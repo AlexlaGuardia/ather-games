@@ -18,10 +18,11 @@ const START_MOVES = 20
 const MOVES_PER_MILESTONE = 4
 const milestoneTarget = (n: number) => Math.round(1200 + n * 1500 + n * n * 350)
 
-const PIECES = [
+type Piece = { name: string; base: string; light: string; edge: string; glyph: string; img?: string }
+const PIECES: Piece[] = [
   { name: 'Sol', base: '#f0a526', light: '#ffd884', edge: '#9c6510', glyph: '☀' },
   { name: 'Tide', base: '#37a3e6', light: '#a6d8f7', edge: '#1d5f8e', glyph: '❈' },
-  { name: 'Void', base: '#9b5ad2', light: '#d8b3f2', edge: '#5e3088', glyph: '✦' },
+  { name: 'Void', base: '#9b5ad2', light: '#d8b3f2', edge: '#5e3088', glyph: '✦', img: '/manana/orbs/void.png' },
   { name: 'Verdant', base: '#48b56f', light: '#a4e7bb', edge: '#236e3f', glyph: '❀' },
   { name: 'Ember', base: '#e8554e', light: '#f9a8a2', edge: '#9c2f2a', glyph: '✸' },
   { name: 'Pearl', base: '#c9d2e6', light: '#ffffff', edge: '#7e879b', glyph: '◆' },
@@ -309,6 +310,9 @@ export default function MananaPage() {
               const isSel = selected === i
               const isPop = popping.has(i)
               const k = cell.kind
+              // painted orb art replaces the CSS gem for plain pieces; specials keep
+              // the gradient + marking language until their art exists.
+              const useArt = !!p.img && k === 'none'
               const bg = k === 'prism' ? RAINBOW : `radial-gradient(circle at 32% 28%, ${p.light}, ${p.base} 58%, ${p.edge})`
               return (
                 <button
@@ -321,22 +325,36 @@ export default function MananaPage() {
                   <span
                     className={`manana-gem absolute inset-0 rounded-full flex items-center justify-center ${isPop ? 'manana-pop' : ''} ${k !== 'none' ? 'manana-charged' : ''}`}
                     style={{
-                      background: bg,
+                      background: useArt ? undefined : bg,
                       boxShadow: isSel
                         ? '0 0 0 3px #ffffffcc, 0 4px 10px rgba(0,0,0,0.5)'
-                        : k !== 'none'
-                          ? `inset 0 -3px 6px ${p.edge}88, 0 0 10px ${p.light}cc, 0 3px 6px rgba(0,0,0,0.35)`
-                          : `inset 0 -3px 6px ${p.edge}88, 0 3px 6px rgba(0,0,0,0.35)`,
+                        : useArt
+                          ? '0 3px 6px rgba(0,0,0,0.35)'
+                          : k !== 'none'
+                            ? `inset 0 -3px 6px ${p.edge}88, 0 0 10px ${p.light}cc, 0 3px 6px rgba(0,0,0,0.35)`
+                            : `inset 0 -3px 6px ${p.edge}88, 0 3px 6px rgba(0,0,0,0.35)`,
                       transform: isSel ? 'scale(1.08)' : undefined,
                     }}
                   >
-                    <span className="absolute rounded-full" style={{ top: '14%', left: '20%', width: '32%', height: '24%', background: 'rgba(255,255,255,0.55)', filter: 'blur(2px)' }} />
-                    {/* special markings */}
-                    {k === 'surgeH' && <span className="absolute left-[6%] right-[6%] top-1/2 -translate-y-1/2 h-[26%] rounded-full bg-white/70" />}
-                    {k === 'surgeV' && <span className="absolute top-[6%] bottom-[6%] left-1/2 -translate-x-1/2 w-[26%] rounded-full bg-white/70" />}
-                    {k === 'star' && <span className="relative text-white text-[16px] sm:text-[20px] leading-none drop-shadow-[0_0_4px_white]">✦</span>}
-                    {k === 'prism' && <span className="absolute inset-[34%] rounded-full bg-white/85" />}
-                    {k === 'none' && <span className="relative text-white/85 text-[15px] sm:text-[18px] leading-none drop-shadow">{p.glyph}</span>}
+                    {useArt ? (
+                      <img
+                        src={p.img}
+                        alt={p.name}
+                        draggable={false}
+                        className="absolute inset-0 w-full h-full pointer-events-none select-none"
+                        style={{ imageRendering: 'pixelated' }}
+                      />
+                    ) : (
+                      <>
+                        <span className="absolute rounded-full" style={{ top: '14%', left: '20%', width: '32%', height: '24%', background: 'rgba(255,255,255,0.55)', filter: 'blur(2px)' }} />
+                        {/* special markings */}
+                        {k === 'surgeH' && <span className="absolute left-[6%] right-[6%] top-1/2 -translate-y-1/2 h-[26%] rounded-full bg-white/70" />}
+                        {k === 'surgeV' && <span className="absolute top-[6%] bottom-[6%] left-1/2 -translate-x-1/2 w-[26%] rounded-full bg-white/70" />}
+                        {k === 'star' && <span className="relative text-white text-[16px] sm:text-[20px] leading-none drop-shadow-[0_0_4px_white]">✦</span>}
+                        {k === 'prism' && <span className="absolute inset-[34%] rounded-full bg-white/85" />}
+                        {k === 'none' && <span className="relative text-white/85 text-[15px] sm:text-[18px] leading-none drop-shadow">{p.glyph}</span>}
+                      </>
+                    )}
                   </span>
                 </button>
               )
