@@ -26,9 +26,8 @@ export const metadata: Metadata = {
   description: "Playable corners of the Athernyx world. Idle, puzzle, and pixel games.",
   metadataBase: new URL("https://ather.games"),
   icons: { icon: "/favicon.ico", apple: "/apple-touch-icon.png" },
-  // PREVIEW: noindex until Alex eyeballs the live site and blesses the launch.
-  // Flip both to true at launch (the only change needed to go fully public).
-  robots: { index: false, follow: false },
+  // Public games site — indexable.
+  robots: { index: true, follow: true },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

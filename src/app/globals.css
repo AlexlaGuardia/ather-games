@@ -40,6 +40,16 @@ body {
     radial-gradient(ellipse at 50% 50%, rgba(14, 14, 22, 1) 0%, rgba(10, 10, 15, 1) 100%);
 }
 
+/* Hub hero glyph — a slow breathing glow, like the world stirring. */
+.shimmer-hero-glyph {
+  animation: shimmerBreath 5s ease-in-out infinite;
+  text-shadow: 0 0 18px rgba(212, 168, 67, 0.25);
+}
+@keyframes shimmerBreath {
+  0%, 100% { opacity: 0.82; text-shadow: 0 0 14px rgba(212, 168, 67, 0.18); }
+  50% { opacity: 1; text-shadow: 0 0 26px rgba(212, 168, 67, 0.4); }
+}
+
 .hero-stars {
   background-image:
     radial-gradient(1px 1px at 15% 20%, rgba(255, 255, 255, 0.4) 0%, transparent 100%),

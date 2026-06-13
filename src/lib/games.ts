@@ -49,7 +49,7 @@ export const GAMES: GameEntry[] = [
     title: "Magii",
     href: "/magii",
     glyph: "❖",
-    tier: "coming-soon",
+    tier: "live",
     kind: "world",
     tagline: "the Athernyx franchise — the world, the lore, the spirit tales",
   },
@@ -66,5 +66,11 @@ export const GAMES: GameEntry[] = [
 
 /** Games the public arcade lists — everything except back-room (owner-only, unlisted). */
 export const publicGames = (): GameEntry[] => GAMES.filter((g) => g.tier !== "back-room");
+/** Live games only, in registry order — the playable/enterable set used for favorites + defaults. */
+export const liveGames = (): GameEntry[] => GAMES.filter((g) => g.tier === "live");
 export const gameById = (id: string): GameEntry | undefined => GAMES.find((g) => g.id === id);
 export const isBackRoom = (id: string): boolean => gameById(id)?.tier === "back-room";
+
+/** Corner badge for a card: SOON for teasers, ENTER for lore/world surfaces, PLAY for games. */
+export const tierLabel = (g: GameEntry): string =>
+  g.tier === "coming-soon" ? "SOON" : g.kind === "world" ? "ENTER" : "PLAY";

@@ -1,77 +1,109 @@
-// THE ARCADE — the public games catalog and landing page of ather.games.
-// Driven by the games registry: `live` games are playable cards, `coming-soon`
-// shows a dimmed teaser, `back-room` games are hidden from the public entirely.
+// THE HUB — the landing of ather.games. Shimmer (the world) is the centered hero,
+// flanked by two portal widgets: the Kindled Mug (the tavern → Magii) and the
+// Arcade (the full catalog). A favorites strip of up to 3 pinned games sits below.
+// The flat catalog grid lives at /arcade/all behind the Arcade widget.
 
 import Link from "next/link";
-import { publicGames, type GameEntry } from "@/lib/games";
+import { gameById } from "@/lib/games";
+import FavoritesRow from "./_components/FavoritesRow";
 
-const STATUS_LABEL: Record<GameEntry["tier"], string> = {
-  live: "PLAY",
-  "coming-soon": "SOON",
-  "back-room": "", // never rendered publicly
-};
-
-function GameCard({ g }: { g: GameEntry }) {
-  const soon = g.tier === "coming-soon";
-  const inner = (
-    <>
-      <div className="flex items-start justify-between mb-3">
-        <span className="text-[#d4a843] text-3xl group-hover:scale-110 transition-transform">{g.glyph}</span>
-        <span className="text-[8px] text-text-faint/40 group-hover:text-[#d4a843]/70 font-display tracking-[0.2em] border border-white/[0.07] rounded px-1.5 py-0.5 transition-colors">
-          {STATUS_LABEL[g.tier]}
-        </span>
-      </div>
-      <h2 className="font-display text-text text-lg tracking-wider mb-1.5 group-hover:text-[#d4a843] transition-colors">
-        {g.title}
-      </h2>
-      <p className="text-text-faint/60 text-[11px] leading-relaxed">{g.tagline}</p>
-      {!soon && (
-        <span className="absolute bottom-3 right-4 text-[#d4a843]/0 group-hover:text-[#d4a843]/70 text-sm transition-colors">
-          &#8594;
-        </span>
-      )}
-    </>
-  );
-
-  const cls =
-    "group relative rounded-xl border border-white/[0.06] bg-[#12121e]/70 p-5 transition-all overflow-hidden";
-
-  // coming-soon = dimmed teaser, not playable by the public (owner-preview lands with auth).
-  if (soon) {
-    return <div className={`${cls} opacity-50 cursor-default`}>{inner}</div>;
-  }
+function PortalWidget({
+  href,
+  glyph,
+  eyebrow,
+  title,
+  tagline,
+  align,
+}: {
+  href: string;
+  glyph: string;
+  eyebrow: string;
+  title: string;
+  tagline: string;
+  align: "left" | "right";
+}) {
   return (
-    <Link href={g.href} className={`${cls} hover:border-[#d4a843]/40 hover:bg-[#12121e]`}>
-      {inner}
+    <Link
+      href={href}
+      className={`group relative block w-[180px] rounded-xl border border-white/[0.07] bg-[#12121e]/60 backdrop-blur-sm p-4 transition-all hover:border-[#d4a843]/40 hover:bg-[#12121e]/90 ${
+        align === "right" ? "text-right" : "text-left"
+      }`}
+    >
+      <span className="block text-[#d4a843] text-3xl mb-2 group-hover:scale-110 transition-transform">{glyph}</span>
+      <span className="block text-[8px] text-text-faint/45 font-display tracking-[0.3em] uppercase">{eyebrow}</span>
+      <span className="block font-display text-text text-base tracking-wider group-hover:text-[#d4a843] transition-colors">
+        {title}
+      </span>
+      <span className="block text-text-faint/45 text-[10px] leading-snug mt-1">{tagline}</span>
     </Link>
   );
 }
 
-export default function ArcadePage() {
-  const games = publicGames();
+function ShimmerHero() {
+  const shimmer = gameById("shimmer")!;
   return (
-    <div className="min-h-screen bg-[#08080f] text-text-dim">
-      <div className="max-w-[1000px] mx-auto px-5 py-10">
-        <header className="mb-8">
-          <h1 className="font-display text-[#d4a843] text-2xl tracking-[0.35em] uppercase">The Arcade</h1>
-          <p className="text-text-faint/50 text-xs mt-2 font-display tracking-wider">
-            everything playable in the Athernyx world · more coming
-          </p>
+    <div className="relative w-full max-w-[440px] rounded-2xl border border-white/[0.08] bg-[#0e0e16]/70 backdrop-blur-sm px-8 py-12 text-center overflow-hidden">
+      {/* inner aura */}
+      <div
+        className="pointer-events-none absolute inset-0 opacity-80"
+        style={{
+          background:
+            "radial-gradient(ellipse at 50% 35%, rgba(139,92,246,0.14) 0%, transparent 55%), radial-gradient(ellipse at 50% 80%, rgba(212,168,67,0.07) 0%, transparent 50%)",
+        }}
+      />
+      <div className="relative">
+        <span className="block text-[#d4a843] text-6xl mb-4 shimmer-hero-glyph">{shimmer.glyph}</span>
+        <h1 className="font-display text-text text-4xl tracking-[0.35em] uppercase">Shimmer</h1>
+        <p className="text-text-faint/55 text-[12px] leading-relaxed mt-3 max-w-[300px] mx-auto">{shimmer.tagline}</p>
+        <p className="text-[#8b5cf6]/70 text-[11px] font-display tracking-[0.2em] uppercase mt-5">the world is waking</p>
+        <span className="inline-block mt-4 text-[9px] text-text-faint/50 font-display tracking-[0.3em] uppercase border border-white/[0.08] rounded-full px-3 py-1">
+          Coming Soon
+        </span>
+      </div>
+    </div>
+  );
+}
+
+export default function HubPage() {
+  return (
+    <div className="relative min-h-screen bg-void text-text-dim hero-void-glow overflow-hidden">
+      <div className="pointer-events-none absolute inset-0 hero-stars opacity-60" />
+
+      <div className="relative max-w-[1000px] mx-auto px-5 py-12">
+        {/* wordmark */}
+        <header className="text-center mb-8">
+          <p className="font-display text-[#d4a843] text-sm tracking-[0.5em] uppercase">Ather · Games</p>
         </header>
 
-        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {games.map((g) => (
-            <GameCard key={g.id} g={g} />
-          ))}
+        {/* stage: widgets flank the hero */}
+        <div className="relative flex flex-col items-center">
+          <div className="flex w-full justify-between gap-4 mb-6 lg:mb-0 lg:absolute lg:inset-x-0 lg:top-0 lg:z-10">
+            <PortalWidget
+              href="/magii"
+              glyph="✦"
+              eyebrow="the tavern"
+              title="Kindled Mug"
+              tagline="pull up a chair — the spirit tales of Magii"
+              align="left"
+            />
+            <PortalWidget
+              href="/arcade/all"
+              glyph="▦"
+              eyebrow="the catalog"
+              title="The Arcade"
+              tagline="every playable corner of the world"
+              align="right"
+            />
+          </div>
 
-          {/* the catalog grows */}
-          <div className="rounded-xl border border-dashed border-white/[0.06] bg-transparent p-5 flex flex-col items-center justify-center text-center min-h-[140px]">
-            <span className="text-text-faint/25 text-2xl mb-2">+</span>
-            <p className="text-text-faint/35 text-[10px] font-display tracking-wider">the next game lands here</p>
+          <div className="lg:pt-6 flex justify-center">
+            <ShimmerHero />
           </div>
         </div>
 
-        <footer className="mt-10 text-center text-text-faint/25 text-[10px] font-display tracking-wider">
+        <FavoritesRow />
+
+        <footer className="mt-12 text-center text-text-faint/25 text-[10px] font-display tracking-wider">
           built in the Akatskii studio · hand-drawn, hand-coded
         </footer>
       </div>
