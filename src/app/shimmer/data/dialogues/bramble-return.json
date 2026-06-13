@@ -1,0 +1,12 @@
+{
+  "id": "bramble-return",
+  "npcId": "bramble",
+  "entryNodeId": "br_cond",
+  "metadata": { "tags": ["farming"] },
+  "nodes": [
+    { "id": "br_cond", "type": "condition", "position": { "x": 100, "y": 0 }, "data": { "conditions": [{ "check": { "type": "skill", "skillId": "farming", "level": 3, "op": ">=" }, "targetNodeId": "br_high" }], "fallbackNodeId": "br_low" } },
+    { "id": "br_high", "type": "text", "position": { "x": 300, "y": 120 }, "data": { "speaker": "Bramble", "text": "Your crops look healthy. Keep at it — the rarer seeds unlock as you level up." } },
+    { "id": "br_low", "type": "text", "position": { "x": 100, "y": 120 }, "data": { "speaker": "Bramble", "text": "Keep planting. The soil rewards patience, Keeper." } }
+  ],
+  "edges": []
+}

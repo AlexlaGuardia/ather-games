@@ -1,0 +1,13 @@
+{
+  "id": "mycelial-keeper",
+  "npcId": "spore",
+  "entryNodeId": "mycelial-keeper_0",
+  "metadata": { "tags": [] },
+  "nodes": [
+    { "id": "mycelial-keeper_0", "type": "text", "position": { "x": 100, "y": 0 }, "data": { "speaker": "Spore", "text": "The roots here connect everything. Every zone, every spirit." } },
+    { "id": "mycelial-keeper_1", "type": "text", "position": { "x": 100, "y": 120 }, "data": { "speaker": "Spore", "text": "Walk carefully. The mycelium remembers your steps." } }
+  ],
+  "edges": [
+    { "id": "mycelial-keeper_e0", "from": "mycelial-keeper_0", "to": "mycelial-keeper_1" }
+  ]
+}

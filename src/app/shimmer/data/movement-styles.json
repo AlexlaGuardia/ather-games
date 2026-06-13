@@ -1,0 +1,58 @@
+{
+  "players": {
+    "alkin": {
+      "walkSpeed": 2.5,
+      "runSpeed": 5.4,
+      "rampTiles": 3,
+      "brakeTiles": 1,
+      "longPathThreshold": 5,
+      "specialThreshold": 6,
+      "endRunTiles": 1
+    },
+    "kael": {
+      "walkSpeed": 3,
+      "runSpeed": 5.2,
+      "rampTiles": 3,
+      "brakeTiles": 3,
+      "longPathThreshold": 6,
+      "specialThreshold": 8,
+      "endRunTiles": 2
+    },
+    "alex": {
+      "walkSpeed": 3,
+      "runSpeed": 5.2,
+      "rampTiles": 3,
+      "brakeTiles": 3,
+      "longPathThreshold": 6,
+      "specialThreshold": 8,
+      "endRunTiles": 2
+    }
+  },
+  "beasts": {
+    "drifthorn": {
+      "walkSpeed": 2.5,
+      "catchupSpeed": 4,
+      "catchupDistance": 4
+    },
+    "dustwhisker": {
+      "walkSpeed": 2,
+      "catchupSpeed": 3.5,
+      "catchupDistance": 3
+    },
+    "sporeling": {
+      "walkSpeed": 1.5,
+      "catchupSpeed": 3,
+      "catchupDistance": 5
+    },
+    "glowmite": {
+      "walkSpeed": 2,
+      "catchupSpeed": 4,
+      "catchupDistance": 4
+    },
+    "embermole": {
+      "walkSpeed": 1.8,
+      "catchupSpeed": 3.5,
+      "catchupDistance": 3
+    }
+  }
+}

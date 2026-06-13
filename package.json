@@ -9,14 +9,17 @@
   },
   "dependencies": {
     "next": "16.1.1",
+    "pixi.js": "^8.19.0",
     "react": "19.2.3",
-    "react-dom": "19.2.3"
+    "react-dom": "19.2.3",
+    "three": "^0.183.2"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "@types/three": "^0.183.1",
     "tailwindcss": "^4",
     "typescript": "^5"
   }

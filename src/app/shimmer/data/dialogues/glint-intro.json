@@ -1,0 +1,17 @@
+{
+  "id": "glint-intro",
+  "npcId": "glint",
+  "entryNodeId": "g0",
+  "metadata": { "tags": ["tutorial", "mana"] },
+  "nodes": [
+    { "id": "g0", "type": "text", "position": { "x": 100, "y": 0 }, "data": { "speaker": "Glint", "text": "Oh! A visitor! The springs don't get many Keepers this far out." } },
+    { "id": "g1", "type": "text", "position": { "x": 100, "y": 120 }, "data": { "speaker": "Glint", "text": "Mana flows from the springs into everything — the soil, the spirits, even you. It's the lifeblood of the Ather." } },
+    { "id": "g2", "type": "text", "position": { "x": 100, "y": 240 }, "data": { "speaker": "Glint", "text": "Harvest mana shards from the blue nodes. They're useful for alchemy, farming, and just about everything else." } },
+    { "id": "g_act", "type": "action", "position": { "x": 100, "y": 360 }, "data": { "actions": [{ "type": "giveItem", "itemId": "raw_mana_shard", "count": 5 }, { "type": "setFlag", "flag": "metGlint", "value": true }] } }
+  ],
+  "edges": [
+    { "id": "ge0", "from": "g0", "to": "g1" },
+    { "id": "ge1", "from": "g1", "to": "g2" },
+    { "id": "ge2", "from": "g2", "to": "g_act" }
+  ]
+}

@@ -1,0 +1,15 @@
+{
+  "id": "console-inspect",
+  "npcId": "object",
+  "entryNodeId": "console-inspect_0",
+  "metadata": { "tags": ["environment"] },
+  "nodes": [
+    { "id": "console-inspect_0", "type": "text", "position": { "x": 100, "y": 0 }, "data": { "speaker": "narrator", "text": "The Spirit Console hums with faint energy..." } },
+    { "id": "console-inspect_1", "type": "text", "position": { "x": 100, "y": 120 }, "data": { "speaker": "narrator", "text": "Ancient markings glow across its surface. It responds to your presence." } },
+    { "id": "console-inspect_2", "type": "text", "position": { "x": 100, "y": 240 }, "data": { "speaker": "narrator", "text": "Spirits drawn to the Console seem calmer, more trusting." } }
+  ],
+  "edges": [
+    { "id": "console-inspect_e0", "from": "console-inspect_0", "to": "console-inspect_1" },
+    { "id": "console-inspect_e1", "from": "console-inspect_1", "to": "console-inspect_2" }
+  ]
+}

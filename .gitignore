@@ -7,3 +7,9 @@ build
 *.log
 .DS_Store
 next-env.d.ts
+
+# heavy game binary assets — synced separately, not in git
+public/spirits
+public/characters
+public/audio
+public/magii

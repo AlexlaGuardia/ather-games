@@ -15,7 +15,8 @@ export function useCloudSave(game: Game) {
   // Every visitor is "signed in" to their own browser — keeps games' save/load paths live.
   const isSignedIn = true;
 
-  const load = useCallback(async (): Promise<unknown> => {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const load = useCallback(async (): Promise<any> => {
     if (typeof window === "undefined") return null;
     try {
       const raw = localStorage.getItem(saveKey(game));

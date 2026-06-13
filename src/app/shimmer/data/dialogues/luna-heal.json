@@ -1,0 +1,16 @@
+{
+  "id": "luna-heal",
+  "npcId": "luna_npc",
+  "entryNodeId": "lh0",
+  "metadata": { "tags": ["heal", "choice"] },
+  "nodes": [
+    { "id": "lh0", "type": "text", "position": { "x": 100, "y": 0 }, "data": { "speaker": "Luna", "text": "Your spirits look weary from the journey. The Moonwell can help." } },
+    { "id": "lh_choice", "type": "choice", "position": { "x": 100, "y": 120 }, "data": { "prompt": "Shall I tend to them?", "options": [{ "label": "Yes, please.", "targetNodeId": "lh_yes" }, { "label": "Not right now.", "targetNodeId": "lh_no" }] } },
+    { "id": "lh_yes", "type": "action", "position": { "x": 300, "y": 240 }, "data": { "actions": [{ "type": "heal" }], "nextNodeId": "lh_healed" } },
+    { "id": "lh_healed", "type": "text", "position": { "x": 300, "y": 360 }, "data": { "speaker": "Luna", "text": "There. The water remembers what your spirits should feel like. Rest well, Keeper." } },
+    { "id": "lh_no", "type": "text", "position": { "x": 100, "y": 240 }, "data": { "speaker": "Luna", "text": "Stay safe out there. The well isn't going anywhere." } }
+  ],
+  "edges": [
+    { "id": "lhe0", "from": "lh0", "to": "lh_choice" }
+  ]
+}

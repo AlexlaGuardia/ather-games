@@ -1,0 +1,94 @@
+{
+  "id": "community-gate",
+  "npcId": "community-gate",
+  "entryNodeId": "gate_text",
+  "metadata": {
+    "tags": ["garden", "social"],
+    "lastEdited": "2026-03-15T18:00:00.000Z"
+  },
+  "nodes": [
+    {
+      "id": "gate_text",
+      "type": "text",
+      "position": { "x": 100, "y": 50 },
+      "data": {
+        "speaker": "Community Gate",
+        "text": "The gate hums with quiet energy. Beyond it, the Ather stretches wide."
+      }
+    },
+    {
+      "id": "gate_choice",
+      "type": "choice",
+      "position": { "x": 100, "y": 170 },
+      "data": {
+        "prompt": "Where would you like to go?",
+        "options": [
+          { "label": "Mycelial Path", "targetNodeId": "go_mycelial" },
+          { "label": "Moonwell Glade", "targetNodeId": "go_moonwell", "condition": { "type": "flag", "flag": "visited_moonwell-glade", "value": true } },
+          { "label": "Spore Hollow", "targetNodeId": "go_spore", "condition": { "type": "flag", "flag": "visited_spore-hollow", "value": true } },
+          { "label": "Mana Springs", "targetNodeId": "go_mana", "condition": { "type": "flag", "flag": "visited_mana-springs", "value": true } },
+          { "label": "Spirit Meadow", "targetNodeId": "go_spirit", "condition": { "type": "flag", "flag": "visited_spirit-meadow", "value": true } },
+          { "label": "Stay here", "targetNodeId": "stay" }
+        ]
+      }
+    },
+    {
+      "id": "go_mycelial",
+      "type": "action",
+      "position": { "x": 50, "y": 300 },
+      "data": {
+        "actions": [{ "type": "teleport", "zoneId": "mycelial-path", "tileX": 16, "tileY": 5 }]
+      }
+    },
+    {
+      "id": "go_moonwell",
+      "type": "action",
+      "position": { "x": 150, "y": 300 },
+      "data": {
+        "actions": [{ "type": "teleport", "zoneId": "moonwell-glade", "tileX": 14, "tileY": 1 }]
+      }
+    },
+    {
+      "id": "go_spore",
+      "type": "action",
+      "position": { "x": 250, "y": 300 },
+      "data": {
+        "actions": [{ "type": "teleport", "zoneId": "spore-hollow", "tileX": 1, "tileY": 12 }]
+      }
+    },
+    {
+      "id": "go_mana",
+      "type": "action",
+      "position": { "x": 350, "y": 300 },
+      "data": {
+        "actions": [{ "type": "teleport", "zoneId": "mana-springs", "tileX": 12, "tileY": 1 }]
+      }
+    },
+    {
+      "id": "go_spirit",
+      "type": "action",
+      "position": { "x": 450, "y": 300 },
+      "data": {
+        "actions": [{ "type": "teleport", "zoneId": "spirit-meadow", "tileX": 14, "tileY": 1 }]
+      }
+    },
+    {
+      "id": "stay",
+      "type": "text",
+      "position": { "x": 550, "y": 300 },
+      "data": {
+        "speaker": "Community Gate",
+        "text": "The gate dims. Perhaps another time."
+      }
+    }
+  ],
+  "edges": [
+    { "id": "e1", "from": "gate_text", "to": "gate_choice" },
+    { "id": "e2", "from": "gate_choice", "to": "go_mycelial", "fromPort": "0" },
+    { "id": "e3", "from": "gate_choice", "to": "go_moonwell", "fromPort": "1" },
+    { "id": "e4", "from": "gate_choice", "to": "go_spore", "fromPort": "2" },
+    { "id": "e5", "from": "gate_choice", "to": "go_mana", "fromPort": "3" },
+    { "id": "e6", "from": "gate_choice", "to": "go_spirit", "fromPort": "4" },
+    { "id": "e7", "from": "gate_choice", "to": "stay", "fromPort": "5" }
+  ]
+}

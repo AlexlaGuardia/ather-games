@@ -1,0 +1,17 @@
+{
+  "id": "ember-intro",
+  "npcId": "ember",
+  "entryNodeId": "e0",
+  "metadata": { "tags": ["tutorial", "exchange"] },
+  "nodes": [
+    { "id": "e0", "type": "text", "position": { "x": 100, "y": 0 }, "data": { "speaker": "Ember", "text": "Hey! You look like someone who knows the value of a good trade." } },
+    { "id": "e1", "type": "text", "position": { "x": 100, "y": 120 }, "data": { "speaker": "Ember", "text": "The Exchange Booth over there connects to the Ather Exchange. Buy low, sell high — that's the game." } },
+    { "id": "e2", "type": "text", "position": { "x": 100, "y": 240 }, "data": { "speaker": "Ember", "text": "Prices shift based on supply. Sell too much of one thing and the price drops. Market forces, you know?" } },
+    { "id": "e_act", "type": "action", "position": { "x": 100, "y": 360 }, "data": { "actions": [{ "type": "setFlag", "flag": "metEmber", "value": true }] } }
+  ],
+  "edges": [
+    { "id": "ee0", "from": "e0", "to": "e1" },
+    { "id": "ee1", "from": "e1", "to": "e2" },
+    { "id": "ee2", "from": "e2", "to": "e_act" }
+  ]
+}

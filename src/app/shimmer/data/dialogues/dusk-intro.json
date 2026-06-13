@@ -1,0 +1,19 @@
+{
+  "id": "dusk-intro",
+  "npcId": "dusk",
+  "entryNodeId": "d0",
+  "metadata": { "tags": ["lore", "warning"] },
+  "nodes": [
+    { "id": "d0", "type": "text", "position": { "x": 100, "y": 0 }, "data": { "speaker": "Dusk", "text": "Hold up. You're heading deeper?", "emotion": "serious" } },
+    { "id": "d1", "type": "text", "position": { "x": 100, "y": 120 }, "data": { "speaker": "Dusk", "text": "The outer zones aren't like the garden. The spirits there don't trust easily, and the Moglins have scouts everywhere." } },
+    { "id": "d2", "type": "text", "position": { "x": 100, "y": 240 }, "data": { "speaker": "Dusk", "text": "I've been mapping the routes between the hollow and the thicket. Most of them are safe. Most." } },
+    { "id": "d3", "type": "text", "position": { "x": 100, "y": 360 }, "data": { "speaker": "Dusk", "text": "Watch yourself out there, Keeper." } },
+    { "id": "d_act", "type": "action", "position": { "x": 100, "y": 480 }, "data": { "actions": [{ "type": "setFlag", "flag": "metDusk", "value": true }] } }
+  ],
+  "edges": [
+    { "id": "de0", "from": "d0", "to": "d1" },
+    { "id": "de1", "from": "d1", "to": "d2" },
+    { "id": "de2", "from": "d2", "to": "d3" },
+    { "id": "de3", "from": "d3", "to": "d_act" }
+  ]
+}

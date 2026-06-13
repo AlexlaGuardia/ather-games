@@ -1,0 +1,10 @@
+{
+  "id": "study-observation",
+  "npcId": "object",
+  "entryNodeId": "study-observation_0",
+  "metadata": { "tags": ["environment"] },
+  "nodes": [
+    { "id": "study-observation_0", "type": "text", "position": { "x": 100, "y": 0 }, "data": { "speaker": "narrator", "text": "You observe the spirit carefully. Its patterns are recorded in your tablet." } }
+  ],
+  "edges": []
+}

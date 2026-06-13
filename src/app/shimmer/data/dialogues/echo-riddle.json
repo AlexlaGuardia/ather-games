@@ -1,0 +1,23 @@
+{
+  "id": "echo-riddle",
+  "npcId": "echo",
+  "entryNodeId": "ec_gate",
+  "metadata": { "tags": ["riddle", "choice", "reward"] },
+  "nodes": [
+    { "id": "ec_gate", "type": "condition", "position": { "x": 100, "y": 0 }, "data": { "conditions": [{ "check": { "type": "flag", "flag": "echoRiddleSolved", "value": true }, "targetNodeId": "ec_solved" }], "fallbackNodeId": "ec0" } },
+    { "id": "ec_solved", "type": "text", "position": { "x": 400, "y": 0 }, "data": { "speaker": "Echo", "text": "You carry the answer within you now. The passage remembers." } },
+    { "id": "ec0", "type": "text", "position": { "x": 100, "y": 120 }, "data": { "speaker": "Echo", "text": "I guard this passage between worlds. To pass, you must answer." } },
+    { "id": "ec1", "type": "text", "position": { "x": 100, "y": 240 }, "data": { "speaker": "Echo", "text": "What grows without roots, shines without fire, and fades when you hold it too tightly?" } },
+    { "id": "ec_choice", "type": "choice", "position": { "x": 100, "y": 360 }, "data": { "options": [{ "label": "Mana.", "targetNodeId": "ec_correct" }, { "label": "A spirit's bond.", "targetNodeId": "ec_wrong1" }, { "label": "Starlight.", "targetNodeId": "ec_wrong2" }] } },
+    { "id": "ec_correct", "type": "text", "position": { "x": 100, "y": 480 }, "data": { "speaker": "Echo", "text": "Mana. Yes. It flows through everything here — but grasp too hard and it scatters.", "emotion": "happy" } },
+    { "id": "ec_reward", "type": "action", "position": { "x": 100, "y": 600 }, "data": { "actions": [{ "type": "giveItem", "itemId": "pure_mana_core", "count": 1 }, { "type": "setFlag", "flag": "echoRiddleSolved", "value": true }], "nextNodeId": "ec_farewell" } },
+    { "id": "ec_farewell", "type": "text", "position": { "x": 100, "y": 720 }, "data": { "speaker": "Echo", "text": "Take this. A fragment of concentrated mana. You've earned it." } },
+    { "id": "ec_wrong1", "type": "text", "position": { "x": 300, "y": 480 }, "data": { "speaker": "Echo", "text": "A thoughtful answer... but not the one I seek. Return when you've considered further." } },
+    { "id": "ec_wrong2", "type": "text", "position": { "x": 500, "y": 480 }, "data": { "speaker": "Echo", "text": "Starlight persists whether held or not. Think deeper, Keeper." } }
+  ],
+  "edges": [
+    { "id": "ece0", "from": "ec0", "to": "ec1" },
+    { "id": "ece1", "from": "ec1", "to": "ec_choice" },
+    { "id": "ece2", "from": "ec_correct", "to": "ec_reward" }
+  ]
+}

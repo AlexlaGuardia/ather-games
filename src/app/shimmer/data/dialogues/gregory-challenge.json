@@ -1,0 +1,13 @@
+{
+  "id": "gregory-challenge",
+  "npcId": "gregory",
+  "entryNodeId": "gregory-challenge_0",
+  "metadata": { "tags": ["quest"] },
+  "nodes": [
+    { "id": "gregory-challenge_0", "type": "text", "position": { "x": 100, "y": 0 }, "data": { "speaker": "Gregory", "text": "Your spirit looks stronger since last time." } },
+    { "id": "gregory-challenge_1", "type": "text", "position": { "x": 100, "y": 120 }, "data": { "speaker": "Gregory", "text": "Let me see how far you've come. My owl's been restless." } }
+  ],
+  "edges": [
+    { "id": "gregory-challenge_e0", "from": "gregory-challenge_0", "to": "gregory-challenge_1" }
+  ]
+}

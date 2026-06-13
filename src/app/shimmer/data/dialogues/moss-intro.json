@@ -1,0 +1,15 @@
+{
+  "id": "moss-intro",
+  "npcId": "moss",
+  "entryNodeId": "m0",
+  "metadata": { "tags": ["lore", "atmosphere"] },
+  "nodes": [
+    { "id": "m0", "type": "text", "position": { "x": 100, "y": 0 }, "data": { "speaker": "Moss", "text": "...the roots here go deep. Deeper than the stone." } },
+    { "id": "m1", "type": "text", "position": { "x": 100, "y": 120 }, "data": { "speaker": "Moss", "text": "This thicket was old when the first Keepers arrived. It remembers things the rest of the Ather has forgotten." } },
+    { "id": "m2", "type": "text", "position": { "x": 100, "y": 240 }, "data": { "speaker": "Moss", "text": "Walk gently. Listen. The trees will tell you what they know... eventually." } }
+  ],
+  "edges": [
+    { "id": "me0", "from": "m0", "to": "m1" },
+    { "id": "me1", "from": "m1", "to": "m2" }
+  ]
+}

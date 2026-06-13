@@ -1,0 +1,25 @@
+{
+  "id": "gregory-tablet",
+  "npcId": "gregory",
+  "entryNodeId": "gregory-tablet_0",
+  "metadata": { "tags": ["quest"] },
+  "nodes": [
+    { "id": "gregory-tablet_0", "type": "text", "position": { "x": 100, "y": 0 }, "data": { "speaker": "Gregory", "text": "Good choice. Take care of it." } },
+    { "id": "gregory-tablet_1", "type": "text", "position": { "x": 100, "y": 120 }, "data": { "speaker": "Gregory", "text": "Now \u2014 take this too. A Spirit Tablet. Portable, links to my research archive.", "emotion": "giving" } },
+    { "id": "gregory-tablet_2", "type": "text", "position": { "x": 100, "y": 240 }, "data": { "speaker": "Gregory", "text": "It tracks your party, and anything you learn about the spirits you encounter." } },
+    { "id": "gregory-tablet_3", "type": "text", "position": { "x": 100, "y": 360 }, "data": { "speaker": "Gregory", "text": "If you come across spirits in the wild... study them. Get close, observe." } },
+    { "id": "gregory-tablet_4", "type": "text", "position": { "x": 100, "y": 480 }, "data": { "speaker": "Gregory", "text": "Most will accept a challenge if you offer one. That's how they communicate." } },
+    { "id": "gregory-tablet_5", "type": "text", "position": { "x": 100, "y": 600 }, "data": { "speaker": "Gregory", "text": "Bring back what you learn. Every bit of data helps me understand what the Moglins are after." } },
+    { "id": "gregory-tablet_6", "type": "text", "position": { "x": 100, "y": 720 }, "data": { "speaker": "Gregory", "text": "The tablet is yours now. Press T to open it anytime." } },
+    { "id": "gregory-tablet_action", "type": "action", "position": { "x": 100, "y": 840 }, "data": { "actions": [{ "type": "setFlag", "flag": "spiritTabletReceived", "value": true }] } }
+  ],
+  "edges": [
+    { "id": "gregory-tablet_e0", "from": "gregory-tablet_0", "to": "gregory-tablet_1" },
+    { "id": "gregory-tablet_e1", "from": "gregory-tablet_1", "to": "gregory-tablet_2" },
+    { "id": "gregory-tablet_e2", "from": "gregory-tablet_2", "to": "gregory-tablet_3" },
+    { "id": "gregory-tablet_e3", "from": "gregory-tablet_3", "to": "gregory-tablet_4" },
+    { "id": "gregory-tablet_e4", "from": "gregory-tablet_4", "to": "gregory-tablet_5" },
+    { "id": "gregory-tablet_e5", "from": "gregory-tablet_5", "to": "gregory-tablet_6" },
+    { "id": "gregory-tablet_e6", "from": "gregory-tablet_6", "to": "gregory-tablet_action" }
+  ]
+}

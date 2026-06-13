@@ -1,0 +1,33 @@
+{
+  "id": "gregory-moglin-warning",
+  "npcId": "gregory",
+  "entryNodeId": "gregory-moglin_0",
+  "metadata": { "tags": ["quest", "lore"] },
+  "nodes": [
+    { "id": "gregory-moglin_0", "type": "text", "position": { "x": 100, "y": 0 }, "data": { "speaker": "Gregory", "text": "Wait. Before you go further, you need to know something.", "emotion": "serious" } },
+    { "id": "gregory-moglin_1", "type": "text", "position": { "x": 100, "y": 120 }, "data": { "speaker": "Gregory", "text": "I didn't come here just to tend spirits. I was researching their origins." } },
+    { "id": "gregory-moglin_2", "type": "text", "position": { "x": 100, "y": 240 }, "data": { "speaker": "Gregory", "text": "The Ather has old pathways \u2014 portals, folded into the roots of this place." } },
+    { "id": "gregory-moglin_3", "type": "text", "position": { "x": 100, "y": 360 }, "data": { "speaker": "Gregory", "text": "I mapped some of them. Back on Athernyx, I was careless with that knowledge.", "emotion": "regret" } },
+    { "id": "gregory-moglin_4", "type": "text", "position": { "x": 100, "y": 480 }, "data": { "speaker": "Gregory", "text": "The Moglins found my research. They built their own portal system from it." } },
+    { "id": "gregory-moglin_5", "type": "text", "position": { "x": 100, "y": 600 }, "data": { "speaker": "Gregory", "text": "They've set up footholds in the outer zones. Camps. Crude, but they're digging in.", "emotion": "serious" } },
+    { "id": "gregory-moglin_6", "type": "text", "position": { "x": 100, "y": 720 }, "data": { "speaker": "Gregory", "text": "I'd avoid their encampments if I were you. They aren't interested in research." } },
+    { "id": "gregory-moglin_7", "type": "text", "position": { "x": 100, "y": 840 }, "data": { "speaker": "Gregory", "text": "But... if you insist on going out there anyway\u2014" } },
+    { "id": "gregory-moglin_8", "type": "text", "position": { "x": 100, "y": 960 }, "data": { "speaker": "Gregory", "text": "Here. I've been gathering these from the deeper groves. Mana seeds.", "emotion": "giving" } },
+    { "id": "gregory-moglin_9", "type": "text", "position": { "x": 100, "y": 1080 }, "data": { "speaker": "Gregory", "text": "Each one holds the essence of a different spirit. Plant it, and something will grow." } },
+    { "id": "gregory-moglin_10", "type": "text", "position": { "x": 100, "y": 1200 }, "data": { "speaker": "Gregory", "text": "Pick one. Whichever calls to you." } },
+    { "id": "gregory-moglin_action", "type": "action", "position": { "x": 100, "y": 1320 }, "data": { "actions": [{ "type": "setFlag", "flag": "gregorySeedChoice", "value": true }] } }
+  ],
+  "edges": [
+    { "id": "gregory-moglin_e0", "from": "gregory-moglin_0", "to": "gregory-moglin_1" },
+    { "id": "gregory-moglin_e1", "from": "gregory-moglin_1", "to": "gregory-moglin_2" },
+    { "id": "gregory-moglin_e2", "from": "gregory-moglin_2", "to": "gregory-moglin_3" },
+    { "id": "gregory-moglin_e3", "from": "gregory-moglin_3", "to": "gregory-moglin_4" },
+    { "id": "gregory-moglin_e4", "from": "gregory-moglin_4", "to": "gregory-moglin_5" },
+    { "id": "gregory-moglin_e5", "from": "gregory-moglin_5", "to": "gregory-moglin_6" },
+    { "id": "gregory-moglin_e6", "from": "gregory-moglin_6", "to": "gregory-moglin_7" },
+    { "id": "gregory-moglin_e7", "from": "gregory-moglin_7", "to": "gregory-moglin_8" },
+    { "id": "gregory-moglin_e8", "from": "gregory-moglin_8", "to": "gregory-moglin_9" },
+    { "id": "gregory-moglin_e9", "from": "gregory-moglin_9", "to": "gregory-moglin_10" },
+    { "id": "gregory-moglin_e10", "from": "gregory-moglin_10", "to": "gregory-moglin_action" }
+  ]
+}
