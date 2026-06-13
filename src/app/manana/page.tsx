@@ -1,0 +1,367 @@
+'use client'
+
+// MANA'NANA — match-3 with blooming specials. Match 4 → Surge (line), 5 → Prism
+// (colour wipe), 7 → Ather Star (cross). Detonate by matching or swapping. Score
+// milestones earn moves; cascades ramp an ather-heat multiplier. Glossy CSS gems.
+
+import { useEffect, useRef, useState } from 'react'
+import Link from 'next/link'
+import { mulberry32, type Rng } from '@/lib/arcade/rng'
+import {
+  W, H, idx, xy, areAdjacent, reshuffle, swapped, swapMakesMatch, swapDetonation,
+  resolve, anyMove, type Cell, type Kind,
+} from './lib/match3'
+import { sfx, type ManaSfx } from './lib/sfx'
+import AtherBackdrop from './AtherBackdrop'
+
+const START_MOVES = 20
+const MOVES_PER_MILESTONE = 4
+const milestoneTarget = (n: number) => Math.round(1200 + n * 1500 + n * n * 350)
+
+const PIECES = [
+  { name: 'Sol', base: '#f0a526', light: '#ffd884', edge: '#9c6510', glyph: '☀' },
+  { name: 'Tide', base: '#37a3e6', light: '#a6d8f7', edge: '#1d5f8e', glyph: '❈' },
+  { name: 'Void', base: '#9b5ad2', light: '#d8b3f2', edge: '#5e3088', glyph: '✦' },
+  { name: 'Verdant', base: '#48b56f', light: '#a4e7bb', edge: '#236e3f', glyph: '❀' },
+  { name: 'Ember', base: '#e8554e', light: '#f9a8a2', edge: '#9c2f2a', glyph: '✸' },
+  { name: 'Pearl', base: '#c9d2e6', light: '#ffffff', edge: '#7e879b', glyph: '◆' },
+]
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
+const RAINBOW = 'conic-gradient(from 210deg, #f0a526, #e8554e, #9b5ad2, #37a3e6, #48b56f, #f0a526)'
+
+function bigSound(fired: Kind[]): ManaSfx | null {
+  if (fired.includes('star')) return 'star'
+  if (fired.includes('prism')) return 'prism'
+  if (fired.some((k) => k === 'surgeH' || k === 'surgeV')) return 'surge'
+  return null
+}
+
+export default function MananaPage() {
+  const [board, setBoardState] = useState<Cell[]>([])
+  const [score, setScore] = useState(0)
+  const [best, setBest] = useState(0)
+  const [moves, setMovesState] = useState(START_MOVES)
+  const [milestones, setMilestones] = useState(0)
+  const [selected, setSelected] = useState<number | null>(null)
+  const [popping, setPopping] = useState<Set<number>>(new Set())
+  const [heat, setHeat] = useState(1)
+  const [reward, setReward] = useState(0)
+  const [busy, setBusy] = useState(false)
+  const [over, setOver] = useState(false)
+  const [muted, setMuted] = useState(false)
+  const [mounted, setMounted] = useState(false)
+  const [boardPx, setBoardPx] = useState<number | null>(null)
+
+  const boardWrapRef = useRef<HTMLDivElement>(null)
+  const boardRef = useRef<Cell[]>([])
+  const movesRef = useRef(START_MOVES)
+  const scoreRef = useRef(0)
+  const milestonesRef = useRef(0)
+  const rngRef = useRef<Rng>(mulberry32(1))
+  const dragRef = useRef<{ i: number; x: number; y: number } | null>(null)
+
+  const apply = (b: Cell[]) => {
+    boardRef.current = b
+    setBoardState(b)
+  }
+
+  const newGame = () => {
+    apply(reshuffle(rngRef.current))
+    scoreRef.current = 0
+    setScore(0)
+    movesRef.current = START_MOVES
+    setMovesState(START_MOVES)
+    milestonesRef.current = 0
+    setMilestones(0)
+    setSelected(null)
+    setPopping(new Set())
+    setHeat(1)
+    setReward(0)
+    setOver(false)
+    setBusy(false)
+  }
+
+  useEffect(() => {
+    rngRef.current = mulberry32((Date.now() & 0xffffffff) >>> 0)
+    setBest(Number(localStorage.getItem('manana.best') ?? 0))
+    setMuted(sfx.isMuted())
+    apply(reshuffle(rngRef.current))
+    setMounted(true)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // size the board to the largest square that fits its slot (width AND height) —
+  // pure-CSS aspect/cqmin can't read a flex-grown height reliably, so measure it.
+  useEffect(() => {
+    const el = boardWrapRef.current
+    if (!el) return
+    const update = () => {
+      const r = el.getBoundingClientRect()
+      // available height from the wrapper's top to the viewport bottom, minus footer room.
+      // (measuring r.height would feed back — the board inflates its own wrapper.)
+      const avail = window.innerHeight - r.top - 52
+      const s = Math.floor(Math.min(r.width, avail))
+      if (s > 80) setBoardPx(s)
+    }
+    update()
+    const ro = new ResizeObserver(update)
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [mounted])
+
+  const endGame = () => {
+    setOver(true)
+    sfx.play('over')
+    if (scoreRef.current > best) {
+      setBest(scoreRef.current)
+      localStorage.setItem('manana.best', String(scoreRef.current))
+    }
+  }
+
+  const awardMilestones = () => {
+    let awarded = 0
+    while (scoreRef.current >= milestoneTarget(milestonesRef.current)) {
+      milestonesRef.current += 1
+      movesRef.current += MOVES_PER_MILESTONE
+      awarded += MOVES_PER_MILESTONE
+    }
+    if (awarded) {
+      setMilestones(milestonesRef.current)
+      setMovesState(movesRef.current)
+      sfx.play('reward')
+      setReward(awarded)
+      setTimeout(() => setReward(0), 1300)
+    }
+  }
+
+  const runResolve = async (start: Cell[], opts: { swapAt?: number; forced?: Set<number> }) => {
+    const { steps } = resolve(start, rngRef.current, opts)
+    for (let s = 0; s < steps.length; s++) {
+      const step = steps[s]
+      setPopping(new Set(step.matched))
+      setHeat(step.mult)
+      if (step.spawned.length) sfx.play('bloom')
+      const big = bigSound(step.fired)
+      if (big) sfx.play(big)
+      else sfx.play(s === 0 ? 'pop' : 'combo')
+      await sleep(255)
+      scoreRef.current += step.gained
+      setScore(scoreRef.current)
+      awardMilestones()
+      apply(step.fallen)
+      setPopping(new Set())
+      await sleep(115)
+    }
+    setHeat(1)
+    if (!anyMove(boardRef.current)) {
+      sfx.play('shuffle')
+      await sleep(220)
+      apply(reshuffle(rngRef.current))
+    }
+  }
+
+  const trySwap = async (a: number, c: number) => {
+    const before = boardRef.current
+    const det = swapDetonation(before, a, c)
+    if (det) {
+      sfx.ensure(); sfx.play('swap'); setBusy(true)
+      apply(det.board)
+      movesRef.current -= 1; setMovesState(movesRef.current)
+      await sleep(120)
+      await runResolve(det.board, { forced: det.forced })
+      setBusy(false)
+      if (movesRef.current <= 0) endGame()
+    } else if (swapMakesMatch(before, a, c)) {
+      sfx.ensure(); sfx.play('swap'); setBusy(true)
+      const nb = swapped(before, a, c)
+      apply(nb)
+      movesRef.current -= 1; setMovesState(movesRef.current)
+      await sleep(120)
+      await runResolve(nb, { swapAt: c })
+      setBusy(false)
+      if (movesRef.current <= 0) endGame()
+    } else {
+      sfx.ensure(); sfx.play('bad'); setBusy(true)
+      apply(swapped(before, a, c))
+      await sleep(165)
+      apply(before)
+      setBusy(false)
+    }
+  }
+
+  const onPiece = (i: number) => {
+    if (busy || over) return
+    if (selected === null) { sfx.ensure(); setSelected(i) }
+    else if (selected === i) setSelected(null)
+    else if (areAdjacent(selected, i)) { const a = selected; setSelected(null); trySwap(a, i) }
+    else setSelected(i)
+  }
+
+  const DRAG_THRESH = 14
+  const onDown = (i: number, e: React.PointerEvent) => {
+    if (busy || over) return
+    sfx.ensure()
+    dragRef.current = { i, x: e.clientX, y: e.clientY }
+  }
+  const onMove = (e: React.PointerEvent) => {
+    const d = dragRef.current
+    if (!d || busy || over) return
+    const dx = e.clientX - d.x
+    const dy = e.clientY - d.y
+    if (Math.hypot(dx, dy) < DRAG_THRESH) return
+    const { x, y } = xy(d.i)
+    let target = -1
+    if (Math.abs(dx) > Math.abs(dy)) target = dx > 0 ? (x < W - 1 ? idx(x + 1, y) : -1) : (x > 0 ? idx(x - 1, y) : -1)
+    else target = dy > 0 ? (y < H - 1 ? idx(x, y + 1) : -1) : (y > 0 ? idx(x, y - 1) : -1)
+    dragRef.current = null
+    if (target >= 0) { setSelected(null); trySwap(d.i, target) }
+  }
+  const onUp = () => {
+    const d = dragRef.current
+    dragRef.current = null
+    if (d && !busy && !over) onPiece(d.i)
+  }
+
+  if (!mounted) return <div className="min-h-screen bg-[#0d0a14]" />
+
+  const prevAt = milestones > 0 ? milestoneTarget(milestones - 1) : 0
+  const nextAt = milestoneTarget(milestones)
+  const barPct = Math.max(0, Math.min(100, ((score - prevAt) / (nextAt - prevAt)) * 100))
+
+  return (
+    <div className="relative min-h-[calc(100svh-5rem)] overflow-hidden text-slate-200 font-sans">
+      <AtherBackdrop />
+      <style>{`
+        @keyframes manana-pop { 0%{transform:scale(1)} 40%{transform:scale(1.28)} 100%{transform:scale(0);opacity:0} }
+        @keyframes manana-drop { 0%{transform:translateY(-14px) scale(0.9);opacity:0.2} 100%{transform:translateY(0) scale(1);opacity:1} }
+        @keyframes manana-charged { 0%,100%{ filter:brightness(1) } 50%{ filter:brightness(1.4) } }
+        .manana-gem{ transition: transform .12s ease, box-shadow .12s ease; animation: manana-drop .18s ease; }
+        .manana-pop{ animation: manana-pop .26s ease forwards !important; }
+        .manana-charged{ animation: manana-charged 1.1s ease-in-out infinite; }
+      `}</style>
+
+      <div className="relative z-10 max-w-[560px] mx-auto px-4 py-6 min-h-[calc(100svh-5rem)] flex flex-col">
+        <header className="flex items-center justify-between mb-4">
+          <div>
+            <h1 className="text-2xl font-bold tracking-tight" style={{ color: '#ffd884' }}>Mana&apos;nana</h1>
+            <p className="text-[11px] text-slate-400/70 mt-0.5">match · bloom · detonate</p>
+          </div>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => { sfx.ensure(); const m = !muted; sfx.setMuted(m); setMuted(m); if (!m) sfx.play('swap') }}
+              title={muted ? 'sound off' : 'sound on'}
+              className="text-lg text-slate-500 hover:text-amber-300 transition-colors"
+            >{muted ? '\u{1F507}' : '\u{1F50A}'}</button>
+            <Link href="/arcade" className="text-[11px] text-slate-500 hover:text-amber-300 transition-colors">arcade &#8594;</Link>
+          </div>
+        </header>
+
+        <div className="grid grid-cols-3 gap-2 mb-2 text-center">
+          {[
+            { k: 'SCORE', v: score, c: '#ffd884' },
+            { k: 'MOVES', v: moves, c: moves <= 4 ? '#f9a8a2' : '#a6d8f7' },
+            { k: 'BEST', v: best, c: '#a4e7bb' },
+          ].map((s) => (
+            <div key={s.k} className="rounded-xl bg-white/[0.04] border border-white/[0.06] py-2">
+              <div className="text-[9px] tracking-[0.2em] text-slate-500">{s.k}</div>
+              <div className="text-lg font-bold tabular-nums" style={{ color: s.c }}>{s.v.toLocaleString()}</div>
+            </div>
+          ))}
+        </div>
+
+        {/* milestone bar — fill it for +moves */}
+        <div className="mb-3">
+          <div className="h-1.5 rounded-full bg-white/[0.06] overflow-hidden">
+            <div className="h-full rounded-full transition-all duration-300" style={{ width: `${barPct}%`, background: 'linear-gradient(90deg,#a4e7bb,#ffd884)' }} />
+          </div>
+          <div className="flex justify-between text-[8px] text-slate-500 mt-1 tracking-wider">
+            <span>ather meter</span>
+            <span>next +{MOVES_PER_MILESTONE} moves</span>
+          </div>
+        </div>
+
+        {/* board fits the leftover height — the whole 8x8 stays on screen, no scroll.
+            100cqmin = the smaller of the wrapper's w/h, so the square never overflows either axis */}
+        <div ref={boardWrapRef} className="flex-1 min-h-0 flex items-center justify-center w-full">
+        <div className="relative rounded-2xl bg-black/30 border border-white/[0.06] p-2.5 shadow-2xl shadow-black/40" style={boardPx ? { width: boardPx, height: boardPx } : { width: '100%' }}>
+          {/* heat multiplier */}
+          {heat > 1 && (
+            <div className="absolute -top-3 left-1/2 -translate-x-1/2 z-20 px-3 py-0.5 rounded-full text-[11px] font-bold tracking-wider text-[#1a1228]" style={{ background: 'linear-gradient(180deg,#ffe09a,#f0a526)' }}>
+              ✦ ATHER HEAT ×{heat.toFixed(1)}
+            </div>
+          )}
+          {reward > 0 && (
+            <div className="absolute top-2 right-2 z-20 px-2 py-0.5 rounded-full text-[11px] font-bold text-emerald-200 bg-emerald-500/20 border border-emerald-400/30 animate-pulse">
+              +{reward} moves
+            </div>
+          )}
+
+          <div
+            className="grid gap-1.5"
+            style={{ gridTemplateColumns: `repeat(${W}, 1fr)`, touchAction: 'none' }}
+            onPointerMove={onMove}
+            onPointerUp={onUp}
+            onPointerLeave={() => { dragRef.current = null }}
+          >
+            {board.map((cell, i) => {
+              const p = PIECES[cell.color] ?? PIECES[0]
+              const isSel = selected === i
+              const isPop = popping.has(i)
+              const k = cell.kind
+              const bg = k === 'prism' ? RAINBOW : `radial-gradient(circle at 32% 28%, ${p.light}, ${p.base} 58%, ${p.edge})`
+              return (
+                <button
+                  key={i}
+                  onPointerDown={(e) => onDown(i, e)}
+                  className="relative aspect-square rounded-full"
+                  style={{ touchAction: 'none' }}
+                  aria-label={p.name}
+                >
+                  <span
+                    className={`manana-gem absolute inset-0 rounded-full flex items-center justify-center ${isPop ? 'manana-pop' : ''} ${k !== 'none' ? 'manana-charged' : ''}`}
+                    style={{
+                      background: bg,
+                      boxShadow: isSel
+                        ? '0 0 0 3px #ffffffcc, 0 4px 10px rgba(0,0,0,0.5)'
+                        : k !== 'none'
+                          ? `inset 0 -3px 6px ${p.edge}88, 0 0 10px ${p.light}cc, 0 3px 6px rgba(0,0,0,0.35)`
+                          : `inset 0 -3px 6px ${p.edge}88, 0 3px 6px rgba(0,0,0,0.35)`,
+                      transform: isSel ? 'scale(1.08)' : undefined,
+                    }}
+                  >
+                    <span className="absolute rounded-full" style={{ top: '14%', left: '20%', width: '32%', height: '24%', background: 'rgba(255,255,255,0.55)', filter: 'blur(2px)' }} />
+                    {/* special markings */}
+                    {k === 'surgeH' && <span className="absolute left-[6%] right-[6%] top-1/2 -translate-y-1/2 h-[26%] rounded-full bg-white/70" />}
+                    {k === 'surgeV' && <span className="absolute top-[6%] bottom-[6%] left-1/2 -translate-x-1/2 w-[26%] rounded-full bg-white/70" />}
+                    {k === 'star' && <span className="relative text-white text-[16px] sm:text-[20px] leading-none drop-shadow-[0_0_4px_white]">✦</span>}
+                    {k === 'prism' && <span className="absolute inset-[34%] rounded-full bg-white/85" />}
+                    {k === 'none' && <span className="relative text-white/85 text-[15px] sm:text-[18px] leading-none drop-shadow">{p.glyph}</span>}
+                  </span>
+                </button>
+              )
+            })}
+          </div>
+
+          {over && (
+            <div className="absolute inset-0 z-30 flex flex-col items-center justify-center rounded-2xl bg-black/70 backdrop-blur-sm">
+              <div className="text-amber-200 text-sm tracking-[0.25em] mb-1">OUT OF MOVES</div>
+              <div className="text-3xl font-bold text-white mb-1 tabular-nums">{score.toLocaleString()}</div>
+              <div className="text-[11px] text-slate-400 mb-4">{score >= best ? 'a new best!' : `best ${best.toLocaleString()}`}</div>
+              <button
+                onClick={() => { sfx.ensure(); sfx.play('shuffle'); newGame() }}
+                className="px-5 py-2 rounded-full text-sm font-semibold tracking-wide text-[#1a1228]"
+                style={{ background: 'linear-gradient(180deg,#ffe09a,#f0a526)' }}
+              >Play again</button>
+            </div>
+          )}
+        </div>
+        </div>
+
+        <footer className="mt-3 shrink-0 text-center text-[10px] text-slate-600">
+          drag a gem to a neighbour · 4 blooms a Surge · 5 a Prism · 7 an Ather Star
+        </footer>
+      </div>
+    </div>
+  )
+}

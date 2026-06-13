@@ -1,0 +1,687 @@
+@import "tailwindcss";
+
+@theme {
+  --color-void: #0a0a0f;
+  --color-abyss: #0e0e16;
+  --color-surface: #141420;
+  --color-surface-light: #1c1c2e;
+  --color-violet: #8b5cf6;
+  --color-violet-dim: #6d48cc;
+  --color-violet-glow: rgba(139, 92, 246, 0.15);
+  --color-cyan: #00ffff;
+  --color-cyan-dim: #00cccc;
+  --color-gold: #d4a843;
+  --color-text: #e2e0ea;
+  --color-text-dim: #8a879a;
+  --color-text-faint: #5a576a;
+  --font-display: "Cormorant Garamond", Georgia, serif;
+  --font-body: "Inter", system-ui, sans-serif;
+}
+
+body {
+  background-color: var(--color-void);
+  color: var(--color-text);
+  font-family: var(--font-body);
+}
+
+/* Thin scrollbar for game panels */
+.shimmer-scroll::-webkit-scrollbar { width: 4px; }
+.shimmer-scroll::-webkit-scrollbar-track { background: transparent; }
+.shimmer-scroll::-webkit-scrollbar-thumb { background: rgba(212, 168, 67, 0.15); border-radius: 2px; }
+.shimmer-scroll::-webkit-scrollbar-thumb:hover { background: rgba(212, 168, 67, 0.3); }
+.shimmer-scroll { scrollbar-width: thin; scrollbar-color: rgba(212, 168, 67, 0.15) transparent; }
+
+/* Hero atmosphere */
+.hero-void-glow {
+  background:
+    radial-gradient(ellipse at 50% 30%, rgba(139, 92, 246, 0.08) 0%, transparent 50%),
+    radial-gradient(ellipse at 30% 60%, rgba(0, 255, 255, 0.03) 0%, transparent 40%),
+    radial-gradient(ellipse at 70% 70%, rgba(212, 168, 67, 0.03) 0%, transparent 35%),
+    radial-gradient(ellipse at 50% 50%, rgba(14, 14, 22, 1) 0%, rgba(10, 10, 15, 1) 100%);
+}
+
+.hero-stars {
+  background-image:
+    radial-gradient(1px 1px at 15% 20%, rgba(255, 255, 255, 0.4) 0%, transparent 100%),
+    radial-gradient(1px 1px at 40% 15%, rgba(255, 255, 255, 0.3) 0%, transparent 100%),
+    radial-gradient(1px 1px at 65% 25%, rgba(139, 92, 246, 0.5) 0%, transparent 100%),
+    radial-gradient(1px 1px at 80% 10%, rgba(255, 255, 255, 0.25) 0%, transparent 100%),
+    radial-gradient(1px 1px at 25% 45%, rgba(255, 255, 255, 0.2) 0%, transparent 100%),
+    radial-gradient(1px 1px at 55% 40%, rgba(0, 255, 255, 0.3) 0%, transparent 100%),
+    radial-gradient(1px 1px at 85% 50%, rgba(255, 255, 255, 0.35) 0%, transparent 100%),
+    radial-gradient(1px 1px at 10% 65%, rgba(255, 255, 255, 0.2) 0%, transparent 100%),
+    radial-gradient(1px 1px at 45% 70%, rgba(139, 92, 246, 0.4) 0%, transparent 100%),
+    radial-gradient(1px 1px at 75% 60%, rgba(255, 255, 255, 0.3) 0%, transparent 100%),
+    radial-gradient(1.5px 1.5px at 35% 35%, rgba(212, 168, 67, 0.35) 0%, transparent 100%),
+    radial-gradient(1px 1px at 90% 35%, rgba(255, 255, 255, 0.2) 0%, transparent 100%);
+  animation: starDrift 80s linear infinite;
+}
+
+@keyframes starDrift {
+  0% { transform: translateY(0); }
+  100% { transform: translateY(-15px); }
+}
+
+.hero-title {
+  text-shadow:
+    0 0 40px rgba(139, 92, 246, 0.15),
+    0 0 80px rgba(139, 92, 246, 0.05);
+}
+
+/* Spoiler reveal animation */
+.animate-in {
+  animation: fadeSlideIn 0.4s ease-out;
+}
+@keyframes fadeSlideIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* Atmospheric glow effects */
+.glow-violet {
+  box-shadow: 0 0 30px var(--color-violet-glow), 0 0 60px rgba(139, 92, 246, 0.05);
+}
+
+.glow-border {
+  border: 1px solid rgba(139, 92, 246, 0.2);
+}
+
+.glow-border:hover {
+  border-color: rgba(139, 92, 246, 0.4);
+  box-shadow: 0 0 20px rgba(139, 92, 246, 0.1);
+}
+
+/* Markdown content styling */
+.prose-athernyx h1 {
+  font-family: var(--font-display);
+  font-size: 2rem;
+  font-weight: 600;
+  color: var(--color-text);
+  margin-bottom: 1rem;
+  margin-top: 2rem;
+}
+
+.prose-athernyx h2 {
+  font-family: var(--font-display);
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: var(--color-violet);
+  margin-bottom: 0.75rem;
+  margin-top: 1.75rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid rgba(139, 92, 246, 0.15);
+}
+
+.prose-athernyx h3 {
+  font-family: var(--font-display);
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: var(--color-text);
+  margin-bottom: 0.5rem;
+  margin-top: 1.5rem;
+}
+
+.prose-athernyx p {
+  line-height: 1.75;
+  margin-bottom: 1rem;
+  color: var(--color-text-dim);
+}
+
+.prose-athernyx strong {
+  color: var(--color-text);
+  font-weight: 600;
+}
+
+.prose-athernyx em {
+  color: var(--color-text);
+  font-style: italic;
+}
+
+.prose-athernyx ul, .prose-athernyx ol {
+  margin-bottom: 1rem;
+  padding-left: 1.5rem;
+}
+
+.prose-athernyx li {
+  line-height: 1.75;
+  color: var(--color-text-dim);
+  margin-bottom: 0.25rem;
+}
+
+.prose-athernyx blockquote {
+  border-left: 3px solid var(--color-violet);
+  padding-left: 1rem;
+  margin: 1.5rem 0;
+  color: var(--color-text-dim);
+  font-style: italic;
+}
+
+.prose-athernyx table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 1.5rem 0;
+}
+
+.prose-athernyx th {
+  text-align: left;
+  padding: 0.75rem;
+  border-bottom: 2px solid rgba(139, 92, 246, 0.2);
+  color: var(--color-violet);
+  font-family: var(--font-display);
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.prose-athernyx td {
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  color: var(--color-text-dim);
+  font-size: 0.9rem;
+}
+
+.prose-athernyx tr:hover td {
+  background-color: rgba(139, 92, 246, 0.03);
+}
+
+.prose-athernyx hr {
+  border: none;
+  border-top: 1px solid rgba(139, 92, 246, 0.15);
+  margin: 2rem 0;
+}
+
+.prose-athernyx code {
+  background: rgba(139, 92, 246, 0.1);
+  padding: 0.15rem 0.4rem;
+  border-radius: 3px;
+  font-size: 0.85em;
+  color: var(--color-violet);
+}
+
+.prose-athernyx a {
+  color: var(--color-violet);
+  text-decoration: underline;
+  text-decoration-color: rgba(139, 92, 246, 0.3);
+}
+
+.prose-athernyx a:hover {
+  text-decoration-color: var(--color-violet);
+}
+
+.prose-athernyx img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 8px;
+  margin: 1.5rem 0;
+}
+
+/* Magii table surface — obsidian slab with mana circuits */
+.magii-table {
+  background:
+    /* Subtle noise texture via repeating micro-gradients */
+    repeating-conic-gradient(rgba(139, 92, 246, 0.015) 0% 25%, transparent 0% 50%) 0 0 / 4px 4px,
+    /* Mana glow — center hotspot */
+    radial-gradient(ellipse at 50% 45%, rgba(139, 92, 246, 0.06) 0%, transparent 50%),
+    /* Secondary warm glow */
+    radial-gradient(ellipse at 50% 80%, rgba(212, 168, 67, 0.04) 0%, transparent 40%),
+    /* Base obsidian surface */
+    radial-gradient(ellipse at 50% 40%, #0e0c14 0%, #0a0910 40%, #08070c 70%, #050408 100%);
+  border: 1px solid rgba(139, 92, 246, 0.08);
+}
+
+/* Mana circuit lines embedded in table */
+.magii-table-circuits {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+  border-radius: inherit;
+  mask-image: radial-gradient(ellipse at 50% 50%, black 40%, transparent 80%);
+  -webkit-mask-image: radial-gradient(ellipse at 50% 50%, black 40%, transparent 80%);
+}
+.magii-table-circuits::before {
+  content: '';
+  position: absolute;
+  inset: -50%;
+  background:
+    /* Horizontal circuit lines */
+    repeating-linear-gradient(0deg, transparent, transparent 58px, rgba(139, 92, 246, 0.09) 58px, rgba(139, 92, 246, 0.09) 59px, transparent 59px, transparent 120px),
+    /* Vertical circuit lines */
+    repeating-linear-gradient(90deg, transparent, transparent 72px, rgba(139, 92, 246, 0.07) 72px, rgba(139, 92, 246, 0.07) 73px, transparent 73px, transparent 144px),
+    /* Diagonal accent lines */
+    repeating-linear-gradient(135deg, transparent, transparent 96px, rgba(212, 168, 67, 0.045) 96px, rgba(212, 168, 67, 0.045) 97px, transparent 97px, transparent 192px);
+  animation: circuitDrift 60s linear infinite;
+}
+@keyframes circuitDrift {
+  0% { transform: translate(0, 0); }
+  100% { transform: translate(72px, 60px); }
+}
+
+/* Circuit intersection nodes — glowing dots at line crossings */
+.magii-table-nodes {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  border-radius: inherit;
+  background:
+    radial-gradient(circle at 25% 30%, rgba(139, 92, 246, 0.25) 0%, rgba(139, 92, 246, 0.15) 2px, transparent 4px),
+    radial-gradient(circle at 75% 25%, rgba(139, 92, 246, 0.20) 0%, rgba(139, 92, 246, 0.10) 2px, transparent 4px),
+    radial-gradient(circle at 50% 48%, rgba(212, 168, 67, 0.25) 0%, rgba(212, 168, 67, 0.12) 2.5px, transparent 5px),
+    radial-gradient(circle at 20% 70%, rgba(139, 92, 246, 0.15) 0%, rgba(139, 92, 246, 0.08) 2px, transparent 4px),
+    radial-gradient(circle at 80% 65%, rgba(139, 92, 246, 0.18) 0%, rgba(139, 92, 246, 0.08) 2px, transparent 4px),
+    radial-gradient(circle at 35% 85%, rgba(212, 168, 67, 0.15) 0%, rgba(212, 168, 67, 0.06) 2px, transparent 4px),
+    radial-gradient(circle at 65% 15%, rgba(139, 92, 246, 0.16) 0%, rgba(139, 92, 246, 0.06) 2px, transparent 4px),
+    radial-gradient(circle at 42% 38%, rgba(139, 92, 246, 0.12) 0%, rgba(139, 92, 246, 0.05) 1.5px, transparent 3px),
+    radial-gradient(circle at 58% 72%, rgba(212, 168, 67, 0.12) 0%, rgba(212, 168, 67, 0.05) 1.5px, transparent 3px);
+  animation: nodesPulse 6s ease-in-out infinite alternate;
+}
+@keyframes nodesPulse {
+  0% { opacity: 0.5; }
+  100% { opacity: 1; }
+}
+
+/* Table edge glow — runic border */
+.magii-table-edge {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  border-radius: inherit;
+  box-shadow:
+    /* Inner darkness vignette */
+    inset 0 0 60px rgba(0, 0, 0, 0.5),
+    inset 0 0 150px rgba(0, 0, 0, 0.25),
+    /* Violet edge bleed */
+    inset 0 0 2px rgba(139, 92, 246, 0.18),
+    inset 0 0 40px rgba(139, 92, 246, 0.05),
+    /* Outer glow */
+    0 0 30px rgba(139, 92, 246, 0.04);
+}
+
+/* Center play area — rune circle */
+.magii-table-rune {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 220px;
+  height: 220px;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  border-radius: 50%;
+  border: 1px solid rgba(139, 92, 246, 0.12);
+  box-shadow:
+    0 0 60px rgba(139, 92, 246, 0.06),
+    0 0 120px rgba(139, 92, 246, 0.02),
+    inset 0 0 40px rgba(139, 92, 246, 0.04);
+  animation: runeRotate 120s linear infinite;
+}
+.magii-table-rune::before {
+  content: '';
+  position: absolute;
+  inset: 16px;
+  border-radius: 50%;
+  border: 1px solid rgba(212, 168, 67, 0.10);
+  box-shadow: 0 0 20px rgba(212, 168, 67, 0.03);
+}
+.magii-table-rune::after {
+  content: '';
+  position: absolute;
+  inset: 36px;
+  border-radius: 50%;
+  border: 1px dashed rgba(139, 92, 246, 0.08);
+}
+@keyframes runeRotate {
+  0% { transform: translate(-50%, -50%) rotate(0deg); }
+  100% { transform: translate(-50%, -50%) rotate(360deg); }
+}
+
+.card-shadow {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.6), 0 1px 3px rgba(0, 0, 0, 0.4), 0 0 1px rgba(139, 92, 246, 0.1);
+}
+
+.magii-glow {
+  animation: magii-pulse 2s ease-in-out infinite;
+}
+
+@keyframes magii-pulse {
+  0%, 100% { box-shadow: 0 0 12px rgba(139, 92, 246, 0.25); }
+  50% { box-shadow: 0 0 24px rgba(139, 92, 246, 0.4), 0 0 48px rgba(139, 92, 246, 0.15); }
+}
+
+/* Magii volume sliders */
+.magii-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 3px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 2px;
+  outline: none;
+  cursor: pointer;
+}
+.magii-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #8b5cf6;
+  cursor: pointer;
+  transition: transform 0.1s;
+}
+.magii-slider::-webkit-slider-thumb:hover {
+  transform: scale(1.3);
+}
+.magii-slider::-moz-range-thumb {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #8b5cf6;
+  border: none;
+  cursor: pointer;
+}
+.magii-slider::-moz-range-track {
+  height: 3px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 2px;
+}
+
+/* Magii card animations */
+.magii-card-enter {
+  animation: cardDealIn 0.35s ease-out both;
+}
+@keyframes cardDealIn {
+  from { opacity: 0; transform: translateY(-20px) scale(0.9); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* Staggered deal — apply nth-child delays */
+.magii-band-enter > *:nth-child(1) { animation-delay: 0ms; }
+.magii-band-enter > *:nth-child(2) { animation-delay: 50ms; }
+.magii-band-enter > *:nth-child(3) { animation-delay: 100ms; }
+.magii-band-enter > *:nth-child(4) { animation-delay: 150ms; }
+.magii-band-enter > *:nth-child(5) { animation-delay: 200ms; }
+.magii-band-enter > *:nth-child(6) { animation-delay: 250ms; }
+.magii-band-enter > *:nth-child(7) { animation-delay: 300ms; }
+.magii-band-enter > *:nth-child(8) { animation-delay: 350ms; }
+
+/* Your turn flash */
+.magii-your-turn {
+  animation: yourTurnFlash 1.2s ease-out;
+}
+@keyframes yourTurnFlash {
+  0% { box-shadow: inset 0 0 0 2px rgba(139, 92, 246, 0); }
+  15% { box-shadow: inset 0 0 0 2px rgba(139, 92, 246, 0.5), inset 0 0 40px rgba(139, 92, 246, 0.1); }
+  100% { box-shadow: inset 0 0 0 2px rgba(139, 92, 246, 0); }
+}
+
+/* Waiting for NPCs indicator */
+.magii-waiting {
+  opacity: 0.7;
+  pointer-events: none;
+}
+.magii-waiting .magii-actions {
+  opacity: 0.3;
+}
+
+/* Modal backdrop fade */
+.magii-modal-enter {
+  animation: modalFadeIn 0.3s ease-out;
+}
+@keyframes modalFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* Modal content pop */
+.magii-modal-content {
+  animation: modalPopIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+@keyframes modalPopIn {
+  from { opacity: 0; transform: scale(0.9) translateY(10px); }
+  to { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+/* Card swap flash */
+.magii-card-swap {
+  animation: cardSwapFlash 0.3s ease-out;
+}
+@keyframes cardSwapFlash {
+  0% { filter: brightness(1); }
+  30% { filter: brightness(1.5); }
+  100% { filter: brightness(1); }
+}
+
+/* Active player glow on opponent seat */
+.magii-active-opponent {
+  animation: activeOpponent 1.5s ease-in-out infinite;
+}
+@keyframes activeOpponent {
+  0%, 100% { box-shadow: 0 0 8px rgba(139, 92, 246, 0.15); }
+  50% { box-shadow: 0 0 16px rgba(139, 92, 246, 0.3); }
+}
+
+/* Game over overlay */
+.magii-game-over {
+  animation: gameOverIn 0.5s ease-out;
+}
+@keyframes gameOverIn {
+  from { opacity: 0; backdrop-filter: blur(0px); }
+  to { opacity: 1; backdrop-filter: blur(4px); }
+}
+
+/* NPC action toast */
+.magii-toast {
+  animation: toastIn 0.3s ease-out, toastOut 0.3s ease-in 1.5s forwards;
+}
+@keyframes toastIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes toastOut {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
+/* ------------------------------------------------------------------ */
+/* Bookstore — Comic Shop                                             */
+/* ------------------------------------------------------------------ */
+
+/* Comic cover hover lift + glow */
+.comic-cover-glow {
+  transition: transform 0.3s ease-out, box-shadow 0.3s ease-out;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+}
+.comic-cover-glow:hover {
+  transform: translateY(-4px) scale(1.02);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6), 0 0 60px rgba(139, 92, 246, 0.08);
+}
+
+/* Coming soon badge */
+.coming-soon-badge {
+  background: linear-gradient(135deg, rgba(212, 168, 67, 0.2), rgba(212, 168, 67, 0.1));
+  border: 1px solid rgba(212, 168, 67, 0.3);
+  color: var(--color-gold);
+}
+
+/* Shelf divider line */
+.bookstore-shelf-divider {
+  border-top: 1px solid rgba(212, 168, 67, 0.08);
+  margin: 3rem 0;
+}
+
+/* Staggered cover entrance */
+.cover-stagger > * {
+  animation: coverSlideIn 0.4s ease-out both;
+}
+.cover-stagger > *:nth-child(1) { animation-delay: 0ms; }
+.cover-stagger > *:nth-child(2) { animation-delay: 60ms; }
+.cover-stagger > *:nth-child(3) { animation-delay: 120ms; }
+.cover-stagger > *:nth-child(4) { animation-delay: 180ms; }
+.cover-stagger > *:nth-child(5) { animation-delay: 240ms; }
+.cover-stagger > *:nth-child(6) { animation-delay: 300ms; }
+.cover-stagger > *:nth-child(7) { animation-delay: 360ms; }
+.cover-stagger > *:nth-child(8) { animation-delay: 420ms; }
+.cover-stagger > *:nth-child(9) { animation-delay: 480ms; }
+.cover-stagger > *:nth-child(10) { animation-delay: 540ms; }
+
+@keyframes coverSlideIn {
+  from { opacity: 0; transform: translateY(12px) scale(0.96); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* ------------------------------------------------------------------ */
+/* Shimmer — in-game notifications + XP floaters                      */
+/* ------------------------------------------------------------------ */
+
+.shimmer-toast {
+  animation: shimmerToastIn 0.22s ease-out, shimmerToastOut 0.35s ease-in var(--toast-hold, 1.65s) forwards;
+  will-change: opacity, transform;
+}
+.shimmer-toast-levelup {
+  animation: shimmerToastIn 0.22s ease-out, shimmerLevelPulse 0.9s ease-out 0.22s 1, shimmerToastOut 0.4s ease-in 3.1s forwards;
+}
+.shimmer-toast-milestone {
+  animation: shimmerToastIn 0.3s ease-out, shimmerMilestonePulse 1.2s ease-out 0.3s 2, shimmerToastOut 0.4s ease-in 4.6s forwards;
+}
+@keyframes shimmerToastIn {
+  from { opacity: 0; transform: translateY(-6px) scale(0.96); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes shimmerToastOut {
+  from { opacity: 1; }
+  to   { opacity: 0; transform: translateY(-4px); }
+}
+@keyframes shimmerLevelPulse {
+  0%   { transform: scale(1); filter: brightness(1); }
+  50%  { transform: scale(1.05); filter: brightness(1.4); }
+  100% { transform: scale(1); filter: brightness(1); }
+}
+@keyframes shimmerMilestonePulse {
+  0%   { transform: scale(1); filter: brightness(1); }
+  50%  { transform: scale(1.08); filter: brightness(1.6); }
+  100% { transform: scale(1); filter: brightness(1); }
+}
+
+.shimmer-xp-floater {
+  animation: shimmerXpFloat 1.2s ease-out forwards;
+  will-change: transform, opacity;
+  transform: translate(-50%, 0);
+}
+
+.shimmer-level-pulse {
+  animation: shimmerLevelNumPulse 1.2s ease-out 1;
+  display: inline-block;
+}
+@keyframes shimmerLevelNumPulse {
+  0%   { transform: scale(1); filter: brightness(1); }
+  30%  { transform: scale(1.35); filter: brightness(1.6); }
+  60%  { transform: scale(1.1); filter: brightness(1.3); }
+  100% { transform: scale(1); filter: brightness(1); }
+}
+@keyframes shimmerXpFloat {
+  0%   { opacity: 0; transform: translate(-50%, 0) scale(0.85); }
+  12%  { opacity: 1; transform: translate(-50%, -6px) scale(1); }
+  70%  { opacity: 1; transform: translate(-50%, -22px) scale(1); }
+  100% { opacity: 0; transform: translate(-50%, -32px) scale(1); }
+}
+
+/* Subtle background texture */
+.bg-noise {
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.02'/%3E%3C/svg%3E");
+}
+
+/* Library markdown rendering */
+.prose-cortex {
+  color: var(--color-text-dim);
+  line-height: 1.7;
+  font-size: 0.95rem;
+}
+.prose-cortex h1 {
+  color: var(--color-text);
+  font-family: var(--font-display), serif;
+  font-size: 2rem;
+  font-weight: 700;
+  margin: 0 0 1rem;
+}
+.prose-cortex h2 {
+  color: var(--color-text);
+  font-size: 1.3rem;
+  font-weight: 600;
+  margin: 2rem 0 0.75rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  padding-bottom: 0.3rem;
+}
+.prose-cortex h3 {
+  color: var(--color-text);
+  font-size: 1.05rem;
+  font-weight: 600;
+  margin: 1.5rem 0 0.5rem;
+}
+.prose-cortex p,
+.prose-cortex li {
+  margin: 0.5rem 0;
+}
+.prose-cortex ul,
+.prose-cortex ol {
+  padding-left: 1.4rem;
+  margin: 0.75rem 0;
+}
+.prose-cortex ul {
+  list-style: disc;
+}
+.prose-cortex ol {
+  list-style: decimal;
+}
+.prose-cortex a {
+  color: var(--color-violet);
+  text-decoration: underline;
+  text-decoration-color: rgba(139, 92, 246, 0.4);
+}
+.prose-cortex code {
+  background: var(--color-surface);
+  color: var(--color-gold);
+  padding: 0.1rem 0.35rem;
+  border-radius: 0.3rem;
+  font-size: 0.85em;
+}
+.prose-cortex pre {
+  background: var(--color-surface);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 0.6rem;
+  padding: 1rem;
+  overflow-x: auto;
+  margin: 1rem 0;
+}
+.prose-cortex pre code {
+  background: transparent;
+  color: var(--color-text-dim);
+  padding: 0;
+}
+.prose-cortex blockquote {
+  border-left: 3px solid var(--color-violet);
+  padding-left: 1rem;
+  color: var(--color-text-faint);
+  margin: 1rem 0;
+}
+.prose-cortex strong {
+  color: var(--color-text);
+  font-weight: 600;
+}
+.prose-cortex table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 1rem 0;
+  font-size: 0.85rem;
+}
+.prose-cortex th,
+.prose-cortex td {
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  padding: 0.4rem 0.6rem;
+  text-align: left;
+}
+.prose-cortex th {
+  color: var(--color-text);
+  background: var(--color-surface);
+}
+.prose-cortex hr {
+  border: none;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  margin: 2rem 0;
+}
