@@ -10,31 +10,26 @@ import FavoritesRow from "./_components/FavoritesRow";
 function PortalWidget({
   href,
   glyph,
-  eyebrow,
   title,
-  tagline,
   align,
 }: {
   href: string;
   glyph: string;
-  eyebrow: string;
   title: string;
-  tagline: string;
   align: "left" | "right";
 }) {
+  // glyph is a placeholder — swap for a pixel-art icon (mug / cabinet) when painted.
   return (
     <Link
       href={href}
-      className={`group relative block w-[180px] rounded-xl border border-white/[0.07] bg-[#12121e]/60 backdrop-blur-sm p-4 transition-all hover:border-[#d4a843]/40 hover:bg-[#12121e]/90 ${
-        align === "right" ? "text-right" : "text-left"
+      className={`group relative block w-full lg:w-[170px] rounded-xl border border-white/[0.07] bg-[#12121e]/60 backdrop-blur-sm p-4 transition-all hover:border-[#d4a843]/40 hover:bg-[#12121e]/90 ${
+        align === "right" ? "lg:text-right" : "lg:text-left"
       }`}
     >
       <span className="block text-[#d4a843] text-3xl mb-2 group-hover:scale-110 transition-transform">{glyph}</span>
-      <span className="block text-[8px] text-text-faint/45 font-display tracking-[0.3em] uppercase">{eyebrow}</span>
       <span className="block font-display text-text text-base tracking-wider group-hover:text-[#d4a843] transition-colors">
         {title}
       </span>
-      <span className="block text-text-faint/45 text-[10px] leading-snug mt-1">{tagline}</span>
     </Link>
   );
 }
@@ -52,11 +47,9 @@ function ShimmerHero() {
         }}
       />
       <div className="relative">
-        <span className="block text-[#d4a843] text-6xl mb-4 shimmer-hero-glyph">{shimmer.glyph}</span>
+        <span className="block text-[#d4a843] text-6xl mb-5 shimmer-hero-glyph">{shimmer.glyph}</span>
         <h1 className="font-display text-text text-4xl tracking-[0.35em] uppercase">Shimmer</h1>
-        <p className="text-text-faint/55 text-[12px] leading-relaxed mt-3 max-w-[300px] mx-auto">{shimmer.tagline}</p>
-        <p className="text-[#8b5cf6]/70 text-[11px] font-display tracking-[0.2em] uppercase mt-5">the world is waking</p>
-        <span className="inline-block mt-4 text-[9px] text-text-faint/50 font-display tracking-[0.3em] uppercase border border-white/[0.08] rounded-full px-3 py-1">
+        <span className="inline-block mt-5 text-[9px] text-text-faint/50 font-display tracking-[0.3em] uppercase border border-white/[0.08] rounded-full px-3 py-1">
           Coming Soon
         </span>
       </div>
@@ -77,35 +70,17 @@ export default function HubPage() {
 
         {/* stage: widgets flank the hero */}
         <div className="relative flex flex-col items-center">
-          <div className="flex w-full justify-between gap-4 mb-6 lg:mb-0 lg:absolute lg:inset-x-0 lg:top-0 lg:z-10">
-            <PortalWidget
-              href="/magii"
-              glyph="✦"
-              eyebrow="the tavern"
-              title="Kindled Mug"
-              tagline="pull up a chair — the spirit tales of Magii"
-              align="left"
-            />
-            <PortalWidget
-              href="/arcade/all"
-              glyph="▦"
-              eyebrow="the catalog"
-              title="The Arcade"
-              tagline="every playable corner of the world"
-              align="right"
-            />
+          <div className="grid grid-cols-2 w-full gap-3 mb-6 lg:flex lg:justify-between lg:mb-0 lg:absolute lg:inset-x-0 lg:top-0 lg:z-10">
+            <PortalWidget href="/magii" glyph="✦" title="Kindled Mug" align="left" />
+            <PortalWidget href="/arcade/all" glyph="▦" title="The Arcade" align="right" />
           </div>
 
-          <div className="lg:pt-6 flex justify-center">
+          <div className="lg:pt-6 flex justify-center w-full">
             <ShimmerHero />
           </div>
         </div>
 
         <FavoritesRow />
-
-        <footer className="mt-12 text-center text-text-faint/25 text-[10px] font-display tracking-wider">
-          built in the Akatskii studio · hand-drawn, hand-coded
-        </footer>
       </div>
     </div>
   );
