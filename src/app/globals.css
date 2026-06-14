@@ -18,6 +18,12 @@
   --font-body: "Inter", system-ui, sans-serif;
 }
 
+html,
+body {
+  /* kill the iOS rubber-band/overscroll bounce everywhere (does not block real scroll) */
+  overscroll-behavior: none;
+}
+
 body {
   background-color: var(--color-void);
   color: var(--color-text);

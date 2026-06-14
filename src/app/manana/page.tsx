@@ -7,6 +7,7 @@
 import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { mulberry32, type Rng } from '@/lib/arcade/rng'
+import { useNoScroll } from '@/lib/arcade/useNoScroll'
 import {
   W, H, idx, xy, areAdjacent, reshuffle, swapped, swapMakesMatch, swapDetonation,
   resolve, anyMove, isPuff, seedPuffs, spreadPuffs, countPuffs, type Cell, type Kind,
@@ -93,6 +94,8 @@ export default function MananaPage() {
   const [boardPx, setBoardPx] = useState<number | null>(null)
   const [fx, setFx] = useState<Fx[]>([])
   const fxIdRef = useRef(0)
+
+  useNoScroll() // pin to viewport on mobile — no page scroll / iOS bounce
 
   const boardWrapRef = useRef<HTMLDivElement>(null)
   const boardRef = useRef<Cell[]>([])

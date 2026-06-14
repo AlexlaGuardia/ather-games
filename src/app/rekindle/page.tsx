@@ -22,6 +22,7 @@ import { NODES, loadProgress, recordClear, type Progress } from './lib/world'
 import { genTemplate, dailySeed, dailyKey, type Template } from './lib/generate'
 import { WorldMap } from './components/WorldMap'
 import { sfx } from './lib/sfx'
+import { useNoScroll } from '@/lib/arcade/useNoScroll'
 
 const CELL = 64
 const SIDE_DX = [0, 1, 0, -1]
@@ -62,6 +63,8 @@ export default function RekindlePage() {
   const [failed, setFailed] = useState(false)
   const [earned, setEarned] = useState(0)
   const [muted, setMuted] = useState(false)
+
+  useNoScroll() // pin to viewport on mobile — no page scroll / iOS bounce
 
   useEffect(() => {
     setProgress(loadProgress())

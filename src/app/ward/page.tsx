@@ -8,6 +8,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { mulberry32 } from '@/lib/arcade/rng'
+import { useNoScroll } from '@/lib/arcade/useNoScroll'
 import {
   makeWorld,
   tick,
@@ -64,6 +65,8 @@ export default function WardPage() {
   const [over, setOver] = useState(false)
   const [muted, setMuted] = useState(false)
   const [hud, setHud] = useState<Hud>({ score: 0, wave: 1, ammo: 0, maxAmmo: 0, spires: NUM_SPIRES, hi: 0 })
+
+  useNoScroll() // pin to viewport on mobile — no page scroll / iOS bounce
 
   const readHud = useCallback((w: World): Hud => ({
     score: w.score,
