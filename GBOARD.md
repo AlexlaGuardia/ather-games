@@ -98,10 +98,12 @@ scenes). Lore routes through /magii for canon safety.
   finally outgrow the thing that hunted you). Wedge: the **first element you eat forks your
   evolution branch** (Storm-line ≠ Earth-line). Finally earns the cloud-ocean a game. Canon
   ladder needs a /magii pass (real Athernyx creatures up the chain, not generic fish).
-- **Shardfall** *(Asteroids)* — free-drift thrust/rotate, shatter void-shards that split into
-  smaller ones, coast on momentum. The game that *invented* vector-glow — would feel the most
-  "Atari" of anything here. Distinct from Ward (free-flight, not tap-bloom) and Gravitar
-  (momentum drift, no gravity wells).
+- **Ather Dash** *(lane-runner)* — Subway-Surfers loop: run through the Ather, dodge obstacles,
+  reach the next gate. **The twist that saves it from being Updraft-with-lanes:** the lanes are
+  **elements** (Storm/Earth/Water/Mana) and each gate is tuned — you must be in the *matching*
+  lane to pass it. So it's **read-ahead** (spot the gate's element, swap in time) under dodge
+  pressure, not pure reflex. Ours + canon (the 4 elements); Updraft is pure timing, this is
+  positional anticipation. *(replaced Shardfall, which was Asteroids with no twist of its own.)*
 - **Squall** *(bullet-hell dodge)* — pure evasion, no offense. Read the void's projectile
   patterns, weave through, score = survival time. A brand-new **mood**: defenseless survival.
   Vector-glow bullet patterns are gorgeous and cheap to draw.
