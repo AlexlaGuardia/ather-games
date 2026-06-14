@@ -45,6 +45,15 @@ export const GAMES: GameEntry[] = [
     tagline: "the void rains on the spires · bloom Ather to hold the line — a vector defense",
   },
   {
+    id: "laz",
+    title: "Laz",
+    href: "/laz",
+    glyph: "➶",
+    tier: "live",
+    kind: "play",
+    tagline: "Lazerin rides the Ather · one tap to climb, mind the void — endless flight",
+  },
+  {
     id: "shimmer",
     title: "Shimmer",
     href: "/shimmer",
