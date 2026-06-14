@@ -90,6 +90,24 @@ scenes). Lore routes through /magii for canon safety.
 - **Rune-weaving** — trace runes to channel mana. A new input mode (gesture/tracing), runes
   are deep canon, distinct enough from Rekindle (draw vs rotate).
 
+## 💡 Fresh riffs *(2026-06-14 — stock the queue, each adds a mechanic the 7 lack)*
+- **Driftling** *(food-chain evolution)* — flOw / Feeding Frenzy / Deeeep.io DNA. Start tiny
+  adrift in the **cloud-ocean** (canon!), eat smaller, get eaten by bigger, tier up into a
+  bigger form. NOT Voranyx — that's slither-length + body-collision; this is discrete
+  **evolution tiers** + an eat-or-be-eaten **size hierarchy** (the drama is the moment you
+  finally outgrow the thing that hunted you). Wedge: the **first element you eat forks your
+  evolution branch** (Storm-line ≠ Earth-line). Finally earns the cloud-ocean a game. Canon
+  ladder needs a /magii pass (real Athernyx creatures up the chain, not generic fish).
+- **Shardfall** *(Asteroids)* — free-drift thrust/rotate, shatter void-shards that split into
+  smaller ones, coast on momentum. The game that *invented* vector-glow — would feel the most
+  "Atari" of anything here. Distinct from Ward (free-flight, not tap-bloom) and Gravitar
+  (momentum drift, no gravity wells).
+- **Squall** *(bullet-hell dodge)* — pure evasion, no offense. Read the void's projectile
+  patterns, weave through, score = survival time. A brand-new **mood**: defenseless survival.
+  Vector-glow bullet patterns are gorgeous and cheap to draw.
+- *Bench (not committed):* **Breakout** (bounce an Ather mote to shatter the void-crust);
+  **Orrery pinball** — held, overlaps Gravitar's physics.
+
 ## ⚰️ Killed — covered by a shipped game *(don't re-pitch)*
 - **The Dive** (fall through the cloud-ocean, dodge-and-collect) → vertical-flight mood
   taken by **Updraft**. Best canon hook of the three, but it's covered.
