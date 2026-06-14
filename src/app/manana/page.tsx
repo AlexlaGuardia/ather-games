@@ -9,13 +9,14 @@ import Link from 'next/link'
 import { mulberry32, type Rng } from '@/lib/arcade/rng'
 import {
   W, H, idx, xy, areAdjacent, reshuffle, swapped, swapMakesMatch, swapDetonation,
-  resolve, anyMove, type Cell, type Kind,
+  resolve, anyMove, isPuff, seedPuffs, spreadPuffs, countPuffs, type Cell, type Kind,
 } from './lib/match3'
 import { sfx, type ManaSfx } from './lib/sfx'
 import AtherBackdrop from './AtherBackdrop'
 import { RuneMark, type RuneId } from './runes'
 
 const START_MOVES = 20
+const PUFF_SEED = 3 // cloud-puffs seeded at board start; they spread if ignored
 const MOVES_PER_MILESTONE = 4
 const milestoneTarget = (n: number) => Math.round(1200 + n * 1500 + n * n * 350)
 
@@ -34,6 +35,27 @@ const PIECES: Piece[] = [
 ]
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
+
+// Cloud-puff blocker — CSS stub built from overlapping greys. Swap for a painted
+// Aseprite cloud sprite later (same path as the orbs). Not interactive.
+function PuffCell({ pop }: { pop: boolean }) {
+  const lump = (s: React.CSSProperties): React.CSSProperties => ({ position: 'absolute', borderRadius: '9999px', ...s })
+  return (
+    <span
+      className={`absolute inset-0 flex items-center justify-center pointer-events-none ${pop ? 'manana-pop' : ''}`}
+      aria-hidden
+    >
+      <span className="relative" style={{ width: '82%', height: '64%', filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.4))' }}>
+        <span style={lump({ left: '-2%', bottom: '2%', width: '46%', height: '72%', background: '#9aa1b6' })} />
+        <span style={lump({ right: '-2%', bottom: '2%', width: '46%', height: '72%', background: '#9aa1b6' })} />
+        <span style={lump({ left: '14%', top: '-14%', width: '42%', height: '84%', background: '#bcc2d4' })} />
+        <span style={lump({ left: '40%', top: '-6%', width: '46%', height: '80%', background: '#b2b9cd' })} />
+        <span style={lump({ left: '6%', bottom: '-4%', width: '88%', height: '66%', background: '#a7aec3' })} />
+        <span style={lump({ left: '24%', top: '4%', width: '34%', height: '38%', background: 'rgba(255,255,255,0.55)', filter: 'blur(2px)' })} />
+      </span>
+    </span>
+  )
+}
 const RAINBOW = 'conic-gradient(from 210deg, #f0a526, #e8554e, #9b5ad2, #37a3e6, #48b56f, #f0a526)'
 
 function bigSound(fired: Kind[]): ManaSfx | null {
@@ -73,7 +95,7 @@ export default function MananaPage() {
   }
 
   const newGame = () => {
-    apply(reshuffle(rngRef.current))
+    apply(seedPuffs(reshuffle(rngRef.current), rngRef.current, PUFF_SEED))
     scoreRef.current = 0
     setScore(0)
     movesRef.current = START_MOVES
@@ -92,7 +114,7 @@ export default function MananaPage() {
     rngRef.current = mulberry32((Date.now() & 0xffffffff) >>> 0)
     setBest(Number(localStorage.getItem('manana.best') ?? 0))
     setMuted(sfx.isMuted())
-    apply(reshuffle(rngRef.current))
+    apply(seedPuffs(reshuffle(rngRef.current), rngRef.current, PUFF_SEED))
     setMounted(true)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -142,7 +164,7 @@ export default function MananaPage() {
   }
 
   const runResolve = async (start: Cell[], opts: { swapAt?: number; forced?: Set<number> }) => {
-    const { steps } = resolve(start, rngRef.current, opts)
+    const { steps, puffs } = resolve(start, rngRef.current, opts)
     for (let s = 0; s < steps.length; s++) {
       const step = steps[s]
       setPopping(new Set(step.matched))
@@ -160,10 +182,19 @@ export default function MananaPage() {
       await sleep(115)
     }
     setHeat(1)
+    // the spread rule: clear no puff this move and the cloud creeps one cell.
+    if (puffs === 0 && countPuffs(boardRef.current) > 0) {
+      const spread = spreadPuffs(boardRef.current, rngRef.current)
+      if (spread !== boardRef.current) {
+        sfx.play('bad')
+        apply(spread)
+        await sleep(180)
+      }
+    }
     if (!anyMove(boardRef.current)) {
       sfx.play('shuffle')
       await sleep(220)
-      apply(reshuffle(rngRef.current))
+      apply(seedPuffs(reshuffle(rngRef.current), rngRef.current, PUFF_SEED))
     }
   }
 
@@ -197,7 +228,7 @@ export default function MananaPage() {
   }
 
   const onPiece = (i: number) => {
-    if (busy || over) return
+    if (busy || over || isPuff(boardRef.current[i])) return
     if (selected === null) { sfx.ensure(); setSelected(i) }
     else if (selected === i) setSelected(null)
     else if (areAdjacent(selected, i)) { const a = selected; setSelected(null); trySwap(a, i) }
@@ -221,7 +252,7 @@ export default function MananaPage() {
     if (Math.abs(dx) > Math.abs(dy)) target = dx > 0 ? (x < W - 1 ? idx(x + 1, y) : -1) : (x > 0 ? idx(x - 1, y) : -1)
     else target = dy > 0 ? (y < H - 1 ? idx(x, y + 1) : -1) : (y > 0 ? idx(x, y - 1) : -1)
     dragRef.current = null
-    if (target >= 0) { setSelected(null); trySwap(d.i, target) }
+    if (target >= 0 && !isPuff(boardRef.current[target])) { setSelected(null); trySwap(d.i, target) }
   }
   const onUp = () => {
     const d = dragRef.current
@@ -311,9 +342,16 @@ export default function MananaPage() {
             onPointerLeave={() => { dragRef.current = null }}
           >
             {board.map((cell, i) => {
+              const isPop = popping.has(i)
+              if (isPuff(cell)) {
+                return (
+                  <div key={i} className="relative aspect-square rounded-full flex items-center justify-center" aria-label="Cloud-puff">
+                    <PuffCell pop={isPop} />
+                  </div>
+                )
+              }
               const p = PIECES[cell.color] ?? PIECES[0]
               const isSel = selected === i
-              const isPop = popping.has(i)
               const k = cell.kind
               const bg = k === 'prism' ? RAINBOW : `radial-gradient(circle at 32% 28%, ${p.light}, ${p.base} 58%, ${p.edge})`
               return (

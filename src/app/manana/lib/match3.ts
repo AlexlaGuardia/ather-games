@@ -15,14 +15,63 @@ export type Kind = 'none' | 'surgeH' | 'surgeV' | 'prism' | 'star'
 export interface Cell {
   color: number // -1 = empty hole (mid-resolve)
   kind: Kind
+  puff?: boolean // a cloud-puff: a fixed, unmatchable blocker (colour ignored)
 }
 
 export const gem = (color: number): Cell => ({ color, kind: 'none' })
 export const empty = (): Cell => ({ color: -1, kind: 'none' })
+export const puffCell = (): Cell => ({ color: -1, kind: 'none', puff: true })
 export const isSpecial = (c: Cell) => c.kind !== 'none'
+export const isPuff = (c: Cell) => c.puff === true
+export const PUFF_BONUS = 30 // score for clearing one puff
 
 export const idx = (x: number, y: number) => y * W + x
 export const xy = (i: number) => ({ x: i % W, y: Math.floor(i / W) })
+
+// orthogonal neighbours of a cell (used for puff spread + burst)
+function orthos(i: number): number[] {
+  const { x, y } = xy(i)
+  const out: number[] = []
+  if (x > 0) out.push(idx(x - 1, y))
+  if (x < W - 1) out.push(idx(x + 1, y))
+  if (y > 0) out.push(idx(x, y - 1))
+  if (y < H - 1) out.push(idx(x, y + 1))
+  return out
+}
+
+export const countPuffs = (b: Cell[]): number => b.reduce((n, c) => n + (isPuff(c) ? 1 : 0), 0)
+
+// turn n random plain gems into puffs (called once at board start)
+export function seedPuffs(b: Cell[], rng: Rng, n: number): Cell[] {
+  const out = b.map((c) => ({ ...c }))
+  let placed = 0
+  let guard = 0
+  while (placed < n && guard++ < 400) {
+    const i = Math.floor(rng() * W * H)
+    if (!isPuff(out[i]) && !isSpecial(out[i]) && out[i].color >= 0) {
+      out[i] = puffCell()
+      placed++
+    }
+  }
+  return out
+}
+
+// one puff creeps into a random orthogonal plain-gem neighbour (the spread rule).
+// Called on a move where the player cleared no puff. Returns same board if boxed in.
+export function spreadPuffs(b: Cell[], rng: Rng): Cell[] {
+  const puffs: number[] = []
+  for (let i = 0; i < W * H; i++) if (isPuff(b[i])) puffs.push(i)
+  if (!puffs.length) return b
+  // candidate targets = plain gems adjacent to some puff
+  const targets = new Set<number>()
+  for (const p of puffs) for (const nb of orthos(p)) if (!isPuff(b[nb]) && !isSpecial(b[nb]) && b[nb].color >= 0) targets.add(nb)
+  if (!targets.size) return b
+  const arr = [...targets]
+  const pick = arr[Math.floor(rng() * arr.length)]
+  const out = b.map((c) => ({ ...c }))
+  out[pick] = puffCell()
+  return out
+}
 
 export function areAdjacent(a: number, b: number): boolean {
   const A = xy(a)
@@ -122,14 +171,25 @@ function blastCells(b: Cell[], i: number): number[] {
 function collapse(b: Cell[], rng: Rng): Cell[] {
   const n = b.map((x) => ({ ...x }))
   for (let x = 0; x < W; x++) {
-    const col: Cell[] = []
-    for (let y = H - 1; y >= 0; y--) {
-      const c = n[idx(x, y)]
-      if (c.color !== -1) col.push(c)
+    // a puff is an immovable floor — it splits the column into segments that
+    // each compact + refill independently. No puffs = one segment = old behaviour.
+    let segment: number[] = []
+    const resolveSegment = () => {
+      if (!segment.length) return
+      const solids = segment.map((y) => n[idx(x, y)]).filter((c) => c.color !== -1)
+      const gap = segment.length - solids.length
+      const filled: Cell[] = [
+        ...Array.from({ length: gap }, () => gem(Math.floor(rng() * TYPES))),
+        ...solids,
+      ]
+      segment.forEach((y, k) => { n[idx(x, y)] = filled[k] })
+      segment = []
     }
-    for (let y = H - 1, k = 0; y >= 0; y--, k++) {
-      n[idx(x, y)] = k < col.length ? col[k] : gem(Math.floor(rng() * TYPES))
+    for (let y = 0; y < H; y++) {
+      if (isPuff(n[idx(x, y)])) resolveSegment()
+      else segment.push(y) // top-to-bottom order within the segment
     }
+    resolveSegment()
   }
   return n
 }
@@ -141,11 +201,13 @@ export interface ResolveStep {
   fallen: Cell[]
   gained: number
   mult: number // cascade multiplier shown as "ather heat"
+  puffs: number // puffs burst this cascade
 }
 
 export interface ResolveResult {
   steps: ResolveStep[]
   board: Cell[]
+  puffs: number // total puffs burst across the whole move (0 → puffs spread)
 }
 
 // expand a clear set through any specials it touches (chain reaction)
@@ -197,18 +259,29 @@ export function resolve(board: Cell[], rng: Rng, opts: { swapAt?: number; forced
     // --- chain through specials, then clear (keep the cells that become specials) ---
     const toClear = detonateChain(cur, base, spawnCells)
     const fired = [...toClear].filter((i) => isSpecial(cur[i]) && !spawnCells.has(i)).map((i) => cur[i].kind)
+
+    // cloud-puffs burst when a clear lands orthogonally next to them (or a blast
+    // hits them directly). They never match on their own.
+    const finalClear = new Set(toClear)
+    for (const i of toClear) for (const nb of orthos(i)) if (isPuff(cur[nb])) finalClear.add(nb)
+    let puffs = 0
+
     const cleared = cur.map((c) => ({ ...c }))
-    for (const i of toClear) if (!spawnCells.has(i)) cleared[i] = empty()
+    for (const i of finalClear) {
+      if (spawnCells.has(i)) continue
+      if (isPuff(cur[i])) puffs++
+      cleared[i] = empty()
+    }
     for (const sp of spawns) cleared[sp.i] = { color: sp.color, kind: sp.kind }
 
     const fallen = collapse(cleared, rng)
     const mult = 1 + cascade * 0.5
-    const gained = Math.round(toClear.size * 10 * mult)
-    steps.push({ matched: [...toClear], spawned: spawns.map((s) => ({ i: s.i, kind: s.kind })), fired, fallen, gained, mult })
+    const gained = Math.round((toClear.size * 10 + puffs * PUFF_BONUS) * mult)
+    steps.push({ matched: [...finalClear], spawned: spawns.map((s) => ({ i: s.i, kind: s.kind })), fired, fallen, gained, mult, puffs })
     cur = fallen
     cascade++
   }
-  return { steps, board: cur }
+  return { steps, board: cur, puffs: steps.reduce((a, s) => a + s.puffs, 0) }
 }
 
 export function swapMakesMatch(b: Cell[], a: number, c: number): boolean {
