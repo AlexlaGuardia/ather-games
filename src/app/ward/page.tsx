@@ -33,6 +33,7 @@ const HOT = '#e8feff'
 const SPIRE = '#6cf0ff'
 const VOID = '#c86bff'
 const VOID_DIM = '#4a2078'
+const HOT_VOID = '#ff5db0' // splitters — hotter, "deal with me first"
 const FALL = '#ff7a3c'
 
 // a fixed, deterministic void-field behind the action (twinkle, no gameplay)
@@ -105,6 +106,7 @@ export default function WardPage() {
       if (startedRef.current && !overRef.current) {
         const ev = tick(w, dt)
         if (ev.intercepts) sfx.play('intercept')
+        if (ev.cleanKills) sfx.play('clean')
         if (ev.spireHits) sfx.play('spire')
         if (ev.waveCleared) sfx.play('wave')
         if (ev.gameOver) {
@@ -343,7 +345,8 @@ function render(
   // spires
   for (const s of w.spires) drawSpire(ctx, s.x, s.alive, t)
 
-  // blight — trail from origin to head, glowing diamond head
+  // blight — trail from origin to head, glowing diamond head. splitters (MIRVs)
+  // read hotter + bigger with a telegraph ring + split-line at their fork altitude.
   for (const b of w.blight) {
     const grad = ctx.createLinearGradient(b.ox, b.oy, b.x, b.y)
     grad.addColorStop(0, 'rgba(74,32,120,0)')
@@ -352,12 +355,36 @@ function render(
     ctx.lineWidth = 2
     ctx.shadowBlur = 0
     seg(ctx, b.ox, b.oy, b.x, b.y)
-    // head
-    ctx.fillStyle = VOID
-    ctx.shadowBlur = 12
-    ctx.shadowColor = VOID
-    diamond(ctx, b.x, b.y, 4.5 + 0.8 * Math.sin(t * 8 + b.x))
+    if (b.splitter) {
+      const pulse = 0.7 + 0.3 * Math.sin(t * 9 + b.x)
+      // faint fork-altitude line — "kill it above here"
+      if (b.splitY !== undefined) {
+        ctx.strokeStyle = HOT_VOID
+        ctx.globalAlpha = 0.12
+        ctx.lineWidth = 1
+        ctx.shadowBlur = 0
+        seg(ctx, b.x - 16, b.splitY, b.x + 16, b.splitY)
+        ctx.globalAlpha = 1
+      }
+      ctx.strokeStyle = HOT_VOID
+      ctx.globalAlpha = 0.5 * pulse
+      ctx.lineWidth = 1.5
+      ctx.shadowBlur = 14
+      ctx.shadowColor = HOT_VOID
+      ring(ctx, b.x, b.y, 9 + pulse * 2)
+      ctx.globalAlpha = 1
+      ctx.fillStyle = HOT_VOID
+      ctx.shadowBlur = 16
+      ctx.shadowColor = HOT_VOID
+      diamond(ctx, b.x, b.y, 6.5 + pulse)
+    } else {
+      ctx.fillStyle = VOID
+      ctx.shadowBlur = 12
+      ctx.shadowColor = VOID
+      diamond(ctx, b.x, b.y, 4.5 + 0.8 * Math.sin(t * 8 + b.x))
+    }
   }
+  ctx.globalAlpha = 1
   ctx.shadowBlur = 0
 
   // blooms — expanding Ather rings with a soft core
@@ -403,6 +430,14 @@ function render(
       ctx.shadowBlur = 16
       ctx.shadowColor = FALL
       ring(ctx, f.x, f.y, 6 + k * 40)
+    } else if (f.kind === 'split') {
+      // a MIRV forked — a hot void burst that reads as "too late, now there's more"
+      ctx.strokeStyle = HOT_VOID
+      ctx.globalAlpha = 1 - k
+      ctx.lineWidth = 2.5 * (1 - k)
+      ctx.shadowBlur = 16
+      ctx.shadowColor = HOT_VOID
+      ring(ctx, f.x, f.y, 4 + k * 30)
     } else {
       ctx.strokeStyle = VOID_DIM
       ctx.globalAlpha = 0.7 * (1 - k)

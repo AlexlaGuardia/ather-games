@@ -119,7 +119,47 @@ function ok(name: string, cond: boolean) {
   ok('different seed → different field', a.toSpawn[0].ox !== c.toSpawn[0].ox)
 }
 
-// 9. taunts — tiered by wave, stable per-run, never empty, best-aware
+// 9. splitters (MIRVs)
+{
+  const { startWave } = require('./ward') as typeof import('./ward')
+  // none on early waves, present from wave 3
+  const w1 = makeWorld(11)
+  ok('no splitters on wave 1', w1.toSpawn.every((b) => !b.splitter))
+  startWave(w1, 3)
+  ok('splitters appear on wave 3', w1.toSpawn.some((b) => b.splitter))
+}
+{
+  // a splitter reaching its fork altitude breaks into splitN children
+  const w = makeWorld(7)
+  w.toSpawn = []
+  w.blight = [{ x: 240, y: 100, ox: 240, oy: -10, vx: 0, vy: 300, target: 0, alive: true, splitter: true, splitN: 3, splitY: 160 }]
+  tick(w, 0.3) // y: 100 -> 190, crosses 160
+  ok('splitter forked into 3 children', w.blight.length === 3)
+  ok('children are marked child + no longer split', w.blight.every((b) => b.child && !b.splitter))
+}
+{
+  // popping a splitter before it forks = clean kill, triple score
+  const w = makeWorld(7)
+  w.toSpawn = []
+  w.blight = [
+    { x: 200, y: 120, ox: 200, oy: -10, vx: 0, vy: 0, target: 0, alive: true, splitter: true, splitN: 3, splitY: 300 },
+    { x: 40, y: 0, ox: 40, oy: -10, vx: 0, vy: 1, target: 0, alive: true }, // decoy so the wave doesn't clear (no +bonus)
+  ]
+  fireBloom(w, 200, 120)
+  const ev = tick(w, 0.05)
+  ok('clean kill reported', ev.cleanKills === 1 && ev.intercepts === 1)
+  ok('clean kill scores 3x (30 at combo 1)', w.score === 30)
+}
+{
+  // a child never forks again, even if flags say otherwise
+  const w = makeWorld(7)
+  w.toSpawn = []
+  w.blight = [{ x: 240, y: 100, ox: 240, oy: -10, vx: 0, vy: 300, target: 0, alive: true, splitter: true, child: true, splitY: 150, splitN: 3 }]
+  tick(w, 0.3)
+  ok('child did not spawn more children', w.blight.length === 1)
+}
+
+// 10. taunts — tiered by wave, stable per-run, never empty, best-aware
 {
   const { tauntFor, tauntTier } = require('./ward') as typeof import('./ward')
   ok('tier climbs with wave', tauntTier(1) === 0 && tauntTier(3) === 1 && tauntTier(6) === 2 && tauntTier(9) === 3 && tauntTier(14) === 4 && tauntTier(30) === 5)

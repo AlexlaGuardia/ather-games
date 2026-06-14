@@ -4,7 +4,7 @@
 // the shared arcade SFX engine.
 import { SfxManager, type Patch } from '@/lib/arcade/sfx'
 
-type Id = 'launch' | 'intercept' | 'spire' | 'wave' | 'over'
+type Id = 'launch' | 'intercept' | 'clean' | 'spire' | 'wave' | 'over'
 
 const patch: Patch<Id> = {
   // Ather lifts off the battery — a short upward whoosh
@@ -16,6 +16,12 @@ const patch: Patch<Id> = {
   intercept: (E, t) => {
     E.tone(t, 880, { glideTo: 1320, dur: 0.09, type: 'triangle', peak: 0.12, detune: 8 })
     E.noise(t, { dur: 0.14, peak: 0.08, filter: 3200, sweepTo: 900, filterType: 'bandpass', q: 1.4 })
+  },
+  // a splitter popped before it forked — a brighter, two-note skill-shot chime
+  clean: (E, t) => {
+    E.tone(t, 988, { glideTo: 1480, dur: 0.1, type: 'triangle', peak: 0.13, detune: 10 })
+    E.tone(t + 0.07, 1480, { glideTo: 1976, dur: 0.12, type: 'triangle', peak: 0.12, detune: 8 })
+    E.noise(t, { dur: 0.12, peak: 0.07, filter: 4200, sweepTo: 1400, filterType: 'bandpass', q: 1.6 })
   },
   // a spire falls — heavy descending thud with a noise crack
   spire: (E, t) => {
@@ -38,6 +44,6 @@ const patch: Patch<Id> = {
 }
 
 export const sfx = new SfxManager<Id>(patch, {
-  throttle: { launch: 40, intercept: 30 },
+  throttle: { launch: 40, intercept: 30, clean: 30 },
   storageKey: 'ward.sfx',
 })

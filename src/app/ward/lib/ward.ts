@@ -35,6 +35,13 @@ const BASE_SPEED = 44
 const SPEED_INC = 6
 const FX_CULL = 0.9
 
+// splitters (MIRVs): from this wave on, some blight fork mid-flight. Pop them above
+// splitY and you spend one bloom; let them fork and you chase splitN children.
+export const SPLIT_MIN_WAVE = 3
+const SPLIT_Y_MIN = 165
+const SPLIT_Y_MAX = 300
+const CLEAN_KILL_MULT = 3 // a splitter killed before it forks scores this much more
+
 export interface Spire {
   x: number
   alive: boolean
@@ -49,6 +56,10 @@ export interface Blight {
   vy: number
   target: number // spire index it is diving at
   alive: boolean
+  splitter?: boolean // a MIRV — forks into children at splitY if not killed first
+  child?: boolean // spawned from a split; never splits again, normal value
+  splitY?: number // altitude at which a splitter forks
+  splitN?: number // how many children it forks into
 }
 
 export interface Bloom {
@@ -58,7 +69,7 @@ export interface Bloom {
   r: number
 }
 
-export type FxKind = 'intercept' | 'impact' | 'spire'
+export type FxKind = 'intercept' | 'impact' | 'spire' | 'split'
 export interface Fx {
   x: number
   y: number
@@ -91,8 +102,22 @@ export interface World {
 export interface TickEvents {
   intercepts: number
   spireHits: number
+  cleanKills: number // splitters popped before they forked — the skill shot
   waveCleared: boolean
   gameOver: boolean
+}
+
+// constant blight speed for a given wave (used by both spawns and split children)
+function blightSpeed(wave: number): number {
+  return BASE_SPEED + wave * SPEED_INC
+}
+
+// aim a velocity of magnitude v from (ox,oy) toward (tx,ty)
+function aimVel(ox: number, oy: number, tx: number, ty: number, v: number) {
+  const dx = tx - ox
+  const dy = ty - oy
+  const len = Math.hypot(dx, dy) || 1
+  return { vx: (dx / len) * v, vy: (dy / len) * v }
 }
 
 export function aliveSpires(w: World): number {
@@ -142,19 +167,26 @@ export function startWave(w: World, wave: number) {
   w.state = 'spawning'
 
   const live = w.spires.map((s, i) => i).filter((i) => w.spires[i].alive)
+  const pickSpire = () => (live.length ? live[randInt(w.rng, 0, live.length - 1)] : randInt(w.rng, 0, NUM_SPIRES - 1))
   const queue: Blight[] = []
   for (let i = 0; i < count; i++) {
     const ox = randInt(w.rng, 24, VW - 24)
     const oy = -14
-    const ti = live.length ? live[randInt(w.rng, 0, live.length - 1)] : randInt(w.rng, 0, NUM_SPIRES - 1)
-    const tx = w.spires[ti].x
-    const ty = GROUND_Y
-    const dx = tx - ox
-    const dy = ty - oy
-    const len = Math.hypot(dx, dy) || 1
+    const ti = pickSpire()
     const jitter = 0.88 + w.rng() * 0.26
-    const v = speed * jitter
-    queue.push({ x: ox, y: oy, ox, oy, vx: (dx / len) * v, vy: (dy / len) * v, target: ti, alive: true })
+    const { vx, vy } = aimVel(ox, oy, w.spires[ti].x, GROUND_Y, speed * jitter)
+    queue.push({ x: ox, y: oy, ox, oy, vx, vy, target: ti, alive: true })
+  }
+
+  // from SPLIT_MIN_WAVE on, seed a growing number of splitters into the wave
+  if (wave >= SPLIT_MIN_WAVE) {
+    const nSplit = Math.min(queue.length, 1 + Math.floor((wave - SPLIT_MIN_WAVE) / 2))
+    for (let i = 0; i < nSplit; i++) {
+      const b = queue[i]
+      b.splitter = true
+      b.splitN = 2 + (w.rng() < (wave >= 6 ? 0.6 : 0.25) ? 1 : 0)
+      b.splitY = SPLIT_Y_MIN + w.rng() * (SPLIT_Y_MAX - SPLIT_Y_MIN)
+    }
   }
   w.toSpawn = queue
 }
@@ -183,7 +215,7 @@ function addFx(w: World, x: number, y: number, kind: FxKind, life: number) {
 
 // Advance the world by dt seconds. Returns what happened this frame for sound/FX.
 export function tick(w: World, dt: number): TickEvents {
-  const ev: TickEvents = { intercepts: 0, spireHits: 0, waveCleared: false, gameOver: false }
+  const ev: TickEvents = { intercepts: 0, spireHits: 0, cleanKills: 0, waveCleared: false, gameOver: false }
   if (w.state === 'over') return ev
 
   // charge trickles back
@@ -202,11 +234,26 @@ export function tick(w: World, dt: number): TickEvents {
     }
   }
 
-  // move blight; ground impacts kill spires
+  // move blight; splitters fork at altitude; ground impacts kill spires
+  const born: Blight[] = []
+  const liveIdx = w.spires.map((s, i) => i).filter((i) => w.spires[i].alive)
   for (const b of w.blight) {
     if (!b.alive) continue
     b.x += b.vx * dt
     b.y += b.vy * dt
+    // a splitter that survived to its fork altitude breaks into children
+    if (b.splitter && !b.child && b.splitY !== undefined && b.y >= b.splitY) {
+      b.alive = false
+      addFx(w, b.x, b.y, 'split', 0.4)
+      const n = b.splitN ?? 2
+      const v = blightSpeed(w.wave)
+      for (let k = 0; k < n; k++) {
+        const ti = liveIdx.length ? liveIdx[randInt(w.rng, 0, liveIdx.length - 1)] : randInt(w.rng, 0, NUM_SPIRES - 1)
+        const { vx, vy } = aimVel(b.x, b.y, w.spires[ti].x, GROUND_Y, v * (0.9 + w.rng() * 0.2))
+        born.push({ x: b.x, y: b.y, ox: b.x, oy: b.y, vx, vy, target: ti, alive: true, child: true })
+      }
+      continue
+    }
     if (b.y >= GROUND_Y) {
       b.alive = false
       const s = w.spires[b.target]
@@ -220,6 +267,7 @@ export function tick(w: World, dt: number): TickEvents {
       }
     }
   }
+  if (born.length) w.blight.push(...born)
 
   // grow blooms; intercept any blight inside the ring
   for (const bl of w.blooms) {
@@ -233,8 +281,10 @@ export function tick(w: World, dt: number): TickEvents {
       if (dx * dx + dy * dy <= bl.r * bl.r) {
         b.alive = false
         w.combo = Math.min(COMBO_MAX, w.combo + 1)
-        w.score += 10 * w.combo
+        const clean = !!b.splitter && !b.child // popped a MIRV before it forked
+        w.score += 10 * w.combo * (clean ? CLEAN_KILL_MULT : 1)
         ev.intercepts++
+        if (clean) ev.cleanKills++
         addFx(w, b.x, b.y, 'intercept', 0.45)
       }
     }
