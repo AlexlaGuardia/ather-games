@@ -107,13 +107,14 @@ scenes). Lore routes through /magii for canon safety.
 - **Squall** *(bullet-hell dodge)* — pure evasion, no offense. Read the void's projectile
   patterns, weave through, score = survival time. A brand-new **mood**: defenseless survival.
   Vector-glow bullet patterns are gorgeous and cheap to draw.
-- **Rin-kin** *(purification draughts — SPEC'D + CANON-DRAFTED 2026-06-14, fills the strategy gap)* —
-  the lineup's only turn-based / beat-the-AI game. **Canon DONE (draft):** the Rin-kin are the
-  **Ancients of *keeping*** — grand ancient spirits who rekindle corrupted Ather back to light
-  rather than slay it (`athernyx/CANON/world/rin-kin.md`, pending only a Sable hardening pass).
-  Convert=rekindle, torches=frequencies lit permanently into the network (3=triangle of reclaimed
-  ground), rooted=conviction on home element. **No longer canon-gated — ready to build.**
-  Vector-glow diagonal board, your Ather-light vs The Dying's grey-corrupted.
+- **[working title TBD]** *(purification draughts — mechanics SPEC'D 2026-06-14, fills the strategy gap)* —
+  the lineup's only turn-based / beat-the-AI game. **⚠ NAME + CANON ON HOLD:** "Rin-kin" was
+  retired — it collides with established canon (**Rinn-kin** = the 4 Legendary mana'mals: Duskpuff/
+  Frilldrift/Prismstrike/Coilguard, load-bearing in the Spirit Tales books). The keeper-spirit
+  concept is fine but **paused pending the top-down spirit-cosmology canon** (Mother + the Ancient/
+  spirit hierarchy — Alex's call 2026-06-14 to write that FIRST, then name this game into it).
+  Mechanics below stand; the lore/name waits. Vector-glow diagonal board, your Ather-light vs
+  The Dying's grey-corrupted.
   - **Move:** diagonal slide (checkers).
   - **Convert (core gimmick):** jump an adjacent enemy into the empty square beyond → it flips
     to your light and *stays on its square* (material never leaves the board). Multi-jump flips
