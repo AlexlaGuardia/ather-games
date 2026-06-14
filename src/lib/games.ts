@@ -36,6 +36,15 @@ export const GAMES: GameEntry[] = [
     tagline: "route the Ather · relight the dark machines — a cozy conduit puzzle",
   },
   {
+    id: "ward",
+    title: "Ward",
+    href: "/ward",
+    glyph: "△",
+    tier: "coming-soon",
+    kind: "play",
+    tagline: "the void rains on the spires · bloom Ather to hold the line — a vector defense",
+  },
+  {
     id: "shimmer",
     title: "Shimmer",
     href: "/shimmer",
