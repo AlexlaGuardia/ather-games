@@ -36,8 +36,9 @@ const PIECES: Piece[] = [
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
-// Cloud-puff blocker — CSS stub built from overlapping greys. Swap for a painted
-// Aseprite cloud sprite later (same path as the orbs). Not interactive.
+// Cloud-puff blocker — CSS stub in Shimmer's canon cloud palette (warm pale
+// lavender/mauve, see tiles.ts T34), not cold grey. Swap for a painted Aseprite
+// cloud sprite later (same path as the orbs). Not interactive.
 function PuffCell({ pop }: { pop: boolean }) {
   const lump = (s: React.CSSProperties): React.CSSProperties => ({ position: 'absolute', borderRadius: '9999px', ...s })
   return (
@@ -45,13 +46,13 @@ function PuffCell({ pop }: { pop: boolean }) {
       className={`absolute inset-0 flex items-center justify-center pointer-events-none ${pop ? 'manana-pop' : ''}`}
       aria-hidden
     >
-      <span className="relative" style={{ width: '82%', height: '64%', filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.4))' }}>
-        <span style={lump({ left: '-2%', bottom: '2%', width: '46%', height: '72%', background: '#9aa1b6' })} />
-        <span style={lump({ right: '-2%', bottom: '2%', width: '46%', height: '72%', background: '#9aa1b6' })} />
-        <span style={lump({ left: '14%', top: '-14%', width: '42%', height: '84%', background: '#bcc2d4' })} />
-        <span style={lump({ left: '40%', top: '-6%', width: '46%', height: '80%', background: '#b2b9cd' })} />
-        <span style={lump({ left: '6%', bottom: '-4%', width: '88%', height: '66%', background: '#a7aec3' })} />
-        <span style={lump({ left: '24%', top: '4%', width: '34%', height: '38%', background: 'rgba(255,255,255,0.55)', filter: 'blur(2px)' })} />
+      <span className="relative" style={{ width: '82%', height: '64%', filter: 'drop-shadow(0 2px 4px rgba(34,34,54,0.45))' }}>
+        <span style={lump({ left: '-2%', bottom: '2%', width: '46%', height: '72%', background: '#dcc7da' })} />
+        <span style={lump({ right: '-2%', bottom: '2%', width: '46%', height: '72%', background: '#dcc7da' })} />
+        <span style={lump({ left: '14%', top: '-14%', width: '42%', height: '84%', background: '#efe0f4' })} />
+        <span style={lump({ left: '40%', top: '-6%', width: '46%', height: '80%', background: '#e7d3ea' })} />
+        <span style={lump({ left: '6%', bottom: '-4%', width: '88%', height: '66%', background: '#cdb4cb' })} />
+        <span style={lump({ left: '24%', top: '4%', width: '34%', height: '38%', background: 'rgba(255,255,255,0.6)', filter: 'blur(2px)' })} />
       </span>
     </span>
   )
