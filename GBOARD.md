@@ -81,17 +81,20 @@ scenes). Lore routes through /magii for canon safety.
 - **Playtest gate:** Alex still needs a foreground-tab playthrough to tune base feel
   (bloom grow-time, ammo generosity, blight speed, splitter telegraph readability).
 
-## 🌱 Queue — the Atari-mined vector-glow suite *(2026-06-12 research)*
-- **Tempest** *(deep cut)* — hold a rune-well as void climbs the lanes. Gorgeous, harder
-  to make feel right.
-- **Gravitar** *(deep cut)* — slingshot Ather between the orrery's bodies by gravity.
-  Canon-rich, famously brutal.
+## 🌱 Queue — what's actually next *(cleaned 2026-06-14: kept only what adds a mechanic the 7 don't)*
+- **Gravitar** *(lead)* — slingshot Ather between the Orrery's bodies by gravity. The one
+  genuinely new mechanic left: nothing in the lineup does physics-orbit. Canon-rich
+  (the Orrery), vector-clean, famously brutal — the tuning is the work.
+- **Tempest** — hold a rune-well as the void climbs the lanes. Distinct *input* (positional
+  lane-hold) but the same job as Ward (hold off the void) — second priority for that reason.
+- **Rune-weaving** — trace runes to channel mana. A new input mode (gesture/tracing), runes
+  are deep canon, distinct enough from Rekindle (draw vs rotate).
 
-## 🌱 Older sparks
-- **Rune-weaving puzzle** — trace runes to channel mana (runes are canon).
-- **The Dive** — controlled fall through the cloud-ocean layers, dodge-and-collect.
-- **Spirit garden** — tend a plot, spirits bond over time (largely subsumed by Seedfall).
-- **One-screen last stand** — real-time blight defense (most animation reps).
+## ⚰️ Killed — covered by a shipped game *(don't re-pitch)*
+- **The Dive** (fall through the cloud-ocean, dodge-and-collect) → vertical-flight mood
+  taken by **Updraft**. Best canon hook of the three, but it's covered.
+- **Spirit garden** (tend a plot, spirits bond over time) → **Seedfall**'s persistent garden.
+- **One-screen last stand** (real-time blight defense) → that *is* **Ward**.
 
 ## 🅿️ Parked
 - **The Cloud-Ocean Angler** — fishing the clouds. Said aloud it didn't hold: thin
