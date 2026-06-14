@@ -107,10 +107,13 @@ scenes). Lore routes through /magii for canon safety.
 - **Squall** *(bullet-hell dodge)* — pure evasion, no offense. Read the void's projectile
   patterns, weave through, score = survival time. A brand-new **mood**: defenseless survival.
   Vector-glow bullet patterns are gorgeous and cheap to draw.
-- **Rin-kin** *(purification draughts — SPEC'D 2026-06-14, fills the strategy mood-gap)* —
-  the lineup's only turn-based / beat-the-AI game. Name = ancient spirits (**needs /magii pass**
-  to canonize; "Rin-kin" confirmed unused in canon today). Vector-glow diagonal board, your
-  Ather-light vs the void-corrupted.
+- **Rin-kin** *(purification draughts — SPEC'D + CANON-DRAFTED 2026-06-14, fills the strategy gap)* —
+  the lineup's only turn-based / beat-the-AI game. **Canon DONE (draft):** the Rin-kin are the
+  **Ancients of *keeping*** — grand ancient spirits who rekindle corrupted Ather back to light
+  rather than slay it (`athernyx/CANON/world/rin-kin.md`, pending only a Sable hardening pass).
+  Convert=rekindle, torches=frequencies lit permanently into the network (3=triangle of reclaimed
+  ground), rooted=conviction on home element. **No longer canon-gated — ready to build.**
+  Vector-glow diagonal board, your Ather-light vs The Dying's grey-corrupted.
   - **Move:** diagonal slide (checkers).
   - **Convert (core gimmick):** jump an adjacent enemy into the empty square beyond → it flips
     to your light and *stays on its square* (material never leaves the board). Multi-jump flips
