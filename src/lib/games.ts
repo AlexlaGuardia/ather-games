@@ -54,6 +54,15 @@ export const GAMES: GameEntry[] = [
     tagline: "Lazerin rides the Ather · one tap to climb, mind the void — endless flight",
   },
   {
+    id: "seedfall",
+    title: "Seedfall",
+    href: "/seedfall",
+    glyph: "❀",
+    tier: "live",
+    kind: "play",
+    tagline: "guide a Mana Seed down the wind · land it soft to plant — a cozy descent",
+  },
+  {
     id: "shimmer",
     title: "Shimmer",
     href: "/shimmer",
