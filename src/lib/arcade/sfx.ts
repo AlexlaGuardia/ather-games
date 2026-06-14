@@ -150,6 +150,18 @@ export class SfxManager<Id extends string> {
     this.master.gain.value = this.muted ? 0 : this.vol
     this.master.connect(this.ac.destination)
     this.eng = makeEngine(this.ac, this.master)
+    // iOS: a freshly created context starts 'suspended' and only wakes if we
+    // resume + play a silent blip inside this user gesture. Without this there
+    // is no sound at all on iPhone.
+    if (this.ac.state === 'suspended') this.ac.resume()
+    try {
+      const blip = this.ac.createBufferSource()
+      blip.buffer = this.ac.createBuffer(1, 1, 22050)
+      blip.connect(this.ac.destination)
+      blip.start(0)
+    } catch {
+      /* unlock is best-effort */
+    }
   }
 
   play(id: Id) {

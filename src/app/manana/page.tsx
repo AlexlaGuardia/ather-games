@@ -151,6 +151,16 @@ export default function MananaPage() {
     return () => ro.disconnect()
   }, [mounted])
 
+  // iOS locks to the board: React touch handlers are passive, so kill the page's
+  // rubber-band scroll/bounce with a real non-passive listener on the board.
+  useEffect(() => {
+    const el = boardWrapRef.current
+    if (!el) return
+    const block = (e: TouchEvent) => e.preventDefault()
+    el.addEventListener('touchmove', block, { passive: false })
+    return () => el.removeEventListener('touchmove', block)
+  }, [mounted])
+
   const endGame = () => {
     setOver(true)
     sfx.play('over')
@@ -329,7 +339,7 @@ export default function MananaPage() {
   const barPct = Math.max(0, Math.min(100, ((score - prevAt) / (nextAt - prevAt)) * 100))
 
   return (
-    <div className="relative min-h-[calc(100svh-5rem)] overflow-hidden text-slate-200 font-sans">
+    <div className="relative min-h-[calc(100svh-5rem)] overflow-hidden text-slate-200 font-sans" style={{ touchAction: 'manipulation', overscrollBehavior: 'none' }}>
       <AtherBackdrop />
       <style>{`
         @keyframes manana-pop { 0%{transform:scale(1)} 40%{transform:scale(1.28)} 100%{transform:scale(0);opacity:0} }
