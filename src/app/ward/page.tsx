@@ -14,6 +14,7 @@ import {
   fireBloom,
   loadHiScore,
   saveHiScore,
+  tauntFor,
   aliveSpires,
   bloomRadius,
   VW,
@@ -252,6 +253,9 @@ export default function WardPage() {
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-2.5 bg-[#04040a]/75 rounded-md text-center px-6">
             <div className="font-mono text-[#ff5d9e] text-xl tracking-[0.3em] uppercase" style={{ textShadow: '0 0 16px #ff5d9e' }}>The line breaks</div>
             <div className="font-mono text-[#e8feff] text-3xl tabular-nums leading-none" style={{ textShadow: '0 0 12px #37e6ff80' }}>{hud.score.toLocaleString()}</div>
+            <p className="text-[11px] leading-relaxed text-[#9fd6e0]/85 italic max-w-[300px]">
+              {tauntFor(hud.wave, hud.score, hud.score >= hud.hi && hud.score > 0)}
+            </p>
             <div className="text-[10px] font-mono text-[#7fd8e6]/50 tracking-wider">
               reached wave {hud.wave} · best {hud.hi.toLocaleString()}{hud.score >= hud.hi && hud.score > 0 ? ' ✦ new best' : ''}
             </div>

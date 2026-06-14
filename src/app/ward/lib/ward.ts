@@ -267,6 +267,55 @@ export function tick(w: World, dt: number): TickEvents {
   return ev
 }
 
+// Game-over taunts — the tease IS the replay button. Tier by how far they got
+// (wave reached is the legible proxy for score); pick is stable within a run
+// (salted by score) but varies run to run. Voice: the void, dry and goading.
+const TAUNTS: string[][] = [
+  // tier 0 — fell on wave 1
+  [
+    "That was the warmup. The void didn't even try.",
+    "Blink, and the spires are gone. Blink again.",
+  ],
+  // tier 1 — waves 2-3
+  [
+    "The dark is still laughing. Wipe it off.",
+    "You'll do better. You almost have to.",
+    "Mercy, wasted. Run it back.",
+  ],
+  // tier 2 — waves 4-6
+  [
+    "Respectable. The void files it under minor inconvenience.",
+    "Closer. Not enough.",
+    "The spires remember you fondly. Briefly.",
+  ],
+  // tier 3 — waves 7-9
+  [
+    "Now the void is paying attention.",
+    "Annoyingly good. Go further.",
+    "The spires held longer than they had any right to.",
+  ],
+  // tier 4 — waves 10-14
+  [
+    "The dark knows your name now.",
+    "Few last this long. Fewer go further.",
+  ],
+  // tier 5 — wave 15+
+  [
+    "You're not holding the line. You are the line.",
+    "The void is genuinely concerned. Twist the knife.",
+  ],
+]
+
+export function tauntTier(wave: number): number {
+  return wave <= 1 ? 0 : wave <= 3 ? 1 : wave <= 6 ? 2 : wave <= 9 ? 3 : wave <= 14 ? 4 : 5
+}
+
+export function tauntFor(wave: number, salt: number, isBest = false): string {
+  const pool = TAUNTS[tauntTier(wave)]
+  const base = pool[Math.abs(Math.floor(salt)) % pool.length]
+  return isBest ? `${base} New best, though. Now bury it.` : base
+}
+
 // localStorage high score, guarded for SSR / private mode.
 const HS_KEY = 'ward.hiscore'
 export function loadHiScore(): number {

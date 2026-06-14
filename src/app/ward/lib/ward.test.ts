@@ -119,5 +119,14 @@ function ok(name: string, cond: boolean) {
   ok('different seed → different field', a.toSpawn[0].ox !== c.toSpawn[0].ox)
 }
 
+// 9. taunts — tiered by wave, stable per-run, never empty, best-aware
+{
+  const { tauntFor, tauntTier } = require('./ward') as typeof import('./ward')
+  ok('tier climbs with wave', tauntTier(1) === 0 && tauntTier(3) === 1 && tauntTier(6) === 2 && tauntTier(9) === 3 && tauntTier(14) === 4 && tauntTier(30) === 5)
+  ok('taunt is non-empty', tauntFor(1, 0).length > 0 && tauntFor(20, 9999).length > 0)
+  ok('taunt is stable for a given run', tauntFor(5, 1234) === tauntFor(5, 1234))
+  ok('best run gets the extra goad', tauntFor(8, 500, true).includes('bury it') && !tauntFor(8, 500, false).includes('bury it'))
+}
+
 console.log(`\nWARD sim: ${pass} passed, ${fail} failed`)
 process.exit(fail ? 1 : 0)
