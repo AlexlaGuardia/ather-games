@@ -40,7 +40,7 @@ export const GAMES: GameEntry[] = [
     title: "Ward",
     href: "/ward",
     glyph: "△",
-    tier: "coming-soon",
+    tier: "live",
     kind: "play",
     tagline: "the void rains on the spires · bloom Ather to hold the line — a vector defense",
   },
