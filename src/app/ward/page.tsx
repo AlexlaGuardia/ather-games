@@ -16,6 +16,8 @@ import {
   loadHiScore,
   saveHiScore,
   tauntFor,
+  runStats,
+  type RunStats,
   aliveSpires,
   bloomRadius,
   VW,
@@ -64,6 +66,7 @@ export default function WardPage() {
   const [started, setStarted] = useState(false)
   const [over, setOver] = useState(false)
   const [muted, setMuted] = useState(false)
+  const [stats, setStats] = useState<RunStats | null>(null)
   const [hud, setHud] = useState<Hud>({ score: 0, wave: 1, ammo: 0, maxAmmo: 0, spires: NUM_SPIRES, hi: 0 })
 
   useNoScroll() // pin to viewport on mobile — no page scroll / iOS bounce
@@ -117,6 +120,7 @@ export default function WardPage() {
           sfx.play('over')
           overRef.current = true
           const hi = saveHiScore(w.score)
+          setStats(runStats(w))
           setOver(true)
           setHud({ ...readHud(w), hi })
         }
@@ -265,6 +269,22 @@ export default function WardPage() {
             <div className="text-[10px] font-mono text-[#7fd8e6]/50 tracking-wider">
               reached wave {hud.wave} · best {hud.hi.toLocaleString()}{hud.score >= hud.hi && hud.score > 0 ? ' ✦ new best' : ''}
             </div>
+
+            {stats && (
+              <div className="mt-1 grid grid-cols-4 gap-2 font-mono">
+                {[
+                  { label: 'accuracy', value: `${stats.accuracy}%` },
+                  { label: 'downed', value: stats.downed },
+                  { label: 'best chain', value: stats.maxMulti >= 2 ? `×${stats.maxMulti}` : '—' },
+                  { label: 'clean', value: stats.cleanTotal },
+                ].map((s) => (
+                  <div key={s.label} className="flex flex-col items-center rounded-sm bg-white/[0.04] px-2 py-1.5">
+                    <span className="text-[#e8feff] text-sm tabular-nums leading-none" style={{ textShadow: '0 0 6px #37e6ff60' }}>{s.value}</span>
+                    <span className="text-[8px] uppercase tracking-[0.15em] text-[#7fd8e6]/45 mt-1">{s.label}</span>
+                  </div>
+                ))}
+              </div>
+            )}
             <button onClick={restart} className="font-mono text-[11px] tracking-[0.25em] uppercase text-[#04040a] bg-[#37e6ff] hover:bg-[#7df0ff] px-6 py-2 rounded-sm mt-1" style={{ boxShadow: '0 0 18px #37e6ff80' }}>
               defend again →
             </button>

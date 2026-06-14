@@ -100,6 +100,34 @@ export interface World {
   breakT: number
   state: WardState
   rng: Rng
+  // run stats (for the post-run scorecard)
+  shots: number // blooms fired
+  hits: number // blooms that caught at least one blight
+  downed: number // total blight intercepted
+  maxMulti: number // biggest single-bloom catch
+  cleanTotal: number // splitters popped before they forked
+}
+
+export interface RunStats {
+  score: number
+  wave: number
+  downed: number
+  shots: number
+  accuracy: number // % of blooms that hit something (0–100)
+  maxMulti: number
+  cleanTotal: number
+}
+
+export function runStats(w: World): RunStats {
+  return {
+    score: w.score,
+    wave: w.wave,
+    downed: w.downed,
+    shots: w.shots,
+    accuracy: w.shots ? Math.round((w.hits / w.shots) * 100) : 0,
+    maxMulti: w.maxMulti,
+    cleanTotal: w.cleanTotal,
+  }
 }
 
 export interface TickEvents {
@@ -153,6 +181,11 @@ export function makeWorld(seed: number): World {
     breakT: 0,
     state: 'spawning',
     rng: mulberry32(seed >>> 0),
+    shots: 0,
+    hits: 0,
+    downed: 0,
+    maxMulti: 0,
+    cleanTotal: 0,
   }
   startWave(w, 1)
   return w
@@ -199,6 +232,7 @@ export function startWave(w: World, wave: number) {
 export function fireBloom(w: World, x: number, y: number): boolean {
   if (w.state === 'over' || w.ammo <= 0) return false
   w.ammo--
+  w.shots++
   w.blooms.push({ x, y, age: 0, r: 0, kills: 0 })
   return true
 }
@@ -288,10 +322,13 @@ export function tick(w: World, dt: number): TickEvents {
         const clean = !!b.splitter && !b.child // popped a MIRV before it forked
         w.score += 10 * w.combo * (clean ? CLEAN_KILL_MULT : 1)
         ev.intercepts++
-        if (clean) ev.cleanKills++
+        w.downed++
+        if (clean) { ev.cleanKills++; w.cleanTotal++ }
         addFx(w, b.x, b.y, 'intercept', 0.45)
         // multi-kill: this same ring catching more in one life pays escalating bonus
         bl.kills++
+        if (bl.kills === 1) w.hits++ // this bloom landed
+        if (bl.kills > w.maxMulti) w.maxMulti = bl.kills
         if (bl.kills >= 2) {
           w.score += MULTI_BONUS * w.combo * (bl.kills - 1)
           addFx(w, bl.x, bl.y, 'multi', 0.7, bl.kills)

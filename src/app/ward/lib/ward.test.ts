@@ -190,6 +190,27 @@ function ok(name: string, cond: boolean) {
   ok('single kill is not a multi', ev.intercepts === 1 && ev.bestMulti === 0)
 }
 
+// 9c. run stats — shots / hits / downed / accuracy / best multi
+{
+  const { runStats } = require('./ward') as typeof import('./ward')
+  const w = makeWorld(7)
+  w.toSpawn = []
+  // bloom A catches 2 (a hit + a multi); bloom B (fired at empty space) misses
+  w.blight = [
+    { x: 200, y: 200, ox: 200, oy: -10, vx: 0, vy: 0, target: 0, alive: true },
+    { x: 204, y: 200, ox: 204, oy: -10, vx: 0, vy: 0, target: 0, alive: true },
+    { x: 40, y: 0, ox: 40, oy: -10, vx: 0, vy: 1, target: 0, alive: true }, // decoy keeps wave open
+  ]
+  fireBloom(w, 200, 200) // hits 2
+  fireBloom(w, 380, 80) // hits nothing
+  tick(w, 0.05)
+  const s = runStats(w)
+  ok('shots counted', s.shots === 2)
+  ok('downed counted', s.downed === 2)
+  ok('best multi tracked', s.maxMulti === 2)
+  ok('accuracy = 1 hit / 2 shots = 50%', s.accuracy === 50)
+}
+
 // 10. taunts — tiered by wave, stable per-run, never empty, best-aware
 {
   const { tauntFor, tauntTier } = require('./ward') as typeof import('./ward')
