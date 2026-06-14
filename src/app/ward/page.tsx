@@ -110,6 +110,7 @@ export default function WardPage() {
         const ev = tick(w, dt)
         if (ev.intercepts) sfx.play('intercept')
         if (ev.cleanKills) sfx.play('clean')
+        if (ev.bestMulti >= 2) sfx.play('multi')
         if (ev.spireHits) sfx.play('spire')
         if (ev.waveCleared) sfx.play('wave')
         if (ev.gameOver) {
@@ -441,6 +442,22 @@ function render(
       ctx.shadowBlur = 16
       ctx.shadowColor = HOT_VOID
       ring(ctx, f.x, f.y, 4 + k * 30)
+    } else if (f.kind === 'multi') {
+      // multi-kill — a bright burst ring + a ×N floater rising and fading
+      const n = f.n ?? 2
+      ctx.strokeStyle = HOT
+      ctx.globalAlpha = (1 - k) * 0.9
+      ctx.lineWidth = 3 * (1 - k)
+      ctx.shadowBlur = 20
+      ctx.shadowColor = ATHER
+      ring(ctx, f.x, f.y, 6 + k * (26 + n * 8))
+      ctx.globalAlpha = Math.min(1, (1 - k) * 1.4)
+      ctx.fillStyle = HOT
+      ctx.shadowBlur = 14
+      ctx.shadowColor = ATHER
+      ctx.textAlign = 'center'
+      ctx.font = `600 ${16 + n * 3}px ui-monospace, monospace`
+      ctx.fillText(`×${n}`, f.x, f.y - 14 - k * 26)
     } else {
       ctx.strokeStyle = VOID_DIM
       ctx.globalAlpha = 0.7 * (1 - k)

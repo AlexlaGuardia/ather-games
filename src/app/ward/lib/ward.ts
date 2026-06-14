@@ -41,6 +41,7 @@ export const SPLIT_MIN_WAVE = 3
 const SPLIT_Y_MIN = 165
 const SPLIT_Y_MAX = 300
 const CLEAN_KILL_MULT = 3 // a splitter killed before it forks scores this much more
+const MULTI_BONUS = 15 // per extra blight caught by one bloom (×combo, ×(kills-1))
 
 export interface Spire {
   x: number
@@ -67,15 +68,17 @@ export interface Bloom {
   y: number
   age: number
   r: number
+  kills: number // blight this single ring has caught over its life (for multi-kills)
 }
 
-export type FxKind = 'intercept' | 'impact' | 'spire' | 'split'
+export type FxKind = 'intercept' | 'impact' | 'spire' | 'split' | 'multi'
 export interface Fx {
   x: number
   y: number
   age: number
   life: number
   kind: FxKind
+  n?: number // multi-kill count, for the ×N floater
 }
 
 export type WardState = 'spawning' | 'wavebreak' | 'over'
@@ -103,6 +106,7 @@ export interface TickEvents {
   intercepts: number
   spireHits: number
   cleanKills: number // splitters popped before they forked — the skill shot
+  bestMulti: number // highest single-bloom kill count reached this frame (>=2 = a multi)
   waveCleared: boolean
   gameOver: boolean
 }
@@ -195,7 +199,7 @@ export function startWave(w: World, wave: number) {
 export function fireBloom(w: World, x: number, y: number): boolean {
   if (w.state === 'over' || w.ammo <= 0) return false
   w.ammo--
-  w.blooms.push({ x, y, age: 0, r: 0 })
+  w.blooms.push({ x, y, age: 0, r: 0, kills: 0 })
   return true
 }
 
@@ -209,13 +213,13 @@ export function bloomRadius(age: number): number {
   return BLOOM_MAX * Math.max(0, 1 - t)
 }
 
-function addFx(w: World, x: number, y: number, kind: FxKind, life: number) {
-  w.fx.push({ x, y, age: 0, kind, life })
+function addFx(w: World, x: number, y: number, kind: FxKind, life: number, n?: number) {
+  w.fx.push({ x, y, age: 0, kind, life, n })
 }
 
 // Advance the world by dt seconds. Returns what happened this frame for sound/FX.
 export function tick(w: World, dt: number): TickEvents {
-  const ev: TickEvents = { intercepts: 0, spireHits: 0, cleanKills: 0, waveCleared: false, gameOver: false }
+  const ev: TickEvents = { intercepts: 0, spireHits: 0, cleanKills: 0, bestMulti: 0, waveCleared: false, gameOver: false }
   if (w.state === 'over') return ev
 
   // charge trickles back
@@ -286,6 +290,13 @@ export function tick(w: World, dt: number): TickEvents {
         ev.intercepts++
         if (clean) ev.cleanKills++
         addFx(w, b.x, b.y, 'intercept', 0.45)
+        // multi-kill: this same ring catching more in one life pays escalating bonus
+        bl.kills++
+        if (bl.kills >= 2) {
+          w.score += MULTI_BONUS * w.combo * (bl.kills - 1)
+          addFx(w, bl.x, bl.y, 'multi', 0.7, bl.kills)
+          if (bl.kills > ev.bestMulti) ev.bestMulti = bl.kills
+        }
       }
     }
   }

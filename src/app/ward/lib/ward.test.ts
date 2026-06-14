@@ -159,6 +159,37 @@ function ok(name: string, cond: boolean) {
   ok('child did not spawn more children', w.blight.length === 1)
 }
 
+// 9b. multi-kill — one bloom catching a cluster pays escalating bonus + reports the count
+{
+  const w = makeWorld(7)
+  w.toSpawn = []
+  // three blight stacked at one point, plus a decoy so the wave doesn't clear
+  w.blight = [
+    { x: 200, y: 200, ox: 200, oy: -10, vx: 0, vy: 0, target: 0, alive: true },
+    { x: 203, y: 200, ox: 203, oy: -10, vx: 0, vy: 0, target: 0, alive: true },
+    { x: 198, y: 203, ox: 198, oy: -10, vx: 0, vy: 0, target: 0, alive: true },
+    { x: 40, y: 0, ox: 40, oy: -10, vx: 0, vy: 1, target: 0, alive: true },
+  ]
+  fireBloom(w, 200, 200)
+  const ev = tick(w, 0.05) // ring covers all three at once
+  ok('three caught in one ring', ev.intercepts === 3)
+  ok('bestMulti reports 3', ev.bestMulti === 3)
+  // combo climbs 1,2,3 over the three; base 10*(1+2+3)=60, multi bonus 15*(2*1)+15*(3*2)... per-kill
+  // kill2: +15*combo(2)*1=30 ; kill3: +15*combo(3)*2=90 → base 60 + 120 = 180
+  ok('multi bonus stacks into score', w.score === 180)
+}
+{
+  const w = makeWorld(7)
+  w.toSpawn = []
+  w.blight = [
+    { x: 200, y: 200, ox: 200, oy: -10, vx: 0, vy: 0, target: 0, alive: true },
+    { x: 40, y: 0, ox: 40, oy: -10, vx: 0, vy: 1, target: 0, alive: true },
+  ]
+  fireBloom(w, 200, 200)
+  const ev = tick(w, 0.05)
+  ok('single kill is not a multi', ev.intercepts === 1 && ev.bestMulti === 0)
+}
+
 // 10. taunts — tiered by wave, stable per-run, never empty, best-aware
 {
   const { tauntFor, tauntTier } = require('./ward') as typeof import('./ward')

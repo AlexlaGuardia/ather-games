@@ -4,7 +4,7 @@
 // the shared arcade SFX engine.
 import { SfxManager, type Patch } from '@/lib/arcade/sfx'
 
-type Id = 'launch' | 'intercept' | 'clean' | 'spire' | 'wave' | 'over'
+type Id = 'launch' | 'intercept' | 'clean' | 'multi' | 'spire' | 'wave' | 'over'
 
 const patch: Patch<Id> = {
   // Ather lifts off the battery — a short upward whoosh
@@ -22,6 +22,12 @@ const patch: Patch<Id> = {
     E.tone(t, 988, { glideTo: 1480, dur: 0.1, type: 'triangle', peak: 0.13, detune: 10 })
     E.tone(t + 0.07, 1480, { glideTo: 1976, dur: 0.12, type: 'triangle', peak: 0.12, detune: 8 })
     E.noise(t, { dur: 0.12, peak: 0.07, filter: 4200, sweepTo: 1400, filterType: 'bandpass', q: 1.6 })
+  },
+  // multi-kill — one ring caught a cluster; a bright rising arpeggio, a small triumph
+  multi: (E, t) => {
+    ;[659, 880, 1175, 1568].forEach((f, i) =>
+      E.tone(t + i * 0.045, f, { type: 'triangle', dur: 0.16, peak: 0.12, detune: 7 }),
+    )
   },
   // a spire falls — heavy descending thud with a noise crack
   spire: (E, t) => {
@@ -44,6 +50,6 @@ const patch: Patch<Id> = {
 }
 
 export const sfx = new SfxManager<Id>(patch, {
-  throttle: { launch: 40, intercept: 30, clean: 30 },
+  throttle: { launch: 40, intercept: 30, clean: 30, multi: 60 },
   storageKey: 'ward.sfx',
 })
