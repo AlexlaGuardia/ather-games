@@ -57,6 +57,16 @@ function PuffCell({ pop }: { pop: boolean }) {
     </span>
   )
 }
+// detonation effects (clean arcade): beams for surge/star, a ring for prism,
+// a soft flash for star, and colour motes off every cleared cell.
+type FxSpec =
+  | { t: 'beamH'; y: number; ox: number; color: string }
+  | { t: 'beamV'; x: number; oy: number; color: string }
+  | { t: 'ring'; x: number; y: number; color: string }
+  | { t: 'flash' }
+  | { t: 'mote'; x: number; y: number; dx: number; dy: number; color: string }
+type Fx = FxSpec & { id: number }
+
 const RAINBOW = 'conic-gradient(from 210deg, #f0a526, #e8554e, #9b5ad2, #37a3e6, #48b56f, #f0a526)'
 
 function bigSound(fired: Kind[]): ManaSfx | null {
@@ -81,6 +91,8 @@ export default function MananaPage() {
   const [muted, setMuted] = useState(false)
   const [mounted, setMounted] = useState(false)
   const [boardPx, setBoardPx] = useState<number | null>(null)
+  const [fx, setFx] = useState<Fx[]>([])
+  const fxIdRef = useRef(0)
 
   const boardWrapRef = useRef<HTMLDivElement>(null)
   const boardRef = useRef<Cell[]>([])
@@ -164,11 +176,60 @@ export default function MananaPage() {
     }
   }
 
+  // cell-center geometry inside the board (p-2.5 = 10px pad, gap-1.5 = 6px)
+  const cellCenter = (n: number, bp: number) => {
+    const cell = (bp - 20 - 7 * 6) / 8
+    return 10 + n * (cell + 6) + cell / 2
+  }
+
+  const spawnFx = (items: FxSpec[], ttl: number) => {
+    if (!items.length) return
+    const tagged = items.map((f) => ({ ...f, id: fxIdRef.current++ } as Fx))
+    setFx((cur) => [...cur, ...tagged])
+    const ids = new Set(tagged.map((f) => f.id))
+    setTimeout(() => setFx((cur) => cur.filter((f) => !ids.has(f.id))), ttl)
+  }
+
+  // turn a resolve step into beams / ring / flash / motes
+  const fireEffects = (step: { matched: number[]; blasts: { i: number; kind: Kind; color: number }[]; spawned: { i: number }[] }) => {
+    const bp = boardPx
+    if (!bp) return
+    const items: FxSpec[] = []
+    let flash = false
+    for (const bl of step.blasts) {
+      const { x, y } = xy(bl.i)
+      const col = PIECES[bl.color]?.base ?? '#ffd884'
+      if (bl.kind === 'surgeH') items.push({ t: 'beamH', y: cellCenter(y, bp), ox: cellCenter(x, bp), color: col })
+      else if (bl.kind === 'surgeV') items.push({ t: 'beamV', x: cellCenter(x, bp), oy: cellCenter(y, bp), color: col })
+      else if (bl.kind === 'star') { items.push({ t: 'beamH', y: cellCenter(y, bp), ox: cellCenter(x, bp), color: col }, { t: 'beamV', x: cellCenter(x, bp), oy: cellCenter(y, bp), color: col }); flash = true }
+      else if (bl.kind === 'prism') items.push({ t: 'ring', x: cellCenter(x, bp), y: cellCenter(y, bp), color: col })
+    }
+    if (flash) items.push({ t: 'flash' })
+    // colour motes off each cleared cell (capped so big cascades stay clean)
+    const spawned = new Set(step.spawned.map((s) => s.i))
+    let motes = 0
+    for (const i of step.matched) {
+      if (motes >= 40 || spawned.has(i)) continue
+      const c = boardRef.current[i]
+      const col = c && c.color >= 0 ? PIECES[c.color]?.base ?? '#ffd884' : '#e7d3ea'
+      const cx = cellCenter(xy(i).x, bp), cy = cellCenter(xy(i).y, bp)
+      const n = 4
+      for (let k = 0; k < n; k++) {
+        const a = (Math.PI * 2 * k) / n + Math.random() * 0.8
+        const r = 14 + Math.random() * 16
+        items.push({ t: 'mote', x: cx, y: cy, dx: Math.cos(a) * r, dy: Math.sin(a) * r, color: col })
+      }
+      motes++
+    }
+    spawnFx(items, 540)
+  }
+
   const runResolve = async (start: Cell[], opts: { swapAt?: number; forced?: Set<number> }) => {
     const { steps, puffs } = resolve(start, rngRef.current, opts)
     for (let s = 0; s < steps.length; s++) {
       const step = steps[s]
       setPopping(new Set(step.matched))
+      fireEffects(step)
       setHeat(step.mult)
       if (step.spawned.length) sfx.play('bloom')
       const big = bigSound(step.fired)
@@ -277,6 +338,25 @@ export default function MananaPage() {
         .manana-gem{ transition: transform .12s ease, box-shadow .12s ease; animation: manana-drop .18s ease; }
         .manana-pop{ animation: manana-pop .26s ease forwards !important; }
         .manana-charged{ animation: manana-charged 1.1s ease-in-out infinite; }
+
+        /* --- special-piece detonations (clean arcade) --- */
+        @keyframes manana-beamH { 0%{opacity:0;transform:translateY(-50%) scaleX(0)} 22%{opacity:1;transform:translateY(-50%) scaleX(1)} 65%{opacity:0.8} 100%{opacity:0;transform:translateY(-50%) scaleX(1)} }
+        @keyframes manana-beamV { 0%{opacity:0;transform:translateX(-50%) scaleY(0)} 22%{opacity:1;transform:translateX(-50%) scaleY(1)} 65%{opacity:0.8} 100%{opacity:0;transform:translateX(-50%) scaleY(1)} }
+        @keyframes manana-ring { 0%{opacity:0.9;transform:translate(-50%,-50%) scale(0.12)} 100%{opacity:0;transform:translate(-50%,-50%) scale(1)} }
+        @keyframes manana-flash { 0%{opacity:0} 18%{opacity:0.45} 100%{opacity:0} }
+        @keyframes manana-mote { 0%{opacity:1;transform:translate(-50%,-50%)} 100%{opacity:0;transform:translate(calc(-50% + var(--dx)),calc(-50% + var(--dy)))} }
+        .manana-beamH{ position:absolute; left:8px; right:8px; border-radius:9999px; mix-blend-mode:screen;
+          background:linear-gradient(180deg,transparent,var(--c),#fff 50%,var(--c),transparent); box-shadow:0 0 16px var(--c);
+          animation:manana-beamH .42s ease-out forwards; }
+        .manana-beamV{ position:absolute; top:8px; bottom:8px; border-radius:9999px; mix-blend-mode:screen;
+          background:linear-gradient(90deg,transparent,var(--c),#fff 50%,var(--c),transparent); box-shadow:0 0 16px var(--c);
+          animation:manana-beamV .42s ease-out forwards; }
+        .manana-ring{ position:absolute; border-radius:9999px; border:3px solid var(--c); box-shadow:0 0 22px var(--c),inset 0 0 18px var(--c); mix-blend-mode:screen;
+          animation:manana-ring .52s ease-out forwards; }
+        .manana-flash{ position:absolute; inset:0; border-radius:1rem; background:radial-gradient(circle,#fff,rgba(255,255,255,0.15)); mix-blend-mode:screen;
+          animation:manana-flash .3s ease-out forwards; }
+        .manana-mote{ position:absolute; width:7px; height:7px; border-radius:9999px; background:var(--c); box-shadow:0 0 8px var(--c); mix-blend-mode:screen;
+          animation:manana-mote .5s ease-out forwards; }
       `}</style>
 
       <div className="relative z-10 max-w-[560px] mx-auto px-4 py-6 min-h-[calc(100svh-5rem)] flex flex-col">
@@ -334,6 +414,23 @@ export default function MananaPage() {
               +{reward} moves
             </div>
           )}
+
+          {/* detonation effects layer — never eats clicks */}
+          {boardPx && fx.length > 0 && (() => {
+            const cell = (boardPx - 20 - 7 * 6) / 8
+            const beamT = cell * 0.78
+            return (
+              <div className="absolute inset-0 z-20 pointer-events-none overflow-hidden rounded-2xl">
+                {fx.map((f) => {
+                  if (f.t === 'beamH') return <span key={f.id} className="manana-beamH" style={{ top: f.y, height: beamT, transformOrigin: `${f.ox - 8}px center`, ['--c' as string]: f.color } as React.CSSProperties} />
+                  if (f.t === 'beamV') return <span key={f.id} className="manana-beamV" style={{ left: f.x, width: beamT, transformOrigin: `center ${f.oy - 8}px`, ['--c' as string]: f.color } as React.CSSProperties} />
+                  if (f.t === 'ring') return <span key={f.id} className="manana-ring" style={{ left: f.x, top: f.y, width: boardPx * 1.1, height: boardPx * 1.1, ['--c' as string]: f.color } as React.CSSProperties} />
+                  if (f.t === 'flash') return <span key={f.id} className="manana-flash" />
+                  return <span key={f.id} className="manana-mote" style={{ left: f.x, top: f.y, ['--c' as string]: f.color, ['--dx' as string]: `${f.dx}px`, ['--dy' as string]: `${f.dy}px` } as React.CSSProperties} />
+                })}
+              </div>
+            )
+          })()}
 
           <div
             className="grid gap-1.5"

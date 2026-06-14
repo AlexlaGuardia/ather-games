@@ -198,6 +198,7 @@ export interface ResolveStep {
   matched: number[] // every cell cleared this cascade (drives the pop)
   spawned: { i: number; kind: Kind }[]
   fired: Kind[] // specials that detonated this cascade (drives the sound)
+  blasts: { i: number; kind: Kind; color: number }[] // where each special fired (drives beams)
   fallen: Cell[]
   gained: number
   mult: number // cascade multiplier shown as "ather heat"
@@ -258,7 +259,10 @@ export function resolve(board: Cell[], rng: Rng, opts: { swapAt?: number; forced
 
     // --- chain through specials, then clear (keep the cells that become specials) ---
     const toClear = detonateChain(cur, base, spawnCells)
-    const fired = [...toClear].filter((i) => isSpecial(cur[i]) && !spawnCells.has(i)).map((i) => cur[i].kind)
+    const blasts = [...toClear]
+      .filter((i) => isSpecial(cur[i]) && !spawnCells.has(i))
+      .map((i) => ({ i, kind: cur[i].kind, color: cur[i].color }))
+    const fired = blasts.map((b) => b.kind)
 
     // cloud-puffs burst when a clear lands orthogonally next to them (or a blast
     // hits them directly). They never match on their own.
@@ -277,7 +281,7 @@ export function resolve(board: Cell[], rng: Rng, opts: { swapAt?: number; forced
     const fallen = collapse(cleared, rng)
     const mult = 1 + cascade * 0.5
     const gained = Math.round((toClear.size * 10 + puffs * PUFF_BONUS) * mult)
-    steps.push({ matched: [...finalClear], spawned: spawns.map((s) => ({ i: s.i, kind: s.kind })), fired, fallen, gained, mult, puffs })
+    steps.push({ matched: [...finalClear], spawned: spawns.map((s) => ({ i: s.i, kind: s.kind })), fired, blasts, fallen, gained, mult, puffs })
     cur = fallen
     cascade++
   }
