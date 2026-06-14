@@ -63,6 +63,15 @@ export const GAMES: GameEntry[] = [
     tagline: "guide a Mana Seed down the wind · land it soft to plant — a cozy descent",
   },
   {
+    id: "voranyx",
+    title: "Voranyx",
+    href: "/voranyx",
+    glyph: "⌇",
+    tier: "live",
+    kind: "play",
+    tagline: "a worm of Ather-light in the Silt · eat, grow, boost, don't crash — a glowing slither",
+  },
+  {
     id: "shimmer",
     title: "Shimmer",
     href: "/shimmer",
