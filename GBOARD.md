@@ -107,6 +107,26 @@ scenes). Lore routes through /magii for canon safety.
 - **Squall** *(bullet-hell dodge)* — pure evasion, no offense. Read the void's projectile
   patterns, weave through, score = survival time. A brand-new **mood**: defenseless survival.
   Vector-glow bullet patterns are gorgeous and cheap to draw.
+- **Rin-kin** *(purification draughts — SPEC'D 2026-06-14, fills the strategy mood-gap)* —
+  the lineup's only turn-based / beat-the-AI game. Name = ancient spirits (**needs /magii pass**
+  to canonize; "Rin-kin" confirmed unused in canon today). Vector-glow diagonal board, your
+  Ather-light vs the void-corrupted.
+  - **Move:** diagonal slide (checkers).
+  - **Convert (core gimmick):** jump an adjacent enemy into the empty square beyond → it flips
+    to your light and *stays on its square* (material never leaves the board). Multi-jump flips
+    an arc. A converted piece **reverses its advance** (now marches toward the enemy home).
+  - **Win — torches:** a piece reaching the enemy's home rank **lights a torch + ascends off
+    the board. First to 3 torches wins.** Spending pieces for torches thins your army and dangles
+    convertible targets midfield → conversion is the natural counter to a torch-rush. Systems
+    tension each other (the reason the win con is best-of-3, not sudden-death).
+  - **Elements = terrain only:** a piece on its own element-tile is **rooted**, can't be flipped.
+    No rock-paper-scissors.
+  - **Cut:** flank-cascade (reads as unfair). Jump-to-convert stays the single clean verb.
+  - **Tiebreak** on board-lock: most torches, then most pieces.
+  - **Why buildable:** conversion swings the board so hard a *greedy* AI (max own flips + torch
+    progress, block their imminent torch) looks smart — no real minimax engine needed.
+  - *Open:* board size (tuning knob, start 8x8) · optional back-rank fork (torch vs "kindle"/king
+    — parked, keep the goal clean for v1).
 - *Bench (not committed):* **Breakout** (bounce an Ather mote to shatter the void-crust);
   **Orrery pinball** — held, overlaps Gravitar's physics.
 
