@@ -1,4 +1,4 @@
-// LAZ sim sanity — run with: npx tsx src/app/laz/lib/laz.test.ts
+// UPDRAFT sim sanity — run with: npx tsx src/app/updraft/lib/updraft.test.ts
 import {
   makeWorld,
   flap,
@@ -13,7 +13,7 @@ import {
   GAP_H,
   VH,
   type World,
-} from './laz'
+} from './updraft'
 
 let pass = 0
 let fail = 0
@@ -112,5 +112,5 @@ function ok(name: string, cond: boolean) {
   ok('different seed → different gap', a.gates[0].gapY !== c.gates[0].gapY)
 }
 
-console.log(`\nLAZ sim: ${pass} passed, ${fail} failed`)
+console.log(`\nUPDRAFT sim: ${pass} passed, ${fail} failed`)
 process.exit(fail ? 1 : 0)

@@ -1,4 +1,4 @@
-// LAZ — sound. A light, airy one-tap arcade: a soft wing-beat on every flap, a
+// UPDRAFT — sound. A light, airy one-tap arcade: a soft wing-beat on every flap, a
 // bright blip clearing a gate, a dull thud on a crash, a short sinking tone on the
 // end screen. Built on the shared arcade SFX engine.
 import { SfxManager, type Patch } from '@/lib/arcade/sfx'
@@ -30,5 +30,5 @@ const patch: Patch<Id> = {
 
 export const sfx = new SfxManager<Id>(patch, {
   throttle: { flap: 40, pass: 25 },
-  storageKey: 'laz.sfx',
+  storageKey: 'updraft.sfx',
 })

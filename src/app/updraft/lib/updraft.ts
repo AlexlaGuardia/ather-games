@@ -29,14 +29,14 @@ export interface Gate {
   passed: boolean
 }
 
-export type LazState = 'ready' | 'playing' | 'over'
+export type UpdraftState = 'ready' | 'playing' | 'over'
 
 export interface World {
   y: number // Lazerin's vertical position
   vy: number
   gates: Gate[]
   score: number
-  state: LazState
+  state: UpdraftState
   rng: Rng
 }
 
@@ -122,7 +122,7 @@ export function tick(w: World, dt: number): TickEvents {
 }
 
 // localStorage high score, guarded for SSR / private mode.
-const HS_KEY = 'laz.hiscore'
+const HS_KEY = 'updraft.hiscore'
 export function loadHiScore(): number {
   try {
     return +(localStorage.getItem(HS_KEY) || 0) || 0

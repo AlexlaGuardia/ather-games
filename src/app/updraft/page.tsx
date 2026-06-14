@@ -2,7 +2,7 @@
 
 // LAZ — Lazerin rides the Ather. One tap to beat his wings and climb, fall when you
 // don't, thread the void gates. Pure pick-up-die-retry, Atari vector-glow on canvas.
-// Core sim lives in lib/laz.ts.
+// Core sim lives in lib/updraft.ts.
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
@@ -21,8 +21,9 @@ import {
   BIRD_R,
   GATE_W,
   GAP_H,
+  SCROLL,
   type World,
-} from './lib/laz'
+} from './lib/updraft'
 import { sfx } from './lib/sfx'
 
 const BG = '#04040a'
@@ -37,11 +38,19 @@ const STARS = (() => {
   return Array.from({ length: 40 }, () => ({ x: r() * VW, y: r() * (GROUND_Y - 8), s: 0.6 + r() * 1.2, sp: 0.3 + r() * 0.9 }))
 })()
 
+// distant spire silhouettes (procedural parallax — echoes Ward's spires for cohesion)
+const FAR_SPIRES = (() => {
+  const r = mulberry32(0x5e)
+  return Array.from({ length: 7 }, (_, i) => ({ x: i * 90 + r() * 30, h: 60 + r() * 90, w: 22 + r() * 16 }))
+})()
+const FAR_SPAN = 7 * 90 // wrap width for the spire row
+
 type Phase = 'ready' | 'playing' | 'over'
 
-export default function LazPage() {
+export default function UpdraftPage() {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const worldRef = useRef<World | null>(null)
+  const nebulaRef = useRef<HTMLImageElement | null>(null)
   const seedRef = useRef(1)
 
   const [phase, setPhase] = useState<Phase>('ready')
@@ -63,6 +72,9 @@ export default function LazPage() {
     boot()
     setMuted(sfx.isMuted())
     setBest(loadHiScore())
+    const img = new Image()
+    img.src = '/updraft/nebula.webp'
+    img.onload = () => { nebulaRef.current = img }
   }, [boot])
 
   // ── render + sim loop ────────────────────────────────────────────────────────
@@ -92,7 +104,7 @@ export default function LazPage() {
         }
       }
 
-      render(canvas, w, ts)
+      render(canvas, w, ts, nebulaRef.current)
     }
     raf = requestAnimationFrame(draw)
     return () => cancelAnimationFrame(raf)
@@ -127,7 +139,7 @@ export default function LazPage() {
           &#8592; arcade
         </Link>
         <div className="text-center">
-          <div className="font-mono text-[#37e6ff] text-sm tracking-[0.35em] uppercase" style={{ textShadow: '0 0 8px #37e6ff80' }}>Laz</div>
+          <div className="font-mono text-[#37e6ff] text-sm tracking-[0.35em] uppercase" style={{ textShadow: '0 0 8px #37e6ff80' }}>Updraft</div>
           <div className="text-[9px] text-[#7fd8e6]/40 font-mono tracking-[0.2em] uppercase mt-0.5">ride the ather</div>
         </div>
         <button onClick={toggleMute} className="text-[10px] tracking-[0.2em] uppercase text-[#37e6ff]/50 hover:text-[#37e6ff] font-mono w-10 text-right">
@@ -137,7 +149,7 @@ export default function LazPage() {
 
       <div className="relative w-full max-w-[400px]" style={{ aspectRatio: `${VW} / ${VH}` }}>
         <canvas ref={canvasRef} onPointerDown={onDown} className="w-full h-full block touch-none rounded-md cursor-pointer" />
-        <div className="pointer-events-none absolute inset-0 rounded-md laz-crt" />
+        <div className="pointer-events-none absolute inset-0 rounded-md updraft-crt" />
 
         {/* live score, big and centered like a real flappy */}
         {phase === 'playing' && (
@@ -148,7 +160,7 @@ export default function LazPage() {
 
         {phase === 'ready' && (
           <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-3 bg-[#04040a]/45 rounded-md text-center px-6">
-            <div className="font-mono text-[#37e6ff] text-2xl tracking-[0.3em] uppercase" style={{ textShadow: '0 0 18px #37e6ff' }}>Laz</div>
+            <div className="font-mono text-[#37e6ff] text-2xl tracking-[0.3em] uppercase" style={{ textShadow: '0 0 18px #37e6ff' }}>Updraft</div>
             <p className="text-[11px] leading-relaxed text-[#9fd6e0]/80 max-w-[260px]">
               tap to beat your wings and rise. fall when you don't. thread the void gates.
             </p>
@@ -178,14 +190,14 @@ export default function LazPage() {
       </div>
 
       <style jsx>{`
-        .laz-crt {
+        .updraft-crt {
           background:
             radial-gradient(ellipse at center, transparent 58%, rgba(0, 0, 0, 0.5) 100%),
             repeating-linear-gradient(0deg, rgba(0, 0, 0, 0) 0px, rgba(0, 0, 0, 0) 2px, rgba(0, 0, 0, 0.16) 3px, rgba(0, 0, 0, 0) 4px);
-          animation: laz-flicker 4.5s infinite steps(60);
+          animation: updraft-flicker 4.5s infinite steps(60);
           mix-blend-mode: multiply;
         }
-        @keyframes laz-flicker {
+        @keyframes updraft-flicker {
           0%, 97%, 100% { opacity: 1; }
           98% { opacity: 0.93; }
           99% { opacity: 0.97; }
@@ -196,7 +208,7 @@ export default function LazPage() {
 }
 
 // ── rendering ───────────────────────────────────────────────────────────────────
-function render(canvas: HTMLCanvasElement, w: World, ts: number) {
+function render(canvas: HTMLCanvasElement, w: World, ts: number, nebula: HTMLImageElement | null) {
   const dpr = Math.min(2, typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1)
   if (canvas.width !== VW * dpr || canvas.height !== VH * dpr) {
     canvas.width = VW * dpr
@@ -209,9 +221,36 @@ function render(canvas: HTMLCanvasElement, w: World, ts: number) {
   ctx.lineCap = 'round'
   ctx.lineJoin = 'round'
   const t = ts / 1000
+  const moving = w.state === 'playing'
+
+  // backmost layer: the nebula, faint + gently floating (no tiling seam — drawn
+  // over-scanned and nudged by sin, edges are pure black so it just breathes)
+  if (nebula && nebula.complete && nebula.naturalWidth) {
+    const over = 28
+    const dx = Math.sin(t * 0.06) * over - over / 2 - (moving ? (t * 5) % over : 0)
+    const dy = Math.cos(t * 0.05) * (over * 0.4)
+    ctx.globalAlpha = 0.5
+    ctx.drawImage(nebula, dx, dy, VW + over * 2, VH + over)
+    ctx.globalAlpha = 1
+  }
+
+  // far parallax: distant spire silhouettes drifting slowly along the floor
+  const drift = (t * SCROLL * 0.18) % FAR_SPAN
+  for (let rep = 0; rep < 2; rep++) {
+    for (const s of FAR_SPIRES) {
+      const x = ((s.x - drift + rep * FAR_SPAN) % (FAR_SPAN * 2) + FAR_SPAN * 2) % (FAR_SPAN * 2)
+      if (x > VW + 30) continue
+      ctx.fillStyle = 'rgba(74,32,120,0.22)'
+      ctx.beginPath()
+      ctx.moveTo(x - s.w / 2, GROUND_Y)
+      ctx.lineTo(x, GROUND_Y - s.h)
+      ctx.lineTo(x + s.w / 2, GROUND_Y)
+      ctx.closePath()
+      ctx.fill()
+    }
+  }
 
   // drifting starfield
-  const moving = w.state === 'playing'
   for (const s of STARS) {
     const x = moving ? ((s.x - t * 40 * s.sp) % VW + VW) % VW : s.x
     ctx.globalAlpha = 0.1 + 0.12 * (0.5 + 0.5 * Math.sin(t * 1.4 + s.x))
