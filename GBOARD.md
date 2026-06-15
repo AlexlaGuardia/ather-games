@@ -137,11 +137,11 @@ the Arcade frame.
   • **Zoom backs off harder** — `1.0 - mass*0.0052`, floor **0.5** (~0.74 @ mass 50, was 0.855).
   • **Floating relative joystick for touch** — thumb-anchored drag, never occludes the head;
     mouse keeps cursor-follow. (`ddc5952`, `f2120b8`.)
-**Next:**
-  1. **Alex phone playtest** — does mid-game breathe now? Is the joystick deadzone/travel
-     (`STICK_DEAD 6` / `STICK_MAX 46`) right, and is the slower ring-close still tense enough?
-  2. If the squeeze now feels *too* slow → nudge `ARENA_SHRINK` back up a touch (6.5→7.5).
-  3. Optional: stick-pushed-to-edge = boost (fold the boost pad into the joystick).
+  • **✅ Alex phone playtest PASSED (2026-06-15)** — mid-game breathes now AND the joystick
+    feels great on both. Tuning + mobile control are validated; Voranyx is in a good resting state.
+**Next:** *(nothing urgent — parked in a good state)*
+  1. Optional: stick-pushed-to-edge = boost (fold the boost pad into the joystick, true one-thumb).
+  2. Optional: if the squeeze ever feels *too* slow → nudge `ARENA_SHRINK` back up (6.5→7.5).
 **Parked:** the **MP seam** (multiplayer serpents — built toward, deferred) · a Sable canon
   pass on the cloud-ocean placement note in `voranyx.md`.
 **Decisions:** **canon before code**; boost **decoupled from length** (motes, not tail-burn);
