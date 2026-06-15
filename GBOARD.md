@@ -27,7 +27,7 @@ the Arcade frame.
 | Updraft #5 | 🟢 live | 2026-06-14 | one-tap flight (Flappy) |
 | Seedfall #6 | 🟢 live | 2026-06-14 | Mana-Seed lander + persistent garden |
 | Voranyx #7 | 🟢 live | 2026-06-15 | glowing slither in the Silt |
-| Lucernyx #8 | 🟡 building | 2026-06-15 | turn-based board of rekindling (coming-soon) |
+| Lucernyx #8 | 🟢 live | 2026-06-15 | turn-based board of rekindling |
 
 ---
 
@@ -151,7 +151,7 @@ the Arcade frame.
   cramping); on mobile, **relative joystick > absolute-aim** (absolute = thumb covers the head).
 **Files:** `voranyx/lib/voranyx.ts` (20 tests) · `page.tsx`
 
-### Lucernyx (#8) — 🟡 building · turn-based board of rekindling → `/lucernyx` *(coming-soon)*
+### Lucernyx (#8) — 🟢 live · turn-based board of rekindling → `/lucernyx`
 *Last touched: 2026-06-15*
 **Left off:** Built the **playable slice** in one session (`5291194` sim, `bb7e09c` board).
   You're the lantern Ancient: slide diagonally (checkers), **jump an adjacent grey into the
@@ -159,8 +159,9 @@ the Arcade frame.
   jump flips an arc, a converted piece reverses its march. Run a piece to the enemy home rank
   → **torch + ascend; first to 3 wins.** Greedy AI (max flips + torch progress, fear their
   imminent torch) plays the Dying. Pure sim `lib/lucernyx.ts` **27 tests green**; vector-glow
-  canvas board (cyan light / guttered grey, violet convert-rings, torch pips). Registered
-  **coming-soon** (owner-gated). The lineup's only turn-based / strategy game.
+  canvas board (cyan light / guttered grey, violet convert-rings, torch pips). **Live + listed**
+  in `/arcade/all` (`67c20b4` — flipped from coming-soon; no owner gate is wired so coming-soon
+  just hid it). The lineup's only turn-based / strategy game.
 **Next:**
   1. **Alex playtest** (owner-gated `/lucernyx`) — is first-to-3-torches the right length? Is
      the greedy AI a satisfying opponent or does it blunder/stall? Board density (3 ranks/12
@@ -169,7 +170,6 @@ the Arcade frame.
      element-tile can't be flipped (positional defense vs conversion). Add the tiles + rule.
   3. **Juice** — animate the multi-jump arc (flip pieces in sequence) + a torch-light flourish;
      its own `lib/sfx.ts` (slide / convert chime / torch / win).
-  4. **Launch flip** coming-soon → live in `lib/games.ts` once it plays well.
 **Parked:** optional back-rank fork (torch vs a "kindle"/king piece — kept off to keep v1's
   win-con clean) · forced-capture rule (jumps are optional in v1).
 **Decisions:** **single clean verb** — jump-to-convert only; cut flank-cascade (read as unfair).
