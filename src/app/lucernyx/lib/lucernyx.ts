@@ -15,9 +15,20 @@
 import { mulberry32, type Rng } from '@/lib/arcade/rng'
 
 export type Owner = 'light' | 'grey'
+export type Element = 'mana' | 'storm' | 'earth' | 'water'
 export const SIZE = 8
 export const PIECE_RANKS = 3 // back ranks each side fills (checkers density)
 export const TORCHES_TO_WIN = 3
+
+// Element tiles = sanctuaries. A piece standing on one is ROOTED: it can't be flipped, and a
+// rooted enemy can't be jumped at all (it blocks). The 4 elements are canon flavour only — no
+// rock-paper-scissors. Placed in the empty midfield, point-symmetric so neither side is favoured.
+export const ELEMENT_TILES: { sq: number; element: Element }[] = [
+  { sq: 3 * SIZE + 2, element: 'storm' },
+  { sq: 3 * SIZE + 4, element: 'mana' },
+  { sq: 4 * SIZE + 3, element: 'water' },
+  { sq: 4 * SIZE + 5, element: 'earth' },
+]
 
 export const other = (o: Owner): Owner => (o === 'light' ? 'grey' : 'light')
 // light's home is the bottom; it advances UP toward row 0. grey advances DOWN toward SIZE-1.
@@ -41,6 +52,7 @@ export interface Move {
 
 export interface Board {
   cells: (Owner | null)[] // index r*SIZE+c; null = empty. only dark squares are ever occupied
+  elements: (Element | null)[] // sanctuary tiles (constant terrain); null = plain square
   turn: Owner
   torches: { light: number; grey: number }
   winner: Owner | null // set when over; null + over = draw (board-lock, equal tiebreak)
@@ -49,6 +61,7 @@ export interface Board {
 
 export function makeBoard(): Board {
   const cells: (Owner | null)[] = new Array(SIZE * SIZE).fill(null)
+  const elements: (Element | null)[] = new Array(SIZE * SIZE).fill(null)
   for (let r = 0; r < SIZE; r++) {
     for (let c = 0; c < SIZE; c++) {
       if (!isDark(r, c)) continue
@@ -56,7 +69,13 @@ export function makeBoard(): Board {
       else if (r >= SIZE - PIECE_RANKS) cells[idx(r, c)] = 'light' // light home at the bottom
     }
   }
-  return { cells, turn: 'light', torches: { light: 0, grey: 0 }, winner: null, over: false }
+  for (const e of ELEMENT_TILES) elements[e.sq] = e.element
+  return { cells, elements, turn: 'light', torches: { light: 0, grey: 0 }, winner: null, over: false }
+}
+
+// a piece is rooted (immune to flipping/jumping) while it stands on a sanctuary tile
+export function isRooted(b: Board, sq: number): boolean {
+  return b.elements[sq] !== null && b.cells[sq] !== null
 }
 
 export function countPieces(b: Board, o: Owner): number {
@@ -95,6 +114,7 @@ export function legalMoves(b: Board, owner: Owner): Move[] {
         if (!inB(lr, lc) || !isDark(lr, lc)) continue
         const oi = idx(or, oc), li = idx(lr, lc)
         if (b.cells[oi] !== enemy) continue
+        if (isRooted(b, oi)) continue // a sanctuary-rooted enemy can't be flipped — it blocks
         if (converts.includes(oi)) continue // don't re-jump one we've already flipped this chain
         if (b.cells[li] !== null || li === s || path.includes(li)) continue // landing must be clear
         const nextConverts = [...converts, oi]
@@ -132,7 +152,7 @@ export function apply(b: Board, m: Move): Board {
   }
 
   const turn = other(owner)
-  const next: Board = { cells, turn, torches, winner, over }
+  const next: Board = { cells, elements: b.elements, turn, torches, winner, over } // terrain is constant
 
   if (!over) {
     // board-lock or wipeout ends the game on the next player's turn
@@ -168,10 +188,10 @@ function evalBoard(b: Board, me: Owner): number {
   let s = 0
   s += (b.torches[me] - b.torches[opp]) * 1000
   s += (countPieces(b, me) - countPieces(b, opp)) * 40 // each conversion is a +80 swing — drives the AI to flip
-  // advancement: reward pushing toward the enemy home rank
+  // advancement: reward pushing toward the enemy home rank; value sitting safe on a sanctuary
   for (let i = 0; i < b.cells.length; i++) {
-    if (b.cells[i] === me) s += advance(me, rowOf(i)) * 3
-    else if (b.cells[i] === opp) s -= advance(opp, rowOf(i)) * 3
+    if (b.cells[i] === me) { s += advance(me, rowOf(i)) * 3; if (b.elements[i]) s += 10 }
+    else if (b.cells[i] === opp) { s -= advance(opp, rowOf(i)) * 3; if (b.elements[i]) s -= 10 }
   }
   if (hasImminentTorch(b, opp)) s -= 250 // they're one move from a torch — bad
   if (hasImminentTorch(b, me)) s += 120

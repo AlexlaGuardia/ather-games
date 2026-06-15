@@ -14,7 +14,7 @@ import { useNoScroll } from '@/lib/arcade/useNoScroll'
 import {
   makeBoard, legalMoves, apply, aiMove, countPieces,
   SIZE, TORCHES_TO_WIN, idx, rowOf, colOf, homeRank, isDark,
-  type Board, type Move, type Owner,
+  type Board, type Move, type Owner, type Element,
 } from './lib/lucernyx'
 import { sfx } from './lib/sfx'
 
@@ -24,6 +24,7 @@ const GREY = '#7c8696'
 const GREY_CORE = '#b9c2cf'
 const VIOLET = '#c86bff'
 const WARM = '#ffb86b'
+const ELEM_COLOR: Record<Element, string> = { mana: '#37e6ff', storm: '#ffd54a', earth: '#54ffae', water: '#5d9eff' }
 
 const HOP_MS = 150 // a single jump hop
 const SLIDE_MS = 190 // a simple slide
@@ -285,6 +286,15 @@ function render(
         ctx.fillStyle = (r === homeRank('light') ? '#37e6ff' : '#c86bff') + '14'
         ctx.fillRect(x, y, cell, cell)
       }
+      // sanctuary tile — a faint element tint + a rune diamond (a piece here is rooted)
+      const el = b.elements[idx(r, c)]
+      if (el) {
+        ctx.fillStyle = ELEM_COLOR[el] + '20'
+        ctx.fillRect(x, y, cell, cell)
+        const mx = x + cell / 2, my = y + cell / 2, d = cell * 0.17
+        ctx.strokeStyle = ELEM_COLOR[el] + 'aa'; ctx.lineWidth = 1.5
+        ctx.beginPath(); ctx.moveTo(mx, my - d); ctx.lineTo(mx + d, my); ctx.lineTo(mx, my + d); ctx.lineTo(mx - d, my); ctx.closePath(); ctx.stroke()
+      }
     }
   }
   ctx.strokeStyle = 'rgba(55,230,255,0.06)'
@@ -346,6 +356,14 @@ function render(
     if (anim && i === anim.from) continue // the mover is drawn separately
     if (flipped.has(i)) o = anim!.owner // rekindled mid-animation
     drawPiece(ctx, cx(i), cy(i), R, o, 1)
+    // rooted on a sanctuary → a bright element ring (can't be flipped)
+    const el = b.elements[i]
+    if (el) {
+      ctx.strokeStyle = ELEM_COLOR[el]; ctx.lineWidth = 2.5
+      ctx.shadowColor = ELEM_COLOR[el]; ctx.shadowBlur = 8
+      ctx.beginPath(); ctx.arc(cx(i), cy(i), R + 3.5, 0, Math.PI * 2); ctx.stroke()
+      ctx.shadowBlur = 0
+    }
   }
   if (moverPos) {
     // a bright streak trailing the rekindling light
