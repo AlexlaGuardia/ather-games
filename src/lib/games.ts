@@ -85,7 +85,7 @@ export const GAMES: GameEntry[] = [
     title: "Gravitar",
     href: "/gravitar",
     glyph: "⊙",
-    tier: "live",
+    tier: "back-room",
     kind: "play",
     tagline: "round the gravity wells, gather the cores · turn + thrust, mind the rocks — a physics-orbit run",
   },

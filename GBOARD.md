@@ -28,7 +28,7 @@ the Arcade frame.
 | Seedfall #6 | 🟢 live | 2026-06-14 | Mana-Seed lander + persistent garden |
 | Voranyx #7 | 🟢 live | 2026-06-15 | glowing slither in the Silt |
 | Lucernyx #8 | 🟢 live | 2026-06-15 | turn-based board of rekindling |
-| Gravitar #9 | 🟢 live | 2026-06-15 | physics-orbit slingshot run |
+| Gravitar #9 | ⚪ parked | 2026-06-15 | physics-orbit — concept didn't land (cut) |
 
 ---
 
@@ -215,30 +215,21 @@ the Arcade frame.
   so converting a piece flips its march for free. Element-rooting **deferred** — ship the verb first.
 **Files:** `lucernyx/lib/lucernyx.ts` (27 tests) · `lib/lucernyx.test.ts` · `page.tsx`
 
-### Gravitar (#9) — 🟢 live · physics-orbit slingshot run → `/gravitar`
+### Gravitar (#9) — ⚪ PARKED/CUT · physics-orbit slingshot → `/gravitar` *(back-room, hidden)*
 *Last touched: 2026-06-15*
-**Left off:** Built end-to-end (`46bc037` sim, `8418310` UI). The queue lead, and the **only
-  physics-orbit game** in the lineup. Pilot a spark of Ather: rotate + thrust under N-body gravity,
-  round the wells to reach open-space cores (each = score + fuel), crash a world = death, the void-
-  wall bounces you back. Whole-arena vector-glow view; keyboard + hold-button controls; thrust flame,
-  trail, fuel/cores HUD. Pure sim `lib/gravitar.ts` **18 tests**; registered **live**. Verified
-  in-browser (renders + flies, no console errors).
-  • **The tuning WAS the work** (board's warning, confirmed): landed via a 30-seed greedy-bot sweep.
-**Next:**
-  1. **Alex playtest — the real feel-tune.** A greedy bot can't anticipate gravity (it scored ~1-2);
-     a human will far outscore it. Dial G / MAXV / fuel economy / arena to taste. Is it fun-brutal or
-     just brutal? Too floaty (the speed cap) or right?
-  2. **Difficulty ramp** — more/heavier wells, smaller arena, or a fuel-pressure clock as score climbs.
-  3. Juice: a slingshot-speed streak, a core-relight flash, screen-shake on crash; a daily seed.
-  4. Canon pass via /magii (name? the Orrery is canon; "Gravitar" is the working/Atari title).
-**Parked:** —
-**Decisions:** **speed cap, not damping** (damping decayed orbits → forced constant thrust → fuel
-  death-spiral; a hard cap tames runaway slingshots while leaving stable orbits free). **Cores in open
-  space, not hugging wells** (hugging made them unreachable without grazing a planet). **Bound-orbit
-  insertion** (start below escape velocity, else you fling straight to the void). **Reflective void-wall**
-  (no cheap drift-out deaths — only crashing a world kills). **Sim-first + bot-swept tuning** (Alex's
-  greedy-bot balance pattern), feel finished by hand.
-**Files:** `gravitar/lib/gravitar.ts` (18 tests) · `lib/gravitar.test.ts` · `lib/sfx.ts` · `page.tsx`
+**⚰ Verdict (Alex playtest 2026-06-15): the CONCEPT isn't fun. Cut.** Not a build problem —
+  well-built, 18 tests, vector-glow clean — but the core loop (fight gravity to collect dots) is a
+  navigation chore with thin reward. Pulled from the live catalog → `back-room` (code kept in git).
+**The lesson (worth keeping):** the *tell was in the build* — the whole thing fought its tuning
+  (bots couldn't survive; needed non-Newtonian speed-caps + bounce-walls just to be navigable). When
+  a core loop needs that much scaffolding to not be miserable, the foundation is thin. Classic Gravitar's
+  fun was **combat + bunkers**; stripping that for a pure collect-loop kept the chore, dropped the thrill.
+  A gimmick rarely saves a base loop that isn't fun. **Physics-orbit-navigation is novel but doesn't carry a game alone.**
+**Possible reuse (only if it ever calls — NOT a save of this game):** the gravity sim is solid tech.
+  The one frame that could be fun with it = a **one-shot "gravity-golf" puzzle** — aim + power, launch a
+  spark, gravity curves it, thread it to a goal (relight an Orrery node) in fewest shots. A *different,
+  deliberate* loop (aim-and-watch), not continuous-piloting stress. Reuses ~80% of `lib/gravitar.ts`.
+**Files (kept):** `gravitar/lib/gravitar.ts` (18 tests, reusable physics) · `lib/sfx.ts` · `page.tsx`
 
 ## 🧭 Catalog direction — narrative meta (2026-06-12, Alex)
 Gardenscapes insight: the puzzle is the currency, the **story you unlock is the draw.**
