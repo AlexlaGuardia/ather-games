@@ -49,6 +49,8 @@ export function proxy(req: NextRequest) {
 }
 
 export const config = {
-  // Only run on game + api paths; everything else (arcade, rekindle, manana, assets) is public and untouched.
-  matcher: ["/shimmer/:path*", "/magii/:path*", "/nolmir/:path*", "/api/:path*"],
+  // Run on every page request EXCEPT Next internals + static assets (anything with a dot, e.g.
+  // .webp/.js/.ico). classify() then decides what's actually gated — so the gate auto-covers
+  // EVERY game route from the GAMES registry (no more stale per-path matcher missing new games).
+  matcher: ["/((?!_next/|favicon.ico|.*\\.).*)"],
 };

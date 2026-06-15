@@ -16,6 +16,7 @@ const display = Chakra_Petch({ weight: ['500', '600'], subsets: ['latin'] })
 import { HostState } from '../lib/types'
 import { loadHost, saveHost, guardProgress } from '../lib/host'
 import { sfx } from '../lib/sfx'
+import WarpCeremony, { type WarpData } from '../components/WarpCeremony'
 import {
   ForgeState,
   PLANETS,
@@ -97,6 +98,8 @@ export default function StarforgePage() {
   const [room, setRoom] = useState<Room>('orrery')
   const [armed, setArmed] = useState(false)
   const [muted, setMuted] = useState(false)
+  const [warpSeq, setWarpSeq] = useState<WarpData | null>(null)
+  const [rehearsing, setRehearsing] = useState(false)
 
   useEffect(() => {
     const now = Date.now()
@@ -229,6 +232,17 @@ export default function StarforgePage() {
 
   const sel = selected !== null ? activePlanets(forge)[selected] : null
   const selLevel = selected !== null ? forge.planets[selected] : 0
+
+  const finishWarp = () => {
+    if (rehearsing) { setRehearsing(false); setWarpSeq(null); return } // a rehearsal spends nothing
+    if (!forge) return
+    const warped = doWarp(forge, Date.now())
+    saveForge(warped)
+    setForge(warped)
+    setSelected(null)
+    setRoom('orrery')
+    setWarpSeq(null)
+  }
 
   return (
     <div className="min-h-screen bg-[#070a10] text-slate-300 font-mono overflow-hidden">
@@ -675,9 +689,26 @@ export default function StarforgePage() {
                   <h2 className={`${display.className} text-slate-400 text-sm tracking-[0.3em]`}>
                     THE GATE {ready ? '— KEYED' : '— SEALED'}
                   </h2>
-                  <span className={`text-xs tabular-nums ${ready ? 'text-orange-300' : 'text-slate-600'}`}>
-                    heat {fmt(heat)} / {WARP_HEAT}
-                  </span>
+                  <div className="flex items-baseline gap-3">
+                    <button
+                      onClick={() => {
+                        const fromNode = forge.node ?? 1
+                        const totalEchoes = (forge.echoes ?? 0) + p.echoesGained
+                        setRehearsing(true)
+                        setWarpSeq({
+                          fromNode, toNode: fromNode + 1, echoesGained: p.echoesGained, networkGain: p.networkGain,
+                          totalEchoes, rateMult: Math.pow(1.03, totalEchoes), planets: p.planets.map((pl) => ({ name: pl.name })),
+                        })
+                      }}
+                      className="text-[10px] tracking-[0.2em] uppercase text-slate-600 hover:text-cyan-300"
+                      title="watch the crossing — spends nothing"
+                    >
+                      rehearse ▸
+                    </button>
+                    <span className={`text-xs tabular-nums ${ready ? 'text-orange-300' : 'text-slate-600'}`}>
+                      heat {fmt(heat)} / {WARP_HEAT}
+                    </span>
+                  </div>
                 </div>
 
                 {!ready ? (
@@ -745,12 +776,18 @@ export default function StarforgePage() {
                           onClick={() => {
                             sfx.ensure()
                             sfx.play('warp')
-                            const warped = doWarp(forge, Date.now())
-                            saveForge(warped)
-                            setForge(warped)
-                            setSelected(null)
+                            const fromNode = forge.node ?? 1
+                            const totalEchoes = (forge.echoes ?? 0) + p.echoesGained
+                            setWarpSeq({
+                              fromNode,
+                              toNode: fromNode + 1,
+                              echoesGained: p.echoesGained,
+                              networkGain: p.networkGain,
+                              totalEchoes,
+                              rateMult: Math.pow(1.03, totalEchoes),
+                              planets: p.planets.map((pl) => ({ name: pl.name })),
+                            })
                             setArmed(false)
-                            setRoom('orrery')
                           }}
                           className={`${display.className} flex-1 py-2.5 rounded border border-orange-500 text-orange-200 bg-orange-950/30 hover:bg-orange-950/50 text-sm tracking-[0.25em]`}
                         >
@@ -904,6 +941,8 @@ export default function StarforgePage() {
           forge feeds crucible · crucible feeds the host · the deep is loud
         </footer>
       </div>
+
+      {warpSeq && <WarpCeremony data={warpSeq} onEnter={finishWarp} />}
     </div>
   )
 }
