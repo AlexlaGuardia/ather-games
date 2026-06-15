@@ -27,6 +27,7 @@ the Arcade frame.
 | Updraft #5 | 🟢 live | 2026-06-14 | one-tap flight (Flappy) |
 | Seedfall #6 | 🟢 live | 2026-06-14 | Mana-Seed lander + persistent garden |
 | Voranyx #7 | 🟢 live | 2026-06-15 | glowing slither in the Silt |
+| Lucernyx #8 | 🟡 building | 2026-06-15 | turn-based board of rekindling (coming-soon) |
 
 ---
 
@@ -150,6 +151,35 @@ the Arcade frame.
   cramping); on mobile, **relative joystick > absolute-aim** (absolute = thumb covers the head).
 **Files:** `voranyx/lib/voranyx.ts` (20 tests) · `page.tsx`
 
+### Lucernyx (#8) — 🟡 building · turn-based board of rekindling → `/lucernyx` *(coming-soon)*
+*Last touched: 2026-06-15*
+**Left off:** Built the **playable slice** in one session (`5291194` sim, `bb7e09c` board).
+  You're the lantern Ancient: slide diagonally (checkers), **jump an adjacent grey into the
+  empty square beyond → it flips to your light and stays put** (material never leaves), multi-
+  jump flips an arc, a converted piece reverses its march. Run a piece to the enemy home rank
+  → **torch + ascend; first to 3 wins.** Greedy AI (max flips + torch progress, fear their
+  imminent torch) plays the Dying. Pure sim `lib/lucernyx.ts` **27 tests green**; vector-glow
+  canvas board (cyan light / guttered grey, violet convert-rings, torch pips). Registered
+  **coming-soon** (owner-gated). The lineup's only turn-based / strategy game.
+**Next:**
+  1. **Alex playtest** (owner-gated `/lucernyx`) — is first-to-3-torches the right length? Is
+     the greedy AI a satisfying opponent or does it blunder/stall? Board density (3 ranks/12
+     pieces) right, or thin to 2 ranks for a snappier race?
+  2. **Element-terrain rooting** — the one spec'd mechanic deferred from v1: a piece on its own
+     element-tile can't be flipped (positional defense vs conversion). Add the tiles + rule.
+  3. **Juice** — animate the multi-jump arc (flip pieces in sequence) + a torch-light flourish;
+     its own `lib/sfx.ts` (slide / convert chime / torch / win).
+  4. **Launch flip** coming-soon → live in `lib/games.ts` once it plays well.
+**Parked:** optional back-rank fork (torch vs a "kindle"/king piece — kept off to keep v1's
+  win-con clean) · forced-capture rule (jumps are optional in v1).
+**Decisions:** **single clean verb** — jump-to-convert only; cut flank-cascade (read as unfair).
+  **Jumps optional** in v1 (friendlier than forced-capture; they're already strictly good so
+  the AI takes them anyway). **Greedy AI, no minimax** — conversion swings the board hard
+  enough that max-flips+torch-progress+block-their-torch looks smart. **Sim-first** (logic fully
+  headless-tested before any pixels), same as the rest of the lineup. **Direction = f(owner)**,
+  so converting a piece flips its march for free. Element-rooting **deferred** — ship the verb first.
+**Files:** `lucernyx/lib/lucernyx.ts` (27 tests) · `lib/lucernyx.test.ts` · `page.tsx`
+
 ## 🧭 Catalog direction — narrative meta (2026-06-12, Alex)
 Gardenscapes insight: the puzzle is the currency, the **story you unlock is the draw.**
 Our edge = a deep canon already built. Each game = a system/region of one "wake Aeterna"
@@ -184,29 +214,9 @@ scenes). Lore routes through /magii for canon safety.
 - **Squall** *(bullet-hell dodge)* — pure evasion, no offense. Read the void's projectile
   patterns, weave through, score = survival time. A brand-new **mood**: defenseless survival.
   Vector-glow bullet patterns are gorgeous and cheap to draw.
-- **Lucernyx** *(purification draughts — SPEC'D + CANON-COMPLETE 2026-06-15, fills the strategy gap)* —
-  the lineup's only turn-based / beat-the-AI game. **Named after the Ancient you play** (same
-  precedent as Voranyx#7). You are a **Lucernyx** — the lantern Ancient who *keeps* the light:
-  rekindle the grey-corrupted back to your colour rather than slay it. **Canon DONE & GATE LIFTED:**
-  the Lucernyx is now Tier-2 canon (`athernyx/CANON/world/mother.md` + glossary, the keeper station
-  of the Mother cosmology). *(Old name "Rin-kin" retired — collided with the canon **Rinn-kin**
-  Legendary mana'mals.)* **Ready to build.** Vector-glow diagonal board, your light vs The Dying's grey.
-  - **Move:** diagonal slide (checkers).
-  - **Convert (core gimmick):** jump an adjacent enemy into the empty square beyond → it flips
-    to your light and *stays on its square* (material never leaves the board). Multi-jump flips
-    an arc. A converted piece **reverses its advance** (now marches toward the enemy home).
-  - **Win — torches:** a piece reaching the enemy's home rank **lights a torch + ascends off
-    the board. First to 3 torches wins.** Spending pieces for torches thins your army and dangles
-    convertible targets midfield → conversion is the natural counter to a torch-rush. Systems
-    tension each other (the reason the win con is best-of-3, not sudden-death).
-  - **Elements = terrain only:** a piece on its own element-tile is **rooted**, can't be flipped.
-    No rock-paper-scissors.
-  - **Cut:** flank-cascade (reads as unfair). Jump-to-convert stays the single clean verb.
-  - **Tiebreak** on board-lock: most torches, then most pieces.
-  - **Why buildable:** conversion swings the board so hard a *greedy* AI (max own flips + torch
-    progress, block their imminent torch) looks smart — no real minimax engine needed.
-  - *Open:* board size (tuning knob, start 8x8) · optional back-rank fork (torch vs "kindle"/king
-    — parked, keep the goal clean for v1).
+- **Lucernyx** → ✅ **BUILT 2026-06-15** (playable slice, coming-soon). Spec graduated to its
+  Shipped roadmap block above (#8). The full original spec lives in git history (this entry) +
+  canon at `athernyx/CANON/world/mother.md`.
 - *Bench (not committed):* **Breakout** (bounce an Ather mote to shatter the void-crust);
   **Orrery pinball** — held, overlaps Gravitar's physics.
 
