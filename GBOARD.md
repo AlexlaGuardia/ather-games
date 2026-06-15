@@ -46,12 +46,17 @@ the Arcade frame.
     a ~4.7s canvas sequence (gate keys → Node falls behind beaming light home → echoes crystallize →
     arrival wheels in → ENTER THE SYSTEM), staged canon text per beat. Plus a **`rehearse ▸`** button
     in the Gate room to watch/tune it **without spending the warp** (Alex's gate is keyed + un-jumped).
+  • **✅ Deck mobile pass — verified great on a 390px phone** (no fixes needed; it's the reserved
+    mobile-idle shape, ready). • **✅ Gate fixed (`f6d09e0`):** proxy.ts is Next 16's middleware
+    (wired all along — "stale artifact" read was wrong); broadened the matcher to cover all game
+    routes. • **✅ Orrery "numbers go up" juice (`5973bb4`):** rising ±N ◈ floater off the corelight
+    readout + emerald/rose flash on the number, wired into buyCorelight (spend) + transmute (gain).
 **Next:**
   1. **Alex: rehearse the crossing** (Orrery → Gate → rehearse ▸) — tune the ceremony's beat
      timing/feel before the real first warp. Then take the actual crossing when it feels right.
-  2. **Deck mobile pass** — it's the front door + the mobile-idle shape; make it great on a phone.
-  3. Per-mode juice (floating gains, milestone beats) · decide the **mobile-idle direction**.
-  4. Art pipeline still open (placeholder glows; Alex's domain).
+  2. **More per-mode juice** — extend the floater pattern to mana/marks + crucible/expeditions;
+     milestone beats (host level-up, planet-cap, first-claim). The return digest as a real beat.
+  3. Decide the **mobile-idle direction** · art pipeline still open (placeholder glows; Alex's domain).
 **Parked:** public launch (intentionally held).
 **Decisions:** back-room, reserved for a future **mobile** idle game (the deck serves that). Deck
   is a **read/route hub**, not a settler — avoids double-settling the three economies. Anti-cash-
