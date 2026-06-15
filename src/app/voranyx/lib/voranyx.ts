@@ -13,9 +13,9 @@ export type Element = 'mana' | 'storm' | 'earth' | 'water'
 export const ELEMENTS: Element[] = ['mana', 'storm', 'earth', 'water']
 
 // ── tuning ──────────────────────────────────────────────────────────────────────
-export const ARENA_R0 = 1000 // starting void-ring radius
-export const ARENA_RMIN = 380 // the ring never closes tighter than this
-export const ARENA_SHRINK = 9 // units/sec the void creeps in
+export const ARENA_R0 = 1500 // starting void-ring radius — a big opening Silt to roam
+export const ARENA_RMIN = 560 // the ring never closes tighter than this (was 380 — too cramped for a mid-game worm)
+export const ARENA_SHRINK = 6.5 // units/sec the void creeps in — slower, so the squeeze is a late-game pressure not a 70s guillotine
 
 export const BASE_MASS = 8 // the blank thread — you can't shrink below this
 export const START_MASS = 16
@@ -37,7 +37,7 @@ export const SEED_MASS = 3.0
 export const BUBBLE_MASS = 1.1
 
 const SEG_SPACING = 6 // trail point spacing (world units)
-const FOOD_TARGET = 240 // ambient food the arena tries to keep stocked (dense = growth feels good)
+const FOOD_TARGET = 480 // ambient food the arena tries to keep stocked (dense = growth feels good); scaled up with the bigger arena to keep density
 
 export interface FoodItem {
   x: number

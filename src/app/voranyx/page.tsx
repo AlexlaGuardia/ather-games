@@ -265,7 +265,10 @@ function render(canvas: HTMLCanvasElement, w: World, ts: number, cam: { x: numbe
     cam.x += (p.x - cam.x) * (live ? 0.12 : 1)
     cam.y += (p.y - cam.y) * (live ? 0.12 : 1)
   }
-  const zoom = p ? Math.max(0.55, Math.min(0.95, 0.95 - p.mass * 0.0019)) : 0.9
+  // zoom out harder as you grow so a mid-game worm sees room ahead of it (was 0.95 - mass*0.0019,
+  // which barely backed off — 0.855 at mass 50). Steeper slope + lower floor: ~0.74 at mass 50,
+  // floors at 0.5 (whole closing ring in view) from ~mass 96 up.
+  const zoom = p ? Math.max(0.5, Math.min(0.95, 1.0 - p.mass * 0.0052)) : 0.9
   const toX = (wx: number) => (wx - cam.x) * zoom + cw / 2
   const toY = (wy: number) => (wy - cam.y) * zoom + ch / 2
 
