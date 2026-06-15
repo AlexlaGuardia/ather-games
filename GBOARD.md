@@ -39,12 +39,19 @@ the Arcade frame.
   matches awaiting; Orrery corelight ticking + heat→warp, "THE GATE IS KEYED" on warp-ready;
   Expeditions marks / champions rested-or-afield) + a consolidated *WHILE YOU HELD NO WATCH*
   digest on return. Reads existing load/settle fns; collecting still happens per-mode. Linked
-  from the hub header (⌂ deck). The fix for "deep systems, disconnected surfaces."
+  from the hub header. The fix for "deep systems, disconnected surfaces."
+  • **✅ Deck PROMOTED to the `/nolmir` front door (`96cb812`):** opening Nolmir now lands on the
+    whole-ship deck; the crucible hub moved to `/nolmir/crucible` (cross-links repointed).
+  • **✅ WARP CEREMONY (`0a443f8`, `components/WarpCeremony.tsx`):** STEP THROUGH was instant — now
+    a ~4.7s canvas sequence (gate keys → Node falls behind beaming light home → echoes crystallize →
+    arrival wheels in → ENTER THE SYSTEM), staged canon text per beat. Plus a **`rehearse ▸`** button
+    in the Gate room to watch/tune it **without spending the warp** (Alex's gate is keyed + un-jumped).
 **Next:**
-  1. **Alex owner-view the deck** — does the at-a-glance pull work? Then **promote it to the
-     `/nolmir` front door** (one-line route swap: deck becomes home, crucible → `/nolmir/crucible`).
-  2. Decide the **mobile-idle direction** it's reserved for (the deck is the mobile-idle shape).
-  3. Art pipeline still open (placeholder glows; Alex's domain).
+  1. **Alex: rehearse the crossing** (Orrery → Gate → rehearse ▸) — tune the ceremony's beat
+     timing/feel before the real first warp. Then take the actual crossing when it feels right.
+  2. **Deck mobile pass** — it's the front door + the mobile-idle shape; make it great on a phone.
+  3. Per-mode juice (floating gains, milestone beats) · decide the **mobile-idle direction**.
+  4. Art pipeline still open (placeholder glows; Alex's domain).
 **Parked:** public launch (intentionally held).
 **Decisions:** back-room, reserved for a future **mobile** idle game (the deck serves that). Deck
   is a **read/route hub**, not a settler — avoids double-settling the three economies. Anti-cash-
