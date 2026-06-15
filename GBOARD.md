@@ -57,10 +57,12 @@ the Arcade frame.
   is a **read/route hub**, not a settler — avoids double-settling the three economies. Anti-cash-
   grab thesis stands (no IAP / energy / lives).
 **Files:** `src/app/nolmir/` — `deck/page.tsx` (the hub) · Starforge / Orrery / Crucible / Expeditions + warp
-**⚠ Infra:** the owner gate (`src/proxy.ts`) runs off a **stale compiled `.next/middleware.js`**
-  — there's no `middleware.ts` in source, nothing imports proxy.ts. Works today (gates /shimmer
-  /magii /nolmir /api) but a clean rebuild drops it, and the matcher already misses the newer
-  game routes (rekindle/manana/ward/updraft/seedfall/voranyx/lucernyx). Needs proxy.ts → middleware.ts.
+**✅ Infra (gate fixed `f6d09e0`):** the owner gate is `src/proxy.ts` — in **Next 16, proxy.ts
+  IS the middleware convention** (correctly wired; my "stale artifact" read was wrong — a `middleware.ts`
+  alongside it is a build error). The real gap was the **matcher**, which only ran on /shimmer /magii
+  /nolmir /api → newer coming-soon routes slipped through (that's how /lucernyx was reachable).
+  Broadened to run on all pages; classify() reads the GAMES registry so it now auto-covers every
+  game route. Verified: live 200 · back-room/coming-soon 307→/arcade · dev tooling 403 · /owner 401.
 
 ### Mana'nana — 🟢 live · match-3, blooming specials → `/manana`
 *Last touched: 2026-06-14*
