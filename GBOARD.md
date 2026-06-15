@@ -32,17 +32,28 @@ the Arcade frame.
 ---
 
 ### Nolmir — 🔵 back-room · idle Athernyx defense/arena → `/nolmir`
-*Last touched: 2026-06-11*
+*Last touched: 2026-06-15*
 **Left off:** All 3 modes (Starforge / Orrery / Crucible-Expeditions) + THE LOOP + warp
-  live. Game-UI typography pass applied in Starforge (Chakra Petch labels, tabular nums,
-  HUD-over-canvas pointer trick). Held in the back-room tier — off the public catalog.
+  live. **2026-06-15 — built the COMMAND DECK (`d54f82b`, `/nolmir/deck`):** one screen for
+  the whole ship — three mode tiles with live "ready" pulls (Crucible next-answer countdown /
+  matches awaiting; Orrery corelight ticking + heat→warp, "THE GATE IS KEYED" on warp-ready;
+  Expeditions marks / champions rested-or-afield) + a consolidated *WHILE YOU HELD NO WATCH*
+  digest on return. Reads existing load/settle fns; collecting still happens per-mode. Linked
+  from the hub header (⌂ deck). The fix for "deep systems, disconnected surfaces."
 **Next:**
-  1. Decide the **mobile-idle direction** Alex reserved it for (the reason it's back-room).
-  2. Art pipeline still open.
+  1. **Alex owner-view the deck** — does the at-a-glance pull work? Then **promote it to the
+     `/nolmir` front door** (one-line route swap: deck becomes home, crucible → `/nolmir/crucible`).
+  2. Decide the **mobile-idle direction** it's reserved for (the deck is the mobile-idle shape).
+  3. Art pipeline still open (placeholder glows; Alex's domain).
 **Parked:** public launch (intentionally held).
-**Decisions:** back-room, not public — Alex's call, reserved for a future **mobile** idle
-  game. Anti-cash-grab thesis stands (no IAP / energy / lives).
-**Files:** `src/app/nolmir/` (Starforge / Orrery / Crucible / Expeditions + warp)
+**Decisions:** back-room, reserved for a future **mobile** idle game (the deck serves that). Deck
+  is a **read/route hub**, not a settler — avoids double-settling the three economies. Anti-cash-
+  grab thesis stands (no IAP / energy / lives).
+**Files:** `src/app/nolmir/` — `deck/page.tsx` (the hub) · Starforge / Orrery / Crucible / Expeditions + warp
+**⚠ Infra:** the owner gate (`src/proxy.ts`) runs off a **stale compiled `.next/middleware.js`**
+  — there's no `middleware.ts` in source, nothing imports proxy.ts. Works today (gates /shimmer
+  /magii /nolmir /api) but a clean rebuild drops it, and the matcher already misses the newer
+  game routes (rekindle/manana/ward/updraft/seedfall/voranyx/lucernyx). Needs proxy.ts → middleware.ts.
 
 ### Mana'nana — 🟢 live · match-3, blooming specials → `/manana`
 *Last touched: 2026-06-14*
