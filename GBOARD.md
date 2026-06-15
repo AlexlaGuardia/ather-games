@@ -111,10 +111,11 @@ scenes). Lore routes through /magii for canon safety.
   the lineup's only turn-based / beat-the-AI game. **⚠ NAME + CANON ON HOLD:** "Rin-kin" was
   retired — it collides with established canon (**Rinn-kin** = the 4 Legendary mana'mals: Duskpuff/
   Frilldrift/Prismstrike/Coilguard, load-bearing in the Spirit Tales books). The keeper-spirit
-  concept is fine but **paused pending the top-down spirit-cosmology canon** (Mother + the Ancient/
-  spirit hierarchy — Alex's call 2026-06-14 to write that FIRST, then name this game into it).
-  Mechanics below stand; the lore/name waits. Vector-glow diagonal board, your Ather-light vs
-  The Dying's grey-corrupted.
+  concept is fine. **Cosmology canon now DONE** (`athernyx/CANON/world/mother.md`, 2026-06-15):
+  Mother → the Ancients → Legendary Rinn-kin. The game's keeper-spirit slots into **Tier 2 (the
+  Ancients)** as the open **third "keeper" Ancient** (neither sower nor reclaimer). **Last gate:
+  name that keeper-Ancient** (a /magii step) — then the game is unblocked and its lore is solid.
+  Mechanics below stand. Vector-glow diagonal board, your Ather-light vs The Dying's grey-corrupted.
   - **Move:** diagonal slide (checkers).
   - **Convert (core gimmick):** jump an adjacent enemy into the empty square beyond → it flips
     to your light and *stays on its square* (material never leaves the board). Multi-jump flips
