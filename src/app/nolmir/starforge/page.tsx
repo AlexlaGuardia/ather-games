@@ -5,7 +5,7 @@
 // or refine into castings. Corelight grows the forge; mana (the Crucible's
 // harvest) buys the armory. One loop, two rooms.
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Chakra_Petch } from 'next/font/google'
 import Orrery from '../components/Orrery'
 import Emblem from '../components/Emblem'
@@ -100,6 +100,9 @@ export default function StarforgePage() {
   const [muted, setMuted] = useState(false)
   const [warpSeq, setWarpSeq] = useState<WarpData | null>(null)
   const [rehearsing, setRehearsing] = useState(false)
+  const [floaters, setFloaters] = useState<{ id: number; text: string; cls: string }[]>([])
+  const [coreFlash, setCoreFlash] = useState<'gain' | 'spend' | null>(null)
+  const floatId = useRef(0)
 
   useEffect(() => {
     const now = Date.now()
@@ -149,13 +152,25 @@ export default function StarforgePage() {
     })
   }, [])
 
+  // "numbers go up" — a rising ±N ◈ floater off the corelight readout + a flash on the number
+  const pushFloat = useCallback((amount: number) => {
+    if (!amount) return
+    const gain = amount > 0
+    const id = floatId.current++
+    setFloaters((fl) => [...fl, { id, text: `${gain ? '+' : '−'}${fmt(Math.abs(amount))} ◈`, cls: gain ? 'text-emerald-300' : 'text-rose-300/90' }])
+    setCoreFlash(gain ? 'gain' : 'spend')
+    window.setTimeout(() => setFloaters((fl) => fl.filter((x) => x.id !== id)), 1100)
+    window.setTimeout(() => setCoreFlash(null), 460)
+  }, [])
+
   const buyCorelight = useCallback(
     (cost: number, apply: (f: ForgeState) => ForgeState) => {
       sfx.ensure()
       sfx.play('buy')
       mutate((f) => (f.corelight >= cost ? apply({ ...f, corelight: f.corelight - cost }) : null))
+      pushFloat(-cost)
     },
-    [mutate],
+    [mutate, pushFloat],
   )
 
   const buyMana = useCallback(
@@ -271,9 +286,14 @@ export default function StarforgePage() {
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
-            <span className="text-sky-300">
-              ◈ <b className="tabular-nums">{fmt(forge.corelight)}</b>
+            <span className="text-sky-300 relative">
+              ◈ <b className={`tabular-nums inline-block ${coreFlash === 'gain' ? 'nolmir-cf-g' : coreFlash === 'spend' ? 'nolmir-cf-s' : ''}`}>{fmt(forge.corelight)}</b>
               <span className="text-slate-600 text-xs ml-1">+{rate.toFixed(1)}/s</span>
+              <span className="pointer-events-none absolute left-2 -top-2">
+                {floaters.map((fl) => (
+                  <span key={fl.id} className={`absolute whitespace-nowrap text-xs tabular-nums nolmir-float ${fl.cls}`}>{fl.text}</span>
+                ))}
+              </span>
             </span>
             <span className="text-fuchsia-300/90">
               mana <b className="tabular-nums">{fmt(host.mana)}</b>
@@ -586,7 +606,7 @@ export default function StarforgePage() {
             <div className="flex items-baseline justify-between mb-2">
               <h2 className={`${display.className} text-slate-500 text-xs tracking-widest`}>STOCKPILE</h2>
               <button
-                onClick={() => mutate((f) => transmute(f))}
+                onClick={() => { mutate((f) => transmute(f)); pushFloat(sellValue) }}
                 disabled={sellValue <= 0}
                 className={`px-3 py-1 text-xs rounded border tabular-nums ${
                   sellValue > 0
@@ -943,6 +963,15 @@ export default function StarforgePage() {
       </div>
 
       {warpSeq && <WarpCeremony data={warpSeq} onEnter={finishWarp} />}
+
+      <style jsx>{`
+        @keyframes nolmir-float { 0% { opacity: 1; transform: translateY(0) } 100% { opacity: 0; transform: translateY(-24px) } }
+        .nolmir-float { animation: nolmir-float 1.1s ease-out forwards }
+        @keyframes nolmir-cf-g { 0%, 100% { transform: scale(1) } 30% { color: #6ee7b7; transform: scale(1.28) } }
+        @keyframes nolmir-cf-s { 0%, 100% { transform: scale(1) } 35% { color: #fda4af; transform: scale(0.88) } }
+        .nolmir-cf-g { animation: nolmir-cf-g 0.5s ease-out }
+        .nolmir-cf-s { animation: nolmir-cf-s 0.5s ease-out }
+      `}</style>
     </div>
   )
 }
