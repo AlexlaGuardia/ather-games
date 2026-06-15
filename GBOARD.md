@@ -169,12 +169,16 @@ the Arcade frame.
   torch = float-up + ascend + pip flare). `lib/sfx.ts` (slide / rekindle bell per convert → a
   cascade / warm torch / win+lose). **The background warms as you win** — amber glow + drifting
   embers scale with your torches; cold violet creep with the Dying's. Render verified in-browser.
+  **✅ Element-terrain rooting shipped (`dbf21d1`):** 4 sanctuary tiles (storm/mana/water/earth)
+  in the contested midfield, point-symmetric. A piece on one is ROOTED — can't be flipped, and a
+  rooted enemy can't be jumped (blocks, caps multi-jumps). No RPS (elements = canon flavour). AI
+  values its own rooted pieces. Render = element tint + rune diamond + bright ring on a rooted
+  piece (verified in-browser). Note: sanctuaries shortened AI-vs-AI games 38→25 plies.
 **Next:**
-  1. **Alex playtest the juice** — do the animations land? Convert-cascade satisfying? Is the
-     "okay" torch-race pacing better now that moves have weight (or still tune length)?
-  2. **Element-terrain rooting** — the one spec'd mechanic deferred from v1: a piece on its own
-     element-tile can't be flipped (positional defense vs conversion). Add the tiles + rule.
-  3. Optional depth if the race still feels off: a daily seed, or an AI difficulty notch.
+  1. **Alex playtest** — the full thing now (juice + sanctuaries): do sanctuaries add good
+     positional tension, or stall the game? Torch-race pacing right? AI still good-but-winnable?
+  2. Optional depth if the race feels off: a daily seed, or an AI difficulty notch.
+  3. Optional: a one-line "root on a glyph" hint / brief first-time tip (discoverability).
 **Parked:** optional back-rank fork (torch vs a "kindle"/king piece — kept off to keep v1's
   win-con clean) · forced-capture rule (jumps are optional in v1).
 **Decisions:** **single clean verb** — jump-to-convert only; cut flank-cascade (read as unfair).
