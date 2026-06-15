@@ -26,7 +26,7 @@ the Arcade frame.
 | Ward #4 | 🟢 live | 2026-06-14 | Missile Command / touch aim-trainer |
 | Updraft #5 | 🟢 live | 2026-06-14 | one-tap flight (Flappy) |
 | Seedfall #6 | 🟢 live | 2026-06-14 | Mana-Seed lander + persistent garden |
-| Voranyx #7 | 🟢 live | 2026-06-14 | glowing slither in the Silt |
+| Voranyx #7 | 🟢 live | 2026-06-15 | glowing slither in the Silt |
 
 ---
 
@@ -128,27 +128,26 @@ the Arcade frame.
 **Files:** `seedfall/lib/seedfall.ts` (15 tests) · `page.tsx`
 
 ### Voranyx (#7) — 🟢 live · glowing slither in the Silt → `/voranyx`
-*Last touched: 2026-06-14*
-**Left off:** SP-vs-AI build shipped and **canon-grounded first** (the /magii Wyrm session,
-  `athernyx/CANON/world/voranyx.md`, DRAFT). Steer-to-pointer worm, first seed paints your
-  element/colour, motes = boost (decoupled from length), head-into-body = death, void ring
-  closes in; **metabolism** (stop eating → sublimate to the blank thread) is the gimmick.
-  **Alex playtest: cursor-follow felt great, but cramped past ~mass 50** — arena too small,
-  zoom-out too gentle.
+*Last touched: 2026-06-15*
+**Left off:** SP-vs-AI build, **canon-grounded first** (`athernyx/CANON/world/voranyx.md`, DRAFT).
+  **2026-06-15 — addressed the mid-game cramping + did a mobile pass:**
+  • **Arena bigger / squeeze slower** — `ARENA_R0` 1000→1500, `ARENA_RMIN` 380→**560**,
+    `ARENA_SHRINK` 9→**6.5**, `FOOD_TARGET` 240→**480** (density held). Worm-vs-arena at mass 50
+    dropped 0.63×→**0.43×** (headless); the ring no longer floors before a typical death.
+  • **Zoom backs off harder** — `1.0 - mass*0.0052`, floor **0.5** (~0.74 @ mass 50, was 0.855).
+  • **Floating relative joystick for touch** — thumb-anchored drag, never occludes the head;
+    mouse keeps cursor-follow. (`ddc5952`, `f2120b8`.)
 **Next:**
-  1. **Bigger arena** — raise `ARENA_R0`/`ARENA_RMIN` (now 1000/380); the ring closing to
-     380 is the main pinch on a mass-50 worm.
-  2. **Zoom out harder with mass** — steepen `zoom = 0.95 - mass*0.0019` (only 0.86 @ mass 50)
-     or raise the floor, so you see more as you grow.
-  3. **Re-tune the growth curve** for the mid-game (mass 40-100) so it keeps feeling rewarding,
-     not cramped; consider a slower / optional ring shrink.
+  1. **Alex phone playtest** — does mid-game breathe now? Is the joystick deadzone/travel
+     (`STICK_DEAD 6` / `STICK_MAX 46`) right, and is the slower ring-close still tense enough?
+  2. If the squeeze now feels *too* slow → nudge `ARENA_SHRINK` back up a touch (6.5→7.5).
+  3. Optional: stick-pushed-to-edge = boost (fold the boost pad into the joystick).
 **Parked:** the **MP seam** (multiplayer serpents — built toward, deferred) · a Sable canon
   pass on the cloud-ocean placement note in `voranyx.md`.
-**Decisions:** **canon before code** (first game grounded in canon before building); boost is
-  **decoupled from length** (bolder than real slither — motes, not tail-burn); world-space
-  **procedural deep, no fixed bg** (a fixed image is wrong for a panning camera — learned from
-  the FLUX-bg experiments). Headless said mass 48-85 was fine; **hands-on says the mid-game
-  tightens too fast** — trust the hands-on read.
+**Decisions:** **canon before code**; boost **decoupled from length** (motes, not tail-burn);
+  world-space **procedural deep, no fixed bg** (fixed image wrong for a panning camera);
+  **trust the hands-on read over headless** (headless said mass 48-85 fine, hands-on caught the
+  cramping); on mobile, **relative joystick > absolute-aim** (absolute = thumb covers the head).
 **Files:** `voranyx/lib/voranyx.ts` (20 tests) · `page.tsx`
 
 ## 🧭 Catalog direction — narrative meta (2026-06-12, Alex)
