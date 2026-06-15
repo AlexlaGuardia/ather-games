@@ -162,14 +162,19 @@ the Arcade frame.
   canvas board (cyan light / guttered grey, violet convert-rings, torch pips). **Live + listed**
   in `/arcade/all` (`67c20b4` — flipped from coming-soon; no owner gate is wired so coming-soon
   just hid it). The lineup's only turn-based / strategy game.
+  **✅ Alex played his first full game (2026-06-15): "good first draft." AI "good but still
+  winnable" (target hit), torch race "okay."** Ranks = his call → kept at 3/12.
+  **✅ Juice pass shipped (`072350f`):** moves animate (slide glide; multi-jump hops square-to-
+  square, flipping each grey to light in sequence as the light punches through, bright trail;
+  torch = float-up + ascend + pip flare). `lib/sfx.ts` (slide / rekindle bell per convert → a
+  cascade / warm torch / win+lose). **The background warms as you win** — amber glow + drifting
+  embers scale with your torches; cold violet creep with the Dying's. Render verified in-browser.
 **Next:**
-  1. **Alex playtest** (owner-gated `/lucernyx`) — is first-to-3-torches the right length? Is
-     the greedy AI a satisfying opponent or does it blunder/stall? Board density (3 ranks/12
-     pieces) right, or thin to 2 ranks for a snappier race?
+  1. **Alex playtest the juice** — do the animations land? Convert-cascade satisfying? Is the
+     "okay" torch-race pacing better now that moves have weight (or still tune length)?
   2. **Element-terrain rooting** — the one spec'd mechanic deferred from v1: a piece on its own
      element-tile can't be flipped (positional defense vs conversion). Add the tiles + rule.
-  3. **Juice** — animate the multi-jump arc (flip pieces in sequence) + a torch-light flourish;
-     its own `lib/sfx.ts` (slide / convert chime / torch / win).
+  3. Optional depth if the race still feels off: a daily seed, or an AI difficulty notch.
 **Parked:** optional back-rank fork (torch vs a "kindle"/king piece — kept off to keep v1's
   win-con clean) · forced-capture rule (jumps are optional in v1).
 **Decisions:** **single clean verb** — jump-to-convert only; cut flank-cascade (read as unfair).
