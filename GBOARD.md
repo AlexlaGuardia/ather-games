@@ -28,6 +28,7 @@ the Arcade frame.
 | Seedfall #6 | 🟢 live | 2026-06-14 | Mana-Seed lander + persistent garden |
 | Voranyx #7 | 🟢 live | 2026-06-15 | glowing slither in the Silt |
 | Lucernyx #8 | 🟢 live | 2026-06-15 | turn-based board of rekindling |
+| Gravitar #9 | 🟢 live | 2026-06-15 | physics-orbit slingshot run |
 
 ---
 
@@ -214,6 +215,31 @@ the Arcade frame.
   so converting a piece flips its march for free. Element-rooting **deferred** — ship the verb first.
 **Files:** `lucernyx/lib/lucernyx.ts` (27 tests) · `lib/lucernyx.test.ts` · `page.tsx`
 
+### Gravitar (#9) — 🟢 live · physics-orbit slingshot run → `/gravitar`
+*Last touched: 2026-06-15*
+**Left off:** Built end-to-end (`46bc037` sim, `8418310` UI). The queue lead, and the **only
+  physics-orbit game** in the lineup. Pilot a spark of Ather: rotate + thrust under N-body gravity,
+  round the wells to reach open-space cores (each = score + fuel), crash a world = death, the void-
+  wall bounces you back. Whole-arena vector-glow view; keyboard + hold-button controls; thrust flame,
+  trail, fuel/cores HUD. Pure sim `lib/gravitar.ts` **18 tests**; registered **live**. Verified
+  in-browser (renders + flies, no console errors).
+  • **The tuning WAS the work** (board's warning, confirmed): landed via a 30-seed greedy-bot sweep.
+**Next:**
+  1. **Alex playtest — the real feel-tune.** A greedy bot can't anticipate gravity (it scored ~1-2);
+     a human will far outscore it. Dial G / MAXV / fuel economy / arena to taste. Is it fun-brutal or
+     just brutal? Too floaty (the speed cap) or right?
+  2. **Difficulty ramp** — more/heavier wells, smaller arena, or a fuel-pressure clock as score climbs.
+  3. Juice: a slingshot-speed streak, a core-relight flash, screen-shake on crash; a daily seed.
+  4. Canon pass via /magii (name? the Orrery is canon; "Gravitar" is the working/Atari title).
+**Parked:** —
+**Decisions:** **speed cap, not damping** (damping decayed orbits → forced constant thrust → fuel
+  death-spiral; a hard cap tames runaway slingshots while leaving stable orbits free). **Cores in open
+  space, not hugging wells** (hugging made them unreachable without grazing a planet). **Bound-orbit
+  insertion** (start below escape velocity, else you fling straight to the void). **Reflective void-wall**
+  (no cheap drift-out deaths — only crashing a world kills). **Sim-first + bot-swept tuning** (Alex's
+  greedy-bot balance pattern), feel finished by hand.
+**Files:** `gravitar/lib/gravitar.ts` (18 tests) · `lib/gravitar.test.ts` · `lib/sfx.ts` · `page.tsx`
+
 ## 🧭 Catalog direction — narrative meta (2026-06-12, Alex)
 Gardenscapes insight: the puzzle is the currency, the **story you unlock is the draw.**
 Our edge = a deep canon already built. Each game = a system/region of one "wake Aeterna"
@@ -223,10 +249,8 @@ thesis). Must stay expressible in vector-glow (a dark network lighting up, not p
 scenes). Lore routes through /magii for canon safety.
 
 ## 🌱 Queue — what's actually next *(cleaned 2026-06-14: kept only what adds a mechanic the 7 don't)*
-- **Gravitar** *(lead)* — slingshot Ather between the Orrery's bodies by gravity. The one
-  genuinely new mechanic left: nothing in the lineup does physics-orbit. Canon-rich
-  (the Orrery), vector-clean, famously brutal — the tuning is the work.
-- **Tempest** — hold a rune-well as the void climbs the lanes. Distinct *input* (positional
+- **Gravitar** → ✅ **BUILT 2026-06-15** (live, `/gravitar`). Graduated to its Shipped block above (#9).
+- **Tempest** *(lead)* — hold a rune-well as the void climbs the lanes. Distinct *input* (positional
   lane-hold) but the same job as Ward (hold off the void) — second priority for that reason.
 - **Rune-weaving** — trace runes to channel mana. A new input mode (gesture/tracing), runes
   are deep canon, distinct enough from Rekindle (draw vs rotate).
