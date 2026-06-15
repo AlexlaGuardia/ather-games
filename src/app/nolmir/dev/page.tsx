@@ -302,7 +302,7 @@ function EditorInner() {
             </h1>
             <p className="text-slate-600 text-xs mt-1">mode: {mode} · paint with mouse · art belongs to Aseprite</p>
           </div>
-          <a href="/nolmir" className="text-slate-500 hover:text-cyan-300 text-sm">
+          <a href="/nolmir/crucible" className="text-slate-500 hover:text-cyan-300 text-sm">
             [back to the terrarium]
           </a>
         </header>

@@ -264,7 +264,7 @@ export default function StarforgePage() {
             <span className="text-fuchsia-300/90">
               mana <b className="tabular-nums">{fmt(host.mana)}</b>
             </span>
-            <Emblem kind="crucible" href="/nolmir" label="CRUCIBLE" />
+            <Emblem kind="crucible" href="/nolmir/crucible" label="CRUCIBLE" />
             <Emblem kind="expeditions" href="/nolmir/expeditions" label="EXPEDITIONS" />
             <button
               onClick={() => {

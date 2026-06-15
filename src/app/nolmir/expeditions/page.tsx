@@ -226,7 +226,7 @@ export default function ExpeditionsPage() {
             >
               {muted ? '🔇' : '🔊'}
             </button>
-            <Emblem kind="crucible" href="/nolmir" label="CRUCIBLE" />
+            <Emblem kind="crucible" href="/nolmir/crucible" label="CRUCIBLE" />
             <Emblem kind="starforge" href="/nolmir/starforge" label="STARFORGE" />
           </div>
         </header>

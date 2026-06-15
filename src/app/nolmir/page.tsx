@@ -1,358 +1,244 @@
 'use client'
 
-import { useCallback, useEffect, useRef, useState } from 'react'
-import Terrarium from './components/Terrarium'
-import Drift from './components/Drift'
-import Emblem from './components/Emblem'
-import { demoCrucible, loadCrucible } from './lib/crucible'
-import { runMatch } from './lib/sim'
-import { loadHost, saveHost, hostProgress, HOST_UNLOCKS } from './lib/host'
+// NOLMIR — THE COMMAND DECK. One screen for the whole ship: Crucible, Orrery, Expeditions,
+// each with a live "something's ready" pull, and a consolidated WHILE YOU HELD NO WATCH digest
+// on return. The deep game, finally legible at a glance. A status hub — the real settling +
+// collecting still happens inside each mode (this reads state and routes you in).
+
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { Chakra_Petch } from 'next/font/google'
+import { loadHost, hostProgress } from './lib/host'
 import {
-  loadForge,
-  saveForge,
-  settleForge,
-  forgeMods,
-  forgeHeat,
-  settleConnections,
-  cutConnection,
-  activePlanets,
+  loadForge, FORGE_KEY, forgeRate, forgeHeat, canWarp, activePlanets, WARP_HEAT,
+  type ForgeState,
 } from './lib/starforge'
-import { loadExpedMeta, championsOffPost } from './lib/expedmeta'
-import { unlockedTier } from './lib/teams'
-import { CrucibleDoc, HostState, LedgerEntry, MatchMods, MatchResult, TEAM_COLORS, TEAM_NAMES } from './lib/types'
-import { mulberry32, pick } from './lib/rng'
-import { sfx } from './lib/sfx'
+import { loadExpedMeta, championsOffPost, tiersUnlocked, bestWave, type ExpedMeta } from './lib/expedmeta'
+import type { HostState } from './lib/types'
 
-// a match answers the beacon every 20 minutes, watched or not — matches
-// are EVENTS now, not a back-to-back blur (Alex, 2026-06-10 night)
-const MATCH_INTERVAL = 20 * 60 * 1000
-const AWAY_CAP = 144 // beyond two days, the beacon dims
+const display = Chakra_Petch({ weight: ['500', '600'], subsets: ['latin'] })
+const MATCH_INTERVAL = 20 * 60 * 1000 // a match answers the beacon every 20 min (mirrors the hub)
+const AWAY_CAP = 144
 
-const TEAM_EPITHETS = ['Cohort', 'Wardens', 'Reavers', 'Pilgrims', 'Sworn', 'Hunters', 'Vanguard', 'Chorus', 'Tide', 'Kin']
-
-function teamName(seed: number, team: number): string {
-  const rng = mulberry32((seed ^ 0x9e3779b9) + team * 0x85ebca6b)
-  return `${TEAM_NAMES[team % TEAM_NAMES.length]} ${pick(rng, TEAM_EPITHETS)}`
+const fmt = (n: number): string => {
+  if (n >= 1e9) return (n / 1e9).toFixed(2) + 'B'
+  if (n >= 1e6) return (n / 1e6).toFixed(2) + 'M'
+  if (n >= 1e3) return (n / 1e3).toFixed(1) + 'k'
+  return Math.floor(n).toString()
+}
+const clock = (ms: number): string => {
+  const s = Math.max(0, Math.ceil(ms / 1000))
+  return `${Math.floor(s / 60)}:${(s % 60).toString().padStart(2, '0')}`
+}
+const dur = (ms: number): string => {
+  const m = Math.floor(ms / 60000), h = Math.floor(m / 60)
+  if (h >= 1) return `${h}h ${m % 60}m`
+  return `${m}m`
 }
 
-interface Toast {
-  id: number
-  text: string
-  color: string
-  mana: number
+interface Snapshot {
+  host: HostState
+  forge: ForgeState
+  meta: ExpedMeta
+  loadedAt: number
+  awayMs: number
+  coreGained: number // corelight banked while away (truthful delta from settle)
+  matchesAwaited: number
 }
 
-interface AwayDigest {
-  matches: number
-  mana: number
-  exp: number
-  vaultFalls: number
-  best: LedgerEntry | null
+function snap(): Snapshot {
+  const now = Date.now()
+  const host = loadHost()
+  // peek pre-settle corelight so we can show the honest away delta
+  let prevCore = 0
+  try {
+    const raw = localStorage.getItem(FORGE_KEY)
+    if (raw) prevCore = (JSON.parse(raw) as ForgeState).corelight ?? 0
+  } catch {}
+  const forge = loadForge(now) // settles offline accrual into the save
+  const meta = loadExpedMeta()
+  const lastSeen = host.lastSeenAt ?? now
+  const awayMs = Math.max(0, now - lastSeen)
+  return {
+    host, forge, meta, loadedAt: now, awayMs,
+    coreGained: Math.max(0, forge.corelight - prevCore),
+    matchesAwaited: host.lastSeenAt ? Math.min(AWAY_CAP, Math.floor(awayMs / MATCH_INTERVAL)) : 0,
+  }
 }
 
-function entryText(e: LedgerEntry): string {
-  if (e.omen) return 'something else answered the beacon. the match did not happen.'
-  if (e.victory) return `${e.teamName} took the vault`
-  if (e.reachedGauntlet) return `${e.teamName} fell in the gauntlet — ${(e.deepest * 100).toFixed(0)}% deep`
-  return `the arena consumed all — ${e.teamName} went deepest (${(e.deepest * 100).toFixed(0)}%)`
-}
-
-export default function NolmirPage() {
-  const [doc, setDoc] = useState<CrucibleDoc | null>(null)
-  const [host, setHost] = useState<HostState>({ mana: 0, exp: 0, ledger: [] })
-  const [toasts, setToasts] = useState<Toast[]>([])
-  const [ledgerOpen, setLedgerOpen] = useState(false)
-  const [driftOpen, setDriftOpen] = useState(false)
-  const toastId = useRef(0)
-
-  const [away, setAway] = useState<AwayDigest | null>(null)
-  const [mods, setMods] = useState<MatchMods | undefined>(undefined)
-  const [corelight, setCorelight] = useState(0)
-  const [muted, setMuted] = useState(false)
+export default function DeckPage() {
+  const [s, setS] = useState<Snapshot | null>(null)
+  const [now, setNow] = useState(0)
+  const [digestOpen, setDigestOpen] = useState(false)
+  const started = useRef(false)
 
   useEffect(() => {
-    const d = loadCrucible() ?? demoCrucible()
-    setDoc(d)
-    setMuted(sfx.isMuted())
-
-    const now = Date.now()
-    // the forge hums whether or not you visit it
-    let forge = settleForge(loadForge(now), now)
-    const h = loadHost()
-    // supply lines drink first — unpaid upkeep frays them
-    const sc = settleConnections(forge, h.mana, now)
-    forge = sc.forge
-    h.mana = sc.mana
-    saveForge(forge)
-    const m = forgeMods(forge)
-    // a guard on a live expedition is off their crucible post
-    if (championsOffPost(loadExpedMeta(), now)) m.champions = undefined
-    // louder crucibles draw harder challengers — roster tier rides heat
-    m.rosterTier = unlockedTier({ heat: forgeHeat(forge), exp: h.exp })
-    m.heat = forgeHeat(forge) // drives challenger level (slice 5; off by default)
-    setMods(m)
-    setCorelight(forge.corelight)
-
-    // settle the marks that passed while the host was gone — wall-clock
-    // aligned, deterministic seeds, so a reload can't reroll history and
-    // the live scheduler's marks line up with the away ledger's
-    const since = h.lastSeenAt ?? now
-    const marks: number[] = []
-    for (let at = (Math.floor(since / MATCH_INTERVAL) + 1) * MATCH_INTERVAL; at <= now; at += MATCH_INTERVAL) {
-      marks.push(at)
-    }
-    const missedMarks = marks.slice(-AWAY_CAP)
-    if (missedMarks.length > 0) {
-      const digest: AwayDigest = { matches: missedMarks.length, mana: 0, exp: 0, vaultFalls: 0, best: null }
-      const heat = forgeHeat(forge)
-      for (const at of missedMarks) {
-        const seed = Math.floor(at / 1000) >>> 0
-        // past the heat ceiling, rarely, the beacon draws... nothing that fights
-        if (heat > 250 && seed % 17 === 0) {
-          const omen: LedgerEntry = {
-            seed, victory: false, winnerTeam: null, deepestTeam: 0, reachedGauntlet: false,
-            fallen: 0, deepest: 0, manaYield: 0, ticks: 0, at, teamName: '', omen: true,
-          }
-          h.ledger = [omen, ...h.ledger].slice(0, 100)
-          continue
-        }
-        const r = runMatch(d, seed, m)
-        const namedTeam = r.victory && r.winnerTeam !== null ? r.winnerTeam : r.deepestTeam
-        const entry: LedgerEntry = { ...r, at, teamName: r.teamNames?.[namedTeam] ?? teamName(r.seed, namedTeam) }
-        h.ledger = [entry, ...h.ledger].slice(0, 100)
-        h.mana += r.manaYield
-        h.exp += r.fallen * 5 + Math.round(r.deepest * 20)
-        digest.mana += r.manaYield
-        digest.exp += r.fallen * 5 + Math.round(r.deepest * 20)
-        if (r.victory) {
-          digest.vaultFalls++
-          // they take a Wonder and cut a line on the way out
-          h.mana = Math.max(0, h.mana - Math.max(100, Math.round(h.mana * 0.15)))
-          const cut = cutConnection(forge, seed)
-          forge = cut.forge
-        }
-        if (!digest.best || entry.deepest > digest.best.deepest) digest.best = entry
-      }
-      saveForge(forge)
-      setAway(digest)
-    }
-    h.lastSeenAt = now
-    saveHost(h)
-    setHost(h)
-
-    // keep the watch current while the tab is open — the forge hums and
-    // the supply lines drink their upkeep
-    const beat = setInterval(() => {
-      const nw = Date.now()
-      const f0 = settleForge(loadForge(nw), nw)
-      const h0 = loadHost()
-      const tick = settleConnections(f0, h0.mana, nw)
-      saveForge(tick.forge)
-      const nh = { ...h0, mana: tick.mana, lastSeenAt: nw }
-      saveHost(nh)
-      setHost(nh)
-      setCorelight(tick.forge.corelight)
-    }, 60_000)
-    return () => clearInterval(beat)
+    const snapshot = snap()
+    setS(snapshot)
+    setNow(Date.now())
+    if (snapshot.awayMs > 2 * 60 * 1000 && (snapshot.coreGained > 0 || snapshot.matchesAwaited > 0)) setDigestOpen(true)
+    started.current = true
+    const t = setInterval(() => setNow(Date.now()), 1000)
+    return () => clearInterval(t)
   }, [])
 
-  const onMatchEnd = useCallback((r: MatchResult) => {
-    const namedTeam = r.victory && r.winnerTeam !== null ? r.winnerTeam : r.deepestTeam
-    const entry: LedgerEntry = { ...r, at: Date.now(), teamName: r.teamNames?.[namedTeam] ?? teamName(r.seed, namedTeam) }
+  const tiles = useMemo(() => {
+    if (!s) return null
+    const { host, forge, meta } = s
+    const level = hostProgress(host.exp).level
+    const nextMark = Math.ceil(now / MATCH_INTERVAL) * MATCH_INTERVAL
+    const heat = forgeHeat(forge)
+    const warp = canWarp(forge)
+    const live = championsOffPost(meta, now)
+    const tiers = tiersUnlocked(meta)
+    let best = 0
+    for (let t = 0; t < tiers; t++) best = Math.max(best, bestWave(meta, t))
+    // corelight ticks up live on the deck (display only; real accrual is in Orrery)
+    const liveCore = forge.corelight + forgeRate(forge) * Math.max(0, (now - s.loadedAt) / 1000)
 
-    // a vault loss costs: they take a Wonder, and cut a supply line out
-    let cutName: string | null = null
-    if (r.victory) {
-      const f = loadForge(Date.now())
-      const cut = cutConnection(f, r.seed)
-      if (cut.planet !== null) {
-        saveForge(cut.forge)
-        cutName = activePlanets(f)[cut.planet].name
-      }
+    return {
+      crucible: {
+        level,
+        mana: host.mana,
+        ready: s.matchesAwaited > 0,
+        line: s.matchesAwaited > 0 ? `${s.matchesAwaited} answer${s.matchesAwaited > 1 ? 's' : ''} await tending` : `next answer in ${clock(nextMark - now)}`,
+        sub: host.ledger[0] ? lastResult(host.ledger[0]) : 'the beacon is quiet',
+      },
+      orrery: {
+        core: liveCore,
+        rate: forgeRate(forge),
+        planets: activePlanets(forge).length,
+        warp,
+        heat,
+        ready: warp,
+        line: warp ? 'THE GATE IS KEYED' : `heat ${heat.toFixed(0)} / ${WARP_HEAT} to warp`,
+      },
+      expeditions: {
+        marks: host.marks ?? 0,
+        tiers,
+        best,
+        live,
+        ready: !live,
+        line: live ? 'a breach holds the line' : 'the champions are rested',
+      },
     }
-    setHost((prev) => {
-      let mana = prev.mana + r.manaYield
-      if (r.victory) {
-        mana = Math.max(0, mana - Math.max(100, Math.round(mana * 0.15)))
-      }
-      const next: HostState = {
-        ...prev,
-        mana,
-        exp: prev.exp + r.fallen * 5 + Math.round(r.deepest * 20),
-        ledger: [entry, ...prev.ledger].slice(0, 100),
-      }
-      saveHost(next)
-      return next
-    })
+  }, [s, now])
 
-    // pop a toast, fade it out later
-    const id = ++toastId.current
-    const text = entryText(entry) + (r.victory ? ` — a Wonder taken${cutName ? `, the line to ${cutName} cut` : ''}` : '')
-    setToasts((prev) => [
-      { id, text, color: TEAM_COLORS[namedTeam % TEAM_COLORS.length], mana: r.manaYield },
-      ...prev.slice(0, 3),
-    ])
-    setTimeout(() => setToasts((prev) => prev.filter((t) => t.id !== id)), 6000)
-  }, [])
-
-  if (!doc) return <div className="min-h-screen bg-[#070a10]" />
+  if (!s || !tiles) return <div className={`min-h-screen bg-[#070a10] ${display.className}`} />
 
   return (
-    <div className="min-h-screen bg-[#070a10] text-slate-300 font-mono overflow-x-hidden">
-      {/* toasts — top right, pop and fade */}
-      <div className="fixed top-4 right-4 z-50 flex flex-col gap-2 items-end pointer-events-none">
-        {toasts.map((t) => (
-          <div
-            key={t.id}
-            className="px-3 py-2 rounded border border-slate-800 bg-[#0b101c]/95 text-xs animate-[nolmir-toast_6s_ease-in-out_forwards]"
-          >
-            <span style={{ color: t.color }}>{t.text}</span>
-            {t.mana > 0 && <span className="text-cyan-400/90 ml-2">+{t.mana}</span>}
+    <div className={`min-h-screen bg-[#070a10] text-slate-300 font-mono ${display.className}`}>
+      <div className="mx-auto w-full max-w-[520px] px-4 py-6">
+        <header className="flex items-center justify-between mb-5">
+          <a href="/arcade" className="text-[10px] tracking-[0.25em] uppercase text-cyan-400/50 hover:text-cyan-300">&#8592; arcade</a>
+          <div className="text-center">
+            <div className="text-cyan-300 text-lg tracking-[0.4em] uppercase" style={{ textShadow: '0 0 10px #22d3ee70' }}>Nolmir</div>
+            <div className="text-[9px] text-slate-500 tracking-[0.3em] uppercase">command deck</div>
           </div>
-        ))}
+          <div className="text-right text-[9px] text-slate-500 tracking-[0.2em] uppercase leading-tight">
+            <div>host <span className="text-cyan-300 tabular-nums">lv{tiles.crucible.level}</span></div>
+            {(s.forge.echoes ?? 0) > 0 && <div>echoes <span className="text-amber-300 tabular-nums">{s.forge.echoes}</span></div>}
+          </div>
+        </header>
+
+        {s.awayMs > 2 * 60 * 1000 && (
+          <div className="mb-4 text-center text-[10px] tracking-[0.25em] uppercase text-slate-500">
+            you held no watch for <span className="text-cyan-300">{dur(s.awayMs)}</span>
+          </div>
+        )}
+
+        <div className="space-y-3">
+          <Tile href="/nolmir/crucible" name="The Crucible" glyph="▤" ready={tiles.crucible.ready} accent="#22d3ee" line={tiles.crucible.line}>
+            <Stat label="mana" value={fmt(tiles.crucible.mana)} />
+            <div className="text-[10px] text-slate-500 italic truncate max-w-[160px]">{tiles.crucible.sub}</div>
+          </Tile>
+
+          <Tile href="/nolmir/starforge" name="The Orrery" glyph="◉" ready={tiles.orrery.ready} accent={tiles.orrery.warp ? '#fbbf24' : '#22d3ee'} line={tiles.orrery.line}>
+            <Stat label="corelight" value={fmt(tiles.orrery.core)} live />
+            <Stat label="+/s" value={fmt(tiles.orrery.rate)} />
+            <Stat label="planets" value={String(tiles.orrery.planets)} />
+          </Tile>
+
+          <Tile href="/nolmir/expeditions" name="Expeditions" glyph="⛬" ready={tiles.expeditions.ready} accent="#34d399" line={tiles.expeditions.line}>
+            <Stat label="marks" value={fmt(tiles.expeditions.marks)} />
+            <Stat label="tiers" value={String(tiles.expeditions.tiers)} />
+            {tiles.expeditions.best > 0 && <Stat label="best" value={`wv${tiles.expeditions.best}`} />}
+          </Tile>
+        </div>
+
+        <p className="mt-5 text-center text-[10px] text-slate-600 tracking-wider">a pulsing room has something for you — tap in</p>
       </div>
-      <style>{`@keyframes nolmir-toast { 0% { opacity: 0; transform: translateY(-6px); } 6% { opacity: 1; transform: translateY(0); } 80% { opacity: 1; } 100% { opacity: 0; } }`}</style>
 
-      <Drift open={driftOpen} onClose={() => setDriftOpen(false)} />
-
-      {/* while you were away */}
-      {away && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={() => setAway(null)}>
-          <div
-            className="rounded-lg border border-cyan-900/60 bg-[#0b101c] p-6 max-w-md w-[90%] text-sm space-y-3"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <h2 className="text-cyan-300 tracking-[0.25em] text-xs">WHILE YOU HELD NO WATCH</h2>
-            <p className="text-slate-300">
-              <b className="text-slate-100">{away.matches}</b> {away.matches === 1 ? 'team' : 'teams'} answered the
-              beacon.
-            </p>
-            <div className="flex gap-5">
-              <span className="text-cyan-300">
-                +<b className="tabular-nums">{away.mana.toLocaleString()}</b> mana
-              </span>
-              <span className="text-violet-300">
-                +<b className="tabular-nums">{away.exp.toLocaleString()}</b> exp
-              </span>
-              {away.vaultFalls > 0 && (
-                <span className="text-yellow-300">
-                  vault fell <b>{away.vaultFalls}×</b>
-                </span>
-              )}
+      {digestOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#070a10]/80 px-4" onClick={() => setDigestOpen(false)}>
+          <div className="rounded-lg border border-cyan-900/60 bg-[#0b101c] p-6 max-w-md w-full text-sm" onClick={(e) => e.stopPropagation()}>
+            <h2 className="text-cyan-300 tracking-[0.25em] text-xs uppercase mb-3">While you held no watch</h2>
+            <p className="text-slate-400 text-[11px] mb-4">the ship kept its vigil for <span className="text-cyan-300">{dur(s.awayMs)}</span>.</p>
+            <div className="space-y-2 text-[12px]">
+              {s.coreGained > 0 && <DigestRow glyph="◉" accent="#22d3ee" text="the Orrery tapped" value={`+${fmt(s.coreGained)} corelight`} />}
+              {s.matchesAwaited > 0 && <DigestRow glyph="▤" accent="#22d3ee" text="the beacon was answered" value={`${s.matchesAwaited} match${s.matchesAwaited > 1 ? 'es' : ''} — tend the node`} />}
+              {tiles.orrery.warp && <DigestRow glyph="◉" accent="#fbbf24" text="the gate is keyed" value="warp ready" />}
             </div>
-            {away.best && (
-              <p className="text-slate-500 text-xs">
-                closest call: {entryText(away.best)}
-              </p>
-            )}
-            <button
-              onClick={() => setAway(null)}
-              className="mt-2 px-3 py-1 text-xs rounded border border-cyan-800 text-cyan-300 hover:bg-cyan-950/40"
-            >
-              resume the watch
-            </button>
+            <button onClick={() => setDigestOpen(false)} className="mt-5 w-full rounded border border-cyan-800 bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-300 text-[11px] tracking-[0.25em] uppercase py-2">take the watch</button>
           </div>
         </div>
       )}
 
-      <div className="max-w-[1200px] mx-auto px-4 py-6">
-        <header className="flex flex-col gap-3 sm:flex-row sm:items-baseline sm:justify-between mb-4">
-          <div>
-            <h1 className="text-cyan-300 text-xl tracking-[0.3em]">NOLMIR</h1>
-            <p className="text-slate-500 text-xs mt-1">
-              {doc.name} · the beacon is lit · challengers are coming
-            </p>
-          </div>
-          <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
-            <span className="text-cyan-300">
-              mana <b className="tabular-nums">{host.mana.toLocaleString()}</b>
-            </span>
-            <span
-              className="text-violet-300"
-              title={(() => {
-                const p = hostProgress(host.exp)
-                const next = HOST_UNLOCKS.find((u) => u.level > p.level)
-                return `host level ${p.level} — next at ${p.next.toLocaleString()} exp${next ? ` · lv ${next.level}: ${next.what}` : ''}`
-              })()}
-            >
-              host <b className="tabular-nums">lv {hostProgress(host.exp).level}</b>
-              <span className="text-violet-300/60 text-xs ml-1.5">{host.exp.toLocaleString()} exp</span>
-            </span>
-            <span className="text-sky-300/90" title="corelight — the forge's bank">
-              ◈ <b className="tabular-nums">{Math.floor(corelight).toLocaleString()}</b>
-            </span>
-            <a href="/nolmir/deck" className="tracking-[0.2em] text-xs uppercase text-cyan-400/70 hover:text-cyan-300 border border-cyan-900/60 rounded px-2 py-1" title="the command deck — the whole ship at a glance">⌂ deck</a>
-            <Emblem kind="starforge" href="/nolmir/starforge" label="STARFORGE" />
-            <Emblem kind="expeditions" href="/nolmir/expeditions" label="EXPEDITIONS" />
-            <button
-              onClick={() => {
-                sfx.ensure()
-                const m = !muted
-                sfx.setMuted(m)
-                setMuted(m)
-                if (!m) sfx.play('click')
-              }}
-              title={muted ? 'sound off — click to enable' : 'sound on'}
-              className="text-base leading-none text-slate-500 hover:text-cyan-300 transition-colors"
-            >
-              {muted ? '🔇' : '🔊'}
-            </button>
-            {/* ledger icon — placeholder glyph until Alex draws the real one */}
-            <button
-              onClick={() => setLedgerOpen((v) => !v)}
-              className={`relative px-2 py-0.5 rounded border text-base leading-none transition-colors ${
-                ledgerOpen
-                  ? 'border-cyan-400 text-cyan-300'
-                  : 'border-slate-800 text-slate-500 hover:border-slate-600 hover:text-slate-300'
-              }`}
-              title="the ledger"
-            >
-              ▤
-              {host.ledger.length > 0 && (
-                <span className="absolute -top-1.5 -right-1.5 text-[9px] bg-cyan-900 text-cyan-200 rounded-full px-1 tabular-nums">
-                  {host.ledger.length}
-                </span>
-              )}
-            </button>
-            <a href="/nolmir/dev" className="text-slate-500 hover:text-cyan-300 transition-colors">
-              [edit]
-            </a>
-          </div>
-        </header>
-
-        <div className="relative">
-          <div className="flex justify-center">
-            <Terrarium doc={doc} mods={mods} onMatchEnd={onMatchEnd} scheduleMs={MATCH_INTERVAL} onLogs={() => setLedgerOpen((v) => !v)} onDrift={() => setDriftOpen(true)} />
-          </div>
-
-          {/* the ledger panel */}
-          {ledgerOpen && (
-            <div className="absolute top-2 right-2 w-[26rem] max-w-[90%] max-h-[80%] overflow-y-auto rounded-lg border border-slate-800 bg-[#0b101c]/95 p-3 z-40">
-              <h2 className="text-slate-500 text-xs tracking-widest mb-2">THE LEDGER</h2>
-              {host.ledger.length === 0 ? (
-                <p className="text-slate-600 text-sm">No teams have answered the beacon yet. They will.</p>
-              ) : (
-                <ul className="space-y-1 text-xs">
-                  {host.ledger.map((e, i) => (
-                    <li key={`${e.at}-${i}`} className="flex gap-2 items-baseline">
-                      <span className="text-slate-600 tabular-nums w-14 shrink-0">
-                        {new Date(e.at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                      </span>
-                      <span className={e.victory ? 'text-yellow-300' : 'text-slate-300'}>{entryText(e)}</span>
-                      {!e.victory && <span className="text-cyan-400/80 shrink-0">+{e.manaYield}</span>}
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-          )}
-        </div>
-
-        <footer className="mt-6 text-xs text-slate-700 text-center space-y-1">
-          <div>arena: 4 teams of 3 · last standing ascends · the gauntlet decides</div>
-          <div>an Athernyx story · the machines were left running</div>
-        </footer>
-      </div>
+      <style jsx>{`
+        @keyframes deck-pulse {
+          0%, 100% { box-shadow: 0 0 0 1px var(--a)55, 0 0 14px -4px var(--a); }
+          50% { box-shadow: 0 0 0 1px var(--a), 0 0 22px -2px var(--a); }
+        }
+      `}</style>
     </div>
   )
+}
+
+function Tile({ href, name, glyph, ready, accent, line, children }: {
+  href: string; name: string; glyph: string; ready: boolean; accent: string; line: string; children: React.ReactNode
+}) {
+  return (
+    <a
+      href={href}
+      className="block rounded-lg border bg-[#0b101c]/85 p-4 transition-colors hover:bg-[#0b101c]"
+      style={{ borderColor: ready ? accent : '#1e293b', ['--a' as string]: accent, animation: ready ? 'deck-pulse 2.2s ease-in-out infinite' : undefined }}
+    >
+      <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center gap-2.5">
+          <span className="text-xl" style={{ color: accent, textShadow: `0 0 10px ${accent}80` }}>{glyph}</span>
+          <span className="tracking-[0.28em] uppercase text-slate-200 text-sm">{name}</span>
+        </div>
+        <span className="text-[10px] tracking-[0.2em] uppercase tabular-nums" style={{ color: ready ? accent : '#64748b' }}>
+          {ready ? '● ready' : 'idle'}
+        </span>
+      </div>
+      <div className="flex items-center gap-4 mb-1.5">{children}</div>
+      <div className="text-[10px] tracking-[0.18em] uppercase" style={{ color: ready ? accent : '#64748b' }}>{line}</div>
+    </a>
+  )
+}
+
+function Stat({ label, value, live }: { label: string; value: string; live?: boolean }) {
+  return (
+    <div className="flex flex-col">
+      <span className="text-[9px] tracking-[0.2em] uppercase text-slate-500">{label}</span>
+      <span className={`text-base tabular-nums leading-none ${live ? 'text-cyan-200' : 'text-slate-200'}`}>{value}</span>
+    </div>
+  )
+}
+
+function DigestRow({ glyph, accent, text, value }: { glyph: string; accent: string; text: string; value: string }) {
+  return (
+    <div className="flex items-center gap-2.5">
+      <span style={{ color: accent }}>{glyph}</span>
+      <span className="text-slate-400 flex-1">{text}</span>
+      <span className="tabular-nums" style={{ color: accent }}>{value}</span>
+    </div>
+  )
+}
+
+function lastResult(e: { victory?: boolean; reachedGauntlet?: boolean; teamName: string; omen?: boolean; deepest: number }): string {
+  if (e.omen) return 'something else answered the beacon'
+  if (e.victory) return `${e.teamName} took the vault`
+  if (e.reachedGauntlet) return `${e.teamName} fell in the gauntlet`
+  return `${e.teamName} went ${(e.deepest * 100).toFixed(0)}% deep`
 }
