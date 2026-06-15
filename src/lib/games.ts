@@ -81,6 +81,15 @@ export const GAMES: GameEntry[] = [
     tagline: "rekindle the grey, don't slay it · jump to convert, light 3 torches — a board of light",
   },
   {
+    id: "gravitar",
+    title: "Gravitar",
+    href: "/gravitar",
+    glyph: "⊙",
+    tier: "live",
+    kind: "play",
+    tagline: "round the gravity wells, gather the cores · turn + thrust, mind the rocks — a physics-orbit run",
+  },
+  {
     id: "shimmer",
     title: "Shimmer",
     href: "/shimmer",
