@@ -125,7 +125,7 @@ export default function VoranyxPage() {
     return () => cancelAnimationFrame(raf)
   }, [])
 
-  // steering: aim the worm toward the pointer (head sits at screen centre)
+  // DESKTOP steering: aim the worm from screen-centre toward the cursor (the head sits at centre)
   const aim = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
     const rect = e.currentTarget.getBoundingClientRect()
     const ang = Math.atan2(e.clientY - (rect.top + rect.height / 2), e.clientX - (rect.left + rect.width / 2))
@@ -133,15 +133,52 @@ export default function VoranyxPage() {
     if (w) steer(w, ang)
   }, [])
 
+  // MOBILE steering: a floating relative joystick. Wherever the thumb presses becomes the
+  // anchor; direction = drag delta from that anchor — so the thumb never covers the head
+  // and you don't reach across the screen. Visual is mutated by ref (no per-move re-render).
+  const STICK_MAX = 46 // px the thumb travels from base centre
+  const STICK_DEAD = 6 // px deadzone before we steer
+  const stickRef = useRef<{ id: number; ax: number; ay: number } | null>(null)
+  const baseRef = useRef<HTMLDivElement>(null)
+  const thumbRef = useRef<HTMLDivElement>(null)
+  const moveThumb = (dx: number, dy: number) => {
+    const t = thumbRef.current; if (!t) return
+    const m = Math.hypot(dx, dy)
+    const cl = m > STICK_MAX ? STICK_MAX / m : 1
+    t.style.transform = `translate(calc(-50% + ${dx * cl}px), calc(-50% + ${dy * cl}px))`
+  }
+  const hideStick = () => { stickRef.current = null; if (baseRef.current) baseRef.current.style.opacity = '0' }
+
   const onDown = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
     sfx.ensure()
     if (!startedRef.current) { startedRef.current = true; setStarted(true) }
-    aim(e)
-    if (e.pointerType === 'mouse' && worldRef.current) setBoost(worldRef.current, true) // hold mouse = boost
+    if (e.pointerType === 'mouse') {
+      aim(e)
+      if (worldRef.current) setBoost(worldRef.current, true) // hold mouse = boost
+      return
+    }
+    if (stickRef.current) return // another finger already owns the stick — ignore
+    const rect = e.currentTarget.getBoundingClientRect()
+    stickRef.current = { id: e.pointerId, ax: e.clientX, ay: e.clientY }
+    e.currentTarget.setPointerCapture?.(e.pointerId)
+    const b = baseRef.current
+    if (b) { b.style.left = `${e.clientX - rect.left}px`; b.style.top = `${e.clientY - rect.top}px`; b.style.opacity = '1' }
+    moveThumb(0, 0)
   }, [aim])
-  const onMove = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => { if (startedRef.current) aim(e) }, [aim])
+
+  const onMove = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
+    if (!startedRef.current) return
+    if (e.pointerType === 'mouse') { aim(e); return }
+    const s = stickRef.current
+    if (!s || s.id !== e.pointerId) return
+    const dx = e.clientX - s.ax, dy = e.clientY - s.ay
+    if (Math.hypot(dx, dy) > STICK_DEAD && worldRef.current) steer(worldRef.current, Math.atan2(dy, dx))
+    moveThumb(dx, dy)
+  }, [aim])
+
   const onUp = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
-    if (e.pointerType === 'mouse' && worldRef.current) setBoost(worldRef.current, false)
+    if (e.pointerType === 'mouse') { if (worldRef.current) setBoost(worldRef.current, false); return }
+    if (stickRef.current && stickRef.current.id === e.pointerId) hideStick()
   }, [])
 
   // dedicated boost (touch thumb + Space)
@@ -191,6 +228,19 @@ export default function VoranyxPage() {
         />
         <div className="pointer-events-none absolute inset-0 rounded-md vx-crt" />
 
+        {/* floating relative joystick (touch) — positioned + faded via ref, no re-render */}
+        <div
+          ref={baseRef}
+          className="pointer-events-none absolute z-10 w-[100px] h-[100px] -translate-x-1/2 -translate-y-1/2 rounded-full border border-[#37e6ff]/25 bg-[#37e6ff]/[0.04] opacity-0 transition-opacity duration-100"
+          style={{ left: 0, top: 0 }}
+        >
+          <div
+            ref={thumbRef}
+            className="absolute left-1/2 top-1/2 w-9 h-9 rounded-full bg-[#37e6ff]/25 border border-[#37e6ff]/60"
+            style={{ boxShadow: '0 0 12px #37e6ff80' }}
+          />
+        </div>
+
         {/* touch boost pad */}
         {started && !over && (
           <button
@@ -206,7 +256,7 @@ export default function VoranyxPage() {
           <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-3 bg-[#04040a]/45 rounded-md text-center px-6">
             <div className="font-mono text-[#37e6ff] text-2xl tracking-[0.3em] uppercase" style={{ textShadow: '0 0 18px #37e6ff' }}>Voranyx</div>
             <p className="text-[11px] leading-relaxed text-[#9fd6e0]/80 max-w-[290px]">
-              steer toward your finger. graze the dross, swallow a seed to take its colour, gather motes to boost. keep eating or you fade — and never put your head into another worm.
+              drag to steer (cursor on desktop). graze the dross, swallow a seed to take its colour, gather motes to boost. keep eating or you fade — and never put your head into another worm.
             </p>
             <div className="font-mono text-[12px] tracking-[0.25em] uppercase text-[#04040a] bg-[#37e6ff] px-6 py-2.5 rounded-sm mt-1" style={{ boxShadow: '0 0 18px #37e6ff80' }}>tap to dive in</div>
           </div>
