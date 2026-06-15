@@ -281,6 +281,7 @@ export default function NolmirPage() {
             <span className="text-sky-300/90" title="corelight — the forge's bank">
               ◈ <b className="tabular-nums">{Math.floor(corelight).toLocaleString()}</b>
             </span>
+            <a href="/nolmir/deck" className="tracking-[0.2em] text-xs uppercase text-cyan-400/70 hover:text-cyan-300 border border-cyan-900/60 rounded px-2 py-1" title="the command deck — the whole ship at a glance">⌂ deck</a>
             <Emblem kind="starforge" href="/nolmir/starforge" label="STARFORGE" />
             <Emblem kind="expeditions" href="/nolmir/expeditions" label="EXPEDITIONS" />
             <button
