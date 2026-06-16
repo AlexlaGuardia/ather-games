@@ -254,12 +254,14 @@ scenes). Lore routes through /magii for canon safety.
   finally outgrow the thing that hunted you). Wedge: the **first element you eat forks your
   evolution branch** (Storm-line ≠ Earth-line). Finally earns the cloud-ocean a game. Canon
   ladder needs a /magii pass (real Athernyx creatures up the chain, not generic fish).
+  **Pinned (Alex 2026-06-16):** the canon ladder = the **Rinn-kin "fish"** (`athernyx/CANON/world/rinn.md` / `manamals.md`) — a rich existing list, so lore is NOT the blocker; the only reason to defer is mechanical distance from Voranyx. Revisit once the catalog has filled out more.
 - **Ather Dash** *(lane-runner)* — Subway-Surfers loop: run through the Ather, dodge obstacles,
   reach the next gate. **The twist that saves it from being Updraft-with-lanes:** the lanes are
   **elements** (Storm/Earth/Water/Mana) and each gate is tuned — you must be in the *matching*
   lane to pass it. So it's **read-ahead** (spot the gate's element, swap in time) under dodge
   pressure, not pure reflex. Ours + canon (the 4 elements); Updraft is pure timing, this is
   positional anticipation. *(replaced Shardfall, which was Asteroids with no twist of its own.)*
+  **→ SELECTED next build (Alex 2026-06-16).** Slice-first (Gravitar lesson): validate the pseudo-3D receding-lane perspective + lane-swap *feel* in a thin slice BEFORE obstacles/scoring/juice. Element-lane matching is the core verb. Canon name pass via /magii (plain-word act, no `-nyx`). Fills the catalog's missing genre = the lane-runner.
 - **Squall** *(bullet-hell dodge)* — pure evasion, no offense. Read the void's projectile
   patterns, weave through, score = survival time. A brand-new **mood**: defenseless survival.
   Vector-glow bullet patterns are gorgeous and cheap to draw.
