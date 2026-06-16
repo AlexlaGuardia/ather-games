@@ -1,7 +1,8 @@
-// LAZ — Lazerin rides the Ather. A one-tap flight: tap to beat your wings and rise,
-// fall when you don't, thread the gaps in the void gates. Pure pick-up-die-retry.
-// Lazerin is the Crucible's announcer who watches from the Vault — here he's just
-// out riding the currents, no combat, no canon weight. Endless score-chase.
+// UPDRAFT — a spark of Ather rides the rising light. A one-tap flight: tap to beat
+// upward and rise, fall when you don't, thread the gaps in the void gates. Pure
+// pick-up-die-retry. The rider is a mote of Ather-light on the updraft (canon ruling
+// 2026-06-16, world/arcade.md: NOT Lazerin — his name stays in the main line).
+// No combat, no canon weight. Endless score-chase.
 //
 // This module is the pure sim (no canvas, no React). The page calls flap()/tick()
 // and reads the events for sound + FX. Deterministic from a seed (mulberry32).

@@ -1,7 +1,8 @@
 'use client'
 
-// LAZ — Lazerin rides the Ather. One tap to beat his wings and climb, fall when you
-// don't, thread the void gates. Pure pick-up-die-retry, Atari vector-glow on canvas.
+// UPDRAFT — a spark of Ather rides the rising light. One tap to beat upward and climb,
+// fall when you don't, thread the void gates. Pure pick-up-die-retry, Atari vector-glow
+// on canvas. The rider is a mote of Ather, not Lazerin (canon ruling, world/arcade.md).
 // Core sim lives in lib/updraft.ts.
 
 import { useCallback, useEffect, useRef, useState } from 'react'

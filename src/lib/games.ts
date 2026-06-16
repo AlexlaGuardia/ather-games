@@ -51,7 +51,7 @@ export const GAMES: GameEntry[] = [
     glyph: "➶",
     tier: "live",
     kind: "play",
-    tagline: "Lazerin rides the Ather · one tap to climb, mind the void — endless flight",
+    tagline: "a spark of Ather rides the rising light · one tap to climb, mind the void — endless flight",
   },
   {
     id: "seedfall",
