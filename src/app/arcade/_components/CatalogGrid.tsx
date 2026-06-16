@@ -8,7 +8,7 @@ import { publicGames, tierLabel, type GameEntry } from "@/lib/games";
 import { getFavs, toggleFav } from "@/lib/favorites";
 
 // Games with generated card art (public/<id>/card.webp) — canon briefs in world/arcade.md.
-const CARD_ART = new Set(["rekindle", "voranyx", "lucernyx", "manana", "ward", "seedfall", "updraft"]);
+const CARD_ART = new Set(["rekindle", "voranyx", "lucernyx", "manana", "ward", "seedfall", "updraft", "magii"]);
 
 function PinButton({ id, favs, onToggle }: { id: string; favs: string[]; onToggle: (id: string) => void }) {
   const pinned = favs.includes(id);
