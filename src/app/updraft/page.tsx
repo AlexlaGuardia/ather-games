@@ -160,7 +160,10 @@ export default function UpdraftPage() {
         )}
 
         {phase === 'ready' && (
-          <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-3 bg-[#04040a]/45 rounded-md text-center px-6">
+          <div className="pointer-events-none absolute inset-0 isolate overflow-hidden flex flex-col items-center justify-center gap-3 rounded-md text-center px-6">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/updraft/card.webp" alt="" aria-hidden="true" className="absolute inset-0 -z-10 h-full w-full object-cover opacity-[0.6]" />
+            <div className="absolute inset-0 -z-10 bg-[#04040a]/62" />
             <div className="font-mono text-[#37e6ff] text-2xl tracking-[0.3em] uppercase" style={{ textShadow: '0 0 18px #37e6ff' }}>Updraft</div>
             <p className="text-[11px] leading-relaxed text-[#9fd6e0]/80 max-w-[260px]">
               tap to beat your wings and rise. fall when you don't. thread the void gates.

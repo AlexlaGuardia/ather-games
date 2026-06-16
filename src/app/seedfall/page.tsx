@@ -177,7 +177,10 @@ export default function SeedfallPage() {
         <div className="pointer-events-none absolute inset-0 rounded-md sf-crt" />
 
         {phase === 'ready' && (
-          <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-3 bg-[#04040a]/45 rounded-md text-center px-6">
+          <div className="pointer-events-none absolute inset-0 isolate overflow-hidden flex flex-col items-center justify-center gap-3 rounded-md text-center px-6">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/seedfall/card.webp" alt="" aria-hidden="true" className="absolute inset-0 -z-10 h-full w-full object-cover opacity-[0.6]" />
+            <div className="absolute inset-0 -z-10 bg-[#04040a]/62" />
             <div className="font-mono text-[#54ffc8] text-2xl tracking-[0.3em] uppercase" style={{ textShadow: '0 0 18px #54ffc8' }}>Seedfall</div>
             <p className="text-[11px] leading-relaxed text-[#9fd6e0]/80 max-w-[270px]">
               hold the left or right side to thrust that way, both to rise. feather the Ather and set the seed down soft on the soil.
