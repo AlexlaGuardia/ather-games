@@ -234,6 +234,12 @@ the Arcade frame.
 
 ### Atherdash (#10) — 🟢 live · lane-runner, element-lanes vs the Dying → `/atherdash`
 *Last touched: 2026-06-17*
+**Juice + sfx pass shipped (`d504e32`, Phase 4 pulled early while Alex at work):** sound on the
+  shared arcade engine (`lib/sfx.ts`) — lane-swap whoosh, gate-pass chime, wall-hit thud, end sigh,
+  mute toggle. Visual juice (ref-driven, no re-render): gate-pass burst (element-coloured ring + mote
+  fountain), crash burst (red ring + scatter) + decaying screen-shake, swap smear trailing the spark
+  mid-lerp. Build clean, public 200, no console errors. **Audio feel-test pending Alex's gesture**
+  (and the browser MCP was timing out on his device while at work — visual verify deferred to him).
 **Left off:** **SLICE feel-gate PASSED on Alex's real device 2026-06-17** ("nailed that first pass!
   maybe a bit fast") → went straight into **PHASE 1, the core game.** Live + public (flipped to `live`
   for the phone test — no traffic, just Alex; flip back to coming-soon anytime if the slice-state card
@@ -254,8 +260,8 @@ the Arcade frame.
   1. **⚑ Alex playtest the loop:** is the read-ahead window fair (gate lead vs swap speed)? Gate
      cadence too sparse/dense? 4 lanes readable at distance, or do the blue/violet lanes blur? Knobs
      in `lib/atherdash.ts`: `SPEED 0.74`, `GATE_GAP_Z 0.6`, `LEAD_DIST`, `GATE_HIT_Z`, `NEAR_LANE_DX 96`.
-  2. **Phase 4 juice/sfx early?** A swap whoosh + gate-pass chime + a wall-hit thud would make the
-     core loop *feel* before Phase 2 — cheap, high payoff (Updraft pattern, shared `lib/arcade/sfx`).
+  2. ✅ **Phase 4 juice/sfx — DONE early** (`d504e32`). If anything, tune amounts after the feel-test
+     (shake too strong? chime too quiet? swap smear too subtle?).
   3. Phase 2 — the Dying-chase (a void wall creeping behind; a miss lets it gain) + maybe non-gate
      obstacles · Phase 3 — distance score + speed ramp + difficulty curve (tighter gaps).
   4. Phase 5 — canon `world/arcade.md` entry + card art (`gen_cards.py` brief) + title screen.
