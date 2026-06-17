@@ -26,6 +26,7 @@ import {
   VH,
   type World,
 } from './lib/atherdash'
+import { sfx } from './lib/sfx'
 
 const BG = '#04040a'
 const ATHER = '#37e6ff'
@@ -36,17 +37,27 @@ const WALL_H = 74 // wall height in near-pixels (scaled by perspective)
 
 type Phase = 'ready' | 'playing' | 'over'
 
+// transient visual juice — lives in a ref, aged by timestamp (no React re-render)
+interface Ring { x: number; y: number; t0: number; color: string }
+interface Mote { x: number; y: number; vx: number; vy: number; t0: number; color: string }
+interface Fx { rings: Ring[]; motes: Mote[]; shakeT0: number }
+
 export default function AtherdashPage() {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const worldRef = useRef<World | null>(null)
   const swipeRef = useRef<{ x: number; id: number } | null>(null)
+  const lastLaneRef = useRef<number>(-1)
+  const fxRef = useRef<Fx>({ rings: [], motes: [], shakeT0: -1 })
 
   const [phase, setPhase] = useState<Phase>('ready')
   const [score, setScore] = useState(0)
   const [best, setBest] = useState(0)
+  const [muted, setMuted] = useState(false)
 
   const boot = useCallback(() => {
     worldRef.current = makeWorld(Date.now() >>> 0)
+    lastLaneRef.current = worldRef.current.lane
+    fxRef.current = { rings: [], motes: [], shakeT0: -1 }
     setScore(0)
     setPhase('ready')
   }, [])
@@ -54,6 +65,7 @@ export default function AtherdashPage() {
   useEffect(() => {
     boot()
     setBest(loadHiScore())
+    setMuted(sfx.isMuted())
   }, [boot])
 
   // ── sim + render loop ─────────────────────────────────────────────────────────
@@ -67,10 +79,40 @@ export default function AtherdashPage() {
       if (!canvas || !w) return
       const dt = last ? Math.min(0.05, (ts - last) / 1000) : 0
       last = ts
+      const t = ts / 1000
+      const fx = fxRef.current
       if (w.state === 'playing') {
         const ev = tick(w, dt)
-        if (ev.pass) setScore(w.score)
+        // lane-swap whoosh — target lane changed since last frame
+        if (w.lane !== lastLaneRef.current) {
+          sfx.play('swap')
+          lastLaneRef.current = w.lane
+        }
+        if (ev.pass) {
+          setScore(w.score)
+          sfx.play('pass')
+          // threaded the gate: a ring + a little fountain of motes in its element colour
+          const lane = Math.round(w.x)
+          const col = ELEMENTS[Math.max(0, Math.min(LANES - 1, lane))].light
+          const sx = laneNearX(w.x)
+          fx.rings.push({ x: sx, y: SPARK_Y, t0: t, color: col })
+          for (let i = 0; i < 7; i++) {
+            const a = -Math.PI / 2 + (Math.random() - 0.5) * 1.7
+            const sp = 90 + Math.random() * 120
+            fx.motes.push({ x: sx, y: SPARK_Y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, t0: t, color: col })
+          }
+        }
         if (ev.crash) {
+          sfx.play('crash')
+          window.setTimeout(() => sfx.play('over'), 220)
+          fx.shakeT0 = t
+          const sx = laneNearX(w.x)
+          fx.rings.push({ x: sx, y: SPARK_Y, t0: t, color: '#ff5d6c' })
+          for (let i = 0; i < 12; i++) {
+            const a = Math.random() * Math.PI * 2
+            const sp = 70 + Math.random() * 150
+            fx.motes.push({ x: sx, y: SPARK_Y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, t0: t, color: '#ff8a96' })
+          }
           const b = saveHiScore(w.score)
           setBest(b)
           setPhase('over')
@@ -78,7 +120,7 @@ export default function AtherdashPage() {
       } else {
         tick(w, dt) // keeps the road scrolling on the ready screen
       }
-      render(canvas, w, ts)
+      render(canvas, w, ts, fx)
     }
     raf = requestAnimationFrame(draw)
     return () => cancelAnimationFrame(raf)
@@ -87,9 +129,18 @@ export default function AtherdashPage() {
   const launch = useCallback(() => {
     const w = worldRef.current
     if (!w || w.state !== 'ready') return
+    sfx.ensure() // unlock audio inside the user gesture
+    lastLaneRef.current = w.lane
     start(w)
     setPhase('playing')
   }, [])
+
+  const toggleMute = () => {
+    sfx.ensure()
+    const m = !sfx.isMuted()
+    sfx.setMuted(m)
+    setMuted(m)
+  }
 
   // keyboard: ←/→ or A/D swap (and launch from ready)
   useEffect(() => {
@@ -132,7 +183,9 @@ export default function AtherdashPage() {
           <div className="font-mono text-[#37e6ff] text-sm tracking-[0.35em] uppercase" style={{ textShadow: '0 0 8px #37e6ff80' }}>Atherdash</div>
           <div className="text-[9px] text-[#7fd8e6]/40 font-mono tracking-[0.2em] uppercase mt-0.5">match the lane to the gate</div>
         </div>
-        <span className="w-10" />
+        <button onClick={toggleMute} className="text-[10px] tracking-[0.2em] uppercase text-[#37e6ff]/50 hover:text-[#37e6ff] font-mono w-10 text-right">
+          {muted ? 'son' : 'snd'}
+        </button>
       </div>
 
       <div className="relative w-full max-w-[400px]" style={{ aspectRatio: `${VW} / ${VH}` }}>
@@ -209,26 +262,38 @@ export default function AtherdashPage() {
 }
 
 // ── rendering ───────────────────────────────────────────────────────────────────
-function render(canvas: HTMLCanvasElement, w: World, ts: number) {
+function render(canvas: HTMLCanvasElement, w: World, ts: number, fx: Fx) {
   const dpr = Math.min(2, typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1)
   if (canvas.width !== VW * dpr || canvas.height !== VH * dpr) {
     canvas.width = VW * dpr
     canvas.height = VH * dpr
   }
   const ctx = canvas.getContext('2d')!
-  ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+  const t = ts / 1000
+  // crash shake — a quick decaying jitter of the whole scene
+  let shx = 0, shy = 0
+  if (fx.shakeT0 >= 0) {
+    const age = t - fx.shakeT0
+    if (age < 0.4) {
+      const amp = 9 * (1 - age / 0.4)
+      shx = Math.sin(age * 90) * amp
+      shy = Math.cos(age * 78) * amp * 0.6
+    } else {
+      fx.shakeT0 = -1
+    }
+  }
+  ctx.setTransform(dpr, 0, 0, dpr, shx * dpr, shy * dpr)
   ctx.lineCap = 'round'
   ctx.lineJoin = 'round'
-  const t = ts / 1000
 
   // backdrop: dark field with a soft depth gradient (deepest at the horizon)
   const grad = ctx.createLinearGradient(0, HORIZON_Y, 0, VH)
   grad.addColorStop(0, '#070417')
   grad.addColorStop(1, BG)
   ctx.fillStyle = grad
-  ctx.fillRect(0, 0, VW, VH)
+  ctx.fillRect(-14, -14, VW + 28, VH + 28) // oversized so crash-shake leaves no edge smear
   ctx.fillStyle = BG
-  ctx.fillRect(0, 0, VW, HORIZON_Y) // pure-black sky → the plane reads as a floor
+  ctx.fillRect(-14, -14, VW + 28, HORIZON_Y + 14) // pure-black sky → the plane reads as a floor
 
   // faint element wash down each lane corridor (teaches lane = element at rest)
   for (let i = 0; i < LANES; i++) {
@@ -328,8 +393,52 @@ function render(canvas: HTMLCanvasElement, w: World, ts: number) {
   ctx.globalAlpha = 1
   ctx.shadowBlur = 0
 
+  // gate-pass + crash bursts: expanding rings (age over ~0.45s)
+  for (let i = fx.rings.length - 1; i >= 0; i--) {
+    const r = fx.rings[i]
+    const age = t - r.t0
+    if (age > 0.45) { fx.rings.splice(i, 1); continue }
+    const k = age / 0.45
+    ctx.globalAlpha = (1 - k) * 0.8
+    ctx.strokeStyle = r.color
+    ctx.lineWidth = 2.5 * (1 - k) + 0.5
+    ctx.shadowBlur = 14 * (1 - k)
+    ctx.shadowColor = r.color
+    ctx.beginPath()
+    ctx.arc(r.x, r.y, 6 + k * 46, 0, Math.PI * 2)
+    ctx.stroke()
+  }
+  ctx.globalAlpha = 1
+  ctx.shadowBlur = 0
+  // motes (gravity-less drift, fade over ~0.55s)
+  for (let i = fx.motes.length - 1; i >= 0; i--) {
+    const m = fx.motes[i]
+    const age = t - m.t0
+    if (age > 0.55) { fx.motes.splice(i, 1); continue }
+    ctx.globalAlpha = (1 - age / 0.55) * 0.85
+    ctx.fillStyle = m.color
+    ctx.shadowBlur = 6
+    ctx.shadowColor = m.color
+    dot(ctx, m.x + m.vx * age, m.y + m.vy * age, 2.2 * (1 - age / 0.55) + 0.5)
+  }
+  ctx.globalAlpha = 1
+  ctx.shadowBlur = 0
+
   // the spark — fixed near-bottom Y, x follows the (lerping) lane. Ather, neutral.
   const sx = laneNearX(w.x)
+  // swap smear — while mid-lerp, a horizontal streak trailing the motion
+  const swapV = w.lane - w.x
+  if (Math.abs(swapV) > 0.02) {
+    const dir = Math.sign(swapV)
+    for (let i = 1; i <= 4; i++) {
+      ctx.globalAlpha = 0.14 * (1 - i / 5)
+      ctx.fillStyle = ATHER
+      ctx.shadowBlur = 7
+      ctx.shadowColor = ATHER
+      dot(ctx, sx - dir * i * 8, SPARK_Y, 9 * (1 - i / 6))
+    }
+    ctx.globalAlpha = 1
+  }
   for (let i = 1; i <= 5; i++) {
     ctx.globalAlpha = 0.1 * (1 - i / 6)
     ctx.fillStyle = ATHER
