@@ -94,7 +94,7 @@ export const GAMES: GameEntry[] = [
     title: "Atherdash",
     href: "/atherdash",
     glyph: "⫸",
-    tier: "coming-soon",
+    tier: "live",
     kind: "play",
     tagline: "dash the elemental lanes ahead of the Dying · read the gate, swap in time — a lane-runner",
   },

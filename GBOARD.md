@@ -29,7 +29,7 @@ the Arcade frame.
 | Voranyx #7 | 🟢 live | 2026-06-15 | glowing slither in the Silt |
 | Lucernyx #8 | 🟢 live | 2026-06-15 | turn-based board of rekindling |
 | Gravitar #9 | ⚪ parked | 2026-06-15 | physics-orbit — concept didn't land (cut) |
-| Atherdash #10 | 🟡 coming-soon | 2026-06-17 | lane-runner — element-lanes ahead of the Dying (slice) |
+| Atherdash #10 | 🟢 live | 2026-06-17 | lane-runner — element-lanes ahead of the Dying (slice) |
 
 ---
 
@@ -232,7 +232,7 @@ the Arcade frame.
   deliberate* loop (aim-and-watch), not continuous-piloting stress. Reuses ~80% of `lib/gravitar.ts`.
 **Files (kept):** `gravitar/lib/gravitar.ts` (18 tests, reusable physics) · `lib/sfx.ts` · `page.tsx`
 
-### Atherdash (#10) — 🟡 coming-soon · lane-runner, element-lanes vs the Dying → `/atherdash`
+### Atherdash (#10) — 🟢 live · lane-runner, element-lanes vs the Dying → `/atherdash`
 *Last touched: 2026-06-17*
 **Left off:** Built **THE SLICE** in one session — feel-test only, NO gates/elements/score/juice
   (DESIGN.md, Gravitar lesson: prove the motion before building on top). A spark of Ather (Updraft's
