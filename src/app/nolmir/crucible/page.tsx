@@ -4,50 +4,24 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import Terrarium from '../components/Terrarium'
 import Drift from '../components/Drift'
 import Emblem from '../components/Emblem'
-import { demoCrucible, loadCrucible } from '../lib/crucible'
-import { runMatch } from '../lib/sim'
 import { loadHost, saveHost, hostProgress, HOST_UNLOCKS } from '../lib/host'
 import {
   loadForge,
   saveForge,
   settleForge,
-  forgeMods,
-  forgeHeat,
   settleConnections,
   cutConnection,
   activePlanets,
 } from '../lib/starforge'
-import { loadExpedMeta, championsOffPost } from '../lib/expedmeta'
-import { unlockedTier } from '../lib/teams'
-import { CrucibleDoc, HostState, LedgerEntry, MatchMods, MatchResult, TEAM_COLORS, TEAM_NAMES } from '../lib/types'
-import { mulberry32, pick } from '../lib/rng'
+import { settleHomecoming, teamName, MATCH_INTERVAL, type AwayDigest } from '../lib/away'
+import { CrucibleDoc, HostState, LedgerEntry, MatchMods, MatchResult, TEAM_COLORS } from '../lib/types'
 import { sfx } from '../lib/sfx'
-
-// a match answers the beacon every 20 minutes, watched or not — matches
-// are EVENTS now, not a back-to-back blur (Alex, 2026-06-10 night)
-const MATCH_INTERVAL = 20 * 60 * 1000
-const AWAY_CAP = 144 // beyond two days, the beacon dims
-
-const TEAM_EPITHETS = ['Cohort', 'Wardens', 'Reavers', 'Pilgrims', 'Sworn', 'Hunters', 'Vanguard', 'Chorus', 'Tide', 'Kin']
-
-function teamName(seed: number, team: number): string {
-  const rng = mulberry32((seed ^ 0x9e3779b9) + team * 0x85ebca6b)
-  return `${TEAM_NAMES[team % TEAM_NAMES.length]} ${pick(rng, TEAM_EPITHETS)}`
-}
 
 interface Toast {
   id: number
   text: string
   color: string
   mana: number
-}
-
-interface AwayDigest {
-  matches: number
-  mana: number
-  exp: number
-  vaultFalls: number
-  best: LedgerEntry | null
 }
 
 function entryText(e: LedgerEntry): string {
@@ -71,74 +45,18 @@ export default function NolmirPage() {
   const [muted, setMuted] = useState(false)
 
   useEffect(() => {
-    const d = loadCrucible() ?? demoCrucible()
-    setDoc(d)
     setMuted(sfx.isMuted())
 
     const now = Date.now()
-    // the forge hums whether or not you visit it
-    let forge = settleForge(loadForge(now), now)
-    const h = loadHost()
-    // supply lines drink first — unpaid upkeep frays them
-    const sc = settleConnections(forge, h.mana, now)
-    forge = sc.forge
-    h.mana = sc.mana
-    saveForge(forge)
-    const m = forgeMods(forge)
-    // a guard on a live expedition is off their crucible post
-    if (championsOffPost(loadExpedMeta(), now)) m.champions = undefined
-    // louder crucibles draw harder challengers — roster tier rides heat
-    m.rosterTier = unlockedTier({ heat: forgeHeat(forge), exp: h.exp })
-    m.heat = forgeHeat(forge) // drives challenger level (slice 5; off by default)
-    setMods(m)
-    setCorelight(forge.corelight)
-
-    // settle the marks that passed while the host was gone — wall-clock
-    // aligned, deterministic seeds, so a reload can't reroll history and
-    // the live scheduler's marks line up with the away ledger's
-    const since = h.lastSeenAt ?? now
-    const marks: number[] = []
-    for (let at = (Math.floor(since / MATCH_INTERVAL) + 1) * MATCH_INTERVAL; at <= now; at += MATCH_INTERVAL) {
-      marks.push(at)
-    }
-    const missedMarks = marks.slice(-AWAY_CAP)
-    if (missedMarks.length > 0) {
-      const digest: AwayDigest = { matches: missedMarks.length, mana: 0, exp: 0, vaultFalls: 0, best: null }
-      const heat = forgeHeat(forge)
-      for (const at of missedMarks) {
-        const seed = Math.floor(at / 1000) >>> 0
-        // past the heat ceiling, rarely, the beacon draws... nothing that fights
-        if (heat > 250 && seed % 17 === 0) {
-          const omen: LedgerEntry = {
-            seed, victory: false, winnerTeam: null, deepestTeam: 0, reachedGauntlet: false,
-            fallen: 0, deepest: 0, manaYield: 0, ticks: 0, at, teamName: '', omen: true,
-          }
-          h.ledger = [omen, ...h.ledger].slice(0, 100)
-          continue
-        }
-        const r = runMatch(d, seed, m)
-        const namedTeam = r.victory && r.winnerTeam !== null ? r.winnerTeam : r.deepestTeam
-        const entry: LedgerEntry = { ...r, at, teamName: r.teamNames?.[namedTeam] ?? teamName(r.seed, namedTeam) }
-        h.ledger = [entry, ...h.ledger].slice(0, 100)
-        h.mana += r.manaYield
-        h.exp += r.fallen * 5 + Math.round(r.deepest * 20)
-        digest.mana += r.manaYield
-        digest.exp += r.fallen * 5 + Math.round(r.deepest * 20)
-        if (r.victory) {
-          digest.vaultFalls++
-          // they take a Wonder and cut a line on the way out
-          h.mana = Math.max(0, h.mana - Math.max(100, Math.round(h.mana * 0.15)))
-          const cut = cutConnection(forge, seed)
-          forge = cut.forge
-        }
-        if (!digest.best || entry.deepest > digest.best.deepest) digest.best = entry
-      }
-      saveForge(forge)
-      setAway(digest)
-    }
-    h.lastSeenAt = now
-    saveHost(h)
-    setHost(h)
+    // the full homecoming settle — shared with the Command Deck (idempotent by
+    // lastSeenAt). If you came in via the deck it already banked the haul, so
+    // `away` is null here; entering the Crucible directly settles + shows it.
+    const hc = settleHomecoming(now)
+    setDoc(hc.doc)
+    setMods(hc.mods)
+    setCorelight(hc.corelight)
+    if (hc.away) setAway(hc.away)
+    setHost(hc.host)
 
     // keep the watch current while the tab is open — the forge hums and
     // the supply lines drink their upkeep

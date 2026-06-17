@@ -7,20 +7,20 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Chakra_Petch } from 'next/font/google'
-import { loadHost, saveHost, hostProgress } from './lib/host'
+import { saveHost, hostProgress } from './lib/host'
 import {
-  loadForge, FORGE_KEY, forgeRate, forgeHeat, canWarp, activePlanets, WARP_HEAT,
+  FORGE_KEY, forgeRate, forgeHeat, canWarp, activePlanets, WARP_HEAT,
   type ForgeState,
 } from './lib/starforge'
 import {
   loadExpedMeta, saveExpedMeta, settleGarrison, garrisonRatePerHour,
   championsOffPost, tiersUnlocked, bestWave, type ExpedMeta,
 } from './lib/expedmeta'
+import { settleHomecoming, type AwayDigest } from './lib/away'
 import type { HostState } from './lib/types'
 
 const display = Chakra_Petch({ weight: ['500', '600'], subsets: ['latin'] })
 const MATCH_INTERVAL = 20 * 60 * 1000 // a match answers the beacon every 20 min (mirrors the hub)
-const AWAY_CAP = 144
 
 const fmt = (n: number): string => {
   if (n >= 1e9) return (n / 1e9).toFixed(2) + 'B'
@@ -46,31 +46,31 @@ interface Snapshot {
   awayMs: number
   coreGained: number // corelight banked while away (truthful delta from settle)
   marksGained: number // garrison salvage banked while away (truthful delta)
-  matchesAwaited: number
+  away: AwayDigest | null // the Crucible homecoming — matches answered, mana/exp banked
 }
 
 function snap(): Snapshot {
   const now = Date.now()
-  const host = loadHost()
-  // peek pre-settle corelight so we can show the honest away delta
+  // peek pre-settle corelight so we can show the honest Orrery away delta
   let prevCore = 0
   try {
     const raw = localStorage.getItem(FORGE_KEY)
     if (raw) prevCore = (JSON.parse(raw) as ForgeState).corelight ?? 0
   } catch {}
-  const forge = loadForge(now) // settles offline accrual into the save
-  // settle the expedition garrison's idle marks into the host (idempotent by tick)
+  // the FULL Crucible homecoming — forge tap + upkeep + away matches banked into
+  // the host. Shared with the Crucible page (idempotent): the deck is the front
+  // door, so it collects; entering a mode after sees an empty window.
+  const hc = settleHomecoming(now)
+  const host = hc.host
+  // the expedition garrison's idle marks, banked on top (the third pillar)
   const g = settleGarrison(loadExpedMeta(), now)
-  if (g.marks > 0) host.marks = (host.marks ?? 0) + g.marks
+  if (g.marks > 0) { host.marks = (host.marks ?? 0) + g.marks; saveHost(host) }
   saveExpedMeta(g.meta)
-  if (g.marks > 0) saveHost(host)
-  const lastSeen = host.lastSeenAt ?? now
-  const awayMs = Math.max(0, now - lastSeen)
   return {
-    host, forge, meta: g.meta, loadedAt: now, awayMs,
-    coreGained: Math.max(0, forge.corelight - prevCore),
+    host, forge: hc.forge, meta: g.meta, loadedAt: now, awayMs: hc.awayMs,
+    coreGained: Math.max(0, hc.forge.corelight - prevCore),
     marksGained: g.marks,
-    matchesAwaited: host.lastSeenAt ? Math.min(AWAY_CAP, Math.floor(awayMs / MATCH_INTERVAL)) : 0,
+    away: hc.away,
   }
 }
 
@@ -84,7 +84,7 @@ export default function DeckPage() {
     const snapshot = snap()
     setS(snapshot)
     setNow(Date.now())
-    if (snapshot.awayMs > 2 * 60 * 1000 && (snapshot.coreGained > 0 || snapshot.marksGained > 0 || snapshot.matchesAwaited > 0)) setDigestOpen(true)
+    if (snapshot.awayMs > 2 * 60 * 1000 && (snapshot.coreGained > 0 || snapshot.marksGained > 0 || (snapshot.away?.matches ?? 0) > 0)) setDigestOpen(true)
     started.current = true
     const t = setInterval(() => setNow(Date.now()), 1000)
     return () => clearInterval(t)
@@ -108,8 +108,10 @@ export default function DeckPage() {
       crucible: {
         level,
         mana: host.mana,
-        ready: s.matchesAwaited > 0,
-        line: s.matchesAwaited > 0 ? `${s.matchesAwaited} answer${s.matchesAwaited > 1 ? 's' : ''} await tending` : `next answer in ${clock(nextMark - now)}`,
+        ready: (s.away?.matches ?? 0) > 0,
+        line: (s.away?.matches ?? 0) > 0
+          ? `${s.away!.matches} answered the beacon while away`
+          : `next answer in ${clock(nextMark - now)}`,
         sub: host.ledger[0] ? lastResult(host.ledger[0]) : 'the beacon is quiet',
       },
       orrery: {
@@ -190,8 +192,9 @@ export default function DeckPage() {
             <p className="text-slate-400 text-[11px] mb-4">the ship kept its vigil for <span className="text-cyan-300">{dur(s.awayMs)}</span>.</p>
             <div className="space-y-2 text-[12px]">
               {s.coreGained > 0 && <DigestRow glyph="◉" accent="#22d3ee" text="the Orrery tapped" value={`+${fmt(s.coreGained)} corelight`} />}
+              {s.away && s.away.matches > 0 && <DigestRow glyph="▤" accent="#22d3ee" text={`the beacon answered ${s.away.matches}×`} value={`+${fmt(s.away.mana)} mana · +${fmt(s.away.exp)} exp`} />}
+              {s.away && s.away.vaultFalls > 0 && <DigestRow glyph="▤" accent="#f43f5e" text={`${s.away.vaultFalls} vault${s.away.vaultFalls > 1 ? 's' : ''} fell`} value={`${s.away.vaultFalls} line${s.away.vaultFalls > 1 ? 's' : ''} cut`} />}
               {s.marksGained > 0 && <DigestRow glyph="⛬" accent="#34d399" text="the garrison salvaged" value={`+${fmt(s.marksGained)} marks`} />}
-              {s.matchesAwaited > 0 && <DigestRow glyph="▤" accent="#22d3ee" text="the beacon was answered" value={`${s.matchesAwaited} match${s.matchesAwaited > 1 ? 'es' : ''} — tend the node`} />}
               {tiles.orrery.warp && <DigestRow glyph="◉" accent="#fbbf24" text="the gate is keyed" value="warp ready" />}
             </div>
             <button onClick={() => setDigestOpen(false)} className="mt-5 w-full rounded border border-cyan-800 bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-300 text-[11px] tracking-[0.25em] uppercase py-2">take the watch</button>
