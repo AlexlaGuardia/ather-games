@@ -29,6 +29,7 @@ the Arcade frame.
 | Voranyx #7 | 🟢 live | 2026-06-15 | glowing slither in the Silt |
 | Lucernyx #8 | 🟢 live | 2026-06-15 | turn-based board of rekindling |
 | Gravitar #9 | ⚪ parked | 2026-06-15 | physics-orbit — concept didn't land (cut) |
+| Atherdash #10 | 🟡 coming-soon | 2026-06-17 | lane-runner — element-lanes ahead of the Dying (slice) |
 
 ---
 
@@ -231,6 +232,35 @@ the Arcade frame.
   deliberate* loop (aim-and-watch), not continuous-piloting stress. Reuses ~80% of `lib/gravitar.ts`.
 **Files (kept):** `gravitar/lib/gravitar.ts` (18 tests, reusable physics) · `lib/sfx.ts` · `page.tsx`
 
+### Atherdash (#10) — 🟡 coming-soon · lane-runner, element-lanes vs the Dying → `/atherdash`
+*Last touched: 2026-06-17*
+**Left off:** Built **THE SLICE** in one session — feel-test only, NO gates/elements/score/juice
+  (DESIGN.md, Gravitar lesson: prove the motion before building on top). A spark of Ather (Updraft's
+  mote-kind, family kept) dashes down a fake-3D receding ground; 3 lanes converging to a vanishing
+  point, glowing dashes streaming z→0 to read as speed, inert violet depth-markers riding the lanes
+  for parallax, the spark fixed near-bottom with x lerping between lanes (~0.12s, crisp). Pure
+  sim + projection `lib/atherdash.ts` **28 tests green** (projection endpoints/monotonicity/easing,
+  lane convergence, swap clamp, lerp timing, dash/marker recycling, determinism); vector-glow canvas
+  `page.tsx`. ←/→ + A/D (keyboard verified in-browser, lane-swap lands clean), swipe L/R on mobile.
+  Registered **coming-soon** (owner-gated). Built clean, pm2 restarted, owner 200, **zero console errors.**
+  **✅ Verified in-browser: the perspective sells fast forward motion + crisp lane-swaps — the slice
+  feel-gate PASSES.** (But the real call is Alex's hands — see Next #1.)
+**Next:**
+  1. **⚑ Alex feel-gate (the decision):** touch it — does it read as *running forward fast* and do
+     lane-swaps feel *crisp on a real device* (swipe, which the automated browser can't dispatch —
+     Ward gotcha)? Tune knobs in `lib/atherdash.ts` if needed: `SPEED 0.92`, `SWAP_T 0.12`,
+     `PERSP_K 2.6` (near-rush), `NEAR_LANE_DX 120` (lane spread). YES → phases. NO → rethink first.
+  2. **Phase 1 — elements + gates:** widen to 4 element-lanes (Mana/Storm/Earth/Water, canon), gates
+     demand the matching lane; wrong lane = fail/hit. The core game (read-ahead under dodge pressure).
+  3. Phase 2 obstacles + the Dying-chase (void wall behind) · Phase 3 score + speed ramp · Phase 4
+     juice + sfx (swap whoosh, gate chime, trails, near-miss flash) · Phase 5 canon `world/arcade.md`
+     + card art (`gen_cards.py`) + coming-soon→live flip.
+**Decisions:** **slice-first** — validate the pseudo-3D receding-lane FEEL before any mechanic
+  (Gravitar lesson). **3 lanes in the slice, widen to 4 elements** after feel proven. **Fake-3D, not
+  real 3D** — single projection `persp(z)=(1−z)/(1+z·K)` shared by sim + render so they never drift.
+  **Name = plain-word act** (no `-nyx`, naming law). **Swipe not tap** on mobile (lane choice, not fire).
+**Files:** `atherdash/lib/atherdash.ts` (28 tests) · `lib/atherdash.test.ts` · `page.tsx` · `DESIGN.md`
+
 ## 🧭 Catalog direction — narrative meta (2026-06-12, Alex)
 Gardenscapes insight: the puzzle is the currency, the **story you unlock is the draw.**
 Our edge = a deep canon already built. Each game = a system/region of one "wake Aeterna"
@@ -261,7 +291,8 @@ scenes). Lore routes through /magii for canon safety.
   lane to pass it. So it's **read-ahead** (spot the gate's element, swap in time) under dodge
   pressure, not pure reflex. Ours + canon (the 4 elements); Updraft is pure timing, this is
   positional anticipation. *(replaced Shardfall, which was Asteroids with no twist of its own.)*
-  **→ SELECTED next build (Alex 2026-06-16).** Slice-first (Gravitar lesson): validate the pseudo-3D receding-lane perspective + lane-swap *feel* in a thin slice BEFORE obstacles/scoring/juice. Element-lane matching is the core verb. Canon name pass via /magii (plain-word act, no `-nyx`). Fills the catalog's missing genre = the lane-runner.
+  → ✅ **BUILT 2026-06-17** (slice, coming-soon, name **Atherdash**). Spec graduated to its
+  Shipped roadmap block above (#10). Slice feel-gate passes in-browser; pending Alex's real-device call.
 - **Squall** *(bullet-hell dodge)* — pure evasion, no offense. Read the void's projectile
   patterns, weave through, score = survival time. A brand-new **mood**: defenseless survival.
   Vector-glow bullet patterns are gorgeous and cheap to draw.

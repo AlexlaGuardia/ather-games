@@ -90,6 +90,15 @@ export const GAMES: GameEntry[] = [
     tagline: "round the gravity wells, gather the cores · turn + thrust, mind the rocks — a physics-orbit run",
   },
   {
+    id: "atherdash",
+    title: "Atherdash",
+    href: "/atherdash",
+    glyph: "⫸",
+    tier: "coming-soon",
+    kind: "play",
+    tagline: "dash the elemental lanes ahead of the Dying · read the gate, swap in time — a lane-runner",
+  },
+  {
     id: "shimmer",
     title: "Shimmer",
     href: "/shimmer",
