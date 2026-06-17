@@ -34,7 +34,21 @@ the Arcade frame.
 ---
 
 ### Nolmir — 🔵 back-room · idle Athernyx defense/arena → `/nolmir`
-*Last touched: 2026-06-15*
+*Last touched: 2026-06-17*
+**Economy map (2026-06-17, grounded in code):** currencies = **corelight** (Orrery spine: core-tap
+  `rigs×1.5^conduit×2.2^depth×research` + node beam-back + transmute) · **ore** (6 tiers, mined) ·
+  **refined** (steelglass/voidplate/embershard — the ONLY research currency) · **mana** (Crucible
+  matches → planet UPKEEP) · **marks** (Expeditions → workshop + champions) · **exp** (Crucible →
+  host level, warp-proof) · **guard-xp** (use-not-coin). **Coupling:** Orrery research buffs all 3
+  pillars; **claim planets w/ corelight, KEEP w/ mana** (the spiral — heat↑→upkeep↑→must run Crucible);
+  marks→champions→appear as Crucible guards; warp = prestige (exp/marks/research persist).
+**✅ 2026-06-17 — Expeditions garrison idle (`5892d89`): the third pillar now idles.** The Orrery +
+  Crucible already accrued offline (settleForge; away-matches bank mana/exp); Expeditions was active-
+  only. Now every cleared breach passively salvages **marks** while away — `garrisonRatePerHour` scales
+  with tiers/waves, 48h cap, a NUDGE not a grind (48h ≈ one solid run, ~316 marks @ tier1 wv12). Proper
+  idle accounting (sub-mark remainder carries, past-cap overflow discarded, idempotent by tick). 13 tests.
+  Deck digest shows a real **marks haul** row + a **✶/hr** tile stat; expeditions header shows "+N held"
+  on return. **All three pillars now idle.**
 **Left off:** All 3 modes (Starforge / Orrery / Crucible-Expeditions) + THE LOOP + warp
   live. **2026-06-15 — built the COMMAND DECK (`d54f82b`, `/nolmir/deck`):** one screen for
   the whole ship — three mode tiles with live "ready" pulls (Crucible next-answer countdown /
@@ -54,15 +68,21 @@ the Arcade frame.
     routes. • **✅ Orrery "numbers go up" juice (`5973bb4`):** rising ±N ◈ floater off the corelight
     readout + emerald/rose flash on the number, wired into buyCorelight (spend) + transmute (gain).
 **Next:**
-  1. **Alex: rehearse the crossing** (Orrery → Gate → rehearse ▸) — tune the ceremony's beat
-     timing/feel before the real first warp. Then take the actual crossing when it feels right.
-  2. **More per-mode juice** — extend the floater pattern to mana/marks + crucible/expeditions;
-     milestone beats (host level-up, planet-cap, first-claim). The return digest as a real beat.
-  3. Decide the **mobile-idle direction** · art pipeline still open (placeholder glows; Alex's domain).
+  1. **⚑ Phase B — unify the return beat on the deck.** Right now the three away-digests live on three
+     pages (Orrery settleForge, Crucible away-matches, Expeditions garrison); the deck only banks
+     corelight + marks. Extract the **Crucible away-match settle into a shared lib** (idempotent via
+     `host.lastSeenAt`) so the deck can bank mana/exp too → ONE collect moment, a true haul. More
+     invasive (touches working Crucible logic) → do it when Alex can feel-test the return.
+  2. **More per-mode juice** — extend the Orrery floater pattern to mana/marks gains + crucible/
+     expeditions; milestone beats (host level-up, planet-cap, first-claim).
+  3. **Alex: rehearse the crossing** (Orrery → Gate → rehearse ▸) — tune the warp ceremony beat/feel
+     before the real first warp. · Decide the **mobile-idle direction** · sprites = Alex (next weekend).
 **Parked:** public launch (intentionally held).
 **Decisions:** back-room, reserved for a future **mobile** idle game (the deck serves that). Deck
-  is a **read/route hub**, not a settler — avoids double-settling the three economies. Anti-cash-
-  grab thesis stands (no IAP / energy / lives).
+  is a **read/route hub**, not a settler — but settling-on-load is idempotent-by-timestamp, so the deck
+  banking corelight/marks is safe (whoever loads first banks; the mode page sees ~0). **All three
+  pillars idle now** (Alex's call 2026-06-17: Nolmir is a true idle game, not one idle pillar + two
+  active). Idle is a **nudge** (48h ≈ one active run), never a replacement. Anti-cash-grab stands.
 **Files:** `src/app/nolmir/` — `deck/page.tsx` (the hub) · Starforge / Orrery / Crucible / Expeditions + warp
 **✅ Infra (gate fixed `f6d09e0`):** the owner gate is `src/proxy.ts` — in **Next 16, proxy.ts
   IS the middleware convention** (correctly wired; my "stale artifact" read was wrong — a `middleware.ts`
