@@ -7,12 +7,15 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Chakra_Petch } from 'next/font/google'
-import { loadHost, hostProgress } from './lib/host'
+import { loadHost, saveHost, hostProgress } from './lib/host'
 import {
   loadForge, FORGE_KEY, forgeRate, forgeHeat, canWarp, activePlanets, WARP_HEAT,
   type ForgeState,
 } from './lib/starforge'
-import { loadExpedMeta, championsOffPost, tiersUnlocked, bestWave, type ExpedMeta } from './lib/expedmeta'
+import {
+  loadExpedMeta, saveExpedMeta, settleGarrison, garrisonRatePerHour,
+  championsOffPost, tiersUnlocked, bestWave, type ExpedMeta,
+} from './lib/expedmeta'
 import type { HostState } from './lib/types'
 
 const display = Chakra_Petch({ weight: ['500', '600'], subsets: ['latin'] })
@@ -42,6 +45,7 @@ interface Snapshot {
   loadedAt: number
   awayMs: number
   coreGained: number // corelight banked while away (truthful delta from settle)
+  marksGained: number // garrison salvage banked while away (truthful delta)
   matchesAwaited: number
 }
 
@@ -55,12 +59,17 @@ function snap(): Snapshot {
     if (raw) prevCore = (JSON.parse(raw) as ForgeState).corelight ?? 0
   } catch {}
   const forge = loadForge(now) // settles offline accrual into the save
-  const meta = loadExpedMeta()
+  // settle the expedition garrison's idle marks into the host (idempotent by tick)
+  const g = settleGarrison(loadExpedMeta(), now)
+  if (g.marks > 0) host.marks = (host.marks ?? 0) + g.marks
+  saveExpedMeta(g.meta)
+  if (g.marks > 0) saveHost(host)
   const lastSeen = host.lastSeenAt ?? now
   const awayMs = Math.max(0, now - lastSeen)
   return {
-    host, forge, meta, loadedAt: now, awayMs,
+    host, forge, meta: g.meta, loadedAt: now, awayMs,
     coreGained: Math.max(0, forge.corelight - prevCore),
+    marksGained: g.marks,
     matchesAwaited: host.lastSeenAt ? Math.min(AWAY_CAP, Math.floor(awayMs / MATCH_INTERVAL)) : 0,
   }
 }
@@ -75,7 +84,7 @@ export default function DeckPage() {
     const snapshot = snap()
     setS(snapshot)
     setNow(Date.now())
-    if (snapshot.awayMs > 2 * 60 * 1000 && (snapshot.coreGained > 0 || snapshot.matchesAwaited > 0)) setDigestOpen(true)
+    if (snapshot.awayMs > 2 * 60 * 1000 && (snapshot.coreGained > 0 || snapshot.marksGained > 0 || snapshot.matchesAwaited > 0)) setDigestOpen(true)
     started.current = true
     const t = setInterval(() => setNow(Date.now()), 1000)
     return () => clearInterval(t)
@@ -117,8 +126,13 @@ export default function DeckPage() {
         tiers,
         best,
         live,
+        marksPerHr: garrisonRatePerHour(meta),
         ready: !live,
-        line: live ? 'a breach holds the line' : 'the champions are rested',
+        line: live
+          ? 'a breach holds the line'
+          : garrisonRatePerHour(meta) > 0
+            ? 'the garrison salvages on'
+            : 'clear a breach to hold it',
       },
     }
   }, [s, now])
@@ -160,6 +174,7 @@ export default function DeckPage() {
 
           <Tile href="/nolmir/expeditions" name="Expeditions" glyph="⛬" ready={tiles.expeditions.ready} accent="#34d399" line={tiles.expeditions.line}>
             <Stat label="marks" value={fmt(tiles.expeditions.marks)} />
+            {tiles.expeditions.marksPerHr > 0 && <Stat label="✶/hr" value={fmt(tiles.expeditions.marksPerHr)} />}
             <Stat label="tiers" value={String(tiles.expeditions.tiers)} />
             {tiles.expeditions.best > 0 && <Stat label="best" value={`wv${tiles.expeditions.best}`} />}
           </Tile>
@@ -175,6 +190,7 @@ export default function DeckPage() {
             <p className="text-slate-400 text-[11px] mb-4">the ship kept its vigil for <span className="text-cyan-300">{dur(s.awayMs)}</span>.</p>
             <div className="space-y-2 text-[12px]">
               {s.coreGained > 0 && <DigestRow glyph="◉" accent="#22d3ee" text="the Orrery tapped" value={`+${fmt(s.coreGained)} corelight`} />}
+              {s.marksGained > 0 && <DigestRow glyph="⛬" accent="#34d399" text="the garrison salvaged" value={`+${fmt(s.marksGained)} marks`} />}
               {s.matchesAwaited > 0 && <DigestRow glyph="▤" accent="#22d3ee" text="the beacon was answered" value={`${s.matchesAwaited} match${s.matchesAwaited > 1 ? 'es' : ''} — tend the node`} />}
               {tiles.orrery.warp && <DigestRow glyph="◉" accent="#fbbf24" text="the gate is keyed" value="warp ready" />}
             </div>

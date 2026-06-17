@@ -16,6 +16,7 @@ import {
   loadExpedMeta,
   recordRun,
   saveExpedMeta,
+  settleGarrison,
   tiersUnlocked,
   workshopCost,
 } from '../lib/expedmeta'
@@ -48,11 +49,22 @@ export default function ExpeditionsPage() {
   const [after, setAfter] = useState<AfterState | null>(null)
   const [mounted, setMounted] = useState(false)
   const [muted, setMuted] = useState(false)
+  const [awayMarks, setAwayMarks] = useState(0)
 
   useEffect(() => {
-    setHost(loadHost())
-    setMeta(loadExpedMeta())
-    setForge(loadForge(Date.now()))
+    const now = Date.now()
+    const h = loadHost()
+    // collect the garrison's idle salvage banked while away (idempotent by tick)
+    const g = settleGarrison(loadExpedMeta(), now)
+    if (g.marks > 0) {
+      h.marks = (h.marks ?? 0) + g.marks
+      saveHost(h)
+      setAwayMarks(g.marks)
+    }
+    saveExpedMeta(g.meta)
+    setHost(h)
+    setMeta(g.meta)
+    setForge(loadForge(now))
     setMounted(true)
     setMuted(sfx.isMuted())
   }, [])
@@ -212,6 +224,11 @@ export default function ExpeditionsPage() {
           <div className="flex gap-5 text-sm items-center">
             <span className="text-amber-300" title="marks — the workshop's coin">
               ✶ <b className="tabular-nums">{(host.marks ?? 0).toLocaleString()}</b>
+              {awayMarks > 0 && (
+                <span className="ml-1.5 text-[11px] text-emerald-300/90" title="salvage the garrison gathered while you were away">
+                  +{awayMarks.toLocaleString()} held
+                </span>
+              )}
             </span>
             <button
               onClick={() => {

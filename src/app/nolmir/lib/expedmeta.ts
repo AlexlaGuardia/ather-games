@@ -38,6 +38,7 @@ export interface ExpedMeta {
   workshop: Record<string, number>
   records: TierRecord[] // best per tier
   runs: number
+  garrisonTick?: number // last time the held breaches were settled for idle marks
 }
 
 export function defaultExpedMeta(): ExpedMeta {
@@ -46,6 +47,48 @@ export function defaultExpedMeta(): ExpedMeta {
     records: [],
     runs: 0,
   }
+}
+
+// ---- garrison idle yield — the held breaches keep salvaging while you're away ----
+// Every cleared tier passively earns marks (the meta coin) over time. This is the
+// third pillar's idle hook (the Orrery + Crucible already accrue offline); it's a
+// NUDGE to return, not a grind-replacer — a full 48h haul ≈ one solid active run.
+
+export const GARRISON_CAP_MS = 48 * 3600_000 // beyond two days the salvage piles up no further
+
+// marks/hour from all held breaches — deeper + higher tiers pay more
+export function garrisonRatePerHour(m: ExpedMeta): number {
+  let r = 0
+  for (const rec of m.records) {
+    if (rec.wave <= 0) continue
+    r += rec.wave * (1 + 0.4 * (rec.tier - 1)) * 0.55
+  }
+  return r
+}
+
+// preview the pending haul WITHOUT mutating (deck / expeditions display)
+export function garrisonPending(m: ExpedMeta, now: number): { marks: number; ms: number } {
+  if (m.garrisonTick == null) return { marks: 0, ms: 0 }
+  const ms = Math.min(Math.max(0, now - m.garrisonTick), GARRISON_CAP_MS)
+  const marks = Math.floor(garrisonRatePerHour(m) * (ms / 3600_000))
+  return { marks, ms }
+}
+
+// Settle the garrison: returns whole marks to bank into the host + the advanced
+// meta. Idempotent by timestamp — whoever loads first banks, the next sees ~0.
+// Advances the tick ONLY by the time the banked whole-marks represent (the
+// sub-mark remainder carries), and discards overflow past the cap.
+export function settleGarrison(m: ExpedMeta, now: number): { meta: ExpedMeta; marks: number } {
+  if (m.garrisonTick == null) return { meta: { ...m, garrisonTick: now }, marks: 0 }
+  const rate = garrisonRatePerHour(m)
+  const rawMs = Math.max(0, now - m.garrisonTick)
+  const ms = Math.min(rawMs, GARRISON_CAP_MS)
+  if (rate <= 0 || ms <= 0) return { meta: { ...m, garrisonTick: now }, marks: 0 }
+  const marks = Math.floor(rate * (ms / 3600_000))
+  // past the cap → discard overflow, reset to now. Within cap → advance only by
+  // the banked whole marks so the fractional remainder isn't lost across visits.
+  const nextTick = rawMs > GARRISON_CAP_MS ? now : m.garrisonTick + (marks > 0 ? (marks / rate) * 3600_000 : 0)
+  return { meta: { ...m, garrisonTick: nextTick }, marks }
 }
 
 export function loadExpedMeta(): ExpedMeta {
