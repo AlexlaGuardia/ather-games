@@ -234,32 +234,37 @@ the Arcade frame.
 
 ### Atherdash (#10) — 🟢 live · lane-runner, element-lanes vs the Dying → `/atherdash`
 *Last touched: 2026-06-17*
-**Left off:** Built **THE SLICE** in one session — feel-test only, NO gates/elements/score/juice
-  (DESIGN.md, Gravitar lesson: prove the motion before building on top). A spark of Ather (Updraft's
-  mote-kind, family kept) dashes down a fake-3D receding ground; 3 lanes converging to a vanishing
-  point, glowing dashes streaming z→0 to read as speed, inert violet depth-markers riding the lanes
-  for parallax, the spark fixed near-bottom with x lerping between lanes (~0.12s, crisp). Pure
-  sim + projection `lib/atherdash.ts` **28 tests green** (projection endpoints/monotonicity/easing,
-  lane convergence, swap clamp, lerp timing, dash/marker recycling, determinism); vector-glow canvas
-  `page.tsx`. ←/→ + A/D (keyboard verified in-browser, lane-swap lands clean), swipe L/R on mobile.
-  Registered **coming-soon** (owner-gated). Built clean, pm2 restarted, owner 200, **zero console errors.**
-  **✅ Verified in-browser: the perspective sells fast forward motion + crisp lane-swaps — the slice
-  feel-gate PASSES.** (But the real call is Alex's hands — see Next #1.)
+**Left off:** **SLICE feel-gate PASSED on Alex's real device 2026-06-17** ("nailed that first pass!
+  maybe a bit fast") → went straight into **PHASE 1, the core game.** Live + public (flipped to `live`
+  for the phone test — no traffic, just Alex; flip back to coming-soon anytime if the slice-state card
+  bugs him). Now playable end-to-end:
+  - **4 canon element-lanes** — Water/Storm/Earth/Mana, left→right, colours = the Mana'nana orbs
+    (`#37a3e6` / `#f0a526` / `#48b56f` / `#9b5ad2`). Element-coloured lane dashes + a faint corridor
+    wash teach lane=element at rest.
+  - **Gates** rush from the horizon, each opens ONE element lane (a glowing portal); the other three
+    are dim void **walls** (the Dying). Be in the matching lane at the hit plane (`GATE_HIT_Z 0.085`,
+    aligned to where the spark visually sits) or you hit the wall. Steady track cadence (`GATE_GAP_Z
+    0.6`, `LEAD_DIST 0.72` breath before the first). Read-ahead under swap pressure = the verb.
+  - **Loop:** ready → playing → over. Score = gates threaded, best in localStorage. Ready overlay has
+    the element legend; over screen has score/best/retry. **SPEED 0.92→0.74** (Alex's "bit fast").
+  - Sim `lib/atherdash.ts` **36 tests green** (added: input-gating, gate cadence, pass/crash, resolve-
+    once, score). Build clean, owner+public 200, **zero console errors** (browser MCP screenshot was
+    glitching mid-session so the visual was Alex's live device, not an automated cap).
 **Next:**
-  1. **⚑ Alex feel-gate (the decision):** touch it — does it read as *running forward fast* and do
-     lane-swaps feel *crisp on a real device* (swipe, which the automated browser can't dispatch —
-     Ward gotcha)? Tune knobs in `lib/atherdash.ts` if needed: `SPEED 0.92`, `SWAP_T 0.12`,
-     `PERSP_K 2.6` (near-rush), `NEAR_LANE_DX 120` (lane spread). YES → phases. NO → rethink first.
-  2. **Phase 1 — elements + gates:** widen to 4 element-lanes (Mana/Storm/Earth/Water, canon), gates
-     demand the matching lane; wrong lane = fail/hit. The core game (read-ahead under dodge pressure).
-  3. Phase 2 obstacles + the Dying-chase (void wall behind) · Phase 3 score + speed ramp · Phase 4
-     juice + sfx (swap whoosh, gate chime, trails, near-miss flash) · Phase 5 canon `world/arcade.md`
-     + card art (`gen_cards.py`) + coming-soon→live flip.
-**Decisions:** **slice-first** — validate the pseudo-3D receding-lane FEEL before any mechanic
-  (Gravitar lesson). **3 lanes in the slice, widen to 4 elements** after feel proven. **Fake-3D, not
-  real 3D** — single projection `persp(z)=(1−z)/(1+z·K)` shared by sim + render so they never drift.
-  **Name = plain-word act** (no `-nyx`, naming law). **Swipe not tap** on mobile (lane choice, not fire).
-**Files:** `atherdash/lib/atherdash.ts` (28 tests) · `lib/atherdash.test.ts` · `page.tsx` · `DESIGN.md`
+  1. **⚑ Alex playtest the loop:** is the read-ahead window fair (gate lead vs swap speed)? Gate
+     cadence too sparse/dense? 4 lanes readable at distance, or do the blue/violet lanes blur? Knobs
+     in `lib/atherdash.ts`: `SPEED 0.74`, `GATE_GAP_Z 0.6`, `LEAD_DIST`, `GATE_HIT_Z`, `NEAR_LANE_DX 96`.
+  2. **Phase 4 juice/sfx early?** A swap whoosh + gate-pass chime + a wall-hit thud would make the
+     core loop *feel* before Phase 2 — cheap, high payoff (Updraft pattern, shared `lib/arcade/sfx`).
+  3. Phase 2 — the Dying-chase (a void wall creeping behind; a miss lets it gain) + maybe non-gate
+     obstacles · Phase 3 — distance score + speed ramp + difficulty curve (tighter gaps).
+  4. Phase 5 — canon `world/arcade.md` entry + card art (`gen_cards.py` brief) + title screen.
+**Decisions:** **slice-first paid off** (motion proven before mechanics). **4 fixed element-lanes**,
+  spark stays neutral **Ather** (the player rides *through* the elements, isn't one). **Wrong lane =
+  instant death** (Flappy-class pick-up-die-retry; the Dying-chase in Phase 2 will add a softer
+  pressure layer). **Fake-3D** — single `persp(z)=(1−z)/(1+z·K)` shared by sim + render so they never
+  drift. **Name = plain-word act** (no `-nyx`). **Swipe not tap** on mobile (lane choice, not fire).
+**Files:** `atherdash/lib/atherdash.ts` (36 tests) · `lib/atherdash.test.ts` · `page.tsx` · `DESIGN.md`
 
 ## 🧭 Catalog direction — narrative meta (2026-06-12, Alex)
 Gardenscapes insight: the puzzle is the currency, the **story you unlock is the draw.**
