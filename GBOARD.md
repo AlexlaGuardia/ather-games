@@ -49,6 +49,14 @@ the Arcade frame.
   idle accounting (sub-mark remainder carries, past-cap overflow discarded, idempotent by tick). 13 tests.
   Deck digest shows a real **marks haul** row + a **✶/hr** tile stat; expeditions header shows "+N held"
   on return. **All three pillars now idle.**
+**✅ 2026-06-17 — Phase B: unified return beat (`d895da5`).** Extracted the Crucible homecoming settle
+  into `lib/away.ts` (`settleHomecoming`): forge tap + supply-line upkeep + away-match resolution
+  (deterministic seeds, vault-falls cut lines), banked to the host, idempotent via `lastSeenAt`. The
+  Crucible page now calls it (−64 lines of inline dup) AND the **deck** calls it — so the front door
+  collects the WHOLE ship in ONE beat: corelight + mana/exp + garrison marks, itemized in the digest
+  (matches answered, mana/exp banked, vaults fallen). Single source → deck & crucible can't drift.
+  Build clean, both render. **The deck is now the one place you collect; entering a mode after sees an
+  empty window (by design).** ⚠ feel-test needs >20min away to show a real haul (one match interval).
 **Left off:** All 3 modes (Starforge / Orrery / Crucible-Expeditions) + THE LOOP + warp
   live. **2026-06-15 — built the COMMAND DECK (`d54f82b`, `/nolmir/deck`):** one screen for
   the whole ship — three mode tiles with live "ready" pulls (Crucible next-answer countdown /
@@ -68,13 +76,10 @@ the Arcade frame.
     routes. • **✅ Orrery "numbers go up" juice (`5973bb4`):** rising ±N ◈ floater off the corelight
     readout + emerald/rose flash on the number, wired into buyCorelight (spend) + transmute (gain).
 **Next:**
-  1. **⚑ Phase B — unify the return beat on the deck.** Right now the three away-digests live on three
-     pages (Orrery settleForge, Crucible away-matches, Expeditions garrison); the deck only banks
-     corelight + marks. Extract the **Crucible away-match settle into a shared lib** (idempotent via
-     `host.lastSeenAt`) so the deck can bank mana/exp too → ONE collect moment, a true haul. More
-     invasive (touches working Crucible logic) → do it when Alex can feel-test the return.
-  2. **More per-mode juice** — extend the Orrery floater pattern to mana/marks gains + crucible/
-     expeditions; milestone beats (host level-up, planet-cap, first-claim).
+  1. **⚑ Alex feel-test the unified return beat** — needs **>20min away** to bank a real Crucible haul
+     (one match interval). Confirm the digest reads as one satisfying collect; does the haul feel earned?
+  2. **More per-mode juice** — extend the Orrery floater pattern to the deck's collect (numbers count up
+     on claim) + mana/marks gains in-mode; milestone beats (host level-up, planet-cap, first-claim).
   3. **Alex: rehearse the crossing** (Orrery → Gate → rehearse ▸) — tune the warp ceremony beat/feel
      before the real first warp. · Decide the **mobile-idle direction** · sprites = Alex (next weekend).
 **Parked:** public launch (intentionally held).
