@@ -1,7 +1,7 @@
 // LUCERNYX sim tests — run with: npx tsx src/app/lucernyx/lib/lucernyx.test.ts
 import {
-  makeBoard, legalMoves, apply, aiMove, countPieces, idx, other, isRooted,
-  SIZE, PIECE_RANKS, TORCHES_TO_WIN, ELEMENT_TILES, type Board, type Owner, type Element,
+  makeBoard, legalMoves, apply, aiMove, countPieces, idx, other,
+  SIZE, PIECE_RANKS, TORCHES_TO_WIN, type Board, type Owner,
 } from './lucernyx'
 import { mulberry32 } from '@/lib/arcade/rng'
 
@@ -13,10 +13,9 @@ function ok(name: string, cond: boolean) {
 
 // a blank board to hand-place positions on
 function blank(turn: Owner = 'light'): Board {
-  return { cells: new Array(SIZE * SIZE).fill(null), elements: new Array(SIZE * SIZE).fill(null), turn, torches: { light: 0, grey: 0 }, winner: null, over: false }
+  return { cells: new Array(SIZE * SIZE).fill(null), turn, torches: { light: 0, grey: 0 }, winner: null, over: false }
 }
 const put = (b: Board, r: number, c: number, o: Owner | null) => { b.cells[idx(r, c)] = o }
-const sanctuary = (b: Board, r: number, c: number, e: Element) => { b.elements[idx(r, c)] = e }
 
 // 1. setup
 {
@@ -172,41 +171,13 @@ const sanctuary = (b: Board, r: number, c: number, e: Element) => { b.elements[i
   console.log(`     (game length ${guard} plies, torches L${b.torches.light}/G${b.torches.grey}, winner ${b.winner ?? 'draw'})`)
 }
 
-// 13. element tiles — setup + symmetry
-{
-  const b = makeBoard()
-  ok('board has the 4 sanctuaries', ELEMENT_TILES.every((e) => b.elements[e.sq] === e.element))
-  ok('sanctuaries are in the empty midfield', ELEMENT_TILES.every((e) => b.cells[e.sq] === null))
-}
-
-// 14. a rooted enemy can't be flipped (the jump is blocked)
+// 13. an adjacent enemy in the empty square beyond is jumpable
 {
   const b = blank('light')
   put(b, 4, 3, 'light')
   put(b, 3, 2, 'grey')
-  sanctuary(b, 3, 2, 'earth') // the grey now stands on a sanctuary → rooted
-  ok('the grey reads as rooted', isRooted(b, idx(3, 2)))
   const jumps = legalMoves(b, 'light').filter((m) => m.converts.length > 0)
-  ok('no jump-convert over a rooted enemy', jumps.length === 0)
-}
-
-// 15. the same enemy off-sanctuary IS jumpable (control)
-{
-  const b = blank('light')
-  put(b, 4, 3, 'light')
-  put(b, 3, 2, 'grey') // no sanctuary this time
-  const jumps = legalMoves(b, 'light').filter((m) => m.converts.length > 0)
-  ok('off-sanctuary, the jump returns', jumps.length === 1)
-}
-
-// 16. rooting blocks one branch of a multi-jump but not the other
-{
-  const b = blank('light')
-  put(b, 6, 5, 'light')
-  put(b, 5, 4, 'grey') // first jump target (6,5)->(4,3)
-  put(b, 3, 2, 'grey'); sanctuary(b, 3, 2, 'mana') // second hop's target is rooted → chain stops at 1
-  const ms = legalMoves(b, 'light').filter((m) => m.converts.length > 0)
-  ok('the chain is capped at the rooted wall', ms.every((m) => m.converts.length === 1))
+  ok('a clean jump-convert returns', jumps.length === 1)
 }
 
 console.log(`\nLUCERNYX sim: ${pass} passed, ${fail} failed`)
