@@ -64,9 +64,9 @@ export class Renderer {
   private ctx: CanvasRenderingContext2D        // offscreen game canvas (320x208)
   private displayCtx: CanvasRenderingContext2D // visible display canvas (scaled)
   private offscreen: HTMLCanvasElement
-  private bgCache: HTMLCanvasElement | null = null
-  private fgCache: HTMLCanvasElement | null = null
-  private spriteCache = new Map<string, HTMLCanvasElement>()
+  protected bgCache: HTMLCanvasElement | null = null
+  protected fgCache: HTMLCanvasElement | null = null
+  protected spriteCache = new Map<string, HTMLCanvasElement>()
   private animTilePositions: { tx: number; ty: number; tileIdx: number; rot: number }[] = []
 
   // Camera offset (pixels) — set before each frame

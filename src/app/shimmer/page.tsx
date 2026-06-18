@@ -4,6 +4,7 @@ import { useRef, useEffect, useState, useCallback } from 'react'
 import { useCloudSave } from '@/lib/use-cloud-save'
 import { useWallet } from '@/lib/use-wallet'
 import { Renderer, TILE, WIDTH, HEIGHT } from './engine/renderer'
+import { TokenRenderer } from './engine/token-renderer'
 import { createGameLoop } from './engine/game-loop'
 import { createInputManager } from './engine/input'
 import { Player, createPlayer, updatePlayer, facingTile, setPath, clearPath, walkable, spriteDir, channelDir, isPlayOncePhase, MovementStyle } from './engine/player'
@@ -1274,7 +1275,13 @@ export default function ShimmerPage() {
     // Register all dialogue graphs on first mount
     loadAllDialogues()
 
-    const renderer = new Renderer(canvasRef.current)
+    // Token renderer (flat colour fields + glowing tokens) is the default skin —
+    // pixels are retired pending the 3D pass. `?render=pixel` falls back to the
+    // old pixel renderer for A/B during the transition.
+    const usePixel = new URLSearchParams(window.location.search).get('render') === 'pixel'
+    const renderer = usePixel
+      ? new Renderer(canvasRef.current)
+      : new TokenRenderer(canvasRef.current)
     rendererRef.current = renderer
 
     // Resize display canvas when container size changes (responsive + window resize)
