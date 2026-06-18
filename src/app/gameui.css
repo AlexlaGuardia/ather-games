@@ -1,0 +1,93 @@
+/* ================================================================
+   THE GAME-UI LAYER  ·  see /GAME_UI_LAYER.md
+   Kills the "browser feel": framed plates instead of web cards,
+   squared game type, brutal on/off state contrast, physical press.
+   Everything is OPT-IN via .gx-* classes — importing this file
+   changes NOTHING until a surface adopts the classes.
+   Accent is themeable per-surface with --gx-accent (default gold).
+   ================================================================ */
+
+/* --- kill-list: scope to .gx-chrome so we never touch prose/content selection --- */
+.gx-chrome,
+.gx-chrome * { -webkit-tap-highlight-color: transparent; }
+.gx-chrome { -webkit-user-select: none; user-select: none; }
+.gx-chrome :focus { outline: none; }
+.gx-chrome :focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 1px var(--gx-accent, #d4a843), 0 0 14px -2px var(--gx-accent, #d4a843);
+}
+
+/* --- the plate: a framed panel with weight, not a soft web card --- */
+.gx-card {
+  --gx-accent: #d4a843;
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  border-radius: 3px; /* near-sharp — a 12px radius is the web-card tell */
+  background: linear-gradient(157deg, rgba(20, 20, 30, 0.92), rgba(10, 10, 16, 0.94));
+  border: 1px solid color-mix(in srgb, var(--gx-accent) 16%, transparent);
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.02),
+    inset 0 0 40px rgba(0, 0, 0, 0.45);
+  transition: border-color 0.18s ease, box-shadow 0.22s ease, transform 0.16s ease;
+}
+.gx-card.is-interactive:hover {
+  border-color: color-mix(in srgb, var(--gx-accent) 55%, transparent);
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--gx-accent) 22%, transparent),
+    inset 0 0 28px rgba(0, 0, 0, 0.4),
+    0 0 22px -6px var(--gx-accent);
+  transform: translateY(-2px); /* physical lift, not just a color swap */
+}
+.gx-card.is-interactive:active { transform: translateY(0); }
+
+/* --- texture: faint scanlines + a top vignette, the CRT-cabinet skin (::before) --- */
+.gx-scan::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1; /* above the card's art backdrop, below the text content */
+  pointer-events: none;
+  background:
+    radial-gradient(ellipse at 50% -10%, transparent 58%, rgba(0, 0, 0, 0.4) 100%),
+    repeating-linear-gradient(0deg, rgba(0, 0, 0, 0) 0px, rgba(0, 0, 0, 0) 2px, rgba(0, 0, 0, 0.10) 3px, rgba(0, 0, 0, 0) 4px);
+  mix-blend-mode: multiply;
+  opacity: 0.55;
+}
+
+/* --- type roles: squared display face; CAPS + tracking on SHORT strings only --- */
+.gx-title {
+  font-family: var(--font-game), "Chakra Petch", system-ui, sans-serif;
+  letter-spacing: 0.1em;
+  font-weight: 600;
+}
+.gx-label {
+  font-family: var(--font-game), "Chakra Petch", system-ui, sans-serif;
+  text-transform: uppercase;
+  letter-spacing: 0.22em;
+  font-weight: 500;
+}
+/* dim label / bright value — the game signature for stat rows */
+.gx-value { font-variant-numeric: tabular-nums; }
+
+/* --- a framed control: a button/tab that reads like a HUD switch --- */
+.gx-btn {
+  --gx-accent: #d4a843;
+  font-family: var(--font-game), "Chakra Petch", system-ui, sans-serif;
+  text-transform: uppercase;
+  letter-spacing: 0.2em;
+  border: 1px solid color-mix(in srgb, var(--gx-accent) 35%, transparent);
+  background: color-mix(in srgb, var(--gx-accent) 8%, transparent);
+  color: var(--gx-accent);
+  border-radius: 2px;
+  transition: background 0.16s ease, box-shadow 0.18s ease, transform 0.12s ease;
+}
+.gx-btn:hover {
+  background: color-mix(in srgb, var(--gx-accent) 16%, transparent);
+  box-shadow: 0 0 18px -4px var(--gx-accent);
+}
+.gx-btn:active { transform: translateY(1px); }
+
+/* --- brutal state contrast: inactive is ~40% and flat, active glows --- */
+.gx-inactive { opacity: 0.4; }
+.gx-active { opacity: 1; }
