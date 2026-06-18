@@ -158,7 +158,7 @@ export default function DeckPage() {
   if (tiles.orrery.warp) digestRows.push({ key: 'warp', glyph: '◉', accent: '#fbbf24', text: 'the gate is keyed', value: 'warp ready' })
 
   return (
-    <div className={`min-h-screen bg-[#070a10] text-slate-300 font-mono ${display.className}`}>
+    <div className={`gx-chrome min-h-screen bg-[#070a10] text-slate-300 font-mono ${display.className}`}>
       <div className="mx-auto w-full max-w-[520px] px-4 py-6">
         <header className="flex items-center justify-between mb-5">
           <a href="/arcade" className="text-[10px] tracking-[0.25em] uppercase text-cyan-400/50 hover:text-cyan-300">&#8592; arcade</a>
@@ -203,7 +203,7 @@ export default function DeckPage() {
 
       {digestOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#070a10]/80 px-4" onClick={closeDigest}>
-          <div className="digest-card rounded-lg border border-cyan-900/60 bg-[#0b101c] p-6 max-w-md w-full text-sm" onClick={(e) => e.stopPropagation()}>
+          <div className="digest-card gx-scan relative isolate overflow-hidden rounded-[4px] border border-cyan-900/60 bg-[#0b101c] p-6 max-w-md w-full text-sm" onClick={(e) => e.stopPropagation()}>
             <h2 className="text-cyan-300 tracking-[0.25em] text-xs uppercase mb-3">While you held no watch</h2>
             <p className="text-slate-400 text-[11px] mb-4">the ship kept its vigil for <span className="text-cyan-300">{dur(s.awayMs)}</span>.</p>
             <div className="space-y-2 text-[12px]">
@@ -237,7 +237,7 @@ function Tile({ href, name, glyph, ready, accent, line, children }: {
   return (
     <a
       href={href}
-      className="block rounded-lg border bg-[#0b101c]/85 p-4 transition-colors hover:bg-[#0b101c]"
+      className="gx-scan relative isolate overflow-hidden block rounded-[3px] border bg-[#0b101c]/85 p-4 transition-colors hover:bg-[#0b101c]"
       style={{ borderColor: ready ? accent : '#1e293b', ['--a' as string]: accent, animation: ready ? 'deck-pulse 2.2s ease-in-out infinite' : undefined }}
     >
       <div className="flex items-center justify-between mb-2">

@@ -11,6 +11,19 @@ real **gimmick** (not watch-and-wait) · **canon-parallel** (serves Athernyx, no
 black, CRT bloom). Mana'nana went glossy-modern; each game gets its own skin under
 the Arcade frame.
 
+## 🧩 Cross-cutting initiative — THE GAME-UI LAYER (active, jin leads, 2026-06-18)
+> **Killing the "browser feel"** — games play like games but the menus/chrome read like a website.
+> Full research + recipe: **`/GAME_UI_LAYER.md`**. Reusable opt-in kit: **`src/app/gameui.css`**
+> (`.gx-card` plate · `.gx-scan` CRT texture · `.gx-title`/`.gx-label` squared type via `--font-game`
+> Chakra Petch · `.gx-btn` · `.gx-chrome` kill-list resets). Alex blessed the direction + handed jin
+> the rollout (taste dial — corner sharpness / glow level — stays his to tune).
+> **Rollout checklist:**
+> - [x] **Arcade catalog** (`/arcade/all`) — soft cards → framed CRT plates (`d3ada82`). PROOF.
+> - [x] **Nolmir deck** — tiles → sharp CRT plates (gx-scan + 3px), gx-chrome kill-list, digest sharpened. Verified live, 0 errors.
+> - [ ] **Per-game start/over overlays** (title plates + framed CTAs)
+> - [ ] **In-game HUDs** (lightest touch — already vector-glow; align type + plates)
+> - [ ] Arcade landing (`/arcade`) + hub widgets
+
 ## 🎮 Shipped — per-game roadmaps
 > Each block is the durable state of one game: where we left off, what's next, why.
 > SHIMMER_SESSION.md is the dated session *log*; these blocks are the source of truth
