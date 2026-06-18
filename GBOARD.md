@@ -98,8 +98,8 @@ the Arcade frame.
 **✅ 2026-06-18 — flipped back-room → `live` in the arcade** (`games.ts`, Alex's call): a clickable
   PLAY card so he can playtest without the owner-cookie/redirect friction. Verified: public no-cookie
   `/nolmir` = 200 (was 307), catalog lists it. Dropped "(held for mobile)" from the tagline. Trivially
-  reversible (flip the tier back). ⚠ No `public/nolmir/card.webp` yet → card renders glyph-only (◈);
-  generate via `scripts/gen_cards.py` if we want art parity with the rest of the catalog.
+  reversible (flip the tier back). ✅ **Card art generated** (`dcc1d43`): a glowing forge-core in a dark
+  orbital system (`public/nolmir/card.webp`, FLUX-schnell, added to CatalogGrid CARD_ART).
 **Decisions:** was back-room (reserved for a future **mobile** idle game); now **live in the arcade**
   for playtest ease (2026-06-18) — still mobile-destined long-term, the desktop deck just serves the
   interim. Deck
@@ -314,7 +314,8 @@ the Arcade frame.
      (shake too strong? chime too quiet? swap smear too subtle?).
   3. Phase 2 — the Dying-chase (a void wall creeping behind; a miss lets it gain) + maybe non-gate
      obstacles · Phase 3 — distance score + speed ramp + difficulty curve (tighter gaps).
-  4. Phase 5 — canon `world/arcade.md` entry + card art (`gen_cards.py` brief) + title screen.
+  4. Phase 5 — canon `world/arcade.md` entry + ✅ card art (`dcc1d43` — receding neon lane-corridor to
+     a gate, `public/atherdash/card.webp`) + title screen (title screen still to do).
 **Decisions:** **slice-first paid off** (motion proven before mechanics). **4 fixed element-lanes**,
   spark stays neutral **Ather** (the player rides *through* the elements, isn't one). **Wrong lane =
   instant death** (Flappy-class pick-up-die-retry; the Dying-chase in Phase 2 will add a softer
