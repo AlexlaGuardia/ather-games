@@ -121,9 +121,9 @@ export const GAMES: GameEntry[] = [
     title: "Nolmir",
     href: "/nolmir",
     glyph: "◈",
-    tier: "back-room",
+    tier: "live",
     kind: "play",
-    tagline: "hold the breach · forge the core — an idle Athernyx story (held for mobile)",
+    tagline: "hold the breach · forge the core — an idle Athernyx story",
   },
 ];
 

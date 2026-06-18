@@ -20,7 +20,7 @@ the Arcade frame.
 
 | Game | Status | Last touched | What it is |
 |------|--------|--------------|------------|
-| Nolmir | 🔵 back-room | 2026-06-11 | idle Athernyx defense/arena |
+| Nolmir | 🟢 live | 2026-06-18 | idle Athernyx defense/arena |
 | Mana'nana | 🟢 live | 2026-06-14 | match-3, blooming specials |
 | Rekindle #3 | 🟢 live | 2026-06-12 | conduit puzzle + Aeterna node-map |
 | Ward #4 | 🟢 live | 2026-06-14 | Missile Command / touch aim-trainer |
@@ -33,7 +33,7 @@ the Arcade frame.
 
 ---
 
-### Nolmir — 🔵 back-room · idle Athernyx defense/arena → `/nolmir`
+### Nolmir — 🟢 live · idle Athernyx defense/arena → `/nolmir`
 *Last touched: 2026-06-18*
 **Economy map (2026-06-17, grounded in code):** currencies = **corelight** (Orrery spine: core-tap
   `rigs×1.5^conduit×2.2^depth×research` + node beam-back + transmute) · **ore** (6 tiers, mined) ·
@@ -94,8 +94,15 @@ the Arcade frame.
      Still open: **planet-cap / first-claim** milestone beats (only host level-up is in so far).
   3. **Alex: rehearse the crossing** (Orrery → Gate → rehearse ▸) — tune the warp ceremony beat/feel
      before the real first warp. · Decide the **mobile-idle direction** · sprites = Alex (next weekend).
-**Parked:** public launch (intentionally held).
-**Decisions:** back-room, reserved for a future **mobile** idle game (the deck serves that). Deck
+**Parked:** dedicated mobile build (still the long-term home; desktop arcade is the interim).
+**✅ 2026-06-18 — flipped back-room → `live` in the arcade** (`games.ts`, Alex's call): a clickable
+  PLAY card so he can playtest without the owner-cookie/redirect friction. Verified: public no-cookie
+  `/nolmir` = 200 (was 307), catalog lists it. Dropped "(held for mobile)" from the tagline. Trivially
+  reversible (flip the tier back). ⚠ No `public/nolmir/card.webp` yet → card renders glyph-only (◈);
+  generate via `scripts/gen_cards.py` if we want art parity with the rest of the catalog.
+**Decisions:** was back-room (reserved for a future **mobile** idle game); now **live in the arcade**
+  for playtest ease (2026-06-18) — still mobile-destined long-term, the desktop deck just serves the
+  interim. Deck
   is a **read/route hub**, not a settler — but settling-on-load is idempotent-by-timestamp, so the deck
   banking corelight/marks is safe (whoever loads first banks; the mode page sees ~0). **All three
   pillars idle now** (Alex's call 2026-06-17: Nolmir is a true idle game, not one idle pillar + two
