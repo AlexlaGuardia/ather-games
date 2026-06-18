@@ -26,6 +26,8 @@ export interface Move {
   selfEffect?: StatusId       // inflicted on SELF (e.g. regen from flow moves)
   selfEffectChance?: number   // 0-100
   statChanges?: { target: 'self' | 'foe'; stat: CombatStat; stages: number }[]
+  reaches?: number            // Reach granted to a COLLARED foe when used (the Reach-encounter mechanic).
+                              // Honest/calming moves reach the spirit under the collar; damage never does.
   description: string
 }
 
@@ -92,7 +94,9 @@ function m(id: string, name: string, element: BattleElement, state: MoveState, p
 // ──────────────────────────────────────────────
 
 export const MOVE_MANA_PULSE = m('mana_pulse', 'Mana Pulse', 'neutral', 'solid', 40, 100, 30, 0, 'A basic pulse of mana energy.')
-export const MOVE_SPIRIT_WARD = m('spirit_ward', 'Spirit Ward', 'neutral', 'compact', 0, 100, 20, 0, 'Channel mana into a protective ward. Raises Guard.', { statChanges: [{ target: 'self', stat: 'grd', stages: 1 }] })
+export const MOVE_SPIRIT_WARD = m('spirit_ward', 'Spirit Ward', 'neutral', 'compact', 0, 100, 20, 0, 'Channel mana into a protective ward. Raises Guard.', { statChanges: [{ target: 'self', stat: 'grd', stages: 1 }], reaches: 13 })
+// Reach-encounter moves — calm, honest, no harm. The way to free a collared spirit: reach the one underneath.
+export const MOVE_STILL_BREATH = m('still_breath', 'Still-Breath', 'neutral', 'compact', 0, 100, 15, 0, 'Go quiet and steady. Offers the collared spirit a moment of calm — and a way out.', { reaches: 18 })
 
 // ──────────────────────────────────────────────
 // SOLID — Direct damage strikes (Mana, Earth, Water)

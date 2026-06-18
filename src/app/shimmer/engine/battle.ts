@@ -110,6 +110,8 @@ export type BattleEvent =
   | { type: 'STATUS_TICK'; target: 'player' | 'enemy'; status: StatusId; damage?: number }
   | { type: 'ENDURE'; target: 'player' | 'enemy' }
   | { type: 'KO'; target: 'player' | 'enemy' }
+  | { type: 'REACH'; reach: number; reachMax: number; delta: number }  // Reach-encounter: progress toward freeing the collar
+  | { type: 'COLLAR_BREAK' }                                            // the collar snaps — the spirit chooses again
   | { type: 'BATTLE_END'; outcome: 'win' | 'lose' | 'flee' }
   | { type: 'HELD_ITEM_TRIGGER'; target: 'player' | 'enemy'; itemName: string; effect: string }
   | { type: 'TEXT'; message: string }
@@ -131,6 +133,10 @@ export interface BattleCombatant {
   enduredThisBattle: boolean
   heldItem?: string
   heldItemConsumed?: boolean
+  // Reach-encounter (collared spirit only): you free it by REACHING it, not KO'ing it.
+  collared?: boolean
+  reach?: number
+  reachMax?: number
 }
 
 export type BattlePhase =
@@ -156,6 +162,10 @@ export interface BattleState {
   playerAction: PlayerAction | null
   enemyAction: PlayerAction | null
   firstAttacker: 'player' | 'enemy' | null
+  // Reach-encounter: mode flag + how it resolved. 'freed' = collar broken (win); 'forced' = brute-KO'd
+  // the collared spirit (the cruelty, a soft fail); 'fainted' = your spirit retreated (standard loss).
+  mode?: 'standard' | 'reach'
+  reachResult?: 'freed' | 'forced' | 'fainted' | null
 }
 
 // ============================================
@@ -203,6 +213,41 @@ export function createBattle(playerSpirit: Spirit, enemySpirit: Spirit): BattleS
   })
   state.phase = 'select_action'
   return state
+}
+
+// ============================================
+// Reach Encounter (free a collared spirit) — tuning knobs
+// ============================================
+// The lesson made mechanical: you free a collared spirit by REACHING the one underneath
+// (calming/honest moves that grant `reaches`), not by KO'ing it. The collar fights back —
+// each turn it yanks the leash and drains some Reach. Brute-KO the collared spirit and you've
+// forced it past its retreat (the cruelty) = soft fail. Fill Reach = collar snaps = win.
+export const REACH_MAX = 100
+export const LEASH_YANK = 9          // Reach drained at end of each turn (the collar resisting)
+export const DIM_FACTOR = 0.6        // the collar dims the spirit's power (canon) — also the survivability knob
+
+/** Create a Reach-encounter: the enemy is a collared spirit you free by reaching, not defeating. */
+export function createReachBattle(playerSpirit: Spirit, collaredSpirit: Spirit): BattleState {
+  const state = createBattle(playerSpirit, collaredSpirit)
+  state.mode = 'reach'
+  state.reachResult = null
+  state.enemy.collared = true
+  state.enemy.reach = 0
+  state.enemy.reachMax = REACH_MAX
+  // The collar DIMS the spirit (canon: grays its light, silences its burst) — so it hits softer.
+  // This is also the survivability knob: a dimmer spirit = a more weatherable, reachable fight.
+  state.enemy.stats.pwr = Math.round(state.enemy.stats.pwr * DIM_FACTOR)
+  return state
+}
+
+/** Add Reach to the collared spirit (clamped). Emits a REACH event. Player-only. */
+function addReach(state: BattleState, delta: number): void {
+  const e = state.enemy
+  if (!e.collared) return
+  const max = e.reachMax ?? REACH_MAX
+  const before = e.reach ?? 0
+  e.reach = Math.max(0, Math.min(max, before + delta))
+  state.events.push({ type: 'REACH', reach: e.reach, reachMax: max, delta: e.reach - before })
 }
 
 // ============================================
@@ -417,6 +462,11 @@ export function executeAction(state: BattleState, who: 'player' | 'enemy'): void
         inflictStatus(state, who, move.selfEffect)
       }
     }
+
+    // Reach-encounter: a calming move reaches the spirit under the collar (player-only, honest moves)
+    if (state.mode === 'reach' && who === 'player' && move.reaches && state.enemy.collared) {
+      addReach(state, move.reaches)
+    }
   }
 }
 
@@ -553,6 +603,12 @@ export function endOfTurn(state: BattleState): void {
   if (state.player.hp <= 0) state.events.push({ type: 'KO', target: 'player' })
   if (state.enemy.hp <= 0) state.events.push({ type: 'KO', target: 'enemy' })
 
+  // Reach-encounter: the collar resists — it yanks the leash and drains some Reach each turn,
+  // so you can't free a spirit with one calm move; you have to keep reaching while you weather it.
+  if (state.mode === 'reach' && state.enemy.collared && state.enemy.hp > 0 && (state.enemy.reach ?? 0) > 0) {
+    addReach(state, -LEASH_YANK)
+  }
+
   // Reset actions for next turn
   state.playerAction = null
   state.enemyAction = null
@@ -618,6 +674,37 @@ function tickStatus(state: BattleState, target: 'player' | 'enemy'): void {
 /** Check if either combatant is KO'd, set outcome. Returns true if battle is over. */
 export function checkBattleEnd(state: BattleState): boolean {
   if (state.outcome !== 'pending') return true
+
+  // Reach-encounter: the win/lose conditions are inverted around the collar.
+  if (state.mode === 'reach' && state.enemy.collared) {
+    // Reach full → the collar snaps → the spirit chooses again. WIN by freeing.
+    if ((state.enemy.reach ?? 0) >= (state.enemy.reachMax ?? REACH_MAX)) {
+      state.outcome = 'win'
+      state.reachResult = 'freed'
+      state.phase = 'battle_end'
+      state.events.push({ type: 'COLLAR_BREAK' })
+      state.events.push({ type: 'BATTLE_END', outcome: 'win' })
+      return true
+    }
+    // You KO'd the collared spirit — forced it past its retreat (the cruelty). SOFT FAIL.
+    if (state.enemy.hp <= 0) {
+      state.outcome = 'lose'
+      state.reachResult = 'forced'
+      state.phase = 'battle_end'
+      state.events.push({ type: 'BATTLE_END', outcome: 'lose' })
+      return true
+    }
+    // Your spirit retreated. Standard loss.
+    if (state.player.hp <= 0) {
+      state.outcome = 'lose'
+      state.reachResult = 'fainted'
+      state.phase = 'battle_end'
+      state.events.push({ type: 'BATTLE_END', outcome: 'lose' })
+      return true
+    }
+    state.phase = 'select_action'
+    return false
+  }
 
   if (state.enemy.hp <= 0) {
     state.outcome = 'win'
