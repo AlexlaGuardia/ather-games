@@ -34,7 +34,7 @@ the Arcade frame.
 ---
 
 ### Nolmir — 🔵 back-room · idle Athernyx defense/arena → `/nolmir`
-*Last touched: 2026-06-17*
+*Last touched: 2026-06-18*
 **Economy map (2026-06-17, grounded in code):** currencies = **corelight** (Orrery spine: core-tap
   `rigs×1.5^conduit×2.2^depth×research` + node beam-back + transmute) · **ore** (6 tiers, mined) ·
   **refined** (steelglass/voidplate/embershard — the ONLY research currency) · **mana** (Crucible
@@ -57,6 +57,14 @@ the Arcade frame.
   (matches answered, mana/exp banked, vaults fallen). Single source → deck & crucible can't drift.
   Build clean, both render. **The deck is now the one place you collect; entering a mode after sees an
   empty window (by design).** ⚠ feel-test needs >20min away to show a real haul (one match interval).
+**✅ 2026-06-18 — collect juice on the digest (`4f0683f`).** The *while you held no watch* digest is
+  now a real collect moment: rows **stagger in** one beat at a time (DIGEST_LEAD 220 / STEP 200), each
+  haul value **counts up from 0** with an ease-out (`useCountUp`, ~620ms) + a glow flare as it lands,
+  a tick/chord sfx per row (`click`/`unlock`, soft `break` on a vault-loss row), payoff chord on *take
+  the watch*; card gets a spring entrance. **Robustness fix:** count-up has a `setTimeout` fallback so
+  the haul resolves to its final value in a **backgrounded tab** (rAF is paused when hidden — without
+  it the numbers froze at +0). Verified on ather.games (owner-gated): digest fires staggered, values
+  land correct in both foreground AND hidden tab, 0 console errors.
 **Left off:** All 3 modes (Starforge / Orrery / Crucible-Expeditions) + THE LOOP + warp
   live. **2026-06-15 — built the COMMAND DECK (`d54f82b`, `/nolmir/deck`):** one screen for
   the whole ship — three mode tiles with live "ready" pulls (Crucible next-answer countdown /
@@ -78,8 +86,9 @@ the Arcade frame.
 **Next:**
   1. **⚑ Alex feel-test the unified return beat** — needs **>20min away** to bank a real Crucible haul
      (one match interval). Confirm the digest reads as one satisfying collect; does the haul feel earned?
-  2. **More per-mode juice** — extend the Orrery floater pattern to the deck's collect (numbers count up
-     on claim) + mana/marks gains in-mode; milestone beats (host level-up, planet-cap, first-claim).
+  2. **More juice (cont.)** — ✅ deck collect count-up done (`4f0683f`). Still open: in-MODE gain
+     floaters (mana/marks on claim inside each pillar) + milestone beats (host level-up, planet-cap,
+     first-claim) — the deck digest now has the satisfying collect; the modes themselves are still flat.
   3. **Alex: rehearse the crossing** (Orrery → Gate → rehearse ▸) — tune the warp ceremony beat/feel
      before the real first warp. · Decide the **mobile-idle direction** · sprites = Alex (next weekend).
 **Parked:** public launch (intentionally held).
