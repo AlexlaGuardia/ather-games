@@ -204,7 +204,7 @@ the Arcade frame.
 **Files:** `voranyx/lib/voranyx.ts` (20 tests) · `page.tsx`
 
 ### Lucernyx (#8) — 🟢 live · turn-based board of rekindling → `/lucernyx`
-*Last touched: 2026-06-15*
+*Last touched: 2026-06-18*
 **Left off:** Built the **playable slice** in one session (`5291194` sim, `bb7e09c` board).
   You're the lantern Ancient: slide diagonally (checkers), **jump an adjacent grey into the
   empty square beyond → it flips to your light and stays put** (material never leaves), multi-
@@ -226,11 +226,16 @@ the Arcade frame.
   rooted enemy can't be jumped (blocks, caps multi-jumps). No RPS (elements = canon flavour). AI
   values its own rooted pieces. Render = element tint + rune diamond + bright ring on a rooted
   piece (verified in-browser). Note: sanctuaries shortened AI-vs-AI games 38→25 plies.
+  **❌ Element sanctuaries CUT (`398548b`, 2026-06-18):** Alex's playtest bug = "move a piece
+  and it vanishes, usually into a special square." Root cause: a rooted enemy can't be jumped,
+  so a move onto/through it is silently illegal → the click falls through, the selection clears,
+  reads as the piece disappearing. AND they board-locked the torch-race: **self-play draws 10.3%
+  with sanctuaries, 0.3% without** (400-game harness, conservation verified — 0 real piece loss).
+  Mechanic removed from sim + render + tests; **28 sim tests green**, draws now 0.3%. The core
+  verb is the whole game — don't re-add terrain without a draw-rate check.
 **Next:**
-  1. **Alex playtest** — the full thing now (juice + sanctuaries): do sanctuaries add good
-     positional tension, or stall the game? Torch-race pacing right? AI still good-but-winnable?
+  1. **Alex re-playtest** — clean now: torch-race pacing right? AI still good-but-winnable?
   2. Optional depth if the race feels off: a daily seed, or an AI difficulty notch.
-  3. Optional: a one-line "root on a glyph" hint / brief first-time tip (discoverability).
 **Parked:** optional back-rank fork (torch vs a "kindle"/king piece — kept off to keep v1's
   win-con clean) · forced-capture rule (jumps are optional in v1).
 **Decisions:** **single clean verb** — jump-to-convert only; cut flank-cascade (read as unfair).
@@ -238,8 +243,9 @@ the Arcade frame.
   the AI takes them anyway). **Greedy AI, no minimax** — conversion swings the board hard
   enough that max-flips+torch-progress+block-their-torch looks smart. **Sim-first** (logic fully
   headless-tested before any pixels), same as the rest of the lineup. **Direction = f(owner)**,
-  so converting a piece flips its march for free. Element-rooting **deferred** — ship the verb first.
-**Files:** `lucernyx/lib/lucernyx.ts` (27 tests) · `lib/lucernyx.test.ts` · `page.tsx`
+  so converting a piece flips its march for free. **Element terrain tried then CUT** — rooting
+  caused stalemates + ghost-moves; the bare verb plays cleaner (see Left off, `398548b`).
+**Files:** `lucernyx/lib/lucernyx.ts` (28 tests) · `lib/lucernyx.test.ts` · `page.tsx`
 
 ### Gravitar (#9) — ⚪ PARKED/CUT · physics-orbit slingshot → `/gravitar` *(back-room, hidden)*
 *Last touched: 2026-06-15*
