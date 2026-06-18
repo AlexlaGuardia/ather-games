@@ -23,6 +23,8 @@ BRIEFS = {
     "ward": "tall glowing crystal spires under a dark void sky, expanding rings of cyan light blooming upward to intercept falling shards of darkness",
     "seedfall": "a single glowing seed of light drifting gently downward along faint wind-current lines toward dark soil, a small glowing garden sprouting below",
     "updraft": "a tiny bright mote of light rising on glowing updraft currents between tall dark spires, threading the gaps, a clear sense of ascent",
+    "nolmir": "a luminous forge-core burning at the center of a dark star system, faint glowing orbital rings strung with small planet-lights, cyan energy radiating outward, a quiet machine empire holding the dark at bay",
+    "atherdash": "a bright spark of light racing down a receding four-lane corridor toward a distant vanishing point, glowing element-colored lane lines converging in sharp perspective, luminous gates rushing forward from the horizon, intense sense of speed and forward motion",
     # Magii is the WORLD / lore tile (kind: world, ENTER not PLAY) — warmer + grander than the games.
     "magii": "a grand luminous gateway opening into a vast dream-realm, warm amber and gold light spilling through an inviting portal, deep atmospheric distance, the threshold of a world of story and lore",
 }
