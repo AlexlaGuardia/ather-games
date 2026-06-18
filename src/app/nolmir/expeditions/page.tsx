@@ -6,6 +6,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import Breach, { HudSnapshot } from '../components/Breach'
 import Emblem from '../components/Emblem'
+import { useGainFx, FloatLayer, flashCls, GainFxStyles } from '../components/gainfx'
 import { DOCTRINES, DoctrineId, RunConfig, RunResult, defaultAnchors } from '../lib/expedition'
 import {
   ExpedMeta,
@@ -41,6 +42,7 @@ export default function ExpeditionsPage() {
   const [meta, setMeta] = useState<ExpedMeta>(defaultExpedMeta())
   const [forge, setForge] = useState<ForgeState | null>(null)
   const [doctrine, setDoctrine] = useState<DoctrineId>('balanced')
+  const marksFx = useGainFx()
   const [tier, setTier] = useState(1)
   const [anchors, setAnchors] = useState(defaultAnchors())
   const [placeIdx, setPlaceIdx] = useState(0)
@@ -120,6 +122,7 @@ export default function ExpeditionsPage() {
     const h = { ...host, marks: (host.marks ?? 0) - cost }
     saveHost(h)
     setHost(h)
+    marksFx.push(-cost, '✶')
     const owned = { ...(forge.owned ?? {}), [sig.profileId]: { ...o, talent: cur + 1 } }
     const next = { ...forge, owned }
     saveForge(next)
@@ -156,6 +159,7 @@ export default function ExpeditionsPage() {
     h.marks = (h.marks ?? 0) + r.marks
     saveHost(h)
     setHost(h)
+    if (r.marks > 0) marksFx.push(r.marks, '✶')
 
     // the fielded creatures LEVEL from the hold — xp travels with the creature,
     // not the slot, so it carries across swaps and into the Crucible (slice 5)
@@ -201,6 +205,7 @@ export default function ExpeditionsPage() {
     const h = { ...host, marks: (host.marks ?? 0) - cost }
     saveHost(h)
     setHost(h)
+    marksFx.push(-cost, '✶')
     const m = { ...meta, workshop: { ...meta.workshop, [id]: lv + 1 } }
     saveExpedMeta(m)
     setMeta(m)
@@ -222,8 +227,9 @@ export default function ExpeditionsPage() {
             </p>
           </div>
           <div className="flex gap-5 text-sm items-center">
-            <span className="text-amber-300" title="marks — the workshop's coin">
-              ✶ <b className="tabular-nums">{(host.marks ?? 0).toLocaleString()}</b>
+            <span className="text-amber-300 relative" title="marks — the workshop's coin">
+              ✶ <b className={`tabular-nums inline-block ${flashCls(marksFx.flash)}`}>{(host.marks ?? 0).toLocaleString()}</b>
+              <FloatLayer floaters={marksFx.floaters} />
               {awayMarks > 0 && (
                 <span className="ml-1.5 text-[11px] text-emerald-300/90" title="salvage the garrison gathered while you were away">
                   +{awayMarks.toLocaleString()} held
@@ -617,6 +623,7 @@ export default function ExpeditionsPage() {
           <div>an Athernyx story · what took them is not named here</div>
         </footer>
       </div>
+      <GainFxStyles />
     </div>
   )
 }

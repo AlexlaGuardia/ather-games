@@ -16,6 +16,7 @@ import {
 import { settleHomecoming, teamName, MATCH_INTERVAL, type AwayDigest } from '../lib/away'
 import { CrucibleDoc, HostState, LedgerEntry, MatchMods, MatchResult, TEAM_COLORS } from '../lib/types'
 import { sfx } from '../lib/sfx'
+import { useGainFx, FloatLayer, flashCls, GainFxStyles } from '../components/gainfx'
 
 interface Toast {
   id: number
@@ -43,6 +44,20 @@ export default function NolmirPage() {
   const [mods, setMods] = useState<MatchMods | undefined>(undefined)
   const [corelight, setCorelight] = useState(0)
   const [muted, setMuted] = useState(false)
+
+  const manaFx = useGainFx()
+  // host level-up beat — watch the displayed level; fires for live wins AND the away-settle
+  const [levelFlash, setLevelFlash] = useState(false)
+  const levelRef = useRef<number | null>(null)
+  useEffect(() => {
+    const lvl = hostProgress(host.exp).level
+    if (levelRef.current !== null && lvl > levelRef.current) {
+      setLevelFlash(true)
+      sfx.ensure(); sfx.play('levelUp')
+      window.setTimeout(() => setLevelFlash(false), 900)
+    }
+    levelRef.current = lvl
+  }, [host.exp])
 
   useEffect(() => {
     setMuted(sfx.isMuted())
@@ -102,6 +117,7 @@ export default function NolmirPage() {
       saveHost(next)
       return next
     })
+    if (r.manaYield > 0) manaFx.push(r.manaYield, 'mana')
 
     // pop a toast, fade it out later
     const id = ++toastId.current
@@ -182,8 +198,9 @@ export default function NolmirPage() {
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
-            <span className="text-cyan-300">
-              mana <b className="tabular-nums">{host.mana.toLocaleString()}</b>
+            <span className="text-cyan-300 relative">
+              mana <b className={`tabular-nums inline-block ${flashCls(manaFx.flash)}`}>{host.mana.toLocaleString()}</b>
+              <FloatLayer floaters={manaFx.floaters} />
             </span>
             <span
               className="text-violet-300"
@@ -193,7 +210,7 @@ export default function NolmirPage() {
                 return `host level ${p.level} — next at ${p.next.toLocaleString()} exp${next ? ` · lv ${next.level}: ${next.what}` : ''}`
               })()}
             >
-              host <b className="tabular-nums">lv {hostProgress(host.exp).level}</b>
+              host <b className={`tabular-nums inline-block ${levelFlash ? 'nolmir-levelup' : ''}`}>lv {hostProgress(host.exp).level}</b>
               <span className="text-violet-300/60 text-xs ml-1.5">{host.exp.toLocaleString()} exp</span>
             </span>
             <span className="text-sky-300/90" title="corelight — the forge's bank">
@@ -271,6 +288,7 @@ export default function NolmirPage() {
           <div>an Athernyx story · the machines were left running</div>
         </footer>
       </div>
+      <GainFxStyles />
     </div>
   )
 }
