@@ -86,9 +86,12 @@ the Arcade frame.
 **Next:**
   1. **⚑ Alex feel-test the unified return beat** — needs **>20min away** to bank a real Crucible haul
      (one match interval). Confirm the digest reads as one satisfying collect; does the haul feel earned?
-  2. **More juice (cont.)** — ✅ deck collect count-up done (`4f0683f`). Still open: in-MODE gain
-     floaters (mana/marks on claim inside each pillar) + milestone beats (host level-up, planet-cap,
-     first-claim) — the deck digest now has the satisfying collect; the modes themselves are still flat.
+  2. **More juice (cont.)** — ✅ deck collect count-up (`4f0683f`) AND ✅ in-mode gain floaters +
+     level-up beat (`fc19a1e`): extracted the Orrery floater into a shared `components/gainfx.tsx`
+     (`useGainFx`/`FloatLayer`/`flashCls`/`GainFxStyles`), wired Crucible (mana floater + host
+     LEVEL-UP beat, watches displayed level → fires on live wins AND away-settle) + Expeditions
+     (marks floater on spoils/spends). Starforge refactored onto it, floater proven live (−25 ◈).
+     Still open: **planet-cap / first-claim** milestone beats (only host level-up is in so far).
   3. **Alex: rehearse the crossing** (Orrery → Gate → rehearse ▸) — tune the warp ceremony beat/feel
      before the real first warp. · Decide the **mobile-idle direction** · sprites = Alex (next weekend).
 **Parked:** public launch (intentionally held).
