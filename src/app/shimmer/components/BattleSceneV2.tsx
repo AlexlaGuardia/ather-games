@@ -5,11 +5,24 @@ import type { Spirit, Species } from '../spirits/spirit'
 import type { SpriteAnim } from '../sprites/sprite-data'
 import {
   BattleState, BattleEvent, BattleRewards,
-  createBattle, submitPlayerAction, submitEnemyAction,
+  createBattle, createReachBattle, submitPlayerAction, submitEnemyAction,
   resolveActions, executeAction, endOfTurn, checkBattleEnd,
   calculateRewards,
 } from '../engine/battle'
+import { MOVE_STILL_BREATH, MOVE_SPIRIT_WARD } from '../engine/moves'
 import { aiSelectAction, AITier } from '../engine/battle-ai'
+
+// Reach encounter: free a collared spirit by reaching it. Grant the player the calming moves
+// (Still-Breath / Spirit Ward) alongside two of its own, so it can choose to reach OR to force.
+function setupReachBattle(player: Spirit, enemy: Spirit): BattleState {
+  const st = createReachBattle(player, enemy)
+  const reachMoves = [
+    { move: MOVE_STILL_BREATH, ppLeft: MOVE_STILL_BREATH.pp },
+    { move: MOVE_SPIRIT_WARD, ppLeft: MOVE_SPIRIT_WARD.pp },
+  ]
+  st.player.moves = [...reachMoves, ...st.player.moves].slice(0, 4)
+  return st
+}
 import { drawBattleBg, BG_W, BG_H } from './BattleBackground'
 import { BattlePixiRenderer } from '../engine/pixi-battle'
 import { startBattleMusic, stopBattleMusic } from '../engine/music'
@@ -22,6 +35,7 @@ export interface BattleSceneV2Props {
   aiTier: AITier
   zoneId: string
   sprites?: Record<string, Record<string, SpriteAnim>>
+  mode?: 'standard' | 'reach'
   onEnd: (outcome: 'win' | 'lose' | 'flee', rewards?: BattleRewards) => void
 }
 
@@ -103,6 +117,8 @@ function eventText(ev: BattleEvent, pName: string, eName: string): string {
     }
     case 'ENDURE': return `${ev.target === 'player' ? pName : eName} held on!`
     case 'KO': return `${ev.target === 'player' ? pName : eName} fainted!`
+    case 'REACH': return ev.delta > 0 ? `You reach for the spirit beneath the collar...` : `The collar yanks it back...`
+    case 'COLLAR_BREAK': return `The collar shatters — its light returns!`
     case 'BATTLE_END': {
       if (ev.outcome === 'win') return 'You won!'
       if (ev.outcome === 'lose') return 'You lost...'
@@ -142,14 +158,41 @@ function HPBar({ current, max, showNumbers }: { current: number; max: number; sh
   )
 }
 
+// ── Reach Bar (collared spirit) — fill it to break the collar, don't KO it ──
+
+function ReachBar({ reach, max }: { reach: number; max: number }) {
+  const pct = Math.max(0, Math.min(100, (reach / max) * 100))
+  return (
+    <div className="mt-1">
+      <div className="flex items-center gap-1.5">
+        <span className="text-[9px] text-[#37e6ff]/60 font-mono tracking-wider">REACH</span>
+        <div className="w-[100px] h-[5px] bg-[#0a1a22] border border-[#37e6ff]/20 rounded-sm overflow-hidden">
+          <div
+            className="h-full rounded-sm"
+            style={{
+              width: `${pct}%`,
+              background: 'linear-gradient(90deg,#1f9fc4,#37e6ff)',
+              boxShadow: pct > 0 ? '0 0 6px #37e6ff80' : 'none',
+              transition: 'width 0.5s ease-out',
+            }}
+          />
+        </div>
+      </div>
+      <p className="text-[8px] text-[#37e6ff]/40 mt-0.5 italic">reach it — don&apos;t break it</p>
+    </div>
+  )
+}
+
 // ── Battle Scene V2 ──
 
 export default function BattleSceneV2({
-  playerSpirit, enemySpirit, aiTier, zoneId, sprites, onEnd,
+  playerSpirit, enemySpirit, aiTier, zoneId, sprites, mode, onEnd,
 }: BattleSceneV2Props) {
   const canvasRef = useRef<HTMLDivElement>(null)
   const rendererRef = useRef<BattlePixiRenderer | null>(null)
-  const battleRef = useRef<BattleState>(createBattle(playerSpirit, enemySpirit))
+  const battleRef = useRef<BattleState>(
+    mode === 'reach' ? setupReachBattle(playerSpirit, enemySpirit) : createBattle(playerSpirit, enemySpirit)
+  )
   const processedRef = useRef(battleRef.current.events.length)
 
   const [uiPhase, setUIPhase] = useState<UIPhase>('intro')
@@ -158,6 +201,7 @@ export default function BattleSceneV2({
   const [moveIdx, setMoveIdx] = useState(0)
   const [playerHP, setPlayerHP] = useState(() => battleRef.current.player.maxHp)
   const [enemyHP, setEnemyHP] = useState(() => battleRef.current.enemy.maxHp)
+  const [enemyReach, setEnemyReach] = useState(() => battleRef.current.enemy.reach ?? 0)
   const [rewards, setRewards] = useState<BattleRewards | null>(null)
 
   const battle = battleRef.current
@@ -237,6 +281,16 @@ export default function BattleSceneV2({
       if (i >= events.length) { onDone(); return }
       const ev = events[i]
       setText(eventText(ev, playerSpirit.name, enemySpirit.name))
+      // Reach encounter: themed end-text (freed / forced / fainted) overrides the generic win/lose line
+      if (ev.type === 'BATTLE_END' && battle.mode === 'reach') {
+        setText(
+          battle.reachResult === 'freed' ? 'The collar breaks. The spirit chooses to stay — by trust. The leash drops, useless.'
+          : battle.reachResult === 'forced' ? 'You overpowered it... but you forced it. The collar drags it back. That was not the way.'
+          : 'Your spirit retreated into the mist. Steady your heart, and try again.'
+        )
+      }
+      if (ev.type === 'REACH') setTimeout(() => setEnemyReach(ev.reach), 150)
+      if (ev.type === 'COLLAR_BREAK' && renderer) { renderer.flash('enemy'); renderer.burst('enemy', 0x37e6ff, 60) }
 
       // Attack slide animation on move announce
       if (ev.type === 'MOVE_ANNOUNCE' && renderer) {
@@ -386,6 +440,9 @@ export default function BattleSceneV2({
             >{eElem}</span>
           </div>
           <HPBar current={enemyHP} max={battle.enemy.maxHp} />
+          {battle.enemy.collared && (
+            <ReachBar reach={enemyReach} max={battle.enemy.reachMax ?? 100} />
+          )}
           {battle.enemy.status && (
             <span className="text-[7px] font-mono mt-1 block tracking-wider"
               style={{ color: STATUS_COLORS[battle.enemy.status] ?? '#888' }}

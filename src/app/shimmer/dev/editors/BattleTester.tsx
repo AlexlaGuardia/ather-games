@@ -261,6 +261,7 @@ export default function BattleTester() {
   const [showPreview, setShowPreview] = useState(false)
   const [battleActive, setBattleActive] = useState(false)
   const [useV2, setUseV2] = useState(true)
+  const [reachMode, setReachMode] = useState(false)
   const [lastResult, setLastResult] = useState<{ outcome: string; rewards?: BattleRewards } | null>(null)
 
   const buildSpirit = useCallback((cfg: SpiritConfig, name: string) => {
@@ -328,6 +329,19 @@ export default function BattleTester() {
         {useV2 ? 'V2 (PixiJS)' : 'V1 (Legacy)'}
       </button>
 
+      {/* Reach-encounter toggle — free a collared spirit by reaching, not KO'ing */}
+      <button
+        onClick={() => setReachMode(v => !v)}
+        title="Reach encounter: the foe is a collared spirit. Fill its REACH bar with Still-Breath / Spirit Ward to free it. KO'ing it (or losing your nerve) fails."
+        className={`px-3 py-1 rounded text-[10px] font-display transition-all ${
+          reachMode
+            ? 'bg-[#37e6ff]/15 text-[#37e6ff] border border-[#37e6ff]/50'
+            : 'text-white/30 hover:text-white/50 border border-white/10'
+        }`}
+      >
+        {reachMode ? '◇ Reach: ON' : '◇ Reach'}
+      </button>
+
       <span className="text-white/10 mx-1">|</span>
 
       {/* AI Tier selector */}
@@ -361,10 +375,11 @@ export default function BattleTester() {
             {useV2 ? (
               <BattleSceneV2
                 playerSpirit={buildSpirit(player, `My ${speciesDisplayName(player.species)}`)}
-                enemySpirit={buildSpirit(enemy, `Wild ${speciesDisplayName(enemy.species)}`)}
+                enemySpirit={buildSpirit(enemy, reachMode ? `Collared ${speciesDisplayName(enemy.species)}` : `Wild ${speciesDisplayName(enemy.species)}`)}
                 aiTier={aiTier}
                 zoneId={sceneZone}
                 sprites={SPRITE_MAP}
+                mode={reachMode ? 'reach' : 'standard'}
                 onEnd={handleEnd}
               />
             ) : (
