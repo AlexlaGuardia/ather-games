@@ -314,8 +314,9 @@ the Arcade frame.
      (shake too strong? chime too quiet? swap smear too subtle?).
   3. Phase 2 — the Dying-chase (a void wall creeping behind; a miss lets it gain) + maybe non-gate
      obstacles · Phase 3 — distance score + speed ramp + difficulty curve (tighter gaps).
-  4. Phase 5 — canon `world/arcade.md` entry + ✅ card art (`dcc1d43` — receding neon lane-corridor to
-     a gate, `public/atherdash/card.webp`) + title screen (title screen still to do).
+  4. Phase 5 — canon `world/arcade.md` entry (still to do) + ✅ card art (`dcc1d43` — receding neon
+     lane-corridor to a gate) + ✅ title screen (card.webp as a dimmed -z-10 backdrop on the ready
+     overlay, same pattern as Ward/Updraft). Only the canon `world/arcade.md` entry remains for Phase 5.
 **Decisions:** **slice-first paid off** (motion proven before mechanics). **4 fixed element-lanes**,
   spark stays neutral **Ather** (the player rides *through* the elements, isn't one). **Wrong lane =
   instant death** (Flappy-class pick-up-die-retry; the Dying-chase in Phase 2 will add a softer

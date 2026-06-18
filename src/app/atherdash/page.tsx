@@ -204,8 +204,10 @@ export default function AtherdashPage() {
         )}
 
         {phase === 'ready' && (
-          <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-3 rounded-md text-center px-6">
-            <div className="absolute inset-0 -z-10 bg-[#04040a]/55 rounded-md" />
+          <div className="pointer-events-none absolute inset-0 isolate overflow-hidden flex flex-col items-center justify-center gap-3 rounded-md text-center px-6">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/atherdash/card.webp" alt="" aria-hidden="true" className="absolute inset-0 -z-10 h-full w-full object-cover opacity-[0.5]" />
+            <div className="absolute inset-0 -z-10 bg-[#04040a]/62 rounded-md" />
             <div className="font-mono text-[#37e6ff] text-2xl tracking-[0.3em] uppercase" style={{ textShadow: '0 0 18px #37e6ff' }}>Atherdash</div>
             <p className="text-[11px] leading-relaxed text-[#9fd6e0]/85 max-w-[270px]">
               gates rush in tuned to an element. slide to the matching lane before each one reaches you — wrong lane is a wall.
