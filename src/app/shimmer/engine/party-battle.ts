@@ -64,6 +64,7 @@ export interface PartyCombatant extends BattleCombatant {
   isKeeper?: boolean
   archetype?: KeeperArchetype
   keeperMana?: ManaPool
+  braced?: boolean   // defended this round → halves incoming damage until round end (Guard stance teeth)
 }
 
 // Support archetypes map to the canon keeper-skills (Heslur→Breaker, Maizie→Mender,
@@ -246,6 +247,7 @@ export function takeAction(state: PartyBattleState, action: PartyAction): void {
 
   if (action.type === 'defend') {
     actor.statStages.grd = Math.min(4, actor.statStages.grd + 1)
+    actor.braced = true // halves all incoming damage until the round ends
     state.turnIdx++
     advanceIfRoundDone(state)
     return
@@ -288,8 +290,9 @@ export function takeAction(state: PartyBattleState, action: PartyAction): void {
       state.events.push({ type: 'MISS', targetId: target.id })
     } else {
       const { damage, crit, effectiveness } = calcPartyDamage(actor, target, move, actor.spirit.level)
-      target.hp = Math.max(0, target.hp - damage)
-      state.events.push({ type: 'DAMAGE', targetId: target.id, amount: damage, effectiveness, crit })
+      const dmg = target.braced ? Math.max(1, Math.round(damage * 0.5)) : damage // brace soaks half
+      target.hp = Math.max(0, target.hp - dmg)
+      state.events.push({ type: 'DAMAGE', targetId: target.id, amount: dmg, effectiveness, crit })
       if (target.hp <= 0) {
         target.alive = false
         state.events.push({ type: 'KO', targetId: target.id })
@@ -352,6 +355,8 @@ function endOfRound(state: PartyBattleState) {
   for (const c of state.allies) {
     if (c.isKeeper && c.alive && c.keeperMana) c.keeperMana.current = Math.min(c.keeperMana.max, c.keeperMana.current + c.keeperMana.regen)
   }
+  // Brace lasts until the round ends
+  for (const c of allCombatants(state)) c.braced = false
 }
 
 // ── Move effects (support layer) — ported from the 1v1 engine, party-aware ──
@@ -470,29 +475,52 @@ function addPartyReach(state: PartyBattleState, captive: PartyCombatant, delta: 
 export interface AIConfig {
   focusFire: boolean   // target the lowest-HP foe (true) vs random (false)
   spendMana: boolean   // use mana moves when affordable (true) vs Strike-only (false)
+  // Half-director: the Keeper sets a STANCE for the round; the spirits riff within it,
+  // colored by their temperament (bold spirits stay aggressive even on Guard, etc.).
+  stance?: 'press' | 'guard' | 'focus'
+  focusTargetId?: string   // for 'focus' — the enemy the Keeper points the party at
 }
 
-/** Pick an action for the actor: strongest affordable move at the chosen target. */
+// Temperament → attack-probability BEND. The stance sets the base lean; temperament nudges it,
+// so a directive is GUIDANCE, not a puppet-string (the bond philosophy, mechanical). A hard Press
+// is mostly obeyed (small bend); on Guard the bend matters more, so a bold spirit still pokes.
+const TEMPERAMENT_BEND: Record<string, number> = {
+  bold: 0.10, bright: 0.05, swift: 0.03, neutral: 0, calm: -0.12, sturdy: -0.18,
+}
+
+/** Pick an action for the actor under the Keeper's stance, bent by the spirit's temperament. */
 export function chooseAction(state: PartyBattleState, actor: PartyCombatant, ai: AIConfig): PartyAction {
   const foes = livingEnemiesOf(state, actor.side)
   if (foes.length === 0) return { type: 'defend', actorId: actor.id }
 
-  const target = ai.focusFire
-    ? foes.reduce((lo, c) => (c.hp < lo.hp ? c : lo), foes[0])
-    : foes[Math.floor(Math.random() * foes.length)]
+  // Target: Focus points the party at one foe; otherwise focus-fire the weakest (or random).
+  let target: PartyCombatant | undefined
+  if (ai.stance === 'focus' && ai.focusTargetId) target = foes.find(f => f.id === ai.focusTargetId)
+  if (!target) target = ai.focusFire ? foes.reduce((lo, c) => (c.hp < lo.hp ? c : lo), foes[0]) : foes[Math.floor(Math.random() * foes.length)]
+
+  // Stance sets the attack-vs-brace lean; temperament bends it (the spirit's own nature shows).
+  // No stance (e.g. enemy AI) = aggressive default so foes press unless told otherwise.
+  const stanceBase = ai.stance === 'guard' ? 0.40 : (ai.stance === 'press' || ai.stance === 'focus') ? 1.0 : 0.92
+  const attackProb = Math.max(0.05, Math.min(1, stanceBase + (TEMPERAMENT_BEND[actor.spirit.temperament] ?? 0)))
+  if (Math.random() >= attackProb) return { type: 'defend', actorId: actor.id } // braces this turn
 
   if (!ai.spendMana) return { type: 'move', actorId: actor.id, moveIdx: -1, targetId: target.id }
 
-  // Best EFFECTIVE move we can afford — score by category vs the target's weaker defense
-  // (+ element matchup). This is the skill the split rewards, so the AI plays it too.
+  // Move choice: Press/Focus = the strongest effective move; Guard = conserve (cheapest real move).
   const pool = state.mana[actor.side]
+  const guarding = ai.stance === 'guard'
   let bestIdx = -1
-  let bestScore = moveScore(BASIC_STRIKE, actor, target)
+  let bestScore = guarding ? Infinity : moveScore(BASIC_STRIKE, actor, target)
   actor.moves.forEach((entry, i) => {
     const m = entry.move
-    if (m.power <= 0 || manaCostFor(m) > pool.current) return // AI skips pure-status moves for v1
-    const sc = moveScore(m, actor, target)
-    if (sc > bestScore) { bestScore = sc; bestIdx = i }
+    if (m.power <= 0 || manaCostFor(m) > pool.current) return // skip pure-status for v1
+    if (guarding) {
+      const cost = manaCostFor(m) // conserve: prefer the cheapest affordable real move
+      if (cost < bestScore) { bestScore = cost; bestIdx = i }
+    } else {
+      const sc = moveScore(m, actor, target) // press/focus: hit the weaker defense hardest
+      if (sc > bestScore) { bestScore = sc; bestIdx = i }
+    }
   })
   return { type: 'move', actorId: actor.id, moveIdx: bestIdx, targetId: target.id }
 }
