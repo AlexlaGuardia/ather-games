@@ -193,6 +193,9 @@ export default function PartyBattleScene({
             delay = 650
           } else { delay = 0 }
           break
+        case 'MISS':
+          setText(`${nameOf(ev.targetId)} slipped aside — dodged!`)
+          delay = 600; break
         case 'KO':
           setText(`${nameOf(ev.targetId)} is down!`)
           if (r) r.koToken(ev.targetId)

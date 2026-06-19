@@ -132,3 +132,32 @@ sweep('Struggle — you mana-rich',
 }
 
 console.log('')
+
+// ── Species-niche matrix in PARTY context (v2 phys/spirit stats live) ──
+// 1v1 duels through the real party engine (mana, evasion, category-AI) at fixed level,
+// all same element (neutral matchup) + bond 0 so the only variable is the species stats.
+// Goal: no dead units (everyone beats SOMETHING >60%), spread tightening toward even.
+{
+  const SP: Species[] = ['fox', 'axolotl', 'owl', 'frog', 'firefly', 'rabbit', 'water-bear', 'hummingbird', 'turtle', 'bat']
+  const AB: Record<string, string> = { fox: 'fox', axolotl: 'axo', owl: 'owl', frog: 'frog', firefly: 'ffly', rabbit: 'rbbt', 'water-bear': 'wbr', hummingbird: 'hmbd', turtle: 'trtl', bat: 'bat' }
+  const L = 25, N = 120
+  const mkS = (sp: Species): Spirit => { const s = createSpirit(sp, sp, 0, 0); s.level = L; s.element = 'mana'; s.bond = 0; s.happiness = 128; return s }
+  const duelP = (a: Species, b: Species): boolean => {
+    const st = createPartyBattle([mkS(a)], [mkS(b)])
+    let g = 0
+    while (st.outcome === 'pending' && g < 1000) { const ac = currentActor(st); if (!ac) break; takeAction(st, chooseAction(st, ac, { focusFire: true, spendMana: true })); g++ }
+    return st.outcome === 'win'
+  }
+  const W: Record<string, Record<string, number>> = {}
+  for (const a of SP) { W[a] = {}; for (const b of SP) { if (a === b) { W[a][b] = 50; continue } let w = 0; for (let i = 0; i < N; i++) if (duelP(a, b)) w++; W[a][b] = w / N * 100 } }
+  console.log(`=== Species niche matrix — PARTY engine, v2 phys/spirit stats, L${L}, ${N}/pair ===\n`)
+  console.log('vs    ' + SP.map(x => AB[x].padStart(5)).join(''))
+  for (const a of SP) console.log(AB[a].padEnd(6) + SP.map(b => (a === b ? '  -  ' : W[a][b].toFixed(0).padStart(5))).join(''))
+  const marg2 = SP.map(a => ({ a, avg: SP.filter(b => b !== a).reduce((s, b) => s + W[a][b], 0) / (SP.length - 1) })).sort((x, y) => y.avg - x.avg)
+  console.log('\nmarginal win% (sorted):')
+  for (const { a, avg } of marg2) {
+    const beats = SP.filter(b => b !== a && W[a][b] >= 60).length
+    console.log(`  ${AB[a].padEnd(6)} ${avg.toFixed(1).padStart(5)}%  beats ${beats} >60%${beats === 0 ? '  ⚠ DEAD UNIT' : ''}`)
+  }
+  console.log(`  spread: ${(marg2[0].avg - marg2[marg2.length - 1].avg).toFixed(1)} pts\n`)
+}

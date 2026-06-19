@@ -18,10 +18,14 @@
 
 import {
   BattleCombatant,
-  createCombatant, calcDamage, getEffectiveStat,
+  createCombatant,
 } from './battle'
 import type { Spirit } from '../spirits/spirit'
 import type { Move, StatusId, CombatStat } from './moves'
+import { getEffectiveness } from './moves'
+import {
+  PartyStats, derivePartyStats, calcPartyDamage, partyEvades, effectiveAgi, moveCategory,
+} from './party-stats'
 
 // ── Free basic attack (always affordable) ──
 // Kept deliberately weak: it's the fallback when mana is dry, so being forced
@@ -54,12 +58,14 @@ export interface PartyCombatant extends BattleCombatant {
   id: string
   side: 'ally' | 'enemy'
   alive: boolean
+  pstats: PartyStats   // 6-stat phys/spirit model (party fork; replaces the 1v1 4-stat for combat)
 }
 
 export type PartyEvent =
   | { type: 'ROUND'; round: number }
   | { type: 'MOVE'; actorId: string; moveName: string; targetId: string; manaSpent: number }
   | { type: 'DAMAGE'; targetId: string; amount: number; effectiveness: number; crit: boolean }
+  | { type: 'MISS'; targetId: string }                  // dodged via agility (evasion)
   | { type: 'STAT_CHANGE'; targetId: string; stat: CombatStat; stages: number }
   | { type: 'STATUS_INFLICT'; targetId: string; status: StatusId }
   | { type: 'STATUS_TICK'; targetId: string; status: StatusId; amount: number }   // amount>0 damage, <0 heal
@@ -92,7 +98,8 @@ const DEFAULT_MANA: ManaConfig = { start: 16, max: 22, regen: 5 }
 
 function makeCombatant(spirit: Spirit, side: 'ally' | 'enemy', idx: number): PartyCombatant {
   const base = createCombatant(spirit)
-  return { ...base, id: `${side}-${idx}-${spirit.species}`, side, alive: true }
+  const pstats = derivePartyStats(spirit) // party fork: 6-stat phys/spirit model drives HP + combat
+  return { ...base, id: `${side}-${idx}-${spirit.species}`, side, alive: true, pstats, hp: pstats.maxHp, maxHp: pstats.maxHp }
 }
 
 export function createPartyBattle(
@@ -142,7 +149,7 @@ function startRound(state: PartyBattleState) {
   state.events.push({ type: 'ROUND', round: state.round })
   const living = allCombatants(state).filter(c => c.alive)
   living.sort((a, b) => {
-    const d = getEffectiveStat(b, 'agi') - getEffectiveStat(a, 'agi')
+    const d = effectiveAgi(b) - effectiveAgi(a)
     return d !== 0 ? d : Math.random() - 0.5 // AGI ties coin-flip — no side bias
   })
   state.order = living.map(c => c.id)
@@ -199,12 +206,16 @@ export function takeAction(state: PartyBattleState, action: PartyAction): void {
   state.events.push({ type: 'MOVE', actorId: actor.id, moveName: move.name, targetId: action.targetId, manaSpent })
 
   if (target && target.alive && move.power > 0) {
-    const { damage, crit, effectiveness } = calcDamage(actor, target, move)
-    target.hp = Math.max(0, target.hp - damage)
-    state.events.push({ type: 'DAMAGE', targetId: target.id, amount: damage, effectiveness, crit })
-    if (target.hp <= 0) {
-      target.alive = false
-      state.events.push({ type: 'KO', targetId: target.id })
+    if (partyEvades(actor, target)) {
+      state.events.push({ type: 'MISS', targetId: target.id })
+    } else {
+      const { damage, crit, effectiveness } = calcPartyDamage(actor, target, move, actor.spirit.level)
+      target.hp = Math.max(0, target.hp - damage)
+      state.events.push({ type: 'DAMAGE', targetId: target.id, amount: damage, effectiveness, crit })
+      if (target.hp <= 0) {
+        target.alive = false
+        state.events.push({ type: 'KO', targetId: target.id })
+      }
     }
   }
 
@@ -349,16 +360,24 @@ export function chooseAction(state: PartyBattleState, actor: PartyCombatant, ai:
 
   if (!ai.spendMana) return { type: 'move', actorId: actor.id, moveIdx: -1, targetId: target.id }
 
-  // Best damaging move we can afford this turn
+  // Best EFFECTIVE move we can afford — score by category vs the target's weaker defense
+  // (+ element matchup). This is the skill the split rewards, so the AI plays it too.
   const pool = state.mana[actor.side]
   let bestIdx = -1
-  let bestPower = BASIC_STRIKE.power
+  let bestScore = moveScore(BASIC_STRIKE, actor, target)
   actor.moves.forEach((entry, i) => {
     const m = entry.move
-    if (m.power > bestPower && manaCostFor(m) <= pool.current) {
-      bestPower = m.power
-      bestIdx = i
-    }
+    if (m.power <= 0 || manaCostFor(m) > pool.current) return // AI skips pure-status moves for v1
+    const sc = moveScore(m, actor, target)
+    if (sc > bestScore) { bestScore = sc; bestIdx = i }
   })
   return { type: 'move', actorId: actor.id, moveIdx: bestIdx, targetId: target.id }
+}
+
+/** Rough expected-damage score: power × (attack/defense for the move's category) × element matchup. */
+function moveScore(move: Move, atk: PartyCombatant, def: PartyCombatant): number {
+  const cat = moveCategory(move)
+  const a = cat === 'phys' ? atk.pstats.pwr : atk.pstats.foc
+  const d = cat === 'phys' ? def.pstats.grd : def.pstats.res
+  return move.power * (a / Math.max(1, d)) * getEffectiveness(move.element, def.element)
 }

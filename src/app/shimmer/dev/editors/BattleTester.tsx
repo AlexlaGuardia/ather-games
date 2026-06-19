@@ -6,7 +6,7 @@ import type { Species, Element, Temperament } from '../../spirits/spirit'
 import { createSpirit, ELEMENTS, speciesDisplayName } from '../../spirits/spirit'
 import type { AITier } from '../../engine/battle-ai'
 import { getMovesForSpirit, toBattleElement, SPECIES_SIGNATURES } from '../../engine/moves'
-import { deriveCombatStats, maxHP } from '../../engine/battle'
+import { derivePartyStats } from '../../engine/party-stats'
 import type { SpriteAnim } from '../../sprites/sprite-data'
 import { PALETTES, getEvolvedPalette } from '../../sprites/palette'
 import { drawSprite } from '../../components/SpriteRenderers'
@@ -129,8 +129,8 @@ function SpiritPanel({ label, config, onChange }: {
   spirit.element = config.element
   spirit.bond = config.bond
   spirit.temperament = config.temperament
-  const stats = deriveCombatStats(spirit)
-  const hp = maxHP(stats.vig)
+  const stats = derivePartyStats(spirit) // party model (6-stat phys/spirit split) — what Party fights use
+  const hp = stats.maxHp
   const bElement = toBattleElement(config.element)
   const moves = getMovesForSpirit(config.species, config.element, config.level, config.bond)
   const hasSig = SPECIES_SIGNATURES[config.species]?.[bElement as Exclude<typeof bElement, 'neutral'>]
@@ -210,14 +210,16 @@ function SpiritPanel({ label, config, onChange }: {
         ))}
       </div>
 
-      {/* Stats preview */}
+      {/* Stats preview — 6-stat party model (phys/spirit split) */}
       <div className="bg-black/30 rounded p-2 mb-2">
-        <div className="grid grid-cols-5 gap-1 text-center">
+        <div className="grid grid-cols-7 gap-1 text-center">
           <div><span className="text-[8px] text-white/25 block">HP</span><span className="text-[11px] text-white/70 font-mono">{hp}</span></div>
-          <div><span className="text-[8px] text-white/25 block">PWR</span><span className="text-[11px] text-white/70 font-mono">{stats.pwr}</span></div>
-          <div><span className="text-[8px] text-white/25 block">GRD</span><span className="text-[11px] text-white/70 font-mono">{stats.grd}</span></div>
-          <div><span className="text-[8px] text-white/25 block">AGI</span><span className="text-[11px] text-white/70 font-mono">{stats.agi}</span></div>
-          <div><span className="text-[8px] text-white/25 block">VIG</span><span className="text-[11px] text-white/70 font-mono">{stats.vig}</span></div>
+          <div><span className="text-[8px] text-[#d08858] block" title="Physical Attack">PWR</span><span className="text-[11px] text-white/70 font-mono">{stats.pwr}</span></div>
+          <div><span className="text-[8px] text-[#d08858] block" title="Physical Defense">GRD</span><span className="text-[11px] text-white/70 font-mono">{stats.grd}</span></div>
+          <div><span className="text-[8px] text-[#9a7ad0] block" title="Spirit Attack">FOC</span><span className="text-[11px] text-white/70 font-mono">{stats.foc}</span></div>
+          <div><span className="text-[8px] text-[#9a7ad0] block" title="Spirit Defense">RES</span><span className="text-[11px] text-white/70 font-mono">{stats.res}</span></div>
+          <div><span className="text-[8px] text-white/25 block" title="Speed + Evasion">AGI</span><span className="text-[11px] text-white/70 font-mono">{stats.agi}</span></div>
+          <div><span className="text-[8px] text-white/25 block" title="Vigor (HP)">VIG</span><span className="text-[11px] text-white/70 font-mono">{stats.vig}</span></div>
         </div>
       </div>
 
