@@ -27,16 +27,18 @@ export interface PartyStats {
 // Each line is a ROLE. The two walls (water-bear=physical, turtle=spirit) are the clearest
 // expression of the split. Tuned against party-battle.sim's species matrix.
 export const SPECIES_STATS_V2: Record<Species, Omit<PartyStats, 'maxHp'>> = {
-  fox:           { pwr: 54, grd: 40, foc: 35, res: 35, agi: 52, vig: 44 }, // balanced phys skirmisher
-  axolotl:       { pwr: 25, grd: 46, foc: 48, res: 56, agi: 30, vig: 60 }, // spirit sustain wall
-  owl:           { pwr: 30, grd: 38, foc: 66, res: 46, agi: 50, vig: 46 }, // spirit attacker / caster
-  frog:          { pwr: 62, grd: 34, foc: 28, res: 30, agi: 58, vig: 42 }, // physical sweeper
-  firefly:       { pwr: 28, grd: 24, foc: 84, res: 28, agi: 70, vig: 36 }, // spirit glass cannon (alpha-striker)
-  rabbit:        { pwr: 47, grd: 42, foc: 30, res: 44, agi: 50, vig: 50 }, // physical bruiser (bulk, not speed)
-  'water-bear':  { pwr: 32, grd: 70, foc: 26, res: 48, agi: 16, vig: 66 }, // physical wall
-  hummingbird:   { pwr: 58, grd: 24, foc: 54, res: 28, agi: 74, vig: 36 }, // hyper-fast mixed evader
-  turtle:        { pwr: 36, grd: 56, foc: 36, res: 66, agi: 16, vig: 60 }, // spirit wall / pivot
-  bat:           { pwr: 42, grd: 32, foc: 56, res: 38, agi: 62, vig: 42 }, // fast spirit skirmisher
+  // FOC ceiling compressed to PWR's range (was 84/66 → casters out-scaled physical leaguewide,
+  // and 5/7 move-states are already spirit-category). Now the two damage axes are at parity.
+  fox:           { pwr: 54, grd: 40, foc: 36, res: 36, agi: 52, vig: 44 }, // balanced phys skirmisher
+  axolotl:       { pwr: 25, grd: 46, foc: 44, res: 52, agi: 30, vig: 54 }, // spirit sustain wall (tamed bulk)
+  owl:           { pwr: 30, grd: 38, foc: 50, res: 46, agi: 48, vig: 44 }, // spirit attacker / caster
+  frog:          { pwr: 60, grd: 36, foc: 28, res: 32, agi: 58, vig: 46 }, // physical sweeper
+  firefly:       { pwr: 28, grd: 26, foc: 62, res: 30, agi: 70, vig: 38 }, // spirit glass cannon (alpha-striker)
+  rabbit:        { pwr: 48, grd: 42, foc: 30, res: 44, agi: 50, vig: 50 }, // physical bruiser (bulk, not speed)
+  'water-bear':  { pwr: 34, grd: 70, foc: 26, res: 48, agi: 16, vig: 64 }, // physical wall
+  hummingbird:   { pwr: 56, grd: 26, foc: 48, res: 30, agi: 72, vig: 38 }, // hyper-fast mixed evader
+  turtle:        { pwr: 38, grd: 56, foc: 36, res: 64, agi: 16, vig: 60 }, // spirit wall / pivot
+  bat:           { pwr: 44, grd: 34, foc: 50, res: 40, agi: 60, vig: 42 }, // fast spirit skirmisher
 }
 
 // Temperament nudges (physical + speed + hp axis; foc/res flat for v1). [pwr,grd,agi,vig]
