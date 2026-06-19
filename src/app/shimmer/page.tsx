@@ -72,13 +72,12 @@ import { createVoice, playChar, stopSpeaking, unlockChatter, type VoiceInstance 
 import { getVoiceProfile } from './data/voice-profiles'
 import { ManaBeast, BeastSpecies, BEAST_DEFS, BEAST_SPECIES, createBeast, checkBeastUnlock, beastsToSave, beastsFromSave, BeastSave } from './beasts/beast'
 import { BEAST_SPRITES, BEAST_PALETTES } from './sprites/beasts'
-import BattleScene from './components/BattleScene'
+import PartyBattleScene from './components/PartyBattleScene'
 import EvolutionOverlay from './components/EvolutionOverlay'
 import Grimoire from './components/Grimoire'
 import SpiritConsole from './components/SpiritConsole'
 import WorldMapOverlay from './components/WorldMapOverlay'
 import type { AITier } from './engine/battle-ai'
-import type { BattleRewards } from './engine/battle'
 import { rollEncounter, createTrainerSpirit, type WildEncounter } from './engine/encounters'
 import { MultiplayerClient, RemotePlayer } from './engine/multiplayer'
 import UsernamePicker from './components/UsernamePicker'
@@ -394,7 +393,7 @@ export default function ShimmerPage() {
       }
     }
   }, [notify])
-  const [battleData, setBattleData] = useState<{ playerSpirit: Spirit; enemySpirit: Spirit; aiTier: AITier; zoneId: string } | null>(null)
+  const [battleData, setBattleData] = useState<{ allyParty: Spirit[]; enemyParty: Spirit[]; aiTier: AITier; zoneId: string; reach?: boolean } | null>(null)
   const battleDataRef = useRef(battleData)
   battleDataRef.current = battleData
   const inBattleRef = useRef(false) // game loop safe flag — avoids stale closure on battleData state
@@ -616,69 +615,99 @@ export default function ShimmerPage() {
     return () => window.removeEventListener('keydown', onKey)
   }, [started, toggleMenu, battleData, encounterChoice, grimoireOpen])
 
-  // Battle trigger — start a fight with a wild spirit
-  const startBattle = useCallback(() => {
-    const mySpirit = spiritsRef.current[0]
-    if (!mySpirit) return
-    const species: Species[] = ['fox', 'axolotl', 'owl', 'frog', 'bat', 'rabbit', 'turtle', 'firefly', 'hummingbird', 'water-bear']
-    const pick = species[Math.floor(Math.random() * species.length)]
-    const enemy = createSpirit(pick, `Wild ${pick.charAt(0).toUpperCase() + pick.slice(1)}`, 0, 0)
-    enemy.level = Math.max(1, mySpirit.level + Math.floor(Math.random() * 5) - 2)
-    enemy.seeds = Array.from({ length: 6 }, () => Math.floor(Math.random() * 32))
+  // ── Party-combat helpers (the overworld now fields your bonded party, not one spirit) ──
+
+  const PARTY_SPECIES: Species[] = ['fox', 'axolotl', 'owl', 'frog', 'bat', 'rabbit', 'turtle', 'firefly', 'hummingbird', 'water-bear']
+
+  // Build an enemy party from a lead spirit + auto-genned members scaled to it (kind sets the count).
+  const buildEnemyParty = useCallback((lead: Spirit, count: number): Spirit[] => {
+    const out = [lead]
+    for (let i = 1; i < count; i++) {
+      const sp = PARTY_SPECIES[Math.floor(Math.random() * PARTY_SPECIES.length)]
+      const e = createSpirit(sp, `Wild ${sp.charAt(0).toUpperCase() + sp.slice(1)}`, 0, 0)
+      e.level = Math.max(1, lead.level + Math.floor(Math.random() * 5) - 2)
+      e.element = lead.element !== 'base' && Math.random() < 0.5 ? lead.element : (['mana', 'storm', 'earth', 'water'] as Element[])[Math.floor(Math.random() * 4)]
+      e.seeds = Array.from({ length: 6 }, () => Math.floor(Math.random() * 32))
+      out.push(e)
+    }
+    return out
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Central entry: your bonded party vs an enemy party built from `enemyLead`.
+  // kind sets enemy count (wild = light, trainer = matched, stronghold = +1 & harder).
+  const beginBattle = useCallback((enemyLead: Spirit, aiTier: AITier, opts?: { kind?: 'wild' | 'trainer' | 'stronghold'; reach?: boolean; trainerId?: string }) => {
+    const allies = spiritsRef.current.slice(0, MAX_PARTY)
+    if (!allies.length) return
+    const kind = opts?.kind ?? 'wild'
+    const n = allies.length
+    const enemyCount = kind === 'wild' ? Math.min(n, 2) : kind === 'stronghold' ? n + 1 : n
+    const enemies = buildEnemyParty(enemyLead, Math.max(1, enemyCount))
+    if (opts?.trainerId) lastTrainerRef.current = opts.trainerId
     inBattleRef.current = true
     loopRef.current?.pause()
     stopMusic()
-    setBattleData({ playerSpirit: mySpirit, enemySpirit: enemy, aiTier: 'wild', zoneId: zoneRef.current.id })
-  }, [])
+    setBattleData({ allyParty: allies, enemyParty: enemies, aiTier, zoneId: zoneRef.current.id, reach: opts?.reach })
+  }, [buildEnemyParty])
 
-  // Battle end — apply rewards, resume overworld, show trainer post-battle dialogue
-  const handleBattleEnd = useCallback((outcome: 'win' | 'lose' | 'flee', rewards?: BattleRewards) => {
+  // Debug 'B' key — quick wild fight
+  const startBattle = useCallback(() => {
+    const mySpirit = spiritsRef.current[0]
+    if (!mySpirit) return
+    const pick = PARTY_SPECIES[Math.floor(Math.random() * PARTY_SPECIES.length)]
+    const enemy = createSpirit(pick, `Wild ${pick.charAt(0).toUpperCase() + pick.slice(1)}`, 0, 0)
+    enemy.level = Math.max(1, mySpirit.level + Math.floor(Math.random() * 5) - 2)
+    enemy.seeds = Array.from({ length: 6 }, () => Math.floor(Math.random() * 32))
+    beginBattle(enemy, 'wild', { kind: 'wild' })
+  }, [beginBattle]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Party battle end — distribute rewards across the bonded party, resume overworld, trainer dialogue.
+  const handleBattleEnd = useCallback((outcome: 'win' | 'lose') => {
+    const bd = battleDataRef.current
     inBattleRef.current = false
     setBattleData(null)
     loopRef.current?.resume()
     setZoneMusic(zoneRef.current.id)
-    if (outcome === 'win' && rewards) {
-      const spirit = spiritsRef.current[0]
-      if (spirit) {
-        const xpResult = addXP(spirit, rewards.xp)
-        spirit.bond = Math.min(255, spirit.bond + rewards.bondChange)
-        spirit.happiness = Math.min(255, spirit.happiness + rewards.happinessChange)
-        if (rewards.gold > 0) wallet.earn(rewards.gold)
-        // Evolution trigger: spirit hit level 34 while still base element
-        if (xpResult.evolved === 'second' && spirit.element === 'base') {
+
+    if (outcome === 'win' && bd) {
+      // Rewards scale with the enemy party; XP is split across your party, gold/bond shared.
+      const totalXp = bd.enemyParty.reduce((s, e) => s + Math.max(8, e.level * 12), 0)
+      const gold = bd.enemyParty.reduce((s, e) => s + e.level * 3, 0)
+      const allies = spiritsRef.current.slice(0, MAX_PARTY)
+      const perXp = Math.max(1, Math.round(totalXp / Math.max(1, allies.length)))
+      if (gold > 0) wallet.earn(gold)
+      let evolveShown = false
+      for (const spirit of allies) {
+        const xpResult = addXP(spirit, perXp)
+        spirit.bond = Math.min(255, spirit.bond + 4)
+        spirit.happiness = Math.min(255, spirit.happiness + 3)
+        // Evolution: first ally to hit a form threshold shows the overlay (others next fight).
+        if (xpResult.evolved === 'second' && spirit.element === 'base' && !evolveShown) {
+          evolveShown = true
           loopRef.current?.pause()
           setEvolutionPending(spirit)
         }
-        // Awakened form trigger: spirit hit level 67 (placeholder — auto-select Champion branch)
         if (xpResult.evolved === 'awakened' && spirit.element !== 'base') {
           const awakenedName = AWAKENED_FORM_NAMES[spirit.species]?.[spirit.element]?.alpha
-          if (awakenedName) {
-            spirit.name = awakenedName
-            notify('milestone', `${awakenedName} has awakened!`, { duration: 4000 })
-          }
+          if (awakenedName) { spirit.name = awakenedName; notify('milestone', `${awakenedName} has awakened!`, { duration: 4000 }) }
         }
       }
     }
+
     // Trainer post-battle dialogue
     const trainerId = lastTrainerRef.current
     if (trainerId) {
       lastTrainerRef.current = null
-      // Set first-win flag for this trainer (gates next dialogue stage)
       if (outcome === 'win' && !flagsRef.current[`${trainerId}FirstWin`]) {
         flagsRef.current[`${trainerId}FirstWin`] = true
         flagsRef.current[`defeated_${trainerId}`] = true
       }
       const dlgId = outcome === 'win' ? `${trainerId}-post-win` : `${trainerId}-post-lose`
-      if (getGraph(dlgId)) {
-        startDialogue(dialogueRef.current, dlgId, buildCtx())
-      }
+      if (getGraph(dlgId)) startDialogue(dialogueRef.current, dlgId, buildCtx())
     }
-    // Mark encountered species as seen in Spirit Index (use ref to avoid stale closure)
-    const bd = battleDataRef.current
-    if (bd) {
-      markSeen(spiritIndexRef.current, bd.enemySpirit.species)
-    }
-  }, [])
+
+    // Mark every enemy species seen in the Spirit Index
+    if (bd) for (const e of bd.enemyParty) markSeen(spiritIndexRef.current, e.species)
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Encounter choice handler — Avoid / Study / Challenge
   const handleEncounterChoice = useCallback((choice: 'avoid' | 'study' | 'challenge') => {
@@ -697,16 +726,14 @@ export default function ShimmerPage() {
       // Brief study observation dialogue
       startDialogue(dialogueRef.current, 'study-observation', buildCtx())
     } else {
-      // Challenge — proceed to battle
+      // Challenge — proceed to a party battle (your bonded party vs a wild pack)
       const enemy = createSpirit(data.encounter.species, data.encounter.name, 0, 0)
       enemy.level = data.encounter.level
       enemy.element = data.encounter.element
       enemy.seeds = Array.from({ length: 6 }, () => Math.floor(Math.random() * 32))
-      inBattleRef.current = true
-      stopMusic()
-      setBattleData({ playerSpirit: data.playerSpirit, enemySpirit: enemy, aiTier: data.encounter.aiTier, zoneId: zoneRef.current.id })
+      beginBattle(enemy, data.encounter.aiTier, { kind: 'wild' })
     }
-  }, [encounterChoice])
+  }, [encounterChoice, beginBattle])
 
   // Encounter choice keyboard nav
   useEffect(() => {
@@ -1252,10 +1279,8 @@ export default function ShimmerPage() {
             enemy.level = cfg.level ?? Math.max(1, mySpirit.level)
             if (cfg.element) enemy.element = cfg.element as Element
             enemy.seeds = Array.from({ length: 6 }, () => Math.floor(Math.random() * 32))
-            inBattleRef.current = true
-            loopRef.current?.pause()
-            stopMusic()
-            setBattleData({ playerSpirit: mySpirit, enemySpirit: enemy, aiTier: (cfg.aiTier ?? 'wild') as AITier, zoneId: zoneRef.current.id })
+            const reach = (act.config as { reach?: boolean }).reach
+            beginBattle(enemy, (cfg.aiTier ?? 'wild') as AITier, { kind: reach ? 'stronghold' : 'trainer', reach })
           }
           break
         }
@@ -1532,15 +1557,12 @@ export default function ShimmerPage() {
                   loopRef.current?.pause()
                   setEncounterChoice({ encounter, playerSpirit: mySpirit, selected: 2 })
                 } else {
-                  // Pre-tablet: auto-battle
+                  // Pre-tablet: auto-battle (party vs a wild pack)
                   const enemy = createSpirit(encounter.species, encounter.name, 0, 0)
                   enemy.level = encounter.level
                   enemy.element = encounter.element
                   enemy.seeds = Array.from({ length: 6 }, () => Math.floor(Math.random() * 32))
-                  inBattleRef.current = true
-                  loopRef.current?.pause()
-                  stopMusic()
-                  setBattleData({ playerSpirit: mySpirit, enemySpirit: enemy, aiTier: encounter.aiTier, zoneId: currentZone.id })
+                  beginBattle(enemy, encounter.aiTier, { kind: 'wild' })
                 }
                 return // skip rest of tick
               }
@@ -1594,12 +1616,8 @@ export default function ShimmerPage() {
               if (facingNpc?.trainer && ds.graphId === facingNpc.returnDialogueId) {
                 const mySpirit = spiritsRef.current[0]
                 if (mySpirit) {
-                  const enemySpirit = createTrainerSpirit(facingNpc.trainer, mySpirit.level)
-                  lastTrainerRef.current = facingNpc.id
-                  inBattleRef.current = true
-                  loopRef.current?.pause()
-                  stopMusic()
-                  setBattleData({ playerSpirit: mySpirit, enemySpirit: enemySpirit, aiTier: facingNpc.trainer.aiTier, zoneId: zoneRef.current.id })
+                  const enemyLead = createTrainerSpirit(facingNpc.trainer, mySpirit.level)
+                  beginBattle(enemyLead, facingNpc.trainer.aiTier, { kind: 'trainer', trainerId: facingNpc.id })
                 }
               }
 
@@ -3019,14 +3037,14 @@ export default function ShimmerPage() {
               </div>
             )}
 
-            {/* Battle overlay */}
+            {/* Battle overlay — party turn-based combat (1v1 retired) */}
             {battleData && (
-              <BattleScene
-                playerSpirit={battleData.playerSpirit}
-                enemySpirit={battleData.enemySpirit}
-                aiTier={battleData.aiTier}
+              <PartyBattleScene
+                allySpirits={battleData.allyParty}
+                enemySpirits={battleData.enemyParty}
                 zoneId={battleData.zoneId}
-                sprites={SPRITE_MAP}
+                reach={battleData.reach}
+                ai={{ focusFire: battleData.aiTier !== 'wild', spendMana: battleData.aiTier !== 'wild' }}
                 onEnd={handleBattleEnd}
               />
             )}
