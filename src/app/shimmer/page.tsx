@@ -78,6 +78,7 @@ import Grimoire from './components/Grimoire'
 import SpiritConsole from './components/SpiritConsole'
 import WorldMapOverlay from './components/WorldMapOverlay'
 import type { AITier } from './engine/battle-ai'
+import type { KeeperArchetype } from './engine/party-battle'
 import { rollEncounter, createTrainerSpirit, type WildEncounter } from './engine/encounters'
 import { MultiplayerClient, RemotePlayer } from './engine/multiplayer'
 import UsernamePicker from './components/UsernamePicker'
@@ -393,7 +394,7 @@ export default function ShimmerPage() {
       }
     }
   }, [notify])
-  const [battleData, setBattleData] = useState<{ allyParty: Spirit[]; enemyParty: Spirit[]; aiTier: AITier; zoneId: string; reach?: boolean } | null>(null)
+  const [battleData, setBattleData] = useState<{ allyParty: Spirit[]; enemyParty: Spirit[]; aiTier: AITier; zoneId: string; reach?: boolean; keeper?: KeeperArchetype } | null>(null)
   const battleDataRef = useRef(battleData)
   battleDataRef.current = battleData
   const inBattleRef = useRef(false) // game loop safe flag — avoids stale closure on battleData state
@@ -635,18 +636,19 @@ export default function ShimmerPage() {
 
   // Central entry: your bonded party vs an enemy party built from `enemyLead`.
   // kind sets enemy count (wild = light, trainer = matched, stronghold = +1 & harder).
-  const beginBattle = useCallback((enemyLead: Spirit, aiTier: AITier, opts?: { kind?: 'wild' | 'trainer' | 'stronghold'; reach?: boolean; trainerId?: string }) => {
+  const beginBattle = useCallback((enemyLead: Spirit, aiTier: AITier, opts?: { kind?: 'wild' | 'trainer' | 'stronghold'; reach?: boolean; trainerId?: string; keeper?: KeeperArchetype }) => {
     const allies = spiritsRef.current.slice(0, MAX_PARTY)
     if (!allies.length) return
     const kind = opts?.kind ?? 'wild'
     const n = allies.length
-    const enemyCount = kind === 'wild' ? Math.min(n, 2) : kind === 'stronghold' ? n + 1 : n
+    let enemyCount = kind === 'wild' ? Math.min(n, 2) : kind === 'stronghold' ? n + 1 : n
+    if (opts?.keeper) enemyCount += 1 // a Keeper joins your side → scale the enemy so it stays a fair fight
     const enemies = buildEnemyParty(enemyLead, Math.max(1, enemyCount))
     if (opts?.trainerId) lastTrainerRef.current = opts.trainerId
     inBattleRef.current = true
     loopRef.current?.pause()
     stopMusic()
-    setBattleData({ allyParty: allies, enemyParty: enemies, aiTier, zoneId: zoneRef.current.id, reach: opts?.reach })
+    setBattleData({ allyParty: allies, enemyParty: enemies, aiTier, zoneId: zoneRef.current.id, reach: opts?.reach, keeper: opts?.keeper })
   }, [buildEnemyParty])
 
   // Debug 'B' key — quick wild fight
@@ -3044,6 +3046,7 @@ export default function ShimmerPage() {
                 enemySpirits={battleData.enemyParty}
                 zoneId={battleData.zoneId}
                 reach={battleData.reach}
+                keeper={battleData.keeper}
                 ai={{ focusFire: battleData.aiTier !== 'wild', spendMana: battleData.aiTier !== 'wild' }}
                 onEnd={handleBattleEnd}
               />

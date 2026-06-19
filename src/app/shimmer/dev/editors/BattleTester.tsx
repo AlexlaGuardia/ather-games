@@ -13,6 +13,7 @@ import { drawSprite } from '../../components/SpriteRenderers'
 import BattleScene from '../../components/BattleScene'
 import BattleSceneV2 from '../../components/BattleSceneV2'
 import PartyBattleScene from '../../components/PartyBattleScene'
+import type { KeeperArchetype } from '../../engine/party-battle'
 import { DEFAULT_LAYOUT } from '../../components/BattleScene'
 import type { BattleLayout } from '../../components/BattleScene'
 import BattleBgEditor from '../../components/BattleBgEditor'
@@ -265,6 +266,7 @@ export default function BattleTester() {
   const [battleActive, setBattleActive] = useState(false)
   const [partyActive, setPartyActive] = useState(false)
   const [partySize, setPartySize] = useState(3)
+  const [keeperArch, setKeeperArch] = useState<KeeperArchetype | null>(null)
   const [useV2, setUseV2] = useState(true)
   const [reachMode, setReachMode] = useState(false)
   const [lastResult, setLastResult] = useState<{ outcome: string; rewards?: BattleRewards } | null>(null)
@@ -443,6 +445,7 @@ export default function BattleTester() {
               enemySpirits={partyRef.current.enemies}
               zoneId={sceneZone}
               reach={reachMode}
+              keeper={keeperArch ?? undefined}
               ai={{
                 focusFire: aiTier !== 'wild',
                 spendMana: aiTier !== 'wild',
@@ -486,6 +489,18 @@ export default function BattleTester() {
                 partySize === n ? 'bg-violet-500/20 text-violet-300 border border-violet-500/40' : 'text-white/30 hover:text-white/50 border border-white/10'
               }`}
             >{n}</button>
+          ))}
+        </div>
+
+        {/* Keeper companion (support archetype) */}
+        <span className="text-[9px] text-white/25 ml-1">Keeper:</span>
+        <div className="flex gap-0.5">
+          {([null, 'warden', 'mender', 'breaker', 'channeler'] as const).map(k => (
+            <button key={k ?? 'none'} onClick={() => setKeeperArch(k)}
+              className={`px-2 py-1 rounded text-[10px] font-display capitalize transition-all ${
+                keeperArch === k ? 'bg-[#d4a843]/20 text-[#d4a843] border border-[#d4a843]/40' : 'text-white/30 hover:text-white/50 border border-white/10'
+              }`}
+            >{k ?? 'none'}</button>
           ))}
         </div>
         <button

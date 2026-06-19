@@ -3,8 +3,8 @@
 import { useRef, useEffect, useState, useCallback } from 'react'
 import type { Spirit } from '../spirits/spirit'
 import {
-  PartyBattleState, PartyCombatant, PartyEvent, PartyAction, AIConfig, ManaConfig,
-  createPartyBattle, takeAction, currentActor, chooseAction,
+  PartyBattleState, PartyCombatant, PartyEvent, PartyAction, AIConfig, ManaConfig, KeeperArchetype,
+  createPartyBattle, takeAction, currentActor, chooseAction, chooseKeeperAction,
   livingEnemiesOf, manaCostFor, BASIC_STRIKE,
 } from '../engine/party-battle'
 import { drawBattleBg, BG_W, BG_H } from './BattleBackground'
@@ -20,6 +20,7 @@ export interface PartyBattleSceneProps {
   ai?: AIConfig
   mana?: { ally?: Partial<ManaConfig>; enemy?: Partial<ManaConfig> }
   reach?: boolean   // Reach-encounter: enemy lead is a collared captive — free it, don't KO it
+  keeper?: KeeperArchetype   // a Keeper support companion joins your side (AI-driven)
   onEnd: (outcome: 'win' | 'lose') => void
 }
 
@@ -85,8 +86,9 @@ function CombatantPlate({ c, hp, isActor, isTarget, onClick }: {
       } ${onClick ? 'cursor-pointer hover:border-[#e0704a]/60' : 'cursor-default'}`}
     >
       <div className="flex items-center gap-1.5 mb-1">
-        <span className="w-2 h-2 rounded-full inline-block shrink-0" style={{ backgroundColor: ELEMENT_COLORS[e], boxShadow: c.alive ? `0 0 5px ${ELEMENT_COLORS[e]}` : 'none' }} />
+        <span className="w-2 h-2 rounded-full inline-block shrink-0" style={{ backgroundColor: c.isKeeper ? '#d4a843' : ELEMENT_COLORS[e], boxShadow: c.alive ? `0 0 5px ${c.isKeeper ? '#d4a843' : ELEMENT_COLORS[e]}` : 'none' }} />
         <span className="font-display text-[10px] text-white/85 truncate">{c.spirit.name}</span>
+        {c.isKeeper && <span className="text-[7px] text-[#d4a843]/80 font-display tracking-wider shrink-0">✦KEEPER</span>}
         {c.alive && c.status && (
           <span className="text-[7px] font-mono px-1 rounded leading-tight shrink-0"
             style={{ color: STATUS_COLOR[c.status], backgroundColor: (STATUS_COLOR[c.status] ?? '#888') + '22' }}>
@@ -116,11 +118,11 @@ function CombatantPlate({ c, hp, isActor, isTarget, onClick }: {
 // ── Party Battle Scene ──
 
 export default function PartyBattleScene({
-  allySpirits, enemySpirits, zoneId, ai, mana, reach, onEnd,
+  allySpirits, enemySpirits, zoneId, ai, mana, reach, keeper, onEnd,
 }: PartyBattleSceneProps) {
   const canvasRef = useRef<HTMLDivElement>(null)
   const rendererRef = useRef<BattlePixiRenderer | null>(null)
-  const stateRef = useRef<PartyBattleState>(createPartyBattle(allySpirits, enemySpirits, mana, reach ? { captiveIdx: 0 } : undefined))
+  const stateRef = useRef<PartyBattleState>(createPartyBattle(allySpirits, enemySpirits, mana, reach ? { captiveIdx: 0 } : undefined, keeper ? { archetype: keeper } : undefined))
   const aiCfg: AIConfig = ai ?? { focusFire: true, spendMana: true }
 
   const [uiPhase, setUIPhase] = useState<UIPhase>('intro')
@@ -219,6 +221,27 @@ export default function PartyBattleScene({
         case 'MANA_DRY':
           setText(`${ev.side === 'ally' ? 'Your side is' : 'The enemy is'} out of mana — a basic strike.`)
           delay = 600; break
+        case 'KEEPER_ACT': {
+          const k = nameOf(ev.keeperId), t = nameOf(ev.targetId)
+          setText(
+            ev.kind === 'ward' ? `${k} raises a ward over ${t}.`
+            : ev.kind === 'mend' ? `${k} tends ${t}'s wounds.`
+            : ev.kind === 'break' ? `${k} cracks ${t}'s guard open.`
+            : ev.kind === 'channel' ? `${k} channels the Ather to you.`
+            : `${k} steadies, gathering mana.`
+          )
+          delay = 600; break
+        }
+        case 'HEAL':
+          if (ev.amount > 0) {
+            setText(`${nameOf(ev.targetId)} recovers ${ev.amount}.`)
+            if (r) { r.flashToken(ev.targetId); r.burstToken(ev.targetId, 0x50c878, 22) }
+            setTimeout(refreshHP, 200)
+          }
+          delay = 650; break
+        case 'MANA_GRANT':
+          if (ev.amount > 0) setText(`+${ev.amount} mana to your pool.`)
+          delay = 450; break
         case 'REACH':
           if (ev.delta > 0) setText(`You reach for the spirit beneath the collar...`)
           else setText(`The collar yanks it back...`)
@@ -277,6 +300,12 @@ export default function PartyBattleScene({
       setUIPhase('enemyTurn')
       setText(`${actor.spirit.name} moves...`)
       setTimeout(() => doAction(chooseAction(s, actor, aiCfg)), 650)
+    } else if (actor.isKeeper) {
+      // Keeper companion is AI-driven support — auto-acts, no player prompt
+      setActiveId(actor.id)
+      setUIPhase('enemyTurn')
+      setText(`${actor.spirit.name} reads the fight...`)
+      setTimeout(() => doAction(chooseKeeperAction(s, actor)), 650)
     } else {
       setActiveId(actor.id)
       setPendingMoveIdx(-1)

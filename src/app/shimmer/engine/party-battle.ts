@@ -20,7 +20,8 @@ import {
   BattleCombatant,
   createCombatant,
 } from './battle'
-import type { Spirit } from '../spirits/spirit'
+import type { Spirit, Species } from '../spirits/spirit'
+import { createSpirit } from '../spirits/spirit'
 import type { Move, StatusId, CombatStat } from './moves'
 import { getEffectiveness, MOVE_STILL_BREATH, MOVE_SPIRIT_WARD } from './moves'
 import {
@@ -59,7 +60,16 @@ export interface PartyCombatant extends BattleCombatant {
   side: 'ally' | 'enemy'
   alive: boolean
   pstats: PartyStats   // 6-stat phys/spirit model (party fork; replaces the 1v1 4-stat for combat)
+  // Keeper companion (canon: rare support mage, the anti-collar). AI-driven, own mana pool.
+  isKeeper?: boolean
+  archetype?: KeeperArchetype
+  keeperMana?: ManaPool
 }
+
+// Support archetypes map to the canon keeper-skills (Heslur→Breaker, Maizie→Mender,
+// Gregory→Warden, a Mana-keeper→Channeler). One support-AI drives all four.
+export type KeeperArchetype = 'warden' | 'mender' | 'breaker' | 'channeler'
+export type KeeperActKind = 'ward' | 'mend' | 'break' | 'channel' | 'rest'
 
 export type PartyEvent =
   | { type: 'ROUND'; round: number }
@@ -73,11 +83,15 @@ export type PartyEvent =
   | { type: 'REACH'; captiveId: string; reach: number; reachMax: number; delta: number } // reach-encounter progress
   | { type: 'COLLAR_BREAK'; captiveId: string }                                            // the collar snaps — captive freed
   | { type: 'MANA_DRY'; side: 'ally' | 'enemy' }       // a side couldn't afford its chosen move, fell back to Strike
+  | { type: 'HEAL'; targetId: string; amount: number }                    // keeper Mender restores HP
+  | { type: 'MANA_GRANT'; amount: number }                                // keeper Channeler feeds your pool
+  | { type: 'KEEPER_ACT'; keeperId: string; kind: KeeperActKind; targetId: string } // keeper's chosen support
   | { type: 'BATTLE_END'; outcome: 'win' | 'lose' }
 
 export type PartyAction =
   | { type: 'move'; actorId: string; moveIdx: number; targetId: string }  // moveIdx -1 = basic Strike
   | { type: 'defend'; actorId: string }
+  | { type: 'keeper'; actorId: string; kind: KeeperActKind; targetId: string } // AI-only: a keeper's support
 
 export interface PartyBattleState {
   allies: PartyCombatant[]
@@ -113,10 +127,30 @@ function makeCombatant(spirit: Spirit, side: 'ally' | 'enemy', idx: number): Par
   return { ...base, id: `${side}-${idx}-${spirit.species}`, side, alive: true, pstats, hp: pstats.maxHp, maxHp: pstats.maxHp }
 }
 
+// ── Keeper companion ──
+// Archetype → a body species for HP/agi (Warden tanky, Mender bulky, casters squishier).
+const KEEPER_BODY: Record<KeeperArchetype, Species> = { warden: 'turtle', mender: 'axolotl', breaker: 'owl', channeler: 'bat' }
+const KEEPER_MANA = { current: 12, max: 16, regen: 5 }
+
+function cap(s: string) { return s.charAt(0).toUpperCase() + s.slice(1) }
+
+/** Build a Keeper companion combatant (AI-driven support, own mana, neutral/amber token). */
+export function createKeeperCombatant(archetype: KeeperArchetype, level: number, idx: number, name?: string): PartyCombatant {
+  const s = createSpirit(KEEPER_BODY[archetype], name ?? `${cap(archetype)}`, 0, 0)
+  s.level = level
+  s.element = 'base' // neutral token — visually distinct from the element-coloured spirits
+  const c = makeCombatant(s, 'ally', idx)
+  c.isKeeper = true
+  c.archetype = archetype
+  c.keeperMana = { ...KEEPER_MANA }
+  return c
+}
+
 export function createPartyBattle(
   allySpirits: Spirit[], enemySpirits: Spirit[],
   manaCfg: { ally?: Partial<ManaConfig>; enemy?: Partial<ManaConfig> } = {},
   reach?: { captiveIdx: number },
+  keeper?: { archetype: KeeperArchetype; name?: string },
 ): PartyBattleState {
   const aCfg = { ...DEFAULT_MANA, ...manaCfg.ally }
   const eCfg = { ...DEFAULT_MANA, ...manaCfg.enemy }
@@ -149,6 +183,12 @@ export function createPartyBattle(
       { move: MOVE_SPIRIT_WARD, ppLeft: MOVE_SPIRIT_WARD.pp },
     ]
     for (const ally of state.allies) ally.moves = [...reachMoves, ...ally.moves].slice(0, 4)
+  }
+
+  // A Keeper companion joins the ally side (rare narrative support — own mana, AI-driven).
+  if (keeper) {
+    const lvl = Math.round(allySpirits.reduce((s, sp) => s + sp.level, 0) / Math.max(1, allySpirits.length)) || 5
+    state.allies.push(createKeeperCombatant(keeper.archetype, lvl, state.allies.length, keeper.name))
   }
 
   startRound(state)
@@ -207,6 +247,14 @@ export function takeAction(state: PartyBattleState, action: PartyAction): void {
   if (action.type === 'defend') {
     actor.statStages.grd = Math.min(4, actor.statStages.grd + 1)
     state.turnIdx++
+    advanceIfRoundDone(state)
+    return
+  }
+
+  if (action.type === 'keeper') {
+    applyKeeperAction(state, actor, action.kind, action.targetId)
+    state.turnIdx++
+    checkOutcome(state)
     advanceIfRoundDone(state)
     return
   }
@@ -299,6 +347,10 @@ function endOfRound(state: PartyBattleState) {
   for (const side of ['ally', 'enemy'] as const) {
     const pool = state.mana[side]
     pool.current = Math.min(pool.max, pool.current + pool.regen)
+  }
+  // Keepers regen their own (separate) mana pool
+  for (const c of state.allies) {
+    if (c.isKeeper && c.alive && c.keeperMana) c.keeperMana.current = Math.min(c.keeperMana.max, c.keeperMana.current + c.keeperMana.regen)
   }
 }
 
@@ -451,4 +503,75 @@ function moveScore(move: Move, atk: PartyCombatant, def: PartyCombatant): number
   const a = cat === 'phys' ? atk.pstats.pwr : atk.pstats.foc
   const d = cat === 'phys' ? def.pstats.grd : def.pstats.res
   return move.power * (a / Math.max(1, d)) * getEffectiveness(move.element, def.element)
+}
+
+// ── Keeper support (one AI, four archetypes) ──
+
+const KEEPER_COST: Record<KeeperActKind, number> = { ward: 5, mend: 6, break: 5, channel: 4, rest: 0 }
+
+/** Apply a keeper's chosen support, spending its own mana. Falls back to rest if it can't afford. */
+function applyKeeperAction(state: PartyBattleState, keeper: PartyCombatant, kind: KeeperActKind, targetId: string) {
+  const pool = keeper.keeperMana
+  let act = kind
+  if (pool && KEEPER_COST[kind] > pool.current) act = 'rest' // can't afford → rest (recover mana)
+  if (pool) pool.current = Math.max(0, pool.current - KEEPER_COST[act])
+  state.events.push({ type: 'KEEPER_ACT', keeperId: keeper.id, kind: act, targetId })
+  const target = findById(state, targetId)
+  switch (act) {
+    case 'ward': // Warden (Gregory): shore up an ally's physical guard
+      if (target && target.alive) applyStatStage(state, target, 'grd', 2)
+      break
+    case 'mend': // Mender (Maizie): restore an ally's HP
+      if (target && target.alive) {
+        const before = target.hp
+        target.hp = Math.min(target.maxHp, target.hp + Math.max(1, Math.round(target.maxHp * 0.3)))
+        state.events.push({ type: 'HEAL', targetId: target.id, amount: target.hp - before })
+      }
+      break
+    case 'break': // Breaker (Heslur, the anti-collar): crack a foe's defense + start it eroding
+      if (target && target.alive) { applyStatStage(state, target, 'grd', -1); inflictPartyStatus(state, target, 'erosion') }
+      break
+    case 'channel': { // Channeler: feed YOUR pool so you cast bigger
+      const p = state.mana.ally
+      const before = p.current
+      p.current = Math.min(p.max, p.current + 8)
+      state.events.push({ type: 'MANA_GRANT', amount: p.current - before })
+      break
+    }
+    case 'rest':
+      if (pool) pool.current = Math.min(pool.max, pool.current + 4)
+      break
+  }
+}
+
+/** The keeper support-AI: pick the archetype's best play for the current board. */
+export function chooseKeeperAction(state: PartyBattleState, keeper: PartyCombatant): PartyAction {
+  const afford = (k: KeeperActKind) => !keeper.keeperMana || keeper.keeperMana.current >= KEEPER_COST[k]
+  const mates = state.allies.filter(c => c.alive && c.id !== keeper.id)
+  const foes = livingEnemiesOf(state, keeper.side)
+  const rest: PartyAction = { type: 'keeper', actorId: keeper.id, kind: 'rest', targetId: keeper.id }
+
+  switch (keeper.archetype) {
+    case 'mender': {
+      const hurt = mates.filter(c => c.hp < c.maxHp * 0.7).sort((a, b) => a.hp / a.maxHp - b.hp / b.maxHp)[0]
+      if (hurt && afford('mend')) return { type: 'keeper', actorId: keeper.id, kind: 'mend', targetId: hurt.id }
+      break
+    }
+    case 'warden': {
+      const ward = mates.filter(c => c.statStages.grd < 3).sort((a, b) => a.hp / a.maxHp - b.hp / b.maxHp)[0]
+      if (ward && afford('ward')) return { type: 'keeper', actorId: keeper.id, kind: 'ward', targetId: ward.id }
+      break
+    }
+    case 'breaker': {
+      const foe = foes.filter(f => f.statStages.grd > -3).sort((a, b) => b.hp - a.hp)[0] ?? foes[0]
+      if (foe && afford('break')) return { type: 'keeper', actorId: keeper.id, kind: 'break', targetId: foe.id }
+      break
+    }
+    case 'channeler': {
+      const p = state.mana.ally
+      if (p.current < p.max * 0.7 && afford('channel')) return { type: 'keeper', actorId: keeper.id, kind: 'channel', targetId: keeper.id }
+      break
+    }
+  }
+  return rest
 }
