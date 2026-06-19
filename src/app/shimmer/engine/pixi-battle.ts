@@ -32,14 +32,18 @@ function easeOutBack(t: number): number {
 const ELEMENT_CONFIG: Record<string, {
   glow: number; glowAlpha: number
   particle: number; particleCount: number; speed: number
+  core: number  // orb body colour for the token render path
 }> = {
-  mana:    { glow: 0xc8a0d8, glowAlpha: 0.4, particle: 0xd4b0e8, particleCount: 20, speed: 0.4 },
-  storm:   { glow: 0x7090c0, glowAlpha: 0.4, particle: 0x90b0e0, particleCount: 26, speed: 0.7 },
-  earth:   { glow: 0xb09060, glowAlpha: 0.35, particle: 0xc8a870, particleCount: 14, speed: 0.25 },
-  water:   { glow: 0x60a0a0, glowAlpha: 0.4, particle: 0x80c0c0, particleCount: 22, speed: 0.5 },
-  neutral: { glow: 0xd4a843, glowAlpha: 0.3, particle: 0xf0d070, particleCount: 12, speed: 0.3 },
-  base:    { glow: 0xd4a843, glowAlpha: 0.3, particle: 0xf0d070, particleCount: 12, speed: 0.3 },
+  mana:    { glow: 0xc8a0d8, glowAlpha: 0.4, particle: 0xd4b0e8, particleCount: 20, speed: 0.4, core: 0xc77ce0 },
+  storm:   { glow: 0x7090c0, glowAlpha: 0.4, particle: 0x90b0e0, particleCount: 26, speed: 0.7, core: 0x6f9be6 },
+  earth:   { glow: 0xb09060, glowAlpha: 0.35, particle: 0xc8a870, particleCount: 14, speed: 0.25, core: 0xc89a5a },
+  water:   { glow: 0x60a0a0, glowAlpha: 0.4, particle: 0x80c0c0, particleCount: 22, speed: 0.5, core: 0x57c4c4 },
+  neutral: { glow: 0xd4a843, glowAlpha: 0.3, particle: 0xf0d070, particleCount: 12, speed: 0.3, core: 0xf0c850 },
+  base:    { glow: 0xd4a843, glowAlpha: 0.3, particle: 0xf0d070, particleCount: 12, speed: 0.3, core: 0xf0c850 },
 }
+
+// Collared spirit — drained of element, rendered ash-grey (canon: collar dims the light)
+const COLLARED_CFG = { glow: 0x6e6e7a, glowAlpha: 0.16, particle: 0x70707a, particleCount: 5, speed: 0.18, core: 0x9a9aa4 }
 
 // ── Shared Textures ──
 
@@ -58,6 +62,31 @@ function getDotTexture(): Texture {
   ctx.fillRect(0, 0, 8, 8)
   _dotTexture = Texture.from(c)
   return _dotTexture
+}
+
+// Soft luminous orb — the token body for the no-pixel battle skin. White so the
+// sprite tint paints it any element colour. Baked top-left highlight = roundness.
+let _orbTexture: Texture | null = null
+
+function getOrbTexture(): Texture {
+  if (_orbTexture) return _orbTexture
+  const c = document.createElement('canvas')
+  c.width = 64; c.height = 64
+  const ctx = c.getContext('2d')!
+  const g = ctx.createRadialGradient(32, 32, 2, 32, 32, 30)
+  g.addColorStop(0, 'rgba(255,255,255,1)')
+  g.addColorStop(0.45, 'rgba(255,255,255,0.96)')
+  g.addColorStop(0.78, 'rgba(255,255,255,0.5)')
+  g.addColorStop(1, 'rgba(255,255,255,0)')
+  ctx.fillStyle = g
+  ctx.beginPath(); ctx.arc(32, 32, 30, 0, Math.PI * 2); ctx.fill()
+  const h = ctx.createRadialGradient(24, 22, 1, 24, 22, 13)
+  h.addColorStop(0, 'rgba(255,255,255,0.95)')
+  h.addColorStop(1, 'rgba(255,255,255,0)')
+  ctx.fillStyle = h
+  ctx.beginPath(); ctx.arc(24, 22, 13, 0, Math.PI * 2); ctx.fill()
+  _orbTexture = Texture.from(c)
+  return _orbTexture
 }
 
 const _maskTextures = new Map<number, Texture>()
@@ -139,6 +168,13 @@ class SpiritDisplay {
   size: number
   isHighRes: boolean
 
+  // Token render path (no-pixel skin)
+  token: boolean
+  collared: boolean
+  cfg: typeof COLLARED_CFG       // active visual config (element or collared)
+  baseCfg: typeof COLLARED_CFG   // the element's config, restored on uncollar
+  collarRing: Graphics | null = null
+
   currentFrame = 0
   frameTimer = 0
   bobPhase: number
@@ -160,16 +196,23 @@ class SpiritDisplay {
     resolve: (() => void) | null
   } | null = null
 
-  constructor(textures: Texture[], element: string, size: number, highRes = false) {
+  constructor(
+    textures: Texture[], element: string, size: number, highRes = false,
+    opts: { token?: boolean; collared?: boolean } = {},
+  ) {
     this.textures = textures
     this.element = element
     this.size = size
     this.isHighRes = highRes
+    this.token = opts.token ?? false
+    this.collared = opts.collared ?? false
     this.bobPhase = Math.random() * Math.PI * 2
     this.breathPhase = Math.random() * Math.PI * 2
 
     this.container = new Container()
-    const cfg = ELEMENT_CONFIG[element] ?? ELEMENT_CONFIG.neutral
+    this.baseCfg = ELEMENT_CONFIG[element] ?? ELEMENT_CONFIG.neutral
+    this.cfg = this.collared ? COLLARED_CFG : this.baseCfg
+    const cfg = this.cfg
 
     // Shadow (wider for high-res)
     this.shadow = new Graphics()
@@ -202,7 +245,19 @@ class SpiritDisplay {
     this.sprite.width = size
     this.sprite.height = size
 
+    // Token skin: paint the white orb with the element's body colour (or ash if collared)
+    if (this.token) {
+      this.sprite.tint = cfg.core
+      if (this.collared) this.sprite.alpha = 0.9
+    }
+
     this.container.addChild(this.sprite)
+
+    // Collar ring — a dark band squeezing the dimmed orb (the leash made visible)
+    if (this.token && this.collared) {
+      this.collarRing = this.drawCollarRing()
+      this.container.addChild(this.collarRing)
+    }
 
     // Particle layer
     this.particleContainer = new Container()
@@ -308,7 +363,7 @@ class SpiritDisplay {
     }
 
     // Glow pulse
-    const cfg = ELEMENT_CONFIG[this.element] ?? ELEMENT_CONFIG.neutral
+    const cfg = this.cfg
     const baseGlow = this.isHighRes ? cfg.glowAlpha * 1.4 : cfg.glowAlpha
     this.glow.alpha = baseGlow + Math.sin(this.bobPhase * 0.7) * 0.08
 
@@ -366,7 +421,7 @@ class SpiritDisplay {
   }
 
   private doTickParticles(dt: number) {
-    const cfg = ELEMENT_CONFIG[this.element] ?? ELEMENT_CONFIG.neutral
+    const cfg = this.cfg
     const bob = this.isKO ? 0 : Math.sin(this.bobPhase) * (this.isHighRes ? 4 : 3)
     const radius = this.isHighRes ? this.size * 0.6 : this.size * 0.55
     const pScale = this.isHighRes ? 1.3 : 1
@@ -384,6 +439,32 @@ class SpiritDisplay {
 
   flash() { this.flashTimer = 20 }
   ko() { this.isKO = true; this.koProgress = 0 }
+
+  private drawCollarRing(): Graphics {
+    const g = new Graphics()
+    const rx = this.size * 0.44
+    const ry = this.size * 0.34
+    g.ellipse(0, 0, rx, ry).stroke({ width: Math.max(2, this.size * 0.05), color: 0x1a1a22, alpha: 0.85 })
+    g.ellipse(0, 0, rx * 0.94, ry * 0.94).stroke({ width: 1, color: 0x000000, alpha: 0.4 })
+    // clasp / lock node at the front of the band
+    g.circle(0, ry, this.size * 0.06).fill({ color: 0x2a2a33, alpha: 0.9 })
+    return g
+  }
+
+  /** Reach complete: the collar breaks, the element light returns. */
+  uncollar() {
+    if (!this.collared) return
+    this.collared = false
+    this.cfg = this.baseCfg
+    this.sprite.tint = this.token ? this.baseCfg.core : 0xffffff
+    this.sprite.alpha = 1
+    this.glow.tint = this.baseCfg.glow
+    if (this.collarRing) {
+      this.container.removeChild(this.collarRing)
+      this.collarRing.destroy()
+      this.collarRing = null
+    }
+  }
 
   destroy() {
     this.spiritMesh?.destroy()
@@ -551,6 +632,24 @@ export class BattlePixiRenderer {
     const display = new SpiritDisplay(textures, element, size)
     this.positionSpirit(side, display)
     this.mainContainer.addChild(display.container)
+  }
+
+  /** Set spirit as a glowing token orb — the no-pixel battle skin (default path) */
+  setSpiritToken(side: 'player' | 'enemy', element: string, opts: { collared?: boolean } = {}) {
+    this.removeSpirit(side)
+    const size = side === 'player' ? 96 : 84
+    const display = new SpiritDisplay([getOrbTexture()], element, size, false, {
+      token: true,
+      collared: opts.collared,
+    })
+    this.positionSpirit(side, display)
+    this.mainContainer.addChild(display.container)
+  }
+
+  /** The collar breaks — restore the freed spirit's element light. */
+  freeCollar(side: 'player' | 'enemy') {
+    const d = side === 'player' ? this.playerDisplay : this.enemyDisplay
+    d?.uncollar()
   }
 
   /** Set spirit from high-res image URL (Flux concept art path) */

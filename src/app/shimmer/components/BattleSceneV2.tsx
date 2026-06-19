@@ -1,7 +1,7 @@
 'use client'
 
 import { useRef, useEffect, useState, useCallback } from 'react'
-import type { Spirit, Species } from '../spirits/spirit'
+import type { Spirit } from '../spirits/spirit'
 import type { SpriteAnim } from '../sprites/sprite-data'
 import {
   BattleState, BattleEvent, BattleRewards,
@@ -37,22 +37,6 @@ export interface BattleSceneV2Props {
   sprites?: Record<string, Record<string, SpriteAnim>>
   mode?: 'standard' | 'reach'
   onEnd: (outcome: 'win' | 'lose' | 'flee', rewards?: BattleRewards) => void
-}
-
-// ── Spirit Image URL Resolution ──
-
-function getSpiritImageUrl(species: Species, element: string): string {
-  // Filesystem uses 'waterbear' not 'water-bear'
-  const slug = species.replace('-', '')
-  if (!element || element === 'base') return `/spirits/${slug}.png`
-  // Prefer _nobg (transparent background) variants
-  return `/spirits/forms/${slug}_${element}_nobg.png`
-}
-
-function getSpiritDepthUrl(species: Species, element: string): string | undefined {
-  const slug = species.replace('-', '')
-  if (!element || element === 'base') return `/spirits/depth/${slug}_depth.png`
-  return `/spirits/depth/${slug}_${element}_depth.png`
 }
 
 type UIPhase = 'intro' | 'menu' | 'moves' | 'animating' | 'rewards' | 'end'
@@ -225,19 +209,12 @@ export default function BattleSceneV2({
       drawBattleBg(bgCtx, BG_W, BG_H, zoneId)
       renderer.setBackground(bgCanvas)
 
-      // Load high-res Flux concept art for battle sprites
+      // No-pixel token skin: glowing element orbs. Enemy is collared (ash-dimmed) in reach mode.
       const pElement = playerSpirit.element === 'base' ? 'neutral' : (playerSpirit.element ?? 'neutral')
       const eElement = enemySpirit.element === 'base' ? 'neutral' : (enemySpirit.element ?? 'neutral')
 
-      const pUrl = getSpiritImageUrl(playerSpirit.species, playerSpirit.element ?? 'base')
-      const eUrl = getSpiritImageUrl(enemySpirit.species, enemySpirit.element ?? 'base')
-      const pDepth = getSpiritDepthUrl(playerSpirit.species, playerSpirit.element ?? 'base')
-      const eDepth = getSpiritDepthUrl(enemySpirit.species, enemySpirit.element ?? 'base')
-
-      await Promise.all([
-        renderer.setSpiritFromImage('player', pUrl, pElement, pDepth),
-        renderer.setSpiritFromImage('enemy', eUrl, eElement, eDepth),
-      ])
+      renderer.setSpiritToken('player', pElement)
+      renderer.setSpiritToken('enemy', eElement, { collared: battle.enemy.collared })
     })
 
     return () => {
@@ -290,7 +267,7 @@ export default function BattleSceneV2({
         )
       }
       if (ev.type === 'REACH') setTimeout(() => setEnemyReach(ev.reach), 150)
-      if (ev.type === 'COLLAR_BREAK' && renderer) { renderer.flash('enemy'); renderer.burst('enemy', 0x37e6ff, 60) }
+      if (ev.type === 'COLLAR_BREAK' && renderer) { renderer.freeCollar('enemy'); renderer.flash('enemy'); renderer.burst('enemy', 0x37e6ff, 60) }
 
       // Attack slide animation on move announce
       if (ev.type === 'MOVE_ANNOUNCE' && renderer) {
