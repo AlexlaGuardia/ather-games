@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useRef } from 'react'
 import EditorShell from '../templates/EditorShell'
 import type { Species, Element, Temperament } from '../../spirits/spirit'
 import { createSpirit, ELEMENTS, speciesDisplayName } from '../../spirits/spirit'
@@ -12,6 +12,7 @@ import { PALETTES, getEvolvedPalette } from '../../sprites/palette'
 import { drawSprite } from '../../components/SpriteRenderers'
 import BattleScene from '../../components/BattleScene'
 import BattleSceneV2 from '../../components/BattleSceneV2'
+import PartyBattleScene from '../../components/PartyBattleScene'
 import { DEFAULT_LAYOUT } from '../../components/BattleScene'
 import type { BattleLayout } from '../../components/BattleScene'
 import BattleBgEditor from '../../components/BattleBgEditor'
@@ -260,6 +261,8 @@ export default function BattleTester() {
   const [layout, setLayout] = useState<BattleLayout>({ ...DEFAULT_LAYOUT })
   const [showPreview, setShowPreview] = useState(false)
   const [battleActive, setBattleActive] = useState(false)
+  const [partyActive, setPartyActive] = useState(false)
+  const [partySize, setPartySize] = useState(3)
   const [useV2, setUseV2] = useState(true)
   const [reachMode, setReachMode] = useState(false)
   const [lastResult, setLastResult] = useState<{ outcome: string; rewards?: BattleRewards } | null>(null)
@@ -278,6 +281,38 @@ export default function BattleTester() {
   const startFight = useCallback(() => {
     setLastResult(null)
     setBattleActive(true)
+  }, [])
+
+  // Build a party from the lead config + N-1 random members (varied species/element).
+  const buildParty = useCallback((lead: SpiritConfig, side: 'ally' | 'enemy', n: number) => {
+    const out = [buildSpirit(lead, `${side === 'ally' ? 'My' : 'Wild'} ${speciesDisplayName(lead.species)}`)]
+    for (let i = 1; i < n; i++) {
+      const species = ALL_SPECIES[Math.floor(Math.random() * ALL_SPECIES.length)]
+      const element = ALL_ELEMENTS[1 + Math.floor(Math.random() * 4)]
+      const cfg: SpiritConfig = {
+        species, element,
+        level: Math.max(5, lead.level + Math.floor(Math.random() * 11) - 5),
+        bond: Math.floor(Math.random() * 100),
+        temperament: TEMPERAMENTS[Math.floor(Math.random() * TEMPERAMENTS.length)],
+      }
+      out.push(buildSpirit(cfg, `${side === 'ally' ? 'My' : 'Wild'} ${speciesDisplayName(species)}`))
+    }
+    return out
+  }, [buildSpirit])
+
+  const partyRef = useRef<{ allies: ReturnType<typeof buildSpirit>[]; enemies: ReturnType<typeof buildSpirit>[] } | null>(null)
+  const startParty = useCallback(() => {
+    setLastResult(null)
+    partyRef.current = {
+      allies: buildParty(player, 'ally', partySize),
+      enemies: buildParty(enemy, 'enemy', partySize),
+    }
+    setPartyActive(true)
+  }, [player, enemy, partySize, buildParty])
+
+  const handlePartyEnd = useCallback((outcome: 'win' | 'lose') => {
+    setPartyActive(false)
+    setLastResult({ outcome })
   }, [])
 
   const handleEnd = useCallback((outcome: 'win' | 'lose' | 'flee', rewards?: BattleRewards) => {
@@ -397,6 +432,24 @@ export default function BattleTester() {
         </div>
       )}
 
+      {/* Party battle overlay (N-per-side) */}
+      {partyActive && partyRef.current && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80">
+          <div className="relative" style={{ width: 480, height: 398 }}>
+            <PartyBattleScene
+              allySpirits={partyRef.current.allies}
+              enemySpirits={partyRef.current.enemies}
+              zoneId={sceneZone}
+              ai={{
+                focusFire: aiTier !== 'wild',
+                spendMana: aiTier !== 'wild',
+              }}
+              onEnd={handlePartyEnd}
+            />
+          </div>
+        </div>
+      )}
+
       {/* Two panels side by side */}
       <div className="flex gap-4 mb-4">
         <SpiritPanel label="Your Spirit" config={player} onChange={setPlayer} />
@@ -414,6 +467,24 @@ export default function BattleTester() {
         >
           Start Battle
         </button>
+
+        {/* Party (N-per-side) launch — the new FF-style team combat */}
+        <button
+          onClick={startParty}
+          className="px-5 py-2.5 bg-violet-500/20 hover:bg-violet-500/30 border border-violet-500/40 rounded-lg text-violet-300 font-display text-[13px] transition-all"
+          title="FF-style party turn-based battle. Lead = your configured spirit; the rest are random members."
+        >
+          Party {partySize}v{partySize}
+        </button>
+        <div className="flex gap-0.5">
+          {[2, 3, 4].map(n => (
+            <button key={n} onClick={() => setPartySize(n)}
+              className={`px-2 py-1 rounded text-[10px] font-mono transition-all ${
+                partySize === n ? 'bg-violet-500/20 text-violet-300 border border-violet-500/40' : 'text-white/30 hover:text-white/50 border border-white/10'
+              }`}
+            >{n}</button>
+          ))}
+        </div>
         <button
           onClick={() => randomize('player')}
           className="px-3 py-2 text-[10px] text-white/30 hover:text-white/50 border border-white/10 rounded transition-all"

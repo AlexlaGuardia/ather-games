@@ -575,6 +575,13 @@ export class BattlePixiRenderer {
   width: number
   height: number
 
+  // Party (N-per-side) token path — keyed by combatant id. Lives alongside the
+  // 1v1 playerDisplay/enemyDisplay so the legacy scene is untouched.
+  partyTokens = new Map<string, SpiritDisplay>()
+  private highlightRing: Graphics | null = null
+  private highlightId: string | null = null
+  private highlightPulse = 0
+
   constructor(width = 480, height = 288) {
     this.app = new Application()
     this.width = width
@@ -721,10 +728,118 @@ export class BattlePixiRenderer {
     return attacker.attack(defender.baseX, defender.baseY, onImpact)
   }
 
+  // ── Party (N-per-side) token API ──
+
+  /** Slot position for combatant `idx` of `count` on a side. Allies cluster bottom-left
+   *  (facing the foes), enemies cluster top-right, both fanned along a shallow arc. */
+  private formationSlot(side: 'ally' | 'enemy', idx: number, count: number): { x: number; y: number } {
+    const W = this.width, H = this.height
+    const spread = count > 3 ? 60 : 70
+    const off = idx - (count - 1) / 2            // centered, -…0…+
+    const arc = Math.abs(off) * 9                 // outer members sit a touch back
+    if (side === 'enemy') {
+      return { x: W * 0.70 + off * spread, y: H * 0.27 - arc + idx * 3 }
+    }
+    return { x: W * 0.30 + off * spread, y: H * 0.71 + arc - idx * 3 }
+  }
+
+  /** Add one party combatant as a glowing token in its formation slot. */
+  addPartyToken(
+    id: string, side: 'ally' | 'enemy', element: string,
+    idx: number, count: number, opts: { collared?: boolean } = {},
+  ) {
+    const existing = this.partyTokens.get(id)
+    if (existing) { this.mainContainer.removeChild(existing.container); existing.destroy() }
+
+    const size = side === 'ally' ? 64 : 58
+    const display = new SpiritDisplay([getOrbTexture()], element, size, false, {
+      token: true, collared: opts.collared,
+    })
+    const slot = this.formationSlot(side, idx, count)
+    display.container.x = slot.x
+    display.container.y = slot.y
+    display.baseX = slot.x
+    display.baseY = slot.y
+    this.partyTokens.set(id, display)
+    this.mainContainer.addChild(display.container)
+  }
+
+  /** Lay out the whole field at once. Clears any prior party tokens. */
+  setParty(
+    allies: { id: string; element: string; collared?: boolean }[],
+    enemies: { id: string; element: string; collared?: boolean }[],
+  ) {
+    this.clearParty()
+    allies.forEach((c, i) => this.addPartyToken(c.id, 'ally', c.element, i, allies.length, { collared: c.collared }))
+    enemies.forEach((c, i) => this.addPartyToken(c.id, 'enemy', c.element, i, enemies.length, { collared: c.collared }))
+  }
+
+  clearParty() {
+    for (const d of this.partyTokens.values()) {
+      this.mainContainer.removeChild(d.container)
+      d.destroy()
+    }
+    this.partyTokens.clear()
+    if (this.highlightRing) { this.mainContainer.removeChild(this.highlightRing); this.highlightRing.destroy(); this.highlightRing = null }
+    this.highlightId = null
+  }
+
+  /** Ring under the combatant whose turn it is. Pass null to clear. */
+  highlightToken(id: string | null) {
+    this.highlightId = id
+    if (!id) { if (this.highlightRing) this.highlightRing.visible = false; return }
+    const d = this.partyTokens.get(id)
+    if (!d) return
+    if (!this.highlightRing) {
+      this.highlightRing = new Graphics()
+      // insert just above the background so tokens render over the ring
+      const at = this.bgSprite ? 1 : 0
+      this.mainContainer.addChildAt(this.highlightRing, at)
+    }
+    this.highlightRing.visible = true
+    this.redrawHighlight(d)
+  }
+
+  private redrawHighlight(d: SpiritDisplay) {
+    const g = this.highlightRing!
+    const col = d.baseCfg.glow
+    g.clear()
+    g.ellipse(0, 0, d.size * 0.62, d.size * 0.30).stroke({ width: 2.5, color: col, alpha: 0.9 })
+    g.ellipse(0, 0, d.size * 0.50, d.size * 0.24).stroke({ width: 1, color: 0xffffff, alpha: 0.35 })
+    g.x = d.baseX
+    g.y = d.baseY + d.size * 0.40
+  }
+
+  flashToken(id: string) { this.partyTokens.get(id)?.flash() }
+  koToken(id: string) { this.partyTokens.get(id)?.ko() }
+
+  burstToken(id: string, color: number, count = 30) {
+    const d = this.partyTokens.get(id)
+    if (!d) return
+    this.bursts.push(new BurstEmitter(this.mainContainer, d.baseX, d.baseY, color, count))
+  }
+
+  freeCollarToken(id: string) { this.partyTokens.get(id)?.uncollar() }
+
+  /** Slide attacker token toward its target, fire onImpact at contact. */
+  attackToken(attackerId: string, targetId: string, onImpact?: () => void): Promise<void> {
+    const a = this.partyTokens.get(attackerId)
+    const t = this.partyTokens.get(targetId)
+    if (!a || !t) return Promise.resolve()
+    return a.attack(t.baseX, t.baseY, onImpact)
+  }
+
   private update(dt: number) {
     this.playerDisplay?.tick(dt)
     this.enemyDisplay?.tick(dt)
+    for (const d of this.partyTokens.values()) d.tick(dt)
     this.ambientDust?.tick(dt)
+
+    // Pulse the active-actor highlight ring
+    if (this.highlightRing && this.highlightRing.visible && this.highlightId) {
+      this.highlightPulse += dt * 0.08
+      this.highlightRing.alpha = 0.55 + Math.sin(this.highlightPulse) * 0.35
+    }
 
     for (let i = this.bursts.length - 1; i >= 0; i--) {
       if (!this.bursts[i].tick(dt)) {
@@ -748,6 +863,7 @@ export class BattlePixiRenderer {
   destroy() {
     this.playerDisplay?.destroy()
     this.enemyDisplay?.destroy()
+    this.clearParty()
     this.ambientDust?.destroy()
     for (const b of this.bursts) b.destroy()
     this.app.destroy(true, { children: true })
