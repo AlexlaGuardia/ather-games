@@ -22,7 +22,7 @@ import {
 } from './battle'
 import type { Spirit } from '../spirits/spirit'
 import type { Move, StatusId, CombatStat } from './moves'
-import { getEffectiveness } from './moves'
+import { getEffectiveness, MOVE_STILL_BREATH, MOVE_SPIRIT_WARD } from './moves'
 import {
   PartyStats, derivePartyStats, calcPartyDamage, partyEvades, effectiveAgi, moveCategory,
 } from './party-stats'
@@ -70,6 +70,8 @@ export type PartyEvent =
   | { type: 'STATUS_INFLICT'; targetId: string; status: StatusId }
   | { type: 'STATUS_TICK'; targetId: string; status: StatusId; amount: number }   // amount>0 damage, <0 heal
   | { type: 'KO'; targetId: string }
+  | { type: 'REACH'; captiveId: string; reach: number; reachMax: number; delta: number } // reach-encounter progress
+  | { type: 'COLLAR_BREAK'; captiveId: string }                                            // the collar snaps — captive freed
   | { type: 'MANA_DRY'; side: 'ally' | 'enemy' }       // a side couldn't afford its chosen move, fell back to Strike
   | { type: 'BATTLE_END'; outcome: 'win' | 'lose' }
 
@@ -86,7 +88,16 @@ export interface PartyBattleState {
   round: number
   outcome: 'pending' | 'win' | 'lose'
   events: PartyEvent[]
+  // Reach-encounter: one enemy is a collared captive you free by REACHING (not KO'ing). Win = collar
+  // breaks; KO the captive = 'forced' soft-fail; party wiped = 'fainted'. KO'ing guards never wins.
+  mode?: 'standard' | 'reach'
+  reachResult?: 'freed' | 'forced' | 'fainted' | null
 }
+
+// Reach knobs (party fork of the 1v1 mechanic)
+const REACH_MAX = 100
+const LEASH_YANK = 9      // reach the collar drains each round (you can't free it with one move)
+const COLLAR_DIM = 0.6    // the collar dims the captive's offense (canon) — also the survivability knob
 
 // ── Setup ──
 
@@ -105,6 +116,7 @@ function makeCombatant(spirit: Spirit, side: 'ally' | 'enemy', idx: number): Par
 export function createPartyBattle(
   allySpirits: Spirit[], enemySpirits: Spirit[],
   manaCfg: { ally?: Partial<ManaConfig>; enemy?: Partial<ManaConfig> } = {},
+  reach?: { captiveIdx: number },
 ): PartyBattleState {
   const aCfg = { ...DEFAULT_MANA, ...manaCfg.ally }
   const eCfg = { ...DEFAULT_MANA, ...manaCfg.enemy }
@@ -121,6 +133,24 @@ export function createPartyBattle(
     outcome: 'pending',
     events: [],
   }
+
+  // Reach-encounter setup: collar one enemy (the captive), dim its offense, and give every ally
+  // the calming moves (Still-Breath / Spirit Ward) so the party can reach it while it fights under the collar.
+  if (reach && state.enemies[reach.captiveIdx]) {
+    state.mode = 'reach'
+    state.reachResult = null
+    const captive = state.enemies[reach.captiveIdx]
+    captive.collared = true
+    captive.reach = 0
+    captive.reachMax = REACH_MAX
+    captive.pstats = { ...captive.pstats, pwr: Math.round(captive.pstats.pwr * COLLAR_DIM), foc: Math.round(captive.pstats.foc * COLLAR_DIM) }
+    const reachMoves = [
+      { move: MOVE_STILL_BREATH, ppLeft: MOVE_STILL_BREATH.pp },
+      { move: MOVE_SPIRIT_WARD, ppLeft: MOVE_SPIRIT_WARD.pp },
+    ]
+    for (const ally of state.allies) ally.moves = [...reachMoves, ...ally.moves].slice(0, 4)
+  }
+
   startRound(state)
   return state
 }
@@ -223,6 +253,12 @@ export function takeAction(state: PartyBattleState, action: PartyAction): void {
   // support moves real and let attack moves carry DoT/debuff riders — both sides.
   applyMoveEffects(state, actor, target, move)
 
+  // Reach-encounter: a calming move (one that `reaches`) aimed at the captive fills its Reach
+  // instead of harming it. Fill the bar → the collar snaps → win.
+  if (state.mode === 'reach' && actor.side === 'ally' && move.reaches && target?.collared && target.alive) {
+    addPartyReach(state, target, move.reaches)
+  }
+
   state.turnIdx++
   checkOutcome(state)
   advanceIfRoundDone(state)
@@ -252,6 +288,13 @@ function endOfRound(state: PartyBattleState) {
     }
   }
   checkOutcome(state)
+
+  // Reach: the collar resists — it yanks the leash each round, draining some Reach. You can't
+  // free a captive with one calm move; you have to keep reaching while you weather the stronghold.
+  if (state.mode === 'reach' && state.outcome === 'pending') {
+    const captive = state.enemies.find(e => e.collared && e.alive)
+    if (captive && (captive.reach ?? 0) > 0) addPartyReach(state, captive, -LEASH_YANK)
+  }
 
   for (const side of ['ally', 'enemy'] as const) {
     const pool = state.mana[side]
@@ -333,12 +376,40 @@ function tickPartyStatus(state: PartyBattleState, c: PartyCombatant) {
 
 function checkOutcome(state: PartyBattleState) {
   if (state.outcome !== 'pending') return
+  if (state.mode === 'reach') {
+    // Win is fired on collar-break (in addPartyReach). Here we only catch the fail states:
+    // KO'ing the captive = forced (you killed who you came to save); party wiped = fainted.
+    const captive = state.enemies.find(e => e.reachMax !== undefined)
+    if (captive && !captive.alive) {
+      state.reachResult = 'forced'; state.outcome = 'lose'
+      state.events.push({ type: 'BATTLE_END', outcome: 'lose' })
+    } else if (state.allies.every(c => !c.alive)) {
+      state.reachResult = 'fainted'; state.outcome = 'lose'
+      state.events.push({ type: 'BATTLE_END', outcome: 'lose' })
+    }
+    return
+  }
   if (state.enemies.every(c => !c.alive)) {
     state.outcome = 'win'
     state.events.push({ type: 'BATTLE_END', outcome: 'win' })
   } else if (state.allies.every(c => !c.alive)) {
     state.outcome = 'lose'
     state.events.push({ type: 'BATTLE_END', outcome: 'lose' })
+  }
+}
+
+/** Add (or drain, with negative delta) Reach on the captive. Filling it snaps the collar → win. */
+function addPartyReach(state: PartyBattleState, captive: PartyCombatant, delta: number) {
+  const max = captive.reachMax ?? REACH_MAX
+  const before = captive.reach ?? 0
+  captive.reach = Math.max(0, Math.min(max, before + delta))
+  state.events.push({ type: 'REACH', captiveId: captive.id, reach: captive.reach, reachMax: max, delta: captive.reach - before })
+  if (captive.reach >= max && state.outcome === 'pending') {
+    captive.collared = false
+    state.reachResult = 'freed'
+    state.events.push({ type: 'COLLAR_BREAK', captiveId: captive.id })
+    state.outcome = 'win'
+    state.events.push({ type: 'BATTLE_END', outcome: 'win' })
   }
 }
 

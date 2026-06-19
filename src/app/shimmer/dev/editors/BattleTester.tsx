@@ -442,6 +442,7 @@ export default function BattleTester() {
               allySpirits={partyRef.current.allies}
               enemySpirits={partyRef.current.enemies}
               zoneId={sceneZone}
+              reach={reachMode}
               ai={{
                 focusFire: aiTier !== 'wild',
                 spendMana: aiTier !== 'wild',

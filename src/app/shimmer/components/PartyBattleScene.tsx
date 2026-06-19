@@ -19,6 +19,7 @@ export interface PartyBattleSceneProps {
   zoneId: string
   ai?: AIConfig
   mana?: { ally?: Partial<ManaConfig>; enemy?: Partial<ManaConfig> }
+  reach?: boolean   // Reach-encounter: enemy lead is a collared captive — free it, don't KO it
   onEnd: (outcome: 'win' | 'lose') => void
 }
 
@@ -42,9 +43,11 @@ const STATUS_COLOR: Record<string, string> = {
   ignition: '#e06030', regen: '#50c878', crystallize: '#80b0d0', fortify: '#b0a060', surge: '#d08040', erosion: '#907060', anchor: '#6070a0',
 }
 
-/** A move needs a foe target only if it damages or has a foe-directed effect. Pure self-buffs skip the picker. */
-function needsTarget(move: { power: number; effect?: string; statChanges?: { target: string }[] }): boolean {
+/** A move needs an enemy target if it damages, has a foe-directed effect, or REACHES the captive.
+ *  Pure self-buffs skip the picker. */
+function needsTarget(move: { power: number; effect?: string; reaches?: number; statChanges?: { target: string }[] }): boolean {
   if (move.power > 0) return true
+  if (move.reaches) return true   // reaching moves are aimed at the collared captive
   if (move.effect) return true
   return !!move.statChanges?.some(sc => sc.target === 'foe')
 }
@@ -93,6 +96,19 @@ function CombatantPlate({ c, hp, isActor, isTarget, onClick }: {
         <span className="text-[8px] text-white/30 font-mono ml-auto tabular-nums">{Math.max(0, hp)}</span>
       </div>
       <HPBar current={hp} max={c.maxHp} />
+      {c.alive && c.reachMax !== undefined && c.collared && (
+        <div className="mt-1">
+          <div className="h-[4px] rounded-sm bg-[#0a1a22] border border-[#37e6ff]/20 overflow-hidden">
+            <div className="h-full rounded-sm" style={{
+              width: `${Math.min(100, ((c.reach ?? 0) / (c.reachMax || 100)) * 100)}%`,
+              background: 'linear-gradient(90deg,#1f9fc4,#37e6ff)',
+              boxShadow: (c.reach ?? 0) > 0 ? '0 0 5px #37e6ff80' : 'none',
+              transition: 'width 0.4s ease-out',
+            }} />
+          </div>
+          <p className="text-[7px] text-[#37e6ff]/50 mt-0.5 italic leading-none">reach it — don&apos;t break it</p>
+        </div>
+      )}
     </button>
   )
 }
@@ -100,11 +116,11 @@ function CombatantPlate({ c, hp, isActor, isTarget, onClick }: {
 // ── Party Battle Scene ──
 
 export default function PartyBattleScene({
-  allySpirits, enemySpirits, zoneId, ai, mana, onEnd,
+  allySpirits, enemySpirits, zoneId, ai, mana, reach, onEnd,
 }: PartyBattleSceneProps) {
   const canvasRef = useRef<HTMLDivElement>(null)
   const rendererRef = useRef<BattlePixiRenderer | null>(null)
-  const stateRef = useRef<PartyBattleState>(createPartyBattle(allySpirits, enemySpirits, mana))
+  const stateRef = useRef<PartyBattleState>(createPartyBattle(allySpirits, enemySpirits, mana, reach ? { captiveIdx: 0 } : undefined))
   const aiCfg: AIConfig = ai ?? { focusFire: true, spendMana: true }
 
   const [uiPhase, setUIPhase] = useState<UIPhase>('intro')
@@ -203,9 +219,27 @@ export default function PartyBattleScene({
         case 'MANA_DRY':
           setText(`${ev.side === 'ally' ? 'Your side is' : 'The enemy is'} out of mana — a basic strike.`)
           delay = 600; break
-        case 'BATTLE_END':
-          setText(ev.outcome === 'win' ? 'The stronghold falls. Your circle holds.' : 'Your circle is overwhelmed...')
-          delay = 1300; break
+        case 'REACH':
+          if (ev.delta > 0) setText(`You reach for the spirit beneath the collar...`)
+          else setText(`The collar yanks it back...`)
+          delay = ev.delta > 0 ? 600 : 450; break
+        case 'COLLAR_BREAK':
+          setText(`The collar shatters — its light returns!`)
+          if (r) { r.freeCollarToken(ev.captiveId); r.flashToken(ev.captiveId); r.burstToken(ev.captiveId, 0x37e6ff, 60) }
+          delay = 1100; break
+        case 'BATTLE_END': {
+          const rr = stateRef.current.reachResult
+          if (stateRef.current.mode === 'reach') {
+            setText(
+              rr === 'freed' ? 'The collar breaks. It chooses to stay — by trust, not the leash.'
+              : rr === 'forced' ? 'You overpowered the captive... but you forced it. That was not the way.'
+              : 'Your circle is overwhelmed. Steady your hearts, and try again.'
+            )
+          } else {
+            setText(ev.outcome === 'win' ? 'The stronghold falls. Your circle holds.' : 'Your circle is overwhelmed...')
+          }
+          delay = 1400; break
+        }
       }
       i++
       setTimeout(next, delay)
