@@ -21,7 +21,7 @@ import {
   createCombatant, calcDamage, getEffectiveStat,
 } from './battle'
 import type { Spirit } from '../spirits/spirit'
-import type { Move } from './moves'
+import type { Move, StatusId, CombatStat } from './moves'
 
 // ── Free basic attack (always affordable) ──
 // Kept deliberately weak: it's the fallback when mana is dry, so being forced
@@ -60,6 +60,9 @@ export type PartyEvent =
   | { type: 'ROUND'; round: number }
   | { type: 'MOVE'; actorId: string; moveName: string; targetId: string; manaSpent: number }
   | { type: 'DAMAGE'; targetId: string; amount: number; effectiveness: number; crit: boolean }
+  | { type: 'STAT_CHANGE'; targetId: string; stat: CombatStat; stages: number }
+  | { type: 'STATUS_INFLICT'; targetId: string; status: StatusId }
+  | { type: 'STATUS_TICK'; targetId: string; status: StatusId; amount: number }   // amount>0 damage, <0 heal
   | { type: 'KO'; targetId: string }
   | { type: 'MANA_DRY'; side: 'ally' | 'enemy' }       // a side couldn't afford its chosen move, fell back to Strike
   | { type: 'BATTLE_END'; outcome: 'win' | 'lose' }
@@ -205,6 +208,10 @@ export function takeAction(state: PartyBattleState, action: PartyAction): void {
     }
   }
 
+  // Non-damage effects (the support layer): stat changes, status riders. These make
+  // support moves real and let attack moves carry DoT/debuff riders — both sides.
+  applyMoveEffects(state, actor, target, move)
+
   state.turnIdx++
   checkOutcome(state)
   advanceIfRoundDone(state)
@@ -219,9 +226,97 @@ function advanceIfRoundDone(state: PartyBattleState) {
 }
 
 function endOfRound(state: PartyBattleState) {
+  // Status ticks first (DoTs/regen can KO or heal before mana refreshes).
+  for (const c of allCombatants(state)) {
+    if (!c.alive || !c.status) continue
+    tickPartyStatus(state, c)
+    c.statusTurns--
+    if (c.statusTurns <= 0) {
+      if (c.status === 'fortify') { applyStatStage(state, c, 'grd', -1); applyStatStage(state, c, 'agi', 1) }
+      c.status = null
+    }
+    if (c.hp <= 0 && c.alive) {
+      c.alive = false
+      state.events.push({ type: 'KO', targetId: c.id })
+    }
+  }
+  checkOutcome(state)
+
   for (const side of ['ally', 'enemy'] as const) {
     const pool = state.mana[side]
     pool.current = Math.min(pool.max, pool.current + pool.regen)
+  }
+}
+
+// ── Move effects (support layer) — ported from the 1v1 engine, party-aware ──
+
+/** Apply a move's stat changes + status riders. self → actor, foe → the chosen target. */
+function applyMoveEffects(state: PartyBattleState, actor: PartyCombatant, target: PartyCombatant | undefined, move: Move) {
+  if (move.statChanges) {
+    for (const sc of move.statChanges) {
+      const t = sc.target === 'self' ? actor : target
+      if (t && t.alive) applyStatStage(state, t, sc.stat, sc.stages)
+    }
+  }
+  if (move.effect && move.effectChance && target && target.alive) {
+    if (Math.random() * 100 < move.effectChance) inflictPartyStatus(state, target, move.effect)
+  }
+  if (move.selfEffect && move.selfEffectChance && actor.alive) {
+    if (Math.random() * 100 < move.selfEffectChance) inflictPartyStatus(state, actor, move.selfEffect)
+  }
+}
+
+function applyStatStage(state: PartyBattleState, c: PartyCombatant, stat: CombatStat, stages: number) {
+  const prev = c.statStages[stat]
+  c.statStages[stat] = Math.max(-4, Math.min(4, prev + stages))
+  const actual = c.statStages[stat] - prev
+  if (actual !== 0) state.events.push({ type: 'STAT_CHANGE', targetId: c.id, stat, stages: actual })
+}
+
+function statusDur(status: StatusId): number {
+  switch (status) {
+    case 'anchor': return 2
+    case 'erosion': return 2 + (Math.random() < 0.5 ? 1 : 0)
+    case 'surge': return 2
+    case 'fortify': return 3
+    default: return 3 // ignition, regen, crystallize
+  }
+}
+
+function inflictPartyStatus(state: PartyBattleState, c: PartyCombatant, status: StatusId) {
+  if (c.status) return // one status at a time
+  c.status = status
+  c.statusTurns = statusDur(status)
+  state.events.push({ type: 'STATUS_INFLICT', targetId: c.id, status })
+  if (status === 'fortify') { applyStatStage(state, c, 'grd', 1); applyStatStage(state, c, 'agi', -1) }
+}
+
+function tickPartyStatus(state: PartyBattleState, c: PartyCombatant) {
+  switch (c.status) {
+    case 'ignition': {
+      const d = Math.max(1, Math.floor(c.maxHp / 12)); c.hp = Math.max(0, c.hp - d)
+      state.events.push({ type: 'STATUS_TICK', targetId: c.id, status: 'ignition', amount: d }); break
+    }
+    case 'regen': {
+      const h = Math.max(1, Math.floor(c.maxHp / 12)); c.hp = Math.min(c.maxHp, c.hp + h)
+      state.events.push({ type: 'STATUS_TICK', targetId: c.id, status: 'regen', amount: -h }); break
+    }
+    case 'surge': {
+      const d = Math.max(1, Math.floor(c.maxHp / 16)); c.hp = Math.max(0, c.hp - d)
+      state.events.push({ type: 'STATUS_TICK', targetId: c.id, status: 'surge', amount: d }); break
+    }
+    case 'erosion': {
+      const stats: CombatStat[] = ['pwr', 'grd', 'agi', 'vig']
+      const stat = stats[Math.floor(Math.random() * stats.length)]
+      if (c.statStages[stat] > -4) { c.statStages[stat]--; state.events.push({ type: 'STAT_CHANGE', targetId: c.id, stat, stages: -1 }) }
+      state.events.push({ type: 'STATUS_TICK', targetId: c.id, status: 'erosion', amount: 0 }); break
+    }
+    case 'crystallize':
+      state.events.push({ type: 'STATUS_TICK', targetId: c.id, status: 'crystallize', amount: 0 }); break
+    case 'fortify':
+      state.events.push({ type: 'STATUS_TICK', targetId: c.id, status: 'fortify', amount: 0 }); break
+    case 'anchor':
+      state.events.push({ type: 'STATUS_TICK', targetId: c.id, status: 'anchor', amount: 0 }); break
   }
 }
 

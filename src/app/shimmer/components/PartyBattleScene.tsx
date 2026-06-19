@@ -31,6 +31,24 @@ const ELEMENT_COLORS: Record<string, string> = {
 }
 const elem = (e?: string) => (!e || e === 'base' ? 'neutral' : e)
 
+const STATUS_VERB: Record<string, string> = {
+  ignition: 'catches fire', regen: 'steadies, mending', crystallize: 'crystallizes',
+  fortify: 'fortifies', surge: 'is surging', erosion: 'starts eroding', anchor: 'is anchored',
+}
+const STATUS_LABEL: Record<string, string> = {
+  ignition: 'BRN', regen: 'RGN', crystallize: 'CRY', fortify: 'FRT', surge: 'SRG', erosion: 'ERO', anchor: 'ANC',
+}
+const STATUS_COLOR: Record<string, string> = {
+  ignition: '#e06030', regen: '#50c878', crystallize: '#80b0d0', fortify: '#b0a060', surge: '#d08040', erosion: '#907060', anchor: '#6070a0',
+}
+
+/** A move needs a foe target only if it damages or has a foe-directed effect. Pure self-buffs skip the picker. */
+function needsTarget(move: { power: number; effect?: string; statChanges?: { target: string }[] }): boolean {
+  if (move.power > 0) return true
+  if (move.effect) return true
+  return !!move.statChanges?.some(sc => sc.target === 'foe')
+}
+
 // ── HP Bar ──
 
 function HPBar({ current, max, w = 88 }: { current: number; max: number; w?: number }) {
@@ -66,6 +84,12 @@ function CombatantPlate({ c, hp, isActor, isTarget, onClick }: {
       <div className="flex items-center gap-1.5 mb-1">
         <span className="w-2 h-2 rounded-full inline-block shrink-0" style={{ backgroundColor: ELEMENT_COLORS[e], boxShadow: c.alive ? `0 0 5px ${ELEMENT_COLORS[e]}` : 'none' }} />
         <span className="font-display text-[10px] text-white/85 truncate">{c.spirit.name}</span>
+        {c.alive && c.status && (
+          <span className="text-[7px] font-mono px-1 rounded leading-tight shrink-0"
+            style={{ color: STATUS_COLOR[c.status], backgroundColor: (STATUS_COLOR[c.status] ?? '#888') + '22' }}>
+            {STATUS_LABEL[c.status] ?? c.status}
+          </span>
+        )}
         <span className="text-[8px] text-white/30 font-mono ml-auto tabular-nums">{Math.max(0, hp)}</span>
       </div>
       <HPBar current={hp} max={c.maxHp} />
@@ -155,6 +179,20 @@ export default function PartyBattleScene({
           setTimeout(refreshHP, 200)
           delay = 950; break
         }
+        case 'STAT_CHANGE':
+          setText(`${nameOf(ev.targetId)}'s ${ev.stat.toUpperCase()} ${ev.stages > 0 ? 'rose' : 'fell'}${Math.abs(ev.stages) > 1 ? ' sharply' : ''}.`)
+          delay = 550; break
+        case 'STATUS_INFLICT':
+          setText(`${nameOf(ev.targetId)} ${STATUS_VERB[ev.status] ?? `is afflicted (${ev.status})`}.`)
+          delay = 650; break
+        case 'STATUS_TICK':
+          if (ev.amount !== 0) {
+            setText(`${nameOf(ev.targetId)} ${ev.amount > 0 ? `takes ${ev.amount} from ${ev.status}` : `recovers ${-ev.amount}`}.`)
+            if (r) { r.flashToken(ev.targetId); if (ev.amount > 0) r.burstToken(ev.targetId, 0xe06030, 16) }
+            setTimeout(refreshHP, 200)
+            delay = 650
+          } else { delay = 0 }
+          break
         case 'KO':
           setText(`${nameOf(ev.targetId)} is down!`)
           if (r) r.koToken(ev.targetId)
@@ -235,15 +273,19 @@ export default function PartyBattleScene({
   const pool = st.mana.ally
 
   const chooseMove = useCallback((moveIdx: number) => {
-    // moveIdx -1 = Strike. If only one foe, skip target select.
-    if (foes.length <= 1) {
+    // moveIdx -1 = Strike (always needs a foe). Self-buffs skip targeting; single foe auto-targets.
+    const move = moveIdx < 0 ? { power: BASIC_STRIKE.power } : actor?.moves[moveIdx]?.move
+    const wantsTarget = !move || needsTarget(move)
+    if (!wantsTarget) {
+      doAction({ type: 'move', actorId: activeId!, moveIdx, targetId: activeId! })
+    } else if (foes.length <= 1) {
       doAction({ type: 'move', actorId: activeId!, moveIdx, targetId: foes[0]?.id ?? '' })
     } else {
       setPendingMoveIdx(moveIdx)
       setTargetIdx(0)
       setUIPhase('selectTarget')
     }
-  }, [foes, activeId, doAction])
+  }, [foes, activeId, actor, doAction])
 
   const confirmTarget = useCallback((id: string) => {
     doAction({ type: 'move', actorId: activeId!, moveIdx: pendingMoveIdx, targetId: id })
