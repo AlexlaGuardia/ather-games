@@ -172,7 +172,7 @@ export interface BattleState {
 // Battle Setup
 // ============================================
 
-function createCombatant(spirit: Spirit): BattleCombatant {
+export function createCombatant(spirit: Spirit): BattleCombatant {
   const rawStats = deriveCombatStats(spirit)
   const stats = applyPassiveHeldItem(rawStats, spirit.heldItem)
   const hp = maxHP(stats.vig)
