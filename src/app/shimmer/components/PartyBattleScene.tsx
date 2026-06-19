@@ -437,7 +437,7 @@ export default function PartyBattleScene({
               </p>
               <p className="text-white/70 text-[12px]">{text}</p>
               <button onClick={() => onEnd(st.outcome === 'win' ? 'win' : 'lose')}
-                className="mt-2 px-4 py-1.5 rounded bg-[#d4a843]/20 border border-[#d4a843]/40 text-[#d4a843] font-display text-[11px] hover:bg-[#d4a843]/30 transition-all">
+                className="mt-2 px-5 py-3 min-h-[48px] w-full rounded-xl bg-[#d4a843]/20 border border-[#d4a843]/40 text-[#d4a843] font-display text-[14px] hover:bg-[#d4a843]/30 active:scale-95 transition-all">
                 Continue
               </button>
             </div>
@@ -455,12 +455,11 @@ function StanceButton({ name, hint, accent, onClick }: {
 }) {
   return (
     <button onClick={onClick}
-      className="text-left px-3 py-2 rounded-lg border border-white/[0.07] hover:bg-white/[0.04] transition-all group"
-      style={{ borderColor: `${accent}30` }}
+      className="text-left px-3 py-3 min-h-[60px] rounded-xl border hover:bg-white/[0.05] active:scale-95 transition-all"
+      style={{ borderColor: `${accent}40`, background: `${accent}10` }}
     >
-      <span className="font-display text-[13px] tracking-wide block" style={{ color: accent }}>{name}</span>
-      <span className="text-[8px] text-white/35 leading-tight block mt-0.5">{hint}</span>
-      <span className="block h-[2px] mt-1.5 rounded-full transition-all" style={{ backgroundColor: accent, opacity: 0.4 }} />
+      <span className="font-display text-[16px] tracking-wide block" style={{ color: accent }}>{name}</span>
+      <span className="text-[9px] text-white/40 leading-tight block mt-0.5">{hint}</span>
     </button>
   )
 }
