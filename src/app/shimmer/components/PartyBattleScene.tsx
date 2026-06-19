@@ -329,8 +329,8 @@ export default function PartyBattleScene({
             <div>
               <p className="text-[10px] text-white/40 mb-1.5">{text}</p>
               <div className="grid grid-cols-2 gap-1.5">
-                <MoveButton name="Strike" element="neutral" cost={0} affordable onClick={() => chooseMove(-1)} sub="basic" />
-                {actor.moves.slice(0, 3).map((slot, i) => {
+                <MoveButton name="Strike" element="neutral" cost={0} affordable onClick={() => chooseMove(-1)} sub="weak · free" />
+                {actor.moves.map((slot, i) => {
                   const cost = manaCostFor(slot.move)
                   const affordable = cost <= pool.current
                   return (

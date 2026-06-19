@@ -24,23 +24,28 @@ import type { Spirit } from '../spirits/spirit'
 import type { Move } from './moves'
 
 // ── Free basic attack (always affordable) ──
+// Kept deliberately weak: it's the fallback when mana is dry, so being forced
+// onto it should sting (otherwise mana is a no-op constraint and the move list
+// collapses to "spam your biggest"). The whole tension is best-move-vs-affordable.
 export const BASIC_STRIKE: Move = {
   id: 'strike',
   name: 'Strike',
   element: 'neutral',
   state: 'compact',
-  power: 30,
+  power: 18,
   accuracy: 100,
   pp: 999,
   priority: 0,
-  description: 'A plain bonded strike — costs no mana.',
+  description: 'A plain bonded strike — costs no mana, but it is weak.',
 }
 
-/** Mana cost for a move — power-scaled. Status/utility (power 0) are cheap; basics are free. */
+/** Mana cost for a move — power-scaled with a premium spike on heavy hitters, so the
+ *  top of the kit is a real commitment (you can't big-cast the whole party every round).
+ *  Status/utility (power 0) are cheap; the free Strike is 0. Used by the party engine only. */
 export function manaCostFor(move: Move): number {
   if (move.id === BASIC_STRIKE.id) return 0
-  if (move.power === 0) return 2
-  return Math.max(2, Math.round(move.power / 12))
+  if (move.power === 0) return 3
+  return Math.max(3, Math.round(move.power / 8)) + (move.power >= 60 ? 2 : 0)
 }
 
 export interface ManaPool { current: number; max: number; regen: number }
@@ -77,7 +82,10 @@ export interface PartyBattleState {
 // ── Setup ──
 
 export interface ManaConfig { start: number; max: number; regen: number }
-const DEFAULT_MANA: ManaConfig = { start: 20, max: 30, regen: 6 }
+// Tight on purpose: the pool is shared across a 3-member side, so it can't fund
+// everyone's premium move every round — you pick who goes big and who Strikes/Defends.
+// regen < one premium cast/round keeps the tension going past the opening.
+const DEFAULT_MANA: ManaConfig = { start: 16, max: 22, regen: 5 }
 
 function makeCombatant(spirit: Spirit, side: 'ally' | 'enemy', idx: number): PartyCombatant {
   const base = createCombatant(spirit)

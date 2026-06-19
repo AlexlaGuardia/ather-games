@@ -24,14 +24,16 @@ function mkSpirit(species: Species, level: number, name = species): Spirit {
 const ALLY_AI: AIConfig = { focusFire: true, spendMana: true }
 const ENEMY_AI: AIConfig = { focusFire: true, spendMana: true }
 
-interface RunResult { outcome: 'win' | 'lose'; rounds: number; manaDryTurns: number; turns: number }
+interface RunResult { outcome: 'win' | 'lose'; rounds: number; manaDryTurns: number; constrained: number; turns: number }
 
 function runBattle(
   allies: Spirit[], enemies: Spirit[],
   mana?: { ally?: Partial<ManaConfig>; enemy?: Partial<ManaConfig> },
 ): RunResult {
   const state: PartyBattleState = createPartyBattle(allies, enemies, mana)
-  let starved = 0  // ally turns that WANTED a mana move but could only afford Strike
+  let starved = 0     // ally turns that WANTED a mana move but could only afford Strike
+  let constrained = 0 // ally turns where mana forced a WEAKER move than the actor's best (Strike or cheaper)
+  let allyTurns = 0
   let turns = 0
   const SAFETY = 2000
   while (state.outcome === 'pending' && turns < SAFETY) {
@@ -39,9 +41,14 @@ function runBattle(
     if (!actor) break // round boundary handled inside takeAction; guard anyway
     const ai = actor.side === 'ally' ? ALLY_AI : ENEMY_AI
     const action = chooseAction(state, actor, ai)
-    if (actor.side === 'ally' && action.type === 'move' && action.moveIdx < 0
-        && actor.moves.some(e => e.move.power > BASIC_STRIKE.power)) {
-      starved++ // had a real move in its kit, mana said no
+    if (actor.side === 'ally') {
+      allyTurns++
+      const bestPower = Math.max(BASIC_STRIKE.power, ...actor.moves.map(e => e.move.power))
+      const chosenPower = action.type !== 'move' ? BASIC_STRIKE.power
+        : action.moveIdx < 0 ? BASIC_STRIKE.power : actor.moves[action.moveIdx].move.power
+      if (chosenPower < bestPower) constrained++ // mana made it settle for less
+      if (action.type === 'move' && action.moveIdx < 0
+          && actor.moves.some(e => e.move.power > BASIC_STRIKE.power)) starved++
     }
     takeAction(state, action)
     turns++
@@ -50,24 +57,26 @@ function runBattle(
     outcome: state.outcome === 'lose' ? 'lose' : 'win',
     rounds: state.round,
     manaDryTurns: starved,
+    constrained: allyTurns ? constrained / allyTurns : 0,
     turns,
   }
 }
 
 function sweep(label: string, mkAllies: () => Spirit[], mkEnemies: () => Spirit[], runs = 400,
   mana?: { ally?: Partial<ManaConfig>; enemy?: Partial<ManaConfig> }) {
-  let wins = 0, rounds = 0, dry = 0, turns = 0
+  let wins = 0, rounds = 0, dry = 0, constrained = 0, turns = 0
   for (let i = 0; i < runs; i++) {
     const r = runBattle(mkAllies(), mkEnemies(), mana)
     if (r.outcome === 'win') wins++
     rounds += r.rounds
     dry += r.manaDryTurns
+    constrained += r.constrained
     turns += r.turns
   }
   const pct = (wins / runs * 100).toFixed(1)
   console.log(
     `${label.padEnd(34)} | win ${pct.padStart(5)}% | rounds ${(rounds / runs).toFixed(1).padStart(4)}` +
-    ` | mana-dry/run ${(dry / runs).toFixed(1).padStart(4)} | turns/run ${(turns / runs).toFixed(0).padStart(3)}`,
+    ` | constrained ${(constrained / runs * 100).toFixed(0).padStart(3)}% | dry/run ${(dry / runs).toFixed(1).padStart(4)} | turns ${(turns / runs).toFixed(0).padStart(3)}`,
   )
 }
 
