@@ -161,3 +161,35 @@ console.log('')
   }
   console.log(`  spread: ${(marg2[0].avg - marg2[marg2.length - 1].avg).toFixed(1)} pts\n`)
 }
+
+// ── Team-value (flex-slot) test — the CORRECT test for glass cannons ──
+// A glass cannon's niche is alpha-striking from a screened backline, which 1v1 can't show.
+// So: fix a 2-spirit core (balanced + physical wall), rotate each species through the 3rd
+// "flex" slot, and measure win% vs a gauntlet of varied enemy teams. If firefly/hummingbird
+// climb here vs their 1v1 floor, they're proven party units, not dead weight.
+{
+  const SP: Species[] = ['fox', 'axolotl', 'owl', 'frog', 'firefly', 'rabbit', 'water-bear', 'hummingbird', 'turtle', 'bat']
+  const AB: Record<string, string> = { fox: 'fox', axolotl: 'axo', owl: 'owl', frog: 'frog', firefly: 'ffly', rabbit: 'rbbt', 'water-bear': 'wbr', hummingbird: 'hmbd', turtle: 'trtl', bat: 'bat' }
+  const L = 25, N = 120
+  const mkS = (sp: Species): Spirit => { const s = createSpirit(sp, sp, 0, 0); s.level = L; s.element = 'mana'; s.bond = 0; s.happiness = 128; return s }
+  const CORE: Species[] = ['fox', 'water-bear']                 // balanced striker + physical wall
+  const GAUNTLET: Species[][] = [
+    ['owl', 'frog', 'turtle'],          // caster + sweeper + spirit wall
+    ['rabbit', 'bat', 'axolotl'],       // bruiser + spirit skirmisher + sustain
+    ['hummingbird', 'fox', 'water-bear'], // speed + balanced + wall
+  ]
+  const teamWin = (allies: Species[], enemies: Species[]): boolean => {
+    const st = createPartyBattle(allies.map(mkS), enemies.map(mkS))
+    let g = 0
+    while (st.outcome === 'pending' && g < 2000) { const ac = currentActor(st); if (!ac) break; takeAction(st, chooseAction(st, ac, { focusFire: true, spendMana: true })); g++ }
+    return st.outcome === 'win'
+  }
+  console.log(`=== Team-value: flex-slot win% — core [fox, water-bear] + FLEX vs a 3-team gauntlet (L${L}, ${N}/matchup) ===\n`)
+  const rows = SP.map(flex => {
+    let w = 0, tot = 0
+    for (const enemy of GAUNTLET) { for (let i = 0; i < N; i++) { if (teamWin([...CORE, flex], enemy)) w++; tot++ } }
+    return { flex, pct: w / tot * 100 }
+  }).sort((x, y) => y.pct - x.pct)
+  for (const { flex, pct } of rows) console.log(`  +${AB[flex].padEnd(5)} ${pct.toFixed(1).padStart(5)}%  ${'█'.repeat(Math.round(pct / 2.5))}`)
+  console.log('\n  (compare each to its 1v1 marginal above — glass cannons SHOULD climb here)\n')
+}
