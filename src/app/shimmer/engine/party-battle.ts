@@ -477,7 +477,7 @@ export interface AIConfig {
   spendMana: boolean   // use mana moves when affordable (true) vs Strike-only (false)
   // Half-director: the Keeper sets a STANCE for the round; the spirits riff within it,
   // colored by their temperament (bold spirits stay aggressive even on Guard, etc.).
-  stance?: 'press' | 'guard' | 'focus'
+  stance?: 'press' | 'guard' | 'focus' | 'reach'
   focusTargetId?: string   // for 'focus' — the enemy the Keeper points the party at
 }
 
@@ -493,10 +493,21 @@ export function chooseAction(state: PartyBattleState, actor: PartyCombatant, ai:
   const foes = livingEnemiesOf(state, actor.side)
   if (foes.length === 0) return { type: 'defend', actorId: actor.id }
 
-  // Target: Focus points the party at one foe; otherwise focus-fire the weakest (or random).
+  // Reach directive: calm the collared captive (a `reaches` move) instead of fighting it.
+  if (ai.stance === 'reach') {
+    const captive = foes.find(f => f.collared)
+    const reachIdx = actor.moves.findIndex(e => (e.move.reaches ?? 0) > 0)
+    if (captive && reachIdx >= 0) return { type: 'move', actorId: actor.id, moveIdx: reachIdx, targetId: captive.id }
+    // no captive / no calm move in kit → fall through and fight the guards
+  }
+
+  // Targeting: Focus points anywhere the Keeper chose (even the captive = a deliberate brute-force).
+  // Otherwise the party spares the collared captive and hits the guards — Press/Guard never force-fail it.
+  const targetPool = ai.stance === 'focus' ? foes : foes.filter(f => !f.collared)
+  if (targetPool.length === 0) return { type: 'defend', actorId: actor.id } // only the captive left — hold, await a Reach call
   let target: PartyCombatant | undefined
   if (ai.stance === 'focus' && ai.focusTargetId) target = foes.find(f => f.id === ai.focusTargetId)
-  if (!target) target = ai.focusFire ? foes.reduce((lo, c) => (c.hp < lo.hp ? c : lo), foes[0]) : foes[Math.floor(Math.random() * foes.length)]
+  if (!target) target = ai.focusFire ? targetPool.reduce((lo, c) => (c.hp < lo.hp ? c : lo), targetPool[0]) : targetPool[Math.floor(Math.random() * targetPool.length)]
 
   // Stance sets the attack-vs-brace lean; temperament bends it (the spirit's own nature shows).
   // No stance (e.g. enemy AI) = aggressive default so foes press unless told otherwise.

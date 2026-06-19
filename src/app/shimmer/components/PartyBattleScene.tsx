@@ -5,7 +5,7 @@ import type { Spirit } from '../spirits/spirit'
 import {
   PartyBattleState, PartyCombatant, PartyEvent, PartyAction, AIConfig, ManaConfig, KeeperArchetype,
   createPartyBattle, takeAction, currentActor, chooseAction, chooseKeeperAction,
-  livingEnemiesOf, manaCostFor, BASIC_STRIKE,
+  livingEnemiesOf,
 } from '../engine/party-battle'
 import { drawBattleBg, BG_W, BG_H } from './BattleBackground'
 import { BattlePixiRenderer } from '../engine/pixi-battle'
@@ -24,7 +24,8 @@ export interface PartyBattleSceneProps {
   onEnd: (outcome: 'win' | 'lose') => void
 }
 
-type UIPhase = 'intro' | 'selectMove' | 'selectTarget' | 'enemyTurn' | 'animating' | 'end'
+type UIPhase = 'intro' | 'selectStance' | 'selectFocus' | 'animating' | 'end'
+type Stance = 'press' | 'guard' | 'focus' | 'reach'
 
 // ── Constants ──
 
@@ -44,14 +45,6 @@ const STATUS_COLOR: Record<string, string> = {
   ignition: '#e06030', regen: '#50c878', crystallize: '#80b0d0', fortify: '#b0a060', surge: '#d08040', erosion: '#907060', anchor: '#6070a0',
 }
 
-/** A move needs an enemy target if it damages, has a foe-directed effect, or REACHES the captive.
- *  Pure self-buffs skip the picker. */
-function needsTarget(move: { power: number; effect?: string; reaches?: number; statChanges?: { target: string }[] }): boolean {
-  if (move.power > 0) return true
-  if (move.reaches) return true   // reaching moves are aimed at the collared captive
-  if (move.effect) return true
-  return !!move.statChanges?.some(sc => sc.target === 'foe')
-}
 
 // ── HP Bar ──
 
@@ -127,9 +120,8 @@ export default function PartyBattleScene({
 
   const [uiPhase, setUIPhase] = useState<UIPhase>('intro')
   const [text, setText] = useState('')
-  const [activeId, setActiveId] = useState<string | null>(null)
-  const [pendingMoveIdx, setPendingMoveIdx] = useState<number>(-1)
-  const [targetIdx, setTargetIdx] = useState(0)
+  const [resolvingId, setResolvingId] = useState<string | null>(null)
+  const [round, setRound] = useState(1)
   const [hp, setHp] = useState<Record<string, number>>(() => {
     const m: Record<string, number> = {}
     const s = stateRef.current
@@ -272,93 +264,77 @@ export default function PartyBattleScene({
 
   const finish = useCallback(() => {
     rendererRef.current?.highlightToken(null)
+    setResolvingId(null)
     setUIPhase('end')
   }, [])
 
-  // ── Submit an action and pump to the next turn ──
-  const doAction = useCallback((action: PartyAction) => {
-    const s = stateRef.current
-    const before = s.events.length
-    takeAction(s, action)
-    const fresh = s.events.slice(before)
-    playEvents(fresh, () => {
-      refreshHP()
-      if (s.outcome !== 'pending') finish()
-      else pump()
-    })
-  }, [playEvents, refreshHP, finish]) // eslint-disable-line react-hooks/exhaustive-deps
+  // ── Half-director: pick ONE stance per round, then the round auto-resolves ──
 
-  // ── Decide whose turn it is, prompt player or run AI ──
-  const pump = useCallback(() => {
+  // Prompt the Keeper (player) for this round's directive.
+  const beginRound = useCallback(() => {
     const s = stateRef.current
     if (s.outcome !== 'pending') { finish(); return }
-    const actor = currentActor(s)
-    if (!actor) { finish(); return }
-    rendererRef.current?.highlightToken(actor.id)
-    if (actor.side === 'enemy') {
-      setActiveId(actor.id)
-      setUIPhase('enemyTurn')
-      setText(`${actor.spirit.name} moves...`)
-      setTimeout(() => doAction(chooseAction(s, actor, aiCfg)), 650)
-    } else if (actor.isKeeper) {
-      // Keeper companion is AI-driven support — auto-acts, no player prompt
-      setActiveId(actor.id)
-      setUIPhase('enemyTurn')
-      setText(`${actor.spirit.name} reads the fight...`)
-      setTimeout(() => doAction(chooseKeeperAction(s, actor)), 650)
-    } else {
-      setActiveId(actor.id)
-      setPendingMoveIdx(-1)
-      setUIPhase('selectMove')
-      setText(`${actor.spirit.name} — your move.`)
-    }
-  }, [doAction, finish, aiCfg])
+    setRound(s.round)
+    setResolvingId(null)
+    rendererRef.current?.highlightToken(null)
+    setUIPhase('selectStance')
+    setText('Give the directive.')
+  }, [finish])
 
-  // ── Intro → first pump ──
+  // Resolve combatants of the CURRENT round one at a time; pause for the next directive at the round break.
+  const resolveNext = useCallback((stance: Stance, focusId: string | undefined, roundAtStart: number) => {
+    const s = stateRef.current
+    if (s.outcome !== 'pending') { finish(); return }
+    if (s.round !== roundAtStart) { beginRound(); return } // a new round began → new directive
+    const actor = currentActor(s)
+    if (!actor) { beginRound(); return }
+
+    rendererRef.current?.highlightToken(actor.id)
+    setResolvingId(actor.id)
+    let action: PartyAction
+    if (actor.side === 'enemy') action = chooseAction(s, actor, aiCfg)
+    else if (actor.isKeeper) action = chooseKeeperAction(s, actor)
+    else action = chooseAction(s, actor, { focusFire: true, spendMana: true, stance, focusTargetId: focusId })
+
+    const before = s.events.length
+    takeAction(s, action)
+    playEvents(s.events.slice(before), () => {
+      refreshHP()
+      if (s.outcome !== 'pending') finish()
+      else resolveNext(stance, focusId, roundAtStart)
+    })
+  }, [aiCfg, playEvents, refreshHP, finish, beginRound])
+
+  const onStance = useCallback((stance: Stance) => {
+    const s = stateRef.current
+    const livingFoes = livingEnemiesOf(s, 'ally')
+    if (stance === 'focus' && livingFoes.length > 1) { setUIPhase('selectFocus'); return }
+    resolveNext(stance, stance === 'focus' ? livingFoes[0]?.id : undefined, s.round)
+  }, [resolveNext])
+
+  const onFocus = useCallback((enemyId: string) => {
+    resolveNext('focus', enemyId, stateRef.current.round)
+  }, [resolveNext])
+
+  // ── Intro → first directive ──
   useEffect(() => {
     setText('The stronghold spirits bar the way!')
-    const t = setTimeout(() => pump(), 1500)
+    const t = setTimeout(() => beginRound(), 1500)
     return () => clearTimeout(t)
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Esc backs out of target selection
+  // Esc backs out of focus-target selection
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
-      if (e.key === 'Escape' && uiPhase === 'selectTarget') {
-        e.preventDefault()
-        setUIPhase('selectMove')
-      }
+      if (e.key === 'Escape' && uiPhase === 'selectFocus') { e.preventDefault(); setUIPhase('selectStance') }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [uiPhase])
 
-  // ── Player action helpers ──
-  const actor = activeId ? [...st.allies, ...st.enemies].find(c => c.id === activeId) : undefined
+  // ── Render ──
   const foes = livingEnemiesOf(st, 'ally')
   const pool = st.mana.ally
-
-  const chooseMove = useCallback((moveIdx: number) => {
-    // moveIdx -1 = Strike (always needs a foe). Self-buffs skip targeting; single foe auto-targets.
-    const move = moveIdx < 0 ? { power: BASIC_STRIKE.power } : actor?.moves[moveIdx]?.move
-    const wantsTarget = !move || needsTarget(move)
-    if (!wantsTarget) {
-      doAction({ type: 'move', actorId: activeId!, moveIdx, targetId: activeId! })
-    } else if (foes.length <= 1) {
-      doAction({ type: 'move', actorId: activeId!, moveIdx, targetId: foes[0]?.id ?? '' })
-    } else {
-      setPendingMoveIdx(moveIdx)
-      setTargetIdx(0)
-      setUIPhase('selectTarget')
-    }
-  }, [foes, activeId, actor, doAction])
-
-  const confirmTarget = useCallback((id: string) => {
-    doAction({ type: 'move', actorId: activeId!, moveIdx: pendingMoveIdx, targetId: id })
-  }, [activeId, pendingMoveIdx, doAction])
-
-  // ── Render ──
-  const targetId = uiPhase === 'selectTarget' ? foes[targetIdx]?.id : undefined
 
   return (
     <div className="absolute inset-0 z-50 flex flex-col rounded overflow-hidden" style={{ animation: 'pbFade 0.4s ease-out' }}>
@@ -373,9 +349,9 @@ export default function PartyBattleScene({
           {st.enemies.map(c => (
             <CombatantPlate
               key={c.id} c={c} hp={hp[c.id] ?? c.hp}
-              isActor={activeId === c.id && uiPhase === 'enemyTurn'}
-              isTarget={targetId === c.id}
-              onClick={uiPhase === 'selectTarget' && c.alive ? () => confirmTarget(c.id) : undefined}
+              isActor={resolvingId === c.id}
+              isTarget={uiPhase === 'selectFocus' && c.alive}
+              onClick={uiPhase === 'selectFocus' && c.alive ? () => onFocus(c.id) : undefined}
             />
           ))}
         </div>
@@ -385,7 +361,7 @@ export default function PartyBattleScene({
           {st.allies.map(c => (
             <CombatantPlate
               key={c.id} c={c} hp={hp[c.id] ?? c.hp}
-              isActor={activeId === c.id && (uiPhase === 'selectMove' || uiPhase === 'selectTarget')}
+              isActor={resolvingId === c.id}
               isTarget={false}
             />
           ))}
@@ -427,37 +403,30 @@ export default function PartyBattleScene({
       <div className="px-2 pb-2 bg-[#060610]">
         <div className="bg-[#0d0d1a]/95 border border-[#d4a843]/30 rounded-lg px-4 py-3 shadow-lg shadow-black/40 min-h-[78px]">
 
-          {(uiPhase === 'intro' || uiPhase === 'animating' || uiPhase === 'enemyTurn') && (
+          {(uiPhase === 'intro' || uiPhase === 'animating') && (
             <p className="text-white/90 text-[13px] leading-relaxed">
               {text}{uiPhase === 'animating' && <span className="text-white/30 animate-pulse ml-1">...</span>}
             </p>
           )}
 
-          {uiPhase === 'selectMove' && actor && (
+          {uiPhase === 'selectStance' && (
             <div>
-              <p className="text-[10px] text-white/40 mb-1.5">{text}</p>
-              <div className="grid grid-cols-2 gap-1.5">
-                <MoveButton name="Strike" element="neutral" cost={0} affordable onClick={() => chooseMove(-1)} sub="weak · free" />
-                {actor.moves.map((slot, i) => {
-                  const cost = manaCostFor(slot.move)
-                  const affordable = cost <= pool.current
-                  return (
-                    <MoveButton key={slot.move.id} name={slot.move.name} element={slot.move.element}
-                      cost={cost} affordable={affordable}
-                      sub={slot.move.power > 0 ? `pwr ${slot.move.power}` : 'status'}
-                      onClick={() => chooseMove(i)} />
-                  )
-                })}
-                <MoveButton name="Defend" element="base" cost={0} affordable accent="#6aa0c0"
-                  sub="+guard" onClick={() => doAction({ type: 'defend', actorId: activeId! })} />
+              <p className="text-[10px] text-white/40 mb-1.5">Round {round} — your directive. Your spirits will follow your lead.</p>
+              <div className={`grid gap-1.5 ${st.mode === 'reach' ? 'grid-cols-4' : 'grid-cols-3'}`}>
+                <StanceButton name="Press" accent="#e0704a" hint="all-out — strike the weak point" onClick={() => onStance('press')} />
+                <StanceButton name="Guard" accent="#6aa0c0" hint="brace — weather the blow" onClick={() => onStance('guard')} />
+                <StanceButton name="Focus" accent="#c77ce0" hint="pile on one foe" onClick={() => onStance('focus')} />
+                {st.mode === 'reach' && (
+                  <StanceButton name="Reach" accent="#37e6ff" hint="free the collared — don't break it" onClick={() => onStance('reach')} />
+                )}
               </div>
             </div>
           )}
 
-          {uiPhase === 'selectTarget' && (
+          {uiPhase === 'selectFocus' && (
             <div>
-              <p className="text-[12px] text-[#e0704a] mb-1">Choose a target — pick an enemy above.</p>
-              <p className="text-[9px] text-white/30">Click a foe&apos;s plate, or Esc to go back.</p>
+              <p className="text-[12px] text-[#c77ce0] mb-1">Focus — point your circle at a foe.</p>
+              <p className="text-[9px] text-white/30">Click an enemy&apos;s plate, or Esc to go back.</p>
             </div>
           )}
 
@@ -479,27 +448,19 @@ export default function PartyBattleScene({
   )
 }
 
-// ── Move button ──
+// ── Stance directive button ──
 
-function MoveButton({ name, element, cost, affordable, sub, accent, onClick }: {
-  name: string; element: string; cost: number; affordable: boolean; sub: string; accent?: string; onClick: () => void
+function StanceButton({ name, hint, accent, onClick }: {
+  name: string; hint: string; accent: string; onClick: () => void
 }) {
-  const col = accent ?? ELEMENT_COLORS[element] ?? '#888'
   return (
     <button onClick={onClick}
-      className={`text-left px-2.5 py-1.5 rounded border transition-all ${
-        affordable ? 'border-white/[0.06] hover:border-[#d4a843]/40 hover:bg-[#d4a843]/[0.06]' : 'border-white/[0.04] opacity-45'
-      }`}
-      title={affordable ? '' : 'Not enough mana — will fall back to Strike'}
+      className="text-left px-3 py-2 rounded-lg border border-white/[0.07] hover:bg-white/[0.04] transition-all group"
+      style={{ borderColor: `${accent}30` }}
     >
-      <div className="flex items-center justify-between">
-        <span className="font-display text-[11px] text-white/85">{name}</span>
-        {cost > 0 && (
-          <span className="text-[8px] font-mono tabular-nums" style={{ color: affordable ? '#c77ce0' : '#80708a' }}>{cost}◆</span>
-        )}
-      </div>
-      <span className="text-[8px] text-white/25">{sub}</span>
-      <span className="block h-[2px] mt-1 rounded-full" style={{ backgroundColor: col, opacity: 0.5 }} />
+      <span className="font-display text-[13px] tracking-wide block" style={{ color: accent }}>{name}</span>
+      <span className="text-[8px] text-white/35 leading-tight block mt-0.5">{hint}</span>
+      <span className="block h-[2px] mt-1.5 rounded-full transition-all" style={{ backgroundColor: accent, opacity: 0.4 }} />
     </button>
   )
 }
