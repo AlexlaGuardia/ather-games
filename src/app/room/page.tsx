@@ -822,24 +822,24 @@ function DeskWall({ wall, active, phase, onEnter }: { wall: Wall; active: boolea
         style={{ background: `radial-gradient(ellipse at 50% 45%, ${accent}1a 0%, transparent 60%)`, opacity: active ? 1 : 0.25, transition: "opacity 320ms ease" }}
       />
 
-      {/* attendant + podium (decor; clicking it bubbles to approach when armed) */}
-      <div className="absolute" style={{ left: "39%", top: "30%", transform: "translate(-50%,0)", opacity: active ? 1 : 0.45, transition: "opacity 320ms ease" }}>
-        <div className="relative" style={{ width: 220, height: 270 }}>
-          {/* figure */}
-          <div className="absolute left-1/2 -translate-x-1/2" style={{ top: 0 }}>
-            <div className="relative mx-auto rounded-full" style={{ width: 76, height: 76, background: "linear-gradient(160deg,#1b2630,#0e151b)", border: `1px solid ${accent}66`, boxShadow: `0 0 26px -6px ${accent}` }}>
-              <div className="absolute rounded-full" style={{ left: 23, top: 32, width: 7, height: 7, background: accent }} />
-              <div className="absolute rounded-full" style={{ right: 23, top: 32, width: 7, height: 7, background: accent }} />
-              <div className="absolute left-1/2 -translate-x-1/2" style={{ top: 45, width: 28, height: 14, borderBottom: `2px solid ${accent}`, borderRadius: "0 0 28px 28px" }} />
-            </div>
-            <div className="mx-auto" style={{ marginTop: -6, width: 158, height: 130, borderRadius: "84px 84px 18px 18px", background: "linear-gradient(160deg,#16202a,#0b1016)", border: `1px solid ${accent}33` }} />
-          </div>
-          {/* podium in front */}
-          <div className="absolute left-1/2 -translate-x-1/2" style={{ bottom: 0, width: 210 }}>
-            <div style={{ width: "100%", height: 22, borderRadius: 8, background: `linear-gradient(180deg, ${accent}33, #0c1218)`, border: `1px solid ${accent}55`, boxShadow: `0 0 26px -8px ${accent}` }} />
-            <div className="mx-auto" style={{ marginTop: -2, width: 158, height: 86, background: "linear-gradient(180deg,#121a22,#0a0e13)", border: `1px solid ${accent}22`, borderTop: "none", clipPath: "polygon(7% 0, 93% 0, 100% 100%, 0% 100%)" }} />
-          </div>
-        </div>
+      {/* the Mana'mal greeter + podium (one cutout image; clicking it bubbles to approach when armed) */}
+      <div
+        className="pointer-events-none absolute"
+        style={{ left: "41%", top: "16%", transform: "translate(-50%,0)", width: 360, height: 438, opacity: active ? 1 : 0.5, transition: "opacity 320ms ease" }}
+      >
+        {/* soft glow pool the greeter sits in */}
+        <div className="pointer-events-none absolute" style={{ left: "50%", top: "32%", width: 330, height: 330, transform: "translate(-50%,-50%)", background: `radial-gradient(circle, ${accent}22, transparent 68%)`, filter: "blur(10px)", opacity: active ? 0.9 : 0.4 }} />
+        <div
+          className="absolute inset-0"
+          style={{
+            backgroundImage: "url(/room/desk-greeter.png)",
+            backgroundSize: "contain",
+            backgroundRepeat: "no-repeat",
+            backgroundPosition: "center",
+            filter: active ? "none" : "brightness(0.7)",
+            transition: "filter 320ms ease",
+          }}
+        />
       </div>
 
       {/* interactive cluster — only live once you've arrived at the desk */}

@@ -107,6 +107,15 @@ ROOM = {
         "no text, no UI, no people",
         "3:2",
     ),
+    "desk-greeter": (
+        "a single cozy small magical creature companion sitting upright behind a dark wooden front-desk "
+        "podium, big friendly glowing round eyes, soft fluffy rounded body, little paws resting on the "
+        "desk, warm and welcoming greeter pose, gentle cyan and warm amber rim light on the fur, the "
+        "creature and the wooden podium are centered and fully visible, isolated on a completely flat "
+        "solid pure black background, strong subject lighting, no room, no floor, no shadow on the ground, "
+        "no people, no text",
+        "4:5",
+    ),
     # the old compass-rose floor — repurpose as a flat-on emblem later, NOT as ground
     "compass": (
         "a glowing inlaid compass rose emblem on near-black stone, concentric luminous rings, "
