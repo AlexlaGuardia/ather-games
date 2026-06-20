@@ -134,5 +134,9 @@ top-down texture; the CSS rotation supplies the perspective. Do NOT bake perspec
 - **Tooling:** `?wall=N` deep-link + server headless chromium screenshot (see SHIMMER_SESSION). Self-verify composites.
 - **FLUX-schnell gotcha:** ignores negative prompts, skews glow RED. Lean into orange as firelight for the Mug;
   push the wanted palette in the POSITIVE prompt for the others.
+- ✅ **Arcade arch — 3-layer pattern (2026-06-20, commit `1757cae`):** `arcade-beyond.webp` (cabinet hall
+  receding to a vanishing point) BEHIND, `arcade-frame.webp` (stone arch, glowing seams) IN FRONT clipped to
+  a ring (`ARC_HOLE`/`ARC_RING` paths in 820×656 box space) so the hall shows through. Same feather mask +
+  saturate(0.82) as the Mug. Replaced the CSS border-ring + div-cabinet stand-in. Self-verified live (`?wall=1`).
 - **DEFERRED (own session):** the `/room`→`/magii` route transition — current /magii page doesn't fit the entryway.
-- ⏳ NEXT: Arcade arch, Shimmer screen, Desk — same 3-layer frame+beyond(+leaf) pattern.
+- ⏳ NEXT: Shimmer screen, Desk — same frame+beyond(+leaf/character) pattern.
