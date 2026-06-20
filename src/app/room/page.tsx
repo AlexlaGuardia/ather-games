@@ -825,12 +825,12 @@ function DeskWall({ wall, active, phase, onEnter }: { wall: Wall; active: boolea
       {/* the Mana'mal greeter + podium (one cutout image; clicking it bubbles to approach when armed) */}
       <div
         className="pointer-events-none absolute"
-        style={{ left: "50%", top: "30%", transform: "translate(-50%,0)", width: 360, height: 438, opacity: active ? 1 : 0.5, transition: "opacity 320ms ease" }}
+        style={{ left: "50%", top: "48%", transform: "translate(-50%,0)", width: 380, height: 462, opacity: active ? 1 : 0.5, transition: "opacity 320ms ease" }}
       >
-        {/* contact shadow at the podium base — grounds it so it doesn't float */}
-        <div className="pointer-events-none absolute" style={{ left: "50%", bottom: 58, width: 200, height: 40, transform: "translate(-50%,0)", background: "radial-gradient(ellipse, rgba(0,0,0,0.6), transparent 72%)", filter: "blur(7px)" }} />
+        {/* contact shadow at the podium base — sits across the wall/floor seam so it reads planted */}
+        <div className="pointer-events-none absolute" style={{ left: "50%", bottom: 60, width: 220, height: 42, transform: "translate(-50%,0)", background: "radial-gradient(ellipse, rgba(0,0,0,0.62), transparent 72%)", filter: "blur(8px)" }} />
         {/* soft glow pool the greeter sits in */}
-        <div className="pointer-events-none absolute" style={{ left: "50%", top: "30%", width: 330, height: 300, transform: "translate(-50%,-50%)", background: `radial-gradient(circle, ${accent}22, transparent 68%)`, filter: "blur(10px)", opacity: active ? 0.9 : 0.4 }} />
+        <div className="pointer-events-none absolute" style={{ left: "50%", top: "32%", width: 340, height: 300, transform: "translate(-50%,-50%)", background: `radial-gradient(circle, ${accent}22, transparent 68%)`, filter: "blur(10px)", opacity: active ? 0.9 : 0.4 }} />
         <div
           className="absolute inset-0"
           style={{
@@ -880,7 +880,8 @@ function DeskWall({ wall, active, phase, onEnter }: { wall: Wall; active: boolea
         </div>
       </div>
 
-      <div className="absolute bottom-[7%] left-1/2 -translate-x-1/2 text-center" style={{ opacity: active ? 1 : 0.4, transition: "opacity 320ms ease" }}>
+      {/* Desk title sits up top (greeter now drops to the floor line and would cover a bottom label) */}
+      <div className="absolute top-[3%] left-1/2 -translate-x-1/2 text-center" style={{ opacity: active ? 1 : 0.4, transition: "opacity 320ms ease" }}>
         <h2 className="text-3xl tracking-[0.3em] uppercase" style={{ fontFamily: "Cormorant Garamond, Georgia, serif" }}>{wall.label}</h2>
         {armed && <p className="mt-1 text-[10px] uppercase tracking-[0.3em]" style={{ color: `${accent}99` }}>approach the desk</p>}
       </div>
