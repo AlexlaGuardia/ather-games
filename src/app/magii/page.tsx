@@ -37,12 +37,10 @@ export default function MagiiPage() {
   const loadedRef = useRef(false)
   const seededRef = useRef(false)
   const [statsReady, setStatsReady] = useState(false)
-  // came in through a spatial Room hub → offer a walk-back affordance
+  // came in through the spatial Room hub → offer a walk-back affordance
   const [roomDest, setRoomDest] = useState<string | null>(null)
   useEffect(() => {
-    const from = new URLSearchParams(window.location.search).get('from')
-    if (from === 'room') setRoomDest('/room')
-    else if (from === 'room3d') setRoomDest('/room3d')
+    if (new URLSearchParams(window.location.search).get('from') === 'room') setRoomDest('/room')
   }, [])
 
   // Load saved stats from cloud on mount.

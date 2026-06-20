@@ -76,7 +76,19 @@ Every per-wall "enter" is just **approach + a short arrival flourish**. One shar
 - Buttons/labels/swipe/keys all agree (wall index increases to the RIGHT: wall placement rotateY(-i*STEP),
   world rotateY(+angle)).
 
-## MASKING PHASE — plan for next session (art over the CSS stand-ins)
+## 3D DETOUR — tried & REVERTED (2026-06-20)
+Built a real-3D R3F version at `/room3d` to fix the floor's grazing problem (camera truly inside).
+It worked technically (snap-turn, approach, bloom, audio all ported) and there's **no hardware blocker**
+(WebGL renders client-side, server stays GPU-less). BUT the real blocker is **assets**: 3D done well
+needs models/materials/lighting we don't have a pipeline for. The pipeline we DO have is 2D gen (FLUX) +
+CSS masking — which is what `/room` is built for. **Decision (Alex): trash room3d, continue on CSS `/room`.**
+Deleted the route + uninstalled @react-three/{fiber,drei,postprocessing} (kept `three`, used by shimmer).
+Lesson banked: "no hardware blocker" ≠ "feasible" — match the build to the asset pipeline you actually have.
+
+## MASKING PHASE — plan (art over the CSS stand-ins, on `/room`)
+> START WITH THE WALLS, not the floor. Walls are seen HEAD-ON when faced → 2D art behaves perfectly.
+> Floor/ceiling are grazed (the 3D detour confirmed this is intrinsic to the CSS technique) → keep them
+> HUMBLE (dark + faint depth), and repurpose the compass as an emblem seen flat-on, not as hero floor art.
 > The room geometry is DONE and already layered. Every surface is its own DOM element
 > with its own background, and the special walls are pre-split into frame + beyond
 > layers (the slots the animations target). So art DROPS IN — no restructuring.
