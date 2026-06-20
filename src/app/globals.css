@@ -701,3 +701,13 @@ body {
   border-top: 1px solid rgba(255, 255, 255, 0.08);
   margin: 2rem 0;
 }
+
+/* Arcade-wall cabinet screens: a faint attract-mode flicker */
+@keyframes arcadeAttract {
+  0%, 100% { opacity: 0.85; }
+  45% { opacity: 0.6; }
+  60% { opacity: 0.95; }
+}
+.arcade-attract {
+  animation: arcadeAttract 2.4s ease-in-out infinite;
+}
