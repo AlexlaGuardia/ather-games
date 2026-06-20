@@ -825,10 +825,12 @@ function DeskWall({ wall, active, phase, onEnter }: { wall: Wall; active: boolea
       {/* the Mana'mal greeter + podium (one cutout image; clicking it bubbles to approach when armed) */}
       <div
         className="pointer-events-none absolute"
-        style={{ left: "41%", top: "16%", transform: "translate(-50%,0)", width: 360, height: 438, opacity: active ? 1 : 0.5, transition: "opacity 320ms ease" }}
+        style={{ left: "50%", top: "30%", transform: "translate(-50%,0)", width: 360, height: 438, opacity: active ? 1 : 0.5, transition: "opacity 320ms ease" }}
       >
+        {/* contact shadow at the podium base — grounds it so it doesn't float */}
+        <div className="pointer-events-none absolute" style={{ left: "50%", bottom: 58, width: 200, height: 40, transform: "translate(-50%,0)", background: "radial-gradient(ellipse, rgba(0,0,0,0.6), transparent 72%)", filter: "blur(7px)" }} />
         {/* soft glow pool the greeter sits in */}
-        <div className="pointer-events-none absolute" style={{ left: "50%", top: "32%", width: 330, height: 330, transform: "translate(-50%,-50%)", background: `radial-gradient(circle, ${accent}22, transparent 68%)`, filter: "blur(10px)", opacity: active ? 0.9 : 0.4 }} />
+        <div className="pointer-events-none absolute" style={{ left: "50%", top: "30%", width: 330, height: 300, transform: "translate(-50%,-50%)", background: `radial-gradient(circle, ${accent}22, transparent 68%)`, filter: "blur(10px)", opacity: active ? 0.9 : 0.4 }} />
         <div
           className="absolute inset-0"
           style={{
