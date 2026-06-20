@@ -379,6 +379,7 @@ export default function RoomPrototype() {
 function Plane({ axis }: { axis: "floor" | "ceiling" }) {
   const depth = ROOM_R * 2;
   const sign = axis === "floor" ? 1 : -1;
+  const isFloor = axis === "floor";
   return (
     <div
       className="absolute"
@@ -389,10 +390,12 @@ function Plane({ axis }: { axis: "floor" | "ceiling" }) {
         top: -depth / 2,
         transform: `rotateX(${90 * sign}deg) translateZ(${WALL_H / 2}px)`,
         backgroundColor: "#08080d",
-        backgroundImage:
-          "linear-gradient(rgba(255,255,255,0.05) 1px, transparent 1px)," +
-          "linear-gradient(90deg, rgba(255,255,255,0.05) 1px, transparent 1px)",
-        backgroundSize: "60px 60px",
+        // floor: the generated compass-rose medallion; ceiling: faint grid for now
+        backgroundImage: isFloor
+          ? "url(/room/floor.webp)"
+          : "linear-gradient(rgba(255,255,255,0.05) 1px, transparent 1px)," +
+            "linear-gradient(90deg, rgba(255,255,255,0.05) 1px, transparent 1px)",
+        backgroundSize: isFloor ? "100% 100%" : "60px 60px",
         WebkitMaskImage: "radial-gradient(ellipse at 50% 50%, #000 25%, transparent 75%)",
         maskImage: "radial-gradient(ellipse at 50% 50%, #000 25%, transparent 75%)",
       }}

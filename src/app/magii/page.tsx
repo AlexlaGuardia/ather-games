@@ -37,10 +37,12 @@ export default function MagiiPage() {
   const loadedRef = useRef(false)
   const seededRef = useRef(false)
   const [statsReady, setStatsReady] = useState(false)
-  // came in through the spatial Room hub → offer a walk-back affordance
-  const [fromRoom, setFromRoom] = useState(false)
+  // came in through a spatial Room hub → offer a walk-back affordance
+  const [roomDest, setRoomDest] = useState<string | null>(null)
   useEffect(() => {
-    setFromRoom(new URLSearchParams(window.location.search).get('from') === 'room')
+    const from = new URLSearchParams(window.location.search).get('from')
+    if (from === 'room') setRoomDest('/room')
+    else if (from === 'room3d') setRoomDest('/room3d')
   }, [])
 
   // Load saved stats from cloud on mount.
@@ -356,9 +358,9 @@ export default function MagiiPage() {
   // --- Game View ---
   return (
     <div className="max-w-6xl mx-auto px-2 py-2 md:px-4 md:py-4">
-      {fromRoom && (
+      {roomDest && (
         <a
-          href="/room"
+          href={roomDest}
           className="fixed top-4 left-4 z-50 flex items-center gap-2 rounded-md border border-[#d4a843]/30 bg-[#12121e]/80 backdrop-blur px-3 py-2 text-[11px] uppercase tracking-[0.2em] text-[#d4a843]/80 transition hover:text-[#d4a843] hover:border-[#d4a843]/60"
         >
           ‹ back to the room

@@ -6,14 +6,16 @@
 import { useEffect, useState } from "react";
 
 export default function RoomReturn() {
-  const [show, setShow] = useState(false);
+  const [dest, setDest] = useState<string | null>(null);
   useEffect(() => {
-    setShow(new URLSearchParams(window.location.search).get("from") === "room");
+    const from = new URLSearchParams(window.location.search).get("from");
+    if (from === "room") setDest("/room");
+    else if (from === "room3d") setDest("/room3d");
   }, []);
-  if (!show) return null;
+  if (!dest) return null;
   return (
     <a
-      href="/room"
+      href={dest}
       className="fixed top-4 left-4 z-50 flex items-center gap-2 rounded-md border border-[#d4a843]/30 bg-[#12121e]/80 backdrop-blur px-3 py-2 text-[11px] uppercase tracking-[0.2em] text-[#d4a843]/80 transition hover:text-[#d4a843] hover:border-[#d4a843]/60"
     >
       &#8249; back to the room
