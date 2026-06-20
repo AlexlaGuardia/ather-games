@@ -92,6 +92,21 @@ ROOM = {
         "no people, no text",
         "5:4",
     ),
+    "shimmer-bezel": (
+        "head-on front view of a heavy ornate rectangular screen housing carved from dark dressed "
+        "stone and dark iron, warm golden and cyan glowing seams running through the frame, a large "
+        "rectangular viewing screen opening in the very center, heavy carved surround filling the "
+        "left right top and bottom edges, symmetrical, straight-on flat architectural elevation, the "
+        "center screen opening is completely solid black and empty, no screen, no picture, no people, no text",
+        "3:2",
+    ),
+    "shimmer-beyond": (
+        "a glowing magical overworld vista, rolling luminous hills under a deep starry violet sky, a "
+        "small glowing spirit creature standing in a soft meadow of cyan and violet light, gentle "
+        "fireflies of light, distant glowing forest, cozy wondrous and atmospheric, dreamlike depth, "
+        "no text, no UI, no people",
+        "3:2",
+    ),
     # the old compass-rose floor — repurpose as a flat-on emblem later, NOT as ground
     "compass": (
         "a glowing inlaid compass rose emblem on near-black stone, concentric luminous rings, "

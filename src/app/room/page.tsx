@@ -593,48 +593,55 @@ function MugDoor({ wall, active, phase, onEnter }: { wall: Wall; active: boolean
   );
 }
 
-// the Shimmer wall — a screen you power ON. Idle attract-glow across the room,
+// the Shimmer wall — a screen you power ON. Idle attract-loop across the room,
 // CRT turn-on (line expands → full glow → resolve) on approach, then into /shimmer.
+// 3-layer pattern (mirrors the Mug/Arcade): the world attract BEYOND → ornate stone
+// BEZEL in front, clipped to a ring so the screen shows through the opening = recessed.
+const SHM_FW = 600;
+const SHM_FH = 400;
+// the rectangular screen opening, in the bezel box's own coordinate space (600×400)
+const SHM_HOLE = "M157,84 H443 Q453,84 453,94 V293 Q453,303 443,303 H157 Q147,303 147,293 V94 Q147,84 157,84 Z";
+const SHM_RING = `M0,0 H${SHM_FW} V${SHM_FH} H0 Z ${SHM_HOLE}`; // donut (evenodd)
+
 function ShimmerTV({ wall, active, phase, onEnter }: { wall: Wall; active: boolean; phase: Phase; onEnter: () => void }) {
   const powering = phase === "open" || phase === "through";
   const armed = active && phase === "room";
   return (
     <div className="relative w-full h-full grid place-items-center text-center">
       <Seams />
-      {/* the cabinet / TV */}
       <div
-        className={`group/tv relative rounded-2xl border-[10px] ${armed ? "cursor-pointer" : ""}`}
-        style={{
-          width: 560,
-          height: 380,
-          borderColor: "#15151f",
-          background: "#0c0c12",
-          boxShadow: active
-            ? `0 0 60px -18px ${wall.accent}, inset 0 0 40px rgba(0,0,0,0.7)`
-            : "inset 0 0 40px rgba(0,0,0,0.6)",
-          transition: "box-shadow 320ms ease",
-        }}
+        className={`group/tv relative ${armed ? "cursor-pointer" : ""}`}
+        style={{ width: SHM_FW, height: SHM_FH }}
         onClick={armed ? onEnter : undefined}
         role={armed ? "button" : undefined}
         aria-label={armed ? "Turn on the screen — enter Shimmer" : undefined}
       >
-        {/* SCREEN */}
-        <div className="absolute inset-0 m-1 rounded-lg overflow-hidden" style={{ background: "#050508" }}>
-          {/* idle attract glow — alive even when off, brighter when faced */}
+        {/* SCREEN — everything clipped to the bezel's opening */}
+        <div
+          className="absolute inset-0"
+          style={{ clipPath: `path('${SHM_HOLE}')`, WebkitClipPath: `path('${SHM_HOLE}')`, background: "#050508" }}
+        >
+          {/* the Shimmer world attract image (dim when off, lit when faced, hidden while powering on) */}
           <div
             className="absolute inset-0"
             style={{
-              background: `radial-gradient(ellipse at 50% 45%, ${wall.accent}26 0%, transparent 60%)`,
-              opacity: powering ? 0 : active ? 0.9 : 0.3,
+              backgroundImage: "url(/room/shimmer-beyond.webp)",
+              backgroundSize: "cover",
+              backgroundPosition: "center",
+              opacity: powering ? 0 : active ? 1 : 0.45,
+              filter: active ? "none" : "brightness(0.7) saturate(0.8)",
+              transition: "opacity 320ms ease, filter 320ms ease",
+            }}
+          />
+          {/* idle attract glow — faint accent wash, alive when faced */}
+          <div
+            className="pointer-events-none absolute inset-0"
+            style={{
+              background: `radial-gradient(ellipse at 50% 45%, ${wall.accent}1f 0%, transparent 65%)`,
+              opacity: powering ? 0 : active ? 0.6 : 0.25,
               transition: "opacity 320ms ease",
             }}
           />
-          {/* attract title (dim ghost when off) */}
-          {!powering && (
-            <div className="absolute inset-0 grid place-items-center" style={{ opacity: active ? 1 : 0.45, transition: "opacity 320ms ease" }}>
-              <div className="shimmer-hero-glyph text-6xl" style={{ color: wall.accent }}>{wall.glyph}</div>
-            </div>
-          )}
 
           {/* CRT turn-on: a bright line expands to fill the tube */}
           <div
@@ -657,7 +664,7 @@ function ShimmerTV({ wall, active, phase, onEnter }: { wall: Wall; active: boole
               transition: `opacity ${THROUGH_MS}ms ease`,
             }}
           >
-            <div className="text-5xl tracking-[0.35em] uppercase" style={{ fontFamily: "Cormorant Garamond, Georgia, serif", color: "#efeaff" }}>
+            <div className="text-4xl tracking-[0.35em] uppercase" style={{ fontFamily: "Cormorant Garamond, Georgia, serif", color: "#efeaff" }}>
               {wall.label}
             </div>
           </div>
@@ -676,12 +683,28 @@ function ShimmerTV({ wall, active, phase, onEnter }: { wall: Wall; active: boole
           )}
         </div>
 
-        {/* standby LED on the bezel */}
-        <div className="absolute bottom-2 right-3 w-1.5 h-1.5 rounded-full" style={{ background: active ? wall.accent : "#3a3a44", boxShadow: active ? `0 0 6px ${wall.accent}` : "none" }} />
+        {/* the ornate BEZEL — IN FRONT, clipped to a ring so the screen shows through the opening */}
+        <div
+          className="pointer-events-none absolute inset-0"
+          style={{
+            backgroundImage: "url(/room/shimmer-bezel.webp)",
+            backgroundSize: "100% 100%",
+            clipPath: `path(evenodd, '${SHM_RING}')`,
+            WebkitClipPath: `path(evenodd, '${SHM_RING}')`,
+            // feather the outer edge so the housing melts into the wall (no rectangle seam)
+            maskImage: "radial-gradient(ellipse 86% 90% at 50% 50%, #000 64%, transparent 100%)",
+            WebkitMaskImage: "radial-gradient(ellipse 86% 90% at 50% 50%, #000 64%, transparent 100%)",
+            filter: active ? "saturate(0.9)" : "brightness(0.5) saturate(0.7)",
+            transition: "filter 320ms ease",
+          }}
+        />
+
+        {/* standby LED tucked at the screen's bottom-right corner */}
+        <div className="absolute w-1.5 h-1.5 rounded-full" style={{ right: 162, bottom: 104, background: active ? wall.accent : "#3a3a44", boxShadow: active ? `0 0 6px ${wall.accent}` : "none" }} />
       </div>
 
-      {/* label below the cabinet */}
-      <div className="absolute bottom-[12%] left-1/2 -translate-x-1/2 text-center" style={{ opacity: active ? 1 : 0.4, transition: "opacity 320ms ease" }}>
+      {/* label below the screen */}
+      <div className="absolute bottom-[10%] left-1/2 -translate-x-1/2 text-center" style={{ opacity: active ? 1 : 0.4, transition: "opacity 320ms ease" }}>
         <h2 className="text-3xl tracking-[0.3em] uppercase" style={{ fontFamily: "Cormorant Garamond, Georgia, serif" }}>{wall.label}</h2>
         {armed && <p className="mt-1 text-[10px] uppercase tracking-[0.3em]" style={{ color: `${wall.accent}99` }}>turn it on</p>}
       </div>
