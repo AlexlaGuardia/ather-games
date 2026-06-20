@@ -75,6 +75,23 @@ ROOM = {
         "room, gentle depth, no people, no text",
         "2:3",
     ),
+    "arcade-frame": (
+        "head-on front view of a grand wide ornate archway frame carved from dark dressed stone, "
+        "warm golden and faint cyan glowing seams running through the stone, a tall wide rounded "
+        "arched opening in the very center, heavy carved stone surround filling the left right and "
+        "top edges, generous wide central opening, symmetrical, straight-on flat architectural "
+        "elevation, the center opening is completely solid black and empty, no door, no gate, "
+        "no cabinets, no people, no text",
+        "5:4",
+    ),
+    "arcade-beyond": (
+        "looking down a long dark hall lined with two receding rows of glowing arcade cabinets "
+        "vanishing into darkness toward a distant central vanishing point, cabinet screens glowing "
+        "in cyan amber violet and green vector light, dark stone floor with faint glowing reflections, "
+        "strong one-point perspective receding into the dark, atmospheric depth and haze, moody, "
+        "no people, no text",
+        "5:4",
+    ),
     # the old compass-rose floor — repurpose as a flat-on emblem later, NOT as ground
     "compass": (
         "a glowing inlaid compass rose emblem on near-black stone, concentric luminous rings, "

@@ -689,86 +689,76 @@ function ShimmerTV({ wall, active, phase, onEnter }: { wall: Wall; active: boole
   );
 }
 
-// the Arcade wall — a grand archway; through it, a hall of glowing cabinets
+// the Arcade wall — a grand stone archway; through it, a hall of glowing cabinets
 // receding into the dark. Approach walks you under the arch into /arcade/all.
-const CABINETS = [
-  { x: 9, y: 64, s: 1.0, c: "#8b5cf6" },
-  { x: 22, y: 52, s: 0.68, c: "#d4a843" },
-  { x: 32, y: 44, s: 0.46, c: "#4ade80" },
-  { x: 91, y: 64, s: 1.0, c: "#00ffff" },
-  { x: 78, y: 52, s: 0.68, c: "#f87171" },
-  { x: 68, y: 44, s: 0.46, c: "#60a5fa" },
-];
+// 3-layer pattern (mirrors the Mug door): hall BEYOND → stone arch FRAME in front,
+// clipped to a ring so the hall shows through the opening = recessed, not pasted.
+const ARC_FW = 820;
+const ARC_FH = 656;
+// the arched opening, in the frame box's own coordinate space (820×656)
+const ARC_HOLE = "M258,652 V243 Q258,121 412,121 Q566,121 566,243 V652 Z";
+const ARC_RING = `M0,0 H${ARC_FW} V${ARC_FH} H0 Z ${ARC_HOLE}`; // donut (evenodd)
 
 function ArcadeArch({ wall, active, phase, onEnter }: { wall: Wall; active: boolean; phase: Phase; onEnter: () => void }) {
   const armed = active && phase === "room";
+  const crossing = phase !== "room";
   return (
     <div className="relative w-full h-full grid place-items-center text-center">
       <Seams />
       <div
         className={`group/arch relative ${armed ? "cursor-pointer" : ""}`}
-        style={{ width: 780, height: 660 }}
+        style={{ width: ARC_FW, height: ARC_FH }}
         onClick={armed ? onEnter : undefined}
         role={armed ? "button" : undefined}
         aria-label={armed ? "Step through the archway into the Arcade" : undefined}
       >
-        {/* the hall seen THROUGH the arch (clipped to the arch shape) */}
+        {/* the hall of cabinets seen THROUGH the arch (clipped to the opening shape) */}
         <div
-          className="absolute overflow-hidden"
-          style={{ inset: 16, borderRadius: "384px 384px 8px 8px", background: "radial-gradient(ellipse at 50% 30%, #14142a 0%, #08080f 70%)" }}
-        >
-          {/* receding floor */}
-          <div
-            className="absolute left-1/2 bottom-0 w-[160%] h-[55%] -translate-x-1/2 origin-bottom"
-            style={{
-              transform: "perspective(360px) rotateX(58deg)",
-              backgroundColor: "#0a0a14",
-              backgroundImage:
-                "linear-gradient(rgba(150,140,255,0.12) 1px, transparent 1px)," +
-                "linear-gradient(90deg, rgba(150,140,255,0.12) 1px, transparent 1px)",
-              backgroundSize: "34px 34px",
-              WebkitMaskImage: "linear-gradient(to top, #000 10%, transparent 85%)",
-              maskImage: "linear-gradient(to top, #000 10%, transparent 85%)",
-            }}
-          />
-          {/* vanishing-point glow at the back of the hall */}
-          <div className="absolute left-1/2 top-[34%] -translate-x-1/2 w-40 h-40 rounded-full" style={{ background: "radial-gradient(circle, rgba(212,168,67,0.25), transparent 70%)", filter: "blur(8px)" }} />
-          {/* cabinets flanking the hall, receding */}
-          {CABINETS.map((cab, idx) => (
-            <div
-              key={idx}
-              className="absolute"
-              style={{ left: `${cab.x}%`, top: `${cab.y}%`, transform: `translate(-50%, -50%) scale(${cab.s})`, width: 64, height: 92, opacity: 0.35 + cab.s * 0.55 }}
-            >
-              <div className="w-full h-full rounded-md border border-white/10" style={{ background: "linear-gradient(160deg, #1a1a26, #0c0c14)" }} />
-              {/* glowing screen */}
-              <div
-                className="absolute left-1/2 top-3 -translate-x-1/2 w-9 h-7 rounded-sm arcade-attract"
-                style={{ background: cab.c, boxShadow: `0 0 12px ${cab.c}`, opacity: 0.85, animationDelay: `${idx * 0.4}s` }}
-              />
-            </div>
-          ))}
-          {/* brighten the hall as you cross the threshold */}
-          <div
-            className="absolute inset-0"
-            style={{ background: "radial-gradient(ellipse at 50% 60%, rgba(212,168,67,0.18), transparent 65%)", opacity: phase === "room" ? 0 : 1, transition: `opacity ${DOOR_MS}ms ease` }}
-          />
-        </div>
-
-        {/* the arch FRAME — thick bordered ring, interior open to the hall */}
-        <div
-          className="absolute inset-0 pointer-events-none"
+          className="absolute inset-0"
           style={{
-            border: "16px solid",
-            borderColor: active ? "color-mix(in srgb, #d4a843 40%, #1c1c28)" : "#1c1c28",
-            borderRadius: "390px 390px 10px 10px",
-            boxShadow: active ? "0 0 50px -16px #d4a843, inset 0 0 40px rgba(0,0,0,0.6)" : "inset 0 0 30px rgba(0,0,0,0.5)",
-            transition: "border-color 320ms ease, box-shadow 320ms ease",
+            backgroundImage: "url(/room/arcade-beyond.webp)",
+            backgroundSize: "cover",
+            backgroundPosition: "center",
+            backgroundColor: "#06060c",
+            clipPath: `path('${ARC_HOLE}')`,
+            WebkitClipPath: `path('${ARC_HOLE}')`,
+            filter: active ? "none" : "brightness(0.55)",
+            transition: "filter 320ms ease",
           }}
         />
-        {/* hover bloom when armed */}
+        {/* live pulse at the vanishing point so the hall breathes */}
+        <div
+          className="pointer-events-none absolute arcade-attract"
+          style={{ left: "50%", top: "44%", width: 130, height: 130, transform: "translate(-50%,-50%)", borderRadius: "9999px", background: "radial-gradient(circle, rgba(212,168,67,0.22), transparent 70%)", filter: "blur(8px)", opacity: active ? 0.9 : 0.4 }}
+        />
+        {/* brighten the hall as you cross the threshold */}
+        <div
+          className="pointer-events-none absolute inset-0"
+          style={{ clipPath: `path('${ARC_HOLE}')`, WebkitClipPath: `path('${ARC_HOLE}')`, background: "radial-gradient(ellipse at 50% 60%, rgba(212,168,67,0.20), transparent 65%)", opacity: crossing ? 1 : 0, transition: `opacity ${DOOR_MS}ms ease` }}
+        />
+
+        {/* the stone arch FRAME — IN FRONT, clipped to a ring so the hall shows through the opening */}
+        <div
+          className="pointer-events-none absolute inset-0"
+          style={{
+            backgroundImage: "url(/room/arcade-frame.webp)",
+            backgroundSize: "100% 100%",
+            clipPath: `path(evenodd, '${ARC_RING}')`,
+            WebkitClipPath: `path(evenodd, '${ARC_RING}')`,
+            // feather the outer edge so the stone panel melts into the wall (no rectangle seam)
+            maskImage: "radial-gradient(ellipse 84% 88% at 50% 50%, #000 62%, transparent 100%)",
+            WebkitMaskImage: "radial-gradient(ellipse 84% 88% at 50% 50%, #000 62%, transparent 100%)",
+            // calm the hot orange so it sits with the gold mortar seams
+            filter: active ? "saturate(0.82)" : "brightness(0.5) saturate(0.68)",
+            transition: "filter 320ms ease",
+          }}
+        />
+        {/* hover bloom when armed — warm wash over the opening */}
         {armed && (
-          <div className="pointer-events-none absolute inset-0 opacity-0 transition-opacity duration-200 group-hover/arch:opacity-100" style={{ borderRadius: "390px 390px 10px 10px", boxShadow: "0 0 70px -8px #d4a843, inset 0 0 50px rgba(212,168,67,0.12)" }} />
+          <div
+            className="pointer-events-none absolute inset-0 opacity-0 transition-opacity duration-200 group-hover/arch:opacity-100"
+            style={{ clipPath: `path('${ARC_HOLE}')`, WebkitClipPath: `path('${ARC_HOLE}')`, boxShadow: "inset 0 0 70px rgba(212,168,67,0.22)" }}
+          />
         )}
       </div>
 
