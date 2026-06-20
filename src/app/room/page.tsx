@@ -54,7 +54,12 @@ type Phase = "room" | "approach" | "open" | "through";
 
 export default function RoomPrototype() {
   const router = useRouter();
-  const [face, setFace] = useState(0);
+  // ?wall=N deep-links a faced wall (also lets headless screenshots target a wall with no turn animation)
+  const [face, setFace] = useState(() => {
+    if (typeof window === "undefined") return 0;
+    const w = new URLSearchParams(window.location.search).get("wall");
+    return w !== null && !Number.isNaN(Number(w)) ? Number(w) : 0;
+  });
   const [phase, setPhase] = useState<Phase>("room");
   const [fit, setFit] = useState(1); // viewport scale (contain)
   const [muted, setMuted] = useState(false);
@@ -270,6 +275,11 @@ export default function RoomPrototype() {
                     top: -WALL_H / 2,
                     transform: `rotateY(${-i * STEP}deg) translateZ(${-ROOM_R}px)`,
                     backfaceVisibility: "hidden",
+                    // shared dressed-stone wall — same surface on all four sides so the
+                    // room reads continuous; features mount on top of it.
+                    backgroundColor: "#08080d",
+                    backgroundImage: "url(/room/wall.webp)",
+                    backgroundSize: "100% 100%",
                   }}
                 >
                   {w.id === "magii" ? (
@@ -289,11 +299,6 @@ export default function RoomPrototype() {
           </div>
         </div>
       </div>
-
-      {/* ── flat HUD (doesn't rotate) ── */}
-      <header className="absolute top-6 left-1/2 -translate-x-1/2 z-30 text-center pointer-events-none">
-        <p className="text-[#d4a843] text-xs tracking-[0.5em] uppercase">Ather · Games</p>
-      </header>
 
       {/* music toggle — unlocks on first interaction; this just mutes/unmutes */}
       <button
@@ -390,12 +395,10 @@ function Plane({ axis }: { axis: "floor" | "ceiling" }) {
         top: -depth / 2,
         transform: `rotateX(${90 * sign}deg) translateZ(${WALL_H / 2}px)`,
         backgroundColor: "#08080d",
-        // floor: the generated compass-rose medallion; ceiling: faint grid for now
-        backgroundImage: isFloor
-          ? "url(/room/floor.webp)"
-          : "linear-gradient(rgba(255,255,255,0.05) 1px, transparent 1px)," +
-            "linear-gradient(90deg, rgba(255,255,255,0.05) 1px, transparent 1px)",
-        backgroundSize: isFloor ? "100% 100%" : "60px 60px",
+        // floor: dressed-stone w/ inlaid compass medallion; ceiling: dark timber beams.
+        // both humble dark stone to match the walls and recede (they're grazed by the camera).
+        backgroundImage: isFloor ? "url(/room/floor.webp)" : "url(/room/ceiling.webp)",
+        backgroundSize: "100% 100%",
         WebkitMaskImage: "radial-gradient(ellipse at 50% 50%, #000 25%, transparent 75%)",
         maskImage: "radial-gradient(ellipse at 50% 50%, #000 25%, transparent 75%)",
       }}
@@ -474,17 +477,25 @@ function MugDoor({ wall, active, phase, onEnter }: { wall: Wall; active: boolean
         role={armed ? "button" : undefined}
         aria-label={armed ? "Open the door to the Kindled Mug" : undefined}
       >
-        {/* warm room glimpsed BEHIND the door */}
+        {/* warm tavern interior glimpsed BEHIND the door */}
         <div
-          className="absolute inset-0 rounded-t-[140px] overflow-hidden grid place-items-center"
+          className="absolute inset-0 rounded-t-[140px] overflow-hidden"
           style={{
-            background: "radial-gradient(ellipse at 50% 35%, #f0c46a 0%, #c8842f 38%, #5a2e12 75%, #1a0d06 100%)",
+            backgroundImage: "url(/room/mug-beyond.webp)",
+            backgroundSize: "cover",
+            backgroundPosition: "center",
+            backgroundColor: "#1a0d06",
           }}
-        >
-          <span className="text-6xl mb-6" style={{ color: "#3a1d0a", opacity: opening ? 1 : 0.0, transition: "opacity 300ms ease" }}>
-            {wall.glyph}
-          </span>
-        </div>
+        />
+        {/* firelight warming when the door is open */}
+        <div
+          className="pointer-events-none absolute inset-0 rounded-t-[140px]"
+          style={{
+            background: "radial-gradient(ellipse at 50% 60%, rgba(240,180,90,0.35), transparent 70%)",
+            opacity: opening ? 1 : 0,
+            transition: "opacity 300ms ease",
+          }}
+        />
 
         {/* the door leaf (swings inward on its left hinge) */}
         <div
@@ -494,7 +505,10 @@ function MugDoor({ wall, active, phase, onEnter }: { wall: Wall; active: boolean
             transformStyle: "preserve-3d",
             transform: opening ? "rotateY(-108deg)" : "rotateY(0deg)",
             transition: `transform ${DOOR_MS}ms cubic-bezier(0.4, 0.0, 0.2, 1)`,
-            background: "linear-gradient(150deg, #2a1c12, #16100a)",
+            backgroundImage: "url(/room/mug-leaf.webp)",
+            backgroundSize: "cover",
+            backgroundPosition: "center",
+            backgroundColor: "#16100a",
             borderColor: active ? "color-mix(in srgb, #d4a843 45%, transparent)" : "rgba(255,255,255,0.08)",
             boxShadow: active ? "0 0 50px -16px #d4a843, inset 0 0 50px rgba(0,0,0,0.6)" : "inset 0 0 40px rgba(0,0,0,0.5)",
             backfaceVisibility: "hidden",
@@ -504,16 +518,63 @@ function MugDoor({ wall, active, phase, onEnter }: { wall: Wall; active: boolean
           {armed && (
             <div className="pointer-events-none absolute inset-0 rounded-t-[140px] opacity-0 transition-opacity duration-200 group-hover/door:opacity-100" style={{ boxShadow: "0 0 70px -10px #d4a843, inset 0 0 60px rgba(212,168,67,0.12)" }} />
           )}
-          {/* plank seams + handle */}
-          <div className="absolute inset-3 rounded-t-[120px] border border-[#d4a843]/15" />
-          <div className="absolute right-5 top-1/2 -translate-y-1/2 w-2 h-7 rounded-full bg-[#d4a843]/70" />
-          <div className="relative" style={{ opacity: active ? 1 : 0.5, transition: "opacity 320ms ease" }}>
-            <span className="block text-6xl mb-3" style={{ color: wall.accent }}>{wall.glyph}</span>
-            <h2 className="text-3xl tracking-[0.3em] uppercase" style={{ fontFamily: "Cormorant Garamond, Georgia, serif" }}>
-              {wall.label}
-            </h2>
-            <p className="mt-2 text-[10px] text-[#8a879a] tracking-[0.3em] uppercase">{wall.tagline}</p>
-          </div>
+        </div>
+
+        {/* FIXED stone frame — IN FRONT, clipped to a ring (arched hole) so the leaf shows
+            through and the stone lip overlaps the door edges = recessed look. Does NOT swing. */}
+        <div
+          className="pointer-events-none absolute"
+          style={{
+            width: 480,
+            height: 720,
+            left: "50%",
+            top: "50%",
+            transform: "translate(-50%, -50%)",
+            backgroundImage: "url(/room/mug-frame.webp)",
+            backgroundSize: "100% 100%",
+            clipPath: "path(evenodd, 'M0,0 H480 V720 H0 Z M144,641 V281 Q144,150 240,150 Q334,150 334,281 V641 Z')",
+            WebkitClipPath: "path(evenodd, 'M0,0 H480 V720 H0 Z M144,641 V281 Q144,150 240,150 Q334,150 334,281 V641 Z')",
+            // feather the outer edge so the frame's stone panel melts into the wall (no hard rectangle seam)
+            maskImage: "radial-gradient(ellipse 82% 86% at 50% 47%, #000 60%, transparent 100%)",
+            WebkitMaskImage: "radial-gradient(ellipse 82% 86% at 50% 47%, #000 60%, transparent 100%)",
+            // calm the hot orange a touch so it sits with the gold mortar seams
+            filter: active ? "saturate(0.82)" : "brightness(0.5) saturate(0.68)",
+            transition: "filter 320ms ease",
+          }}
+        />
+      </div>
+
+      {/* hanging tavern sign above the doorway — carries the wall's name */}
+      <div
+        className="pointer-events-none absolute left-1/2 -translate-x-1/2"
+        style={{ top: -8, width: 300, opacity: active ? 1 : 0.55, transition: "opacity 320ms ease" }}
+      >
+        <div style={{ position: "relative", width: 300, height: 200 }}>
+          <div
+            className="absolute inset-0"
+            style={{
+              backgroundImage: "url(/room/mug-sign.webp)",
+              backgroundSize: "contain",
+              backgroundRepeat: "no-repeat",
+              backgroundPosition: "top center",
+              filter: "saturate(0.82)",
+            }}
+          />
+          <span
+            className="absolute left-0 right-0 text-center"
+            style={{
+              top: 84,
+              fontFamily: "Cormorant Garamond, Georgia, serif",
+              color: "#e8c887",
+              fontSize: 20,
+              fontWeight: 600,
+              letterSpacing: "0.16em",
+              textTransform: "uppercase",
+              textShadow: "0 1px 6px rgba(0,0,0,0.95)",
+            }}
+          >
+            {wall.label}
+          </span>
         </div>
       </div>
 

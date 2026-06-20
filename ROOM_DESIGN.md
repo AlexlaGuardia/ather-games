@@ -117,3 +117,22 @@ top-down texture; the CSS rotation supplies the perspective. Do NOT bake perspec
 
 **Order (incremental, verify each):** floor + ceiling (sets room-shell mood) → Mug → Arcade → Shimmer
 → Desk character. Keep the CSS stand-ins as fallback until each surface's art lands.
+
+## MASKING PHASE — PROGRESS (2026-06-20 eve)
+- ✅ **Shell:** `wall.webp` (dressed stone, NO pillars — Alex cut them), `floor.webp` (humble stone + inlaid
+  compass), `ceiling.webp` (dark beams). All 4 walls share `wall.webp` → reads as one room.
+- ✅ **Mug door — 3-layer pattern (REUSE THIS):**
+  1. `mug-beyond.webp` tavern interior (back, fixed).
+  2. `mug-leaf.webp` oak door panel (mid, SWINGS on left hinge).
+  3. `mug-frame.webp` stone arch **IN FRONT**, `clip-path: path(evenodd,...)` cuts the arch hole so the leaf
+     shows through and the stone lip overlaps the door edges = **recessed, not a cutout.**
+  - **KEY LESSON (Alex caught it):** frame BEHIND the leaf → door looks like a sticker pasted on the frame.
+    Frame must be IN FRONT with a clipped transparent hole. FLUX has no alpha, but the frame's hole shape is
+    defined in CSS (the clip-path), so no bg-removal needed.
+  - Outer frame edge feathered with a radial `mask-image` (hides the rect panel seam); orange glow calmed
+    with `filter: saturate(0.82)`. Hanging `mug-sign.webp` + CSS text carries the name above the door.
+- **Tooling:** `?wall=N` deep-link + server headless chromium screenshot (see SHIMMER_SESSION). Self-verify composites.
+- **FLUX-schnell gotcha:** ignores negative prompts, skews glow RED. Lean into orange as firelight for the Mug;
+  push the wanted palette in the POSITIVE prompt for the others.
+- **DEFERRED (own session):** the `/room`→`/magii` route transition — current /magii page doesn't fit the entryway.
+- ⏳ NEXT: Arcade arch, Shimmer screen, Desk — same 3-layer frame+beyond(+leaf) pattern.
