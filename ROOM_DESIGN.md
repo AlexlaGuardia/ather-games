@@ -138,5 +138,10 @@ top-down texture; the CSS rotation supplies the perspective. Do NOT bake perspec
   receding to a vanishing point) BEHIND, `arcade-frame.webp` (stone arch, glowing seams) IN FRONT clipped to
   a ring (`ARC_HOLE`/`ARC_RING` paths in 820×656 box space) so the hall shows through. Same feather mask +
   saturate(0.82) as the Mug. Replaced the CSS border-ring + div-cabinet stand-in. Self-verified live (`?wall=1`).
+- ✅ **Shimmer screen — 3-layer pattern (2026-06-20, commit `6cf0451`):** `shimmer-beyond.webp` (glowing
+  world vista — spirit in a firefly meadow under violet hills) BEHIND, `shimmer-bezel.webp` (ornate carved
+  stone/iron screen housing) IN FRONT clipped to a ring (`SHM_HOLE`/`SHM_RING`, rounded-rect opening in a
+  600×400 box). CRT power-on flourish (turn-on line + resolve glow + scanlines) preserved OVER the art.
+  Replaced the CSS cabinet stand-in. Self-verified live (`?wall=0`).
 - **DEFERRED (own session):** the `/room`→`/magii` route transition — current /magii page doesn't fit the entryway.
-- ⏳ NEXT: Shimmer screen, Desk — same frame+beyond(+leaf/character) pattern.
+- ⏳ NEXT: Desk — attendant CHARACTER (irregular cutout → rembg alpha) + podium. Last stand-in wall.
