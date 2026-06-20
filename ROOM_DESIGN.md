@@ -143,5 +143,12 @@ top-down texture; the CSS rotation supplies the perspective. Do NOT bake perspec
   stone/iron screen housing) IN FRONT clipped to a ring (`SHM_HOLE`/`SHM_RING`, rounded-rect opening in a
   600×400 box). CRT power-on flourish (turn-on line + resolve glow + scanlines) preserved OVER the art.
   Replaced the CSS cabinet stand-in. Self-verified live (`?wall=0`).
+- ✅ **Front Desk greeter — cutout (2026-06-20, commit `570ffc8`):** `desk-greeter.webp` = a cozy Mana'mal
+  creature at a glowing podium (Alex's call: Mana'mal greeter), gen'd on a PURE-BLACK bg → floodfilled to
+  an alpha PNG **locally with ImageMagick** (`-fuzz 14% color floodfill` from the 4 corners) — **no Replicate
+  rembg needed** when the bg is truly black. Drops onto the dark wall clean, no halo. Floodfill also hollowed
+  the podium to a glowing wireframe (on-style). Profile/Settings/News UI overlays kept. Sized 360×438 @ left41%/top16%.
+- 🎉 **ALL 4 WALLS NOW IN REAL ART** (Mug · Arcade · Shimmer · Desk). Masking phase core = DONE.
 - **DEFERRED (own session):** the `/room`→`/magii` route transition — current /magii page doesn't fit the entryway.
-- ⏳ NEXT: Desk — attendant CHARACTER (irregular cutout → rembg alpha) + podium. Last stand-in wall.
+- ⏳ NEXT (polish, no longer stand-in replacement): ambient life per wall (dust motes, flicker), wire
+  Profile/Settings sign-in panels, Shimmer-page `?from=room` return button. + Alex's full feel-test on device.
