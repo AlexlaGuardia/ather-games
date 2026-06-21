@@ -492,7 +492,7 @@ function MugDoor({ wall, active, phase, onEnter }: { wall: Wall; active: boolean
             left: "50%",
             top: "50%",
             transform: "translate(-50%, -50%)",
-            backgroundImage: "url(/room/mug-frame.webp)",
+            backgroundImage: "url(/room/mug-frame.webp?v=2)",
             backgroundSize: "100% 100%",
             clipPath: "path(evenodd, 'M0,0 H480 V720 H0 Z M144,641 V281 Q144,150 240,150 Q334,150 334,281 V641 Z')",
             WebkitClipPath: "path(evenodd, 'M0,0 H480 V720 H0 Z M144,641 V281 Q144,150 240,150 Q334,150 334,281 V641 Z')",
@@ -514,7 +514,7 @@ function MugDoor({ wall, active, phase, onEnter }: { wall: Wall; active: boolean
           <div
             className="absolute inset-0"
             style={{
-              backgroundImage: "url(/room/mug-sign.webp)",
+              backgroundImage: "url(/room/mug-sign.webp?v=2)",
               backgroundSize: "contain",
               backgroundRepeat: "no-repeat",
               backgroundPosition: "top center",
@@ -797,7 +797,7 @@ function ArcadeArch({ wall, active, phase, onEnter }: { wall: Wall; active: bool
         <div
           className="pointer-events-none absolute inset-0"
           style={{
-            backgroundImage: "url(/room/arcade-frame.webp)",
+            backgroundImage: "url(/room/arcade-frame.webp?v=2)",
             backgroundSize: "100% 100%",
             clipPath: `path(evenodd, '${ARC_RING}')`,
             WebkitClipPath: `path(evenodd, '${ARC_RING}')`,
