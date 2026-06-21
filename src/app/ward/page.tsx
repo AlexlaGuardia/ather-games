@@ -30,6 +30,7 @@ import {
 } from './lib/ward'
 import { sfx } from './lib/sfx'
 import ArcadeCabinet from '../_components/ArcadeCabinet'
+import { dailySeed, dailyNumber, loadDailyBest, saveDailyBest, dailyShare, copyShare } from '@/lib/arcade/daily'
 
 const BG = '#04040a'
 const ATHER = '#37e6ff'
@@ -72,6 +73,10 @@ export default function WardPage() {
   const [muted, setMuted] = useState(false)
   const [stats, setStats] = useState<RunStats | null>(null)
   const [hud, setHud] = useState<Hud>({ score: 0, wave: 1, ammo: 0, maxAmmo: 0, spires: NUM_SPIRES, hi: 0 })
+  const [mode, setMode] = useState<'endless' | 'daily'>('endless')
+  const modeRef = useRef(mode); modeRef.current = mode
+  const [dailyBest, setDailyBest] = useState(0)
+  const [shared, setShared] = useState(false)
 
   useNoScroll() // pin to viewport on mobile — no page scroll / iOS bounce
 
@@ -86,11 +91,15 @@ export default function WardPage() {
 
   // boot a fresh world (also used by restart)
   const boot = useCallback(() => {
-    seedRef.current = (seedRef.current * 1103515245 + 12345) >>> 0
-    const w = makeWorld(seedRef.current ^ (Date.now() >>> 0))
+    // daily = the same seeded onslaught for everyone today; endless = random.
+    let seed: number
+    if (modeRef.current === 'daily') seed = dailySeed()
+    else { seedRef.current = (seedRef.current * 1103515245 + 12345) >>> 0; seed = seedRef.current ^ (Date.now() >>> 0) }
+    const w = makeWorld(seed)
     worldRef.current = w
     overRef.current = false
     setOver(false)
+    setShared(false)
     setHud(readHud(w))
   }, [readHud])
 
@@ -98,6 +107,7 @@ export default function WardPage() {
     seedRef.current = Date.now() >>> 0
     boot()
     setMuted(sfx.isMuted())
+    setDailyBest(loadDailyBest('ward'))
     setHud((h) => ({ ...h, hi: loadHiScore() }))
   }, [boot])
 
@@ -123,7 +133,8 @@ export default function WardPage() {
         if (ev.gameOver) {
           sfx.play('over')
           overRef.current = true
-          const hi = saveHiScore(w.score)
+          if (modeRef.current === 'daily') setDailyBest(saveDailyBest('ward', w.score))
+          const hi = modeRef.current === 'daily' ? loadHiScore() : saveHiScore(w.score)
           setStats(runStats(w))
           setOver(true)
           setHud({ ...readHud(w), hi })
@@ -185,6 +196,19 @@ export default function WardPage() {
     sfx.ensure()
     boot()
   }, [boot])
+
+  const pickMode = (m: 'endless' | 'daily') => {
+    if (m === modeRef.current) return
+    modeRef.current = m // sync so boot's re-seed reads the new mode immediately
+    setMode(m)
+    boot()
+  }
+  const onShare = async () => {
+    if (await copyShare(dailyShare('Ward', hud.score))) {
+      setShared(true)
+      window.setTimeout(() => setShared(false), 1800)
+    }
+  }
 
   const toggleMute = () => {
     sfx.ensure()
@@ -260,6 +284,19 @@ export default function WardPage() {
             <p className="text-[11px] leading-relaxed text-[#9fd6e0]/80 max-w-[300px]">
               the void is falling on the spires. tap the sky to bloom Ather and unmake it before it lands.
             </p>
+            <div className="flex items-center gap-1.5 mt-0.5 font-mono text-[10px] tracking-[0.2em] uppercase">
+              {(['endless', 'daily'] as const).map((m) => (
+                <button
+                  key={m}
+                  onPointerDown={(e) => e.stopPropagation()}
+                  onClick={(e) => { e.stopPropagation(); pickMode(m) }}
+                  className={`px-3 py-1.5 rounded-sm border transition-colors ${mode === m ? 'text-[#04040a] bg-[#37e6ff] border-[#37e6ff]' : 'text-[#37e6ff]/55 border-[#37e6ff]/25 hover:text-[#37e6ff]'}`}
+                >
+                  {m === 'daily' ? `daily #${dailyNumber()}` : m}
+                </button>
+              ))}
+            </div>
+            {mode === 'daily' && <div className="text-[9px] font-mono text-[#7fd8e6]/45 tracking-wider -mt-1">same onslaught for everyone today</div>}
             <button className="font-mono text-[12px] tracking-[0.25em] uppercase text-[#04040a] bg-[#37e6ff] hover:bg-[#7df0ff] px-6 py-2.5 rounded-sm mt-1" style={{ boxShadow: '0 0 18px #37e6ff80' }}>
               tap to defend
             </button>
@@ -274,7 +311,9 @@ export default function WardPage() {
               {tauntFor(hud.wave, hud.score, hud.score >= hud.hi && hud.score > 0)}
             </p>
             <div className="text-[10px] font-mono text-[#7fd8e6]/50 tracking-wider">
-              reached wave {hud.wave} · best {hud.hi.toLocaleString()}{hud.score >= hud.hi && hud.score > 0 ? ' ✦ new best' : ''}
+              {mode === 'daily'
+                ? <>daily #{dailyNumber()} · reached wave {hud.wave} · best {dailyBest.toLocaleString()}{hud.score >= dailyBest && hud.score > 0 ? ' ✦ today’s best' : ''}</>
+                : <>reached wave {hud.wave} · best {hud.hi.toLocaleString()}{hud.score >= hud.hi && hud.score > 0 ? ' ✦ new best' : ''}</>}
             </div>
 
             {stats && (
@@ -292,9 +331,16 @@ export default function WardPage() {
                 ))}
               </div>
             )}
-            <button onClick={restart} className="font-mono text-[11px] tracking-[0.25em] uppercase text-[#04040a] bg-[#37e6ff] hover:bg-[#7df0ff] px-6 py-2 rounded-sm mt-1" style={{ boxShadow: '0 0 18px #37e6ff80' }}>
-              defend again →
-            </button>
+            <div className="flex items-center gap-2 mt-1">
+              <button onClick={restart} className="font-mono text-[11px] tracking-[0.25em] uppercase text-[#04040a] bg-[#37e6ff] hover:bg-[#7df0ff] px-5 py-2 rounded-sm" style={{ boxShadow: '0 0 18px #37e6ff80' }}>
+                defend again →
+              </button>
+              {mode === 'daily' && (
+                <button onClick={onShare} className="font-mono text-[11px] tracking-[0.25em] uppercase text-[#37e6ff] border border-[#37e6ff]/40 hover:border-[#37e6ff] px-5 py-2 rounded-sm transition-colors">
+                  {shared ? 'copied ✓' : 'share'}
+                </button>
+              )}
+            </div>
           </div>
         )}
       </div>
