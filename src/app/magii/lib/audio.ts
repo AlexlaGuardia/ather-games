@@ -3,8 +3,12 @@
  *
  * Hearthstone-inspired tavern soundscape via Web Audio API.
  * All SFX synthesized procedurally — no external files needed.
- * Background music streams from /magii/audio/music.mp3 when available.
+ * Background MUSIC is no longer owned here — it rides the shared hub bed
+ * (lib/hub-audio.ts) so the same track carries continuously from the Room's
+ * Mug door into the tavern. This engine keeps only the SFX + mute state.
  */
+
+import { getHubAudio } from '@/lib/hub-audio'
 
 export type SoundName =
   | 'card-draw' | 'card-place' | 'card-hover'
@@ -23,7 +27,6 @@ class MagiiAudio {
   private masterGain: GainNode | null = null
   private sfxGain: GainNode | null = null
   private ambientGain: GainNode | null = null
-  private musicEl: HTMLAudioElement | null = null
   private ambientNodes: (AudioBufferSourceNode | OscillatorNode)[] = []
   private crackleTimer: ReturnType<typeof setTimeout> | null = null
   private logTimer: ReturnType<typeof setTimeout> | null = null
@@ -61,7 +64,13 @@ class MagiiAudio {
 
     this.ready = true
     this.buildAmbient()
-    this.tryMusic()
+    // Music = the shared hub bed. If you arrived through the Room, it's already
+    // playing (open it to the in-game level); if you landed here directly, this
+    // gesture starts it. Inherit the room's mute choice.
+    const hub = getHubAudio()
+    this._muted = hub.muted
+    hub.start()
+    hub.open()
     this.notify()
   }
 
@@ -71,36 +80,7 @@ class MagiiAudio {
     // Ambient disabled — cosmic tracks carry the atmosphere
   }
 
-  // ── Background Music (shuffled playlist) ─────────────────────
-
-  private static TRACKS = [
-    '/magii/audio/nebula-hopping.mp3',
-    '/magii/audio/wormhole-ride.mp3',
-    '/magii/audio/balance.mp3',
-    '/magii/audio/comet-my-space.mp3',
-  ]
-  private trackIdx = 0
-
-  private tryMusic() {
-    if (this.musicEl) return
-    // Shuffle start position each session
-    this.trackIdx = Math.floor(Math.random() * MagiiAudio.TRACKS.length)
-    this.playTrack()
-  }
-
-  private playTrack() {
-    const src = MagiiAudio.TRACKS[this.trackIdx % MagiiAudio.TRACKS.length]
-    const el = new Audio(src)
-    el.volume = this._muted ? 0 : this._volumes.music * this._volumes.master
-    // When track ends, advance to next
-    el.addEventListener('ended', () => {
-      this.trackIdx++
-      this.musicEl = null
-      this.playTrack()
-    })
-    el.play().catch(() => { this.musicEl = null })
-    this.musicEl = el
-  }
+  // Background music now lives in the shared hub bed (lib/hub-audio.ts) — see init().
 
   // ── SFX ───────────────────────────────────────────────────────
 
@@ -363,9 +343,6 @@ class MagiiAudio {
     if (this.masterGain) this.masterGain.gain.setValueAtTime(this._volumes.master, t)
     if (this.sfxGain) this.sfxGain.gain.setValueAtTime(this._volumes.sfx, t)
     if (this.ambientGain) this.ambientGain.gain.setValueAtTime(this._volumes.ambient, t)
-    if (this.musicEl) {
-      this.musicEl.volume = this._muted ? 0 : this._volumes.music * this._volumes.master
-    }
     this.notify()
   }
 
@@ -378,11 +355,10 @@ class MagiiAudio {
     const t = this.ctx?.currentTime ?? 0
     if (this._muted) {
       this.masterGain?.gain.setValueAtTime(0, t)
-      if (this.musicEl) this.musicEl.volume = 0
     } else {
       this.masterGain?.gain.setValueAtTime(this._volumes.master, t)
-      if (this.musicEl) this.musicEl.volume = this._volumes.music * this._volumes.master
     }
+    getHubAudio().setMuted(this._muted) // mute the shared music bed too
     this.notify()
     return this._muted
   }
@@ -392,7 +368,6 @@ class MagiiAudio {
     if (this.logTimer) { clearTimeout(this.logTimer); this.logTimer = null }
     this.ambientNodes.forEach(n => { try { n.stop() } catch {} })
     this.ambientNodes = []
-    if (this.musicEl) { this.musicEl.pause(); this.musicEl = null }
     this.ctx?.close()
     this.ctx = null
     this.ready = false

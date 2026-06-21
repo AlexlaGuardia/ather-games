@@ -9,6 +9,7 @@ import {
 } from './lib/engine'
 import { chooseDrawAction, chooseDiscardAction, shouldCallMagii, decideDoubleDown, getNPCDifficulty } from './lib/npc'
 import { getMagiiAudio } from './lib/audio'
+import { getHubAudio } from '@/lib/hub-audio'
 import { GameBoard, DoubleDownModal, GameOverOverlay, Card } from './game-board'
 import type { Card as CardType } from './lib/data'
 import { COLLECTIONS, getCollectionEntry } from './lib/data'
@@ -41,6 +42,10 @@ export default function MagiiPage() {
   const [roomDest, setRoomDest] = useState<string | null>(null)
   useEffect(() => {
     if (new URLSearchParams(window.location.search).get('from') === 'room') setRoomDest('/room')
+    // if the muffled tavern bed carried through the door, open it to the in-game
+    // level right away (no wait for the start-screen click). See lib/hub-audio.ts.
+    const hub = getHubAudio()
+    if (hub.isStarted) hub.open()
   }, [])
 
   // Load saved stats from cloud on mount.

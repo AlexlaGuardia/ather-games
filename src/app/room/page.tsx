@@ -11,7 +11,8 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { getHubAudio } from "@/lib/hub-audio";
 
 type Wall = { id: string; label: string; glyph: string; tagline: string; href?: string; accent: string };
 
@@ -35,13 +36,8 @@ const TURN_MS = 420;
 const STAGE_W = 1280;
 const STAGE_H = 820;
 
-// the tavern's music, heard muffled through the wall (Magii's own tracks)
-const TAVERN_TRACKS = [
-  "/magii/audio/balance.mp3",
-  "/magii/audio/nebula-hopping.mp3",
-  "/magii/audio/wormhole-ride.mp3",
-  "/magii/audio/comet-my-space.mp3",
-];
+// The tavern's music (Magii's own tracks) lives in the shared hub-audio service
+// so the SAME element/playhead carries through the door into /magii. See lib/hub-audio.ts.
 const MUG_INDEX = 3; // WALLS[3] = the Kindled Mug
 
 // approach dolly: push the faced wall up until the door fills the view
@@ -62,18 +58,13 @@ export default function RoomPrototype() {
   });
   const [phase, setPhase] = useState<Phase>("room");
   const [fit, setFit] = useState(1); // viewport scale (contain)
-  const [muted, setMuted] = useState(false);
-  const [audioOn, setAudioOn] = useState(false);
   const reduced = useRef(false);
   const touchX = useRef<number | null>(null);
   const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
-  // muffled-tavern audio graph: <audio> → lowpass → gain → out
-  const audioElRef = useRef<HTMLAudioElement | null>(null);
-  const audioCtxRef = useRef<AudioContext | null>(null);
-  const filterRef = useRef<BiquadFilterNode | null>(null);
-  const gainRef = useRef<GainNode | null>(null);
-  const startedRef = useRef(false);
-  const trackRef = useRef(TAVERN_TRACKS[0]);
+  // muffled-tavern audio lives in the shared hub service (survives the route into /magii)
+  const hub = getHubAudio();
+  const muted = useSyncExternalStore(hub.subscribe, () => hub.muted, () => false);
+  const audioOn = useSyncExternalStore(hub.subscribe, () => hub.isStarted, () => false);
 
   useEffect(() => {
     reduced.current = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -145,69 +136,39 @@ export default function RoomPrototype() {
     return () => window.removeEventListener("keydown", onKey);
   }, [inRoom, turn, retreat]);
 
-  // ── muffled tavern audio ──────────────────────────────────────────
+  // ── muffled tavern audio (shared hub bed) ─────────────────────────
   // drive the lowpass cutoff + volume from how much you face/approach the Mug.
+  // The bed is the SAME track that plays in /magii — opening the door swells it,
+  // and crossing the threshold carries it through (hub survives the route change).
+  const startAudio = useCallback(() => getHubAudio().start(), []);
+
   const applyAudio = useCallback(() => {
-    const ctx = audioCtxRef.current, flt = filterRef.current, g = gainRef.current;
-    if (!ctx || !flt || !g) return;
-    // facing factor: 1 = looking straight at the Mug, 0 = turned fully away
-    const f = (Math.cos((face - MUG_INDEX) * STEP * (Math.PI / 180)) + 1) / 2;
+    const f = (Math.cos((face - MUG_INDEX) * STEP * (Math.PI / 180)) + 1) / 2; // 1 = facing Mug
     const facingMug = ((face % N) + N) % N === MUG_INDEX;
+    // approaching a wall that ISN'T the tavern → fade the bed out (we're leaving it behind).
+    const leaving = phase !== "room" && !facingMug;
     const p = facingMug ? (phase === "room" ? 0 : phase === "approach" ? 0.55 : 1) : 0;
-    // muffled + quiet across the hall; clearer + louder as you face/approach; open at the door
     const base = 320 + f * 380;                  // 320–700 Hz "through a wall"
     const cutoff = base + p * (16000 - base);    // → wide open at the door
     const gFacing = 0.05 + f * 0.17;             // 0.05–0.22 ambient
-    const vol = muted ? 0 : gFacing + p * (0.55 - gFacing);
-    const t = ctx.currentTime;
-    flt.frequency.setTargetAtTime(cutoff, t, 0.18);
-    g.gain.setTargetAtTime(vol, t, 0.18);
-  }, [face, phase, muted]);
+    const vol = leaving ? 0 : gFacing + p * (0.55 - gFacing);
+    getHubAudio().tune(cutoff, vol);
+  }, [face, phase]);
 
-  const startAudio = useCallback(() => {
-    if (startedRef.current) return;
-    const el = audioElRef.current;
-    if (!el) return;
-    const Ctx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
-    if (!Ctx) return;
-    const ctx = new Ctx();
-    const src = ctx.createMediaElementSource(el);
-    const flt = ctx.createBiquadFilter();
-    flt.type = "lowpass";
-    flt.frequency.value = 320;
-    flt.Q.value = 0.7;
-    const g = ctx.createGain();
-    g.gain.value = 0;
-    src.connect(flt);
-    flt.connect(g);
-    g.connect(ctx.destination);
-    audioCtxRef.current = ctx;
-    filterRef.current = flt;
-    gainRef.current = g;
-    el.loop = true;
-    el.play().catch(() => {});
-    ctx.resume().catch(() => {});
-    startedRef.current = true;
-    setAudioOn(true);
-  }, []);
-
-  // pick a track once, unlock audio on the first interaction, clean up on exit
+  // unlock audio on the first interaction (autoplay policy)
   useEffect(() => {
-    trackRef.current = TAVERN_TRACKS[Math.floor(Math.random() * TAVERN_TRACKS.length)];
-    if (audioElRef.current) audioElRef.current.src = trackRef.current;
     const onFirst = () => startAudio();
     window.addEventListener("pointerdown", onFirst, { once: true });
     window.addEventListener("keydown", onFirst, { once: true });
     return () => {
       window.removeEventListener("pointerdown", onFirst);
       window.removeEventListener("keydown", onFirst);
-      audioCtxRef.current?.close();
     };
   }, [startAudio]);
 
   // re-aim the filter/volume whenever you turn, approach, mute, or audio starts
   useEffect(() => {
-    if (startedRef.current) applyAudio();
+    if (audioOn) applyAudio();
   }, [applyAudio, audioOn]);
 
   const angle = face * STEP;
@@ -228,8 +189,6 @@ export default function RoomPrototype() {
         touchX.current = null;
       }}
     >
-      <audio ref={audioElRef} preload="auto" loop crossOrigin="anonymous" />
-
       {/* ambient void fills the WHOLE viewport so the contain-margins aren't dead bars */}
       <div
         className="pointer-events-none absolute inset-0"
@@ -302,7 +261,7 @@ export default function RoomPrototype() {
 
       {/* music toggle — unlocks on first interaction; this just mutes/unmutes */}
       <button
-        onClick={() => { startAudio(); setMuted((m) => !m); }}
+        onClick={() => { const h = getHubAudio(); h.start(); h.toggleMuted(); }}
         aria-label={muted || !audioOn ? "Unmute" : "Mute"}
         className="absolute top-5 right-5 z-40 grid place-items-center w-10 h-10 rounded-md border border-white/10 bg-[#12121e]/70 backdrop-blur text-[#8a879a] transition hover:text-[#d4a843] hover:border-[#d4a843]/40"
       >
