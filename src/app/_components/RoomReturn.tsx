@@ -11,7 +11,17 @@ import { useEffect, useState } from "react";
 export default function RoomReturn({ wall }: { wall?: number } = {}) {
   const [show, setShow] = useState(false);
   useEffect(() => {
-    setShow(new URLSearchParams(window.location.search).get("from") === "room");
+    // The room context is STICKY for the session: ?from=room only rides the first hop
+    // (room→hall), and threading it through every card + game back-link is fragile. So
+    // the first time we see it, remember it — then the pill stays available across the
+    // whole room→hall→game→hall loop instead of dead-ending at the old hub.
+    const fromParam = new URLSearchParams(window.location.search).get("from") === "room";
+    try {
+      if (fromParam) sessionStorage.setItem("ag_from_room", "1");
+      setShow(fromParam || sessionStorage.getItem("ag_from_room") === "1");
+    } catch {
+      setShow(fromParam);
+    }
   }, []);
   if (!show) return null;
   return (
