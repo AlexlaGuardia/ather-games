@@ -7,6 +7,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
+import ArcadeCabinet from '../_components/ArcadeCabinet'
 import { mulberry32 } from '@/lib/arcade/rng'
 import { useNoScroll } from '@/lib/arcade/useNoScroll'
 import {
@@ -144,7 +145,7 @@ export default function SeedfallPage() {
   const lowFuel = fuel <= FUEL_MAX * 0.25
 
   return (
-    <div className="min-h-screen bg-[#04040a] text-[#7fd8e6] flex flex-col items-center px-4 py-6 select-none">
+    <ArcadeCabinet accent="#54ffc8" wall={1} maxWidth={400}>
       <div className="w-full max-w-[400px] flex items-center justify-between mb-4">
         <Link href="/arcade" className="text-[10px] tracking-[0.25em] uppercase text-[#37e6ff]/50 hover:text-[#37e6ff] font-mono">&#8592; arcade</Link>
         <div className="text-center">
@@ -226,7 +227,7 @@ export default function SeedfallPage() {
         }
         @keyframes sf-flicker { 0%,97%,100% { opacity: 1; } 98% { opacity: 0.94; } 99% { opacity: 0.98; } }
       `}</style>
-    </div>
+    </ArcadeCabinet>
   )
 }
 

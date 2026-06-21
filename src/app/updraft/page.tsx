@@ -7,6 +7,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
+import ArcadeCabinet from '../_components/ArcadeCabinet'
 import { mulberry32 } from '@/lib/arcade/rng'
 import { useNoScroll } from '@/lib/arcade/useNoScroll'
 import {
@@ -134,7 +135,7 @@ export default function UpdraftPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#04040a] text-[#7fd8e6] flex flex-col items-center px-4 py-6 select-none">
+    <ArcadeCabinet accent="#37e6ff" wall={1} maxWidth={400}>
       <div className="w-full max-w-[400px] flex items-center justify-between mb-4">
         <Link href="/arcade" className="text-[10px] tracking-[0.25em] uppercase text-[#37e6ff]/50 hover:text-[#37e6ff] font-mono">
           &#8592; arcade
@@ -207,7 +208,7 @@ export default function UpdraftPage() {
           99% { opacity: 0.97; }
         }
       `}</style>
-    </div>
+    </ArcadeCabinet>
   )
 }
 
