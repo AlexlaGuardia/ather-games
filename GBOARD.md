@@ -11,6 +11,18 @@ real **gimmick** (not watch-and-wait) · **canon-parallel** (serves Athernyx, no
 black, CRT bloom). Mana'nana went glossy-modern; each game gets its own skin under
 the Arcade frame.
 
+## 🔁 Cross-cutting — THE DAILY CHALLENGE (shipped 2026-06-21, `b4c3ddb`→`7902b30`)
+> Retention loop: one seeded run per UTC day, the SAME course for everyone, shareable score.
+- **Shared lib `src/lib/arcade/daily.ts`** (reusable like ArcadeCabinet): `dailyKey`/`dailySeed`/
+  `dailyNumber` (#1 = 2026-01-01) + per-game daily-best storage + Wordle-style `dailyShare` + clipboard.
+  Opt in with ~6 lines: seed the world from `dailySeed()`, save with `saveDailyBest`, add the toggle + share.
+- **Live on 5 score-chase games:** Atherdash · Ward · Updraft · Voranyx · Mana'nana — Endless/Daily toggle
+  on the start screen (Mana'nana: under the score row), separate daily-best track, Share on game over.
+- **Rekindle** has its own puzzle daily; its date helpers now re-export from the shared lib (one source).
+- **Excluded by design:** Seedfall (soft-landing skill, no chase-able score) · Lucernyx (vs-AI win/lose).
+- ⚠ PENDING Alex feel: does the daily toggle + share read right; is "same course for everyone" worth a
+  back-end leaderboard later (currently local-best only — share is the social layer).
+
 ## 🧩 Cross-cutting initiative — THE GAME-UI LAYER (active, jin leads, 2026-06-18)
 > **Killing the "browser feel"** — games play like games but the menus/chrome read like a website.
 > Full research + recipe: **`/GAME_UI_LAYER.md`**. Reusable opt-in kit: **`src/app/gameui.css`**
