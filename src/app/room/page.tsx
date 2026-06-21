@@ -496,9 +496,9 @@ function MugDoor({ wall, active, phase, onEnter }: { wall: Wall; active: boolean
             backgroundSize: "100% 100%",
             clipPath: "path(evenodd, 'M0,0 H480 V720 H0 Z M144,641 V281 Q144,150 240,150 Q334,150 334,281 V641 Z')",
             WebkitClipPath: "path(evenodd, 'M0,0 H480 V720 H0 Z M144,641 V281 Q144,150 240,150 Q334,150 334,281 V641 Z')",
-            // feather the outer edge so the frame's stone panel melts into the wall (no hard rectangle seam)
-            maskImage: "radial-gradient(ellipse 82% 86% at 50% 47%, #000 60%, transparent 100%)",
-            WebkitMaskImage: "radial-gradient(ellipse 82% 86% at 50% 47%, #000 60%, transparent 100%)",
+            // the frame art is a dark-stone arch on a PURE-BLACK field (no alpha) — screen-blend it onto
+            // the wall so the black vanishes and only the lit stone + runes show, no hard rectangle box.
+            mixBlendMode: "screen",
             // calm the hot orange a touch so it sits with the gold mortar seams
             filter: active ? "saturate(0.82)" : "brightness(0.5) saturate(0.68)",
             transition: "filter 320ms ease",
@@ -802,9 +802,9 @@ function ArcadeArch({ wall, active, phase, onEnter }: { wall: Wall; active: bool
             backgroundSize: "100% 100%",
             clipPath: `path(evenodd, '${ARC_RING}')`,
             WebkitClipPath: `path(evenodd, '${ARC_RING}')`,
-            // feather the outer edge so the stone panel melts into the wall (no rectangle seam)
-            maskImage: "radial-gradient(ellipse 84% 88% at 50% 50%, #000 62%, transparent 100%)",
-            WebkitMaskImage: "radial-gradient(ellipse 84% 88% at 50% 50%, #000 62%, transparent 100%)",
+            // frame art is a dark-stone arch on a PURE-BLACK field (no alpha) — screen-blend it onto
+            // the wall so the black vanishes and only the lit stone + runes show, no hard rectangle box.
+            mixBlendMode: "screen",
             // calm the hot orange so it sits with the gold mortar seams
             filter: active ? "saturate(0.82)" : "brightness(0.5) saturate(0.68)",
             transition: "filter 320ms ease",
