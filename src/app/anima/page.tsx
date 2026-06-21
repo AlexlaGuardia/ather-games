@@ -400,7 +400,7 @@ export default function Anima() {
         <span className="text-xs text-[#5a6d8a]">tap the scene to send it walking</span>
       </div>
 
-      <Link href="/arcade" className="text-xs text-[#5a6d8a] hover:text-[#37e6ff] mt-2">
+      <Link href="/arcade/all" className="text-xs text-[#5a6d8a] hover:text-[#37e6ff] mt-2">
         ← back to the arcade
       </Link>
     </div>

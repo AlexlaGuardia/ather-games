@@ -388,7 +388,7 @@ export default function MananaPage() {
               title={muted ? 'sound off' : 'sound on'}
               className="text-lg text-slate-500 hover:text-amber-300 transition-colors"
             >{muted ? '\u{1F507}' : '\u{1F50A}'}</button>
-            <Link href="/arcade" className="text-[11px] text-slate-500 hover:text-amber-300 transition-colors">arcade &#8594;</Link>
+            <Link href="/arcade/all" className="text-[11px] text-slate-500 hover:text-amber-300 transition-colors">arcade &#8594;</Link>
           </div>
         </header>
 

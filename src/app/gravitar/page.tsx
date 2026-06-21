@@ -109,7 +109,7 @@ export default function GravitarPage() {
   return (
     <div className="min-h-screen bg-[#04040a] text-[#9fd6e0] flex flex-col items-center px-4 py-6 select-none">
       <div className="w-full max-w-[440px] flex items-center justify-between mb-3">
-        <Link href="/arcade" className="text-[10px] tracking-[0.25em] uppercase text-[#37e6ff]/50 hover:text-[#37e6ff] font-mono">&#8592; arcade</Link>
+        <Link href="/arcade/all" className="text-[10px] tracking-[0.25em] uppercase text-[#37e6ff]/50 hover:text-[#37e6ff] font-mono">&#8592; arcade</Link>
         <div className="text-center">
           <div className="font-mono text-[#37e6ff] text-sm tracking-[0.35em] uppercase" style={{ textShadow: '0 0 8px #37e6ff80' }}>Gravitar</div>
           <div className="text-[9px] text-[#7fd8e6]/40 font-mono tracking-[0.2em] uppercase mt-0.5">round the wells</div>
@@ -160,7 +160,7 @@ export default function GravitarPage() {
       </div>
 
       <div className="w-full max-w-[440px] flex items-center justify-between mt-4">
-        <Link href="/arcade" className="text-[10px] tracking-[0.25em] uppercase text-[#37e6ff]/45 hover:text-[#37e6ff] font-mono">arcade</Link>
+        <Link href="/arcade/all" className="text-[10px] tracking-[0.25em] uppercase text-[#37e6ff]/45 hover:text-[#37e6ff] font-mono">arcade</Link>
         <p className="text-[10px] text-[#7fd8e6]/35 font-mono tracking-wider">round the wells · gather the light</p>
       </div>
 

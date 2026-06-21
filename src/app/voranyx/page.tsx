@@ -200,7 +200,7 @@ export default function VoranyxPage() {
   return (
     <ArcadeCabinet accent="#37e6ff" wall={1} maxWidth={440}>
       <div className="w-full max-w-[440px] flex items-center justify-between mb-3">
-        <Link href="/arcade" className="text-[10px] tracking-[0.25em] uppercase text-[#37e6ff]/50 hover:text-[#37e6ff] font-mono">&#8592; arcade</Link>
+        <Link href="/arcade/all" className="text-[10px] tracking-[0.25em] uppercase text-[#37e6ff]/50 hover:text-[#37e6ff] font-mono">&#8592; arcade</Link>
         <div className="text-center">
           <div className="font-mono text-[#37e6ff] text-sm tracking-[0.35em] uppercase" style={{ textShadow: '0 0 8px #37e6ff80' }}>Voranyx</div>
           <div className="text-[9px] text-[#7fd8e6]/40 font-mono tracking-[0.2em] uppercase mt-0.5">worms of the silt</div>
@@ -278,7 +278,7 @@ export default function VoranyxPage() {
       </div>
 
       <div className="w-full max-w-[440px] flex items-center justify-between mt-4">
-        <Link href="/arcade" className="text-[10px] tracking-[0.25em] uppercase text-[#37e6ff]/45 hover:text-[#37e6ff] font-mono">arcade</Link>
+        <Link href="/arcade/all" className="text-[10px] tracking-[0.25em] uppercase text-[#37e6ff]/45 hover:text-[#37e6ff] font-mono">arcade</Link>
         <p className="text-[10px] text-[#7fd8e6]/35 font-mono tracking-wider">steer · hold to boost · keep eating</p>
       </div>
 

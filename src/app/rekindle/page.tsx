@@ -234,7 +234,7 @@ export default function RekindlePage() {
     return (
       <ArcadeCabinet accent="#37e6ff" wall={1} maxWidth={560}>
         <div className="w-full max-w-[560px] flex items-center justify-between mb-6">
-          <Link href="/arcade" className="text-[10px] tracking-[0.25em] uppercase text-[#37e6ff]/50 hover:text-[#37e6ff] font-mono">
+          <Link href="/arcade/all" className="text-[10px] tracking-[0.25em] uppercase text-[#37e6ff]/50 hover:text-[#37e6ff] font-mono">
             &#8592; arcade
           </Link>
           <div className="text-center">

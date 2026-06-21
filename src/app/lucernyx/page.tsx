@@ -119,18 +119,22 @@ export default function LucernyxPage() {
   startMoveRef.current = startMove
 
   const onClick = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
-    if (animActive || board.over || board.turn !== 'light') return
+    // guard on the REFS, not React state: a fast double-fire (mobile/remote can emit
+    // two pointer events for one tap) slips past the laggy state and starts a second
+    // move from the same pre-board.
+    if (animRef.current || boardRef.current.over || boardRef.current.turn !== 'light') return
+    const b = boardRef.current
     const rect = e.currentTarget.getBoundingClientRect()
     const cell = rect.width / SIZE
     const c = Math.floor((e.clientX - rect.left) / cell)
     const r = Math.floor((e.clientY - rect.top) / cell)
     if (r < 0 || r >= SIZE || c < 0 || c >= SIZE) return
     const sq = idx(r, c)
-    const mv = targets.get(sq)
-    if (sel !== null && mv) { startMove(board, mv); return }
-    if (board.cells[sq] === 'light') { setSel(sel === sq ? null : sq); return }
+    const mv = targetsRef.current.get(sq)
+    if (selRef.current !== null && mv) { startMove(b, mv); return }
+    if (b.cells[sq] === 'light') { setSel(selRef.current === sq ? null : sq); return }
     setSel(null)
-  }, [animActive, board, sel, targets, startMove])
+  }, [startMove])
 
   useEffect(() => () => clearTimers(), [])
 
@@ -154,7 +158,7 @@ export default function LucernyxPage() {
   return (
     <ArcadeCabinet accent="#37e6ff" wall={1} maxWidth={440}>
       <div className="w-full max-w-[440px] flex items-center justify-between mb-3">
-        <Link href="/arcade" className="text-[10px] tracking-[0.25em] uppercase text-[#37e6ff]/50 hover:text-[#37e6ff] font-mono">&#8592; arcade</Link>
+        <Link href="/arcade/all" className="text-[10px] tracking-[0.25em] uppercase text-[#37e6ff]/50 hover:text-[#37e6ff] font-mono">&#8592; arcade</Link>
         <div className="text-center">
           <div className="font-mono text-[#37e6ff] text-sm tracking-[0.35em] uppercase" style={{ textShadow: '0 0 8px #37e6ff80' }}>Lucernyx</div>
           <div className="text-[9px] text-[#7fd8e6]/40 font-mono tracking-[0.2em] uppercase mt-0.5">keeper of the light</div>
@@ -191,7 +195,7 @@ export default function LucernyxPage() {
       </div>
 
       <div className="w-full max-w-[440px] flex items-center justify-between mt-4">
-        <Link href="/arcade" className="text-[10px] tracking-[0.25em] uppercase text-[#37e6ff]/45 hover:text-[#37e6ff] font-mono">arcade</Link>
+        <Link href="/arcade/all" className="text-[10px] tracking-[0.25em] uppercase text-[#37e6ff]/45 hover:text-[#37e6ff] font-mono">arcade</Link>
         <p className="text-[10px] text-[#7fd8e6]/35 font-mono tracking-wider">slide · jump to rekindle · 3 torches wins</p>
       </div>
 
@@ -332,11 +336,18 @@ function render(
       let y = cy(segStart) + (cy(segEnd) - cy(segStart)) * fr
       if (anim.converts.length > 0) y -= Math.sin(fr * Math.PI) * cell * 0.3 // hop arc on jumps
       moverPos = { x, y, alpha: 1 }
-    } else {
+    } else if (anim.torch) {
       // torch ascend: float up + fade from the final square
       const ap = Math.min(1, (el - anim.hopsTime) / ASCEND_MS)
       const last = anim.steps[anim.steps.length - 1]
       moverPos = { x: cx(last), y: cy(last) - ap * cell * 0.9, alpha: 1 - ap }
+    } else {
+      // a NON-torch move whose finishMove timer hasn't fired yet (a slow/throttled
+      // frame — e.g. mobile-over-remote): hold the piece on its landing square at
+      // full alpha. The old code fell into the torch-ascend fade here and faded the
+      // piece to nothing until the board committed — THE "disappearing act".
+      const last = anim.steps[anim.steps.length - 1]
+      moverPos = { x: cx(last), y: cy(last), alpha: 1 }
     }
   }
 
