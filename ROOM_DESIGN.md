@@ -149,6 +149,13 @@ top-down texture; the CSS rotation supplies the perspective. Do NOT bake perspec
   rembg needed** when the bg is truly black. Drops onto the dark wall clean, no halo. Floodfill also hollowed
   the podium to a glowing wireframe (on-style). Profile/Settings/News UI overlays kept. Sized 360×438 @ left41%/top16%.
 - 🎉 **ALL 4 WALLS NOW IN REAL ART** (Mug · Arcade · Shimmer · Desk). Masking phase core = DONE.
-- **DEFERRED (own session):** the `/room`→`/magii` route transition — current /magii page doesn't fit the entryway.
-- ⏳ NEXT (polish, no longer stand-in replacement): ambient life per wall (dust motes, flicker), wire
-  Profile/Settings sign-in panels, Shimmer-page `?from=room` return button. + Alex's full feel-test on device.
+- ✅ **PAGE-TIE THREAD DONE (2026-06-21):** all 3 route walls land you INSIDE their vista (Mug→Magii remask +
+  gapless audio, Arcade→hall, Shimmer→world-vista title). `?from=room` return wired on each. Pattern banked.
+- ✅ **AMBIENT LIFE DONE (2026-06-21, commit `000600d`):** every wall breathes — room-wide drifting dust motes,
+  Mug hearth-flicker, Shimmer meadow fireflies, Arcade cabinet-marquee blinks, Desk greeter breath (no bob).
+  All CSS keyframes in `globals.css` (vocabulary: `roomMoteDrift`/`mugFirelight`/`shimmerTwinkle`/`cabinetBlink`/
+  `deskBreath`/`deskGlowPulse`), reduced-motion-safe. Knobs = the per-wall consts in page.tsx + the durations.
+- **DEFERRED (own session):** ~~the `/room`→`/magii` route transition~~ (RESOLVED — remasked + tied 06-21).
+- ⏳ NEXT room polish: **wire the dead Desk stubs** (Profile/Settings are `/* TODO */` no-ops, News is a
+  hardcoded array) → the functional sign-in / settings / owner-gate layer. Needs a product call first.
+  + Alex's full feel-test on device (the page-tie FEEL + the ambient timing).
