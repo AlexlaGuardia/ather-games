@@ -702,3 +702,85 @@ body {
 .arcade-attract {
   animation: arcadeAttract 2.4s ease-in-out infinite;
 }
+
+/* ─────────────────────────────────────────────────────────────
+   THE ROOM — ambient life (dust motes, firelight, twinkles, blinks, breath).
+   All subtle, slow, organic. Each degrades to a steady state under
+   prefers-reduced-motion (block at the bottom). No sprite-bob anywhere.
+   ───────────────────────────────────────────────────────────── */
+
+/* dust motes drifting up through the room air (room-wide overlay) */
+@keyframes roomMoteDrift {
+  0%   { transform: translateY(0) translateX(0) scale(1); opacity: 0; }
+  12%  { opacity: var(--mote-max, 0.5); }
+  88%  { opacity: var(--mote-max, 0.5); }
+  100% { transform: translateY(-140px) translateX(var(--mote-dx, 10px)) scale(0.65); opacity: 0; }
+}
+.room-mote {
+  position: absolute;
+  border-radius: 9999px;
+  background: radial-gradient(circle, rgba(255,246,220,0.95), rgba(255,240,205,0.35) 45%, transparent 72%);
+  will-change: transform, opacity;
+  animation: roomMoteDrift var(--mote-dur, 15s) linear infinite;
+  animation-delay: var(--mote-delay, 0s);
+}
+
+/* Mug — hearth firelight flicker (candle-irregular opacity, no transform so
+   it can't fight the centering translate on the glow element) */
+@keyframes mugFirelight {
+  0%   { opacity: 0.55; }
+  16%  { opacity: 0.92; }
+  30%  { opacity: 0.6; }
+  47%  { opacity: 1; }
+  61%  { opacity: 0.62; }
+  78%  { opacity: 0.86; }
+  100% { opacity: 0.58; }
+}
+.mug-firelight { animation: mugFirelight 3.7s ease-in-out infinite; }
+
+/* Shimmer — firefly-meadow attract twinkles drifting over the screen vista */
+@keyframes shimmerTwinkle {
+  0%, 100% { opacity: 0; transform: scale(0.5); }
+  50%      { opacity: 0.95; transform: scale(1); }
+}
+.shimmer-twinkle {
+  position: absolute;
+  border-radius: 9999px;
+  will-change: opacity, transform;
+  animation: shimmerTwinkle var(--tw-dur, 3.2s) ease-in-out infinite;
+  animation-delay: var(--tw-delay, 0s);
+}
+
+/* Arcade — cabinet marquees blinking down the hall, each on its own beat */
+@keyframes cabinetBlink {
+  0%, 38%, 100% { opacity: 0.22; }
+  44%, 56%      { opacity: 1; }
+}
+.cabinet-blink {
+  position: absolute;
+  border-radius: 9999px;
+  will-change: opacity;
+  animation: cabinetBlink var(--cb-dur, 2.8s) steps(1, end) infinite;
+  animation-delay: var(--cb-delay, 0s);
+}
+
+/* Desk — greeter breath: a tiny scale from near the base = alive, never a bob */
+@keyframes deskBreath {
+  0%, 100% { transform: scale(1); }
+  50%      { transform: scale(1.013); }
+}
+.desk-breath { transform-origin: 50% 90%; animation: deskBreath 4.8s ease-in-out infinite; }
+
+/* soft glow-pool pulse paired with the breath */
+@keyframes deskGlowPulse {
+  0%, 100% { opacity: 0.78; }
+  50%      { opacity: 1; }
+}
+.desk-glow-pulse { animation: deskGlowPulse 4.8s ease-in-out infinite; }
+
+@media (prefers-reduced-motion: reduce) {
+  .room-mote, .mug-firelight, .shimmer-twinkle, .cabinet-blink,
+  .desk-breath, .desk-glow-pulse, .arcade-attract { animation: none !important; }
+  /* motes/twinkles freeze invisible (decorative) — hide them outright */
+  .room-mote, .shimmer-twinkle { opacity: 0 !important; }
+}

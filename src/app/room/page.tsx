@@ -259,6 +259,9 @@ export default function RoomPrototype() {
         </div>
       </div>
 
+      {/* drifting dust motes — room-wide ambient life over the whole viewport */}
+      <DustMotes />
+
       {/* music toggle — unlocks on first interaction; this just mutes/unmutes */}
       <button
         onClick={() => { const h = getHubAudio(); h.start(); h.toggleMuted(); }}
@@ -537,11 +540,18 @@ function MugDoor({ wall, active, phase, onEnter }: { wall: Wall; active: boolean
         </div>
       </div>
 
-      {/* warm flicker leaking from under the door even from across the room (ambient) */}
+      {/* warm firelight leaking from under the door, even across the room (ambient).
+          wrapper carries the distance opacity; the inner layer flickers like a hearth
+          (parent × child opacity = flicker scaled by how close you're facing it) */}
       <div
         className="pointer-events-none absolute bottom-[18%] left-1/2 -translate-x-1/2 w-48 h-6"
-        style={{ background: "radial-gradient(ellipse, rgba(212,168,67,0.5), transparent 70%)", filter: "blur(6px)", opacity: active ? 0.8 : 0.35 }}
-      />
+        style={{ opacity: active ? 0.8 : 0.35, transition: "opacity 320ms ease" }}
+      >
+        <div
+          className="mug-firelight absolute inset-0"
+          style={{ background: "radial-gradient(ellipse, rgba(212,168,67,0.55), transparent 70%)", filter: "blur(6px)" }}
+        />
+      </div>
 
       {armed && (
         <span className="pointer-events-none absolute bottom-[10%] left-1/2 -translate-x-1/2 text-[10px] uppercase tracking-[0.3em] text-[#d4a843]/60">
@@ -561,6 +571,16 @@ const SHM_FH = 400;
 // the rectangular screen opening, in the bezel box's own coordinate space (600×400)
 const SHM_HOLE = "M157,84 H443 Q453,84 453,94 V293 Q453,303 443,303 H157 Q147,303 147,293 V94 Q147,84 157,84 Z";
 const SHM_RING = `M0,0 H${SHM_FW} V${SHM_FH} H0 Z ${SHM_HOLE}`; // donut (evenodd)
+// fireflies drifting over the meadow vista (positions in the 600×400 screen box, inside the hole)
+const SHM_TWINKLES = [
+  { x: 190, y: 142, s: 3,   c: "rgba(255,238,170,0.95)", dur: 2.8, delay: 0 },
+  { x: 322, y: 112, s: 2,   c: "rgba(205,255,205,0.9)",  dur: 3.4, delay: 1.1 },
+  { x: 402, y: 178, s: 3,   c: "rgba(255,240,180,0.95)", dur: 3.0, delay: 0.6 },
+  { x: 240, y: 232, s: 2.5, c: "rgba(184,162,255,0.9)",  dur: 3.8, delay: 1.8 },
+  { x: 360, y: 250, s: 2,   c: "rgba(255,235,160,0.9)",  dur: 2.6, delay: 2.3 },
+  { x: 204, y: 204, s: 2,   c: "rgba(212,255,212,0.85)", dur: 3.2, delay: 0.9 },
+  { x: 430, y: 128, s: 2.5, c: "rgba(190,170,255,0.85)", dur: 3.5, delay: 1.5 },
+];
 
 function ShimmerTV({ wall, active, phase, onEnter }: { wall: Wall; active: boolean; phase: Phase; onEnter: () => void }) {
   const powering = phase === "open" || phase === "through";
@@ -601,6 +621,29 @@ function ShimmerTV({ wall, active, phase, onEnter }: { wall: Wall; active: boole
               transition: "opacity 320ms ease",
             }}
           />
+          {/* fireflies twinkling over the meadow vista — the screen's attract life.
+              hidden while powering on (the CRT sweep owns the screen then) */}
+          <div
+            className="pointer-events-none absolute inset-0"
+            style={{ opacity: powering ? 0 : active ? 1 : 0.45, transition: "opacity 320ms ease" }}
+          >
+            {SHM_TWINKLES.map((t, i) => (
+              <span
+                key={i}
+                className="shimmer-twinkle"
+                style={{
+                  left: t.x,
+                  top: t.y,
+                  width: t.s,
+                  height: t.s,
+                  background: `radial-gradient(circle, ${t.c}, transparent 70%)`,
+                  boxShadow: `0 0 6px ${t.c}`,
+                  ["--tw-dur" as string]: `${t.dur}s`,
+                  ["--tw-delay" as string]: `${t.delay}s`,
+                }}
+              />
+            ))}
+          </div>
 
           {/* CRT turn-on: a bright line expands to fill the tube */}
           <div
@@ -680,6 +723,16 @@ const ARC_FH = 656;
 // the arched opening, in the frame box's own coordinate space (820×656)
 const ARC_HOLE = "M258,652 V243 Q258,121 412,121 Q566,121 566,243 V652 Z";
 const ARC_RING = `M0,0 H${ARC_FW} V${ARC_FH} H0 Z ${ARC_HOLE}`; // donut (evenodd)
+// cabinet marquees blinking down the two converging rows of the hall (820×656 box,
+// inside the arch opening) — closer cabinets bigger/brighter, deeper ones small & dim
+const ARC_BLINKS = [
+  { x: 302, y: 556, s: 6, c: "rgba(0,255,255,0.95)",   dur: 2.6, delay: 0 },
+  { x: 524, y: 556, s: 6, c: "rgba(212,168,67,0.95)",  dur: 3.1, delay: 0.8 },
+  { x: 350, y: 438, s: 4, c: "rgba(168,140,255,0.9)",  dur: 2.9, delay: 1.6 },
+  { x: 472, y: 438, s: 4, c: "rgba(0,255,255,0.85)",   dur: 3.4, delay: 0.4 },
+  { x: 384, y: 338, s: 3, c: "rgba(212,168,67,0.8)",   dur: 2.7, delay: 2.1 },
+  { x: 440, y: 338, s: 3, c: "rgba(168,140,255,0.8)",  dur: 3.2, delay: 1.2 },
+];
 
 function ArcadeArch({ wall, active, phase, onEnter }: { wall: Wall; active: boolean; phase: Phase; onEnter: () => void }) {
   const armed = active && phase === "room";
@@ -713,6 +766,28 @@ function ArcadeArch({ wall, active, phase, onEnter }: { wall: Wall; active: bool
           className="pointer-events-none absolute arcade-attract"
           style={{ left: "50%", top: "44%", width: 130, height: 130, transform: "translate(-50%,-50%)", borderRadius: "9999px", background: "radial-gradient(circle, rgba(212,168,67,0.22), transparent 70%)", filter: "blur(8px)", opacity: active ? 0.9 : 0.4 }}
         />
+        {/* cabinet marquees blinking down the hall (clipped to the opening) */}
+        <div
+          className="pointer-events-none absolute inset-0"
+          style={{ clipPath: `path('${ARC_HOLE}')`, WebkitClipPath: `path('${ARC_HOLE}')`, opacity: active ? 1 : 0.4, transition: "opacity 320ms ease" }}
+        >
+          {ARC_BLINKS.map((b, i) => (
+            <span
+              key={i}
+              className="cabinet-blink"
+              style={{
+                left: b.x,
+                top: b.y,
+                width: b.s,
+                height: b.s,
+                background: `radial-gradient(circle, ${b.c}, transparent 72%)`,
+                boxShadow: `0 0 8px ${b.c}`,
+                ["--cb-dur" as string]: `${b.dur}s`,
+                ["--cb-delay" as string]: `${b.delay}s`,
+              }}
+            />
+          ))}
+        </div>
         {/* brighten the hall as you cross the threshold */}
         <div
           className="pointer-events-none absolute inset-0"
@@ -788,10 +863,10 @@ function DeskWall({ wall, active, phase, onEnter }: { wall: Wall; active: boolea
       >
         {/* contact shadow at the podium base — sits across the wall/floor seam so it reads planted */}
         <div className="pointer-events-none absolute" style={{ left: "50%", bottom: 60, width: 220, height: 42, transform: "translate(-50%,0)", background: "radial-gradient(ellipse, rgba(0,0,0,0.62), transparent 72%)", filter: "blur(8px)" }} />
-        {/* soft glow pool the greeter sits in */}
-        <div className="pointer-events-none absolute" style={{ left: "50%", top: "32%", width: 340, height: 300, transform: "translate(-50%,-50%)", background: `radial-gradient(circle, ${accent}22, transparent 68%)`, filter: "blur(10px)", opacity: active ? 0.9 : 0.4 }} />
+        {/* soft glow pool the greeter sits in (pulses with the breath once you're at the desk) */}
+        <div className={`pointer-events-none absolute ${active ? "desk-glow-pulse" : ""}`} style={{ left: "50%", top: "32%", width: 340, height: 300, transform: "translate(-50%,-50%)", background: `radial-gradient(circle, ${accent}22, transparent 68%)`, filter: "blur(10px)", opacity: active ? 0.9 : 0.4 }} />
         <div
-          className="absolute inset-0"
+          className="desk-breath absolute inset-0"
           style={{
             backgroundImage: "url(/room/desk-greeter.png)",
             backgroundSize: "contain",
@@ -854,5 +929,48 @@ function Seams() {
       <div className="pointer-events-none absolute inset-y-0 left-0 w-px bg-gradient-to-b from-transparent via-white/15 to-transparent" />
       <div className="pointer-events-none absolute inset-y-0 right-0 w-px bg-gradient-to-b from-transparent via-white/15 to-transparent" />
     </>
+  );
+}
+
+// drifting dust motes — a room-wide ambient layer over the whole viewport.
+// Deterministic config (no Math.random) so SSR/CSR markup matches; the CSS
+// keyframe (roomMoteDrift) carries each mote up on its own slow loop.
+const MOTES = [
+  { left: 8,  top: 72, size: 3,   dur: 17, delay: 0,   dx: 12,  max: 0.42 },
+  { left: 17, top: 88, size: 2,   dur: 21, delay: 4,   dx: -8,  max: 0.3 },
+  { left: 26, top: 64, size: 4,   dur: 15, delay: 9,   dx: 16,  max: 0.5 },
+  { left: 34, top: 92, size: 2.5, dur: 19, delay: 2,   dx: -14, max: 0.36 },
+  { left: 43, top: 78, size: 3,   dur: 23, delay: 7,   dx: 6,   max: 0.46 },
+  { left: 50, top: 96, size: 2,   dur: 16, delay: 11,  dx: 10,  max: 0.32 },
+  { left: 58, top: 68, size: 3.5, dur: 20, delay: 1,   dx: -10, max: 0.48 },
+  { left: 66, top: 86, size: 2.5, dur: 18, delay: 6,   dx: 14,  max: 0.38 },
+  { left: 74, top: 74, size: 3,   dur: 22, delay: 3,   dx: -6,  max: 0.44 },
+  { left: 82, top: 90, size: 2,   dur: 15, delay: 10,  dx: 9,   max: 0.3 },
+  { left: 90, top: 66, size: 4,   dur: 24, delay: 5,   dx: -12, max: 0.5 },
+  { left: 12, top: 58, size: 2.5, dur: 19, delay: 13,  dx: 8,   max: 0.34 },
+  { left: 38, top: 56, size: 3,   dur: 21, delay: 8,   dx: -9,  max: 0.4 },
+  { left: 70, top: 60, size: 2,   dur: 17, delay: 14,  dx: 11,  max: 0.3 },
+];
+
+function DustMotes() {
+  return (
+    <div className="pointer-events-none absolute inset-0 z-10 overflow-hidden" aria-hidden>
+      {MOTES.map((m, i) => (
+        <span
+          key={i}
+          className="room-mote"
+          style={{
+            left: `${m.left}%`,
+            top: `${m.top}%`,
+            width: m.size,
+            height: m.size,
+            ["--mote-dur" as string]: `${m.dur}s`,
+            ["--mote-delay" as string]: `${m.delay}s`,
+            ["--mote-dx" as string]: `${m.dx}px`,
+            ["--mote-max" as string]: m.max,
+          }}
+        />
+      ))}
+    </div>
   );
 }
