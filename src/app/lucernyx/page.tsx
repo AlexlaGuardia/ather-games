@@ -84,13 +84,18 @@ export default function LucernyxPage() {
 
   const newGame = useCallback(() => {
     clearTimers(); animRef.current = null
-    setAnimActive(false); setFlash(null); setSel(null); setBoard(makeBoard())
+    const fresh = makeBoard(); boardRef.current = fresh // sync (see finishMove)
+    setAnimActive(false); setFlash(null); setSel(null); setBoard(fresh)
   }, [])
 
   const finishMove = useCallback((pre: Board, m: Move) => {
     animRef.current = null
     setAnimActive(false)
     const next = apply(pre, m)
+    boardRef.current = next // SYNC source of truth for the input guard — setBoard only
+    //   updates boardRef on the next render, leaving a window where a queued tap reads
+    //   the stale pre-move board (still 'your turn') and applies a move to it, erasing
+    //   the move you just made (piece home, jump never converts) but using the turn.
     if (m.torch) { setFlash(pre.turn); after(700, () => setFlash(null)) }
     setBoard(next)
     if (next.over) {
@@ -130,10 +135,19 @@ export default function LucernyxPage() {
     const r = Math.floor((e.clientY - rect.top) / cell)
     if (r < 0 || r >= SIZE || c < 0 || c >= SIZE) return
     const sq = idx(r, c)
-    const mv = targetsRef.current.get(sq)
-    if (selRef.current !== null && mv) { startMove(b, mv); return }
-    if (b.cells[sq] === 'light') { setSel(selRef.current === sq ? null : sq); return }
-    setSel(null)
+    const from = selRef.current
+    if (from !== null) {
+      // best move (most converts) from the selected square to the tapped one,
+      // resolved against the LIVE board so a stale tap can't apply a wrong move
+      let mv: Move | null = null
+      for (const m of legalMoves(b, 'light')) {
+        if (m.from === from && m.to === sq && (!mv || m.converts.length > mv.converts.length)) mv = m
+      }
+      if (mv) { startMove(b, mv); return }
+    }
+    const nextSel = b.cells[sq] === 'light' ? (from === sq ? null : sq) : null
+    selRef.current = nextSel // sync so a fast select→move tap is reliable
+    setSel(nextSel)
   }, [startMove])
 
   useEffect(() => () => clearTimers(), [])
