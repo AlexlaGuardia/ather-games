@@ -302,6 +302,15 @@ the Arcade frame.
 
 ### Atherdash (#10) — 🟢 live · lane-runner, element-lanes vs the Dying → `/atherdash`
 *Last touched: 2026-06-21*
+**🆕 PAGE-TIE shipped (`9cdfff0`, 2026-06-21) — first arcade CABINET tied to the room.** Reused
+  `/arcade/hall-bg.webp` (brightened) full-bleed behind the page + CSS **cabinet housing** (dark panel,
+  gold `#d4a843` trim, title = marquee plate) → the game reads as a lit cabinet IN the hall the room's
+  Arcade arch shows. `RoomReturn wall={1}` (gated `?from=room`) lands back facing the arch. Applies to
+  direct visitors too; room-pill just hides. ⚠ **OPEN taste call (Alex):** hall reads FAINT — its bright
+  center sits behind the cabinet, only dark edges show in the margins → keep reuse-dim, or do a dedicated
+  brighter **Atherdash-cabinet FLUX gen** like the room walls got. ⚠ **TODO:** confirm the hall cards
+  propagate `?from=room` so the back-pill actually shows when arriving via the arch (else it only works
+  on a hand-typed `?from=room`).
 **🆕 ARCADE-LAP slice 1+2 shipped (`afaa451`, 2026-06-21) — the SECOND AXIS.** Alex cold-played on
   mobile: "smooth, could be a bit slower, maybe tap-to-jump + levels with ramps/pitfalls." Built:
   - **Slice 1 — speed ramp.** Forward speed is no longer flat. `speedAt(dist)` opens at **base 0.60**
