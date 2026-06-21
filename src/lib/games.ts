@@ -127,10 +127,19 @@ export const GAMES: GameEntry[] = [
   },
 ];
 
-/** Games the public arcade lists — everything except back-room (owner-only, unlisted). */
-export const publicGames = (): GameEntry[] => GAMES.filter((g) => g.tier !== "back-room");
-/** Live games only, in registry order — the playable/enterable set used for favorites + defaults. */
-export const liveGames = (): GameEntry[] => GAMES.filter((g) => g.tier === "live");
+/** Games that are their OWN room wall / front door (Shimmer, Magii) — they live as
+ *  thresholds in the Room hub, not as cabinets in the arcade, so the arcade lists skip
+ *  them. Still real destinations + still gated by proxy (which reads GAMES directly). */
+export const ROOM_WALL_IDS = new Set(["shimmer", "magii"]);
+
+/** Games the public arcade lists — everything except back-room (owner-only, unlisted)
+ *  and the room walls (they have their own front door). */
+export const publicGames = (): GameEntry[] =>
+  GAMES.filter((g) => g.tier !== "back-room" && !ROOM_WALL_IDS.has(g.id));
+/** Live games only, in registry order — the playable/enterable set used for favorites +
+ *  defaults; room walls excluded (they aren't arcade cabinets). */
+export const liveGames = (): GameEntry[] =>
+  GAMES.filter((g) => g.tier === "live" && !ROOM_WALL_IDS.has(g.id));
 export const gameById = (id: string): GameEntry | undefined => GAMES.find((g) => g.id === id);
 export const isBackRoom = (id: string): boolean => gameById(id)?.tier === "back-room";
 
