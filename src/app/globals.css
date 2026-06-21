@@ -231,88 +231,80 @@ body {
 }
 
 /* Magii table surface — obsidian slab with mana circuits */
+/* The play surface — a warm oak tavern table (the Kindled Mug). Matches the
+   room's Mug door so stepping through lands you at this table. */
 .magii-table {
   background:
-    /* Subtle noise texture via repeating micro-gradients */
-    repeating-conic-gradient(rgba(139, 92, 246, 0.015) 0% 25%, transparent 0% 50%) 0 0 / 4px 4px,
-    /* Mana glow — center hotspot */
-    radial-gradient(ellipse at 50% 45%, rgba(139, 92, 246, 0.06) 0%, transparent 50%),
-    /* Secondary warm glow */
-    radial-gradient(ellipse at 50% 80%, rgba(212, 168, 67, 0.04) 0%, transparent 40%),
-    /* Base obsidian surface */
-    radial-gradient(ellipse at 50% 40%, #0e0c14 0%, #0a0910 40%, #08070c 70%, #050408 100%);
-  border: 1px solid rgba(139, 92, 246, 0.08);
+    /* candlelight pooling toward the center */
+    radial-gradient(ellipse at 50% 42%, rgba(255, 190, 90, 0.10) 0%, transparent 55%),
+    /* darken the wood so UI/text stays readable */
+    linear-gradient(rgba(26, 15, 7, 0.55), rgba(14, 8, 4, 0.80)),
+    /* the oak plank surface */
+    url('/magii/tavern-table.webp') center / cover no-repeat,
+    #140c06;
+  border: 1px solid rgba(212, 168, 67, 0.18);
 }
 
-/* Mana circuit lines embedded in table */
+/* faint drifting wisps of warm haze over the wood (was the mana circuit grid) */
 .magii-table-circuits {
   position: absolute;
   inset: 0;
   pointer-events: none;
   overflow: hidden;
   border-radius: inherit;
-  mask-image: radial-gradient(ellipse at 50% 50%, black 40%, transparent 80%);
-  -webkit-mask-image: radial-gradient(ellipse at 50% 50%, black 40%, transparent 80%);
+  mask-image: radial-gradient(ellipse at 50% 50%, black 40%, transparent 85%);
+  -webkit-mask-image: radial-gradient(ellipse at 50% 50%, black 40%, transparent 85%);
 }
 .magii-table-circuits::before {
   content: '';
   position: absolute;
   inset: -50%;
   background:
-    /* Horizontal circuit lines */
-    repeating-linear-gradient(0deg, transparent, transparent 58px, rgba(139, 92, 246, 0.09) 58px, rgba(139, 92, 246, 0.09) 59px, transparent 59px, transparent 120px),
-    /* Vertical circuit lines */
-    repeating-linear-gradient(90deg, transparent, transparent 72px, rgba(139, 92, 246, 0.07) 72px, rgba(139, 92, 246, 0.07) 73px, transparent 73px, transparent 144px),
-    /* Diagonal accent lines */
-    repeating-linear-gradient(135deg, transparent, transparent 96px, rgba(212, 168, 67, 0.045) 96px, rgba(212, 168, 67, 0.045) 97px, transparent 97px, transparent 192px);
-  animation: circuitDrift 60s linear infinite;
+    radial-gradient(ellipse 40% 30% at 30% 35%, rgba(255, 170, 70, 0.05), transparent 70%),
+    radial-gradient(ellipse 45% 35% at 70% 65%, rgba(212, 168, 67, 0.04), transparent 70%);
+  animation: circuitDrift 90s linear infinite;
 }
 @keyframes circuitDrift {
   0% { transform: translate(0, 0); }
-  100% { transform: translate(72px, 60px); }
+  100% { transform: translate(40px, 30px); }
 }
 
-/* Circuit intersection nodes — glowing dots at line crossings */
+/* drifting embers from the hearth (was circuit nodes) */
 .magii-table-nodes {
   position: absolute;
   inset: 0;
   pointer-events: none;
   border-radius: inherit;
   background:
-    radial-gradient(circle at 25% 30%, rgba(139, 92, 246, 0.25) 0%, rgba(139, 92, 246, 0.15) 2px, transparent 4px),
-    radial-gradient(circle at 75% 25%, rgba(139, 92, 246, 0.20) 0%, rgba(139, 92, 246, 0.10) 2px, transparent 4px),
-    radial-gradient(circle at 50% 48%, rgba(212, 168, 67, 0.25) 0%, rgba(212, 168, 67, 0.12) 2.5px, transparent 5px),
-    radial-gradient(circle at 20% 70%, rgba(139, 92, 246, 0.15) 0%, rgba(139, 92, 246, 0.08) 2px, transparent 4px),
-    radial-gradient(circle at 80% 65%, rgba(139, 92, 246, 0.18) 0%, rgba(139, 92, 246, 0.08) 2px, transparent 4px),
-    radial-gradient(circle at 35% 85%, rgba(212, 168, 67, 0.15) 0%, rgba(212, 168, 67, 0.06) 2px, transparent 4px),
-    radial-gradient(circle at 65% 15%, rgba(139, 92, 246, 0.16) 0%, rgba(139, 92, 246, 0.06) 2px, transparent 4px),
-    radial-gradient(circle at 42% 38%, rgba(139, 92, 246, 0.12) 0%, rgba(139, 92, 246, 0.05) 1.5px, transparent 3px),
-    radial-gradient(circle at 58% 72%, rgba(212, 168, 67, 0.12) 0%, rgba(212, 168, 67, 0.05) 1.5px, transparent 3px);
+    radial-gradient(circle at 25% 30%, rgba(255, 180, 80, 0.20) 0%, rgba(255, 150, 60, 0.10) 2px, transparent 4px),
+    radial-gradient(circle at 75% 25%, rgba(255, 170, 70, 0.16) 0%, rgba(255, 150, 60, 0.08) 2px, transparent 4px),
+    radial-gradient(circle at 50% 48%, rgba(212, 168, 67, 0.22) 0%, rgba(212, 168, 67, 0.10) 2.5px, transparent 5px),
+    radial-gradient(circle at 20% 70%, rgba(255, 160, 60, 0.14) 0%, rgba(255, 140, 50, 0.06) 2px, transparent 4px),
+    radial-gradient(circle at 80% 65%, rgba(255, 170, 70, 0.15) 0%, rgba(255, 150, 60, 0.06) 2px, transparent 4px),
+    radial-gradient(circle at 35% 85%, rgba(212, 168, 67, 0.13) 0%, rgba(212, 168, 67, 0.05) 2px, transparent 4px),
+    radial-gradient(circle at 65% 15%, rgba(255, 165, 65, 0.14) 0%, rgba(255, 140, 50, 0.05) 2px, transparent 4px);
   animation: nodesPulse 6s ease-in-out infinite alternate;
 }
 @keyframes nodesPulse {
-  0% { opacity: 0.5; }
-  100% { opacity: 1; }
+  0% { opacity: 0.45; }
+  100% { opacity: 0.9; }
 }
 
-/* Table edge glow — runic border */
+/* warm firelit edge vignette */
 .magii-table-edge {
   position: absolute;
   inset: 0;
   pointer-events: none;
   border-radius: inherit;
   box-shadow:
-    /* Inner darkness vignette */
-    inset 0 0 60px rgba(0, 0, 0, 0.5),
-    inset 0 0 150px rgba(0, 0, 0, 0.25),
-    /* Violet edge bleed */
-    inset 0 0 2px rgba(139, 92, 246, 0.18),
-    inset 0 0 40px rgba(139, 92, 246, 0.05),
-    /* Outer glow */
-    0 0 30px rgba(139, 92, 246, 0.04);
+    inset 0 0 60px rgba(0, 0, 0, 0.55),
+    inset 0 0 150px rgba(0, 0, 0, 0.30),
+    inset 0 0 2px rgba(212, 168, 67, 0.20),
+    inset 0 0 50px rgba(255, 150, 60, 0.05),
+    0 0 30px rgba(255, 140, 50, 0.04);
 }
 
-/* Center play area — rune circle */
+/* center play area — a brass inlay ring etched in the table */
 .magii-table-rune {
   position: absolute;
   top: 50%;
@@ -322,27 +314,26 @@ body {
   transform: translate(-50%, -50%);
   pointer-events: none;
   border-radius: 50%;
-  border: 1px solid rgba(139, 92, 246, 0.12);
+  border: 1px solid rgba(212, 168, 67, 0.16);
   box-shadow:
-    0 0 60px rgba(139, 92, 246, 0.06),
-    0 0 120px rgba(139, 92, 246, 0.02),
-    inset 0 0 40px rgba(139, 92, 246, 0.04);
-  animation: runeRotate 120s linear infinite;
+    0 0 60px rgba(255, 150, 60, 0.05),
+    inset 0 0 40px rgba(212, 168, 67, 0.05);
+  animation: runeRotate 160s linear infinite;
 }
 .magii-table-rune::before {
   content: '';
   position: absolute;
   inset: 16px;
   border-radius: 50%;
-  border: 1px solid rgba(212, 168, 67, 0.10);
-  box-shadow: 0 0 20px rgba(212, 168, 67, 0.03);
+  border: 1px solid rgba(212, 168, 67, 0.12);
+  box-shadow: 0 0 20px rgba(212, 168, 67, 0.04);
 }
 .magii-table-rune::after {
   content: '';
   position: absolute;
   inset: 36px;
   border-radius: 50%;
-  border: 1px dashed rgba(139, 92, 246, 0.08);
+  border: 1px dashed rgba(212, 168, 67, 0.10);
 }
 @keyframes runeRotate {
   0% { transform: translate(-50%, -50%) rotate(0deg); }
@@ -350,7 +341,7 @@ body {
 }
 
 .card-shadow {
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.6), 0 1px 3px rgba(0, 0, 0, 0.4), 0 0 1px rgba(139, 92, 246, 0.1);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.6), 0 1px 3px rgba(0, 0, 0, 0.4), 0 0 1px rgba(212, 168, 67, 0.12);
 }
 
 .magii-glow {
@@ -358,8 +349,8 @@ body {
 }
 
 @keyframes magii-pulse {
-  0%, 100% { box-shadow: 0 0 12px rgba(139, 92, 246, 0.25); }
-  50% { box-shadow: 0 0 24px rgba(139, 92, 246, 0.4), 0 0 48px rgba(139, 92, 246, 0.15); }
+  0%, 100% { box-shadow: 0 0 12px rgba(212, 168, 67, 0.30); }
+  50% { box-shadow: 0 0 24px rgba(212, 168, 67, 0.45), 0 0 48px rgba(255, 150, 60, 0.18); }
 }
 
 /* Magii volume sliders */

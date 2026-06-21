@@ -132,9 +132,9 @@ export function Card({
             )
           })}
           {/* Center M */}
-          <div className="rounded-full border border-violet/25 flex items-center justify-center"
+          <div className="rounded-full border border-gold/25 flex items-center justify-center"
             style={{ width: `${mSize}px`, height: `${mSize}px`, background: 'radial-gradient(circle, #1e1a30, transparent)' }}>
-            <span className="text-violet/40 font-display font-bold" style={{ fontSize: mFont }}>M</span>
+            <span className="text-gold/40 font-display font-bold" style={{ fontSize: mFont }}>M</span>
           </div>
         </div>
       </div>
@@ -235,7 +235,7 @@ function DrawPile({ count, onClick, canDraw }: { count: number; onClick: () => v
         <div className="absolute top-0.5 left-0.5 w-[72px] h-[100px] rounded-md bg-[#0d0b14] border border-[#1e1a2e]" />
         <div className="absolute top-[3px] left-[3px] w-[72px] h-[100px] rounded-md bg-[#100e18] border border-[#1e1a2e]" />
         <div className={`relative w-[72px] h-[100px] rounded-md border border-[#2a2540] flex flex-col items-center justify-center
-          ${canDraw ? 'group-hover:border-violet/40 transition-colors' : ''}`}
+          ${canDraw ? 'group-hover:border-gold/40 transition-colors' : ''}`}
           style={{ background: 'radial-gradient(ellipse at center, #1a1628 0%, #0e0c18 70%)' }}>
           {/* Orbs + M */}
           <div className="relative w-[52px] h-[52px] flex items-center justify-center">
@@ -259,9 +259,9 @@ function DrawPile({ count, onClick, canDraw }: { count: number; onClick: () => v
                 />
               )
             })}
-            <div className="w-7 h-7 rounded-full border border-violet/25 flex items-center justify-center"
+            <div className="w-7 h-7 rounded-full border border-gold/25 flex items-center justify-center"
               style={{ background: 'radial-gradient(circle, #1e1a30, transparent)' }}>
-              <span className="text-violet/40 text-[11px] font-display font-bold">M</span>
+              <span className="text-gold/40 text-[11px] font-display font-bold">M</span>
             </div>
           </div>
           <span className="text-[10px] text-text-faint mt-0.5">{count}</span>
@@ -293,12 +293,12 @@ function OpponentSeat({
       {/* Name plate */}
       <div className={`px-3 py-1 rounded-full text-xs font-display font-semibold transition-all
         ${isActive
-          ? 'bg-violet/15 text-violet border border-violet/30'
+          ? 'bg-gold/15 text-gold border border-gold/30'
           : 'bg-black/20 text-text-dim border border-white/5'
         }`}>
         {player.name}
         {player.doubled && <span className="text-gold text-[9px] ml-1.5">2x</span>}
-        {isActive && <span className="text-violet/60 text-[9px] ml-1.5 animate-pulse">...</span>}
+        {isActive && <span className="text-gold/60 text-[9px] ml-1.5 animate-pulse">...</span>}
       </div>
 
       {/* Hand — face-down cards (desktop) */}
@@ -306,7 +306,7 @@ function OpponentSeat({
         {player.hand.map((_, i) => (
           <div key={i} className="w-[22px] h-[32px] rounded-[3px] border border-[#2a2540] flex items-center justify-center"
             style={{ background: 'radial-gradient(ellipse at center, #1a1628, #0e0c18)' }}>
-            <span className="text-violet/20 text-[6px] font-display font-bold">M</span>
+            <span className="text-gold/20 text-[6px] font-display font-bold">M</span>
           </div>
         ))}
       </div>
@@ -406,7 +406,7 @@ function PlayerArea({
         {/* Turn prompts + Call Magii */}
         <div className="flex flex-col items-center gap-1.5 min-w-[80px] md:min-w-[140px]">
           {isDrawPhase && !npcProcessing && (
-            <span className="text-[11px] text-violet/60 font-display animate-pulse">Draw a card...</span>
+            <span className="text-[11px] text-gold/60 font-display animate-pulse">Draw a card...</span>
           )}
           {isDiscardPhase && (
             <>
@@ -466,7 +466,7 @@ function PlayerArea({
                 {/* Two-step discard hint on the lifted card */}
                 {isSelected && isDiscardPhase && (
                   <div className="absolute -top-5 left-1/2 -translate-x-1/2 z-40 pointer-events-none whitespace-nowrap">
-                    <span className="text-[9px] font-display text-violet bg-black/70 px-1.5 py-0.5 rounded">
+                    <span className="text-[9px] font-display text-gold bg-black/70 px-1.5 py-0.5 rounded">
                       tap to discard
                     </span>
                   </div>
@@ -522,14 +522,14 @@ export function DoubleDownModal({ onChoice, marks, anteBase, anteDoubled }: {
         <p className="text-[11px] text-[#d4a843]/70 font-display mb-6">⬡ {marks} Marks in your purse</p>
         <div className="flex gap-3 justify-center">
           <button onClick={() => onChoice(false)}
-            className="flex flex-col items-center px-6 py-3 rounded-lg bg-black/30 border border-white/10 text-text hover:border-violet/30 transition-colors font-display font-semibold">
+            className="flex flex-col items-center px-6 py-3 rounded-lg bg-black/30 border border-white/10 text-text hover:border-gold/30 transition-colors font-display font-semibold">
             I&apos;m in.
             <span className="text-[10px] text-text-faint font-normal mt-0.5">ante {anteBase}</span>
           </button>
           <button onClick={() => onChoice(true)}
-            className="flex flex-col items-center px-6 py-3 rounded-lg bg-violet text-white hover:bg-violet-dim transition-colors font-display font-semibold shadow-lg shadow-violet/20">
+            className="flex flex-col items-center px-6 py-3 rounded-lg bg-gold text-black hover:brightness-110 transition-colors font-display font-semibold shadow-lg shadow-gold/20">
             Double.
-            <span className="text-[10px] text-white/60 font-normal mt-0.5">ante {anteDoubled} · 2× score</span>
+            <span className="text-[10px] text-black/55 font-normal mt-0.5">ante {anteDoubled} · 2× score</span>
           </button>
         </div>
       </div>
@@ -564,12 +564,12 @@ export function GameOverOverlay({ state, onPlayAgain, marksDelta, walletBalance 
         <div className="space-y-2">
           {state.players.map((p, i) => (
             <div key={i} className={`flex items-center justify-between px-4 py-2.5 rounded-lg
-              ${i === state.winner ? 'bg-violet/10 border border-violet/25' : 'bg-black/20 border border-white/5'}`}>
+              ${i === state.winner ? 'bg-gold/10 border border-gold/25' : 'bg-black/20 border border-white/5'}`}>
               <div>
                 <span className="font-display font-semibold text-text text-sm">{p.name}</span>
                 {p.doubled && <span className="text-gold text-[10px] ml-2">2x</span>}
                 {i === state.calledBy && (
-                  <span className="text-violet text-[9px] ml-2 font-display uppercase tracking-wide">Magii</span>
+                  <span className="text-gold text-[9px] ml-2 font-display uppercase tracking-wide">Magii</span>
                 )}
               </div>
               <div className="flex items-center gap-3">
@@ -582,7 +582,7 @@ export function GameOverOverlay({ state, onPlayAgain, marksDelta, walletBalance 
                     ))}
                   </div>
                 )}
-                <span className="font-display font-bold text-lg" style={{ color: i === state.winner ? '#8b5cf6' : undefined }}>
+                <span className="font-display font-bold text-lg" style={{ color: i === state.winner ? '#d4a843' : undefined }}>
                   {state.scores[i]}
                 </span>
               </div>
@@ -600,7 +600,7 @@ export function GameOverOverlay({ state, onPlayAgain, marksDelta, walletBalance 
           </div>
         )}
         <button onClick={onPlayAgain}
-          className="mt-4 w-full py-3 rounded-lg bg-violet text-white font-display font-semibold hover:bg-violet-dim transition-colors shadow-lg shadow-violet/20">
+          className="mt-4 w-full py-3 rounded-lg bg-gold text-white font-display font-semibold hover:bg-gold-dim transition-colors shadow-lg shadow-gold/20">
           Play Again
         </button>
       </div>

@@ -281,8 +281,8 @@ export default function MagiiPage() {
                     disabled={!isOwned && !canAfford}
                     className={`relative text-left rounded-lg p-3 border transition-all ${
                       isSelected
-                        ? 'border-violet bg-violet/10 shadow-md shadow-violet/20'
-                        : 'border-white/8 bg-black/20 hover:border-white/20'
+                        ? 'border-gold bg-gold/10 shadow-md shadow-gold/20'
+                        : 'border-white/8 bg-black/25 hover:border-gold/30'
                     } ${!isOwned && !canAfford ? 'opacity-40 cursor-not-allowed' : ''}`}
                     style={isSelected ? { borderColor: entry.accent } : undefined}
                   >
@@ -300,7 +300,7 @@ export default function MagiiPage() {
             </div>
 
             <button onClick={newGame}
-              className="px-10 py-3.5 rounded-lg bg-violet text-white font-display font-semibold text-lg hover:bg-violet-dim transition-all shadow-lg shadow-violet/25 magii-glow mb-8">
+              className="px-10 py-3.5 rounded-lg bg-gold text-black font-display font-semibold text-lg hover:brightness-110 transition-all shadow-lg shadow-gold/30 magii-glow mb-8">
               Sit Down &middot; {getCollectionEntry(selectedId).collection.name}
             </button>
 
