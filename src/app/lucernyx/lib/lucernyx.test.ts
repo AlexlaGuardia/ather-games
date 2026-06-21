@@ -1,7 +1,7 @@
 // LUCERNYX sim tests — run with: npx tsx src/app/lucernyx/lib/lucernyx.test.ts
 import {
   makeBoard, legalMoves, apply, aiMove, countPieces, idx, rowOf, other,
-  COLS, ROWS, PIECE_RANKS, TORCHES_TO_WIN, type Board, type Owner,
+  COLS, ROWS, PIECE_RANKS, TORCHES_TO_WIN, PULSE_CAP, type Board, type Owner,
 } from './lucernyx'
 import { mulberry32 } from '@/lib/arcade/rng'
 
@@ -206,6 +206,29 @@ const put = (b: Board, r: number, c: number, o: Owner | null) => { b.cells[idx(r
   const after = apply(b, torch)
   ok('first ring rekindles', after.cells[idx(4, 3)] === 'light')
   ok('no chain — the second-ring grey stays grey', after.cells[idx(3, 2)] === 'grey')
+}
+
+// 16. the flare CAPS at PULSE_CAP (the nearest to the torch) — no army-wipe
+{
+  const b = blank('light')
+  put(b, 1, 2, 'light') // the runner — torches at row 0
+  // five light anchors, each next to a grey (none on the torch rank) → 5 eligible
+  for (const [r, c] of [[5, 0], [5, 2], [5, 4], [5, 6]] as const) put(b, r, c, 'light')
+  for (const [r, c] of [[4, 1], [4, 3], [4, 5], [6, 5], [6, 7]] as const) put(b, r, c, 'grey')
+  const torch = legalMoves(b, 'light').find((m) => m.torch && m.from === idx(1, 2))!
+  const after = apply(b, torch)
+  ok('flare rekindles at most PULSE_CAP', after.pulse!.length === PULSE_CAP)
+}
+
+// 17. the flare passes over greys already on your torch rank (no stranded pieces)
+{
+  const b = blank('light')
+  put(b, 1, 2, 'light') // torches at row 0
+  put(b, 1, 4, 'light') // anchor adjacent to a row-0 grey
+  put(b, 0, 5, 'grey')  // a grey sitting ON light's torch rank
+  const torch = legalMoves(b, 'light').find((m) => m.torch && m.from === idx(1, 2))!
+  const after = apply(b, torch)
+  ok('grey on the torch rank is spared by the flare', after.cells[idx(0, 5)] === 'grey')
 }
 
 console.log(`\nLUCERNYX sim: ${pass} passed, ${fail} failed`)

@@ -29,6 +29,7 @@ export const COLS = 8 // board width
 export const ROWS = 10 // board height — taller than wide for a longer torch-race
 export const PIECE_RANKS = 3 // back ranks each side fills (checkers density)
 export const TORCHES_TO_WIN = 3
+export const PULSE_CAP = 3 // the flare rekindles at most this many (the nearest to the torch) — a swing, not an army-wipe
 
 export const other = (o: Owner): Owner => (o === 'light' ? 'grey' : 'light')
 // light's home is the bottom; it advances UP toward row 0. grey advances DOWN toward ROWS-1.
@@ -137,17 +138,25 @@ export function apply(b: Board, m: Move): Board {
   for (const sq of m.converts) cells[sq] = owner // flip in place — material never leaves
   if (m.torch) {
     torches[owner]++ // the piece lights a torch and ascends off the board
-    // THE REKINDLE PULSE — the lantern flares: every enemy diagonally adjacent to one of
-    // your pieces rekindles. Collect first, flip together — one wave, no chain reaction.
-    const flips: number[] = []
+    // THE REKINDLE PULSE — the lantern flares from the torch point. Rekindle the enemies
+    // diagonally adjacent to your light, but only the nearest PULSE_CAP to where you lit
+    // it (the flare's reach fades with distance) — a swing, not a board-wide army-wipe.
+    // Skip any on YOUR torch rank: a piece rekindled at the far altar can't advance and
+    // would just sit there, so the flare passes over them. Collect, then flip as one wave.
+    const torchRank = homeRank(owner)
+    const cand: number[] = []
     for (let i = 0; i < cells.length; i++) {
-      if (cells[i] !== enemy) continue
+      if (cells[i] !== enemy || rowOf(i) === torchRank) continue
       const r = rowOf(i), c = colOf(i)
       for (const [dr, dc] of DIAG) {
         const nr = r + dr, nc = c + dc
-        if (inB(nr, nc) && cells[idx(nr, nc)] === owner) { flips.push(i); break }
+        if (inB(nr, nc) && cells[idx(nr, nc)] === owner) { cand.push(i); break }
       }
     }
+    const er = rowOf(m.to), ec = colOf(m.to) // the torch point — the flare's epicentre
+    const dist = (i: number) => Math.max(Math.abs(rowOf(i) - er), Math.abs(colOf(i) - ec))
+    cand.sort((a, b) => dist(a) - dist(b) || a - b) // nearest first; index breaks ties (deterministic)
+    const flips = cand.slice(0, PULSE_CAP)
     for (const i of flips) cells[i] = owner
     if (flips.length) pulse = flips
   } else {

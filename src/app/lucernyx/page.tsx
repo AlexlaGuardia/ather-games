@@ -58,7 +58,7 @@ export default function LucernyxPage() {
   const [flash, setFlash] = useState<Owner | null>(null)
 
   const animRef = useRef<Anim | null>(null)
-  const pulseRef = useRef<{ sqs: number[]; t0: number } | null>(null) // Rekindle Pulse flare FX
+  const pulseRef = useRef<{ sqs: number[]; t0: number; owner: Owner } | null>(null) // Rekindle Pulse flare FX
   const startMoveRef = useRef<(pre: Board, m: Move) => void>(() => {})
   const boardRef = useRef(board); boardRef.current = board
   const selRef = useRef(sel); selRef.current = sel
@@ -93,7 +93,7 @@ export default function LucernyxPage() {
     animRef.current = null
     setAnimActive(false)
     const next = apply(pre, m)
-    if (next.pulse && next.pulse.length) pulseRef.current = { sqs: next.pulse, t0: performance.now() }
+    if (next.pulse && next.pulse.length) pulseRef.current = { sqs: next.pulse, t0: performance.now(), owner: pre.turn }
     boardRef.current = next // SYNC source of truth for the input guard — setBoard only
     //   updates boardRef on the next render, leaving a window where a queued tap reads
     //   the stale pre-move board (still 'your turn') and applies a move to it, erasing
@@ -257,7 +257,7 @@ const easeInOut = (x: number) => (x < 0.5 ? 2 * x * x : 1 - Math.pow(-2 * x + 2,
 function render(
   canvas: HTMLCanvasElement, b: Board, sel: number | null,
   targets: Map<number, Move>, hints: Set<number>, anim: Anim | null,
-  pulseFx: { sqs: number[]; t0: number } | null, ts: number,
+  pulseFx: { sqs: number[]; t0: number; owner: Owner } | null, ts: number,
 ) {
   const dpr = Math.min(2, typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1)
   const cw = canvas.clientWidth || 440
@@ -388,15 +388,25 @@ function render(
   // ── the REKINDLE PULSE flare — expanding light-rings on each rekindled square ──
   if (pulseFx) {
     const el = ts - pulseFx.t0
-    const PULSE_MS = 680
+    const PULSE_MS = 720
     if (el < PULSE_MS) {
       const k = el / PULSE_MS
+      // colour the flare by who lit it: cyan when YOU rekindle, violet when the Dying
+      // flares and takes your pieces — so the conversion reads as a deliberate moment.
+      const grey = pulseFx.owner === 'grey'
+      const edge = grey ? '#e7c0ff' : HOT
+      const halo = grey ? VIOLET : ATHER
       for (const sq of pulseFx.sqs) {
-        ctx.strokeStyle = HOT
-        ctx.globalAlpha = (1 - k) * 0.85
-        ctx.lineWidth = 2.5 * (1 - k) + 0.6
-        ctx.shadowColor = ATHER; ctx.shadowBlur = 18 * (1 - k)
-        ctx.beginPath(); ctx.arc(cx(sq), cy(sq), R + k * cell * 1.1, 0, Math.PI * 2); ctx.stroke()
+        ctx.shadowColor = halo
+        for (const ring of [0, 0.28]) { // a double ring reads bigger / more eventful
+          const kk = k - ring
+          if (kk < 0 || kk > 1) continue
+          ctx.strokeStyle = edge
+          ctx.globalAlpha = (1 - kk) * 0.85
+          ctx.lineWidth = 2.6 * (1 - kk) + 0.6
+          ctx.shadowBlur = 20 * (1 - kk)
+          ctx.beginPath(); ctx.arc(cx(sq), cy(sq), R + kk * cell * 1.15, 0, Math.PI * 2); ctx.stroke()
+        }
       }
       ctx.globalAlpha = 1; ctx.shadowBlur = 0
     }
