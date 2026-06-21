@@ -830,12 +830,20 @@ function ArcadeArch({ wall, active, phase, onEnter }: { wall: Wall; active: bool
 
 // the Front Desk — a greeter at a podium; Profile (top-left), Settings (top-right),
 // a News feed (right). In-place UI wall: walk up and interact, no route-out.
-const DESK_NEWS = [
-  "Atherdash is live — thread the element gates",
-  "Lucernyx torch-race retuned",
-  "Shimmer party combat in the works",
-  "New: the Room hub (you're standing in it)",
+// News feed — live from /public/room/news.json (editable / automatable, no rebuild).
+// The inline list below is the SSR/offline fallback if the fetch fails.
+type NewsItem = { date?: string; tag?: string; title: string };
+const DESK_NEWS_FALLBACK: NewsItem[] = [
+  { tag: "New", title: "Atherdash is live — thread the element gates" },
+  { tag: "Arcade", title: "Lucernyx torch-race retuned" },
+  { tag: "Shimmer", title: "Party combat in the works" },
+  { tag: "Hub", title: "The Room hub — you're standing in it" },
 ];
+const NEWS_MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+function fmtNewsDate(iso?: string): string {
+  const m = iso?.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  return m ? `${NEWS_MONTHS[+m[2] - 1]} ${+m[3]}` : "";
+}
 
 // the Hall of Fame — the Athernyx cast you can hang in your profile frame.
 // Art lives in /public/characters; portraits crop to frame top-center so faces stay in.
@@ -884,6 +892,18 @@ function DeskWall({ wall, active, phase, onEnter }: { wall: Wall; active: boolea
     setPicking(false);
   };
   const frameIds = [profileId, gallery[0], gallery[1]];
+
+  // live News feed — fetch the JSON, fall back to the inline list
+  const [news, setNews] = useState<NewsItem[]>(DESK_NEWS_FALLBACK);
+  useEffect(() => {
+    let alive = true;
+    fetch("/room/news.json", { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => { if (alive && Array.isArray(d) && d.length) setNews(d as NewsItem[]); })
+      .catch(() => {});
+    return () => { alive = false; };
+  }, []);
+  const sortedNews = [...news].sort((a, b) => (b.date || "").localeCompare(a.date || ""));
 
   return (
     <div
@@ -980,14 +1000,19 @@ function DeskWall({ wall, active, phase, onEnter }: { wall: Wall; active: boolea
           <span className="text-2xl leading-none">⚙</span>
         </button>
 
-        {/* News — right side */}
-        <div className="absolute rounded-md border p-4 bg-[#0e1820]/70 backdrop-blur" style={{ left: "72%", top: "34%", width: "26%", borderColor: `${accent}33` }}>
+        {/* News — right side; live from /room/news.json */}
+        <div className="absolute rounded-md border p-4 bg-[#0e1820]/70 backdrop-blur" style={{ left: "72%", top: "34%", width: "27%", borderColor: `${accent}33` }}>
           <h3 className="text-lg uppercase tracking-[0.25em] mb-3" style={{ color: accent }}>News</h3>
-          <ul className="space-y-2.5 text-left">
-            {DESK_NEWS.map((n, i) => (
-              <li key={i} className="flex gap-2 text-xs leading-snug text-[#aebfc8]">
-                <span style={{ color: accent }}>›</span>
-                <span>{n}</span>
+          <ul className="space-y-3 text-left max-h-[260px] overflow-y-auto pr-1">
+            {sortedNews.map((n, i) => (
+              <li key={i} className="text-left">
+                <div className="flex items-center gap-2 mb-0.5">
+                  {n.tag && (
+                    <span className="rounded-sm px-1.5 py-0.5 text-[8px] uppercase tracking-[0.18em] font-medium" style={{ color: accent, border: `1px solid ${accent}44`, background: `${accent}14` }}>{n.tag}</span>
+                  )}
+                  {n.date && <span className="text-[9px] uppercase tracking-[0.16em] tabular-nums text-[#6e7e86]">{fmtNewsDate(n.date)}</span>}
+                </div>
+                <span className="block text-xs leading-snug text-[#aebfc8]">{n.title}</span>
               </li>
             ))}
           </ul>
