@@ -23,6 +23,11 @@ the Arcade frame.
 > - [ ] **Per-game start/over overlays** (title plates + framed CTAs)
 > - [ ] **In-game HUDs** (lightest touch — already vector-glow; align type + plates)
 > - [ ] Arcade landing (`/arcade`) + hub widgets
+>
+> **▶ VEHICLE = the ARCADE POLISH LAP (planned 2026-06-21, Alex):** the start/over + HUD rollout now rides a
+> per-game polish lap — **one game per session**, same checklist (cold play → feel fixes → UI-layer pass → mobile →
+> card art → bump block). Recommended order: **Atherdash → Lucernyx → Ward → Mana'nana → Voranyx/Seedfall/Updraft/
+> Rekindle**. Full plan + the lap steps live in the **`▶ NEXT SESSION` block of SHIMMER_SESSION.md** (boot pointer).
 
 ## 🎮 Shipped — per-game roadmaps
 > Each block is the durable state of one game: where we left off, what's next, why.
