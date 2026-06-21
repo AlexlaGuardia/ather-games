@@ -301,7 +301,25 @@ the Arcade frame.
 **Files (kept):** `gravitar/lib/gravitar.ts` (18 tests, reusable physics) · `lib/sfx.ts` · `page.tsx`
 
 ### Atherdash (#10) — 🟢 live · lane-runner, element-lanes vs the Dying → `/atherdash`
-*Last touched: 2026-06-17*
+*Last touched: 2026-06-21*
+**🆕 ARCADE-LAP slice 1+2 shipped (`afaa451`, 2026-06-21) — the SECOND AXIS.** Alex cold-played on
+  mobile: "smooth, could be a bit slower, maybe tap-to-jump + levels with ramps/pitfalls." Built:
+  - **Slice 1 — speed ramp.** Forward speed is no longer flat. `speedAt(dist)` opens at **base 0.60**
+    (was 0.74) and eases to **0.86** over `SPEED_RAMP_DIST 70` — forgiving start, earns its speed.
+  - **Slice 2 — tap-to-jump + pitfalls.** `jump()` opens a `JUMP_DUR 0.6s` hop window; **grounded-only**
+    (no double-hop = can't sit airborne). **Pitfalls** = full-width gaps you can't slide around — must
+    HOP. Clean axis split: **gates = slide skill, pits = jump skill** (jump ignores gates, lane ignores
+    pits). Pits spawn **centred between gates** (`PIT_GAP_Z 2.4` = 4×`GATE_GAP_Z`, `PIT_LEAD 2.3`) →
+    steady slide→hop rhythm, never simultaneous. Render: void-gap band + glowing danger lips, airborne
+    spark arc (`JUMP_H 64`) + shrinking ground shadow. sfx `jump`/`fall`; over-screen reads cause
+    ("the gap takes you" vs "the wall takes you"). **47 sim tests green** (was 36). Build clean, :3200
+    restarted, ready screen headless-verified.
+  - ⚠ **PENDING ALEX FEEL-TEST (his hands — headless can't dispatch the launch tap):** does the hop
+    *timing window* feel fair? slide→hop rhythm readable? base speed right now, or slower/faster? Knobs:
+    `SPEED`/`SPEED_MAX`/`SPEED_RAMP_DIST`, `JUMP_DUR`, `PIT_GAP_Z`/`PIT_LEAD` in `lib/atherdash.ts`.
+  - **NEXT in the design (his picks, ranked):** ramps (auto-launch + score-mult breather) → **element
+    ZONES** (themed biomes bias the obstacle mix + entry banner = "levels") → the Dying-chase stakes
+    layer → `gx-*` UI-layer pass → card art parity.
 **Juice + sfx pass shipped (`d504e32`, Phase 4 pulled early while Alex at work):** sound on the
   shared arcade engine (`lib/sfx.ts`) — lane-swap whoosh, gate-pass chime, wall-hit thud, end sigh,
   mute toggle. Visual juice (ref-driven, no re-render): gate-pass burst (element-coloured ring + mote
@@ -340,7 +358,9 @@ the Arcade frame.
   instant death** (Flappy-class pick-up-die-retry; the Dying-chase in Phase 2 will add a softer
   pressure layer). **Fake-3D** — single `persp(z)=(1−z)/(1+z·K)` shared by sim + render so they never
   drift. **Name = plain-word act** (no `-nyx`). **Swipe not tap** on mobile (lane choice, not fire).
-**Files:** `atherdash/lib/atherdash.ts` (36 tests) · `lib/atherdash.test.ts` · `page.tsx` · `DESIGN.md`
+  **Mobile UPDATED 2026-06-21:** swipe L/R = lane (unchanged); a **TAP now = jump** (was a no-op in
+  play). Two-axis input = the Subway-Surfers formula; the element-read stays the primary skill.
+**Files:** `atherdash/lib/atherdash.ts` (47 tests) · `lib/atherdash.test.ts` · `page.tsx` · `DESIGN.md`
 
 ## 🧭 Catalog direction — narrative meta (2026-06-12, Alex)
 Gardenscapes insight: the puzzle is the currency, the **story you unlock is the draw.**
