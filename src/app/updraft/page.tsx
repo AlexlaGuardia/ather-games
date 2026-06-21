@@ -27,6 +27,7 @@ import {
   type World,
 } from './lib/updraft'
 import { sfx } from './lib/sfx'
+import { dailySeed, dailyNumber, loadDailyBest, saveDailyBest, dailyShare, copyShare } from '@/lib/arcade/daily'
 
 const BG = '#04040a'
 const ATHER = '#37e6ff'
@@ -59,21 +60,42 @@ export default function UpdraftPage() {
   const [score, setScore] = useState(0)
   const [best, setBest] = useState(0)
   const [muted, setMuted] = useState(false)
+  const [mode, setMode] = useState<'endless' | 'daily'>('endless')
+  const modeRef = useRef(mode); modeRef.current = mode
+  const [dailyBest, setDailyBest] = useState(0)
+  const [shared, setShared] = useState(false)
 
   useNoScroll() // pin to viewport on mobile — no page scroll / iOS bounce
 
   const boot = useCallback(() => {
-    seedRef.current = (seedRef.current * 1103515245 + 12345) >>> 0
-    worldRef.current = makeWorld(seedRef.current ^ (Date.now() >>> 0))
+    let seed: number
+    if (modeRef.current === 'daily') seed = dailySeed()
+    else { seedRef.current = (seedRef.current * 1103515245 + 12345) >>> 0; seed = seedRef.current ^ (Date.now() >>> 0) }
+    worldRef.current = makeWorld(seed)
     setScore(0)
+    setShared(false)
     setPhase('ready')
   }, [])
+
+  const pickMode = (m: 'endless' | 'daily') => {
+    if (m === modeRef.current) return
+    modeRef.current = m
+    setMode(m)
+    boot()
+  }
+  const onShare = async () => {
+    if (await copyShare(dailyShare('Updraft', score))) {
+      setShared(true)
+      window.setTimeout(() => setShared(false), 1800)
+    }
+  }
 
   useEffect(() => {
     seedRef.current = Date.now() >>> 0
     boot()
     setMuted(sfx.isMuted())
     setBest(loadHiScore())
+    setDailyBest(loadDailyBest('updraft'))
     const img = new Image()
     img.src = '/updraft/nebula.webp'
     img.onload = () => { nebulaRef.current = img }
@@ -100,8 +122,8 @@ export default function UpdraftPage() {
         if (ev.crash) {
           sfx.play('crash')
           window.setTimeout(() => sfx.play('over'), 180)
-          const b = saveHiScore(w.score)
-          setBest(b)
+          if (modeRef.current === 'daily') setDailyBest(saveDailyBest('updraft', w.score))
+          else setBest(saveHiScore(w.score))
           setPhase('over')
         }
       }
@@ -169,6 +191,15 @@ export default function UpdraftPage() {
             <p className="text-[11px] leading-relaxed text-[#9fd6e0]/80 max-w-[260px]">
               tap to beat your wings and rise. fall when you don't. thread the void gates.
             </p>
+            <div className="pointer-events-auto flex items-center gap-1.5 mt-0.5 font-mono text-[10px] tracking-[0.2em] uppercase">
+              {(['endless', 'daily'] as const).map((m) => (
+                <button key={m} onClick={() => pickMode(m)}
+                  className={`px-3 py-1.5 rounded-sm border transition-colors ${mode === m ? 'text-[#04040a] bg-[#37e6ff] border-[#37e6ff]' : 'text-[#37e6ff]/55 border-[#37e6ff]/25 hover:text-[#37e6ff]'}`}>
+                  {m === 'daily' ? `daily #${dailyNumber()}` : m}
+                </button>
+              ))}
+            </div>
+            {mode === 'daily' && <div className="text-[9px] font-mono text-[#7fd8e6]/45 tracking-wider -mt-1">same currents for everyone today</div>}
             <div className="font-mono text-[12px] tracking-[0.25em] uppercase text-[#04040a] bg-[#37e6ff] px-6 py-2.5 rounded-sm mt-1" style={{ boxShadow: '0 0 18px #37e6ff80' }}>
               tap to fly
             </div>
@@ -180,11 +211,20 @@ export default function UpdraftPage() {
             <div className="font-mono text-[#ff5d9e] text-lg tracking-[0.3em] uppercase" style={{ textShadow: '0 0 14px #ff5d9e' }}>Down he goes</div>
             <div className="font-mono text-[#e8feff] text-4xl tabular-nums leading-none" style={{ textShadow: '0 0 12px #37e6ff80' }}>{score}</div>
             <div className="text-[10px] font-mono text-[#7fd8e6]/50 tracking-wider">
-              best {best}{score >= best && score > 0 ? ' ✦ new best' : ''}
+              {mode === 'daily'
+                ? <>daily #{dailyNumber()} · best {dailyBest}{score >= dailyBest && score > 0 ? ' ✦ today’s best' : ''}</>
+                : <>best {best}{score >= best && score > 0 ? ' ✦ new best' : ''}</>}
             </div>
-            <button onClick={restart} className="font-mono text-[11px] tracking-[0.25em] uppercase text-[#04040a] bg-[#37e6ff] hover:bg-[#7df0ff] px-6 py-2 rounded-sm mt-1" style={{ boxShadow: '0 0 18px #37e6ff80' }}>
-              fly again →
-            </button>
+            <div className="flex items-center gap-2 mt-1">
+              <button onClick={restart} className="font-mono text-[11px] tracking-[0.25em] uppercase text-[#04040a] bg-[#37e6ff] hover:bg-[#7df0ff] px-5 py-2 rounded-sm" style={{ boxShadow: '0 0 18px #37e6ff80' }}>
+                fly again →
+              </button>
+              {mode === 'daily' && (
+                <button onClick={onShare} className="font-mono text-[11px] tracking-[0.25em] uppercase text-[#37e6ff] border border-[#37e6ff]/40 hover:border-[#37e6ff] px-5 py-2 rounded-sm transition-colors">
+                  {shared ? 'copied ✓' : 'share'}
+                </button>
+              )}
+            </div>
           </div>
         )}
       </div>

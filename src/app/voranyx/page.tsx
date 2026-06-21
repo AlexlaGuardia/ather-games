@@ -28,6 +28,7 @@ import {
   type Element,
 } from './lib/voranyx'
 import { sfx } from './lib/sfx'
+import { dailySeed, dailyNumber, loadDailyBest, saveDailyBest, dailyShare, copyShare } from '@/lib/arcade/daily'
 
 const ATHER = '#37e6ff'
 const HOT = '#e8feff'
@@ -68,25 +69,46 @@ export default function VoranyxPage() {
   const [best, setBest] = useState(0)
   const [boostPct, setBoostPct] = useState(100)
   const [muted, setMuted] = useState(false)
+  const [mode, setMode] = useState<'endless' | 'daily'>('endless')
+  const modeRef = useRef(mode); modeRef.current = mode
+  const [dailyBest, setDailyBest] = useState(0)
+  const [shared, setShared] = useState(false)
 
   useNoScroll()
 
   const boot = useCallback(() => {
-    seedRef.current = (seedRef.current * 1103515245 + 12345) >>> 0
-    const w = makeWorld(seedRef.current ^ (Date.now() >>> 0))
+    let seed: number
+    if (modeRef.current === 'daily') seed = dailySeed()
+    else { seedRef.current = (seedRef.current * 1103515245 + 12345) >>> 0; seed = seedRef.current ^ (Date.now() >>> 0) }
+    const w = makeWorld(seed)
     worldRef.current = w
     const p = player(w)!
     camRef.current = { x: p.x, y: p.y }
     overRef.current = false
     setOver(false)
+    setShared(false)
     setLen(score(w))
   }, [])
+
+  const pickMode = (m: 'endless' | 'daily') => {
+    if (m === modeRef.current) return
+    modeRef.current = m
+    setMode(m)
+    boot()
+  }
+  const onShare = async () => {
+    if (await copyShare(dailyShare('Voranyx', len))) {
+      setShared(true)
+      window.setTimeout(() => setShared(false), 1800)
+    }
+  }
 
   useEffect(() => {
     seedRef.current = Date.now() >>> 0
     boot()
     setMuted(sfx.isMuted())
     setBest(loadBest())
+    setDailyBest(loadDailyBest('voranyx'))
   }, [boot])
 
   // ── render + sim loop ────────────────────────────────────────────────────────
@@ -109,8 +131,8 @@ export default function VoranyxPage() {
         if (ev.died) {
           sfx.play('death')
           overRef.current = true
-          const b = saveBest(score(w))
-          setBest(b)
+          if (modeRef.current === 'daily') setDailyBest(saveDailyBest('voranyx', score(w)))
+          else setBest(saveBest(score(w)))
           setLen(score(w))
           setOver(true)
         }
@@ -262,6 +284,15 @@ export default function VoranyxPage() {
             <p className="text-[11px] leading-relaxed text-[#9fd6e0]/80 max-w-[290px]">
               drag to steer (cursor on desktop). graze the dross, swallow a seed to take its colour, gather motes to boost. keep eating or you fade — and never put your head into another worm.
             </p>
+            <div className="pointer-events-auto flex items-center gap-1.5 mt-0.5 font-mono text-[10px] tracking-[0.2em] uppercase">
+              {(['endless', 'daily'] as const).map((m) => (
+                <button key={m} onClick={() => pickMode(m)}
+                  className={`px-3 py-1.5 rounded-sm border transition-colors ${mode === m ? 'text-[#04040a] bg-[#37e6ff] border-[#37e6ff]' : 'text-[#37e6ff]/55 border-[#37e6ff]/25 hover:text-[#37e6ff]'}`}>
+                  {m === 'daily' ? `daily #${dailyNumber()}` : m}
+                </button>
+              ))}
+            </div>
+            {mode === 'daily' && <div className="text-[9px] font-mono text-[#7fd8e6]/45 tracking-wider -mt-1">same silt for everyone today</div>}
             <div className="font-mono text-[12px] tracking-[0.25em] uppercase text-[#04040a] bg-[#37e6ff] px-6 py-2.5 rounded-sm mt-1" style={{ boxShadow: '0 0 18px #37e6ff80' }}>tap to dive in</div>
           </div>
         )}
@@ -271,8 +302,17 @@ export default function VoranyxPage() {
             <div className="font-mono text-[#c86bff] text-lg tracking-[0.3em] uppercase" style={{ textShadow: '0 0 14px #c86bff' }}>Scattered</div>
             <div className="font-mono text-[#e8feff] text-3xl tabular-nums leading-none" style={{ textShadow: '0 0 12px #37e6ff80' }}>{len}</div>
             <p className="text-[11px] leading-relaxed text-[#9fd6e0]/80 italic max-w-[280px]">{taunt(len)}</p>
-            <div className="text-[10px] font-mono text-[#7fd8e6]/50 tracking-wider">best {best}{len >= best && len > 0 ? ' ✦ new best' : ''}</div>
-            <button onClick={restart} className="font-mono text-[11px] tracking-[0.25em] uppercase text-[#04040a] bg-[#37e6ff] hover:bg-[#7df0ff] px-6 py-2 rounded-sm mt-1" style={{ boxShadow: '0 0 18px #37e6ff80' }}>dive again →</button>
+            <div className="text-[10px] font-mono text-[#7fd8e6]/50 tracking-wider">
+              {mode === 'daily'
+                ? <>daily #{dailyNumber()} · best {dailyBest}{len >= dailyBest && len > 0 ? ' ✦ today’s best' : ''}</>
+                : <>best {best}{len >= best && len > 0 ? ' ✦ new best' : ''}</>}
+            </div>
+            <div className="flex items-center gap-2 mt-1">
+              <button onClick={restart} className="font-mono text-[11px] tracking-[0.25em] uppercase text-[#04040a] bg-[#37e6ff] hover:bg-[#7df0ff] px-5 py-2 rounded-sm" style={{ boxShadow: '0 0 18px #37e6ff80' }}>dive again →</button>
+              {mode === 'daily' && (
+                <button onClick={onShare} className="font-mono text-[11px] tracking-[0.25em] uppercase text-[#37e6ff] border border-[#37e6ff]/40 hover:border-[#37e6ff] px-5 py-2 rounded-sm transition-colors">{shared ? 'copied ✓' : 'share'}</button>
+              )}
+            </div>
           </div>
         )}
       </div>
