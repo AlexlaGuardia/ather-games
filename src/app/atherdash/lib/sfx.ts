@@ -3,7 +3,7 @@
 // sinking sigh on the end screen. Built on the shared arcade SFX engine.
 import { SfxManager, type Patch } from '@/lib/arcade/sfx'
 
-type Id = 'swap' | 'pass' | 'crash' | 'over'
+type Id = 'swap' | 'pass' | 'crash' | 'over' | 'jump' | 'fall'
 
 const patch: Patch<Id> = {
   // lane-swap — a quick sideways puff of air with a tiny upward tick
@@ -26,9 +26,19 @@ const patch: Patch<Id> = {
     E.tone(t, 392, { type: 'sine', dur: 0.34, peak: 0.13, detune: 6 })
     E.tone(t + 0.14, 247, { type: 'sine', dur: 0.44, peak: 0.12, detune: 6, vibHz: 4, vibDepth: 8 })
   },
+  // hop — a quick upward whoosh (the spark leaves the ground)
+  jump: (E, t) => {
+    E.tone(t, 440, { glideTo: 760, dur: 0.14, type: 'sine', peak: 0.07 })
+    E.noise(t, { dur: 0.1, peak: 0.04, filter: 900, sweepTo: 3000, filterType: 'bandpass', q: 0.7 })
+  },
+  // missed the hop — a short dropping whoomp into the gap
+  fall: (E, t) => {
+    E.tone(t, 320, { glideTo: 70, dur: 0.3, type: 'sine', peak: 0.16 })
+    E.noise(t, { dur: 0.26, peak: 0.1, filter: 1200, sweepTo: 120, filterType: 'lowpass' })
+  },
 }
 
 export const sfx = new SfxManager<Id>(patch, {
-  throttle: { swap: 60, pass: 30 },
+  throttle: { swap: 60, pass: 30, jump: 80 },
   storageKey: 'atherdash.sfx',
 })

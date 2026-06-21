@@ -11,6 +11,7 @@ import {
   makeWorld,
   start,
   swap,
+  jump,
   tick,
   persp,
   screenX,
@@ -21,6 +22,9 @@ import {
   HORIZON_Y,
   LANES,
   SPARK_Y,
+  JUMP_DUR,
+  JUMP_H,
+  PIT_DEPTH_Z,
   ELEMENTS,
   VW,
   VH,
@@ -53,6 +57,7 @@ export default function AtherdashPage() {
   const [score, setScore] = useState(0)
   const [best, setBest] = useState(0)
   const [muted, setMuted] = useState(false)
+  const [cause, setCause] = useState<'wall' | 'pit'>('wall')
 
   const boot = useCallback(() => {
     worldRef.current = makeWorld(Date.now() >>> 0)
@@ -102,19 +107,34 @@ export default function AtherdashPage() {
             fx.motes.push({ x: sx, y: SPARK_Y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, t0: t, color: col })
           }
         }
-        if (ev.crash) {
-          sfx.play('crash')
+        if (ev.jumpClear) {
+          setScore(w.score)
+          sfx.play('pass')
+          // cleared the gap: a cyan ring + an upward fan of Ather motes at the spark
+          const sx = laneNearX(w.x)
+          fx.rings.push({ x: sx, y: SPARK_Y, t0: t, color: '#7df0ff' })
+          for (let i = 0; i < 7; i++) {
+            const a = -Math.PI / 2 + (Math.random() - 0.5) * 1.4
+            const sp = 90 + Math.random() * 120
+            fx.motes.push({ x: sx, y: SPARK_Y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, t0: t, color: '#aef6ff' })
+          }
+        }
+        if (ev.crash || ev.fell) {
+          sfx.play(ev.fell ? 'fall' : 'crash')
           window.setTimeout(() => sfx.play('over'), 220)
           fx.shakeT0 = t
           const sx = laneNearX(w.x)
-          fx.rings.push({ x: sx, y: SPARK_Y, t0: t, color: '#ff5d6c' })
+          const col = ev.fell ? '#9b5ad2' : '#ff5d6c'
+          const moteCol = ev.fell ? '#c79bf2' : '#ff8a96'
+          fx.rings.push({ x: sx, y: SPARK_Y, t0: t, color: col })
           for (let i = 0; i < 12; i++) {
             const a = Math.random() * Math.PI * 2
             const sp = 70 + Math.random() * 150
-            fx.motes.push({ x: sx, y: SPARK_Y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, t0: t, color: '#ff8a96' })
+            fx.motes.push({ x: sx, y: SPARK_Y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, t0: t, color: moteCol })
           }
           const b = saveHiScore(w.score)
           setBest(b)
+          setCause(ev.fell ? 'pit' : 'wall')
           setPhase('over')
         }
       } else {
@@ -135,6 +155,13 @@ export default function AtherdashPage() {
     setPhase('playing')
   }, [])
 
+  const doJump = useCallback(() => {
+    const w = worldRef.current
+    if (!w || w.state !== 'playing' || w.air > 0) return
+    jump(w)
+    sfx.play('jump')
+  }, [])
+
   const toggleMute = () => {
     sfx.ensure()
     const m = !sfx.isMuted()
@@ -142,23 +169,26 @@ export default function AtherdashPage() {
     setMuted(m)
   }
 
-  // keyboard: ←/→ or A/D swap (and launch from ready)
+  // keyboard: ←/→ or A/D swap · ↑/W/Space jump (and launch from ready)
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const w = worldRef.current
       if (!w) return
       const left = e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'A'
       const right = e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D'
-      if (!left && !right) return
+      const up = e.key === 'ArrowUp' || e.key === 'w' || e.key === 'W' || e.key === ' '
+      if (!left && !right && !up) return
       e.preventDefault()
-      if (w.state === 'ready') launch()
-      swap(w, left ? -1 : +1)
+      if (w.state === 'ready') { launch(); if (up) return }
+      if (up) doJump()
+      else swap(w, left ? -1 : +1)
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [launch])
+  }, [launch, doJump])
 
-  // touch/pointer: tap launches; swipe L/R swaps. (Ward gotcha: real swipe only
+  // touch/pointer: tap launches from ready; in play, a horizontal SWIPE swaps lane
+  // and a TAP (no real horizontal travel) jumps. (Ward gotcha: real swipe only
   // fires on a device — the automated browser can't dispatch it.)
   const onPointerDown = useCallback((e: React.PointerEvent) => {
     swipeRef.current = { x: e.clientX, id: e.pointerId }
@@ -171,7 +201,8 @@ export default function AtherdashPage() {
     const dx = e.clientX - s.x
     if (w.state === 'ready') { launch(); return }
     if (Math.abs(dx) > 22) swap(w, dx > 0 ? +1 : -1)
-  }, [launch])
+    else doJump() // a tap = hop
+  }, [launch, doJump])
 
   return (
     <div className="min-h-screen bg-[#04040a] text-[#7fd8e6] flex flex-col items-center px-4 py-6 select-none">
@@ -181,7 +212,7 @@ export default function AtherdashPage() {
         </Link>
         <div className="text-center">
           <div className="font-mono text-[#37e6ff] text-sm tracking-[0.35em] uppercase" style={{ textShadow: '0 0 8px #37e6ff80' }}>Atherdash</div>
-          <div className="text-[9px] text-[#7fd8e6]/40 font-mono tracking-[0.2em] uppercase mt-0.5">match the lane to the gate</div>
+          <div className="text-[9px] text-[#7fd8e6]/40 font-mono tracking-[0.2em] uppercase mt-0.5">match the gate · hop the gap</div>
         </div>
         <button onClick={toggleMute} className="text-[10px] tracking-[0.2em] uppercase text-[#37e6ff]/50 hover:text-[#37e6ff] font-mono w-10 text-right">
           {muted ? 'son' : 'snd'}
@@ -210,7 +241,7 @@ export default function AtherdashPage() {
             <div className="absolute inset-0 -z-10 bg-[#04040a]/62 rounded-md" />
             <div className="font-mono text-[#37e6ff] text-2xl tracking-[0.3em] uppercase" style={{ textShadow: '0 0 18px #37e6ff' }}>Atherdash</div>
             <p className="text-[11px] leading-relaxed text-[#9fd6e0]/85 max-w-[270px]">
-              gates rush in tuned to an element. slide to the matching lane before each one reaches you — wrong lane is a wall.
+              gates rush in tuned to an element. slide to the matching lane before each reaches you — wrong lane is a wall. tap to hop the gaps.
             </p>
             <div className="flex items-center justify-center gap-3 flex-wrap max-w-[280px] mt-0.5">
               {ELEMENTS.map((el) => (
@@ -221,14 +252,14 @@ export default function AtherdashPage() {
               ))}
             </div>
             <div className="font-mono text-[12px] tracking-[0.25em] uppercase text-[#04040a] bg-[#37e6ff] px-6 py-2.5 rounded-sm mt-1" style={{ boxShadow: '0 0 18px #37e6ff80' }}>
-              tap / ← → to dash
+              swipe to slide · tap to hop
             </div>
           </div>
         )}
 
         {phase === 'over' && (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-2.5 bg-[#04040a]/78 rounded-md text-center px-6">
-            <div className="font-mono text-[#c86bff] text-lg tracking-[0.3em] uppercase" style={{ textShadow: '0 0 14px #c86bff' }}>the wall takes you</div>
+            <div className="font-mono text-[#c86bff] text-lg tracking-[0.3em] uppercase" style={{ textShadow: '0 0 14px #c86bff' }}>{cause === 'pit' ? 'the gap takes you' : 'the wall takes you'}</div>
             <div className="font-mono text-[#e8feff] text-4xl tabular-nums leading-none" style={{ textShadow: '0 0 12px #37e6ff80' }}>{score}</div>
             <div className="text-[10px] font-mono text-[#7fd8e6]/55 tracking-wider">
               gates threaded · best {best}{score >= best && score > 0 ? ' ✦ new best' : ''}
@@ -242,7 +273,7 @@ export default function AtherdashPage() {
 
       <div className="w-full max-w-[400px] flex items-center justify-between mt-4">
         <Link href="/arcade" className="text-[10px] tracking-[0.25em] uppercase text-[#37e6ff]/45 hover:text-[#37e6ff] font-mono">arcade</Link>
-        <p className="text-[10px] text-[#7fd8e6]/35 font-mono tracking-wider">←/→ or A/D · swipe on phone</p>
+        <p className="text-[10px] text-[#7fd8e6]/35 font-mono tracking-wider">←/→ slide · ↑ hop · swipe + tap on phone</p>
       </div>
 
       <style jsx>{`
@@ -351,6 +382,36 @@ function render(canvas: HTMLCanvasElement, w: World, ts: number, fx: Fx) {
   ctx.globalAlpha = 1
   ctx.shadowBlur = 0
 
+  // pitfalls — full-width gaps the floor drops out of. Draw far first. The void band
+  // sits on the plane (gates overlay it); danger lips glow so the hop reads early.
+  const pits = [...w.pits].sort((a, b) => b.z - a.z)
+  for (const p of pits) {
+    const nz = Math.max(0, p.z)
+    const fz = Math.min(1, p.z + PIT_DEPTH_Z)
+    const nearP = persp(nz)
+    const fade = p.z < 0 ? Math.max(0, 1 + p.z / 0.06) : 1
+    const lN = screenX(-0.5, nz), rN = screenX(LANES - 0.5, nz)
+    const lF = screenX(-0.5, fz), rF = screenX(LANES - 0.5, fz)
+    const yN = screenY(nz), yF = screenY(fz)
+    // the void
+    ctx.globalAlpha = 0.96 * fade
+    ctx.fillStyle = '#020108'
+    ctx.beginPath()
+    ctx.moveTo(lN, yN); ctx.lineTo(rN, yN); ctx.lineTo(rF, yF); ctx.lineTo(lF, yF)
+    ctx.closePath(); ctx.fill()
+    // glowing danger lips (near + far edge)
+    ctx.globalAlpha = (0.5 + 0.45 * nearP) * fade
+    ctx.strokeStyle = '#b06bff'
+    ctx.lineWidth = 1 + 2.4 * nearP
+    ctx.shadowBlur = 12 * nearP
+    ctx.shadowColor = '#9b5ad2'
+    seg(ctx, lF, yF, rF, yF)
+    seg(ctx, lN, yN, rN, yN)
+    ctx.shadowBlur = 0
+  }
+  ctx.globalAlpha = 1
+  ctx.shadowBlur = 0
+
   // gates — far first so nearer overlay. Open lane = glowing element portal; rest = wall.
   const gates = [...w.gates].sort((a, b) => b.z - a.z)
   for (const g of gates) {
@@ -426,8 +487,21 @@ function render(canvas: HTMLCanvasElement, w: World, ts: number, fx: Fx) {
   ctx.globalAlpha = 1
   ctx.shadowBlur = 0
 
-  // the spark — fixed near-bottom Y, x follows the (lerping) lane. Ather, neutral.
+  // the spark — x follows the (lerping) lane; y lifts on a hop arc. Ather, neutral.
   const sx = laneNearX(w.x)
+  const airK = w.air > 0 ? 1 - w.air / JUMP_DUR : -1 // hop progress 0→1, or -1 grounded
+  const lift = airK >= 0 ? Math.sin(airK * Math.PI) * JUMP_H : 0
+  const sy = SPARK_Y - lift
+
+  // ground shadow — shrinks + fades as the spark rises (reads the hop height)
+  const shadowK = 1 - lift / JUMP_H
+  ctx.globalAlpha = 0.34 * shadowK
+  ctx.fillStyle = '#000'
+  ctx.beginPath()
+  ctx.ellipse(sx, SPARK_Y + 3, 11 * (0.5 + 0.5 * shadowK), 4 * (0.5 + 0.5 * shadowK), 0, 0, Math.PI * 2)
+  ctx.fill()
+  ctx.globalAlpha = 1
+
   // swap smear — while mid-lerp, a horizontal streak trailing the motion
   const swapV = w.lane - w.x
   if (Math.abs(swapV) > 0.02) {
@@ -437,7 +511,7 @@ function render(canvas: HTMLCanvasElement, w: World, ts: number, fx: Fx) {
       ctx.fillStyle = ATHER
       ctx.shadowBlur = 7
       ctx.shadowColor = ATHER
-      dot(ctx, sx - dir * i * 8, SPARK_Y, 9 * (1 - i / 6))
+      dot(ctx, sx - dir * i * 8, sy, 9 * (1 - i / 6))
     }
     ctx.globalAlpha = 1
   }
@@ -446,17 +520,17 @@ function render(canvas: HTMLCanvasElement, w: World, ts: number, fx: Fx) {
     ctx.fillStyle = ATHER
     ctx.shadowBlur = 8
     ctx.shadowColor = ATHER
-    dot(ctx, sx, SPARK_Y + i * 9, 10 * (1 - i / 7))
+    dot(ctx, sx, sy + i * 9, 10 * (1 - i / 7))
   }
   ctx.globalAlpha = 1
   const pulse = 1 + Math.sin(t * 9) * 0.08
   ctx.fillStyle = HOT
   ctx.shadowBlur = 22
   ctx.shadowColor = ATHER
-  dot(ctx, sx, SPARK_Y, 9 * pulse)
+  dot(ctx, sx, sy, 9 * pulse)
   ctx.fillStyle = ATHER
   ctx.globalAlpha = 0.5
-  dot(ctx, sx, SPARK_Y, 14 * pulse)
+  dot(ctx, sx, sy, 14 * pulse)
   ctx.globalAlpha = 1
   ctx.shadowBlur = 0
 }

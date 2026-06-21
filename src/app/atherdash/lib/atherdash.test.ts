@@ -3,11 +3,13 @@ import {
   makeWorld,
   start,
   swap,
+  jump,
   tick,
   persp,
   screenY,
   screenX,
   laneNearX,
+  speedAt,
   loadHiScore, // referenced to ensure exports resolve
   HORIZON_Y,
   NEAR_Y,
@@ -15,6 +17,9 @@ import {
   LANES,
   SWAP_T,
   SPEED,
+  SPEED_MAX,
+  SPEED_RAMP_DIST,
+  JUMP_DUR,
   DASH_COUNT,
   GATE_GAP_Z,
   GATE_HIT_Z,
@@ -147,6 +152,49 @@ const stepN = (w: ReturnType<typeof makeWorld>, n: number, dt = 1 / 60) => { for
   ok('same seed → same gate count', a.gates.length === b.gates.length)
   ok('same seed → same gate lanes', a.gates.every((g, i) => g.lane === b.gates[i].lane))
   ok('GATE_HIT_Z sits in front of camera', GATE_HIT_Z > 0 && GATE_HIT_Z < 0.2)
+}
+
+// 10. speed ramp: opens at base, climbs to max, monotonic, never overshoots
+{
+  ok('speed starts at base (dist 0)', near(speedAt(0), SPEED))
+  ok('base is slower than max', SPEED < SPEED_MAX)
+  ok('speed maxes at the ramp distance', near(speedAt(SPEED_RAMP_DIST), SPEED_MAX))
+  ok('speed clamps at max past the ramp', near(speedAt(SPEED_RAMP_DIST * 5), SPEED_MAX))
+  ok('speed climbs monotonically', speedAt(5) > speedAt(0) && speedAt(40) > speedAt(5) && speedAt(SPEED_RAMP_DIST) > speedAt(40))
+}
+
+// 11. the jump axis: hop clears a pitfall, no hop falls, no double-hop
+{
+  // isolate pits: silence gate spawning so only pitfalls can resolve
+  const w = makeWorld(11); start(w); w.nextGateAt = Infinity
+  let cleared = false, fell = false
+  for (let i = 0; i < 3000 && w.state === 'playing'; i++) {
+    if (w.air <= 0 && w.pits.some((p) => !p.resolved && p.z <= 0.18)) jump(w)
+    const ev = tick(w, 1 / 60)
+    if (ev.jumpClear) cleared = true
+    if (ev.fell) fell = true
+    if (cleared) break
+  }
+  ok('a hop clears a pitfall', cleared && !fell && w.state === 'playing')
+
+  // never hop → fall in
+  const w2 = makeWorld(12); start(w2); w2.nextGateAt = Infinity
+  let fell2 = false
+  for (let i = 0; i < 3000 && w2.state === 'playing'; i++) { if (tick(w2, 1 / 60).fell) fell2 = true }
+  ok('no hop → fall into the gap (game over)', fell2 && w2.state === 'over')
+
+  // no double-hop: airborne jump is ignored, and you must land before hopping again
+  const w3 = makeWorld(13); start(w3); w3.nextGateAt = Infinity; w3.nextPitAt = Infinity
+  jump(w3)
+  ok('jump sets a full hop', near(w3.air, JUMP_DUR))
+  tick(w3, 0.1)
+  const mid = w3.air
+  jump(w3)
+  ok('no double-hop while airborne', near(w3.air, mid))
+  for (let i = 0; i < 120 && w3.air > 0; i++) tick(w3, 1 / 60)
+  ok('lands back to grounded', w3.air === 0)
+  jump(w3)
+  ok('can hop again once grounded', near(w3.air, JUMP_DUR))
 }
 
 console.log(`\n${pass} passed, ${fail} failed`)

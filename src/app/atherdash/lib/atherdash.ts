@@ -28,7 +28,15 @@ export const LANES = 4 // the four canon elements
 export const NEAR_LANE_DX = 96 // lane spacing at the near plane (p=1) — 4 lanes fit VW
 export const SPARK_Y = 516 // the spark holds a fixed screen Y; only its x swaps lanes
 
-export const SPEED = 0.74 // z units/sec the world rushes (was 0.92 — Alex: "a bit fast")
+// forward motion ramps: opens slow + forgiving, earns its speed over distance.
+export const SPEED = 0.6 // BASE z units/sec at the start (was a flat 0.74 — Alex: "a bit slower")
+export const SPEED_MAX = 0.86 // top speed the run climbs toward
+export const SPEED_RAMP_DIST = 70 // distance over which speed eases base→max (gentle, ~2 min)
+export function speedAt(dist: number): number {
+  const k = Math.min(1, Math.max(0, dist / SPEED_RAMP_DIST))
+  return SPEED + (SPEED_MAX - SPEED) * k
+}
+
 export const SWAP_T = 0.12 // seconds for a full one-lane swap (crisp lerp)
 export const DASH_COUNT = 14 // ground dashes per lane, scrolling z→0 to read as speed
 
@@ -36,6 +44,13 @@ export const GATE_GAP_Z = 0.6 // track distance between gates (cadence)
 export const LEAD_DIST = 0.72 // distance before the first gate spawns (a breath to start)
 export const GATE_HIT_Z = 0.085 // depth at which a gate reaches the spark and resolves
 //   (SPARK_Y projects to z≈0.085 — gate logic + the visual line up)
+
+// ── the second axis: tap to JUMP, over pitfalls (gaps the floor drops out of) ────
+export const JUMP_DUR = 0.6 // seconds airborne per hop (this IS the timing window to clear a pit)
+export const JUMP_H = 64 // apex lift in near-pixels (render only — sim cares only about `air > 0`)
+export const PIT_GAP_Z = 2.4 // multiple of GATE_GAP_Z → pits land CENTRED between gates (clean rhythm, no overlap)
+export const PIT_LEAD = 2.3 // first pitfall — a few gates teach the slide before the hop arrives
+export const PIT_DEPTH_Z = 0.13 // visual z-thickness of the gap (render)
 
 // ── canon elements (one per lane; colours match the Mana'nana orbs) ─────────────
 export interface Element {
@@ -77,15 +92,26 @@ export interface Gate {
   passed: boolean // …and you made it
 }
 
+// pitfall: a gap spanning ALL lanes — you can't slide around it, you must JUMP it.
+// (the clean axis split: gates = slide skill, pits = jump skill.)
+export interface Pit {
+  z: number
+  resolved: boolean
+  cleared: boolean // airborne when it passed underfoot
+}
+
 export interface World {
   state: GameState
   lane: number // target lane (integer, what input sets)
   x: number // current lane position (lerps toward lane — fractional mid-swap)
+  air: number // seconds left in the current hop (>0 = airborne, clears pits)
   gates: Gate[]
+  pits: Pit[]
   dashes: number[] // ground-dash z values, recycled 0→1
-  dist: number // total forward distance travelled (drives gate cadence)
+  dist: number // total forward distance travelled (drives cadence + speed ramp)
   nextGateAt: number // dist at which to spawn the next gate
-  score: number // gates threaded this run
+  nextPitAt: number // dist at which to spawn the next pitfall
+  score: number // obstacles cleared this run
   best: number
   rng: Rng
 }
@@ -97,10 +123,13 @@ export function makeWorld(seed: number): World {
     state: 'ready',
     lane: START_LANE,
     x: START_LANE,
+    air: 0,
     gates: [],
+    pits: [],
     dashes: Array.from({ length: DASH_COUNT }, (_, i) => i / DASH_COUNT),
     dist: 0,
     nextGateAt: LEAD_DIST,
+    nextPitAt: PIT_LEAD,
     score: 0,
     best: 0,
     rng: mulberry32(seed >>> 0),
@@ -118,6 +147,13 @@ export function swap(w: World, dir: number) {
   w.lane = Math.max(0, Math.min(LANES - 1, w.lane + Math.sign(dir)))
 }
 
+// Hop. Only while grounded — no double-hop, so you can't sit in the air forever.
+export function jump(w: World) {
+  if (w.state !== 'playing') return
+  if (w.air > 0) return
+  w.air = JUMP_DUR
+}
+
 function spawnGate(w: World) {
   // pick an element; avoid repeating the previous lane back-to-back (less stale)
   const prev = w.gates.length ? w.gates[w.gates.length - 1].lane : -1
@@ -129,36 +165,47 @@ function spawnGate(w: World) {
 export interface TickEvents {
   pass: number // gates threaded this frame
   crash: boolean // hit a wall this frame
+  jumpClear: number // pitfalls cleared (hopped) this frame
+  fell: boolean // fell into a pitfall this frame
 }
 
-// One frame. Lerps x toward target, rushes the world, spawns + resolves gates.
+// One frame. Lerps x toward target, ages the hop, rushes the world (speed ramps
+// with distance), spawns + resolves gates and pitfalls.
 export function tick(w: World, dt: number): TickEvents {
-  const ev: TickEvents = { pass: 0, crash: false }
+  const ev: TickEvents = { pass: 0, crash: false, jumpClear: 0, fell: false }
+  const sp = speedAt(w.dist) // current forward speed (climbs base→max over distance)
 
   // ground dashes always rush (the road reads alive on the ready screen too)
   for (let i = 0; i < w.dashes.length; i++) {
-    let z = w.dashes[i] - SPEED * dt
+    let z = w.dashes[i] - sp * dt
     while (z < 0) z += 1
     w.dashes[i] = z
   }
 
   if (w.state !== 'playing') return ev
 
+  // age the hop — airborne while air > 0
+  if (w.air > 0) w.air = Math.max(0, w.air - dt)
+
   // crisp lane-swap: linear toward target, full lane in SWAP_T seconds
   const step = dt / SWAP_T
   if (w.x < w.lane) w.x = Math.min(w.lane, w.x + step)
   else if (w.x > w.lane) w.x = Math.max(w.lane, w.x - step)
 
-  // advance the world + spawn gates on a steady track cadence
-  w.dist += SPEED * dt
+  // advance the world + spawn gates and pitfalls on their cadences
+  w.dist += sp * dt
   while (w.dist >= w.nextGateAt) {
     spawnGate(w)
     w.nextGateAt += GATE_GAP_Z
   }
+  while (w.dist >= w.nextPitAt) {
+    w.pits.push({ z: 1, resolved: false, cleared: false })
+    w.nextPitAt += PIT_GAP_Z
+  }
 
-  // ride gates forward; resolve each once it reaches the spark's plane
+  // ride gates forward; resolve each once it reaches the spark's plane (lane skill)
   for (const g of w.gates) {
-    g.z -= SPEED * dt
+    g.z -= sp * dt
     if (!g.resolved && g.z <= GATE_HIT_Z) {
       g.resolved = true
       if (Math.round(w.x) === g.lane) {
@@ -172,7 +219,23 @@ export function tick(w: World, dt: number): TickEvents {
   }
   w.gates = w.gates.filter((g) => g.z > -0.06)
 
-  if (ev.crash) {
+  // ride pitfalls forward; clear by being airborne when the gap is underfoot (jump skill)
+  for (const p of w.pits) {
+    p.z -= sp * dt
+    if (!p.resolved && p.z <= GATE_HIT_Z) {
+      p.resolved = true
+      if (w.air > 0) {
+        p.cleared = true
+        w.score += 1
+        ev.jumpClear += 1
+      } else {
+        ev.fell = true
+      }
+    }
+  }
+  w.pits = w.pits.filter((p) => p.z > -0.06)
+
+  if (ev.crash || ev.fell) {
     w.state = 'over'
     if (w.score > w.best) w.best = w.score
   }
