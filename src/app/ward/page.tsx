@@ -29,6 +29,7 @@ import {
   type World,
 } from './lib/ward'
 import { sfx } from './lib/sfx'
+import ArcadeCabinet from '../_components/ArcadeCabinet'
 
 const BG = '#04040a'
 const ATHER = '#37e6ff'
@@ -192,7 +193,7 @@ export default function WardPage() {
   const lowAmmo = hud.maxAmmo > 0 && hud.ammo <= 3
 
   return (
-    <div className="min-h-screen bg-[#04040a] text-[#7fd8e6] flex flex-col items-center px-4 py-6 select-none">
+    <ArcadeCabinet accent="#37e6ff" wall={1} maxWidth={520}>
       {/* header */}
       <div className="w-full max-w-[520px] flex items-center justify-between mb-4">
         <Link href="/arcade" className="text-[10px] tracking-[0.25em] uppercase text-[#37e6ff]/50 hover:text-[#37e6ff] font-mono">
@@ -314,7 +315,7 @@ export default function WardPage() {
           99% { opacity: 0.97; }
         }
       `}</style>
-    </div>
+    </ArcadeCabinet>
   )
 }
 

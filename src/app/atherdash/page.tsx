@@ -31,7 +31,7 @@ import {
   type World,
 } from './lib/atherdash'
 import { sfx } from './lib/sfx'
-import RoomReturn from '../_components/RoomReturn'
+import ArcadeCabinet from '../_components/ArcadeCabinet'
 
 const BG = '#04040a'
 const ATHER = '#37e6ff'
@@ -206,35 +206,8 @@ export default function AtherdashPage() {
   }, [launch, doJump])
 
   return (
-    <div className="relative min-h-screen bg-[#050309] text-[#7fd8e6] flex flex-col items-center justify-center px-4 py-6 select-none">
-      {/* Step off the arcade hall floor up to the cabinet — the same hall the room's
-          Arcade arch shows (reuses /arcade/hall-bg.webp), pushed back + dimmed so the
-          cabinet reads as the lit thing in the room. */}
-      <div
-        aria-hidden
-        className="fixed inset-0 -z-20 bg-cover bg-center"
-        style={{ backgroundImage: 'url(/arcade/cabinet-hall.webp)', filter: 'brightness(1.1) saturate(0.92) blur(2px)' }}
-      />
-      <div
-        aria-hidden
-        className="fixed inset-0 -z-10"
-        style={{
-          background:
-            // warm marquee/ceiling light bleeding from the top edge
-            'linear-gradient(to bottom, rgba(212,168,67,0.17), transparent 24%),' +
-            // colourful arcade floor-glow rising from the bottom edge
-            'linear-gradient(to top, rgba(55,230,255,0.12), rgba(155,90,210,0.07) 9%, transparent 26%),' +
-            // the played cabinet's cyan screen-glow spilling out (ties the colour)
-            'radial-gradient(ellipse 58% 40% at 50% 50%, rgba(55,230,255,0.08), transparent 62%),' +
-            // gentle overall dim so the sharp cabinet stays the lit thing
-            'linear-gradient(rgba(5,3,9,0.2), rgba(5,3,9,0.4))',
-        }}
-      />
-      <RoomReturn wall={1} />
-
-      {/* THE CABINET — dark housing + gold trim, the game canvas is its lit screen. */}
-      <div className="relative w-full max-w-[400px] rounded-2xl border border-[#d4a843]/25 bg-[#08080f]/70 backdrop-blur-sm px-3.5 pt-3 pb-3.5 shadow-[0_14px_70px_rgba(0,0,0,0.7),inset_0_0_30px_rgba(55,230,255,0.04)]">
-        {/* marquee — title plate across the top of the cabinet */}
+    <ArcadeCabinet accent="#37e6ff" wall={1} maxWidth={400}>
+      {/* marquee — title plate across the top of the cabinet */}
         <div className="w-full flex items-center justify-between mb-3 pb-2.5 border-b border-[#d4a843]/15">
           <Link href="/arcade" className="text-[10px] tracking-[0.25em] uppercase text-[#37e6ff]/50 hover:text-[#37e6ff] font-mono">
             &#8592; arcade
@@ -304,7 +277,6 @@ export default function AtherdashPage() {
           <Link href="/arcade" className="text-[10px] tracking-[0.25em] uppercase text-[#37e6ff]/45 hover:text-[#37e6ff] font-mono">arcade</Link>
           <p className="text-[10px] text-[#7fd8e6]/35 font-mono tracking-wider">←/→ slide · ↑ hop · swipe + tap on phone</p>
         </div>
-      </div>
 
       <style jsx>{`
         .atherdash-crt {
@@ -320,7 +292,7 @@ export default function AtherdashPage() {
           99% { opacity: 0.97; }
         }
       `}</style>
-    </div>
+    </ArcadeCabinet>
   )
 }
 
