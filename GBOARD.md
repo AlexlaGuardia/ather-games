@@ -170,7 +170,17 @@ the Arcade frame.
 **Files:** `rekindle/lib/puzzle.ts` · `lib/generate.ts` · `lib/world.ts` · `components/WorldMap.tsx`
 
 ### Ward (#4) — 🟢 live · Missile Command / touch aim-trainer → `/ward`
-*Last touched: 2026-06-14*
+*Last touched: 2026-06-21*
+**🆕 FEEL-LAP DONE (2026-06-21, `7031fb5`) — ENEMY VARIETY.** Alex cold-play: too easy (only
+  faller + splitter to read). Added 3 kinds, each a distinct aim skill, staged by wave (fresh
+  threat + difficulty bump): **Drifter** (w4, TRACK — weaves, wavy-wake tell), **Darter** (w6,
+  REACT — winds up then snaps, red charging reticle), **Husk** (w7, FOLLOW-UP — armored 2-hit,
+  cracking shell; where the ammo economy earns its keep). Foundation: kind discriminator,
+  per-bloom hit-set, generalized ground-impact (lateral kinds hit whatever spire they land on),
+  crack/dart FX. 59 sim tests (+10). Tells verified distinct on-screen; mobile 390px confirmed;
+  card art ✓. **Ward lap = cold-play ✓ feel ✓ cabinet ✓ mobile ✓ card ✓.** ⚠ PENDING Alex tune
+  pass (DRIFT/DART/HUSK constants: weave gentleness, dart warning, husk feel, intro wave). Ammo
+  kept generous per Alex ("they'll need it when it's hard" — the Husk makes that true).
 **Left off:** Shipped + four depth passes all live — **splitters/MIRVs** (wave 3+ fork at
   altitude, kill high for a 3x clean-kill), **tiered game-over taunts**, **multi-kill
   scoring + juice** (one ring on a cluster → escalating bonus + ×N floater + arpeggio),
