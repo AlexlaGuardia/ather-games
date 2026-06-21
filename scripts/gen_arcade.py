@@ -33,6 +33,21 @@ ARCADE = {
         "distance, the wide center aisle is open dark and empty, cinematic low light",
         "16:9",
     ),
+    # SHARED backdrop for the at-a-cabinet view (a game page sits centered on top).
+    # Unlike hall-bg, the INTERESTING light is in the MARGINS — glowing neighbour
+    # cabinets flank close on both sides, warm marquee glow fills the frame edges +
+    # ceiling, reflective floor glow along the bottom — only the immediate centre is
+    # calmer (the played cabinet covers it). Reads as "standing among lit cabinets".
+    "cabinet-hall": (
+        "first person view standing in the narrow aisle between two close rows of glowing "
+        "retro arcade cabinets, tall neon-lit cabinets flanking both left and right sides "
+        "filling the frame edges, warm amber-gold marquee lights and softly glowing blue and "
+        "cyan screens on the cabinets, polished reflective dark floor with colourful glow "
+        "reflections along the bottom, warm volumetric haze and ambient marquee light filling "
+        "the upper frame, the immediate centre of the aisle is calmer and a little darker, "
+        "cosy inviting arcade ambience, cinematic depth",
+        "1:1",
+    ),
 }
 
 def token():

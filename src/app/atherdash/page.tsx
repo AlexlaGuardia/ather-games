@@ -210,15 +210,24 @@ export default function AtherdashPage() {
       {/* Step off the arcade hall floor up to the cabinet — the same hall the room's
           Arcade arch shows (reuses /arcade/hall-bg.webp), pushed back + dimmed so the
           cabinet reads as the lit thing in the room. */}
-      <div aria-hidden className="fixed inset-0 -z-20 bg-cover bg-center" style={{ backgroundImage: 'url(/arcade/hall-bg.webp)', filter: 'brightness(1.45) saturate(1.05)' }} />
+      <div
+        aria-hidden
+        className="fixed inset-0 -z-20 bg-cover bg-center"
+        style={{ backgroundImage: 'url(/arcade/cabinet-hall.webp)', filter: 'brightness(1.1) saturate(0.92) blur(2px)' }}
+      />
       <div
         aria-hidden
         className="fixed inset-0 -z-10"
         style={{
           background:
-            'radial-gradient(ellipse 70% 45% at 50% 0%, rgba(212,168,67,0.12), transparent 55%),' +
-            'radial-gradient(ellipse 60% 50% at 50% 52%, rgba(5,3,9,0.55), transparent 70%),' +
-            'linear-gradient(rgba(5,3,9,0.18), rgba(5,3,9,0.4))',
+            // warm marquee/ceiling light bleeding from the top edge
+            'linear-gradient(to bottom, rgba(212,168,67,0.17), transparent 24%),' +
+            // colourful arcade floor-glow rising from the bottom edge
+            'linear-gradient(to top, rgba(55,230,255,0.12), rgba(155,90,210,0.07) 9%, transparent 26%),' +
+            // the played cabinet's cyan screen-glow spilling out (ties the colour)
+            'radial-gradient(ellipse 58% 40% at 50% 50%, rgba(55,230,255,0.08), transparent 62%),' +
+            // gentle overall dim so the sharp cabinet stays the lit thing
+            'linear-gradient(rgba(5,3,9,0.2), rgba(5,3,9,0.4))',
         }}
       />
       <RoomReturn wall={1} />
