@@ -8,6 +8,7 @@ import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import RoomReturn from '../_components/RoomReturn'
 import { mulberry32, type Rng } from '@/lib/arcade/rng'
+import { dailySeed, dailyNumber, loadDailyBest, saveDailyBest, dailyShare, copyShare } from '@/lib/arcade/daily'
 import { useNoScroll } from '@/lib/arcade/useNoScroll'
 import {
   W, H, idx, xy, areAdjacent, reshuffle, swapped, swapMakesMatch, swapDetonation,
@@ -90,6 +91,10 @@ export default function MananaPage() {
   const [reward, setReward] = useState(0)
   const [busy, setBusy] = useState(false)
   const [over, setOver] = useState(false)
+  const [mode, setMode] = useState<'endless' | 'daily'>('endless')
+  const modeRef = useRef(mode); modeRef.current = mode
+  const [dailyBest, setDailyBest] = useState(0)
+  const [shared, setShared] = useState(false)
   const [muted, setMuted] = useState(false)
   const [mounted, setMounted] = useState(false)
   const [boardPx, setBoardPx] = useState<number | null>(null)
@@ -112,7 +117,10 @@ export default function MananaPage() {
   }
 
   const newGame = () => {
+    // daily = the same board + luck sequence for everyone today; endless = random.
+    rngRef.current = mulberry32(modeRef.current === 'daily' ? dailySeed() : ((Date.now() & 0xffffffff) >>> 0))
     apply(seedPuffs(reshuffle(rngRef.current), rngRef.current, PUFF_SEED))
+    setShared(false)
     scoreRef.current = 0
     setScore(0)
     movesRef.current = START_MOVES
@@ -130,6 +138,7 @@ export default function MananaPage() {
   useEffect(() => {
     rngRef.current = mulberry32((Date.now() & 0xffffffff) >>> 0)
     setBest(Number(localStorage.getItem('manana.best') ?? 0))
+    setDailyBest(loadDailyBest('manana'))
     setMuted(sfx.isMuted())
     apply(seedPuffs(reshuffle(rngRef.current), rngRef.current, PUFF_SEED))
     setMounted(true)
@@ -168,9 +177,25 @@ export default function MananaPage() {
   const endGame = () => {
     setOver(true)
     sfx.play('over')
-    if (scoreRef.current > best) {
+    if (modeRef.current === 'daily') {
+      setDailyBest(saveDailyBest('manana', scoreRef.current))
+    } else if (scoreRef.current > best) {
       setBest(scoreRef.current)
       localStorage.setItem('manana.best', String(scoreRef.current))
+    }
+  }
+
+  const pickMode = (m: 'endless' | 'daily') => {
+    if (m === modeRef.current) return
+    modeRef.current = m // sync so newGame's re-seed reads the new mode
+    setMode(m)
+    sfx.ensure()
+    newGame()
+  }
+  const onShare = async () => {
+    if (await copyShare(dailyShare("Mana'nana", scoreRef.current))) {
+      setShared(true)
+      window.setTimeout(() => setShared(false), 1800)
     }
   }
 
@@ -405,6 +430,18 @@ export default function MananaPage() {
           ))}
         </div>
 
+        <div className="flex items-center justify-center gap-1.5 mb-2 text-[10px] tracking-[0.18em] uppercase">
+          {(['endless', 'daily'] as const).map((m) => (
+            <button
+              key={m}
+              onClick={() => pickMode(m)}
+              className={`px-3 py-1 rounded-full border transition-colors ${mode === m ? 'text-[#1a1228] bg-amber-300 border-amber-300 font-semibold' : 'text-slate-400 border-white/15 hover:text-amber-200'}`}
+            >
+              {m === 'daily' ? `daily #${dailyNumber()}` : m}
+            </button>
+          ))}
+        </div>
+
         {/* milestone bar — fill it for +moves */}
         <div className="mb-3">
           <div className="h-1.5 rounded-full bg-white/[0.06] overflow-hidden">
@@ -506,12 +543,23 @@ export default function MananaPage() {
             <div className="absolute inset-0 z-30 flex flex-col items-center justify-center rounded-2xl bg-black/70 backdrop-blur-sm">
               <div className="text-amber-200 text-sm tracking-[0.25em] mb-1">OUT OF MOVES</div>
               <div className="text-3xl font-bold text-white mb-1 tabular-nums">{score.toLocaleString()}</div>
-              <div className="text-[11px] text-slate-400 mb-4">{score >= best ? 'a new best!' : `best ${best.toLocaleString()}`}</div>
-              <button
-                onClick={() => { sfx.ensure(); sfx.play('shuffle'); newGame() }}
-                className="px-5 py-2 rounded-full text-sm font-semibold tracking-wide text-[#1a1228]"
-                style={{ background: 'linear-gradient(180deg,#ffe09a,#f0a526)' }}
-              >Play again</button>
+              <div className="text-[11px] text-slate-400 mb-4">
+                {mode === 'daily'
+                  ? `daily #${dailyNumber()} · ${score >= dailyBest ? 'today’s best!' : `best ${dailyBest.toLocaleString()}`}`
+                  : (score >= best ? 'a new best!' : `best ${best.toLocaleString()}`)}
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => { sfx.ensure(); sfx.play('shuffle'); newGame() }}
+                  className="px-5 py-2 rounded-full text-sm font-semibold tracking-wide text-[#1a1228]"
+                  style={{ background: 'linear-gradient(180deg,#ffe09a,#f0a526)' }}
+                >Play again</button>
+                {mode === 'daily' && (
+                  <button onClick={onShare} className="px-5 py-2 rounded-full text-sm font-semibold tracking-wide text-amber-200 border border-amber-300/40 hover:border-amber-300 transition-colors">
+                    {shared ? 'copied ✓' : 'share'}
+                  </button>
+                )}
+              </div>
             </div>
           )}
         </div>

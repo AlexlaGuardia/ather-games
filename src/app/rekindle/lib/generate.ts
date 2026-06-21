@@ -73,11 +73,6 @@ export function genTemplate(cols: number, rows: number, seed: number, name = 'Un
   return { name, cols, rows, grid }
 }
 
-/** today's date as a stable numeric seed (UTC) — everyone gets the same machine. */
-export function dailySeed(d: Date): number {
-  const k = d.getUTCFullYear() * 10000 + (d.getUTCMonth() + 1) * 100 + d.getUTCDate()
-  return k >>> 0
-}
-export function dailyKey(d: Date): string {
-  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`
-}
+// date-seeded daily — re-exported from the shared arcade lib so every game's daily
+// uses ONE source of truth for the date math (was a local copy here first).
+export { dailySeed, dailyKey } from '@/lib/arcade/daily'
