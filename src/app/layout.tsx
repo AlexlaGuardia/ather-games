@@ -30,13 +30,33 @@ export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
   viewportFit: "cover",
+  themeColor: "#05060e", // mobile browser chrome tint
 };
 
 export const metadata: Metadata = {
-  title: "Ather — Games",
-  description: "Playable corners of the Athernyx world. Idle, puzzle, and pixel games.",
+  // default brand title + a template so per-page titles get the brand suffix
+  title: {
+    default: "ather.games — the Athernyx arcade",
+    template: "%s · ather.games",
+  },
+  description: "Playable corners of the Athernyx world — an arcade of original games.",
+  applicationName: "ather.games",
   metadataBase: new URL("https://ather.games"),
-  icons: { icon: "/favicon.ico", apple: "/apple-touch-icon.png" },
+  // icons auto-wired from app/icon.svg, app/apple-icon.png, app/favicon.ico
+  openGraph: {
+    type: "website",
+    siteName: "ather.games",
+    title: "ather.games — the Athernyx arcade",
+    description: "Playable corners of the Athernyx world — an arcade of original games.",
+    url: "https://ather.games",
+    images: [{ url: "/og.png", width: 1200, height: 630, alt: "ather.games" }],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "ather.games — the Athernyx arcade",
+    description: "Playable corners of the Athernyx world — an arcade of original games.",
+    images: ["/og.png"],
+  },
   // Public games site — indexable.
   robots: { index: true, follow: true },
 };

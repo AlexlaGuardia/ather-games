@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <defs>
+    <radialGradient id="screen" cx="50%" cy="44%" r="62%">
+      <stop offset="0%" stop-color="#101938"/>
+      <stop offset="100%" stop-color="#05060e"/>
+    </radialGradient>
+    <radialGradient id="spark" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#eaffff"/>
+      <stop offset="42%" stop-color="#37e6ff"/>
+      <stop offset="100%" stop-color="#0d6280"/>
+    </radialGradient>
+    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="2.4"/>
+    </filter>
+  </defs>
+  <!-- the cabinet screen: dark panel, gold trim (the shared arcade furniture) -->
+  <rect x="3" y="3" width="58" height="58" rx="14" fill="url(#screen)" stroke="#d4a843" stroke-width="2.6"/>
+  <!-- the Ather spark, glowing -->
+  <circle cx="32" cy="31" r="15" fill="#37e6ff" opacity="0.42" filter="url(#glow)"/>
+  <path d="M32 9 Q35.5 27.5 54 31 Q35.5 34.5 32 53 Q28.5 34.5 10 31 Q28.5 27.5 32 9 Z" fill="url(#spark)"/>
+  <circle cx="32" cy="31" r="3" fill="#f2ffff"/>
+</svg>
