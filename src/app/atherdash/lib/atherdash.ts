@@ -12,7 +12,7 @@
 // Pure sim + projection (no canvas, no React). The page steps tick()/swap()/start()
 // and uses the exported projection so render and sim agree. Deterministic (mulberry32).
 
-import { mulberry32, randInt, type Rng } from '@/lib/arcade/rng'
+import { mulberry32, type Rng } from '@/lib/arcade/rng'
 
 // ── virtual field (portrait; the renderer scales it) ────────────────────────────
 export const VW = 400
@@ -40,16 +40,17 @@ export function speedAt(dist: number): number {
 export const SWAP_T = 0.12 // seconds for a full one-lane swap (crisp lerp)
 export const DASH_COUNT = 14 // ground dashes per lane, scrolling z→0 to read as speed
 
-export const GATE_GAP_Z = 0.6 // track distance between gates (cadence)
-export const LEAD_DIST = 0.72 // distance before the first gate spawns (a breath to start)
+export const GATE_GAP_Z = 1.0 // track distance between gates (was 0.6 — Alex: needs more runway
+//   to line up multi-lane moves; one swipe = one lane, so packed gates were near-impossible)
+export const LEAD_DIST = 1.0 // distance before the first gate spawns (a breath to start)
 export const GATE_HIT_Z = 0.085 // depth at which a gate reaches the spark and resolves
 //   (SPARK_Y projects to z≈0.085 — gate logic + the visual line up)
 
 // ── the second axis: tap to JUMP, over pitfalls (gaps the floor drops out of) ────
 export const JUMP_DUR = 0.6 // seconds airborne per hop (this IS the timing window to clear a pit)
 export const JUMP_H = 64 // apex lift in near-pixels (render only — sim cares only about `air > 0`)
-export const PIT_GAP_Z = 2.4 // multiple of GATE_GAP_Z → pits land CENTRED between gates (clean rhythm, no overlap)
-export const PIT_LEAD = 2.3 // first pitfall — a few gates teach the slide before the hop arrives
+export const PIT_GAP_Z = 4.0 // multiple of GATE_GAP_Z → pits land CENTRED between gates (clean rhythm, no overlap)
+export const PIT_LEAD = 3.5 // first pitfall — a few gates teach the slide before the hop arrives (lands mid-gap)
 export const PIT_DEPTH_Z = 0.13 // visual z-thickness of the gap (render)
 
 // ── canon elements (one per lane; colours match the Mana'nana orbs) ─────────────
@@ -154,11 +155,21 @@ export function jump(w: World) {
   w.air = JUMP_DUR
 }
 
+// Lane choice is weighted toward the previous gate's lane so the run reads as a
+// flowing path, not a teleport gauntlet. With one input = one lane, a long string
+// of 3-lane jumps is what made it feel impossible — so far hops are rare, adjacent
+// moves common, and an occasional repeat gives a beat of rest.
+const LANE_WEIGHT = [1.4, 5, 2, 0.8] // index = |lane − prevLane|: rest / adjacent / two / three
 function spawnGate(w: World) {
-  // pick an element; avoid repeating the previous lane back-to-back (less stale)
-  const prev = w.gates.length ? w.gates[w.gates.length - 1].lane : -1
-  let lane = randInt(w.rng, 0, LANES - 1)
-  if (lane === prev) lane = (lane + 1 + randInt(w.rng, 0, LANES - 2)) % LANES
+  const prev = w.gates.length ? w.gates[w.gates.length - 1].lane : Math.floor(LANES / 2)
+  let total = 0
+  for (let c = 0; c < LANES; c++) total += LANE_WEIGHT[Math.abs(c - prev)]
+  let r = w.rng() * total
+  let lane = 0
+  for (let c = 0; c < LANES; c++) {
+    r -= LANE_WEIGHT[Math.abs(c - prev)]
+    if (r <= 0) { lane = c; break }
+  }
   w.gates.push({ z: 1, lane, resolved: false, passed: false })
 }
 

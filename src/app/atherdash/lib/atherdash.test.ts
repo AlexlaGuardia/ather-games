@@ -101,9 +101,16 @@ const stepN = (w: ReturnType<typeof makeWorld>, n: number, dt = 1 / 60) => { for
   stepN(w, 6)
   ok('first gate spawned after lead-in', w.gates.length >= 1)
   ok('gate opens a valid lane', w.gates.every((g) => g.lane >= 0 && g.lane < LANES))
-  // run a while; gates should be spaced ~GATE_GAP_Z apart (cadence holds)
-  stepN(w, Math.floor((GATE_GAP_Z * 3 / SPEED) * 60))
-  ok('multiple gates in flight', w.gates.length >= 2)
+  // cadence holds: auto-match each gate (and silence pits) so the run survives;
+  // several gates should thread over a window — i.e. they keep coming.
+  w.nextPitAt = Infinity; w.pits = []
+  let threaded = 0
+  for (let i = 0; i < 600 && w.state === 'playing'; i++) {
+    const next = w.gates.filter((g) => !g.resolved).sort((a, b) => a.z - b.z)[0]
+    if (next) { w.lane = next.lane; w.x = next.lane }
+    threaded += tick(w, 1 / 60).pass
+  }
+  ok('gates keep coming on cadence (several threaded)', threaded >= 3 && w.state === 'playing')
 }
 
 // 7. matching lane PASSES (score up), wrong lane CRASHES (game over)
