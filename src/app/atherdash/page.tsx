@@ -31,6 +31,7 @@ import {
   type World,
 } from './lib/atherdash'
 import { sfx } from './lib/sfx'
+import RoomReturn from '../_components/RoomReturn'
 
 const BG = '#04040a'
 const ATHER = '#37e6ff'
@@ -205,21 +206,40 @@ export default function AtherdashPage() {
   }, [launch, doJump])
 
   return (
-    <div className="min-h-screen bg-[#04040a] text-[#7fd8e6] flex flex-col items-center px-4 py-6 select-none">
-      <div className="w-full max-w-[400px] flex items-center justify-between mb-4">
-        <Link href="/arcade" className="text-[10px] tracking-[0.25em] uppercase text-[#37e6ff]/50 hover:text-[#37e6ff] font-mono">
-          &#8592; arcade
-        </Link>
-        <div className="text-center">
-          <div className="font-mono text-[#37e6ff] text-sm tracking-[0.35em] uppercase" style={{ textShadow: '0 0 8px #37e6ff80' }}>Atherdash</div>
-          <div className="text-[9px] text-[#7fd8e6]/40 font-mono tracking-[0.2em] uppercase mt-0.5">match the gate · hop the gap</div>
-        </div>
-        <button onClick={toggleMute} className="text-[10px] tracking-[0.2em] uppercase text-[#37e6ff]/50 hover:text-[#37e6ff] font-mono w-10 text-right">
-          {muted ? 'son' : 'snd'}
-        </button>
-      </div>
+    <div className="relative min-h-screen bg-[#050309] text-[#7fd8e6] flex flex-col items-center justify-center px-4 py-6 select-none">
+      {/* Step off the arcade hall floor up to the cabinet — the same hall the room's
+          Arcade arch shows (reuses /arcade/hall-bg.webp), pushed back + dimmed so the
+          cabinet reads as the lit thing in the room. */}
+      <div aria-hidden className="fixed inset-0 -z-20 bg-cover bg-center" style={{ backgroundImage: 'url(/arcade/hall-bg.webp)', filter: 'brightness(1.45) saturate(1.05)' }} />
+      <div
+        aria-hidden
+        className="fixed inset-0 -z-10"
+        style={{
+          background:
+            'radial-gradient(ellipse 70% 45% at 50% 0%, rgba(212,168,67,0.12), transparent 55%),' +
+            'radial-gradient(ellipse 60% 50% at 50% 52%, rgba(5,3,9,0.55), transparent 70%),' +
+            'linear-gradient(rgba(5,3,9,0.18), rgba(5,3,9,0.4))',
+        }}
+      />
+      <RoomReturn wall={1} />
 
-      <div className="relative w-full max-w-[400px]" style={{ aspectRatio: `${VW} / ${VH}` }}>
+      {/* THE CABINET — dark housing + gold trim, the game canvas is its lit screen. */}
+      <div className="relative w-full max-w-[400px] rounded-2xl border border-[#d4a843]/25 bg-[#08080f]/70 backdrop-blur-sm px-3.5 pt-3 pb-3.5 shadow-[0_14px_70px_rgba(0,0,0,0.7),inset_0_0_30px_rgba(55,230,255,0.04)]">
+        {/* marquee — title plate across the top of the cabinet */}
+        <div className="w-full flex items-center justify-between mb-3 pb-2.5 border-b border-[#d4a843]/15">
+          <Link href="/arcade" className="text-[10px] tracking-[0.25em] uppercase text-[#37e6ff]/50 hover:text-[#37e6ff] font-mono">
+            &#8592; arcade
+          </Link>
+          <div className="text-center">
+            <div className="font-mono text-[#37e6ff] text-sm tracking-[0.35em] uppercase" style={{ textShadow: '0 0 10px #37e6ffaa' }}>Atherdash</div>
+            <div className="text-[9px] text-[#d4a843]/45 font-mono tracking-[0.2em] uppercase mt-0.5">match the gate · hop the gap</div>
+          </div>
+          <button onClick={toggleMute} className="text-[10px] tracking-[0.2em] uppercase text-[#37e6ff]/50 hover:text-[#37e6ff] font-mono w-10 text-right">
+            {muted ? 'son' : 'snd'}
+          </button>
+        </div>
+
+      <div className="relative w-full" style={{ aspectRatio: `${VW} / ${VH}` }}>
         <canvas
           ref={canvasRef}
           onPointerDown={onPointerDown}
@@ -271,9 +291,10 @@ export default function AtherdashPage() {
         )}
       </div>
 
-      <div className="w-full max-w-[400px] flex items-center justify-between mt-4">
-        <Link href="/arcade" className="text-[10px] tracking-[0.25em] uppercase text-[#37e6ff]/45 hover:text-[#37e6ff] font-mono">arcade</Link>
-        <p className="text-[10px] text-[#7fd8e6]/35 font-mono tracking-wider">←/→ slide · ↑ hop · swipe + tap on phone</p>
+        <div className="w-full flex items-center justify-between mt-3">
+          <Link href="/arcade" className="text-[10px] tracking-[0.25em] uppercase text-[#37e6ff]/45 hover:text-[#37e6ff] font-mono">arcade</Link>
+          <p className="text-[10px] text-[#7fd8e6]/35 font-mono tracking-wider">←/→ slide · ↑ hop · swipe + tap on phone</p>
+        </div>
       </div>
 
       <style jsx>{`
