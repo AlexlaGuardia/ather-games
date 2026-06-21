@@ -7,6 +7,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
+import ArcadeCabinet from '../_components/ArcadeCabinet'
 import {
   TEMPLATES,
   type Level,
@@ -231,7 +232,7 @@ export default function RekindlePage() {
   // ── MAP VIEW ────────────────────────────────────────────────────────────────
   if (view === 'map') {
     return (
-      <div className="min-h-screen bg-[#04040a] text-[#7fd8e6] flex flex-col items-center px-4 py-6 select-none">
+      <ArcadeCabinet accent="#37e6ff" wall={1} maxWidth={560}>
         <div className="w-full max-w-[560px] flex items-center justify-between mb-6">
           <Link href="/arcade" className="text-[10px] tracking-[0.25em] uppercase text-[#37e6ff]/50 hover:text-[#37e6ff] font-mono">
             &#8592; arcade
@@ -270,13 +271,13 @@ export default function RekindlePage() {
         <p className="mt-6 text-[10px] text-[#7fd8e6]/30 font-mono tracking-wider text-center max-w-[440px]">
           the machines of Aeterna were left running. relight each one to wake the network.
         </p>
-      </div>
+      </ArcadeCabinet>
     )
   }
 
   // ── PLAY VIEW ───────────────────────────────────────────────────────────────
   return (
-    <div className="min-h-screen bg-[#04040a] text-[#7fd8e6] flex flex-col items-center px-4 py-6 select-none">
+    <ArcadeCabinet accent="#37e6ff" wall={1} maxWidth={560}>
       <div className="w-full max-w-[520px] flex items-center justify-between mb-4">
         <button onClick={toMap} className="text-[10px] tracking-[0.25em] uppercase text-[#37e6ff]/50 hover:text-[#37e6ff] font-mono">
           &#8592; network
@@ -354,7 +355,7 @@ export default function RekindlePage() {
           99% { opacity: 0.97; }
         }
       `}</style>
-    </div>
+    </ArcadeCabinet>
   )
 }
 

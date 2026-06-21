@@ -6,6 +6,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
+import RoomReturn from '../_components/RoomReturn'
 import { mulberry32, type Rng } from '@/lib/arcade/rng'
 import { useNoScroll } from '@/lib/arcade/useNoScroll'
 import {
@@ -344,6 +345,9 @@ export default function MananaPage() {
   return (
     <div className="relative min-h-[calc(100svh-5rem)] overflow-hidden text-slate-200 font-sans" style={{ touchAction: 'manipulation', overscrollBehavior: 'none' }}>
       <AtherBackdrop />
+      {/* full-bleed board (its own AtherBackdrop) — deliberately NOT a cabinet; just
+          the room tie so back lands facing the Arcade arch. */}
+      <RoomReturn wall={1} />
       <style>{`
         @keyframes manana-pop { 0%{transform:scale(1)} 40%{transform:scale(1.28)} 100%{transform:scale(0);opacity:0} }
         @keyframes manana-drop { 0%{transform:translateY(-14px) scale(0.9);opacity:0.2} 100%{transform:translateY(0) scale(1);opacity:1} }
