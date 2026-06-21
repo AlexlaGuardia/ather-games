@@ -32,6 +32,7 @@ import {
 } from './lib/atherdash'
 import { sfx } from './lib/sfx'
 import ArcadeCabinet from '../_components/ArcadeCabinet'
+import { dailySeed, dailyNumber, loadDailyBest, saveDailyBest, dailyShare, copyShare } from '@/lib/arcade/daily'
 
 const BG = '#04040a'
 const ATHER = '#37e6ff'
@@ -59,20 +60,40 @@ export default function AtherdashPage() {
   const [best, setBest] = useState(0)
   const [muted, setMuted] = useState(false)
   const [cause, setCause] = useState<'wall' | 'pit'>('wall')
+  const [mode, setMode] = useState<'endless' | 'daily'>('endless')
+  const modeRef = useRef(mode); modeRef.current = mode
+  const [dailyBest, setDailyBest] = useState(0)
+  const [shared, setShared] = useState(false)
 
   const boot = useCallback(() => {
-    worldRef.current = makeWorld(Date.now() >>> 0)
+    // daily mode = one seeded course a day, the same for everyone; endless = random.
+    worldRef.current = makeWorld(modeRef.current === 'daily' ? dailySeed() : (Date.now() >>> 0))
     lastLaneRef.current = worldRef.current.lane
     fxRef.current = { rings: [], motes: [], shakeT0: -1 }
     setScore(0)
+    setShared(false)
     setPhase('ready')
   }, [])
 
   useEffect(() => {
     boot()
     setBest(loadHiScore())
+    setDailyBest(loadDailyBest('atherdash'))
     setMuted(sfx.isMuted())
   }, [boot])
+
+  const pickMode = (m: 'endless' | 'daily') => {
+    if (m === modeRef.current) return
+    modeRef.current = m // sync so boot's re-seed reads the new mode immediately
+    setMode(m)
+    boot()
+  }
+  const onShare = async () => {
+    if (await copyShare(dailyShare('Atherdash', score))) {
+      setShared(true)
+      window.setTimeout(() => setShared(false), 1800)
+    }
+  }
 
   // ── sim + render loop ─────────────────────────────────────────────────────────
   useEffect(() => {
@@ -133,8 +154,8 @@ export default function AtherdashPage() {
             const sp = 70 + Math.random() * 150
             fx.motes.push({ x: sx, y: SPARK_Y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, t0: t, color: moteCol })
           }
-          const b = saveHiScore(w.score)
-          setBest(b)
+          if (modeRef.current === 'daily') setDailyBest(saveDailyBest('atherdash', w.score))
+          else setBest(saveHiScore(w.score))
           setCause(ev.fell ? 'pit' : 'wall')
           setPhase('over')
         }
@@ -253,6 +274,20 @@ export default function AtherdashPage() {
                 </span>
               ))}
             </div>
+            <div className="pointer-events-auto flex items-center gap-1.5 mt-0.5 font-mono text-[10px] tracking-[0.2em] uppercase">
+              {(['endless', 'daily'] as const).map((m) => (
+                <button
+                  key={m}
+                  onClick={() => pickMode(m)}
+                  className={`px-3 py-1.5 rounded-sm border transition-colors ${mode === m ? 'text-[#04040a] bg-[#37e6ff] border-[#37e6ff]' : 'text-[#37e6ff]/55 border-[#37e6ff]/25 hover:text-[#37e6ff]'}`}
+                >
+                  {m === 'daily' ? `daily #${dailyNumber()}` : m}
+                </button>
+              ))}
+            </div>
+            {mode === 'daily' && (
+              <div className="text-[9px] font-mono text-[#7fd8e6]/45 tracking-wider -mt-1">same course for everyone today</div>
+            )}
             <div className="font-mono text-[12px] tracking-[0.25em] uppercase text-[#04040a] bg-[#37e6ff] px-6 py-2.5 rounded-sm mt-1" style={{ boxShadow: '0 0 18px #37e6ff80' }}>
               swipe to slide · tap to hop
             </div>
@@ -264,11 +299,20 @@ export default function AtherdashPage() {
             <div className="font-mono text-[#c86bff] text-lg tracking-[0.3em] uppercase" style={{ textShadow: '0 0 14px #c86bff' }}>{cause === 'pit' ? 'the gap takes you' : 'the wall takes you'}</div>
             <div className="font-mono text-[#e8feff] text-4xl tabular-nums leading-none" style={{ textShadow: '0 0 12px #37e6ff80' }}>{score}</div>
             <div className="text-[10px] font-mono text-[#7fd8e6]/55 tracking-wider">
-              gates threaded · best {best}{score >= best && score > 0 ? ' ✦ new best' : ''}
+              {mode === 'daily'
+                ? <>daily #{dailyNumber()} · best {dailyBest}{score >= dailyBest && score > 0 ? ' ✦ today’s best' : ''}</>
+                : <>gates threaded · best {best}{score >= best && score > 0 ? ' ✦ new best' : ''}</>}
             </div>
-            <button onClick={boot} className="font-mono text-[11px] tracking-[0.25em] uppercase text-[#04040a] bg-[#37e6ff] hover:bg-[#7df0ff] px-6 py-2 rounded-sm mt-1" style={{ boxShadow: '0 0 18px #37e6ff80' }}>
-              dash again →
-            </button>
+            <div className="flex items-center gap-2 mt-1">
+              <button onClick={boot} className="font-mono text-[11px] tracking-[0.25em] uppercase text-[#04040a] bg-[#37e6ff] hover:bg-[#7df0ff] px-5 py-2 rounded-sm" style={{ boxShadow: '0 0 18px #37e6ff80' }}>
+                dash again →
+              </button>
+              {mode === 'daily' && (
+                <button onClick={onShare} className="font-mono text-[11px] tracking-[0.25em] uppercase text-[#37e6ff] border border-[#37e6ff]/40 hover:border-[#37e6ff] px-5 py-2 rounded-sm transition-colors">
+                  {shared ? 'copied ✓' : 'share'}
+                </button>
+              )}
+            </div>
           </div>
         )}
       </div>
