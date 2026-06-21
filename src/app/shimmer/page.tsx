@@ -1,6 +1,7 @@
 'use client'
 
 import { useRef, useEffect, useState, useCallback } from 'react'
+import RoomReturn from '../_components/RoomReturn'
 import { useCloudSave } from '@/lib/use-cloud-save'
 import { useWallet } from '@/lib/use-wallet'
 import { Renderer, TILE, WIDTH, HEIGHT } from './engine/renderer'
@@ -2725,10 +2726,28 @@ export default function ShimmerPage() {
   if (!started) {
     return (
       <div className={isMobile
-        ? 'fixed inset-0 z-50 bg-[#050508] flex items-center justify-center px-6'
-        : 'min-h-[calc(100vh-80px)] flex items-center justify-center px-6'
+        ? 'fixed inset-0 z-50 flex items-start justify-center px-6 pt-20 pb-8 overflow-y-auto'
+        : 'min-h-[calc(100vh-80px)] flex items-start sm:items-center justify-center px-6 pt-20 sm:pt-0 pb-8'
       }>
-        <div className="text-center max-w-2xl">
+        {/* Stepped through the Shimmer TV → you're standing IN the world-vista the
+            screen showed (room/shimmer-beyond, the same image). Dimmed so the gold
+            title + intro card read on top. */}
+        <div
+          aria-hidden
+          className="fixed inset-0 -z-20 bg-cover bg-center"
+          style={{ backgroundImage: 'url(/room/shimmer-beyond.webp)' }}
+        />
+        <div
+          aria-hidden
+          className="fixed inset-0 -z-10"
+          style={{
+            background:
+              'radial-gradient(ellipse 80% 55% at 50% 44%, rgba(10,8,20,0.74), transparent 76%),' +
+              'linear-gradient(rgba(8,6,16,0.5), rgba(6,5,12,0.64))',
+          }}
+        />
+        <RoomReturn wall={0} />
+        <div className="relative text-center max-w-2xl">
           <div className="mb-10">
             <h1 className="font-display text-5xl sm:text-7xl font-bold text-gold tracking-wide mb-3">
               Shimmer
