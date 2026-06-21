@@ -837,10 +837,54 @@ const DESK_NEWS = [
   "New: the Room hub (you're standing in it)",
 ];
 
+// the Hall of Fame — the Athernyx cast you can hang in your profile frame.
+// Art lives in /public/characters; portraits crop to frame top-center so faces stay in.
+type CastMember = { id: string; name: string; title: string };
+const CAST: CastMember[] = [
+  { id: "kael", name: "Kael", title: "The Heretic" },
+  { id: "veyra", name: "Veyra", title: "The Hunter" },
+  { id: "eyuun", name: "Eyuun", title: "The Ancient" },
+  { id: "samantha", name: "Samantha", title: "The Healer" },
+  { id: "helga", name: "Helga", title: "The Mother" },
+  { id: "lazerin", name: "Lazerin", title: "The Patient" },
+];
+const CAST_BY_ID = Object.fromEntries(CAST.map((c) => [c.id, c]));
+const PROFILE_KEY = "ather-room-profile";
+// deterministic "random" so SSR and first client paint agree (shuffled for real on mount)
+function pickGallery(exclude: string, seed: number): string[] {
+  const pool = CAST.filter((c) => c.id !== exclude).map((c) => c.id);
+  const out: string[] = [];
+  for (let i = 0; i < 2 && pool.length; i++) {
+    const idx = (seed + i * 7) % pool.length;
+    out.push(pool.splice(idx, 1)[0]);
+  }
+  return out;
+}
+
 function DeskWall({ wall, active, phase, onEnter }: { wall: Wall; active: boolean; phase: Phase; onEnter: () => void }) {
   const accent = wall.accent; // cyan
   const armed = active && phase === "room"; // far away → click anywhere to approach
   const arrived = active && phase !== "room"; // at the desk → UI is interactive
+
+  // profile pic (left frame) + two gallery frames + the hall-of-fame picker
+  const [profileId, setProfileId] = useState<string>("kael");
+  const [gallery, setGallery] = useState<string[]>(() => pickGallery("kael", 0));
+  const [picking, setPicking] = useState(false);
+  useEffect(() => {
+    let saved = "kael";
+    try { saved = localStorage.getItem(PROFILE_KEY) || "kael"; } catch {}
+    if (!CAST_BY_ID[saved]) saved = "kael";
+    setProfileId(saved);
+    setGallery(pickGallery(saved, Math.floor(Date.now() / 1000) % CAST.length));
+  }, []);
+  const chooseProfile = (id: string) => {
+    setProfileId(id);
+    try { localStorage.setItem(PROFILE_KEY, id); } catch {}
+    setGallery(pickGallery(id, Math.floor(Date.now() / 1000) % CAST.length));
+    setPicking(false);
+  };
+  const frameIds = [profileId, gallery[0], gallery[1]];
+
   return (
     <div
       className={`relative w-full h-full ${armed ? "cursor-pointer" : ""}`}
@@ -878,15 +922,53 @@ function DeskWall({ wall, active, phase, onEnter }: { wall: Wall; active: boolea
 
       {/* interactive cluster — only live once you've arrived at the desk */}
       <div className="absolute inset-0" style={{ pointerEvents: arrived ? "auto" : "none" }}>
-        {/* Profile — top-left */}
-        <button
-          className="group/pf absolute flex items-center gap-3 rounded-md border px-4 py-3 bg-[#0e1820]/70 backdrop-blur transition"
-          style={{ left: "26%", top: "11%", transform: "translate(-50%,0)", borderColor: `${accent}33` }}
-          onClick={(e) => { e.stopPropagation(); /* TODO: open profile / sign-in */ }}
-        >
-          <span className="grid place-items-center rounded-full" style={{ width: 30, height: 30, border: `1px solid ${accent}66`, color: accent }}>☺</span>
-          <span className="text-sm uppercase tracking-[0.22em]" style={{ color: "#dfeaf0" }}>Profile</span>
-        </button>
+        {/* the picture-frame row — hung above the greeter; left = your profile, the
+            other two are a rotating hall-of-fame of the cast. Click any to open the picker. */}
+        <div className="absolute flex items-end justify-center gap-5" style={{ left: "50%", top: "10%", transform: "translate(-50%,0)" }}>
+          {frameIds.map((id, i) => {
+            const c = CAST_BY_ID[id] || CAST[0];
+            const isProfile = i === 0;
+            return (
+              <button
+                key={`${id}-${i}`}
+                className="group/fr flex flex-col items-center transition hover:-translate-y-0.5"
+                style={{ marginTop: isProfile ? 0 : 14 }}
+                aria-label={isProfile ? `Profile: ${c.name}. Open the hall of fame` : `${c.name}, ${c.title}. Open the hall of fame`}
+                onClick={(e) => { e.stopPropagation(); setPicking(true); }}
+              >
+                {/* the frame — gilt moulding, dark mat, portrait cover */}
+                <span
+                  className="block rounded-[3px]"
+                  style={{
+                    width: isProfile ? 104 : 88,
+                    height: isProfile ? 138 : 116,
+                    padding: 6,
+                    background: "linear-gradient(145deg,#caa24e,#7a5c1e 45%,#e7c878 70%,#6e5018)",
+                    boxShadow: isProfile
+                      ? `0 8px 22px rgba(0,0,0,0.55), 0 0 0 1px ${accent}55, 0 0 18px ${accent}44`
+                      : "0 7px 18px rgba(0,0,0,0.5)",
+                  }}
+                >
+                  <span
+                    className="block w-full h-full rounded-[1px]"
+                    style={{
+                      backgroundImage: `url(/characters/${id}.png)`,
+                      backgroundSize: "cover",
+                      backgroundPosition: "center 18%",
+                      boxShadow: "inset 0 0 0 2px #1a140a, inset 0 0 14px rgba(0,0,0,0.6)",
+                      filter: "saturate(0.95)",
+                    }}
+                  />
+                </span>
+                {/* nameplate */}
+                <span className="mt-1.5 text-center leading-tight">
+                  <span className="block text-[11px] uppercase tracking-[0.18em]" style={{ color: isProfile ? accent : "#cdd8de" }}>{c.name}</span>
+                  <span className="block text-[8px] uppercase tracking-[0.2em] text-[#8a9aa2]">{isProfile ? "you" : c.title}</span>
+                </span>
+              </button>
+            );
+          })}
+        </div>
 
         {/* Settings — top-right */}
         <button
@@ -910,6 +992,53 @@ function DeskWall({ wall, active, phase, onEnter }: { wall: Wall; active: boolea
             ))}
           </ul>
         </div>
+
+        {/* Hall of Fame picker — pick a cast portrait to hang in your profile frame */}
+        {picking && (
+          <div
+            className="absolute inset-0 z-30 grid place-items-center bg-black/70 backdrop-blur-sm"
+            onClick={(e) => { e.stopPropagation(); setPicking(false); }}
+          >
+            <div
+              className="w-[min(86%,560px)] rounded-lg border p-5 bg-[#0b1218]/95"
+              style={{ borderColor: `${accent}44`, boxShadow: `0 0 40px ${accent}22` }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="mb-4 flex items-center justify-between">
+                <h3 className="text-lg uppercase tracking-[0.28em]" style={{ color: accent }}>Hall of Fame</h3>
+                <button className="text-[#8a9aa2] hover:text-white text-xl leading-none" aria-label="Close" onClick={() => setPicking(false)}>×</button>
+              </div>
+              <div className="grid grid-cols-3 gap-3 sm:grid-cols-6">
+                {CAST.map((c) => {
+                  const sel = c.id === profileId;
+                  return (
+                    <button
+                      key={c.id}
+                      className="flex flex-col items-center transition hover:-translate-y-0.5"
+                      onClick={() => chooseProfile(c.id)}
+                      aria-label={`Set ${c.name} as your profile`}
+                    >
+                      <span
+                        className="block w-full rounded-[2px]"
+                        style={{
+                          aspectRatio: "3 / 4",
+                          backgroundImage: `url(/characters/${c.id}.png)`,
+                          backgroundSize: "cover",
+                          backgroundPosition: "center 18%",
+                          boxShadow: sel ? `0 0 0 2px ${accent}, 0 0 14px ${accent}66` : "inset 0 0 0 1px #1a140a",
+                          filter: sel ? "none" : "saturate(0.85) brightness(0.85)",
+                        }}
+                      />
+                      <span className="mt-1 text-[10px] uppercase tracking-[0.14em] text-center leading-tight" style={{ color: sel ? accent : "#cdd8de" }}>{c.name}</span>
+                      <span className="text-[8px] uppercase tracking-[0.16em] text-[#7e8e96]">{c.title}</span>
+                    </button>
+                  );
+                })}
+              </div>
+              <p className="mt-4 text-center text-[10px] uppercase tracking-[0.22em] text-[#6e7e86]">tap a portrait to hang it in your frame</p>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Desk title sits up top (greeter now drops to the floor line and would cover a bottom label) */}
