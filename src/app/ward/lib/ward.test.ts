@@ -11,6 +11,7 @@ import {
   BLOOM_GROW,
   GROUND_Y,
   NUM_SPIRES,
+  type Blight,
   type World,
 } from './ward'
 
@@ -218,6 +219,63 @@ function ok(name: string, cond: boolean) {
   ok('taunt is non-empty', tauntFor(1, 0).length > 0 && tauntFor(20, 9999).length > 0)
   ok('taunt is stable for a given run', tauntFor(5, 1234) === tauntFor(5, 1234))
   ok('best run gets the extra goad', tauntFor(8, 500, true).includes('bury it') && !tauntFor(8, 500, false).includes('bury it'))
+}
+
+// ── new enemy variety: drifter (track), darter (react), husk (follow-up) ────────
+{
+  // staged introduction by wave
+  const w = makeWorld(2)
+  startWave(w, 3)
+  ok('no drifters before wave 4', w.toSpawn.every((b) => b.kind !== 'drifter'))
+  startWave(w, 4)
+  ok('drifters appear on wave 4', w.toSpawn.some((b) => b.kind === 'drifter'))
+  startWave(w, 6)
+  ok('darters appear on wave 6', w.toSpawn.some((b) => b.kind === 'darter'))
+  startWave(w, 7)
+  ok('husks appear on wave 7', w.toSpawn.some((b) => b.kind === 'husk'))
+  ok('a blight is only ever one kind', w.toSpawn.every((b) =>
+    [b.kind === 'splitter', b.kind === 'drifter', b.kind === 'darter', b.kind === 'husk'].filter(Boolean).length <= 1))
+}
+
+{
+  // drifter weaves: its x reverses direction as it falls
+  const w = makeWorld(11)
+  startWave(w, 5)
+  const d = w.toSpawn.find((b) => b.kind === 'drifter')!
+  w.blight = [d]; w.toSpawn = []
+  const xs: number[] = []
+  for (let i = 0; i < 140 && d.alive; i++) { tick(w, 1 / 60); xs.push(d.x) }
+  let reversals = 0
+  for (let i = 2; i < xs.length; i++) if ((xs[i - 1] - xs[i - 2]) * (xs[i] - xs[i - 1]) < 0) reversals++
+  ok('drifter weaves sideways (lateral reversals)', reversals >= 1 && Math.max(...xs) - Math.min(...xs) > 40)
+}
+
+{
+  // darter winds up slow, then snaps fast
+  const w = makeWorld(3)
+  w.wave = 6; w.state = 'spawning'; w.toSpawn = []
+  const d: Blight = { x: 240, y: 90, ox: 240, oy: -10, vx: 0, vy: 16, target: 0, alive: true, kind: 'darter', hangT: 1.0, darted: false, age: 0 }
+  w.blight = [d]
+  for (let i = 0; i < 54; i++) tick(w, 1 / 60) // ~0.9s — still winding up
+  const vyBefore = d.vy
+  ok('darter creeps during the wind-up', !d.darted && vyBefore < 40)
+  for (let i = 0; i < 12; i++) tick(w, 1 / 60) // cross the hang time
+  ok('darter snaps into a fast dive', d.darted && d.vy > vyBefore * 2)
+}
+
+{
+  // husk takes two blooms — one cracks, the next downs it
+  const w = makeWorld(4)
+  w.state = 'spawning'; w.toSpawn = []; w.ammo = 5; w.maxAmmo = 5
+  const h: Blight = { x: 240, y: 200, ox: 240, oy: -10, vx: 0, vy: 0, target: 0, alive: true, kind: 'husk', hp: 2 }
+  w.blight = [h]
+  fireBloom(w, 240, 200)
+  for (let i = 0; i < 12; i++) tick(w, 1 / 60) // first bloom blooms + cracks
+  ok('husk survives the first bloom (cracked)', h.alive === true && h.hp === 1)
+  for (let i = 0; i < 60; i++) tick(w, 1 / 60) // let the first ring fade
+  fireBloom(w, 240, 200)
+  for (let i = 0; i < 12; i++) tick(w, 1 / 60)
+  ok('husk falls to the follow-up bloom', !h.alive && w.downed >= 1)
 }
 
 console.log(`\nWARD sim: ${pass} passed, ${fail} failed`)

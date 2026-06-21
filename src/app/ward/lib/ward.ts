@@ -43,10 +43,32 @@ const SPLIT_Y_MAX = 300
 const CLEAN_KILL_MULT = 3 // a splitter killed before it forks scores this much more
 const MULTI_BONUS = 15 // per extra blight caught by one bloom (×combo, ×(kills-1))
 
+// drifter (tracking skill): falls while weaving sideways — you must lead it
+export const DRIFT_MIN_WAVE = 4
+const DRIFT_AMP = 165 // lateral weave velocity (px/s)
+const DRIFT_FREQ = 2.5 // weave frequency (rad/s)
+const DRIFT_VY = 0.82 // drifters fall a touch slower (the weave is the threat)
+
+// darter (reaction skill): hangs high winding up, then SNAPS into a fast dive
+export const DART_MIN_WAVE = 6
+const DART_HANG = 1.25 // seconds of wind-up before it darts
+const DART_HANG_VY = 16 // slow creep during the wind-up
+const DART_MULT = 2.6 // how much faster than the wave's blight it dives
+
+// husk (follow-up skill): armored, slow + heavy — first bloom cracks it, second kills
+export const HUSK_MIN_WAVE = 7
+const HUSK_VY = 0.7 // husks fall slower (you need time for two shots)
+const HUSK_HP = 2
+
 export interface Spire {
   x: number
   alive: boolean
 }
+
+// Each kind trains a different aim skill: faller = placement, splitter = prioritise,
+// drifter = TRACK (it weaves), darter = REACT (winds up then snaps), husk = FOLLOW-UP
+// (two hits). Undefined kind reads as 'faller' so older constructions still work.
+export type BlightKind = 'faller' | 'splitter' | 'drifter' | 'darter' | 'husk'
 
 export interface Blight {
   x: number
@@ -57,10 +79,18 @@ export interface Blight {
   vy: number
   target: number // spire index it is diving at
   alive: boolean
+  kind?: BlightKind
+  age?: number // seconds alive — drives the drifter weave + the darter wind-up
+  hp?: number // hits to kill (husk = 2); undefined/1 = dies in one
   splitter?: boolean // a MIRV — forks into children at splitY if not killed first
   child?: boolean // spawned from a split; never splits again, normal value
   splitY?: number // altitude at which a splitter forks
   splitN?: number // how many children it forks into
+  driftAmp?: number // drifter: lateral weave velocity amplitude (px/s)
+  driftFreq?: number // drifter: weave frequency (rad/s)
+  driftPhase?: number // drifter: weave phase offset so they don't sync
+  darted?: boolean // darter: has it snapped into its dive yet
+  hangT?: number // darter: wind-up time before it darts
 }
 
 export interface Bloom {
@@ -69,9 +99,11 @@ export interface Bloom {
   age: number
   r: number
   kills: number // blight this single ring has caught over its life (for multi-kills)
+  hit?: Set<Blight> // blight this ring has already struck (so a husk takes one hit per bloom, not per frame)
+  landed?: boolean // has this ring connected with anything (crack or kill) — for accuracy
 }
 
-export type FxKind = 'intercept' | 'impact' | 'spire' | 'split' | 'multi'
+export type FxKind = 'intercept' | 'impact' | 'spire' | 'split' | 'multi' | 'crack' | 'dart'
 export interface Fx {
   x: number
   y: number
@@ -212,17 +244,57 @@ export function startWave(w: World, wave: number) {
     const ti = pickSpire()
     const jitter = 0.88 + w.rng() * 0.26
     const { vx, vy } = aimVel(ox, oy, w.spires[ti].x, GROUND_Y, speed * jitter)
-    queue.push({ x: ox, y: oy, ox, oy, vx, vy, target: ti, alive: true })
+    queue.push({ x: ox, y: oy, ox, oy, vx, vy, target: ti, alive: true, kind: 'faller', age: 0 })
   }
 
+  // mark types in distinct slots of the queue so a blight is only ever one kind.
+  let slot = 0
   // from SPLIT_MIN_WAVE on, seed a growing number of splitters into the wave
   if (wave >= SPLIT_MIN_WAVE) {
-    const nSplit = Math.min(queue.length, 1 + Math.floor((wave - SPLIT_MIN_WAVE) / 2))
-    for (let i = 0; i < nSplit; i++) {
-      const b = queue[i]
+    const nSplit = Math.min(queue.length - slot, 1 + Math.floor((wave - SPLIT_MIN_WAVE) / 2))
+    for (let i = 0; i < nSplit; i++, slot++) {
+      const b = queue[slot]
+      b.kind = 'splitter'
       b.splitter = true
       b.splitN = 2 + (w.rng() < (wave >= 6 ? 0.6 : 0.25) ? 1 : 0)
       b.splitY = SPLIT_Y_MIN + w.rng() * (SPLIT_Y_MAX - SPLIT_Y_MIN)
+    }
+  }
+  // DRIFTERS (tracking) — weave sideways as they fall; lead them
+  if (wave >= DRIFT_MIN_WAVE) {
+    const nDrift = Math.min(queue.length - slot, 1 + Math.floor((wave - DRIFT_MIN_WAVE) / 2))
+    for (let i = 0; i < nDrift; i++, slot++) {
+      const b = queue[slot]
+      b.kind = 'drifter'
+      b.vx = 0
+      b.vy = speed * DRIFT_VY
+      b.driftAmp = DRIFT_AMP * (0.85 + w.rng() * 0.3)
+      b.driftFreq = DRIFT_FREQ * (0.85 + w.rng() * 0.3)
+      b.driftPhase = w.rng() * Math.PI * 2
+    }
+  }
+  // DARTERS (reaction) — creep down, then snap into a fast dive
+  if (wave >= DART_MIN_WAVE) {
+    const nDart = Math.min(queue.length - slot, 1 + Math.floor((wave - DART_MIN_WAVE) / 3))
+    for (let i = 0; i < nDart; i++, slot++) {
+      const b = queue[slot]
+      b.kind = 'darter'
+      b.vx = 0
+      b.vy = DART_HANG_VY
+      b.hangT = DART_HANG * (0.85 + w.rng() * 0.3)
+      b.darted = false
+    }
+  }
+  // HUSKS (follow-up) — armored, slow + heavy; two hits to down
+  if (wave >= HUSK_MIN_WAVE) {
+    const nHusk = Math.min(queue.length - slot, 1 + Math.floor((wave - HUSK_MIN_WAVE) / 3))
+    for (let i = 0; i < nHusk; i++, slot++) {
+      const b = queue[slot]
+      b.kind = 'husk'
+      b.hp = HUSK_HP
+      const { vx, vy } = aimVel(b.ox, b.oy, w.spires[b.target].x, GROUND_Y, speed * HUSK_VY)
+      b.vx = vx
+      b.vy = vy
     }
   }
   w.toSpawn = queue
@@ -277,8 +349,28 @@ export function tick(w: World, dt: number): TickEvents {
   const liveIdx = w.spires.map((s, i) => i).filter((i) => w.spires[i].alive)
   for (const b of w.blight) {
     if (!b.alive) continue
-    b.x += b.vx * dt
-    b.y += b.vy * dt
+    b.age = (b.age ?? 0) + dt
+    if (b.kind === 'drifter') {
+      // weave sideways while falling — the player must LEAD it (tracking skill)
+      b.x += Math.sin(b.age * (b.driftFreq ?? DRIFT_FREQ) + (b.driftPhase ?? 0)) * (b.driftAmp ?? DRIFT_AMP) * dt
+      b.x = Math.max(10, Math.min(VW - 10, b.x))
+      b.y += b.vy * dt
+    } else if (b.kind === 'darter') {
+      // wind up high, then SNAP into a fast dive at its spire (reaction skill)
+      if (!b.darted && (b.age ?? 0) >= (b.hangT ?? DART_HANG)) {
+        b.darted = true
+        const sp = w.spires[b.target]
+        const aimed = aimVel(b.x, b.y, sp ? sp.x : b.x, GROUND_Y, blightSpeed(w.wave) * DART_MULT)
+        b.vx = aimed.vx
+        b.vy = aimed.vy
+        addFx(w, b.x, b.y, 'dart', 0.3)
+      }
+      b.x += b.vx * dt
+      b.y += b.vy * dt
+    } else {
+      b.x += b.vx * dt
+      b.y += b.vy * dt
+    }
     // a splitter that survived to its fork altitude breaks into children
     if (b.splitter && !b.child && b.splitY !== undefined && b.y >= b.splitY) {
       b.alive = false
@@ -294,12 +386,18 @@ export function tick(w: World, dt: number): TickEvents {
     }
     if (b.y >= GROUND_Y) {
       b.alive = false
-      const s = w.spires[b.target]
-      if (s && s.alive) {
-        s.alive = false
+      // hit whichever spire is under the landing point (lateral kinds don't keep a target)
+      let hit = -1, bestD = SPIRE_HALF
+      for (let i = 0; i < w.spires.length; i++) {
+        if (!w.spires[i].alive) continue
+        const d = Math.abs(w.spires[i].x - b.x)
+        if (d <= bestD) { bestD = d; hit = i }
+      }
+      if (hit >= 0) {
+        w.spires[hit].alive = false
         ev.spireHits++
         w.combo = 0
-        addFx(w, s.x, GROUND_Y, 'spire', 0.7)
+        addFx(w, w.spires[hit].x, GROUND_Y, 'spire', 0.7)
       } else {
         addFx(w, b.x, GROUND_Y, 'impact', 0.4)
       }
@@ -316,24 +414,31 @@ export function tick(w: World, dt: number): TickEvents {
       if (!b.alive) continue
       const dx = b.x - bl.x
       const dy = b.y - bl.y
-      if (dx * dx + dy * dy <= bl.r * bl.r) {
-        b.alive = false
-        w.combo = Math.min(COMBO_MAX, w.combo + 1)
-        const clean = !!b.splitter && !b.child // popped a MIRV before it forked
-        w.score += 10 * w.combo * (clean ? CLEAN_KILL_MULT : 1)
-        ev.intercepts++
-        w.downed++
-        if (clean) { ev.cleanKills++; w.cleanTotal++ }
-        addFx(w, b.x, b.y, 'intercept', 0.45)
-        // multi-kill: this same ring catching more in one life pays escalating bonus
-        bl.kills++
-        if (bl.kills === 1) w.hits++ // this bloom landed
-        if (bl.kills > w.maxMulti) w.maxMulti = bl.kills
-        if (bl.kills >= 2) {
-          w.score += MULTI_BONUS * w.combo * (bl.kills - 1)
-          addFx(w, bl.x, bl.y, 'multi', 0.7, bl.kills)
-          if (bl.kills > ev.bestMulti) ev.bestMulti = bl.kills
-        }
+      if (dx * dx + dy * dy > bl.r * bl.r) continue
+      if (bl.hit && bl.hit.has(b)) continue // this ring already struck it (a husk takes one hit per bloom)
+      ;(bl.hit ??= new Set()).add(b)
+      if (!bl.landed) { bl.landed = true; w.hits++ } // the ring connected (crack or kill)
+      b.hp = (b.hp ?? 1) - 1
+      if (b.hp > 0) {
+        // survived — a husk's shell cracks; it needs a follow-up bloom to finish
+        addFx(w, b.x, b.y, 'crack', 0.3)
+        continue
+      }
+      b.alive = false
+      w.combo = Math.min(COMBO_MAX, w.combo + 1)
+      const clean = !!b.splitter && !b.child // popped a MIRV before it forked
+      w.score += 10 * w.combo * (clean ? CLEAN_KILL_MULT : 1)
+      ev.intercepts++
+      w.downed++
+      if (clean) { ev.cleanKills++; w.cleanTotal++ }
+      addFx(w, b.x, b.y, 'intercept', 0.45)
+      // multi-kill: this same ring catching more in one life pays escalating bonus
+      bl.kills++
+      if (bl.kills > w.maxMulti) w.maxMulti = bl.kills
+      if (bl.kills >= 2) {
+        w.score += MULTI_BONUS * w.combo * (bl.kills - 1)
+        addFx(w, bl.x, bl.y, 'multi', 0.7, bl.kills)
+        if (bl.kills > ev.bestMulti) ev.bestMulti = bl.kills
       }
     }
   }

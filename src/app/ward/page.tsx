@@ -38,6 +38,9 @@ const SPIRE = '#6cf0ff'
 const VOID = '#c86bff'
 const VOID_DIM = '#4a2078'
 const HOT_VOID = '#ff5db0' // splitters — hotter, "deal with me first"
+const DRIFT = '#54ffa8' // drifters — green serpentine weavers, "lead me"
+const DART = '#ff5a5a' // darters — hot red, "I'm about to snap"
+const HUSKC = '#9a86c0' // husks — armored steel-void, "hit me twice"
 const FALL = '#ff7a3c'
 
 // a fixed, deterministic void-field behind the action (twinkle, no gameplay)
@@ -376,6 +379,32 @@ function render(
   // blight — trail from origin to head, glowing diamond head. splitters (MIRVs)
   // read hotter + bigger with a telegraph ring + split-line at their fork altitude.
   for (const b of w.blight) {
+    if (b.kind === 'drifter') {
+      // DRIFTER (tracking) — a green serpentine weaver. Its WAVY WAKE is the tell:
+      // it moves sideways, so you have to lead it. The wake is reconstructed from the
+      // exact weave path it took, so the wiggle reads honestly.
+      const amp = b.driftAmp ?? 165, freq = b.driftFreq ?? 2.5, ph = b.driftPhase ?? 0, age = b.age ?? 0
+      ctx.strokeStyle = DRIFT
+      ctx.globalAlpha = 0.5
+      ctx.lineWidth = 2
+      ctx.shadowBlur = 7
+      ctx.shadowColor = DRIFT
+      ctx.beginPath()
+      for (let s = 0; s <= 10; s++) {
+        const tau = (s / 10) * 0.95 // ~1s of wake
+        const px = b.x + (amp / freq) * (Math.cos(age * freq + ph) - Math.cos((age - tau) * freq + ph))
+        const py = b.y - b.vy * tau
+        if (s === 0) ctx.moveTo(px, py)
+        else ctx.lineTo(px, py)
+      }
+      ctx.stroke()
+      ctx.globalAlpha = 1
+      ctx.fillStyle = DRIFT
+      ctx.shadowBlur = 13
+      ctx.shadowColor = DRIFT
+      diamond(ctx, b.x, b.y, 5 + 0.7 * Math.sin(t * 7 + b.x))
+      continue
+    }
     const grad = ctx.createLinearGradient(b.ox, b.oy, b.x, b.y)
     grad.addColorStop(0, 'rgba(74,32,120,0)')
     grad.addColorStop(1, VOID_DIM)
@@ -405,6 +434,47 @@ function render(
       ctx.shadowBlur = 16
       ctx.shadowColor = HOT_VOID
       diamond(ctx, b.x, b.y, 6.5 + pulse)
+    } else if (b.kind === 'darter') {
+      if (!b.darted) {
+        // winding up — a red reticle that TIGHTENS + brightens toward the snap, so
+        // you can read the threat and ready your reaction.
+        const charge = Math.min(1, (b.age ?? 0) / (b.hangT ?? 1.25))
+        const pulse = 0.5 + 0.5 * Math.sin(t * (8 + charge * 16))
+        ctx.strokeStyle = DART
+        ctx.globalAlpha = 0.35 + 0.5 * charge
+        ctx.lineWidth = 1.5
+        ctx.shadowBlur = 8 + 14 * charge
+        ctx.shadowColor = DART
+        ring(ctx, b.x, b.y, 15 - charge * 7 + pulse * 2)
+        // crosshair ticks
+        seg(ctx, b.x - 11, b.y, b.x - 5, b.y); seg(ctx, b.x + 5, b.y, b.x + 11, b.y)
+        seg(ctx, b.x, b.y - 11, b.x, b.y - 5); seg(ctx, b.x, b.y + 5, b.x, b.y + 11)
+        ctx.globalAlpha = 1
+        ctx.fillStyle = DART
+        ctx.shadowBlur = 10
+        diamond(ctx, b.x, b.y, 4)
+      } else {
+        // darting — a bright hot head streaking down
+        ctx.fillStyle = HOT
+        ctx.shadowBlur = 18
+        ctx.shadowColor = DART
+        diamond(ctx, b.x, b.y, 5.5)
+      }
+    } else if (b.kind === 'husk') {
+      // armored — a heavy core inside a thick shell ring; the shell BREAKS when cracked
+      const cracked = (b.hp ?? 2) <= 1
+      ctx.fillStyle = HUSKC
+      ctx.shadowBlur = 9
+      ctx.shadowColor = HUSKC
+      diamond(ctx, b.x, b.y, 7)
+      ctx.strokeStyle = cracked ? '#6e5a8c' : HUSKC
+      ctx.globalAlpha = cracked ? 0.4 : 0.9
+      ctx.lineWidth = cracked ? 1.2 : 2.6
+      ctx.shadowBlur = cracked ? 3 : 10
+      ctx.shadowColor = HUSKC
+      ring(ctx, b.x, b.y, 11.5)
+      if (cracked) { ctx.globalAlpha = 0.7; seg(ctx, b.x - 8, b.y - 4, b.x + 6, b.y + 7) } // crack line
+      ctx.globalAlpha = 1
     } else {
       ctx.fillStyle = VOID
       ctx.shadowBlur = 12
@@ -482,6 +552,22 @@ function render(
       ctx.textAlign = 'center'
       ctx.font = `600 ${16 + n * 3}px ui-monospace, monospace`
       ctx.fillText(`×${n}`, f.x, f.y - 14 - k * 26)
+    } else if (f.kind === 'crack') {
+      // husk shell cracked — a hard steel flash, "again!"
+      ctx.strokeStyle = HUSKC
+      ctx.globalAlpha = 1 - k
+      ctx.lineWidth = 2.5 * (1 - k)
+      ctx.shadowBlur = 10
+      ctx.shadowColor = HUSKC
+      ring(ctx, f.x, f.y, 8 + k * 12)
+    } else if (f.kind === 'dart') {
+      // darter snapped — a hot red burst the instant it commits to the dive
+      ctx.strokeStyle = DART
+      ctx.globalAlpha = (1 - k) * 0.9
+      ctx.lineWidth = 3 * (1 - k)
+      ctx.shadowBlur = 16
+      ctx.shadowColor = DART
+      ring(ctx, f.x, f.y, 5 + k * 26)
     } else {
       ctx.strokeStyle = VOID_DIM
       ctx.globalAlpha = 0.7 * (1 - k)
