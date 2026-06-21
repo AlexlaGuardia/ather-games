@@ -496,9 +496,8 @@ function MugDoor({ wall, active, phase, onEnter }: { wall: Wall; active: boolean
             backgroundSize: "100% 100%",
             clipPath: "path(evenodd, 'M0,0 H480 V720 H0 Z M144,641 V281 Q144,150 240,150 Q334,150 334,281 V641 Z')",
             WebkitClipPath: "path(evenodd, 'M0,0 H480 V720 H0 Z M144,641 V281 Q144,150 240,150 Q334,150 334,281 V641 Z')",
-            // the frame art is a dark-stone arch on a PURE-BLACK field (no alpha) — screen-blend it onto
-            // the wall so the black vanishes and only the lit stone + runes show, no hard rectangle box.
-            mixBlendMode: "screen",
+            // mug-frame.webp now carries a luminance-keyed alpha channel (dark field → transparent),
+            // so it composites straight onto the brick — no black rectangle, no blend-mode hacks needed.
             // calm the hot orange a touch so it sits with the gold mortar seams
             filter: active ? "saturate(0.82)" : "brightness(0.5) saturate(0.68)",
             transition: "filter 320ms ease",
@@ -802,9 +801,8 @@ function ArcadeArch({ wall, active, phase, onEnter }: { wall: Wall; active: bool
             backgroundSize: "100% 100%",
             clipPath: `path(evenodd, '${ARC_RING}')`,
             WebkitClipPath: `path(evenodd, '${ARC_RING}')`,
-            // frame art is a dark-stone arch on a PURE-BLACK field (no alpha) — screen-blend it onto
-            // the wall so the black vanishes and only the lit stone + runes show, no hard rectangle box.
-            mixBlendMode: "screen",
+            // arcade-frame.webp now carries a luminance-keyed alpha channel (dark field → transparent),
+            // so it composites straight onto the brick — no black rectangle, no blend-mode hacks needed.
             // calm the hot orange so it sits with the gold mortar seams
             filter: active ? "saturate(0.82)" : "brightness(0.5) saturate(0.68)",
             transition: "filter 320ms ease",
