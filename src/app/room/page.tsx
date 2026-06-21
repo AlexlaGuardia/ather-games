@@ -858,40 +858,29 @@ const CAST: CastMember[] = [
 ];
 const CAST_BY_ID = Object.fromEntries(CAST.map((c) => [c.id, c]));
 const PROFILE_KEY = "ather-room-profile";
-// deterministic "random" so SSR and first client paint agree (shuffled for real on mount)
-function pickGallery(exclude: string, seed: number): string[] {
-  const pool = CAST.filter((c) => c.id !== exclude).map((c) => c.id);
-  const out: string[] = [];
-  for (let i = 0; i < 2 && pool.length; i++) {
-    const idx = (seed + i * 7) % pool.length;
-    out.push(pool.splice(idx, 1)[0]);
-  }
-  return out;
-}
 
 function DeskWall({ wall, active, phase, onEnter }: { wall: Wall; active: boolean; phase: Phase; onEnter: () => void }) {
   const accent = wall.accent; // cyan
   const armed = active && phase === "room"; // far away → click anywhere to approach
   const arrived = active && phase !== "room"; // at the desk → UI is interactive
 
-  // profile pic (left frame) + two gallery frames + the hall-of-fame picker
+  // single profile frame → opens a combined Profile panel (portrait picker + settings)
   const [profileId, setProfileId] = useState<string>("kael");
-  const [gallery, setGallery] = useState<string[]>(() => pickGallery("kael", 0));
-  const [picking, setPicking] = useState(false);
+  const [panelOpen, setPanelOpen] = useState(false);
   useEffect(() => {
     let saved = "kael";
     try { saved = localStorage.getItem(PROFILE_KEY) || "kael"; } catch {}
     if (!CAST_BY_ID[saved]) saved = "kael";
     setProfileId(saved);
-    setGallery(pickGallery(saved, Math.floor(Date.now() / 1000) % CAST.length));
   }, []);
   const chooseProfile = (id: string) => {
     setProfileId(id);
     try { localStorage.setItem(PROFILE_KEY, id); } catch {}
-    setGallery(pickGallery(id, Math.floor(Date.now() / 1000) % CAST.length));
-    setPicking(false);
   };
-  const frameIds = [profileId, gallery[0], gallery[1]];
+  const profile = CAST_BY_ID[profileId] || CAST[0];
+  // audio mute lives in Settings now (singleton hub — shared with the room HUD toggle)
+  const hub = getHubAudio();
+  const muted = useSyncExternalStore(hub.subscribe, () => hub.muted, () => false);
 
   // live News feed — fetch the JSON, fall back to the inline list
   const [news, setNews] = useState<NewsItem[]>(DESK_NEWS_FALLBACK);
@@ -942,63 +931,41 @@ function DeskWall({ wall, active, phase, onEnter }: { wall: Wall; active: boolea
 
       {/* interactive cluster — only live once you've arrived at the desk */}
       <div className="absolute inset-0" style={{ pointerEvents: arrived ? "auto" : "none" }}>
-        {/* the picture-frame row — hung above the greeter; left = your profile, the
-            other two are a rotating hall-of-fame of the cast. Click any to open the picker. */}
-        <div className="absolute flex items-end justify-center gap-5" style={{ left: "50%", top: "10%", transform: "translate(-50%,0)" }}>
-          {frameIds.map((id, i) => {
-            const c = CAST_BY_ID[id] || CAST[0];
-            const isProfile = i === 0;
-            return (
-              <button
-                key={`${id}-${i}`}
-                className="group/fr flex flex-col items-center transition hover:-translate-y-0.5"
-                style={{ marginTop: isProfile ? 0 : 14 }}
-                aria-label={isProfile ? `Profile: ${c.name}. Open the hall of fame` : `${c.name}, ${c.title}. Open the hall of fame`}
-                onClick={(e) => { e.stopPropagation(); setPicking(true); }}
-              >
-                {/* the frame — gilt moulding, dark mat, portrait cover */}
-                <span
-                  className="block rounded-[3px]"
-                  style={{
-                    width: isProfile ? 104 : 88,
-                    height: isProfile ? 138 : 116,
-                    padding: 6,
-                    background: "linear-gradient(145deg,#caa24e,#7a5c1e 45%,#e7c878 70%,#6e5018)",
-                    boxShadow: isProfile
-                      ? `0 8px 22px rgba(0,0,0,0.55), 0 0 0 1px ${accent}55, 0 0 18px ${accent}44`
-                      : "0 7px 18px rgba(0,0,0,0.5)",
-                  }}
-                >
-                  <span
-                    className="block w-full h-full rounded-[1px]"
-                    style={{
-                      backgroundImage: `url(/characters/${id}.png)`,
-                      backgroundSize: "cover",
-                      backgroundPosition: "center 18%",
-                      boxShadow: "inset 0 0 0 2px #1a140a, inset 0 0 14px rgba(0,0,0,0.6)",
-                      filter: "saturate(0.95)",
-                    }}
-                  />
-                </span>
-                {/* nameplate */}
-                <span className="mt-1.5 text-center leading-tight">
-                  <span className="block text-[11px] uppercase tracking-[0.18em]" style={{ color: isProfile ? accent : "#cdd8de" }}>{c.name}</span>
-                  <span className="block text-[8px] uppercase tracking-[0.2em] text-[#8a9aa2]">{isProfile ? "you" : c.title}</span>
-                </span>
-              </button>
-            );
-          })}
+        {/* the profile frame — a single portrait hung above the greeter; click to open
+            the Profile panel (pick a cast portrait + settings). */}
+        <div className="absolute flex justify-center" style={{ left: "50%", top: "8%", transform: "translate(-50%,0)" }}>
+          <button
+            className="group/fr flex flex-col items-center transition hover:-translate-y-0.5"
+            aria-label={`Profile: ${profile.name}. Open profile and settings`}
+            onClick={(e) => { e.stopPropagation(); setPanelOpen(true); }}
+          >
+            {/* gilt frame, dark mat, portrait cover */}
+            <span
+              className="block rounded-[3px]"
+              style={{
+                width: 116, height: 152, padding: 7,
+                background: "linear-gradient(145deg,#caa24e,#7a5c1e 45%,#e7c878 70%,#6e5018)",
+                boxShadow: `0 8px 24px rgba(0,0,0,0.55), 0 0 0 1px ${accent}55, 0 0 18px ${accent}44`,
+              }}
+            >
+              <span
+                className="block w-full h-full rounded-[1px]"
+                style={{
+                  backgroundImage: `url(/characters/${profile.id}.png)`,
+                  backgroundSize: "cover",
+                  backgroundPosition: "center 18%",
+                  boxShadow: "inset 0 0 0 2px #1a140a, inset 0 0 14px rgba(0,0,0,0.6)",
+                  filter: "saturate(0.95)",
+                }}
+              />
+            </span>
+            {/* nameplate */}
+            <span className="mt-1.5 text-center leading-tight">
+              <span className="block text-[12px] uppercase tracking-[0.18em]" style={{ color: accent }}>{profile.name}</span>
+              <span className="block text-[8px] uppercase tracking-[0.22em] text-[#8a9aa2] opacity-0 transition group-hover/fr:opacity-100">edit ⚙</span>
+            </span>
+          </button>
         </div>
-
-        {/* Settings — top-right */}
-        <button
-          className="absolute grid place-items-center rounded-md border bg-[#0e1820]/70 backdrop-blur transition hover:rotate-45"
-          style={{ left: "72%", top: "11%", transform: "translate(-50%,0)", width: 46, height: 46, borderColor: `${accent}33`, color: `${accent}cc`, transitionDuration: "300ms" }}
-          aria-label="Settings"
-          onClick={(e) => { e.stopPropagation(); /* TODO: open settings */ }}
-        >
-          <span className="text-2xl leading-none">⚙</span>
-        </button>
 
         {/* News — right side; live from /room/news.json */}
         <div className="absolute rounded-md border p-4 bg-[#0e1820]/70 backdrop-blur" style={{ left: "72%", top: "34%", width: "27%", borderColor: `${accent}33` }}>
@@ -1018,21 +985,24 @@ function DeskWall({ wall, active, phase, onEnter }: { wall: Wall; active: boolea
           </ul>
         </div>
 
-        {/* Hall of Fame picker — pick a cast portrait to hang in your profile frame */}
-        {picking && (
+        {/* Profile panel — pick a cast portrait + settings (folded in from the old gear) */}
+        {panelOpen && (
           <div
             className="absolute inset-0 z-30 grid place-items-center bg-black/70 backdrop-blur-sm"
-            onClick={(e) => { e.stopPropagation(); setPicking(false); }}
+            onClick={(e) => { e.stopPropagation(); setPanelOpen(false); }}
           >
             <div
-              className="w-[min(86%,560px)] rounded-lg border p-5 bg-[#0b1218]/95"
+              className="w-[min(88%,560px)] max-h-[88%] overflow-y-auto rounded-lg border p-5 bg-[#0b1218]/95"
               style={{ borderColor: `${accent}44`, boxShadow: `0 0 40px ${accent}22` }}
               onClick={(e) => e.stopPropagation()}
             >
               <div className="mb-4 flex items-center justify-between">
-                <h3 className="text-lg uppercase tracking-[0.28em]" style={{ color: accent }}>Hall of Fame</h3>
-                <button className="text-[#8a9aa2] hover:text-white text-xl leading-none" aria-label="Close" onClick={() => setPicking(false)}>×</button>
+                <h3 className="text-lg uppercase tracking-[0.28em]" style={{ color: accent }}>Profile</h3>
+                <button className="text-[#8a9aa2] hover:text-white text-xl leading-none" aria-label="Close" onClick={() => setPanelOpen(false)}>×</button>
               </div>
+
+              {/* portrait picker */}
+              <p className="mb-2 text-[10px] uppercase tracking-[0.22em] text-[#7e8e96]">Your portrait</p>
               <div className="grid grid-cols-3 gap-3 sm:grid-cols-6">
                 {CAST.map((c) => {
                   const sel = c.id === profileId;
@@ -1060,7 +1030,23 @@ function DeskWall({ wall, active, phase, onEnter }: { wall: Wall; active: boolea
                   );
                 })}
               </div>
-              <p className="mt-4 text-center text-[10px] uppercase tracking-[0.22em] text-[#6e7e86]">tap a portrait to hang it in your frame</p>
+
+              {/* settings */}
+              <div className="mt-5 border-t pt-4" style={{ borderColor: `${accent}22` }}>
+                <p className="mb-2.5 text-[10px] uppercase tracking-[0.22em] text-[#7e8e96]">Settings</p>
+                <div className="flex items-center justify-between">
+                  <span className="text-xs uppercase tracking-[0.18em] text-[#aebfc8]">Sound</span>
+                  <button
+                    role="switch"
+                    aria-checked={!muted}
+                    onClick={() => { const h = getHubAudio(); h.start(); h.toggleMuted(); }}
+                    className="relative rounded-full transition"
+                    style={{ width: 46, height: 24, background: muted ? "#1c2730" : `${accent}55`, border: `1px solid ${muted ? "#33424c" : accent}` }}
+                  >
+                    <span className="absolute top-1/2 rounded-full transition-all" style={{ width: 18, height: 18, transform: "translateY(-50%)", left: muted ? 3 : 25, background: muted ? "#6e7e86" : accent }} />
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
         )}
