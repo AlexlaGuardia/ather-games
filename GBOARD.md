@@ -315,11 +315,13 @@ the Arcade frame.
   room WALLS earned bespoke art because they're destinations, cabinets are items in a collection). Spend
   the gen budget ONCE on a great SHARED hall composed for the at-a-cabinet view (light in the MARGINS,
   not just a center corridor). Full rationale: memory `project_arcade_cabinet_not_world`.
-  **✅ ROLLED OUT (`153ac26`,`617528c`):** gen-once `/arcade/cabinet-hall.webp` + reusable
+  **✅ COMPLETE (`153ac26`→`846d88b`):** gen-once `/arcade/cabinet-hall.webp` + reusable
   `<ArcadeCabinet>` (`_components/`, props accent/wall/maxWidth; gold housing = shared furniture,
-  accent = screen-spill) on **6 games** — Atherdash/Ward/Lucernyx/Voranyx/Seedfall/Updraft (3-line drop
-  each, HUDs intact). **LEFT:** Mana'nana + Rekindle (divergent wrappers) in their own lap. Pending
-  Alex device pass on the look + warmth/red-skew taste.
+  accent = screen-spill). **Whole catalog tied:** 7 games on the shell — Atherdash/Ward/Lucernyx/
+  Voranyx/Seedfall/Updraft + Rekindle (BOTH map+play views); **Mana'nana deliberately full-bleed**
+  (own AtherBackdrop, RoomReturn-only — a cabinet would cage the match-3 board). Gravitar cut;
+  Shimmer/Magii = room walls. **PENDING Alex device pass:** look across games + final warmth/dim/
+  red-skew (one component → change once, everywhere). **TODO:** hall cards propagate `?from=room`.
 **🆕 ARCADE-LAP slice 1+2 shipped (`afaa451`, 2026-06-21) — the SECOND AXIS.** Alex cold-played on
   mobile: "smooth, could be a bit slower, maybe tap-to-jump + levels with ramps/pitfalls." Built:
   - **Slice 1 — speed ramp.** Forward speed is no longer flat. `speedAt(dist)` opens at **base 0.60**
