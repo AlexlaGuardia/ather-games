@@ -5,7 +5,6 @@
 // milestones earn moves; cascades ramp an ather-heat multiplier. Glossy CSS gems.
 
 import { useEffect, useRef, useState } from 'react'
-import Link from 'next/link'
 import RoomReturn from '../_components/RoomReturn'
 import { mulberry32, type Rng } from '@/lib/arcade/rng'
 import { dailySeed, dailyNumber, loadDailyBest, saveDailyBest, dailyShare, copyShare } from '@/lib/arcade/daily'
@@ -412,9 +411,7 @@ export default function MananaPage() {
               onClick={() => { sfx.ensure(); const m = !muted; sfx.setMuted(m); setMuted(m); if (!m) sfx.play('swap') }}
               title={muted ? 'sound off' : 'sound on'}
               className="text-lg text-slate-500 hover:text-amber-300 transition-colors"
-            >{muted ? '\u{1F507}' : '\u{1F50A}'}</button>
-            <Link href="/arcade/all" className="text-[11px] text-slate-500 hover:text-amber-300 transition-colors">arcade &#8594;</Link>
-          </div>
+            >{muted ? '\u{1F507}' : '\u{1F50A}'}</button>          </div>
         </header>
 
         <div className="grid grid-cols-3 gap-2 mb-2 text-center">

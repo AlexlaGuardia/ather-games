@@ -6,7 +6,6 @@
 // Machine and Endless free play (generated boards). Atari vector-glow on canvas.
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import Link from 'next/link'
 import ArcadeCabinet from '../_components/ArcadeCabinet'
 import {
   TEMPLATES,
@@ -234,9 +233,7 @@ export default function RekindlePage() {
     return (
       <ArcadeCabinet accent="#37e6ff" wall={1} maxWidth={560}>
         <div className="w-full max-w-[560px] flex items-center justify-between mb-6">
-          <Link href="/arcade/all" className="text-[10px] tracking-[0.25em] uppercase text-[#37e6ff]/50 hover:text-[#37e6ff] font-mono">
-            &#8592; arcade
-          </Link>
+          <span aria-hidden className="w-10" />
           <div className="text-center">
             <div className="font-mono text-[#37e6ff] text-sm tracking-[0.3em] uppercase" style={{ textShadow: '0 0 8px #37e6ff80' }}>Rekindle</div>
             <div className="text-[9px] text-[#7fd8e6]/40 font-mono tracking-[0.2em] uppercase mt-0.5">the aeterna network</div>

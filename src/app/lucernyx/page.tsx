@@ -8,7 +8,6 @@
 // Silt warms as you win. You are light (bottom); the Dying (grey) answers. Sim in lib/lucernyx.ts.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import Link from 'next/link'
 import ArcadeCabinet from '../_components/ArcadeCabinet'
 import { mulberry32 } from '@/lib/arcade/rng'
 import { useNoScroll } from '@/lib/arcade/useNoScroll'
@@ -174,7 +173,7 @@ export default function LucernyxPage() {
   return (
     <ArcadeCabinet accent="#37e6ff" wall={1} maxWidth={440}>
       <div className="w-full max-w-[440px] flex items-center justify-between mb-3">
-        <Link href="/arcade/all" className="text-[10px] tracking-[0.25em] uppercase text-[#37e6ff]/50 hover:text-[#37e6ff] font-mono">&#8592; arcade</Link>
+        <span aria-hidden className="w-16" />
         <div className="text-center">
           <div className="font-mono text-[#37e6ff] text-sm tracking-[0.35em] uppercase" style={{ textShadow: '0 0 8px #37e6ff80' }}>Lucernyx</div>
           <div className="text-[9px] text-[#7fd8e6]/40 font-mono tracking-[0.2em] uppercase mt-0.5">keeper of the light</div>
@@ -210,8 +209,7 @@ export default function LucernyxPage() {
         )}
       </div>
 
-      <div className="w-full max-w-[440px] flex items-center justify-between mt-4">
-        <Link href="/arcade/all" className="text-[10px] tracking-[0.25em] uppercase text-[#37e6ff]/45 hover:text-[#37e6ff] font-mono">arcade</Link>
+      <div className="w-full max-w-[440px] flex items-center justify-center mt-4">
         <p className="text-[10px] text-[#7fd8e6]/35 font-mono tracking-wider">slide · jump to rekindle · 3 torches wins</p>
       </div>
 
