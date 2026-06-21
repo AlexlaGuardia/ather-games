@@ -472,7 +472,7 @@ function MugDoor({ wall, active, phase, onEnter }: { wall: Wall; active: boolean
       {/* door frame — the WHOLE door is the click target when armed */}
       <div
         className={`group/door relative ${armed ? "cursor-pointer" : ""}`}
-        style={{ width: 360, height: 540, perspective: 1200 }}
+        style={{ width: 360, height: 540, perspective: 1200, transform: "translateY(84px)" }}
         onClick={armed ? onEnter : undefined}
         role={armed ? "button" : undefined}
         aria-label={armed ? "Open the door to the Kindled Mug" : undefined}
@@ -730,7 +730,7 @@ function ArcadeArch({ wall, active, phase, onEnter }: { wall: Wall; active: bool
       <Seams />
       <div
         className={`group/arch relative ${armed ? "cursor-pointer" : ""}`}
-        style={{ width: ARC_FW, height: ARC_FH }}
+        style={{ width: ARC_FW, height: ARC_FH, transform: "translateY(34px)" }}
         onClick={armed ? onEnter : undefined}
         role={armed ? "button" : undefined}
         aria-label={armed ? "Step through the archway into the Arcade" : undefined}
