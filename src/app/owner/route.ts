@@ -5,7 +5,7 @@ import { NextResponse, type NextRequest } from "next/server";
 export function GET(req: NextRequest) {
   const url = req.nextUrl;
   if (url.searchParams.has("logout")) {
-    const res = NextResponse.redirect(new URL("/arcade", req.url));
+    const res = NextResponse.redirect(new URL("/room", req.url));
     res.cookies.delete("ather_owner");
     return res;
   }
@@ -15,7 +15,7 @@ export function GET(req: NextRequest) {
     return new NextResponse("Invalid or missing key.", { status: 401 });
   }
 
-  const res = NextResponse.redirect(new URL("/arcade", req.url));
+  const res = NextResponse.redirect(new URL("/room", req.url));
   res.cookies.set("ather_owner", key, {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",

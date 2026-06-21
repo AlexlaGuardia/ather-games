@@ -43,7 +43,7 @@ export function proxy(req: NextRequest) {
   if (isOwner) return NextResponse.next();
 
   if (kind === "gated-game") {
-    return NextResponse.redirect(new URL("/arcade", req.url));
+    return NextResponse.redirect(new URL("/room", req.url));
   }
   return new NextResponse("Forbidden — owner only.", { status: 403 });
 }
