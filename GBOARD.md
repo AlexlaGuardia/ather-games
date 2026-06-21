@@ -314,8 +314,12 @@ the Arcade frame.
   bespoke gen'd environment per game (that's a never-ending art tax + dissolves the "one hall" fiction;
   room WALLS earned bespoke art because they're destinations, cabinets are items in a collection). Spend
   the gen budget ONCE on a great SHARED hall composed for the at-a-cabinet view (light in the MARGINS,
-  not just a center corridor). Now BUILDING this route on Atherdash as the template. Full rationale:
-  memory `project_arcade_cabinet_not_world`.
+  not just a center corridor). Full rationale: memory `project_arcade_cabinet_not_world`.
+  **✅ ROLLED OUT (`153ac26`,`617528c`):** gen-once `/arcade/cabinet-hall.webp` + reusable
+  `<ArcadeCabinet>` (`_components/`, props accent/wall/maxWidth; gold housing = shared furniture,
+  accent = screen-spill) on **6 games** — Atherdash/Ward/Lucernyx/Voranyx/Seedfall/Updraft (3-line drop
+  each, HUDs intact). **LEFT:** Mana'nana + Rekindle (divergent wrappers) in their own lap. Pending
+  Alex device pass on the look + warmth/red-skew taste.
 **🆕 ARCADE-LAP slice 1+2 shipped (`afaa451`, 2026-06-21) — the SECOND AXIS.** Alex cold-played on
   mobile: "smooth, could be a bit slower, maybe tap-to-jump + levels with ramps/pitfalls." Built:
   - **Slice 1 — speed ramp.** Forward speed is no longer flat. `speedAt(dist)` opens at **base 0.60**
