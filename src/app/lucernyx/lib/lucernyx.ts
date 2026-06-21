@@ -6,31 +6,40 @@
 // for torches thins your army and dangles convertible targets midfield, so conversion is
 // the natural counter to a torch-rush. (Canon: world/mother.md in /athernyx — Tier-2.)
 //
+// THE GIMMICK — the REKINDLE PULSE (2026-06-21): lighting a torch makes the lantern FLARE.
+// Every enemy piece diagonally adjacent to one of your pieces instantly rekindles to your
+// light (one wave, no chain). So you set up beside the corrupted BEFORE you torch — the
+// torch-race and the convert mechanic now talk to each other, and a torch becomes a board-
+// swing, not a quiet +1. This is what makes it Lucernyx and not checkers.
+//
+// Board is TALLER than wide (8×10): the torch-race is a longer, more perilous march.
+//
 // Pure sim — no canvas, no React. Deterministic. The page drives it with legalMoves()/
 // apply()/aiMove() and renders from the returned board.
 //
 // CUT 2026-06-18: element-tile "sanctuaries" (rooted pieces couldn't be jumped). They turned
 // the torch-race into board-locks — self-play draws ran 10% with them, 0.3% without — and the
-// un-jumpable blocker squares read as "my move vanished." The core verb (move / jump-convert /
-// torch) is the whole game. Don't re-add terrain without a draw-rate check.
+// un-jumpable blocker squares read as "my move vanished." Don't re-add terrain without a
+// draw-rate check.
 
 import { mulberry32, type Rng } from '@/lib/arcade/rng'
 
 export type Owner = 'light' | 'grey'
-export const SIZE = 8
+export const COLS = 8 // board width
+export const ROWS = 10 // board height — taller than wide for a longer torch-race
 export const PIECE_RANKS = 3 // back ranks each side fills (checkers density)
 export const TORCHES_TO_WIN = 3
 
 export const other = (o: Owner): Owner => (o === 'light' ? 'grey' : 'light')
-// light's home is the bottom; it advances UP toward row 0. grey advances DOWN toward SIZE-1.
+// light's home is the bottom; it advances UP toward row 0. grey advances DOWN toward ROWS-1.
 export const forwardDir = (o: Owner): number => (o === 'light' ? -1 : 1)
 // the rank a piece must reach to light a torch (the enemy's home rank)
-export const homeRank = (o: Owner): number => (o === 'light' ? 0 : SIZE - 1)
+export const homeRank = (o: Owner): number => (o === 'light' ? 0 : ROWS - 1)
 
-export const idx = (r: number, c: number): number => r * SIZE + c
-export const rowOf = (i: number): number => Math.floor(i / SIZE)
-export const colOf = (i: number): number => i % SIZE
-const inB = (r: number, c: number): boolean => r >= 0 && r < SIZE && c >= 0 && c < SIZE
+export const idx = (r: number, c: number): number => r * COLS + c
+export const rowOf = (i: number): number => Math.floor(i / COLS)
+export const colOf = (i: number): number => i % COLS
+const inB = (r: number, c: number): boolean => r >= 0 && r < ROWS && c >= 0 && c < COLS
 export const isDark = (r: number, c: number): boolean => (r + c) % 2 === 1
 
 export interface Move {
@@ -42,20 +51,21 @@ export interface Move {
 }
 
 export interface Board {
-  cells: (Owner | null)[] // index r*SIZE+c; null = empty. only dark squares are ever occupied
+  cells: (Owner | null)[] // index r*COLS+c; null = empty. only dark squares are ever occupied
   turn: Owner
   torches: { light: number; grey: number }
   winner: Owner | null // set when over; null + over = draw (board-lock, equal tiebreak)
   over: boolean
+  pulse?: number[] // squares rekindled by the last torch's flare (for the render to animate)
 }
 
 export function makeBoard(): Board {
-  const cells: (Owner | null)[] = new Array(SIZE * SIZE).fill(null)
-  for (let r = 0; r < SIZE; r++) {
-    for (let c = 0; c < SIZE; c++) {
+  const cells: (Owner | null)[] = new Array(COLS * ROWS).fill(null)
+  for (let r = 0; r < ROWS; r++) {
+    for (let c = 0; c < COLS; c++) {
       if (!isDark(r, c)) continue
       if (r < PIECE_RANKS) cells[idx(r, c)] = 'grey' // grey home at the top
-      else if (r >= SIZE - PIECE_RANKS) cells[idx(r, c)] = 'light' // light home at the bottom
+      else if (r >= ROWS - PIECE_RANKS) cells[idx(r, c)] = 'light' // light home at the bottom
     }
   }
   return { cells, turn: 'light', torches: { light: 0, grey: 0 }, winner: null, over: false }
@@ -112,16 +122,34 @@ export function legalMoves(b: Board, owner: Owner): Move[] {
   return moves
 }
 
+// the four diagonal neighbours of a dark square (where pieces can sit)
+const DIAG = [[-1, -1], [-1, 1], [1, -1], [1, 1]]
+
 // apply a move for the side to move; returns a NEW board (caller keeps the old one for undo/anim)
 export function apply(b: Board, m: Move): Board {
   const owner = b.turn
+  const enemy = other(owner)
   const cells = b.cells.slice()
   const torches = { ...b.torches }
+  let pulse: number[] | undefined
 
   cells[m.from] = null
   for (const sq of m.converts) cells[sq] = owner // flip in place — material never leaves
   if (m.torch) {
     torches[owner]++ // the piece lights a torch and ascends off the board
+    // THE REKINDLE PULSE — the lantern flares: every enemy diagonally adjacent to one of
+    // your pieces rekindles. Collect first, flip together — one wave, no chain reaction.
+    const flips: number[] = []
+    for (let i = 0; i < cells.length; i++) {
+      if (cells[i] !== enemy) continue
+      const r = rowOf(i), c = colOf(i)
+      for (const [dr, dc] of DIAG) {
+        const nr = r + dr, nc = c + dc
+        if (inB(nr, nc) && cells[idx(nr, nc)] === owner) { flips.push(i); break }
+      }
+    }
+    for (const i of flips) cells[i] = owner
+    if (flips.length) pulse = flips
   } else {
     cells[m.to] = owner
   }
@@ -134,7 +162,7 @@ export function apply(b: Board, m: Move): Board {
   }
 
   const turn = other(owner)
-  const next: Board = { cells, turn, torches, winner, over }
+  const next: Board = { cells, turn, torches, winner, over, pulse }
 
   if (!over) {
     // board-lock or wipeout ends the game on the next player's turn
@@ -180,8 +208,8 @@ function evalBoard(b: Board, me: Owner): number {
   return s
 }
 
-// how many ranks a piece of `o` has advanced from its start edge (0..SIZE-1)
-const advance = (o: Owner, r: number): number => (o === 'light' ? SIZE - 1 - r : r)
+// how many ranks a piece of `o` has advanced from its start edge (0..ROWS-1)
+const advance = (o: Owner, r: number): number => (o === 'light' ? ROWS - 1 - r : r)
 
 // greedy AI: simulate each legal move, keep the best by eval, break ties deterministically
 export function aiMove(b: Board, rng: Rng = mulberry32(1)): Move | null {

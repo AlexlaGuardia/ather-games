@@ -14,7 +14,7 @@ import { mulberry32 } from '@/lib/arcade/rng'
 import { useNoScroll } from '@/lib/arcade/useNoScroll'
 import {
   makeBoard, legalMoves, apply, aiMove, countPieces,
-  SIZE, TORCHES_TO_WIN, idx, rowOf, colOf, homeRank, isDark,
+  COLS, ROWS, TORCHES_TO_WIN, idx, rowOf, colOf, homeRank, isDark,
   type Board, type Move, type Owner,
 } from './lib/lucernyx'
 import { sfx } from './lib/sfx'
@@ -58,6 +58,7 @@ export default function LucernyxPage() {
   const [flash, setFlash] = useState<Owner | null>(null)
 
   const animRef = useRef<Anim | null>(null)
+  const pulseRef = useRef<{ sqs: number[]; t0: number } | null>(null) // Rekindle Pulse flare FX
   const startMoveRef = useRef<(pre: Board, m: Move) => void>(() => {})
   const boardRef = useRef(board); boardRef.current = board
   const selRef = useRef(sel); selRef.current = sel
@@ -92,6 +93,7 @@ export default function LucernyxPage() {
     animRef.current = null
     setAnimActive(false)
     const next = apply(pre, m)
+    if (next.pulse && next.pulse.length) pulseRef.current = { sqs: next.pulse, t0: performance.now() }
     boardRef.current = next // SYNC source of truth for the input guard — setBoard only
     //   updates boardRef on the next render, leaving a window where a queued tap reads
     //   the stale pre-move board (still 'your turn') and applies a move to it, erasing
@@ -130,10 +132,10 @@ export default function LucernyxPage() {
     if (animRef.current || boardRef.current.over || boardRef.current.turn !== 'light') return
     const b = boardRef.current
     const rect = e.currentTarget.getBoundingClientRect()
-    const cell = rect.width / SIZE
+    const cell = rect.width / COLS // square cells (canvas aspect is COLS:ROWS)
     const c = Math.floor((e.clientX - rect.left) / cell)
     const r = Math.floor((e.clientY - rect.top) / cell)
-    if (r < 0 || r >= SIZE || c < 0 || c >= SIZE) return
+    if (r < 0 || r >= ROWS || c < 0 || c >= COLS) return
     const sq = idx(r, c)
     const from = selRef.current
     if (from !== null) {
@@ -157,7 +159,7 @@ export default function LucernyxPage() {
     let raf = 0
     const draw = (ts: number) => {
       const cv = canvasRef.current
-      if (cv) render(cv, boardRef.current, selRef.current, targetsRef.current, hintsRef.current, animRef.current, ts)
+      if (cv) render(cv, boardRef.current, selRef.current, targetsRef.current, hintsRef.current, animRef.current, pulseRef.current, ts)
       raf = requestAnimationFrame(draw)
     }
     raf = requestAnimationFrame(draw)
@@ -189,7 +191,7 @@ export default function LucernyxPage() {
         <Torches who="grey" n={gt} pieces={gp} active={board.turn === 'grey' && !board.over} flash={flash === 'grey'} />
       </div>
 
-      <div className="relative w-full max-w-[440px]" style={{ aspectRatio: '1 / 1' }}>
+      <div className="relative w-full max-w-[440px]" style={{ aspectRatio: `${COLS} / ${ROWS}` }}>
         <canvas ref={canvasRef} onPointerDown={onClick} className="w-full h-full block touch-none rounded-md cursor-pointer" />
         <div className="pointer-events-none absolute inset-0 rounded-md lx-crt" />
 
@@ -254,7 +256,8 @@ const easeInOut = (x: number) => (x < 0.5 ? 2 * x * x : 1 - Math.pow(-2 * x + 2,
 
 function render(
   canvas: HTMLCanvasElement, b: Board, sel: number | null,
-  targets: Map<number, Move>, hints: Set<number>, anim: Anim | null, ts: number,
+  targets: Map<number, Move>, hints: Set<number>, anim: Anim | null,
+  pulseFx: { sqs: number[]; t0: number } | null, ts: number,
 ) {
   const dpr = Math.min(2, typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1)
   const cw = canvas.clientWidth || 440
@@ -262,7 +265,7 @@ function render(
   if (canvas.width !== cw * dpr || canvas.height !== ch * dpr) { canvas.width = cw * dpr; canvas.height = ch * dpr }
   const ctx = canvas.getContext('2d')!
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
-  const cell = cw / SIZE
+  const cell = cw / COLS // square cells; canvas aspect is COLS:ROWS so ch === cell*ROWS
   const t = ts / 1000
   const pulse = 0.5 + 0.5 * Math.sin(t * 3)
 
@@ -295,8 +298,8 @@ function render(
   ctx.globalAlpha = 1
 
   // ── squares (slightly translucent so the warmth + embers bleed through) ────
-  for (let r = 0; r < SIZE; r++) {
-    for (let c = 0; c < SIZE; c++) {
+  for (let r = 0; r < ROWS; r++) {
+    for (let c = 0; c < COLS; c++) {
       const x = c * cell, y = r * cell
       ctx.fillStyle = isDark(r, c) ? 'rgba(12,16,24,0.80)' : 'rgba(7,7,16,0.86)'
       ctx.fillRect(x, y, cell, cell)
@@ -308,10 +311,8 @@ function render(
   }
   ctx.strokeStyle = 'rgba(55,230,255,0.06)'
   ctx.lineWidth = 1
-  for (let i = 0; i <= SIZE; i++) {
-    ctx.beginPath(); ctx.moveTo(i * cell, 0); ctx.lineTo(i * cell, ch); ctx.stroke()
-    ctx.beginPath(); ctx.moveTo(0, i * cell); ctx.lineTo(cw, i * cell); ctx.stroke()
-  }
+  for (let i = 0; i <= COLS; i++) { ctx.beginPath(); ctx.moveTo(i * cell, 0); ctx.lineTo(i * cell, ch); ctx.stroke() }
+  for (let i = 0; i <= ROWS; i++) { ctx.beginPath(); ctx.moveTo(0, i * cell); ctx.lineTo(cw, i * cell); ctx.stroke() }
 
   const cx = (i: number) => colOf(i) * cell + cell / 2
   const cy = (i: number) => rowOf(i) * cell + cell / 2
@@ -382,6 +383,23 @@ function render(
       ctx.globalAlpha = 1
     }
     drawPiece(ctx, moverPos.x, moverPos.y, R * (1 + 0.12 * (anim?.converts.length ? 1 : 0)), anim!.owner, moverPos.alpha)
+  }
+
+  // ── the REKINDLE PULSE flare — expanding light-rings on each rekindled square ──
+  if (pulseFx) {
+    const el = ts - pulseFx.t0
+    const PULSE_MS = 680
+    if (el < PULSE_MS) {
+      const k = el / PULSE_MS
+      for (const sq of pulseFx.sqs) {
+        ctx.strokeStyle = HOT
+        ctx.globalAlpha = (1 - k) * 0.85
+        ctx.lineWidth = 2.5 * (1 - k) + 0.6
+        ctx.shadowColor = ATHER; ctx.shadowBlur = 18 * (1 - k)
+        ctx.beginPath(); ctx.arc(cx(sq), cy(sq), R + k * cell * 1.1, 0, Math.PI * 2); ctx.stroke()
+      }
+      ctx.globalAlpha = 1; ctx.shadowBlur = 0
+    }
   }
 
   // move-target dots (hidden during anim)

@@ -1,7 +1,7 @@
 // LUCERNYX sim tests — run with: npx tsx src/app/lucernyx/lib/lucernyx.test.ts
 import {
-  makeBoard, legalMoves, apply, aiMove, countPieces, idx, other,
-  SIZE, PIECE_RANKS, TORCHES_TO_WIN, type Board, type Owner,
+  makeBoard, legalMoves, apply, aiMove, countPieces, idx, rowOf, other,
+  COLS, ROWS, PIECE_RANKS, TORCHES_TO_WIN, type Board, type Owner,
 } from './lucernyx'
 import { mulberry32 } from '@/lib/arcade/rng'
 
@@ -13,7 +13,7 @@ function ok(name: string, cond: boolean) {
 
 // a blank board to hand-place positions on
 function blank(turn: Owner = 'light'): Board {
-  return { cells: new Array(SIZE * SIZE).fill(null), turn, torches: { light: 0, grey: 0 }, winner: null, over: false }
+  return { cells: new Array(COLS * ROWS).fill(null), turn, torches: { light: 0, grey: 0 }, winner: null, over: false }
 }
 const put = (b: Board, r: number, c: number, o: Owner | null) => { b.cells[idx(r, c)] = o }
 
@@ -21,7 +21,7 @@ const put = (b: Board, r: number, c: number, o: Owner | null) => { b.cells[idx(r
 {
   const b = makeBoard()
   const lp = countPieces(b, 'light'), gp = countPieces(b, 'grey')
-  ok('light starts with a full home', lp === PIECE_RANKS * (SIZE / 2))
+  ok('light starts with a full home', lp === PIECE_RANKS * (COLS / 2))
   ok('grey mirrors light', gp === lp)
   ok('light moves first', b.turn === 'light')
 }
@@ -33,7 +33,7 @@ const put = (b: Board, r: number, c: number, o: Owner | null) => { b.cells[idx(r
   ok('light has opening slides', m.length > 0)
   ok('all opening moves are simple slides', m.every((x) => x.converts.length === 0))
   // light advances toward row 0, so every landing row < from row
-  ok('light slides advance upward', m.every((x) => Math.floor(x.to / SIZE) < Math.floor(x.from / SIZE)))
+  ok('light slides advance upward', m.every((x) => rowOf(x.to) < rowOf(x.from)))
 }
 
 // 3. the convert verb — jump flips the enemy in place, piece lands beyond
@@ -75,7 +75,7 @@ const put = (b: Board, r: number, c: number, o: Owner | null) => { b.cells[idx(r
   const after = apply(b, j) // the flipped piece now at (3,2) is light → must advance toward row 0
   after.turn = 'light'
   const m = legalMoves(after, 'light').filter((x) => x.from === idx(3, 2))
-  ok('flipped piece now marches as light (upward)', m.length > 0 && m.every((x) => Math.floor(x.to / SIZE) < 3))
+  ok('flipped piece now marches as light (upward)', m.length > 0 && m.every((x) => rowOf(x.to) < 3))
 }
 
 // 6. reaching the enemy home rank lights a torch + ascends
@@ -178,6 +178,34 @@ const put = (b: Board, r: number, c: number, o: Owner | null) => { b.cells[idx(r
   put(b, 3, 2, 'grey')
   const jumps = legalMoves(b, 'light').filter((m) => m.converts.length > 0)
   ok('a clean jump-convert returns', jumps.length === 1)
+}
+
+// 14. the REKINDLE PULSE — lighting a torch flips every enemy adjacent to your light
+{
+  const b = blank('light')
+  put(b, 1, 2, 'light') // the runner — torches at row 0 then ascends
+  put(b, 5, 4, 'light') // stays on the board → anchors the flare
+  put(b, 4, 3, 'grey')  // diagonally adjacent to the anchor → should rekindle
+  put(b, 7, 0, 'grey')  // far from any light → should be spared
+  const torch = legalMoves(b, 'light').find((m) => m.torch && m.from === idx(1, 2))!
+  ok('torch move available for the runner', !!torch)
+  const after = apply(b, torch)
+  ok('pulse rekindled the adjacent grey', after.cells[idx(4, 3)] === 'light')
+  ok('pulse spared the distant grey', after.cells[idx(7, 0)] === 'grey')
+  ok('pulse recorded for the render', Array.isArray(after.pulse) && after.pulse!.includes(idx(4, 3)))
+}
+
+// 15. the pulse is ONE wave — a grey adjacent only to a freshly-flipped grey does NOT chain
+{
+  const b = blank('light')
+  put(b, 1, 2, 'light') // torches
+  put(b, 5, 4, 'light') // anchor
+  put(b, 4, 3, 'grey')  // adjacent to the anchor → flips
+  put(b, 3, 2, 'grey')  // adjacent ONLY to (4,3), never to an original light
+  const torch = legalMoves(b, 'light').find((m) => m.torch && m.from === idx(1, 2))!
+  const after = apply(b, torch)
+  ok('first ring rekindles', after.cells[idx(4, 3)] === 'light')
+  ok('no chain — the second-ring grey stays grey', after.cells[idx(3, 2)] === 'grey')
 }
 
 console.log(`\nLUCERNYX sim: ${pass} passed, ${fail} failed`)
