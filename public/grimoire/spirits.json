@@ -1,0 +1,153 @@
+{
+  "version": 1,
+  "updated": "2026-06-22",
+  "note": "Spirit Grimoire manifest. SEED authored by Jin from CANON/design-briefs/base-forms.md. Serberus owns the final manifest (HANDOFF_JIN_grimoire.md); Raven owns the `entry` lore copy per spirit (placeholder empty here). Base refs in /grimoire/<id>.png; stage-2 element art in /magii/spirits/<analog>_<element>.png. stage-3 not designed yet (Raven's lane); UI reserves 4 slots per stage-2.",
+  "elements": {
+    "mana":  { "label": "Mana",  "color": "#f5c542" },
+    "water": { "label": "Water", "color": "#37e6ff" },
+    "earth": { "label": "Earth", "color": "#7bd88f" },
+    "storm": { "label": "Storm", "color": "#c08bff" }
+  },
+  "spirits": [
+    {
+      "id": "vulnyx", "name": "Vulnyx", "analog": "fox", "element": "mana",
+      "palette": ["#f5c542", "#fef3d8", "#ffb347"],
+      "quirk": "leaves golden afterimages when she moves, a built-in decoy",
+      "signature": "afterimage trail",
+      "individual": "Glim",
+      "img": "/grimoire/vulnyx.png", "entry": "",
+      "evolutions": [
+        { "element": "mana",  "name": "Vulnara", "img": "/magii/spirits/fox_mana.png" },
+        { "element": "water", "name": null,      "img": "/magii/spirits/fox_water.png" },
+        { "element": "earth", "name": null,      "img": "/magii/spirits/fox_earth.png" },
+        { "element": "storm", "name": null,      "img": "/magii/spirits/fox_storm.png" }
+      ]
+    },
+    {
+      "id": "athowl", "name": "Athowl", "analog": "owl", "element": "mana",
+      "palette": ["#e8ecf2", "#c9b8e8", "#f5c542"],
+      "quirk": "rotates its head past any normal angle; an unnervingly patient, all-seeing stare",
+      "signature": "deep-gold disc eyes",
+      "individual": "Strixen",
+      "img": "/grimoire/athowl.png", "entry": "",
+      "evolutions": [
+        { "element": "mana",  "name": null, "img": "/magii/spirits/owl_mana.png" },
+        { "element": "water", "name": null, "img": "/magii/spirits/owl_water.png" },
+        { "element": "earth", "name": null, "img": "/magii/spirits/owl_earth.png" },
+        { "element": "storm", "name": null, "img": "/magii/spirits/owl_storm.png" }
+      ]
+    },
+    {
+      "id": "shellmere", "name": "Shellmere", "analog": "turtle", "element": "earth",
+      "palette": ["#5fb98a", "#f0e6c8", "#f5b942"],
+      "quirk": "the runes on its shell pulse like a slow heartbeat",
+      "signature": "amber shell-runes",
+      "individual": null,
+      "img": "/grimoire/shellmere.png", "entry": "",
+      "evolutions": [
+        { "element": "mana",  "name": null,       "img": "/magii/spirits/turtle_mana.png" },
+        { "element": "water", "name": null,       "img": "/magii/spirits/turtle_water.png" },
+        { "element": "earth", "name": "Cragmere", "img": "/magii/spirits/turtle_earth.png" },
+        { "element": "storm", "name": null,       "img": "/magii/spirits/turtle_storm.png" }
+      ]
+    },
+    {
+      "id": "manalotl", "name": "Manalotl", "analog": "axolotl", "element": "water",
+      "palette": ["#ffb3a0", "#fff0ea", "#ff8fb0"],
+      "quirk": "an eternal smile that persists in every form; head-tilts when curious",
+      "signature": "feathery gill frills",
+      "individual": "Brook",
+      "img": "/grimoire/manalotl.png", "entry": "",
+      "evolutions": [
+        { "element": "mana",  "name": null,      "img": "/magii/spirits/axolotl_mana.png" },
+        { "element": "water", "name": "Marlotl", "img": "/magii/spirits/axolotl_water.png" },
+        { "element": "earth", "name": null,      "img": "/magii/spirits/axolotl_earth.png" },
+        { "element": "storm", "name": null,      "img": "/magii/spirits/axolotl_storm.png" }
+      ]
+    },
+    {
+      "id": "noctyx", "name": "Noctyx", "analog": "bat", "element": "storm",
+      "palette": ["#4a3f7a", "#b8bcc8", "#c08bff"],
+      "quirk": "hangs upside-down by default; wraps its wings around itself like a cloak",
+      "signature": "elemental light across the wing membrane",
+      "individual": "Echo",
+      "img": "/grimoire/noctyx.png", "entry": "",
+      "evolutions": [
+        { "element": "mana",  "name": null, "img": "/magii/spirits/bat_mana.png" },
+        { "element": "water", "name": null, "img": "/magii/spirits/bat_water.png" },
+        { "element": "earth", "name": null, "img": "/magii/spirits/bat_earth.png" },
+        { "element": "storm", "name": null, "img": "/magii/spirits/bat_storm.png" }
+      ]
+    },
+    {
+      "id": "luminara", "name": "Luminara", "analog": "firefly", "element": "mana",
+      "palette": ["#f5c542", "#3a3320", "#fff6d8"],
+      "quirk": "its abdomen is brightest, pulsing like a tiny sun; writes light-trails as it flies",
+      "signature": "the glowing abdomen-orb",
+      "individual": null,
+      "img": "/grimoire/luminara.png", "entry": "",
+      "evolutions": [
+        { "element": "mana",  "name": null, "img": "/magii/spirits/firefly_mana.png" },
+        { "element": "water", "name": null, "img": "/magii/spirits/firefly_water.png" },
+        { "element": "earth", "name": null, "img": "/magii/spirits/firefly_earth.png" },
+        { "element": "storm", "name": null, "img": "/magii/spirits/firefly_storm.png" }
+      ]
+    },
+    {
+      "id": "croakling", "name": "Croakling", "analog": "frog", "element": "water",
+      "palette": ["#3fcf9a", "#f0e89a", "#b6f542"],
+      "quirk": "zero grace, all enthusiasm; goofy mid-hop poses, throat puffs, the lure bobs as it hops",
+      "signature": "an anglerfish lantern-lure arching from its head",
+      "individual": null,
+      "img": "/grimoire/croakling.png", "entry": "",
+      "evolutions": [
+        { "element": "mana",  "name": null, "img": "/magii/spirits/frog_mana.png" },
+        { "element": "water", "name": null, "img": "/magii/spirits/frog_water.png" },
+        { "element": "earth", "name": null, "img": "/magii/spirits/frog_earth.png" },
+        { "element": "storm", "name": null, "img": "/magii/spirits/frog_storm.png" }
+      ]
+    },
+    {
+      "id": "lepara", "name": "Lepara", "analog": "rabbit", "element": "earth",
+      "palette": ["#f5ecd8", "#ffb3c0", "#ff9eb5"],
+      "quirk": "nose twitches constantly; its ears convey every emotion",
+      "signature": "the expressive ears",
+      "individual": "Ember",
+      "img": "/grimoire/lepara.png", "entry": "",
+      "evolutions": [
+        { "element": "mana",  "name": null, "img": "/magii/spirits/rabbit_mana.png" },
+        { "element": "water", "name": null, "img": "/magii/spirits/rabbit_water.png" },
+        { "element": "earth", "name": null, "img": "/magii/spirits/rabbit_earth.png" },
+        { "element": "storm", "name": null, "img": "/magii/spirits/rabbit_storm.png" }
+      ]
+    },
+    {
+      "id": "dewbear", "name": "Dewbear", "analog": "waterbear", "element": "earth",
+      "palette": ["#9fb8c8", "#eaf2f7", "#f5b942"],
+      "quirk": "waddles; wrinkly-but-huggable; curls into an indestructible tun-ball",
+      "signature": "glow rising between the body segments",
+      "individual": "Blue",
+      "img": "/grimoire/dewbear.png", "entry": "",
+      "evolutions": [
+        { "element": "mana",  "name": null, "img": "/magii/spirits/waterbear_mana.png" },
+        { "element": "water", "name": null, "img": "/magii/spirits/waterbear_water.png" },
+        { "element": "earth", "name": null, "img": "/magii/spirits/waterbear_earth.png" },
+        { "element": "storm", "name": null, "img": "/magii/spirits/waterbear_storm.png" }
+      ]
+    },
+    {
+      "id": "hovari", "name": "Hovari", "analog": "hummingbird", "element": "storm",
+      "palette": ["#2fc9a0", "#ff4d6a", "#c08bff"],
+      "quirk": "hovers as default and never lands; wings blur into a prismatic rainbow shimmer",
+      "signature": "the prismatic wing-shimmer",
+      "individual": "Flint",
+      "img": "/grimoire/hovari.png", "entry": "",
+      "evolutions": [
+        { "element": "mana",  "name": null,       "img": "/magii/spirits/hummingbird_mana.png" },
+        { "element": "water", "name": null,       "img": "/magii/spirits/hummingbird_water.png" },
+        { "element": "earth", "name": "Obsidari", "img": "/magii/spirits/hummingbird_earth.png" },
+        { "element": "storm", "name": null,       "img": "/magii/spirits/hummingbird_storm.png" }
+      ]
+    }
+  ]
+}

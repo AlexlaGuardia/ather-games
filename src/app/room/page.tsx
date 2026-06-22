@@ -967,6 +967,32 @@ function DeskWall({ wall, active, phase, onEnter }: { wall: Wall; active: boolea
           </button>
         </div>
 
+        {/* Grimoire — left side; the in-world bestiary, opens its own page (off the desk) */}
+        <Link
+          href="/grimoire?from=room"
+          onClick={(e) => e.stopPropagation()}
+          className="group/grim absolute rounded-md border p-4 bg-[#0e1820]/70 backdrop-blur transition hover:-translate-y-0.5"
+          style={{ left: "1%", top: "34%", width: "27%", borderColor: `${accent}33` }}
+        >
+          <h3 className="text-lg uppercase tracking-[0.25em] mb-2" style={{ color: accent }}>Grimoire</h3>
+          <p className="text-[11px] leading-snug text-[#aebfc8] mb-3">the spirits of Athernyx — every base form and how it evolves.</p>
+          <div className="flex items-center gap-2 mb-3">
+            {["vulnyx", "croakling", "hovari"].map((id) => (
+              <span
+                key={id}
+                className="block h-11 w-11 rounded-sm"
+                style={{ background: `radial-gradient(circle, ${accent}22, transparent 70%)` }}
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={`/grimoire/${id}.png`} alt="" aria-hidden className="h-full w-full object-contain" />
+              </span>
+            ))}
+          </div>
+          <span className="inline-flex items-center gap-1 text-[10px] uppercase tracking-[0.2em]" style={{ color: `${accent}cc` }}>
+            open the grimoire <span className="transition group-hover/grim:translate-x-0.5">&#8250;</span>
+          </span>
+        </Link>
+
         {/* News — right side; live from /room/news.json */}
         <div className="absolute rounded-md border p-4 bg-[#0e1820]/70 backdrop-blur" style={{ left: "72%", top: "34%", width: "27%", borderColor: `${accent}33` }}>
           <h3 className="text-lg uppercase tracking-[0.25em] mb-3" style={{ color: accent }}>News</h3>
