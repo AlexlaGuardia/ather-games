@@ -32,9 +32,10 @@ the Arcade frame.
 > **Rollout checklist:**
 > - [x] **Arcade catalog** (`/arcade/all`) — soft cards → framed CRT plates (`d3ada82`). PROOF.
 > - [x] **Nolmir deck** — tiles → sharp CRT plates (gx-scan + 3px), gx-chrome kill-list, digest sharpened. Verified live, 0 errors.
-> - [~] **Per-game start/over overlays + HUDs** (title plates + framed CTAs + squared HUD type) — DONE on
->   **Voranyx · Seedfall · Updraft · Rekindle** (gx-title/label/value + gx-chrome, `f2deed2`/`cb00971`, 06-22).
->   Remaining: Atherdash · Lucernyx · Ward · Mana'nana (the feel-lapped four — still all-mono).
+> - [x] **Per-game start/over overlays + HUDs** (title plates + framed CTAs + squared HUD type) — **DONE 8/8**
+>   (gx-title/label/value + gx-chrome kill-list + sharper buttons). Voranyx·Seedfall·Updraft·Rekindle `f2deed2`/`cb00971`,
+>   Atherdash·Lucernyx·Ward `2dd83b2` (06-22). **Mana'nana = deliberate LIGHT pass** (kill-list + squared micro-labels
+>   only) — kept its candy match-3 identity (bold sans title, rounded-full pills, amber); don't force the squared face on it.
 > - [x] Arcade landing retired — `/arcade` (old flat hub) now redirects to `/room` (`a23cd1c`, 06-22).
 >
 > **▶ VEHICLE = the ARCADE POLISH LAP (planned 2026-06-21, Alex):** the start/over + HUD rollout now rides a
@@ -52,15 +53,15 @@ the Arcade frame.
 | Game | Status | Last touched | What it is |
 |------|--------|--------------|------------|
 | Nolmir | 🟢 live | 2026-06-18 | idle Athernyx defense/arena |
-| Mana'nana | 🟢 live | 2026-06-14 | match-3, blooming specials |
+| Mana'nana | 🟢 live | 2026-06-22 | match-3, blooming specials |
 | Rekindle #3 | 🟢 live | 2026-06-22 | conduit puzzle + Aeterna node-map |
-| Ward #4 | 🟢 live | 2026-06-14 | Missile Command / touch aim-trainer |
+| Ward #4 | 🟢 live | 2026-06-22 | Missile Command / touch aim-trainer |
 | Updraft #5 | 🟢 live | 2026-06-22 | one-tap flight (Flappy) |
 | Seedfall #6 | 🟢 live | 2026-06-22 | Mana-Seed lander + persistent garden |
 | Voranyx #7 | 🟢 live | 2026-06-22 | glowing slither in the Silt |
-| Lucernyx #8 | 🟢 live | 2026-06-15 | turn-based board of rekindling |
+| Lucernyx #8 | 🟢 live | 2026-06-22 | turn-based board of rekindling |
 | Gravitar #9 | ⚪ parked | 2026-06-15 | physics-orbit — concept didn't land (cut) |
-| Atherdash #10 | 🟢 live | 2026-06-17 | lane-runner — element-lanes ahead of the Dying (slice) |
+| Atherdash #10 | 🟢 live | 2026-06-22 | lane-runner — element-lanes ahead of the Dying (slice) |
 
 ---
 
