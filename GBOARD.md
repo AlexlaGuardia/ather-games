@@ -19,7 +19,7 @@ the Arcade frame.
 - **Live on 5 score-chase games:** Atherdash · Ward · Updraft · Voranyx · Mana'nana — Endless/Daily toggle
   on the start screen (Mana'nana: under the score row), separate daily-best track, Share on game over.
 - **Rekindle** has its own puzzle daily; its date helpers now re-export from the shared lib (one source).
-- **Excluded by design:** Seedfall (soft-landing skill, no chase-able score) · Lucernyx (vs-AI win/lose).
+- **Excluded by design:** Lucernyx (vs-AI win/lose, now SHELVED) · Rekindle (puzzle ★-rating, not higher-is-better). Seedfall JOINED 2026-06-22 (descent redesign gave it a depth score).
 - ⚠ PENDING Alex feel: does the daily toggle + share read right; is "same course for everyone" worth a
   back-end leaderboard later (currently local-best only — share is the social layer).
 
@@ -57,9 +57,9 @@ the Arcade frame.
 | Rekindle #3 | 🟢 live | 2026-06-22 | conduit puzzle + Aeterna node-map |
 | Ward #4 | 🟢 live | 2026-06-22 | Missile Command / touch aim-trainer |
 | Updraft #5 | 🟢 live | 2026-06-22 | one-tap flight (Flappy) |
-| Seedfall #6 | 🟢 live | 2026-06-22 | Mana-Seed lander + persistent garden |
+| Seedfall #6 | 🟢 live | 2026-06-22 | the long drop — scrolling descent, weave branches + dodge Havari (Daily) |
 | Voranyx #7 | 🟢 live | 2026-06-22 | glowing slither in the Silt |
-| Lucernyx #8 | 🟢 live | 2026-06-22 | turn-based board of rekindling |
+| Lucernyx #8 | ⚫ shelved | 2026-06-22 | turn-based board of rekindling — pulse overtuned, back-room |
 | Gravitar #9 | ⚪ parked | 2026-06-15 | physics-orbit — concept didn't land (cut) |
 | Atherdash #10 | 🟢 live | 2026-06-22 | lane-runner — element-lanes ahead of the Dying (slice) |
 
@@ -226,20 +226,27 @@ the Arcade frame.
   minimal** — it's the cleanser, not a depth game; renamed Laz → Updraft (Alex's call).
 **Files:** `updraft/lib/updraft.ts` (17 tests) · `page.tsx` · `public/updraft/nebula.webp`
 
-### Seedfall (#6) — 🟢 live · Mana-Seed lander + persistent garden → `/seedfall`
-*Last touched: 2026-06-22 — gx-* UI pass (squared chrome + HUD)*
-**Left off:** Shipped, tuned **cozy-landable** (headless pilot 12/12). Hold L/R half to
-  thrust (both = rise), set the seed down soft → it **roots into a persistent garden that
-  grows run over run** (localStorage); a hot/off-pad landing shatters. Hybrid bg (FLUX
-  horizon + parallax). Uses `useNoScroll`.
-**Next:**
-  1. *(Optional)* garden depth — more plant variety / stages as the garden grows.
-     Nothing else committed.
-**Parked:** —
-**Decisions:** this is the **slow/precision lane** — the one mood the lineup lacked; the
-  growing garden is the closest thing to "**wake Aeterna**" persistence **without** needing a
-  canon pass; shatter-on-bad-landing gives the cozy loop real **stakes**.
-**Files:** `seedfall/lib/seedfall.ts` (15 tests) · `page.tsx`
+### Seedfall (#6) — 🟢 live · the long drop (scrolling descent) → `/seedfall`
+*Last touched: 2026-06-22 — REDESIGNED static lander → scrolling descent (Alex's pitch)*
+**Left off:** **Full redesign.** The old static soft-lander was boring (a one-decision run, no
+  score). Rebuilt as a **scrolling descent**: camera tracks the falling seed (depth = score), you
+  **weave leafy branches** (one walking gap each, narrows/tightens with depth) and **out-drift a
+  curious Havari** (bird spirit — swoops to snatch the seed = run ends; framed as a force-of-world,
+  not a villain, per canon), and the **soft-landing on the garden soil is preserved as the climactic
+  finale** (perfect/soft = big score bonus + plants the garden). Kept the floaty drift physics &
+  two-zone hold; single-side thrust also lifts so weaving naturally slows you. **Now joins the Daily
+  loop + the new server leaderboard** (was excluded for having no score). endless/daily mode toggle,
+  depth HUD, gx-* chrome. **Balance (sim):** retuned languid (GRAVITY 78→54, MAX_VY 250→170, walking
+  gaps) — oracle perfect-play reaches the soil **41%** threading 13/15 branches (median depth 3685/
+  4200, 0 caught); most runs end on a deep branch w/ a depth score = the score-chase tail. 22 sim
+  tests green, build clean, start screen headless-verified.
+**⚠ PENDING ALEX device pass:** the whole descent FEEL (drift authority vs branch spacing, fall
+  speed), the **Havari catch-rate / dodge feel** (bots can't judge it), the soil-approach landing,
+  and the game-over overlays (headless can't get past hold-to-drop). Knobs = consts atop `seedfall.ts`
+  + `genBranches`. Card art (`/seedfall/card.webp`) still the old lander image — regen for the descent later.
+**Decisions:** redesign over polish — the cozy mood stays (languid drift, the garden payoff) but it
+  earns a score axis + escalation so it's replayable; Havari = curious not malicious (canon).
+**Files:** `seedfall/lib/seedfall.ts` (22 tests) · `seedfall.test.ts` · `lib/sfx.ts` (+thread/+caught) · `page.tsx`
 
 ### Voranyx (#7) — 🟢 live · glowing slither in the Silt → `/voranyx`
 *Last touched: 2026-06-22 — gx-* UI pass (squared chrome + HUD); template for the lap look*
@@ -264,9 +271,20 @@ the Arcade frame.
   cramping); on mobile, **relative joystick > absolute-aim** (absolute = thumb covers the head).
 **Files:** `voranyx/lib/voranyx.ts` (20 tests) · `page.tsx`
 
-### Lucernyx (#8) — 🟢 live · turn-based board of rekindling → `/lucernyx`
-*Last touched: 2026-06-18*
-**Left off:** Built the **playable slice** in one session (`5291194` sim, `bb7e09c` board).
+### Lucernyx (#8) — ⚫ SHELVED (back-room) · turn-based board of rekindling → `/lucernyx`
+*Last touched: 2026-06-22*
+**⚫ SHELVED 2026-06-22 (Alex's call):** "the gameplay isn't worth the hassle of trying to make it enjoyable."
+  Parked to `back-room` (tier flipped in `lib/games.ts`, gated like Gravitar; code kept, public never sees it).
+  **Root cause we diagnosed (the "win after 1 torch" bug Alex hit):** the Rekindle Pulse is overtuned — sim over
+  2025 torches showed it converts **2.29 enemy pieces per torch on avg, 79% of torches flip 2+, 54% flip the full 3**.
+  That material avalanche (a) ends ~4% of games via board-lock/wipeout *before* anyone lights 3 torches (then the
+  tiebreak crowns a sub-3-torch winner while the overlay hardcodes "Three torches lit" — the lying victory msg), and
+  (b) punishes clustering pieces in the back ranks (the flare goes off on the defender's home cluster). The fix
+  existed (PULSE_CAP 3→1, sub-3-torch lock = draw not win, honest copy) but the broken mechanic IS the game's whole
+  hook, so Alex chose to shelve rather than rebalance. **Lesson:** a single high-cap swing mechanic that's also the
+  win-engine self-snowballs; if the gimmick can end the game sideways, it'll do it more than you think (measure it).
+  Catalog back to **7 live cabinets**. Revive = rebalance the pulse first. Original build log below.
+**Left off (pre-shelve):** Built the **playable slice** in one session (`5291194` sim, `bb7e09c` board).
   You're the lantern Ancient: slide diagonally (checkers), **jump an adjacent grey into the
   empty square beyond → it flips to your light and stays put** (material never leaves), multi-
   jump flips an arc, a converted piece reverses its march. Run a piece to the enemy home rank
