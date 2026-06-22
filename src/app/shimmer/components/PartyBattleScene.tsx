@@ -81,6 +81,7 @@ function CombatantPlate({ c, hp, isActor, isTarget, shielded, onClick }: {
       <div className="flex items-center gap-1.5 mb-1">
         <span className="w-2 h-2 rounded-full inline-block shrink-0" style={{ backgroundColor: c.isKeeper ? '#d4a843' : ELEMENT_COLORS[e], boxShadow: c.alive ? `0 0 5px ${c.isKeeper ? '#d4a843' : ELEMENT_COLORS[e]}` : 'none' }} />
         <span className="font-display text-[10px] text-white/85 truncate">{c.spirit.name}</span>
+        <span className="text-[7px] text-white/35 font-mono shrink-0 tabular-nums">Lv{c.spirit.level}</span>
         {c.isKeeper && <span className="text-[7px] text-[#d4a843]/80 font-display tracking-wider shrink-0">✦KEEPER</span>}
         {c.alive && c.status && (
           <span className="text-[7px] font-mono px-1 rounded leading-tight shrink-0"
@@ -348,11 +349,23 @@ export default function PartyBattleScene({
 
   return (
     <div className="absolute inset-0 z-50 flex flex-col rounded overflow-hidden" style={{ animation: 'pbFade 0.4s ease-out' }}>
-      <style>{`@keyframes pbFade{0%{opacity:0}100%{opacity:1}}`}</style>
+      <style>{`@keyframes pbFade{0%{opacity:0}100%{opacity:1}}@keyframes pbToast{0%{opacity:0;transform:translateY(6px) scale(0.97)}100%{opacity:1;transform:none}}`}</style>
 
       {/* Arena */}
       <div className="flex-1 relative overflow-hidden bg-[#060610]">
         <div ref={canvasRef} className="absolute inset-0" />
+
+        {/* Move narration — prominent center callout (the bottom panel keeps the quiet log line) */}
+        {(uiPhase === 'intro' || uiPhase === 'animating') && text && (
+          <div className="absolute z-20 inset-x-0 flex justify-center pointer-events-none px-4" style={{ top: '40%' }}>
+            <div className="max-w-[85%] bg-black/75 border border-[#d4a843]/30 rounded-xl px-5 py-3 backdrop-blur-sm text-center shadow-lg shadow-black/50"
+              style={{ animation: 'pbToast 0.22s ease-out' }}>
+              <p className="text-white text-[16px] leading-snug font-display">
+                {text}{uiPhase === 'animating' && <span className="text-[#d4a843]/70 animate-pulse ml-1">▸</span>}
+              </p>
+            </div>
+          </div>
+        )}
 
         {/* Enemy roster (top-left) */}
         <div className="absolute z-10 flex flex-col gap-1 w-[148px]" style={{ top: 10, left: 10 }}>
@@ -415,8 +428,8 @@ export default function PartyBattleScene({
         <div className="bg-[#0d0d1a]/95 border border-[#d4a843]/30 rounded-lg px-4 py-3 shadow-lg shadow-black/40 min-h-[78px]">
 
           {(uiPhase === 'intro' || uiPhase === 'animating') && (
-            <p className="text-white/90 text-[13px] leading-relaxed">
-              {text}{uiPhase === 'animating' && <span className="text-white/30 animate-pulse ml-1">...</span>}
+            <p className="text-white/40 text-[11px] leading-relaxed">
+              {text}{uiPhase === 'animating' && <span className="text-white/25 animate-pulse ml-1">...</span>}
             </p>
           )}
 
