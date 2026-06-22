@@ -160,21 +160,21 @@ export default function UpdraftPage() {
       <div className="w-full max-w-[400px] flex items-center justify-between mb-4">
         <span aria-hidden className="w-10" />
         <div className="text-center">
-          <div className="font-mono text-[#37e6ff] text-sm tracking-[0.35em] uppercase" style={{ textShadow: '0 0 8px #37e6ff80' }}>Updraft</div>
-          <div className="text-[9px] text-[#7fd8e6]/40 font-mono tracking-[0.2em] uppercase mt-0.5">ride the ather</div>
+          <div className="gx-title text-[#37e6ff] text-sm tracking-[0.35em] uppercase" style={{ textShadow: '0 0 8px #37e6ff80' }}>Updraft</div>
+          <div className="gx-label text-[9px] text-[#7fd8e6]/40 mt-0.5">ride the ather</div>
         </div>
         <button onClick={toggleMute} className="text-[10px] tracking-[0.2em] uppercase text-[#37e6ff]/50 hover:text-[#37e6ff] font-mono w-10 text-right">
           {muted ? 'son' : 'snd'}
         </button>
       </div>
 
-      <div className="relative w-full max-w-[400px]" style={{ aspectRatio: `${VW} / ${VH}` }}>
+      <div className="gx-chrome relative w-full max-w-[400px]" style={{ aspectRatio: `${VW} / ${VH}`, ['--gx-accent' as string]: '#37e6ff' } as React.CSSProperties}>
         <canvas ref={canvasRef} onPointerDown={onDown} className="w-full h-full block touch-none rounded-md cursor-pointer" />
         <div className="pointer-events-none absolute inset-0 rounded-md updraft-crt" />
 
         {/* live score, big and centered like a real flappy */}
         {phase === 'playing' && (
-          <div className="pointer-events-none absolute top-6 inset-x-0 text-center font-mono text-[#e8feff] text-4xl tabular-nums" style={{ textShadow: '0 0 14px #37e6ff90' }}>
+          <div className="pointer-events-none absolute top-6 inset-x-0 text-center gx-value font-mono text-[#e8feff] text-4xl" style={{ textShadow: '0 0 14px #37e6ff90' }}>
             {score}
           </div>
         )}
@@ -184,11 +184,11 @@ export default function UpdraftPage() {
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src="/updraft/card.webp" alt="" aria-hidden="true" className="absolute inset-0 -z-10 h-full w-full object-cover opacity-[0.6]" />
             <div className="absolute inset-0 -z-10 bg-[#04040a]/62" />
-            <div className="font-mono text-[#37e6ff] text-2xl tracking-[0.3em] uppercase" style={{ textShadow: '0 0 18px #37e6ff' }}>Updraft</div>
+            <div className="gx-title text-[#37e6ff] text-2xl tracking-[0.3em] uppercase" style={{ textShadow: '0 0 18px #37e6ff' }}>Updraft</div>
             <p className="text-[11px] leading-relaxed text-[#9fd6e0]/80 max-w-[260px]">
               tap to beat your wings and rise. fall when you don't. thread the void gates.
             </p>
-            <div className="pointer-events-auto flex items-center gap-1.5 mt-0.5 font-mono text-[10px] tracking-[0.2em] uppercase">
+            <div className="gx-label pointer-events-auto flex items-center gap-1.5 mt-0.5 text-[10px]">
               {(['endless', 'daily'] as const).map((m) => (
                 <button key={m} onClick={() => pickMode(m)}
                   className={`px-3 py-1.5 rounded-sm border transition-colors ${mode === m ? 'text-[#04040a] bg-[#37e6ff] border-[#37e6ff]' : 'text-[#37e6ff]/55 border-[#37e6ff]/25 hover:text-[#37e6ff]'}`}>
@@ -197,7 +197,7 @@ export default function UpdraftPage() {
               ))}
             </div>
             {mode === 'daily' && <div className="text-[9px] font-mono text-[#7fd8e6]/45 tracking-wider -mt-1">same currents for everyone today</div>}
-            <div className="font-mono text-[12px] tracking-[0.25em] uppercase text-[#04040a] bg-[#37e6ff] px-6 py-2.5 rounded-sm mt-1" style={{ boxShadow: '0 0 18px #37e6ff80' }}>
+            <div className="gx-label text-[12px] text-[#04040a] bg-[#37e6ff] px-6 py-2.5 rounded-[2px] mt-1" style={{ boxShadow: '0 0 18px #37e6ff80' }}>
               tap to fly
             </div>
           </div>
@@ -205,19 +205,19 @@ export default function UpdraftPage() {
 
         {phase === 'over' && (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-2.5 bg-[#04040a]/75 rounded-md text-center px-6">
-            <div className="font-mono text-[#ff5d9e] text-lg tracking-[0.3em] uppercase" style={{ textShadow: '0 0 14px #ff5d9e' }}>Down he goes</div>
-            <div className="font-mono text-[#e8feff] text-4xl tabular-nums leading-none" style={{ textShadow: '0 0 12px #37e6ff80' }}>{score}</div>
+            <div className="gx-title text-[#ff5d9e] text-lg tracking-[0.3em] uppercase" style={{ textShadow: '0 0 14px #ff5d9e' }}>Down he goes</div>
+            <div className="gx-value font-mono text-[#e8feff] text-4xl leading-none" style={{ textShadow: '0 0 12px #37e6ff80' }}>{score}</div>
             <div className="text-[10px] font-mono text-[#7fd8e6]/50 tracking-wider">
               {mode === 'daily'
                 ? <>daily #{dailyNumber()} · best {dailyBest}{score >= dailyBest && score > 0 ? ' ✦ today’s best' : ''}</>
                 : <>best {best}{score >= best && score > 0 ? ' ✦ new best' : ''}</>}
             </div>
             <div className="flex items-center gap-2 mt-1">
-              <button onClick={restart} className="font-mono text-[11px] tracking-[0.25em] uppercase text-[#04040a] bg-[#37e6ff] hover:bg-[#7df0ff] px-5 py-2 rounded-sm" style={{ boxShadow: '0 0 18px #37e6ff80' }}>
+              <button onClick={restart} className="gx-label text-[11px] text-[#04040a] bg-[#37e6ff] hover:bg-[#7df0ff] px-5 py-2 rounded-[2px]" style={{ boxShadow: '0 0 18px #37e6ff80' }}>
                 fly again →
               </button>
               {mode === 'daily' && (
-                <button onClick={onShare} className="font-mono text-[11px] tracking-[0.25em] uppercase text-[#37e6ff] border border-[#37e6ff]/40 hover:border-[#37e6ff] px-5 py-2 rounded-sm transition-colors">
+                <button onClick={onShare} className="gx-label text-[11px] text-[#37e6ff] border border-[#37e6ff]/40 hover:border-[#37e6ff] px-5 py-2 rounded-[2px] transition-colors">
                   {shared ? 'copied ✓' : 'share'}
                 </button>
               )}

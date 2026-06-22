@@ -148,23 +148,23 @@ export default function SeedfallPage() {
       <div className="w-full max-w-[400px] flex items-center justify-between mb-4">
         <span aria-hidden className="w-10" />
         <div className="text-center">
-          <div className="font-mono text-[#54ffc8] text-sm tracking-[0.35em] uppercase" style={{ textShadow: '0 0 8px #54ffc880' }}>Seedfall</div>
-          <div className="text-[9px] text-[#7fd8e6]/40 font-mono tracking-[0.2em] uppercase mt-0.5">set it down soft</div>
+          <div className="gx-title text-[#54ffc8] text-sm tracking-[0.35em] uppercase" style={{ textShadow: '0 0 8px #54ffc880' }}>Seedfall</div>
+          <div className="gx-label text-[9px] text-[#7fd8e6]/40 mt-0.5">set it down soft</div>
         </div>
         <button onClick={toggleMute} className="text-[10px] tracking-[0.2em] uppercase text-[#37e6ff]/50 hover:text-[#37e6ff] font-mono w-10 text-right">{muted ? 'son' : 'snd'}</button>
       </div>
 
       {/* garden tally + fuel */}
       <div className="w-full max-w-[400px] mb-2 flex items-center gap-3 font-mono">
-        <span className="text-[9px] tracking-[0.2em] uppercase text-[#54ffc8]/60">garden {garden.planted}</span>
-        {garden.perfect > 0 && <span className="text-[9px] tracking-[0.15em] uppercase text-[#e8feff]/50">· {garden.perfect} perfect</span>}
+        <span className="gx-label text-[9px] text-[#54ffc8]/60">garden {garden.planted}</span>
+        {garden.perfect > 0 && <span className="gx-label text-[9px] text-[#e8feff]/50">· {garden.perfect} perfect</span>}
         <div className="flex-1 h-2 rounded-full bg-white/[0.05] overflow-hidden ml-auto max-w-[150px]">
           <div className="h-full rounded-full transition-all duration-100" style={{ width: `${(fuel / FUEL_MAX) * 100}%`, background: lowFuel ? '#ff5d9e' : '#37e6ff', boxShadow: `0 0 10px ${lowFuel ? '#ff5d9e' : '#37e6ff'}` }} />
         </div>
-        <span className="text-[9px] tracking-[0.2em] uppercase text-[#7fd8e6]/40">ather</span>
+        <span className="gx-label text-[9px] text-[#7fd8e6]/40">ather</span>
       </div>
 
-      <div className="relative w-full max-w-[400px]" style={{ aspectRatio: `${VW} / ${VH}` }}>
+      <div className="gx-chrome relative w-full max-w-[400px]" style={{ aspectRatio: `${VW} / ${VH}`, ['--gx-accent' as string]: '#54ffc8' } as React.CSSProperties}>
         <canvas
           ref={canvasRef}
           onPointerDown={onDown}
@@ -181,32 +181,32 @@ export default function SeedfallPage() {
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src="/seedfall/card.webp" alt="" aria-hidden="true" className="absolute inset-0 -z-10 h-full w-full object-cover opacity-[0.6]" />
             <div className="absolute inset-0 -z-10 bg-[#04040a]/62" />
-            <div className="font-mono text-[#54ffc8] text-2xl tracking-[0.3em] uppercase" style={{ textShadow: '0 0 18px #54ffc8' }}>Seedfall</div>
+            <div className="gx-title text-[#54ffc8] text-2xl tracking-[0.3em] uppercase" style={{ textShadow: '0 0 18px #54ffc8' }}>Seedfall</div>
             <p className="text-[11px] leading-relaxed text-[#9fd6e0]/80 max-w-[270px]">
               hold the left or right side to thrust that way, both to rise. feather the Ather and set the seed down soft on the soil.
             </p>
-            <div className="font-mono text-[12px] tracking-[0.25em] uppercase text-[#04040a] bg-[#54ffc8] px-6 py-2.5 rounded-sm mt-1" style={{ boxShadow: '0 0 18px #54ffc880' }}>hold to begin</div>
+            <div className="gx-label text-[12px] text-[#04040a] bg-[#54ffc8] px-6 py-2.5 rounded-[2px] mt-1" style={{ boxShadow: '0 0 18px #54ffc880' }}>hold to begin</div>
           </div>
         )}
 
         {phase === 'landed' && (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-[#04040a]/70 rounded-md text-center px-6">
-            <div className="font-mono text-2xl tracking-[0.3em] uppercase" style={{ color: rating === 'perfect' ? '#e8feff' : '#54ffc8', textShadow: `0 0 16px ${rating === 'perfect' ? '#e8feff' : '#54ffc8'}` }}>
+            <div className="gx-title text-2xl tracking-[0.3em] uppercase" style={{ color: rating === 'perfect' ? '#e8feff' : '#54ffc8', textShadow: `0 0 16px ${rating === 'perfect' ? '#e8feff' : '#54ffc8'}` }}>
               {rating === 'perfect' ? 'Perfect' : 'Rooted'}
             </div>
             <p className="text-[11px] leading-relaxed text-[#9fd6e0]/80 max-w-[260px] italic">
               {rating === 'perfect' ? 'butter-soft. the seed takes hold and glows.' : 'it settles into the soil and roots.'}
             </p>
             <div className="text-[10px] font-mono text-[#54ffc8]/60 tracking-wider">garden {garden.planted}{garden.perfect > 0 ? ` · ${garden.perfect} perfect` : ''}</div>
-            <button onClick={restart} className="font-mono text-[11px] tracking-[0.25em] uppercase text-[#04040a] bg-[#54ffc8] hover:bg-[#8affdd] px-6 py-2 rounded-sm mt-1" style={{ boxShadow: '0 0 18px #54ffc880' }}>drop another →</button>
+            <button onClick={restart} className="gx-label text-[11px] text-[#04040a] bg-[#54ffc8] hover:bg-[#8affdd] px-6 py-2 rounded-[2px] mt-1" style={{ boxShadow: '0 0 18px #54ffc880' }}>drop another →</button>
           </div>
         )}
 
         {phase === 'crashed' && (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-2.5 bg-[#04040a]/70 rounded-md text-center px-6">
-            <div className="font-mono text-[#c86bff] text-lg tracking-[0.3em] uppercase" style={{ textShadow: '0 0 14px #c86bff' }}>Shattered</div>
+            <div className="gx-title text-[#c86bff] text-lg tracking-[0.3em] uppercase" style={{ textShadow: '0 0 14px #c86bff' }}>Shattered</div>
             <p className="text-[11px] leading-relaxed text-[#9fd6e0]/70 max-w-[250px] italic">too fast, or short of the soil. the seed scatters to the wind.</p>
-            <button onClick={restart} className="font-mono text-[11px] tracking-[0.25em] uppercase text-[#04040a] bg-[#54ffc8] hover:bg-[#8affdd] px-6 py-2 rounded-sm mt-1" style={{ boxShadow: '0 0 18px #54ffc880' }}>try again →</button>
+            <button onClick={restart} className="gx-label text-[11px] text-[#04040a] bg-[#54ffc8] hover:bg-[#8affdd] px-6 py-2 rounded-[2px] mt-1" style={{ boxShadow: '0 0 18px #54ffc880' }}>try again →</button>
           </div>
         )}
       </div>

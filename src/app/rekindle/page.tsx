@@ -235,8 +235,8 @@ export default function RekindlePage() {
         <div className="w-full max-w-[560px] flex items-center justify-between mb-6">
           <span aria-hidden className="w-10" />
           <div className="text-center">
-            <div className="font-mono text-[#37e6ff] text-sm tracking-[0.3em] uppercase" style={{ textShadow: '0 0 8px #37e6ff80' }}>Rekindle</div>
-            <div className="text-[9px] text-[#7fd8e6]/40 font-mono tracking-[0.2em] uppercase mt-0.5">the aeterna network</div>
+            <div className="gx-title text-[#37e6ff] text-sm tracking-[0.3em] uppercase" style={{ textShadow: '0 0 8px #37e6ff80' }}>Rekindle</div>
+            <div className="gx-label text-[9px] text-[#7fd8e6]/40 mt-0.5">the aeterna network</div>
           </div>
           <button onClick={toggleMute} className="text-[10px] tracking-[0.2em] uppercase text-[#37e6ff]/50 hover:text-[#37e6ff] font-mono w-10 text-right">
             {muted ? 'son' : 'snd'}
@@ -249,18 +249,20 @@ export default function RekindlePage() {
         <div className="w-full max-w-[440px] grid grid-cols-2 gap-3 mt-6">
           <button
             onClick={openDaily}
-            className="rounded-md border border-[#ffb24a]/25 bg-[#0a0a14]/70 hover:border-[#ffb24a]/60 p-3 text-left transition-colors"
+            className="gx-card is-interactive gx-scan p-3 text-left"
+            style={{ ['--gx-accent' as string]: '#ffb24a' } as React.CSSProperties}
           >
-            <div className="font-mono text-[#ffb24a] text-[11px] tracking-[0.2em] uppercase">Daily Machine</div>
+            <div className="gx-label text-[#ffb24a] text-[11px]">Daily Machine</div>
             <div className="text-[9px] text-[#7fd8e6]/45 font-mono mt-1">
               {dailyDone ? <span style={{ color: '#ffd54a' }}>{'★'.repeat(dailyDone)} cleared today</span> : 'a new one each day'}
             </div>
           </button>
           <button
             onClick={openEndless}
-            className="rounded-md border border-[#37e6ff]/20 bg-[#0a0a14]/70 hover:border-[#37e6ff]/55 p-3 text-left transition-colors"
+            className="gx-card is-interactive gx-scan p-3 text-left"
+            style={{ ['--gx-accent' as string]: '#37e6ff' } as React.CSSProperties}
           >
-            <div className="font-mono text-[#37e6ff] text-[11px] tracking-[0.2em] uppercase">Endless</div>
+            <div className="gx-label text-[#37e6ff] text-[11px]">Endless</div>
             <div className="text-[9px] text-[#7fd8e6]/45 font-mono mt-1">free play · fresh every time</div>
           </button>
         </div>
@@ -276,12 +278,12 @@ export default function RekindlePage() {
   return (
     <ArcadeCabinet accent="#37e6ff" wall={1} maxWidth={560}>
       <div className="w-full max-w-[520px] flex items-center justify-between mb-4">
-        <button onClick={toMap} className="text-[10px] tracking-[0.25em] uppercase text-[#37e6ff]/50 hover:text-[#37e6ff] font-mono">
+        <button onClick={toMap} className="gx-label text-[10px] text-[#37e6ff]/50 hover:text-[#37e6ff]">
           &#8592; network
         </button>
         <div className="text-center">
-          <div className="font-mono text-[#37e6ff] text-sm tracking-[0.3em] uppercase" style={{ textShadow: '0 0 8px #37e6ff80' }}>{name}</div>
-          <div className="text-[10px] text-[#7fd8e6]/40 font-mono tracking-wider mt-0.5">
+          <div className="gx-title text-[#37e6ff] text-sm tracking-[0.3em] uppercase" style={{ textShadow: '0 0 8px #37e6ff80' }}>{name}</div>
+          <div className="gx-label text-[10px] text-[#7fd8e6]/40 mt-0.5">
             {kind === 'node' && nodeId !== null ? `node ${nodeId + 1}/${NODES.length}` : kind === 'daily' ? 'daily · ' + dailyKey(new Date()) : 'endless'}
           </div>
         </div>
@@ -291,31 +293,31 @@ export default function RekindlePage() {
       </div>
 
       <div className="w-full max-w-[480px] mb-2 flex items-center gap-3">
-        <span className="text-[9px] font-mono tracking-[0.2em] uppercase text-[#7fd8e6]/40">charge</span>
+        <span className="gx-label text-[9px] text-[#7fd8e6]/40">charge</span>
         <div className="flex-1 h-2 rounded-full bg-white/[0.05] overflow-hidden">
           <div className="h-full rounded-full transition-all duration-150" style={{ width: `${Math.max(0, (remaining / charge) * 100)}%`, background: low ? '#ff5d9e' : '#37e6ff', boxShadow: `0 0 10px ${low ? '#ff5d9e' : '#37e6ff'}` }} />
         </div>
         <span className="text-[10px] font-mono tabular-nums text-[#7fd8e6]/60 w-20 text-right">{remaining} left · par {par}</span>
       </div>
 
-      <div className="relative w-full max-w-[480px]" style={{ aspectRatio: aspect }}>
+      <div className="gx-chrome relative w-full max-w-[480px]" style={{ aspectRatio: aspect, ['--gx-accent' as string]: '#37e6ff' } as React.CSSProperties}>
         <canvas ref={canvasRef} onPointerDown={onPoint} className="w-full h-full block touch-none rounded-md cursor-pointer" />
         <div className="pointer-events-none absolute inset-0 rounded-md rk-crt" />
 
         {won && (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-2.5 bg-[#04040a]/70 rounded-md px-5 text-center">
-            <div className="font-mono text-[#54ff9e] text-xl tracking-[0.35em] uppercase" style={{ textShadow: '0 0 16px #54ff9e' }}>Rekindled</div>
+            <div className="gx-title text-[#54ff9e] text-xl tracking-[0.35em] uppercase" style={{ textShadow: '0 0 16px #54ff9e' }}>Rekindled</div>
             <div className="text-lg tracking-[0.3em]" style={{ color: '#ffd54a', textShadow: '0 0 12px #ffd54a90' }}>
               {'★'.repeat(earned)}<span className="text-white/15">{'★'.repeat(3 - earned)}</span>
             </div>
             {reward && <p className="text-[11px] leading-relaxed text-[#9fd6e0]/80 italic max-w-[300px]">{reward}</p>}
             <div className="flex gap-2 mt-1">
               {kind === 'endless' && (
-                <button onClick={openEndless} className="font-mono text-[11px] tracking-[0.2em] uppercase text-[#04040a] bg-[#37e6ff] hover:bg-[#7df0ff] px-4 py-2 rounded-sm" style={{ boxShadow: '0 0 16px #37e6ff80' }}>
+                <button onClick={openEndless} className="gx-label text-[11px] text-[#04040a] bg-[#37e6ff] hover:bg-[#7df0ff] px-4 py-2 rounded-[2px]" style={{ boxShadow: '0 0 16px #37e6ff80' }}>
                   new machine →
                 </button>
               )}
-              <button onClick={toMap} className="font-mono text-[11px] tracking-[0.25em] uppercase text-[#04040a] bg-[#54ff9e] hover:bg-[#7dffb8] px-5 py-2 rounded-sm" style={{ boxShadow: '0 0 18px #54ff9e80' }}>
+              <button onClick={toMap} className="gx-label text-[11px] text-[#04040a] bg-[#54ff9e] hover:bg-[#7dffb8] px-5 py-2 rounded-[2px]" style={{ boxShadow: '0 0 18px #54ff9e80' }}>
                 ← the network
               </button>
             </div>
@@ -324,9 +326,9 @@ export default function RekindlePage() {
 
         {failed && (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-[#04040a]/70 rounded-md">
-            <div className="font-mono text-[#ff5d9e] text-lg tracking-[0.3em] uppercase" style={{ textShadow: '0 0 14px #ff5d9e' }}>The dark wins</div>
+            <div className="gx-title text-[#ff5d9e] text-lg tracking-[0.3em] uppercase" style={{ textShadow: '0 0 14px #ff5d9e' }}>The dark wins</div>
             <div className="text-[10px] font-mono text-[#7fd8e6]/50">out of charge</div>
-            <button onClick={retry} className="font-mono text-[11px] tracking-[0.25em] uppercase text-[#04040a] bg-[#ff5d9e] hover:bg-[#ff86b4] px-5 py-2 rounded-sm mt-1" style={{ boxShadow: '0 0 18px #ff5d9e80' }}>
+            <button onClick={retry} className="gx-label text-[11px] text-[#04040a] bg-[#ff5d9e] hover:bg-[#ff86b4] px-5 py-2 rounded-[2px] mt-1" style={{ boxShadow: '0 0 18px #ff5d9e80' }}>
               try again
             </button>
           </div>
@@ -334,7 +336,7 @@ export default function RekindlePage() {
       </div>
 
       <div className="w-full max-w-[480px] flex items-center justify-between mt-4">
-        <button onClick={reset} className="text-[10px] tracking-[0.25em] uppercase text-[#37e6ff]/45 hover:text-[#37e6ff] font-mono">reset</button>
+        <button onClick={reset} className="gx-label text-[10px] text-[#37e6ff]/45 hover:text-[#37e6ff]">reset</button>
         <p className="text-[10px] text-[#7fd8e6]/35 font-mono tracking-wider">tap to turn · keep each colour pure</p>
       </div>
 
