@@ -83,6 +83,7 @@ export type PartyEvent =
   | { type: 'KO'; targetId: string }
   | { type: 'REACH'; captiveId: string; reach: number; reachMax: number; delta: number } // reach-encounter progress
   | { type: 'COLLAR_BREAK'; captiveId: string }                                            // the collar snaps — captive freed
+  | { type: 'REACH_SHIELDED'; captiveId: string }                                          // collar shielded — a guard still stands
   | { type: 'MANA_DRY'; side: 'ally' | 'enemy' }       // a side couldn't afford its chosen move, fell back to Strike
   | { type: 'HEAL'; targetId: string; amount: number }                    // keeper Mender restores HP
   | { type: 'MANA_GRANT'; amount: number }                                // keeper Channeler feeds your pool
@@ -305,9 +306,15 @@ export function takeAction(state: PartyBattleState, action: PartyAction): void {
   applyMoveEffects(state, actor, target, move)
 
   // Reach-encounter: a calming move (one that `reaches`) aimed at the captive fills its Reach
-  // instead of harming it. Fill the bar → the collar snaps → win.
+  // instead of harming it. But the stronghold SHIELDS the collar — while any guard still stands,
+  // reaching does nothing (you must break the stronghold first, then free the boss). This is what
+  // makes it a real boss interaction, not a "skip the guards and just reach" shortcut.
   if (state.mode === 'reach' && actor.side === 'ally' && move.reaches && target?.collared && target.alive) {
-    addPartyReach(state, target, move.reaches)
+    if (strongholdStanding(state)) {
+      state.events.push({ type: 'REACH_SHIELDED', captiveId: target.id })
+    } else {
+      addPartyReach(state, target, move.reaches)
+    }
   }
 
   state.turnIdx++
@@ -455,6 +462,11 @@ function checkOutcome(state: PartyBattleState) {
   }
 }
 
+/** True while any guard (a non-captive enemy) still stands — the stronghold shields the collar. */
+function strongholdStanding(state: PartyBattleState): boolean {
+  return state.enemies.some(e => e.alive && e.reachMax === undefined)
+}
+
 /** Add (or drain, with negative delta) Reach on the captive. Filling it snaps the collar → win. */
 function addPartyReach(state: PartyBattleState, captive: PartyCombatant, delta: number) {
   const max = captive.reachMax ?? REACH_MAX
@@ -493,12 +505,15 @@ export function chooseAction(state: PartyBattleState, actor: PartyCombatant, ai:
   const foes = livingEnemiesOf(state, actor.side)
   if (foes.length === 0) return { type: 'defend', actorId: actor.id }
 
-  // Reach directive: calm the collared captive (a `reaches` move) instead of fighting it.
+  // Reach directive: calm the collared captive (a `reaches` move) instead of fighting it — but ONLY
+  // once the stronghold is broken. While a guard still stands the collar is shielded, so a Reach call
+  // sensibly turns the party onto the guards (no whiffed turns); the calm lands once they're clear.
   if (ai.stance === 'reach') {
     const captive = foes.find(f => f.collared)
     const reachIdx = actor.moves.findIndex(e => (e.move.reaches ?? 0) > 0)
-    if (captive && reachIdx >= 0) return { type: 'move', actorId: actor.id, moveIdx: reachIdx, targetId: captive.id }
-    // no captive / no calm move in kit → fall through and fight the guards
+    const exposed = !foes.some(f => f.reachMax === undefined) // no guards left → collar reachable
+    if (captive && exposed && reachIdx >= 0) return { type: 'move', actorId: actor.id, moveIdx: reachIdx, targetId: captive.id }
+    // shielded (guards alive) / no captive / no calm move → fall through and fight the guards
   }
 
   // Targeting: Focus points anywhere the Keeper chose (even the captive = a deliberate brute-force).

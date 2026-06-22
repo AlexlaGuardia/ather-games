@@ -63,8 +63,8 @@ function HPBar({ current, max, w = 88 }: { current: number; max: number; w?: num
 
 // ── Combatant plate (one party member) ──
 
-function CombatantPlate({ c, hp, isActor, isTarget, onClick }: {
-  c: PartyCombatant; hp: number; isActor: boolean; isTarget: boolean; onClick?: () => void
+function CombatantPlate({ c, hp, isActor, isTarget, shielded, onClick }: {
+  c: PartyCombatant; hp: number; isActor: boolean; isTarget: boolean; shielded?: boolean; onClick?: () => void
 }) {
   const e = elem(c.element)
   return (
@@ -92,17 +92,24 @@ function CombatantPlate({ c, hp, isActor, isTarget, onClick }: {
       </div>
       <HPBar current={hp} max={c.maxHp} />
       {c.alive && c.reachMax !== undefined && c.collared && (
-        <div className="mt-1">
-          <div className="h-[4px] rounded-sm bg-[#0a1a22] border border-[#37e6ff]/20 overflow-hidden">
-            <div className="h-full rounded-sm" style={{
-              width: `${Math.min(100, ((c.reach ?? 0) / (c.reachMax || 100)) * 100)}%`,
-              background: 'linear-gradient(90deg,#1f9fc4,#37e6ff)',
-              boxShadow: (c.reach ?? 0) > 0 ? '0 0 5px #37e6ff80' : 'none',
-              transition: 'width 0.4s ease-out',
-            }} />
+        shielded ? (
+          <div className="mt-1">
+            <div className="h-[4px] rounded-sm bg-[#1a1208] border border-[#d4a843]/25 overflow-hidden opacity-60" />
+            <p className="text-[7px] text-[#d4a843]/70 mt-0.5 italic leading-none">🔒 shielded — break the stronghold first</p>
           </div>
-          <p className="text-[7px] text-[#37e6ff]/50 mt-0.5 italic leading-none">reach it — don&apos;t break it</p>
-        </div>
+        ) : (
+          <div className="mt-1">
+            <div className="h-[4px] rounded-sm bg-[#0a1a22] border border-[#37e6ff]/20 overflow-hidden">
+              <div className="h-full rounded-sm" style={{
+                width: `${Math.min(100, ((c.reach ?? 0) / (c.reachMax || 100)) * 100)}%`,
+                background: 'linear-gradient(90deg,#1f9fc4,#37e6ff)',
+                boxShadow: (c.reach ?? 0) > 0 ? '0 0 5px #37e6ff80' : 'none',
+                transition: 'width 0.4s ease-out',
+              }} />
+            </div>
+            <p className="text-[7px] text-[#37e6ff]/50 mt-0.5 italic leading-none">reach it — don&apos;t break it</p>
+          </div>
+        )
       )}
     </button>
   )
@@ -238,6 +245,9 @@ export default function PartyBattleScene({
           if (ev.delta > 0) setText(`You reach for the spirit beneath the collar...`)
           else setText(`The collar yanks it back...`)
           delay = ev.delta > 0 ? 600 : 450; break
+        case 'REACH_SHIELDED':
+          setText(`The stronghold shields the collar — break the guards first.`)
+          delay = 700; break
         case 'COLLAR_BREAK':
           setText(`The collar shatters — its light returns!`)
           if (r) { r.freeCollarToken(ev.captiveId); r.flashToken(ev.captiveId); r.burstToken(ev.captiveId, 0x37e6ff, 60) }
@@ -351,6 +361,7 @@ export default function PartyBattleScene({
               key={c.id} c={c} hp={hp[c.id] ?? c.hp}
               isActor={resolvingId === c.id}
               isTarget={uiPhase === 'selectFocus' && c.alive}
+              shielded={st.enemies.some(e => e.alive && e.reachMax === undefined)}
               onClick={uiPhase === 'selectFocus' && c.alive ? () => onFocus(c.id) : undefined}
             />
           ))}
