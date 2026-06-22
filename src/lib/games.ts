@@ -76,7 +76,7 @@ export const GAMES: GameEntry[] = [
     title: "Lucernyx",
     href: "/lucernyx",
     glyph: "♦",
-    tier: "live",
+    tier: "back-room",
     kind: "play",
     tagline: "rekindle the grey, don't slay it · jump to convert, light 3 torches — a board of light",
   },
