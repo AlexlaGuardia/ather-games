@@ -3,7 +3,7 @@
 // shared arcade SFX engine.
 import { SfxManager, type Patch } from '@/lib/arcade/sfx'
 
-type Id = 'thrust' | 'plant' | 'perfect' | 'crash'
+type Id = 'thrust' | 'plant' | 'perfect' | 'crash' | 'thread' | 'caught'
 
 const patch: Patch<Id> = {
   // a short breath of thrust — played in pulses while held (throttled)
@@ -26,6 +26,16 @@ const patch: Patch<Id> = {
   crash: (E, t) => {
     E.tone(t, 130, { glideTo: 70, dur: 0.32, type: 'sine', peak: 0.16 })
     E.noise(t, { dur: 0.22, peak: 0.08, filter: 700, sweepTo: 180, filterType: 'lowpass' })
+  },
+  // threaded a branch — a soft airy tick, leaf-rustle light
+  thread: (E, t) => {
+    E.noise(t, { dur: 0.07, peak: 0.035, filter: 1600, sweepTo: 2600, filterType: 'bandpass', q: 1.2 })
+    E.tone(t, 660, { type: 'sine', dur: 0.08, peak: 0.045 })
+  },
+  // the Havari snatches it — a startled little flutter up, then gone
+  caught: (E, t) => {
+    E.tone(t, 440, { glideTo: 760, dur: 0.18, type: 'triangle', peak: 0.12, vibHz: 18, vibDepth: 30 })
+    E.noise(t, { dur: 0.2, peak: 0.06, filter: 900, sweepTo: 1800, filterType: 'bandpass', q: 0.8 })
   },
 }
 

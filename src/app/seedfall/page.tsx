@@ -1,14 +1,16 @@
 'use client'
 
-// SEEDFALL — set a Mana Seed down softly. Hold the left/right half of the screen to
-// thrust that way (both = straight up), feather the Ather, land gentle on the soil.
-// A clean set-down roots into your garden, which grows run over run. Atari vector-glow
-// on canvas, the cozy slow lane. Core sim lives in lib/seedfall.ts.
+// SEEDFALL — the long drop. A Mana Seed falls down the canopy; hold the left/right half of
+// the screen to drift that way (both = slow the fall), weave through the branches, out-drift
+// the curious Havari, and set down soft on the garden soil at the bottom. Depth is the score;
+// the soft-landing is the payoff. Atari vector-glow on a scrolling canvas. Sim in lib/seedfall.ts.
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import ArcadeCabinet from '../_components/ArcadeCabinet'
+import DailyLeaderboard from '../_components/DailyLeaderboard'
 import { mulberry32 } from '@/lib/arcade/rng'
 import { useNoScroll } from '@/lib/arcade/useNoScroll'
+import { dailySeed, dailyNumber, loadDailyBest, saveDailyBest, dailyShare, copyShare } from '@/lib/arcade/daily'
 import {
   makeWorld,
   setInput,
@@ -16,10 +18,14 @@ import {
   loadGarden,
   VW,
   VH,
-  GROUND_Y,
   SEED_R,
-  SOFT_VY,
+  SEED_SCREEN_Y,
+  DEPTH_GOAL,
+  THICK,
+  HAVARI_SWOOP_H,
+  HAVARI_KILL_W,
   FUEL_MAX,
+  SOFT_VY,
   type World,
   type Garden,
   type Rating,
@@ -29,39 +35,49 @@ import { sfx } from './lib/sfx'
 const BG = '#04040a'
 const ATHER = '#37e6ff'
 const HOT = '#e8feff'
-const LEAF = '#54ffc8' // soil + garden + safe-descent
+const LEAF = '#54ffc8' // soil + branches + safe-descent
 const WARM = '#ff8a5c' // coming-in-too-hot
-const VOID = '#c86bff'
+const VOID = '#c86bff' // the Havari + a shatter
+
+// camera: keep the soil ~64px off the bottom once we reach it
+const MAX_CAM_Y = DEPTH_GOAL - (VH - 64)
 
 const STARS = (() => {
   const r = mulberry32(0x5eed)
-  return Array.from({ length: 30 }, () => ({ x: r() * VW, y: r() * (GROUND_Y - 30), s: 0.5 + r() * 1.1, p: r() * 6.28 }))
+  return Array.from({ length: 36 }, () => ({ x: r() * VW, y: r() * 1600, s: 0.5 + r() * 1.1, p: r() * 6.28, par: 0.3 + r() * 0.5 }))
 })()
 
-type Phase = 'ready' | 'playing' | 'landed' | 'crashed'
+type Phase = 'ready' | 'playing' | 'landed' | 'crashed' | 'caught'
+type Mode = 'endless' | 'daily'
 
 export default function SeedfallPage() {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const worldRef = useRef<World | null>(null)
-  const skyRef = useRef<HTMLImageElement | null>(null)
   const seedRef = useRef(1)
   const pointers = useRef<Map<number, 'L' | 'R'>>(new Map())
   const syncT = useRef(0)
 
   const [phase, setPhase] = useState<Phase>('ready')
+  const [mode, setMode] = useState<Mode>('endless')
+  const modeRef = useRef(mode); modeRef.current = mode
   const [fuel, setFuel] = useState(FUEL_MAX)
+  const [score, setScore] = useState(0)
   const [garden, setGarden] = useState<Garden>({ planted: 0, perfect: 0 })
+  const [dailyBest, setDailyBest] = useState(0)
   const [rating, setRating] = useState<Rating | null>(null)
   const [muted, setMuted] = useState(false)
+  const [shared, setShared] = useState(false)
 
   useNoScroll()
 
   const boot = useCallback(() => {
     seedRef.current = (seedRef.current * 1103515245 + 12345) >>> 0
-    worldRef.current = makeWorld(seedRef.current ^ (Date.now() >>> 0))
+    worldRef.current = makeWorld(modeRef.current === 'daily' ? dailySeed() : (seedRef.current ^ (Date.now() >>> 0)))
     pointers.current.clear()
     setFuel(FUEL_MAX)
+    setScore(0)
     setRating(null)
+    setShared(false)
     setPhase('ready')
   }, [])
 
@@ -70,10 +86,21 @@ export default function SeedfallPage() {
     boot()
     setMuted(sfx.isMuted())
     setGarden(loadGarden())
-    const img = new Image()
-    img.src = '/seedfall/sky.webp'
-    img.onload = () => { skyRef.current = img }
+    setDailyBest(loadDailyBest('seedfall'))
   }, [boot])
+
+  const pickMode = (m: Mode) => {
+    if (m === modeRef.current) return
+    modeRef.current = m
+    setMode(m)
+    boot()
+  }
+  const onShare = async () => {
+    if (await copyShare(dailyShare('Seedfall', score))) {
+      setShared(true)
+      window.setTimeout(() => setShared(false), 1800)
+    }
+  }
 
   // ── render + sim loop ────────────────────────────────────────────────────────
   useEffect(() => {
@@ -90,21 +117,33 @@ export default function SeedfallPage() {
       if (w.state === 'playing') {
         const ev = tick(w, dt)
         if (ev.thrust) sfx.play('thrust')
+        if (ev.thread) sfx.play('thread')
+        if (ev.havariEnter) sfx.play('thread')
         if (ev.landed) {
           sfx.play('plant')
           if (ev.rating === 'perfect') window.setTimeout(() => sfx.play('perfect'), 120)
           setGarden(loadGarden())
           setRating(ev.rating)
+          setScore(w.score)
+          if (modeRef.current === 'daily') setDailyBest(saveDailyBest('seedfall', w.score))
           setPhase('landed')
+        }
+        if (ev.caught) {
+          sfx.play('caught')
+          setScore(w.score)
+          if (modeRef.current === 'daily') setDailyBest(saveDailyBest('seedfall', w.score))
+          setPhase('caught')
         }
         if (ev.crashed) {
           sfx.play('crash')
+          setScore(w.score)
+          if (modeRef.current === 'daily') setDailyBest(saveDailyBest('seedfall', w.score))
           setPhase('crashed')
         }
         syncT.current += dt
-        if (syncT.current >= 0.08) { syncT.current = 0; setFuel(w.fuel) }
+        if (syncT.current >= 0.06) { syncT.current = 0; setFuel(w.fuel); setScore(w.score) }
       }
-      render(canvas, w, ts, skyRef.current, garden.planted)
+      render(canvas, w, ts, garden.planted)
     }
     raf = requestAnimationFrame(draw)
     return () => cancelAnimationFrame(raf)
@@ -124,7 +163,8 @@ export default function SeedfallPage() {
   }
   const onDown = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
     sfx.ensure()
-    if (worldRef.current?.state === 'landed' || worldRef.current?.state === 'crashed') return
+    const st = worldRef.current?.state
+    if (st === 'landed' || st === 'crashed' || st === 'caught') return
     pointers.current.set(e.pointerId, halfOf(e))
     applyInput()
   }, [phase])
@@ -142,23 +182,24 @@ export default function SeedfallPage() {
   const toggleMute = () => { sfx.ensure(); const m = !sfx.isMuted(); sfx.setMuted(m); setMuted(m) }
 
   const lowFuel = fuel <= FUEL_MAX * 0.25
+  const depthPct = Math.min(100, Math.round((worldRef.current?.y ?? 0) / DEPTH_GOAL * 100))
 
   return (
     <ArcadeCabinet accent="#54ffc8" wall={1} maxWidth={400}>
-      <div className="w-full max-w-[400px] flex items-center justify-between mb-4">
+      <div className="w-full max-w-[400px] flex items-center justify-between mb-3">
         <span aria-hidden className="w-10" />
         <div className="text-center">
           <div className="gx-title text-[#54ffc8] text-sm tracking-[0.35em] uppercase" style={{ textShadow: '0 0 8px #54ffc880' }}>Seedfall</div>
-          <div className="gx-label text-[9px] text-[#7fd8e6]/40 mt-0.5">set it down soft</div>
+          <div className="gx-label text-[9px] text-[#7fd8e6]/40 mt-0.5">weave the long drop</div>
         </div>
         <button onClick={toggleMute} className="text-[10px] tracking-[0.2em] uppercase text-[#37e6ff]/50 hover:text-[#37e6ff] font-mono w-10 text-right">{muted ? 'son' : 'snd'}</button>
       </div>
 
-      {/* garden tally + fuel */}
+      {/* score + depth + fuel */}
       <div className="w-full max-w-[400px] mb-2 flex items-center gap-3 font-mono">
-        <span className="gx-label text-[9px] text-[#54ffc8]/60">garden {garden.planted}</span>
-        {garden.perfect > 0 && <span className="gx-label text-[9px] text-[#e8feff]/50">· {garden.perfect} perfect</span>}
-        <div className="flex-1 h-2 rounded-full bg-white/[0.05] overflow-hidden ml-auto max-w-[150px]">
+        <span className="gx-label text-[10px] text-[#54ffc8]">depth <span className="gx-value text-[#e8feff] tabular-nums">{score}</span></span>
+        <span className="gx-label text-[9px] text-[#7fd8e6]/40">{depthPct}%</span>
+        <div className="flex-1 h-2 rounded-full bg-white/[0.05] overflow-hidden ml-auto max-w-[140px]">
           <div className="h-full rounded-full transition-all duration-100" style={{ width: `${(fuel / FUEL_MAX) * 100}%`, background: lowFuel ? '#ff5d9e' : '#37e6ff', boxShadow: `0 0 10px ${lowFuel ? '#ff5d9e' : '#37e6ff'}` }} />
         </div>
         <span className="gx-label text-[9px] text-[#7fd8e6]/40">ather</span>
@@ -179,40 +220,55 @@ export default function SeedfallPage() {
         {phase === 'ready' && (
           <div className="pointer-events-none absolute inset-0 isolate overflow-hidden flex flex-col items-center justify-center gap-3 rounded-md text-center px-6">
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/seedfall/card.webp" alt="" aria-hidden="true" className="absolute inset-0 -z-10 h-full w-full object-cover opacity-[0.6]" />
-            <div className="absolute inset-0 -z-10 bg-[#04040a]/62" />
+            <img src="/seedfall/card.webp" alt="" aria-hidden="true" className="absolute inset-0 -z-10 h-full w-full object-cover opacity-[0.55]" />
+            <div className="absolute inset-0 -z-10 bg-[#04040a]/66" />
             <div className="gx-title text-[#54ffc8] text-2xl tracking-[0.3em] uppercase" style={{ textShadow: '0 0 18px #54ffc8' }}>Seedfall</div>
-            <p className="text-[11px] leading-relaxed text-[#9fd6e0]/80 max-w-[270px]">
-              hold the left or right side to thrust that way, both to rise. feather the Ather and set the seed down soft on the soil.
+            <p className="text-[11px] leading-relaxed text-[#9fd6e0]/80 max-w-[280px]">
+              hold a side to drift that way, both to slow the fall. weave the branches, slip the Havari, and set the seed down soft on the soil far below.
             </p>
-            <div className="gx-label text-[12px] text-[#04040a] bg-[#54ffc8] px-6 py-2.5 rounded-[2px] mt-1" style={{ boxShadow: '0 0 18px #54ffc880' }}>hold to begin</div>
+            <div className="gx-label pointer-events-auto flex items-center gap-1.5 text-[10px]">
+              {(['endless', 'daily'] as const).map((m) => (
+                <button
+                  key={m}
+                  onClick={() => pickMode(m)}
+                  className={`px-3 py-1.5 rounded-sm border transition-colors ${mode === m ? 'text-[#04040a] bg-[#54ffc8] border-[#54ffc8]' : 'text-[#54ffc8]/55 border-[#54ffc8]/25 hover:text-[#54ffc8]'}`}
+                >
+                  {m === 'daily' ? `daily #${dailyNumber()}` : m}
+                </button>
+              ))}
+            </div>
+            {mode === 'daily' && <div className="text-[9px] font-mono text-[#7fd8e6]/45 tracking-wider -mt-1">same canopy for everyone today</div>}
+            <div className="gx-label text-[12px] text-[#04040a] bg-[#54ffc8] px-6 py-2.5 rounded-[2px] mt-1" style={{ boxShadow: '0 0 18px #54ffc880' }}>hold to drop</div>
           </div>
         )}
 
         {phase === 'landed' && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-[#04040a]/70 rounded-md text-center px-6">
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-[#04040a]/72 rounded-md text-center px-6">
             <div className="gx-title text-2xl tracking-[0.3em] uppercase" style={{ color: rating === 'perfect' ? '#e8feff' : '#54ffc8', textShadow: `0 0 16px ${rating === 'perfect' ? '#e8feff' : '#54ffc8'}` }}>
               {rating === 'perfect' ? 'Perfect' : 'Rooted'}
             </div>
-            <p className="text-[11px] leading-relaxed text-[#9fd6e0]/80 max-w-[260px] italic">
-              {rating === 'perfect' ? 'butter-soft. the seed takes hold and glows.' : 'it settles into the soil and roots.'}
+            <div className="gx-value font-mono text-[#e8feff] text-3xl leading-none tabular-nums" style={{ textShadow: '0 0 12px #54ffc880' }}>{score}</div>
+            <p className="text-[10px] leading-relaxed text-[#9fd6e0]/75 max-w-[260px] italic">
+              {rating === 'perfect' ? 'butter-soft, dead centre. the seed takes hold and glows.' : 'it reaches the soil and roots. the garden grows.'}
             </p>
-            <div className="text-[10px] font-mono text-[#54ffc8]/60 tracking-wider">garden {garden.planted}{garden.perfect > 0 ? ` · ${garden.perfect} perfect` : ''}</div>
-            <button onClick={restart} className="gx-label text-[11px] text-[#04040a] bg-[#54ffc8] hover:bg-[#8affdd] px-6 py-2 rounded-[2px] mt-1" style={{ boxShadow: '0 0 18px #54ffc880' }}>drop another →</button>
+            <OverFooter mode={mode} score={score} dailyBest={dailyBest} shared={shared} onShare={onShare} onRestart={restart} garden={garden} />
           </div>
         )}
 
-        {phase === 'crashed' && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center gap-2.5 bg-[#04040a]/70 rounded-md text-center px-6">
-            <div className="gx-title text-[#c86bff] text-lg tracking-[0.3em] uppercase" style={{ textShadow: '0 0 14px #c86bff' }}>Shattered</div>
-            <p className="text-[11px] leading-relaxed text-[#9fd6e0]/70 max-w-[250px] italic">too fast, or short of the soil. the seed scatters to the wind.</p>
-            <button onClick={restart} className="gx-label text-[11px] text-[#04040a] bg-[#54ffc8] hover:bg-[#8affdd] px-6 py-2 rounded-[2px] mt-1" style={{ boxShadow: '0 0 18px #54ffc880' }}>try again →</button>
+        {(phase === 'crashed' || phase === 'caught') && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-[#04040a]/72 rounded-md text-center px-6">
+            <div className="gx-title text-[#c86bff] text-lg tracking-[0.3em] uppercase" style={{ textShadow: '0 0 14px #c86bff' }}>{phase === 'caught' ? 'Snatched' : 'Shattered'}</div>
+            <div className="gx-value font-mono text-[#e8feff] text-3xl leading-none tabular-nums" style={{ textShadow: '0 0 12px #54ffc880' }}>{score}</div>
+            <p className="text-[10px] leading-relaxed text-[#9fd6e0]/70 max-w-[250px] italic">
+              {phase === 'caught' ? 'the Havari plucks the seed from the air, curious, and carries it off.' : 'it clips a branch and scatters to the wind. drift cleaner next time.'}
+            </p>
+            <OverFooter mode={mode} score={score} dailyBest={dailyBest} shared={shared} onShare={onShare} onRestart={restart} garden={garden} />
           </div>
         )}
       </div>
 
       <div className="w-full max-w-[400px] flex items-center justify-center mt-4">
-        <p className="text-[10px] text-[#7fd8e6]/35 font-mono tracking-wider">hold a side · land it gentle</p>
+        <p className="text-[10px] text-[#7fd8e6]/35 font-mono tracking-wider">hold a side · slow with both · go deep</p>
       </div>
 
       <style jsx>{`
@@ -229,8 +285,30 @@ export default function SeedfallPage() {
   )
 }
 
+// shared game-over footer (garden tally · best/share · play again · daily leaderboard)
+function OverFooter({ mode, score, dailyBest, shared, onShare, onRestart, garden }: {
+  mode: Mode; score: number; dailyBest: number; shared: boolean; onShare: () => void; onRestart: () => void; garden: Garden
+}) {
+  return (
+    <>
+      <div className="text-[10px] font-mono text-[#54ffc8]/60 tracking-wider">
+        {mode === 'daily'
+          ? <>daily #{dailyNumber()} · best {dailyBest}{score >= dailyBest && score > 0 ? ' ✦ today’s best' : ''}</>
+          : <>garden {garden.planted}{garden.perfect > 0 ? ` · ${garden.perfect} perfect` : ''}</>}
+      </div>
+      <div className="flex items-center gap-2 mt-1">
+        <button onClick={onRestart} className="gx-label text-[11px] text-[#04040a] bg-[#54ffc8] hover:bg-[#8affdd] px-5 py-2 rounded-[2px]" style={{ boxShadow: '0 0 18px #54ffc880' }}>drop again →</button>
+        {mode === 'daily' && (
+          <button onClick={onShare} className="gx-label text-[11px] text-[#54ffc8] border border-[#54ffc8]/40 hover:border-[#54ffc8] px-5 py-2 rounded-[2px] transition-colors">{shared ? 'copied ✓' : 'share'}</button>
+        )}
+      </div>
+      {mode === 'daily' && <DailyLeaderboard gameId="seedfall" accent="#54ffc8" score={score} className="mt-1.5" />}
+    </>
+  )
+}
+
 // ── rendering ───────────────────────────────────────────────────────────────────
-function render(canvas: HTMLCanvasElement, w: World, ts: number, sky: HTMLImageElement | null, planted: number) {
+function render(canvas: HTMLCanvasElement, w: World, ts: number, planted: number) {
   const dpr = Math.min(2, typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1)
   if (canvas.width !== VW * dpr || canvas.height !== VH * dpr) {
     canvas.width = VW * dpr
@@ -244,84 +322,168 @@ function render(canvas: HTMLCanvasElement, w: World, ts: number, sky: HTMLImageE
   ctx.lineJoin = 'round'
   const t = ts / 1000
 
-  // backmost: the horizon sky, faint + gently breathing
-  if (sky && sky.complete && sky.naturalWidth) {
-    const over = 20
-    ctx.globalAlpha = 0.6
-    ctx.drawImage(sky, Math.sin(t * 0.05) * over - over / 2, 0, VW + over, VH)
-    ctx.globalAlpha = 1
-  }
+  // camera: track the seed, but clamp at the top (intro fall-in) and the soil (landing approach)
+  const camY = Math.max(-40, Math.min(w.y - SEED_SCREEN_Y, MAX_CAM_Y))
+  const sy = (worldY: number) => worldY - camY
 
-  // faint stars
+  // parallax stars (wrap over a 1600 band, scaled by per-star parallax)
   for (const s of STARS) {
+    const yy = ((s.y - camY * s.par) % 1600 + 1600) % 1600 - 200
+    if (yy < -10 || yy > VH + 10) continue
     ctx.globalAlpha = 0.1 + 0.12 * (0.5 + 0.5 * Math.sin(t * 1.2 + s.p))
     ctx.fillStyle = '#9fb0c8'
-    dot(ctx, s.x, s.y, s.s)
+    dot(ctx, s.x, yy, s.s)
   }
   ctx.globalAlpha = 1
 
-  // wind streaks — telegraph the breeze (drift in its direction)
+  // wind streaks — telegraph the breeze
   const wind = w.wind
   for (let i = 0; i < 6; i++) {
-    const sy = 90 + i * 70 + Math.sin(t + i) * 6
+    const wy = 90 + i * 80 + Math.sin(t + i) * 6
     const phase = (t * (0.4 + i * 0.05) + i * 0.37) % 1
-    const sx = phase * (VW + 60) - 30
+    const wx = phase * (VW + 60) - 30
     const dir = Math.sign(wind) || 1
-    const len = 10 + Math.abs(wind) * 0.25
+    const len = 9 + Math.abs(wind) * 0.22
     ctx.strokeStyle = LEAF
-    ctx.globalAlpha = 0.06 + Math.min(0.08, Math.abs(wind) / 600)
+    ctx.globalAlpha = 0.05 + Math.min(0.07, Math.abs(wind) / 700)
     ctx.lineWidth = 1
-    seg(ctx, sx, sy, sx + dir * len, sy)
+    seg(ctx, wx, wy, wx + dir * len, wy)
   }
   ctx.globalAlpha = 1
 
-  // ground line
-  ctx.strokeStyle = LEAF
-  ctx.globalAlpha = 0.35
-  ctx.lineWidth = 1.5
-  ctx.shadowBlur = 8
-  ctx.shadowColor = LEAF
-  seg(ctx, 0, GROUND_Y, VW, GROUND_Y)
+  // depth ticks on the walls — convey the scroll/descent speed
+  ctx.strokeStyle = '#2a3340'
+  ctx.lineWidth = 1
+  ctx.globalAlpha = 0.5
+  const tick0 = Math.floor(camY / 120) * 120
+  for (let yy = tick0; yy < camY + VH + 120; yy += 120) {
+    const py = sy(yy)
+    seg(ctx, 0, py, 10, py)
+    seg(ctx, VW - 10, py, VW, py)
+  }
   ctx.globalAlpha = 1
-  ctx.shadowBlur = 0
 
-  // the soil pad — a bright glowing strip you must land on
-  const padL = w.padX - w.padW / 2
-  ctx.strokeStyle = HOT
-  ctx.lineWidth = 3
-  ctx.shadowBlur = 14
-  ctx.shadowColor = LEAF
-  ctx.globalAlpha = 0.9
-  seg(ctx, padL, GROUND_Y, padL + w.padW, GROUND_Y)
-  // soft markers at the pad edges
-  ctx.fillStyle = LEAF
-  dot(ctx, padL, GROUND_Y, 2.5)
-  dot(ctx, padL + w.padW, GROUND_Y, 2.5)
-  ctx.globalAlpha = 1
-  ctx.shadowBlur = 0
-
-  // the persistent garden — sprouts accumulated from past plantings
-  const sprouts = Math.min(28, planted)
-  for (let i = 0; i < sprouts; i++) {
-    const gx = 14 + ((i * 53) % (VW - 28))
-    const h = 6 + ((i * 17) % 9)
-    const sway = Math.sin(t * 1.5 + i) * 1.5
-    ctx.strokeStyle = LEAF
-    ctx.globalAlpha = 0.5
-    ctx.lineWidth = 1.5
-    ctx.shadowBlur = 6
+  // ── branches: leafy limbs with one opening ──────────────────────────────────
+  for (const b of w.branches) {
+    const py = sy(b.y)
+    if (py < -THICK || py > VH + THICK) continue
+    const gl = b.gapX - b.gap / 2
+    const gr = b.gapX + b.gap / 2
+    const col = b.passed ? '#2f6f5a' : LEAF
+    ctx.strokeStyle = col
+    ctx.globalAlpha = b.passed ? 0.4 : 0.92
+    ctx.lineWidth = THICK
+    ctx.shadowBlur = b.passed ? 0 : 9
     ctx.shadowColor = LEAF
-    seg(ctx, gx, GROUND_Y, gx + sway, GROUND_Y - h)
-    ctx.fillStyle = HOT
-    dot(ctx, gx + sway, GROUND_Y - h, 1.6)
+    if (gl > 2) seg(ctx, 0, py, gl, py)
+    if (gr < VW - 2) seg(ctx, gr, py, VW, py)
+    // little leaf nubs along the limb (cheap texture)
+    if (!b.passed) {
+      ctx.lineWidth = 2
+      ctx.globalAlpha = 0.55
+      for (let x = 12; x < gl - 4; x += 22) seg(ctx, x, py, x - 5, py - 7)
+      for (let x = gr + 8; x < VW - 6; x += 22) seg(ctx, x, py, x + 5, py - 7)
+    }
+    ctx.shadowBlur = 0
   }
   ctx.globalAlpha = 1
-  ctx.shadowBlur = 0
 
-  // the Mana Seed — colour signals descent safety (green = soft enough, warm = hot)
+  // ── soil floor + pad + garden (only when in view) ───────────────────────────
+  const soilY = sy(DEPTH_GOAL)
+  if (soilY < VH + 40) {
+    ctx.strokeStyle = LEAF
+    ctx.globalAlpha = 0.35
+    ctx.lineWidth = 1.5
+    ctx.shadowBlur = 8
+    ctx.shadowColor = LEAF
+    seg(ctx, 0, soilY, VW, soilY)
+    // the landing pad — a bright strip you must set down on
+    const padL = w.padX - w.padW / 2
+    ctx.strokeStyle = HOT
+    ctx.lineWidth = 3
+    ctx.shadowBlur = 14
+    ctx.globalAlpha = 0.9
+    seg(ctx, padL, soilY, padL + w.padW, soilY)
+    ctx.fillStyle = LEAF
+    dot(ctx, padL, soilY, 2.5)
+    dot(ctx, padL + w.padW, soilY, 2.5)
+    // persistent garden sprouts
+    const sprouts = Math.min(28, planted)
+    for (let i = 0; i < sprouts; i++) {
+      const gx = 14 + ((i * 53) % (VW - 28))
+      const h = 6 + ((i * 17) % 9)
+      const sway = Math.sin(t * 1.5 + i) * 1.5
+      ctx.strokeStyle = LEAF
+      ctx.globalAlpha = 0.5
+      ctx.lineWidth = 1.5
+      ctx.shadowBlur = 6
+      seg(ctx, gx, soilY, gx + sway, soilY - h)
+      ctx.fillStyle = HOT
+      dot(ctx, gx + sway, soilY - h, 1.6)
+    }
+    ctx.globalAlpha = 1
+    ctx.shadowBlur = 0
+  }
+
+  // ── the Havari (bird spirit) — a committed swoop, not a hover ────────────────
+  const hv = w.havari
+  const seedScreenY = sy(w.y)
+  if (hv) {
+    // DANGER BAND at the intercept point — shown from the warn. Drift out of this column to live.
+    const bandPulse = 0.5 + 0.5 * Math.sin(t * 9)
+    const bandTop = seedScreenY - HAVARI_SWOOP_H
+    const bandH = HAVARI_SWOOP_H + 18
+    const grad = ctx.createLinearGradient(0, bandTop, 0, bandTop + bandH)
+    grad.addColorStop(0, 'rgba(200,107,255,0)')
+    grad.addColorStop(1, `rgba(200,107,255,${0.1 + 0.12 * bandPulse})`)
+    ctx.fillStyle = grad
+    ctx.fillRect(hv.targetX - HAVARI_KILL_W, bandTop, HAVARI_KILL_W * 2, bandH)
+    ctx.globalAlpha = 0.5 + 0.3 * bandPulse
+    ctx.strokeStyle = VOID
+    ctx.lineWidth = 1
+    ctx.setLineDash([4, 5])
+    seg(ctx, hv.targetX - HAVARI_KILL_W, bandTop, hv.targetX - HAVARI_KILL_W, bandTop + bandH)
+    seg(ctx, hv.targetX + HAVARI_KILL_W, bandTop, hv.targetX + HAVARI_KILL_W, bandTop + bandH)
+    ctx.setLineDash([])
+    ctx.globalAlpha = 1
+    if (hv.state === 'warn') {
+      // pulsing glint at the edge it will dive in from
+      const ex = hv.side < 0 ? 12 : VW - 12
+      const ey = seedScreenY - 60
+      ctx.globalAlpha = 0.45 + 0.45 * Math.sin(t * 14)
+      ctx.fillStyle = VOID
+      ctx.shadowBlur = 12
+      ctx.shadowColor = VOID
+      dot(ctx, ex, ey, 4)
+      ctx.lineWidth = 2
+      ctx.strokeStyle = VOID
+      const dir = hv.side < 0 ? 1 : -1
+      seg(ctx, ex, ey, ex + dir * 14, ey)
+      ctx.shadowBlur = 0
+    } else {
+      // the bird: two flapping wings + a bright body, banking into its dive
+      const px = hv.x
+      const py = seedScreenY + hv.dy
+      const flap = Math.sin(t * 18) * 7
+      const bank = Math.max(0, 1 + hv.dy / HAVARI_SWOOP_H) // 0 high → 1 at the bottom of the dive
+      ctx.globalAlpha = 0.96
+      ctx.strokeStyle = VOID
+      ctx.lineWidth = 2.5
+      ctx.shadowBlur = 12
+      ctx.shadowColor = VOID
+      seg(ctx, px, py, px - 11, py - 6 - flap + bank * 4)
+      seg(ctx, px, py, px + 11, py - 6 - flap + bank * 4)
+      ctx.fillStyle = HOT
+      dot(ctx, px, py, 3)
+      ctx.shadowBlur = 0
+    }
+  }
+  ctx.globalAlpha = 1
+
+  // ── the Mana Seed ────────────────────────────────────────────────────────────
+  const seedY = sy(w.y) // == SEED_SCREEN_Y except during intro fall-in / soil approach
   const safe = w.vy <= SOFT_VY
-  const col = w.state === 'crashed' ? VOID : safe ? LEAF : WARM
-  // thrust flame
+  const col = (w.state === 'crashed' || w.state === 'caught') ? VOID : safe ? LEAF : WARM
   if (w.thrusting && w.state === 'playing') {
     const dir = w.input.left && w.input.right ? 0 : w.input.left ? 1 : -1
     ctx.strokeStyle = ATHER
@@ -330,19 +492,18 @@ function render(canvas: HTMLCanvasElement, w: World, ts: number, sky: HTMLImageE
     ctx.shadowBlur = 10
     ctx.shadowColor = ATHER
     for (let i = 0; i < 3; i++) {
-      const j = (Math.sin(t * 40 + i) * 2)
-      seg(ctx, w.x, w.y + SEED_R, w.x + dir * (4 + i * 3) + j, w.y + SEED_R + 10 + i * 4)
+      const j = Math.sin(t * 40 + i) * 2
+      seg(ctx, w.x, seedY + SEED_R, w.x + dir * (4 + i * 3) + j, seedY + SEED_R + 10 + i * 4)
     }
     ctx.globalAlpha = 1
   }
   ctx.fillStyle = col
   ctx.shadowBlur = 16
   ctx.shadowColor = col
-  // a little seed: round body + a tail
-  dot(ctx, w.x, w.y, SEED_R)
+  dot(ctx, w.x, seedY, SEED_R)
   ctx.fillStyle = HOT
-  ctx.globalAlpha = 0.8
-  dot(ctx, w.x, w.y - 1, SEED_R * 0.4)
+  ctx.globalAlpha = 0.85
+  dot(ctx, w.x, seedY - 1, SEED_R * 0.4)
   ctx.globalAlpha = 1
   ctx.shadowBlur = 0
 }
