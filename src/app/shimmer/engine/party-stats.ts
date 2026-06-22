@@ -30,7 +30,7 @@ export const SPECIES_STATS_V2: Record<Species, Omit<PartyStats, 'maxHp'>> = {
   // FOC ceiling compressed to PWR's range (was 84/66 → casters out-scaled physical leaguewide,
   // and 5/7 move-states are already spirit-category). Now the two damage axes are at parity.
   fox:           { pwr: 54, grd: 40, foc: 36, res: 36, agi: 52, vig: 44 }, // balanced phys skirmisher
-  axolotl:       { pwr: 25, grd: 46, foc: 44, res: 52, agi: 30, vig: 54 }, // spirit sustain wall (tamed bulk)
+  axolotl:       { pwr: 30, grd: 46, foc: 52, res: 52, agi: 34, vig: 54 }, // spirit sustain wall — teeth bumped for the short-fight regime (was 25/44/30)
   owl:           { pwr: 30, grd: 38, foc: 50, res: 46, agi: 48, vig: 44 }, // spirit attacker / caster
   frog:          { pwr: 60, grd: 36, foc: 28, res: 32, agi: 58, vig: 46 }, // physical sweeper
   firefly:       { pwr: 28, grd: 26, foc: 62, res: 30, agi: 70, vig: 38 }, // spirit glass cannon (alpha-striker)
@@ -61,8 +61,14 @@ export function derivePartyStats(spirit: Spirit): PartyStats {
   const vig = grow(base.vig, seeds[3], mods[3])
   const foc = grow(base.foc, seeds[4])
   const res = grow(base.res, seeds[5])
-  return { pwr, grd, foc, res, agi, vig, maxHp: Math.round(vig * 1.6 + 15) }
+  return { pwr, grd, foc, res, agi, vig, maxHp: Math.round(vig * HP_SCALE + HP_BASE) }
 }
+
+// TTK knob (uniform → preserves the approved win-bands, just ends sooner). Was 1.6/15 = ~26-round
+// fair 3v3 mirrors (a slog — Alex's note). Cut to snappier wild fights; the collared captive is the
+// only intentionally-long fight (a boss). Tuned against party-battle.sim's fair-mirror round count.
+const HP_SCALE = 0.85
+const HP_BASE = 8
 
 // ── Move category from canon MoveState ──
 const PHYS_STATES = new Set(['solid', 'compact'])
