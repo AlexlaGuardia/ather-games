@@ -231,15 +231,15 @@ export default function AtherdashPage() {
         <div className="w-full flex items-center justify-between mb-3 pb-2.5 border-b border-[#d4a843]/15">
           <span aria-hidden className="w-10" />
           <div className="text-center">
-            <div className="font-mono text-[#37e6ff] text-sm tracking-[0.35em] uppercase" style={{ textShadow: '0 0 10px #37e6ffaa' }}>Atherdash</div>
-            <div className="text-[9px] text-[#d4a843]/45 font-mono tracking-[0.2em] uppercase mt-0.5">match the gate · hop the gap</div>
+            <div className="gx-title text-[#37e6ff] text-sm tracking-[0.35em] uppercase" style={{ textShadow: '0 0 10px #37e6ffaa' }}>Atherdash</div>
+            <div className="gx-label text-[9px] text-[#d4a843]/45 mt-0.5">match the gate · hop the gap</div>
           </div>
           <button onClick={toggleMute} className="text-[10px] tracking-[0.2em] uppercase text-[#37e6ff]/50 hover:text-[#37e6ff] font-mono w-10 text-right">
             {muted ? 'son' : 'snd'}
           </button>
         </div>
 
-      <div className="relative w-full" style={{ aspectRatio: `${VW} / ${VH}` }}>
+      <div className="gx-chrome relative w-full" style={{ aspectRatio: `${VW} / ${VH}`, ['--gx-accent' as string]: '#37e6ff' } as React.CSSProperties}>
         <canvas
           ref={canvasRef}
           onPointerDown={onPointerDown}
@@ -249,7 +249,7 @@ export default function AtherdashPage() {
         <div className="pointer-events-none absolute inset-0 rounded-md atherdash-crt" />
 
         {phase === 'playing' && (
-          <div className="pointer-events-none absolute top-5 inset-x-0 text-center font-mono text-[#e8feff] text-4xl tabular-nums" style={{ textShadow: '0 0 14px #37e6ff90' }}>
+          <div className="pointer-events-none absolute top-5 inset-x-0 text-center gx-value font-mono text-[#e8feff] text-4xl" style={{ textShadow: '0 0 14px #37e6ff90' }}>
             {score}
           </div>
         )}
@@ -259,19 +259,19 @@ export default function AtherdashPage() {
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src="/atherdash/card.webp" alt="" aria-hidden="true" className="absolute inset-0 -z-10 h-full w-full object-cover opacity-[0.5]" />
             <div className="absolute inset-0 -z-10 bg-[#04040a]/62 rounded-md" />
-            <div className="font-mono text-[#37e6ff] text-2xl tracking-[0.3em] uppercase" style={{ textShadow: '0 0 18px #37e6ff' }}>Atherdash</div>
+            <div className="gx-title text-[#37e6ff] text-2xl tracking-[0.3em] uppercase" style={{ textShadow: '0 0 18px #37e6ff' }}>Atherdash</div>
             <p className="text-[11px] leading-relaxed text-[#9fd6e0]/85 max-w-[270px]">
               gates rush in tuned to an element. slide to the matching lane before each reaches you — wrong lane is a wall. tap to hop the gaps.
             </p>
             <div className="flex items-center justify-center gap-3 flex-wrap max-w-[280px] mt-0.5">
               {ELEMENTS.map((el) => (
-                <span key={el.id} className="inline-flex items-center gap-1.5 font-mono text-[10px] tracking-wider uppercase" style={{ color: el.light }}>
+                <span key={el.id} className="inline-flex items-center gap-1.5 gx-label text-[10px]" style={{ color: el.light }}>
                   <span className="inline-block w-2.5 h-2.5 rounded-full" style={{ background: el.base, boxShadow: `0 0 8px ${el.base}` }} />
                   {el.name}
                 </span>
               ))}
             </div>
-            <div className="pointer-events-auto flex items-center gap-1.5 mt-0.5 font-mono text-[10px] tracking-[0.2em] uppercase">
+            <div className="gx-label pointer-events-auto flex items-center gap-1.5 mt-0.5 text-[10px]">
               {(['endless', 'daily'] as const).map((m) => (
                 <button
                   key={m}
@@ -285,7 +285,7 @@ export default function AtherdashPage() {
             {mode === 'daily' && (
               <div className="text-[9px] font-mono text-[#7fd8e6]/45 tracking-wider -mt-1">same course for everyone today</div>
             )}
-            <div className="font-mono text-[12px] tracking-[0.25em] uppercase text-[#04040a] bg-[#37e6ff] px-6 py-2.5 rounded-sm mt-1" style={{ boxShadow: '0 0 18px #37e6ff80' }}>
+            <div className="gx-label text-[12px] text-[#04040a] bg-[#37e6ff] px-6 py-2.5 rounded-[2px] mt-1" style={{ boxShadow: '0 0 18px #37e6ff80' }}>
               swipe to slide · tap to hop
             </div>
           </div>
@@ -293,19 +293,19 @@ export default function AtherdashPage() {
 
         {phase === 'over' && (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-2.5 bg-[#04040a]/78 rounded-md text-center px-6">
-            <div className="font-mono text-[#c86bff] text-lg tracking-[0.3em] uppercase" style={{ textShadow: '0 0 14px #c86bff' }}>{cause === 'pit' ? 'the gap takes you' : 'the wall takes you'}</div>
-            <div className="font-mono text-[#e8feff] text-4xl tabular-nums leading-none" style={{ textShadow: '0 0 12px #37e6ff80' }}>{score}</div>
+            <div className="gx-title text-[#c86bff] text-lg tracking-[0.3em] uppercase" style={{ textShadow: '0 0 14px #c86bff' }}>{cause === 'pit' ? 'the gap takes you' : 'the wall takes you'}</div>
+            <div className="gx-value font-mono text-[#e8feff] text-4xl leading-none" style={{ textShadow: '0 0 12px #37e6ff80' }}>{score}</div>
             <div className="text-[10px] font-mono text-[#7fd8e6]/55 tracking-wider">
               {mode === 'daily'
                 ? <>daily #{dailyNumber()} · best {dailyBest}{score >= dailyBest && score > 0 ? ' ✦ today’s best' : ''}</>
                 : <>gates threaded · best {best}{score >= best && score > 0 ? ' ✦ new best' : ''}</>}
             </div>
             <div className="flex items-center gap-2 mt-1">
-              <button onClick={boot} className="font-mono text-[11px] tracking-[0.25em] uppercase text-[#04040a] bg-[#37e6ff] hover:bg-[#7df0ff] px-5 py-2 rounded-sm" style={{ boxShadow: '0 0 18px #37e6ff80' }}>
+              <button onClick={boot} className="gx-label text-[11px] text-[#04040a] bg-[#37e6ff] hover:bg-[#7df0ff] px-5 py-2 rounded-[2px]" style={{ boxShadow: '0 0 18px #37e6ff80' }}>
                 dash again →
               </button>
               {mode === 'daily' && (
-                <button onClick={onShare} className="font-mono text-[11px] tracking-[0.25em] uppercase text-[#37e6ff] border border-[#37e6ff]/40 hover:border-[#37e6ff] px-5 py-2 rounded-sm transition-colors">
+                <button onClick={onShare} className="gx-label text-[11px] text-[#37e6ff] border border-[#37e6ff]/40 hover:border-[#37e6ff] px-5 py-2 rounded-[2px] transition-colors">
                   {shared ? 'copied ✓' : 'share'}
                 </button>
               )}

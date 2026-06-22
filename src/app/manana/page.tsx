@@ -367,7 +367,7 @@ export default function MananaPage() {
   const barPct = Math.max(0, Math.min(100, ((score - prevAt) / (nextAt - prevAt)) * 100))
 
   return (
-    <div className="relative min-h-[calc(100svh-5rem)] overflow-hidden text-slate-200 font-sans" style={{ touchAction: 'manipulation', overscrollBehavior: 'none' }}>
+    <div className="gx-chrome relative min-h-[calc(100svh-5rem)] overflow-hidden text-slate-200 font-sans" style={{ touchAction: 'manipulation', overscrollBehavior: 'none', ['--gx-accent' as string]: '#ffd884' } as React.CSSProperties}>
       <AtherBackdrop />
       {/* full-bleed board (its own AtherBackdrop) — deliberately NOT a cabinet; just
           the room tie so back lands facing the Arcade arch. */}
@@ -421,7 +421,7 @@ export default function MananaPage() {
             { k: 'BEST', v: best, c: '#a4e7bb' },
           ].map((s) => (
             <div key={s.k} className="rounded-xl bg-white/[0.04] border border-white/[0.06] py-2">
-              <div className="text-[9px] tracking-[0.2em] text-slate-500">{s.k}</div>
+              <div className="gx-label text-[9px] text-slate-500">{s.k}</div>
               <div className="text-lg font-bold tabular-nums" style={{ color: s.c }}>{s.v.toLocaleString()}</div>
             </div>
           ))}
@@ -538,7 +538,7 @@ export default function MananaPage() {
 
           {over && (
             <div className="absolute inset-0 z-30 flex flex-col items-center justify-center rounded-2xl bg-black/70 backdrop-blur-sm">
-              <div className="text-amber-200 text-sm tracking-[0.25em] mb-1">OUT OF MOVES</div>
+              <div className="gx-label text-amber-200 text-sm mb-1">OUT OF MOVES</div>
               <div className="text-3xl font-bold text-white mb-1 tabular-nums">{score.toLocaleString()}</div>
               <div className="text-[11px] text-slate-400 mb-4">
                 {mode === 'daily'

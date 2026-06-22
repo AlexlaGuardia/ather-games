@@ -175,8 +175,8 @@ export default function LucernyxPage() {
       <div className="w-full max-w-[440px] flex items-center justify-between mb-3">
         <span aria-hidden className="w-16" />
         <div className="text-center">
-          <div className="font-mono text-[#37e6ff] text-sm tracking-[0.35em] uppercase" style={{ textShadow: '0 0 8px #37e6ff80' }}>Lucernyx</div>
-          <div className="text-[9px] text-[#7fd8e6]/40 font-mono tracking-[0.2em] uppercase mt-0.5">keeper of the light</div>
+          <div className="gx-title text-[#37e6ff] text-sm tracking-[0.35em] uppercase" style={{ textShadow: '0 0 8px #37e6ff80' }}>Lucernyx</div>
+          <div className="gx-label text-[9px] text-[#7fd8e6]/40 mt-0.5">keeper of the light</div>
         </div>
         <div className="flex items-center gap-2 w-16 justify-end">
           <button onClick={toggleMute} className="text-[10px] tracking-[0.2em] uppercase text-[#37e6ff]/50 hover:text-[#37e6ff] font-mono">{muted ? 'son' : 'snd'}</button>
@@ -186,17 +186,17 @@ export default function LucernyxPage() {
 
       <div className="w-full max-w-[440px] mb-2 flex items-center justify-between font-mono text-[10px]">
         <Torches who="light" n={lt} pieces={lp} active={board.turn === 'light' && !board.over} flash={flash === 'light'} />
-        <span className="tracking-[0.25em] uppercase text-[#7fd8e6]/45">{turnLabel}</span>
+        <span className="gx-label text-[#7fd8e6]/45">{turnLabel}</span>
         <Torches who="grey" n={gt} pieces={gp} active={board.turn === 'grey' && !board.over} flash={flash === 'grey'} />
       </div>
 
-      <div className="relative w-full max-w-[440px]" style={{ aspectRatio: `${COLS} / ${ROWS}` }}>
+      <div className="gx-chrome relative w-full max-w-[440px]" style={{ aspectRatio: `${COLS} / ${ROWS}`, ['--gx-accent' as string]: '#37e6ff' } as React.CSSProperties}>
         <canvas ref={canvasRef} onPointerDown={onClick} className="w-full h-full block touch-none rounded-md cursor-pointer" />
         <div className="pointer-events-none absolute inset-0 rounded-md lx-crt" />
 
         {board.over && (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-2.5 bg-[#04040a]/78 rounded-md text-center px-6">
-            <div className="font-mono text-lg tracking-[0.3em] uppercase" style={{ color: board.winner === 'grey' ? VIOLET : ATHER, textShadow: `0 0 14px ${board.winner === 'grey' ? VIOLET : ATHER}` }}>
+            <div className="gx-title text-lg tracking-[0.3em] uppercase" style={{ color: board.winner === 'grey' ? VIOLET : ATHER, textShadow: `0 0 14px ${board.winner === 'grey' ? VIOLET : ATHER}` }}>
               {board.winner === 'light' ? 'The light holds' : board.winner === 'grey' ? 'The grey takes the field' : 'A held breath'}
             </div>
             <p className="text-[11px] leading-relaxed text-[#9fd6e0]/80 italic max-w-[280px]">
@@ -204,7 +204,7 @@ export default function LucernyxPage() {
                 : board.winner === 'grey' ? 'The dark drank the lanterns. Kindle again.'
                 : 'Neither could light the third. The board sleeps.'}
             </p>
-            <button onClick={newGame} className="font-mono text-[11px] tracking-[0.25em] uppercase text-[#04040a] bg-[#37e6ff] hover:bg-[#7df0ff] px-6 py-2 rounded-sm mt-1" style={{ boxShadow: '0 0 18px #37e6ff80' }}>kindle again →</button>
+            <button onClick={newGame} className="gx-label text-[11px] text-[#04040a] bg-[#37e6ff] hover:bg-[#7df0ff] px-6 py-2 rounded-[2px] mt-1" style={{ boxShadow: '0 0 18px #37e6ff80' }}>kindle again →</button>
           </div>
         )}
       </div>

@@ -235,22 +235,22 @@ export default function WardPage() {
       {/* score / wave / hiscore row */}
       <div className="w-full max-w-[480px] flex items-end justify-between mb-2 font-mono">
         <div className="text-left">
-          <div className="text-[9px] tracking-[0.2em] uppercase text-[#7fd8e6]/40">score</div>
-          <div className="text-[#e8feff] text-lg tabular-nums leading-none" style={{ textShadow: '0 0 8px #37e6ff70' }}>{hud.score.toLocaleString()}</div>
+          <div className="gx-label text-[9px] text-[#7fd8e6]/40">score</div>
+          <div className="gx-value text-[#e8feff] text-lg leading-none" style={{ textShadow: '0 0 8px #37e6ff70' }}>{hud.score.toLocaleString()}</div>
         </div>
         <div className="text-center">
-          <div className="text-[9px] tracking-[0.2em] uppercase text-[#ffb24a]/60">wave</div>
-          <div className="text-[#ffb24a] text-lg tabular-nums leading-none" style={{ textShadow: '0 0 8px #ffb24a70' }}>{hud.wave}</div>
+          <div className="gx-label text-[9px] text-[#ffb24a]/60">wave</div>
+          <div className="gx-value text-[#ffb24a] text-lg leading-none" style={{ textShadow: '0 0 8px #ffb24a70' }}>{hud.wave}</div>
         </div>
         <div className="text-right">
-          <div className="text-[9px] tracking-[0.2em] uppercase text-[#7fd8e6]/40">best</div>
-          <div className="text-[#7fd8e6]/70 text-lg tabular-nums leading-none">{hud.hi.toLocaleString()}</div>
+          <div className="gx-label text-[9px] text-[#7fd8e6]/40">best</div>
+          <div className="gx-value text-[#7fd8e6]/70 text-lg leading-none">{hud.hi.toLocaleString()}</div>
         </div>
       </div>
 
       {/* ammo + spires */}
       <div className="w-full max-w-[480px] mb-2 flex items-center gap-3">
-        <span className="text-[9px] font-mono tracking-[0.2em] uppercase text-[#7fd8e6]/40">ather</span>
+        <span className="gx-label text-[9px] text-[#7fd8e6]/40">ather</span>
         <div className="flex-1 h-2 rounded-full bg-white/[0.05] overflow-hidden">
           <div className="h-full rounded-full transition-all duration-150" style={{ width: `${hud.maxAmmo ? (hud.ammo / hud.maxAmmo) * 100 : 0}%`, background: lowAmmo ? '#ff5d9e' : '#37e6ff', boxShadow: `0 0 10px ${lowAmmo ? '#ff5d9e' : '#37e6ff'}` }} />
         </div>
@@ -262,7 +262,7 @@ export default function WardPage() {
       </div>
 
       {/* the field */}
-      <div className="relative w-full max-w-[480px]" style={{ aspectRatio: `${VW} / ${VH}` }}>
+      <div className="gx-chrome relative w-full max-w-[480px]" style={{ aspectRatio: `${VW} / ${VH}`, ['--gx-accent' as string]: '#37e6ff' } as React.CSSProperties}>
         <canvas
           ref={canvasRef}
           onPointerDown={onDown}
@@ -277,11 +277,11 @@ export default function WardPage() {
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src="/ward/card.webp" alt="" aria-hidden="true" className="absolute inset-0 -z-10 h-full w-full object-cover opacity-[0.65]" />
             <div className="absolute inset-0 -z-10 bg-[#04040a]/65" />
-            <div className="font-mono text-[#37e6ff] text-2xl tracking-[0.3em] uppercase" style={{ textShadow: '0 0 18px #37e6ff' }}>Ward</div>
+            <div className="gx-title text-[#37e6ff] text-2xl tracking-[0.3em] uppercase" style={{ textShadow: '0 0 18px #37e6ff' }}>Ward</div>
             <p className="text-[11px] leading-relaxed text-[#9fd6e0]/80 max-w-[300px]">
               the void is falling on the spires. tap the sky to bloom Ather and unmake it before it lands.
             </p>
-            <div className="flex items-center gap-1.5 mt-0.5 font-mono text-[10px] tracking-[0.2em] uppercase">
+            <div className="gx-label flex items-center gap-1.5 mt-0.5 text-[10px]">
               {(['endless', 'daily'] as const).map((m) => (
                 <button
                   key={m}
@@ -294,7 +294,7 @@ export default function WardPage() {
               ))}
             </div>
             {mode === 'daily' && <div className="text-[9px] font-mono text-[#7fd8e6]/45 tracking-wider -mt-1">same onslaught for everyone today</div>}
-            <button className="font-mono text-[12px] tracking-[0.25em] uppercase text-[#04040a] bg-[#37e6ff] hover:bg-[#7df0ff] px-6 py-2.5 rounded-sm mt-1" style={{ boxShadow: '0 0 18px #37e6ff80' }}>
+            <button className="gx-label text-[12px] text-[#04040a] bg-[#37e6ff] hover:bg-[#7df0ff] px-6 py-2.5 rounded-[2px] mt-1" style={{ boxShadow: '0 0 18px #37e6ff80' }}>
               tap to defend
             </button>
           </div>
@@ -302,8 +302,8 @@ export default function WardPage() {
 
         {over && (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-2.5 bg-[#04040a]/75 rounded-md text-center px-6">
-            <div className="font-mono text-[#ff5d9e] text-xl tracking-[0.3em] uppercase" style={{ textShadow: '0 0 16px #ff5d9e' }}>The line breaks</div>
-            <div className="font-mono text-[#e8feff] text-3xl tabular-nums leading-none" style={{ textShadow: '0 0 12px #37e6ff80' }}>{hud.score.toLocaleString()}</div>
+            <div className="gx-title text-[#ff5d9e] text-xl tracking-[0.3em] uppercase" style={{ textShadow: '0 0 16px #ff5d9e' }}>The line breaks</div>
+            <div className="gx-value font-mono text-[#e8feff] text-3xl leading-none" style={{ textShadow: '0 0 12px #37e6ff80' }}>{hud.score.toLocaleString()}</div>
             <p className="text-[11px] leading-relaxed text-[#9fd6e0]/85 italic max-w-[300px]">
               {tauntFor(hud.wave, hud.score, hud.score >= hud.hi && hud.score > 0)}
             </p>
@@ -322,18 +322,18 @@ export default function WardPage() {
                   { label: 'clean', value: stats.cleanTotal },
                 ].map((s) => (
                   <div key={s.label} className="flex flex-col items-center rounded-sm bg-white/[0.04] px-2 py-1.5">
-                    <span className="text-[#e8feff] text-sm tabular-nums leading-none" style={{ textShadow: '0 0 6px #37e6ff60' }}>{s.value}</span>
-                    <span className="text-[8px] uppercase tracking-[0.15em] text-[#7fd8e6]/45 mt-1">{s.label}</span>
+                    <span className="gx-value text-[#e8feff] text-sm leading-none" style={{ textShadow: '0 0 6px #37e6ff60' }}>{s.value}</span>
+                    <span className="gx-label text-[8px] text-[#7fd8e6]/45 mt-1">{s.label}</span>
                   </div>
                 ))}
               </div>
             )}
             <div className="flex items-center gap-2 mt-1">
-              <button onClick={restart} className="font-mono text-[11px] tracking-[0.25em] uppercase text-[#04040a] bg-[#37e6ff] hover:bg-[#7df0ff] px-5 py-2 rounded-sm" style={{ boxShadow: '0 0 18px #37e6ff80' }}>
+              <button onClick={restart} className="gx-label text-[11px] text-[#04040a] bg-[#37e6ff] hover:bg-[#7df0ff] px-5 py-2 rounded-[2px]" style={{ boxShadow: '0 0 18px #37e6ff80' }}>
                 defend again →
               </button>
               {mode === 'daily' && (
-                <button onClick={onShare} className="font-mono text-[11px] tracking-[0.25em] uppercase text-[#37e6ff] border border-[#37e6ff]/40 hover:border-[#37e6ff] px-5 py-2 rounded-sm transition-colors">
+                <button onClick={onShare} className="gx-label text-[11px] text-[#37e6ff] border border-[#37e6ff]/40 hover:border-[#37e6ff] px-5 py-2 rounded-[2px] transition-colors">
                   {shared ? 'copied ✓' : 'share'}
                 </button>
               )}
