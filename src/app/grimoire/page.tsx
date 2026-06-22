@@ -154,9 +154,6 @@ function LeftPage({ spirit: s, index, elColor, elLabel }: {
           <h2 className="text-2xl tracking-[0.12em] uppercase" style={{ color: '#6e5212', fontFamily: 'Cormorant Garamond, Georgia, serif', fontWeight: 700 }}>{s.name}</h2>
           <span className="gx-label text-[9px] px-2 py-0.5 rounded-sm" style={{ color: '#fff', background: c }}>{elLabel(s.element)}</span>
         </div>
-        <p className="text-[11px] font-mono mt-0.5" style={{ color: '#8a7038' }}>
-          the {s.analog}{s.individual ? ` · ${s.individual}` : ''}
-        </p>
       </div>
 
       {/* Evolutions — four slots (the sketch's four ovals) */}
