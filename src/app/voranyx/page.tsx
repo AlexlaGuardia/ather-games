@@ -223,23 +223,23 @@ export default function VoranyxPage() {
       <div className="w-full max-w-[440px] flex items-center justify-between mb-3">
         <span aria-hidden className="w-10" />
         <div className="text-center">
-          <div className="font-mono text-[#37e6ff] text-sm tracking-[0.35em] uppercase" style={{ textShadow: '0 0 8px #37e6ff80' }}>Voranyx</div>
-          <div className="text-[9px] text-[#7fd8e6]/40 font-mono tracking-[0.2em] uppercase mt-0.5">worms of the silt</div>
+          <div className="gx-title text-[#37e6ff] text-sm tracking-[0.35em] uppercase" style={{ textShadow: '0 0 8px #37e6ff80' }}>Voranyx</div>
+          <div className="gx-label text-[9px] text-[#7fd8e6]/40 mt-0.5">worms of the silt</div>
         </div>
         <button onClick={toggleMute} className="text-[10px] tracking-[0.2em] uppercase text-[#37e6ff]/50 hover:text-[#37e6ff] font-mono w-10 text-right">{muted ? 'son' : 'snd'}</button>
       </div>
 
       <div className="w-full max-w-[440px] mb-2 flex items-center gap-3 font-mono">
-        <span className="text-[9px] tracking-[0.2em] uppercase text-[#7fd8e6]/40">length</span>
-        <span className="text-[#e8feff] text-lg tabular-nums leading-none" style={{ textShadow: '0 0 8px #37e6ff70' }}>{len}</span>
-        <span className="text-[9px] tracking-[0.2em] uppercase text-[#7fd8e6]/30 ml-1">best {best}</span>
+        <span className="gx-label text-[9px] text-[#7fd8e6]/40">length</span>
+        <span className="gx-value text-[#e8feff] text-lg leading-none" style={{ textShadow: '0 0 8px #37e6ff70' }}>{len}</span>
+        <span className="gx-label text-[9px] text-[#7fd8e6]/30 ml-1">best {best}</span>
         <div className="flex-1 h-2 rounded-full bg-white/[0.05] overflow-hidden ml-auto max-w-[130px]">
           <div className="h-full rounded-full transition-all duration-100" style={{ width: `${boostPct}%`, background: lowBoost ? '#ff5d9e' : '#37e6ff', boxShadow: `0 0 10px ${lowBoost ? '#ff5d9e' : '#37e6ff'}` }} />
         </div>
-        <span className="text-[9px] tracking-[0.2em] uppercase text-[#7fd8e6]/40">boost</span>
+        <span className="gx-label text-[9px] text-[#7fd8e6]/40">boost</span>
       </div>
 
-      <div className="relative w-full max-w-[440px]" style={{ aspectRatio: '3 / 4' }}>
+      <div className="gx-chrome relative w-full max-w-[440px]" style={{ aspectRatio: '3 / 4', ['--gx-accent' as string]: '#37e6ff' } as React.CSSProperties}>
         <canvas
           ref={canvasRef}
           onPointerDown={onDown}
@@ -279,11 +279,11 @@ export default function VoranyxPage() {
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src="/voranyx/card.webp" alt="" aria-hidden="true" className="absolute inset-0 -z-10 h-full w-full object-cover opacity-[0.6]" />
             <div className="absolute inset-0 -z-10 bg-[#04040a]/62" />
-            <div className="font-mono text-[#37e6ff] text-2xl tracking-[0.3em] uppercase" style={{ textShadow: '0 0 18px #37e6ff' }}>Voranyx</div>
+            <div className="gx-title text-[#37e6ff] text-2xl tracking-[0.3em] uppercase" style={{ textShadow: '0 0 18px #37e6ff' }}>Voranyx</div>
             <p className="text-[11px] leading-relaxed text-[#9fd6e0]/80 max-w-[290px]">
               drag to steer (cursor on desktop). graze the dross, swallow a seed to take its colour, gather motes to boost. keep eating or you fade — and never put your head into another worm.
             </p>
-            <div className="pointer-events-auto flex items-center gap-1.5 mt-0.5 font-mono text-[10px] tracking-[0.2em] uppercase">
+            <div className="gx-label pointer-events-auto flex items-center gap-1.5 mt-0.5 text-[10px]">
               {(['endless', 'daily'] as const).map((m) => (
                 <button key={m} onClick={() => pickMode(m)}
                   className={`px-3 py-1.5 rounded-sm border transition-colors ${mode === m ? 'text-[#04040a] bg-[#37e6ff] border-[#37e6ff]' : 'text-[#37e6ff]/55 border-[#37e6ff]/25 hover:text-[#37e6ff]'}`}>
@@ -292,14 +292,14 @@ export default function VoranyxPage() {
               ))}
             </div>
             {mode === 'daily' && <div className="text-[9px] font-mono text-[#7fd8e6]/45 tracking-wider -mt-1">same silt for everyone today</div>}
-            <div className="font-mono text-[12px] tracking-[0.25em] uppercase text-[#04040a] bg-[#37e6ff] px-6 py-2.5 rounded-sm mt-1" style={{ boxShadow: '0 0 18px #37e6ff80' }}>tap to dive in</div>
+            <div className="gx-label text-[12px] text-[#04040a] bg-[#37e6ff] px-6 py-2.5 rounded-[2px] mt-1" style={{ boxShadow: '0 0 18px #37e6ff80' }}>tap to dive in</div>
           </div>
         )}
 
         {over && (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-2.5 bg-[#04040a]/75 rounded-md text-center px-6">
-            <div className="font-mono text-[#c86bff] text-lg tracking-[0.3em] uppercase" style={{ textShadow: '0 0 14px #c86bff' }}>Scattered</div>
-            <div className="font-mono text-[#e8feff] text-3xl tabular-nums leading-none" style={{ textShadow: '0 0 12px #37e6ff80' }}>{len}</div>
+            <div className="gx-title text-[#c86bff] text-lg tracking-[0.3em] uppercase" style={{ textShadow: '0 0 14px #c86bff' }}>Scattered</div>
+            <div className="gx-value font-mono text-[#e8feff] text-3xl leading-none" style={{ textShadow: '0 0 12px #37e6ff80' }}>{len}</div>
             <p className="text-[11px] leading-relaxed text-[#9fd6e0]/80 italic max-w-[280px]">{taunt(len)}</p>
             <div className="text-[10px] font-mono text-[#7fd8e6]/50 tracking-wider">
               {mode === 'daily'
@@ -307,9 +307,9 @@ export default function VoranyxPage() {
                 : <>best {best}{len >= best && len > 0 ? ' ✦ new best' : ''}</>}
             </div>
             <div className="flex items-center gap-2 mt-1">
-              <button onClick={restart} className="font-mono text-[11px] tracking-[0.25em] uppercase text-[#04040a] bg-[#37e6ff] hover:bg-[#7df0ff] px-5 py-2 rounded-sm" style={{ boxShadow: '0 0 18px #37e6ff80' }}>dive again →</button>
+              <button onClick={restart} className="gx-label text-[11px] text-[#04040a] bg-[#37e6ff] hover:bg-[#7df0ff] px-5 py-2 rounded-[2px]" style={{ boxShadow: '0 0 18px #37e6ff80' }}>dive again →</button>
               {mode === 'daily' && (
-                <button onClick={onShare} className="font-mono text-[11px] tracking-[0.25em] uppercase text-[#37e6ff] border border-[#37e6ff]/40 hover:border-[#37e6ff] px-5 py-2 rounded-sm transition-colors">{shared ? 'copied ✓' : 'share'}</button>
+                <button onClick={onShare} className="gx-label text-[11px] text-[#37e6ff] border border-[#37e6ff]/40 hover:border-[#37e6ff] px-5 py-2 rounded-[2px] transition-colors">{shared ? 'copied ✓' : 'share'}</button>
               )}
             </div>
           </div>
