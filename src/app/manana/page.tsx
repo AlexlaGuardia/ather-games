@@ -6,6 +6,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import RoomReturn from '../_components/RoomReturn'
+import DailyLeaderboard from '../_components/DailyLeaderboard'
 import { mulberry32, type Rng } from '@/lib/arcade/rng'
 import { dailySeed, dailyNumber, loadDailyBest, saveDailyBest, dailyShare, copyShare } from '@/lib/arcade/daily'
 import { useNoScroll } from '@/lib/arcade/useNoScroll'
@@ -557,6 +558,7 @@ export default function MananaPage() {
                   </button>
                 )}
               </div>
+              {mode === 'daily' && <DailyLeaderboard gameId="manana" accent="#f0a526" score={score} className="mt-3" />}
             </div>
           )}
         </div>

@@ -14,3 +14,6 @@ public/characters
 public/audio
 public/magii
 public/manana
+
+# arcade leaderboard data (runtime-written)
+/data/

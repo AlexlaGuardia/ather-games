@@ -28,6 +28,7 @@ import {
 } from './lib/voranyx'
 import { sfx } from './lib/sfx'
 import { dailySeed, dailyNumber, loadDailyBest, saveDailyBest, dailyShare, copyShare } from '@/lib/arcade/daily'
+import DailyLeaderboard from '../_components/DailyLeaderboard'
 
 const ATHER = '#37e6ff'
 const HOT = '#e8feff'
@@ -312,6 +313,7 @@ export default function VoranyxPage() {
                 <button onClick={onShare} className="gx-label text-[11px] text-[#37e6ff] border border-[#37e6ff]/40 hover:border-[#37e6ff] px-5 py-2 rounded-[2px] transition-colors">{shared ? 'copied ✓' : 'share'}</button>
               )}
             </div>
+            {mode === 'daily' && <DailyLeaderboard gameId="voranyx" accent="#37e6ff" score={len} className="mt-1.5" />}
           </div>
         )}
       </div>

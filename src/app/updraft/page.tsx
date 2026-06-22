@@ -27,6 +27,7 @@ import {
 } from './lib/updraft'
 import { sfx } from './lib/sfx'
 import { dailySeed, dailyNumber, loadDailyBest, saveDailyBest, dailyShare, copyShare } from '@/lib/arcade/daily'
+import DailyLeaderboard from '../_components/DailyLeaderboard'
 
 const BG = '#04040a'
 const ATHER = '#37e6ff'
@@ -222,6 +223,7 @@ export default function UpdraftPage() {
                 </button>
               )}
             </div>
+            {mode === 'daily' && <DailyLeaderboard gameId="updraft" accent="#37e6ff" score={score} className="mt-1.5" />}
           </div>
         )}
       </div>

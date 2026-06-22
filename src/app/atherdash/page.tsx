@@ -32,6 +32,7 @@ import {
 import { sfx } from './lib/sfx'
 import ArcadeCabinet from '../_components/ArcadeCabinet'
 import { dailySeed, dailyNumber, loadDailyBest, saveDailyBest, dailyShare, copyShare } from '@/lib/arcade/daily'
+import DailyLeaderboard from '../_components/DailyLeaderboard'
 
 const BG = '#04040a'
 const ATHER = '#37e6ff'
@@ -310,6 +311,7 @@ export default function AtherdashPage() {
                 </button>
               )}
             </div>
+            {mode === 'daily' && <DailyLeaderboard gameId="atherdash" accent="#37e6ff" score={score} className="mt-1.5" />}
           </div>
         )}
       </div>
