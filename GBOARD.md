@@ -32,9 +32,10 @@ the Arcade frame.
 > **Rollout checklist:**
 > - [x] **Arcade catalog** (`/arcade/all`) — soft cards → framed CRT plates (`d3ada82`). PROOF.
 > - [x] **Nolmir deck** — tiles → sharp CRT plates (gx-scan + 3px), gx-chrome kill-list, digest sharpened. Verified live, 0 errors.
-> - [ ] **Per-game start/over overlays** (title plates + framed CTAs)
-> - [ ] **In-game HUDs** (lightest touch — already vector-glow; align type + plates)
-> - [ ] Arcade landing (`/arcade`) + hub widgets
+> - [~] **Per-game start/over overlays + HUDs** (title plates + framed CTAs + squared HUD type) — DONE on
+>   **Voranyx · Seedfall · Updraft · Rekindle** (gx-title/label/value + gx-chrome, `f2deed2`/`cb00971`, 06-22).
+>   Remaining: Atherdash · Lucernyx · Ward · Mana'nana (the feel-lapped four — still all-mono).
+> - [x] Arcade landing retired — `/arcade` (old flat hub) now redirects to `/room` (`a23cd1c`, 06-22).
 >
 > **▶ VEHICLE = the ARCADE POLISH LAP (planned 2026-06-21, Alex):** the start/over + HUD rollout now rides a
 > per-game polish lap — **one game per session**, same checklist (cold play → feel fixes → UI-layer pass → mobile →
@@ -52,11 +53,11 @@ the Arcade frame.
 |------|--------|--------------|------------|
 | Nolmir | 🟢 live | 2026-06-18 | idle Athernyx defense/arena |
 | Mana'nana | 🟢 live | 2026-06-14 | match-3, blooming specials |
-| Rekindle #3 | 🟢 live | 2026-06-12 | conduit puzzle + Aeterna node-map |
+| Rekindle #3 | 🟢 live | 2026-06-22 | conduit puzzle + Aeterna node-map |
 | Ward #4 | 🟢 live | 2026-06-14 | Missile Command / touch aim-trainer |
-| Updraft #5 | 🟢 live | 2026-06-14 | one-tap flight (Flappy) |
-| Seedfall #6 | 🟢 live | 2026-06-14 | Mana-Seed lander + persistent garden |
-| Voranyx #7 | 🟢 live | 2026-06-15 | glowing slither in the Silt |
+| Updraft #5 | 🟢 live | 2026-06-22 | one-tap flight (Flappy) |
+| Seedfall #6 | 🟢 live | 2026-06-22 | Mana-Seed lander + persistent garden |
+| Voranyx #7 | 🟢 live | 2026-06-22 | glowing slither in the Silt |
 | Lucernyx #8 | 🟢 live | 2026-06-15 | turn-based board of rekindling |
 | Gravitar #9 | ⚪ parked | 2026-06-15 | physics-orbit — concept didn't land (cut) |
 | Atherdash #10 | 🟢 live | 2026-06-17 | lane-runner — element-lanes ahead of the Dying (slice) |
@@ -163,7 +164,7 @@ the Arcade frame.
 **Files:** `manana/lib/match3.ts` · `page.tsx` · `tiles.ts` (T34 puff palette) · `runes.tsx`
 
 ### Rekindle (#3) — 🟢 live · conduit puzzle + Aeterna node-map → `/rekindle`
-*Last touched: 2026-06-12*
+*Last touched: 2026-06-22 — gx-* UI pass (map tiles → gx-card plates, squared chrome on both views)*
 **Left off:** v2 mechanics live — **colour purity** (mixed hues muddy a junction) +
   **charge budget** (rotations cost; run dry = the dark wins) + 3-star scoring. Slice 2
   **Aeterna network** node-map (5 nodes + a finale), each puzzle a dead machine that lights
@@ -212,7 +213,7 @@ the Arcade frame.
 **Files:** `ward/lib/ward.ts` (41 tests) · `lib/sfx.ts` · `page.tsx`
 
 ### Updraft (#5, was "Laz") — 🟢 live · one-tap flight (Flappy) → `/updraft`
-*Last touched: 2026-06-14*
+*Last touched: 2026-06-22 — gx-* UI pass (squared chrome + HUD)*
 **Left off:** Shipped. Lazerin rides the Ather currents — tap to climb, thread the void
   gates, endless score-chase. Hybrid bg (faint FLUX nebula behind procedural parallax
   spires + starfield). Uses shared `useNoScroll`. The pick-up-die-retry palate cleanser.
@@ -225,7 +226,7 @@ the Arcade frame.
 **Files:** `updraft/lib/updraft.ts` (17 tests) · `page.tsx` · `public/updraft/nebula.webp`
 
 ### Seedfall (#6) — 🟢 live · Mana-Seed lander + persistent garden → `/seedfall`
-*Last touched: 2026-06-14*
+*Last touched: 2026-06-22 — gx-* UI pass (squared chrome + HUD)*
 **Left off:** Shipped, tuned **cozy-landable** (headless pilot 12/12). Hold L/R half to
   thrust (both = rise), set the seed down soft → it **roots into a persistent garden that
   grows run over run** (localStorage); a hot/off-pad landing shatters. Hybrid bg (FLUX
@@ -240,7 +241,7 @@ the Arcade frame.
 **Files:** `seedfall/lib/seedfall.ts` (15 tests) · `page.tsx`
 
 ### Voranyx (#7) — 🟢 live · glowing slither in the Silt → `/voranyx`
-*Last touched: 2026-06-15*
+*Last touched: 2026-06-22 — gx-* UI pass (squared chrome + HUD); template for the lap look*
 **Left off:** SP-vs-AI build, **canon-grounded first** (`athernyx/CANON/world/voranyx.md`, DRAFT).
   **2026-06-15 — addressed the mid-game cramping + did a mobile pass:**
   • **Arena bigger / squeeze slower** — `ARENA_R0` 1000→1500, `ARENA_RMIN` 380→**560**,
