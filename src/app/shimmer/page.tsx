@@ -3145,9 +3145,12 @@ export default function ShimmerPage() {
               />
             )}
 
-            {/* Build mode: zoom toggle (only in garden build mode) */}
+            {/* Build mode: zoom toggle (only in garden build mode).
+                Mobile palette is a bottom sheet (z-30), so on mobile anchor top-right
+                (below the clock) to stay clear of it; desktop palette is a left panel
+                so bottom-right is fine. z-40 to sit above the panel either way. */}
             {buildMode && zoneRef.current.id === 'garden' && (
-              <div className="absolute bottom-[72px] right-2 z-20 flex flex-col items-center gap-0.5">
+              <div className={`absolute right-2 z-40 flex flex-col items-center gap-0.5 ${isMobile ? 'top-14' : 'bottom-[72px]'}`}>
                 <button
                   onClick={() => setCameraZoom(z => z === 0.75 ? 1 : z === 1 ? 1.5 : 0.75)}
                   className="w-10 h-10 rounded-lg bg-[#16142a]/90 border border-[#d4a843]/30 flex items-center justify-center text-[#d4a843] text-[18px] font-display hover:border-[#d4a843]/60 active:bg-[#d4a843]/15 transition-all shadow-lg"
