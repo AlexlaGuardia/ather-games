@@ -56,6 +56,17 @@ Re-read the current furniture placement interactions (page.tsx ~1785/1954) and h
 catalog is sourced before wiring the palette — the state-map is from an Explore pass, confirm
 exact entry points. Run the doctor after. Mobile-pass the palette + move/remove (phone primary).
 
+## Build-mode UX follow-ups (queued, post-v1)
+- **Camera zoom toggle** (Alex 2026-06-23) — zoom in (fewer/bigger tiles, precise placement) /
+  zoom out (whole-plot overview). Engine change: render assumes fixed 30x20 @ 1:1 TILE=32, so
+  zoom = scale camera + every draw. Next focused pixel build after placement is confirmed.
+- **2-step placement w/ confirm + rotate** (Alex 2026-06-23) — replace commit-on-first-tap:
+  tap tile → ghost → control bar (rotate / nudge / ✓confirm / ✗cancel) → commits on confirm.
+  Confirm/cancel + nudge = no art dependency, can ship with the zoom pass. ROTATE step: tile
+  engine already rotates (rotateTilePixels, bits 8-9) so STRUCTURES can rotate now; FURNITURE
+  rotation needs per-item rotation frames/art ("once we get the images" — Alex's framing).
+- (Earlier deferred: move/pick-up gesture, placement audio sfx, undo-last-placement.)
+
 ## Sequence
 Editable home plot (this) → then the terrain-generator thread for the big world (separate).
 The plot is a small fixed zone, independent of the big-map work — they don't block each other.
