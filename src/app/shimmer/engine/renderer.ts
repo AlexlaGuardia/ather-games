@@ -115,6 +115,10 @@ export class Renderer {
   camX = 0
   camY = 0
 
+  /** Camera zoom factor. >1 = zoom in (fewer tiles visible, bigger), <1 = zoom out (more tiles visible).
+   *  Supported levels: 0.75 (out) / 1.0 (normal) / 1.5 (in). Set each frame before drawBackground(). */
+  zoom = 1
+
   constructor(canvas: HTMLCanvasElement) {
     // Display canvas — sized to match CSS content area (excludes border)
     const dpr = window.devicePixelRatio || 1
@@ -160,14 +164,18 @@ export class Renderer {
 
   // --- Camera ---
 
-  /** Smoothly ease camera toward a pixel position, clamped to map edges */
+  /** Smoothly ease camera toward a pixel position, clamped to map edges.
+   *  At zoom != 1 the visible world window is (WIDTH/zoom) × (HEIGHT/zoom), so
+   *  clamp bounds and target center are adjusted accordingly. */
   centerOn(px: number, py: number, mapCols: number, mapRows: number) {
-    const maxCamX = Math.max(0, mapCols * TILE - WIDTH)
-    const maxCamY = Math.max(0, mapRows * TILE - HEIGHT)
+    const visW = WIDTH / this.zoom
+    const visH = HEIGHT / this.zoom
+    const maxCamX = Math.max(0, mapCols * TILE - visW)
+    const maxCamY = Math.max(0, mapRows * TILE - visH)
 
     // Target position (where camera wants to be)
-    const targetX = Math.max(0, Math.min(maxCamX, px + TILE / 2 - WIDTH / 2))
-    const targetY = Math.max(0, Math.min(maxCamY, py + TILE / 2 - HEIGHT / 2))
+    const targetX = Math.max(0, Math.min(maxCamX, px + TILE / 2 - visW / 2))
+    const targetY = Math.max(0, Math.min(maxCamY, py + TILE / 2 - visH / 2))
 
     // Lerp toward target — float precision, floor at draw time only
     // Min speed prevents integer-lock stutter at edge transitions
@@ -296,10 +304,12 @@ export class Renderer {
     this.fgChunks.set(`${ccx},${ccy}`, c) // null if no above-tiles found
   }
 
-  /** Ensure all chunks in the visible+margin range are baked; evict outside chunks. */
+  /** Ensure all chunks in the visible+margin range are baked; evict outside chunks.
+   *  At zoom < 1 the visible world window is larger (WIDTH/zoom), so more chunks are needed. */
   private ensureChunks(camX: number, camY: number): void {
     const { minCCX, maxCCX, minCCY, maxCCY } = visibleChunkRange(
       camX, camY, this._mapCols, this._mapRows,
+      CHUNK * TILE, WIDTH / this.zoom, HEIGHT / this.zoom,
     )
 
     // Build a set of keys we want to keep
@@ -329,21 +339,23 @@ export class Renderer {
     if (this._mapCols === 0) return
 
     const CS = CHUNK * TILE
+    const z = this.zoom
     const cx = Math.floor(this.camX)
     const cy = Math.floor(this.camY)
 
     this.ensureChunks(this.camX, this.camY)
 
+    const destCS = CS * z
     for (const [key, chunk] of this.bgChunks) {
       const [ccxStr, ccyStr] = key.split(',')
       const ccx = parseInt(ccxStr, 10)
       const ccy = parseInt(ccyStr, 10)
-      const dx = ccx * CS - cx
-      const dy = ccy * CS - cy
-      // Skip if entirely outside the viewport (ensureChunks already guards this,
-      // but guard again in case margin-ring chunks are just off-screen)
-      if (dx + CS < 0 || dx > WIDTH || dy + CS < 0 || dy > HEIGHT) continue
-      this.ctx.drawImage(chunk, 0, 0, CS, CS, dx, dy, CS, CS)
+      // World offset from camera × zoom → screen position
+      const dx = (ccx * CS - cx) * z
+      const dy = (ccy * CS - cy) * z
+      // Skip if entirely outside the viewport
+      if (dx + destCS < 0 || dx > WIDTH || dy + destCS < 0 || dy > HEIGHT) continue
+      this.ctx.drawImage(chunk, 0, 0, CS, CS, dx, dy, destCS, destCS)
     }
   }
 
@@ -352,18 +364,20 @@ export class Renderer {
     if (this._mapCols === 0) return
 
     const CS = CHUNK * TILE
+    const z = this.zoom
     const cx = Math.floor(this.camX)
     const cy = Math.floor(this.camY)
+    const destCS = CS * z
 
     for (const [key, chunk] of this.fgChunks) {
       if (!chunk) continue // null = no above-tiles in this chunk
       const [ccxStr, ccyStr] = key.split(',')
       const ccx = parseInt(ccxStr, 10)
       const ccy = parseInt(ccyStr, 10)
-      const dx = ccx * CS - cx
-      const dy = ccy * CS - cy
-      if (dx + CS < 0 || dx > WIDTH || dy + CS < 0 || dy > HEIGHT) continue
-      this.ctx.drawImage(chunk, 0, 0, CS, CS, dx, dy, CS, CS)
+      const dx = (ccx * CS - cx) * z
+      const dy = (ccy * CS - cy) * z
+      if (dx + destCS < 0 || dx > WIDTH || dy + destCS < 0 || dy > HEIGHT) continue
+      this.ctx.drawImage(chunk, 0, 0, CS, CS, dx, dy, destCS, destCS)
     }
   }
 
@@ -387,30 +401,34 @@ export class Renderer {
     return c
   }
 
-  /** Draw a sprite at world coordinates (camera-adjusted) */
+  /** Draw a sprite at world coordinates (camera-adjusted, zoom-scaled) */
   drawSprite(
     sprite: HTMLCanvasElement, x: number, y: number,
     flipX: boolean = false, dw?: number, dh?: number,
   ) {
     const w = dw ?? sprite.width
     const h = dh ?? sprite.height
+    const z = this.zoom
     // Floor camera first so sprites align with the bgCache pixel grid
     const cx = Math.floor(this.camX)
     const cy = Math.floor(this.camY)
-    const sx = Math.floor(x - cx - (w - sprite.width) / 2)
-    const sy = Math.floor(y - cy - (h - sprite.height))
+    // World offset from camera, centered, scaled by zoom
+    const sx = Math.floor((x - cx - (w - sprite.width) / 2) * z)
+    const sy = Math.floor((y - cy - (h - sprite.height)) * z)
+    const dw2 = Math.ceil(w * z)
+    const dh2 = Math.ceil(h * z)
 
     // Skip if entirely off-screen
-    if (sx + w < 0 || sx > WIDTH || sy + h < 0 || sy > HEIGHT) return
+    if (sx + dw2 < 0 || sx > WIDTH || sy + dh2 < 0 || sy > HEIGHT) return
 
     if (flipX) {
       this.ctx.save()
-      this.ctx.translate(sx + w, sy)
+      this.ctx.translate(sx + dw2, sy)
       this.ctx.scale(-1, 1)
-      this.ctx.drawImage(sprite, 0, 0, sprite.width, sprite.height, 0, 0, w, h)
+      this.ctx.drawImage(sprite, 0, 0, sprite.width, sprite.height, 0, 0, dw2, dh2)
       this.ctx.restore()
     } else {
-      this.ctx.drawImage(sprite, 0, 0, sprite.width, sprite.height, sx, sy, w, h)
+      this.ctx.drawImage(sprite, 0, 0, sprite.width, sprite.height, sx, sy, dw2, dh2)
     }
   }
 
@@ -421,29 +439,33 @@ export class Renderer {
 
   // --- Particles (drawn directly, no caching) ---
 
-  /** Draw a pixel at world coordinates (camera-adjusted) */
+  /** Draw a pixel at world coordinates (camera-adjusted, zoom-scaled) */
   drawPixel(x: number, y: number, color: string, alpha: number = 1) {
-    const sx = Math.floor(x - Math.floor(this.camX))
-    const sy = Math.floor(y - Math.floor(this.camY))
-    if (sx < 0 || sx >= WIDTH || sy < 0 || sy >= HEIGHT) return
+    const z = this.zoom
+    const sx = Math.floor((x - Math.floor(this.camX)) * z)
+    const sy = Math.floor((y - Math.floor(this.camY)) * z)
+    const ps = Math.ceil(z) // pixel size — ceil avoids sub-pixel gaps at non-integer zoom
+    if (sx + ps < 0 || sx >= WIDTH || sy + ps < 0 || sy >= HEIGHT) return
 
     this.ctx.globalAlpha = alpha
     this.ctx.fillStyle = color
-    this.ctx.fillRect(sx, sy, 1, 1)
+    this.ctx.fillRect(sx, sy, ps, ps)
     this.ctx.globalAlpha = 1
   }
 
-  /** Draw a pixel-art label at world coordinates using 3x5 bitmap font */
+  /** Draw a pixel-art label at world coordinates using 3x5 bitmap font (zoom-scaled) */
   drawLabel(text: string, x: number, y: number, color: string = '#ffffff') {
-    const sx = Math.floor(x - Math.floor(this.camX))
-    const sy = Math.floor(y - Math.floor(this.camY))
-    const charW = 4  // 3px char + 1px gap
-    const textW = text.length * charW - 1
-    const pad = 1
+    const z = this.zoom
+    const sx = Math.floor((x - Math.floor(this.camX)) * z)
+    const sy = Math.floor((y - Math.floor(this.camY)) * z)
+    const ps = Math.ceil(z)
+    const charW = 4 * ps  // 3px char + 1px gap, scaled
+    const textW = text.length * charW - ps
+    const pad = ps
     // Background pill
     this.ctx.globalAlpha = 0.45
     this.ctx.fillStyle = '#000000'
-    this.ctx.fillRect(sx - pad, sy - pad, textW + pad * 2, 5 + pad * 2)
+    this.ctx.fillRect(sx - pad, sy - pad, textW + pad * 2, 5 * ps + pad * 2)
     this.ctx.globalAlpha = 1
     // Render each character as 3x5 pixel bitmap
     this.ctx.fillStyle = color
@@ -453,7 +475,7 @@ export class Renderer {
       for (let row = 0; row < 5; row++) {
         for (let col = 0; col < 3; col++) {
           if (glyph[row * 3 + col]) {
-            this.ctx.fillRect(sx + i * charW + col, sy + row, 1, 1)
+            this.ctx.fillRect(sx + i * charW + col * ps, sy + row * ps, ps, ps)
           }
         }
       }
@@ -491,18 +513,20 @@ export class Renderer {
    *  aboveOnly=false before entities, aboveOnly=true after overlay */
   drawAnimatedTiles(tiles: TileDef[], above: boolean[], globalTick: number, aboveOnly: boolean) {
     if (this.animTilePositions.length === 0) return
+    const z = this.zoom
     const cx = Math.floor(this.camX)
     const cy = Math.floor(this.camY)
+    const destSize = TILE * z
 
     for (const pos of this.animTilePositions) {
       // Filter by layer
       const isAbove = above[pos.tileIdx] ?? false
       if (aboveOnly !== isAbove) continue
 
-      // Viewport culling
-      const px = pos.tx * TILE - cx
-      const py = pos.ty * TILE - cy
-      if (px + TILE < 0 || px > WIDTH || py + TILE < 0 || py > HEIGHT) continue
+      // Viewport culling (zoom-aware)
+      const px = (pos.tx * TILE - cx) * z
+      const py = (pos.ty * TILE - cy) * z
+      if (px + destSize < 0 || px > WIDTH || py + destSize < 0 || py > HEIGHT) continue
 
       const tile = tiles[pos.tileIdx]
       if (!tile?.frames || tile.frames.length <= 1) continue
@@ -518,7 +542,7 @@ export class Renderer {
       const pixels = pos.rot > 0 ? Renderer.rotateTilePixels(framePixels, pos.rot) : framePixels
       const key = `atile-${pos.tileIdx}-f${frameIdx}-r${pos.rot}`
       const sprite = this.getSprite(key, pixels, tile.palette, TILE, TILE, false)
-      this.ctx.drawImage(sprite, px, py)
+      this.ctx.drawImage(sprite, 0, 0, TILE, TILE, px, py, destSize, destSize)
     }
   }
 

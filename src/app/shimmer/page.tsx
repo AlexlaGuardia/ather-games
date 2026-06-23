@@ -379,8 +379,15 @@ export default function ShimmerPage() {
   const [selectedBuildItem, setSelectedBuildItem] = useState<{ type: 'furniture' | 'structure'; id: string } | null>(null)
   const selectedBuildItemRef = useRef(selectedBuildItem) // mirror: handleCanvasClick has [] deps
   const [buildHoverTile, setBuildHoverTile] = useState<{ x: number; y: number } | null>(null)
+  const buildHoverTileRef = useRef<{ x: number; y: number } | null>(null) // mirror for game loop (stale closure safe)
   const [selectedPlacedFurnId, setSelectedPlacedFurnId] = useState<string | null>(null)
   const [selectedPlacedStructId, setSelectedPlacedStructId] = useState<string | null>(null)
+  // Camera zoom — 0.75=out, 1=normal, 1.5=in. Shown only in build mode.
+  const [cameraZoom, setCameraZoom] = useState<0.75 | 1 | 1.5>(1)
+  const cameraZoomRef = useRef<0.75 | 1 | 1.5>(1)
+  // Two-step placement: pending tile before commit
+  const [pendingPlacement, setPendingPlacement] = useState<{ tileX: number; tileY: number } | null>(null)
+  const pendingPlacementRef = useRef<{ tileX: number; tileY: number } | null>(null)
   const dayCycleRef = useRef<DayCycleState>(createDayCycle())
   const weatherStatesRef = useRef<Record<string, WeatherState>>({})
   const flagsRef = useRef<Record<string, boolean>>({})
@@ -429,6 +436,9 @@ export default function ShimmerPage() {
   // Sync refs with state so game loop closure can read current values
   buildModeRef.current = buildMode
   selectedBuildItemRef.current = selectedBuildItem
+  buildHoverTileRef.current = buildHoverTile
+  cameraZoomRef.current = cameraZoom
+  pendingPlacementRef.current = pendingPlacement
   activeBeastIdRef.current = activeBeastId
   playerCharRef.current = playerCharId
   // Apply movement style when character changes
@@ -1028,56 +1038,24 @@ export default function ShimmerPage() {
     // Dismiss player popup on any canvas click
     if (playerPopup) { setPlayerPopup(null); return }
     const rect = canvas.getBoundingClientRect()
-    const scaleX = WIDTH / rect.width
-    const scaleY = HEIGHT / rect.height
-    const worldX = (e.clientX - rect.left) * scaleX + renderer.camX
-    const worldY = (e.clientY - rect.top) * scaleY + renderer.camY
+    // Zoom-aware coord transform:
+    //   CSS px → offscreen px (960×640): multiply by WIDTH/rect.width
+    //   offscreen px → world px: divide by zoom (at zoom>1 fewer world px fill the offscreen)
+    const zoom = cameraZoomRef.current
+    const offX = (e.clientX - rect.left) * (WIDTH / rect.width)
+    const offY = (e.clientY - rect.top) * (HEIGHT / rect.height)
+    const worldX = offX / zoom + renderer.camX
+    const worldY = offY / zoom + renderer.camY
     const clickTileX = Math.floor(worldX / TILE)
     const clickTileY = Math.floor(worldY / TILE)
 
     // Build mode — intercept all clicks in the Garden
     if (buildModeRef.current && zoneRef.current.id === 'garden') {
-      const grid = zoneRef.current.grid
       const sel = selectedBuildItemRef.current
       if (sel) {
-        // Attempt to place
-        if (sel.type === 'furniture') {
-          const tileOk = walkable(grid, clickTileX, clickTileY)
-          const furnOnTile = furnitureAtTile(clickTileX, clickTileY, 'garden', furnitureRef.current)
-          const structOnTile = structureOccupiesTile(clickTileX, clickTileY, 'garden', playerStructuresRef.current, structureDefsRef.current)
-          if (tileOk && !furnOnTile && !structOnTile) {
-            const placed = createFurniture(sel.id, clickTileX, clickTileY, 'garden')
-            furnitureRef.current.push(placed)
-            particlesRef.current.burst(clickTileX * TILE + 16, clickTileY * TILE + 8, 'sparkle', 5)
-            forceUpdate(n => n + 1)
-          } else {
-            notify('warning', 'Cannot place here')
-          }
-        } else {
-          // Structure — validate entire footprint
-          const def = structureDefsRef.current.find(s => s.id === sel.id)
-          if (def) {
-            let valid = true
-            for (let fr = 0; fr < def.rows && valid; fr++) {
-              for (let fc = 0; fc < def.cols && valid; fc++) {
-                const tx = clickTileX + fc
-                const ty = clickTileY + fr
-                if (!walkable(grid, tx, ty)) valid = false
-                else if (furnitureAtTile(tx, ty, 'garden', furnitureRef.current)) valid = false
-                else if (structureOccupiesTile(tx, ty, 'garden', playerStructuresRef.current, structureDefsRef.current)) valid = false
-              }
-            }
-            if (valid) {
-              const placed = createPlacedStructure(sel.id, clickTileX, clickTileY, 'garden')
-              playerStructuresRef.current.push(placed)
-              particlesRef.current.burst(clickTileX * TILE + 16, clickTileY * TILE + 8, 'sparkle', 5)
-              forceUpdate(n => n + 1)
-            } else {
-              notify('warning', 'Cannot place here')
-            }
-          }
-        }
-        setSelectedBuildItem(null)
+        // Two-step placement: tap sets pending ghost, confirm bar commits it.
+        // Re-tapping while pending moves the ghost to the new tile.
+        setPendingPlacement({ tileX: clickTileX, tileY: clickTileY })
       } else {
         // No item selected — check if clicked on a placed item to select it for removal
         const furnHere = furnitureRef.current.find(f =>
@@ -1353,14 +1331,65 @@ export default function ShimmerPage() {
       clientX = e.clientX
       clientY = e.clientY
     }
-    const scaleX = WIDTH / rect.width
-    const scaleY = HEIGHT / rect.height
-    const canvasX = (clientX - rect.left) * scaleX
-    const canvasY = (clientY - rect.top) * scaleY
-    const worldX = canvasX + renderer.camX
-    const worldY = canvasY + renderer.camY
-    setBuildHoverTile({ x: Math.floor(worldX / TILE), y: Math.floor(worldY / TILE) })
+    // Zoom-aware: CSS px → offscreen px → world px (same as handleCanvasClick)
+    const zoom = cameraZoomRef.current
+    const offX = (clientX - rect.left) * (WIDTH / rect.width)
+    const offY = (clientY - rect.top) * (HEIGHT / rect.height)
+    const worldX = offX / zoom + renderer.camX
+    const worldY = offY / zoom + renderer.camY
+    const tile = { x: Math.floor(worldX / TILE), y: Math.floor(worldY / TILE) }
+    setBuildHoverTile(tile)
+    buildHoverTileRef.current = tile // sync immediately so game loop sees current frame
   }, [])
+
+  // Commit the pending placement (called from the confirm bar ✓ button)
+  const confirmPlacement = useCallback(() => {
+    const pending = pendingPlacementRef.current
+    const sel = selectedBuildItemRef.current
+    if (!pending || !sel) return
+    const { tileX, tileY } = pending
+    const grid = zoneRef.current.grid
+    if (sel.type === 'furniture') {
+      const tileOk = walkable(grid, tileX, tileY)
+      const furnOnTile = furnitureAtTile(tileX, tileY, 'garden', furnitureRef.current)
+      const structOnTile = structureOccupiesTile(tileX, tileY, 'garden', playerStructuresRef.current, structureDefsRef.current)
+      if (tileOk && !furnOnTile && !structOnTile) {
+        const placed = createFurniture(sel.id, tileX, tileY, 'garden')
+        furnitureRef.current.push(placed)
+        particlesRef.current.burst(tileX * TILE + 16, tileY * TILE + 8, 'sparkle', 5)
+        forceUpdate(n => n + 1)
+        setPendingPlacement(null)
+        setSelectedBuildItem(null)
+      } else {
+        notify('warning', 'Cannot place here')
+      }
+    } else {
+      // Structure — validate entire footprint
+      const def = structureDefsRef.current.find(s => s.id === sel.id)
+      if (def) {
+        let valid = true
+        for (let fr = 0; fr < def.rows && valid; fr++) {
+          for (let fc = 0; fc < def.cols && valid; fc++) {
+            const tx = tileX + fc
+            const ty = tileY + fr
+            if (!walkable(grid, tx, ty)) valid = false
+            else if (furnitureAtTile(tx, ty, 'garden', furnitureRef.current)) valid = false
+            else if (structureOccupiesTile(tx, ty, 'garden', playerStructuresRef.current, structureDefsRef.current)) valid = false
+          }
+        }
+        if (valid) {
+          const placed = createPlacedStructure(sel.id, tileX, tileY, 'garden')
+          playerStructuresRef.current.push(placed)
+          particlesRef.current.burst(tileX * TILE + 16, tileY * TILE + 8, 'sparkle', 5)
+          forceUpdate(n => n + 1)
+          setPendingPlacement(null)
+          setSelectedBuildItem(null)
+        } else {
+          notify('warning', 'Cannot place here')
+        }
+      }
+    }
+  }, [notify])
 
   // Build game context for dialogue condition evaluation
   const buildCtx = useCallback((): GameContext => ({
@@ -2271,6 +2300,8 @@ export default function ShimmerPage() {
 
         // Camera follows interpolated player position
         const rz = zoneRef.current
+        // Apply zoom before centerOn so clamp bounds use zoomed window size
+        renderer.zoom = cameraZoomRef.current
         renderer.centerOn(visualX, visualY, rz.grid[0]?.length ?? 30, rz.grid.length)
 
         // Layer 0: Tilemap
@@ -2761,35 +2792,45 @@ export default function ShimmerPage() {
           }
         }
 
-        // Build mode ghost preview
-        if (buildModeRef.current && buildHoverTile) {
-          const gx = buildHoverTile.x
-          const gy = buildHoverTile.y
-          // Determine footprint
-          let footprintCols = 1
-          let footprintRows = 1
-          if (selectedBuildItem?.type === 'structure') {
-            const def = structureDefsRef.current.find(s => s.id === selectedBuildItem.id)
-            if (def) { footprintCols = def.cols; footprintRows = def.rows }
-          }
-          // Validate footprint
-          const grid = rz.grid
-          let valid = true
-          for (let fr = 0; fr < footprintRows && valid; fr++) {
-            for (let fc = 0; fc < footprintCols && valid; fc++) {
-              const tx = gx + fc
-              const ty = gy + fr
-              if (!walkable(grid, tx, ty)) valid = false
-              else if (furnitureAtTile(tx, ty, rz.id, furnitureRef.current)) valid = false
-              else if (structureOccupiesTile(tx, ty, rz.id, playerStructuresRef.current, structureDefsRef.current)) valid = false
+        // Build mode ghost preview — uses refs (not state) to avoid stale closure
+        // Pending placement (from two-step confirm) takes priority over hover tile.
+        if (buildModeRef.current) {
+          const selRef = selectedBuildItemRef.current
+          const ghostSource = pendingPlacementRef.current
+            ? { x: pendingPlacementRef.current.tileX, y: pendingPlacementRef.current.tileY }
+            : buildHoverTileRef.current
+          if (ghostSource && selRef) {
+            const gx = ghostSource.x
+            const gy = ghostSource.y
+            const isPending = !!pendingPlacementRef.current
+            // Determine footprint
+            let footprintCols = 1
+            let footprintRows = 1
+            if (selRef.type === 'structure') {
+              const def = structureDefsRef.current.find(s => s.id === selRef.id)
+              if (def) { footprintCols = def.cols; footprintRows = def.rows }
             }
-          }
-          const ghostColor = valid ? '#44ff88' : '#ff4444'
-          for (let fr = 0; fr < footprintRows; fr++) {
-            for (let fc = 0; fc < footprintCols; fc++) {
-              for (let px2 = 0; px2 < TILE; px2++) {
-                for (let py2 = 0; py2 < TILE; py2++) {
-                  renderer.drawPixel((gx + fc) * TILE + px2, (gy + fr) * TILE + py2, ghostColor, 0.3)
+            // Validate footprint
+            const grid = rz.grid
+            let valid = true
+            for (let fr = 0; fr < footprintRows && valid; fr++) {
+              for (let fc = 0; fc < footprintCols && valid; fc++) {
+                const tx = gx + fc
+                const ty = gy + fr
+                if (!walkable(grid, tx, ty)) valid = false
+                else if (furnitureAtTile(tx, ty, rz.id, furnitureRef.current)) valid = false
+                else if (structureOccupiesTile(tx, ty, rz.id, playerStructuresRef.current, structureDefsRef.current)) valid = false
+              }
+            }
+            // Pending = brighter / more opaque; hover = subtle
+            const ghostColor = valid ? '#44ff88' : '#ff4444'
+            const ghostAlpha = isPending ? 0.5 : 0.25
+            for (let fr = 0; fr < footprintRows; fr++) {
+              for (let fc = 0; fc < footprintCols; fc++) {
+                for (let px2 = 0; px2 < TILE; px2++) {
+                  for (let py2 = 0; py2 < TILE; py2++) {
+                    renderer.drawPixel((gx + fc) * TILE + px2, (gy + fr) * TILE + py2, ghostColor, ghostAlpha)
+                  }
                 }
               }
             }
@@ -3080,7 +3121,7 @@ export default function ShimmerPage() {
                 selectedItem={selectedBuildItem}
                 selectedPlacedFurnId={selectedPlacedFurnId}
                 selectedPlacedStructId={selectedPlacedStructId}
-                onSelectItem={setSelectedBuildItem}
+                onSelectItem={(item) => { setPendingPlacement(null); setSelectedBuildItem(item) }}
                 onRemoveFurniture={(id) => {
                   furnitureRef.current = furnitureRef.current.filter(f => f.id !== id)
                   setSelectedPlacedFurnId(null)
@@ -3095,11 +3136,75 @@ export default function ShimmerPage() {
                   setBuildMode(false)
                   buildModeRef.current = false
                   setSelectedBuildItem(null)
+                  setPendingPlacement(null)
                   setSelectedPlacedFurnId(null)
                   setSelectedPlacedStructId(null)
+                  setCameraZoom(1)
                 }}
                 isMobile={isMobile}
               />
+            )}
+
+            {/* Build mode: zoom toggle (only in garden build mode) */}
+            {buildMode && zoneRef.current.id === 'garden' && (
+              <div className="absolute bottom-[72px] right-2 z-20 flex flex-col items-center gap-0.5">
+                <button
+                  onClick={() => setCameraZoom(z => z === 0.75 ? 1 : z === 1 ? 1.5 : 0.75)}
+                  className="w-10 h-10 rounded-lg bg-[#16142a]/90 border border-[#d4a843]/30 flex items-center justify-center text-[#d4a843] text-[18px] font-display hover:border-[#d4a843]/60 active:bg-[#d4a843]/15 transition-all shadow-lg"
+                  title={cameraZoom === 0.75 ? 'Zoom: Out — tap to reset' : cameraZoom === 1 ? 'Zoom: Normal — tap to zoom in' : 'Zoom: In — tap to zoom out'}
+                >
+                  {cameraZoom === 0.75 ? '−' : cameraZoom === 1 ? '□' : '+'}
+                </button>
+                <span className="text-[9px] text-[#d4a843]/50 font-display leading-none">
+                  {cameraZoom === 0.75 ? 'OUT' : cameraZoom === 1 ? '1×' : 'IN'}
+                </span>
+              </div>
+            )}
+
+            {/* Build mode: confirm / cancel / nudge bar (two-step placement) */}
+            {buildMode && pendingPlacement && selectedBuildItem && (
+              <div className="absolute bottom-2 left-1/2 -translate-x-1/2 z-30 flex items-center gap-2 bg-[#16142a]/95 border border-[#d4a843]/30 rounded-xl px-3 py-2 shadow-xl shadow-black/40">
+                {/* Nudge arrows: 3×3 grid with arrows at N/S/E/W */}
+                <div className="grid grid-cols-3 gap-0.5">
+                  <div />
+                  <button
+                    onClick={() => setPendingPlacement(p => p ? { ...p, tileY: p.tileY - 1 } : p)}
+                    className="w-7 h-7 flex items-center justify-center rounded text-[#d4a843]/70 hover:bg-[#d4a843]/15 active:bg-[#d4a843]/25 text-[16px] transition-colors"
+                  >↑</button>
+                  <div />
+                  <button
+                    onClick={() => setPendingPlacement(p => p ? { ...p, tileX: p.tileX - 1 } : p)}
+                    className="w-7 h-7 flex items-center justify-center rounded text-[#d4a843]/70 hover:bg-[#d4a843]/15 active:bg-[#d4a843]/25 text-[16px] transition-colors"
+                  >←</button>
+                  {/* Center: rotate placeholder — art not yet available */}
+                  {/* TODO: add rotate button here once furniture rotation frames exist */}
+                  <div className="w-7 h-7 flex items-center justify-center rounded opacity-20 text-[#d4a843]/30 text-[10px] font-display" title="Rotate — coming soon">⟳</div>
+                  <button
+                    onClick={() => setPendingPlacement(p => p ? { ...p, tileX: p.tileX + 1 } : p)}
+                    className="w-7 h-7 flex items-center justify-center rounded text-[#d4a843]/70 hover:bg-[#d4a843]/15 active:bg-[#d4a843]/25 text-[16px] transition-colors"
+                  >→</button>
+                  <div />
+                  <button
+                    onClick={() => setPendingPlacement(p => p ? { ...p, tileY: p.tileY + 1 } : p)}
+                    className="w-7 h-7 flex items-center justify-center rounded text-[#d4a843]/70 hover:bg-[#d4a843]/15 active:bg-[#d4a843]/25 text-[16px] transition-colors"
+                  >↓</button>
+                  <div />
+                </div>
+                {/* Divider */}
+                <div className="w-px h-10 bg-[#d4a843]/15 mx-1" />
+                {/* Cancel */}
+                <button
+                  onClick={() => setPendingPlacement(null)}
+                  className="w-9 h-9 flex items-center justify-center rounded-lg text-red-400/60 hover:bg-red-400/10 hover:text-red-400 active:bg-red-400/20 transition-colors text-[18px]"
+                  title="Cancel placement"
+                >✗</button>
+                {/* Confirm */}
+                <button
+                  onClick={confirmPlacement}
+                  className="w-9 h-9 flex items-center justify-center rounded-lg text-green-400/60 hover:bg-green-400/10 hover:text-green-400 active:bg-green-400/20 transition-colors text-[18px]"
+                  title="Confirm placement"
+                >✓</button>
+              </div>
             )}
 
             {/* Mana bar */}
@@ -3472,8 +3577,10 @@ export default function ShimmerPage() {
                       buildModeRef.current = next
                       if (!next) {
                         setSelectedBuildItem(null)
+                        setPendingPlacement(null)
                         setSelectedPlacedFurnId(null)
                         setSelectedPlacedStructId(null)
+                        setCameraZoom(1)
                       }
                       return next
                     })
@@ -4430,8 +4537,10 @@ export default function ShimmerPage() {
                     buildModeRef.current = next
                     if (!next) {
                       setSelectedBuildItem(null)
+                      setPendingPlacement(null)
                       setSelectedPlacedFurnId(null)
                       setSelectedPlacedStructId(null)
+                      setCameraZoom(1)
                     }
                     return next
                   })
