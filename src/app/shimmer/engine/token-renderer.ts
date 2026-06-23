@@ -11,7 +11,7 @@
 // drawSprite blits it with the same camera / flip / anchor maths. When 3D
 // lands, swap the renderer; engine/ and all the design data carry over 1:1.
 
-import { Renderer, TileDef, WIDTH, HEIGHT, TILE } from './renderer'
+import { Renderer, TileDef, WIDTH, HEIGHT, TILE, CHUNK } from './renderer'
 
 function hexToRgb(hex: string): [number, number, number] {
   let h = hex.trim().replace('#', '')
@@ -44,33 +44,47 @@ export class TokenRenderer extends Renderer {
   // --- Terrain: flat colour fields instead of pixel tilesets ---
 
   override cacheTilemap(grid: number[][], tiles: TileDef[]) {
-    const cols = grid[0]?.length ?? 0
-    const rows = grid.length
-    const c = document.createElement('canvas')
-    c.width = cols * TILE
-    c.height = rows * TILE
-    const ctx = c.getContext('2d')!
-
-    for (let ty = 0; ty < rows; ty++) {
-      for (let tx = 0; tx < grid[ty].length; tx++) {
-        const tileIdx = grid[ty][tx] & 0xFF
-        const tile = tiles[tileIdx]
-        const base = tile ? dominantColor(tile.pixels, tile.palette) : '#1b2030'
-        ctx.fillStyle = base
-        ctx.fillRect(tx * TILE, ty * TILE, TILE, TILE)
-        // Faint grid seam so large same-colour zones still read as a world.
-        ctx.fillStyle = 'rgba(0,0,0,0.10)'
-        ctx.fillRect(tx * TILE, ty * TILE + TILE - 1, TILE, 1)
-        ctx.fillRect(tx * TILE + TILE - 1, ty * TILE, 1, TILE)
-      }
-    }
-    this.bgCache = c
+    // Store refs + clear chunk maps via base; chunks baked lazily via bakeBgChunk
+    super.cacheTilemap(grid, tiles)
   }
 
   // Above-player canopy occlusion is a pixel-era nicety; skip it for the
   // stand-in (terrain is already fully drawn flat in the bg layer).
-  override cacheOverlay(_grid: number[][], _tiles: TileDef[], _above: boolean[]) {
-    this.fgCache = null
+  override cacheOverlay(grid: number[][], tiles: TileDef[], above: boolean[]) {
+    // Store above ref (clears fgChunks); bakeFgChunk will produce all-null chunks
+    super.cacheOverlay(grid, tiles, above)
+  }
+
+  /** Override bg chunk baking: draw flat colour fields instead of pixel tilesets. */
+  protected override bakeBgChunk(ccx: number, ccy: number): void {
+    const CS = CHUNK * TILE
+    const c = document.createElement('canvas')
+    c.width = CS
+    c.height = CS
+    const ctx = c.getContext('2d')!
+
+    const txStart = ccx * CHUNK
+    const tyStart = ccy * CHUNK
+
+    for (let dy = 0; dy < CHUNK; dy++) {
+      const ty = tyStart + dy
+      if (ty >= this._mapRows) break
+      for (let dx = 0; dx < CHUNK; dx++) {
+        const tx = txStart + dx
+        if (tx >= this._mapCols) break
+        const tileIdx = this._grid[ty][tx] & 0xFF
+        const tile = this._tiles[tileIdx]
+        const base = tile ? dominantColor(tile.pixels, tile.palette) : '#1b2030'
+        ctx.fillStyle = base
+        ctx.fillRect(dx * TILE, dy * TILE, TILE, TILE)
+        // Faint grid seam so large same-colour zones still read as a world.
+        ctx.fillStyle = 'rgba(0,0,0,0.10)'
+        ctx.fillRect(dx * TILE, dy * TILE + TILE - 1, TILE, 1)
+        ctx.fillRect(dx * TILE + TILE - 1, dy * TILE, 1, TILE)
+      }
+    }
+
+    this.bgChunks.set(`${ccx},${ccy}`, c)
   }
 
   // No per-tile animation in token mode — keep the animTilePositions list empty

@@ -7,6 +7,9 @@ export const WIDTH = 960
 export const HEIGHT = 640
 export const TILE = 32
 
+/** Chunk size in tiles. Each chunk canvas is CHUNK*TILE × CHUNK*TILE px. Tunable. */
+export const CHUNK = 16
+
 // 3x5 pixel bitmap font — each glyph is 15 booleans (3 cols × 5 rows, row-major)
 const PIXEL_FONT: Record<string, number[]> = {
   A: [0,1,0, 1,0,1, 1,1,1, 1,0,1, 1,0,1],
@@ -60,12 +63,51 @@ export interface TileDef {
   animRate?: number      // ticks per frame at 15 TPS (default: 12)
 }
 
+/** Visible chunk range (chunk coords, inclusive). Pure function — unit-testable. */
+export function visibleChunkRange(
+  camX: number,
+  camY: number,
+  mapCols: number,
+  mapRows: number,
+  chunkPx: number = CHUNK * TILE,
+  viewportW: number = WIDTH,
+  viewportH: number = HEIGHT,
+): { minCCX: number; maxCCX: number; minCCY: number; maxCCY: number } {
+  const cx = Math.floor(camX)
+  const cy = Math.floor(camY)
+
+  // Pixel range of the visible window in world space
+  const worldLeft  = cx
+  const worldRight = cx + viewportW - 1
+  const worldTop   = cy
+  const worldBot   = cy + viewportH - 1
+
+  // Chunk coords that overlap the visible window (expand by 1-chunk margin ring)
+  const mapChunkCols = Math.ceil(mapCols * TILE / chunkPx)
+  const mapChunkRows = Math.ceil(mapRows * TILE / chunkPx)
+
+  const minCCX = Math.max(0, Math.floor(worldLeft  / chunkPx) - 1)
+  const maxCCX = Math.min(mapChunkCols - 1, Math.floor(worldRight / chunkPx) + 1)
+  const minCCY = Math.max(0, Math.floor(worldTop   / chunkPx) - 1)
+  const maxCCY = Math.min(mapChunkRows - 1, Math.floor(worldBot   / chunkPx) + 1)
+
+  return { minCCX, maxCCX, minCCY, maxCCY }
+}
+
 export class Renderer {
   private ctx: CanvasRenderingContext2D        // offscreen game canvas (320x208)
   private displayCtx: CanvasRenderingContext2D // visible display canvas (scaled)
   private offscreen: HTMLCanvasElement
-  protected bgCache: HTMLCanvasElement | null = null
-  protected fgCache: HTMLCanvasElement | null = null
+  // Chunk maps replace the old single-canvas bgCache / fgCache
+  protected bgChunks = new Map<string, HTMLCanvasElement>()
+  // null in fgChunks = chunk baked but contains no above-tiles (never redraw)
+  protected fgChunks = new Map<string, HTMLCanvasElement | null>()
+  // Stored grid/tiles/above refs for on-demand chunk baking
+  protected _grid: number[][] = []
+  protected _tiles: TileDef[] = []
+  protected _above: boolean[] = []
+  protected _mapCols = 0
+  protected _mapRows = 0
   protected spriteCache = new Map<string, HTMLCanvasElement>()
   private animTilePositions: { tx: number; ty: number; tileIdx: number; rot: number }[] = []
 
@@ -146,25 +188,13 @@ export class Renderer {
   // --- Tilemap ---
 
   cacheTilemap(grid: number[][], tiles: TileDef[]) {
-    const cols = grid[0]?.length ?? 0
-    const rows = grid.length
-    const c = document.createElement('canvas')
-    c.width = cols * TILE
-    c.height = rows * TILE
-    const ctx = c.getContext('2d')!
-
-    for (let ty = 0; ty < rows; ty++) {
-      for (let tx = 0; tx < grid[ty].length; tx++) {
-        const val = grid[ty][tx]
-        const tileIdx = val & 0xFF
-        const rot = (val >> 8) & 3
-        const tile = tiles[tileIdx]
-        const pixels = rot > 0 ? Renderer.rotateTilePixels(tile.pixels, rot) : tile.pixels
-        this.drawPixelsTo(ctx, pixels, tile.palette, tx * TILE, ty * TILE, TILE, TILE)
-      }
-    }
-
-    this.bgCache = c
+    // Store refs for on-demand chunk baking; clear existing chunks
+    this._grid = grid
+    this._tiles = tiles
+    this._mapCols = grid[0]?.length ?? 0
+    this._mapRows = grid.length
+    this.bgChunks.clear()
+    this.fgChunks.clear()
   }
 
   static rotateTilePixels(pixels: Uint8Array, rot: number): Uint8Array {
@@ -183,64 +213,150 @@ export class Renderer {
     return result
   }
 
-  /** Cache the foreground/overlay layer (above-player tiles only) */
+  /** Store the above[] array; chunk fg baking is deferred to ensureChunks. */
   cacheOverlay(grid: number[][], tiles: TileDef[], above: boolean[]) {
-    const cols = grid[0]?.length ?? 0
-    const rows = grid.length
-    // Check if any tiles are marked above
-    let hasAbove = false
-    for (let ty = 0; ty < rows && !hasAbove; ty++) {
-      for (let tx = 0; tx < grid[ty].length && !hasAbove; tx++) {
-        if (above[grid[ty][tx] & 0xFF]) hasAbove = true
-      }
-    }
-    if (!hasAbove) { this.fgCache = null; return }
+    // above[] is stored on _above — the fg chunks are baked lazily alongside bg chunks
+    this._above = above
+    // Invalidate any already-baked fg chunks (covers the case where cacheOverlay is
+    // called after cacheTilemap on the same zone load — fgChunks was already cleared
+    // by cacheTilemap, so this is a no-op in normal flow; kept as a safety net)
+    this.fgChunks.clear()
+  }
 
+  /** Bake one bg chunk (ccx, ccy) into bgChunks. */
+  protected bakeBgChunk(ccx: number, ccy: number): void {
+    const CS = CHUNK * TILE
     const c = document.createElement('canvas')
-    c.width = cols * TILE
-    c.height = rows * TILE
+    c.width = CS
+    c.height = CS
     const ctx = c.getContext('2d')!
 
-    for (let ty = 0; ty < rows; ty++) {
-      for (let tx = 0; tx < grid[ty].length; tx++) {
-        const val = grid[ty][tx]
+    const txStart = ccx * CHUNK
+    const tyStart = ccy * CHUNK
+
+    for (let dy = 0; dy < CHUNK; dy++) {
+      const ty = tyStart + dy
+      if (ty >= this._mapRows) break
+      for (let dx = 0; dx < CHUNK; dx++) {
+        const tx = txStart + dx
+        if (tx >= this._mapCols) break
+        const val = this._grid[ty][tx]
         const tileIdx = val & 0xFF
-        if (!above[tileIdx]) continue
         const rot = (val >> 8) & 3
-        const tile = tiles[tileIdx]
+        const tile = this._tiles[tileIdx]
+        if (!tile) continue
         const pixels = rot > 0 ? Renderer.rotateTilePixels(tile.pixels, rot) : tile.pixels
-        this.drawPixelsTo(ctx, pixels, tile.palette, tx * TILE, ty * TILE, TILE, TILE)
+        this.drawPixelsTo(ctx, pixels, tile.palette, dx * TILE, dy * TILE, TILE, TILE)
       }
     }
 
-    this.fgCache = c
+    this.bgChunks.set(`${ccx},${ccy}`, c)
+  }
+
+  /** Bake one fg chunk (ccx, ccy) into fgChunks (null if no above-tiles). */
+  protected bakeFgChunk(ccx: number, ccy: number): void {
+    const CS = CHUNK * TILE
+    const txStart = ccx * CHUNK
+    const tyStart = ccy * CHUNK
+
+    let c: HTMLCanvasElement | null = null
+    let ctx: CanvasRenderingContext2D | null = null
+
+    for (let dy = 0; dy < CHUNK; dy++) {
+      const ty = tyStart + dy
+      if (ty >= this._mapRows) break
+      for (let dx = 0; dx < CHUNK; dx++) {
+        const tx = txStart + dx
+        if (tx >= this._mapCols) break
+        const val = this._grid[ty][tx]
+        const tileIdx = val & 0xFF
+        if (!this._above[tileIdx]) continue
+        const rot = (val >> 8) & 3
+        const tile = this._tiles[tileIdx]
+        if (!tile) continue
+        // Lazy-create canvas on first above-tile found in chunk
+        if (!c) {
+          c = document.createElement('canvas')
+          c.width = CS
+          c.height = CS
+          ctx = c.getContext('2d')!
+        }
+        const pixels = rot > 0 ? Renderer.rotateTilePixels(tile.pixels, rot) : tile.pixels
+        this.drawPixelsTo(ctx!, pixels, tile.palette, dx * TILE, dy * TILE, TILE, TILE)
+      }
+    }
+
+    this.fgChunks.set(`${ccx},${ccy}`, c) // null if no above-tiles found
+  }
+
+  /** Ensure all chunks in the visible+margin range are baked; evict outside chunks. */
+  private ensureChunks(camX: number, camY: number): void {
+    const { minCCX, maxCCX, minCCY, maxCCY } = visibleChunkRange(
+      camX, camY, this._mapCols, this._mapRows,
+    )
+
+    // Build a set of keys we want to keep
+    const keep = new Set<string>()
+    for (let cy = minCCY; cy <= maxCCY; cy++) {
+      for (let cx = minCCX; cx <= maxCCX; cx++) {
+        const key = `${cx},${cy}`
+        keep.add(key)
+        if (!this.bgChunks.has(key)) this.bakeBgChunk(cx, cy)
+        if (!this.fgChunks.has(key)) this.bakeFgChunk(cx, cy)
+      }
+    }
+
+    // Evict chunks outside the visible+margin ring
+    for (const key of this.bgChunks.keys()) {
+      if (!keep.has(key)) this.bgChunks.delete(key)
+    }
+    for (const key of this.fgChunks.keys()) {
+      if (!keep.has(key)) this.fgChunks.delete(key)
+    }
   }
 
   drawBackground() {
     // Clear offscreen canvas to prevent previous frame bleed-through at transparent pixels
     this.ctx.clearRect(0, 0, WIDTH, HEIGHT)
-    if (this.bgCache) {
-      // Draw the visible portion of the tilemap based on camera (floor for pixel-crisp tiles)
-      const cx = Math.floor(this.camX)
-      const cy = Math.floor(this.camY)
-      this.ctx.drawImage(
-        this.bgCache,
-        cx, cy, WIDTH, HEIGHT,
-        0, 0, WIDTH, HEIGHT,
-      )
+
+    if (this._mapCols === 0) return
+
+    const CS = CHUNK * TILE
+    const cx = Math.floor(this.camX)
+    const cy = Math.floor(this.camY)
+
+    this.ensureChunks(this.camX, this.camY)
+
+    for (const [key, chunk] of this.bgChunks) {
+      const [ccxStr, ccyStr] = key.split(',')
+      const ccx = parseInt(ccxStr, 10)
+      const ccy = parseInt(ccyStr, 10)
+      const dx = ccx * CS - cx
+      const dy = ccy * CS - cy
+      // Skip if entirely outside the viewport (ensureChunks already guards this,
+      // but guard again in case margin-ring chunks are just off-screen)
+      if (dx + CS < 0 || dx > WIDTH || dy + CS < 0 || dy > HEIGHT) continue
+      this.ctx.drawImage(chunk, 0, 0, CS, CS, dx, dy, CS, CS)
     }
   }
 
   /** Draw the foreground/overlay layer (renders on top of entities) */
   drawOverlay() {
-    if (this.fgCache) {
-      const cx = Math.floor(this.camX)
-      const cy = Math.floor(this.camY)
-      this.ctx.drawImage(
-        this.fgCache,
-        cx, cy, WIDTH, HEIGHT,
-        0, 0, WIDTH, HEIGHT,
-      )
+    if (this._mapCols === 0) return
+
+    const CS = CHUNK * TILE
+    const cx = Math.floor(this.camX)
+    const cy = Math.floor(this.camY)
+
+    for (const [key, chunk] of this.fgChunks) {
+      if (!chunk) continue // null = no above-tiles in this chunk
+      const [ccxStr, ccyStr] = key.split(',')
+      const ccx = parseInt(ccxStr, 10)
+      const ccy = parseInt(ccyStr, 10)
+      const dx = ccx * CS - cx
+      const dy = ccy * CS - cy
+      if (dx + CS < 0 || dx > WIDTH || dy + CS < 0 || dy > HEIGHT) continue
+      this.ctx.drawImage(chunk, 0, 0, CS, CS, dx, dy, CS, CS)
     }
   }
 
