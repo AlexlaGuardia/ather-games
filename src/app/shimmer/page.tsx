@@ -334,7 +334,15 @@ export default function ShimmerPage() {
   const playerCharRef = useRef('alkin')
   const movementStylesRef = useRef<{ players: Record<string, MovementStyle>; beasts: Record<string, any> }>({ players: {}, beasts: {} })
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
-  const [inv, setInv] = useState<Inventory>(() => migrateFromBag({ sunfruit: 3, moonberry: 3, stonemelon: 3, spirit_treat: 2, seed_fox: 1 }))
+  const [inv, setInv] = useState<Inventory>(() => {
+    const base = migrateFromBag({ sunfruit: 3, moonberry: 3, stonemelon: 3, spirit_treat: 2, seed_fox: 1 })
+    // Starter stash of placeable furniture so build mode is testable before crafting is built
+    addItems(base, 'crafting_table', 2)
+    addItems(base, 'chest', 3)
+    addItems(base, 'alchemy_table', 1)
+    addItems(base, 'exchange_booth', 1)
+    return base
+  })
   const invRef = useRef(inv)
   const [chests, setChests] = useState<ChestStorage[]>([])
   const chestsRef = useRef(chests)
@@ -1350,16 +1358,25 @@ export default function ShimmerPage() {
     const { tileX, tileY } = pending
     const grid = zoneRef.current.grid
     if (sel.type === 'furniture') {
+      // Inventory check — must own at least 1
+      if (countItem(invRef.current, sel.id) < 1) {
+        notify('warning', 'You don\'t have any of that item')
+        return
+      }
       const tileOk = walkable(grid, tileX, tileY)
       const furnOnTile = furnitureAtTile(tileX, tileY, 'garden', furnitureRef.current)
       const structOnTile = structureOccupiesTile(tileX, tileY, 'garden', playerStructuresRef.current, structureDefsRef.current)
       if (tileOk && !furnOnTile && !structOnTile) {
+        // Consume 1 from inventory
+        removeItems(invRef.current, sel.id, 1)
+        setInv({ ...invRef.current })
         const placed = createFurniture(sel.id, tileX, tileY, 'garden')
         furnitureRef.current.push(placed)
         particlesRef.current.burst(tileX * TILE + 16, tileY * TILE + 8, 'sparkle', 5)
         forceUpdate(n => n + 1)
         setPendingPlacement(null)
-        setSelectedBuildItem(null)
+        // If we're out of this item, deselect it
+        if (countItem(invRef.current, sel.id) < 1) setSelectedBuildItem(null)
       } else {
         notify('warning', 'Cannot place here')
       }
@@ -3118,11 +3135,17 @@ export default function ShimmerPage() {
               <HomePlotPanel
                 furniture={FURNITURE}
                 structures={structureDefsRef.current}
+                inventoryCounts={Object.fromEntries(FURNITURE.map(f => [f.id, countItem(inv, f.id)]))}
                 selectedItem={selectedBuildItem}
                 selectedPlacedFurnId={selectedPlacedFurnId}
                 selectedPlacedStructId={selectedPlacedStructId}
                 onSelectItem={(item) => { setPendingPlacement(null); setSelectedBuildItem(item) }}
                 onRemoveFurniture={(id) => {
+                  const placed = furnitureRef.current.find(f => f.id === id)
+                  if (placed) {
+                    addItems(invRef.current, placed.furnitureId, 1)
+                    setInv({ ...invRef.current })
+                  }
                   furnitureRef.current = furnitureRef.current.filter(f => f.id !== id)
                   setSelectedPlacedFurnId(null)
                   forceUpdate(n => n + 1)

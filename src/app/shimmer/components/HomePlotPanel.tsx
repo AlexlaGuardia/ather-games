@@ -6,6 +6,7 @@ import type { TileGroup } from '../world/structures'
 interface HomePlotPanelProps {
   furniture: FurnitureDef[]
   structures: TileGroup[]
+  inventoryCounts: Record<string, number>
   selectedItem: { type: 'furniture' | 'structure'; id: string } | null
   selectedPlacedFurnId: string | null
   selectedPlacedStructId: string | null
@@ -22,6 +23,7 @@ const TAB_STRUCTURES = 'structures'
 export default function HomePlotPanel({
   furniture,
   structures,
+  inventoryCounts,
   selectedItem,
   selectedPlacedFurnId,
   selectedPlacedStructId,
@@ -101,19 +103,35 @@ export default function HomePlotPanel({
         {tab === TAB_FURNITURE && (
           <div className="flex flex-col gap-0.5">
             {furniture.map(furn => {
+              const count = inventoryCounts[furn.id] ?? 0
+              const isOwned = count > 0
               const isSelected = selectedItem?.type === 'furniture' && selectedItem.id === furn.id
               return (
                 <button
                   key={furn.id}
-                  onClick={() => onSelectItem(isSelected ? null : { type: 'furniture', id: furn.id })}
+                  onClick={() => {
+                    if (!isOwned) return
+                    onSelectItem(isSelected ? null : { type: 'furniture', id: furn.id })
+                  }}
+                  disabled={!isOwned}
                   className={`w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-left transition-all ${
                     isSelected
                       ? 'bg-[#d4a843]/20 text-[#d4a843] ring-1 ring-[#d4a843]/50'
-                      : 'text-text-faint/60 hover:bg-[#d4a843]/8 hover:text-text-faint/80'
+                      : isOwned
+                        ? 'text-text-faint/60 hover:bg-[#d4a843]/8 hover:text-text-faint/80'
+                        : 'text-text-faint/25 cursor-not-allowed'
                   }`}
                 >
-                  <div className={`w-2 h-2 rounded-full flex-shrink-0 ${isSelected ? 'bg-[#d4a843]' : 'bg-text-faint/20'}`} />
-                  <span className="text-[12px] font-display leading-tight">{furn.name}</span>
+                  <div className={`w-2 h-2 rounded-full flex-shrink-0 ${
+                    isSelected ? 'bg-[#d4a843]' : isOwned ? 'bg-text-faint/20' : 'bg-text-faint/8'
+                  }`} />
+                  <span className="text-[12px] font-display leading-tight flex-1 truncate">{furn.name}</span>
+                  {/* Count badge — always show, greyed when 0 */}
+                  <span className={`text-[10px] font-mono tabular-nums flex-shrink-0 min-w-[1.5ch] text-right ${
+                    isSelected ? 'text-[#d4a843]/80' : isOwned ? 'text-text-faint/50' : 'text-text-faint/20'
+                  }`}>
+                    {count}
+                  </span>
                 </button>
               )
             })}
