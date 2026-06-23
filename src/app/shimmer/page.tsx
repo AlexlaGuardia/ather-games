@@ -345,23 +345,6 @@ export default function ShimmerPage() {
   const npcStatesRef = useRef<Map<string, { id: string; x: number; y: number; prevX: number; prevY: number; targetX: number | null; targetY: number | null; direction: string; waypointIdx: number; waitTimer: number }>>(new Map())
   const playerRef = useRef<Player | null>(null)
   const rendererRef = useRef<Renderer | null>(null)
-  // Jitter test (2026-06-23): scale-mode toggle, persisted so it survives reloads
-  const [scaleMode, setScaleMode] = useState<'nearest' | 'smooth' | 'integer'>('nearest')
-  const cycleScaleMode = useCallback(() => {
-    setScaleMode(prev => {
-      const order = ['nearest', 'smooth', 'integer'] as const
-      const next = order[(order.indexOf(prev) + 1) % order.length]
-      if (rendererRef.current) rendererRef.current.scaleMode = next
-      try { localStorage.setItem('shimmer.scaleMode', next) } catch {}
-      return next
-    })
-  }, [])
-  useEffect(() => {
-    try {
-      const saved = localStorage.getItem('shimmer.scaleMode')
-      if (saved === 'nearest' || saved === 'smooth' || saved === 'integer') setScaleMode(saved)
-    } catch {}
-  }, [])
   const pendingTeleportRef = useRef<{ zoneId: string; tileX: number; tileY: number } | null>(null)
   const particlesRef = useRef(new ParticleSystem())
   const inputRef = useRef(createInputManager())
@@ -1341,11 +1324,6 @@ export default function ShimmerPage() {
     const renderer = usePixel
       ? new Renderer(canvasRef.current)
       : new TokenRenderer(canvasRef.current)
-    // Jitter test: start in the persisted scale mode (toggle via the HUD button)
-    try {
-      const savedScale = localStorage.getItem('shimmer.scaleMode')
-      if (savedScale === 'nearest' || savedScale === 'smooth' || savedScale === 'integer') renderer.scaleMode = savedScale
-    } catch {}
     rendererRef.current = renderer
 
     // Resize display canvas when container size changes (responsive + window resize)
@@ -2928,15 +2906,6 @@ export default function ShimmerPage() {
                 {dayPhase.phase}
               </span>
             </div>
-
-            {/* TEMP jitter test (2026-06-23): tap to cycle scale mode — remove after Alex picks */}
-            <button
-              onClick={cycleScaleMode}
-              className="absolute top-14 right-4 z-10 px-2 py-1 rounded-md bg-black/55 border border-white/15 text-[11px] font-mono uppercase tracking-wider text-amber-200/80 hover:text-amber-100 hover:border-amber-300/40 active:scale-95 transition"
-              title="Cycle scale mode (jitter test)"
-            >
-              scale: {scaleMode}
-            </button>
 
             {/* XP floaters (world-positioned) */}
             <XpFloaterLayer

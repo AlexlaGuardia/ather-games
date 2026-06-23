@@ -134,32 +134,20 @@ export class Renderer {
     this.offscreen = offscreen
   }
 
-  // Jitter test (2026-06-23): how the 960x640 buffer is scaled to the display.
-  //  'nearest'  = current: nearest-neighbor full stretch (fractional scale -> scroll crawl)
-  //  'smooth'   = bilinear full stretch (kills the crawl, slightly soft)
-  //  'integer'  = nearest, whole-number scale + centered letterbox (crisp, may bar/shrink)
-  scaleMode: 'nearest' | 'smooth' | 'integer' = 'nearest'
-
-  /** Blit offscreen game canvas to the display canvas — call after all draw calls */
+  /** Blit offscreen game canvas to the display canvas — call after all draw calls.
+   * Bilinear-smooth the final upscale: the 960x640 buffer rarely maps to a whole-number
+   * multiple of the device's pixels, and nearest-neighbor at a fractional scale makes the
+   * scene crawl/shimmer while scrolling. Smoothing the final blit only (the offscreen ctx
+   * stays nearest) trades a touch of softness for stable motion. (Chosen 2026-06-23.) */
   present() {
     const dctx = this.displayCtx
-    const cw = dctx.canvas.width
-    const ch = dctx.canvas.height
-    if (this.scaleMode === 'integer') {
-      dctx.imageSmoothingEnabled = false
-      const scale = Math.max(1, Math.floor(Math.min(cw / WIDTH, ch / HEIGHT)))
-      const dw = WIDTH * scale
-      const dh = HEIGHT * scale
-      const dx = Math.floor((cw - dw) / 2)
-      const dy = Math.floor((ch - dh) / 2)
-      dctx.fillStyle = '#000'
-      dctx.fillRect(0, 0, cw, ch)
-      dctx.drawImage(this.offscreen, 0, 0, WIDTH, HEIGHT, dx, dy, dw, dh)
-    } else {
-      dctx.imageSmoothingEnabled = this.scaleMode === 'smooth'
-      if (this.scaleMode === 'smooth') dctx.imageSmoothingQuality = 'high'
-      dctx.drawImage(this.offscreen, 0, 0, WIDTH, HEIGHT, 0, 0, cw, ch)
-    }
+    dctx.imageSmoothingEnabled = true
+    dctx.imageSmoothingQuality = 'high'
+    dctx.drawImage(
+      this.offscreen,
+      0, 0, WIDTH, HEIGHT,
+      0, 0, dctx.canvas.width, dctx.canvas.height,
+    )
   }
 
   /** Resize display canvas to match CSS layout (call on window resize) */
