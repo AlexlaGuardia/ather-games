@@ -377,6 +377,7 @@ export default function ShimmerPage() {
   const [buildMode, setBuildMode] = useState(false)
   const buildModeRef = useRef(false)
   const [selectedBuildItem, setSelectedBuildItem] = useState<{ type: 'furniture' | 'structure'; id: string } | null>(null)
+  const selectedBuildItemRef = useRef(selectedBuildItem) // mirror: handleCanvasClick has [] deps
   const [buildHoverTile, setBuildHoverTile] = useState<{ x: number; y: number } | null>(null)
   const [selectedPlacedFurnId, setSelectedPlacedFurnId] = useState<string | null>(null)
   const [selectedPlacedStructId, setSelectedPlacedStructId] = useState<string | null>(null)
@@ -427,6 +428,7 @@ export default function ShimmerPage() {
 
   // Sync refs with state so game loop closure can read current values
   buildModeRef.current = buildMode
+  selectedBuildItemRef.current = selectedBuildItem
   activeBeastIdRef.current = activeBeastId
   playerCharRef.current = playerCharId
   // Apply movement style when character changes
@@ -1036,14 +1038,15 @@ export default function ShimmerPage() {
     // Build mode — intercept all clicks in the Garden
     if (buildModeRef.current && zoneRef.current.id === 'garden') {
       const grid = zoneRef.current.grid
-      if (selectedBuildItem) {
+      const sel = selectedBuildItemRef.current
+      if (sel) {
         // Attempt to place
-        if (selectedBuildItem.type === 'furniture') {
+        if (sel.type === 'furniture') {
           const tileOk = walkable(grid, clickTileX, clickTileY)
           const furnOnTile = furnitureAtTile(clickTileX, clickTileY, 'garden', furnitureRef.current)
           const structOnTile = structureOccupiesTile(clickTileX, clickTileY, 'garden', playerStructuresRef.current, structureDefsRef.current)
           if (tileOk && !furnOnTile && !structOnTile) {
-            const placed = createFurniture(selectedBuildItem.id, clickTileX, clickTileY, 'garden')
+            const placed = createFurniture(sel.id, clickTileX, clickTileY, 'garden')
             furnitureRef.current.push(placed)
             particlesRef.current.burst(clickTileX * TILE + 16, clickTileY * TILE + 8, 'sparkle', 5)
             forceUpdate(n => n + 1)
@@ -1052,7 +1055,7 @@ export default function ShimmerPage() {
           }
         } else {
           // Structure — validate entire footprint
-          const def = structureDefsRef.current.find(s => s.id === selectedBuildItem.id)
+          const def = structureDefsRef.current.find(s => s.id === sel.id)
           if (def) {
             let valid = true
             for (let fr = 0; fr < def.rows && valid; fr++) {
@@ -1065,7 +1068,7 @@ export default function ShimmerPage() {
               }
             }
             if (valid) {
-              const placed = createPlacedStructure(selectedBuildItem.id, clickTileX, clickTileY, 'garden')
+              const placed = createPlacedStructure(sel.id, clickTileX, clickTileY, 'garden')
               playerStructuresRef.current.push(placed)
               particlesRef.current.burst(clickTileX * TILE + 16, clickTileY * TILE + 8, 'sparkle', 5)
               forceUpdate(n => n + 1)
@@ -1350,8 +1353,8 @@ export default function ShimmerPage() {
       clientX = e.clientX
       clientY = e.clientY
     }
-    const scaleX = canvas.width / rect.width
-    const scaleY = canvas.height / rect.height
+    const scaleX = WIDTH / rect.width
+    const scaleY = HEIGHT / rect.height
     const canvasX = (clientX - rect.left) * scaleX
     const canvasY = (clientY - rect.top) * scaleY
     const worldX = canvasX + renderer.camX
