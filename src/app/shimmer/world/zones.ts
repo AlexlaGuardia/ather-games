@@ -41,7 +41,7 @@ export function getZone(zones: Zone[], id: string): Zone | null {
 // Moonwell Glade → east → Spore Hollow (post-tutorial)
 
 import { GARDEN, MYCELIAL_PATH, MOONWELL_GLADE, SPORE_HOLLOW, TWILIGHT_THICKET, THE_THRESHOLD, MANA_SPRINGS, SPIRIT_MEADOW, MOONWELL_GLADE_GREGORY_S_HOME , TEST_SANDBOX,
-  FP_GARDEN, FP_LARGE_1, FP_LARGE_2, FP_LARGE_3, FP_MED_1, FP_MED_2, FP_MED_3, FP_MED_4 } from './tilemap'
+  FP_GARDEN, FP_LARGE_1, FP_LARGE_2, FP_LARGE_3, FP_MED_1, FP_MED_2, FP_MED_3, FP_MED_4, FP_HUGE } from './tilemap'
 
 export const ZONES: Zone[] = [
   {
@@ -206,6 +206,11 @@ export const ZONES: Zone[] = [
     id: 'fp-med-4', name: 'Medium IV', grid: FP_MED_4,
     playerStart: { tileX: 40, tileY: 40 },
     warps: [{ fromX: 79, fromY: 40, toZone: 'fp-garden', toX: 1, toY: 20, direction: 'right' }],
+  },
+  {
+    id: 'fp-huge', name: 'Huge (256² chunk-bake proof)', grid: FP_HUGE,
+    playerStart: { tileX: 128, tileY: 128 },
+    warps: [{ fromX: 128, fromY: 255, toZone: 'fp-garden', toX: 24, toY: 20, direction: 'down' }],
   },
 ]
 

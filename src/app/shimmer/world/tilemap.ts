@@ -338,3 +338,6 @@ export const FP_MED_1: number[][] = createStubMap(80, 80, [{ side: 'south', posi
 export const FP_MED_2: number[][] = createStubMap(80, 80, [{ side: 'west',  positions: [40] }])
 export const FP_MED_3: number[][] = createStubMap(80, 80, [{ side: 'north', positions: [40] }])
 export const FP_MED_4: number[][] = createStubMap(80, 80, [{ side: 'east',  positions: [40] }])
+// Chunked-bake proof map: 256x256 = 8192px sq = 67M px — 4x over the old iOS single-bake cap.
+// If this walks smooth on mobile, chunking works. Reach via ?zone=fp-huge.
+export const FP_HUGE: number[][] = createStubMap(256, 256, [{ side: 'south', positions: [128] }])
