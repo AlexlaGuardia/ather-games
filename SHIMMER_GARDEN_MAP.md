@@ -13,7 +13,13 @@ So per-plot size is a soft dial; the journey across many zones is what sells "bi
 
 ## Progression — linear, gated by the 3 Thornlords
 1. **Start: only Greg's path is open.** Talk to **Gregory** (Moonwell Glade, his home) → he
-   gives your **first spirit (choose 1 of 3)** + the basics, then opens the way out.
+   gives your **first spirit (choose 1 of 3)** + a **starter backpack** + teaches the basics,
+   then opens the way out. The backpack is a verb-tutorial in a box:
+   - **Crafting table** — bootstraps crafting (this is the early-crafting source; Bramble is
+     later resupply/variety, not the only table).
+   - **Pot** + **mana seed** — bootstraps plant/bloom (the first seed; bosses drop more).
+   - **Grimoire** — bootstraps spirit-recording (your bestiary; `/grimoire` already exists).
+   - (+ the chosen starter spirit — your first companion / combat.)
 2. → **Spirit Meadow** opens. To the north: **Burr** (1st Thornlord), gating north.
 3. **Beat Burr** → opens the loop: back down to the **home plot via Mycelial Path**, plus
    **Shimmeroak Thicket** (forestry / wood), **Mana Springs** (mining), and the path to
@@ -61,12 +67,16 @@ at home; defeated Thornlords join as helpers that cut friction.
 - **Spirits / Keepers** → starter spirit from Greg; Nettle renames them.
 
 ## FLAGS / OPEN
-- **Early crafting access (real gap):** Bramble (the trader who sells crafting tables) is the
-  LAST boss — so the trader backstop arrives at the END. Decide where the FIRST crafting table
-  comes from: Greg gifts one at the tutorial? start owning one? Otherwise early players can't craft.
+- ~~Early crafting access~~ **RESOLVED:** Greg's starter backpack includes the crafting table
+  (+ pot, mana seed, grimoire). Bramble becomes later resupply/variety, not the only source.
 - **Mana as a material:** Mana Springs (mined) vs. blooming mana seeds — which feeds crafting?
 - **Gloview Village:** reuse `spore-hollow` or author a new zone?
 - **Sizes:** soft dial; tune to playthrough length once the chain is wired.
+
+## CONTENT / POLISH (future tasks, not core systems)
+- **Voiced NPCs + dialogue script.** Alex wants voice. Dispatch the **raven agent** to write
+  the script (cozy register fits Greg + the garden); voice it later (TTS or recorded). Start
+  with Greg's tutorial dialogue once the tutorial flow is wired.
 
 ## PARKED — beyond the garden (future; likely needs hardware)
 The Ather: the **Wilds**, the **Sea of Folds**, **Underneath the Silt** (Voranyx tunnels).
