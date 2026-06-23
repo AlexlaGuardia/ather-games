@@ -318,3 +318,23 @@ export const TEST_SANDBOX: number[][] = [
   [ 11,  0,  0,  0,  0,  1,  0,  0,  0,  0,523],  // 9
   [780,779,779,779,779,779,779,779,779,779,524],  // 10
 ]
+
+// --- F2P scale-test maps (stub grass + warp openings) ---
+// Hub-and-spoke for feel-testing map SIZE with zero engine changes:
+//   Garden hub (48x40) -> 3 large (120x120) + 4 medium (80x80), each warps back.
+// Sizes chosen as "comfortably big" while staying under the iOS canvas cap
+// (large bakes to ~3840px sq = 14.7M px < 16.78M). Reach via ?zone=fp-garden.
+// Throwaway: empty grass, no pickups/weather/npcs — pure scale feel.
+export const FP_GARDEN: number[][] = createStubMap(48, 40, [
+  { side: 'north', positions: [12, 35] },
+  { side: 'east',  positions: [13, 26] },
+  { side: 'south', positions: [12, 35] },
+  { side: 'west',  positions: [20] },
+])
+export const FP_LARGE_1: number[][] = createStubMap(120, 120, [{ side: 'south', positions: [60] }])
+export const FP_LARGE_2: number[][] = createStubMap(120, 120, [{ side: 'west',  positions: [60] }])
+export const FP_LARGE_3: number[][] = createStubMap(120, 120, [{ side: 'north', positions: [60] }])
+export const FP_MED_1: number[][] = createStubMap(80, 80, [{ side: 'south', positions: [40] }])
+export const FP_MED_2: number[][] = createStubMap(80, 80, [{ side: 'west',  positions: [40] }])
+export const FP_MED_3: number[][] = createStubMap(80, 80, [{ side: 'north', positions: [40] }])
+export const FP_MED_4: number[][] = createStubMap(80, 80, [{ side: 'east',  positions: [40] }])

@@ -461,6 +461,18 @@ export default function ShimmerPage() {
     }
   }, [])
 
+  // ?zone= debug override — force a zone + its spawn (F2P scale-test maps)
+  const applyZoneOverride = useCallback((charId: string) => {
+    const zoneParam = new URLSearchParams(window.location.search).get('zone')
+    if (!zoneParam) return
+    const z = getZone(ZONES, zoneParam)
+    if (!z) return
+    zoneRef.current = z
+    const ps = z.playerStart ?? PLAYER_START
+    playerRef.current = createPlayer(ps.tileX, ps.tileY, movementStylesRef.current.players[charId])
+    setPlayerTile({ x: ps.tileX, y: ps.tileY })
+  }, [])
+
   const startGame = useCallback(async () => {
     // Load editor-configured movement styles
     try {
@@ -550,6 +562,7 @@ export default function ShimmerPage() {
         if (data.collectedPickups) collectedPickupsRef.current = new Set(data.collectedPickups)
         if (data.spiritIndex) spiritIndexRef.current = indexFromSave(data.spiritIndex)
         if (data.quests) questStateRef.current = questFromSave(data.quests)
+        applyZoneOverride(playerCharId)
         spawnZonePickups(zoneRef.current.id)
         setStarted(true)
         return
@@ -574,9 +587,10 @@ export default function ShimmerPage() {
     }).catch(() => {})
     // Dev account exclusive content
     if (shimmerfileRef.current?.user_id === DEV_USER_ID) flagsRef.current['admin_beast'] = true
-    spawnZonePickups(START_ZONE)
+    applyZoneOverride(playerCharId)
+    spawnZonePickups(zoneRef.current.id)
     setStarted(true)
-  }, [isSignedIn, load, initDefaultNodes, spawnZonePickups])
+  }, [isSignedIn, load, initDefaultNodes, spawnZonePickups, applyZoneOverride])
 
   // Toggle menu with ESC
   const toggleMenu = useCallback(() => {
@@ -2843,19 +2857,23 @@ export default function ShimmerPage() {
 
         {/* Main content area */}
         <div className={isMobile ? 'flex flex-col flex-1 min-h-0' : 'flex gap-0'}>
-          {/* Canvas centering wrapper (mobile: flex-grow + center, desktop: no-op) */}
-          <div className={isMobile ? 'flex-1 min-h-0 flex items-center justify-center bg-black' : ''}>
-          {/* Canvas area — holds canvas + all overlays (mana, dialogue, etc.) */}
-          <div className={isMobile ? 'relative w-full' : 'relative p-3'} style={isMobile ? { aspectRatio: '960 / 640', maxHeight: '100%' } : undefined}>
+          {/* Canvas centering wrapper (mobile: flex-grow + center; desktop: grow into free width, center the letterboxed canvas box without vertical stretch) */}
+          <div className={isMobile ? 'flex-1 min-h-0 flex items-center justify-center bg-black' : 'flex-1 min-w-0 flex justify-center items-center p-3'}>
+          {/* Canvas area — sized to the canvas itself so all overlays (mana, dialogue, etc.) anchor to the canvas edges */}
+          <div
+            className={isMobile ? 'relative w-full' : 'relative'}
+            style={isMobile
+              ? { aspectRatio: '960 / 640', maxHeight: '100%' }
+              // Letterbox box: width caps at the smaller of container width or what the height budget allows.
+              : { width: 'min(100%, calc((100vh - 160px) * 960 / 640))', aspectRatio: '960 / 640' }}
+          >
             <canvas
               ref={canvasRef}
               onClick={handleCanvasClick}
-              className={isMobile ? 'w-full h-full cursor-pointer' : 'border border-white/5 rounded cursor-pointer'}
+              className={isMobile ? 'w-full h-full cursor-pointer' : 'w-full h-full block border border-white/5 rounded cursor-pointer'}
               style={{
                 imageRendering: 'pixelated',
-                ...(isMobile
-                  ? { touchAction: 'manipulation' }
-                  : { height: 'calc(100vh - 160px)', aspectRatio: '960 / 640' }),
+                ...(isMobile ? { touchAction: 'manipulation' } : {}),
               }}
               tabIndex={0}
             />

@@ -40,7 +40,8 @@ export function getZone(zones: Zone[], id: string): Zone | null {
 // Garden → east → Moonwell Glade (shortcut, blocked until tutorialComplete)
 // Moonwell Glade → east → Spore Hollow (post-tutorial)
 
-import { GARDEN, MYCELIAL_PATH, MOONWELL_GLADE, SPORE_HOLLOW, TWILIGHT_THICKET, THE_THRESHOLD, MANA_SPRINGS, SPIRIT_MEADOW, MOONWELL_GLADE_GREGORY_S_HOME , TEST_SANDBOX } from './tilemap'
+import { GARDEN, MYCELIAL_PATH, MOONWELL_GLADE, SPORE_HOLLOW, TWILIGHT_THICKET, THE_THRESHOLD, MANA_SPRINGS, SPIRIT_MEADOW, MOONWELL_GLADE_GREGORY_S_HOME , TEST_SANDBOX,
+  FP_GARDEN, FP_LARGE_1, FP_LARGE_2, FP_LARGE_3, FP_MED_1, FP_MED_2, FP_MED_3, FP_MED_4 } from './tilemap'
 
 export const ZONES: Zone[] = [
   {
@@ -153,6 +154,58 @@ export const ZONES: Zone[] = [
     grid: TEST_SANDBOX,
     playerStart: { tileX: 5, tileY: 5 },
     warps: [],
+  },
+
+  // --- F2P scale-test world (hub + 3 large + 4 medium) — reach via ?zone=fp-garden ---
+  {
+    id: 'fp-garden',
+    name: 'Garden (hub)',
+    grid: FP_GARDEN,
+    playerStart: { tileX: 24, tileY: 20 },
+    warps: [
+      { fromX: 12, fromY: 0,  toZone: 'fp-large-1', toX: 60, toY: 118, direction: 'up' },
+      { fromX: 35, fromY: 0,  toZone: 'fp-med-1',   toX: 40, toY: 78,  direction: 'up' },
+      { fromX: 47, fromY: 13, toZone: 'fp-large-2', toX: 1,  toY: 60,  direction: 'right' },
+      { fromX: 47, fromY: 26, toZone: 'fp-med-2',   toX: 1,  toY: 40,  direction: 'right' },
+      { fromX: 12, fromY: 39, toZone: 'fp-large-3', toX: 60, toY: 1,   direction: 'down' },
+      { fromX: 35, fromY: 39, toZone: 'fp-med-3',   toX: 40, toY: 1,   direction: 'down' },
+      { fromX: 0,  fromY: 20, toZone: 'fp-med-4',   toX: 78, toY: 40,  direction: 'left' },
+    ],
+  },
+  {
+    id: 'fp-large-1', name: 'Large I', grid: FP_LARGE_1,
+    playerStart: { tileX: 60, tileY: 60 },
+    warps: [{ fromX: 60, fromY: 119, toZone: 'fp-garden', toX: 12, toY: 1, direction: 'down' }],
+  },
+  {
+    id: 'fp-large-2', name: 'Large II', grid: FP_LARGE_2,
+    playerStart: { tileX: 60, tileY: 60 },
+    warps: [{ fromX: 0, fromY: 60, toZone: 'fp-garden', toX: 46, toY: 13, direction: 'left' }],
+  },
+  {
+    id: 'fp-large-3', name: 'Large III', grid: FP_LARGE_3,
+    playerStart: { tileX: 60, tileY: 60 },
+    warps: [{ fromX: 60, fromY: 0, toZone: 'fp-garden', toX: 12, toY: 38, direction: 'up' }],
+  },
+  {
+    id: 'fp-med-1', name: 'Medium I', grid: FP_MED_1,
+    playerStart: { tileX: 40, tileY: 40 },
+    warps: [{ fromX: 40, fromY: 79, toZone: 'fp-garden', toX: 35, toY: 1, direction: 'down' }],
+  },
+  {
+    id: 'fp-med-2', name: 'Medium II', grid: FP_MED_2,
+    playerStart: { tileX: 40, tileY: 40 },
+    warps: [{ fromX: 0, fromY: 40, toZone: 'fp-garden', toX: 46, toY: 26, direction: 'left' }],
+  },
+  {
+    id: 'fp-med-3', name: 'Medium III', grid: FP_MED_3,
+    playerStart: { tileX: 40, tileY: 40 },
+    warps: [{ fromX: 40, fromY: 0, toZone: 'fp-garden', toX: 35, toY: 38, direction: 'up' }],
+  },
+  {
+    id: 'fp-med-4', name: 'Medium IV', grid: FP_MED_4,
+    playerStart: { tileX: 40, tileY: 40 },
+    warps: [{ fromX: 79, fromY: 40, toZone: 'fp-garden', toX: 1, toY: 20, direction: 'right' }],
   },
 ]
 
