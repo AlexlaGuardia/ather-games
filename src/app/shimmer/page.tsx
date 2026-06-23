@@ -48,6 +48,8 @@ import ItemIcon from './components/ItemIcon'
 import { ITEMS, DEFAULT_SPIRIT_NAMES, SEED_SPECIES, SEED_IDS, CROP_SEED_IDS, GROWTH_SPRITES, CROP_GROWTH_SPRITES, CROP_SPRITES_BY_TYPE, CROP_PALETTES, ITEM_PALETTE, ITEM_ICONS, SEED_PALETTES, NODE_SPRITES, NODE_PALETTES, TOOL_SPRITES, NODE_TYPE_LABELS } from './sprites/items'
 import { FURNITURE, FURNITURE_SPRITES, FURNITURE_DEFS } from './sprites/furniture'
 import { drawSprite as drawSpriteToCtx } from './components/SpriteRenderers'
+import { PlacedStructure, createPlacedStructure, structuresToSave, structuresFromSave, structureOccupiesTile, type StructureSave } from './engine/structures'
+import HomePlotPanel from './components/HomePlotPanel'
 import { createResourceNode, ResourceNode, tickAllNodeRespawns, respawnNodesBySkill, nodesToSave, mergeNodesFromSave, ResourceNodeSave, getNodeSkill, NodeType } from './world/resources'
 import { DayCycleState, createDayCycle, dayCycleFromSave, tickDayCycle, getPhase, getAmbientOverlay, getDisplayTime } from './engine/day-cycle'
 import { createSkillSet, SkillSet, addSkillXP, skillSetToSave, skillSetFromSave, SkillSave, SKILL_META, SKILL_IDS, xpForSkillLevel, getMilestone, SkillId } from './engine/skills'
@@ -178,6 +180,7 @@ interface GameSave {
   collectedPickups?: string[]  // IDs of one-time pickups already collected
   lootedZoneChests?: string[]  // IDs of zone chests fully looted
   zoneChestStates?: { id: string; slots: (import('./engine/inventory').ItemStack | null)[] }[]  // partially looted zone chests
+  playerStructures?: StructureSave  // player-placed structures (home plot)
 }
 
 const MAX_PARTY = 4
@@ -370,6 +373,13 @@ export default function ShimmerPage() {
   const geRef = useRef<GEMarketState>(createGEState())
   const furnitureRef = useRef<PlacedFurniture[]>([])
   const structureDefsRef = useRef<TileGroup[]>([])
+  const playerStructuresRef = useRef<PlacedStructure[]>([])
+  const [buildMode, setBuildMode] = useState(false)
+  const buildModeRef = useRef(false)
+  const [selectedBuildItem, setSelectedBuildItem] = useState<{ type: 'furniture' | 'structure'; id: string } | null>(null)
+  const [buildHoverTile, setBuildHoverTile] = useState<{ x: number; y: number } | null>(null)
+  const [selectedPlacedFurnId, setSelectedPlacedFurnId] = useState<string | null>(null)
+  const [selectedPlacedStructId, setSelectedPlacedStructId] = useState<string | null>(null)
   const dayCycleRef = useRef<DayCycleState>(createDayCycle())
   const weatherStatesRef = useRef<Record<string, WeatherState>>({})
   const flagsRef = useRef<Record<string, boolean>>({})
@@ -416,6 +426,7 @@ export default function ShimmerPage() {
   const selectedItemRef = useRef<{ id: string; name: string; count: number } | null>(null)
 
   // Sync refs with state so game loop closure can read current values
+  buildModeRef.current = buildMode
   activeBeastIdRef.current = activeBeastId
   playerCharRef.current = playerCharId
   // Apply movement style when character changes
@@ -550,6 +561,7 @@ export default function ShimmerPage() {
           zoneChestStatesRef.current = new Map(data.zoneChestStates.map(s => [s.id, s.slots]))
         }
         furnitureRef.current = mergeDesignFurniture(furnitureFromSave(data.furniture), lootedZoneChestsRef.current)
+        playerStructuresRef.current = structuresFromSave(data.playerStructures)
         // Load structure definitions for overlay rendering
         fetch('/shimmer/save-structure').then(r => r.json()).then(d => {
           structureDefsRef.current = d.structures || []
@@ -581,6 +593,7 @@ export default function ShimmerPage() {
     beastsRef.current = []
     setActiveBeastId(null)
     furnitureRef.current = mergeDesignFurniture([])
+    playerStructuresRef.current = []
     // Load structure definitions for overlay rendering
     fetch('/shimmer/save-structure').then(r => r.json()).then(d => {
       structureDefsRef.current = d.structures || []
@@ -846,6 +859,7 @@ export default function ShimmerPage() {
       dayElapsed: dayCycleRef.current.elapsed,
       equippedTools: toolsToSave(equippedToolsRef.current),
       furniture: furnitureToSave(furnitureRef.current),
+      playerStructures: structuresToSave(playerStructuresRef.current),
     })
     setSaveStatus('saved')
     setTimeout(() => setSaveStatus('idle'), 2000)
@@ -878,6 +892,7 @@ export default function ShimmerPage() {
         dayElapsed: dayCycleRef.current.elapsed,
         equippedTools: toolsToSave(equippedToolsRef.current),
         furniture: furnitureToSave(furnitureRef.current),
+        playerStructures: structuresToSave(playerStructuresRef.current),
       })
     }
     stopMusic()
@@ -1017,6 +1032,77 @@ export default function ShimmerPage() {
     const worldY = (e.clientY - rect.top) * scaleY + renderer.camY
     const clickTileX = Math.floor(worldX / TILE)
     const clickTileY = Math.floor(worldY / TILE)
+
+    // Build mode — intercept all clicks in the Garden
+    if (buildModeRef.current && zoneRef.current.id === 'garden') {
+      const grid = zoneRef.current.grid
+      if (selectedBuildItem) {
+        // Attempt to place
+        if (selectedBuildItem.type === 'furniture') {
+          const tileOk = walkable(grid, clickTileX, clickTileY)
+          const furnOnTile = furnitureAtTile(clickTileX, clickTileY, 'garden', furnitureRef.current)
+          const structOnTile = structureOccupiesTile(clickTileX, clickTileY, 'garden', playerStructuresRef.current, structureDefsRef.current)
+          if (tileOk && !furnOnTile && !structOnTile) {
+            const placed = createFurniture(selectedBuildItem.id, clickTileX, clickTileY, 'garden')
+            furnitureRef.current.push(placed)
+            particlesRef.current.burst(clickTileX * TILE + 16, clickTileY * TILE + 8, 'sparkle', 5)
+            forceUpdate(n => n + 1)
+          } else {
+            notify('warning', 'Cannot place here')
+          }
+        } else {
+          // Structure — validate entire footprint
+          const def = structureDefsRef.current.find(s => s.id === selectedBuildItem.id)
+          if (def) {
+            let valid = true
+            for (let fr = 0; fr < def.rows && valid; fr++) {
+              for (let fc = 0; fc < def.cols && valid; fc++) {
+                const tx = clickTileX + fc
+                const ty = clickTileY + fr
+                if (!walkable(grid, tx, ty)) valid = false
+                else if (furnitureAtTile(tx, ty, 'garden', furnitureRef.current)) valid = false
+                else if (structureOccupiesTile(tx, ty, 'garden', playerStructuresRef.current, structureDefsRef.current)) valid = false
+              }
+            }
+            if (valid) {
+              const placed = createPlacedStructure(selectedBuildItem.id, clickTileX, clickTileY, 'garden')
+              playerStructuresRef.current.push(placed)
+              particlesRef.current.burst(clickTileX * TILE + 16, clickTileY * TILE + 8, 'sparkle', 5)
+              forceUpdate(n => n + 1)
+            } else {
+              notify('warning', 'Cannot place here')
+            }
+          }
+        }
+        setSelectedBuildItem(null)
+      } else {
+        // No item selected — check if clicked on a placed item to select it for removal
+        const furnHere = furnitureRef.current.find(f =>
+          f.tileX === clickTileX && f.tileY === clickTileY && f.zoneId === 'garden' && !f.id.startsWith('design-')
+        )
+        if (furnHere) {
+          setSelectedPlacedFurnId(furnHere.id)
+          setSelectedPlacedStructId(null)
+        } else {
+          const structHere = playerStructuresRef.current.find(sp => {
+            if (sp.zoneId !== 'garden') return false
+            const def = structureDefsRef.current.find(s => s.id === sp.structureId)
+            if (!def) return false
+            return clickTileX >= sp.tileX && clickTileX < sp.tileX + def.cols &&
+              clickTileY >= sp.tileY && clickTileY < sp.tileY + def.rows
+          })
+          if (structHere) {
+            setSelectedPlacedStructId(structHere.id)
+            setSelectedPlacedFurnId(null)
+          } else {
+            setSelectedPlacedFurnId(null)
+            setSelectedPlacedStructId(null)
+          }
+        }
+      }
+      return
+    }
+
     const grid = zoneRef.current.grid
     const clickBlockedTiles = getBlockedTiles(zoneRef.current.id, flagsRef.current)
     // Add resource node positions to blocked tiles for pathfinding
@@ -1246,6 +1332,31 @@ export default function ShimmerPage() {
         setPath(player, path, { x: clickTileX, y: clickTileY, pixelX: worldX, pixelY: worldY })
       }
     }
+  }, [])
+
+  // Build mode hover — tracks tile under pointer for ghost preview
+  const handleCanvasMove = useCallback((e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
+    if (!buildModeRef.current) return
+    const canvas = canvasRef.current
+    const renderer = rendererRef.current
+    if (!canvas || !renderer) return
+    const rect = canvas.getBoundingClientRect()
+    let clientX: number, clientY: number
+    if ('touches' in e) {
+      if (e.touches.length === 0) return
+      clientX = e.touches[0].clientX
+      clientY = e.touches[0].clientY
+    } else {
+      clientX = e.clientX
+      clientY = e.clientY
+    }
+    const scaleX = canvas.width / rect.width
+    const scaleY = canvas.height / rect.height
+    const canvasX = (clientX - rect.left) * scaleX
+    const canvasY = (clientY - rect.top) * scaleY
+    const worldX = canvasX + renderer.camX
+    const worldY = canvasY + renderer.camY
+    setBuildHoverTile({ x: Math.floor(worldX / TILE), y: Math.floor(worldY / TILE) })
   }, [])
 
   // Build game context for dialogue condition evaluation
@@ -2233,6 +2344,27 @@ export default function ShimmerPage() {
           }
         }
 
+        // Layer 0.65b: Player-placed structures (home plot, non-ABOVE cells)
+        for (const sp of playerStructuresRef.current) {
+          if (sp.zoneId !== rz.id) continue
+          const def = structureDefsRef.current.find(s => s.id === sp.structureId)
+          if (!def) continue
+          for (let r = 0; r < def.rows; r++) {
+            for (let c = 0; c < def.cols; c++) {
+              const cell = def.cells[r]?.[c]
+              if (!cell) continue
+              if (ABOVE[cell.tileIdx]) continue
+              const tile = TILES[cell.tileIdx]
+              if (!tile) continue
+              const ppx = tile.pixels
+              const rotated = cell.rotation > 0 ? Renderer.rotateTilePixels(ppx, cell.rotation) : ppx
+              const sKey = `pstruct-${sp.structureId}-${r}-${c}-${cell.rotation}`
+              const sCanvas = renderer.getSprite(sKey, rotated, tile.palette, TILE, TILE)
+              renderer.drawSprite(sCanvas, (sp.tileX + c) * TILE, (sp.tileY + r) * TILE, false)
+            }
+          }
+        }
+
         // Layer 1: Y-sorted middleground — entities, nodes, furniture, world items
         // Sort by feet position (sortY = y + spriteHeight) for correct top-down depth
         type Drawable = { x: number; y: number; sortY: number; type: 'beast'; beast: ManaBeast }
@@ -2605,6 +2737,62 @@ export default function ShimmerPage() {
           }
         }
 
+        // Layer 1.6b: Player-placed structure ABOVE cells (home plot)
+        for (const sp of playerStructuresRef.current) {
+          if (sp.zoneId !== rz.id) continue
+          const def = structureDefsRef.current.find(s => s.id === sp.structureId)
+          if (!def) continue
+          for (let r = 0; r < def.rows; r++) {
+            for (let c = 0; c < def.cols; c++) {
+              const cell = def.cells[r]?.[c]
+              if (!cell) continue
+              if (!ABOVE[cell.tileIdx]) continue
+              const tile = TILES[cell.tileIdx]
+              if (!tile) continue
+              const ppx = tile.pixels
+              const rotated = cell.rotation > 0 ? Renderer.rotateTilePixels(ppx, cell.rotation) : ppx
+              const sKey = `pstruct-above-${sp.structureId}-${r}-${c}-${cell.rotation}`
+              const sCanvas = renderer.getSprite(sKey, rotated, tile.palette, TILE, TILE)
+              renderer.drawSprite(sCanvas, (sp.tileX + c) * TILE, (sp.tileY + r) * TILE, false)
+            }
+          }
+        }
+
+        // Build mode ghost preview
+        if (buildModeRef.current && buildHoverTile) {
+          const gx = buildHoverTile.x
+          const gy = buildHoverTile.y
+          // Determine footprint
+          let footprintCols = 1
+          let footprintRows = 1
+          if (selectedBuildItem?.type === 'structure') {
+            const def = structureDefsRef.current.find(s => s.id === selectedBuildItem.id)
+            if (def) { footprintCols = def.cols; footprintRows = def.rows }
+          }
+          // Validate footprint
+          const grid = rz.grid
+          let valid = true
+          for (let fr = 0; fr < footprintRows && valid; fr++) {
+            for (let fc = 0; fc < footprintCols && valid; fc++) {
+              const tx = gx + fc
+              const ty = gy + fr
+              if (!walkable(grid, tx, ty)) valid = false
+              else if (furnitureAtTile(tx, ty, rz.id, furnitureRef.current)) valid = false
+              else if (structureOccupiesTile(tx, ty, rz.id, playerStructuresRef.current, structureDefsRef.current)) valid = false
+            }
+          }
+          const ghostColor = valid ? '#44ff88' : '#ff4444'
+          for (let fr = 0; fr < footprintRows; fr++) {
+            for (let fc = 0; fc < footprintCols; fc++) {
+              for (let px2 = 0; px2 < TILE; px2++) {
+                for (let py2 = 0; py2 < TILE; py2++) {
+                  renderer.drawPixel((gx + fc) * TILE + px2, (gy + fr) * TILE + py2, ghostColor, 0.3)
+                }
+              }
+            }
+          }
+        }
+
         // Dialogue typewriter tick (runs at 60fps for smooth text reveal)
         const ds = dialogueRef.current
         if (ds.active) {
@@ -2710,6 +2898,7 @@ export default function ShimmerPage() {
           dayElapsed: dayCycleRef.current.elapsed,
           equippedTools: toolsToSave(equippedToolsRef.current),
           furniture: furnitureToSave(furnitureRef.current),
+          playerStructures: structuresToSave(playerStructuresRef.current),
         })
       }, 30_000)
     }
@@ -2870,6 +3059,8 @@ export default function ShimmerPage() {
             <canvas
               ref={canvasRef}
               onClick={handleCanvasClick}
+              onMouseMove={handleCanvasMove}
+              onTouchMove={handleCanvasMove}
               className={isMobile ? 'w-full h-full cursor-pointer' : 'w-full h-full block border border-white/5 rounded cursor-pointer'}
               style={{
                 imageRendering: 'pixelated',
@@ -2877,6 +3068,36 @@ export default function ShimmerPage() {
               }}
               tabIndex={0}
             />
+
+            {/* Home Plot build panel */}
+            {buildMode && zoneRef.current.id === 'garden' && (
+              <HomePlotPanel
+                furniture={FURNITURE}
+                structures={structureDefsRef.current}
+                selectedItem={selectedBuildItem}
+                selectedPlacedFurnId={selectedPlacedFurnId}
+                selectedPlacedStructId={selectedPlacedStructId}
+                onSelectItem={setSelectedBuildItem}
+                onRemoveFurniture={(id) => {
+                  furnitureRef.current = furnitureRef.current.filter(f => f.id !== id)
+                  setSelectedPlacedFurnId(null)
+                  forceUpdate(n => n + 1)
+                }}
+                onRemoveStructure={(id) => {
+                  playerStructuresRef.current = playerStructuresRef.current.filter(s => s.id !== id)
+                  setSelectedPlacedStructId(null)
+                  forceUpdate(n => n + 1)
+                }}
+                onClose={() => {
+                  setBuildMode(false)
+                  buildModeRef.current = false
+                  setSelectedBuildItem(null)
+                  setSelectedPlacedFurnId(null)
+                  setSelectedPlacedStructId(null)
+                }}
+                isMobile={isMobile}
+              />
+            )}
 
             {/* Mana bar */}
             <div className="absolute top-4 left-4 z-10 flex items-center gap-1.5">
@@ -3238,6 +3459,32 @@ export default function ShimmerPage() {
                   {saveStatus === 'saving' ? 'Saving...' : saveStatus === 'saved' ? 'Saved!' : 'Save'}
                 </span>
               </button>
+
+              {/* Build (garden only) */}
+              {zoneRef.current.id === 'garden' && (
+                <button
+                  onClick={() => {
+                    setBuildMode(prev => {
+                      const next = !prev
+                      buildModeRef.current = next
+                      if (!next) {
+                        setSelectedBuildItem(null)
+                        setSelectedPlacedFurnId(null)
+                        setSelectedPlacedStructId(null)
+                      }
+                      return next
+                    })
+                  }}
+                  className={`flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-left transition-all ${
+                    buildMode ? 'bg-[#d4a843]/18 text-[#d4a843]' : 'hover:bg-[#d4a843]/10 text-text-dim'
+                  }`}
+                >
+                  <svg width="18" height="18" viewBox="0 0 16 16" fill="none" className="flex-shrink-0">
+                    <path d="M3 13l3-3 7-7-3-3-7 7-3 3h3ZM10 3l3 3" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
+                  <span className="text-sm font-display">Build</span>
+                </button>
+              )}
 
               {/* Bag */}
               <button
@@ -4172,6 +4419,30 @@ export default function ShimmerPage() {
                 <span className="text-[13px] font-display">{btn.label}</span>
               </button>
             ))}
+            {zoneRef.current.id === 'garden' && (
+              <button
+                onClick={() => {
+                  setBuildMode(prev => {
+                    const next = !prev
+                    buildModeRef.current = next
+                    if (!next) {
+                      setSelectedBuildItem(null)
+                      setSelectedPlacedFurnId(null)
+                      setSelectedPlacedStructId(null)
+                    }
+                    return next
+                  })
+                }}
+                className={`flex flex-col items-center gap-0.5 px-2 py-1 rounded-md transition-all ${
+                  buildMode ? 'text-[#d4a843]' : 'text-text-faint/40 active:text-text-faint/70'
+                }`}
+              >
+                <svg width="18" height="18" viewBox="0 0 16 16" fill="none">
+                  <path d="M3 13l3-3 7-7-3-3-7 7-3 3h3ZM10 3l3 3" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+                <span className="text-[13px] font-display">Build</span>
+              </button>
+            )}
           </div>
         )}
       </div>
