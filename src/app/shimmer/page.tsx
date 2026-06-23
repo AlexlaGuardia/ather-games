@@ -4508,7 +4508,7 @@ export default function ShimmerPage() {
 
         {/* Mobile quick-access toolbar (replaces sidebar) */}
         {isMobile && (
-          <div className="border-t border-[#d4a843]/15 px-2 py-1.5 flex justify-around items-center" style={{ paddingBottom: 'max(6px, env(safe-area-inset-bottom))' }}>
+          <div className="border-t border-[#d4a843]/15 px-1 py-1.5 flex items-center gap-px" style={{ paddingBottom: 'max(6px, env(safe-area-inset-bottom))' }}>
             {([
               { id: 'bag' as const, label: 'Bag', icon: 'M5 5V4a3 3 0 0 1 6 0v1M3 5h10l-1 9H4L3 5Z' },
               { id: 'spirits' as const, label: 'Spirits', icon: 'M8 3a3 3 0 1 0 0 6 3 3 0 0 0 0-6ZM5 6c-1-1-2 0-2 1M11 6c1-1 2 0 2 1' },
@@ -4519,14 +4519,14 @@ export default function ShimmerPage() {
               <button
                 key={btn.id}
                 onClick={() => setSidePanel(sidePanel === btn.id ? null : btn.id)}
-                className={`flex flex-col items-center gap-0.5 px-2 py-1 rounded-md transition-all ${
+                className={`flex flex-col flex-1 min-w-0 items-center gap-0.5 px-0.5 py-1 rounded-md transition-all ${
                   sidePanel === btn.id ? 'text-[#d4a843]' : 'text-text-faint/40 active:text-text-faint/70'
                 }`}
               >
                 <svg width="18" height="18" viewBox="0 0 16 16" fill="none">
                   <path d={btn.icon} stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/>
                 </svg>
-                <span className="text-[13px] font-display">{btn.label}</span>
+                <span className="text-[11px] font-display truncate max-w-full">{btn.label}</span>
               </button>
             ))}
             {zoneRef.current.id === 'garden' && (
@@ -4545,14 +4545,14 @@ export default function ShimmerPage() {
                     return next
                   })
                 }}
-                className={`flex flex-col items-center gap-0.5 px-2 py-1 rounded-md transition-all ${
+                className={`flex flex-col flex-1 min-w-0 items-center gap-0.5 px-0.5 py-1 rounded-md transition-all ${
                   buildMode ? 'text-[#d4a843]' : 'text-text-faint/40 active:text-text-faint/70'
                 }`}
               >
                 <svg width="18" height="18" viewBox="0 0 16 16" fill="none">
                   <path d="M3 13l3-3 7-7-3-3-7 7-3 3h3ZM10 3l3 3" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/>
                 </svg>
-                <span className="text-[13px] font-display">Build</span>
+                <span className="text-[11px] font-display truncate max-w-full">Build</span>
               </button>
             )}
           </div>
