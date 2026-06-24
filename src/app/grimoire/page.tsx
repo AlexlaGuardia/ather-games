@@ -1,10 +1,11 @@
 'use client'
 
-// THE SPIRIT GRIMOIRE — the in-world bestiary, built as an open tome you page through (Alex's
-// whiteboard: left page = framed portrait + name + #number + the four Evolution slots; right page =
-// details/lore; ‹ › flip between entries). Reads /grimoire/spirits.json at runtime (no rebuild when
-// Serberus updates it; Raven's lore fills each `entry`). Lives off the Front Desk wall. Deep-link a
-// spirit with /grimoire?s=<id>. Seed + handoff: athernyx/HANDOFF_JIN_grimoire.md.
+// ATHERPAGES — the universe registry ("the yellowpages of Shimmer"), built as an open tome you
+// page through. Two volumes so far: THE GRIMOIRE (spirits, reads /grimoire/spirits.json — the
+// original) and THE FOLK (the people, reads /atherpages/folk.json). Volume tabs switch between
+// them; the open-book shell, paging, and deep-links are shared. Spirit card = portrait + #number +
+// the four Evolution slots + lore; Folk card = portrait + #number + role/allegiance + account.
+// Deep-link: /grimoire?s=<spiritId>  or  /grimoire?v=folk&f=<folkId>. Lives off the Front Desk wall.
 
 import { useCallback, useEffect, useState } from 'react'
 import RoomReturn from '../_components/RoomReturn'
@@ -16,43 +17,80 @@ type Spirit = {
   img: string; entry: string; evolutions: Evo[]
 }
 type ElementDef = { label: string; color: string }
-type Manifest = { version: number; updated: string; elements: Record<string, ElementDef>; spirits: Spirit[] }
+type SpiritManifest = { version: number; updated: string; elements: Record<string, ElementDef>; spirits: Spirit[] }
+
+type Folk = {
+  id: string; name: string; type: string; kind: string; allegiance: string
+  img: string; summary: string; relations: string; appears: string; entry: string; status: string
+}
+type AllegianceDef = { label: string; color: string }
+type FolkManifest = { version: number; updated: string; allegiances: Record<string, AllegianceDef>; folk: Folk[] }
+
+type Volume = 'spirits' | 'folk'
 
 const GOLD = '#caa24e'
 const INK = '#3a2f1e'
 const STAGE3_SLOTS = 4 // reserved per evolution (base → 4 → up to 16); not designed yet
 
-export default function GrimoirePage() {
-  const [data, setData] = useState<Manifest | null>(null)
+export default function AtherPages() {
+  const [spirits, setSpirits] = useState<SpiritManifest | null>(null)
+  const [folkData, setFolkData] = useState<FolkManifest | null>(null)
   const [failed, setFailed] = useState(false)
+  const [vol, setVol] = useState<Volume>('spirits')
   const [i, setI] = useState(0)
 
+  // load both volumes; honor ?v= / ?s= / ?f= deep-links
   useEffect(() => {
     let alive = true
-    fetch('/grimoire/spirits.json', { cache: 'no-store' })
-      .then((r) => (r.ok ? r.json() : Promise.reject()))
-      .then((d: Manifest) => {
+    Promise.all([
+      fetch('/grimoire/spirits.json', { cache: 'no-store' }).then((r) => (r.ok ? r.json() : Promise.reject())),
+      fetch('/atherpages/folk.json', { cache: 'no-store' }).then((r) => (r.ok ? r.json() : null)).catch(() => null),
+    ])
+      .then(([sp, fk]: [SpiritManifest, FolkManifest | null]) => {
         if (!alive) return
-        setData(d)
-        const want = new URLSearchParams(window.location.search).get('s')
-        const idx = want ? d.spirits.findIndex((sp) => sp.id === want) : -1
-        if (idx >= 0) setI(idx)
+        setSpirits(sp); setFolkData(fk)
+        const q = new URLSearchParams(window.location.search)
+        const wantVol = q.get('v') === 'folk' && fk ? 'folk' : 'spirits'
+        setVol(wantVol)
+        if (wantVol === 'folk' && fk) {
+          const idx = fk.folk.findIndex((f) => f.id === q.get('f'))
+          if (idx >= 0) setI(idx)
+        } else {
+          const idx = sp.spirits.findIndex((s) => s.id === q.get('s'))
+          if (idx >= 0) setI(idx)
+        }
       })
       .catch(() => { if (alive) setFailed(true) })
     return () => { alive = false }
   }, [])
 
-  const n = data?.spirits.length ?? 0
-  const go = useCallback((next: number) => {
-    if (!n) return
-    const idx = ((next % n) + n) % n // wrap
-    setI(idx)
+  const elements = spirits?.elements ?? {}
+  const elColor = (e: string) => elements[e]?.color ?? GOLD
+  const elLabel = (e: string) => elements[e]?.label ?? e
+  const allegiances = folkData?.allegiances ?? {}
+  const alColor = (a: string) => allegiances[a]?.color ?? GOLD
+  const alLabel = (a: string) => allegiances[a]?.label ?? a
+
+  const list: Array<Spirit | Folk> = vol === 'folk' ? (folkData?.folk ?? []) : (spirits?.spirits ?? [])
+  const n = list.length
+
+  const syncUrl = useCallback((nextVol: Volume, idx: number) => {
     try {
       const u = new URL(window.location.href)
-      u.searchParams.set('s', data!.spirits[idx].id)
+      u.searchParams.delete('s'); u.searchParams.delete('f')
+      if (nextVol === 'folk') { u.searchParams.set('v', 'folk'); if (folkData) u.searchParams.set('f', folkData.folk[idx].id) }
+      else { u.searchParams.delete('v'); if (spirits) u.searchParams.set('s', spirits.spirits[idx].id) }
       window.history.replaceState(null, '', u)
     } catch {}
-  }, [n, data])
+  }, [spirits, folkData])
+
+  const go = useCallback((next: number) => {
+    if (!n) return
+    const idx = ((next % n) + n) % n
+    setI(idx); syncUrl(vol, idx)
+  }, [n, vol, syncUrl])
+
+  const switchVol = (v: Volume) => { if (v === vol) return; setVol(v); setI(0); syncUrl(v, 0) }
 
   // keyboard paging
   useEffect(() => {
@@ -64,49 +102,56 @@ export default function GrimoirePage() {
     return () => window.removeEventListener('keydown', h)
   }, [i, go])
 
-  const elements = data?.elements ?? {}
-  const elColor = (e: string) => elements[e]?.color ?? GOLD
-  const elLabel = (e: string) => elements[e]?.label ?? e
+  const data = spirits
+  const sub = vol === 'folk'
+    ? (folkData ? `the people of Athernyx · ${n} of the Folk` : '')
+    : (data ? `the spirits of Athernyx · ${n} base forms` : '')
 
   return (
     <main className="min-h-dvh w-full flex flex-col items-center bg-[#070608] text-[#e8e2d0]" style={{ backgroundImage: 'radial-gradient(ellipse at 50% -10%, #1a1206 0%, transparent 55%)' }}>
       <RoomReturn wall={2} />
 
-      <header className="text-center pt-8 pb-5 px-4">
-        <h1 className="gx-title text-2xl sm:text-3xl tracking-[0.34em] uppercase" style={{ color: '#f5c542', textShadow: '0 0 22px #f5c54255' }}>The Grimoire</h1>
-        <p className="gx-label text-[10px] sm:text-[11px] text-[#b8a87e]/70 mt-1.5 tracking-[0.2em]">the spirits of Athernyx{data ? ` · ${n} base forms` : ''}</p>
+      <header className="text-center pt-8 pb-4 px-4">
+        <h1 className="gx-title text-2xl sm:text-3xl tracking-[0.34em] uppercase" style={{ color: '#f5c542', textShadow: '0 0 22px #f5c54255' }}>AtherPages</h1>
+        <p className="gx-label text-[10px] sm:text-[11px] text-[#b8a87e]/70 mt-1.5 tracking-[0.2em]">{sub}</p>
+
+        {/* volume tabs */}
+        <div className="mt-4 inline-flex items-center gap-1 rounded-sm p-1" style={{ background: '#0e0b0780', boxShadow: `0 0 0 1px ${GOLD}33` }}>
+          <VolTab label="The Grimoire" active={vol === 'spirits'} onClick={() => switchVol('spirits')} />
+          <VolTab label="The Folk" active={vol === 'folk'} onClick={() => switchVol('folk')} disabled={!folkData} />
+        </div>
       </header>
 
-      {failed && <p className="text-center text-[#b8a87e]/60 text-sm py-20">the Grimoire is sealed for now — couldn’t read the manifest.</p>}
+      {failed && <p className="text-center text-[#b8a87e]/60 text-sm py-20">AtherPages is sealed for now — couldn’t read the manifest.</p>}
       {!data && !failed && <p className="text-center text-[#b8a87e]/50 text-sm py-20 animate-pulse">unfurling the pages…</p>}
 
       {data && n > 0 && (
         <div className="w-full max-w-[1000px] px-2 sm:px-4 pb-12 flex items-center gap-1 sm:gap-3">
-          {/* ‹ prev (desktop) */}
           <PageArrow dir="left" onClick={() => go(i - 1)} />
 
-          {/* the open book */}
           <div
             className="relative flex-1 grid grid-cols-1 md:grid-cols-2 rounded-[6px] overflow-hidden"
-            style={{
-              background: 'linear-gradient(160deg,#efe6cf,#e4d7b8)',
-              boxShadow: '0 24px 60px rgba(0,0,0,0.6), 0 0 0 1px #00000022',
-              minHeight: 460,
-            }}
+            style={{ background: 'linear-gradient(160deg,#efe6cf,#e4d7b8)', boxShadow: '0 24px 60px rgba(0,0,0,0.6), 0 0 0 1px #00000022', minHeight: 460 }}
           >
-            {/* center spine */}
             <div aria-hidden className="hidden md:block absolute inset-y-0 left-1/2 -translate-x-1/2 w-6" style={{ background: 'linear-gradient(90deg,transparent,rgba(0,0,0,0.16),rgba(0,0,0,0.05),rgba(0,0,0,0.16),transparent)' }} />
 
-            <LeftPage spirit={data.spirits[i]} index={i} elColor={elColor} elLabel={elLabel} />
-            <RightPage spirit={data.spirits[i]} elColor={elColor} elLabel={elLabel} />
+            {vol === 'folk' ? (
+              <>
+                <FolkLeftPage folk={list[i] as Folk} index={i} alColor={alColor} alLabel={alLabel} />
+                <FolkRightPage folk={list[i] as Folk} />
+              </>
+            ) : (
+              <>
+                <LeftPage spirit={list[i] as Spirit} index={i} elColor={elColor} elLabel={elLabel} />
+                <RightPage spirit={list[i] as Spirit} elColor={elColor} elLabel={elLabel} />
+              </>
+            )}
           </div>
 
-          {/* › next (desktop) */}
           <PageArrow dir="right" onClick={() => go(i + 1)} />
         </div>
       )}
 
-      {/* mobile pager bar */}
       {data && n > 0 && (
         <div className="md:hidden flex items-center justify-center gap-6 pb-10 -mt-6">
           <button onClick={() => go(i - 1)} className="gx-label text-[13px] px-4 py-2 rounded-sm border" style={{ color: GOLD, borderColor: `${GOLD}55` }}>&#8249;</button>
@@ -118,11 +163,25 @@ export default function GrimoirePage() {
   )
 }
 
+function VolTab({ label, active, onClick, disabled }: { label: string; active: boolean; onClick: () => void; disabled?: boolean }) {
+  return (
+    <button
+      onClick={onClick} disabled={disabled}
+      className="gx-label text-[10px] sm:text-[11px] px-3 py-1.5 rounded-sm uppercase tracking-[0.16em] transition disabled:opacity-30"
+      style={active
+        ? { color: '#1a1206', background: GOLD, fontWeight: 700 }
+        : { color: `${GOLD}cc`, background: 'transparent' }}
+    >
+      {label}
+    </button>
+  )
+}
+
 function PageArrow({ dir, onClick }: { dir: 'left' | 'right'; onClick: () => void }) {
   return (
     <button
       onClick={onClick}
-      aria-label={dir === 'left' ? 'previous spirit' : 'next spirit'}
+      aria-label={dir === 'left' ? 'previous entry' : 'next entry'}
       className="hidden md:flex shrink-0 h-12 w-9 items-center justify-center rounded-sm border text-xl transition hover:scale-110"
       style={{ color: GOLD, borderColor: `${GOLD}44`, background: '#0e0b0780' }}
     >
@@ -131,7 +190,8 @@ function PageArrow({ dir, onClick }: { dir: 'left' | 'right'; onClick: () => voi
   )
 }
 
-// LEFT PAGE — framed portrait + name + #number + the four Evolution slots
+// ---- SPIRIT VOLUME (the Grimoire) ----
+
 function LeftPage({ spirit: s, index, elColor, elLabel }: {
   spirit: Spirit; index: number; elColor: (e: string) => string; elLabel: (e: string) => string
 }) {
@@ -139,7 +199,6 @@ function LeftPage({ spirit: s, index, elColor, elLabel }: {
   return (
     <div className="relative p-5 sm:p-7" style={{ color: INK }}>
       <div className="flex items-start justify-between gap-3">
-        {/* gilt-framed portrait with a dark mat (so the glowing render reads as a painting) */}
         <div className="rounded-[3px] shrink-0" style={{ padding: 7, width: 168, background: 'linear-gradient(145deg,#caa24e,#7a5c1e 45%,#e7c878 70%,#6e5018)', boxShadow: `0 6px 18px rgba(0,0,0,0.4), 0 0 0 1px ${c}44` }}>
           <div className="relative rounded-[1px] overflow-hidden" style={{ aspectRatio: '1 / 1', background: `radial-gradient(circle at 50% 42%, ${c}33, #120d07 72%)`, boxShadow: 'inset 0 0 0 2px #1a140a' }}>
             {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -156,7 +215,6 @@ function LeftPage({ spirit: s, index, elColor, elLabel }: {
         </div>
       </div>
 
-      {/* Evolutions — four slots (the sketch's four ovals) */}
       <div className="mt-5">
         <p className="text-[11px] uppercase tracking-[0.28em] mb-2.5" style={{ color: '#8a6c22' }}>Evolutions</p>
         <div className="grid grid-cols-4 gap-2">
@@ -169,7 +227,6 @@ function LeftPage({ spirit: s, index, elColor, elLabel }: {
                   <img src={evo.img} alt={`${s.name} · ${elLabel(evo.element)}`} className="absolute inset-0 h-full w-full object-contain p-0.5" />
                 </div>
                 <span className="mt-1 text-[8px] uppercase tracking-wide leading-none" style={{ color: ec === '#f5c542' ? '#9a7b34' : ec }}>{elLabel(evo.element)}</span>
-                {/* reserved stage-3 pips */}
                 <div className="flex gap-0.5 mt-1">
                   {Array.from({ length: STAGE3_SLOTS }).map((_, k) => (
                     <span key={k} className="w-1 h-1 rounded-full" style={{ background: `${ec}55` }} />
@@ -185,7 +242,6 @@ function LeftPage({ spirit: s, index, elColor, elLabel }: {
   )
 }
 
-// RIGHT PAGE — the details / lore account
 function RightPage({ spirit: s, elColor, elLabel }: {
   spirit: Spirit; elColor: (e: string) => string; elLabel: (e: string) => string
 }) {
@@ -209,6 +265,55 @@ function RightPage({ spirit: s, elColor, elLabel }: {
       <p className="mt-5 text-[14px] leading-relaxed italic" style={{ color: '#4a3c25', fontFamily: 'Cormorant Garamond, Georgia, serif' }}>
         {s.entry?.trim() ? s.entry : 'Its full account has not yet been inked into the Grimoire.'}
       </p>
+    </div>
+  )
+}
+
+// ---- FOLK VOLUME (the people) ----
+
+function FolkLeftPage({ folk: f, index, alColor, alLabel }: {
+  folk: Folk; index: number; alColor: (a: string) => string; alLabel: (a: string) => string
+}) {
+  const c = alColor(f.allegiance)
+  return (
+    <div className="relative p-5 sm:p-7" style={{ color: INK }}>
+      <div className="flex items-start justify-between gap-3">
+        <div className="rounded-[3px] shrink-0" style={{ padding: 7, width: 168, background: 'linear-gradient(145deg,#caa24e,#7a5c1e 45%,#e7c878 70%,#6e5018)', boxShadow: `0 6px 18px rgba(0,0,0,0.4), 0 0 0 1px ${c}55` }}>
+          <div className="relative rounded-[1px] overflow-hidden" style={{ aspectRatio: '1 / 1', background: `radial-gradient(circle at 50% 42%, ${c}2e, #120d07 74%)`, boxShadow: 'inset 0 0 0 2px #1a140a' }}>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={f.img} alt={f.name} className="absolute inset-0 h-full w-full object-contain p-1" />
+          </div>
+        </div>
+        <span className="font-mono text-xl tabular-nums" style={{ color: '#9a7b34' }}>#{String(index + 1).padStart(3, '0')}</span>
+      </div>
+
+      <div className="mt-4">
+        <h2 className="text-2xl tracking-[0.12em] uppercase" style={{ color: '#6e5212', fontFamily: 'Cormorant Garamond, Georgia, serif', fontWeight: 700 }}>{f.name}</h2>
+        <div className="flex items-center gap-2 flex-wrap mt-1.5">
+          <span className="gx-label text-[9px] px-2 py-0.5 rounded-sm" style={{ color: '#fff', background: c }}>{alLabel(f.allegiance)}</span>
+          <span className="text-[11px]" style={{ color: '#8a6c22' }}>{f.kind}</span>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function FolkRightPage({ folk: f }: { folk: Folk }) {
+  return (
+    <div className="relative p-5 sm:p-7 border-t md:border-t-0 md:border-l" style={{ color: INK, borderColor: '#00000018' }}>
+      <h3 className="text-xl tracking-[0.14em]" style={{ color: '#6e5212', fontFamily: 'Cormorant Garamond, Georgia, serif', fontWeight: 700 }}>Who They Are</h3>
+      <div className="mt-3 h-px w-full" style={{ background: '#00000018' }} />
+
+      <p className="mt-3 text-[13.5px] leading-relaxed" style={{ color: '#4a3c25' }}>{f.summary}</p>
+
+      <dl className="mt-4 space-y-2.5">
+        {f.relations && <Row label="Ties" value={f.relations} />}
+        {f.appears && <Row label="Appears" value={f.appears} />}
+      </dl>
+
+      {f.entry?.trim() && (
+        <p className="mt-5 text-[14px] leading-relaxed italic" style={{ color: '#4a3c25', fontFamily: 'Cormorant Garamond, Georgia, serif' }}>{f.entry}</p>
+      )}
     </div>
   )
 }

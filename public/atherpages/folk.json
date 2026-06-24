@@ -1,0 +1,60 @@
+{
+  "version": 1,
+  "updated": "2026-06-24",
+  "note": "AtherPages Folk volume (the people of the universe). Authored by Magii from CANON/design-briefs/moglins.md + keepers.md; art Kontext'd off locked anchors in athernyx/assets/folk-refs/. blurb/entry = Raven's cozy-voice slot (placeholder empty). allegiance: collared (villain) | free | neutral.",
+  "allegiances": {
+    "collared": { "label": "Collared", "color": "#b5462f" },
+    "free":     { "label": "Free",     "color": "#7bd88f" },
+    "neutral":  { "label": "The Folk",  "color": "#caa24e" }
+  },
+  "folk": [
+    {
+      "id": "moglin", "name": "Moglin", "type": "folk", "kind": "The People of the Ather",
+      "allegiance": "neutral", "img": "/atherpages/folk/moglin.png",
+      "summary": "The timid, teddy-bear-soft burrow-folk of the Ather, the gentlest of races until the collar. A Moglin with a collared spirit feels ten feet tall; free the spirit and the borrowed bravery drains away, and he deflates into the sweet creature he always was.",
+      "relations": "a whole people: villages, holds, and the Warren",
+      "appears": "nearly every book; the outer zones of Shimmer",
+      "entry": "", "status": "locked"
+    },
+    {
+      "id": "bramble", "name": "Bramble", "type": "folk", "kind": "Thornlord · garden-boss III",
+      "allegiance": "collared", "img": "/atherpages/folk/bramble.png",
+      "summary": "Ringleader of the three weeds. The biggest swagger of the lot, a twisted thorn-crown and a scavenged green cloak. Borrowed bravado on a borrowed spirit. The third garden boss.",
+      "relations": "leads Nettle & Burr",
+      "appears": "early books; Shimmer garden boss III",
+      "entry": "", "status": "locked"
+    },
+    {
+      "id": "nettle", "name": "Nettle", "type": "folk", "kind": "Thornlord · garden-boss II",
+      "allegiance": "collared", "img": "/atherpages/folk/nettle.png",
+      "summary": "The wiry, sly weed: arms crossed, a stolen red sash, a smirk that stings. All front and no spine once the collar comes off. The second garden boss.",
+      "relations": "runs with Bramble & Burr",
+      "appears": "early books; Shimmer garden boss II",
+      "entry": "", "status": "locked"
+    },
+    {
+      "id": "burr", "name": "Burr", "type": "folk", "kind": "Thornlord · garden-boss I",
+      "allegiance": "collared", "img": "/atherpages/folk/burr.png",
+      "summary": "The small, eager weed, trying hardest of the three to look tough. A too-big patchwork vest and a spiky pauldron of bundled thorns. The first garden boss a young keeper meets.",
+      "relations": "runs with Bramble & Nettle",
+      "appears": "early books; Shimmer garden boss I",
+      "entry": "", "status": "locked"
+    },
+    {
+      "id": "hemlock", "name": "Hemlock", "type": "folk", "kind": "The Collar-Master",
+      "allegiance": "collared", "img": "/atherpages/folk/hemlock.png",
+      "summary": "The cold, clever collar-baron. He runs a stronghold and counts spirits as inventory to be loaded; he can forge a giant collar and take a hold without raising his voice. Competent at the means and blind to the meaning, which is exactly what makes him dangerous. What the three weeds wish they were, and their opposite number.",
+      "relations": "the Thornlords' dark mirror; turns from spirits to the Ancients",
+      "appears": "Books 7–10; into Series 2–3",
+      "entry": "", "status": "locked"
+    },
+    {
+      "id": "jimbo", "name": "Jimbo", "type": "folk", "kind": "Free Fold-Runner",
+      "allegiance": "free", "img": "/atherpages/folk/jimbo.png",
+      "summary": "A gentle Moglin who has never collared anything: a sure-footed runner of the wild folds who knows their passages cold. He carries his honest confidence the way the Thornlords fake theirs. Bonn's first Outland ally, and living proof that the species was never the sin; the collar is.",
+      "relations": "Bonn's friend; of the free Warren",
+      "appears": "Book 5+; the Warren (Series 2)",
+      "entry": "", "status": "locked"
+    }
+  ]
+}
