@@ -147,6 +147,12 @@ export class Renderer {
     const dctx = this.displayCtx
     dctx.imageSmoothingEnabled = true
     dctx.imageSmoothingQuality = 'high'
+    // Clear the display first: the offscreen is cleared to transparent each frame, and
+    // drawImage does NOT overwrite transparent source pixels — so without this, any margin
+    // a smaller zone doesn't cover keeps the previous zone burned in (e.g. the garden showing
+    // under the smaller Mycelial Path). Clearing makes uncovered margins fall back to the
+    // canvas's dark wrapper bg. (Fix 2026-06-24.)
+    dctx.clearRect(0, 0, dctx.canvas.width, dctx.canvas.height)
     dctx.drawImage(
       this.offscreen,
       0, 0, WIDTH, HEIGHT,
