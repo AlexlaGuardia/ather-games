@@ -24,6 +24,25 @@ import { ZONE_INTGRIDS } from '../../world/intgrids'
 
 const TS = 32
 
+// ── Curated tile palette ─────────────────────────────────────────────────────
+// Adjust this allowlist to control which old-pixel tiles appear in the palette.
+// FLAT tiles (97-109) are always shown in the "Terrain" group.
+// Cloud tiles are hand-placed by Alex for borders — keep them in the "Clouds" group.
+// Everything else is hidden from the default palette (still fully functional in saves).
+const CLOUD_TILE_INDICES: readonly number[] = [
+  11, 12, 15, 16, 17, 18, 19,           // Border L/R, Full Top 1, Border Empty, Wall Bottom/Top
+  25, 26, 27, 28, 29,                    // Pillar L, Arch, Window, Wall Mid, Pillar R
+  34,                                    // Cloud 1
+  37, 38, 39, 40, 41, 42,               // Cloud Top L/R corners, Border Top 2, Cloud L 2
+  74, 77, 78, 79, 80, 81,               // Cloud Border B R Out, L Exit, B Exits, Bottom 1, Top 3
+  82, 83, 84, 85, 86, 87, 88, 89,       // Cloud Top corners, Border exits, Top 4/5, in L Corner 2, Bottom
+  95, 96,                               // Cloud B L in Corner, Cloud Border B Exit
+]
+// Flat tile indices (new design system)
+const FLAT_TILE_INDICES: readonly number[] = [97, 98, 99, 100, 101, 102, 103, 104, 105, 106, 107, 108, 109]
+// Combined allowlist for the curated palette — union of flat + cloud
+const CURATED_TILE_ALLOWLIST = new Set<number>([...FLAT_TILE_INDICES, ...CLOUD_TILE_INDICES])
+
 const CATEGORIES = [
   { id: 'terrain', label: 'Terrain', color: '#4ade80' },
   { id: 'path', label: 'Path', color: '#fbbf24' },
@@ -916,7 +935,8 @@ export default function MapEditor() {
   const [tiles, setTiles] = useState<EditorTile[]>(builtInTiles)
   const [grid, setGrid] = useState<number[][]>(() => GARDEN.map(row => [...row]))
   const [gridDirty, setGridDirty] = useState(false)
-  const [brush, setBrush] = useSessionState('map:brush', 0)
+  // Layout mode default: start in IntGrid/region-paint mode with Grass selected
+  const [brush, setBrush] = useSessionState('map:brush', 1)
   const [painting, setPainting] = useState(false)
   const [hoverTile, setHoverTile] = useState<{ x: number; y: number } | null>(null)
   const [showGrid, setShowGrid] = useSessionState('map:showGrid', true)
@@ -937,7 +957,14 @@ export default function MapEditor() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
   const [showPreview, setShowPreview] = useState(false)
+  // Advanced drawer: furniture/item/node/structure/stamp/zonechest — hidden by default.
+  // Auto-open if session restores an advanced brush type.
   const [brushType, setBrushType] = useSessionState<'tile' | 'item' | 'node' | 'eraser' | 'structure' | 'stamp' | 'furniture' | 'zonechest'>('map:brushType', 'tile')
+  const [showAdvancedBrushes, setShowAdvancedBrushes] = useState(
+    () => (['item', 'node', 'structure', 'stamp', 'furniture', 'zonechest'] as const).includes(
+      (typeof window !== 'undefined' ? sessionStorage.getItem('map:brushType') : null) as never
+    )
+  )
   const [brushItemId, setBrushItemId] = useSessionState<string | null>('map:brushItemId', null)
   const [brushNodeType, setBrushNodeType] = useSessionState<string | null>('map:brushNodeType', null)
   const [brushStructureId, setBrushStructureId] = useSessionState<string | null>('map:brushStructureId', null)
@@ -962,7 +989,8 @@ export default function MapEditor() {
     if (persisted && persisted.length > 0) return persisted.map(r => [...r])
     return GARDEN.map(row => row.map(() => 0))
   })
-  const [showIntGrid, setShowIntGrid] = useState(false)
+  // Default to IntGrid/region-paint mode so the editor opens in layout workflow
+  const [showIntGrid, setShowIntGrid] = useState(true)
   const [autoLayerRules, setAutoLayerRules] = useState<AutoLayerRule[]>(() => DEFAULT_AUTOLAYER_RULES)
   const INT_VALUES = [
     { value: 1, label: 'Grass', color: '#5bbd6e' },
@@ -2409,135 +2437,187 @@ export default function MapEditor() {
 
       {/* Brush Selector */}
       <div className="mb-4">
+        {/* Current brush preview + status */}
         <div className="flex items-center gap-3 mb-3">
-          <div className="flex items-center gap-3">
-            <BrushPreview
-              entry={brushType === 'eraser' ? { type: 'eraser' } : brushType === 'item' ? { type: 'item', itemId: brushItemId! } : brushType === 'node' ? { type: 'node', nodeType: brushNodeType! } : brushType === 'structure' ? { type: 'structure', structureId: brushStructureId! } : brushType === 'furniture' ? { type: 'furniture', furnitureId: brushFurnitureId! } : brushType === 'zonechest' ? { type: 'zonechest', chestType: brushChestType } : { type: 'tile', tileIdx: brush }}
-              tiles={tiles}
-              structures={structures}
-              size={48}
-            />
-            <select
-              value={dropdownValue}
-              onChange={e => handleDropdownChange(e.target.value)}
-              className="bg-[#1a1a2e] border border-white/10 rounded px-3 py-2 text-[12px] text-white font-display focus:outline-none focus:border-gold/40 min-w-[200px]"
-            >
-              <option value="eraser" className="bg-[#1a1a2e] text-white">Eraser</option>
-              {[...CATEGORIES].sort((a, b) => a.label.localeCompare(b.label)).map(cat => {
-                const catTiles = tiles.map((et, i) => ({ et, i })).filter(({ et }) => et.category === cat.id)
-                  .sort((a, b) => a.et.name.localeCompare(b.et.name))
-                if (catTiles.length === 0) return null
-                return (
-                  <optgroup key={cat.id} label={cat.label}>
-                    {catTiles.map(({ et, i }) => (
-                      <option key={i} value={`tile:${i}`} className="bg-[#1a1a2e] text-white">
-                        {et.name}{et.solid ? ' [solid]' : ''}{et.above ? ' [above]' : ''}
-                      </option>
-                    ))}
-                  </optgroup>
-                )
-              })}
-              {(() => {
-                const uncategorized = tiles.map((et, i) => ({ et, i })).filter(({ et }) => !CATEGORIES.some(c => c.id === et.category))
-                  .sort((a, b) => a.et.name.localeCompare(b.et.name))
-                if (uncategorized.length === 0) return null
-                return (
-                  <optgroup label="Unsorted">
-                    {uncategorized.map(({ et, i }) => (
-                      <option key={i} value={`tile:${i}`} className="bg-[#1a1a2e] text-white">
-                        {et.name}{et.solid ? ' [solid]' : ''}{et.above ? ' [above]' : ''}
-                      </option>
-                    ))}
-                  </optgroup>
-                )
-              })()}
-              <optgroup label="Items">
-                {ITEMS.map(item => (
-                  <option key={item.id} value={`item:${item.id}`} className="bg-[#1a1a2e] text-white">
-                    {item.name}{item.species ? ` (${item.species})` : ''}
-                  </option>
-                ))}
-              </optgroup>
-              {(() => {
-                const categories = ['Forestry', 'Prospecting', 'Rinning'] as const
-                return categories.map(cat => {
-                  const nodes = Object.entries(NODE_TYPE_LABELS).filter(([, v]) => v.category === cat)
-                  if (nodes.length === 0) return null
-                  return (
-                    <optgroup key={cat} label={`Nodes: ${cat}`}>
-                      {nodes.map(([key, v]) => (
-                        <option key={key} value={`node:${key}`} className="bg-[#1a1a2e] text-white">
-                          {v.name}{v.above ? ' [above]' : ''}
-                        </option>
-                      ))}
-                    </optgroup>
-                  )
-                })
-              })()}
-              {structures.length > 0 && (
-                <optgroup label="Structures">
-                  {structures.map(s => (
-                    <option key={s.id} value={`struct:${s.id}`} className="bg-[#1a1a2e] text-white">
-                      {s.name} ({s.cols}x{s.rows})
-                    </option>
-                  ))}
-                </optgroup>
-              )}
-              {FURNITURE.length > 0 && (
-                <optgroup label="Furniture">
-                  {FURNITURE.map(f => (
-                    <option key={f.id} value={`furn:${f.id}`} className="bg-[#1a1a2e] text-white">
-                      {f.name}
-                    </option>
-                  ))}
-                </optgroup>
-              )}
-              <optgroup label="Zone Chests">
-                {FURNITURE.filter(f => f.chestSlots).map(f => (
-                  <option key={`zc-${f.id}`} value={`zc:${f.id}`} className="bg-[#1a1a2e] text-white">
-                    {f.name}
-                  </option>
-                ))}
-              </optgroup>
-            </select>
+          <BrushPreview
+            entry={brushType === 'eraser' ? { type: 'eraser' } : brushType === 'item' ? { type: 'item', itemId: brushItemId! } : brushType === 'node' ? { type: 'node', nodeType: brushNodeType! } : brushType === 'structure' ? { type: 'structure', structureId: brushStructureId! } : brushType === 'furniture' ? { type: 'furniture', furnitureId: brushFurnitureId! } : brushType === 'zonechest' ? { type: 'zonechest', chestType: brushChestType } : { type: 'tile', tileIdx: brush }}
+            tiles={tiles}
+            structures={structures}
+            size={48}
+          />
+          <div>
+            <p className="text-[10px] text-text-faint mb-0.5">
+              {brushType === 'tile' ? (tiles[brush]?.name ?? `Tile ${brush}`) : brushType === 'eraser' ? 'Eraser' : brushType === 'item' ? (ITEMS.find(i => i.id === brushItemId)?.name ?? brushItemId ?? '—') : brushType === 'node' ? (NODE_TYPE_LABELS[brushNodeType!]?.name ?? brushNodeType ?? '—') : brushType === 'structure' ? (structures.find(s => s.id === brushStructureId)?.name ?? brushStructureId ?? '—') : brushType === 'furniture' ? brushFurnitureId ?? '—' : brushType === 'stamp' ? 'Stamp' : brushChestType}
+            </p>
+            <span className="text-[9px] text-text-faint">
+              {brushType === 'tile' && tiles[brush]?.solid && <span className="text-red-400/60 mr-2">solid</span>}
+              {brushType === 'tile' && tiles[brush]?.above && <span className="text-violet-400/60 mr-2">above</span>}
+              {brushType === 'item' && <span className="text-amber-400/60">pickup — click to place/remove</span>}
+              {brushType === 'node' && <span className="text-green-400/60">resource node — click to place/remove</span>}
+              {brushType === 'eraser' && <span className="text-red-400/60">clears tiles, items, nodes, warps, structures, furniture + chests</span>}
+              {brushType === 'furniture' && <span className="text-amber-400/60">furniture — click to place</span>}
+              {brushType === 'zonechest' && <span className="text-purple-400/60">zone chest — <label className="cursor-pointer"><input type="checkbox" checked={brushChestClaimable} onChange={e => setBrushChestClaimable(e.target.checked)} className="mr-1 accent-purple-500" />claimable</label></span>}
+              {brushType === 'stamp' && <span className="text-violet-400/60">stamp — click to place{randomVariant ? ' (random variant)' : ''}</span>}
+              {editorTool === 'select' && <span className="text-[#60a5fa]/60 ml-2">select mode — drag to select, then fill/rotate/move</span>}
+            </span>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 ml-auto">
             {brushType === 'tile' && (
-              <button
-                onClick={() => openEditTile(brush)}
-                className="px-3 py-1 rounded text-[10px] bg-white/5 text-text-faint hover:bg-white/10"
-              >Edit Tile</button>
+              <button onClick={() => openEditTile(brush)} className="px-3 py-1 rounded text-[10px] bg-white/5 text-text-faint hover:bg-white/10">Edit Tile</button>
             )}
-            <button
-              onClick={openNewTile}
-              className="px-3 py-1 rounded text-[10px] bg-white/5 text-text-faint hover:bg-white/10 border border-dashed border-white/15"
-            >+ New Tile</button>
+            <button onClick={openNewTile} className="px-3 py-1 rounded text-[10px] bg-white/5 text-text-faint hover:bg-white/10 border border-dashed border-white/15">+ New Tile</button>
             {brushType === 'tile' && (
               <button
-                onClick={() => {
-                  if (!tiles[brush]) return
-                  setEditingTileIdx(null)
-                  setCloneSourceIdx(brush)
-                  setWorkshopOpen(true)
-                }}
+                onClick={() => { if (!tiles[brush]) return; setEditingTileIdx(null); setCloneSourceIdx(brush); setWorkshopOpen(true) }}
                 className="px-3 py-1 rounded text-[10px] bg-white/5 text-text-faint hover:bg-white/10"
                 title="Create a new tile using the current tile as a starting point"
               >Clone Tile</button>
             )}
           </div>
-          <span className="text-[9px] text-text-faint ml-auto">
-            {brushType === 'tile' && tiles[brush]?.solid && <span className="text-red-400/60 mr-2">solid</span>}
-            {brushType === 'tile' && tiles[brush]?.above && <span className="text-violet-400/60 mr-2">above</span>}
-            {brushType === 'item' && <span className="text-amber-400/60">pickup mode — click to place/remove one-time item finds</span>}
-            {brushType === 'node' && <span className="text-green-400/60">node mode — click to place/remove resource nodes</span>}
-            {brushType === 'eraser' && <span className="text-red-400/60">eraser — clears tiles, items, nodes, warps, structures, furniture + zone chests</span>}
-            {brushType === 'furniture' && <span className="text-amber-400/60">furniture mode — click to place</span>}
-            {brushType === 'zonechest' && <span className="text-purple-400/60">zone chest — click to place/remove <label className="ml-2 cursor-pointer"><input type="checkbox" checked={brushChestClaimable} onChange={e => setBrushChestClaimable(e.target.checked)} className="mr-1 accent-purple-500" />claimable</label></span>}
-            {brushType === 'stamp' && <span className="text-violet-400/60">stamp mode — click to place stamp{randomVariant ? ' (random variant)' : ''}</span>}
-            {editorTool === 'select' && <span className="text-[#60a5fa]/60 ml-2">select mode — drag to select, then fill/rotate/move</span>}
-          </span>
         </div>
 
+        {/* Curated tile palette — Terrain (flat) + Clouds */}
+        <div className="space-y-2 mb-3">
+          {/* Flat terrain group */}
+          <div>
+            <p className="text-[9px] text-text-faint/60 uppercase tracking-wider mb-1">Terrain</p>
+            <div className="flex flex-wrap gap-0.5">
+              <button
+                onClick={() => selectBrush({ type: 'eraser' })}
+                className={`w-9 h-9 rounded flex items-center justify-center text-[9px] border transition-all ${brushType === 'eraser' ? 'bg-red-500/20 border-red-500/40 text-red-300' : 'bg-white/[0.03] border-white/10 text-text-faint hover:bg-white/10'}`}
+                title="Eraser"
+              >✕</button>
+              {FLAT_TILE_INDICES.map(i => (
+                <BrushPreview
+                  key={i}
+                  entry={{ type: 'tile', tileIdx: i }}
+                  tiles={tiles}
+                  size={36}
+                  selected={brushType === 'tile' && brush === i}
+                  onClick={() => selectBrush({ type: 'tile', tileIdx: i })}
+                />
+              ))}
+            </div>
+          </div>
+          {/* Cloud border group */}
+          <div>
+            <p className="text-[9px] text-text-faint/60 uppercase tracking-wider mb-1">Clouds</p>
+            <div className="flex flex-wrap gap-0.5">
+              {CLOUD_TILE_INDICES.filter(i => i < tiles.length).map(i => (
+                <BrushPreview
+                  key={i}
+                  entry={{ type: 'tile', tileIdx: i }}
+                  tiles={tiles}
+                  size={36}
+                  selected={brushType === 'tile' && brush === i}
+                  onClick={() => selectBrush({ type: 'tile', tileIdx: i })}
+                />
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* Advanced drawer — items, nodes, structures, stamps, furniture, zone chests */}
+        <div className="border border-white/[0.06] rounded-lg overflow-hidden">
+          <button
+            onClick={() => setShowAdvancedBrushes(v => !v)}
+            className={`w-full flex items-center gap-2 px-3 py-2 text-[10px] transition-colors ${showAdvancedBrushes ? 'bg-white/[0.06] text-text-dim' : 'bg-white/[0.02] text-text-faint hover:bg-white/[0.05]'}`}
+          >
+            <span className="text-[8px]">{showAdvancedBrushes ? '▾' : '▸'}</span>
+            <span className="uppercase tracking-wider">Advanced Brushes</span>
+            {(['item', 'node', 'structure', 'stamp', 'furniture', 'zonechest'] as const).includes(brushType as 'item' | 'node' | 'structure' | 'stamp' | 'furniture' | 'zonechest') && (
+              <span className="ml-1 text-[8px] text-amber-400/70">(active)</span>
+            )}
+          </button>
+          {showAdvancedBrushes && (
+            <div className="px-3 py-2 bg-white/[0.01]">
+              <select
+                value={dropdownValue}
+                onChange={e => handleDropdownChange(e.target.value)}
+                className="bg-[#1a1a2e] border border-white/10 rounded px-3 py-2 text-[12px] text-white font-display focus:outline-none focus:border-gold/40 w-full mb-2"
+              >
+                <option value="eraser" className="bg-[#1a1a2e] text-white">Eraser</option>
+                {/* Full tile list — all categories including hidden-by-default old tiles */}
+                {[...CATEGORIES].sort((a, b) => a.label.localeCompare(b.label)).map(cat => {
+                  const catTiles = tiles.map((et, i) => ({ et, i })).filter(({ et }) => et.category === cat.id)
+                    .sort((a, b) => a.et.name.localeCompare(b.et.name))
+                  if (catTiles.length === 0) return null
+                  return (
+                    <optgroup key={cat.id} label={cat.label}>
+                      {catTiles.map(({ et, i }) => (
+                        <option key={i} value={`tile:${i}`} className="bg-[#1a1a2e] text-white">
+                          {et.name}{et.solid ? ' [solid]' : ''}{et.above ? ' [above]' : ''}
+                        </option>
+                      ))}
+                    </optgroup>
+                  )
+                })}
+                {(() => {
+                  const uncategorized = tiles.map((et, i) => ({ et, i })).filter(({ et }) => !CATEGORIES.some(c => c.id === et.category))
+                    .sort((a, b) => a.et.name.localeCompare(b.et.name))
+                  if (uncategorized.length === 0) return null
+                  return (
+                    <optgroup label="Unsorted">
+                      {uncategorized.map(({ et, i }) => (
+                        <option key={i} value={`tile:${i}`} className="bg-[#1a1a2e] text-white">
+                          {et.name}{et.solid ? ' [solid]' : ''}{et.above ? ' [above]' : ''}
+                        </option>
+                      ))}
+                    </optgroup>
+                  )
+                })()}
+                <optgroup label="Items">
+                  {ITEMS.map(item => (
+                    <option key={item.id} value={`item:${item.id}`} className="bg-[#1a1a2e] text-white">
+                      {item.name}{item.species ? ` (${item.species})` : ''}
+                    </option>
+                  ))}
+                </optgroup>
+                {(() => {
+                  const categories = ['Forestry', 'Prospecting', 'Rinning'] as const
+                  return categories.map(cat => {
+                    const nodes = Object.entries(NODE_TYPE_LABELS).filter(([, v]) => v.category === cat)
+                    if (nodes.length === 0) return null
+                    return (
+                      <optgroup key={cat} label={`Nodes: ${cat}`}>
+                        {nodes.map(([key, v]) => (
+                          <option key={key} value={`node:${key}`} className="bg-[#1a1a2e] text-white">
+                            {v.name}{v.above ? ' [above]' : ''}
+                          </option>
+                        ))}
+                      </optgroup>
+                    )
+                  })
+                })()}
+                {structures.length > 0 && (
+                  <optgroup label="Structures">
+                    {structures.map(s => (
+                      <option key={s.id} value={`struct:${s.id}`} className="bg-[#1a1a2e] text-white">
+                        {s.name} ({s.cols}x{s.rows})
+                      </option>
+                    ))}
+                  </optgroup>
+                )}
+                {FURNITURE.length > 0 && (
+                  <optgroup label="Furniture">
+                    {FURNITURE.map(f => (
+                      <option key={f.id} value={`furn:${f.id}`} className="bg-[#1a1a2e] text-white">
+                        {f.name}
+                      </option>
+                    ))}
+                  </optgroup>
+                )}
+                <optgroup label="Zone Chests">
+                  {FURNITURE.filter(f => f.chestSlots).map(f => (
+                    <option key={`zc-${f.id}`} value={`zc:${f.id}`} className="bg-[#1a1a2e] text-white">
+                      {f.name}
+                    </option>
+                  ))}
+                </optgroup>
+              </select>
+            </div>
+          )}
+        </div>
         {/* Warp Tool */}
         <div className={`flex items-center gap-3 mt-2 px-3 py-2 rounded-lg border transition-all ${
           warpEnabled ? 'bg-amber-500/10 border-amber-500/30' : 'bg-white/[0.02] border-white/5'

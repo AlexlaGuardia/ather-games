@@ -49,17 +49,18 @@ import { GARDEN, MYCELIAL_PATH, MOONWELL_GLADE, SPORE_HOLLOW, TWILIGHT_THICKET, 
   FLAT_TERRAIN_DEMO,
   FP_GARDEN, FP_LARGE_1, FP_LARGE_2, FP_LARGE_3, FP_MED_1, FP_MED_2, FP_MED_3, FP_MED_4, FP_HUGE,
   ROUTE_GARDEN_MYCELIAL, ROUTE_MYCELIAL_SPIRIT, ROUTE_SPIRIT_MOONWELL, ROUTE_MOONWELL_GARDEN } from './tilemap'
-import { CHAIN_GRIDS, CHAIN_WARPS, CHAIN_SPAWNS } from './garden-chain'
-
 export const ZONES: Zone[] = [
   {
     id: 'garden',
     name: 'Shimmer Garden',
     element: 'mana',
     grid: GARDEN,
-    playerStart: { tileX: 14, tileY: 8 },
+    playerStart: { tileX: 2, tileY: 9 },
     warps: [
-      { fromX: 2, fromY: 4, toZone: 'mycelial-path', toX: 16, toY: 5, direction: 'right' },
+      { fromX: 25, fromY: 8, toZone: 'route-garden-mycelial', toX: 1, toY: 5, direction: 'right' },
+      { fromX: 25, fromY: 9, toZone: 'route-garden-mycelial', toX: 1, toY: 5, direction: 'right' },
+      { fromX: 0, fromY: 8, toZone: 'route-moonwell-garden', toX: 28, toY: 5, direction: 'left' },
+      { fromX: 0, fromY: 9, toZone: 'route-moonwell-garden', toX: 28, toY: 5, direction: 'left' },
     ],
   },
   {
@@ -67,11 +68,12 @@ export const ZONES: Zone[] = [
     name: 'Mycelial Path',
     element: 'earth',
     grid: MYCELIAL_PATH,
-    playerStart: { tileX: 18, tileY: 4 },
+    playerStart: { tileX: 2, tileY: 8 },
     warps: [
-      { fromX: 9, fromY: 29, toZone: 'moonwell-glade', toX: 14, toY: 1, direction: 'down' },
-      { fromX: 10, fromY: 29, toZone: 'moonwell-glade', toX: 15, toY: 1, direction: 'down' },
-      { fromX: 17, fromY: 5, toZone: 'garden', toX: 3, toY: 4, direction: 'right' },
+      { fromX: 0, fromY: 7, toZone: 'route-garden-mycelial', toX: 28, toY: 5, direction: 'left' },
+      { fromX: 0, fromY: 8, toZone: 'route-garden-mycelial', toX: 28, toY: 5, direction: 'left' },
+      { fromX: 21, fromY: 7, toZone: 'route-mycelial-spirit', toX: 1, toY: 5, direction: 'right' },
+      { fromX: 21, fromY: 8, toZone: 'route-mycelial-spirit', toX: 1, toY: 5, direction: 'right' },
     ],
   },
   {
@@ -79,12 +81,12 @@ export const ZONES: Zone[] = [
     name: 'Moonwell Glade',
     element: 'water',
     grid: MOONWELL_GLADE,
-    playerStart: { tileX: 14, tileY: 1 },
+    playerStart: { tileX: 2, tileY: 8 },
     warps: [
-      { fromX: 0, fromY: 15, toZone: 'garden', toX: 24, toY: 22, direction: 'left' },
-      // South exit to Mana Springs
-      { fromX: 14, fromY: 29, toZone: 'mana-springs', toX: 12, toY: 1, direction: 'down' },
-      { fromX: 15, fromY: 29, toZone: 'mana-springs', toX: 13, toY: 1, direction: 'down' },
+      { fromX: 0, fromY: 7, toZone: 'route-spirit-moonwell', toX: 28, toY: 5, direction: 'left' },
+      { fromX: 0, fromY: 8, toZone: 'route-spirit-moonwell', toX: 28, toY: 5, direction: 'left' },
+      { fromX: 21, fromY: 7, toZone: 'route-moonwell-garden', toX: 1, toY: 5, direction: 'right' },
+      { fromX: 21, fromY: 8, toZone: 'route-moonwell-garden', toX: 1, toY: 5, direction: 'right' },
     ],
   },
   {
@@ -146,14 +148,12 @@ export const ZONES: Zone[] = [
     name: 'Spirit Meadow',
     element: 'mana',
     grid: SPIRIT_MEADOW,
-    playerStart: { tileX: 14, tileY: 1 },
+    playerStart: { tileX: 2, tileY: 8 },
     warps: [
-      // North entry back to Mana Springs
-      { fromX: 14, fromY: 0, toZone: 'mana-springs', toX: 12, toY: 18, direction: 'up' },
-      { fromX: 15, fromY: 0, toZone: 'mana-springs', toX: 13, toY: 18, direction: 'up' },
-      // South exit to The Threshold
-      { fromX: 14, fromY: 19, toZone: 'the-threshold', toX: 9, toY: 1, direction: 'down' },
-      { fromX: 15, fromY: 19, toZone: 'the-threshold', toX: 10, toY: 1, direction: 'down' },
+      { fromX: 0, fromY: 7, toZone: 'route-mycelial-spirit', toX: 28, toY: 5, direction: 'left' },
+      { fromX: 0, fromY: 8, toZone: 'route-mycelial-spirit', toX: 28, toY: 5, direction: 'left' },
+      { fromX: 21, fromY: 7, toZone: 'route-spirit-moonwell', toX: 1, toY: 5, direction: 'right' },
+      { fromX: 21, fromY: 8, toZone: 'route-spirit-moonwell', toX: 1, toY: 5, direction: 'right' },
     ],
   },  {
     id: 'moonwell-glade-gregory-s-home',
@@ -238,47 +238,56 @@ export const ZONES: Zone[] = [
     warps: [{ fromX: 128, fromY: 255, toZone: 'fp-garden', toX: 24, toY: 20, direction: 'down' }],
   },
 
-  // --- Garden-chain route zones (blank grass canvases for Alex to paint) ---
-  // Warps are intentionally empty — Alex places all chain warps in the editor.
+  // --- Garden-chain route zones (baked from garden-chain.ts, 2026-06-24) ---
+  // Grids + warps + spawns are now static; edit here or via Map Editor (saves stick).
   {
     id: 'route-garden-mycelial',
     name: 'Garden–Mycelial Path',
     grid: ROUTE_GARDEN_MYCELIAL,
-    playerStart: { tileX: 3, tileY: 7 },
-    warps: [],
+    playerStart: { tileX: 2, tileY: 5 },
+    warps: [
+      { fromX: 0, fromY: 4, toZone: 'garden', toX: 24, toY: 9, direction: 'left' },
+      { fromX: 0, fromY: 5, toZone: 'garden', toX: 24, toY: 9, direction: 'left' },
+      { fromX: 29, fromY: 4, toZone: 'mycelial-path', toX: 1, toY: 8, direction: 'right' },
+      { fromX: 29, fromY: 5, toZone: 'mycelial-path', toX: 1, toY: 8, direction: 'right' },
+    ],
   },
   {
     id: 'route-mycelial-spirit',
     name: 'Mycelial Path–Spirit Meadow',
     grid: ROUTE_MYCELIAL_SPIRIT,
-    playerStart: { tileX: 3, tileY: 7 },
-    warps: [],
+    playerStart: { tileX: 2, tileY: 5 },
+    warps: [
+      { fromX: 0, fromY: 4, toZone: 'mycelial-path', toX: 20, toY: 8, direction: 'left' },
+      { fromX: 0, fromY: 5, toZone: 'mycelial-path', toX: 20, toY: 8, direction: 'left' },
+      { fromX: 29, fromY: 4, toZone: 'spirit-meadow', toX: 1, toY: 8, direction: 'right' },
+      { fromX: 29, fromY: 5, toZone: 'spirit-meadow', toX: 1, toY: 8, direction: 'right' },
+    ],
   },
   {
     id: 'route-spirit-moonwell',
     name: 'Spirit Meadow–Moonwell Glade',
     grid: ROUTE_SPIRIT_MOONWELL,
-    playerStart: { tileX: 3, tileY: 7 },
-    warps: [],
+    playerStart: { tileX: 2, tileY: 5 },
+    warps: [
+      { fromX: 0, fromY: 4, toZone: 'spirit-meadow', toX: 20, toY: 8, direction: 'left' },
+      { fromX: 0, fromY: 5, toZone: 'spirit-meadow', toX: 20, toY: 8, direction: 'left' },
+      { fromX: 29, fromY: 4, toZone: 'moonwell-glade', toX: 1, toY: 8, direction: 'right' },
+      { fromX: 29, fromY: 5, toZone: 'moonwell-glade', toX: 1, toY: 8, direction: 'right' },
+    ],
   },
   {
     id: 'route-moonwell-garden',
     name: 'Moonwell Glade–Garden',
     grid: ROUTE_MOONWELL_GARDEN,
-    playerStart: { tileX: 3, tileY: 7 },
-    warps: [],
+    playerStart: { tileX: 2, tileY: 5 },
+    warps: [
+      { fromX: 0, fromY: 4, toZone: 'moonwell-glade', toX: 20, toY: 8, direction: 'left' },
+      { fromX: 0, fromY: 5, toZone: 'moonwell-glade', toX: 20, toY: 8, direction: 'left' },
+      { fromX: 29, fromY: 4, toZone: 'garden', toX: 1, toY: 9, direction: 'right' },
+      { fromX: 29, fromY: 5, toZone: 'garden', toX: 1, toY: 9, direction: 'right' },
+    ],
   },
 ]
-
-// Garden-chain override (Serberus 2026-06-24): the 8 chain zones use code-generated
-// first-pass maps + ring warps + spawns. Old static grids/warps stay in source (unused
-// for these ids) so nothing is lost. Edit specs in garden-chain.ts + rebuild to iterate.
-for (const z of ZONES) {
-  if (CHAIN_GRIDS[z.id]) {
-    z.grid = CHAIN_GRIDS[z.id]
-    z.warps = CHAIN_WARPS[z.id]
-    z.playerStart = CHAIN_SPAWNS[z.id]
-  }
-}
 
 export const START_ZONE = 'garden'
