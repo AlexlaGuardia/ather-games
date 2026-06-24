@@ -385,6 +385,16 @@ export default function ShimmerPage() {
   const [buildMode, setBuildMode] = useState(false)
   const buildModeRef = useRef(false)
   const [isOwner, setIsOwner] = useState(false) // Alex-only: gates the in-game "Edit Map" pill
+  // ather.games has no cloud auth (the DEV_USER_ID shimmerfile path can't fire here), so owner
+  // status comes from the httpOnly `ather_owner` cookie via /api/owner. Set it via /owner?key=OWNER_KEY.
+  useEffect(() => {
+    let alive = true
+    fetch('/api/owner', { cache: 'no-store' })
+      .then(r => (r.ok ? r.json() : { owner: false }))
+      .then(d => { if (alive && d.owner) setIsOwner(true) })
+      .catch(() => {})
+    return () => { alive = false }
+  }, [])
   const [selectedBuildItem, setSelectedBuildItem] = useState<{ type: 'furniture' | 'structure'; id: string } | null>(null)
   const selectedBuildItemRef = useRef(selectedBuildItem) // mirror: handleCanvasClick has [] deps
   const [buildHoverTile, setBuildHoverTile] = useState<{ x: number; y: number } | null>(null)
