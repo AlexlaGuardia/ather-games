@@ -927,6 +927,13 @@ export default function MapEditor() {
   const [loadStatus, setLoadStatus] = useState<string>('')
   const [rotation, setRotation] = useSessionState('map:rotation', 0)
   const [activeMap, setActiveMap] = useSessionState('map:activeMap', 'garden')
+  // Deep-link from the in-game "Edit Map" pill: ?zone=<id> overrides the persisted active map
+  // so Alex lands on the zone he was standing in. Runs once on mount.
+  useEffect(() => {
+    const z = new URLSearchParams(window.location.search).get('zone')
+    if (z && ZONES.some(zo => zo.id === z)) setActiveMap(z)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
   const [showPreview, setShowPreview] = useState(false)
   const [brushType, setBrushType] = useSessionState<'tile' | 'item' | 'node' | 'eraser' | 'structure' | 'stamp' | 'furniture' | 'zonechest'>('map:brushType', 'tile')
   const [brushItemId, setBrushItemId] = useSessionState<string | null>('map:brushItemId', null)

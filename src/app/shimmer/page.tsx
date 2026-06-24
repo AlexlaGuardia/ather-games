@@ -384,6 +384,7 @@ export default function ShimmerPage() {
   const playerStructuresRef = useRef<PlacedStructure[]>([])
   const [buildMode, setBuildMode] = useState(false)
   const buildModeRef = useRef(false)
+  const [isOwner, setIsOwner] = useState(false) // Alex-only: gates the in-game "Edit Map" pill
   const [selectedBuildItem, setSelectedBuildItem] = useState<{ type: 'furniture' | 'structure'; id: string } | null>(null)
   const selectedBuildItemRef = useRef(selectedBuildItem) // mirror: handleCanvasClick has [] deps
   const [buildHoverTile, setBuildHoverTile] = useState<{ x: number; y: number } | null>(null)
@@ -518,6 +519,7 @@ export default function ShimmerPage() {
         const data = await res.json()
         if (data.shimmerfile) {
           shimmerfileRef.current = data.shimmerfile
+          if (data.shimmerfile.user_id === DEV_USER_ID) setIsOwner(true)
           // Apply character choice from shimmerfile
           if (data.shimmerfile.character_id) {
             setPlayerCharId(data.shimmerfile.character_id)
@@ -2977,6 +2979,7 @@ export default function ShimmerPage() {
   // --- Username Picker ---
   const handleShimmerfileCreated = useCallback((username: string, characterId: string, userId?: string) => {
     shimmerfileRef.current = { user_id: userId ?? '', username, character_id: characterId }
+    if (userId === DEV_USER_ID) setIsOwner(true)
     setPlayerCharId(characterId)
     setNeedsShimmerfile(false)
     startGame()
@@ -3619,6 +3622,22 @@ export default function ShimmerPage() {
                     <path d="M3 13l3-3 7-7-3-3-7 7-3 3h3ZM10 3l3 3" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/>
                   </svg>
                   <span className="text-sm font-display">Build</span>
+                </button>
+              )}
+
+              {/* Edit Map (owner-only, any zone) — jumps to the map editor focused on the
+                  zone you're standing in, so Alex draws layouts/warps in-context. Temporary
+                  dev tool; remove the gate later. */}
+              {isOwner && (
+                <button
+                  onClick={() => { window.location.href = `/shimmer/dev?mode=map&zone=${zoneRef.current.id}` }}
+                  className="flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-left transition-all hover:bg-[#d4a843]/10 text-text-dim"
+                  title={`Edit "${zoneRef.current.name}" in the map editor`}
+                >
+                  <svg width="18" height="18" viewBox="0 0 16 16" fill="none" className="flex-shrink-0">
+                    <path d="M2 11.5V14h2.5l7-7L9 4.5l-7 7ZM10 3.5L12.5 6 14 4.5 11.5 2 10 3.5Z" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
+                  <span className="text-sm font-display">Edit Map</span>
                 </button>
               )}
 
