@@ -11,12 +11,17 @@ export interface Warp {
   requiredFlag?: string // warp only works when this flag is set (e.g., 'tutorialComplete')
 }
 
+// Elemental theme of a zone — drives spirit-condensation affinity (see SPIRIT_CONDENSE.md).
+// Leveling a spirit in a zone feeds that zone's element into its affinity vector.
+export type ZoneElement = 'mana' | 'water' | 'earth' | 'storm'
+
 export interface Zone {
   id: string
   name: string
   grid: number[][]
   warps: Warp[]
   playerStart?: { tileX: number; tileY: number } // default spawn point for this zone
+  element?: ZoneElement // cultivation element (undefined = dev/throwaway zone, no affinity)
 }
 
 // Check if player is standing on a warp tile (respects flag requirements)
@@ -47,6 +52,7 @@ export const ZONES: Zone[] = [
   {
     id: 'garden',
     name: 'Shimmer Garden',
+    element: 'mana',
     grid: GARDEN,
     playerStart: { tileX: 14, tileY: 8 },
     warps: [
@@ -56,6 +62,7 @@ export const ZONES: Zone[] = [
   {
     id: 'mycelial-path',
     name: 'Mycelial Path',
+    element: 'earth',
     grid: MYCELIAL_PATH,
     playerStart: { tileX: 18, tileY: 4 },
     warps: [
@@ -67,6 +74,7 @@ export const ZONES: Zone[] = [
   {
     id: 'moonwell-glade',
     name: 'Moonwell Glade',
+    element: 'water',
     grid: MOONWELL_GLADE,
     playerStart: { tileX: 14, tileY: 1 },
     warps: [
@@ -79,6 +87,7 @@ export const ZONES: Zone[] = [
   {
     id: 'spore-hollow',
     name: 'Spore Hollow',
+    element: 'earth',
     grid: SPORE_HOLLOW,
     playerStart: { tileX: 1, tileY: 12 },
     warps: [
@@ -93,6 +102,7 @@ export const ZONES: Zone[] = [
   {
     id: 'twilight-thicket',
     name: 'Twilight Thicket',
+    element: 'earth', // future Shimmeroak Thicket (wood/forestry)
     grid: TWILIGHT_THICKET,
     playerStart: { tileX: 1, tileY: 9 },
     warps: [
@@ -104,6 +114,7 @@ export const ZONES: Zone[] = [
   {
     id: 'the-threshold',
     name: 'The Threshold',
+    element: 'storm', // future Wilds Pass (the frontier edge to the Ather)
     grid: THE_THRESHOLD,
     playerStart: { tileX: 9, tileY: 1 },
     warps: [
@@ -115,6 +126,7 @@ export const ZONES: Zone[] = [
   {
     id: 'mana-springs',
     name: 'Mana Springs',
+    element: 'earth', // mining / ore
     grid: MANA_SPRINGS,
     playerStart: { tileX: 12, tileY: 1 },
     warps: [
@@ -129,6 +141,7 @@ export const ZONES: Zone[] = [
   {
     id: 'spirit-meadow',
     name: 'Spirit Meadow',
+    element: 'mana',
     grid: SPIRIT_MEADOW,
     playerStart: { tileX: 14, tileY: 1 },
     warps: [
@@ -142,6 +155,7 @@ export const ZONES: Zone[] = [
   },  {
     id: 'moonwell-glade-gregory-s-home',
     name: "Moonwell Glade (Gregory's Home)",
+    element: 'water',
     grid: MOONWELL_GLADE_GREGORY_S_HOME,
     playerStart: { tileX: 5, tileY: 5 },
     warps: [
