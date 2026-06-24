@@ -3124,7 +3124,16 @@ export default function ShimmerPage() {
               Background = the Ather: shows through the canvas's transparent margins (beyond the cloud-bordered island) + the letterbox, so the void beyond a map is dream-cosmos, not dead black. */}
           <div
             className={isMobile ? 'flex-1 min-h-0 flex items-center justify-center' : 'flex-1 min-w-0 flex justify-center items-center p-3'}
-            style={{ background: 'radial-gradient(ellipse 120% 85% at 50% 38%, #2a2348 0%, #1a1730 46%, #0e0c1c 100%)' }}
+            style={{ background: [
+              'radial-gradient(1.5px 1.5px at 12% 22%, #ffffffcc, transparent)',
+              'radial-gradient(1.5px 1.5px at 78% 14%, #e9d9ffbb, transparent)',
+              'radial-gradient(1px 1px at 33% 67%, #ffffffaa, transparent)',
+              'radial-gradient(1.5px 1.5px at 63% 48%, #d8c4ffaa, transparent)',
+              'radial-gradient(1px 1px at 88% 72%, #ffffff99, transparent)',
+              'radial-gradient(1.5px 1.5px at 47% 88%, #efe6ffbb, transparent)',
+              'radial-gradient(1px 1px at 22% 84%, #ffffff88, transparent)',
+              'radial-gradient(ellipse 130% 95% at 50% 36%, #44347e 0%, #29215a 44%, #140f2e 100%)',
+            ].join(', ') }}
           >
           {/* Canvas area — sized to the canvas itself so all overlays (mana, dialogue, etc.) anchor to the canvas edges */}
           <div
