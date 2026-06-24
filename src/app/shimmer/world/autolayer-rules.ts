@@ -11,13 +11,13 @@
 // Priority: corner > edge > base (higher = checked first)
 
 import type { AutoLayerRule } from '../dev/editors/autolayer-engine'
-import { FLAT_TILES as FT } from './tiles'
 
-const {
-  FT_GRASS_BASE,
-  FT_PATH_BASE, FT_PATH_EDGE, FT_PATH_CORNER_OUT, FT_PATH_CORNER_IN,
-  FT_WATER_BASE, FT_WATER_EDGE, FT_WATER_CORNER_OUT, FT_WATER_CORNER_IN,
-} = FT
+// FLAT_TILES export was removed when the tileset went pixel-art (Alex's call, 2026-06-24).
+// Hardcode the indices that still exist. Water edge/corner tiles (103-105) were dropped,
+// so those transitional rules are gone — water is base-fill only now.
+const FT_GRASS_BASE = 97
+const FT_PATH_BASE = 98, FT_PATH_EDGE = 99, FT_PATH_CORNER_OUT = 100, FT_PATH_CORNER_IN = 101
+const FT_WATER_BASE = 102
 
 let _id = 0
 function rid(prefix: string) { return `${prefix}_${++_id}` }
@@ -116,10 +116,7 @@ const PATH_RULES: AutoLayerRule[] = [
 ]
 
 // ── Water (intValue 3) ─────────────────────────────────────────────────────
-const WATER_CORNER_OUT_BASE: (number | -1)[] = [0, 0, -1, 0, 3, -1, -1, -1, -1]
-const WATER_CORNER_IN_BASE: (number | -1)[] = [0, 3, -1, 3, 3, -1, -1, -1, -1]
-const WATER_EDGE_BASE: (number | -1)[] = [-1, 0, -1, -1, 3, -1, -1, 3, -1]
-
+// Base fill only — the edge/corner tiles (103-105) were dropped in the pixel-art switch.
 const WATER_RULES: AutoLayerRule[] = [
   {
     id: rid('water_base'),
@@ -131,9 +128,6 @@ const WATER_RULES: AutoLayerRule[] = [
     priority: 1,
     enabled: true,
   },
-  ...edgeRules(3, FT_WATER_EDGE, WATER_EDGE_BASE),
-  ...cornerRules(3, FT_WATER_CORNER_OUT, WATER_CORNER_OUT_BASE),
-  ...cornerRules(3, FT_WATER_CORNER_IN, WATER_CORNER_IN_BASE).map(r => ({ ...r, priority: 25 })),
 ]
 
 // Stone family dropped — Shimmer's borders are CLOUDS (existing old-palette cloud
