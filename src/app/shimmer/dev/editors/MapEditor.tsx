@@ -39,7 +39,7 @@ const CLOUD_TILE_INDICES: readonly number[] = [
   95, 96,                               // Cloud B L in Corner, Cloud Border B Exit
 ]
 // Flat tile indices (new design system)
-const FLAT_TILE_INDICES: readonly number[] = [97, 98, 99, 100, 101, 102, 103, 104, 105, 106, 107, 108, 109]
+const FLAT_TILE_INDICES: readonly number[] = [97, 98, 99, 100, 101, 102] // placeholder/gray-box tiles (103-109 removed in the pixel-art switch)
 // Combined allowlist for the curated palette — union of flat + cloud
 const CURATED_TILE_ALLOWLIST = new Set<number>([...FLAT_TILE_INDICES, ...CLOUD_TILE_INDICES])
 
@@ -1839,38 +1839,17 @@ export default function MapEditor() {
       const data = await res.json()
       if (!data.success) { setSaveStatus('error'); return }
 
-      // Trigger rebuild so changes go live
-      setSaveStatus('building')
-      await fetch('/shimmer/deploy', { method: 'POST' })
-
-      // Poll for build completion (server restarts after build, so retry on network errors)
-      const pollUntilDone = async () => {
-        for (let i = 0; i < 60; i++) {
-          await new Promise(r => setTimeout(r, 3000))
-          try {
-            const sr = await fetch('/shimmer/deploy')
-            const st = await sr.json()
-            if (st.state === 'done') return true
-            if (st.state === 'error') return false
-          } catch {
-            // Server restarting — keep polling
-          }
-        }
-        return false
-      }
-
-      const ok = await pollUntilDone()
-      setSaveStatus(ok ? 'saved' : 'error')
-      if (ok) {
-        setGridDirty(false)
-        // Clear IndexedDB cache — source is now truth
-        Promise.all([
-          deleteState('map-state', `grid-${activeMap}`),
-          deleteState('map-state', `items-${activeMap}`),
-          deleteState('map-state', `nodes-${activeMap}`),
-          deleteState('map-state', `warps-${activeMap}`),
-        ]).catch(() => {})
-      }
+      // Saved to source (your "branch"). NO auto-build: Serberus/Jin builds + verifies
+      // before it goes live, so a save can never break the game blind.
+      setSaveStatus('saved')
+      setGridDirty(false)
+      // Drop the local cache so the editor reflects saved source after the next build.
+      Promise.all([
+        deleteState('map-state', `grid-${activeMap}`),
+        deleteState('map-state', `items-${activeMap}`),
+        deleteState('map-state', `nodes-${activeMap}`),
+        deleteState('map-state', `warps-${activeMap}`),
+      ]).catch(() => {})
     } catch {
       setSaveStatus('error')
     }
@@ -2417,7 +2396,7 @@ export default function MapEditor() {
               : 'bg-green-500/20 text-green-300 border-green-500/30 hover:bg-green-500/30'
           }`}
         >
-          {saveStatus === 'saving' ? 'Saving...' : saveStatus === 'building' ? 'Building...' : saveStatus === 'saved' ? 'Live!' : saveStatus === 'error' ? 'Failed' : gridDirty ? 'Save & Deploy *' : 'Save & Deploy'}
+          {saveStatus === 'saving' ? 'Saving...' : saveStatus === 'saved' ? 'Saved ✓ (ping Serb to build)' : saveStatus === 'error' ? 'Failed' : gridDirty ? 'Save to branch *' : 'Save to branch'}
         </button>
         <button onClick={exportTiles}
           className="px-3 py-1.5 rounded text-[10px] bg-white/5 text-text-faint hover:bg-white/10">
