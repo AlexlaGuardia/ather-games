@@ -1445,10 +1445,9 @@ export default function ShimmerPage() {
           break
         case 'giveStarterSeed': {
           // RNG 1/pool — species-neutral to the player (the Ather chooses).
-          // Widen READY_STARTER_SPECIES to all 10 as sprites land.
-          const READY_STARTER_SPECIES = ['fox', 'axolotl', 'water-bear'] as const
-          const pick = READY_STARTER_SPECIES[Math.floor(Math.random() * READY_STARTER_SPECIES.length)]
-          addItems(invRef.current, `seed_${pick}`, 1)
+          // Pool = LAUNCHED_SPECIES (single source of truth; all 10 launched on placeholder sprites).
+          const pick = LAUNCHED_SPECIES[Math.floor(Math.random() * LAUNCHED_SPECIES.length)]
+          addItems(invRef.current, `seed_${pick.replace('-', '_')}`, 1) // 'water-bear' → seed_water_bear
           setInv({ ...invRef.current })
           break
         }

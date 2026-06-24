@@ -25,9 +25,11 @@ export const ALL_SPECIES: Species[] = [
   'frog', 'firefly', 'rabbit', 'hummingbird', 'bat',
 ]
 
-// Species available in-game — toggle via SpriteEditor "Launch" button
-// Unlaunched species are still editable in dev tools, just hidden from players
-export const LAUNCHED_SPECIES: Species[] = ['fox', 'axolotl', 'water-bear']
+// Species available in-game — drives wild encounters + the RNG starter pool.
+// All 10 launched on PLACEHOLDER sprites (the 7 beyond fox/axolotl/water-bear are basic
+// frames + battle-fallback; deriveSprites fills animations). Polish upgrades in place.
+// NOTE: Shimmer goes 3D eventually — the 2D pixel art is intentionally placeholder, don't over-invest.
+export const LAUNCHED_SPECIES: Species[] = ['fox', 'axolotl', 'water-bear', 'turtle', 'owl', 'frog', 'firefly', 'rabbit', 'hummingbird', 'bat']
 
 export function createSpiritIndex(): SpiritIndex {
   const entries = {} as Record<Species, IndexEntry>
