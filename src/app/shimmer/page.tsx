@@ -41,6 +41,7 @@ import { DIALOGUES } from './world/dialogue-data'
 import { getNPCsForZone, npcAtTile, getBlockedTiles, NPCDef } from './world/npcs'
 // MinimapPanel removed — replaced with world map globe button
 import InventoryBar from './components/InventoryBar'
+import BlockoutEditor from './components/BlockoutEditor'
 import InventoryGrid from './components/InventoryGrid'
 import ChestPanel from './components/ChestPanel'
 import ExchangePanel from './components/ExchangePanel'
@@ -385,6 +386,7 @@ export default function ShimmerPage() {
   const [buildMode, setBuildMode] = useState(false)
   const buildModeRef = useRef(false)
   const [isOwner, setIsOwner] = useState(false) // Alex-only: gates the in-game "Edit Map" pill
+  const [blockoutOpen, setBlockoutOpen] = useState(false) // owner-only lightweight layout popup
   // ather.games has no cloud auth (the DEV_USER_ID shimmerfile path can't fire here), so owner
   // status comes from the httpOnly `ather_owner` cookie via /api/owner. Set it via /owner?key=OWNER_KEY.
   useEffect(() => {
@@ -4013,6 +4015,18 @@ export default function ShimmerPage() {
                             <span className="block text-[12px] text-text-faint/40 truncate">Draw &ldquo;{zoneRef.current.name}&rdquo; in the editor</span>
                           </span>
                         </button>
+                        <button
+                          onClick={() => setBlockoutOpen(true)}
+                          className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-left bg-white/[0.03] border border-[#d4a843]/20 hover:bg-[#d4a843]/10 transition-all"
+                        >
+                          <svg width="18" height="18" viewBox="0 0 16 16" fill="none" className="flex-shrink-0 text-[#d4a843]">
+                            <rect x="2" y="2" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.2"/><rect x="9" y="2" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.2"/><rect x="2" y="9" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.2"/><rect x="9" y="9" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.2"/>
+                          </svg>
+                          <span className="flex-1 min-w-0">
+                            <span className="block text-sm font-display text-text">Blockout</span>
+                            <span className="block text-[12px] text-text-faint/40 truncate">Lay out &ldquo;{zoneRef.current.name}&rdquo; fast — popup</span>
+                          </span>
+                        </button>
                       </div>
                     )}
                     <div className="text-center py-6">
@@ -4875,6 +4889,18 @@ export default function ShimmerPage() {
                           <span className="block text-[12px] text-text-faint/40 truncate">Draw &ldquo;{zoneRef.current.name}&rdquo; in the editor</span>
                         </span>
                       </button>
+                      <button
+                        onClick={() => setBlockoutOpen(true)}
+                        className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-left bg-white/[0.03] border border-[#d4a843]/20 hover:bg-[#d4a843]/10 transition-all"
+                      >
+                        <svg width="18" height="18" viewBox="0 0 16 16" fill="none" className="flex-shrink-0 text-[#d4a843]">
+                          <rect x="2" y="2" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.2"/><rect x="9" y="2" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.2"/><rect x="2" y="9" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.2"/><rect x="9" y="9" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.2"/>
+                        </svg>
+                        <span className="flex-1 min-w-0">
+                          <span className="block text-sm font-display text-text">Blockout</span>
+                          <span className="block text-[12px] text-text-faint/40 truncate">Lay out &ldquo;{zoneRef.current.name}&rdquo; fast — popup</span>
+                        </span>
+                      </button>
                     </div>
                   )}
                   <div className="text-center py-6">
@@ -4886,6 +4912,16 @@ export default function ShimmerPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {isOwner && (
+        <BlockoutEditor
+          open={blockoutOpen}
+          zoneId={zoneRef.current.id}
+          zoneName={zoneRef.current.name}
+          initialGrid={zoneRef.current.grid}
+          onClose={() => setBlockoutOpen(false)}
+        />
       )}
     </div>
   )
