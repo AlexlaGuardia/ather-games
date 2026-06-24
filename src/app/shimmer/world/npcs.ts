@@ -51,64 +51,6 @@ export function resolveNPCDialogue(npc: NPCDef, flags: Record<string, boolean>):
 
 // --- NPC sprites (16x16, 1-3 palette indices) ---
 
-const WISP_SPRITE = px(16, 16, `
-  0000000000000000
-  0000000000000000
-  0000000330000000
-  0000003223000000
-  0000032112300000
-  0000321111230000
-  0000321131230000
-  0000032112300000
-  0000003223000000
-  0000000330000000
-  0000000300000000
-  0000000030000000
-  0000000300000000
-  0000000000000000
-  0000000000000000
-  0000000000000000
-`)
-
-const SPORE_SPRITE = px(16, 16, `
-  0000000330000000
-  0000003223000000
-  0000032222300000
-  0000322222300000
-  0000322122300000
-  0000032222300000
-  0000003223000000
-  0000000330000000
-  0000000110000000
-  0000000110000000
-  0000001111000000
-  0000000110000000
-  0000000110000000
-  0000001001000000
-  0000010000100000
-  0000000000000000
-`)
-
-// Sleeping spirit — small curled-up blob, Gregory's companion
-const SLEEPING_SPIRIT_SPRITE = px(16, 16, `
-  0000000000000000
-  0000000000000000
-  0000000000000000
-  0000000000000000
-  0000000000000000
-  0000000330000000
-  0000003223000000
-  0000032112300000
-  0000031111300000
-  0000032112300000
-  0000003223000000
-  0000000330000000
-  0000000300000000
-  0000000000000000
-  0000000000000000
-  0000000000000000
-`)
-
 // Gregory — uses down_idle frame 0 from gregory.ts
 const GREGORY_SPRITE = px(16, 16, `
   0000000000000000
@@ -124,126 +66,6 @@ const GREGORY_SPRITE = px(16, 16, `
   0000011011000000
   0000011011000000
   0000033033000000
-  0000000000000000
-  0000000000000000
-  0000000000000000
-`)
-
-// Bramble — stocky farmer NPC, brown/green palette
-const BRAMBLE_SPRITE = px(16, 16, `
-  0000000000000000
-  0000003330000000
-  0000033333000000
-  0000032223000000
-  0000032323000000
-  0000002220000000
-  0000011111000000
-  0000011211000000
-  0000011111000000
-  0000011111000000
-  0000011011000000
-  0000011011000000
-  0000022022000000
-  0000000000000000
-  0000000000000000
-  0000000000000000
-`)
-
-// Ember — small fiery trader NPC, orange/red palette
-const EMBER_SPRITE = px(16, 16, `
-  0000000000000000
-  0000000330000000
-  0000003223000000
-  0000032112300000
-  0000032132300000
-  0000032112300000
-  0000003223000000
-  0000000330000000
-  0000001111000000
-  0000001111000000
-  0000001111000000
-  0000001001000000
-  0000010000100000
-  0000000000000000
-  0000000000000000
-  0000000000000000
-`)
-
-// Luna NPC — serene healer, blue/silver palette
-const LUNA_NPC_SPRITE = px(16, 16, `
-  0000000000000000
-  0000003330000000
-  0000033333000000
-  0000031113000000
-  0000031313000000
-  0000001110000000
-  0000022222000000
-  0000022222000000
-  0000022122000000
-  0000022222000000
-  0000022022000000
-  0000022022000000
-  0000033033000000
-  0000000000000000
-  0000000000000000
-  0000000000000000
-`)
-
-// Rootweaver — hunched alchemist, purple/green palette
-const ROOTWEAVER_SPRITE = px(16, 16, `
-  0000000000000000
-  0000033330000000
-  0000322233000000
-  0000321123000000
-  0000032223000000
-  0000033330000000
-  0000011110000000
-  0000011110000000
-  0000021120000000
-  0000011110000000
-  0000011010000000
-  0000011010000000
-  0000022020000000
-  0000000000000000
-  0000000000000000
-  0000000000000000
-`)
-
-// Echo — mysterious floating orb, teal/white palette
-const ECHO_SPRITE = px(16, 16, `
-  0000000000000000
-  0000000000000000
-  0000000330000000
-  0000003113000000
-  0000031111300000
-  0000311331130000
-  0000311111130000
-  0000031111300000
-  0000003113000000
-  0000000330000000
-  0000000300000000
-  0000000030000000
-  0000000300000000
-  0000000000000000
-  0000000000000000
-  0000000000000000
-`)
-
-// Dusk — cloaked scout, dark blue/gray palette
-const DUSK_SPRITE = px(16, 16, `
-  0000000000000000
-  0000003330000000
-  0000033333000000
-  0000032223000000
-  0000032323000000
-  0000002220000000
-  0000111111100000
-  0000112211100000
-  0000111111100000
-  0000011111000000
-  0000011011000000
-  0000011011000000
-  0000011011000000
   0000000000000000
   0000000000000000
   0000000000000000
@@ -269,41 +91,22 @@ const GATE_SPRITE = px(16, 16, `
   1111111111111110
 `)
 
-// Moss — slow-moving tree spirit, deep green/brown palette
-const MOSS_SPRITE = px(16, 16, `
+// Moglin placeholder sprites — Gregory base with collar accent (col 5 = red = collar)
+// TODO: replace with proper Thistle/Sorrel/Brack renders (Alex's art pipeline)
+const MOGLIN_SPRITE = px(16, 16, `
   0000000000000000
-  0000033333000000
-  0000333333300000
-  0000332223300000
-  0000033333000000
   0000003330000000
+  0000033333000000
+  0000032223000000
+  0000032323000000
   0000002220000000
-  0000002220000000
-  0000002220000000
-  0000022222000000
-  0000002220000000
-  0000002220000000
-  0000022022000000
-  0000220002200000
-  0000000000000000
-  0000000000000000
-`)
-
-// Glint — tiny mana sprite, bright cyan/white palette
-const GLINT_SPRITE = px(16, 16, `
-  0000000000000000
-  0000000000000000
-  0000000300000000
-  0000003130000000
-  0000031113000000
-  0000311311300000
-  0000031113000000
-  0000003130000000
-  0000000300000000
-  0000000300000000
-  0000000030000000
-  0000000300000000
-  0000000000000000
+  0000011111000000
+  0000015151000000
+  0000011111000000
+  0000011111000000
+  0000011011000000
+  0000011011000000
+  0000033033000000
   0000000000000000
   0000000000000000
   0000000000000000
@@ -312,38 +115,6 @@ const GLINT_SPRITE = px(16, 16, `
 // --- NPC registry ---
 
 export const NPCS: NPCDef[] = [
-  {
-    id: 'wisp',
-    name: 'Wisp',
-    zone: 'garden',
-    tileX: 7, tileY: 2,
-    direction: 'down',
-    dialogueId: 'wisp-intro',
-    sprite: WISP_SPRITE,
-    palette: ['#d4a843', '#f0e0a0', '#ffffff'],
-  },
-  {
-    id: 'spore',
-    name: 'Spore',
-    zone: 'mycelial-path',
-    tileX: 10, tileY: 14,
-    direction: 'down',
-    dialogueId: 'mycelial-keeper',
-    sprite: SPORE_SPRITE,
-    palette: ['#6b4e71', '#9b7fa0', '#c8b8d0'],
-  },
-  {
-    id: 'sleeping-spirit',
-    name: 'Sleeping Spirit',
-    zone: 'garden',
-    tileX: 25, tileY: 16,
-    direction: 'down',
-    dialogueId: 'sleeping-spirit',
-    sprite: SLEEPING_SPIRIT_SPRITE,
-    palette: ['#607898', '#90b0c8', '#d0e0f0'],
-    blocking: true,
-    hideWhenFlag: 'tutorialComplete',
-  },
   {
     id: 'gregory',
     name: 'Gregory',
@@ -354,112 +125,114 @@ export const NPCS: NPCDef[] = [
     returnDialogueId: 'gregory-challenge',
     dialogueChain: [
       { dialogueId: 'gregory-intro' },
-      { dialogueId: 'gregory-challenge', requiresFlag: 'tutorialComplete' },
-      { dialogueId: 'gregory-moglin-warning', requiresFlag: 'gregoryFirstWin' },
-      { dialogueId: 'gregory-tablet', requiresFlag: 'gregorySeedChoice' },
-      { dialogueId: 'gregory-post-tablet', requiresFlag: 'spiritTabletReceived' },
+      { dialogueId: 'gregory-tending', requiresFlag: 'tutorialComplete' },
+      { dialogueId: 'gregory-sendoff', requiresFlag: 'tendingTaughtComplete' },
+      { dialogueId: 'gregory-challenge', requiresFlag: 'gregorySentToMeadows' },
     ],
     sprite: GREGORY_SPRITE,
     palette: GREGORY_PALETTE,
+  },
+  {
+    id: 'thistle',
+    name: 'Thistle',
+    zone: 'spirit-meadow',
+    tileX: 15, tileY: 5,
+    direction: 'down',
+    dialogueId: 'thistle-prefight',
+    dialogueChain: [
+      { dialogueId: 'thistle-prefight' },
+      { dialogueId: 'thistle-return', requiresFlag: 'sawThistle' },
+      { dialogueId: 'thistle-defeat', requiresFlag: 'defeated_thistle' },
+    ],
+    hideWhenFlag: 'thistleDefeated',
+    sprite: MOGLIN_SPRITE,
+    palette: ['#2a5a20', '#50a038', '#c8e8b0', '#1a1a2e', '#c03030'],
+    blocking: true,
     trainer: {
-      species: 'owl',
-      name: "Gregory\'s Owl",
-      levelOffset: 2,
+      species: 'rabbit',
+      name: "Thistle's Rabbit",
+      levelOffset: 0,
       element: 'mana',
       aiTier: 'trained',
     },
   },
   {
-    id: 'bramble',
-    name: 'Bramble',
-    zone: 'spirit-meadow',
-    tileX: 20, tileY: 12,
+    id: 'sorrel',
+    name: 'Sorrel',
+    zone: 'sorrel-hold',
+    tileX: 20, tileY: 15,
     direction: 'down',
-    dialogueId: 'bramble-intro',
+    dialogueId: 'sorrel-prefight',
     dialogueChain: [
-      { dialogueId: 'bramble-intro' },
-      { dialogueId: 'bramble-return', requiresFlag: 'metBramble' },
+      { dialogueId: 'sorrel-prefight' },
+      { dialogueId: 'sorrel-defeat', requiresFlag: 'defeated_sorrel' },
     ],
-    sprite: BRAMBLE_SPRITE,
-    palette: ['#5a3e28', '#7a9a4a', '#c8b088'],
+    hideWhenFlag: 'sorrelDefeated',
+    sprite: MOGLIN_SPRITE,
+    palette: ['#8a6a20', '#c8a040', '#f0e8b0', '#1a1a2e', '#c03030'],
+    blocking: true,
+    trainer: {
+      species: 'fox',
+      name: "Sorrel's Fox",
+      levelOffset: 3,
+      element: 'earth',
+      aiTier: 'trained',
+    },
   },
   {
-    id: 'ember',
-    name: 'Ember',
-    zone: 'spirit-meadow',
-    tileX: 8, tileY: 15,
+    id: 'brack',
+    name: 'Brack',
+    zone: 'brack-hold',
+    tileX: 20, tileY: 15,
     direction: 'down',
-    dialogueId: 'ember-intro',
+    dialogueId: 'brack-prefight',
     dialogueChain: [
-      { dialogueId: 'ember-intro' },
-      { dialogueId: 'ember-return', requiresFlag: 'metEmber' },
+      { dialogueId: 'brack-prefight' },
+      { dialogueId: 'brack-defeat', requiresFlag: 'defeated_brack' },
     ],
-    sprite: EMBER_SPRITE,
-    palette: ['#d45a20', '#f0a040', '#ffe080'],
+    hideWhenFlag: 'brackDefeated',
+    sprite: MOGLIN_SPRITE,
+    palette: ['#4a2a70', '#8050c0', '#d0b8f0', '#1a1a2e', '#c03030'],
+    blocking: true,
+    trainer: {
+      species: 'water-bear',
+      name: "Brack's Water Bear",
+      levelOffset: 6,
+      element: 'storm',
+      aiTier: 'trained',
+    },
   },
+  // Reformed Moglins — dock at Home Plot after moglinsReformed flag
+  // TODO: needs showWhenFlag support or a flag-inversion pattern (currently always-visible stub)
   {
-    id: 'luna_npc',
-    name: 'Luna',
-    zone: 'moonwell-glade',
-    tileX: 12, tileY: 8,
+    id: 'thistle-home',
+    name: 'Thistle',
+    zone: 'garden',
+    tileX: 5, tileY: 14,
     direction: 'down',
-    dialogueId: 'luna-intro',
-    dialogueChain: [
-      { dialogueId: 'luna-intro' },
-      { dialogueId: 'luna-heal', requiresFlag: 'metLuna' },
-    ],
-    sprite: LUNA_NPC_SPRITE,
-    palette: ['#607898', '#90b0d8', '#d0e0f8'],
+    dialogueId: 'thistle-home',
+    sprite: MOGLIN_SPRITE,
+    palette: ['#2a5a20', '#50a038', '#c8e8b0', '#1a1a2e', '#88cc88'],
   },
   {
-    id: 'rootweaver',
-    name: 'Rootweaver',
-    zone: 'moonwell-glade',
-    tileX: 16, tileY: 11,
-    direction: 'left',
-    dialogueId: 'rootweaver-intro',
-    sprite: ROOTWEAVER_SPRITE,
-    palette: ['#4a3060', '#7a5a8a', '#a0c870'],
-  },
-  {
-    id: 'echo',
-    name: 'Echo',
-    zone: 'spore-hollow',
-    tileX: 8, tileY: 8,
+    id: 'sorrel-home',
+    name: 'Sorrel',
+    zone: 'garden',
+    tileX: 7, tileY: 14,
     direction: 'down',
-    dialogueId: 'echo-riddle',
-    sprite: ECHO_SPRITE,
-    palette: ['#40a0a0', '#80d0d0', '#e0f8f8'],
+    dialogueId: 'sorrel-home',
+    sprite: MOGLIN_SPRITE,
+    palette: ['#8a6a20', '#c8a040', '#f0e8b0', '#1a1a2e', '#eec888'],
   },
   {
-    id: 'dusk',
-    name: 'Dusk',
-    zone: 'spore-hollow',
-    tileX: 15, tileY: 5,
-    direction: 'left',
-    dialogueId: 'dusk-intro',
-    sprite: DUSK_SPRITE,
-    palette: ['#303850', '#506080', '#8898b0'],
-  },
-  {
-    id: 'moss',
-    name: 'Moss',
-    zone: 'twilight-thicket',
-    tileX: 3, tileY: 4,
+    id: 'brack-home',
+    name: 'Brack',
+    zone: 'garden',
+    tileX: 9, tileY: 14,
     direction: 'down',
-    dialogueId: 'moss-intro',
-    sprite: MOSS_SPRITE,
-    palette: ['#2a4020', '#4a7038', '#88a860'],
-  },
-  {
-    id: 'glint',
-    name: 'Glint',
-    zone: 'mana-springs',
-    tileX: 10, tileY: 8,
-    direction: 'down',
-    dialogueId: 'glint-intro',
-    sprite: GLINT_SPRITE,
-    palette: ['#3090c0', '#60c0e0', '#c0f0ff'],
+    dialogueId: 'brack-home',
+    sprite: MOGLIN_SPRITE,
+    palette: ['#4a2a70', '#8050c0', '#d0b8f0', '#1a1a2e', '#c0a0f0'],
   },
   {
     id: 'community-gate',

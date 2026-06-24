@@ -45,7 +45,7 @@ export function getZone(zones: Zone[], id: string): Zone | null {
 // Garden → east → Moonwell Glade (shortcut, blocked until tutorialComplete)
 // Moonwell Glade → east → Spore Hollow (post-tutorial)
 
-import { GARDEN, MYCELIAL_PATH, MOONWELL_GLADE, SPORE_HOLLOW, TWILIGHT_THICKET, THE_THRESHOLD, MANA_SPRINGS, SPIRIT_MEADOW, MOONWELL_GLADE_GREGORY_S_HOME , TEST_SANDBOX,
+import { GARDEN, MYCELIAL_PATH, MOONWELL_GLADE, SPORE_HOLLOW, TWILIGHT_THICKET, THE_THRESHOLD, MANA_SPRINGS, SPIRIT_MEADOW, MOONWELL_GLADE_GREGORY_S_HOME, SORREL_HOLD, BRACK_HOLD, TEST_SANDBOX,
   FLAT_TERRAIN_DEMO,
   FP_GARDEN, FP_LARGE_1, FP_LARGE_2, FP_LARGE_3, FP_MED_1, FP_MED_2, FP_MED_3, FP_MED_4, FP_HUGE,
   ROUTE_GARDEN_MYCELIAL, ROUTE_MYCELIAL_SPIRIT, ROUTE_SPIRIT_MOONWELL, ROUTE_MOONWELL_GARDEN } from './tilemap'
@@ -123,9 +123,9 @@ export const ZONES: Zone[] = [
     grid: THE_THRESHOLD,
     playerStart: { tileX: 9, tileY: 1 },
     warps: [
-      // North entry back to Spirit Meadow
-      { fromX: 9, fromY: 0, toZone: 'spirit-meadow', toX: 14, toY: 18, direction: 'up' },
-      { fromX: 10, fromY: 0, toZone: 'spirit-meadow', toX: 15, toY: 18, direction: 'up' },
+      // North entry back to Brack Hold
+      { fromX: 9, fromY: 0, toZone: 'brack-hold', toX: 19, toY: 28, direction: 'up' },
+      { fromX: 10, fromY: 0, toZone: 'brack-hold', toX: 20, toY: 28, direction: 'up' },
     ],
   },
   {
@@ -138,9 +138,12 @@ export const ZONES: Zone[] = [
       // North entry back to Moonwell Glade
       { fromX: 12, fromY: 0, toZone: 'moonwell-glade', toX: 14, toY: 28, direction: 'up' },
       { fromX: 13, fromY: 0, toZone: 'moonwell-glade', toX: 15, toY: 28, direction: 'up' },
-      // South exit to Spirit Meadow
+      // South exit to Spirit Meadow (return path)
       { fromX: 12, fromY: 19, toZone: 'spirit-meadow', toX: 14, toY: 1, direction: 'down' },
       { fromX: 13, fromY: 19, toZone: 'spirit-meadow', toX: 15, toY: 1, direction: 'down' },
+      // East exit to Sorrel Hold (gated: need defeated_thistle)
+      { fromX: 24, fromY: 14, toZone: 'sorrel-hold', toX: 1, toY: 14, direction: 'right', requiredFlag: 'defeated_thistle' },
+      { fromX: 24, fromY: 15, toZone: 'sorrel-hold', toX: 1, toY: 15, direction: 'right', requiredFlag: 'defeated_thistle' },
     ],
   },
   {
@@ -154,8 +157,42 @@ export const ZONES: Zone[] = [
       { fromX: 0, fromY: 8, toZone: 'route-mycelial-spirit', toX: 28, toY: 5, direction: 'left' },
       { fromX: 21, fromY: 7, toZone: 'route-spirit-moonwell', toX: 1, toY: 5, direction: 'right' },
       { fromX: 21, fromY: 8, toZone: 'route-spirit-moonwell', toX: 1, toY: 5, direction: 'right' },
+      // North to Mana Springs (gated: need defeated_thistle)
+      { fromX: 14, fromY: 0, toZone: 'mana-springs', toX: 12, toY: 18, direction: 'up', requiredFlag: 'defeated_thistle' },
+      { fromX: 15, fromY: 0, toZone: 'mana-springs', toX: 13, toY: 18, direction: 'up', requiredFlag: 'defeated_thistle' },
     ],
-  },  {
+  },
+  {
+    id: 'sorrel-hold',
+    name: 'Sorrel Hold',
+    element: 'earth',
+    grid: SORREL_HOLD,
+    playerStart: { tileX: 2, tileY: 14 },
+    warps: [
+      // Return west to Mana Springs (open)
+      { fromX: 0, fromY: 14, toZone: 'mana-springs', toX: 23, toY: 14, direction: 'left' },
+      { fromX: 0, fromY: 15, toZone: 'mana-springs', toX: 23, toY: 15, direction: 'left' },
+      // Forward east to Brack Hold (gated: need defeated_sorrel)
+      { fromX: 39, fromY: 14, toZone: 'brack-hold', toX: 1, toY: 14, direction: 'right', requiredFlag: 'defeated_sorrel' },
+      { fromX: 39, fromY: 15, toZone: 'brack-hold', toX: 1, toY: 15, direction: 'right', requiredFlag: 'defeated_sorrel' },
+    ],
+  },
+  {
+    id: 'brack-hold',
+    name: 'Brack Hold',
+    element: 'storm',
+    grid: BRACK_HOLD,
+    playerStart: { tileX: 2, tileY: 14 },
+    warps: [
+      // Return west to Sorrel Hold (open)
+      { fromX: 0, fromY: 14, toZone: 'sorrel-hold', toX: 38, toY: 14, direction: 'left' },
+      { fromX: 0, fromY: 15, toZone: 'sorrel-hold', toX: 38, toY: 15, direction: 'left' },
+      // Forward south to Ather Winds (gated: need defeated_brack)
+      { fromX: 19, fromY: 29, toZone: 'the-threshold', toX: 9, toY: 1, direction: 'down', requiredFlag: 'defeated_brack' },
+      { fromX: 20, fromY: 29, toZone: 'the-threshold', toX: 10, toY: 1, direction: 'down', requiredFlag: 'defeated_brack' },
+    ],
+  },
+  {
     id: 'moonwell-glade-gregory-s-home',
     name: "Moonwell Glade (Gregory's Home)",
     element: 'water',

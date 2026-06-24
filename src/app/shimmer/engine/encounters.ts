@@ -107,6 +107,27 @@ export const ENCOUNTER_TABLES: Record<string, ZoneEncounters> = {
     ],
     aiTier: 'wild',
   },
+  'sorrel-hold': {
+    rate: 0.10,
+    entries: [
+      { species: 'fox',         weight: 3, levelRange: [2, 5] },
+      { species: 'turtle',      weight: 3, levelRange: [2, 5] },
+      { species: 'water-bear',  weight: 2, levelRange: [3, 6] },
+      { species: 'hummingbird', weight: 2, levelRange: [2, 4] },
+    ],
+    aiTier: 'trained',
+  },
+  'brack-hold': {
+    rate: 0.12,
+    entries: [
+      { species: 'owl',         weight: 3, levelRange: [4, 7] },
+      { species: 'water-bear',  weight: 3, levelRange: [4, 7] },
+      { species: 'turtle',      weight: 3, levelRange: [4, 7] },
+      { species: 'fox',         weight: 2, levelRange: [4, 8] },
+      { species: 'bat',         weight: 1, levelRange: [5, 8] },
+    ],
+    aiTier: 'trained',
+  },
 }
 
 // ============================================

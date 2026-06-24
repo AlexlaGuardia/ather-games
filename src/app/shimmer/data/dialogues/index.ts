@@ -4,57 +4,43 @@ import type { DialogueGraph } from '../../engine/dialogue-schema'
 import { registerGraphs } from '../../engine/dialogue-runtime'
 
 import communityGate from './community-gate.json'
-import brambleIntro from './bramble-intro.json'
-import brambleReturn from './bramble-return.json'
 import consoleInspect from './console-inspect.json'
-import duskIntro from './dusk-intro.json'
-import echoRiddle from './echo-riddle.json'
-import emberIntro from './ember-intro.json'
-import emberReturn from './ember-return.json'
-import glintIntro from './glint-intro.json'
 import gregoryChallenge from './gregory-challenge.json'
 import gregoryIntro from './gregory-intro.json'
-import gregoryMoglinWarning from './gregory-moglin-warning.json'
-import gregoryPostLose from './gregory-post-lose.json'
-import gregoryPostTablet from './gregory-post-tablet.json'
-import gregoryPostWin from './gregory-post-win.json'
-import gregoryReturn from './gregory-return.json'
-import gregoryTablet from './gregory-tablet.json'
-import lunaHeal from './luna-heal.json'
-import lunaIntro from './luna-intro.json'
-import mossIntro from './moss-intro.json'
-import mycelialKeeper from './mycelial-keeper.json'
-import rootweaverIntro from './rootweaver-intro.json'
-import sleepingSpirit from './sleeping-spirit.json'
+import gregoryTending from './gregory-tending.json'
+import gregorySendoff from './gregory-sendoff.json'
 import studyObservation from './study-observation.json'
-import wispIntro from './wisp-intro.json'
+import thistlePrefight from './thistle-prefight.json'
+import thistleReturn from './thistle-return.json'
+import thistleDefeat from './thistle-defeat.json'
+import sorrelPrefight from './sorrel-prefight.json'
+import sorrelDefeat from './sorrel-defeat.json'
+import brackPrefight from './brack-prefight.json'
+import brackDefeat from './brack-defeat.json'
+import atherWindsHook from './ather-winds-hook.json'
+import thistleHome from './thistle-home.json'
+import sorrelHome from './sorrel-home.json'
+import brackHome from './brack-home.json'
 
 const ALL_GRAPHS: DialogueGraph[] = [
   communityGate,
-  brambleIntro,
-  brambleReturn,
   consoleInspect,
-  duskIntro,
-  echoRiddle,
-  emberIntro,
-  emberReturn,
-  glintIntro,
   gregoryChallenge,
   gregoryIntro,
-  gregoryMoglinWarning,
-  gregoryPostLose,
-  gregoryPostTablet,
-  gregoryPostWin,
-  gregoryReturn,
-  gregoryTablet,
-  lunaHeal,
-  lunaIntro,
-  mossIntro,
-  mycelialKeeper,
-  rootweaverIntro,
-  sleepingSpirit,
+  gregoryTending,
+  gregorySendoff,
   studyObservation,
-  wispIntro,
+  thistlePrefight,
+  thistleReturn,
+  thistleDefeat,
+  sorrelPrefight,
+  sorrelDefeat,
+  brackPrefight,
+  brackDefeat,
+  atherWindsHook,
+  thistleHome,
+  sorrelHome,
+  brackHome,
 ] as DialogueGraph[]
 
 export function loadAllDialogues() {

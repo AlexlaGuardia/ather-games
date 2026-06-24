@@ -1,0 +1,17 @@
+{
+  "id": "sorrel-prefight",
+  "npcId": "sorrel",
+  "entryNodeId": "sp_0",
+  "metadata": { "tags": ["beat6a", "battle-intro"] },
+  "nodes": [
+    { "id": "sp_0", "type": "text", "position": { "x": 0, "y": 0 }, "data": { "speaker": "Sorrel", "text": "So you are the one. The little keeper who put my brother Thistle to flight. He came scampering up here with his tail in a knot, going on about a sprout with muddy boots." } },
+    { "id": "sp_1", "type": "text", "position": { "x": 0, "y": 120 }, "data": { "speaker": "Sorrel", "text": "I am not Thistle. Thistle is soft. I keep two friends on the leash, not one, and they mind me twice as well. You will not find me so easy to chase off." } },
+    { "id": "sp_2", "type": "text", "position": { "x": 0, "y": 240 }, "data": { "speaker": "Sorrel", "text": "And even if you did? Even if? You would only be doing me a favor. Brack is up the road, keeper. Brack is the biggest of us, with more friends on more leashes than you can count. You think you are climbing toward something. You are climbing toward him." } },
+    { "id": "sp_3", "type": "text", "position": { "x": 0, "y": 360 }, "data": { "speaker": "Sorrel", "text": "Go home. Go home while it is still your idea." } }
+  ],
+  "edges": [
+    { "id": "sp_e0", "from": "sp_0", "to": "sp_1" },
+    { "id": "sp_e1", "from": "sp_1", "to": "sp_2" },
+    { "id": "sp_e2", "from": "sp_2", "to": "sp_3" }
+  ]
+}

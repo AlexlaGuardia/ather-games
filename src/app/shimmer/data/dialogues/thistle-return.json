@@ -1,0 +1,15 @@
+{
+  "id": "thistle-return",
+  "npcId": "thistle",
+  "entryNodeId": "tr_0",
+  "metadata": { "tags": ["beat4a", "battle-intro"] },
+  "nodes": [
+    { "id": "tr_0", "type": "text", "position": { "x": 0, "y": 0 }, "data": { "speaker": "Thistle", "text": "You came back? You actually came back. With that little sprout at your heel?" } },
+    { "id": "tr_1", "type": "text", "position": { "x": 0, "y": 120 }, "data": { "speaker": "Thistle", "text": "Oh, this is rich. You think your sweet little chosen friend is any match for mine? Mine does what it is told. Mine does not get scared. Watch." } },
+    { "id": "tr_2", "type": "text", "position": { "x": 0, "y": 240 }, "data": { "speaker": "Thistle", "text": "Thistle does not lose his own meadow to a keeper with mud still on their boots. Come on then. Come and see." } }
+  ],
+  "edges": [
+    { "id": "tr_e0", "from": "tr_0", "to": "tr_1" },
+    { "id": "tr_e1", "from": "tr_1", "to": "tr_2" }
+  ]
+}

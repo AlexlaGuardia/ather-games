@@ -1,0 +1,13 @@
+{
+  "id": "thistle-home",
+  "npcId": "thistle-home",
+  "entryNodeId": "th_0",
+  "metadata": { "tags": ["home-station", "reserved-slot", "TODO-ui"] },
+  "nodes": [
+    { "id": "th_0", "type": "text", "position": { "x": 0, "y": 0 }, "data": { "speaker": "Thistle", "text": "I will mind a corner for you, Keeper. Keep it ready. Keep it warm. For whatever comes next." } },
+    { "id": "th_1", "type": "text", "position": { "x": 0, "y": 120 }, "data": { "speaker": "Thistle", "text": "The corner is yours to use when you are ready. I will be right here." } }
+  ],
+  "edges": [
+    { "id": "th_e0", "from": "th_0", "to": "th_1" }
+  ]
+}

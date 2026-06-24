@@ -1,0 +1,33 @@
+{
+  "id": "ather-winds-hook",
+  "npcId": "gregory",
+  "entryNodeId": "aw_0",
+  "metadata": { "tags": ["beat8", "closing-hook"] },
+  "nodes": [
+    { "id": "aw_0", "type": "text", "position": { "x": 0, "y": 0 }, "data": { "speaker": "narrator", "text": "The top of the map. A great sealed gate, and beyond it nothing the Keeper can quite see, only a wind pouring through the seams of it, strong and sweet and full of far-off places." } },
+    { "id": "aw_1", "type": "text", "position": { "x": 0, "y": 120 }, "data": { "speaker": "Gregory", "text": "This is as high as the road goes, Keeper. The Ather Winds. Feel that?" } },
+    { "id": "aw_2", "type": "text", "position": { "x": 0, "y": 240 }, "data": { "speaker": "narrator", "text": "The wind tugs at the Keeper's clothes and hums in the gate, and far down on the Home Plot a Mana Seed turns over in its pot as if it heard its name." } },
+    { "id": "aw_3", "type": "text", "position": { "x": 0, "y": 360 }, "data": { "speaker": "Gregory", "text": "Every seed you have ever planted rode in on a wind like this one. From out there. From past the gate. The whole sky on the other side is thick with them, drifting, looking for soil and somebody to notice them." } },
+    { "id": "aw_4", "type": "text", "position": { "x": 0, "y": 480 }, "data": { "speaker": "Gregory", "text": "You set this little country right. Freed three holds, brought three lost folk home. It was good work and I am proud of you." } },
+    { "id": "aw_5", "type": "text", "position": { "x": 0, "y": 600 }, "data": { "speaker": "Gregory", "text": "But Keeper. The holds you broke were small ones. Wandering bullies who squatted where they should not. Out past this gate, where the winds come from, there are bigger things. Real strongholds. Whole stretches of the wild held under the leash, waiting for somebody to set them right too." } },
+    { "id": "aw_6", "type": "text", "position": { "x": 0, "y": 720 }, "data": { "speaker": "Gregory", "text": "The gate is shut today. It will not always be. When it opens, the country on the far side will be wide, and wild, and waiting." } },
+    { "id": "aw_7", "type": "text", "position": { "x": 0, "y": 840 }, "data": { "speaker": "Gregory", "text": "Rest a while. Tend your plot. Let your friends grow strong. The wind is patient, and so is the work." } },
+    { "id": "aw_8", "type": "text", "position": { "x": 0, "y": 960 }, "data": { "speaker": "narrator", "text": "The wind pours through the gate, off the wilds, carrying the smell of soil and far places. Somewhere out there, the seeds are still drifting. Somewhere out there, the real strongholds wait." } },
+    { "id": "aw_action", "type": "action", "position": { "x": 0, "y": 1080 }, "data": {
+      "actions": [
+        { "type": "setFlag", "flag": "atherWindsVisited", "value": true }
+      ]
+    } }
+  ],
+  "edges": [
+    { "id": "aw_e0", "from": "aw_0", "to": "aw_1" },
+    { "id": "aw_e1", "from": "aw_1", "to": "aw_2" },
+    { "id": "aw_e2", "from": "aw_2", "to": "aw_3" },
+    { "id": "aw_e3", "from": "aw_3", "to": "aw_4" },
+    { "id": "aw_e4", "from": "aw_4", "to": "aw_5" },
+    { "id": "aw_e5", "from": "aw_5", "to": "aw_6" },
+    { "id": "aw_e6", "from": "aw_6", "to": "aw_7" },
+    { "id": "aw_e7", "from": "aw_7", "to": "aw_8" },
+    { "id": "aw_e8", "from": "aw_8", "to": "aw_action" }
+  ]
+}

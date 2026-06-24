@@ -1,0 +1,21 @@
+{
+  "id": "gregory-sendoff",
+  "npcId": "gregory",
+  "entryNodeId": "gs_0",
+  "metadata": { "tags": ["beat3"] },
+  "nodes": [
+    { "id": "gs_0", "type": "text", "position": { "x": 0, "y": 0 }, "data": { "speaker": "Gregory", "text": "Restless already? I thought so. You have the look." } },
+    { "id": "gs_1", "type": "text", "position": { "x": 0, "y": 120 }, "data": { "speaker": "Gregory", "text": "Your seed will sleep a while yet, so let it. In the meantime, take those tools out and learn their weight. There is a meadow west of here, past the Mycelial Path. Spirit Meadows, the old maps call it. Wild spirits roam it, and the gathering is good." } },
+    { "id": "gs_2", "type": "text", "position": { "x": 0, "y": 240 }, "data": { "speaker": "Gregory", "text": "Go and try your tools. Watch the spirits, do not crowd them. And Keeper. If something out there feels wrong, you do not have to fix it today. Just come home and tell me." } },
+    { "id": "gs_action", "type": "action", "position": { "x": 0, "y": 360 }, "data": {
+      "actions": [
+        { "type": "setFlag", "flag": "gregorySentToMeadows", "value": true }
+      ]
+    } }
+  ],
+  "edges": [
+    { "id": "gs_e0", "from": "gs_0", "to": "gs_1" },
+    { "id": "gs_e1", "from": "gs_1", "to": "gs_2" },
+    { "id": "gs_e2", "from": "gs_2", "to": "gs_action" }
+  ]
+}

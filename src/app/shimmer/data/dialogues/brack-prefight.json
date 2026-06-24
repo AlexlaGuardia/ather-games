@@ -1,0 +1,19 @@
+{
+  "id": "brack-prefight",
+  "npcId": "brack",
+  "entryNodeId": "bp_0",
+  "metadata": { "tags": ["beat7a", "battle-intro"] },
+  "nodes": [
+    { "id": "bp_0", "type": "text", "position": { "x": 0, "y": 0 }, "data": { "speaker": "narrator", "text": "The top hold. Brack stands the tallest of the three on his toes, chest out, chin up, the widest grin of all. Behind him and beside him, leash after leash, more dimmed spirits than the Keeper has seen in one place. Thistle and Sorrel huddle at his back, half hiding." } },
+    { "id": "bp_1", "type": "text", "position": { "x": 0, "y": 120 }, "data": { "speaker": "Brack", "text": "So. The little keeper made it all the way up Brack's hill. The whole long way, just to stand in front of the biggest friend-keeper in the country." } },
+    { "id": "bp_2", "type": "text", "position": { "x": 0, "y": 240 }, "data": { "speaker": "Brack", "text": "Look at them all. Count them if you like. I have got more than Thistle, more than Sorrel, more than the two of them stacked one on the other. That is what makes Brack Brack." } },
+    { "id": "bp_3", "type": "text", "position": { "x": 0, "y": 360 }, "data": { "speaker": "Brack", "text": "You freed a meadow. Cute. You chased my brothers up a road. Cute. But this is the top, keeper, and the top is mine, and nobody, nobody, takes the top from Brack." } },
+    { "id": "bp_4", "type": "text", "position": { "x": 0, "y": 480 }, "data": { "speaker": "Brack", "text": "Come on then. Bring your one little chosen friend against all of mine. Let us see whose is stronger. Let us settle it." } }
+  ],
+  "edges": [
+    { "id": "bp_e0", "from": "bp_0", "to": "bp_1" },
+    { "id": "bp_e1", "from": "bp_1", "to": "bp_2" },
+    { "id": "bp_e2", "from": "bp_2", "to": "bp_3" },
+    { "id": "bp_e3", "from": "bp_3", "to": "bp_4" }
+  ]
+}

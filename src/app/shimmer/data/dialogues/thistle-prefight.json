@@ -1,0 +1,29 @@
+{
+  "id": "thistle-prefight",
+  "npcId": "thistle",
+  "entryNodeId": "tp_0",
+  "metadata": { "tags": ["beat3b", "beat4a", "trainer"] },
+  "nodes": [
+    { "id": "tp_0", "type": "text", "position": { "x": 0, "y": 0 }, "data": { "speaker": "narrator", "text": "Spirit Meadows. The Keeper rounds a hedge and freezes. A Moglin stands in the open, up on his toes to seem taller than he is, chin high, a too-big grin stretched across his soft face. Behind him, a leash of dark metal. At the end of it, a small spirit." } },
+    { "id": "tp_1", "type": "text", "position": { "x": 0, "y": 120 }, "data": { "speaker": "narrator", "text": "The spirit should glow. It does not. Its color is guttered out toward dull and drab, its light gone sick and faint. It does not look up." } },
+    { "id": "tp_2", "type": "text", "position": { "x": 0, "y": 240 }, "data": { "speaker": "Thistle", "text": "Eyes front, little keeper! You are looking at Thistle, and this meadow is Thistle's now. Mine. Every blade of it." } },
+    { "id": "tp_3", "type": "text", "position": { "x": 0, "y": 360 }, "data": { "speaker": "Thistle", "text": "See my friend here? See how it minds me? That is power, that is. That is what a real keeper looks like. Bet you have not got one of these." } },
+    { "id": "tp_4", "type": "text", "position": { "x": 0, "y": 480 }, "data": { "speaker": "narrator", "text": "The dimmed spirit takes a slow step when the leash pulls. There is no fight left in it. Just the pull, and the dull obeying." } },
+    { "id": "tp_5", "type": "text", "position": { "x": 0, "y": 600 }, "data": { "speaker": "Thistle", "text": "Run along now. Shoo. This is no place for keepers with empty pots." } },
+    { "id": "tp_6", "type": "text", "position": { "x": 0, "y": 720 }, "data": { "speaker": "narrator", "text": "The Keeper cannot help it, not yet, not with empty hands. So the Keeper does the only sense there is. The Keeper runs." } },
+    { "id": "tp_action", "type": "action", "position": { "x": 0, "y": 840 }, "data": {
+      "actions": [
+        { "type": "setFlag", "flag": "sawThistle", "value": true }
+      ]
+    } }
+  ],
+  "edges": [
+    { "id": "tp_e0", "from": "tp_0", "to": "tp_1" },
+    { "id": "tp_e1", "from": "tp_1", "to": "tp_2" },
+    { "id": "tp_e2", "from": "tp_2", "to": "tp_3" },
+    { "id": "tp_e3", "from": "tp_3", "to": "tp_4" },
+    { "id": "tp_e4", "from": "tp_4", "to": "tp_5" },
+    { "id": "tp_e5", "from": "tp_5", "to": "tp_6" },
+    { "id": "tp_e6", "from": "tp_6", "to": "tp_action" }
+  ]
+}

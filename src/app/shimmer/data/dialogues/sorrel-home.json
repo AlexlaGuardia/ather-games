@@ -1,0 +1,13 @@
+{
+  "id": "sorrel-home",
+  "npcId": "sorrel-home",
+  "entryNodeId": "sh_0",
+  "metadata": { "tags": ["home-station", "rename-service", "TODO-ui"] },
+  "nodes": [
+    { "id": "sh_0", "type": "text", "position": { "x": 0, "y": 0 }, "data": { "speaker": "Sorrel", "text": "And I am good with names. If ever a friend of yours wants a new one, a kinder one, you bring them to me. I will help you find the right fit." } },
+    { "id": "sh_1", "type": "text", "position": { "x": 0, "y": 120 }, "data": { "speaker": "Sorrel", "text": "The rename service is coming soon. I am setting up my corner just right." } }
+  ],
+  "edges": [
+    { "id": "sh_e0", "from": "sh_0", "to": "sh_1" }
+  ]
+}

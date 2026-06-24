@@ -1,0 +1,13 @@
+{
+  "id": "brack-home",
+  "npcId": "brack-home",
+  "entryNodeId": "bh_0",
+  "metadata": { "tags": ["home-station", "trader", "ather-exchange", "TODO-ui"] },
+  "nodes": [
+    { "id": "bh_0", "type": "text", "position": { "x": 0, "y": 0 }, "data": { "speaker": "Brack", "text": "I know the worth of things, Keeper. Spent years counting them on leashes, more shame to me. Let me count them the right way now." } },
+    { "id": "bh_1", "type": "text", "position": { "x": 0, "y": 120 }, "data": { "speaker": "Brack", "text": "You bring me what you have, I will help you trade for what you need. The Ather Exchange opens soon." } }
+  ],
+  "edges": [
+    { "id": "bh_e0", "from": "bh_0", "to": "bh_1" }
+  ]
+}

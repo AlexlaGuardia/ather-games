@@ -1,0 +1,27 @@
+{
+  "id": "thistle-defeat",
+  "npcId": "thistle",
+  "entryNodeId": "td_0",
+  "metadata": { "tags": ["beat4b", "post-battle"] },
+  "nodes": [
+    { "id": "td_0", "type": "text", "position": { "x": 0, "y": 0 }, "data": { "speaker": "Thistle", "text": "No. No, no, that is not how it goes. My friend never. You never." } },
+    { "id": "td_1", "type": "text", "position": { "x": 0, "y": 120 }, "data": { "speaker": "narrator", "text": "Thistle backs up a step, then another, smaller now, the grin gone wobbly at the edges." } },
+    { "id": "td_2", "type": "text", "position": { "x": 0, "y": 240 }, "data": { "speaker": "Thistle", "text": "This is not over. You hear me? Thistle just needs to be somewhere safer, is all. Somewhere with bigger friends. East. Sorrel will know what to do with the likes of you." } },
+    { "id": "td_3", "type": "text", "position": { "x": 0, "y": 360 }, "data": { "speaker": "narrator", "text": "He turns and scrambles off toward the rising road, and for the first time he does not look ten feet tall. He looks like a small thing in a hurry." } },
+    { "id": "td_4", "type": "text", "position": { "x": 0, "y": 480 }, "data": { "speaker": "narrator", "text": "The leash lies in the grass, the dark metal of it cracked clean through. The little spirit lifts its head. Slowly its color comes back, the way warmth comes back to cold fingers, dull to soft to bright." } },
+    { "id": "td_5", "type": "text", "position": { "x": 0, "y": 600 }, "data": { "speaker": "narrator", "text": "It looks at the Keeper. It does not come closer and it does not stay. It turns toward the wild meadow, and then it is running, light again, free again, gone into the tall grass where it belongs." } },
+    { "id": "td_action", "type": "action", "position": { "x": 0, "y": 720 }, "data": {
+      "actions": [
+        { "type": "setFlag", "flag": "thistleDefeated", "value": true }
+      ]
+    } }
+  ],
+  "edges": [
+    { "id": "td_e0", "from": "td_0", "to": "td_1" },
+    { "id": "td_e1", "from": "td_1", "to": "td_2" },
+    { "id": "td_e2", "from": "td_2", "to": "td_3" },
+    { "id": "td_e3", "from": "td_3", "to": "td_4" },
+    { "id": "td_e4", "from": "td_4", "to": "td_5" },
+    { "id": "td_e5", "from": "td_5", "to": "td_action" }
+  ]
+}

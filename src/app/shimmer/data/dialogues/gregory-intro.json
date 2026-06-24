@@ -1,21 +1,39 @@
 {
   "id": "gregory-intro",
   "npcId": "gregory",
-  "entryNodeId": "gregory-intro_0",
-  "metadata": { "tags": ["tutorial", "quest"] },
+  "entryNodeId": "gi_0",
+  "metadata": { "tags": ["tutorial", "quest", "beat1"] },
   "nodes": [
-    { "id": "gregory-intro_0", "type": "text", "position": { "x": 100, "y": 0 }, "data": { "speaker": "Gregory", "text": "Well now. You actually made it through." } },
-    { "id": "gregory-intro_1", "type": "text", "position": { "x": 100, "y": 120 }, "data": { "speaker": "Gregory", "text": "Most Keepers turn back at the first fork. You kept going." } },
-    { "id": "gregory-intro_2", "type": "text", "position": { "x": 100, "y": 240 }, "data": { "speaker": "Gregory", "text": "This is my workshop. Everything in the Ather flows through here eventually." } },
-    { "id": "gregory-intro_3", "type": "text", "position": { "x": 100, "y": 360 }, "data": { "speaker": "Gregory", "text": "I've called my companion back from your garden entrance. The shortcut is open now." } },
-    { "id": "gregory-intro_4", "type": "text", "position": { "x": 100, "y": 480 }, "data": { "speaker": "Gregory", "text": "Come find me when you're ready to go deeper." } },
-    { "id": "gregory-intro_action", "type": "action", "position": { "x": 100, "y": 600 }, "data": { "actions": [{ "type": "setFlag", "flag": "tutorialComplete", "value": true }] } }
+    { "id": "gi_0", "type": "text", "position": { "x": 0, "y": 0 }, "data": { "speaker": "Gregory", "text": "Well now. Look who came through the wall. You have the keeper look about you, all wide eyes and muddy boots. Come in, come in." } },
+    { "id": "gi_1", "type": "text", "position": { "x": 0, "y": 120 }, "data": { "speaker": "Gregory", "text": "I am Greg. I have been in the Ather a long while, long enough that the doors and I are on speaking terms. And this big fellow is Blue. Say hello, Blue." } },
+    { "id": "gi_2", "type": "text", "position": { "x": 0, "y": 240 }, "data": { "speaker": "narrator", "text": "A round, dew-blue spirit lifts its head, blinks slow and kind, and settles back down." } },
+    { "id": "gi_3", "type": "text", "position": { "x": 0, "y": 360 }, "data": { "speaker": "Gregory", "text": "Blue does not say much. Neither do I, most days. But you, Keeper, you have come a long way, so I will say a little." } },
+    { "id": "gi_4", "type": "text", "position": { "x": 0, "y": 480 }, "data": { "speaker": "Gregory", "text": "Every keeper gets a plot of their own. A patch of the Ather to tend and to make warm. Yours is just down the path, waiting. It is empty now. It will not stay empty." } },
+    { "id": "gi_5", "type": "text", "position": { "x": 0, "y": 600 }, "data": { "speaker": "Gregory", "text": "Here. Take this." } },
+    { "id": "gi_6", "type": "text", "position": { "x": 0, "y": 720 }, "data": { "speaker": "narrator", "text": "Greg presses a small seed into the Keeper's hands. It is light as a breath and warm as a held stone." } },
+    { "id": "gi_7", "type": "text", "position": { "x": 0, "y": 840 }, "data": { "speaker": "Gregory", "text": "A Mana Seed. It rode the wind in from far off, the way they all do. Plant it, tend it, and something will choose to grow." } },
+    { "id": "gi_8", "type": "text", "position": { "x": 0, "y": 960 }, "data": { "speaker": "Gregory", "text": "And this bag. A pot, a grimoire, a few good tools, a table to work at. Everything a new keeper needs and nothing a new keeper does not." } },
+    { "id": "gi_9", "type": "text", "position": { "x": 0, "y": 1080 }, "data": { "speaker": "Gregory", "text": "Go on home, Keeper. Put down roots. I will come by once you have a pot in the ground." } },
+    { "id": "gi_action", "type": "action", "position": { "x": 0, "y": 1200 }, "data": {
+      "actions": [
+        { "type": "giveItem", "itemId": "seed_fox", "count": 1 },
+        { "type": "giveItem", "itemId": "mana_spike", "count": 1 },
+        { "type": "giveItem", "itemId": "basic_rinstick", "count": 1 },
+        { "type": "giveItem", "itemId": "goldwood_blade", "count": 1 },
+        { "type": "setFlag", "flag": "tutorialComplete", "value": true }
+      ]
+    } }
   ],
   "edges": [
-    { "id": "gregory-intro_e0", "from": "gregory-intro_0", "to": "gregory-intro_1" },
-    { "id": "gregory-intro_e1", "from": "gregory-intro_1", "to": "gregory-intro_2" },
-    { "id": "gregory-intro_e2", "from": "gregory-intro_2", "to": "gregory-intro_3" },
-    { "id": "gregory-intro_e3", "from": "gregory-intro_3", "to": "gregory-intro_4" },
-    { "id": "gregory-intro_e4", "from": "gregory-intro_4", "to": "gregory-intro_action" }
+    { "id": "gi_e0", "from": "gi_0", "to": "gi_1" },
+    { "id": "gi_e1", "from": "gi_1", "to": "gi_2" },
+    { "id": "gi_e2", "from": "gi_2", "to": "gi_3" },
+    { "id": "gi_e3", "from": "gi_3", "to": "gi_4" },
+    { "id": "gi_e4", "from": "gi_4", "to": "gi_5" },
+    { "id": "gi_e5", "from": "gi_5", "to": "gi_6" },
+    { "id": "gi_e6", "from": "gi_6", "to": "gi_7" },
+    { "id": "gi_e7", "from": "gi_7", "to": "gi_8" },
+    { "id": "gi_e8", "from": "gi_8", "to": "gi_9" },
+    { "id": "gi_e9", "from": "gi_9", "to": "gi_action" }
   ]
 }

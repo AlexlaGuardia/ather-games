@@ -1,0 +1,29 @@
+{
+  "id": "gregory-tending",
+  "npcId": "gregory",
+  "entryNodeId": "gt_0",
+  "metadata": { "tags": ["tutorial", "beat2"] },
+  "nodes": [
+    { "id": "gt_0", "type": "text", "position": { "x": 0, "y": 0 }, "data": { "speaker": "narrator", "text": "The Keeper sets the pot on the empty Home Plot. A short while later Greg ambles up the path, Blue padding behind." } },
+    { "id": "gt_1", "type": "text", "position": { "x": 0, "y": 120 }, "data": { "speaker": "Gregory", "text": "Ah, you found a good spot for it. Sun on it most of the day, shelter at its back. The seed will like that." } },
+    { "id": "gt_2", "type": "text", "position": { "x": 0, "y": 240 }, "data": { "speaker": "Gregory", "text": "Now then. A seed is a small, sleepy thing. It does not need much. It needs the same things you do. A drink. A little warmth. Somebody to notice it." } },
+    { "id": "gt_3", "type": "text", "position": { "x": 0, "y": 360 }, "data": { "speaker": "Gregory", "text": "Water first. Not a flood, just enough to wet the soil. A seed that drowns will not thank you, and a seed left dry will simply sleep." } },
+    { "id": "gt_4", "type": "text", "position": { "x": 0, "y": 480 }, "data": { "speaker": "Gregory", "text": "Then the mana. Hold your hands close and let a little of the Ather pass through. You will feel it go. Like warming your palms at a fire, only the fire is on your side of it." } },
+    { "id": "gt_5", "type": "text", "position": { "x": 0, "y": 600 }, "data": { "speaker": "Gregory", "text": "That is all there is to it. Water, warmth, a little of your time. Do it each day and do not rush." } },
+    { "id": "gt_6", "type": "text", "position": { "x": 0, "y": 720 }, "data": { "speaker": "Gregory", "text": "It will not bloom today. Maybe not tomorrow. Good things take the time they take. Come find me when you are restless, and I will give you something to do while it grows." } },
+    { "id": "gt_action", "type": "action", "position": { "x": 0, "y": 840 }, "data": {
+      "actions": [
+        { "type": "setFlag", "flag": "tendingTaughtComplete", "value": true }
+      ]
+    } }
+  ],
+  "edges": [
+    { "id": "gt_e0", "from": "gt_0", "to": "gt_1" },
+    { "id": "gt_e1", "from": "gt_1", "to": "gt_2" },
+    { "id": "gt_e2", "from": "gt_2", "to": "gt_3" },
+    { "id": "gt_e3", "from": "gt_3", "to": "gt_4" },
+    { "id": "gt_e4", "from": "gt_4", "to": "gt_5" },
+    { "id": "gt_e5", "from": "gt_5", "to": "gt_6" },
+    { "id": "gt_e6", "from": "gt_6", "to": "gt_action" }
+  ]
+}
