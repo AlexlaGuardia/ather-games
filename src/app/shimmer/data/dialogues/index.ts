@@ -21,6 +21,9 @@ import atherWindsHook from './ather-winds-hook.json'
 import thistleHome from './thistle-home.json'
 import sorrelHome from './sorrel-home.json'
 import brackHome from './brack-home.json'
+import thistlePostWin from './thistle-post-win.json'
+import sorrelPostWin from './sorrel-post-win.json'
+import brackPostWin from './brack-post-win.json'
 
 const ALL_GRAPHS: DialogueGraph[] = [
   communityGate,
@@ -33,10 +36,13 @@ const ALL_GRAPHS: DialogueGraph[] = [
   thistlePrefight,
   thistleReturn,
   thistleDefeat,
+  thistlePostWin,
   sorrelPrefight,
   sorrelDefeat,
+  sorrelPostWin,
   brackPrefight,
   brackDefeat,
+  brackPostWin,
   atherWindsHook,
   thistleHome,
   sorrelHome,

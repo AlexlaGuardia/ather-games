@@ -59,6 +59,9 @@ export type DialogueAction =
   | { type: 'teleport'; zoneId: string; tileX: number; tileY: number }
   | { type: 'playSound'; soundId: string }
   | { type: 'setEmotion'; npcId: string; emotion: string }
+  // Grants a random Mana Seed from the ready-species pool.
+  // Pool starts as ['fox','axolotl','water-bear']; widen to all 10 as sprites land.
+  | { type: 'giveStarterSeed' }
 
 // ── Graph structure ──
 

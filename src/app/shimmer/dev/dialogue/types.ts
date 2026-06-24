@@ -83,6 +83,7 @@ export type DialogueAction =
   | { type: 'teleport'; zoneId: string; tileX: number; tileY: number }
   | { type: 'playSound'; soundId: string }
   | { type: 'setEmotion'; npcId: string; emotion: string }
+  | { type: 'giveStarterSeed' }
 
 export interface DialogueEdge {
   id: string

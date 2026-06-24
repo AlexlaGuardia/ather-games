@@ -374,6 +374,11 @@ export const ITEMS: ItemDef[] = [
   { id: 'element_charm', name: 'Element Charm', type: 'consumable', rarity: 'rare', description: 'Boosts same-type attack bonus to 1.40x.', stackable: true, maxStack: 5, sellPrice: 75, buyPrice: 150, tradeable: true },
   { id: 'endurance_charm', name: 'Endurance Charm', type: 'consumable', rarity: 'rare', description: 'Doubles chance to endure a lethal hit.', stackable: true, maxStack: 5, sellPrice: 75, buyPrice: 150, tradeable: true },
   { id: 'focus_charm', name: 'Focus Charm', type: 'consumable', rarity: 'rare', description: 'Increases move accuracy by 10 in battle.', stackable: true, maxStack: 5, sellPrice: 75, buyPrice: 150, tradeable: true },
+  // --- Starter Bag key items (granted by Greg at intro; drive the core tutorial loop) ---
+  // mana_pot: the spirit-bloom vessel — place on ather_soil to plant a Mana Seed (bloom → spirit joins)
+  { id: 'mana_pot', name: 'Mana Pot', type: 'key', rarity: 'uncommon', description: 'A warm clay pot from Greg. Place it on a patch of ather soil and plant your Mana Seed inside.', stackable: false, maxStack: 1 },
+  // spirit_grimoire: the field guide — auto-fills as you study wild spirits
+  { id: 'spirit_grimoire', name: 'Spirit Grimoire', type: 'key', rarity: 'uncommon', description: 'A leather-bound grimoire from Greg. It records every spirit you encounter. Press G to open it.', stackable: false, maxStack: 1 },
 ]
 
 /** Check if an item is giftable to NPCs. Tools, keys, and furniture are not giftable. */

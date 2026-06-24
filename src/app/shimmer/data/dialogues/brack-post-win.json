@@ -1,0 +1,49 @@
+{
+  "id": "brack-post-win",
+  "npcId": "brack",
+  "entryNodeId": "bpw_0",
+  "metadata": { "tags": ["beat7b", "beat7c", "post-battle", "deflation"] },
+  "nodes": [
+    { "id": "bpw_0", "type": "text", "position": { "x": 0, "y": 0 }, "data": { "speaker": "narrator", "text": "The leashes give way, one after another, the dark metal cracking and falling into the grass. The dimmed spirits brighten all at once, color flooding back, and they scatter for the open sky, free." } },
+    { "id": "bpw_1", "type": "text", "position": { "x": 0, "y": 120 }, "data": { "speaker": "narrator", "text": "And Brack. Brack who felt ten feet tall a breath ago." } },
+    { "id": "bpw_2", "type": "text", "position": { "x": 0, "y": 240 }, "data": { "speaker": "narrator", "text": "The chest goes first, sinking in. Then the chin drops. He comes down off his toes and finds he is much smaller than he was pretending. His ears fold down. His paws come up and clutch at his chest, and the grin is gone, and what is left is a soft, shy, frightened little fellow who looks like he would very much like to be hugged." } },
+    { "id": "bpw_3", "type": "text", "position": { "x": 0, "y": 360 }, "data": { "speaker": "Brack", "text": "Oh. Oh no. They are gone. The friends are gone, and I feel ever so small, and I do not, I do not actually want to fight anybody." } },
+    { "id": "bpw_4", "type": "text", "position": { "x": 0, "y": 480 }, "data": { "speaker": "narrator", "text": "Behind him, Thistle and Sorrel slump the very same way, all the borrowed bigness draining out of the three of them at once, until they are only three round, drab, gentle folk standing close together, blinking like they just woke up." } },
+    { "id": "bpw_5", "type": "text", "position": { "x": 0, "y": 600 }, "data": { "speaker": "Thistle", "text": "We were awfully loud, were we not." } },
+    { "id": "bpw_6", "type": "text", "position": { "x": 0, "y": 720 }, "data": { "speaker": "Sorrel", "text": "I said some unkind things. I did not mean them. The leash sort of says them for you." } },
+    { "id": "bpw_7", "type": "text", "position": { "x": 0, "y": 840 }, "data": { "speaker": "Brack", "text": "We never knew how to be brave on our own, so we borrowed it. And it never fit. It pinched the whole time." } },
+    { "id": "bpw_8", "type": "text", "position": { "x": 0, "y": 960 }, "data": { "speaker": "narrator", "text": "Greg arrives, Blue at his side." } },
+    { "id": "bpw_9", "type": "text", "position": { "x": 0, "y": 1080 }, "data": { "speaker": "Gregory", "text": "There now. There is what was under all that noise the whole while. The gentlest folk in the Ather, the day they put the collars down." } },
+    { "id": "bpw_10", "type": "text", "position": { "x": 0, "y": 1200 }, "data": { "speaker": "Gregory", "text": "Well, you three. You squatted on this keeper's road long enough. Time you made yourselves useful, the honest way." } },
+    { "id": "bpw_11", "type": "text", "position": { "x": 0, "y": 1320 }, "data": { "speaker": "narrator", "text": "Greg walks them down to the Home Plot, which is bigger now, warmer, with room along its edge that was not there before." } },
+    { "id": "bpw_12", "type": "text", "position": { "x": 0, "y": 1440 }, "data": { "speaker": "Thistle", "text": "I will mind a corner for you, Keeper. Keep it ready. Keep it warm. For whatever comes next." } },
+    { "id": "bpw_13", "type": "text", "position": { "x": 0, "y": 1560 }, "data": { "speaker": "Sorrel", "text": "And I am good with names. If ever a friend of yours wants a new one, a kinder one, you bring them to me. I will help you find the right fit." } },
+    { "id": "bpw_14", "type": "text", "position": { "x": 0, "y": 1680 }, "data": { "speaker": "Brack", "text": "I know the worth of things, Keeper. Spent years counting them on leashes, more shame to me. Let me count them the right way now. You bring me what you have, I will help you trade for what you need." } },
+    { "id": "bpw_15", "type": "text", "position": { "x": 0, "y": 1800 }, "data": { "speaker": "Gregory", "text": "You see, Keeper? You did not beat them. You freed them. There is a difference, and it is the whole of the work." } },
+    { "id": "bpw_action", "type": "action", "position": { "x": 0, "y": 1920 }, "data": {
+      "actions": [
+        { "type": "giveItem", "itemId": "seed_water_bear", "count": 1 },
+        { "type": "setFlag", "flag": "brackDefeated", "value": true },
+        { "type": "setFlag", "flag": "moglinsReformed", "value": true }
+      ]
+    } }
+  ],
+  "edges": [
+    { "id": "bpw_e0", "from": "bpw_0", "to": "bpw_1" },
+    { "id": "bpw_e1", "from": "bpw_1", "to": "bpw_2" },
+    { "id": "bpw_e2", "from": "bpw_2", "to": "bpw_3" },
+    { "id": "bpw_e3", "from": "bpw_3", "to": "bpw_4" },
+    { "id": "bpw_e4", "from": "bpw_4", "to": "bpw_5" },
+    { "id": "bpw_e5", "from": "bpw_5", "to": "bpw_6" },
+    { "id": "bpw_e6", "from": "bpw_6", "to": "bpw_7" },
+    { "id": "bpw_e7", "from": "bpw_7", "to": "bpw_8" },
+    { "id": "bpw_e8", "from": "bpw_8", "to": "bpw_9" },
+    { "id": "bpw_e9", "from": "bpw_9", "to": "bpw_10" },
+    { "id": "bpw_e10", "from": "bpw_10", "to": "bpw_11" },
+    { "id": "bpw_e11", "from": "bpw_11", "to": "bpw_12" },
+    { "id": "bpw_e12", "from": "bpw_12", "to": "bpw_13" },
+    { "id": "bpw_e13", "from": "bpw_13", "to": "bpw_14" },
+    { "id": "bpw_e14", "from": "bpw_14", "to": "bpw_15" },
+    { "id": "bpw_e15", "from": "bpw_15", "to": "bpw_action" }
+  ]
+}

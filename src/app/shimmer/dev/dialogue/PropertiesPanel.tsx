@@ -369,6 +369,7 @@ function ActionNodeEditor({ data, onChange, graph, currentNodeId }: { data: Acti
     { value: 'teleport', label: 'Teleport' },
     { value: 'playSound', label: 'Play Sound' },
     { value: 'setEmotion', label: 'Set Emotion' },
+    { value: 'giveStarterSeed', label: 'Give Starter Seed (RNG)' },
   ]
 
   return (

@@ -1443,6 +1443,15 @@ export default function ShimmerPage() {
           addItems(invRef.current, act.itemId, act.count)
           setInv({ ...invRef.current })
           break
+        case 'giveStarterSeed': {
+          // RNG 1/pool — species-neutral to the player (the Ather chooses).
+          // Widen READY_STARTER_SPECIES to all 10 as sprites land.
+          const READY_STARTER_SPECIES = ['fox', 'axolotl', 'water-bear'] as const
+          const pick = READY_STARTER_SPECIES[Math.floor(Math.random() * READY_STARTER_SPECIES.length)]
+          addItems(invRef.current, `seed_${pick}`, 1)
+          setInv({ ...invRef.current })
+          break
+        }
         case 'removeItem':
           removeItems(invRef.current, act.itemId, act.count)
           setInv({ ...invRef.current })

@@ -21,6 +21,7 @@ export interface NPCDef {
   dialogueChain?: { dialogueId: string; requiresFlag?: string }[] // ordered progression, picks first unlocked
   blocking?: boolean       // tile is impassable when NPC present
   hideWhenFlag?: string    // NPC disappears when this flag is set
+  showWhenFlag?: string    // NPC only appears when this flag is set (gate-in)
   trainer?: TrainerConfig  // if set, battle triggers after return dialogue completes
   patrolPath?: { tileX: number; tileY: number }[]  // waypoints for patrol movement
 }
@@ -202,8 +203,7 @@ export const NPCS: NPCDef[] = [
       aiTier: 'trained',
     },
   },
-  // Reformed Moglins — dock at Home Plot after moglinsReformed flag
-  // TODO: needs showWhenFlag support or a flag-inversion pattern (currently always-visible stub)
+  // Reformed Moglins — appear at Home Plot only after moglinsReformed flag (set on Brack's defeat)
   {
     id: 'thistle-home',
     name: 'Thistle',
@@ -211,6 +211,7 @@ export const NPCS: NPCDef[] = [
     tileX: 5, tileY: 14,
     direction: 'down',
     dialogueId: 'thistle-home',
+    showWhenFlag: 'moglinsReformed',
     sprite: MOGLIN_SPRITE,
     palette: ['#2a5a20', '#50a038', '#c8e8b0', '#1a1a2e', '#88cc88'],
   },
@@ -221,6 +222,7 @@ export const NPCS: NPCDef[] = [
     tileX: 7, tileY: 14,
     direction: 'down',
     dialogueId: 'sorrel-home',
+    showWhenFlag: 'moglinsReformed',
     sprite: MOGLIN_SPRITE,
     palette: ['#8a6a20', '#c8a040', '#f0e8b0', '#1a1a2e', '#eec888'],
   },
@@ -231,6 +233,7 @@ export const NPCS: NPCDef[] = [
     tileX: 9, tileY: 14,
     direction: 'down',
     dialogueId: 'brack-home',
+    showWhenFlag: 'moglinsReformed',
     sprite: MOGLIN_SPRITE,
     palette: ['#4a2a70', '#8050c0', '#d0b8f0', '#1a1a2e', '#c0a0f0'],
   },
@@ -250,21 +253,26 @@ export const NPCS: NPCDef[] = [
 /** Summary data for editors (avoids importing heavy sprite data) */
 export const NPC_SUMMARY = NPCS.map(n => ({ id: n.id, name: n.name, zone: n.zone }))
 
-/** Get NPCs for a specific zone (respects hideWhenFlag) */
+/** Check if an NPC is currently visible given the flag state */
+function npcVisible(n: NPCDef, flags?: Record<string, boolean>): boolean {
+  if (n.hideWhenFlag && flags?.[n.hideWhenFlag]) return false
+  if (n.showWhenFlag && !flags?.[n.showWhenFlag]) return false
+  return true
+}
+
+/** Get NPCs for a specific zone (respects hideWhenFlag + showWhenFlag) */
 export function getNPCsForZone(zoneId: string, flags?: Record<string, boolean>): NPCDef[] {
   return NPCS.filter(n => {
     if (n.zone !== zoneId) return false
-    if (n.hideWhenFlag && flags?.[n.hideWhenFlag]) return false
-    return true
+    return npcVisible(n, flags)
   })
 }
 
-/** Find NPC at a specific tile in a zone (respects hideWhenFlag) */
+/** Find NPC at a specific tile in a zone (respects hideWhenFlag + showWhenFlag) */
 export function npcAtTile(zoneId: string, tx: number, ty: number, flags?: Record<string, boolean>): NPCDef | null {
   return NPCS.find(n => {
     if (n.zone !== zoneId || n.tileX !== tx || n.tileY !== ty) return false
-    if (n.hideWhenFlag && flags?.[n.hideWhenFlag]) return false
-    return true
+    return npcVisible(n, flags)
   }) ?? null
 }
 
@@ -274,7 +282,7 @@ export function getBlockedTiles(zoneId: string, flags?: Record<string, boolean>)
   for (const n of NPCS) {
     if (n.zone !== zoneId) continue
     if (!n.blocking) continue
-    if (n.hideWhenFlag && flags?.[n.hideWhenFlag]) continue
+    if (!npcVisible(n, flags)) continue
     blocked.add(`${n.tileX},${n.tileY}`)
   }
   return blocked

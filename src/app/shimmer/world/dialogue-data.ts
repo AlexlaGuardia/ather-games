@@ -102,4 +102,8 @@ export const DIALOGUES: Record<string, Dialogue> = {
   'thistle-home': { id: 'thistle-home', lines: [], repeatable: true },
   'sorrel-home': { id: 'sorrel-home', lines: [], repeatable: true },
   'brack-home': { id: 'brack-home', lines: [], repeatable: true },
+  // Post-battle dialogues — fired by trainer system on win (${trainerId}-post-win pattern)
+  'thistle-post-win': { id: 'thistle-post-win', lines: [], repeatable: false, onComplete: 'thistleDefeated' },
+  'sorrel-post-win': { id: 'sorrel-post-win', lines: [], repeatable: false, onComplete: 'sorrelDefeated' },
+  'brack-post-win': { id: 'brack-post-win', lines: [], repeatable: false, onComplete: 'brackDefeated' },
 }

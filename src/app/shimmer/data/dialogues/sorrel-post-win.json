@@ -1,0 +1,26 @@
+{
+  "id": "sorrel-post-win",
+  "npcId": "sorrel",
+  "entryNodeId": "spw_0",
+  "metadata": { "tags": ["beat6b", "post-battle"] },
+  "nodes": [
+    { "id": "spw_0", "type": "text", "position": { "x": 0, "y": 0 }, "data": { "speaker": "narrator", "text": "Sorrel staggers, and all the meanness drains out of his stance at once, leaving something small and scared behind it." } },
+    { "id": "spw_1", "type": "text", "position": { "x": 0, "y": 120 }, "data": { "speaker": "Sorrel", "text": "How. How are you still standing. That is not. You should not be able to do that." } },
+    { "id": "spw_2", "type": "text", "position": { "x": 0, "y": 240 }, "data": { "speaker": "Sorrel", "text": "Fine. Fine! Sorrel knows when to fall back. Up the road I go, up to Brack, where it is safe, where you cannot follow without going through everything he has got." } },
+    { "id": "spw_3", "type": "text", "position": { "x": 0, "y": 360 }, "data": { "speaker": "Sorrel", "text": "You will not climb that hill, keeper. Nobody climbs that hill. Brack will see to it." } },
+    { "id": "spw_4", "type": "text", "position": { "x": 0, "y": 480 }, "data": { "speaker": "narrator", "text": "He gathers his leashes and bolts up the high road, calling a name ahead of him as he goes." } },
+    { "id": "spw_action", "type": "action", "position": { "x": 0, "y": 600 }, "data": {
+      "actions": [
+        { "type": "giveItem", "itemId": "seed_axolotl", "count": 1 },
+        { "type": "setFlag", "flag": "sorrelDefeated", "value": true }
+      ]
+    } }
+  ],
+  "edges": [
+    { "id": "spw_e0", "from": "spw_0", "to": "spw_1" },
+    { "id": "spw_e1", "from": "spw_1", "to": "spw_2" },
+    { "id": "spw_e2", "from": "spw_2", "to": "spw_3" },
+    { "id": "spw_e3", "from": "spw_3", "to": "spw_4" },
+    { "id": "spw_e4", "from": "spw_4", "to": "spw_action" }
+  ]
+}
