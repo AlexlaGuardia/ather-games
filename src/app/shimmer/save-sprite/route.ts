@@ -563,7 +563,18 @@ export async function GET(req: NextRequest) {
     let palettes: Record<string, string[]> | undefined
     // Check if file has inline palette (form files, player files)
     const isFormFile = !SPIRIT_FILES[species] && !PLAYER_FILES[species] && !BEAST_FILES[species] && !ICON_FILES[species]
-    if (species === 'nodes') {
+    if (species === 'furniture') {
+      // Furniture palettes: per-furniture entries in FURNITURE_PALETTES export in furniture.ts
+      const furnPalMatch = content.match(/export const FURNITURE_PALETTES[^{]*\{([^}]*)(\})/)
+      if (furnPalMatch) {
+        palettes = {}
+        const entries = furnPalMatch[1].matchAll(/([\w]+):\s*\[([^\]]*)\]/g)
+        for (const m of entries) {
+          const colors = m[2].match(/'([^']+)'/g)?.map(s => s.replace(/'/g, '')) ?? []
+          palettes[m[1]] = colors
+        }
+      }
+    } else if (species === 'nodes') {
       // Node palettes: per-node entries in NODE_PALETTES export in items.ts
       const nodePalMatch = content.match(/export const NODE_PALETTES[^{]*\{([\s\S]*?)\n\}/)
       if (nodePalMatch) {
@@ -642,6 +653,28 @@ export async function PUT(req: NextRequest) {
     const { paletteKey, colors } = body
     if (!species || !Array.isArray(colors) || colors.length === 0)
       return NextResponse.json({ error: 'Invalid palette data' }, { status: 400 })
+
+    // Furniture palettes: per-furniture entries in FURNITURE_PALETTES in furniture.ts
+    if (species === 'furniture' && paletteKey) {
+      const filePath = join(SPRITE_DIR, 'furniture.ts')
+      let content = await readFile(filePath, 'utf-8')
+      const colorStr = colors.map((c: string) => `'${c}'`).join(', ')
+      const escaped = paletteKey.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+      const pattern = new RegExp(`(${escaped}:\\s*\\[)[^\\]]*?(\\])`)
+      const blockMatch = content.match(/(export const FURNITURE_PALETTES[^{]*\{)([^}]*)(\})/)
+      if (!blockMatch) {
+        return NextResponse.json({ error: 'Could not find FURNITURE_PALETTES in furniture.ts' }, { status: 400 })
+      }
+      let block = blockMatch[2]
+      if (pattern.test(block)) {
+        block = block.replace(pattern, `$1${colorStr}$2`)
+      } else {
+        block += `\n  ${paletteKey}: [${colorStr}],`
+      }
+      content = content.replace(blockMatch[0], `${blockMatch[1]}${block}${blockMatch[3]}`)
+      await writeFile(filePath, content, 'utf-8')
+      return NextResponse.json({ success: true, species, paletteKey, colors })
+    }
 
     // Node palettes: per-node entries in NODE_PALETTES in items.ts
     if (species === 'nodes' && paletteKey) {

@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useCallback, useEffect, useRef, useMemo } from 'react'
-import { FURNITURE, FURNITURE_ICONS, FURNITURE_FRAME_MAP } from '../../sprites/furniture'
+import { FURNITURE, FURNITURE_ICONS, FURNITURE_FRAME_MAP, FURNITURE_PALETTES } from '../../sprites/furniture'
 import { ITEM_PALETTE } from '../../sprites/items'
 import { SpriteAnim } from '../../sprites/sprite-data'
 import { ViewMode, parseDigits, pixelsToDigits, flipH, flipV, shiftAllPixels } from '../../components/PixelUtils'
@@ -19,6 +19,7 @@ export default function FurnitureEditor({ onDeploy, deployState }: {
   const [frameIndex, setFrameIndex] = useState(0)
   const [mode, setMode] = useState<ViewMode>('normal')
   const [liveSprites, setLiveSprites] = useState<Record<string, SpriteAnim> | null>(null)
+  const [livePalettes, setLivePalettes] = useState<Record<string, string[]> | null>(null)
   const [loadStatus, setLoadStatus] = useState<string>('')
   const gridRef = useRef<HTMLCanvasElement>(null)
 
@@ -31,6 +32,9 @@ export default function FurnitureEditor({ onDeploy, deployState }: {
       setLoadStatus('loading...')
       const res = await fetch('/shimmer/save-sprite?species=furniture')
       const data = await res.json()
+      if (data.palettes) {
+        setLivePalettes(data.palettes)
+      }
       if (data.frames) {
         const fmap: Record<string, string[]> = data.frameMap ?? {}
         setLiveFrameMapData(fmap)
@@ -76,7 +80,7 @@ export default function FurnitureEditor({ onDeploy, deployState }: {
   const safeFrameIndex = Math.min(frameIndex, totalFrames - 1)
   const currentFrame = currentAnim?.frames[safeFrameIndex]
   const currentFurn = FURNITURE.find(f => f.id === selected)
-  const palette = ITEM_PALETTE as unknown as readonly string[]
+  const palette = (livePalettes?.[selected] ?? FURNITURE_PALETTES[selected] ?? [...ITEM_PALETTE]) as readonly string[]
 
   const [addingFrame, setAddingFrame] = useState(false)
 
@@ -278,7 +282,8 @@ export default function FurnitureEditor({ onDeploy, deployState }: {
               onFrameChange={setFrameIndex}
               onSaved={() => loadLiveData()}
               allSprites={sprites}
-              paletteKey="base"
+              paletteKey={selected}
+              maxColors={14}
               frameConstMap={liveFrameMap}
               onBatchOperation={handleBatchOp}
               onDuplicateFrame={duplicateFrame}
@@ -362,7 +367,7 @@ export default function FurnitureEditor({ onDeploy, deployState }: {
           <div>
             <span className="text-[9px] text-text-faint block mb-2">Palette</span>
             <div className="grid grid-cols-4 gap-1">
-              {ITEM_PALETTE.map((color, i) => (
+              {palette.map((color, i) => (
                 <div key={i} className="flex items-center gap-1.5">
                   <div
                     className="w-4 h-4 rounded border border-white/10"

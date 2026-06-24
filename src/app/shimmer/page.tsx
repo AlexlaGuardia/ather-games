@@ -46,7 +46,7 @@ import ChestPanel from './components/ChestPanel'
 import ExchangePanel from './components/ExchangePanel'
 import ItemIcon from './components/ItemIcon'
 import { ITEMS, DEFAULT_SPIRIT_NAMES, SEED_SPECIES, SEED_IDS, CROP_SEED_IDS, GROWTH_SPRITES, CROP_GROWTH_SPRITES, CROP_SPRITES_BY_TYPE, CROP_PALETTES, ITEM_PALETTE, ITEM_ICONS, SEED_PALETTES, NODE_SPRITES, NODE_PALETTES, TOOL_SPRITES, NODE_TYPE_LABELS } from './sprites/items'
-import { FURNITURE, FURNITURE_SPRITES, FURNITURE_DEFS } from './sprites/furniture'
+import { FURNITURE, FURNITURE_SPRITES, FURNITURE_DEFS, FURNITURE_PALETTES } from './sprites/furniture'
 import { drawSprite as drawSpriteToCtx } from './components/SpriteRenderers'
 import { PlacedStructure, createPlacedStructure, structuresToSave, structuresFromSave, structureOccupiesTile, type StructureSave } from './engine/structures'
 import HomePlotPanel from './components/HomePlotPanel'
@@ -2606,7 +2606,8 @@ export default function ShimmerPage() {
             if (furnAnim) {
               const fFrame = furnAnim.frames[0]
               const fKey = `furn-${d.furn.furnitureId}`
-              const fCanvas = renderer.getSprite(fKey, fFrame, [...ITEM_PALETTE] as string[], 32, 32)
+              const fPal = (FURNITURE_PALETTES[d.furn.furnitureId] ?? [...ITEM_PALETTE]) as string[]
+              const fCanvas = renderer.getSprite(fKey, fFrame, fPal, 32, 32)
               renderer.drawSprite(fCanvas, d.x, d.y, false)
             }
           } else if (d.type === 'world-item') {
