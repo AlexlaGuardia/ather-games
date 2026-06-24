@@ -114,18 +114,20 @@ export const ELEMENT_COLORS: Record<Element, string> = {
 // Non-base elements for iteration
 export const ELEMENTS: Exclude<Element, 'base'>[] = ['mana', 'storm', 'earth', 'water']
 
-// Second form names — canon-locked (shimmer-master.md), Athernyx names
+// Second form names — canon morpheme grid (world/spirits-species.md "The 40 Second Forms", ruled 2026-06-22).
+// Matches the grimoire manifest (public/grimoire/spirits.json). Element morphemes: Mana=-ara/Aur-/Lume-/Myst-,
+// Storm=Volt-/-arc, Earth=Crag-/Mesa-/-ore/Obsid-, Water=Tide-/Mar-/-ix.
 export const SECOND_FORM_NAMES: Record<Species, Record<Exclude<Element, 'base'>, string>> = {
-  fox:         { mana: 'Phantom Vulnyx',  storm: 'Thunder Kit',  earth: 'Den Mother',    water: 'Stream Runner' },
-  axolotl:     { mana: 'Healer Manalotl', storm: 'Shock Gill',   earth: 'Mud Lurker',    water: 'Deep Diver' },
-  owl:         { mana: 'Seer Athowl',     storm: 'Storm Wing',   earth: 'Ancient Perch', water: 'Fisher Athowl' },
-  frog:        { mana: 'Hex Croakling',   storm: 'Spark Toad',   earth: 'Mud Hopper',    water: 'Stream Racer' },
-  firefly:     { mana: 'Beacon Fly',      storm: 'Lightning Luminara', earth: 'Cave Glimmer', water: 'Abyss Light' },
-  rabbit:      { mana: 'Lucky Lepara',    storm: 'Thunder Hop',  earth: 'Burrow King',   water: 'Marsh Runner' },
-  'water-bear': { mana: 'Eternal Grade',  storm: 'Shock Proof',  earth: 'Moss Titan',    water: 'Cryo Dewbear' },
-  hummingbird: { mana: 'Nectar Mage',     storm: 'Gale Wing',    earth: 'Jewel Hovari',  water: 'Vapor Hover' },
-  turtle:      { mana: 'Shell Sage',      storm: 'Thunderback',  earth: 'Iron Shellmere', water: 'Tide Walker' },
-  bat:         { mana: 'Shadow Wing',     storm: 'Echo Hunter',  earth: 'Stone Noctyx',  water: 'Fisher Noctyx' },
+  fox:         { mana: 'Vulnara',  storm: 'Vulnarc',  earth: 'Vulnore',  water: 'Vulnix' },
+  axolotl:     { mana: 'Aurlotl',  storm: 'Arclotl',  earth: 'Craglotl', water: 'Marlotl' },
+  owl:         { mana: 'Mystowl',  storm: 'Voltowl',  earth: 'Cragowl',  water: 'Tideowl' },
+  frog:        { mana: 'Croakara', storm: 'Croakarc', earth: 'Croakore', water: 'Croakrill' },
+  firefly:     { mana: 'Luminel',  storm: 'Luminarc', earth: 'Luminore', water: 'Luminix' },
+  rabbit:      { mana: 'Lepaura',  storm: 'Leparc',   earth: 'Lepore',   water: 'Lepnix' },
+  'water-bear': { mana: 'Lumebear', storm: 'Voltbear', earth: 'Cragbear', water: 'Tidebear' },
+  hummingbird: { mana: 'Lumari',   storm: 'Voltari',  earth: 'Obsidari', water: 'Tidari' },
+  turtle:      { mana: 'Aurmere',  storm: 'Voltmere', earth: 'Mesamere', water: 'Tidemere' },
+  bat:         { mana: 'Noctara',  storm: 'Noctarc',  earth: 'Noctore',  water: 'Noctix' },
 }
 
 /** Get second form name, or null if base element */

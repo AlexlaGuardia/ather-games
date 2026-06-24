@@ -51,8 +51,8 @@ import { GARDEN, MYCELIAL_PATH, MOONWELL_GLADE, SPORE_HOLLOW, TWILIGHT_THICKET, 
   ROUTE_GARDEN_MYCELIAL, ROUTE_MYCELIAL_SPIRIT, ROUTE_SPIRIT_MOONWELL, ROUTE_MOONWELL_GARDEN } from './tilemap'
 export const ZONES: Zone[] = [
   {
-    id: 'garden',
-    name: 'Shimmer Garden',
+    id: 'garden',            // keep id stable (referenced widely); display = the player's own plot
+    name: 'Home Plot',
     element: 'mana',
     grid: GARDEN,
     playerStart: { tileX: 2, tileY: 9 },
@@ -90,8 +90,8 @@ export const ZONES: Zone[] = [
     ],
   },
   {
-    id: 'spore-hollow',
-    name: 'Spore Hollow',
+    id: 'spore-hollow',      // retheme → Voranyx Caverns (east passage that "opens to the Silt", sealed in v1)
+    name: 'Voranyx Caverns',
     element: 'earth',
     grid: SPORE_HOLLOW,
     playerStart: { tileX: 1, tileY: 12 },
@@ -117,9 +117,9 @@ export const ZONES: Zone[] = [
     ],
   },
   {
-    id: 'the-threshold',
-    name: 'The Threshold',
-    element: 'storm', // future Wilds Pass (the frontier edge to the Ather)
+    id: 'the-threshold',     // retheme → Ather Winds (the sealed gate to the Wilds; seeds ride in from here)
+    name: 'Ather Winds',
+    element: 'storm', // frontier edge — the sealed door to the Wilds expansion
     grid: THE_THRESHOLD,
     playerStart: { tileX: 9, tileY: 1 },
     warps: [
