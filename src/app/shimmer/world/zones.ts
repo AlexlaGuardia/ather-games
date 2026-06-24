@@ -46,6 +46,7 @@ export function getZone(zones: Zone[], id: string): Zone | null {
 // Moonwell Glade → east → Spore Hollow (post-tutorial)
 
 import { GARDEN, MYCELIAL_PATH, MOONWELL_GLADE, SPORE_HOLLOW, TWILIGHT_THICKET, THE_THRESHOLD, MANA_SPRINGS, SPIRIT_MEADOW, MOONWELL_GLADE_GREGORY_S_HOME , TEST_SANDBOX,
+  FLAT_TERRAIN_DEMO,
   FP_GARDEN, FP_LARGE_1, FP_LARGE_2, FP_LARGE_3, FP_MED_1, FP_MED_2, FP_MED_3, FP_MED_4, FP_HUGE } from './tilemap'
 
 export const ZONES: Zone[] = [
@@ -167,6 +168,14 @@ export const ZONES: Zone[] = [
     name: 'test_sandbox',
     grid: TEST_SANDBOX,
     playerStart: { tileX: 5, tileY: 5 },
+    warps: [],
+  },
+  // --- Flat-terrain demo (throwaway) — reach via ?zone=flat-terrain-demo ---
+  {
+    id: 'flat-terrain-demo',
+    name: 'Flat Terrain Demo',
+    grid: FLAT_TERRAIN_DEMO,
+    playerStart: { tileX: 10, tileY: 7 },
     warps: [],
   },
 

@@ -19,6 +19,7 @@ import { useSessionState } from '../hooks/useSessionState'
 import StampManager, { type Stamp } from './StampManager'
 import AutoLayerRules from './AutoLayerRules'
 import { evaluateAffected, type AutoLayerRule, BUILTIN_RULE_TEMPLATES } from './autolayer-engine'
+import { DEFAULT_AUTOLAYER_RULES } from '../../world/autolayer-rules'
 
 const TS = 32
 
@@ -957,11 +958,12 @@ export default function MapEditor() {
   // Auto-layer system
   const [intGrid, setIntGrid] = useState<number[][]>(() => GARDEN.map(row => row.map(() => 0)))
   const [showIntGrid, setShowIntGrid] = useState(false)
-  const [autoLayerRules, setAutoLayerRules] = useState<AutoLayerRule[]>([])
+  const [autoLayerRules, setAutoLayerRules] = useState<AutoLayerRule[]>(() => DEFAULT_AUTOLAYER_RULES)
   const INT_VALUES = [
-    { value: 1, label: 'Path', color: '#fbbf24' },
-    { value: 2, label: 'Water', color: '#60a5fa' },
-    { value: 3, label: 'Wall', color: '#94a3b8' },
+    { value: 1, label: 'Grass', color: '#5bbd6e' },
+    { value: 2, label: 'Path', color: '#c8a96e' },
+    { value: 3, label: 'Water', color: '#4a9fc8' },
+    { value: 4, label: 'Stone', color: '#7a7a8c' },
   ]
   const [itemPlacements, setItemPlacements] = useState<Array<{ itemId: string, x: number, y: number }>>([])
 
