@@ -14,7 +14,6 @@ export interface NodePlacement {
 const GARDEN_NODES: NodePlacement[] = [
   { type: 'goldwood' as NodeType, tileX: 22, tileY: 4 },
   { type: 'goldwood' as NodeType, tileX: 19, tileY: 3 },
-  { type: 'goldwood' as NodeType, tileX: 20, tileY: 7 },
   { type: 'goldwood' as NodeType, tileX: 14, tileY: 2 },
   { type: 'goldwood' as NodeType, tileX: 2, tileY: 25 },
   { type: 'goldwood' as NodeType, tileX: 3, tileY: 27 },
