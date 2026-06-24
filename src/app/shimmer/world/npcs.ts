@@ -119,8 +119,8 @@ export const NPCS: NPCDef[] = [
   {
     id: 'gregory',
     name: 'Gregory',
-    zone: 'moonwell-glade-gregory-s-home',
-    tileX: 2, tileY: 5,
+    zone: 'moonwell-glade',   // moved out of the doorless interior so he's reachable (was moonwell-glade-gregory-s-home)
+    tileX: 10, tileY: 9,      // central walkable tile (97), just below the moonwell
     direction: 'down',
     dialogueId: 'gregory-intro',
     returnDialogueId: 'gregory-challenge',
