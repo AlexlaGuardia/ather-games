@@ -963,7 +963,6 @@ export default function MapEditor() {
     { value: 1, label: 'Grass', color: '#5bbd6e' },
     { value: 2, label: 'Path', color: '#c8a96e' },
     { value: 3, label: 'Water', color: '#4a9fc8' },
-    { value: 4, label: 'Stone', color: '#7a7a8c' },
   ]
   const [itemPlacements, setItemPlacements] = useState<Array<{ itemId: string, x: number, y: number }>>([])
 

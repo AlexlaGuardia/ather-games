@@ -1,5 +1,5 @@
 // Default auto-layer rules for the flat-design tileset
-// IntGrid semantic values: 1=grass  2=path  3=water  4=stone
+// IntGrid semantic values: 1=grass  2=path  3=water  (clouds = existing tiles, hand-placed)
 //
 // Pattern layout:
 //   [0][1][2]
@@ -17,7 +17,6 @@ const {
   FT_GRASS_BASE,
   FT_PATH_BASE, FT_PATH_EDGE, FT_PATH_CORNER_OUT, FT_PATH_CORNER_IN,
   FT_WATER_BASE, FT_WATER_EDGE, FT_WATER_CORNER_OUT, FT_WATER_CORNER_IN,
-  FT_STONE_BASE, FT_STONE_EDGE, FT_STONE_CORNER_OUT, FT_STONE_CORNER_IN,
 } = FT
 
 let _id = 0
@@ -137,31 +136,13 @@ const WATER_RULES: AutoLayerRule[] = [
   ...cornerRules(3, FT_WATER_CORNER_IN, WATER_CORNER_IN_BASE).map(r => ({ ...r, priority: 25 })),
 ]
 
-// ── Stone (intValue 4) ─────────────────────────────────────────────────────
-const STONE_CORNER_OUT_BASE: (number | -1)[] = [0, 0, -1, 0, 4, -1, -1, -1, -1]
-const STONE_CORNER_IN_BASE: (number | -1)[] = [0, 4, -1, 4, 4, -1, -1, -1, -1]
-const STONE_EDGE_BASE: (number | -1)[] = [-1, 0, -1, -1, 4, -1, -1, 4, -1]
-
-const STONE_RULES: AutoLayerRule[] = [
-  {
-    id: rid('stone_base'),
-    name: 'Stone Base',
-    intValue: 4,
-    pattern: [-1, -1, -1, -1, 4, -1, -1, -1, -1],
-    outputTileIdx: FT_STONE_BASE,
-    outputRotation: 0,
-    priority: 1,
-    enabled: true,
-  },
-  ...edgeRules(4, FT_STONE_EDGE, STONE_EDGE_BASE),
-  ...cornerRules(4, FT_STONE_CORNER_OUT, STONE_CORNER_OUT_BASE),
-  ...cornerRules(4, FT_STONE_CORNER_IN, STONE_CORNER_IN_BASE).map(r => ({ ...r, priority: 25 })),
-]
+// Stone family dropped — Shimmer's borders are CLOUDS (existing old-palette cloud
+// tiles, hand-placed) and the void beyond is the Ather page background, not tiles.
+// Flat tiles T106-T109 remain defined but unused.
 
 // ── Combined export ────────────────────────────────────────────────────────
 export const DEFAULT_AUTOLAYER_RULES: AutoLayerRule[] = [
   ...GRASS_RULES,
   ...PATH_RULES,
   ...WATER_RULES,
-  ...STONE_RULES,
 ]

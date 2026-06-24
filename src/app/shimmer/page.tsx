@@ -3120,8 +3120,12 @@ export default function ShimmerPage() {
 
         {/* Main content area */}
         <div className={isMobile ? 'flex flex-col flex-1 min-h-0' : 'flex gap-0'}>
-          {/* Canvas centering wrapper (mobile: flex-grow + center; desktop: grow into free width, center the letterboxed canvas box without vertical stretch) */}
-          <div className={isMobile ? 'flex-1 min-h-0 flex items-center justify-center bg-black' : 'flex-1 min-w-0 flex justify-center items-center p-3'}>
+          {/* Canvas centering wrapper (mobile: flex-grow + center; desktop: grow into free width, center the letterboxed canvas box without vertical stretch).
+              Background = the Ather: shows through the canvas's transparent margins (beyond the cloud-bordered island) + the letterbox, so the void beyond a map is dream-cosmos, not dead black. */}
+          <div
+            className={isMobile ? 'flex-1 min-h-0 flex items-center justify-center' : 'flex-1 min-w-0 flex justify-center items-center p-3'}
+            style={{ background: 'radial-gradient(ellipse 120% 85% at 50% 38%, #2a2348 0%, #1a1730 46%, #0e0c1c 100%)' }}
+          >
           {/* Canvas area — sized to the canvas itself so all overlays (mana, dialogue, etc.) anchor to the canvas edges */}
           <div
             className={isMobile ? 'relative w-full' : 'relative'}
