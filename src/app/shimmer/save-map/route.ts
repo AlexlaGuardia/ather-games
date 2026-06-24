@@ -4,6 +4,7 @@ import { join } from 'path'
 import { safeWriteFile as writeFile } from '../lib/backup'
 
 const WORLD_DIR = join(process.cwd(), 'src/app/shimmer/world')
+const INTGRIDS_FILE = join(WORLD_DIR, 'intgrids.ts')
 const TILES_FILE = join(WORLD_DIR, 'tiles.ts')
 const TILEMAP_FILE = join(WORLD_DIR, 'tilemap.ts')
 const NODES_FILE = join(WORLD_DIR, 'node-placements.ts')
@@ -1731,6 +1732,39 @@ export async function POST(req: NextRequest) {
       } catch { /* encounters file might not have this zone */ }
 
       return NextResponse.json({ success: true, deleted: id })
+    }
+
+    // ── Save IntGrid for zone ──
+    // body.intGrid: number[][] — semantic region layer painted in the editor.
+    // Upserts the zone's entry in intgrids.ts as a single key: value, line.
+    // Format kept flat (JSON.stringify row array per row) so the regex can reliably
+    // find the block start/end without multi-line ambiguity.
+    if (body.intGrid && Array.isArray(body.intGrid) && body.mapId) {
+      const igZoneId: string = body.mapId
+      const igGrid: number[][] = body.intGrid
+
+      // ONE line per zone (one-line-per-key) so the upsert regex matches the whole value
+      // with a line-anchored pattern. A multi-row form breaks non-greedy matching at the
+      // first inner '],' and corrupts the file on re-save.
+      const newEntry = `  '${igZoneId}': ${JSON.stringify(igGrid)},`
+
+      let igContent = await readFile(INTGRIDS_FILE, 'utf-8')
+
+      // Replace this zone's single-line entry, or insert before closing }
+      const esc = igZoneId.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+      const entryPattern = new RegExp(`^  '${esc}': \\[.*\\],$`, 'm')
+      if (entryPattern.test(igContent)) {
+        igContent = igContent.replace(entryPattern, newEntry)
+      } else {
+        // Insert before the closing brace of ZONE_INTGRIDS
+        const closeIdx = igContent.lastIndexOf('}')
+        if (closeIdx !== -1) {
+          igContent = igContent.substring(0, closeIdx) + newEntry + '\n' + igContent.substring(closeIdx)
+        }
+      }
+
+      await writeFile(INTGRIDS_FILE, igContent, 'utf-8')
+      saved.push('intGrid')
     }
 
     return NextResponse.json({ success: true, saved })

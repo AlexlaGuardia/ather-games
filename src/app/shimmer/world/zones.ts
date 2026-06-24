@@ -47,7 +47,8 @@ export function getZone(zones: Zone[], id: string): Zone | null {
 
 import { GARDEN, MYCELIAL_PATH, MOONWELL_GLADE, SPORE_HOLLOW, TWILIGHT_THICKET, THE_THRESHOLD, MANA_SPRINGS, SPIRIT_MEADOW, MOONWELL_GLADE_GREGORY_S_HOME , TEST_SANDBOX,
   FLAT_TERRAIN_DEMO,
-  FP_GARDEN, FP_LARGE_1, FP_LARGE_2, FP_LARGE_3, FP_MED_1, FP_MED_2, FP_MED_3, FP_MED_4, FP_HUGE } from './tilemap'
+  FP_GARDEN, FP_LARGE_1, FP_LARGE_2, FP_LARGE_3, FP_MED_1, FP_MED_2, FP_MED_3, FP_MED_4, FP_HUGE,
+  ROUTE_GARDEN_MYCELIAL, ROUTE_MYCELIAL_SPIRIT, ROUTE_SPIRIT_MOONWELL, ROUTE_MOONWELL_GARDEN } from './tilemap'
 
 export const ZONES: Zone[] = [
   {
@@ -234,6 +235,37 @@ export const ZONES: Zone[] = [
     id: 'fp-huge', name: 'Huge (256² chunk-bake proof)', grid: FP_HUGE,
     playerStart: { tileX: 128, tileY: 128 },
     warps: [{ fromX: 128, fromY: 255, toZone: 'fp-garden', toX: 24, toY: 20, direction: 'down' }],
+  },
+
+  // --- Garden-chain route zones (blank grass canvases for Alex to paint) ---
+  // Warps are intentionally empty — Alex places all chain warps in the editor.
+  {
+    id: 'route-garden-mycelial',
+    name: 'Garden–Mycelial Path',
+    grid: ROUTE_GARDEN_MYCELIAL,
+    playerStart: { tileX: 3, tileY: 7 },
+    warps: [],
+  },
+  {
+    id: 'route-mycelial-spirit',
+    name: 'Mycelial Path–Spirit Meadow',
+    grid: ROUTE_MYCELIAL_SPIRIT,
+    playerStart: { tileX: 3, tileY: 7 },
+    warps: [],
+  },
+  {
+    id: 'route-spirit-moonwell',
+    name: 'Spirit Meadow–Moonwell Glade',
+    grid: ROUTE_SPIRIT_MOONWELL,
+    playerStart: { tileX: 3, tileY: 7 },
+    warps: [],
+  },
+  {
+    id: 'route-moonwell-garden',
+    name: 'Moonwell Glade–Garden',
+    grid: ROUTE_MOONWELL_GARDEN,
+    playerStart: { tileX: 3, tileY: 7 },
+    warps: [],
   },
 ]
 

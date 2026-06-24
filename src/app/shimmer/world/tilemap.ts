@@ -390,3 +390,21 @@ export const FP_MED_4: number[][] = createStubMap(80, 80, [{ side: 'east',  posi
 // Chunked-bake proof map: 256x256 = 8192px sq = 67M px — 4x over the old iOS single-bake cap.
 // If this walks smooth on mobile, chunking works. Reach via ?zone=fp-huge.
 export const FP_HUGE: number[][] = createStubMap(256, 256, [{ side: 'south', positions: [128] }])
+
+// --- Garden-chain route zones (blank grass canvases for Alex to paint) ---
+// Each route is 36 wide x 14 tall, filled with FT_GRASS_BASE (tile 97).
+// No warps wired here — Alex places all chain warps in the editor.
+// Reach via ?zone=<id>
+function createGrassRoute(cols: number, rows: number): number[][] {
+  const grid: number[][] = []
+  for (let y = 0; y < rows; y++) {
+    const row: number[] = []
+    for (let x = 0; x < cols; x++) row.push(97)
+    grid.push(row)
+  }
+  return grid
+}
+export const ROUTE_GARDEN_MYCELIAL: number[][] = createGrassRoute(36, 14)
+export const ROUTE_MYCELIAL_SPIRIT: number[][] = createGrassRoute(36, 14)
+export const ROUTE_SPIRIT_MOONWELL: number[][] = createGrassRoute(36, 14)
+export const ROUTE_MOONWELL_GARDEN: number[][] = createGrassRoute(36, 14)

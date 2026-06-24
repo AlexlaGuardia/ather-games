@@ -20,6 +20,7 @@ import StampManager, { type Stamp } from './StampManager'
 import AutoLayerRules from './AutoLayerRules'
 import { evaluateAffected, type AutoLayerRule, BUILTIN_RULE_TEMPLATES } from './autolayer-engine'
 import { DEFAULT_AUTOLAYER_RULES } from '../../world/autolayer-rules'
+import { ZONE_INTGRIDS } from '../../world/intgrids'
 
 const TS = 32
 
@@ -956,7 +957,11 @@ export default function MapEditor() {
   const [stampHotkeys, setStampHotkeys] = useState<(string | null)[]>([null, null, null, null, null, null])
 
   // Auto-layer system
-  const [intGrid, setIntGrid] = useState<number[][]>(() => GARDEN.map(row => row.map(() => 0)))
+  const [intGrid, setIntGrid] = useState<number[][]>(() => {
+    const persisted = ZONE_INTGRIDS['garden']
+    if (persisted && persisted.length > 0) return persisted.map(r => [...r])
+    return GARDEN.map(row => row.map(() => 0))
+  })
   const [showIntGrid, setShowIntGrid] = useState(false)
   const [autoLayerRules, setAutoLayerRules] = useState<AutoLayerRule[]>(() => DEFAULT_AUTOLAYER_RULES)
   const INT_VALUES = [
@@ -1634,7 +1639,20 @@ export default function MapEditor() {
     setUndoStack([])
     setRedoStack([])
     setShowIntGrid(false)
-    setIntGrid([]) // Reset — will be rebuilt on next toggle or paint
+    // Restore persisted IntGrid for this zone if available, else zero-fill to grid size
+    {
+      const zoneRef = ZONES.find(z => z.id === mapId)
+      const persisted = ZONE_INTGRIDS[mapId]
+      if (persisted && persisted.length > 0) {
+        setIntGrid(persisted.map(r => [...r]))
+      } else if (zoneRef) {
+        const rows = zoneRef.grid.length
+        const cols = zoneRef.grid[0]?.length ?? 0
+        setIntGrid(Array.from({ length: rows }, () => new Array(cols).fill(0)))
+      } else {
+        setIntGrid([])
+      }
+    }
     // Immediately show the default grid to prevent stale blending
     const defaultGrid = ZONE_DEFAULTS[mapId]?.map(r => [...r]) ?? GARDEN.map(r => [...r])
     setGrid(defaultGrid)
@@ -1787,6 +1805,7 @@ export default function MapEditor() {
           structurePlacements: placedStructures,
           furniture: placedFurniture,
           zoneChests: placedZoneChests,
+          intGrid,
         }),
       })
       const data = await res.json()
@@ -1828,7 +1847,7 @@ export default function MapEditor() {
       setSaveStatus('error')
     }
     setTimeout(() => setSaveStatus('idle'), 4000)
-  }, [tiles, grid, activeMap, nodePlacements, warpPlacements])
+  }, [tiles, grid, activeMap, nodePlacements, warpPlacements, intGrid])
 
   const exportTiles = useCallback(() => {
     const lines: string[] = []
