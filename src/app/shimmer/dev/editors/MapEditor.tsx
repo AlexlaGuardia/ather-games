@@ -2509,91 +2509,115 @@ export default function MapEditor() {
             )}
           </button>
           {showAdvancedBrushes && (
-            <div className="px-3 py-2 bg-white/[0.01]">
-              <select
-                value={dropdownValue}
-                onChange={e => handleDropdownChange(e.target.value)}
-                className="bg-[#1a1a2e] border border-white/10 rounded px-3 py-2 text-[12px] text-white font-display focus:outline-none focus:border-gold/40 w-full mb-2"
-              >
-                <option value="eraser" className="bg-[#1a1a2e] text-white">Eraser</option>
-                {/* Full tile list — all categories including hidden-by-default old tiles */}
-                {[...CATEGORIES].sort((a, b) => a.label.localeCompare(b.label)).map(cat => {
-                  const catTiles = tiles.map((et, i) => ({ et, i })).filter(({ et }) => et.category === cat.id)
-                    .sort((a, b) => a.et.name.localeCompare(b.et.name))
-                  if (catTiles.length === 0) return null
-                  return (
-                    <optgroup key={cat.id} label={cat.label}>
-                      {catTiles.map(({ et, i }) => (
-                        <option key={i} value={`tile:${i}`} className="bg-[#1a1a2e] text-white">
-                          {et.name}{et.solid ? ' [solid]' : ''}{et.above ? ' [above]' : ''}
-                        </option>
+            <div className="px-3 py-2 bg-white/[0.01] space-y-3">
+              {/* ── Visual tile grid (replaces tile optgroups) ── */}
+              {[...CATEGORIES].sort((a, b) => a.label.localeCompare(b.label)).map(cat => {
+                const catTiles = tiles.map((et, i) => ({ et, i })).filter(({ et }) => et.category === cat.id)
+                  .sort((a, b) => a.et.name.localeCompare(b.et.name))
+                if (catTiles.length === 0) return null
+                return (
+                  <div key={cat.id}>
+                    <p className="text-[9px] text-text-faint/60 uppercase tracking-wider mb-1">{cat.label}</p>
+                    <div className="flex flex-wrap gap-0.5">
+                      {catTiles.map(({ i }) => (
+                        <BrushPreview
+                          key={i}
+                          entry={{ type: 'tile', tileIdx: i }}
+                          tiles={tiles}
+                          size={36}
+                          selected={dropdownValue === `tile:${i}`}
+                          onClick={() => handleDropdownChange(`tile:${i}`)}
+                        />
                       ))}
-                    </optgroup>
-                  )
-                })}
-                {(() => {
-                  const uncategorized = tiles.map((et, i) => ({ et, i })).filter(({ et }) => !CATEGORIES.some(c => c.id === et.category))
-                    .sort((a, b) => a.et.name.localeCompare(b.et.name))
-                  if (uncategorized.length === 0) return null
-                  return (
-                    <optgroup label="Unsorted">
-                      {uncategorized.map(({ et, i }) => (
-                        <option key={i} value={`tile:${i}`} className="bg-[#1a1a2e] text-white">
-                          {et.name}{et.solid ? ' [solid]' : ''}{et.above ? ' [above]' : ''}
-                        </option>
+                    </div>
+                  </div>
+                )
+              })}
+              {(() => {
+                const uncategorized = tiles.map((et, i) => ({ et, i })).filter(({ et }) => !CATEGORIES.some(c => c.id === et.category))
+                  .sort((a, b) => a.et.name.localeCompare(b.et.name))
+                if (uncategorized.length === 0) return null
+                return (
+                  <div>
+                    <p className="text-[9px] text-text-faint/60 uppercase tracking-wider mb-1">Unsorted</p>
+                    <div className="flex flex-wrap gap-0.5">
+                      {uncategorized.map(({ i }) => (
+                        <BrushPreview
+                          key={i}
+                          entry={{ type: 'tile', tileIdx: i }}
+                          tiles={tiles}
+                          size={36}
+                          selected={dropdownValue === `tile:${i}`}
+                          onClick={() => handleDropdownChange(`tile:${i}`)}
+                        />
                       ))}
-                    </optgroup>
-                  )
-                })()}
-                <optgroup label="Items">
-                  {ITEMS.map(item => (
-                    <option key={item.id} value={`item:${item.id}`} className="bg-[#1a1a2e] text-white">
-                      {item.name}{item.species ? ` (${item.species})` : ''}
-                    </option>
-                  ))}
-                </optgroup>
-                {(() => {
-                  const categories = ['Forestry', 'Prospecting', 'Rinning'] as const
-                  return categories.map(cat => {
-                    const nodes = Object.entries(NODE_TYPE_LABELS).filter(([, v]) => v.category === cat)
-                    if (nodes.length === 0) return null
-                    return (
-                      <optgroup key={cat} label={`Nodes: ${cat}`}>
-                        {nodes.map(([key, v]) => (
-                          <option key={key} value={`node:${key}`} className="bg-[#1a1a2e] text-white">
-                            {v.name}{v.above ? ' [above]' : ''}
-                          </option>
-                        ))}
-                      </optgroup>
-                    )
-                  })
-                })()}
-                {structures.length > 0 && (
-                  <optgroup label="Structures">
-                    {structures.map(s => (
-                      <option key={s.id} value={`struct:${s.id}`} className="bg-[#1a1a2e] text-white">
-                        {s.name} ({s.cols}x{s.rows})
+                    </div>
+                  </div>
+                )
+              })()}
+              {/* ── Other brushes (non-tile) — compact dropdown ── */}
+              <div>
+                <p className="text-[9px] text-text-faint/60 uppercase tracking-wider mb-1">Other brush</p>
+                <select
+                  value={['eraser', 'item', 'node', 'structure', 'furniture', 'zonechest'].some(t =>
+                    dropdownValue === 'eraser' || dropdownValue.startsWith('item:') || dropdownValue.startsWith('node:') ||
+                    dropdownValue.startsWith('struct:') || dropdownValue.startsWith('furn:') || dropdownValue.startsWith('zc:')
+                  ) ? dropdownValue : ''}
+                  onChange={e => handleDropdownChange(e.target.value)}
+                  className="bg-[#1a1a2e] border border-white/10 rounded px-2 py-1.5 text-[11px] text-white font-display focus:outline-none focus:border-gold/40 w-full"
+                >
+                  <option value="" disabled className="bg-[#1a1a2e] text-text-faint">— select other brush ▾</option>
+                  <option value="eraser" className="bg-[#1a1a2e] text-white">Eraser</option>
+                  <optgroup label="Items">
+                    {ITEMS.map(item => (
+                      <option key={item.id} value={`item:${item.id}`} className="bg-[#1a1a2e] text-white">
+                        {item.name}{item.species ? ` (${item.species})` : ''}
                       </option>
                     ))}
                   </optgroup>
-                )}
-                {FURNITURE.length > 0 && (
-                  <optgroup label="Furniture">
-                    {FURNITURE.map(f => (
-                      <option key={f.id} value={`furn:${f.id}`} className="bg-[#1a1a2e] text-white">
+                  {(() => {
+                    const nodeCategories = ['Forestry', 'Prospecting', 'Rinning'] as const
+                    return nodeCategories.map(cat => {
+                      const nodes = Object.entries(NODE_TYPE_LABELS).filter(([, v]) => v.category === cat)
+                      if (nodes.length === 0) return null
+                      return (
+                        <optgroup key={cat} label={`Nodes: ${cat}`}>
+                          {nodes.map(([key, v]) => (
+                            <option key={key} value={`node:${key}`} className="bg-[#1a1a2e] text-white">
+                              {v.name}{v.above ? ' [above]' : ''}
+                            </option>
+                          ))}
+                        </optgroup>
+                      )
+                    })
+                  })()}
+                  {structures.length > 0 && (
+                    <optgroup label="Structures">
+                      {structures.map(s => (
+                        <option key={s.id} value={`struct:${s.id}`} className="bg-[#1a1a2e] text-white">
+                          {s.name} ({s.cols}x{s.rows})
+                        </option>
+                      ))}
+                    </optgroup>
+                  )}
+                  {FURNITURE.length > 0 && (
+                    <optgroup label="Furniture">
+                      {FURNITURE.map(f => (
+                        <option key={f.id} value={`furn:${f.id}`} className="bg-[#1a1a2e] text-white">
+                          {f.name}
+                        </option>
+                      ))}
+                    </optgroup>
+                  )}
+                  <optgroup label="Zone Chests">
+                    {FURNITURE.filter(f => f.chestSlots).map(f => (
+                      <option key={`zc-${f.id}`} value={`zc:${f.id}`} className="bg-[#1a1a2e] text-white">
                         {f.name}
                       </option>
                     ))}
                   </optgroup>
-                )}
-                <optgroup label="Zone Chests">
-                  {FURNITURE.filter(f => f.chestSlots).map(f => (
-                    <option key={`zc-${f.id}`} value={`zc:${f.id}`} className="bg-[#1a1a2e] text-white">
-                      {f.name}
-                    </option>
-                  ))}
-                </optgroup>
-              </select>
+                </select>
+              </div>
             </div>
           )}
         </div>
