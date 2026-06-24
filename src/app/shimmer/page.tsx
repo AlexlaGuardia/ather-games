@@ -1443,7 +1443,7 @@ export default function ShimmerPage() {
           addItems(invRef.current, act.itemId, act.count)
           setInv({ ...invRef.current })
           break
-        case 'giveStarterSeed': {
+        case 'giveRandomSeed': {
           // RNG 1/pool — species-neutral to the player (the Ather chooses).
           // Pool = LAUNCHED_SPECIES (single source of truth; all 10 launched on placeholder sprites).
           const pick = LAUNCHED_SPECIES[Math.floor(Math.random() * LAUNCHED_SPECIES.length)]

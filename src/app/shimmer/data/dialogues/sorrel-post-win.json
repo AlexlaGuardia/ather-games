@@ -11,7 +11,7 @@
     { "id": "spw_4", "type": "text", "position": { "x": 0, "y": 480 }, "data": { "speaker": "narrator", "text": "He gathers his leashes and bolts up the high road, calling a name ahead of him as he goes." } },
     { "id": "spw_action", "type": "action", "position": { "x": 0, "y": 600 }, "data": {
       "actions": [
-        { "type": "giveItem", "itemId": "seed_axolotl", "count": 1 },
+        { "type": "giveRandomSeed" },
         { "type": "setFlag", "flag": "sorrelDefeated", "value": true }
       ]
     } }

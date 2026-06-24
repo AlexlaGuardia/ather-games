@@ -22,7 +22,7 @@
     { "id": "bpw_15", "type": "text", "position": { "x": 0, "y": 1800 }, "data": { "speaker": "Gregory", "text": "You see, Keeper? You did not beat them. You freed them. There is a difference, and it is the whole of the work." } },
     { "id": "bpw_action", "type": "action", "position": { "x": 0, "y": 1920 }, "data": {
       "actions": [
-        { "type": "giveItem", "itemId": "seed_water_bear", "count": 1 },
+        { "type": "giveRandomSeed" },
         { "type": "setFlag", "flag": "brackDefeated", "value": true },
         { "type": "setFlag", "flag": "moglinsReformed", "value": true }
       ]

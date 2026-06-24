@@ -61,7 +61,7 @@ export type DialogueAction =
   | { type: 'setEmotion'; npcId: string; emotion: string }
   // Grants a random Mana Seed from the ready-species pool.
   // Pool starts as ['fox','axolotl','water-bear']; widen to all 10 as sprites land.
-  | { type: 'giveStarterSeed' }
+  | { type: 'giveRandomSeed' }
 
 // ── Graph structure ──
 

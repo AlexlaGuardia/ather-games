@@ -16,7 +16,7 @@
     { "id": "gi_9", "type": "text", "position": { "x": 0, "y": 1080 }, "data": { "speaker": "Gregory", "text": "Go on home, Keeper. Put down roots. I will come by once you have a pot in the ground." } },
     { "id": "gi_action", "type": "action", "position": { "x": 0, "y": 1200 }, "data": {
       "actions": [
-        { "type": "giveStarterSeed" },
+        { "type": "giveRandomSeed" },
         { "type": "giveItem", "itemId": "mana_pot", "count": 1 },
         { "type": "giveItem", "itemId": "spirit_grimoire", "count": 1 },
         { "type": "giveItem", "itemId": "mana_spike", "count": 1 },
