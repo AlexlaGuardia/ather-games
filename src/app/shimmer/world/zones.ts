@@ -49,6 +49,7 @@ import { GARDEN, MYCELIAL_PATH, MOONWELL_GLADE, SPORE_HOLLOW, TWILIGHT_THICKET, 
   FLAT_TERRAIN_DEMO,
   FP_GARDEN, FP_LARGE_1, FP_LARGE_2, FP_LARGE_3, FP_MED_1, FP_MED_2, FP_MED_3, FP_MED_4, FP_HUGE,
   ROUTE_GARDEN_MYCELIAL, ROUTE_MYCELIAL_SPIRIT, ROUTE_SPIRIT_MOONWELL, ROUTE_MOONWELL_GARDEN } from './tilemap'
+import { CHAIN_GRIDS, CHAIN_WARPS, CHAIN_SPAWNS } from './garden-chain'
 
 export const ZONES: Zone[] = [
   {
@@ -268,5 +269,16 @@ export const ZONES: Zone[] = [
     warps: [],
   },
 ]
+
+// Garden-chain override (Serberus 2026-06-24): the 8 chain zones use code-generated
+// first-pass maps + ring warps + spawns. Old static grids/warps stay in source (unused
+// for these ids) so nothing is lost. Edit specs in garden-chain.ts + rebuild to iterate.
+for (const z of ZONES) {
+  if (CHAIN_GRIDS[z.id]) {
+    z.grid = CHAIN_GRIDS[z.id]
+    z.warps = CHAIN_WARPS[z.id]
+    z.playerStart = CHAIN_SPAWNS[z.id]
+  }
+}
 
 export const START_ZONE = 'garden'
