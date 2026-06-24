@@ -592,7 +592,7 @@ export default function ShimmerPage() {
         if (data.ge) geRef.current = geFromSave(data.ge)
         if (data.flags) flagsRef.current = data.flags
         // Dev account exclusive content
-        if (shimmerfileRef.current?.user_id === DEV_USER_ID) flagsRef.current['admin_beast'] = true
+        if (shimmerfileRef.current?.user_id === DEV_USER_ID) { flagsRef.current['admin_beast'] = true; setIsOwner(true) }
         if (data.collectedPickups) collectedPickupsRef.current = new Set(data.collectedPickups)
         if (data.spiritIndex) spiritIndexRef.current = indexFromSave(data.spiritIndex)
         if (data.quests) questStateRef.current = questFromSave(data.quests)
@@ -621,7 +621,7 @@ export default function ShimmerPage() {
       structureDefsRef.current = d.structures || []
     }).catch(() => {})
     // Dev account exclusive content
-    if (shimmerfileRef.current?.user_id === DEV_USER_ID) flagsRef.current['admin_beast'] = true
+    if (shimmerfileRef.current?.user_id === DEV_USER_ID) { flagsRef.current['admin_beast'] = true; setIsOwner(true) }
     applyZoneOverride(playerCharId)
     spawnZonePickups(zoneRef.current.id)
     setStarted(true)
@@ -3625,22 +3625,6 @@ export default function ShimmerPage() {
                 </button>
               )}
 
-              {/* Edit Map (owner-only, any zone) — jumps to the map editor focused on the
-                  zone you're standing in, so Alex draws layouts/warps in-context. Temporary
-                  dev tool; remove the gate later. */}
-              {isOwner && (
-                <button
-                  onClick={() => { window.location.href = `/shimmer/dev?mode=map&zone=${zoneRef.current.id}` }}
-                  className="flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-left transition-all hover:bg-[#d4a843]/10 text-text-dim"
-                  title={`Edit "${zoneRef.current.name}" in the map editor`}
-                >
-                  <svg width="18" height="18" viewBox="0 0 16 16" fill="none" className="flex-shrink-0">
-                    <path d="M2 11.5V14h2.5l7-7L9 4.5l-7 7ZM10 3.5L12.5 6 14 4.5 11.5 2 10 3.5Z" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/>
-                  </svg>
-                  <span className="text-sm font-display">Edit Map</span>
-                </button>
-              )}
-
               {/* Bag */}
               <button
                 onClick={() => { setBagOpen(prev => !prev); if (sidePanel === 'bag') setSidePanel(null) }}
@@ -3989,9 +3973,28 @@ export default function ShimmerPage() {
 
                 {/* Options panel */}
                 {sidePanel === 'options' && (
-                  <div className="text-center py-8">
-                    <p className="text-text-faint/40 text-[13px] font-display">Nothing to configure yet</p>
-                    <p className="text-text-faint/25 text-[13px] mt-1">Sound and controls coming soon</p>
+                  <div className="space-y-3">
+                    {isOwner && (
+                      <div className="space-y-1.5">
+                        <div className="text-[11px] text-text-faint/40 font-display uppercase tracking-wider">Dev · Map Tools</div>
+                        <button
+                          onClick={() => { window.location.href = `/shimmer/dev?mode=map&zone=${zoneRef.current.id}` }}
+                          className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-left bg-white/[0.03] border border-[#d4a843]/20 hover:bg-[#d4a843]/10 transition-all"
+                        >
+                          <svg width="18" height="18" viewBox="0 0 16 16" fill="none" className="flex-shrink-0 text-[#d4a843]">
+                            <path d="M2 11.5V14h2.5l7-7L9 4.5l-7 7ZM10 3.5L12.5 6 14 4.5 11.5 2 10 3.5Z" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/>
+                          </svg>
+                          <span className="flex-1 min-w-0">
+                            <span className="block text-sm font-display text-text">Edit Map</span>
+                            <span className="block text-[12px] text-text-faint/40 truncate">Draw &ldquo;{zoneRef.current.name}&rdquo; in the editor</span>
+                          </span>
+                        </button>
+                      </div>
+                    )}
+                    <div className="text-center py-6">
+                      <p className="text-text-faint/40 text-[13px] font-display">Nothing else to configure yet</p>
+                      <p className="text-text-faint/25 text-[13px] mt-1">Sound and controls coming soon</p>
+                    </div>
                   </div>
                 )}
 
@@ -4832,9 +4835,28 @@ export default function ShimmerPage() {
                 )
               })()}
               {menuView === 'settings' && (
-                <div className="text-center py-8">
-                  <p className="text-text-faint/40 text-[13px] font-display">Nothing to configure yet</p>
-                  <p className="text-text-faint/25 text-[13px] mt-1">Sound and controls coming soon</p>
+                <div className="space-y-3">
+                  {isOwner && (
+                    <div className="space-y-1.5">
+                      <div className="text-[11px] text-text-faint/40 font-display uppercase tracking-wider">Dev · Map Tools</div>
+                      <button
+                        onClick={() => { window.location.href = `/shimmer/dev?mode=map&zone=${zoneRef.current.id}` }}
+                        className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-left bg-white/[0.03] border border-[#d4a843]/20 hover:bg-[#d4a843]/10 transition-all"
+                      >
+                        <svg width="18" height="18" viewBox="0 0 16 16" fill="none" className="flex-shrink-0 text-[#d4a843]">
+                          <path d="M2 11.5V14h2.5l7-7L9 4.5l-7 7ZM10 3.5L12.5 6 14 4.5 11.5 2 10 3.5Z" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/>
+                        </svg>
+                        <span className="flex-1 min-w-0">
+                          <span className="block text-sm font-display text-text">Edit Map</span>
+                          <span className="block text-[12px] text-text-faint/40 truncate">Draw &ldquo;{zoneRef.current.name}&rdquo; in the editor</span>
+                        </span>
+                      </button>
+                    </div>
+                  )}
+                  <div className="text-center py-6">
+                    <p className="text-text-faint/40 text-[13px] font-display">Nothing else to configure yet</p>
+                    <p className="text-text-faint/25 text-[13px] mt-1">Sound and controls coming soon</p>
+                  </div>
                 </div>
               )}
             </div>
