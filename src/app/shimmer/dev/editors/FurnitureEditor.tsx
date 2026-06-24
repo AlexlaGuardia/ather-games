@@ -39,7 +39,7 @@ export default function FurnitureEditor({ onDeploy, deployState }: {
           const frames: Uint8Array[] = []
           for (const name of constNames) {
             if (data.frames[name]) {
-              frames.push(parseDigits(data.frames[name]))
+              frames.push(parseDigits(data.frames[name], 32 * 32))
             } else {
               frames.push(FURNITURE_ICONS[key]?.frames[0] ?? new Uint8Array(1024))
             }
@@ -111,7 +111,7 @@ export default function FurnitureEditor({ onDeploy, deployState }: {
         await fetch('/shimmer/save-sprite', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ species: 'furniture', anim: selected, frameIndex: data.frameCount - 1, digits: pixelsToDigits(currentPixels) }),
+          body: JSON.stringify({ species: 'furniture', anim: selected, frameIndex: data.frameCount - 1, digits: pixelsToDigits(currentPixels, 32) }),
         })
         await loadLiveData()
         setFrameIndex(data.frameCount - 1)
@@ -142,15 +142,15 @@ export default function FurnitureEditor({ onDeploy, deployState }: {
       switch (op) {
         case 'flipH': px = flipH(px, 32, 32); break
         case 'flipV': px = flipV(px, 32, 32); break
-        case 'shiftUp': px = shiftAllPixels(px, 0, -1); break
-        case 'shiftDown': px = shiftAllPixels(px, 0, 1); break
-        case 'shiftLeft': px = shiftAllPixels(px, -1, 0); break
-        case 'shiftRight': px = shiftAllPixels(px, 1, 0); break
+        case 'shiftUp': px = shiftAllPixels(px, 0, -1, 32); break
+        case 'shiftDown': px = shiftAllPixels(px, 0, 1, 32); break
+        case 'shiftLeft': px = shiftAllPixels(px, -1, 0, 32); break
+        case 'shiftRight': px = shiftAllPixels(px, 1, 0, 32); break
       }
       await fetch('/shimmer/save-sprite', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ species: 'furniture', anim: selected, frameIndex: i, digits: pixelsToDigits(px) }),
+        body: JSON.stringify({ species: 'furniture', anim: selected, frameIndex: i, digits: pixelsToDigits(px, 32) }),
       })
     }
     await loadLiveData()
