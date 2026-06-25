@@ -13,6 +13,12 @@ const START_ZONE = 'moonwell-glade'
 const WATER_ID = 8
 const UP = new THREE.Vector3(0, 1, 0)
 
+// Warp.direction (the way you were travelling) → camera azimuth, so you arrive looking INTO the
+// new zone instead of back at the return tile. up=north(-z) is yaw 0 (camera behind, at +z).
+const DIR_YAW: Record<string, number> = {
+  up: 0, down: Math.PI, left: Math.PI / 2, right: -Math.PI / 2,
+}
+
 type Cell = [number, number] // [col, row] == [x, z]
 
 function buckets(grid: number[][]) {
@@ -71,6 +77,7 @@ function Player({ posRef, zoneRef, onWarp }: {
   const keys = useRef<Record<string, boolean>>({})
   const yaw = useRef(0)
   const lastTile = useRef('')
+  const warpCd = useRef(0)
   const fwd = useMemo(() => new THREE.Vector3(), [])
   const right = useMemo(() => new THREE.Vector3(), [])
   const move = useMemo(() => new THREE.Vector3(), [])
@@ -104,13 +111,17 @@ function Player({ posRef, zoneRef, onWarp }: {
       yaw.current = Math.atan2(move.x, move.z)
     }
 
-    // warp on tile-enter — reuse the 2D engine's checkWarp verbatim
+    // warp on tile-enter — reuse the 2D engine's checkWarp verbatim. A short cooldown after
+    // each warp prevents an accidental instant bounce back through the return tile.
     const tx = Math.round(p.x), tz = Math.round(p.z)
     const tileKey = `${tx},${tz}`
-    if (tileKey !== lastTile.current) {
-      lastTile.current = tileKey
+    const tileChanged = tileKey !== lastTile.current
+    lastTile.current = tileKey
+    if (warpCd.current > 0) {
+      warpCd.current -= dt
+    } else if (tileChanged) {
       const w = checkWarp(ZONES, zoneRef.current.id, tx, tz)
-      if (w) onWarp(w)
+      if (w) { onWarp(w); warpCd.current = 0.4 }
     }
 
     const g = group.current!
@@ -133,8 +144,9 @@ function Player({ posRef, zoneRef, onWarp }: {
 }
 
 // Explicit follow-behind rig: camera = player + spherical(dist, yaw, pitch) every frame (zero lag).
-function CameraRig({ posRef }: { posRef: React.RefObject<THREE.Vector3> }) {
-  const yaw = useRef(0)
+// yawRef is shared with the parent so a warp can re-aim the camera into the new zone.
+function CameraRig({ posRef, yawRef }: { posRef: React.RefObject<THREE.Vector3>; yawRef: React.RefObject<number> }) {
+  const yaw = yawRef
   const pitch = useRef(0.6)
   const dist = useRef(11)
   useEffect(() => {
@@ -170,11 +182,12 @@ function CameraRig({ posRef }: { posRef: React.RefObject<THREE.Vector3> }) {
   return null
 }
 
-function Scene({ zone, posRef, zoneRef, onWarp }: {
+function Scene({ zone, posRef, zoneRef, onWarp, yawRef }: {
   zone: Zone
   posRef: React.RefObject<THREE.Vector3>
   zoneRef: React.RefObject<Zone>
   onWarp: (w: Warp) => void
+  yawRef: React.RefObject<number>
 }) {
   return (
     <>
@@ -189,7 +202,7 @@ function Scene({ zone, posRef, zoneRef, onWarp }: {
       />
       <ZoneGeometry key={zone.id} zone={zone} />
       <Player posRef={posRef} zoneRef={zoneRef} onWarp={onWarp} />
-      <CameraRig posRef={posRef} />
+      <CameraRig posRef={posRef} yawRef={yawRef} />
     </>
   )
 }
@@ -204,15 +217,17 @@ export default function Shimmer3D() {
     const ps = zone.playerStart ?? { tileX: 1, tileY: 1 }
     posRef.current = new THREE.Vector3(ps.tileX, 0.7, ps.tileY)
   }
+  const camYaw = useRef(0)
   const onWarp = useCallback((w: Warp) => {
     posRef.current!.set(w.toX, 0.7, w.toY)
+    if (w.direction && DIR_YAW[w.direction] !== undefined) camYaw.current = DIR_YAW[w.direction]
     setZoneId(w.toZone)
   }, [])
 
   return (
     <div style={{ position: 'fixed', inset: 0, background: '#bfe3ef' }}>
       <Canvas shadows camera={{ fov: 45, position: [1, 6, 14], near: 0.1, far: 500 }} gl={{ antialias: true }}>
-        <Scene zone={zone} posRef={posRef as React.RefObject<THREE.Vector3>} zoneRef={zoneRef} onWarp={onWarp} />
+        <Scene zone={zone} posRef={posRef as React.RefObject<THREE.Vector3>} zoneRef={zoneRef} onWarp={onWarp} yawRef={camYaw} />
       </Canvas>
       <div style={{
         position: 'fixed', top: 12, left: 12, padding: '8px 12px', borderRadius: 8,
