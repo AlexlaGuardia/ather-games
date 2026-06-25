@@ -17,8 +17,11 @@ always the placeholder ("build systems not art"). The full-map blockout we just 
 - **Stack:** Three.js via **React Three Fiber** (`@react-three/fiber` + `@react-three/drei`), same ather-games
   Next.js project. `three` is already a dep. **NOT Unity** (separate C# toolchain, GPU-heavy editor, pulls out
   of the web stack we're fluent in — parked).
-- **Camera:** **top-down / isometric 3D** (Don't Starve / A Short Hike angle). Grid movement maps 1:1 to 3D
-  x,z; zones/warps survive unchanged. FPS is Supra's lane, not Shimmer's.
+- **Camera:** **third-person follow-behind** (perspective, drag-to-orbit + scroll-zoom, pitch clamped to a
+  cozy down-angle band). *Updated 2026-06-25 — we spiked iso first, Alex preferred third-person.* Movement is
+  **camera-relative** (W = where the camera faces; the character turns to its heading). Grid still drives
+  collision/layout; warps stay tile-based for now (revisit if free-movement makes them feel off). FPS is
+  Supra's lane, not Shimmer's.
 - **Art sourcing:** **asset packs first** (Kenney / Quaternius — CC0, commercial-safe) to stand the world up
   fast; Blender + Mixamo (free auto-rig + animation) as the skill ramps. This is what lets pixels go down NOW.
 - **Editor cap — the anti-black-hole rule:** NO in-app 3D editor suite. 3D content is authored in **external**
