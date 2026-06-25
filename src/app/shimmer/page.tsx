@@ -1711,6 +1711,13 @@ export default function ShimmerPage() {
         }
         if (!dialogueRef.current.active && !channelRef.current) {
           updatePlayer(player, input.state, currentZone.grid, blockedTiles)
+        } else {
+          // Movement locked (dialogue/channeling): updatePlayer normally snapshots
+          // prevX=x each tick. Skipping it leaves prevX stale at the pre-arrival tile
+          // while x sits on the target, so the render lerps prevX→x every frame and the
+          // sprite shakes a full tile. Keep the snapshot in sync so it holds still.
+          player.prevX = player.x
+          player.prevY = player.y
         }
 
         // Update NPC patrols (paused during dialogue to prevent NPC walking away mid-conversation)
