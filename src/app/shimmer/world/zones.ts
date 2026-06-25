@@ -72,10 +72,18 @@ export const ZONES: Zone[] = [
     grid: MYCELIAL_PATH,
     playerStart: { tileX: 2, tileY: 8 },
     warps: [
-      { fromX: 0, fromY: 7, toZone: 'route-garden-mycelial', toX: 28, toY: 5, direction: 'left' },
-      { fromX: 0, fromY: 8, toZone: 'route-garden-mycelial', toX: 28, toY: 5, direction: 'left' },
-      { fromX: 21, fromY: 7, toZone: 'route-mycelial-spirit', toX: 1, toY: 5, direction: 'right' },
-      { fromX: 21, fromY: 8, toZone: 'route-mycelial-spirit', toX: 1, toY: 5, direction: 'right' },
+      // NORTH → Spirit Meadows (via connector)
+      { fromX: 10, fromY: 0, toZone: 'route-mycelial-spirit', toX: 1, toY: 5, direction: 'up' },
+      { fromX: 11, fromY: 0, toZone: 'route-mycelial-spirit', toX: 1, toY: 5, direction: 'up' },
+      // EAST → Route One → Home Plot
+      { fromX: 21, fromY: 7, toZone: 'route-garden-mycelial', toX: 28, toY: 5, direction: 'right' },
+      { fromX: 21, fromY: 8, toZone: 'route-garden-mycelial', toX: 28, toY: 5, direction: 'right' },
+      // WEST → Wooded Pass → Twilight Thicket (provisional until those areas are whiteboarded)
+      { fromX: 0, fromY: 7, toZone: 'twilight-thicket', toX: 1, toY: 9, direction: 'left' },
+      { fromX: 0, fromY: 8, toZone: 'twilight-thicket', toX: 1, toY: 9, direction: 'left' },
+      // SOUTH → Voranyx Caverns (the east arm; provisional until that branch is whiteboarded)
+      { fromX: 5, fromY: 15, toZone: 'spore-hollow', toX: 1, toY: 12, direction: 'down' },
+      { fromX: 6, fromY: 15, toZone: 'spore-hollow', toX: 1, toY: 12, direction: 'down' },
     ],
   },
   {
@@ -99,8 +107,8 @@ export const ZONES: Zone[] = [
     grid: SPORE_HOLLOW,
     playerStart: { tileX: 1, tileY: 12 },
     warps: [
-      { fromX: 0, fromY: 12, toZone: 'moonwell-glade', toX: 28, toY: 15, direction: 'left' },
-      { fromX: 0, fromY: 13, toZone: 'moonwell-glade', toX: 28, toY: 15, direction: 'left' },
+      { fromX: 0, fromY: 12, toZone: 'mycelial-path', toX: 5, toY: 14, direction: 'up' }, // → Mycelial Path (refined with the east arm)
+      { fromX: 0, fromY: 13, toZone: 'mycelial-path', toX: 5, toY: 14, direction: 'up' },
       // East exit to Twilight Thicket
       { fromX: 54, fromY: 9, toZone: 'twilight-thicket', toX: 1, toY: 9, direction: 'right' },
       { fromX: 54, fromY: 10, toZone: 'twilight-thicket', toX: 1, toY: 10, direction: 'right' },
@@ -114,9 +122,9 @@ export const ZONES: Zone[] = [
     grid: TWILIGHT_THICKET,
     playerStart: { tileX: 1, tileY: 9 },
     warps: [
-      // West entry back to Spore Hollow
-      { fromX: 0, fromY: 9, toZone: 'spore-hollow', toX: 53, toY: 9, direction: 'left' },
-      { fromX: 0, fromY: 10, toZone: 'spore-hollow', toX: 53, toY: 10, direction: 'left' },
+      // West entry → Mycelial Path (Wooded Pass side; refined when we whiteboard Twilight Thicket)
+      { fromX: 0, fromY: 9, toZone: 'mycelial-path', toX: 1, toY: 7, direction: 'left' },
+      { fromX: 0, fromY: 10, toZone: 'mycelial-path', toX: 1, toY: 7, direction: 'left' },
     ],
   },
   {
@@ -288,8 +296,8 @@ export const ZONES: Zone[] = [
     warps: [
       { fromX: 0, fromY: 4, toZone: 'garden', toX: 1, toY: 9, direction: 'left' }, // back to Home Plot WEST edge
       { fromX: 0, fromY: 5, toZone: 'garden', toX: 1, toY: 9, direction: 'left' },
-      { fromX: 29, fromY: 4, toZone: 'mycelial-path', toX: 1, toY: 8, direction: 'right' },
-      { fromX: 29, fromY: 5, toZone: 'mycelial-path', toX: 1, toY: 8, direction: 'right' },
+      { fromX: 29, fromY: 4, toZone: 'mycelial-path', toX: 20, toY: 7, direction: 'left' }, // arrive at Mycelial EAST
+      { fromX: 29, fromY: 5, toZone: 'mycelial-path', toX: 20, toY: 7, direction: 'left' },
     ],
   },
   {
@@ -298,8 +306,8 @@ export const ZONES: Zone[] = [
     grid: ROUTE_MYCELIAL_SPIRIT,
     playerStart: { tileX: 2, tileY: 5 },
     warps: [
-      { fromX: 0, fromY: 4, toZone: 'mycelial-path', toX: 20, toY: 8, direction: 'left' },
-      { fromX: 0, fromY: 5, toZone: 'mycelial-path', toX: 20, toY: 8, direction: 'left' },
+      { fromX: 0, fromY: 4, toZone: 'mycelial-path', toX: 10, toY: 1, direction: 'down' }, // arrive at Mycelial NORTH
+      { fromX: 0, fromY: 5, toZone: 'mycelial-path', toX: 10, toY: 1, direction: 'down' },
       { fromX: 29, fromY: 4, toZone: 'spirit-meadow', toX: 5, toY: 14, direction: 'up' }, // arrive at Spirit Meadow bottom-left
       { fromX: 29, fromY: 5, toZone: 'spirit-meadow', toX: 5, toY: 14, direction: 'up' },
     ],
