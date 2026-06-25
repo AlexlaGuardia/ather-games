@@ -12,7 +12,7 @@ import { ZONES, getZone, checkWarp, type Zone, type Warp } from '../world/zones'
 import { getHeightGrid } from '../world/heightmaps'
 
 const START_ZONE = 'moonwell-glade'
-const WATER_ID = 8, FLOOR_ID = 97, WALL_ID = 34, WARP_ID = 14
+const WATER_ID = 8, FLOOR_ID = 97, WALL_ID = 34, WARP_ID = 14, MIST_ID = 31
 const VOID = -1 // empty cell — renders nothing, not walkable (draw land onto an empty grid)
 const STEP = 1.0
 const MAX_TIER = 8
@@ -20,21 +20,22 @@ const UP = new THREE.Vector3(0, 1, 0)
 const DIR_YAW: Record<string, number> = { up: 0, down: Math.PI, left: Math.PI / 2, right: -Math.PI / 2 }
 
 type Cell = [number, number]
-type Tool = 'raise' | 'lower' | 'floor' | 'wall' | 'water' | 'warp' | 'void'
+type Tool = 'raise' | 'lower' | 'floor' | 'wall' | 'water' | 'mist' | 'warp' | 'void'
 
 function buckets(grid: number[][]) {
-  const floors: Cell[] = [], walls: Cell[] = [], waters: Cell[] = [], voids: Cell[] = [], warps: Cell[] = []
+  const floors: Cell[] = [], walls: Cell[] = [], waters: Cell[] = [], voids: Cell[] = [], warps: Cell[] = [], mists: Cell[] = []
   const rows = grid.length, cols = grid[0].length
   for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) {
     const v = grid[r][c]
     if (v === VOID) { voids.push([c, r]); continue }
     const id = v & 0xFF
     if (id === WARP_ID) warps.push([c, r])
+    else if (id === MIST_ID) mists.push([c, r])
     else if (id === WATER_ID) waters.push([c, r])
     else if (walkable(grid, c, r)) floors.push([c, r])
     else walls.push([c, r])
   }
-  return { floors, walls, waters, voids, warps }
+  return { floors, walls, waters, voids, warps, mists }
 }
 
 function lerpAngle(a: number, b: number, t: number) {
@@ -95,6 +96,23 @@ function FloorTerrain({ floors, heights, version, paint, editing, color = '#7cc4
   )
 }
 
+// Wispy translucent cloud over mist cells — encounter areas you walk through.
+function MistOverlay({ mists, heights }: { mists: Cell[]; heights: number[][] }) {
+  const ref = useRef<THREE.InstancedMesh>(null)
+  useLayoutEffect(() => {
+    const mesh = ref.current!
+    const m = new THREE.Matrix4(), q = new THREE.Quaternion(), pos = new THREE.Vector3(), scl = new THREE.Vector3(0.98, 0.8, 0.98)
+    mists.forEach(([c, r], i) => { pos.set(c, (heights[r]?.[c] ?? 0) * STEP + 0.55, r); m.compose(pos, q, scl); mesh.setMatrixAt(i, m) })
+    mesh.instanceMatrix.needsUpdate = true
+  }, [mists, heights])
+  return (
+    <instancedMesh ref={ref} args={[undefined, undefined, Math.max(mists.length, 1)]}>
+      <boxGeometry args={[1, 1, 1]} />
+      <meshStandardMaterial color="#eef4ff" transparent opacity={0.42} emissive="#ffffff" emissiveIntensity={0.12} depthWrite={false} />
+    </instancedMesh>
+  )
+}
+
 // A tall glowing beacon over each warp marker so doors/exits read from any angle.
 function WarpBeacons({ warps, heights }: { warps: Cell[]; heights: number[][] }) {
   const ref = useRef<THREE.InstancedMesh>(null)
@@ -136,12 +154,16 @@ function ZoneGeometry({ gridRef, heights, version, paint, editing }: {
   gridRef: React.RefObject<number[][]>; heights: number[][]; version: number
   paint: (c: number, r: number, shift: boolean) => void; editing: boolean
 }) {
-  const { floors, walls, waters, voids, warps } = useMemo(() => buckets(gridRef.current), [version, gridRef])
+  const { floors, walls, waters, voids, warps, mists } = useMemo(() => buckets(gridRef.current), [version, gridRef])
   return (
     <>
       <FloorTerrain floors={floors} heights={heights} version={version} paint={paint} editing={editing} />
-      <Tiles cells={walls} size={[1, 1.3, 1]} y={0.55} color="#8a8d96" paint={paint} editing={editing} />
+      {/* solid clouds = the walls */}
+      <Tiles cells={walls} size={[1, 1.3, 1]} y={0.55} color="#e3e9f4" paint={paint} editing={editing} />
       <Tiles cells={waters} size={[1, 0.3, 1]} y={-0.15} color="#3aa0d6" opacity={0.85} paint={paint} editing={editing} />
+      {/* cloud mist = walkable encounter areas: land + a wispy translucent overlay */}
+      <FloorTerrain floors={mists} heights={heights} version={version} paint={paint} editing={editing} />
+      <MistOverlay mists={mists} heights={heights} />
       {/* warp markers — glowing gold columns + beacons (you place; Jin wires the destinations) */}
       <FloorTerrain floors={warps} heights={heights} version={version} paint={paint} editing={editing} color="#caa233" emissive="#ffcf4d" />
       <WarpBeacons warps={warps} heights={heights} />
@@ -326,7 +348,8 @@ function Scene(props: {
 
 const TOOLS: { id: Tool; label: string }[] = [
   { id: 'floor', label: 'Land' }, { id: 'raise', label: 'Raise' }, { id: 'lower', label: 'Lower' },
-  { id: 'wall', label: 'Wall' }, { id: 'water', label: 'Water' }, { id: 'warp', label: 'Warp' }, { id: 'void', label: 'Erase' },
+  { id: 'wall', label: 'Cloud' }, { id: 'water', label: 'Water' }, { id: 'mist', label: 'Mist' },
+  { id: 'warp', label: 'Warp' }, { id: 'void', label: 'Erase' },
 ]
 
 export default function Shimmer3D() {
@@ -376,6 +399,7 @@ export default function Shimmer3D() {
       else if (t === 'wall') G[rr][cc] = WALL_ID
       else if (t === 'water') G[rr][cc] = WATER_ID
       else if (t === 'floor') G[rr][cc] = FLOOR_ID
+      else if (t === 'mist') G[rr][cc] = MIST_ID
       else if (t === 'warp') G[rr][cc] = WARP_ID
       else if (t === 'void') { G[rr][cc] = VOID; H[rr][cc] = 0 }
       if (t === 'raise') H[rr][cc] = Math.max(0, H[rr][cc])
@@ -463,7 +487,7 @@ export default function Shimmer3D() {
 
       {editMode && (
         <div style={{ position: 'fixed', top: 12, right: 12, display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'flex-end' }}>
-          <div style={{ display: 'flex', gap: 6 }}>
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end', maxWidth: 480 }}>
             {TOOLS.map((t) => <Btn key={t.id} active={tool === t.id} onClick={() => setTool(t.id)}>{t.label}</Btn>)}
           </div>
           <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
