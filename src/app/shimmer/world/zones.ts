@@ -103,21 +103,22 @@ export const ZONES: Zone[] = [
     id: 'spore-hollow',      // Voranyx Caverns — 1st Floor (id kept as spore-hollow)
     name: 'Voranyx Caverns',
     element: 'earth',
-    grid: SPORE_HOLLOW,
-    playerStart: { tileX: 12, tileY: 1 },
+    grid: SPORE_HOLLOW, // 60x32, redesigned in the editor by Alex (with encounter mist)
+    playerStart: { tileX: 15, tileY: 1 },
     warps: [
-      // TOP (cols 12-13) → up to Mycelial Path (its south opening)
-      { fromX: 12, fromY: 0, toZone: 'mycelial-path', toX: 1, toY: 7, direction: 'up' }, // east arm orphaned pending its redesign
-      { fromX: 13, fromY: 0, toZone: 'mycelial-path', toX: 1, toY: 8, direction: 'up' },
-      // BOTTOM (cols 11-12) → down to Mana Springs (its top opening, cols 8-9)
-      { fromX: 11, fromY: 21, toZone: 'mana-springs', toX: 8, toY: 1, direction: 'down' },
-      { fromX: 12, fromY: 21, toZone: 'mana-springs', toX: 9, toY: 1, direction: 'down' },
-      // RIGHT-edge portal (a) → 2nd Floor (arrive at its left edge)
-      { fromX: 25, fromY: 15, toZone: 'voranyx-deep', toX: 1, toY: 11, direction: 'right' },
-      { fromX: 25, fromY: 16, toZone: 'voranyx-deep', toX: 1, toY: 12, direction: 'right' },
-      // LEFT-edge portal (b) → 2nd Floor (arrive at its top-right)
-      { fromX: 0, fromY: 8, toZone: 'voranyx-deep', toX: 22, toY: 1, direction: 'down' },
-      { fromX: 0, fromY: 9, toZone: 'voranyx-deep', toX: 23, toY: 1, direction: 'down' },
+      // N door (15-16,0) → Mycelium Path. NOTE: Mycelial's redesign has no Voranyx return
+      //   door yet, so this is one-way until Alex adds a door on Mycelial's side.
+      { fromX: 15, fromY: 0, toZone: 'mycelial-path', toX: 1, toY: 7, direction: 'up' },
+      { fromX: 16, fromY: 0, toZone: 'mycelial-path', toX: 1, toY: 8, direction: 'up' },
+      // S door (23-24,59) → Mana Springs (its top opening)
+      { fromX: 23, fromY: 59, toZone: 'mana-springs', toX: 8, toY: 1, direction: 'down' },
+      { fromX: 24, fromY: 59, toZone: 'mana-springs', toX: 9, toY: 1, direction: 'down' },
+      // E door (31,17-18) → 2nd Floor (east wall). PROVISIONAL landing — rewired when Alex bakes the 2nd floor.
+      { fromX: 31, fromY: 17, toZone: 'voranyx-deep', toX: 1, toY: 11, direction: 'right' },
+      { fromX: 31, fromY: 18, toZone: 'voranyx-deep', toX: 1, toY: 12, direction: 'right' },
+      // W door (0,49-50) → 2nd Floor (west wall). PROVISIONAL landing — rewired when Alex bakes the 2nd floor.
+      { fromX: 0, fromY: 49, toZone: 'voranyx-deep', toX: 1, toY: 11, direction: 'right' },
+      { fromX: 0, fromY: 50, toZone: 'voranyx-deep', toX: 1, toY: 12, direction: 'right' },
     ],
   },
   {
@@ -127,12 +128,13 @@ export const ZONES: Zone[] = [
     grid: VORANYX_DEEP,
     playerStart: { tileX: 1, tileY: 11 },
     warps: [
-      // LEFT-edge portal (a) → back to 1st Floor (its right edge)
-      { fromX: 0, fromY: 11, toZone: 'spore-hollow', toX: 24, toY: 15, direction: 'left' },
-      { fromX: 0, fromY: 12, toZone: 'spore-hollow', toX: 24, toY: 16, direction: 'left' },
-      // TOP-right portal (b) → back to 1st Floor (its left edge)
-      { fromX: 22, fromY: 0, toZone: 'spore-hollow', toX: 1, toY: 8, direction: 'up' },
-      { fromX: 23, fromY: 0, toZone: 'spore-hollow', toX: 1, toY: 9, direction: 'up' },
+      // PROVISIONAL until Alex bakes the 2nd floor — these land at the new 1st-floor E/W doors.
+      // → 1st Floor E door (east wall)
+      { fromX: 0, fromY: 11, toZone: 'spore-hollow', toX: 30, toY: 17, direction: 'left' },
+      { fromX: 0, fromY: 12, toZone: 'spore-hollow', toX: 30, toY: 18, direction: 'left' },
+      // → 1st Floor W door (west wall)
+      { fromX: 22, fromY: 0, toZone: 'spore-hollow', toX: 1, toY: 49, direction: 'right' },
+      { fromX: 23, fromY: 0, toZone: 'spore-hollow', toX: 1, toY: 50, direction: 'right' },
       // BOTTOM (cols 19-20) = passage to The Silt — LOCKED/sealed in v1 (no warp yet)
     ],
   },
@@ -183,9 +185,9 @@ export const ZONES: Zone[] = [
     grid: MANA_SPRINGS,
     playerStart: { tileX: 8, tileY: 1 },
     warps: [
-      // TOP (cols 8-9) → up to Voranyx Caverns 1st Floor (its bottom opening)
-      { fromX: 8, fromY: 0, toZone: 'spore-hollow', toX: 11, toY: 20, direction: 'up' },
-      { fromX: 9, fromY: 0, toZone: 'spore-hollow', toX: 12, toY: 20, direction: 'up' },
+      // TOP (cols 8-9) → up to Voranyx Caverns 1st Floor (its S door)
+      { fromX: 8, fromY: 0, toZone: 'spore-hollow', toX: 23, toY: 58, direction: 'up' },
+      { fromX: 9, fromY: 0, toZone: 'spore-hollow', toX: 24, toY: 58, direction: 'up' },
       // LEFT (rows 7-8) → Route 2 (arrive at its right opening, rows 13-14)
       { fromX: 0, fromY: 7, toZone: 'route-2', toX: 28, toY: 13, direction: 'left' },
       { fromX: 0, fromY: 8, toZone: 'route-2', toX: 28, toY: 14, direction: 'left' },
