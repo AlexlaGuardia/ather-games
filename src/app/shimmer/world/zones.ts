@@ -96,8 +96,9 @@ export const ZONES: Zone[] = [
       // LEFT (rows 8-9) → Moonwell Pass (enter its east opening)
       { fromX: 0, fromY: 8, toZone: 'route-moonwell-garden', toX: 28, toY: 7, direction: 'left' },
       { fromX: 0, fromY: 9, toZone: 'route-moonwell-garden', toX: 28, toY: 8, direction: 'left' },
-      // Greg's house door (col 10, row 13) → his home interior
-      { fromX: 10, fromY: 13, toZone: 'moonwell-glade-gregory-s-home', toX: 4, toY: 8, direction: 'up' },
+      // Greg's house door (cols 22-23, row 17 — placed in the editor) → his home interior
+      { fromX: 22, fromY: 17, toZone: 'moonwell-glade-gregory-s-home', toX: 4, toY: 8, direction: 'up' },
+      { fromX: 23, fromY: 17, toZone: 'moonwell-glade-gregory-s-home', toX: 5, toY: 8, direction: 'up' },
     ],
   },
   {
@@ -305,10 +306,9 @@ export const ZONES: Zone[] = [
     grid: MOONWELL_GLADE_GREGORY_S_HOME,
     playerStart: { tileX: 4, tileY: 8 },
     warps: [
-      // Door at the bottom → back out to the Glade (below the house). Was (14,14) — out of
-      // bounds for this 10x10 room, which is why the interior used to be a dead-end.
-      { fromX: 4, fromY: 9, toZone: 'moonwell-glade', toX: 10, toY: 14, direction: 'down' },
-      { fromX: 5, fromY: 9, toZone: 'moonwell-glade', toX: 10, toY: 14, direction: 'down' },
+      // Door at the bottom → back out to the Glade, just south of Greg's house door (22-23,17).
+      { fromX: 4, fromY: 9, toZone: 'moonwell-glade', toX: 22, toY: 18, direction: 'down' },
+      { fromX: 5, fromY: 9, toZone: 'moonwell-glade', toX: 23, toY: 18, direction: 'down' },
     ],
   },
   {
