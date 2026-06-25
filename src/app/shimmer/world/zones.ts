@@ -156,14 +156,13 @@ export const ZONES: Zone[] = [
     grid: SPIRIT_MEADOW,
     playerStart: { tileX: 2, tileY: 8 },
     warps: [
-      { fromX: 0, fromY: 7, toZone: 'route-mycelial-spirit', toX: 28, toY: 5, direction: 'left' },
-      { fromX: 0, fromY: 8, toZone: 'route-mycelial-spirit', toX: 28, toY: 5, direction: 'left' },
-      // Spirit Meadow → Moonwell Pass (enter near its NORTH opening). Edge refined when we whiteboard this area.
-      { fromX: 21, fromY: 7, toZone: 'route-moonwell-garden', toX: 14, toY: 2, direction: 'down' },
-      { fromX: 21, fromY: 8, toZone: 'route-moonwell-garden', toX: 14, toY: 2, direction: 'down' },
-      // North to Mana Springs (gated: need defeated_thistle)
-      { fromX: 14, fromY: 0, toZone: 'mana-springs', toX: 12, toY: 18, direction: 'up', requiredFlag: 'defeated_thistle' },
-      { fromX: 15, fromY: 0, toZone: 'mana-springs', toX: 13, toY: 18, direction: 'up', requiredFlag: 'defeated_thistle' },
+      // BOTTOM-LEFT → Mycelial Path (per Alex's Spirit Meadows whiteboard)
+      { fromX: 5, fromY: 15, toZone: 'route-mycelial-spirit', toX: 28, toY: 5, direction: 'down' },
+      { fromX: 6, fromY: 15, toZone: 'route-mycelial-spirit', toX: 28, toY: 5, direction: 'down' },
+      // BOTTOM-RIGHT → Moonwell Pass
+      { fromX: 15, fromY: 15, toZone: 'route-moonwell-garden', toX: 14, toY: 2, direction: 'down' },
+      { fromX: 16, fromY: 15, toZone: 'route-moonwell-garden', toX: 14, toY: 2, direction: 'down' },
+      // NOTE: the Mana Springs ascent / defeated_thistle gate is re-wired when we whiteboard the east arm.
     ],
   },
   {
@@ -301,8 +300,8 @@ export const ZONES: Zone[] = [
     warps: [
       { fromX: 0, fromY: 4, toZone: 'mycelial-path', toX: 20, toY: 8, direction: 'left' },
       { fromX: 0, fromY: 5, toZone: 'mycelial-path', toX: 20, toY: 8, direction: 'left' },
-      { fromX: 29, fromY: 4, toZone: 'spirit-meadow', toX: 1, toY: 8, direction: 'right' },
-      { fromX: 29, fromY: 5, toZone: 'spirit-meadow', toX: 1, toY: 8, direction: 'right' },
+      { fromX: 29, fromY: 4, toZone: 'spirit-meadow', toX: 5, toY: 14, direction: 'up' }, // arrive at Spirit Meadow bottom-left
+      { fromX: 29, fromY: 5, toZone: 'spirit-meadow', toX: 5, toY: 14, direction: 'up' },
     ],
   },
   {
@@ -330,8 +329,8 @@ export const ZONES: Zone[] = [
       { fromX: 29, fromY: 7, toZone: 'moonwell-glade', toX: 2, toY: 8, direction: 'right' },
       { fromX: 29, fromY: 8, toZone: 'moonwell-glade', toX: 2, toY: 8, direction: 'right' },
       // NORTH → Spirit Meadows
-      { fromX: 14, fromY: 0, toZone: 'spirit-meadow', toX: 2, toY: 8, direction: 'up' },
-      { fromX: 15, fromY: 0, toZone: 'spirit-meadow', toX: 2, toY: 8, direction: 'up' },
+      { fromX: 14, fromY: 0, toZone: 'spirit-meadow', toX: 15, toY: 14, direction: 'up' }, // arrive at Spirit Meadow bottom-right
+      { fromX: 15, fromY: 0, toZone: 'spirit-meadow', toX: 15, toY: 14, direction: 'up' },
     ],
   },
 ]
