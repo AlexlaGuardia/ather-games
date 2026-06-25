@@ -45,7 +45,7 @@ export function getZone(zones: Zone[], id: string): Zone | null {
 // Garden → east → Moonwell Glade (shortcut, blocked until tutorialComplete)
 // Moonwell Glade → east → Spore Hollow (post-tutorial)
 
-import { GARDEN, MYCELIAL_PATH, MOONWELL_GLADE, SPORE_HOLLOW, TWILIGHT_THICKET, WOODED_TRAIL, THE_THRESHOLD, MANA_SPRINGS, SPIRIT_MEADOW, MOONWELL_GLADE_GREGORY_S_HOME, SORREL_HOLD, BRACK_HOLD, TEST_SANDBOX,
+import { GARDEN, MYCELIAL_PATH, MOONWELL_GLADE, SPORE_HOLLOW, VORANYX_DEEP, TWILIGHT_THICKET, WOODED_TRAIL, THE_THRESHOLD, MANA_SPRINGS, SPIRIT_MEADOW, MOONWELL_GLADE_GREGORY_S_HOME, SORREL_HOLD, BRACK_HOLD, TEST_SANDBOX,
   FLAT_TERRAIN_DEMO,
   FP_GARDEN, FP_LARGE_1, FP_LARGE_2, FP_LARGE_3, FP_MED_1, FP_MED_2, FP_MED_3, FP_MED_4, FP_HUGE,
   ROUTE_GARDEN_MYCELIAL, ROUTE_MYCELIAL_SPIRIT, ROUTE_SPIRIT_MOONWELL, ROUTE_MOONWELL_GARDEN } from './tilemap'
@@ -82,8 +82,8 @@ export const ZONES: Zone[] = [
       { fromX: 0, fromY: 7, toZone: 'wooded-trail', toX: 25, toY: 8, direction: 'left' },
       { fromX: 0, fromY: 8, toZone: 'wooded-trail', toX: 25, toY: 8, direction: 'left' },
       // SOUTH → Voranyx Caverns (the east arm; provisional until that branch is whiteboarded)
-      { fromX: 5, fromY: 15, toZone: 'spore-hollow', toX: 1, toY: 12, direction: 'down' },
-      { fromX: 6, fromY: 15, toZone: 'spore-hollow', toX: 1, toY: 12, direction: 'down' },
+      { fromX: 5, fromY: 15, toZone: 'spore-hollow', toX: 12, toY: 1, direction: 'down' },
+      { fromX: 6, fromY: 15, toZone: 'spore-hollow', toX: 13, toY: 1, direction: 'down' },
     ],
   },
   {
@@ -101,17 +101,40 @@ export const ZONES: Zone[] = [
     ],
   },
   {
-    id: 'spore-hollow',      // retheme → Voranyx Caverns (east passage that "opens to the Silt", sealed in v1)
+    id: 'spore-hollow',      // Voranyx Caverns — 1st Floor (id kept as spore-hollow)
     name: 'Voranyx Caverns',
     element: 'earth',
     grid: SPORE_HOLLOW,
-    playerStart: { tileX: 1, tileY: 12 },
+    playerStart: { tileX: 12, tileY: 1 },
     warps: [
-      { fromX: 0, fromY: 12, toZone: 'mycelial-path', toX: 5, toY: 14, direction: 'up' }, // → Mycelial Path (refined with the east arm)
-      { fromX: 0, fromY: 13, toZone: 'mycelial-path', toX: 5, toY: 14, direction: 'up' },
-      // East exit to Twilight Thicket
-      { fromX: 54, fromY: 9, toZone: 'twilight-thicket', toX: 1, toY: 9, direction: 'right' },
-      { fromX: 54, fromY: 10, toZone: 'twilight-thicket', toX: 1, toY: 10, direction: 'right' },
+      // TOP (cols 12-13) → up to Mycelial Path (its south opening)
+      { fromX: 12, fromY: 0, toZone: 'mycelial-path', toX: 5, toY: 14, direction: 'up' },
+      { fromX: 13, fromY: 0, toZone: 'mycelial-path', toX: 5, toY: 14, direction: 'up' },
+      // BOTTOM (cols 11-12) → down to Mana Springs (its north opening)
+      { fromX: 11, fromY: 21, toZone: 'mana-springs', toX: 12, toY: 1, direction: 'down' },
+      { fromX: 12, fromY: 21, toZone: 'mana-springs', toX: 12, toY: 1, direction: 'down' },
+      // RIGHT-edge portal (a) → 2nd Floor (arrive at its left edge)
+      { fromX: 25, fromY: 15, toZone: 'voranyx-deep', toX: 1, toY: 11, direction: 'right' },
+      { fromX: 25, fromY: 16, toZone: 'voranyx-deep', toX: 1, toY: 12, direction: 'right' },
+      // LEFT-edge portal (b) → 2nd Floor (arrive at its top-right)
+      { fromX: 0, fromY: 8, toZone: 'voranyx-deep', toX: 22, toY: 1, direction: 'down' },
+      { fromX: 0, fromY: 9, toZone: 'voranyx-deep', toX: 23, toY: 1, direction: 'down' },
+    ],
+  },
+  {
+    id: 'voranyx-deep',
+    name: 'Voranyx Caverns — 2nd Floor',
+    element: 'earth',
+    grid: VORANYX_DEEP,
+    playerStart: { tileX: 1, tileY: 11 },
+    warps: [
+      // LEFT-edge portal (a) → back to 1st Floor (its right edge)
+      { fromX: 0, fromY: 11, toZone: 'spore-hollow', toX: 24, toY: 15, direction: 'left' },
+      { fromX: 0, fromY: 12, toZone: 'spore-hollow', toX: 24, toY: 16, direction: 'left' },
+      // TOP-right portal (b) → back to 1st Floor (its left edge)
+      { fromX: 22, fromY: 0, toZone: 'spore-hollow', toX: 1, toY: 8, direction: 'up' },
+      { fromX: 23, fromY: 0, toZone: 'spore-hollow', toX: 1, toY: 9, direction: 'up' },
+      // BOTTOM (cols 19-20) = passage to The Silt — LOCKED/sealed in v1 (no warp yet)
     ],
   },
   // --- New zones (song-inspired, placeholder grids) ---
@@ -161,9 +184,10 @@ export const ZONES: Zone[] = [
     grid: MANA_SPRINGS,
     playerStart: { tileX: 12, tileY: 1 },
     warps: [
-      // North entry back to Moonwell Glade
-      { fromX: 12, fromY: 0, toZone: 'moonwell-glade', toX: 14, toY: 28, direction: 'up' },
-      { fromX: 13, fromY: 0, toZone: 'moonwell-glade', toX: 15, toY: 28, direction: 'up' },
+      // North → up to Voranyx Caverns 1st Floor (its bottom opening). Supersedes the old
+      // Moonwell-Glade link (Moonwell stays reachable via the west-core routes).
+      { fromX: 12, fromY: 0, toZone: 'spore-hollow', toX: 11, toY: 20, direction: 'up' },
+      { fromX: 13, fromY: 0, toZone: 'spore-hollow', toX: 12, toY: 20, direction: 'up' },
       // South exit to Spirit Meadow (return path)
       { fromX: 12, fromY: 19, toZone: 'spirit-meadow', toX: 14, toY: 1, direction: 'down' },
       { fromX: 13, fromY: 19, toZone: 'spirit-meadow', toX: 15, toY: 1, direction: 'down' },
