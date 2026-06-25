@@ -113,29 +113,28 @@ export const ZONES: Zone[] = [
       // S door (23-24,59) → Mana Springs (its top opening)
       { fromX: 23, fromY: 59, toZone: 'mana-springs', toX: 8, toY: 1, direction: 'down' },
       { fromX: 24, fromY: 59, toZone: 'mana-springs', toX: 9, toY: 1, direction: 'down' },
-      // E door (31,17-18) → 2nd Floor (east wall). PROVISIONAL landing — rewired when Alex bakes the 2nd floor.
-      { fromX: 31, fromY: 17, toZone: 'voranyx-deep', toX: 1, toY: 11, direction: 'right' },
-      { fromX: 31, fromY: 18, toZone: 'voranyx-deep', toX: 1, toY: 12, direction: 'right' },
-      // W door (0,49-50) → 2nd Floor (west wall). PROVISIONAL landing — rewired when Alex bakes the 2nd floor.
-      { fromX: 0, fromY: 49, toZone: 'voranyx-deep', toX: 1, toY: 11, direction: 'right' },
-      { fromX: 0, fromY: 50, toZone: 'voranyx-deep', toX: 1, toY: 12, direction: 'right' },
+      // E door (31,17-18) → 2nd Floor's E door (east wall)
+      { fromX: 31, fromY: 17, toZone: 'voranyx-deep', toX: 30, toY: 15, direction: 'left' },
+      { fromX: 31, fromY: 18, toZone: 'voranyx-deep', toX: 30, toY: 16, direction: 'left' },
+      // W door (0,49-50) → 2nd Floor's W door (west wall)
+      { fromX: 0, fromY: 49, toZone: 'voranyx-deep', toX: 1, toY: 34, direction: 'right' },
+      { fromX: 0, fromY: 50, toZone: 'voranyx-deep', toX: 1, toY: 35, direction: 'right' },
     ],
   },
   {
     id: 'voranyx-deep',
     name: 'Voranyx Caverns — 2nd Floor',
     element: 'earth',
-    grid: VORANYX_DEEP,
-    playerStart: { tileX: 1, tileY: 11 },
+    grid: VORANYX_DEEP, // 60x32, redesigned in the editor by Alex (with encounter mist)
+    playerStart: { tileX: 30, tileY: 15 },
     warps: [
-      // PROVISIONAL until Alex bakes the 2nd floor — these land at the new 1st-floor E/W doors.
-      // → 1st Floor E door (east wall)
-      { fromX: 0, fromY: 11, toZone: 'spore-hollow', toX: 30, toY: 17, direction: 'left' },
-      { fromX: 0, fromY: 12, toZone: 'spore-hollow', toX: 30, toY: 18, direction: 'left' },
-      // → 1st Floor W door (west wall)
-      { fromX: 22, fromY: 0, toZone: 'spore-hollow', toX: 1, toY: 49, direction: 'right' },
-      { fromX: 23, fromY: 0, toZone: 'spore-hollow', toX: 1, toY: 50, direction: 'right' },
-      // BOTTOM (cols 19-20) = passage to The Silt — LOCKED/sealed in v1 (no warp yet)
+      // E door (31,15-16) → 1st Floor's E door (east wall)
+      { fromX: 31, fromY: 15, toZone: 'spore-hollow', toX: 30, toY: 17, direction: 'left' },
+      { fromX: 31, fromY: 16, toZone: 'spore-hollow', toX: 30, toY: 18, direction: 'left' },
+      // W door (0,34-35) → 1st Floor's W door (west wall)
+      { fromX: 0, fromY: 34, toZone: 'spore-hollow', toX: 1, toY: 49, direction: 'right' },
+      { fromX: 0, fromY: 35, toZone: 'spore-hollow', toX: 1, toY: 50, direction: 'right' },
+      // S door (28-29,59) = passage to The Silt — LOCKED + unreachable by design in v1 (no warp).
     ],
   },
   // --- New zones (song-inspired, placeholder grids) ---
