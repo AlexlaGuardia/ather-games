@@ -141,12 +141,12 @@ export const ZONES: Zone[] = [
     id: 'twilight-thicket',
     name: 'Twilight Thicket',
     element: 'earth', // future Shimmeroak Thicket (wood/forestry)
-    grid: TWILIGHT_THICKET,
-    playerStart: { tileX: 12, tileY: 18 },
+    grid: TWILIGHT_THICKET, // 100x80, redesigned in the editor by Alex (with encounter mist)
+    playerStart: { tileX: 78, tileY: 51 },
     warps: [
-      // BOTTOM exit (cols 12-13) → Wooded Trail (its W door)
-      { fromX: 12, fromY: 19, toZone: 'wooded-trail', toX: 1, toY: 11, direction: 'right' },
-      { fromX: 13, fromY: 19, toZone: 'wooded-trail', toX: 1, toY: 12, direction: 'right' },
+      // E door (79,51-52, placed in the editor) — the only door → Wooded Trail (its W door)
+      { fromX: 79, fromY: 51, toZone: 'wooded-trail', toX: 1, toY: 11, direction: 'right' },
+      { fromX: 79, fromY: 52, toZone: 'wooded-trail', toX: 1, toY: 12, direction: 'right' },
     ],
   },
   {
@@ -159,9 +159,9 @@ export const ZONES: Zone[] = [
       // E door (49,11-12, placed in the editor) → Mycelial Path (its L door)
       { fromX: 49, fromY: 11, toZone: 'mycelial-path', toX: 1, toY: 7, direction: 'right' },
       { fromX: 49, fromY: 12, toZone: 'mycelial-path', toX: 1, toY: 8, direction: 'right' },
-      // W door (0,11-12) → Twilight Thicket (its bottom door)
-      { fromX: 0, fromY: 11, toZone: 'twilight-thicket', toX: 12, toY: 18, direction: 'up' },
-      { fromX: 0, fromY: 12, toZone: 'twilight-thicket', toX: 13, toY: 18, direction: 'up' },
+      // W door (0,11-12) → Twilight Thicket (its E door)
+      { fromX: 0, fromY: 11, toZone: 'twilight-thicket', toX: 78, toY: 51, direction: 'left' },
+      { fromX: 0, fromY: 12, toZone: 'twilight-thicket', toX: 78, toY: 52, direction: 'left' },
     ],
   },
   {
