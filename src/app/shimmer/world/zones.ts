@@ -235,9 +235,9 @@ export const ZONES: Zone[] = [
       // TOP → back up to Gloview Village (its bottom-left opening, cols 2-3)
       { fromX: 10, fromY: 0, toZone: 'gloview-village', toX: 2, toY: 20, direction: 'up' },
       { fromX: 11, fromY: 0, toZone: 'gloview-village', toX: 3, toY: 20, direction: 'up' },
-      // BOTTOM-RIGHT (cols 18-19) → The Outfields (arrive at its north opening)
-      { fromX: 18, fromY: 27, toZone: 'the-outfields', toX: 14, toY: 1, direction: 'down' },
-      { fromX: 19, fromY: 27, toZone: 'the-outfields', toX: 15, toY: 1, direction: 'down' },
+      // BOTTOM-RIGHT (cols 18-19) → The Outfields (arrive at its north opening, cols 6-7)
+      { fromX: 18, fromY: 27, toZone: 'the-outfields', toX: 6, toY: 1, direction: 'down' },
+      { fromX: 19, fromY: 27, toZone: 'the-outfields', toX: 7, toY: 1, direction: 'down' },
     ],
   },
   {
@@ -245,11 +245,11 @@ export const ZONES: Zone[] = [
     name: 'The Outfields',
     element: 'earth',
     grid: THE_OUTFIELDS,
-    playerStart: { tileX: 14, tileY: 1 },
+    playerStart: { tileX: 6, tileY: 1 },
     warps: [
-      // NORTH → back up to Route 3 (its bottom opening, cols 18-19)
-      { fromX: 14, fromY: 0, toZone: 'route-3', toX: 18, toY: 26, direction: 'up' },
-      { fromX: 15, fromY: 0, toZone: 'route-3', toX: 19, toY: 26, direction: 'up' },
+      // NORTH (cols 6-7) → back up to Route 3 (its bottom opening, cols 18-19)
+      { fromX: 6, fromY: 0, toZone: 'route-3', toX: 18, toY: 26, direction: 'up' },
+      { fromX: 7, fromY: 0, toZone: 'route-3', toX: 19, toY: 26, direction: 'up' },
     ],
   },
   {
