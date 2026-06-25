@@ -57,10 +57,12 @@ export const ZONES: Zone[] = [
     grid: GARDEN,
     playerStart: { tileX: 2, tileY: 9 },
     warps: [
-      { fromX: 25, fromY: 8, toZone: 'route-garden-mycelial', toX: 1, toY: 5, direction: 'right' },
-      { fromX: 25, fromY: 9, toZone: 'route-garden-mycelial', toX: 1, toY: 5, direction: 'right' },
-      { fromX: 0, fromY: 8, toZone: 'route-moonwell-garden', toX: 28, toY: 5, direction: 'left' },
-      { fromX: 0, fromY: 9, toZone: 'route-moonwell-garden', toX: 28, toY: 5, direction: 'left' },
+      // WEST edge → Route One (leads to Mycelial Path)
+      { fromX: 0, fromY: 8, toZone: 'route-garden-mycelial', toX: 1, toY: 5, direction: 'left' },
+      { fromX: 0, fromY: 9, toZone: 'route-garden-mycelial', toX: 1, toY: 5, direction: 'left' },
+      // EAST edge → Moonwell Pass (hub to Moonwell Glade + Spirit Meadow)
+      { fromX: 25, fromY: 8, toZone: 'route-moonwell-garden', toX: 28, toY: 5, direction: 'right' },
+      { fromX: 25, fromY: 9, toZone: 'route-moonwell-garden', toX: 28, toY: 5, direction: 'right' },
     ],
   },
   {
@@ -279,12 +281,12 @@ export const ZONES: Zone[] = [
   // Grids + warps + spawns are now static; edit here or via Map Editor (saves stick).
   {
     id: 'route-garden-mycelial',
-    name: 'Garden–Mycelial Path',
+    name: 'Route One',     // Home Plot WEST ↔ Mycelial Path (per Alex's Home Plot whiteboard)
     grid: ROUTE_GARDEN_MYCELIAL,
     playerStart: { tileX: 2, tileY: 5 },
     warps: [
-      { fromX: 0, fromY: 4, toZone: 'garden', toX: 24, toY: 9, direction: 'left' },
-      { fromX: 0, fromY: 5, toZone: 'garden', toX: 24, toY: 9, direction: 'left' },
+      { fromX: 0, fromY: 4, toZone: 'garden', toX: 1, toY: 9, direction: 'left' }, // back to Home Plot WEST edge
+      { fromX: 0, fromY: 5, toZone: 'garden', toX: 1, toY: 9, direction: 'left' },
       { fromX: 29, fromY: 4, toZone: 'mycelial-path', toX: 1, toY: 8, direction: 'right' },
       { fromX: 29, fromY: 5, toZone: 'mycelial-path', toX: 1, toY: 8, direction: 'right' },
     ],
@@ -315,14 +317,14 @@ export const ZONES: Zone[] = [
   },
   {
     id: 'route-moonwell-garden',
-    name: 'Moonwell Glade–Garden',
+    name: 'Moonwell Pass',     // Home Plot EAST ↔ Moonwell Glade (hub; Spirit Meadow leg added when we wire this area)
     grid: ROUTE_MOONWELL_GARDEN,
     playerStart: { tileX: 2, tileY: 5 },
     warps: [
       { fromX: 0, fromY: 4, toZone: 'moonwell-glade', toX: 20, toY: 8, direction: 'left' },
       { fromX: 0, fromY: 5, toZone: 'moonwell-glade', toX: 20, toY: 8, direction: 'left' },
-      { fromX: 29, fromY: 4, toZone: 'garden', toX: 1, toY: 9, direction: 'right' },
-      { fromX: 29, fromY: 5, toZone: 'garden', toX: 1, toY: 9, direction: 'right' },
+      { fromX: 29, fromY: 4, toZone: 'garden', toX: 24, toY: 9, direction: 'right' }, // back to Home Plot EAST edge
+      { fromX: 29, fromY: 5, toZone: 'garden', toX: 24, toY: 9, direction: 'right' },
     ],
   },
 ]
