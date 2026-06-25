@@ -74,9 +74,9 @@ export const ZONES: Zone[] = [
       // R door (29,14-15, placed in the editor) → Route 1 (Home Plot)
       { fromX: 29, fromY: 14, toZone: 'route-garden-mycelial', toX: 1, toY: 13, direction: 'right' }, // arrive at Route 1's W door
       { fromX: 29, fromY: 15, toZone: 'route-garden-mycelial', toX: 1, toY: 14, direction: 'right' },
-      // L door (0,7-8) → Wooded Trail (its east opening)
-      { fromX: 0, fromY: 7, toZone: 'wooded-trail', toX: 25, toY: 8, direction: 'left' },
-      { fromX: 0, fromY: 8, toZone: 'wooded-trail', toX: 25, toY: 8, direction: 'left' },
+      // L door (0,7-8) → Wooded Trail (its E door)
+      { fromX: 0, fromY: 7, toZone: 'wooded-trail', toX: 48, toY: 11, direction: 'left' },
+      { fromX: 0, fromY: 8, toZone: 'wooded-trail', toX: 48, toY: 12, direction: 'left' },
       // N door (8-9,49) → Spirit Meadows (its south-left door, direct — connector retired)
       { fromX: 8, fromY: 49, toZone: 'spirit-meadow', toX: 10, toY: 38, direction: 'up' },
       { fromX: 9, fromY: 49, toZone: 'spirit-meadow', toX: 11, toY: 38, direction: 'up' },
@@ -144,24 +144,24 @@ export const ZONES: Zone[] = [
     grid: TWILIGHT_THICKET,
     playerStart: { tileX: 12, tileY: 18 },
     warps: [
-      // BOTTOM exit (cols 12-13) → back down to Wooded Trail (arrive by its north exit).
-      { fromX: 12, fromY: 19, toZone: 'wooded-trail', toX: 4, toY: 2, direction: 'down' },
-      { fromX: 13, fromY: 19, toZone: 'wooded-trail', toX: 4, toY: 2, direction: 'down' },
+      // BOTTOM exit (cols 12-13) → Wooded Trail (its W door)
+      { fromX: 12, fromY: 19, toZone: 'wooded-trail', toX: 1, toY: 11, direction: 'right' },
+      { fromX: 13, fromY: 19, toZone: 'wooded-trail', toX: 1, toY: 12, direction: 'right' },
     ],
   },
   {
     id: 'wooded-trail',
     name: 'Wooded Trail',
     element: 'earth', // wooded/forestry pocket between Mycelial Path and Twilight Thicket
-    grid: WOODED_TRAIL,
-    playerStart: { tileX: 25, tileY: 8 },
+    grid: WOODED_TRAIL, // 30x50, redesigned in the editor by Alex (with encounter mist)
+    playerStart: { tileX: 48, tileY: 11 },
     warps: [
-      // EAST → back to Mycelial Path (its west opening, rows 7-8)
-      { fromX: 27, fromY: 7, toZone: 'mycelial-path', toX: 1, toY: 7, direction: 'right' }, // arrive at Mycelial's L door
-      { fromX: 27, fromY: 8, toZone: 'mycelial-path', toX: 1, toY: 8, direction: 'right' },
-      // NORTH (top-left, cols 4-5) → up into Twilight Thicket (arrive at its bottom exit)
-      { fromX: 4, fromY: 0, toZone: 'twilight-thicket', toX: 12, toY: 18, direction: 'up' },
-      { fromX: 5, fromY: 0, toZone: 'twilight-thicket', toX: 12, toY: 18, direction: 'up' },
+      // E door (49,11-12, placed in the editor) → Mycelial Path (its L door)
+      { fromX: 49, fromY: 11, toZone: 'mycelial-path', toX: 1, toY: 7, direction: 'right' },
+      { fromX: 49, fromY: 12, toZone: 'mycelial-path', toX: 1, toY: 8, direction: 'right' },
+      // W door (0,11-12) → Twilight Thicket (its bottom door)
+      { fromX: 0, fromY: 11, toZone: 'twilight-thicket', toX: 12, toY: 18, direction: 'up' },
+      { fromX: 0, fromY: 12, toZone: 'twilight-thicket', toX: 13, toY: 18, direction: 'up' },
     ],
   },
   {
