@@ -45,7 +45,7 @@ export function getZone(zones: Zone[], id: string): Zone | null {
 // Garden → east → Moonwell Glade (shortcut, blocked until tutorialComplete)
 // Moonwell Glade → east → Spore Hollow (post-tutorial)
 
-import { GARDEN, MYCELIAL_PATH, MOONWELL_GLADE, SPORE_HOLLOW, VORANYX_DEEP, TWILIGHT_THICKET, WOODED_TRAIL, THE_THRESHOLD, MANA_SPRINGS, ROUTE_2, SPIRIT_MEADOW, MOONWELL_GLADE_GREGORY_S_HOME, SORREL_HOLD, BRACK_HOLD, TEST_SANDBOX,
+import { GARDEN, MYCELIAL_PATH, MOONWELL_GLADE, SPORE_HOLLOW, VORANYX_DEEP, TWILIGHT_THICKET, WOODED_TRAIL, THE_THRESHOLD, MANA_SPRINGS, ROUTE_2, GLOVIEW_VILLAGE, SPIRIT_MEADOW, MOONWELL_GLADE_GREGORY_S_HOME, SORREL_HOLD, BRACK_HOLD, TEST_SANDBOX,
   FLAT_TERRAIN_DEMO,
   FP_GARDEN, FP_LARGE_1, FP_LARGE_2, FP_LARGE_3, FP_MED_1, FP_MED_2, FP_MED_3, FP_MED_4, FP_HUGE,
   ROUTE_GARDEN_MYCELIAL, ROUTE_MYCELIAL_SPIRIT, ROUTE_SPIRIT_MOONWELL, ROUTE_MOONWELL_GARDEN } from './tilemap'
@@ -187,9 +187,9 @@ export const ZONES: Zone[] = [
       // TOP (cols 8-9) → up to Voranyx Caverns 1st Floor (its bottom opening)
       { fromX: 8, fromY: 0, toZone: 'spore-hollow', toX: 11, toY: 20, direction: 'up' },
       { fromX: 9, fromY: 0, toZone: 'spore-hollow', toX: 12, toY: 20, direction: 'up' },
-      // LEFT (rows 7-8) → Route 2 (arrive at its east opening)
-      { fromX: 0, fromY: 7, toZone: 'route-2', toX: 20, toY: 6, direction: 'left' },
-      { fromX: 0, fromY: 8, toZone: 'route-2', toX: 20, toY: 7, direction: 'left' },
+      // LEFT (rows 7-8) → Route 2 (arrive at its right opening, rows 13-14)
+      { fromX: 0, fromY: 7, toZone: 'route-2', toX: 28, toY: 13, direction: 'left' },
+      { fromX: 0, fromY: 8, toZone: 'route-2', toX: 28, toY: 14, direction: 'left' },
       // (old south→Spirit Meadow + gated east→Sorrel Hold retired — east arm re-laid per
       //  whiteboards; Sorrel/Brack reconnect through the new topology when built.)
     ],
@@ -198,12 +198,25 @@ export const ZONES: Zone[] = [
     id: 'route-2',
     name: 'Route 2',
     grid: ROUTE_2,
-    playerStart: { tileX: 20, tileY: 6 },
+    playerStart: { tileX: 28, tileY: 13 },
     warps: [
-      // EAST → back to Mana Springs (its left opening, rows 7-8)
-      { fromX: 21, fromY: 6, toZone: 'mana-springs', toX: 1, toY: 7, direction: 'right' },
-      { fromX: 21, fromY: 7, toZone: 'mana-springs', toX: 1, toY: 8, direction: 'right' },
-      // WEST opening reserved for the next area (unwired until whiteboarded)
+      // RIGHT (rows 13-14) → back to Mana Springs (its left opening, rows 7-8)
+      { fromX: 29, fromY: 13, toZone: 'mana-springs', toX: 1, toY: 7, direction: 'right' },
+      { fromX: 29, fromY: 14, toZone: 'mana-springs', toX: 1, toY: 8, direction: 'right' },
+      // LEFT (rows 2-3) → Gloview Village (arrive at its east opening)
+      { fromX: 0, fromY: 2, toZone: 'gloview-village', toX: 22, toY: 8, direction: 'left' },
+      { fromX: 0, fromY: 3, toZone: 'gloview-village', toX: 22, toY: 9, direction: 'left' },
+    ],
+  },
+  {
+    id: 'gloview-village',
+    name: 'Gloview Village',
+    grid: GLOVIEW_VILLAGE,
+    playerStart: { tileX: 22, tileY: 8 },
+    warps: [
+      // EAST → back to Route 2 (its left opening, rows 2-3)
+      { fromX: 23, fromY: 8, toZone: 'route-2', toX: 1, toY: 2, direction: 'right' },
+      { fromX: 23, fromY: 9, toZone: 'route-2', toX: 1, toY: 3, direction: 'right' },
     ],
   },
   {
