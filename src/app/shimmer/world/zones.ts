@@ -110,9 +110,9 @@ export const ZONES: Zone[] = [
       //   door yet, so this is one-way until Alex adds a door on Mycelial's side.
       { fromX: 15, fromY: 0, toZone: 'mycelial-path', toX: 1, toY: 7, direction: 'up' },
       { fromX: 16, fromY: 0, toZone: 'mycelial-path', toX: 1, toY: 8, direction: 'up' },
-      // S door (23-24,59) → Mana Springs (its top opening)
-      { fromX: 23, fromY: 59, toZone: 'mana-springs', toX: 8, toY: 1, direction: 'down' },
-      { fromX: 24, fromY: 59, toZone: 'mana-springs', toX: 9, toY: 1, direction: 'down' },
+      // S door (23-24,59) → Mana Springs (its N door)
+      { fromX: 23, fromY: 59, toZone: 'mana-springs', toX: 30, toY: 1, direction: 'down' },
+      { fromX: 24, fromY: 59, toZone: 'mana-springs', toX: 31, toY: 1, direction: 'down' },
       // E door (31,17-18) → 2nd Floor's E door (east wall)
       { fromX: 31, fromY: 17, toZone: 'voranyx-deep', toX: 30, toY: 15, direction: 'left' },
       { fromX: 31, fromY: 18, toZone: 'voranyx-deep', toX: 30, toY: 16, direction: 'left' },
@@ -181,17 +181,15 @@ export const ZONES: Zone[] = [
     id: 'mana-springs',
     name: 'Mana Springs',
     element: 'earth', // mining / ore
-    grid: MANA_SPRINGS,
-    playerStart: { tileX: 8, tileY: 1 },
+    grid: MANA_SPRINGS, // 100x100, redesigned in the editor by Alex (with encounter mist)
+    playerStart: { tileX: 30, tileY: 1 },
     warps: [
-      // TOP (cols 8-9) → up to Voranyx Caverns 1st Floor (its S door)
-      { fromX: 8, fromY: 0, toZone: 'spore-hollow', toX: 23, toY: 58, direction: 'up' },
-      { fromX: 9, fromY: 0, toZone: 'spore-hollow', toX: 24, toY: 58, direction: 'up' },
-      // LEFT (rows 7-8) → Route 2 (arrive at its right opening, rows 13-14)
-      { fromX: 0, fromY: 7, toZone: 'route-2', toX: 28, toY: 13, direction: 'left' },
-      { fromX: 0, fromY: 8, toZone: 'route-2', toX: 28, toY: 14, direction: 'left' },
-      // (old south→Spirit Meadow + gated east→Sorrel Hold retired — east arm re-laid per
-      //  whiteboards; Sorrel/Brack reconnect through the new topology when built.)
+      // N door (30-31,0) → Voranyx Caverns 1st Floor (its S door)
+      { fromX: 30, fromY: 0, toZone: 'spore-hollow', toX: 23, toY: 58, direction: 'up' },
+      { fromX: 31, fromY: 0, toZone: 'spore-hollow', toX: 24, toY: 58, direction: 'up' },
+      // W door (0,76-77) → Route Two (its right opening)
+      { fromX: 0, fromY: 76, toZone: 'route-2', toX: 28, toY: 13, direction: 'left' },
+      { fromX: 0, fromY: 77, toZone: 'route-2', toX: 28, toY: 14, direction: 'left' },
     ],
   },
   {
@@ -200,9 +198,9 @@ export const ZONES: Zone[] = [
     grid: ROUTE_2,
     playerStart: { tileX: 28, tileY: 13 },
     warps: [
-      // RIGHT (rows 13-14) → back to Mana Springs (its left opening, rows 7-8)
-      { fromX: 29, fromY: 13, toZone: 'mana-springs', toX: 1, toY: 7, direction: 'right' },
-      { fromX: 29, fromY: 14, toZone: 'mana-springs', toX: 1, toY: 8, direction: 'right' },
+      // RIGHT (rows 13-14) → back to Mana Springs (its W door)
+      { fromX: 29, fromY: 13, toZone: 'mana-springs', toX: 1, toY: 76, direction: 'right' },
+      { fromX: 29, fromY: 14, toZone: 'mana-springs', toX: 1, toY: 77, direction: 'right' },
       // LEFT (rows 2-3) → Gloview Village (arrive at its right opening, rows 11-12)
       { fromX: 0, fromY: 2, toZone: 'gloview-village', toX: 32, toY: 11, direction: 'left' },
       { fromX: 0, fromY: 3, toZone: 'gloview-village', toX: 32, toY: 12, direction: 'left' },
