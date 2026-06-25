@@ -45,7 +45,7 @@ export function getZone(zones: Zone[], id: string): Zone | null {
 // Garden → east → Moonwell Glade (shortcut, blocked until tutorialComplete)
 // Moonwell Glade → east → Spore Hollow (post-tutorial)
 
-import { GARDEN, MYCELIAL_PATH, MOONWELL_GLADE, SPORE_HOLLOW, VORANYX_DEEP, TWILIGHT_THICKET, WOODED_TRAIL, THE_THRESHOLD, MANA_SPRINGS, ROUTE_2, GLOVIEW_VILLAGE, SPIRIT_MEADOW, MOONWELL_GLADE_GREGORY_S_HOME, SORREL_HOLD, BRACK_HOLD, TEST_SANDBOX,
+import { GARDEN, MYCELIAL_PATH, MOONWELL_GLADE, SPORE_HOLLOW, VORANYX_DEEP, TWILIGHT_THICKET, WOODED_TRAIL, THE_THRESHOLD, MANA_SPRINGS, ROUTE_2, ROUTE_3, GLOVIEW_VILLAGE, SPIRIT_MEADOW, MOONWELL_GLADE_GREGORY_S_HOME, SORREL_HOLD, BRACK_HOLD, TEST_SANDBOX,
   FLAT_TERRAIN_DEMO,
   FP_GARDEN, FP_LARGE_1, FP_LARGE_2, FP_LARGE_3, FP_MED_1, FP_MED_2, FP_MED_3, FP_MED_4, FP_HUGE,
   ROUTE_GARDEN_MYCELIAL, ROUTE_MYCELIAL_SPIRIT, ROUTE_SPIRIT_MOONWELL, ROUTE_MOONWELL_GARDEN } from './tilemap'
@@ -203,20 +203,38 @@ export const ZONES: Zone[] = [
       // RIGHT (rows 13-14) → back to Mana Springs (its left opening, rows 7-8)
       { fromX: 29, fromY: 13, toZone: 'mana-springs', toX: 1, toY: 7, direction: 'right' },
       { fromX: 29, fromY: 14, toZone: 'mana-springs', toX: 1, toY: 8, direction: 'right' },
-      // LEFT (rows 2-3) → Gloview Village (arrive at its east opening)
-      { fromX: 0, fromY: 2, toZone: 'gloview-village', toX: 22, toY: 8, direction: 'left' },
-      { fromX: 0, fromY: 3, toZone: 'gloview-village', toX: 22, toY: 9, direction: 'left' },
+      // LEFT (rows 2-3) → Gloview Village (arrive at its right opening, rows 11-12)
+      { fromX: 0, fromY: 2, toZone: 'gloview-village', toX: 32, toY: 11, direction: 'left' },
+      { fromX: 0, fromY: 3, toZone: 'gloview-village', toX: 32, toY: 12, direction: 'left' },
     ],
   },
   {
     id: 'gloview-village',
     name: 'Gloview Village',
     grid: GLOVIEW_VILLAGE,
-    playerStart: { tileX: 22, tileY: 8 },
+    playerStart: { tileX: 32, tileY: 11 },
     warps: [
-      // EAST → back to Route 2 (its left opening, rows 2-3)
-      { fromX: 23, fromY: 8, toZone: 'route-2', toX: 1, toY: 2, direction: 'right' },
-      { fromX: 23, fromY: 9, toZone: 'route-2', toX: 1, toY: 3, direction: 'right' },
+      // RIGHT (rows 11-12) → back to Route 2 (its left opening, rows 2-3)
+      { fromX: 33, fromY: 11, toZone: 'route-2', toX: 1, toY: 2, direction: 'right' },
+      { fromX: 33, fromY: 12, toZone: 'route-2', toX: 1, toY: 3, direction: 'right' },
+      // BOTTOM-LEFT (cols 2-3) → Route 3 (arrive at its north opening)
+      { fromX: 2, fromY: 21, toZone: 'route-3', toX: 10, toY: 1, direction: 'down' },
+      { fromX: 3, fromY: 21, toZone: 'route-3', toX: 11, toY: 1, direction: 'down' },
+      // SORREL compound door (gap in the pen's left wall) → the sorrel-hold arena.
+      // Ungated for now; the Thistle progression-gate gets added in the F2P gating pass.
+      { fromX: 20, fromY: 6, toZone: 'sorrel-hold', toX: 1, toY: 14, direction: 'right' },
+      { fromX: 20, fromY: 7, toZone: 'sorrel-hold', toX: 1, toY: 15, direction: 'right' },
+    ],
+  },
+  {
+    id: 'route-3',
+    name: 'Route 3',
+    grid: ROUTE_3,
+    playerStart: { tileX: 10, tileY: 1 },
+    warps: [
+      // NORTH → back up to Gloview Village (its bottom-left opening, cols 2-3)
+      { fromX: 10, fromY: 0, toZone: 'gloview-village', toX: 2, toY: 20, direction: 'up' },
+      { fromX: 11, fromY: 0, toZone: 'gloview-village', toX: 3, toY: 20, direction: 'up' },
     ],
   },
   {
@@ -242,9 +260,9 @@ export const ZONES: Zone[] = [
     grid: SORREL_HOLD,
     playerStart: { tileX: 2, tileY: 14 },
     warps: [
-      // Return west to Mana Springs (open)
-      { fromX: 0, fromY: 14, toZone: 'mana-springs', toX: 23, toY: 14, direction: 'left' },
-      { fromX: 0, fromY: 15, toZone: 'mana-springs', toX: 23, toY: 15, direction: 'left' },
+      // Return west to Gloview Village (back to the Sorrel compound door)
+      { fromX: 0, fromY: 14, toZone: 'gloview-village', toX: 19, toY: 6, direction: 'left' },
+      { fromX: 0, fromY: 15, toZone: 'gloview-village', toX: 19, toY: 7, direction: 'left' },
       // Forward east to Brack Hold (gated: need defeated_sorrel)
       { fromX: 39, fromY: 14, toZone: 'brack-hold', toX: 1, toY: 14, direction: 'right', requiredFlag: 'defeated_sorrel' },
       { fromX: 39, fromY: 15, toZone: 'brack-hold', toX: 1, toY: 15, direction: 'right', requiredFlag: 'defeated_sorrel' },
