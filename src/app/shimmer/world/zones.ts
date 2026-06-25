@@ -61,8 +61,8 @@ export const ZONES: Zone[] = [
       { fromX: 0, fromY: 8, toZone: 'route-garden-mycelial', toX: 1, toY: 5, direction: 'left' },
       { fromX: 0, fromY: 9, toZone: 'route-garden-mycelial', toX: 1, toY: 5, direction: 'left' },
       // EAST edge → Moonwell Pass (enter its WEST opening)
-      { fromX: 25, fromY: 8, toZone: 'route-moonwell-garden', toX: 1, toY: 7, direction: 'right' },
-      { fromX: 25, fromY: 9, toZone: 'route-moonwell-garden', toX: 1, toY: 7, direction: 'right' },
+      { fromX: 25, fromY: 8, toZone: 'route-moonwell-garden', toX: 1, toY: 28, direction: 'right' },
+      { fromX: 25, fromY: 9, toZone: 'route-moonwell-garden', toX: 1, toY: 29, direction: 'right' },
     ],
   },
   {
@@ -94,8 +94,8 @@ export const ZONES: Zone[] = [
     playerStart: { tileX: 1, tileY: 8 },
     warps: [
       // LEFT (rows 8-9) → Moonwell Pass (enter its east opening)
-      { fromX: 0, fromY: 8, toZone: 'route-moonwell-garden', toX: 28, toY: 7, direction: 'left' },
-      { fromX: 0, fromY: 9, toZone: 'route-moonwell-garden', toX: 28, toY: 8, direction: 'left' },
+      { fromX: 0, fromY: 8, toZone: 'route-moonwell-garden', toX: 36, toY: 17, direction: 'left' },
+      { fromX: 0, fromY: 9, toZone: 'route-moonwell-garden', toX: 36, toY: 18, direction: 'left' },
       // Greg's house door (cols 22-23, row 17 — placed in the editor) → his home interior
       { fromX: 22, fromY: 17, toZone: 'moonwell-glade-gregory-s-home', toX: 4, toY: 8, direction: 'up' },
       { fromX: 23, fromY: 17, toZone: 'moonwell-glade-gregory-s-home', toX: 5, toY: 8, direction: 'up' },
@@ -264,8 +264,8 @@ export const ZONES: Zone[] = [
       { fromX: 5, fromY: 15, toZone: 'route-mycelial-spirit', toX: 28, toY: 5, direction: 'down' },
       { fromX: 6, fromY: 15, toZone: 'route-mycelial-spirit', toX: 28, toY: 5, direction: 'down' },
       // BOTTOM-RIGHT → Moonwell Pass
-      { fromX: 15, fromY: 15, toZone: 'route-moonwell-garden', toX: 14, toY: 2, direction: 'down' },
-      { fromX: 16, fromY: 15, toZone: 'route-moonwell-garden', toX: 14, toY: 2, direction: 'down' },
+      { fromX: 15, fromY: 15, toZone: 'route-moonwell-garden', toX: 14, toY: 1, direction: 'down' },
+      { fromX: 16, fromY: 15, toZone: 'route-moonwell-garden', toX: 15, toY: 1, direction: 'down' },
       // NOTE: the Mana Springs ascent / defeated_thistle gate is re-wired when we whiteboard the east arm.
     ],
   },
@@ -424,18 +424,18 @@ export const ZONES: Zone[] = [
   },
   {
     id: 'route-moonwell-garden',
-    name: 'Moonwell Pass',     // 3-way hub (W→Home Plot, N→Spirit Meadows, E→Moonwell Glade) per Alex's whiteboard
-    grid: ROUTE_MOONWELL_GARDEN,
-    playerStart: { tileX: 14, tileY: 8 },
+    name: 'Moonwell Pass',     // 3-way hub (W→Home Plot, N→Spirit Meadows, E→Moonwell Glade)
+    grid: ROUTE_MOONWELL_GARDEN, // 52x38, redesigned in the editor by Alex (with encounter mist)
+    playerStart: { tileX: 14, tileY: 1 },
     warps: [
-      // WEST → Home Plot
-      { fromX: 0, fromY: 7, toZone: 'garden', toX: 24, toY: 9, direction: 'left' },
-      { fromX: 0, fromY: 8, toZone: 'garden', toX: 24, toY: 9, direction: 'left' },
-      // EAST → Moonwell Glade (its west opening, rows 8-9)
-      { fromX: 29, fromY: 7, toZone: 'moonwell-glade', toX: 1, toY: 8, direction: 'right' },
-      { fromX: 29, fromY: 8, toZone: 'moonwell-glade', toX: 1, toY: 9, direction: 'right' },
-      // NORTH → Spirit Meadows
-      { fromX: 14, fromY: 0, toZone: 'spirit-meadow', toX: 15, toY: 14, direction: 'up' }, // arrive at Spirit Meadow bottom-right
+      // WEST door (0,28-29 — placed in the editor) → Home Plot
+      { fromX: 0, fromY: 28, toZone: 'garden', toX: 24, toY: 9, direction: 'left' },
+      { fromX: 0, fromY: 29, toZone: 'garden', toX: 24, toY: 9, direction: 'left' },
+      // EAST door (37,17-18) → Moonwell Glade (its west opening)
+      { fromX: 37, fromY: 17, toZone: 'moonwell-glade', toX: 1, toY: 8, direction: 'right' },
+      { fromX: 37, fromY: 18, toZone: 'moonwell-glade', toX: 1, toY: 9, direction: 'right' },
+      // NORTH door (14-15,0) → Spirit Meadows
+      { fromX: 14, fromY: 0, toZone: 'spirit-meadow', toX: 15, toY: 14, direction: 'up' },
       { fromX: 15, fromY: 0, toZone: 'spirit-meadow', toX: 15, toY: 14, direction: 'up' },
     ],
   },
