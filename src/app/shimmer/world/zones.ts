@@ -57,8 +57,8 @@ export const ZONES: Zone[] = [
     playerStart: { tileX: 30, tileY: 9 },
     warps: [
       // LEFT door (0,11-12, placed in the editor) → Route 1 (leads to Mycelial Path)
-      { fromX: 0, fromY: 11, toZone: 'route-garden-mycelial', toX: 1, toY: 5, direction: 'left' },
-      { fromX: 0, fromY: 12, toZone: 'route-garden-mycelial', toX: 1, toY: 5, direction: 'left' },
+      { fromX: 0, fromY: 11, toZone: 'route-garden-mycelial', toX: 58, toY: 7, direction: 'left' }, // arrive at Route 1's E door
+      { fromX: 0, fromY: 12, toZone: 'route-garden-mycelial', toX: 58, toY: 8, direction: 'left' },
       // RIGHT door (31,9-10) → Moonwell Pass (its west door interior)
       { fromX: 31, fromY: 9, toZone: 'route-moonwell-garden', toX: 1, toY: 28, direction: 'right' },
       { fromX: 31, fromY: 10, toZone: 'route-moonwell-garden', toX: 1, toY: 29, direction: 'right' },
@@ -72,8 +72,8 @@ export const ZONES: Zone[] = [
     playerStart: { tileX: 1, tileY: 7 },
     warps: [
       // R door (29,14-15, placed in the editor) → Route 1 (Home Plot)
-      { fromX: 29, fromY: 14, toZone: 'route-garden-mycelial', toX: 28, toY: 5, direction: 'right' },
-      { fromX: 29, fromY: 15, toZone: 'route-garden-mycelial', toX: 28, toY: 5, direction: 'right' },
+      { fromX: 29, fromY: 14, toZone: 'route-garden-mycelial', toX: 1, toY: 13, direction: 'right' }, // arrive at Route 1's W door
+      { fromX: 29, fromY: 15, toZone: 'route-garden-mycelial', toX: 1, toY: 14, direction: 'right' },
       // L door (0,7-8) → Wooded Trail (its east opening)
       { fromX: 0, fromY: 7, toZone: 'wooded-trail', toX: 25, toY: 8, direction: 'left' },
       { fromX: 0, fromY: 8, toZone: 'wooded-trail', toX: 25, toY: 8, direction: 'left' },
@@ -385,14 +385,16 @@ export const ZONES: Zone[] = [
   // Grids + warps + spawns are now static; edit here or via Map Editor (saves stick).
   {
     id: 'route-garden-mycelial',
-    name: 'Route One',     // Home Plot WEST ↔ Mycelial Path (per Alex's Home Plot whiteboard)
-    grid: ROUTE_GARDEN_MYCELIAL,
-    playerStart: { tileX: 2, tileY: 5 },
+    name: 'Route One',     // Home Plot ↔ Mycelial Path
+    grid: ROUTE_GARDEN_MYCELIAL, // 50x60, redesigned in the editor by Alex (with encounter mist)
+    playerStart: { tileX: 58, tileY: 7 },
     warps: [
-      { fromX: 0, fromY: 4, toZone: 'garden', toX: 1, toY: 11, direction: 'left' }, // arrive at Home Plot's left door
-      { fromX: 0, fromY: 5, toZone: 'garden', toX: 1, toY: 12, direction: 'left' },
-      { fromX: 29, fromY: 4, toZone: 'mycelial-path', toX: 28, toY: 14, direction: 'left' }, // arrive at Mycelial's R door
-      { fromX: 29, fromY: 5, toZone: 'mycelial-path', toX: 28, toY: 15, direction: 'left' },
+      // E door (59,7-8, placed in the editor) → Home Plot (its left door)
+      { fromX: 59, fromY: 7, toZone: 'garden', toX: 1, toY: 11, direction: 'right' },
+      { fromX: 59, fromY: 8, toZone: 'garden', toX: 1, toY: 12, direction: 'right' },
+      // W door (0,13-14) → Mycelial Path (its R door)
+      { fromX: 0, fromY: 13, toZone: 'mycelial-path', toX: 28, toY: 14, direction: 'left' },
+      { fromX: 0, fromY: 14, toZone: 'mycelial-path', toX: 28, toY: 15, direction: 'left' },
     ],
   },
   {
