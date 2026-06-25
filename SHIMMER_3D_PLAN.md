@@ -40,10 +40,12 @@ MapEditor mostly retires.
 
 ## Phases
 - **Phase 0 — Plan locked** (this doc). ✅
-- **Phase 1 — Renderer seam, one zone walkable.** Add R3F; render a zone's floor + walls *extruded straight
-  from a blockout grid*; a capsule character driven by the **existing** movement system; iso camera; behind a
-  2D/3D flag. Proves the systems plug in unchanged. **Primitives only — no art blocker.** Owner: **Jin**
-  (architecture-defining; everything hangs on this seam).
+- **Phase 1 — Renderer seam, one zone walkable.** ✅ **DONE 2026-06-25** (`5647f83`). Route
+  `/shimmer/play3d`: Moonwell Glade extruded from its blockout grid (instanced floor/wall/water), a capsule
+  with collision reused from the 2D engine's `walkable()`, and a **rotatable** iso camera (drag-orbit + zoom,
+  pitch clamped to the iso band). Verified in-browser; Alex likes the look. **Thesis proven: zone data +
+  collision plug into WebGL unchanged.** Built self-contained (NOT the 2D page); flag-integration deferred.
+  Stack added: `@react-three/fiber@9` + `@react-three/drei@10` (three was already a dep).
 - **Phase 2 — Character + camera feel.** Real low-poly character (pack / Mixamo); nail movement + camera feel.
   Alex feel-gates. This is where the tone is decided.
 - **Phase 3 — Kit + dress one zone.** A modular 3D tile-kit keyed to cell-ids; **Moonwell Glade** fully dressed
