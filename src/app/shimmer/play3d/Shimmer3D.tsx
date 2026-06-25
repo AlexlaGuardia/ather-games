@@ -1,10 +1,12 @@
 'use client'
 // Phase 1 renderer-seam proof. Builds the Moonwell Glade blockout grid as 3D geometry
-// (instanced floor / wall / water boxes), an iso orthographic camera that follows a capsule,
-// and grid collision REUSED from the 2D engine (`walkable`) — the systems-swap thesis in one screen.
-import { Canvas, useFrame, useThree } from '@react-three/fiber'
+// (instanced floor / wall / water boxes), a rotatable iso orthographic camera that follows a
+// capsule, and grid collision REUSED from the 2D engine (`walkable`).
+import { Canvas, useFrame } from '@react-three/fiber'
+import { OrbitControls } from '@react-three/drei'
 import { useRef, useEffect, useLayoutEffect, useMemo } from 'react'
 import * as THREE from 'three'
+import type { OrbitControls as OrbitControlsImpl } from 'three-stdlib'
 import { MOONWELL_GLADE } from '../world/tilemap'
 import { walkable } from '../engine/player' // <- the actual 2D-engine collision, untouched
 
@@ -44,13 +46,9 @@ function Tiles({ cells, size, y, color, opacity = 1 }: {
   )
 }
 
-function Player() {
+function Player({ posRef }: { posRef: React.RefObject<THREE.Vector3> }) {
   const group = useRef<THREE.Group>(null)
   const keys = useRef<Record<string, boolean>>({})
-  // Moonwell Glade playerStart = tile (1,8)
-  const pos = useRef(new THREE.Vector3(1, 0.7, 8))
-  const camOffset = useMemo(() => new THREE.Vector3(13, 17, 13), [])
-  const cam = useThree((s) => s.camera)
 
   useEffect(() => {
     const dn = (e: KeyboardEvent) => { keys.current[e.key.toLowerCase()] = true }
@@ -69,16 +67,14 @@ function Player() {
     if (dx || dz) {
       const len = Math.hypot(dx, dz); dx /= len; dz /= len
       const step = Math.min(dt, 0.05) * 5
-      const p = pos.current
+      const p = posRef.current
       // axis-separated so you slide along walls; collision = the 2D engine's walkable()
       const nx = p.x + dx * step
       if (walkable(GRID, Math.round(nx), Math.round(p.z))) p.x = nx
       const nz = p.z + dz * step
       if (walkable(GRID, Math.round(p.x), Math.round(nz))) p.z = nz
     }
-    group.current!.position.set(pos.current.x, 0.7, pos.current.z)
-    cam.position.copy(pos.current).add(camOffset)
-    cam.lookAt(pos.current.x, 0, pos.current.z)
+    group.current!.position.set(posRef.current.x, 0.7, posRef.current.z)
   })
 
   return (
@@ -91,8 +87,33 @@ function Player() {
   )
 }
 
+// Rotatable iso camera that follows the player. Pitch is clamped to a cozy iso band so it
+// can't flatten out or go fully top-down; azimuth (spin) + zoom stay free.
+function CameraRig({ posRef }: { posRef: React.RefObject<THREE.Vector3> }) {
+  const controls = useRef<OrbitControlsImpl>(null)
+  useFrame(() => {
+    if (controls.current) {
+      controls.current.target.copy(posRef.current)
+      controls.current.update()
+    }
+  })
+  return (
+    <OrbitControls
+      ref={controls}
+      makeDefault
+      enablePan={false}
+      minPolarAngle={0.55}
+      maxPolarAngle={1.05}
+      minZoom={16}
+      maxZoom={64}
+      target={[1, 0, 8]}
+    />
+  )
+}
+
 function Scene() {
   const { floors, walls, waters } = useMemo(buckets, [])
+  const posRef = useRef(new THREE.Vector3(1, 0.7, 8))
   return (
     <>
       <color attach="background" args={['#bfe3ef']} />
@@ -107,7 +128,8 @@ function Scene() {
       <Tiles cells={floors} size={[1, 0.2, 1]} y={0} color="#7cc46a" />
       <Tiles cells={walls} size={[1, 1.3, 1]} y={0.55} color="#8a8d96" />
       <Tiles cells={waters} size={[1, 0.3, 1]} y={-0.15} color="#3aa0d6" opacity={0.85} />
-      <Player />
+      <Player posRef={posRef} />
+      <CameraRig posRef={posRef} />
     </>
   )
 }
@@ -129,7 +151,7 @@ export default function Shimmer3D() {
         pointerEvents: 'none', lineHeight: 1.5,
       }}>
         Shimmer 3D — Phase 1 proof · Moonwell Glade<br />
-        <span style={{ opacity: 0.8 }}>WASD / arrows to move · collision reused from the 2D engine</span>
+        <span style={{ opacity: 0.8 }}>WASD / arrows to move · drag to rotate · scroll to zoom</span>
       </div>
     </div>
   )
