@@ -346,6 +346,42 @@ function Scene(props: {
   )
 }
 
+// Compass — a needle that points to grid-north on screen. Driven by the live camera yaw via rAF
+// (no React re-render). North = world -z; the rose rotates with the camera so N tracks the map.
+function Compass({ yawRef }: { yawRef: React.RefObject<number> }) {
+  const rose = useRef<HTMLDivElement>(null)
+  const nlabel = useRef<HTMLSpanElement>(null)
+  useEffect(() => {
+    let id = 0
+    const tick = () => {
+      const y = yawRef.current
+      if (rose.current) rose.current.style.transform = `rotate(${y}rad)`
+      if (nlabel.current) nlabel.current.style.transform = `translate(-50%, -50%) rotate(${-y}rad)`
+      id = requestAnimationFrame(tick)
+    }
+    id = requestAnimationFrame(tick)
+    return () => cancelAnimationFrame(id)
+  }, [yawRef])
+  return (
+    <div style={{
+      position: 'fixed', top: 12, left: '50%', marginLeft: -30, width: 60, height: 60, borderRadius: '50%',
+      background: 'rgba(10,8,20,0.7)', border: '1px solid #ffffff44', pointerEvents: 'none',
+    }}>
+      <div ref={rose} style={{ position: 'absolute', inset: 0 }}>
+        <div style={{
+          position: 'absolute', top: 5, left: '50%', transform: 'translateX(-50%)', width: 0, height: 0,
+          borderLeft: '6px solid transparent', borderRight: '6px solid transparent', borderBottom: '12px solid #e8584a',
+        }} />
+        <div style={{
+          position: 'absolute', bottom: 5, left: '50%', transform: 'translateX(-50%)', width: 0, height: 0,
+          borderLeft: '6px solid transparent', borderRight: '6px solid transparent', borderTop: '12px solid #cdd4e3',
+        }} />
+        <span ref={nlabel} style={{ position: 'absolute', top: '24%', left: '50%', color: '#ffd9d2', font: '800 11px ui-monospace, monospace' }}>N</span>
+      </div>
+    </div>
+  )
+}
+
 const TOOLS: { id: Tool; label: string }[] = [
   { id: 'floor', label: 'Land' }, { id: 'raise', label: 'Raise' }, { id: 'lower', label: 'Lower' },
   { id: 'wall', label: 'Cloud' }, { id: 'water', label: 'Water' }, { id: 'mist', label: 'Mist' },
@@ -495,6 +531,8 @@ export default function Shimmer3D() {
           {editMode ? 'left-drag paint · WASD fly · Q/E down·up · right-drag look · scroll zoom' : 'WASD · drag look · scroll zoom · edges warp · B to edit terrain'}
         </span>
       </div>
+
+      <Compass yawRef={camYaw} />
 
       {editMode && (
         <div style={{ position: 'fixed', top: 70, left: 12, display: 'flex', flexDirection: 'column', gap: 3 }}>
