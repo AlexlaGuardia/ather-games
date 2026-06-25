@@ -238,7 +238,7 @@ function CameraRig({ posRef, yawRef, editRef }: {
 }
 
 function Scene(props: {
-  zone: Zone; gridRef: React.RefObject<number[][]>; heights: number[][]; version: number
+  zone: Zone; gridRef: React.RefObject<number[][]>; heights: number[][]; version: number; dims: string
   posRef: React.RefObject<THREE.Vector3>; heightsRef: React.RefObject<number[][]>; zoneIdRef: React.RefObject<string>
   onWarp: (w: Warp) => void; yawRef: React.RefObject<number>; editRef: React.RefObject<boolean>
   paint: (c: number, r: number, shift: boolean) => void; editing: boolean
@@ -254,7 +254,7 @@ function Scene(props: {
         shadow-camera-top={40} shadow-camera-bottom={-40}
         shadow-camera-near={0.5} shadow-camera-far={160}
       />
-      <ZoneGeometry key={props.zone.id} gridRef={props.gridRef} heights={props.heights} version={props.version} paint={props.paint} editing={props.editing} />
+      <ZoneGeometry key={`${props.zone.id}-${props.dims}`} gridRef={props.gridRef} heights={props.heights} version={props.version} paint={props.paint} editing={props.editing} />
       <Player posRef={props.posRef} gridRef={props.gridRef} heightsRef={props.heightsRef} zoneIdRef={props.zoneIdRef} onWarp={props.onWarp} />
       <CameraRig posRef={props.posRef} yawRef={props.yawRef} editRef={props.editRef} />
     </>
@@ -269,11 +269,16 @@ const TOOLS: { id: Tool; label: string }[] = [
 export default function Shimmer3D() {
   const [zoneId, setZoneId] = useState(START_ZONE)
   const zone = getZone(ZONES, zoneId) ?? getZone(ZONES, START_ZONE)!
-  const heights = useMemo(() => getHeightGrid(zone.id, zone.grid.length, zone.grid[0].length), [zone])
-  const grid = useMemo(() => zone.grid.map((row) => [...row]), [zone]) // working copy (editable)
 
-  const gridRef = useRef(grid); gridRef.current = grid
-  const heightsRef = useRef(heights); heightsRef.current = heights
+  // Working copies — init ONCE per zone (not every render) so paint/resize edits persist.
+  const gridRef = useRef<number[][]>([])
+  const heightsRef = useRef<number[][]>([])
+  const initedZone = useRef('')
+  if (initedZone.current !== zone.id) {
+    initedZone.current = zone.id
+    gridRef.current = zone.grid.map((row) => [...row])
+    heightsRef.current = getHeightGrid(zone.id, zone.grid.length, zone.grid[0].length)
+  }
   const zoneIdRef = useRef(zone.id); zoneIdRef.current = zone.id
   const posRef = useRef<THREE.Vector3 | null>(null)
   if (!posRef.current) {
@@ -290,6 +295,8 @@ export default function Shimmer3D() {
   const [brush, setBrush] = useState(1)
   const brushRef = useRef(1); brushRef.current = brush
   const [saveMsg, setSaveMsg] = useState('')
+  // recomputed each render; resize bumps version → re-render → fresh dims (drives the geometry key)
+  const dims = `${gridRef.current[0]?.length ?? 0}x${gridRef.current.length}`
 
   const paint = useCallback((c: number, r: number, shift: boolean) => {
     const t = toolRef.current, b = brushRef.current
@@ -305,6 +312,29 @@ export default function Shimmer3D() {
       else if (t === 'floor') G[rr][cc] = FLOOR_ID
       if (t === 'raise') H[rr][cc] = Math.max(0, H[rr][cc])
     }
+    setVersion((v) => v + 1)
+  }, [])
+
+  // Grow/shrink the zone. New cells = floor at height 0; existing content keeps its NW origin.
+  // (Resizing shifts the zone's edges → its warps need re-aligning afterward; Jin re-wires.)
+  const resize = useCallback((dCols: number, dRows: number) => {
+    const G = gridRef.current, H = heightsRef.current
+    const oldRows = G.length, oldCols = G[0].length
+    const rows = Math.max(8, Math.min(160, oldRows + dRows))
+    const cols = Math.max(8, Math.min(160, oldCols + dCols))
+    const ng: number[][] = [], nh: number[][] = []
+    for (let r = 0; r < rows; r++) {
+      const gr: number[] = [], hr: number[] = []
+      for (let c = 0; c < cols; c++) {
+        if (r < oldRows && c < oldCols) { gr.push(G[r][c]); hr.push(H[r]?.[c] ?? 0) }
+        else { gr.push(FLOOR_ID); hr.push(0) }
+      }
+      ng.push(gr); nh.push(hr)
+    }
+    gridRef.current = ng; heightsRef.current = nh
+    const p = posRef.current!
+    p.x = Math.max(1, Math.min(p.x, cols - 2))
+    p.z = Math.max(1, Math.min(p.z, rows - 2))
     setVersion((v) => v + 1)
   }, [])
 
@@ -339,7 +369,7 @@ export default function Shimmer3D() {
     <div style={{ position: 'fixed', inset: 0, background: '#bfe3ef', cursor: editMode ? 'crosshair' : 'default' }}>
       <Canvas shadows camera={{ fov: 45, position: [1, 6, 14], near: 0.1, far: 500 }} gl={{ antialias: true }}>
         <Scene
-          zone={zone} gridRef={gridRef} heights={heights} version={version}
+          zone={zone} gridRef={gridRef} heights={heightsRef.current} version={version} dims={dims}
           posRef={posRef as React.RefObject<THREE.Vector3>} heightsRef={heightsRef} zoneIdRef={zoneIdRef}
           onWarp={onWarp} yawRef={camYaw} editRef={editRef} paint={paint} editing={editMode}
         />
@@ -364,8 +394,15 @@ export default function Shimmer3D() {
             <span style={{ color: '#e9dfc8', font: '700 13px ui-monospace, monospace' }}>brush {brush * 2 + 1}×{brush * 2 + 1}</span>
             <Btn onClick={() => setBrush((b) => Math.max(0, b - 1))}>−</Btn>
             <Btn onClick={() => setBrush((b) => Math.min(5, b + 1))}>+</Btn>
-            <button onClick={save} style={{ padding: '6px 14px', borderRadius: 6, border: 'none', background: '#d4a843', color: '#1a1a2e', font: '800 13px ui-monospace, monospace', cursor: 'pointer' }}>Save</button>
           </div>
+          <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+            <span style={{ color: '#e9dfc8', font: '700 13px ui-monospace, monospace' }}>size {dims}</span>
+            <Btn onClick={() => resize(-2, 0)}>W−</Btn>
+            <Btn onClick={() => resize(2, 0)}>W+</Btn>
+            <Btn onClick={() => resize(0, -2)}>H−</Btn>
+            <Btn onClick={() => resize(0, 2)}>H+</Btn>
+          </div>
+          <button onClick={save} style={{ padding: '6px 16px', borderRadius: 6, border: 'none', background: '#d4a843', color: '#1a1a2e', font: '800 13px ui-monospace, monospace', cursor: 'pointer' }}>Save zone</button>
           {saveMsg && <span style={{ color: '#e9dfc8', font: '600 12px ui-monospace, monospace' }}>{saveMsg}</span>}
         </div>
       )}
