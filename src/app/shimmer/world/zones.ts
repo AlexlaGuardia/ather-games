@@ -45,7 +45,7 @@ export function getZone(zones: Zone[], id: string): Zone | null {
 // Garden → east → Moonwell Glade (shortcut, blocked until tutorialComplete)
 // Moonwell Glade → east → Spore Hollow (post-tutorial)
 
-import { GARDEN, MYCELIAL_PATH, MOONWELL_GLADE, SPORE_HOLLOW, VORANYX_DEEP, TWILIGHT_THICKET, WOODED_TRAIL, THE_THRESHOLD, MANA_SPRINGS, SPIRIT_MEADOW, MOONWELL_GLADE_GREGORY_S_HOME, SORREL_HOLD, BRACK_HOLD, TEST_SANDBOX,
+import { GARDEN, MYCELIAL_PATH, MOONWELL_GLADE, SPORE_HOLLOW, VORANYX_DEEP, TWILIGHT_THICKET, WOODED_TRAIL, THE_THRESHOLD, MANA_SPRINGS, ROUTE_2, SPIRIT_MEADOW, MOONWELL_GLADE_GREGORY_S_HOME, SORREL_HOLD, BRACK_HOLD, TEST_SANDBOX,
   FLAT_TERRAIN_DEMO,
   FP_GARDEN, FP_LARGE_1, FP_LARGE_2, FP_LARGE_3, FP_MED_1, FP_MED_2, FP_MED_3, FP_MED_4, FP_HUGE,
   ROUTE_GARDEN_MYCELIAL, ROUTE_MYCELIAL_SPIRIT, ROUTE_SPIRIT_MOONWELL, ROUTE_MOONWELL_GARDEN } from './tilemap'
@@ -110,9 +110,9 @@ export const ZONES: Zone[] = [
       // TOP (cols 12-13) → up to Mycelial Path (its south opening)
       { fromX: 12, fromY: 0, toZone: 'mycelial-path', toX: 5, toY: 14, direction: 'up' },
       { fromX: 13, fromY: 0, toZone: 'mycelial-path', toX: 5, toY: 14, direction: 'up' },
-      // BOTTOM (cols 11-12) → down to Mana Springs (its north opening)
-      { fromX: 11, fromY: 21, toZone: 'mana-springs', toX: 12, toY: 1, direction: 'down' },
-      { fromX: 12, fromY: 21, toZone: 'mana-springs', toX: 12, toY: 1, direction: 'down' },
+      // BOTTOM (cols 11-12) → down to Mana Springs (its top opening, cols 8-9)
+      { fromX: 11, fromY: 21, toZone: 'mana-springs', toX: 8, toY: 1, direction: 'down' },
+      { fromX: 12, fromY: 21, toZone: 'mana-springs', toX: 9, toY: 1, direction: 'down' },
       // RIGHT-edge portal (a) → 2nd Floor (arrive at its left edge)
       { fromX: 25, fromY: 15, toZone: 'voranyx-deep', toX: 1, toY: 11, direction: 'right' },
       { fromX: 25, fromY: 16, toZone: 'voranyx-deep', toX: 1, toY: 12, direction: 'right' },
@@ -182,18 +182,28 @@ export const ZONES: Zone[] = [
     name: 'Mana Springs',
     element: 'earth', // mining / ore
     grid: MANA_SPRINGS,
-    playerStart: { tileX: 12, tileY: 1 },
+    playerStart: { tileX: 8, tileY: 1 },
     warps: [
-      // North → up to Voranyx Caverns 1st Floor (its bottom opening). Supersedes the old
-      // Moonwell-Glade link (Moonwell stays reachable via the west-core routes).
-      { fromX: 12, fromY: 0, toZone: 'spore-hollow', toX: 11, toY: 20, direction: 'up' },
-      { fromX: 13, fromY: 0, toZone: 'spore-hollow', toX: 12, toY: 20, direction: 'up' },
-      // South exit to Spirit Meadow (return path)
-      { fromX: 12, fromY: 19, toZone: 'spirit-meadow', toX: 14, toY: 1, direction: 'down' },
-      { fromX: 13, fromY: 19, toZone: 'spirit-meadow', toX: 15, toY: 1, direction: 'down' },
-      // East exit to Sorrel Hold (gated: need defeated_thistle)
-      { fromX: 24, fromY: 14, toZone: 'sorrel-hold', toX: 1, toY: 14, direction: 'right', requiredFlag: 'defeated_thistle' },
-      { fromX: 24, fromY: 15, toZone: 'sorrel-hold', toX: 1, toY: 15, direction: 'right', requiredFlag: 'defeated_thistle' },
+      // TOP (cols 8-9) → up to Voranyx Caverns 1st Floor (its bottom opening)
+      { fromX: 8, fromY: 0, toZone: 'spore-hollow', toX: 11, toY: 20, direction: 'up' },
+      { fromX: 9, fromY: 0, toZone: 'spore-hollow', toX: 12, toY: 20, direction: 'up' },
+      // LEFT (rows 7-8) → Route 2 (arrive at its east opening)
+      { fromX: 0, fromY: 7, toZone: 'route-2', toX: 20, toY: 6, direction: 'left' },
+      { fromX: 0, fromY: 8, toZone: 'route-2', toX: 20, toY: 7, direction: 'left' },
+      // (old south→Spirit Meadow + gated east→Sorrel Hold retired — east arm re-laid per
+      //  whiteboards; Sorrel/Brack reconnect through the new topology when built.)
+    ],
+  },
+  {
+    id: 'route-2',
+    name: 'Route 2',
+    grid: ROUTE_2,
+    playerStart: { tileX: 20, tileY: 6 },
+    warps: [
+      // EAST → back to Mana Springs (its left opening, rows 7-8)
+      { fromX: 21, fromY: 6, toZone: 'mana-springs', toX: 1, toY: 7, direction: 'right' },
+      { fromX: 21, fromY: 7, toZone: 'mana-springs', toX: 1, toY: 8, direction: 'right' },
+      // WEST opening reserved for the next area (unwired until whiteboarded)
     ],
   },
   {
