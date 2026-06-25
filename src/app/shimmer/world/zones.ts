@@ -120,12 +120,11 @@ export const ZONES: Zone[] = [
     name: 'Twilight Thicket',
     element: 'earth', // future Shimmeroak Thicket (wood/forestry)
     grid: TWILIGHT_THICKET,
-    playerStart: { tileX: 1, tileY: 9 },
+    playerStart: { tileX: 12, tileY: 18 },
     warps: [
-      // West entry → Wooded Trail (arrive back at its top-left, by the north exit).
-      // Provisional return edge — refined when we whiteboard Twilight Thicket itself.
-      { fromX: 0, fromY: 9, toZone: 'wooded-trail', toX: 4, toY: 2, direction: 'down' },
-      { fromX: 0, fromY: 10, toZone: 'wooded-trail', toX: 4, toY: 2, direction: 'down' },
+      // BOTTOM exit (cols 12-13) → back down to Wooded Trail (arrive by its north exit).
+      { fromX: 12, fromY: 19, toZone: 'wooded-trail', toX: 4, toY: 2, direction: 'down' },
+      { fromX: 13, fromY: 19, toZone: 'wooded-trail', toX: 4, toY: 2, direction: 'down' },
     ],
   },
   {
@@ -138,9 +137,9 @@ export const ZONES: Zone[] = [
       // EAST → back to Mycelial Path (its west opening, rows 7-8)
       { fromX: 27, fromY: 7, toZone: 'mycelial-path', toX: 1, toY: 7, direction: 'right' },
       { fromX: 27, fromY: 8, toZone: 'mycelial-path', toX: 1, toY: 7, direction: 'right' },
-      // NORTH (top-left, cols 4-5) → Twilight Thicket (its west entry; provisional until Twilight is whiteboarded)
-      { fromX: 4, fromY: 0, toZone: 'twilight-thicket', toX: 1, toY: 9, direction: 'up' },
-      { fromX: 5, fromY: 0, toZone: 'twilight-thicket', toX: 1, toY: 9, direction: 'up' },
+      // NORTH (top-left, cols 4-5) → up into Twilight Thicket (arrive at its bottom exit)
+      { fromX: 4, fromY: 0, toZone: 'twilight-thicket', toX: 12, toY: 18, direction: 'up' },
+      { fromX: 5, fromY: 0, toZone: 'twilight-thicket', toX: 12, toY: 18, direction: 'up' },
     ],
   },
   {
