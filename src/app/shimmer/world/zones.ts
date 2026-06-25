@@ -77,11 +77,12 @@ export const ZONES: Zone[] = [
       // L door (0,7-8) → Wooded Trail (its E door)
       { fromX: 0, fromY: 7, toZone: 'wooded-trail', toX: 48, toY: 11, direction: 'left' },
       { fromX: 0, fromY: 8, toZone: 'wooded-trail', toX: 48, toY: 12, direction: 'left' },
-      // N door (8-9,49) → Spirit Meadows (its south-left door, direct — connector retired)
-      { fromX: 8, fromY: 49, toZone: 'spirit-meadow', toX: 10, toY: 38, direction: 'up' },
-      { fromX: 9, fromY: 49, toZone: 'spirit-meadow', toX: 11, toY: 38, direction: 'up' },
-      // (south→Voranyx east-arm link dropped — Alex's redesign has no Voranyx door; reconnects
-      //  when the east arm is redesigned.)
+      // N door (15-16,0) → Spirit Meadows (its south-left door)
+      { fromX: 15, fromY: 0, toZone: 'spirit-meadow', toX: 10, toY: 38, direction: 'up' },
+      { fromX: 16, fromY: 0, toZone: 'spirit-meadow', toX: 11, toY: 38, direction: 'up' },
+      // S door (8-9,49) → Voranyx Caverns 1st Floor (its N door) — closes the loop Alex flagged
+      { fromX: 8, fromY: 49, toZone: 'spore-hollow', toX: 15, toY: 1, direction: 'down' },
+      { fromX: 9, fromY: 49, toZone: 'spore-hollow', toX: 16, toY: 1, direction: 'down' },
     ],
   },
   {
@@ -106,10 +107,9 @@ export const ZONES: Zone[] = [
     grid: SPORE_HOLLOW, // 60x32, redesigned in the editor by Alex (with encounter mist)
     playerStart: { tileX: 15, tileY: 1 },
     warps: [
-      // N door (15-16,0) → Mycelium Path. NOTE: Mycelial's redesign has no Voranyx return
-      //   door yet, so this is one-way until Alex adds a door on Mycelial's side.
-      { fromX: 15, fromY: 0, toZone: 'mycelial-path', toX: 1, toY: 7, direction: 'up' },
-      { fromX: 16, fromY: 0, toZone: 'mycelial-path', toX: 1, toY: 8, direction: 'up' },
+      // N door (15-16,0) → Mycelial Path (its S door) — two-way now (Alex added the return door)
+      { fromX: 15, fromY: 0, toZone: 'mycelial-path', toX: 8, toY: 48, direction: 'up' },
+      { fromX: 16, fromY: 0, toZone: 'mycelial-path', toX: 9, toY: 48, direction: 'up' },
       // S door (23-24,59) → Mana Springs (its N door)
       { fromX: 23, fromY: 59, toZone: 'mana-springs', toX: 30, toY: 1, direction: 'down' },
       { fromX: 24, fromY: 59, toZone: 'mana-springs', toX: 31, toY: 1, direction: 'down' },
@@ -257,9 +257,9 @@ export const ZONES: Zone[] = [
     grid: SPIRIT_MEADOW, // 40x80, redesigned in the editor by Alex (with encounter mist)
     playerStart: { tileX: 10, tileY: 38 },
     warps: [
-      // SOUTH-LEFT door (10-11,39, placed in the editor) → Mycelial Path
-      { fromX: 10, fromY: 39, toZone: 'mycelial-path', toX: 8, toY: 48, direction: 'up' },
-      { fromX: 11, fromY: 39, toZone: 'mycelial-path', toX: 9, toY: 48, direction: 'up' },
+      // SOUTH-LEFT door (10-11,39, placed in the editor) → Mycelial Path (its N door)
+      { fromX: 10, fromY: 39, toZone: 'mycelial-path', toX: 15, toY: 1, direction: 'down' },
+      { fromX: 11, fromY: 39, toZone: 'mycelial-path', toX: 16, toY: 1, direction: 'down' },
       // SOUTH-RIGHT door (69-70,39) → Moonwell Pass (its north door interior)
       { fromX: 69, fromY: 39, toZone: 'route-moonwell-garden', toX: 14, toY: 1, direction: 'down' },
       { fromX: 70, fromY: 39, toZone: 'route-moonwell-garden', toX: 15, toY: 1, direction: 'down' },
