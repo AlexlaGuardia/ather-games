@@ -318,6 +318,8 @@ export default function ShimmerPage() {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const isMobile = useIsMobile()
   const [started, setStarted] = useState(false)
+  const [hasSave, setHasSave] = useState(false)
+  const [confirmWipe, setConfirmWipe] = useState(false)
   const [needsShimmerfile, setNeedsShimmerfile] = useState(false)
   const [playerPopup, setPlayerPopup] = useState<{ username: string; playerId: string; screenX: number; screenY: number } | null>(null)
   const shimmerfileRef = useRef<{ user_id: string; username: string; character_id: string } | null>(null)
@@ -638,6 +640,21 @@ export default function ShimmerPage() {
     spawnZonePickups(zoneRef.current.id)
     setStarted(true)
   }, [isSignedIn, load, initDefaultNodes, spawnZonePickups, applyZoneOverride])
+
+  // Detect an existing local save so the title can offer "New game" (the save is
+  // localStorage-backed — see use-cloud-save.ts; ather.games is login-free).
+  useEffect(() => {
+    try { setHasSave(!!localStorage.getItem('ather:save:shimmer')) } catch { /* private mode */ }
+  }, [])
+
+  // Wipe the save and start a fresh playthrough (intro flow + tutorial run again).
+  const startNewGame = useCallback(() => {
+    try { localStorage.removeItem('ather:save:shimmer') } catch { /* ignore */ }
+    loadedRef.current = false      // force load() to miss → new-player branch
+    setConfirmWipe(false)
+    setHasSave(false)
+    startGame()
+  }, [startGame])
 
   // Toggle menu with ESC
   const toggleMenu = useCallback(() => {
@@ -3050,10 +3067,41 @@ export default function ShimmerPage() {
 
           <button
             onClick={startGame}
-            className="px-8 sm:px-12 py-3 sm:py-4 rounded-lg bg-[#d4a843] text-[#1a1a2e] font-display font-semibold text-xl sm:text-2xl hover:brightness-110 transition-all shadow-lg shadow-[#d4a843]/25 mb-10"
+            className={`px-8 sm:px-12 py-3 sm:py-4 rounded-lg bg-[#d4a843] text-[#1a1a2e] font-display font-semibold text-xl sm:text-2xl hover:brightness-110 transition-all shadow-lg shadow-[#d4a843]/25 ${hasSave ? 'mb-4' : 'mb-10'}`}
           >
-            Enter the Shimmer
+            {hasSave ? 'Continue' : 'Enter the Shimmer'}
           </button>
+
+          {hasSave && (
+            <div className="mb-10 flex flex-col items-center gap-2">
+              {!confirmWipe ? (
+                <button
+                  onClick={() => setConfirmWipe(true)}
+                  className="text-text-faint hover:text-text-dim text-sm sm:text-base underline underline-offset-4 decoration-text-faint/40 transition-colors"
+                >
+                  New game
+                </button>
+              ) : (
+                <div className="flex flex-col items-center gap-2">
+                  <p className="text-text-dim text-sm sm:text-base">Erase your save and start over?</p>
+                  <div className="flex items-center gap-3">
+                    <button
+                      onClick={startNewGame}
+                      className="px-4 py-1.5 rounded-md bg-[#b9483f] text-[#f6e9da] font-display font-semibold text-sm sm:text-base hover:brightness-110 transition-all"
+                    >
+                      Erase &amp; start over
+                    </button>
+                    <button
+                      onClick={() => setConfirmWipe(false)}
+                      className="px-4 py-1.5 rounded-md border border-text-faint/30 text-text-dim text-sm sm:text-base hover:text-text transition-colors"
+                    >
+                      Keep my save
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
 
           <div className="text-left bg-[#16142a]/60 rounded-xl p-4 sm:p-6 border border-[#d4a843]/15">
             <p className="font-display font-semibold text-text text-lg sm:text-[22px] mb-3 sm:mb-4">What is Shimmer?</p>
