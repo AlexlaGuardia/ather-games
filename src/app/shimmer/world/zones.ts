@@ -91,13 +91,13 @@ export const ZONES: Zone[] = [
     name: 'Moonwell Glade',
     element: 'water',
     grid: MOONWELL_GLADE,
-    playerStart: { tileX: 2, tileY: 8 },
+    playerStart: { tileX: 1, tileY: 8 },
     warps: [
-      { fromX: 0, fromY: 7, toZone: 'route-spirit-moonwell', toX: 28, toY: 5, direction: 'left' },
-      { fromX: 0, fromY: 8, toZone: 'route-spirit-moonwell', toX: 28, toY: 5, direction: 'left' },
-      // Moonwell Glade → Moonwell Pass (enter its EAST opening). Edge refined when we whiteboard this area.
-      { fromX: 21, fromY: 7, toZone: 'route-moonwell-garden', toX: 28, toY: 7, direction: 'left' },
-      { fromX: 21, fromY: 8, toZone: 'route-moonwell-garden', toX: 28, toY: 7, direction: 'left' },
+      // LEFT (rows 8-9) → Moonwell Pass (enter its east opening)
+      { fromX: 0, fromY: 8, toZone: 'route-moonwell-garden', toX: 28, toY: 7, direction: 'left' },
+      { fromX: 0, fromY: 9, toZone: 'route-moonwell-garden', toX: 28, toY: 8, direction: 'left' },
+      // Greg's house door (col 10, row 13) → his home interior
+      { fromX: 10, fromY: 13, toZone: 'moonwell-glade-gregory-s-home', toX: 4, toY: 8, direction: 'up' },
     ],
   },
   {
@@ -303,9 +303,12 @@ export const ZONES: Zone[] = [
     name: "Moonwell Glade (Gregory's Home)",
     element: 'water',
     grid: MOONWELL_GLADE_GREGORY_S_HOME,
-    playerStart: { tileX: 5, tileY: 5 },
+    playerStart: { tileX: 4, tileY: 8 },
     warps: [
-      { fromX: 14, fromY: 14, toZone: 'moonwell-glade', toX: 15, toY: 13, direction: 'up' },
+      // Door at the bottom → back out to the Glade (below the house). Was (14,14) — out of
+      // bounds for this 10x10 room, which is why the interior used to be a dead-end.
+      { fromX: 4, fromY: 9, toZone: 'moonwell-glade', toX: 10, toY: 14, direction: 'down' },
+      { fromX: 5, fromY: 9, toZone: 'moonwell-glade', toX: 10, toY: 14, direction: 'down' },
     ],
   },
   {
@@ -428,9 +431,9 @@ export const ZONES: Zone[] = [
       // WEST → Home Plot
       { fromX: 0, fromY: 7, toZone: 'garden', toX: 24, toY: 9, direction: 'left' },
       { fromX: 0, fromY: 8, toZone: 'garden', toX: 24, toY: 9, direction: 'left' },
-      // EAST → Moonwell Glade
-      { fromX: 29, fromY: 7, toZone: 'moonwell-glade', toX: 2, toY: 8, direction: 'right' },
-      { fromX: 29, fromY: 8, toZone: 'moonwell-glade', toX: 2, toY: 8, direction: 'right' },
+      // EAST → Moonwell Glade (its west opening, rows 8-9)
+      { fromX: 29, fromY: 7, toZone: 'moonwell-glade', toX: 1, toY: 8, direction: 'right' },
+      { fromX: 29, fromY: 8, toZone: 'moonwell-glade', toX: 1, toY: 9, direction: 'right' },
       // NORTH → Spirit Meadows
       { fromX: 14, fromY: 0, toZone: 'spirit-meadow', toX: 15, toY: 14, direction: 'up' }, // arrive at Spirit Meadow bottom-right
       { fromX: 15, fromY: 0, toZone: 'spirit-meadow', toX: 15, toY: 14, direction: 'up' },
