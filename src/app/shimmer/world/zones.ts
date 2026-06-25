@@ -45,7 +45,7 @@ export function getZone(zones: Zone[], id: string): Zone | null {
 // Garden → east → Moonwell Glade (shortcut, blocked until tutorialComplete)
 // Moonwell Glade → east → Spore Hollow (post-tutorial)
 
-import { GARDEN, MYCELIAL_PATH, MOONWELL_GLADE, SPORE_HOLLOW, TWILIGHT_THICKET, THE_THRESHOLD, MANA_SPRINGS, SPIRIT_MEADOW, MOONWELL_GLADE_GREGORY_S_HOME, SORREL_HOLD, BRACK_HOLD, TEST_SANDBOX,
+import { GARDEN, MYCELIAL_PATH, MOONWELL_GLADE, SPORE_HOLLOW, TWILIGHT_THICKET, WOODED_TRAIL, THE_THRESHOLD, MANA_SPRINGS, SPIRIT_MEADOW, MOONWELL_GLADE_GREGORY_S_HOME, SORREL_HOLD, BRACK_HOLD, TEST_SANDBOX,
   FLAT_TERRAIN_DEMO,
   FP_GARDEN, FP_LARGE_1, FP_LARGE_2, FP_LARGE_3, FP_MED_1, FP_MED_2, FP_MED_3, FP_MED_4, FP_HUGE,
   ROUTE_GARDEN_MYCELIAL, ROUTE_MYCELIAL_SPIRIT, ROUTE_SPIRIT_MOONWELL, ROUTE_MOONWELL_GARDEN } from './tilemap'
@@ -78,9 +78,9 @@ export const ZONES: Zone[] = [
       // EAST → Route One → Home Plot
       { fromX: 21, fromY: 7, toZone: 'route-garden-mycelial', toX: 28, toY: 5, direction: 'right' },
       { fromX: 21, fromY: 8, toZone: 'route-garden-mycelial', toX: 28, toY: 5, direction: 'right' },
-      // WEST → Wooded Pass → Twilight Thicket (provisional until those areas are whiteboarded)
-      { fromX: 0, fromY: 7, toZone: 'twilight-thicket', toX: 1, toY: 9, direction: 'left' },
-      { fromX: 0, fromY: 8, toZone: 'twilight-thicket', toX: 1, toY: 9, direction: 'left' },
+      // WEST → Wooded Trail (arrive at its east opening, rows 7-8)
+      { fromX: 0, fromY: 7, toZone: 'wooded-trail', toX: 25, toY: 8, direction: 'left' },
+      { fromX: 0, fromY: 8, toZone: 'wooded-trail', toX: 25, toY: 8, direction: 'left' },
       // SOUTH → Voranyx Caverns (the east arm; provisional until that branch is whiteboarded)
       { fromX: 5, fromY: 15, toZone: 'spore-hollow', toX: 1, toY: 12, direction: 'down' },
       { fromX: 6, fromY: 15, toZone: 'spore-hollow', toX: 1, toY: 12, direction: 'down' },
@@ -122,9 +122,25 @@ export const ZONES: Zone[] = [
     grid: TWILIGHT_THICKET,
     playerStart: { tileX: 1, tileY: 9 },
     warps: [
-      // West entry → Mycelial Path (Wooded Pass side; refined when we whiteboard Twilight Thicket)
-      { fromX: 0, fromY: 9, toZone: 'mycelial-path', toX: 1, toY: 7, direction: 'left' },
-      { fromX: 0, fromY: 10, toZone: 'mycelial-path', toX: 1, toY: 7, direction: 'left' },
+      // West entry → Wooded Trail (arrive back at its top-left, by the north exit).
+      // Provisional return edge — refined when we whiteboard Twilight Thicket itself.
+      { fromX: 0, fromY: 9, toZone: 'wooded-trail', toX: 4, toY: 2, direction: 'down' },
+      { fromX: 0, fromY: 10, toZone: 'wooded-trail', toX: 4, toY: 2, direction: 'down' },
+    ],
+  },
+  {
+    id: 'wooded-trail',
+    name: 'Wooded Trail',
+    element: 'earth', // wooded/forestry pocket between Mycelial Path and Twilight Thicket
+    grid: WOODED_TRAIL,
+    playerStart: { tileX: 25, tileY: 8 },
+    warps: [
+      // EAST → back to Mycelial Path (its west opening, rows 7-8)
+      { fromX: 27, fromY: 7, toZone: 'mycelial-path', toX: 1, toY: 7, direction: 'right' },
+      { fromX: 27, fromY: 8, toZone: 'mycelial-path', toX: 1, toY: 7, direction: 'right' },
+      // NORTH (top-left, cols 4-5) → Twilight Thicket (its west entry; provisional until Twilight is whiteboarded)
+      { fromX: 4, fromY: 0, toZone: 'twilight-thicket', toX: 1, toY: 9, direction: 'up' },
+      { fromX: 5, fromY: 0, toZone: 'twilight-thicket', toX: 1, toY: 9, direction: 'up' },
     ],
   },
   {
