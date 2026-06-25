@@ -45,7 +45,7 @@ export function getZone(zones: Zone[], id: string): Zone | null {
 // Garden → east → Moonwell Glade (shortcut, blocked until tutorialComplete)
 // Moonwell Glade → east → Spore Hollow (post-tutorial)
 
-import { GARDEN, MYCELIAL_PATH, MOONWELL_GLADE, SPORE_HOLLOW, VORANYX_DEEP, TWILIGHT_THICKET, WOODED_TRAIL, THE_THRESHOLD, MANA_SPRINGS, ROUTE_2, ROUTE_3, GLOVIEW_VILLAGE, SPIRIT_MEADOW, MOONWELL_GLADE_GREGORY_S_HOME, SORREL_HOLD, BRACK_HOLD, TEST_SANDBOX,
+import { GARDEN, MYCELIAL_PATH, MOONWELL_GLADE, SPORE_HOLLOW, VORANYX_DEEP, TWILIGHT_THICKET, WOODED_TRAIL, THE_THRESHOLD, MANA_SPRINGS, ROUTE_2, ROUTE_3, THE_OUTFIELDS, GLOVIEW_VILLAGE, SPIRIT_MEADOW, MOONWELL_GLADE_GREGORY_S_HOME, SORREL_HOLD, BRACK_HOLD, TEST_SANDBOX,
   FLAT_TERRAIN_DEMO,
   FP_GARDEN, FP_LARGE_1, FP_LARGE_2, FP_LARGE_3, FP_MED_1, FP_MED_2, FP_MED_3, FP_MED_4, FP_HUGE,
   ROUTE_GARDEN_MYCELIAL, ROUTE_MYCELIAL_SPIRIT, ROUTE_SPIRIT_MOONWELL, ROUTE_MOONWELL_GARDEN } from './tilemap'
@@ -232,9 +232,24 @@ export const ZONES: Zone[] = [
     grid: ROUTE_3,
     playerStart: { tileX: 10, tileY: 1 },
     warps: [
-      // NORTH → back up to Gloview Village (its bottom-left opening, cols 2-3)
+      // TOP → back up to Gloview Village (its bottom-left opening, cols 2-3)
       { fromX: 10, fromY: 0, toZone: 'gloview-village', toX: 2, toY: 20, direction: 'up' },
       { fromX: 11, fromY: 0, toZone: 'gloview-village', toX: 3, toY: 20, direction: 'up' },
+      // BOTTOM-RIGHT (cols 18-19) → The Outfields (arrive at its north opening)
+      { fromX: 18, fromY: 27, toZone: 'the-outfields', toX: 14, toY: 1, direction: 'down' },
+      { fromX: 19, fromY: 27, toZone: 'the-outfields', toX: 15, toY: 1, direction: 'down' },
+    ],
+  },
+  {
+    id: 'the-outfields',
+    name: 'The Outfields',
+    element: 'earth',
+    grid: THE_OUTFIELDS,
+    playerStart: { tileX: 14, tileY: 1 },
+    warps: [
+      // NORTH → back up to Route 3 (its bottom opening, cols 18-19)
+      { fromX: 14, fromY: 0, toZone: 'route-3', toX: 18, toY: 26, direction: 'up' },
+      { fromX: 15, fromY: 0, toZone: 'route-3', toX: 19, toY: 26, direction: 'up' },
     ],
   },
   {
