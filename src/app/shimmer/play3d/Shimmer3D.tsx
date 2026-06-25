@@ -52,6 +52,7 @@ function usePaint(cells: Cell[], paint: (c: number, r: number, shift: boolean) =
   }, [])
   const apply = (e: ThreeEvent<PointerEvent>, isDown: boolean) => {
     if (!enabled || e.instanceId == null) return
+    if (isDown && e.nativeEvent.button !== 0) return // left button only (right-drag = camera)
     if (!isDown && !painting.current) return
     const [c, r] = cells[e.instanceId]
     const key = `${c},${r}`
@@ -163,35 +164,38 @@ function Player({ posRef, gridRef, heightsRef, zoneIdRef, editRef, onWarp }: {
       return walkable(grid, cx, cz) && (heights[cz]?.[cx] ?? 0) - curH <= 1
     }
 
-    state.camera.getWorldDirection(fwd); fwd.y = 0; fwd.normalize()
-    right.crossVectors(fwd, UP).normalize()
-    move.set(0, 0, 0)
-    if (k['w'] || k['arrowup']) move.add(fwd)
-    if (k['s'] || k['arrowdown']) move.sub(fwd)
-    if (k['d'] || k['arrowright']) move.add(right)
-    if (k['a'] || k['arrowleft']) move.sub(right)
+    // In edit mode WASD drives the spectator camera, not the player — skip player movement/warps.
+    if (!editRef.current) {
+      state.camera.getWorldDirection(fwd); fwd.y = 0; fwd.normalize()
+      right.crossVectors(fwd, UP).normalize()
+      move.set(0, 0, 0)
+      if (k['w'] || k['arrowup']) move.add(fwd)
+      if (k['s'] || k['arrowdown']) move.sub(fwd)
+      if (k['d'] || k['arrowright']) move.add(right)
+      if (k['a'] || k['arrowleft']) move.sub(right)
 
-    if (move.lengthSq() > 0) {
-      move.normalize()
-      const dstep = Math.min(dt, 0.05) * 5
-      const nx = p.x + move.x * dstep
-      if (canStand(Math.round(nx), Math.round(p.z))) p.x = nx
-      const nz = p.z + move.z * dstep
-      if (canStand(Math.round(p.x), Math.round(nz))) p.z = nz
-      yaw.current = Math.atan2(move.x, move.z)
-    }
+      if (move.lengthSq() > 0) {
+        move.normalize()
+        const dstep = Math.min(dt, 0.05) * 5
+        const nx = p.x + move.x * dstep
+        if (canStand(Math.round(nx), Math.round(p.z))) p.x = nx
+        const nz = p.z + move.z * dstep
+        if (canStand(Math.round(p.x), Math.round(nz))) p.z = nz
+        yaw.current = Math.atan2(move.x, move.z)
+      }
 
-    const standTop = (heights[Math.round(p.z)]?.[Math.round(p.x)] ?? 0) * STEP
-    p.y += (standTop - p.y) * 0.25
+      const standTop = (heights[Math.round(p.z)]?.[Math.round(p.x)] ?? 0) * STEP
+      p.y += (standTop - p.y) * 0.25
 
-    const tx = Math.round(p.x), tz = Math.round(p.z)
-    const tileKey = `${tx},${tz}`
-    const tileChanged = tileKey !== lastTile.current
-    lastTile.current = tileKey
-    if (warpCd.current > 0) warpCd.current -= dt
-    else if (tileChanged) {
-      const w = checkWarp(ZONES, zoneIdRef.current, tx, tz)
-      if (w) { onWarp(w); warpCd.current = 0.4 }
+      const tx = Math.round(p.x), tz = Math.round(p.z)
+      const tileKey = `${tx},${tz}`
+      const tileChanged = tileKey !== lastTile.current
+      lastTile.current = tileKey
+      if (warpCd.current > 0) warpCd.current -= dt
+      else if (tileChanged) {
+        const w = checkWarp(ZONES, zoneIdRef.current, tx, tz)
+        if (w) { onWarp(w); warpCd.current = 0.4 }
+      }
     }
 
     const g = group.current!
@@ -209,39 +213,67 @@ function Player({ posRef, gridRef, heightsRef, zoneIdRef, editRef, onWarp }: {
   )
 }
 
-function CameraRig({ posRef, yawRef, editRef }: {
-  posRef: React.RefObject<THREE.Vector3>; yawRef: React.RefObject<number>; editRef: React.RefObject<boolean>
+function CameraRig({ posRef, editFocusRef, yawRef, editRef }: {
+  posRef: React.RefObject<THREE.Vector3>; editFocusRef: React.RefObject<THREE.Vector3>
+  yawRef: React.RefObject<number>; editRef: React.RefObject<boolean>
 }) {
   const yaw = yawRef
   const pitch = useRef(0.6)
   const dist = useRef(11)
+  const keys = useRef<Record<string, boolean>>({})
+  const fwd = useMemo(() => new THREE.Vector3(), [])
+  const right = useMemo(() => new THREE.Vector3(), [])
   useEffect(() => {
     let dragging = false, lx = 0, ly = 0
-    const dn = (e: PointerEvent) => { if (editRef.current) return; dragging = true; lx = e.clientX; ly = e.clientY }
+    // non-edit: left-drag orbits (follow-cam). edit (spectator): right-drag looks (left = brush).
+    const dn = (e: PointerEvent) => {
+      const ok = editRef.current ? e.button === 2 : e.button === 0
+      if (!ok) return
+      dragging = true; lx = e.clientX; ly = e.clientY
+    }
     const mv = (e: PointerEvent) => {
-      if (!dragging || editRef.current) return
+      if (!dragging) return
       yaw.current -= (e.clientX - lx) * 0.005
-      pitch.current = Math.max(0.35, Math.min(0.95, pitch.current - (e.clientY - ly) * 0.004))
+      pitch.current = Math.max(0.2, Math.min(1.45, pitch.current - (e.clientY - ly) * 0.004))
       lx = e.clientX; ly = e.clientY
     }
     const up = () => { dragging = false }
-    const wh = (e: WheelEvent) => { dist.current = Math.max(5, Math.min(20, dist.current + e.deltaY * 0.012)) }
+    const wh = (e: WheelEvent) => { dist.current = Math.max(4, Math.min(40, dist.current + e.deltaY * 0.012)) }
+    const ctx = (e: Event) => { if (editRef.current) e.preventDefault() } // no menu during right-drag
+    const kd = (e: KeyboardEvent) => { keys.current[e.key.toLowerCase()] = true }
+    const ku = (e: KeyboardEvent) => { keys.current[e.key.toLowerCase()] = false }
     window.addEventListener('pointerdown', dn); window.addEventListener('pointermove', mv)
     window.addEventListener('pointerup', up); window.addEventListener('wheel', wh, { passive: true })
+    window.addEventListener('contextmenu', ctx); window.addEventListener('keydown', kd); window.addEventListener('keyup', ku)
     return () => {
       window.removeEventListener('pointerdown', dn); window.removeEventListener('pointermove', mv)
       window.removeEventListener('pointerup', up); window.removeEventListener('wheel', wh)
+      window.removeEventListener('contextmenu', ctx); window.removeEventListener('keydown', kd); window.removeEventListener('keyup', ku)
     }
   }, [editRef, yaw])
-  useFrame((state) => {
-    const p = posRef.current
-    const sp = Math.sin(pitch.current), cp = Math.cos(pitch.current)
+  useFrame((state, dt) => {
+    const editing = editRef.current
+    const target = editing ? editFocusRef.current : posRef.current
+    if (editing) {
+      // spectator fly: WASD pans (camera-relative, ground plane), Q/E lower/raise
+      const k = keys.current
+      state.camera.getWorldDirection(fwd); fwd.y = 0; fwd.normalize()
+      right.crossVectors(fwd, UP).normalize()
+      const sp = dist.current * Math.min(dt, 0.05) * 1.4
+      if (k['w'] || k['arrowup']) target.addScaledVector(fwd, sp)
+      if (k['s'] || k['arrowdown']) target.addScaledVector(fwd, -sp)
+      if (k['d'] || k['arrowright']) target.addScaledVector(right, sp)
+      if (k['a'] || k['arrowleft']) target.addScaledVector(right, -sp)
+      if (k['e']) target.y += sp
+      if (k['q']) target.y -= sp
+    }
+    const s = Math.sin(pitch.current), c = Math.cos(pitch.current)
     state.camera.position.set(
-      p.x + dist.current * sp * Math.sin(yaw.current),
-      p.y + dist.current * cp,
-      p.z + dist.current * sp * Math.cos(yaw.current),
+      target.x + dist.current * s * Math.sin(yaw.current),
+      target.y + dist.current * c,
+      target.z + dist.current * s * Math.cos(yaw.current),
     )
-    state.camera.lookAt(p.x, p.y + 0.4, p.z)
+    state.camera.lookAt(target.x, target.y + 0.4, target.z)
   })
   return null
 }
@@ -249,6 +281,7 @@ function CameraRig({ posRef, yawRef, editRef }: {
 function Scene(props: {
   zone: Zone; gridRef: React.RefObject<number[][]>; heights: number[][]; version: number; dims: string
   posRef: React.RefObject<THREE.Vector3>; heightsRef: React.RefObject<number[][]>; zoneIdRef: React.RefObject<string>
+  editFocusRef: React.RefObject<THREE.Vector3>
   onWarp: (w: Warp) => void; yawRef: React.RefObject<number>; editRef: React.RefObject<boolean>
   paint: (c: number, r: number, shift: boolean) => void; editing: boolean
 }) {
@@ -265,7 +298,7 @@ function Scene(props: {
       />
       <ZoneGeometry key={`${props.zone.id}-${props.dims}`} gridRef={props.gridRef} heights={props.heights} version={props.version} paint={props.paint} editing={props.editing} />
       <Player posRef={props.posRef} gridRef={props.gridRef} heightsRef={props.heightsRef} zoneIdRef={props.zoneIdRef} editRef={props.editRef} onWarp={props.onWarp} />
-      <CameraRig posRef={props.posRef} yawRef={props.yawRef} editRef={props.editRef} />
+      <CameraRig posRef={props.posRef} editFocusRef={props.editFocusRef} yawRef={props.yawRef} editRef={props.editRef} />
     </>
   )
 }
@@ -295,10 +328,13 @@ export default function Shimmer3D() {
     posRef.current = new THREE.Vector3(ps.tileX, 0, ps.tileY)
   }
   const camYaw = useRef(0)
+  const editFocusRef = useRef(new THREE.Vector3())
 
   const [version, setVersion] = useState(0)
   const [editMode, setEditMode] = useState(false)
   const editRef = useRef(false); editRef.current = editMode
+  // entering edit mode: start the spectator camera where the player is standing
+  useEffect(() => { if (editMode) editFocusRef.current.copy(posRef.current!) }, [editMode])
   const [tool, setTool] = useState<Tool>('raise')
   const toolRef = useRef<Tool>('raise'); toolRef.current = tool
   const [brush, setBrush] = useState(1)
@@ -388,6 +424,7 @@ export default function Shimmer3D() {
         <Scene
           zone={zone} gridRef={gridRef} heights={heightsRef.current} version={version} dims={dims}
           posRef={posRef as React.RefObject<THREE.Vector3>} heightsRef={heightsRef} zoneIdRef={zoneIdRef}
+          editFocusRef={editFocusRef}
           onWarp={onWarp} yawRef={camYaw} editRef={editRef} paint={paint} editing={editMode}
         />
       </Canvas>
@@ -398,7 +435,7 @@ export default function Shimmer3D() {
       }}>
         Shimmer 3D — {zone.name}{editMode ? '  ·  EDIT' : ''}<br />
         <span style={{ opacity: 0.8 }}>
-          {editMode ? 'click/drag to paint · WASD move' : 'WASD · drag look · scroll zoom · edges warp · B to edit terrain'}
+          {editMode ? 'left-drag paint · WASD fly · Q/E down·up · right-drag look · scroll zoom' : 'WASD · drag look · scroll zoom · edges warp · B to edit terrain'}
         </span>
       </div>
 
