@@ -443,6 +443,17 @@ export default function Shimmer3D() {
     setZoneId(w.toZone)
   }, [])
 
+  // Jump straight to a zone to edit it (no walking/warping). Resets the player + camera focus
+  // to its spawn. NOTE: unsaved edits in the current zone are dropped — save before switching.
+  const selectZone = useCallback((id: string) => {
+    const z = getZone(ZONES, id)
+    if (!z) return
+    const ps = z.playerStart ?? { tileX: 1, tileY: 1 }
+    posRef.current!.set(ps.tileX, 0, ps.tileY)
+    editFocusRef.current.set(ps.tileX, 0, ps.tileY)
+    setZoneId(id)
+  }, [])
+
   const save = useCallback(async () => {
     setSaveMsg('saving…')
     try {
@@ -484,6 +495,22 @@ export default function Shimmer3D() {
           {editMode ? 'left-drag paint · WASD fly · Q/E down·up · right-drag look · scroll zoom' : 'WASD · drag look · scroll zoom · edges warp · B to edit terrain'}
         </span>
       </div>
+
+      {editMode && (
+        <div style={{ position: 'fixed', top: 70, left: 12, display: 'flex', flexDirection: 'column', gap: 3 }}>
+          <select
+            value={zoneId}
+            onChange={(e) => selectZone(e.target.value)}
+            style={{
+              padding: '6px 8px', borderRadius: 6, border: '1px solid #ffffff33', background: '#16142a',
+              color: '#e9dfc8', font: '700 13px ui-monospace, monospace', cursor: 'pointer', pointerEvents: 'auto', maxWidth: 260,
+            }}
+          >
+            {ZONES.map((z) => <option key={z.id} value={z.id}>{z.name}{z.id !== z.name ? ` (${z.id})` : ''}</option>)}
+          </select>
+          <span style={{ color: '#e9dfc8', opacity: 0.55, font: '600 11px ui-monospace, monospace' }}>jump to a map · save before switching</span>
+        </div>
+      )}
 
       {editMode && (
         <div style={{ position: 'fixed', top: 12, right: 12, display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'flex-end' }}>
