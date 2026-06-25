@@ -53,16 +53,15 @@ export const ZONES: Zone[] = [
   {
     id: 'garden',            // keep id stable (referenced widely); display = the player's own plot
     name: 'Home Plot',
-    element: 'mana',
-    grid: GARDEN,
-    playerStart: { tileX: 2, tileY: 9 },
+    grid: GARDEN, // 32x32, redesigned in the editor by Alex
+    playerStart: { tileX: 30, tileY: 9 },
     warps: [
-      // WEST edge → Route One (leads to Mycelial Path)
-      { fromX: 0, fromY: 8, toZone: 'route-garden-mycelial', toX: 1, toY: 5, direction: 'left' },
-      { fromX: 0, fromY: 9, toZone: 'route-garden-mycelial', toX: 1, toY: 5, direction: 'left' },
-      // EAST edge → Moonwell Pass (enter its WEST opening)
-      { fromX: 25, fromY: 8, toZone: 'route-moonwell-garden', toX: 1, toY: 28, direction: 'right' },
-      { fromX: 25, fromY: 9, toZone: 'route-moonwell-garden', toX: 1, toY: 29, direction: 'right' },
+      // LEFT door (0,11-12, placed in the editor) → Route 1 (leads to Mycelial Path)
+      { fromX: 0, fromY: 11, toZone: 'route-garden-mycelial', toX: 1, toY: 5, direction: 'left' },
+      { fromX: 0, fromY: 12, toZone: 'route-garden-mycelial', toX: 1, toY: 5, direction: 'left' },
+      // RIGHT door (31,9-10) → Moonwell Pass (its west door interior)
+      { fromX: 31, fromY: 9, toZone: 'route-moonwell-garden', toX: 1, toY: 28, direction: 'right' },
+      { fromX: 31, fromY: 10, toZone: 'route-moonwell-garden', toX: 1, toY: 29, direction: 'right' },
     ],
   },
   {
@@ -390,8 +389,8 @@ export const ZONES: Zone[] = [
     grid: ROUTE_GARDEN_MYCELIAL,
     playerStart: { tileX: 2, tileY: 5 },
     warps: [
-      { fromX: 0, fromY: 4, toZone: 'garden', toX: 1, toY: 9, direction: 'left' }, // back to Home Plot WEST edge
-      { fromX: 0, fromY: 5, toZone: 'garden', toX: 1, toY: 9, direction: 'left' },
+      { fromX: 0, fromY: 4, toZone: 'garden', toX: 1, toY: 11, direction: 'left' }, // arrive at Home Plot's left door
+      { fromX: 0, fromY: 5, toZone: 'garden', toX: 1, toY: 12, direction: 'left' },
       { fromX: 29, fromY: 4, toZone: 'mycelial-path', toX: 28, toY: 14, direction: 'left' }, // arrive at Mycelial's R door
       { fromX: 29, fromY: 5, toZone: 'mycelial-path', toX: 28, toY: 15, direction: 'left' },
     ],
@@ -427,8 +426,8 @@ export const ZONES: Zone[] = [
     playerStart: { tileX: 14, tileY: 1 },
     warps: [
       // WEST door (0,28-29 — placed in the editor) → Home Plot
-      { fromX: 0, fromY: 28, toZone: 'garden', toX: 24, toY: 9, direction: 'left' },
-      { fromX: 0, fromY: 29, toZone: 'garden', toX: 24, toY: 9, direction: 'left' },
+      { fromX: 0, fromY: 28, toZone: 'garden', toX: 30, toY: 9, direction: 'left' }, // arrive at Home Plot's right door
+      { fromX: 0, fromY: 29, toZone: 'garden', toX: 30, toY: 10, direction: 'left' },
       // EAST door (37,17-18) → Moonwell Glade (its west opening)
       { fromX: 37, fromY: 17, toZone: 'moonwell-glade', toX: 1, toY: 8, direction: 'right' },
       { fromX: 37, fromY: 18, toZone: 'moonwell-glade', toX: 1, toY: 9, direction: 'right' },
