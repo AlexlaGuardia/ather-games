@@ -13,25 +13,27 @@ import { getHeightGrid } from '../world/heightmaps'
 
 const START_ZONE = 'moonwell-glade'
 const WATER_ID = 8, FLOOR_ID = 97, WALL_ID = 34
+const VOID = -1 // empty cell — renders nothing, not walkable (draw land onto an empty grid)
 const STEP = 1.0
 const MAX_TIER = 8
 const UP = new THREE.Vector3(0, 1, 0)
 const DIR_YAW: Record<string, number> = { up: 0, down: Math.PI, left: Math.PI / 2, right: -Math.PI / 2 }
 
 type Cell = [number, number]
-type Tool = 'raise' | 'lower' | 'wall' | 'water' | 'floor'
-const HEIGHT_TOOLS = new Set<Tool>(['raise', 'lower'])
+type Tool = 'raise' | 'lower' | 'floor' | 'wall' | 'water' | 'void'
 
 function buckets(grid: number[][]) {
-  const floors: Cell[] = [], walls: Cell[] = [], waters: Cell[] = []
+  const floors: Cell[] = [], walls: Cell[] = [], waters: Cell[] = [], voids: Cell[] = []
   const rows = grid.length, cols = grid[0].length
   for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) {
-    const id = grid[r][c] & 0xFF
+    const v = grid[r][c]
+    if (v === VOID) { voids.push([c, r]); continue }
+    const id = v & 0xFF
     if (id === WATER_ID) waters.push([c, r])
     else if (walkable(grid, c, r)) floors.push([c, r])
     else walls.push([c, r])
   }
-  return { floors, walls, waters }
+  return { floors, walls, waters, voids }
 }
 
 function lerpAngle(a: number, b: number, t: number) {
@@ -115,19 +117,22 @@ function ZoneGeometry({ gridRef, heights, version, paint, editing }: {
   gridRef: React.RefObject<number[][]>; heights: number[][]; version: number
   paint: (c: number, r: number, shift: boolean) => void; editing: boolean
 }) {
-  const { floors, walls, waters } = useMemo(() => buckets(gridRef.current), [version, gridRef])
+  const { floors, walls, waters, voids } = useMemo(() => buckets(gridRef.current), [version, gridRef])
   return (
     <>
       <FloorTerrain floors={floors} heights={heights} version={version} paint={paint} editing={editing} />
       <Tiles cells={walls} size={[1, 1.3, 1]} y={0.55} color="#8a8d96" paint={paint} editing={editing} />
       <Tiles cells={waters} size={[1, 0.3, 1]} y={-0.15} color="#3aa0d6" opacity={0.85} paint={paint} editing={editing} />
+      {/* empty cells: invisible in play; a faint clickable grid-canvas to draw land onto while editing */}
+      {editing && <Tiles cells={voids} size={[0.92, 0.05, 0.92]} y={-0.02} color="#39406b" opacity={0.5} paint={paint} editing={editing} />}
     </>
   )
 }
 
-function Player({ posRef, gridRef, heightsRef, zoneIdRef, onWarp }: {
+function Player({ posRef, gridRef, heightsRef, zoneIdRef, editRef, onWarp }: {
   posRef: React.RefObject<THREE.Vector3>; gridRef: React.RefObject<number[][]>
-  heightsRef: React.RefObject<number[][]>; zoneIdRef: React.RefObject<string>; onWarp: (w: Warp) => void
+  heightsRef: React.RefObject<number[][]>; zoneIdRef: React.RefObject<string>
+  editRef: React.RefObject<boolean>; onWarp: (w: Warp) => void
 }) {
   const group = useRef<THREE.Group>(null)
   const keys = useRef<Record<string, boolean>>({})
@@ -151,8 +156,12 @@ function Player({ posRef, gridRef, heightsRef, zoneIdRef, onWarp }: {
     const heights = heightsRef.current
     const p = posRef.current
     const curH = heights[Math.round(p.z)]?.[Math.round(p.x)] ?? 0
-    const canStand = (cx: number, cz: number) =>
-      walkable(grid, cx, cz) && (heights[cz]?.[cx] ?? 0) - curH <= 1
+    const canStand = (cx: number, cz: number) => {
+      if (cz < 0 || cz >= grid.length || cx < 0 || cx >= grid[0].length) return false
+      if (editRef.current) return true // roam freely while editing (so you can paint anywhere)
+      if (grid[cz][cx] === VOID) return false
+      return walkable(grid, cx, cz) && (heights[cz]?.[cx] ?? 0) - curH <= 1
+    }
 
     state.camera.getWorldDirection(fwd); fwd.y = 0; fwd.normalize()
     right.crossVectors(fwd, UP).normalize()
@@ -255,15 +264,15 @@ function Scene(props: {
         shadow-camera-near={0.5} shadow-camera-far={160}
       />
       <ZoneGeometry key={`${props.zone.id}-${props.dims}`} gridRef={props.gridRef} heights={props.heights} version={props.version} paint={props.paint} editing={props.editing} />
-      <Player posRef={props.posRef} gridRef={props.gridRef} heightsRef={props.heightsRef} zoneIdRef={props.zoneIdRef} onWarp={props.onWarp} />
+      <Player posRef={props.posRef} gridRef={props.gridRef} heightsRef={props.heightsRef} zoneIdRef={props.zoneIdRef} editRef={props.editRef} onWarp={props.onWarp} />
       <CameraRig posRef={props.posRef} yawRef={props.yawRef} editRef={props.editRef} />
     </>
   )
 }
 
 const TOOLS: { id: Tool; label: string }[] = [
-  { id: 'raise', label: 'Raise' }, { id: 'lower', label: 'Lower' },
-  { id: 'wall', label: 'Wall' }, { id: 'water', label: 'Water' }, { id: 'floor', label: 'Floor' },
+  { id: 'floor', label: 'Land' }, { id: 'raise', label: 'Raise' }, { id: 'lower', label: 'Lower' },
+  { id: 'wall', label: 'Wall' }, { id: 'water', label: 'Water' }, { id: 'void', label: 'Erase' },
 ]
 
 export default function Shimmer3D() {
@@ -310,8 +319,16 @@ export default function Shimmer3D() {
       else if (t === 'wall') G[rr][cc] = WALL_ID
       else if (t === 'water') G[rr][cc] = WATER_ID
       else if (t === 'floor') G[rr][cc] = FLOOR_ID
+      else if (t === 'void') { G[rr][cc] = VOID; H[rr][cc] = 0 }
       if (t === 'raise') H[rr][cc] = Math.max(0, H[rr][cc])
     }
+    setVersion((v) => v + 1)
+  }, [])
+
+  // Empty the whole zone to a blank grid — then draw the land's shape onto it.
+  const clearZone = useCallback(() => {
+    const G = gridRef.current, H = heightsRef.current
+    for (let r = 0; r < G.length; r++) for (let c = 0; c < G[0].length; c++) { G[r][c] = VOID; H[r][c] = 0 }
     setVersion((v) => v + 1)
   }, [])
 
@@ -327,7 +344,7 @@ export default function Shimmer3D() {
       const gr: number[] = [], hr: number[] = []
       for (let c = 0; c < cols; c++) {
         if (r < oldRows && c < oldCols) { gr.push(G[r][c]); hr.push(H[r]?.[c] ?? 0) }
-        else { gr.push(FLOOR_ID); hr.push(0) }
+        else { gr.push(VOID); hr.push(0) } // new space is empty — draw land into it
       }
       ng.push(gr); nh.push(hr)
     }
@@ -402,7 +419,10 @@ export default function Shimmer3D() {
             <Btn onClick={() => resize(0, -2)}>H−</Btn>
             <Btn onClick={() => resize(0, 2)}>H+</Btn>
           </div>
-          <button onClick={save} style={{ padding: '6px 16px', borderRadius: 6, border: 'none', background: '#d4a843', color: '#1a1a2e', font: '800 13px ui-monospace, monospace', cursor: 'pointer' }}>Save zone</button>
+          <div style={{ display: 'flex', gap: 6 }}>
+            <Btn onClick={clearZone}>Clear to empty</Btn>
+            <button onClick={save} style={{ padding: '6px 16px', borderRadius: 6, border: 'none', background: '#d4a843', color: '#1a1a2e', font: '800 13px ui-monospace, monospace', cursor: 'pointer' }}>Save zone</button>
+          </div>
           {saveMsg && <span style={{ color: '#e9dfc8', font: '600 12px ui-monospace, monospace' }}>{saveMsg}</span>}
         </div>
       )}
