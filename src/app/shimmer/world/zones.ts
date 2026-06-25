@@ -69,21 +69,20 @@ export const ZONES: Zone[] = [
     id: 'mycelial-path',
     name: 'Mycelial Path',
     element: 'earth',
-    grid: MYCELIAL_PATH,
-    playerStart: { tileX: 2, tileY: 8 },
+    grid: MYCELIAL_PATH, // 50x30, redesigned in the editor by Alex (with encounter mist)
+    playerStart: { tileX: 1, tileY: 7 },
     warps: [
-      // NORTH → Spirit Meadows (via connector)
-      { fromX: 10, fromY: 0, toZone: 'route-mycelial-spirit', toX: 1, toY: 5, direction: 'up' },
-      { fromX: 11, fromY: 0, toZone: 'route-mycelial-spirit', toX: 1, toY: 5, direction: 'up' },
-      // EAST → Route One → Home Plot
-      { fromX: 21, fromY: 7, toZone: 'route-garden-mycelial', toX: 28, toY: 5, direction: 'right' },
-      { fromX: 21, fromY: 8, toZone: 'route-garden-mycelial', toX: 28, toY: 5, direction: 'right' },
-      // WEST → Wooded Trail (arrive at its east opening, rows 7-8)
+      // R door (29,14-15, placed in the editor) → Route 1 (Home Plot)
+      { fromX: 29, fromY: 14, toZone: 'route-garden-mycelial', toX: 28, toY: 5, direction: 'right' },
+      { fromX: 29, fromY: 15, toZone: 'route-garden-mycelial', toX: 28, toY: 5, direction: 'right' },
+      // L door (0,7-8) → Wooded Trail (its east opening)
       { fromX: 0, fromY: 7, toZone: 'wooded-trail', toX: 25, toY: 8, direction: 'left' },
       { fromX: 0, fromY: 8, toZone: 'wooded-trail', toX: 25, toY: 8, direction: 'left' },
-      // SOUTH → Voranyx Caverns (the east arm; provisional until that branch is whiteboarded)
-      { fromX: 5, fromY: 15, toZone: 'spore-hollow', toX: 12, toY: 1, direction: 'down' },
-      { fromX: 6, fromY: 15, toZone: 'spore-hollow', toX: 13, toY: 1, direction: 'down' },
+      // N door (8-9,49) → Spirit Meadows (its south-left door, direct — connector retired)
+      { fromX: 8, fromY: 49, toZone: 'spirit-meadow', toX: 10, toY: 38, direction: 'up' },
+      { fromX: 9, fromY: 49, toZone: 'spirit-meadow', toX: 11, toY: 38, direction: 'up' },
+      // (south→Voranyx east-arm link dropped — Alex's redesign has no Voranyx door; reconnects
+      //  when the east arm is redesigned.)
     ],
   },
   {
@@ -109,8 +108,8 @@ export const ZONES: Zone[] = [
     playerStart: { tileX: 12, tileY: 1 },
     warps: [
       // TOP (cols 12-13) → up to Mycelial Path (its south opening)
-      { fromX: 12, fromY: 0, toZone: 'mycelial-path', toX: 5, toY: 14, direction: 'up' },
-      { fromX: 13, fromY: 0, toZone: 'mycelial-path', toX: 5, toY: 14, direction: 'up' },
+      { fromX: 12, fromY: 0, toZone: 'mycelial-path', toX: 1, toY: 7, direction: 'up' }, // east arm orphaned pending its redesign
+      { fromX: 13, fromY: 0, toZone: 'mycelial-path', toX: 1, toY: 8, direction: 'up' },
       // BOTTOM (cols 11-12) → down to Mana Springs (its top opening, cols 8-9)
       { fromX: 11, fromY: 21, toZone: 'mana-springs', toX: 8, toY: 1, direction: 'down' },
       { fromX: 12, fromY: 21, toZone: 'mana-springs', toX: 9, toY: 1, direction: 'down' },
@@ -159,8 +158,8 @@ export const ZONES: Zone[] = [
     playerStart: { tileX: 25, tileY: 8 },
     warps: [
       // EAST → back to Mycelial Path (its west opening, rows 7-8)
-      { fromX: 27, fromY: 7, toZone: 'mycelial-path', toX: 1, toY: 7, direction: 'right' },
-      { fromX: 27, fromY: 8, toZone: 'mycelial-path', toX: 1, toY: 7, direction: 'right' },
+      { fromX: 27, fromY: 7, toZone: 'mycelial-path', toX: 1, toY: 7, direction: 'right' }, // arrive at Mycelial's L door
+      { fromX: 27, fromY: 8, toZone: 'mycelial-path', toX: 1, toY: 8, direction: 'right' },
       // NORTH (top-left, cols 4-5) → up into Twilight Thicket (arrive at its bottom exit)
       { fromX: 4, fromY: 0, toZone: 'twilight-thicket', toX: 12, toY: 18, direction: 'up' },
       { fromX: 5, fromY: 0, toZone: 'twilight-thicket', toX: 12, toY: 18, direction: 'up' },
@@ -261,8 +260,8 @@ export const ZONES: Zone[] = [
     playerStart: { tileX: 10, tileY: 38 },
     warps: [
       // SOUTH-LEFT door (10-11,39, placed in the editor) → Mycelial Path
-      { fromX: 10, fromY: 39, toZone: 'route-mycelial-spirit', toX: 28, toY: 5, direction: 'down' },
-      { fromX: 11, fromY: 39, toZone: 'route-mycelial-spirit', toX: 28, toY: 5, direction: 'down' },
+      { fromX: 10, fromY: 39, toZone: 'mycelial-path', toX: 8, toY: 48, direction: 'up' },
+      { fromX: 11, fromY: 39, toZone: 'mycelial-path', toX: 9, toY: 48, direction: 'up' },
       // SOUTH-RIGHT door (69-70,39) → Moonwell Pass (its north door interior)
       { fromX: 69, fromY: 39, toZone: 'route-moonwell-garden', toX: 14, toY: 1, direction: 'down' },
       { fromX: 70, fromY: 39, toZone: 'route-moonwell-garden', toX: 15, toY: 1, direction: 'down' },
@@ -393,8 +392,8 @@ export const ZONES: Zone[] = [
     warps: [
       { fromX: 0, fromY: 4, toZone: 'garden', toX: 1, toY: 9, direction: 'left' }, // back to Home Plot WEST edge
       { fromX: 0, fromY: 5, toZone: 'garden', toX: 1, toY: 9, direction: 'left' },
-      { fromX: 29, fromY: 4, toZone: 'mycelial-path', toX: 20, toY: 7, direction: 'left' }, // arrive at Mycelial EAST
-      { fromX: 29, fromY: 5, toZone: 'mycelial-path', toX: 20, toY: 7, direction: 'left' },
+      { fromX: 29, fromY: 4, toZone: 'mycelial-path', toX: 28, toY: 14, direction: 'left' }, // arrive at Mycelial's R door
+      { fromX: 29, fromY: 5, toZone: 'mycelial-path', toX: 28, toY: 15, direction: 'left' },
     ],
   },
   {
