@@ -32,6 +32,7 @@ const BG_TOP = '#03060f'
 const BG_BOT = '#06121f'
 const NEUTRAL = '#cfeaf2' // pre-fork player + UI light
 const DANGER = '#ff5d6c' // threat ring (bigger than you)
+const JOY_R = 62 // virtual-px deflection radius of the touch joystick (full tilt at the rim)
 
 const elColor: Record<ElementId, string> = Object.fromEntries(ELEMENTS.map((e) => [e.id, e.color])) as Record<ElementId, string>
 
@@ -58,6 +59,8 @@ export default function DriftlingPage() {
   const worldRef = useRef<World | null>(null)
   const seedRef = useRef(1)
   const pointer = useRef<{ x: number; y: number; active: boolean }>({ x: VW / 2, y: VH / 2, active: false })
+  // floating touch joystick: base anchors where the thumb lands, knob follows, heading = offset
+  const joy = useRef({ active: false, baseX: 0, baseY: 0, curX: 0, curY: 0, pid: -1 })
   const keys = useRef<Set<string>>(new Set())
   const syncT = useRef(0)
   const growFx = useRef(0) // seconds left on the evolve/fork payoff burst
@@ -117,8 +120,15 @@ export default function DriftlingPage() {
     if (k.has('w') || k.has('arrowup')) ky -= 1
     if (k.has('s') || k.has('arrowdown')) ky += 1
     if (kx || ky) { setHeading(w, kx, ky); return }
+    if (joy.current.active) {
+      // heading = thumb offset from the joystick base (full tilt at JOY_R; analog in between)
+      const dx = (joy.current.curX - joy.current.baseX) / JOY_R
+      const dy = (joy.current.curY - joy.current.baseY) / JOY_R
+      setHeading(w, dx, dy)
+      return
+    }
     if (pointer.current.active) {
-      // heading = pointer offset from screen centre (where the player sits)
+      // mouse: steer toward the cursor (offset from screen centre where the player sits)
       const dx = (pointer.current.x - VW / 2) / 90 // ~90px to full tilt
       const dy = (pointer.current.y - VH / 2) / 90
       setHeading(w, dx, dy)
@@ -163,7 +173,7 @@ export default function DriftlingPage() {
       } else if (w.state === 'ready' && phase !== 'ready') {
         // keyboard/pointer can flip state before React catches up
       }
-      render(canvas, w, ts, growFx.current)
+      render(canvas, w, ts, growFx.current, joy.current)
     }
     raf = requestAnimationFrame(draw)
     return () => cancelAnimationFrame(raf)
@@ -181,16 +191,28 @@ export default function DriftlingPage() {
     sfx.ensure()
     if (worldRef.current?.state === 'dead') return
     const p = ptFromEvent(e)
-    pointer.current = { ...p, active: true }
+    if (e.pointerType === 'mouse') {
+      pointer.current = { ...p, active: true }
+    } else {
+      // touch: drop the joystick base under the thumb
+      joy.current = { active: true, baseX: p.x, baseY: p.y, curX: p.x, curY: p.y, pid: e.pointerId }
+    }
     applyHeading(); launchIfReady()
   }, [phase])
   const onMove = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
     const p = ptFromEvent(e)
-    // mouse steers on hover; touch only while pressed
-    pointer.current = { ...p, active: e.pointerType === 'mouse' ? true : pointer.current.active }
+    if (e.pointerType === 'mouse') {
+      pointer.current = { ...p, active: true } // steers on hover
+    } else if (joy.current.active && e.pointerId === joy.current.pid) {
+      joy.current.curX = p.x; joy.current.curY = p.y
+    }
     applyHeading(); launchIfReady()
   }, [phase])
-  const onUp = useCallback(() => { pointer.current.active = false; applyHeading() }, [])
+  const onUp = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
+    if (e.pointerType === 'mouse') pointer.current.active = false
+    else if (e.pointerId === joy.current.pid) joy.current.active = false
+    applyHeading()
+  }, [])
 
   const restart = useCallback(() => { sfx.ensure(); boot() }, [boot])
   const toggleMute = () => { sfx.ensure(); const m = !sfx.isMuted(); sfx.setMuted(m); setMuted(m) }
@@ -233,7 +255,7 @@ export default function DriftlingPage() {
           <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-3 rounded-md text-center px-6 bg-[#03060f]/55">
             <div className="gx-title text-2xl tracking-[0.3em] uppercase" style={{ color: accent, textShadow: `0 0 18px ${accent}` }}>Driftling</div>
             <p className="text-[11px] leading-relaxed text-[#9fd6e0]/80 max-w-[280px]">
-              steer toward your finger to drift. eat anything smaller than you, slip anything bigger. grow enough and you evolve. the first thing you eat decides what you become.
+              touch and drag to swim that way. eat anything smaller than you, slip anything bigger. grow enough and you evolve. the first thing you eat decides what you become.
             </p>
             <div className="gx-label text-[12px] text-[#03060f] px-6 py-2.5 rounded-[2px] mt-1" style={{ background: accent, boxShadow: `0 0 18px ${accent}80` }}>drift to begin</div>
             {best > 0 && <div className="gx-label text-[10px] font-mono text-[#7fd8e6]/50 tracking-wider mt-1">best <span className="text-[#e8feff] tabular-nums">{best}</span></div>}
@@ -260,14 +282,16 @@ export default function DriftlingPage() {
       </div>
 
       <div className="w-full flex items-center justify-center mt-4" style={{ maxWidth: VW }}>
-        <p className="text-[10px] text-[#7fd8e6]/35 font-mono tracking-wider">steer to your touch · eat up the ladder</p>
+        <p className="text-[10px] text-[#7fd8e6]/35 font-mono tracking-wider">drag to swim · eat up the ladder</p>
       </div>
     </ArcadeCabinet>
   )
 }
 
+interface Joy { active: boolean; baseX: number; baseY: number; curX: number; curY: number; pid: number }
+
 // ── rendering ───────────────────────────────────────────────────────────────────
-function render(canvas: HTMLCanvasElement, w: World, ts: number, growFx: number) {
+function render(canvas: HTMLCanvasElement, w: World, ts: number, growFx: number, joy: Joy) {
   const dpr = Math.min(2, typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1)
   if (canvas.width !== VW * dpr || canvas.height !== VH * dpr) {
     canvas.width = VW * dpr
@@ -411,6 +435,27 @@ function render(canvas: HTMLCanvasElement, w: World, ts: number, growFx: number)
   }
   ctx.globalAlpha = 1
   ctx.shadowBlur = 0
+
+  // ── the floating touch joystick (only while a thumb is down) ──────────────────
+  if (joy.active) {
+    let dx = joy.curX - joy.baseX, dy = joy.curY - joy.baseY
+    const d = Math.hypot(dx, dy)
+    if (d > JOY_R) { dx = (dx / d) * JOY_R; dy = (dy / d) * JOY_R }
+    ctx.globalAlpha = 0.16
+    ctx.fillStyle = NEUTRAL
+    dot(ctx, joy.baseX, joy.baseY, JOY_R)
+    ctx.globalAlpha = 0.5
+    ctx.strokeStyle = NEUTRAL
+    ctx.lineWidth = 2
+    ring(ctx, joy.baseX, joy.baseY, JOY_R)
+    ctx.globalAlpha = 0.85
+    ctx.fillStyle = NEUTRAL
+    ctx.shadowBlur = 10
+    ctx.shadowColor = NEUTRAL
+    dot(ctx, joy.baseX + dx, joy.baseY + dy, 19)
+    ctx.shadowBlur = 0
+    ctx.globalAlpha = 1
+  }
 }
 
 // a tiny teardrop "fish": a body circle + a tail nub pointing opposite the heading

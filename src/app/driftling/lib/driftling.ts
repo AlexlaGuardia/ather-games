@@ -31,7 +31,7 @@ export const MIN_MAXV_FRAC = 0.45 // never slower than this fraction of BASE_MAX
 // meaningfully bigger is a threat; roughly equal just bumps (neither can swallow).
 export const EQUAL_BAND = 0.15 // ±15% of player size = a bump, no eat
 export const EAT_REACH = 0.7 // bodies must really overlap (fraction of summed radii) to resolve
-export const FOOD_PER_SIZE = 1.3 // mass gained = eaten creature's size × this (payoff comes in a few bites)
+export const FOOD_PER_SIZE = 0.95 // mass gained = eaten creature's size × this (lower = a longer climb)
 
 // ── the ladder (PROPOSED canon skin — drawn from rinn.md; pending /magii bless) ──
 // Player evolution STATIONS. `size` is the body radius at that tier; `evolveAt` is the
@@ -44,13 +44,13 @@ export interface Tier {
 }
 export const LADDER: Tier[] = [
   { key: 'mote', size: 6, evolveAt: 0 }, // prey-only floor (player never sits here)
-  { key: 'driftling', size: 10, evolveAt: 14 }, // ← START tier (quick first payoff)
-  { key: 'silvergill', size: 15, evolveAt: 34 },
-  { key: 'coppermouth', size: 22, evolveAt: 64 },
-  { key: 'shimmerscale', size: 31, evolveAt: 108 },
-  { key: 'glassfin', size: 42, evolveAt: 168 },
-  { key: 'silenthunter', size: 55, evolveAt: 250 },
-  { key: 'driftwhale', size: 72, evolveAt: 360 },
+  { key: 'driftling', size: 10, evolveAt: 18 }, // ← START tier (first payoff still comes fairly soon)
+  { key: 'silvergill', size: 15, evolveAt: 52 },
+  { key: 'coppermouth', size: 22, evolveAt: 110 },
+  { key: 'shimmerscale', size: 31, evolveAt: 200 },
+  { key: 'glassfin', size: 42, evolveAt: 330 },
+  { key: 'silenthunter', size: 55, evolveAt: 510 },
+  { key: 'driftwhale', size: 72, evolveAt: 760 },
   { key: 'apex', size: 94, evolveAt: Infinity },
 ]
 export const START_TIER = 1
