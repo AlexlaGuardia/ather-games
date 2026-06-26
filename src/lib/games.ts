@@ -72,6 +72,15 @@ export const GAMES: GameEntry[] = [
     tagline: "a worm of Ather-light in the Silt · eat, grow, boost, don't crash — a glowing slither",
   },
   {
+    id: "driftling",
+    title: "Driftling",
+    href: "/driftling",
+    glyph: "❍",
+    tier: "coming-soon",
+    kind: "play",
+    tagline: "a newborn spirit-fish adrift · eat small, flee big, evolve up the food chain — the first bite forks your branch",
+  },
+  {
     id: "lucernyx",
     title: "Lucernyx",
     href: "/lucernyx",

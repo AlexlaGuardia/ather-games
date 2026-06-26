@@ -26,7 +26,7 @@ the Arcade frame.
 > **The 9-day spine (Jin's build track — Alex's tests slot into any day with device time):**
 > - **D1** — Room block authored + room-side TODO sweep (`?from=room` propagation, back-pill). Kick the PENDING-ALEX lap (Atherdash + Ward first).
 > - **D2** — ✅ **DONE (06-26):** `lib/driftling.ts` sim-first shipped + pushed — drift physics, eat/evolve discrete tiers off a swappable LADDER, element-fork on first eat. 26 tests green. Autoplay oracle retuned for the languid identity (nursery start, threat exposure ramps with tier; median run reaches apex, deaths still live). Canon ladder (Rinn-kin element↔apex) stays a PARKED /magii gap — sim is element-agnostic so it doesn't block.
-> - **D3** — Driftling render + page + card art; cold-play. Alex lap: Seedfall descent + Havari.
+> - **D3** — ⏳ **RENDER SHIPPED (06-26), gated on Alex cold-play:** `/driftling` page live — vector-glow ocean, steer-to-touch/cursor (WASD too), camera-follow, fish-glyph creatures colored by element, threat=danger-ring / prey=spark readability cues, tier/score/evolve HUD, fork→branch-color shift, death overlay + restart. Registered `coming-soon` (owner plays real, public sees teaser; flip to `live` after the feel+art pass). sfx (eat/grow/fork/death) in. Build clean, :3200 restarted. **STILL DEFERRED (Alex's taste): card art + real creature art.** Cold-play knobs = consts atop `lib/driftling.ts`. Alex lap: Seedfall descent + Havari.
 > - **D4** — Leaderboard overlay verification across the 5 + Seedfall; fix render bugs; social/share call.
 > - **D5** — Squall: `lib/squall.ts` sim (void bullet-patterns, weave, survival-time score) + tests.
 > - **D6** — Squall render + page + card art; cold-play. Alex lap: gx-* mobile sweep across 8.
