@@ -13,8 +13,12 @@ const nextConfig: NextConfig = {
         ],
       },
       {
-        // long-cache immutable game assets (magii/spirits/audio land here as games migrate)
-        source: "/:dir(magii|spirits|characters|manamals)/:path*",
+        // long-cache immutable game MEDIA (images/audio/fonts) under these public/ folders.
+        // MUST require a file extension: the bare ":path*" also matched the /magii PAGE route,
+        // pinning its HTML with a 1-year immutable cache → phones kept stale HTML referencing
+        // dead chunk hashes after every rebuild (the recurring "stale build" breakage). Anchor
+        // to real asset extensions so page routes (no extension) never match.
+        source: "/:dir(magii|spirits|characters|manamals)/:path*.:ext(png|jpe?g|webp|gif|svg|avif|ico|mp3|ogg|wav|m4a|woff|woff2|ttf)",
         headers: [
           { key: "Cache-Control", value: "public, max-age=31536000, immutable" },
         ],
