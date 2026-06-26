@@ -26,9 +26,19 @@ the Arcade frame.
 > **The 9-day spine (Jin's build track — Alex's tests slot into any day with device time):**
 > - **D1** — Room block authored + room-side TODO sweep (`?from=room` propagation, back-pill). Kick the PENDING-ALEX lap (Atherdash + Ward first).
 > - **D2** — ✅ **DONE (06-26):** `lib/driftling.ts` sim-first shipped + pushed — drift physics, eat/evolve discrete tiers off a swappable LADDER, element-fork on first eat. 26 tests green. Autoplay oracle retuned for the languid identity (nursery start, threat exposure ramps with tier; median run reaches apex, deaths still live). Canon ladder (Rinn-kin element↔apex) stays a PARKED /magii gap — sim is element-agnostic so it doesn't block.
-> - **D3** — ⏳ **RENDER SHIPPED (06-26), gated on Alex cold-play:** `/driftling` page live — vector-glow ocean, steer-to-touch/cursor (WASD too), camera-follow, fish-glyph creatures colored by element, threat=danger-ring / prey=spark readability cues, tier/score/evolve HUD, fork→branch-color shift, death overlay + restart. Registered `coming-soon` (owner plays real, public sees teaser; flip to `live` after the feel+art pass). sfx (eat/grow/fork/death) in. Build clean, :3200 restarted. **STILL DEFERRED (Alex's taste): card art + real creature art.** Cold-play knobs = consts atop `lib/driftling.ts`. Alex lap: Seedfall descent + Havari.
+> - **D3** — ✅ **DONE + LIVE + PARKED (06-26):** `/driftling` public + playable. Render (vector-glow ocean,
+>   camera-follow, element-colored fish, threat-ring/prey-spark cues, tier/score/evolve HUD, fork→branch
+>   color), threat chevrons + evolve burst, best-score + run-summary death, empty-ocean spawn FIX (caught
+>   live). **Alex's 1st mobile cold-play addressed (`98bf393`): touch JOYSTICK** (felt good, his words) **+
+>   slower growth** (FOOD 1.3→0.95, thresholds stretched). Alex parked it here — joystick good, pacing
+>   better. **STILL DEFERRED (Alex's taste): card + creature art.** Resume = more feel-tuning if he asks.
 > - **D4** — Leaderboard overlay verification across the 5 + Seedfall; fix render bugs; social/share call.
-> - **D5** — Squall: `lib/squall.ts` sim (void bullet-patterns, weave, survival-time score) + tests.
+> - **D5** — ✅ **DONE (06-26):** `lib/squall.ts` sim-first shipped (`8f050df`) — pure-evasion bullet-hell,
+>   5 telegraphed patterns (rain/sweep/aimed-fan/ring-burst/spiral) escalating with survival time, tiny
+>   hitbox + graze risk-reward, score = survival time + grazes, deterministic. 20 tests green, tsc clean.
+>   Dodge-oracle: survivable + skill-scaling, opening softened for a fair casual on-ramp. **#2-cabinet call
+>   made: Squall over Pac-Man** — Driftling is an eat/flee/flip game, Pac-Man is too (predator-flip), so
+>   Squall (no offense) gives the board real contrast. Pac-Man stays queued. NO render yet (D6, cold-play).
 > - **D6** — Squall render + page + card art; cold-play. Alex lap: gx-* mobile sweep across 8.
 > - **D7** — Cabinet warmth/dim dial (one `<ArcadeCabinet>` const, his taste) + Mana'nana squared-vs-candy taste call + Daily toggle/share feel.
 > - **D8** — Nolmir feel beats (unified return >20min, warp rehearse, mobile-idle direction) + any new-game tuning from D3/D6 cold-plays.
