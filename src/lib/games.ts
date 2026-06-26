@@ -81,6 +81,15 @@ export const GAMES: GameEntry[] = [
     tagline: "a newborn spirit-fish adrift · eat small, flee big, evolve up the food chain — the first bite forks your branch",
   },
   {
+    id: "squall",
+    title: "Squall",
+    href: "/squall",
+    glyph: "✶",
+    tier: "live",
+    kind: "play",
+    tagline: "a mote of Ather in the void's storm · no shield, no shots — read the patterns, weave, just survive",
+  },
+  {
     id: "lucernyx",
     title: "Lucernyx",
     href: "/lucernyx",

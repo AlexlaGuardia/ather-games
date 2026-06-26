@@ -4,6 +4,8 @@ import {
   setHeading,
   tick,
   addBullet,
+  loadBest,
+  saveBest,
   diffAt, // ensure exports resolve
   VW,
   VH,
@@ -108,6 +110,13 @@ function solo(w: World) { w.bullets = []; w.warnings = []; w.emitters = []; w.sp
   ok('same seed → same mote position', a.x === b.x && a.y === b.y)
   const diff = a.bullets.length !== c.bullets.length || a.warnings.length !== c.warnings.length
   ok('different seed → different storm', diff || a.x !== c.x)
+}
+
+// 9. best-score helpers survive a no-storage env (headless / SSR)
+{
+  let threw = false, b = -1
+  try { b = saveBest(200); loadBest() } catch { threw = true }
+  ok('best-score helpers survive no-storage', !threw && b >= 0)
 }
 
 console.log(`\nSQUALL sim: ${pass} passed, ${fail} failed`)

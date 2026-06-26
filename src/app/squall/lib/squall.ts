@@ -297,3 +297,23 @@ export function tick(w: World, dt: number): TickEvents {
   w.score = Math.floor(w.time * 10) + w.graze * 5
   return ev
 }
+
+// ── best-score persistence (localStorage) — the chase ────────────────────────────
+const BEST_KEY = 'squall.best'
+export function loadBest(): number {
+  try {
+    const raw = localStorage.getItem(BEST_KEY)
+    return raw ? Math.max(0, parseInt(raw, 10) || 0) : 0
+  } catch {
+    return 0 // storage unavailable
+  }
+}
+export function saveBest(score: number): number {
+  const best = Math.max(loadBest(), Math.max(0, Math.floor(score)))
+  try {
+    localStorage.setItem(BEST_KEY, String(best))
+  } catch {
+    /* storage unavailable */
+  }
+  return best
+}
