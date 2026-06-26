@@ -14,6 +14,8 @@ import {
   setHeading,
   tick,
   apexName,
+  loadBest,
+  saveBest,
   LADDER,
   START_TIER,
   EQUAL_BAND,
@@ -67,6 +69,9 @@ export default function DriftlingPage() {
   const [apex, setApex] = useState<string | null>(null)
   const [progress, setProgress] = useState(0)
   const [muted, setMuted] = useState(false)
+  const [best, setBest] = useState(0)
+  const [newBest, setNewBest] = useState(false)
+  const [eaten, setEaten] = useState(0) // creatures consumed, frozen at death for the summary
 
   useNoScroll()
 
@@ -80,6 +85,8 @@ export default function DriftlingPage() {
     setBranch(null)
     setApex(null)
     setProgress(0)
+    setNewBest(false)
+    setEaten(0)
     setPhase('ready')
   }, [])
 
@@ -87,6 +94,7 @@ export default function DriftlingPage() {
     seedRef.current = Date.now() >>> 0
     boot()
     setMuted(sfx.isMuted())
+    setBest(loadBest())
   }, [boot])
 
   // keyboard steering (WASD / arrows) — desktop alternative to the cursor
@@ -144,6 +152,10 @@ export default function DriftlingPage() {
         if (ev.eaten) {
           sfx.play('death')
           setScore(w.score)
+          setEaten(w.eaten)
+          const b = saveBest(w.score)
+          setBest(b)
+          setNewBest(w.score > 0 && w.score >= b)
           setPhase('dead')
         }
         syncT.current += dt
@@ -224,6 +236,7 @@ export default function DriftlingPage() {
               steer toward your finger to drift. eat anything smaller than you, slip anything bigger. grow enough and you evolve. the first thing you eat decides what you become.
             </p>
             <div className="gx-label text-[12px] text-[#03060f] px-6 py-2.5 rounded-[2px] mt-1" style={{ background: accent, boxShadow: `0 0 18px ${accent}80` }}>drift to begin</div>
+            {best > 0 && <div className="gx-label text-[10px] font-mono text-[#7fd8e6]/50 tracking-wider mt-1">best <span className="text-[#e8feff] tabular-nums">{best}</span></div>}
           </div>
         )}
 
@@ -231,7 +244,14 @@ export default function DriftlingPage() {
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-[#03060f]/75 rounded-md text-center px-6">
             <div className="gx-title text-[#ff5d6c] text-lg tracking-[0.3em] uppercase" style={{ textShadow: '0 0 14px #ff5d6c' }}>Swallowed</div>
             <div className="gx-value font-mono text-[#e8feff] text-3xl leading-none tabular-nums" style={{ textShadow: `0 0 12px ${accent}80` }}>{score}</div>
-            <p className="text-[10px] leading-relaxed text-[#9fd6e0]/70 max-w-[250px] italic">
+            {newBest
+              ? <div className="gx-label text-[10px] font-mono tracking-wider" style={{ color: accent }}>✦ new best</div>
+              : best > 0 && <div className="gx-label text-[10px] font-mono text-[#7fd8e6]/45 tracking-wider">best {best}</div>}
+            {/* run summary — how far you climbed, written as the run's little story */}
+            <div className="gx-label text-[10px] font-mono text-[#9fd6e0]/55 tracking-wider mt-0.5">
+              reached <span style={{ color: accent }}>{tierName}</span> · ate <span className="text-[#e8feff] tabular-nums">{eaten}</span>{branch ? <> · <span style={{ color: accent }}>{cap(branch)}</span>-line</> : ''}
+            </div>
+            <p className="text-[10px] leading-relaxed text-[#9fd6e0]/70 max-w-[250px] italic mt-0.5">
               {branch ? `a bigger thing of the deep took you. the ${cap(branch)}-line ends here.` : 'something bigger took you before you ever fed. drift wary.'}
             </p>
             <button onClick={restart} className="gx-label text-[11px] text-[#03060f] hover:brightness-110 px-5 py-2 rounded-[2px] mt-1" style={{ background: accent, boxShadow: `0 0 18px ${accent}80` }}>drift again →</button>

@@ -341,3 +341,24 @@ export function tick(w: World, dt: number): TickEvents {
 export function apexName(w: World): string | null {
   return w.branch ? APEX_BY_ELEMENT[w.branch] : null
 }
+
+// ── best-score persistence (localStorage) — gives the run a chase ─────────────────
+const BEST_KEY = 'driftling.best'
+export function loadBest(): number {
+  try {
+    const raw = localStorage.getItem(BEST_KEY)
+    return raw ? Math.max(0, parseInt(raw, 10) || 0) : 0
+  } catch {
+    return 0 // storage unavailable
+  }
+}
+// store the score if it beats the saved best; returns the (possibly new) best.
+export function saveBest(score: number): number {
+  const best = Math.max(loadBest(), Math.max(0, Math.floor(score)))
+  try {
+    localStorage.setItem(BEST_KEY, String(best))
+  } catch {
+    /* storage unavailable */
+  }
+  return best
+}

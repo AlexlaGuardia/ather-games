@@ -5,6 +5,8 @@ import {
   tick,
   addCreature,
   apexName, // ensure exports resolve
+  loadBest,
+  saveBest,
   LADDER,
   START_TIER,
   APEX_TIER,
@@ -136,6 +138,14 @@ function solo(w: World) { w.creatures = []; w.spawnPaused = true }
   addCreature(w, w.x, w.y, 0, 'earth')
   tick(w, 1 / 60)
   ok('apex is the ceiling', w.tier === APEX_TIER)
+}
+
+// 11. best-score helpers don't throw without localStorage (headless / SSR safety)
+{
+  let threw = false
+  let b = -1
+  try { b = saveBest(123); loadBest() } catch { threw = true }
+  ok('best-score helpers survive a no-storage env', !threw && b >= 0)
 }
 
 console.log(`\nDRIFTLING sim: ${pass} passed, ${fail} failed`)
