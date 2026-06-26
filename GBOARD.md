@@ -11,6 +11,48 @@ real **gimmick** (not watch-and-wait) · **canon-parallel** (serves Athernyx, no
 black, CRT bloom). Mana'nana went glossy-modern; each game gets its own skin under
 the Arcade frame.
 
+## 🗓️ THIS WEEK — Room + Arcade swamp (2026-06-25 → 9-day push) [jin]
+> Four lanes running at once so we're never blocked on each other: **Jin builds** (my hands, daily)
+> while **Alex feel-tests** (his hands, batched whenever there's device time). The arcade's hard
+> building is done — this week converts the backlog of taste-calls into *resolved*, ships the Room
+> its own surface, finishes the leaderboard loop, and lands **two new cabinets**.
+>
+> **The four lanes:**
+> 1. **Clear the PENDING-ALEX lap** — every stacked feel-test/tune, run as one structured lap (checklist ↓). Alex plays, Jin tunes the named knobs, mark each line ✅/tuned/shipped.
+> 2. **Build new cabinets** — lead = **Driftling** (food-chain evolution, finally earns the cloud-ocean; Rinn-kin ladder ready so canon's not the blocker). Second = **Squall** (bullet-hell dodge — cheapest art, brand-new "defenseless survival" mood). Stretch = **Tempest** / **Rune-weaving**.
+> 3. **Room gets its own block** — the hub has no roadmap (see new `### The Room` block below). Plan + ship room-side polish: `?from=room` propagation on hall cards, back-pill correctness, Desk-wall surfacing the Folk volume, nav dead-end sweep.
+> 4. **Leaderboard polish** — backend's done; verify the board renders inside each game-over overlay (5 + Seedfall), then decide social/share layer.
+>
+> **The 9-day spine (Jin's build track — Alex's tests slot into any day with device time):**
+> - **D1** — Room block authored + room-side TODO sweep (`?from=room` propagation, back-pill). Kick the PENDING-ALEX lap (Atherdash + Ward first).
+> - **D2** — Driftling: canon ladder lock (Rinn-kin) + `lib/driftling.ts` sim-first (eat/evolve/size-tier, element-fork on first eat) + tests.
+> - **D3** — Driftling render + page + card art; cold-play. Alex lap: Seedfall descent + Havari.
+> - **D4** — Leaderboard overlay verification across the 5 + Seedfall; fix render bugs; social/share call.
+> - **D5** — Squall: `lib/squall.ts` sim (void bullet-patterns, weave, survival-time score) + tests.
+> - **D6** — Squall render + page + card art; cold-play. Alex lap: gx-* mobile sweep across 8.
+> - **D7** — Cabinet warmth/dim dial (one `<ArcadeCabinet>` const, his taste) + Mana'nana squared-vs-candy taste call + Daily toggle/share feel.
+> - **D8** — Nolmir feel beats (unified return >20min, warp rehearse, mobile-idle direction) + any new-game tuning from D3/D6 cold-plays.
+> - **D9** — Canon `world/arcade.md` entries (Atherdash + new games via /magii), card-art parity sweep, full mobile pass, push + GBOARD bump + wrap.
+>
+> **▶ PENDING-ALEX LAP — the consolidated checklist (was scattered across every block):**
+> - [ ] **Atherdash** — hop timing window fair? slide→hop rhythm readable? base speed right? *(knobs: `SPEED`/`SPEED_MAX`/`SPEED_RAMP_DIST`, `JUMP_DUR`, `PIT_GAP_Z`/`PIT_LEAD`)*
+> - [ ] **Ward** — enemy tune: Drifter weave gentleness, Darter warning time, Husk feel, intro wave *(knobs: `DRIFT`/`DART`/`HUSK` consts)*
+> - [ ] **Seedfall ⭐ (Alex's FAVOURITE — polish FIRST, it's the proven winner)** — full descent feel (drift authority vs branch spacing, fall speed) + Havari catch/dodge readability (1.05s warn) + soil-approach landing + game-over overlays + **regen the card art for the descent** (still the old lander image) *(knobs atop `seedfall.ts` + `genBranches`)*
+> - [ ] **gx-* look on real mobile across all 8** — esp. the game-OVER overlays headless can't reach
+> - [ ] **Arcade cabinet dial** — final warmth/dim/red-skew on `<ArcadeCabinet>` (one component → changes everywhere)
+> - [ ] **Daily leaderboard** — does the board render right *inside* the game-over overlay (5 games + Seedfall)? logic+API already proven, only the visual is unseen
+> - [ ] **Daily toggle + share** — does Endless/Daily read right; is the share line satisfying
+> - [ ] **Mana'nana** — taste call: keep the candy match-3 look, or push it into the squared gx-* family
+> - [ ] **Nolmir** — unified return beat (needs >20min away for a real haul) + rehearse the warp ceremony + mobile-idle direction call
+> - [x] **Voranyx** — phone playtest PASSED 2026-06-15 (no action; here for completeness)
+>
+> **▶ NEW-CABINET PIPELINE (each clears the filter: real gimmick · canon-parallel · light on art):**
+> - **Driftling** — flOw/Feeding-Frenzy/Deeeep DNA. Drift the cloud-ocean, eat smaller, dodge bigger, **evolve in discrete tiers**. Wedge: **first element you eat forks your branch** (Storm-line ≠ Earth-line). NOT Voranyx (that's slither-length+body-collision). Ladder = the **Rinn-kin** (`athernyx/CANON/world/rinn.md`/`manamals.md`, pinned 2026-06-16). *(full riff below)*
+> - **Squall** — pure evasion, no offense. Read the void's projectile patterns, weave, score = survival time. Brand-new mood: **defenseless survival**. Vector-glow bullet patterns = gorgeous + cheap. *(full riff below)*
+> - *Stretch:* **Tempest** (positional lane-hold — deprioritized, same job as Ward) · **Rune-weaving** (gesture/tracing input — new mode, deep canon).
+>
+> ---
+
 ## 🔁 Cross-cutting — THE DAILY CHALLENGE (shipped 2026-06-21, `b4c3ddb`→`7902b30`)
 > Retention loop: one seeded run per UTC day, the SAME course for everyone, shareable score.
 - **Shared lib `src/lib/arcade/daily.ts`** (reusable like ArcadeCabinet): `dailyKey`/`dailySeed`/
@@ -20,8 +62,12 @@ the Arcade frame.
   on the start screen (Mana'nana: under the score row), separate daily-best track, Share on game over.
 - **Rekindle** has its own puzzle daily; its date helpers now re-export from the shared lib (one source).
 - **Excluded by design:** Lucernyx (vs-AI win/lose, now SHELVED) · Rekindle (puzzle ★-rating, not higher-is-better). Seedfall JOINED 2026-06-22 (descent redesign gave it a depth score).
-- ⚠ PENDING Alex feel: does the daily toggle + share read right; is "same course for everyone" worth a
-  back-end leaderboard later (currently local-best only — share is the social layer).
+- **✅ Server-side leaderboard SHIPPED (2026-06-22):** `api/arcade/leaderboard/route.ts` (file-backed,
+  per-day top-20, upsert-best-by-player) + `lib/arcade/leaderboard.ts` client + reusable
+  `_components/DailyLeaderboard.tsx`, wired on the 5 score games + Seedfall. No auth (scores
+  client-submitted, fine for a personal arcade). ⚠ **only unverified bit = the board RENDERING inside
+  each game-over overlay** (logic+API proven via curl; visual unseen) → THIS WEEK lane 4.
+- ⚠ PENDING Alex feel: does the daily toggle + share read right (this-week lap).
 
 ## 🧩 Cross-cutting initiative — THE GAME-UI LAYER (active, jin leads, 2026-06-18)
 > **Killing the "browser feel"** — games play like games but the menus/chrome read like a website.
@@ -52,6 +98,7 @@ the Arcade frame.
 
 | Game | Status | Last touched | What it is |
 |------|--------|--------------|------------|
+| The Room | 🟢 live | 2026-06-21 | the hub — arcade hall, Desk wall, Grimoire/AtherPages, nav spine |
 | Nolmir | 🟢 live | 2026-06-18 | idle Athernyx defense/arena |
 | Mana'nana | 🟢 live | 2026-06-22 | match-3, blooming specials |
 | Rekindle #3 | 🟢 live | 2026-06-22 | conduit puzzle + Aeterna node-map |
@@ -65,6 +112,36 @@ the Arcade frame.
 
 ---
 
+### The Room — 🟢 live · the hub everything ties back to → `/room`
+*Last touched: 2026-06-21*
+**What it is:** the spatial front door of ather.games (since `/`→`/room`). A 4-wall room you turn
+  between, each wall a destination: **Mug door** (profile/settings), **Shimmer TV** (→ the 3D game),
+  **Arcade arch** (→ `/arcade/all`, the cabinet hall), **Desk wall** (in-place UI — **Grimoire** link
+  left + live **News** feed right, fed by `/room/news.json`, editable with no rebuild). Cabinets return
+  here via `<RoomReturn>` facing the right wall.
+**Left off:** Nav is room-centric, zero dead-ends — `/arcade` (old flat hub) redirects to `/room`
+  (`a23cd1c`), every cabinet carries a RoomReturn pill, stale "← arcade" header/footer links removed
+  (`af25be2`). Desk wall surfaces Grimoire + News. AtherPages (Folk volume) shipped behind `/grimoire`
+  but the Desk only links the Grimoire volume.
+**Next (this week's room lane):**
+  1. ~~**Verify-and-close the `?from=room` TODO**~~ ✅ **CLOSED 2026-06-26 (code-confirmed).** The chain
+     holds by construction: arch → `/arcade/all?from=room` mounts `<RoomReturn wall={1}>` which writes the
+     sticky `ag_from_room` sessionStorage flag; cabinet cards are same-tab `<Link>` (no `_blank`, so the
+     flag carries); every game's `<ArcadeCabinet>` renders `<RoomReturn>` unconditionally and reads the
+     flag → pill shows for the whole room→hall→game→hall loop. Per-card param propagation is NOT needed.
+     *(Edge cases ruled out: no `target="_blank"` cards; RoomReturn render is unconditional.)*
+  2. **Desk wall → surface the Folk volume** — the AtherPages Folk volume exists but the Desk only links
+     `/grimoire` (Spirits). Add a Folk entry/tab on the Desk wall (or a `?v=folk` deep-link panel).
+  3. **News feed automation** — `/room/news.json` is hand/auto-editable; wire the session-end or a small
+     cron to drop a "what shipped" line so the Desk News stays live without manual edits.
+  4. **Mobile pass on the wall-turn** — confirm the 4-wall turn + Desk in-place UI read well at 390px.
+**Parked:** more walls (a 5th destination) · ambient room audio · attendant/NPC presence.
+**Decisions:** **room-centric nav** — the room pill is the ONLY back (no duplicate header links);
+  cabinets tie as items in the hall, the room WALLS are the bespoke-art destinations (see the
+  cabinet-not-world policy in Atherdash). News is **data-driven** (`news.json`) so it updates without a build.
+**Files:** `src/app/room/page.tsx` (walls + DeskWall + ArcadeArch) · `_components/RoomReturn.tsx`
+  (sticky from-room) · `public/room/news.json` (live feed) · `/grimoire` (AtherPages, off the Desk)
+
 ### Nolmir — 🟢 live · idle Athernyx defense/arena → `/nolmir`
 *Last touched: 2026-06-18*
 **Economy map (2026-06-17, grounded in code):** currencies = **corelight** (Orrery spine: core-tap
@@ -74,29 +151,11 @@ the Arcade frame.
   host level, warp-proof) · **guard-xp** (use-not-coin). **Coupling:** Orrery research buffs all 3
   pillars; **claim planets w/ corelight, KEEP w/ mana** (the spiral — heat↑→upkeep↑→must run Crucible);
   marks→champions→appear as Crucible guards; warp = prestige (exp/marks/research persist).
-**✅ 2026-06-17 — Expeditions garrison idle (`5892d89`): the third pillar now idles.** The Orrery +
-  Crucible already accrued offline (settleForge; away-matches bank mana/exp); Expeditions was active-
-  only. Now every cleared breach passively salvages **marks** while away — `garrisonRatePerHour` scales
-  with tiers/waves, 48h cap, a NUDGE not a grind (48h ≈ one solid run, ~316 marks @ tier1 wv12). Proper
-  idle accounting (sub-mark remainder carries, past-cap overflow discarded, idempotent by tick). 13 tests.
-  Deck digest shows a real **marks haul** row + a **✶/hr** tile stat; expeditions header shows "+N held"
-  on return. **All three pillars now idle.**
-**✅ 2026-06-17 — Phase B: unified return beat (`d895da5`).** Extracted the Crucible homecoming settle
-  into `lib/away.ts` (`settleHomecoming`): forge tap + supply-line upkeep + away-match resolution
-  (deterministic seeds, vault-falls cut lines), banked to the host, idempotent via `lastSeenAt`. The
-  Crucible page now calls it (−64 lines of inline dup) AND the **deck** calls it — so the front door
-  collects the WHOLE ship in ONE beat: corelight + mana/exp + garrison marks, itemized in the digest
-  (matches answered, mana/exp banked, vaults fallen). Single source → deck & crucible can't drift.
-  Build clean, both render. **The deck is now the one place you collect; entering a mode after sees an
-  empty window (by design).** ⚠ feel-test needs >20min away to show a real haul (one match interval).
-**✅ 2026-06-18 — collect juice on the digest (`4f0683f`).** The *while you held no watch* digest is
-  now a real collect moment: rows **stagger in** one beat at a time (DIGEST_LEAD 220 / STEP 200), each
-  haul value **counts up from 0** with an ease-out (`useCountUp`, ~620ms) + a glow flare as it lands,
-  a tick/chord sfx per row (`click`/`unlock`, soft `break` on a vault-loss row), payoff chord on *take
-  the watch*; card gets a spring entrance. **Robustness fix:** count-up has a `setTimeout` fallback so
-  the haul resolves to its final value in a **backgrounded tab** (rAF is paused when hidden — without
-  it the numbers froze at +0). Verified on ather.games (owner-gated): digest fires staggered, values
-  land correct in both foreground AND hidden tab, 0 console errors.
+**Recent ships (2026-06-17→18, collapsed — detail in git):** **all three pillars now idle** —
+  Expeditions garrison salvages marks while away (`5892d89`, 48h cap, nudge-not-grind); **unified
+  return beat** extracted to `lib/away.ts` `settleHomecoming` so the deck collects the WHOLE ship in
+  ONE itemized digest (`d895da5`); **collect juice** on that digest — staggered rows + count-up +
+  sfx + hidden-tab fallback (`4f0683f`).
 **Left off:** All 3 modes (Starforge / Orrery / Crucible-Expeditions) + THE LOOP + warp
   live. **2026-06-15 — built the COMMAND DECK (`d54f82b`, `/nolmir/deck`):** one screen for
   the whole ship — three mode tiles with live "ready" pulls (Crucible next-answer countdown /
@@ -283,48 +342,13 @@ the Arcade frame.
   existed (PULSE_CAP 3→1, sub-3-torch lock = draw not win, honest copy) but the broken mechanic IS the game's whole
   hook, so Alex chose to shelve rather than rebalance. **Lesson:** a single high-cap swing mechanic that's also the
   win-engine self-snowballs; if the gimmick can end the game sideways, it'll do it more than you think (measure it).
-  Catalog back to **7 live cabinets**. Revive = rebalance the pulse first. Original build log below.
-**Left off (pre-shelve):** Built the **playable slice** in one session (`5291194` sim, `bb7e09c` board).
-  You're the lantern Ancient: slide diagonally (checkers), **jump an adjacent grey into the
-  empty square beyond → it flips to your light and stays put** (material never leaves), multi-
-  jump flips an arc, a converted piece reverses its march. Run a piece to the enemy home rank
-  → **torch + ascend; first to 3 wins.** Greedy AI (max flips + torch progress, fear their
-  imminent torch) plays the Dying. Pure sim `lib/lucernyx.ts` **27 tests green**; vector-glow
-  canvas board (cyan light / guttered grey, violet convert-rings, torch pips). **Live + listed**
-  in `/arcade/all` (`67c20b4` — flipped from coming-soon; no owner gate is wired so coming-soon
-  just hid it). The lineup's only turn-based / strategy game.
-  **✅ Alex played his first full game (2026-06-15): "good first draft." AI "good but still
-  winnable" (target hit), torch race "okay."** Ranks = his call → kept at 3/12.
-  **✅ Juice pass shipped (`072350f`):** moves animate (slide glide; multi-jump hops square-to-
-  square, flipping each grey to light in sequence as the light punches through, bright trail;
-  torch = float-up + ascend + pip flare). `lib/sfx.ts` (slide / rekindle bell per convert → a
-  cascade / warm torch / win+lose). **The background warms as you win** — amber glow + drifting
-  embers scale with your torches; cold violet creep with the Dying's. Render verified in-browser.
-  **✅ Element-terrain rooting shipped (`dbf21d1`):** 4 sanctuary tiles (storm/mana/water/earth)
-  in the contested midfield, point-symmetric. A piece on one is ROOTED — can't be flipped, and a
-  rooted enemy can't be jumped (blocks, caps multi-jumps). No RPS (elements = canon flavour). AI
-  values its own rooted pieces. Render = element tint + rune diamond + bright ring on a rooted
-  piece (verified in-browser). Note: sanctuaries shortened AI-vs-AI games 38→25 plies.
-  **❌ Element sanctuaries CUT (`398548b`, 2026-06-18):** Alex's playtest bug = "move a piece
-  and it vanishes, usually into a special square." Root cause: a rooted enemy can't be jumped,
-  so a move onto/through it is silently illegal → the click falls through, the selection clears,
-  reads as the piece disappearing. AND they board-locked the torch-race: **self-play draws 10.3%
-  with sanctuaries, 0.3% without** (400-game harness, conservation verified — 0 real piece loss).
-  Mechanic removed from sim + render + tests; **28 sim tests green**, draws now 0.3%. The core
-  verb is the whole game — don't re-add terrain without a draw-rate check.
-**Next:**
-  1. **Alex re-playtest** — clean now: torch-race pacing right? AI still good-but-winnable?
-  2. Optional depth if the race feels off: a daily seed, or an AI difficulty notch.
-**Parked:** optional back-rank fork (torch vs a "kindle"/king piece — kept off to keep v1's
-  win-con clean) · forced-capture rule (jumps are optional in v1).
-**Decisions:** **single clean verb** — jump-to-convert only; cut flank-cascade (read as unfair).
-  **Jumps optional** in v1 (friendlier than forced-capture; they're already strictly good so
-  the AI takes them anyway). **Greedy AI, no minimax** — conversion swings the board hard
-  enough that max-flips+torch-progress+block-their-torch looks smart. **Sim-first** (logic fully
-  headless-tested before any pixels), same as the rest of the lineup. **Direction = f(owner)**,
-  so converting a piece flips its march for free. **Element terrain tried then CUT** — rooting
-  caused stalemates + ghost-moves; the bare verb plays cleaner (see Left off, `398548b`).
-**Files:** `lucernyx/lib/lucernyx.ts` (28 tests) · `lib/lucernyx.test.ts` · `page.tsx`
+  Catalog back to **7 live cabinets**. **Revive = rebalance the pulse first** (PULSE_CAP 3→1,
+  sub-3-torch lock = draw not win, honest copy) — but the broken mechanic IS the hook, so a revive
+  is really a redesign. Code kept in git, gated like Gravitar.
+**What it was (one line):** lantern Ancient, checkers-slide + jump-to-convert grey pieces to your
+  light, run a piece to the enemy home rank → torch; first to 3 wins. Greedy AI, sim-first (28 tests).
+  Element-terrain rooting was tried then CUT (`398548b`) — caused stalemates + ghost-moves.
+**Files:** `lucernyx/lib/lucernyx.ts` (28 tests) · `lib/lucernyx.test.ts` · `page.tsx` *(full build-log in git history pre-`398548b`)*
 
 ### Gravitar (#9) — ⚪ PARKED/CUT · physics-orbit slingshot → `/gravitar` *(back-room, hidden)*
 *Last touched: 2026-06-15*
@@ -348,8 +372,8 @@ the Arcade frame.
   `/arcade/hall-bg.webp` (brightened) full-bleed behind the page + CSS **cabinet housing** (dark panel,
   gold `#d4a843` trim, title = marquee plate) → the game reads as a lit cabinet IN the hall the room's
   Arcade arch shows. `RoomReturn wall={1}` (gated `?from=room`) lands back facing the arch. Applies to
-  direct visitors too; room-pill just hides. ⚠ **TODO:** confirm the hall cards propagate `?from=room`
-  so the back-pill actually shows when arriving via the arch (else it only works on a hand-typed param).
+  direct visitors too; room-pill just hides. ✅ **TODO CLOSED 2026-06-26** — back-pill confirmed via the
+  sticky `ag_from_room` flag (set at the hall on the arch hop, read by every cabinet); no per-card propagation needed.
 
   **✅ POLICY DECIDED (Alex green-lit 2026-06-21) — cabinets, not bespoke worlds.** Arcade games tie as
   cabinets in ONE shared hall; per-game identity = cabinet skin (trim/glow keyed to palette), NOT a
@@ -363,7 +387,7 @@ the Arcade frame.
   Voranyx/Seedfall/Updraft + Rekindle (BOTH map+play views); **Mana'nana deliberately full-bleed**
   (own AtherBackdrop, RoomReturn-only — a cabinet would cage the match-3 board). Gravitar cut;
   Shimmer/Magii = room walls. **PENDING Alex device pass:** look across games + final warmth/dim/
-  red-skew (one component → change once, everywhere). **TODO:** hall cards propagate `?from=room`.
+  red-skew (one component → change once, everywhere). ✅ **`?from=room` TODO CLOSED 2026-06-26** (sticky flag; see Room block).
 **🆕 ARCADE-LAP slice 1+2 shipped (`afaa451`, 2026-06-21) — the SECOND AXIS.** Alex cold-played on
   mobile: "smooth, could be a bit slower, maybe tap-to-jump + levels with ramps/pitfalls." Built:
   - **Slice 1 — speed ramp.** Forward speed is no longer flat. `speedAt(dist)` opens at **base 0.60**
@@ -464,6 +488,34 @@ scenes). Lore routes through /magii for canon safety.
   canon at `athernyx/CANON/world/mother.md`.
 - *Bench (not committed):* **Breakout** (bounce an Ather mote to shatter the void-crust);
   **Orrery pinball** — held, overlaps Gravitar's physics.
+
+## 🕹️ Classics to riff into the Ather *(2026-06-25, Alex — refueling the ammo, not committed)*
+> Alex's instinct: take a classic, weld it to canon, add OUR twist. Same recipe the whole catalog
+> was built on. Run each through the filter (real gimmick · canon-parallel · light on art) before it
+> graduates to the Queue.
+- **Pac-Man riff** *(STRONG — Jin's pick of the three)* — maze chase + the one verb our lineup
+  lacks: the **predator-flip** (you're prey; grab a **rune-bloom** and for a few beats the hunted
+  becomes the hunter). Canon weld is nearly free: **the 4 ghosts = the 4 elements**, each hunting
+  with its own personality (chase / ambush / patrol / drift). Dots = **ather motes**; power pellet =
+  a rune-bloom that banishes the void. Setting = the **Silt / Voranyx caverns**. Art = phosphor-glow
+  maze = peak house-look + dirt cheap. **Distinct from the lineup** (Ward=defense, Voranyx=slither,
+  Updraft/Atherdash=timing-dodge, Squall=bullet-dodge — none do maze-navigation + predator-flip).
+  Canon name TBD via /magii. **→ top graduation candidate; could bump Squall as the #2 build.**
+- **Bricks / Breakout riff** *(cheap + fast, NEEDS its wedge)* — was already on the bench
+  ("bounce an Ather mote to shatter the void-crust"). Cheapest art of anything we'd build (paddle +
+  ball + blocks = vector heaven). Risk: it's the classic with the *least* twist of its own → would be
+  filler without a real gimmick. **The wedge that saves it: the mote takes on the last element it
+  touched**, so you chain-break matching-element bricks (plugs into the shared element system). With
+  the wedge = a legit palate-cleanser cabinet (Updraft tier); without it = filler. Canon = sealing
+  the void-crust over the Silt.
+- **Auto-run platformer riff (the "Mario, scoped")** *(viable via Alex's reframe — but watch the
+  overlap)* — NOT full Mario control (that's the heaviest art/content cost on the whole board, parked).
+  Alex's scoping: **auto-run + tap-to-jump, the player only times the jumps.** That makes it light +
+  in-wheelhouse. **⚠ THE TENSION TO SOLVE BEFORE BUILDING:** auto-run + tap-jump is *very* close to
+  **Atherdash** (auto-run, tap-jump over pitfalls) and **Updraft** (one-tap timing). Its job has to be
+  **platformer geometry** to earn its slot — **stomping enemies, vertical height, read-ahead gaps/
+  ledges** — not just another timing-tapper. If we can't name a verb Atherdash doesn't already have,
+  don't build it. Canon hook (open): climbing a Spire? ascending out of the Silt? → /magii.
 
 ## ⚰️ Killed — covered by a shipped game *(don't re-pitch)*
 - **The Dive** (fall through the cloud-ocean, dodge-and-collect) → vertical-flight mood
