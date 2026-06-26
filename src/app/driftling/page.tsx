@@ -58,6 +58,7 @@ export default function DriftlingPage() {
   const pointer = useRef<{ x: number; y: number; active: boolean }>({ x: VW / 2, y: VH / 2, active: false })
   const keys = useRef<Set<string>>(new Set())
   const syncT = useRef(0)
+  const growFx = useRef(0) // seconds left on the evolve/fork payoff burst
 
   const [phase, setPhase] = useState<Phase>('ready')
   const [tierName, setTierName] = useState(cap(LADDER[START_TIER].key))
@@ -130,12 +131,14 @@ export default function DriftlingPage() {
       const dt = last ? Math.min(0.05, (ts - last) / 1000) : 0
       last = ts
 
+      if (growFx.current > 0) growFx.current = Math.max(0, growFx.current - dt)
       if (w.state === 'playing') {
         applyHeading()
         const ev = tick(w, dt)
         if (ev.forkLocked) sfx.play('fork')
         else if (ev.grew) sfx.play('grow')
         else if (ev.ate) sfx.play('eat')
+        if (ev.grew || ev.forkLocked) growFx.current = 0.7 // fire the payoff burst
         if (ev.grew) setTierName(cap(LADDER[w.tier].key))
         if (ev.forkLocked) { setBranch(w.branch); setApex(apexName(w)) }
         if (ev.eaten) {
@@ -148,7 +151,7 @@ export default function DriftlingPage() {
       } else if (w.state === 'ready' && phase !== 'ready') {
         // keyboard/pointer can flip state before React catches up
       }
-      render(canvas, w, ts)
+      render(canvas, w, ts, growFx.current)
     }
     raf = requestAnimationFrame(draw)
     return () => cancelAnimationFrame(raf)
@@ -244,7 +247,7 @@ export default function DriftlingPage() {
 }
 
 // ── rendering ───────────────────────────────────────────────────────────────────
-function render(canvas: HTMLCanvasElement, w: World, ts: number) {
+function render(canvas: HTMLCanvasElement, w: World, ts: number, growFx: number) {
   const dpr = Math.min(2, typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1)
   if (canvas.width !== VW * dpr || canvas.height !== VH * dpr) {
     canvas.width = VW * dpr
@@ -336,6 +339,58 @@ function render(canvas: HTMLCanvasElement, w: World, ts: number) {
   ctx.lineWidth = 1
   ring(ctx, px, py, w.size + 3)
   ctx.globalAlpha = 1
+
+  // ── evolve / fork payoff burst — an expanding fading ring + flash on the player ─
+  if (growFx > 0) {
+    const p = 1 - growFx / 0.7 // 0 → 1 over the burst
+    const r = w.size + p * (w.size * 3 + 36)
+    ctx.globalAlpha = (1 - p) * 0.8
+    ctx.strokeStyle = pcol
+    ctx.lineWidth = 3
+    ctx.shadowBlur = 16
+    ctx.shadowColor = pcol
+    ring(ctx, px, py, r)
+    ctx.globalAlpha = (1 - p) * 0.25
+    ctx.fillStyle = pcol
+    dot(ctx, px, py, r * 0.7)
+    ctx.shadowBlur = 0
+    ctx.globalAlpha = 1
+  }
+
+  // ── off-screen threat warnings — a danger chevron at the edge points at a nearby
+  //    bigger creature you can't see yet, so getting swallowed is never a blind hit ─
+  const margin = 26
+  for (const c of w.creatures) {
+    if (c.size <= w.size * (1 + EQUAL_BAND)) continue // only things that can eat you
+    const cxw = sx(c.x), cyw = sy(c.y)
+    const onScreen = cxw >= -10 && cxw <= VW + 10 && cyw >= -10 && cyw <= VH + 10
+    if (onScreen) continue
+    const d = Math.hypot(c.x - w.x, c.y - w.y)
+    if (d > 620) continue // only warn for ones drifting genuinely close
+    const ang = Math.atan2(cyw - VH / 2, cxw - VW / 2)
+    // clamp the marker to the viewport rectangle along the threat's bearing
+    const hw = VW / 2 - margin, hh = VH / 2 - margin
+    const sxr = Math.abs(Math.cos(ang)) < 1e-3 ? Infinity : hw / Math.abs(Math.cos(ang))
+    const syr = Math.abs(Math.sin(ang)) < 1e-3 ? Infinity : hh / Math.abs(Math.sin(ang))
+    const rad = Math.min(sxr, syr)
+    const ex = VW / 2 + Math.cos(ang) * rad
+    const ey = VH / 2 + Math.sin(ang) * rad
+    const near = 1 - Math.min(1, d / 620) // closer = brighter + bigger
+    ctx.save()
+    ctx.translate(ex, ey)
+    ctx.rotate(ang)
+    ctx.globalAlpha = 0.3 + near * 0.5 + 0.15 * Math.sin(ts / 120)
+    ctx.fillStyle = DANGER
+    ctx.shadowBlur = 8
+    ctx.shadowColor = DANGER
+    const s = 7 + near * 5
+    ctx.beginPath()
+    ctx.moveTo(s, 0); ctx.lineTo(-s * 0.7, s * 0.7); ctx.lineTo(-s * 0.7, -s * 0.7)
+    ctx.closePath(); ctx.fill()
+    ctx.restore()
+  }
+  ctx.globalAlpha = 1
+  ctx.shadowBlur = 0
 }
 
 // a tiny teardrop "fish": a body circle + a tail nub pointing opposite the heading
