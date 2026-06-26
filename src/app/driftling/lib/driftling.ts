@@ -20,9 +20,9 @@ export const WORLD_W = 2400
 export const WORLD_H = 1800
 
 // ── drift physics (flOw-like: heading nudges, body eases, water drags) ───────────
-export const ACCEL = 540 // how hard the body pulls toward the heading
-export const DRAG = 1.5 // velocity bleed per second when coasting (languid settle)
-export const BASE_MAXV = 240 // top drift speed at the smallest tier
+export const ACCEL = 820 // how hard the body pulls toward the heading (tightened — was floaty/hard to steer)
+export const DRAG = 2.6 // velocity bleed per second when coasting (more bite = less overshoot, keeps some glide)
+export const BASE_MAXV = 250 // top drift speed at the smallest tier
 export const TIER_SLOW = 0.06 // each tier up shaves this fraction off max speed (giants are ponderous)
 export const MIN_MAXV_FRAC = 0.45 // never slower than this fraction of BASE_MAXV
 
