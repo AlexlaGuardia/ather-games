@@ -508,14 +508,19 @@ scenes). Lore routes through /magii for canon safety.
 > Alex's instinct: take a classic, weld it to canon, add OUR twist. Same recipe the whole catalog
 > was built on. Run each through the filter (real gimmick · canon-parallel · light on art) before it
 > graduates to the Queue.
-- **Pac-Man riff** *(STRONG — Jin's pick of the three)* — maze chase + the one verb our lineup
-  lacks: the **predator-flip** (you're prey; grab a **rune-bloom** and for a few beats the hunted
-  becomes the hunter). Canon weld is nearly free: **the 4 ghosts = the 4 elements**, each hunting
-  with its own personality (chase / ambush / patrol / drift). Dots = **ather motes**; power pellet =
-  a rune-bloom that banishes the void. Setting = the **Silt / Voranyx caverns**. Art = phosphor-glow
-  maze = peak house-look + dirt cheap. **Distinct from the lineup** (Ward=defense, Voranyx=slither,
-  Updraft/Atherdash=timing-dodge, Squall=bullet-dodge — none do maze-navigation + predator-flip).
-  Canon name TBD via /magii. **→ top graduation candidate; could bump Squall as the #2 build.**
+- **Pac-Man riff** *(GRADUATED — building now)* — maze chase + the predator-flip the lineup lacked.
+  ✅ **SIM-FIRST SHIPPED 2026-06-26 (`f9cdbe1`):** `src/app/pacmaze/lib/pacmaze.ts` (working title
+  `pacmaze`) — Pac-style movement (queued turns/walls/tunnel), ather-motes→win, **rune-bloom flip**
+  (combo 200·2^n, eyes rush home), **4 elemental shades** w/ distinct AI (water=chase, storm=ambush,
+  earth=flank, mana=hound-then-peel) + scatter/chase waves, lives+reset. 19 tests green (incl. flood-fill
+  connectivity). Maze = guaranteed-connected pillar lattice placeholder; real maze art/layout = later pass.
+  🚩 **CANON GAP — the game's NAME is a /magii call** (Alex bridges to Magii). NOT registered / not live;
+  render is gated on the name. Canon weld: 4 shades = 4 elements, motes = ather, bloom banishes the void,
+  setting = the Silt / Voranyx caverns.
+- **▶ STRATEGY (Alex, 2026-06-26): TWO more new cabinets, then STOP adding — improve the lineup.** Pac-Man
+  (this) + the **Mario-style auto-runner** are the final two new builds. After both ship, pivot off new
+  cabinets to **polishing the existing lineup** (PENDING-ALEX feel-lap, Seedfall ⭐ first, cabinet dial,
+  leaderboard-overlay verify, mobile sweep). Don't pitch more new games until the lineup pass is done.
 - **Bricks / Breakout riff** *(cheap + fast, NEEDS its wedge)* — was already on the bench
   ("bounce an Ather mote to shatter the void-crust"). Cheapest art of anything we'd build (paddle +
   ball + blocks = vector heaven). Risk: it's the classic with the *least* twist of its own → would be
