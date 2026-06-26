@@ -76,7 +76,7 @@ export const GAMES: GameEntry[] = [
     title: "Driftling",
     href: "/driftling",
     glyph: "❍",
-    tier: "coming-soon",
+    tier: "live",
     kind: "play",
     tagline: "a newborn spirit-fish adrift · eat small, flee big, evolve up the food chain — the first bite forks your branch",
   },
