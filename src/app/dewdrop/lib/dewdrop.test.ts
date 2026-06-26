@@ -1,15 +1,17 @@
-// PACMAZE sim sanity — run with: npx tsx src/app/pacmaze/lib/pacmaze.test.ts
+// DEWDROP sim sanity — run with: npx tsx src/app/dewdrop/lib/dewdrop.test.ts
 import {
   makeWorld,
   setDir,
   setHeading, // ensure exports resolve
   tick,
+  loadBest,
+  saveBest,
   MAZE,
   COLS,
   ROWS,
   DELTA, // ensure exports resolve
   type World,
-} from './pacmaze'
+} from './dewdrop'
 
 let pass = 0
 let fail = 0
@@ -112,18 +114,18 @@ function run(w: World, frames: number, dt = 1 / 60) { for (let i = 0; i < frames
   ok('a hunting shade costs a life', ev.death && w2.lives === lives0 - 1)
 }
 
-// 6. a chasing water-shade closes distance on a stationary player over time
+// 6. a chasing Burr closes distance on a stationary player over time
 {
   const w = makeWorld(3); w.state = 'playing'
-  const water = w.ghosts.find((g) => g.element === 'water')!
-  water.mode = 'chase'
+  const burr = w.ghosts.find((g) => g.moglin === 'burr')!
+  burr.mode = 'chase'
   w.frightT = 0; w.scatterWave = false; w.waveT = 0
-  // freeze the player by jamming it against a wall; measure the water shade's distance
-  const d0 = Math.hypot(water.x - w.px, water.y - w.py)
+  // freeze the player by jamming it against a wall; measure Burr's distance
+  const d0 = Math.hypot(burr.x - w.px, burr.y - w.py)
   for (let i = 0; i < 60 * 5; i++) { setDir(w, 'up'); if (w.state !== 'playing') break; tick(w, 1 / 60) }
-  const wsh = w.ghosts.find((g) => g.element === 'water')!
+  const wsh = w.ghosts.find((g) => g.moglin === 'burr')!
   const d1 = Math.hypot(wsh.x - w.px, wsh.y - w.py)
-  ok('the water shade hunts closer (or catches you)', d1 < d0 || w.lives < 3)
+  ok('Burr hunts closer (or catches you)', d1 < d0 || w.lives < 3)
 }
 
 // 7. heading → cardinal mapping
@@ -143,5 +145,12 @@ function run(w: World, frames: number, dt = 1 / 60) { for (let i = 0; i < frames
   ok('same seed → same shade positions', a.ghosts[0].x === b.ghosts[0].x && a.ghosts[2].y === b.ghosts[2].y)
 }
 
-console.log(`\nPACMAZE sim: ${pass} passed, ${fail} failed`)
+// 9. best-score helpers survive a no-storage env (headless / SSR)
+{
+  let threw = false, bb = -1
+  try { bb = saveBest(150); loadBest() } catch { threw = true }
+  ok('best-score helpers survive no-storage', !threw && bb >= 0)
+}
+
+console.log(`\nDEWDROP sim: ${pass} passed, ${fail} failed`)
 process.exit(fail ? 1 : 0)

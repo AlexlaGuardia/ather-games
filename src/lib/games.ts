@@ -90,6 +90,15 @@ export const GAMES: GameEntry[] = [
     tagline: "a mote of Ather in the void's storm · no shield, no shots — read the patterns, weave, just survive",
   },
   {
+    id: "dewdrop",
+    title: "Dewdrop",
+    href: "/dewdrop",
+    glyph: "✾",
+    tier: "live",
+    kind: "play",
+    tagline: "a wild Dewbear in the Moglins' burrow · gobble the dew, dodge the collar, snap it with a wildbloom — a maze chase",
+  },
+  {
     id: "lucernyx",
     title: "Lucernyx",
     href: "/lucernyx",

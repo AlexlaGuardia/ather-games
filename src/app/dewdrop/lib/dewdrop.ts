@@ -1,16 +1,16 @@
-// PACMAZE (working title — CANON NAME IS A /magii GAP, do not ship this name public) —
-// a maze chase welded to canon: you are a spark of Ather threading the Silt, hoovering up
-// ather-motes while the void hunts you as FOUR elemental shades (Water/Storm/Earth/Mana),
-// each with its own personality. Grab a RUNE-BLOOM (power pellet) and for a few beats the
-// hunted becomes the hunter — the predator-flip verb the lineup lacks. Clear the motes to win.
+// DEWDROP — a maze chase, canon (CANON/game/dewbear-maze.md). You are a wild DEWBEAR loose in
+// the collar-Moglins' burrow-warren, hoovering DEWDROPS while four collar-Moglins hunt you to
+// collar you — Burr (latches on → chaser), Bramble (schemer → ambush), Nettle (vain → flank),
+// Hemlock (cold baron → overseer). Touch a WILDBLOOM (power pellet) and every collar snaps: the
+// Moglins DEFLATE into harmless teddies and flee (the books' deflate payoff = the predator-flip).
+// Bump a deflated one and it scurries to the warren-heart for a fresh collar. Clear the dewdrops to win.
 //
-// Pure sim (no canvas, no React). The page queues a direction each frame and calls tick();
-// it reads events for sound/FX and the grid + mobs to render the phosphor maze. Deterministic
-// (mulberry32) for the Daily. Sim-first: this file + pacmaze.test.ts before any render.
+// Pure sim (no canvas, no React). The page queues a direction each frame and calls tick(); it reads
+// events for sound/FX and the grid + mobs to render. Deterministic (mulberry32) for the Daily.
 
 import { mulberry32, type Rng } from '@/lib/arcade/rng'
 
-// ── the maze. '#' wall · '.' mote · 'o' rune-bloom · ' ' empty · 'P' player ·
+// ── the maze. '#' wall · '.' mote · 'o' wildbloom · ' ' empty · 'P' player ·
 //    'H' shade home · 'T' tunnel (wraps L↔R on its row).
 // Built programmatically as a PILLAR LATTICE (walls only at odd,odd interiors) so it is
 // connected-with-loops + dead-end-free BY CONSTRUCTION — a correct sim-first board. The
@@ -36,7 +36,7 @@ function buildMaze(): string[] {
   const put = (x: number, y: number, ch: string) => { rows[y] = rows[y].slice(0, x) + ch + rows[y].slice(x + 1) }
   put(9, MH - 3, 'P') // player spawn (open lattice cell, low-centre)
   put(9, midY, 'H') // shade home (centre)
-  for (const [px, py] of [[2, 2], [MW - 3, 2], [2, MH - 3], [MW - 3, MH - 3]]) put(px, py, 'o') // rune-blooms
+  for (const [px, py] of [[2, 2], [MW - 3, 2], [2, MH - 3], [MW - 3, MH - 3]]) put(px, py, 'o') // wildblooms
   return rows
 }
 export const MAZE = buildMaze()
@@ -48,7 +48,8 @@ export const DELTA: Record<Dir, [number, number]> = { up: [0, -1], down: [0, 1],
 const REVERSE: Record<Dir, Dir> = { up: 'down', down: 'up', left: 'right', right: 'left' }
 const DIRS: Dir[] = ['up', 'down', 'left', 'right']
 
-export type ElementId = 'water' | 'storm' | 'earth' | 'mana'
+// the four collar-Moglins (canon personalities → ghost archetypes; see dewbear-maze.md)
+export type MoglinId = 'burr' | 'bramble' | 'nettle' | 'hemlock'
 export type GhostMode = 'scatter' | 'chase' | 'frightened' | 'eaten'
 export type GameState = 'ready' | 'playing' | 'dead' | 'won'
 
@@ -57,7 +58,7 @@ export const PLAYER_SPEED = 6.2 // tiles/sec
 export const GHOST_SPEED = 5.5
 export const FRIGHT_SPEED = 3.6
 export const EYES_SPEED = 12 // eaten shade rushing home
-export const FRIGHT_TIME = 6.5 // seconds a rune-bloom keeps the void edible
+export const FRIGHT_TIME = 6.5 // seconds a wildbloom keeps the Moglins deflated
 export const SCATTER_TIME = 6 // wave timings
 export const CHASE_TIME = 18
 export const START_LIVES = 3
@@ -68,8 +69,8 @@ export interface Ghost {
   y: number
   dir: Dir
   mode: GhostMode
-  element: ElementId
-  home: [number, number] // spawn / eyes-return tile
+  moglin: MoglinId
+  home: [number, number] // spawn / warren-heart return tile
   scatter: [number, number] // this shade's scatter corner
 }
 
@@ -94,7 +95,7 @@ export interface World {
 
 export interface TickEvents {
   mote: boolean // ate an ather-mote
-  bloom: boolean // grabbed a rune-bloom (flip on)
+  bloom: boolean // grabbed a wildbloom (flip on)
   eatGhost: number // points scored eating a shade this tick (0 = none)
   death: boolean // a shade caught you (life lost)
   won: boolean // cleared the maze
@@ -138,16 +139,16 @@ export function makeWorld(seed: number): World {
       if (c === 'P' || c === 'H') grid[y] = grid[y].slice(0, x) + ' ' + grid[y].slice(x + 1)
     }
   }
-  // four shades, one per element, spawned along the home corridor, each with a corner
-  const elements: ElementId[] = ['water', 'storm', 'earth', 'mana']
+  // four collar-Moglins, spawned along the warren-heart corridor, each with a scatter corner
+  const moglins: MoglinId[] = ['burr', 'bramble', 'nettle', 'hemlock']
   const corners: [number, number][] = [[COLS - 2, 0], [0, 0], [COLS - 2, ROWS - 1], [0, ROWS - 1]]
   const offs = [0, -1, 1, -2]
-  const ghosts: Ghost[] = elements.map((element, i) => ({
+  const ghosts: Ghost[] = moglins.map((moglin, i) => ({
     x: home[0] + offs[i],
     y: home[1],
     dir: i % 2 ? 'left' : 'right',
     mode: 'scatter' as GhostMode,
-    element,
+    moglin,
     home: [home[0], home[1]] as [number, number],
     scatter: corners[i],
   }))
@@ -214,20 +215,20 @@ function tileDist(ax: number, ay: number, bx: number, by: number): number {
   return (ax - bx) ** 2 + (ay - by) ** 2
 }
 
-// the shade's chase target tile, by personality
+// the Moglin's chase target tile, by canon personality (see dewbear-maze.md)
 function chaseTarget(w: World, g: Ghost): [number, number] {
   const px = ti(w.px), py = ti(w.py)
   const pdir = w.dir ?? 'left'
   const [pdx, pdy] = DELTA[pdir]
-  if (g.element === 'water') return [px, py] // Blinky — straight for you
-  if (g.element === 'storm') return [px + pdx * 4, py + pdy * 4] // Pinky — ambush ahead
-  if (g.element === 'earth') {
-    // Inky — vector from the water shade through 2-ahead of you, doubled (a flank)
-    const water = w.ghosts.find((q) => q.element === 'water') ?? g
+  if (g.moglin === 'burr') return [px, py] // latches on, won't let go → straight for you
+  if (g.moglin === 'bramble') return [px + pdx * 4, py + pdy * 4] // the schemer → ambush 4 ahead
+  if (g.moglin === 'nettle') {
+    // vain/tricky flank — vector from Burr through 2-ahead of you, doubled
+    const burr = w.ghosts.find((q) => q.moglin === 'burr') ?? g
     const pivx = px + pdx * 2, pivy = py + pdy * 2
-    return [pivx + (pivx - ti(water.x)), pivy + (pivy - ti(water.y))]
+    return [pivx + (pivx - ti(burr.x)), pivy + (pivy - ti(burr.y))]
   }
-  // mana — Clyde: hound you when far, peel to your corner when close
+  // hemlock — the cold baron: closes in when far, peels off to oversee when near
   return tileDist(g.x, g.y, px, py) > 64 ? [px, py] : g.scatter
 }
 
@@ -306,7 +307,7 @@ function collide(w: World, ev: TickEvents) {
   }
 }
 
-// eat the mote / rune-bloom on tile (x,y) if any
+// eat the mote / wildbloom on tile (x,y) if any
 function eatTileAt(w: World, x: number, y: number, ev: TickEvents) {
   const c = cell(w.grid, x, y)
   if (c === '.') {
@@ -316,7 +317,7 @@ function eatTileAt(w: World, x: number, y: number, ev: TickEvents) {
     w.frightT = FRIGHT_TIME; w.combo = 0
     for (const g of w.ghosts) if (g.mode === 'scatter' || g.mode === 'chase') {
       g.mode = 'frightened'
-      if (g.dir) g.dir = REVERSE[g.dir] // the void recoils — turn and flee
+      if (g.dir) g.dir = REVERSE[g.dir] // the Moglins recoil (collars snap) — turn and flee
     }
   }
 }
@@ -376,3 +377,32 @@ export function tick(w: World, dt: number): TickEvents {
   if (w.motesLeft <= 0 && w.state === 'playing') { w.state = 'won'; ev.won = true }
   return ev
 }
+
+// ── best-score persistence (localStorage) ────────────────────────────────────────
+const BEST_KEY = 'dewdrop.best'
+export function loadBest(): number {
+  try {
+    const raw = localStorage.getItem(BEST_KEY)
+    return raw ? Math.max(0, parseInt(raw, 10) || 0) : 0
+  } catch {
+    return 0 // storage unavailable
+  }
+}
+export function saveBest(score: number): number {
+  const best = Math.max(loadBest(), Math.max(0, Math.floor(score)))
+  try {
+    localStorage.setItem(BEST_KEY, String(best))
+  } catch {
+    /* storage unavailable */
+  }
+  return best
+}
+
+// the four Moglins' colours (canon render refs) + the dew-blue Dewbear
+export const MOGLIN_COLOR: Record<MoglinId, string> = {
+  burr: '#f0e6c8', // cream
+  bramble: '#c0623a', // russet
+  nettle: '#8c93a6', // slate-dun
+  hemlock: '#6b5642', // dark coffee
+}
+export const DEWBEAR_COLOR = '#8fd6e6' // soft dew-blue (the shade "Blue" is named for)
