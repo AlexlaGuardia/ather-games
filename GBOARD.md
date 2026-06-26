@@ -508,7 +508,15 @@ scenes). Lore routes through /magii for canon safety.
 > Alex's instinct: take a classic, weld it to canon, add OUR twist. Same recipe the whole catalog
 > was built on. Run each through the filter (real gimmick · canon-parallel · light on art) before it
 > graduates to the Queue.
-- **Pac-Man riff** *(GRADUATED — building now)* — maze chase + the predator-flip the lineup lacked.
+- **Pac-Man riff → ✅ SHIPPED LIVE as DEWDROP (2026-06-26, `fdeb8bc`)** — `ather.games/dewdrop`, public.
+  Magii ruled it onto canon (`athernyx/CANON/game/dewbear-maze.md`): a wild **Dewbear** hoovering
+  **dewdrops** in the **collar-Moglins' burrow-warren**; the 4 hunters = the Moglins (Burr=chaser,
+  Bramble=ambush, Nettle=flank, Hemlock=overseer+tophat); power-pellet = **wildbloom** → collars snap,
+  Moglins **deflate** + flee (the books' deflate payoff = the predator-flip). Alex named it **Dewdrop**.
+  Render: phosphor burrow, chomping dew-blue Dewbear, 4 distinct Moglins (deflate + eyes-home states),
+  joystick+WASD, lives, win/lose + best-score, sfx. 20 tests green. **Maze art/layout = later design pass.**
+  ▶ Alex cold-play → tune speeds / wave timings / fright duration (`lib/dewdrop.ts` consts).
+- *(historical)* Pac-Man riff — maze chase + the predator-flip the lineup lacked.
   ✅ **SIM-FIRST SHIPPED 2026-06-26 (`f9cdbe1`):** `src/app/pacmaze/lib/pacmaze.ts` (working title
   `pacmaze`) — Pac-style movement (queued turns/walls/tunnel), ather-motes→win, **rune-bloom flip**
   (combo 200·2^n, eyes rush home), **4 elemental shades** w/ distinct AI (water=chase, storm=ambush,
