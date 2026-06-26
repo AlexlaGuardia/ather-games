@@ -75,10 +75,15 @@ export const APEX_BY_ELEMENT: Record<ElementId, string> = {
 }
 
 // ── spawning ──────────────────────────────────────────────────────────────────────
-export const TARGET_CREATURES = 26 // how full the visible ocean stays
+export const TARGET_CREATURES = 32 // how full the visible ocean stays
 export const SPAWN_PER_TICK = 2 // gentle top-up so the field doesn't pop in all at once
-export const SPAWN_RING = 760 // creatures appear this far out (beyond the view, inside despawn)
-export const DESPAWN_R = 1100 // drift this far from the player and you're recycled
+// the viewport is ~420×620 (corner ~373px from the player). Top-ups appear just beyond that
+// edge so they drift INTO view rather than popping in; the initial seed (makeWorld) scatters
+// across the visible disc so you start surrounded, not staring at an empty sea.
+export const SPAWN_RING = 430 // ongoing spawns appear here (just off-screen, drift in)
+export const SEED_MIN = 130 // initial-seed inner radius (clear of the instant-eat zone)
+export const SEED_MAX = 600 // initial-seed outer radius (fills view + a margin)
+export const DESPAWN_R = 780 // drift this far from the player and you're recycled
 export const BRANCH_BIAS = 0.5 // P(a spawn carries your branch element) once the fork locks
 export const CREATURE_DRIFT = 34 // base wander speed of ocean life
 export const THREAT_HOMING = 11 // bigger creatures lean toward you; prey lean away (gentle — flee-able)
@@ -151,9 +156,9 @@ export function pickTier(w: World): number {
   return Math.max(0, Math.min(APEX_TIER, w.tier + delta))
 }
 
-function spawnOne(w: World) {
+function spawnOne(w: World, minDist = SPAWN_RING, maxDist = SPAWN_RING + 140) {
   const ang = w.rng() * Math.PI * 2
-  const dist = SPAWN_RING + w.rng() * 120
+  const dist = minDist + w.rng() * (maxDist - minDist)
   const tier = pickTier(w)
   const dvAng = w.rng() * Math.PI * 2
   const dv = w.rng() * CREATURE_DRIFT
@@ -191,8 +196,8 @@ export function makeWorld(seed: number): World {
     nextId: 1,
     rng,
   }
-  // seed the ocean so the first frame already has life around the player
-  for (let i = 0; i < TARGET_CREATURES; i++) spawnOne(w)
+  // seed the ocean so the first frame already has life IN VIEW around the player
+  for (let i = 0; i < TARGET_CREATURES; i++) spawnOne(w, SEED_MIN, SEED_MAX)
   return w
 }
 
