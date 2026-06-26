@@ -39,7 +39,12 @@ the Arcade frame.
 >   Dodge-oracle: survivable + skill-scaling, opening softened for a fair casual on-ramp. **#2-cabinet call
 >   made: Squall over Pac-Man** — Driftling is an eat/flee/flip game, Pac-Man is too (predator-flip), so
 >   Squall (no offense) gives the board real contrast. Pac-Man stays queued. NO render yet (D6, cold-play).
-> - **D6** — Squall render + page + card art; cold-play. Alex lap: gx-* mobile sweep across 8.
+> - **D6** — ✅ **RENDER SHIPPED + LIVE (06-26, `5098b24`):** `/squall` public + playable. Vector-glow storm,
+>   touch joystick / mouse-follow / WASD, void-purple bullets, **telegraph readability** focus (aim = live
+>   dashed line at the mote, burst = expanding preview ring, spiral = rotating tick, all pulse toward fire),
+>   visible hot-white **hitbox pinpoint** + graze aura/flash, HUD (score+graze), best-score + run-summary death.
+>   Build clean, deployed. **⚠ unverified-by-me** (browser extension down) + **card art DEFERRED (Alex taste)**.
+>   ▶ Alex cold-play → tune `squall.ts` consts (pattern density, bullet speed, RAMP_T, graze radius).
 > - **D7** — Cabinet warmth/dim dial (one `<ArcadeCabinet>` const, his taste) + Mana'nana squared-vs-candy taste call + Daily toggle/share feel.
 > - **D8** — Nolmir feel beats (unified return >20min, warp rehearse, mobile-idle direction) + any new-game tuning from D3/D6 cold-plays.
 > - **D9** — Canon `world/arcade.md` entries (Atherdash + new games via /magii), card-art parity sweep, full mobile pass, push + GBOARD bump + wrap.
