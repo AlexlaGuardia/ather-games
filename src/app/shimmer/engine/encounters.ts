@@ -107,6 +107,29 @@ export const ENCOUNTER_TABLES: Record<string, ZoneEncounters> = {
     ],
     aiTier: 'wild',
   },
+  // Wooded Trail — cozy forest pocket west of the spine, gentle wilds
+  'wooded-trail': {
+    rate: 0.08,
+    entries: [
+      { species: 'owl',     weight: 4, levelRange: [-1, 2] },
+      { species: 'firefly', weight: 3, levelRange: [-1, 2] },
+      { species: 'bat',     weight: 3, levelRange: [0, 2] },
+      { species: 'rabbit',  weight: 2, levelRange: [-1, 2] },
+    ],
+    aiTier: 'wild',
+  },
+  // Voranyx Caverns 2F — deeper than Spore Hollow, tougher cave-dwellers
+  'voranyx-deep': {
+    rate: 0.12,
+    entries: [
+      { species: 'water-bear', weight: 3, levelRange: [1, 5] },
+      { species: 'turtle',     weight: 3, levelRange: [1, 4] },
+      { species: 'fox',        weight: 2, levelRange: [2, 5] },
+      { species: 'bat',        weight: 2, levelRange: [1, 4] },
+      { species: 'owl',        weight: 1, levelRange: [2, 6] },
+    ],
+    aiTier: 'trained',
+  },
   'sorrel-hold': {
     rate: 0.10,
     entries: [

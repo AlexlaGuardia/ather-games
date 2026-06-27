@@ -10,9 +10,17 @@ import * as THREE from 'three'
 import { walkable } from '../engine/player'
 import { ZONES, getZone, checkWarp, type Zone, type Warp } from '../world/zones'
 import { getHeightGrid } from '../world/heightmaps'
+import { rollEncounter, type WildEncounter } from '../engine/encounters'
+import { createSpirit, type Spirit, type Species } from '../spirits/spirit'
+import type { AITier } from '../engine/battle-ai'
+import PartyBattleScene from '../components/PartyBattleScene'
 
 const START_ZONE = 'moonwell-glade'
 const WATER_ID = 8, FLOOR_ID = 97, WALL_ID = 34, WARP_ID = 14, MIST_ID = 31
+// Encounters: stepping onto a fresh MIST tile can draw a wild spirit. Per-zone odds live in
+// ENCOUNTER_TABLES (engine/encounters.ts → `rate`); these dials shape it for the 3D walker so a
+// 888-mist zone isn't wall-to-wall battles.
+const ENCOUNTER_GRACE = 1.3 // seconds after a battle / zone-entry before mist can roll again
 const VOID = -1 // empty cell — renders nothing, not walkable (draw land onto an empty grid)
 const STEP = 1.0
 const MAX_TIER = 8
@@ -40,6 +48,42 @@ function buckets(grid: number[][]) {
 
 function lerpAngle(a: number, b: number, t: number) {
   return a + Math.atan2(Math.sin(b - a), Math.cos(b - a)) * t
+}
+
+// The 3D walker is still a standalone sandbox (no save yet) — field a small starter party so wild
+// encounters actually play. When play3d gets save integration, swap this for the bonded party.
+function makeStarterParty(): Spirit[] {
+  const roster: { sp: Species; name: string; lvl: number }[] = [
+    { sp: 'fox',     name: 'Ember', lvl: 7 },
+    { sp: 'axolotl', name: 'Pip',   lvl: 6 },
+    { sp: 'owl',     name: 'Sage',  lvl: 6 },
+  ]
+  return roster.map(({ sp, name, lvl }) => {
+    const s = createSpirit(sp, name, 0, 0)
+    s.level = lvl
+    s.seeds = Array.from({ length: 6 }, () => 16 + Math.floor(Math.random() * 16)) // decent IVs
+    s.bond = 120; s.happiness = 200
+    return s
+  })
+}
+
+const FILLER_SPECIES: Species[] = ['fox', 'axolotl', 'owl', 'frog', 'bat', 'rabbit', 'turtle', 'firefly', 'hummingbird', 'water-bear']
+
+// Build the wild side from a rolled encounter. A wild draw is light: the lead + a ~45% weaker tag-along.
+function buildWildParty(enc: WildEncounter): Spirit[] {
+  const lead = createSpirit(enc.species, enc.name, 0, 0)
+  lead.level = enc.level
+  lead.element = enc.element
+  lead.seeds = Array.from({ length: 6 }, () => Math.floor(Math.random() * 32))
+  const party = [lead]
+  if (Math.random() < 0.45) {
+    const sp = FILLER_SPECIES[Math.floor(Math.random() * FILLER_SPECIES.length)]
+    const m = createSpirit(sp, `Wild ${sp.charAt(0).toUpperCase() + sp.slice(1)}`, 0, 0)
+    m.level = Math.max(1, enc.level - 1 - Math.floor(Math.random() * 2))
+    m.seeds = Array.from({ length: 6 }, () => Math.floor(Math.random() * 32))
+    party.push(m)
+  }
+  return party
 }
 
 // Shared pointer painting for any instanced cell layer. Tracks the last cell (not instanceId) so
@@ -173,16 +217,19 @@ function ZoneGeometry({ gridRef, heights, version, paint, editing }: {
   )
 }
 
-function Player({ posRef, gridRef, heightsRef, zoneIdRef, editRef, onWarp }: {
+function Player({ posRef, gridRef, heightsRef, zoneIdRef, editRef, onWarp, battleRef, partyLevelRef, onEncounter }: {
   posRef: React.RefObject<THREE.Vector3>; gridRef: React.RefObject<number[][]>
   heightsRef: React.RefObject<number[][]>; zoneIdRef: React.RefObject<string>
   editRef: React.RefObject<boolean>; onWarp: (w: Warp) => void
+  battleRef: React.RefObject<boolean>; partyLevelRef: React.RefObject<number>
+  onEncounter: (enc: WildEncounter) => void
 }) {
   const group = useRef<THREE.Group>(null)
   const keys = useRef<Record<string, boolean>>({})
   const yaw = useRef(0)
   const lastTile = useRef('')
   const warpCd = useRef(0)
+  const encGrace = useRef(ENCOUNTER_GRACE)
   const fwd = useMemo(() => new THREE.Vector3(), [])
   const right = useMemo(() => new THREE.Vector3(), [])
   const move = useMemo(() => new THREE.Vector3(), [])
@@ -207,8 +254,9 @@ function Player({ posRef, gridRef, heightsRef, zoneIdRef, editRef, onWarp }: {
       return walkable(grid, cx, cz) && (heights[cz]?.[cx] ?? 0) - curH <= 1
     }
 
-    // In edit mode WASD drives the spectator camera, not the player — skip player movement/warps.
-    if (!editRef.current) {
+    // Edit mode → WASD drives the spectator camera. Battle → walker is frozen behind the overlay.
+    // Either way, skip player movement / warps / encounters.
+    if (!editRef.current && !battleRef.current) {
       state.camera.getWorldDirection(fwd); fwd.y = 0; fwd.normalize()
       right.crossVectors(fwd, UP).normalize()
       move.set(0, 0, 0)
@@ -234,10 +282,19 @@ function Player({ posRef, gridRef, heightsRef, zoneIdRef, editRef, onWarp }: {
       const tileKey = `${tx},${tz}`
       const tileChanged = tileKey !== lastTile.current
       lastTile.current = tileKey
+      if (encGrace.current > 0) encGrace.current -= dt
       if (warpCd.current > 0) warpCd.current -= dt
       else if (tileChanged) {
         const w = checkWarp(ZONES, zoneIdRef.current, tx, tz)
-        if (w) { onWarp(w); warpCd.current = 0.4 }
+        if (w) { onWarp(w); warpCd.current = 0.4; encGrace.current = ENCOUNTER_GRACE }
+        // No door here — a fresh mist tile can draw a wild spirit (warps win, so you're safe on a door).
+        else if (encGrace.current <= 0) {
+          const cell = grid[tz]?.[tx]
+          if (cell !== undefined && (cell & 0xFF) === MIST_ID) {
+            const enc = rollEncounter(zoneIdRef.current, partyLevelRef.current)
+            if (enc) { encGrace.current = ENCOUNTER_GRACE; onEncounter(enc) }
+          }
+        }
       }
     }
 
@@ -327,6 +384,8 @@ function Scene(props: {
   editFocusRef: React.RefObject<THREE.Vector3>
   onWarp: (w: Warp) => void; yawRef: React.RefObject<number>; editRef: React.RefObject<boolean>
   paint: (c: number, r: number, shift: boolean) => void; editing: boolean
+  battleRef: React.RefObject<boolean>; partyLevelRef: React.RefObject<number>
+  onEncounter: (enc: WildEncounter) => void
 }) {
   return (
     <>
@@ -340,7 +399,7 @@ function Scene(props: {
         shadow-camera-near={0.5} shadow-camera-far={160}
       />
       <ZoneGeometry key={`${props.zone.id}-${props.dims}`} gridRef={props.gridRef} heights={props.heights} version={props.version} paint={props.paint} editing={props.editing} />
-      <Player posRef={props.posRef} gridRef={props.gridRef} heightsRef={props.heightsRef} zoneIdRef={props.zoneIdRef} editRef={props.editRef} onWarp={props.onWarp} />
+      <Player posRef={props.posRef} gridRef={props.gridRef} heightsRef={props.heightsRef} zoneIdRef={props.zoneIdRef} editRef={props.editRef} onWarp={props.onWarp} battleRef={props.battleRef} partyLevelRef={props.partyLevelRef} onEncounter={props.onEncounter} />
       <CameraRig posRef={props.posRef} editFocusRef={props.editFocusRef} yawRef={props.yawRef} editRef={props.editRef} />
     </>
   )
@@ -409,6 +468,19 @@ export default function Shimmer3D() {
   }
   const camYaw = useRef(0)
   const editFocusRef = useRef(new THREE.Vector3())
+
+  // Party + wild encounters. battleRef freezes the walker while the battle overlay is up.
+  const partyRef = useRef<Spirit[] | null>(null)
+  if (!partyRef.current) partyRef.current = makeStarterParty()
+  const partyLevelRef = useRef(0)
+  partyLevelRef.current = Math.round(partyRef.current.reduce((s, x) => s + x.level, 0) / partyRef.current.length)
+  const battleRef = useRef(false)
+  const [battle, setBattle] = useState<{ allies: Spirit[]; enemies: Spirit[]; aiTier: AITier; zoneId: string } | null>(null)
+  const onEncounter = useCallback((enc: WildEncounter) => {
+    battleRef.current = true
+    setBattle({ allies: partyRef.current!, enemies: buildWildParty(enc), aiTier: enc.aiTier, zoneId: zoneIdRef.current })
+  }, [])
+  const endBattle = useCallback(() => { battleRef.current = false; setBattle(null) }, [])
 
   const [version, setVersion] = useState(0)
   const [editMode, setEditMode] = useState(false)
@@ -519,6 +591,7 @@ export default function Shimmer3D() {
           posRef={posRef as React.RefObject<THREE.Vector3>} heightsRef={heightsRef} zoneIdRef={zoneIdRef}
           editFocusRef={editFocusRef}
           onWarp={onWarp} yawRef={camYaw} editRef={editRef} paint={paint} editing={editMode}
+          battleRef={battleRef} partyLevelRef={partyLevelRef} onEncounter={onEncounter}
         />
       </Canvas>
 
@@ -528,7 +601,7 @@ export default function Shimmer3D() {
       }}>
         Shimmer 3D — {zone.name}{editMode ? '  ·  EDIT' : ''}<br />
         <span style={{ opacity: 0.8 }}>
-          {editMode ? 'left-drag paint · WASD fly · Q/E down·up · right-drag look · scroll zoom' : 'WASD · drag look · scroll zoom · edges warp · B to edit terrain'}
+          {editMode ? 'left-drag paint · WASD fly · Q/E down·up · right-drag look · scroll zoom' : 'WASD · drag look · scroll zoom · edges warp · mist = wild spirits · B to edit'}
         </span>
       </div>
 
@@ -575,13 +648,28 @@ export default function Shimmer3D() {
         </div>
       )}
 
-      <button onClick={() => setEditMode((e) => !e)} style={{
-        position: 'fixed', bottom: 12, right: 12, padding: '8px 16px', borderRadius: 8, border: 'none',
-        background: editMode ? '#b9483f' : '#d4a843', color: '#1a1a2e', font: '800 14px ui-monospace, monospace', cursor: 'pointer',
-      }}>{editMode ? 'Done editing' : 'Edit terrain (B)'}</button>
+      {!battle && (
+        <button onClick={() => setEditMode((e) => !e)} style={{
+          position: 'fixed', bottom: 12, right: 12, padding: '8px 16px', borderRadius: 8, border: 'none',
+          background: editMode ? '#b9483f' : '#d4a843', color: '#1a1a2e', font: '800 14px ui-monospace, monospace', cursor: 'pointer',
+        }}>{editMode ? 'Done editing' : 'Edit terrain (B)'}</button>
+      )}
 
-      {/* keep the B hotkey too */}
-      <KeyToggle onB={() => setEditMode((e) => !e)} />
+      {/* keep the B hotkey too — but not while a battle overlay is up */}
+      <KeyToggle onB={() => { if (!battleRef.current) setEditMode((e) => !e) }} />
+
+      {/* Wild encounter — the real party battle, mounted over the 3D world. */}
+      {battle && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 50, background: '#0a0a12' }}>
+          <PartyBattleScene
+            allySpirits={battle.allies}
+            enemySpirits={battle.enemies}
+            zoneId={battle.zoneId}
+            ai={{ focusFire: battle.aiTier !== 'wild', spendMana: battle.aiTier !== 'wild' }}
+            onEnd={endBattle}
+          />
+        </div>
+      )}
     </div>
   )
 }
