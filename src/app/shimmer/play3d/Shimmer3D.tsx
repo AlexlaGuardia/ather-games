@@ -11,9 +11,12 @@ import { walkable } from '../engine/player'
 import { ZONES, getZone, checkWarp, type Zone, type Warp } from '../world/zones'
 import { getHeightGrid } from '../world/heightmaps'
 import { rollEncounter, type WildEncounter } from '../engine/encounters'
-import { createSpirit, type Spirit, type Species } from '../spirits/spirit'
+import { createSpirit, addXP, type Spirit, type Species } from '../spirits/spirit'
+import { spiritsToSave, spiritsFromSave } from '../spirits/spirit-save'
 import type { AITier } from '../engine/battle-ai'
 import PartyBattleScene from '../components/PartyBattleScene'
+import { useCloudSave } from '@/lib/use-cloud-save'
+import { useWallet } from '@/lib/use-wallet'
 
 const START_ZONE = 'moonwell-glade'
 const WATER_ID = 8, FLOOR_ID = 97, WALL_ID = 34, WARP_ID = 14, MIST_ID = 31
@@ -21,6 +24,7 @@ const WATER_ID = 8, FLOOR_ID = 97, WALL_ID = 34, WARP_ID = 14, MIST_ID = 31
 // ENCOUNTER_TABLES (engine/encounters.ts → `rate`); these dials shape it for the 3D walker so a
 // 888-mist zone isn't wall-to-wall battles.
 const ENCOUNTER_GRACE = 1.3 // seconds after a battle / zone-entry before mist can roll again
+const MAX_PARTY = 4         // active party size (matches the 2D game)
 const VOID = -1 // empty cell — renders nothing, not walkable (draw land onto an empty grid)
 const STEP = 1.0
 const MAX_TIER = 8
@@ -469,21 +473,103 @@ export default function Shimmer3D() {
   const camYaw = useRef(0)
   const editFocusRef = useRef(new THREE.Vector3())
 
-  // Party + wild encounters. battleRef freezes the walker while the battle overlay is up.
+  // ── Party + save. ather.games saves are per-browser localStorage (no login); the 3D walker shares
+  // Shimmer's slot (`ather:save:shimmer`) and MERGES on write so it never clobbers 2D-only fields. ──
+  const { load, save: saveGame } = useCloudSave('shimmer')
+  const wallet = useWallet()
   const partyRef = useRef<Spirit[] | null>(null)
-  if (!partyRef.current) partyRef.current = makeStarterParty()
+  if (!partyRef.current) partyRef.current = makeStarterParty() // synchronous default; load() may replace it
   const partyLevelRef = useRef(0)
   partyLevelRef.current = Math.round(partyRef.current.reduce((s, x) => s + x.level, 0) / partyRef.current.length)
   const battleRef = useRef(false)
   const [battle, setBattle] = useState<{ allies: Spirit[]; enemies: Spirit[]; aiTier: AITier; zoneId: string } | null>(null)
+  const curBattleRef = useRef(battle); curBattleRef.current = battle
+  const [banner, setBanner] = useState<string | null>(null)
+  useEffect(() => { if (!banner) return; const t = setTimeout(() => setBanner(null), 2600); return () => clearTimeout(t) }, [banner])
+
+  // Merge-save: preserve any 2D-only fields (furniture/crops/quests…) the 2D game may have written.
+  const persist = useCallback(async () => {
+    const prev = (await load()) ?? {}
+    await saveGame({
+      ...prev,
+      spirits: spiritsToSave(partyRef.current ?? []),
+      zoneId: zoneIdRef.current,
+      playerTileX: Math.round(posRef.current!.x),
+      playerTileY: Math.round(posRef.current!.z),
+    })
+  }, [load, saveGame])
+
+  // Load once on mount: restore party + zone + position, or bank the starter party on first visit.
+  const loadedRef = useRef(false)
+  useEffect(() => {
+    if (loadedRef.current) return
+    loadedRef.current = true
+    let alive = true
+    load().then((data) => {
+      if (!alive) return
+      if (data?.spirits?.length) {
+        partyRef.current = spiritsFromSave(data.spirits)
+        if (typeof data.playerTileX === 'number' && typeof data.playerTileY === 'number') {
+          posRef.current!.set(data.playerTileX, posRef.current!.y, data.playerTileY)
+        }
+        if (data.zoneId && getZone(ZONES, data.zoneId)) setZoneId(data.zoneId)
+      } else {
+        persist() // first visit — seed the save so the starter party persists + grows
+      }
+    }).catch(() => {})
+    return () => { alive = false }
+  }, [load, persist])
+
+  // Auto-save every 30s + on page close (the walker can be left mid-stride).
+  useEffect(() => {
+    const id = setInterval(() => { persist() }, 30_000)
+    const onLeave = () => { persist() }
+    window.addEventListener('beforeunload', onLeave)
+    return () => { clearInterval(id); window.removeEventListener('beforeunload', onLeave); persist() }
+  }, [persist])
+
   const onEncounter = useCallback((enc: WildEncounter) => {
     battleRef.current = true
     setBattle({ allies: partyRef.current!, enemies: buildWildParty(enc), aiTier: enc.aiTier, zoneId: zoneIdRef.current })
   }, [])
-  const endBattle = useCallback(() => { battleRef.current = false; setBattle(null) }, [])
+
+  // Battle end: on a win, split rewards across the party (XP / bond / happiness / gold), then save.
+  const endBattle = useCallback((outcome: 'win' | 'lose') => {
+    battleRef.current = false
+    const bd = curBattleRef.current
+    if (outcome === 'win' && bd) {
+      const totalXp = bd.enemies.reduce((s, e) => s + Math.max(8, e.level * 12), 0)
+      const gold = bd.enemies.reduce((s, e) => s + e.level * 3, 0)
+      const allies = (partyRef.current ?? []).slice(0, MAX_PARTY)
+      const perXp = Math.max(1, Math.round(totalXp / Math.max(1, allies.length)))
+      if (gold > 0) wallet.earn(gold)
+      for (const spirit of allies) {
+        const xpResult = addXP(spirit, perXp)
+        spirit.bond = Math.min(255, spirit.bond + 4)
+        spirit.happiness = Math.min(255, spirit.happiness + 3)
+        // Full evolution (form/element change) is the 2D EvolutionScene's job — not ported yet. We just
+        // celebrate the threshold here; the spirit keeps leveling until it can evolve in the full flow.
+        if (xpResult.evolved) setBanner(`✦ ${spirit.name} is ready to evolve!`)
+      }
+    }
+    setBattle(null)
+    persist()
+  }, [wallet, persist])
+
+  // New Game: fresh starter party back at the start zone (merge-save keeps any 2D fields intact).
+  const newGame = useCallback(() => {
+    partyRef.current = makeStarterParty()
+    const z = getZone(ZONES, START_ZONE)!
+    const ps = z.playerStart ?? { tileX: 1, tileY: 1 }
+    posRef.current!.set(ps.tileX, posRef.current!.y, ps.tileY)
+    setZoneId(START_ZONE)
+    setBanner('new game — fresh party')
+    persist()
+  }, [persist])
 
   const [version, setVersion] = useState(0)
   const [editMode, setEditMode] = useState(false)
+  const [confirmNew, setConfirmNew] = useState(false)
   const editRef = useRef(false); editRef.current = editMode
 
   // The walker is public; the terrain editor is owner-only. ather.games has no cloud auth, so owner
@@ -615,9 +701,43 @@ export default function Shimmer3D() {
         <span style={{ opacity: 0.8 }}>
           {editMode ? 'left-drag paint · WASD fly · Q/E down·up · right-drag look · scroll zoom' : `WASD · drag look · scroll zoom · edges warp · mist = wild spirits${isOwner ? ' · B to edit' : ''}`}
         </span>
+        {!editMode && <><br /><span style={{ color: '#ffe08a' }}>✦ {wallet.marks} marks</span></>}
       </div>
 
       <Compass yawRef={camYaw} />
+
+      {/* milestone toast (evolution-ready, new game) */}
+      {banner && (
+        <div style={{
+          position: 'fixed', top: 84, left: '50%', transform: 'translateX(-50%)', zIndex: 40,
+          padding: '8px 16px', borderRadius: 999, background: 'rgba(20,16,40,0.92)', border: '1px solid #d4a84366',
+          color: '#ffe9b0', font: '700 13px ui-monospace, monospace', whiteSpace: 'nowrap', pointerEvents: 'none',
+        }}>{banner}</div>
+      )}
+
+      {/* New Game — public players can reset their party (two-tap confirm) */}
+      {!battle && !editMode && (
+        <div style={{ position: 'fixed', bottom: 12, left: 12, display: 'flex', gap: 6, alignItems: 'center' }}>
+          {confirmNew ? (
+            <>
+              <span style={{ color: '#e9dfc8', font: '700 12px ui-monospace, monospace' }}>reset your party?</span>
+              <button onClick={() => { setConfirmNew(false); newGame() }} style={{
+                padding: '6px 12px', borderRadius: 6, border: 'none', background: '#b9483f', color: '#fff',
+                font: '800 12px ui-monospace, monospace', cursor: 'pointer',
+              }}>Yes, new game</button>
+              <button onClick={() => setConfirmNew(false)} style={{
+                padding: '6px 12px', borderRadius: 6, border: '1px solid #ffffff33', background: '#16142a', color: '#e9dfc8',
+                font: '700 12px ui-monospace, monospace', cursor: 'pointer',
+              }}>Cancel</button>
+            </>
+          ) : (
+            <button onClick={() => setConfirmNew(true)} style={{
+              padding: '6px 12px', borderRadius: 6, border: '1px solid #ffffff33', background: '#16142a', color: '#e9dfc8',
+              font: '700 12px ui-monospace, monospace', cursor: 'pointer',
+            }}>New Game</button>
+          )}
+        </div>
+      )}
 
       {editMode && (
         <div style={{ position: 'fixed', top: 70, left: 12, display: 'flex', flexDirection: 'column', gap: 3 }}>
