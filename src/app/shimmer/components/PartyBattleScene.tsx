@@ -21,7 +21,7 @@ export interface PartyBattleSceneProps {
   mana?: { ally?: Partial<ManaConfig>; enemy?: Partial<ManaConfig> }
   reach?: boolean   // Reach-encounter: enemy lead is a collared captive — free it, don't KO it
   keeper?: KeeperArchetype   // a Keeper support companion joins your side (AI-driven)
-  onEnd: (outcome: 'win' | 'lose') => void
+  onEnd: (outcome: 'win' | 'lose', reachResult?: 'freed' | 'forced' | 'fainted' | null) => void
 }
 
 type UIPhase = 'intro' | 'selectStance' | 'selectFocus' | 'animating' | 'end'
@@ -460,7 +460,7 @@ export default function PartyBattleScene({
                 {st.outcome === 'win' ? 'Victory' : 'Defeated'}
               </p>
               <p className="text-white/70 text-[12px]">{text}</p>
-              <button onClick={() => onEnd(st.outcome === 'win' ? 'win' : 'lose')}
+              <button onClick={() => onEnd(st.outcome === 'win' ? 'win' : 'lose', stateRef.current.reachResult)}
                 className="mt-2 px-5 py-3 min-h-[48px] w-full rounded-xl bg-[#d4a843]/20 border border-[#d4a843]/40 text-[#d4a843] font-display text-[14px] hover:bg-[#d4a843]/30 active:scale-95 transition-all">
                 Continue
               </button>

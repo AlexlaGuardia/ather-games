@@ -16,7 +16,7 @@ import { spiritsToSave, spiritsFromSave } from '../spirits/spirit-save'
 import { LAUNCHED_SPECIES } from '../engine/spirit-index'
 import type { AITier } from '../engine/battle-ai'
 import PartyBattleScene from '../components/PartyBattleScene'
-import { NPCS_3D, GREG_INTRO_LINES, GREG_NUDGE, GREG_RETURN, type NPC3D } from './npcs3d'
+import { NPCS_3D, GREG_INTRO_LINES, GREG_NUDGE, GREG_RETURN, THISTLE_TAUNT_NO_SPIRIT, THISTLE_PREFIGHT, THISTLE_DEFEAT, FREED_SPIRIT_BEAT, type NPC3D } from './npcs3d'
 import { useCloudSave } from '@/lib/use-cloud-save'
 import { useWallet } from '@/lib/use-wallet'
 
@@ -89,16 +89,19 @@ function buildWildParty(enc: WildEncounter, playerPartySize: number): Spirit[] {
 }
 
 // NPC markers in the current zone — a body, a head, and a tall findable beacon so you spot them fast.
+// Moglins keep a dimmed collared spirit beside them (canon) and glow an ominous violet, not warm gold.
 function NPCMarkers({ npcs, heights }: { npcs: NPC3D[]; heights: number[][] }) {
   return (
     <>
       {npcs.map((n) => {
         const y = (heights[n.tileY]?.[n.tileX] ?? 0) * STEP
+        const moglin = n.kind === 'moglin'
         return (
           <group key={n.id} position={[n.tileX, y, n.tileY]}>
             <mesh position={[0, 0.85, 0]} castShadow><capsuleGeometry args={[0.32, 0.7, 4, 10]} /><meshStandardMaterial color={n.color} /></mesh>
             <mesh position={[0, 1.55, 0]} castShadow><sphereGeometry args={[0.26, 14, 14]} /><meshStandardMaterial color="#ecdab4" /></mesh>
-            <mesh position={[0, 3.1, 0]}><boxGeometry args={[0.13, 2.2, 0.13]} /><meshStandardMaterial color="#ffe08a" emissive="#ffcf4d" emissiveIntensity={0.95} transparent opacity={0.8} /></mesh>
+            {moglin && <mesh position={[0.9, 0.5, 0.25]} castShadow><sphereGeometry args={[0.22, 12, 12]} /><meshStandardMaterial color="#6b6675" emissive="#241f2e" emissiveIntensity={0.4} /></mesh>}
+            <mesh position={[0, 3.1, 0]}><boxGeometry args={[0.13, 2.2, 0.13]} /><meshStandardMaterial color={moglin ? '#b58adf' : '#ffe08a'} emissive={moglin ? '#7a4fc0' : '#ffcf4d'} emissiveIntensity={0.92} transparent opacity={0.8} /></mesh>
           </group>
         )
       })}
@@ -237,7 +240,7 @@ function ZoneGeometry({ gridRef, heights, version, paint, editing }: {
   )
 }
 
-function Player({ posRef, gridRef, heightsRef, zoneIdRef, editRef, onWarp, battleRef, partyLevelRef, onEncounter, joyRef, talkingRef, hasPartyRef, onNearChange }: {
+function Player({ posRef, gridRef, heightsRef, zoneIdRef, editRef, onWarp, battleRef, partyLevelRef, onEncounter, joyRef, talkingRef, hasPartyRef, onNearChange, defeatedRef }: {
   posRef: React.RefObject<THREE.Vector3>; gridRef: React.RefObject<number[][]>
   heightsRef: React.RefObject<number[][]>; zoneIdRef: React.RefObject<string>
   editRef: React.RefObject<boolean>; onWarp: (w: Warp) => void
@@ -246,6 +249,7 @@ function Player({ posRef, gridRef, heightsRef, zoneIdRef, editRef, onWarp, battl
   joyRef: React.RefObject<{ x: number; y: number }>
   talkingRef: React.RefObject<boolean>; hasPartyRef: React.RefObject<boolean>
   onNearChange: (n: NPC3D | null) => void
+  defeatedRef: React.RefObject<Record<string, boolean>>
 }) {
   const group = useRef<THREE.Group>(null)
   const keys = useRef<Record<string, boolean>>({})
@@ -330,7 +334,7 @@ function Player({ posRef, gridRef, heightsRef, zoneIdRef, editRef, onWarp, battl
       let near: NPC3D | null = null
       let best = 1.7
       for (const n of NPCS_3D) {
-        if (n.zone !== zoneIdRef.current) continue
+        if (n.zone !== zoneIdRef.current || defeatedRef.current[n.id]) continue
         const d = Math.hypot(n.tileX - p.x, n.tileY - p.z)
         if (d < best) { best = d; near = n }
       }
@@ -432,6 +436,7 @@ function Scene(props: {
   joyRef: React.RefObject<{ x: number; y: number }>
   talkingRef: React.RefObject<boolean>; hasPartyRef: React.RefObject<boolean>
   onNearChange: (n: NPC3D | null) => void
+  defeatedRef: React.RefObject<Record<string, boolean>>; defeated: Record<string, boolean>
 }) {
   return (
     <>
@@ -445,8 +450,8 @@ function Scene(props: {
         shadow-camera-near={0.5} shadow-camera-far={160}
       />
       <ZoneGeometry key={`${props.zone.id}-${props.dims}`} gridRef={props.gridRef} heights={props.heights} version={props.version} paint={props.paint} editing={props.editing} />
-      <NPCMarkers npcs={NPCS_3D.filter((n) => n.zone === props.zone.id)} heights={props.heights} />
-      <Player posRef={props.posRef} gridRef={props.gridRef} heightsRef={props.heightsRef} zoneIdRef={props.zoneIdRef} editRef={props.editRef} onWarp={props.onWarp} battleRef={props.battleRef} partyLevelRef={props.partyLevelRef} onEncounter={props.onEncounter} joyRef={props.joyRef} talkingRef={props.talkingRef} hasPartyRef={props.hasPartyRef} onNearChange={props.onNearChange} />
+      <NPCMarkers npcs={NPCS_3D.filter((n) => n.zone === props.zone.id && !props.defeated[n.id])} heights={props.heights} />
+      <Player posRef={props.posRef} gridRef={props.gridRef} heightsRef={props.heightsRef} zoneIdRef={props.zoneIdRef} editRef={props.editRef} onWarp={props.onWarp} battleRef={props.battleRef} partyLevelRef={props.partyLevelRef} onEncounter={props.onEncounter} joyRef={props.joyRef} talkingRef={props.talkingRef} hasPartyRef={props.hasPartyRef} onNearChange={props.onNearChange} defeatedRef={props.defeatedRef} />
       <CameraRig posRef={props.posRef} editFocusRef={props.editFocusRef} yawRef={props.yawRef} editRef={props.editRef} />
     </>
   )
@@ -571,7 +576,9 @@ export default function Shimmer3D() {
   const battleRef = useRef(false)
   const talkingRef = useRef(false)
   const [hasStarter, setHasStarter] = useState(false) // reactive mirror of "party has ≥1 spirit" for HUD
-  const [battle, setBattle] = useState<{ allies: Spirit[]; enemies: Spirit[]; aiTier: AITier; zoneId: string } | null>(null)
+  const [defeated, setDefeated] = useState<Record<string, boolean>>({}) // NPCs cleared from the world (by id)
+  const defeatedRef = useRef(defeated); defeatedRef.current = defeated
+  const [battle, setBattle] = useState<{ allies: Spirit[]; enemies: Spirit[]; aiTier: AITier; zoneId: string; reach?: boolean; kind?: 'wild' | 'thistle' } | null>(null)
   const curBattleRef = useRef(battle); curBattleRef.current = battle
   const [banner, setBanner] = useState<string | null>(null)
   const [nearNpc, setNearNpc] = useState<NPC3D | null>(null)
@@ -601,7 +608,13 @@ export default function Shimmer3D() {
     let alive = true
     load().then((data) => {
       if (!alive) return
-      if (data?.flags) flagsRef.current = data.flags
+      if (data?.flags) {
+        flagsRef.current = data.flags
+        // re-hide any NPC whose defeated-flag is already set in the save (e.g. Thistle, once freed)
+        const cleared: Record<string, boolean> = {}
+        for (const n of NPCS_3D) if (n.defeatedFlag && data.flags[n.defeatedFlag]) cleared[n.id] = true
+        if (Object.keys(cleared).length) setDefeated(cleared)
+      }
       if (data?.spirits?.length) {
         partyRef.current = spiritsFromSave(data.spirits)
         setHasStarter(true)
@@ -627,11 +640,11 @@ export default function Shimmer3D() {
   const onEncounter = useCallback((enc: WildEncounter) => {
     battleRef.current = true
     const size = partyRef.current?.length ?? 1
-    setBattle({ allies: partyRef.current!, enemies: buildWildParty(enc, size), aiTier: enc.aiTier, zoneId: zoneIdRef.current })
+    setBattle({ allies: partyRef.current!, enemies: buildWildParty(enc, size), aiTier: enc.aiTier, zoneId: zoneIdRef.current, kind: 'wild' })
   }, [])
 
   // Battle end: on a win, split rewards across the party (XP / bond / happiness / gold), then save.
-  const endBattle = useCallback((outcome: 'win' | 'lose') => {
+  const endBattle = useCallback((outcome: 'win' | 'lose', reachResult?: 'freed' | 'forced' | 'fainted' | null) => {
     battleRef.current = false
     const bd = curBattleRef.current
     if (outcome === 'win' && bd) {
@@ -650,6 +663,16 @@ export default function Shimmer3D() {
       }
     }
     setBattle(null)
+    // Liberation beat: freeing Thistle's collared spirit clears Hold 1 — he deflates and retreats east.
+    if (outcome === 'win' && bd?.kind === 'thistle') {
+      flagsRef.current.freedThistle = true
+      setDefeated((d) => ({ ...d, thistle: true }))
+      // Canon cares HOW you won: reaching frees the spirit; forcing it KO'd the captive ("not the way").
+      const closing = reachResult === 'forced'
+        ? 'You overpowered the captive, but you forced it. That was not the way. Still, Thistle has had enough.'
+        : FREED_SPIRIT_BEAT
+      setDialogue({ name: 'Thistle', lines: [...THISTLE_DEFEAT, closing], idx: 0, onDone: () => setBanner('✦ Hold 1 cleared — Spirit Meadows is open') })
+    }
     persist()
   }, [wallet, persist])
 
@@ -658,6 +681,7 @@ export default function Shimmer3D() {
     partyRef.current = []
     flagsRef.current = {}
     setHasStarter(false)
+    setDefeated({})
     const z = getZone(ZONES, START_ZONE)!
     const ps = z.playerStart ?? { tileX: 1, tileY: 1 }
     posRef.current!.set(ps.tileX, posRef.current!.y, ps.tileY)
@@ -686,15 +710,29 @@ export default function Shimmer3D() {
     setDialogue({ ...d, idx: next })
   }, [grantStarter])
 
-  // Talk to an NPC. Gregory: no spirit yet → intro + starter handoff; already have one → a sendoff line.
-  const talk = useCallback((npc: NPC3D) => {
-    if (npc.id !== 'gregory') return
-    if ((partyRef.current?.length ?? 0) === 0) {
-      setDialogue({ name: 'Gregory', lines: [...GREG_INTRO_LINES, GREG_NUDGE], idx: 0, grantAt: GREG_INTRO_LINES.length, onDone: () => {} })
-    } else {
-      setDialogue({ name: 'Gregory', lines: [GREG_RETURN], idx: 0, onDone: () => {} })
-    }
+  // Thistle's collared captive — the spirit you free in the Reach battle (enemy index 0, auto-collared by
+  // createPartyBattle's reach mode, which also dims it and hands your party the calming moves).
+  const startThistleBattle = useCallback(() => {
+    const sp = LAUNCHED_SPECIES[Math.floor(Math.random() * LAUNCHED_SPECIES.length)]
+    const captive = createSpirit(sp, `Collared ${speciesDisplayName(sp)}`, 0, 0)
+    captive.level = 5
+    captive.seeds = Array.from({ length: 6 }, () => Math.floor(Math.random() * 32))
+    battleRef.current = true
+    setBattle({ allies: partyRef.current!, enemies: [captive], aiTier: 'wild', zoneId: zoneIdRef.current, reach: true, kind: 'thistle' })
   }, [])
+
+  // Talk to an NPC. Gregory: no spirit → intro + starter handoff; else a sendoff. Thistle: no spirit → he
+  // sneers you off; with a bonded spirit → pre-fight swagger, then the Reach battle to free his captive.
+  const talk = useCallback((npc: NPC3D) => {
+    const hasSpirit = (partyRef.current?.length ?? 0) > 0
+    if (npc.id === 'gregory') {
+      if (!hasSpirit) setDialogue({ name: 'Gregory', lines: [...GREG_INTRO_LINES, GREG_NUDGE], idx: 0, grantAt: GREG_INTRO_LINES.length, onDone: () => {} })
+      else setDialogue({ name: 'Gregory', lines: [GREG_RETURN], idx: 0, onDone: () => {} })
+    } else if (npc.id === 'thistle') {
+      if (!hasSpirit) setDialogue({ name: 'Thistle', lines: THISTLE_TAUNT_NO_SPIRIT, idx: 0, onDone: () => {} })
+      else setDialogue({ name: 'Thistle', lines: THISTLE_PREFIGHT, idx: 0, onDone: startThistleBattle })
+    }
+  }, [startThistleBattle])
 
   const [version, setVersion] = useState(0)
   const [editMode, setEditMode] = useState(false)
@@ -836,6 +874,7 @@ export default function Shimmer3D() {
           onWarp={onWarp} yawRef={camYaw} editRef={editRef} paint={paint} editing={editMode}
           battleRef={battleRef} partyLevelRef={partyLevelRef} onEncounter={onEncounter} joyRef={joyRef}
           talkingRef={talkingRef} hasPartyRef={hasPartyRef} onNearChange={setNearNpc}
+          defeatedRef={defeatedRef} defeated={defeated}
         />
       </Canvas>
 
@@ -852,13 +891,13 @@ export default function Shimmer3D() {
 
       <Compass yawRef={camYaw} />
 
-      {/* first-quest nudge: no spirit yet → point the player at Gregory's glow */}
-      {!hasStarter && !dialogue && !nearNpc && !battle && !editMode && (
+      {/* quest objective nudge — advances with the first-quest chain */}
+      {!dialogue && !nearNpc && !battle && !editMode && (!hasStarter || !defeated.thistle) && (
         <div style={{
           position: 'fixed', top: 84, left: '50%', transform: 'translateX(-50%)', zIndex: 35,
           padding: '7px 15px', borderRadius: 999, background: 'rgba(16,14,32,0.88)', border: '1px solid #d4a84355',
           color: '#ffe9b0', font: '700 13px ui-monospace, monospace', whiteSpace: 'nowrap', pointerEvents: 'none',
-        }}>✦ Find Gregory — follow the glow in the glade</div>
+        }}>{!hasStarter ? '✦ Find Gregory — follow the glow in the glade' : '✦ Spirit Meadows — free the spirit Thistle holds'}</div>
       )}
 
       {/* talk prompt when standing by an NPC */}
@@ -1005,6 +1044,7 @@ export default function Shimmer3D() {
             allySpirits={battle.allies}
             enemySpirits={battle.enemies}
             zoneId={battle.zoneId}
+            reach={battle.reach}
             ai={{ focusFire: battle.aiTier !== 'wild', spendMana: battle.aiTier !== 'wild' }}
             onEnd={endBattle}
           />
