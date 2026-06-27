@@ -221,12 +221,13 @@ function ZoneGeometry({ gridRef, heights, version, paint, editing }: {
   )
 }
 
-function Player({ posRef, gridRef, heightsRef, zoneIdRef, editRef, onWarp, battleRef, partyLevelRef, onEncounter }: {
+function Player({ posRef, gridRef, heightsRef, zoneIdRef, editRef, onWarp, battleRef, partyLevelRef, onEncounter, joyRef }: {
   posRef: React.RefObject<THREE.Vector3>; gridRef: React.RefObject<number[][]>
   heightsRef: React.RefObject<number[][]>; zoneIdRef: React.RefObject<string>
   editRef: React.RefObject<boolean>; onWarp: (w: Warp) => void
   battleRef: React.RefObject<boolean>; partyLevelRef: React.RefObject<number>
   onEncounter: (enc: WildEncounter) => void
+  joyRef: React.RefObject<{ x: number; y: number }>
 }) {
   const group = useRef<THREE.Group>(null)
   const keys = useRef<Record<string, boolean>>({})
@@ -268,6 +269,9 @@ function Player({ posRef, gridRef, heightsRef, zoneIdRef, editRef, onWarp, battl
       if (k['s'] || k['arrowdown']) move.sub(fwd)
       if (k['d'] || k['arrowright']) move.add(right)
       if (k['a'] || k['arrowleft']) move.sub(right)
+      // touch joystick (camera-relative, same as WASD): y = forward/back, x = strafe
+      const j = joyRef.current
+      if (j.x || j.y) { move.addScaledVector(fwd, j.y); move.addScaledVector(right, j.x) }
 
       if (move.lengthSq() > 0) {
         move.normalize()
@@ -333,6 +337,9 @@ function CameraRig({ posRef, editFocusRef, yawRef, editRef }: {
     const dn = (e: PointerEvent) => {
       const ok = editRef.current ? e.button === 2 : e.button === 0
       if (!ok) return
+      // only orbit from drags that START on the 3D canvas — touches on the joystick / buttons / HUD
+      // are theirs, not the camera's.
+      if (!(e.target instanceof HTMLCanvasElement)) return
       dragging = true; lx = e.clientX; ly = e.clientY
     }
     const mv = (e: PointerEvent) => {
@@ -390,6 +397,7 @@ function Scene(props: {
   paint: (c: number, r: number, shift: boolean) => void; editing: boolean
   battleRef: React.RefObject<boolean>; partyLevelRef: React.RefObject<number>
   onEncounter: (enc: WildEncounter) => void
+  joyRef: React.RefObject<{ x: number; y: number }>
 }) {
   return (
     <>
@@ -403,7 +411,7 @@ function Scene(props: {
         shadow-camera-near={0.5} shadow-camera-far={160}
       />
       <ZoneGeometry key={`${props.zone.id}-${props.dims}`} gridRef={props.gridRef} heights={props.heights} version={props.version} paint={props.paint} editing={props.editing} />
-      <Player posRef={props.posRef} gridRef={props.gridRef} heightsRef={props.heightsRef} zoneIdRef={props.zoneIdRef} editRef={props.editRef} onWarp={props.onWarp} battleRef={props.battleRef} partyLevelRef={props.partyLevelRef} onEncounter={props.onEncounter} />
+      <Player posRef={props.posRef} gridRef={props.gridRef} heightsRef={props.heightsRef} zoneIdRef={props.zoneIdRef} editRef={props.editRef} onWarp={props.onWarp} battleRef={props.battleRef} partyLevelRef={props.partyLevelRef} onEncounter={props.onEncounter} joyRef={props.joyRef} />
       <CameraRig posRef={props.posRef} editFocusRef={props.editFocusRef} yawRef={props.yawRef} editRef={props.editRef} />
     </>
   )
@@ -445,6 +453,45 @@ function Compass({ yawRef }: { yawRef: React.RefObject<number> }) {
   )
 }
 
+// Floating touch joystick (bottom-left). Writes an analog {x,y} (camera-relative: y up = forward) into
+// joyRef, which Player reads alongside WASD. Captures its own pointer so the camera never sees the drag.
+function TouchJoystick({ joyRef }: { joyRef: React.RefObject<{ x: number; y: number }> }) {
+  const baseRef = useRef<HTMLDivElement>(null)
+  const active = useRef(false)
+  const [knob, setKnob] = useState({ x: 0, y: 0 })
+  const R = 44 // max knob travel (px)
+  const update = (cx: number, cy: number) => {
+    const r = baseRef.current!.getBoundingClientRect()
+    const ox = r.left + r.width / 2, oy = r.top + r.height / 2
+    let dx = cx - ox, dy = cy - oy
+    const len = Math.hypot(dx, dy)
+    if (len > R) { dx = (dx / len) * R; dy = (dy / len) * R }
+    setKnob({ x: dx, y: dy })
+    joyRef.current.x = dx / R
+    joyRef.current.y = -dy / R // screen-down is forward-negative
+  }
+  const end = () => { active.current = false; setKnob({ x: 0, y: 0 }); joyRef.current.x = 0; joyRef.current.y = 0 }
+  return (
+    <div
+      ref={baseRef}
+      onPointerDown={(e) => { e.stopPropagation(); active.current = true; (e.target as HTMLElement).setPointerCapture(e.pointerId); update(e.clientX, e.clientY) }}
+      onPointerMove={(e) => { if (active.current) { e.stopPropagation(); update(e.clientX, e.clientY) } }}
+      onPointerUp={end}
+      onPointerCancel={end}
+      style={{
+        position: 'fixed', bottom: 30, left: 30, width: 116, height: 116, borderRadius: '50%', zIndex: 30,
+        background: 'rgba(18,14,36,0.4)', border: '2px solid #ffffff2e', touchAction: 'none',
+      }}
+    >
+      <div style={{
+        position: 'absolute', left: '50%', top: '50%', width: 54, height: 54, marginLeft: -27, marginTop: -27,
+        borderRadius: '50%', transform: `translate(${knob.x}px, ${knob.y}px)`,
+        background: 'rgba(212,168,67,0.85)', border: '2px solid #ffffff80', boxShadow: '0 2px 10px #0009', pointerEvents: 'none',
+      }} />
+    </div>
+  )
+}
+
 const TOOLS: { id: Tool; label: string }[] = [
   { id: 'floor', label: 'Land' }, { id: 'raise', label: 'Raise' }, { id: 'lower', label: 'Lower' },
   { id: 'wall', label: 'Cloud' }, { id: 'water', label: 'Water' }, { id: 'mist', label: 'Mist' },
@@ -472,6 +519,7 @@ export default function Shimmer3D() {
   }
   const camYaw = useRef(0)
   const editFocusRef = useRef(new THREE.Vector3())
+  const joyRef = useRef({ x: 0, y: 0 }) // touch-joystick analog input → Player movement
 
   // ── Party + save. ather.games saves are per-browser localStorage (no login); the 3D walker shares
   // Shimmer's slot (`ather:save:shimmer`) and MERGES on write so it never clobbers 2D-only fields. ──
@@ -583,6 +631,9 @@ export default function Shimmer3D() {
       .catch(() => {})
     return () => { alive = false }
   }, [])
+  // Show on-screen touch controls (joystick + A/B) on touch devices; desktop keeps WASD + drag-look.
+  const [isTouch, setIsTouch] = useState(false)
+  useEffect(() => { setIsTouch((window.matchMedia?.('(pointer: coarse)').matches ?? false) || 'ontouchstart' in window) }, [])
   // entering edit mode: start the spectator camera where the player is standing
   useEffect(() => { if (editMode) editFocusRef.current.copy(posRef.current!) }, [editMode])
   const [tool, setTool] = useState<Tool>('raise')
@@ -682,14 +733,14 @@ export default function Shimmer3D() {
   )
 
   return (
-    <div style={{ position: 'fixed', inset: 0, background: '#bfe3ef', cursor: editMode ? 'crosshair' : 'default' }}>
+    <div style={{ position: 'fixed', inset: 0, background: '#bfe3ef', cursor: editMode ? 'crosshair' : 'default', touchAction: 'none', overscrollBehavior: 'none' }}>
       <Canvas shadows camera={{ fov: 45, position: [1, 6, 14], near: 0.1, far: 500 }} gl={{ antialias: true }}>
         <Scene
           zone={zone} gridRef={gridRef} heights={heightsRef.current} version={version} dims={dims}
           posRef={posRef as React.RefObject<THREE.Vector3>} heightsRef={heightsRef} zoneIdRef={zoneIdRef}
           editFocusRef={editFocusRef}
           onWarp={onWarp} yawRef={camYaw} editRef={editRef} paint={paint} editing={editMode}
-          battleRef={battleRef} partyLevelRef={partyLevelRef} onEncounter={onEncounter}
+          battleRef={battleRef} partyLevelRef={partyLevelRef} onEncounter={onEncounter} joyRef={joyRef}
         />
       </Canvas>
 
@@ -715,21 +766,27 @@ export default function Shimmer3D() {
         }}>{banner}</div>
       )}
 
-      {/* New Game — public players can reset their party (two-tap confirm) */}
+      {/* top-right (walking): owner Edit-enter + New Game (two-tap confirm). Bottom corners are the controls. */}
       {!battle && !editMode && (
-        <div style={{ position: 'fixed', bottom: 12, left: 12, display: 'flex', gap: 6, alignItems: 'center' }}>
+        <div style={{ position: 'fixed', top: 12, right: 12, zIndex: 20, display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'flex-end' }}>
+          {isOwner && (
+            <button onClick={() => setEditMode(true)} style={{
+              padding: '6px 12px', borderRadius: 6, border: '1px solid #ffffff33', background: '#16142a', color: '#e9dfc8',
+              font: '700 12px ui-monospace, monospace', cursor: 'pointer',
+            }}>Edit terrain</button>
+          )}
           {confirmNew ? (
-            <>
-              <span style={{ color: '#e9dfc8', font: '700 12px ui-monospace, monospace' }}>reset your party?</span>
+            <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+              <span style={{ color: '#e9dfc8', font: '700 12px ui-monospace, monospace' }}>reset party?</span>
               <button onClick={() => { setConfirmNew(false); newGame() }} style={{
                 padding: '6px 12px', borderRadius: 6, border: 'none', background: '#b9483f', color: '#fff',
                 font: '800 12px ui-monospace, monospace', cursor: 'pointer',
-              }}>Yes, new game</button>
+              }}>Yes</button>
               <button onClick={() => setConfirmNew(false)} style={{
                 padding: '6px 12px', borderRadius: 6, border: '1px solid #ffffff33', background: '#16142a', color: '#e9dfc8',
                 font: '700 12px ui-monospace, monospace', cursor: 'pointer',
-              }}>Cancel</button>
-            </>
+              }}>No</button>
+            </div>
           ) : (
             <button onClick={() => setConfirmNew(true)} style={{
               padding: '6px 12px', borderRadius: 6, border: '1px solid #ffffff33', background: '#16142a', color: '#e9dfc8',
@@ -780,14 +837,36 @@ export default function Shimmer3D() {
         </div>
       )}
 
-      {!battle && isOwner && (
-        <button onClick={() => setEditMode((e) => !e)} style={{
+      {/* edit-mode Done button (enter is top-right; touch controls are hidden while editing) */}
+      {editMode && isOwner && (
+        <button onClick={() => setEditMode(false)} style={{
           position: 'fixed', bottom: 12, right: 12, padding: '8px 16px', borderRadius: 8, border: 'none',
-          background: editMode ? '#b9483f' : '#d4a843', color: '#1a1a2e', font: '800 14px ui-monospace, monospace', cursor: 'pointer',
-        }}>{editMode ? 'Done editing' : 'Edit terrain (B)'}</button>
+          background: '#b9483f', color: '#1a1a2e', font: '800 14px ui-monospace, monospace', cursor: 'pointer',
+        }}>Done editing</button>
       )}
 
-      {/* B hotkey — owner only, and not while a battle overlay is up */}
+      {/* ── Mobile controls: joystick (move) bottom-left · A interact / B cancel bottom-right ── */}
+      {isTouch && !battle && !editMode && (
+        <>
+          <TouchJoystick joyRef={joyRef} />
+          <div style={{ position: 'fixed', bottom: 30, right: 30, zIndex: 30, display: 'flex', flexDirection: 'column', gap: 16, alignItems: 'center' }}>
+            {/* B — cancel/back (upper, smaller). Backs out of the New Game prompt / dismisses a toast. */}
+            <button
+              onPointerDown={(e) => { e.stopPropagation(); if (confirmNew) setConfirmNew(false); else if (banner) setBanner(null) }}
+              aria-label="cancel"
+              style={{ width: 56, height: 56, borderRadius: '50%', border: '2px solid #ffffff33', background: 'rgba(70,44,52,0.72)', color: '#f3dada', font: '800 19px ui-monospace, monospace', cursor: 'pointer', touchAction: 'none' }}
+            >✕</button>
+            {/* A — interact/confirm (lower, bigger, where the thumb rests). Confirms New Game; reserved for NPCs. */}
+            <button
+              onPointerDown={(e) => { e.stopPropagation(); if (confirmNew) { setConfirmNew(false); newGame() } /* else: interact — wired for NPCs/objects as they land in 3D */ }}
+              aria-label="interact"
+              style={{ width: 76, height: 76, borderRadius: '50%', border: '2px solid #ffffff4d', background: 'rgba(36,84,72,0.8)', color: '#dffaf0', font: '800 23px ui-monospace, monospace', cursor: 'pointer', touchAction: 'none' }}
+            >✦</button>
+          </div>
+        </>
+      )}
+
+      {/* B hotkey (keyboard) — owner only, and not while a battle overlay is up */}
       <KeyToggle onB={() => { if (isOwner && !battleRef.current) setEditMode((e) => !e) }} />
 
       {/* Wild encounter — the real party battle, mounted over the 3D world. */}
