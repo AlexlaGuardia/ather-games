@@ -485,6 +485,18 @@ export default function Shimmer3D() {
   const [version, setVersion] = useState(0)
   const [editMode, setEditMode] = useState(false)
   const editRef = useRef(false); editRef.current = editMode
+
+  // The walker is public; the terrain editor is owner-only. ather.games has no cloud auth, so owner
+  // status comes from the httpOnly `ather_owner` cookie via /api/owner (set it at /owner?key=OWNER_KEY).
+  const [isOwner, setIsOwner] = useState(false)
+  useEffect(() => {
+    let alive = true
+    fetch('/api/owner', { cache: 'no-store' })
+      .then((r) => (r.ok ? r.json() : { owner: false }))
+      .then((d) => { if (alive && d.owner) setIsOwner(true) })
+      .catch(() => {})
+    return () => { alive = false }
+  }, [])
   // entering edit mode: start the spectator camera where the player is standing
   useEffect(() => { if (editMode) editFocusRef.current.copy(posRef.current!) }, [editMode])
   const [tool, setTool] = useState<Tool>('raise')
@@ -601,7 +613,7 @@ export default function Shimmer3D() {
       }}>
         Shimmer 3D — {zone.name}{editMode ? '  ·  EDIT' : ''}<br />
         <span style={{ opacity: 0.8 }}>
-          {editMode ? 'left-drag paint · WASD fly · Q/E down·up · right-drag look · scroll zoom' : 'WASD · drag look · scroll zoom · edges warp · mist = wild spirits · B to edit'}
+          {editMode ? 'left-drag paint · WASD fly · Q/E down·up · right-drag look · scroll zoom' : `WASD · drag look · scroll zoom · edges warp · mist = wild spirits${isOwner ? ' · B to edit' : ''}`}
         </span>
       </div>
 
@@ -648,15 +660,15 @@ export default function Shimmer3D() {
         </div>
       )}
 
-      {!battle && (
+      {!battle && isOwner && (
         <button onClick={() => setEditMode((e) => !e)} style={{
           position: 'fixed', bottom: 12, right: 12, padding: '8px 16px', borderRadius: 8, border: 'none',
           background: editMode ? '#b9483f' : '#d4a843', color: '#1a1a2e', font: '800 14px ui-monospace, monospace', cursor: 'pointer',
         }}>{editMode ? 'Done editing' : 'Edit terrain (B)'}</button>
       )}
 
-      {/* keep the B hotkey too — but not while a battle overlay is up */}
-      <KeyToggle onB={() => { if (!battleRef.current) setEditMode((e) => !e) }} />
+      {/* B hotkey — owner only, and not while a battle overlay is up */}
+      <KeyToggle onB={() => { if (isOwner && !battleRef.current) setEditMode((e) => !e) }} />
 
       {/* Wild encounter — the real party battle, mounted over the 3D world. */}
       {battle && (

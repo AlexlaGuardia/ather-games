@@ -17,7 +17,7 @@ import { getHubAudio } from "@/lib/hub-audio";
 type Wall = { id: string; label: string; glyph: string; tagline: string; href?: string; accent: string };
 
 const WALLS: Wall[] = [
-  { id: "shimmer", label: "Shimmer", glyph: "❈", tagline: "the world", href: "/shimmer", accent: "#8b5cf6" },
+  { id: "shimmer", label: "Shimmer", glyph: "❈", tagline: "the world", href: "/shimmer/play3d", accent: "#8b5cf6" },
   { id: "arcade", label: "The Arcade", glyph: "▦", tagline: "the cabinet", href: "/arcade/all", accent: "#d4a843" },
   { id: "desk", label: "Front Desk", glyph: "✦", tagline: "who you are", accent: "#00cccc" },
   { id: "magii", label: "Kindled Mug", glyph: "❖", tagline: "the tavern", href: "/magii", accent: "#d4a843" },

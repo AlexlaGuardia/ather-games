@@ -27,6 +27,12 @@ function classify(path: string): "tool" | "gated-game" | null {
   ) {
     return "tool";
   }
+  // The 3D walker is PUBLIC — anyone can play it. Its in-page terrain editor + the save-* endpoints
+  // (tool-gated above) stay owner-only; the edit UI hides itself for non-owners. This wins over the
+  // gated-game check below (Shimmer's `/shimmer` href would otherwise sweep the whole prefix in).
+  if (path === "/shimmer/play3d" || path.startsWith("/shimmer/play3d/")) {
+    return null;
+  }
   // Non-live game pages — hidden from the public, owner-only.
   if (GATED_GAME_PREFIXES.some((p) => path === p || path.startsWith(p + "/"))) {
     return "gated-game";
