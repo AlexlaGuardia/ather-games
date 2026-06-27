@@ -130,6 +130,31 @@ export const ENCOUNTER_TABLES: Record<string, ZoneEncounters> = {
     ],
     aiTier: 'trained',
   },
+  // Moonwell Pass (route-moonwell-garden) — the 3-way hub right outside the glade. First mist a new
+  // Keeper crosses, so keep it gentle.
+  'route-moonwell-garden': {
+    rate: 0.08,
+    entries: [
+      { species: 'rabbit',      weight: 4, levelRange: [-2, 1] },
+      { species: 'frog',        weight: 3, levelRange: [-2, 1] },
+      { species: 'hummingbird', weight: 3, levelRange: [-1, 2] },
+      { species: 'firefly',     weight: 2, levelRange: [-2, 1] },
+      { species: 'owl',         weight: 1, levelRange: [-1, 2] },
+    ],
+    aiTier: 'wild',
+  },
+  // Route One (route-garden-mycelial) — Home Plot ↔ Mycelial. Early, gentle wilds.
+  'route-garden-mycelial': {
+    rate: 0.08,
+    entries: [
+      { species: 'frog',    weight: 4, levelRange: [-2, 1] },
+      { species: 'firefly', weight: 3, levelRange: [-2, 1] },
+      { species: 'bat',     weight: 3, levelRange: [-1, 2] },
+      { species: 'axolotl', weight: 2, levelRange: [-1, 1] },
+      { species: 'rabbit',  weight: 2, levelRange: [-2, 1] },
+    ],
+    aiTier: 'wild',
+  },
   'sorrel-hold': {
     rate: 0.10,
     entries: [
