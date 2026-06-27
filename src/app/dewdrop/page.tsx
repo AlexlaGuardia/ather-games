@@ -24,9 +24,9 @@ import {
 } from './lib/dewdrop'
 import { sfx } from './lib/sfx'
 
-const TILE = 20
-const VW = COLS * TILE // 380
-const VH = ROWS * TILE // 420
+const TILE = 26 // bigger cells (smaller 15×17 grid still fills ~390px wide on a phone)
+const VW = COLS * TILE // 15 × 26 = 390
+const VH = ROWS * TILE // 17 × 26 = 442
 const BG = '#05060f'
 const WALL = '#1b3a5e' // burrow wall (dim phosphor blue)
 const WALL_GLOW = '#2f6fa8'

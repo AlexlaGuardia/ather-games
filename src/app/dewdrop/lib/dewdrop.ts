@@ -15,8 +15,8 @@ import { mulberry32, type Rng } from '@/lib/arcade/rng'
 // Built programmatically as a PILLAR LATTICE (walls only at odd,odd interiors) so it is
 // connected-with-loops + dead-end-free BY CONSTRUCTION — a correct sim-first board. The
 // hand-designed maze ART/layout is a later pass (CANON name + look are a /magii + Alex call).
-const MW = 19
-const MH = 21
+const MW = 15 // smaller grid → bigger cells on a phone (was 19×21, too cramped)
+const MH = 17
 function buildMaze(): string[] {
   const midY = Math.floor(MH / 2)
   const rows: string[] = []
@@ -34,8 +34,9 @@ function buildMaze(): string[] {
     rows.push(r)
   }
   const put = (x: number, y: number, ch: string) => { rows[y] = rows[y].slice(0, x) + ch + rows[y].slice(x + 1) }
-  put(9, MH - 3, 'P') // player spawn (open lattice cell, low-centre)
-  put(9, midY, 'H') // shade home (centre)
+  const cx = Math.floor(MW / 2) // centre column (odd for odd MW → an open lattice cell)
+  put(cx, MH - 3, 'P') // player spawn (low-centre)
+  put(cx, midY, 'H') // warren-heart (centre)
   for (const [px, py] of [[2, 2], [MW - 3, 2], [2, MH - 3], [MW - 3, MH - 3]]) put(px, py, 'o') // wildblooms
   return rows
 }
@@ -54,10 +55,12 @@ export type GhostMode = 'scatter' | 'chase' | 'frightened' | 'eaten'
 export type GameState = 'ready' | 'playing' | 'dead' | 'won'
 
 // ── tuning ────────────────────────────────────────────────────────────────────────
-export const PLAYER_SPEED = 6.2 // tiles/sec
-export const GHOST_SPEED = 5.5
-export const FRIGHT_SPEED = 3.6
-export const EYES_SPEED = 12 // eaten shade rushing home
+// tiles/sec — slowed for readability (Alex: "a bit fast"); cells are bigger now too, so
+// pixel-speed drops further. Ghosts stay just under the player; eyes rush home.
+export const PLAYER_SPEED = 4.0
+export const GHOST_SPEED = 3.5
+export const FRIGHT_SPEED = 2.4
+export const EYES_SPEED = 8 // eaten Moglin scurrying home for a fresh collar
 export const FRIGHT_TIME = 6.5 // seconds a wildbloom keeps the Moglins deflated
 export const SCATTER_TIME = 6 // wave timings
 export const CHASE_TIME = 18
@@ -190,7 +193,9 @@ function advance(w: World, m: { x: number; y: number; dir: Dir | null }, speed: 
     const sign = dx + dy // ±1 (one axis is 0)
     const nextCenter = sign > 0 ? Math.floor(along + 1e-6) + 1 : Math.ceil(along - 1e-6) - 1
     const dist = Math.abs(nextCenter - along)
-    if (remaining >= dist) {
+    // EPS so an exact step (e.g. 0.0667 tiles/frame) that accumulates to ≈center still snaps;
+    // without it FP drift can leave dist a hair above remaining forever → decide()/eat skipped.
+    if (remaining >= dist - 1e-6) {
       if (dx !== 0) m.x = nextCenter; else m.y = nextCenter
       remaining -= dist
       wrapTunnel(m)

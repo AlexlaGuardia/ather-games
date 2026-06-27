@@ -74,10 +74,11 @@ function run(w: World, frames: number, dt = 1 / 60) { for (let i = 0; i < frames
 // 3. a queued turn is taken at the next intersection
 {
   const w = makeWorld(1); w.ghosts = []
-  setDir(w, 'left'); run(w, 12) // slide left toward (8,15)
-  setDir(w, 'down') // queue a turn; (8,16) is open
-  run(w, 40)
-  ok('queued turn changes lane', w.py > 15)
+  const sy = w.py
+  setDir(w, 'left'); run(w, 14) // slide left toward the next intersection
+  setDir(w, 'down') // queue a turn into the perpendicular lane
+  run(w, 30)
+  ok('queued turn changes lane', w.py > sy) // turned off the spawn row
 }
 
 // 4. eating motes scores; clearing the last mote wins
