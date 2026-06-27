@@ -11,10 +11,12 @@ import { walkable } from '../engine/player'
 import { ZONES, getZone, checkWarp, type Zone, type Warp } from '../world/zones'
 import { getHeightGrid } from '../world/heightmaps'
 import { rollEncounter, type WildEncounter } from '../engine/encounters'
-import { createSpirit, addXP, type Spirit, type Species } from '../spirits/spirit'
+import { createSpirit, addXP, speciesDisplayName, type Spirit, type Species } from '../spirits/spirit'
 import { spiritsToSave, spiritsFromSave } from '../spirits/spirit-save'
+import { LAUNCHED_SPECIES } from '../engine/spirit-index'
 import type { AITier } from '../engine/battle-ai'
 import PartyBattleScene from '../components/PartyBattleScene'
+import { NPCS_3D, GREG_INTRO_LINES, GREG_NUDGE, GREG_RETURN, type NPC3D } from './npcs3d'
 import { useCloudSave } from '@/lib/use-cloud-save'
 import { useWallet } from '@/lib/use-wallet'
 
@@ -54,33 +56,29 @@ function lerpAngle(a: number, b: number, t: number) {
   return a + Math.atan2(Math.sin(b - a), Math.cos(b - a)) * t
 }
 
-// The 3D walker is still a standalone sandbox (no save yet) — field a small starter party so wild
-// encounters actually play. When play3d gets save integration, swap this for the bonded party.
-function makeStarterParty(): Spirit[] {
-  const roster: { sp: Species; name: string; lvl: number }[] = [
-    { sp: 'fox',     name: 'Ember', lvl: 7 },
-    { sp: 'axolotl', name: 'Pip',   lvl: 6 },
-    { sp: 'owl',     name: 'Sage',  lvl: 6 },
-  ]
-  return roster.map(({ sp, name, lvl }) => {
-    const s = createSpirit(sp, name, 0, 0)
-    s.level = lvl
-    s.seeds = Array.from({ length: 6 }, () => 16 + Math.floor(Math.random() * 16)) // decent IVs
-    s.bond = 120; s.happiness = 200
-    return s
-  })
+// Gregory's gift — ONE young spirit, RNG from the launched roster (the canon starter mechanic). The new
+// player gets this from Greg's first-quest handoff, not at spawn, so they have a reason to meet him.
+function makeStarterSpirit(): Spirit {
+  const sp = LAUNCHED_SPECIES[Math.floor(Math.random() * LAUNCHED_SPECIES.length)]
+  const s = createSpirit(sp, speciesDisplayName(sp), 0, 0)
+  s.level = 5
+  s.seeds = Array.from({ length: 6 }, () => 16 + Math.floor(Math.random() * 16)) // decent IVs
+  s.bond = 40
+  s.happiness = 160
+  return s
 }
 
 const FILLER_SPECIES: Species[] = ['fox', 'axolotl', 'owl', 'frog', 'bat', 'rabbit', 'turtle', 'firefly', 'hummingbird', 'water-bear']
 
-// Build the wild side from a rolled encounter. A wild draw is light: the lead + a ~45% weaker tag-along.
-function buildWildParty(enc: WildEncounter): Spirit[] {
+// Build the wild side from a rolled encounter. A wild draw is light: the lead + a ~45% weaker tag-along —
+// but never gang up on a lone starter (party of 1 always faces a fair 1v1).
+function buildWildParty(enc: WildEncounter, playerPartySize: number): Spirit[] {
   const lead = createSpirit(enc.species, enc.name, 0, 0)
   lead.level = enc.level
   lead.element = enc.element
   lead.seeds = Array.from({ length: 6 }, () => Math.floor(Math.random() * 32))
   const party = [lead]
-  if (Math.random() < 0.45) {
+  if (playerPartySize > 1 && Math.random() < 0.45) {
     const sp = FILLER_SPECIES[Math.floor(Math.random() * FILLER_SPECIES.length)]
     const m = createSpirit(sp, `Wild ${sp.charAt(0).toUpperCase() + sp.slice(1)}`, 0, 0)
     m.level = Math.max(1, enc.level - 1 - Math.floor(Math.random() * 2))
@@ -88,6 +86,24 @@ function buildWildParty(enc: WildEncounter): Spirit[] {
     party.push(m)
   }
   return party
+}
+
+// NPC markers in the current zone — a body, a head, and a tall findable beacon so you spot them fast.
+function NPCMarkers({ npcs, heights }: { npcs: NPC3D[]; heights: number[][] }) {
+  return (
+    <>
+      {npcs.map((n) => {
+        const y = (heights[n.tileY]?.[n.tileX] ?? 0) * STEP
+        return (
+          <group key={n.id} position={[n.tileX, y, n.tileY]}>
+            <mesh position={[0, 0.85, 0]} castShadow><capsuleGeometry args={[0.32, 0.7, 4, 10]} /><meshStandardMaterial color={n.color} /></mesh>
+            <mesh position={[0, 1.55, 0]} castShadow><sphereGeometry args={[0.26, 14, 14]} /><meshStandardMaterial color="#ecdab4" /></mesh>
+            <mesh position={[0, 3.1, 0]}><boxGeometry args={[0.13, 2.2, 0.13]} /><meshStandardMaterial color="#ffe08a" emissive="#ffcf4d" emissiveIntensity={0.95} transparent opacity={0.8} /></mesh>
+          </group>
+        )
+      })}
+    </>
+  )
 }
 
 // Shared pointer painting for any instanced cell layer. Tracks the last cell (not instanceId) so
@@ -221,13 +237,15 @@ function ZoneGeometry({ gridRef, heights, version, paint, editing }: {
   )
 }
 
-function Player({ posRef, gridRef, heightsRef, zoneIdRef, editRef, onWarp, battleRef, partyLevelRef, onEncounter, joyRef }: {
+function Player({ posRef, gridRef, heightsRef, zoneIdRef, editRef, onWarp, battleRef, partyLevelRef, onEncounter, joyRef, talkingRef, hasPartyRef, onNearChange }: {
   posRef: React.RefObject<THREE.Vector3>; gridRef: React.RefObject<number[][]>
   heightsRef: React.RefObject<number[][]>; zoneIdRef: React.RefObject<string>
   editRef: React.RefObject<boolean>; onWarp: (w: Warp) => void
   battleRef: React.RefObject<boolean>; partyLevelRef: React.RefObject<number>
   onEncounter: (enc: WildEncounter) => void
   joyRef: React.RefObject<{ x: number; y: number }>
+  talkingRef: React.RefObject<boolean>; hasPartyRef: React.RefObject<boolean>
+  onNearChange: (n: NPC3D | null) => void
 }) {
   const group = useRef<THREE.Group>(null)
   const keys = useRef<Record<string, boolean>>({})
@@ -235,6 +253,7 @@ function Player({ posRef, gridRef, heightsRef, zoneIdRef, editRef, onWarp, battl
   const lastTile = useRef('')
   const warpCd = useRef(0)
   const encGrace = useRef(ENCOUNTER_GRACE)
+  const lastNear = useRef<string | null>(null)
   const fwd = useMemo(() => new THREE.Vector3(), [])
   const right = useMemo(() => new THREE.Vector3(), [])
   const move = useMemo(() => new THREE.Vector3(), [])
@@ -259,9 +278,9 @@ function Player({ posRef, gridRef, heightsRef, zoneIdRef, editRef, onWarp, battl
       return walkable(grid, cx, cz) && (heights[cz]?.[cx] ?? 0) - curH <= 1
     }
 
-    // Edit mode → WASD drives the spectator camera. Battle → walker is frozen behind the overlay.
-    // Either way, skip player movement / warps / encounters.
-    if (!editRef.current && !battleRef.current) {
+    // Edit mode → WASD drives the spectator camera. Battle / dialogue → walker is frozen behind the
+    // overlay. Either way, skip player movement / warps / encounters / NPC proximity.
+    if (!editRef.current && !battleRef.current && !talkingRef.current) {
       state.camera.getWorldDirection(fwd); fwd.y = 0; fwd.normalize()
       right.crossVectors(fwd, UP).normalize()
       move.set(0, 0, 0)
@@ -295,8 +314,9 @@ function Player({ posRef, gridRef, heightsRef, zoneIdRef, editRef, onWarp, battl
       else if (tileChanged) {
         const w = checkWarp(ZONES, zoneIdRef.current, tx, tz)
         if (w) { onWarp(w); warpCd.current = 0.4; encGrace.current = ENCOUNTER_GRACE }
-        // No door here — a fresh mist tile can draw a wild spirit (warps win, so you're safe on a door).
-        else if (encGrace.current <= 0) {
+        // No door — a fresh mist tile can draw a wild spirit, but only once you HAVE a spirit (Greg's
+        // starter). Before that the mist is just scenery, so a fresh player is never stuck in a fight.
+        else if (encGrace.current <= 0 && hasPartyRef.current) {
           const cell = grid[tz]?.[tx]
           if (cell !== undefined && (cell & 0xFF) === MIST_ID) {
             const enc = rollEncounter(zoneIdRef.current, partyLevelRef.current)
@@ -304,6 +324,18 @@ function Player({ posRef, gridRef, heightsRef, zoneIdRef, editRef, onWarp, battl
           }
         }
       }
+
+      // Nearest interactable NPC in this zone (within ~1.7 tiles) → drive the "talk" prompt. Fires
+      // onNearChange only on enter/leave so we don't churn React state every frame.
+      let near: NPC3D | null = null
+      let best = 1.7
+      for (const n of NPCS_3D) {
+        if (n.zone !== zoneIdRef.current) continue
+        const d = Math.hypot(n.tileX - p.x, n.tileY - p.z)
+        if (d < best) { best = d; near = n }
+      }
+      const nid = near?.id ?? null
+      if (nid !== lastNear.current) { lastNear.current = nid; onNearChange(near) }
     }
 
     const g = group.current!
@@ -398,6 +430,8 @@ function Scene(props: {
   battleRef: React.RefObject<boolean>; partyLevelRef: React.RefObject<number>
   onEncounter: (enc: WildEncounter) => void
   joyRef: React.RefObject<{ x: number; y: number }>
+  talkingRef: React.RefObject<boolean>; hasPartyRef: React.RefObject<boolean>
+  onNearChange: (n: NPC3D | null) => void
 }) {
   return (
     <>
@@ -411,7 +445,8 @@ function Scene(props: {
         shadow-camera-near={0.5} shadow-camera-far={160}
       />
       <ZoneGeometry key={`${props.zone.id}-${props.dims}`} gridRef={props.gridRef} heights={props.heights} version={props.version} paint={props.paint} editing={props.editing} />
-      <Player posRef={props.posRef} gridRef={props.gridRef} heightsRef={props.heightsRef} zoneIdRef={props.zoneIdRef} editRef={props.editRef} onWarp={props.onWarp} battleRef={props.battleRef} partyLevelRef={props.partyLevelRef} onEncounter={props.onEncounter} joyRef={props.joyRef} />
+      <NPCMarkers npcs={NPCS_3D.filter((n) => n.zone === props.zone.id)} heights={props.heights} />
+      <Player posRef={props.posRef} gridRef={props.gridRef} heightsRef={props.heightsRef} zoneIdRef={props.zoneIdRef} editRef={props.editRef} onWarp={props.onWarp} battleRef={props.battleRef} partyLevelRef={props.partyLevelRef} onEncounter={props.onEncounter} joyRef={props.joyRef} talkingRef={props.talkingRef} hasPartyRef={props.hasPartyRef} onNearChange={props.onNearChange} />
       <CameraRig posRef={props.posRef} editFocusRef={props.editFocusRef} yawRef={props.yawRef} editRef={props.editRef} />
     </>
   )
@@ -526,13 +561,23 @@ export default function Shimmer3D() {
   const { load, save: saveGame } = useCloudSave('shimmer')
   const wallet = useWallet()
   const partyRef = useRef<Spirit[] | null>(null)
-  if (!partyRef.current) partyRef.current = makeStarterParty() // synchronous default; load() may replace it
+  if (!partyRef.current) partyRef.current = [] // empty until Greg's starter handoff; load() may replace it
+  const hasPartyRef = useRef(false); hasPartyRef.current = (partyRef.current?.length ?? 0) > 0
   const partyLevelRef = useRef(0)
-  partyLevelRef.current = Math.round(partyRef.current.reduce((s, x) => s + x.level, 0) / partyRef.current.length)
+  partyLevelRef.current = partyRef.current.length
+    ? Math.round(partyRef.current.reduce((s, x) => s + x.level, 0) / partyRef.current.length)
+    : 5
+  const flagsRef = useRef<Record<string, boolean>>({})
   const battleRef = useRef(false)
+  const talkingRef = useRef(false)
+  const [hasStarter, setHasStarter] = useState(false) // reactive mirror of "party has ≥1 spirit" for HUD
   const [battle, setBattle] = useState<{ allies: Spirit[]; enemies: Spirit[]; aiTier: AITier; zoneId: string } | null>(null)
   const curBattleRef = useRef(battle); curBattleRef.current = battle
   const [banner, setBanner] = useState<string | null>(null)
+  const [nearNpc, setNearNpc] = useState<NPC3D | null>(null)
+  const [dialogue, setDialogue] = useState<{ name: string; lines: string[]; idx: number; grantAt?: number; onDone: () => void } | null>(null)
+  const dialogueRef = useRef(dialogue); dialogueRef.current = dialogue
+  useEffect(() => { talkingRef.current = !!dialogue }, [dialogue])
   useEffect(() => { if (!banner) return; const t = setTimeout(() => setBanner(null), 2600); return () => clearTimeout(t) }, [banner])
 
   // Merge-save: preserve any 2D-only fields (furniture/crops/quests…) the 2D game may have written.
@@ -541,6 +586,7 @@ export default function Shimmer3D() {
     await saveGame({
       ...prev,
       spirits: spiritsToSave(partyRef.current ?? []),
+      flags: { ...(prev.flags ?? {}), ...flagsRef.current },
       zoneId: zoneIdRef.current,
       playerTileX: Math.round(posRef.current!.x),
       playerTileY: Math.round(posRef.current!.z),
@@ -555,14 +601,16 @@ export default function Shimmer3D() {
     let alive = true
     load().then((data) => {
       if (!alive) return
+      if (data?.flags) flagsRef.current = data.flags
       if (data?.spirits?.length) {
         partyRef.current = spiritsFromSave(data.spirits)
+        setHasStarter(true)
         if (typeof data.playerTileX === 'number' && typeof data.playerTileY === 'number') {
           posRef.current!.set(data.playerTileX, posRef.current!.y, data.playerTileY)
         }
         if (data.zoneId && getZone(ZONES, data.zoneId)) setZoneId(data.zoneId)
       } else {
-        persist() // first visit — seed the save so the starter party persists + grows
+        persist() // first visit — bank an empty save; the player gets their starter from Gregory
       }
     }).catch(() => {})
     return () => { alive = false }
@@ -578,7 +626,8 @@ export default function Shimmer3D() {
 
   const onEncounter = useCallback((enc: WildEncounter) => {
     battleRef.current = true
-    setBattle({ allies: partyRef.current!, enemies: buildWildParty(enc), aiTier: enc.aiTier, zoneId: zoneIdRef.current })
+    const size = partyRef.current?.length ?? 1
+    setBattle({ allies: partyRef.current!, enemies: buildWildParty(enc, size), aiTier: enc.aiTier, zoneId: zoneIdRef.current })
   }, [])
 
   // Battle end: on a win, split rewards across the party (XP / bond / happiness / gold), then save.
@@ -604,16 +653,48 @@ export default function Shimmer3D() {
     persist()
   }, [wallet, persist])
 
-  // New Game: fresh starter party back at the start zone (merge-save keeps any 2D fields intact).
+  // New Game: empty party back at the start zone — the player meets Gregory again for a fresh starter.
   const newGame = useCallback(() => {
-    partyRef.current = makeStarterParty()
+    partyRef.current = []
+    flagsRef.current = {}
+    setHasStarter(false)
     const z = getZone(ZONES, START_ZONE)!
     const ps = z.playerStart ?? { tileX: 1, tileY: 1 }
     posRef.current!.set(ps.tileX, posRef.current!.y, ps.tileY)
     setZoneId(START_ZONE)
-    setBanner('new game — fresh party')
+    setBanner('new game — find Gregory in the glade')
     persist()
   }, [persist])
+
+  // Gregory's gift — the player's first spirit (the kit). One RNG starter → party, flag set, saved.
+  const grantStarter = useCallback(() => {
+    const s = makeStarterSpirit()
+    partyRef.current = [s]
+    flagsRef.current.gotStarter = true
+    setHasStarter(true)
+    setBanner(`✦ a young ${speciesDisplayName(s.species)} joined you!`)
+    persist()
+  }, [persist])
+
+  // Advance the active dialogue. Greg's intro grants the starter as the "here it is" line appears.
+  const advanceDialogue = useCallback(() => {
+    const d = dialogueRef.current
+    if (!d) return
+    const next = d.idx + 1
+    if (next >= d.lines.length) { setDialogue(null); d.onDone(); return }
+    if (d.grantAt !== undefined && next === d.grantAt) grantStarter()
+    setDialogue({ ...d, idx: next })
+  }, [grantStarter])
+
+  // Talk to an NPC. Gregory: no spirit yet → intro + starter handoff; already have one → a sendoff line.
+  const talk = useCallback((npc: NPC3D) => {
+    if (npc.id !== 'gregory') return
+    if ((partyRef.current?.length ?? 0) === 0) {
+      setDialogue({ name: 'Gregory', lines: [...GREG_INTRO_LINES, GREG_NUDGE], idx: 0, grantAt: GREG_INTRO_LINES.length, onDone: () => {} })
+    } else {
+      setDialogue({ name: 'Gregory', lines: [GREG_RETURN], idx: 0, onDone: () => {} })
+    }
+  }, [])
 
   const [version, setVersion] = useState(0)
   const [editMode, setEditMode] = useState(false)
@@ -634,6 +715,19 @@ export default function Shimmer3D() {
   // Show on-screen touch controls (joystick + A/B) on touch devices; desktop keeps WASD + drag-look.
   const [isTouch, setIsTouch] = useState(false)
   useEffect(() => { setIsTouch((window.matchMedia?.('(pointer: coarse)').matches ?? false) || 'ontouchstart' in window) }, [])
+
+  // Desktop interact key (E / Space / Enter): advance dialogue, or talk to a nearby NPC.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (editMode || battle) return
+      const k = e.key.toLowerCase()
+      if (k !== 'e' && k !== ' ' && k !== 'enter') return
+      if (dialogueRef.current) { e.preventDefault(); advanceDialogue() }
+      else if (nearNpc) { e.preventDefault(); talk(nearNpc) }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [editMode, battle, nearNpc, advanceDialogue, talk])
   // entering edit mode: start the spectator camera where the player is standing
   useEffect(() => { if (editMode) editFocusRef.current.copy(posRef.current!) }, [editMode])
   const [tool, setTool] = useState<Tool>('raise')
@@ -741,6 +835,7 @@ export default function Shimmer3D() {
           editFocusRef={editFocusRef}
           onWarp={onWarp} yawRef={camYaw} editRef={editRef} paint={paint} editing={editMode}
           battleRef={battleRef} partyLevelRef={partyLevelRef} onEncounter={onEncounter} joyRef={joyRef}
+          talkingRef={talkingRef} hasPartyRef={hasPartyRef} onNearChange={setNearNpc}
         />
       </Canvas>
 
@@ -750,12 +845,46 @@ export default function Shimmer3D() {
       }}>
         Shimmer 3D — {zone.name}{editMode ? '  ·  EDIT' : ''}<br />
         <span style={{ opacity: 0.8 }}>
-          {editMode ? 'left-drag paint · WASD fly · Q/E down·up · right-drag look · scroll zoom' : `WASD · drag look · scroll zoom · edges warp · mist = wild spirits${isOwner ? ' · B to edit' : ''}`}
+          {editMode ? 'left-drag paint · WASD fly · Q/E down·up · right-drag look · scroll zoom' : `WASD · drag look · scroll zoom · edges warp · ${hasStarter ? 'mist = wild spirits' : 'meet Gregory first'}${isOwner ? ' · B to edit' : ''}`}
         </span>
         {!editMode && <><br /><span style={{ color: '#ffe08a' }}>✦ {wallet.marks} marks</span></>}
       </div>
 
       <Compass yawRef={camYaw} />
+
+      {/* first-quest nudge: no spirit yet → point the player at Gregory's glow */}
+      {!hasStarter && !dialogue && !nearNpc && !battle && !editMode && (
+        <div style={{
+          position: 'fixed', top: 84, left: '50%', transform: 'translateX(-50%)', zIndex: 35,
+          padding: '7px 15px', borderRadius: 999, background: 'rgba(16,14,32,0.88)', border: '1px solid #d4a84355',
+          color: '#ffe9b0', font: '700 13px ui-monospace, monospace', whiteSpace: 'nowrap', pointerEvents: 'none',
+        }}>✦ Find Gregory — follow the glow in the glade</div>
+      )}
+
+      {/* talk prompt when standing by an NPC */}
+      {nearNpc && !dialogue && !battle && !editMode && (
+        <div style={{
+          position: 'fixed', left: '50%', bottom: 156, transform: 'translateX(-50%)', zIndex: 35,
+          padding: '7px 14px', borderRadius: 999, background: 'rgba(16,14,32,0.92)', border: '1px solid #d4a84366',
+          color: '#ffe9b0', font: '700 13px ui-monospace, monospace', whiteSpace: 'nowrap', pointerEvents: 'none',
+        }}>✦ Talk to {nearNpc.name} <span style={{ opacity: 0.6 }}>({isTouch ? 'tap ✦' : 'E'})</span></div>
+      )}
+
+      {/* dialogue box — tap/click anywhere on it (or A / E) to advance; last line closes */}
+      {dialogue && (
+        <div
+          onPointerDown={(e) => { e.stopPropagation(); advanceDialogue() }}
+          style={{ position: 'fixed', left: 0, right: 0, bottom: 0, zIndex: 45, display: 'flex', justifyContent: 'center', padding: '0 16px 20px' }}
+        >
+          <div style={{ width: 'min(680px, 94vw)', background: 'rgba(12,10,24,0.95)', border: '1px solid #d4a84366', borderRadius: 12, padding: '14px 18px', cursor: 'pointer' }}>
+            <div style={{ color: '#ffd98a', font: '800 13px ui-monospace, monospace', marginBottom: 6, letterSpacing: '0.04em' }}>{dialogue.name}</div>
+            <div style={{ color: '#ece3d0', font: '600 15px/1.55 ui-monospace, monospace' }}>{dialogue.lines[dialogue.idx]}</div>
+            <div style={{ color: '#ffffff5e', font: '600 11px ui-monospace, monospace', marginTop: 9, textAlign: 'right' }}>
+              {dialogue.idx >= dialogue.lines.length - 1 ? 'tap to close' : 'tap to continue ▸'}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* milestone toast (evolution-ready, new game) */}
       {banner && (
@@ -856,11 +985,11 @@ export default function Shimmer3D() {
               aria-label="cancel"
               style={{ width: 56, height: 56, borderRadius: '50%', border: '2px solid #ffffff33', background: 'rgba(70,44,52,0.72)', color: '#f3dada', font: '800 19px ui-monospace, monospace', cursor: 'pointer', touchAction: 'none' }}
             >✕</button>
-            {/* A — interact/confirm (lower, bigger, where the thumb rests). Confirms New Game; reserved for NPCs. */}
+            {/* A — interact/confirm (lower, bigger, where the thumb rests): advance dialogue / talk to an NPC / confirm New Game. */}
             <button
-              onPointerDown={(e) => { e.stopPropagation(); if (confirmNew) { setConfirmNew(false); newGame() } /* else: interact — wired for NPCs/objects as they land in 3D */ }}
+              onPointerDown={(e) => { e.stopPropagation(); if (dialogue) advanceDialogue(); else if (nearNpc) talk(nearNpc); else if (confirmNew) { setConfirmNew(false); newGame() } }}
               aria-label="interact"
-              style={{ width: 76, height: 76, borderRadius: '50%', border: '2px solid #ffffff4d', background: 'rgba(36,84,72,0.8)', color: '#dffaf0', font: '800 23px ui-monospace, monospace', cursor: 'pointer', touchAction: 'none' }}
+              style={{ width: 76, height: 76, borderRadius: '50%', border: '2px solid #ffffff4d', background: nearNpc || dialogue ? 'rgba(212,168,67,0.85)' : 'rgba(36,84,72,0.8)', color: nearNpc || dialogue ? '#1a1a2e' : '#dffaf0', font: '800 23px ui-monospace, monospace', cursor: 'pointer', touchAction: 'none' }}
             >✦</button>
           </div>
         </>
