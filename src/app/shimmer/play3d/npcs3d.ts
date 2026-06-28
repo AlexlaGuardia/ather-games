@@ -24,6 +24,10 @@ export const NPCS_3D: NPC3D[] = [
   // collared spirits on the leash (canon), so freeing the hold means breaking the stronghold then
   // reaching BOTH captives. Deep in Mana Springs, up the misty climb. Removed once the hold clears.
   { id: 'sorrel', name: 'Sorrel', zone: 'mana-springs', tileX: 30, tileY: 25, color: '#7a5a3a', kind: 'moglin', requiredFlag: 'freedThistle', defeatedFlag: 'freedSorrel' },
+  // Brack — Hold 3, the climax. The pooled force: the biggest stronghold (two enforcers shielding THREE
+  // collared spirits). Appears only after Sorrel falls. Deep at the south end of Mana Springs — the top of
+  // the climb (interim home; moves up-map when the higher holds are baked). Removed once the hold clears.
+  { id: 'brack', name: 'Brack', zone: 'mana-springs', tileX: 65, tileY: 92, color: '#5a4632', kind: 'moglin', requiredFlag: 'freedSorrel', defeatedFlag: 'freedBrack' },
 ]
 
 // ── Gregory's first-quest dialogue (raven-voiced, his deep/warm/measured keeper register). ──
@@ -72,3 +76,31 @@ export const SORREL_DEFEAT: string[] = [
 ]
 // Both collars snap at once when the stronghold falls.
 export const FREED_PAIR_BEAT = 'Both collars drop at once. The two freed spirits drift apart from the leash, blinking, and go light again into the springs.'
+
+// ── Brack (Hold 3 — the climax) — verbatim from CANON/game/shimmer-quests-mainmap.md, Beat 7 (LOCKED). ──
+// The biggest swagger, the most collars. He huddles Thistle and Sorrel behind him.
+export const BRACK_PREFIGHT: string[] = [
+  'So. The little keeper made it all the way up Brack’s hill. The whole long way, just to stand in front of the biggest friend-keeper in the country.',
+  'Look at them all. Count them if you like. I have got more than Thistle, more than Sorrel, more than the two of them stacked one on the other. That is what makes Brack Brack.',
+  'You freed a meadow. Cute. You chased my brothers up a road. Cute. But this is the top, keeper, and the top is mine, and nobody, nobody, takes the top from Brack.',
+  'Come on then. Bring your one little chosen friend against all of mine. Let us see whose is stronger. Let us settle it.',
+]
+// The defeat + triple deflation + welcome-home — a four-voice scene (Brack/Thistle/Sorrel/Gregory,
+// narration as '—'). Rendered with per-line speakers. This is the payoff that closes the liberation arc.
+export interface ScriptLine { speaker: string; text: string }
+export const BRACK_FINALE: ScriptLine[] = [
+  { speaker: '—', text: 'The leashes give way, one after another, the dark metal cracking and falling into the grass. The dimmed spirits brighten all at once, color flooding back, and they scatter for the open sky, free.' },
+  { speaker: 'Brack', text: 'Oh. Oh no. They are gone. The friends are gone, and I feel ever so small, and I do not, I do not actually want to fight anybody.' },
+  { speaker: '—', text: 'Behind him, Thistle and Sorrel slump the very same way, all the borrowed bigness draining out of the three of them at once, until they are only three round, drab, gentle folk standing close together, blinking like they just woke up.' },
+  { speaker: 'Thistle', text: 'We were awfully loud, were we not.' },
+  { speaker: 'Sorrel', text: 'I said some unkind things. I did not mean them. The leash sort of says them for you.' },
+  { speaker: 'Brack', text: 'We never knew how to be brave on our own, so we borrowed it. And it never fit. It pinched the whole time.' },
+  { speaker: 'Gregory', text: 'There now. There is what was under all that noise the whole while. The gentlest folk in the Ather, the day they put the collars down.' },
+  { speaker: 'Gregory', text: 'Well, you three. You squatted on this keeper’s road long enough. Time you made yourselves useful, the honest way.' },
+  { speaker: 'Thistle', text: 'I will mind a corner for you, Keeper. Keep it ready. Keep it warm. For whatever comes next.' },
+  { speaker: 'Sorrel', text: 'And I am good with names. If ever a friend of yours wants a new one, a kinder one, you bring them to me. I will help you find the right fit.' },
+  { speaker: 'Brack', text: 'I know the worth of things, Keeper. Spent years counting them on leashes, more shame to me. Let me count them the right way now. You bring me what you have, I will help you trade for what you need.' },
+  { speaker: 'Gregory', text: 'You see, Keeper? You did not beat them. You freed them. There is a difference, and it is the whole of the work.' },
+]
+// Shown ahead of the finale only when the hold was forced (a captive KO'd) instead of reached.
+export const BRACK_FORCED_BEAT: ScriptLine = { speaker: '—', text: 'You broke through by force, not by reaching — and some of what you came to free did not make it. Still, the leashes fall. Brack has nothing left to hold.' }

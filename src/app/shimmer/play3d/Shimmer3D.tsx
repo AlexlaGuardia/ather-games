@@ -16,7 +16,7 @@ import { spiritsToSave, spiritsFromSave } from '../spirits/spirit-save'
 import { LAUNCHED_SPECIES } from '../engine/spirit-index'
 import type { AITier } from '../engine/battle-ai'
 import PartyBattleScene from '../components/PartyBattleScene'
-import { NPCS_3D, GREG_INTRO_LINES, GREG_NUDGE, GREG_RETURN, THISTLE_TAUNT_NO_SPIRIT, THISTLE_PREFIGHT, THISTLE_DEFEAT, FREED_SPIRIT_BEAT, SORREL_PREFIGHT, SORREL_DEFEAT, FREED_PAIR_BEAT, type NPC3D } from './npcs3d'
+import { NPCS_3D, GREG_INTRO_LINES, GREG_NUDGE, GREG_RETURN, THISTLE_TAUNT_NO_SPIRIT, THISTLE_PREFIGHT, THISTLE_DEFEAT, FREED_SPIRIT_BEAT, SORREL_PREFIGHT, SORREL_DEFEAT, FREED_PAIR_BEAT, BRACK_PREFIGHT, BRACK_FINALE, BRACK_FORCED_BEAT, type NPC3D } from './npcs3d'
 import { useCloudSave } from '@/lib/use-cloud-save'
 import { useWallet } from '@/lib/use-wallet'
 
@@ -588,11 +588,11 @@ export default function Shimmer3D() {
   const [hasStarter, setHasStarter] = useState(false) // reactive mirror of "party has ≥1 spirit" for HUD
   const [defeated, setDefeated] = useState<Record<string, boolean>>({}) // NPCs cleared from the world (by id)
   const defeatedRef = useRef(defeated); defeatedRef.current = defeated
-  const [battle, setBattle] = useState<{ allies: Spirit[]; enemies: Spirit[]; aiTier: AITier; zoneId: string; reach?: boolean; captiveIdxs?: number[]; kind?: 'wild' | 'thistle' | 'sorrel' } | null>(null)
+  const [battle, setBattle] = useState<{ allies: Spirit[]; enemies: Spirit[]; aiTier: AITier; zoneId: string; reach?: boolean; captiveIdxs?: number[]; kind?: 'wild' | 'thistle' | 'sorrel' | 'brack' } | null>(null)
   const curBattleRef = useRef(battle); curBattleRef.current = battle
   const [banner, setBanner] = useState<string | null>(null)
   const [nearNpc, setNearNpc] = useState<NPC3D | null>(null)
-  const [dialogue, setDialogue] = useState<{ name: string; lines: string[]; idx: number; grantAt?: number; onDone: () => void } | null>(null)
+  const [dialogue, setDialogue] = useState<{ name: string; lines: string[]; speakers?: string[]; idx: number; grantAt?: number; onDone: () => void } | null>(null)
   const dialogueRef = useRef(dialogue); dialogueRef.current = dialogue
   useEffect(() => { talkingRef.current = !!dialogue }, [dialogue])
   useEffect(() => { if (!banner) return; const t = setTimeout(() => setBanner(null), 2600); return () => clearTimeout(t) }, [banner])
@@ -697,6 +697,25 @@ export default function Shimmer3D() {
         : FREED_PAIR_BEAT
       setDialogue({ name: 'Sorrel', lines: [...SORREL_DEFEAT, closing, `A Mana Seed sits where the leashes were. It blooms — a young ${speciesDisplayName(sp)} joins you.`], idx: 0, onDone: () => setBanner('✦ Hold 2 cleared — the Mana Springs are free') })
     }
+    // Hold 3 — the climax. Brack's stronghold falls; all three collars break at once and the three Moglins
+    // deflate together (the four-voice finale). Mana Seed reward blooms a companion; the arc closes.
+    if (outcome === 'win' && bd?.kind === 'brack') {
+      flagsRef.current.freedBrack = true
+      setDefeated((d) => ({ ...d, brack: true }))
+      const sp = LAUNCHED_SPECIES[Math.floor(Math.random() * LAUNCHED_SPECIES.length)]
+      const bloom = createSpirit(sp, speciesDisplayName(sp), 0, 0)
+      bloom.level = Math.max(5, partyLevelRef.current)
+      partyRef.current = [...(partyRef.current ?? []), bloom]
+      const script = reachResult === 'forced' ? [BRACK_FORCED_BEAT, ...BRACK_FINALE] : BRACK_FINALE
+      const finale = [...script, { speaker: '—', text: `A Mana Seed rests in the cracked-open grass. It blooms — a young ${speciesDisplayName(sp)} joins you.` }]
+      setDialogue({
+        name: 'Brack',
+        lines: finale.map(l => l.text),
+        speakers: finale.map(l => l.speaker),
+        idx: 0,
+        onDone: () => setBanner('✦ The holds are free — the three come home'),
+      })
+    }
     persist()
   }, [wallet, persist])
 
@@ -765,6 +784,28 @@ export default function Shimmer3D() {
     setBattle({ allies: partyRef.current!, enemies: [guard, mkCaptive(), mkCaptive()], aiTier: 'champion', zoneId: zoneIdRef.current, reach: true, captiveIdxs: [1, 2], kind: 'sorrel' })
   }, [])
 
+  // Brack — Hold 3, the climax. The pooled force: TWO enforcers (guards) shielding THREE collared
+  // captives. Break both guards, then reach all three. The wall of the arc — canon wants a real team.
+  const startBrackBattle = useCallback(() => {
+    const lvl = Math.max(8, partyLevelRef.current)
+    const pick = () => LAUNCHED_SPECIES[Math.floor(Math.random() * LAUNCHED_SPECIES.length)]
+    const mkGuard = (name: string, bump: number) => {
+      const g = createSpirit(pick(), name, 0, 0)
+      g.level = lvl + bump
+      g.seeds = Array.from({ length: 6 }, () => 18 + Math.floor(Math.random() * 14))
+      return g
+    }
+    const mkCaptive = () => {
+      const sp = pick()
+      const c = createSpirit(sp, `Collared ${speciesDisplayName(sp)}`, 0, 0)
+      c.level = lvl
+      c.seeds = Array.from({ length: 6 }, () => Math.floor(Math.random() * 32))
+      return c
+    }
+    battleRef.current = true
+    setBattle({ allies: partyRef.current!, enemies: [mkGuard('Brack’s Muscle', 3), mkGuard('Brack’s Enforcer', 2), mkCaptive(), mkCaptive(), mkCaptive()], aiTier: 'champion', zoneId: zoneIdRef.current, reach: true, captiveIdxs: [2, 3, 4], kind: 'brack' })
+  }, [])
+
   // Talk to an NPC. Gregory: no spirit → intro + starter handoff; else a sendoff. Thistle: no spirit → he
   // sneers you off; with a bonded spirit → pre-fight swagger, then the Reach battle to free his captive.
   const talk = useCallback((npc: NPC3D) => {
@@ -779,8 +820,10 @@ export default function Shimmer3D() {
       // Sorrel only stands here once Thistle has fled to him (gated by requiredFlag), so the player
       // always has a party by now — straight to the swagger, then the stronghold Reach battle.
       setDialogue({ name: 'Sorrel', lines: SORREL_PREFIGHT, idx: 0, onDone: startSorrelBattle })
+    } else if (npc.id === 'brack') {
+      setDialogue({ name: 'Brack', lines: BRACK_PREFIGHT, idx: 0, onDone: startBrackBattle })
     }
-  }, [startThistleBattle, startSorrelBattle])
+  }, [startThistleBattle, startSorrelBattle, startBrackBattle])
 
   const [version, setVersion] = useState(0)
   const [editMode, setEditMode] = useState(false)
@@ -939,14 +982,14 @@ export default function Shimmer3D() {
 
       <Compass yawRef={camYaw} />
 
-      {/* quest objective nudge — advances with the hold chain (Greg → Thistle → Sorrel). Goes quiet
-          after Hold 2 since Brack (Hold 3) isn't built yet — no nudge toward a dead end. */}
-      {!dialogue && !nearNpc && !battle && !editMode && (!hasStarter || !defeated.thistle || !defeated.sorrel) && (
+      {/* quest objective nudge — advances with the full hold chain (Greg → Thistle → Sorrel → Brack).
+          Goes quiet once Hold 3 clears — the liberation arc is done. */}
+      {!dialogue && !nearNpc && !battle && !editMode && (!hasStarter || !defeated.thistle || !defeated.sorrel || !defeated.brack) && (
         <div style={{
           position: 'fixed', top: 84, left: '50%', transform: 'translateX(-50%)', zIndex: 35,
           padding: '7px 15px', borderRadius: 999, background: 'rgba(16,14,32,0.88)', border: '1px solid #d4a84355',
           color: '#ffe9b0', font: '700 13px ui-monospace, monospace', whiteSpace: 'nowrap', pointerEvents: 'none',
-        }}>{!hasStarter ? '✦ Find Gregory — follow the glow in the glade' : !defeated.thistle ? '✦ Spirit Meadows — free the spirit Thistle holds' : '✦ Mana Springs — climb to the spirits Sorrel holds'}</div>
+        }}>{!hasStarter ? '✦ Find Gregory — follow the glow in the glade' : !defeated.thistle ? '✦ Spirit Meadows — free the spirit Thistle holds' : !defeated.sorrel ? '✦ Mana Springs — climb to the spirits Sorrel holds' : '✦ Mana Springs — climb to the top hold, where Brack waits'}</div>
       )}
 
       {/* talk prompt when standing by an NPC */}
@@ -965,7 +1008,7 @@ export default function Shimmer3D() {
           style={{ position: 'fixed', left: 0, right: 0, bottom: 0, zIndex: 45, display: 'flex', justifyContent: 'center', padding: '0 16px 20px' }}
         >
           <div style={{ width: 'min(680px, 94vw)', background: 'rgba(12,10,24,0.95)', border: '1px solid #d4a84366', borderRadius: 12, padding: '14px 18px', cursor: 'pointer' }}>
-            <div style={{ color: '#ffd98a', font: '800 13px ui-monospace, monospace', marginBottom: 6, letterSpacing: '0.04em' }}>{dialogue.name}</div>
+            <div style={{ color: '#ffd98a', font: '800 13px ui-monospace, monospace', marginBottom: 6, letterSpacing: '0.04em' }}>{dialogue.speakers?.[dialogue.idx] ?? dialogue.name}</div>
             <div style={{ color: '#ece3d0', font: '600 15px/1.55 ui-monospace, monospace' }}>{dialogue.lines[dialogue.idx]}</div>
             <div style={{ color: '#ffffff5e', font: '600 11px ui-monospace, monospace', marginTop: 9, textAlign: 'right' }}>
               {dialogue.idx >= dialogue.lines.length - 1 ? 'tap to close' : 'tap to continue ▸'}
