@@ -16,7 +16,7 @@ import { spiritsToSave, spiritsFromSave } from '../spirits/spirit-save'
 import { LAUNCHED_SPECIES } from '../engine/spirit-index'
 import type { AITier } from '../engine/battle-ai'
 import PartyBattleScene from '../components/PartyBattleScene'
-import { NPCS_3D, GREG_INTRO_LINES, GREG_NUDGE, GREG_RETURN, THISTLE_TAUNT_NO_SPIRIT, THISTLE_PREFIGHT, THISTLE_DEFEAT, FREED_SPIRIT_BEAT, type NPC3D } from './npcs3d'
+import { NPCS_3D, GREG_INTRO_LINES, GREG_NUDGE, GREG_RETURN, THISTLE_TAUNT_NO_SPIRIT, THISTLE_PREFIGHT, THISTLE_DEFEAT, FREED_SPIRIT_BEAT, SORREL_PREFIGHT, SORREL_DEFEAT, FREED_PAIR_BEAT, type NPC3D } from './npcs3d'
 import { useCloudSave } from '@/lib/use-cloud-save'
 import { useWallet } from '@/lib/use-wallet'
 
@@ -240,7 +240,15 @@ function ZoneGeometry({ gridRef, heights, version, paint, editing }: {
   )
 }
 
-function Player({ posRef, gridRef, heightsRef, zoneIdRef, editRef, onWarp, battleRef, partyLevelRef, onEncounter, joyRef, talkingRef, hasPartyRef, onNearChange, defeatedRef }: {
+// An NPC stands in the world when it hasn't been cleared (defeated) and its gate flag (if any) is set.
+// Gating chains the holds: Sorrel only appears once `freedThistle` is true (he fled up here).
+function npcInWorld(n: NPC3D, defeated: Record<string, boolean>, flags: Record<string, boolean>): boolean {
+  if (defeated[n.id]) return false
+  if (n.requiredFlag && !flags[n.requiredFlag]) return false
+  return true
+}
+
+function Player({ posRef, gridRef, heightsRef, zoneIdRef, editRef, onWarp, battleRef, partyLevelRef, onEncounter, joyRef, talkingRef, hasPartyRef, onNearChange, defeatedRef, flagsRef }: {
   posRef: React.RefObject<THREE.Vector3>; gridRef: React.RefObject<number[][]>
   heightsRef: React.RefObject<number[][]>; zoneIdRef: React.RefObject<string>
   editRef: React.RefObject<boolean>; onWarp: (w: Warp) => void
@@ -250,6 +258,7 @@ function Player({ posRef, gridRef, heightsRef, zoneIdRef, editRef, onWarp, battl
   talkingRef: React.RefObject<boolean>; hasPartyRef: React.RefObject<boolean>
   onNearChange: (n: NPC3D | null) => void
   defeatedRef: React.RefObject<Record<string, boolean>>
+  flagsRef: React.RefObject<Record<string, boolean>>
 }) {
   const group = useRef<THREE.Group>(null)
   const keys = useRef<Record<string, boolean>>({})
@@ -334,7 +343,7 @@ function Player({ posRef, gridRef, heightsRef, zoneIdRef, editRef, onWarp, battl
       let near: NPC3D | null = null
       let best = 1.7
       for (const n of NPCS_3D) {
-        if (n.zone !== zoneIdRef.current || defeatedRef.current[n.id]) continue
+        if (n.zone !== zoneIdRef.current || !npcInWorld(n, defeatedRef.current, flagsRef.current)) continue
         const d = Math.hypot(n.tileX - p.x, n.tileY - p.z)
         if (d < best) { best = d; near = n }
       }
@@ -437,6 +446,7 @@ function Scene(props: {
   talkingRef: React.RefObject<boolean>; hasPartyRef: React.RefObject<boolean>
   onNearChange: (n: NPC3D | null) => void
   defeatedRef: React.RefObject<Record<string, boolean>>; defeated: Record<string, boolean>
+  flagsRef: React.RefObject<Record<string, boolean>>
 }) {
   return (
     <>
@@ -450,8 +460,8 @@ function Scene(props: {
         shadow-camera-near={0.5} shadow-camera-far={160}
       />
       <ZoneGeometry key={`${props.zone.id}-${props.dims}`} gridRef={props.gridRef} heights={props.heights} version={props.version} paint={props.paint} editing={props.editing} />
-      <NPCMarkers npcs={NPCS_3D.filter((n) => n.zone === props.zone.id && !props.defeated[n.id])} heights={props.heights} />
-      <Player posRef={props.posRef} gridRef={props.gridRef} heightsRef={props.heightsRef} zoneIdRef={props.zoneIdRef} editRef={props.editRef} onWarp={props.onWarp} battleRef={props.battleRef} partyLevelRef={props.partyLevelRef} onEncounter={props.onEncounter} joyRef={props.joyRef} talkingRef={props.talkingRef} hasPartyRef={props.hasPartyRef} onNearChange={props.onNearChange} defeatedRef={props.defeatedRef} />
+      <NPCMarkers npcs={NPCS_3D.filter((n) => n.zone === props.zone.id && npcInWorld(n, props.defeated, props.flagsRef.current))} heights={props.heights} />
+      <Player posRef={props.posRef} gridRef={props.gridRef} heightsRef={props.heightsRef} zoneIdRef={props.zoneIdRef} editRef={props.editRef} onWarp={props.onWarp} battleRef={props.battleRef} partyLevelRef={props.partyLevelRef} onEncounter={props.onEncounter} joyRef={props.joyRef} talkingRef={props.talkingRef} hasPartyRef={props.hasPartyRef} onNearChange={props.onNearChange} defeatedRef={props.defeatedRef} flagsRef={props.flagsRef} />
       <CameraRig posRef={props.posRef} editFocusRef={props.editFocusRef} yawRef={props.yawRef} editRef={props.editRef} />
     </>
   )
@@ -578,7 +588,7 @@ export default function Shimmer3D() {
   const [hasStarter, setHasStarter] = useState(false) // reactive mirror of "party has ≥1 spirit" for HUD
   const [defeated, setDefeated] = useState<Record<string, boolean>>({}) // NPCs cleared from the world (by id)
   const defeatedRef = useRef(defeated); defeatedRef.current = defeated
-  const [battle, setBattle] = useState<{ allies: Spirit[]; enemies: Spirit[]; aiTier: AITier; zoneId: string; reach?: boolean; kind?: 'wild' | 'thistle' } | null>(null)
+  const [battle, setBattle] = useState<{ allies: Spirit[]; enemies: Spirit[]; aiTier: AITier; zoneId: string; reach?: boolean; captiveIdxs?: number[]; kind?: 'wild' | 'thistle' | 'sorrel' } | null>(null)
   const curBattleRef = useRef(battle); curBattleRef.current = battle
   const [banner, setBanner] = useState<string | null>(null)
   const [nearNpc, setNearNpc] = useState<NPC3D | null>(null)
@@ -673,6 +683,20 @@ export default function Shimmer3D() {
         : FREED_SPIRIT_BEAT
       setDialogue({ name: 'Thistle', lines: [...THISTLE_DEFEAT, closing], idx: 0, onDone: () => setBanner('✦ Hold 1 cleared — Spirit Meadows is open') })
     }
+    // Hold 2: Sorrel's stronghold falls — both collars break, he retreats up to Brack, and a Mana Seed
+    // is left behind. Canon reward = the Mana Seed blooms into a new companion (party growth = seeds/bloom).
+    if (outcome === 'win' && bd?.kind === 'sorrel') {
+      flagsRef.current.freedSorrel = true
+      setDefeated((d) => ({ ...d, sorrel: true }))
+      const sp = LAUNCHED_SPECIES[Math.floor(Math.random() * LAUNCHED_SPECIES.length)]
+      const bloom = createSpirit(sp, speciesDisplayName(sp), 0, 0)
+      bloom.level = Math.max(5, partyLevelRef.current)
+      partyRef.current = [...(partyRef.current ?? []), bloom]
+      const closing = reachResult === 'forced'
+        ? 'You overpowered them, but you forced it. That was not the way. Still, Sorrel has had enough.'
+        : FREED_PAIR_BEAT
+      setDialogue({ name: 'Sorrel', lines: [...SORREL_DEFEAT, closing, `A Mana Seed sits where the leashes were. It blooms — a young ${speciesDisplayName(sp)} joins you.`], idx: 0, onDone: () => setBanner('✦ Hold 2 cleared — the Mana Springs are free') })
+    }
     persist()
   }, [wallet, persist])
 
@@ -718,7 +742,27 @@ export default function Shimmer3D() {
     captive.level = 5
     captive.seeds = Array.from({ length: 6 }, () => Math.floor(Math.random() * 32))
     battleRef.current = true
-    setBattle({ allies: partyRef.current!, enemies: [captive], aiTier: 'wild', zoneId: zoneIdRef.current, reach: true, kind: 'thistle' })
+    setBattle({ allies: partyRef.current!, enemies: [captive], aiTier: 'wild', zoneId: zoneIdRef.current, reach: true, captiveIdxs: [0], kind: 'thistle' })
+  }, [])
+
+  // Sorrel — Hold 2, the stronghold. Enemies = [guard, captive, captive]. The guard (no collar) SHIELDS
+  // the two collared captives: you break the brute first, then reach BOTH to free them. KO'ing either
+  // captive = "forced" (you broke who you came to save). Tougher than Thistle (champion AI, higher levels).
+  const startSorrelBattle = useCallback(() => {
+    const lvl = Math.max(6, partyLevelRef.current)
+    const pick = () => LAUNCHED_SPECIES[Math.floor(Math.random() * LAUNCHED_SPECIES.length)]
+    const guard = createSpirit(pick(), 'Sorrel’s Brute', 0, 0)
+    guard.level = lvl + 2
+    guard.seeds = Array.from({ length: 6 }, () => 16 + Math.floor(Math.random() * 16))
+    const mkCaptive = () => {
+      const sp = pick()
+      const c = createSpirit(sp, `Collared ${speciesDisplayName(sp)}`, 0, 0)
+      c.level = lvl
+      c.seeds = Array.from({ length: 6 }, () => Math.floor(Math.random() * 32))
+      return c
+    }
+    battleRef.current = true
+    setBattle({ allies: partyRef.current!, enemies: [guard, mkCaptive(), mkCaptive()], aiTier: 'champion', zoneId: zoneIdRef.current, reach: true, captiveIdxs: [1, 2], kind: 'sorrel' })
   }, [])
 
   // Talk to an NPC. Gregory: no spirit → intro + starter handoff; else a sendoff. Thistle: no spirit → he
@@ -731,8 +775,12 @@ export default function Shimmer3D() {
     } else if (npc.id === 'thistle') {
       if (!hasSpirit) setDialogue({ name: 'Thistle', lines: THISTLE_TAUNT_NO_SPIRIT, idx: 0, onDone: () => {} })
       else setDialogue({ name: 'Thistle', lines: THISTLE_PREFIGHT, idx: 0, onDone: startThistleBattle })
+    } else if (npc.id === 'sorrel') {
+      // Sorrel only stands here once Thistle has fled to him (gated by requiredFlag), so the player
+      // always has a party by now — straight to the swagger, then the stronghold Reach battle.
+      setDialogue({ name: 'Sorrel', lines: SORREL_PREFIGHT, idx: 0, onDone: startSorrelBattle })
     }
-  }, [startThistleBattle])
+  }, [startThistleBattle, startSorrelBattle])
 
   const [version, setVersion] = useState(0)
   const [editMode, setEditMode] = useState(false)
@@ -874,7 +922,7 @@ export default function Shimmer3D() {
           onWarp={onWarp} yawRef={camYaw} editRef={editRef} paint={paint} editing={editMode}
           battleRef={battleRef} partyLevelRef={partyLevelRef} onEncounter={onEncounter} joyRef={joyRef}
           talkingRef={talkingRef} hasPartyRef={hasPartyRef} onNearChange={setNearNpc}
-          defeatedRef={defeatedRef} defeated={defeated}
+          defeatedRef={defeatedRef} defeated={defeated} flagsRef={flagsRef}
         />
       </Canvas>
 
@@ -891,13 +939,14 @@ export default function Shimmer3D() {
 
       <Compass yawRef={camYaw} />
 
-      {/* quest objective nudge — advances with the first-quest chain */}
-      {!dialogue && !nearNpc && !battle && !editMode && (!hasStarter || !defeated.thistle) && (
+      {/* quest objective nudge — advances with the hold chain (Greg → Thistle → Sorrel). Goes quiet
+          after Hold 2 since Brack (Hold 3) isn't built yet — no nudge toward a dead end. */}
+      {!dialogue && !nearNpc && !battle && !editMode && (!hasStarter || !defeated.thistle || !defeated.sorrel) && (
         <div style={{
           position: 'fixed', top: 84, left: '50%', transform: 'translateX(-50%)', zIndex: 35,
           padding: '7px 15px', borderRadius: 999, background: 'rgba(16,14,32,0.88)', border: '1px solid #d4a84355',
           color: '#ffe9b0', font: '700 13px ui-monospace, monospace', whiteSpace: 'nowrap', pointerEvents: 'none',
-        }}>{!hasStarter ? '✦ Find Gregory — follow the glow in the glade' : '✦ Spirit Meadows — free the spirit Thistle holds'}</div>
+        }}>{!hasStarter ? '✦ Find Gregory — follow the glow in the glade' : !defeated.thistle ? '✦ Spirit Meadows — free the spirit Thistle holds' : '✦ Mana Springs — climb to the spirits Sorrel holds'}</div>
       )}
 
       {/* talk prompt when standing by an NPC */}
@@ -1045,6 +1094,7 @@ export default function Shimmer3D() {
             enemySpirits={battle.enemies}
             zoneId={battle.zoneId}
             reach={battle.reach}
+            captiveIdxs={battle.captiveIdxs}
             ai={{ focusFire: battle.aiTier !== 'wild', spendMana: battle.aiTier !== 'wild' }}
             onEnd={endBattle}
           />

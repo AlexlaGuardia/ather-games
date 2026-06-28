@@ -11,6 +11,7 @@ export interface NPC3D {
   color: string
   kind: 'keeper' | 'moglin'
   defeatedFlag?: string // save-flag that, once set, removes this NPC from the world (e.g. a freed hold)
+  requiredFlag?: string // save-flag that must be set before this NPC appears (gates the hold order)
 }
 
 export const NPCS_3D: NPC3D[] = [
@@ -19,6 +20,10 @@ export const NPCS_3D: NPC3D[] = [
   // Thistle — Hold 1. A borrowed-swagger Moglin in Spirit Meadows with a collared spirit. You free it
   // (a Reach battle), he deflates and retreats east. Removed from the world once freed.
   { id: 'thistle', name: 'Thistle', zone: 'spirit-meadow', tileX: 55, tileY: 30, color: '#9a6aaa', kind: 'moglin', defeatedFlag: 'freedThistle' },
+  // Sorrel — Hold 2, the stronghold. Appears only after Thistle is freed (he fled here). Keeps TWO
+  // collared spirits on the leash (canon), so freeing the hold means breaking the stronghold then
+  // reaching BOTH captives. Deep in Mana Springs, up the misty climb. Removed once the hold clears.
+  { id: 'sorrel', name: 'Sorrel', zone: 'mana-springs', tileX: 30, tileY: 25, color: '#7a5a3a', kind: 'moglin', requiredFlag: 'freedThistle', defeatedFlag: 'freedSorrel' },
 ]
 
 // ── Gregory's first-quest dialogue (raven-voiced, his deep/warm/measured keeper register). ──
@@ -50,3 +55,20 @@ export const THISTLE_DEFEAT: string[] = [
   'East. Sorrel will know what to do with the likes of you.',
 ]
 export const FREED_SPIRIT_BEAT = 'The collar drops, useless. The freed spirit looks at you a long moment, then drifts back into the meadow, light again.'
+
+// ── Sorrel (Hold 2 — the stronghold) — verbatim from CANON/game/shimmer-quests-mainmap.md, Beat 6. ──
+// He keeps two on the leash and shelters the fled Thistle; tougher than Hold 1, name-drops Brack.
+export const SORREL_PREFIGHT: string[] = [
+  'So you are the one. The little keeper who put my brother Thistle to flight. He came scampering up here with his tail in a knot, going on about a sprout with muddy boots.',
+  'I am not Thistle. Thistle is soft. I keep two friends on the leash, not one, and they mind me twice as well. You will not find me so easy to chase off.',
+  'And even if you did? Even if? You would only be doing me a favor. Brack is up the road, keeper. Brack is the biggest of us, with more friends on more leashes than you can count. You think you are climbing toward something. You are climbing toward him.',
+  'Go home. Go home while it is still your idea.',
+]
+// On defeat — the meanness drains out; he falls back up the road to Brack.
+export const SORREL_DEFEAT: string[] = [
+  'How. How are you still standing. That is not. You should not be able to do that.',
+  'Fine. Fine! Sorrel knows when to fall back. Up the road I go, up to Brack, where it is safe, where you cannot follow without going through everything he has got.',
+  'You will not climb that hill, keeper. Nobody climbs that hill. Brack will see to it.',
+]
+// Both collars snap at once when the stronghold falls.
+export const FREED_PAIR_BEAT = 'Both collars drop at once. The two freed spirits drift apart from the leash, blinking, and go light again into the springs.'

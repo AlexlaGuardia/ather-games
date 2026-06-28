@@ -151,7 +151,7 @@ export function createKeeperCombatant(archetype: KeeperArchetype, level: number,
 export function createPartyBattle(
   allySpirits: Spirit[], enemySpirits: Spirit[],
   manaCfg: { ally?: Partial<ManaConfig>; enemy?: Partial<ManaConfig> } = {},
-  reach?: { captiveIdx: number },
+  reach?: { captiveIdxs: number[] },
   keeper?: { archetype: KeeperArchetype; name?: string },
 ): PartyBattleState {
   const aCfg = { ...DEFAULT_MANA, ...manaCfg.ally }
@@ -170,21 +170,26 @@ export function createPartyBattle(
     events: [],
   }
 
-  // Reach-encounter setup: collar one enemy (the captive), dim its offense, and give every ally
-  // the calming moves (Still-Breath / Spirit Ward) so the party can reach it while it fights under the collar.
-  if (reach && state.enemies[reach.captiveIdx]) {
-    state.mode = 'reach'
-    state.reachResult = null
-    const captive = state.enemies[reach.captiveIdx]
-    captive.collared = true
-    captive.reach = 0
-    captive.reachMax = REACH_MAX
-    captive.pstats = { ...captive.pstats, pwr: Math.round(captive.pstats.pwr * COLLAR_DIM), foc: Math.round(captive.pstats.foc * COLLAR_DIM) }
-    const reachMoves = [
-      { move: MOVE_STILL_BREATH, ppLeft: MOVE_STILL_BREATH.pp },
-      { move: MOVE_SPIRIT_WARD, ppLeft: MOVE_SPIRIT_WARD.pp },
-    ]
-    for (const ally of state.allies) ally.moves = [...reachMoves, ...ally.moves].slice(0, 4)
+  // Reach-encounter setup: collar each captive (Hold 1 = one captive; a stronghold like Sorrel keeps
+  // TWO on the leash), dim its offense, and give every ally the calming moves (Still-Breath / Spirit
+  // Ward) so the party can reach the collared while they fight under the collar.
+  if (reach) {
+    const captives = reach.captiveIdxs.map(i => state.enemies[i]).filter(Boolean)
+    if (captives.length) {
+      state.mode = 'reach'
+      state.reachResult = null
+      for (const captive of captives) {
+        captive.collared = true
+        captive.reach = 0
+        captive.reachMax = REACH_MAX
+        captive.pstats = { ...captive.pstats, pwr: Math.round(captive.pstats.pwr * COLLAR_DIM), foc: Math.round(captive.pstats.foc * COLLAR_DIM) }
+      }
+      const reachMoves = [
+        { move: MOVE_STILL_BREATH, ppLeft: MOVE_STILL_BREATH.pp },
+        { move: MOVE_SPIRIT_WARD, ppLeft: MOVE_SPIRIT_WARD.pp },
+      ]
+      for (const ally of state.allies) ally.moves = [...reachMoves, ...ally.moves].slice(0, 4)
+    }
   }
 
   // A Keeper companion joins the ally side (rare narrative support — own mana, AI-driven).
@@ -350,8 +355,9 @@ function endOfRound(state: PartyBattleState) {
   // Reach: the collar resists — it yanks the leash each round, draining some Reach. You can't
   // free a captive with one calm move; you have to keep reaching while you weather the stronghold.
   if (state.mode === 'reach' && state.outcome === 'pending') {
-    const captive = state.enemies.find(e => e.collared && e.alive)
-    if (captive && (captive.reach ?? 0) > 0) addPartyReach(state, captive, -LEASH_YANK)
+    for (const captive of state.enemies) {
+      if (captive.collared && captive.alive && (captive.reach ?? 0) > 0) addPartyReach(state, captive, -LEASH_YANK)
+    }
   }
 
   for (const side of ['ally', 'enemy'] as const) {
@@ -442,9 +448,10 @@ function checkOutcome(state: PartyBattleState) {
   if (state.outcome !== 'pending') return
   if (state.mode === 'reach') {
     // Win is fired on collar-break (in addPartyReach). Here we only catch the fail states:
-    // KO'ing the captive = forced (you killed who you came to save); party wiped = fainted.
-    const captive = state.enemies.find(e => e.reachMax !== undefined)
-    if (captive && !captive.alive) {
+    // KO'ing a still-collared captive = forced (you killed who you came to save); party wiped = fainted.
+    // (A freed captive whose collar already broke is no longer collared, so it never trips 'forced'.)
+    const captiveKilled = state.enemies.some(e => e.reachMax !== undefined && e.collared && !e.alive)
+    if (captiveKilled) {
       state.reachResult = 'forced'; state.outcome = 'lose'
       state.events.push({ type: 'BATTLE_END', outcome: 'lose' })
     } else if (state.allies.every(c => !c.alive)) {
@@ -473,12 +480,17 @@ function addPartyReach(state: PartyBattleState, captive: PartyCombatant, delta: 
   const before = captive.reach ?? 0
   captive.reach = Math.max(0, Math.min(max, before + delta))
   state.events.push({ type: 'REACH', captiveId: captive.id, reach: captive.reach, reachMax: max, delta: captive.reach - before })
-  if (captive.reach >= max && state.outcome === 'pending') {
+  if (captive.reach >= max && captive.collared && state.outcome === 'pending') {
     captive.collared = false
-    state.reachResult = 'freed'
     state.events.push({ type: 'COLLAR_BREAK', captiveId: captive.id })
-    state.outcome = 'win'
-    state.events.push({ type: 'BATTLE_END', outcome: 'win' })
+    // A stronghold can hold more than one captive (Sorrel keeps two). The hold only falls — and the
+    // battle is won — once EVERY collar is broken; until then the fight continues for the rest.
+    const stillCollared = state.enemies.some(e => e.reachMax !== undefined && e.collared && e.alive)
+    if (!stillCollared) {
+      state.reachResult = 'freed'
+      state.outcome = 'win'
+      state.events.push({ type: 'BATTLE_END', outcome: 'win' })
+    }
   }
 }
 
@@ -502,6 +514,9 @@ const TEMPERAMENT_BEND: Record<string, number> = {
 
 /** Pick an action for the actor under the Keeper's stance, bent by the spirit's temperament. */
 export function chooseAction(state: PartyBattleState, actor: PartyCombatant, ai: AIConfig): PartyAction {
+  // A freed captive (a stronghold's reach-target whose collar already broke) stops fighting — it drifts,
+  // no longer the captor's tool. Matters when a stronghold holds two: free one, it lays down before the other.
+  if (actor.side === 'enemy' && actor.reachMax !== undefined && !actor.collared) return { type: 'defend', actorId: actor.id }
   const foes = livingEnemiesOf(state, actor.side)
   if (foes.length === 0) return { type: 'defend', actorId: actor.id }
 

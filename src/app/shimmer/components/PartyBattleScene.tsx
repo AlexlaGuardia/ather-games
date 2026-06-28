@@ -19,7 +19,8 @@ export interface PartyBattleSceneProps {
   zoneId: string
   ai?: AIConfig
   mana?: { ally?: Partial<ManaConfig>; enemy?: Partial<ManaConfig> }
-  reach?: boolean   // Reach-encounter: enemy lead is a collared captive — free it, don't KO it
+  reach?: boolean   // Reach-encounter: enemy lead (idx 0) is a collared captive — free it, don't KO it
+  captiveIdxs?: number[]   // stronghold reach: explicit collared-captive enemy indices (Sorrel keeps two)
   keeper?: KeeperArchetype   // a Keeper support companion joins your side (AI-driven)
   onEnd: (outcome: 'win' | 'lose', reachResult?: 'freed' | 'forced' | 'fainted' | null) => void
 }
@@ -119,11 +120,13 @@ function CombatantPlate({ c, hp, isActor, isTarget, shielded, onClick }: {
 // ── Party Battle Scene ──
 
 export default function PartyBattleScene({
-  allySpirits, enemySpirits, zoneId, ai, mana, reach, keeper, onEnd,
+  allySpirits, enemySpirits, zoneId, ai, mana, reach, captiveIdxs, keeper, onEnd,
 }: PartyBattleSceneProps) {
   const canvasRef = useRef<HTMLDivElement>(null)
   const rendererRef = useRef<BattlePixiRenderer | null>(null)
-  const stateRef = useRef<PartyBattleState>(createPartyBattle(allySpirits, enemySpirits, mana, reach ? { captiveIdx: 0 } : undefined, keeper ? { archetype: keeper } : undefined))
+  // captiveIdxs (a stronghold's two-on-the-leash) wins over the single-captive `reach` boolean (idx 0).
+  const reachCfg = captiveIdxs?.length ? { captiveIdxs } : reach ? { captiveIdxs: [0] } : undefined
+  const stateRef = useRef<PartyBattleState>(createPartyBattle(allySpirits, enemySpirits, mana, reachCfg, keeper ? { archetype: keeper } : undefined))
   const aiCfg: AIConfig = ai ?? { focusFire: true, spendMana: true }
 
   const [uiPhase, setUIPhase] = useState<UIPhase>('intro')
