@@ -17,29 +17,6 @@ const GREGORY: VoiceProfile = {
   volume: 0.8,
 }
 
-const WISP: VoiceProfile = {
-  id: 'wisp',
-  name: 'Wisp',
-  pitch: 250,            // high, ethereal
-  pitchVariance: 35,     // fluttery, variable
-  speed: 10,             // fast, excited
-  syllableSet: 'breathy',
-  tone: 'cheerful',
-  volume: 0.6,
-}
-
-const SPORE: VoiceProfile = {
-  id: 'spore',
-  name: 'Spore',
-  pitch: 180,            // mid-range, earthy
-  pitchVariance: 25,     // some roughness
-  speed: 7,              // measured pace
-  syllableSet: 'consonant-heavy',
-  tone: 'raspy',
-  volume: 0.7,
-  reverb: 0.3,           // cave/underground feel
-}
-
 // Narrator/object text — neutral, understated
 const NARRATOR: VoiceProfile = {
   id: 'narrator',
@@ -52,114 +29,55 @@ const NARRATOR: VoiceProfile = {
   volume: 0.4,           // quieter than NPCs
 }
 
-// ── Wave 2 NPCs ──
+// ── Reformed Moglins ──
 
-const BRAMBLE: VoiceProfile = {
-  id: 'bramble',
-  name: 'Bramble',
-  pitch: 140,            // low, gruff farmer
-  pitchVariance: 12,
-  speed: 5,              // slow, deliberate
+// Brack — gruff, grounded, carries the weight of what he did; reformed trader.
+// "I know the worth of things, Keeper. Spent years counting them on leashes, more shame to me."
+const BRACK: VoiceProfile = {
+  id: 'brack',
+  name: 'Brack',
+  pitch: 145,            // low, solid — a heavy voice doing lighter work now
+  pitchVariance: 12,     // steady, no flutter
+  speed: 5,              // slow and deliberate, like he thinks before he speaks
   syllableSet: 'consonant-heavy',
-  tone: 'neutral',
+  tone: 'warm',          // reformed, trying to be good
   volume: 0.75,
 }
 
-const EMBER: VoiceProfile = {
-  id: 'ember',
-  name: 'Ember',
-  pitch: 190,            // mid-high, energetic
-  pitchVariance: 30,     // animated speech
-  speed: 8,              // fast talker
-  syllableSet: 'sharp',
-  tone: 'cheerful',
-  volume: 0.7,
-}
-
-const LUNA_NPC: VoiceProfile = {
-  id: 'luna_npc',
-  name: 'Luna',
-  pitch: 210,            // gentle, calming
-  pitchVariance: 18,
-  speed: 7,
-  syllableSet: 'breathy',
-  tone: 'warm',
-  volume: 0.65,
-}
-
-const ROOTWEAVER: VoiceProfile = {
-  id: 'rootweaver',
-  name: 'Rootweaver',
-  pitch: 160,            // mid-low, gravelly
-  pitchVariance: 20,
-  speed: 6,
-  syllableSet: 'vowel-heavy',
-  tone: 'raspy',
-  volume: 0.7,
-  reverb: 0.2,
-}
-
-const ECHO: VoiceProfile = {
-  id: 'echo',
-  name: 'Echo',
-  pitch: 260,            // high, ethereal
-  pitchVariance: 40,     // wavering, mysterious
-  speed: 9,
-  syllableSet: 'vowel-heavy',
-  tone: 'cold',
-  volume: 0.6,
-  reverb: 0.5,           // echo reverb
-}
-
-const DUSK: VoiceProfile = {
-  id: 'dusk',
-  name: 'Dusk',
-  pitch: 170,            // mid, measured
-  pitchVariance: 10,     // very steady
-  speed: 7,
+// Sorrel — careful with words, gentle, thoughtful; finds the right name for things.
+// "And I am good with names. If ever a friend of yours wants a new one, a kinder one…"
+const SORREL: VoiceProfile = {
+  id: 'sorrel',
+  name: 'Sorrel',
+  pitch: 195,            // mid-high, bright but unhurried
+  pitchVariance: 18,     // light variance — turning words over
+  speed: 7,              // measured, not slow; she chooses each word
   syllableSet: 'balanced',
-  tone: 'neutral',
+  tone: 'warm',          // careful kindness
   volume: 0.7,
 }
 
-const MOSS: VoiceProfile = {
-  id: 'moss',
-  name: 'Moss',
-  pitch: 130,            // very deep, slow
-  pitchVariance: 8,      // almost monotone
-  speed: 4,              // slowest NPC
-  syllableSet: 'consonant-heavy',
-  tone: 'warm',
-  volume: 0.8,
-  reverb: 0.15,
-}
-
-const GLINT: VoiceProfile = {
-  id: 'glint',
-  name: 'Glint',
-  pitch: 240,            // high, sparkling
-  pitchVariance: 35,
-  speed: 10,             // very fast, excited
+// Thistle — quietest of the three; patient, warm, waiting.
+// "I will mind a corner for you, Keeper. Keep it ready. Keep it warm."
+const THISTLE: VoiceProfile = {
+  id: 'thistle',
+  name: 'Thistle',
+  pitch: 220,            // higher, soft — the gentlest voice in the cast
+  pitchVariance: 14,     // gentle ebb, never jagged
+  speed: 6,              // unhurried, patient
   syllableSet: 'breathy',
-  tone: 'cheerful',
-  volume: 0.55,
+  tone: 'warm',          // genuinely warm, no edge left
+  volume: 0.6,           // quieter — doesn't demand attention
 }
 
 // ── Registry ──
 
 export const VOICE_PROFILES: Record<string, VoiceProfile> = {
   gregory: GREGORY,
-  wisp: WISP,
-  spore: SPORE,
   narrator: NARRATOR,
-  bramble: BRAMBLE,
-  ember: EMBER,
-  luna_npc: LUNA_NPC,
-  rootweaver: ROOTWEAVER,
-  echo: ECHO,
-  dusk: DUSK,
-  moss: MOSS,
-  glint: GLINT,
+  brack: BRACK,
+  sorrel: SORREL,
+  thistle: THISTLE,
 }
 
 /** Get voice profile for an NPC, falling back to narrator */

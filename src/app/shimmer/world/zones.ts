@@ -194,7 +194,7 @@ export const ZONES: Zone[] = [
   },
   {
     id: 'route-2',
-    name: 'Route 2',
+    name: 'Route Two',
     grid: ROUTE_2,
     playerStart: { tileX: 28, tileY: 13 },
     warps: [
@@ -226,7 +226,7 @@ export const ZONES: Zone[] = [
   },
   {
     id: 'route-3',
-    name: 'Route 3',
+    name: 'Route Three',
     grid: ROUTE_3,
     playerStart: { tileX: 10, tileY: 1 },
     warps: [
@@ -252,7 +252,7 @@ export const ZONES: Zone[] = [
   },
   {
     id: 'spirit-meadow',
-    name: 'Spirit Meadow',
+    name: 'Spirit Meadows',
     element: 'mana',
     grid: SPIRIT_MEADOW, // 40x80, redesigned in the editor by Alex (with encounter mist)
     playerStart: { tileX: 10, tileY: 38 },

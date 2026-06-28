@@ -1,8 +1,9 @@
-// Evolution configuration — single source of truth for all evolution mechanics
-// Editable via Sprite Editor > Element Palettes section
+// Evolution configuration — single source of truth for all evolution MECHANICS
+// (thresholds, stat mods, runewords). Editable via Sprite Editor > Element Palettes.
 //
-// Canon source: /root/athernyx/CANON/game/shimmer-master.md
-//               /root/athernyx/CANON/game/shimmer-awakened-master.md
+// Canon source for NAMES: /root/athernyx/CANON/world/spirits-species.md (authoritative,
+//   ruled 2026-06-22). The shimmer-master.md / shimmer-awakened-master.md files are
+//   DERIVED quick-lookups, not truth. Verify alignment with `npm run canon`.
 
 import type { Species, Element } from './spirit'
 
