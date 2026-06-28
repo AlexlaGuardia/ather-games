@@ -20,13 +20,15 @@ export const NPCS_3D: NPC3D[] = [
   // Thistle — Hold 1. A borrowed-swagger Moglin in Spirit Meadows with a collared spirit. You free it
   // (a Reach battle), he deflates and retreats east. Removed from the world once freed.
   { id: 'thistle', name: 'Thistle', zone: 'spirit-meadow', tileX: 55, tileY: 30, color: '#9a6aaa', kind: 'moglin', defeatedFlag: 'freedThistle' },
-  // Sorrel — Hold 2, the stronghold. Appears only after Thistle is freed (he fled here). Keeps TWO
-  // collared spirits on the leash (canon), so freeing the hold means breaking the stronghold then
-  // reaching BOTH captives. Deep in Mana Springs, up the misty climb. Removed once the hold clears.
+  // Sorrel — Hold 2, the stronghold. Keeps TWO collared spirits on the leash (canon): break the
+  // stronghold, then reach BOTH captives. Appears only after Thistle is freed (he fled here).
+  // TODO(hold-placement): canon home is the `sorrel-hold` zone (via the Gloview pen door). Parked in
+  // mana-springs (30,25) because sorrel-hold isn't baked in 3D yet — move zone+tile here when it is.
   { id: 'sorrel', name: 'Sorrel', zone: 'mana-springs', tileX: 30, tileY: 25, color: '#7a5a3a', kind: 'moglin', requiredFlag: 'freedThistle', defeatedFlag: 'freedSorrel' },
-  // Brack — Hold 3, the climax. The pooled force: the biggest stronghold (two enforcers shielding THREE
-  // collared spirits). Appears only after Sorrel falls. Deep at the south end of Mana Springs — the top of
-  // the climb (interim home; moves up-map when the higher holds are baked). Removed once the hold clears.
+  // Brack — Hold 3, the climax. The pooled force: two enforcers shielding THREE collared spirits.
+  // Appears only after Sorrel falls.
+  // TODO(hold-placement): canon home is the `brack-hold` zone (via sorrel-hold's gated east door).
+  // Parked at the south end of mana-springs (65,92) because brack-hold isn't baked in 3D yet — move here.
   { id: 'brack', name: 'Brack', zone: 'mana-springs', tileX: 65, tileY: 92, color: '#5a4632', kind: 'moglin', requiredFlag: 'freedSorrel', defeatedFlag: 'freedBrack' },
 ]
 
