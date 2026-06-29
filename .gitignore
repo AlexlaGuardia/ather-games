@@ -17,3 +17,6 @@ public/manana
 
 # arcade leaderboard data (runtime-written)
 /data/
+
+# agent worktrees / local claude state — never track
+.claude/
