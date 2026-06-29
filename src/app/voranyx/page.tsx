@@ -29,6 +29,7 @@ import {
 import { sfx } from './lib/sfx'
 import { dailySeed, dailyNumber, loadDailyBest, saveDailyBest, dailyShare, copyShare } from '@/lib/arcade/daily'
 import DailyLeaderboard from '../_components/DailyLeaderboard'
+import ArcadeControls from '../_components/ArcadeControls'
 
 const ATHER = '#37e6ff'
 const HOT = '#e8feff'
@@ -148,61 +149,14 @@ export default function VoranyxPage() {
     return () => cancelAnimationFrame(raf)
   }, [])
 
-  // DESKTOP steering: aim the worm from screen-centre toward the cursor (the head sits at centre)
-  const aim = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
-    const rect = e.currentTarget.getBoundingClientRect()
-    const ang = Math.atan2(e.clientY - (rect.top + rect.height / 2), e.clientX - (rect.left + rect.width / 2))
-    const w = worldRef.current
-    if (w) steer(w, ang)
-  }, [])
-
-  // MOBILE steering: a floating relative joystick. Wherever the thumb presses becomes the
-  // anchor; direction = drag delta from that anchor — so the thumb never covers the head
-  // and you don't reach across the screen. Visual is mutated by ref (no per-move re-render).
-  const STICK_MAX = 46 // px the thumb travels from base centre
-  const STICK_DEAD = 6 // px deadzone before we steer
-  const stickRef = useRef<{ id: number; ax: number; ay: number } | null>(null)
-  const baseRef = useRef<HTMLDivElement>(null)
-  const thumbRef = useRef<HTMLDivElement>(null)
-  const moveThumb = (dx: number, dy: number) => {
-    const t = thumbRef.current; if (!t) return
-    const m = Math.hypot(dx, dy)
-    const cl = m > STICK_MAX ? STICK_MAX / m : 1
-    t.style.transform = `translate(calc(-50% + ${dx * cl}px), calc(-50% + ${dy * cl}px))`
-  }
-  const hideStick = () => { stickRef.current = null; if (baseRef.current) baseRef.current.style.opacity = '0' }
-
-  const onDown = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
-    sfx.ensure()
-    if (!startedRef.current) { startedRef.current = true; setStarted(true) }
-    if (e.pointerType === 'mouse') {
-      aim(e)
-      if (worldRef.current) setBoost(worldRef.current, true) // hold mouse = boost
-      return
-    }
-    if (stickRef.current) return // another finger already owns the stick — ignore
-    const rect = e.currentTarget.getBoundingClientRect()
-    stickRef.current = { id: e.pointerId, ax: e.clientX, ay: e.clientY }
-    e.currentTarget.setPointerCapture?.(e.pointerId)
-    const b = baseRef.current
-    if (b) { b.style.left = `${e.clientX - rect.left}px`; b.style.top = `${e.clientY - rect.top}px`; b.style.opacity = '1' }
-    moveThumb(0, 0)
-  }, [aim])
-
-  const onMove = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
-    if (!startedRef.current) return
-    if (e.pointerType === 'mouse') { aim(e); return }
-    const s = stickRef.current
-    if (!s || s.id !== e.pointerId) return
-    const dx = e.clientX - s.ax, dy = e.clientY - s.ay
-    if (Math.hypot(dx, dy) > STICK_DEAD && worldRef.current) steer(worldRef.current, Math.atan2(dy, dx))
-    moveThumb(dx, dy)
-  }, [aim])
-
-  const onUp = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
-    if (e.pointerType === 'mouse') { if (worldRef.current) setBoost(worldRef.current, false); return }
-    if (stickRef.current && stickRef.current.id === e.pointerId) hideStick()
-  }, [])
+  // start on first deck interaction (the screen is a neutral display now)
+  const begin = useCallback(() => { sfx.ensure(); if (!startedRef.current) { startedRef.current = true; setStarted(true) } }, [])
+  // DECK steering: the cabinet stick gives a -1..1 vector; steer the worm toward it past a deadzone.
+  // Releasing the stick leaves the last heading (the worm keeps gliding) — same as before.
+  const deckStick = useCallback((x: number, y: number) => {
+    begin()
+    if (Math.hypot(x, y) > 0.2 && worldRef.current) steer(worldRef.current, Math.atan2(y, x))
+  }, [begin])
 
   // dedicated boost (touch thumb + Space)
   const boostOn = useCallback(() => { sfx.ensure(); if (worldRef.current) setBoost(worldRef.current, true) }, [])
@@ -243,37 +197,9 @@ export default function VoranyxPage() {
       <div className="gx-chrome relative w-full max-w-[440px]" style={{ aspectRatio: '3 / 4', ['--gx-accent' as string]: '#37e6ff' } as React.CSSProperties}>
         <canvas
           ref={canvasRef}
-          onPointerDown={onDown}
-          onPointerMove={onMove}
-          onPointerUp={onUp}
-          onPointerLeave={onUp}
-          className="w-full h-full block touch-none rounded-md cursor-crosshair"
+          className="w-full h-full block rounded-md pointer-events-none"
         />
         <div className="pointer-events-none absolute inset-0 rounded-md vx-crt" />
-
-        {/* floating relative joystick (touch) — positioned + faded via ref, no re-render */}
-        <div
-          ref={baseRef}
-          className="pointer-events-none absolute z-10 w-[100px] h-[100px] -translate-x-1/2 -translate-y-1/2 rounded-full border border-[#37e6ff]/25 bg-[#37e6ff]/[0.04] opacity-0 transition-opacity duration-100"
-          style={{ left: 0, top: 0 }}
-        >
-          <div
-            ref={thumbRef}
-            className="absolute left-1/2 top-1/2 w-9 h-9 rounded-full bg-[#37e6ff]/25 border border-[#37e6ff]/60"
-            style={{ boxShadow: '0 0 12px #37e6ff80' }}
-          />
-        </div>
-
-        {/* touch boost pad */}
-        {started && !over && (
-          <button
-            onPointerDown={(e) => { e.preventDefault(); boostOn() }}
-            onPointerUp={boostOff}
-            onPointerLeave={boostOff}
-            className="absolute bottom-3 right-3 w-16 h-16 rounded-full border border-[#37e6ff]/40 bg-[#37e6ff]/10 active:bg-[#37e6ff]/25 font-mono text-[9px] tracking-[0.2em] uppercase text-[#37e6ff]/80 flex items-center justify-center"
-            style={{ boxShadow: '0 0 14px #37e6ff30' }}
-          >boost</button>
-        )}
 
         {!started && (
           <div className="pointer-events-none absolute inset-0 isolate overflow-hidden flex flex-col items-center justify-center gap-3 rounded-md text-center px-6">
@@ -293,7 +219,7 @@ export default function VoranyxPage() {
               ))}
             </div>
             {mode === 'daily' && <div className="text-[9px] font-mono text-[#7fd8e6]/45 tracking-wider -mt-1">same silt for everyone today</div>}
-            <div className="gx-label text-[12px] text-[#04040a] bg-[#37e6ff] px-6 py-2.5 rounded-[2px] mt-1" style={{ boxShadow: '0 0 18px #37e6ff80' }}>tap to dive in</div>
+            <div className="gx-label text-[11px] text-[#7fd8e6]/70 mt-1">steer the stick below to dive in</div>
           </div>
         )}
 
@@ -318,7 +244,19 @@ export default function VoranyxPage() {
         )}
       </div>
 
-      <div className="w-full max-w-[440px] flex items-center justify-center mt-4">
+      {/* the cabinet control deck — steer stick + a BOOST button (screen stays a clean display) */}
+      <ArcadeControls
+        accent="#37e6ff"
+        maxWidth={440}
+        stick
+        onStick={deckStick}
+        buttons={[{ id: 'boost', label: 'Boost', glyph: '»', hint: 'space', size: 'lg' }]}
+        onPress={() => { begin(); boostOn() }}
+        onRelease={boostOff}
+        hint="drag the stick to steer · hold boost to surge"
+      />
+
+      <div className="w-full max-w-[440px] flex items-center justify-center mt-3">
         <p className="text-[10px] text-[#7fd8e6]/35 font-mono tracking-wider">steer · hold to boost · keep eating</p>
       </div>
 
