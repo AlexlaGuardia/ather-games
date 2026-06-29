@@ -19,12 +19,14 @@ the Arcade frame.
 >
 > **Where we actually are:** **11 live play cabinets** (Mana'nana · Rekindle · Ward · Updraft · Seedfall ·
 > Voranyx · Atherdash · Driftling · Squall · Dewdrop · Nolmir) + Magii (world wall) + Shimmer (room wall,
-> coming-soon). Back-room/held: Lucernyx, Gravitar. **One cabinet mid-build: Bound** (sim done, needs
-> render + a Magii name). After Bound ships, the door on new games is closed — it's the **polish lap**.
+> coming-soon). Back-room/held: Lucernyx, Gravitar. **One cabinet mid-build: Vault** (working title `bound`;
+> sim done, **canon RULED — name LOCKED**, just needs render). After Vault ships, the door on new games is
+> closed — it's the **polish lap**.
 >
 > **THE THREE LANES NOW (no more new-game pipeline):**
-> 1. **★ Finish Bound** — the last new cabinet. Sim + oracle done (see its block). Needs: Magii name
->    ruling (working title), then render + page + card art + register. Then we're feature-complete on count.
+> 1. **★ Finish Vault** — the last new cabinet. Sim + oracle done, **canon settled** (`vault.md`, name LOCKED
+>    06-28 — Updraft's sibling, a mote crosses the greying). Just needs rename `bound`→`vault`, then render +
+>    page + card art + register. No canon blocker. Then we're feature-complete on count.
 > 2. **★ The POLISH LAP** — the whole backlog of taste-calls, run one game per session (cold-play → feel
 >    tune → gx-* check → mobile → card art → bump block). The consolidated checklist ↓ is still the spine;
 >    **Seedfall first** (Alex's favourite, the proven winner). Many new cabinets (Driftling/Squall/Dewdrop)
@@ -114,7 +116,7 @@ the Arcade frame.
 | Driftling #11 | 🟢 live | 2026-06-26 | food-chain evolution — eat small, flee big, first bite forks your branch |
 | Squall #12 | 🟢 live | 2026-06-26 | defenseless bullet-hell — read the void's patterns, weave, survive |
 | Dewdrop #13 | 🟢 live | 2026-06-26 | Pac-Man riff — Dewbear vs collar-Moglins, wildbloom snaps the collar |
-| Bound #14 | 🟡 building | 2026-06-28 | Mario-style auto-runner — variable jump + stomp-combo (sim done, render next) |
+| Vault #14 | 🟡 building | 2026-06-29 | auto-runner — mote of light crosses the greying, leaps the void's tears (sim done, name LOCKED, render next) |
 | Anima | 🔬 tech demo | 2026-06-21 | procedural character (IK rig + verlet cloak), ZERO art files — linked in Room |
 
 ---
@@ -516,29 +518,45 @@ the Arcade frame.
   `pacmaze`** sim before the canon weld (`f9cdbe1` → Dewdrop `fdeb8bc`); `pacmaze/` dir is gone (renamed).
 **Files:** `dewdrop/lib/dewdrop.ts` (20 tests) · `page.tsx` · canon `athernyx/CANON/game/dewbear-maze.md`
 
-### Bound (#14) — 🟡 BUILDING · Mario-style auto-runner → `/bound` *(sim done, render next)*
-*Last touched: 2026-06-28 (`7503b55` — sim-first, working title)*
-**Left off:** **Sim-first SHIPPED, no render yet.** One-button auto-runner: runner moves right on its own
-  (faster with distance), only input is **JUMP** — and jump is **variable** (tap = short hop, hold = float
-  higher). The wedge vs Atherdash/Updraft (the board's two existing jump games): real **platformer geometry** —
-  (1) variable jump arc you *shape*, (2) **elevation** (ledges/platforms at different heights, read-ahead +
-  land), (3) **stomp + bounce-combo** (land on a foe from above → kill + bounce; chain aerial stomps for a
-  rising multiplier; side-contact = death). Coyote-time + jump-buffer for fairness. Deterministic (mulberry32)
-  → free Daily + oracle. **26 sim tests green; oracle clean** (300 seeds: 0% early deaths = fair start,
-  median dist 2392, deaths mostly foe/spike = the new platformer skills are what kill you, not cheap gaps).
-**Next (the path to live):**
-  1. **🚩 CANON GAP — Magii name + theme ruling** (mirror of the Dewdrop/Dewbear weld). Sim is theme-agnostic
-     (entities = generic runner / stomp-foe / spike / mote), so the re-skin is data/label only, zero logic.
-     **Alex bridges to /magii.** Jin's open canon hook: climbing a Spire? ascending out of the Silt?
-  2. **Render + page + card art** (gated on Alex's cold-play of the feel + the name ruling) — vector-glow
-     platformer, variable-jump arc + shrinking shadow, stomp burst + combo floater, parallax terrain.
-  3. **Register** in `lib/games.ts` (tier `live` per the public-by-default rule) + arcade cabinet shell.
+### Vault (#14, working title `bound`) — 🟡 BUILDING · auto-runner, a mote crosses the greying → `/vault` *(sim done, name LOCKED, render next)*
+*Last touched: 2026-06-29 (canon ruled — Vault). Sim: 2026-06-28 (`7503b55`).*
+**Left off:** **Sim-first SHIPPED + CANON SETTLED, no render yet.** One-button auto-runner: runner moves
+  right on its own (faster with distance), only input is **JUMP** — and jump is **variable** (tap = short
+  hop, hold = float higher). The wedge vs Atherdash/Updraft (the board's two existing jump games): real
+  **platformer geometry** — (1) variable jump arc you *shape*, (2) **elevation** (ledges/platforms at
+  different heights, read-ahead + land), (3) **stomp + bounce-combo** (land on a foe from above → kill +
+  bounce; chain aerial stomps for a rising multiplier; side-contact = death). Coyote-time + jump-buffer for
+  fairness. Deterministic (mulberry32) → free Daily + oracle. **26 sim tests green; oracle clean** (300 seeds:
+  0% early deaths = fair start, median dist 2392, deaths mostly foe/spike = the new platformer skills are what
+  kill you, not cheap gaps).
+**🔒 CANON — RULED, no gap (Magii, 2026-06-28, `athernyx/CANON/game/vault.md`):** name **Vault** LOCKED by
+  Alex; registered in `CANON/world/arcade.md`. **It's Updraft's sibling** — Updraft = *the climb*, Vault =
+  *the crossing*. The frame = **the greying** (`core.md`): the land itself is going grey, eaten into gaps;
+  a **mote of Ather-light** runs the failing ground and **forward motion is the defiance** ("you cannot hold
+  the light still, you can only carry it"). The re-skin is **label + art only, zero logic** (the sim's
+  generic entities map 1:1):
+  | sim entity | Vault skin (locked) |
+  |---|---|
+  | runner | **a mote of Ather-light** (cyan/gold glow + light-trail). ⚠ COHERENCE GUARD: light, NOT a creature — never name it / give it a species / a `-nyx`. |
+  | ground / ledges | **surviving islands of coloured ground**; height = the broken remains of the land |
+  | gap | **the void's tear** — fall = "the grey takes the light" (death) |
+  | stomp-foe | **grey void-spawn** — soulless/colourless; stomp = **"unmaking"** (Ward register, defiance not cruelty; NOT a souled spirit) |
+  | spike | **rooted grey corruption / blight-thorn** — can't be unmade, must be leapt |
+  | mote | **loose Ather-light** gathered on the run (score) |
+  Ramp = the Dying gaining ground; score = the **crossing** (distance) + motes + the **unmaking**-combo.
+**Next (the path to live — canon is settled, build freely):**
+  1. **Rename** the `bound` placeholder → `vault` (dir / route / id) per the ruling.
+  2. **Render + page + card art** — vector-glow platformer in the greying palette (coloured islands vs grey
+     void), variable-jump arc + shrinking ground-shadow, stomp/"unmaking" burst + combo floater, parallax.
+     Honor the coherence guard (runner = light, never a named creature). Gated on Alex's cold-play of feel.
+  3. **Register** in `lib/games.ts` (tier `live` per the public-by-default rule) + `<ArcadeCabinet>` shell.
 **Parked:** —
-**Decisions:** **the final new cabinet** — closes the "two more then stop" strategy (Dewdrop + Bound). MUST
+**Decisions:** **the final new cabinet** — closes the "two more then stop" strategy (Dewdrop + Vault). MUST
   earn its slot with platformer geometry, not be a third rhythm-tapper (the explicit pre-build gate; the 3
   verbs above are the answer). Sim-first discipline held (oracle gut-check before any render — the
-  Seedfall/Driftling lesson).
-**Files:** `bound/lib/bound.ts` (322 ln) · `lib/bound.test.ts` (26 tests) · `lib/bound.oracle.ts` · `DESIGN.md`
+  Seedfall/Driftling lesson). **Naming law** (per `arcade.md`): plain word names an *act/thing* (Vault = the
+  leap/crossing), `-nyx` would star a spirit-kind — the runner is light, so a plain word is correct.
+**Files:** `bound/lib/bound.ts`→rename `vault/` (322 ln) · `lib/bound.test.ts` (26 tests) · `lib/bound.oracle.ts` · `DESIGN.md` · canon `athernyx/CANON/game/vault.md`
 
 ### Anima — 🔬 tech demo · procedural character, ZERO art files → `/anima`
 *Last touched: 2026-06-21*
@@ -617,8 +635,9 @@ scenes). Lore routes through /magii for canon safety.
   render is gated on the name. Canon weld: 4 shades = 4 elements, motes = ather, bloom banishes the void,
   setting = the Silt / Voranyx caverns.
 - **▶ STRATEGY (Alex, 2026-06-26): TWO more new cabinets, then STOP adding — improve the lineup.**
-  ✅ **FULFILLED:** Pac-Man (this) shipped as **Dewdrop** + the **Mario-style auto-runner** is **Bound**
-  (sim done `7503b55`, render is the last task — see its Shipped block #14). After Bound's render lands,
+  ✅ **FULFILLED:** Pac-Man (this) shipped as **Dewdrop** + the **Mario-style auto-runner** is **Vault**
+  (working title `bound`; sim done `7503b55`, canon ruled, render is the last task — see its Shipped block
+  #14). After Vault's render lands,
   the door on new cabinets is CLOSED → pivot fully to **polishing the existing lineup** (PENDING-ALEX
   feel-lap, Seedfall ⭐ first, cabinet dial, leaderboard-overlay verify, mobile sweep). Don't pitch more
   new games until the lineup pass is done.
@@ -629,11 +648,12 @@ scenes). Lore routes through /magii for canon safety.
   touched**, so you chain-break matching-element bricks (plugs into the shared element system). With
   the wedge = a legit palate-cleanser cabinet (Updraft tier); without it = filler. Canon = sealing
   the void-crust over the Silt.
-- **Auto-run platformer riff (the "Mario, scoped") → ✅ BUILT as BOUND (sim, 2026-06-28 `7503b55`).** The
-  overlap tension was solved exactly as flagged: Bound earns its slot with **platformer geometry** none of
-  the others have — **variable jump arc** (shape it, don't just fire), **elevation** (ledges to read-ahead +
-  land on), **stomp + bounce-combo**. Graduated to its Shipped block (#14); render + Magii name = the
-  remaining work. This was the LAST sanctioned new cabinet (closes the "two more" strategy).
+- **Auto-run platformer riff (the "Mario, scoped") → ✅ BUILT as VAULT (sim, 2026-06-28 `7503b55`; working
+  title `bound`).** The overlap tension was solved exactly as flagged: Vault earns its slot with **platformer
+  geometry** none of the others have — **variable jump arc** (shape it, don't just fire), **elevation**
+  (ledges to read-ahead + land on), **stomp + bounce-combo**. **Canon ruled** (`vault.md`, name LOCKED —
+  a mote crosses the greying; Updraft's sibling). Graduated to its Shipped block (#14); render = the only
+  remaining work. The LAST sanctioned new cabinet (closes the "two more" strategy).
 
 ## ⚰️ Killed — covered by a shipped game *(don't re-pitch)*
 - **The Dive** (fall through the cloud-ocean, dodge-and-collect) → vertical-flight mood
