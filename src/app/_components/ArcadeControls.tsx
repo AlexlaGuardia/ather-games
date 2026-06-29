@@ -30,7 +30,7 @@ export interface ArcadeControlsProps {
   onStickEnd?: () => void
   /** override the small instruction line under the deck */
   hint?: string
-  maxWidth?: number
+  maxWidth?: number | string
   className?: string
 }
 

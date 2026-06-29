@@ -26,7 +26,7 @@ export default function ArcadeCabinet({
   children: React.ReactNode
   accent?: string
   wall?: number
-  maxWidth?: number
+  maxWidth?: number | string
 }) {
   const rgb = hexToRgb(accent)
   return (
