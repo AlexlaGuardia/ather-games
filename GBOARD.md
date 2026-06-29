@@ -116,7 +116,7 @@ the Arcade frame.
 | Driftling #11 | 🟢 live | 2026-06-26 | food-chain evolution — eat small, flee big, first bite forks your branch |
 | Squall #12 | 🟢 live | 2026-06-26 | defenseless bullet-hell — read the void's patterns, weave, survive |
 | Dewdrop #13 | 🟢 live | 2026-06-26 | Pac-Man riff — Dewbear vs collar-Moglins, wildbloom snaps the collar |
-| Vault #14 | 🟡 building | 2026-06-29 | auto-runner — mote of light crosses the greying, leaps the void's tears (sim done, name LOCKED, render next) |
+| Vault #14 | 🟢 live | 2026-06-29 | auto-runner — mote of light crosses the greying, leaps the void's tears (render shipped, pending Alex feel-test) |
 | Anima | 🔬 tech demo | 2026-06-21 | procedural character (IK rig + verlet cloak), ZERO art files — linked in Room |
 
 ---
@@ -518,9 +518,17 @@ the Arcade frame.
   `pacmaze`** sim before the canon weld (`f9cdbe1` → Dewdrop `fdeb8bc`); `pacmaze/` dir is gone (renamed).
 **Files:** `dewdrop/lib/dewdrop.ts` (20 tests) · `page.tsx` · canon `athernyx/CANON/game/dewbear-maze.md`
 
-### Vault (#14, working title `bound`) — 🟡 BUILDING · auto-runner, a mote crosses the greying → `/vault` *(sim done, name LOCKED, render next)*
-*Last touched: 2026-06-29 (canon ruled — Vault). Sim: 2026-06-28 (`7503b55`).*
-**Left off:** **Sim-first SHIPPED + CANON SETTLED, no render yet.** One-button auto-runner: runner moves
+### Vault (#14) — 🟢 live · auto-runner, a mote crosses the greying → `/vault` *(render shipped, pending Alex feel-test)*
+*Last touched: 2026-06-29 (render shell shipped + registered live). Sim: 2026-06-28 (`7503b55`); canon ruled 2026-06-28.*
+**🆕 RENDER SHELL SHIPPED (2026-06-29):** `bound`→`vault` renamed (git-mv, history kept); `/vault` live +
+  public + registered (`games.ts`, tier live, glyph ↟). Greying skin per canon: surviving **coloured ground
+  islands** (lit living edge) over the **void's tears** (gaps), **grey void-spawn** foes (soulless dead-eyes),
+  **rooted-corruption** spike-thorns, **loose Ather-light** motes. The mote = cyan core + gold glow + a
+  **light-trail arc**; **unmaking burst** + `unmaking ×N` combo readout on stomps; collect spark; death
+  screen-shake; greying wash thickens with distance. One-button input: **tap / hold / space** = the vault
+  (variable jump via hold; keyboard auto-repeat guarded so a held key = one leap, not a buzz). gx-* chrome,
+  best-score, cause-aware death lines. Build clean, `/vault` 200. **Render = my hands; feel = Alex's.**
+**Left off (sim, unchanged):** One-button auto-runner: mote moves
   right on its own (faster with distance), only input is **JUMP** — and jump is **variable** (tap = short
   hop, hold = float higher). The wedge vs Atherdash/Updraft (the board's two existing jump games): real
   **platformer geometry** — (1) variable jump arc you *shape*, (2) **elevation** (ledges/platforms at
@@ -544,12 +552,15 @@ the Arcade frame.
   | spike | **rooted grey corruption / blight-thorn** — can't be unmade, must be leapt |
   | mote | **loose Ather-light** gathered on the run (score) |
   Ramp = the Dying gaining ground; score = the **crossing** (distance) + motes + the **unmaking**-combo.
-**Next (the path to live — canon is settled, build freely):**
-  1. **Rename** the `bound` placeholder → `vault` (dir / route / id) per the ruling.
-  2. **Render + page + card art** — vector-glow platformer in the greying palette (coloured islands vs grey
-     void), variable-jump arc + shrinking ground-shadow, stomp/"unmaking" burst + combo floater, parallax.
-     Honor the coherence guard (runner = light, never a named creature). Gated on Alex's cold-play of feel.
-  3. **Register** in `lib/games.ts` (tier `live` per the public-by-default rule) + `<ArcadeCabinet>` shell.
+**Next (render shipped — now feel + polish):**
+  1. **⚑ Alex device cold-play (his hands — headless can't dispatch the vault tap):** does the **jump arc**
+     feel right (tap=short / hold=float)? Is the **stomp-from-above** window fair, and does the bounce-combo
+     read? Coyote-time + jump-buffer fair? Run speed + gap spacing on the ramp? Knobs = consts atop
+     `lib/vault.ts` (`JUMP_V0`, `GRAV_RISE_HOLD/FREE`, `GRAV_FALL`, `CUT_V`, `STOMP_BOUNCE`, `BASE_SPEED`,
+     `SPEED_RANGE`, `RAMP_DIST`, gap/hazard density in `generate`/`populate`).
+  2. **Card art** (`/vault/card.webp`) — the greying crossing (deferred, Alex's taste/FLUX), then title-screen backdrop.
+  3. **Mobile pass** at 390px (tap/hold reads on a phone; HUD + overlays).
+  4. **Optional Daily + leaderboard opt-in** (sim is deterministic from a seed — ready for `daily.ts`).
 **Parked:** —
 **Decisions:** **the final new cabinet** — closes the "two more then stop" strategy (Dewdrop + Vault). MUST
   earn its slot with platformer geometry, not be a third rhythm-tapper (the explicit pre-build gate; the 3
