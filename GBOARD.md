@@ -62,13 +62,14 @@ the Arcade frame.
 - **Shared lib `src/lib/arcade/daily.ts`** (reusable like ArcadeCabinet): `dailyKey`/`dailySeed`/
   `dailyNumber` (#1 = 2026-01-01) + per-game daily-best storage + Wordle-style `dailyShare` + clipboard.
   Opt in with ~6 lines: seed the world from `dailySeed()`, save with `saveDailyBest`, add the toggle + share.
-- **Live on 5 score-chase games:** Atherdash · Ward · Updraft · Voranyx · Mana'nana — Endless/Daily toggle
-  on the start screen (Mana'nana: under the score row), separate daily-best track, Share on game over.
+- **Live on 7 score-chase games:** Atherdash · Ward · Updraft · Voranyx · Mana'nana · Seedfall · **Vault**
+  (Vault joined 2026-06-29) — Endless/Daily toggle on the start screen (Mana'nana: under the score row),
+  separate daily-best track, Share on game over.
 - **Rekindle** has its own puzzle daily; its date helpers now re-export from the shared lib (one source).
 - **Excluded by design:** Lucernyx (vs-AI win/lose, now SHELVED) · Rekindle (puzzle ★-rating, not higher-is-better). Seedfall JOINED 2026-06-22 (descent redesign gave it a depth score).
 - **✅ Server-side leaderboard SHIPPED (2026-06-22):** `api/arcade/leaderboard/route.ts` (file-backed,
   per-day top-20, upsert-best-by-player) + `lib/arcade/leaderboard.ts` client + reusable
-  `_components/DailyLeaderboard.tsx`, wired on the 5 score games + Seedfall. No auth (scores
+  `_components/DailyLeaderboard.tsx`, wired on the 5 score games + Seedfall + Vault. No auth (scores
   client-submitted, fine for a personal arcade). ⚠ **only unverified bit = the board RENDERING inside
   each game-over overlay** (logic+API proven via curl; visual unseen) → THIS WEEK lane 4.
 - ⚠ PENDING Alex feel: does the daily toggle + share read right (this-week lap).
@@ -560,7 +561,9 @@ the Arcade frame.
      `SPEED_RANGE`, `RAMP_DIST`, gap/hazard density in `generate`/`populate`).
   2. **Card art** (`/vault/card.webp`) — the greying crossing (deferred, Alex's taste/FLUX), then title-screen backdrop.
   3. **Mobile pass** at 390px (tap/hold reads on a phone; HUD + overlays).
-  4. **Optional Daily + leaderboard opt-in** (sim is deterministic from a seed — ready for `daily.ts`).
+  4. ✅ **Daily + server leaderboard — SHIPPED 2026-06-29** (`6f51800`): endless/daily toggle, deterministic
+     daily seed, daily-best + Wordle-share, DailyLeaderboard on game-over; added to the server allowlist.
+     Vault is now at full lineup par (7th score-chase game on the Daily loop).
 **Parked:** —
 **Decisions:** **the final new cabinet** — closes the "two more then stop" strategy (Dewdrop + Vault). MUST
   earn its slot with platformer geometry, not be a third rhythm-tapper (the explicit pre-build gate; the 3
