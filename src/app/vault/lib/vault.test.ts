@@ -1,4 +1,4 @@
-// BOUND sim sanity — run with: npx tsx src/app/vault/lib/vault.test.ts
+// VAULT sim sanity — run with: npx tsx src/app/vault/lib/vault.test.ts
 import {
   makeWorld, tick, pressJump, releaseJump,
   diffAt, speedAt, // ensure exports resolve
@@ -167,6 +167,36 @@ function flat(w: World) {
   ok('diff rises with distance', diffAt(0) < diffAt(3000) && diffAt(3000) < diffAt(9000))
   ok('speed rises with distance', speedAt(0) < speedAt(6500))
   ok('diff caps at 1', diffAt(1e9) <= 1)
+}
+
+// 14. double-jump — a stomp banks ONE air-jump; tapping mid-air fires it; landing clears it
+{
+  const w = makeWorld(21); pressJump(w); flat(w)
+  // stomp a foe (airborne, descending onto it)
+  w.foes = [{ x: w.dist + 2, y: TOP_BASE, dead: false }]
+  w.grounded = false; w.jumping = true; w.vy = 130; w.y = TOP_BASE - FOE_H + 4
+  tick(w, 0.016)
+  ok('stomp banks an air-jump', w.airJumps === 1)
+  // now airborne after the bounce; a buffered press fires a second jump and spends the charge
+  pressJump(w); tick(w, 0.016)
+  ok('air-jump fires mid-air', w.events.some(e => e.type === 'jump' && e.air === true))
+  ok('air-jump relaunches upward', w.vy < 0)
+  ok('air-jump is spent (one per stomp)', w.airJumps === 0)
+  // a SECOND mid-air press with no charge left does nothing
+  w.events.length = 0
+  pressJump(w); tick(w, 0.016)
+  ok('no third jump without another stomp', !w.events.some(e => e.type === 'jump'))
+}
+
+// 15. no free double-jump — a plain ground jump grants no air-jump
+{
+  const w = makeWorld(23); pressJump(w); flat(w)
+  pressJump(w); tick(w, 0.016) // ground jump launches
+  ok('airborne from ground jump', !w.grounded && w.vy < 0)
+  ok('ground jump banks no air-jump', w.airJumps === 0)
+  w.events.length = 0
+  pressJump(w); tick(w, 0.016) // press again mid-air — nothing to spend
+  ok('cannot air-jump without stomping', !w.events.some(e => e.type === 'jump'))
 }
 
 console.log(`\n${pass} passed, ${fail} failed`)

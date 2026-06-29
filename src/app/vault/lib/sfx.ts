@@ -3,13 +3,18 @@
 // Ather-light, and a low collapsing thud when the grey takes the light. Shared arcade SFX engine.
 import { SfxManager, type Patch } from '@/lib/arcade/sfx'
 
-type Id = 'jump' | 'land' | 'stomp' | 'collect' | 'death'
+type Id = 'jump' | 'djump' | 'land' | 'stomp' | 'collect' | 'death'
 
 const patch: Patch<Id> = {
   // the vault — a short bright upward blip (the leap of the light)
   jump: (E, t) => {
     E.tone(t, 440, { glideTo: 720, dur: 0.12, type: 'triangle', peak: 0.06 })
     E.noise(t, { dur: 0.06, peak: 0.02, filter: 1800, sweepTo: 3000, filterType: 'highpass', q: 0.7 })
+  },
+  // the double-jump (stomp-granted air-jump) — a brighter, higher twin of the vault, a touch of shimmer
+  djump: (E, t) => {
+    E.tone(t, 620, { glideTo: 1040, dur: 0.14, type: 'triangle', peak: 0.06, detune: 7 })
+    E.noise(t, { dur: 0.07, peak: 0.022, filter: 2400, sweepTo: 3800, filterType: 'highpass', q: 0.8 })
   },
   // landing on surviving ground — a soft, low tap (no harshness; you made it across)
   land: (E, t) => {

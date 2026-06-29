@@ -163,7 +163,7 @@ export default function VaultPage() {
       if (w.state === 'playing') {
         tick(w, dt)
         for (const ev of w.events) {
-          if (ev.type === 'jump') sfx.play('jump')
+          if (ev.type === 'jump') { if (ev.air) { sfx.play('djump'); burstAirJump(w) } else sfx.play('jump') }
           else if (ev.type === 'land') sfx.play('land')
           else if (ev.type === 'collect') { sfx.play('collect'); burstCollect(w) }
           else if (ev.type === 'stomp') { sfx.play('stomp'); burstStomp(w); comboFx.current = 0.6 }
@@ -203,6 +203,13 @@ export default function VaultPage() {
     for (let i = 0; i < 6; i++) {
       const a = Math.random() * Math.PI * 2
       fx.current.push({ x: RUNNER_SX, y: w.y - RUNNER_H * 0.5, vx: Math.cos(a) * 60, vy: Math.sin(a) * 60 - 60, life: 0.35, max: 0.35, c: GOLD })
+    }
+  }
+  // the double-jump kick — a downward ring of ather-light puffing off the leap (the momentum carry)
+  function burstAirJump(w: World) {
+    for (let i = 0; i < 8; i++) {
+      const a = Math.PI * (0.15 + (i / 7) * 0.7) // a fan aimed downward (the push-off)
+      fx.current.push({ x: RUNNER_SX, y: w.y - RUNNER_H * 0.3, vx: Math.cos(a) * 70 - 30, vy: Math.sin(a) * 80, life: 0.3, max: 0.3, c: ATHER })
     }
   }
 
@@ -245,7 +252,7 @@ export default function VaultPage() {
           <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-3 rounded-md text-center px-6 bg-[#070a12]/55">
             <div className="gx-title text-2xl tracking-[0.3em] uppercase" style={{ color: ACCENT, textShadow: `0 0 18px ${ACCENT}` }}>Vault</div>
             <p className="text-[11px] leading-relaxed text-[#9fd6e0]/80 max-w-[290px]">
-              the land is going grey. you are a mote of Ather-light running the failing ground. tap (or hold) to vault the void&apos;s tears, unmake the grey by landing on it from above, and gather the light. you cannot hold the light still. carry it.
+              the land is going grey. you are a mote of Ather-light running the failing ground. tap (or hold) to vault the void&apos;s tears, and unmake the grey by landing on it from above — each unmaking gives you a double-jump, so tap again to chain across them. you cannot hold the light still. carry it.
             </p>
             <div className="pointer-events-auto flex gap-1.5 text-[10px] font-mono tracking-wider uppercase">
               {(['endless', 'daily'] as const).map((m) => (
@@ -291,7 +298,7 @@ export default function VaultPage() {
       </div>
 
       <div className="w-full flex items-center justify-center mt-4" style={{ maxWidth: VW }}>
-        <p className="text-[10px] text-[#7fd8e6]/35 font-mono tracking-wider">tap / hold / space to vault · land on grey to unmake it · hop the thorns</p>
+        <p className="text-[10px] text-[#7fd8e6]/35 font-mono tracking-wider">tap / hold to vault · stomp grey from above → tap again to double-jump · hop the thorns</p>
       </div>
     </ArcadeCabinet>
   )

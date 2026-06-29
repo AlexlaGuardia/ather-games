@@ -39,7 +39,9 @@ export const GRAV_FALL = 1950 // snappy on the way down
 export const CUT_V = 170 // release while rising clamps upward speed to this → the short hop
 export const COYOTE = 0.09 // s — jump just after leaving a ledge still fires
 export const BUFFER = 0.12 // s — press just before landing still fires on touchdown
-export const STOMP_BOUNCE = 440 // up-velocity granted by a stomp (re-launch for chains)
+export const STOMP_BOUNCE = 440 // up-velocity granted by a stomp (the automatic re-launch)
+export const AIR_JUMP_V0 = 520 // a stomp also banks ONE air-jump (double-jump) — tap mid-air to keep momentum
+export const AIR_JUMPS_PER_STOMP = 1 // how many air-jumps an unmaking grants (resets on landing)
 export const FACE_TOL = 6 // landing slack at a ledge top before it counts as hitting the face
 
 // ── run speed + difficulty ramp ───────────────────────────────────────────────────
@@ -75,7 +77,7 @@ export const MOTE_PTS = 25
 export const STOMP_BASE = 30 // stomp score = STOMP_BASE * current combo
 
 export type BoundEvent =
-  | { type: 'jump' }
+  | { type: 'jump'; air?: boolean } // air = a stomp-granted double-jump (vs a ground/coyote jump)
   | { type: 'land' }
   | { type: 'stomp'; combo: number }
   | { type: 'collect' }
@@ -96,6 +98,7 @@ export interface World {
   jumping: boolean // in a jump arc (vs just falling off a ledge)
   held: boolean // jump button currently down (drives variable height)
   combo: number // consecutive aerial stomps without landing
+  airJumps: number // banked air-jumps (a stomp grants one; tap mid-air to spend; resets on landing)
   score: number
   motesGot: number
   stompScore: number
@@ -114,7 +117,7 @@ export function makeWorld(seed: number): World {
   const w: World = {
     rng, state: 'ready', dist: 0,
     y: TOP_BASE, vy: 0, grounded: true, coyote: 0, buffer: 0, jumping: false, held: false,
-    combo: 0, score: 0, motesGot: 0, stompScore: 0,
+    combo: 0, airJumps: 0, score: 0, motesGot: 0, stompScore: 0,
     segs: [], foes: [], spikes: [], motes: [],
     genX: 0, lastTop: TOP_BASE, events: [],
   }
@@ -150,14 +153,17 @@ export function tick(w: World, dt: number): void {
   if (w.coyote > 0) w.coyote = Math.max(0, w.coyote - dt)
   if (w.buffer > 0) w.buffer = Math.max(0, w.buffer - dt)
 
-  // start a jump if one is buffered and we're on (or just off) the ground
-  if (w.buffer > 0 && (w.grounded || w.coyote > 0)) {
-    w.vy = -JUMP_V0
+  // start a jump if one is buffered and we're on (or just off) the ground, OR a stomp banked an
+  // air-jump (the double-jump that carries the momentum on across enemies)
+  if (w.buffer > 0 && (w.grounded || w.coyote > 0 || w.airJumps > 0)) {
+    const air = !w.grounded && w.coyote <= 0 // not grounded and not in coyote → spending an air-jump
+    w.vy = air ? -AIR_JUMP_V0 : -JUMP_V0
     w.grounded = false
     w.jumping = true
     w.coyote = 0
     w.buffer = 0
-    w.events.push({ type: 'jump' })
+    if (air) w.airJumps--
+    w.events.push({ type: 'jump', air })
   }
 
   // integrate vertical motion (variable gravity)
@@ -195,6 +201,7 @@ export function tick(w: World, dt: number): void {
     w.grounded = true
     w.jumping = false
     if (w.combo > 0) w.combo = 0 // a touchdown ends the bounce-chain
+    w.airJumps = 0 // landing clears any banked air-jump (the double-jump only carries while aloft)
     w.events.push({ type: 'land' })
   }
 
@@ -213,6 +220,7 @@ export function tick(w: World, dt: number): void {
       w.vy = -STOMP_BOUNCE
       w.grounded = false
       w.jumping = true
+      w.airJumps = AIR_JUMPS_PER_STOMP // unmaking a foe banks a double-jump — tap to keep the momentum
       const gain = STOMP_BASE * w.combo
       w.stompScore += gain
       w.events.push({ type: 'stomp', combo: w.combo })
