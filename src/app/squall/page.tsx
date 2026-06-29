@@ -22,6 +22,7 @@ import {
   type Warning,
 } from './lib/squall'
 import { sfx } from './lib/sfx'
+import ArcadeControls from '../_components/ArcadeControls'
 
 const BG_TOP = '#05030d'
 const BG_BOT = '#0a0716'
@@ -39,6 +40,7 @@ export default function SquallPage() {
   const seedRef = useRef(1)
   const pointer = useRef({ x: VW / 2, y: VH / 2, active: false })
   const joy = useRef({ active: false, baseX: 0, baseY: 0, curX: 0, curY: 0, pid: -1 })
+  const deckVec = useRef({ x: 0, y: 0, active: false }) // the cabinet stick's -1..1 vector
   const keys = useRef<Set<string>>(new Set())
   const grazeFx = useRef(0) // seconds left on the graze sparkle
   const syncT = useRef(0)
@@ -88,6 +90,7 @@ export default function SquallPage() {
     if (k.has('w') || k.has('arrowup')) ky -= 1
     if (k.has('s') || k.has('arrowdown')) ky += 1
     if (kx || ky) { setHeading(w, kx, ky); return }
+    if (deckVec.current.active) { setHeading(w, deckVec.current.x, deckVec.current.y); return }
     if (joy.current.active) {
       setHeading(w, (joy.current.curX - joy.current.baseX) / JOY_R, (joy.current.curY - joy.current.baseY) / JOY_R)
       return
@@ -135,37 +138,22 @@ export default function SquallPage() {
   }, [phase])
 
   // ── input ──────────────────────────────────────────────────────────────────────
-  const ptFromEvent = (e: React.PointerEvent<HTMLCanvasElement>) => {
-    const rect = e.currentTarget.getBoundingClientRect()
-    return { x: ((e.clientX - rect.left) / rect.width) * VW, y: ((e.clientY - rect.top) / rect.height) * VH }
-  }
-  const launchIfReady = () => { if (worldRef.current?.state === 'playing' && phase === 'ready') setPhase('playing') }
-  const onDown = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
+  // DECK steering: the cabinet stick gives a -1..1 vector; the per-frame applyHeading reads it.
+  // First steer kicks the sim from ready→playing (setHeading auto-starts it).
+  const onStick = useCallback((x: number, y: number) => {
     sfx.ensure()
-    if (worldRef.current?.state === 'dead') return
-    const p = ptFromEvent(e)
-    if (e.pointerType === 'mouse') pointer.current = { ...p, active: true }
-    else joy.current = { active: true, baseX: p.x, baseY: p.y, curX: p.x, curY: p.y, pid: e.pointerId }
-    applyHeading(); launchIfReady()
-  }, [phase])
-  const onMove = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
-    const p = ptFromEvent(e)
-    if (e.pointerType === 'mouse') pointer.current = { ...p, active: true }
-    else if (joy.current.active && e.pointerId === joy.current.pid) { joy.current.curX = p.x; joy.current.curY = p.y }
-    applyHeading(); launchIfReady()
-  }, [phase])
-  const onUp = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
-    if (e.pointerType === 'mouse') pointer.current.active = false
-    else if (e.pointerId === joy.current.pid) joy.current.active = false
-    applyHeading()
+    deckVec.current = { x, y, active: true }
+    const w = worldRef.current
+    if (w && w.state === 'ready') { setHeading(w, x, y); setPhase('playing') }
   }, [])
+  const onStickEnd = useCallback(() => { deckVec.current = { x: 0, y: 0, active: false } }, [])
 
   const restart = useCallback(() => { sfx.ensure(); boot() }, [boot])
   const toggleMute = () => { sfx.ensure(); const m = !sfx.isMuted(); sfx.setMuted(m); setMuted(m) }
 
   return (
-    <ArcadeCabinet accent={ACCENT} wall={1} maxWidth={VW}>
-      <div className="w-full flex items-center justify-between mb-3" style={{ maxWidth: VW }}>
+    <ArcadeCabinet accent={ACCENT} wall={1} maxWidth="min(420px, 34vh)">
+      <div className="w-full flex items-center justify-between mb-3" style={{ maxWidth: 'min(420px, 34vh)' }}>
         <span aria-hidden className="w-10" />
         <div className="text-center">
           <div className="gx-title text-sm tracking-[0.35em] uppercase" style={{ color: ACCENT, textShadow: `0 0 8px ${ACCENT}80` }}>Squall</div>
@@ -175,21 +163,16 @@ export default function SquallPage() {
       </div>
 
       {/* score + graze */}
-      <div className="w-full mb-2 flex items-center gap-3 font-mono" style={{ maxWidth: VW }}>
+      <div className="w-full mb-2 flex items-center gap-3 font-mono" style={{ maxWidth: 'min(420px, 34vh)' }}>
         <span className="gx-label text-[10px]" style={{ color: ACCENT }}>survive</span>
         <span className="gx-label text-[10px] text-[#e8feff] tabular-nums">{score}</span>
         <span className="gx-label text-[9px] tracking-wider ml-auto" style={{ color: VOID }}>graze <span className="text-[#e8feff] tabular-nums">{graze}</span></span>
       </div>
 
-      <div className="gx-chrome relative w-full" style={{ maxWidth: VW, aspectRatio: `${VW} / ${VH}`, ['--gx-accent' as string]: ACCENT } as React.CSSProperties}>
+      <div className="gx-chrome relative w-full" style={{ maxWidth: 'min(420px, 34vh)', aspectRatio: `${VW} / ${VH}`, ['--gx-accent' as string]: ACCENT } as React.CSSProperties}>
         <canvas
           ref={canvasRef}
-          onPointerDown={onDown}
-          onPointerMove={onMove}
-          onPointerUp={onUp}
-          onPointerCancel={onUp}
-          onPointerLeave={onUp}
-          className="w-full h-full block touch-none rounded-md cursor-crosshair"
+          className="w-full h-full block rounded-md pointer-events-none"
         />
 
         {phase === 'ready' && (
@@ -198,7 +181,7 @@ export default function SquallPage() {
             <p className="text-[11px] leading-relaxed text-[#9fd6e0]/80 max-w-[280px]">
               you are a mote of Ather in the void&apos;s storm. you cannot fight back. read the patterns as they telegraph, weave the gaps, and graze close for score. last as long as you can.
             </p>
-            <div className="gx-label text-[12px] text-[#05030d] px-6 py-2.5 rounded-[2px] mt-1" style={{ background: ACCENT, boxShadow: `0 0 18px ${ACCENT}80` }}>move to begin</div>
+            <div className="gx-label text-[11px] text-[#7fd8e6]/70 mt-1">steer the stick below to begin</div>
             {best > 0 && <div className="gx-label text-[10px] font-mono text-[#7fd8e6]/50 tracking-wider mt-1">best <span className="text-[#e8feff] tabular-nums">{best}</span></div>}
           </div>
         )}
@@ -219,7 +202,17 @@ export default function SquallPage() {
         )}
       </div>
 
-      <div className="w-full flex items-center justify-center mt-4" style={{ maxWidth: VW }}>
+      {/* the cabinet control deck — a steer stick (no buttons; Squall is pure evasion) */}
+      <ArcadeControls
+        accent={ACCENT}
+        maxWidth="min(420px, 34vh)"
+        stick
+        onStick={onStick}
+        onStickEnd={onStickEnd}
+        hint="drag the stick to weave the storm"
+      />
+
+      <div className="w-full flex items-center justify-center mt-3" style={{ maxWidth: 'min(420px, 34vh)' }}>
         <p className="text-[10px] text-[#7fd8e6]/35 font-mono tracking-wider">drag to move · graze for score · just survive</p>
       </div>
     </ArcadeCabinet>

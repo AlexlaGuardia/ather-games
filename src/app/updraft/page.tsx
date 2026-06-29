@@ -7,6 +7,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import ArcadeCabinet from '../_components/ArcadeCabinet'
+import ArcadeControls from '../_components/ArcadeControls'
 import { mulberry32 } from '@/lib/arcade/rng'
 import { useNoScroll } from '@/lib/arcade/useNoScroll'
 import {
@@ -157,8 +158,8 @@ export default function UpdraftPage() {
   }
 
   return (
-    <ArcadeCabinet accent="#37e6ff" wall={1} maxWidth={400}>
-      <div className="w-full max-w-[400px] flex items-center justify-between mb-4">
+    <ArcadeCabinet accent="#37e6ff" wall={1} maxWidth="min(400px, 33vh)">
+      <div className="w-full max-w-[min(400px,33vh)] flex items-center justify-between mb-4">
         <span aria-hidden className="w-10" />
         <div className="text-center">
           <div className="gx-title text-[#37e6ff] text-sm tracking-[0.35em] uppercase" style={{ textShadow: '0 0 8px #37e6ff80' }}>Updraft</div>
@@ -169,8 +170,8 @@ export default function UpdraftPage() {
         </button>
       </div>
 
-      <div className="gx-chrome relative w-full max-w-[400px]" style={{ aspectRatio: `${VW} / ${VH}`, ['--gx-accent' as string]: '#37e6ff' } as React.CSSProperties}>
-        <canvas ref={canvasRef} onPointerDown={onDown} className="w-full h-full block touch-none rounded-md cursor-pointer" />
+      <div className="gx-chrome relative w-full max-w-[min(400px,33vh)]" style={{ aspectRatio: `${VW} / ${VH}`, ['--gx-accent' as string]: '#37e6ff' } as React.CSSProperties}>
+        <canvas ref={canvasRef} className="w-full h-full block rounded-md pointer-events-none" />
         <div className="pointer-events-none absolute inset-0 rounded-md updraft-crt" />
 
         {/* live score, big and centered like a real flappy */}
@@ -198,9 +199,7 @@ export default function UpdraftPage() {
               ))}
             </div>
             {mode === 'daily' && <div className="text-[9px] font-mono text-[#7fd8e6]/45 tracking-wider -mt-1">same currents for everyone today</div>}
-            <div className="gx-label text-[12px] text-[#04040a] bg-[#37e6ff] px-6 py-2.5 rounded-[2px] mt-1" style={{ boxShadow: '0 0 18px #37e6ff80' }}>
-              tap to fly
-            </div>
+            <div className="gx-label text-[11px] text-[#7fd8e6]/70 mt-1">press <span className="text-[#37e6ff]">➶ Fly</span> below to begin</div>
           </div>
         )}
 
@@ -228,7 +227,16 @@ export default function UpdraftPage() {
         )}
       </div>
 
-      <div className="w-full max-w-[400px] flex items-center justify-center mt-4">
+      {/* the cabinet control deck — one big FLY button (screen stays a clean display) */}
+      <ArcadeControls
+        accent="#37e6ff"
+        maxWidth="min(400px, 33vh)"
+        buttons={[{ id: 'flap', label: 'Fly', glyph: '➶', hint: 'tap', size: 'lg' }]}
+        onPress={onDown}
+        hint="tap to beat your wings · rise"
+      />
+
+      <div className="w-full max-w-[min(400px,33vh)] flex items-center justify-center mt-3">
         <p className="text-[10px] text-[#7fd8e6]/35 font-mono tracking-wider">one tap · keep him in the air</p>
       </div>
 
