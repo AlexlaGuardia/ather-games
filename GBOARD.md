@@ -529,6 +529,10 @@ the Arcade frame.
   screen-shake; greying wash thickens with distance. One-button input: **tap / hold / space** = the vault
   (variable jump via hold; keyboard auto-repeat guarded so a held key = one leap, not a buzz). gx-* chrome,
   best-score, cause-aware death lines. Build clean, `/vault` 200. **Render = my hands; feel = Alex's.**
+  **🆕 STOMP → DOUBLE-JUMP (`3678e6c`, Alex's call):** unmaking a foe banks ONE air-jump — tap again
+  mid-air for a full second leap to keep the momentum and chain across enemies (no free double-jump; granted
+  only by a stomp, resets on landing). Distinct `djump` sfx + downward ather-kick FX. +2 sim tests (34 green);
+  oracle curve unchanged (the look-ahead bot doesn't use it → it's a pure skill-ceiling raise, not a difficulty shift).
 **Left off (sim, unchanged):** One-button auto-runner: mote moves
   right on its own (faster with distance), only input is **JUMP** — and jump is **variable** (tap = short
   hop, hold = float higher). The wedge vs Atherdash/Updraft (the board's two existing jump games): real
