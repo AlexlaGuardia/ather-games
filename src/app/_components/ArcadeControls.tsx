@@ -115,6 +115,9 @@ export default function ArcadeControls({
 
   return (
     <div className={`w-full ${className}`} style={{ maxWidth }}>
+      {/* the attract pulse — the deck button breathes so the SCREEN can stay neutral and the
+          BUTTON is what calls the eye (idle only; killed the moment you press) */}
+      <style>{`@keyframes acAttract{0%,100%{filter:brightness(1)}50%{filter:brightness(1.22)}}`}</style>
       {/* the control panel — recessed dark deck, gold cabinet trim, corner screws */}
       <div
         className="relative mt-3 rounded-xl border border-[#d4a843]/30 px-4 py-3.5 touch-none"
@@ -188,6 +191,8 @@ export default function ArcadeControls({
                       transition: 'transform 0.05s, box-shadow 0.08s, background 0.08s',
                       textShadow: '0 1px 2px rgba(0,0,0,0.6)',
                       fontSize: big ? 24 : 19,
+                      // idle attract on the primary button — the eye-catcher (off while pressed)
+                      animation: big && !down ? 'acAttract 1.8s ease-in-out infinite' : 'none',
                     }}
                   >
                     {b.glyph ?? b.label.slice(0, 1)}

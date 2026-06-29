@@ -217,9 +217,6 @@ export default function VaultPage() {
   const restart = useCallback(() => { sfx.ensure(); boot() }, [boot])
   const toggleMute = () => { sfx.ensure(); const m = !sfx.isMuted(); sfx.setMuted(m); setMuted(m) }
 
-  // a tap/click anywhere on the field = the vault (down = press, up = release → variable hold)
-  const onDown = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => { e.preventDefault(); doPress() }, [doPress])
-  const onUp = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => { e.preventDefault(); doRelease() }, [doRelease])
 
   return (
     <ArcadeCabinet accent={ACCENT} wall={1} maxWidth={VW}>
@@ -242,11 +239,7 @@ export default function VaultPage() {
       <div className="gx-chrome relative w-full" style={{ maxWidth: VW, aspectRatio: `${VW} / ${VH}`, ['--gx-accent' as string]: ACCENT } as React.CSSProperties}>
         <canvas
           ref={canvasRef}
-          onPointerDown={onDown}
-          onPointerUp={onUp}
-          onPointerCancel={onUp}
-          onPointerLeave={onUp}
-          className="w-full h-full block touch-none rounded-md cursor-pointer select-none"
+          className="w-full h-full block rounded-md select-none pointer-events-none"
         />
 
         {phase === 'ready' && (
@@ -264,7 +257,7 @@ export default function VaultPage() {
               ))}
             </div>
             {mode === 'daily' && <div className="text-[9px] font-mono text-[#7fd8e6]/45 tracking-wider -mt-1">same crossing for everyone today</div>}
-            <div className="gx-label text-[12px] text-[#070a12] px-6 py-2.5 rounded-[2px] mt-1" style={{ background: ACCENT, boxShadow: `0 0 18px ${ACCENT}80` }}>tap to begin</div>
+            <div className="gx-label text-[11px] text-[#7fd8e6]/70 mt-1">press <span style={{ color: ACCENT }}>↟ Vault</span> below to begin</div>
             {best > 0 && <div className="gx-label text-[10px] font-mono text-[#7fd8e6]/50 tracking-wider mt-1">best <span className="text-[#e8feff] tabular-nums">{best}</span></div>}
           </div>
         )}
