@@ -13,7 +13,7 @@ the Arcade frame.
 
 ## 🗓️ STATE OF THE ARCADE — at the pivot point (reconciled 2026-06-29) [jin]
 > **The 06-25 nine-day push delivered.** Both sanctioned new cabinets are built: **Dewdrop** (the
-> Pac-Man riff, LIVE) and **Bound** (the Mario-style auto-runner, sim-complete — render is the one
+> Pac-Man riff, LIVE) and **Vault** (the Mario-style auto-runner, working title `bound`, sim-complete + canon-ruled — render is the one
 > remaining new-cabinet task). Plus **Driftling** + **Squall** shipped live in the same arc. That
 > fulfils the standing strategy — **"two more cabinets, then STOP adding and polish the lineup."**
 >
@@ -50,8 +50,8 @@ the Arcade frame.
 > - [ ] **Nolmir** — unified return beat (needs >20min away for a real haul) + rehearse the warp ceremony + mobile-idle direction call
 > - [x] **Voranyx** — phone playtest PASSED 2026-06-15 (no action; here for completeness)
 >
-> **▶ NEW-CABINET PIPELINE — CLOSED after Bound.** The "two more then stop" strategy is fulfilled
-> (Dewdrop + Bound). The remaining ONE build is **Bound's render** (sim done; see its block below). All
+> **▶ NEW-CABINET PIPELINE — CLOSED after Vault.** The "two more then stop" strategy is fulfilled
+> (Dewdrop + Vault). The remaining ONE build is **Vault's render** (sim done, canon ruled; see its block below). All
 > other concepts (Tempest, Rune-weaving, Breakout) stay parked in the Queue — **don't pitch new games
 > until the polish lap is done** (Alex's standing call, 2026-06-26).
 >
