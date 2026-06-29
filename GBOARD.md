@@ -89,6 +89,18 @@ the Arcade frame.
 >   only) — kept its candy match-3 identity (bold sans title, rounded-full pills, amber); don't force the squared face on it.
 > - [x] Arcade landing retired — `/arcade` (old flat hub) now redirects to `/room` (`a23cd1c`, 06-22).
 >
+> **▶ CABINET CONTROL DECK (active, jin, 2026-06-29 — Alex blessed the direction "good start"):** a reusable
+> **`_components/ArcadeControls.tsx`** — a recessed gold-trim control panel that bolts UNDER the screen
+> (arcade buttons + optional fixed-base joystick) so the canvas stays clean and the page reads like a tall
+> cabinet. Spec-driven: a game points `onPress`/`onRelease` (buttons) or a `-1..1` vector (`onStick`) at it.
+> **Design rule (Alex):** the SCREEN stays NEUTRAL (display only — no tap, no cursor), the BUTTON calls the
+> eye (idle attract-pulse on the primary). **Proven on Vault** (one big VAULT button, screen neutralized).
+> Archetype map for rollout: 1-btn = Vault✓/Updraft · 2-btn = Seedfall(L/R)/Atherdash(L/R+jump) · stick =
+> Squall/Driftling/Voranyx/Dewdrop · direct-touch frame-only = Ward/Mana'nana/Rekindle.
+> **OPEN taste calls (Alex):** (a) stick games — fixed deck stick [best look] vs keep floating thumb-stick
+> [best phone feel]; (b) deck on desktop too vs mobile-only. **Room-pill audit done 2026-06-29:** all cabinet
+> games have it; Nolmir was a dead-end → FIXED (RoomReturn added); Gravitar = back-room/cut (skipped).
+>
 > **▶ VEHICLE = the ARCADE POLISH LAP (planned 2026-06-21, Alex):** the start/over + HUD rollout now rides a
 > per-game polish lap — **one game per session**, same checklist (cold play → feel fixes → UI-layer pass → mobile →
 > card art → bump block). Recommended order: **Atherdash → Lucernyx → Ward → Mana'nana → Voranyx/Seedfall/Updraft/
