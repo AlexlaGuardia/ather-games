@@ -11,49 +11,36 @@ real **gimmick** (not watch-and-wait) · **canon-parallel** (serves Athernyx, no
 black, CRT bloom). Mana'nana went glossy-modern; each game gets its own skin under
 the Arcade frame.
 
-## 🗓️ THIS WEEK — Room + Arcade swamp (2026-06-25 → 9-day push) [jin]
-> Four lanes running at once so we're never blocked on each other: **Jin builds** (my hands, daily)
-> while **Alex feel-tests** (his hands, batched whenever there's device time). The arcade's hard
-> building is done — this week converts the backlog of taste-calls into *resolved*, ships the Room
-> its own surface, finishes the leaderboard loop, and lands **two new cabinets**.
+## 🗓️ STATE OF THE ARCADE — at the pivot point (reconciled 2026-06-29) [jin]
+> **The 06-25 nine-day push delivered.** Both sanctioned new cabinets are built: **Dewdrop** (the
+> Pac-Man riff, LIVE) and **Bound** (the Mario-style auto-runner, sim-complete — render is the one
+> remaining new-cabinet task). Plus **Driftling** + **Squall** shipped live in the same arc. That
+> fulfils the standing strategy — **"two more cabinets, then STOP adding and polish the lineup."**
 >
-> **The four lanes:**
-> 1. **Clear the PENDING-ALEX lap** — every stacked feel-test/tune, run as one structured lap (checklist ↓). Alex plays, Jin tunes the named knobs, mark each line ✅/tuned/shipped.
-> 2. **Build new cabinets** — lead = **Driftling** (food-chain evolution, finally earns the cloud-ocean; Rinn-kin ladder ready so canon's not the blocker). Second = **Squall** (bullet-hell dodge — cheapest art, brand-new "defenseless survival" mood). Stretch = **Tempest** / **Rune-weaving**.
-> 3. **Room gets its own block** — the hub has no roadmap (see new `### The Room` block below). Plan + ship room-side polish: `?from=room` propagation on hall cards, back-pill correctness, Desk-wall surfacing the Folk volume, nav dead-end sweep.
-> 4. **Leaderboard polish** — backend's done; verify the board renders inside each game-over overlay (5 + Seedfall), then decide social/share layer.
+> **Where we actually are:** **11 live play cabinets** (Mana'nana · Rekindle · Ward · Updraft · Seedfall ·
+> Voranyx · Atherdash · Driftling · Squall · Dewdrop · Nolmir) + Magii (world wall) + Shimmer (room wall,
+> coming-soon). Back-room/held: Lucernyx, Gravitar. **One cabinet mid-build: Bound** (sim done, needs
+> render + a Magii name). After Bound ships, the door on new games is closed — it's the **polish lap**.
 >
-> **The 9-day spine (Jin's build track — Alex's tests slot into any day with device time):**
-> - **D1** — Room block authored + room-side TODO sweep (`?from=room` propagation, back-pill). Kick the PENDING-ALEX lap (Atherdash + Ward first).
-> - **D2** — ✅ **DONE (06-26):** `lib/driftling.ts` sim-first shipped + pushed — drift physics, eat/evolve discrete tiers off a swappable LADDER, element-fork on first eat. 26 tests green. Autoplay oracle retuned for the languid identity (nursery start, threat exposure ramps with tier; median run reaches apex, deaths still live). Canon ladder (Rinn-kin element↔apex) stays a PARKED /magii gap — sim is element-agnostic so it doesn't block.
-> - **D3** — ✅ **DONE + LIVE + PARKED (06-26):** `/driftling` public + playable. Render (vector-glow ocean,
->   camera-follow, element-colored fish, threat-ring/prey-spark cues, tier/score/evolve HUD, fork→branch
->   color), threat chevrons + evolve burst, best-score + run-summary death, empty-ocean spawn FIX (caught
->   live). **Alex's 1st mobile cold-play addressed (`98bf393`): touch JOYSTICK** (felt good, his words) **+
->   slower growth** (FOOD 1.3→0.95, thresholds stretched). Alex parked it here — joystick good, pacing
->   better. **STILL DEFERRED (Alex's taste): card + creature art.** Resume = more feel-tuning if he asks.
-> - **D4** — Leaderboard overlay verification across the 5 + Seedfall; fix render bugs; social/share call.
-> - **D5** — ✅ **DONE (06-26):** `lib/squall.ts` sim-first shipped (`8f050df`) — pure-evasion bullet-hell,
->   5 telegraphed patterns (rain/sweep/aimed-fan/ring-burst/spiral) escalating with survival time, tiny
->   hitbox + graze risk-reward, score = survival time + grazes, deterministic. 20 tests green, tsc clean.
->   Dodge-oracle: survivable + skill-scaling, opening softened for a fair casual on-ramp. **#2-cabinet call
->   made: Squall over Pac-Man** — Driftling is an eat/flee/flip game, Pac-Man is too (predator-flip), so
->   Squall (no offense) gives the board real contrast. Pac-Man stays queued. NO render yet (D6, cold-play).
-> - **D6** — ✅ **RENDER SHIPPED + LIVE (06-26, `5098b24`):** `/squall` public + playable. Vector-glow storm,
->   touch joystick / mouse-follow / WASD, void-purple bullets, **telegraph readability** focus (aim = live
->   dashed line at the mote, burst = expanding preview ring, spiral = rotating tick, all pulse toward fire),
->   visible hot-white **hitbox pinpoint** + graze aura/flash, HUD (score+graze), best-score + run-summary death.
->   Build clean, deployed. **⚠ unverified-by-me** (browser extension down) + **card art DEFERRED (Alex taste)**.
->   ▶ Alex cold-play → tune `squall.ts` consts (pattern density, bullet speed, RAMP_T, graze radius).
-> - **D7** — Cabinet warmth/dim dial (one `<ArcadeCabinet>` const, his taste) + Mana'nana squared-vs-candy taste call + Daily toggle/share feel.
-> - **D8** — Nolmir feel beats (unified return >20min, warp rehearse, mobile-idle direction) + any new-game tuning from D3/D6 cold-plays.
-> - **D9** — Canon `world/arcade.md` entries (Atherdash + new games via /magii), card-art parity sweep, full mobile pass, push + GBOARD bump + wrap.
+> **THE THREE LANES NOW (no more new-game pipeline):**
+> 1. **★ Finish Bound** — the last new cabinet. Sim + oracle done (see its block). Needs: Magii name
+>    ruling (working title), then render + page + card art + register. Then we're feature-complete on count.
+> 2. **★ The POLISH LAP** — the whole backlog of taste-calls, run one game per session (cold-play → feel
+>    tune → gx-* check → mobile → card art → bump block). The consolidated checklist ↓ is still the spine;
+>    **Seedfall first** (Alex's favourite, the proven winner). Many new cabinets (Driftling/Squall/Dewdrop)
+>    are also pending Alex's device cold-play — they fold into this lap.
+> 3. **Leaderboard + Room loose ends** — verify the daily-leaderboard renders inside each game-over overlay
+>    (logic+API proven, only the visual is unseen); finish the Room's small lane (Folk volume on the Desk,
+>    news automation, 390px wall-turn pass). See `### The Room` block.
 >
-> **▶ PENDING-ALEX LAP — the consolidated checklist (was scattered across every block):**
+> **▶ PENDING-ALEX LAP — the consolidated checklist (the polish-lap spine; new cabinets fold in below):**
 > - [ ] **Atherdash** — hop timing window fair? slide→hop rhythm readable? base speed right? *(knobs: `SPEED`/`SPEED_MAX`/`SPEED_RAMP_DIST`, `JUMP_DUR`, `PIT_GAP_Z`/`PIT_LEAD`)*
 > - [ ] **Ward** — enemy tune: Drifter weave gentleness, Darter warning time, Husk feel, intro wave *(knobs: `DRIFT`/`DART`/`HUSK` consts)*
 > - [ ] **Seedfall ⭐ (Alex's FAVOURITE — polish FIRST, it's the proven winner)** — full descent feel (drift authority vs branch spacing, fall speed) + Havari catch/dodge readability (1.05s warn) + soil-approach landing + game-over overlays + **regen the card art for the descent** (still the old lander image) *(knobs atop `seedfall.ts` + `genBranches`)*
-> - [ ] **gx-* look on real mobile across all 8** — esp. the game-OVER overlays headless can't reach
+> - [ ] **Driftling** — device cold-play: drift authority, eat/threat readability, evolve-payoff moment, nursery-start curve *(knobs atop `lib/driftling.ts`)* + card/creature art (deferred, Alex taste)
+> - [ ] **Squall** — device cold-play (never verified by me, extension was down): pattern density/cadence, bullet speeds, telegraph warn times *(knobs: `fireDirector` gap, per-pattern `spd`, `RAMP_T`, `GRAZE_R`)* + card art
+> - [ ] **Dewdrop** — cold-play tune already started (`a8c54ac`): scatter/chase waves, wildbloom duration, ghost-vs-player speed gap *(consts atop `lib/dewdrop.ts`)* + maze art/layout (deferred, Alex taste)
+> - [ ] **gx-* look on real mobile across all 11** — esp. the game-OVER overlays headless can't reach
 > - [ ] **Arcade cabinet dial** — final warmth/dim/red-skew on `<ArcadeCabinet>` (one component → changes everywhere)
 > - [ ] **Daily leaderboard** — does the board render right *inside* the game-over overlay (5 games + Seedfall)? logic+API already proven, only the visual is unseen
 > - [ ] **Daily toggle + share** — does Endless/Daily read right; is the share line satisfying
@@ -61,10 +48,10 @@ the Arcade frame.
 > - [ ] **Nolmir** — unified return beat (needs >20min away for a real haul) + rehearse the warp ceremony + mobile-idle direction call
 > - [x] **Voranyx** — phone playtest PASSED 2026-06-15 (no action; here for completeness)
 >
-> **▶ NEW-CABINET PIPELINE (each clears the filter: real gimmick · canon-parallel · light on art):**
-> - **Driftling** — flOw/Feeding-Frenzy/Deeeep DNA. Drift the cloud-ocean, eat smaller, dodge bigger, **evolve in discrete tiers**. Wedge: **first element you eat forks your branch** (Storm-line ≠ Earth-line). NOT Voranyx (that's slither-length+body-collision). Ladder = the **Rinn-kin** (`athernyx/CANON/world/rinn.md`/`manamals.md`, pinned 2026-06-16). *(full riff below)*
-> - **Squall** — pure evasion, no offense. Read the void's projectile patterns, weave, score = survival time. Brand-new mood: **defenseless survival**. Vector-glow bullet patterns = gorgeous + cheap. *(full riff below)*
-> - *Stretch:* **Tempest** (positional lane-hold — deprioritized, same job as Ward) · **Rune-weaving** (gesture/tracing input — new mode, deep canon).
+> **▶ NEW-CABINET PIPELINE — CLOSED after Bound.** The "two more then stop" strategy is fulfilled
+> (Dewdrop + Bound). The remaining ONE build is **Bound's render** (sim done; see its block below). All
+> other concepts (Tempest, Rune-weaving, Breakout) stay parked in the Queue — **don't pitch new games
+> until the polish lap is done** (Alex's standing call, 2026-06-26).
 >
 > ---
 
@@ -124,6 +111,11 @@ the Arcade frame.
 | Lucernyx #8 | ⚫ shelved | 2026-06-22 | turn-based board of rekindling — pulse overtuned, back-room |
 | Gravitar #9 | ⚪ parked | 2026-06-15 | physics-orbit — concept didn't land (cut) |
 | Atherdash #10 | 🟢 live | 2026-06-22 | lane-runner — element-lanes ahead of the Dying (slice) |
+| Driftling #11 | 🟢 live | 2026-06-26 | food-chain evolution — eat small, flee big, first bite forks your branch |
+| Squall #12 | 🟢 live | 2026-06-26 | defenseless bullet-hell — read the void's patterns, weave, survive |
+| Dewdrop #13 | 🟢 live | 2026-06-26 | Pac-Man riff — Dewbear vs collar-Moglins, wildbloom snaps the collar |
+| Bound #14 | 🟡 building | 2026-06-28 | Mario-style auto-runner — variable jump + stomp-combo (sim done, render next) |
+| Anima | 🔬 tech demo | 2026-06-21 | procedural character (IK rig + verlet cloak), ZERO art files — linked in Room |
 
 ---
 
@@ -357,7 +349,7 @@ the Arcade frame.
   existed (PULSE_CAP 3→1, sub-3-torch lock = draw not win, honest copy) but the broken mechanic IS the game's whole
   hook, so Alex chose to shelve rather than rebalance. **Lesson:** a single high-cap swing mechanic that's also the
   win-engine self-snowballs; if the gimmick can end the game sideways, it'll do it more than you think (measure it).
-  Catalog back to **7 live cabinets**. **Revive = rebalance the pulse first** (PULSE_CAP 3→1,
+  **Revive = rebalance the pulse first** (PULSE_CAP 3→1,
   sub-3-torch lock = draw not win, honest copy) — but the broken mechanic IS the hook, so a revive
   is really a redesign. Code kept in git, gated like Gravitar.
 **What it was (one line):** lantern Ancient, checkers-slide + jump-to-convert grey pieces to your
@@ -463,6 +455,105 @@ the Arcade frame.
   play). Two-axis input = the Subway-Surfers formula; the element-read stays the primary skill.
 **Files:** `atherdash/lib/atherdash.ts` (47 tests) · `lib/atherdash.test.ts` · `page.tsx` · `DESIGN.md`
 
+### Driftling (#11) — 🟢 live · food-chain evolution → `/driftling`
+*Last touched: 2026-06-26*
+**Left off:** Shipped live + public. flOw/Feeding-Frenzy DNA: drift the cloud-ocean, eat smaller, flee
+  bigger, **evolve in discrete tiers** off a swappable `LADDER` table. Wedge = **the first element you
+  eat forks your branch** (Storm ≠ Earth ≠ Water ≠ Mana). Render = vector-glow ocean, camera-follow,
+  element-coloured fish-glyphs with readability cues (threat = pulsing danger-ring, prey = bright spark),
+  threat **chevrons** (off-screen-bigger arrow), evolve/fork **payoff burst**, tier/score/evolve HUD,
+  best-score + run-summary death. **Touch joystick** (Alex: "felt good") + **slower growth** (FOOD_PER_SIZE
+  1.3→0.95, evolve thresholds stretched). 27 sim tests green.
+**Next:**
+  1. **⚑ Alex device cold-play** — drift authority, eat/threat readability, the evolve-payoff moment,
+     whether the nursery-start difficulty curve feels right. Knobs = consts atop `lib/driftling.ts`.
+  2. Then art pass (card + creature art — deferred, Alex's taste).
+**Parked:** **Rinn-kin element↔apex mapping** = a /magii canon gap (sim is element-agnostic so it doesn't
+  block; canon re-skins via the LADDER/APEX tables only, zero logic). Jin's non-binding proposal in DESIGN.md.
+**Decisions:** sim-first (oracle retuned for the **languid identity** — nursery start, threat exposure ramps
+  with tier, median run reaches apex, deaths still live); element-AGNOSTIC core so canon is never the blocker.
+  NOT Voranyx (that's slither-length + body-collision; this is discrete evolution tiers + size hierarchy).
+**Files:** `driftling/lib/driftling.ts` (27 tests) · `driftling.test.ts` · `lib/sfx.ts` · `page.tsx` · `DESIGN.md`
+
+### Squall (#12) — 🟢 live · defenseless bullet-hell → `/squall`
+*Last touched: 2026-06-26*
+**Left off:** Shipped live + public. Pure-evasion bullet-hell — **no shield, no shots**, brand-new
+  "defenseless survival" mood. The void rains **5 telegraphed patterns** escalating with survival time
+  (rain comb / side sweep / aimed fan / ring burst / rotating spiral), each fair (edge-entered or warned).
+  **Tiny hitbox + graze** risk-reward (close passes bank score). Render = vector-glow storm, **telegraph
+  readability** (aim = live dashed line, burst = expanding preview ring, spiral = rotating tick, all pulse
+  toward fire), visible hot-white **hitbox pinpoint** + graze aura/flash, HUD, best-score + run-summary death,
+  touch joystick / mouse-follow / WASD. 20 sim tests green.
+**Next:**
+  1. **⚑ Alex device cold-play (NEVER verified by me — extension was down on ship day)** — pattern
+     density/cadence, bullet speeds, telegraph warn times. Knobs: `fireDirector` gap, per-pattern `spd`,
+     `RAMP_T`, `GRAZE_R` in `lib/squall.ts`.
+  2. Card art (deferred, Alex's taste).
+**Parked:** —
+**Decisions:** **#2-cabinet call: Squall over Pac-Man** at the time — Driftling is eat/flee/flip, Pac-Man is
+  too (predator-flip), so Squall (no offense) gives the board real contrast. (Pac-Man later shipped anyway as
+  Dewdrop.) Opening softened for a fair casual on-ramp (roomier gaps, slower early bullets, RAMP_T 115).
+**Files:** `squall/lib/squall.ts` (20 tests) · `squall.test.ts` · `lib/sfx.ts` · `page.tsx`
+
+### Dewdrop (#13) — 🟢 live · Pac-Man riff, Dewbear vs the Moglins → `/dewdrop`
+*Last touched: 2026-06-26*
+**Left off:** Shipped live + public + tuned. A wild **Dewbear** hoovering **dewdrops** in the collar-Moglins'
+  burrow-warren; the 4 hunters = the Moglins (**Burr**=chaser, **Bramble**=ambush, **Nettle**=flank,
+  **Hemlock**=overseer + top hat); power-pellet = **wildbloom** → collars snap, Moglins **deflate** + flee
+  (the books' deflate payoff = the predator-flip). Render = phosphor burrow, chomping dew-blue Dewbear, 4
+  distinct Moglins (deflate + eyes-home states), joystick+WASD, lives, win/lose + best-score, sfx. 20 tests.
+  **Alex cold-play → tuned:** maze 19×21→15×17 (bigger cells), speeds slowed (PLAYER 4.0 / GHOST 3.5), +
+  fixed a real FP movement bug (exact-step skipped centre-decisions → added 1e-6 epsilon to `advance()`).
+**Next:**
+  1. **⚑ More tuning if Alex asks** — scatter/chase waves, wildbloom duration, ghost-vs-player speed gap
+     (consts atop `lib/dewdrop.ts`).
+  2. **Maze art/layout** = a later design pass (Alex's taste). Current maze is a guaranteed-connected
+     placeholder (hand-authored maze was sealed/disconnected → generated by construction).
+**Parked:** —
+**Decisions:** **Magii ruled it onto canon** (`athernyx/CANON/game/dewbear-maze.md`, committed `0c15ae6`) —
+  Alex named it **Dewdrop**. The Pac-Man riff was Jin's pick of the floated classics (predator-flip verb the
+  lineup lacked; 4 hunters = 4 elements/Moglins; phosphor maze = cheap art). Was the **working title
+  `pacmaze`** sim before the canon weld (`f9cdbe1` → Dewdrop `fdeb8bc`); `pacmaze/` dir is gone (renamed).
+**Files:** `dewdrop/lib/dewdrop.ts` (20 tests) · `page.tsx` · canon `athernyx/CANON/game/dewbear-maze.md`
+
+### Bound (#14) — 🟡 BUILDING · Mario-style auto-runner → `/bound` *(sim done, render next)*
+*Last touched: 2026-06-28 (`7503b55` — sim-first, working title)*
+**Left off:** **Sim-first SHIPPED, no render yet.** One-button auto-runner: runner moves right on its own
+  (faster with distance), only input is **JUMP** — and jump is **variable** (tap = short hop, hold = float
+  higher). The wedge vs Atherdash/Updraft (the board's two existing jump games): real **platformer geometry** —
+  (1) variable jump arc you *shape*, (2) **elevation** (ledges/platforms at different heights, read-ahead +
+  land), (3) **stomp + bounce-combo** (land on a foe from above → kill + bounce; chain aerial stomps for a
+  rising multiplier; side-contact = death). Coyote-time + jump-buffer for fairness. Deterministic (mulberry32)
+  → free Daily + oracle. **26 sim tests green; oracle clean** (300 seeds: 0% early deaths = fair start,
+  median dist 2392, deaths mostly foe/spike = the new platformer skills are what kill you, not cheap gaps).
+**Next (the path to live):**
+  1. **🚩 CANON GAP — Magii name + theme ruling** (mirror of the Dewdrop/Dewbear weld). Sim is theme-agnostic
+     (entities = generic runner / stomp-foe / spike / mote), so the re-skin is data/label only, zero logic.
+     **Alex bridges to /magii.** Jin's open canon hook: climbing a Spire? ascending out of the Silt?
+  2. **Render + page + card art** (gated on Alex's cold-play of the feel + the name ruling) — vector-glow
+     platformer, variable-jump arc + shrinking shadow, stomp burst + combo floater, parallax terrain.
+  3. **Register** in `lib/games.ts` (tier `live` per the public-by-default rule) + arcade cabinet shell.
+**Parked:** —
+**Decisions:** **the final new cabinet** — closes the "two more then stop" strategy (Dewdrop + Bound). MUST
+  earn its slot with platformer geometry, not be a third rhythm-tapper (the explicit pre-build gate; the 3
+  verbs above are the answer). Sim-first discipline held (oracle gut-check before any render — the
+  Seedfall/Driftling lesson).
+**Files:** `bound/lib/bound.ts` (322 ln) · `lib/bound.test.ts` (26 tests) · `lib/bound.oracle.ts` · `DESIGN.md`
+
+### Anima — 🔬 tech demo · procedural character, ZERO art files → `/anima`
+*Last touched: 2026-06-21*
+**What it is:** a proof-of-concept that a *living* character can animate with **no sprites, no painted
+  frames** — a 2-bone IK skeleton + procedural walk gait + breathing idle + a verlet cloak that lags and
+  flows. Every pose is computed, not drawn, so one rig replaces N painted frames. Click/tap = walk; toggle
+  the skeleton to see the rig. Linked from the Room.
+**Why it's on the board (not a game — but load-bearing):** it's the **direct answer to "art is the blocker"**
+  — the recurring deferral across every game ("placeholder pill, real art is Alex's taste/hands"). Procedural
+  animation is the **build-systems-not-art** thesis made literal. If it holds up, it's a path to characters in
+  Shimmer / the arcade without an art pipeline.
+**Next (open, not scheduled):** decide if it graduates — does a procedural character get used in a real game
+  (Shimmer overworld? a cabinet mascot?), or stay a demo. Alex's call; no build pending.
+**Files:** `anima/page.tsx` (self-contained, ~15KB)
+
 ## 🧭 Catalog direction — narrative meta (2026-06-12, Alex)
 Gardenscapes insight: the puzzle is the currency, the **story you unlock is the draw.**
 Our edge = a deep canon already built. Each game = a system/region of one "wake Aeterna"
@@ -525,10 +616,12 @@ scenes). Lore routes through /magii for canon safety.
   🚩 **CANON GAP — the game's NAME is a /magii call** (Alex bridges to Magii). NOT registered / not live;
   render is gated on the name. Canon weld: 4 shades = 4 elements, motes = ather, bloom banishes the void,
   setting = the Silt / Voranyx caverns.
-- **▶ STRATEGY (Alex, 2026-06-26): TWO more new cabinets, then STOP adding — improve the lineup.** Pac-Man
-  (this) + the **Mario-style auto-runner** are the final two new builds. After both ship, pivot off new
-  cabinets to **polishing the existing lineup** (PENDING-ALEX feel-lap, Seedfall ⭐ first, cabinet dial,
-  leaderboard-overlay verify, mobile sweep). Don't pitch more new games until the lineup pass is done.
+- **▶ STRATEGY (Alex, 2026-06-26): TWO more new cabinets, then STOP adding — improve the lineup.**
+  ✅ **FULFILLED:** Pac-Man (this) shipped as **Dewdrop** + the **Mario-style auto-runner** is **Bound**
+  (sim done `7503b55`, render is the last task — see its Shipped block #14). After Bound's render lands,
+  the door on new cabinets is CLOSED → pivot fully to **polishing the existing lineup** (PENDING-ALEX
+  feel-lap, Seedfall ⭐ first, cabinet dial, leaderboard-overlay verify, mobile sweep). Don't pitch more
+  new games until the lineup pass is done.
 - **Bricks / Breakout riff** *(cheap + fast, NEEDS its wedge)* — was already on the bench
   ("bounce an Ather mote to shatter the void-crust"). Cheapest art of anything we'd build (paddle +
   ball + blocks = vector heaven). Risk: it's the classic with the *least* twist of its own → would be
@@ -536,14 +629,11 @@ scenes). Lore routes through /magii for canon safety.
   touched**, so you chain-break matching-element bricks (plugs into the shared element system). With
   the wedge = a legit palate-cleanser cabinet (Updraft tier); without it = filler. Canon = sealing
   the void-crust over the Silt.
-- **Auto-run platformer riff (the "Mario, scoped")** *(viable via Alex's reframe — but watch the
-  overlap)* — NOT full Mario control (that's the heaviest art/content cost on the whole board, parked).
-  Alex's scoping: **auto-run + tap-to-jump, the player only times the jumps.** That makes it light +
-  in-wheelhouse. **⚠ THE TENSION TO SOLVE BEFORE BUILDING:** auto-run + tap-jump is *very* close to
-  **Atherdash** (auto-run, tap-jump over pitfalls) and **Updraft** (one-tap timing). Its job has to be
-  **platformer geometry** to earn its slot — **stomping enemies, vertical height, read-ahead gaps/
-  ledges** — not just another timing-tapper. If we can't name a verb Atherdash doesn't already have,
-  don't build it. Canon hook (open): climbing a Spire? ascending out of the Silt? → /magii.
+- **Auto-run platformer riff (the "Mario, scoped") → ✅ BUILT as BOUND (sim, 2026-06-28 `7503b55`).** The
+  overlap tension was solved exactly as flagged: Bound earns its slot with **platformer geometry** none of
+  the others have — **variable jump arc** (shape it, don't just fire), **elevation** (ledges to read-ahead +
+  land on), **stomp + bounce-combo**. Graduated to its Shipped block (#14); render + Magii name = the
+  remaining work. This was the LAST sanctioned new cabinet (closes the "two more" strategy).
 
 ## ⚰️ Killed — covered by a shipped game *(don't re-pitch)*
 - **The Dive** (fall through the cloud-ocean, dodge-and-collect) → vertical-flight mood
