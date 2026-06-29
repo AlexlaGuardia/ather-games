@@ -30,6 +30,8 @@ import {
   type World,
 } from './lib/vault'
 import { sfx } from './lib/sfx'
+import { dailySeed, dailyNumber, loadDailyBest, saveDailyBest, dailyShare, copyShare } from '@/lib/arcade/daily'
+import DailyLeaderboard from '../_components/DailyLeaderboard'
 
 // ── the greying palette ───────────────────────────────────────────────────────────
 const BG_TOP = '#070a12' // night over the failing land
@@ -66,18 +68,24 @@ export default function VaultPage() {
   const [motes, setMotes] = useState(0)
   const [cause, setCause] = useState<'gap' | 'foe' | 'spike'>('gap')
   const [muted, setMuted] = useState(false)
+  const [mode, setMode] = useState<'endless' | 'daily'>('endless')
+  const modeRef = useRef(mode); modeRef.current = mode
+  const [dailyBest, setDailyBest] = useState(0)
+  const [shared, setShared] = useState(false)
 
   useNoScroll()
 
   const boot = useCallback(() => {
-    seedRef.current = (seedRef.current * 1103515245 + 12345) >>> 0
-    worldRef.current = makeWorld(seedRef.current)
+    let seed: number
+    if (modeRef.current === 'daily') seed = dailySeed() // same crossing for everyone today
+    else { seedRef.current = (seedRef.current * 1103515245 + 12345) >>> 0; seed = seedRef.current ^ (Date.now() >>> 0) }
+    worldRef.current = makeWorld(seed)
     downKeys.current.clear()
     trail.current = []
     fx.current = []
     shake.current = 0
     comboFx.current = 0
-    setScore(0); setDist(0); setMotes(0); setNewBest(false)
+    setScore(0); setDist(0); setMotes(0); setNewBest(false); setShared(false)
     setPhase('ready')
   }, [])
 
@@ -86,7 +94,21 @@ export default function VaultPage() {
     boot()
     setMuted(sfx.isMuted())
     setBest(loadBest())
+    setDailyBest(loadDailyBest('vault'))
   }, [boot])
+
+  const pickMode = (m: 'endless' | 'daily') => {
+    if (m === modeRef.current) return
+    modeRef.current = m
+    setMode(m)
+    boot()
+  }
+  const onShare = async () => {
+    if (await copyShare(dailyShare('Vault', score))) {
+      setShared(true)
+      window.setTimeout(() => setShared(false), 1800)
+    }
+  }
 
   // ── the one input: the vault (jump). Variable via hold (press → up-arc, release → cut). ──────────
   const doPress = useCallback(() => {
@@ -149,6 +171,7 @@ export default function VaultPage() {
             sfx.play('death'); shake.current = 0.4
             setScore(w.score); setDist(Math.floor(w.dist / 10)); setMotes(w.motesGot); setCause(ev.cause)
             const b = saveBest(w.score); setBest(b); setNewBest(w.score > 0 && w.score >= b)
+            if (modeRef.current === 'daily') setDailyBest(saveDailyBest('vault', w.score))
             setPhase('dead')
           }
         }
@@ -224,6 +247,15 @@ export default function VaultPage() {
             <p className="text-[11px] leading-relaxed text-[#9fd6e0]/80 max-w-[290px]">
               the land is going grey. you are a mote of Ather-light running the failing ground. tap (or hold) to vault the void&apos;s tears, unmake the grey by landing on it from above, and gather the light. you cannot hold the light still. carry it.
             </p>
+            <div className="pointer-events-auto flex gap-1.5 text-[10px] font-mono tracking-wider uppercase">
+              {(['endless', 'daily'] as const).map((m) => (
+                <button key={m} onClick={() => pickMode(m)}
+                  className={`px-3 py-1.5 rounded-sm border transition-colors ${mode === m ? 'text-[#070a12] bg-[#7fe9ff] border-[#7fe9ff]' : 'text-[#7fe9ff]/55 border-[#7fe9ff]/25 hover:text-[#7fe9ff]'}`}>
+                  {m === 'daily' ? `daily #${dailyNumber()}` : m}
+                </button>
+              ))}
+            </div>
+            {mode === 'daily' && <div className="text-[9px] font-mono text-[#7fd8e6]/45 tracking-wider -mt-1">same crossing for everyone today</div>}
             <div className="gx-label text-[12px] text-[#070a12] px-6 py-2.5 rounded-[2px] mt-1" style={{ background: ACCENT, boxShadow: `0 0 18px ${ACCENT}80` }}>tap to begin</div>
             {best > 0 && <div className="gx-label text-[10px] font-mono text-[#7fd8e6]/50 tracking-wider mt-1">best <span className="text-[#e8feff] tabular-nums">{best}</span></div>}
           </div>
@@ -239,8 +271,21 @@ export default function VaultPage() {
             <div className="gx-label text-[10px] font-mono text-[#9fd6e0]/55 tracking-wider mt-0.5">
               crossed <span style={{ color: ACCENT }} className="tabular-nums">{dist}</span> · gathered <span style={{ color: GOLD }} className="tabular-nums">{motes}</span>
             </div>
+            {mode === 'daily' && (
+              <div className="gx-label text-[10px] font-mono text-[#7fd8e6]/55 tracking-wider">
+                daily #{dailyNumber()} · best {dailyBest}{score >= dailyBest && score > 0 ? ' ✦ today’s best' : ''}
+              </div>
+            )}
             <p className="text-[10px] leading-relaxed text-[#9fd6e0]/70 max-w-[250px] italic mt-0.5">{DEATH_LINE[cause]}</p>
-            <button onClick={restart} className="gx-label text-[11px] text-[#070a12] hover:brightness-110 px-5 py-2 rounded-[2px] mt-1" style={{ background: ACCENT, boxShadow: `0 0 18px ${ACCENT}80` }}>carry it again →</button>
+            <div className="flex items-center gap-2 mt-1">
+              <button onClick={restart} className="gx-label text-[11px] text-[#070a12] hover:brightness-110 px-5 py-2 rounded-[2px]" style={{ background: ACCENT, boxShadow: `0 0 18px ${ACCENT}80` }}>carry it again →</button>
+              {mode === 'daily' && (
+                <button onClick={onShare} className="gx-label text-[11px] text-[#7fe9ff] border border-[#7fe9ff]/40 hover:border-[#7fe9ff] px-5 py-2 rounded-[2px] transition-colors">
+                  {shared ? 'copied ✓' : 'share'}
+                </button>
+              )}
+            </div>
+            {mode === 'daily' && <DailyLeaderboard gameId="vault" accent={ACCENT} score={score} className="mt-1.5" />}
           </div>
         )}
       </div>
