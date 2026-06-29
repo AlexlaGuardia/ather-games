@@ -99,6 +99,15 @@ export const GAMES: GameEntry[] = [
     tagline: "a wild Dewbear in the Moglins' burrow · gobble the dew, dodge the collar, snap it with a wildbloom — a maze chase",
   },
   {
+    id: "vault",
+    title: "Vault",
+    href: "/vault",
+    glyph: "↟",
+    tier: "live",
+    kind: "play",
+    tagline: "a mote of Ather-light runs the greying ground · vault the void's tears, unmake the grey — the crossing",
+  },
+  {
     id: "lucernyx",
     title: "Lucernyx",
     href: "/lucernyx",

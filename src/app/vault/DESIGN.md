@@ -1,4 +1,4 @@
-# Bound — design spine (sim-first)
+# Vault — design spine (sim-first) — canon RULED (CANON/game/vault.md, name LOCKED)
 
 > **WORKING TITLE `bound`.** 🚩 CANON GAP — the real name + Athernyx theme is a Magii call
 > (mirror of the Dewdrop/Dewbear ruling). The sim is theme-agnostic: entities are generic

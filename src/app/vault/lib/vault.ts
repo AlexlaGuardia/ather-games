@@ -1,14 +1,19 @@
-// BOUND (working title — 🚩 canon name/theme is a Magii call) — a one-button auto-runner.
-// The runner moves right on its own, faster the farther you get; the only input is JUMP, and jump
-// is VARIABLE (tap = short hop, hold = float higher). You read the terrain rushing at you — gaps to
-// clear, ledges to land on, foes to stomp, spikes to hop — and shape each arc to fit. Score = distance
-// (+ motes + stomp-combo). Deterministic from a seed (mulberry32) for the Daily + a headless oracle.
+// VAULT (canon: CANON/game/vault.md — a mote of Ather-light crosses the greying) — a one-button
+// auto-runner. The mote runs the failing ground on its own, faster the farther it carries the light;
+// the only input is the VAULT (jump), and it's VARIABLE (tap = short hop, hold = float higher). You read
+// the terrain rushing at you — the void's tears (gaps) to leap, surviving ledges to land on, grey
+// void-spawn to unmake (stomp), rooted corruption (spikes) to hop — and shape each arc. Score = the
+// crossing (distance) + loose Ather-light (motes) + the unmaking-combo. Deterministic (mulberry32) for
+// the Daily + a headless oracle. Forward motion is the defiance: you cannot hold the light still.
 //
 // Pure sim (no canvas, no React). The page calls pressJump/releaseJump on the button and tick() each
 // frame; it reads `events` for sound/FX and the world fields (segs/foes/spikes/motes/runner) to render.
+// Entity names stay generic (foe/spike/mote) — the Vault skin is render-only (canon re-skin: foe = grey
+// void-spawn, spike = rooted grey corruption, mote = loose Ather-light, runner = the mote of light).
 //
-// Wedge vs Atherdash (flat rhythm hop) / Updraft (vertical climb): real platformer geometry — variable
+// Wedge vs Atherdash (flat rhythm hop) / Updraft (the climb): real platformer geometry — variable
 // jump ARC + elevation (land on ledges) + STOMP bounce-combo. None of the others have those.
+// Vault is Updraft's sibling: Updraft = the climb, Vault = the crossing.
 
 import { mulberry32, type Rng } from '@/lib/arcade/rng'
 
@@ -311,7 +316,7 @@ function populate(w: World, seg: Seg, d: number): void {
 function clamp(v: number, lo: number, hi: number): number { return Math.max(lo, Math.min(hi, v)) }
 
 // ── best-score persistence (the chase) ────────────────────────────────────────────
-const BEST_KEY = 'bound.best'
+const BEST_KEY = 'vault.best'
 export function loadBest(): number {
   try { return parseInt(localStorage.getItem(BEST_KEY) || '0', 10) || 0 } catch { return 0 }
 }

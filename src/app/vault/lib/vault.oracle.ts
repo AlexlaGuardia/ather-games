@@ -1,6 +1,6 @@
 // BOUND autoplay oracle — a look-ahead bot that jumps for gaps / ledges / hazards, to prove courses
-// are clearable with skill and the difficulty curve is fair. Run: npx tsx src/app/bound/lib/bound.oracle.ts
-import { makeWorld, tick, pressJump, releaseJump, speedAt, STEP_UP, FOE_W, type World } from './bound'
+// are clearable with skill and the difficulty curve is fair. Run: npx tsx src/app/vault/lib/vault.oracle.ts
+import { makeWorld, tick, pressJump, releaseJump, speedAt, STEP_UP, FOE_W, type World } from './vault'
 
 function botRun(seed: number, maxT = 90): { dist: number; cause: string; t: number } {
   const w = makeWorld(seed); pressJump(w)
@@ -54,7 +54,7 @@ const median = dists[Math.floor(N / 2)]
 const mean = Math.round(dists.reduce((a, b) => a + b, 0) / N)
 const p10 = dists[Math.floor(N * 0.1)], p90 = dists[Math.floor(N * 0.9)]
 const earlyDeaths = dists.filter(d => d < 950).length // died on/just after the runway = unfair pocket
-console.log(`\nBOUND oracle — ${N} seeds, competent look-ahead bot`)
+console.log(`\nVAULT oracle — ${N} seeds, competent look-ahead bot`)
 console.log(`survival dist:  p10=${p10}  median=${median}  mean=${mean}  p90=${p90}  max=${dists[N - 1]}`)
 console.log(`death causes:`, causes)
 console.log(`early deaths (<950, ~runway): ${earlyDeaths} (${(earlyDeaths / N * 100).toFixed(1)}%)  ← want ~0 (fair start)`)

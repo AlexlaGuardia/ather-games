@@ -1,10 +1,10 @@
-// BOUND sim sanity — run with: npx tsx src/app/bound/lib/bound.test.ts
+// BOUND sim sanity — run with: npx tsx src/app/vault/lib/vault.test.ts
 import {
   makeWorld, tick, pressJump, releaseJump,
   diffAt, speedAt, // ensure exports resolve
   TOP_BASE, FOE_W, FOE_H, SPIKE_H, MOTE_R, JUMP_V0, DEATH_Y, RUNNER_H,
   type World, type Seg,
-} from './bound'
+} from './vault'
 
 let pass = 0, fail = 0
 function ok(name: string, cond: boolean) {
