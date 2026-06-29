@@ -32,6 +32,7 @@ import {
 import { sfx } from './lib/sfx'
 import { dailySeed, dailyNumber, loadDailyBest, saveDailyBest, dailyShare, copyShare } from '@/lib/arcade/daily'
 import DailyLeaderboard from '../_components/DailyLeaderboard'
+import ArcadeControls from '../_components/ArcadeControls'
 
 // ── the greying palette ───────────────────────────────────────────────────────────
 const BG_TOP = '#070a12' // night over the failing land
@@ -297,8 +298,18 @@ export default function VaultPage() {
         )}
       </div>
 
-      <div className="w-full flex items-center justify-center mt-4" style={{ maxWidth: VW }}>
-        <p className="text-[10px] text-[#7fd8e6]/35 font-mono tracking-wider">tap / hold to vault · stomp grey from above → tap again to double-jump · hop the thorns</p>
+      {/* the cabinet control deck — one big VAULT button under the screen (keyboard still works) */}
+      <ArcadeControls
+        accent={ACCENT}
+        maxWidth={VW}
+        buttons={[{ id: 'jump', label: 'Vault', glyph: '↟', hint: 'space', size: 'lg' }]}
+        onPress={doPress}
+        onRelease={doRelease}
+        hint="tap = short hop · hold = float higher"
+      />
+
+      <div className="w-full flex items-center justify-center mt-3" style={{ maxWidth: VW }}>
+        <p className="text-[10px] text-[#7fd8e6]/35 font-mono tracking-wider">stomp grey from above → tap again to double-jump · hop the thorns</p>
       </div>
     </ArcadeCabinet>
   )
