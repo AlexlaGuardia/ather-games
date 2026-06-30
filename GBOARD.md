@@ -95,11 +95,15 @@ the Arcade frame.
 > cabinet. Spec-driven: a game points `onPress`/`onRelease` (buttons) or a `-1..1` vector (`onStick`) at it.
 > **Design rule (Alex):** the SCREEN stays NEUTRAL (display only — no tap, no cursor), the BUTTON calls the
 > eye (idle attract-pulse on the primary). **Proven on Vault** (one big VAULT button, screen neutralized).
-> Archetype map for rollout: 1-btn = Vault✓/Updraft · 2-btn = Seedfall(L/R)/Atherdash(L/R+jump) · stick =
-> Squall/Driftling/Voranyx/Dewdrop · direct-touch frame-only = Ward/Mana'nana/Rekindle.
-> **OPEN taste calls (Alex):** (a) stick games — fixed deck stick [best look] vs keep floating thumb-stick
-> [best phone feel]; (b) deck on desktop too vs mobile-only. **Room-pill audit done 2026-06-29:** all cabinet
-> games have it; Nolmir was a dead-end → FIXED (RoomReturn added); Gravitar = back-room/cut (skipped).
+> Archetype map for rollout: 1-btn = Vault✓/Updraft✓ · 2-btn = Seedfall✓(L/R)/Atherdash✓(L/R+jump) · stick =
+> Squall✓/Driftling✓/Voranyx✓/Dewdrop✓ · direct-touch frame-only = Ward/Mana'nana/Rekindle (no deck by design).
+> **✅ ROLLOUT COMPLETE 2026-06-30 (jin-cc):** all 8 deck-eligible cabinets wired. Last 4 this session —
+> Seedfall + Atherdash (2-btn; Seedfall gained L/R keys it never had), Driftling + Dewdrop (fixed deck stick,
+> floating thumb-stick retired, screen neutralized to pure display). tsc + build clean, 4 routes 200.
+> **TASTE CALLS RESOLVED (Alex 06-30):** (a) stick games = **fixed deck stick** (matches Squall/Voranyx);
+> (b) deck shows on **desktop too** (mirrors the keybinds — already the component's behavior, no gating).
+> **Room-pill audit done 2026-06-29:** all cabinet games have it; Nolmir was a dead-end → FIXED (RoomReturn
+> added); Gravitar = back-room/cut (skipped). **No public dead-ends remain.**
 >
 > **▶ VEHICLE = the ARCADE POLISH LAP (planned 2026-06-21, Alex):** the start/over + HUD rollout now rides a
 > per-game polish lap — **one game per session**, same checklist (cold play → feel fixes → UI-layer pass → mobile →

@@ -7,6 +7,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import ArcadeCabinet from '../_components/ArcadeCabinet'
+import ArcadeControls from '../_components/ArcadeControls'
 import DailyLeaderboard from '../_components/DailyLeaderboard'
 import { mulberry32 } from '@/lib/arcade/rng'
 import { useNoScroll } from '@/lib/arcade/useNoScroll'
@@ -54,7 +55,8 @@ export default function SeedfallPage() {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const worldRef = useRef<World | null>(null)
   const seedRef = useRef(1)
-  const pointers = useRef<Map<number, 'L' | 'R'>>(new Map())
+  // the cabinet deck's two buttons (and L/R keys) drive these holds; the screen is a neutral display.
+  const held = useRef({ L: false, R: false })
   const syncT = useRef(0)
 
   const [phase, setPhase] = useState<Phase>('ready')
@@ -73,7 +75,7 @@ export default function SeedfallPage() {
   const boot = useCallback(() => {
     seedRef.current = (seedRef.current * 1103515245 + 12345) >>> 0
     worldRef.current = makeWorld(modeRef.current === 'daily' ? dailySeed() : (seedRef.current ^ (Date.now() >>> 0)))
-    pointers.current.clear()
+    held.current = { L: false, R: false }
     setFuel(FUEL_MAX)
     setScore(0)
     setRating(null)
@@ -149,33 +151,35 @@ export default function SeedfallPage() {
     return () => cancelAnimationFrame(raf)
   }, [garden.planted])
 
-  // ── two-zone hold input ───────────────────────────────────────────────────────
+  // ── two-button hold input (cabinet deck + L/R keys; screen is a neutral display) ──
   const applyInput = () => {
     const w = worldRef.current
     if (!w) return
-    const halves = new Set(pointers.current.values())
-    setInput(w, halves.has('L'), halves.has('R'))
+    setInput(w, held.current.L, held.current.R)
     if (w.state === 'playing' && phase === 'ready') setPhase('playing')
   }
-  const halfOf = (e: React.PointerEvent<HTMLCanvasElement>) => {
-    const rect = e.currentTarget.getBoundingClientRect()
-    return e.clientX - rect.left < rect.width / 2 ? 'L' : 'R'
-  }
-  const onDown = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
-    sfx.ensure()
+  const setHalf = (which: 'L' | 'R', on: boolean) => {
     const st = worldRef.current?.state
-    if (st === 'landed' || st === 'crashed' || st === 'caught') return
-    pointers.current.set(e.pointerId, halfOf(e))
+    if (on && (st === 'landed' || st === 'crashed' || st === 'caught')) return
+    held.current[which] = on
     applyInput()
-  }, [phase])
-  const onMove = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
-    if (!pointers.current.has(e.pointerId)) return
-    pointers.current.set(e.pointerId, halfOf(e))
-    applyInput()
-  }, [])
-  const onUp = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
-    pointers.current.delete(e.pointerId)
-    applyInput()
+  }
+  const deckPress = useCallback((id: string) => { sfx.ensure(); setHalf(id as 'L' | 'R', true) }, [phase])
+  const deckRelease = useCallback((id: string) => { setHalf(id as 'L' | 'R', false) }, [phase])
+
+  // desktop keyboard — the deck mirrors these (←/a = left thread, →/d = right)
+  useEffect(() => {
+    const k = (e: KeyboardEvent, on: boolean) => {
+      const key = e.key.toLowerCase()
+      if (key === 'arrowleft' || key === 'a') { sfx.ensure(); setHalf('L', on) }
+      else if (key === 'arrowright' || key === 'd') { sfx.ensure(); setHalf('R', on) }
+    }
+    const down = (e: KeyboardEvent) => k(e, true)
+    const up = (e: KeyboardEvent) => k(e, false)
+    window.addEventListener('keydown', down)
+    window.addEventListener('keyup', up)
+    return () => { window.removeEventListener('keydown', down); window.removeEventListener('keyup', up) }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const restart = useCallback(() => { sfx.ensure(); boot() }, [boot])
@@ -208,12 +212,7 @@ export default function SeedfallPage() {
       <div className="gx-chrome relative w-full max-w-[400px]" style={{ aspectRatio: `${VW} / ${VH}`, ['--gx-accent' as string]: '#54ffc8' } as React.CSSProperties}>
         <canvas
           ref={canvasRef}
-          onPointerDown={onDown}
-          onPointerMove={onMove}
-          onPointerUp={onUp}
-          onPointerCancel={onUp}
-          onPointerLeave={onUp}
-          className="w-full h-full block touch-none rounded-md cursor-pointer"
+          className="w-full h-full block touch-none rounded-md"
         />
         <div className="pointer-events-none absolute inset-0 rounded-md sf-crt" />
 
@@ -267,9 +266,18 @@ export default function SeedfallPage() {
         )}
       </div>
 
-      <div className="w-full max-w-[400px] flex items-center justify-center mt-4">
-        <p className="text-[10px] text-[#7fd8e6]/35 font-mono tracking-wider">hold a side · slow with both · go deep</p>
-      </div>
+      {/* the cabinet control deck — hold a side to drift, both to slow (screen stays a clean display) */}
+      <ArcadeControls
+        accent="#54ffc8"
+        maxWidth={400}
+        buttons={[
+          { id: 'L', label: 'Left', glyph: '◀', hint: '←', size: 'lg' },
+          { id: 'R', label: 'Right', glyph: '▶', hint: '→', size: 'lg' },
+        ]}
+        onPress={deckPress}
+        onRelease={deckRelease}
+        hint="hold a side to drift · both to slow · go deep"
+      />
 
       <style jsx>{`
         .sf-crt {

@@ -31,6 +31,7 @@ import {
 } from './lib/atherdash'
 import { sfx } from './lib/sfx'
 import ArcadeCabinet from '../_components/ArcadeCabinet'
+import ArcadeControls from '../_components/ArcadeControls'
 import { dailySeed, dailyNumber, loadDailyBest, saveDailyBest, dailyShare, copyShare } from '@/lib/arcade/daily'
 import DailyLeaderboard from '../_components/DailyLeaderboard'
 
@@ -51,7 +52,6 @@ interface Fx { rings: Ring[]; motes: Mote[]; shakeT0: number }
 export default function AtherdashPage() {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const worldRef = useRef<World | null>(null)
-  const swipeRef = useRef<{ x: number; id: number } | null>(null)
   const lastLaneRef = useRef<number>(-1)
   const fxRef = useRef<Fx>({ rings: [], motes: [], shakeT0: -1 })
 
@@ -209,21 +209,16 @@ export default function AtherdashPage() {
     return () => window.removeEventListener('keydown', onKey)
   }, [launch, doJump])
 
-  // touch/pointer: tap launches from ready; in play, a horizontal SWIPE swaps lane
-  // and a TAP (no real horizontal travel) jumps. (Ward gotcha: real swipe only
-  // fires on a device — the automated browser can't dispatch it.)
-  const onPointerDown = useCallback((e: React.PointerEvent) => {
-    swipeRef.current = { x: e.clientX, id: e.pointerId }
-  }, [])
-  const onPointerUp = useCallback((e: React.PointerEvent) => {
-    const s = swipeRef.current
+  // the cabinet deck: LEFT / RIGHT slide lanes, JUMP hops. From ready, any press
+  // launches first (a launch-press with LEFT/RIGHT also slides; JUMP just launches),
+  // mirroring the keyboard so the screen stays a neutral display.
+  const deckPress = useCallback((id: string) => {
     const w = worldRef.current
-    swipeRef.current = null
-    if (!w || !s || s.id !== e.pointerId) return
-    const dx = e.clientX - s.x
-    if (w.state === 'ready') { launch(); return }
-    if (Math.abs(dx) > 22) swap(w, dx > 0 ? +1 : -1)
-    else doJump() // a tap = hop
+    if (!w) return
+    sfx.ensure()
+    if (w.state === 'ready') { launch(); if (id === 'jump') return }
+    if (id === 'jump') doJump()
+    else swap(w, id === 'left' ? -1 : +1)
   }, [launch, doJump])
 
   return (
@@ -243,9 +238,7 @@ export default function AtherdashPage() {
       <div className="gx-chrome relative w-full" style={{ aspectRatio: `${VW} / ${VH}`, ['--gx-accent' as string]: '#37e6ff' } as React.CSSProperties}>
         <canvas
           ref={canvasRef}
-          onPointerDown={onPointerDown}
-          onPointerUp={onPointerUp}
-          className="w-full h-full block touch-none rounded-md cursor-pointer"
+          className="w-full h-full block touch-none rounded-md"
         />
         <div className="pointer-events-none absolute inset-0 rounded-md atherdash-crt" />
 
@@ -316,9 +309,18 @@ export default function AtherdashPage() {
         )}
       </div>
 
-        <div className="w-full flex items-center justify-center mt-3">
-          <p className="text-[10px] text-[#7fd8e6]/35 font-mono tracking-wider">←/→ slide · ↑ hop · swipe + tap on phone</p>
-        </div>
+      {/* the cabinet control deck — slide the lanes, hop the gaps (screen stays a clean display) */}
+      <ArcadeControls
+        accent="#37e6ff"
+        maxWidth={400}
+        buttons={[
+          { id: 'left', label: 'Left', glyph: '◀', hint: '←', size: 'md' },
+          { id: 'jump', label: 'Hop', glyph: '⤴', hint: 'space', size: 'lg' },
+          { id: 'right', label: 'Right', glyph: '▶', hint: '→', size: 'md' },
+        ]}
+        onPress={deckPress}
+        hint="slide to the matching lane · hop the gaps"
+      />
 
       <style jsx>{`
         .atherdash-crt {

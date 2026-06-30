@@ -7,6 +7,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import ArcadeCabinet from '../_components/ArcadeCabinet'
+import ArcadeControls from '../_components/ArcadeControls'
 import { useNoScroll } from '@/lib/arcade/useNoScroll'
 import {
   makeWorld,
@@ -42,6 +43,9 @@ export default function DewdropPage() {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const worldRef = useRef<World | null>(null)
   const seedRef = useRef(1)
+  // the cabinet deck stick gives a -1..1 vector; the screen stays a neutral display.
+  const deck = useRef({ active: false, x: 0, y: 0 })
+  // kept inert so the canvas render's floating-stick block stays hidden (steering is the deck now).
   const joy = useRef({ active: false, baseX: 0, baseY: 0, curX: 0, curY: 0, pid: -1 })
   const keys = useRef<Set<string>>(new Set())
   const syncT = useRef(0)
@@ -58,7 +62,7 @@ export default function DewdropPage() {
   const boot = useCallback(() => {
     seedRef.current = (seedRef.current * 1103515245 + 12345) >>> 0
     worldRef.current = makeWorld(seedRef.current ^ (Date.now() >>> 0))
-    joy.current = { active: false, baseX: 0, baseY: 0, curX: 0, curY: 0, pid: -1 }
+    deck.current = { active: false, x: 0, y: 0 }
     keys.current.clear()
     setScore(0); setLives(START_LIVES); setNewBest(false)
     setPhase('ready')
@@ -90,7 +94,8 @@ export default function DewdropPage() {
     if (k.has('w') || k.has('arrowup')) ky -= 1
     if (k.has('s') || k.has('arrowdown')) ky += 1
     if (kx || ky) { setHeading(w, kx, ky); return }
-    if (joy.current.active) setHeading(w, joy.current.curX - joy.current.baseX, joy.current.curY - joy.current.baseY)
+    // the cabinet stick steers; idle keeps the last heading (the maze coasts on dir).
+    if (deck.current.active) setHeading(w, deck.current.x, deck.current.y)
   }
 
   // ── render + sim loop ─────────────────────────────────────────────────────────
@@ -126,29 +131,17 @@ export default function DewdropPage() {
     return () => cancelAnimationFrame(raf)
   }, [phase])
 
-  // ── input ──────────────────────────────────────────────────────────────────────
-  const ptFromEvent = (e: React.PointerEvent<HTMLCanvasElement>) => {
-    const rect = e.currentTarget.getBoundingClientRect()
-    return { x: ((e.clientX - rect.left) / rect.width) * VW, y: ((e.clientY - rect.top) / rect.height) * VH }
-  }
+  // ── input ── the cabinet deck stick (screen is a neutral display) ───────────────
   const launchIfReady = () => { if (worldRef.current?.state === 'playing' && phase === 'ready') setPhase('playing') }
-  const onDown = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
+  const deckStick = useCallback((x: number, y: number) => {
     sfx.ensure()
     const st = worldRef.current?.state
     if (st === 'dead' || st === 'won') return
-    const p = ptFromEvent(e)
-    joy.current = { active: true, baseX: p.x, baseY: p.y, curX: p.x, curY: p.y, pid: e.pointerId }
-    applyHeading(); launchIfReady()
+    const live = Math.hypot(x, y) > 0.2 // deadzone — a resting stick doesn't turn or launch
+    deck.current = { active: live, x, y }
+    if (live) { setHeading(worldRef.current!, x, y); launchIfReady() }
   }, [phase])
-  const onMove = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
-    if (!joy.current.active || e.pointerId !== joy.current.pid) return
-    const p = ptFromEvent(e)
-    joy.current.curX = p.x; joy.current.curY = p.y
-    applyHeading(); launchIfReady()
-  }, [phase])
-  const onUp = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
-    if (e.pointerId === joy.current.pid) joy.current.active = false
-  }, [])
+  const deckEnd = useCallback(() => { deck.current = { active: false, x: 0, y: 0 } }, [])
 
   const restart = useCallback(() => { sfx.ensure(); boot() }, [boot])
   const toggleMute = () => { sfx.ensure(); const m = !sfx.isMuted(); sfx.setMuted(m); setMuted(m) }
@@ -178,12 +171,7 @@ export default function DewdropPage() {
       <div className="gx-chrome relative w-full" style={{ maxWidth: VW, aspectRatio: `${VW} / ${VH}`, ['--gx-accent' as string]: ACCENT } as React.CSSProperties}>
         <canvas
           ref={canvasRef}
-          onPointerDown={onDown}
-          onPointerMove={onMove}
-          onPointerUp={onUp}
-          onPointerCancel={onUp}
-          onPointerLeave={onUp}
-          className="w-full h-full block touch-none rounded-md cursor-pointer"
+          className="w-full h-full block touch-none rounded-md"
         />
 
         {phase === 'ready' && (
@@ -214,9 +202,15 @@ export default function DewdropPage() {
         )}
       </div>
 
-      <div className="w-full flex items-center justify-center mt-4" style={{ maxWidth: VW }}>
-        <p className="text-[10px] text-[#7fd8e6]/35 font-mono tracking-wider">swipe / WASD · grab a wildbloom · clear the dew</p>
-      </div>
+      {/* the cabinet control deck — the roam stick (screen stays a clean display) */}
+      <ArcadeControls
+        accent={ACCENT}
+        maxWidth={VW}
+        stick
+        onStick={deckStick}
+        onStickEnd={deckEnd}
+        hint="drag the stick to roam · grab a wildbloom · clear the dew"
+      />
     </ArcadeCabinet>
   )
 }

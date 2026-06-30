@@ -7,6 +7,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import ArcadeCabinet from '../_components/ArcadeCabinet'
+import ArcadeControls from '../_components/ArcadeControls'
 import { mulberry32 } from '@/lib/arcade/rng'
 import { useNoScroll } from '@/lib/arcade/useNoScroll'
 import {
@@ -58,8 +59,9 @@ export default function DriftlingPage() {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const worldRef = useRef<World | null>(null)
   const seedRef = useRef(1)
-  const pointer = useRef<{ x: number; y: number; active: boolean }>({ x: VW / 2, y: VH / 2, active: false })
-  // floating touch joystick: base anchors where the thumb lands, knob follows, heading = offset
+  // the cabinet deck stick gives a -1..1 vector; the screen stays a neutral display.
+  const deck = useRef({ active: false, x: 0, y: 0 })
+  // kept inert so the canvas render's floating-stick block stays hidden (steering is the deck now).
   const joy = useRef({ active: false, baseX: 0, baseY: 0, curX: 0, curY: 0, pid: -1 })
   const keys = useRef<Set<string>>(new Set())
   const syncT = useRef(0)
@@ -81,7 +83,7 @@ export default function DriftlingPage() {
   const boot = useCallback(() => {
     seedRef.current = (seedRef.current * 1103515245 + 12345) >>> 0
     worldRef.current = makeWorld(seedRef.current ^ (Date.now() >>> 0))
-    pointer.current = { x: VW / 2, y: VH / 2, active: false }
+    deck.current = { active: false, x: 0, y: 0 }
     keys.current.clear()
     setTierName(cap(LADDER[START_TIER].key))
     setScore(0)
@@ -120,21 +122,9 @@ export default function DriftlingPage() {
     if (k.has('w') || k.has('arrowup')) ky -= 1
     if (k.has('s') || k.has('arrowdown')) ky += 1
     if (kx || ky) { setHeading(w, kx, ky); return }
-    if (joy.current.active) {
-      // heading = thumb offset from the joystick base (full tilt at JOY_R; analog in between)
-      const dx = (joy.current.curX - joy.current.baseX) / JOY_R
-      const dy = (joy.current.curY - joy.current.baseY) / JOY_R
-      setHeading(w, dx, dy)
-      return
-    }
-    if (pointer.current.active) {
-      // mouse: steer toward the cursor (offset from screen centre where the player sits)
-      const dx = (pointer.current.x - VW / 2) / 90 // ~90px to full tilt
-      const dy = (pointer.current.y - VH / 2) / 90
-      setHeading(w, dx, dy)
-    } else {
-      setHeading(w, 0, 0)
-    }
+    // the cabinet stick steers; released = coast straight (drift physics carries it).
+    if (deck.current.active) { setHeading(w, deck.current.x, deck.current.y); return }
+    setHeading(w, 0, 0)
   }
 
   // ── render + sim loop ────────────────────────────────────────────────────────
@@ -179,39 +169,22 @@ export default function DriftlingPage() {
     return () => cancelAnimationFrame(raf)
   }, [phase])
 
-  // ── steering input ────────────────────────────────────────────────────────────
-  const ptFromEvent = (e: React.PointerEvent<HTMLCanvasElement>) => {
-    const rect = e.currentTarget.getBoundingClientRect()
-    return { x: ((e.clientX - rect.left) / rect.width) * VW, y: ((e.clientY - rect.top) / rect.height) * VH }
-  }
+  // ── steering input ── the cabinet deck stick (screen is a neutral display) ──────
   const launchIfReady = () => {
     if (worldRef.current?.state === 'playing' && phase === 'ready') setPhase('playing')
   }
-  const onDown = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
+  const deckStick = useCallback((x: number, y: number) => {
     sfx.ensure()
-    if (worldRef.current?.state === 'dead') return
-    const p = ptFromEvent(e)
-    if (e.pointerType === 'mouse') {
-      pointer.current = { ...p, active: true }
-    } else {
-      // touch: drop the joystick base under the thumb
-      joy.current = { active: true, baseX: p.x, baseY: p.y, curX: p.x, curY: p.y, pid: e.pointerId }
-    }
-    applyHeading(); launchIfReady()
+    const w = worldRef.current
+    if (!w || w.state === 'dead') return
+    const live = Math.hypot(x, y) > 0.18 // deadzone — a resting stick doesn't steer or launch
+    deck.current = { active: live, x, y }
+    setHeading(w, live ? x : 0, live ? y : 0)
+    launchIfReady()
   }, [phase])
-  const onMove = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
-    const p = ptFromEvent(e)
-    if (e.pointerType === 'mouse') {
-      pointer.current = { ...p, active: true } // steers on hover
-    } else if (joy.current.active && e.pointerId === joy.current.pid) {
-      joy.current.curX = p.x; joy.current.curY = p.y
-    }
-    applyHeading(); launchIfReady()
-  }, [phase])
-  const onUp = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
-    if (e.pointerType === 'mouse') pointer.current.active = false
-    else if (e.pointerId === joy.current.pid) joy.current.active = false
-    applyHeading()
+  const deckEnd = useCallback(() => {
+    deck.current = { active: false, x: 0, y: 0 }
+    if (worldRef.current) setHeading(worldRef.current, 0, 0)
   }, [])
 
   const restart = useCallback(() => { sfx.ensure(); boot() }, [boot])
@@ -243,12 +216,7 @@ export default function DriftlingPage() {
       <div className="gx-chrome relative w-full" style={{ maxWidth: VW, aspectRatio: `${VW} / ${VH}`, ['--gx-accent' as string]: accent } as React.CSSProperties}>
         <canvas
           ref={canvasRef}
-          onPointerDown={onDown}
-          onPointerMove={onMove}
-          onPointerUp={onUp}
-          onPointerCancel={onUp}
-          onPointerLeave={onUp}
-          className="w-full h-full block touch-none rounded-md cursor-crosshair"
+          className="w-full h-full block touch-none rounded-md"
         />
 
         {phase === 'ready' && (
@@ -281,9 +249,15 @@ export default function DriftlingPage() {
         )}
       </div>
 
-      <div className="w-full flex items-center justify-center mt-4" style={{ maxWidth: VW }}>
-        <p className="text-[10px] text-[#7fd8e6]/35 font-mono tracking-wider">drag to swim · eat up the ladder</p>
-      </div>
+      {/* the cabinet control deck — the steer stick (screen stays a clean display) */}
+      <ArcadeControls
+        accent={accent}
+        maxWidth={VW}
+        stick
+        onStick={deckStick}
+        onStickEnd={deckEnd}
+        hint="drag the stick to swim · eat up the ladder"
+      />
     </ArcadeCabinet>
   )
 }
