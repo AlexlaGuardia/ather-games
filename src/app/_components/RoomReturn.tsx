@@ -1,29 +1,12 @@
-"use client";
-
-// Shows a "back to the room" affordance only when the page was reached via the
-// spatial Room hub (?from=room). Invisible for normal /arcade visitors, so the
-// throwaway /room prototype never leaks into the live nav.
-import { useEffect, useState } from "react";
+// Shows a "back to the room" affordance on every cabinet. The Room is the front
+// door now (/arcade redirects into it), so the pill is ALWAYS visible — no game
+// is a dead-end however you arrived (direct URL, shared link, or walking in).
+// (Was gated on ?from=room until 2026-06-30; that left direct visits pill-less.)
 
 // `wall` = the room wall index this page sits behind (shimmer 0 / arcade 1 / desk 2
 // / magii 3). Passed so "back" lands you facing the threshold you walked through,
 // not the room's default wall. Omit to return to the default facing.
 export default function RoomReturn({ wall }: { wall?: number } = {}) {
-  const [show, setShow] = useState(false);
-  useEffect(() => {
-    // The room context is STICKY for the session: ?from=room only rides the first hop
-    // (room→hall), and threading it through every card + game back-link is fragile. So
-    // the first time we see it, remember it — then the pill stays available across the
-    // whole room→hall→game→hall loop instead of dead-ending at the old hub.
-    const fromParam = new URLSearchParams(window.location.search).get("from") === "room";
-    try {
-      if (fromParam) sessionStorage.setItem("ag_from_room", "1");
-      setShow(fromParam || sessionStorage.getItem("ag_from_room") === "1");
-    } catch {
-      setShow(fromParam);
-    }
-  }, []);
-  if (!show) return null;
   return (
     <a
       href={wall === undefined ? "/room" : `/room?wall=${wall}`}

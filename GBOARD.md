@@ -102,7 +102,7 @@ the Arcade frame.
 > floating thumb-stick retired, screen neutralized to pure display). tsc + build clean, 4 routes 200.
 > **TASTE CALLS RESOLVED (Alex 06-30):** (a) stick games = **fixed deck stick** (matches Squall/Voranyx);
 > (b) deck shows on **desktop too** (mirrors the keybinds — already the component's behavior, no gating).
-> **Room-pill audit done 2026-06-29:** all cabinet games have it; Nolmir was a dead-end → FIXED (RoomReturn
+> **Room pill ALWAYS-ON 2026-06-30** (was from-room-gated → direct visits looked like dead-ends; now every cabinet always shows it). Audit 06-29: all cabinet games have it; Nolmir was a dead-end → FIXED (RoomReturn
 > added); Gravitar = back-room/cut (skipped). **No public dead-ends remain.**
 >
 > **▶ VEHICLE = the ARCADE POLISH LAP (planned 2026-06-21, Alex):** the start/over + HUD rollout now rides a
