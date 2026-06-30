@@ -38,7 +38,7 @@ the Arcade frame.
 > **▶ PENDING-ALEX LAP — the consolidated checklist (the polish-lap spine; new cabinets fold in below):**
 > - [ ] **Atherdash** — hop timing window fair? slide→hop rhythm readable? base speed right? *(knobs: `SPEED`/`SPEED_MAX`/`SPEED_RAMP_DIST`, `JUMP_DUR`, `PIT_GAP_Z`/`PIT_LEAD`)*
 > - [ ] **Ward** — enemy tune: Drifter weave gentleness, Darter warning time, Husk feel, intro wave *(knobs: `DRIFT`/`DART`/`HUSK` consts)*
-> - [ ] **Seedfall ⭐ (Alex's FAVOURITE — polish FIRST, it's the proven winner)** — full descent feel (drift authority vs branch spacing, fall speed) + Havari catch/dodge readability (1.05s warn) + soil-approach landing + game-over overlays + **regen the card art for the descent** (still the old lander image) *(knobs atop `seedfall.ts` + `genBranches`)*
+> - [ ] **Seedfall ⭐ (Alex's FAVOURITE — polish FIRST, it's the proven winner)** — full descent feel (drift authority vs branch spacing, fall speed) + Havari catch/dodge readability (1.4s warn) + soil-approach landing + game-over overlays *(knobs atop `seedfall.ts` + `genBranches`)*. ✅ **Card art DONE 2026-06-30** (`e7a04d9` — descent: canopy drop, Havari, garden floor; old static-lander card retired).
 > - [ ] **Driftling** — device cold-play: drift authority, eat/threat readability, evolve-payoff moment, nursery-start curve *(knobs atop `lib/driftling.ts`)* + card/creature art (deferred, Alex taste)
 > - [ ] **Squall** — device cold-play (never verified by me, extension was down): pattern density/cadence, bullet speeds, telegraph warn times *(knobs: `fireDirector` gap, per-pattern `spd`, `RAMP_T`, `GRAZE_R`)* + card art
 > - [ ] **Dewdrop** — cold-play tune already started (`a8c54ac`): scatter/chase waves, wildbloom duration, ghost-vs-player speed gap *(consts atop `lib/dewdrop.ts`)* + maze art/layout (deferred, Alex taste)
@@ -328,7 +328,8 @@ the Arcade frame.
 **⚠ PENDING ALEX device pass:** the whole descent FEEL (drift authority vs branch spacing, fall
   speed), the **Havari catch-rate / dodge feel** (bots can't judge it), the soil-approach landing,
   and the game-over overlays (headless can't get past hold-to-drop). Knobs = consts atop `seedfall.ts`
-  + `genBranches`. Card art (`/seedfall/card.webp`) still the old lander image — regen for the descent later.
+  + `genBranches`. ✅ **Card art regen'd for the descent 2026-06-30 (`e7a04d9`)** — FLUX brief rewritten to
+  the long canopy plunge (seed-mote weaving gaps, swooping Havari, garden-glow floor); old static-lander card retired.
 **Decisions:** redesign over polish — the cozy mood stays (languid drift, the garden payoff) but it
   earns a score axis + escalation so it's replayable; Havari = curious not malicious (canon).
 **Files:** `seedfall/lib/seedfall.ts` (22 tests) · `seedfall.test.ts` · `lib/sfx.ts` (+thread/+caught) · `page.tsx`
