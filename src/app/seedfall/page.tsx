@@ -493,17 +493,45 @@ function render(canvas: HTMLCanvasElement, w: World, ts: number, planted: number
   const safe = w.vy <= SOFT_VY
   const col = (w.state === 'crashed' || w.state === 'caught') ? VOID : safe ? LEAF : WARM
   if (w.thrusting && w.state === 'playing') {
-    const dir = w.input.left && w.input.right ? 0 : w.input.left ? 1 : -1
+    // a PUFF OF WIND nudges the seed (not a rocket): soft curling Ather-gusts that
+    // bloom on the upwind side and sweep across in the drift direction. cozy, airy, quick.
+    const both = w.input.left && w.input.right
     ctx.strokeStyle = ATHER
-    ctx.globalAlpha = 0.7
-    ctx.lineWidth = 2
-    ctx.shadowBlur = 10
+    ctx.lineCap = 'round'
+    ctx.lineWidth = 3
+    ctx.shadowBlur = 14
     ctx.shadowColor = ATHER
-    for (let i = 0; i < 3; i++) {
-      const j = Math.sin(t * 40 + i) * 2
-      seg(ctx, w.x, seedY + SEED_R, w.x + dir * (4 + i * 3) + j, seedY + SEED_R + 10 + i * 4)
+    if (both) {
+      // updraft: air cups UP under the seed, pillowing the fall — bold upcurls
+      for (let i = 0; i < 4; i++) {
+        const ph = t * 9 + i * 1.3
+        const sx = w.x + (i - 1.5) * 13
+        const by = seedY + SEED_R + 14
+        const sway = Math.sin(ph) * 5
+        ctx.globalAlpha = 0.30 + 0.40 * (0.5 + 0.5 * Math.sin(ph))
+        ctx.beginPath()
+        ctx.moveTo(sx, by)
+        ctx.quadraticCurveTo(sx + sway, by - 10, sx + sway + (i - 1.5) * 6, by - 22)
+        ctx.stroke()
+      }
+    } else {
+      // lateral gust: wind shoves the seed sideways. mdir = the way it drifts.
+      const mdir = w.input.left ? -1 : 1
+      const ox = w.x - mdir * (SEED_R + 4) // origin on the UPWIND side
+      for (let i = 0; i < 4; i++) {
+        const ph = t * 12 + i * 1.0
+        const yoff = (i - 1.5) * 7 + Math.sin(ph) * 2.5
+        const len = 28 + i * 7
+        const y0 = seedY + yoff
+        ctx.globalAlpha = 0.32 + 0.38 * (0.5 + 0.5 * Math.sin(ph))
+        ctx.beginPath()
+        ctx.moveTo(ox, y0)
+        ctx.quadraticCurveTo(ox + mdir * len * 0.5, y0 - 9, ox + mdir * len, y0 + 2)
+        ctx.stroke()
+      }
     }
     ctx.globalAlpha = 1
+    ctx.shadowBlur = 0
   }
   ctx.fillStyle = col
   ctx.shadowBlur = 16
