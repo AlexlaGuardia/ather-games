@@ -30,9 +30,10 @@ the Arcade frame.
 >    - **Card art backlog — ✅ CLEARED + WIRED + VERIFIED IN HALL 2026-07-01** (`4499727` Vault+Dewdrop,
 >      `1d866ae` Squall+Driftling, `c554cb9` catalog wiring). The 4 new cards existed on disk but the hall's
 >      `CARD_ART` allowlist (`CatalogGrid.tsx`) didn't include them → they rendered as bare glyph+text; added
->      the four, browser-verified all 12 cabinets show art at `/arcade/all`. *(Optional follow-up: the 4 new
->      games don't use their card as a title-screen backdrop like atherdash/seedfall/ward/voranyx/updraft do —
->      a per-page `<img src="/<id>/card.webp">` behind the start screen; additive, not required.)*
+>      the four, browser-verified all 12 cabinets show art at `/arcade/all`. ✅ **Title-screen backdrops for
+>      the 4 new games DONE 2026-07-01** (Vault `a010998`, Squall `af6f700`, Dewdrop `1d3fd85`, Driftling
+>      `d885e16`) — each start screen shows its card behind the text (per-card opacity + scrim tuned for
+>      legibility, browser-verified), matching atherdash/seedfall/ward/voranyx/updraft.
 >      Remaining polish work is **all pending Alex's device** (feel-tune, mobile/overlay reads).
 >    - **Everything else is pending Alex's hands** (feel-tune, mobile/overlay reads) — headless can't judge.
 > 2. **Room loose ends** — ✅ daily-leaderboard render VERIFIED + clip FIXED across all 7 games 2026-07-01
