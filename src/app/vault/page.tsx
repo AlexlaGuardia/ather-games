@@ -243,7 +243,10 @@ export default function VaultPage() {
         />
 
         {phase === 'ready' && (
-          <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-3 rounded-md text-center px-6 bg-[#070a12]/55">
+          <div className="pointer-events-none absolute inset-0 isolate overflow-hidden flex flex-col items-center justify-center gap-3 rounded-md text-center px-6">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/vault/card.webp" alt="" aria-hidden="true" className="absolute inset-0 -z-10 h-full w-full object-cover opacity-[0.55]" />
+            <div className="absolute inset-0 -z-10 bg-[#070a12]/68" />
             <div className="gx-title text-2xl tracking-[0.3em] uppercase" style={{ color: ACCENT, textShadow: `0 0 18px ${ACCENT}` }}>Vault</div>
             <p className="text-[11px] leading-relaxed text-[#9fd6e0]/80 max-w-[290px]">
               the land is going grey. you are a mote of Ather-light running the failing ground. tap (or hold) to vault the void&apos;s tears, and unmake the grey by landing on it from above — each unmaking gives you a double-jump, so tap again to chain across them. you cannot hold the light still. carry it.
