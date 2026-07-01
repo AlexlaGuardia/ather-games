@@ -263,7 +263,8 @@ export default function VaultPage() {
         )}
 
         {phase === 'dead' && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-[#070a12]/75 rounded-md text-center px-6">
+          <div className="absolute inset-0 overflow-y-auto bg-[#070a12]/75 rounded-md">
+           <div className="min-h-full flex flex-col items-center justify-center gap-2 text-center px-6 py-4">
             <div className="gx-title text-[#a7a7b0] text-lg tracking-[0.3em] uppercase" style={{ textShadow: '0 0 14px #71717a' }}>The grey takes the light</div>
             <div className="gx-value font-mono text-[#e8feff] text-3xl leading-none tabular-nums" style={{ textShadow: `0 0 12px ${ACCENT}80` }}>{score}</div>
             {newBest
@@ -287,6 +288,7 @@ export default function VaultPage() {
               )}
             </div>
             {mode === 'daily' && <DailyLeaderboard gameId="vault" accent={ACCENT} score={score} className="mt-1.5" />}
+           </div>
           </div>
         )}
       </div>
