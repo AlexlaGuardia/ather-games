@@ -538,7 +538,8 @@ export default function MananaPage() {
           </div>
 
           {over && (
-            <div className="absolute inset-0 z-30 flex flex-col items-center justify-center rounded-2xl bg-black/70 backdrop-blur-sm">
+            <div className="absolute inset-0 z-30 overflow-y-auto rounded-2xl bg-black/70 backdrop-blur-sm">
+             <div className="min-h-full flex flex-col items-center justify-center py-4">
               <div className="gx-label text-amber-200 text-sm mb-1">OUT OF MOVES</div>
               <div className="text-3xl font-bold text-white mb-1 tabular-nums">{score.toLocaleString()}</div>
               <div className="text-[11px] text-slate-400 mb-4">
@@ -559,6 +560,7 @@ export default function MananaPage() {
                 )}
               </div>
               {mode === 'daily' && <DailyLeaderboard gameId="manana" accent="#f0a526" score={score} className="mt-3" />}
+             </div>
             </div>
           )}
         </div>

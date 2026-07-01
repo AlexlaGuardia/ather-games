@@ -286,7 +286,8 @@ export default function AtherdashPage() {
         )}
 
         {phase === 'over' && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center gap-2.5 bg-[#04040a]/78 rounded-md text-center px-6">
+          <div className="absolute inset-0 overflow-y-auto bg-[#04040a]/78 rounded-md">
+           <div className="min-h-full flex flex-col items-center justify-center gap-2.5 text-center px-6 py-4">
             <div className="gx-title text-[#c86bff] text-lg tracking-[0.3em] uppercase" style={{ textShadow: '0 0 14px #c86bff' }}>{cause === 'pit' ? 'the gap takes you' : 'the wall takes you'}</div>
             <div className="gx-value font-mono text-[#e8feff] text-4xl leading-none" style={{ textShadow: '0 0 12px #37e6ff80' }}>{score}</div>
             <div className="text-[10px] font-mono text-[#7fd8e6]/55 tracking-wider">
@@ -305,6 +306,7 @@ export default function AtherdashPage() {
               )}
             </div>
             {mode === 'daily' && <DailyLeaderboard gameId="atherdash" accent="#37e6ff" score={score} className="mt-1.5" />}
+           </div>
           </div>
         )}
       </div>

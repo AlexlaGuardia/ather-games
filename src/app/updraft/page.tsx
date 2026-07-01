@@ -204,7 +204,8 @@ export default function UpdraftPage() {
         )}
 
         {phase === 'over' && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center gap-2.5 bg-[#04040a]/75 rounded-md text-center px-6">
+          <div className="absolute inset-0 overflow-y-auto bg-[#04040a]/75 rounded-md">
+           <div className="min-h-full flex flex-col items-center justify-center gap-2.5 text-center px-6 py-4">
             <div className="gx-title text-[#ff5d9e] text-lg tracking-[0.3em] uppercase" style={{ textShadow: '0 0 14px #ff5d9e' }}>Down he goes</div>
             <div className="gx-value font-mono text-[#e8feff] text-4xl leading-none" style={{ textShadow: '0 0 12px #37e6ff80' }}>{score}</div>
             <div className="text-[10px] font-mono text-[#7fd8e6]/50 tracking-wider">
@@ -223,6 +224,7 @@ export default function UpdraftPage() {
               )}
             </div>
             {mode === 'daily' && <DailyLeaderboard gameId="updraft" accent="#37e6ff" score={score} className="mt-1.5" />}
+           </div>
           </div>
         )}
       </div>

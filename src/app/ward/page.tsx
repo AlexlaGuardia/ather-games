@@ -302,7 +302,8 @@ export default function WardPage() {
         )}
 
         {over && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center gap-2.5 bg-[#04040a]/75 rounded-md text-center px-6">
+          <div className="absolute inset-0 overflow-y-auto bg-[#04040a]/75 rounded-md">
+           <div className="min-h-full flex flex-col items-center justify-center gap-2.5 text-center px-6 py-4">
             <div className="gx-title text-[#ff5d9e] text-xl tracking-[0.3em] uppercase" style={{ textShadow: '0 0 16px #ff5d9e' }}>The line breaks</div>
             <div className="gx-value font-mono text-[#e8feff] text-3xl leading-none" style={{ textShadow: '0 0 12px #37e6ff80' }}>{hud.score.toLocaleString()}</div>
             <p className="text-[11px] leading-relaxed text-[#9fd6e0]/85 italic max-w-[300px]">
@@ -340,6 +341,7 @@ export default function WardPage() {
               )}
             </div>
             {mode === 'daily' && <DailyLeaderboard gameId="ward" accent="#37e6ff" score={hud.score} className="mt-1.5" />}
+           </div>
           </div>
         )}
       </div>

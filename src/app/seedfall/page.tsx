@@ -255,13 +255,15 @@ export default function SeedfallPage() {
         )}
 
         {(phase === 'crashed' || phase === 'caught') && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-[#04040a]/72 rounded-md text-center px-6">
+          <div className="absolute inset-0 overflow-y-auto bg-[#04040a]/72 rounded-md">
+           <div className="min-h-full flex flex-col items-center justify-center gap-2 text-center px-6 py-4">
             <div className="gx-title text-[#c86bff] text-lg tracking-[0.3em] uppercase" style={{ textShadow: '0 0 14px #c86bff' }}>{phase === 'caught' ? 'Snatched' : 'Shattered'}</div>
             <div className="gx-value font-mono text-[#e8feff] text-3xl leading-none tabular-nums" style={{ textShadow: '0 0 12px #54ffc880' }}>{score}</div>
             <p className="text-[10px] leading-relaxed text-[#9fd6e0]/70 max-w-[250px] italic">
               {phase === 'caught' ? 'the Havari plucks the seed from the air, curious, and carries it off.' : 'it clips a branch and scatters to the wind. drift cleaner next time.'}
             </p>
             <OverFooter mode={mode} score={score} dailyBest={dailyBest} shared={shared} onShare={onShare} onRestart={restart} garden={garden} />
+           </div>
           </div>
         )}
       </div>
