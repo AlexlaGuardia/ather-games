@@ -11,34 +11,33 @@ real **gimmick** (not watch-and-wait) · **canon-parallel** (serves Athernyx, no
 black, CRT bloom). Mana'nana went glossy-modern; each game gets its own skin under
 the Arcade frame.
 
-## 🗓️ STATE OF THE ARCADE — at the pivot point (reconciled 2026-06-29) [jin]
-> **The 06-25 nine-day push delivered.** Both sanctioned new cabinets are built: **Dewdrop** (the
-> Pac-Man riff, LIVE) and **Vault** (the Mario-style auto-runner, working title `bound`, sim-complete + canon-ruled — render is the one
-> remaining new-cabinet task). Plus **Driftling** + **Squall** shipped live in the same arc. That
-> fulfils the standing strategy — **"two more cabinets, then STOP adding and polish the lineup."**
+## 🗓️ STATE OF THE ARCADE — POLISH LAP (reconciled 2026-07-01) [jin]
+> **The new-cabinet pipeline is CLOSED — all 14 cabinets are live.** The 06-25 nine-day push delivered its
+> two sanctioned builds (**Dewdrop** + **Vault**), plus **Driftling** + **Squall** in the same arc, fulfilling
+> the standing strategy — **"two more cabinets, then STOP adding and polish the lineup."** Vault's render
+> shipped 06-29 (render shell + stomp-double-jump + Daily + leaderboard), so **no cabinet is mid-build.**
+> Its only remainders (Alex feel-test + card art) fold into the polish lap like everything else.
 >
-> **Where we actually are:** **11 live play cabinets** (Mana'nana · Rekindle · Ward · Updraft · Seedfall ·
-> Voranyx · Atherdash · Driftling · Squall · Dewdrop · Nolmir) + Magii (world wall) + Shimmer (room wall,
-> coming-soon). Back-room/held: Lucernyx, Gravitar. **One cabinet mid-build: Vault** (working title `bound`;
-> sim done, **canon RULED — name LOCKED**, just needs render). After Vault ships, the door on new games is
-> closed — it's the **polish lap**.
+> **Where we actually are:** **12 live play cabinets** (Mana'nana · Rekindle · Ward · Updraft · Seedfall ·
+> Voranyx · Atherdash · Driftling · Squall · Dewdrop · Vault · Nolmir) + Magii (world wall) + Shimmer (room
+> wall). Back-room/held: Lucernyx, Gravitar. **Feature-complete on cabinet count. This is the polish lap now.**
 >
-> **THE THREE LANES NOW (no more new-game pipeline):**
-> 1. **★ Finish Vault** — the last new cabinet. Sim + oracle done, **canon settled** (`vault.md`, name LOCKED
->    06-28 — Updraft's sibling, a mote crosses the greying). Just needs rename `bound`→`vault`, then render +
->    page + card art + register. No canon blocker. Then we're feature-complete on count.
-> 2. **★ The POLISH LAP** — the whole backlog of taste-calls, run one game per session (cold-play → feel
->    tune → gx-* check → mobile → card art → bump block). The consolidated checklist ↓ is still the spine;
->    **Seedfall first** (Alex's favourite, the proven winner). Many new cabinets (Driftling/Squall/Dewdrop)
+> **THE TWO LANES NOW (no more new-game pipeline):**
+> 1. **★ The POLISH LAP** — the whole backlog of taste-calls, run one game per session (cold-play → feel
+>    tune → gx-* check → mobile → card art → bump block). The consolidated checklist ↓ is the spine;
+>    **Seedfall first** (Alex's favourite, the proven winner). New cabinets (Driftling/Squall/Dewdrop/Vault)
 >    are also pending Alex's device cold-play — they fold into this lap.
-> 3. **Leaderboard + Room loose ends** — verify the daily-leaderboard renders inside each game-over overlay
+>    - **Solo-doable NOW (headless, no device):** card art for the cabinets still missing it —
+>      **Vault, Squall, Driftling** (FLUX via `scripts/gen_cards.py`, same as Seedfall's 06-30 regen).
+>    - **Everything else is pending Alex's hands** (feel-tune, mobile/overlay reads) — headless can't judge.
+> 2. **Leaderboard + Room loose ends** — verify the daily-leaderboard renders inside each game-over overlay
 >    (logic+API proven, only the visual is unseen); finish the Room's small lane (Folk volume on the Desk,
 >    news automation, 390px wall-turn pass). See `### The Room` block.
 >
 > **▶ PENDING-ALEX LAP — the consolidated checklist (the polish-lap spine; new cabinets fold in below):**
 > - [ ] **Atherdash** — hop timing window fair? slide→hop rhythm readable? base speed right? *(knobs: `SPEED`/`SPEED_MAX`/`SPEED_RAMP_DIST`, `JUMP_DUR`, `PIT_GAP_Z`/`PIT_LEAD`)*
 > - [ ] **Ward** — enemy tune: Drifter weave gentleness, Darter warning time, Husk feel, intro wave *(knobs: `DRIFT`/`DART`/`HUSK` consts)*
-> - [ ] **Seedfall ⭐ (Alex's FAVOURITE — polish FIRST, it's the proven winner)** — full descent feel (drift authority vs branch spacing, fall speed) + Havari catch/dodge readability (1.4s warn) + soil-approach landing + game-over overlays *(knobs atop `seedfall.ts` + `genBranches`)*. ✅ **Card art DONE 2026-06-30** (`e7a04d9` — descent: canopy drop, Havari, garden floor; old static-lander card retired).
+> - [ ] **Seedfall ⭐ (Alex's FAVOURITE — polish FIRST, it's the proven winner)** — full descent feel (drift authority vs branch spacing, fall speed) + Havari catch/dodge readability (1.4s warn) + soil-approach landing + game-over overlays + **the new wind-puff thrust read** *(knobs atop `seedfall.ts` + `genBranches`)*. ✅ **Card art DONE 2026-06-30** (`e7a04d9`). ✅ **Thrust reworked to wind-puff gusts 2026-07-01** (`693a613` — updraft pillow on both-held, lateral gust from upwind side; render-only). **All solo work done — waiting on Alex's device pass.**
 > - [ ] **Driftling** — device cold-play: drift authority, eat/threat readability, evolve-payoff moment, nursery-start curve *(knobs atop `lib/driftling.ts`)* + card/creature art (deferred, Alex taste)
 > - [ ] **Squall** — device cold-play (never verified by me, extension was down): pattern density/cadence, bullet speeds, telegraph warn times *(knobs: `fireDirector` gap, per-pattern `spd`, `RAMP_T`, `GRAZE_R`)* + card art
 > - [ ] **Dewdrop** — cold-play tune already started (`a8c54ac`): scatter/chase waves, wildbloom duration, ghost-vs-player speed gap *(consts atop `lib/dewdrop.ts`)* + maze art/layout (deferred, Alex taste)
@@ -125,7 +124,7 @@ the Arcade frame.
 | Rekindle #3 | 🟢 live | 2026-06-22 | conduit puzzle + Aeterna node-map |
 | Ward #4 | 🟢 live | 2026-06-22 | Missile Command / touch aim-trainer |
 | Updraft #5 | 🟢 live | 2026-06-22 | one-tap flight (Flappy) |
-| Seedfall #6 | 🟢 live | 2026-06-22 | the long drop — scrolling descent, weave branches + dodge Havari (Daily) |
+| Seedfall #6 | 🟢 live | 2026-07-01 | the long drop — scrolling descent, weave branches + dodge Havari (Daily) |
 | Voranyx #7 | 🟢 live | 2026-06-22 | glowing slither in the Silt |
 | Lucernyx #8 | ⚫ shelved | 2026-06-22 | turn-based board of rekindling — pulse overtuned, back-room |
 | Gravitar #9 | ⚪ parked | 2026-06-15 | physics-orbit — concept didn't land (cut) |
@@ -312,7 +311,7 @@ the Arcade frame.
 **Files:** `updraft/lib/updraft.ts` (17 tests) · `page.tsx` · `public/updraft/nebula.webp`
 
 ### Seedfall (#6) — 🟢 live · the long drop (scrolling descent) → `/seedfall`
-*Last touched: 2026-06-22 — REDESIGNED static lander → scrolling descent (Alex's pitch)*
+*Last touched: 2026-07-01 — thrust reworked to wind-puff gusts (`693a613`); card regen 06-30; redesign 06-22*
 **Left off:** **Full redesign.** The old static soft-lander was boring (a one-decision run, no
   score). Rebuilt as a **scrolling descent**: camera tracks the falling seed (depth = score), you
   **weave leafy branches** (one walking gap each, narrows/tightens with depth) and **out-drift a
@@ -330,6 +329,9 @@ the Arcade frame.
   and the game-over overlays (headless can't get past hold-to-drop). Knobs = consts atop `seedfall.ts`
   + `genBranches`. ✅ **Card art regen'd for the descent 2026-06-30 (`e7a04d9`)** — FLUX brief rewritten to
   the long canopy plunge (seed-mote weaving gaps, swooping Havari, garden-glow floor); old static-lander card retired.
+  ✅ **Thrust visual reworked 2026-07-01 (`693a613`)** — old "rocket lines" → **wind-puff gusts**: both-held =
+  updraft pillowing up under the seed, single-side = lateral gust sweeping from the upwind side. Render-only,
+  matches the languid-airy soul. **All solo-doable Seedfall work is now done — the block waits on Alex's device pass.**
 **Decisions:** redesign over polish — the cozy mood stays (languid drift, the garden payoff) but it
   earns a score axis + escalation so it's replayable; Havari = curious not malicious (canon).
 **Files:** `seedfall/lib/seedfall.ts` (22 tests) · `seedfall.test.ts` · `lib/sfx.ts` (+thread/+caught) · `page.tsx`
