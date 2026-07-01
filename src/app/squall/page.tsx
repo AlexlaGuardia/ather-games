@@ -176,7 +176,10 @@ export default function SquallPage() {
         />
 
         {phase === 'ready' && (
-          <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-3 rounded-md text-center px-6 bg-[#05030d]/55">
+          <div className="pointer-events-none absolute inset-0 isolate overflow-hidden flex flex-col items-center justify-center gap-3 rounded-md text-center px-6">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/squall/card.webp" alt="" aria-hidden="true" className="absolute inset-0 -z-10 h-full w-full object-cover opacity-[0.42]" />
+            <div className="absolute inset-0 -z-10 bg-[#05030d]/72" />
             <div className="gx-title text-2xl tracking-[0.3em] uppercase" style={{ color: ACCENT, textShadow: `0 0 18px ${ACCENT}` }}>Squall</div>
             <p className="text-[11px] leading-relaxed text-[#9fd6e0]/80 max-w-[280px]">
               you are a mote of Ather in the void&apos;s storm. you cannot fight back. read the patterns as they telegraph, weave the gaps, and graze close for score. last as long as you can.
