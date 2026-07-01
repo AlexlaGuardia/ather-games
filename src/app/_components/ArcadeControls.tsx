@@ -28,6 +28,8 @@ export interface ArcadeControlsProps {
   stick?: boolean
   onStick?: (x: number, y: number) => void // each axis -1..1, y+ = down
   onStickEnd?: () => void
+  /** 4-direction D-pad (cross of square keys) — fires onPress/onRelease with ids up|down|left|right */
+  dpad?: boolean
   /** override the small instruction line under the deck */
   hint?: string
   maxWidth?: number | string
@@ -52,6 +54,7 @@ export default function ArcadeControls({
   stick = false,
   onStick,
   onStickEnd,
+  dpad = false,
   hint,
   maxWidth = 480,
   className = '',
@@ -111,7 +114,51 @@ export default function ArcadeControls({
 
   const defaultHint = stick
     ? 'drag the stick · tap the buttons'
+    : dpad ? 'tap a direction to turn'
     : buttons.length > 1 ? 'hold the buttons' : 'tap or hold the button'
+
+  // ── 4-direction D-pad (cross of square keys) ────────────────────────────────────
+  const DPAD_KEYS = [
+    { id: 'up', glyph: '▲', gc: 2, gr: 1 },
+    { id: 'left', glyph: '◀', gc: 1, gr: 2 },
+    { id: 'right', glyph: '▶', gc: 3, gr: 2 },
+    { id: 'down', glyph: '▼', gc: 2, gr: 3 },
+  ] as const
+  const renderDpad = () => (
+    <div className="grid gap-1.5" style={{ gridTemplateColumns: 'repeat(3, 52px)', gridTemplateRows: 'repeat(3, 52px)' }}>
+      {DPAD_KEYS.map((d) => {
+        const down = !!held[d.id]
+        const btn: DeckButton = { id: d.id, label: d.id }
+        return (
+          <button
+            key={d.id}
+            aria-label={d.id}
+            onPointerDown={(e) => press(btn, e)}
+            onPointerUp={(e) => release(btn, e)}
+            onPointerCancel={(e) => release(btn, e)}
+            onPointerLeave={(e) => { if (held[d.id]) release(btn, e) }}
+            onContextMenu={(e) => e.preventDefault()}
+            className="relative rounded-lg flex items-center justify-center font-bold select-none touch-none active:outline-none"
+            style={{
+              gridColumn: d.gc, gridRow: d.gr, width: 52, height: 52,
+              color: down ? '#fff' : '#eafcff',
+              background: `radial-gradient(circle at 50% 34%, rgba(${rgb},${down ? 0.95 : 0.7}), rgba(${rgb},0.32) 64%, rgba(${rgb},0.14) 100%)`,
+              boxShadow: down
+                ? `inset 0 4px 12px rgba(0,0,0,0.55), 0 0 22px rgba(${rgb},0.8)`
+                : `0 4px 0 rgba(${rgb},0.28), 0 7px 14px rgba(0,0,0,0.55), inset 0 2px 3px rgba(255,255,255,0.35), inset 0 -3px 6px rgba(0,0,0,0.35), 0 0 16px rgba(${rgb},0.32)`,
+              transform: down ? 'translateY(2px)' : 'translateY(0)',
+              transition: 'transform 0.05s, box-shadow 0.08s, background 0.08s',
+              textShadow: '0 1px 2px rgba(0,0,0,0.6)', fontSize: 18,
+            }}
+          >
+            {d.glyph}
+          </button>
+        )
+      })}
+      {/* center hub — dead cell, reads as a real D-pad */}
+      <span style={{ gridColumn: 2, gridRow: 2 }} className="m-auto h-3.5 w-3.5 rounded-[3px] bg-black/40 border border-white/5" />
+    </div>
+  )
 
   return (
     <div className={`w-full ${className}`} style={{ maxWidth }}>
@@ -164,8 +211,11 @@ export default function ArcadeControls({
             </div>
           )}
 
+          {/* D-pad (cross) — replaces the button row for direction games */}
+          {dpad && renderDpad()}
+
           {/* buttons (right, or centered) */}
-          <div className="flex items-center gap-3.5">
+          {!dpad && <div className="flex items-center gap-3.5">
             {buttons.map((b) => {
               const big = b.size === 'lg'
               const dim = big ? 72 : 56
@@ -203,7 +253,7 @@ export default function ArcadeControls({
                 </div>
               )
             })}
-          </div>
+          </div>}
         </div>
 
         <p className="mt-2 text-center text-[9px] font-mono tracking-wider text-[#7fd8e6]/30">{hint ?? defaultHint}</p>

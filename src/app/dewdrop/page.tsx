@@ -131,17 +131,22 @@ export default function DewdropPage() {
     return () => cancelAnimationFrame(raf)
   }, [phase])
 
-  // ── input ── the cabinet deck stick (screen is a neutral display) ───────────────
+  // ── input ── the cabinet deck D-pad (tap a direction to turn; screen is a neutral display) ──
+  // Narrow hallways want precise turn-timing, so the deck is a 4-way D-pad, not a stick (Alex's call):
+  // tapping a direction sets the heading and it PERSISTS (the maze coasts on last dir, turns at junctions).
   const launchIfReady = () => { if (worldRef.current?.state === 'playing' && phase === 'ready') setPhase('playing') }
-  const deckStick = useCallback((x: number, y: number) => {
+  const DPAD_VEC: Record<string, [number, number]> = { up: [0, -1], down: [0, 1], left: [-1, 0], right: [1, 0] }
+  const deckDir = useCallback((id: string) => {
     sfx.ensure()
-    const st = worldRef.current?.state
-    if (st === 'dead' || st === 'won') return
-    const live = Math.hypot(x, y) > 0.2 // deadzone — a resting stick doesn't turn or launch
-    deck.current = { active: live, x, y }
-    if (live) { setHeading(worldRef.current!, x, y); launchIfReady() }
+    const w = worldRef.current
+    const st = w?.state
+    if (!w || st === 'dead' || st === 'won') return
+    const v = DPAD_VEC[id]
+    if (!v) return
+    deck.current = { active: true, x: v[0], y: v[1] } // persists → maze coasts on last dir
+    setHeading(w, v[0], v[1])
+    launchIfReady()
   }, [phase])
-  const deckEnd = useCallback(() => { deck.current = { active: false, x: 0, y: 0 } }, [])
 
   const restart = useCallback(() => { sfx.ensure(); boot() }, [boot])
   const toggleMute = () => { sfx.ensure(); const m = !sfx.isMuted(); sfx.setMuted(m); setMuted(m) }
@@ -175,12 +180,15 @@ export default function DewdropPage() {
         />
 
         {phase === 'ready' && (
-          <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-3 rounded-md text-center px-6 bg-[#05060f]/60">
+          <div className="pointer-events-none absolute inset-0 isolate overflow-hidden flex flex-col items-center justify-center gap-3 rounded-md text-center px-6">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/dewdrop/card.webp" alt="" aria-hidden="true" className="absolute inset-0 -z-10 h-full w-full object-cover opacity-[0.45]" />
+            <div className="absolute inset-0 -z-10 bg-[#05060f]/70" />
             <div className="gx-title text-2xl tracking-[0.3em] uppercase" style={{ color: ACCENT, textShadow: `0 0 18px ${ACCENT}` }}>Dewdrop</div>
             <p className="text-[11px] leading-relaxed text-[#9fd6e0]/80 max-w-[280px]">
               a wild Dewbear in the Moglins&apos; burrow. gobble the dewdrops, slip the four collar-Moglins. grab a wildbloom and their collars snap — they deflate and flee, so chase them down. clear the warren.
             </p>
-            <div className="gx-label text-[12px] text-[#05060f] px-6 py-2.5 rounded-[2px] mt-1" style={{ background: ACCENT, boxShadow: `0 0 18px ${ACCENT}80` }}>swipe to roam</div>
+            <div className="gx-label text-[12px] text-[#05060f] px-6 py-2.5 rounded-[2px] mt-1" style={{ background: ACCENT, boxShadow: `0 0 18px ${ACCENT}80` }}>tap a direction to roam</div>
             {best > 0 && <div className="gx-label text-[10px] font-mono text-[#7fd8e6]/50 tracking-wider mt-1">best <span className="text-[#e8feff] tabular-nums">{best}</span></div>}
           </div>
         )}
@@ -202,14 +210,13 @@ export default function DewdropPage() {
         )}
       </div>
 
-      {/* the cabinet control deck — the roam stick (screen stays a clean display) */}
+      {/* the cabinet control deck — a 4-way D-pad (tap to turn; screen stays a clean display) */}
       <ArcadeControls
         accent={ACCENT}
         maxWidth={VW}
-        stick
-        onStick={deckStick}
-        onStickEnd={deckEnd}
-        hint="drag the stick to roam · grab a wildbloom · clear the dew"
+        dpad
+        onPress={deckDir}
+        hint="tap a direction to turn · grab a wildbloom · clear the dew"
       />
     </ArcadeCabinet>
   )
