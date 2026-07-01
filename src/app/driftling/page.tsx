@@ -220,7 +220,10 @@ export default function DriftlingPage() {
         />
 
         {phase === 'ready' && (
-          <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-3 rounded-md text-center px-6 bg-[#03060f]/55">
+          <div className="pointer-events-none absolute inset-0 isolate overflow-hidden flex flex-col items-center justify-center gap-3 rounded-md text-center px-6">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/driftling/card.webp" alt="" aria-hidden="true" className="absolute inset-0 -z-10 h-full w-full object-cover opacity-[0.5]" />
+            <div className="absolute inset-0 -z-10 bg-[#03060f]/62" />
             <div className="gx-title text-2xl tracking-[0.3em] uppercase" style={{ color: accent, textShadow: `0 0 18px ${accent}` }}>Driftling</div>
             <p className="text-[11px] leading-relaxed text-[#9fd6e0]/80 max-w-[280px]">
               touch and drag to swim that way. eat anything smaller than you, slip anything bigger. grow enough and you evolve. the first thing you eat decides what you become.
