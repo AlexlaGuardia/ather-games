@@ -119,7 +119,7 @@ the Arcade frame.
 
 | Game | Status | Last touched | What it is |
 |------|--------|--------------|------------|
-| The Room | 🟢 live | 2026-06-21 | the hub — arcade hall, Desk wall, Grimoire/AtherPages, nav spine |
+| The Room | 🟢 live | 2026-07-01 | the hub — arcade hall, Desk wall, Grimoire/AtherPages, nav spine |
 | Nolmir | 🟢 live | 2026-06-18 | idle Athernyx defense/arena |
 | Mana'nana | 🟢 live | 2026-06-22 | match-3, blooming specials |
 | Rekindle #3 | 🟢 live | 2026-06-22 | conduit puzzle + Aeterna node-map |
@@ -139,7 +139,7 @@ the Arcade frame.
 ---
 
 ### The Room — 🟢 live · the hub everything ties back to → `/room`
-*Last touched: 2026-06-21*
+*Last touched: 2026-07-01 — Folk volume surfaced on the Desk + News tooling/freshen (`3e7c5c6`, `85d535a`)*
 **What it is:** the spatial front door of ather.games (since `/`→`/room`). A 4-wall room you turn
   between, each wall a destination: **Mug door** (profile/settings), **Shimmer TV** (→ the 3D game),
   **Arcade arch** (→ `/arcade/all`, the cabinet hall), **Desk wall** (in-place UI — **Grimoire** link
@@ -156,17 +156,25 @@ the Arcade frame.
      flag carries); every game's `<ArcadeCabinet>` renders `<RoomReturn>` unconditionally and reads the
      flag → pill shows for the whole room→hall→game→hall loop. Per-card param propagation is NOT needed.
      *(Edge cases ruled out: no `target="_blank"` cards; RoomReturn render is unconditional.)*
-  2. **Desk wall → surface the Folk volume** — the AtherPages Folk volume exists but the Desk only links
-     `/grimoire` (Spirits). Add a Folk entry/tab on the Desk wall (or a `?v=folk` deep-link panel).
-  3. **News feed automation** — `/room/news.json` is hand/auto-editable; wire the session-end or a small
-     cron to drop a "what shipped" line so the Desk News stays live without manual edits.
-  4. **Mobile pass on the wall-turn** — confirm the 4-wall turn + Desk in-place UI read well at 390px.
+  2. ~~**Desk wall → surface the Folk volume**~~ ✅ **DONE 2026-07-01 (`3e7c5c6`).** Reframed the single
+     Grimoire card into an **AtherPages** card with two deep-linked sub-entries — The Grimoire (spirits, cyan →
+     `/grimoire?from=room`) + The Folk (people, gold → `/grimoire?v=folk&from=room`), each with its own thumbs.
+     Verified live: both render on the Front Desk; the Folk link lands on the Folk volume w/ the room pill intact.
+  3. ~~**News feed automation**~~ ✅ **DONE 2026-07-01 (`85d535a`).** Built `scripts/news.py` — `add "<tag>"
+     "<title>" [--date]` prepends a dated line + rewrites valid JSON (cap 14, dedup, NO rebuild — the Desk fetches
+     news.json at runtime); `suggest [N]` surfaces candidate ships from recent feat/art commits. `add` is the
+     ship-moment hook (call it like a cortex signal). **Deliberately NOT blind commit-scraping** — the feed is
+     player-facing copy, so suggest proposes + a curated add picks. Dogfooded it to freshen the stale feed (was
+     newest 06-21) with the real ships (Driftling/Squall/Dewdrop/Vault, Shimmer 3D, the Folk volume).
+  4. **Mobile pass on the wall-turn** — confirm the 4-wall turn + Desk in-place UI read well at 390px. *(Note
+     2026-07-01: on desktop, ENTERING the desk dollies in and pushes the side panels — AtherPages left, News
+     right — partly off-screen edges. Pre-existing dolly behavior, not new; worth folding into this mobile/read pass.)*
 **Parked:** more walls (a 5th destination) · ambient room audio · attendant/NPC presence.
 **Decisions:** **room-centric nav** — the room pill is the ONLY back (no duplicate header links);
   cabinets tie as items in the hall, the room WALLS are the bespoke-art destinations (see the
   cabinet-not-world policy in Atherdash). News is **data-driven** (`news.json`) so it updates without a build.
 **Files:** `src/app/room/page.tsx` (walls + DeskWall + ArcadeArch) · `_components/RoomReturn.tsx`
-  (sticky from-room) · `public/room/news.json` (live feed) · `/grimoire` (AtherPages, off the Desk)
+  (sticky from-room) · `public/room/news.json` (live feed) · `scripts/news.py` (add/suggest feed tooling) · `/grimoire` (AtherPages, off the Desk)
 
 ### Nolmir — 🟢 live · idle Athernyx defense/arena → `/nolmir`
 *Last touched: 2026-06-18*
