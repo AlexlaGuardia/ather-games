@@ -31,9 +31,9 @@ the Arcade frame.
 >      Every cabinet now has a card. Remaining polish work is **all pending Alex's device** (feel-tune,
 >      mobile/overlay reads) — no headless card-gen work left.
 >    - **Everything else is pending Alex's hands** (feel-tune, mobile/overlay reads) — headless can't judge.
-> 2. **Leaderboard + Room loose ends** — verify the daily-leaderboard renders inside each game-over overlay
->    (logic+API proven, only the visual is unseen); finish the Room's small lane (Folk volume on the Desk,
->    news automation, 390px wall-turn pass). See `### The Room` block.
+> 2. **Room loose ends** — ✅ daily-leaderboard render VERIFIED + clip FIXED across all 7 games 2026-07-01
+>    (`bb55f38`). Remaining: the Room's small lane (Folk volume on the Desk, news automation, 390px wall-turn
+>    pass). See `### The Room` block.
 >
 > **▶ PENDING-ALEX LAP — the consolidated checklist (the polish-lap spine; new cabinets fold in below):**
 > - [ ] **Atherdash** — hop timing window fair? slide→hop rhythm readable? base speed right? *(knobs: `SPEED`/`SPEED_MAX`/`SPEED_RAMP_DIST`, `JUMP_DUR`, `PIT_GAP_Z`/`PIT_LEAD`)*
@@ -44,7 +44,7 @@ the Arcade frame.
 > - [ ] **Dewdrop** — cold-play tune already started (`a8c54ac`): scatter/chase waves, wildbloom duration, ghost-vs-player speed gap *(consts atop `lib/dewdrop.ts`)* + maze art/layout (deferred, Alex taste)
 > - [ ] **gx-* look on real mobile across all 11** — esp. the game-OVER overlays headless can't reach
 > - [ ] **Arcade cabinet dial** — final warmth/dim/red-skew on `<ArcadeCabinet>` (one component → changes everywhere)
-> - [ ] **Daily leaderboard** — does the board render right *inside* the game-over overlay (5 games + Seedfall)? logic+API already proven, only the visual is unseen
+> - [x] **Daily leaderboard** — ✅ **VERIFIED + FIXED 2026-07-01** (`bb55f38`). Browser-verified the board renders inside the game-over overlay (Vault + Updraft played to death live). **Found + fixed a real clip:** the `justify-center` overlay in the fixed-height cabinet screen + the leaderboard = content taller than the screen → board (+ RENAME) spilled below, occluded by the control deck, no scroll to recover. Wrapped all 7 leaderboard overlays (vault/updraft/atherdash/voranyx/ward/seedfall/manana) in `overflow-y-auto` + `min-h-full` inner flex (centers when short, scrolls when tall).
 > - [ ] **Daily toggle + share** — does Endless/Daily read right; is the share line satisfying
 > - [ ] **Mana'nana** — taste call: keep the candy match-3 look, or push it into the squared gx-* family
 > - [ ] **Nolmir** — unified return beat (needs >20min away for a real haul) + rehearse the warp ceremony + mobile-idle direction call
