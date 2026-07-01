@@ -833,6 +833,8 @@ function ArcadeArch({ wall, active, phase, onEnter }: { wall: Wall; active: bool
 // News feed — live from /public/room/news.json (editable / automatable, no rebuild).
 // The inline list below is the SSR/offline fallback if the fetch fails.
 type NewsItem = { date?: string; tag?: string; title: string };
+// AtherPages Folk-volume accent (matches folk.json's "neutral / The Folk" gold) — distinguishes the Folk sub-link from the cyan Grimoire one.
+const FOLK_GOLD = "#caa24e";
 const DESK_NEWS_FALLBACK: NewsItem[] = [
   { tag: "New", title: "Atherdash is live — thread the element gates" },
   { tag: "Arcade", title: "Lucernyx torch-race retuned" },
@@ -967,31 +969,63 @@ function DeskWall({ wall, active, phase, onEnter }: { wall: Wall; active: boolea
           </button>
         </div>
 
-        {/* Grimoire — left side; the in-world bestiary, opens its own page (off the desk) */}
-        <Link
-          href="/grimoire?from=room"
+        {/* AtherPages — left side; the living record, both volumes (Grimoire spirits + The Folk people) */}
+        <div
           onClick={(e) => e.stopPropagation()}
-          className="group/grim absolute rounded-md border p-4 bg-[#0e1820]/70 backdrop-blur transition hover:-translate-y-0.5"
-          style={{ left: "1%", top: "34%", width: "27%", borderColor: `${accent}33` }}
+          className="absolute rounded-md border p-4 bg-[#0e1820]/70 backdrop-blur"
+          style={{ left: "1%", top: "30%", width: "27%", borderColor: `${accent}33` }}
         >
-          <h3 className="text-lg uppercase tracking-[0.25em] mb-2" style={{ color: accent }}>Grimoire</h3>
-          <p className="text-[11px] leading-snug text-[#aebfc8] mb-3">the spirits of Athernyx — every base form and how it evolves.</p>
-          <div className="flex items-center gap-2 mb-3">
-            {["vulnyx", "croakling", "hovari"].map((id) => (
-              <span
-                key={id}
-                className="block h-11 w-11 rounded-sm"
-                style={{ background: `radial-gradient(circle, ${accent}22, transparent 70%)` }}
-              >
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={`/grimoire/${id}.png`} alt="" aria-hidden className="h-full w-full object-contain" />
+          <h3 className="text-lg uppercase tracking-[0.25em]" style={{ color: accent }}>AtherPages</h3>
+          <p className="text-[10px] leading-snug text-[#aebfc8]/80 mb-3">the living record of Athernyx — two volumes.</p>
+
+          {/* The Grimoire — spirits */}
+          <Link
+            href="/grimoire?from=room"
+            onClick={(e) => e.stopPropagation()}
+            className="group/grim block rounded-md border p-2.5 mb-2 transition hover:-translate-y-0.5"
+            style={{ borderColor: `${accent}22` }}
+          >
+            <div className="flex items-center justify-between mb-1.5">
+              <span className="text-[11px] uppercase tracking-[0.2em]" style={{ color: accent }}>The Grimoire</span>
+              <span className="text-[9px] uppercase tracking-[0.18em] text-[#8a9aa2]">spirits</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              {["vulnyx", "croakling", "hovari"].map((id) => (
+                <span key={id} className="block h-9 w-9 rounded-sm" style={{ background: `radial-gradient(circle, ${accent}22, transparent 70%)` }}>
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={`/grimoire/${id}.png`} alt="" aria-hidden className="h-full w-full object-contain" />
+                </span>
+              ))}
+              <span className="ml-auto inline-flex items-center gap-1 text-[10px] uppercase tracking-[0.2em]" style={{ color: `${accent}cc` }}>
+                open <span className="transition group-hover/grim:translate-x-0.5">&#8250;</span>
               </span>
-            ))}
-          </div>
-          <span className="inline-flex items-center gap-1 text-[10px] uppercase tracking-[0.2em]" style={{ color: `${accent}cc` }}>
-            open the grimoire <span className="transition group-hover/grim:translate-x-0.5">&#8250;</span>
-          </span>
-        </Link>
+            </div>
+          </Link>
+
+          {/* The Folk — the people */}
+          <Link
+            href="/grimoire?v=folk&from=room"
+            onClick={(e) => e.stopPropagation()}
+            className="group/folk block rounded-md border p-2.5 transition hover:-translate-y-0.5"
+            style={{ borderColor: `${FOLK_GOLD}2a` }}
+          >
+            <div className="flex items-center justify-between mb-1.5">
+              <span className="text-[11px] uppercase tracking-[0.2em]" style={{ color: FOLK_GOLD }}>The Folk</span>
+              <span className="text-[9px] uppercase tracking-[0.18em] text-[#8a9aa2]">the people</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              {["moglin", "bramble", "hemlock"].map((id) => (
+                <span key={id} className="block h-9 w-9 rounded-sm overflow-hidden" style={{ background: `radial-gradient(circle, ${FOLK_GOLD}22, transparent 70%)` }}>
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={`/atherpages/folk/${id}.png`} alt="" aria-hidden className="h-full w-full object-cover" />
+                </span>
+              ))}
+              <span className="ml-auto inline-flex items-center gap-1 text-[10px] uppercase tracking-[0.2em]" style={{ color: `${FOLK_GOLD}cc` }}>
+                open <span className="transition group-hover/folk:translate-x-0.5">&#8250;</span>
+              </span>
+            </div>
+          </Link>
+        </div>
 
         {/* News — right side; live from /room/news.json */}
         <div className="absolute rounded-md border p-4 bg-[#0e1820]/70 backdrop-blur" style={{ left: "72%", top: "34%", width: "27%", borderColor: `${accent}33` }}>
