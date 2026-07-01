@@ -27,8 +27,9 @@ the Arcade frame.
 >    tune → gx-* check → mobile → card art → bump block). The consolidated checklist ↓ is the spine;
 >    **Seedfall first** (Alex's favourite, the proven winner). New cabinets (Driftling/Squall/Dewdrop/Vault)
 >    are also pending Alex's device cold-play — they fold into this lap.
->    - **Solo-doable NOW (headless, no device):** card art via FLUX (`scripts/gen_cards.py`). ✅ **Vault +
->      Dewdrop DONE 2026-07-01** (`4499727`). Remaining: **Squall, Driftling** (card/creature art).
+>    - **Card art backlog — ✅ CLEARED 2026-07-01** (`4499727` Vault+Dewdrop, `1d866ae` Squall+Driftling).
+>      Every cabinet now has a card. Remaining polish work is **all pending Alex's device** (feel-tune,
+>      mobile/overlay reads) — no headless card-gen work left.
 >    - **Everything else is pending Alex's hands** (feel-tune, mobile/overlay reads) — headless can't judge.
 > 2. **Leaderboard + Room loose ends** — verify the daily-leaderboard renders inside each game-over overlay
 >    (logic+API proven, only the visual is unseen); finish the Room's small lane (Folk volume on the Desk,
@@ -38,8 +39,8 @@ the Arcade frame.
 > - [ ] **Atherdash** — hop timing window fair? slide→hop rhythm readable? base speed right? *(knobs: `SPEED`/`SPEED_MAX`/`SPEED_RAMP_DIST`, `JUMP_DUR`, `PIT_GAP_Z`/`PIT_LEAD`)*
 > - [ ] **Ward** — enemy tune: Drifter weave gentleness, Darter warning time, Husk feel, intro wave *(knobs: `DRIFT`/`DART`/`HUSK` consts)*
 > - [ ] **Seedfall ⭐ (Alex's FAVOURITE — polish FIRST, it's the proven winner)** — full descent feel (drift authority vs branch spacing, fall speed) + Havari catch/dodge readability (1.4s warn) + soil-approach landing + game-over overlays + **the new wind-puff thrust read** *(knobs atop `seedfall.ts` + `genBranches`)*. ✅ **Card art DONE 2026-06-30** (`e7a04d9`). ✅ **Thrust reworked to wind-puff gusts 2026-07-01** (`693a613` — updraft pillow on both-held, lateral gust from upwind side; render-only). **All solo work done — waiting on Alex's device pass.**
-> - [ ] **Driftling** — device cold-play: drift authority, eat/threat readability, evolve-payoff moment, nursery-start curve *(knobs atop `lib/driftling.ts`)* + card/creature art (deferred, Alex taste)
-> - [ ] **Squall** — device cold-play (never verified by me, extension was down): pattern density/cadence, bullet speeds, telegraph warn times *(knobs: `fireDirector` gap, per-pattern `spd`, `RAMP_T`, `GRAZE_R`)* + card art
+> - [ ] **Driftling** — device cold-play: drift authority, eat/threat readability, evolve-payoff moment, nursery-start curve *(knobs atop `lib/driftling.ts`)*. ✅ card art DONE 07-01 (`1d866ae`).
+> - [ ] **Squall** — device cold-play (never verified by me, extension was down): pattern density/cadence, bullet speeds, telegraph warn times *(knobs: `fireDirector` gap, per-pattern `spd`, `RAMP_T`, `GRAZE_R`)*. ✅ card art DONE 07-01 (`1d866ae`).
 > - [ ] **Dewdrop** — cold-play tune already started (`a8c54ac`): scatter/chase waves, wildbloom duration, ghost-vs-player speed gap *(consts atop `lib/dewdrop.ts`)* + maze art/layout (deferred, Alex taste)
 > - [ ] **gx-* look on real mobile across all 11** — esp. the game-OVER overlays headless can't reach
 > - [ ] **Arcade cabinet dial** — final warmth/dim/red-skew on `<ArcadeCabinet>` (one component → changes everywhere)
@@ -129,8 +130,8 @@ the Arcade frame.
 | Lucernyx #8 | ⚫ shelved | 2026-06-22 | turn-based board of rekindling — pulse overtuned, back-room |
 | Gravitar #9 | ⚪ parked | 2026-06-15 | physics-orbit — concept didn't land (cut) |
 | Atherdash #10 | 🟢 live | 2026-06-22 | lane-runner — element-lanes ahead of the Dying (slice) |
-| Driftling #11 | 🟢 live | 2026-06-26 | food-chain evolution — eat small, flee big, first bite forks your branch |
-| Squall #12 | 🟢 live | 2026-06-26 | defenseless bullet-hell — read the void's patterns, weave, survive |
+| Driftling #11 | 🟢 live | 2026-07-01 | food-chain evolution — eat small, flee big, first bite forks your branch |
+| Squall #12 | 🟢 live | 2026-07-01 | defenseless bullet-hell — read the void's patterns, weave, survive |
 | Dewdrop #13 | 🟢 live | 2026-06-26 | Pac-Man riff — Dewbear vs collar-Moglins, wildbloom snaps the collar |
 | Vault #14 | 🟢 live | 2026-06-29 | auto-runner — mote of light crosses the greying, leaps the void's tears (render shipped, pending Alex feel-test) |
 | Anima | 🔬 tech demo | 2026-06-21 | procedural character (IK rig + verlet cloak), ZERO art files — linked in Room |
@@ -478,7 +479,7 @@ the Arcade frame.
 **Files:** `atherdash/lib/atherdash.ts` (47 tests) · `lib/atherdash.test.ts` · `page.tsx` · `DESIGN.md`
 
 ### Driftling (#11) — 🟢 live · food-chain evolution → `/driftling`
-*Last touched: 2026-06-26*
+*Last touched: 2026-07-01 — card art added (`1d866ae`); shipped 06-26*
 **Left off:** Shipped live + public. flOw/Feeding-Frenzy DNA: drift the cloud-ocean, eat smaller, flee
   bigger, **evolve in discrete tiers** off a swappable `LADDER` table. Wedge = **the first element you
   eat forks your branch** (Storm ≠ Earth ≠ Water ≠ Mana). Render = vector-glow ocean, camera-follow,
@@ -489,7 +490,7 @@ the Arcade frame.
 **Next:**
   1. **⚑ Alex device cold-play** — drift authority, eat/threat readability, the evolve-payoff moment,
      whether the nursery-start difficulty curve feels right. Knobs = consts atop `lib/driftling.ts`.
-  2. Then art pass (card + creature art — deferred, Alex's taste).
+  2. ✅ **Card art DONE 2026-07-01** (`1d866ae`) — dreamlike cloud-ocean, element-colored fish-glyphs at varied sizes (kept element-agnostic — no named apex). In-game creature-art polish still deferred (Alex's taste).
 **Parked:** **Rinn-kin element↔apex mapping** = a /magii canon gap (sim is element-agnostic so it doesn't
   block; canon re-skins via the LADDER/APEX tables only, zero logic). Jin's non-binding proposal in DESIGN.md.
 **Decisions:** sim-first (oracle retuned for the **languid identity** — nursery start, threat exposure ramps
@@ -498,7 +499,7 @@ the Arcade frame.
 **Files:** `driftling/lib/driftling.ts` (27 tests) · `driftling.test.ts` · `lib/sfx.ts` · `page.tsx` · `DESIGN.md`
 
 ### Squall (#12) — 🟢 live · defenseless bullet-hell → `/squall`
-*Last touched: 2026-06-26*
+*Last touched: 2026-07-01 — card art added (`1d866ae`); shipped 06-26*
 **Left off:** Shipped live + public. Pure-evasion bullet-hell — **no shield, no shots**, brand-new
   "defenseless survival" mood. The void rains **5 telegraphed patterns** escalating with survival time
   (rain comb / side sweep / aimed fan / ring burst / rotating spiral), each fair (edge-entered or warned).
@@ -510,7 +511,7 @@ the Arcade frame.
   1. **⚑ Alex device cold-play (NEVER verified by me — extension was down on ship day)** — pattern
      density/cadence, bullet speeds, telegraph warn times. Knobs: `fireDirector` gap, per-pattern `spd`,
      `RAMP_T`, `GRAZE_R` in `lib/squall.ts`.
-  2. Card art (deferred, Alex's taste).
+  2. ✅ **Card art DONE 2026-07-01** (`1d866ae`) — lone cyan spark in a radial storm of violet bullet-streaks.
 **Parked:** —
 **Decisions:** **#2-cabinet call: Squall over Pac-Man** at the time — Driftling is eat/flee/flip, Pac-Man is
   too (predator-flip), so Squall (no offense) gives the board real contrast. (Pac-Man later shipped anyway as
