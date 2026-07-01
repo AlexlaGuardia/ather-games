@@ -27,9 +27,13 @@ the Arcade frame.
 >    tune → gx-* check → mobile → card art → bump block). The consolidated checklist ↓ is the spine;
 >    **Seedfall first** (Alex's favourite, the proven winner). New cabinets (Driftling/Squall/Dewdrop/Vault)
 >    are also pending Alex's device cold-play — they fold into this lap.
->    - **Card art backlog — ✅ CLEARED 2026-07-01** (`4499727` Vault+Dewdrop, `1d866ae` Squall+Driftling).
->      Every cabinet now has a card. Remaining polish work is **all pending Alex's device** (feel-tune,
->      mobile/overlay reads) — no headless card-gen work left.
+>    - **Card art backlog — ✅ CLEARED + WIRED + VERIFIED IN HALL 2026-07-01** (`4499727` Vault+Dewdrop,
+>      `1d866ae` Squall+Driftling, `c554cb9` catalog wiring). The 4 new cards existed on disk but the hall's
+>      `CARD_ART` allowlist (`CatalogGrid.tsx`) didn't include them → they rendered as bare glyph+text; added
+>      the four, browser-verified all 12 cabinets show art at `/arcade/all`. *(Optional follow-up: the 4 new
+>      games don't use their card as a title-screen backdrop like atherdash/seedfall/ward/voranyx/updraft do —
+>      a per-page `<img src="/<id>/card.webp">` behind the start screen; additive, not required.)*
+>      Remaining polish work is **all pending Alex's device** (feel-tune, mobile/overlay reads).
 >    - **Everything else is pending Alex's hands** (feel-tune, mobile/overlay reads) — headless can't judge.
 > 2. **Room loose ends** — ✅ daily-leaderboard render VERIFIED + clip FIXED across all 7 games 2026-07-01
 >    (`bb55f38`). Remaining: the Room's small lane (Folk volume on the Desk, news automation, 390px wall-turn
