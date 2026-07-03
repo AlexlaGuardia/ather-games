@@ -259,7 +259,10 @@ the Arcade frame.
      (`useGainFx`/`FloatLayer`/`flashCls`/`GainFxStyles`), wired Crucible (mana floater + host
      LEVEL-UP beat, watches displayed level → fires on live wins AND away-settle) + Expeditions
      (marks floater on spoils/spends). Starforge refactored onto it, floater proven live (−25 ◈).
-     Still open: **planet-cap / first-claim** milestone beats (only host level-up is in so far).
+     ✅ **Planet milestone beats SHIPPED 2026-07-03 (`8240a65`):** claiming a NEW world fires a toast —
+     "First World Claimed" / "World Claimed" (named + counted) / "System Claimed" (full system, big fanfare).
+     Ref-guarded effect keyed on worked-world count (arms silent on load, ignores deepen/settle churn);
+     decision lifted to a pure `lib/milestones.ts` + unit-tested (16 assertions). ⚑ **Toast feel = Alex's eye.**
   3. **Alex: rehearse the crossing** (Orrery → Gate → rehearse ▸) — tune the warp ceremony beat/feel
      before the real first warp. · Decide the **mobile-idle direction** · sprites = Alex (next weekend).
 **Parked:** dedicated mobile build (still the long-term home; desktop arcade is the interim).
