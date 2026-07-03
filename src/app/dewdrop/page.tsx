@@ -9,6 +9,8 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import ArcadeCabinet from '../_components/ArcadeCabinet'
 import ArcadeControls from '../_components/ArcadeControls'
 import { useNoScroll } from '@/lib/arcade/useNoScroll'
+import { dailySeed, dailyNumber, loadDailyBest, saveDailyBest, dailyShare, copyShare } from '@/lib/arcade/daily'
+import DailyLeaderboard from '../_components/DailyLeaderboard'
 import {
   makeWorld,
   setHeading,
@@ -56,15 +58,22 @@ export default function DewdropPage() {
   const [best, setBest] = useState(0)
   const [newBest, setNewBest] = useState(false)
   const [muted, setMuted] = useState(false)
+  const [mode, setMode] = useState<'endless' | 'daily'>('endless')
+  const modeRef = useRef(mode); modeRef.current = mode
+  const [dailyBest, setDailyBest] = useState(0)
+  const [shared, setShared] = useState(false)
 
   useNoScroll()
 
   const boot = useCallback(() => {
-    seedRef.current = (seedRef.current * 1103515245 + 12345) >>> 0
-    worldRef.current = makeWorld(seedRef.current ^ (Date.now() >>> 0))
+    // daily = the same warren for everyone today (deterministic seed); endless = fresh each run.
+    let seed: number
+    if (modeRef.current === 'daily') seed = dailySeed()
+    else { seedRef.current = (seedRef.current * 1103515245 + 12345) >>> 0; seed = seedRef.current ^ (Date.now() >>> 0) }
+    worldRef.current = makeWorld(seed)
     deck.current = { active: false, x: 0, y: 0 }
     keys.current.clear()
-    setScore(0); setLives(START_LIVES); setNewBest(false)
+    setScore(0); setLives(START_LIVES); setNewBest(false); setShared(false)
     setPhase('ready')
   }, [])
 
@@ -73,7 +82,22 @@ export default function DewdropPage() {
     boot()
     setMuted(sfx.isMuted())
     setBest(loadBest())
+    setDailyBest(loadDailyBest('dewdrop'))
   }, [boot])
+
+  const pickMode = (m: 'endless' | 'daily') => {
+    if (m === modeRef.current) return
+    modeRef.current = m
+    setMode(m)
+    boot()
+  }
+
+  const doShare = async () => {
+    if (await copyShare(dailyShare('Dewdrop', score))) {
+      setShared(true)
+      setTimeout(() => setShared(false), 1600)
+    }
+  }
 
   useEffect(() => {
     const down = (e: KeyboardEvent) => keys.current.add(e.key.toLowerCase())
@@ -119,6 +143,7 @@ export default function DewdropPage() {
         if (ev.death) { sfx.play('caught'); setLives(w.lives) }
         if (ev.won || (w.state as string) === 'dead') {
           const b = saveBest(w.score); setBest(b); setNewBest(w.score > 0 && w.score >= b)
+          if (modeRef.current === 'daily') setDailyBest(saveDailyBest('dewdrop', w.score))
           setScore(w.score)
           setPhase((w.state as string) === 'won' ? 'won' : 'dead')
         }
@@ -188,24 +213,45 @@ export default function DewdropPage() {
             <p className="text-[11px] leading-relaxed text-[#9fd6e0]/80 max-w-[280px]">
               a wild Dewbear in the Moglins&apos; burrow. gobble the dewdrops, slip the four collar-Moglins. grab a wildbloom and their collars snap — they deflate and flee, so chase them down. clear the warren.
             </p>
+            <div className="pointer-events-auto flex gap-1.5 text-[10px] font-mono tracking-wider">
+              {(['endless', 'daily'] as const).map((m) => (
+                <button key={m} onClick={() => pickMode(m)}
+                  className={`px-3 py-1.5 rounded-sm border transition-colors ${mode === m ? 'text-[#05060f] bg-[#37d4e6] border-[#37d4e6]' : 'text-[#37d4e6]/55 border-[#37d4e6]/25 hover:text-[#37d4e6]'}`}>
+                  {m === 'daily' ? `daily #${dailyNumber()}` : m}
+                </button>
+              ))}
+            </div>
+            {mode === 'daily' && <div className="text-[9px] font-mono text-[#7fd8e6]/45 tracking-wider -mt-1">the same warren for everyone today</div>}
             <div className="gx-label text-[12px] text-[#05060f] px-6 py-2.5 rounded-[2px] mt-1" style={{ background: ACCENT, boxShadow: `0 0 18px ${ACCENT}80` }}>tap a direction to roam</div>
-            {best > 0 && <div className="gx-label text-[10px] font-mono text-[#7fd8e6]/50 tracking-wider mt-1">best <span className="text-[#e8feff] tabular-nums">{best}</span></div>}
+            {mode === 'daily'
+              ? dailyBest > 0 && <div className="gx-label text-[10px] font-mono text-[#7fd8e6]/50 tracking-wider mt-1">today&apos;s best <span className="text-[#e8feff] tabular-nums">{dailyBest}</span></div>
+              : best > 0 && <div className="gx-label text-[10px] font-mono text-[#7fd8e6]/50 tracking-wider mt-1">best <span className="text-[#e8feff] tabular-nums">{best}</span></div>}
           </div>
         )}
 
         {(phase === 'dead' || phase === 'won') && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-[#05060f]/78 rounded-md text-center px-6">
+          <div className="absolute inset-0 overflow-y-auto bg-[#05060f]/78 rounded-md">
+           <div className="min-h-full flex flex-col items-center justify-center gap-2 text-center px-6 py-4">
             <div className="gx-title text-lg tracking-[0.3em] uppercase" style={{ color: phase === 'won' ? BLOOM : '#e89a6b', textShadow: `0 0 14px ${phase === 'won' ? BLOOM : '#e89a6b'}` }}>
               {phase === 'won' ? 'Warren Cleared' : 'Collared'}
             </div>
             <div className="gx-value font-mono text-[#e8feff] text-3xl leading-none tabular-nums" style={{ textShadow: `0 0 12px ${ACCENT}80` }}>{score}</div>
-            {newBest
-              ? <div className="gx-label text-[10px] font-mono tracking-wider" style={{ color: ACCENT }}>✦ new best</div>
-              : best > 0 && <div className="gx-label text-[10px] font-mono text-[#7fd8e6]/45 tracking-wider">best {best}</div>}
+            {mode === 'daily'
+              ? <div className="gx-label text-[10px] font-mono tracking-wider" style={{ color: ACCENT }}>daily #{dailyNumber()} · today&apos;s best {dailyBest}{score >= dailyBest && score > 0 ? ' ✦' : ''}</div>
+              : newBest
+                ? <div className="gx-label text-[10px] font-mono tracking-wider" style={{ color: ACCENT }}>✦ new best</div>
+                : best > 0 && <div className="gx-label text-[10px] font-mono text-[#7fd8e6]/45 tracking-wider">best {best}</div>}
             <p className="text-[10px] leading-relaxed text-[#9fd6e0]/70 max-w-[250px] italic mt-0.5">
               {phase === 'won' ? 'every dewdrop gathered, every collar snapped. the warren is quiet.' : 'a collar finds your neck. wriggle free and try the warren again.'}
             </p>
             <button onClick={restart} className="gx-label text-[11px] text-[#05060f] hover:brightness-110 px-5 py-2 rounded-[2px] mt-1" style={{ background: ACCENT, boxShadow: `0 0 18px ${ACCENT}80` }}>back to the burrow →</button>
+            {mode === 'daily' && (
+              <button onClick={doShare} className="gx-label text-[10px] tracking-wider px-4 py-1.5 rounded-[2px] border transition-colors" style={{ color: ACCENT, borderColor: `${ACCENT}55` }}>
+                {shared ? 'copied ✓' : 'share result'}
+              </button>
+            )}
+            {mode === 'daily' && <DailyLeaderboard gameId="dewdrop" accent={ACCENT} score={score} className="mt-1.5" />}
+           </div>
           </div>
         )}
       </div>

@@ -10,6 +10,8 @@ import ArcadeCabinet from '../_components/ArcadeCabinet'
 import ArcadeControls from '../_components/ArcadeControls'
 import { mulberry32 } from '@/lib/arcade/rng'
 import { useNoScroll } from '@/lib/arcade/useNoScroll'
+import { dailySeed, dailyNumber, loadDailyBest, saveDailyBest, dailyShare, copyShare } from '@/lib/arcade/daily'
+import DailyLeaderboard from '../_components/DailyLeaderboard'
 import {
   makeWorld,
   setHeading,
@@ -77,12 +79,19 @@ export default function DriftlingPage() {
   const [best, setBest] = useState(0)
   const [newBest, setNewBest] = useState(false)
   const [eaten, setEaten] = useState(0) // creatures consumed, frozen at death for the summary
+  const [mode, setMode] = useState<'endless' | 'daily'>('endless')
+  const modeRef = useRef(mode); modeRef.current = mode
+  const [dailyBest, setDailyBest] = useState(0)
+  const [shared, setShared] = useState(false)
 
   useNoScroll()
 
   const boot = useCallback(() => {
-    seedRef.current = (seedRef.current * 1103515245 + 12345) >>> 0
-    worldRef.current = makeWorld(seedRef.current ^ (Date.now() >>> 0))
+    // daily = the same ocean for everyone today (deterministic seed); endless = fresh each run.
+    let seed: number
+    if (modeRef.current === 'daily') seed = dailySeed()
+    else { seedRef.current = (seedRef.current * 1103515245 + 12345) >>> 0; seed = seedRef.current ^ (Date.now() >>> 0) }
+    worldRef.current = makeWorld(seed)
     deck.current = { active: false, x: 0, y: 0 }
     keys.current.clear()
     setTierName(cap(LADDER[START_TIER].key))
@@ -92,6 +101,7 @@ export default function DriftlingPage() {
     setProgress(0)
     setNewBest(false)
     setEaten(0)
+    setShared(false)
     setPhase('ready')
   }, [])
 
@@ -100,7 +110,22 @@ export default function DriftlingPage() {
     boot()
     setMuted(sfx.isMuted())
     setBest(loadBest())
+    setDailyBest(loadDailyBest('driftling'))
   }, [boot])
+
+  const pickMode = (m: 'endless' | 'daily') => {
+    if (m === modeRef.current) return
+    modeRef.current = m
+    setMode(m)
+    boot()
+  }
+
+  const doShare = async () => {
+    if (await copyShare(dailyShare('Driftling', score))) {
+      setShared(true)
+      setTimeout(() => setShared(false), 1600)
+    }
+  }
 
   // keyboard steering (WASD / arrows) — desktop alternative to the cursor
   useEffect(() => {
@@ -156,6 +181,7 @@ export default function DriftlingPage() {
           const b = saveBest(w.score)
           setBest(b)
           setNewBest(w.score > 0 && w.score >= b)
+          if (modeRef.current === 'daily') setDailyBest(saveDailyBest('driftling', w.score))
           setPhase('dead')
         }
         syncT.current += dt
@@ -228,18 +254,35 @@ export default function DriftlingPage() {
             <p className="text-[11px] leading-relaxed text-[#9fd6e0]/80 max-w-[280px]">
               touch and drag to swim that way. eat anything smaller than you, slip anything bigger. grow enough and you evolve. the first thing you eat decides what you become.
             </p>
+            <div className="pointer-events-auto flex gap-1.5 text-[10px] font-mono tracking-wider">
+              {(['endless', 'daily'] as const).map((m) => (
+                <button key={m} onClick={() => pickMode(m)}
+                  className="px-3 py-1.5 rounded-sm border transition-colors"
+                  style={mode === m
+                    ? { color: '#03060f', background: accent, borderColor: accent }
+                    : { color: `${accent}8c`, borderColor: `${accent}40` }}>
+                  {m === 'daily' ? `daily #${dailyNumber()}` : m}
+                </button>
+              ))}
+            </div>
+            {mode === 'daily' && <div className="text-[9px] font-mono text-[#7fd8e6]/45 tracking-wider -mt-1">the same ocean for everyone today</div>}
             <div className="gx-label text-[12px] text-[#03060f] px-6 py-2.5 rounded-[2px] mt-1" style={{ background: accent, boxShadow: `0 0 18px ${accent}80` }}>drift to begin</div>
-            {best > 0 && <div className="gx-label text-[10px] font-mono text-[#7fd8e6]/50 tracking-wider mt-1">best <span className="text-[#e8feff] tabular-nums">{best}</span></div>}
+            {mode === 'daily'
+              ? dailyBest > 0 && <div className="gx-label text-[10px] font-mono text-[#7fd8e6]/50 tracking-wider mt-1">today&apos;s best <span className="text-[#e8feff] tabular-nums">{dailyBest}</span></div>
+              : best > 0 && <div className="gx-label text-[10px] font-mono text-[#7fd8e6]/50 tracking-wider mt-1">best <span className="text-[#e8feff] tabular-nums">{best}</span></div>}
           </div>
         )}
 
         {phase === 'dead' && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-[#03060f]/75 rounded-md text-center px-6">
+          <div className="absolute inset-0 overflow-y-auto bg-[#03060f]/75 rounded-md">
+           <div className="min-h-full flex flex-col items-center justify-center gap-2 text-center px-6 py-4">
             <div className="gx-title text-[#ff5d6c] text-lg tracking-[0.3em] uppercase" style={{ textShadow: '0 0 14px #ff5d6c' }}>Swallowed</div>
             <div className="gx-value font-mono text-[#e8feff] text-3xl leading-none tabular-nums" style={{ textShadow: `0 0 12px ${accent}80` }}>{score}</div>
-            {newBest
-              ? <div className="gx-label text-[10px] font-mono tracking-wider" style={{ color: accent }}>✦ new best</div>
-              : best > 0 && <div className="gx-label text-[10px] font-mono text-[#7fd8e6]/45 tracking-wider">best {best}</div>}
+            {mode === 'daily'
+              ? <div className="gx-label text-[10px] font-mono tracking-wider" style={{ color: accent }}>daily #{dailyNumber()} · today&apos;s best {dailyBest}{score >= dailyBest && score > 0 ? ' ✦' : ''}</div>
+              : newBest
+                ? <div className="gx-label text-[10px] font-mono tracking-wider" style={{ color: accent }}>✦ new best</div>
+                : best > 0 && <div className="gx-label text-[10px] font-mono text-[#7fd8e6]/45 tracking-wider">best {best}</div>}
             {/* run summary — how far you climbed, written as the run's little story */}
             <div className="gx-label text-[10px] font-mono text-[#9fd6e0]/55 tracking-wider mt-0.5">
               reached <span style={{ color: accent }}>{tierName}</span> · ate <span className="text-[#e8feff] tabular-nums">{eaten}</span>{branch ? <> · <span style={{ color: accent }}>{cap(branch)}</span>-line</> : ''}
@@ -248,6 +291,13 @@ export default function DriftlingPage() {
               {branch ? `a bigger thing of the deep took you. the ${cap(branch)}-line ends here.` : 'something bigger took you before you ever fed. drift wary.'}
             </p>
             <button onClick={restart} className="gx-label text-[11px] text-[#03060f] hover:brightness-110 px-5 py-2 rounded-[2px] mt-1" style={{ background: accent, boxShadow: `0 0 18px ${accent}80` }}>drift again →</button>
+            {mode === 'daily' && (
+              <button onClick={doShare} className="gx-label text-[10px] tracking-wider px-4 py-1.5 rounded-[2px] border transition-colors" style={{ color: accent, borderColor: `${accent}55` }}>
+                {shared ? 'copied ✓' : 'share result'}
+              </button>
+            )}
+            {mode === 'daily' && <DailyLeaderboard gameId="driftling" accent={accent} score={score} className="mt-1.5" />}
+           </div>
           </div>
         )}
       </div>
