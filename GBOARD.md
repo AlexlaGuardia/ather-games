@@ -190,19 +190,21 @@ the Arcade frame.
      ship-moment hook (call it like a cortex signal). **Deliberately NOT blind commit-scraping** — the feed is
      player-facing copy, so suggest proposes + a curated add picks. Dogfooded it to freshen the stale feed (was
      newest 06-21) with the real ships (Driftling/Squall/Dewdrop/Vault, Shimmer 3D, the Folk volume).
-  4. **★ Desk side-panels off-screen (TEED FOR ALEX CO-REVIEW, 2026-07-03).** Root cause pinned: AtherPages
-     (left 1%) + News (right 72-99%) sit at the wall's very edges, and the approach-dolly magnifies the wall
-     ~2× (`PERSP 720` / desk `enterDolly 380` → scale ≈ 2.1), pushing their outer edges past the viewport.
-     **Reducing the dolly can't fix it** (panels are AT the edges); the real fix is to render the two panels
-     (and the profile modal) as a **screen-space overlay when `arrived`** (a HUD over the desk) instead of on
-     the dollied wall face — greeter/title stay on the wall for approach continuity. jin-cc deliberately did
-     NOT ship this blind — `/room` is the PUBLIC FRONT DOOR and the result needs an eyeball (extension can't
-     screenshot localhost without Alex's host-perm grant). **30-sec co-review then ship.**
+  4. ✅ **Desk side-panels off-screen — FIXED + VERIFIED LIVE 2026-07-03 (`d258847`).** Root cause: AtherPages
+     (left 1%) + News (right 99%) sit at the wall's edges; the approach-dolly magnified the wall ~2× and pushed
+     them off. Geometry showed ANY dolly over ~15px clips them, so the fix was to **drop the desk approach-dolly
+     to 0** — panels stay at their in-frame rest positions, approach reads as a brighten (dim 0.55 → full + a
+     hair up). Screenshot-verified on ather.games/room?wall=2 (browser access unblocked). *(If Alex later wants
+     the immersive zoom back WITH panels in-frame, the follow-up is the screen-space HUD — but the bug is gone.)*
   5. **News fallback freshened 2026-07-03** — `DESK_NEWS_FALLBACK` was mid-June/stale; synced to the current
      top ships so an offline/failed fetch isn't stale. Live feed also got the Daily-Challenge ship (news.py).
   6. **Mobile pass on the wall-turn** — confirm the 4-wall turn + Desk in-place UI read well at 390px (folds
      in with #4 — the screen-space HUD should also fix the mobile desk read).
 **Parked:** more walls (a 5th destination) · ambient room audio · attendant/NPC presence.
+  **★ PARKED IDEA — Eyuun's Bookstore (Alex 2026-07-03, its OWN session):** make the Desk **greeter clickable**
+  → **Eyuun's Bookstore**, a cleaner inline-view successor to the Atelier (browse/read the Athernyx books
+  in-place). Reading front-door for the franchise, wired into the Room. Detail: CC memory `project_eyuun_bookstore`.
+  Do NOT build inline with other work — it's a dedicated session. Relates to the Atelier / Raven book builder.
 **Decisions:** **room-centric nav** — the room pill is the ONLY back (no duplicate header links);
   cabinets tie as items in the hall, the room WALLS are the bespoke-art destinations (see the
   cabinet-not-world policy in Atherdash). News is **data-driven** (`news.json`) so it updates without a build.
