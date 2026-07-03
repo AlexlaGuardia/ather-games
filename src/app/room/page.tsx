@@ -835,11 +835,12 @@ function ArcadeArch({ wall, active, phase, onEnter }: { wall: Wall; active: bool
 type NewsItem = { date?: string; tag?: string; title: string };
 // AtherPages Folk-volume accent (matches folk.json's "neutral / The Folk" gold) — distinguishes the Folk sub-link from the cyan Grimoire one.
 const FOLK_GOLD = "#caa24e";
+// fallback only if the live fetch fails — kept current so an offline read isn't stale.
 const DESK_NEWS_FALLBACK: NewsItem[] = [
-  { tag: "New", title: "Atherdash is live — thread the element gates" },
-  { tag: "Arcade", title: "Lucernyx torch-race retuned" },
-  { tag: "Shimmer", title: "Party combat in the works" },
-  { tag: "Hub", title: "The Room hub — you're standing in it" },
+  { date: "2026-07-03", tag: "Arcade", title: "Daily Challenge — Squall, Driftling & Dewdrop join the seeded run" },
+  { date: "2026-07-01", tag: "Hub", title: "The Folk join AtherPages — meet the people of the Ather" },
+  { date: "2026-06-29", tag: "Arcade", title: "Vault — carry the light and leap the void's tears" },
+  { date: "2026-06-28", tag: "Shimmer", title: "Shimmer walks in 3D — explore the overworld yourself" },
 ];
 const NEWS_MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 function fmtNewsDate(iso?: string): string {
