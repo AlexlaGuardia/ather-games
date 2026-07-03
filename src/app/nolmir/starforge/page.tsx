@@ -10,6 +10,7 @@ import { Chakra_Petch } from 'next/font/google'
 import Orrery from '../components/Orrery'
 import Emblem from '../components/Emblem'
 import { useGainFx, FloatLayer, flashCls, GainFxStyles } from '../components/gainfx'
+import { planetMilestone } from '../lib/milestones'
 
 // the display face — squared, industrial, the genre's voice (Eurostile's free cousin).
 // labels/tabs/titles only; mono keeps the numbers and the flavor text.
@@ -102,6 +103,10 @@ export default function StarforgePage() {
   const [warpSeq, setWarpSeq] = useState<WarpData | null>(null)
   const [rehearsing, setRehearsing] = useState(false)
   const { floaters, flash: coreFlash, push: pushFloat } = useGainFx()
+  // milestone beat — a claim brings a NEW world online. The first world and the
+  // full system get a celebratory toast (mirrors the Crucible's host level-up beat).
+  const [milestone, setMilestone] = useState<{ text: string; sub: string } | null>(null)
+  const prevWorkedMask = useRef<boolean[] | null>(null)
 
   useEffect(() => {
     const now = Date.now()
@@ -140,6 +145,24 @@ export default function StarforgePage() {
       clearInterval(drink)
     }
   }, [])
+
+  // count of worked worlds (level > 0) — the dep that fires the milestone beat.
+  // deepening an already-worked planet doesn't change it (a milestone is a NEW world).
+  const worldsWorked = forge ? forge.planets.reduce((n, l) => n + (l > 0 ? 1 : 0), 0) : 0
+  useEffect(() => {
+    if (!forge) return
+    const mask = forge.planets.map((l) => l > 0)
+    const prev = prevWorkedMask.current
+    prevWorkedMask.current = mask
+    const m = planetMilestone(prev, mask, (i) => activePlanets(forge)[i]?.name ?? '')
+    if (!m) return
+    setMilestone({ text: m.text, sub: m.sub })
+    sfx.ensure()
+    sfx.play(m.full ? 'levelUp' : 'unlock')
+    const t = window.setTimeout(() => setMilestone(null), 2600)
+    return () => window.clearTimeout(t)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [worldsWorked])
 
   const mutate = useCallback((apply: (f: ForgeState) => ForgeState | null) => {
     setForge((prev) => {
@@ -947,6 +970,18 @@ export default function StarforgePage() {
       </div>
 
       {warpSeq && <WarpCeremony data={warpSeq} onEnter={finishWarp} />}
+
+      {milestone && (
+        <div className="pointer-events-none fixed inset-x-0 top-20 z-50 flex justify-center px-4">
+          <div
+            className="nolmir-levelup rounded-md border px-5 py-2.5 text-center backdrop-blur"
+            style={{ borderColor: '#c4b5fd55', background: 'rgba(18,14,32,0.86)', boxShadow: '0 0 26px #c4b5fd44' }}
+          >
+            <div className={`${display.className} text-sm uppercase tracking-[0.28em] text-violet-200`}>{milestone.text}</div>
+            <div className="mt-0.5 text-[11px] text-slate-300/80">{milestone.sub}</div>
+          </div>
+        </div>
+      )}
 
       <GainFxStyles />
     </div>
