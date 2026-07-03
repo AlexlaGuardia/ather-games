@@ -217,6 +217,10 @@ the Arcade frame.
   offline cap, no-leak accrual, heat/upkeep (mana never negative, lines fray unpaid), transmute (whole units
   sold, dust kept), research gating/ramp, cost curves, genSystem determinism, and the warp carry. Run:
   `for f in src/app/nolmir/lib/*.test.ts; do npx tsx "$f"; done`. **All green, no bugs in covered paths.**
+  **Coverage now 118 assertions (was 13):** + **sim.test.ts (14)** guards the Crucible `runMatch` — the idle
+  economy's foundation (away.ts settles by seed, trusts determinism): determinism + 200-seed invariant sweep
+  (yield≥0, deepest∈[0,1], bounded ticks, victory names a valid winner + reached gauntlet, non-degenerate),
+  mods bite the outcome, yieldMult scales. ~22s to run. All green, no bugs.
   **⚑ ONE FINDING FOR ALEX (not changed — prestige-balance call):** `doWarp` carries research/castings/sigils
   but NOT `owned` (per-creature guard levels/xp) → a warp keeps WHICH guards you equip but resets their earned
   progression. The comment says warp carries "the guards" — so this reads like an oversight, but whether guard
