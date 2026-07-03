@@ -8,6 +8,8 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import ArcadeCabinet from '../_components/ArcadeCabinet'
 import { mulberry32 } from '@/lib/arcade/rng'
 import { useNoScroll } from '@/lib/arcade/useNoScroll'
+import { dailySeed, dailyNumber, loadDailyBest, saveDailyBest, dailyShare, copyShare } from '@/lib/arcade/daily'
+import DailyLeaderboard from '../_components/DailyLeaderboard'
 import {
   makeWorld,
   setHeading,
@@ -52,16 +54,23 @@ export default function SquallPage() {
   const [newBest, setNewBest] = useState(false)
   const [survived, setSurvived] = useState(0) // seconds, frozen at death
   const [muted, setMuted] = useState(false)
+  const [mode, setMode] = useState<'endless' | 'daily'>('endless')
+  const modeRef = useRef(mode); modeRef.current = mode
+  const [dailyBest, setDailyBest] = useState(0)
+  const [shared, setShared] = useState(false)
 
   useNoScroll()
 
   const boot = useCallback(() => {
-    seedRef.current = (seedRef.current * 1103515245 + 12345) >>> 0
-    worldRef.current = makeWorld(seedRef.current ^ (Date.now() >>> 0))
+    // daily = the SAME storm for everyone today (deterministic seed); endless = fresh each run.
+    let seed: number
+    if (modeRef.current === 'daily') seed = dailySeed()
+    else { seedRef.current = (seedRef.current * 1103515245 + 12345) >>> 0; seed = seedRef.current ^ (Date.now() >>> 0) }
+    worldRef.current = makeWorld(seed)
     pointer.current = { x: VW / 2, y: VH / 2, active: false }
     joy.current = { active: false, baseX: 0, baseY: 0, curX: 0, curY: 0, pid: -1 }
     keys.current.clear()
-    setScore(0); setGraze(0); setNewBest(false); setSurvived(0)
+    setScore(0); setGraze(0); setNewBest(false); setSurvived(0); setShared(false)
     setPhase('ready')
   }, [])
 
@@ -70,7 +79,22 @@ export default function SquallPage() {
     boot()
     setMuted(sfx.isMuted())
     setBest(loadBest())
+    setDailyBest(loadDailyBest('squall'))
   }, [boot])
+
+  const pickMode = (m: 'endless' | 'daily') => {
+    if (m === modeRef.current) return
+    modeRef.current = m
+    setMode(m)
+    boot()
+  }
+
+  const doShare = async () => {
+    if (await copyShare(dailyShare('Squall', score))) {
+      setShared(true)
+      setTimeout(() => setShared(false), 1600)
+    }
+  }
 
   useEffect(() => {
     const down = (e: KeyboardEvent) => keys.current.add(e.key.toLowerCase())
@@ -126,6 +150,7 @@ export default function SquallPage() {
           sfx.play('death')
           setScore(w.score); setGraze(w.graze); setSurvived(w.time)
           const b = saveBest(w.score); setBest(b); setNewBest(w.score > 0 && w.score >= b)
+          if (modeRef.current === 'daily') setDailyBest(saveDailyBest('squall', w.score))
           setPhase('dead')
         }
         syncT.current += dt
@@ -184,23 +209,44 @@ export default function SquallPage() {
             <p className="text-[11px] leading-relaxed text-[#9fd6e0]/80 max-w-[280px]">
               you are a mote of Ather in the void&apos;s storm. you cannot fight back. read the patterns as they telegraph, weave the gaps, and graze close for score. last as long as you can.
             </p>
+            <div className="pointer-events-auto flex gap-1.5 text-[10px] font-mono tracking-wider">
+              {(['endless', 'daily'] as const).map((m) => (
+                <button key={m} onClick={() => pickMode(m)}
+                  className={`px-3 py-1.5 rounded-sm border transition-colors ${mode === m ? 'text-[#04040a] bg-[#37d4e6] border-[#37d4e6]' : 'text-[#37d4e6]/55 border-[#37d4e6]/25 hover:text-[#37d4e6]'}`}>
+                  {m === 'daily' ? `daily #${dailyNumber()}` : m}
+                </button>
+              ))}
+            </div>
+            {mode === 'daily' && <div className="text-[9px] font-mono text-[#7fd8e6]/45 tracking-wider -mt-1">the same storm for everyone today</div>}
             <div className="gx-label text-[11px] text-[#7fd8e6]/70 mt-1">steer the stick below to begin</div>
-            {best > 0 && <div className="gx-label text-[10px] font-mono text-[#7fd8e6]/50 tracking-wider mt-1">best <span className="text-[#e8feff] tabular-nums">{best}</span></div>}
+            {mode === 'daily'
+              ? dailyBest > 0 && <div className="gx-label text-[10px] font-mono text-[#7fd8e6]/50 tracking-wider mt-1">today&apos;s best <span className="text-[#e8feff] tabular-nums">{dailyBest}</span></div>
+              : best > 0 && <div className="gx-label text-[10px] font-mono text-[#7fd8e6]/50 tracking-wider mt-1">best <span className="text-[#e8feff] tabular-nums">{best}</span></div>}
           </div>
         )}
 
         {phase === 'dead' && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-[#05030d]/75 rounded-md text-center px-6">
+          <div className="absolute inset-0 overflow-y-auto bg-[#05030d]/75 rounded-md">
+           <div className="min-h-full flex flex-col items-center justify-center gap-2 text-center px-6 py-4">
             <div className="gx-title text-[#c86bff] text-lg tracking-[0.3em] uppercase" style={{ textShadow: '0 0 14px #c86bff' }}>Unmade</div>
             <div className="gx-value font-mono text-[#e8feff] text-3xl leading-none tabular-nums" style={{ textShadow: `0 0 12px ${ACCENT}80` }}>{score}</div>
-            {newBest
-              ? <div className="gx-label text-[10px] font-mono tracking-wider" style={{ color: ACCENT }}>✦ new best</div>
-              : best > 0 && <div className="gx-label text-[10px] font-mono text-[#7fd8e6]/45 tracking-wider">best {best}</div>}
+            {mode === 'daily'
+              ? <div className="gx-label text-[10px] font-mono tracking-wider" style={{ color: ACCENT }}>daily #{dailyNumber()} · today&apos;s best {dailyBest}{score >= dailyBest && score > 0 ? ' ✦' : ''}</div>
+              : newBest
+                ? <div className="gx-label text-[10px] font-mono tracking-wider" style={{ color: ACCENT }}>✦ new best</div>
+                : best > 0 && <div className="gx-label text-[10px] font-mono text-[#7fd8e6]/45 tracking-wider">best {best}</div>}
             <div className="gx-label text-[10px] font-mono text-[#9fd6e0]/55 tracking-wider mt-0.5">
               survived <span style={{ color: ACCENT }} className="tabular-nums">{survived.toFixed(1)}s</span> · <span style={{ color: VOID }} className="tabular-nums">{graze}</span> grazes
             </div>
             <p className="text-[10px] leading-relaxed text-[#9fd6e0]/70 max-w-[250px] italic mt-0.5">the void closes over the mote. read it sooner next time.</p>
             <button onClick={restart} className="gx-label text-[11px] text-[#05030d] hover:brightness-110 px-5 py-2 rounded-[2px] mt-1" style={{ background: ACCENT, boxShadow: `0 0 18px ${ACCENT}80` }}>weather it again →</button>
+            {mode === 'daily' && (
+              <button onClick={doShare} className="gx-label text-[10px] tracking-wider px-4 py-1.5 rounded-[2px] border transition-colors" style={{ color: ACCENT, borderColor: `${ACCENT}55` }}>
+                {shared ? 'copied ✓' : 'share result'}
+              </button>
+            )}
+            {mode === 'daily' && <DailyLeaderboard gameId="squall" accent={ACCENT} score={score} className="mt-1.5" />}
+           </div>
           </div>
         )}
       </div>

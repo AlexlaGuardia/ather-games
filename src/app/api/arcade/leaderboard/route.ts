@@ -21,6 +21,7 @@ const GAMES: Record<string, number> = {
   rekindle: 1_000_000,
   seedfall: 1_000_000, // reserved — Seedfall gains a score in its redesign
   vault: 1_000_000, // the auto-runner — the crossing (distance + motes + unmaking-combo)
+  squall: 1_000_000, // pure-evasion bullet-hell — survival time + grazes
 }
 
 const STORED_PER_DAY = 200 // keep at most this many rows per day on disk
