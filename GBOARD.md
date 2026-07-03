@@ -85,6 +85,19 @@ the Arcade frame.
   each game-over overlay** (logic+API proven via curl; visual unseen) → THIS WEEK lane 4.
 - ⚠ PENDING Alex feel: does the daily toggle + share read right (this-week lap).
 
+## 🔎 Cross-cutting — DISCOVERABILITY / SHARE METADATA (2026-07-03, jin-cc)
+> The site's a build-in-public front for sharing game links — so the links have to render as the game.
+- **Per-game share metadata SHIPPED (`525363c`):** every game was `'use client'` → all 12 shared as the
+  generic "ather.games" card (no per-game title/image). Added a server-component `layout.tsx` per live game
+  exporting real `title` (game name) + `description` (registry tagline) + the **card art as the OG/Twitter
+  `summary_large_image`** (1344×768). Layout returns children → the client page renders unchanged. Verified:
+  build clean, all 12 routes 200, `<title>`/`og:title`/`og:image` render per-game, OG images reachable.
+- **sitemap.xml + robots.txt SHIPPED (`af8dbac`):** both were 404. `sitemap.ts` is registry-driven (front door
+  + hubs + every LIVE game = 17 URLs, back-room excluded, stays in sync); `robots.ts` allows indexing but
+  disallows `/api/` + owner-only `/shimmer/dev`, points at the sitemap. Verified both 200.
+- **Open:** proper 1200×630 OG crops (cards are 1.75:1, platforms letterbox slightly — fine for now); OG for
+  the Room/hubs (they inherit the good root default, which is correct for the brand front door).
+
 ## 🧩 Cross-cutting initiative — THE GAME-UI LAYER (active, jin leads, 2026-06-18)
 > **Killing the "browser feel"** — games play like games but the menus/chrome read like a website.
 > Full research + recipe: **`/GAME_UI_LAYER.md`**. Reusable opt-in kit: **`src/app/gameui.css`**
@@ -150,7 +163,7 @@ the Arcade frame.
 ---
 
 ### The Room — 🟢 live · the hub everything ties back to → `/room`
-*Last touched: 2026-07-01 — Folk volume surfaced on the Desk + News tooling/freshen (`3e7c5c6`, `85d535a`)*
+*Last touched: 2026-07-03 — news fallback freshened + Daily ship in the feed; desk-panel fix teed for co-review*
 **What it is:** the spatial front door of ather.games (since `/`→`/room`). A 4-wall room you turn
   between, each wall a destination: **Mug door** (profile/settings), **Shimmer TV** (→ the 3D game),
   **Arcade arch** (→ `/arcade/all`, the cabinet hall), **Desk wall** (in-place UI — **Grimoire** link
@@ -177,9 +190,18 @@ the Arcade frame.
      ship-moment hook (call it like a cortex signal). **Deliberately NOT blind commit-scraping** — the feed is
      player-facing copy, so suggest proposes + a curated add picks. Dogfooded it to freshen the stale feed (was
      newest 06-21) with the real ships (Driftling/Squall/Dewdrop/Vault, Shimmer 3D, the Folk volume).
-  4. **Mobile pass on the wall-turn** — confirm the 4-wall turn + Desk in-place UI read well at 390px. *(Note
-     2026-07-01: on desktop, ENTERING the desk dollies in and pushes the side panels — AtherPages left, News
-     right — partly off-screen edges. Pre-existing dolly behavior, not new; worth folding into this mobile/read pass.)*
+  4. **★ Desk side-panels off-screen (TEED FOR ALEX CO-REVIEW, 2026-07-03).** Root cause pinned: AtherPages
+     (left 1%) + News (right 72-99%) sit at the wall's very edges, and the approach-dolly magnifies the wall
+     ~2× (`PERSP 720` / desk `enterDolly 380` → scale ≈ 2.1), pushing their outer edges past the viewport.
+     **Reducing the dolly can't fix it** (panels are AT the edges); the real fix is to render the two panels
+     (and the profile modal) as a **screen-space overlay when `arrived`** (a HUD over the desk) instead of on
+     the dollied wall face — greeter/title stay on the wall for approach continuity. jin-cc deliberately did
+     NOT ship this blind — `/room` is the PUBLIC FRONT DOOR and the result needs an eyeball (extension can't
+     screenshot localhost without Alex's host-perm grant). **30-sec co-review then ship.**
+  5. **News fallback freshened 2026-07-03** — `DESK_NEWS_FALLBACK` was mid-June/stale; synced to the current
+     top ships so an offline/failed fetch isn't stale. Live feed also got the Daily-Challenge ship (news.py).
+  6. **Mobile pass on the wall-turn** — confirm the 4-wall turn + Desk in-place UI read well at 390px (folds
+     in with #4 — the screen-space HUD should also fix the mobile desk read).
 **Parked:** more walls (a 5th destination) · ambient room audio · attendant/NPC presence.
 **Decisions:** **room-centric nav** — the room pill is the ONLY back (no duplicate header links);
   cabinets tie as items in the hall, the room WALLS are the bespoke-art destinations (see the
