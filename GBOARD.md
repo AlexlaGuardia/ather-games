@@ -46,7 +46,7 @@ the Arcade frame.
 > - [ ] **Seedfall ⭐ (Alex's FAVOURITE — polish FIRST, it's the proven winner)** — full descent feel (drift authority vs branch spacing, fall speed) + Havari catch/dodge readability (1.4s warn) + soil-approach landing + game-over overlays + **the new wind-puff thrust read** *(knobs atop `seedfall.ts` + `genBranches`)*. ✅ **Card art DONE 2026-06-30** (`e7a04d9`). ✅ **Thrust reworked to wind-puff gusts 2026-07-01** (`693a613` — updraft pillow on both-held, lateral gust from upwind side; render-only). **All solo work done — waiting on Alex's device pass.**
 > - [ ] **Driftling** — device cold-play: drift authority, eat/threat readability, evolve-payoff moment, nursery-start curve *(knobs atop `lib/driftling.ts`)*. ✅ card art DONE 07-01 (`1d866ae`).
 > - [ ] **Squall** — device cold-play (STILL never visually verified — extension needs Alex's host-perm grant): pattern density/cadence, bullet speeds, telegraph warn times *(knobs: `fireDirector` gap, per-pattern `spd`, `RAMP_T`, `GRAZE_R`)*. ✅ card art DONE 07-01 (`1d866ae`). ✅ **Daily + leaderboard WIRED 2026-07-03 (`39af949`)** — endless/daily toggle, share, DailyLeaderboard, API allowlisted; round-trip verified via curl.
-> - [ ] **Driftling + Dewdrop** — wire the Daily (the audit finding, `39af949` did Squall; these two are the same ~6-line pattern) THEN device cold-play.
+> - [ ] **Driftling + Dewdrop** — ✅ **Daily WIRED 2026-07-03 (`aff36d2`)** (toggle/share/DailyLeaderboard/API allowlist/scroll-fix, curl-verified). Device cold-play still pending: Driftling drift/eat/evolve feel + nursery curve; Dewdrop D-pad + maze difficulty *(knobs atop each `lib/*.ts`)*.
 > - [ ] **Dewdrop** — cold-play tune already started (`a8c54ac`): scatter/chase waves, wildbloom duration, ghost-vs-player speed gap *(consts atop `lib/dewdrop.ts`)* + maze art/layout (deferred, Alex taste)
 > - [ ] **gx-* look on real mobile across all 11** — esp. the game-OVER overlays headless can't reach
 > - [ ] **Arcade cabinet dial** — final warmth/dim/red-skew on `<ArcadeCabinet>` (one component → changes everywhere)
@@ -68,14 +68,14 @@ the Arcade frame.
 - **Shared lib `src/lib/arcade/daily.ts`** (reusable like ArcadeCabinet): `dailyKey`/`dailySeed`/
   `dailyNumber` (#1 = 2026-01-01) + per-game daily-best storage + Wordle-style `dailyShare` + clipboard.
   Opt in with ~6 lines: seed the world from `dailySeed()`, save with `saveDailyBest`, add the toggle + share.
-- **Live on 8 score-chase games:** Atherdash · Ward · Updraft · Voranyx · Mana'nana · Seedfall · **Vault**
-  (Vault joined 2026-06-29) · **Squall** (joined 2026-07-03) — Endless/Daily toggle on the start screen
-  (Mana'nana: under the score row), separate daily-best track, Share on game over.
-- **⚠ STILL UN-WIRED (audit 2026-07-03) — Driftling + Dewdrop.** Both are built deterministic
-  (`makeWorld(seed)`, mulberry32 — Dewdrop's source even says "for the Daily") but shipped in the 06-26
-  arc without the ~6-line daily opt-in. They're score-chase games that fit the loop; **wiring them the
-  same way Squall just got is the obvious next polish-lap items** (pure plumbing, no feel-judgment needed).
-  Squall was done first (strongest survival-score daily + it was the one game never visually verified).
+- **Live on ALL 10 score-chase games:** Atherdash · Ward · Updraft · Voranyx · Mana'nana · Seedfall ·
+  **Vault** (joined 2026-06-29) · **Squall · Driftling · Dewdrop** (all joined 2026-07-03) — Endless/Daily
+  toggle on the start screen (Mana'nana: under the score row), separate daily-best track, Share on game over.
+- **✅ AUDIT FINDING CLOSED 2026-07-03 (`39af949` Squall, `aff36d2` Driftling+Dewdrop).** The three newest
+  cabinets shipped daily-ready (deterministic `makeWorld(seed)`, mulberry32) in the 06-26 arc but were never
+  wired into the Daily loop — 7 of 10 score games had it, these 3 didn't. All three now match: toggle,
+  deterministic daily seed, daily-best, share, DailyLeaderboard on the end overlay (+ the overflow-y-auto
+  scroll-fix none of them had), API allowlisted. Round-trips curl-verified. Feel/render pending Alex's device.
 - **Rekindle** has its own puzzle daily; its date helpers now re-export from the shared lib (one source).
 - **Excluded by design:** Lucernyx (vs-AI win/lose, now SHELVED) · Rekindle (puzzle ★-rating, not higher-is-better). Seedfall JOINED 2026-06-22 (descent redesign gave it a depth score).
 - **✅ Server-side leaderboard SHIPPED (2026-06-22):** `api/arcade/leaderboard/route.ts` (file-backed,
@@ -498,7 +498,7 @@ the Arcade frame.
 **Files:** `atherdash/lib/atherdash.ts` (47 tests) · `lib/atherdash.test.ts` · `page.tsx` · `DESIGN.md`
 
 ### Driftling (#11) — 🟢 live · food-chain evolution → `/driftling`
-*Last touched: 2026-07-01 — card art added (`1d866ae`); shipped 06-26*
+*Last touched: 2026-07-03 — Daily + leaderboard wired (`aff36d2`); card art 07-01; shipped 06-26*
 **Left off:** Shipped live + public. flOw/Feeding-Frenzy DNA: drift the cloud-ocean, eat smaller, flee
   bigger, **evolve in discrete tiers** off a swappable `LADDER` table. Wedge = **the first element you
   eat forks your branch** (Storm ≠ Earth ≠ Water ≠ Mana). Render = vector-glow ocean, camera-follow,
@@ -541,7 +541,7 @@ the Arcade frame.
 **Files:** `squall/lib/squall.ts` (20 tests) · `squall.test.ts` · `lib/sfx.ts` · `page.tsx`
 
 ### Dewdrop (#13) — 🟢 live · Pac-Man riff, Dewbear vs the Moglins → `/dewdrop`
-*Last touched: 2026-07-01 — 4-way D-pad controls + card backdrop (`1d3fd85`); card art (`4499727`); tuned 06-26*
+*Last touched: 2026-07-03 — Daily + leaderboard wired (`aff36d2`); 4-way D-pad + card backdrop 07-01; tuned 06-26*
 **Left off:** Shipped live + public + tuned. A wild **Dewbear** hoovering **dewdrops** in the collar-Moglins'
   burrow-warren; the 4 hunters = the Moglins (**Burr**=chaser, **Bramble**=ambush, **Nettle**=flank,
   **Hemlock**=overseer + top hat); power-pellet = **wildbloom** → collars snap, Moglins **deflate** + flee
