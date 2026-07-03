@@ -924,10 +924,10 @@ function DeskWall({ wall, active, phase, onEnter }: { wall: Wall; active: boolea
         <div
           className="desk-breath absolute inset-0"
           style={{
-            backgroundImage: "url(/room/desk-greeter.png)",
+            backgroundImage: "url(/room/desk-greeter.png?v=momo)",
             backgroundSize: "contain",
             backgroundRepeat: "no-repeat",
-            backgroundPosition: "center",
+            backgroundPosition: "center bottom",
             filter: active ? "none" : "brightness(0.7)",
             transition: "filter 320ms ease",
           }}
