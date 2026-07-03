@@ -210,7 +210,17 @@ the Arcade frame.
   (sticky from-room) · `public/room/news.json` (live feed) · `scripts/news.py` (add/suggest feed tooling) · `/grimoire` (AtherPages, off the Desk)
 
 ### Nolmir — 🟢 live · idle Athernyx defense/arena → `/nolmir`
-*Last touched: 2026-06-18*
+*Last touched: 2026-07-03 — economy regression-guard suite added (`8001bfe`)*
+**🧪 REGRESSION GUARD (2026-07-03, jin-cc):** the ~90K economy had 1 test file (expedmeta, 13). Added
+  **starforge.test.ts (59)** + **away.test.ts (16)** = **88 total** guarding the idle math that breaks
+  silently: settle idempotency (starforge + the homecoming — *whoever loads first banks the haul*), 48h
+  offline cap, no-leak accrual, heat/upkeep (mana never negative, lines fray unpaid), transmute (whole units
+  sold, dust kept), research gating/ramp, cost curves, genSystem determinism, and the warp carry. Run:
+  `for f in src/app/nolmir/lib/*.test.ts; do npx tsx "$f"; done`. **All green, no bugs in covered paths.**
+  **⚑ ONE FINDING FOR ALEX (not changed — prestige-balance call):** `doWarp` carries research/castings/sigils
+  but NOT `owned` (per-creature guard levels/xp) → a warp keeps WHICH guards you equip but resets their earned
+  progression. The comment says warp carries "the guards" — so this reads like an oversight, but whether guard
+  levels should survive a prestige is Alex's call. One-line fix if yes (add `owned`/`collection` to the carry).
 **Economy map (2026-06-17, grounded in code):** currencies = **corelight** (Orrery spine: core-tap
   `rigs×1.5^conduit×2.2^depth×research` + node beam-back + transmute) · **ore** (6 tiers, mined) ·
   **refined** (steelglass/voidplate/embershard — the ONLY research currency) · **mana** (Crucible
