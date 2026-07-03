@@ -200,6 +200,7 @@ the Arcade frame.
      top ships so an offline/failed fetch isn't stale. Live feed also got the Daily-Challenge ship (news.py).
   6. **Mobile pass on the wall-turn** — confirm the 4-wall turn + Desk in-place UI read well at 390px (folds
      in with #4 — the screen-space HUD should also fix the mobile desk read).
+**Recent (2026-07-03):** greeter is now **Momo** (canon-locked Duskpuff, commercial Kontext base, bg-cut + de-glowed — `c320193`/`93c6d5f`); the **Front Desk approach step is REMOVED** (`318be76`) — no dolly, no click-to-approach, panels live the instant you face it. Desk off-screen-panel fix earlier (`d258847`).
 **Parked:** more walls (a 5th destination) · ambient room audio · attendant/NPC presence.
   **★ PARKED IDEA — Eyuun's Bookstore (Alex 2026-07-03, its OWN session):** make the Desk **greeter clickable**
   → **Eyuun's Bookstore**, a cleaner inline-view successor to the Atelier (browse/read the Athernyx books
