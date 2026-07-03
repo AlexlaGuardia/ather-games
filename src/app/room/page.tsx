@@ -864,10 +864,11 @@ const CAST: CastMember[] = [
 const CAST_BY_ID = Object.fromEntries(CAST.map((c) => [c.id, c]));
 const PROFILE_KEY = "ather-room-profile";
 
-function DeskWall({ wall, active, phase, onEnter }: { wall: Wall; active: boolean; phase: Phase; onEnter: () => void }) {
+function DeskWall({ wall, active }: { wall: Wall; active: boolean; phase?: Phase; onEnter?: () => void }) {
   const accent = wall.accent; // cyan
-  const armed = active && phase === "room"; // far away → click anywhere to approach
-  const arrived = active && phase !== "room"; // at the desk → UI is interactive
+  // The Front Desk has NO approach step — no dolly, no click-to-approach. It's
+  // live the instant you face it (arrived === facing it); you turn away to leave.
+  const arrived = active;
 
   // single profile frame → opens a combined Profile panel (portrait picker + settings)
   const [profileId, setProfileId] = useState<string>("kael");
@@ -900,19 +901,14 @@ function DeskWall({ wall, active, phase, onEnter }: { wall: Wall; active: boolea
   const sortedNews = [...news].sort((a, b) => (b.date || "").localeCompare(a.date || ""));
 
   return (
-    <div
-      className={`relative w-full h-full ${armed ? "cursor-pointer" : ""}`}
-      onClick={armed ? onEnter : undefined}
-      role={armed ? "button" : undefined}
-      aria-label={armed ? "Approach the front desk" : undefined}
-    >
+    <div className="relative w-full h-full">
       <Seams />
       <div
         className="pointer-events-none absolute inset-0"
         style={{ background: `radial-gradient(ellipse at 50% 45%, ${accent}1a 0%, transparent 60%)`, opacity: active ? 1 : 0.25, transition: "opacity 320ms ease" }}
       />
 
-      {/* the Mana'mal greeter + podium (one cutout image; clicking it bubbles to approach when armed) */}
+      {/* Momo — the Mana'mal greeter + podium (one cutout image; decorative, no approach step) */}
       <div
         className="pointer-events-none absolute"
         style={{ left: "50%", top: "48%", transform: "translate(-50%,0)", width: 380, height: 462, opacity: active ? 1 : 0.5, transition: "opacity 320ms ease" }}
@@ -1128,7 +1124,6 @@ function DeskWall({ wall, active, phase, onEnter }: { wall: Wall; active: boolea
       {/* Desk title sits up top (greeter now drops to the floor line and would cover a bottom label) */}
       <div className="absolute top-[3%] left-1/2 -translate-x-1/2 text-center" style={{ opacity: active ? 1 : 0.4, transition: "opacity 320ms ease" }}>
         <h2 className="text-3xl tracking-[0.3em] uppercase" style={{ fontFamily: "Cormorant Garamond, Georgia, serif" }}>{wall.label}</h2>
-        {armed && <p className="mt-1 text-[10px] uppercase tracking-[0.3em]" style={{ color: `${accent}99` }}>approach the desk</p>}
       </div>
     </div>
   );
