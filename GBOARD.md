@@ -45,7 +45,8 @@ the Arcade frame.
 > - [ ] **Ward** — enemy tune: Drifter weave gentleness, Darter warning time, Husk feel, intro wave *(knobs: `DRIFT`/`DART`/`HUSK` consts)*
 > - [ ] **Seedfall ⭐ (Alex's FAVOURITE — polish FIRST, it's the proven winner)** — full descent feel (drift authority vs branch spacing, fall speed) + Havari catch/dodge readability (1.4s warn) + soil-approach landing + game-over overlays + **the new wind-puff thrust read** *(knobs atop `seedfall.ts` + `genBranches`)*. ✅ **Card art DONE 2026-06-30** (`e7a04d9`). ✅ **Thrust reworked to wind-puff gusts 2026-07-01** (`693a613` — updraft pillow on both-held, lateral gust from upwind side; render-only). **All solo work done — waiting on Alex's device pass.**
 > - [ ] **Driftling** — device cold-play: drift authority, eat/threat readability, evolve-payoff moment, nursery-start curve *(knobs atop `lib/driftling.ts`)*. ✅ card art DONE 07-01 (`1d866ae`).
-> - [ ] **Squall** — device cold-play (never verified by me, extension was down): pattern density/cadence, bullet speeds, telegraph warn times *(knobs: `fireDirector` gap, per-pattern `spd`, `RAMP_T`, `GRAZE_R`)*. ✅ card art DONE 07-01 (`1d866ae`).
+> - [ ] **Squall** — device cold-play (STILL never visually verified — extension needs Alex's host-perm grant): pattern density/cadence, bullet speeds, telegraph warn times *(knobs: `fireDirector` gap, per-pattern `spd`, `RAMP_T`, `GRAZE_R`)*. ✅ card art DONE 07-01 (`1d866ae`). ✅ **Daily + leaderboard WIRED 2026-07-03 (`39af949`)** — endless/daily toggle, share, DailyLeaderboard, API allowlisted; round-trip verified via curl.
+> - [ ] **Driftling + Dewdrop** — wire the Daily (the audit finding, `39af949` did Squall; these two are the same ~6-line pattern) THEN device cold-play.
 > - [ ] **Dewdrop** — cold-play tune already started (`a8c54ac`): scatter/chase waves, wildbloom duration, ghost-vs-player speed gap *(consts atop `lib/dewdrop.ts`)* + maze art/layout (deferred, Alex taste)
 > - [ ] **gx-* look on real mobile across all 11** — esp. the game-OVER overlays headless can't reach
 > - [ ] **Arcade cabinet dial** — final warmth/dim/red-skew on `<ArcadeCabinet>` (one component → changes everywhere)
@@ -67,9 +68,14 @@ the Arcade frame.
 - **Shared lib `src/lib/arcade/daily.ts`** (reusable like ArcadeCabinet): `dailyKey`/`dailySeed`/
   `dailyNumber` (#1 = 2026-01-01) + per-game daily-best storage + Wordle-style `dailyShare` + clipboard.
   Opt in with ~6 lines: seed the world from `dailySeed()`, save with `saveDailyBest`, add the toggle + share.
-- **Live on 7 score-chase games:** Atherdash · Ward · Updraft · Voranyx · Mana'nana · Seedfall · **Vault**
-  (Vault joined 2026-06-29) — Endless/Daily toggle on the start screen (Mana'nana: under the score row),
-  separate daily-best track, Share on game over.
+- **Live on 8 score-chase games:** Atherdash · Ward · Updraft · Voranyx · Mana'nana · Seedfall · **Vault**
+  (Vault joined 2026-06-29) · **Squall** (joined 2026-07-03) — Endless/Daily toggle on the start screen
+  (Mana'nana: under the score row), separate daily-best track, Share on game over.
+- **⚠ STILL UN-WIRED (audit 2026-07-03) — Driftling + Dewdrop.** Both are built deterministic
+  (`makeWorld(seed)`, mulberry32 — Dewdrop's source even says "for the Daily") but shipped in the 06-26
+  arc without the ~6-line daily opt-in. They're score-chase games that fit the loop; **wiring them the
+  same way Squall just got is the obvious next polish-lap items** (pure plumbing, no feel-judgment needed).
+  Squall was done first (strongest survival-score daily + it was the one game never visually verified).
 - **Rekindle** has its own puzzle daily; its date helpers now re-export from the shared lib (one source).
 - **Excluded by design:** Lucernyx (vs-AI win/lose, now SHELVED) · Rekindle (puzzle ★-rating, not higher-is-better). Seedfall JOINED 2026-06-22 (descent redesign gave it a depth score).
 - **✅ Server-side leaderboard SHIPPED (2026-06-22):** `api/arcade/leaderboard/route.ts` (file-backed,
@@ -512,7 +518,7 @@ the Arcade frame.
 **Files:** `driftling/lib/driftling.ts` (27 tests) · `driftling.test.ts` · `lib/sfx.ts` · `page.tsx` · `DESIGN.md`
 
 ### Squall (#12) — 🟢 live · defenseless bullet-hell → `/squall`
-*Last touched: 2026-07-01 — card art added (`1d866ae`); shipped 06-26*
+*Last touched: 2026-07-03 — Daily + leaderboard wired (`39af949`); card art 07-01; shipped 06-26*
 **Left off:** Shipped live + public. Pure-evasion bullet-hell — **no shield, no shots**, brand-new
   "defenseless survival" mood. The void rains **5 telegraphed patterns** escalating with survival time
   (rain comb / side sweep / aimed fan / ring burst / rotating spiral), each fair (edge-entered or warned).
@@ -521,10 +527,13 @@ the Arcade frame.
   toward fire), visible hot-white **hitbox pinpoint** + graze aura/flash, HUD, best-score + run-summary death,
   touch joystick / mouse-follow / WASD. 20 sim tests green.
 **Next:**
-  1. **⚑ Alex device cold-play (NEVER verified by me — extension was down on ship day)** — pattern
+  1. **⚑ Alex device cold-play (STILL never visually verified — extension needs a host-perm grant)** — pattern
      density/cadence, bullet speeds, telegraph warn times. Knobs: `fireDirector` gap, per-pattern `spd`,
      `RAMP_T`, `GRAZE_R` in `lib/squall.ts`.
   2. ✅ **Card art DONE 2026-07-01** (`1d866ae`) — lone cyan spark in a radial storm of violet bullet-streaks.
+  3. ✅ **Daily + leaderboard WIRED 2026-07-03** (`39af949`) — endless/daily toggle, deterministic daily seed,
+     today's-best track, share-result, DailyLeaderboard on game-over (dead overlay got the overflow-y-auto
+     scroll-fix too), squall added to the API allowlist. Round-trip verified via curl. Feel still pending Alex.
 **Parked:** —
 **Decisions:** **#2-cabinet call: Squall over Pac-Man** at the time — Driftling is eat/flee/flip, Pac-Man is
   too (predator-flip), so Squall (no offense) gives the board real contrast. (Pac-Man later shipped anyway as
