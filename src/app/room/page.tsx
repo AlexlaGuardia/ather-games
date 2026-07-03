@@ -172,9 +172,11 @@ export default function RoomPrototype() {
   }, [applyAudio, audioOn]);
 
   const angle = face * STEP;
-  // door/TV/arch fill the view (ENTER_DOLLY); the Front Desk approaches GENTLER so the whole
-  // composition (profile/settings/news + attendant) stays in frame.
-  const enterDolly = facedWall.id === "desk" ? 380 : ENTER_DOLLY;
+  // door/TV/arch fill the view (ENTER_DOLLY). The Front Desk does NOT dolly: its
+  // side panels sit at the wall's edges (1% / 99%), so ANY zoom magnifies them
+  // off-screen (the old 380 pushed AtherPages + News past the viewport). Instead
+  // the desk "approach" reads as the panels brightening to life in place.
+  const enterDolly = facedWall.id === "desk" ? 0 : ENTER_DOLLY;
   const dolly = phase === "room" ? 0 : phase === "through" ? enterDolly + 110 : enterDolly;
   const worldMs = phase === "approach" ? APPROACH_MS : phase === "through" ? THROUGH_MS : TURN_MS;
 
@@ -932,8 +934,18 @@ function DeskWall({ wall, active, phase, onEnter }: { wall: Wall; active: boolea
         />
       </div>
 
-      {/* interactive cluster — only live once you've arrived at the desk */}
-      <div className="absolute inset-0" style={{ pointerEvents: arrived ? "auto" : "none" }}>
+      {/* interactive cluster — only live once you've arrived at the desk. With no
+          dolly, the approach reads here: the panels lift from dim to full + a hair
+          upward as you "step up" to the desk. */}
+      <div
+        className="absolute inset-0"
+        style={{
+          pointerEvents: arrived ? "auto" : "none",
+          opacity: arrived ? 1 : 0.55,
+          transform: arrived ? "translateY(0)" : "translateY(6px)",
+          transition: "opacity 320ms ease, transform 320ms ease",
+        }}
+      >
         {/* the profile frame — a single portrait hung above the greeter; click to open
             the Profile panel (pick a cast portrait + settings). */}
         <div className="absolute flex justify-center" style={{ left: "50%", top: "8%", transform: "translate(-50%,0)" }}>
