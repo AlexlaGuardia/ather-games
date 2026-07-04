@@ -21,8 +21,8 @@ function buildSlice(): ArenaState {
     return s
   }
   // A party with distinct roles so the Speak layer matters: striker · caster · wall.
-  const allies = [mk('fox', 'Kit', 20, 'storm'), mk('owl', 'Sage', 20, 'mana'), mk('water-bear', 'Tor', 20, 'earth')]
-  const enemies = [mk('frog', 'Blightling', 22), mk('bat', 'Gnash', 22)]
+  const allies = [mk('fox', 'Kit', 22, 'storm'), mk('owl', 'Sage', 22, 'mana'), mk('water-bear', 'Tor', 22, 'earth')]
+  const enemies = [mk('frog', 'Blightling', 22), mk('bat', 'Gnash', 22), mk('rabbit', 'Scree', 22)]
   return createArena({ allies, enemies, seed: (Math.random() * 1e9) | 0 })
 }
 

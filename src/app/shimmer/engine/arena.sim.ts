@@ -87,6 +87,17 @@ console.log(`  passive Keeper : ${A.pct.toFixed(1).padStart(5)}% win   (resolved
 console.log(`  skilled Keeper : ${B.pct.toFixed(1).padStart(5)}% win   (resolved ${B.resolvedPct.toFixed(0)}%)`)
 console.log(`  skill delta    : ${(B.pct - A.pct >= 0 ? '+' : '')}${(B.pct - A.pct).toFixed(1)} pts\n`)
 
+// ── PARTY scenario (matches /shimmer/arena harness): 3 allies vs 2 enemies ──
+// Player-favored by design (you brought your team). Want: passive winnable (~45-65%),
+// skilled clearly strong (~80%+). If passive is near 0, the party is getting AoE-wiped.
+const pAllies = () => [mk('fox', 22), mk('owl', 22), mk('water-bear', 22)]
+const pEnemies = () => [mk('frog', 22), mk('bat', 22), mk('rabbit', 22)]
+const Ap = winRate(passive, pAllies, pEnemies, N)
+const Bp = winRate(skilled, pAllies, pEnemies, N)
+console.log(`=== PARTY — 3 allies vs 3 enemies, all L22, ${N} seeds/policy ===`)
+console.log(`  passive Keeper : ${Ap.pct.toFixed(1).padStart(5)}% win   (resolved ${Ap.resolvedPct.toFixed(0)}%)`)
+console.log(`  skilled Keeper : ${Bp.pct.toFixed(1).padStart(5)}% win   (resolved ${Bp.resolvedPct.toFixed(0)}%)\n`)
+
 // ── hard assertions ──
 const fails: string[] = []
 if (A.badHp || B.badHp) fails.push('hp went negative')
@@ -94,6 +105,10 @@ if (A.badMana || B.badMana) fails.push('mana went negative')
 if (A.resolvedPct < 100 || B.resolvedPct < 100) fails.push(`fights stalled (resolved A=${A.resolvedPct}% B=${B.resolvedPct}%)`)
 if (A.pct > 55) fails.push(`passive too strong (${A.pct}%) — matchup isn't actually losing`)
 if (B.pct - A.pct < 25) fails.push(`Keeper skill barely matters (+${(B.pct - A.pct).toFixed(1)}pts) — the timing loop is weak`)
+// party balance: a fair 3v3 should be competitive at baseline (spirits fight on their own) and
+// clearly won by an engaged Keeper — NOT one-sided against the player.
+if (Ap.pct < 30 || Ap.pct > 68) fails.push(`party baseline off (passive ${Ap.pct}%) — want competitive ~40-60%`)
+if (Bp.pct < 85) fails.push(`party Keeper too weak (skilled ${Bp.pct}%) — should reliably win`)
 
 if (fails.length) { console.error('❌ ARENA ORACLE FAILED:\n  - ' + fails.join('\n  - ')); process.exit(1) }
 console.log('✅ arena oracle: fights resolve, no negative hp/mana, and a skilled Keeper flips a losing fight.')

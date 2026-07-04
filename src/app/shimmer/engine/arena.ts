@@ -107,15 +107,18 @@ function fighterFromSpirit(spirit: Spirit, id: string, side: Side, x: number, y:
   const s = derivePartyStats(spirit)
   const speed = 1.6 + s.agi / 40           // agi → footspeed
   const maxHp = Math.round(s.maxHp * HP_MULT)
+  // Attack = the spirit's real damage axis. Physical units hit on pwr, casters channel on foc
+  // (owl/firefly/bat). Reading pwr alone gimped every caster — use whichever is their strength.
+  const atk = Math.max(s.pwr, s.foc)
   return {
     id, side, species: spirit.species, element: spirit.element, name: spirit.name,
     x, y, facing: side === 'ally' ? 0 : Math.PI,
-    hp: maxHp, maxHp, pwr: s.pwr, grd: s.grd, agi: s.agi,
+    hp: maxHp, maxHp, pwr: atk, grd: s.grd, agi: s.agi,
     radius: 0.35 + s.maxHp / 260, speed,
     reach: 0.9, atkCd: 0.4, atkInterval: Math.max(0.95, 1.9 - s.agi / 70),
     stance: 'aggressive', targetId: null,
     flinch: 0, defDownT: 0, defDownAmt: 0, braceT: 0, recoverT: 0, hitFlash: 0,
-    wind: null, winCd: side === 'enemy' ? 2.5 : 0,
+    wind: null, winCd: 2.5,
   }
 }
 
@@ -213,8 +216,10 @@ export function tick(state: ArenaState, dt: number, commands: KeeperCommand[] = 
     f.facing = Math.atan2(target.y - f.y, target.x - f.x)
     const d = dist(f, target)
 
-    // enemy heavy wind-up — the telegraph the Keeper times against
-    if (f.side === 'enemy') { stepEnemyWind(state, f, target, d, dt); if (f.wind) continue }
+    // heavy wind-up — both sides channel one (spirits fight on their own). A defending spirit
+    // holds instead. Enemy winds telegraph a danger-ring the Keeper times against; ally winds
+    // just fire (your spirits doing their thing).
+    if (f.stance !== 'defend') { stepWind(state, f, target, d, dt); if (f.wind) continue }
 
     const inReach = d <= f.reach + f.radius + target.radius
     if (f.stance === 'defend') {
@@ -251,27 +256,28 @@ function basicAttack(state: ArenaState, f: Fighter, target: Fighter) {
   applyDamage(state, f, target, f.pwr * 0.34)   // light — the heavy wind-up is the real threat
 }
 
-function stepEnemyWind(state: ArenaState, f: Fighter, target: Fighter, d: number, dt: number) {
+function stepWind(state: ArenaState, f: Fighter, target: Fighter, d: number, dt: number) {
+  const foeSide: Side = f.side === 'ally' ? 'enemy' : 'ally'
   if (f.wind) {
     f.wind.t += dt
     if (f.wind.t >= f.wind.dur) {
-      // land it on everyone in range of the strike point (the target's position at fire)
+      // land it on the opposite side within range of the strike point (target's position at fire)
       const tgt = state.fighters.find(g => g.id === f.wind!.targetId && alive(g))
       if (tgt) {
         for (const g of state.fighters) {
-          if (g.side !== 'ally' || !alive(g)) continue
+          if (g.side !== foeSide || !alive(g)) continue
           if (Math.hypot(g.x - tgt.x, g.y - tgt.y) <= f.wind.range) applyDamage(state, f, g, f.wind.dmg)
         }
         state.events.push({ type: 'wind_land', who: f.id, target: tgt.id, dmg: f.wind.dmg })
       }
       f.wind = null
-      f.winCd = 4.5
+      f.winCd = 5.5
     }
     return
   }
   // start a wind-up when off cooldown and roughly in position
   if (f.winCd <= 0 && d <= f.reach + 2.5) {
-    f.wind = { t: 0, dur: 1.5, range: 1.4, dmg: f.pwr * 0.95, targetId: target.id }
+    f.wind = { t: 0, dur: 1.5, range: 1.0, dmg: f.pwr * 0.58, targetId: target.id }
     state.events.push({ type: 'wind_start', who: f.id, target: target.id })
   }
 }
