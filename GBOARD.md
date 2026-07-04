@@ -143,7 +143,8 @@ the Arcade frame.
 
 | Game | Status | Last touched | What it is |
 |------|--------|--------------|------------|
-| The Room | 🟢 live | 2026-07-01 | the hub — arcade hall, Desk wall, Grimoire/AtherPages, nav spine |
+| The Room | 🟢 live | 2026-07-04 | the hub — arcade hall, Desk wall, Grimoire/AtherPages, Momo→Bookstore, nav spine |
+| Eyuun's Bookstore | 🟢 live | 2026-07-04 | public audiobook player — Athernyx narrations off the Desk (Secrets hero + 15 Spirit Tales) |
 | Nolmir | 🟢 live | 2026-06-18 | idle Athernyx defense/arena |
 | Mana'nana | 🟢 live | 2026-06-22 | match-3, blooming specials |
 | Rekindle #3 | 🟢 live | 2026-06-22 | conduit puzzle + Aeterna node-map |
@@ -161,6 +162,20 @@ the Arcade frame.
 | Anima | 🔬 tech demo | 2026-06-21 | procedural character (IK rig + verlet cloak), ZERO art files — linked in Room |
 
 ---
+
+### Eyuun's Bookstore — 🟢 live · the public listening room → `/bookstore`
+*Last touched: 2026-07-04 — shipped (`476e301`)*
+**What it is:** an **audiobook player** (the "listen" half of the Atelier, brought public to spread the
+  universe). Reached by clicking **Momo at the Front Desk**. Secrets of Athernyx (Eyuun's own book) is the
+  hero; the 15 Spirit Tales sit on the shelf. Play/pause, prev/next chapter, seek, speed 1–2×, auto-advance,
+  localStorage resume.
+**Left off:** built + verified live end-to-end (Momo nav, intro→auto-advance into Ch.1, covers/shelves,
+  resume). Serves ~500MB of narration **same-origin** via a `/listen` rewrite → local akatskii-web (:3100) —
+  cross-origin akatskii.com media stalls in the browser (CF hotlink hang), same-origin streams clean w/ range.
+  Manifest fetched server-side (revalidate 5m). Files: `src/app/bookstore/`.
+**Next:** Alex cold-play desktop + phone (390px bottom-bar fit, dark-cover legibility). **Decision:** it's
+  audio-only by design — NOT a text reader (Alex reframed 07-04). **Coupling:** depends on akatskii-web (:3100)
+  being up. Memory: `project_eyuun_bookstore`.
 
 ### The Room — 🟢 live · the hub everything ties back to → `/room`
 *Last touched: 2026-07-03 — news fallback freshened + Daily ship in the feed; desk-panel fix teed for co-review*
