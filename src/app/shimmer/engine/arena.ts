@@ -19,7 +19,7 @@ import { derivePartyStats } from './party-stats'
 
 export type Side = 'ally' | 'enemy'
 export type Stance = 'aggressive' | 'defend'   // the live-nudgeable instinct (Speak flicks this)
-export type AidId = 'flash' | 'breeze' | 'reach'
+export type AidId = 'flash' | 'breeze' | 'reach' | 'guard'
 
 export interface Fighter {
   id: string
@@ -40,6 +40,7 @@ export interface Fighter {
   // status timers, in seconds remaining
   flinch: number            // stunned — cannot act (Momo's flash)
   defDownT: number; defDownAmt: number   // grd reduced (Bonn's Reach)
+  shieldT: number           // incoming damage reduced (a bonded guardian Mana'mal's gift)
   braceT: number            // defending → incoming halved
   recoverT: number          // just struck → give ground (the strike-and-reposition tempo, no glued scrum)
   hitFlash: number          // took a hit → renderer flashes the body white (impact read)
@@ -93,11 +94,41 @@ export function mulberry32(seed: number): () => number {
   }
 }
 
-const DEFAULT_AID: () => AidSlot[] = () => [
-  { id: 'flash',  name: 'Rainbow Flash', cost: 4, cd: 6, cdLeft: 0 },  // Momo — flinch/interrupt
-  { id: 'breeze', name: 'Cool Breeze',   cost: 2, cd: 8, cdLeft: 0 },  // Bonn — mana trickle
-  { id: 'reach',  name: 'Reach',         cost: 3, cd: 5, cdLeft: 0 },  // Bonn — single-target defense-down
-]
+// ── Aid technique catalog + Keeper kits ─────────────────────────────────────────
+// Canon (game/shimmer-combat.md): Aid = 3 techniques = 2 the KEEPER'S own channeled
+// magic + 1 the bonded MANA'MAL'S gift. Aid enables, never deals damage. A bonded
+// Mana'mal never fights — it does its natural thing and that helps you. So a kit is
+// the Keeper's two channels plus whichever Mana'mal is bonded (the swappable 3rd slot).
+type AidDef = { id: AidId; name: string; cost: number; cd: number }
+
+// Keeper channels — Bonn's own runes (the only ruled Keeper so far).
+const CHANNELS: Record<string, AidDef> = {
+  breeze: { id: 'breeze', name: 'Cool Breeze', cost: 2, cd: 8 },  // Flow sustain — mana trickle
+  reach:  { id: 'reach',  name: 'Reach',       cost: 3, cd: 5 },  // single-target defence-down
+}
+// Mana'mal gifts — the 3rd slot, keyed by the bonded companion. Each is that creature's
+// canonical natural behaviour turned mechanical (mechanic = Jin; the technique NAME/lore
+// is Magii's — 'flash'/Momo is ruled, the rest carry mechanic-labels pending a ruling).
+const GIFTS: Record<string, AidDef> = {
+  duskpuff:  { id: 'flash', name: 'Rainbow Flash', cost: 4, cd: 6 },  // Momo — startle-burst → flinch/interrupt (RULED)
+  coilguard: { id: 'guard', name: 'Guard',         cost: 3, cd: 9 },  // sentinel — shelters an ally (damage taken cut)
+}
+export type ManamalId = keyof typeof GIFTS
+export interface AidKit { channels: AidId[]; gift: AidId }
+
+// Bonn + Momo — the ruled starter kit.
+export const BONN_MOMO_KIT: AidKit = { channels: ['breeze', 'reach'], gift: 'flash' }
+export function kitForManamal(m: ManamalId): AidKit { return { channels: ['breeze', 'reach'], gift: GIFTS[m].id } }
+
+const AID_DEFS: Record<AidId, AidDef> = {
+  ...Object.fromEntries(Object.values(CHANNELS).map(d => [d.id, d])),
+  ...Object.fromEntries(Object.values(GIFTS).map(d => [d.id, d])),
+} as Record<AidId, AidDef>
+
+// Build the keeper's 3 live Aid slots from a kit: gift first (top corner), then channels.
+function buildAid(kit: AidKit): AidSlot[] {
+  return [kit.gift, ...kit.channels].map(id => ({ ...AID_DEFS[id], cdLeft: 0 }))
+}
 
 // Fights are duels, not pings — HP is padded well above the turn-based pool so the
 // telegraph→react→payoff loop cycles many times before anyone falls (~5-6x longer).
@@ -117,7 +148,7 @@ function fighterFromSpirit(spirit: Spirit, id: string, side: Side, x: number, y:
     radius: 0.35 + s.maxHp / 260, speed,
     reach: 0.9, atkCd: 0.4, atkInterval: Math.max(0.95, 1.9 - s.agi / 70),
     stance: 'aggressive', targetId: null,
-    flinch: 0, defDownT: 0, defDownAmt: 0, braceT: 0, recoverT: 0, hitFlash: 0,
+    flinch: 0, defDownT: 0, defDownAmt: 0, shieldT: 0, braceT: 0, recoverT: 0, hitFlash: 0,
     wind: null, winCd: 2.5,
   }
 }
@@ -127,6 +158,7 @@ export interface ArenaSpec {
   enemies: Spirit[]
   seed: number
   R?: number
+  aidKit?: AidKit           // the Keeper's kit (2 channels + bonded Mana'mal gift); defaults to Bonn + Momo
 }
 
 export function createArena(spec: ArenaSpec): ArenaState {
@@ -142,7 +174,7 @@ export function createArena(spec: ArenaSpec): ArenaState {
   })
   return {
     t: 0, R, fighters,
-    keeper: { mana: 6, maxMana: 12, manaRegen: 1.1, breezeBoostT: 0, aid: DEFAULT_AID(), bagCdLeft: 0 },
+    keeper: { mana: 6, maxMana: 12, manaRegen: 1.1, breezeBoostT: 0, aid: buildAid(spec.aidKit ?? BONN_MOMO_KIT), bagCdLeft: 0 },
     outcome: 'ongoing', events: [], rng: mulberry32(spec.seed),
   }
 }
@@ -169,6 +201,7 @@ function applyDamage(state: ArenaState, from: Fighter, to: Fighter, base: number
   const braced = braceHalves && to.braceT > 0
   let dmg = Math.max(1, Math.round(base - effGrd(to) * 0.25))
   if (braced) dmg = Math.max(1, Math.round(dmg * 0.5))
+  if (to.shieldT > 0) dmg = Math.max(1, Math.round(dmg * 0.45))   // guarded → incoming softened
   to.hp = Math.max(0, to.hp - dmg)
   to.hitFlash = 0.16
   // knockback — the hit visibly lands (shoved along the attacker→target axis)
@@ -202,6 +235,7 @@ export function tick(state: ArenaState, dt: number, commands: KeeperCommand[] = 
     if (!alive(f)) continue
     f.flinch = Math.max(0, f.flinch - dt)
     f.defDownT = Math.max(0, f.defDownT - dt)
+    f.shieldT = Math.max(0, f.shieldT - dt)
     f.braceT = Math.max(0, f.braceT - dt)
     f.recoverT = Math.max(0, f.recoverT - dt)
     f.hitFlash = Math.max(0, f.hitFlash - dt)
@@ -322,6 +356,15 @@ function applyCommand(state: ArenaState, cmd: KeeperCommand) {
       ? state.fighters.find(x => x.id === cmd.targetId && x.side === 'enemy' && alive(x))
       : nearestEnemyForKeeper(state)
     if (g) { g.defDownT = 5; g.defDownAmt = 0.5 }
+  } else if (slot.id === 'guard') {
+    // Coilguard's gift — shelter the ally under the most pressure (targeted by a wind-up,
+    // else the lowest-HP standing ally). Incoming damage softened for a few seconds.
+    const winding = state.fighters.filter(f => f.side === 'enemy' && f.wind && alive(f)).map(f => f.wind!.targetId)
+    const g = cmd.targetId
+      ? state.fighters.find(x => x.id === cmd.targetId && x.side === 'ally' && alive(x))
+      : state.fighters.filter(x => x.side === 'ally' && alive(x))
+          .sort((a, b) => (winding.includes(b.id) ? 1 : 0) - (winding.includes(a.id) ? 1 : 0) || a.hp - b.hp)[0]
+    if (g) g.shieldT = 6
   }
 }
 

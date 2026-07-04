@@ -10,7 +10,7 @@ import { Canvas, useFrame } from '@react-three/fiber'
 import { Html, OrbitControls } from '@react-three/drei'
 import * as THREE from 'three'
 import { useRef, useState, useCallback } from 'react'
-import { createArena, tick, type ArenaState, type KeeperCommand, type AidId, type Stance } from '../engine/arena'
+import { createArena, tick, type ArenaState, type KeeperCommand, type AidId, type Stance, type AidKit } from '../engine/arena'
 import { ELEMENT_COLORS, type Element, type Spirit } from '../spirits/spirit'
 
 const ENEMY_GREY = '#787885'
@@ -46,6 +46,7 @@ function Scene({ arenaRef, cmdQueue, onSnap }: {
   const bodies = useRef(new Map<string, THREE.Mesh>())
   const hpFills = useRef(new Map<string, HTMLDivElement>())
   const rings = useRef(new Map<string, THREE.Mesh>())
+  const shields = useRef(new Map<string, THREE.Mesh>())
   const acc = useRef(0)
 
   useFrame((_, delta) => {
@@ -88,6 +89,18 @@ function Scene({ arenaRef, cmdQueue, onSnap }: {
       } else r.visible = false
     }
 
+    // guard shield — a cyan ground halo under a sheltered ally (blue = protected)
+    for (const f of s.fighters) {
+      if (f.side !== 'ally') continue
+      const sh = shields.current.get(f.id)
+      if (!sh) continue
+      if (f.shieldT > 0 && f.hp > 0) {
+        sh.visible = true; sh.position.set(f.x, 0.03, f.y)
+        const m = sh.material as THREE.MeshBasicMaterial
+        m.opacity = 0.3 + 0.25 * (0.5 + 0.5 * Math.sin(s.t * 6))   // gentle pulse
+      } else sh.visible = false
+    }
+
     acc.current += delta
     if (acc.current > 0.08) { acc.current = 0; onSnap(snap(s)) }
   })
@@ -119,6 +132,13 @@ function Scene({ arenaRef, cmdQueue, onSnap }: {
         <mesh key={'ring-' + f.id} ref={m => { if (m) rings.current.set(f.id, m) }} rotation={[-Math.PI / 2, 0, 0]} visible={false}>
           <ringGeometry args={[0.72, 1, 40]} />
           <meshBasicMaterial color="#f0a526" transparent opacity={0.4} side={THREE.DoubleSide} />
+        </mesh>
+      ))}
+      {/* guard shield halos — one per ally (shown only while sheltered) */}
+      {s0.fighters.filter(f => f.side === 'ally').map(f => (
+        <mesh key={'shield-' + f.id} ref={m => { if (m) shields.current.set(f.id, m) }} rotation={[-Math.PI / 2, 0, 0]} visible={false}>
+          <ringGeometry args={[f.radius * 0.9, f.radius * 1.15, 40]} />
+          <meshBasicMaterial color="#6fd0e6" transparent opacity={0.4} side={THREE.DoubleSide} />
         </mesh>
       ))}
       {/* fighters — element-tinted blockout capsules + floating nameplate/HP */}
@@ -170,21 +190,21 @@ function CornerBtn({ label, sub, disabled, accent, cd, cdMax, onClick, style }: 
 }
 
 // ── the battle: sim + HUD. One renderer for both the harness and in-world play3d. ──
-export default function ArenaBattle({ allies, enemies, seed, onEnd, continueLabel = 'CONTINUE' }: {
+export default function ArenaBattle({ allies, enemies, seed, aidKit, onEnd, continueLabel = 'CONTINUE' }: {
   allies: Spirit[]
   enemies: Spirit[]
   seed?: number
+  aidKit?: AidKit
   onEnd: (outcome: 'win' | 'lose' | 'fled') => void
   continueLabel?: string
 }) {
   const arenaRef = useRef<ArenaState | null>(null)
-  if (!arenaRef.current) arenaRef.current = createArena({ allies, enemies, seed: seed ?? ((Math.random() * 1e9) | 0) })
+  if (!arenaRef.current) arenaRef.current = createArena({ allies, enemies, aidKit, seed: seed ?? ((Math.random() * 1e9) | 0) })
   const cmdQueue = useRef<KeeperCommand[]>([])
   const [ui, setUi] = useState<UISnap>(() => snap(arenaRef.current!))
   const [speakOpen, setSpeakOpen] = useState(false)
 
   const send = useCallback((c: KeeperCommand) => { cmdQueue.current.push(c) }, [])
-  const aidBy = (id: AidId) => ui.aid.find(a => a.id === id)!
   const over = ui.outcome !== 'ongoing'
 
   return (
@@ -203,13 +223,12 @@ export default function ArenaBattle({ allies, enemies, seed, onEnd, continueLabe
         <div style={{ font: '600 9px ui-monospace, monospace', color: '#9fb8c8', marginTop: 2 }}>MANA {Math.floor(ui.mana)}/{ui.maxMana}</div>
       </div>
 
-      {/* AID — top-left (3 spells) */}
+      {/* AID — top-left (3 techniques: bonded Mana'mal gift on top, then the Keeper's 2 channels) */}
       <div style={{ position: 'absolute', top: 74, left: 14, display: 'flex', flexDirection: 'column', gap: 8 }}>
-        {(['flash', 'breeze', 'reach'] as AidId[]).map(id => {
-          const a = aidBy(id)
+        {ui.aid.map(a => {
           const disabled = over || a.cdLeft > 0 || ui.mana < a.cost
-          return <CornerBtn key={id} label={a.name.split(' ')[a.name.split(' ').length - 1].toUpperCase()} sub={`${a.cost}◈`}
-            accent="#6fd0e6" disabled={disabled} cd={a.cdLeft} cdMax={a.cd} onClick={() => send({ type: 'aid', id })} style={{ position: 'static' }} />
+          return <CornerBtn key={a.id} label={a.name.split(' ')[a.name.split(' ').length - 1].toUpperCase()} sub={`${a.cost}◈`}
+            accent="#6fd0e6" disabled={disabled} cd={a.cdLeft} cdMax={a.cd} onClick={() => send({ type: 'aid', id: a.id })} style={{ position: 'static' }} />
         })}
       </div>
 
