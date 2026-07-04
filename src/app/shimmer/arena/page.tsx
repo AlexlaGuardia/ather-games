@@ -196,7 +196,7 @@ export default function ArenaSlice() {
 
   return (
     <div style={{ position: 'fixed', inset: 0, background: '#0a0f0e', overflow: 'hidden', touchAction: 'none' }}>
-      <Canvas key={runId} shadows camera={{ position: [0, 10, 9.5], fov: 40 }} style={{ position: 'absolute', inset: 0 }}>
+      <Canvas key={runId} shadows camera={{ position: [0, 10, -9.5], fov: 40 }} style={{ position: 'absolute', inset: 0 }}>
         <color attach="background" args={['#0a0f0e']} />
         <Scene arenaRef={arenaRef} cmdQueue={cmdQueue} onSnap={setUi} />
       </Canvas>
