@@ -6,7 +6,7 @@
 // arena will later materialize in-world inside play3d). Route: /shimmer/arena.
 
 import { Canvas, useFrame } from '@react-three/fiber'
-import { Html } from '@react-three/drei'
+import { Html, OrbitControls } from '@react-three/drei'
 import * as THREE from 'three'
 import { useRef, useState, useCallback } from 'react'
 import { createArena, tick, type ArenaState, type KeeperCommand, type AidId, type Stance } from '../engine/arena'
@@ -58,10 +58,8 @@ function Scene({ arenaRef, cmdQueue, onSnap }: {
   const hpFills = useRef(new Map<string, HTMLDivElement>())
   const rings = useRef(new Map<string, THREE.Mesh>())
   const acc = useRef(0)
-  const didLook = useRef(false)
 
-  useFrame(({ camera }, delta) => {
-    if (!didLook.current) { camera.lookAt(0, 0, 0.6); didLook.current = true }
+  useFrame((_, delta) => {
     const s = arenaRef.current
     const dt = Math.min(delta, 1 / 20)
     const cmds = cmdQueue.current.splice(0)
@@ -109,6 +107,14 @@ function Scene({ arenaRef, cmdQueue, onSnap }: {
   const s0 = arenaRef.current
   return (
     <>
+      {/* camera: orbit + zoom the arena. Pan locked (stays centred), clamped above the floor
+          and within a 3/4-to-overhead band so you can't lose the fight off-screen. */}
+      <OrbitControls
+        makeDefault target={[0, 0.4, 0]} enablePan={false}
+        enableDamping dampingFactor={0.08}
+        minDistance={7} maxDistance={22}
+        minPolarAngle={0.35} maxPolarAngle={1.28}
+      />
       <ambientLight intensity={0.7} />
       <directionalLight position={[4, 9, 5]} intensity={1.1} />
       {/* arena floor */}
