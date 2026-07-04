@@ -49,6 +49,7 @@ function Scene({ arenaRef, cmdQueue, onSnap }: {
   onSnap: (u: UISnap) => void
 }) {
   const groups = useRef(new Map<string, THREE.Group>())
+  const bodies = useRef(new Map<string, THREE.Mesh>())
   const hpFills = useRef(new Map<string, HTMLDivElement>())
   const ring = useRef<THREE.Mesh>(null)
   const acc = useRef(0)
@@ -70,6 +71,13 @@ function Scene({ arenaRef, cmdQueue, onSnap }: {
       g.rotation.y = -f.facing + Math.PI / 2
       // flinch shiver
       if (f.flinch > 0) g.position.x += Math.sin(s.t * 60) * 0.04
+      // hit-flash + pop — the blow visibly lands
+      const body = bodies.current.get(f.id)
+      if (body) {
+        const mat = body.material as THREE.MeshStandardMaterial
+        mat.emissiveIntensity = (f.side === 'ally' ? 0.35 : 0.12) + f.hitFlash * 6
+        body.scale.setScalar(1 + f.hitFlash * 1.1)
+      }
       const fill = hpFills.current.get(f.id)
       if (fill) fill.style.width = `${Math.max(0, (f.hp / f.maxHp) * 100)}%`
     }
@@ -115,7 +123,7 @@ function Scene({ arenaRef, cmdQueue, onSnap }: {
         const h = f.radius * 1.2
         return (
           <group key={f.id} ref={g => { if (g) groups.current.set(f.id, g) }} position={[f.x, 0, f.y]}>
-            <mesh position={[0, f.radius * 0.6 + h / 2, 0]} castShadow>
+            <mesh ref={m => { if (m) bodies.current.set(f.id, m) }} position={[0, f.radius * 0.6 + h / 2, 0]} castShadow>
               <capsuleGeometry args={[f.radius * 0.6, h, 6, 12]} />
               <meshStandardMaterial color={col} emissive={col} emissiveIntensity={f.side === 'ally' ? 0.35 : 0.12} roughness={0.5} />
             </mesh>
@@ -172,7 +180,7 @@ export default function ArenaSlice() {
 
   return (
     <div style={{ position: 'fixed', inset: 0, background: '#0a0f0e', overflow: 'hidden', touchAction: 'none' }}>
-      <Canvas key={runId} shadows camera={{ position: [0, 8.5, 8], fov: 42 }} style={{ position: 'absolute', inset: 0 }}>
+      <Canvas key={runId} shadows camera={{ position: [0, 10, 9.5], fov: 40 }} style={{ position: 'absolute', inset: 0 }}>
         <color attach="background" args={['#0a0f0e']} />
         <Scene arenaRef={arenaRef} cmdQueue={cmdQueue} onSnap={setUi} />
       </Canvas>

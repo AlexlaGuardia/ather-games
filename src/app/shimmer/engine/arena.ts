@@ -41,6 +41,8 @@ export interface Fighter {
   flinch: number            // stunned — cannot act (Momo's flash)
   defDownT: number; defDownAmt: number   // grd reduced (Bonn's Reach)
   braceT: number            // defending → incoming halved
+  recoverT: number          // just struck → give ground (the strike-and-reposition tempo, no glued scrum)
+  hitFlash: number          // took a hit → renderer flashes the body white (impact read)
   // enemy heavy attack telegraph (the CLOCK the Keeper reads)
   wind: { t: number; dur: number; range: number; dmg: number; targetId: string } | null
   winCd: number
@@ -97,17 +99,22 @@ const DEFAULT_AID: () => AidSlot[] = () => [
   { id: 'reach',  name: 'Reach',         cost: 3, cd: 5, cdLeft: 0 },  // Bonn — single-target defense-down
 ]
 
+// Fights are duels, not pings — HP is padded well above the turn-based pool so the
+// telegraph→react→payoff loop cycles many times before anyone falls (~5-6x longer).
+const HP_MULT = 2.6
+
 function fighterFromSpirit(spirit: Spirit, id: string, side: Side, x: number, y: number): Fighter {
   const s = derivePartyStats(spirit)
   const speed = 1.6 + s.agi / 40           // agi → footspeed
+  const maxHp = Math.round(s.maxHp * HP_MULT)
   return {
     id, side, species: spirit.species, element: spirit.element, name: spirit.name,
     x, y, facing: side === 'ally' ? 0 : Math.PI,
-    hp: s.maxHp, maxHp: s.maxHp, pwr: s.pwr, grd: s.grd, agi: s.agi,
+    hp: maxHp, maxHp, pwr: s.pwr, grd: s.grd, agi: s.agi,
     radius: 0.35 + s.maxHp / 260, speed,
-    reach: 0.9, atkCd: 0.4, atkInterval: Math.max(0.55, 1.4 - s.agi / 90),
+    reach: 0.9, atkCd: 0.4, atkInterval: Math.max(0.95, 1.9 - s.agi / 70),
     stance: 'aggressive', targetId: null,
-    flinch: 0, defDownT: 0, defDownAmt: 0, braceT: 0,
+    flinch: 0, defDownT: 0, defDownAmt: 0, braceT: 0, recoverT: 0, hitFlash: 0,
     wind: null, winCd: side === 'enemy' ? 2.5 : 0,
   }
 }
@@ -156,9 +163,15 @@ function nearestEnemy(state: ArenaState, f: Fighter): Fighter | null {
 function effGrd(f: Fighter): number { return f.defDownT > 0 ? f.grd * (1 - f.defDownAmt) : f.grd }
 
 function applyDamage(state: ArenaState, from: Fighter, to: Fighter, base: number, braceHalves = true) {
+  const braced = braceHalves && to.braceT > 0
   let dmg = Math.max(1, Math.round(base - effGrd(to) * 0.25))
-  if (braceHalves && to.braceT > 0) dmg = Math.max(1, Math.round(dmg * 0.5))
+  if (braced) dmg = Math.max(1, Math.round(dmg * 0.5))
   to.hp = Math.max(0, to.hp - dmg)
+  to.hitFlash = 0.16
+  // knockback — the hit visibly lands (shoved along the attacker→target axis)
+  const kb = braced ? 0.06 : 0.17
+  const ang = Math.atan2(to.y - from.y, to.x - from.x)
+  to.x += Math.cos(ang) * kb; to.y += Math.sin(ang) * kb
   state.events.push({ type: 'hit', from: from.id, to: to.id, dmg })
   if (to.hp <= 0) state.events.push({ type: 'ko', who: to.id })
 }
@@ -187,6 +200,8 @@ export function tick(state: ArenaState, dt: number, commands: KeeperCommand[] = 
     f.flinch = Math.max(0, f.flinch - dt)
     f.defDownT = Math.max(0, f.defDownT - dt)
     f.braceT = Math.max(0, f.braceT - dt)
+    f.recoverT = Math.max(0, f.recoverT - dt)
+    f.hitFlash = Math.max(0, f.hitFlash - dt)
     f.atkCd = Math.max(0, f.atkCd - dt)
     f.winCd = Math.max(0, f.winCd - dt)
 
@@ -211,9 +226,17 @@ export function tick(state: ArenaState, dt: number, commands: KeeperCommand[] = 
       else if (d > want + 0.6) moveToward(f, target, dt)
       if (inReach && f.atkCd <= 0) { basicAttack(state, f, target); f.atkCd = f.atkInterval * 1.25 }
     } else {
-      // aggressive: close + strike on cooldown
-      if (!inReach) moveToward(f, target, dt)
-      else if (f.atkCd <= 0) { basicAttack(state, f, target); f.atkCd = f.atkInterval }
+      // aggressive: strike-and-reposition — dart in, hit, give ground, re-close (no glued hug)
+      if (f.recoverT > 0) {
+        const space = f.reach + f.radius + target.radius + 1.2
+        if (d < space) moveAway(f, target, dt * 0.85)
+      } else if (!inReach) {
+        moveToward(f, target, dt)
+      } else if (f.atkCd <= 0) {
+        moveToward(f, target, dt)      // small lunge into the blow
+        basicAttack(state, f, target)
+        f.atkCd = f.atkInterval; f.recoverT = f.atkInterval * 0.6
+      }
     }
   }
 
@@ -225,7 +248,7 @@ export function tick(state: ArenaState, dt: number, commands: KeeperCommand[] = 
 }
 
 function basicAttack(state: ArenaState, f: Fighter, target: Fighter) {
-  applyDamage(state, f, target, f.pwr * 0.5)
+  applyDamage(state, f, target, f.pwr * 0.34)   // light — the heavy wind-up is the real threat
 }
 
 function stepEnemyWind(state: ArenaState, f: Fighter, target: Fighter, d: number, dt: number) {
@@ -248,7 +271,7 @@ function stepEnemyWind(state: ArenaState, f: Fighter, target: Fighter, d: number
   }
   // start a wind-up when off cooldown and roughly in position
   if (f.winCd <= 0 && d <= f.reach + 2.5) {
-    f.wind = { t: 0, dur: 1.5, range: 1.4, dmg: f.pwr * 1.05, targetId: target.id }
+    f.wind = { t: 0, dur: 1.5, range: 1.4, dmg: f.pwr * 0.95, targetId: target.id }
     state.events.push({ type: 'wind_start', who: f.id, target: target.id })
   }
 }
