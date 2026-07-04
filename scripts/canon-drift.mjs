@@ -22,6 +22,7 @@
 import { readFileSync, writeFileSync, existsSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
+import { execFileSync } from 'node:child_process'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
 const GAME = join(HERE, '..', 'src', 'app', 'shimmer')          // /root/ather-games/src/app/shimmer
@@ -290,6 +291,18 @@ function toMarkdown(counts) {
     md += `\n`
   }
   return md
+}
+
+// ── REGISTRY SYNC (best-effort) ────────────────────────
+// Keep canon_registry mirrored to CANON/ on every gate run, so the index
+// never silently drifts (it once fell to 63/131). Best-effort: a sync
+// failure warns but never blocks the drift check — the gate's exit code
+// stays a pure function of build↔canon drift.
+try {
+  const out = execFileSync('python3', ['/root/athernyx/sync_registry.py', '--quiet'], { encoding: 'utf8' })
+  if (!QUIET) process.stdout.write(out)
+} catch (e) {
+  console.error(`canon-drift: registry sync skipped — ${e.message.split('\n')[0]}`)
 }
 
 // ── MAIN ───────────────────────────────────────────────
