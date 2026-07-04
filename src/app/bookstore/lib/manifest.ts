@@ -44,7 +44,8 @@ const PUBLISHED_IDS = new Set<number>([
   101, // Secrets of Athernyx — Vol. One: The Heretic  (the hero; remove to pull it)
   1,   // Bonn #1 — Bonn and the Great Discovery
   2,   // Bonn #2 — Bonn and the Borrowed Courage
-  // Bonn #3 (id 3) is still being published; #4+ not locked in — add as they ship.
+  3,   // Bonn #3 — Bonn and the Hollow Crown  (published 2026-07-04, KDP eBook + paperback)
+  // Bonn #4+ not locked in — add as they ship.
 ]);
 
 const WORK_LABELS: Record<string, string> = {

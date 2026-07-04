@@ -164,15 +164,20 @@ the Arcade frame.
 ---
 
 ### Eyuun's Bookstore — 🟢 live · the public listening room → `/bookstore`
-*Last touched: 2026-07-04 — shipped (`476e301`)*
+*Last touched: 2026-07-04 — shipped (`476e301`); Bk3 added to the public shelf*
 **What it is:** an **audiobook player** (the "listen" half of the Atelier, brought public to spread the
   universe). Reached by clicking **Momo at the Front Desk**. Secrets of Athernyx (Eyuun's own book) is the
   hero; the 15 Spirit Tales sit on the shelf. Play/pause, prev/next chapter, seek, speed 1–2×, auto-advance,
   localStorage resume.
-**Left off:** built + verified live end-to-end (Momo nav, intro→auto-advance into Ch.1, covers/shelves,
-  resume). Serves ~500MB of narration **same-origin** via a `/listen` rewrite → local akatskii-web (:3100) —
-  cross-origin akatskii.com media stalls in the browser (CF hotlink hang), same-origin streams clean w/ range.
-  Manifest fetched server-side (revalidate 5m). Files: `src/app/bookstore/`.
+**Left off:** 2026-07-04 — **added Bonn Bk3 (The Hollow Crown)** to the public shelf: `+3` in `PUBLISHED_IDS`
+  (bookstore/lib/manifest.ts allowlist) → 3 Spirit Tales now live. On the akatskii-web listen side: re-narrated
+  Ch3 (was stale pre-edit; `build_audio --book 3 --out <listen> --cover <redo2_a>`, idempotent) + swapped the
+  manifest cover from the old atrium v2 to the real published cover. **Publish a book → add its manifest id here.**
+  ★ Gotchas: `build_audio` defaults `--out` to the local `audio/` dir (pass `--out /root/akatskii-web/public/listen`);
+  Next **fetch-cache persists across pm2 restart** (`revalidate:300`) — `rm -rf .next/cache/fetch-cache` to force;
+  do NOT `rm .next/server/app/<route>` on a live server (500 until rebuild).
+  Serves ~500MB narration **same-origin** via a `/listen` rewrite → local akatskii-web (:3100) — cross-origin
+  akatskii.com media stalls (CF hotlink hang), same-origin streams clean w/ range. Files: `src/app/bookstore/`.
 **Next:** Alex cold-play desktop + phone (390px bottom-bar fit, dark-cover legibility). **Decision:** it's
   audio-only by design — NOT a text reader (Alex reframed 07-04). **Coupling:** depends on akatskii-web (:3100)
   being up. Memory: `project_eyuun_bookstore`.
