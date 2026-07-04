@@ -17,16 +17,7 @@ import { ALEX_SPRITES, ALEX_PALETTE } from './sprites/alex'
 import { TILES, ABOVE, VEIL, VEIL_DENSE } from './world/tiles'
 import { PLAYER_START } from './world/tilemap'
 import { ZONES, START_ZONE, Zone, checkWarp, getZone } from './world/zones'
-import { FOX_SPRITES } from './sprites/fox'
-import { AXOLOTL_SPRITES } from './sprites/axolotl'
-import { WATER_BEAR_SPRITES } from './sprites/water-bear'
-import { TURTLE_SPRITES } from './sprites/turtle'
-import { OWL_SPRITES } from './sprites/owl'
-import { FROG_SPRITES } from './sprites/frog'
-import { FIREFLY_SPRITES } from './sprites/firefly'
-import { RABBIT_SPRITES } from './sprites/rabbit'
-import { HUMMINGBIRD_SPRITES } from './sprites/hummingbird'
-import { BAT_SPRITES } from './sprites/bat'
+import { SPECIES_SPRITE_MAP } from './spirits/species-sprites'
 import { PALETTES, getEvolvedPalette } from './sprites/palette'
 import { Spirit, Species, Element, Variant, createSpirit, addXP, hasFruitBoost, xpForLevel, formStage, FAVORITE_FRUIT, PlantedSeed, createPlantedSeed, getGrowthPhase, isReadyToHatch, ELEMENTS, ELEMENT_COLORS, SECOND_FORM_NAMES, getSecondFormName, speciesDisplayName } from './spirits/spirit'
 import { type SpiritSave, spiritsToSave, spiritsFromSave } from './spirits/spirit-save'
@@ -125,18 +116,7 @@ const SKILL_COLORS: Record<SkillId, string> = {
   mana: '#5090d0',
 }
 
-const SPRITE_MAP: Record<string, Record<string, SpriteAnim>> = {
-  fox: FOX_SPRITES,
-  axolotl: AXOLOTL_SPRITES,
-  'water-bear': WATER_BEAR_SPRITES,
-  turtle: TURTLE_SPRITES,
-  owl: OWL_SPRITES,
-  frog: FROG_SPRITES,
-  firefly: FIREFLY_SPRITES,
-  rabbit: RABBIT_SPRITES,
-  hummingbird: HUMMINGBIRD_SPRITES,
-  bat: BAT_SPRITES,
-}
+const SPRITE_MAP = SPECIES_SPRITE_MAP
 
 interface GameSave {
   spirits?: SpiritSave[]
