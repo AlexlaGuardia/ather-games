@@ -934,18 +934,29 @@ function DeskWall({ wall, active }: { wall: Wall; active: boolean; phase?: Phase
             transition: "filter 320ms ease, transform 300ms ease",
           }}
         />
-        {/* discoverable label at the podium base — dim once you're at the desk, bright on hover */}
+        {/* discoverable label — a solid pill below the podium so it reads as UI, not an
+            artifact in Momo's fur. Full-strength once you're at the desk; lifts on hover. */}
         <span
-          className="pointer-events-none absolute left-1/2 -translate-x-1/2 inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-[10px] uppercase tracking-[0.2em] whitespace-nowrap transition-all duration-300"
+          className="pointer-events-none absolute left-1/2 -translate-x-1/2 inline-flex items-center gap-2 rounded-full border whitespace-nowrap transition-all duration-300 group-hover/greeter:-translate-y-0.5"
           style={{
-            bottom: 30,
-            borderColor: `${accent}44`,
-            background: "#0b1218cc",
+            bottom: 8,
+            padding: "7px 18px",
+            fontSize: 15,
+            fontWeight: 500,
+            letterSpacing: "0.16em",
+            textTransform: "uppercase",
+            borderColor: `${accent}88`,
+            background: "#0a0f16f2",
             color: accent,
-            opacity: arrived ? 0.72 : 0,
+            boxShadow: `0 6px 20px rgba(0,0,0,0.6), 0 0 14px ${accent}33`,
+            opacity: arrived ? 1 : 0,
           }}
         >
-          <span className="group-hover/greeter:opacity-100" style={{ opacity: 0.85 }}>Eyuun&apos;s Bookstore</span>
+          {/* little open-book glyph so it reads as "enter" at a glance */}
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+            <path d="M2 3h6a4 4 0 014 4v14a3 3 0 00-3-3H2z" /><path d="M22 3h-6a4 4 0 00-4 4v14a3 3 0 013-3h7z" />
+          </svg>
+          Eyuun&apos;s Bookstore
           <span className="transition-transform group-hover/greeter:translate-x-0.5">&#8250;</span>
         </span>
       </Link>
