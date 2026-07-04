@@ -908,27 +908,47 @@ function DeskWall({ wall, active }: { wall: Wall; active: boolean; phase?: Phase
         style={{ background: `radial-gradient(ellipse at 50% 45%, ${accent}1a 0%, transparent 60%)`, opacity: active ? 1 : 0.25, transition: "opacity 320ms ease" }}
       />
 
-      {/* Momo — the Mana'mal greeter + podium (one cutout image; decorative, no approach step) */}
-      <div
-        className="pointer-events-none absolute"
-        style={{ left: "50%", top: "48%", transform: "translate(-50%,0)", width: 380, height: 462, opacity: active ? 1 : 0.5, transition: "opacity 320ms ease" }}
+      {/* Momo — the Mana'mal greeter + podium. Decorative until you've arrived at the
+          desk; then she's the door to Eyuun's Bookstore (the listening room). z-lifted
+          above the interactive cluster overlay so the click lands; she sits dead-center
+          and never overlaps the side panels. */}
+      <Link
+        href="/bookstore?from=room"
+        aria-label="Enter Eyuun's Bookstore — a listening room for the Athernyx books"
+        className={`group/greeter absolute ${arrived ? "cursor-pointer" : "pointer-events-none"}`}
+        style={{ left: "50%", top: "48%", transform: "translate(-50%,0)", width: 380, height: 462, opacity: active ? 1 : 0.5, transition: "opacity 320ms ease", zIndex: 15 }}
+        onClick={(e) => { if (!arrived) e.preventDefault(); }}
       >
         {/* contact shadow at the podium base — sits across the wall/floor seam so it reads planted */}
         <div className="pointer-events-none absolute" style={{ left: "50%", bottom: 60, width: 220, height: 42, transform: "translate(-50%,0)", background: "radial-gradient(ellipse, rgba(0,0,0,0.62), transparent 72%)", filter: "blur(8px)" }} />
-        {/* soft glow pool the greeter sits in (pulses with the breath once you're at the desk) */}
-        <div className={`pointer-events-none absolute ${active ? "desk-glow-pulse" : ""}`} style={{ left: "50%", top: "32%", width: 340, height: 300, transform: "translate(-50%,-50%)", background: `radial-gradient(circle, ${accent}22, transparent 68%)`, filter: "blur(10px)", opacity: active ? 0.9 : 0.4 }} />
+        {/* soft glow pool the greeter sits in (pulses with the breath once you're at the desk; brightens on hover) */}
+        <div className={`pointer-events-none absolute transition-opacity duration-300 ${active ? "desk-glow-pulse" : ""} group-hover/greeter:opacity-100`} style={{ left: "50%", top: "32%", width: 340, height: 300, transform: "translate(-50%,-50%)", background: `radial-gradient(circle, ${accent}22, transparent 68%)`, filter: "blur(10px)", opacity: active ? 0.9 : 0.4 }} />
         <div
-          className="desk-breath absolute inset-0"
+          className="desk-breath absolute inset-0 transition-transform duration-300 group-hover/greeter:-translate-y-1"
           style={{
             backgroundImage: "url(/room/desk-greeter.png?v=momo2)",
             backgroundSize: "contain",
             backgroundRepeat: "no-repeat",
             backgroundPosition: "center bottom",
             filter: active ? "none" : "brightness(0.7)",
-            transition: "filter 320ms ease",
+            transition: "filter 320ms ease, transform 300ms ease",
           }}
         />
-      </div>
+        {/* discoverable label at the podium base — dim once you're at the desk, bright on hover */}
+        <span
+          className="pointer-events-none absolute left-1/2 -translate-x-1/2 inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-[10px] uppercase tracking-[0.2em] whitespace-nowrap transition-all duration-300"
+          style={{
+            bottom: 30,
+            borderColor: `${accent}44`,
+            background: "#0b1218cc",
+            color: accent,
+            opacity: arrived ? 0.72 : 0,
+          }}
+        >
+          <span className="group-hover/greeter:opacity-100" style={{ opacity: 0.85 }}>Eyuun&apos;s Bookstore</span>
+          <span className="transition-transform group-hover/greeter:translate-x-0.5">&#8250;</span>
+        </span>
+      </Link>
 
       {/* interactive cluster — only live once you've arrived at the desk. With no
           dolly, the approach reads here: the panels lift from dim to full + a hair
