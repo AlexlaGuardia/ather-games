@@ -88,24 +88,32 @@ export default function Bookstore({ groups, fromRoom }: { groups: WorkGroup[]; f
   }, []);
 
   // ── play a specific chapter of a book ─────────────────────────────────────
+  // Drives the <audio> element IMPERATIVELY (no requestAnimationFrame). rAF is
+  // frozen while a tab is backgrounded, so the old RAF-based path meant that when
+  // a chapter ended with the phone asleep, the auto-advance never fired — the
+  // "it pauses at the end of a chapter" bug. Setting src + play() directly works
+  // in the background, and the Media Session (below) keeps that playback allowed.
   const play = useCallback((book: Book, chapter: Chapter, seekTo = 0) => {
+    const el = audioRef.current;
+    if (!el) return;
     setActiveBook(book);
     setActiveChapter(chapter);
     setPos(seekTo);
     setDur(chapter.duration_seconds || 0);
-    // let the <audio src> swap in, then load + seek + play
-    requestAnimationFrame(() => {
-      const el = audioRef.current;
-      if (!el) return;
-      el.playbackRate = rate;
-      const start = () => {
-        if (seekTo > 0) { try { el.currentTime = seekTo; } catch { /* ignore */ } }
-        el.play().then(() => setPlaying(true)).catch(() => setPlaying(false));
-        el.removeEventListener("loadedmetadata", start);
+    el.src = chapter.file;
+    el.playbackRate = rate;
+    el.load();
+    const startPlay = () => { el.play().then(() => setPlaying(true)).catch(() => setPlaying(false)); };
+    if (seekTo > 0) {
+      const onMeta = () => {
+        try { el.currentTime = seekTo; } catch { /* ignore */ }
+        startPlay();
+        el.removeEventListener("loadedmetadata", onMeta);
       };
-      el.addEventListener("loadedmetadata", start);
-      el.load();
-    });
+      el.addEventListener("loadedmetadata", onMeta);
+    } else {
+      startPlay();
+    }
   }, [rate]);
 
   const togglePlay = useCallback(() => {
@@ -127,11 +135,54 @@ export default function Bookstore({ groups, fromRoom }: { groups: WorkGroup[]; f
     setRate((r) => SPEEDS[(SPEEDS.indexOf(r) + 1) % SPEEDS.length] ?? 1);
   }, []);
 
+  // ── Media Session — lock-screen controls + background playback ─────────────
+  // This is what keeps the narration playing when the phone screen locks or the
+  // tab backgrounds (the "it pauses when I close the phone" fix): a registered
+  // media session tells the OS this is legit background audio. It also puts real
+  // play/pause/next/prev on the lock screen and notification shade.
+  useEffect(() => {
+    if (!("mediaSession" in navigator) || !activeChapter || !activeBook) return;
+    const ms = navigator.mediaSession;
+    try {
+      ms.metadata = new MediaMetadata({
+        title: activeChapter.title,
+        artist: activeBook.title,
+        album: "Eyuun's Bookstore",
+        artwork: activeBook.cover ? [{ src: activeBook.cover, sizes: "512x768", type: "image/png" }] : [],
+      });
+    } catch { /* ignore */ }
+    const el = () => audioRef.current;
+    ms.setActionHandler("play", () => { el()?.play().then(() => setPlaying(true)).catch(() => {}); });
+    ms.setActionHandler("pause", () => { el()?.pause(); setPlaying(false); });
+    ms.setActionHandler("previoustrack", () => step(-1));
+    ms.setActionHandler("nexttrack", () => step(1));
+    try {
+      ms.setActionHandler("seekto", (d) => {
+        const a = el();
+        if (a && d.seekTime != null) { a.currentTime = d.seekTime; setPos(d.seekTime); }
+      });
+    } catch { /* seekto unsupported on some browsers */ }
+    return () => {
+      (["play", "pause", "previoustrack", "nexttrack", "seekto"] as MediaSessionAction[]).forEach((a) => {
+        try { ms.setActionHandler(a, null); } catch { /* ignore */ }
+      });
+    };
+  }, [activeChapter, activeBook, step]);
+
+  // reflect play/pause to the OS so the lock-screen button stays in sync
+  useEffect(() => {
+    if ("mediaSession" in navigator) navigator.mediaSession.playbackState = playing ? "playing" : "paused";
+  }, [playing]);
+
   // ── audio element event wiring ────────────────────────────────────────────
   const onTime = () => {
     const el = audioRef.current;
     if (!el || seekingRef.current) return;
     setPos(el.currentTime);
+    // feed the OS lock-screen scrubber
+    if ("mediaSession" in navigator && navigator.mediaSession.setPositionState && el.duration && isFinite(el.duration)) {
+      try { navigator.mediaSession.setPositionState({ duration: el.duration, position: el.currentTime, playbackRate: el.playbackRate }); } catch { /* ignore */ }
+    }
     if (activeBook && activeChapter && Math.floor(el.currentTime) % 5 === 0) {
       persistResume(activeBook.id, activeChapter.n, el.currentTime);
     }
@@ -168,10 +219,9 @@ export default function Bookstore({ groups, fromRoom }: { groups: WorkGroup[]; f
 
   return (
     <div className="min-h-screen bg-void text-[#cdbfa6] pb-32" style={{ background: "radial-gradient(ellipse at 50% -10%, #1a1410 0%, #0b0906 55%, #070504 100%)" }}>
-      {/* single audio element, driven by refs */}
+      {/* single audio element — src is set imperatively in play() (see note there) */}
       <audio
         ref={audioRef}
-        src={activeChapter?.file}
         onTimeUpdate={onTime}
         onLoadedMetadata={onLoaded}
         onEnded={onEnded}

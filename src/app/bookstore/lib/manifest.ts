@@ -35,6 +35,18 @@ export interface Manifest {
   books: Book[];
 }
 
+// ── PUBLISHED SHELF — the public allowlist ────────────────────────────────────
+// The narration manifest carries EVERY book that's been narrated, including ones
+// still being revised or not yet published. This store is public-facing, so it
+// only shows books whose id is listed here. Publish a book → add its manifest id.
+// (Find an id: the manifest at akatskii.com/listen/manifest.json — `id` per book.)
+const PUBLISHED_IDS = new Set<number>([
+  101, // Secrets of Athernyx — Vol. One: The Heretic  (the hero; remove to pull it)
+  1,   // Bonn #1 — Bonn and the Great Discovery
+  2,   // Bonn #2 — Bonn and the Borrowed Courage
+  // Bonn #3 (id 3) is still being published; #4+ not locked in — add as they ship.
+]);
+
 const WORK_LABELS: Record<string, string> = {
   "secrets-of-athernyx": "Secrets of Athernyx",
   "spirit-tales": "Spirit Tales",
@@ -89,7 +101,9 @@ export async function fetchManifest(): Promise<Manifest> {
     const res = await fetch(MANIFEST_URL, { next: { revalidate: 300 } });
     if (!res.ok) return { books: [] };
     const raw = (await res.json()) as { books?: Array<Record<string, unknown>> };
-    const books: Book[] = (raw.books ?? []).map((b) => {
+    const books: Book[] = (raw.books ?? [])
+      .filter((b) => PUBLISHED_IDS.has((b as { id: number }).id))
+      .map((b) => {
       const rec = b as {
         id: number;
         work?: string;
