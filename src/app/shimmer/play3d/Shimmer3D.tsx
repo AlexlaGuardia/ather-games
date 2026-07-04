@@ -654,6 +654,30 @@ export default function Shimmer3D() {
     setBattle({ allies: partyRef.current!, enemies: buildWildParty(enc, size), aiTier: enc.aiTier, zoneId: zoneIdRef.current, kind: 'wild' })
   }, [])
 
+  // DEV: force a wild Keeper's Arena fight in-world, ignoring the party/zone/RNG gates —
+  // so the arena can be feel-tested without owning a starter or being in an encounter zone.
+  // Uses the real party if present; otherwise a throwaway test trio (never persisted).
+  const forceFight = useCallback(() => {
+    const real = partyRef.current ?? []
+    const allies = real.length > 0
+      ? real
+      : (['fox', 'owl', 'water-bear'] as const).map((sp, i) => {
+          const s = createSpirit(sp, ['Kit', 'Sage', 'Tor'][i], 0, 0)
+          s.level = 12; s.bond = 60; s.happiness = 128
+          return s
+        })
+    const enc = rollEncounter(zoneIdRef.current, partyLevelRef.current || 12)
+    const enemies = enc
+      ? buildWildParty(enc, allies.length)
+      : (['frog', 'bat'] as const).map((sp, i) => {
+          const s = createSpirit(sp, ['Blightling', 'Gnash'][i], 0, 0)
+          s.level = Math.max(10, partyLevelRef.current || 12)
+          return s
+        })
+    battleRef.current = true
+    setBattle({ allies, enemies, aiTier: enc?.aiTier ?? 'wild', zoneId: zoneIdRef.current, kind: 'wild' })
+  }, [])
+
   // Battle end: on a win, split rewards across the party (XP / bond / happiness / gold), then save.
   const endBattle = useCallback((outcome: 'win' | 'lose', reachResult?: 'freed' | 'forced' | 'fainted' | null) => {
     battleRef.current = false
@@ -1094,6 +1118,8 @@ export default function Shimmer3D() {
             <Btn onClick={clearZone}>Clear to empty</Btn>
             <button onClick={save} style={{ padding: '6px 16px', borderRadius: 6, border: 'none', background: '#d4a843', color: '#1a1a2e', font: '800 13px ui-monospace, monospace', cursor: 'pointer' }}>Save zone</button>
           </div>
+          {/* DEV: drop straight into the in-world Keeper's Arena (bypasses party/zone/RNG gates) */}
+          <button onClick={() => { setEditMode(false); forceFight() }} style={{ padding: '6px 16px', borderRadius: 6, border: '2px solid #7fe3c8', background: '#12181a', color: '#7fe3c8', font: '800 13px ui-monospace, monospace', cursor: 'pointer' }}>⚔ Force Fight (arena)</button>
           {saveMsg && <span style={{ color: '#e9dfc8', font: '600 12px ui-monospace, monospace' }}>{saveMsg}</span>}
         </div>
       )}
