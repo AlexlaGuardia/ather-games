@@ -7,7 +7,7 @@ const BASE = 'https://ather.games'
 
 export default function sitemap(): MetadataRoute.Sitemap {
   const now = new Date()
-  const hubs = ['/room', '/arcade/all', '/grimoire']
+  const hubs = ['/room', '/arcade/all', '/grimoire', '/bookstore']
   const live = GAMES.filter((g) => g.tier === 'live').map((g) => g.href)
 
   const seen = new Set<string>()
