@@ -11,11 +11,8 @@ import { walkable } from '../engine/player'
 import { ZONES, getZone, checkWarp, type Zone, type Warp } from '../world/zones'
 import { getHeightGrid } from '../world/heightmaps'
 import { rollEncounter, type WildEncounter } from '../engine/encounters'
-import { createSpirit, addXP, speciesDisplayName, getSecondFormName, type Spirit, type Species, type Element } from '../spirits/spirit'
-import { AWAKENED_FORM_NAMES } from '../spirits/evolution-config'
+import { createSpirit, addXP, speciesDisplayName, type Spirit, type Species } from '../spirits/spirit'
 import { spiritsToSave, spiritsFromSave } from '../spirits/spirit-save'
-import { SPECIES_SPRITE_MAP } from '../spirits/species-sprites'
-import EvolutionOverlay from '../components/EvolutionOverlay'
 import { LAUNCHED_SPECIES } from '../engine/spirit-index'
 import type { AITier } from '../engine/battle-ai'
 import PartyBattleScene from '../components/PartyBattleScene'
@@ -593,7 +590,6 @@ export default function Shimmer3D() {
   const defeatedRef = useRef(defeated); defeatedRef.current = defeated
   const [battle, setBattle] = useState<{ allies: Spirit[]; enemies: Spirit[]; aiTier: AITier; zoneId: string; reach?: boolean; captiveIdxs?: number[]; kind?: 'wild' | 'thistle' | 'sorrel' | 'brack' } | null>(null)
   const curBattleRef = useRef(battle); curBattleRef.current = battle
-  const [evolvePending, setEvolvePending] = useState<Spirit | null>(null) // second-form evolution: freezes the walker until the element is picked
   const [banner, setBanner] = useState<string | null>(null)
   const [nearNpc, setNearNpc] = useState<NPC3D | null>(null)
   const [dialogue, setDialogue] = useState<{ name: string; lines: string[]; speakers?: string[]; idx: number; grantAt?: number; onDone: () => void } | null>(null)
@@ -667,26 +663,14 @@ export default function Shimmer3D() {
       const allies = (partyRef.current ?? []).slice(0, MAX_PARTY)
       const perXp = Math.max(1, Math.round(totalXp / Math.max(1, allies.length)))
       if (gold > 0) wallet.earn(gold)
-      let evolveShown = false
       for (const spirit of allies) {
         const xpResult = addXP(spirit, perXp)
         spirit.bond = Math.min(255, spirit.bond + 4)
         spirit.happiness = Math.min(255, spirit.happiness + 3)
-        // Second form (Lv34): the first eligible ally opens the element-pick overlay; others get their
-        // turn next fight. The overlay keeps battleRef true so the walker stays frozen until it resolves.
-        if (xpResult.evolved === 'second' && spirit.element === 'base' && !evolveShown) {
-          evolveShown = true
-          setEvolvePending(spirit)
-        }
-        // Awakened (Lv67, already elemental): auto-take the Champion (alpha) branch, matching the 2D game
-        // (the full branch-pick with mastery prereqs is a deferred system there too).
-        if (xpResult.evolved === 'awakened' && spirit.element !== 'base') {
-          const awakenedName = AWAKENED_FORM_NAMES[spirit.species]?.[spirit.element]?.alpha
-          if (awakenedName) { spirit.name = awakenedName; setBanner(`✦ ${awakenedName} has awakened!`) }
-        }
+        // Full evolution (form/element change) is the 2D EvolutionScene's job — not ported yet. We just
+        // celebrate the threshold here; the spirit keeps leveling until it can evolve in the full flow.
+        if (xpResult.evolved) setBanner(`✦ ${spirit.name} is ready to evolve!`)
       }
-      // Keep the walker frozen through the overlay; handleEvolveComplete unfreezes.
-      if (evolveShown) battleRef.current = true
     }
     setBattle(null)
     // Liberation beat: freeing Thistle's collared spirit clears Hold 1 — he deflates and retreats east.
@@ -734,19 +718,6 @@ export default function Shimmer3D() {
     }
     persist()
   }, [wallet, persist])
-
-  // Second-form evolution resolved: lock in the chosen element + second-form name, save, unfreeze the walker.
-  const handleEvolveComplete = useCallback((chosenElement: Exclude<Element, 'base'>) => {
-    const spirit = evolvePending
-    if (spirit) {
-      spirit.element = chosenElement
-      const formName = getSecondFormName(spirit.species, chosenElement)
-      if (formName) { spirit.name = formName; setBanner(`✦ Evolved into ${formName}!`) }
-    }
-    setEvolvePending(null)
-    battleRef.current = false
-    persist()
-  }, [evolvePending, persist])
 
   // New Game: empty party back at the start zone — the player meets Gregory again for a fresh starter.
   const newGame = useCallback(() => {
@@ -1171,15 +1142,6 @@ export default function Shimmer3D() {
             onEnd={endBattle}
           />
         </div>
-      )}
-
-      {/* Second-form evolution — element pick, mounted over the frozen walker after a battle. */}
-      {evolvePending && (
-        <EvolutionOverlay
-          spirit={evolvePending}
-          sprites={SPECIES_SPRITE_MAP}
-          onComplete={handleEvolveComplete}
-        />
       )}
     </div>
   )
