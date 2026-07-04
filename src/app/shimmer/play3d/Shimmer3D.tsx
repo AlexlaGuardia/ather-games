@@ -16,6 +16,7 @@ import { spiritsToSave, spiritsFromSave } from '../spirits/spirit-save'
 import { LAUNCHED_SPECIES } from '../engine/spirit-index'
 import type { AITier } from '../engine/battle-ai'
 import PartyBattleScene from '../components/PartyBattleScene'
+import ArenaBattle from '../components/ArenaBattle'
 import { NPCS_3D, GREG_INTRO_LINES, GREG_NUDGE, GREG_RETURN, THISTLE_TAUNT_NO_SPIRIT, THISTLE_PREFIGHT, THISTLE_DEFEAT, FREED_SPIRIT_BEAT, SORREL_PREFIGHT, SORREL_DEFEAT, FREED_PAIR_BEAT, BRACK_PREFIGHT, BRACK_FINALE, BRACK_FORCED_BEAT, type NPC3D } from './npcs3d'
 import { useCloudSave } from '@/lib/use-cloud-save'
 import { useWallet } from '@/lib/use-wallet'
@@ -1129,18 +1130,29 @@ export default function Shimmer3D() {
       {/* B hotkey (keyboard) — owner only, and not while a battle overlay is up */}
       <KeyToggle onB={() => { if (isOwner && !battleRef.current) setEditMode((e) => !e) }} />
 
-      {/* Wild encounter — the real party battle, mounted over the 3D world. */}
+      {/* Combat, mounted over the 3D world. Wild fights use the real-time Keeper's Arena;
+          the scripted liberation holds (thistle/sorrel/brack) still run the reach/captive
+          turn-based scene until the freed-vs-forced beat is ruled back into the arena
+          (CANON_GAPS: collar-breaks-on-win). */}
       {battle && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 50, background: '#0a0a12' }}>
-          <PartyBattleScene
-            allySpirits={battle.allies}
-            enemySpirits={battle.enemies}
-            zoneId={battle.zoneId}
-            reach={battle.reach}
-            captiveIdxs={battle.captiveIdxs}
-            ai={{ focusFire: battle.aiTier !== 'wild', spendMana: battle.aiTier !== 'wild' }}
-            onEnd={endBattle}
-          />
+          {battle.kind === 'wild' ? (
+            <ArenaBattle
+              allies={battle.allies}
+              enemies={battle.enemies}
+              onEnd={(o) => endBattle(o === 'win' ? 'win' : 'lose')}
+            />
+          ) : (
+            <PartyBattleScene
+              allySpirits={battle.allies}
+              enemySpirits={battle.enemies}
+              zoneId={battle.zoneId}
+              reach={battle.reach}
+              captiveIdxs={battle.captiveIdxs}
+              ai={{ focusFire: battle.aiTier !== 'wild', spendMana: battle.aiTier !== 'wild' }}
+              onEnd={endBattle}
+            />
+          )}
         </div>
       )}
     </div>
