@@ -10,14 +10,20 @@ import { Html } from '@react-three/drei'
 import * as THREE from 'three'
 import { useRef, useState, useCallback } from 'react'
 import { createArena, tick, type ArenaState, type KeeperCommand, type AidId, type Stance } from '../engine/arena'
-import { createSpirit, ELEMENT_COLORS, type Element } from '../spirits/spirit'
+import { createSpirit, ELEMENT_COLORS, type Element, type Species } from '../spirits/spirit'
 
 const ENEMY_GREY = '#787885'
 
 function buildSlice(): ArenaState {
-  const ally = createSpirit('fox', 'Kit', 0, 0); ally.level = 20; ally.bond = 60; ally.happiness = 128; ally.element = 'storm'
-  const enemy = createSpirit('frog', 'Blightling', 0, 0); enemy.level = 24
-  return createArena({ allies: [ally], enemies: [enemy], seed: (Math.random() * 1e9) | 0 })
+  const mk = (sp: Species, name: string, lvl: number, el: Element = 'base') => {
+    const s = createSpirit(sp, name, 0, 0); s.level = lvl; s.bond = 60; s.happiness = 128
+    if (el !== 'base') s.element = el
+    return s
+  }
+  // A party with distinct roles so the Speak layer matters: striker · caster · wall.
+  const allies = [mk('fox', 'Kit', 20, 'storm'), mk('owl', 'Sage', 20, 'mana'), mk('water-bear', 'Tor', 20, 'earth')]
+  const enemies = [mk('frog', 'Blightling', 22), mk('bat', 'Gnash', 22)]
+  return createArena({ allies, enemies, seed: (Math.random() * 1e9) | 0 })
 }
 
 function colorFor(el: Element, side: 'ally' | 'enemy'): string {
@@ -29,16 +35,15 @@ interface UISnap {
   mana: number; maxMana: number
   aid: { id: AidId; name: string; cost: number; cdLeft: number; cd: number }[]
   bagCdLeft: number
-  stance: Stance
+  allies: { id: string; name: string; element: Element; hp: number; maxHp: number; stance: Stance }[]
   outcome: ArenaState['outcome']
 }
 function snap(s: ArenaState): UISnap {
-  const ally = s.fighters.find(f => f.side === 'ally')
   return {
     mana: s.keeper.mana, maxMana: s.keeper.maxMana,
     aid: s.keeper.aid.map(a => ({ id: a.id, name: a.name, cost: a.cost, cdLeft: a.cdLeft, cd: a.cd })),
     bagCdLeft: s.keeper.bagCdLeft,
-    stance: ally?.stance ?? 'aggressive',
+    allies: s.fighters.filter(f => f.side === 'ally').map(f => ({ id: f.id, name: f.name, element: f.element, hp: f.hp, maxHp: f.maxHp, stance: f.stance })),
     outcome: s.outcome,
   }
 }
@@ -51,7 +56,7 @@ function Scene({ arenaRef, cmdQueue, onSnap }: {
   const groups = useRef(new Map<string, THREE.Group>())
   const bodies = useRef(new Map<string, THREE.Mesh>())
   const hpFills = useRef(new Map<string, HTMLDivElement>())
-  const ring = useRef<THREE.Mesh>(null)
+  const rings = useRef(new Map<string, THREE.Mesh>())
   const acc = useRef(0)
   const didLook = useRef(false)
 
@@ -83,15 +88,18 @@ function Scene({ arenaRef, cmdQueue, onSnap }: {
     }
 
     // enemy telegraph ring — the clock the Keeper reads
-    const winder = s.fighters.find(f => f.wind)
-    if (ring.current) {
-      if (winder && winder.wind) {
-        const tgt = s.fighters.find(g => g.id === winder.wind!.targetId)
-        const p = winder.wind.t / winder.wind.dur
-        if (tgt) { ring.current.visible = true; ring.current.position.set(tgt.x, 0.02, tgt.y); ring.current.scale.setScalar(winder.wind.range * (0.4 + 0.6 * p)) }
-        const m = ring.current.material as THREE.MeshBasicMaterial
+    // enemy telegraph rings — one per winding enemy (the clock the Keeper reads)
+    for (const f of s.fighters) {
+      if (f.side !== 'enemy') continue
+      const r = rings.current.get(f.id)
+      if (!r) continue
+      if (f.wind && f.hp > 0) {
+        const tgt = s.fighters.find(g => g.id === f.wind!.targetId)
+        const p = f.wind.t / f.wind.dur
+        if (tgt) { r.visible = true; r.position.set(tgt.x, 0.02, tgt.y); r.scale.setScalar(f.wind.range * (0.4 + 0.6 * p)) }
+        const m = r.material as THREE.MeshBasicMaterial
         m.opacity = 0.25 + 0.55 * p; m.color.setStyle(p > 0.75 ? '#ff5a4d' : '#f0a526')
-      } else ring.current.visible = false
+      } else r.visible = false
     }
 
     acc.current += delta
@@ -112,11 +120,13 @@ function Scene({ arenaRef, cmdQueue, onSnap }: {
         <ringGeometry args={[s0.R - 0.12, s0.R, 64]} />
         <meshBasicMaterial color="#2f5c4f" />
       </mesh>
-      {/* telegraph ring */}
-      <mesh ref={ring} rotation={[-Math.PI / 2, 0, 0]} visible={false}>
-        <ringGeometry args={[0.72, 1, 40]} />
-        <meshBasicMaterial color="#f0a526" transparent opacity={0.4} side={THREE.DoubleSide} />
-      </mesh>
+      {/* telegraph rings — one per enemy */}
+      {s0.fighters.filter(f => f.side === 'enemy').map(f => (
+        <mesh key={'ring-' + f.id} ref={m => { if (m) rings.current.set(f.id, m) }} rotation={[-Math.PI / 2, 0, 0]} visible={false}>
+          <ringGeometry args={[0.72, 1, 40]} />
+          <meshBasicMaterial color="#f0a526" transparent opacity={0.4} side={THREE.DoubleSide} />
+        </mesh>
+      ))}
       {/* fighters — element-tinted blockout capsules + floating nameplate/HP */}
       {s0.fighters.map(f => {
         const col = colorFor(f.element, f.side)
@@ -170,11 +180,11 @@ export default function ArenaSlice() {
   const cmdQueue = useRef<KeeperCommand[]>([])
   const [ui, setUi] = useState<UISnap>(() => snap(arenaRef.current))
   const [runId, setRunId] = useState(0)
+  const [speakOpen, setSpeakOpen] = useState(false)
 
   const send = useCallback((c: KeeperCommand) => { cmdQueue.current.push(c) }, [])
-  const restart = useCallback(() => { arenaRef.current = buildSlice(); cmdQueue.current = []; setUi(snap(arenaRef.current)); setRunId(r => r + 1) }, [])
+  const restart = useCallback(() => { arenaRef.current = buildSlice(); cmdQueue.current = []; setUi(snap(arenaRef.current)); setRunId(r => r + 1); setSpeakOpen(false) }, [])
 
-  const allyId = arenaRef.current.fighters.find(f => f.side === 'ally')?.id ?? 'a0'
   const aidBy = (id: AidId) => ui.aid.find(a => a.id === id)!
   const over = ui.outcome !== 'ongoing'
 
@@ -204,10 +214,30 @@ export default function ArenaSlice() {
         })}
       </div>
 
-      {/* SPEAK — top-right (stance flick) */}
-      <CornerBtn label="SPEAK" sub={ui.stance === 'aggressive' ? '→ DEFEND' : '→ ATTACK'} accent="#f0a526" disabled={over}
-        onClick={() => send({ type: 'speak', fighterId: allyId, stance: ui.stance === 'aggressive' ? 'defend' : 'aggressive' })}
-        style={{ top: 74, right: 14 }} />
+      {/* SPEAK — top-right (per-ally tactics, no pause) */}
+      <div style={{ position: 'absolute', top: 74, right: 14, display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 8 }}>
+        <CornerBtn label="SPEAK" sub={speakOpen ? 'close' : 'tactics'} accent="#f0a526" disabled={over}
+          onClick={() => setSpeakOpen(o => !o)} style={{ position: 'static' }} />
+        {speakOpen && !over && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {ui.allies.map(a => {
+              const dead = a.hp <= 0
+              return (
+                <button key={a.id} disabled={dead}
+                  onClick={() => send({ type: 'speak', fighterId: a.id, stance: a.stance === 'aggressive' ? 'defend' : 'aggressive' })}
+                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, width: 130, padding: '7px 11px', borderRadius: 10,
+                    border: `2px solid ${dead ? '#ffffff22' : (ELEMENT_COLORS[a.element] ?? '#7fe3c8')}`, background: '#12181aee',
+                    color: dead ? '#ffffff44' : '#eafff6', font: '700 11px ui-monospace, monospace', cursor: dead ? 'default' : 'pointer', touchAction: 'none' }}>
+                  <span>{a.name}</span>
+                  <span style={{ font: '800 10px ui-monospace, monospace', letterSpacing: '0.06em', color: dead ? '#ffffff44' : a.stance === 'aggressive' ? '#f0a526' : '#6fd0e6' }}>
+                    {dead ? '—' : a.stance === 'aggressive' ? 'ATK' : 'DEF'}
+                  </span>
+                </button>
+              )
+            })}
+          </div>
+        )}
+      </div>
 
       {/* BAG — bottom-right (80s lockout) */}
       <CornerBtn label="BAG" sub={ui.bagCdLeft > 0 ? `${Math.ceil(ui.bagCdLeft)}s` : 'heal'} accent="#4fbf87" disabled={over || ui.bagCdLeft > 0}
