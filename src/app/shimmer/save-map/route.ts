@@ -481,6 +481,18 @@ export async function POST(req: NextRequest) {
           await writeFile(NODES_FILE, updated, 'utf-8')
           saved.push('nodes')
         }
+      } else {
+        // No const for this zone yet — create it AND wire it into the ZONE_NODES map, so placing
+        // nodes in a fresh zone actually persists (previously this silently no-op'd).
+        const anchor = 'export const ZONE_NODES'
+        const anchorIdx = existing.indexOf(anchor)
+        if (anchorIdx !== -1) {
+          const withConst = existing.substring(0, anchorIdx) + newBlock + '\n\n' + existing.substring(anchorIdx)
+          const mapOpen = withConst.indexOf('{', withConst.indexOf(anchor)) + 1
+          const updated = withConst.substring(0, mapOpen) + `\n  '${mapId}': ${constName},` + withConst.substring(mapOpen)
+          await writeFile(NODES_FILE, updated, 'utf-8')
+          saved.push('nodes')
+        }
       }
     }
 

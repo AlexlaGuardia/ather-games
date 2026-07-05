@@ -121,10 +121,19 @@ const THE_THRESHOLD_NODES: NodePlacement[] = [
   { type: 'ather_crystal_node' as NodeType, tileX: 11, tileY: 21 },
 ]
 
+// Moonwell Pass — the route out of the glade; a starter Shimmeroak grove (Alex can move these in-editor)
+const ROUTE_MOONWELL_GARDEN_NODES: NodePlacement[] = [
+  { type: 'shimmeroak' as NodeType, tileX: 7, tileY: 5 },
+  { type: 'shimmeroak' as NodeType, tileX: 11, tileY: 5 },
+  { type: 'shimmeroak' as NodeType, tileX: 15, tileY: 5 },
+  { type: 'shimmeroak' as NodeType, tileX: 19, tileY: 5 },
+]
+
 export const ZONE_NODES: Record<string, NodePlacement[]> = {
   garden: GARDEN_NODES,
   'mycelial-path': MYCELIAL_PATH_NODES,
   'moonwell-glade': MOONWELL_GLADE_NODES,
+  'route-moonwell-garden': ROUTE_MOONWELL_GARDEN_NODES,
   'spore-hollow': SPORE_HOLLOW_NODES,
   'twilight-thicket': TWILIGHT_THICKET_NODES,
   'the-threshold': THE_THRESHOLD_NODES,
