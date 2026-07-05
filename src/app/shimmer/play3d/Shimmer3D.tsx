@@ -17,7 +17,7 @@ import { spiritsToSave, spiritsFromSave } from '../spirits/spirit-save'
 import { LAUNCHED_SPECIES } from '../engine/spirit-index'
 import { ZONE_NODES, type NodePlacement } from '../world/node-placements'
 import { createResourceNode, depleteNode, tickNodeRespawn, rollDrops, getNodeSkill, nodeTier, NODE_DEFS, type NodeType, type ResourceNode } from '../world/resources'
-import { TOOL_DEFS, getEquippedTool, useTool, toolsToSave, toolsFromSave, ensureBasicTools, type EquippedTools } from '../engine/tools'
+import { TOOL_DEFS, getEquippedTool, useTool, toolsToSave, toolsFromSave, ensureBasicTools, craftTool, canCraft as canCraftTool, type EquippedTools } from '../engine/tools'
 import { findAdjacentNode, addHarvestItems } from '../engine/harvesting'
 import { createSkillSet, skillSetToSave, skillSetFromSave, addSkillXP, xpForSkillLevel, SKILL_META, type SkillSet } from '../engine/skills'
 import { createBeast, checkBeastUnlock, beastsToSave, beastsFromSave, BEAST_SPECIES, BEAST_DEFS, BEAST_PERKS, PERK_INFO, getBonusFindChance, getSpeedBonus, type ManaBeast, type BeastSpecies } from '../beasts/beast'
@@ -1247,6 +1247,19 @@ export default function Shimmer3D() {
     persist()
   }, [syncSkillHud, persist])
 
+  // Craft a tiered tool (blade/spike/rinstick) — consumes gathered mats, auto-equips it for its
+  // skill (replacing the basic/current). It wears out and breaks; the basic is always the fallback.
+  const craftToolAction = useCallback((toolId: string) => {
+    const newTool = craftTool(toolId, invRef.current)
+    if (!newTool) { setHarvestToast('Missing materials'); return }
+    const def = TOOL_DEFS[toolId]
+    equippedToolsRef.current[def.skillId] = newTool
+    setToolTick(t => t + 1)
+    setInvSlots([...invRef.current.slots])
+    setHarvestToast(`Crafted ${def.name} — equipped (${def.durability} uses)`)
+    persist()
+  }, [persist])
+
   // ── Chest (open at a placed chest) — per-instance storage, lazy-created on first open ──
   const getChest = useCallback((struct: PlacedStruct): ChestStorage => {
     const id = stationInstanceId(struct)
@@ -2140,6 +2153,47 @@ export default function Shimmer3D() {
                   )
                 })}
               </div>
+
+              {/* TOOLS — the tiered blades / spikes / rinsticks. Better than Greg's free basics
+                  (faster + more XP + no under-tooled mana penalty at their tier) but they wear out
+                  and break, dropping you back to the basic. Crafting one equips it for its skill. */}
+              {(() => {
+                void toolTick // re-render after a craft/break changes the equipped set
+                const craftable = (['forestry', 'prospecting', 'rinning'] as const).flatMap(skill =>
+                  Object.values(TOOL_DEFS).filter(t => t.skillId === skill && !t.basic).sort((a, b) => a.tier - b.tier))
+                return <>
+                  <div style={{ font: '800 11px ui-monospace, monospace', color: '#e0b64e', margin: '18px 0 4px', letterSpacing: '0.08em' }}>⚒ TOOLS</div>
+                  <div style={{ font: '600 10px ui-monospace, monospace', color: '#b09660', marginBottom: 10 }}>Sharper than Greg&apos;s basics — but they wear out</div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
+                    {craftable.map(def => {
+                      const ok = canCraftTool(def.id, invRef.current)
+                      const equipped = equippedToolsRef.current[def.skillId]?.toolId === def.id
+                      return (
+                        <div key={def.id} style={{ background: '#241b09', border: `1px solid ${equipped ? '#7fe3c855' : '#ffffff14'}`, borderRadius: 10, padding: '9px 11px', opacity: equipped ? 0.85 : 1 }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+                            <span style={{ font: '800 13px ui-monospace, monospace', color: '#f0e2c4' }}>
+                              <span style={{ marginRight: 5 }}>{TOOL_HUD[def.skillId]?.glyph}</span>{def.name}
+                              <span style={{ marginLeft: 6, font: '700 9px ui-monospace, monospace', color: '#0d1a17', background: TOOL_HUD[def.skillId]?.tint, borderRadius: 5, padding: '1px 5px' }}>T{def.tier}</span>
+                            </span>
+                            <span style={{ font: '700 10px ui-monospace, monospace', color: '#8fd9c4', whiteSpace: 'nowrap' }}>
+                              +{Math.round((def.xpBonus - 1) * 100)}% XP · {def.durability} uses
+                            </span>
+                          </div>
+                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 6, alignItems: 'center' }}>
+                            {def.recipe.map(r => {
+                              const have = countItem(invRef.current, r.itemId)
+                              const short = have < r.count
+                              return <span key={r.itemId} style={{ font: '700 10px ui-monospace, monospace', color: short ? '#ff8a7a' : '#d9c78a', background: '#0007', border: `1px solid ${short ? '#ff5a4d55' : '#5c4f2f'}`, borderRadius: 6, padding: '2px 7px' }}>{prettyItem(r.itemId)} {have}/{r.count}</span>
+                            })}
+                            <span style={{ flex: 1 }} />
+                            <button onClick={() => craftToolAction(def.id)} disabled={!ok || equipped} style={{ padding: '6px 14px', borderRadius: 8, border: 'none', background: equipped ? '#2a3a2f' : ok ? '#b0862a' : '#3a3018', color: equipped ? '#7fe3c8' : ok ? '#fff' : '#ffffff55', font: '800 12px ui-monospace, monospace', cursor: ok && !equipped ? 'pointer' : 'default', touchAction: 'none' }}>{equipped ? 'Equipped' : 'Craft'}</button>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </>
+              })()}
               <div style={{ font: '600 9px ui-monospace, monospace', color: '#7d6a3e', marginTop: 12, textAlign: 'center' }}>Crafted stations go to your hotbar — double-tap to place them.</div>
             </div>
           </div>
