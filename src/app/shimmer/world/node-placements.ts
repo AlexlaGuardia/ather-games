@@ -11,6 +11,8 @@ export interface NodePlacement {
 }
 
 // Garden — starter zone, level 1 nodes only
+// Canon (shimmer-skilling.md, START home circle): "1-2 crystal nodes" — seed a starter
+// raw-mana pair so Prospecting is discoverable at home, not only after leaving the plot.
 const GARDEN_NODES: NodePlacement[] = [
   { type: 'goldwood' as NodeType, tileX: 22, tileY: 4 },
   { type: 'goldwood' as NodeType, tileX: 19, tileY: 3 },
@@ -18,6 +20,8 @@ const GARDEN_NODES: NodePlacement[] = [
   { type: 'goldwood' as NodeType, tileX: 2, tileY: 25 },
   { type: 'goldwood' as NodeType, tileX: 3, tileY: 27 },
   { type: 'goldwood' as NodeType, tileX: 5, tileY: 26 },
+  { type: 'raw_mana_node' as NodeType, tileX: 15, tileY: 5 },
+  { type: 'raw_mana_node' as NodeType, tileX: 16, tileY: 10 },
 ]
 
 // Mycelial Path — mid zone, level 1-4 nodes
