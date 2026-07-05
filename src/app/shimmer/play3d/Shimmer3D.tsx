@@ -11,7 +11,7 @@ import { walkable } from '../engine/player'
 import { ZONES, getZone, checkWarp, type Zone, type Warp } from '../world/zones'
 import { getHeightGrid } from '../world/heightmaps'
 import { rollEncounter, type WildEncounter } from '../engine/encounters'
-import { createSpirit, addXP, speciesDisplayName, ELEMENT_COLORS, type Spirit, type Species, type Element } from '../spirits/spirit'
+import { createSpirit, addXP, xpForLevel, speciesDisplayName, ELEMENT_COLORS, type Spirit, type Species, type Element } from '../spirits/spirit'
 import { spiritsToSave, spiritsFromSave } from '../spirits/spirit-save'
 import { LAUNCHED_SPECIES } from '../engine/spirit-index'
 import type { AITier } from '../engine/battle-ai'
@@ -601,6 +601,9 @@ export default function Shimmer3D() {
   const curBattleRef = useRef(battle); curBattleRef.current = battle
   // Wild encounters play a brief "drawn to you" approach beat before the arena mounts (see below).
   const [approach, setApproach] = useState<{ enc: WildEncounter; battle: NonNullable<typeof battle> } | null>(null)
+  // Post-win spoils reveal (wild fights): per-spirit XP/level breakdown + gold, shown before returning.
+  type RewardRow = { name: string; element: Element; fromLevel: number; toLevel: number; xpGained: number; curXp: number; needXp: number; evolved: boolean }
+  const [rewards, setRewards] = useState<{ gold: number; rows: RewardRow[] } | null>(null)
   const [banner, setBanner] = useState<string | null>(null)
   const [nearNpc, setNearNpc] = useState<NPC3D | null>(null)
   const [dialogue, setDialogue] = useState<{ name: string; lines: string[]; speakers?: string[]; idx: number; grantAt?: number; onDone: () => void } | null>(null)
@@ -703,22 +706,29 @@ export default function Shimmer3D() {
   const endBattle = useCallback((outcome: 'win' | 'lose', reachResult?: 'freed' | 'forced' | 'fainted' | null) => {
     battleRef.current = false
     const bd = curBattleRef.current
+    let spoils: { gold: number; rows: RewardRow[] } | null = null
     if (outcome === 'win' && bd) {
       const totalXp = bd.enemies.reduce((s, e) => s + Math.max(8, e.level * 12), 0)
       const gold = bd.enemies.reduce((s, e) => s + e.level * 3, 0)
       const allies = (partyRef.current ?? []).slice(0, MAX_PARTY)
       const perXp = Math.max(1, Math.round(totalXp / Math.max(1, allies.length)))
       if (gold > 0) wallet.earn(gold)
+      const rows: RewardRow[] = []
       for (const spirit of allies) {
+        const fromLevel = spirit.level
         const xpResult = addXP(spirit, perXp)
         spirit.bond = Math.min(255, spirit.bond + 4)
         spirit.happiness = Math.min(255, spirit.happiness + 3)
         // Full evolution (form/element change) is the 2D EvolutionScene's job — not ported yet. We just
         // celebrate the threshold here; the spirit keeps leveling until it can evolve in the full flow.
         if (xpResult.evolved) setBanner(`✦ ${spirit.name} is ready to evolve!`)
+        rows.push({ name: spirit.name, element: spirit.element, fromLevel, toLevel: spirit.level, xpGained: perXp, curXp: spirit.xp, needXp: xpForLevel(spirit.level), evolved: !!xpResult.evolved })
       }
+      // Wild fights get the spoils reveal; the scripted holds keep their narrative payoff (dialogue below).
+      if (!bd.kind || bd.kind === 'wild') spoils = { gold, rows }
     }
     setBattle(null)
+    if (spoils) { battleRef.current = true; setRewards(spoils) }   // stay frozen behind the reveal
     // Liberation beat: freeing Thistle's collared spirit clears Hold 1 — he deflates and retreats east.
     if (outcome === 'win' && bd?.kind === 'thistle') {
       flagsRef.current.freedThistle = true
@@ -1187,6 +1197,11 @@ export default function Shimmer3D() {
         <EncounterApproach name={approach.enc.name} element={approach.enc.element} onSkip={commitApproach} />
       )}
 
+      {/* post-win spoils reveal — the payoff: gold + per-spirit XP/level breakdown. Unfreezes on close. */}
+      {rewards && !battle && (
+        <BattleRewards gold={rewards.gold} rows={rewards.rows} onClose={() => { setRewards(null); battleRef.current = false }} />
+      )}
+
       {battle && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 50, background: '#0a0a12' }}>
           {battle.kind === 'wild' ? (
@@ -1240,6 +1255,62 @@ function EncounterApproach({ name, element, onSkip }: { name: string; element: E
       </div>
       {/* end flash — snaps into the arena */}
       <div style={{ position: 'absolute', inset: 0, background: '#eafff6', pointerEvents: 'none', animation: 'encFlash 1.3s ease-in forwards' }} />
+    </div>
+  )
+}
+
+// Post-win spoils reveal — the loop's payoff. Gold + a per-spirit row: level (with a Lv↑ jump when
+// they leveled), XP gained, and an animated bar filling toward the next level. Tap CONTINUE to return.
+function BattleRewards({ gold, rows, onClose }: {
+  gold: number
+  rows: { name: string; element: Element; fromLevel: number; toLevel: number; xpGained: number; curXp: number; needXp: number; evolved: boolean }[]
+  onClose: () => void
+}) {
+  const [shown, setShown] = useState(false)
+  useEffect(() => { const t = setTimeout(() => setShown(true), 70); return () => clearTimeout(t) }, [])
+  return (
+    <div style={{ position: 'fixed', inset: 0, zIndex: 50, background: '#05070ae8', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16, touchAction: 'none', animation: 'rwdFade 0.25s ease-out' }}>
+      <style>{`@keyframes rwdFade { from { opacity: 0 } to { opacity: 1 } }`}</style>
+      <div style={{ width: 'min(430px, 94vw)', maxHeight: '88vh', overflowY: 'auto', background: '#0d1614', border: '2px solid #2f5c4f', borderRadius: 16, padding: '20px 20px 16px', boxShadow: '0 12px 48px #000a' }}>
+        <div style={{ textAlign: 'center', font: '900 20px ui-monospace, monospace', color: '#7fe3c8', letterSpacing: '0.12em', textShadow: '0 0 18px #7fe3c855' }}>THE FIELD IS YOURS</div>
+        {gold > 0 && (
+          <div style={{ textAlign: 'center', font: '700 13px ui-monospace, monospace', color: '#ffd98a', marginTop: 6, letterSpacing: '0.06em' }}>+{gold} ✦ marks</div>
+        )}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 16 }}>
+          {rows.map((r, i) => {
+            const pct = Math.min(100, Math.round((r.curXp / Math.max(1, r.needXp)) * 100))
+            const leveled = r.toLevel > r.fromLevel
+            const col = ELEMENT_COLORS[r.element] ?? '#7fe3c8'
+            return (
+              <div key={i} style={{ background: '#12201d', border: `1px solid ${leveled ? col : '#ffffff18'}`, borderRadius: 10, padding: '9px 11px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                  <span style={{ display: 'flex', alignItems: 'center', gap: 8, overflow: 'hidden' }}>
+                    <span style={{ width: 10, height: 10, borderRadius: 3, background: col, flexShrink: 0, boxShadow: `0 0 8px ${col}99` }} />
+                    <span style={{ font: '700 13px ui-monospace, monospace', color: '#eafff6', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{r.name}</span>
+                  </span>
+                  <span style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+                    <span style={{ font: '700 11px ui-monospace, monospace', color: '#8fd9c4' }}>+{r.xpGained} XP</span>
+                    <span style={{ font: '800 12px ui-monospace, monospace', color: leveled ? col : '#c9d6d1', letterSpacing: '0.04em', textShadow: leveled ? `0 0 10px ${col}88` : 'none' }}>
+                      {leveled ? `Lv ${r.fromLevel}→${r.toLevel}` : `Lv ${r.toLevel}`}
+                    </span>
+                  </span>
+                </div>
+                {/* XP bar toward next level — fills in on reveal */}
+                <div style={{ height: 6, background: '#0008', borderRadius: 4, overflow: 'hidden', marginTop: 8, border: '1px solid #0006' }}>
+                  <div style={{ height: '100%', width: shown ? `${pct}%` : '0%', background: `linear-gradient(90deg, ${col}, #eafff6)`, borderRadius: 4, transition: 'width 0.7s cubic-bezier(0.2,0.8,0.2,1)' }} />
+                </div>
+                {(leveled || r.evolved) && (
+                  <div style={{ display: 'flex', gap: 6, marginTop: 7 }}>
+                    {leveled && <span style={{ font: '800 9px ui-monospace, monospace', color: '#05070a', background: col, borderRadius: 999, padding: '2px 8px', letterSpacing: '0.08em' }}>LEVEL UP</span>}
+                    {r.evolved && <span style={{ font: '800 9px ui-monospace, monospace', color: '#ffe9b0', background: '#0000', border: '1px solid #d4a843', borderRadius: 999, padding: '2px 8px', letterSpacing: '0.08em' }}>✦ READY TO EVOLVE</span>}
+                  </div>
+                )}
+              </div>
+            )
+          })}
+        </div>
+        <button onClick={onClose} style={{ display: 'block', width: '100%', marginTop: 16, padding: '11px 0', borderRadius: 11, border: '2px solid #7fe3c8', background: '#12181a', color: '#eafff6', font: '800 14px ui-monospace, monospace', letterSpacing: '0.1em', cursor: 'pointer', touchAction: 'none' }}>CONTINUE</button>
+      </div>
     </div>
   )
 }
