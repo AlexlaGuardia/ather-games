@@ -24,18 +24,25 @@ interface UISnap {
   mana: number; maxMana: number
   aid: { id: AidId; name: string; cost: number; cdLeft: number; cd: number }[]
   bagCdLeft: number
-  allies: { id: string; name: string; element: Element; hp: number; maxHp: number; stance: Stance }[]
+  allies: { id: string; name: string; element: Element; hp: number; maxHp: number; stance: Stance; windTargeted: boolean }[]
+  enemies: { id: string; name: string; element: Element; hp: number; maxHp: number; winding: boolean }[]
   outcome: ArenaState['outcome']
 }
 function snap(s: ArenaState): UISnap {
+  // which allies are the target of a live enemy wind-up (the ones worth sheltering)
+  const windTargets = new Set(s.fighters.filter(f => f.wind).map(f => f.wind!.targetId))
   return {
     mana: s.keeper.mana, maxMana: s.keeper.maxMana,
     aid: s.keeper.aid.map(a => ({ id: a.id, name: a.name, cost: a.cost, cdLeft: a.cdLeft, cd: a.cd })),
     bagCdLeft: s.keeper.bagCdLeft,
-    allies: s.fighters.filter(f => f.side === 'ally').map(f => ({ id: f.id, name: f.name, element: f.element, hp: f.hp, maxHp: f.maxHp, stance: f.stance })),
+    allies: s.fighters.filter(f => f.side === 'ally').map(f => ({ id: f.id, name: f.name, element: f.element, hp: f.hp, maxHp: f.maxHp, stance: f.stance, windTargeted: windTargets.has(f.id) })),
+    enemies: s.fighters.filter(f => f.side === 'enemy').map(f => ({ id: f.id, name: f.name, element: f.element, hp: f.hp, maxHp: f.maxHp, winding: !!f.wind })),
     outcome: s.outcome,
   }
 }
+
+// Reach (soften an enemy) + Guard (shelter an ally) take a target; Flash/Breeze don't.
+const TARGETED: Record<string, 'enemy' | 'ally'> = { reach: 'enemy', guard: 'ally' }
 
 function Scene({ arenaRef, cmdQueue, onSnap }: {
   arenaRef: React.RefObject<ArenaState>
@@ -203,9 +210,18 @@ export default function ArenaBattle({ allies, enemies, seed, aidKit, onEnd, cont
   const cmdQueue = useRef<KeeperCommand[]>([])
   const [ui, setUi] = useState<UISnap>(() => snap(arenaRef.current!))
   const [speakOpen, setSpeakOpen] = useState(false)
+  const [armed, setArmed] = useState<AidId | null>(null)   // a targeted Aid awaiting a target pick
 
   const send = useCallback((c: KeeperCommand) => { cmdQueue.current.push(c) }, [])
   const over = ui.outcome !== 'ongoing'
+  if (over && armed) setArmed(null)
+
+  // Aid tap: targeted aids (reach/guard) arm a target picker; the rest fire on tap.
+  const onAid = (id: AidId) => {
+    if (TARGETED[id]) { setSpeakOpen(false); setArmed(a => (a === id ? null : id)) }
+    else send({ type: 'aid', id })
+  }
+  const fireAt = (id: AidId, targetId?: string) => { send({ type: 'aid', id, targetId }); setArmed(null) }
 
   return (
     <div style={{ position: 'fixed', inset: 0, background: '#0a0f0e', overflow: 'hidden', touchAction: 'none' }}>
@@ -223,13 +239,50 @@ export default function ArenaBattle({ allies, enemies, seed, aidKit, onEnd, cont
         <div style={{ font: '600 9px ui-monospace, monospace', color: '#9fb8c8', marginTop: 2 }}>MANA {Math.floor(ui.mana)}/{ui.maxMana}</div>
       </div>
 
-      {/* AID — top-left (3 techniques: bonded Mana'mal gift on top, then the Keeper's 2 channels) */}
-      <div style={{ position: 'absolute', top: 74, left: 14, display: 'flex', flexDirection: 'column', gap: 8 }}>
-        {ui.aid.map(a => {
-          const disabled = over || a.cdLeft > 0 || ui.mana < a.cost
-          return <CornerBtn key={a.id} label={a.name.split(' ')[a.name.split(' ').length - 1].toUpperCase()} sub={`${a.cost}◈`}
-            accent="#6fd0e6" disabled={disabled} cd={a.cdLeft} cdMax={a.cd} onClick={() => send({ type: 'aid', id: a.id })} style={{ position: 'static' }} />
-        })}
+      {/* AID — top-left (3 techniques: bonded Mana'mal gift on top, then the Keeper's 2 channels).
+          Reach/Guard arm a target picker; Flash/Breeze fire on tap. */}
+      <div style={{ position: 'absolute', top: 74, left: 14, display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {ui.aid.map(a => {
+            const disabled = over || a.cdLeft > 0 || ui.mana < a.cost
+            const isArmed = armed === a.id
+            return <CornerBtn key={a.id} label={a.name.split(' ')[a.name.split(' ').length - 1].toUpperCase()} sub={isArmed ? 'pick…' : `${a.cost}◈`}
+              accent={isArmed ? '#f0a526' : '#6fd0e6'} disabled={disabled} cd={a.cdLeft} cdMax={a.cd} onClick={() => onAid(a.id)} style={{ position: 'static' }} />
+          })}
+        </div>
+        {/* target picker — chips for the armed aid's valid side (tap a name, not a moving body) */}
+        {armed && !over && (() => {
+          const side = TARGETED[armed]
+          const list = side === 'enemy' ? ui.enemies : ui.allies
+          return (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 5, background: '#0b1211ee', border: '1px solid #f0a52655', borderRadius: 10, padding: 6, maxWidth: 150 }}>
+              <div style={{ font: '700 8px ui-monospace, monospace', color: '#f0a526', letterSpacing: '0.1em', padding: '1px 3px' }}>
+                {side === 'enemy' ? 'SOFTEN WHICH?' : 'SHELTER WHO?'}
+              </div>
+              <button onClick={() => fireAt(armed)}
+                style={{ textAlign: 'left', padding: '5px 8px', borderRadius: 7, border: '1px dashed #6fd0e688', background: '#12181aee', color: '#9fe3d2', font: '700 10px ui-monospace, monospace', cursor: 'pointer', touchAction: 'none' }}>
+                ⤿ AUTO
+              </button>
+              {list.filter(t => t.hp > 0).map(t => {
+                const flag = side === 'enemy' ? (t as UISnap['enemies'][number]).winding : (t as UISnap['allies'][number]).windTargeted
+                const col = ELEMENT_COLORS[t.element] ?? '#7fe3c8'
+                return (
+                  <button key={t.id} onClick={() => fireAt(armed, t.id)}
+                    style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, width: 132, padding: '5px 8px', borderRadius: 7,
+                      border: `1px solid ${flag ? '#ff5a4d' : '#ffffff22'}`, background: '#12181aee', color: '#eafff6', font: '700 10px ui-monospace, monospace', cursor: 'pointer', touchAction: 'none' }}>
+                    <span style={{ display: 'flex', alignItems: 'center', gap: 5, overflow: 'hidden' }}>
+                      <span style={{ width: 7, height: 7, borderRadius: 2, background: side === 'enemy' ? '#c9c9d2' : col, flexShrink: 0 }} />
+                      <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{t.name}</span>
+                    </span>
+                    <span style={{ font: '600 8px ui-monospace, monospace', color: flag ? '#ff8a7a' : '#7f9a92', flexShrink: 0 }}>
+                      {flag ? '⚠' : `${Math.max(0, Math.round((t.hp / t.maxHp) * 100))}%`}
+                    </span>
+                  </button>
+                )
+              })}
+            </div>
+          )
+        })()}
       </div>
 
       {/* SPEAK — top-right (per-ally tactics, no pause) */}
@@ -276,7 +329,7 @@ export default function ArenaBattle({ allies, enemies, seed, aidKit, onEnd, cont
       )}
 
       {/* hint */}
-      {!over && <div style={{ position: 'absolute', bottom: 26, left: '50%', transform: 'translateX(-50%)', font: '600 10px ui-monospace, monospace', color: '#5f7a72', textAlign: 'center', maxWidth: 260, pointerEvents: 'none' }}>Your spirit fights on its own. Time your Aid: FLASH interrupts a wind-up · REACH softens · BREEZE sustains mana.</div>}
+      {!over && <div style={{ position: 'absolute', bottom: 26, left: '50%', transform: 'translateX(-50%)', font: '600 10px ui-monospace, monospace', color: '#5f7a72', textAlign: 'center', maxWidth: 268, pointerEvents: 'none' }}>{armed ? (TARGETED[armed] === 'enemy' ? 'Pick an enemy to soften — ⚠ marks one winding up.' : 'Pick an ally to shelter — ⚠ marks one about to be hit.') : 'Your spirit fights on its own. Time your Aid: FLASH interrupts · REACH/GUARD pick a target · BREEZE sustains mana.'}</div>}
     </div>
   )
 }
