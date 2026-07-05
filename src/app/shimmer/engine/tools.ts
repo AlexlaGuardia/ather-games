@@ -10,14 +10,23 @@ export interface ToolDef {
   id: string
   name: string
   skillId: SkillId
-  tier: 1 | 2 | 3
-  durability: number      // max uses before breaking
+  tier: 0 | 1 | 2 | 3     // tier 0 = the basic Greg-given tool (infinite, no bonus)
+  durability: number      // max uses before breaking (basics: effectively infinite)
   xpBonus: number         // multiplier (1.1 = +10% XP)
   speedBonus: number      // multiplier on channel ticks (0.9 = 10% faster)
   recipe: { itemId: string; count: number }[]
+  basic?: boolean         // the free starter tool — never breaks, always the fallback
 }
 
 export const TOOL_DEFS: Record<string, ToolDef> = {
+  // ── Basic tools — Greg hands you one per gathering skill at game start. Infinite durability,
+  // no recipe, no bonus. They handle the low tier cleanly and STRUGGLE above it (soft mana penalty,
+  // applied at the gather site) so there's incentive to craft the tiered tools below — but the basic
+  // is always your backup, so you can never be locked out of gathering. ──
+  worn_blade:    { id: 'worn_blade',    name: 'Worn Blade',    skillId: 'forestry',    tier: 1, durability: 999999, xpBonus: 1, speedBonus: 1, recipe: [], basic: true },
+  worn_spike:    { id: 'worn_spike',    name: 'Worn Spike',    skillId: 'prospecting', tier: 1, durability: 999999, xpBonus: 1, speedBonus: 1, recipe: [], basic: true },
+  worn_rinstick: { id: 'worn_rinstick', name: 'Worn Rinstick', skillId: 'rinning',     tier: 1, durability: 999999, xpBonus: 1, speedBonus: 1, recipe: [], basic: true },
+
   // Forestry — Blades
   goldwood_blade: {
     id: 'goldwood_blade', name: 'Goldwood Blade', skillId: 'forestry', tier: 1,
@@ -93,10 +102,36 @@ export function getToolDef(tool: EquippedTool): ToolDef | undefined {
   return TOOL_DEFS[tool.toolId]
 }
 
-/** Use a tool (decrement durability). Returns false if the tool broke. */
+/** Use a tool (decrement durability). Returns false if the tool broke. Basics never break. */
 export function useTool(tool: EquippedTool): boolean {
+  if (TOOL_DEFS[tool.toolId]?.basic) return true
   tool.usesRemaining--
   return tool.usesRemaining > 0
+}
+
+// The basic (Greg-given) tool per gathering skill. Farming/Alchemy are toolless (hand + mana).
+export const BASIC_TOOL_ID: Partial<Record<SkillId, string>> = {
+  forestry: 'worn_blade', prospecting: 'worn_spike', rinning: 'worn_rinstick',
+}
+
+/** Build an equipped basic tool for a skill (or null if that skill is toolless). */
+export function makeBasicTool(skillId: SkillId): EquippedTool | null {
+  const id = BASIC_TOOL_ID[skillId]
+  if (!id) return null
+  const def = TOOL_DEFS[id]
+  return { toolId: id, usesRemaining: def.durability, speedBonus: def.speedBonus, xpBonus: def.xpBonus }
+}
+
+/** Ensure every tool-using skill has at least its basic tool equipped (the always-available backup).
+ *  Mutates + returns the map. Call after load, starter-kit grant, and whenever an improved tool breaks. */
+export function ensureBasicTools(equipped: EquippedTools): EquippedTools {
+  for (const skillId of Object.keys(BASIC_TOOL_ID) as SkillId[]) {
+    if (!equipped[skillId]) {
+      const basic = makeBasicTool(skillId)
+      if (basic) equipped[skillId] = basic
+    }
+  }
+  return equipped
 }
 
 /** Check if player has materials to craft a tool */

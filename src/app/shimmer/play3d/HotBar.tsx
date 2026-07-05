@@ -57,7 +57,7 @@ function ItemTile({ item }: { item: ItemStack | null }) {
   )
 }
 
-export default function HotBar({ items: propItems, onUse, onReorder, usable }: { items?: (ItemStack | null)[]; onUse?: (itemId: string) => void; onReorder?: (from: number, to: number) => void; usable?: Record<string, unknown> } = {}) {
+export default function HotBar({ items: propItems, onUse, onReorder, usable, tools: propTools }: { items?: (ItemStack | null)[]; onUse?: (itemId: string) => void; onReorder?: (from: number, to: number) => void; usable?: Record<string, unknown>; tools?: ToolGauge[] } = {}) {
   const [items, setItems] = useState<(ItemStack | null)[]>(propItems ?? PH_ITEMS)
   const itemsRef = useRef(items); itemsRef.current = items
   const onUseRef = useRef(onUse); onUseRef.current = onUse
@@ -65,7 +65,7 @@ export default function HotBar({ items: propItems, onUse, onReorder, usable }: {
   const usableRef = useRef(usable); usableRef.current = usable
   const [sel, setSel] = useState(0)
   const [bagOpen, setBagOpen] = useState(false)
-  const [tools] = useState<ToolGauge[]>(PH_TOOLS)
+  const tools = propTools ?? PH_TOOLS
   const [isTouch, setIsTouch] = useState(false)
   const [nameTag, setNameTag] = useState<{ text: string; sub?: string } | null>(null)  // fades above the bar on select
   const [flashIdx, setFlashIdx] = useState<number | null>(null)                         // slot pulses when a potion is drunk

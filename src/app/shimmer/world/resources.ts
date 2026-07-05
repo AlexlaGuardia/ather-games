@@ -177,6 +177,13 @@ export function getNodeSkill(type: NodeType): SkillId {
   return NODE_SKILL[type]
 }
 
+/** Node tier 1-4, derived from its minLevel band (T1 lvl1-3, T2 4-6, T3 7-9, T4 10).
+ *  Used against the equipped tool's tier for the under-tooled mana penalty. */
+export function nodeTier(type: NodeType): number {
+  const ml = NODE_DEFS[type].minLevel
+  return ml >= 10 ? 4 : ml >= 7 ? 3 : ml >= 4 ? 2 : 1
+}
+
 // Save/load
 export interface ResourceNodeSave {
   type: NodeType

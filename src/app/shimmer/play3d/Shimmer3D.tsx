@@ -16,7 +16,8 @@ import { createSpirit, addXP, xpForLevel, speciesDisplayName, ELEMENT_COLORS, ty
 import { spiritsToSave, spiritsFromSave } from '../spirits/spirit-save'
 import { LAUNCHED_SPECIES } from '../engine/spirit-index'
 import { ZONE_NODES, type NodePlacement } from '../world/node-placements'
-import { createResourceNode, depleteNode, tickNodeRespawn, rollDrops, getNodeSkill, NODE_DEFS, type NodeType, type ResourceNode } from '../world/resources'
+import { createResourceNode, depleteNode, tickNodeRespawn, rollDrops, getNodeSkill, nodeTier, NODE_DEFS, type NodeType, type ResourceNode } from '../world/resources'
+import { TOOL_DEFS, getEquippedTool, useTool, toolsToSave, toolsFromSave, ensureBasicTools, type EquippedTools } from '../engine/tools'
 import { findAdjacentNode, addHarvestItems } from '../engine/harvesting'
 import { createSkillSet, skillSetToSave, skillSetFromSave, addSkillXP, xpForSkillLevel, SKILL_META, type SkillSet } from '../engine/skills'
 import { createBeast, checkBeastUnlock, beastsToSave, beastsFromSave, BEAST_SPECIES, BEAST_DEFS, BEAST_PERKS, PERK_INFO, getBonusFindChance, getSpeedBonus, type ManaBeast, type BeastSpecies } from '../beasts/beast'
@@ -646,6 +647,13 @@ function Player({ posRef, gridRef, heightsRef, zoneIdRef, editRef, onWarp, battl
   )
 }
 
+// Per-skill tool HUD look (glyph + tint) for the bottom-bar tool gauges.
+const TOOL_HUD: Record<string, { glyph: string; tint: string; label: string }> = {
+  forestry:    { glyph: '🪓', tint: '#8fd97f', label: 'Forestry' },
+  prospecting: { glyph: '⛏️', tint: '#d9b56a', label: 'Prospecting' },
+  rinning:     { glyph: '🎣', tint: '#6fb8d9', label: 'Rinning' },
+}
+
 // Blockout palette for the bonded Mana'mal follower (real sprites/models later, per the art rule).
 const BEAST_COLOR: Record<string, string> = {
   drifthorn: '#c9b6ea', dustwhisker: '#e6cf9a', sporeling: '#8fd97f', glowmite: '#8fd0ea', embermole: '#e69a6a',
@@ -953,6 +961,10 @@ export default function Shimmer3D() {
   const beastsRef = useRef<ManaBeast[]>([])
   const activeBeastIdRef = useRef<string | null>(null)
   const [companionTick, setCompanionTick] = useState(0)  // HUD refresh when companions change
+  // Gathering tools — basics (worn blade/spike/rinstick) always equipped; improved craftable ones
+  // gather higher tiers without the under-tooled mana penalty. ensureBasicTools keeps a floor.
+  const equippedToolsRef = useRef<EquippedTools>(ensureBasicTools({}))
+  const [toolTick, setToolTick] = useState(0)  // HUD refresh when a tool breaks / changes
   const flagsRef = useRef<Record<string, boolean>>({})
   const battleRef = useRef(false)
   const talkingRef = useRef(false)
@@ -981,6 +993,7 @@ export default function Shimmer3D() {
       spirits: spiritsToSave(partyRef.current ?? []),
       beasts: beastsToSave(beastsRef.current),
       activeBeastId: activeBeastIdRef.current,
+      tools: toolsToSave(equippedToolsRef.current),
       flags: { ...(prev.flags ?? {}), ...flagsRef.current },
       zoneId: zoneIdRef.current,
       playerTileX: Math.round(posRef.current!.x),
@@ -1025,6 +1038,8 @@ export default function Shimmer3D() {
       if (!alive) return
       if (data?.skills) skillsRef.current = skillSetFromSave(data.skills)
       if (data?.mana) manaRef.current = manaFromSave(data.mana, skillsRef.current.mana.level)
+      // Tools: restore, then guarantee every gathering skill has at least its basic (Greg's, infinite).
+      equippedToolsRef.current = ensureBasicTools(toolsFromSave(data?.tools as Parameters<typeof toolsFromSave>[0]))
       if (data?.inventory) invRef.current = inventoryFromSave(data.inventory)
       if (Array.isArray(data?.built)) setStructures(data.built as PlacedStruct[])
       if (Array.isArray(data?.chests)) {
@@ -1112,7 +1127,7 @@ export default function Shimmer3D() {
   const CHANNEL_RANGE = 1.8
   const [harvestToast, setHarvestToast] = useState<string | null>(null)
   useEffect(() => { if (!harvestToast) return; const t = setTimeout(() => setHarvestToast(null), 2400); return () => clearTimeout(t) }, [harvestToast])
-  const channelRef = useRef<{ node: ResourceNode; progress: number; durSec: number } | null>(null)
+  const channelRef = useRef<{ node: ResourceNode; progress: number; durSec: number; manaCost: number } | null>(null)
   const [channel, setChannel] = useState<{ nodeId: string; label: string; hp: number } | null>(null)
   const [menuOpen, setMenuOpen] = useState(false)     // ☰ — edit terrain / new game
   const [skillsOpen, setSkillsOpen] = useState(false) // skills panel
@@ -1120,12 +1135,22 @@ export default function Shimmer3D() {
     if (channelRef.current) { channelRef.current = null; setChannel(null); return }   // unlink
     const node = nearNodeRef.current
     if (!node || node.state !== 'harvestable') return
-    if (manaRef.current.current < nodeManaCost(node.type)) { setHarvestToast(`Not enough mana (need ${nodeManaCost(node.type)})`); return }
-    // NOTE(jin): minLevel gate bypassed for now (early-tier goldwood not placed in starter zones yet).
-    // Drifthorn's gathering_speed perk shortens the channel (skill perks don't affect speed).
+    // Tool-gate: you gather with the skill's tool (Greg gives you a basic one, so this always holds).
+    const skillId = getNodeSkill(node.type)
+    const tool = getEquippedTool(equippedToolsRef.current, skillId)
+    if (!tool) { setHarvestToast(`Need a ${SKILL_META[skillId].name.toLowerCase()} tool`); return }
+    const toolDef = TOOL_DEFS[tool.toolId]
+    // Soft under-tooled penalty: pushing a tool above its tier costs extra mana (double per tier over).
+    const overTier = Math.max(0, nodeTier(node.type) - (toolDef?.tier ?? 0))
+    const manaCost = nodeManaCost(node.type) * (1 + overTier)
+    if (manaRef.current.current < manaCost) {
+      setHarvestToast(overTier > 0 ? `${toolDef?.name} strains here — need ${manaCost} mana` : `Not enough mana (need ${manaCost})`)
+      return
+    }
+    // Drifthorn's gathering_speed perk + the tool's speedBonus both shorten the channel.
     const speedBeast = beastsRef.current.find(b => b.id === activeBeastIdRef.current) ?? null
-    const durSec = nodeChannelSec(node.type) / (1 + getSpeedBonus(speedBeast))
-    channelRef.current = { node, progress: 0, durSec }
+    const durSec = nodeChannelSec(node.type) * (toolDef?.speedBonus ?? 1) / (1 + getSpeedBonus(speedBeast))
+    channelRef.current = { node, progress: 0, durSec, manaCost }
     setChannel({ nodeId: node.id, label: prettyItem(node.type), hp: 1 })
   }, [])
 
@@ -1317,8 +1342,7 @@ export default function Shimmer3D() {
       if (!ch) return
       const p = posRef.current!
       const dist = Math.max(Math.abs(ch.node.tileX - p.x), Math.abs(ch.node.tileY - p.z))
-      const totalCost = nodeManaCost(ch.node.type)
-      const drain = (totalCost / ch.durSec) * dt          // spread the flat tier cost over the chop (4/s for shimmeroak)
+      const drain = (ch.manaCost / ch.durSec) * dt         // spread the (tool-penalized) tier cost over the chop
       if (dist > CHANNEL_RANGE || ch.node.state !== 'harvestable') { channelRef.current = null; setChannel(null); return }
       if (manaRef.current.current < drain) { channelRef.current = null; setChannel(null); setHarvestToast('Out of mana'); return }
       manaRef.current.current -= drain
@@ -1326,11 +1350,19 @@ export default function Shimmer3D() {
       ch.progress += dt / ch.durSec
       if (ch.progress >= 1) {
         const skillId = getNodeSkill(ch.node.type)
-        const xp = NODE_DEFS[ch.node.type].xp
+        const tool = getEquippedTool(equippedToolsRef.current, skillId)
+        const xp = Math.round(NODE_DEFS[ch.node.type].xp * (tool?.xpBonus ?? 1))
         // Active companion @15 perk — skill-matched bonus find (Grovekin/Gemsense/Truesight)
         const activeBeast = beastsRef.current.find(b => b.id === activeBeastIdRef.current) ?? null
         const added = addHarvestItems(invRef.current, rollDrops(ch.node.type, getBonusFindChance(activeBeast, skillId)))
         const xpr = addSkillXP(skillsRef.current[skillId], xp)
+        // Wear the tool — basics never break; when an improved tool breaks, fall back to the basic.
+        if (tool && !useTool(tool)) {
+          delete equippedToolsRef.current[skillId]
+          ensureBasicTools(equippedToolsRef.current)
+          setToolTick(t => t + 1)
+          setHarvestToast(`${TOOL_DEFS[tool.toolId]?.name} broke — back to your ${TOOL_DEFS[equippedToolsRef.current[skillId]!.toolId]?.name}`)
+        }
         depleteNode(ch.node)
         channelRef.current = null; setChannel(null)
         syncSkillHud(); setRuntimeNodes([...runtimeNodesRef.current]); setNearNode(null)
@@ -1471,6 +1503,7 @@ export default function Shimmer3D() {
     manaRef.current = createManaPool(1)
     invRef.current = createInventory()
     grantStarterKit(invRef.current)
+    equippedToolsRef.current = ensureBasicTools({})  // Greg's basic blade/spike/rinstick
     flagsRef.current[STARTER_KIT_FLAG] = true // already granted; keep the load-path migration from re-seeding
     setStructures([])
     syncSkillHud()
@@ -1995,7 +2028,13 @@ export default function Shimmer3D() {
       )}
 
       {/* Hotbar HUD — bag + 6 quick-slots + tool gauges + mana vial. Only while walking the world. */}
-      {!battle && !approach && !rewards && !editMode && !dialogue && !placing && <HotBar items={invSlots} onUse={useItem} onReorder={reorderSlots} usable={USE_HINTS} />}
+      {!battle && !approach && !rewards && !editMode && !dialogue && !placing && <HotBar items={invSlots} onUse={useItem} onReorder={reorderSlots} usable={USE_HINTS}
+        tools={(void toolTick, (['forestry', 'prospecting', 'rinning'] as const).map(skill => {
+          const t = equippedToolsRef.current[skill]
+          const def = t ? TOOL_DEFS[t.toolId] : null
+          const infinite = !!def?.basic
+          return { id: skill, label: def?.name ?? TOOL_HUD[skill].label, glyph: TOOL_HUD[skill].glyph, tint: TOOL_HUD[skill].tint, infinite, dur: def && !infinite ? t!.usesRemaining / def.durability : 1 }
+        }))} />}
 
       {/* ── Mobile controls: joystick (move) bottom-left · A interact / B cancel bottom-right ── */}
       {isTouch && !battle && !editMode && !placing && (
