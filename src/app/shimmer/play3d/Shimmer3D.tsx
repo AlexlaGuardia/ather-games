@@ -17,10 +17,10 @@ import { spiritsToSave, spiritsFromSave } from '../spirits/spirit-save'
 import { LAUNCHED_SPECIES } from '../engine/spirit-index'
 import { ZONE_NODES, type NodePlacement } from '../world/node-placements'
 import { createResourceNode, depleteNode, tickNodeRespawn, rollDrops, getNodeSkill, NODE_DEFS, type NodeType, type ResourceNode } from '../world/resources'
-import { findAdjacentNode, addHarvestItems, getChannelDuration } from '../engine/harvesting'
+import { findAdjacentNode, addHarvestItems } from '../engine/harvesting'
 import { createSkillSet, skillSetToSave, skillSetFromSave, addSkillXP, xpForSkillLevel, SKILL_META, type SkillSet } from '../engine/skills'
 import { createInventory, inventoryToSave, inventoryFromSave, type Inventory, type ItemStack } from '../engine/inventory'
-import { createManaPool, manaToSave, manaFromSave, getMaxPool, getRegenRate, type ManaPool } from '../engine/mana'
+import { createManaPool, manaToSave, manaFromSave, getMaxPool, type ManaPool } from '../engine/mana'
 import type { AITier } from '../engine/battle-ai'
 import PartyBattleScene from '../components/PartyBattleScene'
 import ArenaBattle from '../components/ArenaBattle'
@@ -54,9 +54,12 @@ const NODE_TOOL_IDS = new Set<string>(NODE_TOOLS.map(t => t.id))
 // sprites/items.ts; this prettifier is enough for harvest toasts until those are wired.
 const prettyItem = (id: string) => id.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')
 const menuBtn: React.CSSProperties = { padding: '6px 11px', borderRadius: 7, border: '1px solid #ffffff2a', background: '#16142a', color: '#e9dfc8', font: '700 11px ui-monospace, monospace', cursor: 'pointer', whiteSpace: 'nowrap' }
-// Felt mana cost of one chop = a FRACTION of the pool, scaling up with node tier (its minLevel).
-// A low tree (goldwood, Lv1) ≈ 1/9 of the pool; higher tiers eat more. Pure feel — tune here.
-const nodeManaFrac = (type: NodeType) => Math.min(0.6, 0.11 + (NODE_DEFS[type].minLevel - 1) * 0.018)
+// Chop cost + time, scaling by node tier (its minLevel). Base pool is 100 and regen is slow
+// (see MANA_REGEN_PER_SEC), so mana is a real budget. Shimmeroak (Lv4): 12 mana over 3s = 4/s.
+// Pure feel — tune here. goldwood(1): 6 mana / 2s · shimmeroak(4): 12 / 2.9s · dawnwood(10): 24 / 4.7s.
+const nodeManaCost = (type: NodeType) => 6 + (NODE_DEFS[type].minLevel - 1) * 2
+const nodeChannelSec = (type: NodeType) => 2 + (NODE_DEFS[type].minLevel - 1) * 0.3
+const MANA_REGEN_PER_SEC = 1 / 60   // 1 mana per minute — lean on the mana station / Mana skill to refill
 
 function buckets(grid: number[][]) {
   const floors: Cell[] = [], walls: Cell[] = [], waters: Cell[] = [], voids: Cell[] = [], warps: Cell[] = [], mists: Cell[] = []
@@ -783,9 +786,9 @@ export default function Shimmer3D() {
   // vial and the minutes-long respawn timers).
   useEffect(() => {
     const id = setInterval(() => {
-      const lvl = skillsRef.current.mana.level, max = getMaxPool(lvl)
+      const max = getMaxPool(skillsRef.current.mana.level)
       if (manaRef.current.current < max) {
-        manaRef.current.current = Math.min(max, manaRef.current.current + getRegenRate(lvl) * 7)
+        manaRef.current.current = Math.min(max, manaRef.current.current + MANA_REGEN_PER_SEC * 0.5) // 0.5s tick
         setManaFrac(manaRef.current.current / max)
       }
       let respawned = false
@@ -808,9 +811,9 @@ export default function Shimmer3D() {
     if (channelRef.current) { channelRef.current = null; setChannel(null); return }   // unlink
     const node = nearNodeRef.current
     if (!node || node.state !== 'harvestable') return
-    if (manaRef.current.current < 1) { setHarvestToast('No mana — let the vial refill'); return }
+    if (manaRef.current.current < nodeManaCost(node.type)) { setHarvestToast(`Not enough mana (need ${nodeManaCost(node.type)})`); return }
     // NOTE(jin): minLevel gate bypassed for now (early-tier goldwood not placed in starter zones yet).
-    const durSec = getChannelDuration(node.type, skillsRef.current.mana.level) / 15
+    const durSec = nodeChannelSec(node.type)
     channelRef.current = { node, progress: 0, durSec }
     setChannel({ nodeId: node.id, label: prettyItem(node.type), hp: 1 })
   }, [])
@@ -822,9 +825,8 @@ export default function Shimmer3D() {
       if (!ch) return
       const p = posRef.current!
       const dist = Math.max(Math.abs(ch.node.tileX - p.x), Math.abs(ch.node.tileY - p.z))
-      const def = NODE_DEFS[ch.node.type]
-      const totalCost = getMaxPool(skillsRef.current.mana.level) * nodeManaFrac(ch.node.type)
-      const drain = (totalCost / ch.durSec) * dt          // spread the pool-fraction cost over the chop
+      const totalCost = nodeManaCost(ch.node.type)
+      const drain = (totalCost / ch.durSec) * dt          // spread the flat tier cost over the chop (4/s for shimmeroak)
       if (dist > CHANNEL_RANGE || ch.node.state !== 'harvestable') { channelRef.current = null; setChannel(null); return }
       if (manaRef.current.current < drain) { channelRef.current = null; setChannel(null); setHarvestToast('Out of mana'); return }
       manaRef.current.current -= drain
@@ -832,12 +834,13 @@ export default function Shimmer3D() {
       ch.progress += dt / ch.durSec
       if (ch.progress >= 1) {
         const skillId = getNodeSkill(ch.node.type)
+        const xp = NODE_DEFS[ch.node.type].xp
         const added = addHarvestItems(invRef.current, rollDrops(ch.node.type))
-        const xpr = addSkillXP(skillsRef.current[skillId], def.xp)
+        const xpr = addSkillXP(skillsRef.current[skillId], xp)
         depleteNode(ch.node)
         channelRef.current = null; setChannel(null)
         syncSkillHud(); setRuntimeNodes([...runtimeNodesRef.current]); setNearNode(null)
-        setHarvestToast(`+ ${added.map(prettyItem).join(' · ') || 'nothing'}   ·   ${SKILL_META[skillId].name} +${def.xp} XP`)
+        setHarvestToast(`+ ${added.map(prettyItem).join(' · ') || 'nothing'}   ·   ${SKILL_META[skillId].name} +${xp} XP`)
         if (xpr.leveled) setBanner(`✦ ${SKILL_META[skillId].name} Lv ${xpr.newLevel}!`)
         persist()
       } else {
