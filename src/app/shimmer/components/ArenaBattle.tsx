@@ -122,12 +122,12 @@ function Scene({ arenaRef, cmdQueue, onSnap }: {
       } else so.visible = false
     }
 
-    // witherbloom — a sickly-green ground ring under a poisoned enemy (Frilldrift's toxin bleeding it)
+    // witherbloom — a sickly-green ground ring under a numbed enemy (Frilldrift's toxin: its strikes whiff)
     for (const f of s.fighters) {
       if (f.side !== 'enemy') continue
       const po = poisons.current.get(f.id)
       if (!po) continue
-      if (f.poisonT > 0 && f.hp > 0) {
+      if (f.numbT > 0 && f.hp > 0) {
         po.visible = true; po.position.set(f.x, 0.02, f.y)
         const m = po.material as THREE.MeshBasicMaterial
         m.opacity = 0.3 + 0.28 * (0.5 + 0.5 * Math.sin(s.t * 4.5))   // slow sickly pulse
@@ -369,7 +369,7 @@ export default function ArenaBattle({ allies, enemies, seed, aidKit, onEnd, cont
       )}
 
       {/* hint */}
-      {!over && <div style={{ position: 'absolute', bottom: 26, left: '50%', transform: 'translateX(-50%)', font: '600 10px ui-monospace, monospace', color: '#5f7a72', textAlign: 'center', maxWidth: 268, pointerEvents: 'none' }}>{armed ? (TARGETED[armed] === 'enemy' ? 'Pick an enemy — ⚠ marks one winding up.' : 'Pick an ally to shelter — ⚠ marks one about to be hit.') : 'Your spirit fights on its own. Time your Aid — FLASH interrupts · REACH/WITHER hit an enemy · WARDCOIL shelters · BREEZE sustains.'}</div>}
+      {!over && <div style={{ position: 'absolute', bottom: 26, left: '50%', transform: 'translateX(-50%)', font: '600 10px ui-monospace, monospace', color: '#5f7a72', textAlign: 'center', maxWidth: 268, pointerEvents: 'none' }}>{armed ? (TARGETED[armed] === 'enemy' ? 'Pick an enemy — ⚠ marks one winding up.' : 'Pick an ally to shelter — ⚠ marks one about to be hit.') : 'Your spirit fights on its own. Time your Aid — FLASH interrupts · REACH softens · WITHER numbs · WARDCOIL shelters · BREEZE sustains.'}</div>}
     </div>
   )
 }

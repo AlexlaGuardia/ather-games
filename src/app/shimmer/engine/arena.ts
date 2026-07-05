@@ -41,8 +41,7 @@ export interface Fighter {
   flinch: number            // stunned — cannot act (Momo's flash)
   defDownT: number; defDownAmt: number   // grd reduced (Bonn's Reach)
   shieldT: number           // incoming damage reduced (Coilguard's Wardcoil — plates lock, tail-coil shelters)
-  poisonT: number           // Witherbloom — Frilldrift's toxin bleeds hp over time (a slow wither, never a burst)
-  poisonDps: number         // hp/sec while poisonT > 0
+  numbT: number             // Witherbloom — Frilldrift's toxin numbs a foe; its strikes often whiff (a debuff, no damage)
   braceT: number            // defending → incoming halved
   recoverT: number          // just struck → give ground (the strike-and-reposition tempo, no glued scrum)
   hitFlash: number          // took a hit → renderer flashes the body white (impact read)
@@ -67,6 +66,7 @@ export type ArenaEvent =
   | { type: 'wind_interrupt'; who: string }
   | { type: 'aid'; id: AidId; target?: string }
   | { type: 'bag' }
+  | { type: 'miss'; who: string }
   | { type: 'ko'; who: string }
 
 export interface ArenaState {
@@ -151,7 +151,7 @@ function fighterFromSpirit(spirit: Spirit, id: string, side: Side, x: number, y:
     radius: 0.35 + s.maxHp / 260, speed,
     reach: 0.9, atkCd: 0.4, atkInterval: Math.max(0.95, 1.9 - s.agi / 70),
     stance: 'aggressive', targetId: null,
-    flinch: 0, defDownT: 0, defDownAmt: 0, shieldT: 0, poisonT: 0, poisonDps: 0, braceT: 0, recoverT: 0, hitFlash: 0,
+    flinch: 0, defDownT: 0, defDownAmt: 0, shieldT: 0, numbT: 0, braceT: 0, recoverT: 0, hitFlash: 0,
     wind: null, winCd: 2.5,
   }
 }
@@ -239,19 +239,12 @@ export function tick(state: ArenaState, dt: number, commands: KeeperCommand[] = 
     f.flinch = Math.max(0, f.flinch - dt)
     f.defDownT = Math.max(0, f.defDownT - dt)
     f.shieldT = Math.max(0, f.shieldT - dt)
+    f.numbT = Math.max(0, f.numbT - dt)   // Witherbloom's numbness fading
     f.braceT = Math.max(0, f.braceT - dt)
     f.recoverT = Math.max(0, f.recoverT - dt)
     f.hitFlash = Math.max(0, f.hitFlash - dt)
     f.atkCd = Math.max(0, f.atkCd - dt)
     f.winCd = Math.max(0, f.winCd - dt)
-
-    // Witherbloom — Frilldrift's toxin bleeds hp while it lasts. A slow wither (enabler
-    // pressure), never a burst; it can finish a weakened foe but can't carry a fight.
-    if (f.poisonT > 0) {
-      f.poisonT = Math.max(0, f.poisonT - dt)
-      f.hp = Math.max(0, f.hp - f.poisonDps * dt)
-      if (f.hp <= 0) { state.events.push({ type: 'ko', who: f.id }); continue }
-    }
 
     if (f.flinch > 0) { if (f.wind) { state.events.push({ type: 'wind_interrupt', who: f.id }); f.wind = null; f.winCd = Math.max(f.winCd, 1.2) } continue }
 
@@ -297,7 +290,10 @@ export function tick(state: ArenaState, dt: number, commands: KeeperCommand[] = 
   else if (!allyLeft) state.outcome = 'lose'
 }
 
+const WITHER_MISS = 0.5   // numbed → half its strikes whiff (knob)
+
 function basicAttack(state: ArenaState, f: Fighter, target: Fighter) {
+  if (f.numbT > 0 && state.rng() < WITHER_MISS) { state.events.push({ type: 'miss', who: f.id }); return }
   applyDamage(state, f, target, f.pwr * 0.34)   // light — the heavy wind-up is the real threat
 }
 
@@ -306,6 +302,8 @@ function stepWind(state: ArenaState, f: Fighter, target: Fighter, d: number, dt:
   if (f.wind) {
     f.wind.t += dt
     if (f.wind.t >= f.wind.dur) {
+      // numbed → even the heavy can fumble (Witherbloom): the whole wind-up whiffs
+      if (f.numbT > 0 && state.rng() < WITHER_MISS) { state.events.push({ type: 'miss', who: f.id }); f.wind = null; f.winCd = 5.5; return }
       // land it on the opposite side within range of the strike point (target's position at fire)
       const tgt = state.fighters.find(g => g.id === f.wind!.targetId && alive(g))
       if (tgt) {
@@ -377,12 +375,13 @@ function applyCommand(state: ArenaState, cmd: KeeperCommand) {
           .sort((a, b) => (winding.includes(b.id) ? 1 : 0) - (winding.includes(a.id) ? 1 : 0) || a.hp - b.hp)[0]
     if (g) g.shieldT = 6
   } else if (slot.id === 'witherbloom') {
-    // Frilldrift's gift — its contact toxin settles on a target and bleeds it over time.
-    // Targets the picked enemy, else the sturdiest (highest effGrd) — wither what basics chip slowest.
+    // Frilldrift's gift — its contact toxin numbs a foe (canon: "burning numbness"). While
+    // numbed the enemy's strikes often whiff — an enabler debuff, no damage. Targets the
+    // picked enemy, else the hardest-hitting one (highest pwr) — numb the biggest threat.
     const g = cmd.targetId
       ? state.fighters.find(x => x.id === cmd.targetId && x.side === 'enemy' && alive(x))
-      : state.fighters.filter(x => x.side === 'enemy' && alive(x)).sort((a, b) => effGrd(b) - effGrd(a))[0]
-    if (g) { g.poisonT = 8; g.poisonDps = 2.6 }   // ~21 hp over 8s — pressure, not a nuke (knobs)
+      : state.fighters.filter(x => x.side === 'enemy' && alive(x)).sort((a, b) => b.pwr - a.pwr)[0]
+    if (g) g.numbT = 8   // 8s of numbness (knob)
   }
 }
 
