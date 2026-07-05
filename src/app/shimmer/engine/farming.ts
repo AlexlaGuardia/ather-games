@@ -174,8 +174,11 @@ export interface HarvestCropResult {
   xpGained: number
 }
 
-/** Harvest a ready crop — rolls yields with level bonus, adds items, grants farming XP. */
-export function harvestCrop(crop: PlantedCrop, inv: Inventory, skills: SkillSet): HarvestCropResult {
+/**
+ * Harvest a ready crop — rolls yields with level bonus, adds items, grants farming XP.
+ * bonusFindChance: companion Tuberfind perk (Dustwhisker @15) — a chance for one bonus crop.
+ */
+export function harvestCrop(crop: PlantedCrop, inv: Inventory, skills: SkillSet, bonusFindChance = 0): HarvestCropResult {
   const def = CROP_DEFS[crop.cropId]
   if (!def) return { items: [], xpGained: 0 }
 
@@ -185,7 +188,9 @@ export function harvestCrop(crop: PlantedCrop, inv: Inventory, skills: SkillSet)
   const items: { itemId: string; count: number }[] = []
   for (const y of def.yields) {
     if (Math.random() < y.chance) {
-      const count = Math.max(1, Math.round(y.count * yieldMult))
+      let count = Math.max(1, Math.round(y.count * yieldMult))
+      // Companion perk (Tuberfind @15) — a chance for a bonus crop on top.
+      if (bonusFindChance > 0 && Math.random() < bonusFindChance) count += 1
       addItems(inv, y.itemId, count)
       items.push({ itemId: y.itemId, count })
     }

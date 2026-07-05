@@ -250,31 +250,54 @@ export function adventureBondTick(beast: ManaBeast): void {
 }
 
 // ============================================
-// Species Perks
+// Species Perks — @15 "lesser" tier
+// Canon: shimmer-skilling.md §Two-Tier Companions. Each skill-tied beast grants a WEAKER
+// version of that skill's @100 Mana'mal perk. All are "bonus find" yield boosts on the beast's
+// OWN skill; Drifthorn (admin/rare) is skill-agnostic and keeps a channel-speed identity.
+// The true @100 Mana'mals (Tuskroot/Rootback/Gemdigger/Prismstrike) give the strong versions —
+// blocked on Alex's follower art before they can be built.
 // ============================================
 
-export type BeastPerk = 'gathering_speed' | 'crop_growth' | 'rare_drop' | 'ore_quality' | 'mana_regen'
+export type BeastPerk = 'gathering_speed' | 'tuberfind' | 'grovekin' | 'gemsense' | 'truesight'
 
 export const BEAST_PERKS: Record<BeastSpecies, BeastPerk> = {
-  drifthorn:   'gathering_speed',
-  dustwhisker: 'crop_growth',
-  sporeling:   'rare_drop',
-  glowmite:    'ore_quality',
-  embermole:   'mana_regen',
+  drifthorn:   'gathering_speed', // admin/rare — faster channel on ALL skills
+  dustwhisker: 'tuberfind',       // Farming     (lesser Tuskroot → Tuberfind)
+  sporeling:   'grovekin',        // Forestry    (lesser Rootback → Grovekin)
+  glowmite:    'gemsense',        // Prospecting (lesser Gemdigger → Gemsense)
+  embermole:   'truesight',       // Rinning     (lesser Prismstrike → Truesight)
 }
 
-// Max bonus per perk at full strength (happiness = 100)
+// Which skill each perk boosts (null = skill-agnostic, applies to every skill).
+export const PERK_SKILL: Record<BeastPerk, SkillId | null> = {
+  gathering_speed: null,
+  tuberfind:   'farming',
+  grovekin:    'forestry',
+  gemsense:    'prospecting',
+  truesight:   'rinning',
+}
+
+// Player-facing copy for the companion UI.
+export const PERK_INFO: Record<BeastPerk, { label: string; blurb: string }> = {
+  gathering_speed: { label: 'Gathering Speed', blurb: 'Channels a little faster on every skill.' },
+  tuberfind:       { label: 'Tuberfind',       blurb: 'Sometimes turns up a bonus crop when you harvest.' },
+  grovekin:        { label: 'Grovekin',        blurb: 'Sometimes yields extra wood when you gather.' },
+  gemsense:        { label: 'Gemsense',        blurb: 'Sometimes finds an extra shard when you mine.' },
+  truesight:       { label: 'Truesight',       blurb: 'Sometimes lands an extra catch when you fish.' },
+}
+
+// Max bonus at full happiness (100). @15 = the WEAK tier — the @100 Mana'mal gives the strong version.
 export const PERK_MAX_BONUS: Record<BeastPerk, number> = {
-  gathering_speed: 0.20,  // +20% faster
-  crop_growth:     0.15,  // +15% faster
-  rare_drop:       0.25,  // +25% rare drop chance
-  ore_quality:     0.25,  // +25% ore quality
-  mana_regen:      0.15,  // +15% mana regen
+  gathering_speed: 0.20,  // +20% channel speed
+  tuberfind:       0.20,  // +20% bonus-find chance on farming harvest
+  grovekin:        0.20,  // +20% bonus-find chance on forestry
+  gemsense:        0.20,  // +20% bonus-find chance on prospecting
+  truesight:       0.20,  // +20% bonus-find chance on rinning
 }
 
 /**
  * Get perk strength for the active beast (0.0 to 1.0).
- * Returns 0 if happiness < 50. Scales linearly from 50 to 100.
+ * Returns 0 if happiness < 50. Scales linearly from 50 to 100 — happy companion, stronger perk.
  */
 export function getPerkStrength(beast: ManaBeast): number {
   if (beast.happiness < 50) return 0
@@ -291,6 +314,23 @@ export function getActivePerkBonus(beast: ManaBeast | null): { perk: BeastPerk; 
   if (strength <= 0) return null
   const perk = BEAST_PERKS[beast.species]
   return { perk, bonus: PERK_MAX_BONUS[perk] * strength }
+}
+
+/**
+ * Bonus-find chance for the active beast on a specific skill.
+ * Returns 0 unless the beast's perk is tied to that skill (Drifthorn's speed perk yields 0 here).
+ */
+export function getBonusFindChance(beast: ManaBeast | null, skill: SkillId): number {
+  const active = getActivePerkBonus(beast)
+  if (!active) return 0
+  return PERK_SKILL[active.perk] === skill ? active.bonus : 0
+}
+
+/** Channel-speed bonus for the active beast (0 unless it has the gathering_speed perk). */
+export function getSpeedBonus(beast: ManaBeast | null): number {
+  const active = getActivePerkBonus(beast)
+  if (!active || active.perk !== 'gathering_speed') return 0
+  return active.bonus
 }
 
 // ============================================

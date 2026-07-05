@@ -157,6 +157,7 @@ export function channelProgress(channel: ChannelState): number {
  * Complete a harvest — drain mana, roll drops, grant XP, deplete node.
  * Call when tickChannel returns true.
  * Optional xpBonus multiplier from equipped tool (e.g. 1.1 = +10% XP).
+ * Optional bonusFindChance from the active companion's @15 perk (matched to this node's skill).
  * Mutates: node state, skill XP, mana pool.
  * Does NOT mutate bag — returns items for caller to add.
  */
@@ -165,6 +166,7 @@ export function completeHarvest(
   skills: SkillSet,
   mana: ManaPool,
   xpBonus?: number,
+  bonusFindChance?: number,
 ): HarvestResult {
   const def = NODE_DEFS[node.type]
   const skillId = getNodeSkill(node.type)
@@ -173,8 +175,8 @@ export function completeHarvest(
   const drained = drainMana(mana, def.manaCost)
   const manaSpent = drained ? def.manaCost : 0
 
-  // Roll drops
-  const items = rollDrops(node.type)
+  // Roll drops (with optional companion bonus-find)
+  const items = rollDrops(node.type, bonusFindChance)
 
   // Grant skill XP (with optional tool bonus)
   const xpAmount = Math.floor(def.xp * (xpBonus ?? 1))

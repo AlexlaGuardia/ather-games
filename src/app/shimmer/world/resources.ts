@@ -148,8 +148,12 @@ export function respawnNodesBySkill(nodes: ResourceNode[], skillId: string): num
   return count
 }
 
-/** Roll drops from a node. Returns array of item IDs to add to bag. */
-export function rollDrops(type: NodeType): string[] {
+/**
+ * Roll drops from a node. Returns array of item IDs to add to bag.
+ * bonusFindChance: companion @15 perk (Grovekin/Gemsense/Truesight) — a chance to turn up
+ * one extra of the node's primary drop. 0 = no active companion perk for this skill.
+ */
+export function rollDrops(type: NodeType, bonusFindChance = 0): string[] {
   const def = NODE_DEFS[type]
   const items: string[] = []
   for (const drop of def.drops) {
@@ -159,6 +163,10 @@ export function rollDrops(type: NodeType): string[] {
   }
   // Guarantee at least one drop
   if (items.length === 0 && def.drops.length > 0) {
+    items.push(def.drops[0].itemId)
+  }
+  // Companion perk bonus find — a chance for one extra primary drop.
+  if (bonusFindChance > 0 && def.drops.length > 0 && Math.random() < bonusFindChance) {
     items.push(def.drops[0].itemId)
   }
   return items

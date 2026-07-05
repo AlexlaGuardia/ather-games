@@ -75,7 +75,7 @@ import type { TileGroup } from './world/structures'
 import { unlockAudio, setZoneMusic, stopMusic } from './engine/music'
 import { createVoice, playChar, stopSpeaking, unlockChatter, type VoiceInstance } from './engine/chatterbox'
 import { getVoiceProfile } from './data/voice-profiles'
-import { ManaBeast, BeastSpecies, BEAST_DEFS, BEAST_SPECIES, createBeast, checkBeastUnlock, beastsToSave, beastsFromSave, BeastSave } from './beasts/beast'
+import { ManaBeast, BeastSpecies, BEAST_DEFS, BEAST_SPECIES, createBeast, checkBeastUnlock, beastsToSave, beastsFromSave, BeastSave, BEAST_PERKS, PERK_INFO, getActivePerkBonus, getBonusFindChance, getSpeedBonus } from './beasts/beast'
 import { BEAST_SPRITES, BEAST_PALETTES } from './sprites/beasts'
 import PartyBattleScene from './components/PartyBattleScene'
 import EvolutionOverlay from './components/EvolutionOverlay'
@@ -1873,7 +1873,9 @@ export default function ShimmerPage() {
                 )
                 if (readyCrop) {
                   const prevFarmLvl = skillsRef.current.farming.level
-                  const result = harvestCrop(readyCrop, invRef.current, skillsRef.current)
+                  const cropBeast = beastsRef.current.find(b => b.id === activeBeastIdRef.current)
+                  const cropFind = getBonusFindChance(cropBeast ?? null, 'farming')
+                  const result = harvestCrop(readyCrop, invRef.current, skillsRef.current, cropFind)
                   plantedCropsRef.current = plantedCropsRef.current.filter(c => c.id !== readyCrop.id)
                   setInv({ ...invRef.current })
                   particles.burst(cropTx * TILE + 8, cropTy * TILE + 8, 'sparkle', 10)
@@ -1898,7 +1900,8 @@ export default function ShimmerPage() {
                   if (check.ok) {
                     const nodeSkill = getNodeSkill(node.type)
                     const tool = getEquippedTool(equippedToolsRef.current, nodeSkill)
-                    channelRef.current = startChannel(node, skillsRef.current.mana.level, tool?.speedBonus)
+                    const speedBeast = beastsRef.current.find(b => b.id === activeBeastIdRef.current)
+                    channelRef.current = startChannel(node, skillsRef.current.mana.level, tool?.speedBonus, getSpeedBonus(speedBeast ?? null))
                     manaRef.current.channeling = true
                     player.animFrame = 0
                     player.animTimer = 0
@@ -2051,7 +2054,8 @@ export default function ShimmerPage() {
             if (check.ok) {
               const nodeSkill = getNodeSkill(node.type)
               const tool = getEquippedTool(equippedToolsRef.current, nodeSkill)
-              channelRef.current = startChannel(node, skillsRef.current.mana.level, tool?.speedBonus)
+              const speedBeast = beastsRef.current.find(b => b.id === activeBeastIdRef.current)
+              channelRef.current = startChannel(node, skillsRef.current.mana.level, tool?.speedBonus, getSpeedBonus(speedBeast ?? null))
               manaRef.current.channeling = true
               player.animFrame = 0
               player.animTimer = 0
@@ -2143,7 +2147,10 @@ export default function ShimmerPage() {
               const chTool = getEquippedTool(equippedToolsRef.current, chSkill)
               const xpBuff = activeBuffsRef.current.find(b => b.stat === 'xp_boost')
               const totalXpBonus = (chTool?.xpBonus ?? 1) * (1 + (xpBuff?.multiplier ?? 0))
-              const result = completeHarvest(node, skillsRef.current, manaRef.current, totalXpBonus)
+              // Active companion @15 perk — bonus find if its skill matches this node
+              const findBeast = beastsRef.current.find(b => b.id === activeBeastIdRef.current)
+              const bonusFind = getBonusFindChance(findBeast ?? null, chSkill)
+              const result = completeHarvest(node, skillsRef.current, manaRef.current, totalXpBonus, bonusFind)
               // XP floaters per skill gained
               for (const xp of result.xp) {
                 if (xp.amount > 0) {
@@ -3996,6 +4003,23 @@ export default function ShimmerPage() {
                           )
                         })}
                       </div>
+                      {/* Active companion perk blurb */}
+                      {(() => {
+                        const active = beastsRef.current.find(b => b.id === activeBeastId)
+                        if (!active) return null
+                        const info = PERK_INFO[BEAST_PERKS[active.species]]
+                        const live = getActivePerkBonus(active)
+                        return (
+                          <div className="mt-2 flex items-start gap-2 px-2.5 py-2 rounded-lg bg-[#d4a843]/[0.06] border border-[#d4a843]/15">
+                            <span className={`mt-0.5 w-1.5 h-1.5 rounded-full flex-shrink-0 ${live ? 'bg-[#7bd47b]' : 'bg-text-faint/30'}`} />
+                            <span className="text-[12px] leading-snug text-text-faint/70">
+                              <span className="text-[#d4a843] font-display">{info.label}</span>
+                              {' — '}{info.blurb}
+                              {!live && <span className="text-text-faint/40"> (keep {active.name} happy to activate)</span>}
+                            </span>
+                          </div>
+                        )
+                      })()}
                     </div>
 
                     {/* Quick Stats */}
