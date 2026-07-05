@@ -1,405 +1,445 @@
 {
- "version": 1,
- "updated": "2026-06-23",
- "note": "Spirit Grimoire manifest. SEED authored by Jin from CANON/design-briefs/base-forms.md. Serberus owns the final manifest (HANDOFF_JIN_grimoire.md); Raven owns the `entry` lore copy per spirit (placeholder empty here). Base refs in /grimoire/<id>.png; stage-2 element art in /magii/spirits/<analog>_<element>.png. stage-3 not designed yet (Raven's lane); UI reserves 4 slots per stage-2. | STAGE-2 COMPLETE 2026-06-23: all 40 forms locked (house-style, concept-riff), all canon names filled (Magii). Some cross-element forms diverge body-plan (Croakarc=skink, Lepnix=unicorn, Lepaura=moon-hare) - the i",
- "elements": {
-  "mana": {
-   "label": "Mana",
-   "color": "#f5c542"
-  },
-  "water": {
-   "label": "Water",
-   "color": "#37e6ff"
-  },
-  "earth": {
-   "label": "Earth",
-   "color": "#7bd88f"
-  },
-  "storm": {
-   "label": "Storm",
-   "color": "#c08bff"
-  }
- },
- "spirits": [
-  {
-   "id": "vulnyx",
-   "name": "Vulnyx",
-   "analog": "fox",
-   "element": "mana",
-   "palette": [
-    "#f5c542",
-    "#fef3d8",
-    "#ffb347"
-   ],
-   "quirk": "leaves golden afterimages when she moves, a built-in decoy",
-   "signature": "afterimage trail",
-   "individual": "Glim",
-   "img": "/grimoire/vulnyx.png",
-   "entry": "",
-   "evolutions": [
-    {
-     "element": "mana",
-     "name": "Vulnara",
-     "img": "/magii/spirits/fox_mana.png"
+  "version": 1,
+  "updated": "2026-06-23",
+  "note": "Spirit Grimoire manifest. SEED authored by Jin from CANON/design-briefs/base-forms.md. Serberus owns the final manifest (HANDOFF_JIN_grimoire.md); Raven owns the `entry` lore copy per spirit (placeholder empty here). Base refs in /grimoire/<id>.png; stage-2 element art in /magii/spirits/<analog>_<element>.png. stage-3 not designed yet (Raven's lane); UI reserves 4 slots per stage-2. | STAGE-2 COMPLETE 2026-06-23: all 40 forms locked (house-style, concept-riff), all canon names filled (Magii). Some cross-element forms diverge body-plan (Croakarc=skink, Lepnix=unicorn, Lepaura=moon-hare) - the i",
+  "elements": {
+    "mana": {
+      "label": "Mana",
+      "color": "#f5c542"
     },
-    {
-     "element": "water",
-     "name": "Vulnix",
-     "img": "/magii/spirits/fox_water.png"
+    "water": {
+      "label": "Water",
+      "color": "#37e6ff"
     },
-    {
-     "element": "earth",
-     "name": "Vulnore",
-     "img": "/magii/spirits/fox_earth.png"
+    "earth": {
+      "label": "Earth",
+      "color": "#7bd88f"
     },
-    {
-     "element": "storm",
-     "name": "Vulnarc",
-     "img": "/magii/spirits/fox_storm.png"
+    "storm": {
+      "label": "Storm",
+      "color": "#c08bff"
     }
-   ]
   },
-  {
-   "id": "athowl",
-   "name": "Athowl",
-   "analog": "owl",
-   "element": "mana",
-   "palette": [
-    "#e8ecf2",
-    "#c9b8e8",
-    "#f5c542"
-   ],
-   "quirk": "rotates its head past any normal angle; an unnervingly patient, all-seeing stare",
-   "signature": "deep-gold disc eyes",
-   "individual": "Strixen",
-   "img": "/grimoire/athowl.png",
-   "entry": "",
-   "evolutions": [
+  "spirits": [
     {
-     "element": "mana",
-     "name": "Mystowl",
-     "img": "/magii/spirits/owl_mana.png"
+      "id": "vulnyx",
+      "name": "Vulnyx",
+      "analog": "fox",
+      "element": "mana",
+      "palette": [
+        "#f5c542",
+        "#fef3d8",
+        "#ffb347"
+      ],
+      "quirk": "leaves golden afterimages when she moves, a built-in decoy",
+      "signature": "afterimage trail",
+      "individual": "Glim",
+      "img": "/grimoire/vulnyx.png",
+      "entry": "The tell is that there are two of it, then one. A Vulnyx throws a gold copy of itself the moment it bolts, and you grab the copy every time. This is the plain form, before any element has marked it, and it already knows the trick. Nobody taught it. I've checked.",
+      "evolutions": [
+        {
+          "element": "mana",
+          "name": "Vulnara",
+          "img": "/magii/spirits/fox_mana.png",
+          "entry": "The tell is the trail. Every Vulnyx leaves gold ghosts behind it, quick and gone. Hers stay, and if you look long enough there is old writing in them, the kind that was there before anyone could read it. She is slower than her base form, on purpose. Whatever the Mana gave her, it wasn't speed. It was patience, and patience on this kind just means the clever one can wait. She has never looked away first. I've checked."
+        },
+        {
+          "element": "water",
+          "name": "Vulnix",
+          "img": "/magii/spirits/fox_water.png",
+          "entry": "The tell pools instead of flashing. A Vulnix's ghost does not blink out, it runs off her like water and takes a moment to still. Water made the trickster calm, which is the strangest version of her I have found. A quiet Vulnyx is still a Vulnyx. I keep both eyes on the quiet ones."
+        },
+        {
+          "element": "earth",
+          "name": "Vulnore",
+          "img": "/magii/spirits/fox_earth.png",
+          "entry": "The tell changed. A Vulnore leaves no ghost at all, and for this kind that is nearly a confession. Earth traded her the trick for weight, so where the others flicker she simply stands, stone-colored and sure. She does not need to be two of herself. One is enough, and she knows it."
+        },
+        {
+          "element": "storm",
+          "name": "Vulnarc",
+          "img": "/magii/spirits/fox_storm.png",
+          "entry": "The tell is still the trail, only now her ghosts spark. A Vulnarc's afterimages hold a charge, so the decoy you reach for bites back. Storm made her quicker than the base and a good deal less patient. She does not wait for you to fall for the trick. She makes you."
+        }
+      ]
     },
     {
-     "element": "water",
-     "name": "Tideowl",
-     "img": "/magii/spirits/owl_water.png"
+      "id": "athowl",
+      "name": "Athowl",
+      "analog": "owl",
+      "element": "mana",
+      "palette": [
+        "#e8ecf2",
+        "#c9b8e8",
+        "#f5c542"
+      ],
+      "quirk": "rotates its head past any normal angle; an unnervingly patient, all-seeing stare",
+      "signature": "deep-gold disc eyes",
+      "individual": "Strixen",
+      "img": "/grimoire/athowl.png",
+      "entry": "The eyes find you first. Two deep-gold discs, too wide for the dark they live in, and they do not blink when you would expect them to. It sits so still you forget it is there. Then the head turns, all the way past where a head should stop, and lands on the exact thing that moved. One motion. Never a wasted one.",
+      "evolutions": [
+        {
+          "element": "mana",
+          "name": "Mystowl",
+          "img": "/magii/spirits/owl_mana.png",
+          "entry": "The gold in the eyes has gone deep, almost lit from behind, and there are marks in the feathers now that turn faintly when the light hits them. It is stiller than the base, if that is possible, and it seems to see more than it looks at. This is where the family was always headed. The seeing was the point."
+        },
+        {
+          "element": "water",
+          "name": "Tideowl",
+          "img": "/magii/spirits/owl_water.png",
+          "entry": "The stillness is softer on this one. Flowing lines have come up across the feathers, pale and moving like reflections on water, and the gold of the eyes has cooled toward the color of deep shallows. It turns its head slower, smoother, no snap at the end of it. Patient the way a calm pool is patient. It will wait longer than you."
+        },
+        {
+          "element": "earth",
+          "name": "Cragowl",
+          "img": "/magii/spirits/owl_earth.png",
+          "entry": "This one you might walk past as a rock. The feathers have hardened to a dull mineral gray, layered like slate, and it holds its stillness longer than anything I have watched. The gold eyes are the only part that still looks alive. When it moves, and it will, it is slow and certain and final."
+        },
+        {
+          "element": "storm",
+          "name": "Voltowl",
+          "img": "/magii/spirits/owl_storm.png",
+          "entry": "Static comes off the feathers of this one, a faint lift in the air near it. The gold eyes hold the same, but thin lines of light run through its wings and snap when it finally moves. It moves fast here, one crack of motion instead of the slow turn. Blink and you missed the whole thing."
+        }
+      ]
     },
     {
-     "element": "earth",
-     "name": "Cragowl",
-     "img": "/magii/spirits/owl_earth.png"
+      "id": "shellmere",
+      "name": "Shellmere",
+      "analog": "turtle",
+      "element": "earth",
+      "palette": [
+        "#5fb98a",
+        "#f0e6c8",
+        "#f5b942"
+      ],
+      "quirk": "the runes on its shell pulse like a slow heartbeat",
+      "signature": "amber shell-runes",
+      "individual": null,
+      "img": "/grimoire/shellmere.png",
+      "entry": "Watch the shell and count. The amber marks along it pulse, slow and even, one glow about every few breaths, like something under there keeping time. It moves at the pace of the pulse, which is to say barely. Old, and in no hurry to prove it.",
+      "evolutions": [
+        {
+          "element": "mana",
+          "name": "Aurmere",
+          "img": "/magii/spirits/turtle_mana.png",
+          "entry": "The runes on the shell have gone deep and clear, lit from inside like amber with a light trapped in it. The pulse is slower here, and each one lasts longer, as if the thought behind it got bigger and needs the extra breath. It watched me the whole time I sat with it, and it never once hurried."
+        },
+        {
+          "element": "water",
+          "name": "Tidemere",
+          "img": "/magii/spirits/turtle_water.png",
+          "entry": "The runes run instead of pulsing. On the shell they have spread into flowing lines, the amber light moving along them like water finding a channel, never stopping and never fast. It is the calmest of them, and the easiest to sit beside. Time feels slower near it, in a good way."
+        },
+        {
+          "element": "earth",
+          "name": "Mesamere",
+          "img": "/magii/spirits/turtle_earth.png",
+          "entry": "This is the heaviest quiet in the whole book. The shell has thickened to layered stone, banded like a cliff face, the runes glowing a low steady amber that never quickens. It does not startle. It does not rush. Whatever the others are still becoming, this one already is."
+        },
+        {
+          "element": "storm",
+          "name": "Voltmere",
+          "img": "/magii/spirits/turtle_storm.png",
+          "entry": "The pulse has picked up. Where the base form glows every few breaths, this one flickers quick and bright, the amber runes shot through with thin white lines that snap when it moves. It is still slow. The lightning is just impatient inside a body that refuses to be. I like it for that."
+        }
+      ]
     },
     {
-     "element": "storm",
-     "name": "Voltowl",
-     "img": "/magii/spirits/owl_storm.png"
+      "id": "manalotl",
+      "name": "Manalotl",
+      "analog": "axolotl",
+      "element": "water",
+      "palette": [
+        "#ffb3a0",
+        "#fff0ea",
+        "#ff8fb0"
+      ],
+      "quirk": "an eternal smile that persists in every form; head-tilts when curious",
+      "signature": "feathery gill frills",
+      "individual": "Brook",
+      "img": "/grimoire/manalotl.png",
+      "entry": "That smile is the first thing you notice, and it does not go anywhere. I have watched one wait out a whole cold snap, frills pulsing soft blue in the dark, still smiling like it knew something I didn't. Tilt your head and it tilts back, curious about you being curious. Whatever it is made of, it decided a long time ago to be glad about it.",
+      "evolutions": [
+        {
+          "element": "mana",
+          "name": "Aurlotl",
+          "img": "/magii/spirits/axolotl_mana.png",
+          "entry": "The frills give it away. On the base form they only glow, but here there is writing inside the light, faint and old, the kind that was set down before the words meant anything. It moves slower and thinks longer. The smile is still there, only now it feels less like being glad and more like being sure."
+        },
+        {
+          "element": "water",
+          "name": "Marlotl",
+          "img": "/magii/spirits/axolotl_water.png",
+          "entry": "This is the one that looks like it came home. The frills move the way the current moves, folding and opening without any effort I can find, the light running through them like it is being carried somewhere. It is calmest here, slowest to startle. I think the Water did not change it so much as let it stop pretending to be anything else."
+        },
+        {
+          "element": "earth",
+          "name": "Craglotl",
+          "img": "/magii/spirits/axolotl_earth.png",
+          "entry": "Heavier. That is the first change. The frills that used to drift now hold their shape like carved things, dulled to the color of wet stone, the light inside them coming up slow and staying. It does not dart anymore. It settles, and it waits, and the smile has gone patient as a rock in a stream."
+        },
+        {
+          "element": "storm",
+          "name": "Arclotl",
+          "img": "/magii/spirits/axolotl_storm.png",
+          "entry": "You hear this one before the light reaches you, a small dry crackle in the water. The frills have gone to sparks, snapping bright and quick along every frond. It still tilts its head, still smiles, only now the smile has a jolt behind it. Curious is a faster thing on the Storm."
+        }
+      ]
+    },
+    {
+      "id": "noctyx",
+      "name": "Noctyx",
+      "analog": "bat",
+      "element": "storm",
+      "palette": [
+        "#4a3f7a",
+        "#b8bcc8",
+        "#c08bff"
+      ],
+      "quirk": "hangs upside-down by default; wraps its wings around itself like a cloak",
+      "signature": "elemental light across the wing membrane",
+      "individual": "Echo",
+      "img": "/grimoire/noctyx.png",
+      "entry": "Look up, and then look up higher, to the underside of things. A Noctyx spends its day hung upside-down with its wings drawn round it like a cloak, a small dark shape you would take for a folded leaf until it opens. It does not see the way you do, it listens, and the world comes back to it in echoes. Light plays across the thin of its wings when it stirs, faint and shifting. Spooky, the others say. I came from a place with no sun. To me it just looks like something that learned to live where I did.",
+      "evolutions": [
+        {
+          "element": "mana",
+          "name": "Noctara",
+          "img": "/magii/spirits/bat_mana.png",
+          "entry": "The wing-cloak went to glass. A Noctara hangs like its base does, wrapped and quiet, but the membrane has gone near-translucent, and old marks surface across it when the light moves, the kind of writing that was there before reading. It listens deeper. Where a Noctyx reads the near echoes, this one seems to catch the far ones too, patient in the dark, wiser than a small thing has cause to be. I lingered below one for an hour. I think it heard me the whole time."
+        },
+        {
+          "element": "water",
+          "name": "Noctix",
+          "img": "/magii/spirits/bat_water.png",
+          "entry": "The cloak learned to flow. A Noctix hangs like the rest of its line, but the wing-membrane ripples when it wraps, smooth as a curtain of water drawn closed, and the light across it runs instead of flickers. Its echoes come soft and rounded, as if the dark it listens to were underwater. Calmer than any Noctyx has right to be, slow to startle, slow to leave. I have watched it fold and unfold at the edge of a pool for the pleasure of the motion. That is a thing I do not admit often."
+        },
+        {
+          "element": "earth",
+          "name": "Noctore",
+          "img": "/magii/spirits/bat_earth.png",
+          "entry": "It stopped hanging. A Noctore keeps to the shadowed low places but settles on stone instead of swinging from the high dark, heavier, its wing-cloak gone thick and dull like slate. The echoes it throws come back slow and solid, reading rock and root rather than open air. It is the still one of a restless kind. Where its cousins flit and drop, this one waits, folded and grounded, in no hurry to be found. I found it anyway. It took me longer."
+        },
+        {
+          "element": "storm",
+          "name": "Noctarc",
+          "img": "/magii/spirits/bat_storm.png",
+          "entry": "The dark one picked up a charge. A Noctarc hangs like its kin but never quite settles, its cloak-wings twitching with a static that lifts the fine hairs of it, and when it drops it drops fast, a black snap through the air. The echoes come quicker here, sharp and near, a thing that hears and moves in the same breath. This is where the line was always leaning. Storm suits it. It wears the dark and the crackle both, and looks right in each."
+        }
+      ]
+    },
+    {
+      "id": "luminara",
+      "name": "Luminara",
+      "analog": "firefly",
+      "element": "mana",
+      "palette": [
+        "#f5c542",
+        "#3a3320",
+        "#fff6d8"
+      ],
+      "quirk": "its abdomen is brightest, pulsing like a tiny sun; writes light-trails as it flies",
+      "signature": "the glowing abdomen-orb",
+      "individual": null,
+      "img": "/grimoire/luminara.png",
+      "entry": "Watch the air, not the creature. A Luminara is barely there, a mote of light no bigger than a seed, but it writes where it has been. The trail hangs a moment after it, a thread of glow that fades before you can point at it. The light sits lowest in its body and pulses, slow and warm, like something small that decided to be a sun anyway. I have followed one just to read the line it left. That is the whole trick of them. You forget to be careful.",
+      "evolutions": [
+        {
+          "element": "mana",
+          "name": "Luminel",
+          "img": "/magii/spirits/firefly_mana.png",
+          "entry": "Look at the trail longer. A Luminel leaves the same thread of light a Luminara does, only its threads hold. Marks surface in them if you wait, thin rune-shapes that were old before anyone had a word for old. The pulse is slower here, deeper, less a heartbeat than a thought. Mana did not make it brighter. It made it patient enough to be read. This is the one that came home to its own element, and it knows it."
+        },
+        {
+          "element": "water",
+          "name": "Luminix",
+          "img": "/magii/spirits/firefly_water.png",
+          "entry": "The trail pools. Where a Luminara's line frays and vanishes, a Luminix lets its light run and gather, slow ribbons that fold over themselves before they fade. The pulse is a tide now, in and out, unhurried. It moves the way water thinks it moves, all curve and no corner. Follow one across a still pool at dusk and the reflection doubles it. Two lights, one slow, neither in any rush to be anywhere."
+        },
+        {
+          "element": "earth",
+          "name": "Luminore",
+          "img": "/magii/spirits/firefly_earth.png",
+          "entry": "The light stopped darting. A Luminore carries its glow low and steady, banked like a coal that will not go out and will not flare. It does not write on the air the way its kin do, it just sits, warm and certain, a small stone that happens to shine. A whole line of restless light, and this one chose to be an ember. I set my hand near one and felt heat before I saw a trail. Stubborn. I like it."
+        },
+        {
+          "element": "storm",
+          "name": "Luminarc",
+          "img": "/magii/spirits/firefly_storm.png",
+          "entry": "You catch this one before the trail catches up. A Luminarc does not glow so much as flicker, a stutter of light that snaps and is gone and snaps again somewhere you were not looking. The pulse in its body has gone quick and sharp, less a sun than a struck spark held too long. Fast. Faster than a thing that small has any right to be. I gave up tracing the line. It does not leave one long enough."
+        }
+      ]
+    },
+    {
+      "id": "croakling",
+      "name": "Croakling",
+      "analog": "frog",
+      "element": "water",
+      "palette": [
+        "#3fcf9a",
+        "#f0e89a",
+        "#b6f542"
+      ],
+      "quirk": "zero grace, all enthusiasm; goofy mid-hop poses, throat puffs, the lure bobs as it hops",
+      "signature": "an anglerfish lantern-lure arching from its head",
+      "individual": null,
+      "img": "/grimoire/croakling.png",
+      "entry": "The tell is the freeze. A Croakling will launch itself, then stop dead at the top of the hop and hang there a beat too long, like it forgot its own plan mid-air. It looks foolish. It is not. That pause is the whole of it deciding, and I have watched one out-wait a circling hunter by doing nothing at all.",
+      "evolutions": [
+        {
+          "element": "mana",
+          "name": "Croakara",
+          "img": "/magii/spirits/frog_mana.png",
+          "entry": "The tell is in the throat. Every Croakling puffs and croaks at nothing, but a Croakara's throat lights when it does, and there are rune-marks under the skin that flicker in time with the sound. I used to think the croaking was noise. On this one I am no longer sure. Something is being said, slowly, to something I cannot see."
+        },
+        {
+          "element": "water",
+          "name": "Croakrill",
+          "img": "/magii/spirits/frog_water.png",
+          "entry": "The tell is that the clumsiness is gone. On land a Croakling is all mismatched parts, big feet and bulging eyes, but drop a Croakrill in water and every awkward thing about it becomes the reason it moves so well. This is the Croakling where it was always meant to be. The goofiness was never a flaw. It was a swimmer waiting for the right water."
+        },
+        {
+          "element": "earth",
+          "name": "Croakore",
+          "img": "/magii/spirits/frog_earth.png",
+          "entry": "The tell is that it does not hop. A Croakore sits, heavy and mineral, those big feet planted like it grew there, and you could mistake it for a wet stone until it blinks. Earth took the jump right out of it. It kept the patience and made it into something you could build a wall from. I have leaned on one. It did not mind."
+        },
+        {
+          "element": "storm",
+          "name": "Croakarc",
+          "img": "/magii/spirits/frog_storm.png",
+          "entry": "The tell is the sound before the jump. A Croakarc clicks, a small dry spark, and then it is already gone, faster than a thing that shape has any business being. Storm took the goofy thing and gave it a temper. The freeze-pose is gone. Now there is only the click and the empty spot where it was."
+        }
+      ]
+    },
+    {
+      "id": "lepara",
+      "name": "Lepara",
+      "analog": "rabbit",
+      "element": "earth",
+      "palette": [
+        "#f5ecd8",
+        "#ffb3c0",
+        "#ff9eb5"
+      ],
+      "quirk": "nose twitches constantly; its ears convey every emotion",
+      "signature": "the expressive ears",
+      "individual": "Ember",
+      "img": "/grimoire/lepara.png",
+      "entry": "Read the ears and you will know it before it knows you. A Lepara says everything with them, up and open when the day is easy, flat and low when it is not, and its nose never stops working the air. Soft all over, round, quick when it decides to be. Nothing in the Wilds is warmer to sit beside. I do not sit long. But I have noticed the ears turn to me before the rest of it does, and I have learned to read what they say.",
+      "evolutions": [
+        {
+          "element": "mana",
+          "name": "Lepaura",
+          "img": "/magii/spirits/rabbit_mana.png",
+          "entry": "The ears still tell the truth, only now the light comes through them. A Lepaura has gone half to glass, its edges translucent, faint marks under the skin that catch when the sun does. It reads calmer than its base, slower to startle, as if it already knows how the moment ends. Twitchy nose, steady eyes. The Mana traded a little of its fear for a little of its knowing. A fair trade, I think."
+        },
+        {
+          "element": "water",
+          "name": "Lepnix",
+          "img": "/magii/spirits/rabbit_water.png",
+          "entry": "The nose still works the air, but nothing else hurries. A Lepnix moves the way a slow current does, its fur laid smooth and flowing, the twitch gone soft and unbothered. It startles less than any of its kin, as if the water in it will not let it be rushed. Sit beside one at the edge of a still pool and your own breath slows to match it. I noticed that before I meant to. The calm is catching. That may be the whole of what it does."
+        },
+        {
+          "element": "earth",
+          "name": "Lepore",
+          "img": "/magii/spirits/rabbit_earth.png",
+          "entry": "This one I know. Not from watching someone else watch it, from my own two feet, up a stream that had gone wrong until I found where the wrong began. A Lepore is a Lepara grown grounded, heavier, mineral in the fur, the ears slower and surer. Where it settles, the ground answers. Fruit hangs low and heavy, plants come up thick and green, the soil goes rich under it without anyone asking. That is the gift, and the gift is made to wander. A few of them ranging a wide wild stretch keep the whole of it fed and none of it drowned. I have seen that kind, the good kind, a hillside quietly generous because something small was passing through. I have also seen the other kind. Pen them, crowd them, keep the plenty in one place because you cannot bear to let it roam, and the giving turns on the ground. Too much, too rich, too fast, until the growth rots from its own weight and a taint bleeds down into the water. That was my poisoned stream. Not a curse. Kindness hoarded past what any soil can hold. I followed it up and found a hold full of penned Lepore and a keeper who only ever meant to have enough. The cure was letting them go. I watched the ground come back. I do not forget that one."
+        },
+        {
+          "element": "storm",
+          "name": "Leparc",
+          "img": "/magii/spirits/rabbit_storm.png",
+          "entry": "Blink and the spot it was in is empty. A Leparc is a Lepara with the patience burned off, all nerve and speed, its fur lifting with a charge that snaps if you reach too soon. The ears still talk but they talk fast, flicking through three feelings before it has finished one. It does not sit beside anyone. It is gone before the ground remembers it was there. Quick things are hard to know. This one I am still working on."
+        }
+      ]
+    },
+    {
+      "id": "dewbear",
+      "name": "Dewbear",
+      "analog": "waterbear",
+      "element": "earth",
+      "palette": [
+        "#9fb8c8",
+        "#eaf2f7",
+        "#f5b942"
+      ],
+      "quirk": "waddles; wrinkly-but-huggable; curls into an indestructible tun-ball",
+      "signature": "glow rising between the body segments",
+      "individual": "Blue",
+      "img": "/grimoire/dewbear.png",
+      "entry": "It will walk right up to you. No pause, no circling, just eight little legs carrying a round body straight into your lap like you invited it. There is a glow that lives between the segments, and you only see it when it breathes. Push on it and it goes to a ball, hard as a knuckle, and waits you out. I have never won.",
+      "evolutions": [
+        {
+          "element": "mana",
+          "name": "Lumebear",
+          "img": "/magii/spirits/waterbear_mana.png",
+          "entry": "The glow is the tell, and on this one it has stopped hiding. It runs between every segment now, steady and lit from somewhere deep, faint marks turning in it that I cannot quite read. It still crowds you the same way. It just glows while it does."
+        },
+        {
+          "element": "water",
+          "name": "Tidebear",
+          "img": "/magii/spirits/waterbear_water.png",
+          "entry": "The glow moves now. On the others it sits between the segments, but on this one it flows, sliding around the body slow as poured water. It is softer to the touch and slower to ball up. When it finally does, a bead of light rolls once around the seam and settles, like the tide going out."
+        },
+        {
+          "element": "earth",
+          "name": "Cragbear",
+          "img": "/magii/spirits/waterbear_earth.png",
+          "entry": "Knock on this one. Go ahead. Where the base form was squishy, this is packed close and heavy, its shell come up in mineral ridges the color of deep clay. The glow between the plates burns low and orange, like a coal that will not go out. It curls up and becomes a stone, and I mean an actual stone. This is the shape the whole family was reaching for."
+        },
+        {
+          "element": "storm",
+          "name": "Voltbear",
+          "img": "/magii/spirits/waterbear_storm.png",
+          "entry": "You feel this one before it touches you, a little prickle up the arm. The glow between its segments has gone to a current, snapping quiet in the seams. It still curls into its ball, but now the ball hums, and touching it is a small dare. Worth it, mostly."
+        }
+      ]
+    },
+    {
+      "id": "hovari",
+      "name": "Hovari",
+      "analog": "hummingbird",
+      "element": "storm",
+      "palette": [
+        "#2fc9a0",
+        "#ff4d6a",
+        "#c08bff"
+      ],
+      "quirk": "hovers as default and never lands; wings blur into a prismatic rainbow shimmer",
+      "signature": "the prismatic wing-shimmer",
+      "individual": "Flint",
+      "img": "/grimoire/hovari.png",
+      "entry": "It will not land. That is the first thing and the truest, a Hovari holds itself in the air by default and stays there, wings beating too fast to see, a smear of jewel-color where the creature should be. Look at the blur straight on and it breaks into every color at once, a piece of rainbow that will not hold still to be counted. Small. Precise. It moves like it already decided where to be and skipped the part in between. I have waited a long time to see one rest. Not once.",
+      "evolutions": [
+        {
+          "element": "mana",
+          "name": "Lumari",
+          "img": "/magii/spirits/hummingbird_mana.png",
+          "entry": "The blur went to light. A Lumari holds the air like its base does, never resting, but the wings throw a glow now instead of only color, faint marks riding the shimmer where a keener eye can read them. It is slower, a touch, slow enough that the rainbow steadies into something you can almost hold. Mana asks a fast thing to wait, and this one learned to. The hover is the same. What it does while hovering has changed. It watches back."
+        },
+        {
+          "element": "water",
+          "name": "Tidari",
+          "img": "/magii/spirits/hummingbird_water.png",
+          "entry": "The blur went to ribbon. A Tidari holds the air like all its kind, but the wings move in long smooth strokes now, and the color runs off them like water off a leaf, curling and folding before it fades. It hovers calm, unhurried, the fierce edge gone soft. Where a Hovari darts, this one drifts, and somehow arrives all the same. Watching it is like watching a slow pour that never quite spills. Restful. I did not expect restful from this line."
+        },
+        {
+          "element": "earth",
+          "name": "Obsidari",
+          "img": "/magii/spirits/hummingbird_earth.png",
+          "entry": "This is the one that lands. Everything else in the line refuses the ground and this one made peace with it, a Hovari gone to dark mineral, its wings heavy and glassy like stone that learned to fly. It hovers still, but low and deliberate, and when it sets down it stays, which none of its kin will do. The color is banked to a deep gleam, a glint off something struck from rock. Slow where the others are quick. Sure where the others are only fast. I trust the ones that will hold still."
+        },
+        {
+          "element": "storm",
+          "name": "Voltari",
+          "img": "/magii/spirits/hummingbird_storm.png",
+          "entry": "You feel it on your arms before you find it. A Voltari hovers in a haze of its own charge, the air around it gone tight and prickling, its wings a blur that snaps with small light at the tips. Fast became faster here. This is the one Storm was always reaching for. It does not dart so much as arrive, there and then there, the space between too quick to hold a name. Fierce for its size. It came home loud, and it is not shy about it."
+        }
+      ]
     }
-   ]
-  },
-  {
-   "id": "shellmere",
-   "name": "Shellmere",
-   "analog": "turtle",
-   "element": "earth",
-   "palette": [
-    "#5fb98a",
-    "#f0e6c8",
-    "#f5b942"
-   ],
-   "quirk": "the runes on its shell pulse like a slow heartbeat",
-   "signature": "amber shell-runes",
-   "individual": null,
-   "img": "/grimoire/shellmere.png",
-   "entry": "",
-   "evolutions": [
-    {
-     "element": "mana",
-     "name": "Aurmere",
-     "img": "/magii/spirits/turtle_mana.png"
-    },
-    {
-     "element": "water",
-     "name": "Tidemere",
-     "img": "/magii/spirits/turtle_water.png"
-    },
-    {
-     "element": "earth",
-     "name": "Mesamere",
-     "img": "/magii/spirits/turtle_earth.png"
-    },
-    {
-     "element": "storm",
-     "name": "Voltmere",
-     "img": "/magii/spirits/turtle_storm.png"
-    }
-   ]
-  },
-  {
-   "id": "manalotl",
-   "name": "Manalotl",
-   "analog": "axolotl",
-   "element": "water",
-   "palette": [
-    "#ffb3a0",
-    "#fff0ea",
-    "#ff8fb0"
-   ],
-   "quirk": "an eternal smile that persists in every form; head-tilts when curious",
-   "signature": "feathery gill frills",
-   "individual": "Brook",
-   "img": "/grimoire/manalotl.png",
-   "entry": "",
-   "evolutions": [
-    {
-     "element": "mana",
-     "name": "Aurlotl",
-     "img": "/magii/spirits/axolotl_mana.png"
-    },
-    {
-     "element": "water",
-     "name": "Marlotl",
-     "img": "/magii/spirits/axolotl_water.png"
-    },
-    {
-     "element": "earth",
-     "name": "Craglotl",
-     "img": "/magii/spirits/axolotl_earth.png"
-    },
-    {
-     "element": "storm",
-     "name": "Arclotl",
-     "img": "/magii/spirits/axolotl_storm.png"
-    }
-   ]
-  },
-  {
-   "id": "noctyx",
-   "name": "Noctyx",
-   "analog": "bat",
-   "element": "storm",
-   "palette": [
-    "#4a3f7a",
-    "#b8bcc8",
-    "#c08bff"
-   ],
-   "quirk": "hangs upside-down by default; wraps its wings around itself like a cloak",
-   "signature": "elemental light across the wing membrane",
-   "individual": "Echo",
-   "img": "/grimoire/noctyx.png",
-   "entry": "",
-   "evolutions": [
-    {
-     "element": "mana",
-     "name": "Noctara",
-     "img": "/magii/spirits/bat_mana.png"
-    },
-    {
-     "element": "water",
-     "name": "Noctix",
-     "img": "/magii/spirits/bat_water.png"
-    },
-    {
-     "element": "earth",
-     "name": "Noctore",
-     "img": "/magii/spirits/bat_earth.png"
-    },
-    {
-     "element": "storm",
-     "name": "Noctarc",
-     "img": "/magii/spirits/bat_storm.png"
-    }
-   ]
-  },
-  {
-   "id": "luminara",
-   "name": "Luminara",
-   "analog": "firefly",
-   "element": "mana",
-   "palette": [
-    "#f5c542",
-    "#3a3320",
-    "#fff6d8"
-   ],
-   "quirk": "its abdomen is brightest, pulsing like a tiny sun; writes light-trails as it flies",
-   "signature": "the glowing abdomen-orb",
-   "individual": null,
-   "img": "/grimoire/luminara.png",
-   "entry": "",
-   "evolutions": [
-    {
-     "element": "mana",
-     "name": "Luminel",
-     "img": "/magii/spirits/firefly_mana.png"
-    },
-    {
-     "element": "water",
-     "name": "Luminix",
-     "img": "/magii/spirits/firefly_water.png"
-    },
-    {
-     "element": "earth",
-     "name": "Luminore",
-     "img": "/magii/spirits/firefly_earth.png"
-    },
-    {
-     "element": "storm",
-     "name": "Luminarc",
-     "img": "/magii/spirits/firefly_storm.png"
-    }
-   ]
-  },
-  {
-   "id": "croakling",
-   "name": "Croakling",
-   "analog": "frog",
-   "element": "water",
-   "palette": [
-    "#3fcf9a",
-    "#f0e89a",
-    "#b6f542"
-   ],
-   "quirk": "zero grace, all enthusiasm; goofy mid-hop poses, throat puffs, the lure bobs as it hops",
-   "signature": "an anglerfish lantern-lure arching from its head",
-   "individual": null,
-   "img": "/grimoire/croakling.png",
-   "entry": "",
-   "evolutions": [
-    {
-     "element": "mana",
-     "name": "Croakara",
-     "img": "/magii/spirits/frog_mana.png"
-    },
-    {
-     "element": "water",
-     "name": "Croakrill",
-     "img": "/magii/spirits/frog_water.png"
-    },
-    {
-     "element": "earth",
-     "name": "Croakore",
-     "img": "/magii/spirits/frog_earth.png"
-    },
-    {
-     "element": "storm",
-     "name": "Croakarc",
-     "img": "/magii/spirits/frog_storm.png"
-    }
-   ]
-  },
-  {
-   "id": "lepara",
-   "name": "Lepara",
-   "analog": "rabbit",
-   "element": "earth",
-   "palette": [
-    "#f5ecd8",
-    "#ffb3c0",
-    "#ff9eb5"
-   ],
-   "quirk": "nose twitches constantly; its ears convey every emotion",
-   "signature": "the expressive ears",
-   "individual": "Ember",
-   "img": "/grimoire/lepara.png",
-   "entry": "",
-   "evolutions": [
-    {
-     "element": "mana",
-     "name": "Lepaura",
-     "img": "/magii/spirits/rabbit_mana.png"
-    },
-    {
-     "element": "water",
-     "name": "Lepnix",
-     "img": "/magii/spirits/rabbit_water.png"
-    },
-    {
-     "element": "earth",
-     "name": "Lepore",
-     "img": "/magii/spirits/rabbit_earth.png"
-    },
-    {
-     "element": "storm",
-     "name": "Leparc",
-     "img": "/magii/spirits/rabbit_storm.png"
-    }
-   ]
-  },
-  {
-   "id": "dewbear",
-   "name": "Dewbear",
-   "analog": "waterbear",
-   "element": "earth",
-   "palette": [
-    "#9fb8c8",
-    "#eaf2f7",
-    "#f5b942"
-   ],
-   "quirk": "waddles; wrinkly-but-huggable; curls into an indestructible tun-ball",
-   "signature": "glow rising between the body segments",
-   "individual": "Blue",
-   "img": "/grimoire/dewbear.png",
-   "entry": "",
-   "evolutions": [
-    {
-     "element": "mana",
-     "name": "Lumebear",
-     "img": "/magii/spirits/waterbear_mana.png"
-    },
-    {
-     "element": "water",
-     "name": "Tidebear",
-     "img": "/magii/spirits/waterbear_water.png"
-    },
-    {
-     "element": "earth",
-     "name": "Cragbear",
-     "img": "/magii/spirits/waterbear_earth.png"
-    },
-    {
-     "element": "storm",
-     "name": "Voltbear",
-     "img": "/magii/spirits/waterbear_storm.png"
-    }
-   ]
-  },
-  {
-   "id": "hovari",
-   "name": "Hovari",
-   "analog": "hummingbird",
-   "element": "storm",
-   "palette": [
-    "#2fc9a0",
-    "#ff4d6a",
-    "#c08bff"
-   ],
-   "quirk": "hovers as default and never lands; wings blur into a prismatic rainbow shimmer",
-   "signature": "the prismatic wing-shimmer",
-   "individual": "Flint",
-   "img": "/grimoire/hovari.png",
-   "entry": "",
-   "evolutions": [
-    {
-     "element": "mana",
-     "name": "Lumari",
-     "img": "/magii/spirits/hummingbird_mana.png"
-    },
-    {
-     "element": "water",
-     "name": "Tidari",
-     "img": "/magii/spirits/hummingbird_water.png"
-    },
-    {
-     "element": "earth",
-     "name": "Obsidari",
-     "img": "/magii/spirits/hummingbird_earth.png"
-    },
-    {
-     "element": "storm",
-     "name": "Voltari",
-     "img": "/magii/spirits/hummingbird_storm.png"
-    }
-   ]
-  }
- ]
+  ]
 }
