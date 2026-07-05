@@ -5,6 +5,7 @@
 // height grid; cell tools edit the tile grid (so you can remove water/walls). Save persists both
 // (heights→/shimmer/save-heights, grid→/shimmer/save-map). Warps/collision reuse the 2D engine.
 import { Canvas, useFrame, type ThreeEvent } from '@react-three/fiber'
+import { Html } from '@react-three/drei'
 import { useRef, useEffect, useLayoutEffect, useMemo, useState, useCallback } from 'react'
 import * as THREE from 'three'
 import { walkable } from '../engine/player'
@@ -14,6 +15,8 @@ import { rollEncounter, type WildEncounter } from '../engine/encounters'
 import { createSpirit, addXP, xpForLevel, speciesDisplayName, ELEMENT_COLORS, type Spirit, type Species, type Element } from '../spirits/spirit'
 import { spiritsToSave, spiritsFromSave } from '../spirits/spirit-save'
 import { LAUNCHED_SPECIES } from '../engine/spirit-index'
+import { ZONE_NODES, type NodePlacement } from '../world/node-placements'
+import type { NodeType } from '../world/resources'
 import type { AITier } from '../engine/battle-ai'
 import PartyBattleScene from '../components/PartyBattleScene'
 import ArenaBattle from '../components/ArenaBattle'
@@ -36,7 +39,13 @@ const UP = new THREE.Vector3(0, 1, 0)
 const DIR_YAW: Record<string, number> = { up: 0, down: Math.PI, left: Math.PI / 2, right: -Math.PI / 2 }
 
 type Cell = [number, number]
-type Tool = 'raise' | 'lower' | 'floor' | 'wall' | 'water' | 'mist' | 'warp' | 'void'
+type Tool = 'raise' | 'lower' | 'floor' | 'wall' | 'water' | 'mist' | 'warp' | 'void' | NodeType
+// Node-placing tools exposed in the editor (place = click, erase = shift-click). Terrain tools
+// paint the tile grid; node tools drop/remove a resource node in the separate node layer.
+const NODE_TOOLS: { id: NodeType; label: string }[] = [
+  { id: 'shimmeroak', label: 'Shimmeroak' },
+]
+const NODE_TOOL_IDS = new Set<string>(NODE_TOOLS.map(t => t.id))
 
 function buckets(grid: number[][]) {
   const floors: Cell[] = [], walls: Cell[] = [], waters: Cell[] = [], voids: Cell[] = [], warps: Cell[] = [], mists: Cell[] = []
@@ -104,6 +113,45 @@ function NPCMarkers({ npcs, heights }: { npcs: NPC3D[]; heights: number[][] }) {
             <mesh position={[0, 1.55, 0]} castShadow><sphereGeometry args={[0.26, 14, 14]} /><meshStandardMaterial color="#ecdab4" /></mesh>
             {moglin && <mesh position={[0.9, 0.5, 0.25]} castShadow><sphereGeometry args={[0.22, 12, 12]} /><meshStandardMaterial color="#6b6675" emissive="#241f2e" emissiveIntensity={0.4} /></mesh>}
             <mesh position={[0, 3.1, 0]}><boxGeometry args={[0.13, 2.2, 0.13]} /><meshStandardMaterial color={moglin ? '#b58adf' : '#ffe08a'} emissive={moglin ? '#7a4fc0' : '#ffcf4d'} emissiveIntensity={0.92} transparent opacity={0.8} /></mesh>
+          </group>
+        )
+      })}
+    </>
+  )
+}
+
+// Resource-node placeholder looks — a trunk + canopy blockout per type (real models come later,
+// per the art rule). Canon reads: goldwood = golden, shimmeroak = larger with a rippled/shimmery
+// emerald canopy, starwillow = pale drooping, dawnwood = warm-glow. Crystals = angular gem shapes.
+const NODE_LOOK: Record<string, { trunk: string; canopy: string; scale: number; glow?: number; gem?: boolean }> = {
+  goldwood:   { trunk: '#8a6a3c', canopy: '#d9b84a', scale: 1 },
+  shimmeroak: { trunk: '#6f5330', canopy: '#4fc79a', scale: 1.35, glow: 0.35 },
+  starwillow: { trunk: '#9a8f7a', canopy: '#cfe6d0', scale: 1.15 },
+  dawnwood:   { trunk: '#7a4a34', canopy: '#f0a86a', scale: 1.2, glow: 0.5 },
+  raw_mana_node: { trunk: '#3a4a6a', canopy: '#6fbce6', scale: 0.8, gem: true, glow: 0.4 },
+  element_crystal_node: { trunk: '#5a3a6a', canopy: '#c88ae6', scale: 0.9, gem: true, glow: 0.5 },
+}
+function NodeMarkers({ nodes, heights, editing }: { nodes: NodePlacement[]; heights: number[][]; editing: boolean }) {
+  return (
+    <>
+      {nodes.map((n, i) => {
+        const look = NODE_LOOK[n.type] ?? NODE_LOOK.goldwood
+        const y = (heights[n.tileY]?.[n.tileX] ?? 0) * STEP
+        const s = look.scale
+        return (
+          <group key={`${n.type}-${n.tileX}-${n.tileY}-${i}`} position={[n.tileX, y, n.tileY]}>
+            {/* trunk */}
+            <mesh position={[0, 0.5 * s, 0]} castShadow><cylinderGeometry args={[0.13 * s, 0.17 * s, s, 7]} /><meshStandardMaterial color={look.trunk} roughness={0.9} /></mesh>
+            {/* canopy — gem nodes get an angular crystal, trees a rounded crown */}
+            {look.gem
+              ? <mesh position={[0, s + 0.2, 0]} castShadow><octahedronGeometry args={[0.45 * s, 0]} /><meshStandardMaterial color={look.canopy} emissive={look.canopy} emissiveIntensity={look.glow ?? 0.3} roughness={0.3} /></mesh>
+              : <mesh position={[0, s + 0.35 * s, 0]} castShadow><icosahedronGeometry args={[0.62 * s, 0]} /><meshStandardMaterial color={look.canopy} emissive={look.canopy} emissiveIntensity={look.glow ?? 0} roughness={0.8} flatShading /></mesh>}
+            {/* edit-mode label so you can tell what you placed */}
+            {editing && (
+              <Html position={[0, s + 1.2, 0]} center distanceFactor={12} pointerEvents="none">
+                <div style={{ font: '700 10px ui-monospace, monospace', color: '#0d1a17', background: '#eafff6d0', border: '1px solid #2f5c4f', borderRadius: 5, padding: '1px 5px', whiteSpace: 'nowrap' }}>{n.type}</div>
+              </Html>
+            )}
           </group>
         )
       })}
@@ -453,6 +501,7 @@ function Scene(props: {
   onNearChange: (n: NPC3D | null) => void
   defeatedRef: React.RefObject<Record<string, boolean>>; defeated: Record<string, boolean>
   flagsRef: React.RefObject<Record<string, boolean>>
+  nodes: NodePlacement[]
 }) {
   return (
     <>
@@ -467,6 +516,7 @@ function Scene(props: {
       />
       <ZoneGeometry key={`${props.zone.id}-${props.dims}`} gridRef={props.gridRef} heights={props.heights} version={props.version} paint={props.paint} editing={props.editing} />
       <NPCMarkers npcs={NPCS_3D.filter((n) => n.zone === props.zone.id && npcInWorld(n, props.defeated, props.flagsRef.current))} heights={props.heights} />
+      <NodeMarkers nodes={props.nodes} heights={props.heights} editing={props.editing} />
       <Player posRef={props.posRef} gridRef={props.gridRef} heightsRef={props.heightsRef} zoneIdRef={props.zoneIdRef} editRef={props.editRef} onWarp={props.onWarp} battleRef={props.battleRef} partyLevelRef={props.partyLevelRef} onEncounter={props.onEncounter} joyRef={props.joyRef} talkingRef={props.talkingRef} hasPartyRef={props.hasPartyRef} onNearChange={props.onNearChange} defeatedRef={props.defeatedRef} flagsRef={props.flagsRef} />
       <CameraRig posRef={props.posRef} editFocusRef={props.editFocusRef} yawRef={props.yawRef} editRef={props.editRef} />
     </>
@@ -561,6 +611,12 @@ const TOOLS: { id: Tool; label: string }[] = [
 export default function Shimmer3D() {
   const [zoneId, setZoneId] = useState(START_ZONE)
   const zone = getZone(ZONES, zoneId) ?? getZone(ZONES, START_ZONE)!
+
+  // Resource nodes for this zone — seeded from the authored ZONE_NODES layer; the editor
+  // adds/removes them and the Save button writes them back to node-placements.ts.
+  const [nodes, setNodes] = useState<NodePlacement[]>(() => (ZONE_NODES[zone.id] ?? []).map(n => ({ ...n })))
+  const nodesRef = useRef(nodes); nodesRef.current = nodes
+  useEffect(() => { setNodes((ZONE_NODES[zone.id] ?? []).map(n => ({ ...n }))) }, [zone.id])
 
   // Working copies — init ONCE per zone (not every render) so paint/resize edits persist.
   const gridRef = useRef<number[][]>([])
@@ -926,6 +982,16 @@ export default function Shimmer3D() {
 
   const paint = useCallback((c: number, r: number, shift: boolean) => {
     const t = toolRef.current, b = brushRef.current
+    // Node tools drop/remove a single resource node in the node layer (not the tile grid).
+    if (NODE_TOOL_IDS.has(t)) {
+      setNodes(prev => {
+        const without = prev.filter(n => !(n.tileX === c && n.tileY === r))
+        if (shift) return without                                  // shift-click erases any node here
+        if (without.length !== prev.length) return prev            // already a node here — leave it
+        return [...prev, { type: t as NodeType, tileX: c, tileY: r }]
+      })
+      return
+    }
     const H = heightsRef.current, G = gridRef.current
     const rows = G.length, cols = G[0].length
     for (let dr = -b; dr <= b; dr++) for (let dc = -b; dc <= b; dc++) {
@@ -995,11 +1061,13 @@ export default function Shimmer3D() {
     setSaveMsg('saving…')
     try {
       const id = zone.id
-      const [h, g] = await Promise.all([
+      const [h, g, n] = await Promise.all([
         fetch('/shimmer/save-heights', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ zoneId: id, heights: heightsRef.current }) }),
         fetch('/shimmer/save-map', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ grid: gridRef.current, mapId: id }) }),
+        // node layer → node-placements.ts (same endpoint, `nodes` payload; {nodeType,x,y} shape)
+        fetch('/shimmer/save-map', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ nodes: nodesRef.current.map(nd => ({ nodeType: nd.type, x: nd.tileX, y: nd.tileY })), mapId: id }) }),
       ])
-      setSaveMsg(h.ok && g.ok ? 'saved ✓ (ping Jin to build it live)' : 'save failed')
+      setSaveMsg(h.ok && g.ok && n.ok ? 'saved ✓ (ping Jin to build it live)' : 'save failed')
     } catch { setSaveMsg('save failed') }
     setTimeout(() => setSaveMsg(''), 3500)
   }, [zone.id])
@@ -1023,6 +1091,7 @@ export default function Shimmer3D() {
           battleRef={battleRef} partyLevelRef={partyLevelRef} onEncounter={onEncounter} joyRef={joyRef}
           talkingRef={talkingRef} hasPartyRef={hasPartyRef} onNearChange={setNearNpc}
           defeatedRef={defeatedRef} defeated={defeated} flagsRef={flagsRef}
+          nodes={nodes}
         />
       </Canvas>
 
@@ -1133,6 +1202,11 @@ export default function Shimmer3D() {
         <div style={{ position: 'fixed', top: 12, right: 12, display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'flex-end' }}>
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end', maxWidth: 480 }}>
             {TOOLS.map((t) => <Btn key={t.id} active={tool === t.id} onClick={() => setTool(t.id)}>{t.label}</Btn>)}
+          </div>
+          {/* resource-node blocks — click places, shift-click erases (single node per tile) */}
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end', alignItems: 'center', maxWidth: 480 }}>
+            <span style={{ color: '#8fd9c4', font: '700 11px ui-monospace, monospace', letterSpacing: '0.06em' }}>NODES</span>
+            {NODE_TOOLS.map((t) => <Btn key={t.id} active={tool === t.id} onClick={() => setTool(t.id)}>{t.label}</Btn>)}
           </div>
           <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
             <span style={{ color: '#e9dfc8', font: '700 13px ui-monospace, monospace' }}>brush {brush * 2 + 1}×{brush * 2 + 1}</span>
