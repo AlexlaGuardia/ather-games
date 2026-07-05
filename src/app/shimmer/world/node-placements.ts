@@ -41,6 +41,10 @@ const MYCELIAL_PATH_NODES: NodePlacement[] = [
   { type: 'raw_mana_node' as NodeType, tileX: 14, tileY: 14 },
   { type: 'raw_mana_node' as NodeType, tileX: 13, tileY: 16 },
   { type: 'element_crystal_node' as NodeType, tileX: 17, tileY: 26 },
+  // Round-out (cozy cluster): + fishing so all 3 gathering skills live here. Placed next to the
+  // shimmeroak grove (harvest-stand tiles, walkable). NOTE: not eyeballed in-zone — Alex verify.
+  { type: 'small_pond' as NodeType, tileX: 5, tileY: 22 },
+  { type: 'small_pond' as NodeType, tileX: 6, tileY: 19 },
 ]
 
 // Moonwell Glade — deeper zone, level 4-7 nodes
@@ -102,6 +106,10 @@ const MANA_SPRINGS_NODES: NodePlacement[] = [
   { type: 'raw_mana_node' as NodeType, tileX: 1, tileY: 8 },
   { type: 'raw_mana_node' as NodeType, tileX: 23, tileY: 8 },
   { type: 'pure_core_node' as NodeType, tileX: 23, tileY: 18 },
+  // Round-out (cozy cluster): + forestry so all 3 gathering skills live here. Placed next to the
+  // spring pools (harvest-stand tiles, walkable). NOTE: not eyeballed in-zone — Alex verify.
+  { type: 'shimmeroak' as NodeType, tileX: 4, tileY: 5 },
+  { type: 'goldwood' as NodeType, tileX: 16, tileY: 5 },
 ]
 
 // Spirit Meadow — open grassland, forestry + fishing
@@ -115,6 +123,10 @@ const SPIRIT_MEADOW_NODES: NodePlacement[] = [
   { type: 'small_pond' as NodeType, tileX: 27, tileY: 7 },
   { type: 'small_pond' as NodeType, tileX: 27, tileY: 9 },
   { type: 'small_pond' as NodeType, tileX: 22, tileY: 10 },
+  // Round-out (cozy cluster): + prospecting so all 3 gathering skills live here. Placed beside the
+  // trees (harvest-stand tiles, walkable). NOTE: not eyeballed in-zone — Alex verify.
+  { type: 'raw_mana_node' as NodeType, tileX: 9, tileY: 9 },
+  { type: 'raw_mana_node' as NodeType, tileX: 6, tileY: 10 },
 ]
 
 // The Threshold — end-zone, rare prospecting
