@@ -16,9 +16,9 @@ import { createSpirit, addXP, xpForLevel, speciesDisplayName, ELEMENT_COLORS, ty
 import { spiritsToSave, spiritsFromSave } from '../spirits/spirit-save'
 import { LAUNCHED_SPECIES } from '../engine/spirit-index'
 import { ZONE_NODES, type NodePlacement } from '../world/node-placements'
-import { createResourceNode, depleteNode, tickNodeRespawn, NODE_DEFS, type NodeType, type ResourceNode } from '../world/resources'
-import { findAdjacentNode, completeHarvest, addHarvestItems } from '../engine/harvesting'
-import { createSkillSet, skillSetToSave, skillSetFromSave, xpForSkillLevel, SKILL_META, type SkillSet } from '../engine/skills'
+import { createResourceNode, depleteNode, tickNodeRespawn, rollDrops, getNodeSkill, NODE_DEFS, type NodeType, type ResourceNode } from '../world/resources'
+import { findAdjacentNode, addHarvestItems, getChannelDuration } from '../engine/harvesting'
+import { createSkillSet, skillSetToSave, skillSetFromSave, addSkillXP, xpForSkillLevel, SKILL_META, type SkillSet } from '../engine/skills'
 import { createInventory, inventoryToSave, inventoryFromSave, type Inventory, type ItemStack } from '../engine/inventory'
 import { createManaPool, manaToSave, manaFromSave, getMaxPool, getRegenRate, type ManaPool } from '../engine/mana'
 import type { AITier } from '../engine/battle-ai'
@@ -138,7 +138,7 @@ const NODE_LOOK: Record<string, { trunk: string; canopy: string; scale: number; 
   raw_mana_node: { trunk: '#3a4a6a', canopy: '#6fbce6', scale: 0.8, gem: true, glow: 0.4 },
   element_crystal_node: { trunk: '#5a3a6a', canopy: '#c88ae6', scale: 0.9, gem: true, glow: 0.5 },
 }
-function NodeMarkers({ nodes, heights, editing }: { nodes: ResourceNode[]; heights: number[][]; editing: boolean }) {
+function NodeMarkers({ nodes, heights, editing, channel }: { nodes: ResourceNode[]; heights: number[][]; editing: boolean; channel?: { nodeId: string; hp: number } | null }) {
   return (
     <>
       {nodes.map((n) => {
@@ -146,8 +146,20 @@ function NodeMarkers({ nodes, heights, editing }: { nodes: ResourceNode[]; heigh
         const y = (heights[n.tileY]?.[n.tileX] ?? 0) * STEP
         const s = look.scale
         const depleted = n.state === 'depleted'
+        const chan = channel?.nodeId === n.id ? channel : null
         return (
           <group key={n.id} position={[n.tileX, y, n.tileY]}>
+            {/* channel HP bar — drains as the mana-powered tool chops it down */}
+            {chan && (
+              <Html position={[0, s + 1.55, 0]} center distanceFactor={11} pointerEvents="none">
+                <div style={{ width: 60, textAlign: 'center', userSelect: 'none' }}>
+                  <div style={{ font: '800 9px ui-monospace, monospace', color: '#bfe0ff', textShadow: '0 1px 2px #000', marginBottom: 2, whiteSpace: 'nowrap' }}>⚡ {prettyItem(n.type)}</div>
+                  <div style={{ height: 6, background: '#0009', borderRadius: 3, border: '1px solid #0007', overflow: 'hidden' }}>
+                    <div style={{ height: '100%', width: `${Math.max(0, chan.hp * 100)}%`, background: 'linear-gradient(90deg,#e0607a,#f0a86a)', transition: 'width 0.1s linear' }} />
+                  </div>
+                </div>
+              </Html>
+            )}
             {/* trunk — a lone stump when depleted (canopy harvested, regrowing) */}
             <mesh position={[0, (depleted ? 0.18 : 0.5) * s, 0]} castShadow><cylinderGeometry args={[0.13 * s, 0.17 * s, (depleted ? 0.36 : 1) * s, 7]} /><meshStandardMaterial color={look.trunk} roughness={0.9} opacity={depleted ? 0.7 : 1} transparent={depleted} /></mesh>
             {/* canopy — hidden while depleted */}
@@ -517,6 +529,7 @@ function Scene(props: {
   flagsRef: React.RefObject<Record<string, boolean>>
   nodes: ResourceNode[]
   harvestNodesRef: React.RefObject<ResourceNode[]>; onNearNode: (n: ResourceNode | null) => void
+  channel: { nodeId: string; hp: number } | null
 }) {
   return (
     <>
@@ -531,7 +544,7 @@ function Scene(props: {
       />
       <ZoneGeometry key={`${props.zone.id}-${props.dims}`} gridRef={props.gridRef} heights={props.heights} version={props.version} paint={props.paint} editing={props.editing} />
       <NPCMarkers npcs={NPCS_3D.filter((n) => n.zone === props.zone.id && npcInWorld(n, props.defeated, props.flagsRef.current))} heights={props.heights} />
-      <NodeMarkers nodes={props.nodes} heights={props.heights} editing={props.editing} />
+      <NodeMarkers nodes={props.nodes} heights={props.heights} editing={props.editing} channel={props.channel} />
       <Player posRef={props.posRef} gridRef={props.gridRef} heightsRef={props.heightsRef} zoneIdRef={props.zoneIdRef} editRef={props.editRef} onWarp={props.onWarp} battleRef={props.battleRef} partyLevelRef={props.partyLevelRef} onEncounter={props.onEncounter} joyRef={props.joyRef} talkingRef={props.talkingRef} hasPartyRef={props.hasPartyRef} onNearChange={props.onNearChange} defeatedRef={props.defeatedRef} flagsRef={props.flagsRef} harvestNodesRef={props.harvestNodesRef} onNearNode={props.onNearNode} />
       <CameraRig posRef={props.posRef} editFocusRef={props.editFocusRef} yawRef={props.yawRef} editRef={props.editRef} />
     </>
@@ -778,26 +791,53 @@ export default function Shimmer3D() {
     return () => clearInterval(id)
   }, [])
 
-  // Harvest the adjacent node: drain mana → roll drops → grant forestry XP → deplete (respawns on a timer).
+  // ── Channelled harvest: link to a node, the mana-powered tool auto-chops (its HP bar drains) until
+  // done — but the link breaks if you walk out of range or run dry of mana. Toggle on/off with 🪓/E. ──
+  const CHANNEL_RANGE = 1.8
   const [harvestToast, setHarvestToast] = useState<string | null>(null)
   useEffect(() => { if (!harvestToast) return; const t = setTimeout(() => setHarvestToast(null), 2400); return () => clearTimeout(t) }, [harvestToast])
-  const harvest = useCallback(() => {
+  const channelRef = useRef<{ node: ResourceNode; progress: number; durSec: number } | null>(null)
+  const [channel, setChannel] = useState<{ nodeId: string; label: string; hp: number } | null>(null)
+  const toggleChannel = useCallback(() => {
+    if (channelRef.current) { channelRef.current = null; setChannel(null); return }   // unlink
     const node = nearNodeRef.current
     if (!node || node.state !== 'harvestable') return
-    const def = NODE_DEFS[node.type]
-    if (manaRef.current.current < def.manaCost) { setHarvestToast('Not enough mana — let it refill'); return }
-    // NOTE(jin): minLevel gate intentionally bypassed for now — the early-tier goldwood isn't placed in
-    // the starter zones yet, so gating shimmeroak (Lv4) would soft-lock the only test nodes. Re-enable
-    // via canHarvest once the low-level groves exist.
-    const result = completeHarvest(node, skillsRef.current, manaRef.current)
-    const added = addHarvestItems(invRef.current, result.items)
-    syncSkillHud()
-    setRuntimeNodes([...runtimeNodesRef.current])
-    setNearNode(null)
-    const drops = added.map(prettyItem).join(' · ')
-    setHarvestToast(`+ ${drops || 'nothing'}   ·   Forestry +${result.xp[0]?.amount ?? 0} XP`)
-    if (result.levelUps.length) setBanner(`✦ ${SKILL_META[result.levelUps[0].skillId].name} Lv ${result.levelUps[0].newLevel}!`)
-    persist()
+    if (manaRef.current.current < 1) { setHarvestToast('No mana — let the vial refill'); return }
+    // NOTE(jin): minLevel gate bypassed for now (early-tier goldwood not placed in starter zones yet).
+    const durSec = getChannelDuration(node.type, skillsRef.current.mana.level) / 15
+    channelRef.current = { node, progress: 0, durSec }
+    setChannel({ nodeId: node.id, label: prettyItem(node.type), hp: 1 })
+  }, [])
+  // channel driver — advances progress + drains mana each tick; breaks on distance / no-mana; completes at full.
+  useEffect(() => {
+    const dt = 0.09
+    const id = setInterval(() => {
+      const ch = channelRef.current
+      if (!ch) return
+      const p = posRef.current!
+      const dist = Math.max(Math.abs(ch.node.tileX - p.x), Math.abs(ch.node.tileY - p.z))
+      const def = NODE_DEFS[ch.node.type]
+      const drain = (def.manaCost / ch.durSec) * dt
+      if (dist > CHANNEL_RANGE || ch.node.state !== 'harvestable') { channelRef.current = null; setChannel(null); return }
+      if (manaRef.current.current < drain) { channelRef.current = null; setChannel(null); setHarvestToast('Out of mana'); return }
+      manaRef.current.current -= drain
+      setManaFrac(manaRef.current.current / getMaxPool(skillsRef.current.mana.level))
+      ch.progress += dt / ch.durSec
+      if (ch.progress >= 1) {
+        const skillId = getNodeSkill(ch.node.type)
+        const added = addHarvestItems(invRef.current, rollDrops(ch.node.type))
+        const xpr = addSkillXP(skillsRef.current[skillId], def.xp)
+        depleteNode(ch.node)
+        channelRef.current = null; setChannel(null)
+        syncSkillHud(); setRuntimeNodes([...runtimeNodesRef.current]); setNearNode(null)
+        setHarvestToast(`+ ${added.map(prettyItem).join(' · ') || 'nothing'}   ·   ${SKILL_META[skillId].name} +${def.xp} XP`)
+        if (xpr.leveled) setBanner(`✦ ${SKILL_META[skillId].name} Lv ${xpr.newLevel}!`)
+        persist()
+      } else {
+        setChannel({ nodeId: ch.node.id, label: prettyItem(ch.node.type), hp: 1 - ch.progress })
+      }
+    }, dt * 1000)
+    return () => clearInterval(id)
   }, [syncSkillHud, persist])
 
   const onEncounter = useCallback((enc: WildEncounter) => {
@@ -1048,11 +1088,11 @@ export default function Shimmer3D() {
       if (k !== 'e' && k !== ' ' && k !== 'enter') return
       if (dialogueRef.current) { e.preventDefault(); advanceDialogue() }
       else if (nearNpc) { e.preventDefault(); talk(nearNpc) }
-      else if (nearNodeRef.current) { e.preventDefault(); harvest() }
+      else if (nearNodeRef.current || channelRef.current) { e.preventDefault(); toggleChannel() }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [editMode, battle, nearNpc, advanceDialogue, talk, harvest])
+  }, [editMode, battle, nearNpc, advanceDialogue, talk, toggleChannel])
   // entering edit mode: start the spectator camera where the player is standing
   useEffect(() => { if (editMode) editFocusRef.current.copy(posRef.current!) }, [editMode])
   const [tool, setTool] = useState<Tool>('raise')
@@ -1173,7 +1213,7 @@ export default function Shimmer3D() {
           onWarp={onWarp} yawRef={camYaw} editRef={editRef} paint={paint} editing={editMode}
           battleRef={battleRef} partyLevelRef={partyLevelRef} onEncounter={onEncounter} joyRef={joyRef}
           talkingRef={talkingRef} hasPartyRef={hasPartyRef} onNearChange={setNearNpc}
-          harvestNodesRef={runtimeNodesRef} onNearNode={setNearNode}
+          harvestNodesRef={runtimeNodesRef} onNearNode={setNearNode} channel={channel}
           defeatedRef={defeatedRef} defeated={defeated} flagsRef={flagsRef}
           nodes={runtimeNodes}
         />
@@ -1211,13 +1251,21 @@ export default function Shimmer3D() {
         }}>✦ Talk to {nearNpc.name} <span style={{ opacity: 0.6 }}>({isTouch ? 'tap ✦' : 'E'})</span></div>
       )}
 
-      {/* harvest prompt when standing by a resource node */}
-      {nearNode && !nearNpc && !dialogue && !battle && !editMode && (
+      {/* harvest prompt when standing by a node (hidden once you link in) */}
+      {nearNode && !channel && !nearNpc && !dialogue && !battle && !editMode && (
         <div style={{
           position: 'fixed', left: '50%', bottom: 156, transform: 'translateX(-50%)', zIndex: 35,
           padding: '7px 14px', borderRadius: 999, background: 'rgba(11,21,19,0.92)', border: '1px solid #4fc79a66',
           color: '#cfeee2', font: '700 13px ui-monospace, monospace', whiteSpace: 'nowrap', pointerEvents: 'none',
-        }}>🪓 Harvest {prettyItem(nearNode.type)} <span style={{ opacity: 0.6 }}>({isTouch ? 'tap 🪓' : 'E'})</span></div>
+        }}>🪓 Channel {prettyItem(nearNode.type)} <span style={{ opacity: 0.6 }}>({isTouch ? 'tap 🪓' : 'E'})</span></div>
+      )}
+      {/* channeling indicator — mana is powering the tool; the node's HP bar drains over it */}
+      {channel && !battle && !editMode && (
+        <div style={{
+          position: 'fixed', left: '50%', bottom: 156, transform: 'translateX(-50%)', zIndex: 35,
+          padding: '7px 14px', borderRadius: 999, background: 'rgba(11,21,19,0.94)', border: '1px solid #3a7bd5aa',
+          color: '#bfe0ff', font: '700 13px ui-monospace, monospace', whiteSpace: 'nowrap', pointerEvents: 'none',
+        }}>⚡ Channeling into {channel.label}… <span style={{ opacity: 0.6 }}>(stay close · {isTouch ? 'tap ⏹' : 'E'} to stop)</span></div>
       )}
 
       {/* harvest toast — the drops + XP you just collected */}
@@ -1374,10 +1422,10 @@ export default function Shimmer3D() {
             >✕</button>
             {/* A — interact/confirm (lower, bigger, where the thumb rests): advance dialogue / talk to an NPC / confirm New Game. */}
             <button
-              onPointerDown={(e) => { e.stopPropagation(); if (dialogue) advanceDialogue(); else if (nearNpc) talk(nearNpc); else if (nearNode) harvest(); else if (confirmNew) { setConfirmNew(false); newGame() } }}
+              onPointerDown={(e) => { e.stopPropagation(); if (dialogue) advanceDialogue(); else if (nearNpc) talk(nearNpc); else if (nearNode || channel) toggleChannel(); else if (confirmNew) { setConfirmNew(false); newGame() } }}
               aria-label="interact"
-              style={{ width: 76, height: 76, borderRadius: '50%', border: '2px solid #ffffff4d', background: nearNpc || dialogue ? 'rgba(212,168,67,0.85)' : nearNode ? 'rgba(79,199,154,0.85)' : 'rgba(36,84,72,0.8)', color: nearNpc || dialogue || nearNode ? '#0d1a17' : '#dffaf0', font: '800 23px ui-monospace, monospace', cursor: 'pointer', touchAction: 'none' }}
-            >{nearNode && !nearNpc && !dialogue ? '🪓' : '✦'}</button>
+              style={{ width: 76, height: 76, borderRadius: '50%', border: '2px solid #ffffff4d', background: nearNpc || dialogue ? 'rgba(212,168,67,0.85)' : channel ? 'rgba(58,123,213,0.9)' : nearNode ? 'rgba(79,199,154,0.85)' : 'rgba(36,84,72,0.8)', color: nearNpc || dialogue || nearNode || channel ? '#0d1a17' : '#dffaf0', font: '800 23px ui-monospace, monospace', cursor: 'pointer', touchAction: 'none' }}
+            >{channel ? '⏹' : (nearNode && !nearNpc && !dialogue ? '🪓' : '✦')}</button>
           </div>
         </>
       )}
