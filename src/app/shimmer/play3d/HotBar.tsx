@@ -15,8 +15,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { ItemStack } from '../engine/inventory'
 
-const SLOTS = 6
-const BAG_ROWS = 3 // extra satchel rows beneath the hotbar row (Palia-style)
+const SLOTS = 6 // quick-slots; the satchel adds the rest of the inventory beneath (Palia-style)
 
 interface ToolGauge { id: string; label: string; glyph: string; tint: string; infinite: boolean; dur: number }
 
@@ -53,17 +52,20 @@ function ItemTile({ item }: { item: ItemStack | null }) {
   )
 }
 
-export default function HotBar() {
-  const [items, setItems] = useState<(ItemStack | null)[]>(PH_ITEMS)
+export default function HotBar({ items: propItems, mana: propMana }: { items?: (ItemStack | null)[]; mana?: number } = {}) {
+  const [items, setItems] = useState<(ItemStack | null)[]>(propItems ?? PH_ITEMS)
   const [sel, setSel] = useState(0)
   const [bagOpen, setBagOpen] = useState(false)
-  const [mana, setMana] = useState(0.62)
+  const [phMana, setPhMana] = useState(0.62)
+  const mana = propMana ?? phMana                          // real mana when the walker supplies it
   const [tools] = useState<ToolGauge[]>(PH_TOOLS)
   const [isTouch, setIsTouch] = useState(false)
   useEffect(() => { setIsTouch(window.matchMedia('(pointer:coarse)').matches) }, [])
+  // keep the display synced to the walker's real inventory (drag-drop reorders this local mirror)
+  useEffect(() => { if (propItems) setItems(propItems) }, [propItems])
 
-  // mana regen — the vial refills over time (a station tops it faster; Pass 2)
-  useEffect(() => { const id = setInterval(() => setMana(m => Math.min(1, m + 0.02)), 700); return () => clearInterval(id) }, [])
+  // placeholder mana regen — only when the walker isn't supplying a real value
+  useEffect(() => { if (propMana != null) return; const id = setInterval(() => setPhMana(m => Math.min(1, m + 0.02)), 700); return () => clearInterval(id) }, [propMana])
   // desktop number keys 1-6
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { const n = parseInt(e.key, 10); if (n >= 1 && n <= SLOTS) setSel(n - 1) }
@@ -173,7 +175,7 @@ export default function HotBar() {
           background: '#0e1a17f4', border: '2px solid #2f5c4f', borderRadius: 14, padding: 12, boxShadow: '0 12px 40px #000a' }}>
           <div style={{ font: '800 11px ui-monospace, monospace', color: '#8fd9c4', letterSpacing: '0.14em', marginBottom: 9, textAlign: 'center' }}>SATCHEL</div>
           <div style={{ display: 'grid', gridTemplateColumns: `repeat(${SLOTS}, 52px)`, gap: 6 }}>
-            {Array.from({ length: BAG_ROWS * SLOTS }, (_, i) => <Slot key={'x' + i} idx={SLOTS + i} />)}
+            {Array.from({ length: Math.max(0, items.length - SLOTS) }, (_, i) => <Slot key={'x' + i} idx={SLOTS + i} />)}
             {Array.from({ length: SLOTS }, (_, i) => <Slot key={'h' + i} idx={i} />)}
           </div>
         </div>

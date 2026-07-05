@@ -16,7 +16,11 @@ import { createSpirit, addXP, xpForLevel, speciesDisplayName, ELEMENT_COLORS, ty
 import { spiritsToSave, spiritsFromSave } from '../spirits/spirit-save'
 import { LAUNCHED_SPECIES } from '../engine/spirit-index'
 import { ZONE_NODES, type NodePlacement } from '../world/node-placements'
-import type { NodeType } from '../world/resources'
+import { createResourceNode, depleteNode, tickNodeRespawn, NODE_DEFS, type NodeType, type ResourceNode } from '../world/resources'
+import { findAdjacentNode, completeHarvest, addHarvestItems } from '../engine/harvesting'
+import { createSkillSet, skillSetToSave, skillSetFromSave, xpForSkillLevel, SKILL_META, type SkillSet } from '../engine/skills'
+import { createInventory, inventoryToSave, inventoryFromSave, type Inventory, type ItemStack } from '../engine/inventory'
+import { createManaPool, manaToSave, manaFromSave, getMaxPool, getRegenRate, type ManaPool } from '../engine/mana'
 import type { AITier } from '../engine/battle-ai'
 import PartyBattleScene from '../components/PartyBattleScene'
 import ArenaBattle from '../components/ArenaBattle'
@@ -46,6 +50,9 @@ const NODE_TOOLS: { id: NodeType; label: string }[] = [
   { id: 'shimmeroak', label: 'Shimmeroak' },
 ]
 const NODE_TOOL_IDS = new Set<string>(NODE_TOOLS.map(t => t.id))
+// itemId → display label (e.g. shimmeroak_plank → "Shimmeroak Plank"). Real item names live in
+// sprites/items.ts; this prettifier is enough for harvest toasts until those are wired.
+const prettyItem = (id: string) => id.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')
 
 function buckets(grid: number[][]) {
   const floors: Cell[] = [], walls: Cell[] = [], waters: Cell[] = [], voids: Cell[] = [], warps: Cell[] = [], mists: Cell[] = []
@@ -131,22 +138,22 @@ const NODE_LOOK: Record<string, { trunk: string; canopy: string; scale: number; 
   raw_mana_node: { trunk: '#3a4a6a', canopy: '#6fbce6', scale: 0.8, gem: true, glow: 0.4 },
   element_crystal_node: { trunk: '#5a3a6a', canopy: '#c88ae6', scale: 0.9, gem: true, glow: 0.5 },
 }
-function NodeMarkers({ nodes, heights, editing }: { nodes: NodePlacement[]; heights: number[][]; editing: boolean }) {
+function NodeMarkers({ nodes, heights, editing }: { nodes: ResourceNode[]; heights: number[][]; editing: boolean }) {
   return (
     <>
-      {nodes.map((n, i) => {
+      {nodes.map((n) => {
         const look = NODE_LOOK[n.type] ?? NODE_LOOK.goldwood
         const y = (heights[n.tileY]?.[n.tileX] ?? 0) * STEP
         const s = look.scale
+        const depleted = n.state === 'depleted'
         return (
-          <group key={`${n.type}-${n.tileX}-${n.tileY}-${i}`} position={[n.tileX, y, n.tileY]}>
-            {/* trunk */}
-            <mesh position={[0, 0.5 * s, 0]} castShadow><cylinderGeometry args={[0.13 * s, 0.17 * s, s, 7]} /><meshStandardMaterial color={look.trunk} roughness={0.9} /></mesh>
-            {/* canopy — gem nodes get an angular crystal, trees a rounded crown */}
-            {look.gem
+          <group key={n.id} position={[n.tileX, y, n.tileY]}>
+            {/* trunk — a lone stump when depleted (canopy harvested, regrowing) */}
+            <mesh position={[0, (depleted ? 0.18 : 0.5) * s, 0]} castShadow><cylinderGeometry args={[0.13 * s, 0.17 * s, (depleted ? 0.36 : 1) * s, 7]} /><meshStandardMaterial color={look.trunk} roughness={0.9} opacity={depleted ? 0.7 : 1} transparent={depleted} /></mesh>
+            {/* canopy — hidden while depleted */}
+            {!depleted && (look.gem
               ? <mesh position={[0, s + 0.2, 0]} castShadow><octahedronGeometry args={[0.45 * s, 0]} /><meshStandardMaterial color={look.canopy} emissive={look.canopy} emissiveIntensity={look.glow ?? 0.3} roughness={0.3} /></mesh>
-              : <mesh position={[0, s + 0.35 * s, 0]} castShadow><icosahedronGeometry args={[0.62 * s, 0]} /><meshStandardMaterial color={look.canopy} emissive={look.canopy} emissiveIntensity={look.glow ?? 0} roughness={0.8} flatShading /></mesh>}
-            {/* edit-mode label so you can tell what you placed */}
+              : <mesh position={[0, s + 0.35 * s, 0]} castShadow><icosahedronGeometry args={[0.62 * s, 0]} /><meshStandardMaterial color={look.canopy} emissive={look.canopy} emissiveIntensity={look.glow ?? 0} roughness={0.8} flatShading /></mesh>)}
             {editing && (
               <Html position={[0, s + 1.2, 0]} center distanceFactor={12} pointerEvents="none">
                 <div style={{ font: '700 10px ui-monospace, monospace', color: '#0d1a17', background: '#eafff6d0', border: '1px solid #2f5c4f', borderRadius: 5, padding: '1px 5px', whiteSpace: 'nowrap' }}>{n.type}</div>
@@ -298,7 +305,7 @@ function npcInWorld(n: NPC3D, defeated: Record<string, boolean>, flags: Record<s
   return true
 }
 
-function Player({ posRef, gridRef, heightsRef, zoneIdRef, editRef, onWarp, battleRef, partyLevelRef, onEncounter, joyRef, talkingRef, hasPartyRef, onNearChange, defeatedRef, flagsRef }: {
+function Player({ posRef, gridRef, heightsRef, zoneIdRef, editRef, onWarp, battleRef, partyLevelRef, onEncounter, joyRef, talkingRef, hasPartyRef, onNearChange, defeatedRef, flagsRef, harvestNodesRef, onNearNode }: {
   posRef: React.RefObject<THREE.Vector3>; gridRef: React.RefObject<number[][]>
   heightsRef: React.RefObject<number[][]>; zoneIdRef: React.RefObject<string>
   editRef: React.RefObject<boolean>; onWarp: (w: Warp) => void
@@ -309,6 +316,7 @@ function Player({ posRef, gridRef, heightsRef, zoneIdRef, editRef, onWarp, battl
   onNearChange: (n: NPC3D | null) => void
   defeatedRef: React.RefObject<Record<string, boolean>>
   flagsRef: React.RefObject<Record<string, boolean>>
+  harvestNodesRef: React.RefObject<ResourceNode[]>; onNearNode: (n: ResourceNode | null) => void
 }) {
   const group = useRef<THREE.Group>(null)
   const keys = useRef<Record<string, boolean>>({})
@@ -317,6 +325,7 @@ function Player({ posRef, gridRef, heightsRef, zoneIdRef, editRef, onWarp, battl
   const warpCd = useRef(0)
   const encGrace = useRef(ENCOUNTER_GRACE)
   const lastNear = useRef<string | null>(null)
+  const lastNode = useRef<string | null>(null)
   const fwd = useMemo(() => new THREE.Vector3(), [])
   const right = useMemo(() => new THREE.Vector3(), [])
   const move = useMemo(() => new THREE.Vector3(), [])
@@ -403,6 +412,11 @@ function Player({ posRef, gridRef, heightsRef, zoneIdRef, editRef, onWarp, battl
       }
       const nid = near?.id ?? null
       if (nid !== lastNear.current) { lastNear.current = nid; onNearChange(near) }
+
+      // Nearest harvestable resource node (adjacent, ≤1.6 tiles) → drives the "Harvest" prompt.
+      const node = findAdjacentNode(Math.round(p.x), Math.round(p.z), zoneIdRef.current, harvestNodesRef.current ?? [], 1) ?? null
+      const nodeId = node?.id ?? null
+      if (nodeId !== lastNode.current) { lastNode.current = nodeId; onNearNode(node) }
     }
 
     const g = group.current!
@@ -501,7 +515,8 @@ function Scene(props: {
   onNearChange: (n: NPC3D | null) => void
   defeatedRef: React.RefObject<Record<string, boolean>>; defeated: Record<string, boolean>
   flagsRef: React.RefObject<Record<string, boolean>>
-  nodes: NodePlacement[]
+  nodes: ResourceNode[]
+  harvestNodesRef: React.RefObject<ResourceNode[]>; onNearNode: (n: ResourceNode | null) => void
 }) {
   return (
     <>
@@ -517,7 +532,7 @@ function Scene(props: {
       <ZoneGeometry key={`${props.zone.id}-${props.dims}`} gridRef={props.gridRef} heights={props.heights} version={props.version} paint={props.paint} editing={props.editing} />
       <NPCMarkers npcs={NPCS_3D.filter((n) => n.zone === props.zone.id && npcInWorld(n, props.defeated, props.flagsRef.current))} heights={props.heights} />
       <NodeMarkers nodes={props.nodes} heights={props.heights} editing={props.editing} />
-      <Player posRef={props.posRef} gridRef={props.gridRef} heightsRef={props.heightsRef} zoneIdRef={props.zoneIdRef} editRef={props.editRef} onWarp={props.onWarp} battleRef={props.battleRef} partyLevelRef={props.partyLevelRef} onEncounter={props.onEncounter} joyRef={props.joyRef} talkingRef={props.talkingRef} hasPartyRef={props.hasPartyRef} onNearChange={props.onNearChange} defeatedRef={props.defeatedRef} flagsRef={props.flagsRef} />
+      <Player posRef={props.posRef} gridRef={props.gridRef} heightsRef={props.heightsRef} zoneIdRef={props.zoneIdRef} editRef={props.editRef} onWarp={props.onWarp} battleRef={props.battleRef} partyLevelRef={props.partyLevelRef} onEncounter={props.onEncounter} joyRef={props.joyRef} talkingRef={props.talkingRef} hasPartyRef={props.hasPartyRef} onNearChange={props.onNearChange} defeatedRef={props.defeatedRef} flagsRef={props.flagsRef} harvestNodesRef={props.harvestNodesRef} onNearNode={props.onNearNode} />
       <CameraRig posRef={props.posRef} editFocusRef={props.editFocusRef} yawRef={props.yawRef} editRef={props.editRef} />
     </>
   )
@@ -618,6 +633,28 @@ export default function Shimmer3D() {
   const nodesRef = useRef(nodes); nodesRef.current = nodes
   useEffect(() => { setNodes((ZONE_NODES[zone.id] ?? []).map(n => ({ ...n }))) }, [zone.id])
 
+  // ── Skilling: the forestry harvest loop. The real engine state (skills / mana / inventory) lives
+  // in refs, persisted via the merge-save; small mirrors drive the HUD. Nodes get a runtime state
+  // layer (harvestable ⇄ depleted+respawn timer) derived from the authored placements. ──
+  const skillsRef = useRef<SkillSet>(createSkillSet())
+  const manaRef = useRef<ManaPool>(createManaPool(1))
+  const invRef = useRef<Inventory>(createInventory())
+  const [invSlots, setInvSlots] = useState<(ItemStack | null)[]>(() => invRef.current.slots)
+  const [manaFrac, setManaFrac] = useState(1)
+  const [forestry, setForestry] = useState(() => ({ level: 1, xp: 0, next: xpForSkillLevel(1), pulse: 0 }))
+  const syncSkillHud = useCallback(() => {
+    const f = skillsRef.current.forestry
+    setForestry(p => ({ level: f.level, xp: f.xp, next: xpForSkillLevel(f.level), pulse: p.pulse + 1 }))
+    setInvSlots([...invRef.current.slots])
+    setManaFrac(manaRef.current.current / getMaxPool(skillsRef.current.mana.level))
+  }, [])
+  // runtime nodes (with harvest state) rebuilt whenever the authored layer or zone changes
+  const [runtimeNodes, setRuntimeNodes] = useState<ResourceNode[]>([])
+  const runtimeNodesRef = useRef<ResourceNode[]>([]); runtimeNodesRef.current = runtimeNodes
+  useEffect(() => { setRuntimeNodes(nodes.map(n => createResourceNode(n.type, n.tileX, n.tileY, zone.id))) }, [nodes, zone.id])
+  const [nearNode, setNearNode] = useState<ResourceNode | null>(null)
+  const nearNodeRef = useRef<ResourceNode | null>(null); nearNodeRef.current = nearNode
+
   // Working copies — init ONCE per zone (not every render) so paint/resize edits persist.
   const gridRef = useRef<number[][]>([])
   const heightsRef = useRef<number[][]>([])
@@ -678,6 +715,9 @@ export default function Shimmer3D() {
       zoneId: zoneIdRef.current,
       playerTileX: Math.round(posRef.current!.x),
       playerTileY: Math.round(posRef.current!.z),
+      skills: skillSetToSave(skillsRef.current),
+      mana: manaToSave(manaRef.current),
+      inventory: inventoryToSave(invRef.current),
     })
   }, [load, saveGame])
 
@@ -689,6 +729,10 @@ export default function Shimmer3D() {
     let alive = true
     load().then((data) => {
       if (!alive) return
+      if (data?.skills) skillsRef.current = skillSetFromSave(data.skills)
+      if (data?.mana) manaRef.current = manaFromSave(data.mana, skillsRef.current.mana.level)
+      if (data?.inventory) invRef.current = inventoryFromSave(data.inventory)
+      syncSkillHud()
       if (data?.flags) {
         flagsRef.current = data.flags
         // re-hide any NPC whose defeated-flag is already set in the save (e.g. Thistle, once freed)
@@ -717,6 +761,44 @@ export default function Shimmer3D() {
     window.addEventListener('beforeunload', onLeave)
     return () => { clearInterval(id); window.removeEventListener('beforeunload', onLeave); persist() }
   }, [persist])
+
+  // Mana regen + node respawn — a coarse tick (the real engine runs 15 TPS; 2 Hz is plenty for the
+  // vial and the minutes-long respawn timers).
+  useEffect(() => {
+    const id = setInterval(() => {
+      const lvl = skillsRef.current.mana.level, max = getMaxPool(lvl)
+      if (manaRef.current.current < max) {
+        manaRef.current.current = Math.min(max, manaRef.current.current + getRegenRate(lvl) * 7)
+        setManaFrac(manaRef.current.current / max)
+      }
+      let respawned = false
+      for (const n of runtimeNodesRef.current) if (tickNodeRespawn(n)) respawned = true
+      if (respawned) setRuntimeNodes([...runtimeNodesRef.current])
+    }, 500)
+    return () => clearInterval(id)
+  }, [])
+
+  // Harvest the adjacent node: drain mana → roll drops → grant forestry XP → deplete (respawns on a timer).
+  const [harvestToast, setHarvestToast] = useState<string | null>(null)
+  useEffect(() => { if (!harvestToast) return; const t = setTimeout(() => setHarvestToast(null), 2400); return () => clearTimeout(t) }, [harvestToast])
+  const harvest = useCallback(() => {
+    const node = nearNodeRef.current
+    if (!node || node.state !== 'harvestable') return
+    const def = NODE_DEFS[node.type]
+    if (manaRef.current.current < def.manaCost) { setHarvestToast('Not enough mana — let it refill'); return }
+    // NOTE(jin): minLevel gate intentionally bypassed for now — the early-tier goldwood isn't placed in
+    // the starter zones yet, so gating shimmeroak (Lv4) would soft-lock the only test nodes. Re-enable
+    // via canHarvest once the low-level groves exist.
+    const result = completeHarvest(node, skillsRef.current, manaRef.current)
+    const added = addHarvestItems(invRef.current, result.items)
+    syncSkillHud()
+    setRuntimeNodes([...runtimeNodesRef.current])
+    setNearNode(null)
+    const drops = added.map(prettyItem).join(' · ')
+    setHarvestToast(`+ ${drops || 'nothing'}   ·   Forestry +${result.xp[0]?.amount ?? 0} XP`)
+    if (result.levelUps.length) setBanner(`✦ ${SKILL_META[result.levelUps[0].skillId].name} Lv ${result.levelUps[0].newLevel}!`)
+    persist()
+  }, [syncSkillHud, persist])
 
   const onEncounter = useCallback((enc: WildEncounter) => {
     battleRef.current = true   // freeze the walker through the approach beat AND the fight
@@ -966,10 +1048,11 @@ export default function Shimmer3D() {
       if (k !== 'e' && k !== ' ' && k !== 'enter') return
       if (dialogueRef.current) { e.preventDefault(); advanceDialogue() }
       else if (nearNpc) { e.preventDefault(); talk(nearNpc) }
+      else if (nearNodeRef.current) { e.preventDefault(); harvest() }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [editMode, battle, nearNpc, advanceDialogue, talk])
+  }, [editMode, battle, nearNpc, advanceDialogue, talk, harvest])
   // entering edit mode: start the spectator camera where the player is standing
   useEffect(() => { if (editMode) editFocusRef.current.copy(posRef.current!) }, [editMode])
   const [tool, setTool] = useState<Tool>('raise')
@@ -1090,8 +1173,9 @@ export default function Shimmer3D() {
           onWarp={onWarp} yawRef={camYaw} editRef={editRef} paint={paint} editing={editMode}
           battleRef={battleRef} partyLevelRef={partyLevelRef} onEncounter={onEncounter} joyRef={joyRef}
           talkingRef={talkingRef} hasPartyRef={hasPartyRef} onNearChange={setNearNpc}
+          harvestNodesRef={runtimeNodesRef} onNearNode={setNearNode}
           defeatedRef={defeatedRef} defeated={defeated} flagsRef={flagsRef}
-          nodes={nodes}
+          nodes={runtimeNodes}
         />
       </Canvas>
 
@@ -1125,6 +1209,42 @@ export default function Shimmer3D() {
           padding: '7px 14px', borderRadius: 999, background: 'rgba(16,14,32,0.92)', border: '1px solid #d4a84366',
           color: '#ffe9b0', font: '700 13px ui-monospace, monospace', whiteSpace: 'nowrap', pointerEvents: 'none',
         }}>✦ Talk to {nearNpc.name} <span style={{ opacity: 0.6 }}>({isTouch ? 'tap ✦' : 'E'})</span></div>
+      )}
+
+      {/* harvest prompt when standing by a resource node */}
+      {nearNode && !nearNpc && !dialogue && !battle && !editMode && (
+        <div style={{
+          position: 'fixed', left: '50%', bottom: 156, transform: 'translateX(-50%)', zIndex: 35,
+          padding: '7px 14px', borderRadius: 999, background: 'rgba(11,21,19,0.92)', border: '1px solid #4fc79a66',
+          color: '#cfeee2', font: '700 13px ui-monospace, monospace', whiteSpace: 'nowrap', pointerEvents: 'none',
+        }}>🪓 Harvest {prettyItem(nearNode.type)} <span style={{ opacity: 0.6 }}>({isTouch ? 'tap 🪓' : 'E'})</span></div>
+      )}
+
+      {/* harvest toast — the drops + XP you just collected */}
+      {harvestToast && !battle && (
+        <div style={{
+          position: 'fixed', left: '50%', top: 118, transform: 'translateX(-50%)', zIndex: 36,
+          padding: '8px 16px', borderRadius: 12, background: 'rgba(11,21,19,0.94)', border: '1px solid #4fc79a', whiteSpace: 'nowrap',
+          color: '#eafff6', font: '700 13px ui-monospace, monospace', pointerEvents: 'none', boxShadow: '0 6px 20px #0008',
+        }}>{harvestToast}</div>
+      )}
+
+      {/* forestry readout — Lv + XP bar, pulses on a gain so "the skill advances" reads on screen */}
+      {!battle && !editMode && !dialogue && (
+        <div key={forestry.pulse} style={{
+          position: 'fixed', top: 74, right: 14, zIndex: 34, width: 116, pointerEvents: 'none',
+          background: 'rgba(11,21,19,0.82)', border: '1px solid #2f5c4f', borderRadius: 9, padding: '6px 8px',
+          animation: forestry.pulse ? 'fstPulse 0.5s ease-out' : undefined,
+        }}>
+          <style>{`@keyframes fstPulse { 0%{box-shadow:0 0 0 #4fc79a00} 40%{box-shadow:0 0 14px #4fc79aaa} 100%{box-shadow:0 0 0 #4fc79a00} }`}</style>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+            <span style={{ font: '700 10px ui-monospace, monospace', color: '#8fd9c4', letterSpacing: '0.06em' }}>FORESTRY</span>
+            <span style={{ font: '800 12px ui-monospace, monospace', color: '#eafff6' }}>Lv {forestry.level}</span>
+          </div>
+          <div style={{ height: 5, background: '#0008', borderRadius: 3, overflow: 'hidden', marginTop: 4, border: '1px solid #0006' }}>
+            <div style={{ height: '100%', width: `${Math.min(100, Math.round((forestry.xp / Math.max(1, forestry.next)) * 100))}%`, background: 'linear-gradient(90deg,#4fc79a,#eafff6)', transition: 'width 0.4s ease-out' }} />
+          </div>
+        </div>
       )}
 
       {/* dialogue box — tap/click anywhere on it (or A / E) to advance; last line closes */}
@@ -1239,7 +1359,7 @@ export default function Shimmer3D() {
       )}
 
       {/* Hotbar HUD — bag + 6 quick-slots + tool gauges + mana vial. Only while walking the world. */}
-      {!battle && !approach && !rewards && !editMode && !dialogue && <HotBar />}
+      {!battle && !approach && !rewards && !editMode && !dialogue && <HotBar items={invSlots} mana={manaFrac} />}
 
       {/* ── Mobile controls: joystick (move) bottom-left · A interact / B cancel bottom-right ── */}
       {isTouch && !battle && !editMode && (
@@ -1254,10 +1374,10 @@ export default function Shimmer3D() {
             >✕</button>
             {/* A — interact/confirm (lower, bigger, where the thumb rests): advance dialogue / talk to an NPC / confirm New Game. */}
             <button
-              onPointerDown={(e) => { e.stopPropagation(); if (dialogue) advanceDialogue(); else if (nearNpc) talk(nearNpc); else if (confirmNew) { setConfirmNew(false); newGame() } }}
+              onPointerDown={(e) => { e.stopPropagation(); if (dialogue) advanceDialogue(); else if (nearNpc) talk(nearNpc); else if (nearNode) harvest(); else if (confirmNew) { setConfirmNew(false); newGame() } }}
               aria-label="interact"
-              style={{ width: 76, height: 76, borderRadius: '50%', border: '2px solid #ffffff4d', background: nearNpc || dialogue ? 'rgba(212,168,67,0.85)' : 'rgba(36,84,72,0.8)', color: nearNpc || dialogue ? '#1a1a2e' : '#dffaf0', font: '800 23px ui-monospace, monospace', cursor: 'pointer', touchAction: 'none' }}
-            >✦</button>
+              style={{ width: 76, height: 76, borderRadius: '50%', border: '2px solid #ffffff4d', background: nearNpc || dialogue ? 'rgba(212,168,67,0.85)' : nearNode ? 'rgba(79,199,154,0.85)' : 'rgba(36,84,72,0.8)', color: nearNpc || dialogue || nearNode ? '#0d1a17' : '#dffaf0', font: '800 23px ui-monospace, monospace', cursor: 'pointer', touchAction: 'none' }}
+            >{nearNode && !nearNpc && !dialogue ? '🪓' : '✦'}</button>
           </div>
         </>
       )}
