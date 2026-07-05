@@ -23,11 +23,12 @@ function buildSlice() {
   return { allies, enemies }
 }
 
-// The bonded Mana'mal = the swappable 3rd Aid slot. Momo (flash) is ruled; Coilguard
-// (guard) is the second gift, mechanic-labelled pending a canon name (CANON_GAPS).
+// The bonded Mana'mal = the swappable 3rd Aid slot. All three Rinn-kin combat gifts are
+// canon-ruled (2026-07-05): Momo→Rainbow Flash, Coilguard→Wardcoil, Frilldrift→Witherbloom.
 const MANAMALS: { id: ManamalId; label: string }[] = [
   { id: 'duskpuff', label: 'Momo · Flash' },
-  { id: 'coilguard', label: 'Coilguard · Guard' },
+  { id: 'coilguard', label: 'Coilguard · Wardcoil' },
+  { id: 'frilldrift', label: 'Frilldrift · Witherbloom' },
 ]
 
 export default function ArenaSlice() {

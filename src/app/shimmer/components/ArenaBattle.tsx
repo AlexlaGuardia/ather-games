@@ -41,8 +41,8 @@ function snap(s: ArenaState): UISnap {
   }
 }
 
-// Reach (soften an enemy) + Guard (shelter an ally) take a target; Flash/Breeze don't.
-const TARGETED: Record<string, 'enemy' | 'ally'> = { reach: 'enemy', guard: 'ally' }
+// Reach/Witherbloom (an enemy) + Wardcoil (an ally) take a target; Flash/Breeze don't.
+const TARGETED: Record<string, 'enemy' | 'ally'> = { reach: 'enemy', witherbloom: 'enemy', wardcoil: 'ally' }
 
 function Scene({ arenaRef, cmdQueue, onSnap }: {
   arenaRef: React.RefObject<ArenaState>
@@ -55,6 +55,7 @@ function Scene({ arenaRef, cmdQueue, onSnap }: {
   const rings = useRef(new Map<string, THREE.Mesh>())
   const shields = useRef(new Map<string, THREE.Mesh>())
   const softens = useRef(new Map<string, THREE.Mesh>())
+  const poisons = useRef(new Map<string, THREE.Mesh>())
   const acc = useRef(0)
 
   useFrame((_, delta) => {
@@ -121,6 +122,18 @@ function Scene({ arenaRef, cmdQueue, onSnap }: {
       } else so.visible = false
     }
 
+    // witherbloom — a sickly-green ground ring under a poisoned enemy (Frilldrift's toxin bleeding it)
+    for (const f of s.fighters) {
+      if (f.side !== 'enemy') continue
+      const po = poisons.current.get(f.id)
+      if (!po) continue
+      if (f.poisonT > 0 && f.hp > 0) {
+        po.visible = true; po.position.set(f.x, 0.02, f.y)
+        const m = po.material as THREE.MeshBasicMaterial
+        m.opacity = 0.3 + 0.28 * (0.5 + 0.5 * Math.sin(s.t * 4.5))   // slow sickly pulse
+      } else po.visible = false
+    }
+
     acc.current += delta
     if (acc.current > 0.08) { acc.current = 0; onSnap(snap(s)) }
   })
@@ -166,6 +179,13 @@ function Scene({ arenaRef, cmdQueue, onSnap }: {
         <mesh key={'soften-' + f.id} ref={m => { if (m) softens.current.set(f.id, m) }} rotation={[-Math.PI / 2, 0, 0]} visible={false}>
           <ringGeometry args={[f.radius * 0.95, f.radius * 1.3, 32]} />
           <meshBasicMaterial color="#a679ff" transparent opacity={0.4} side={THREE.DoubleSide} />
+        </mesh>
+      ))}
+      {/* witherbloom poison rings — one per enemy (shown only while the toxin bleeds it) */}
+      {s0.fighters.filter(f => f.side === 'enemy').map(f => (
+        <mesh key={'poison-' + f.id} ref={m => { if (m) poisons.current.set(f.id, m) }} rotation={[-Math.PI / 2, 0, 0]} visible={false}>
+          <ringGeometry args={[f.radius * 1.05, f.radius * 1.4, 32]} />
+          <meshBasicMaterial color="#8fd14f" transparent opacity={0.4} side={THREE.DoubleSide} />
         </mesh>
       ))}
       {/* fighters — element-tinted blockout capsules + floating nameplate/HP */}
@@ -236,7 +256,7 @@ export default function ArenaBattle({ allies, enemies, seed, aidKit, onEnd, cont
   const over = ui.outcome !== 'ongoing'
   if (over && armed) setArmed(null)
 
-  // Aid tap: targeted aids (reach/guard) arm a target picker; the rest fire on tap.
+  // Aid tap: targeted aids (reach/witherbloom on an enemy, wardcoil on an ally) arm a target picker; the rest fire on tap.
   const onAid = (id: AidId) => {
     if (TARGETED[id]) { setSpeakOpen(false); setArmed(a => (a === id ? null : id)) }
     else send({ type: 'aid', id })
@@ -260,7 +280,7 @@ export default function ArenaBattle({ allies, enemies, seed, aidKit, onEnd, cont
       </div>
 
       {/* AID — top-left (3 techniques: bonded Mana'mal gift on top, then the Keeper's 2 channels).
-          Reach/Guard arm a target picker; Flash/Breeze fire on tap. */}
+          Reach/Witherbloom/Wardcoil arm a target picker; Flash/Breeze fire on tap. */}
       <div style={{ position: 'absolute', top: 74, left: 14, display: 'flex', alignItems: 'flex-start', gap: 8 }}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           {ui.aid.map(a => {
@@ -349,7 +369,7 @@ export default function ArenaBattle({ allies, enemies, seed, aidKit, onEnd, cont
       )}
 
       {/* hint */}
-      {!over && <div style={{ position: 'absolute', bottom: 26, left: '50%', transform: 'translateX(-50%)', font: '600 10px ui-monospace, monospace', color: '#5f7a72', textAlign: 'center', maxWidth: 268, pointerEvents: 'none' }}>{armed ? (TARGETED[armed] === 'enemy' ? 'Pick an enemy to soften — ⚠ marks one winding up.' : 'Pick an ally to shelter — ⚠ marks one about to be hit.') : 'Your spirit fights on its own. Time your Aid: FLASH interrupts · REACH/GUARD pick a target · BREEZE sustains mana.'}</div>}
+      {!over && <div style={{ position: 'absolute', bottom: 26, left: '50%', transform: 'translateX(-50%)', font: '600 10px ui-monospace, monospace', color: '#5f7a72', textAlign: 'center', maxWidth: 268, pointerEvents: 'none' }}>{armed ? (TARGETED[armed] === 'enemy' ? 'Pick an enemy — ⚠ marks one winding up.' : 'Pick an ally to shelter — ⚠ marks one about to be hit.') : 'Your spirit fights on its own. Time your Aid — FLASH interrupts · REACH/WITHER hit an enemy · WARDCOIL shelters · BREEZE sustains.'}</div>}
     </div>
   )
 }

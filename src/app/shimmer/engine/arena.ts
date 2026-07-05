@@ -19,7 +19,7 @@ import { derivePartyStats } from './party-stats'
 
 export type Side = 'ally' | 'enemy'
 export type Stance = 'aggressive' | 'defend'   // the live-nudgeable instinct (Speak flicks this)
-export type AidId = 'flash' | 'breeze' | 'reach' | 'guard'
+export type AidId = 'flash' | 'breeze' | 'reach' | 'wardcoil' | 'witherbloom'
 
 export interface Fighter {
   id: string
@@ -40,7 +40,9 @@ export interface Fighter {
   // status timers, in seconds remaining
   flinch: number            // stunned — cannot act (Momo's flash)
   defDownT: number; defDownAmt: number   // grd reduced (Bonn's Reach)
-  shieldT: number           // incoming damage reduced (a bonded guardian Mana'mal's gift)
+  shieldT: number           // incoming damage reduced (Coilguard's Wardcoil — plates lock, tail-coil shelters)
+  poisonT: number           // Witherbloom — Frilldrift's toxin bleeds hp over time (a slow wither, never a burst)
+  poisonDps: number         // hp/sec while poisonT > 0
   braceT: number            // defending → incoming halved
   recoverT: number          // just struck → give ground (the strike-and-reposition tempo, no glued scrum)
   hitFlash: number          // took a hit → renderer flashes the body white (impact read)
@@ -110,8 +112,9 @@ const CHANNELS: Record<string, AidDef> = {
 // canonical natural behaviour turned mechanical (mechanic = Jin; the technique NAME/lore
 // is Magii's — 'flash'/Momo is ruled, the rest carry mechanic-labels pending a ruling).
 const GIFTS: Record<string, AidDef> = {
-  duskpuff:  { id: 'flash', name: 'Rainbow Flash', cost: 4, cd: 6 },  // Momo — startle-burst → flinch/interrupt (RULED)
-  coilguard: { id: 'guard', name: 'Guard',         cost: 3, cd: 9 },  // sentinel — shelters an ally (damage taken cut)
+  duskpuff:   { id: 'flash',       name: 'Rainbow Flash', cost: 4, cd: 6 },   // Momo — startle-burst → flinch/interrupt (RULED)
+  coilguard:  { id: 'wardcoil',    name: 'Wardcoil',      cost: 3, cd: 9 },   // Coilguard — plates lock + tail-coil shelters an ally, damage cut (RULED 2026-07-05)
+  frilldrift: { id: 'witherbloom', name: 'Witherbloom',   cost: 4, cd: 10 },  // Frilldrift — contact toxin bleeds a target over time, a slow wither (RULED 2026-07-05)
 }
 export type ManamalId = keyof typeof GIFTS
 export interface AidKit { channels: AidId[]; gift: AidId }
@@ -148,7 +151,7 @@ function fighterFromSpirit(spirit: Spirit, id: string, side: Side, x: number, y:
     radius: 0.35 + s.maxHp / 260, speed,
     reach: 0.9, atkCd: 0.4, atkInterval: Math.max(0.95, 1.9 - s.agi / 70),
     stance: 'aggressive', targetId: null,
-    flinch: 0, defDownT: 0, defDownAmt: 0, shieldT: 0, braceT: 0, recoverT: 0, hitFlash: 0,
+    flinch: 0, defDownT: 0, defDownAmt: 0, shieldT: 0, poisonT: 0, poisonDps: 0, braceT: 0, recoverT: 0, hitFlash: 0,
     wind: null, winCd: 2.5,
   }
 }
@@ -241,6 +244,14 @@ export function tick(state: ArenaState, dt: number, commands: KeeperCommand[] = 
     f.hitFlash = Math.max(0, f.hitFlash - dt)
     f.atkCd = Math.max(0, f.atkCd - dt)
     f.winCd = Math.max(0, f.winCd - dt)
+
+    // Witherbloom — Frilldrift's toxin bleeds hp while it lasts. A slow wither (enabler
+    // pressure), never a burst; it can finish a weakened foe but can't carry a fight.
+    if (f.poisonT > 0) {
+      f.poisonT = Math.max(0, f.poisonT - dt)
+      f.hp = Math.max(0, f.hp - f.poisonDps * dt)
+      if (f.hp <= 0) { state.events.push({ type: 'ko', who: f.id }); continue }
+    }
 
     if (f.flinch > 0) { if (f.wind) { state.events.push({ type: 'wind_interrupt', who: f.id }); f.wind = null; f.winCd = Math.max(f.winCd, 1.2) } continue }
 
@@ -356,15 +367,22 @@ function applyCommand(state: ArenaState, cmd: KeeperCommand) {
       ? state.fighters.find(x => x.id === cmd.targetId && x.side === 'enemy' && alive(x))
       : nearestEnemyForKeeper(state)
     if (g) { g.defDownT = 5; g.defDownAmt = 0.5 }
-  } else if (slot.id === 'guard') {
-    // Coilguard's gift — shelter the ally under the most pressure (targeted by a wind-up,
-    // else the lowest-HP standing ally). Incoming damage softened for a few seconds.
+  } else if (slot.id === 'wardcoil') {
+    // Coilguard's gift — plates lock, tail-coil throws round the ally under the most pressure
+    // (targeted by a wind-up, else the lowest-HP standing ally). Incoming damage softened ~6s.
     const winding = state.fighters.filter(f => f.side === 'enemy' && f.wind && alive(f)).map(f => f.wind!.targetId)
     const g = cmd.targetId
       ? state.fighters.find(x => x.id === cmd.targetId && x.side === 'ally' && alive(x))
       : state.fighters.filter(x => x.side === 'ally' && alive(x))
           .sort((a, b) => (winding.includes(b.id) ? 1 : 0) - (winding.includes(a.id) ? 1 : 0) || a.hp - b.hp)[0]
     if (g) g.shieldT = 6
+  } else if (slot.id === 'witherbloom') {
+    // Frilldrift's gift — its contact toxin settles on a target and bleeds it over time.
+    // Targets the picked enemy, else the sturdiest (highest effGrd) — wither what basics chip slowest.
+    const g = cmd.targetId
+      ? state.fighters.find(x => x.id === cmd.targetId && x.side === 'enemy' && alive(x))
+      : state.fighters.filter(x => x.side === 'enemy' && alive(x)).sort((a, b) => effGrd(b) - effGrd(a))[0]
+    if (g) { g.poisonT = 8; g.poisonDps = 2.6 }   // ~21 hp over 8s — pressure, not a nuke (knobs)
   }
 }
 
