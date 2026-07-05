@@ -54,6 +54,7 @@ const NODE_TOOL_IDS = new Set<string>(NODE_TOOLS.map(t => t.id))
 // sprites/items.ts; this prettifier is enough for harvest toasts until those are wired.
 const prettyItem = (id: string) => id.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')
 const menuBtn: React.CSSProperties = { padding: '6px 11px', borderRadius: 7, border: '1px solid #ffffff2a', background: '#16142a', color: '#e9dfc8', font: '700 11px ui-monospace, monospace', cursor: 'pointer', whiteSpace: 'nowrap' }
+const placeIconBtn = (accent: string): React.CSSProperties => ({ width: 60, height: 60, borderRadius: '50%', border: `2px solid ${accent}`, background: 'rgba(12,16,26,0.92)', color: '#eafff6', font: '800 24px ui-monospace, monospace', cursor: 'pointer', touchAction: 'none' })
 // Chop cost + time, scaling by node tier (its minLevel). Base pool is 100 and regen is slow
 // (see MANA_REGEN_PER_SEC), so mana is a real budget. Shimmeroak (Lv4): 12 mana over 3s = 4/s.
 // Pure feel — tune here. goldwood(1): 6 mana / 2s · shimmeroak(4): 12 / 2.9s · dawnwood(10): 24 / 4.7s.
@@ -63,6 +64,18 @@ const MANA_REGEN_PER_SEC = 1 / 60   // 1 mana per minute by design — the real 
 // Mana-restore potions (Alchemy-brewed; canon economy — see project_shimmer_mana_economy). Drink to
 // refill the pool. Restore amounts are the feel knob. Only ids listed here are drinkable-for-mana.
 const MANA_POTIONS: Record<string, number> = { mana_draught: 40, shard_tonic: 65 }
+// Placeable stations — double-tap in the hotbar to enter placement mode, then confirm to build.
+// Placeholder blockout look (real models later, per the art rule). w/d = footprint tiles, h = height.
+const PLACEABLES: Record<string, { name: string; color: string; accent: string; h: number }> = {
+  alchemy_station: { name: 'Alchemy Station', color: '#5a3f74', accent: '#c88ae6', h: 1.1 },
+  crafting_table:  { name: 'Crafting Table',  color: '#7a5a34', accent: '#d9b84a', h: 0.85 },
+}
+type PlacedStruct = { itemId: string; tileX: number; tileY: number; facing: number; zoneId: string }
+// hotbar double-tap hints (drinkable potions + placeable stations)
+const USE_HINTS: Record<string, string> = {
+  ...Object.fromEntries(Object.entries(MANA_POTIONS).map(([k, v]) => [k, `+${v} mana · double-tap to drink`])),
+  ...Object.fromEntries(Object.keys(PLACEABLES).map(k => [k, 'double-tap to place'])),
+}
 
 function buckets(grid: number[][]) {
   const floors: Cell[] = [], walls: Cell[] = [], waters: Cell[] = [], voids: Cell[] = [], warps: Cell[] = [], mists: Cell[] = []
@@ -185,6 +198,62 @@ function NodeMarkers({ nodes, heights, editing, channel }: { nodes: ResourceNode
         )
       })}
     </>
+  )
+}
+
+// Placed stations (player-built) — blockout box + a glowing top + a facing nub.
+function StructureMarkers({ structures, heights }: { structures: PlacedStruct[]; heights: number[][] }) {
+  return (
+    <>
+      {structures.map((s, i) => {
+        const def = PLACEABLES[s.itemId]; if (!def) return null
+        const y = (heights[s.tileY]?.[s.tileX] ?? 0) * STEP
+        return (
+          <group key={`${s.itemId}-${s.tileX}-${s.tileY}-${i}`} position={[s.tileX, y, s.tileY]} rotation={[0, -s.facing * Math.PI / 180, 0]}>
+            <mesh position={[0, def.h / 2 + 0.05, 0]} castShadow><boxGeometry args={[0.82, def.h, 0.82]} /><meshStandardMaterial color={def.color} roughness={0.7} /></mesh>
+            <mesh position={[0, def.h + 0.12, 0]}><boxGeometry args={[0.5, 0.12, 0.5]} /><meshStandardMaterial color={def.accent} emissive={def.accent} emissiveIntensity={0.35} /></mesh>
+            <mesh position={[0.35, def.h * 0.6, 0]}><sphereGeometry args={[0.08, 8, 8]} /><meshBasicMaterial color="#ffffff" /></mesh>
+          </group>
+        )
+      })}
+    </>
+  )
+}
+
+// Placement ghost — a translucent preview on the tile in front of the camera; writes that tile to
+// placeTargetRef each frame (confirm reads it). Tints red where it can't build.
+function PlacementGhost({ placing, posRef, heights, gridRef, placeTargetRef, structuresRef, zoneIdRef }: {
+  placing: { itemId: string; facing: number } | null
+  posRef: React.RefObject<THREE.Vector3>; heights: number[][]; gridRef: React.RefObject<number[][]>
+  placeTargetRef: React.RefObject<{ x: number; y: number } | null>; structuresRef: React.RefObject<PlacedStruct[]>; zoneIdRef: React.RefObject<string>
+}) {
+  const grp = useRef<THREE.Group>(null)
+  const ringMat = useRef<THREE.MeshBasicMaterial>(null)
+  const bodyMat = useRef<THREE.MeshStandardMaterial>(null)
+  const fwd = useMemo(() => new THREE.Vector3(), [])
+  useFrame((state) => {
+    if (!placing || !grp.current) { if (grp.current) grp.current.visible = false; return }
+    state.camera.getWorldDirection(fwd); fwd.y = 0; fwd.normalize()
+    const p = posRef.current!
+    const tx = Math.round(p.x + fwd.x * 1.4), tz = Math.round(p.z + fwd.z * 1.4)
+    placeTargetRef.current = { x: tx, y: tz }
+    const y = (heights[tz]?.[tx] ?? 0) * STEP
+    const blocked = !walkable(gridRef.current, tx, tz) || structuresRef.current!.some(s => s.zoneId === zoneIdRef.current && s.tileX === tx && s.tileY === tz)
+    grp.current.visible = true
+    grp.current.position.set(tx, y, tz)
+    grp.current.rotation.y = -placing.facing * Math.PI / 180
+    if (ringMat.current) ringMat.current.color.setStyle(blocked ? '#ff5a4d' : '#7fe3c8')
+    if (bodyMat.current) { bodyMat.current.color.setStyle(blocked ? '#ff5a4d' : (PLACEABLES[placing.itemId]?.accent ?? '#7fe3c8')) }
+  })
+  const def = placing ? PLACEABLES[placing.itemId] : null
+  return (
+    <group ref={grp} visible={false}>
+      {def && <>
+        <mesh position={[0, def.h / 2 + 0.05, 0]}><boxGeometry args={[0.82, def.h, 0.82]} /><meshStandardMaterial ref={bodyMat} color={def.accent} transparent opacity={0.45} emissive={def.accent} emissiveIntensity={0.5} /></mesh>
+        <mesh position={[0.35, def.h * 0.6, 0]}><sphereGeometry args={[0.09, 8, 8]} /><meshBasicMaterial color="#ffffff" /></mesh>
+        <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.03, 0]}><ringGeometry args={[0.44, 0.54, 4]} /><meshBasicMaterial ref={ringMat} color="#7fe3c8" transparent opacity={0.85} side={THREE.DoubleSide} /></mesh>
+      </>}
+    </group>
   )
 }
 
@@ -540,6 +609,8 @@ function Scene(props: {
   nodes: ResourceNode[]
   harvestNodesRef: React.RefObject<ResourceNode[]>; onNearNode: (n: ResourceNode | null) => void
   channel: { nodeId: string; hp: number } | null
+  structures: PlacedStruct[]; placing: { itemId: string; facing: number } | null
+  placeTargetRef: React.RefObject<{ x: number; y: number } | null>; structuresRef: React.RefObject<PlacedStruct[]>
 }) {
   return (
     <>
@@ -555,6 +626,8 @@ function Scene(props: {
       <ZoneGeometry key={`${props.zone.id}-${props.dims}`} gridRef={props.gridRef} heights={props.heights} version={props.version} paint={props.paint} editing={props.editing} />
       <NPCMarkers npcs={NPCS_3D.filter((n) => n.zone === props.zone.id && npcInWorld(n, props.defeated, props.flagsRef.current))} heights={props.heights} />
       <NodeMarkers nodes={props.nodes} heights={props.heights} editing={props.editing} channel={props.channel} />
+      <StructureMarkers structures={props.structures.filter(s => s.zoneId === props.zone.id)} heights={props.heights} />
+      <PlacementGhost placing={props.placing} posRef={props.posRef} heights={props.heights} gridRef={props.gridRef} placeTargetRef={props.placeTargetRef} structuresRef={props.structuresRef} zoneIdRef={props.zoneIdRef} />
       <Player posRef={props.posRef} gridRef={props.gridRef} heightsRef={props.heightsRef} zoneIdRef={props.zoneIdRef} editRef={props.editRef} onWarp={props.onWarp} battleRef={props.battleRef} partyLevelRef={props.partyLevelRef} onEncounter={props.onEncounter} joyRef={props.joyRef} talkingRef={props.talkingRef} hasPartyRef={props.hasPartyRef} onNearChange={props.onNearChange} defeatedRef={props.defeatedRef} flagsRef={props.flagsRef} harvestNodesRef={props.harvestNodesRef} onNearNode={props.onNearNode} />
       <CameraRig posRef={props.posRef} editFocusRef={props.editFocusRef} yawRef={props.yawRef} editRef={props.editRef} />
     </>
@@ -741,6 +814,7 @@ export default function Shimmer3D() {
       skills: skillSetToSave(skillsRef.current),
       mana: manaToSave(manaRef.current),
       inventory: inventoryToSave(invRef.current),
+      built: structuresRef.current,
     })
   }, [load, saveGame])
 
@@ -755,6 +829,7 @@ export default function Shimmer3D() {
       if (data?.skills) skillsRef.current = skillSetFromSave(data.skills)
       if (data?.mana) manaRef.current = manaFromSave(data.mana, skillsRef.current.mana.level)
       if (data?.inventory) invRef.current = inventoryFromSave(data.inventory)
+      if (Array.isArray(data?.built)) setStructures(data.built as PlacedStruct[])
       syncSkillHud()
       if (data?.flags) {
         flagsRef.current = data.flags
@@ -772,6 +847,7 @@ export default function Shimmer3D() {
         if (data.zoneId && getZone(ZONES, data.zoneId)) setZoneId(data.zoneId)
       } else {
         addItems(invRef.current, 'mana_draught', 3) // first visit — a few starter potions to refill mana
+        addItems(invRef.current, 'alchemy_station', 1); addItems(invRef.current, 'crafting_table', 1) // + starter placeables to test building
         setInvSlots([...invRef.current.slots])
         persist() // bank the save; the player gets their spirit starter from Gregory
       }
@@ -823,9 +899,22 @@ export default function Shimmer3D() {
     setChannel({ nodeId: node.id, label: prettyItem(node.type), hp: 1 })
   }, [])
 
-  // Drink a mana potion from the hotbar → refill the pool (the canon refill path; no station).
+  // ── Build placement: double-tap a placeable → ghost on the tile in front → rotate → confirm/cancel ──
+  const [placing, setPlacing] = useState<{ itemId: string; facing: number } | null>(null)
+  const placingRef = useRef(placing); placingRef.current = placing
+  const placeTargetRef = useRef<{ x: number; y: number } | null>(null)     // front tile, updated by the ghost
+  const [structures, setStructures] = useState<PlacedStruct[]>([])
+  const structuresRef = useRef(structures); structuresRef.current = structures
+
+  // Double-tap use: drink a mana potion, or enter placement for a placeable.
   const useItem = useCallback((itemId?: string) => {
     if (!itemId) return
+    if (itemId in PLACEABLES) {
+      if (countItem(invRef.current, itemId) < 1) return
+      battleRef.current = true                       // freeze the walker while aiming the ghost
+      setPlacing({ itemId, facing: 0 })
+      return
+    }
     const restore = MANA_POTIONS[itemId]
     if (restore == null || countItem(invRef.current, itemId) < 1) return   // not a drinkable mana potion / none held
     const max = getMaxPool(skillsRef.current.mana.level)
@@ -837,6 +926,32 @@ export default function Shimmer3D() {
     setHarvestToast(`Drank ${prettyItem(itemId)} · +${restore} mana`)
     persist()
   }, [persist])
+  const rotatePlacing = useCallback(() => setPlacing(p => p && ({ ...p, facing: (p.facing + 90) % 360 })), [])
+  const cancelPlacing = useCallback(() => { setPlacing(null); battleRef.current = false }, [])
+  const confirmPlacing = useCallback(() => {
+    const pl = placingRef.current, t = placeTargetRef.current
+    if (!pl || !t) return
+    const gr = gridRef.current
+    const blocked = !walkable(gr, t.x, t.y) || structuresRef.current.some(s => s.tileX === t.x && s.tileY === t.y)
+    if (blocked) { setHarvestToast('Can’t build there'); return }
+    if (countItem(invRef.current, pl.itemId) < 1) { cancelPlacing(); return }
+    removeItems(invRef.current, pl.itemId, 1)
+    setStructures(prev => [...prev, { itemId: pl.itemId, tileX: t.x, tileY: t.y, facing: pl.facing, zoneId: zoneIdRef.current }])
+    setInvSlots([...invRef.current.slots])
+    setHarvestToast(`Placed ${PLACEABLES[pl.itemId].name}`)
+    setPlacing(null); battleRef.current = false
+    persist()
+  }, [cancelPlacing, persist])
+  useEffect(() => {
+    if (!placing) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Enter') { e.preventDefault(); confirmPlacing() }
+      else if (e.key === 'Escape') { e.preventDefault(); cancelPlacing() }
+      else if (e.key.startsWith('Arrow')) { e.preventDefault(); rotatePlacing() }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [placing, confirmPlacing, cancelPlacing, rotatePlacing])
   // channel driver — advances progress + drains mana each tick; breaks on distance / no-mana; completes at full.
   useEffect(() => {
     const dt = 0.09
@@ -993,6 +1108,8 @@ export default function Shimmer3D() {
     manaRef.current = createManaPool(1)
     invRef.current = createInventory()
     addItems(invRef.current, 'mana_draught', 3)
+    addItems(invRef.current, 'alchemy_station', 1); addItems(invRef.current, 'crafting_table', 1)
+    setStructures([])
     syncSkillHud()
     setHasStarter(false)
     setDefeated({})
@@ -1250,6 +1367,7 @@ export default function Shimmer3D() {
           battleRef={battleRef} partyLevelRef={partyLevelRef} onEncounter={onEncounter} joyRef={joyRef}
           talkingRef={talkingRef} hasPartyRef={hasPartyRef} onNearChange={setNearNpc}
           harvestNodesRef={runtimeNodesRef} onNearNode={setNearNode} channel={channel}
+          structures={structures} placing={placing} placeTargetRef={placeTargetRef} structuresRef={structuresRef}
           defeatedRef={defeatedRef} defeated={defeated} flagsRef={flagsRef}
           nodes={runtimeNodes}
         />
@@ -1302,6 +1420,22 @@ export default function Shimmer3D() {
           padding: '7px 14px', borderRadius: 999, background: 'rgba(11,21,19,0.94)', border: '1px solid #3a7bd5aa',
           color: '#bfe0ff', font: '700 13px ui-monospace, monospace', whiteSpace: 'nowrap', pointerEvents: 'none',
         }}>⚡ Channeling into {channel.label}… <span style={{ opacity: 0.6 }}>(stay close · {isTouch ? 'tap ⏹' : 'E'} to stop)</span></div>
+      )}
+
+      {/* PLACEMENT MODE — ghost is in the 3D scene; this is the confirm/cancel/rotate control ring */}
+      {placing && (
+        <>
+          <div style={{ position: 'fixed', top: 84, left: '50%', transform: 'translateX(-50%)', zIndex: 36, pointerEvents: 'none',
+            padding: '7px 15px', borderRadius: 999, background: 'rgba(11,21,19,0.92)', border: '1px solid #7fe3c866',
+            color: '#cfeee2', font: '700 13px ui-monospace, monospace', whiteSpace: 'nowrap' }}>
+            Placing {PLACEABLES[placing.itemId].name} — face where you want it{isTouch ? '' : ' · ← → rotate · Enter place · Esc cancel'}
+          </div>
+          <div style={{ position: 'fixed', bottom: 40, left: '50%', transform: 'translateX(-50%)', zIndex: 36, display: 'flex', gap: 14, alignItems: 'center' }}>
+            <button onClick={rotatePlacing} aria-label="rotate" style={placeIconBtn('#3a7bd5')}>⟳</button>
+            <button onClick={cancelPlacing} aria-label="cancel" style={placeIconBtn('#b9483f')}>✗</button>
+            <button onClick={confirmPlacing} aria-label="confirm" style={placeIconBtn('#2f8f5f')}>✓</button>
+          </div>
+        </>
       )}
 
       {/* harvest toast — the drops + XP you just collected */}
@@ -1457,10 +1591,10 @@ export default function Shimmer3D() {
       )}
 
       {/* Hotbar HUD — bag + 6 quick-slots + tool gauges + mana vial. Only while walking the world. */}
-      {!battle && !approach && !rewards && !editMode && !dialogue && <HotBar items={invSlots} onUse={useItem} usable={MANA_POTIONS} />}
+      {!battle && !approach && !rewards && !editMode && !dialogue && !placing && <HotBar items={invSlots} onUse={useItem} usable={USE_HINTS} />}
 
       {/* ── Mobile controls: joystick (move) bottom-left · A interact / B cancel bottom-right ── */}
-      {isTouch && !battle && !editMode && (
+      {isTouch && !battle && !editMode && !placing && (
         <>
           <TouchJoystick joyRef={joyRef} bottom={96} />
           <div style={{ position: 'fixed', bottom: 96, right: 30, zIndex: 30, display: 'flex', flexDirection: 'column', gap: 16, alignItems: 'center' }}>

@@ -32,6 +32,7 @@ const ITEM_LOOK: Record<string, { c: string; s: string }> = {
   petal: { c: '#e69ac8', s: 'PT' }, ore: { c: '#7fd0e6', s: 'OR' },
   mana_draught: { c: '#5a9be6', s: 'MD' }, shard_tonic: { c: '#8f7fe6', s: 'TN' },
   shimmeroak_plank: { c: '#b08355', s: 'PL' }, amber_sap: { c: '#e0a34a', s: 'SP' }, raw_mana_shard: { c: '#6fd0e6', s: 'MS' },
+  alchemy_station: { c: '#a679ff', s: 'AL' }, crafting_table: { c: '#c8a05a', s: 'CT' },
 }
 const PH_TOOLS: ToolGauge[] = [
   { id: 'forestry', label: 'Forestry', glyph: '🪓', tint: '#8fd97f', infinite: true, dur: 1 },
@@ -110,7 +111,7 @@ export default function HotBar({ items: propItems, onUse, usable }: { items?: (I
           if (isDouble && drinkable) { onUseRef.current?.(it.itemId); setFlashIdx(p.idx); lastTap.current = null }
           else {
             if (p.idx < SLOTS) setSel(p.idx)
-            setNameTag({ text: pretty(it.itemId) + (it.count > 1 ? `  ×${it.count}` : ''), sub: drinkable ? `+${(usableRef.current as Record<string, number>)[it.itemId]} mana · double-tap to drink` : undefined })
+            setNameTag({ text: pretty(it.itemId) + (it.count > 1 ? `  ×${it.count}` : ''), sub: drinkable ? String((usableRef.current as Record<string, string>)[it.itemId]) : undefined })
           }
         } else if (p.idx < SLOTS) setSel(p.idx)
       }
