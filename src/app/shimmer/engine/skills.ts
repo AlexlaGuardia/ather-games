@@ -1,5 +1,6 @@
 // Skill system — XP tracking, level progression, 6 skills
-// Canon: shimmer-skilling.md — Levels 1-10 unlock all content, 11-99 is prestige
+// Canon: shimmer-skilling.md — three bands: Content 1-15 (all content), Climb 15-100
+// (grind to the true Mana'mal @100, as hard as old-99), Mastery 100-9999 (flat steady trickle)
 
 export type SkillId = 'farming' | 'forestry' | 'prospecting' | 'rinning' | 'alchemy' | 'mana'
 
@@ -29,12 +30,19 @@ export const SKILL_META: Record<SkillId, { name: string; manaCost: number; locke
 }
 
 export const SKILL_IDS: SkillId[] = ['farming', 'forestry', 'prospecting', 'rinning', 'alchemy', 'mana']
-export const MAX_LEVEL = 99
+export const MAX_LEVEL = 9999          // Mastery tail (was 99). Content by 15, true Mana'mal @100, endless to 9999.
+export const MASTERY_START = 100       // at 100 the true canon Mana'mal unlocks; past here the curve goes flat
 
-// Canon XP formula: floor((L + 300 * 2^(L/7)) / 4)
-// Level 92 is roughly the halfway point in total XP to 99
-// Total XP for 99: ~13,000,000
+// XP-to-next-level. Two bands (canon: shimmer-skilling.md §The XP curve):
+//  - L < 100: the old exponential — 100 ends up as hard to earn as the old level-99 cap (~14M total by 100).
+//    (2^(L/7) is finite and well-behaved through the low hundreds; we never call it past 99.)
+//  - L >= 100: FLAT per-level cost (steady trickle) — never steepens, never overflows, mastery runs to 9999.
+// MASTERY_FLAT = the climb's final per-level cost, so the tail continues at that steady rate. Balance knob (Jin):
+// lower it for a faster mastery trickle, raise it for a slower one. XP-per-action rates tune the felt pace.
+export const MASTERY_FLAT = Math.floor((99 + 300 * Math.pow(2, 99 / 7)) / 4)   // ~1.36M XP/level
+
 export function xpForSkillLevel(level: number): number {
+  if (level >= MASTERY_START) return MASTERY_FLAT
   return Math.floor((level + 300 * Math.pow(2, level / 7)) / 4)
 }
 
