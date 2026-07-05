@@ -19,7 +19,7 @@ import { ZONE_NODES, type NodePlacement } from '../world/node-placements'
 import { createResourceNode, depleteNode, tickNodeRespawn, rollDrops, getNodeSkill, NODE_DEFS, type NodeType, type ResourceNode } from '../world/resources'
 import { findAdjacentNode, addHarvestItems } from '../engine/harvesting'
 import { createSkillSet, skillSetToSave, skillSetFromSave, addSkillXP, xpForSkillLevel, SKILL_META, type SkillSet } from '../engine/skills'
-import { createInventory, inventoryToSave, inventoryFromSave, type Inventory, type ItemStack } from '../engine/inventory'
+import { createInventory, inventoryToSave, inventoryFromSave, addItems, removeItems, countItem, type Inventory, type ItemStack } from '../engine/inventory'
 import { createManaPool, manaToSave, manaFromSave, getMaxPool, type ManaPool } from '../engine/mana'
 import type { AITier } from '../engine/battle-ai'
 import PartyBattleScene from '../components/PartyBattleScene'
@@ -59,7 +59,10 @@ const menuBtn: React.CSSProperties = { padding: '6px 11px', borderRadius: 7, bor
 // Pure feel — tune here. goldwood(1): 6 mana / 2s · shimmeroak(4): 12 / 2.9s · dawnwood(10): 24 / 4.7s.
 const nodeManaCost = (type: NodeType) => 6 + (NODE_DEFS[type].minLevel - 1) * 2
 const nodeChannelSec = (type: NodeType) => 2 + (NODE_DEFS[type].minLevel - 1) * 0.3
-const MANA_REGEN_PER_SEC = 1 / 60   // 1 mana per minute — lean on the mana station / Mana skill to refill
+const MANA_REGEN_PER_SEC = 1 / 60   // 1 mana per minute by design — the real refill is Alchemy-brewed potions
+// Mana-restore potions (Alchemy-brewed; canon economy — see project_shimmer_mana_economy). Drink to
+// refill the pool. Restore amounts are the feel knob. Only ids listed here are drinkable-for-mana.
+const MANA_POTIONS: Record<string, number> = { mana_draught: 40, shard_tonic: 65 }
 
 function buckets(grid: number[][]) {
   const floors: Cell[] = [], walls: Cell[] = [], waters: Cell[] = [], voids: Cell[] = [], warps: Cell[] = [], mists: Cell[] = []
@@ -768,7 +771,9 @@ export default function Shimmer3D() {
         }
         if (data.zoneId && getZone(ZONES, data.zoneId)) setZoneId(data.zoneId)
       } else {
-        persist() // first visit — bank an empty save; the player gets their starter from Gregory
+        addItems(invRef.current, 'mana_draught', 3) // first visit — a few starter potions to refill mana
+        setInvSlots([...invRef.current.slots])
+        persist() // bank the save; the player gets their spirit starter from Gregory
       }
     }).catch(() => {})
     return () => { alive = false }
@@ -817,6 +822,21 @@ export default function Shimmer3D() {
     channelRef.current = { node, progress: 0, durSec }
     setChannel({ nodeId: node.id, label: prettyItem(node.type), hp: 1 })
   }, [])
+
+  // Drink a mana potion from the hotbar → refill the pool (the canon refill path; no station).
+  const useItem = useCallback((itemId?: string) => {
+    if (!itemId) return
+    const restore = MANA_POTIONS[itemId]
+    if (restore == null || countItem(invRef.current, itemId) < 1) return   // not a drinkable mana potion / none held
+    const max = getMaxPool(skillsRef.current.mana.level)
+    if (manaRef.current.current >= max - 0.5) { setHarvestToast('Mana already full'); return }
+    removeItems(invRef.current, itemId, 1)
+    manaRef.current.current = Math.min(max, manaRef.current.current + restore)
+    setManaFrac(manaRef.current.current / max)
+    setInvSlots([...invRef.current.slots])
+    setHarvestToast(`Drank ${prettyItem(itemId)} · +${restore} mana`)
+    persist()
+  }, [persist])
   // channel driver — advances progress + drains mana each tick; breaks on distance / no-mana; completes at full.
   useEffect(() => {
     const dt = 0.09
@@ -968,6 +988,12 @@ export default function Shimmer3D() {
   const newGame = useCallback(() => {
     partyRef.current = []
     flagsRef.current = {}
+    // fresh skilling state: reset skills/mana/inventory, seed a few starter mana potions
+    skillsRef.current = createSkillSet()
+    manaRef.current = createManaPool(1)
+    invRef.current = createInventory()
+    addItems(invRef.current, 'mana_draught', 3)
+    syncSkillHud()
     setHasStarter(false)
     setDefeated({})
     const z = getZone(ZONES, START_ZONE)!
@@ -976,7 +1002,7 @@ export default function Shimmer3D() {
     setZoneId(START_ZONE)
     setBanner('new game — find Gregory in the glade')
     persist()
-  }, [persist])
+  }, [persist, syncSkillHud])
 
   // Gregory's gift — the player's first spirit (the kit). One RNG starter → party, flag set, saved.
   const grantStarter = useCallback(() => {
@@ -1431,7 +1457,7 @@ export default function Shimmer3D() {
       )}
 
       {/* Hotbar HUD — bag + 6 quick-slots + tool gauges + mana vial. Only while walking the world. */}
-      {!battle && !approach && !rewards && !editMode && !dialogue && <HotBar items={invSlots} />}
+      {!battle && !approach && !rewards && !editMode && !dialogue && <HotBar items={invSlots} onUse={useItem} usable={MANA_POTIONS} />}
 
       {/* ── Mobile controls: joystick (move) bottom-left · A interact / B cancel bottom-right ── */}
       {isTouch && !battle && !editMode && (

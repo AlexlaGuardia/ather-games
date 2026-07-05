@@ -30,6 +30,8 @@ const ITEM_LOOK: Record<string, { c: string; s: string }> = {
   seed: { c: '#8fd97f', s: 'SD' }, berry: { c: '#e0607a', s: 'BR' }, potion: { c: '#6fa8e6', s: 'PO' },
   wood: { c: '#b08355', s: 'WD' }, stone: { c: '#9aa0a8', s: 'ST' }, fiber: { c: '#c8b86a', s: 'FB' },
   petal: { c: '#e69ac8', s: 'PT' }, ore: { c: '#7fd0e6', s: 'OR' },
+  mana_draught: { c: '#5a9be6', s: 'MD' }, shard_tonic: { c: '#8f7fe6', s: 'TN' },
+  shimmeroak_plank: { c: '#b08355', s: 'PL' }, amber_sap: { c: '#e0a34a', s: 'SP' }, raw_mana_shard: { c: '#6fd0e6', s: 'MS' },
 }
 const PH_TOOLS: ToolGauge[] = [
   { id: 'forestry', label: 'Forestry', glyph: '🪓', tint: '#8fd97f', infinite: true, dur: 1 },
@@ -52,8 +54,11 @@ function ItemTile({ item }: { item: ItemStack | null }) {
   )
 }
 
-export default function HotBar({ items: propItems }: { items?: (ItemStack | null)[] } = {}) {
+export default function HotBar({ items: propItems, onUse, usable }: { items?: (ItemStack | null)[]; onUse?: (itemId: string) => void; usable?: Record<string, unknown> } = {}) {
   const [items, setItems] = useState<(ItemStack | null)[]>(propItems ?? PH_ITEMS)
+  const itemsRef = useRef(items); itemsRef.current = items
+  const onUseRef = useRef(onUse); onUseRef.current = onUse
+  const usableRef = useRef(usable); usableRef.current = usable
   const [sel, setSel] = useState(0)
   const [bagOpen, setBagOpen] = useState(false)
   const [tools] = useState<ToolGauge[]>(PH_TOOLS)
@@ -87,8 +92,11 @@ export default function HotBar({ items: propItems }: { items?: (ItemStack | null
         const el = (document.elementFromPoint(e.clientX, e.clientY) as HTMLElement | null)?.closest('[data-slotidx]') as HTMLElement | null
         const to = el ? parseInt(el.dataset.slotidx || '-1', 10) : -1
         if (to >= 0 && to !== p.idx) setItems(prev => { const n = [...prev]; const t = n[to]; n[to] = n[p.idx]; n[p.idx] = t; return n })
-      } else if (p.idx < SLOTS) {
-        setSel(p.idx)   // a tap on a hotbar slot selects it
+      } else {
+        // a tap: drink a usable potion, otherwise select the quick-slot
+        const it = itemsRef.current[p.idx]
+        if (it && usableRef.current && it.itemId in usableRef.current) onUseRef.current?.(it.itemId)
+        else if (p.idx < SLOTS) setSel(p.idx)
       }
       setDrag(null)
     }
@@ -114,6 +122,9 @@ export default function HotBar({ items: propItems }: { items?: (ItemStack | null
       }}>
         <ItemTile item={items[idx]} />
         {idx < SLOTS && <span style={{ position: 'absolute', left: 3, top: 1, font: '700 9px ui-monospace, monospace', color: on ? '#7fe3c8' : '#ffffff40' }}>{idx + 1}</span>}
+        {items[idx] && usable && items[idx]!.itemId in usable && (
+          <span title="tap to drink" style={{ position: 'absolute', right: 2, top: 2, width: 8, height: 8, borderRadius: '50%', background: '#6fd0e6', boxShadow: '0 0 5px #6fd0e6', border: '1px solid #0b1513' }} />
+        )}
       </div>
     )
   }
