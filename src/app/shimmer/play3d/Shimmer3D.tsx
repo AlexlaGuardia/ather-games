@@ -17,6 +17,7 @@ import { LAUNCHED_SPECIES } from '../engine/spirit-index'
 import type { AITier } from '../engine/battle-ai'
 import PartyBattleScene from '../components/PartyBattleScene'
 import ArenaBattle from '../components/ArenaBattle'
+import HotBar from './HotBar'
 import { NPCS_3D, GREG_INTRO_LINES, GREG_NUDGE, GREG_RETURN, THISTLE_TAUNT_NO_SPIRIT, THISTLE_PREFIGHT, THISTLE_DEFEAT, FREED_SPIRIT_BEAT, SORREL_PREFIGHT, SORREL_DEFEAT, FREED_PAIR_BEAT, BRACK_PREFIGHT, BRACK_FINALE, BRACK_FORCED_BEAT, type NPC3D } from './npcs3d'
 import { useCloudSave } from '@/lib/use-cloud-save'
 import { useWallet } from '@/lib/use-wallet'
@@ -1162,6 +1163,9 @@ export default function Shimmer3D() {
           background: '#b9483f', color: '#1a1a2e', font: '800 14px ui-monospace, monospace', cursor: 'pointer',
         }}>Done editing</button>
       )}
+
+      {/* Hotbar HUD — bag + 6 quick-slots + tool gauges + mana vial. Only while walking the world. */}
+      {!battle && !approach && !rewards && !editMode && !dialogue && <HotBar />}
 
       {/* ── Mobile controls: joystick (move) bottom-left · A interact / B cancel bottom-right ── */}
       {isTouch && !battle && !editMode && (
