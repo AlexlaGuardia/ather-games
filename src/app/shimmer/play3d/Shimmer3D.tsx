@@ -28,10 +28,9 @@ import { canCraft, craftItem, getRecipes, RECIPE_DEFS } from '../engine/crafting
 import { createGEState, buyFromGE, sellToGE, tickPriceDrift, getMarketPrice, GE_ITEM_IDS, TAX_RATE, geToSave, geFromSave, type GEMarketState, type GESave } from '../engine/exchange'
 import { CROP_DEFS, canPlantCrop, plantCrop, harvestCrop, getCropGrowthPhase, isCropReady, getVisibleCrops, plantedCropsToSave, plantedCropsFromSave, type PlantedCrop } from '../engine/farming'
 import type { AITier } from '../engine/battle-ai'
-import PartyBattleScene from '../components/PartyBattleScene'
 import ArenaBattle from '../components/ArenaBattle'
 import HotBar from './HotBar'
-import { NPCS_3D, GREG_INTRO_LINES, GREG_NUDGE, GREG_RETURN, THISTLE_TAUNT_NO_SPIRIT, THISTLE_PREFIGHT, THISTLE_DEFEAT, FREED_SPIRIT_BEAT, SORREL_PREFIGHT, SORREL_DEFEAT, FREED_PAIR_BEAT, BRACK_PREFIGHT, BRACK_FINALE, BRACK_FORCED_BEAT, type NPC3D } from './npcs3d'
+import { NPCS_3D, GREG_INTRO_LINES, GREG_NUDGE, GREG_RETURN, THISTLE_TAUNT_NO_SPIRIT, THISTLE_PREFIGHT, THISTLE_DEFEAT, FREED_SPIRIT_BEAT, SORREL_PREFIGHT, SORREL_DEFEAT, FREED_PAIR_BEAT, BRACK_PREFIGHT, BRACK_FINALE, type NPC3D } from './npcs3d'
 import { useCloudSave } from '@/lib/use-cloud-save'
 import { useWallet } from '@/lib/use-wallet'
 
@@ -971,7 +970,7 @@ export default function Shimmer3D() {
   const [hasStarter, setHasStarter] = useState(false) // reactive mirror of "party has ≥1 spirit" for HUD
   const [defeated, setDefeated] = useState<Record<string, boolean>>({}) // NPCs cleared from the world (by id)
   const defeatedRef = useRef(defeated); defeatedRef.current = defeated
-  const [battle, setBattle] = useState<{ allies: Spirit[]; enemies: Spirit[]; aiTier: AITier; zoneId: string; reach?: boolean; captiveIdxs?: number[]; kind?: 'wild' | 'thistle' | 'sorrel' | 'brack' } | null>(null)
+  const [battle, setBattle] = useState<{ allies: Spirit[]; enemies: Spirit[]; aiTier: AITier; zoneId: string; kind?: 'wild' | 'thistle' | 'sorrel' | 'brack' } | null>(null)
   const curBattleRef = useRef(battle); curBattleRef.current = battle
   // Wild encounters play a brief "drawn to you" approach beat before the arena mounts (see below).
   const [approach, setApproach] = useState<{ enc: WildEncounter; battle: NonNullable<typeof battle> } | null>(null)
@@ -1422,7 +1421,7 @@ export default function Shimmer3D() {
   }, [])
 
   // Battle end: on a win, split rewards across the party (XP / bond / happiness / gold), then save.
-  const endBattle = useCallback((outcome: 'win' | 'lose', reachResult?: 'freed' | 'forced' | 'fainted' | null) => {
+  const endBattle = useCallback((outcome: 'win' | 'lose') => {
     battleRef.current = false
     const bd = curBattleRef.current
     let spoils: { gold: number; rows: RewardRow[] } | null = null
@@ -1452,11 +1451,9 @@ export default function Shimmer3D() {
     if (outcome === 'win' && bd?.kind === 'thistle') {
       flagsRef.current.freedThistle = true
       setDefeated((d) => ({ ...d, thistle: true }))
-      // Canon cares HOW you won: reaching frees the spirit; forcing it KO'd the captive ("not the way").
-      const closing = reachResult === 'forced'
-        ? 'You overpowered the captive, but you forced it. That was not the way. Still, Thistle has had enough.'
-        : FREED_SPIRIT_BEAT
-      setDialogue({ name: 'Thistle', lines: [...THISTLE_DEFEAT, closing], idx: 0, onDone: () => setBanner('✦ Hold 1 cleared — Spirit Meadows is open') })
+      // Canon (ruled 2026-07-04): win = free. The old freed-vs-forced beat was dropped, so the
+      // collar just breaks on the win — one freeing path.
+      setDialogue({ name: 'Thistle', lines: [...THISTLE_DEFEAT, FREED_SPIRIT_BEAT], idx: 0, onDone: () => setBanner('✦ Hold 1 cleared — Spirit Meadows is open') })
     }
     // Hold 2: Sorrel's stronghold falls — both collars break, he retreats up to Brack, and a Mana Seed
     // is left behind. Canon reward = the Mana Seed blooms into a new companion (party growth = seeds/bloom).
@@ -1467,10 +1464,7 @@ export default function Shimmer3D() {
       const bloom = createSpirit(sp, speciesDisplayName(sp), 0, 0)
       bloom.level = Math.max(5, partyLevelRef.current)
       partyRef.current = [...(partyRef.current ?? []), bloom]
-      const closing = reachResult === 'forced'
-        ? 'You overpowered them, but you forced it. That was not the way. Still, Sorrel has had enough.'
-        : FREED_PAIR_BEAT
-      setDialogue({ name: 'Sorrel', lines: [...SORREL_DEFEAT, closing, `A Mana Seed sits where the leashes were. It blooms — a young ${speciesDisplayName(sp)} joins you.`], idx: 0, onDone: () => setBanner('✦ Hold 2 cleared — the Mana Springs are free') })
+      setDialogue({ name: 'Sorrel', lines: [...SORREL_DEFEAT, FREED_PAIR_BEAT, `A Mana Seed sits where the leashes were. It blooms — a young ${speciesDisplayName(sp)} joins you.`], idx: 0, onDone: () => setBanner('✦ Hold 2 cleared — the Mana Springs are free') })
     }
     // Hold 3 — the climax. Brack's stronghold falls; all three collars break at once and the three Moglins
     // deflate together (the four-voice finale). Mana Seed reward blooms a companion; the arc closes.
@@ -1481,8 +1475,7 @@ export default function Shimmer3D() {
       const bloom = createSpirit(sp, speciesDisplayName(sp), 0, 0)
       bloom.level = Math.max(5, partyLevelRef.current)
       partyRef.current = [...(partyRef.current ?? []), bloom]
-      const script = reachResult === 'forced' ? [BRACK_FORCED_BEAT, ...BRACK_FINALE] : BRACK_FINALE
-      const finale = [...script, { speaker: '—', text: `A Mana Seed rests in the cracked-open grass. It blooms — a young ${speciesDisplayName(sp)} joins you.` }]
+      const finale = [...BRACK_FINALE, { speaker: '—', text: `A Mana Seed rests in the cracked-open grass. It blooms — a young ${speciesDisplayName(sp)} joins you.` }]
       setDialogue({
         name: 'Brack',
         lines: finale.map(l => l.text),
@@ -1545,7 +1538,7 @@ export default function Shimmer3D() {
     captive.level = 5
     captive.seeds = Array.from({ length: 6 }, () => Math.floor(Math.random() * 32))
     battleRef.current = true
-    setBattle({ allies: partyRef.current!, enemies: [captive], aiTier: 'wild', zoneId: zoneIdRef.current, reach: true, captiveIdxs: [0], kind: 'thistle' })
+    setBattle({ allies: partyRef.current!, enemies: [captive], aiTier: 'wild', zoneId: zoneIdRef.current, kind: 'thistle' })
   }, [])
 
   // Sorrel — Hold 2, the stronghold. Enemies = [guard, captive, captive]. The guard (no collar) SHIELDS
@@ -1565,7 +1558,7 @@ export default function Shimmer3D() {
       return c
     }
     battleRef.current = true
-    setBattle({ allies: partyRef.current!, enemies: [guard, mkCaptive(), mkCaptive()], aiTier: 'champion', zoneId: zoneIdRef.current, reach: true, captiveIdxs: [1, 2], kind: 'sorrel' })
+    setBattle({ allies: partyRef.current!, enemies: [guard, mkCaptive(), mkCaptive()], aiTier: 'champion', zoneId: zoneIdRef.current, kind: 'sorrel' })
   }, [])
 
   // Brack — Hold 3, the climax. The pooled force: TWO enforcers (guards) shielding THREE collared
@@ -1587,7 +1580,7 @@ export default function Shimmer3D() {
       return c
     }
     battleRef.current = true
-    setBattle({ allies: partyRef.current!, enemies: [mkGuard('Brack’s Muscle', 3), mkGuard('Brack’s Enforcer', 2), mkCaptive(), mkCaptive(), mkCaptive()], aiTier: 'champion', zoneId: zoneIdRef.current, reach: true, captiveIdxs: [2, 3, 4], kind: 'brack' })
+    setBattle({ allies: partyRef.current!, enemies: [mkGuard('Brack’s Muscle', 3), mkGuard('Brack’s Enforcer', 2), mkCaptive(), mkCaptive(), mkCaptive()], aiTier: 'champion', zoneId: zoneIdRef.current, kind: 'brack' })
   }, [])
 
   // Talk to an NPC. Gregory: no spirit → intro + starter handoff; else a sendoff. Thistle: no spirit → he
@@ -2060,10 +2053,9 @@ export default function Shimmer3D() {
       {/* B hotkey (keyboard) — owner only, and not while a battle overlay is up */}
       <KeyToggle onB={() => { if (isOwner && !battleRef.current) setEditMode((e) => !e) }} />
 
-      {/* Combat, mounted over the 3D world. Wild fights use the real-time Keeper's Arena;
-          the scripted liberation holds (thistle/sorrel/brack) still run the reach/captive
-          turn-based scene until the freed-vs-forced beat is ruled back into the arena
-          (CANON_GAPS: collar-breaks-on-win). */}
+      {/* Combat, mounted over the 3D world. ALL fights — wild and the scripted liberation holds
+          (thistle/sorrel/brack) — run the real-time Keeper's Arena. The collar breaks on the win
+          (freed-vs-forced was ruled non-canon 2026-07-04: win = free). */}
       {/* wild-encounter approach beat — the mist stirs and a spirit is drawn to you, then the ring
           materializes. Tap to skip straight into the fight. */}
       {approach && !battle && (
@@ -2283,23 +2275,14 @@ export default function Shimmer3D() {
 
       {battle && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 50, background: '#0a0a12' }}>
-          {battle.kind === 'wild' ? (
-            <ArenaBattle
-              allies={battle.allies}
-              enemies={battle.enemies}
-              onEnd={(o) => endBattle(o === 'win' ? 'win' : 'lose')}
-            />
-          ) : (
-            <PartyBattleScene
-              allySpirits={battle.allies}
-              enemySpirits={battle.enemies}
-              zoneId={battle.zoneId}
-              reach={battle.reach}
-              captiveIdxs={battle.captiveIdxs}
-              ai={{ focusFire: battle.aiTier !== 'wild', spendMana: battle.aiTier !== 'wild' }}
-              onEnd={endBattle}
-            />
-          )}
+          {/* All fights — wild AND the scripted liberation holds — run the Keeper's Arena now.
+              (The old turn-based PartyBattleScene + reach/captive mechanic was retired when the
+              freed-vs-forced beat was ruled non-canon: win = free, the collar breaks on the win.) */}
+          <ArenaBattle
+            allies={battle.allies}
+            enemies={battle.enemies}
+            onEnd={(o) => endBattle(o === 'win' ? 'win' : 'lose')}
+          />
         </div>
       )}
     </div>
