@@ -1,0 +1,61 @@
+// Crafting system — assemble buildables (placeable stations) from gathered materials.
+// There is NO canon "crafting" skill (skills are farming/forestry/prospecting/rinning/
+// alchemy), so the workbench is skill-less: gated by materials + a small mana cost only.
+// Mirrors alchemy.ts (canBrew/brewPotion) → canCraft/craftItem.
+
+import type { Inventory } from './inventory'
+import type { ManaPool } from './mana'
+import { countItem, removeItems, addItems } from './inventory'
+import { drainMana } from './mana'
+
+export interface RecipeDef {
+  id: string          // == the produced item id
+  name: string
+  tier: 1 | 2 | 3
+  manaCost: number
+  recipe: { itemId: string; count: number }[]
+  resultCount: number
+}
+
+export const RECIPE_DEFS: Record<string, RecipeDef> = {
+  // Tier 1 — the workbench itself, renewable from cheap forestry mats.
+  crafting_table: {
+    id: 'crafting_table', name: 'Crafting Table', tier: 1,
+    manaCost: 4, resultCount: 1,
+    recipe: [{ itemId: 'goldwood_plank', count: 4 }, { itemId: 'goldwood_bark', count: 2 }],
+  },
+
+  // Tier 2 — the Alchemy Station: sturdier wood + raw mana to seat the brewing.
+  alchemy_station: {
+    id: 'alchemy_station', name: 'Alchemy Station', tier: 2,
+    manaCost: 8, resultCount: 1,
+    recipe: [{ itemId: 'shimmeroak_plank', count: 6 }, { itemId: 'raw_mana_shard', count: 4 }],
+  },
+}
+
+export const RECIPE_IDS = Object.keys(RECIPE_DEFS)
+
+/** Can the player craft this recipe? (has materials + mana) */
+export function canCraft(recipeId: string, inv: Inventory, mana?: ManaPool): boolean {
+  const def = RECIPE_DEFS[recipeId]
+  if (!def) return false
+  if (mana && mana.current < def.manaCost) return false
+  return def.recipe.every(r => countItem(inv, r.itemId) >= r.count)
+}
+
+/** Craft a recipe — consumes materials, drains mana, adds result. Returns false on failure. */
+export function craftItem(recipeId: string, inv: Inventory, mana: ManaPool): boolean {
+  const def = RECIPE_DEFS[recipeId]
+  if (!def) return false
+  if (!def.recipe.every(r => countItem(inv, r.itemId) >= r.count)) return false
+  if (!drainMana(mana, def.manaCost)) return false
+
+  for (const r of def.recipe) removeItems(inv, r.itemId, r.count)
+  addItems(inv, def.id, def.resultCount)
+  return true
+}
+
+/** All recipes, ordered for display (cheapest tier first). */
+export function getRecipes(): RecipeDef[] {
+  return RECIPE_IDS.map(id => RECIPE_DEFS[id]).sort((a, b) => a.tier - b.tier)
+}

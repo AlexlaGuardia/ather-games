@@ -22,6 +22,7 @@ import { createSkillSet, skillSetToSave, skillSetFromSave, addSkillXP, xpForSkil
 import { createInventory, inventoryToSave, inventoryFromSave, addItems, removeItems, countItem, type Inventory, type ItemStack } from '../engine/inventory'
 import { createManaPool, manaToSave, manaFromSave, getMaxPool, type ManaPool } from '../engine/mana'
 import { canBrew, brewPotion, getVisiblePotions, POTION_DEFS } from '../engine/alchemy'
+import { canCraft, craftItem, getRecipes, RECIPE_DEFS } from '../engine/crafting'
 import type { AITier } from '../engine/battle-ai'
 import PartyBattleScene from '../components/PartyBattleScene'
 import ArenaBattle from '../components/ArenaBattle'
@@ -397,7 +398,7 @@ function npcInWorld(n: NPC3D, defeated: Record<string, boolean>, flags: Record<s
   return true
 }
 
-function Player({ posRef, gridRef, heightsRef, zoneIdRef, editRef, onWarp, battleRef, partyLevelRef, onEncounter, joyRef, talkingRef, hasPartyRef, onNearChange, defeatedRef, flagsRef, harvestNodesRef, onNearNode, stationsRef, onNearStation }: {
+function Player({ posRef, gridRef, heightsRef, zoneIdRef, editRef, onWarp, battleRef, partyLevelRef, onEncounter, joyRef, talkingRef, hasPartyRef, onNearChange, defeatedRef, flagsRef, harvestNodesRef, onNearNode, stationsRef, onNearStation, onNearTable }: {
   posRef: React.RefObject<THREE.Vector3>; gridRef: React.RefObject<number[][]>
   heightsRef: React.RefObject<number[][]>; zoneIdRef: React.RefObject<string>
   editRef: React.RefObject<boolean>; onWarp: (w: Warp) => void
@@ -410,6 +411,7 @@ function Player({ posRef, gridRef, heightsRef, zoneIdRef, editRef, onWarp, battl
   flagsRef: React.RefObject<Record<string, boolean>>
   harvestNodesRef: React.RefObject<ResourceNode[]>; onNearNode: (n: ResourceNode | null) => void
   stationsRef: React.RefObject<PlacedStruct[]>; onNearStation: (s: PlacedStruct | null) => void
+  onNearTable: (s: PlacedStruct | null) => void
 }) {
   const group = useRef<THREE.Group>(null)
   const keys = useRef<Record<string, boolean>>({})
@@ -420,6 +422,7 @@ function Player({ posRef, gridRef, heightsRef, zoneIdRef, editRef, onWarp, battl
   const lastNear = useRef<string | null>(null)
   const lastNode = useRef<string | null>(null)
   const lastStation = useRef<string | null>(null)
+  const lastTable = useRef<string | null>(null)
   const fwd = useMemo(() => new THREE.Vector3(), [])
   const right = useMemo(() => new THREE.Vector3(), [])
   const move = useMemo(() => new THREE.Vector3(), [])
@@ -512,14 +515,18 @@ function Player({ posRef, gridRef, heightsRef, zoneIdRef, editRef, onWarp, battl
       const nodeId = node?.id ?? null
       if (nodeId !== lastNode.current) { lastNode.current = nodeId; onNearNode(node) }
 
-      // Nearest placed Alchemy Station (adjacent) → drives the "Brew" prompt.
-      let station: PlacedStruct | null = null
+      // Nearest placed station (adjacent) → drives the "Brew" / "Craft" prompt.
+      let station: PlacedStruct | null = null; let table: PlacedStruct | null = null
       for (const s of (stationsRef.current ?? [])) {
-        if (s.zoneId !== zoneIdRef.current || s.itemId !== 'alchemy_station') continue
-        if (Math.max(Math.abs(s.tileX - p.x), Math.abs(s.tileY - p.z)) <= 1.4) { station = s; break }
+        if (s.zoneId !== zoneIdRef.current) continue
+        if (Math.max(Math.abs(s.tileX - p.x), Math.abs(s.tileY - p.z)) > 1.4) continue
+        if (!station && s.itemId === 'alchemy_station') station = s
+        else if (!table && s.itemId === 'crafting_table') table = s
       }
       const stId = station ? `${station.tileX},${station.tileY}` : null
       if (stId !== lastStation.current) { lastStation.current = stId; onNearStation(station) }
+      const tbId = table ? `${table.tileX},${table.tileY}` : null
+      if (tbId !== lastTable.current) { lastTable.current = tbId; onNearTable(table) }
     }
 
     const g = group.current!
@@ -624,6 +631,7 @@ function Scene(props: {
   structures: PlacedStruct[]; placing: { itemId: string; facing: number } | null
   placeTargetRef: React.RefObject<{ x: number; y: number } | null>; structuresRef: React.RefObject<PlacedStruct[]>
   onNearStation: (s: PlacedStruct | null) => void
+  onNearTable: (s: PlacedStruct | null) => void
 }) {
   return (
     <>
@@ -641,7 +649,7 @@ function Scene(props: {
       <NodeMarkers nodes={props.nodes} heights={props.heights} editing={props.editing} channel={props.channel} />
       <StructureMarkers structures={props.structures.filter(s => s.zoneId === props.zone.id)} heights={props.heights} />
       <PlacementGhost placing={props.placing} posRef={props.posRef} heights={props.heights} gridRef={props.gridRef} placeTargetRef={props.placeTargetRef} structuresRef={props.structuresRef} zoneIdRef={props.zoneIdRef} />
-      <Player posRef={props.posRef} gridRef={props.gridRef} heightsRef={props.heightsRef} zoneIdRef={props.zoneIdRef} editRef={props.editRef} onWarp={props.onWarp} battleRef={props.battleRef} partyLevelRef={props.partyLevelRef} onEncounter={props.onEncounter} joyRef={props.joyRef} talkingRef={props.talkingRef} hasPartyRef={props.hasPartyRef} onNearChange={props.onNearChange} defeatedRef={props.defeatedRef} flagsRef={props.flagsRef} harvestNodesRef={props.harvestNodesRef} onNearNode={props.onNearNode} stationsRef={props.structuresRef} onNearStation={props.onNearStation} />
+      <Player posRef={props.posRef} gridRef={props.gridRef} heightsRef={props.heightsRef} zoneIdRef={props.zoneIdRef} editRef={props.editRef} onWarp={props.onWarp} battleRef={props.battleRef} partyLevelRef={props.partyLevelRef} onEncounter={props.onEncounter} joyRef={props.joyRef} talkingRef={props.talkingRef} hasPartyRef={props.hasPartyRef} onNearChange={props.onNearChange} defeatedRef={props.defeatedRef} flagsRef={props.flagsRef} harvestNodesRef={props.harvestNodesRef} onNearNode={props.onNearNode} stationsRef={props.structuresRef} onNearStation={props.onNearStation} onNearTable={props.onNearTable} />
       <CameraRig posRef={props.posRef} editFocusRef={props.editFocusRef} yawRef={props.yawRef} editRef={props.editRef} />
     </>
   )
@@ -862,6 +870,7 @@ export default function Shimmer3D() {
         addItems(invRef.current, 'mana_draught', 3) // first visit — a few starter potions to refill mana
         addItems(invRef.current, 'alchemy_station', 1); addItems(invRef.current, 'crafting_table', 1) // + starter placeables to test building
         addItems(invRef.current, 'raw_mana_shard', 12) // + shards so the Alchemy Station has something to brew
+        addItems(invRef.current, 'goldwood_plank', 6); addItems(invRef.current, 'goldwood_bark', 3); addItems(invRef.current, 'shimmeroak_plank', 6) // + wood so the Crafting Table can build a station
         setInvSlots([...invRef.current.slots])
         persist() // bank the save; the player gets their spirit starter from Gregory
       }
@@ -922,6 +931,9 @@ export default function Shimmer3D() {
   const [nearStation, setNearStation] = useState<PlacedStruct | null>(null)
   const nearStationRef = useRef<PlacedStruct | null>(null); nearStationRef.current = nearStation
   const [brewOpen, setBrewOpen] = useState(false)
+  const [nearTable, setNearTable] = useState<PlacedStruct | null>(null)
+  const nearTableRef = useRef<PlacedStruct | null>(null); nearTableRef.current = nearTable
+  const [craftOpen, setCraftOpen] = useState(false)
 
   // Double-tap use: drink a mana potion, or enter placement for a placeable.
   const useItem = useCallback((itemId?: string) => {
@@ -980,6 +992,18 @@ export default function Shimmer3D() {
     const def = POTION_DEFS[potionId]
     setHarvestToast(`Brewed ${def.name} ×${def.resultCount}`)
     if (skillsRef.current.alchemy.level > before) setBanner(`✦ Alchemy Lv ${skillsRef.current.alchemy.level}!`)
+    persist()
+  }, [syncSkillHud, persist])
+
+  // ── Crafting Table menu (open at a placed table) ──
+  const openCraft = useCallback(() => { battleRef.current = true; setCraftOpen(true) }, [])
+  const closeCraft = useCallback(() => { battleRef.current = false; setCraftOpen(false) }, [])
+  const craft = useCallback((recipeId: string) => {
+    if (!craftItem(recipeId, invRef.current, manaRef.current)) { setHarvestToast('Missing materials or mana'); return }
+    syncSkillHud() // refreshes the mana pie (craft drained mana)
+    setInvSlots([...invRef.current.slots])
+    const def = RECIPE_DEFS[recipeId]
+    setHarvestToast(`Crafted ${def.name}${def.resultCount > 1 ? ` ×${def.resultCount}` : ''} — hold ${prettyItem(def.id)} to place`)
     persist()
   }, [syncSkillHud, persist])
   // channel driver — advances progress + drains mana each tick; breaks on distance / no-mana; completes at full.
@@ -1140,6 +1164,7 @@ export default function Shimmer3D() {
     addItems(invRef.current, 'mana_draught', 3)
     addItems(invRef.current, 'alchemy_station', 1); addItems(invRef.current, 'crafting_table', 1)
     addItems(invRef.current, 'raw_mana_shard', 12)
+    addItems(invRef.current, 'goldwood_plank', 6); addItems(invRef.current, 'goldwood_bark', 3); addItems(invRef.current, 'shimmeroak_plank', 6)
     setStructures([])
     syncSkillHud()
     setHasStarter(false)
@@ -1274,10 +1299,11 @@ export default function Shimmer3D() {
       else if (nearNpc) { e.preventDefault(); talk(nearNpc) }
       else if (nearNodeRef.current || channelRef.current) { e.preventDefault(); toggleChannel() }
       else if (nearStationRef.current) { e.preventDefault(); openBrew() }
+      else if (nearTableRef.current) { e.preventDefault(); openCraft() }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [editMode, battle, nearNpc, advanceDialogue, talk, toggleChannel, openBrew])
+  }, [editMode, battle, nearNpc, advanceDialogue, talk, toggleChannel, openBrew, openCraft])
   // entering edit mode: start the spectator camera where the player is standing
   useEffect(() => { if (editMode) editFocusRef.current.copy(posRef.current!) }, [editMode])
   const [tool, setTool] = useState<Tool>('raise')
@@ -1399,7 +1425,7 @@ export default function Shimmer3D() {
           battleRef={battleRef} partyLevelRef={partyLevelRef} onEncounter={onEncounter} joyRef={joyRef}
           talkingRef={talkingRef} hasPartyRef={hasPartyRef} onNearChange={setNearNpc}
           harvestNodesRef={runtimeNodesRef} onNearNode={setNearNode} channel={channel}
-          structures={structures} placing={placing} placeTargetRef={placeTargetRef} structuresRef={structuresRef} onNearStation={setNearStation}
+          structures={structures} placing={placing} placeTargetRef={placeTargetRef} structuresRef={structuresRef} onNearStation={setNearStation} onNearTable={setNearTable}
           defeatedRef={defeatedRef} defeated={defeated} flagsRef={flagsRef}
           nodes={runtimeNodes}
         />
@@ -1452,6 +1478,14 @@ export default function Shimmer3D() {
           padding: '7px 14px', borderRadius: 999, background: 'rgba(17,12,24,0.92)', border: '1px solid #a679ff66',
           color: '#e2d4ff', font: '700 13px ui-monospace, monospace', whiteSpace: 'nowrap', pointerEvents: 'none',
         }}>⚗ Brew at the Alchemy Station <span style={{ opacity: 0.6 }}>({isTouch ? 'tap ⚗' : 'E'})</span></div>
+      )}
+      {/* craft prompt at a Crafting Table (station takes priority if adjacent to both) */}
+      {nearTable && !nearStation && !craftOpen && !nearNode && !nearNpc && !dialogue && !battle && !editMode && !placing && (
+        <div style={{
+          position: 'fixed', left: '50%', bottom: 156, transform: 'translateX(-50%)', zIndex: 35,
+          padding: '7px 14px', borderRadius: 999, background: 'rgba(24,18,10,0.92)', border: '1px solid #d9b84a66',
+          color: '#f0e2c4', font: '700 13px ui-monospace, monospace', whiteSpace: 'nowrap', pointerEvents: 'none',
+        }}>🔨 Craft at the Crafting Table <span style={{ opacity: 0.6 }}>({isTouch ? 'tap 🔨' : 'E'})</span></div>
       )}
       {/* channeling indicator — mana is powering the tool; the node's HP bar drains over it */}
       {channel && !battle && !editMode && (
@@ -1646,10 +1680,10 @@ export default function Shimmer3D() {
             >✕</button>
             {/* A — interact/confirm (lower, bigger, where the thumb rests): advance dialogue / talk to an NPC / confirm New Game. */}
             <button
-              onPointerDown={(e) => { e.stopPropagation(); if (dialogue) advanceDialogue(); else if (nearNpc) talk(nearNpc); else if (nearNode || channel) toggleChannel(); else if (nearStation) openBrew(); else if (confirmNew) { setConfirmNew(false); newGame() } }}
+              onPointerDown={(e) => { e.stopPropagation(); if (dialogue) advanceDialogue(); else if (nearNpc) talk(nearNpc); else if (nearNode || channel) toggleChannel(); else if (nearStation) openBrew(); else if (nearTable) openCraft(); else if (confirmNew) { setConfirmNew(false); newGame() } }}
               aria-label="interact"
-              style={{ width: 76, height: 76, borderRadius: '50%', border: '2px solid #ffffff4d', background: nearNpc || dialogue ? 'rgba(212,168,67,0.85)' : channel ? 'rgba(58,123,213,0.9)' : nearNode ? 'rgba(79,199,154,0.85)' : nearStation ? 'rgba(166,121,255,0.85)' : 'rgba(36,84,72,0.8)', color: nearNpc || dialogue || nearNode || channel || nearStation ? '#0d1a17' : '#dffaf0', font: '800 23px ui-monospace, monospace', cursor: 'pointer', touchAction: 'none' }}
-            >{channel ? '⏹' : nearNode && !nearNpc && !dialogue ? '🪓' : nearStation && !nearNpc && !dialogue ? '⚗' : '✦'}</button>
+              style={{ width: 76, height: 76, borderRadius: '50%', border: '2px solid #ffffff4d', background: nearNpc || dialogue ? 'rgba(212,168,67,0.85)' : channel ? 'rgba(58,123,213,0.9)' : nearNode ? 'rgba(79,199,154,0.85)' : nearStation ? 'rgba(166,121,255,0.85)' : nearTable ? 'rgba(217,184,74,0.85)' : 'rgba(36,84,72,0.8)', color: nearNpc || dialogue || nearNode || channel || nearStation || nearTable ? '#0d1a17' : '#dffaf0', font: '800 23px ui-monospace, monospace', cursor: 'pointer', touchAction: 'none' }}
+            >{channel ? '⏹' : nearNode && !nearNpc && !dialogue ? '🪓' : nearStation && !nearNpc && !dialogue ? '⚗' : nearTable && !nearNpc && !dialogue ? '🔨' : '✦'}</button>
           </div>
         </>
       )}
@@ -1707,6 +1741,45 @@ export default function Shimmer3D() {
                   )
                 })}
               </div>
+            </div>
+          </div>
+        )
+      })()}
+
+      {/* CRAFTING TABLE menu — skill-less: gated by materials + mana only */}
+      {craftOpen && (() => {
+        const recipes = getRecipes()
+        return (
+          <div style={{ position: 'fixed', inset: 0, zIndex: 47, background: '#05070ae8', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16, touchAction: 'none' }}>
+            <div style={{ width: 'min(440px, 95vw)', maxHeight: '86vh', overflowY: 'auto', background: '#171205', border: '2px solid #6b5220', borderRadius: 16, padding: '18px 18px 14px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                <span style={{ font: '900 16px ui-monospace, monospace', color: '#e0b64e', letterSpacing: '0.1em' }}>🔨 CRAFTING TABLE</span>
+                <button onClick={closeCraft} style={{ ...menuBtn, padding: '4px 10px' }}>✕</button>
+              </div>
+              <div style={{ font: '600 10px ui-monospace, monospace', color: '#b09660', marginBottom: 12 }}>Build stations from gathered materials</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
+                {recipes.map(def => {
+                  const ok = canCraft(def.id, invRef.current, manaRef.current)
+                  return (
+                    <div key={def.id} style={{ background: '#241b09', border: '1px solid #ffffff14', borderRadius: 10, padding: '9px 11px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+                        <span style={{ font: '800 13px ui-monospace, monospace', color: '#f0e2c4' }}>{def.name}</span>
+                        <span style={{ font: '700 10px ui-monospace, monospace', color: '#b09660' }}>{def.manaCost}◈</span>
+                      </div>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 6, alignItems: 'center' }}>
+                        {def.recipe.map(r => {
+                          const have = countItem(invRef.current, r.itemId)
+                          const short = have < r.count
+                          return <span key={r.itemId} style={{ font: '700 10px ui-monospace, monospace', color: short ? '#ff8a7a' : '#d9c78a', background: '#0007', border: `1px solid ${short ? '#ff5a4d55' : '#5c4f2f'}`, borderRadius: 6, padding: '2px 7px' }}>{prettyItem(r.itemId)} {have}/{r.count}</span>
+                        })}
+                        <span style={{ flex: 1 }} />
+                        <button onClick={() => craft(def.id)} disabled={!ok} style={{ padding: '6px 14px', borderRadius: 8, border: 'none', background: ok ? '#b0862a' : '#3a3018', color: ok ? '#fff' : '#ffffff55', font: '800 12px ui-monospace, monospace', cursor: ok ? 'pointer' : 'default', touchAction: 'none' }}>Craft{def.resultCount > 1 ? ` ×${def.resultCount}` : ''}</button>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+              <div style={{ font: '600 9px ui-monospace, monospace', color: '#7d6a3e', marginTop: 12, textAlign: 'center' }}>Crafted stations go to your hotbar — double-tap to place them.</div>
             </div>
           </div>
         )
