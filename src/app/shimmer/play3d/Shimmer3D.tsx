@@ -1272,7 +1272,7 @@ function BattleRewards({ gold, rows, onClose }: {
     <div style={{ position: 'fixed', inset: 0, zIndex: 50, background: '#05070ae8', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16, touchAction: 'none', animation: 'rwdFade 0.25s ease-out' }}>
       <style>{`@keyframes rwdFade { from { opacity: 0 } to { opacity: 1 } }`}</style>
       <div style={{ width: 'min(430px, 94vw)', maxHeight: '88vh', overflowY: 'auto', background: '#0d1614', border: '2px solid #2f5c4f', borderRadius: 16, padding: '20px 20px 16px', boxShadow: '0 12px 48px #000a' }}>
-        <div style={{ textAlign: 'center', font: '900 20px ui-monospace, monospace', color: '#7fe3c8', letterSpacing: '0.12em', textShadow: '0 0 18px #7fe3c855' }}>THE FIELD IS YOURS</div>
+        <div style={{ textAlign: 'center', font: '900 20px ui-monospace, monospace', color: '#7fe3c8', letterSpacing: '0.14em', textShadow: '0 0 18px #7fe3c855' }}>SPOILS</div>
         {gold > 0 && (
           <div style={{ textAlign: 'center', font: '700 13px ui-monospace, monospace', color: '#ffd98a', marginTop: 6, letterSpacing: '0.06em' }}>+{gold} ✦ marks</div>
         )}
