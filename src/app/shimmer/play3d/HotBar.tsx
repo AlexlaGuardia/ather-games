@@ -52,20 +52,15 @@ function ItemTile({ item }: { item: ItemStack | null }) {
   )
 }
 
-export default function HotBar({ items: propItems, mana: propMana }: { items?: (ItemStack | null)[]; mana?: number } = {}) {
+export default function HotBar({ items: propItems }: { items?: (ItemStack | null)[] } = {}) {
   const [items, setItems] = useState<(ItemStack | null)[]>(propItems ?? PH_ITEMS)
   const [sel, setSel] = useState(0)
   const [bagOpen, setBagOpen] = useState(false)
-  const [phMana, setPhMana] = useState(0.62)
-  const mana = propMana ?? phMana                          // real mana when the walker supplies it
   const [tools] = useState<ToolGauge[]>(PH_TOOLS)
   const [isTouch, setIsTouch] = useState(false)
   useEffect(() => { setIsTouch(window.matchMedia('(pointer:coarse)').matches) }, [])
   // keep the display synced to the walker's real inventory (drag-drop reorders this local mirror)
   useEffect(() => { if (propItems) setItems(propItems) }, [propItems])
-
-  // placeholder mana regen — only when the walker isn't supplying a real value
-  useEffect(() => { if (propMana != null) return; const id = setInterval(() => setPhMana(m => Math.min(1, m + 0.02)), 700); return () => clearInterval(id) }, [propMana])
   // desktop number keys 1-6
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { const n = parseInt(e.key, 10); if (n >= 1 && n <= SLOTS) setSel(n - 1) }
@@ -157,17 +152,7 @@ export default function HotBar({ items: propItems, mana: propMana }: { items?: (
 
   return (
     <>
-      {/* MANA VIAL — top-right glass flask; drains on use, regens over time */}
-      <div style={{ position: 'fixed', top: 12, right: 14, zIndex: 34, display: 'flex', flexDirection: 'column', alignItems: 'center', pointerEvents: 'none' }}>
-        <svg width={34} height={54} viewBox="0 0 34 54">
-          <defs><clipPath id="vialclip"><path d="M11 3 h12 v14 l7 24 a9 9 0 0 1-8 13 h-10 a9 9 0 0 1-8-13 l7-24 z" /></clipPath>
-            <linearGradient id="manaGrad" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#6fd0e6" /><stop offset="1" stopColor="#3a7bd5" /></linearGradient></defs>
-          <rect x="0" y={54 - 54 * mana} width="34" height={54 * mana} fill="url(#manaGrad)" clipPath="url(#vialclip)" />
-          <path d="M11 3 h12 v14 l7 24 a9 9 0 0 1-8 13 h-10 a9 9 0 0 1-8-13 l7-24 z" fill="none" stroke="#cfe9f2" strokeWidth="2" opacity="0.85" />
-          <rect x="9" y="1" width="16" height="4" rx="2" fill="#cfe9f2" opacity="0.85" />
-        </svg>
-        <span style={{ font: '700 8px ui-monospace, monospace', color: '#9fd6e6', letterSpacing: '0.1em', marginTop: 1 }}>MANA</span>
-      </div>
+      {/* (mana gauge now lives in the top-right HUD in Shimmer3D) */}
 
       {/* SATCHEL — the bag extends the hotbar: its 6 slots are the bottom row of this grid */}
       {bagOpen && (

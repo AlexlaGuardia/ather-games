@@ -53,6 +53,10 @@ const NODE_TOOL_IDS = new Set<string>(NODE_TOOLS.map(t => t.id))
 // itemId → display label (e.g. shimmeroak_plank → "Shimmeroak Plank"). Real item names live in
 // sprites/items.ts; this prettifier is enough for harvest toasts until those are wired.
 const prettyItem = (id: string) => id.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')
+const menuBtn: React.CSSProperties = { padding: '6px 11px', borderRadius: 7, border: '1px solid #ffffff2a', background: '#16142a', color: '#e9dfc8', font: '700 11px ui-monospace, monospace', cursor: 'pointer', whiteSpace: 'nowrap' }
+// Felt mana cost of one chop = a FRACTION of the pool, scaling up with node tier (its minLevel).
+// A low tree (goldwood, Lv1) ≈ 1/9 of the pool; higher tiers eat more. Pure feel — tune here.
+const nodeManaFrac = (type: NodeType) => Math.min(0.6, 0.11 + (NODE_DEFS[type].minLevel - 1) * 0.018)
 
 function buckets(grid: number[][]) {
   const floors: Cell[] = [], walls: Cell[] = [], waters: Cell[] = [], voids: Cell[] = [], warps: Cell[] = [], mists: Cell[] = []
@@ -798,6 +802,8 @@ export default function Shimmer3D() {
   useEffect(() => { if (!harvestToast) return; const t = setTimeout(() => setHarvestToast(null), 2400); return () => clearTimeout(t) }, [harvestToast])
   const channelRef = useRef<{ node: ResourceNode; progress: number; durSec: number } | null>(null)
   const [channel, setChannel] = useState<{ nodeId: string; label: string; hp: number } | null>(null)
+  const [menuOpen, setMenuOpen] = useState(false)     // ☰ — edit terrain / new game
+  const [skillsOpen, setSkillsOpen] = useState(false) // skills panel
   const toggleChannel = useCallback(() => {
     if (channelRef.current) { channelRef.current = null; setChannel(null); return }   // unlink
     const node = nearNodeRef.current
@@ -817,7 +823,8 @@ export default function Shimmer3D() {
       const p = posRef.current!
       const dist = Math.max(Math.abs(ch.node.tileX - p.x), Math.abs(ch.node.tileY - p.z))
       const def = NODE_DEFS[ch.node.type]
-      const drain = (def.manaCost / ch.durSec) * dt
+      const totalCost = getMaxPool(skillsRef.current.mana.level) * nodeManaFrac(ch.node.type)
+      const drain = (totalCost / ch.durSec) * dt          // spread the pool-fraction cost over the chop
       if (dist > CHANNEL_RANGE || ch.node.state !== 'harvestable') { channelRef.current = null; setChannel(null); return }
       if (manaRef.current.current < drain) { channelRef.current = null; setChannel(null); setHarvestToast('Out of mana'); return }
       manaRef.current.current -= drain
@@ -1277,21 +1284,64 @@ export default function Shimmer3D() {
         }}>{harvestToast}</div>
       )}
 
-      {/* forestry readout — Lv + XP bar, pulses on a gain so "the skill advances" reads on screen */}
-      {!battle && !editMode && !dialogue && (
-        <div key={forestry.pulse} style={{
-          position: 'fixed', top: 74, right: 14, zIndex: 34, width: 116, pointerEvents: 'none',
-          background: 'rgba(11,21,19,0.82)', border: '1px solid #2f5c4f', borderRadius: 9, padding: '6px 8px',
-          animation: forestry.pulse ? 'fstPulse 0.5s ease-out' : undefined,
-        }}>
-          <style>{`@keyframes fstPulse { 0%{box-shadow:0 0 0 #4fc79a00} 40%{box-shadow:0 0 14px #4fc79aaa} 100%{box-shadow:0 0 0 #4fc79a00} }`}</style>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-            <span style={{ font: '700 10px ui-monospace, monospace', color: '#8fd9c4', letterSpacing: '0.06em' }}>FORESTRY</span>
-            <span style={{ font: '800 12px ui-monospace, monospace', color: '#eafff6' }}>Lv {forestry.level}</span>
+      {/* ── TOP-RIGHT HUD: mana pie gauge · ☰ menu (edit/new game) · skills panel ── */}
+      {!battle && !approach && !rewards && !editMode && !dialogue && (
+        <div style={{ position: 'fixed', top: 12, right: 12, zIndex: 34, display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 9 }}>
+          {/* mana pie — 1-100% of the pool; drains live while channeling */}
+          <div style={{
+            width: 104, height: 104, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center',
+            background: `conic-gradient(#4aa3e6 ${manaFrac * 360}deg, rgba(10,20,28,0.72) ${manaFrac * 360}deg)`,
+            border: '2px solid #2f5c4f', boxShadow: '0 3px 16px #0008',
+          }}>
+            <div style={{ width: 74, height: 74, borderRadius: '50%', background: '#0b1513', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', border: '1px solid #ffffff12' }}>
+              <span style={{ font: '800 22px ui-monospace, monospace', color: '#bfe0ff', lineHeight: 1 }}>{Math.round(manaFrac * 100)}</span>
+              <span style={{ font: '700 8px ui-monospace, monospace', color: '#7fa8c8', letterSpacing: '0.14em', marginTop: 2 }}>MANA</span>
+            </div>
           </div>
-          <div style={{ height: 5, background: '#0008', borderRadius: 3, overflow: 'hidden', marginTop: 4, border: '1px solid #0006' }}>
-            <div style={{ height: '100%', width: `${Math.min(100, Math.round((forestry.xp / Math.max(1, forestry.next)) * 100))}%`, background: 'linear-gradient(90deg,#4fc79a,#eafff6)', transition: 'width 0.4s ease-out' }} />
-          </div>
+
+          {/* ☰ menu button */}
+          <button onClick={() => { setMenuOpen(o => !o); setSkillsOpen(false) }} style={{
+            width: 40, height: 40, borderRadius: 10, border: `1px solid ${menuOpen ? '#d4a843' : '#ffffff33'}`,
+            background: menuOpen ? '#241d10' : 'rgba(16,20,32,0.86)', color: '#e9dfc8', font: '800 18px ui-monospace, monospace', cursor: 'pointer',
+          }}>☰</button>
+          {menuOpen && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'flex-end', background: 'rgba(12,16,26,0.94)', border: '1px solid #ffffff20', borderRadius: 10, padding: 8 }}>
+              {isOwner && <button onClick={() => { setMenuOpen(false); setEditMode(true) }} style={menuBtn}>✎ Edit terrain</button>}
+              {confirmNew ? (
+                <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                  <span style={{ color: '#e9dfc8', font: '700 11px ui-monospace, monospace' }}>reset?</span>
+                  <button onClick={() => { setConfirmNew(false); setMenuOpen(false); newGame() }} style={{ ...menuBtn, background: '#b9483f', color: '#fff' }}>Yes</button>
+                  <button onClick={() => setConfirmNew(false)} style={menuBtn}>No</button>
+                </div>
+              ) : <button onClick={() => setConfirmNew(true)} style={menuBtn}>↺ New Game</button>}
+            </div>
+          )}
+
+          {/* skills button */}
+          <button onClick={() => { setSkillsOpen(o => !o); setMenuOpen(false) }} style={{
+            width: 40, height: 40, borderRadius: 10, border: `1px solid ${skillsOpen ? '#4fc79a' : '#ffffff33'}`,
+            background: skillsOpen ? '#12261f' : 'rgba(16,20,32,0.86)', color: '#cfeee2', font: '800 16px ui-monospace, monospace', cursor: 'pointer',
+          }}>⬡</button>
+          {skillsOpen && (
+            <div style={{ width: 168, background: 'rgba(11,21,19,0.96)', border: '1px solid #2f5c4f', borderRadius: 11, padding: 10 }}>
+              <div style={{ font: '800 10px ui-monospace, monospace', color: '#8fd9c4', letterSpacing: '0.12em', marginBottom: 8, textAlign: 'center' }}>SKILLS</div>
+              {(['forestry', 'prospecting', 'rinning', 'farming', 'alchemy'] as const).map(id => {
+                const sk = skillsRef.current[id]
+                const next = xpForSkillLevel(sk.level)
+                return (
+                  <div key={id} style={{ marginBottom: 8 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+                      <span style={{ font: '700 10px ui-monospace, monospace', color: '#cfeee2' }}>{SKILL_META[id].name}</span>
+                      <span style={{ font: '800 11px ui-monospace, monospace', color: '#eafff6' }}>Lv {sk.level}</span>
+                    </div>
+                    <div style={{ height: 4, background: '#0008', borderRadius: 3, overflow: 'hidden', marginTop: 3, border: '1px solid #0006' }}>
+                      <div style={{ height: '100%', width: `${Math.min(100, Math.round((sk.xp / Math.max(1, next)) * 100))}%`, background: 'linear-gradient(90deg,#4fc79a,#eafff6)' }} />
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
         </div>
       )}
 
@@ -1320,35 +1370,6 @@ export default function Shimmer3D() {
         }}>{banner}</div>
       )}
 
-      {/* top-right (walking): owner Edit-enter + New Game (two-tap confirm). Bottom corners are the controls. */}
-      {!battle && !editMode && (
-        <div style={{ position: 'fixed', top: 12, right: 12, zIndex: 20, display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'flex-end' }}>
-          {isOwner && (
-            <button onClick={() => setEditMode(true)} style={{
-              padding: '6px 12px', borderRadius: 6, border: '1px solid #ffffff33', background: '#16142a', color: '#e9dfc8',
-              font: '700 12px ui-monospace, monospace', cursor: 'pointer',
-            }}>Edit terrain</button>
-          )}
-          {confirmNew ? (
-            <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-              <span style={{ color: '#e9dfc8', font: '700 12px ui-monospace, monospace' }}>reset party?</span>
-              <button onClick={() => { setConfirmNew(false); newGame() }} style={{
-                padding: '6px 12px', borderRadius: 6, border: 'none', background: '#b9483f', color: '#fff',
-                font: '800 12px ui-monospace, monospace', cursor: 'pointer',
-              }}>Yes</button>
-              <button onClick={() => setConfirmNew(false)} style={{
-                padding: '6px 12px', borderRadius: 6, border: '1px solid #ffffff33', background: '#16142a', color: '#e9dfc8',
-                font: '700 12px ui-monospace, monospace', cursor: 'pointer',
-              }}>No</button>
-            </div>
-          ) : (
-            <button onClick={() => setConfirmNew(true)} style={{
-              padding: '6px 12px', borderRadius: 6, border: '1px solid #ffffff33', background: '#16142a', color: '#e9dfc8',
-              font: '700 12px ui-monospace, monospace', cursor: 'pointer',
-            }}>New Game</button>
-          )}
-        </div>
-      )}
 
       {editMode && (
         <div style={{ position: 'fixed', top: 70, left: 12, display: 'flex', flexDirection: 'column', gap: 3 }}>
@@ -1407,7 +1428,7 @@ export default function Shimmer3D() {
       )}
 
       {/* Hotbar HUD — bag + 6 quick-slots + tool gauges + mana vial. Only while walking the world. */}
-      {!battle && !approach && !rewards && !editMode && !dialogue && <HotBar items={invSlots} mana={manaFrac} />}
+      {!battle && !approach && !rewards && !editMode && !dialogue && <HotBar items={invSlots} />}
 
       {/* ── Mobile controls: joystick (move) bottom-left · A interact / B cancel bottom-right ── */}
       {isTouch && !battle && !editMode && (
