@@ -333,8 +333,12 @@ function Player({ posRef, gridRef, heightsRef, zoneIdRef, editRef, onWarp, battl
         else if (encGrace.current <= 0 && hasPartyRef.current) {
           const cell = grid[tz]?.[tx]
           if (cell !== undefined && (cell & 0xFF) === MIST_ID) {
-            const enc = rollEncounter(zoneIdRef.current, partyLevelRef.current)
-            if (enc) { encGrace.current = ENCOUNTER_GRACE; onEncounter(enc) }
+            // The FIRST mist a new Keeper crosses is a guaranteed draw so the arena reliably
+            // introduces itself (the start zone has no mist, so this lands on the way to Thistle).
+            // Every crossing after is the normal per-step rate.
+            const force = !flagsRef.current.metFirstWild
+            const enc = rollEncounter(zoneIdRef.current, partyLevelRef.current, false, force)
+            if (enc) { encGrace.current = ENCOUNTER_GRACE; flagsRef.current.metFirstWild = true; onEncounter(enc) }
           }
         }
       }

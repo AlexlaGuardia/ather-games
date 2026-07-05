@@ -192,8 +192,10 @@ export interface WildEncounter {
 
 /** Roll for a wild encounter when player steps on a veil tile.
  *  Only call this on VEIL tiles — non-veil tiles should never roll.
- *  isDense: true for dense veil (1.5x encounter rate, capped at 0.20) */
-export function rollEncounter(zoneId: string, playerLevel: number, isDense?: boolean): WildEncounter | null {
+ *  isDense: true for dense veil (1.5x encounter rate, capped at 0.20)
+ *  force: skip the rate roll and always draw (if the zone can spawn anything) — used to
+ *         guarantee a new Keeper's FIRST wild encounter so the arena reliably debuts. */
+export function rollEncounter(zoneId: string, playerLevel: number, isDense?: boolean, force?: boolean): WildEncounter | null {
   const table = ENCOUNTER_TABLES[zoneId]
   if (!table || table.entries.length === 0) return null
 
@@ -201,9 +203,9 @@ export function rollEncounter(zoneId: string, playerLevel: number, isDense?: boo
   const entries = table.entries.filter(e => LAUNCHED_SPECIES.includes(e.species))
   if (entries.length === 0) return null
 
-  // Rate check — dense veil gets boosted rate
+  // Rate check — dense veil gets boosted rate; a forced draw skips it entirely
   const rate = isDense ? Math.min(table.rate * 1.5, 0.20) : table.rate
-  if (Math.random() >= rate) return null
+  if (!force && Math.random() >= rate) return null
 
   // Weighted pick
   const totalWeight = entries.reduce((sum, e) => sum + e.weight, 0)
