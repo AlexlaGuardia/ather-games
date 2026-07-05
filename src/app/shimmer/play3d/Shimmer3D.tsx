@@ -275,8 +275,13 @@ function NodeMarkers({ nodes, heights, editing, channel }: { nodes: ResourceNode
             </>}
 
             {look.kind === 'water' && <>
-              {/* water surface — a low shimmering disc at ground level */}
-              <mesh position={[0, 0.05, 0]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
+              {/* basin rim — a darker earthen bank so the pool reads as water set INTO the ground */}
+              <mesh position={[0, 0.02, 0]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
+                <ringGeometry args={[0.5 * s, 0.64 * s, 24]} />
+                <meshStandardMaterial color={look.trunk} roughness={0.95} />
+              </mesh>
+              {/* water surface — a low shimmering disc just inside the bank */}
+              <mesh position={[0, 0.035, 0]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
                 <circleGeometry args={[0.52 * s, 20]} />
                 <meshStandardMaterial color={look.canopy} emissive={look.canopy} emissiveIntensity={depleted ? 0.08 : (look.glow ?? 0.3)} roughness={0.15} metalness={0.3} transparent opacity={depleted ? 0.5 : 0.82} />
               </mesh>
@@ -641,6 +646,48 @@ function Player({ posRef, gridRef, heightsRef, zoneIdRef, editRef, onWarp, battl
   )
 }
 
+// Blockout palette for the bonded Mana'mal follower (real sprites/models later, per the art rule).
+const BEAST_COLOR: Record<string, string> = {
+  drifthorn: '#c9b6ea', dustwhisker: '#e6cf9a', sporeling: '#8fd97f', glowmite: '#8fd0ea', embermole: '#e69a6a',
+}
+
+// The active companion trails the player around the overworld — lags behind, catches up when you move.
+// Keeps its own smoothed position (no path history needed): each frame it steps toward the player,
+// stopping FOLLOW tiles away, so it strings out behind you and settles at your heel when you stop.
+function Follower({ posRef, heightsRef, color }: {
+  posRef: React.RefObject<THREE.Vector3>; heightsRef: React.RefObject<number[][]>; color: string
+}) {
+  const group = useRef<THREE.Group>(null)
+  const fx = useRef<number | null>(null)
+  const fz = useRef(0)
+  useFrame((state, dt) => {
+    const g = group.current; if (!g) return
+    const p = posRef.current
+    if (fx.current === null) { fx.current = p.x - 0.9; fz.current = p.z - 0.9 }
+    const dx = p.x - fx.current, dz = p.z - fz.current
+    const d = Math.hypot(dx, dz) || 1e-4
+    const FOLLOW = 1.15
+    if (d > FOLLOW) {
+      const step = (d - FOLLOW) * Math.min(1, dt * 7)
+      fx.current += (dx / d) * step
+      fz.current += (dz / d) * step
+    }
+    const h = (heightsRef.current[Math.round(fz.current)]?.[Math.round(fx.current)] ?? 0) * STEP
+    const bob = Math.sin(state.clock.elapsedTime * 4) * 0.05
+    g.position.set(fx.current, h + 0.42 + bob, fz.current)
+    g.rotation.y = Math.atan2(dx, dz)
+  })
+  return (
+    <group ref={group}>
+      <mesh castShadow><capsuleGeometry args={[0.2, 0.28, 4, 8]} /><meshStandardMaterial color={color} roughness={0.7} /></mesh>
+      {/* glow tuft — the mana sheen */}
+      <mesh position={[0, 0.32, 0]}><sphereGeometry args={[0.11, 8, 8]} /><meshStandardMaterial color={color} emissive={color} emissiveIntensity={0.35} roughness={0.4} /></mesh>
+      {/* face nub toward heading */}
+      <mesh position={[0, 0.03, 0.2]}><sphereGeometry args={[0.05, 6, 6]} /><meshStandardMaterial color="#0d1a17" /></mesh>
+    </group>
+  )
+}
+
 function CameraRig({ posRef, editFocusRef, yawRef, editRef }: {
   posRef: React.RefObject<THREE.Vector3>; editFocusRef: React.RefObject<THREE.Vector3>
   yawRef: React.RefObject<number>; editRef: React.RefObject<boolean>
@@ -728,6 +775,7 @@ function Scene(props: {
   structures: PlacedStruct[]; placing: { itemId: string; facing: number } | null
   placeTargetRef: React.RefObject<{ x: number; y: number } | null>; structuresRef: React.RefObject<PlacedStruct[]>
   onNearStation: (s: PlacedStruct | null) => void
+  companionColor: string | null
 }) {
   return (
     <>
@@ -746,6 +794,7 @@ function Scene(props: {
       <StructureMarkers structures={props.structures.filter(s => s.zoneId === props.zone.id)} heights={props.heights} />
       <PlacementGhost placing={props.placing} posRef={props.posRef} heights={props.heights} gridRef={props.gridRef} placeTargetRef={props.placeTargetRef} structuresRef={props.structuresRef} zoneIdRef={props.zoneIdRef} />
       <Player posRef={props.posRef} gridRef={props.gridRef} heightsRef={props.heightsRef} zoneIdRef={props.zoneIdRef} editRef={props.editRef} onWarp={props.onWarp} battleRef={props.battleRef} partyLevelRef={props.partyLevelRef} onEncounter={props.onEncounter} joyRef={props.joyRef} talkingRef={props.talkingRef} hasPartyRef={props.hasPartyRef} onNearChange={props.onNearChange} defeatedRef={props.defeatedRef} flagsRef={props.flagsRef} harvestNodesRef={props.harvestNodesRef} onNearNode={props.onNearNode} stationsRef={props.structuresRef} onNearStation={props.onNearStation} />
+      {props.companionColor && !props.editing && <Follower posRef={props.posRef} heightsRef={props.heightsRef} color={props.companionColor} />}
       <CameraRig posRef={props.posRef} editFocusRef={props.editFocusRef} yawRef={props.yawRef} editRef={props.editRef} />
     </>
   )
@@ -1685,6 +1734,7 @@ export default function Shimmer3D() {
           structures={structures} placing={placing} placeTargetRef={placeTargetRef} structuresRef={structuresRef} onNearStation={setNearStation}
           defeatedRef={defeatedRef} defeated={defeated} flagsRef={flagsRef}
           nodes={runtimeNodes}
+          companionColor={(() => { const b = beastsRef.current.find(x => x.id === activeBeastIdRef.current); void companionTick; return b ? (BEAST_COLOR[b.species] ?? '#9fd9c4') : null })()}
         />
       </Canvas>
 
