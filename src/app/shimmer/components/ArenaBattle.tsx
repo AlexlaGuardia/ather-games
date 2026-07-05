@@ -255,12 +255,12 @@ export default function ArenaBattle({ allies, enemies, seed, aidKit, onEnd, cont
           const side = TARGETED[armed]
           const list = side === 'enemy' ? ui.enemies : ui.allies
           return (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 5, background: '#0b1211ee', border: '1px solid #f0a52655', borderRadius: 10, padding: 6, maxWidth: 150 }}>
-              <div style={{ font: '700 8px ui-monospace, monospace', color: '#f0a526', letterSpacing: '0.1em', padding: '1px 3px' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 7, background: '#0b1211f2', border: '1px solid #f0a52666', borderRadius: 12, padding: 9, maxWidth: 190 }}>
+              <div style={{ font: '700 10px ui-monospace, monospace', color: '#f0a526', letterSpacing: '0.1em', padding: '1px 3px' }}>
                 {side === 'enemy' ? 'SOFTEN WHICH?' : 'SHELTER WHO?'}
               </div>
               <button onClick={() => fireAt(armed)}
-                style={{ textAlign: 'left', padding: '5px 8px', borderRadius: 7, border: '1px dashed #6fd0e688', background: '#12181aee', color: '#9fe3d2', font: '700 10px ui-monospace, monospace', cursor: 'pointer', touchAction: 'none' }}>
+                style={{ textAlign: 'left', padding: '9px 12px', borderRadius: 9, border: '1px dashed #6fd0e688', background: '#12181aee', color: '#9fe3d2', font: '800 12px ui-monospace, monospace', letterSpacing: '0.04em', cursor: 'pointer', touchAction: 'none' }}>
                 ⤿ AUTO
               </button>
               {list.filter(t => t.hp > 0).map(t => {
@@ -268,13 +268,13 @@ export default function ArenaBattle({ allies, enemies, seed, aidKit, onEnd, cont
                 const col = ELEMENT_COLORS[t.element] ?? '#7fe3c8'
                 return (
                   <button key={t.id} onClick={() => fireAt(armed, t.id)}
-                    style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, width: 132, padding: '5px 8px', borderRadius: 7,
-                      border: `1px solid ${flag ? '#ff5a4d' : '#ffffff22'}`, background: '#12181aee', color: '#eafff6', font: '700 10px ui-monospace, monospace', cursor: 'pointer', touchAction: 'none' }}>
-                    <span style={{ display: 'flex', alignItems: 'center', gap: 5, overflow: 'hidden' }}>
-                      <span style={{ width: 7, height: 7, borderRadius: 2, background: side === 'enemy' ? '#c9c9d2' : col, flexShrink: 0 }} />
+                    style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 9, width: 168, padding: '9px 12px', borderRadius: 9,
+                      border: `2px solid ${flag ? '#ff5a4d' : '#ffffff2a'}`, background: '#12181aee', color: '#eafff6', font: '700 12px ui-monospace, monospace', cursor: 'pointer', touchAction: 'none' }}>
+                    <span style={{ display: 'flex', alignItems: 'center', gap: 7, overflow: 'hidden' }}>
+                      <span style={{ width: 9, height: 9, borderRadius: 2, background: side === 'enemy' ? '#c9c9d2' : col, flexShrink: 0 }} />
                       <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{t.name}</span>
                     </span>
-                    <span style={{ font: '600 8px ui-monospace, monospace', color: flag ? '#ff8a7a' : '#7f9a92', flexShrink: 0 }}>
+                    <span style={{ font: '700 10px ui-monospace, monospace', color: flag ? '#ff8a7a' : '#7f9a92', flexShrink: 0 }}>
                       {flag ? '⚠' : `${Math.max(0, Math.round((t.hp / t.maxHp) * 100))}%`}
                     </span>
                   </button>

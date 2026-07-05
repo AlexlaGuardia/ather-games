@@ -522,6 +522,10 @@ function TouchJoystick({ joyRef }: { joyRef: React.RefObject<{ x: number; y: num
     joyRef.current.y = -dy / R // screen-down is forward-negative
   }
   const end = () => { active.current = false; setKnob({ x: 0, y: 0 }); joyRef.current.x = 0; joyRef.current.y = 0 }
+  // If the stick unmounts mid-drag (an encounter fires, edit mode opens…), onPointerUp never
+  // runs, so joyRef keeps its last vector and the player walks off in that direction once the
+  // stick remounts. Zero it on unmount so movement always stops cleanly.
+  useEffect(() => () => { joyRef.current.x = 0; joyRef.current.y = 0 }, [joyRef])
   return (
     <div
       ref={baseRef}
