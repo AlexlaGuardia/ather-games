@@ -11,7 +11,7 @@ import { walkable } from '../engine/player'
 import { ZONES, getZone, checkWarp, type Zone, type Warp } from '../world/zones'
 import { getHeightGrid } from '../world/heightmaps'
 import { rollEncounter, type WildEncounter } from '../engine/encounters'
-import { createSpirit, addXP, speciesDisplayName, type Spirit, type Species } from '../spirits/spirit'
+import { createSpirit, addXP, speciesDisplayName, ELEMENT_COLORS, type Spirit, type Species, type Element } from '../spirits/spirit'
 import { spiritsToSave, spiritsFromSave } from '../spirits/spirit-save'
 import { LAUNCHED_SPECIES } from '../engine/spirit-index'
 import type { AITier } from '../engine/battle-ai'
@@ -599,6 +599,8 @@ export default function Shimmer3D() {
   const defeatedRef = useRef(defeated); defeatedRef.current = defeated
   const [battle, setBattle] = useState<{ allies: Spirit[]; enemies: Spirit[]; aiTier: AITier; zoneId: string; reach?: boolean; captiveIdxs?: number[]; kind?: 'wild' | 'thistle' | 'sorrel' | 'brack' } | null>(null)
   const curBattleRef = useRef(battle); curBattleRef.current = battle
+  // Wild encounters play a brief "drawn to you" approach beat before the arena mounts (see below).
+  const [approach, setApproach] = useState<{ enc: WildEncounter; battle: NonNullable<typeof battle> } | null>(null)
   const [banner, setBanner] = useState<string | null>(null)
   const [nearNpc, setNearNpc] = useState<NPC3D | null>(null)
   const [dialogue, setDialogue] = useState<{ name: string; lines: string[]; speakers?: string[]; idx: number; grantAt?: number; onDone: () => void } | null>(null)
@@ -657,10 +659,21 @@ export default function Shimmer3D() {
   }, [persist])
 
   const onEncounter = useCallback((enc: WildEncounter) => {
-    battleRef.current = true
+    battleRef.current = true   // freeze the walker through the approach beat AND the fight
     const size = partyRef.current?.length ?? 1
-    setBattle({ allies: partyRef.current!, enemies: buildWildParty(enc, size), aiTier: enc.aiTier, zoneId: zoneIdRef.current, kind: 'wild' })
+    // Stage the fight, but show the approach beat first — the arena mounts when it commits.
+    setApproach({ enc, battle: { allies: partyRef.current!, enemies: buildWildParty(enc, size), aiTier: enc.aiTier, zoneId: zoneIdRef.current, kind: 'wild' } })
   }, [])
+
+  // Approach beat → arena: hold the "drawn to you" flash ~1.3s, then mount the real fight.
+  const commitApproach = useCallback(() => {
+    setApproach(a => { if (a) setBattle(a.battle); return null })
+  }, [])
+  useEffect(() => {
+    if (!approach) return
+    const t = setTimeout(commitApproach, 1300)
+    return () => clearTimeout(t)
+  }, [approach, commitApproach])
 
   // DEV: force a wild Keeper's Arena fight in-world, ignoring the party/zone/RNG gates —
   // so the arena can be feel-tested without owning a starter or being in an encounter zone.
@@ -1168,6 +1181,12 @@ export default function Shimmer3D() {
           the scripted liberation holds (thistle/sorrel/brack) still run the reach/captive
           turn-based scene until the freed-vs-forced beat is ruled back into the arena
           (CANON_GAPS: collar-breaks-on-win). */}
+      {/* wild-encounter approach beat — the mist stirs and a spirit is drawn to you, then the ring
+          materializes. Tap to skip straight into the fight. */}
+      {approach && !battle && (
+        <EncounterApproach name={approach.enc.name} element={approach.enc.element} onSkip={commitApproach} />
+      )}
+
       {battle && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 50, background: '#0a0a12' }}>
           {battle.kind === 'wild' ? (
@@ -1189,6 +1208,38 @@ export default function Shimmer3D() {
           )}
         </div>
       )}
+    </div>
+  )
+}
+
+// The wild-encounter approach beat — a short, canon-true "a spirit drifts toward you out of
+// curiosity" flourish that eases the jump from overworld to the arena (no hard cut). Element-tinted
+// bloom + the spirit's name, ~1.3s, tap anywhere to skip.
+function EncounterApproach({ name, element, onSkip }: { name: string; element: Element; onSkip: () => void }) {
+  const col = ELEMENT_COLORS[element] ?? '#7fe3c8'
+  return (
+    <div onPointerDown={onSkip} style={{
+      position: 'fixed', inset: 0, zIndex: 50, background: '#05070a', overflow: 'hidden', cursor: 'pointer',
+      touchAction: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', animation: 'encFade 0.22s ease-out',
+    }}>
+      <style>{`
+        @keyframes encFade { from { opacity: 0 } to { opacity: 1 } }
+        @keyframes encBloom { 0% { transform: scale(0.2); opacity: 0 } 45% { opacity: 0.95 } 100% { transform: scale(1.7); opacity: 0.5 } }
+        @keyframes encRise { 0% { transform: translateY(16px); opacity: 0 } 100% { transform: translateY(0); opacity: 1 } }
+        @keyframes encFlash { 0%, 72% { opacity: 0 } 88% { opacity: 0.8 } 100% { opacity: 0 } }
+      `}</style>
+      {/* element bloom drawing inward */}
+      <div style={{
+        position: 'absolute', width: '82vmin', height: '82vmin', borderRadius: '50%', filter: 'blur(2px)',
+        background: `radial-gradient(circle, ${col}cc 0%, ${col}44 42%, transparent 70%)`, animation: 'encBloom 1.15s ease-out forwards',
+      }} />
+      <div style={{ position: 'relative', textAlign: 'center', animation: 'encRise 0.5s ease-out 0.12s both' }}>
+        <div style={{ font: '700 12px ui-monospace, monospace', color: '#dfeee9', letterSpacing: '0.28em', opacity: 0.7, marginBottom: 8 }}>✦ THE MIST STIRS</div>
+        <div style={{ font: '900 30px ui-monospace, monospace', color: col, letterSpacing: '0.04em', textShadow: `0 0 22px ${col}88, 0 2px 6px #000` }}>{name}</div>
+        <div style={{ font: '600 14px ui-monospace, monospace', color: '#c9d6d1', marginTop: 8, opacity: 0.85 }}>is drawn to you…</div>
+      </div>
+      {/* end flash — snaps into the arena */}
+      <div style={{ position: 'absolute', inset: 0, background: '#eafff6', pointerEvents: 'none', animation: 'encFlash 1.3s ease-in forwards' }} />
     </div>
   )
 }
