@@ -22,6 +22,7 @@ const GARDEN_NODES: NodePlacement[] = [
   { type: 'goldwood' as NodeType, tileX: 5, tileY: 26 },
   { type: 'raw_mana_node' as NodeType, tileX: 15, tileY: 5 },
   { type: 'raw_mana_node' as NodeType, tileX: 16, tileY: 10 },
+  { type: 'small_pond' as NodeType, tileX: 11, tileY: 7 },  // canon START: "small pond (3 fish)"
 ]
 
 // Mycelial Path — mid zone, level 1-4 nodes

@@ -198,16 +198,37 @@ function NPCMarkers({ npcs, heights }: { npcs: NPC3D[]; heights: number[][] }) {
   )
 }
 
-// Resource-node placeholder looks — a trunk + canopy blockout per type (real models come later,
-// per the art rule). Canon reads: goldwood = golden, shimmeroak = larger with a rippled/shimmery
-// emerald canopy, starwillow = pale drooping, dawnwood = warm-glow. Crystals = angular gem shapes.
-const NODE_LOOK: Record<string, { trunk: string; canopy: string; scale: number; glow?: number; gem?: boolean }> = {
-  goldwood:   { trunk: '#8a6a3c', canopy: '#d9b84a', scale: 1 },
-  shimmeroak: { trunk: '#6f5330', canopy: '#4fc79a', scale: 1.35, glow: 0.35 },
-  starwillow: { trunk: '#9a8f7a', canopy: '#cfe6d0', scale: 1.15 },
-  dawnwood:   { trunk: '#7a4a34', canopy: '#f0a86a', scale: 1.2, glow: 0.5 },
-  raw_mana_node: { trunk: '#3a4a6a', canopy: '#6fbce6', scale: 0.8, gem: true, glow: 0.4 },
-  element_crystal_node: { trunk: '#5a3a6a', canopy: '#c88ae6', scale: 0.9, gem: true, glow: 0.5 },
+// Resource-node placeholder looks — a blockout per type (real models come later, per the art rule).
+// kind picks the FORM: 'tree' = trunk+canopy (forestry), 'crystal' = a shard cluster from a rock base
+// (prospecting), 'water' = a shimmering ripple pool (rinning). trunk = base/rock/water-bed color,
+// canopy = leaves/crystal/water-surface color. Canon reads inform the palette per tier.
+const NODE_LOOK: Record<string, { kind: 'tree' | 'crystal' | 'water'; trunk: string; canopy: string; scale: number; glow?: number }> = {
+  // Forestry
+  goldwood:   { kind: 'tree', trunk: '#8a6a3c', canopy: '#d9b84a', scale: 1 },
+  shimmeroak: { kind: 'tree', trunk: '#6f5330', canopy: '#4fc79a', scale: 1.35, glow: 0.35 },
+  starwillow: { kind: 'tree', trunk: '#9a8f7a', canopy: '#cfe6d0', scale: 1.15 },
+  dawnwood:   { kind: 'tree', trunk: '#7a4a34', canopy: '#f0a86a', scale: 1.2, glow: 0.5 },
+  // Prospecting — cloudy raw shard → violet element → clear pure core → golden ather (glow climbs with tier)
+  raw_mana_node:        { kind: 'crystal', trunk: '#4a5568', canopy: '#bcd4ea', scale: 0.85, glow: 0.4 },
+  element_crystal_node: { kind: 'crystal', trunk: '#4a3a5e', canopy: '#c88ae6', scale: 1.0,  glow: 0.6 },
+  pure_core_node:       { kind: 'crystal', trunk: '#3e5a58', canopy: '#a6efe2', scale: 1.1,  glow: 0.8 },
+  ather_crystal_node:   { kind: 'crystal', trunk: '#6a5a34', canopy: '#f0d986', scale: 1.25, glow: 1.0 },
+  // Rinning — still luminescent pools; larger spots = bigger water
+  small_pond: { kind: 'water', trunk: '#31505e', canopy: '#6fbcd9', scale: 1.0, glow: 0.3 },
+  stream:     { kind: 'water', trunk: '#31505e', canopy: '#82cce4', scale: 1.25, glow: 0.3 },
+  lake:       { kind: 'water', trunk: '#2b4552', canopy: '#5fa8d0', scale: 1.6, glow: 0.35 },
+}
+
+// Deterministic per-node shard/ripple layout (stable across frames — seeded by tile position).
+function nodeShards(tx: number, ty: number, count: number): { a: number; tilt: number; h: number; r: number }[] {
+  let s = ((tx * 73856093) ^ (ty * 19349663)) >>> 0
+  const rnd = () => { s = (s * 1103515245 + 12345) >>> 0; return s / 0xffffffff }
+  return Array.from({ length: count }, (_, i) => ({
+    a: (i / count) * Math.PI * 2 + rnd() * 0.7,   // angle around the base
+    tilt: 0.12 + rnd() * 0.32,                     // lean outward
+    h: 0.7 + rnd() * 0.7,                          // shard height factor
+    r: 0.14 + rnd() * 0.16,                        // distance from center
+  }))
 }
 function NodeMarkers({ nodes, heights, editing, channel }: { nodes: ResourceNode[]; heights: number[][]; editing: boolean; channel?: { nodeId: string; hp: number } | null }) {
   return (
@@ -231,12 +252,44 @@ function NodeMarkers({ nodes, heights, editing, channel }: { nodes: ResourceNode
                 </div>
               </Html>
             )}
-            {/* trunk — a lone stump when depleted (canopy harvested, regrowing) */}
-            <mesh position={[0, (depleted ? 0.18 : 0.5) * s, 0]} castShadow><cylinderGeometry args={[0.13 * s, 0.17 * s, (depleted ? 0.36 : 1) * s, 7]} /><meshStandardMaterial color={look.trunk} roughness={0.9} opacity={depleted ? 0.7 : 1} transparent={depleted} /></mesh>
-            {/* canopy — hidden while depleted */}
-            {!depleted && (look.gem
-              ? <mesh position={[0, s + 0.2, 0]} castShadow><octahedronGeometry args={[0.45 * s, 0]} /><meshStandardMaterial color={look.canopy} emissive={look.canopy} emissiveIntensity={look.glow ?? 0.3} roughness={0.3} /></mesh>
-              : <mesh position={[0, s + 0.35 * s, 0]} castShadow><icosahedronGeometry args={[0.62 * s, 0]} /><meshStandardMaterial color={look.canopy} emissive={look.canopy} emissiveIntensity={look.glow ?? 0} roughness={0.8} flatShading /></mesh>)}
+            {look.kind === 'tree' && <>
+              {/* trunk — a lone stump when depleted (canopy harvested, regrowing) */}
+              <mesh position={[0, (depleted ? 0.18 : 0.5) * s, 0]} castShadow><cylinderGeometry args={[0.13 * s, 0.17 * s, (depleted ? 0.36 : 1) * s, 7]} /><meshStandardMaterial color={look.trunk} roughness={0.9} opacity={depleted ? 0.7 : 1} transparent={depleted} /></mesh>
+              {!depleted && <mesh position={[0, s + 0.35 * s, 0]} castShadow><icosahedronGeometry args={[0.62 * s, 0]} /><meshStandardMaterial color={look.canopy} emissive={look.canopy} emissiveIntensity={look.glow ?? 0} roughness={0.8} flatShading /></mesh>}
+            </>}
+
+            {look.kind === 'crystal' && <>
+              {/* rock base — always present; the shards break off it when mined */}
+              <mesh position={[0, 0.12 * s, 0]} castShadow><dodecahedronGeometry args={[0.28 * s, 0]} /><meshStandardMaterial color={look.trunk} roughness={0.95} flatShading /></mesh>
+              {/* shard cluster — angular crystals leaning outward from the base; gone while depleted */}
+              {!depleted && nodeShards(n.tileX, n.tileY, 4).map((sh, i) => (
+                <mesh key={i} castShadow
+                  position={[Math.cos(sh.a) * sh.r * s, (0.2 + sh.h * 0.42) * s, Math.sin(sh.a) * sh.r * s]}
+                  rotation={[Math.cos(sh.a) * sh.tilt, sh.a, Math.sin(sh.a) * sh.tilt]}>
+                  <octahedronGeometry args={[0.17 * s, 0]} />
+                  <meshStandardMaterial color={look.canopy} emissive={look.canopy} emissiveIntensity={look.glow ?? 0.4} roughness={0.25} metalness={0.1} transparent opacity={0.92} />
+                </mesh>
+              ))}
+              {/* a taller center shard for a readable silhouette */}
+              {!depleted && <mesh position={[0, 0.62 * s, 0]} castShadow rotation={[0.08, 0.6, 0.05]}><octahedronGeometry args={[0.22 * s, 0]} /><meshStandardMaterial color={look.canopy} emissive={look.canopy} emissiveIntensity={(look.glow ?? 0.4) + 0.1} roughness={0.2} transparent opacity={0.95} /></mesh>}
+            </>}
+
+            {look.kind === 'water' && <>
+              {/* water surface — a low shimmering disc at ground level */}
+              <mesh position={[0, 0.05, 0]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
+                <circleGeometry args={[0.52 * s, 20]} />
+                <meshStandardMaterial color={look.canopy} emissive={look.canopy} emissiveIntensity={depleted ? 0.08 : (look.glow ?? 0.3)} roughness={0.15} metalness={0.3} transparent opacity={depleted ? 0.5 : 0.82} />
+              </mesh>
+              {/* ripple rings — the catch-spot tell; calmer (single, dim) while fished out */}
+              {[0.62, 0.82].slice(0, depleted ? 1 : 2).map((rr, i) => (
+                <mesh key={i} position={[0, 0.06, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+                  <ringGeometry args={[rr * s * 0.5, rr * s * 0.5 + 0.03 * s, 24]} />
+                  <meshBasicMaterial color={look.canopy} transparent opacity={depleted ? 0.18 : 0.4} />
+                </mesh>
+              ))}
+              {/* bobber — a small float that marks an active spot; hidden when fished out */}
+              {!depleted && <mesh position={[0.16 * s, 0.14, 0.1 * s]} castShadow><sphereGeometry args={[0.07 * s, 8, 8]} /><meshStandardMaterial color="#e0607a" emissive="#e0607a" emissiveIntensity={0.25} roughness={0.5} /></mesh>}
+            </>}
             {editing && (
               <Html position={[0, s + 1.2, 0]} center distanceFactor={12} pointerEvents="none">
                 <div style={{ font: '700 10px ui-monospace, monospace', color: '#0d1a17', background: '#eafff6d0', border: '1px solid #2f5c4f', borderRadius: 5, padding: '1px 5px', whiteSpace: 'nowrap' }}>{n.type}</div>
