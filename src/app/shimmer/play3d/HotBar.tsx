@@ -76,11 +76,15 @@ export default function HotBar() {
   useEffect(() => {
     const onMove = (e: PointerEvent) => {
       const p = press.current; if (!p) return
-      if (!p.moved && Math.hypot(e.clientX - p.x, e.clientY - p.y) > 8) p.moved = true
-      if (p.moved) setDrag({ idx: p.idx, x: e.clientX, y: e.clientY })
+      if (!p.moved && Math.hypot(e.clientX - p.x, e.clientY - p.y) > 8) {
+        p.moved = true
+        document.body.style.userSelect = 'none'; (document.body.style as CSSStyleDeclaration & { webkitUserSelect?: string }).webkitUserSelect = 'none'
+      }
+      if (p.moved) { e.preventDefault(); setDrag({ idx: p.idx, x: e.clientX, y: e.clientY }) }
     }
     const onUp = (e: PointerEvent) => {
       const p = press.current; press.current = null
+      document.body.style.userSelect = ''; (document.body.style as CSSStyleDeclaration & { webkitUserSelect?: string }).webkitUserSelect = ''
       if (!p) return
       if (p.moved) {
         const el = (document.elementFromPoint(e.clientX, e.clientY) as HTMLElement | null)?.closest('[data-slotidx]') as HTMLElement | null
@@ -91,7 +95,7 @@ export default function HotBar() {
       }
       setDrag(null)
     }
-    window.addEventListener('pointermove', onMove); window.addEventListener('pointerup', onUp)
+    window.addEventListener('pointermove', onMove, { passive: false }); window.addEventListener('pointerup', onUp)
     return () => { window.removeEventListener('pointermove', onMove); window.removeEventListener('pointerup', onUp) }
   }, [])
 
@@ -109,6 +113,7 @@ export default function HotBar() {
         boxShadow: on ? '0 0 12px #7fe3c866, inset 0 1px 0 #ffffff10' : 'inset 0 1px 0 #ffffff08',
         opacity: dragging ? 0.35 : 1, transform: on ? 'translateY(-3px)' : 'none',
         transition: 'transform 0.1s, box-shadow 0.1s, border-color 0.1s', cursor: 'grab', touchAction: 'none',
+        userSelect: 'none', WebkitUserSelect: 'none', WebkitTouchCallout: 'none',
       }}>
         <ItemTile item={items[idx]} />
         {idx < SLOTS && <span style={{ position: 'absolute', left: 3, top: 1, font: '700 9px ui-monospace, monospace', color: on ? '#7fe3c8' : '#ffffff40' }}>{idx + 1}</span>}
