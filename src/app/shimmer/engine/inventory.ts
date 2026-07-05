@@ -92,15 +92,21 @@ function getMaxStack(itemId: string): number {
 }
 
 /** Add items to inventory. Returns leftover count that couldn't fit.
- *  Furniture items are restricted to storage slots (0-14), never hotbar. */
+ *  The hotbar (slots 15-19) is a deliberate, player-arranged quick row: auto-add NEVER
+ *  drops a new item into an empty hotbar slot (that churn is what made hotbar layouts feel
+ *  like they "reset" every time you gathered). Existing hotbar stacks still top up — a
+ *  resource you keep in the hotbar keeps growing — but new/other loot only ever fills storage.
+ *  Furniture is storage-only in both passes. */
 export function addItems(inv: Inventory, itemId: string, count: number, maxStack?: number): number {
   const max = maxStack ?? getMaxStack(itemId)
   const isFurn = isFurnitureItem(itemId)
-  const slotLimit = isFurn ? HOTBAR_START : inv.slots.length  // furniture: storage only
+  // Top-up pass may reach the hotbar for non-furniture; empty-fill pass never does.
+  const topUpLimit = isFurn ? HOTBAR_START : inv.slots.length
+  const fillLimit = HOTBAR_START  // new items → storage only (0-14)
   let remaining = count
 
-  // First pass: fill existing stacks of same item
-  for (let i = 0; i < slotLimit && remaining > 0; i++) {
+  // First pass: fill existing stacks of same item (incl. a stack the player keeps in the hotbar)
+  for (let i = 0; i < topUpLimit && remaining > 0; i++) {
     const slot = inv.slots[i]
     if (slot && slot.itemId === itemId && slot.count < max) {
       const space = max - slot.count
@@ -110,8 +116,8 @@ export function addItems(inv: Inventory, itemId: string, count: number, maxStack
     }
   }
 
-  // Second pass: fill empty slots
-  for (let i = 0; i < slotLimit && remaining > 0; i++) {
+  // Second pass: fill empty STORAGE slots only — leave the hotbar layout untouched
+  for (let i = 0; i < fillLimit && remaining > 0; i++) {
     if (inv.slots[i] === null) {
       const add = Math.min(max, remaining)
       inv.slots[i] = { itemId, count: add }

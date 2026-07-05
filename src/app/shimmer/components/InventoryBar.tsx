@@ -55,12 +55,29 @@ export default function InventoryBar({
   const tooltipItem = hoverSlot !== null ? slots[hoverSlot] : null
   const tooltipDef = tooltipItem ? ITEM_DEFS.find(i => i.id === tooltipItem.itemId) : null
 
+  // --- Click-away to close the bag ---
+  const rootRef = useRef<HTMLDivElement>(null)
+
   useEffect(() => {
     return () => {
       if (tapTimerRef.current) clearTimeout(tapTimerRef.current)
       if (holdTimerRef.current) clearTimeout(holdTimerRef.current)
     }
   }, [])
+
+  // Close the storage panel when the player taps anywhere outside the whole inventory bar
+  // (canvas, other UI). Listener only lives while the bag is open, so it only ever closes.
+  useEffect(() => {
+    if (!bagOpen) return
+    const onPointerDown = (e: PointerEvent) => {
+      if (rootRef.current && !rootRef.current.contains(e.target as Node)) {
+        onToggleBag()
+      }
+    }
+    // Defer one frame so the same tap that opened the bag doesn't immediately close it
+    const id = setTimeout(() => document.addEventListener('pointerdown', onPointerDown), 0)
+    return () => { clearTimeout(id); document.removeEventListener('pointerdown', onPointerDown) }
+  }, [bagOpen, onToggleBag])
 
   // Clear held slot when bag closes
   useEffect(() => {
@@ -179,7 +196,7 @@ export default function InventoryBar({
   }
 
   return (
-    <div className="flex items-end gap-0">
+    <div ref={rootRef} className="flex items-end gap-0">
       {/* Bag toggle button */}
       <button
         onClick={onToggleBag}
@@ -206,7 +223,8 @@ export default function InventoryBar({
                 <span className="font-display text-[9px] text-[#d4a843]/50 tracking-wider uppercase">Storage</span>
                 <button
                   onClick={onToggleBag}
-                  className="w-4 h-4 flex items-center justify-center rounded text-red-400/60 hover:text-red-400 hover:bg-red-400/10 transition-colors text-[10px] font-bold"
+                  aria-label="Close bag"
+                  className="w-6 h-6 -mr-1 flex items-center justify-center rounded-md bg-red-500/15 text-red-400/80 hover:text-red-300 hover:bg-red-500/25 active:scale-90 transition-all text-[13px] font-bold leading-none"
                 >
                   ✕
                 </button>
