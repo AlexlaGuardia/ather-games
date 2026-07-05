@@ -31,6 +31,30 @@ export const RECIPE_DEFS: Record<string, RecipeDef> = {
     manaCost: 8, resultCount: 1,
     recipe: [{ itemId: 'shimmeroak_plank', count: 6 }, { itemId: 'raw_mana_shard', count: 4 }],
   },
+
+  // Tier 1 — Chest: same itemId + recipe as the 2D game's furniture Wooden Chest (sprites/furniture.ts),
+  // so the two walkers agree on what it costs to build one.
+  chest: {
+    id: 'chest', name: 'Chest', tier: 1,
+    manaCost: 4, resultCount: 1,
+    recipe: [{ itemId: 'goldwood_plank', count: 8 }, { itemId: 'goldwood_bark', count: 4 }],
+  },
+
+  // Tier 2 — Exchange Booth: pricier than the Alchemy Station (it's the market itself), sturdier
+  // wood + more raw mana to seat the connection to the Ather Exchange.
+  exchange_booth: {
+    id: 'exchange_booth', name: 'Exchange Booth', tier: 2,
+    manaCost: 10, resultCount: 1,
+    recipe: [{ itemId: 'shimmeroak_plank', count: 10 }, { itemId: 'raw_mana_shard', count: 6 }],
+  },
+
+  // Tier 1 — Farm Planter: cheap and renewable, same spirit as the Crafting Table (farming starts
+  // at level 1, so the entry station should be gettable day one).
+  farm_planter: {
+    id: 'farm_planter', name: 'Farm Planter', tier: 1,
+    manaCost: 3, resultCount: 1,
+    recipe: [{ itemId: 'goldwood_plank', count: 3 }, { itemId: 'goldwood_bark', count: 2 }],
+  },
 }
 
 export const RECIPE_IDS = Object.keys(RECIPE_DEFS)
