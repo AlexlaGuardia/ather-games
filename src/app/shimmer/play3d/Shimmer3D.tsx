@@ -1099,6 +1099,16 @@ export default function Shimmer3D() {
     persist()
   }, [getChest, persist])
 
+  // ── Hotbar/satchel drag-reorder → swap the REAL inventory slots so it persists and survives
+  // the next inventory update (otherwise HotBar only reorders a local mirror and it reverts). ──
+  const reorderSlots = useCallback((from: number, to: number) => {
+    const s = invRef.current.slots
+    if (from < 0 || to < 0 || from >= s.length || to >= s.length || from === to) return
+    const tmp = s[to]; s[to] = s[from]; s[from] = tmp
+    setInvSlots([...s])
+    persist()
+  }, [persist])
+
   // ── Exchange Booth (open at a placed booth) — buy/sell vs the single shared GE market ──
   const [tradeToast, setTradeToast] = useState<string | null>(null)
   useEffect(() => { if (!tradeToast) return; const t = setTimeout(() => setTradeToast(null), 2400); return () => clearTimeout(t) }, [tradeToast])
@@ -1795,7 +1805,7 @@ export default function Shimmer3D() {
       )}
 
       {/* Hotbar HUD — bag + 6 quick-slots + tool gauges + mana vial. Only while walking the world. */}
-      {!battle && !approach && !rewards && !editMode && !dialogue && !placing && <HotBar items={invSlots} onUse={useItem} usable={USE_HINTS} />}
+      {!battle && !approach && !rewards && !editMode && !dialogue && !placing && <HotBar items={invSlots} onUse={useItem} onReorder={reorderSlots} usable={USE_HINTS} />}
 
       {/* ── Mobile controls: joystick (move) bottom-left · A interact / B cancel bottom-right ── */}
       {isTouch && !battle && !editMode && !placing && (

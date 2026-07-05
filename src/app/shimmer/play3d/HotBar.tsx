@@ -57,10 +57,11 @@ function ItemTile({ item }: { item: ItemStack | null }) {
   )
 }
 
-export default function HotBar({ items: propItems, onUse, usable }: { items?: (ItemStack | null)[]; onUse?: (itemId: string) => void; usable?: Record<string, unknown> } = {}) {
+export default function HotBar({ items: propItems, onUse, onReorder, usable }: { items?: (ItemStack | null)[]; onUse?: (itemId: string) => void; onReorder?: (from: number, to: number) => void; usable?: Record<string, unknown> } = {}) {
   const [items, setItems] = useState<(ItemStack | null)[]>(propItems ?? PH_ITEMS)
   const itemsRef = useRef(items); itemsRef.current = items
   const onUseRef = useRef(onUse); onUseRef.current = onUse
+  const onReorderRef = useRef(onReorder); onReorderRef.current = onReorder
   const usableRef = useRef(usable); usableRef.current = usable
   const [sel, setSel] = useState(0)
   const [bagOpen, setBagOpen] = useState(false)
@@ -99,7 +100,13 @@ export default function HotBar({ items: propItems, onUse, usable }: { items?: (I
       if (p.moved) {
         const el = (document.elementFromPoint(e.clientX, e.clientY) as HTMLElement | null)?.closest('[data-slotidx]') as HTMLElement | null
         const to = el ? parseInt(el.dataset.slotidx || '-1', 10) : -1
-        if (to >= 0 && to !== p.idx) setItems(prev => { const n = [...prev]; const t = n[to]; n[to] = n[p.idx]; n[p.idx] = t; return n })
+        if (to >= 0 && to !== p.idx) {
+          // Persist the reorder to the parent's REAL inventory when wired — otherwise it only
+          // moves this local mirror and gets clobbered the next time propItems updates (the
+          // "hotbar resets when I use something" bug). Falls back to local-only for placeholder use.
+          if (onReorderRef.current) onReorderRef.current(p.idx, to)
+          else setItems(prev => { const n = [...prev]; const t = n[to]; n[to] = n[p.idx]; n[p.idx] = t; return n })
+        }
       } else {
         // a tap. single = select + name tag; double-tap a usable = consume it.
         const it = itemsRef.current[p.idx]
