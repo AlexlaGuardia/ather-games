@@ -19,6 +19,7 @@ import { ZONE_NODES, type NodePlacement } from '../world/node-placements'
 import { createResourceNode, depleteNode, tickNodeRespawn, rollDrops, getNodeSkill, NODE_DEFS, type NodeType, type ResourceNode } from '../world/resources'
 import { findAdjacentNode, addHarvestItems } from '../engine/harvesting'
 import { createSkillSet, skillSetToSave, skillSetFromSave, addSkillXP, xpForSkillLevel, SKILL_META, type SkillSet } from '../engine/skills'
+import { createBeast, checkBeastUnlock, beastsToSave, beastsFromSave, BEAST_SPECIES, BEAST_DEFS, BEAST_PERKS, PERK_INFO, getBonusFindChance, getSpeedBonus, type ManaBeast, type BeastSpecies } from '../beasts/beast'
 import { createInventory, inventoryToSave, inventoryFromSave, addItems, removeItems, countItem, transferItem, createChestStorage, chestToSave, chestFromSave, type Inventory, type ItemStack, type ChestStorage, type ChestSave } from '../engine/inventory'
 import { createManaPool, manaToSave, manaFromSave, getMaxPool, type ManaPool } from '../engine/mana'
 import { canBrew, brewPotion, getVisiblePotions, POTION_DEFS } from '../engine/alchemy'
@@ -844,6 +845,12 @@ export default function Shimmer3D() {
   partyLevelRef.current = partyRef.current.length
     ? Math.round(partyRef.current.reduce((s, x) => s + x.level, 0) / partyRef.current.length)
     : 5
+  // Mana'mal companions — earned at skill 15 (canon two-tier @15 tier). Grant its perk in the
+  // harvest loop. No overworld follower render / care loop in the walker yet (a follow-up); the
+  // companion is treated as content so its perk is fully active.
+  const beastsRef = useRef<ManaBeast[]>([])
+  const activeBeastIdRef = useRef<string | null>(null)
+  const [companionTick, setCompanionTick] = useState(0)  // HUD refresh when companions change
   const flagsRef = useRef<Record<string, boolean>>({})
   const battleRef = useRef(false)
   const talkingRef = useRef(false)
@@ -870,6 +877,8 @@ export default function Shimmer3D() {
     await saveGame({
       ...prev,
       spirits: spiritsToSave(partyRef.current ?? []),
+      beasts: beastsToSave(beastsRef.current),
+      activeBeastId: activeBeastIdRef.current,
       flags: { ...(prev.flags ?? {}), ...flagsRef.current },
       zoneId: zoneIdRef.current,
       playerTileX: Math.round(posRef.current!.x),
@@ -883,6 +892,26 @@ export default function Shimmer3D() {
       plantedCrops: plantedCropsToSave(plantedCropsRef.current),
     })
   }, [load, saveGame])
+
+  // Grant any skill-15 companion the player has newly earned (canon @15 unlock). Idempotent —
+  // skips species already owned. Auto-selects the first companion as active. Returns the granted
+  // species (for a banner), or null. Call after a level-up and once on load.
+  const checkCompanionUnlocks = useCallback((): BeastSpecies | null => {
+    let granted: BeastSpecies | null = null
+    for (const sp of BEAST_SPECIES) {
+      if (BEAST_DEFS[sp].unlockType !== 'skill') continue
+      if (beastsRef.current.some(b => b.species === sp)) continue
+      if (checkBeastUnlock(sp, skillsRef.current, flagsRef.current)) {
+        const b = createBeast(sp, posRef.current?.x ?? 0, posRef.current?.z ?? 0)
+        b.happiness = 100  // no care loop in the walker yet — keep the perk fully active
+        beastsRef.current.push(b)
+        if (!activeBeastIdRef.current) activeBeastIdRef.current = b.id
+        granted = sp
+      }
+    }
+    if (granted) setCompanionTick(t => t + 1)
+    return granted
+  }, [])
 
   // Load once on mount: restore party + zone + position, or bank the starter party on first visit.
   const loadedRef = useRef(false)
@@ -915,6 +944,22 @@ export default function Shimmer3D() {
         for (const n of NPCS_3D) if (n.defeatedFlag && data.flags[n.defeatedFlag]) cleared[n.id] = true
         if (Object.keys(cleared).length) setDefeated(cleared)
       }
+      if (Array.isArray(data?.beasts)) {
+        beastsRef.current = beastsFromSave(data.beasts as Parameters<typeof beastsFromSave>[0], posRef.current?.x ?? 0, posRef.current?.z ?? 0)
+        // Data hygiene: drop any skill-companion the current skills no longer justify (a skill level
+        // never drops, so this only removes bad/stale grants — never a legitimately earned one).
+        beastsRef.current = beastsRef.current.filter(b => {
+          const def = BEAST_DEFS[b.species]
+          if (def.unlockType === 'skill' && def.unlockSkill && def.unlockLevel) {
+            return skillsRef.current[def.unlockSkill].level >= def.unlockLevel
+          }
+          return true
+        })
+        activeBeastIdRef.current = beastsRef.current.some(b => b.id === (data.activeBeastId as string))
+          ? (data.activeBeastId as string) : beastsRef.current[0]?.id ?? null
+      }
+      checkCompanionUnlocks()  // grant any companion already earned by a skill ≥15 in this save
+      setCompanionTick(t => t + 1)
       if (data?.spirits?.length) {
         partyRef.current = spiritsFromSave(data.spirits)
         setHasStarter(true)
@@ -975,7 +1020,9 @@ export default function Shimmer3D() {
     if (!node || node.state !== 'harvestable') return
     if (manaRef.current.current < nodeManaCost(node.type)) { setHarvestToast(`Not enough mana (need ${nodeManaCost(node.type)})`); return }
     // NOTE(jin): minLevel gate bypassed for now (early-tier goldwood not placed in starter zones yet).
-    const durSec = nodeChannelSec(node.type)
+    // Drifthorn's gathering_speed perk shortens the channel (skill perks don't affect speed).
+    const speedBeast = beastsRef.current.find(b => b.id === activeBeastIdRef.current) ?? null
+    const durSec = nodeChannelSec(node.type) / (1 + getSpeedBonus(speedBeast))
     channelRef.current = { node, progress: 0, durSec }
     setChannel({ nodeId: node.id, label: prettyItem(node.type), hp: 1 })
   }, [])
@@ -1144,15 +1191,21 @@ export default function Shimmer3D() {
   }, [syncSkillHud, persist])
   const harvestAt = useCallback((crop: PlantedCrop) => {
     const before = skillsRef.current.farming.level
-    const result = harvestCrop(crop, invRef.current, skillsRef.current)
+    // Active companion @15 perk — Tuberfind bonus crop (Dustwhisker)
+    const activeBeast = beastsRef.current.find(b => b.id === activeBeastIdRef.current) ?? null
+    const result = harvestCrop(crop, invRef.current, skillsRef.current, getBonusFindChance(activeBeast, 'farming'))
     plantedCropsRef.current = plantedCropsRef.current.filter(c => c.id !== crop.id)
     setCropsTick(t => t + 1)
     syncSkillHud()
     setInvSlots([...invRef.current.slots])
     setHarvestToast(`+ ${result.items.map(i => prettyItem(i.itemId)).join(' · ') || 'nothing'}   ·   Farming +${result.xpGained} XP`)
-    if (skillsRef.current.farming.level > before) setBanner(`✦ Farming Lv ${skillsRef.current.farming.level}!`)
+    if (skillsRef.current.farming.level > before) {
+      setBanner(`✦ Farming Lv ${skillsRef.current.farming.level}!`)
+      const got = checkCompanionUnlocks()
+      if (got) setBanner(`✦ ${BEAST_DEFS[got].name} joined you — ${PERK_INFO[BEAST_PERKS[got]].label} unlocked!`)
+    }
     persist()
-  }, [syncSkillHud, persist])
+  }, [syncSkillHud, persist, checkCompanionUnlocks])
 
   // channel driver — advances progress + drains mana each tick; breaks on distance / no-mana; completes at full.
   useEffect(() => {
@@ -1172,13 +1225,19 @@ export default function Shimmer3D() {
       if (ch.progress >= 1) {
         const skillId = getNodeSkill(ch.node.type)
         const xp = NODE_DEFS[ch.node.type].xp
-        const added = addHarvestItems(invRef.current, rollDrops(ch.node.type))
+        // Active companion @15 perk — skill-matched bonus find (Grovekin/Gemsense/Truesight)
+        const activeBeast = beastsRef.current.find(b => b.id === activeBeastIdRef.current) ?? null
+        const added = addHarvestItems(invRef.current, rollDrops(ch.node.type, getBonusFindChance(activeBeast, skillId)))
         const xpr = addSkillXP(skillsRef.current[skillId], xp)
         depleteNode(ch.node)
         channelRef.current = null; setChannel(null)
         syncSkillHud(); setRuntimeNodes([...runtimeNodesRef.current]); setNearNode(null)
         setHarvestToast(`+ ${added.map(prettyItem).join(' · ') || 'nothing'}   ·   ${SKILL_META[skillId].name} +${xp} XP`)
-        if (xpr.leveled) setBanner(`✦ ${SKILL_META[skillId].name} Lv ${xpr.newLevel}!`)
+        if (xpr.leveled) {
+          setBanner(`✦ ${SKILL_META[skillId].name} Lv ${xpr.newLevel}!`)
+          const got = checkCompanionUnlocks()
+          if (got) setBanner(`✦ ${BEAST_DEFS[got].name} joined you — ${PERK_INFO[BEAST_PERKS[got]].label} unlocked!`)
+        }
         persist()
       } else {
         setChannel({ nodeId: ch.node.id, label: prettyItem(ch.node.type), hp: 1 - ch.progress })
@@ -1663,7 +1722,7 @@ export default function Shimmer3D() {
 
       {/* ── TOP-RIGHT HUD: mana pie gauge · ☰ menu (edit/new game) · skills panel ── */}
       {!battle && !approach && !rewards && !editMode && !dialogue && (
-        <div style={{ position: 'fixed', top: 12, right: 12, zIndex: 34, display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 9 }}>
+        <div data-ct={companionTick} style={{ position: 'fixed', top: 12, right: 12, zIndex: 34, display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 9 }}>
           {/* mana pie — 1-100% of the pool; drains live while channeling */}
           <div style={{
             width: 104, height: 104, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -1675,6 +1734,34 @@ export default function Shimmer3D() {
               <span style={{ font: '700 8px ui-monospace, monospace', color: '#7fa8c8', letterSpacing: '0.14em', marginTop: 2 }}>MANA</span>
             </div>
           </div>
+
+          {/* Companion chip — active Mana'mal + its @15 perk; tap to switch (when you own >1) */}
+          {beastsRef.current.length > 0 && (() => {
+            const owned = beastsRef.current
+            const active = owned.find(b => b.id === activeBeastIdRef.current) ?? owned[0]
+            const info = PERK_INFO[BEAST_PERKS[active.species]]
+            return (
+              <button
+                onClick={() => {
+                  const i = owned.findIndex(b => b.id === activeBeastIdRef.current)
+                  activeBeastIdRef.current = owned[(i + 1) % owned.length].id
+                  setCompanionTick(t => t + 1); persist()
+                }}
+                title={`${active.name} — ${info.blurb}${owned.length > 1 ? ' · tap to switch' : ''}`}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 7, maxWidth: 200, padding: '5px 9px', borderRadius: 11,
+                  border: '1px solid #d4a84340', background: 'rgba(20,20,14,0.82)', cursor: owned.length > 1 ? 'pointer' : 'default', textAlign: 'left',
+                }}>
+                <span style={{ font: '16px serif', lineHeight: 1 }}>🐾</span>
+                <span style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+                  <span style={{ font: '800 11px ui-monospace, monospace', color: '#e9dfc8', whiteSpace: 'nowrap' }}>{active.name}</span>
+                  <span style={{ font: '600 9px ui-monospace, monospace', color: '#8fd9c4', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    {info.label}{owned.length > 1 ? ` ⟳${owned.length}` : ''}
+                  </span>
+                </span>
+              </button>
+            )
+          })()}
 
           {/* ☰ menu button */}
           <button onClick={() => { setMenuOpen(o => !o); setSkillsOpen(false) }} style={{
