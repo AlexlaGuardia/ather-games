@@ -511,7 +511,7 @@ function Compass({ yawRef }: { yawRef: React.RefObject<number> }) {
 
 // Floating touch joystick (bottom-left). Writes an analog {x,y} (camera-relative: y up = forward) into
 // joyRef, which Player reads alongside WASD. Captures its own pointer so the camera never sees the drag.
-function TouchJoystick({ joyRef }: { joyRef: React.RefObject<{ x: number; y: number }> }) {
+function TouchJoystick({ joyRef, bottom = 30 }: { joyRef: React.RefObject<{ x: number; y: number }>; bottom?: number }) {
   const baseRef = useRef<HTMLDivElement>(null)
   const active = useRef(false)
   const [knob, setKnob] = useState({ x: 0, y: 0 })
@@ -539,7 +539,7 @@ function TouchJoystick({ joyRef }: { joyRef: React.RefObject<{ x: number; y: num
       onPointerUp={end}
       onPointerCancel={end}
       style={{
-        position: 'fixed', bottom: 30, left: 30, width: 116, height: 116, borderRadius: '50%', zIndex: 30,
+        position: 'fixed', bottom, left: 30, width: 116, height: 116, borderRadius: '50%', zIndex: 30,
         background: 'rgba(18,14,36,0.4)', border: '2px solid #ffffff2e', touchAction: 'none',
       }}
     >
@@ -1170,8 +1170,8 @@ export default function Shimmer3D() {
       {/* ── Mobile controls: joystick (move) bottom-left · A interact / B cancel bottom-right ── */}
       {isTouch && !battle && !editMode && (
         <>
-          <TouchJoystick joyRef={joyRef} />
-          <div style={{ position: 'fixed', bottom: 30, right: 30, zIndex: 30, display: 'flex', flexDirection: 'column', gap: 16, alignItems: 'center' }}>
+          <TouchJoystick joyRef={joyRef} bottom={96} />
+          <div style={{ position: 'fixed', bottom: 96, right: 30, zIndex: 30, display: 'flex', flexDirection: 'column', gap: 16, alignItems: 'center' }}>
             {/* B — cancel/back (upper, smaller). Backs out of the New Game prompt / dismisses a toast. */}
             <button
               onPointerDown={(e) => { e.stopPropagation(); if (confirmNew) setConfirmNew(false); else if (banner) setBanner(null) }}
