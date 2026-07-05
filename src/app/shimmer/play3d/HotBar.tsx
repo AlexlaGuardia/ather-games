@@ -38,6 +38,8 @@ const PH_TOOLS: ToolGauge[] = [
   { id: 'prospecting', label: 'Prospecting', glyph: '⛏️', tint: '#d9b56a', infinite: false, dur: 0.58 },
 ]
 
+const pretty = (id: string) => id.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')
+
 // item art placeholder — % insets so it scales to any slot size
 function ItemTile({ item }: { item: ItemStack | null }) {
   if (!item) return null
@@ -63,9 +65,14 @@ export default function HotBar({ items: propItems, onUse, usable }: { items?: (I
   const [bagOpen, setBagOpen] = useState(false)
   const [tools] = useState<ToolGauge[]>(PH_TOOLS)
   const [isTouch, setIsTouch] = useState(false)
+  const [nameTag, setNameTag] = useState<{ text: string; sub?: string } | null>(null)  // fades above the bar on select
+  const [flashIdx, setFlashIdx] = useState<number | null>(null)                         // slot pulses when a potion is drunk
+  const lastTap = useRef<{ idx: number; t: number } | null>(null)
   useEffect(() => { setIsTouch(window.matchMedia('(pointer:coarse)').matches) }, [])
   // keep the display synced to the walker's real inventory (drag-drop reorders this local mirror)
   useEffect(() => { if (propItems) setItems(propItems) }, [propItems])
+  useEffect(() => { if (!nameTag) return; const t = setTimeout(() => setNameTag(null), 2200); return () => clearTimeout(t) }, [nameTag])
+  useEffect(() => { if (flashIdx == null) return; const t = setTimeout(() => setFlashIdx(null), 320); return () => clearTimeout(t) }, [flashIdx])
   // desktop number keys 1-6
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { const n = parseInt(e.key, 10); if (n >= 1 && n <= SLOTS) setSel(n - 1) }
@@ -93,10 +100,19 @@ export default function HotBar({ items: propItems, onUse, usable }: { items?: (I
         const to = el ? parseInt(el.dataset.slotidx || '-1', 10) : -1
         if (to >= 0 && to !== p.idx) setItems(prev => { const n = [...prev]; const t = n[to]; n[to] = n[p.idx]; n[p.idx] = t; return n })
       } else {
-        // a tap: drink a usable potion, otherwise select the quick-slot
+        // a tap. single = select + name tag; double-tap a usable = consume it.
         const it = itemsRef.current[p.idx]
-        if (it && usableRef.current && it.itemId in usableRef.current) onUseRef.current?.(it.itemId)
-        else if (p.idx < SLOTS) setSel(p.idx)
+        const now = performance.now()
+        const isDouble = !!lastTap.current && lastTap.current.idx === p.idx && (now - lastTap.current.t) < 340
+        lastTap.current = { idx: p.idx, t: now }
+        if (it) {
+          const drinkable = !!usableRef.current && it.itemId in usableRef.current
+          if (isDouble && drinkable) { onUseRef.current?.(it.itemId); setFlashIdx(p.idx); lastTap.current = null }
+          else {
+            if (p.idx < SLOTS) setSel(p.idx)
+            setNameTag({ text: pretty(it.itemId) + (it.count > 1 ? `  ×${it.count}` : ''), sub: drinkable ? `+${(usableRef.current as Record<string, number>)[it.itemId]} mana · double-tap to drink` : undefined })
+          }
+        } else if (p.idx < SLOTS) setSel(p.idx)
       }
       setDrag(null)
     }
@@ -110,12 +126,13 @@ export default function HotBar({ items: propItems, onUse, usable }: { items?: (I
   const Slot = ({ idx, flex }: { idx: number; flex?: boolean }) => {
     const on = sel === idx && idx < SLOTS
     const dragging = drag?.idx === idx
+    const flashing = flashIdx === idx
     return (
       <div data-slotidx={idx} onPointerDown={startPress(idx)} style={{
         position: 'relative', flex: flex ? '1 1 0' : undefined, aspectRatio: '1',
         width: flex ? undefined : 52, maxWidth: flex ? 66 : undefined, borderRadius: 11,
-        border: `2px solid ${on ? '#7fe3c8' : '#ffffff20'}`, background: on ? '#1a2b28' : '#111c1a',
-        boxShadow: on ? '0 0 12px #7fe3c866, inset 0 1px 0 #ffffff10' : 'inset 0 1px 0 #ffffff08',
+        border: `2px solid ${flashing ? '#bfe0ff' : on ? '#7fe3c8' : '#ffffff20'}`, background: on ? '#1a2b28' : '#111c1a',
+        boxShadow: flashing ? '0 0 18px #6fd0e6' : on ? '0 0 12px #7fe3c866, inset 0 1px 0 #ffffff10' : 'inset 0 1px 0 #ffffff08',
         opacity: dragging ? 0.35 : 1, transform: on ? 'translateY(-3px)' : 'none',
         transition: 'transform 0.1s, box-shadow 0.1s, border-color 0.1s', cursor: 'grab', touchAction: 'none',
         userSelect: 'none', WebkitUserSelect: 'none', WebkitTouchCallout: 'none',
@@ -174,6 +191,17 @@ export default function HotBar({ items: propItems, onUse, usable }: { items?: (I
             {Array.from({ length: Math.max(0, items.length - SLOTS) }, (_, i) => <Slot key={'x' + i} idx={SLOTS + i} />)}
             {Array.from({ length: SLOTS }, (_, i) => <Slot key={'h' + i} idx={i} />)}
           </div>
+        </div>
+      )}
+
+      {/* NAME TAG — pops above the bar when you select an item, then fades */}
+      {nameTag && (
+        <div style={{ position: 'fixed', left: '50%', transform: 'translateX(-50%)', bottom: isTouch ? 84 : 80, zIndex: 36, pointerEvents: 'none',
+          background: 'rgba(11,21,19,0.94)', border: '1px solid #2f5c4f', borderRadius: 9, padding: '5px 12px', textAlign: 'center',
+          animation: 'tagIn 0.16s ease-out' }}>
+          <style>{`@keyframes tagIn { from { opacity: 0; transform: translate(-50%, 4px) } to { opacity: 1; transform: translate(-50%, 0) } }`}</style>
+          <div style={{ font: '800 12px ui-monospace, monospace', color: '#eafff6', whiteSpace: 'nowrap' }}>{nameTag.text}</div>
+          {nameTag.sub && <div style={{ font: '600 9px ui-monospace, monospace', color: '#8fd9c4', marginTop: 1, whiteSpace: 'nowrap' }}>{nameTag.sub}</div>}
         </div>
       )}
 
