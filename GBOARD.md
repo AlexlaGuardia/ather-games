@@ -21,6 +21,9 @@ the Arcade frame.
 > **Where we actually are:** **12 live play cabinets** (Mana'nana · Rekindle · Ward · Updraft · Seedfall ·
 > Voranyx · Atherdash · Driftling · Squall · Dewdrop · Vault · Nolmir) + Magii (world wall) + Shimmer (room
 > wall). Back-room/held: Lucernyx, Gravitar. **Feature-complete on cabinet count. This is the polish lap now.**
+> **Shimmer (room wall → 3D walker) side-track, 2026-07-05 (`1718a57`):** placeable stations expanded past
+> brew/craft to 5 — added **Chest / Exchange Booth / Farm Planter** on a generalized station-menu system.
+> Full detail + Left off/Next lives in `SHIMMER_SESSION.md` (its own session cadence, not cabinet-shaped).
 >
 > **THE TWO LANES NOW (no more new-game pipeline):**
 > 1. **★ The POLISH LAP** — the whole backlog of taste-calls, run one game per session (cold-play → feel
