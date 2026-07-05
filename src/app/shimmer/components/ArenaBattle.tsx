@@ -54,6 +54,7 @@ function Scene({ arenaRef, cmdQueue, onSnap }: {
   const hpFills = useRef(new Map<string, HTMLDivElement>())
   const rings = useRef(new Map<string, THREE.Mesh>())
   const shields = useRef(new Map<string, THREE.Mesh>())
+  const softens = useRef(new Map<string, THREE.Mesh>())
   const acc = useRef(0)
 
   useFrame((_, delta) => {
@@ -108,6 +109,18 @@ function Scene({ arenaRef, cmdQueue, onSnap }: {
       } else sh.visible = false
     }
 
+    // reach soften — a violet ground ring under an enemy whose guard you dropped (defence-down)
+    for (const f of s.fighters) {
+      if (f.side !== 'enemy') continue
+      const so = softens.current.get(f.id)
+      if (!so) continue
+      if (f.defDownT > 0 && f.hp > 0) {
+        so.visible = true; so.position.set(f.x, 0.025, f.y)
+        const m = so.material as THREE.MeshBasicMaterial
+        m.opacity = 0.35 + 0.3 * (0.5 + 0.5 * Math.sin(s.t * 7))   // pulse — reads as "exposed"
+      } else so.visible = false
+    }
+
     acc.current += delta
     if (acc.current > 0.08) { acc.current = 0; onSnap(snap(s)) }
   })
@@ -146,6 +159,13 @@ function Scene({ arenaRef, cmdQueue, onSnap }: {
         <mesh key={'shield-' + f.id} ref={m => { if (m) shields.current.set(f.id, m) }} rotation={[-Math.PI / 2, 0, 0]} visible={false}>
           <ringGeometry args={[f.radius * 0.9, f.radius * 1.15, 40]} />
           <meshBasicMaterial color="#6fd0e6" transparent opacity={0.4} side={THREE.DoubleSide} />
+        </mesh>
+      ))}
+      {/* reach soften rings — one per enemy (shown only while its guard is down) */}
+      {s0.fighters.filter(f => f.side === 'enemy').map(f => (
+        <mesh key={'soften-' + f.id} ref={m => { if (m) softens.current.set(f.id, m) }} rotation={[-Math.PI / 2, 0, 0]} visible={false}>
+          <ringGeometry args={[f.radius * 0.95, f.radius * 1.3, 32]} />
+          <meshBasicMaterial color="#a679ff" transparent opacity={0.4} side={THREE.DoubleSide} />
         </mesh>
       ))}
       {/* fighters — element-tinted blockout capsules + floating nameplate/HP */}
