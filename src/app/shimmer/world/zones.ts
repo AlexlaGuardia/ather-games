@@ -96,10 +96,10 @@ export const ZONES: Zone[] = [
       { fromX: 0, fromY: 8, toZone: 'route-moonwell-garden', toX: 36, toY: 17, direction: 'left' },
       { fromX: 0, fromY: 9, toZone: 'route-moonwell-garden', toX: 36, toY: 18, direction: 'left' },
       // Greg's house door (cols 22-23, row 17 — placed in the editor) → his home interior.
-      // Redesigned interior: the door is the east-alcove (rows 6-7); arrive on the floor just
-      // inside it (14,6-7), facing into the room. (Was the stale left-side 4-5,8.)
-      { fromX: 22, fromY: 17, toZone: 'moonwell-glade-gregory-s-home', toX: 14, toY: 6, direction: 'left' },
-      { fromX: 23, fromY: 17, toZone: 'moonwell-glade-gregory-s-home', toX: 14, toY: 7, direction: 'left' },
+      // Redesigned interior (30x28): door is the bottom vestibule (warp tiles 14-15,22); arrive on
+      // the entry floor just above it (14-15,21), facing up into the house.
+      { fromX: 22, fromY: 17, toZone: 'moonwell-glade-gregory-s-home', toX: 14, toY: 21, direction: 'up' },
+      { fromX: 23, fromY: 17, toZone: 'moonwell-glade-gregory-s-home', toX: 15, toY: 21, direction: 'up' },
     ],
   },
   {
@@ -302,12 +302,12 @@ export const ZONES: Zone[] = [
     name: "Moonwell Glade (Gregory's Home)",
     element: 'water',
     grid: MOONWELL_GLADE_GREGORY_S_HOME,
-    playerStart: { tileX: 14, tileY: 6 },
+    playerStart: { tileX: 14, tileY: 21 },
     warps: [
-      // Exit = the east-alcove door tiles (15,6-7) → back out to the Glade, just south of Greg's
-      // house door (22-23,17). (Rewired from the stale left-side 4-5,9 that the redesign left dangling.)
-      { fromX: 15, fromY: 6, toZone: 'moonwell-glade', toX: 22, toY: 18, direction: 'down' },
-      { fromX: 15, fromY: 7, toZone: 'moonwell-glade', toX: 23, toY: 18, direction: 'down' },
+      // Exit = the bottom vestibule door tiles (14-15,22) → back out to the Glade, just south of
+      // Greg's house door (22-23,17).
+      { fromX: 14, fromY: 22, toZone: 'moonwell-glade', toX: 22, toY: 18, direction: 'down' },
+      { fromX: 15, fromY: 22, toZone: 'moonwell-glade', toX: 23, toY: 18, direction: 'down' },
     ],
   },
   {
