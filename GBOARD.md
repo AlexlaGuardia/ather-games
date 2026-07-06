@@ -147,7 +147,12 @@ the Arcade frame.
 > 1.1→0.32 + scrim 0.62/0.82. **KNOWN CEILING:** portrait games ~77% width on phone (aspect-locked 2:3 +
 > deck-below rule); wider needs a header-HUD-overlay pass OR controls-over-canvas (reverses the neutral-screen
 > rule) — both deferred/offered, Alex happy at current. Minor open: a couple start-overlays run tall for their screen.
-> **Not yet eyeballed on mobile (trusted via typecheck+pattern):** updraft, dewdrop, voranyx, lucernyx.
+> **✅ FULL MOBILE SWEEP DONE 2026-07-06** — measured all 11 cabinets live; fixed real overflow the pattern hid:
+> removed 3 redundant footers (squall/updraft/voranyx duplicated the deck hint → clipped), fixed dewdrop
+> (4-way D-pad = 3-row deck + near-square screen → own `DPAD_RESERVE`=342 + dpad 78→64), updraft header
+> `mb-4`→`mb-2`. Every cabinet now fits with no control cut-off. Reserve model: `DECK_RESERVE`=222 (stick/button),
+> `DPAD_RESERVE`=342 (dewdrop). **Future proper fix if this gets fiddly again: flexbox cabinet (screen=flex-1,
+> auto-fits leftover space, kills all reserve tuning) — deferred, current fixed-reserve holds for the 11.**
 >
 > **▶ VEHICLE = the ARCADE POLISH LAP (planned 2026-06-21, Alex):** the start/over + HUD rollout now rides a
 > per-game polish lap — **one game per session**, same checklist (cold play → feel fixes → UI-layer pass → mobile →
