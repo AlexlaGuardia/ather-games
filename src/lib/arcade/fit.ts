@@ -19,8 +19,22 @@
 //
 // Landscape games (VW > VH) are rarely height-bound; the min() just falls through to VW.
 
-export const DECK_RESERVE = 200 // header + control deck + footer + padding, in px
+export const DECK_RESERVE = 320 // header + control deck + footer + padding, in px
+                                // (deck buttons are thumb-size 2x — the deck is tall)
 
 export function screenMaxW(vw: number, vh: number, reserve: number = DECK_RESERVE): string {
   return `min(${vw}px, calc((100dvh - ${reserve}px) * ${vw} / ${vh}))`
+}
+
+// The control deck is thumb-sized and must stay comfortable regardless of the game's
+// aspect — a tall portrait screen is gutter-clamped narrow, but the deck should still use
+// the full phone width (up to a cap) so the big buttons never overflow. Decoupled from
+// screenMaxW on purpose.
+export const deckMaxW = 'min(460px, 94vw)'
+
+// The cabinet housing wraps BOTH the screen and the deck, so it must be as wide as the
+// wider of the two: deck-width for tall portrait games (the screen sits centered inside
+// with a dark bezel), screen-width for wide landscape games (the deck fits within).
+export function cabinetMaxW(vw: number, vh: number, reserve: number = DECK_RESERVE): string {
+  return `max(${screenMaxW(vw, vh, reserve)}, ${deckMaxW})`
 }

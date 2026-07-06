@@ -9,7 +9,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import ArcadeCabinet from '../_components/ArcadeCabinet'
 import { useNoScroll } from '@/lib/arcade/useNoScroll'
-import { screenMaxW } from '@/lib/arcade/fit'
+import { screenMaxW, deckMaxW, cabinetMaxW } from '@/lib/arcade/fit'
 import {
   makeWorld,
   pressJump,
@@ -220,7 +220,7 @@ export default function VaultPage() {
 
 
   return (
-    <ArcadeCabinet accent={ACCENT} wall={1} maxWidth={screenMaxW(VW, VH)}>
+    <ArcadeCabinet accent={ACCENT} wall={1} maxWidth={cabinetMaxW(VW, VH)}>
       <div className="w-full flex items-center justify-between mb-3" style={{ maxWidth: screenMaxW(VW, VH) }}>
         <span aria-hidden className="w-10" />
         <div className="text-center">
@@ -300,7 +300,7 @@ export default function VaultPage() {
       {/* the cabinet control deck — one big VAULT button under the screen (keyboard still works) */}
       <ArcadeControls
         accent={ACCENT}
-        maxWidth={screenMaxW(VW, VH)}
+        maxWidth={deckMaxW}
         buttons={[{ id: 'jump', label: 'Vault', glyph: '↟', hint: 'space', size: 'lg' }]}
         onPress={doPress}
         onRelease={doRelease}
