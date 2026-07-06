@@ -1,7 +1,7 @@
 {
   "version": 1,
-  "updated": "2026-06-24",
-  "note": "AtherPages Folk volume (the people of the universe). Authored by Magii from CANON/design-briefs/moglins.md + keepers.md; art Kontext'd off locked anchors in athernyx/assets/folk-refs/. blurb/entry = Raven's cozy-voice slot (placeholder empty). allegiance: collared (villain) | free | neutral.",
+  "updated": "2026-07-06",
+  "note": "AtherPages Folk volume (the people of the universe). Authored by Magii from CANON/design-briefs/moglins.md + keepers.md; art Kontext'd off locked anchors in athernyx/assets/folk-refs/. entry = Raven's cozy-voice accounts (all 6 inked 2026-07-06, Native-World-Law clean, no narrator attribution). allegiance: collared (villain) | free | neutral.",
   "allegiances": {
     "collared": { "label": "Collared", "color": "#b5462f" },
     "free":     { "label": "Free",     "color": "#7bd88f" },
@@ -14,7 +14,7 @@
       "summary": "The timid, teddy-bear-soft burrow-folk of the Ather, the gentlest of races until the collar. A Moglin with a collared spirit feels ten feet tall; free the spirit and the borrowed bravery drains away, and he deflates into the sweet creature he always was.",
       "relations": "a whole people: villages, holds, and the Warren",
       "appears": "nearly every book; the outer zones of Shimmer",
-      "entry": "", "status": "locked"
+      "entry": "The softest folk the Ather ever made, the Moglin keep to their burrows and their holds and the deep Warren, small and shy and quick to startle. Left to themselves they would not frighten a soul. But buckle a collared spirit onto one and he swells to feel ten feet tall, and only when the spirit goes free does the borrowed courage drain away and leave the gentle creature underneath.", "status": "locked"
     },
     {
       "id": "bramble", "name": "Bramble", "type": "folk", "kind": "Thornlord · garden-boss III",
@@ -22,7 +22,7 @@
       "summary": "Ringleader of the three weeds. The biggest swagger of the lot, a twisted thorn-crown and a scavenged green cloak. Borrowed bravado on a borrowed spirit. The third garden boss.",
       "relations": "leads Nettle & Burr",
       "appears": "early books; Shimmer garden boss III",
-      "entry": "", "status": "locked"
+      "entry": "Bramble struts at the head of the three, thorn-crown askew and a scavenged cloak thrown back so you cannot miss him. He talks the biggest and stands the tallest, all of it purchased with a spirit that was never his to spend. Loosen that collar and the garden's fiercest boss is a frightened Moglin again, blinking at how small the world turns out to be.", "status": "locked"
     },
     {
       "id": "nettle", "name": "Nettle", "type": "folk", "kind": "Thornlord · garden-boss II",
@@ -30,7 +30,7 @@
       "summary": "The wiry, sly weed: arms crossed, a stolen red sash, a smirk that stings. All front and no spine once the collar comes off. The second garden boss.",
       "relations": "runs with Bramble & Burr",
       "appears": "early books; Shimmer garden boss II",
-      "entry": "", "status": "locked"
+      "entry": "The wiry one, Nettle stands with his arms crossed and a stolen red sash and a smirk sharp enough to sting. He is quick with a jab and quicker to hide behind Bramble when the jabbing turns real. Take the collar off and there is nothing behind the front at all, only a small folk who learned that a sneer keeps others from looking too close.", "status": "locked"
     },
     {
       "id": "burr", "name": "Burr", "type": "folk", "kind": "Thornlord · garden-boss I",
@@ -38,7 +38,7 @@
       "summary": "The small, eager weed, trying hardest of the three to look tough. A too-big patchwork vest and a spiky pauldron of bundled thorns. The first garden boss a young keeper meets.",
       "relations": "runs with Bramble & Nettle",
       "appears": "early books; Shimmer garden boss I",
-      "entry": "", "status": "locked"
+      "entry": "Burr is the smallest of the three and tries the hardest, swimming in a patchwork vest too big for him and a shoulder-guard of bundled thorns he tied on himself. He is the first boss a young keeper squares up to, and how he wants to be frightening. Free his spirit and you find no bully at all, only an eager little folk who wanted to keep up with the big ones.", "status": "locked"
     },
     {
       "id": "hemlock", "name": "Hemlock", "type": "folk", "kind": "The Collar-Master",
@@ -46,7 +46,7 @@
       "summary": "The cold, clever collar-baron. He runs a stronghold and counts spirits as inventory to be loaded; he can forge a giant collar and take a hold without raising his voice. Competent at the means and blind to the meaning, which is exactly what makes him dangerous. What the three weeds wish they were, and their opposite number.",
       "relations": "the Thornlords' dark mirror; turns from spirits to the Ancients",
       "appears": "Books 7–10; into Series 2–3",
-      "entry": "", "status": "locked"
+      "entry": "Hemlock does not swagger. He keeps a stronghold and a ledger where spirits are stock to be counted and loaded, nothing more, and he can forge a collar big enough to take a whole hold without once raising his voice. That quiet is exactly what makes him worse than the three who bluster. Bramble and his lot dream of being Hemlock, who has simply forgotten that the numbers in his book were ever alive.", "status": "locked"
     },
     {
       "id": "jimbo", "name": "Jimbo", "type": "folk", "kind": "Free Fold-Runner",
@@ -54,7 +54,7 @@
       "summary": "A gentle Moglin who has never collared anything: a sure-footed runner of the wild folds who knows their passages cold. He carries his honest confidence the way the Thornlords fake theirs. Bonn's first Outland ally, and living proof that the species was never the sin; the collar is.",
       "relations": "Bonn's friend; of the free Warren",
       "appears": "Book 5+; the Warren (Series 2)",
-      "entry": "", "status": "locked"
+      "entry": "Jimbo has never collared a thing in his life and has never needed to. He runs the wild folds sure-footed and knows their passages the way you know your own hands, and where the Thornlords fake their bravery he simply owns his. Bonn's first friend in the Outland, he is the living proof that the gentle folk were never the sin. The collar was.", "status": "locked"
     }
   ]
 }
