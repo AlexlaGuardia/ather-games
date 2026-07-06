@@ -74,7 +74,7 @@ type Fx = FxSpec & { id: number }
 const RAINBOW = 'conic-gradient(from 210deg, #f0a526, #e8554e, #9b5ad2, #37a3e6, #48b56f, #f0a526)'
 
 function bigSound(fired: Kind[]): ManaSfx | null {
-  if (fired.includes('star')) return 'star'
+  if (fired.includes('star') || fired.includes('burst')) return 'star'
   if (fired.includes('prism')) return 'prism'
   if (fired.some((k) => k === 'surgeH' || k === 'surgeV')) return 'surge'
   return null
@@ -287,6 +287,7 @@ export default function MananaPage() {
       else if (bl.kind === 'surgeV') items.push({ t: 'beamV', x: cellCenter(x, bp), oy: cellCenter(y, bp), color: col })
       else if (bl.kind === 'star') { items.push({ t: 'beamH', y: cellCenter(y, bp), ox: cellCenter(x, bp), color: col }, { t: 'beamV', x: cellCenter(x, bp), oy: cellCenter(y, bp), color: col }); flash = true }
       else if (bl.kind === 'prism') items.push({ t: 'ring', x: cellCenter(x, bp), y: cellCenter(y, bp), color: col })
+      else if (bl.kind === 'burst') { items.push({ t: 'ring', x: cellCenter(x, bp), y: cellCenter(y, bp), color: col }); flash = true }
     }
     if (flash) items.push({ t: 'flash' })
     // colour motes off each cleared cell (capped so big cascades stay clean)
@@ -597,6 +598,7 @@ export default function MananaPage() {
                     {k === 'surgeV' && <span className="absolute top-[6%] bottom-[6%] left-1/2 -translate-x-1/2 w-[26%] rounded-full bg-white/70" />}
                     {k === 'star' && <span className="relative text-white text-[16px] sm:text-[20px] leading-none drop-shadow-[0_0_4px_white]">✦</span>}
                     {k === 'prism' && <span className="absolute inset-[34%] rounded-full bg-white/85" />}
+                    {k === 'burst' && <span className="absolute inset-[30%] rounded-[4px] bg-white/85 rotate-45" />}
                     {k === 'none' && <RuneMark rune={p.rune} color={p.mark} />}
                   </span>
                 </button>

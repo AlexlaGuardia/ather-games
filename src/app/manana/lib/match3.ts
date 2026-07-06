@@ -9,8 +9,10 @@ export const H = 8
 export const TYPES = 6
 export const MIN_RUN = 3
 
-// surgeH clears its ROW, surgeV its COLUMN, star both (a cross), prism a colour
-export type Kind = 'none' | 'surgeH' | 'surgeV' | 'prism' | 'star'
+// surgeH clears its ROW, surgeV its COLUMN, star both (a cross), prism a colour,
+// burst a 3×3 box. surge/prism/star bloom from straight runs (4/5/7); star also
+// blooms from a T-shape and burst from an L-shape (an H run + V run intersecting).
+export type Kind = 'none' | 'surgeH' | 'surgeV' | 'prism' | 'star' | 'burst'
 
 export interface Cell {
   color: number // -1 = empty hole (mid-resolve)
@@ -165,7 +167,21 @@ function blastCells(b: Cell[], i: number): number[] {
     const col = b[i].color
     for (let j = 0; j < W * H; j++) if (b[j].color === col) out.push(j)
   }
+  if (k === 'burst') {
+    for (let yy = Math.max(0, y - 1); yy <= Math.min(H - 1, y + 1); yy++)
+      for (let xx = Math.max(0, x - 1); xx <= Math.min(W - 1, x + 1); xx++) out.push(idx(xx, yy))
+  }
   return out
+}
+
+// classify the shape of an H run and a V run of the same colour that share cell p:
+// both arms end at p → an L (corner); otherwise a T/plus junction. null if no share.
+function shapeAt(h: Run, v: Run, p: number): 'L' | 'T' | null {
+  const hi = h.cells.indexOf(p), vi = v.cells.indexOf(p)
+  if (hi < 0 || vi < 0) return null
+  const hEnd = hi === 0 || hi === h.len - 1
+  const vEnd = vi === 0 || vi === v.len - 1
+  return hEnd && vEnd ? 'L' : 'T'
 }
 
 function collapse(b: Cell[], rng: Rng): Cell[] {
@@ -248,11 +264,31 @@ export function resolve(board: Cell[], rng: Rng, opts: { swapAt?: number; forced
       const runs = findRuns(cur).filter((r) => r.len >= MIN_RUN)
       if (runs.length === 0) break
       for (const r of runs) for (const i of r.cells) base.add(i)
+
+      // shape specials: where an H run and a V run of the same colour cross, the
+      // shape (L vs T) blooms a special at the junction and consumes both arms.
+      const consumed = new Set<Run>()
+      const hRuns = runs.filter((r) => r.dir === 'h')
+      const vRuns = runs.filter((r) => r.dir === 'v')
+      for (const h of hRuns) for (const v of vRuns) {
+        const p = h.cells.find((c) => v.cells.includes(c))
+        if (p == null) continue
+        const shape = shapeAt(h, v, p)
+        if (!shape) continue
+        if (spawnCells.has(p)) continue
+        spawns.push({ i: p, kind: shape === 'L' ? 'burst' : 'star', color: cur[p].color })
+        spawnCells.add(p)
+        consumed.add(h); consumed.add(v)
+      }
+
+      // straight-run specials for the arms not already claimed by a shape
       for (const r of runs) {
+        if (consumed.has(r)) continue
         const kind = specialFor(r)
         if (!kind) continue
         let cell = cascade === 0 && opts.swapAt != null && r.cells.includes(opts.swapAt) ? opts.swapAt : r.cells[Math.floor(r.cells.length / 2)]
         if (spawnCells.has(cell)) cell = r.cells.find((c) => !spawnCells.has(c)) ?? cell
+        if (spawnCells.has(cell)) continue
         spawns.push({ i: cell, kind, color: cur[cell].color })
         spawnCells.add(cell)
       }
@@ -271,20 +307,28 @@ export function resolve(board: Cell[], rng: Rng, opts: { swapAt?: number; forced
     for (const i of toClear) for (const nb of orthos(i)) if (isPuff(cur[nb])) finalClear.add(nb)
     let puffs = 0
 
+    // spawns are normally protected from the clear, but if EVERY matched cell is a
+    // spawn (a degenerate mono-colour board where a special lands on every cell),
+    // protecting them would clear nothing and loop forever — so drop the specials
+    // that pass and clear everything, guaranteeing the cascade always makes progress.
+    const willClear = [...finalClear].some((i) => !spawnCells.has(i))
+    const applySpawns = willClear ? spawns : []
+    const protect = willClear ? spawnCells : new Set<number>()
+
     const cleared = cur.map((c) => ({ ...c }))
     const colorCounts = new Array<number>(TYPES).fill(0)
     for (const i of finalClear) {
-      if (spawnCells.has(i)) continue
+      if (protect.has(i)) continue
       if (isPuff(cur[i])) puffs++
       else if (cur[i].color >= 0) colorCounts[cur[i].color]++
       cleared[i] = empty()
     }
-    for (const sp of spawns) cleared[sp.i] = { color: sp.color, kind: sp.kind }
+    for (const sp of applySpawns) cleared[sp.i] = { color: sp.color, kind: sp.kind }
 
     const fallen = collapse(cleared, rng)
     const mult = 1 + cascade * 0.5
     const gained = Math.round((toClear.size * 10 + puffs * PUFF_BONUS) * mult)
-    steps.push({ matched: [...finalClear], spawned: spawns.map((s) => ({ i: s.i, kind: s.kind })), fired, blasts, fallen, gained, mult, puffs, colorCounts })
+    steps.push({ matched: [...finalClear], spawned: applySpawns.map((s) => ({ i: s.i, kind: s.kind })), fired, blasts, fallen, gained, mult, puffs, colorCounts })
     cur = fallen
     cascade++
   }
@@ -303,7 +347,7 @@ export function swapMakesMatch(b: Cell[], a: number, c: number): boolean {
 // seed clear-set for resolve()'s detonateChain to blow through.
 type Fam = 'surge' | 'star' | 'prism'
 const fam = (k: Kind): Fam | null =>
-  k === 'surgeH' || k === 'surgeV' ? 'surge' : k === 'star' ? 'star' : k === 'prism' ? 'prism' : null
+  k === 'surgeH' || k === 'surgeV' ? 'surge' : k === 'star' || k === 'burst' ? 'star' : k === 'prism' ? 'prism' : null
 
 const rowCells = (y: number) => Array.from({ length: W }, (_, x) => idx(x, y))
 const colCells = (x: number) => Array.from({ length: H }, (_, y) => idx(x, y))
