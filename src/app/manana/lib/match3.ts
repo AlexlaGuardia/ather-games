@@ -293,12 +293,81 @@ export function swapMakesMatch(b: Cell[], a: number, c: number): boolean {
   return findMatches(swapped(b, a, c)).size > 0
 }
 
+// ── special + special COMBOS ────────────────────────────────────────────────
+// Swapping two specials together fires a signature combined effect, bigger than
+// the two firing on their own. `board` is already swapped (both specials sit at
+// a and c). Returns the enhanced board (some gems re-forged into specials) + the
+// seed clear-set for resolve()'s detonateChain to blow through.
+type Fam = 'surge' | 'star' | 'prism'
+const fam = (k: Kind): Fam | null =>
+  k === 'surgeH' || k === 'surgeV' ? 'surge' : k === 'star' ? 'star' : k === 'prism' ? 'prism' : null
+
+const rowCells = (y: number) => Array.from({ length: W }, (_, x) => idx(x, y))
+const colCells = (x: number) => Array.from({ length: H }, (_, y) => idx(x, y))
+const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v))
+
+function presentColour(b: Cell[], rng: Rng): number {
+  const seen = [...new Set(b.filter((c) => c.color >= 0 && !c.puff).map((c) => c.color))]
+  return seen.length ? seen[Math.floor(rng() * seen.length)] : 0
+}
+
+export function specialCombo(b: Cell[], a: number, c: number, rng: Rng): { board: Cell[]; forced: Set<number> } {
+  const fa = fam(b[a].kind)!, fb = fam(b[c].kind)!
+  const nb = b.map((x) => ({ ...x }))
+  const forced = new Set<number>([a, c])
+  const { x: cx, y: cy } = xy(c)
+  const key = [fa, fb].sort().join('+') // canonical pair name
+
+  // prism + prism → clear the whole board (the nuke)
+  if (key === 'prism+prism') {
+    for (let i = 0; i < W * H; i++) if (!isPuff(nb[i])) forced.add(i)
+    return { board: nb, forced }
+  }
+
+  // prism + surge/star → every gem of the partner's colour becomes that special, then all fire
+  if (fa === 'prism' || fb === 'prism') {
+    const partner = fa === 'prism' ? c : a
+    const otherFam: Fam = fa === 'prism' ? fb : fa
+    const colour = nb[partner].color >= 0 ? nb[partner].color : presentColour(nb, rng)
+    let flip = 0
+    for (let i = 0; i < W * H; i++) {
+      if (i === a || i === c || isPuff(nb[i]) || nb[i].color < 0) continue
+      if (nb[i].color === colour) {
+        nb[i] = { ...nb[i], kind: otherFam === 'star' ? 'star' : (flip++ % 2 ? 'surgeH' : 'surgeV') }
+        forced.add(i)
+      }
+    }
+    return { board: nb, forced }
+  }
+
+  // surge + surge → full row AND full column through the swap (a giant plus)
+  if (key === 'surge+surge') {
+    for (const i of rowCells(cy)) forced.add(i)
+    for (const i of colCells(cx)) forced.add(i)
+    return { board: nb, forced }
+  }
+
+  // star + surge → a THICK cross: three rows and three columns
+  if (key === 'star+surge') {
+    for (let dy = -1; dy <= 1; dy++) for (const i of rowCells(clamp(cy + dy, 0, H - 1))) forced.add(i)
+    for (let dx = -1; dx <= 1; dx++) for (const i of colCells(clamp(cx + dx, 0, W - 1))) forced.add(i)
+    return { board: nb, forced }
+  }
+
+  // star + star → a 5×5 blast around the swap
+  for (let y = clamp(cy - 2, 0, H - 1); y <= clamp(cy + 2, 0, H - 1); y++)
+    for (let x = clamp(cx - 2, 0, W - 1); x <= clamp(cx + 2, 0, W - 1); x++) forced.add(idx(x, y))
+  return { board: nb, forced }
+}
+
 // a swap is also legal if it detonates a special. Returns the seed clear-set
 // (post-swap) for resolve(), or null if it's a plain (non-detonating) swap.
-export function swapDetonation(b: Cell[], a: number, c: number): { board: Cell[]; forced: Set<number> } | null {
+export function swapDetonation(b: Cell[], a: number, c: number, rng?: Rng): { board: Cell[]; forced: Set<number> } | null {
   if (!areAdjacent(a, c)) return null
   if (!isSpecial(b[a]) && !isSpecial(b[c])) return null
   const nb = swapped(b, a, c)
+  // BOTH cells special after the swap → a combined combo effect
+  if (isSpecial(nb[a]) && isSpecial(nb[c])) return specialCombo(nb, a, c, rng ?? Math.random)
   // a prism takes the colour of the plain gem it was swapped with
   if (nb[a].kind === 'prism' && nb[c].kind === 'none') nb[a] = { ...nb[a], color: nb[c].color }
   if (nb[c].kind === 'prism' && nb[a].kind === 'none') nb[c] = { ...nb[c], color: nb[a].color }

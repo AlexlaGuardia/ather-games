@@ -301,7 +301,7 @@ export default function MananaPage() {
 
   const trySwap = async (a: number, c: number) => {
     const before = boardRef.current
-    const det = swapDetonation(before, a, c)
+    const det = swapDetonation(before, a, c, rngRef.current)
     if (det) {
       sfx.ensure(); sfx.play('swap'); setBusy(true)
       apply(det.board)
@@ -567,7 +567,7 @@ export default function MananaPage() {
         </div>
 
         <footer className="mt-3 shrink-0 text-center text-[10px] text-slate-600">
-          drag a gem to a neighbour · 4 blooms a Surge · 5 a Prism · 7 an Ather Star
+          drag to a neighbour · 4→Surge · 5→Prism · 7→Star · swap two specials to combo
         </footer>
       </div>
     </div>
