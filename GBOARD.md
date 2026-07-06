@@ -358,6 +358,12 @@ the Arcade frame.
      H-run × V-run crossing: **L (corner) → burst** (NEW 3×3 box-bomb special), **T (junction) → star**.
      (mapping is a one-line flip if Alex wants T↔L swapped.) Fixed a latent mono-colour infinite loop via a
      guaranteed-progress guard. 5 shape assertions green. ▶ Alex playtest the burst feel + T/L mapping.
+  1c. ✅ **COLLAR OBSTACLE + CALLOUTS SHIPPED 2026-07-06 (`7fe607e`)** — collared orb = Folk-canon blocker
+     (locked colour orb; a clear on/beside it SNAPS the collar, freeing it to a normal orb — "free the spirit").
+     Distinct from puffs (carries colour, falls, freed not removed). New quest goal 'free N collars' + 2 levels
+     (Snap the Collar / The Warren) → ladder now 14. Plus SPECIAL/COMBO CALLOUTS (SURGE!/PRISM!/STAR!/BURST!/
+     COMBO! flash) teaching the roster. 7 collar assertions; collars render+seed+HUD confirmed live. ▶ Alex
+     playtest freeing feel + callout timing.
   2. Paint a **cloud-puff sprite** in Aseprite → swap the CSS `PuffCell` stub (drop-and-convert).
   3. Combo discoverability polish — a first-combo celebration / subtle glow between two adjacent specials.
   4. Optional puff balance tune; `robots` index intent in `layout.tsx`.
