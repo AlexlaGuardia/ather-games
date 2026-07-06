@@ -19,6 +19,7 @@ import { ZONE_NODES, type NodePlacement } from '../world/node-placements'
 import { createResourceNode, depleteNode, tickNodeRespawn, rollDrops, getNodeSkill, nodeTier, NODE_DEFS, type NodeType, type ResourceNode } from '../world/resources'
 import { TOOL_DEFS, getEquippedTool, useTool, toolsToSave, toolsFromSave, ensureBasicTools, craftTool, canCraft as canCraftTool, type EquippedTools } from '../engine/tools'
 import { findAdjacentNode, addHarvestItems } from '../engine/harvesting'
+import { RinningCatch } from './RinningCatch'
 import { createSkillSet, skillSetToSave, skillSetFromSave, addSkillXP, xpForSkillLevel, SKILL_META, type SkillSet } from '../engine/skills'
 import { createBeast, checkBeastUnlock, beastsToSave, beastsFromSave, BEAST_SPECIES, BEAST_DEFS, BEAST_PERKS, PERK_INFO, getBonusFindChance, getSpeedBonus, type ManaBeast, type BeastSpecies } from '../beasts/beast'
 import { createInventory, inventoryToSave, inventoryFromSave, addItems, removeItems, countItem, transferItem, createChestStorage, chestToSave, chestFromSave, type Inventory, type ItemStack, type ChestStorage, type ChestSave } from '../engine/inventory'
@@ -1128,6 +1129,7 @@ export default function Shimmer3D() {
   useEffect(() => { if (!harvestToast) return; const t = setTimeout(() => setHarvestToast(null), 2400); return () => clearTimeout(t) }, [harvestToast])
   const channelRef = useRef<{ node: ResourceNode; progress: number; durSec: number; manaCost: number } | null>(null)
   const [channel, setChannel] = useState<{ nodeId: string; label: string; hp: number } | null>(null)
+  const [rinNode, setRinNode] = useState<{ node: ResourceNode; manaCost: number } | null>(null) // rinning cast-and-catch
   const [menuOpen, setMenuOpen] = useState(false)     // ☰ — edit terrain / new game
   const [skillsOpen, setSkillsOpen] = useState(false) // skills panel
   const toggleChannel = useCallback(() => {
@@ -1146,6 +1148,9 @@ export default function Shimmer3D() {
       setHarvestToast(overTier > 0 ? `${toolDef?.name} strains here — need ${manaCost} mana` : `Not enough mana (need ${manaCost})`)
       return
     }
+    // Rinning is a cast-and-catch, not a hold-to-channel — open the minigame; a catch
+    // drains the mana + grants the drops (a miss costs nothing but the cast).
+    if (skillId === 'rinning') { setRinNode({ node, manaCost }); return }
     // Drifthorn's gathering_speed perk + the tool's speedBonus both shorten the channel.
     const speedBeast = beastsRef.current.find(b => b.id === activeBeastIdRef.current) ?? null
     const durSec = nodeChannelSec(node.type) * (toolDef?.speedBonus ?? 1) / (1 + getSpeedBonus(speedBeast))
@@ -1346,6 +1351,48 @@ export default function Shimmer3D() {
     persist()
   }, [syncSkillHud, persist, checkCompanionUnlocks])
 
+  // Grant a completed harvest: roll drops + XP, wear the tool, deplete the node, HUD/toast/banner,
+  // persist. Shared by the channel completion (forestry/prospecting) and the rinning catch.
+  const grantHarvest = useCallback((node: ResourceNode) => {
+    const skillId = getNodeSkill(node.type)
+    const tool = getEquippedTool(equippedToolsRef.current, skillId)
+    const xp = Math.round(NODE_DEFS[node.type].xp * (tool?.xpBonus ?? 1))
+    // Active companion @15 perk — skill-matched bonus find (Grovekin/Gemsense/Truesight)
+    const activeBeast = beastsRef.current.find(b => b.id === activeBeastIdRef.current) ?? null
+    const added = addHarvestItems(invRef.current, rollDrops(node.type, getBonusFindChance(activeBeast, skillId)))
+    const xpr = addSkillXP(skillsRef.current[skillId], xp)
+    // Wear the tool — basics never break; when an improved tool breaks, fall back to the basic.
+    if (tool && !useTool(tool)) {
+      delete equippedToolsRef.current[skillId]
+      ensureBasicTools(equippedToolsRef.current)
+      setToolTick(t => t + 1)
+      setHarvestToast(`${TOOL_DEFS[tool.toolId]?.name} broke — back to your ${TOOL_DEFS[equippedToolsRef.current[skillId]!.toolId]?.name}`)
+    }
+    depleteNode(node)
+    syncSkillHud(); setRuntimeNodes([...runtimeNodesRef.current]); setNearNode(null)
+    setHarvestToast(`+ ${added.map(prettyItem).join(' · ') || 'nothing'}   ·   ${SKILL_META[skillId].name} +${xp} XP`)
+    if (xpr.leveled) {
+      setBanner(`✦ ${SKILL_META[skillId].name} Lv ${xpr.newLevel}!`)
+      const got = checkCompanionUnlocks()
+      if (got) setBanner(`✦ ${BEAST_DEFS[got].name} joined you — ${PERK_INFO[BEAST_PERKS[got]].label} unlocked!`)
+    }
+    persist()
+  }, [syncSkillHud, persist, checkCompanionUnlocks])
+
+  // rinning catch resolved — a catch drains the mana + grants the drops; a miss just closes.
+  const onRinDone = useCallback((caught: boolean) => {
+    const ctx = rinNode
+    setRinNode(null)
+    if (!ctx) return
+    if (caught) {
+      manaRef.current.current = Math.max(0, manaRef.current.current - ctx.manaCost)
+      setManaFrac(manaRef.current.current / getMaxPool(skillsRef.current.mana.level))
+      grantHarvest(ctx.node)
+    } else {
+      setHarvestToast('…it slipped the line')
+    }
+  }, [rinNode, grantHarvest])
+
   // channel driver — advances progress + drains mana each tick; breaks on distance / no-mana; completes at full.
   useEffect(() => {
     const dt = 0.09
@@ -1361,36 +1408,14 @@ export default function Shimmer3D() {
       setManaFrac(manaRef.current.current / getMaxPool(skillsRef.current.mana.level))
       ch.progress += dt / ch.durSec
       if (ch.progress >= 1) {
-        const skillId = getNodeSkill(ch.node.type)
-        const tool = getEquippedTool(equippedToolsRef.current, skillId)
-        const xp = Math.round(NODE_DEFS[ch.node.type].xp * (tool?.xpBonus ?? 1))
-        // Active companion @15 perk — skill-matched bonus find (Grovekin/Gemsense/Truesight)
-        const activeBeast = beastsRef.current.find(b => b.id === activeBeastIdRef.current) ?? null
-        const added = addHarvestItems(invRef.current, rollDrops(ch.node.type, getBonusFindChance(activeBeast, skillId)))
-        const xpr = addSkillXP(skillsRef.current[skillId], xp)
-        // Wear the tool — basics never break; when an improved tool breaks, fall back to the basic.
-        if (tool && !useTool(tool)) {
-          delete equippedToolsRef.current[skillId]
-          ensureBasicTools(equippedToolsRef.current)
-          setToolTick(t => t + 1)
-          setHarvestToast(`${TOOL_DEFS[tool.toolId]?.name} broke — back to your ${TOOL_DEFS[equippedToolsRef.current[skillId]!.toolId]?.name}`)
-        }
-        depleteNode(ch.node)
+        grantHarvest(ch.node)
         channelRef.current = null; setChannel(null)
-        syncSkillHud(); setRuntimeNodes([...runtimeNodesRef.current]); setNearNode(null)
-        setHarvestToast(`+ ${added.map(prettyItem).join(' · ') || 'nothing'}   ·   ${SKILL_META[skillId].name} +${xp} XP`)
-        if (xpr.leveled) {
-          setBanner(`✦ ${SKILL_META[skillId].name} Lv ${xpr.newLevel}!`)
-          const got = checkCompanionUnlocks()
-          if (got) setBanner(`✦ ${BEAST_DEFS[got].name} joined you — ${PERK_INFO[BEAST_PERKS[got]].label} unlocked!`)
-        }
-        persist()
       } else {
         setChannel({ nodeId: ch.node.id, label: prettyItem(ch.node.type), hp: 1 - ch.progress })
       }
     }, dt * 1000)
     return () => clearInterval(id)
-  }, [syncSkillHud, persist])
+  }, [syncSkillHud, persist, grantHarvest])
 
   const onEncounter = useCallback((enc: WildEncounter) => {
     battleRef.current = true   // freeze the walker through the approach beat AND the fight
@@ -1815,7 +1840,9 @@ export default function Shimmer3D() {
           position: 'fixed', left: '50%', bottom: 156, transform: 'translateX(-50%)', zIndex: 35,
           padding: '7px 14px', borderRadius: 999, background: 'rgba(11,21,19,0.92)', border: '1px solid #4fc79a66',
           color: '#cfeee2', font: '700 13px ui-monospace, monospace', whiteSpace: 'nowrap', pointerEvents: 'none',
-        }}>🪓 Channel {prettyItem(nearNode.type)} <span style={{ opacity: 0.6 }}>({isTouch ? 'tap 🪓' : 'E'})</span></div>
+        }}>{getNodeSkill(nearNode.type) === 'rinning'
+          ? <>🎣 Cast at {prettyItem(nearNode.type)} <span style={{ opacity: 0.6 }}>({isTouch ? 'tap 🎣' : 'E'})</span></>
+          : <>🪓 Channel {prettyItem(nearNode.type)} <span style={{ opacity: 0.6 }}>({isTouch ? 'tap 🪓' : 'E'})</span></>}</div>
       )}
       {/* station prompt — generic over brew/craft/chest/exchange/farm, driven by the STATIONS registry */}
       {nearStation && !openMenu && !nearNode && !nearNpc && !dialogue && !battle && !editMode && !placing && (() => {
@@ -2338,6 +2365,11 @@ export default function Shimmer3D() {
             onEnd={(o) => endBattle(o === 'win' ? 'win' : 'lose')}
           />
         </div>
+      )}
+
+      {/* Rinning cast-and-catch — the water-node minigame (opens instead of channelling) */}
+      {rinNode && !battle && !editMode && (
+        <RinningCatch label={prettyItem(rinNode.node.type)} onDone={(caught) => onRinDone(caught)} />
       )}
     </div>
   )
