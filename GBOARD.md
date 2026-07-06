@@ -132,6 +132,18 @@ the Arcade frame.
 > **Room pill ALWAYS-ON 2026-06-30** (was from-room-gated → direct visits looked like dead-ends; now every cabinet always shows it). Audit 06-29: all cabinet games have it; Nolmir was a dead-end → FIXED (RoomReturn
 > added); Gravitar = back-room/cut (skipped). **No public dead-ends remain.**
 >
+> **✅ SHARED MOBILE-FIT + 2x DECK 2026-07-06 (jin-cc, `c9f032c`→`7d0b3eb`):** killed the mobile control cut-off
+> ACROSS ALL 11 cabinets. Root cause: cabinets stack header/screen/deck under `useNoScroll`, nothing fit the
+> stack to viewport height (`min-h-screen`=100vh ignored the phone URL bar); only 3 games had an ad-hoc
+> `min(px,Nvh)` band-aid. New shared `src/lib/arcade/fit.ts` — **`screenMaxW`** (screen: aspect + `dvh`
+> height-fit), **`deckMaxW`** (thumb-comfortable deck width), **`cabinetMaxW`=max(screen,deck)** (housing +
+> header/score/footer). Shell `min-h-screen`→`min-h-dvh`+`max-h-dvh`. Portrait screen now sits centered in a
+> dark bezel inside the wider cabinet (reads like a real cabinet). **2x button pass (Alex):** round 72/56→144/112,
+> D-pad 52→104, joystick 46→92/knob 26→52; `DECK_RESERVE`=320. Rolled to all games (9 via 3 parallel agents),
+> type-clean + built, verified live at 500x755 across every variant. **▶ PENDING ALEX real-phone pass:** (1) 2x
+> feel — one number in `ArcadeControls` if too big; (2) `DECK_RESERVE`/gutter feel — one number, reflows all.
+> Minor open: a couple start-overlays run tall for their screen; header subtitle tight vs room pill at narrow widths.
+>
 > **▶ VEHICLE = the ARCADE POLISH LAP (planned 2026-06-21, Alex):** the start/over + HUD rollout now rides a
 > per-game polish lap — **one game per session**, same checklist (cold play → feel fixes → UI-layer pass → mobile →
 > card art → bump block). Recommended order: **Atherdash → Lucernyx → Ward → Mana'nana → Voranyx/Seedfall/Updraft/
