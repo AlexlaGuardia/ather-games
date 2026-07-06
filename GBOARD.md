@@ -375,7 +375,12 @@ the Arcade frame.
      sfx+voice. Alex ear-picked George over edge-Ryan/11L-Alice in an A/B. Clips in `public/manana/vo`
      (gitignored); `scripts/gen_manana_vo.py` reproduces them. Lines canon-neutral (no Magii gate). ▶ Alex
      DEVICE PASS: the throttle/sparseness feel — talks too much? too rare? tune PROB/MIN_GAP in `lib/vo.ts`.
-     ▶ NEXT on this thread: **music bus + ducking** (Alex making a track → I wire loop + dip-under-VO).
+  1f. ✅ **MUSIC BED + DUCKING SHIPPED 2026-07-06 (`3679dae`)** — Alex's looping backdrop track wired through a
+     Web Audio bus (`lib/music.ts`), NOT a plain `<audio>` tag: gapless MP3 loop + a real GainNode so every
+     spoken George line dips the music ~1s then swells back (voice cuts through). Quiet bed (0.32); starts on
+     first gesture; one mute toggle governs sfx+voice+music. VoBank got an `onSpeak` hook (stays decoupled).
+     Track = `public/manana/music.mp3` (gitignored, server-side). ▶ Alex DEVICE PASS: bed volume (BASE_VOL) +
+     duck depth/recover (DUCK_TO/DUCK_RECOVER_S) feel + is the loop seam clean? All knobs in `lib/music.ts`.
   2. Paint a **cloud-puff sprite** in Aseprite → swap the CSS `PuffCell` stub (drop-and-convert).
   3. Combo discoverability polish — a first-combo celebration / subtle glow between two adjacent specials.
   4. Optional puff balance tune; `robots` index intent in `layout.tsx`.
@@ -383,7 +388,7 @@ the Arcade frame.
 **Decisions:** kept the **CSS gradient orbs** over a painted pixel-orb (Alex prefers them —
   the Void-orb experiment was reverted); cloud-puff chains stay **emergent**, not hardcoded
   (that's the difficulty); detonation kept **clean** over maximalist (his call).
-**Files:** `manana/lib/match3.ts` · `page.tsx` · `tiles.ts` (T34 puff palette) · `runes.tsx` · `lib/sfx.ts` · `lib/vo.ts` (commentator) · `scripts/gen_manana_vo.py`
+**Files:** `manana/lib/match3.ts` · `page.tsx` · `tiles.ts` (T34 puff palette) · `runes.tsx` · `lib/sfx.ts` · `lib/vo.ts` (commentator) · `lib/music.ts` (bed+ducking) · `scripts/gen_manana_vo.py`
 
 ### Rekindle (#3) — 🟢 live · conduit puzzle + Aeterna node-map → `/rekindle`
 *Last touched: 2026-06-22 — gx-* UI pass (map tiles → gx-card plates, squared chrome on both views)*
