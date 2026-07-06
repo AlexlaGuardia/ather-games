@@ -364,6 +364,10 @@ the Arcade frame.
      (Snap the Collar / The Warren) → ladder now 14. Plus SPECIAL/COMBO CALLOUTS (SURGE!/PRISM!/STAR!/BURST!/
      COMBO! flash) teaching the roster. 7 collar assertions; collars render+seed+HUD confirmed live. ▶ Alex
      playtest freeing feel + callout timing.
+  1d. ✅ **ATHER SURGE POWER SHIPPED 2026-07-06 (`61fbcb3`)** — the ather meter now charges a triggerable
+     power, not just auto +moves. Clearing orbs fills a header lightning button (48 orbs); tap when full to
+     forge 3 random specials onto the board (weighted surge/star/burst) for you to wield + combo. No move cost;
+     resets per game; excluded from bloom-goal counting. atherSurge() pure (7 assertions). ▶ Alex playtest charge feel.
   2. Paint a **cloud-puff sprite** in Aseprite → swap the CSS `PuffCell` stub (drop-and-convert).
   3. Combo discoverability polish — a first-combo celebration / subtle glow between two adjacent specials.
   4. Optional puff balance tune; `robots` index intent in `layout.tsx`.
