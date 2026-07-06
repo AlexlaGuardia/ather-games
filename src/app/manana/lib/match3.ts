@@ -203,6 +203,7 @@ export interface ResolveStep {
   gained: number
   mult: number // cascade multiplier shown as "ather heat"
   puffs: number // puffs burst this cascade
+  colorCounts: number[] // gems cleared this cascade, tallied by colour id (drives quest goals)
 }
 
 export interface ResolveResult {
@@ -271,9 +272,11 @@ export function resolve(board: Cell[], rng: Rng, opts: { swapAt?: number; forced
     let puffs = 0
 
     const cleared = cur.map((c) => ({ ...c }))
+    const colorCounts = new Array<number>(TYPES).fill(0)
     for (const i of finalClear) {
       if (spawnCells.has(i)) continue
       if (isPuff(cur[i])) puffs++
+      else if (cur[i].color >= 0) colorCounts[cur[i].color]++
       cleared[i] = empty()
     }
     for (const sp of spawns) cleared[sp.i] = { color: sp.color, kind: sp.kind }
@@ -281,7 +284,7 @@ export function resolve(board: Cell[], rng: Rng, opts: { swapAt?: number; forced
     const fallen = collapse(cleared, rng)
     const mult = 1 + cascade * 0.5
     const gained = Math.round((toClear.size * 10 + puffs * PUFF_BONUS) * mult)
-    steps.push({ matched: [...finalClear], spawned: spawns.map((s) => ({ i: s.i, kind: s.kind })), fired, blasts, fallen, gained, mult, puffs })
+    steps.push({ matched: [...finalClear], spawned: spawns.map((s) => ({ i: s.i, kind: s.kind })), fired, blasts, fallen, gained, mult, puffs, colorCounts })
     cur = fallen
     cascade++
   }

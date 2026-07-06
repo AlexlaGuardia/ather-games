@@ -17,6 +17,7 @@ import {
 import { sfx, type ManaSfx } from './lib/sfx'
 import AtherBackdrop from './AtherBackdrop'
 import { RuneMark, type RuneId } from './runes'
+import { LEVELS, levelAt, isLastLevel, trackStep, goalMet, goalProgress, goalLabel } from './lib/quests'
 
 const START_MOVES = 20
 const PUFF_SEED = 3 // cloud-puffs seeded at board start; they spread if ignored
@@ -91,8 +92,13 @@ export default function MananaPage() {
   const [reward, setReward] = useState(0)
   const [busy, setBusy] = useState(false)
   const [over, setOver] = useState(false)
-  const [mode, setMode] = useState<'endless' | 'daily'>('endless')
+  const [mode, setMode] = useState<'endless' | 'daily' | 'quests'>('endless')
   const modeRef = useRef(mode); modeRef.current = mode
+  const [level, setLevel] = useState(0) // quest ladder index
+  const levelRef = useRef(0)
+  const [questGot, setQuestGot] = useState(0) // progress toward the current goal
+  const questGotRef = useRef(0)
+  const [won, setWon] = useState(false) // the over-overlay is a WIN (quest cleared) not a loss
   const [dailyBest, setDailyBest] = useState(0)
   const [shared, setShared] = useState(false)
   const [muted, setMuted] = useState(false)
@@ -174,23 +180,61 @@ export default function MananaPage() {
     return () => el.removeEventListener('touchmove', block)
   }, [mounted])
 
+  // start (or restart) a quest level: its own board seed, move budget, puff count.
+  const startLevel = (i: number) => {
+    const clamped = Math.max(0, Math.min(LEVELS.length - 1, i))
+    const lv = LEVELS[clamped]
+    levelRef.current = clamped
+    setLevel(clamped)
+    localStorage.setItem('manana.quest.level', String(clamped))
+    rngRef.current = mulberry32((Date.now() & 0xffffffff) >>> 0)
+    apply(seedPuffs(reshuffle(rngRef.current), rngRef.current, lv.puffs))
+    scoreRef.current = 0; setScore(0)
+    movesRef.current = lv.moves; setMovesState(lv.moves)
+    questGotRef.current = 0; setQuestGot(0)
+    milestonesRef.current = 0; setMilestones(0)
+    setSelected(null); setPopping(new Set()); setHeat(1); setReward(0)
+    setWon(false); setOver(false); setBusy(false)
+  }
+
+  // the current goal was met — clear the level and remember the next one.
+  const win = () => {
+    setWon(true)
+    setOver(true)
+    sfx.play('reward')
+    const next = Math.min(levelRef.current + 1, LEVELS.length)
+    localStorage.setItem('manana.quest.level', String(isLastLevel(levelRef.current) ? levelRef.current : next))
+  }
+
   const endGame = () => {
     setOver(true)
+    setWon(false)
     sfx.play('over')
     if (modeRef.current === 'daily') {
       setDailyBest(saveDailyBest('manana', scoreRef.current))
-    } else if (scoreRef.current > best) {
+    } else if (modeRef.current === 'endless' && scoreRef.current > best) {
       setBest(scoreRef.current)
       localStorage.setItem('manana.best', String(scoreRef.current))
     }
   }
 
-  const pickMode = (m: 'endless' | 'daily') => {
+  // quests: check the goal (win) before the out-of-moves loss.
+  const settle = () => {
+    if (modeRef.current === 'quests') {
+      if (goalMet(questGotRef.current, levelAt(levelRef.current).goal, scoreRef.current)) return win()
+      settle()
+      return
+    }
+    if (movesRef.current <= 0) endGame()
+  }
+
+  const pickMode = (m: 'endless' | 'daily' | 'quests') => {
     if (m === modeRef.current) return
-    modeRef.current = m // sync so newGame's re-seed reads the new mode
+    modeRef.current = m // sync so the re-seed reads the new mode
     setMode(m)
     sfx.ensure()
-    newGame()
+    if (m === 'quests') startLevel(Number(localStorage.getItem('manana.quest.level') ?? 0))
+    else newGame()
   }
   const onShare = async () => {
     if (await copyShare(dailyShare("Mana'nana", scoreRef.current))) {
@@ -200,6 +244,7 @@ export default function MananaPage() {
   }
 
   const awardMilestones = () => {
+    if (modeRef.current === 'quests') return // quests have a fixed move budget
     let awarded = 0
     while (scoreRef.current >= milestoneTarget(milestonesRef.current)) {
       milestonesRef.current += 1
@@ -278,6 +323,10 @@ export default function MananaPage() {
       scoreRef.current += step.gained
       setScore(scoreRef.current)
       awardMilestones()
+      if (modeRef.current === 'quests') {
+        questGotRef.current = trackStep(questGotRef.current, levelAt(levelRef.current).goal, step)
+        setQuestGot(questGotRef.current)
+      }
       apply(step.fallen)
       setPopping(new Set())
       await sleep(115)
@@ -309,7 +358,7 @@ export default function MananaPage() {
       await sleep(120)
       await runResolve(det.board, { forced: det.forced })
       setBusy(false)
-      if (movesRef.current <= 0) endGame()
+      settle()
     } else if (swapMakesMatch(before, a, c)) {
       sfx.ensure(); sfx.play('swap'); setBusy(true)
       const nb = swapped(before, a, c)
@@ -318,7 +367,7 @@ export default function MananaPage() {
       await sleep(120)
       await runResolve(nb, { swapAt: c })
       setBusy(false)
-      if (movesRef.current <= 0) endGame()
+      settle()
     } else {
       sfx.ensure(); sfx.play('bad'); setBusy(true)
       apply(swapped(before, a, c))
@@ -366,6 +415,11 @@ export default function MananaPage() {
   const prevAt = milestones > 0 ? milestoneTarget(milestones - 1) : 0
   const nextAt = milestoneTarget(milestones)
   const barPct = Math.max(0, Math.min(100, ((score - prevAt) / (nextAt - prevAt)) * 100))
+
+  // quest HUD
+  const lvl = levelAt(level)
+  const questProg = goalProgress(questGot, lvl.goal, score)
+  const questBarPct = Math.min(100, (questProg / lvl.goal.target) * 100)
 
   return (
     <div className="gx-chrome relative min-h-[calc(100svh-5rem)] overflow-hidden text-slate-200 font-sans" style={{ touchAction: 'manipulation', overscrollBehavior: 'none', ['--gx-accent' as string]: '#ffd884' } as React.CSSProperties}>
@@ -429,27 +483,40 @@ export default function MananaPage() {
         </div>
 
         <div className="flex items-center justify-center gap-1.5 mb-2 text-[10px] tracking-[0.18em] uppercase">
-          {(['endless', 'daily'] as const).map((m) => (
+          {(['quests', 'endless', 'daily'] as const).map((m) => (
             <button
               key={m}
               onClick={() => pickMode(m)}
               className={`px-3 py-1 rounded-full border transition-colors ${mode === m ? 'text-[#1a1228] bg-amber-300 border-amber-300 font-semibold' : 'text-slate-400 border-white/15 hover:text-amber-200'}`}
             >
-              {m === 'daily' ? `daily #${dailyNumber()}` : m}
+              {m === 'daily' ? `daily #${dailyNumber()}` : m === 'quests' ? 'quest' : m}
             </button>
           ))}
         </div>
 
-        {/* milestone bar — fill it for +moves */}
-        <div className="mb-3">
-          <div className="h-1.5 rounded-full bg-white/[0.06] overflow-hidden">
-            <div className="h-full rounded-full transition-all duration-300" style={{ width: `${barPct}%`, background: 'linear-gradient(90deg,#a4e7bb,#ffd884)' }} />
+        {/* quests → goal tracker · endless/daily → milestone (+moves) bar */}
+        {mode === 'quests' ? (
+          <div className="mb-3">
+            <div className="flex justify-between items-baseline text-[10px] mb-1">
+              <span className="text-amber-200 font-semibold tracking-wide">Lv {lvl.id} · {lvl.name}</span>
+              <span className="text-slate-300 tabular-nums">{questProg}/{lvl.goal.target}</span>
+            </div>
+            <div className="h-1.5 rounded-full bg-white/[0.06] overflow-hidden">
+              <div className="h-full rounded-full transition-all duration-300" style={{ width: `${questBarPct}%`, background: 'linear-gradient(90deg,#a4e7bb,#ffd884)' }} />
+            </div>
+            <div className="text-[8px] text-slate-500 mt-1 tracking-wider text-center uppercase">{goalLabel(lvl.goal)}</div>
           </div>
-          <div className="flex justify-between text-[8px] text-slate-500 mt-1 tracking-wider">
-            <span>ather meter</span>
-            <span>next +{MOVES_PER_MILESTONE} moves</span>
+        ) : (
+          <div className="mb-3">
+            <div className="h-1.5 rounded-full bg-white/[0.06] overflow-hidden">
+              <div className="h-full rounded-full transition-all duration-300" style={{ width: `${barPct}%`, background: 'linear-gradient(90deg,#a4e7bb,#ffd884)' }} />
+            </div>
+            <div className="flex justify-between text-[8px] text-slate-500 mt-1 tracking-wider">
+              <span>ather meter</span>
+              <span>next +{MOVES_PER_MILESTONE} moves</span>
+            </div>
           </div>
-        </div>
+        )}
 
         {/* board fits the leftover height — the whole 8x8 stays on screen, no scroll.
             100cqmin = the smaller of the wrapper's w/h, so the square never overflows either axis */}
@@ -539,27 +606,57 @@ export default function MananaPage() {
 
           {over && (
             <div className="absolute inset-0 z-30 overflow-y-auto rounded-2xl bg-black/70 backdrop-blur-sm">
-             <div className="min-h-full flex flex-col items-center justify-center py-4">
-              <div className="gx-label text-amber-200 text-sm mb-1">OUT OF MOVES</div>
-              <div className="text-3xl font-bold text-white mb-1 tabular-nums">{score.toLocaleString()}</div>
-              <div className="text-[11px] text-slate-400 mb-4">
-                {mode === 'daily'
-                  ? `daily #${dailyNumber()} · ${score >= dailyBest ? 'today’s best!' : `best ${dailyBest.toLocaleString()}`}`
-                  : (score >= best ? 'a new best!' : `best ${best.toLocaleString()}`)}
-              </div>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => { sfx.ensure(); sfx.play('shuffle'); newGame() }}
-                  className="px-5 py-2 rounded-full text-sm font-semibold tracking-wide text-[#1a1228]"
-                  style={{ background: 'linear-gradient(180deg,#ffe09a,#f0a526)' }}
-                >Play again</button>
-                {mode === 'daily' && (
-                  <button onClick={onShare} className="px-5 py-2 rounded-full text-sm font-semibold tracking-wide text-amber-200 border border-amber-300/40 hover:border-amber-300 transition-colors">
-                    {shared ? 'copied ✓' : 'share'}
-                  </button>
-                )}
-              </div>
-              {mode === 'daily' && <DailyLeaderboard gameId="manana" accent="#f0a526" score={score} className="mt-3" />}
+             <div className="min-h-full flex flex-col items-center justify-center py-4 px-4 text-center">
+              {mode === 'quests' && won ? (
+                <>
+                  <div className="gx-label text-emerald-300 text-sm mb-1 tracking-wide">
+                    {isLastLevel(level) ? 'MANA’NANA CLEARED ✦' : 'LEVEL CLEARED ✦'}
+                  </div>
+                  <div className="text-3xl font-bold text-white mb-1 tabular-nums">{score.toLocaleString()}</div>
+                  <div className="text-[11px] text-slate-400 mb-4">
+                    {isLastLevel(level) ? 'you cleared every level of the ladder' : `Lv ${lvl.id} · ${goalLabel(lvl.goal)}`}
+                  </div>
+                  <button
+                    onClick={() => { sfx.ensure(); sfx.play('shuffle'); startLevel(isLastLevel(level) ? 0 : level + 1) }}
+                    className="px-5 py-2 rounded-full text-sm font-semibold tracking-wide text-[#1a1228]"
+                    style={{ background: 'linear-gradient(180deg,#b6f2c8,#48b56f)' }}
+                  >{isLastLevel(level) ? 'Play from Lv 1' : 'Next level →'}</button>
+                </>
+              ) : mode === 'quests' ? (
+                <>
+                  <div className="gx-label text-amber-200 text-sm mb-1">OUT OF MOVES</div>
+                  <div className="text-3xl font-bold text-white mb-1 tabular-nums">{score.toLocaleString()}</div>
+                  <div className="text-[11px] text-slate-400 mb-4">Lv {lvl.id} · {goalLabel(lvl.goal)} · {questProg}/{lvl.goal.target}</div>
+                  <button
+                    onClick={() => { sfx.ensure(); sfx.play('shuffle'); startLevel(level) }}
+                    className="px-5 py-2 rounded-full text-sm font-semibold tracking-wide text-[#1a1228]"
+                    style={{ background: 'linear-gradient(180deg,#ffe09a,#f0a526)' }}
+                  >Retry level</button>
+                </>
+              ) : (
+                <>
+                  <div className="gx-label text-amber-200 text-sm mb-1">OUT OF MOVES</div>
+                  <div className="text-3xl font-bold text-white mb-1 tabular-nums">{score.toLocaleString()}</div>
+                  <div className="text-[11px] text-slate-400 mb-4">
+                    {mode === 'daily'
+                      ? `daily #${dailyNumber()} · ${score >= dailyBest ? 'today’s best!' : `best ${dailyBest.toLocaleString()}`}`
+                      : (score >= best ? 'a new best!' : `best ${best.toLocaleString()}`)}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => { sfx.ensure(); sfx.play('shuffle'); newGame() }}
+                      className="px-5 py-2 rounded-full text-sm font-semibold tracking-wide text-[#1a1228]"
+                      style={{ background: 'linear-gradient(180deg,#ffe09a,#f0a526)' }}
+                    >Play again</button>
+                    {mode === 'daily' && (
+                      <button onClick={onShare} className="px-5 py-2 rounded-full text-sm font-semibold tracking-wide text-amber-200 border border-amber-300/40 hover:border-amber-300 transition-colors">
+                        {shared ? 'copied ✓' : 'share'}
+                      </button>
+                    )}
+                  </div>
+                  {mode === 'daily' && <DailyLeaderboard gameId="manana" accent="#f0a526" score={score} className="mt-3" />}
+                </>
+              )}
              </div>
             </div>
           )}
