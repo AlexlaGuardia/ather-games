@@ -45,9 +45,9 @@ export default function ArcadeCabinet({
         className="fixed inset-0 -z-10"
         style={{
           background:
-            'linear-gradient(to bottom, rgba(212,168,67,0.17), transparent 24%),' +
-            `linear-gradient(to top, rgba(${rgb},0.12), rgba(155,90,210,0.07) 9%, transparent 26%),` +
-            `radial-gradient(ellipse 58% 40% at 50% 50%, rgba(${rgb},0.08), transparent 62%),` +
+            'linear-gradient(to bottom, rgba(212,168,67,0.10), transparent 20%),' +
+            `linear-gradient(to top, rgba(${rgb},0.05), rgba(155,90,210,0.025) 6%, transparent 14%),` +
+            `radial-gradient(ellipse 58% 40% at 50% 50%, rgba(${rgb},0.07), transparent 62%),` +
             'linear-gradient(rgba(5,3,9,0.2), rgba(5,3,9,0.4))',
         }}
       />
