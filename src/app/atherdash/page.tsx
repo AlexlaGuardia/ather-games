@@ -33,6 +33,7 @@ import { sfx } from './lib/sfx'
 import ArcadeCabinet from '../_components/ArcadeCabinet'
 import ArcadeControls from '../_components/ArcadeControls'
 import { dailySeed, dailyNumber, loadDailyBest, saveDailyBest, dailyShare, copyShare } from '@/lib/arcade/daily'
+import { screenMaxW, deckMaxW, cabinetMaxW } from '@/lib/arcade/fit'
 import DailyLeaderboard from '../_components/DailyLeaderboard'
 
 const BG = '#04040a'
@@ -222,7 +223,7 @@ export default function AtherdashPage() {
   }, [launch, doJump])
 
   return (
-    <ArcadeCabinet accent="#37e6ff" wall={1} maxWidth={400}>
+    <ArcadeCabinet accent="#37e6ff" wall={1} maxWidth={cabinetMaxW(VW, VH)}>
       {/* marquee — title plate across the top of the cabinet */}
         <div className="w-full flex items-center justify-between mb-3 pb-2.5 border-b border-[#d4a843]/15">
           <span aria-hidden className="w-10" />
@@ -235,7 +236,7 @@ export default function AtherdashPage() {
           </button>
         </div>
 
-      <div className="gx-chrome relative w-full" style={{ aspectRatio: `${VW} / ${VH}`, ['--gx-accent' as string]: '#37e6ff' } as React.CSSProperties}>
+      <div className="gx-chrome relative w-full" style={{ maxWidth: screenMaxW(VW, VH), aspectRatio: `${VW} / ${VH}`, ['--gx-accent' as string]: '#37e6ff' } as React.CSSProperties}>
         <canvas
           ref={canvasRef}
           className="w-full h-full block touch-none rounded-md"
@@ -314,7 +315,7 @@ export default function AtherdashPage() {
       {/* the cabinet control deck — slide the lanes, hop the gaps (screen stays a clean display) */}
       <ArcadeControls
         accent="#37e6ff"
-        maxWidth={400}
+        maxWidth={deckMaxW}
         buttons={[
           { id: 'left', label: 'Left', glyph: '◀', hint: '←', size: 'md' },
           { id: 'jump', label: 'Hop', glyph: '⤴', hint: 'space', size: 'lg' },

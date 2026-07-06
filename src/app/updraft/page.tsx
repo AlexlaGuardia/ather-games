@@ -10,6 +10,7 @@ import ArcadeCabinet from '../_components/ArcadeCabinet'
 import ArcadeControls from '../_components/ArcadeControls'
 import { mulberry32 } from '@/lib/arcade/rng'
 import { useNoScroll } from '@/lib/arcade/useNoScroll'
+import { screenMaxW, deckMaxW, cabinetMaxW } from '@/lib/arcade/fit'
 import {
   makeWorld,
   flap,
@@ -158,8 +159,8 @@ export default function UpdraftPage() {
   }
 
   return (
-    <ArcadeCabinet accent="#37e6ff" wall={1} maxWidth="min(400px, 33vh)">
-      <div className="w-full max-w-[min(400px,33vh)] flex items-center justify-between mb-4">
+    <ArcadeCabinet accent="#37e6ff" wall={1} maxWidth={cabinetMaxW(VW, VH)}>
+      <div className="w-full flex items-center justify-between mb-4" style={{ maxWidth: cabinetMaxW(VW, VH) }}>
         <span aria-hidden className="w-10" />
         <div className="text-center">
           <div className="gx-title text-[#37e6ff] text-sm tracking-[0.35em] uppercase" style={{ textShadow: '0 0 8px #37e6ff80' }}>Updraft</div>
@@ -170,7 +171,7 @@ export default function UpdraftPage() {
         </button>
       </div>
 
-      <div className="gx-chrome relative w-full max-w-[min(400px,33vh)]" style={{ aspectRatio: `${VW} / ${VH}`, ['--gx-accent' as string]: '#37e6ff' } as React.CSSProperties}>
+      <div className="gx-chrome relative w-full" style={{ maxWidth: screenMaxW(VW, VH), aspectRatio: `${VW} / ${VH}`, ['--gx-accent' as string]: '#37e6ff' } as React.CSSProperties}>
         <canvas ref={canvasRef} className="w-full h-full block rounded-md pointer-events-none" />
         <div className="pointer-events-none absolute inset-0 rounded-md updraft-crt" />
 
@@ -232,13 +233,13 @@ export default function UpdraftPage() {
       {/* the cabinet control deck — one big FLY button (screen stays a clean display) */}
       <ArcadeControls
         accent="#37e6ff"
-        maxWidth="min(400px, 33vh)"
+        maxWidth={deckMaxW}
         buttons={[{ id: 'flap', label: 'Fly', glyph: '➶', hint: 'tap', size: 'lg' }]}
         onPress={onDown}
         hint="tap to beat your wings · rise"
       />
 
-      <div className="w-full max-w-[min(400px,33vh)] flex items-center justify-center mt-3">
+      <div className="w-full flex items-center justify-center mt-3" style={{ maxWidth: cabinetMaxW(VW, VH) }}>
         <p className="text-[10px] text-[#7fd8e6]/35 font-mono tracking-wider">one tap · keep him in the air</p>
       </div>
 

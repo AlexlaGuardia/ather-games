@@ -8,6 +8,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { mulberry32 } from '@/lib/arcade/rng'
 import { useNoScroll } from '@/lib/arcade/useNoScroll'
+import { screenMaxW, cabinetMaxW } from '@/lib/arcade/fit'
 import {
   makeWorld,
   tick,
@@ -220,9 +221,9 @@ export default function WardPage() {
   const lowAmmo = hud.maxAmmo > 0 && hud.ammo <= 3
 
   return (
-    <ArcadeCabinet accent="#37e6ff" wall={1} maxWidth={520}>
+    <ArcadeCabinet accent="#37e6ff" wall={1} maxWidth={cabinetMaxW(VW, VH)}>
       {/* header */}
-      <div className="w-full max-w-[520px] flex items-center justify-between mb-4">
+      <div className="w-full flex items-center justify-between mb-4" style={{ maxWidth: cabinetMaxW(VW, VH) }}>
         <span aria-hidden className="w-10" />
         <div className="text-center">
           <div className="font-mono text-[#37e6ff] text-sm tracking-[0.35em] uppercase" style={{ textShadow: '0 0 8px #37e6ff80' }}>Ward</div>
@@ -234,7 +235,7 @@ export default function WardPage() {
       </div>
 
       {/* score / wave / hiscore row */}
-      <div className="w-full max-w-[480px] flex items-end justify-between mb-2 font-mono">
+      <div className="w-full flex items-end justify-between mb-2 font-mono" style={{ maxWidth: cabinetMaxW(VW, VH) }}>
         <div className="text-left">
           <div className="gx-label text-[9px] text-[#7fd8e6]/40">score</div>
           <div className="gx-value text-[#e8feff] text-lg leading-none" style={{ textShadow: '0 0 8px #37e6ff70' }}>{hud.score.toLocaleString()}</div>
@@ -250,7 +251,7 @@ export default function WardPage() {
       </div>
 
       {/* ammo + spires */}
-      <div className="w-full max-w-[480px] mb-2 flex items-center gap-3">
+      <div className="w-full mb-2 flex items-center gap-3" style={{ maxWidth: cabinetMaxW(VW, VH) }}>
         <span className="gx-label text-[9px] text-[#7fd8e6]/40">ather</span>
         <div className="flex-1 h-2 rounded-full bg-white/[0.05] overflow-hidden">
           <div className="h-full rounded-full transition-all duration-150" style={{ width: `${hud.maxAmmo ? (hud.ammo / hud.maxAmmo) * 100 : 0}%`, background: lowAmmo ? '#ff5d9e' : '#37e6ff', boxShadow: `0 0 10px ${lowAmmo ? '#ff5d9e' : '#37e6ff'}` }} />
@@ -263,7 +264,7 @@ export default function WardPage() {
       </div>
 
       {/* the field */}
-      <div className="gx-chrome relative w-full max-w-[480px]" style={{ aspectRatio: `${VW} / ${VH}`, ['--gx-accent' as string]: '#37e6ff' } as React.CSSProperties}>
+      <div className="gx-chrome relative w-full" style={{ maxWidth: screenMaxW(VW, VH), aspectRatio: `${VW} / ${VH}`, ['--gx-accent' as string]: '#37e6ff' } as React.CSSProperties}>
         <canvas
           ref={canvasRef}
           onPointerDown={onDown}
@@ -346,7 +347,7 @@ export default function WardPage() {
         )}
       </div>
 
-      <div className="w-full max-w-[480px] flex items-center justify-center mt-4">
+      <div className="w-full flex items-center justify-center mt-4" style={{ maxWidth: cabinetMaxW(VW, VH) }}>
         <p className="text-[10px] text-[#7fd8e6]/35 font-mono tracking-wider">tap the sky · bloom early, the ring takes a moment</p>
       </div>
 

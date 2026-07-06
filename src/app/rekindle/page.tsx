@@ -23,6 +23,7 @@ import { genTemplate, dailySeed, dailyKey, type Template } from './lib/generate'
 import { WorldMap } from './components/WorldMap'
 import { sfx } from './lib/sfx'
 import { useNoScroll } from '@/lib/arcade/useNoScroll'
+import { screenMaxW, cabinetMaxW } from '@/lib/arcade/fit'
 
 const CELL = 64
 const SIDE_DX = [0, 1, 0, -1]
@@ -231,8 +232,8 @@ export default function RekindlePage() {
   // ── MAP VIEW ────────────────────────────────────────────────────────────────
   if (view === 'map') {
     return (
-      <ArcadeCabinet accent="#37e6ff" wall={1} maxWidth={560}>
-        <div className="w-full max-w-[560px] flex items-center justify-between mb-6">
+      <ArcadeCabinet accent="#37e6ff" wall={1} maxWidth={cabinetMaxW(CELL * 5, CELL * 5)}>
+        <div className="w-full flex items-center justify-between mb-6" style={{ maxWidth: cabinetMaxW(CELL * 5, CELL * 5) }}>
           <span aria-hidden className="w-10" />
           <div className="text-center">
             <div className="gx-title text-[#37e6ff] text-sm tracking-[0.3em] uppercase" style={{ textShadow: '0 0 8px #37e6ff80' }}>Rekindle</div>
@@ -246,7 +247,7 @@ export default function RekindlePage() {
         <WorldMap progress={progress} onPlay={openNode} />
 
         {/* generated machines */}
-        <div className="w-full max-w-[440px] grid grid-cols-2 gap-3 mt-6">
+        <div className="w-full grid grid-cols-2 gap-3 mt-6" style={{ maxWidth: cabinetMaxW(CELL * 5, CELL * 5) }}>
           <button
             onClick={openDaily}
             className="gx-card is-interactive gx-scan p-3 text-left"
@@ -276,8 +277,8 @@ export default function RekindlePage() {
 
   // ── PLAY VIEW ───────────────────────────────────────────────────────────────
   return (
-    <ArcadeCabinet accent="#37e6ff" wall={1} maxWidth={560}>
-      <div className="w-full max-w-[520px] flex items-center justify-between mb-4">
+    <ArcadeCabinet accent="#37e6ff" wall={1} maxWidth={cabinetMaxW(CELL * 5, CELL * 5)}>
+      <div className="w-full flex items-center justify-between mb-4" style={{ maxWidth: cabinetMaxW(CELL * 5, CELL * 5) }}>
         <button onClick={toMap} className="gx-label text-[10px] text-[#37e6ff]/50 hover:text-[#37e6ff]">
           &#8592; network
         </button>
@@ -292,7 +293,7 @@ export default function RekindlePage() {
         </button>
       </div>
 
-      <div className="w-full max-w-[480px] mb-2 flex items-center gap-3">
+      <div className="w-full mb-2 flex items-center gap-3" style={{ maxWidth: cabinetMaxW(CELL * 5, CELL * 5) }}>
         <span className="gx-label text-[9px] text-[#7fd8e6]/40">charge</span>
         <div className="flex-1 h-2 rounded-full bg-white/[0.05] overflow-hidden">
           <div className="h-full rounded-full transition-all duration-150" style={{ width: `${Math.max(0, (remaining / charge) * 100)}%`, background: low ? '#ff5d9e' : '#37e6ff', boxShadow: `0 0 10px ${low ? '#ff5d9e' : '#37e6ff'}` }} />
@@ -300,7 +301,7 @@ export default function RekindlePage() {
         <span className="text-[10px] font-mono tabular-nums text-[#7fd8e6]/60 w-20 text-right">{remaining} left · par {par}</span>
       </div>
 
-      <div className="gx-chrome relative w-full max-w-[480px]" style={{ aspectRatio: aspect, ['--gx-accent' as string]: '#37e6ff' } as React.CSSProperties}>
+      <div className="gx-chrome relative w-full" style={{ maxWidth: screenMaxW(CELL * 5, CELL * 5), aspectRatio: aspect, ['--gx-accent' as string]: '#37e6ff' } as React.CSSProperties}>
         <canvas ref={canvasRef} onPointerDown={onPoint} className="w-full h-full block touch-none rounded-md cursor-pointer" />
         <div className="pointer-events-none absolute inset-0 rounded-md rk-crt" />
 
@@ -335,7 +336,7 @@ export default function RekindlePage() {
         )}
       </div>
 
-      <div className="w-full max-w-[480px] flex items-center justify-between mt-4">
+      <div className="w-full flex items-center justify-between mt-4" style={{ maxWidth: cabinetMaxW(CELL * 5, CELL * 5) }}>
         <button onClick={reset} className="gx-label text-[10px] text-[#37e6ff]/45 hover:text-[#37e6ff]">reset</button>
         <p className="text-[10px] text-[#7fd8e6]/35 font-mono tracking-wider">tap to turn · keep each colour pure</p>
       </div>

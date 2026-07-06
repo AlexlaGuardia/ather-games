@@ -8,6 +8,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import ArcadeCabinet from '../_components/ArcadeCabinet'
 import { mulberry32 } from '@/lib/arcade/rng'
 import { useNoScroll } from '@/lib/arcade/useNoScroll'
+import { screenMaxW, deckMaxW, cabinetMaxW } from '@/lib/arcade/fit'
 import { dailySeed, dailyNumber, loadDailyBest, saveDailyBest, dailyShare, copyShare } from '@/lib/arcade/daily'
 import DailyLeaderboard from '../_components/DailyLeaderboard'
 import {
@@ -177,8 +178,8 @@ export default function SquallPage() {
   const toggleMute = () => { sfx.ensure(); const m = !sfx.isMuted(); sfx.setMuted(m); setMuted(m) }
 
   return (
-    <ArcadeCabinet accent={ACCENT} wall={1} maxWidth="min(420px, 34vh)">
-      <div className="w-full flex items-center justify-between mb-3" style={{ maxWidth: 'min(420px, 34vh)' }}>
+    <ArcadeCabinet accent={ACCENT} wall={1} maxWidth={cabinetMaxW(VW, VH)}>
+      <div className="w-full flex items-center justify-between mb-3" style={{ maxWidth: cabinetMaxW(VW, VH) }}>
         <span aria-hidden className="w-10" />
         <div className="text-center">
           <div className="gx-title text-sm tracking-[0.35em] uppercase" style={{ color: ACCENT, textShadow: `0 0 8px ${ACCENT}80` }}>Squall</div>
@@ -188,13 +189,13 @@ export default function SquallPage() {
       </div>
 
       {/* score + graze */}
-      <div className="w-full mb-2 flex items-center gap-3 font-mono" style={{ maxWidth: 'min(420px, 34vh)' }}>
+      <div className="w-full mb-2 flex items-center gap-3 font-mono" style={{ maxWidth: cabinetMaxW(VW, VH) }}>
         <span className="gx-label text-[10px]" style={{ color: ACCENT }}>survive</span>
         <span className="gx-label text-[10px] text-[#e8feff] tabular-nums">{score}</span>
         <span className="gx-label text-[9px] tracking-wider ml-auto" style={{ color: VOID }}>graze <span className="text-[#e8feff] tabular-nums">{graze}</span></span>
       </div>
 
-      <div className="gx-chrome relative w-full" style={{ maxWidth: 'min(420px, 34vh)', aspectRatio: `${VW} / ${VH}`, ['--gx-accent' as string]: ACCENT } as React.CSSProperties}>
+      <div className="gx-chrome relative w-full" style={{ maxWidth: screenMaxW(VW, VH), aspectRatio: `${VW} / ${VH}`, ['--gx-accent' as string]: ACCENT } as React.CSSProperties}>
         <canvas
           ref={canvasRef}
           className="w-full h-full block rounded-md pointer-events-none"
@@ -254,14 +255,14 @@ export default function SquallPage() {
       {/* the cabinet control deck — a steer stick (no buttons; Squall is pure evasion) */}
       <ArcadeControls
         accent={ACCENT}
-        maxWidth="min(420px, 34vh)"
+        maxWidth={deckMaxW}
         stick
         onStick={onStick}
         onStickEnd={onStickEnd}
         hint="drag the stick to weave the storm"
       />
 
-      <div className="w-full flex items-center justify-center mt-3" style={{ maxWidth: 'min(420px, 34vh)' }}>
+      <div className="w-full flex items-center justify-center mt-3" style={{ maxWidth: cabinetMaxW(VW, VH) }}>
         <p className="text-[10px] text-[#7fd8e6]/35 font-mono tracking-wider">drag to move · graze for score · just survive</p>
       </div>
     </ArcadeCabinet>

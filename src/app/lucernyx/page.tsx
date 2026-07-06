@@ -11,6 +11,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import ArcadeCabinet from '../_components/ArcadeCabinet'
 import { mulberry32 } from '@/lib/arcade/rng'
 import { useNoScroll } from '@/lib/arcade/useNoScroll'
+import { screenMaxW, cabinetMaxW } from '@/lib/arcade/fit'
 import {
   makeBoard, legalMoves, apply, aiMove, countPieces,
   COLS, ROWS, TORCHES_TO_WIN, idx, rowOf, colOf, homeRank, isDark,
@@ -171,8 +172,8 @@ export default function LucernyxPage() {
   const toggleMute = () => { sfx.ensure(); const m = !sfx.isMuted(); sfx.setMuted(m); setMuted(m) }
 
   return (
-    <ArcadeCabinet accent="#37e6ff" wall={1} maxWidth={440}>
-      <div className="w-full max-w-[440px] flex items-center justify-between mb-3">
+    <ArcadeCabinet accent="#37e6ff" wall={1} maxWidth={cabinetMaxW(440, 440 * ROWS / COLS)}>
+      <div className="w-full flex items-center justify-between mb-3" style={{ maxWidth: cabinetMaxW(440, 440 * ROWS / COLS) }}>
         <span aria-hidden className="w-16" />
         <div className="text-center">
           <div className="gx-title text-[#37e6ff] text-sm tracking-[0.35em] uppercase" style={{ textShadow: '0 0 8px #37e6ff80' }}>Lucernyx</div>
@@ -184,13 +185,13 @@ export default function LucernyxPage() {
         </div>
       </div>
 
-      <div className="w-full max-w-[440px] mb-2 flex items-center justify-between font-mono text-[10px]">
+      <div className="w-full mb-2 flex items-center justify-between font-mono text-[10px]" style={{ maxWidth: cabinetMaxW(440, 440 * ROWS / COLS) }}>
         <Torches who="light" n={lt} pieces={lp} active={board.turn === 'light' && !board.over} flash={flash === 'light'} />
         <span className="gx-label text-[#7fd8e6]/45">{turnLabel}</span>
         <Torches who="grey" n={gt} pieces={gp} active={board.turn === 'grey' && !board.over} flash={flash === 'grey'} />
       </div>
 
-      <div className="gx-chrome relative w-full max-w-[440px]" style={{ aspectRatio: `${COLS} / ${ROWS}`, ['--gx-accent' as string]: '#37e6ff' } as React.CSSProperties}>
+      <div className="gx-chrome relative w-full" style={{ maxWidth: screenMaxW(440, 440 * ROWS / COLS), aspectRatio: `${COLS} / ${ROWS}`, ['--gx-accent' as string]: '#37e6ff' } as React.CSSProperties}>
         <canvas ref={canvasRef} onPointerDown={onClick} className="w-full h-full block touch-none rounded-md cursor-pointer" />
         <div className="pointer-events-none absolute inset-0 rounded-md lx-crt" />
 
@@ -209,7 +210,7 @@ export default function LucernyxPage() {
         )}
       </div>
 
-      <div className="w-full max-w-[440px] flex items-center justify-center mt-4">
+      <div className="w-full flex items-center justify-center mt-4" style={{ maxWidth: cabinetMaxW(440, 440 * ROWS / COLS) }}>
         <p className="text-[10px] text-[#7fd8e6]/35 font-mono tracking-wider">slide · jump to rekindle · 3 torches wins</p>
       </div>
 

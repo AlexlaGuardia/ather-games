@@ -10,6 +10,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import ArcadeCabinet from '../_components/ArcadeCabinet'
 import { mulberry32 } from '@/lib/arcade/rng'
 import { useNoScroll } from '@/lib/arcade/useNoScroll'
+import { screenMaxW, deckMaxW, cabinetMaxW } from '@/lib/arcade/fit'
 import {
   makeWorld,
   player,
@@ -174,8 +175,8 @@ export default function VoranyxPage() {
   const lowBoost = boostPct <= 18
 
   return (
-    <ArcadeCabinet accent="#37e6ff" wall={1} maxWidth="min(440px, 40vh)">
-      <div className="w-full max-w-[min(440px,40vh)] flex items-center justify-between mb-3">
+    <ArcadeCabinet accent="#37e6ff" wall={1} maxWidth={cabinetMaxW(360, 480)}>
+      <div className="w-full flex items-center justify-between mb-3" style={{ maxWidth: cabinetMaxW(360, 480) }}>
         <span aria-hidden className="w-10" />
         <div className="text-center">
           <div className="gx-title text-[#37e6ff] text-sm tracking-[0.35em] uppercase" style={{ textShadow: '0 0 8px #37e6ff80' }}>Voranyx</div>
@@ -184,7 +185,7 @@ export default function VoranyxPage() {
         <button onClick={toggleMute} className="text-[10px] tracking-[0.2em] uppercase text-[#37e6ff]/50 hover:text-[#37e6ff] font-mono w-10 text-right">{muted ? 'son' : 'snd'}</button>
       </div>
 
-      <div className="w-full max-w-[min(440px,40vh)] mb-2 flex items-center gap-3 font-mono">
+      <div className="w-full mb-2 flex items-center gap-3 font-mono" style={{ maxWidth: cabinetMaxW(360, 480) }}>
         <span className="gx-label text-[9px] text-[#7fd8e6]/40">length</span>
         <span className="gx-value text-[#e8feff] text-lg leading-none" style={{ textShadow: '0 0 8px #37e6ff70' }}>{len}</span>
         <span className="gx-label text-[9px] text-[#7fd8e6]/30 ml-1">best {best}</span>
@@ -194,7 +195,7 @@ export default function VoranyxPage() {
         <span className="gx-label text-[9px] text-[#7fd8e6]/40">boost</span>
       </div>
 
-      <div className="gx-chrome relative w-full max-w-[min(440px,40vh)]" style={{ aspectRatio: '3 / 4', ['--gx-accent' as string]: '#37e6ff' } as React.CSSProperties}>
+      <div className="gx-chrome relative w-full" style={{ maxWidth: screenMaxW(360, 480), aspectRatio: '3 / 4', ['--gx-accent' as string]: '#37e6ff' } as React.CSSProperties}>
         <canvas
           ref={canvasRef}
           className="w-full h-full block rounded-md pointer-events-none"
@@ -249,7 +250,7 @@ export default function VoranyxPage() {
       {/* the cabinet control deck — steer stick + a BOOST button (screen stays a clean display) */}
       <ArcadeControls
         accent="#37e6ff"
-        maxWidth="min(440px, 40vh)"
+        maxWidth={deckMaxW}
         stick
         onStick={deckStick}
         buttons={[{ id: 'boost', label: 'Boost', glyph: '»', hint: 'space', size: 'lg' }]}
@@ -258,7 +259,7 @@ export default function VoranyxPage() {
         hint="drag the stick to steer · hold boost to surge"
       />
 
-      <div className="w-full max-w-[min(440px,40vh)] flex items-center justify-center mt-3">
+      <div className="w-full flex items-center justify-center mt-3" style={{ maxWidth: cabinetMaxW(360, 480) }}>
         <p className="text-[10px] text-[#7fd8e6]/35 font-mono tracking-wider">steer · hold to boost · keep eating</p>
       </div>
 
