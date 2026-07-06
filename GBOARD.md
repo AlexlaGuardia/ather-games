@@ -345,10 +345,15 @@ the Arcade frame.
   **confirmed on a real iPhone**. Orbs are canon elements (SVG rune-marks: Mana/Storm/
   Earth/Water + Ather + Love).
 **Next:**
-  1. Paint a **cloud-puff sprite** in Aseprite → swap the CSS `PuffCell` stub (drop-and-convert).
-  2. Optional puff balance tune (`PUFF_SEED`, spread cadence) if it overruns 20-move games.
-  3. Optional: puff-chain as a *power* (Ather Star / prism chains them), not the default.
-  4. Confirm `robots` index intent in `layout.tsx` (currently `index:true`).
+  0. ✅ **SPECIAL+SPECIAL COMBOS SHIPPED 2026-07-06 (`a08d6a6`)** — the depth layer. surge+surge=plus,
+     star+surge=thick cross, star+star=5x5, prism+surge/star=colour-sweep-to-special, prism+prism=board nuke.
+     `specialCombo()` in match3.ts; flows through the existing resolve/FX/score pipeline (no page rewrite).
+     8 clear-set + 4 full-cascade assertions. ▶ Alex playtest for feel/balance (prism+prism is a big score spike).
+  1. **Reason-to-play / objectives** — still pure score-attack; element-themed goals (score/clear-puffs/bloom-N)
+     would give it a spine (Alex-picked as the next big arc after combos).
+  2. Paint a **cloud-puff sprite** in Aseprite → swap the CSS `PuffCell` stub (drop-and-convert).
+  3. Combo discoverability polish — a first-combo celebration / subtle glow between two adjacent specials.
+  4. Optional puff balance tune; `robots` index intent in `layout.tsx`.
 **Parked:** pre-tinted orb bases per element · pixel-art widget icons (mug / cabinet).
 **Decisions:** kept the **CSS gradient orbs** over a painted pixel-orb (Alex prefers them —
   the Void-orb experiment was reverted); cloud-puff chains stay **emergent**, not hardcoded
