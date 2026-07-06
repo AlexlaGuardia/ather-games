@@ -139,6 +139,7 @@ export default function MananaPage() {
   const [won, setWon] = useState(false) // the over-overlay is a WIN (quest cleared) not a loss
   const [dailyBest, setDailyBest] = useState(0)
   const [view, setView] = useState<'home' | 'roadmap' | 'board'>('home') // home = front door
+  const [boardBloom, setBoardBloom] = useState(false) // board entered from a pitstop → bloom, else gentle
   const advancedFromRef = useRef<number | null>(null) // just-cleared level, for the roadmap token-hop
   const [shared, setShared] = useState(false)
   const [muted, setMuted] = useState(false)
@@ -317,11 +318,13 @@ export default function MananaPage() {
   const playLevel = (i: number) => {
     modeRef.current = 'quests'; setMode('quests')
     startLevel(i)
+    setBoardBloom(true) // launched from a pitstop — bloom the board in
     setView('board')
   }
   const startCasual = (m: 'endless' | 'daily') => {
     modeRef.current = m; setMode(m); sfx.ensure(); music.start()
     newGame()
+    setBoardBloom(false)
     setView('board')
   }
 
@@ -574,13 +577,14 @@ export default function MananaPage() {
   )
 
   return (
-    <div className="gx-chrome relative min-h-[calc(100svh-5rem)] overflow-hidden text-slate-200 font-sans" style={{ touchAction: 'manipulation', overscrollBehavior: 'none', animation: 'manana-viewin .32s ease-out', ['--gx-accent' as string]: '#ffd884' } as React.CSSProperties}>
+    <div className="gx-chrome relative min-h-[calc(100svh-5rem)] overflow-hidden text-slate-200 font-sans" style={{ touchAction: 'manipulation', overscrollBehavior: 'none', animation: boardBloom ? 'manana-bloom .42s cubic-bezier(.2,.7,.3,1.25)' : 'manana-viewin .32s ease-out', ['--gx-accent' as string]: '#ffd884' } as React.CSSProperties}>
       <AtherBackdrop />
       {/* full-bleed board (its own AtherBackdrop) — deliberately NOT a cabinet; just
           the room tie so back lands facing the Arcade arch. */}
       <RoomReturn wall={1} />
       <style>{`
         @keyframes manana-viewin { from{opacity:0;transform:translateY(10px) scale(.984)} to{opacity:1;transform:none} }
+        @keyframes manana-bloom { from{opacity:0;transform:scale(.8)} 60%{opacity:1} to{opacity:1;transform:none} }
         @keyframes manana-pop { 0%{transform:scale(1)} 40%{transform:scale(1.28)} 100%{transform:scale(0);opacity:0} }
         @keyframes manana-drop { 0%{transform:translateY(-14px) scale(0.9);opacity:0.2} 100%{transform:translateY(0) scale(1);opacity:1} }
         @keyframes manana-charged { 0%,100%{ filter:brightness(1) } 50%{ filter:brightness(1.4) } }

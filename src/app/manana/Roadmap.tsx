@@ -89,9 +89,23 @@ export default function Roadmap({ current, onPlay, onHome, advancedFrom }: Roadm
 
       <div className="relative flex-1 overflow-y-auto">
         <div ref={colRef} className="relative mx-auto" style={{ height, maxWidth: 460 }}>
+          {/* per-region ambient glow — the atmosphere of each canon place you pass through */}
+          {w > 0 && BANDS.map((b) => {
+            const ns = b.levels.map((i) => nodes[i])
+            const xs = ns.map((n) => n.x), ys = ns.map((n) => n.y)
+            const cx = (Math.min(...xs) + Math.max(...xs)) / 2
+            const cy = (Math.min(...ys) + Math.max(...ys)) / 2
+            const rw = Math.max(...xs) - Math.min(...xs) + 230
+            const rh = Math.max(...ys) - Math.min(...ys) + 190
+            return (
+              <div key={b.zone} className="pointer-events-none absolute z-[1]"
+                style={{ left: cx, top: cy, width: rw, height: rh, transform: 'translate(-50%,-50%)', background: `radial-gradient(ellipse at center, ${b.accent}33, transparent 66%)`, filter: 'blur(26px)', mixBlendMode: 'screen', opacity: 0.5 }} />
+            )
+          })}
+
           {/* curved connectors — one cubic per segment; travelled path glows gold */}
           {w > 0 && (
-            <svg className="pointer-events-none absolute inset-0" width={w} height={height} style={{ overflow: 'visible' }}>
+            <svg className="pointer-events-none absolute inset-0 z-[2]" width={w} height={height} style={{ overflow: 'visible' }}>
               {nodes.slice(1).map((n, k) => {
                 const p = nodes[k]
                 const my = (p.y + n.y) / 2
