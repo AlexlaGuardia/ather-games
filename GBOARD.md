@@ -339,7 +339,7 @@ the Arcade frame.
   game route. Verified: live 200 · back-room/coming-soon 307→/arcade · dev tooling 403 · /owner 401.
 
 ### Mana'nana — 🟢 live · match-3, blooming specials → `/manana`
-*Last touched: 2026-07-06 — cozy commentator VO*
+*Last touched: 2026-07-06 — home + Story roadmap (board-game trail)*
 **Left off:** Cloud-puff obstacle live (CSS stub, Shimmer-canon palette), detonation FX
   (row/col beams, star flash, prism ring, capped motes), and iOS sound+scroll fixes
   **confirmed on a real iPhone**. Orbs are canon elements (SVG rune-marks: Mana/Storm/
@@ -381,6 +381,17 @@ the Arcade frame.
      first gesture; one mute toggle governs sfx+voice+music. VoBank got an `onSpeak` hook (stays decoupled).
      Track = `public/manana/music.mp3` (gitignored, server-side). ▶ Alex DEVICE PASS: bed volume (BASE_VOL) +
      duck depth/recover (DUCK_TO/DUCK_RECOVER_S) feel + is the loop seam clean? All knobs in `lib/music.ts`.
+  1g. ✅ **HOME + STORY ROADMAP SHIPPED 2026-07-06 (`5c1a042`)** — the game got a SHAPE. `Home.tsx` front door
+     (Story/Endless/Daily + records + mute) and `Roadmap.tsx` = a **winding board-game trail** of the 14 quest
+     levels as pitstops with a **game-piece that hops forward on each win** (the "pitstop" payoff — win returns
+     to the trail, not a board overlay). Waypoint bands cite the garden's REAL canon geography in canon order
+     (Moonwell Glade→Mycelial Path→Mana Springs→Spirit Meadows→Gloview Village→The Outfields→Voranyx Caverns→
+     Ather Winds, per `CANON/game/shimmer-geography.md` — cited, not invented; level→zone map is soft design).
+     `page.tsx` gained a `view` state (home|roadmap|board). Alex picked the winding-trail metaphor over region-
+     bands/node-chain. Build EXIT=0, /manana 200. **▶ Alex DEVICE PASS: the whole flow** — home feel, trail
+     readability on a phone, the win token-hop, tap-to-play. This is a SKELETON. **▶ NEXT:** transition polish
+     (home→trail slide, pitstop→board bloom, win token-hop juice) + theme the trail art + swap 🐾 placeholder
+     token for a real Mana'mal + decide if the in-board mode toggle stays (Home covers it now).
   2. Paint a **cloud-puff sprite** in Aseprite → swap the CSS `PuffCell` stub (drop-and-convert).
   3. Combo discoverability polish — a first-combo celebration / subtle glow between two adjacent specials.
   4. Optional puff balance tune; `robots` index intent in `layout.tsx`.
