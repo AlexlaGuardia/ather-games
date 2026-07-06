@@ -13,7 +13,7 @@ import { useNoScroll } from '@/lib/arcade/useNoScroll'
 import {
   W, H, idx, xy, areAdjacent, reshuffle, swapped, swapMakesMatch, swapDetonation,
   resolve, anyMove, isPuff, seedPuffs, spreadPuffs, countPuffs,
-  isCollared, seedCollars, type Cell, type Kind, type ResolveStep,
+  isCollared, seedCollars, atherSurge, type Cell, type Kind, type ResolveStep,
 } from './lib/match3'
 import { sfx, type ManaSfx } from './lib/sfx'
 import AtherBackdrop from './AtherBackdrop'
@@ -23,6 +23,8 @@ import { LEVELS, levelAt, isLastLevel, trackStep, goalMet, goalProgress, goalLab
 const START_MOVES = 20
 const PUFF_SEED = 3 // cloud-puffs seeded at board start; they spread if ignored
 const MOVES_PER_MILESTONE = 4
+const ATHER_MAX = 48 // orbs to clear to charge one Ather Surge (forges 3 specials)
+const ATHER_FORGE = 3 // specials the surge forges
 const milestoneTarget = (n: number) => Math.round(1200 + n * 1500 + n * n * 350)
 
 // The six orbs map to canon: the 4 elements (Mana/Storm/Earth/Water) + Ather
@@ -105,6 +107,8 @@ export default function MananaPage() {
   const [reward, setReward] = useState(0)
   const [callout, setCallout] = useState<{ text: string; key: number } | null>(null)
   const calloutNonce = useRef(0)
+  const [atherCharge, setAtherCharge] = useState(0) // 0..ATHER_MAX; full = surge ready
+  const atherChargeRef = useRef(0)
   const [busy, setBusy] = useState(false)
   const [over, setOver] = useState(false)
   const [mode, setMode] = useState<'endless' | 'daily' | 'quests'>('endless')
@@ -155,6 +159,8 @@ export default function MananaPage() {
     setMovesState(START_MOVES)
     milestonesRef.current = 0
     setMilestones(0)
+    atherChargeRef.current = 0
+    setAtherCharge(0)
     setSelected(null)
     setPopping(new Set())
     setHeat(1)
@@ -217,6 +223,7 @@ export default function MananaPage() {
     movesRef.current = lv.moves; setMovesState(lv.moves)
     questGotRef.current = 0; setQuestGot(0)
     milestonesRef.current = 0; setMilestones(0)
+    atherChargeRef.current = 0; setAtherCharge(0)
     setSelected(null); setPopping(new Set()); setHeat(1); setReward(0)
     setWon(false); setOver(false); setBusy(false)
   }
@@ -351,6 +358,11 @@ export default function MananaPage() {
       const call = calloutFor(step)
       if (call) { calloutNonce.current += 1; setCallout({ text: call, key: calloutNonce.current }) }
       if (step.freed) sfx.play('reward') // a collar snapped
+      // charge the Ather Surge by orbs cleared this cascade (caps when full)
+      if (atherChargeRef.current < ATHER_MAX) {
+        atherChargeRef.current = Math.min(ATHER_MAX, atherChargeRef.current + step.colorCounts.reduce((a, c) => a + c, 0))
+        setAtherCharge(atherChargeRef.current)
+      }
       if (modeRef.current === 'quests') {
         questGotRef.current = trackStep(questGotRef.current, levelAt(levelRef.current).goal, step)
         setQuestGot(questGotRef.current)
@@ -403,6 +415,20 @@ export default function MananaPage() {
       apply(before)
       setBusy(false)
     }
+  }
+
+  // ATHER SURGE — spend a full charge to forge random specials onto the board (no move cost).
+  const fireAtherSurge = async () => {
+    if (busy || over || atherChargeRef.current < ATHER_MAX) return
+    sfx.ensure(); setBusy(true)
+    atherChargeRef.current = 0; setAtherCharge(0)
+    calloutNonce.current += 1; setCallout({ text: 'ATHER SURGE!', key: calloutNonce.current })
+    sfx.play('bloom')
+    const surged = atherSurge(boardRef.current, rngRef.current, ATHER_FORGE)
+    apply(surged)
+    setSelected(null)
+    await sleep(260)
+    setBusy(false)
   }
 
   const onPiece = (i: number) => {
@@ -493,6 +519,25 @@ export default function MananaPage() {
             <p className="text-[11px] text-slate-400/70 mt-0.5">match · bloom · detonate</p>
           </div>
           <div className="flex items-center gap-3">
+            {(() => {
+              const pct = Math.round((atherCharge / ATHER_MAX) * 100)
+              const ready = atherCharge >= ATHER_MAX
+              return (
+                <button
+                  onClick={fireAtherSurge}
+                  disabled={!ready || busy}
+                  title={ready ? 'Ather Surge — forge specials' : `Ather Surge · charging ${pct}%`}
+                  aria-label="Ather Surge"
+                  className={`relative w-8 h-8 rounded-full flex items-center justify-center text-sm leading-none transition-all ${ready ? 'text-[#1a1228] animate-pulse cursor-pointer' : 'text-slate-400 cursor-default'}`}
+                  style={{
+                    background: ready ? 'radial-gradient(circle,#ffe6a8,#f0a526)' : `conic-gradient(#ffd884 ${pct}%, rgba(255,255,255,0.07) ${pct}%)`,
+                    boxShadow: ready ? '0 0 12px #ffd884aa' : 'inset 0 0 0 1px rgba(255,255,255,0.08)',
+                  }}
+                >
+                  <span className={ready ? '' : 'opacity-70'}>{'⚡'}</span>
+                </button>
+              )
+            })()}
             <button
               onClick={() => { sfx.ensure(); const m = !muted; sfx.setMuted(m); setMuted(m); if (!m) sfx.play('swap') }}
               title={muted ? 'sound off' : 'sound on'}

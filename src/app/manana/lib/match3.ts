@@ -64,6 +64,28 @@ export function seedPuffs(b: Cell[], rng: Rng, n: number): Cell[] {
   return out
 }
 
+// ATHER SURGE — the charged power. Forge n random plain orbs into random specials
+// (weighted: mostly surges, some stars, a few bursts). The player then wields/combos
+// them. Doesn't clear anything on its own — it's raw Ather seeding the board.
+export function atherSurge(b: Cell[], rng: Rng, n: number): Cell[] {
+  const out = b.map((c) => ({ ...c }))
+  const candidates: number[] = []
+  for (let i = 0; i < W * H; i++) {
+    if (!isPuff(out[i]) && !isCollared(out[i]) && !isSpecial(out[i]) && out[i].color >= 0) candidates.push(i)
+  }
+  const chosen = new Set<number>()
+  let guard = 0
+  while (chosen.size < n && chosen.size < candidates.length && guard++ < 400) {
+    const i = candidates[Math.floor(rng() * candidates.length)]
+    if (chosen.has(i)) continue
+    chosen.add(i)
+    const roll = rng()
+    const kind: Kind = roll < 0.55 ? (rng() < 0.5 ? 'surgeH' : 'surgeV') : roll < 0.82 ? 'star' : 'burst'
+    out[i] = { color: out[i].color, kind }
+  }
+  return out
+}
+
 // collar n random plain gems (keep their colour). Called once at board start.
 export function seedCollars(b: Cell[], rng: Rng, n: number): Cell[] {
   const out = b.map((c) => ({ ...c }))
