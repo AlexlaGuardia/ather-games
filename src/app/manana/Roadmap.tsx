@@ -1,17 +1,16 @@
 'use client'
 
 // MANA'NANA — Story roadmap. A winding board-game trail through Gregory's garden.
-// Each pitstop is a quest level (names already canon-settled in lib/quests). The
-// waypoint regions cite the garden's real canon geography in canon order
-// (CANON/game/shimmer-geography.md) — Moonwell Glade → ... → Ather Winds, the
-// garden's home-outward loop. The level→zone mapping is a soft design layering
-// (easy to re-tune / ratify via Magii); no place-name here is invented.
+// Layout: ONE canon region per row (a "leg" of the journey), legs alternating
+// left/right so the path meanders. Each region owns its row, so its header never
+// collides with a neighbour's. Pitstops are quest levels (names already canon-
+// settled in lib/quests). Region names cite the garden's real canon geography in
+// canon order (CANON/game/shimmer-geography.md), home→edge. The level→zone map is
+// a soft design layering (easy to re-tune / ratify via Magii); nothing invented.
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { LEVELS } from './lib/quests'
 
-// canon zones (EXACT names, canon order home→edge) + a per-region accent so the
-// ascent through named places is felt in colour, not just labels.
 const BANDS: { zone: string; note: string; levels: number[]; accent: string }[] = [
   { zone: 'Moonwell Glade', note: 'the tended heart', levels: [0, 1], accent: '#8fb7ff' },
   { zone: 'Mycelial Path', note: 'the corridor west', levels: [2, 3], accent: '#7fd6a0' },
@@ -22,12 +21,9 @@ const BANDS: { zone: string; note: string; levels: number[]; accent: string }[] 
   { zone: 'Voranyx Caverns', note: 'the eastern deep', levels: [11, 12], accent: '#9a8cff' },
   { zone: 'Ather Winds', note: 'the sealed gate', levels: [13], accent: '#ffe9a8' },
 ]
-const bandOf = (i: number) => BANDS.find((b) => b.levels.includes(i))!
-const isRegionStart = (i: number) => BANDS.some((b) => b.levels[0] === i)
 
-const LANES = [0.22, 0.5, 0.78] // x fractions — serpentine across 3 lanes
-const ROW_GAP = 128
-const TOP_PAD = 56
+const ROW_GAP = 142
+const TOP_PAD = 62
 
 interface RoadmapProps {
   current: number
@@ -39,7 +35,7 @@ interface RoadmapProps {
 export default function Roadmap({ current, onPlay, onHome, advancedFrom }: RoadmapProps) {
   const colRef = useRef<HTMLDivElement>(null)
   const nodeRefs = useRef<(HTMLButtonElement | null)[]>([])
-  const [w, setW] = useState(0) // measured column width → real px coords (no % in svg paths)
+  const [w, setW] = useState(0)
 
   useLayoutEffect(() => {
     const el = colRef.current
@@ -51,16 +47,19 @@ export default function Roadmap({ current, onPlay, onHome, advancedFrom }: Roadm
     return () => ro.disconnect()
   }, [])
 
-  // node positions — vertical serpentine (row snakes L→R→L), x in real px
-  const nodes = useMemo(() => LEVELS.map((lv, i) => {
-    const row = Math.floor(i / LANES.length)
-    let col = i % LANES.length
-    if (row % 2 === 1) col = LANES.length - 1 - col
-    return { i, lv, x: LANES[col] * w, xPct: LANES[col] * 100, y: TOP_PAD + row * ROW_GAP }
-  }), [w])
-  const height = TOP_PAD * 2 + Math.ceil(LEVELS.length / LANES.length) * ROW_GAP
+  // one region per row; legs lean left/right by parity for the meander.
+  const nodes = useMemo(() => {
+    const out: { i: number; lv: typeof LEVELS[number]; x: number; y: number; region: number }[] = new Array(LEVELS.length)
+    BANDS.forEach((b, r) => {
+      const side = r % 2 // 0 = lean left, 1 = lean right
+      const y = TOP_PAD + r * ROW_GAP
+      const lanes = b.levels.length === 1 ? [side ? 0.66 : 0.34] : side ? [0.5, 0.74] : [0.26, 0.5]
+      b.levels.forEach((li, j) => { out[li] = { i: li, lv: LEVELS[li], x: lanes[j] * w, y, region: r } })
+    })
+    return out
+  }, [w])
+  const height = TOP_PAD * 2 + BANDS.length * ROW_GAP
 
-  // token hops from the just-cleared node to the current one on entry, pops on landing
   const [tokenAt, setTokenAt] = useState(advancedFrom ?? current)
   const [landing, setLanding] = useState(false)
   useEffect(() => {
@@ -80,30 +79,29 @@ export default function Roadmap({ current, onPlay, onHome, advancedFrom }: Roadm
     <div className="flex h-full w-full flex-col" style={{ background: 'radial-gradient(130% 90% at 50% -5%,#33244c 0%,#1c1430 50%,#100b1a 100%)', color: '#f4ecdf' }}>
       <div className="flex items-center gap-3 px-4 py-3 shrink-0 border-b border-white/5">
         <button onClick={onHome} className="rounded-lg border border-white/15 bg-white/5 px-3 py-1.5 text-sm active:scale-95" aria-label="Home">‹ Home</button>
-        <div className="flex-1">
-          <div className="text-lg font-black tracking-wide">The Long Meander</div>
-          <div className="text-[11px] uppercase tracking-widest text-amber-200/50">Story · Gregory&apos;s Garden</div>
+        <div className="flex-1 min-w-0">
+          <div className="text-lg font-black tracking-wide truncate">The Long Meander</div>
+          <div className="text-[11px] uppercase tracking-widest text-amber-200/50 truncate">Story · Gregory&apos;s Garden</div>
         </div>
-        <div className="text-right text-xs text-slate-300/70 tabular-nums">Lv {Math.min(current + 1, LEVELS.length)}<span className="text-slate-500"> / {LEVELS.length}</span></div>
+        <div className="text-right text-xs text-slate-300/70 tabular-nums shrink-0">Lv {Math.min(current + 1, LEVELS.length)}<span className="text-slate-500"> / {LEVELS.length}</span></div>
       </div>
 
       <div className="relative flex-1 overflow-y-auto">
         <div ref={colRef} className="relative mx-auto" style={{ height, maxWidth: 460 }}>
-          {/* per-region ambient glow — the atmosphere of each canon place you pass through */}
+          {/* per-region ambient glow — the atmosphere of each canon place */}
           {w > 0 && BANDS.map((b) => {
             const ns = b.levels.map((i) => nodes[i])
-            const xs = ns.map((n) => n.x), ys = ns.map((n) => n.y)
+            const xs = ns.map((n) => n.x)
             const cx = (Math.min(...xs) + Math.max(...xs)) / 2
-            const cy = (Math.min(...ys) + Math.max(...ys)) / 2
-            const rw = Math.max(...xs) - Math.min(...xs) + 230
-            const rh = Math.max(...ys) - Math.min(...ys) + 190
+            const cy = ns[0].y
+            const rw = Math.max(...xs) - Math.min(...xs) + 210
             return (
               <div key={b.zone} className="pointer-events-none absolute z-[1]"
-                style={{ left: cx, top: cy, width: rw, height: rh, transform: 'translate(-50%,-50%)', background: `radial-gradient(ellipse at center, ${b.accent}33, transparent 66%)`, filter: 'blur(26px)', mixBlendMode: 'screen', opacity: 0.5 }} />
+                style={{ left: cx, top: cy, width: rw, height: 150, transform: 'translate(-50%,-50%)', background: `radial-gradient(ellipse at center, ${b.accent}30, transparent 66%)`, filter: 'blur(28px)', mixBlendMode: 'screen', opacity: 0.5 }} />
             )
           })}
 
-          {/* curved connectors — one cubic per segment; travelled path glows gold */}
+          {/* curved connectors — travelled path glows gold */}
           {w > 0 && (
             <svg className="pointer-events-none absolute inset-0 z-[2]" width={w} height={height} style={{ overflow: 'visible' }}>
               {nodes.slice(1).map((n, k) => {
@@ -120,24 +118,22 @@ export default function Roadmap({ current, onPlay, onHome, advancedFrom }: Roadm
             </svg>
           )}
 
-          {/* region signposts — one per canon zone, at its entry pitstop */}
-          {w > 0 && nodes.filter((n) => isRegionStart(n.i)).map((n) => {
-            const b = bandOf(n.i)
-            const left = n.xPct < 50
+          {/* region headers — one per row, centered over its pitstops; can't collide */}
+          {w > 0 && BANDS.map((b) => {
+            const ns = b.levels.map((i) => nodes[i])
+            const cx = ns.reduce((s, n) => s + n.x, 0) / ns.length
             return (
-              <div key={b.zone} className="pointer-events-none absolute z-[5]"
-                style={{ top: n.y - 48, left: left ? n.x + 32 : undefined, right: left ? undefined : w - n.x + 32, textAlign: left ? 'left' : 'right' }}>
-                <div className="inline-block rounded-md px-2 py-1" style={{ background: `${b.accent}1c`, border: `1px solid ${b.accent}55` }}>
-                  <div className="text-[10px] font-bold uppercase tracking-wider" style={{ color: b.accent }}>{b.zone}</div>
-                  <div className="text-[9px] italic text-slate-300/55 leading-tight">{b.note}</div>
-                </div>
+              <div key={b.zone} className="pointer-events-none absolute z-[5] whitespace-nowrap text-center"
+                style={{ left: cx, top: ns[0].y - 52, transform: 'translateX(-50%)' }}>
+                <div className="text-[11px] font-bold uppercase tracking-wider" style={{ color: b.accent }}>{b.zone}</div>
+                <div className="text-[9px] italic text-slate-300/50 leading-tight">{b.note}</div>
               </div>
             )
           })}
 
           {/* pitstops */}
           {w > 0 && nodes.map((n) => {
-            const b = bandOf(n.i)
+            const b = BANDS[n.region]
             const state = n.i < current ? 'cleared' : n.i === current ? 'here' : 'locked'
             const playable = state !== 'locked'
             return (

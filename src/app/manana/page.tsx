@@ -569,7 +569,6 @@ export default function MananaPage() {
   if (view === 'roadmap') return (
     <div className="gx-chrome relative overflow-hidden" style={{ touchAction: 'manipulation', overscrollBehavior: 'none' }}>
       <style>{VIEW_ANIM}</style>
-      <RoomReturn wall={1} />
       <div style={{ height: 'calc(100svh - 5rem)', animation: 'manana-viewin .3s ease-out' }}>
         <Roadmap current={level} advancedFrom={advancedFromRef.current} onPlay={playLevel} onHome={goHome} />
       </div>
