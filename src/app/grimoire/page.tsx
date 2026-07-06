@@ -10,7 +10,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import RoomReturn from '../_components/RoomReturn'
 
-type Evo = { element: string; name: string | null; img: string }
+type Evo = { element: string; name: string | null; img: string; entry?: string }
 type Spirit = {
   id: string; name: string; analog: string; element: string
   palette: string[]; quirk: string; signature: string; individual: string | null
@@ -38,6 +38,7 @@ export default function AtherPages() {
   const [failed, setFailed] = useState(false)
   const [vol, setVol] = useState<Volume>('spirits')
   const [i, setI] = useState(0)
+  const [evoSel, setEvoSel] = useState<string | null>(null)  // selected evolution ELEMENT within the current base (null = base view)
 
   // load both volumes; honor ?v= / ?s= / ?f= deep-links
   useEffect(() => {
@@ -87,10 +88,10 @@ export default function AtherPages() {
   const go = useCallback((next: number) => {
     if (!n) return
     const idx = ((next % n) + n) % n
-    setI(idx); syncUrl(vol, idx)
+    setI(idx); setEvoSel(null); syncUrl(vol, idx)   // paging away drops back to the base view
   }, [n, vol, syncUrl])
 
-  const switchVol = (v: Volume) => { if (v === vol) return; setVol(v); setI(0); syncUrl(v, 0) }
+  const switchVol = (v: Volume) => { if (v === vol) return; setVol(v); setI(0); setEvoSel(null); syncUrl(v, 0) }
 
   // keyboard paging
   useEffect(() => {
@@ -140,12 +141,21 @@ export default function AtherPages() {
                 <FolkLeftPage folk={list[i] as Folk} index={i} alColor={alColor} alLabel={alLabel} />
                 <FolkRightPage folk={list[i] as Folk} />
               </>
-            ) : (
-              <>
-                <LeftPage spirit={list[i] as Spirit} index={i} elColor={elColor} elLabel={elLabel} />
-                <RightPage spirit={list[i] as Spirit} elColor={elColor} elLabel={elLabel} />
-              </>
-            )}
+            ) : (() => {
+              const s = list[i] as Spirit
+              const evo = evoSel ? s.evolutions.find(e => e.element === evoSel) ?? null : null
+              return evo ? (
+                <>
+                  <FormLeftPage spirit={s} evo={evo} elColor={elColor} elLabel={elLabel} onSelectEvo={setEvoSel} onBack={() => setEvoSel(null)} />
+                  <FormRightPage spirit={s} evo={evo} elColor={elColor} elLabel={elLabel} />
+                </>
+              ) : (
+                <>
+                  <LeftPage spirit={s} index={i} elColor={elColor} elLabel={elLabel} onSelectEvo={setEvoSel} />
+                  <RightPage spirit={s} elColor={elColor} elLabel={elLabel} />
+                </>
+              )
+            })()}
           </div>
 
           <PageArrow dir="right" onClick={() => go(i + 1)} />
@@ -192,8 +202,9 @@ function PageArrow({ dir, onClick }: { dir: 'left' | 'right'; onClick: () => voi
 
 // ---- SPIRIT VOLUME (the Grimoire) ----
 
-function LeftPage({ spirit: s, index, elColor, elLabel }: {
+function LeftPage({ spirit: s, index, elColor, elLabel, onSelectEvo }: {
   spirit: Spirit; index: number; elColor: (e: string) => string; elLabel: (e: string) => string
+  onSelectEvo: (element: string) => void
 }) {
   const c = elColor(s.element)
   return (
@@ -216,23 +227,23 @@ function LeftPage({ spirit: s, index, elColor, elLabel }: {
       </div>
 
       <div className="mt-5">
-        <p className="text-[11px] uppercase tracking-[0.28em] mb-2.5" style={{ color: '#8a6c22' }}>Evolutions</p>
+        <p className="text-[11px] uppercase tracking-[0.28em] mb-2.5" style={{ color: '#8a6c22' }}>Evolutions <span className="text-[8px] tracking-[0.14em] text-[#a3895180]">· tap to read</span></p>
         <div className="grid grid-cols-4 gap-2">
           {s.evolutions.map((evo) => {
             const ec = elColor(evo.element)
             return (
-              <div key={evo.element} className="flex flex-col items-center">
-                <div className="relative w-full rounded-full overflow-hidden" style={{ aspectRatio: '1 / 1', background: `radial-gradient(circle, ${ec}3a, #14100a 72%)`, boxShadow: `0 0 0 2px ${ec}66` }} title={evo.name ?? elLabel(evo.element)}>
+              <button key={evo.element} onClick={() => onSelectEvo(evo.element)} className="flex flex-col items-center group cursor-pointer" title={`${evo.name ?? elLabel(evo.element)} — read`}>
+                <div className="relative w-full rounded-full overflow-hidden transition-transform group-hover:scale-105" style={{ aspectRatio: '1 / 1', background: `radial-gradient(circle, ${ec}3a, #14100a 72%)`, boxShadow: `0 0 0 2px ${ec}66` }}>
                   {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={evo.img} alt={`${s.name} · ${elLabel(evo.element)}`} className="absolute inset-0 h-full w-full object-contain p-0.5" />
+                  <img src={evo.img} alt={`${evo.name ?? elLabel(evo.element)}`} className="absolute inset-0 h-full w-full object-contain p-0.5" />
                 </div>
-                <span className="mt-1 text-[8px] uppercase tracking-wide leading-none" style={{ color: ec === '#f5c542' ? '#9a7b34' : ec }}>{elLabel(evo.element)}</span>
+                <span className="mt-1 text-[8px] uppercase tracking-wide leading-none transition-colors" style={{ color: ec === '#f5c542' ? '#9a7b34' : ec }}>{evo.name ?? elLabel(evo.element)}</span>
                 <div className="flex gap-0.5 mt-1">
                   {Array.from({ length: STAGE3_SLOTS }).map((_, k) => (
                     <span key={k} className="w-1 h-1 rounded-full" style={{ background: `${ec}55` }} />
                   ))}
                 </div>
-              </div>
+              </button>
             )
           })}
         </div>
@@ -265,6 +276,77 @@ function RightPage({ spirit: s, elColor, elLabel }: {
       <p className="mt-5 text-[14px] leading-relaxed italic" style={{ color: '#4a3c25', fontFamily: 'Cormorant Garamond, Georgia, serif' }}>
         {s.entry?.trim() ? s.entry : 'Its full account has not yet been inked into the Grimoire.'}
       </p>
+      {s.entry?.trim() && <p className="mt-4 text-[9px] italic" style={{ color: '#a3895190', fontFamily: 'Cormorant Garamond, Georgia, serif' }}>— from the field notes of Tess</p>}
+    </div>
+  )
+}
+
+// ---- SPIRIT EVOLUTION (a second form's own entry, reached from its base) ----
+
+function FormLeftPage({ spirit: s, evo, elColor, elLabel, onSelectEvo, onBack }: {
+  spirit: Spirit; evo: Evo; elColor: (e: string) => string; elLabel: (e: string) => string
+  onSelectEvo: (element: string) => void; onBack: () => void
+}) {
+  const c = elColor(evo.element)
+  return (
+    <div className="relative p-5 sm:p-7" style={{ color: INK }}>
+      <button onClick={onBack} className="text-[10px] uppercase tracking-[0.18em] mb-3 inline-flex items-center gap-1 hover:opacity-70 transition-opacity" style={{ color: '#8a6c22' }}>
+        ‹ Back to {s.name}
+      </button>
+      <div className="flex items-start justify-between gap-3">
+        <div className="rounded-[3px] shrink-0" style={{ padding: 7, width: 168, background: 'linear-gradient(145deg,#caa24e,#7a5c1e 45%,#e7c878 70%,#6e5018)', boxShadow: `0 6px 18px rgba(0,0,0,0.4), 0 0 0 1px ${c}66` }}>
+          <div className="relative rounded-[1px] overflow-hidden" style={{ aspectRatio: '1 / 1', background: `radial-gradient(circle at 50% 42%, ${c}44, #120d07 72%)`, boxShadow: 'inset 0 0 0 2px #1a140a' }}>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={evo.img} alt={evo.name ?? elLabel(evo.element)} className="absolute inset-0 h-full w-full object-contain p-1.5" />
+          </div>
+        </div>
+        <span className="gx-label text-[9px] px-2 py-0.5 rounded-sm self-start" style={{ color: '#fff', background: c }}>{elLabel(evo.element)}</span>
+      </div>
+
+      <div className="mt-4">
+        <h2 className="text-2xl tracking-[0.12em] uppercase" style={{ color: '#6e5212', fontFamily: 'Cormorant Garamond, Georgia, serif', fontWeight: 700 }}>{evo.name ?? elLabel(evo.element)}</h2>
+        <p className="text-[12px] italic mt-0.5" style={{ color: '#8a7038', fontFamily: 'Cormorant Garamond, Georgia, serif' }}>the {elLabel(evo.element).toLowerCase()} evolution of {s.name}</p>
+      </div>
+
+      <div className="mt-5">
+        <p className="text-[11px] uppercase tracking-[0.28em] mb-2.5" style={{ color: '#8a6c22' }}>The Four Paths</p>
+        <div className="grid grid-cols-4 gap-2">
+          {s.evolutions.map((sib) => {
+            const sc = elColor(sib.element)
+            const on = sib.element === evo.element
+            return (
+              <button key={sib.element} onClick={() => onSelectEvo(sib.element)} className="flex flex-col items-center cursor-pointer transition-transform hover:scale-105" style={{ opacity: on ? 1 : 0.5 }}>
+                <div className="relative w-full rounded-full overflow-hidden" style={{ aspectRatio: '1 / 1', background: `radial-gradient(circle, ${sc}3a, #14100a 72%)`, boxShadow: on ? `0 0 0 2px ${sc}, 0 0 9px ${sc}77` : `0 0 0 2px ${sc}55` }}>
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={sib.img} alt={sib.name ?? elLabel(sib.element)} className="absolute inset-0 h-full w-full object-contain p-0.5" />
+                </div>
+                <span className="mt-1 text-[8px] uppercase tracking-wide leading-none" style={{ color: sc === '#f5c542' ? '#9a7b34' : sc, fontWeight: on ? 700 : 400 }}>{elLabel(sib.element)}</span>
+              </button>
+            )
+          })}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function FormRightPage({ spirit: s, evo, elColor, elLabel }: {
+  spirit: Spirit; evo: Evo; elColor: (e: string) => string; elLabel: (e: string) => string
+}) {
+  const c = elColor(evo.element)
+  return (
+    <div className="relative p-5 sm:p-7 border-t md:border-t-0 md:border-l" style={{ color: INK, borderColor: '#00000018' }}>
+      <h3 className="text-xl tracking-[0.14em]" style={{ color: '#6e5212', fontFamily: 'Cormorant Garamond, Georgia, serif', fontWeight: 700 }}>Field Notes</h3>
+      <div className="mt-3 h-px w-full" style={{ background: '#00000018' }} />
+      <div className="mt-3 flex items-center gap-2 flex-wrap">
+        <span className="text-[10px] uppercase tracking-[0.16em]" style={{ color: '#8a7038' }}>Evolves from</span>
+        <span className="text-[14px]" style={{ color: '#6e5212', fontFamily: 'Cormorant Garamond, Georgia, serif', fontWeight: 700 }}>{s.name}</span>
+        <span className="gx-label text-[9px] px-2 py-0.5 rounded-sm" style={{ color: '#fff', background: c }}>{elLabel(evo.element)}</span>
+      </div>
+      <p className="mt-5 text-[14px] leading-relaxed italic" style={{ color: '#4a3c25', fontFamily: 'Cormorant Garamond, Georgia, serif' }}>
+        {evo.entry?.trim() ? evo.entry : 'Its account has not yet been inked into the Grimoire.'}
+      </p>
+      {evo.entry?.trim() && <p className="mt-4 text-[9px] italic" style={{ color: '#a3895190', fontFamily: 'Cormorant Garamond, Georgia, serif' }}>— from the field notes of Tess</p>}
     </div>
   )
 }
