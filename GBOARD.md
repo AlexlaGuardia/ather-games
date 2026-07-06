@@ -354,6 +354,10 @@ the Arcade frame.
      goal + move budget; clear→advance, localStorage progress. `lib/quests.ts` pure engine (19 assertions);
      resolve() now reports colorCounts. Goal HUD + win/lose overlays. Verified live (mode/HUD/budget/tracking).
      ▶ Alex playtest for difficulty curve (move budgets + goal targets per level) + win-overlay feel.
+  1b. ✅ **T/L SHAPE SPECIALS SHIPPED 2026-07-06 (`ff69d90`)** — shape now matters, not just run length.
+     H-run × V-run crossing: **L (corner) → burst** (NEW 3×3 box-bomb special), **T (junction) → star**.
+     (mapping is a one-line flip if Alex wants T↔L swapped.) Fixed a latent mono-colour infinite loop via a
+     guaranteed-progress guard. 5 shape assertions green. ▶ Alex playtest the burst feel + T/L mapping.
   2. Paint a **cloud-puff sprite** in Aseprite → swap the CSS `PuffCell` stub (drop-and-convert).
   3. Combo discoverability polish — a first-combo celebration / subtle glow between two adjacent specials.
   4. Optional puff balance tune; `robots` index intent in `layout.tsx`.
