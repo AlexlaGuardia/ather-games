@@ -12,7 +12,8 @@ import { dailySeed, dailyNumber, loadDailyBest, saveDailyBest, dailyShare, copyS
 import { useNoScroll } from '@/lib/arcade/useNoScroll'
 import {
   W, H, idx, xy, areAdjacent, reshuffle, swapped, swapMakesMatch, swapDetonation,
-  resolve, anyMove, isPuff, seedPuffs, spreadPuffs, countPuffs, type Cell, type Kind,
+  resolve, anyMove, isPuff, seedPuffs, spreadPuffs, countPuffs,
+  isCollared, seedCollars, type Cell, type Kind, type ResolveStep,
 } from './lib/match3'
 import { sfx, type ManaSfx } from './lib/sfx'
 import AtherBackdrop from './AtherBackdrop'
@@ -80,6 +81,18 @@ function bigSound(fired: Kind[]): ManaSfx | null {
   return null
 }
 
+// a big floating word when you forge a special or land a combo — teaches the roster.
+const SPECIAL_NAME: Partial<Record<Kind, string>> = { surgeH: 'SURGE', surgeV: 'SURGE', prism: 'PRISM', star: 'STAR', burst: 'BURST' }
+const specialRank = (k: Kind): number => (k === 'burst' || k === 'star' ? 3 : k === 'prism' ? 2 : k === 'surgeH' || k === 'surgeV' ? 1 : 0)
+function calloutFor(step: ResolveStep): string | null {
+  if (step.spawned.length) {
+    const best = step.spawned.map((s) => s.kind).sort((a, b) => specialRank(b) - specialRank(a))[0]
+    return `${SPECIAL_NAME[best] ?? 'SPECIAL'}!`
+  }
+  if (step.fired.length >= 2) return 'COMBO!' // several specials detonating together
+  return null
+}
+
 export default function MananaPage() {
   const [board, setBoardState] = useState<Cell[]>([])
   const [score, setScore] = useState(0)
@@ -90,6 +103,8 @@ export default function MananaPage() {
   const [popping, setPopping] = useState<Set<number>>(new Set())
   const [heat, setHeat] = useState(1)
   const [reward, setReward] = useState(0)
+  const [callout, setCallout] = useState<{ text: string; key: number } | null>(null)
+  const calloutNonce = useRef(0)
   const [busy, setBusy] = useState(false)
   const [over, setOver] = useState(false)
   const [mode, setMode] = useState<'endless' | 'daily' | 'quests'>('endless')
@@ -108,6 +123,13 @@ export default function MananaPage() {
   const fxIdRef = useRef(0)
 
   useNoScroll() // pin to viewport on mobile — no page scroll / iOS bounce
+
+  // clear the special/combo callout after it flashes
+  useEffect(() => {
+    if (!callout) return
+    const t = setTimeout(() => setCallout(null), 850)
+    return () => clearTimeout(t)
+  }, [callout])
 
   const boardWrapRef = useRef<HTMLDivElement>(null)
   const boardRef = useRef<Cell[]>([])
@@ -188,7 +210,9 @@ export default function MananaPage() {
     setLevel(clamped)
     localStorage.setItem('manana.quest.level', String(clamped))
     rngRef.current = mulberry32((Date.now() & 0xffffffff) >>> 0)
-    apply(seedPuffs(reshuffle(rngRef.current), rngRef.current, lv.puffs))
+    let b0 = seedPuffs(reshuffle(rngRef.current), rngRef.current, lv.puffs)
+    if (lv.collars) b0 = seedCollars(b0, rngRef.current, lv.collars)
+    apply(b0)
     scoreRef.current = 0; setScore(0)
     movesRef.current = lv.moves; setMovesState(lv.moves)
     questGotRef.current = 0; setQuestGot(0)
@@ -324,6 +348,9 @@ export default function MananaPage() {
       scoreRef.current += step.gained
       setScore(scoreRef.current)
       awardMilestones()
+      const call = calloutFor(step)
+      if (call) { calloutNonce.current += 1; setCallout({ text: call, key: calloutNonce.current }) }
+      if (step.freed) sfx.play('reward') // a collar snapped
       if (modeRef.current === 'quests') {
         questGotRef.current = trackStep(questGotRef.current, levelAt(levelRef.current).goal, step)
         setQuestGot(questGotRef.current)
@@ -379,7 +406,7 @@ export default function MananaPage() {
   }
 
   const onPiece = (i: number) => {
-    if (busy || over || isPuff(boardRef.current[i])) return
+    if (busy || over || isPuff(boardRef.current[i]) || isCollared(boardRef.current[i])) return
     if (selected === null) { sfx.ensure(); setSelected(i) }
     else if (selected === i) setSelected(null)
     else if (areAdjacent(selected, i)) { const a = selected; setSelected(null); trySwap(a, i) }
@@ -395,6 +422,7 @@ export default function MananaPage() {
   const onMove = (e: React.PointerEvent) => {
     const d = dragRef.current
     if (!d || busy || over) return
+    if (isCollared(boardRef.current[d.i])) { dragRef.current = null; return } // can't drag a locked orb
     const dx = e.clientX - d.x
     const dy = e.clientY - d.y
     if (Math.hypot(dx, dy) < DRAG_THRESH) return
@@ -403,7 +431,7 @@ export default function MananaPage() {
     if (Math.abs(dx) > Math.abs(dy)) target = dx > 0 ? (x < W - 1 ? idx(x + 1, y) : -1) : (x > 0 ? idx(x - 1, y) : -1)
     else target = dy > 0 ? (y < H - 1 ? idx(x, y + 1) : -1) : (y > 0 ? idx(x, y - 1) : -1)
     dragRef.current = null
-    if (target >= 0 && !isPuff(boardRef.current[target])) { setSelected(null); trySwap(d.i, target) }
+    if (target >= 0 && !isPuff(boardRef.current[target]) && !isCollared(boardRef.current[target])) { setSelected(null); trySwap(d.i, target) }
   }
   const onUp = () => {
     const d = dragRef.current
@@ -454,6 +482,8 @@ export default function MananaPage() {
           animation:manana-flash .3s ease-out forwards; }
         .manana-mote{ position:absolute; width:7px; height:7px; border-radius:9999px; background:var(--c); box-shadow:0 0 8px var(--c); mix-blend-mode:screen;
           animation:manana-mote .5s ease-out forwards; }
+        @keyframes manana-callout{ 0%{ transform:scale(.5); opacity:0 } 18%{ transform:scale(1.12); opacity:1 } 70%{ transform:scale(1); opacity:1 } 100%{ transform:scale(1.04); opacity:0 } }
+        .manana-callout{ animation:manana-callout .85s ease-out forwards; }
       `}</style>
 
       <div className="relative z-10 max-w-[560px] mx-auto px-4 py-6 min-h-[calc(100svh-5rem)] flex flex-col">
@@ -535,6 +565,15 @@ export default function MananaPage() {
             </div>
           )}
 
+          {/* special / combo callout — names what you just forged */}
+          {callout && (
+            <div key={callout.key} className="pointer-events-none absolute inset-0 z-30 flex items-center justify-center">
+              <span className="manana-callout text-3xl sm:text-4xl font-black italic tracking-wider" style={{ color: '#fff', textShadow: '0 0 16px #ffd884, 0 0 4px #ffb020, 0 2px 6px rgba(0,0,0,0.7)' }}>
+                {callout.text}
+              </span>
+            </div>
+          )}
+
           {/* detonation effects layer — never eats clicks */}
           {boardPx && fx.length > 0 && (() => {
             const cell = (boardPx - 20 - 7 * 6) / 8
@@ -600,6 +639,14 @@ export default function MananaPage() {
                     {k === 'prism' && <span className="absolute inset-[34%] rounded-full bg-white/85" />}
                     {k === 'burst' && <span className="absolute inset-[30%] rounded-[4px] bg-white/85 rotate-45" />}
                     {k === 'none' && <RuneMark rune={p.rune} color={p.mark} />}
+                    {/* collar — a gold band locking the orb (canon: free the spirit) */}
+                    {isCollared(cell) && (
+                      <>
+                        <span className="absolute inset-0 rounded-full bg-black/40" />
+                        <span className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[92%] h-[30%] rounded-full border-2 border-[#e7c878] bg-[#2a2114]/70" style={{ boxShadow: '0 0 6px #e7c87899, inset 0 0 4px #00000088' }} />
+                        <span className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[14%] h-[14%] rounded-full bg-[#e7c878] shadow-[0_0_4px_#e7c878]" />
+                      </>
+                    )}
                   </span>
                 </button>
               )

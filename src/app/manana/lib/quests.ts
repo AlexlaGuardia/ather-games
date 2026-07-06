@@ -14,6 +14,7 @@ export type GoalKind =
   | 'collect' // clear N gems of one element (goal.color)
   | 'puffs' // clear N cloud-puffs
   | 'bloom' // bloom N specials (surge/prism/star)
+  | 'free' // snap N collars (free N collared orbs)
 
 export interface Goal {
   kind: GoalKind
@@ -28,6 +29,7 @@ export interface Level {
   goal: Goal
   moves: number
   puffs: number // cloud-puffs seeded at board start
+  collars?: number // collared orbs seeded at board start
 }
 
 // the ladder — element-themed, escalating. collect colours cycle the elements,
@@ -39,12 +41,14 @@ export const LEVELS: Level[] = [
   { id: 4, name: 'Clear Skies', blurb: 'scatter the clouds', goal: { kind: 'puffs', target: 6 }, moves: 12, puffs: 6 },
   { id: 5, name: 'Wild Mana', blurb: 'the raw current', goal: { kind: 'collect', target: 28, color: 2 }, moves: 13, puffs: 3 },
   { id: 6, name: 'First Bloom', blurb: 'forge the specials', goal: { kind: 'bloom', target: 3 }, moves: 15, puffs: 2 },
-  { id: 7, name: "Heart's Match", blurb: 'the warm colour', goal: { kind: 'collect', target: 30, color: 4 }, moves: 14, puffs: 3 },
-  { id: 8, name: 'Ather Rising', blurb: 'the raw substance', goal: { kind: 'score', target: 3500 }, moves: 16, puffs: 3 },
-  { id: 9, name: 'Stormfront', blurb: 'the sky breaks', goal: { kind: 'collect', target: 34, color: 0 }, moves: 13, puffs: 4 },
-  { id: 10, name: 'Cloudbreak', blurb: 'the great overcast', goal: { kind: 'puffs', target: 9 }, moves: 12, puffs: 9 },
-  { id: 11, name: 'Twin Blooms', blurb: 'forge and combine', goal: { kind: 'bloom', target: 5 }, moves: 16, puffs: 3 },
-  { id: 12, name: 'The Deep', blurb: 'as far as it goes', goal: { kind: 'score', target: 6000 }, moves: 18, puffs: 4 },
+  { id: 7, name: 'Snap the Collar', blurb: 'free the caught', goal: { kind: 'free', target: 5 }, moves: 14, puffs: 1, collars: 5 },
+  { id: 8, name: "Heart's Match", blurb: 'the warm colour', goal: { kind: 'collect', target: 30, color: 4 }, moves: 14, puffs: 3 },
+  { id: 9, name: 'Ather Rising', blurb: 'the raw substance', goal: { kind: 'score', target: 3500 }, moves: 16, puffs: 3 },
+  { id: 10, name: 'Stormfront', blurb: 'the sky breaks', goal: { kind: 'collect', target: 34, color: 0 }, moves: 13, puffs: 4 },
+  { id: 11, name: 'The Warren', blurb: 'free the whole hold', goal: { kind: 'free', target: 8 }, moves: 15, puffs: 2, collars: 8 },
+  { id: 12, name: 'Cloudbreak', blurb: 'the great overcast', goal: { kind: 'puffs', target: 9 }, moves: 12, puffs: 9 },
+  { id: 13, name: 'Twin Blooms', blurb: 'forge and combine', goal: { kind: 'bloom', target: 5 }, moves: 16, puffs: 3 },
+  { id: 14, name: 'The Deep', blurb: 'as far as it goes', goal: { kind: 'score', target: 6000 }, moves: 18, puffs: 4 },
 ]
 
 export const levelAt = (i: number): Level => LEVELS[Math.max(0, Math.min(LEVELS.length - 1, i))]
@@ -60,6 +64,8 @@ export function trackStep(got: number, goal: Goal, step: ResolveStep): number {
       return got + step.spawned.length
     case 'puffs':
       return got + step.puffs
+    case 'free':
+      return got + step.freed
     case 'score':
       return got
   }
@@ -83,5 +89,7 @@ export function goalLabel(goal: Goal): string {
       return `Scatter ${goal.target} clouds`
     case 'bloom':
       return `Bloom ${goal.target} specials`
+    case 'free':
+      return `Free ${goal.target} collared orbs`
   }
 }

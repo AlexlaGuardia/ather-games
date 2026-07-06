@@ -18,14 +18,19 @@ export interface Cell {
   color: number // -1 = empty hole (mid-resolve)
   kind: Kind
   puff?: boolean // a cloud-puff: a fixed, unmatchable blocker (colour ignored)
+  collared?: boolean // a collared orb: a real colour, but LOCKED — can't match or be
+  // swapped until a clear lands beside it and snaps the collar (canon: free the spirit).
 }
 
 export const gem = (color: number): Cell => ({ color, kind: 'none' })
 export const empty = (): Cell => ({ color: -1, kind: 'none' })
 export const puffCell = (): Cell => ({ color: -1, kind: 'none', puff: true })
+export const collarCell = (color: number): Cell => ({ color, kind: 'none', collared: true })
 export const isSpecial = (c: Cell) => c.kind !== 'none'
 export const isPuff = (c: Cell) => c.puff === true
+export const isCollared = (c: Cell) => c.collared === true
 export const PUFF_BONUS = 30 // score for clearing one puff
+export const COLLAR_BONUS = 25 // score for snapping one collar (freeing the orb)
 
 export const idx = (x: number, y: number) => y * W + x
 export const xy = (i: number) => ({ x: i % W, y: Math.floor(i / W) })
@@ -42,6 +47,7 @@ function orthos(i: number): number[] {
 }
 
 export const countPuffs = (b: Cell[]): number => b.reduce((n, c) => n + (isPuff(c) ? 1 : 0), 0)
+export const countCollars = (b: Cell[]): number => b.reduce((n, c) => n + (isCollared(c) ? 1 : 0), 0)
 
 // turn n random plain gems into puffs (called once at board start)
 export function seedPuffs(b: Cell[], rng: Rng, n: number): Cell[] {
@@ -52,6 +58,21 @@ export function seedPuffs(b: Cell[], rng: Rng, n: number): Cell[] {
     const i = Math.floor(rng() * W * H)
     if (!isPuff(out[i]) && !isSpecial(out[i]) && out[i].color >= 0) {
       out[i] = puffCell()
+      placed++
+    }
+  }
+  return out
+}
+
+// collar n random plain gems (keep their colour). Called once at board start.
+export function seedCollars(b: Cell[], rng: Rng, n: number): Cell[] {
+  const out = b.map((c) => ({ ...c }))
+  let placed = 0
+  let guard = 0
+  while (placed < n && guard++ < 400) {
+    const i = Math.floor(rng() * W * H)
+    if (!isPuff(out[i]) && !isSpecial(out[i]) && !isCollared(out[i]) && out[i].color >= 0) {
+      out[i] = collarCell(out[i].color)
       placed++
     }
   }
@@ -115,6 +136,7 @@ export function findRuns(b: Cell[]): Run[] {
     let start = 0
     for (let x = 1; x <= W; x++) {
       const cont = x < W && b[idx(x, y)].color !== -1 && b[idx(x, y)].color === b[idx(x - 1, y)].color
+        && !isCollared(b[idx(x, y)]) && !isCollared(b[idx(x - 1, y)])
       if (!cont) {
         const len = x - start
         if (len >= MIN_RUN) runs.push({ cells: Array.from({ length: len }, (_, k) => idx(start + k, y)), dir: 'h', len })
@@ -126,6 +148,7 @@ export function findRuns(b: Cell[]): Run[] {
     let start = 0
     for (let y = 1; y <= H; y++) {
       const cont = y < H && b[idx(x, y)].color !== -1 && b[idx(x, y)].color === b[idx(x, y - 1)].color
+        && !isCollared(b[idx(x, y)]) && !isCollared(b[idx(x, y - 1)])
       if (!cont) {
         const len = y - start
         if (len >= MIN_RUN) runs.push({ cells: Array.from({ length: len }, (_, k) => idx(x, start + k)), dir: 'v', len })
@@ -219,6 +242,7 @@ export interface ResolveStep {
   gained: number
   mult: number // cascade multiplier shown as "ather heat"
   puffs: number // puffs burst this cascade
+  freed: number // collars snapped this cascade (orbs freed)
   colorCounts: number[] // gems cleared this cascade, tallied by colour id (drives quest goals)
 }
 
@@ -226,6 +250,7 @@ export interface ResolveResult {
   steps: ResolveStep[]
   board: Cell[]
   puffs: number // total puffs burst across the whole move (0 → puffs spread)
+  freed: number // total collars snapped across the whole move
 }
 
 // expand a clear set through any specials it touches (chain reaction)
@@ -307,6 +332,14 @@ export function resolve(board: Cell[], rng: Rng, opts: { swapAt?: number; forced
     for (const i of toClear) for (const nb of orthos(i)) if (isPuff(cur[nb])) finalClear.add(nb)
     let puffs = 0
 
+    // collared orbs: a clear landing on OR beside one snaps the collar — it's freed
+    // into a normal orb of its colour (not cleared). Canon: free the spirit.
+    const freedSet = new Set<number>()
+    for (const i of toClear) {
+      if (isCollared(cur[i])) freedSet.add(i)
+      for (const nb of orthos(i)) if (isCollared(cur[nb])) freedSet.add(nb)
+    }
+
     // spawns are normally protected from the clear, but if EVERY matched cell is a
     // spawn (a degenerate mono-colour board where a special lands on every cell),
     // protecting them would clear nothing and loop forever — so drop the specials
@@ -319,20 +352,24 @@ export function resolve(board: Cell[], rng: Rng, opts: { swapAt?: number; forced
     const colorCounts = new Array<number>(TYPES).fill(0)
     for (const i of finalClear) {
       if (protect.has(i)) continue
+      if (isCollared(cur[i])) continue // collars are freed, never cleared
       if (isPuff(cur[i])) puffs++
       else if (cur[i].color >= 0) colorCounts[cur[i].color]++
       cleared[i] = empty()
     }
+    // snap every collar the clear reached (freed orbs are protected from the clear above)
+    let freed = 0
+    for (const i of freedSet) { if (protect.has(i)) continue; cleared[i] = gem(cur[i].color); freed++ }
     for (const sp of applySpawns) cleared[sp.i] = { color: sp.color, kind: sp.kind }
 
     const fallen = collapse(cleared, rng)
     const mult = 1 + cascade * 0.5
-    const gained = Math.round((toClear.size * 10 + puffs * PUFF_BONUS) * mult)
-    steps.push({ matched: [...finalClear], spawned: applySpawns.map((s) => ({ i: s.i, kind: s.kind })), fired, blasts, fallen, gained, mult, puffs, colorCounts })
+    const gained = Math.round((toClear.size * 10 + puffs * PUFF_BONUS + freed * COLLAR_BONUS) * mult)
+    steps.push({ matched: [...finalClear], spawned: applySpawns.map((s) => ({ i: s.i, kind: s.kind })), fired, blasts, fallen, gained, mult, puffs, freed, colorCounts })
     cur = fallen
     cascade++
   }
-  return { steps, board: cur, puffs: steps.reduce((a, s) => a + s.puffs, 0) }
+  return { steps, board: cur, puffs: steps.reduce((a, s) => a + s.puffs, 0), freed: steps.reduce((a, s) => a + s.freed, 0) }
 }
 
 export function swapMakesMatch(b: Cell[], a: number, c: number): boolean {
