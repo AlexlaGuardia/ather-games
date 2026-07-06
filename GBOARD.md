@@ -349,8 +349,11 @@ the Arcade frame.
      star+surge=thick cross, star+star=5x5, prism+surge/star=colour-sweep-to-special, prism+prism=board nuke.
      `specialCombo()` in match3.ts; flows through the existing resolve/FX/score pipeline (no page rewrite).
      8 clear-set + 4 full-cascade assertions. ▶ Alex playtest for feel/balance (prism+prism is a big score spike).
-  1. **Reason-to-play / objectives** — still pure score-attack; element-themed goals (score/clear-puffs/bloom-N)
-     would give it a spine (Alex-picked as the next big arc after combos).
+  1. ✅ **QUESTS MODE SHIPPED 2026-07-06 (`523daad`)** — the objective ladder / spine. New 'quest' mode:
+     12 element-themed levels (collect N element · scatter clouds · bloom N specials · reach score), each a
+     goal + move budget; clear→advance, localStorage progress. `lib/quests.ts` pure engine (19 assertions);
+     resolve() now reports colorCounts. Goal HUD + win/lose overlays. Verified live (mode/HUD/budget/tracking).
+     ▶ Alex playtest for difficulty curve (move budgets + goal targets per level) + win-overlay feel.
   2. Paint a **cloud-puff sprite** in Aseprite → swap the CSS `PuffCell` stub (drop-and-convert).
   3. Combo discoverability polish — a first-combo celebration / subtle glow between two adjacent specials.
   4. Optional puff balance tune; `robots` index intent in `layout.tsx`.
