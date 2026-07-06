@@ -24,6 +24,9 @@ import AtherBackdrop from './AtherBackdrop'
 import { RuneMark, type RuneId } from './runes'
 import { LEVELS, levelAt, isLastLevel, trackStep, goalMet, goalProgress, goalLabel } from './lib/quests'
 
+// shared view-enter animation (home / roadmap / board all fade+rise in on switch)
+const VIEW_ANIM = '@keyframes manana-viewin{from{opacity:0;transform:translateY(10px) scale(.984)}to{opacity:1;transform:none}}'
+
 const START_MOVES = 20
 const PUFF_SEED = 3 // cloud-puffs seeded at board start; they spread if ignored
 const MOVES_PER_MILESTONE = 4
@@ -288,7 +291,7 @@ export default function MananaPage() {
   const settle = () => {
     if (modeRef.current === 'quests') {
       if (goalMet(questGotRef.current, levelAt(levelRef.current).goal, scoreRef.current)) return win()
-      settle()
+      if (movesRef.current <= 0) endGame() // ran out before the goal — lose the level
       return
     }
     if (movesRef.current <= 0) endGame()
@@ -552,8 +555,9 @@ export default function MananaPage() {
 
   if (view === 'home') return (
     <div className="gx-chrome relative overflow-hidden" style={{ touchAction: 'manipulation', overscrollBehavior: 'none' }}>
+      <style>{VIEW_ANIM}</style>
       <RoomReturn wall={1} />
-      <div style={{ height: 'calc(100svh - 5rem)' }}>
+      <div style={{ height: 'calc(100svh - 5rem)', animation: 'manana-viewin .3s ease-out' }}>
         <Home best={best} dailyBest={dailyBest} muted={muted}
           onStory={openStory} onEndless={() => startCasual('endless')} onDaily={() => startCasual('daily')} onToggleMute={toggleMute} />
       </div>
@@ -561,20 +565,22 @@ export default function MananaPage() {
   )
   if (view === 'roadmap') return (
     <div className="gx-chrome relative overflow-hidden" style={{ touchAction: 'manipulation', overscrollBehavior: 'none' }}>
+      <style>{VIEW_ANIM}</style>
       <RoomReturn wall={1} />
-      <div style={{ height: 'calc(100svh - 5rem)' }}>
+      <div style={{ height: 'calc(100svh - 5rem)', animation: 'manana-viewin .3s ease-out' }}>
         <Roadmap current={level} advancedFrom={advancedFromRef.current} onPlay={playLevel} onHome={goHome} />
       </div>
     </div>
   )
 
   return (
-    <div className="gx-chrome relative min-h-[calc(100svh-5rem)] overflow-hidden text-slate-200 font-sans" style={{ touchAction: 'manipulation', overscrollBehavior: 'none', ['--gx-accent' as string]: '#ffd884' } as React.CSSProperties}>
+    <div className="gx-chrome relative min-h-[calc(100svh-5rem)] overflow-hidden text-slate-200 font-sans" style={{ touchAction: 'manipulation', overscrollBehavior: 'none', animation: 'manana-viewin .32s ease-out', ['--gx-accent' as string]: '#ffd884' } as React.CSSProperties}>
       <AtherBackdrop />
       {/* full-bleed board (its own AtherBackdrop) — deliberately NOT a cabinet; just
           the room tie so back lands facing the Arcade arch. */}
       <RoomReturn wall={1} />
       <style>{`
+        @keyframes manana-viewin { from{opacity:0;transform:translateY(10px) scale(.984)} to{opacity:1;transform:none} }
         @keyframes manana-pop { 0%{transform:scale(1)} 40%{transform:scale(1.28)} 100%{transform:scale(0);opacity:0} }
         @keyframes manana-drop { 0%{transform:translateY(-14px) scale(0.9);opacity:0.2} 100%{transform:translateY(0) scale(1);opacity:1} }
         @keyframes manana-charged { 0%,100%{ filter:brightness(1) } 50%{ filter:brightness(1.4) } }
