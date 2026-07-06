@@ -16,6 +16,7 @@ import {
   isCollared, seedCollars, atherSurge, type Cell, type Kind, type ResolveStep,
 } from './lib/match3'
 import { sfx, type ManaSfx } from './lib/sfx'
+import { vo, type VoTrigger } from './lib/vo'
 import AtherBackdrop from './AtherBackdrop'
 import { RuneMark, type RuneId } from './runes'
 import { LEVELS, levelAt, isLastLevel, trackStep, goalMet, goalProgress, goalLabel } from './lib/quests'
@@ -95,6 +96,18 @@ function calloutFor(step: ResolveStep): string | null {
   return null
 }
 
+// which commentator beat (if any) a cascade step deserves. The VoBank throttles
+// on top of this, so it's fine to return a tier often — most get swallowed sparse.
+const VO_LOW_MOVES = 3
+function voTierFor(step: ResolveStep, cascade: number): VoTrigger | null {
+  const topSpawn = step.spawned.length ? Math.max(...step.spawned.map((s) => specialRank(s.kind))) : 0
+  const hasBigFire = step.fired.some((k) => k === 'star' || k === 'burst' || k === 'prism')
+  if (topSpawn >= 2 || hasBigFire || step.fired.length >= 3) return 'big'      // prism/star forged, big detonation, or a 3+ combo
+  if (topSpawn === 1 || step.fired.length >= 2) return 'impressive'            // a surge forged, or a 2-combo
+  if (step.spawned.length || cascade >= 2) return 'nice'                       // any special, or a deep (3rd+) cascade
+  return null
+}
+
 export default function MananaPage() {
   const [board, setBoardState] = useState<Cell[]>([])
   const [score, setScore] = useState(0)
@@ -140,6 +153,7 @@ export default function MananaPage() {
   const movesRef = useRef(START_MOVES)
   const scoreRef = useRef(0)
   const milestonesRef = useRef(0)
+  const lowWarnedRef = useRef(false) // commentator's "running low" line fires once per crossing
   const rngRef = useRef<Rng>(mulberry32(1))
   const dragRef = useRef<{ i: number; x: number; y: number } | null>(null)
 
@@ -167,6 +181,8 @@ export default function MananaPage() {
     setReward(0)
     setOver(false)
     setBusy(false)
+    lowWarnedRef.current = false
+    vo.reset(); vo.play('start')
   }
 
   useEffect(() => {
@@ -174,6 +190,7 @@ export default function MananaPage() {
     setBest(Number(localStorage.getItem('manana.best') ?? 0))
     setDailyBest(loadDailyBest('manana'))
     setMuted(sfx.isMuted())
+    vo.setMuted(sfx.isMuted()); void vo.ensure() // one mute toggle governs both; warm the clips
     apply(seedPuffs(reshuffle(rngRef.current), rngRef.current, PUFF_SEED))
     setMounted(true)
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -226,6 +243,8 @@ export default function MananaPage() {
     atherChargeRef.current = 0; setAtherCharge(0)
     setSelected(null); setPopping(new Set()); setHeat(1); setReward(0)
     setWon(false); setOver(false); setBusy(false)
+    lowWarnedRef.current = false
+    vo.reset(); vo.play('start')
   }
 
   // the current goal was met — clear the level and remember the next one.
@@ -233,6 +252,7 @@ export default function MananaPage() {
     setWon(true)
     setOver(true)
     sfx.play('reward')
+    vo.play('big')
     const next = Math.min(levelRef.current + 1, LEVELS.length)
     localStorage.setItem('manana.quest.level', String(isLastLevel(levelRef.current) ? levelRef.current : next))
   }
@@ -241,6 +261,7 @@ export default function MananaPage() {
     setOver(true)
     setWon(false)
     sfx.play('over')
+    vo.play('over')
     if (modeRef.current === 'daily') {
       setDailyBest(saveDailyBest('manana', scoreRef.current))
     } else if (modeRef.current === 'endless' && scoreRef.current > best) {
@@ -286,8 +307,20 @@ export default function MananaPage() {
       setMilestones(milestonesRef.current)
       setMovesState(movesRef.current)
       sfx.play('reward')
+      vo.play('milestone')
+      if (movesRef.current > VO_LOW_MOVES) lowWarnedRef.current = false // moves climbed — let the low line re-arm
       setReward(awarded)
       setTimeout(() => setReward(0), 1300)
+    }
+  }
+
+  // spend one move; the commentator murmurs a gentle warning as the budget runs thin (once per crossing).
+  const spendMove = () => {
+    movesRef.current -= 1
+    setMovesState(movesRef.current)
+    if (movesRef.current <= VO_LOW_MOVES && movesRef.current > 0 && !lowWarnedRef.current) {
+      lowWarnedRef.current = true
+      vo.play('low_moves')
     }
   }
 
@@ -357,6 +390,8 @@ export default function MananaPage() {
       awardMilestones()
       const call = calloutFor(step)
       if (call) { calloutNonce.current += 1; setCallout({ text: call, key: calloutNonce.current }) }
+      const voTier = voTierFor(step, s)
+      if (voTier) vo.play(voTier)
       if (step.freed) sfx.play('reward') // a collar snapped
       // charge the Ather Surge by orbs cleared this cascade (caps when full)
       if (atherChargeRef.current < ATHER_MAX) {
@@ -383,6 +418,7 @@ export default function MananaPage() {
     }
     if (!anyMove(boardRef.current)) {
       sfx.play('shuffle')
+      vo.play('shuffle')
       await sleep(220)
       apply(seedPuffs(reshuffle(rngRef.current), rngRef.current, PUFF_SEED))
     }
@@ -394,7 +430,7 @@ export default function MananaPage() {
     if (det) {
       sfx.ensure(); sfx.play('swap'); setBusy(true)
       apply(det.board)
-      movesRef.current -= 1; setMovesState(movesRef.current)
+      spendMove()
       await sleep(120)
       await runResolve(det.board, { forced: det.forced })
       setBusy(false)
@@ -403,7 +439,7 @@ export default function MananaPage() {
       sfx.ensure(); sfx.play('swap'); setBusy(true)
       const nb = swapped(before, a, c)
       apply(nb)
-      movesRef.current -= 1; setMovesState(movesRef.current)
+      spendMove()
       await sleep(120)
       await runResolve(nb, { swapAt: c })
       setBusy(false)
@@ -424,6 +460,7 @@ export default function MananaPage() {
     atherChargeRef.current = 0; setAtherCharge(0)
     calloutNonce.current += 1; setCallout({ text: 'ATHER SURGE!', key: calloutNonce.current })
     sfx.play('bloom')
+    vo.play('big')
     const surged = atherSurge(boardRef.current, rngRef.current, ATHER_FORGE)
     apply(surged)
     setSelected(null)
@@ -539,7 +576,7 @@ export default function MananaPage() {
               )
             })()}
             <button
-              onClick={() => { sfx.ensure(); const m = !muted; sfx.setMuted(m); setMuted(m); if (!m) sfx.play('swap') }}
+              onClick={() => { sfx.ensure(); const m = !muted; sfx.setMuted(m); vo.setMuted(m); setMuted(m); if (!m) sfx.play('swap') }}
               title={muted ? 'sound off' : 'sound on'}
               className="text-lg text-slate-500 hover:text-amber-300 transition-colors"
             >{muted ? '\u{1F507}' : '\u{1F50A}'}</button>          </div>
