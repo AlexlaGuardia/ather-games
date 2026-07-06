@@ -19,8 +19,8 @@
 //
 // Landscape games (VW > VH) are rarely height-bound; the min() just falls through to VW.
 
-export const DECK_RESERVE = 320 // header + control deck + footer + padding, in px
-                                // (deck buttons are thumb-size 2x — the deck is tall)
+export const DECK_RESERVE = 265 // header + control deck + footer + padding, in px
+                                // (deck buttons are thumb-size 1.5x)
 
 export function screenMaxW(vw: number, vh: number, reserve: number = DECK_RESERVE): string {
   return `min(${vw}px, calc((100dvh - ${reserve}px) * ${vw} / ${vh}))`
