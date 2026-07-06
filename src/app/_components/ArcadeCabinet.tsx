@@ -36,7 +36,7 @@ export default function ArcadeCabinet({
       <div
         aria-hidden
         className="fixed inset-0 -z-20 bg-cover bg-center"
-        style={{ backgroundImage: 'url(/arcade/cabinet-hall.webp)', filter: 'brightness(1.1) saturate(0.92) blur(2px)' }}
+        style={{ backgroundImage: 'url(/arcade/cabinet-hall.webp)', filter: 'brightness(0.32) saturate(0.5) blur(3px)' }}
       />
       {/* arcade light around the cabinet: warm marquee glow from the top, colourful
           floor-glow from the bottom, the game's screen-spill in the middle, gentle dim. */}
@@ -48,7 +48,7 @@ export default function ArcadeCabinet({
             'linear-gradient(to bottom, rgba(212,168,67,0.10), transparent 20%),' +
             `linear-gradient(to top, rgba(${rgb},0.05), rgba(155,90,210,0.025) 6%, transparent 14%),` +
             `radial-gradient(ellipse 58% 40% at 50% 50%, rgba(${rgb},0.07), transparent 62%),` +
-            'linear-gradient(rgba(5,3,9,0.2), rgba(5,3,9,0.4))',
+            'linear-gradient(rgba(5,3,9,0.62), rgba(5,3,9,0.82))',
         }}
       />
       <RoomReturn wall={wall} />
