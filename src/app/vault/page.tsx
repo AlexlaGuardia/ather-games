@@ -9,6 +9,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import ArcadeCabinet from '../_components/ArcadeCabinet'
 import { useNoScroll } from '@/lib/arcade/useNoScroll'
+import { screenMaxW } from '@/lib/arcade/fit'
 import {
   makeWorld,
   pressJump,
@@ -219,8 +220,8 @@ export default function VaultPage() {
 
 
   return (
-    <ArcadeCabinet accent={ACCENT} wall={1} maxWidth={VW}>
-      <div className="w-full flex items-center justify-between mb-3" style={{ maxWidth: VW }}>
+    <ArcadeCabinet accent={ACCENT} wall={1} maxWidth={screenMaxW(VW, VH)}>
+      <div className="w-full flex items-center justify-between mb-3" style={{ maxWidth: screenMaxW(VW, VH) }}>
         <span aria-hidden className="w-10" />
         <div className="text-center">
           <div className="gx-title text-sm tracking-[0.35em] uppercase" style={{ color: ACCENT, textShadow: `0 0 8px ${ACCENT}80` }}>Vault</div>
@@ -230,13 +231,13 @@ export default function VaultPage() {
       </div>
 
       {/* score + motes */}
-      <div className="w-full mb-2 flex items-center gap-3 font-mono" style={{ maxWidth: VW }}>
+      <div className="w-full mb-2 flex items-center gap-3 font-mono" style={{ maxWidth: screenMaxW(VW, VH) }}>
         <span className="gx-label text-[10px]" style={{ color: ACCENT }}>crossing</span>
         <span className="gx-label text-[10px] text-[#e8feff] tabular-nums">{score}</span>
         <span className="gx-label text-[9px] tracking-wider ml-auto" style={{ color: GOLD }}>light <span className="text-[#e8feff] tabular-nums">{motes}</span></span>
       </div>
 
-      <div className="gx-chrome relative w-full" style={{ maxWidth: VW, aspectRatio: `${VW} / ${VH}`, ['--gx-accent' as string]: ACCENT } as React.CSSProperties}>
+      <div className="gx-chrome relative w-full" style={{ maxWidth: screenMaxW(VW, VH), aspectRatio: `${VW} / ${VH}`, ['--gx-accent' as string]: ACCENT } as React.CSSProperties}>
         <canvas
           ref={canvasRef}
           className="w-full h-full block rounded-md select-none pointer-events-none"
@@ -299,14 +300,14 @@ export default function VaultPage() {
       {/* the cabinet control deck — one big VAULT button under the screen (keyboard still works) */}
       <ArcadeControls
         accent={ACCENT}
-        maxWidth={VW}
+        maxWidth={screenMaxW(VW, VH)}
         buttons={[{ id: 'jump', label: 'Vault', glyph: '↟', hint: 'space', size: 'lg' }]}
         onPress={doPress}
         onRelease={doRelease}
         hint="tap = short hop · hold = float higher"
       />
 
-      <div className="w-full flex items-center justify-center mt-3" style={{ maxWidth: VW }}>
+      <div className="w-full flex items-center justify-center mt-3" style={{ maxWidth: screenMaxW(VW, VH) }}>
         <p className="text-[10px] text-[#7fd8e6]/35 font-mono tracking-wider">stomp grey from above → tap again to double-jump · hop the thorns</p>
       </div>
     </ArcadeCabinet>

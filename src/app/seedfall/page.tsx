@@ -11,6 +11,7 @@ import ArcadeControls from '../_components/ArcadeControls'
 import DailyLeaderboard from '../_components/DailyLeaderboard'
 import { mulberry32 } from '@/lib/arcade/rng'
 import { useNoScroll } from '@/lib/arcade/useNoScroll'
+import { screenMaxW } from '@/lib/arcade/fit'
 import { dailySeed, dailyNumber, loadDailyBest, saveDailyBest, dailyShare, copyShare } from '@/lib/arcade/daily'
 import {
   makeWorld,
@@ -189,7 +190,7 @@ export default function SeedfallPage() {
   const depthPct = Math.min(100, Math.round((worldRef.current?.y ?? 0) / DEPTH_GOAL * 100))
 
   return (
-    <ArcadeCabinet accent="#54ffc8" wall={1} maxWidth={400}>
+    <ArcadeCabinet accent="#54ffc8" wall={1} maxWidth={screenMaxW(VW, VH)}>
       <div className="w-full max-w-[400px] flex items-center justify-between mb-3">
         <span aria-hidden className="w-10" />
         <div className="text-center">
@@ -209,7 +210,7 @@ export default function SeedfallPage() {
         <span className="gx-label text-[9px] text-[#7fd8e6]/40">ather</span>
       </div>
 
-      <div className="gx-chrome relative w-full max-w-[400px]" style={{ aspectRatio: `${VW} / ${VH}`, ['--gx-accent' as string]: '#54ffc8' } as React.CSSProperties}>
+      <div className="gx-chrome relative w-full" style={{ maxWidth: screenMaxW(VW, VH), aspectRatio: `${VW} / ${VH}`, ['--gx-accent' as string]: '#54ffc8' } as React.CSSProperties}>
         <canvas
           ref={canvasRef}
           className="w-full h-full block touch-none rounded-md"
@@ -271,7 +272,7 @@ export default function SeedfallPage() {
       {/* the cabinet control deck — hold a side to drift, both to slow (screen stays a clean display) */}
       <ArcadeControls
         accent="#54ffc8"
-        maxWidth={400}
+        maxWidth={screenMaxW(VW, VH)}
         buttons={[
           { id: 'L', label: 'Left', glyph: '◀', hint: '←', size: 'lg' },
           { id: 'R', label: 'Right', glyph: '▶', hint: '→', size: 'lg' },

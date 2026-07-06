@@ -167,7 +167,7 @@ export default function ArcadeControls({
       <style>{`@keyframes acAttract{0%,100%{filter:brightness(1)}50%{filter:brightness(1.22)}}`}</style>
       {/* the control panel — recessed dark deck, gold cabinet trim, corner screws */}
       <div
-        className="relative mt-3 rounded-xl border border-[#d4a843]/30 px-4 py-3.5 touch-none"
+        className="relative mt-2 rounded-xl border border-[#d4a843]/30 px-4 py-2.5 touch-none"
         style={{
           background: 'linear-gradient(to bottom, #15151d 0%, #0c0c12 55%, #08080d 100%)',
           boxShadow: `inset 0 2px 10px rgba(0,0,0,0.65), inset 0 0 24px rgba(${rgb},0.04), 0 6px 22px rgba(0,0,0,0.5)`,
@@ -178,7 +178,7 @@ export default function ArcadeControls({
           <span key={p} className={`absolute ${p} w-1.5 h-1.5 rounded-full bg-[#d4a843]/30 shadow-[inset_0_1px_1px_rgba(0,0,0,0.6)]`} />
         ))}
 
-        <div className={`flex items-center ${stick ? 'justify-between' : 'justify-center'} gap-4 min-h-[88px]`}>
+        <div className={`flex items-center ${stick ? 'justify-between' : 'justify-center'} gap-4 min-h-[76px]`}>
           {/* joystick gate (left) */}
           {stick && (
             <div
@@ -256,7 +256,7 @@ export default function ArcadeControls({
           </div>}
         </div>
 
-        <p className="mt-2 text-center text-[9px] font-mono tracking-wider text-[#7fd8e6]/30">{hint ?? defaultHint}</p>
+        <p className="mt-1.5 text-center text-[9px] font-mono tracking-wider text-[#7fd8e6]/30">{hint ?? defaultHint}</p>
       </div>
     </div>
   )

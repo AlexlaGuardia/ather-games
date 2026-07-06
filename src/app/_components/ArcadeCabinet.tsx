@@ -30,7 +30,7 @@ export default function ArcadeCabinet({
 }) {
   const rgb = hexToRgb(accent)
   return (
-    <div className="relative min-h-screen bg-[#050309] text-[#7fd8e6] flex flex-col items-center justify-center px-4 py-6 select-none">
+    <div className="relative min-h-dvh max-h-dvh overflow-hidden bg-[#050309] text-[#7fd8e6] flex flex-col items-center justify-center px-4 py-4 select-none">
       {/* the hall the room's Arcade arch shows — pushed back + soft-blurred (depth of
           field behind the sharp cabinet; also mutes the gen's fake marquee text). */}
       <div
@@ -55,7 +55,7 @@ export default function ArcadeCabinet({
 
       {/* the cabinet housing — dark panel, gold trim (shared arcade furniture). */}
       <div
-        className="relative w-full flex flex-col items-center rounded-2xl border border-[#d4a843]/25 bg-[#08080f]/70 backdrop-blur-sm px-3.5 pt-3 pb-3.5"
+        className="relative w-full max-h-full flex flex-col items-center rounded-2xl border border-[#d4a843]/25 bg-[#08080f]/70 backdrop-blur-sm px-3.5 pt-2.5 pb-3"
         style={{ maxWidth, boxShadow: `0 14px 70px rgba(0,0,0,0.7), inset 0 0 30px rgba(${rgb},0.05)` }}
       >
         {children}
