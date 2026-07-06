@@ -339,7 +339,7 @@ the Arcade frame.
   game route. Verified: live 200 · back-room/coming-soon 307→/arcade · dev tooling 403 · /owner 401.
 
 ### Mana'nana — 🟢 live · match-3, blooming specials → `/manana`
-*Last touched: 2026-06-14*
+*Last touched: 2026-07-06 — cozy commentator VO*
 **Left off:** Cloud-puff obstacle live (CSS stub, Shimmer-canon palette), detonation FX
   (row/col beams, star flash, prism ring, capped motes), and iOS sound+scroll fixes
   **confirmed on a real iPhone**. Orbs are canon elements (SVG rune-marks: Mana/Storm/
@@ -368,6 +368,14 @@ the Arcade frame.
      power, not just auto +moves. Clearing orbs fills a header lightning button (48 orbs); tap when full to
      forge 3 random specials onto the board (weighted surge/star/burst) for you to wield + combo. No move cost;
      resets per game; excluded from bloom-goal counting. atherSurge() pure (7 assertions). ▶ Alex playtest charge feel.
+  1e. ✅ **COZY COMMENTATOR VO SHIPPED 2026-07-06 (`c08c7f0`)** — a warm British sportscaster (ElevenLabs
+     "George") reacts to game state: open, combo tiers (nice/impressive/big), running-low-on-moves, milestone,
+     shuffle, game over. Cozy-not-Candy-Crush: the feel is the THROTTLE (`lib/vo.ts` VoBank — per-tier
+     probability + 2.8s global cooldown + priority so big moments talk over chatter). One mute toggle governs
+     sfx+voice. Alex ear-picked George over edge-Ryan/11L-Alice in an A/B. Clips in `public/manana/vo`
+     (gitignored); `scripts/gen_manana_vo.py` reproduces them. Lines canon-neutral (no Magii gate). ▶ Alex
+     DEVICE PASS: the throttle/sparseness feel — talks too much? too rare? tune PROB/MIN_GAP in `lib/vo.ts`.
+     ▶ NEXT on this thread: **music bus + ducking** (Alex making a track → I wire loop + dip-under-VO).
   2. Paint a **cloud-puff sprite** in Aseprite → swap the CSS `PuffCell` stub (drop-and-convert).
   3. Combo discoverability polish — a first-combo celebration / subtle glow between two adjacent specials.
   4. Optional puff balance tune; `robots` index intent in `layout.tsx`.
@@ -375,7 +383,7 @@ the Arcade frame.
 **Decisions:** kept the **CSS gradient orbs** over a painted pixel-orb (Alex prefers them —
   the Void-orb experiment was reverted); cloud-puff chains stay **emergent**, not hardcoded
   (that's the difficulty); detonation kept **clean** over maximalist (his call).
-**Files:** `manana/lib/match3.ts` · `page.tsx` · `tiles.ts` (T34 puff palette) · `runes.tsx`
+**Files:** `manana/lib/match3.ts` · `page.tsx` · `tiles.ts` (T34 puff palette) · `runes.tsx` · `lib/sfx.ts` · `lib/vo.ts` (commentator) · `scripts/gen_manana_vo.py`
 
 ### Rekindle (#3) — 🟢 live · conduit puzzle + Aeterna node-map → `/rekindle`
 *Last touched: 2026-06-22 — gx-* UI pass (map tiles → gx-card plates, squared chrome on both views)*
