@@ -18,6 +18,8 @@ import {
 import { sfx, type ManaSfx } from './lib/sfx'
 import { vo, type VoTrigger } from './lib/vo'
 import { music } from './lib/music'
+import Home from './Home'
+import Roadmap from './Roadmap'
 import AtherBackdrop from './AtherBackdrop'
 import { RuneMark, type RuneId } from './runes'
 import { LEVELS, levelAt, isLastLevel, trackStep, goalMet, goalProgress, goalLabel } from './lib/quests'
@@ -133,6 +135,8 @@ export default function MananaPage() {
   const questGotRef = useRef(0)
   const [won, setWon] = useState(false) // the over-overlay is a WIN (quest cleared) not a loss
   const [dailyBest, setDailyBest] = useState(0)
+  const [view, setView] = useState<'home' | 'roadmap' | 'board'>('home') // home = front door
+  const advancedFromRef = useRef<number | null>(null) // just-cleared level, for the roadmap token-hop
   const [shared, setShared] = useState(false)
   const [muted, setMuted] = useState(false)
   const [mounted, setMounted] = useState(false)
@@ -253,13 +257,18 @@ export default function MananaPage() {
   }
 
   // the current goal was met — clear the level and remember the next one.
+  // quest cleared → advance progress and return to the trail; the piece hops forward there.
   const win = () => {
-    setWon(true)
-    setOver(true)
     sfx.play('reward')
     vo.play('big')
-    const next = Math.min(levelRef.current + 1, LEVELS.length)
-    localStorage.setItem('manana.quest.level', String(isLastLevel(levelRef.current) ? levelRef.current : next))
+    const clearedIdx = levelRef.current
+    advancedFromRef.current = clearedIdx
+    const progress = clearedIdx + 1 // may reach LEVELS.length = whole ladder walked
+    localStorage.setItem('manana.quest.level', String(Math.min(progress, LEVELS.length - 1)))
+    levelRef.current = progress
+    setLevel(progress)
+    setBusy(false)
+    setView('roadmap')
   }
 
   const endGame = () => {
@@ -293,6 +302,26 @@ export default function MananaPage() {
     if (m === 'quests') startLevel(Number(localStorage.getItem('manana.quest.level') ?? 0))
     else newGame()
   }
+  // ---- view navigation (home ↔ roadmap ↔ board) ----
+  const goHome = () => { setOver(false); setView('home') }
+  const openStory = () => {
+    modeRef.current = 'quests'; setMode('quests'); sfx.ensure(); music.start()
+    advancedFromRef.current = null
+    const prog = Number(localStorage.getItem('manana.quest.level') ?? 0)
+    levelRef.current = prog; setLevel(prog)
+    setOver(false); setView('roadmap')
+  }
+  const playLevel = (i: number) => {
+    modeRef.current = 'quests'; setMode('quests')
+    startLevel(i)
+    setView('board')
+  }
+  const startCasual = (m: 'endless' | 'daily') => {
+    modeRef.current = m; setMode(m); sfx.ensure(); music.start()
+    newGame()
+    setView('board')
+  }
+
   const onShare = async () => {
     if (await copyShare(dailyShare("Mana'nana", scoreRef.current))) {
       setShared(true)
@@ -518,6 +547,26 @@ export default function MananaPage() {
   const lvl = levelAt(level)
   const questProg = goalProgress(questGot, lvl.goal, score)
   const questBarPct = Math.min(100, (questProg / lvl.goal.target) * 100)
+
+  const toggleMute = () => { sfx.ensure(); const m = !muted; sfx.setMuted(m); vo.setMuted(m); music.setMuted(m); setMuted(m); if (!m) sfx.play('swap') }
+
+  if (view === 'home') return (
+    <div className="gx-chrome relative overflow-hidden" style={{ touchAction: 'manipulation', overscrollBehavior: 'none' }}>
+      <RoomReturn wall={1} />
+      <div style={{ height: 'calc(100svh - 5rem)' }}>
+        <Home best={best} dailyBest={dailyBest} muted={muted}
+          onStory={openStory} onEndless={() => startCasual('endless')} onDaily={() => startCasual('daily')} onToggleMute={toggleMute} />
+      </div>
+    </div>
+  )
+  if (view === 'roadmap') return (
+    <div className="gx-chrome relative overflow-hidden" style={{ touchAction: 'manipulation', overscrollBehavior: 'none' }}>
+      <RoomReturn wall={1} />
+      <div style={{ height: 'calc(100svh - 5rem)' }}>
+        <Roadmap current={level} advancedFrom={advancedFromRef.current} onPlay={playLevel} onHome={goHome} />
+      </div>
+    </div>
+  )
 
   return (
     <div className="gx-chrome relative min-h-[calc(100svh-5rem)] overflow-hidden text-slate-200 font-sans" style={{ touchAction: 'manipulation', overscrollBehavior: 'none', ['--gx-accent' as string]: '#ffd884' } as React.CSSProperties}>
@@ -764,11 +813,17 @@ export default function MananaPage() {
                   <div className="gx-label text-amber-200 text-sm mb-1">OUT OF MOVES</div>
                   <div className="text-3xl font-bold text-white mb-1 tabular-nums">{score.toLocaleString()}</div>
                   <div className="text-[11px] text-slate-400 mb-4">Lv {lvl.id} · {goalLabel(lvl.goal)} · {questProg}/{lvl.goal.target}</div>
-                  <button
-                    onClick={() => { sfx.ensure(); sfx.play('shuffle'); startLevel(level) }}
-                    className="px-5 py-2 rounded-full text-sm font-semibold tracking-wide text-[#1a1228]"
-                    style={{ background: 'linear-gradient(180deg,#ffe09a,#f0a526)' }}
-                  >Retry level</button>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => { sfx.ensure(); sfx.play('shuffle'); startLevel(level) }}
+                      className="px-5 py-2 rounded-full text-sm font-semibold tracking-wide text-[#1a1228]"
+                      style={{ background: 'linear-gradient(180deg,#ffe09a,#f0a526)' }}
+                    >Retry level</button>
+                    <button
+                      onClick={() => { sfx.ensure(); sfx.play('shuffle'); advancedFromRef.current = null; setOver(false); setView('roadmap') }}
+                      className="px-5 py-2 rounded-full text-sm font-semibold tracking-wide text-amber-200 border border-amber-300/40"
+                    >To the trail ‹</button>
+                  </div>
                 </>
               ) : (
                 <>
@@ -790,6 +845,7 @@ export default function MananaPage() {
                         {shared ? 'copied ✓' : 'share'}
                       </button>
                     )}
+                    <button onClick={goHome} className="px-5 py-2 rounded-full text-sm font-semibold tracking-wide text-slate-300 border border-white/20">Home ‹</button>
                   </div>
                   {mode === 'daily' && <DailyLeaderboard gameId="manana" accent="#f0a526" score={score} className="mt-3" />}
                 </>
