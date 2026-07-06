@@ -140,9 +140,14 @@ the Arcade frame.
 > header/score/footer). Shell `min-h-screen`→`min-h-dvh`+`max-h-dvh`. Portrait screen now sits centered in a
 > dark bezel inside the wider cabinet (reads like a real cabinet). **2x button pass (Alex):** round 72/56→144/112,
 > D-pad 52→104, joystick 46→92/knob 26→52; `DECK_RESERVE`=320. Rolled to all games (9 via 3 parallel agents),
-> type-clean + built, verified live at 500x755 across every variant. **▶ PENDING ALEX real-phone pass:** (1) 2x
-> feel — one number in `ArcadeControls` if too big; (2) `DECK_RESERVE`/gutter feel — one number, reflows all.
-> Minor open: a couple start-overlays run tall for their screen; header subtitle tight vs room pill at narrow widths.
+> type-clean + built, verified live at 500x755 across every variant. **✅ ALEX-APPROVED 2026-07-06** after a
+> phone-feedback loop: 2x buttons overtook the screen → dialed to **1.5x**; grew screen 65%→71% (trimmed deck,
+> normalized joystick gate so one `DECK_RESERVE`=222 fits all). The "reddish footer" Alex saw = **cabinet-hall.webp
+> backdrop bleeding red neon** below the cabinet on tall phones (NOT the accent glow) → dimmed hall brightness
+> 1.1→0.32 + scrim 0.62/0.82. **KNOWN CEILING:** portrait games ~77% width on phone (aspect-locked 2:3 +
+> deck-below rule); wider needs a header-HUD-overlay pass OR controls-over-canvas (reverses the neutral-screen
+> rule) — both deferred/offered, Alex happy at current. Minor open: a couple start-overlays run tall for their screen.
+> **Not yet eyeballed on mobile (trusted via typecheck+pattern):** updraft, dewdrop, voranyx, lucernyx.
 >
 > **▶ VEHICLE = the ARCADE POLISH LAP (planned 2026-06-21, Alex):** the start/over + HUD rollout now rides a
 > per-game polish lap — **one game per session**, same checklist (cold play → feel fixes → UI-layer pass → mobile →
