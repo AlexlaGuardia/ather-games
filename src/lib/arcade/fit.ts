@@ -23,6 +23,10 @@ export const DECK_RESERVE = 222 // header + control deck + footer + padding, in 
                                 // are normalized (stick gate sized to the button deck), so one
                                 // reserve fits all games without clipping. 1.5x thumb deck.
 
+export const DPAD_RESERVE = 342 // a 4-way D-pad is 3 rows tall (~2x a stick/button deck), so
+                                // D-pad games (dewdrop) pass this instead — the screen shrinks
+                                // to make room for the taller deck. screenMaxW(VW, VH, DPAD_RESERVE).
+
 export function screenMaxW(vw: number, vh: number, reserve: number = DECK_RESERVE): string {
   return `min(${vw}px, calc((100dvh - ${reserve}px) * ${vw} / ${vh}))`
 }

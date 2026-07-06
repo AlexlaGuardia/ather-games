@@ -160,7 +160,7 @@ export default function UpdraftPage() {
 
   return (
     <ArcadeCabinet accent="#37e6ff" wall={1} maxWidth={cabinetMaxW(VW, VH)}>
-      <div className="w-full flex items-center justify-between mb-4" style={{ maxWidth: cabinetMaxW(VW, VH) }}>
+      <div className="w-full flex items-center justify-between mb-2" style={{ maxWidth: cabinetMaxW(VW, VH) }}>
         <span aria-hidden className="w-10" />
         <div className="text-center">
           <div className="gx-title text-[#37e6ff] text-sm tracking-[0.35em] uppercase" style={{ textShadow: '0 0 8px #37e6ff80' }}>Updraft</div>
@@ -239,9 +239,6 @@ export default function UpdraftPage() {
         hint="tap to beat your wings · rise"
       />
 
-      <div className="w-full flex items-center justify-center mt-3" style={{ maxWidth: cabinetMaxW(VW, VH) }}>
-        <p className="text-[10px] text-[#7fd8e6]/35 font-mono tracking-wider">one tap · keep him in the air</p>
-      </div>
 
       <style jsx>{`
         .updraft-crt {

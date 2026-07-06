@@ -259,9 +259,6 @@ export default function VoranyxPage() {
         hint="drag the stick to steer · hold boost to surge"
       />
 
-      <div className="w-full flex items-center justify-center mt-3" style={{ maxWidth: cabinetMaxW(360, 480) }}>
-        <p className="text-[10px] text-[#7fd8e6]/35 font-mono tracking-wider">steer · hold to boost · keep eating</p>
-      </div>
 
       <style jsx>{`
         .vx-crt {

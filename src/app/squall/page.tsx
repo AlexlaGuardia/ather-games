@@ -262,9 +262,6 @@ export default function SquallPage() {
         hint="drag the stick to weave the storm"
       />
 
-      <div className="w-full flex items-center justify-center mt-3" style={{ maxWidth: cabinetMaxW(VW, VH) }}>
-        <p className="text-[10px] text-[#7fd8e6]/35 font-mono tracking-wider">drag to move · graze for score · just survive</p>
-      </div>
     </ArcadeCabinet>
   )
 }

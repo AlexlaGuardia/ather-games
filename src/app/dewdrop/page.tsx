@@ -9,7 +9,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import ArcadeCabinet from '../_components/ArcadeCabinet'
 import ArcadeControls from '../_components/ArcadeControls'
 import { useNoScroll } from '@/lib/arcade/useNoScroll'
-import { screenMaxW, deckMaxW, cabinetMaxW } from '@/lib/arcade/fit'
+import { screenMaxW, deckMaxW, cabinetMaxW, DPAD_RESERVE } from '@/lib/arcade/fit'
 import { dailySeed, dailyNumber, loadDailyBest, saveDailyBest, dailyShare, copyShare } from '@/lib/arcade/daily'
 import DailyLeaderboard from '../_components/DailyLeaderboard'
 import {
@@ -178,8 +178,8 @@ export default function DewdropPage() {
   const toggleMute = () => { sfx.ensure(); const m = !sfx.isMuted(); sfx.setMuted(m); setMuted(m) }
 
   return (
-    <ArcadeCabinet accent={ACCENT} wall={1} maxWidth={cabinetMaxW(VW, VH)}>
-      <div className="w-full flex items-center justify-between mb-3" style={{ maxWidth: cabinetMaxW(VW, VH) }}>
+    <ArcadeCabinet accent={ACCENT} wall={1} maxWidth={cabinetMaxW(VW, VH, DPAD_RESERVE)}>
+      <div className="w-full flex items-center justify-between mb-3" style={{ maxWidth: cabinetMaxW(VW, VH, DPAD_RESERVE) }}>
         <span aria-hidden className="w-10" />
         <div className="text-center">
           <div className="gx-title text-sm tracking-[0.35em] uppercase" style={{ color: ACCENT, textShadow: `0 0 8px ${ACCENT}80` }}>Dewdrop</div>
@@ -189,7 +189,7 @@ export default function DewdropPage() {
       </div>
 
       {/* score + lives */}
-      <div className="w-full mb-2 flex items-center gap-3 font-mono" style={{ maxWidth: cabinetMaxW(VW, VH) }}>
+      <div className="w-full mb-2 flex items-center gap-3 font-mono" style={{ maxWidth: cabinetMaxW(VW, VH, DPAD_RESERVE) }}>
         <span className="gx-label text-[10px]" style={{ color: ACCENT }}>dew</span>
         <span className="gx-label text-[10px] text-[#e8feff] tabular-nums">{score}</span>
         <span className="gx-label text-[10px] tracking-wider ml-auto flex items-center gap-1">
@@ -199,7 +199,7 @@ export default function DewdropPage() {
         </span>
       </div>
 
-      <div className="gx-chrome relative w-full" style={{ maxWidth: screenMaxW(VW, VH), aspectRatio: `${VW} / ${VH}`, ['--gx-accent' as string]: ACCENT } as React.CSSProperties}>
+      <div className="gx-chrome relative w-full" style={{ maxWidth: screenMaxW(VW, VH, DPAD_RESERVE), aspectRatio: `${VW} / ${VH}`, ['--gx-accent' as string]: ACCENT } as React.CSSProperties}>
         <canvas
           ref={canvasRef}
           className="w-full h-full block touch-none rounded-md"

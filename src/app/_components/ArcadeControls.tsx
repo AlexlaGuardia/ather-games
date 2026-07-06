@@ -125,7 +125,7 @@ export default function ArcadeControls({
     { id: 'down', glyph: '▼', gc: 2, gr: 3 },
   ] as const
   const renderDpad = () => (
-    <div className="grid gap-2" style={{ gridTemplateColumns: 'repeat(3, 78px)', gridTemplateRows: 'repeat(3, 78px)' }}>
+    <div className="grid gap-1.5" style={{ gridTemplateColumns: 'repeat(3, 64px)', gridTemplateRows: 'repeat(3, 64px)' }}>
       {DPAD_KEYS.map((d) => {
         const down = !!held[d.id]
         const btn: DeckButton = { id: d.id, label: d.id }
@@ -140,7 +140,7 @@ export default function ArcadeControls({
             onContextMenu={(e) => e.preventDefault()}
             className="relative rounded-lg flex items-center justify-center font-bold select-none touch-none active:outline-none"
             style={{
-              gridColumn: d.gc, gridRow: d.gr, width: 78, height: 78,
+              gridColumn: d.gc, gridRow: d.gr, width: 64, height: 64,
               color: down ? '#fff' : '#eafcff',
               background: `radial-gradient(circle at 50% 34%, rgba(${rgb},${down ? 0.95 : 0.7}), rgba(${rgb},0.32) 64%, rgba(${rgb},0.14) 100%)`,
               boxShadow: down
@@ -148,7 +148,7 @@ export default function ArcadeControls({
                 : `0 4px 0 rgba(${rgb},0.28), 0 7px 14px rgba(0,0,0,0.55), inset 0 2px 3px rgba(255,255,255,0.35), inset 0 -3px 6px rgba(0,0,0,0.35), 0 0 16px rgba(${rgb},0.32)`,
               transform: down ? 'translateY(2px)' : 'translateY(0)',
               transition: 'transform 0.05s, box-shadow 0.08s, background 0.08s',
-              textShadow: '0 1px 2px rgba(0,0,0,0.6)', fontSize: 26,
+              textShadow: '0 1px 2px rgba(0,0,0,0.6)', fontSize: 22,
             }}
           >
             {d.glyph}
