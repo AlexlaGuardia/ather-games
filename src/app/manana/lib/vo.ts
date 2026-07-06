@@ -32,6 +32,7 @@ class VoBank {
   private playingPri = 0
   private current: HTMLAudioElement | null = null
   private lastIdx: Partial<Record<VoTrigger, number>> = {}
+  private onSpeak: (() => void) | null = null // fired when a line actually plays (music ducks off this)
 
   constructor() {
     if (typeof window !== 'undefined') {
@@ -66,6 +67,7 @@ class VoBank {
   }
   isMuted() { return this.muted }
   setVolume(v: number) { this.volume = Math.max(0, Math.min(1, v)) }
+  setOnSpeak(fn: () => void) { this.onSpeak = fn }
 
   play(trigger: VoTrigger) {
     if (this.muted || typeof window === 'undefined') return
@@ -91,7 +93,7 @@ class VoBank {
     this.playingPri = pri
     this.cooldownUntil = now + MIN_GAP_MS
     el.onended = () => { if (this.current === el) this.playingPri = 0 }
-    el.play().catch(() => { this.playingPri = 0 }) // autoplay-blocked etc. — ignore
+    el.play().then(() => this.onSpeak?.()).catch(() => { this.playingPri = 0 }) // duck music only once the line truly starts
   }
 
   // call when moves climb back up (milestone / new game) so low-moves can re-arm

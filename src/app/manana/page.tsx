@@ -17,6 +17,7 @@ import {
 } from './lib/match3'
 import { sfx, type ManaSfx } from './lib/sfx'
 import { vo, type VoTrigger } from './lib/vo'
+import { music } from './lib/music'
 import AtherBackdrop from './AtherBackdrop'
 import { RuneMark, type RuneId } from './runes'
 import { LEVELS, levelAt, isLastLevel, trackStep, goalMet, goalProgress, goalLabel } from './lib/quests'
@@ -182,6 +183,7 @@ export default function MananaPage() {
     setOver(false)
     setBusy(false)
     lowWarnedRef.current = false
+    music.start()
     vo.reset(); vo.play('start')
   }
 
@@ -191,6 +193,8 @@ export default function MananaPage() {
     setDailyBest(loadDailyBest('manana'))
     setMuted(sfx.isMuted())
     vo.setMuted(sfx.isMuted()); void vo.ensure() // one mute toggle governs both; warm the clips
+    music.setMuted(sfx.isMuted()); void music.ensure() // decode the bed ahead of the first gesture
+    vo.setOnSpeak(() => music.duck()) // a spoken line dips the music, then it swells back
     apply(seedPuffs(reshuffle(rngRef.current), rngRef.current, PUFF_SEED))
     setMounted(true)
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -244,6 +248,7 @@ export default function MananaPage() {
     setSelected(null); setPopping(new Set()); setHeat(1); setReward(0)
     setWon(false); setOver(false); setBusy(false)
     lowWarnedRef.current = false
+    music.start()
     vo.reset(); vo.play('start')
   }
 
@@ -425,6 +430,7 @@ export default function MananaPage() {
   }
 
   const trySwap = async (a: number, c: number) => {
+    music.start() // first gem tap also gets the bed going (idempotent)
     const before = boardRef.current
     const det = swapDetonation(before, a, c, rngRef.current)
     if (det) {
@@ -576,7 +582,7 @@ export default function MananaPage() {
               )
             })()}
             <button
-              onClick={() => { sfx.ensure(); const m = !muted; sfx.setMuted(m); vo.setMuted(m); setMuted(m); if (!m) sfx.play('swap') }}
+              onClick={() => { sfx.ensure(); const m = !muted; sfx.setMuted(m); vo.setMuted(m); music.setMuted(m); setMuted(m); if (!m) sfx.play('swap') }}
               title={muted ? 'sound off' : 'sound on'}
               className="text-lg text-slate-500 hover:text-amber-300 transition-colors"
             >{muted ? '\u{1F507}' : '\u{1F50A}'}</button>          </div>
