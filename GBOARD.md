@@ -135,14 +135,24 @@ the Arcade frame.
 > **Phase 2 SHIPPED `a80fa5e`:** ArcadeCabinet renders `<SiteNav gameId wall>` (one edit → all 11 cabinet
 > games); `arcade/all` dropped RoomReturn+ArcadeHeaderBack for the drawer; Nolmir swapped. All build clean,
 > routes 200, pushed.
-> **▶ HELD for Alex's eye (deliberately NOT migrated blind):** `shimmer` play3d (top-left ☰ may collide with
-> the walker HUD — companion chip/hotbar/force-fight; + breadcrumb "Arcade" is wrong for the walker) and
-> `grimoire` (lore page, not an arcade game — wants a custom `crumbs` trail, not the default Room ▸ Arcade).
-> These two still mount RoomReturn; retire it + ArcadeHeaderBack once they migrate.
-> **▶ Phase 3 (next):** Alex device pass — tap the drawer on a phone (manana has the fullest wiring: recents/
-> favs/surprise/game-home/sound). Then juice (slide/chips/surprise-me feel) + decide shimmer/grimoire + strip
-> Nolmir's now-redundant inline "← arcade" header link. **Files:** `src/lib/recents.ts`, `_components/SiteNav.tsx`,
-> `_components/ArcadeCabinet.tsx`, `manana/page.tsx`, `arcade/all/page.tsx`, `nolmir/page.tsx`.
+> **✅ ☰ MOVED TO TOP-RIGHT (`40aaee0`):** left corner covered games' own back buttons; now a consistent
+> top-right corner + slide-from-right drawer everywhere. manana's audio/surge nudged inward to sit beside it.
+> Same commit reclaimed manana's dead `100svh-5rem` bottom bar (leftover from the removed mode pills).
+> **✅ LAST SURFACES MIGRATED + OLD NAV RETIRED (`e299baa`, `0fb0b4a`):** grimoire → SiteNav w/ custom
+> `Room ▸ AtherPages` crumbs; `/shimmer` 2D title (owner-only, `/shimmer` redirects non-owners to /room) → SiteNav;
+> **RoomReturn + ArcadeHeaderBack DELETED** (trio fully gone). **play3d (the PUBLIC walker) had NO exit at all** —
+> folded ⌂ The Room + ▦ All games into its existing HUD ☰ menu (native menuBtn, no second button; autosave makes
+> hard-nav safe).
+> **▶ NEEDS ALEX DEVICE PASS:** (1) manana — ☰ sits clean next to 🔊 on Home+board, bottom flush (no black gap)?
+> (2) play3d — the two new menu items feel/reachable on a phone? (3) the drawer feel generally (manana = fullest wiring).
+> **⚑ FINDING (not fixed):** the registry `shimmer` entry's href is `/shimmer`, which is GATED → redirects non-owners
+> to /room. So a "shimmer" recents/favorites/surprise chip would send the public to /room, not the walker. If shimmer
+> should be game-jumpable, point its href at `/shimmer/play3d` (or exclude it from the jump pool). Alex's call.
+> **▶ Phase 3 (next):** juice (drawer slide/chips/surprise-me feel) · ★-favorite-from-the-drawer (today you can only
+> star from /arcade/all) · recents→"resume" for save-backed games (nolmir/manana/play3d) · strip Nolmir's now-redundant
+> inline "← arcade" header link. **Files:** `src/lib/recents.ts`, `_components/SiteNav.tsx`, `_components/ArcadeCabinet.tsx`,
+> `manana/page.tsx` + `manana/Home.tsx`, `arcade/all/page.tsx`, `nolmir/page.tsx`, `grimoire/page.tsx`,
+> `shimmer/page.tsx`, `shimmer/play3d/Shimmer3D.tsx`.
 
 ## 🧩 Cross-cutting initiative — THE GAME-UI LAYER (active, jin leads, 2026-06-18)
 > **Killing the "browser feel"** — games play like games but the menus/chrome read like a website.
