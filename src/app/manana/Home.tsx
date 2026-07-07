@@ -18,7 +18,7 @@ export default function Home({ best, dailyBest, muted, onStory, onEndless, onDai
     <div className="relative flex h-full w-full flex-col items-center justify-center px-6"
       style={{ background: 'radial-gradient(130% 100% at 50% 15%,#33224a 0%,#1c1430 55%,#120c1c 100%)', color: '#f4ecdf' }}>
       <button onClick={onToggleMute} aria-label={muted ? 'Unmute' : 'Mute'}
-        className="absolute right-4 top-4 rounded-lg border border-white/12 bg-white/5 px-3 py-1.5 text-sm active:scale-95">
+        className="absolute right-[4.5rem] top-4 rounded-lg border border-white/12 bg-white/5 px-3 py-1.5 text-sm active:scale-95">
         {muted ? '🔇' : '🔊'}
       </button>
 

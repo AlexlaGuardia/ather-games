@@ -552,7 +552,7 @@ export default function MananaPage() {
     <div className="gx-chrome relative overflow-hidden" style={{ touchAction: 'manipulation', overscrollBehavior: 'none' }}>
       <style>{VIEW_ANIM}</style>
       <SiteNav gameId="manana" wall={1} soundOn={!muted} onToggleSound={toggleMute} />
-      <div style={{ height: 'calc(100svh - 5rem)', animation: 'manana-viewin .3s ease-out' }}>
+      <div style={{ height: '100svh', animation: 'manana-viewin .3s ease-out' }}>
         <Home best={best} dailyBest={dailyBest} muted={muted}
           onStory={openStory} onEndless={() => startCasual('endless')} onDaily={() => startCasual('daily')} onToggleMute={toggleMute} />
       </div>
@@ -562,14 +562,14 @@ export default function MananaPage() {
     <div className="gx-chrome relative overflow-hidden" style={{ touchAction: 'manipulation', overscrollBehavior: 'none' }}>
       <style>{VIEW_ANIM}</style>
       <SiteNav gameId="manana" wall={1} gameHome={goHome} homeLabel="Mana'nana Home" soundOn={!muted} onToggleSound={toggleMute} />
-      <div style={{ height: 'calc(100svh - 5rem)', animation: 'manana-viewin .3s ease-out' }}>
+      <div style={{ height: '100svh', animation: 'manana-viewin .3s ease-out' }}>
         <Roadmap current={level} advancedFrom={advancedFromRef.current} onPlay={playLevel} onHome={goHome} />
       </div>
     </div>
   )
 
   return (
-    <div className="gx-chrome relative min-h-[calc(100svh-5rem)] overflow-hidden text-slate-200 font-sans" style={{ touchAction: 'manipulation', overscrollBehavior: 'none', animation: boardBloom ? 'manana-bloom .42s cubic-bezier(.2,.7,.3,1.25)' : 'manana-viewin .32s ease-out', ['--gx-accent' as string]: '#ffd884' } as React.CSSProperties}>
+    <div className="gx-chrome relative min-h-[100svh] overflow-hidden text-slate-200 font-sans" style={{ touchAction: 'manipulation', overscrollBehavior: 'none', animation: boardBloom ? 'manana-bloom .42s cubic-bezier(.2,.7,.3,1.25)' : 'manana-viewin .32s ease-out', ['--gx-accent' as string]: '#ffd884' } as React.CSSProperties}>
       <AtherBackdrop />
       {/* full-bleed board (its own AtherBackdrop) — deliberately NOT a cabinet; just
           the room tie so back lands facing the Arcade arch. */}
@@ -606,8 +606,8 @@ export default function MananaPage() {
         .manana-callout{ animation:manana-callout .85s ease-out forwards; }
       `}</style>
 
-      <div className="relative z-10 max-w-[560px] mx-auto px-4 py-6 min-h-[calc(100svh-5rem)] flex flex-col">
-        <header className="flex items-center justify-between mb-4">
+      <div className="relative z-10 max-w-[560px] mx-auto px-4 py-6 min-h-[100svh] flex flex-col">
+        <header className="flex items-center justify-between mb-4 pr-[3.75rem]">
           <div>
             <h1 className="text-2xl font-bold tracking-tight" style={{ color: '#ffd884' }}>Mana&apos;nana</h1>
             <p className="text-[11px] text-slate-400/70 mt-0.5">match · bloom · detonate</p>

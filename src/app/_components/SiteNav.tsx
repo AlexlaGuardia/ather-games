@@ -98,7 +98,7 @@ export default function SiteNav({
         type="button"
         aria-label="Menu — get around the site"
         onClick={openMenu}
-        className="fixed top-4 left-4 z-[60] flex items-center gap-2 rounded-md border bg-[#12121e]/80 backdrop-blur px-3 py-2 text-[11px] uppercase tracking-[0.2em] transition"
+        className="fixed top-4 right-4 z-[60] flex items-center gap-2 rounded-md border bg-[#12121e]/80 backdrop-blur px-3 py-2 text-[11px] uppercase tracking-[0.2em] transition"
         style={{ borderColor: `${GOLD}4d`, color: `${GOLD}cc` }}
       >
         <span aria-hidden style={{ fontSize: 13, lineHeight: 1 }}>☰</span>
@@ -116,7 +116,7 @@ export default function SiteNav({
           />
           {/* the sheet — slides from the left, full height, scrollable */}
           <nav
-            className="gx-chrome absolute left-0 top-0 h-full w-[min(84vw,340px)] overflow-y-auto border-r bg-[#0b0b14]/95 backdrop-blur"
+            className="gx-chrome absolute right-0 top-0 h-full w-[min(84vw,340px)] overflow-y-auto border-l bg-[#0b0b14]/95 backdrop-blur"
             style={{ borderColor: `${GOLD}33`, animation: "sitenav-slide .22s cubic-bezier(.2,.7,.3,1)" }}
           >
             <div className="flex flex-col gap-5 px-5 py-6">
@@ -197,7 +197,7 @@ export default function SiteNav({
 
           <style>{`
             @keyframes sitenav-fade { from { opacity: 0 } to { opacity: 1 } }
-            @keyframes sitenav-slide { from { transform: translateX(-100%) } to { transform: none } }
+            @keyframes sitenav-slide { from { transform: translateX(100%) } to { transform: none } }
           `}</style>
         </div>
       )}
