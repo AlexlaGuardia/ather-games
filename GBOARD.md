@@ -101,14 +101,37 @@ the Arcade frame.
 - **Open:** proper 1200×630 OG crops (cards are 1.75:1, platforms letterbox slightly — fine for now); OG for
   the Room/hubs (they inherit the good root default, which is correct for the brand front door).
 
-## 📌 Cross-cutting — SITE NAVIGATION / WAYFINDING (PINNED 2026-07-07, not yet scoped)
-> Alex: "we need a better way to get around the site." The whole arcade's nav is **ad-hoc** — a `RoomReturn`
-> button per game, no global menu / persistent nav / breadcrumb. Getting between games, the Room, a game's Home,
-> and the Story trail is inconsistent. This is a SITE-WIDE design problem, deliberately NOT started late-night
-> (would be a worse mess half-done). **Do a real pass fresh:** what are the destinations (Room / Arcade catalog /
-> per-game Home / in-game), and what's the one cohesive wayfinding pattern across all of them. Surfaced while
-> building the Mana'nana Home/roadmap (removing the in-board mode pills left RoomReturn as the only mid-game exit
-> — a symptom of the bigger gap). START HERE next nav session.
+## 🧭 Cross-cutting — SITE NAVIGATION / WAYFINDING (RULED + BUILDING 2026-07-07, jin-cc)
+> **Ruled the pattern (Alex + Jin, 2026-07-07):** one `SiteNav` quick-menu replaces the ad-hoc trio
+> (`RoomReturn` pill + `ArcadeHeaderBack` + per-game internal exits). The loudest pain = **game→game**
+> (today you get pulled ALL the way back to the Room to move sideways). So the drawer's HERO is lateral hops.
+>
+> **The design — hybrid drawer, orientation folded in:**
+> - Persistent footprint = **one button** (top-left, where the RoomReturn pill sat). Only always-on chrome;
+>   zero canvas stolen. Tap → slide-over drawer. The "hybrid" = the **breadcrumb lives INSIDE the drawer
+>   header** (Room ▸ Arcade ▸ <game>, tap-to-jump-up) — orientation on demand, not an always-on bar.
+> - **Drawer body (game→game is the hero):** ↔ Recently played (new `lib/recents.ts`, the hop tool) ·
+>   ★ Favorites (reuse `lib/favorites`, MAX_FAVS 3) · ⤨ Surprise me (random live game not played lately) ·
+>   ▦ All games → (`/arcade/all` for the long tail). Then ↺ <game> Home (contextual, only if the game has
+>   an internal home) · ⌂ The Room (scenic front door, no longer the forced turnstile) · 🔊 Sound (optional
+>   per-game).
+> - **Recents = zero per-game wiring:** SiteNav records its own `gameId` on mount, so every game that mounts
+>   it auto-fills recents. gx-styled (kill browser feel), mobile sheet.
+>
+> **Decisions (don't relitigate):** button stays top-left (muscle memory) · the Room's scenic walk-in stays
+> forced ONLY on first `/` arrival, everything after is the drawer · breadcrumb is IN the drawer, no always-on
+> bar (fights the game-UI-layer "kill browser feel" rule) · Room is NOT replaced, it stays the experiential
+> arrival — SiteNav is the utility layer beside it.
+>
+> **Rollout leverage:** `ArcadeCabinet` renders the back-affordance at ~L54, so swapping RoomReturn→SiteNav
+> THERE lights up all ~9 cabinet games in one edit (add an `id` passthrough). Standalones (Mana'nana, Nolmir,
+> `/arcade/all`) get touched individually; deprecate RoomReturn + ArcadeHeaderBack once migrated.
+>
+> **Phases:** ① core on ONE game — `lib/recents.ts` + `SiteNav.tsx`, wired into **Mana'nana** first (it has a
+> Home to link = best test), verify the whole drawer live. ② roll out via ArcadeCabinet + standalones,
+> retire the old two. ③ juice (drawer slide, recents chips, surprise-me feel) + Alex phone pass.
+> **Left off:** Phase 1 IN PROGRESS (this session). **Files:** `src/lib/recents.ts` (new),
+> `src/app/_components/SiteNav.tsx` (new), `src/app/manana/page.tsx`, later `_components/ArcadeCabinet.tsx`.
 
 ## 🧩 Cross-cutting initiative — THE GAME-UI LAYER (active, jin leads, 2026-06-18)
 > **Killing the "browser feel"** — games play like games but the menus/chrome read like a website.

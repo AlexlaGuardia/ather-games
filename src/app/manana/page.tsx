@@ -5,7 +5,7 @@
 // milestones earn moves; cascades ramp an ather-heat multiplier. Glossy CSS gems.
 
 import { useEffect, useRef, useState } from 'react'
-import RoomReturn from '../_components/RoomReturn'
+import SiteNav from '../_components/SiteNav'
 import DailyLeaderboard from '../_components/DailyLeaderboard'
 import { mulberry32, type Rng } from '@/lib/arcade/rng'
 import { dailySeed, dailyNumber, loadDailyBest, saveDailyBest, dailyShare, copyShare } from '@/lib/arcade/daily'
@@ -551,7 +551,7 @@ export default function MananaPage() {
   if (view === 'home') return (
     <div className="gx-chrome relative overflow-hidden" style={{ touchAction: 'manipulation', overscrollBehavior: 'none' }}>
       <style>{VIEW_ANIM}</style>
-      <RoomReturn wall={1} />
+      <SiteNav gameId="manana" wall={1} soundOn={!muted} onToggleSound={toggleMute} />
       <div style={{ height: 'calc(100svh - 5rem)', animation: 'manana-viewin .3s ease-out' }}>
         <Home best={best} dailyBest={dailyBest} muted={muted}
           onStory={openStory} onEndless={() => startCasual('endless')} onDaily={() => startCasual('daily')} onToggleMute={toggleMute} />
@@ -561,6 +561,7 @@ export default function MananaPage() {
   if (view === 'roadmap') return (
     <div className="gx-chrome relative overflow-hidden" style={{ touchAction: 'manipulation', overscrollBehavior: 'none' }}>
       <style>{VIEW_ANIM}</style>
+      <SiteNav gameId="manana" wall={1} gameHome={goHome} homeLabel="Mana'nana Home" soundOn={!muted} onToggleSound={toggleMute} />
       <div style={{ height: 'calc(100svh - 5rem)', animation: 'manana-viewin .3s ease-out' }}>
         <Roadmap current={level} advancedFrom={advancedFromRef.current} onPlay={playLevel} onHome={goHome} />
       </div>
@@ -572,7 +573,7 @@ export default function MananaPage() {
       <AtherBackdrop />
       {/* full-bleed board (its own AtherBackdrop) — deliberately NOT a cabinet; just
           the room tie so back lands facing the Arcade arch. */}
-      <RoomReturn wall={1} />
+      <SiteNav gameId="manana" wall={1} gameHome={goHome} homeLabel="Mana'nana Home" soundOn={!muted} onToggleSound={toggleMute} />
       <style>{`
         @keyframes manana-viewin { from{opacity:0;transform:translateY(10px) scale(.984)} to{opacity:1;transform:none} }
         @keyframes manana-bloom { from{opacity:0;transform:scale(.8)} 60%{opacity:1} to{opacity:1;transform:none} }
