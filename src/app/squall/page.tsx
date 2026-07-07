@@ -26,6 +26,7 @@ import {
 } from './lib/squall'
 import { sfx } from './lib/sfx'
 import { music } from './music'
+import { vo } from './vo'
 import ArcadeControls from '../_components/ArcadeControls'
 
 const BG_TOP = '#05030d'
@@ -42,6 +43,7 @@ export default function SquallPage() {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const worldRef = useRef<World | null>(null)
   const seedRef = useRef(1)
+  const voMileRef = useRef(0) // survival-milestone crossings spoken (reset each run)
   const pointer = useRef({ x: VW / 2, y: VH / 2, active: false })
   const joy = useRef({ active: false, baseX: 0, baseY: 0, curX: 0, curY: 0, pid: -1 })
   const deckVec = useRef({ x: 0, y: 0, active: false }) // the cabinet stick's -1..1 vector
@@ -72,6 +74,7 @@ export default function SquallPage() {
     pointer.current = { x: VW / 2, y: VH / 2, active: false }
     joy.current = { active: false, baseX: 0, baseY: 0, curX: 0, curY: 0, pid: -1 }
     keys.current.clear()
+    voMileRef.current = 0; vo.reset() // fresh run: re-arm the commentator
     setScore(0); setGraze(0); setNewBest(false); setSurvived(0); setShared(false)
     setPhase('ready')
   }, [])
@@ -81,9 +84,10 @@ export default function SquallPage() {
     boot()
     setMuted(sfx.isMuted())
     music.setMuted(sfx.isMuted()); void music.ensure() // decode the bed ahead of the first steer
+    vo.setMuted(sfx.isMuted()); void vo.ensure(); vo.setOnSpeak(() => music.duck()) // a spoken line dips the bed
     setBest(loadBest())
     setDailyBest(loadDailyBest('squall'))
-    return () => music.stop() // tear the bed down on leave — it never follows you out
+    return () => { music.stop(); vo.stop() } // tear audio down on leave — never follows you out
   }, [boot])
 
   const pickMode = (m: 'endless' | 'daily') => {
@@ -149,13 +153,17 @@ export default function SquallPage() {
         const ev = tick(w, dt)
         if (ev.spawned) sfx.play('warn')
         if (ev.fired) sfx.play('fire')
-        if (ev.grazed) { sfx.play('graze'); grazeFx.current = 0.18 }
+        if (ev.grazed) { sfx.play('graze'); grazeFx.current = 0.18; vo.play('close') }
+        // survival milestones — a warm "still standing" every 25s weathered
+        if (w.time >= (voMileRef.current + 1) * 25) { voMileRef.current++; vo.play('weathering') }
         if (ev.dead) {
           sfx.play('death')
           setScore(w.score); setGraze(w.graze); setSurvived(w.time)
-          const b = saveBest(w.score); setBest(b); setNewBest(w.score > 0 && w.score >= b)
+          const b = saveBest(w.score); const isBest = w.score > 0 && w.score >= b
+          setBest(b); setNewBest(isBest)
           if (modeRef.current === 'daily') setDailyBest(saveDailyBest('squall', w.score))
           setPhase('dead')
+          vo.play(isBest ? 'best' : 'over')
         }
         syncT.current += dt
         if (syncT.current >= 0.08) { syncT.current = 0; setScore(w.score); setGraze(w.graze) }
@@ -173,12 +181,12 @@ export default function SquallPage() {
     sfx.ensure()
     deckVec.current = { x, y, active: true }
     const w = worldRef.current
-    if (w && w.state === 'ready') { setHeading(w, x, y); setPhase('playing'); music.start() }
+    if (w && w.state === 'ready') { setHeading(w, x, y); setPhase('playing'); music.start(); vo.play('start') }
   }, [])
   const onStickEnd = useCallback(() => { deckVec.current = { x: 0, y: 0, active: false } }, [])
 
   const restart = useCallback(() => { sfx.ensure(); boot() }, [boot])
-  const toggleMute = () => { sfx.ensure(); const m = !sfx.isMuted(); sfx.setMuted(m); music.setMuted(m); setMuted(m) }
+  const toggleMute = () => { sfx.ensure(); const m = !sfx.isMuted(); sfx.setMuted(m); music.setMuted(m); vo.setMuted(m); setMuted(m) }
 
   return (
     <ArcadeCabinet gameId="squall" accent={ACCENT} wall={1} maxWidth={cabinetMaxW(VW, VH)}>
