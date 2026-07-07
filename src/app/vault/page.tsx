@@ -227,8 +227,9 @@ export default function VaultPage() {
             setPhase('won')
           }
         }
-        // carrying milestone — a warm beat every ~25 metres of distance
-        if (w.dist >= (voMileRef.current + 1) * 250) { voMileRef.current++; vo.play('carrying') }
+        // carrying milestone — a warm beat roughly every ~7-8s of running (250 was every ~1.3s, which
+        // made George nonstop; the VoBank throttle thins it further).
+        if (w.dist >= (voMileRef.current + 1) * 1500) { voMileRef.current++; vo.play('carrying') }
         // light-trail: remember recent screen-y (the arc when jumping)
         trail.current.unshift(w.y)
         if (trail.current.length > 14) trail.current.pop()

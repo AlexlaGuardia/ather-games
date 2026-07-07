@@ -227,7 +227,9 @@ export function tick(w: World, dt: number): void {
     w.events.push({ type: 'jump', air })
   }
 
-  // integrate vertical motion (variable gravity)
+  // integrate vertical motion (variable gravity). Remember the feet BEFORE the move for swept collision
+  // — a fast fall can travel >20px in a frame, so a fixed landing window would tunnel through a platform.
+  const prevY = w.y
   if (!w.grounded) {
     const g = w.vy < 0 ? (w.held ? GRAV_RISE_HOLD : GRAV_RISE_FREE) : GRAV_FALL
     w.vy += g * dt
@@ -238,13 +240,6 @@ export function tick(w: World, dt: number): void {
   const segHere = segAt(w, w.dist)
   const segPrev = segAt(w, prevDist)
 
-  // entering a ledge that's reached ACROSS A GAP while below its lip → smacked the face (didn't clear
-  // it) = death. Only gap-separated ledges count; a flush-connected step-up is free (handled below).
-  if (segHere && segHere !== segPrev) {
-    const gapBefore = !segPrev || segHere.x0 > segPrev.x1 + 1
-    if (gapBefore && w.y > segHere.top + FACE_TOL) return die(w, 'gap')
-  }
-
   if (w.grounded) {
     if (segHere) {
       // follow the ground; a small up-step is free, a drop means we walk off and fall
@@ -253,10 +248,10 @@ export function tick(w: World, dt: number): void {
     } else {
       w.grounded = false; w.coyote = COYOTE // ran out over a gap
     }
-  }
-
-  // landing: descending onto a segment top
-  if (!w.grounded && w.vy >= 0 && segHere && w.y >= segHere.top && w.y <= segHere.top + Math.max(FACE_TOL, 24)) {
+  } else if (w.vy >= 0 && segHere && prevY <= segHere.top + FACE_TOL && w.y >= segHere.top) {
+    // SWEPT LANDING: descending, and the feet crossed this segment's top this frame → land on it. Robust
+    // to ANY fall speed — an arc over a gap that comes down onto the far ledge no longer tunnels through
+    // (this was the old "ignores the platform and falls through" bug).
     w.y = segHere.top
     w.vy = 0
     w.grounded = true
@@ -264,6 +259,12 @@ export function tick(w: World, dt: number): void {
     if (w.combo > 0) w.combo = 0 // a touchdown ends the bounce-chain
     w.airJumps = 0 // landing clears any banked air-jump (the double-jump only carries while aloft)
     w.events.push({ type: 'land' })
+  } else if (segHere && segHere !== segPrev) {
+    // FACE-HIT: entered a gap-separated ledge while already BELOW its lip (came in low, didn't clear it).
+    // A proper descent onto the top lands above (handled just above), so this only fires on a genuine
+    // low entry — never on a clean landing.
+    const gapBefore = !segPrev || segHere.x0 > segPrev.x1 + 1
+    if (gapBefore && prevY > segHere.top + FACE_TOL) return die(w, 'gap')
   }
 
   // fell into a gap
