@@ -28,11 +28,17 @@ import {
   SPIKE_W,
   SPIKE_H,
   MOTE_R,
+  MOVEMENTS,
+  ENDLESS_CFG,
+  loadStoryDone,
+  saveStoryDone,
   type World,
+  type MovementCfg,
 } from './lib/vault'
 import { sfx } from './lib/sfx'
 import { music } from './music'
 import { vo } from './vo'
+import Trail from './Trail'
 import { dailySeed, dailyNumber, loadDailyBest, saveDailyBest, dailyShare, copyShare } from '@/lib/arcade/daily'
 import DailyLeaderboard from '../_components/DailyLeaderboard'
 import ArcadeControls from '../_components/ArcadeControls'
@@ -49,7 +55,8 @@ const GREY = '#71717a' // the grey — void-spawn + rooted corruption
 const GREY_HOT = '#a7a7b0'
 const ACCENT = ATHER
 
-type Phase = 'ready' | 'playing' | 'dead'
+type Phase = 'ready' | 'playing' | 'dead' | 'won'
+type Mode = 'story' | 'endless' | 'daily'
 
 interface Particle { x: number; y: number; vx: number; vy: number; life: number; max: number; c: string }
 
@@ -73,18 +80,27 @@ export default function VaultPage() {
   const [motes, setMotes] = useState(0)
   const [cause, setCause] = useState<'gap' | 'foe' | 'spike'>('gap')
   const [muted, setMuted] = useState(false)
-  const [mode, setMode] = useState<'endless' | 'daily'>('endless')
+  const [mode, setMode] = useState<Mode>('story')
   const modeRef = useRef(mode); modeRef.current = mode
   const [dailyBest, setDailyBest] = useState(0)
   const [shared, setShared] = useState(false)
+  // Story mode: the crossing told in movements (a descent). storyDone = movements cleared (persisted);
+  // storyIdx = the movement being played; storyView flips the ready screen between the trail and a run.
+  const [storyDone, setStoryDone] = useState(0)
+  const [storyIdx, setStoryIdx] = useState(0)
+  const storyIdxRef = useRef(0); storyIdxRef.current = storyIdx
+  const [storyView, setStoryView] = useState<'map' | 'run'>('map')
+  const storyViewRef = useRef(storyView); storyViewRef.current = storyView
+  const activeCfgRef = useRef<MovementCfg>(ENDLESS_CFG) // the cfg the current run uses (for restart)
 
   useNoScroll()
 
-  const boot = useCallback(() => {
+  const boot = useCallback((cfg: MovementCfg = ENDLESS_CFG) => {
+    activeCfgRef.current = cfg
     let seed: number
     if (modeRef.current === 'daily') seed = dailySeed() // same crossing for everyone today
     else { seedRef.current = (seedRef.current * 1103515245 + 12345) >>> 0; seed = seedRef.current ^ (Date.now() >>> 0) }
-    worldRef.current = makeWorld(seed)
+    worldRef.current = makeWorld(seed, cfg)
     downKeys.current.clear()
     trail.current = []
     fx.current = []
@@ -103,14 +119,29 @@ export default function VaultPage() {
     vo.setMuted(sfx.isMuted()); void vo.ensure(); vo.setOnSpeak(() => music.duck()) // a spoken line dips the bed
     setBest(loadBest())
     setDailyBest(loadDailyBest('vault'))
+    setStoryDone(loadStoryDone())
     return () => { music.stop(); vo.stop() } // tear audio down on leave — never follows you out
   }, [boot])
 
-  const pickMode = (m: 'endless' | 'daily') => {
+  const pickMode = (m: Mode) => {
     if (m === modeRef.current) return
     modeRef.current = m
     setMode(m)
-    boot()
+    if (m === 'story') { setStoryView('map'); setPhase('ready') } // show the trail; a movement boots on tap
+    else boot(ENDLESS_CFG) // endless + daily both run the endless crossing (daily just seeds it fixed)
+  }
+  // start a told movement (from the trail). Locked ones can't be picked.
+  const playMovement = (i: number) => {
+    if (i > storyDone || i >= MOVEMENTS.length) return
+    setStoryIdx(i); storyIdxRef.current = i
+    setStoryView('run')
+    boot(MOVEMENTS[i]) // world ready for this movement; press Vault to begin
+  }
+  // the light carries on past the last told movement → the crossing without end
+  const carryOnEndless = () => {
+    modeRef.current = 'endless'; setMode('endless')
+    setStoryView('map')
+    boot(ENDLESS_CFG)
   }
   const onShare = async () => {
     if (await copyShare(dailyShare('Vault', score))) {
@@ -121,9 +152,11 @@ export default function VaultPage() {
 
   // ── the one input: the vault (jump). Variable via hold (press → up-arc, release → cut). ──────────
   const doPress = useCallback(() => {
+    // on the Story trail the world sits 'ready' behind the map — ignore the Vault button there
+    if (modeRef.current === 'story' && storyViewRef.current === 'map') return
     sfx.ensure()
     const w = worldRef.current
-    if (!w || w.state === 'dead') return
+    if (!w || w.state === 'dead' || w.state === 'won') return
     if (w.state === 'ready') { setPhase('playing'); music.start(); vo.play('start') }
     pressJump(w)
   }, [])
@@ -185,6 +218,14 @@ export default function VaultPage() {
             setPhase('dead')
             vo.play(isBest ? 'best' : 'over')
           }
+          else if (ev.type === 'won') {
+            // a Story movement's goal crossed — the light carries on. Mark it told, bank the score.
+            setScore(w.score); setDist(Math.floor(w.dist / 10)); setMotes(w.motesGot)
+            saveBest(w.score); setBest(loadBest())
+            const done = saveStoryDone(storyIdxRef.current + 1); setStoryDone(done)
+            vo.play('best') // the warm "well carried" beat
+            setPhase('won')
+          }
         }
         // carrying milestone — a warm beat every ~25 metres of distance
         if (w.dist >= (voMileRef.current + 1) * 250) { voMileRef.current++; vo.play('carrying') }
@@ -226,7 +267,7 @@ export default function VaultPage() {
     }
   }
 
-  const restart = useCallback(() => { sfx.ensure(); boot() }, [boot])
+  const restart = useCallback(() => { sfx.ensure(); boot(activeCfgRef.current) }, [boot]) // re-run the same crossing/movement
   const toggleMute = () => { sfx.ensure(); const m = !sfx.isMuted(); sfx.setMuted(m); music.setMuted(m); vo.setMuted(m); setMuted(m) }
 
 
@@ -254,17 +295,40 @@ export default function VaultPage() {
           className="w-full h-full block rounded-md select-none pointer-events-none"
         />
 
-        {phase === 'ready' && (
+        {phase === 'ready' && (mode === 'story' && storyView === 'map' ? (
+          <div className="absolute inset-0 rounded-md">
+            <Trail movements={MOVEMENTS} done={storyDone} onPlay={playMovement} onEndless={carryOnEndless} />
+            <div className="pointer-events-auto absolute top-2 right-2 z-10 flex gap-1 text-[9px] font-mono tracking-wider uppercase">
+              {(['story', 'endless', 'daily'] as const).map((m) => (
+                <button key={m} onClick={() => pickMode(m)}
+                  className={`px-2 py-1 rounded-sm border transition-colors ${mode === m ? 'text-[#070a12] bg-[#7fe9ff] border-[#7fe9ff]' : 'text-[#7fe9ff]/55 border-[#7fe9ff]/25 hover:text-[#7fe9ff]'}`}>
+                  {m === 'daily' ? `daily #${dailyNumber()}` : m}
+                </button>
+              ))}
+            </div>
+          </div>
+        ) : (
           <div className="pointer-events-none absolute inset-0 isolate overflow-hidden flex flex-col items-center justify-center gap-3 rounded-md text-center px-6">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src="/vault/card.webp" alt="" aria-hidden="true" className="absolute inset-0 -z-10 h-full w-full object-cover opacity-[0.55]" />
             <div className="absolute inset-0 -z-10 bg-[#070a12]/68" />
-            <div className="gx-title text-2xl tracking-[0.3em] uppercase" style={{ color: ACCENT, textShadow: `0 0 18px ${ACCENT}` }}>Vault</div>
-            <p className="text-[11px] leading-relaxed text-[#9fd6e0]/80 max-w-[290px]">
-              the land is going grey. you are a mote of Ather-light running the failing ground. tap (or hold) to vault the void&apos;s tears, and unmake the grey by landing on it from above — each unmaking gives you a double-jump, so tap again to chain across them. you cannot hold the light still. carry it.
-            </p>
+            {mode === 'story' ? (
+              <>
+                <button onClick={() => setStoryView('map')} className="pointer-events-auto absolute top-2 left-2 gx-label text-[10px] text-[#7fe9ff]/60 hover:text-[#7fe9ff] tracking-wider">‹ trail</button>
+                <div className="gx-label text-[9px] tracking-[0.25em] uppercase text-[#7fd8e6]/50">movement {storyIdx + 1} of {MOVEMENTS.length} · the descent</div>
+                <div className="gx-title text-2xl tracking-[0.2em] uppercase" style={{ color: ACCENT, textShadow: `0 0 18px ${ACCENT}` }}>{MOVEMENTS[storyIdx].name}</div>
+                <p className="text-[11px] leading-relaxed text-[#9fd6e0]/80 max-w-[280px] italic">{MOVEMENTS[storyIdx].blurb}</p>
+              </>
+            ) : (
+              <>
+                <div className="gx-title text-2xl tracking-[0.3em] uppercase" style={{ color: ACCENT, textShadow: `0 0 18px ${ACCENT}` }}>Vault</div>
+                <p className="text-[11px] leading-relaxed text-[#9fd6e0]/80 max-w-[290px]">
+                  the land is going grey. you are a mote of Ather-light running the failing ground. tap (or hold) to vault the void&apos;s tears, and unmake the grey by landing on it from above — each unmaking gives you a double-jump, so tap again to chain across them. you cannot hold the light still. carry it.
+                </p>
+              </>
+            )}
             <div className="pointer-events-auto flex gap-1.5 text-[10px] font-mono tracking-wider uppercase">
-              {(['endless', 'daily'] as const).map((m) => (
+              {(['story', 'endless', 'daily'] as const).map((m) => (
                 <button key={m} onClick={() => pickMode(m)}
                   className={`px-3 py-1.5 rounded-sm border transition-colors ${mode === m ? 'text-[#070a12] bg-[#7fe9ff] border-[#7fe9ff]' : 'text-[#7fe9ff]/55 border-[#7fe9ff]/25 hover:text-[#7fe9ff]'}`}>
                   {m === 'daily' ? `daily #${dailyNumber()}` : m}
@@ -273,9 +337,9 @@ export default function VaultPage() {
             </div>
             {mode === 'daily' && <div className="text-[9px] font-mono text-[#7fd8e6]/45 tracking-wider -mt-1">same crossing for everyone today</div>}
             <div className="gx-label text-[11px] text-[#7fd8e6]/70 mt-1">press <span style={{ color: ACCENT }}>↟ Vault</span> below to begin</div>
-            {best > 0 && <div className="gx-label text-[10px] font-mono text-[#7fd8e6]/50 tracking-wider mt-1">best <span className="text-[#e8feff] tabular-nums">{best}</span></div>}
+            {best > 0 && mode !== 'story' && <div className="gx-label text-[10px] font-mono text-[#7fd8e6]/50 tracking-wider mt-1">best <span className="text-[#e8feff] tabular-nums">{best}</span></div>}
           </div>
-        )}
+        ))}
 
         {phase === 'dead' && (
           <div className="absolute inset-0 overflow-y-auto bg-[#070a12]/75 rounded-md">
@@ -296,6 +360,9 @@ export default function VaultPage() {
             <p className="text-[10px] leading-relaxed text-[#9fd6e0]/70 max-w-[250px] italic mt-0.5">{DEATH_LINE[cause]}</p>
             <div className="flex items-center gap-2 mt-1">
               <button onClick={restart} className="gx-label text-[11px] text-[#070a12] hover:brightness-110 px-5 py-2 rounded-[2px]" style={{ background: ACCENT, boxShadow: `0 0 18px ${ACCENT}80` }}>carry it again →</button>
+              {mode === 'story' && (
+                <button onClick={() => { setStoryView('map'); setPhase('ready') }} className="gx-label text-[11px] text-[#7fe9ff] border border-[#7fe9ff]/40 hover:border-[#7fe9ff] px-5 py-2 rounded-[2px] transition-colors">‹ trail</button>
+              )}
               {mode === 'daily' && (
                 <button onClick={onShare} className="gx-label text-[11px] text-[#7fe9ff] border border-[#7fe9ff]/40 hover:border-[#7fe9ff] px-5 py-2 rounded-[2px] transition-colors">
                   {shared ? 'copied ✓' : 'share'}
@@ -306,6 +373,37 @@ export default function VaultPage() {
            </div>
           </div>
         )}
+
+        {phase === 'won' && (() => {
+          const last = storyIdx >= MOVEMENTS.length - 1
+          return (
+          <div className="absolute inset-0 overflow-y-auto bg-[#070a12]/78 rounded-md">
+           <div className="min-h-full flex flex-col items-center justify-center gap-2 text-center px-6 py-4">
+            <div className="gx-title text-lg tracking-[0.25em] uppercase" style={{ color: GOLD, textShadow: `0 0 16px ${GOLD}` }}>
+              {last ? 'Beyond the teller’s sight' : 'The light carries on'}
+            </div>
+            <div className="gx-label text-[10px] tracking-[0.2em] uppercase text-[#7fd8e6]/55">{MOVEMENTS[storyIdx].name} · crossed</div>
+            <div className="gx-value font-mono text-[#e8feff] text-3xl leading-none tabular-nums" style={{ textShadow: `0 0 12px ${ACCENT}80` }}>{score}</div>
+            <div className="gx-label text-[10px] font-mono text-[#9fd6e0]/55 tracking-wider">
+              crossed <span style={{ color: ACCENT }} className="tabular-nums">{dist}</span> · gathered <span style={{ color: GOLD }} className="tabular-nums">{motes}</span>
+            </div>
+            <p className="text-[10px] leading-relaxed text-[#9fd6e0]/70 max-w-[260px] italic mt-0.5">
+              {last
+                ? 'the tale is told to its heart. the light does not stop — it passes on, still crossing, past where the Mug can follow.'
+                : 'you cannot hold the light still. deeper the crossing goes.'}
+            </p>
+            <div className="flex items-center gap-2 mt-1.5">
+              {last ? (
+                <button onClick={carryOnEndless} className="gx-label text-[11px] text-[#070a12] hover:brightness-110 px-5 py-2 rounded-[2px]" style={{ background: ACCENT, boxShadow: `0 0 18px ${ACCENT}80` }}>cross without end →</button>
+              ) : (
+                <button onClick={() => playMovement(storyIdx + 1)} className="gx-label text-[11px] text-[#070a12] hover:brightness-110 px-5 py-2 rounded-[2px]" style={{ background: ACCENT, boxShadow: `0 0 18px ${ACCENT}80` }}>next movement →</button>
+              )}
+              <button onClick={() => { setStoryView('map'); setPhase('ready') }} className="gx-label text-[11px] text-[#7fe9ff] border border-[#7fe9ff]/40 hover:border-[#7fe9ff] px-5 py-2 rounded-[2px] transition-colors">‹ trail</button>
+            </div>
+           </div>
+          </div>
+          )
+        })()}
       </div>
 
       {/* the cabinet control deck — one big VAULT button under the screen (keyboard still works) */}

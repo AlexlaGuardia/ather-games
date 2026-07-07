@@ -398,3 +398,14 @@ export function saveBest(score: number): number {
   try { localStorage.setItem(BEST_KEY, String(best)) } catch { /* ignore */ }
   return best
 }
+
+// ── Story progress: how many movements have been crossed (the tale told so far) ─────
+const STORY_KEY = 'vault.story.done'
+export function loadStoryDone(): number {
+  try { return Math.min(MOVEMENTS.length, parseInt(localStorage.getItem(STORY_KEY) || '0', 10) || 0) } catch { return 0 }
+}
+export function saveStoryDone(n: number): number {
+  const done = Math.min(MOVEMENTS.length, Math.max(loadStoryDone(), Math.max(0, Math.floor(n))))
+  try { localStorage.setItem(STORY_KEY, String(done)) } catch { /* ignore */ }
+  return done
+}
