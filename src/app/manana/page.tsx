@@ -298,14 +298,6 @@ export default function MananaPage() {
     if (movesRef.current <= 0) endGame()
   }
 
-  const pickMode = (m: 'endless' | 'daily' | 'quests') => {
-    if (m === modeRef.current) return
-    modeRef.current = m // sync so the re-seed reads the new mode
-    setMode(m)
-    sfx.ensure()
-    if (m === 'quests') startLevel(Number(localStorage.getItem('manana.quest.level') ?? 0))
-    else newGame()
-  }
   // ---- view navigation (home ↔ roadmap ↔ board) ----
   const goHome = () => { setOver(false); setView('home') }
   const openStory = () => {
@@ -656,18 +648,6 @@ export default function MananaPage() {
               <div className="gx-label text-[9px] text-slate-500">{s.k}</div>
               <div className="text-lg font-bold tabular-nums" style={{ color: s.c }}>{s.v.toLocaleString()}</div>
             </div>
-          ))}
-        </div>
-
-        <div className="flex items-center justify-center gap-1.5 mb-2 text-[10px] tracking-[0.18em] uppercase">
-          {(['quests', 'endless', 'daily'] as const).map((m) => (
-            <button
-              key={m}
-              onClick={() => pickMode(m)}
-              className={`px-3 py-1 rounded-full border transition-colors ${mode === m ? 'text-[#1a1228] bg-amber-300 border-amber-300 font-semibold' : 'text-slate-400 border-white/15 hover:text-amber-200'}`}
-            >
-              {m === 'daily' ? `daily #${dailyNumber()}` : m === 'quests' ? 'quest' : m}
-            </button>
           ))}
         </div>
 
