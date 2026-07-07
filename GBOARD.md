@@ -101,6 +101,15 @@ the Arcade frame.
 - **Open:** proper 1200×630 OG crops (cards are 1.75:1, platforms letterbox slightly — fine for now); OG for
   the Room/hubs (they inherit the good root default, which is correct for the brand front door).
 
+## 📌 Cross-cutting — SITE NAVIGATION / WAYFINDING (PINNED 2026-07-07, not yet scoped)
+> Alex: "we need a better way to get around the site." The whole arcade's nav is **ad-hoc** — a `RoomReturn`
+> button per game, no global menu / persistent nav / breadcrumb. Getting between games, the Room, a game's Home,
+> and the Story trail is inconsistent. This is a SITE-WIDE design problem, deliberately NOT started late-night
+> (would be a worse mess half-done). **Do a real pass fresh:** what are the destinations (Room / Arcade catalog /
+> per-game Home / in-game), and what's the one cohesive wayfinding pattern across all of them. Surfaced while
+> building the Mana'nana Home/roadmap (removing the in-board mode pills left RoomReturn as the only mid-game exit
+> — a symptom of the bigger gap). START HERE next nav session.
+
 ## 🧩 Cross-cutting initiative — THE GAME-UI LAYER (active, jin leads, 2026-06-18)
 > **Killing the "browser feel"** — games play like games but the menus/chrome read like a website.
 > Full research + recipe: **`/GAME_UI_LAYER.md`**. Reusable opt-in kit: **`src/app/gameui.css`**
