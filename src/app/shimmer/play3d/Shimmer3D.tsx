@@ -1939,6 +1939,10 @@ export default function Shimmer3D() {
           }}>☰</button>
           {menuOpen && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'flex-end', background: 'rgba(12,16,26,0.94)', border: '1px solid #ffffff20', borderRadius: 10, padding: 8 }}>
+              {/* site nav folded into the walker's own menu — play3d had no exit before this
+                  (autosave persists on every change, so a hard nav out never loses progress) */}
+              <button onClick={() => { window.location.href = '/room?wall=0' }} style={menuBtn}>⌂ The Room</button>
+              <button onClick={() => { window.location.href = '/arcade/all' }} style={menuBtn}>▦ All games</button>
               {isOwner && <button onClick={() => { setMenuOpen(false); setEditMode(true) }} style={menuBtn}>✎ Edit terrain</button>}
               {confirmNew ? (
                 <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
