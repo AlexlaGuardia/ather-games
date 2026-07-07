@@ -88,23 +88,58 @@ function flat(w: World) {
   ok('stomp scored', w.stompScore > 0)
 }
 
-// 7. side-hit a foe = death
+// 7. side-hit a foe = lose a heart (damage), not instant death; survives with hearts left
 {
   const w = makeWorld(12); pressJump(w); flat(w)
   for (let i = 0; i < 3; i++) tick(w, 0.016) // grounded, running
+  const h0 = w.hearts
   w.foes = [{ x: w.dist + 1, y: TOP_BASE, dead: false }]
   w.vy = 0; w.grounded = true; w.y = TOP_BASE
   tick(w, 0.016)
-  ok('side contact kills (foe)', w.state === 'dead' && w.events.some(e => e.type === 'death' && e.cause === 'foe'))
+  ok('foe side-hit costs a heart, not death', w.state === 'playing' && w.hearts === h0 - 1 && w.events.some(e => e.type === 'hurt' && e.cause === 'foe'))
 }
 
-// 8. spike = death (never stompable, even from above)
+// 7b. a hit grants invuln — a second foe the same instant does NOT double-drain
+{
+  const w = makeWorld(12); pressJump(w); flat(w)
+  for (let i = 0; i < 3; i++) tick(w, 0.016)
+  w.vy = 0; w.grounded = true; w.y = TOP_BASE
+  w.foes = [{ x: w.dist + 1, y: TOP_BASE, dead: false }]
+  tick(w, 0.016) // first hit → -1 heart, iframes set
+  const hAfter = w.hearts
+  w.foes = [{ x: w.dist + 1, y: TOP_BASE, dead: false }] // another foe right on us, still in iframes
+  w.vy = 0; w.grounded = true; w.y = TOP_BASE
+  tick(w, 0.016)
+  ok('invuln blocks a second immediate hit', w.hearts === hAfter)
+}
+
+// 8. spike = lose a heart too (forgiving), not instant death
 {
   const w = makeWorld(13); pressJump(w); flat(w)
+  const h0 = w.hearts
   w.spikes = [{ x: w.dist + 2, y: TOP_BASE }]
   w.grounded = false; w.vy = 150; w.y = TOP_BASE - SPIKE_H + 4
   tick(w, 0.016)
-  ok('spike contact kills (spike)', w.state === 'dead' && w.events.some(e => e.type === 'death' && e.cause === 'spike'))
+  ok('spike costs a heart, not death', w.state === 'playing' && w.hearts === h0 - 1 && w.events.some(e => e.type === 'hurt' && e.cause === 'spike'))
+}
+
+// 8b. running dry → the greying takes hearts; the last heart guts the light out to grey (death)
+{
+  const w = makeWorld(14); pressJump(w); flat(w)
+  w.fuel = 0; w.hearts = 1 // one heart left, light already dry
+  let died = false
+  for (let i = 0; i < 600 && w.state === 'playing'; i++) { flat(w); tick(w, 0.016); if (w.state === 'dead') died = true }
+  ok('dry light guts out to grey death', died && w.events.some(e => e.type === 'death' && e.cause === 'grey'))
+}
+
+// 8c. a mote refuels the light and stops the greying
+{
+  const w = makeWorld(16); pressJump(w); flat(w)
+  w.fuel = 0; w.grayCount = 2 // primed near a heart-loss
+  w.motes = [{ x: w.dist + 1, y: TOP_BASE, got: false }]
+  w.vy = 0; w.grounded = true; w.y = TOP_BASE
+  tick(w, 0.016)
+  ok('mote refuels + resets greying', w.fuel > 0 && w.grayCount === 0)
 }
 
 // 9. gap = death (fall past the death line)

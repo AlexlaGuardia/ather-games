@@ -21,8 +21,8 @@ import { mulberry32, type Rng } from '@/lib/arcade/rng'
 export const VW = 480
 export const VH = 270
 export const RUNNER_SX = 130 // the runner's FIXED screen-x; the world scrolls past it
-export const RUNNER_W = 16
-export const RUNNER_H = 20
+export const RUNNER_W = 22 // the mote of light — bigger so its size can read as its fuel (2026-07-07)
+export const RUNNER_H = 27
 export const DEATH_Y = VH + 50 // fall past this (into a gap) → death
 
 // ── platform heights (smaller y = higher ledge) ───────────────────────────────────
@@ -108,20 +108,31 @@ export interface Seg { x0: number; x1: number; top: number }
 export interface Foe { x: number; y: number; dead: boolean } // stompable; y = its feet (on a seg top)
 export interface Spike { x: number; y: number } // never stompable; contact = death
 export interface Mote { x: number; y: number; got: boolean }
-export const FOE_W = 18
-export const FOE_H = 16
-export const SPIKE_W = 16
-export const SPIKE_H = 14
-export const MOTE_R = 7
+export const FOE_W = 24
+export const FOE_H = 22
+export const SPIKE_W = 21
+export const SPIKE_H = 19
+export const MOTE_R = 9
 export const MOTE_PTS = 25
 export const STOMP_BASE = 30 // stomp score = STOMP_BASE * current combo
+
+// ── the carried light: hearts (resilience) + fuel (motes feed it; runs dry → the greying takes hearts) ──
+export const MAX_HEARTS = 3
+export const MAX_FUEL = 100
+export const FUEL_DRAIN = 5.5   // fuel/sec spent carrying — full lasts ~18s if you gather nothing
+export const MOTE_FUEL = 22     // fuel a gathered mote restores (~4s of carrying)
+export const GRAY_TIC = 0.8     // sec per greying tic once the light is dry (the dim pulse)
+export const TICS_PER_HEART = 3 // every 3rd greying tic costs a heart (~2.4s grace per heart when starving)
+export const HURT_IFRAMES = 1.0 // sec of invulnerability after a hit (a cluster can't drain you at once)
 
 export type BoundEvent =
   | { type: 'jump'; air?: boolean } // air = a stomp-granted double-jump (vs a ground/coyote jump)
   | { type: 'land' }
   | { type: 'stomp'; combo: number }
-  | { type: 'collect' }
-  | { type: 'death'; cause: 'gap' | 'foe' | 'spike' }
+  | { type: 'collect' } // gathered a mote (score + fuel)
+  | { type: 'hurt'; cause: 'foe' | 'spike' | 'grey'; hearts: number } // lost a heart (survived)
+  | { type: 'graytic' } // a greying pulse while the light is dry (every 3rd costs a heart)
+  | { type: 'death'; cause: 'gap' | 'grey' } // gap = fell into the void; grey = the light gutted out (0 hearts)
   | { type: 'won' } // a Story movement's goal distance was crossed (the light carries on)
 
 export type BoundState = 'ready' | 'playing' | 'dead' | 'won'
@@ -141,6 +152,12 @@ export interface World {
   held: boolean // jump button currently down (drives variable height)
   combo: number // consecutive aerial stomps without landing
   airJumps: number // banked air-jumps (a stomp grants one; tap mid-air to spend; resets on landing)
+  // the carried light
+  hearts: number // resilience — a hit or a greying tic costs one; 0 → the grey takes the light
+  fuel: number // 0..MAX_FUEL — drains as you carry, motes refill; at 0 the greying starts taking hearts
+  grayTic: number // accumulated time toward the next greying tic (only while dry)
+  grayCount: number // greying tics elapsed since going dry (resets on refuel)
+  iframes: number // invuln timer after a hit
   score: number
   motesGot: number
   stompScore: number
@@ -159,7 +176,9 @@ export function makeWorld(seed: number, cfg: MovementCfg = ENDLESS_CFG): World {
   const w: World = {
     rng, cfg, state: 'ready', dist: 0,
     y: TOP_BASE, vy: 0, grounded: true, coyote: 0, buffer: 0, jumping: false, held: false,
-    combo: 0, airJumps: 0, score: 0, motesGot: 0, stompScore: 0,
+    combo: 0, airJumps: 0,
+    hearts: MAX_HEARTS, fuel: MAX_FUEL, grayTic: 0, grayCount: 0, iframes: 0,
+    score: 0, motesGot: 0, stompScore: 0,
     segs: [], foes: [], spikes: [], motes: [],
     genX: 0, lastTop: TOP_BASE, events: [],
   }
@@ -211,6 +230,24 @@ export function tick(w: World, dt: number): void {
     w.events.push({ type: 'won' })
     return
   }
+
+  // the carried light: invuln ticks down, fuel drains as you carry it, and once it's dry the greying
+  // pulses — every 3rd pulse the grey takes a heart (forgiving: ~2.4s of grace per heart). A gathered
+  // mote refuels and eases the greying back off.
+  if (w.iframes > 0) w.iframes = Math.max(0, w.iframes - dt)
+  w.fuel = Math.max(0, w.fuel - FUEL_DRAIN * dt)
+  if (w.fuel <= 0) {
+    w.grayTic += dt
+    while (w.grayTic >= GRAY_TIC) {
+      w.grayTic -= GRAY_TIC
+      w.grayCount++
+      w.events.push({ type: 'graytic' })
+      if (w.grayCount % TICS_PER_HEART === 0) { loseHeart(w, 'grey'); if (w.state !== 'playing') return }
+    }
+  } else {
+    w.grayTic = 0; w.grayCount = 0 // refueled → the greying eases off
+  }
+
   if (w.coyote > 0) w.coyote = Math.max(0, w.coyote - dt)
   if (w.buffer > 0) w.buffer = Math.max(0, w.buffer - dt)
 
@@ -286,18 +323,27 @@ export function tick(w: World, dt: number): void {
       const gain = STOMP_BASE * w.combo
       w.stompScore += gain
       w.events.push({ type: 'stomp', combo: w.combo })
-    } else {
-      return die(w, 'foe')
+    } else if (w.iframes <= 0) {
+      // side-hit: the grey void-spawn chips the light (a heart), not instant death. Brief knockback +
+      // the invuln set below. During invuln we pass through harmlessly.
+      loseHeart(w, 'foe'); w.iframes = HURT_IFRAMES; w.vy = Math.min(w.vy, -160); w.grounded = false
+      if (w.state !== 'playing') return
     }
   }
   for (const s of w.spikes) {
-    if (overlap(w.dist, w.y, RUNNER_W, RUNNER_H, s.x, s.y, SPIKE_W, SPIKE_H)) return die(w, 'spike')
+    if (overlap(w.dist, w.y, RUNNER_W, RUNNER_H, s.x, s.y, SPIKE_W, SPIKE_H) && w.iframes <= 0) {
+      // rooted grey corruption — a heart, not instant death (forgiving), + knockback/invuln
+      loseHeart(w, 'spike'); w.iframes = HURT_IFRAMES; w.vy = Math.min(w.vy, -160); w.grounded = false
+      if (w.state !== 'playing') return
+    }
   }
   for (const m of w.motes) {
     if (m.got) continue
     if (overlap(w.dist, w.y, RUNNER_W, RUNNER_H, m.x, m.y, MOTE_R * 2, MOTE_R * 2)) {
       m.got = true
       w.motesGot++
+      w.fuel = Math.min(MAX_FUEL, w.fuel + MOTE_FUEL) // gathered light feeds the carried light
+      if (w.fuel > 0) { w.grayTic = 0; w.grayCount = 0 } // refueled → the greying eases off at once
       w.events.push({ type: 'collect' })
     }
   }
@@ -307,9 +353,17 @@ export function tick(w: World, dt: number): void {
   generate(w)
 }
 
-function die(w: World, cause: 'gap' | 'foe' | 'spike'): void {
+function die(w: World, cause: 'gap' | 'grey'): void {
   w.state = 'dead'
   w.events.push({ type: 'death', cause })
+}
+
+// the grey chips a heart. When the last one goes, the light guts out to grey (death). Grey-tic hits
+// bypass invuln (the slow drain); foe/spike hits set invuln at the call site so a cluster can't stack.
+function loseHeart(w: World, cause: 'foe' | 'spike' | 'grey'): void {
+  w.hearts--
+  w.events.push({ type: 'hurt', cause, hearts: w.hearts })
+  if (w.hearts <= 0) die(w, 'grey')
 }
 
 // ── helpers ─────────────────────────────────────────────────────────────────────

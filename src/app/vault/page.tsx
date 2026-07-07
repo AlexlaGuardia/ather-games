@@ -28,6 +28,8 @@ import {
   SPIKE_W,
   SPIKE_H,
   MOTE_R,
+  MAX_HEARTS,
+  MAX_FUEL,
   MOVEMENTS,
   ENDLESS_CFG,
   loadStoryDone,
@@ -78,7 +80,9 @@ export default function VaultPage() {
   const [newBest, setNewBest] = useState(false)
   const [dist, setDist] = useState(0)
   const [motes, setMotes] = useState(0)
-  const [cause, setCause] = useState<'gap' | 'foe' | 'spike'>('gap')
+  const [hearts, setHearts] = useState(3)
+  const [fuel, setFuel] = useState(100)
+  const [cause, setCause] = useState<'gap' | 'grey'>('gap')
   const [muted, setMuted] = useState(false)
   const [mode, setMode] = useState<Mode>('story')
   const modeRef = useRef(mode); modeRef.current = mode
@@ -108,6 +112,7 @@ export default function VaultPage() {
     comboFx.current = 0
     voMileRef.current = 0; vo.reset() // fresh run: re-arm the commentator
     setScore(0); setDist(0); setMotes(0); setNewBest(false); setShared(false)
+    setHearts(MAX_HEARTS); setFuel(MAX_FUEL)
     setPhase('ready')
   }, [])
 
@@ -207,8 +212,9 @@ export default function VaultPage() {
         for (const ev of w.events) {
           if (ev.type === 'jump') { if (ev.air) { sfx.play('djump'); burstAirJump(w) } else sfx.play('jump') }
           else if (ev.type === 'land') sfx.play('land')
-          else if (ev.type === 'collect') { sfx.play('collect'); burstCollect(w) }
+          else if (ev.type === 'collect') { sfx.play('collect'); burstCollect(w); setFuel(w.fuel) }
           else if (ev.type === 'stomp') { sfx.play('stomp'); burstStomp(w); comboFx.current = 0.6; vo.play('stomp') }
+          else if (ev.type === 'hurt') { sfx.play('death'); shake.current = 0.28; setHearts(w.hearts) } // the grey chips a heart
           else if (ev.type === 'death') {
             sfx.play('death'); shake.current = 0.4
             setScore(w.score); setDist(Math.floor(w.dist / 10)); setMotes(w.motesGot); setCause(ev.cause)
@@ -234,7 +240,7 @@ export default function VaultPage() {
         trail.current.unshift(w.y)
         if (trail.current.length > 14) trail.current.pop()
         syncT.current += dt
-        if (syncT.current >= 0.1) { syncT.current = 0; setScore(w.score); setMotes(w.motesGot) }
+        if (syncT.current >= 0.1) { syncT.current = 0; setScore(w.score); setMotes(w.motesGot); setFuel(w.fuel); setHearts(w.hearts) }
       }
       render(canvas, w, ts, trail.current, fx.current, shake.current, comboFx.current)
     }
@@ -349,11 +355,24 @@ export default function VaultPage() {
         )
       })() : (<>
 
-      {/* score + motes */}
-      <div className="w-full mb-2 flex items-center gap-3 font-mono" style={{ maxWidth: screenMaxW(VW, VH) }}>
-        <span className="gx-label text-[10px]" style={{ color: ACCENT }}>crossing</span>
+      {/* HUD: hearts (the light's resilience) · crossing · fuel gauge (the carried light) · motes */}
+      <div className="w-full mb-2 flex items-center gap-2 font-mono" style={{ maxWidth: screenMaxW(VW, VH) }}>
+        {/* hearts */}
+        <span className="flex items-center gap-0.5" aria-label={`${hearts} of ${MAX_HEARTS} light`}>
+          {Array.from({ length: MAX_HEARTS }).map((_, i) => (
+            <span key={i} aria-hidden className="text-[12px] leading-none transition-opacity" style={{ opacity: i < hearts ? 1 : 0.22, filter: i < hearts ? `drop-shadow(0 0 4px ${ACCENT})` : 'none' }}>✦</span>
+          ))}
+        </span>
+        <span className="gx-label text-[10px] ml-1" style={{ color: ACCENT }}>crossing</span>
         <span className="gx-label text-[10px] text-[#e8feff] tabular-nums">{score}</span>
-        <span className="gx-label text-[9px] tracking-wider ml-auto" style={{ color: GOLD }}>light <span className="text-[#e8feff] tabular-nums">{motes}</span></span>
+        {/* fuel gauge — how lit the carried light is */}
+        <span className="ml-auto flex items-center gap-1.5">
+          <span className="relative h-[6px] w-[46px] overflow-hidden rounded-full border border-white/10 bg-black/40" aria-label="light fuel">
+            <span className="absolute inset-y-0 left-0 rounded-full transition-[width] duration-150"
+              style={{ width: `${Math.max(0, Math.min(100, fuel / MAX_FUEL * 100))}%`, background: fuel <= 0 ? '#71717a' : `linear-gradient(90deg, ${GOLD}, ${ACCENT})`, boxShadow: fuel > 0 ? `0 0 6px ${ACCENT}80` : 'none' }} />
+          </span>
+          <span className="gx-label text-[9px] tracking-wider" style={{ color: GOLD }}>light <span className="text-[#e8feff] tabular-nums">{motes}</span></span>
+        </span>
       </div>
 
       <div className="gx-chrome relative w-full" style={{ maxWidth: screenMaxW(VW, VH), aspectRatio: `${VW} / ${VH}`, ['--gx-accent' as string]: ACCENT } as React.CSSProperties}>
@@ -407,10 +426,9 @@ export default function VaultPage() {
   )
 }
 
-const DEATH_LINE: Record<'gap' | 'foe' | 'spike', string> = {
+const DEATH_LINE: Record<'gap' | 'grey', string> = {
   gap: 'the light fell into the void’s tear. read the gap sooner.',
-  foe: 'the grey caught the light from the side. come down on it next time.',
-  spike: 'rooted corruption cannot be unmade. it must be leapt.',
+  grey: 'the light guttered out to grey. gather more of it, and keep it lit.',
 }
 
 // ── rendering ───────────────────────────────────────────────────────────────────
@@ -557,21 +575,28 @@ function render(canvas: HTMLCanvasElement, w: World, ts: number, trail: number[]
       ctx.fill()
       ctx.globalAlpha = 1
     }
+    // the carried light — its SIZE + BRIGHTNESS ride on fuel (bright/big when fed → small/dim when
+    // starving), it greys as it runs dry, and it flickers during invuln right after a hit.
+    const fuelFrac = Math.max(0, Math.min(1, w.fuel / MAX_FUEL))
+    const lit = 0.6 + 0.4 * fuelFrac
+    const dry = w.fuel <= 0
+    ctx.globalAlpha = w.iframes > 0 && Math.floor(w.iframes * 18) % 2 === 0 ? 0.4 : 1
     // gold outer glow
-    ctx.fillStyle = GOLD
-    ctx.shadowBlur = 16
-    ctx.shadowColor = GOLD
-    dot(ctx, RUNNER_SX, cy, RUNNER_W * 0.55)
+    ctx.fillStyle = dry ? GREY_HOT : GOLD
+    ctx.shadowBlur = 16 * lit
+    ctx.shadowColor = dry ? GREY_HOT : GOLD
+    dot(ctx, RUNNER_SX, cy, RUNNER_W * 0.55 * lit)
     // cyan core
-    ctx.fillStyle = ATHER
-    ctx.shadowBlur = 12
-    ctx.shadowColor = ATHER
-    dot(ctx, RUNNER_SX, cy, RUNNER_W * 0.42)
+    ctx.fillStyle = dry ? '#9aa6b0' : ATHER
+    ctx.shadowBlur = 12 * lit
+    ctx.shadowColor = dry ? '#8890a0' : ATHER
+    dot(ctx, RUNNER_SX, cy, RUNNER_W * 0.42 * lit)
     // hot center
     ctx.shadowBlur = 6
-    ctx.fillStyle = HOT
-    dot(ctx, RUNNER_SX, cy, RUNNER_W * 0.2)
+    ctx.fillStyle = dry ? '#ccd2da' : HOT
+    dot(ctx, RUNNER_SX, cy, RUNNER_W * 0.2 * lit)
     ctx.shadowBlur = 0
+    ctx.globalAlpha = 1
   }
 
   // ── combo readout (the unmaking chain) ────────────────────────────────────────
