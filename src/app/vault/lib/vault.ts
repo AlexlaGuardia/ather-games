@@ -88,20 +88,81 @@ export const ENDLESS_CFG: MovementCfg = {
   goalDist: 0, diffBase: 0, diffSpan: 1, gaps: true, foes: true, spikes: true, hazMul: 1, runway: RUNWAY,
 }
 
-// the told movements — a descent. Each teaches one new thing; the floor deepens each time.
-// Difficulty band is a FAIR, completable descent (peaks ~0.6 on the last told movement); Endless ramps the
-// crossing on past 0.6→1.0 — canon-true (the tale only tells so deep; past it, the crossing without end is
-// harder than any teller says). Bands are monotonic; foe-bearing movements sit a touch gentler because the
-// unmaking (stomp/chain) is a learned skill. Tuned against the movements oracle + Alex's device feel.
-export const MOVEMENTS: MovementCfg[] = [
-  { id: 'm1', name: 'First Light',           blurb: 'the light, new — leap the first tears',      goalDist: 2200, diffBase: 0.00, diffSpan: 0.15, gaps: true,  foes: false, spikes: false, hazMul: 0,    runway: 700 },
-  { id: 'm2', name: 'The Tears Widen',       blurb: 'the ground breaks; read it ahead',          goalDist: 2600, diffBase: 0.12, diffSpan: 0.16, gaps: true,  foes: false, spikes: false, hazMul: 0,    runway: 420 },
-  { id: 'm3', name: 'The Grey Wakes',        blurb: 'the grey rises — unmake it, chain it',       goalDist: 2600, diffBase: 0.16, diffSpan: 0.16, gaps: true,  foes: true,  spikes: false, hazMul: 0.45, runway: 420 },
-  { id: 'm4', name: 'The Rooted Grey',       blurb: 'grey that has taken root — that, you leap',  goalDist: 2800, diffBase: 0.24, diffSpan: 0.16, gaps: true,  foes: true,  spikes: true,  hazMul: 0.6,  runway: 380 },
-  { id: 'm5', name: 'The Dying Gains Ground', blurb: 'faster, more broken — the Dying presses',    goalDist: 3000, diffBase: 0.32, diffSpan: 0.18, gaps: true,  foes: true,  spikes: true,  hazMul: 0.8,  runway: 340 },
-  { id: 'm6', name: 'The Grey Heart',        blurb: 'the deepest the tale is told; carry on',     goalDist: 3200, diffBase: 0.40, diffSpan: 0.20, gaps: true,  foes: true,  spikes: true,  hazMul: 1.0,  runway: 320 },
+// ── AREAS × LEVELS (the descent as a level ladder) ──────────────────────────────────
+// An AREA is a *look* + a hazard set + a difficulty BAND (canon: one named stretch of the greying, the 6
+// blessed movements). Each area holds LEVELS_PER_AREA discrete levels you beat in order (linear unlock) to
+// advance. Levels are PROCEDURAL — a level is a short seeded run whose difficulty steps from the area's
+// floor→ceil across its levels, and whose LENGTH grows over the whole ladder (~35s early → ~90s late). So
+// "100 levels/area" is just a number, not 100 hand-built maps. `accent` is the area's tint (rich per-area
+// theming comes later — Alex: don't go crazy on maps until the enemies/obstacles get their glow-up).
+export interface AreaCfg {
+  id: string
+  name: string       // canon-blessed (game/vault.md)
+  blurb: string
+  accent: string     // the look tint (a descent bright→grey); full theming is future work
+  diffFloor: number  // difficulty of level 1
+  diffCeil: number   // difficulty of the last level
+  gaps: boolean
+  foes: boolean
+  spikes: boolean
+  hazMul: number     // hazard density for the area
+}
+export const AREAS: AreaCfg[] = [
+  { id: 'a1', name: 'First Light',            blurb: 'the light, new — leap the first tears',     accent: '#ffd36b', diffFloor: 0.00, diffCeil: 0.16, gaps: true, foes: false, spikes: false, hazMul: 0    },
+  { id: 'a2', name: 'The Tears Widen',        blurb: 'the ground breaks; read it ahead',          accent: '#7fe0ff', diffFloor: 0.12, diffCeil: 0.30, gaps: true, foes: false, spikes: false, hazMul: 0    },
+  { id: 'a3', name: 'The Grey Wakes',         blurb: 'the grey rises — unmake it, chain it',       accent: '#8fd0d8', diffFloor: 0.16, diffCeil: 0.34, gaps: true, foes: true,  spikes: false, hazMul: 0.32 },
+  { id: 'a4', name: 'The Rooted Grey',        blurb: 'grey that has taken root — that, you leap',  accent: '#8fb0b0', diffFloor: 0.24, diffCeil: 0.42, gaps: true, foes: true,  spikes: true,  hazMul: 0.42 },
+  { id: 'a5', name: 'The Dying Gains Ground', blurb: 'faster, more broken — the Dying presses',    accent: '#9a94a8', diffFloor: 0.30, diffCeil: 0.50, gaps: true, foes: true,  spikes: true,  hazMul: 0.55 },
+  { id: 'a6', name: 'The Grey Heart',         blurb: 'the deepest the tale is told',               accent: '#8a8a94', diffFloor: 0.38, diffCeil: 0.58, gaps: true, foes: true,  spikes: true,  hazMul: 0.68 },
 ]
-export function movementById(id: string): MovementCfg | undefined { return MOVEMENTS.find(m => m.id === id) }
+export const LEVELS_PER_AREA = 10 // 10 for now; the goal is ~100 — bumping this is the only change needed
+
+// deterministic per-level seed → a level is the SAME layout every attempt (learnable + retryable)
+export function levelSeed(a: number, i: number): number {
+  return (Math.imul(a + 1, 73856093) ^ Math.imul(i + 1, 19349663) ^ 0x9e3779b9) >>> 0
+}
+
+// concrete run-config for area a, level i (both 0-based). Difficulty steps floor→ceil across the area;
+// length grows across the whole ladder (early ~35s → late ~90s).
+export function levelCfg(a: number, i: number): MovementCfg {
+  const area = AREAS[a]
+  const t = LEVELS_PER_AREA > 1 ? i / (LEVELS_PER_AREA - 1) : 0
+  const diffBase = area.diffFloor + (area.diffCeil - area.diffFloor) * t
+  const globalIdx = a * LEVELS_PER_AREA + i
+  const p = globalIdx / Math.max(1, AREAS.length * LEVELS_PER_AREA - 1)
+  const targetSec = 35 + 48 * p // ~35s at the start of the ladder → ~83s at the end
+  const goalDist = Math.round(targetSec * (BASE_SPEED + SPEED_RANGE * diffBase))
+  return {
+    id: `${area.id}-l${i + 1}`,
+    name: `${area.name} · ${i + 1}`,
+    blurb: area.blurb,
+    goalDist,
+    diffBase,
+    diffSpan: 0.1, // a gentle rise within the single level
+    gaps: area.gaps, foes: area.foes, spikes: area.spikes,
+    hazMul: area.hazMul,
+    runway: a === 0 && i === 0 ? 420 : 260, // short lead-in — no more long flat opening run
+  }
+}
+
+// ── progress (per-area cleared-level count, linear unlock) ───────────────────────────
+const PROG_KEY = 'vault.progress.v2'
+export function loadProgress(): number[] {
+  const empty = AREAS.map(() => 0)
+  if (typeof window === 'undefined') return empty
+  try {
+    const raw = JSON.parse(localStorage.getItem(PROG_KEY) || '[]')
+    return AREAS.map((_, a) => Math.max(0, Math.min(LEVELS_PER_AREA, Number(raw?.[a]) || 0)))
+  } catch { return empty }
+}
+export function saveProgress(prog: number[]): void {
+  if (typeof window === 'undefined') return
+  try { localStorage.setItem(PROG_KEY, JSON.stringify(prog)) } catch { /* ignore */ }
+}
+export function areaUnlocked(prog: number[], a: number): boolean { return a === 0 || prog[a - 1] >= LEVELS_PER_AREA }
+export function levelUnlocked(prog: number[], a: number, i: number): boolean { return areaUnlocked(prog, a) && i <= (prog[a] ?? 0) }
+export function areaDone(prog: number[], a: number): boolean { return (prog[a] ?? 0) >= LEVELS_PER_AREA }
+export function allAreasDone(prog: number[]): boolean { return AREAS.every((_, a) => areaDone(prog, a)) }
 
 // ── entities ──────────────────────────────────────────────────────────────────────
 export interface Seg { x0: number; x1: number; top: number }
@@ -119,7 +180,7 @@ export const STOMP_BASE = 30 // stomp score = STOMP_BASE * current combo
 // ── the carried light: hearts (resilience) + fuel (motes feed it; runs dry → the greying takes hearts) ──
 export const MAX_HEARTS = 3
 export const MAX_FUEL = 100
-export const FUEL_DRAIN = 5.5   // fuel/sec spent carrying — full lasts ~18s if you gather nothing
+export const FUEL_DRAIN = 4.0   // fuel/sec spent carrying — full lasts ~25s if you gather nothing (levels are long)
 export const MOTE_FUEL = 22     // fuel a gathered mote restores (~4s of carrying)
 export const GRAY_TIC = 0.8     // sec per greying tic once the light is dry (the dim pulse)
 export const TICS_PER_HEART = 3 // every 3rd greying tic costs a heart (~2.4s grace per heart when starving)
@@ -452,15 +513,4 @@ export function saveBest(score: number): number {
   const best = Math.max(loadBest(), Math.max(0, Math.floor(score)))
   try { localStorage.setItem(BEST_KEY, String(best)) } catch { /* ignore */ }
   return best
-}
-
-// ── Story progress: how many movements have been crossed (the tale told so far) ─────
-const STORY_KEY = 'vault.story.done'
-export function loadStoryDone(): number {
-  try { return Math.min(MOVEMENTS.length, parseInt(localStorage.getItem(STORY_KEY) || '0', 10) || 0) } catch { return 0 }
-}
-export function saveStoryDone(n: number): number {
-  const done = Math.min(MOVEMENTS.length, Math.max(loadStoryDone(), Math.max(0, Math.floor(n))))
-  try { localStorage.setItem(STORY_KEY, String(done)) } catch { /* ignore */ }
-  return done
 }

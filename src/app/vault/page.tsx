@@ -30,10 +30,17 @@ import {
   MOTE_R,
   MAX_HEARTS,
   MAX_FUEL,
-  MOVEMENTS,
+  AREAS,
+  LEVELS_PER_AREA,
+  levelCfg,
+  levelSeed,
+  loadProgress,
+  saveProgress,
+  levelUnlocked,
+  areaUnlocked,
+  areaDone,
+  allAreasDone,
   ENDLESS_CFG,
-  loadStoryDone,
-  saveStoryDone,
   type World,
   type MovementCfg,
 } from './lib/vault'
@@ -88,21 +95,29 @@ export default function VaultPage() {
   const modeRef = useRef(mode); modeRef.current = mode
   const [dailyBest, setDailyBest] = useState(0)
   const [shared, setShared] = useState(false)
-  // Story mode: the crossing told in movements (a descent). storyDone = movements cleared (persisted);
-  // storyIdx = the movement being played; storyView flips the ready screen between the trail and a run.
-  const [storyDone, setStoryDone] = useState(0)
-  const [storyIdx, setStoryIdx] = useState(0)
-  const storyIdxRef = useRef(0); storyIdxRef.current = storyIdx
-  const [storyView, setStoryView] = useState<'map' | 'run'>('map')
+  // Story mode = a level ladder. progress[a] = levels cleared in area a (persisted). The trail is two-tier
+  // (areas → an area's levels); storyView flips between the trail and an actual level run. run{Area,Level}
+  // track the level currently being played.
+  const [progress, setProgress] = useState<number[]>(() => AREAS.map(() => 0))
+  const [trailView, setTrailView] = useState<'areas' | 'levels'>('areas')
+  const [selArea, setSelArea] = useState(0) // which area's levels are shown in the levels view
+  const [runArea, setRunArea] = useState(0)
+  const [runLevel, setRunLevel] = useState(0)
+  const runAreaRef = useRef(0); runAreaRef.current = runArea
+  const runLevelRef = useRef(0); runLevelRef.current = runLevel
+  const [storyView, setStoryView] = useState<'trail' | 'run'>('trail')
   const storyViewRef = useRef(storyView); storyViewRef.current = storyView
   const activeCfgRef = useRef<MovementCfg>(ENDLESS_CFG) // the cfg the current run uses (for restart)
+  const activeSeedRef = useRef<number | null>(null) // fixed seed for a level (null = random/daily)
 
   useNoScroll()
 
-  const boot = useCallback((cfg: MovementCfg = ENDLESS_CFG) => {
+  const boot = useCallback((cfg: MovementCfg = ENDLESS_CFG, fixedSeed: number | null = null) => {
     activeCfgRef.current = cfg
+    activeSeedRef.current = fixedSeed
     let seed: number
-    if (modeRef.current === 'daily') seed = dailySeed() // same crossing for everyone today
+    if (fixedSeed !== null) seed = fixedSeed // a Story level = a fixed, learnable layout
+    else if (modeRef.current === 'daily') seed = dailySeed() // same crossing for everyone today
     else { seedRef.current = (seedRef.current * 1103515245 + 12345) >>> 0; seed = seedRef.current ^ (Date.now() >>> 0) }
     worldRef.current = makeWorld(seed, cfg)
     downKeys.current.clear()
@@ -124,7 +139,7 @@ export default function VaultPage() {
     vo.setMuted(sfx.isMuted()); void vo.ensure(); vo.setOnSpeak(() => music.duck()) // a spoken line dips the bed
     setBest(loadBest())
     setDailyBest(loadDailyBest('vault'))
-    setStoryDone(loadStoryDone())
+    setProgress(loadProgress())
     return () => { music.stop(); vo.stop() } // tear audio down on leave — never follows you out
   }, [boot])
 
@@ -132,20 +147,22 @@ export default function VaultPage() {
     if (m === modeRef.current) return
     modeRef.current = m
     setMode(m)
-    if (m === 'story') { setStoryView('map'); setPhase('ready') } // show the trail; a movement boots on tap
+    if (m === 'story') { setStoryView('trail'); setPhase('ready') } // show the trail; a level boots on tap
     else boot(ENDLESS_CFG) // endless + daily both run the endless crossing (daily just seeds it fixed)
   }
-  // start a told movement (from the trail). Locked ones can't be picked.
-  const playMovement = (i: number) => {
-    if (i > storyDone || i >= MOVEMENTS.length) return
-    setStoryIdx(i); storyIdxRef.current = i
+  const openArea = (a: number) => { if (areaUnlocked(loadProgress(), a)) { setSelArea(a); setTrailView('levels') } }
+  // play a specific level (from the levels view). Locked levels can't be picked; a level = a FIXED seed.
+  const playLevel = (a: number, i: number) => {
+    if (!levelUnlocked(loadProgress(), a, i)) return
+    setRunArea(a); runAreaRef.current = a
+    setRunLevel(i); runLevelRef.current = i
     setStoryView('run')
-    boot(MOVEMENTS[i]) // world ready for this movement; press Vault to begin
+    boot(levelCfg(a, i), levelSeed(a, i)) // fixed layout for this level; press Vault to begin
   }
-  // the light carries on past the last told movement → the crossing without end
+  // the light carries on past the whole ladder → the crossing without end
   const carryOnEndless = () => {
     modeRef.current = 'endless'; setMode('endless')
-    setStoryView('map')
+    setStoryView('trail'); setTrailView('areas')
     boot(ENDLESS_CFG)
   }
   const onShare = async () => {
@@ -157,8 +174,8 @@ export default function VaultPage() {
 
   // ── the one input: the vault (jump). Variable via hold (press → up-arc, release → cut). ──────────
   const doPress = useCallback(() => {
-    // on the Story trail the world sits 'ready' behind the map — ignore the Vault button there
-    if (modeRef.current === 'story' && storyViewRef.current === 'map') return
+    // on the Story trail the world sits 'ready' behind the menu — ignore the Vault button there
+    if (modeRef.current === 'story' && storyViewRef.current === 'trail') return
     sfx.ensure()
     const w = worldRef.current
     if (!w || w.state === 'dead' || w.state === 'won') return
@@ -225,10 +242,13 @@ export default function VaultPage() {
             vo.play(isBest ? 'best' : 'over')
           }
           else if (ev.type === 'won') {
-            // a Story movement's goal crossed — the light carries on. Mark it told, bank the score.
+            // a level's goal crossed — the light carries on. Mark it cleared (unlocks the next) + bank score.
             setScore(w.score); setDist(Math.floor(w.dist / 10)); setMotes(w.motesGot)
             saveBest(w.score); setBest(loadBest())
-            const done = saveStoryDone(storyIdxRef.current + 1); setStoryDone(done)
+            const a = runAreaRef.current, i = runLevelRef.current
+            const prog = loadProgress()
+            prog[a] = Math.max(prog[a] ?? 0, Math.min(LEVELS_PER_AREA, i + 1))
+            saveProgress(prog); setProgress(prog)
             vo.play('best') // the warm "well carried" beat
             setPhase('won')
           }
@@ -274,12 +294,13 @@ export default function VaultPage() {
     }
   }
 
-  const restart = useCallback(() => { sfx.ensure(); boot(activeCfgRef.current) }, [boot]) // re-run the same crossing/movement
+  const restart = useCallback(() => { sfx.ensure(); boot(activeCfgRef.current, activeSeedRef.current) }, [boot]) // re-run the same level/crossing
+  const toTrail = () => { setStoryView('trail'); setPhase('ready') }
   const toggleMute = () => { sfx.ensure(); const m = !sfx.isMuted(); sfx.setMuted(m); music.setMuted(m); vo.setMuted(m); setMuted(m) }
 
   // the Story trail is a MENU, not gameplay — render it full-height (not jammed in the landscape
   // canvas letterbox), and hide the score row + controller while it's up.
-  const isStoryMap = mode === 'story' && storyView === 'map'
+  const isStoryTrail = mode === 'story' && storyView === 'trail'
 
   return (
     <ArcadeCabinet gameId="vault" accent={ACCENT} wall={1} maxWidth={cabinetMaxW(VW, VH)}>
@@ -304,9 +325,19 @@ export default function VaultPage() {
         </div>
       )}
 
-      {isStoryMap ? (
+      {isStoryTrail ? (
         <div className="w-full" style={{ maxWidth: screenMaxW(VW, VH) }}>
-          <Trail movements={MOVEMENTS} done={storyDone} onPlay={playMovement} onEndless={carryOnEndless} />
+          <Trail
+            areas={AREAS}
+            levelsPerArea={LEVELS_PER_AREA}
+            progress={progress}
+            view={trailView}
+            selArea={selArea}
+            onOpenArea={openArea}
+            onBackToAreas={() => setTrailView('areas')}
+            onPlayLevel={playLevel}
+            onEndless={carryOnEndless}
+          />
         </div>
       ) : phase === 'dead' ? (
         // result screen — its OWN full-height panel (not the landscape letterbox), so the buttons
@@ -317,7 +348,7 @@ export default function VaultPage() {
           {newBest
             ? <div className="gx-label text-[10px] font-mono tracking-wider" style={{ color: ACCENT }}>✦ new best</div>
             : best > 0 && <div className="gx-label text-[10px] font-mono text-[#7fd8e6]/45 tracking-wider">best {best}</div>}
-          {mode === 'story' && <div className="gx-label text-[10px] tracking-[0.2em] uppercase text-[#7fd8e6]/55">{MOVEMENTS[storyIdx].name}</div>}
+          {mode === 'story' && <div className="gx-label text-[10px] tracking-[0.2em] uppercase text-[#7fd8e6]/55">{AREAS[runArea].name} · {runLevel + 1}</div>}
           <div className="gx-label text-[10px] font-mono text-[#9fd6e0]/55 tracking-wider">
             crossed <span style={{ color: ACCENT }} className="tabular-nums">{dist}</span> · gathered <span style={{ color: GOLD }} className="tabular-nums">{motes}</span>
           </div>
@@ -328,7 +359,7 @@ export default function VaultPage() {
           <div className="flex flex-wrap items-center justify-center gap-2 mt-2">
             <button onClick={restart} className="gx-label text-[11px] text-[#070a12] hover:brightness-110 px-5 py-2 rounded-[2px]" style={{ background: ACCENT, boxShadow: `0 0 18px ${ACCENT}80` }}>carry it again →</button>
             {mode === 'story' && (
-              <button onClick={() => { setStoryView('map'); setPhase('ready') }} className="gx-label text-[11px] text-[#7fe9ff] border border-[#7fe9ff]/40 hover:border-[#7fe9ff] px-5 py-2 rounded-[2px] transition-colors">‹ trail</button>
+              <button onClick={() => { setSelArea(runArea); setTrailView('levels'); toTrail() }} className="gx-label text-[11px] text-[#7fe9ff] border border-[#7fe9ff]/40 hover:border-[#7fe9ff] px-5 py-2 rounded-[2px] transition-colors">‹ levels</button>
             )}
             {mode === 'daily' && (
               <button onClick={onShare} className="gx-label text-[11px] text-[#7fe9ff] border border-[#7fe9ff]/40 hover:border-[#7fe9ff] px-5 py-2 rounded-[2px] transition-colors">{shared ? 'copied ✓' : 'share'}</button>
@@ -337,19 +368,25 @@ export default function VaultPage() {
           {mode === 'daily' && <DailyLeaderboard gameId="vault" accent={ACCENT} score={score} className="mt-1.5 w-full" />}
         </div>
       ) : phase === 'won' ? (() => {
-        const last = storyIdx >= MOVEMENTS.length - 1
+        const a = runArea, i = runLevel
+        const hasNextLevel = i + 1 < LEVELS_PER_AREA
+        const hasNextArea = a + 1 < AREAS.length
+        const finished = !hasNextLevel && !hasNextArea // cleared the very last level of the ladder
+        const title = finished ? 'Beyond the teller’s sight' : hasNextLevel ? 'The light carries on' : `${AREAS[a].name} — cleared`
         return (
         <div className="w-full flex flex-col items-center gap-2 rounded-md border border-white/10 bg-[#070a12]/85 px-6 py-6 text-center" style={{ maxWidth: screenMaxW(VW, VH) }}>
-          <div className="gx-title text-lg tracking-[0.25em] uppercase" style={{ color: GOLD, textShadow: `0 0 16px ${GOLD}` }}>{last ? 'Beyond the teller’s sight' : 'The light carries on'}</div>
-          <div className="gx-label text-[10px] tracking-[0.2em] uppercase text-[#7fd8e6]/55">{MOVEMENTS[storyIdx].name} · crossed</div>
+          <div className="gx-title text-lg tracking-[0.25em] uppercase" style={{ color: GOLD, textShadow: `0 0 16px ${GOLD}` }}>{title}</div>
+          <div className="gx-label text-[10px] tracking-[0.2em] uppercase text-[#7fd8e6]/55">{AREAS[a].name} · {i + 1} · crossed</div>
           <div className="gx-value font-mono text-[#e8feff] text-4xl leading-none tabular-nums" style={{ textShadow: `0 0 12px ${ACCENT}80` }}>{score}</div>
           <div className="gx-label text-[10px] font-mono text-[#9fd6e0]/55 tracking-wider">crossed <span style={{ color: ACCENT }} className="tabular-nums">{dist}</span> · gathered <span style={{ color: GOLD }} className="tabular-nums">{motes}</span></div>
-          <p className="text-[10px] leading-relaxed text-[#9fd6e0]/70 max-w-[270px] italic mt-0.5">{last ? 'the tale is told to its heart. the light does not stop — it passes on, still crossing, past where the Mug can follow.' : 'you cannot hold the light still. deeper the crossing goes.'}</p>
+          <p className="text-[10px] leading-relaxed text-[#9fd6e0]/70 max-w-[270px] italic mt-0.5">{finished ? 'the tale is told to its heart. the light does not stop — it passes on, still crossing, past where the Mug can follow.' : hasNextLevel ? 'you cannot hold the light still. deeper the crossing goes.' : 'this stretch of the greying is behind you. the descent goes on.'}</p>
           <div className="flex flex-wrap items-center justify-center gap-2 mt-2">
-            {last
+            {finished
               ? <button onClick={carryOnEndless} className="gx-label text-[11px] text-[#070a12] hover:brightness-110 px-5 py-2 rounded-[2px]" style={{ background: ACCENT, boxShadow: `0 0 18px ${ACCENT}80` }}>cross without end →</button>
-              : <button onClick={() => playMovement(storyIdx + 1)} className="gx-label text-[11px] text-[#070a12] hover:brightness-110 px-5 py-2 rounded-[2px]" style={{ background: ACCENT, boxShadow: `0 0 18px ${ACCENT}80` }}>next movement →</button>}
-            <button onClick={() => { setStoryView('map'); setPhase('ready') }} className="gx-label text-[11px] text-[#7fe9ff] border border-[#7fe9ff]/40 hover:border-[#7fe9ff] px-5 py-2 rounded-[2px] transition-colors">‹ trail</button>
+              : hasNextLevel
+                ? <button onClick={() => playLevel(a, i + 1)} className="gx-label text-[11px] text-[#070a12] hover:brightness-110 px-5 py-2 rounded-[2px]" style={{ background: ACCENT, boxShadow: `0 0 18px ${ACCENT}80` }}>next level →</button>
+                : <button onClick={() => playLevel(a + 1, 0)} className="gx-label text-[11px] text-[#070a12] hover:brightness-110 px-5 py-2 rounded-[2px]" style={{ background: ACCENT, boxShadow: `0 0 18px ${ACCENT}80` }}>next area →</button>}
+            <button onClick={() => { setSelArea(a); setTrailView('levels'); toTrail() }} className="gx-label text-[11px] text-[#7fe9ff] border border-[#7fe9ff]/40 hover:border-[#7fe9ff] px-5 py-2 rounded-[2px] transition-colors">‹ levels</button>
           </div>
         </div>
         )
@@ -388,10 +425,10 @@ export default function VaultPage() {
             <div className="absolute inset-0 -z-10 bg-[#070a12]/68" />
             {mode === 'story' ? (
               <>
-                <button onClick={() => setStoryView('map')} className="pointer-events-auto absolute top-2 left-2 gx-label text-[10px] text-[#7fe9ff]/60 hover:text-[#7fe9ff] tracking-wider">‹ trail</button>
-                <div className="gx-label text-[9px] tracking-[0.25em] uppercase text-[#7fd8e6]/50">movement {storyIdx + 1} of {MOVEMENTS.length} · the descent</div>
-                <div className="gx-title text-2xl tracking-[0.2em] uppercase" style={{ color: ACCENT, textShadow: `0 0 18px ${ACCENT}` }}>{MOVEMENTS[storyIdx].name}</div>
-                <p className="text-[11px] leading-relaxed text-[#9fd6e0]/80 max-w-[280px] italic">{MOVEMENTS[storyIdx].blurb}</p>
+                <button onClick={() => { setSelArea(runArea); setTrailView('levels'); setStoryView('trail') }} className="pointer-events-auto absolute top-2 left-2 gx-label text-[10px] text-[#7fe9ff]/60 hover:text-[#7fe9ff] tracking-wider">‹ levels</button>
+                <div className="gx-label text-[9px] tracking-[0.25em] uppercase text-[#7fd8e6]/50">{AREAS[runArea].name} · level {runLevel + 1} of {LEVELS_PER_AREA}</div>
+                <div className="gx-title text-2xl tracking-[0.2em] uppercase" style={{ color: ACCENT, textShadow: `0 0 18px ${ACCENT}` }}>Level {runLevel + 1}</div>
+                <p className="text-[11px] leading-relaxed text-[#9fd6e0]/80 max-w-[280px] italic">{AREAS[runArea].blurb}</p>
               </>
             ) : (
               <>
