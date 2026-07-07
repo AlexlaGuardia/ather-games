@@ -154,6 +154,21 @@ the Arcade frame.
 > `manana/page.tsx` + `manana/Home.tsx`, `arcade/all/page.tsx`, `nolmir/page.tsx`, `grimoire/page.tsx`,
 > `shimmer/page.tsx`, `shimmer/play3d/Shimmer3D.tsx`.
 
+## 🔊 Cross-cutting — THE AUDIO LAYER (music beds + VO commentator, 2026-07-06→07, jin-cc)
+> **A reusable audio stack, extracted from Mana'nana and rolled across the score-chase games.** Three shared libs
+> under `src/lib/arcade/`:
+> - **`musicBed.ts`** — a looping Web Audio music bed (gapless MP3 loop + a GainNode for ducking under VO). Each game
+>   makes one with its own track; `stop()` on unmount so music never follows you out.
+> - **`voBank.ts`** — the cozy commentator (ElevenLabs **George**, HTMLAudioElement clips). The feel is the THROTTLE:
+>   per-trigger probability + a global cooldown + priority. Canon-neutral lines (no Magii gate). Reproducible via
+>   `scripts/gen_<game>_vo.py`.
+> - **`audioContext.ts`** — **ONE shared AudioContext** for the whole arcade. Root-caused + fixed a real bug: sfx AND
+>   music each minted their own context and never closed them, so bouncing through games hit the browser cap (~6 desktop,
+>   ~4 iOS) and later games went silent (the Updraft symptom). Now sfx + every music bed hang a GainNode off one context.
+> **Live on:** Mana'nana (music + George VO), **Squall / Vault / Updraft** (music + George VO each). Clips gitignored
+> (`public/*/music.mp3`, `public/*/vo/`). **Device-tune** = per-game throttle in each `<game>/vo.ts`, bed volume in `music.ts`.
+> **Files:** `lib/arcade/{musicBed,voBank,audioContext,sfx}.ts` · per-game `music.ts`/`vo.ts` · `scripts/gen_*_vo.py`.
+
 ## 🧩 Cross-cutting initiative — THE GAME-UI LAYER (active, jin leads, 2026-06-18)
 > **Killing the "browser feel"** — games play like games but the menus/chrome read like a website.
 > Full research + recipe: **`/GAME_UI_LAYER.md`**. Reusable opt-in kit: **`src/app/gameui.css`**
@@ -392,7 +407,7 @@ the Arcade frame.
   game route. Verified: live 200 · back-room/coming-soon 307→/arcade · dev tooling 403 · /owner 401.
 
 ### Mana'nana — 🟢 live · match-3, blooming specials → `/manana`
-*Last touched: 2026-07-06 — home + Story roadmap (board-game trail)*
+*Last touched: 2026-07-07 — audio layer extracted to shared libs (MusicBed/VoBank/one AudioContext); 07-06 home + Story roadmap (board-game trail)*
 **Left off:** Cloud-puff obstacle live (CSS stub, Shimmer-canon palette), detonation FX
   (row/col beams, star flash, prism ring, capped motes), and iOS sound+scroll fixes
   **confirmed on a real iPhone**. Orbs are canon elements (SVG rune-marks: Mana/Storm/
@@ -504,7 +519,7 @@ the Arcade frame.
 **Files:** `ward/lib/ward.ts` (41 tests) · `lib/sfx.ts` · `page.tsx`
 
 ### Updraft (#5, was "Laz") — 🟢 live · one-tap flight (Flappy) → `/updraft`
-*Last touched: 2026-06-22 — gx-* UI pass (squared chrome + HUD)*
+*Last touched: 2026-07-07 — music bed + George VO commentator (shared audio layer); 06-22 gx-* UI pass*
 **Left off:** Shipped. Lazerin rides the Ather currents — tap to climb, thread the void
   gates, endless score-chase. Hybrid bg (faint FLUX nebula behind procedural parallax
   spires + starfield). Uses shared `useNoScroll`. The pick-up-die-retry palate cleanser.
@@ -704,7 +719,7 @@ the Arcade frame.
 **Files:** `driftling/lib/driftling.ts` (27 tests) · `driftling.test.ts` · `lib/sfx.ts` · `page.tsx` · `DESIGN.md`
 
 ### Squall (#12) — 🟢 live · defenseless bullet-hell → `/squall`
-*Last touched: 2026-07-03 — Daily + leaderboard wired (`39af949`); card art 07-01; shipped 06-26*
+*Last touched: 2026-07-07 — music bed + George VO commentator (shared audio layer); 07-03 Daily + leaderboard*
 **Left off:** Shipped live + public. Pure-evasion bullet-hell — **no shield, no shots**, brand-new
   "defenseless survival" mood. The void rains **5 telegraphed patterns** escalating with survival time
   (rain comb / side sweep / aimed fan / ring burst / rotating spiral), each fair (edge-entered or warned).
@@ -752,62 +767,47 @@ the Arcade frame.
   `pacmaze`** sim before the canon weld (`f9cdbe1` → Dewdrop `fdeb8bc`); `pacmaze/` dir is gone (renamed).
 **Files:** `dewdrop/lib/dewdrop.ts` (20 tests) · `page.tsx` · canon `athernyx/CANON/game/dewbear-maze.md`
 
-### Vault (#14) — 🟢 live · auto-runner, a mote crosses the greying → `/vault` *(render shipped, pending Alex feel-test)*
-*Last touched: 2026-06-29 (render shell shipped + registered live). Sim: 2026-06-28 (`7503b55`); canon ruled 2026-06-28.*
-**🆕 RENDER SHELL SHIPPED (2026-06-29):** `bound`→`vault` renamed (git-mv, history kept); `/vault` live +
-  public + registered (`games.ts`, tier live, glyph ↟). Greying skin per canon: surviving **coloured ground
-  islands** (lit living edge) over the **void's tears** (gaps), **grey void-spawn** foes (soulless dead-eyes),
-  **rooted-corruption** spike-thorns, **loose Ather-light** motes. The mote = cyan core + gold glow + a
-  **light-trail arc**; **unmaking burst** + `unmaking ×N` combo readout on stomps; collect spark; death
-  screen-shake; greying wash thickens with distance. One-button input: **tap / hold / space** = the vault
-  (variable jump via hold; keyboard auto-repeat guarded so a held key = one leap, not a buzz). gx-* chrome,
-  best-score, cause-aware death lines. Build clean, `/vault` 200. **Render = my hands; feel = Alex's.**
-  **🆕 STOMP → DOUBLE-JUMP (`3678e6c`, Alex's call):** unmaking a foe banks ONE air-jump — tap again
-  mid-air for a full second leap to keep the momentum and chain across enemies (no free double-jump; granted
-  only by a stomp, resets on landing). Distinct `djump` sfx + downward ather-kick FX. +2 sim tests (34 green);
-  oracle curve unchanged (the look-ahead bot doesn't use it → it's a pure skill-ceiling raise, not a difficulty shift).
-**Left off (sim, unchanged):** One-button auto-runner: mote moves
-  right on its own (faster with distance), only input is **JUMP** — and jump is **variable** (tap = short
-  hop, hold = float higher). The wedge vs Atherdash/Updraft (the board's two existing jump games): real
-  **platformer geometry** — (1) variable jump arc you *shape*, (2) **elevation** (ledges/platforms at
-  different heights, read-ahead + land), (3) **stomp + bounce-combo** (land on a foe from above → kill +
-  bounce; chain aerial stomps for a rising multiplier; side-contact = death). Coyote-time + jump-buffer for
-  fairness. Deterministic (mulberry32) → free Daily + oracle. **26 sim tests green; oracle clean** (300 seeds:
-  0% early deaths = fair start, median dist 2392, deaths mostly foe/spike = the new platformer skills are what
-  kill you, not cheap gaps).
-**🔒 CANON — RULED, no gap (Magii, 2026-06-28, `athernyx/CANON/game/vault.md`):** name **Vault** LOCKED by
-  Alex; registered in `CANON/world/arcade.md`. **It's Updraft's sibling** — Updraft = *the climb*, Vault =
-  *the crossing*. The frame = **the greying** (`core.md`): the land itself is going grey, eaten into gaps;
-  a **mote of Ather-light** runs the failing ground and **forward motion is the defiance** ("you cannot hold
-  the light still, you can only carry it"). The re-skin is **label + art only, zero logic** (the sim's
-  generic entities map 1:1):
-  | sim entity | Vault skin (locked) |
-  |---|---|
-  | runner | **a mote of Ather-light** (cyan/gold glow + light-trail). ⚠ COHERENCE GUARD: light, NOT a creature — never name it / give it a species / a `-nyx`. |
-  | ground / ledges | **surviving islands of coloured ground**; height = the broken remains of the land |
-  | gap | **the void's tear** — fall = "the grey takes the light" (death) |
-  | stomp-foe | **grey void-spawn** — soulless/colourless; stomp = **"unmaking"** (Ward register, defiance not cruelty; NOT a souled spirit) |
-  | spike | **rooted grey corruption / blight-thorn** — can't be unmade, must be leapt |
-  | mote | **loose Ather-light** gathered on the run (score) |
-  Ramp = the Dying gaining ground; score = the **crossing** (distance) + motes + the **unmaking**-combo.
-**Next (render shipped — now feel + polish):**
-  1. **⚑ Alex device cold-play (his hands — headless can't dispatch the vault tap):** does the **jump arc**
-     feel right (tap=short / hold=float)? Is the **stomp-from-above** window fair, and does the bounce-combo
-     read? Coyote-time + jump-buffer fair? Run speed + gap spacing on the ramp? Knobs = consts atop
-     `lib/vault.ts` (`JUMP_V0`, `GRAV_RISE_HOLD/FREE`, `GRAV_FALL`, `CUT_V`, `STOMP_BOUNCE`, `BASE_SPEED`,
-     `SPEED_RANGE`, `RAMP_DIST`, gap/hazard density in `generate`/`populate`).
-  2. ✅ **Card art DONE 2026-07-01** (`4499727`) — `/vault/card.webp`: formless spark-orb of light crossing a void-tear between broken islands, blight-thorns + greying (3 FLUX passes to clear the coherence guard — no creature/figure). Title-screen backdrop still optional.
-  3. **Mobile pass** at 390px (tap/hold reads on a phone; HUD + overlays).
-  4. ✅ **Daily + server leaderboard — SHIPPED 2026-06-29** (`6f51800`): endless/daily toggle, deterministic
-     daily seed, daily-best + Wordle-share, DailyLeaderboard on game-over; added to the server allowlist.
-     Vault is now at full lineup par (7th score-chase game on the Daily loop).
-**Parked:** —
-**Decisions:** **the final new cabinet** — closes the "two more then stop" strategy (Dewdrop + Vault). MUST
-  earn its slot with platformer geometry, not be a third rhythm-tapper (the explicit pre-build gate; the 3
-  verbs above are the answer). Sim-first discipline held (oracle gut-check before any render — the
-  Seedfall/Driftling lesson). **Naming law** (per `arcade.md`): plain word names an *act/thing* (Vault = the
-  leap/crossing), `-nyx` would star a spirit-kind — the runner is light, so a plain word is correct.
-**Files:** `bound/lib/bound.ts`→rename `vault/` (322 ln) · `lib/bound.test.ts` (26 tests) · `lib/bound.oracle.ts` · `DESIGN.md` · canon `athernyx/CANON/game/vault.md`
+### Vault (#14) — 🟢 live · auto-runner, a mote crosses the greying → `/vault` *(BIG feature arc 07-07; device-tuning)*
+*Last touched: 2026-07-07 — huge arc: Story mode → audio → fuel/hearts mechanic → areas×levels ladder. Render shell 06-29; sim 06-28; canon ruled 06-28 + 07-07.*
+**★ 2026-07-07 ARC (one long session, all pushed) — Vault went from a bare score-runner to the most-developed cabinet:**
+  1. **STORY MODE (the crossing, canon-ruled).** Magii ruled the crossing is **eternal — no arrival** (`game/vault.md`,
+     07-07): Story = the myth told as a **descent** into the greying, seamless handoff to Endless. Built the sim to be
+     movement-aware (per-run difficulty band + hazard toggles + goal), Endless byte-identical. 6 movement names blessed
+     by Magii (First Light · The Tears Widen · The Grey Wakes · The Rooted Grey · The Dying Gains Ground · The Grey Heart).
+  2. **AUDIO (see the cross-cutting AUDIO LAYER section).** Own music bed (`vault/music.ts`) + cozy George VO commentator
+     (`vault/vo.ts`, 15 clips) on the shared MusicBed + VoBank; ducking, mute-synced, one shared AudioContext.
+  3. **★ MOTES FUEL THE LIGHT + HEARTS (Alex's design, forgiving/drowning model).** The mote now carries **HEARTS**
+     (resilience) + **FUEL** (its lit-ness). **Void/gaps stay lethal** (platforming teeth); **foes/spikes cost a heart**
+     (+1s invuln), not instant death; **fuel drains as you carry**, **motes refill it** (score AND fuel); run dry → the
+     greying pulses, every 3rd tic takes a heart; 0 hearts = the light guts to grey. The **light's size+brightness = the
+     fuel gauge** (bright/big fed → small/dim/grey starving), sprites +35%. HUD = hearts pips + fuel bar. 37/37 physics tests.
+  4. **★ AREAS × LEVELS LADDER (Alex's direction — the current shape).** Story is now a **level ladder**: each **AREA**
+     (=a look + hazard set + difficulty band; the 6 movements) holds **levels** you beat linearly to advance. **10/area now,
+     framework scales to ~100** (bump `LEVELS_PER_AREA`). Levels are **procedural** — `levelCfg(a,i)`+`levelSeed(a,i)`, a
+     short **fixed-seed** run whose difficulty steps floor→ceil per area, LENGTH grows across the ladder (~35s early →
+     ~83s late). **Two-tier trail**: areas descent → tap an area → its 10-level grid → play (verified live at mobile width).
+     Per-area progress persisted (`vault.progress.v2`), linear unlock.
+  5. **BUGS FIXED same session:** platform **fall-through** (swept collision — only bit on real-device frame drops, the
+     60fps oracle never saw it); VO **carrying-spam** (fired every ~1.3s → ~7-8s); end-of-match + trail **mobile layout**
+     (result screens + trail lifted OUT of the landscape letterbox into full-height panels — buttons were clipped/hidden
+     under the controller deck).
+**Left off (2026-07-07):** the areas×levels ladder is live and playable end-to-end; Alex device-tested the fuel/hearts
+  loop ("pretty good") + the two-tier trail. Difficulty retuned for the long format (fuel drain 5.5→4.0, sparser hazMul,
+  length cap ~83s). `vault.levels.oracle.ts`: gating + fair-start + within-area + descent all green; a1/a2 ~99%, a3
+  75→41%, a4 35→9% — **deep foe areas (a5/a6) read near-0 for the hop-only bot (can't stomp) = explicitly device-tuned**.
+**Next (ranked — all feel/content, Alex's hands):**
+  1. **Device-tune the ladder:** level lengths across the 30-45→90s ramp; soften the deep areas (a5/a6). Knobs in
+     `lib/vault.ts`: `AREAS[]` (diffFloor/Ceil/hazMul), `levelCfg` targetSec, `MAX_HEARTS`/`FUEL_DRAIN`/`MOTE_FUEL`/`GRAY_TIC`, sprite sizes.
+  2. **Per-area LOOKS** — areas currently share the render; each `AREAS[a].accent` is set but rich per-area theming
+     (palette/backdrop per stretch) is future work (Alex: don't go crazy on maps until enemies/obstacles improve).
+  3. **Enemies/obstacles glow-up** — Alex flagged these "need a lot of work"; the level framework is built to absorb
+     more/better hazards without touching structure.
+**Parked (Alex, later):** ⭐ **end-of-run STARS** for the flame's remaining intensity (a mastery layer riding on fuel-at-win).
+**Decisions:** crossing is **eternal**, told as a descent (canon). **Void lethal / grey forgiving** risk split (leaps keep
+  teeth, hearts absorb the grey). Levels **procedural + fixed-seed** (learnable, and 100/area is a number not 100 maps).
+  Areas = looks; the whole thing stays sim-first + oracle-guarded.
+**Files:** `lib/vault.ts` (sim + AREAS/levels + fuel/hearts + progress) · `lib/vault.test.ts` (37) · `lib/vault.levels.oracle.ts` ·
+  `Trail.tsx` (two-tier) · `page.tsx` · `music.ts` · `vo.ts` · `scripts/gen_vault_vo.py` · canon `athernyx/CANON/game/vault.md`
 
 ### Anima — 🔬 tech demo · procedural character, ZERO art files → `/anima`
 *Last touched: 2026-06-21*
