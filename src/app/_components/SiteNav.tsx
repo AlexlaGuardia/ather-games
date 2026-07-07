@@ -13,7 +13,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { liveGames, gameById, type GameEntry } from "@/lib/games";
-import { getFavs } from "@/lib/favorites";
+import { getFavs, toggleFav } from "@/lib/favorites";
 import { getRecents, pushRecent } from "@/lib/recents";
 
 const GOLD = "#d4a843"; // arcade "furniture" colour — the nav is furniture, fixed across games
@@ -48,6 +48,7 @@ export default function SiteNav({
   // re-read local state each open so recents/faves reflect the latest play
   const [recents, setRecents] = useState<GameEntry[]>([]);
   const [favs, setFavs] = useState<GameEntry[]>([]);
+  const [isFav, setIsFav] = useState(false);
 
   const roomHref = wall === undefined ? "/room" : `/room?wall=${wall}`;
 
@@ -61,7 +62,12 @@ export default function SiteNav({
       ids.map(gameById).filter((g): g is GameEntry => !!g && g.id !== gameId);
     setRecents(resolve(getRecents()).slice(0, 6));
     setFavs(resolve(getFavs()));
+    setIsFav(!!gameId && getFavs().includes(gameId));
   }, [gameId]);
+
+  // pin/unpin the game you're currently on — Favorites was only reachable from
+  // the All Games catalog before; now it's one tap from inside any game.
+  const toggleFavHere = () => { if (gameId) { toggleFav(gameId); refresh(); } };
 
   const openMenu = () => { refresh(); setOpen(true); };
   const close = () => setOpen(false);
@@ -120,18 +126,34 @@ export default function SiteNav({
             style={{ borderColor: `${GOLD}33`, animation: "sitenav-slide .22s cubic-bezier(.2,.7,.3,1)" }}
           >
             <div className="flex flex-col gap-5 px-5 py-6">
-              {/* breadcrumb — orientation folded into the drawer (the hybrid) */}
-              <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-[10px] uppercase tracking-[0.18em]">
-                {trail.map((c, i) => (
-                  <span key={i} className="flex items-center gap-1.5">
-                    {i > 0 && <span aria-hidden style={{ color: `${GOLD}66` }}>▸</span>}
-                    {c.href && i < trail.length - 1 ? (
-                      <Link href={c.href} onClick={close} className="transition-colors" style={{ color: `${GOLD}99` }}>{c.label}</Link>
-                    ) : (
-                      <span style={{ color: i === trail.length - 1 ? "#e8e8f0" : `${GOLD}99` }}>{c.label}</span>
-                    )}
-                  </span>
-                ))}
+              {/* breadcrumb — orientation folded into the drawer (the hybrid) —
+                  + a star to pin the current game to Favorites from anywhere */}
+              <div className="flex items-start justify-between gap-2">
+                <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-[10px] uppercase tracking-[0.18em]">
+                  {trail.map((c, i) => (
+                    <span key={i} className="flex items-center gap-1.5">
+                      {i > 0 && <span aria-hidden style={{ color: `${GOLD}66` }}>▸</span>}
+                      {c.href && i < trail.length - 1 ? (
+                        <Link href={c.href} onClick={close} className="transition-colors" style={{ color: `${GOLD}99` }}>{c.label}</Link>
+                      ) : (
+                        <span style={{ color: i === trail.length - 1 ? "#e8e8f0" : `${GOLD}99` }}>{c.label}</span>
+                      )}
+                    </span>
+                  ))}
+                </div>
+                {here && (
+                  <button
+                    type="button"
+                    onClick={toggleFavHere}
+                    aria-pressed={isFav}
+                    aria-label={isFav ? `Unpin ${here.title} from favorites` : `Pin ${here.title} to favorites`}
+                    title={isFav ? "Pinned to favorites" : "Pin to favorites"}
+                    className="-mt-0.5 shrink-0 text-base leading-none transition-transform active:scale-90"
+                    style={{ color: isFav ? GOLD : `${GOLD}55` }}
+                  >
+                    {isFav ? "★" : "☆"}
+                  </button>
+                )}
               </div>
 
               {/* HERO: jump to a game */}
