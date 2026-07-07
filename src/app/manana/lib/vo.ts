@@ -98,6 +98,8 @@ class VoBank {
 
   // call when moves climb back up (milestone / new game) so low-moves can re-arm
   reset() { this.cooldownUntil = 0; this.playingPri = 0 }
+  // cut any in-flight line when the game unmounts (doesn't touch muted state)
+  stop() { if (this.current) { try { this.current.pause() } catch { /* fine */ } } this.playingPri = 0; this.cooldownUntil = 0 }
 }
 
 export const vo = new VoBank()

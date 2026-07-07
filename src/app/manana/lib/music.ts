@@ -56,6 +56,19 @@ class Music {
     })
   }
 
+  // halt the loop + park the audio thread when the game unmounts, so the bed
+  // doesn't keep playing after you navigate away. Keeps the decoded buffer +
+  // context so returning to the game restarts instantly (no re-decode).
+  stop() {
+    if (this.source) {
+      try { this.source.stop() } catch { /* already stopped */ }
+      try { this.source.disconnect() } catch { /* fine */ }
+      this.source = null
+    }
+    this.started = false
+    if (this.ctx && this.ctx.state === 'running') void this.ctx.suspend()
+  }
+
   setMuted(m: boolean) {
     this.muted = m
     if (typeof window !== 'undefined') localStorage.setItem('manana.vo.muted', m ? '1' : '0')

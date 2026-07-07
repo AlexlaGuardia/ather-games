@@ -205,6 +205,9 @@ export default function MananaPage() {
     vo.setOnSpeak(() => music.duck()) // a spoken line dips the music, then it swells back
     apply(seedPuffs(reshuffle(rngRef.current), rngRef.current, PUFF_SEED))
     setMounted(true)
+    // tear the audio down when you leave the game — the music bed + any VO line
+    // shouldn't follow you to the Room or another game (each game owns its own sound).
+    return () => { music.stop(); vo.stop() }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
