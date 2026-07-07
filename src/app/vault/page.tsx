@@ -270,6 +270,9 @@ export default function VaultPage() {
   const restart = useCallback(() => { sfx.ensure(); boot(activeCfgRef.current) }, [boot]) // re-run the same crossing/movement
   const toggleMute = () => { sfx.ensure(); const m = !sfx.isMuted(); sfx.setMuted(m); music.setMuted(m); vo.setMuted(m); setMuted(m) }
 
+  // the Story trail is a MENU, not gameplay — render it full-height (not jammed in the landscape
+  // canvas letterbox), and hide the score row + controller while it's up.
+  const isStoryMap = mode === 'story' && storyView === 'map'
 
   return (
     <ArcadeCabinet gameId="vault" accent={ACCENT} wall={1} maxWidth={cabinetMaxW(VW, VH)}>
@@ -281,6 +284,24 @@ export default function VaultPage() {
         </div>
         <button onClick={toggleMute} className="text-[10px] tracking-[0.2em] uppercase text-[#37e6ff]/50 hover:text-[#37e6ff] font-mono w-10 text-right">{muted ? 'son' : 'snd'}</button>
       </div>
+
+      {/* mode select — one clean row, never overlapping the menus (only when not mid-run) */}
+      {phase !== 'playing' && (
+        <div className="w-full mb-2 flex items-center justify-center gap-1.5 text-[10px] font-mono tracking-wider uppercase" style={{ maxWidth: screenMaxW(VW, VH) }}>
+          {(['story', 'endless', 'daily'] as const).map((m) => (
+            <button key={m} onClick={() => pickMode(m)}
+              className={`px-3 py-1.5 rounded-sm border transition-colors ${mode === m ? 'text-[#070a12] bg-[#7fe9ff] border-[#7fe9ff]' : 'text-[#7fe9ff]/55 border-[#7fe9ff]/25 hover:text-[#7fe9ff]'}`}>
+              {m === 'daily' ? `daily #${dailyNumber()}` : m}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {isStoryMap ? (
+        <div className="w-full" style={{ maxWidth: screenMaxW(VW, VH) }}>
+          <Trail movements={MOVEMENTS} done={storyDone} onPlay={playMovement} onEndless={carryOnEndless} />
+        </div>
+      ) : (<>
 
       {/* score + motes */}
       <div className="w-full mb-2 flex items-center gap-3 font-mono" style={{ maxWidth: screenMaxW(VW, VH) }}>
@@ -295,19 +316,7 @@ export default function VaultPage() {
           className="w-full h-full block rounded-md select-none pointer-events-none"
         />
 
-        {phase === 'ready' && (mode === 'story' && storyView === 'map' ? (
-          <div className="absolute inset-0 rounded-md">
-            <Trail movements={MOVEMENTS} done={storyDone} onPlay={playMovement} onEndless={carryOnEndless} />
-            <div className="pointer-events-auto absolute top-2 right-2 z-10 flex gap-1 text-[9px] font-mono tracking-wider uppercase">
-              {(['story', 'endless', 'daily'] as const).map((m) => (
-                <button key={m} onClick={() => pickMode(m)}
-                  className={`px-2 py-1 rounded-sm border transition-colors ${mode === m ? 'text-[#070a12] bg-[#7fe9ff] border-[#7fe9ff]' : 'text-[#7fe9ff]/55 border-[#7fe9ff]/25 hover:text-[#7fe9ff]'}`}>
-                  {m === 'daily' ? `daily #${dailyNumber()}` : m}
-                </button>
-              ))}
-            </div>
-          </div>
-        ) : (
+        {phase === 'ready' && (
           <div className="pointer-events-none absolute inset-0 isolate overflow-hidden flex flex-col items-center justify-center gap-3 rounded-md text-center px-6">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src="/vault/card.webp" alt="" aria-hidden="true" className="absolute inset-0 -z-10 h-full w-full object-cover opacity-[0.55]" />
@@ -327,19 +336,11 @@ export default function VaultPage() {
                 </p>
               </>
             )}
-            <div className="pointer-events-auto flex gap-1.5 text-[10px] font-mono tracking-wider uppercase">
-              {(['story', 'endless', 'daily'] as const).map((m) => (
-                <button key={m} onClick={() => pickMode(m)}
-                  className={`px-3 py-1.5 rounded-sm border transition-colors ${mode === m ? 'text-[#070a12] bg-[#7fe9ff] border-[#7fe9ff]' : 'text-[#7fe9ff]/55 border-[#7fe9ff]/25 hover:text-[#7fe9ff]'}`}>
-                  {m === 'daily' ? `daily #${dailyNumber()}` : m}
-                </button>
-              ))}
-            </div>
-            {mode === 'daily' && <div className="text-[9px] font-mono text-[#7fd8e6]/45 tracking-wider -mt-1">same crossing for everyone today</div>}
+            {mode === 'daily' && <div className="text-[9px] font-mono text-[#7fd8e6]/45 tracking-wider">same crossing for everyone today</div>}
             <div className="gx-label text-[11px] text-[#7fd8e6]/70 mt-1">press <span style={{ color: ACCENT }}>↟ Vault</span> below to begin</div>
             {best > 0 && mode !== 'story' && <div className="gx-label text-[10px] font-mono text-[#7fd8e6]/50 tracking-wider mt-1">best <span className="text-[#e8feff] tabular-nums">{best}</span></div>}
           </div>
-        ))}
+        )}
 
         {phase === 'dead' && (
           <div className="absolute inset-0 overflow-y-auto bg-[#070a12]/75 rounded-md">
@@ -419,6 +420,7 @@ export default function VaultPage() {
       <div className="w-full flex items-center justify-center mt-3" style={{ maxWidth: screenMaxW(VW, VH) }}>
         <p className="text-[10px] text-[#7fd8e6]/35 font-mono tracking-wider">stomp grey from above → tap again to double-jump · hop the thorns</p>
       </div>
+      </>)}
     </ArcadeCabinet>
   )
 }
