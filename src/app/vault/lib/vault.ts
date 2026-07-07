@@ -94,12 +94,12 @@ export const ENDLESS_CFG: MovementCfg = {
 // harder than any teller says). Bands are monotonic; foe-bearing movements sit a touch gentler because the
 // unmaking (stomp/chain) is a learned skill. Tuned against the movements oracle + Alex's device feel.
 export const MOVEMENTS: MovementCfg[] = [
-  { id: 'm1', name: 'First Light',      blurb: 'the light, new — leap the first tears',        goalDist: 2200, diffBase: 0.00, diffSpan: 0.15, gaps: true,  foes: false, spikes: false, hazMul: 0,    runway: 700 },
-  { id: 'm2', name: 'The Tears Widen',  blurb: 'the ground breaks; read it ahead',            goalDist: 2600, diffBase: 0.12, diffSpan: 0.16, gaps: true,  foes: false, spikes: false, hazMul: 0,    runway: 420 },
-  { id: 'm3', name: 'Void-spawn',       blurb: 'grey things rise — unmake them, chain it',    goalDist: 2600, diffBase: 0.16, diffSpan: 0.16, gaps: true,  foes: true,  spikes: false, hazMul: 0.45, runway: 420 },
-  { id: 'm4', name: 'Rooted Grey',      blurb: 'some grey has taken root — that, you leap',    goalDist: 2800, diffBase: 0.24, diffSpan: 0.16, gaps: true,  foes: true,  spikes: true,  hazMul: 0.6,  runway: 380 },
-  { id: 'm5', name: 'The Dying Gains',  blurb: 'faster, more broken — the grey presses',       goalDist: 3000, diffBase: 0.32, diffSpan: 0.18, gaps: true,  foes: true,  spikes: true,  hazMul: 0.8,  runway: 340 },
-  { id: 'm6', name: 'The Heart',        blurb: 'the deepest the tale is told; carry on',       goalDist: 3200, diffBase: 0.40, diffSpan: 0.20, gaps: true,  foes: true,  spikes: true,  hazMul: 1.0,  runway: 320 },
+  { id: 'm1', name: 'First Light',           blurb: 'the light, new — leap the first tears',      goalDist: 2200, diffBase: 0.00, diffSpan: 0.15, gaps: true,  foes: false, spikes: false, hazMul: 0,    runway: 700 },
+  { id: 'm2', name: 'The Tears Widen',       blurb: 'the ground breaks; read it ahead',          goalDist: 2600, diffBase: 0.12, diffSpan: 0.16, gaps: true,  foes: false, spikes: false, hazMul: 0,    runway: 420 },
+  { id: 'm3', name: 'The Grey Wakes',        blurb: 'the grey rises — unmake it, chain it',       goalDist: 2600, diffBase: 0.16, diffSpan: 0.16, gaps: true,  foes: true,  spikes: false, hazMul: 0.45, runway: 420 },
+  { id: 'm4', name: 'The Rooted Grey',       blurb: 'grey that has taken root — that, you leap',  goalDist: 2800, diffBase: 0.24, diffSpan: 0.16, gaps: true,  foes: true,  spikes: true,  hazMul: 0.6,  runway: 380 },
+  { id: 'm5', name: 'The Dying Gains Ground', blurb: 'faster, more broken — the Dying presses',    goalDist: 3000, diffBase: 0.32, diffSpan: 0.18, gaps: true,  foes: true,  spikes: true,  hazMul: 0.8,  runway: 340 },
+  { id: 'm6', name: 'The Grey Heart',        blurb: 'the deepest the tale is told; carry on',     goalDist: 3200, diffBase: 0.40, diffSpan: 0.20, gaps: true,  foes: true,  spikes: true,  hazMul: 1.0,  runway: 320 },
 ]
 export function movementById(id: string): MovementCfg | undefined { return MOVEMENTS.find(m => m.id === id) }
 
