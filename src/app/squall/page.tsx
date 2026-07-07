@@ -25,6 +25,7 @@ import {
   type Warning,
 } from './lib/squall'
 import { sfx } from './lib/sfx'
+import { music } from './music'
 import ArcadeControls from '../_components/ArcadeControls'
 
 const BG_TOP = '#05030d'
@@ -79,8 +80,10 @@ export default function SquallPage() {
     seedRef.current = Date.now() >>> 0
     boot()
     setMuted(sfx.isMuted())
+    music.setMuted(sfx.isMuted()); void music.ensure() // decode the bed ahead of the first steer
     setBest(loadBest())
     setDailyBest(loadDailyBest('squall'))
+    return () => music.stop() // tear the bed down on leave — it never follows you out
   }, [boot])
 
   const pickMode = (m: 'endless' | 'daily') => {
@@ -170,12 +173,12 @@ export default function SquallPage() {
     sfx.ensure()
     deckVec.current = { x, y, active: true }
     const w = worldRef.current
-    if (w && w.state === 'ready') { setHeading(w, x, y); setPhase('playing') }
+    if (w && w.state === 'ready') { setHeading(w, x, y); setPhase('playing'); music.start() }
   }, [])
   const onStickEnd = useCallback(() => { deckVec.current = { x: 0, y: 0, active: false } }, [])
 
   const restart = useCallback(() => { sfx.ensure(); boot() }, [boot])
-  const toggleMute = () => { sfx.ensure(); const m = !sfx.isMuted(); sfx.setMuted(m); setMuted(m) }
+  const toggleMute = () => { sfx.ensure(); const m = !sfx.isMuted(); sfx.setMuted(m); music.setMuted(m); setMuted(m) }
 
   return (
     <ArcadeCabinet gameId="squall" accent={ACCENT} wall={1} maxWidth={cabinetMaxW(VW, VH)}>

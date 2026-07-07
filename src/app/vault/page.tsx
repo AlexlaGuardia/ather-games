@@ -31,6 +31,7 @@ import {
   type World,
 } from './lib/vault'
 import { sfx } from './lib/sfx'
+import { music } from './music'
 import { dailySeed, dailyNumber, loadDailyBest, saveDailyBest, dailyShare, copyShare } from '@/lib/arcade/daily'
 import DailyLeaderboard from '../_components/DailyLeaderboard'
 import ArcadeControls from '../_components/ArcadeControls'
@@ -95,8 +96,10 @@ export default function VaultPage() {
     seedRef.current = Date.now() >>> 0
     boot()
     setMuted(sfx.isMuted())
+    music.setMuted(sfx.isMuted()); void music.ensure() // decode the bed ahead of the first press
     setBest(loadBest())
     setDailyBest(loadDailyBest('vault'))
+    return () => music.stop() // tear the bed down on leave — it never follows you out
   }, [boot])
 
   const pickMode = (m: 'endless' | 'daily') => {
@@ -117,7 +120,7 @@ export default function VaultPage() {
     sfx.ensure()
     const w = worldRef.current
     if (!w || w.state === 'dead') return
-    if (w.state === 'ready') setPhase('playing')
+    if (w.state === 'ready') { setPhase('playing'); music.start() }
     pressJump(w)
   }, [])
   const doRelease = useCallback(() => {
@@ -216,7 +219,7 @@ export default function VaultPage() {
   }
 
   const restart = useCallback(() => { sfx.ensure(); boot() }, [boot])
-  const toggleMute = () => { sfx.ensure(); const m = !sfx.isMuted(); sfx.setMuted(m); setMuted(m) }
+  const toggleMute = () => { sfx.ensure(); const m = !sfx.isMuted(); sfx.setMuted(m); music.setMuted(m); setMuted(m) }
 
 
   return (

@@ -15,6 +15,10 @@ public/audio
 public/magii
 public/manana
 
+# per-game audio beds + VO — server-side only, drop the files, never commit
+public/*/music.mp3
+public/*/vo/
+
 # arcade leaderboard data (runtime-written)
 /data/
 
