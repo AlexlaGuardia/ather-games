@@ -10,6 +10,8 @@
 
 "use client";
 
+import { getSharedAudioContext, unlockAudio } from "./audioContext";
+
 export interface MusicBedOptions {
   /** public path to the looping track, e.g. "/squall/music.mp3" */
   src: string;
@@ -57,22 +59,21 @@ export class MusicBed {
   // create the context + decode the track. Safe pre-gesture (decode works suspended).
   ensure(): Promise<void> {
     if (typeof window === "undefined") return Promise.resolve();
-    if (this.buffer && this.ctx) return Promise.resolve();
-    if (this.loading) return this.loading;
-    const AC = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
-    try {
-      this.ctx = new AC();
-    } catch {
-      // hardware AudioContext cap hit (too many live contexts) — bail; music is garnish
-      this.ctx = null;
-      return Promise.resolve();
+    // the one shared arcade context (see lib/arcade/audioContext) — no per-bed
+    // context, so beds never contribute to the browser's context cap.
+    const ctx = getSharedAudioContext();
+    if (!ctx) return Promise.resolve();
+    this.ctx = ctx;
+    if (!this.gain) {
+      this.gain = ctx.createGain();
+      this.gain.gain.value = this.muted ? 0 : this.baseVol;
+      this.gain.connect(ctx.destination);
     }
-    this.gain = this.ctx.createGain();
-    this.gain.gain.value = this.muted ? 0 : this.baseVol;
-    this.gain.connect(this.ctx.destination);
+    if (this.buffer) return Promise.resolve();
+    if (this.loading) return this.loading;
     this.loading = fetch(this.src)
       .then((r) => r.arrayBuffer())
-      .then((buf) => this.ctx!.decodeAudioData(buf))
+      .then((buf) => ctx.decodeAudioData(buf))
       .then((decoded) => { this.buffer = decoded; })
       .catch(() => { /* music is garnish — never block play (also swallows a missing file) */ });
     return this.loading;
@@ -81,9 +82,9 @@ export class MusicBed {
   // begin the loop. Needs a user gesture to resume the context; idempotent.
   start() {
     if (typeof window === "undefined") return;
+    unlockAudio(); // resume the shared context inside this gesture
     void this.ensure().then(() => {
       if (!this.ctx || !this.buffer || !this.gain) return;
-      if (this.ctx.state === "suspended") void this.ctx.resume();
       if (this.started) return;
       const src = this.ctx.createBufferSource();
       src.buffer = this.buffer;
@@ -95,22 +96,15 @@ export class MusicBed {
     });
   }
 
-  // halt the loop + fully CLOSE the audio context when the game unmounts. Close
-  // (not just suspend) matters: browsers cap concurrent AudioContexts (~6, fewer
-  // on mobile), and suspended ones still count — bouncing between games would
-  // stack them up until a later game's `new AudioContext()` silently fails. So
-  // each bed frees its slot on leave and rebuilds on return (fetch is cached).
+  // halt the loop when the game unmounts, so the bed doesn't follow you out. The
+  // shared context stays alive (other games/sfx use it) — we just stop this bed's
+  // source and keep the decoded buffer + gain, so returning restarts instantly.
   stop() {
     if (this.source) {
       try { this.source.stop(); } catch { /* already stopped */ }
       try { this.source.disconnect(); } catch { /* fine */ }
       this.source = null;
     }
-    if (this.ctx) { try { void this.ctx.close(); } catch { /* already closed */ } }
-    this.ctx = null;
-    this.gain = null;
-    this.buffer = null;
-    this.loading = null;
     this.started = false;
   }
 

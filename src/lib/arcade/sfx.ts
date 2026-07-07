@@ -3,6 +3,8 @@
 // lazy audio-unlock, a master gain, persisted mute + volume, and per-event
 // throttling for free. Extracted from Nolmir's first SFX pass (2026-06-11).
 
+import { getSharedAudioContext, unlockAudio } from './audioContext'
+
 export interface ToneOpts {
   type?: OscillatorType
   dur?: number
@@ -139,29 +141,20 @@ export class SfxManager<Id extends string> {
   // call from a user gesture (a click) so the browser lets audio start
   ensure() {
     if (typeof window === 'undefined') return
-    if (this.ac) {
-      if (this.ac.state === 'suspended') this.ac.resume()
-      return
+    // one shared AudioContext for the whole arcade (see lib/arcade/audioContext) —
+    // this manager just hangs its own master gain off it. No per-game context, so
+    // visiting many games never exhausts the browser's context cap.
+    const ac = getSharedAudioContext()
+    if (!ac) return
+    this.ac = ac
+    if (!this.master) {
+      this.master = ac.createGain()
+      this.master.gain.value = this.muted ? 0 : this.vol
+      this.master.connect(ac.destination)
+      this.eng = makeEngine(ac, this.master)
     }
-    const AC = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext
-    if (!AC) return
-    this.ac = new AC()
-    this.master = this.ac.createGain()
-    this.master.gain.value = this.muted ? 0 : this.vol
-    this.master.connect(this.ac.destination)
-    this.eng = makeEngine(this.ac, this.master)
-    // iOS: a freshly created context starts 'suspended' and only wakes if we
-    // resume + play a silent blip inside this user gesture. Without this there
-    // is no sound at all on iPhone.
-    if (this.ac.state === 'suspended') this.ac.resume()
-    try {
-      const blip = this.ac.createBufferSource()
-      blip.buffer = this.ac.createBuffer(1, 1, 22050)
-      blip.connect(this.ac.destination)
-      blip.start(0)
-    } catch {
-      /* unlock is best-effort */
-    }
+    // resume + iOS silent-blip unlock, inside this gesture (idempotent)
+    unlockAudio()
   }
 
   play(id: Id) {
