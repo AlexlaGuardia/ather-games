@@ -130,8 +130,19 @@ the Arcade frame.
 > **Phases:** ① core on ONE game — `lib/recents.ts` + `SiteNav.tsx`, wired into **Mana'nana** first (it has a
 > Home to link = best test), verify the whole drawer live. ② roll out via ArcadeCabinet + standalones,
 > retire the old two. ③ juice (drawer slide, recents chips, surprise-me feel) + Alex phone pass.
-> **Left off:** Phase 1 IN PROGRESS (this session). **Files:** `src/lib/recents.ts` (new),
-> `src/app/_components/SiteNav.tsx` (new), `src/app/manana/page.tsx`, later `_components/ArcadeCabinet.tsx`.
+> **Left off (2026-07-07 cont., after a laptop crash mid-build — recovered):** Phase 1 was written but
+> uncommitted when the laptop died; recovered clean (built exit 0, no dead imports) + committed `8f855d3`.
+> **Phase 2 SHIPPED `a80fa5e`:** ArcadeCabinet renders `<SiteNav gameId wall>` (one edit → all 11 cabinet
+> games); `arcade/all` dropped RoomReturn+ArcadeHeaderBack for the drawer; Nolmir swapped. All build clean,
+> routes 200, pushed.
+> **▶ HELD for Alex's eye (deliberately NOT migrated blind):** `shimmer` play3d (top-left ☰ may collide with
+> the walker HUD — companion chip/hotbar/force-fight; + breadcrumb "Arcade" is wrong for the walker) and
+> `grimoire` (lore page, not an arcade game — wants a custom `crumbs` trail, not the default Room ▸ Arcade).
+> These two still mount RoomReturn; retire it + ArcadeHeaderBack once they migrate.
+> **▶ Phase 3 (next):** Alex device pass — tap the drawer on a phone (manana has the fullest wiring: recents/
+> favs/surprise/game-home/sound). Then juice (slide/chips/surprise-me feel) + decide shimmer/grimoire + strip
+> Nolmir's now-redundant inline "← arcade" header link. **Files:** `src/lib/recents.ts`, `_components/SiteNav.tsx`,
+> `_components/ArcadeCabinet.tsx`, `manana/page.tsx`, `arcade/all/page.tsx`, `nolmir/page.tsx`.
 
 ## 🧩 Cross-cutting initiative — THE GAME-UI LAYER (active, jin leads, 2026-06-18)
 > **Killing the "browser feel"** — games play like games but the menus/chrome read like a website.
