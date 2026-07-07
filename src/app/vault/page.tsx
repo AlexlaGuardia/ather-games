@@ -32,6 +32,7 @@ import {
 } from './lib/vault'
 import { sfx } from './lib/sfx'
 import { music } from './music'
+import { vo } from './vo'
 import { dailySeed, dailyNumber, loadDailyBest, saveDailyBest, dailyShare, copyShare } from '@/lib/arcade/daily'
 import DailyLeaderboard from '../_components/DailyLeaderboard'
 import ArcadeControls from '../_components/ArcadeControls'
@@ -56,6 +57,7 @@ export default function VaultPage() {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const worldRef = useRef<World | null>(null)
   const seedRef = useRef(1)
+  const voMileRef = useRef(0) // distance-milestone crossings spoken (reset each run)
   const downKeys = useRef<Set<string>>(new Set()) // tracks held jump keys (ignore auto-repeat)
   const trail = useRef<number[]>([]) // recent runner screen-y for the light-trail / jump arc
   const fx = useRef<Particle[]>([])
@@ -88,6 +90,7 @@ export default function VaultPage() {
     fx.current = []
     shake.current = 0
     comboFx.current = 0
+    voMileRef.current = 0; vo.reset() // fresh run: re-arm the commentator
     setScore(0); setDist(0); setMotes(0); setNewBest(false); setShared(false)
     setPhase('ready')
   }, [])
@@ -97,9 +100,10 @@ export default function VaultPage() {
     boot()
     setMuted(sfx.isMuted())
     music.setMuted(sfx.isMuted()); void music.ensure() // decode the bed ahead of the first press
+    vo.setMuted(sfx.isMuted()); void vo.ensure(); vo.setOnSpeak(() => music.duck()) // a spoken line dips the bed
     setBest(loadBest())
     setDailyBest(loadDailyBest('vault'))
-    return () => music.stop() // tear the bed down on leave — it never follows you out
+    return () => { music.stop(); vo.stop() } // tear audio down on leave — never follows you out
   }, [boot])
 
   const pickMode = (m: 'endless' | 'daily') => {
@@ -120,7 +124,7 @@ export default function VaultPage() {
     sfx.ensure()
     const w = worldRef.current
     if (!w || w.state === 'dead') return
-    if (w.state === 'ready') { setPhase('playing'); music.start() }
+    if (w.state === 'ready') { setPhase('playing'); music.start(); vo.play('start') }
     pressJump(w)
   }, [])
   const doRelease = useCallback(() => {
@@ -171,15 +175,19 @@ export default function VaultPage() {
           if (ev.type === 'jump') { if (ev.air) { sfx.play('djump'); burstAirJump(w) } else sfx.play('jump') }
           else if (ev.type === 'land') sfx.play('land')
           else if (ev.type === 'collect') { sfx.play('collect'); burstCollect(w) }
-          else if (ev.type === 'stomp') { sfx.play('stomp'); burstStomp(w); comboFx.current = 0.6 }
+          else if (ev.type === 'stomp') { sfx.play('stomp'); burstStomp(w); comboFx.current = 0.6; vo.play('stomp') }
           else if (ev.type === 'death') {
             sfx.play('death'); shake.current = 0.4
             setScore(w.score); setDist(Math.floor(w.dist / 10)); setMotes(w.motesGot); setCause(ev.cause)
-            const b = saveBest(w.score); setBest(b); setNewBest(w.score > 0 && w.score >= b)
+            const b = saveBest(w.score); const isBest = w.score > 0 && w.score >= b
+            setBest(b); setNewBest(isBest)
             if (modeRef.current === 'daily') setDailyBest(saveDailyBest('vault', w.score))
             setPhase('dead')
+            vo.play(isBest ? 'best' : 'over')
           }
         }
+        // carrying milestone — a warm beat every ~25 metres of distance
+        if (w.dist >= (voMileRef.current + 1) * 250) { voMileRef.current++; vo.play('carrying') }
         // light-trail: remember recent screen-y (the arc when jumping)
         trail.current.unshift(w.y)
         if (trail.current.length > 14) trail.current.pop()
@@ -219,7 +227,7 @@ export default function VaultPage() {
   }
 
   const restart = useCallback(() => { sfx.ensure(); boot() }, [boot])
-  const toggleMute = () => { sfx.ensure(); const m = !sfx.isMuted(); sfx.setMuted(m); music.setMuted(m); setMuted(m) }
+  const toggleMute = () => { sfx.ensure(); const m = !sfx.isMuted(); sfx.setMuted(m); music.setMuted(m); vo.setMuted(m); setMuted(m) }
 
 
   return (

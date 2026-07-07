@@ -29,6 +29,7 @@ import {
 } from './lib/updraft'
 import { sfx } from './lib/sfx'
 import { music } from './music'
+import { vo } from './vo'
 import { dailySeed, dailyNumber, loadDailyBest, saveDailyBest, dailyShare, copyShare } from '@/lib/arcade/daily'
 import DailyLeaderboard from '../_components/DailyLeaderboard'
 
@@ -57,6 +58,7 @@ export default function UpdraftPage() {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const worldRef = useRef<World | null>(null)
   const nebulaRef = useRef<HTMLImageElement | null>(null)
+  const voMileRef = useRef(0) // gate-pass milestone crossings spoken (reset each run)
   const seedRef = useRef(1)
 
   const [phase, setPhase] = useState<Phase>('ready')
@@ -75,6 +77,7 @@ export default function UpdraftPage() {
     if (modeRef.current === 'daily') seed = dailySeed()
     else { seedRef.current = (seedRef.current * 1103515245 + 12345) >>> 0; seed = seedRef.current ^ (Date.now() >>> 0) }
     worldRef.current = makeWorld(seed)
+    voMileRef.current = 0; vo.reset() // fresh run: re-arm the commentator
     setScore(0)
     setShared(false)
     setPhase('ready')
@@ -98,12 +101,13 @@ export default function UpdraftPage() {
     boot()
     setMuted(sfx.isMuted())
     music.setMuted(sfx.isMuted()); void music.ensure() // decode the bed ahead of the first flap
+    vo.setMuted(sfx.isMuted()); void vo.ensure(); vo.setOnSpeak(() => music.duck()) // a spoken line dips the bed
     setBest(loadHiScore())
     setDailyBest(loadDailyBest('updraft'))
     const img = new Image()
     img.src = '/updraft/nebula.webp'
     img.onload = () => { nebulaRef.current = img }
-    return () => music.stop() // tear the bed down on leave — it never follows you out
+    return () => { music.stop(); vo.stop() } // tear audio down on leave — never follows you out
   }, [boot])
 
   // ── render + sim loop ────────────────────────────────────────────────────────
@@ -123,13 +127,17 @@ export default function UpdraftPage() {
         if (ev.pass) {
           sfx.play('pass')
           setScore(w.score)
+          // climbing milestone — a warm beat every 10 gates cleared
+          if (w.score >= (voMileRef.current + 1) * 10) { voMileRef.current++; vo.play('climbing') }
         }
         if (ev.crash) {
           sfx.play('crash')
           window.setTimeout(() => sfx.play('over'), 180)
+          let isBest = false
           if (modeRef.current === 'daily') setDailyBest(saveDailyBest('updraft', w.score))
-          else setBest(saveHiScore(w.score))
+          else { const prev = loadHiScore(); isBest = w.score > 0 && w.score > prev; setBest(saveHiScore(w.score)) }
           setPhase('over')
+          vo.play(isBest ? 'best' : 'over')
         }
       }
 
@@ -146,7 +154,7 @@ export default function UpdraftPage() {
     const wasReady = w.state === 'ready'
     flap(w)
     sfx.play('flap')
-    if (wasReady) { setPhase('playing'); music.start() }
+    if (wasReady) { setPhase('playing'); music.start(); vo.play('start') }
   }, [])
 
   const restart = useCallback(() => {
@@ -159,6 +167,7 @@ export default function UpdraftPage() {
     const m = !sfx.isMuted()
     sfx.setMuted(m)
     music.setMuted(m)
+    vo.setMuted(m)
     setMuted(m)
   }
 
