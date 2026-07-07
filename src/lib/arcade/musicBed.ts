@@ -57,10 +57,16 @@ export class MusicBed {
   // create the context + decode the track. Safe pre-gesture (decode works suspended).
   ensure(): Promise<void> {
     if (typeof window === "undefined") return Promise.resolve();
-    if (this.buffer) return Promise.resolve();
+    if (this.buffer && this.ctx) return Promise.resolve();
     if (this.loading) return this.loading;
     const AC = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
-    this.ctx = new AC();
+    try {
+      this.ctx = new AC();
+    } catch {
+      // hardware AudioContext cap hit (too many live contexts) — bail; music is garnish
+      this.ctx = null;
+      return Promise.resolve();
+    }
     this.gain = this.ctx.createGain();
     this.gain.gain.value = this.muted ? 0 : this.baseVol;
     this.gain.connect(this.ctx.destination);
@@ -89,17 +95,23 @@ export class MusicBed {
     });
   }
 
-  // halt the loop + park the audio thread when the game unmounts, so the bed
-  // doesn't keep playing after you navigate away. Keeps the decoded buffer +
-  // context so returning to the game restarts instantly (no re-decode).
+  // halt the loop + fully CLOSE the audio context when the game unmounts. Close
+  // (not just suspend) matters: browsers cap concurrent AudioContexts (~6, fewer
+  // on mobile), and suspended ones still count — bouncing between games would
+  // stack them up until a later game's `new AudioContext()` silently fails. So
+  // each bed frees its slot on leave and rebuilds on return (fetch is cached).
   stop() {
     if (this.source) {
       try { this.source.stop(); } catch { /* already stopped */ }
       try { this.source.disconnect(); } catch { /* fine */ }
       this.source = null;
     }
+    if (this.ctx) { try { void this.ctx.close(); } catch { /* already closed */ } }
+    this.ctx = null;
+    this.gain = null;
+    this.buffer = null;
+    this.loading = null;
     this.started = false;
-    if (this.ctx && this.ctx.state === "running") void this.ctx.suspend();
   }
 
   setMuted(m: boolean) {
