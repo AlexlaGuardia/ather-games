@@ -1,7 +1,7 @@
 'use client'
 
 import { useRef, useEffect, useState, useCallback } from 'react'
-import RoomReturn from '../_components/RoomReturn'
+import SiteNav from '../_components/SiteNav'
 import { useCloudSave } from '@/lib/use-cloud-save'
 import { useWallet } from '@/lib/use-wallet'
 import { Renderer, TILE, WIDTH, HEIGHT } from './engine/renderer'
@@ -3017,7 +3017,7 @@ export default function ShimmerPage() {
               'linear-gradient(rgba(8,6,16,0.5), rgba(6,5,12,0.64))',
           }}
         />
-        <RoomReturn wall={0} />
+        <SiteNav gameId="shimmer" wall={0} crumbs={[{ label: 'Room', href: '/room?wall=0' }, { label: 'Shimmer' }]} />
         <div className="relative text-center max-w-2xl">
           <div className="mb-10">
             <h1 className="font-display text-5xl sm:text-7xl font-bold text-gold tracking-wide mb-3">

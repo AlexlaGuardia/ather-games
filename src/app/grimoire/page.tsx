@@ -8,7 +8,7 @@
 // Deep-link: /grimoire?s=<spiritId>  or  /grimoire?v=folk&f=<folkId>. Lives off the Front Desk wall.
 
 import { useCallback, useEffect, useState } from 'react'
-import RoomReturn from '../_components/RoomReturn'
+import SiteNav from '../_components/SiteNav'
 
 type Evo = { element: string; name: string | null; img: string; entry?: string }
 type Spirit = {
@@ -110,7 +110,7 @@ export default function AtherPages() {
 
   return (
     <main className="min-h-dvh w-full flex flex-col items-center bg-[#070608] text-[#e8e2d0]" style={{ backgroundImage: 'radial-gradient(ellipse at 50% -10%, #1a1206 0%, transparent 55%)' }}>
-      <RoomReturn wall={2} />
+      <SiteNav wall={2} crumbs={[{ label: 'Room', href: '/room?wall=2' }, { label: 'AtherPages' }]} />
 
       <header className="text-center pt-8 pb-4 px-4">
         <h1 className="gx-title text-2xl sm:text-3xl tracking-[0.34em] uppercase" style={{ color: '#f5c542', textShadow: '0 0 22px #f5c54255' }}>AtherPages</h1>
