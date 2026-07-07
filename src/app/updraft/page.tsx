@@ -159,7 +159,7 @@ export default function UpdraftPage() {
   }
 
   return (
-    <ArcadeCabinet accent="#37e6ff" wall={1} maxWidth={cabinetMaxW(VW, VH)}>
+    <ArcadeCabinet gameId="updraft" accent="#37e6ff" wall={1} maxWidth={cabinetMaxW(VW, VH)}>
       <div className="w-full flex items-center justify-between mb-2" style={{ maxWidth: cabinetMaxW(VW, VH) }}>
         <span aria-hidden className="w-10" />
         <div className="text-center">

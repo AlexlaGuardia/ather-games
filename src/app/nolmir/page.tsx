@@ -19,7 +19,7 @@ import {
 import { settleHomecoming, type AwayDigest } from './lib/away'
 import type { HostState } from './lib/types'
 import { sfx } from './lib/sfx'
-import RoomReturn from '../_components/RoomReturn'
+import SiteNav from '../_components/SiteNav'
 
 const display = Chakra_Petch({ weight: ['500', '600'], subsets: ['latin'] })
 const MATCH_INTERVAL = 20 * 60 * 1000 // a match answers the beacon every 20 min (mirrors the hub)
@@ -160,7 +160,7 @@ export default function DeckPage() {
 
   return (
     <div className={`gx-chrome min-h-screen bg-[#070a10] text-slate-300 font-mono ${display.className}`}>
-      <RoomReturn wall={1} />
+      <SiteNav gameId="nolmir" wall={1} />
       <div className="mx-auto w-full max-w-[520px] px-4 py-6">
         <header className="flex items-center justify-between mb-5">
           <a href="/arcade/all" className="text-[10px] tracking-[0.25em] uppercase text-cyan-400/50 hover:text-cyan-300">&#8592; arcade</a>

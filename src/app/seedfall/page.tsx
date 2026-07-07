@@ -190,7 +190,7 @@ export default function SeedfallPage() {
   const depthPct = Math.min(100, Math.round((worldRef.current?.y ?? 0) / DEPTH_GOAL * 100))
 
   return (
-    <ArcadeCabinet accent="#54ffc8" wall={1} maxWidth={cabinetMaxW(VW, VH)}>
+    <ArcadeCabinet gameId="seedfall" accent="#54ffc8" wall={1} maxWidth={cabinetMaxW(VW, VH)}>
       <div className="w-full flex items-center justify-between mb-3" style={{ maxWidth: cabinetMaxW(VW, VH) }}>
         <span aria-hidden className="w-10" />
         <div className="text-center">

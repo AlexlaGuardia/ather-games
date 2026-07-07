@@ -178,7 +178,7 @@ export default function SquallPage() {
   const toggleMute = () => { sfx.ensure(); const m = !sfx.isMuted(); sfx.setMuted(m); setMuted(m) }
 
   return (
-    <ArcadeCabinet accent={ACCENT} wall={1} maxWidth={cabinetMaxW(VW, VH)}>
+    <ArcadeCabinet gameId="squall" accent={ACCENT} wall={1} maxWidth={cabinetMaxW(VW, VH)}>
       <div className="w-full flex items-center justify-between mb-3" style={{ maxWidth: cabinetMaxW(VW, VH) }}>
         <span aria-hidden className="w-10" />
         <div className="text-center">

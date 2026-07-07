@@ -220,7 +220,7 @@ export default function VaultPage() {
 
 
   return (
-    <ArcadeCabinet accent={ACCENT} wall={1} maxWidth={cabinetMaxW(VW, VH)}>
+    <ArcadeCabinet gameId="vault" accent={ACCENT} wall={1} maxWidth={cabinetMaxW(VW, VH)}>
       <div className="w-full flex items-center justify-between mb-3" style={{ maxWidth: screenMaxW(VW, VH) }}>
         <span aria-hidden className="w-10" />
         <div className="text-center">

@@ -223,7 +223,7 @@ export default function AtherdashPage() {
   }, [launch, doJump])
 
   return (
-    <ArcadeCabinet accent="#37e6ff" wall={1} maxWidth={cabinetMaxW(VW, VH)}>
+    <ArcadeCabinet gameId="atherdash" accent="#37e6ff" wall={1} maxWidth={cabinetMaxW(VW, VH)}>
       {/* marquee — title plate across the top of the cabinet */}
         <div className="w-full flex items-center justify-between mb-3 pb-2.5 border-b border-[#d4a843]/15">
           <span aria-hidden className="w-10" />

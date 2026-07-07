@@ -175,7 +175,7 @@ export default function VoranyxPage() {
   const lowBoost = boostPct <= 18
 
   return (
-    <ArcadeCabinet accent="#37e6ff" wall={1} maxWidth={cabinetMaxW(360, 480)}>
+    <ArcadeCabinet gameId="voranyx" accent="#37e6ff" wall={1} maxWidth={cabinetMaxW(360, 480)}>
       <div className="w-full flex items-center justify-between mb-3" style={{ maxWidth: cabinetMaxW(360, 480) }}>
         <span aria-hidden className="w-10" />
         <div className="text-center">

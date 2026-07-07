@@ -232,7 +232,7 @@ export default function RekindlePage() {
   // ── MAP VIEW ────────────────────────────────────────────────────────────────
   if (view === 'map') {
     return (
-      <ArcadeCabinet accent="#37e6ff" wall={1} maxWidth={cabinetMaxW(CELL * 5, CELL * 5)}>
+      <ArcadeCabinet gameId="rekindle" accent="#37e6ff" wall={1} maxWidth={cabinetMaxW(CELL * 5, CELL * 5)}>
         <div className="w-full flex items-center justify-between mb-6" style={{ maxWidth: cabinetMaxW(CELL * 5, CELL * 5) }}>
           <span aria-hidden className="w-10" />
           <div className="text-center">
@@ -277,7 +277,7 @@ export default function RekindlePage() {
 
   // ── PLAY VIEW ───────────────────────────────────────────────────────────────
   return (
-    <ArcadeCabinet accent="#37e6ff" wall={1} maxWidth={cabinetMaxW(CELL * 5, CELL * 5)}>
+    <ArcadeCabinet gameId="rekindle" accent="#37e6ff" wall={1} maxWidth={cabinetMaxW(CELL * 5, CELL * 5)}>
       <div className="w-full flex items-center justify-between mb-4" style={{ maxWidth: cabinetMaxW(CELL * 5, CELL * 5) }}>
         <button onClick={toMap} className="gx-label text-[10px] text-[#37e6ff]/50 hover:text-[#37e6ff]">
           &#8592; network

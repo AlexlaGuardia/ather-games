@@ -221,7 +221,7 @@ export default function WardPage() {
   const lowAmmo = hud.maxAmmo > 0 && hud.ammo <= 3
 
   return (
-    <ArcadeCabinet accent="#37e6ff" wall={1} maxWidth={cabinetMaxW(VW, VH)}>
+    <ArcadeCabinet gameId="ward" accent="#37e6ff" wall={1} maxWidth={cabinetMaxW(VW, VH)}>
       {/* header */}
       <div className="w-full flex items-center justify-between mb-4" style={{ maxWidth: cabinetMaxW(VW, VH) }}>
         <span aria-hidden className="w-10" />

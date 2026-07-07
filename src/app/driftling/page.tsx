@@ -220,7 +220,7 @@ export default function DriftlingPage() {
   const accent = branch ? elColor[branch] : '#37d4e6'
 
   return (
-    <ArcadeCabinet accent={accent} wall={1} maxWidth={cabinetMaxW(VW, VH)}>
+    <ArcadeCabinet gameId="driftling" accent={accent} wall={1} maxWidth={cabinetMaxW(VW, VH)}>
       <div className="w-full flex items-center justify-between mb-3" style={{ maxWidth: cabinetMaxW(VW, VH) }}>
         <span aria-hidden className="w-10" />
         <div className="text-center">

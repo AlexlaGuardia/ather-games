@@ -172,7 +172,7 @@ export default function LucernyxPage() {
   const toggleMute = () => { sfx.ensure(); const m = !sfx.isMuted(); sfx.setMuted(m); setMuted(m) }
 
   return (
-    <ArcadeCabinet accent="#37e6ff" wall={1} maxWidth={cabinetMaxW(440, 440 * ROWS / COLS)}>
+    <ArcadeCabinet gameId="lucernyx" accent="#37e6ff" wall={1} maxWidth={cabinetMaxW(440, 440 * ROWS / COLS)}>
       <div className="w-full flex items-center justify-between mb-3" style={{ maxWidth: cabinetMaxW(440, 440 * ROWS / COLS) }}>
         <span aria-hidden className="w-16" />
         <div className="text-center">

@@ -178,7 +178,7 @@ export default function DewdropPage() {
   const toggleMute = () => { sfx.ensure(); const m = !sfx.isMuted(); sfx.setMuted(m); setMuted(m) }
 
   return (
-    <ArcadeCabinet accent={ACCENT} wall={1} maxWidth={cabinetMaxW(VW, VH, DPAD_RESERVE)}>
+    <ArcadeCabinet gameId="dewdrop" accent={ACCENT} wall={1} maxWidth={cabinetMaxW(VW, VH, DPAD_RESERVE)}>
       <div className="w-full flex items-center justify-between mb-3" style={{ maxWidth: cabinetMaxW(VW, VH, DPAD_RESERVE) }}>
         <span aria-hidden className="w-10" />
         <div className="text-center">

@@ -1,4 +1,4 @@
-import RoomReturn from './RoomReturn'
+import SiteNav from './SiteNav'
 
 // "#rrggbb" (or "#rgb") → "r, g, b" for use inside rgba() gradients.
 function hexToRgb(hex: string): string {
@@ -22,11 +22,14 @@ export default function ArcadeCabinet({
   accent = '#37e6ff',
   wall = 1,
   maxWidth = 400,
+  gameId,
 }: {
   children: React.ReactNode
   accent?: string
   wall?: number
   maxWidth?: number | string
+  /** registry id of the game housed here — feeds SiteNav recents + breadcrumb */
+  gameId?: string
 }) {
   const rgb = hexToRgb(accent)
   return (
@@ -51,7 +54,7 @@ export default function ArcadeCabinet({
             'linear-gradient(rgba(5,3,9,0.62), rgba(5,3,9,0.82))',
         }}
       />
-      <RoomReturn wall={wall} />
+      <SiteNav gameId={gameId} wall={wall} />
 
       {/* the cabinet housing — dark panel, gold trim (shared arcade furniture). */}
       <div
