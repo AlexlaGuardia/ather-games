@@ -63,6 +63,46 @@ export const SEG_MIN = 130
 export const SEG_MAX = 340
 export const GAP_MIN = 70
 
+// ── movements (canon: game/vault.md — the crossing told as a DESCENT into the greying) ─────────────
+// The crossing is eternal (no arrival). Story mode is the myth told in movements: named stretches of the
+// greying going edge→heart, each a difficulty band + which hazards exist. The ramp IS the descent — a
+// later movement floors harder AND adds a hazard. Finishing the last hands seamlessly into ENDLESS (goalDist
+// 0). NAMES are working/world-facing → routed to Magii to bless before final (CANON_GAPS logged).
+export interface MovementCfg {
+  id: string
+  name: string       // world-facing (Magii to ratify)
+  blurb: string      // one line for the roadmap
+  goalDist: number   // cross this far → the movement is done. 0 = endless (the crossing without end)
+  diffBase: number   // difficulty floor 0..1 — how deep into the greying this movement sits
+  diffSpan: number   // how much difficulty rises across the movement (the local descent)
+  gaps: boolean      // the void's tears
+  foes: boolean      // grey void-spawn (stomp/unmake)
+  spikes: boolean    // rooted grey corruption (leap-only)
+  hazMul: number     // hazard-DENSITY scalar (1 = endless density) — low = a gentle teaching movement
+  runway: number     // flat hazard-free lead-in
+}
+
+// endless / daily = the crossing without end (original single-ramp feel preserved)
+export const ENDLESS_CFG: MovementCfg = {
+  id: 'endless', name: 'The Crossing', blurb: 'the crossing without end',
+  goalDist: 0, diffBase: 0, diffSpan: 1, gaps: true, foes: true, spikes: true, hazMul: 1, runway: RUNWAY,
+}
+
+// the told movements — a descent. Each teaches one new thing; the floor deepens each time.
+// Difficulty band is a FAIR, completable descent (peaks ~0.6 on the last told movement); Endless ramps the
+// crossing on past 0.6→1.0 — canon-true (the tale only tells so deep; past it, the crossing without end is
+// harder than any teller says). Bands are monotonic; foe-bearing movements sit a touch gentler because the
+// unmaking (stomp/chain) is a learned skill. Tuned against the movements oracle + Alex's device feel.
+export const MOVEMENTS: MovementCfg[] = [
+  { id: 'm1', name: 'First Light',      blurb: 'the light, new — leap the first tears',        goalDist: 2200, diffBase: 0.00, diffSpan: 0.15, gaps: true,  foes: false, spikes: false, hazMul: 0,    runway: 700 },
+  { id: 'm2', name: 'The Tears Widen',  blurb: 'the ground breaks; read it ahead',            goalDist: 2600, diffBase: 0.12, diffSpan: 0.16, gaps: true,  foes: false, spikes: false, hazMul: 0,    runway: 420 },
+  { id: 'm3', name: 'Void-spawn',       blurb: 'grey things rise — unmake them, chain it',    goalDist: 2600, diffBase: 0.16, diffSpan: 0.16, gaps: true,  foes: true,  spikes: false, hazMul: 0.45, runway: 420 },
+  { id: 'm4', name: 'Rooted Grey',      blurb: 'some grey has taken root — that, you leap',    goalDist: 2800, diffBase: 0.24, diffSpan: 0.16, gaps: true,  foes: true,  spikes: true,  hazMul: 0.6,  runway: 380 },
+  { id: 'm5', name: 'The Dying Gains',  blurb: 'faster, more broken — the grey presses',       goalDist: 3000, diffBase: 0.32, diffSpan: 0.18, gaps: true,  foes: true,  spikes: true,  hazMul: 0.8,  runway: 340 },
+  { id: 'm6', name: 'The Heart',        blurb: 'the deepest the tale is told; carry on',       goalDist: 3200, diffBase: 0.40, diffSpan: 0.20, gaps: true,  foes: true,  spikes: true,  hazMul: 1.0,  runway: 320 },
+]
+export function movementById(id: string): MovementCfg | undefined { return MOVEMENTS.find(m => m.id === id) }
+
 // ── entities ──────────────────────────────────────────────────────────────────────
 export interface Seg { x0: number; x1: number; top: number }
 export interface Foe { x: number; y: number; dead: boolean } // stompable; y = its feet (on a seg top)
@@ -82,11 +122,13 @@ export type BoundEvent =
   | { type: 'stomp'; combo: number }
   | { type: 'collect' }
   | { type: 'death'; cause: 'gap' | 'foe' | 'spike' }
+  | { type: 'won' } // a Story movement's goal distance was crossed (the light carries on)
 
-export type BoundState = 'ready' | 'playing' | 'dead'
+export type BoundState = 'ready' | 'playing' | 'dead' | 'won'
 
 export interface World {
   rng: Rng
+  cfg: MovementCfg // the movement being crossed (ENDLESS_CFG for endless/daily)
   state: BoundState
   dist: number // world-x travelled (the runner's world position)
   // runner vertical state (its x is always `dist`; screen-x is RUNNER_SX)
@@ -112,21 +154,32 @@ export interface World {
   events: BoundEvent[]
 }
 
-export function makeWorld(seed: number): World {
+export function makeWorld(seed: number, cfg: MovementCfg = ENDLESS_CFG): World {
   const rng = mulberry32(seed >>> 0)
   const w: World = {
-    rng, state: 'ready', dist: 0,
+    rng, cfg, state: 'ready', dist: 0,
     y: TOP_BASE, vy: 0, grounded: true, coyote: 0, buffer: 0, jumping: false, held: false,
     combo: 0, airJumps: 0, score: 0, motesGot: 0, stompScore: 0,
     segs: [], foes: [], spikes: [], motes: [],
     genX: 0, lastTop: TOP_BASE, events: [],
   }
-  // the nursery: one long flat hazard-free runway so the player gets going (Seedfall/Driftling lesson)
-  w.segs.push({ x0: -RUNNER_SX, x1: RUNWAY, top: TOP_BASE })
-  w.genX = RUNWAY
+  // the nursery: a flat hazard-free runway so the player gets going (Seedfall/Driftling lesson)
+  w.segs.push({ x0: -RUNNER_SX, x1: cfg.runway, top: TOP_BASE })
+  w.genX = cfg.runway
   generate(w)
   return w
 }
+
+// difficulty at a world-x. Endless (goalDist 0) keeps the original single ramp; a movement instead runs
+// its own local ramp from diffBase→diffBase+diffSpan across [0, goalDist] — the descent made numeric.
+export function diffOf(w: World, x: number): number {
+  const c = w.cfg
+  if (c.goalDist <= 0) return diffAt(x)
+  const p = Math.min(1, Math.max(0, x) / c.goalDist)
+  const eased = p * p * 0.5 + p * 0.5
+  return Math.min(1, c.diffBase + c.diffSpan * eased)
+}
+export function speedOf(w: World, x: number): number { return BASE_SPEED + SPEED_RANGE * diffOf(w, x) }
 
 // ── input ─────────────────────────────────────────────────────────────────────────
 export function pressJump(w: World): void {
@@ -147,9 +200,17 @@ export function tick(w: World, dt: number): void {
   // clamp dt so a stutter can't tunnel the runner through terrain
   dt = Math.min(dt, 1 / 30)
 
-  const speed = speedAt(w.dist)
+  const speed = speedOf(w, w.dist)
   const prevDist = w.dist
   w.dist += speed * dt
+  // Story movement complete: crossed the goal distance → the light carries on out of sight (won).
+  // Only once the runner is safely grounded, so a win never lands mid-leap over a tear.
+  if (w.cfg.goalDist > 0 && w.dist >= w.cfg.goalDist && w.grounded) {
+    w.score = Math.floor(w.dist / 10) + w.motesGot * MOTE_PTS + w.stompScore
+    w.state = 'won'
+    w.events.push({ type: 'won' })
+    return
+  }
   if (w.coyote > 0) w.coyote = Math.max(0, w.coyote - dt)
   if (w.buffer > 0) w.buffer = Math.max(0, w.buffer - dt)
 
@@ -264,15 +325,15 @@ function overlap(ax: number, ay: number, aw: number, ah: number, bx: number, by:
 // ── terrain generation (deterministic; only ever produces clearable courses) ──────
 function generate(w: World): void {
   while (w.genX < w.dist + GEN_AHEAD) {
-    const d = diffAt(w.genX)
-    const speed = speedAt(w.genX)
+    const d = diffOf(w, w.genX)
+    const speed = speedOf(w, w.genX)
 
     // past the runway, most segments are reached across a gap (where height can change). An ease-in
     // window right after the runway stays gentle (no gaps, no hazards) so the first real obstacle never
     // ambushes a player who just got moving.
-    const past = w.genX >= RUNWAY
-    const eased = w.genX < RUNWAY + 280
-    const wantGap = past && !eased && w.rng() < 0.42 + d * 0.3
+    const past = w.genX >= w.cfg.runway
+    const eased = w.genX < w.cfg.runway + 280
+    const wantGap = past && !eased && w.cfg.gaps && w.rng() < 0.42 + d * 0.3
     let top = w.lastTop
     if (wantGap) {
       // a gap the runner can clear: bounded by the airtime * speed (with margin)
@@ -304,14 +365,18 @@ function generate(w: World): void {
 
 function populate(w: World, seg: Seg, d: number): void {
   const len = seg.x1 - seg.x0
-  if (seg.x0 < RUNWAY + 280) return // ease-in window: no hazards on the first stretch past the runway
+  if (seg.x0 < w.cfg.runway + 280) return // ease-in window: no hazards on the first stretch past the runway
+  const canFoe = w.cfg.foes, canSpike = w.cfg.spikes
   // hazards: a foe OR a spike, density ramps from sparse. Kept off the segment EDGES (>= EDGE_MARGIN
-  // from x0/x1) so there's always reaction room after a landing and before the next gap.
+  // from x0/x1) so there's always reaction room after a landing and before the next gap. A movement that
+  // hasn't introduced a hazard yet (First Light / The Tears Widen) leaves it out entirely.
   const EDGE_MARGIN = 90
-  if (len > 2 * EDGE_MARGIN + 30 && w.rng() < 0.18 + d * 0.45) {
+  if ((canFoe || canSpike) && len > 2 * EDGE_MARGIN + 30 && w.rng() < (0.18 + d * 0.45) * w.cfg.hazMul) {
     const hx = seg.x0 + EDGE_MARGIN + w.rng() * (len - 2 * EDGE_MARGIN)
-    if (w.rng() < 0.7) w.foes.push({ x: hx, y: seg.top, dead: false }) // stomp it or hop it
-    else w.spikes.push({ x: hx, y: seg.top, dead: false } as Spike) // must hop it (rarer)
+    // prefer a foe (stomp-or-hop); spikes (leap-only) stay rarer. Fall back to whichever is enabled.
+    const spike = canSpike && (!canFoe || w.rng() >= 0.7)
+    if (spike) w.spikes.push({ x: hx, y: seg.top } as Spike)
+    else w.foes.push({ x: hx, y: seg.top, dead: false })
   }
   // a mote: sometimes a reward arc above the ledge, sometimes low (free)
   if (w.rng() < 0.5) {
