@@ -301,7 +301,52 @@ export default function VaultPage() {
         <div className="w-full" style={{ maxWidth: screenMaxW(VW, VH) }}>
           <Trail movements={MOVEMENTS} done={storyDone} onPlay={playMovement} onEndless={carryOnEndless} />
         </div>
-      ) : (<>
+      ) : phase === 'dead' ? (
+        // result screen — its OWN full-height panel (not the landscape letterbox), so the buttons
+        // are never clipped or hidden under the controller deck.
+        <div className="w-full flex flex-col items-center gap-2 rounded-md border border-white/10 bg-[#070a12]/85 px-6 py-6 text-center" style={{ maxWidth: screenMaxW(VW, VH) }}>
+          <div className="gx-title text-[#a7a7b0] text-lg tracking-[0.3em] uppercase" style={{ textShadow: '0 0 14px #71717a' }}>The grey takes the light</div>
+          <div className="gx-value font-mono text-[#e8feff] text-4xl leading-none tabular-nums" style={{ textShadow: `0 0 12px ${ACCENT}80` }}>{score}</div>
+          {newBest
+            ? <div className="gx-label text-[10px] font-mono tracking-wider" style={{ color: ACCENT }}>✦ new best</div>
+            : best > 0 && <div className="gx-label text-[10px] font-mono text-[#7fd8e6]/45 tracking-wider">best {best}</div>}
+          {mode === 'story' && <div className="gx-label text-[10px] tracking-[0.2em] uppercase text-[#7fd8e6]/55">{MOVEMENTS[storyIdx].name}</div>}
+          <div className="gx-label text-[10px] font-mono text-[#9fd6e0]/55 tracking-wider">
+            crossed <span style={{ color: ACCENT }} className="tabular-nums">{dist}</span> · gathered <span style={{ color: GOLD }} className="tabular-nums">{motes}</span>
+          </div>
+          {mode === 'daily' && (
+            <div className="gx-label text-[10px] font-mono text-[#7fd8e6]/55 tracking-wider">daily #{dailyNumber()} · best {dailyBest}{score >= dailyBest && score > 0 ? ' ✦ today’s best' : ''}</div>
+          )}
+          <p className="text-[10px] leading-relaxed text-[#9fd6e0]/70 max-w-[260px] italic mt-0.5">{DEATH_LINE[cause]}</p>
+          <div className="flex flex-wrap items-center justify-center gap-2 mt-2">
+            <button onClick={restart} className="gx-label text-[11px] text-[#070a12] hover:brightness-110 px-5 py-2 rounded-[2px]" style={{ background: ACCENT, boxShadow: `0 0 18px ${ACCENT}80` }}>carry it again →</button>
+            {mode === 'story' && (
+              <button onClick={() => { setStoryView('map'); setPhase('ready') }} className="gx-label text-[11px] text-[#7fe9ff] border border-[#7fe9ff]/40 hover:border-[#7fe9ff] px-5 py-2 rounded-[2px] transition-colors">‹ trail</button>
+            )}
+            {mode === 'daily' && (
+              <button onClick={onShare} className="gx-label text-[11px] text-[#7fe9ff] border border-[#7fe9ff]/40 hover:border-[#7fe9ff] px-5 py-2 rounded-[2px] transition-colors">{shared ? 'copied ✓' : 'share'}</button>
+            )}
+          </div>
+          {mode === 'daily' && <DailyLeaderboard gameId="vault" accent={ACCENT} score={score} className="mt-1.5 w-full" />}
+        </div>
+      ) : phase === 'won' ? (() => {
+        const last = storyIdx >= MOVEMENTS.length - 1
+        return (
+        <div className="w-full flex flex-col items-center gap-2 rounded-md border border-white/10 bg-[#070a12]/85 px-6 py-6 text-center" style={{ maxWidth: screenMaxW(VW, VH) }}>
+          <div className="gx-title text-lg tracking-[0.25em] uppercase" style={{ color: GOLD, textShadow: `0 0 16px ${GOLD}` }}>{last ? 'Beyond the teller’s sight' : 'The light carries on'}</div>
+          <div className="gx-label text-[10px] tracking-[0.2em] uppercase text-[#7fd8e6]/55">{MOVEMENTS[storyIdx].name} · crossed</div>
+          <div className="gx-value font-mono text-[#e8feff] text-4xl leading-none tabular-nums" style={{ textShadow: `0 0 12px ${ACCENT}80` }}>{score}</div>
+          <div className="gx-label text-[10px] font-mono text-[#9fd6e0]/55 tracking-wider">crossed <span style={{ color: ACCENT }} className="tabular-nums">{dist}</span> · gathered <span style={{ color: GOLD }} className="tabular-nums">{motes}</span></div>
+          <p className="text-[10px] leading-relaxed text-[#9fd6e0]/70 max-w-[270px] italic mt-0.5">{last ? 'the tale is told to its heart. the light does not stop — it passes on, still crossing, past where the Mug can follow.' : 'you cannot hold the light still. deeper the crossing goes.'}</p>
+          <div className="flex flex-wrap items-center justify-center gap-2 mt-2">
+            {last
+              ? <button onClick={carryOnEndless} className="gx-label text-[11px] text-[#070a12] hover:brightness-110 px-5 py-2 rounded-[2px]" style={{ background: ACCENT, boxShadow: `0 0 18px ${ACCENT}80` }}>cross without end →</button>
+              : <button onClick={() => playMovement(storyIdx + 1)} className="gx-label text-[11px] text-[#070a12] hover:brightness-110 px-5 py-2 rounded-[2px]" style={{ background: ACCENT, boxShadow: `0 0 18px ${ACCENT}80` }}>next movement →</button>}
+            <button onClick={() => { setStoryView('map'); setPhase('ready') }} className="gx-label text-[11px] text-[#7fe9ff] border border-[#7fe9ff]/40 hover:border-[#7fe9ff] px-5 py-2 rounded-[2px] transition-colors">‹ trail</button>
+          </div>
+        </div>
+        )
+      })() : (<>
 
       {/* score + motes */}
       <div className="w-full mb-2 flex items-center gap-3 font-mono" style={{ maxWidth: screenMaxW(VW, VH) }}>
@@ -341,70 +386,6 @@ export default function VaultPage() {
             {best > 0 && mode !== 'story' && <div className="gx-label text-[10px] font-mono text-[#7fd8e6]/50 tracking-wider mt-1">best <span className="text-[#e8feff] tabular-nums">{best}</span></div>}
           </div>
         )}
-
-        {phase === 'dead' && (
-          <div className="absolute inset-0 overflow-y-auto bg-[#070a12]/75 rounded-md">
-           <div className="min-h-full flex flex-col items-center justify-center gap-2 text-center px-6 py-4">
-            <div className="gx-title text-[#a7a7b0] text-lg tracking-[0.3em] uppercase" style={{ textShadow: '0 0 14px #71717a' }}>The grey takes the light</div>
-            <div className="gx-value font-mono text-[#e8feff] text-3xl leading-none tabular-nums" style={{ textShadow: `0 0 12px ${ACCENT}80` }}>{score}</div>
-            {newBest
-              ? <div className="gx-label text-[10px] font-mono tracking-wider" style={{ color: ACCENT }}>✦ new best</div>
-              : best > 0 && <div className="gx-label text-[10px] font-mono text-[#7fd8e6]/45 tracking-wider">best {best}</div>}
-            <div className="gx-label text-[10px] font-mono text-[#9fd6e0]/55 tracking-wider mt-0.5">
-              crossed <span style={{ color: ACCENT }} className="tabular-nums">{dist}</span> · gathered <span style={{ color: GOLD }} className="tabular-nums">{motes}</span>
-            </div>
-            {mode === 'daily' && (
-              <div className="gx-label text-[10px] font-mono text-[#7fd8e6]/55 tracking-wider">
-                daily #{dailyNumber()} · best {dailyBest}{score >= dailyBest && score > 0 ? ' ✦ today’s best' : ''}
-              </div>
-            )}
-            <p className="text-[10px] leading-relaxed text-[#9fd6e0]/70 max-w-[250px] italic mt-0.5">{DEATH_LINE[cause]}</p>
-            <div className="flex items-center gap-2 mt-1">
-              <button onClick={restart} className="gx-label text-[11px] text-[#070a12] hover:brightness-110 px-5 py-2 rounded-[2px]" style={{ background: ACCENT, boxShadow: `0 0 18px ${ACCENT}80` }}>carry it again →</button>
-              {mode === 'story' && (
-                <button onClick={() => { setStoryView('map'); setPhase('ready') }} className="gx-label text-[11px] text-[#7fe9ff] border border-[#7fe9ff]/40 hover:border-[#7fe9ff] px-5 py-2 rounded-[2px] transition-colors">‹ trail</button>
-              )}
-              {mode === 'daily' && (
-                <button onClick={onShare} className="gx-label text-[11px] text-[#7fe9ff] border border-[#7fe9ff]/40 hover:border-[#7fe9ff] px-5 py-2 rounded-[2px] transition-colors">
-                  {shared ? 'copied ✓' : 'share'}
-                </button>
-              )}
-            </div>
-            {mode === 'daily' && <DailyLeaderboard gameId="vault" accent={ACCENT} score={score} className="mt-1.5" />}
-           </div>
-          </div>
-        )}
-
-        {phase === 'won' && (() => {
-          const last = storyIdx >= MOVEMENTS.length - 1
-          return (
-          <div className="absolute inset-0 overflow-y-auto bg-[#070a12]/78 rounded-md">
-           <div className="min-h-full flex flex-col items-center justify-center gap-2 text-center px-6 py-4">
-            <div className="gx-title text-lg tracking-[0.25em] uppercase" style={{ color: GOLD, textShadow: `0 0 16px ${GOLD}` }}>
-              {last ? 'Beyond the teller’s sight' : 'The light carries on'}
-            </div>
-            <div className="gx-label text-[10px] tracking-[0.2em] uppercase text-[#7fd8e6]/55">{MOVEMENTS[storyIdx].name} · crossed</div>
-            <div className="gx-value font-mono text-[#e8feff] text-3xl leading-none tabular-nums" style={{ textShadow: `0 0 12px ${ACCENT}80` }}>{score}</div>
-            <div className="gx-label text-[10px] font-mono text-[#9fd6e0]/55 tracking-wider">
-              crossed <span style={{ color: ACCENT }} className="tabular-nums">{dist}</span> · gathered <span style={{ color: GOLD }} className="tabular-nums">{motes}</span>
-            </div>
-            <p className="text-[10px] leading-relaxed text-[#9fd6e0]/70 max-w-[260px] italic mt-0.5">
-              {last
-                ? 'the tale is told to its heart. the light does not stop — it passes on, still crossing, past where the Mug can follow.'
-                : 'you cannot hold the light still. deeper the crossing goes.'}
-            </p>
-            <div className="flex items-center gap-2 mt-1.5">
-              {last ? (
-                <button onClick={carryOnEndless} className="gx-label text-[11px] text-[#070a12] hover:brightness-110 px-5 py-2 rounded-[2px]" style={{ background: ACCENT, boxShadow: `0 0 18px ${ACCENT}80` }}>cross without end →</button>
-              ) : (
-                <button onClick={() => playMovement(storyIdx + 1)} className="gx-label text-[11px] text-[#070a12] hover:brightness-110 px-5 py-2 rounded-[2px]" style={{ background: ACCENT, boxShadow: `0 0 18px ${ACCENT}80` }}>next movement →</button>
-              )}
-              <button onClick={() => { setStoryView('map'); setPhase('ready') }} className="gx-label text-[11px] text-[#7fe9ff] border border-[#7fe9ff]/40 hover:border-[#7fe9ff] px-5 py-2 rounded-[2px] transition-colors">‹ trail</button>
-            </div>
-           </div>
-          </div>
-          )
-        })()}
       </div>
 
       {/* the cabinet control deck — one big VAULT button under the screen (keyboard still works) */}
