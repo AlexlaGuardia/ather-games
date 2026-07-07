@@ -28,6 +28,7 @@ import {
   type World,
 } from './lib/updraft'
 import { sfx } from './lib/sfx'
+import { music } from './music'
 import { dailySeed, dailyNumber, loadDailyBest, saveDailyBest, dailyShare, copyShare } from '@/lib/arcade/daily'
 import DailyLeaderboard from '../_components/DailyLeaderboard'
 
@@ -96,11 +97,13 @@ export default function UpdraftPage() {
     seedRef.current = Date.now() >>> 0
     boot()
     setMuted(sfx.isMuted())
+    music.setMuted(sfx.isMuted()); void music.ensure() // decode the bed ahead of the first flap
     setBest(loadHiScore())
     setDailyBest(loadDailyBest('updraft'))
     const img = new Image()
     img.src = '/updraft/nebula.webp'
     img.onload = () => { nebulaRef.current = img }
+    return () => music.stop() // tear the bed down on leave — it never follows you out
   }, [boot])
 
   // ── render + sim loop ────────────────────────────────────────────────────────
@@ -143,7 +146,7 @@ export default function UpdraftPage() {
     const wasReady = w.state === 'ready'
     flap(w)
     sfx.play('flap')
-    if (wasReady) setPhase('playing')
+    if (wasReady) { setPhase('playing'); music.start() }
   }, [])
 
   const restart = useCallback(() => {
@@ -155,6 +158,7 @@ export default function UpdraftPage() {
     sfx.ensure()
     const m = !sfx.isMuted()
     sfx.setMuted(m)
+    music.setMuted(m)
     setMuted(m)
   }
 
