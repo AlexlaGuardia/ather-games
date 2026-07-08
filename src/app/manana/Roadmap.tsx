@@ -157,13 +157,18 @@ export default function Roadmap({ current, onPlay, onHome, advancedFrom }: Roadm
             )
           })}
 
-          {/* game-piece token — hops to the current pitstop, pops on landing */}
+          {/* game-piece token — hops to the current pitstop, idles with a gentle bob,
+              pops on landing. TODO(art): swap the 🐾 glyph for Alex's bonded-Mana'mal
+              sprite (Momo/Duskpuff) — the wrapper already carries motion + ground-shadow. */}
           {w > 0 && (() => {
             const t = nodes[Math.min(tokenAt, nodes.length - 1)]
             return (
-              <div className="pointer-events-none absolute z-10 text-2xl"
-                style={{ left: t.x, top: t.y - 36, transform: 'translate(-50%,-50%)', transition: 'left .5s cubic-bezier(.5,0,.3,1), top .5s cubic-bezier(.34,1.5,.5,1)', filter: 'drop-shadow(0 2px 4px rgba(0,0,0,.6))', animation: landing ? 'manana-token-land .46s ease-out' : undefined }}>
-                🐾
+              <div className="pointer-events-none absolute z-10"
+                style={{ left: t.x, top: t.y - 36, transform: 'translate(-50%,-50%)', transition: 'left .55s cubic-bezier(.5,0,.3,1), top .55s cubic-bezier(.34,1.5,.5,1)' }}>
+                <div style={{ animation: landing ? 'manana-token-land .5s ease-out' : 'manana-token-idle 2.6s ease-in-out infinite' }}>
+                  <div className="text-2xl leading-none" style={{ filter: 'drop-shadow(0 3px 3px rgba(0,0,0,.55))' }}>🐾</div>
+                  <div className="mx-auto mt-[1px] h-[5px] w-[18px] rounded-full" style={{ background: 'radial-gradient(ellipse at center, rgba(255,216,132,.55), transparent 72%)', filter: 'blur(1px)' }} />
+                </div>
               </div>
             )
           })()}
@@ -176,7 +181,8 @@ export default function Roadmap({ current, onPlay, onHome, advancedFrom }: Roadm
 
       <style>{`
         @keyframes manana-pit-pulse{0%,100%{filter:brightness(1)}50%{filter:brightness(1.15)}}
-        @keyframes manana-token-land{0%{transform:translate(-50%,-50%) scale(1)}35%{transform:translate(-50%,-66%) scale(1.28)}100%{transform:translate(-50%,-50%) scale(1)}}
+        @keyframes manana-token-idle{0%,100%{transform:translateY(0)}50%{transform:translateY(-4px)}}
+        @keyframes manana-token-land{0%{transform:translateY(0) scale(1)}30%{transform:translateY(-12px) scale(1.26)}60%{transform:translateY(0) scale(.94)}100%{transform:translateY(0) scale(1)}}
       `}</style>
     </div>
   )

@@ -141,6 +141,7 @@ export default function MananaPage() {
   const [dailyBest, setDailyBest] = useState(0)
   const [view, setView] = useState<'home' | 'roadmap' | 'board'>('home') // home = front door
   const [boardBloom, setBoardBloom] = useState(false) // board entered from a pitstop → bloom, else gentle
+  const [winFlash, setWinFlash] = useState(false) // level-cleared celebration beat before the trail hop
   const advancedFromRef = useRef<number | null>(null) // just-cleared level, for the roadmap token-hop
   const [shared, setShared] = useState(false)
   const [muted, setMuted] = useState(false)
@@ -273,10 +274,18 @@ export default function MananaPage() {
     advancedFromRef.current = clearedIdx
     const progress = clearedIdx + 1 // may reach LEVELS.length = whole ladder walked
     localStorage.setItem('manana.quest.level', String(Math.min(progress, LEVELS.length - 1)))
-    levelRef.current = progress
-    setLevel(progress)
-    setBusy(false)
-    setView('roadmap')
+    // celebrate on the board first, THEN hop to the trail — the level-cleared payoff.
+    setBusy(true) // hold input through the fanfare
+    fireWinCelebration()
+    setWinFlash(true)
+    setTimeout(() => { sfx.play('bloom') }, 620) // a second swell as the banner lands
+    setTimeout(() => {
+      setWinFlash(false)
+      levelRef.current = progress
+      setLevel(progress)
+      setBusy(false)
+      setView('roadmap')
+    }, 1500)
   }
 
   const endGame = () => {
@@ -429,6 +438,24 @@ export default function MananaPage() {
       bursts++
     }
     spawnFx(items, 760)
+  }
+
+  // level-cleared fanfare — a burst wave rolling out from the board's centre + a
+  // big gold ring + a full flash. Pure garnish, reuses the detonation FX layer.
+  const fireWinCelebration = () => {
+    const bp = boardPx
+    if (!bp) return
+    const items: FxSpec[] = []
+    const ccx = (W - 1) / 2, ccy = (H - 1) / 2
+    for (let i = 0; i < W * H; i++) {
+      const { x, y } = xy(i)
+      const delay = Math.round(Math.hypot(x - ccx, y - ccy) * 58) // slow grand wave
+      const c = boardRef.current[i]
+      const col = c && c.color >= 0 ? PIECES[c.color]?.base ?? '#ffd884' : '#ffd884'
+      items.push({ t: 'pop', x: cellCenter(x, bp), y: cellCenter(y, bp), color: col, delay })
+    }
+    items.push({ t: 'ring', x: bp / 2, y: bp / 2, color: '#ffd884' }, { t: 'flash' })
+    spawnFx(items, 1500)
   }
 
   const runResolve = async (start: Cell[], opts: { swapAt?: number; forced?: Set<number> }) => {
@@ -633,6 +660,10 @@ export default function MananaPage() {
           animation:manana-burst .42s ease-out forwards; }
         @keyframes manana-callout{ 0%{ transform:scale(.5); opacity:0 } 18%{ transform:scale(1.12); opacity:1 } 70%{ transform:scale(1); opacity:1 } 100%{ transform:scale(1.04); opacity:0 } }
         .manana-callout{ animation:manana-callout .85s ease-out forwards; }
+        @keyframes manana-winbanner{ 0%{ transform:scale(.4) rotate(-4deg); opacity:0 } 24%{ transform:scale(1.14) rotate(1deg); opacity:1 } 44%{ transform:scale(1) rotate(0) } 82%{ transform:scale(1); opacity:1 } 100%{ transform:scale(1.06); opacity:0 } }
+        .manana-winbanner{ animation:manana-winbanner 1.5s cubic-bezier(.3,1.3,.4,1) forwards; }
+        @keyframes manana-winkicker{ 0%,12%{ opacity:0; transform:translateY(6px) } 30%{ opacity:1; transform:none } 82%{ opacity:1 } 100%{ opacity:0 } }
+        .manana-winkicker{ animation:manana-winkicker 1.5s ease-out forwards; }
       `}</style>
 
       <div className="relative z-10 max-w-[560px] mx-auto px-4 py-6 min-h-[100svh] flex flex-col">
@@ -727,6 +758,14 @@ export default function MananaPage() {
               <span className="manana-callout text-3xl sm:text-4xl font-black italic tracking-wider" style={{ color: '#fff', textShadow: '0 0 16px #ffd884, 0 0 4px #ffb020, 0 2px 6px rgba(0,0,0,0.7)' }}>
                 {callout.text}
               </span>
+            </div>
+          )}
+
+          {/* level-cleared banner — the payoff beat before the trail hop */}
+          {winFlash && (
+            <div className="pointer-events-none absolute inset-0 z-40 flex flex-col items-center justify-center gap-1">
+              <div className="manana-winkicker text-[11px] font-bold uppercase tracking-[0.35em] text-emerald-300" style={{ textShadow: '0 0 10px rgba(52,211,153,.6)' }}>Level Cleared</div>
+              <div className="manana-winbanner text-3xl sm:text-4xl font-black tracking-wide text-white" style={{ textShadow: '0 0 22px #ffd884, 0 0 6px #ffb020, 0 2px 8px rgba(0,0,0,0.75)' }}>✦ {lvl.name} ✦</div>
             </div>
           )}
 
