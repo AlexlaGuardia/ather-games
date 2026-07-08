@@ -78,7 +78,8 @@ type FxSpec =
   | { t: 'beamV'; x: number; oy: number; color: string }
   | { t: 'ring'; x: number; y: number; color: string }
   | { t: 'flash' }
-  | { t: 'mote'; x: number; y: number; dx: number; dy: number; color: string }
+  | { t: 'mote'; x: number; y: number; dx: number; dy: number; color: string; delay?: number }
+  | { t: 'pop'; x: number; y: number; color: string; delay?: number } // per-orb burst ring
 type Fx = FxSpec & { id: number }
 
 const RAINBOW = 'conic-gradient(from 210deg, #f0a526, #e8554e, #9b5ad2, #37a3e6, #48b56f, #f0a526)'
@@ -121,7 +122,7 @@ export default function MananaPage() {
   const [moves, setMovesState] = useState(START_MOVES)
   const [milestones, setMilestones] = useState(0)
   const [selected, setSelected] = useState<number | null>(null)
-  const [popping, setPopping] = useState<Set<number>>(new Set())
+  const [popping, setPopping] = useState<Map<number, number>>(new Map()) // cell index -> ripple delay (ms)
   const [heat, setHeat] = useState(1)
   const [reward, setReward] = useState(0)
   const [callout, setCallout] = useState<{ text: string; key: number } | null>(null)
@@ -185,7 +186,7 @@ export default function MananaPage() {
     atherChargeRef.current = 0
     setAtherCharge(0)
     setSelected(null)
-    setPopping(new Set())
+    setPopping(new Map())
     setHeat(1)
     setReward(0)
     setOver(false)
@@ -256,7 +257,7 @@ export default function MananaPage() {
     questGotRef.current = 0; setQuestGot(0)
     milestonesRef.current = 0; setMilestones(0)
     atherChargeRef.current = 0; setAtherCharge(0)
-    setSelected(null); setPopping(new Set()); setHeat(1); setReward(0)
+    setSelected(null); setPopping(new Map()); setHeat(1); setReward(0)
     setWon(false); setOver(false); setBusy(false)
     lowWarnedRef.current = false
     music.start()
@@ -365,6 +366,24 @@ export default function MananaPage() {
     return 10 + n * (cell + 6) + cell / 2
   }
 
+  // radial ripple: cells nearest the match's centre pop first, the clear washes outward.
+  // returns cell-index -> delay(ms), shared by the gem-pop and the burst FX so they ripple together.
+  const RIPPLE_STEP = 26 // ms per cell of distance from centre
+  const RIPPLE_MAX = 120 // cap so a big cascade still clears inside the pop budget
+  const rippleDelays = (matched: number[]): Map<number, number> => {
+    const m = new Map<number, number>()
+    if (!matched.length) return m
+    let cx = 0, cy = 0
+    for (const i of matched) { const p = xy(i); cx += p.x; cy += p.y }
+    cx /= matched.length; cy /= matched.length
+    for (const i of matched) {
+      const p = xy(i)
+      const d = Math.hypot(p.x - cx, p.y - cy)
+      m.set(i, Math.min(RIPPLE_MAX, Math.round(d * RIPPLE_STEP)))
+    }
+    return m
+  }
+
   const spawnFx = (items: FxSpec[], ttl: number) => {
     if (!items.length) return
     const tagged = items.map((f) => ({ ...f, id: fxIdRef.current++ } as Fx))
@@ -389,37 +408,41 @@ export default function MananaPage() {
       else if (bl.kind === 'burst') { items.push({ t: 'ring', x: cellCenter(x, bp), y: cellCenter(y, bp), color: col }); flash = true }
     }
     if (flash) items.push({ t: 'flash' })
-    // colour motes off each cleared cell (capped so big cascades stay clean)
+    // per-orb burst: each cleared orb throws a ring + colour motes as it goes, rippling
+    // out from the match centre (capped so big cascades stay clean).
     const spawned = new Set(step.spawned.map((s) => s.i))
-    let motes = 0
+    const delays = rippleDelays(step.matched)
+    let bursts = 0
     for (const i of step.matched) {
-      if (motes >= 40 || spawned.has(i)) continue
+      if (bursts >= 28 || spawned.has(i)) continue
       const c = boardRef.current[i]
       const col = c && c.color >= 0 ? PIECES[c.color]?.base ?? '#ffd884' : '#e7d3ea'
       const cx = cellCenter(xy(i).x, bp), cy = cellCenter(xy(i).y, bp)
-      const n = 4
+      const delay = delays.get(i) ?? 0
+      items.push({ t: 'pop', x: cx, y: cy, color: col, delay }) // the little burst ring
+      const n = 5
       for (let k = 0; k < n; k++) {
         const a = (Math.PI * 2 * k) / n + Math.random() * 0.8
-        const r = 14 + Math.random() * 16
-        items.push({ t: 'mote', x: cx, y: cy, dx: Math.cos(a) * r, dy: Math.sin(a) * r, color: col })
+        const r = 16 + Math.random() * 18
+        items.push({ t: 'mote', x: cx, y: cy, dx: Math.cos(a) * r, dy: Math.sin(a) * r, color: col, delay })
       }
-      motes++
+      bursts++
     }
-    spawnFx(items, 540)
+    spawnFx(items, 760)
   }
 
   const runResolve = async (start: Cell[], opts: { swapAt?: number; forced?: Set<number> }) => {
     const { steps, puffs } = resolve(start, rngRef.current, opts)
     for (let s = 0; s < steps.length; s++) {
       const step = steps[s]
-      setPopping(new Set(step.matched))
+      setPopping(rippleDelays(step.matched))
       fireEffects(step)
       setHeat(step.mult)
       if (step.spawned.length) sfx.play('bloom')
       const big = bigSound(step.fired)
       if (big) sfx.play(big)
       else sfx.play(s === 0 ? 'pop' : 'combo')
-      await sleep(255)
+      await sleep(300) // hold long enough for the ripple stagger to burst before the board falls
       scoreRef.current += step.gained
       setScore(scoreRef.current)
       awardMilestones()
@@ -438,7 +461,7 @@ export default function MananaPage() {
         setQuestGot(questGotRef.current)
       }
       apply(step.fallen)
-      setPopping(new Set())
+      setPopping(new Map())
       await sleep(115)
     }
     setHeat(1)
@@ -580,11 +603,12 @@ export default function MananaPage() {
       <style>{`
         @keyframes manana-viewin { from{opacity:0;transform:translateY(10px) scale(.984)} to{opacity:1;transform:none} }
         @keyframes manana-bloom { from{opacity:0;transform:scale(.8)} 60%{opacity:1} to{opacity:1;transform:none} }
-        @keyframes manana-pop { 0%{transform:scale(1)} 40%{transform:scale(1.28)} 100%{transform:scale(0);opacity:0} }
+        @keyframes manana-pop { 0%{transform:scale(1);filter:brightness(1)} 32%{transform:scale(1.4);filter:brightness(1.9)} 100%{transform:scale(0);opacity:0;filter:brightness(1.4)} }
+        @keyframes manana-burst { 0%{opacity:0;transform:translate(-50%,-50%) scale(.35)} 22%{opacity:.95} 100%{opacity:0;transform:translate(-50%,-50%) scale(1.5)} }
         @keyframes manana-drop { 0%{transform:translateY(-14px) scale(0.9);opacity:0.2} 100%{transform:translateY(0) scale(1);opacity:1} }
         @keyframes manana-charged { 0%,100%{ filter:brightness(1) } 50%{ filter:brightness(1.4) } }
         .manana-gem{ transition: transform .12s ease, box-shadow .12s ease; animation: manana-drop .18s ease; }
-        .manana-pop{ animation: manana-pop .26s ease forwards !important; }
+        .manana-pop{ animation: manana-pop .24s ease var(--pd,0s) forwards !important; }
         .manana-charged{ animation: manana-charged 1.1s ease-in-out infinite; }
 
         /* --- special-piece detonations (clean arcade) --- */
@@ -605,6 +629,8 @@ export default function MananaPage() {
           animation:manana-flash .3s ease-out forwards; }
         .manana-mote{ position:absolute; width:7px; height:7px; border-radius:9999px; background:var(--c); box-shadow:0 0 8px var(--c); mix-blend-mode:screen;
           animation:manana-mote .5s ease-out forwards; }
+        .manana-burst{ position:absolute; border-radius:9999px; border:2px solid var(--c); box-shadow:0 0 12px var(--c),inset 0 0 8px var(--c); mix-blend-mode:screen;
+          animation:manana-burst .42s ease-out forwards; }
         @keyframes manana-callout{ 0%{ transform:scale(.5); opacity:0 } 18%{ transform:scale(1.12); opacity:1 } 70%{ transform:scale(1); opacity:1 } 100%{ transform:scale(1.04); opacity:0 } }
         .manana-callout{ animation:manana-callout .85s ease-out forwards; }
       `}</style>
@@ -715,7 +741,8 @@ export default function MananaPage() {
                   if (f.t === 'beamV') return <span key={f.id} className="manana-beamV" style={{ left: f.x, width: beamT, transformOrigin: `center ${f.oy - 8}px`, ['--c' as string]: f.color } as React.CSSProperties} />
                   if (f.t === 'ring') return <span key={f.id} className="manana-ring" style={{ left: f.x, top: f.y, width: boardPx * 1.1, height: boardPx * 1.1, ['--c' as string]: f.color } as React.CSSProperties} />
                   if (f.t === 'flash') return <span key={f.id} className="manana-flash" />
-                  return <span key={f.id} className="manana-mote" style={{ left: f.x, top: f.y, ['--c' as string]: f.color, ['--dx' as string]: `${f.dx}px`, ['--dy' as string]: `${f.dy}px` } as React.CSSProperties} />
+                  if (f.t === 'pop') return <span key={f.id} className="manana-burst" style={{ left: f.x, top: f.y, width: cell * 1.05, height: cell * 1.05, marginLeft: -cell * 0.525, marginTop: -cell * 0.525, animationDelay: `${f.delay ?? 0}ms`, ['--c' as string]: f.color } as React.CSSProperties} />
+                  return <span key={f.id} className="manana-mote" style={{ left: f.x, top: f.y, animationDelay: `${f.delay ?? 0}ms`, ['--c' as string]: f.color, ['--dx' as string]: `${f.dx}px`, ['--dy' as string]: `${f.dy}px` } as React.CSSProperties} />
                 })}
               </div>
             )
@@ -759,7 +786,8 @@ export default function MananaPage() {
                           ? `inset 0 -3px 6px ${p.edge}88, 0 0 10px ${p.light}cc, 0 3px 6px rgba(0,0,0,0.35)`
                           : `inset 0 -3px 6px ${p.edge}88, 0 3px 6px rgba(0,0,0,0.35)`,
                       transform: isSel ? 'scale(1.08)' : undefined,
-                    }}
+                      ...(isPop ? { ['--pd' as string]: `${popping.get(i) ?? 0}ms` } : {}),
+                    } as React.CSSProperties}
                   >
                     <span className="absolute rounded-full" style={{ top: '14%', left: '20%', width: '32%', height: '24%', background: 'rgba(255,255,255,0.55)', filter: 'blur(2px)' }} />
                     {/* special markings */}
