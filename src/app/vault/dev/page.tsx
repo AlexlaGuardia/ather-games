@@ -305,6 +305,10 @@ export default function VaultDevPage() {
   // ── publish to the live game ──────────────────────────────────────────────────
   const slotKey = authoredKey(selArea, selLevel)
   const isLive = !!liveStore[slotKey]
+  // dirty = the editor differs from what's published. seed is cosmetic for authored levels
+  // (makeAuthoredWorld replaces all entities), so compare only the gameplay-bearing fields.
+  const layoutSig = (L?: AuthoredLevel) => L ? JSON.stringify({ e: L.end, s: L.segs.map((s) => [s.x0, s.x1, s.top]), f: L.foes.map((f) => [f.x, f.y]), k: L.spikes.map((s) => [s.x, s.y]), m: L.motes.map((m) => [m.x, m.y]) }) : ''
+  const dirty = isLive && layoutSig(level) !== layoutSig(liveStore[slotKey])
   const publish = async () => {
     setSaveMsg({ ok: true, text: 'saving…' })
     try {
@@ -405,11 +409,11 @@ export default function VaultDevPage() {
                 ))}
               </select>
             </label>
-            <span className={`text-[10px] px-1.5 py-0.5 rounded ${isLive ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-400/40' : 'bg-white/5 text-slate-500 border border-white/10'}`}>
-              {isLive ? '● live' : 'procedural'}
+            <span className={`text-[10px] px-1.5 py-0.5 rounded ${dirty ? 'bg-amber-500/20 text-amber-300 border border-amber-400/50' : isLive ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-400/40' : 'bg-white/5 text-slate-500 border border-white/10'}`}>
+              {dirty ? '● unsaved edits' : isLive ? '● live · matches' : 'procedural · not published'}
             </span>
             <div className="flex-1" />
-            <button onClick={publish} className="rounded-md px-3 py-1.5 text-sm font-bold bg-amber-400/20 border border-amber-300/60 text-amber-100 hover:bg-amber-400/30">▲ Save to Live</button>
+            <button onClick={publish} className={`rounded-md px-3 py-1.5 text-sm font-bold border ${dirty || !isLive ? 'bg-amber-400/25 border-amber-300/70 text-amber-100 hover:bg-amber-400/35' : 'bg-white/5 border-white/10 text-slate-400 hover:bg-white/10'}`}>▲ Save to Live{dirty ? ' •' : ''}</button>
             <button onClick={loadLive} disabled={!isLive} title="pull the published level back into the editor"
               className="rounded-md px-2.5 py-1.5 text-sm bg-white/5 border border-white/10 hover:bg-white/10 disabled:opacity-40 disabled:hover:bg-white/5">⬇ Load Live</button>
             <button onClick={unpublish} disabled={!isLive} title="revert this slot to the procedural generator"
