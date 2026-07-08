@@ -48,7 +48,7 @@ export const LEVELS: Level[] = [
   { id: 11, name: 'The Warren', blurb: 'free the whole hold', goal: { kind: 'free', target: 8 }, moves: 15, puffs: 2, collars: 8 },
   { id: 12, name: 'Cloudbreak', blurb: 'the great overcast', goal: { kind: 'puffs', target: 9 }, moves: 12, puffs: 9 },
   { id: 13, name: 'Twin Blooms', blurb: 'forge and combine', goal: { kind: 'bloom', target: 5 }, moves: 16, puffs: 3 },
-  { id: 14, name: 'The Deep', blurb: 'as far as it goes', goal: { kind: 'score', target: 6000 }, moves: 18, puffs: 4 },
+  { id: 14, name: 'The Deep', blurb: 'as far as it goes', goal: { kind: 'score', target: 4000 }, moves: 20, puffs: 4 },
 ]
 
 export const levelAt = (i: number): Level => LEVELS[Math.max(0, Math.min(LEVELS.length - 1, i))]
