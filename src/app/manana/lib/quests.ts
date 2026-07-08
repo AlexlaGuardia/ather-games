@@ -44,7 +44,7 @@ export const LEVELS: Level[] = [
   { id: 7, name: 'Snap the Collar', blurb: 'free the caught', goal: { kind: 'free', target: 5 }, moves: 14, puffs: 1, collars: 5 },
   { id: 8, name: "Heart's Match", blurb: 'the warm colour', goal: { kind: 'collect', target: 30, color: 4 }, moves: 14, puffs: 3 },
   { id: 9, name: 'Ather Rising', blurb: 'the raw substance', goal: { kind: 'score', target: 2000 }, moves: 16, puffs: 3 },
-  { id: 10, name: 'Stormfront', blurb: 'the sky breaks', goal: { kind: 'collect', target: 34, color: 0 }, moves: 13, puffs: 4 },
+  { id: 10, name: 'Stormfront', blurb: 'the sky breaks', goal: { kind: 'collect', target: 28, color: 0 }, moves: 20, puffs: 4 },
   { id: 11, name: 'The Warren', blurb: 'free the whole hold', goal: { kind: 'free', target: 8 }, moves: 15, puffs: 2, collars: 8 },
   { id: 12, name: 'Cloudbreak', blurb: 'the great overcast', goal: { kind: 'puffs', target: 9 }, moves: 12, puffs: 9 },
   { id: 13, name: 'Twin Blooms', blurb: 'forge and combine', goal: { kind: 'bloom', target: 5 }, moves: 16, puffs: 3 },
