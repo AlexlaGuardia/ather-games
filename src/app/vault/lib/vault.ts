@@ -229,6 +229,7 @@ export interface World {
   motes: Mote[]
   genX: number // world-x generated up to
   lastTop: number // top of the last generated segment (gen continuity)
+  authored?: boolean // true = hand-built level (fixed data, no procedural streaming)
   events: BoundEvent[]
 }
 
@@ -247,6 +248,50 @@ export function makeWorld(seed: number, cfg: MovementCfg = ENDLESS_CFG): World {
   w.segs.push({ x0: -RUNNER_SX, x1: cfg.runway, top: TOP_BASE })
   w.genX = cfg.runway
   generate(w)
+  return w
+}
+
+// ── authored levels (the /vault/dev map editor) ─────────────────────────────────
+// A hand-built level is a finite, fixed snapshot of the world entities. The editor
+// SEEDS one by baking the procedural stream to a length, then Alex tweaks it; the
+// game plays it back with streaming off. `end` is the goal distance (the finish).
+export interface AuthoredLevel {
+  seed: number    // the seed it was baked from (for reference / re-roll)
+  end: number     // finish line in world-x; cross it grounded → won
+  areaId?: string // which area's look/movement it belongs to (optional; set when saved to the ladder)
+  segs: Seg[]
+  foes: Foe[]
+  spikes: Spike[]
+  motes: Mote[]
+}
+
+// bake the procedural generator into a finite editable snapshot covering [0, end].
+export function bakeLevel(seed: number, cfg: MovementCfg, end: number): AuthoredLevel {
+  const w = makeWorld(seed, cfg)
+  w.dist = end // push the frontier so one uncull'd pass fills the whole span
+  generate(w, false)
+  const clip = (x: number) => x < end
+  const segs = w.segs.filter((s) => s.x0 < end).map((s) => ({ x0: s.x0, x1: Math.min(s.x1, end), top: s.top }))
+  return {
+    seed, end,
+    segs,
+    foes: w.foes.filter((f) => clip(f.x)).map((f) => ({ x: f.x, y: f.y, dead: false })),
+    spikes: w.spikes.filter((s) => clip(s.x)).map((s) => ({ x: s.x, y: s.y })),
+    motes: w.motes.filter((m) => clip(m.x)).map((m) => ({ x: m.x, y: m.y, got: false })),
+  }
+}
+
+// build a playable world from an authored level: load its entities, disable streaming,
+// finish at `end`. Entities are deep-cloned so play mutations never touch the source.
+export function makeAuthoredWorld(level: AuthoredLevel, cfg: MovementCfg = ENDLESS_CFG): World {
+  const w = makeWorld(level.seed, { ...cfg, goalDist: level.end })
+  w.segs = level.segs.map((s) => ({ ...s }))
+  w.foes = level.foes.map((f) => ({ x: f.x, y: f.y, dead: false }))
+  w.spikes = level.spikes.map((s) => ({ ...s }))
+  w.motes = level.motes.map((m) => ({ x: m.x, y: m.y, got: false }))
+  w.genX = level.end
+  w.lastTop = level.segs.length ? level.segs[level.segs.length - 1].top : TOP_BASE
+  w.authored = true
   return w
 }
 
@@ -409,9 +454,9 @@ export function tick(w: World, dt: number): void {
     }
   }
 
-  // score + keep the course generated/culled
+  // score + keep the course generated/culled (authored levels are fixed — no streaming)
   w.score = Math.floor(w.dist / 10) + w.motesGot * MOTE_PTS + w.stompScore
-  generate(w)
+  if (!w.authored) generate(w)
 }
 
 function die(w: World, cause: 'gap' | 'grey'): void {
@@ -439,7 +484,7 @@ function overlap(ax: number, ay: number, aw: number, ah: number, bx: number, by:
 }
 
 // ── terrain generation (deterministic; only ever produces clearable courses) ──────
-function generate(w: World): void {
+function generate(w: World, cull = true): void {
   while (w.genX < w.dist + GEN_AHEAD) {
     const d = diffOf(w, w.genX)
     const speed = speedOf(w, w.genX)
@@ -472,6 +517,7 @@ function generate(w: World): void {
     w.lastTop = top
   }
   // cull behind
+  if (!cull) return
   const cutoff = w.dist - GEN_BEHIND
   if (w.segs.length > 60) w.segs = w.segs.filter(s => s.x1 > cutoff)
   if (w.foes.length > 40) w.foes = w.foes.filter(f => f.x > cutoff && !f.dead)
