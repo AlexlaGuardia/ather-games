@@ -17,12 +17,12 @@ import { spiritsToSave, spiritsFromSave } from '../spirits/spirit-save'
 import { LAUNCHED_SPECIES } from '../engine/spirit-index'
 import { ZONE_NODES, type NodePlacement } from '../world/node-placements'
 import { createResourceNode, depleteNode, tickNodeRespawn, rollDrops, getNodeSkill, nodeTier, NODE_DEFS, type NodeType, type ResourceNode } from '../world/resources'
-import { TOOL_DEFS, getEquippedTool, useTool, toolsToSave, toolsFromSave, ensureBasicTools, craftTool, canCraft as canCraftTool, type EquippedTools } from '../engine/tools'
+import { TOOL_DEFS, getEquippedTool, useTool, toolsToSave, toolsFromSave, ensureBasicTools, craftTool, canCraft as canCraftTool, wornFraction, repairCost, canRepair, repairTool, type EquippedTools } from '../engine/tools'
 import { findAdjacentNode, addHarvestItems } from '../engine/harvesting'
 import { newCast as newRinCast, phaseAt as rinPhaseAt, hook as rinHook, type RinCast } from '../engine/rinning'
 import { rinBite, rinCatch, rinMiss } from './rin-fx'
 import { gatherTick, gatherPop } from './gather-fx'
-import { createSkillSet, skillSetToSave, skillSetFromSave, addSkillXP, xpForSkillLevel, SKILL_META, type SkillSet } from '../engine/skills'
+import { createSkillSet, skillSetToSave, skillSetFromSave, addSkillXP, xpForSkillLevel, SKILL_META, type SkillSet, type SkillId } from '../engine/skills'
 import { createBeast, checkBeastUnlock, beastsToSave, beastsFromSave, BEAST_SPECIES, BEAST_DEFS, BEAST_PERKS, PERK_INFO, getBonusFindChance, getSpeedBonus, type ManaBeast, type BeastSpecies } from '../beasts/beast'
 import { createInventory, inventoryToSave, inventoryFromSave, addItems, removeItems, countItem, transferItem, createChestStorage, chestToSave, chestFromSave, type Inventory, type ItemStack, type ChestStorage, type ChestSave } from '../engine/inventory'
 import { createManaPool, manaToSave, manaFromSave, getMaxPool, type ManaPool } from '../engine/mana'
@@ -1328,6 +1328,17 @@ export default function Shimmer3D() {
     persist()
   }, [persist])
 
+  // Repair the equipped tool back to full — spends a wear-scaled slice of its recipe (maintenance,
+  // so you keep a tool going instead of running it to break + re-crafting from scratch).
+  const repairToolAction = useCallback((skillId: SkillId) => {
+    const tool = equippedToolsRef.current[skillId]
+    if (!tool || !repairTool(tool, invRef.current)) { setHarvestToast('Missing materials to repair'); return }
+    setToolTick(t => t + 1)
+    setInvSlots([...invRef.current.slots])
+    setHarvestToast(`Repaired ${TOOL_DEFS[tool.toolId]?.name} — full again (${TOOL_DEFS[tool.toolId]?.durability} uses)`)
+    persist()
+  }, [persist])
+
   // ── Chest (open at a placed chest) — per-instance storage, lazy-created on first open ──
   const getChest = useCallback((struct: PlacedStruct): ChestStorage => {
     const id = stationInstanceId(struct)
@@ -2297,7 +2308,7 @@ export default function Shimmer3D() {
                       const ok = canCraftTool(def.id, invRef.current)
                       const equipped = equippedToolsRef.current[def.skillId]?.toolId === def.id
                       return (
-                        <div key={def.id} style={{ background: '#241b09', border: `1px solid ${equipped ? '#7fe3c855' : '#ffffff14'}`, borderRadius: 10, padding: '9px 11px', opacity: equipped ? 0.85 : 1 }}>
+                        <div key={def.id} style={{ background: equipped ? '#1c2417' : '#241b09', border: `1px solid ${equipped ? '#7fe3c855' : '#ffffff14'}`, borderRadius: 10, padding: '9px 11px' }}>
                           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
                             <span style={{ font: '800 13px ui-monospace, monospace', color: '#f0e2c4' }}>
                               <span style={{ marginRight: 5 }}>{TOOL_HUD[def.skillId]?.glyph}</span>{def.name}
@@ -2307,15 +2318,48 @@ export default function Shimmer3D() {
                               +{Math.round((def.xpBonus - 1) * 100)}% XP · {def.durability} uses
                             </span>
                           </div>
-                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 6, alignItems: 'center' }}>
-                            {def.recipe.map(r => {
-                              const have = countItem(invRef.current, r.itemId)
-                              const short = have < r.count
-                              return <span key={r.itemId} style={{ font: '700 10px ui-monospace, monospace', color: short ? '#ff8a7a' : '#d9c78a', background: '#0007', border: `1px solid ${short ? '#ff5a4d55' : '#5c4f2f'}`, borderRadius: 6, padding: '2px 7px' }}>{prettyItem(r.itemId)} {have}/{r.count}</span>
-                            })}
-                            <span style={{ flex: 1 }} />
-                            <button onClick={() => craftToolAction(def.id)} disabled={!ok || equipped} style={{ padding: '6px 14px', borderRadius: 8, border: 'none', background: equipped ? '#2a3a2f' : ok ? '#b0862a' : '#3a3018', color: equipped ? '#7fe3c8' : ok ? '#fff' : '#ffffff55', font: '800 12px ui-monospace, monospace', cursor: ok && !equipped ? 'pointer' : 'default', touchAction: 'none' }}>{equipped ? 'Equipped' : 'Craft'}</button>
-                          </div>
+                          {equipped ? (() => {
+                            // EQUIPPED → maintenance: show wear + repair (a wear-scaled slice of the recipe)
+                            const eq = equippedToolsRef.current[def.skillId]!
+                            const frac = Math.max(0, eq.usesRemaining / def.durability)
+                            const worn = wornFraction(eq)
+                            const rep = repairCost(eq)
+                            const repOk = canRepair(eq, invRef.current)
+                            const barCol = frac > 0.5 ? 'linear-gradient(90deg,#6fd08f,#a7e07f)' : frac > 0.25 ? 'linear-gradient(90deg,#e0c060,#e0a860)' : 'linear-gradient(90deg,#e0806a,#e05a4d)'
+                            return (
+                              <div style={{ marginTop: 8 }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                  <div style={{ flex: 1, height: 7, background: '#0009', borderRadius: 4, border: '1px solid #0007', overflow: 'hidden' }}>
+                                    <div style={{ height: '100%', width: `${frac * 100}%`, background: barCol, transition: 'width .2s' }} />
+                                  </div>
+                                  <span style={{ font: '700 10px ui-monospace, monospace', color: '#cdbd8e', whiteSpace: 'nowrap' }}>{eq.usesRemaining}/{def.durability} uses</span>
+                                </div>
+                                {worn >= 0.25 ? (
+                                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 7, alignItems: 'center' }}>
+                                    <span style={{ font: '700 9px ui-monospace, monospace', color: '#b09660' }}>repair:</span>
+                                    {rep.map(r => {
+                                      const have = countItem(invRef.current, r.itemId); const short = have < r.count
+                                      return <span key={r.itemId} style={{ font: '700 10px ui-monospace, monospace', color: short ? '#ff8a7a' : '#d9c78a', background: '#0007', border: `1px solid ${short ? '#ff5a4d55' : '#5c4f2f'}`, borderRadius: 6, padding: '2px 7px' }}>{prettyItem(r.itemId)} {have}/{r.count}</span>
+                                    })}
+                                    <span style={{ flex: 1 }} />
+                                    <button onClick={() => repairToolAction(def.skillId)} disabled={!repOk} style={{ padding: '6px 14px', borderRadius: 8, border: 'none', background: repOk ? '#3a7a52' : '#243a2f', color: repOk ? '#eafff4' : '#ffffff55', font: '800 12px ui-monospace, monospace', cursor: repOk ? 'pointer' : 'default', touchAction: 'none' }}>Repair</button>
+                                  </div>
+                                ) : (
+                                  <div style={{ font: '700 10px ui-monospace, monospace', color: '#7fe3c8', marginTop: 7, textAlign: 'right' }}>✓ equipped · good condition</div>
+                                )}
+                              </div>
+                            )
+                          })() : (
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 6, alignItems: 'center' }}>
+                              {def.recipe.map(r => {
+                                const have = countItem(invRef.current, r.itemId)
+                                const short = have < r.count
+                                return <span key={r.itemId} style={{ font: '700 10px ui-monospace, monospace', color: short ? '#ff8a7a' : '#d9c78a', background: '#0007', border: `1px solid ${short ? '#ff5a4d55' : '#5c4f2f'}`, borderRadius: 6, padding: '2px 7px' }}>{prettyItem(r.itemId)} {have}/{r.count}</span>
+                              })}
+                              <span style={{ flex: 1 }} />
+                              <button onClick={() => craftToolAction(def.id)} disabled={!ok} style={{ padding: '6px 14px', borderRadius: 8, border: 'none', background: ok ? '#b0862a' : '#3a3018', color: ok ? '#fff' : '#ffffff55', font: '800 12px ui-monospace, monospace', cursor: ok ? 'pointer' : 'default', touchAction: 'none' }}>Craft</button>
+                            </div>
+                          )}
                         </div>
                       )
                     })}

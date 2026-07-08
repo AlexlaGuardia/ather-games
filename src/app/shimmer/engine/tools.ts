@@ -152,6 +152,45 @@ export function craftTool(toolId: string, inv: Inventory): EquippedTool | null {
 }
 
 // ============================================
+// Maintenance (repair a worn tool instead of running it to break + re-crafting)
+// ============================================
+
+/** How spent a tool is, 0 (fresh) … 1 (about to break). Basics never wear → 0. */
+export function wornFraction(tool: EquippedTool): number {
+  const def = TOOL_DEFS[tool.toolId]
+  if (!def || def.basic) return 0
+  return Math.max(0, Math.min(1, 1 - tool.usesRemaining / def.durability))
+}
+
+// repair is only offered once a tool is meaningfully worn (no trivial 1-mat top-ups)
+export const REPAIR_MIN_WEAR = 0.25
+
+/** Materials to repair a worn tool back to full — a fraction of the craft recipe scaled to wear,
+ *  so topping up early is cheap and a near-broken tool costs almost a full re-craft. */
+export function repairCost(tool: EquippedTool): { itemId: string; count: number }[] {
+  const def = TOOL_DEFS[tool.toolId]
+  if (!def || def.basic) return []
+  const worn = wornFraction(tool)
+  return def.recipe.map(r => ({ itemId: r.itemId, count: Math.ceil(r.count * worn) })).filter(r => r.count > 0)
+}
+
+/** Can this tool be repaired right now (worn enough + materials on hand)? */
+export function canRepair(tool: EquippedTool, inv: Inventory): boolean {
+  const def = TOOL_DEFS[tool.toolId]
+  if (!def || def.basic || wornFraction(tool) < REPAIR_MIN_WEAR) return false
+  return repairCost(tool).every(r => countItem(inv, r.itemId) >= r.count)
+}
+
+/** Repair a tool to full durability, consuming the repair cost. Returns true on success. */
+export function repairTool(tool: EquippedTool, inv: Inventory): boolean {
+  const def = TOOL_DEFS[tool.toolId]
+  if (!def || def.basic || !canRepair(tool, inv)) return false
+  for (const r of repairCost(tool)) removeItems(inv, r.itemId, r.count)
+  tool.usesRemaining = def.durability
+  return true
+}
+
+// ============================================
 // Save/Load
 // ============================================
 
