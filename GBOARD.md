@@ -773,8 +773,11 @@ the Arcade frame.
   `pacmaze`** sim before the canon weld (`f9cdbe1` → Dewdrop `fdeb8bc`); `pacmaze/` dir is gone (renamed).
 **Files:** `dewdrop/lib/dewdrop.ts` (20 tests) · `page.tsx` · canon `athernyx/CANON/game/dewbear-maze.md`
 
-### Vault (#14) — 🟢 live · auto-runner, a mote crosses the greying → `/vault` *(BIG feature arc 07-07; device-tuning)*
-*Last touched: 2026-07-07 — huge arc: Story mode → audio → fuel/hearts mechanic → areas×levels ladder. Render shell 06-29; sim 06-28; canon ruled 06-28 + 07-07.*
+### Vault (#14) — 🟢 live · auto-runner, a mote crosses the greying → `/vault` *(BIG feature arc 07-07; MAP EDITOR 07-08)*
+*Last touched: 2026-07-08 — MAP EDITOR phase 1 (`/vault/dev`). 07-07 huge arc: Story mode → audio → fuel/hearts → areas×levels ladder.*
+**★ 2026-07-08 — MAP EDITOR, phase 1 (jin-cc, `64821f8`, pushed).** Vault was procedural-stream-only (a "level" = fixed seed + goalDist, nothing hand-placed). Introduced **authored levels**: `AuthoredLevel` data + `bakeLevel()` (snapshot the generator to a finite span) + `makeAuthoredWorld()` (play it back, streaming off, finish at `end`); `tick()` skips `generate()` when authored; `generate()` gained a cull toggle. 14 engine assertions (finite/no-stream/winnable/deterministic) in `vault.authored.test.ts`. **Editor `/vault/dev`** (desktop, noindex, self-contained — no game-page changes): **seed-then-tweak** (Alex's pick) — Reroll bakes a procedural level, then draw platforms / drop motes+foes+spikes / move / erase / set finish; **Test Play** runs the real engine in-place (blockout render — skin is cosmetic, layout reads clearer); Export/Import JSON; localStorage autosave.
+  - **▶ NEEDS ALEX DESKTOP PASS:** the editor feel (place/drag ergonomics, zoom, test-play). **Design decision (mine, confirmable):** Endless/Daily STAY procedural (that's "the crossing without end"); only the **Story ladder** goes authored.
+  - **▶ NEXT (phase 2):** wire authored levels into the Story ladder slots — save a built level as level (a,i), replace `levelSeed`/`levelCfg` procedural for Story, a level-picker in the editor to edit each ladder slot, and per-area look/movement carried into test-play. Also: device-tune knobs from the 07-07 arc still open (level lengths, deep-area softening a5/a6).
 **★ 2026-07-07 ARC (one long session, all pushed) — Vault went from a bare score-runner to the most-developed cabinet:**
   1. **STORY MODE (the crossing, canon-ruled).** Magii ruled the crossing is **eternal — no arrival** (`game/vault.md`,
      07-07): Story = the myth told as a **descent** into the greying, seamless handoff to Endless. Built the sim to be
