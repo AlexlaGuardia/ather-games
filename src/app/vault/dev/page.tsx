@@ -1,9 +1,12 @@
 'use client'
 
-// VAULT — map editor (/vault/dev). Desktop tool. Seed a level from the procedural
-// generator, then tweak it: drag platforms, drop motes / foes / spikes, move the
-// finish. Test-play it in-place (same engine, blockout render — the Vault skin is
-// cosmetic and blockout reads the layout more clearly). Export JSON for the ladder.
+// VAULT — map editor (/vault/dev). Desktop tool. Pick a ladder slot (Area × Level
+// dropdowns); it loads scratch → live → a procedural seed. Tweak it: drag platforms,
+// drop motes / foes / spikes, move the finish. Test-play it in-place (same engine,
+// blockout render — the Vault skin is cosmetic and blockout reads the layout more
+// clearly). "Save to Live" publishes the slot to public/vault/authored-levels.json
+// (served instantly, no rebuild) and the game plays it for that slot; Unpublish reverts
+// the slot to the procedural generator. Export/Import JSON still available below.
 //
 // Coords are world-space: x = distance, y = VH-space (smaller y = higher). Platforms
 // are Seg{x0,x1,top}; foe/spike carry feet-y (sit on a platform top); motes float free.
