@@ -407,7 +407,13 @@ the Arcade frame.
   game route. Verified: live 200 · back-room/coming-soon 307→/arcade · dev tooling 403 · /owner 401.
 
 ### Mana'nana — 🟢 live · match-3, blooming specials → `/manana`
-*Last touched: 2026-07-07 — audio layer extracted to shared libs (MusicBed/VoBank/one AudioContext); 07-06 home + Story roadmap (board-game trail)*
+*Last touched: 2026-07-08 — difficulty-curve pass (eased Lv9/10/14 walls) + reward-loop polish (level-cleared fanfare, living trail token, trail finish line). 07-07 audio layer to shared libs; 07-06 home + Story roadmap*
+**★ 2026-07-08 SESSION (jin-cc, all pushed):**
+  - **Difficulty pass** — Alex hit walls at Lv9 (score 3500→2000), Lv10 (storm 34/13→28/20 moves), Lv14 finale (6000/18→4000/20). Curve audit flagged the outliers; watch next = Lv12 (9 puffs/12) + Lv11 (8 collars), left for play data. Full feel-sweep deferred until Alex runs the ladder end-to-end.
+  - **Orb-clear juice** (`7e97b15`) — clears read as instant-vanish; added radial ripple stagger + per-orb burst ring + punchier pop + more motes. Knobs: `RIPPLE_STEP`/`RIPPLE_MAX` + `manana-pop`/`manana-burst` in page.tsx.
+  - **Reward-loop polish** (`f6f6297`) — win was an instant cut to the trail; now a 1.5s board fanfare (burst-wave from centre + gold ring + "✦ level ✦" banner) before the token-hop. Trail token gains idle-bob + ground-shadow + squash landing. Timers in `win()`.
+  - **Finish line** (`0b5729d`) — trail ended abruptly; added a finish marker at the foot (Ather Winds' gate): dim/sealed while climbing, lights gold + token crosses on full-ladder clear; auto-scrolls to it when done.
+  - **▶ NEEDS ALEX DEVICE PASS:** fanfare timing/feel (too long/short?), ripple feel on big cascades, finish-line read. **TODO(art):** swap 🐾 trail token for a real Mana'mal sprite (Momo/Duskpuff) — wrapper ready in Roadmap.tsx.
 **Left off:** Cloud-puff obstacle live (CSS stub, Shimmer-canon palette), detonation FX
   (row/col beams, star flash, prism ring, capped motes), and iOS sound+scroll fixes
   **confirmed on a real iPhone**. Orbs are canon elements (SVG rune-marks: Mana/Storm/
