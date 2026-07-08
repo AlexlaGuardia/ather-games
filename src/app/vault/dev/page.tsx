@@ -11,14 +11,15 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import {
-  VH, TOP_MIN, TOP_MAX, TOP_BASE, RUNNER_SX, RUNNER_W, RUNNER_H,
+  VH, TOP_MIN, TOP_MAX, TOP_BASE, STEP_UP, RUNNER_SX, RUNNER_W, RUNNER_H,
   FOE_W, FOE_H, ENDLESS_CFG, bakeLevel, makeAuthoredWorld, tick, pressJump, releaseJump,
   type AuthoredLevel, type World, type MovementCfg,
 } from '../lib/vault'
 
-type Tool = 'platform' | 'mote' | 'foe' | 'spike' | 'erase' | 'move'
+type Tool = 'platform' | 'stairs' | 'mote' | 'foe' | 'spike' | 'erase' | 'move'
 const TOOLS: { id: Tool; label: string; hint: string }[] = [
   { id: 'platform', label: '▭ Platform', hint: 'drag to draw a ledge' },
+  { id: 'stairs', label: '◥ Stairs', hint: 'drag to lay a walkable staircase' },
   { id: 'mote', label: '● Mote', hint: 'click to drop (floats)' },
   { id: 'foe', label: '✖ Foe', hint: 'click a ledge (stompable)' },
   { id: 'spike', label: '▲ Spike', hint: 'click a ledge (leap only)' },
@@ -36,6 +37,26 @@ const COL = { bg: '#0d0b14', grid: '#241d33', ledge: '#3b4b63', ledgeTop: '#8fb0
 
 function emptyLevel(end = 5000): AuthoredLevel {
   return { seed: 1, end, segs: [{ x0: -RUNNER_SX, x1: 900, top: TOP_BASE }], foes: [], spikes: [], motes: [] }
+}
+
+// a drag (a→b) becomes a run of FLUSH platforms stepping from a's height to b's, each
+// riser kept under STEP_UP so the runner walks up/down it (a proper staircase, not
+// stacked ledges). Direction follows the drag: left→right of the drag = the descent.
+const STAIR_RISE = STEP_UP - 2 // target riser (leaves room for grid snap to stay walkable)
+function makeStairs(ax: number, ay: number, bx: number, by: number) {
+  const sx = Math.min(ax, bx), ex = Math.max(ax, bx)
+  const run = ex - sx
+  if (run < GRID_X) return []
+  const leftTop = clamp(ax <= bx ? ay : by, TOP_MIN, TOP_MAX)
+  const rightTop = clamp(ax <= bx ? by : ay, TOP_MIN, TOP_MAX)
+  const steps = clamp(Math.max(2, Math.ceil(Math.abs(rightTop - leftTop) / STAIR_RISE)), 2, Math.max(2, Math.min(40, Math.floor(run / 8))))
+  const stepW = run / steps
+  const out: { x0: number; x1: number; top: number }[] = []
+  for (let i = 0; i < steps; i++) {
+    const top = clamp(Math.round((leftTop + (rightTop - leftTop) * (i / steps)) / 2) * 2, TOP_MIN, TOP_MAX)
+    out.push({ x0: Math.max(0, Math.round((sx + i * stepW) / 4) * 4), x1: Math.round((sx + (i + 1) * stepW) / 4) * 4, top })
+  }
+  return out
 }
 
 export default function VaultDevPage() {
@@ -59,9 +80,10 @@ export default function VaultDevPage() {
   const [dims, setDims] = useState({ w: 960, h: Math.round(VH * 1.4) })
 
   // drag state (edit mode)
-  const drag = useRef<{ kind: 'platform' | 'move' | 'pan'; x0: number; y0: number; ref?: unknown; camStart?: number } | null>(null)
+  const drag = useRef<{ kind: 'platform' | 'stairs' | 'move' | 'pan'; x0: number; y0: number; ref?: unknown; camStart?: number } | null>(null)
   const [preview, setPreview] = useState<{ x0: number; x1: number; top: number } | null>(null)
   const previewRef = useRef(preview); previewRef.current = preview
+  const stairsPrevRef = useRef<{ x0: number; x1: number; top: number }[]>([]) // live staircase preview segs
   const testResultRef = useRef(testResult); testResultRef.current = testResult
 
   // ── load / autosave ─────────────────────────────────────────────────────────
@@ -134,6 +156,12 @@ export default function VaultDevPage() {
     // preview platform
     const pv = previewRef.current
     if (pv) { ctx.strokeStyle = COL.ledgeTop; ctx.strokeRect(wx(pv.x0), wy(pv.top), (pv.x1 - pv.x0) * sc, wy(VH) - wy(pv.top)) }
+    // preview staircase (filled ghost + top rail per step)
+    for (const st of stairsPrevRef.current) {
+      const x = wx(st.x0), w = (st.x1 - st.x0) * sc, y = wy(st.top)
+      ctx.fillStyle = 'rgba(143,176,216,0.22)'; ctx.fillRect(x, y, w, wy(VH) - y)
+      ctx.fillStyle = COL.ledgeTop; ctx.fillRect(x, y - 2 * sc, w, 2 * sc)
+    }
     // runner (test) or start marker (edit)
     if (testRef.current && worldRef.current) {
       const w = worldRef.current
@@ -163,6 +191,7 @@ export default function VaultDevPage() {
     if (e.button === 1 || e.shiftKey) { drag.current = { kind: 'pan', x0: px, y0: py, camStart: camXRef.current }; return }
     const t = toolRef.current
     if (t === 'platform') { const sx = Math.max(0, SNAP(x, GRID_X)); const top = clamp(SNAP(y, 4), TOP_MIN, TOP_MAX); drag.current = { kind: 'platform', x0: sx, y0: top }; setPreview({ x0: sx, x1: sx, top }); return }
+    if (t === 'stairs') { drag.current = { kind: 'stairs', x0: Math.max(0, x), y0: clamp(y, TOP_MIN, TOP_MAX) }; stairsPrevRef.current = []; return }
     if (t === 'mote') { setLevel((L) => ({ ...L, motes: [...L.motes, { x: SNAP(x, GRID_X), y: clamp(SNAP(y, 8), TOP_MIN - 70, TOP_MAX), got: false }] })); return }
     if (t === 'foe') { const fx = SNAP(x, GRID_X); setLevel((L) => ({ ...L, foes: [...L.foes, { x: fx, y: segTopAt(fx), dead: false }] })); return }
     if (t === 'spike') { const sx = SNAP(x, GRID_X); setLevel((L) => ({ ...L, spikes: [...L.spikes, { x: sx, y: segTopAt(sx) }] })); return }
@@ -176,6 +205,7 @@ export default function VaultDevPage() {
     const { x, y } = s2w(px, py)
     if (d.kind === 'pan') { setCamX(Math.max(-RUNNER_SX, d.camStart! - (px - d.x0) / scaleRef.current)); return }
     if (d.kind === 'platform') { const x1 = Math.max(d.x0 + GRID_X, SNAP(x, GRID_X)); setPreview({ x0: d.x0, x1, top: d.y0 }); return }
+    if (d.kind === 'stairs') { stairsPrevRef.current = makeStairs(d.x0, d.y0, Math.max(0, x), clamp(y, TOP_MIN, TOP_MAX)); return }
     if (d.kind === 'move') { moveRef(d.ref as ReturnType<typeof pick>, x, y); d.x0 = x; d.y0 = y }
   }
   function onUp() {
@@ -184,6 +214,10 @@ export default function VaultDevPage() {
     if (d.kind === 'platform' && preview && preview.x1 > preview.x0) {
       const p = preview; setLevel((L) => ({ ...L, segs: [...L.segs, { x0: p.x0, x1: p.x1, top: p.top }] }))
     }
+    if (d.kind === 'stairs' && stairsPrevRef.current.length) {
+      const steps = stairsPrevRef.current; setLevel((L) => ({ ...L, segs: [...L.segs, ...steps] }))
+    }
+    stairsPrevRef.current = []
     setPreview(null)
   }
   function eraseAt(p: NonNullable<ReturnType<typeof pick>>) {
