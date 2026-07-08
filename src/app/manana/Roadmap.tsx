@@ -58,7 +58,13 @@ export default function Roadmap({ current, onPlay, onHome, advancedFrom }: Roadm
     })
     return out
   }, [w])
-  const height = TOP_PAD * 2 + BANDS.length * ROW_GAP
+  // the trail ends at a finish-line marker below the last pitstop — Ather Winds'
+  // "sealed gate". It sits at the foot of the path; the token crosses it on the
+  // full-ladder clear. posFor maps a token index past the last level onto it.
+  const height = TOP_PAD + BANDS.length * ROW_GAP + 118
+  const finishX = w * 0.5
+  const finishY = TOP_PAD + BANDS.length * ROW_GAP - 16
+  const posFor = (i: number) => (i >= LEVELS.length ? { x: finishX, y: finishY } : { x: nodes[i].x, y: nodes[i].y })
 
   const [tokenAt, setTokenAt] = useState(advancedFrom ?? current)
   const [landing, setLanding] = useState(false)
@@ -71,9 +77,12 @@ export default function Roadmap({ current, onPlay, onHome, advancedFrom }: Roadm
     setTokenAt(current)
   }, [current, advancedFrom])
 
-  useEffect(() => { nodeRefs.current[Math.min(current, LEVELS.length - 1)]?.scrollIntoView({ block: 'center' }) }, [current, w])
-
+  const finishRef = useRef<HTMLDivElement>(null)
   const done = current >= LEVELS.length
+  useEffect(() => {
+    if (done) finishRef.current?.scrollIntoView({ block: 'center' })
+    else nodeRefs.current[Math.min(current, LEVELS.length - 1)]?.scrollIntoView({ block: 'center' })
+  }, [current, w, done])
 
   return (
     <div className="flex h-full w-full flex-col" style={{ background: 'radial-gradient(130% 90% at 50% -5%,#33244c 0%,#1c1430 50%,#100b1a 100%)', color: '#f4ecdf' }}>
@@ -115,6 +124,17 @@ export default function Roadmap({ current, onPlay, onHome, advancedFrom }: Roadm
                     style={travelled ? { filter: 'drop-shadow(0 0 5px rgba(255,200,110,.55))' } : undefined} />
                 )
               })}
+              {/* the last stretch of path into the finish line */}
+              {(() => {
+                const last = nodes[LEVELS.length - 1]
+                const my = (last.y + finishY) / 2
+                return (
+                  <path d={`M ${last.x} ${last.y} C ${last.x} ${my}, ${finishX} ${my}, ${finishX} ${finishY}`} fill="none"
+                    stroke={done ? '#ffd884' : '#463c5e'} strokeWidth={done ? 6 : 4}
+                    strokeLinecap="round" strokeDasharray={done ? undefined : '1 13'} opacity={done ? 0.85 : 0.55}
+                    style={done ? { filter: 'drop-shadow(0 0 5px rgba(255,200,110,.55))' } : undefined} />
+                )
+              })()}
             </svg>
           )}
 
@@ -157,11 +177,29 @@ export default function Roadmap({ current, onPlay, onHome, advancedFrom }: Roadm
             )
           })}
 
+          {/* finish line — the foot of the trail. Dim + sealed until the ladder's
+              walked, then it lights gold and the token crosses it. */}
+          {w > 0 && (
+            <div ref={finishRef} className="pointer-events-none absolute z-[6] -translate-x-1/2 -translate-y-1/2 flex flex-col items-center"
+              style={{ left: finishX, top: finishY }}>
+              <div className="flex h-[46px] w-[74px] items-center justify-center rounded-lg text-2xl transition-all"
+                style={done
+                  ? { background: 'linear-gradient(180deg,#fff2cf,#ffb020)', boxShadow: '0 0 0 3px #ffe9a855, 0 0 26px rgba(255,176,32,.75)', animation: 'manana-finish-glow 1.8s ease-in-out infinite' }
+                  : { background: 'rgba(255,255,255,.04)', border: '1px dashed #ffe9a83a', filter: 'grayscale(.4) opacity(.8)' }}>
+                🏁
+              </div>
+              <div className="mt-1.5 text-center leading-tight">
+                <div className="text-[11px] font-black uppercase tracking-wider" style={{ color: done ? '#ffe9a8' : '#8a7fa6' }}>{done ? 'Journey’s End' : 'The Gate'}</div>
+                <div className="text-[9px] italic text-slate-300/50">{done ? 'the whole garden, walked ✦' : 'walk the trail to reach it'}</div>
+              </div>
+            </div>
+          )}
+
           {/* game-piece token — hops to the current pitstop, idles with a gentle bob,
               pops on landing. TODO(art): swap the 🐾 glyph for Alex's bonded-Mana'mal
               sprite (Momo/Duskpuff) — the wrapper already carries motion + ground-shadow. */}
           {w > 0 && (() => {
-            const t = nodes[Math.min(tokenAt, nodes.length - 1)]
+            const t = posFor(Math.min(tokenAt, LEVELS.length))
             return (
               <div className="pointer-events-none absolute z-10"
                 style={{ left: t.x, top: t.y - 36, transform: 'translate(-50%,-50%)', transition: 'left .55s cubic-bezier(.5,0,.3,1), top .55s cubic-bezier(.34,1.5,.5,1)' }}>
@@ -181,6 +219,7 @@ export default function Roadmap({ current, onPlay, onHome, advancedFrom }: Roadm
 
       <style>{`
         @keyframes manana-pit-pulse{0%,100%{filter:brightness(1)}50%{filter:brightness(1.15)}}
+        @keyframes manana-finish-glow{0%,100%{filter:brightness(1);box-shadow:0 0 0 3px #ffe9a855,0 0 22px rgba(255,176,32,.6)}50%{filter:brightness(1.12);box-shadow:0 0 0 4px #ffe9a877,0 0 32px rgba(255,176,32,.9)}}
         @keyframes manana-token-idle{0%,100%{transform:translateY(0)}50%{transform:translateY(-4px)}}
         @keyframes manana-token-land{0%{transform:translateY(0) scale(1)}30%{transform:translateY(-12px) scale(1.26)}60%{transform:translateY(0) scale(.94)}100%{transform:translateY(0) scale(1)}}
       `}</style>
