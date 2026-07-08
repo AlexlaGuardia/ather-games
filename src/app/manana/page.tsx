@@ -4,7 +4,7 @@
 // (colour wipe), 7 → Ather Star (cross). Detonate by matching or swapping. Score
 // milestones earn moves; cascades ramp an ather-heat multiplier. Glossy CSS gems.
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import SiteNav from '../_components/SiteNav'
 import DailyLeaderboard from '../_components/DailyLeaderboard'
 import { mulberry32, type Rng } from '@/lib/arcade/rng'
@@ -148,8 +148,40 @@ export default function MananaPage() {
   const [boardPx, setBoardPx] = useState<number | null>(null)
   const [fx, setFx] = useState<Fx[]>([])
   const fxIdRef = useRef(0)
+  const cellRefs = useRef<(HTMLSpanElement | null)[]>([]) // per-cell gem spans, for the gravity animation
+  const fallDataRef = useRef<number[]>([]) // last step's per-cell fall distances
+  const [fallTick, setFallTick] = useState(0) // bumped after each apply to fire the gravity pass
 
   useNoScroll() // pin to viewport on mobile — no page scroll / iOS bounce
+
+  // gravity pass — after a settle, slide each gem down from where it fell (WAAPI so it
+  // replays every cascade step; graceful/floaty ease + a soft landing settle, gentle
+  // centre-out column stagger). Runs pre-paint so gems never flash at their end spot.
+  useLayoutEffect(() => {
+    if (!fallTick) return
+    const fall = fallDataRef.current
+    const bp = boardPx ?? 0
+    if (!bp) return
+    const pitch = (bp - 20 - 7 * 6) / 8 + 6 // one row of travel in px (cell + gap)
+    for (let i = 0; i < fall.length; i++) {
+      const d = fall[i]
+      if (!d) continue
+      const el = cellRefs.current[i]
+      if (!el?.animate) continue
+      const dropPx = d * pitch
+      const settle = Math.min(6, dropPx * 0.06)
+      const stagger = Math.round(Math.abs((i % W) - (W - 1) / 2) * 15) // centre columns land first
+      el.animate(
+        [
+          { transform: `translateY(${-dropPx}px)`, easing: 'cubic-bezier(.37,0,.63,1)' }, // ease-in gravity
+          { transform: 'translateY(0)', offset: 0.72, easing: 'cubic-bezier(.34,1.4,.5,1)' },
+          { transform: `translateY(${-settle}px)`, offset: 0.85 }, // gentle rebound
+          { transform: 'translateY(0)' }, // rest
+        ],
+        { duration: 300 + d * 40, delay: stagger, easing: 'linear', fill: 'backwards' },
+      )
+    }
+  }, [fallTick, boardPx])
 
   // clear the special/combo callout after it flashes
   useEffect(() => {
@@ -488,7 +520,10 @@ export default function MananaPage() {
       }
       apply(step.fallen)
       setPopping(new Map())
-      await sleep(115)
+      fallDataRef.current = step.fall
+      setFallTick((t) => t + 1) // fires the gravity pass in useLayoutEffect
+      const maxFall = step.fall.reduce((m, d) => (d > m ? d : m), 0)
+      await sleep(maxFall > 0 ? Math.min(700, 360 + maxFall * 44) : 140) // savour the fall before the next link
     }
     setHeat(1)
     // the spread rule: clear no puff this move and the cloud creeps one cell.
@@ -811,6 +846,7 @@ export default function MananaPage() {
                   aria-label={p.name}
                 >
                   <span
+                    ref={(el) => { cellRefs.current[i] = el }}
                     className={`manana-gem absolute inset-0 rounded-full flex items-center justify-center ${isPop ? 'manana-pop' : ''} ${k !== 'none' ? 'manana-charged' : ''}`}
                     style={{
                       background: bg,

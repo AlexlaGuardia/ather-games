@@ -9,7 +9,7 @@ const chk = (n: string, c: boolean, x = '') => { c ? ok++ : (bad++, console.erro
 
 // a minimal fake step exposing only what trackStep reads
 const step = (o: Partial<ResolveStep>): ResolveStep => ({
-  matched: [], spawned: [], fired: [], blasts: [], fallen: [], gained: 0, mult: 1, puffs: 0, freed: 0,
+  matched: [], spawned: [], fired: [], blasts: [], fallen: [], fall: [], gained: 0, mult: 1, puffs: 0, freed: 0,
   colorCounts: new Array(6).fill(0), ...o,
 })
 

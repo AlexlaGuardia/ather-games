@@ -16,5 +16,19 @@ const pp = fire('prism',3,'prism',5); chk('prism+prism resolves clean', pp.steps
 const ps = fire('prism',0,'surgeH',7,[10,11,12,20,21,40].map(i=>({i,color:7}))); chk('prism+surge resolves clean', ps.steps>=1 && ps.boardOk, JSON.stringify(ps))
 const ss = fire('star',1,'star',2); chk('star+star resolves clean', ss.steps>=1 && ss.boardOk, JSON.stringify(ss))
 const su = fire('surgeH',1,'surgeV',2); chk('surge+surge resolves clean', su.steps>=1 && su.boardOk, JSON.stringify(su))
+
+// fall map (drives the gravity animation): right length, non-negative, and every
+// cleared cell ends up filled by something that fell in (fall > 0 there).
+{
+  const a = idx(3,3), c = idx(4,3)
+  const b = blank(); b[a] = {color:1,kind:'surgeH'}; b[c] = {color:2,kind:'surgeV'}
+  const det = swapDetonation(b,a,c,rng)!
+  const res = resolve(det.board, rng, { forced: det.forced })
+  const s0 = res.steps[0]
+  chk('fall map is board-sized', s0.fall.length === W*H, `${s0.fall.length}`)
+  chk('fall is never negative', s0.fall.every((d)=>d>=0))
+  chk('fall never exceeds board height', s0.fall.every((d)=>d<=H))
+  chk('cleared cells got a gem that fell in', s0.matched.every((i)=> s0.fall[i] > 0 || s0.fallen[i].color >= 0))
+}
 console.log(`\ncombo resolve pipeline: ${ok} passed, ${bad} failed`)
 if(bad)process.exit(1)

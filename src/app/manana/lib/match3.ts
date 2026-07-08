@@ -229,21 +229,31 @@ function shapeAt(h: Run, v: Run, p: number): 'L' | 'T' | null {
   return hEnd && vEnd ? 'L' : 'T'
 }
 
-function collapse(b: Cell[], rng: Rng): Cell[] {
+// collapse returns the settled board AND a per-cell fall distance (in rows) — how
+// far each gem dropped into its final spot, so the renderer can animate real
+// gravity instead of teleporting. 0 = didn't move; new gems get their drop-from-
+// above distance; survivors get newSlot - oldSlot.
+function collapse(b: Cell[], rng: Rng): { board: Cell[]; fall: number[] } {
   const n = b.map((x) => ({ ...x }))
+  const fall = new Array<number>(W * H).fill(0)
   for (let x = 0; x < W; x++) {
     // a puff is an immovable floor — it splits the column into segments that
     // each compact + refill independently. No puffs = one segment = old behaviour.
     let segment: number[] = []
     const resolveSegment = () => {
       if (!segment.length) return
-      const solids = segment.map((y) => n[idx(x, y)]).filter((c) => c.color !== -1)
+      const solids: Cell[] = []
+      const oldSlots: number[] = [] // segment-slot of each surviving solid, pre-fall
+      segment.forEach((y, k) => { if (n[idx(x, y)].color !== -1) { solids.push(n[idx(x, y)]); oldSlots.push(k) } })
       const gap = segment.length - solids.length
       const filled: Cell[] = [
         ...Array.from({ length: gap }, () => gem(Math.floor(rng() * TYPES))),
         ...solids,
       ]
-      segment.forEach((y, k) => { n[idx(x, y)] = filled[k] })
+      segment.forEach((y, k) => {
+        n[idx(x, y)] = filled[k]
+        fall[idx(x, y)] = k < gap ? k + 1 : k - oldSlots[k - gap] // new gem drops from above; survivor by slot delta
+      })
       segment = []
     }
     for (let y = 0; y < H; y++) {
@@ -252,7 +262,7 @@ function collapse(b: Cell[], rng: Rng): Cell[] {
     }
     resolveSegment()
   }
-  return n
+  return { board: n, fall }
 }
 
 export interface ResolveStep {
@@ -261,6 +271,7 @@ export interface ResolveStep {
   fired: Kind[] // specials that detonated this cascade (drives the sound)
   blasts: { i: number; kind: Kind; color: number }[] // where each special fired (drives beams)
   fallen: Cell[]
+  fall: number[] // per-cell fall distance in rows (drives the gravity animation; 0 = didn't move)
   gained: number
   mult: number // cascade multiplier shown as "ather heat"
   puffs: number // puffs burst this cascade
@@ -384,10 +395,10 @@ export function resolve(board: Cell[], rng: Rng, opts: { swapAt?: number; forced
     for (const i of freedSet) { if (protect.has(i)) continue; cleared[i] = gem(cur[i].color); freed++ }
     for (const sp of applySpawns) cleared[sp.i] = { color: sp.color, kind: sp.kind }
 
-    const fallen = collapse(cleared, rng)
+    const { board: fallen, fall } = collapse(cleared, rng)
     const mult = 1 + cascade * 0.5
     const gained = Math.round((toClear.size * 10 + puffs * PUFF_BONUS + freed * COLLAR_BONUS) * mult)
-    steps.push({ matched: [...finalClear], spawned: applySpawns.map((s) => ({ i: s.i, kind: s.kind })), fired, blasts, fallen, gained, mult, puffs, freed, colorCounts })
+    steps.push({ matched: [...finalClear], spawned: applySpawns.map((s) => ({ i: s.i, kind: s.kind })), fired, blasts, fallen, fall, gained, mult, puffs, freed, colorCounts })
     cur = fallen
     cascade++
   }
