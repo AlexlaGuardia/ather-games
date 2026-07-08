@@ -19,7 +19,8 @@ import { ZONE_NODES, type NodePlacement } from '../world/node-placements'
 import { createResourceNode, depleteNode, tickNodeRespawn, rollDrops, getNodeSkill, nodeTier, NODE_DEFS, type NodeType, type ResourceNode } from '../world/resources'
 import { TOOL_DEFS, getEquippedTool, useTool, toolsToSave, toolsFromSave, ensureBasicTools, craftTool, canCraft as canCraftTool, type EquippedTools } from '../engine/tools'
 import { findAdjacentNode, addHarvestItems } from '../engine/harvesting'
-import { RinningCatch } from './RinningCatch'
+import { newCast as newRinCast, phaseAt as rinPhaseAt, hook as rinHook, type RinCast } from '../engine/rinning'
+import { rinBite, rinCatch, rinMiss } from './rin-fx'
 import { createSkillSet, skillSetToSave, skillSetFromSave, addSkillXP, xpForSkillLevel, SKILL_META, type SkillSet } from '../engine/skills'
 import { createBeast, checkBeastUnlock, beastsToSave, beastsFromSave, BEAST_SPECIES, BEAST_DEFS, BEAST_PERKS, PERK_INFO, getBonusFindChance, getSpeedBonus, type ManaBeast, type BeastSpecies } from '../beasts/beast'
 import { createInventory, inventoryToSave, inventoryFromSave, addItems, removeItems, countItem, transferItem, createChestStorage, chestToSave, chestFromSave, type Inventory, type ItemStack, type ChestStorage, type ChestSave } from '../engine/inventory'
@@ -696,6 +697,32 @@ function Follower({ posRef, heightsRef, color }: {
   )
 }
 
+// The rinning tell — a world-space marker over the mote's head while the line's out: a faint
+// ripple bob during the wait, a big pulsing `!` at the bite (strike it). Follows the player each frame.
+function FishTell({ posRef, heightsRef, bite }: {
+  posRef: React.RefObject<THREE.Vector3>; heightsRef: React.RefObject<number[][]>; bite: boolean
+}) {
+  const group = useRef<THREE.Group>(null)
+  useFrame(() => {
+    const g = group.current, p = posRef.current; if (!g || !p) return
+    const h = (heightsRef.current?.[Math.round(p.z)]?.[Math.round(p.x)] ?? 0) * STEP
+    g.position.set(p.x, h + 1.55, p.z)
+  })
+  return (
+    <group ref={group}>
+      <Html center distanceFactor={9} pointerEvents="none">
+        <style>{`@keyframes fishBang{0%,100%{transform:scale(1) translateY(0)}50%{transform:scale(1.28) translateY(-3px)}}
+          @keyframes fishWait{0%,100%{transform:translateY(0);opacity:.55}50%{transform:translateY(4px);opacity:.9}}`}</style>
+        <div style={{
+          fontSize: bite ? 34 : 20, lineHeight: 1, userSelect: 'none', whiteSpace: 'nowrap',
+          filter: bite ? 'drop-shadow(0 0 8px #37e6ff)' : 'none',
+          animation: bite ? 'fishBang .32s ease-in-out infinite' : 'fishWait 1.5s ease-in-out infinite',
+        }}>{bite ? '❗' : '〰️'}</div>
+      </Html>
+    </group>
+  )
+}
+
 function CameraRig({ posRef, editFocusRef, yawRef, editRef }: {
   posRef: React.RefObject<THREE.Vector3>; editFocusRef: React.RefObject<THREE.Vector3>
   yawRef: React.RefObject<number>; editRef: React.RefObject<boolean>
@@ -784,6 +811,7 @@ function Scene(props: {
   placeTargetRef: React.RefObject<{ x: number; y: number } | null>; structuresRef: React.RefObject<PlacedStruct[]>
   onNearStation: (s: PlacedStruct | null) => void
   companionColor: string | null
+  fishing: boolean; fishBite: boolean
 }) {
   return (
     <>
@@ -803,6 +831,7 @@ function Scene(props: {
       <PlacementGhost placing={props.placing} posRef={props.posRef} heights={props.heights} gridRef={props.gridRef} placeTargetRef={props.placeTargetRef} structuresRef={props.structuresRef} zoneIdRef={props.zoneIdRef} />
       <Player posRef={props.posRef} gridRef={props.gridRef} heightsRef={props.heightsRef} zoneIdRef={props.zoneIdRef} editRef={props.editRef} onWarp={props.onWarp} battleRef={props.battleRef} partyLevelRef={props.partyLevelRef} onEncounter={props.onEncounter} joyRef={props.joyRef} talkingRef={props.talkingRef} hasPartyRef={props.hasPartyRef} onNearChange={props.onNearChange} defeatedRef={props.defeatedRef} flagsRef={props.flagsRef} harvestNodesRef={props.harvestNodesRef} onNearNode={props.onNearNode} stationsRef={props.structuresRef} onNearStation={props.onNearStation} />
       {props.companionColor && !props.editing && <Follower posRef={props.posRef} heightsRef={props.heightsRef} color={props.companionColor} />}
+      {props.fishing && <FishTell posRef={props.posRef} heightsRef={props.heightsRef} bite={props.fishBite} />}
       <CameraRig posRef={props.posRef} editFocusRef={props.editFocusRef} yawRef={props.yawRef} editRef={props.editRef} />
     </>
   )
@@ -1129,10 +1158,16 @@ export default function Shimmer3D() {
   useEffect(() => { if (!harvestToast) return; const t = setTimeout(() => setHarvestToast(null), 2400); return () => clearTimeout(t) }, [harvestToast])
   const channelRef = useRef<{ node: ResourceNode; progress: number; durSec: number; manaCost: number } | null>(null)
   const [channel, setChannel] = useState<{ nodeId: string; label: string; hp: number } | null>(null)
-  const [rinNode, setRinNode] = useState<{ node: ResourceNode; manaCost: number } | null>(null) // rinning cast-and-catch
+  // Rinning: casting LOCKS the walker to the node (reuse battleRef as the movement freeze); a `!`
+  // pops over the mote's head at the bite — strike (E/tap) during it to hook, early/late = it slips.
+  const fishRef = useRef<{ node: ResourceNode; manaCost: number; cast: RinCast; bitten: boolean } | null>(null)
+  const [fish, setFish] = useState<{ label: string; bite: boolean } | null>(null) // drives HUD + the world-space `!`
+  const fishBiteRef = useRef(false); fishBiteRef.current = !!fish?.bite
+  const hookFishRef = useRef<() => void>(() => {}) // set below (needs grantHarvest, defined later)
   const [menuOpen, setMenuOpen] = useState(false)     // ☰ — edit terrain / new game
   const [skillsOpen, setSkillsOpen] = useState(false) // skills panel
   const toggleChannel = useCallback(() => {
+    if (fishRef.current) { hookFishRef.current(); return }   // fishing: this press is the strike (hook or slip)
     if (channelRef.current) { channelRef.current = null; setChannel(null); return }   // unlink
     const node = nearNodeRef.current
     if (!node || node.state !== 'harvestable') return
@@ -1148,9 +1183,14 @@ export default function Shimmer3D() {
       setHarvestToast(overTier > 0 ? `${toolDef?.name} strains here — need ${manaCost} mana` : `Not enough mana (need ${manaCost})`)
       return
     }
-    // Rinning is a cast-and-catch, not a hold-to-channel — open the minigame; a catch
-    // drains the mana + grants the drops (a miss costs nothing but the cast).
-    if (skillId === 'rinning') { setRinNode({ node, manaCost }); return }
+    // Rinning is a cast-and-catch, not a hold-to-channel — cast locks you to the node and waits
+    // for the bite (see the fishing driver below). A catch drains mana + grants drops; a miss is free.
+    if (skillId === 'rinning') {
+      fishRef.current = { node, manaCost, cast: newRinCast(performance.now(), Math.random), bitten: false }
+      battleRef.current = true // lock the walker to the node while the line's out
+      setFish({ label: prettyItem(node.type), bite: false })
+      return
+    }
     // Drifthorn's gathering_speed perk + the tool's speedBonus both shorten the channel.
     const speedBeast = beastsRef.current.find(b => b.id === activeBeastIdRef.current) ?? null
     const durSec = nodeChannelSec(node.type) * (toolDef?.speedBonus ?? 1) / (1 + getSpeedBonus(speedBeast))
@@ -1353,16 +1393,13 @@ export default function Shimmer3D() {
 
   // Grant a completed harvest: roll drops + XP, wear the tool, deplete the node, HUD/toast/banner,
   // persist. Shared by the channel completion (forestry/prospecting) and the rinning catch.
-  const grantHarvest = useCallback((node: ResourceNode, opts?: { bonus?: boolean }) => {
+  const grantHarvest = useCallback((node: ResourceNode) => {
     const skillId = getNodeSkill(node.type)
     const tool = getEquippedTool(equippedToolsRef.current, skillId)
-    // a clean rinning hook lands a bonus catch: an extra drop roll + a small XP bump.
-    const xp = Math.round(NODE_DEFS[node.type].xp * (tool?.xpBonus ?? 1) * (opts?.bonus ? 1.5 : 1))
+    const xp = Math.round(NODE_DEFS[node.type].xp * (tool?.xpBonus ?? 1))
     // Active companion @15 perk — skill-matched bonus find (Grovekin/Gemsense/Truesight)
     const activeBeast = beastsRef.current.find(b => b.id === activeBeastIdRef.current) ?? null
-    const rolled = rollDrops(node.type, getBonusFindChance(activeBeast, skillId))
-    if (opts?.bonus) rolled.push(...rollDrops(node.type, 0))
-    const added = addHarvestItems(invRef.current, rolled)
+    const added = addHarvestItems(invRef.current, rollDrops(node.type, getBonusFindChance(activeBeast, skillId)))
     const xpr = addSkillXP(skillsRef.current[skillId], xp)
     // Wear the tool — basics never break; when an improved tool breaks, fall back to the basic.
     if (tool && !useTool(tool)) {
@@ -1373,7 +1410,7 @@ export default function Shimmer3D() {
     }
     depleteNode(node)
     syncSkillHud(); setRuntimeNodes([...runtimeNodesRef.current]); setNearNode(null)
-    setHarvestToast(`${opts?.bonus ? '✦ clean · ' : ''}+ ${added.map(prettyItem).join(' · ') || 'nothing'}   ·   ${SKILL_META[skillId].name} +${xp} XP`)
+    setHarvestToast(`+ ${added.map(prettyItem).join(' · ') || 'nothing'}   ·   ${SKILL_META[skillId].name} +${xp} XP`)
     if (xpr.leveled) {
       setBanner(`✦ ${SKILL_META[skillId].name} Lv ${xpr.newLevel}!`)
       const got = checkCompanionUnlocks()
@@ -1382,19 +1419,33 @@ export default function Shimmer3D() {
     persist()
   }, [syncSkillHud, persist, checkCompanionUnlocks])
 
-  // rinning catch resolved — a catch drains the mana + grants the drops; a miss just closes.
-  const onRinDone = useCallback((caught: boolean, quality: number) => {
-    const ctx = rinNode
-    setRinNode(null)
-    if (!ctx) return
-    if (caught) {
-      manaRef.current.current = Math.max(0, manaRef.current.current - ctx.manaCost)
+  // rinning strike (E/tap while the line's out): hook only while the `!` is up. A catch drains
+  // the mana + grants the drops; striking early or letting the bite lapse slips the line. Either
+  // way the walker unlocks from the node.
+  const endFishing = useCallback(() => { fishRef.current = null; battleRef.current = false; setFish(null) }, [])
+  const hookFish = useCallback(() => {
+    const f = fishRef.current; if (!f) return
+    if (rinHook(f.cast, performance.now())) {
+      manaRef.current.current = Math.max(0, manaRef.current.current - f.manaCost)
       setManaFrac(manaRef.current.current / getMaxPool(skillsRef.current.mana.level))
-      grantHarvest(ctx.node, { bonus: quality > 0.7 }) // a clean, fast hook lands a bonus catch
+      rinCatch(); grantHarvest(f.node)
     } else {
-      setHarvestToast('…it slipped the line')
+      rinMiss(); setHarvestToast('…it slipped the line')
     }
-  }, [rinNode, grantHarvest])
+    endFishing()
+  }, [grantHarvest, endFishing])
+  hookFishRef.current = hookFish
+
+  // fishing driver — while the line's out, raise the `!` at the bite and slip it if the window lapses.
+  useEffect(() => {
+    const id = setInterval(() => {
+      const f = fishRef.current; if (!f) return
+      const ph = rinPhaseAt(f.cast, performance.now())
+      if (ph === 'bite' && !f.bitten) { f.bitten = true; setFish(s => (s ? { ...s, bite: true } : s)); rinBite() }
+      else if (ph === 'gotaway') { rinMiss(); setHarvestToast('…it slipped the line'); endFishing() }
+    }, 60)
+    return () => clearInterval(id)
+  }, [endFishing])
 
   // channel driver — advances progress + drains mana each tick; breaks on distance / no-mana; completes at full.
   useEffect(() => {
@@ -1671,7 +1722,7 @@ export default function Shimmer3D() {
       if (k !== 'e' && k !== ' ' && k !== 'enter') return
       if (dialogueRef.current) { e.preventDefault(); advanceDialogue() }
       else if (nearNpc) { e.preventDefault(); talk(nearNpc) }
-      else if (nearNodeRef.current || channelRef.current) { e.preventDefault(); toggleChannel() }
+      else if (fishRef.current || nearNodeRef.current || channelRef.current) { e.preventDefault(); toggleChannel() }
       else if (nearStationRef.current) { e.preventDefault(); openStation() }
     }
     window.addEventListener('keydown', onKey)
@@ -1802,6 +1853,7 @@ export default function Shimmer3D() {
           defeatedRef={defeatedRef} defeated={defeated} flagsRef={flagsRef}
           nodes={runtimeNodes}
           companionColor={(() => { const b = beastsRef.current.find(x => x.id === activeBeastIdRef.current); void companionTick; return b ? (BEAST_COLOR[b.species] ?? '#9fd9c4') : null })()}
+          fishing={!!fish} fishBite={!!fish?.bite}
         />
       </Canvas>
 
@@ -1837,8 +1889,20 @@ export default function Shimmer3D() {
         }}>✦ Talk to {nearNpc.name} <span style={{ opacity: 0.6 }}>({isTouch ? 'tap ✦' : 'E'})</span></div>
       )}
 
-      {/* harvest prompt when standing by a node (hidden once you link in) */}
-      {nearNode && !channel && !nearNpc && !dialogue && !battle && !editMode && (
+      {/* rinning prompt — locked at the pool: watch, then strike when the `!` pops (early/late slips) */}
+      {fish && !editMode && (
+        <div style={{
+          position: 'fixed', left: '50%', bottom: 156, transform: 'translateX(-50%)', zIndex: 35,
+          padding: '7px 14px', borderRadius: 999, background: fish.bite ? 'rgba(20,54,66,0.95)' : 'rgba(11,21,19,0.92)',
+          border: `1px solid ${fish.bite ? '#7fe9ff' : '#4fc79a66'}`, boxShadow: fish.bite ? '0 0 18px #37e6ff88' : 'none',
+          color: fish.bite ? '#eafcff' : '#cfeee2', font: '700 13px ui-monospace, monospace', whiteSpace: 'nowrap', pointerEvents: 'none',
+        }}>{fish.bite
+          ? <>❗ HOOK IT! <span style={{ opacity: 0.7 }}>({isTouch ? 'tap' : 'E'})</span></>
+          : <>🎣 rinning {fish.label} · watch the water… <span style={{ opacity: 0.6 }}>({isTouch ? 'tap' : 'E'})</span></>}</div>
+      )}
+
+      {/* harvest prompt when standing by a node (hidden once you link in or start fishing) */}
+      {nearNode && !channel && !fish && !nearNpc && !dialogue && !battle && !editMode && (
         <div style={{
           position: 'fixed', left: '50%', bottom: 156, transform: 'translateX(-50%)', zIndex: 35,
           padding: '7px 14px', borderRadius: 999, background: 'rgba(11,21,19,0.92)', border: '1px solid #4fc79a66',
@@ -2089,10 +2153,10 @@ export default function Shimmer3D() {
             >✕</button>
             {/* A — interact/confirm (lower, bigger, where the thumb rests): advance dialogue / talk to an NPC / confirm New Game. */}
             <button
-              onPointerDown={(e) => { e.stopPropagation(); if (dialogue) advanceDialogue(); else if (nearNpc) talk(nearNpc); else if (nearNode || channel) toggleChannel(); else if (nearStation) openStation(); else if (confirmNew) { setConfirmNew(false); newGame() } }}
+              onPointerDown={(e) => { e.stopPropagation(); if (dialogue) advanceDialogue(); else if (nearNpc) talk(nearNpc); else if (fish || nearNode || channel) toggleChannel(); else if (nearStation) openStation(); else if (confirmNew) { setConfirmNew(false); newGame() } }}
               aria-label="interact"
-              style={{ width: 76, height: 76, borderRadius: '50%', border: '2px solid #ffffff4d', background: nearNpc || dialogue ? 'rgba(212,168,67,0.85)' : channel ? 'rgba(58,123,213,0.9)' : nearNode ? 'rgba(79,199,154,0.85)' : nearStation && !nearNpc && !dialogue ? `${STATIONS[nearStation.itemId].accent}d9` : 'rgba(36,84,72,0.8)', color: nearNpc || dialogue || nearNode || channel || nearStation ? '#0d1a17' : '#dffaf0', font: '800 23px ui-monospace, monospace', cursor: 'pointer', touchAction: 'none' }}
-            >{channel ? '⏹' : nearNode && !nearNpc && !dialogue ? '🪓' : nearStation && !nearNpc && !dialogue ? STATIONS[nearStation.itemId].emoji : '✦'}</button>
+              style={{ width: 76, height: 76, borderRadius: '50%', border: '2px solid #ffffff4d', background: fish ? (fish.bite ? 'rgba(55,230,255,0.92)' : 'rgba(58,123,213,0.9)') : nearNpc || dialogue ? 'rgba(212,168,67,0.85)' : channel ? 'rgba(58,123,213,0.9)' : nearNode ? 'rgba(79,199,154,0.85)' : nearStation && !nearNpc && !dialogue ? `${STATIONS[nearStation.itemId].accent}d9` : 'rgba(36,84,72,0.8)', color: fish || nearNpc || dialogue || nearNode || channel || nearStation ? '#0d1a17' : '#dffaf0', font: '800 23px ui-monospace, monospace', cursor: 'pointer', touchAction: 'none' }}
+            >{fish ? (fish.bite ? '❗' : '🎣') : channel ? '⏹' : nearNode && !nearNpc && !dialogue ? '🪓' : nearStation && !nearNpc && !dialogue ? STATIONS[nearStation.itemId].emoji : '✦'}</button>
           </div>
         </>
       )}
@@ -2375,9 +2439,6 @@ export default function Shimmer3D() {
       )}
 
       {/* Rinning cast-and-catch — the water-node minigame (opens instead of channelling) */}
-      {rinNode && !battle && !editMode && (
-        <RinningCatch label={prettyItem(rinNode.node.type)} onDone={onRinDone} />
-      )}
     </div>
   )
 }
