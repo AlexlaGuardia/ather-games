@@ -30,6 +30,10 @@ export const TOP_BASE = 212 // default ground surface
 export const TOP_MIN = 96 // highest a ledge can sit
 export const TOP_MAX = 224 // lowest a ledge can sit
 export const STEP_UP = 14 // a flush height change up to this is a free step; bigger only across gaps
+// authored levels may stack routes ABOVE the normal frame (canon: layers of the greying you climb through);
+// the camera follows the light up into them, the player only ever seeing a screen-tall sliver. Procedural
+// (Endless/Daily) stays flat in [TOP_MIN, TOP_MAX] → its content never rises past the frame → camera stays put.
+export const WORLD_CEIL = -260 // highest y a platform/mote can be authored (≈ 1.3 screens of headroom above y=0)
 
 // ── jump / gravity (variable jump: low grav while rising+held, snappy fall) ────────
 export const JUMP_V0 = 560 // launch velocity (up)
@@ -227,6 +231,7 @@ export interface World {
   score: number
   motesGot: number
   stompScore: number
+  camY: number // render-only vertical camera (eased toward the light when it climbs above the frame; 0 = normal)
   // world
   segs: Seg[]
   foes: Foe[]
@@ -245,7 +250,7 @@ export function makeWorld(seed: number, cfg: MovementCfg = ENDLESS_CFG): World {
     y: TOP_BASE, vy: 0, grounded: true, coyote: 0, buffer: 0, jumping: false, held: false,
     combo: 0, airJumps: 0,
     hearts: MAX_HEARTS, fuel: MAX_FUEL, grayTic: 0, grayCount: 0, iframes: 0,
-    score: 0, motesGot: 0, stompScore: 0,
+    score: 0, motesGot: 0, stompScore: 0, camY: 0,
     segs: [], foes: [], spikes: [], motes: [],
     genX: 0, lastTop: TOP_BASE, events: [],
   }

@@ -32,6 +32,8 @@ import {
   MOTE_R,
   MAX_HEARTS,
   MAX_FUEL,
+  TOP_BASE,
+  TOP_MIN,
   AREAS,
   LEVELS_PER_AREA,
   levelCfg,
@@ -495,6 +497,16 @@ function render(canvas: HTMLCanvasElement, w: World, ts: number, trail: number[]
   const camX = w.dist - RUNNER_SX
   const sx = (x: number) => x - camX
 
+  // vertical follow-camera: keep the light ~60% down the screen when it climbs above the normal frame;
+  // rest at 0 (identical to the flat game) whenever content fits the view. `camY` = world-y at the top edge.
+  let worldTop = TOP_BASE
+  for (const s of w.segs) if (s.top < worldTop) worldTop = s.top
+  const camLo = Math.min(0, worldTop - 34) // furthest up the camera may travel (never below 0 = normal frame)
+  const camTarget = Math.max(camLo, Math.min(0, w.y - VH * 0.6))
+  w.camY += (camTarget - w.camY) * 0.18
+  if (Math.abs(w.camY) < 0.3) w.camY = 0
+  const camY = w.camY
+
   // screen-shake on death
   ctx.save()
   if (shake > 0) ctx.translate((Math.random() - 0.5) * shake * 22, (Math.random() - 0.5) * shake * 22)
@@ -519,21 +531,29 @@ function render(canvas: HTMLCanvasElement, w: World, ts: number, trail: number[]
   ctx.fillStyle = GREY_HOT
   for (let i = 0; i < 6; i++) {
     const px = ((i * 113 - w.dist * 0.18) % (VW + 80) + VW + 80) % (VW + 80) - 40
-    dot(ctx, px, 40 + ((i * 53) % 120), 2.5)
+    dot(ctx, px, 40 + ((i * 53) % 120) - camY * 0.3, 2.5) // mild vertical parallax when the camera climbs
   }
   ctx.globalAlpha = 1
 
+  // everything from here is world-space — shift it by the vertical camera (sky above stays screen-fixed)
+  ctx.save()
+  ctx.translate(0, -camY)
+
   // ── surviving ground (coloured islands) — gaps between them are the void's tears ──
+  // segs in the normal band fill to the bottom (living land); segs authored ABOVE the frame (top < TOP_MIN)
+  // are floating alt-route ledges → draw them as a thin slab, not a full column to the death floor.
   for (const s of w.segs) {
     const x0 = sx(s.x0), x1 = sx(s.x1)
     if (x1 < -20 || x0 > VW + 20) continue
     const wdt = x1 - x0
+    const floating = s.top < TOP_MIN
+    const depth = floating ? 26 : VH - s.top + 30
     // body of living ground
-    const gg = ctx.createLinearGradient(0, s.top, 0, VH)
+    const gg = ctx.createLinearGradient(0, s.top, 0, s.top + depth)
     gg.addColorStop(0, LAND)
-    gg.addColorStop(1, '#11201f')
+    gg.addColorStop(1, floating ? 'rgba(17,32,31,0)' : '#11201f')
     ctx.fillStyle = gg
-    ctx.fillRect(x0, s.top, wdt, VH - s.top + 30)
+    ctx.fillRect(x0, s.top, wdt, depth)
     // the lit living edge (brighter = the light still holds here)
     ctx.strokeStyle = LAND_LIP
     ctx.globalAlpha = 0.9
@@ -660,7 +680,8 @@ function render(canvas: HTMLCanvasElement, w: World, ts: number, trail: number[]
     ctx.textAlign = 'start'
   }
 
-  ctx.restore()
+  ctx.restore() // end vertical-camera transform
+  ctx.restore() // end shake transform
 }
 
 function seg(ctx: CanvasRenderingContext2D, x0: number, y0: number, x1: number, y1: number) {

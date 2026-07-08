@@ -14,7 +14,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import {
-  VH, TOP_MIN, TOP_MAX, TOP_BASE, STEP_UP, RUNNER_SX, RUNNER_W, RUNNER_H,
+  VH, TOP_MIN, TOP_MAX, TOP_BASE, STEP_UP, RUNNER_SX, RUNNER_W, RUNNER_H, WORLD_CEIL,
   FOE_W, FOE_H, bakeLevel, makeAuthoredWorld, tick, pressJump, releaseJump,
   AREAS, LEVELS_PER_AREA, levelCfg, levelSeed, authoredKey,
   type AuthoredLevel, type World, type MovementCfg,
@@ -33,6 +33,9 @@ const TOOLS: { id: Tool; label: string; hint: string }[] = [
 
 const STORE_KEY = 'vault.dev.level'
 const GRID_X = 20
+// the editor shows the full authorable world height: from WORLD_CEIL (the headroom for stacked alt-routes)
+// down past the normal frame (0..VH) to the death floor. World-y → canvas-y = (y - WORLD_CEIL) * scale.
+const VSPAN = VH - WORLD_CEIL // total authorable vertical span (world units)
 const SNAP = (v: number, g: number) => Math.round(v / g) * g
 const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v))
 
@@ -50,13 +53,13 @@ function makeStairs(ax: number, ay: number, bx: number, by: number) {
   const sx = Math.min(ax, bx), ex = Math.max(ax, bx)
   const run = ex - sx
   if (run < GRID_X) return []
-  const leftTop = clamp(ax <= bx ? ay : by, TOP_MIN, TOP_MAX)
-  const rightTop = clamp(ax <= bx ? by : ay, TOP_MIN, TOP_MAX)
+  const leftTop = clamp(ax <= bx ? ay : by, WORLD_CEIL, TOP_MAX)
+  const rightTop = clamp(ax <= bx ? by : ay, WORLD_CEIL, TOP_MAX)
   const steps = clamp(Math.max(2, Math.ceil(Math.abs(rightTop - leftTop) / STAIR_RISE)), 2, Math.max(2, Math.min(40, Math.floor(run / 8))))
   const stepW = run / steps
   const out: { x0: number; x1: number; top: number }[] = []
   for (let i = 0; i < steps; i++) {
-    const top = clamp(Math.round((leftTop + (rightTop - leftTop) * (i / steps)) / 2) * 2, TOP_MIN, TOP_MAX)
+    const top = clamp(Math.round((leftTop + (rightTop - leftTop) * (i / steps)) / 2) * 2, WORLD_CEIL, TOP_MAX)
     out.push({ x0: Math.max(0, Math.round((sx + i * stepW) / 4) * 4), x1: Math.round((sx + (i + 1) * stepW) / 4) * 4, top })
   }
   return out
@@ -89,7 +92,7 @@ export default function VaultDevPage() {
   const [testResult, setTestResult] = useState<string | null>(null)
   const [exportText, setExportText] = useState('')
   const [ioMsg, setIoMsg] = useState<{ ok: boolean; text: string } | null>(null)
-  const [dims, setDims] = useState({ w: 960, h: Math.round(VH * 1.4) })
+  const [dims, setDims] = useState({ w: 960, h: Math.round(VSPAN * 1.4) })
 
   // drag state (edit mode)
   const drag = useRef<{ kind: 'platform' | 'stairs' | 'move' | 'pan'; x0: number; y0: number; ref?: unknown; camStart?: number } | null>(null)
@@ -153,12 +156,12 @@ export default function VaultDevPage() {
   // ── size to container ─────────────────────────────────────────────────────────
   useEffect(() => {
     const el = wrapRef.current; if (!el) return
-    const measure = () => { const w = el.clientWidth; const sc = Math.max(0.5, Math.min(1.6, w / 1100)); setScale(sc); setDims({ w, h: Math.round(VH * sc) }) } // ~1100 world units across, height letterboxed to match
+    const measure = () => { const w = el.clientWidth; const sc = Math.max(0.5, Math.min(1.6, w / 1100)); setScale(sc); setDims({ w, h: Math.round(VSPAN * sc) }) } // ~1100 world units across; height spans WORLD_CEIL..VH
     measure(); const ro = new ResizeObserver(measure); ro.observe(el); return () => ro.disconnect()
   }, [])
 
   // ── coordinate transforms ──────────────────────────────────────────────────────
-  const s2w = useCallback((px: number, py: number) => ({ x: px / scaleRef.current + camXRef.current, y: py / scaleRef.current }), [])
+  const s2w = useCallback((px: number, py: number) => ({ x: px / scaleRef.current + camXRef.current, y: py / scaleRef.current + WORLD_CEIL }), [])
 
   // ── render loop ─────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -183,19 +186,29 @@ export default function VaultDevPage() {
 
   function draw(ctx: CanvasRenderingContext2D, W: number, H: number, sc: number) {
     const cam = camXRef.current, lvl = levelRef.current
-    const wx = (x: number) => (x - cam) * sc, wy = (y: number) => y * sc
+    const wx = (x: number) => (x - cam) * sc, wy = (y: number) => (y - WORLD_CEIL) * sc
     ctx.fillStyle = COL.bg; ctx.fillRect(0, 0, W, H)
     // grid + guide lines
     ctx.strokeStyle = COL.grid; ctx.lineWidth = 1; ctx.font = '10px monospace'; ctx.fillStyle = '#4a3f63'
     const startX = Math.floor(cam / 100) * 100
     for (let x = startX; wx(x) < W; x += 100) { const px = wx(x); ctx.beginPath(); ctx.moveTo(px, 0); ctx.lineTo(px, H); ctx.stroke(); ctx.fillText(String(x), px + 2, H - 4) }
     for (const gy of [TOP_MIN, TOP_BASE, TOP_MAX]) { ctx.strokeStyle = '#1c1730'; ctx.beginPath(); ctx.moveTo(0, wy(gy)); ctx.lineTo(W, wy(gy)); ctx.stroke() }
+    // the normal frame band (0..VH = what the player sees at ground level); above y=0 = camera-reveal headroom
+    ctx.strokeStyle = '#2b3a52'; ctx.setLineDash([2, 3])
+    for (const [gy, lbl] of [[0, 'frame top'], [TOP_MIN, 'normal ceiling']] as [number, string][]) {
+      ctx.beginPath(); ctx.moveTo(0, wy(gy)); ctx.lineTo(W, wy(gy)); ctx.stroke()
+      ctx.fillStyle = '#4a6a94'; ctx.fillText(lbl, 4, wy(gy) - 3)
+    }
+    ctx.setLineDash([])
+    ctx.fillStyle = '#3a5a3a'; ctx.fillText('↑ alt-route headroom (camera follows the light up here)', 4, wy(WORLD_CEIL) + 12)
     // death line
     ctx.strokeStyle = '#3a1d24'; ctx.setLineDash([4, 4]); ctx.beginPath(); ctx.moveTo(0, wy(VH)); ctx.lineTo(W, wy(VH)); ctx.stroke(); ctx.setLineDash([])
-    // platforms
+    // platforms — normal-band segs fill to the death floor (land); segs above the frame (top < TOP_MIN) are
+    // floating alt-route ledges → a thin slab, matching how the game renders them.
     for (const s of lvl.segs) {
       const x = wx(s.x0), w = (s.x1 - s.x0) * sc, y = wy(s.top)
-      ctx.fillStyle = COL.ledge; ctx.fillRect(x, y, w, wy(VH) - y)
+      const depth = s.top < TOP_MIN ? 22 * sc : wy(VH) - y
+      ctx.fillStyle = COL.ledge; ctx.fillRect(x, y, w, depth)
       ctx.fillStyle = COL.ledgeTop; ctx.fillRect(x, y - 2 * sc, w, 3 * sc)
     }
     // motes
@@ -245,9 +258,9 @@ export default function VaultDevPage() {
     const { x, y } = s2w(px, py)
     if (e.button === 1 || e.shiftKey) { drag.current = { kind: 'pan', x0: px, y0: py, camStart: camXRef.current }; return }
     const t = toolRef.current
-    if (t === 'platform') { const sx = Math.max(0, SNAP(x, GRID_X)); const top = clamp(SNAP(y, 4), TOP_MIN, TOP_MAX); drag.current = { kind: 'platform', x0: sx, y0: top }; setPreview({ x0: sx, x1: sx, top }); return }
-    if (t === 'stairs') { drag.current = { kind: 'stairs', x0: Math.max(0, x), y0: clamp(y, TOP_MIN, TOP_MAX) }; stairsPrevRef.current = []; return }
-    if (t === 'mote') { setLevel((L) => ({ ...L, motes: [...L.motes, { x: SNAP(x, GRID_X), y: clamp(SNAP(y, 8), TOP_MIN - 70, TOP_MAX), got: false }] })); return }
+    if (t === 'platform') { const sx = Math.max(0, SNAP(x, GRID_X)); const top = clamp(SNAP(y, 4), WORLD_CEIL, TOP_MAX); drag.current = { kind: 'platform', x0: sx, y0: top }; setPreview({ x0: sx, x1: sx, top }); return }
+    if (t === 'stairs') { drag.current = { kind: 'stairs', x0: Math.max(0, x), y0: clamp(y, WORLD_CEIL, TOP_MAX) }; stairsPrevRef.current = []; return }
+    if (t === 'mote') { setLevel((L) => ({ ...L, motes: [...L.motes, { x: SNAP(x, GRID_X), y: clamp(SNAP(y, 8), WORLD_CEIL, TOP_MAX), got: false }] })); return }
     if (t === 'foe') { const fx = SNAP(x, GRID_X); setLevel((L) => ({ ...L, foes: [...L.foes, { x: fx, y: segTopAt(fx), dead: false }] })); return }
     if (t === 'spike') { const sx = SNAP(x, GRID_X); setLevel((L) => ({ ...L, spikes: [...L.spikes, { x: sx, y: segTopAt(sx) }] })); return }
     if (t === 'erase') { const p = pick(x, y); if (p) eraseAt(p); return }
@@ -260,7 +273,7 @@ export default function VaultDevPage() {
     const { x, y } = s2w(px, py)
     if (d.kind === 'pan') { setCamX(Math.max(-RUNNER_SX, d.camStart! - (px - d.x0) / scaleRef.current)); return }
     if (d.kind === 'platform') { const x1 = Math.max(d.x0 + GRID_X, SNAP(x, GRID_X)); setPreview({ x0: d.x0, x1, top: d.y0 }); return }
-    if (d.kind === 'stairs') { stairsPrevRef.current = makeStairs(d.x0, d.y0, Math.max(0, x), clamp(y, TOP_MIN, TOP_MAX)); return }
+    if (d.kind === 'stairs') { stairsPrevRef.current = makeStairs(d.x0, d.y0, Math.max(0, x), clamp(y, WORLD_CEIL, TOP_MAX)); return }
     if (d.kind === 'move') { moveRef(d.ref as ReturnType<typeof pick>, x, y); d.x0 = x; d.y0 = y }
   }
   function onUp() {
@@ -286,10 +299,10 @@ export default function VaultDevPage() {
   function moveRef(p: ReturnType<typeof pick>, x: number, y: number) {
     if (!p) return
     setLevel((L) => {
-      if (p.t === 'mote') { const motes = L.motes.slice(); motes[p.i] = { ...motes[p.i], x: SNAP(x, GRID_X), y: clamp(SNAP(y, 8), TOP_MIN - 70, TOP_MAX) }; return { ...L, motes } }
+      if (p.t === 'mote') { const motes = L.motes.slice(); motes[p.i] = { ...motes[p.i], x: SNAP(x, GRID_X), y: clamp(SNAP(y, 8), WORLD_CEIL, TOP_MAX) }; return { ...L, motes } }
       if (p.t === 'foe') { const foes = L.foes.slice(); const fx = SNAP(x, GRID_X); foes[p.i] = { ...foes[p.i], x: fx, y: segTopAt(fx) }; return { ...L, foes } }
       if (p.t === 'spike') { const spikes = L.spikes.slice(); const sx = SNAP(x, GRID_X); spikes[p.i] = { x: sx, y: segTopAt(sx) }; return { ...L, spikes } }
-      const segs = L.segs.slice(); const s = segs[p.i]; const w = s.x1 - s.x0; const nx = Math.max(0, SNAP(x - w / 2, GRID_X)); segs[p.i] = { x0: nx, x1: nx + w, top: clamp(SNAP(y, 4), TOP_MIN, TOP_MAX) }; return { ...L, segs }
+      const segs = L.segs.slice(); const s = segs[p.i]; const w = s.x1 - s.x0; const nx = Math.max(0, SNAP(x - w / 2, GRID_X)); segs[p.i] = { x0: nx, x1: nx + w, top: clamp(SNAP(y, 4), WORLD_CEIL, TOP_MAX) }; return { ...L, segs }
     })
   }
 
