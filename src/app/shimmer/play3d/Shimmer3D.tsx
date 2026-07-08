@@ -1353,13 +1353,16 @@ export default function Shimmer3D() {
 
   // Grant a completed harvest: roll drops + XP, wear the tool, deplete the node, HUD/toast/banner,
   // persist. Shared by the channel completion (forestry/prospecting) and the rinning catch.
-  const grantHarvest = useCallback((node: ResourceNode) => {
+  const grantHarvest = useCallback((node: ResourceNode, opts?: { bonus?: boolean }) => {
     const skillId = getNodeSkill(node.type)
     const tool = getEquippedTool(equippedToolsRef.current, skillId)
-    const xp = Math.round(NODE_DEFS[node.type].xp * (tool?.xpBonus ?? 1))
+    // a clean rinning hook lands a bonus catch: an extra drop roll + a small XP bump.
+    const xp = Math.round(NODE_DEFS[node.type].xp * (tool?.xpBonus ?? 1) * (opts?.bonus ? 1.5 : 1))
     // Active companion @15 perk — skill-matched bonus find (Grovekin/Gemsense/Truesight)
     const activeBeast = beastsRef.current.find(b => b.id === activeBeastIdRef.current) ?? null
-    const added = addHarvestItems(invRef.current, rollDrops(node.type, getBonusFindChance(activeBeast, skillId)))
+    const rolled = rollDrops(node.type, getBonusFindChance(activeBeast, skillId))
+    if (opts?.bonus) rolled.push(...rollDrops(node.type, 0))
+    const added = addHarvestItems(invRef.current, rolled)
     const xpr = addSkillXP(skillsRef.current[skillId], xp)
     // Wear the tool — basics never break; when an improved tool breaks, fall back to the basic.
     if (tool && !useTool(tool)) {
@@ -1370,7 +1373,7 @@ export default function Shimmer3D() {
     }
     depleteNode(node)
     syncSkillHud(); setRuntimeNodes([...runtimeNodesRef.current]); setNearNode(null)
-    setHarvestToast(`+ ${added.map(prettyItem).join(' · ') || 'nothing'}   ·   ${SKILL_META[skillId].name} +${xp} XP`)
+    setHarvestToast(`${opts?.bonus ? '✦ clean · ' : ''}+ ${added.map(prettyItem).join(' · ') || 'nothing'}   ·   ${SKILL_META[skillId].name} +${xp} XP`)
     if (xpr.leveled) {
       setBanner(`✦ ${SKILL_META[skillId].name} Lv ${xpr.newLevel}!`)
       const got = checkCompanionUnlocks()
@@ -1380,14 +1383,14 @@ export default function Shimmer3D() {
   }, [syncSkillHud, persist, checkCompanionUnlocks])
 
   // rinning catch resolved — a catch drains the mana + grants the drops; a miss just closes.
-  const onRinDone = useCallback((caught: boolean) => {
+  const onRinDone = useCallback((caught: boolean, quality: number) => {
     const ctx = rinNode
     setRinNode(null)
     if (!ctx) return
     if (caught) {
       manaRef.current.current = Math.max(0, manaRef.current.current - ctx.manaCost)
       setManaFrac(manaRef.current.current / getMaxPool(skillsRef.current.mana.level))
-      grantHarvest(ctx.node)
+      grantHarvest(ctx.node, { bonus: quality > 0.7 }) // a clean, fast hook lands a bonus catch
     } else {
       setHarvestToast('…it slipped the line')
     }
@@ -2373,7 +2376,7 @@ export default function Shimmer3D() {
 
       {/* Rinning cast-and-catch — the water-node minigame (opens instead of channelling) */}
       {rinNode && !battle && !editMode && (
-        <RinningCatch label={prettyItem(rinNode.node.type)} onDone={(caught) => onRinDone(caught)} />
+        <RinningCatch label={prettyItem(rinNode.node.type)} onDone={onRinDone} />
       )}
     </div>
   )
