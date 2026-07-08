@@ -21,6 +21,7 @@ import { TOOL_DEFS, getEquippedTool, useTool, toolsToSave, toolsFromSave, ensure
 import { findAdjacentNode, addHarvestItems } from '../engine/harvesting'
 import { newCast as newRinCast, phaseAt as rinPhaseAt, hook as rinHook, type RinCast } from '../engine/rinning'
 import { rinBite, rinCatch, rinMiss } from './rin-fx'
+import { gatherTick, gatherPop } from './gather-fx'
 import { createSkillSet, skillSetToSave, skillSetFromSave, addSkillXP, xpForSkillLevel, SKILL_META, type SkillSet } from '../engine/skills'
 import { createBeast, checkBeastUnlock, beastsToSave, beastsFromSave, BEAST_SPECIES, BEAST_DEFS, BEAST_PERKS, PERK_INFO, getBonusFindChance, getSpeedBonus, type ManaBeast, type BeastSpecies } from '../beasts/beast'
 import { createInventory, inventoryToSave, inventoryFromSave, addItems, removeItems, countItem, transferItem, createChestStorage, chestToSave, chestFromSave, type Inventory, type ItemStack, type ChestStorage, type ChestSave } from '../engine/inventory'
@@ -654,6 +655,8 @@ const TOOL_HUD: Record<string, { glyph: string; tint: string; label: string }> =
   prospecting: { glyph: '⛏️', tint: '#d9b56a', label: 'Prospecting' },
   rinning:     { glyph: '🎣', tint: '#6fb8d9', label: 'Rinning' },
 }
+// the resource glyph that pops off a node on a completed harvest, per skill.
+const HARVEST_GLYPH: Record<string, string> = { forestry: '🪵', prospecting: '💎', rinning: '🐟' }
 
 // Blockout palette for the bonded Mana'mal follower (real sprites/models later, per the art rule).
 const BEAST_COLOR: Record<string, string> = {
@@ -718,6 +721,19 @@ function FishTell({ posRef, heightsRef, bite }: {
           filter: bite ? 'drop-shadow(0 0 8px #37e6ff)' : 'none',
           animation: bite ? 'fishBang .32s ease-in-out infinite' : 'fishWait 1.5s ease-in-out infinite',
         }}>{bite ? '❗' : '〰️'}</div>
+      </Html>
+    </group>
+  )
+}
+
+// The harvest payoff — a resource glyph that bursts off a node and floats up as it fades.
+function HarvestPop({ pop }: { pop: { x: number; y: number; z: number; glyph: string; key: number } | null }) {
+  if (!pop) return null
+  return (
+    <group key={pop.key} position={[pop.x, pop.y + 1.1, pop.z]}>
+      <Html center distanceFactor={9} pointerEvents="none">
+        <style>{`@keyframes gpop{0%{transform:translateY(8px) scale(.4);opacity:0}28%{opacity:1}100%{transform:translateY(-28px) scale(1.1);opacity:0}}`}</style>
+        <div style={{ fontSize: 26, lineHeight: 1, userSelect: 'none', animation: 'gpop .85s ease-out forwards', filter: 'drop-shadow(0 0 6px #ffe9b0)' }}>{pop.glyph}</div>
       </Html>
     </group>
   )
@@ -812,6 +828,7 @@ function Scene(props: {
   onNearStation: (s: PlacedStruct | null) => void
   companionColor: string | null
   fishing: boolean; fishBite: boolean
+  harvestPop: { x: number; y: number; z: number; glyph: string; key: number } | null
 }) {
   return (
     <>
@@ -832,6 +849,7 @@ function Scene(props: {
       <Player posRef={props.posRef} gridRef={props.gridRef} heightsRef={props.heightsRef} zoneIdRef={props.zoneIdRef} editRef={props.editRef} onWarp={props.onWarp} battleRef={props.battleRef} partyLevelRef={props.partyLevelRef} onEncounter={props.onEncounter} joyRef={props.joyRef} talkingRef={props.talkingRef} hasPartyRef={props.hasPartyRef} onNearChange={props.onNearChange} defeatedRef={props.defeatedRef} flagsRef={props.flagsRef} harvestNodesRef={props.harvestNodesRef} onNearNode={props.onNearNode} stationsRef={props.structuresRef} onNearStation={props.onNearStation} />
       {props.companionColor && !props.editing && <Follower posRef={props.posRef} heightsRef={props.heightsRef} color={props.companionColor} />}
       {props.fishing && <FishTell posRef={props.posRef} heightsRef={props.heightsRef} bite={props.fishBite} />}
+      <HarvestPop pop={props.harvestPop} />
       <CameraRig posRef={props.posRef} editFocusRef={props.editFocusRef} yawRef={props.yawRef} editRef={props.editRef} />
     </>
   )
@@ -1155,8 +1173,12 @@ export default function Shimmer3D() {
   // done — but the link breaks if you walk out of range or run dry of mana. Toggle on/off with 🪓/E. ──
   const CHANNEL_RANGE = 1.8
   const [harvestToast, setHarvestToast] = useState<string | null>(null)
+  const [harvestPop, setHarvestPop] = useState<{ x: number; y: number; z: number; glyph: string; key: number } | null>(null) // transient node-pop
+  const popKeyRef = useRef(0)
   useEffect(() => { if (!harvestToast) return; const t = setTimeout(() => setHarvestToast(null), 2400); return () => clearTimeout(t) }, [harvestToast])
+  useEffect(() => { if (!harvestPop) return; const t = setTimeout(() => setHarvestPop(null), 850); return () => clearTimeout(t) }, [harvestPop])
   const channelRef = useRef<{ node: ResourceNode; progress: number; durSec: number; manaCost: number } | null>(null)
+  const chopClockRef = useRef(0) // accumulates dt to space out the chop/mine tick sound
   const [channel, setChannel] = useState<{ nodeId: string; label: string; hp: number } | null>(null)
   // Rinning: casting LOCKS the walker to the node (reuse battleRef as the movement freeze); a `!`
   // pops over the mote's head at the bite — strike (E/tap) during it to hook, early/late = it slips.
@@ -1195,6 +1217,7 @@ export default function Shimmer3D() {
     const speedBeast = beastsRef.current.find(b => b.id === activeBeastIdRef.current) ?? null
     const durSec = nodeChannelSec(node.type) * (toolDef?.speedBonus ?? 1) / (1 + getSpeedBonus(speedBeast))
     channelRef.current = { node, progress: 0, durSec, manaCost }
+    chopClockRef.current = 0.42 // fire the first thunk on the next tick (immediate feedback)
     setChannel({ nodeId: node.id, label: prettyItem(node.type), hp: 1 })
   }, [])
 
@@ -1411,6 +1434,10 @@ export default function Shimmer3D() {
     depleteNode(node)
     syncSkillHud(); setRuntimeNodes([...runtimeNodesRef.current]); setNearNode(null)
     setHarvestToast(`+ ${added.map(prettyItem).join(' · ') || 'nothing'}   ·   ${SKILL_META[skillId].name} +${xp} XP`)
+    // the payoff: a resource glyph bursts off the node + a bright pop (parity with the rinning catch)
+    const gy = (heightsRef.current[node.tileY]?.[node.tileX] ?? 0) * STEP
+    setHarvestPop({ x: node.tileX, y: gy, z: node.tileY, glyph: HARVEST_GLYPH[skillId] ?? '✦', key: ++popKeyRef.current })
+    gatherPop()
     if (xpr.leveled) {
       setBanner(`✦ ${SKILL_META[skillId].name} Lv ${xpr.newLevel}!`)
       const got = checkCompanionUnlocks()
@@ -1460,6 +1487,8 @@ export default function Shimmer3D() {
       if (manaRef.current.current < drain) { channelRef.current = null; setChannel(null); setHarvestToast('Out of mana'); return }
       manaRef.current.current -= drain
       setManaFrac(manaRef.current.current / getMaxPool(skillsRef.current.mana.level))
+      chopClockRef.current += dt
+      if (chopClockRef.current >= 0.42) { chopClockRef.current = 0; gatherTick(getNodeSkill(ch.node.type)) } // working rhythm
       ch.progress += dt / ch.durSec
       if (ch.progress >= 1) {
         grantHarvest(ch.node)
@@ -1854,6 +1883,7 @@ export default function Shimmer3D() {
           nodes={runtimeNodes}
           companionColor={(() => { const b = beastsRef.current.find(x => x.id === activeBeastIdRef.current); void companionTick; return b ? (BEAST_COLOR[b.species] ?? '#9fd9c4') : null })()}
           fishing={!!fish} fishBite={!!fish?.bite}
+          harvestPop={harvestPop}
         />
       </Canvas>
 
