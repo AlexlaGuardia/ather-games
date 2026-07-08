@@ -55,6 +55,7 @@ export default function VaultDevPage() {
   const worldRef = useRef<World | null>(null)
   const [testResult, setTestResult] = useState<string | null>(null)
   const [exportText, setExportText] = useState('')
+  const [ioMsg, setIoMsg] = useState<{ ok: boolean; text: string } | null>(null)
   const [dims, setDims] = useState({ w: 960, h: Math.round(VH * 1.4) })
 
   // drag state (edit mode)
@@ -209,8 +210,29 @@ export default function VaultDevPage() {
   const setEnd = (end: number) => setLevel((L) => ({ ...L, end: clamp(Math.round(end), 1200, 40000) }))
   const startTest = () => { setTestResult(null); const w = makeAuthoredWorld(levelRef.current, editorCfg(levelRef.current.end)); w.state = 'playing'; worldRef.current = w; setCamX(0); setTesting(true) }
   const stopTest = () => { setTesting(false); worldRef.current = null; setTestResult(null); setCamX(0) }
-  const doExport = () => { const j = JSON.stringify(level); setExportText(j); navigator.clipboard?.writeText(j).catch(() => {}) }
-  const doImport = () => { try { const L = JSON.parse(exportText); if (L && L.segs) setLevel(L) } catch {} }
+  const doExport = () => {
+    const j = JSON.stringify(level); setExportText(j)
+    setIoMsg({ ok: true, text: '✓ exported to the box below' })
+    navigator.clipboard?.writeText(j).then(() => setIoMsg({ ok: true, text: '✓ copied to clipboard' })).catch(() => {})
+  }
+  // validate + normalize a pasted level so a partial/typo'd paste can't silently break the canvas.
+  const doImport = () => {
+    let raw: unknown
+    try { raw = JSON.parse(exportText) } catch { setIoMsg({ ok: false, text: '✗ not valid JSON — paste the full level text' }); return }
+    const r = raw as Partial<AuthoredLevel>
+    if (!r || !Array.isArray(r.segs) || !r.segs.length) { setIoMsg({ ok: false, text: '✗ no platforms found — is this a Vault level?' }); return }
+    const num = (v: unknown, d = 0) => (Number.isFinite(Number(v)) ? Number(v) : d)
+    const L: AuthoredLevel = {
+      seed: num(r.seed, 1) || 1,
+      end: clamp(Math.round(num(r.end, 5000)), 1200, 40000),
+      segs: r.segs.map((s) => ({ x0: num(s.x0), x1: num(s.x1), top: num(s.top, TOP_BASE) })),
+      foes: Array.isArray(r.foes) ? r.foes.map((f) => ({ x: num(f.x), y: num(f.y, TOP_BASE), dead: false })) : [],
+      spikes: Array.isArray(r.spikes) ? r.spikes.map((s) => ({ x: num(s.x), y: num(s.y, TOP_BASE) })) : [],
+      motes: Array.isArray(r.motes) ? r.motes.map((m) => ({ x: num(m.x), y: num(m.y, TOP_BASE), got: false })) : [],
+    }
+    setLevel(L); setCamX(0)
+    setIoMsg({ ok: true, text: `✓ imported — ${L.segs.length} plat · ${L.foes.length} foe · ${L.spikes.length} spike · ${L.motes.length} mote · end ${L.end}` })
+  }
 
   // keyboard: space = jump (test), esc = stop test
   useEffect(() => {
@@ -286,9 +308,10 @@ export default function VaultDevPage() {
         {/* export / import */}
         {!testing && (
           <div className="mt-4">
-            <div className="flex gap-2 mb-1">
+            <div className="flex items-center gap-2 mb-1">
               <button onClick={doExport} className="rounded-md px-2.5 py-1 text-xs bg-white/5 border border-white/10 hover:bg-white/10">Export → clipboard</button>
               <button onClick={doImport} className="rounded-md px-2.5 py-1 text-xs bg-white/5 border border-white/10 hover:bg-white/10">Import ↓ from box</button>
+              {ioMsg && <span className={`text-xs font-medium ${ioMsg.ok ? 'text-emerald-300' : 'text-rose-300'}`}>{ioMsg.text}</span>}
             </div>
             <textarea value={exportText} onChange={(e) => setExportText(e.target.value)} placeholder="level JSON appears here on export; paste + Import to load"
               className="w-full h-20 rounded-md bg-black/40 border border-white/10 p-2 text-[10px] font-mono text-slate-400" />
