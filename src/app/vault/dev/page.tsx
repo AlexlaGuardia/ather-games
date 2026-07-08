@@ -12,7 +12,8 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import {
   VH, TOP_MIN, TOP_MAX, TOP_BASE, STEP_UP, RUNNER_SX, RUNNER_W, RUNNER_H,
-  FOE_W, FOE_H, ENDLESS_CFG, bakeLevel, makeAuthoredWorld, tick, pressJump, releaseJump,
+  FOE_W, FOE_H, bakeLevel, makeAuthoredWorld, tick, pressJump, releaseJump,
+  AREAS, LEVELS_PER_AREA, levelCfg, levelSeed, authoredKey,
   type AuthoredLevel, type World, type MovementCfg,
 } from '../lib/vault'
 
@@ -31,7 +32,6 @@ const STORE_KEY = 'vault.dev.level'
 const GRID_X = 20
 const SNAP = (v: number, g: number) => Math.round(v / g) * g
 const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v))
-const editorCfg = (end: number): MovementCfg => ({ ...ENDLESS_CFG, goalDist: end })
 
 const COL = { bg: '#0d0b14', grid: '#241d33', ledge: '#3b4b63', ledgeTop: '#8fb0d8', mote: '#ffd15c', foe: '#71717a', spike: '#e8554e', finish: '#7fe0a0', runner: '#fff2b0' }
 
@@ -65,6 +65,15 @@ export default function VaultDevPage() {
   const wrapRef = useRef<HTMLDivElement>(null)
   const [level, setLevel] = useState<AuthoredLevel>(emptyLevel)
   const levelRef = useRef(level); levelRef.current = level
+  // ── which ladder slot this level belongs to (area × level dropdowns) ──────────
+  const [selArea, setSelArea] = useState(0)
+  const [selLevel, setSelLevel] = useState(0)
+  const selAreaRef = useRef(0); selAreaRef.current = selArea
+  const selLevelRef = useRef(0); selLevelRef.current = selLevel
+  // published (live) authored slots — for the ● badge + Load Live. ref for sync reads, state for render.
+  const [liveStore, setLiveStore] = useState<Record<string, AuthoredLevel>>({})
+  const liveStoreRef = useRef(liveStore); liveStoreRef.current = liveStore
+  const [saveMsg, setSaveMsg] = useState<{ ok: boolean; text: string } | null>(null)
   const [tool, setTool] = useState<Tool>('platform')
   const toolRef = useRef(tool); toolRef.current = tool
   const [camX, setCamX] = useState(0)
@@ -86,14 +95,57 @@ export default function VaultDevPage() {
   const stairsPrevRef = useRef<{ x0: number; x1: number; top: number }[]>([]) // live staircase preview segs
   const testResultRef = useRef(testResult); testResultRef.current = testResult
 
-  // ── load / autosave ─────────────────────────────────────────────────────────
-  useEffect(() => {
-    try { const raw = localStorage.getItem(STORE_KEY); if (raw) setLevel(JSON.parse(raw)) } catch {}
+  // ── per-slot scratch + live-store load ───────────────────────────────────────
+  // scratch = your WIP for a slot (survives reloads); live = what's published to the game.
+  // Load order for a slot: scratch → live → seed fresh from the procedural generator.
+  const slotStoreKey = (a: number, i: number) => `${STORE_KEY}:${authoredKey(a, i)}`
+  const seedForSlot = useCallback((a: number, i: number): AuthoredLevel => {
+    const cfg = levelCfg(a, i)
+    const L = bakeLevel(levelSeed(a, i), cfg, cfg.goalDist)
+    L.areaId = AREAS[a].id
+    return L
   }, [])
+  const loadSlot = useCallback((a: number, i: number): AuthoredLevel => {
+    try { const raw = localStorage.getItem(slotStoreKey(a, i)); if (raw) return JSON.parse(raw) } catch {}
+    const live = liveStoreRef.current[authoredKey(a, i)]
+    if (live) return { ...live, motes: live.motes.map((m) => ({ ...m, got: false })) }
+    return seedForSlot(a, i)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [seedForSlot])
+
+  // mount: pull the live store, then load the initial slot (picks up live if this slot has no scratch)
   useEffect(() => {
-    const t = setTimeout(() => { try { localStorage.setItem(STORE_KEY, JSON.stringify(levelRef.current)) } catch {} }, 400)
+    setLevel(loadSlot(0, 0))
+    fetch('/vault/dev/save', { cache: 'no-store' })
+      .then((r) => (r.ok ? r.json() : {}))
+      .then((raw) => {
+        if (!raw || typeof raw !== 'object') return
+        const store = raw as Record<string, AuthoredLevel>
+        setLiveStore(store); liveStoreRef.current = store
+        const hasScratch = (() => { try { return !!localStorage.getItem(slotStoreKey(selAreaRef.current, selLevelRef.current)) } catch { return false } })()
+        if (!hasScratch) setLevel(loadSlot(selAreaRef.current, selLevelRef.current))
+      })
+      .catch(() => {})
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // debounced scratch autosave — always writes to the CURRENT slot
+  useEffect(() => {
+    const t = setTimeout(() => { try { localStorage.setItem(slotStoreKey(selAreaRef.current, selLevelRef.current), JSON.stringify(levelRef.current)) } catch {} }, 400)
     return () => clearTimeout(t)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [level])
+
+  // switch slot: flush current scratch synchronously, then load the target slot
+  const switchSlot = useCallback((a: number, i: number) => {
+    try { localStorage.setItem(slotStoreKey(selAreaRef.current, selLevelRef.current), JSON.stringify(levelRef.current)) } catch {}
+    setSelArea(a); selAreaRef.current = a
+    setSelLevel(i); selLevelRef.current = i
+    setSaveMsg(null)
+    setCamX(0)
+    setLevel(loadSlot(a, i))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loadSlot])
 
   // ── size to container ─────────────────────────────────────────────────────────
   useEffect(() => {
@@ -239,10 +291,45 @@ export default function VaultDevPage() {
   }
 
   // ── actions ─────────────────────────────────────────────────────────────────
-  const reroll = () => { const seed = ((Math.floor((camX + 1) * 2654435761) ^ (level.segs.length * 40503) ^ Date.now()) >>> 0) || 1; setLevel(bakeLevel(seed, editorCfg(level.end), level.end)) }
-  const clearAll = () => setLevel(emptyLevel(level.end))
+  // the slot's real run-config (area look/speed/hazard band) with the editor's length — so test-play
+  // and reseeds match how the game will actually play this slot.
+  const slotCfg = (end: number): MovementCfg => ({ ...levelCfg(selAreaRef.current, selLevelRef.current), goalDist: end })
+  const reroll = () => { const seed = ((Math.floor((camX + 1) * 2654435761) ^ (level.segs.length * 40503) ^ Date.now()) >>> 0) || 1; setLevel({ ...bakeLevel(seed, slotCfg(level.end), level.end), areaId: AREAS[selAreaRef.current].id }) }
+  const clearAll = () => setLevel({ ...emptyLevel(level.end), areaId: AREAS[selAreaRef.current].id })
   const setEnd = (end: number) => setLevel((L) => ({ ...L, end: clamp(Math.round(end), 1200, 40000) }))
-  const startTest = () => { setTestResult(null); const w = makeAuthoredWorld(levelRef.current, editorCfg(levelRef.current.end)); w.state = 'playing'; worldRef.current = w; setCamX(0); setTesting(true) }
+  const startTest = () => { setTestResult(null); const w = makeAuthoredWorld(levelRef.current, slotCfg(levelRef.current.end)); w.state = 'playing'; worldRef.current = w; setCamX(0); setTesting(true) }
+
+  // ── publish to the live game ──────────────────────────────────────────────────
+  const slotKey = authoredKey(selArea, selLevel)
+  const isLive = !!liveStore[slotKey]
+  const publish = async () => {
+    setSaveMsg({ ok: true, text: 'saving…' })
+    try {
+      const res = await fetch('/vault/dev/save', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ key: slotKey, level: { ...levelRef.current, areaId: AREAS[selAreaRef.current].id } }) })
+      const j = await res.json()
+      if (!res.ok) { setSaveMsg({ ok: false, text: `✗ ${j.error || 'save failed'}` }); return }
+      const next = { ...liveStoreRef.current, [slotKey]: { ...levelRef.current, areaId: AREAS[selAreaRef.current].id } }
+      setLiveStore(next); liveStoreRef.current = next
+      setSaveMsg({ ok: true, text: `✓ live in ${AREAS[selAreaRef.current].name} · ${selLevelRef.current + 1}` })
+    } catch { setSaveMsg({ ok: false, text: '✗ network error' }) }
+  }
+  const loadLive = () => {
+    const live = liveStoreRef.current[slotKey]
+    if (!live) { setSaveMsg({ ok: false, text: '✗ nothing published for this slot' }); return }
+    setLevel({ ...live, motes: live.motes.map((m) => ({ ...m, got: false })) }); setCamX(0)
+    setSaveMsg({ ok: true, text: '✓ loaded the live level into the editor' })
+  }
+  const unpublish = async () => {
+    setSaveMsg({ ok: true, text: 'removing…' })
+    try {
+      const res = await fetch('/vault/dev/save', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ key: slotKey, delete: true }) })
+      const j = await res.json()
+      if (!res.ok) { setSaveMsg({ ok: false, text: `✗ ${j.error || 'remove failed'}` }); return }
+      const next = { ...liveStoreRef.current }; delete next[slotKey]
+      setLiveStore(next); liveStoreRef.current = next
+      setSaveMsg({ ok: true, text: '✓ unpublished — this slot is procedural again' })
+    } catch { setSaveMsg({ ok: false, text: '✗ network error' }) }
+  }
   const stopTest = () => { setTesting(false); worldRef.current = null; setTestResult(null); setCamX(0) }
   const doExport = () => {
     const j = JSON.stringify(level); setExportText(j)
@@ -288,10 +375,45 @@ export default function VaultDevPage() {
         <div className="flex items-center justify-between gap-3 mb-3">
           <div>
             <h1 className="text-xl font-black tracking-tight text-amber-200">Vault · Map Editor</h1>
-            <div className="text-[11px] text-slate-500">seed then tweak · {counts} · end {level.end}</div>
+            <div className="text-[11px] text-slate-500">{AREAS[selArea].name} · level {selLevel + 1} · {counts} · end {level.end}</div>
           </div>
           <button onClick={() => router.push('/vault')} className="rounded-lg border border-white/15 bg-white/5 px-3 py-1.5 text-sm hover:bg-white/10">‹ Vault</button>
         </div>
+
+        {/* slot bar — area × level dropdowns + publish to the live game */}
+        {!testing && (
+          <div className="flex flex-wrap items-center gap-2 mb-2 rounded-lg border border-white/10 bg-white/[0.03] px-2.5 py-2">
+            <label className="flex items-center gap-1.5 text-xs text-slate-400">
+              <span className="uppercase tracking-wider text-[10px] text-slate-500">Area</span>
+              <select value={selArea} onChange={(e) => switchSlot(Number(e.target.value), 0)}
+                className="rounded-md bg-black/50 border border-white/15 px-2 py-1 text-sm text-slate-200 focus:outline-none focus:border-amber-300/60">
+                {AREAS.map((a, ai) => {
+                  const n = Array.from({ length: LEVELS_PER_AREA }).filter((_, li) => liveStore[authoredKey(ai, li)]).length
+                  return <option key={a.id} value={ai}>{ai + 1}. {a.name}{n ? ` (${n}●)` : ''}</option>
+                })}
+              </select>
+            </label>
+            <label className="flex items-center gap-1.5 text-xs text-slate-400">
+              <span className="uppercase tracking-wider text-[10px] text-slate-500">Level</span>
+              <select value={selLevel} onChange={(e) => switchSlot(selArea, Number(e.target.value))}
+                className="rounded-md bg-black/50 border border-white/15 px-2 py-1 text-sm text-slate-200 focus:outline-none focus:border-amber-300/60">
+                {Array.from({ length: LEVELS_PER_AREA }).map((_, li) => (
+                  <option key={li} value={li}>{li + 1}{liveStore[authoredKey(selArea, li)] ? ' ●' : ''}</option>
+                ))}
+              </select>
+            </label>
+            <span className={`text-[10px] px-1.5 py-0.5 rounded ${isLive ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-400/40' : 'bg-white/5 text-slate-500 border border-white/10'}`}>
+              {isLive ? '● live' : 'procedural'}
+            </span>
+            <div className="flex-1" />
+            <button onClick={publish} className="rounded-md px-3 py-1.5 text-sm font-bold bg-amber-400/20 border border-amber-300/60 text-amber-100 hover:bg-amber-400/30">▲ Save to Live</button>
+            <button onClick={loadLive} disabled={!isLive} title="pull the published level back into the editor"
+              className="rounded-md px-2.5 py-1.5 text-sm bg-white/5 border border-white/10 hover:bg-white/10 disabled:opacity-40 disabled:hover:bg-white/5">⬇ Load Live</button>
+            <button onClick={unpublish} disabled={!isLive} title="revert this slot to the procedural generator"
+              className="rounded-md px-2.5 py-1.5 text-sm bg-rose-500/10 border border-rose-400/30 text-rose-200 hover:bg-rose-500/20 disabled:opacity-40 disabled:hover:bg-rose-500/10">✕ Unpublish</button>
+            {saveMsg && <span className={`w-full text-xs font-medium ${saveMsg.ok ? 'text-emerald-300' : 'text-rose-300'}`}>{saveMsg.text}</span>}
+          </div>
+        )}
 
         {/* toolbar */}
         <div className="flex flex-wrap items-center gap-2 mb-2">

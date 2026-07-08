@@ -122,6 +122,11 @@ export function levelSeed(a: number, i: number): number {
   return (Math.imul(a + 1, 73856093) ^ Math.imul(i + 1, 19349663) ^ 0x9e3779b9) >>> 0
 }
 
+// the slot key for a hand-authored level in the ladder (matches MovementCfg.id): 'a3-l7'.
+// The map editor publishes authored levels under this key; the game plays the authored
+// layout for a slot when one exists, else falls back to the procedural stream.
+export function authoredKey(a: number, i: number): string { return `${AREAS[a].id}-l${i + 1}` }
+
 // concrete run-config for area a, level i (both 0-based). Difficulty steps floor→ceil across the area;
 // length grows across the whole ladder (early ~35s → late ~90s).
 export function levelCfg(a: number, i: number): MovementCfg {

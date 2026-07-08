@@ -24,3 +24,5 @@ public/*/vo/
 
 # agent worktrees / local claude state — never track
 .claude/
+
+.shimmer-backups/

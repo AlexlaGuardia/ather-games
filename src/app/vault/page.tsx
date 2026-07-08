@@ -12,6 +12,8 @@ import { useNoScroll } from '@/lib/arcade/useNoScroll'
 import { screenMaxW, deckMaxW, cabinetMaxW } from '@/lib/arcade/fit'
 import {
   makeWorld,
+  makeAuthoredWorld,
+  authoredKey,
   pressJump,
   releaseJump,
   tick,
@@ -43,6 +45,7 @@ import {
   ENDLESS_CFG,
   type World,
   type MovementCfg,
+  type AuthoredLevel,
 } from './lib/vault'
 import { sfx } from './lib/sfx'
 import { music } from './music'
@@ -109,17 +112,20 @@ export default function VaultPage() {
   const storyViewRef = useRef(storyView); storyViewRef.current = storyView
   const activeCfgRef = useRef<MovementCfg>(ENDLESS_CFG) // the cfg the current run uses (for restart)
   const activeSeedRef = useRef<number | null>(null) // fixed seed for a level (null = random/daily)
+  const activeAuthoredRef = useRef<AuthoredLevel | null>(null) // hand-authored layout for the current run (null = procedural)
+  const authoredStoreRef = useRef<Record<string, AuthoredLevel>>({}) // published authored levels, keyed by authoredKey(a,i)
 
   useNoScroll()
 
-  const boot = useCallback((cfg: MovementCfg = ENDLESS_CFG, fixedSeed: number | null = null) => {
+  const boot = useCallback((cfg: MovementCfg = ENDLESS_CFG, fixedSeed: number | null = null, authored: AuthoredLevel | null = null) => {
     activeCfgRef.current = cfg
     activeSeedRef.current = fixedSeed
+    activeAuthoredRef.current = authored
     let seed: number
     if (fixedSeed !== null) seed = fixedSeed // a Story level = a fixed, learnable layout
     else if (modeRef.current === 'daily') seed = dailySeed() // same crossing for everyone today
     else { seedRef.current = (seedRef.current * 1103515245 + 12345) >>> 0; seed = seedRef.current ^ (Date.now() >>> 0) }
-    worldRef.current = makeWorld(seed, cfg)
+    worldRef.current = authored ? makeAuthoredWorld(authored, cfg) : makeWorld(seed, cfg)
     downKeys.current.clear()
     trail.current = []
     fx.current = []
@@ -140,6 +146,11 @@ export default function VaultPage() {
     setBest(loadBest())
     setDailyBest(loadDailyBest('vault'))
     setProgress(loadProgress())
+    // pull any hand-authored ladder levels (published from /vault/dev) so a slot plays its authored layout
+    fetch('/vault/dev/save', { cache: 'no-store' })
+      .then((r) => (r.ok ? r.json() : {}))
+      .then((store) => { if (store && typeof store === 'object') authoredStoreRef.current = store as Record<string, AuthoredLevel> })
+      .catch(() => {})
     return () => { music.stop(); vo.stop() } // tear audio down on leave — never follows you out
   }, [boot])
 
@@ -157,7 +168,9 @@ export default function VaultPage() {
     setRunArea(a); runAreaRef.current = a
     setRunLevel(i); runLevelRef.current = i
     setStoryView('run')
-    boot(levelCfg(a, i), levelSeed(a, i)) // fixed layout for this level; press Vault to begin
+    // an authored slot plays its hand-built layout (still uses the area's movement/look via levelCfg); else procedural.
+    const authored = authoredStoreRef.current[authoredKey(a, i)] ?? null
+    boot(levelCfg(a, i), levelSeed(a, i), authored) // fixed layout for this level; press Vault to begin
   }
   // the light carries on past the whole ladder → the crossing without end
   const carryOnEndless = () => {
@@ -294,7 +307,7 @@ export default function VaultPage() {
     }
   }
 
-  const restart = useCallback(() => { sfx.ensure(); boot(activeCfgRef.current, activeSeedRef.current) }, [boot]) // re-run the same level/crossing
+  const restart = useCallback(() => { sfx.ensure(); boot(activeCfgRef.current, activeSeedRef.current, activeAuthoredRef.current) }, [boot]) // re-run the same level/crossing
   const toTrail = () => { setStoryView('trail'); setPhase('ready') }
   const toggleMute = () => { sfx.ensure(); const m = !sfx.isMuted(); sfx.setMuted(m); music.setMuted(m); vo.setMuted(m); setMuted(m) }
 
