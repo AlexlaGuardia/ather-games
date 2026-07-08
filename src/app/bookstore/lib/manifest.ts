@@ -45,7 +45,9 @@ const PUBLISHED_IDS = new Set<number>([
   1,   // Bonn #1 — Bonn and the Great Discovery
   2,   // Bonn #2 — Bonn and the Borrowed Courage
   3,   // Bonn #3 — Bonn and the Hollow Crown  (published 2026-07-04, KDP eBook + paperback)
-  // Bonn #4+ not locked in — add as they ship.
+  4,   // Bonn #4 — Bonn and the Open Door  (published on KDP; audio + cover verified 2026-07-08)
+  5,   // Bonn #5 — Bonn and the Wide Ather (published on KDP; audio + cover verified 2026-07-08)
+  // Bonn #6+ not locked in — add as they ship.
 ]);
 
 const WORK_LABELS: Record<string, string> = {
