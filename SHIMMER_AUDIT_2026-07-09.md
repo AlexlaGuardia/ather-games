@@ -137,12 +137,27 @@ comment someone reads when deciding whether to build the care loop.
 
 ## Process finding — a canon gap that never reached the queue
 
-`SHIMMER_SESSION.md:128-130` flags the **Sporeling collision**: the build treats it as a Forestry@15
-beast, while `CANON_GAPS.md:49` already **RULED** Sporeling → "Sporebloom" (Alchemy). Ruled one way in
-canon, built the other way in code, and the ambiguity was logged only in the session file — which is
-the exact failure mode `SHIMMER-CANON-BOUNDARY.md` warns about, since Magii never opens the game repo.
+**Corrected 2026-07-09 after verification.** My first read of this was wrong in Jin's favour, so the
+record should say what's actually true.
 
-Not blocking today. Should be filed as `[OPEN]` in `CANON_GAPS.md` before more skilling work stacks on it.
+The **build is faithful to canon.** `beasts/beast.ts:265-268` wires the lesser-tier perks exactly as
+the Two-Tier Companions table rules them (`game/shimmer-skilling.md:60-66`): Dustwhisker→Tuberfind,
+Sporeling→Grovekin, Glowmite→Gemsense, Embermole→Truesight. No drift. The canon gate is right to pass.
+
+The real gap is that **Sporeling is double-booked across tiers**, and canon knows it —
+`shimmer-skilling.md:68-71` flags the collision inline: Sporeling is both the Forestry-@15 beast and
+the Alchemy-@100 Mana'mal. It also leaves **Alchemy with no @15 beast at all** (`:66`, "TBD").
+
+Two things are wrong with how it's parked:
+1. It lives **only** in a canon prose file and `SHIMMER_SESSION.md:128-130` — never in `CANON_GAPS.md`.
+   So it is not in Magii's boot grep (`grep -n '\[OPEN\]'`) and cannot be picked up async. This is the
+   exact failure mode `SHIMMER-CANON-BOUNDARY.md` was written to prevent.
+2. Canon labels it a build-reconcile "(Jin/Alex)". By the boundary test it isn't. Resolving it means
+   either **splitting Sporeling into two distinct creatures** (needs a canonical name) or **naming a new
+   Alchemy-@15 beast** (needs a creature that exists in the world). Both answers can contradict the
+   books. That's Magii's pen, not Jin's.
+
+Not blocking today. File as `[OPEN]` before more skilling work stacks on it.
 
 ---
 
