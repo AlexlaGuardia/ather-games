@@ -25,6 +25,18 @@ the Arcade frame.
 > brew/craft to 5 — added **Chest / Exchange Booth / Farm Planter** on a generalized station-menu system.
 > Full detail + Left off/Next lives in `SHIMMER_SESSION.md` (its own session cadence, not cabinet-shaped).
 >
+> **Shimmer Decisions (don't relitigate):**
+> - **✖ KILLED — Mana'mal care loop / races / menagerie (Alex, 2026-07-05).** Companions stay **simple**:
+>   one flat passive perk each, no feed→happiness→perk-strength tending, no races mini-game, no home-plot
+>   menagerie. *Why:* keeps the cozy gatherer from turning into a pet-management sim; the companion is a
+>   quiet passive bonus, not a system you maintain. Fits the Keepers/anti-collar ethos. It got re-pitched
+>   twice after being killed (2026-07-08, 2026-07-09) because it was still sitting in `SHIMMER_SESSION.md`'s
+>   NEXT line with no decision recorded anywhere — hence this entry. **Do not propose it again.**
+>   Consequence: the happiness field is vestigial (pinned full); `getPerkStrength()`'s happiness scaling can
+>   be stripped whenever someone is in that file.
+> - **Sporeling/companion tiers are CANON** (`athernyx/CANON/game/shimmer-skilling.md` §Two-Tier Companions),
+>   ruled 2026-07-09. Drifthorn→Forestry@15, Sporeling→Alchemy@15, Sporehound→Alchemy@100. Not a build call.
+>
 > **THE TWO LANES NOW (no more new-game pipeline):**
 > 1. **★ The POLISH LAP** — the whole backlog of taste-calls, run one game per session (cold-play → feel
 >    tune → gx-* check → mobile → card art → bump block). The consolidated checklist ↓ is the spine;

@@ -190,6 +190,13 @@ Not blocking today. File as `[OPEN]` before more skilling work stacks on it.
 7. Delete the 432 dead engine lines + wire or delete the 15 orphan sprites (P2 #7, #8)
 8. File the Sporeling gap as `[OPEN]`
 
-Note that #3 (beast frame map) and #12 (the stale comment) both sit directly on the path of the
-**Mana'mal care loop** — the feature that was queued next. That's not a coincidence; it's what a
-half-finished system looks like from the outside.
+**Correction (2026-07-09):** an earlier draft of this report recommended the **Mana'mal care loop** as
+the feature these fixes unblock. That feature was **killed by Alex on 2026-07-05** (companions stay one
+flat passive perk — no feed/happiness/races/menagerie; see `GBOARD.md` §Shimmer Decisions). The audit
+recommended it because it was still sitting in `SHIMMER_SESSION.md`'s NEXT line with the decision
+recorded nowhere — the same class of failure as the Sporeling gap: *a ruling that never reached the file
+the next reader boots from.* Both are now recorded where they'll be found.
+
+The beast frame-map fix (#3) stands on its own regardless: the editor must not 400 and silently eat
+painted art. And the happiness field is now known-vestigial by design — `getPerkStrength()`'s scaling can
+be stripped whenever someone is next in that file.
