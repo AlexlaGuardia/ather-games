@@ -1002,9 +1002,9 @@ export default function Shimmer3D() {
   partyLevelRef.current = partyRef.current.length
     ? Math.round(partyRef.current.reduce((s, x) => s + x.level, 0) / partyRef.current.length)
     : 5
-  // Mana'mal companions — earned at skill 15 (canon two-tier @15 tier). Grant its perk in the
-  // harvest loop. No overworld follower render / care loop in the walker yet (a follow-up); the
-  // companion is treated as content so its perk is fully active.
+  // Mana'mal companions — earned at skill 15 (canon Companion-tier bond). The overworld follower
+  // renders (see `Follower`); its perk is granted in the harvest/brew loops. No CARE loop yet, so
+  // happiness is pinned at full and the perk runs at full strength.
   const beastsRef = useRef<ManaBeast[]>([])
   const activeBeastIdRef = useRef<string | null>(null)
   const [companionTick, setCompanionTick] = useState(0)  // HUD refresh when companions change
@@ -1033,7 +1033,9 @@ export default function Shimmer3D() {
   useEffect(() => { if (!banner) return; const t = setTimeout(() => setBanner(null), 2600); return () => clearTimeout(t) }, [banner])
 
   // Merge-save: preserve any 2D-only fields (furniture/crops/quests…) the 2D game may have written.
-  const persist = useCallback(async () => {
+  // `replaceFlags` — New Game must not inherit the old run's story flags. Normal saves merge
+  // (the 2D walker writes flags this save path doesn't know about); a fresh start replaces.
+  const persist = useCallback(async (opts?: { replaceFlags?: boolean }) => {
     const prev = (await load()) ?? {}
     await saveGame({
       ...prev,
@@ -1041,7 +1043,7 @@ export default function Shimmer3D() {
       beasts: beastsToSave(beastsRef.current),
       activeBeastId: activeBeastIdRef.current,
       tools: toolsToSave(equippedToolsRef.current),
-      flags: { ...(prev.flags ?? {}), ...flagsRef.current },
+      flags: opts?.replaceFlags ? { ...flagsRef.current } : { ...(prev.flags ?? {}), ...flagsRef.current },
       zoneId: zoneIdRef.current,
       playerTileX: Math.round(posRef.current!.x),
       playerTileY: Math.round(posRef.current!.z),
@@ -1213,7 +1215,8 @@ export default function Shimmer3D() {
       setFish({ label: prettyItem(node.type), bite: false })
       return
     }
-    // Drifthorn's gathering_speed perk + the tool's speedBonus both shorten the channel.
+    // A gathering_speed companion + the tool's speedBonus both shorten the channel.
+    // (No species grants gathering_speed today — reserved for a future admin/endgame beast.)
     const speedBeast = beastsRef.current.find(b => b.id === activeBeastIdRef.current) ?? null
     const durSec = nodeChannelSec(node.type) * (toolDef?.speedBonus ?? 1) / (1 + getSpeedBonus(speedBeast))
     channelRef.current = { node, progress: 0, durSec, manaCost }
@@ -1298,7 +1301,9 @@ export default function Shimmer3D() {
 
   const brew = useCallback((potionId: string) => {
     const before = skillsRef.current.alchemy.level
-    if (!brewPotion(potionId, invRef.current, skillsRef.current, manaRef.current)) { setHarvestToast('Missing ingredients or mana'); return }
+    // Active companion @15 perk — Sporebloom bonus draught (Sporeling)
+    const brewBeast = beastsRef.current.find(b => b.id === activeBeastIdRef.current) ?? null
+    if (!brewPotion(potionId, invRef.current, skillsRef.current, manaRef.current, getBonusFindChance(brewBeast, 'alchemy'))) { setHarvestToast('Missing ingredients or mana'); return }
     syncSkillHud()
     const def = POTION_DEFS[potionId]
     setHarvestToast(`Brewed ${def.name} ×${def.resultCount}`)
@@ -1630,6 +1635,15 @@ export default function Shimmer3D() {
     grantStarterKit(invRef.current)
     equippedToolsRef.current = ensureBasicTools({})  // Greg's basic blade/spike/rinstick
     flagsRef.current[STARTER_KIT_FLAG] = true // already granted; keep the load-path migration from re-seeding
+    // The rest of the run's economy. persist() writes every one of these refs, so anything left
+    // un-reset here gets saved straight back into the "new" game.
+    beastsRef.current = []
+    activeBeastIdRef.current = null
+    chestsRef.current = {}
+    geRef.current = createGEState()
+    plantedCropsRef.current = []
+    setChestsTick(t => t + 1)
+    setCropsTick(t => t + 1)
     setStructures([])
     syncSkillHud()
     setHasStarter(false)
@@ -1639,7 +1653,7 @@ export default function Shimmer3D() {
     posRef.current!.set(ps.tileX, posRef.current!.y, ps.tileY)
     setZoneId(START_ZONE)
     setBanner('new game — find Gregory in the glade')
-    persist()
+    persist({ replaceFlags: true })
   }, [persist, syncSkillHud])
 
   // Gregory's gift — the player's first spirit (the kit). One RNG starter → party, flag set, saved.

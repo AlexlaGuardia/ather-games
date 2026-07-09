@@ -109,7 +109,17 @@ export function canBrew(potionId: string, inv: Inventory, alchemyLevel: number, 
 }
 
 /** Brew a potion — consumes materials, drains mana, adds result, grants XP. Returns false on failure. */
-export function brewPotion(potionId: string, inv: Inventory, skills: SkillSet, mana: ManaPool): boolean {
+/**
+ * bonusYieldChance: the companion Sporebloom perk (Sporeling @15) — a chance for one extra draught.
+ * Mirrors farming's bonusFindChance. 0 when no Alchemy companion is active.
+ */
+export function brewPotion(
+  potionId: string,
+  inv: Inventory,
+  skills: SkillSet,
+  mana: ManaPool,
+  bonusYieldChance = 0,
+): boolean {
   const def = POTION_DEFS[potionId]
   if (!def) return false
   if (skills.alchemy.level < def.minAlchemyLevel) return false
@@ -119,7 +129,10 @@ export function brewPotion(potionId: string, inv: Inventory, skills: SkillSet, m
   for (const r of def.recipe) {
     removeItems(inv, r.itemId, r.count)
   }
-  addItems(inv, potionId, def.resultCount)
+  let count = def.resultCount
+  // Companion perk (Sporebloom @15) — the Sporeling's fungal read turns up one more draught.
+  if (bonusYieldChance > 0 && Math.random() < bonusYieldChance) count += 1
+  addItems(inv, potionId, count)
   addSkillXP(skills.alchemy, def.xpGrant)
   return true
 }

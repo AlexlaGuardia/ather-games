@@ -26,8 +26,10 @@ export const BEAST_DEFS: Record<BeastSpecies, BeastDef> = {
   drifthorn: {
     id: 'drifthorn',
     name: 'Drifthorn',
-    description: 'Antler tips glow with faint mana mist. The rarest of companions.',
-    unlockType: 'admin',
+    description: 'Antler tips glow with faint mana mist. Walks the Eastern Forests, where Rootback sleeps.',
+    unlockType: 'skill',
+    unlockSkill: 'forestry',
+    unlockLevel: 15,
   },
   dustwhisker: {
     id: 'dustwhisker',
@@ -40,9 +42,9 @@ export const BEAST_DEFS: Record<BeastSpecies, BeastDef> = {
   sporeling: {
     id: 'sporeling',
     name: 'Sporeling',
-    description: 'A mobile fungi that follows people. Unclear if pet or parasite.',
+    description: 'A mobile fungi that follows people out of shroom groves. Unclear if pet or parasite.',
     unlockType: 'skill',
-    unlockSkill: 'forestry',
+    unlockSkill: 'alchemy',
     unlockLevel: 15,
   },
   glowmite: {
@@ -258,23 +260,28 @@ export function adventureBondTick(beast: ManaBeast): void {
 // blocked on Alex's follower art before they can be built.
 // ============================================
 
-export type BeastPerk = 'gathering_speed' | 'tuberfind' | 'grovekin' | 'gemsense' | 'truesight'
+export type BeastPerk = 'gathering_speed' | 'tuberfind' | 'grovekin' | 'gemsense' | 'truesight' | 'sporebloom'
 
+// Canon: game/shimmer-skilling.md §Two-Tier Companions. Each skill's perk is granted at two bond
+// depths — the Companion-tier beast below (weak) and the @100 true Mana'mal (strong, unbuilt).
 export const BEAST_PERKS: Record<BeastSpecies, BeastPerk> = {
-  drifthorn:   'gathering_speed', // admin/rare — faster channel on ALL skills
+  drifthorn:   'grovekin',        // Forestry    (lesser Rootback → Grovekin)
   dustwhisker: 'tuberfind',       // Farming     (lesser Tuskroot → Tuberfind)
-  sporeling:   'grovekin',        // Forestry    (lesser Rootback → Grovekin)
+  sporeling:   'sporebloom',      // Alchemy     (lesser Sporehound → Sporebloom)
   glowmite:    'gemsense',        // Prospecting (lesser Gemdigger → Gemsense)
   embermole:   'truesight',       // Rinning     (lesser Prismstrike → Truesight)
 }
 
 // Which skill each perk boosts (null = skill-agnostic, applies to every skill).
+// `gathering_speed` is granted by no species today — it's the reserved slot for a future
+// admin/endgame companion. getSpeedBonus() stays live so that beast can be dropped in.
 export const PERK_SKILL: Record<BeastPerk, SkillId | null> = {
   gathering_speed: null,
   tuberfind:   'farming',
   grovekin:    'forestry',
   gemsense:    'prospecting',
   truesight:   'rinning',
+  sporebloom:  'alchemy',
 }
 
 // Player-facing copy for the companion UI.
@@ -284,6 +291,7 @@ export const PERK_INFO: Record<BeastPerk, { label: string; blurb: string }> = {
   grovekin:        { label: 'Grovekin',        blurb: 'Sometimes yields extra wood when you gather.' },
   gemsense:        { label: 'Gemsense',        blurb: 'Sometimes finds an extra shard when you mine.' },
   truesight:       { label: 'Truesight',       blurb: 'Sometimes lands an extra catch when you fish.' },
+  sporebloom:      { label: 'Sporebloom',      blurb: 'Sometimes a brew yields an extra draught.' },
 }
 
 // Max bonus at full happiness (100). @15 = the WEAK tier — the @100 Mana'mal gives the strong version.
@@ -293,6 +301,7 @@ export const PERK_MAX_BONUS: Record<BeastPerk, number> = {
   grovekin:        0.20,  // +20% bonus-find chance on forestry
   gemsense:        0.20,  // +20% bonus-find chance on prospecting
   truesight:       0.20,  // +20% bonus-find chance on rinning
+  sporebloom:      0.20,  // +20% chance a brew yields one extra draught
 }
 
 /**

@@ -161,6 +161,12 @@ function beastFrameMap(species: string): Record<string, string[]> {
     upright_special:     [`${p}_UPRIGHT_SPECIAL_0`, `${p}_UPRIGHT_SPECIAL_1`, `${p}_UPRIGHT_SPECIAL_2`],
     upright_end_run:     [`${p}_UPRIGHT_END_RUN_0`, `${p}_UPRIGHT_END_RUN_1`, `${p}_UPRIGHT_END_RUN_2`],
     happy:      [`${p}_HAPPY_0`],
+    // Care-loop frames. These exist in BeastEditor's DEFAULT_FRAME_CONST_MAP; without them here the
+    // POST resolves no const names and 400s "Unknown animation" — painting them silently lost the work.
+    // Keep the frame counts in lockstep with the editor (pet 2, eat 2, sleep 1).
+    pet:        [`${p}_PET_0`, `${p}_PET_1`],
+    eat:        [`${p}_EAT_0`, `${p}_EAT_1`],
+    sleep:      [`${p}_SLEEP_0`],
   }
 }
 
