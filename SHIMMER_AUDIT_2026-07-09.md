@@ -102,8 +102,18 @@ Copy it to `save-map`, `save-sprite`, `save-npc`. Coerce numerics; `JSON.stringi
   (`world/dialogue-data.ts` is still imported by `page.tsx:41`).
 - ~~`engine/placed-structures.ts` (64)~~ — orphaned duplicate of `engine/structures.ts`. Deleted.
 
-`engine/` is 48 → 45 files. **Still open:** `arena.sim.ts`, `party-battle.sim.ts`, `species-balance.sim.ts`
-— no importers, no npm script, but they look hand-run via `npx tsx`. That needs a human answer, not a guess.
+**The `*.sim.ts` files — ✅ RESOLVED `33e3589`.** Alex cleared all three. Two were deleted; the third was
+misnamed, not dead:
+- ~~`party-battle.sim.ts` (195)~~ — print-only tuning report, no exit code, covers the retired 2D
+  turn-based system. Deleted.
+- ~~`species-balance.sim.ts` (83)~~ — print-only species win-matrix report. Deleted.
+- `arena.sim.ts` → **`arena.test.ts`** (114). It asserts real invariants and exits non-zero, and it is the
+  **only guard on `engine/arena.ts`** — the live combat engine behind every play3d fight
+  (`components/ArenaBattle.tsx:13`). The `.sim` suffix was hiding a test. Mutation-checked: stubbing
+  `applyCommand()` makes it exit 1; restored, exit 0.
+
+`engine/` is 48 → 43 files. Shimmer now has **4 committed tests** (arena, rinning, renderer chunks,
+station menus) against the 1-working-1-broken this audit started with.
 
 ### 8. ~15 painted sprite consts that never render
 Art on disk, not wired into any `_SPRITES` export. `bat.ts:89,108` · `firefly.ts:89,108` ·
