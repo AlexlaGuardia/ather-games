@@ -17,7 +17,7 @@ import { spiritsToSave, spiritsFromSave } from '../spirits/spirit-save'
 import { LAUNCHED_SPECIES } from '../engine/spirit-index'
 import { ZONE_NODES, type NodePlacement } from '../world/node-placements'
 import { createResourceNode, depleteNode, tickNodeRespawn, rollDrops, getNodeSkill, nodeTier, NODE_DEFS, type NodeType, type ResourceNode } from '../world/resources'
-import { TOOL_DEFS, getEquippedTool, useTool, toolsToSave, toolsFromSave, ensureBasicTools, craftTool, canCraft as canCraftTool, wornFraction, repairCost, canRepair, repairTool, type EquippedTools } from '../engine/tools'
+import { TOOL_DEFS, getEquippedTool, useTool, toolsToSave, toolsFromSave, ensureBasicTools, craftTool, repairTool, type EquippedTools } from '../engine/tools'
 import { findAdjacentNode, addHarvestItems } from '../engine/harvesting'
 import { newCast as newRinCast, phaseAt as rinPhaseAt, hook as rinHook, type RinCast } from '../engine/rinning'
 import { rinBite, rinCatch, rinMiss } from './rin-fx'
@@ -26,16 +26,18 @@ import { createSkillSet, skillSetToSave, skillSetFromSave, addSkillXP, xpForSkil
 import { createBeast, checkBeastUnlock, beastsToSave, beastsFromSave, BEAST_SPECIES, BEAST_DEFS, BEAST_PERKS, PERK_INFO, getBonusFindChance, getSpeedBonus, type ManaBeast, type BeastSpecies } from '../beasts/beast'
 import { createInventory, inventoryToSave, inventoryFromSave, addItems, removeItems, countItem, transferItem, createChestStorage, chestToSave, chestFromSave, type Inventory, type ItemStack, type ChestStorage, type ChestSave } from '../engine/inventory'
 import { createManaPool, manaToSave, manaFromSave, getMaxPool, type ManaPool } from '../engine/mana'
-import { canBrew, brewPotion, getVisiblePotions, POTION_DEFS } from '../engine/alchemy'
-import { canCraft, craftItem, getRecipes, RECIPE_DEFS } from '../engine/crafting'
-import { createGEState, buyFromGE, sellToGE, tickPriceDrift, getMarketPrice, GE_ITEM_IDS, TAX_RATE, geToSave, geFromSave, type GEMarketState, type GESave } from '../engine/exchange'
-import { CROP_DEFS, canPlantCrop, plantCrop, harvestCrop, getCropGrowthPhase, isCropReady, getVisibleCrops, plantedCropsToSave, plantedCropsFromSave, type PlantedCrop } from '../engine/farming'
+import { brewPotion, POTION_DEFS } from '../engine/alchemy'
+import { canCraft, craftItem, RECIPE_DEFS } from '../engine/crafting'
+import { createGEState, buyFromGE, sellToGE, tickPriceDrift, GE_ITEM_IDS, geToSave, geFromSave, type GEMarketState, type GESave } from '../engine/exchange'
+import { CROP_DEFS, plantCrop, harvestCrop, plantedCropsToSave, plantedCropsFromSave, type PlantedCrop } from '../engine/farming'
 import type { AITier } from '../engine/battle-ai'
 import ArenaBattle from '../components/ArenaBattle'
 import HotBar from './HotBar'
 import { NPCS_3D, GREG_INTRO_LINES, GREG_NUDGE, GREG_RETURN, THISTLE_TAUNT_NO_SPIRIT, THISTLE_PREFIGHT, THISTLE_DEFEAT, FREED_SPIRIT_BEAT, SORREL_PREFIGHT, SORREL_DEFEAT, FREED_PAIR_BEAT, BRACK_PREFIGHT, BRACK_FINALE, type NPC3D } from './npcs3d'
 import { useCloudSave } from '@/lib/use-cloud-save'
 import { useWallet } from '@/lib/use-wallet'
+import { StationMenus, type PlacedStruct, type StationKind } from './StationMenus'
+import { prettyItem, menuBtn, TOOL_HUD } from './ui'
 
 const START_ZONE = 'moonwell-glade'
 const WATER_ID = 8, FLOOR_ID = 97, WALL_ID = 34, WARP_ID = 14, MIST_ID = 31
@@ -60,7 +62,6 @@ const NODE_TOOLS: { id: NodeType; label: string }[] = [
 const NODE_TOOL_IDS = new Set<string>(NODE_TOOLS.map(t => t.id))
 // itemId → display label (e.g. shimmeroak_plank → "Shimmeroak Plank"). Real item names live in
 // sprites/items.ts; this prettifier is enough for harvest toasts until those are wired.
-const prettyItem = (id: string) => id.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')
 // Tap-to-transfer destination pick: a slot already holding the same item (merge target) wins,
 // else the first empty slot. -1 = no room (transferChestSlot no-ops rather than dropping items).
 function findEmptyOrMatch(dest: (ItemStack | null)[], item: ItemStack | null): number {
@@ -69,7 +70,6 @@ function findEmptyOrMatch(dest: (ItemStack | null)[], item: ItemStack | null): n
   if (match !== -1) return match
   return dest.findIndex(s => s === null)
 }
-const menuBtn: React.CSSProperties = { padding: '6px 11px', borderRadius: 7, border: '1px solid #ffffff2a', background: '#16142a', color: '#e9dfc8', font: '700 11px ui-monospace, monospace', cursor: 'pointer', whiteSpace: 'nowrap' }
 const placeIconBtn = (accent: string): React.CSSProperties => ({ width: 60, height: 60, borderRadius: '50%', border: `2px solid ${accent}`, background: 'rgba(12,16,26,0.92)', color: '#eafff6', font: '800 24px ui-monospace, monospace', cursor: 'pointer', touchAction: 'none' })
 // Chop cost + time, scaling by node tier (its minLevel). Base pool is 100 and regen is slow
 // (see MANA_REGEN_PER_SEC), so mana is a real budget. Shimmeroak (Lv4): 12 mana over 3s = 4/s.
@@ -89,13 +89,11 @@ const PLACEABLES: Record<string, { name: string; color: string; accent: string; 
   exchange_booth:  { name: 'Exchange Booth',  color: '#2f4a3f', accent: '#6ad0a0', h: 1.0 },
   farm_planter:    { name: 'Planter',         color: '#4a3a1e', accent: '#8fd06a', h: 0.4 },
 }
-type PlacedStruct = { itemId: string; tileX: number; tileY: number; facing: number; zoneId: string }
 
 // Placed-station menu kinds, generalized over ALL 5 station itemIds (brew/craft/chest/exchange/farm).
 // A station's `kind` drives which menu opens on interact + the prompt/tap-button look. `chest` and
 // `exchange_booth` reuse the SAME itemIds as the 2D game's furniture (sprites/furniture.ts) — same
 // item, same look, coherent across both walkers.
-type StationKind = 'brew' | 'craft' | 'chest' | 'exchange' | 'farm'
 const STATIONS: Record<string, { kind: StationKind; verb: string; emoji: string; name: string; accent: string; bg: string }> = {
   alchemy_station: { kind: 'brew',     verb: 'Brew',  emoji: '⚗', name: 'Alchemy Station', accent: '#a679ff', bg: 'rgba(17,12,24,0.92)' },
   crafting_table:  { kind: 'craft',    verb: 'Craft', emoji: '🔨', name: 'Crafting Table',  accent: '#d9b84a', bg: 'rgba(24,18,10,0.92)' },
@@ -110,7 +108,6 @@ const stationInstanceId = (s: PlacedStruct) => `${s.zoneId}:${s.tileX},${s.tileY
 // Exchange Booth "Buy" shelf — a curated shortlist (the full GE_ITEM_IDS is ~80 items; showing
 // all of them on a phone-sized menu isn't usable). "Sell" already covers everything tradeable
 // the player is holding, so this is just the early-game staples worth buying on demand.
-const GE_BUY_CURATED = ['mana_draught', 'shard_tonic', 'goldwood_plank', 'goldwood_bark', 'raw_mana_shard', 'shimmeroak_plank', 'seed_shimmerwheat', 'seed_glowroot', 'seed_sunpetal']
 
 // Starter build-kit — the placeable stations + enough gathered mats to build/brew day one.
 // Granted ONCE per save via the `starterKitV2` flag so it reaches returning players too (older
@@ -653,11 +650,6 @@ function Player({ posRef, gridRef, heightsRef, zoneIdRef, editRef, onWarp, battl
 }
 
 // Per-skill tool HUD look (glyph + tint) for the bottom-bar tool gauges.
-const TOOL_HUD: Record<string, { glyph: string; tint: string; label: string }> = {
-  forestry:    { glyph: '🪓', tint: '#8fd97f', label: 'Forestry' },
-  prospecting: { glyph: '⛏️', tint: '#d9b56a', label: 'Prospecting' },
-  rinning:     { glyph: '🎣', tint: '#6fb8d9', label: 'Rinning' },
-}
 // the resource glyph that pops off a node on a completed harvest, per skill.
 const HARVEST_GLYPH: Record<string, string> = { forestry: '🪵', prospecting: '💎', rinning: '🐟' }
 
@@ -2248,285 +2240,19 @@ export default function Shimmer3D() {
         <BattleRewards gold={rewards.gold} rows={rewards.rows} onClose={() => { setRewards(null); battleRef.current = false }} />
       )}
 
-      {/* ALCHEMY STATION brew menu */}
-      {openMenu?.kind === 'brew' && (() => {
-        const alch = skillsRef.current.alchemy.level
-        const potions = getVisiblePotions(alch)
-        return (
-          <div style={{ position: 'fixed', inset: 0, zIndex: 47, background: '#05070ae8', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16, touchAction: 'none' }}>
-            <div style={{ width: 'min(440px, 95vw)', maxHeight: '86vh', overflowY: 'auto', background: '#130f1c', border: '2px solid #5a3f74', borderRadius: 16, padding: '18px 18px 14px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-                <span style={{ font: '900 16px ui-monospace, monospace', color: '#c88ae6', letterSpacing: '0.1em' }}>⚗ ALCHEMY STATION</span>
-                <button onClick={closeStation} style={{ ...menuBtn, padding: '4px 10px' }}>✕</button>
-              </div>
-              <div style={{ font: '600 10px ui-monospace, monospace', color: '#9b86b8', marginBottom: 12 }}>Alchemy Lv {alch}</div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
-                {potions.map(def => {
-                  const locked = alch < def.minAlchemyLevel
-                  const ok = !locked && canBrew(def.id, invRef.current, alch, manaRef.current)
-                  return (
-                    <div key={def.id} style={{ background: '#1c1730', border: '1px solid #ffffff14', borderRadius: 10, padding: '9px 11px', opacity: locked ? 0.5 : 1 }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
-                        <span style={{ font: '800 13px ui-monospace, monospace', color: '#eadcff' }}>{def.name}</span>
-                        <span style={{ font: '700 10px ui-monospace, monospace', color: '#9b86b8' }}>{locked ? `Lv ${def.minAlchemyLevel}` : `${def.manaCost}◈ · +${def.xpGrant}xp`}</span>
-                      </div>
-                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 6, alignItems: 'center' }}>
-                        {def.recipe.map(r => {
-                          const have = countItem(invRef.current, r.itemId)
-                          const short = have < r.count
-                          return <span key={r.itemId} style={{ font: '700 10px ui-monospace, monospace', color: short ? '#ff8a7a' : '#9fd9c4', background: '#0007', border: `1px solid ${short ? '#ff5a4d55' : '#2f5c4f'}`, borderRadius: 6, padding: '2px 7px' }}>{prettyItem(r.itemId)} {have}/{r.count}</span>
-                        })}
-                        <span style={{ flex: 1 }} />
-                        <button onClick={() => brew(def.id)} disabled={!ok} style={{ padding: '6px 14px', borderRadius: 8, border: 'none', background: ok ? '#7a4fc0' : '#2a2540', color: ok ? '#fff' : '#ffffff55', font: '800 12px ui-monospace, monospace', cursor: ok ? 'pointer' : 'default', touchAction: 'none' }}>Brew{def.resultCount > 1 ? ` ×${def.resultCount}` : ''}</button>
-                      </div>
-                    </div>
-                  )
-                })}
-              </div>
-            </div>
-          </div>
-        )
-      })()}
-
-      {/* CRAFTING TABLE menu — skill-less: gated by materials + mana only */}
-      {openMenu?.kind === 'craft' && (() => {
-        const recipes = getRecipes()
-        return (
-          <div style={{ position: 'fixed', inset: 0, zIndex: 47, background: '#05070ae8', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16, touchAction: 'none' }}>
-            <div style={{ width: 'min(440px, 95vw)', maxHeight: '86vh', overflowY: 'auto', background: '#171205', border: '2px solid #6b5220', borderRadius: 16, padding: '18px 18px 14px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-                <span style={{ font: '900 16px ui-monospace, monospace', color: '#e0b64e', letterSpacing: '0.1em' }}>🔨 CRAFTING TABLE</span>
-                <button onClick={closeStation} style={{ ...menuBtn, padding: '4px 10px' }}>✕</button>
-              </div>
-              <div style={{ font: '600 10px ui-monospace, monospace', color: '#b09660', marginBottom: 12 }}>Build stations from gathered materials</div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
-                {recipes.map(def => {
-                  const ok = canCraft(def.id, invRef.current, manaRef.current)
-                  return (
-                    <div key={def.id} style={{ background: '#241b09', border: '1px solid #ffffff14', borderRadius: 10, padding: '9px 11px' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
-                        <span style={{ font: '800 13px ui-monospace, monospace', color: '#f0e2c4' }}>{def.name}</span>
-                        <span style={{ font: '700 10px ui-monospace, monospace', color: '#b09660' }}>{def.manaCost}◈</span>
-                      </div>
-                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 6, alignItems: 'center' }}>
-                        {def.recipe.map(r => {
-                          const have = countItem(invRef.current, r.itemId)
-                          const short = have < r.count
-                          return <span key={r.itemId} style={{ font: '700 10px ui-monospace, monospace', color: short ? '#ff8a7a' : '#d9c78a', background: '#0007', border: `1px solid ${short ? '#ff5a4d55' : '#5c4f2f'}`, borderRadius: 6, padding: '2px 7px' }}>{prettyItem(r.itemId)} {have}/{r.count}</span>
-                        })}
-                        <span style={{ flex: 1 }} />
-                        <button onClick={() => craft(def.id)} disabled={!ok} style={{ padding: '6px 14px', borderRadius: 8, border: 'none', background: ok ? '#b0862a' : '#3a3018', color: ok ? '#fff' : '#ffffff55', font: '800 12px ui-monospace, monospace', cursor: ok ? 'pointer' : 'default', touchAction: 'none' }}>Craft{def.resultCount > 1 ? ` ×${def.resultCount}` : ''}</button>
-                      </div>
-                    </div>
-                  )
-                })}
-              </div>
-
-              {/* TOOLS — the tiered blades / spikes / rinsticks. Better than Greg's free basics
-                  (faster + more XP + no under-tooled mana penalty at their tier) but they wear out
-                  and break, dropping you back to the basic. Crafting one equips it for its skill. */}
-              {(() => {
-                void toolTick // re-render after a craft/break changes the equipped set
-                const craftable = (['forestry', 'prospecting', 'rinning'] as const).flatMap(skill =>
-                  Object.values(TOOL_DEFS).filter(t => t.skillId === skill && !t.basic).sort((a, b) => a.tier - b.tier))
-                return <>
-                  <div style={{ font: '800 11px ui-monospace, monospace', color: '#e0b64e', margin: '18px 0 4px', letterSpacing: '0.08em' }}>⚒ TOOLS</div>
-                  <div style={{ font: '600 10px ui-monospace, monospace', color: '#b09660', marginBottom: 10 }}>Sharper than Greg&apos;s basics — but they wear out</div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
-                    {craftable.map(def => {
-                      const ok = canCraftTool(def.id, invRef.current)
-                      const equipped = equippedToolsRef.current[def.skillId]?.toolId === def.id
-                      return (
-                        <div key={def.id} style={{ background: equipped ? '#1c2417' : '#241b09', border: `1px solid ${equipped ? '#7fe3c855' : '#ffffff14'}`, borderRadius: 10, padding: '9px 11px' }}>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
-                            <span style={{ font: '800 13px ui-monospace, monospace', color: '#f0e2c4' }}>
-                              <span style={{ marginRight: 5 }}>{TOOL_HUD[def.skillId]?.glyph}</span>{def.name}
-                              <span style={{ marginLeft: 6, font: '700 9px ui-monospace, monospace', color: '#0d1a17', background: TOOL_HUD[def.skillId]?.tint, borderRadius: 5, padding: '1px 5px' }}>T{def.tier}</span>
-                            </span>
-                            <span style={{ font: '700 10px ui-monospace, monospace', color: '#8fd9c4', whiteSpace: 'nowrap' }}>
-                              +{Math.round((def.xpBonus - 1) * 100)}% XP · {def.durability} uses
-                            </span>
-                          </div>
-                          {equipped ? (() => {
-                            // EQUIPPED → maintenance: show wear + repair (a wear-scaled slice of the recipe)
-                            const eq = equippedToolsRef.current[def.skillId]!
-                            const frac = Math.max(0, eq.usesRemaining / def.durability)
-                            const worn = wornFraction(eq)
-                            const rep = repairCost(eq)
-                            const repOk = canRepair(eq, invRef.current)
-                            const barCol = frac > 0.5 ? 'linear-gradient(90deg,#6fd08f,#a7e07f)' : frac > 0.25 ? 'linear-gradient(90deg,#e0c060,#e0a860)' : 'linear-gradient(90deg,#e0806a,#e05a4d)'
-                            return (
-                              <div style={{ marginTop: 8 }}>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                                  <div style={{ flex: 1, height: 7, background: '#0009', borderRadius: 4, border: '1px solid #0007', overflow: 'hidden' }}>
-                                    <div style={{ height: '100%', width: `${frac * 100}%`, background: barCol, transition: 'width .2s' }} />
-                                  </div>
-                                  <span style={{ font: '700 10px ui-monospace, monospace', color: '#cdbd8e', whiteSpace: 'nowrap' }}>{eq.usesRemaining}/{def.durability} uses</span>
-                                </div>
-                                {worn >= 0.25 ? (
-                                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 7, alignItems: 'center' }}>
-                                    <span style={{ font: '700 9px ui-monospace, monospace', color: '#b09660' }}>repair:</span>
-                                    {rep.map(r => {
-                                      const have = countItem(invRef.current, r.itemId); const short = have < r.count
-                                      return <span key={r.itemId} style={{ font: '700 10px ui-monospace, monospace', color: short ? '#ff8a7a' : '#d9c78a', background: '#0007', border: `1px solid ${short ? '#ff5a4d55' : '#5c4f2f'}`, borderRadius: 6, padding: '2px 7px' }}>{prettyItem(r.itemId)} {have}/{r.count}</span>
-                                    })}
-                                    <span style={{ flex: 1 }} />
-                                    <button onClick={() => repairToolAction(def.skillId)} disabled={!repOk} style={{ padding: '6px 14px', borderRadius: 8, border: 'none', background: repOk ? '#3a7a52' : '#243a2f', color: repOk ? '#eafff4' : '#ffffff55', font: '800 12px ui-monospace, monospace', cursor: repOk ? 'pointer' : 'default', touchAction: 'none' }}>Repair</button>
-                                  </div>
-                                ) : (
-                                  <div style={{ font: '700 10px ui-monospace, monospace', color: '#7fe3c8', marginTop: 7, textAlign: 'right' }}>✓ equipped · good condition</div>
-                                )}
-                              </div>
-                            )
-                          })() : (
-                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 6, alignItems: 'center' }}>
-                              {def.recipe.map(r => {
-                                const have = countItem(invRef.current, r.itemId)
-                                const short = have < r.count
-                                return <span key={r.itemId} style={{ font: '700 10px ui-monospace, monospace', color: short ? '#ff8a7a' : '#d9c78a', background: '#0007', border: `1px solid ${short ? '#ff5a4d55' : '#5c4f2f'}`, borderRadius: 6, padding: '2px 7px' }}>{prettyItem(r.itemId)} {have}/{r.count}</span>
-                              })}
-                              <span style={{ flex: 1 }} />
-                              <button onClick={() => craftToolAction(def.id)} disabled={!ok} style={{ padding: '6px 14px', borderRadius: 8, border: 'none', background: ok ? '#b0862a' : '#3a3018', color: ok ? '#fff' : '#ffffff55', font: '800 12px ui-monospace, monospace', cursor: ok ? 'pointer' : 'default', touchAction: 'none' }}>Craft</button>
-                            </div>
-                          )}
-                        </div>
-                      )
-                    })}
-                  </div>
-                </>
-              })()}
-              <div style={{ font: '600 9px ui-monospace, monospace', color: '#7d6a3e', marginTop: 12, textAlign: 'center' }}>Crafted stations go to your hotbar — double-tap to place them.</div>
-            </div>
-          </div>
-        )
-      })()}
-
-      {/* CHEST menu — tap a slot to move that stack (chest ⇄ satchel); no drag needed */}
-      {openMenu?.kind === 'chest' && (() => {
-        const chest = getChest(openMenu.struct)
-        void chestsTick // subscribe: re-render this menu after a transfer bumps the tick
-        return (
-          <div style={{ position: 'fixed', inset: 0, zIndex: 47, background: '#05070ae8', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16, touchAction: 'none' }}>
-            <div style={{ width: 'min(440px, 95vw)', maxHeight: '86vh', overflowY: 'auto', background: '#171205', border: '2px solid #6b5220', borderRadius: 16, padding: '18px 18px 14px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-                <span style={{ font: '900 16px ui-monospace, monospace', color: '#c9a86a', letterSpacing: '0.1em' }}>📦 CHEST</span>
-                <button onClick={closeStation} style={{ ...menuBtn, padding: '4px 10px' }}>✕</button>
-              </div>
-              <div style={{ font: '600 10px ui-monospace, monospace', color: '#b09660', marginBottom: 12 }}>Tap an item to move it — chest ⇄ satchel</div>
-              <div style={{ font: '800 11px ui-monospace, monospace', color: '#d9c78a', marginBottom: 6 }}>CHEST ({chest.slots.filter(Boolean).length}/{chest.slots.length})</div>
-              <SlotGrid slots={chest.slots} onTap={(i) => transferChestSlot(openMenu.struct, i, false)} accent="#c9a86a" />
-              <div style={{ font: '800 11px ui-monospace, monospace', color: '#d9c78a', margin: '14px 0 6px' }}>SATCHEL</div>
-              <SlotGrid slots={invRef.current.slots} onTap={(i) => transferChestSlot(openMenu.struct, i, true)} accent="#7fd0e6" />
-            </div>
-          </div>
-        )
-      })()}
-
-      {/* EXCHANGE BOOTH menu — instant buy/sell vs the single shared market (Sell = whatever's
-          tradeable in your satchel; Buy = the early-game staple shortlist) */}
-      {openMenu?.kind === 'exchange' && (() => {
-        const sellIds = Array.from(new Set(invRef.current.slots.filter((s): s is ItemStack => !!s).map(s => s.itemId))).filter(id => GE_ITEM_IDS.includes(id))
-        const buyIds = GE_BUY_CURATED.filter(id => GE_ITEM_IDS.includes(id))
-        return (
-          <div style={{ position: 'fixed', inset: 0, zIndex: 47, background: '#05070ae8', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16, touchAction: 'none' }}>
-            <div style={{ width: 'min(440px, 95vw)', maxHeight: '86vh', overflowY: 'auto', background: '#0b1613', border: '2px solid #2f5c4f', borderRadius: 16, padding: '18px 18px 14px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-                <span style={{ font: '900 16px ui-monospace, monospace', color: '#6ad0a0', letterSpacing: '0.1em' }}>💰 EXCHANGE BOOTH</span>
-                <button onClick={closeStation} style={{ ...menuBtn, padding: '4px 10px' }}>✕</button>
-              </div>
-              <div style={{ font: '600 10px ui-monospace, monospace', color: '#8fc4ae', marginBottom: 8 }}>✦ {wallet.marks} marks · {Math.round(TAX_RATE * 100)}% tax on sales</div>
-              {tradeToast && <div style={{ font: '700 11px ui-monospace, monospace', color: '#ffe08a', marginBottom: 8 }}>{tradeToast}</div>}
-              <div style={{ font: '800 11px ui-monospace, monospace', color: '#8fd9c4', marginBottom: 6 }}>SELL</div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 7, marginBottom: 14 }}>
-                {sellIds.length === 0 && <span style={{ font: '600 11px ui-monospace, monospace', color: '#5a7a6e' }}>Nothing tradeable in your satchel.</span>}
-                {sellIds.map(id => {
-                  const have = countItem(invRef.current, id)
-                  const price = getMarketPrice(geRef.current, id)
-                  return (
-                    <div key={id} style={{ display: 'flex', alignItems: 'center', gap: 8, background: '#12201d', border: '1px solid #ffffff14', borderRadius: 9, padding: '7px 10px' }}>
-                      <span style={{ flex: 1, font: '700 12px ui-monospace, monospace', color: '#eafff6' }}>{prettyItem(id)}</span>
-                      <span style={{ font: '700 10px ui-monospace, monospace', color: '#8fd9c4' }}>{price}◆ ×{have}</span>
-                      <button onClick={() => tradeSell(id, 1)} style={{ padding: '5px 10px', borderRadius: 7, border: 'none', background: '#2f8f5f', color: '#fff', font: '800 11px ui-monospace, monospace', cursor: 'pointer', touchAction: 'none' }}>Sell 1</button>
-                      {have > 1 && <button onClick={() => tradeSell(id, have)} style={{ padding: '5px 10px', borderRadius: 7, border: 'none', background: '#1c5c3f', color: '#fff', font: '800 11px ui-monospace, monospace', cursor: 'pointer', touchAction: 'none' }}>All</button>}
-                    </div>
-                  )
-                })}
-              </div>
-              <div style={{ font: '800 11px ui-monospace, monospace', color: '#8fd9c4', marginBottom: 6 }}>BUY</div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
-                {buyIds.map(id => {
-                  const price = getMarketPrice(geRef.current, id)
-                  const afford = wallet.marks >= price
-                  return (
-                    <div key={id} style={{ display: 'flex', alignItems: 'center', gap: 8, background: '#12201d', border: '1px solid #ffffff14', borderRadius: 9, padding: '7px 10px' }}>
-                      <span style={{ flex: 1, font: '700 12px ui-monospace, monospace', color: '#eafff6' }}>{prettyItem(id)}</span>
-                      <span style={{ font: '700 10px ui-monospace, monospace', color: '#8fd9c4' }}>{price}◆</span>
-                      <button onClick={() => tradeBuy(id, 1)} disabled={!afford} style={{ padding: '5px 10px', borderRadius: 7, border: 'none', background: afford ? '#2f8f5f' : '#1a2a24', color: afford ? '#fff' : '#ffffff55', font: '800 11px ui-monospace, monospace', cursor: afford ? 'pointer' : 'default', touchAction: 'none' }}>Buy 1</button>
-                    </div>
-                  )
-                })}
-              </div>
-            </div>
-          </div>
-        )
-      })()}
-
-      {/* FARM PLANTER menu — plant a seed → watch it grow (real time) → harvest when ready.
-          ONE crop per planter, keyed by tile+zone (matches the 2D game's farming save shape). */}
-      {openMenu?.kind === 'farm' && (() => {
-        const struct = openMenu.struct
-        void cropsTick // subscribe: re-render on plant/harvest
-        const crop = plantedCropsRef.current.find(c => c.tileX === struct.tileX && c.tileY === struct.tileY && c.zoneId === struct.zoneId) ?? null
-        const farmLvl = skillsRef.current.farming.level
-        return (
-          <div style={{ position: 'fixed', inset: 0, zIndex: 47, background: '#05070ae8', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16, touchAction: 'none' }}>
-            <div style={{ width: 'min(440px, 95vw)', maxHeight: '86vh', overflowY: 'auto', background: '#0f1608', border: '2px solid #4a6b2f', borderRadius: 16, padding: '18px 18px 14px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-                <span style={{ font: '900 16px ui-monospace, monospace', color: '#8fd06a', letterSpacing: '0.1em' }}>🌱 PLANTER</span>
-                <button onClick={closeStation} style={{ ...menuBtn, padding: '4px 10px' }}>✕</button>
-              </div>
-              <div style={{ font: '600 10px ui-monospace, monospace', color: '#94b073', marginBottom: 12 }}>Farming Lv {farmLvl}</div>
-              {crop ? (() => {
-                const def = CROP_DEFS[crop.cropId]
-                const ready = isCropReady(crop)
-                const phase = getCropGrowthPhase(crop)
-                const phaseLabel = ['seed', 'sprout', 'growth', 'ready'][phase]
-                const pct = Math.min(100, Math.round(((Date.now() - crop.plantedAt) / crop.growthDuration) * 100))
-                return (
-                  <div style={{ background: '#182410', border: '1px solid #ffffff14', borderRadius: 10, padding: 12 }}>
-                    <div style={{ font: '800 13px ui-monospace, monospace', color: '#eafff6', marginBottom: 6 }}>{def.name}</div>
-                    <div style={{ font: '700 11px ui-monospace, monospace', color: ready ? '#8fd06a' : '#c9d6bd', marginBottom: 8 }}>{ready ? 'Ready to harvest!' : `Growing — ${phaseLabel}`}</div>
-                    <div style={{ height: 6, background: '#0008', borderRadius: 4, overflow: 'hidden', border: '1px solid #0006' }}>
-                      <div style={{ height: '100%', width: `${pct}%`, background: 'linear-gradient(90deg,#4a6b2f,#8fd06a)' }} />
-                    </div>
-                    <button onClick={() => harvestAt(crop)} disabled={!ready} style={{ marginTop: 12, width: '100%', padding: '9px 0', borderRadius: 9, border: 'none', background: ready ? '#4a8f3f' : '#25301c', color: ready ? '#fff' : '#ffffff55', font: '800 12px ui-monospace, monospace', cursor: ready ? 'pointer' : 'default', touchAction: 'none' }}>Harvest</button>
-                  </div>
-                )
-              })() : (() => {
-                const plantable = getVisibleCrops(farmLvl).filter(def => countItem(invRef.current, def.seedItemId) > 0)
-                return (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
-                    {plantable.length === 0 && <span style={{ font: '600 11px ui-monospace, monospace', color: '#5a7a4a' }}>No plantable seeds in your satchel.</span>}
-                    {plantable.map(def => {
-                      const ok = canPlantCrop(def.id, invRef.current, farmLvl, manaRef.current)
-                      const have = countItem(invRef.current, def.seedItemId)
-                      return (
-                        <div key={def.id} style={{ background: '#182410', border: '1px solid #ffffff14', borderRadius: 10, padding: '9px 11px' }}>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
-                            <span style={{ font: '800 13px ui-monospace, monospace', color: '#eafff6' }}>{def.name}</span>
-                            <span style={{ font: '700 10px ui-monospace, monospace', color: '#94b073' }}>{def.manaCost}◈ · seed ×{have}</span>
-                          </div>
-                          <button onClick={() => plantAt(struct, def.id)} disabled={!ok} style={{ marginTop: 8, width: '100%', padding: '7px 0', borderRadius: 8, border: 'none', background: ok ? '#4a8f3f' : '#25301c', color: ok ? '#fff' : '#ffffff55', font: '800 12px ui-monospace, monospace', cursor: ok ? 'pointer' : 'default', touchAction: 'none' }}>Plant</button>
-                        </div>
-                      )
-                    })}
-                  </div>
-                )
-              })()}
-            </div>
-          </div>
-        )
-      })()}
+      {/* The five placeable-station menus (alchemy / craft / chest / exchange / farm).
+          Extracted to StationMenus.tsx — the walker keeps every ref + action, and hands them down. */}
+      <StationMenus
+        openMenu={openMenu} closeStation={closeStation}
+        skillsRef={skillsRef} invRef={invRef} manaRef={manaRef} equippedToolsRef={equippedToolsRef}
+        geRef={geRef} plantedCropsRef={plantedCropsRef}
+        toolTick={toolTick} chestsTick={chestsTick} cropsTick={cropsTick}
+        wallet={wallet} tradeToast={tradeToast}
+        brew={brew} craft={craft} craftToolAction={craftToolAction} repairToolAction={repairToolAction}
+        getChest={getChest} transferChestSlot={transferChestSlot}
+        tradeSell={tradeSell} tradeBuy={tradeBuy}
+        harvestAt={harvestAt} plantAt={plantAt}
+      />
 
       {battle && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 50, background: '#0a0a12' }}>
@@ -2636,28 +2362,6 @@ function BattleRewards({ gold, rows, onClose }: {
 
 // Tap-to-transfer slot grid — used by the Chest menu for both the chest's storage and the
 // player's satchel. No drag needed (mobile-first): tap a filled slot to move that stack.
-function SlotGrid({ slots, onTap, cols = 5, accent }: { slots: (ItemStack | null)[]; onTap: (idx: number) => void; cols?: number; accent: string }) {
-  return (
-    <div style={{ display: 'grid', gridTemplateColumns: `repeat(${cols}, 1fr)`, gap: 4 }}>
-      {slots.map((s, i) => (
-        <button key={i} onClick={() => s && onTap(i)} disabled={!s} style={{
-          position: 'relative', aspectRatio: '1', minHeight: 40, borderRadius: 7,
-          border: `1px solid ${s ? accent + '66' : '#ffffff14'}`, background: s ? '#1c1730' : '#00000022',
-          cursor: s ? 'pointer' : 'default', touchAction: 'none', padding: 0,
-        }}>
-          {s && (
-            <>
-              <span style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', font: '800 8px ui-monospace, monospace', color: '#eadcff', textAlign: 'center', overflow: 'hidden', padding: 2, lineHeight: 1.1 }}>
-                {prettyItem(s.itemId).split(' ').map(w => w.slice(0, 3)).join(' ')}
-              </span>
-              {s.count > 1 && <span style={{ position: 'absolute', right: 2, bottom: 1, font: '800 9px ui-monospace, monospace', color: '#fff', textShadow: '0 1px 2px #000' }}>{s.count}</span>}
-            </>
-          )}
-        </button>
-      ))}
-    </div>
-  )
-}
 
 function KeyToggle({ onB }: { onB: () => void }) {
   useEffect(() => {
