@@ -93,13 +93,17 @@ Copy it to `save-map`, `save-sprite`, `save-npc`. Coerce numerics; `JSON.stringi
 
 ## P2 — rot and waste
 
-### 7. ~432 lines of confirmed-dead engine code (zero importers, repo-wide)
-- `engine/reputation.ts` (267 lines) — a complete NPC gift/reputation system, never wired to anything
-- `engine/dialogue.ts` (101) — superseded by `dialogue-runtime.ts`
-- `engine/placed-structures.ts` (64) — orphaned duplicate of `engine/structures.ts`
+### 7. ~432 lines of confirmed-dead engine code (zero importers, repo-wide) — ✅ **DELETED `8d60c26`**
+- ~~`engine/reputation.ts` (267 lines)~~ — a complete NPC gift/reputation system, never wired to anything.
+  Deleted. `dialogue-runtime` keeps its `reputation` **condition**, but `page.tsx:1399` hardcodes
+  `getReputation: () => 0` and no dialogue data gates on it — the system was inert end to end. The typed
+  hook stays (it's where a future rep system would land); it is currently unsatisfiable.
+- ~~`engine/dialogue.ts` (101)~~ — superseded by `dialogue-runtime.ts`. Deleted; orphaned nothing
+  (`world/dialogue-data.ts` is still imported by `page.tsx:41`).
+- ~~`engine/placed-structures.ts` (64)~~ — orphaned duplicate of `engine/structures.ts`. Deleted.
 
-Unsure: `arena.sim.ts`, `party-battle.sim.ts`, `species-balance.sim.ts` — no importers, no npm script.
-Balance sims run by hand via `npx tsx`? If not, delete.
+`engine/` is 48 → 45 files. **Still open:** `arena.sim.ts`, `party-battle.sim.ts`, `species-balance.sim.ts`
+— no importers, no npm script, but they look hand-run via `npx tsx`. That needs a human answer, not a guess.
 
 ### 8. ~15 painted sprite consts that never render
 Art on disk, not wired into any `_SPRITES` export. `bat.ts:89,108` · `firefly.ts:89,108` ·
