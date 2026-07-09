@@ -1,5 +1,11 @@
 // ── Keeper's Arena — headless oracle (sim-first proof) ─────────────────────────
-// Run: npx tsx src/app/shimmer/engine/arena.sim.ts
+// Run: npx tsx src/app/shimmer/engine/arena.test.ts
+//
+// Renamed from arena.sim.ts (2026-07-09). It was never a scratch sim: it asserts real invariants
+// and exits non-zero on failure, and it is the ONLY guard on engine/arena.ts — the live combat
+// engine behind every fight in play3d (components/ArenaBattle.tsx). Its siblings
+// party-battle.sim.ts and species-balance.sim.ts *were* print-only tuning reports and were deleted
+// in the same pass; this one earned its .test.ts.
 //
 // The design thesis to prove BEFORE any renderer: the Keeper's scarce, timing-gated
 // support kit is real skill expression — a good Keeper turns a losing fight. So we
