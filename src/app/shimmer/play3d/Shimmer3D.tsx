@@ -6,7 +6,7 @@
 // (heights→/shimmer/save-heights, grid→/shimmer/save-map). Warps/collision reuse the 2D engine.
 import { Canvas, useFrame, type ThreeEvent } from '@react-three/fiber'
 import { Html } from '@react-three/drei'
-import { useRef, useEffect, useLayoutEffect, useMemo, useState, useCallback } from 'react'
+import { useRef, useEffect, useLayoutEffect, useMemo, useState, useCallback, memo } from 'react'
 import * as THREE from 'three'
 import { walkable } from '../engine/player'
 import { ZONES, getZone, checkWarp, type Zone, type Warp } from '../world/zones'
@@ -311,7 +311,7 @@ function NodeMarkers({ nodes, heights, editing, channel }: { nodes: ResourceNode
 }
 
 // Placed stations (player-built) — blockout box + a glowing top + a facing nub.
-function StructureMarkers({ structures, heights }: { structures: PlacedStruct[]; heights: number[][] }) {
+const StructureMarkers = memo(function StructureMarkers({ structures, heights }: { structures: PlacedStruct[]; heights: number[][] }) {
   return (
     <>
       {structures.map((s, i) => {
@@ -327,7 +327,7 @@ function StructureMarkers({ structures, heights }: { structures: PlacedStruct[];
       })}
     </>
   )
-}
+})
 
 // Placement ghost — a translucent preview on the tile in front of the camera; writes that tile to
 // placeTargetRef each frame (confirm reads it). Tints red where it can't build.
@@ -474,7 +474,10 @@ function Tiles({ cells, size, y, color, opacity = 1, paint, editing }: {
   )
 }
 
-function ZoneGeometry({ gridRef, heights, version, paint, editing }: {
+// memo: the terrain is the heaviest node in the scene and depends on nothing that ticks. Without it,
+// every channel tick (~11 Hz) rebuilt the whole floor/wall/water/mist JSX tree. All five props are
+// stable (a ref, a ref's array, a version int, a useCallback, a bool), so this skips cleanly.
+const ZoneGeometry = memo(function ZoneGeometry({ gridRef, heights, version, paint, editing }: {
   gridRef: React.RefObject<number[][]>; heights: number[][]; version: number
   paint: (c: number, r: number, shift: boolean) => void; editing: boolean
 }) {
@@ -495,7 +498,7 @@ function ZoneGeometry({ gridRef, heights, version, paint, editing }: {
       {editing && <Tiles cells={voids} size={[0.92, 0.05, 0.92]} y={-0.02} color="#39406b" opacity={0.5} paint={paint} editing={editing} />}
     </>
   )
-}
+})
 
 // An NPC stands in the world when it hasn't been cleared (defeated) and its gate flag (if any) is set.
 // Gating chains the holds: Sorrel only appears once `freedThistle` is true (he fled up here).
@@ -807,7 +810,11 @@ function CameraRig({ posRef, editFocusRef, yawRef, editRef }: {
   return null
 }
 
-function Scene(props: {
+// memo: the parent re-renders on every HUD tick — mana regen fires setManaFrac at 2 Hz whenever mana
+// is below full, and the harvest channel driver fires setChannel at ~11 Hz. Neither touches a Scene
+// prop, so without memo the entire 3D subtree was reconciled for a number that only the HUD reads.
+// Every prop here is a ref, a primitive, a useCallback, or state that genuinely should redraw.
+const Scene = memo(function Scene(props: {
   zone: Zone; gridRef: React.RefObject<number[][]>; heights: number[][]; version: number; dims: string
   posRef: React.RefObject<THREE.Vector3>; heightsRef: React.RefObject<number[][]>; zoneIdRef: React.RefObject<string>
   editFocusRef: React.RefObject<THREE.Vector3>
@@ -830,6 +837,14 @@ function Scene(props: {
   fishing: boolean; fishBite: boolean
   harvestPop: { x: number; y: number; z: number; glyph: string; key: number } | null
 }) {
+  // Pure-prop filter → safe to memo, so a channel tick doesn't re-allocate the structure list.
+  // The NPC filter below is deliberately NOT memoized: npcInWorld() reads flagsRef.current, which is
+  // mutated in place, so any dep list would go stale the moment a story flag flips. It's a ~20-item
+  // filter — recomputing it is cheaper than a subtle "the NPC never disappeared" bug.
+  const structuresInZone = useMemo(
+    () => props.structures.filter(s => s.zoneId === props.zone.id),
+    [props.structures, props.zone.id],
+  )
   return (
     <>
       <color attach="background" args={['#bfe3ef']} />
@@ -844,7 +859,7 @@ function Scene(props: {
       <ZoneGeometry key={`${props.zone.id}-${props.dims}`} gridRef={props.gridRef} heights={props.heights} version={props.version} paint={props.paint} editing={props.editing} />
       <NPCMarkers npcs={NPCS_3D.filter((n) => n.zone === props.zone.id && npcInWorld(n, props.defeated, props.flagsRef.current))} heights={props.heights} />
       <NodeMarkers nodes={props.nodes} heights={props.heights} editing={props.editing} channel={props.channel} />
-      <StructureMarkers structures={props.structures.filter(s => s.zoneId === props.zone.id)} heights={props.heights} />
+      <StructureMarkers structures={structuresInZone} heights={props.heights} />
       <PlacementGhost placing={props.placing} posRef={props.posRef} heights={props.heights} gridRef={props.gridRef} placeTargetRef={props.placeTargetRef} structuresRef={props.structuresRef} zoneIdRef={props.zoneIdRef} />
       <Player posRef={props.posRef} gridRef={props.gridRef} heightsRef={props.heightsRef} zoneIdRef={props.zoneIdRef} editRef={props.editRef} onWarp={props.onWarp} battleRef={props.battleRef} partyLevelRef={props.partyLevelRef} onEncounter={props.onEncounter} joyRef={props.joyRef} talkingRef={props.talkingRef} hasPartyRef={props.hasPartyRef} onNearChange={props.onNearChange} defeatedRef={props.defeatedRef} flagsRef={props.flagsRef} harvestNodesRef={props.harvestNodesRef} onNearNode={props.onNearNode} stationsRef={props.structuresRef} onNearStation={props.onNearStation} />
       {props.companionColor && !props.editing && <Follower posRef={props.posRef} heightsRef={props.heightsRef} color={props.companionColor} />}
@@ -853,7 +868,7 @@ function Scene(props: {
       <CameraRig posRef={props.posRef} editFocusRef={props.editFocusRef} yawRef={props.yawRef} editRef={props.editRef} />
     </>
   )
-}
+})
 
 // Compass — a needle that points to grid-north on screen. Driven by the live camera yaw via rAF
 // (no React re-render). North = world -z; the rose rotates with the camera so N tracks the map.
