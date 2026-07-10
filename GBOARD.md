@@ -357,7 +357,20 @@ the Arcade frame.
   (sticky from-room) · `public/room/news.json` (live feed) · `scripts/news.py` (add/suggest feed tooling) · `/grimoire` (AtherPages, off the Desk)
 
 ### Nolmir — 🟢 live · idle Athernyx defense/arena → `/nolmir`
-*Last touched: 2026-07-03 — economy regression-guard suite added (`8001bfe`)*
+*Last touched: 2026-07-10 — wayfinding audit + nav pass (`bb856d2`)*
+**🧭 NAV AUDIT + FIX (2026-07-10, jin-cc, `bb856d2`, pushed, live).** Alex flagged the interface as "messy and
+  complicated, had me avoiding it." The audit found the mess was the MAP, not the density: the SiteNav drawer was
+  mounted ONLY on the deck — Starforge + Expeditions had **no menu and no route home at all** (only sideways hops
+  between halls). And the names lied — deck tile said "The Orrery" but opened a page titled "THE STARFORGE" (Orrery
+  is one of its 5 tabs); `/nolmir/crucible` still titled itself **"NOLMIR"** (stale front-door leftover). Plus the
+  crucible `[edit]`→`/nolmir/dev` link rendered for everyone → non-owners hit the proxy's bare "Forbidden" page, no
+  way back. **Fixed:** SiteNav on all 3 halls w/ a `Nolmir ▸ <hall>` breadcrumb (Nolmir crumb = home); a `deck`
+  (home) emblem added to each hall's sibling row (now Deck + 2 siblings = one tap anywhere); inline mute → drawer
+  sound row (manana pattern, clears the corner for ☰); tile "The Orrery"→"The Starforge"; crucible h1 "NOLMIR"→
+  "THE CRUCIBLE"; `[edit]` owner-gated via new `useIsOwner()` hook (`/api/owner` probe — httpOnly cookie isn't
+  JS-readable). Verified live both owner paths. **★ THE DENSITY IS A SEPARATE PASS (Alex's eye):** 8 currencies,
+  ~13 panels behind 3 tiles. Fixing the map first may change how crowded it actually feels — reassess before cutting.
+**🧪 REGRESSION GUARD (2026-07-03, jin-cc):** the ~90K economy had 1 test file (expedmeta, 13). Added
 **🧪 REGRESSION GUARD (2026-07-03, jin-cc):** the ~90K economy had 1 test file (expedmeta, 13). Added
   **starforge.test.ts (59)** + **away.test.ts (16)** = **88 total** guarding the idle math that breaks
   silently: settle idempotency (starforge + the homecoming — *whoever loads first banks the haul*), 48h
