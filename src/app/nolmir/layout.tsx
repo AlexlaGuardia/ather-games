@@ -1,4 +1,5 @@
 import type { Metadata } from 'next'
+import RotateGate from './components/RotateGate'
 
 // Per-game share metadata — a real title, description, and the card art as the
 // OG/Twitter image, so a shared link to this game reads as the game (not the
@@ -22,5 +23,5 @@ export const metadata: Metadata = {
 }
 
 export default function NolmirLayout({ children }: { children: React.ReactNode }) {
-  return children
+  return <RotateGate>{children}</RotateGate>
 }
