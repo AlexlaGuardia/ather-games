@@ -2,6 +2,38 @@ import { NextRequest, NextResponse } from 'next/server'
 import { readFile } from 'fs/promises'
 import { join } from 'path'
 import { safeWriteFile as writeFile } from '../lib/backup'
+import { BadRequest, safeId, safeIdOpt, safeInt, safeNum, safeText, safeColors, escText, gridMax, lookup } from '../lib/safe'
+
+/** Map a guard failure to 400, anything else to 500. */
+function errorResponse(e: unknown) {
+  if (e instanceof BadRequest) return NextResponse.json({ error: e.message }, { status: 400 })
+  return NextResponse.json({ error: e instanceof Error ? e.message : 'Unknown error' }, { status: 500 })
+}
+
+/** The map a placement/config write targets. Becomes a TS const name and a quoted zone id. */
+function bodyMapId(body: { mapId?: unknown }): string {
+  return body.mapId === undefined ? 'garden' : safeId(body.mapId, 'mapId')
+}
+
+/** A tile's pixel payload: hex digits and newlines only, so it can't break out of the `px(...)` template literal. */
+function safeDigits(v: unknown, field: string): string {
+  if (typeof v !== 'string') throw new BadRequest(`Invalid ${field}: expected string`)
+  if (v.length > 200_000) throw new BadRequest(`Invalid ${field}: too large`)
+  if (!/^[0-9a-fA-F\s]*$/.test(v)) throw new BadRequest(`Invalid ${field}: expected hex digits and whitespace only`)
+  return v
+}
+
+/** Validate a tile grid: rectangular-ish, every cell a non-negative integer. */
+function safeGrid(v: unknown, field: string): number[][] {
+  if (!Array.isArray(v) || v.length === 0) throw new BadRequest(`Invalid ${field}: expected non-empty array`)
+  if (v.length > 512) throw new BadRequest(`Invalid ${field}: more than 512 rows`)
+  for (const row of v) {
+    if (!Array.isArray(row) || row.length > 512)
+      throw new BadRequest(`Invalid ${field}: rows must be arrays of at most 512 cells`)
+  }
+  gridMax(v as number[][], field) // validates every cell
+  return v as number[][]
+}
 
 const WORLD_DIR = join(process.cwd(), 'src/app/shimmer/world')
 const INTGRIDS_FILE = join(WORLD_DIR, 'intgrids.ts')
@@ -226,8 +258,7 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json(result)
   } catch (e: unknown) {
-    const msg = e instanceof Error ? e.message : 'Unknown error'
-    return NextResponse.json({ error: msg }, { status: 500 })
+    return errorResponse(e)
   }
 }
 
@@ -240,6 +271,16 @@ export async function POST(req: NextRequest) {
     // Save tiles
     if (body.tiles && Array.isArray(body.tiles)) {
       const tiles: TileData[] = body.tiles
+      // Names become source comments; palettes and digit strings become literals.
+      // A backtick or `${` in a digit string would close/open the template literal.
+      tiles.forEach((t, i) => {
+        t.name = safeText(t.name, `tiles[${i}].name`, 80).replace(/[`\r\n]/g, ' ')
+        safeColors(t.palette, `tiles[${i}].palette`)
+        if (t.category !== undefined && t.category !== '') safeId(t.category, `tiles[${i}].category`)
+        if (t.animRate !== undefined) safeInt(t.animRate, `tiles[${i}].animRate`, 1, 9999)
+        safeDigits(t.digits, `tiles[${i}].digits`)
+        t.frames?.forEach((f, fi) => safeDigits(f, `tiles[${i}].frames[${fi}]`))
+      })
       const hasAnimated = tiles.some(t => t.frames && t.frames.length > 1)
 
       // Detect if any tiles are 16x16 (legacy) vs 32x32 (native)
@@ -376,14 +417,17 @@ export async function POST(req: NextRequest) {
 
     // Save map grid
     if (body.grid && Array.isArray(body.grid)) {
-      const grid: number[][] = body.grid
-      const mapId: string = body.mapId ?? 'garden'
+      const grid = safeGrid(body.grid, 'grid')
+      const mapId = bodyMapId(body)
 
       if (mapId === 'garden') {
         // Replace GARDEN section, preserve zone maps below
         const cols = grid[0]?.length ?? 0
         const rows = grid.length
-        const playerStart = body.playerStart ?? { tileX: 14, tileY: 8 }
+        const playerStart = {
+          tileX: safeInt(body.playerStart?.tileX ?? 14, 'playerStart.tileX', 0, 9999),
+          tileY: safeInt(body.playerStart?.tileY ?? 8, 'playerStart.tileY', 0, 9999),
+        }
         const existing = await readFile(TILEMAP_FILE, 'utf-8')
 
         const header = [
@@ -395,7 +439,7 @@ export async function POST(req: NextRequest) {
           'export const GARDEN: number[][] = [',
         ]
 
-        const maxVal = Math.max(...grid.flat())
+        const maxVal = gridMax(grid, 'grid')
         const padWidth = maxVal > 99 ? (maxVal > 999 ? 4 : 3) : 2
         grid.forEach((row, y) => {
           const padded = row.map(n => n.toString().padStart(padWidth, ' ')).join(',')
@@ -439,7 +483,7 @@ export async function POST(req: NextRequest) {
         const declEnd = nextExport === -1 ? existing.length : nextExport + 1
 
         // Build replacement grid
-        const maxVal = Math.max(0, ...grid.flat())
+        const maxVal = gridMax(grid, 'grid')
         const padWidth = maxVal > 99 ? (maxVal > 999 ? 4 : 3) : 2
         const gridLines = grid.map((row, y) => {
           const padded = row.map(n => n.toString().padStart(padWidth, ' ')).join(',')
@@ -455,8 +499,12 @@ export async function POST(req: NextRequest) {
 
     // Save node placements for the current map
     if (body.nodes && Array.isArray(body.nodes)) {
-      const mapId: string = body.mapId ?? 'garden'
-      const nodes: Array<{ nodeType: string, x: number, y: number }> = body.nodes
+      const mapId = bodyMapId(body)
+      const nodes = (body.nodes as unknown[]).map((n, i) => ({
+        nodeType: safeId((n as { nodeType: unknown }).nodeType, `nodes[${i}].nodeType`),
+        x: safeInt((n as { x: unknown }).x, `nodes[${i}].x`, 0, 9999),
+        y: safeInt((n as { y: unknown }).y, `nodes[${i}].y`, 0, 9999),
+      }))
 
       // Read existing file
       const existing = await readFile(NODES_FILE, 'utf-8')
@@ -498,8 +546,12 @@ export async function POST(req: NextRequest) {
 
     // Save structure placements for the current map
     if (body.structurePlacements && Array.isArray(body.structurePlacements)) {
-      const mapId: string = body.mapId ?? 'garden'
-      const placements: Array<{ structureId: string, x: number, y: number }> = body.structurePlacements
+      const mapId = bodyMapId(body)
+      const placements = (body.structurePlacements as unknown[]).map((p, i) => ({
+        structureId: safeId((p as { structureId: unknown }).structureId, `structurePlacements[${i}].structureId`),
+        x: safeInt((p as { x: unknown }).x, `structurePlacements[${i}].x`, 0, 9999),
+        y: safeInt((p as { y: unknown }).y, `structurePlacements[${i}].y`, 0, 9999),
+      }))
 
       const existing = await readFile(STRUCTURES_FILE, 'utf-8')
       const constName = mapId.replace(/-/g, '_').toUpperCase() + '_STRUCTURES'
@@ -523,8 +575,12 @@ export async function POST(req: NextRequest) {
 
     // Save furniture placements for the current map
     if (body.furniture && Array.isArray(body.furniture)) {
-      const mapId: string = body.mapId ?? 'garden'
-      const placements: Array<{ furnitureId: string, x: number, y: number }> = body.furniture
+      const mapId = bodyMapId(body)
+      const placements = (body.furniture as unknown[]).map((p, i) => ({
+        furnitureId: safeId((p as { furnitureId: unknown }).furnitureId, `furniture[${i}].furnitureId`),
+        x: safeInt((p as { x: unknown }).x, `furniture[${i}].x`, 0, 9999),
+        y: safeInt((p as { y: unknown }).y, `furniture[${i}].y`, 0, 9999),
+      }))
 
       const existing = await readFile(FURNITURE_FILE, 'utf-8')
       const constName = mapId.replace(/-/g, '_').toUpperCase() + '_FURNITURE'
@@ -548,8 +604,13 @@ export async function POST(req: NextRequest) {
 
     // Save zone chest placements for the current map
     if (body.zoneChests && Array.isArray(body.zoneChests)) {
-      const mapId: string = body.mapId ?? 'garden'
-      const chests: Array<{ chestType: string, x: number, y: number, claimable?: boolean }> = body.zoneChests
+      const mapId = bodyMapId(body)
+      const chests = (body.zoneChests as unknown[]).map((c, i) => ({
+        chestType: safeId((c as { chestType: unknown }).chestType, `zoneChests[${i}].chestType`),
+        x: safeInt((c as { x: unknown }).x, `zoneChests[${i}].x`, 0, 9999),
+        y: safeInt((c as { y: unknown }).y, `zoneChests[${i}].y`, 0, 9999),
+        claimable: Boolean((c as { claimable?: unknown }).claimable),
+      }))
 
       const existing = await readFile(ZONE_CHESTS_FILE, 'utf-8')
       const constName = mapId.replace(/-/g, '_').toUpperCase() + '_ZONE_CHESTS'
@@ -574,8 +635,12 @@ export async function POST(req: NextRequest) {
 
     // Save static pickup placements for the current map
     if (body.pickups && Array.isArray(body.pickups)) {
-      const mapId: string = body.mapId ?? 'garden'
-      const pickups: Array<{ itemId: string, x: number, y: number }> = body.pickups
+      const mapId = bodyMapId(body)
+      const pickups = (body.pickups as unknown[]).map((p, i) => ({
+        itemId: safeId((p as { itemId: unknown }).itemId, `pickups[${i}].itemId`),
+        x: safeInt((p as { x: unknown }).x, `pickups[${i}].x`, 0, 9999),
+        y: safeInt((p as { y: unknown }).y, `pickups[${i}].y`, 0, 9999),
+      }))
 
       const existing = await readFile(PICKUPS_FILE, 'utf-8')
       const constName = mapId.replace(/-/g, '_').toUpperCase() + '_PICKUPS'
@@ -599,8 +664,19 @@ export async function POST(req: NextRequest) {
 
     // Save warp placements to zones.ts
     if (body.warps && Array.isArray(body.warps)) {
-      const mapId: string = body.mapId ?? 'garden'
-      const warps: Array<{ fromX: number, fromY: number, toZone: string, toX: number, toY: number, direction?: string, requiredFlag?: string }> = body.warps
+      const mapId = bodyMapId(body)
+      const warps = (body.warps as unknown[]).map((w, i) => {
+        const raw = w as Record<string, unknown>
+        return {
+          fromX: safeInt(raw.fromX, `warps[${i}].fromX`, 0, 9999),
+          fromY: safeInt(raw.fromY, `warps[${i}].fromY`, 0, 9999),
+          toZone: safeId(raw.toZone, `warps[${i}].toZone`),
+          toX: safeInt(raw.toX, `warps[${i}].toX`, 0, 9999),
+          toY: safeInt(raw.toY, `warps[${i}].toY`, 0, 9999),
+          direction: safeIdOpt(raw.direction, `warps[${i}].direction`),
+          requiredFlag: safeIdOpt(raw.requiredFlag, `warps[${i}].requiredFlag`),
+        }
+      })
 
       const existing = await readFile(ZONES_FILE, 'utf-8')
 
@@ -647,16 +723,23 @@ export async function POST(req: NextRequest) {
 
       // Generate ENCOUNTER_TABLES const block
       const zoneBlocks: string[] = []
-      for (const [zoneId, zone] of Object.entries(encounterData)) {
-        const entryLines = zone.entries.map(e => {
-          const elStr = e.element && e.element !== 'base' ? `, element: '${e.element}'` : ''
-          const sp = `'${e.species}'`
-          return `      { species: ${sp.padEnd(14)}, weight: ${e.weight}, levelRange: [${e.levelRange[0]}, ${e.levelRange[1]}]${elStr} },`
+      for (const [rawZoneId, zone] of Object.entries(encounterData)) {
+        const zoneId = safeId(rawZoneId, 'encounters zone id')
+        const entryLines = zone.entries.map((e, i) => {
+          const element = safeIdOpt(e.element, `encounters.${zoneId}.entries[${i}].element`)
+          const elStr = element && element !== 'base' ? `, element: '${element}'` : ''
+          const sp = `'${safeId(e.species, `encounters.${zoneId}.entries[${i}].species`)}'`
+          const weight = safeNum(e.weight, `encounters.${zoneId}.entries[${i}].weight`, 0, 1_000_000)
+          const lo = safeInt(e.levelRange?.[0], `encounters.${zoneId}.entries[${i}].levelRange[0]`, 0, 999)
+          const hi = safeInt(e.levelRange?.[1], `encounters.${zoneId}.entries[${i}].levelRange[1]`, 0, 999)
+          return `      { species: ${sp.padEnd(14)}, weight: ${weight}, levelRange: [${lo}, ${hi}]${elStr} },`
         })
         const entriesStr = entryLines.length > 0
           ? `[\n${entryLines.join('\n')}\n    ]`
           : '[]'
-        zoneBlocks.push(`  '${zoneId}': {\n    rate: ${zone.rate},\n    entries: ${entriesStr},\n    aiTier: '${zone.aiTier}',\n  },`)
+        const rate = safeNum(zone.rate, `encounters.${zoneId}.rate`, 0, 1)
+        const aiTier = safeId(zone.aiTier, `encounters.${zoneId}.aiTier`)
+        zoneBlocks.push(`  '${zoneId}': {\n    rate: ${rate},\n    entries: ${entriesStr},\n    aiTier: '${aiTier}',\n  },`)
       }
 
       const newTableBlock = `const ENCOUNTER_TABLES: Record<string, ZoneEncounters> = {\n${zoneBlocks.join('\n\n')}\n}`
@@ -681,9 +764,12 @@ export async function POST(req: NextRequest) {
       const byTier: Record<number, string[]> = { 1: [], 2: [], 3: [], 4: [] }
       const tierComments: Record<number, string> = { 1: 'Tier 1 — Beginner', 2: 'Tier 2 — Intermediate', 3: 'Tier 3 — Advanced', 4: 'Tier 4 — Master' }
 
-      for (const [key, p] of Object.entries(potionData)) {
-        const recipeStr = p.recipe.map(r => `{ itemId: '${r.itemId}', count: ${r.count} }`).join(', ')
-        const line = `  ${key}: {\n    id: '${p.id}', name: '${p.name}', tier: ${p.tier},\n    minAlchemyLevel: ${p.minAlchemyLevel}, manaCost: ${p.manaCost}, xpGrant: ${p.xpGrant}, resultCount: ${p.resultCount},\n    recipe: [${recipeStr}],\n  },`
+      for (const [rawKey, p] of Object.entries(potionData)) {
+        const key = safeId(rawKey, 'alchemy key')
+        const recipeStr = p.recipe.map((r, i) =>
+          `{ itemId: '${safeId(r.itemId, `alchemy.${key}.recipe[${i}].itemId`)}', count: ${safeInt(r.count, `alchemy.${key}.recipe[${i}].count`, 0, 9999)} }`
+        ).join(', ')
+        const line = `  ${key}: {\n    id: '${safeId(p.id, `alchemy.${key}.id`)}', name: '${escText(p.name, `alchemy.${key}.name`, 80)}', tier: ${safeInt(p.tier, `alchemy.${key}.tier`, 1, 4)},\n    minAlchemyLevel: ${safeInt(p.minAlchemyLevel, `alchemy.${key}.minAlchemyLevel`, 0, 999)}, manaCost: ${safeInt(p.manaCost, `alchemy.${key}.manaCost`, 0, 99999)}, xpGrant: ${safeInt(p.xpGrant, `alchemy.${key}.xpGrant`, 0, 99999)}, resultCount: ${safeInt(p.resultCount, `alchemy.${key}.resultCount`, 0, 9999)},\n    recipe: [${recipeStr}],\n  },`
         const tier = p.tier as 1 | 2 | 3 | 4
         if (byTier[tier]) byTier[tier].push(line)
         else byTier[1].push(line)
@@ -719,21 +805,30 @@ export async function POST(req: NextRequest) {
       const mainQuests = questEntries.filter(q => q.category === 'main')
       const sideQuests = questEntries.filter(q => q.category === 'side')
 
-      function serializeObj(o: Record<string, unknown>): string {
+      // Objective/reward shapes vary; keys must be TS identifiers and string values
+      // are quoted, so both go through the guards rather than straight interpolation.
+      function serializeObj(o: Record<string, unknown>, field: string): string {
         return '{ ' + Object.entries(o)
           .filter(([, v]) => v !== undefined && v !== null)
-          .map(([k, v]) => `${k}: ${typeof v === 'string' ? `'${v}'` : v}`)
+          .map(([k, v]) => {
+            const key = safeId(k, `${field} key`)
+            if (typeof v === 'string') return `${key}: '${escText(v, `${field}.${key}`, 200)}'`
+            if (typeof v === 'number') return `${key}: ${safeNum(v, `${field}.${key}`)}`
+            if (typeof v === 'boolean') return `${key}: ${v}`
+            throw new BadRequest(`Invalid ${field}.${key}: unsupported value ${JSON.stringify(v)}`)
+          })
           .join(', ') + ' }'
       }
 
       function questBlock(q: typeof questEntries[0]): string {
+        const id = safeId(q.id, 'quest id')
         const lines = [
-          `  ${q.id}: {`,
-          `    id: '${q.id}', name: '${q.name.replace(/'/g, "\\'")}', category: '${q.category}',`,
-          `    description: '${q.description.replace(/'/g, "\\'")}',`,
-          `    prerequisites: [${q.prerequisites.map(p => `'${p}'`).join(', ')}],`,
-          `    objectives: [${q.objectives.map(o => serializeObj(o as Record<string, unknown>)).join(', ')}],`,
-          `    rewards: [${q.rewards.map(r => serializeObj(r as Record<string, unknown>)).join(', ')}],`,
+          `  ${id}: {`,
+          `    id: '${id}', name: '${escText(q.name, `quests.${id}.name`, 120)}', category: '${safeId(q.category, `quests.${id}.category`)}',`,
+          `    description: '${escText(q.description, `quests.${id}.description`, 1000)}',`,
+          `    prerequisites: [${q.prerequisites.map((p, i) => `'${safeId(p, `quests.${id}.prerequisites[${i}]`)}'`).join(', ')}],`,
+          `    objectives: [${q.objectives.map((o, i) => serializeObj(o as Record<string, unknown>, `quests.${id}.objectives[${i}]`)).join(', ')}],`,
+          `    rewards: [${q.rewards.map((r, i) => serializeObj(r as Record<string, unknown>, `quests.${id}.rewards[${i}]`)).join(', ')}],`,
         ]
         if (q.autoStart) lines.push(`    autoStart: true,`)
         lines.push(`  },`)
@@ -772,6 +867,10 @@ export async function POST(req: NextRequest) {
       const entries = Object.entries(overrides)
         .filter(([, v]) => typeof v === 'number' && v > 0)
         .sort(([a], [b]) => a.localeCompare(b))
+        .map(([id, price]) => [
+          safeId(id, 'geOverrides key'),
+          safeInt(price, `geOverrides.${id}`, 1, 1_000_000_000),
+        ] as const)
 
       const mapContent = entries.length > 0
         ? `{\n${entries.map(([id, price]) => `  '${id}': ${price},`).join('\n')}\n}`
@@ -797,23 +896,25 @@ export async function POST(req: NextRequest) {
       const tierComments: Record<number, string> = { 1: 'Tier 1 — Beginner', 2: 'Tier 2 — Intermediate', 3: 'Tier 3 — Advanced', 4: 'Tier 4 — Master' }
       const byTier: Record<number, string[]> = { 1: [], 2: [], 3: [], 4: [] }
 
-      for (const [key, c] of Object.entries(cropData)) {
-        const yieldsStr = c.yields.map(y =>
-          `{ itemId: '${y.itemId}', count: ${y.count}, chance: ${y.chance} }`
-        ).join(',\n      ')
+      for (const [rawKey, c] of Object.entries(cropData)) {
+        const key = safeId(rawKey, 'farming key')
+        const oneYield = (y: { itemId: string; count: number; chance: number }, i: number) =>
+          `{ itemId: '${safeId(y.itemId, `farming.${key}.yields[${i}].itemId`)}', count: ${safeInt(y.count, `farming.${key}.yields[${i}].count`, 0, 9999)}, chance: ${safeNum(y.chance, `farming.${key}.yields[${i}].chance`, 0, 1)} }`
+        const yieldsStr = c.yields.map(oneYield).join(',\n      ')
         const yieldsBlock = c.yields.length > 1
           ? `[\n      ${yieldsStr},\n    ]`
-          : `[${c.yields.map(y => `{ itemId: '${y.itemId}', count: ${y.count}, chance: ${y.chance} }`).join(', ')}]`
+          : `[${c.yields.map(oneYield).join(', ')}]`
 
-        const growthExpr = c.growthMs % 60000 === 0
-          ? `${c.growthMs / 60000} * 60 * 1000`
-          : `${c.growthMs}`
+        const growthMs = safeInt(c.growthMs, `farming.${key}.growthMs`, 0, 2_000_000_000)
+        const growthExpr = growthMs % 60000 === 0
+          ? `${growthMs / 60000} * 60 * 1000`
+          : `${growthMs}`
 
         const line = [
           `  ${key}: {`,
-          `    id: '${c.id}', name: '${c.name}', tier: ${c.tier},`,
-          `    minFarmingLevel: ${c.minFarmingLevel}, manaCost: ${c.manaCost}, plantXp: ${c.plantXp}, xpGrant: ${c.xpGrant}, growthMs: ${growthExpr},`,
-          `    seedItemId: '${c.seedItemId}', yieldBonusPerLevel: ${c.yieldBonusPerLevel},`,
+          `    id: '${safeId(c.id, `farming.${key}.id`)}', name: '${escText(c.name, `farming.${key}.name`, 80)}', tier: ${safeInt(c.tier, `farming.${key}.tier`, 1, 4)},`,
+          `    minFarmingLevel: ${safeInt(c.minFarmingLevel, `farming.${key}.minFarmingLevel`, 0, 999)}, manaCost: ${safeInt(c.manaCost, `farming.${key}.manaCost`, 0, 99999)}, plantXp: ${safeInt(c.plantXp, `farming.${key}.plantXp`, 0, 99999)}, xpGrant: ${safeInt(c.xpGrant, `farming.${key}.xpGrant`, 0, 99999)}, growthMs: ${growthExpr},`,
+          `    seedItemId: '${safeId(c.seedItemId, `farming.${key}.seedItemId`)}', yieldBonusPerLevel: ${safeNum(c.yieldBonusPerLevel, `farming.${key}.yieldBonusPerLevel`, 0, 1000)},`,
           `    yields: ${yieldsBlock},`,
           `  },`,
         ].join('\n')
@@ -854,6 +955,18 @@ export async function POST(req: NextRequest) {
         runewords: Record<string, Record<string, string>>
         awakenedBranches: Record<string, { name: string; focus: string; prereqSummary: string }>
         awakenedFormNames: Record<string, Record<string, Record<string, string | null>>>
+      }
+
+      // evolution-config.ts is fully regenerated below: thresholds/caps become bare
+      // numbers, and every runeword / branch / awakened name becomes a quoted literal.
+      for (const [k, v] of Object.entries(evo.thresholds)) safeInt(v, `evolution.thresholds.${k}`, 0, 9999)
+      for (const [k, v] of Object.entries(evo.infusionCaps)) safeInt(v, `evolution.infusionCaps.${k}`, 0, 9999)
+      for (const [k, v] of Object.entries(evo.statCaps)) safeInt(v, `evolution.statCaps.${k}`, 0, 99999)
+      for (const [el, mods] of Object.entries(evo.elementStatMods)) {
+        mods.forEach((m, i) => {
+          safeId(m.stat, `evolution.elementStatMods.${el}[${i}].stat`)
+          safeNum(m.mod, `evolution.elementStatMods.${el}[${i}].mod`, -10000, 10000)
+        })
       }
 
       const lines: string[] = [
@@ -911,9 +1024,12 @@ export async function POST(req: NextRequest) {
       const elements = ['mana', 'storm', 'earth', 'water']
 
       for (const sp of speciesOrder) {
-        const rw = evo.runewords[sp] ?? {}
+        const rw = lookup(evo.runewords, sp) ?? {}
         const key = sp.includes('-') ? `'${sp}'` : `${sp}`
-        const rwEntries = elements.map(el => `${el}: '${rw[el] ?? ''}'`).join(', ')
+        const rwEntries = elements.map(el => {
+          const word = lookup(rw, el) ?? ''
+          return `${el}: '${word === '' ? '' : escText(word, `evolution.runewords.${sp}.${el}`, 60)}'`
+        }).join(', ')
         const pad = key.length < 13 ? ' '.repeat(13 - key.length) : ' '
         lines.push(`  ${key}:${pad}{ ${rwEntries} },`)
       }
@@ -934,8 +1050,11 @@ export async function POST(req: NextRequest) {
       lines.push("")
       lines.push("export const AWAKENED_BRANCHES: Record<AwakenedBranch, BranchDef> = {")
       for (const branch of ['alpha', 'beta', 'gamma', 'delta']) {
-        const b = evo.awakenedBranches[branch] ?? { name: '', focus: '', prereqSummary: '' }
-        lines.push(`  ${branch}: { name: '${b.name}', focus: '${b.focus}',${' '.repeat(Math.max(1, 14 - b.focus.length))}prereqSummary: '${b.prereqSummary.replace(/'/g, "\\'")}' },`)
+        const b = lookup(evo.awakenedBranches, branch) ?? { name: '', focus: '', prereqSummary: '' }
+        const bName = escText(b.name, `evolution.awakenedBranches.${branch}.name`, 60)
+        const bFocus = escText(b.focus, `evolution.awakenedBranches.${branch}.focus`, 60)
+        const bPrereq = escText(b.prereqSummary, `evolution.awakenedBranches.${branch}.prereqSummary`, 200)
+        lines.push(`  ${branch}: { name: '${bName}', focus: '${bFocus}',${' '.repeat(Math.max(1, 14 - bFocus.length))}prereqSummary: '${bPrereq}' },`)
       }
       lines.push("}")
       lines.push("")
@@ -954,10 +1073,10 @@ export async function POST(req: NextRequest) {
         const key = sp.includes('-') ? `'${sp}'` : sp
         lines.push(`  ${key}: {`)
         for (const el of elements) {
-          const names = evo.awakenedFormNames[sp]?.[el] ?? {}
+          const names = lookup(lookup(evo.awakenedFormNames, sp) ?? {}, el) ?? {}
           const nameEntries = branches.map(b => {
-            const v = names[b]
-            return `${b}: ${v ? `'${v}'` : 'null'}`
+            const v = lookup(names, b)
+            return `${b}: ${v ? `'${escText(v, `evolution.awakenedFormNames.${sp}.${el}.${b}`, 60)}'` : 'null'}`
           }).join(', ')
           lines.push(`    ${el}:  { ${nameEntries} },`)
         }
@@ -982,6 +1101,11 @@ export async function POST(req: NextRequest) {
       }
 
       // Rebuild NODE_SKILL
+      for (const [key, n] of Object.entries(nodeData)) {
+        safeId(key, 'resources key')
+        safeId(n.skill, `resources.${key}.skill`)
+      }
+
       const nodeSkillLines: string[] = []
       for (const skill of skillOrder) {
         const nodes = Object.entries(nodeData).filter(([, n]) => n.skill === skill)
@@ -998,12 +1122,19 @@ export async function POST(req: NextRequest) {
         if (nodes.length === 0) continue
         blocks.push(`  // ${skillComments[skill]}`)
         for (const [key, n] of nodes) {
-          const respawnExpr = n.respawnMs % 60000 === 0
-            ? `${n.respawnMs / 60000} * 60_000`
-            : String(n.respawnMs)
-          const dropsStr = n.drops.map(d => `{ itemId: '${d.itemId}', chance: ${d.chance} }`).join(', ')
-          const maxH = n.maxHarvests && n.maxHarvests > 1 ? `, maxHarvests: ${n.maxHarvests}` : ''
-          blocks.push(`  ${key}: { type: '${key}' as NodeType, skill: '${n.skill}' as SkillId, minLevel: ${n.minLevel}, respawnMs: ${respawnExpr}, xp: ${n.xp}, manaCost: ${n.manaCost}${maxH}, drops: [${dropsStr}] },`)
+          const respawnMs = safeInt(n.respawnMs, `resources.${key}.respawnMs`, 0, 2_000_000_000)
+          const respawnExpr = respawnMs % 60000 === 0
+            ? `${respawnMs / 60000} * 60_000`
+            : String(respawnMs)
+          const dropsStr = n.drops.map((d, i) =>
+            `{ itemId: '${safeId(d.itemId, `resources.${key}.drops[${i}].itemId`)}', chance: ${safeNum(d.chance, `resources.${key}.drops[${i}].chance`, 0, 1)} }`
+          ).join(', ')
+          const maxHarvests = n.maxHarvests === undefined ? undefined : safeInt(n.maxHarvests, `resources.${key}.maxHarvests`, 0, 9999)
+          const maxH = maxHarvests && maxHarvests > 1 ? `, maxHarvests: ${maxHarvests}` : ''
+          const minLevel = safeInt(n.minLevel, `resources.${key}.minLevel`, 0, 999)
+          const xp = safeNum(n.xp, `resources.${key}.xp`, 0, 99999)
+          const manaCost = safeInt(n.manaCost, `resources.${key}.manaCost`, 0, 99999)
+          blocks.push(`  ${key}: { type: '${key}' as NodeType, skill: '${n.skill}' as SkillId, minLevel: ${minLevel}, respawnMs: ${respawnExpr}, xp: ${xp}, manaCost: ${manaCost}${maxH}, drops: [${dropsStr}] },`)
         }
         blocks.push('')
       }
@@ -1044,11 +1175,14 @@ export async function POST(req: NextRequest) {
         const tools = Object.entries(toolData).filter(([, t]) => t.skillId === skill)
         if (tools.length === 0) continue
         blocks.push(`  // ${skillToolComments[skill]}`)
-        for (const [key, t] of tools) {
-          const recipeStr = t.recipe.map(r => `{ itemId: '${r.itemId}', count: ${r.count} }`).join(', ')
+        for (const [rawKey, t] of tools) {
+          const key = safeId(rawKey, 'tools key')
+          const recipeStr = t.recipe.map((r, i) =>
+            `{ itemId: '${safeId(r.itemId, `tools.${key}.recipe[${i}].itemId`)}', count: ${safeInt(r.count, `tools.${key}.recipe[${i}].count`, 0, 9999)} }`
+          ).join(', ')
           blocks.push(`  ${key}: {`)
-          blocks.push(`    id: '${t.id}', name: '${t.name}', skillId: '${t.skillId}' as SkillId, tier: ${t.tier} as 1 | 2 | 3,`)
-          blocks.push(`    durability: ${t.durability}, xpBonus: ${t.xpBonus}, speedBonus: ${t.speedBonus},`)
+          blocks.push(`    id: '${safeId(t.id, `tools.${key}.id`)}', name: '${escText(t.name, `tools.${key}.name`, 80)}', skillId: '${safeId(t.skillId, `tools.${key}.skillId`)}' as SkillId, tier: ${safeInt(t.tier, `tools.${key}.tier`, 1, 3)} as 1 | 2 | 3,`)
+          blocks.push(`    durability: ${safeInt(t.durability, `tools.${key}.durability`, 0, 999999)}, xpBonus: ${safeNum(t.xpBonus, `tools.${key}.xpBonus`, 0, 1000)}, speedBonus: ${safeNum(t.speedBonus, `tools.${key}.speedBonus`, 0, 1000)},`)
           blocks.push(`    recipe: [${recipeStr}],`)
           blocks.push(`  },`)
         }
@@ -1078,10 +1212,14 @@ export async function POST(req: NextRequest) {
 
       // Save SKILL_META + SKILL_MILESTONES to skills.ts
       if (meta) {
-        const metaEntries = Object.entries(meta).map(([id, m]) => {
-          const locked = m.locked ? `, locked: '${m.locked}'` : ''
+        const metaEntries = Object.entries(meta).map(([rawId, m]) => {
+          const id = safeId(rawId, 'skills.meta key')
+          const lockedVal = m.locked ? escText(m.locked, `skills.meta.${id}.locked`, 200) : undefined
+          const locked = lockedVal ? `, locked: '${lockedVal}'` : ''
+          const name = escText(m.name, `skills.meta.${id}.name`, 60)
+          const manaCost = safeInt(m.manaCost, `skills.meta.${id}.manaCost`, 0, 99999)
           const pad = ' '.repeat(Math.max(1, 12 - id.length))
-          return `  ${id}:${pad}{ name: '${m.name}',${' '.repeat(Math.max(1, 14 - m.name.length))}manaCost: ${m.manaCost}${locked} },`
+          return `  ${id}:${pad}{ name: '${name}',${' '.repeat(Math.max(1, 14 - name.length))}manaCost: ${manaCost}${locked} },`
         })
         const newMeta = `export const SKILL_META: Record<SkillId, { name: string; manaCost: number; locked?: string }> = {\n${metaEntries.join('\n')}\n}`
 
@@ -1093,7 +1231,8 @@ export async function POST(req: NextRequest) {
 
         if (milestones && Array.isArray(milestones)) {
           const sorted = [...milestones].sort((a, b) => a.level - b.level)
-          const milestoneEntries = sorted.map(m => `  { level: ${m.level}, label: '${m.label}' },`)
+          const milestoneEntries = sorted.map((m, i) =>
+            `  { level: ${safeInt(m.level, `skills.milestones[${i}].level`, 0, 999)}, label: '${escText(m.label, `skills.milestones[${i}].label`, 80)}' },`)
           const newMilestones = `export const SKILL_MILESTONES: { level: number; label: string }[] = [\n${milestoneEntries.join('\n')}\n]`
           const milestonePattern = /export const SKILL_MILESTONES[^=]*=\s*\[[\s\S]*?\n\]/
           if (milestonePattern.test(content)) {
@@ -1107,8 +1246,10 @@ export async function POST(req: NextRequest) {
 
       // Save BASE_CHANNEL_TICKS to harvesting.ts
       if (channelTicks) {
-        const tickEntries = Object.entries(channelTicks).map(([id, ticks]) => {
-          const seconds = (Number(ticks) / 15).toFixed(1)
+        const tickEntries = Object.entries(channelTicks).map(([rawId, rawTicks]) => {
+          const id = safeId(rawId, 'skills.channelTicks key')
+          const ticks = safeInt(rawTicks, `skills.channelTicks.${id}`, 0, 100000)
+          const seconds = (ticks / 15).toFixed(1)
           const pad = ' '.repeat(Math.max(1, 12 - id.length))
           const valPad = ' '.repeat(Math.max(1, 6 - String(ticks).length))
           return `  ${id}:${pad}${ticks},${valPad}// ${seconds}s`
@@ -1133,19 +1274,20 @@ export async function POST(req: NextRequest) {
         signatures: Record<string, Record<string, { id: string; name: string; element: string; state: string; power: number; accuracy: number; pp: number; priority: number; description: string; effect?: string; effectChance?: number; selfEffect?: string; selfEffectChance?: number; statChanges?: { target: string; stat: string; stages: number }[] }>>
       }
 
-      function escStr(s: string): string { return s.replace(/\\/g, '\\\\').replace(/'/g, "\\'") }
-
       function moveToM(mv: typeof universal[0]['move']): string {
+        const id = safeId(mv.id, 'moves id')
         const extras: string[] = []
-        if (mv.effect) extras.push(`effect: '${mv.effect}'`)
-        if (mv.effect && mv.effectChance != null) extras.push(`effectChance: ${mv.effectChance}`)
-        if (mv.selfEffect) extras.push(`selfEffect: '${mv.selfEffect}'`)
-        if (mv.selfEffect && mv.selfEffectChance != null) extras.push(`selfEffectChance: ${mv.selfEffectChance}`)
+        if (mv.effect) extras.push(`effect: '${safeId(mv.effect, `moves.${id}.effect`)}'`)
+        if (mv.effect && mv.effectChance != null) extras.push(`effectChance: ${safeNum(mv.effectChance, `moves.${id}.effectChance`, 0, 100)}`)
+        if (mv.selfEffect) extras.push(`selfEffect: '${safeId(mv.selfEffect, `moves.${id}.selfEffect`)}'`)
+        if (mv.selfEffect && mv.selfEffectChance != null) extras.push(`selfEffectChance: ${safeNum(mv.selfEffectChance, `moves.${id}.selfEffectChance`, 0, 100)}`)
         if (mv.statChanges?.length) {
-          const scStr = mv.statChanges.map(sc => `{ target: '${sc.target}', stat: '${sc.stat}', stages: ${sc.stages} }`).join(', ')
+          const scStr = mv.statChanges.map((sc, i) =>
+            `{ target: '${safeId(sc.target, `moves.${id}.statChanges[${i}].target`)}', stat: '${safeId(sc.stat, `moves.${id}.statChanges[${i}].stat`)}', stages: ${safeInt(sc.stages, `moves.${id}.statChanges[${i}].stages`, -12, 12)} }`
+          ).join(', ')
           extras.push(`statChanges: [${scStr}]`)
         }
-        const base = `m('${mv.id}', '${escStr(mv.name)}', '${mv.element}', '${mv.state}', ${mv.power}, ${mv.accuracy}, ${mv.pp}, ${mv.priority}, '${escStr(mv.description)}'`
+        const base = `m('${id}', '${escText(mv.name, `moves.${id}.name`, 60)}', '${safeId(mv.element, `moves.${id}.element`)}', '${safeId(mv.state, `moves.${id}.state`)}', ${safeInt(mv.power, `moves.${id}.power`, 0, 9999)}, ${safeInt(mv.accuracy, `moves.${id}.accuracy`, 0, 100)}, ${safeInt(mv.pp, `moves.${id}.pp`, 0, 999)}, ${safeInt(mv.priority, `moves.${id}.priority`, -12, 12)}, '${escText(mv.description, `moves.${id}.description`, 300)}'`
         return extras.length > 0 ? `${base}, { ${extras.join(', ')} })` : `${base})`
       }
 
@@ -1153,10 +1295,11 @@ export async function POST(req: NextRequest) {
 
       // 1. Replace universal moves (single-line each)
       for (const u of universal) {
+        const constName = safeId(u.constName, 'moves universal constName')
         const lines = content.split('\n')
         for (let i = 0; i < lines.length; i++) {
-          if (lines[i].startsWith(`export const ${u.constName} = m(`)) {
-            lines[i] = `export const ${u.constName} = ${moveToM(u.move)}`
+          if (lines[i].startsWith(`export const ${constName} = m(`)) {
+            lines[i] = `export const ${constName} = ${moveToM(u.move)}`
             break
           }
         }
@@ -1169,9 +1312,9 @@ export async function POST(req: NextRequest) {
         ignite: 'MOVES_IGNITE', flow: 'MOVES_FLOW', scatter: 'MOVES_SCATTER', bind: 'MOVES_BIND',
       }
       for (const [groupId, groupData] of Object.entries(groups)) {
-        const constName = groupConstNames[groupId]
+        const constName = lookup(groupConstNames, groupId)
         if (!constName) continue
-        const keys = Object.keys(groupData)
+        const keys = Object.keys(groupData).map(k => safeId(k, `moves.groups.${groupId} key`))
         const maxKeyLen = Math.max(...keys.map(k => k.length))
         const entries = keys.map(key => {
           const pad = ' '.repeat(maxKeyLen - key.length + 1)
@@ -1194,11 +1337,11 @@ export async function POST(req: NextRequest) {
         }
         const sigLines: string[] = []
         sigLines.push('export const SPECIES_SIGNATURES: Record<Species, ElementSigs> = {')
-        const speciesKeys = Object.keys(signatures)
+        const speciesKeys = Object.keys(signatures).map(k => safeId(k, 'moves.signatures key'))
         for (let si = 0; si < speciesKeys.length; si++) {
           const sp = speciesKeys[si]
           const elMoves = signatures[sp]
-          const els = Object.keys(elMoves)
+          const els = Object.keys(elMoves).map(k => safeId(k, `moves.signatures.${sp} key`))
           const maxElLen = Math.max(...els.map(k => k.length), 0)
           sigLines.push(`  // ${sp.charAt(0).toUpperCase() + sp.slice(1).replace('-', ' ')}`)
           sigLines.push(`  '${sp.includes('-') ? sp : `${sp}`}': {`)
@@ -1235,19 +1378,20 @@ export async function POST(req: NextRequest) {
       profileLines.push('')
 
       const registryEntries: string[] = []
-      for (const [key, p] of Object.entries(profiles)) {
+      for (const [rawKey, p] of Object.entries(profiles)) {
+        const key = safeId(rawKey, 'voiceProfiles key')
         const constName = key.toUpperCase()
         profileLines.push(`const ${constName}: VoiceProfile = {`)
-        profileLines.push(`  id: '${p.id}',`)
-        profileLines.push(`  name: '${p.name.replace(/'/g, "\\'")}',`)
-        profileLines.push(`  pitch: ${p.pitch},`)
-        profileLines.push(`  pitchVariance: ${p.pitchVariance},`)
-        profileLines.push(`  speed: ${p.speed},`)
-        profileLines.push(`  syllableSet: '${p.syllableSet}',`)
-        profileLines.push(`  tone: '${p.tone}',`)
-        profileLines.push(`  volume: ${p.volume},`)
+        profileLines.push(`  id: '${safeId(p.id, `voiceProfiles.${key}.id`)}',`)
+        profileLines.push(`  name: '${escText(p.name, `voiceProfiles.${key}.name`, 60)}',`)
+        profileLines.push(`  pitch: ${safeNum(p.pitch, `voiceProfiles.${key}.pitch`, 0, 1000)},`)
+        profileLines.push(`  pitchVariance: ${safeNum(p.pitchVariance, `voiceProfiles.${key}.pitchVariance`, 0, 1000)},`)
+        profileLines.push(`  speed: ${safeNum(p.speed, `voiceProfiles.${key}.speed`, 0, 1000)},`)
+        profileLines.push(`  syllableSet: '${safeId(p.syllableSet, `voiceProfiles.${key}.syllableSet`)}',`)
+        profileLines.push(`  tone: '${safeId(p.tone, `voiceProfiles.${key}.tone`)}',`)
+        profileLines.push(`  volume: ${safeNum(p.volume, `voiceProfiles.${key}.volume`, 0, 100)},`)
         if (p.reverb != null && p.reverb > 0) {
-          profileLines.push(`  reverb: ${p.reverb},`)
+          profileLines.push(`  reverb: ${safeNum(p.reverb, `voiceProfiles.${key}.reverb`, 0, 100)},`)
         }
         profileLines.push('}')
         profileLines.push('')
@@ -1290,52 +1434,55 @@ export async function POST(req: NextRequest) {
       }
       const paletteRef: Record<string, string> = { gregory: 'GREGORY_PALETTE' }
 
-      function escNpc(s: string): string { return s.replace(/'/g, "\\'") }
-
       const entries: string[] = []
       for (const n of npcData) {
+        const id = safeId(n.id, 'npcs id')
         const lines: string[] = []
         lines.push(`  {`)
-        lines.push(`    id: '${n.id}',`)
-        lines.push(`    name: '${escNpc(n.name)}',`)
-        lines.push(`    zone: '${n.zone}',`)
-        lines.push(`    tileX: ${n.tileX}, tileY: ${n.tileY},`)
-        lines.push(`    direction: '${n.direction}',`)
-        lines.push(`    dialogueId: '${n.dialogueId}',`)
-        if (n.returnDialogueId) lines.push(`    returnDialogueId: '${n.returnDialogueId}',`)
+        lines.push(`    id: '${id}',`)
+        lines.push(`    name: '${escText(n.name, `npcs.${id}.name`, 80)}',`)
+        lines.push(`    zone: '${safeId(n.zone, `npcs.${id}.zone`)}',`)
+        lines.push(`    tileX: ${safeInt(n.tileX, `npcs.${id}.tileX`, 0, 9999)}, tileY: ${safeInt(n.tileY, `npcs.${id}.tileY`, 0, 9999)},`)
+        lines.push(`    direction: '${safeId(n.direction, `npcs.${id}.direction`)}',`)
+        lines.push(`    dialogueId: '${safeId(n.dialogueId, `npcs.${id}.dialogueId`)}',`)
+        if (n.returnDialogueId) lines.push(`    returnDialogueId: '${safeId(n.returnDialogueId, `npcs.${id}.returnDialogueId`)}',`)
         if (n.dialogueChain && n.dialogueChain.length > 0) {
           lines.push(`    dialogueChain: [`)
-          for (const step of n.dialogueChain) {
+          for (const [i, step] of n.dialogueChain.entries()) {
+            const stepDialogue = safeId(step.dialogueId, `npcs.${id}.dialogueChain[${i}].dialogueId`)
             if (step.requiresFlag) {
-              lines.push(`      { dialogueId: '${step.dialogueId}', requiresFlag: '${step.requiresFlag}' },`)
+              lines.push(`      { dialogueId: '${stepDialogue}', requiresFlag: '${safeId(step.requiresFlag, `npcs.${id}.dialogueChain[${i}].requiresFlag`)}' },`)
             } else {
-              lines.push(`      { dialogueId: '${step.dialogueId}' },`)
+              lines.push(`      { dialogueId: '${stepDialogue}' },`)
             }
           }
           lines.push(`    ],`)
         }
-        lines.push(`    sprite: ${spriteRef[n.id] ?? `${n.id.toUpperCase().replace(/-/g, '_')}_SPRITE`},`)
-        if (paletteRef[n.id]) {
-          lines.push(`    palette: ${paletteRef[n.id]},`)
+        lines.push(`    sprite: ${lookup(spriteRef, id) ?? `${id.toUpperCase().replace(/-/g, '_')}_SPRITE`},`)
+        const paletteConst = lookup(paletteRef, id)
+        if (paletteConst) {
+          lines.push(`    palette: ${paletteConst},`)
         } else {
-          lines.push(`    palette: [${n.palette.map(c => `'${c}'`).join(', ')}],`)
+          lines.push(`    palette: [${safeColors(n.palette, `npcs.${id}.palette`).map(c => `'${c}'`).join(', ')}],`)
         }
         if (n.blocking) lines.push(`    blocking: true,`)
-        if (n.hideWhenFlag) lines.push(`    hideWhenFlag: '${n.hideWhenFlag}',`)
+        if (n.hideWhenFlag) lines.push(`    hideWhenFlag: '${safeId(n.hideWhenFlag, `npcs.${id}.hideWhenFlag`)}',`)
         if (n.patrolPath && n.patrolPath.length > 0) {
           lines.push(`    patrolPath: [`)
-          for (const p of n.patrolPath) {
-            lines.push(`      { tileX: ${p.tileX}, tileY: ${p.tileY} },`)
+          for (const [i, p] of n.patrolPath.entries()) {
+            lines.push(`      { tileX: ${safeInt(p.tileX, `npcs.${id}.patrolPath[${i}].tileX`, 0, 9999)}, tileY: ${safeInt(p.tileY, `npcs.${id}.patrolPath[${i}].tileY`, 0, 9999)} },`)
           }
           lines.push(`    ],`)
         }
         if (n.trainer) {
           lines.push(`    trainer: {`)
-          lines.push(`      species: '${n.trainer.species}',`)
-          lines.push(`      name: "${escNpc(n.trainer.name)}",`)
-          lines.push(`      levelOffset: ${n.trainer.levelOffset},`)
-          lines.push(`      element: '${n.trainer.element}',`)
-          lines.push(`      aiTier: '${n.trainer.aiTier}',`)
+          lines.push(`      species: '${safeId(n.trainer.species, `npcs.${id}.trainer.species`)}',`)
+          // Double-quoted in source. JSON.stringify emits the literal *with* its quotes and
+          // handles every escape itself, so this field needs no escText pass.
+          lines.push(`      name: ${JSON.stringify(safeText(n.trainer.name, `npcs.${id}.trainer.name`, 80))},`)
+          lines.push(`      levelOffset: ${safeInt(n.trainer.levelOffset, `npcs.${id}.trainer.levelOffset`, -99, 99)},`)
+          lines.push(`      element: '${safeId(n.trainer.element, `npcs.${id}.trainer.element`)}',`)
+          lines.push(`      aiTier: '${safeId(n.trainer.aiTier, `npcs.${id}.trainer.aiTier`)}',`)
           lines.push(`    },`)
         }
         lines.push(`  },`)
@@ -1361,6 +1508,21 @@ export async function POST(req: NextRequest) {
         midnight: number
         respawnTriggers: { id: string; threshold: number }[]
       }
+
+      // Everything below is interpolated into day-cycle.ts as a number, a hex colour,
+      // or an identifier. Validate once here rather than at each of the ~12 sites.
+      safeNum(dc.cycleMins, 'dayCycle.cycleMins', 1, 100000)
+      safeNum(dc.midnight, 'dayCycle.midnight', 0, 1)
+      dc.phases.forEach((ph, i) => {
+        safeId(ph.id, `dayCycle.phases[${i}].id`)
+        safeNum(ph.start, `dayCycle.phases[${i}].start`, 0, 1)
+        safeNum(ph.alpha, `dayCycle.phases[${i}].alpha`, 0, 1)
+        safeColors([ph.color], `dayCycle.phases[${i}].color`)
+      })
+      dc.respawnTriggers.forEach((t, i) => {
+        safeId(t.id, `dayCycle.respawnTriggers[${i}].id`)
+        safeNum(t.threshold, `dayCycle.respawnTriggers[${i}].threshold`, 0, 1)
+      })
 
       let content = await readFile(DAY_CYCLE_FILE, 'utf-8')
 
@@ -1446,6 +1608,22 @@ export async function POST(req: NextRequest) {
         perks: { id: string; level: number }[]
       }
 
+      // All fields land in mana.ts as bare numbers.
+      mc.table.forEach((t, i) => {
+        safeInt(t.pool, `mana.table[${i}].pool`, 0, 1_000_000)
+        safeNum(t.regen, `mana.table[${i}].regen`, 0, 1_000_000)
+      })
+      for (const [k, v] of Object.entries(mc.postCurve)) safeNum(v, `mana.postCurve.${k}`, -1e6, 1e6)
+      mc.extraction.forEach((e, i) => {
+        safeInt(e.level, `mana.extraction[${i}].level`, 0, 999)
+        safeNum(e.multiplier, `mana.extraction[${i}].multiplier`, 0, 1000)
+      })
+      mc.perks.forEach((pk, i) => {
+        safeId(pk.id, `mana.perks[${i}].id`)
+        safeInt(pk.level, `mana.perks[${i}].level`, 0, 999)
+      })
+      if (mc.table.length === 0) throw new BadRequest('Invalid mana.table: expected at least one row')
+
       let content = await readFile(MANA_FILE, 'utf-8')
 
       // Rebuild MANA_TABLE
@@ -1503,9 +1681,10 @@ export async function POST(req: NextRequest) {
       const weatherData: Record<string, { allowedWeathers: { type: string; weight: number }[]; transitionTicks: number; minDurationMs: number; maxDurationMs: number }> = body.weather
 
       const zoneBlocks: string[] = []
-      for (const [zoneId, zone] of Object.entries(weatherData)) {
-        const weatherLines = zone.allowedWeathers.map(w =>
-          `      { type: '${w.type}', weight: ${w.weight} },`
+      for (const [rawZoneId, zone] of Object.entries(weatherData)) {
+        const zoneId = safeId(rawZoneId, 'weather zone id')
+        const weatherLines = zone.allowedWeathers.map((w, i) =>
+          `      { type: '${safeId(w.type, `weather.${zoneId}.allowedWeathers[${i}].type`)}', weight: ${safeNum(w.weight, `weather.${zoneId}.allowedWeathers[${i}].weight`, 0, 1_000_000)} },`
         )
         const weathersStr = weatherLines.length > 0
           ? `[\n${weatherLines.join('\n')}\n    ]`
@@ -1513,9 +1692,9 @@ export async function POST(req: NextRequest) {
         zoneBlocks.push(
           `  '${zoneId}': {\n` +
           `    allowedWeathers: ${weathersStr},\n` +
-          `    transitionTicks: ${zone.transitionTicks},\n` +
-          `    minDurationMs: ${zone.minDurationMs},\n` +
-          `    maxDurationMs: ${zone.maxDurationMs},\n` +
+          `    transitionTicks: ${safeInt(zone.transitionTicks, `weather.${zoneId}.transitionTicks`, 0, 1_000_000)},\n` +
+          `    minDurationMs: ${safeInt(zone.minDurationMs, `weather.${zoneId}.minDurationMs`, 0, 2_000_000_000)},\n` +
+          `    maxDurationMs: ${safeInt(zone.maxDurationMs, `weather.${zoneId}.maxDurationMs`, 0, 2_000_000_000)},\n` +
           `  },`
         )
       }
@@ -1535,13 +1714,14 @@ export async function POST(req: NextRequest) {
 
     // ── Create Zone ──
     if (body.action === 'createZone') {
-      const name: string = body.name
-      const cols: number = body.cols ?? 25
-      const rows: number = body.rows ?? 20
+      const name = escText(body.name, 'name', 60)
+      const cols = safeInt(body.cols ?? 25, 'cols', 1, 512)
+      const rows = safeInt(body.rows ?? 20, 'rows', 1, 512)
       if (!name || name.length < 2) {
         return NextResponse.json({ error: 'Zone name required' }, { status: 400 })
       }
       const id = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
+      if (!id) return NextResponse.json({ error: 'Zone name must contain a letter or digit' }, { status: 400 })
       const constName = zoneConstName(id)
       const grid = generateStubGrid(cols, rows)
       const spawnX = Math.floor(cols / 2)
@@ -1552,7 +1732,7 @@ export async function POST(req: NextRequest) {
       if (tilemapContent.includes(`export const ${constName}`)) {
         return NextResponse.json({ error: `Zone "${constName}" already exists in tilemap.ts` }, { status: 400 })
       }
-      const maxVal = Math.max(0, ...grid.flat())
+      const maxVal = gridMax(grid, 'grid')
       const padWidth = maxVal > 99 ? (maxVal > 999 ? 4 : 3) : 2
       const gridLines = grid.map((row, y) => {
         const padded = row.map(n => n.toString().padStart(padWidth, ' ')).join(',')
@@ -1634,10 +1814,11 @@ export async function POST(req: NextRequest) {
 
     // ── Delete Zone ──
     if (body.action === 'deleteZone') {
-      const id: string = body.zoneId
-      if (!id || id === 'garden') {
+      if (!body.zoneId || body.zoneId === 'garden') {
         return NextResponse.json({ error: 'Cannot delete garden or missing zone ID' }, { status: 400 })
       }
+      // Spliced into several `new RegExp` patterns below.
+      const id = safeId(body.zoneId, 'zoneId')
       const constName = zoneConstName(id)
 
       // 1. Remove grid from tilemap.ts
@@ -1752,8 +1933,8 @@ export async function POST(req: NextRequest) {
     // Format kept flat (JSON.stringify row array per row) so the regex can reliably
     // find the block start/end without multi-line ambiguity.
     if (body.intGrid && Array.isArray(body.intGrid) && body.mapId) {
-      const igZoneId: string = body.mapId
-      const igGrid: number[][] = body.intGrid
+      const igZoneId = safeId(body.mapId, 'mapId')
+      const igGrid = safeGrid(body.intGrid, 'intGrid')
 
       // ONE line per zone (one-line-per-key) so the upsert regex matches the whole value
       // with a line-anchored pattern. A multi-row form breaks non-greedy matching at the
@@ -1781,7 +1962,6 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ success: true, saved })
   } catch (e: unknown) {
-    const msg = e instanceof Error ? e.message : 'Unknown error'
-    return NextResponse.json({ error: msg }, { status: 500 })
+    return errorResponse(e)
   }
 }

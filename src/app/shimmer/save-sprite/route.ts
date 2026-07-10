@@ -2,6 +2,13 @@ import { NextRequest, NextResponse } from 'next/server'
 import { readFile, access } from 'fs/promises'
 import { join } from 'path'
 import { safeWriteFile as writeFile } from '../lib/backup'
+import { BadRequest, safeId, safeInt, safeEnum, safeColors, lookup } from '../lib/safe'
+
+/** Map a guard failure to 400, anything else to 500. */
+function errorResponse(e: unknown) {
+  if (e instanceof BadRequest) return NextResponse.json({ error: e.message }, { status: 400 })
+  return NextResponse.json({ error: e instanceof Error ? e.message : 'Unknown error' }, { status: 500 })
+}
 
 // Grid size per animation (default 32 for overworld, 96 for battle)
 const ANIM_GRID_SIZE: Record<string, number> = {
@@ -254,8 +261,8 @@ async function resolveNodes(species: string) {
 // Spirit files: ${UPPER}_SPRITES with hyphens → underscores (water-bear → WATER_BEAR_SPRITES)
 function getSpritesExportName(species: string): string | null {
   if (species === 'alkin') return 'PLAYER_SPRITES'
-  if (PLAYER_FILES[species]) return `${species.toUpperCase()}_SPRITES`
-  if (SPIRIT_FILES[species]) return `${species.toUpperCase().replace(/-/g, '_')}_SPRITES`
+  if (lookup(PLAYER_FILES, species)) return `${species.toUpperCase()}_SPRITES`
+  if (lookup(SPIRIT_FILES, species)) return `${species.toUpperCase().replace(/-/g, '_')}_SPRITES`
   return null
 }
 
@@ -342,33 +349,37 @@ function parseSpriteExportFrameMap(content: string, defaultMap: Record<string, s
 }
 
 async function resolve(species: string) {
-  if (SPIRIT_FILES[species]) {
+  const spiritFile = lookup(SPIRIT_FILES, species)
+  if (spiritFile) {
     try {
-      const file = SPIRIT_FILES[species]
-      const content = await readFile(join(SPRITE_DIR, file), 'utf-8')
-      return { file, frameMap: parseSpriteExportFrameMap(content, SPIRIT_FRAME_MAP), isPlayer: false }
+      const content = await readFile(join(SPRITE_DIR, spiritFile), 'utf-8')
+      return { file: spiritFile, frameMap: parseSpriteExportFrameMap(content, SPIRIT_FRAME_MAP), isPlayer: false }
     } catch {
-      return { file: SPIRIT_FILES[species], frameMap: SPIRIT_FRAME_MAP, isPlayer: false }
+      return { file: spiritFile, frameMap: SPIRIT_FRAME_MAP, isPlayer: false }
     }
   }
-  if (PLAYER_FILES[species]) {
+  const playerFile = lookup(PLAYER_FILES, species)
+  if (playerFile) {
     try {
-      const file = PLAYER_FILES[species]
-      const content = await readFile(join(SPRITE_DIR, file), 'utf-8')
-      return { file, frameMap: parseSpriteExportFrameMap(content, PLAYER_FRAME_MAP), isPlayer: true }
+      const content = await readFile(join(SPRITE_DIR, playerFile), 'utf-8')
+      return { file: playerFile, frameMap: parseSpriteExportFrameMap(content, PLAYER_FRAME_MAP), isPlayer: true }
     } catch {
-      return { file: PLAYER_FILES[species], frameMap: PLAYER_FRAME_MAP, isPlayer: true }
+      return { file: playerFile, frameMap: PLAYER_FRAME_MAP, isPlayer: true }
     }
   }
-  if (BEAST_FILES[species]) {
-    return { file: BEAST_FILES[species], frameMap: beastFrameMap(species), isPlayer: false }
+  const beastFile = lookup(BEAST_FILES, species)
+  if (beastFile) {
+    return { file: beastFile, frameMap: beastFrameMap(species), isPlayer: false }
   }
-  if (ICON_FILES[species]) return { file: ICON_FILES[species], frameMap: ICON_FRAME_MAP, isPlayer: false }
+  const iconFile = lookup(ICON_FILES, species)
+  if (iconFile) return { file: iconFile, frameMap: ICON_FRAME_MAP, isPlayer: false }
 
   // Dynamic form files — any grimoire entry (evolution forms, etc.)
   // File is {id}.ts in sprites dir, created on first save
   // Skip reserved species — they have dedicated resolvers (items, tools, furniture, nodes)
   if (RESERVED_SPECIES.has(species)) return null
+  // Past this point `species` names a file. Anything but a bare id escapes SPRITE_DIR.
+  safeId(species, 'species')
   const formFile = `${species}.ts`
   const formPath = join(SPRITE_DIR, formFile)
   try {
@@ -433,6 +444,7 @@ export const ${constPrefix}_SPRITES: Record<string, SpriteAnim> = {
 
 /** Ensure a form's sprite file exists, creating from template if needed */
 async function ensureFormFile(species: string): Promise<string> {
+  safeId(species, 'species')
   const file = `${species}.ts`
   const filePath = join(SPRITE_DIR, file)
   try {
@@ -482,12 +494,22 @@ async function readVariantConfig() {
   return config
 }
 
+// Mirrors the `Rarity` union in sprites/variants.ts.
+const VARIANT_RARITIES = ['common', 'uncommon', 'rare', 'epic', 'legendary'] as const
+// Mirrors the `CharRole` union in dev/editors/PlayerEditor.tsx.
+const CHAR_ROLES = ['player', 'npc'] as const
+
 async function writeVariantConfig(species: string, variants: Record<string, { rarity: string; encounterRate: number }>) {
+  safeId(species, 'species')
   let content = await readFile(VARIANTS_PATH, 'utf-8')
   const variantEntries = Object.entries(variants)
-    .map(([key, v]) => {
+    .map(([rawKey, raw]) => {
+      const key = safeId(rawKey, 'variant key')
+      const v = raw as { rarity: unknown; encounterRate: unknown }
+      const rarity = safeEnum(v.rarity, VARIANT_RARITIES, `variants.${key}.rarity`)
+      const encounterRate = safeInt(v.encounterRate, `variants.${key}.encounterRate`, 0, 1000)
       const pad = key.length < 6 ? ' '.repeat(6 - key.length) : ''
-      return `    ${key}:${pad} { rarity: '${v.rarity}',${' '.repeat(Math.max(1, 10 - v.rarity.length))}encounterRate: ${v.encounterRate} },`
+      return `    ${key}:${pad} { rarity: '${rarity}',${' '.repeat(Math.max(1, 10 - rarity.length))}encounterRate: ${encounterRate} },`
     })
     .join('\n')
   const newBlock = `{\n${variantEntries}\n  }`
@@ -568,7 +590,7 @@ export async function GET(req: NextRequest) {
     // Extract palette
     let palettes: Record<string, string[]> | undefined
     // Check if file has inline palette (form files, player files)
-    const isFormFile = !SPIRIT_FILES[species] && !PLAYER_FILES[species] && !BEAST_FILES[species] && !ICON_FILES[species]
+    const isFormFile = !lookup(SPIRIT_FILES, species) && !lookup(PLAYER_FILES, species) && !lookup(BEAST_FILES, species) && !lookup(ICON_FILES, species)
     if (species === 'furniture') {
       // Furniture palettes: per-furniture entries in FURNITURE_PALETTES export in furniture.ts
       const furnPalMatch = content.match(/export const FURNITURE_PALETTES[^{]*\{([^}]*)(\})/)
@@ -602,7 +624,7 @@ export async function GET(req: NextRequest) {
           palettes[m[1]] = colors
         }
       }
-    } else if (BEAST_FILES[species]) {
+    } else if (lookup(BEAST_FILES, species)) {
       // Beast palettes are in beasts.ts — BEAST_PALETTES export
       const escaped = species.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
       const palMatch = content.match(new RegExp(`${escaped}:\\s*\\[([^\\]]+)\\]`))
@@ -637,28 +659,30 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json({ species, frames, palettes, frameMap: info.frameMap })
   } catch (e: unknown) {
-    const msg = e instanceof Error ? e.message : 'Unknown error'
-    return NextResponse.json({ error: msg }, { status: 500 })
+    return errorResponse(e)
   }
 }
 
 export async function PUT(req: NextRequest) {
   try {
     const body = await req.json()
-    const { species } = body
+    if (!body.species) return NextResponse.json({ error: 'Missing species' }, { status: 400 })
+    const species = safeId(body.species, 'species')
 
     // Variant config save
     if (body.variants) {
-      if (!species) return NextResponse.json({ error: 'Missing species' }, { status: 400 })
       const ok = await writeVariantConfig(species, body.variants)
       if (!ok) return NextResponse.json({ error: `Species ${species} not found in variants.ts` }, { status: 400 })
       return NextResponse.json({ success: true, species })
     }
 
     // Palette save
-    const { paletteKey, colors } = body
-    if (!species || !Array.isArray(colors) || colors.length === 0)
+    if (!Array.isArray(body.colors) || body.colors.length === 0)
       return NextResponse.json({ error: 'Invalid palette data' }, { status: 400 })
+    const colors = safeColors(body.colors, 'colors')
+    const paletteKey = body.paletteKey === undefined || body.paletteKey === ''
+      ? undefined
+      : safeId(body.paletteKey, 'paletteKey')
 
     // Furniture palettes: per-furniture entries in FURNITURE_PALETTES in furniture.ts
     if (species === 'furniture' && paletteKey) {
@@ -732,7 +756,7 @@ export async function PUT(req: NextRequest) {
     if (!info) return NextResponse.json({ error: 'Unknown species' }, { status: 400 })
 
     // Form files and player files have inline _PALETTE exports
-    const isFormFile = !SPIRIT_FILES[species] && !PLAYER_FILES[species] && !BEAST_FILES[species]
+    const isFormFile = !lookup(SPIRIT_FILES, species) && !lookup(PLAYER_FILES, species) && !lookup(BEAST_FILES, species)
     if (info.isPlayer || isFormFile) {
       const filePath = join(SPRITE_DIR, info.file)
       let content = await readFile(filePath, 'utf-8')
@@ -749,7 +773,7 @@ export async function PUT(req: NextRequest) {
     }
 
     // Beast: palette lives in beasts.ts — BEAST_PALETTES export
-    if (BEAST_FILES[species]) {
+    if (lookup(BEAST_FILES, species)) {
       const filePath = join(SPRITE_DIR, 'beasts.ts')
       let content = await readFile(filePath, 'utf-8')
 
@@ -809,14 +833,18 @@ export async function PUT(req: NextRequest) {
     await writeFile(palettePath, content, 'utf-8')
     return NextResponse.json({ success: true, species, paletteKey, colors })
   } catch (e: unknown) {
-    const msg = e instanceof Error ? e.message : 'Unknown error'
-    return NextResponse.json({ error: msg }, { status: 500 })
+    return errorResponse(e)
   }
 }
 
 export async function POST(req: NextRequest) {
   try {
-    const { species, anim, frameIndex, digits } = await req.json()
+    const body = await req.json()
+    const species = safeId(body.species, 'species')
+    const anim = safeId(body.anim, 'anim')
+    const frameIndex = safeInt(body.frameIndex, 'frameIndex', 0, 999)
+    const digits = body.digits
+    if (typeof digits !== 'string') return NextResponse.json({ error: 'Invalid digits: expected string' }, { status: 400 })
 
     const info = await resolveOrCreate(species) ?? await resolveFurniture(species) ?? await resolveNodes(species) ?? await resolveItems(species)
     if (!info) return NextResponse.json({ error: 'Unknown species' }, { status: 400 })
@@ -825,9 +853,9 @@ export async function POST(req: NextRequest) {
     // ITEM_FRAME_MAP/ITEM_ICONS). Defer the actual write until after digit
     // validation passes — otherwise a bad request would leave orphan refs to a
     // non-existent const and break the build.
-    const needsItemSeed = species === 'items' && anim && typeof anim === 'string'
-      && !info.frameMap[anim] && /^[a-z][a-z0-9_]*$/.test(anim)
-      && anim !== 'icon' && !BATTLE_96_MAP[anim]
+    const needsItemSeed = species === 'items'
+      && !lookup(info.frameMap, anim) && /^[a-z][a-z0-9_]*$/.test(anim)
+      && anim !== 'icon' && !lookup(BATTLE_96_MAP, anim)
     if (needsItemSeed) {
       info.frameMap[anim] = [anim.toUpperCase()]
     }
@@ -839,12 +867,10 @@ export async function POST(req: NextRequest) {
     let constNames: string[] | undefined
     if (anim === 'icon') {
       constNames = info.frameMap['battle_front']
-    } else if (BATTLE_96_MAP[anim]) {
-      constNames = BATTLE_96_MAP[anim]
     } else {
-      constNames = info.frameMap[anim]
+      constNames = lookup(BATTLE_96_MAP, anim) ?? lookup(info.frameMap, anim)
     }
-    if (!constNames) return NextResponse.json({ error: 'Unknown animation' }, { status: 400 })
+    if (!constNames || constNames.length === 0) return NextResponse.json({ error: 'Unknown animation' }, { status: 400 })
 
     // For animations that reuse frames (walk uses [idle,stepL,idle,stepR]), map to unique const
     const constIdx = frameIndex % constNames.length
@@ -852,7 +878,7 @@ export async function POST(req: NextRequest) {
     if (!constName) return NextResponse.json({ error: 'Invalid frame index' }, { status: 400 })
 
     // Sprite size depends on animation type (32x32 for battle, 16x16 for everything else)
-    const spriteSize = ANIM_GRID_SIZE[anim] ?? 32
+    const spriteSize = lookup(ANIM_GRID_SIZE, anim) ?? 32
     const lines = digits.trim().split('\n').map((l: string) => l.trim())
     if (lines.length !== spriteSize || lines.some((l: string) => l.length !== spriteSize || !/^[0-9a-f]+$/i.test(l)))
       return NextResponse.json({ error: `Invalid digit format (expected ${spriteSize}x${spriteSize})` }, { status: 400 })
@@ -908,9 +934,9 @@ export async function POST(req: NextRequest) {
     // Ensure SPRITES export references this animKey so the runtime can find it.
     // Without this, painted run/special phases save pixels but the game falls
     // back to walk because PLAYER_SPRITES/SPIRIT_SPRITES never gets the entry.
-    if (anim !== 'icon' && !BATTLE_96_MAP[anim]) {
+    if (anim !== 'icon' && !lookup(BATTLE_96_MAP, anim)) {
       const exportName = getSpritesExportName(species)
-      const constNames = info.frameMap[anim]
+      const constNames = lookup(info.frameMap, anim)
       if (exportName && constNames && constNames.length > 0) {
         content = upsertSpritesExportEntry(content, exportName, anim, constNames, pickDefaultRate(anim))
       }
@@ -920,8 +946,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ success: true, saved: constName, file: info.file })
   } catch (e: unknown) {
-    const msg = e instanceof Error ? e.message : 'Unknown error'
-    return NextResponse.json({ error: msg }, { status: 500 })
+    return errorResponse(e)
   }
 }
 
@@ -929,15 +954,15 @@ export async function POST(req: NextRequest) {
 export async function PATCH(req: NextRequest) {
   try {
     const body = await req.json()
-    const { species, item, node, anim, insertAt, frameName, renameFrame: renameIdx, newName } = body
 
     // --- Create a new character from template ---
     if (body.action === 'createCharacter') {
       const rawName = (body.name as string ?? '').toLowerCase().replace(/[^a-z0-9]/g, '')
-      const role = body.role as string ?? 'npc'
+      // Interpolated into PlayerEditor.tsx as `role: '${role}' as CharRole`.
+      const role = safeEnum(body.role ?? 'npc', CHAR_ROLES, 'role')
       if (!rawName || rawName.length < 2)
         return NextResponse.json({ error: 'Name must be at least 2 characters (a-z only)' }, { status: 400 })
-      if (PLAYER_FILES[rawName] || SPIRIT_FILES[rawName])
+      if (lookup(PLAYER_FILES, rawName) || lookup(SPIRIT_FILES, rawName))
         return NextResponse.json({ error: `Character "${rawName}" already exists` }, { status: 400 })
 
       const constPrefix = rawName.toUpperCase()
@@ -1001,14 +1026,14 @@ export async function PATCH(req: NextRequest) {
     // --- Delete a character ---
     if (body.action === 'deleteCharacter') {
       const rawName = (body.name as string ?? '').toLowerCase()
-      if (!rawName || !PLAYER_FILES[rawName])
+      const fileName = lookup(PLAYER_FILES, rawName)
+      if (!rawName || !fileName)
         return NextResponse.json({ error: `Character "${rawName}" not found` }, { status: 400 })
       // Protect built-in characters
       if (['alkin', 'kael', 'gregory'].includes(rawName))
         return NextResponse.json({ error: 'Cannot delete built-in characters' }, { status: 400 })
 
       const constPrefix = rawName.toUpperCase()
-      const fileName = PLAYER_FILES[rawName]
 
       // 1. Delete sprite file
       const spritePath = join(SPRITE_DIR, fileName)
@@ -1035,7 +1060,7 @@ export async function PATCH(req: NextRequest) {
     // --- Toggle spirit species launch status ---
     if (body.action === 'toggleLaunch') {
       const sp = body.species as string
-      if (!sp || !SPIRIT_FILES[sp])
+      if (!sp || !lookup(SPIRIT_FILES, sp))
         return NextResponse.json({ error: 'Invalid species' }, { status: 400 })
 
       const indexPath = join(process.cwd(), 'src/app/shimmer/engine/spirit-index.ts')
@@ -1062,23 +1087,35 @@ export async function PATCH(req: NextRequest) {
       return NextResponse.json({ success: true, launched: !isLaunched })
     }
 
+    // Everything below names a sprite file, a frame const, or a frame-map key.
+    const species = safeId(body.species, 'species')
+    const anim = body.anim === undefined || body.anim === '' ? undefined : safeId(body.anim, 'anim')
+    const item = body.item === undefined || body.item === '' ? undefined : safeId(body.item, 'item')
+    const node = body.node === undefined || body.node === '' ? undefined : safeId(body.node, 'node')
+    const frameName = body.frameName === undefined || body.frameName === '' ? undefined : safeId(body.frameName, 'frameName')
+    const newName = body.newName === undefined || body.newName === '' ? undefined : safeId(body.newName, 'newName')
+    const insertAt = body.insertAt === undefined ? undefined : safeInt(body.insertAt, 'insertAt', 0, 999)
+    const renameIdx = body.renameFrame === undefined ? undefined : safeInt(body.renameFrame, 'renameFrame', 0, 999)
+
+    const speciesSpiritFile = lookup(SPIRIT_FILES, species)
+    const speciesPlayerFile = lookup(PLAYER_FILES, species)
+
     // --- Rename an existing frame ---
-    const renameInfo = (SPIRIT_FILES[species] || PLAYER_FILES[species]) ? null : await resolve(species)
-    if (((SPIRIT_FILES[species] || PLAYER_FILES[species]) || renameInfo) && anim && typeof renameIdx === 'number' && newName) {
-      const file = SPIRIT_FILES[species] ?? PLAYER_FILES[species] ?? renameInfo!.file
+    const renameInfo = (speciesSpiritFile || speciesPlayerFile) ? null : await resolve(species)
+    if (((speciesSpiritFile || speciesPlayerFile) || renameInfo) && anim && typeof renameIdx === 'number' && newName) {
+      const file = speciesSpiritFile ?? speciesPlayerFile ?? renameInfo!.file
       const filePath = join(SPRITE_DIR, file)
       let content = await readFile(filePath, 'utf-8')
 
-      const defaultMap = PLAYER_FILES[species] ? PLAYER_FRAME_MAP : SPIRIT_FRAME_MAP
+      const defaultMap = speciesPlayerFile ? PLAYER_FRAME_MAP : SPIRIT_FRAME_MAP
       const frameMap = parseSpriteExportFrameMap(content, defaultMap)
       const currentFrames = anim === 'icon' ? frameMap['battle_front']
-        : BATTLE_96_MAP[anim] ? BATTLE_96_MAP[anim]
-        : frameMap[anim]
+        : lookup(BATTLE_96_MAP, anim) ?? lookup(frameMap, anim)
       if (!currentFrames || renameIdx >= currentFrames.length)
         return NextResponse.json({ error: `Frame ${renameIdx} out of range` }, { status: 400 })
 
       const oldName = currentFrames[renameIdx]
-      const safeName = (newName as string).replace(/[^A-Z0-9_]/g, '')
+      const safeName = newName.replace(/[^A-Z0-9_]/g, '')
       if (!safeName || safeName === oldName)
         return NextResponse.json({ error: 'Invalid or unchanged name' }, { status: 400 })
 
@@ -1094,9 +1131,9 @@ export async function PATCH(req: NextRequest) {
     }
 
     // --- Spirits/Players/Forms: add frame to an animation ---
-    const addFrameInfo = (SPIRIT_FILES[species] || PLAYER_FILES[species]) ? null : await resolveOrCreate(species)
-    if (((SPIRIT_FILES[species] || PLAYER_FILES[species]) || addFrameInfo) && anim) {
-      const file = SPIRIT_FILES[species] ?? PLAYER_FILES[species] ?? addFrameInfo!.file
+    const addFrameInfo = (speciesSpiritFile || speciesPlayerFile) ? null : await resolveOrCreate(species)
+    if (((speciesSpiritFile || speciesPlayerFile) || addFrameInfo) && anim) {
+      const file = speciesSpiritFile ?? speciesPlayerFile ?? addFrameInfo!.file
       const filePath = join(SPRITE_DIR, file)
       let content = await readFile(filePath, 'utf-8')
 
@@ -1105,20 +1142,19 @@ export async function PATCH(req: NextRequest) {
         return NextResponse.json({ error: 'Cannot add frames to derived species yet' }, { status: 400 })
       }
 
-      const defaultMap = PLAYER_FILES[species] ? PLAYER_FRAME_MAP : SPIRIT_FRAME_MAP
+      const defaultMap = speciesPlayerFile ? PLAYER_FRAME_MAP : SPIRIT_FRAME_MAP
       const frameMap = parseSpriteExportFrameMap(content, defaultMap)
       const resolvedAnim = anim === 'icon' ? 'battle_front' : anim
       const currentFrames = anim === 'icon' ? frameMap['battle_front']
-        : BATTLE_96_MAP[anim] ? BATTLE_96_MAP[anim]
-        : frameMap[anim]
+        : lookup(BATTLE_96_MAP, anim) ?? lookup(frameMap, anim)
       if (!currentFrames)
         return NextResponse.json({ error: `Unknown animation: ${anim}` }, { status: 400 })
 
       // Use custom name if provided, otherwise auto-generate
-      const gridSize = ANIM_GRID_SIZE[anim] ?? 32
+      const gridSize = lookup(ANIM_GRID_SIZE, anim) ?? 32
       let newConstName: string
       if (frameName) {
-        const safeName = (frameName as string).toUpperCase().replace(/[^A-Z0-9_]/g, '')
+        const safeName = frameName.toUpperCase().replace(/[^A-Z0-9_]/g, '')
         if (!safeName) return NextResponse.json({ error: 'Invalid frame name' }, { status: 400 })
         if (new RegExp(`\\bconst ${safeName}\\b`).test(content))
           return NextResponse.json({ error: `Name ${safeName} already exists` }, { status: 400 })
@@ -1146,7 +1182,7 @@ export async function PATCH(req: NextRequest) {
       // Update the animation entry: insert new const into frames array at position
       // Use \b word boundary to avoid matching inside longer animation names (e.g. idle inside down_idle)
       const escaped = resolvedAnim.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-      const insertIdx = insertAt as number | undefined
+      const insertIdx = insertAt
       const animPattern = new RegExp(
         `(\\b${escaped}:\\s*\\{\\s*frames:\\s*\\[)([^\\]]*)(\\],\\s*rate:\\s*)(\\d+)`
       )
@@ -1170,7 +1206,7 @@ export async function PATCH(req: NextRequest) {
       let content = await readFile(filePath, 'utf-8')
 
       const frameMap = parseNodeFrameMap(content)
-      const currentFrames = frameMap[node]
+      const currentFrames = lookup(frameMap, node)
       if (!currentFrames || currentFrames.length === 0)
         return NextResponse.json({ error: `Unknown node: ${node}` }, { status: 400 })
 
@@ -1213,7 +1249,7 @@ export async function PATCH(req: NextRequest) {
       let content = await readFile(filePath, 'utf-8')
 
       const frameMap = parseFurnitureFrameMap(content)
-      const currentFrames = frameMap[anim]
+      const currentFrames = lookup(frameMap, anim)
       if (!currentFrames || currentFrames.length === 0)
         return NextResponse.json({ error: `Unknown furniture: ${anim}` }, { status: 400 })
 
@@ -1256,7 +1292,7 @@ export async function PATCH(req: NextRequest) {
     let content = await readFile(filePath, 'utf-8')
 
     const frameMap = parseItemFrameMap(content)
-    const currentFrames = frameMap[item]
+    const currentFrames = lookup(frameMap, item)
     if (!currentFrames || currentFrames.length === 0)
       return NextResponse.json({ error: `Unknown item: ${item}` }, { status: 400 })
 
@@ -1279,7 +1315,7 @@ export async function PATCH(req: NextRequest) {
     // CRITICAL: scope to ITEM_FRAME_MAP block. The unscoped regex matched
     // ITEM_PALETTES first (same `<item>: [...]` shape) and corrupted palette
     // arrays with const-name strings.
-    const escapedItem = (item as string).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    const escapedItem = item.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
     const fmapBlock = content.match(/(export const ITEM_FRAME_MAP[^{]*\{)([\s\S]*?)(\n\})/)
     if (!fmapBlock) {
       return NextResponse.json({ error: 'Could not find ITEM_FRAME_MAP block' }, { status: 500 })
@@ -1306,33 +1342,36 @@ export async function PATCH(req: NextRequest) {
 
     return NextResponse.json({ success: true, frameCount: newIndex + 1, constName: newConstName })
   } catch (e: unknown) {
-    const msg = e instanceof Error ? e.message : 'Unknown error'
-    return NextResponse.json({ error: msg }, { status: 500 })
+    return errorResponse(e)
   }
 }
 
 // DELETE: remove an animation frame from a sprite
 export async function DELETE(req: NextRequest) {
   try {
-    const { species, item, node, anim, frameIndex } = await req.json()
-    const fi = frameIndex as number
-    if (typeof fi !== 'number' || fi < 0)
-      return NextResponse.json({ error: 'Invalid frameIndex' }, { status: 400 })
+    const body = await req.json()
+    const species = safeId(body.species, 'species')
+    const anim = body.anim === undefined || body.anim === '' ? undefined : safeId(body.anim, 'anim')
+    const item = body.item === undefined || body.item === '' ? undefined : safeId(body.item, 'item')
+    const node = body.node === undefined || body.node === '' ? undefined : safeId(body.node, 'node')
+    const fi = safeInt(body.frameIndex, 'frameIndex', 0, 999)
+
+    const speciesSpiritFile = lookup(SPIRIT_FILES, species)
+    const speciesPlayerFile = lookup(PLAYER_FILES, species)
 
     // --- Spirits/Players/Forms ---
-    const deleteInfo = (SPIRIT_FILES[species] || PLAYER_FILES[species]) ? null : await resolve(species)
-    if (((SPIRIT_FILES[species] || PLAYER_FILES[species]) || deleteInfo) && anim) {
-      const file = SPIRIT_FILES[species] ?? PLAYER_FILES[species] ?? deleteInfo!.file
+    const deleteInfo = (speciesSpiritFile || speciesPlayerFile) ? null : await resolve(species)
+    if (((speciesSpiritFile || speciesPlayerFile) || deleteInfo) && anim) {
+      const file = speciesSpiritFile ?? speciesPlayerFile ?? deleteInfo!.file
       const filePath = join(SPRITE_DIR, file)
       let content = await readFile(filePath, 'utf-8')
 
-      const defaultMap = PLAYER_FILES[species] ? PLAYER_FRAME_MAP : SPIRIT_FRAME_MAP
+      const defaultMap = speciesPlayerFile ? PLAYER_FRAME_MAP : SPIRIT_FRAME_MAP
       const frameMap = parseSpriteExportFrameMap(content, defaultMap)
       // Resolve animation key: 'icon' maps to source's battle_front, 32x32 battle uses BATTLE_96_MAP
       const resolvedAnim = anim === 'icon' ? 'battle_front' : anim
       const currentFrames = anim === 'icon' ? frameMap['battle_front']
-        : BATTLE_96_MAP[anim] ? BATTLE_96_MAP[anim]
-        : frameMap[anim]
+        : lookup(BATTLE_96_MAP, anim) ?? lookup(frameMap, anim)
       if (!currentFrames || fi >= currentFrames.length)
         return NextResponse.json({ error: `Frame ${fi} out of range` }, { status: 400 })
       if (currentFrames.length <= 1)
@@ -1369,7 +1408,7 @@ export async function DELETE(req: NextRequest) {
       let content = await readFile(filePath, 'utf-8')
 
       const frameMap = parseNodeFrameMap(content)
-      const currentFrames = frameMap[node]
+      const currentFrames = lookup(frameMap, node)
       if (!currentFrames || fi >= currentFrames.length)
         return NextResponse.json({ error: `Frame ${fi} out of range` }, { status: 400 })
       if (currentFrames.length <= 1)
@@ -1416,7 +1455,7 @@ export async function DELETE(req: NextRequest) {
       let content = await readFile(filePath, 'utf-8')
 
       const frameMap = parseItemFrameMap(content)
-      const currentFrames = frameMap[item]
+      const currentFrames = lookup(frameMap, item)
       if (!currentFrames || fi >= currentFrames.length)
         return NextResponse.json({ error: `Frame ${fi} out of range` }, { status: 400 })
       if (currentFrames.length <= 1)
@@ -1458,7 +1497,7 @@ export async function DELETE(req: NextRequest) {
       let content = await readFile(filePath, 'utf-8')
 
       const frameMap = parseFurnitureFrameMap(content)
-      const currentFrames = frameMap[anim]
+      const currentFrames = lookup(frameMap, anim)
       if (!currentFrames || fi >= currentFrames.length)
         return NextResponse.json({ error: `Frame ${fi} out of range` }, { status: 400 })
       if (currentFrames.length <= 1)
@@ -1500,7 +1539,6 @@ export async function DELETE(req: NextRequest) {
 
     return NextResponse.json({ error: 'Invalid DELETE params' }, { status: 400 })
   } catch (e: unknown) {
-    const msg = e instanceof Error ? e.message : 'Unknown error'
-    return NextResponse.json({ error: msg }, { status: 500 })
+    return errorResponse(e)
   }
 }

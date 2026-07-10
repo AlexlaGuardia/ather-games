@@ -2,9 +2,28 @@ import { NextRequest, NextResponse } from 'next/server'
 import { readFile } from 'fs/promises'
 import { join } from 'path'
 import { safeWriteFile as writeFile } from '../lib/backup'
+import { BadRequest, safeId, safeIdOpt, safeInt, safeEnum, safeTsFile, escText } from '../lib/safe'
 
 const NPCS_PATH = join(process.cwd(), 'src/app/shimmer/world/npcs.ts')
 const SPRITE_DIR = join(process.cwd(), 'src/app/shimmer/sprites')
+
+const DIRECTIONS = ['up', 'down', 'left', 'right', 'up-left', 'up-right', 'down-left', 'down-right'] as const
+
+/** Map a guard failure to 400, anything else to 500. */
+function errorResponse(e: unknown) {
+  if (e instanceof BadRequest) return NextResponse.json({ error: e.message }, { status: 400 })
+  return NextResponse.json({ error: e instanceof Error ? e.message : 'Unknown error' }, { status: 500 })
+}
+
+/** Validate a patrol path's points as tile coordinates. */
+function safePatrolPath(v: unknown): { tileX: number; tileY: number }[] | undefined {
+  if (v === undefined) return undefined
+  if (!Array.isArray(v)) throw new BadRequest('Invalid patrolPath: expected array')
+  return v.map((p, i) => ({
+    tileX: safeInt((p as { tileX: unknown })?.tileX, `patrolPath[${i}].tileX`, 0, 9999),
+    tileY: safeInt((p as { tileY: unknown })?.tileY, `patrolPath[${i}].tileY`, 0, 9999),
+  }))
+}
 
 interface NPCSummary {
   id: string
@@ -71,8 +90,22 @@ export async function GET() {
 // POST: create or update NPC entry in npcs.ts
 export async function POST(req: NextRequest) {
   try {
-    const { id, name, zone, tileX, tileY, direction, dialogueId, blocking, patrolPath, spriteFile } = await req.json()
-    if (!id || !zone) return NextResponse.json({ error: 'Missing id or zone' }, { status: 400 })
+    const body = await req.json()
+    if (!body.id || !body.zone) return NextResponse.json({ error: 'Missing id or zone' }, { status: 400 })
+
+    const id = safeId(body.id, 'id')
+    const zone = safeId(body.zone, 'zone')
+    const name = body.name === undefined || body.name === '' ? undefined : escText(body.name, 'name', 80)
+    const tileX = body.tileX === undefined ? undefined : safeInt(body.tileX, 'tileX', 0, 9999)
+    const tileY = body.tileY === undefined ? undefined : safeInt(body.tileY, 'tileY', 0, 9999)
+    const direction = body.direction === undefined ? undefined : safeEnum(body.direction, DIRECTIONS, 'direction')
+    const dialogueId = safeIdOpt(body.dialogueId, 'dialogueId')
+    const blocking = Boolean(body.blocking)
+    const patrolPath = safePatrolPath(body.patrolPath)
+    // Joined onto SPRITE_DIR below — a bare `.ts` name keeps the read inside it.
+    const spriteFile = body.spriteFile === undefined || body.spriteFile === ''
+      ? undefined
+      : safeTsFile(body.spriteFile, 'spriteFile')
 
     let content = await readFile(NPCS_PATH, 'utf-8')
     const existing = parseNPCs(content)
@@ -174,15 +207,16 @@ export async function POST(req: NextRequest) {
     await writeFile(NPCS_PATH, content, 'utf-8')
     return NextResponse.json({ success: true, id })
   } catch (e: unknown) {
-    return NextResponse.json({ error: e instanceof Error ? e.message : 'Unknown error' }, { status: 500 })
+    return errorResponse(e)
   }
 }
 
 // DELETE: remove NPC entry from npcs.ts
 export async function DELETE(req: NextRequest) {
   try {
-    const { id } = await req.json()
-    if (!id) return NextResponse.json({ error: 'Missing id' }, { status: 400 })
+    const body = await req.json()
+    if (!body.id) return NextResponse.json({ error: 'Missing id' }, { status: 400 })
+    const id = safeId(body.id, 'id')
 
     let content = await readFile(NPCS_PATH, 'utf-8')
     const escaped = id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
@@ -231,6 +265,6 @@ export async function DELETE(req: NextRequest) {
     await writeFile(NPCS_PATH, content, 'utf-8')
     return NextResponse.json({ success: true, deleted: id })
   } catch (e: unknown) {
-    return NextResponse.json({ error: e instanceof Error ? e.message : 'Unknown error' }, { status: 500 })
+    return errorResponse(e)
   }
 }
