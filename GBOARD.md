@@ -357,7 +357,21 @@ the Arcade frame.
   (sticky from-room) · `public/room/news.json` (live feed) · `scripts/news.py` (add/suggest feed tooling) · `/grimoire` (AtherPages, off the Desk)
 
 ### Nolmir — 🟢 live · idle Athernyx defense/arena → `/nolmir`
-*Last touched: 2026-07-10 — wayfinding audit + nav pass (`bb856d2`)*
+*Last touched: 2026-07-10 — one-screen redesign: Expeditions shipped hero+overlay (`057e54a`)*
+**🖥️ ONE-SCREEN REDESIGN (2026-07-10, jin-cc) — Alex: "make it fit on one screen, scrolling isn't the way."**
+  Measured overflow at a ~540px window: **Expeditions +781px (2.6× viewport)** — the disaster, six panels stacked
+  in a right column; **Crucible +146** (mild); **Starforge** already tabbed, 3 of 5 tabs fit at 0, Core +290 /
+  Refinery +51. **Direction chosen by Alex: HERO + OVERLAYS** — the hall's visual owns the screen, deep controls
+  open as dismissible overlays (not stacked). Shared helpers built: `components/Panel.tsx` (scrim + Esc + internal
+  scroll overlay), `components/useFitScale.ts` (scales a fixed hero to its box via a click-safe CSS transform).
+  - **✅ EXPEDITIONS SHIPPED (`057e54a`, pushed, live):** `h-[100dvh]` frame, `overflow-hidden` — page never scrolls.
+    Arena is the hero (640→464 scaled to fit). Control dock over it: prep = squad slots + Staging + Workshop + OPEN
+    THE GATE; run = the HUD; after = Back. Overlays: STAGING (roster+talents+doctrine+tier), WORKSHOP (upgrades+
+    records), RESULTS. **Verified live at 543px: 0 page scroll in prep AND run** (was +781); full place→gate→run
+    flow works; overlays scroll internally + Esc-close; no console errors.
+  - **▶ NEXT: same frame → Crucible + Starforge** (helpers exist, both minor). **⚑ Alex device/taste pass on the
+    Expeditions execution first** — dock position, overlay feel, arena scale — before rolling to the other two.
+**🧭 NAV AUDIT + FIX (2026-07-10, jin-cc, `bb856d2`, pushed, live).** Alex flagged the interface as "messy and
 **🧭 NAV AUDIT + FIX (2026-07-10, jin-cc, `bb856d2`, pushed, live).** Alex flagged the interface as "messy and
   complicated, had me avoiding it." The audit found the mess was the MAP, not the density: the SiteNav drawer was
   mounted ONLY on the deck — Starforge + Expeditions had **no menu and no route home at all** (only sideways hops
