@@ -160,13 +160,28 @@ the Arcade frame.
 > folded ⌂ The Room + ▦ All games into its existing HUD ☰ menu (native menuBtn, no second button; autosave makes
 > hard-nav safe).
 > **▶ NEEDS ALEX DEVICE PASS:** (1) manana — ☰ sits clean next to 🔊 on Home+board, bottom flush (no black gap)?
-> (2) play3d — the two new menu items feel/reachable on a phone? (3) the drawer feel generally (manana = fullest wiring).
-> **⚑ FINDING (not fixed):** the registry `shimmer` entry's href is `/shimmer`, which is GATED → redirects non-owners
-> to /room. So a "shimmer" recents/favorites/surprise chip would send the public to /room, not the walker. If shimmer
-> should be game-jumpable, point its href at `/shimmer/play3d` (or exclude it from the jump pool). Alex's call.
-> **▶ Phase 3 (next):** juice (drawer slide/chips/surprise-me feel) · ★-favorite-from-the-drawer (today you can only
-> star from /arcade/all) · recents→"resume" for save-backed games (nolmir/manana/play3d) · strip Nolmir's now-redundant
-> inline "← arcade" header link. **Files:** `src/lib/recents.ts`, `_components/SiteNav.tsx`, `_components/ArcadeCabinet.tsx`,
+> (2) play3d — the two new menu items feel/reachable on a phone? (3) the drawer feel generally (manana = fullest wiring),
+> now incl. the 170ms slide-out — is the close speed right? Knob: `CLOSE_MS` in `SiteNav.tsx` (must match the
+> `sitenav-slide-out` duration).
+> **⚑ ~~FINDING~~ — CORRECTED + FIXED 2026-07-10 (`0fb8e59`).** The old entry claimed a `shimmer` chip sends the
+> public to `/room`. **It can't** — shimmer is `tier: "coming-soon"`, so `liveGames()` (which filters `tier === "live"`
+> *and* `ROOM_WALL_IDS`) excludes it from surprise-me; `CatalogGrid` renders coming-soon as a plain dimmed `div` with
+> **no `<Link>` and no pin button**, so it can't be favorited; and recents only fill where `SiteNav` mounts with a
+> `gameId`, which play3d doesn't. Three independent closed paths. **The board was right that the jump pool was
+> unfiltered and wrong about which game fell through.** The real instance was **Lucernyx** (`tier: "back-room"`,
+> shelved): `refresh()` resolved recents/favs with `gameById`, which has no tier filter, and localStorage outlives a
+> game's tier — so a Lucernyx chip sat in the live drawer, routing into a redirect. Now resolved against `liveGames()`.
+> *Lesson: a board entry naming a specific bug is a hypothesis, not a fact — re-read the registry before acting on it.*
+>
+> **✅ Phase 3 SHIPPED 2026-07-10 (`0fb8e59`):** drawer **exit animation** (it slid in, then vanished on a hard cut;
+> `closing` state holds it for one 170ms slide-out, reduced-motion unmounts instantly rather than gating unmount on an
+> animation that may never run) · **focus management** — it claimed `aria-modal` while leaving focus on the page behind,
+> so Tab walked the game; focus now enters on open, wraps at both ends, returns to the ☰ on close (+ the missing
+> `aria-expanded`) · **tier filter** on recents/favs (above) · **Nolmir's redundant "← arcade" link removed** (header
+> `justify-between` → 3-col grid so the title stays centred without the link propping the left slot open).
+> **Already shipped earlier, board was stale:** ★-favorite-from-the-drawer (`toggleFavHere`) exists and works.
+> **▶ Still open:** recents→"resume" for save-backed games (nolmir/manana/play3d) · Alex's phone pass on the drawer feel.
+> **Files:** `src/lib/recents.ts`, `_components/SiteNav.tsx`, `_components/ArcadeCabinet.tsx`,
 > `manana/page.tsx` + `manana/Home.tsx`, `arcade/all/page.tsx`, `nolmir/page.tsx`, `grimoire/page.tsx`,
 > `shimmer/page.tsx`, `shimmer/play3d/Shimmer3D.tsx`.
 
