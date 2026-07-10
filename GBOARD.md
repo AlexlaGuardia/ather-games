@@ -369,8 +369,18 @@ the Arcade frame.
     THE GATE; run = the HUD; after = Back. Overlays: STAGING (roster+talents+doctrine+tier), WORKSHOP (upgrades+
     records), RESULTS. **Verified live at 543px: 0 page scroll in prep AND run** (was +781); full place→gate→run
     flow works; overlays scroll internally + Esc-close; no console errors.
-  - **▶ NEXT: same frame → Crucible + Starforge** (helpers exist, both minor). **⚑ Alex device/taste pass on the
-    Expeditions execution first** — dock position, overlay feel, arena scale — before rolling to the other two.
+  - **✅ STARFORGE mobile chrome slimmed (`ba1b1a9`):** sibling emblems `hidden sm:flex` (drop on mobile, ☰ covers
+    nav), 5 tabs → one horizontally-scrollable row (was wrapping to 2), subtitle hidden mobile, top tightened.
+    Chrome ~45%→~19% of height. Mobile visual pending Alex's phone (extension can't emulate narrow viewport).
+  - **★ REFRAME (Alex, 2026-07-10): Nolmir is a LANDSCAPE game; web can't force orientation (iOS Safari ignores
+    the Screen Orientation lock API).** So stop contorting the landscape halls into portrait — GATE portrait phones
+    instead. **✅ `RotateGate` SHIPPED (`ee7d8c0`):** wraps all of Nolmir at the layout; on `(orientation:portrait)
+    and (pointer:coarse)` drops a "turn your device" prompt over the (still-mounted, still-accruing) game, lifts on
+    rotate. Desktops never gated. NOT a manifest lock (manifest is app-wide, would break portrait cabinets). Gates
+    the deck too (rotate once at entry). **In landscape the existing layouts already work** — a landscape phone
+    (~2.1:1) is wider than the Orrery, so the void mostly resolves. The portrait-void crop question is moot now.
+  - **▶ NEXT: same frame → Crucible** (was +146, minor) + Starforge Core/Refinery tab fit (Core +290), now that
+    landscape is the target. **⚑ Alex phone pass on: the rotate gate + the slimmed Starforge + Expeditions, live.**
 **🧭 NAV AUDIT + FIX (2026-07-10, jin-cc, `bb856d2`, pushed, live).** Alex flagged the interface as "messy and
 **🧭 NAV AUDIT + FIX (2026-07-10, jin-cc, `bb856d2`, pushed, live).** Alex flagged the interface as "messy and
   complicated, had me avoiding it." The audit found the mess was the MAP, not the density: the SiteNav drawer was
