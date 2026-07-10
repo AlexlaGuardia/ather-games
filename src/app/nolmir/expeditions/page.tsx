@@ -6,6 +6,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import Breach, { HudSnapshot } from '../components/Breach'
 import Emblem from '../components/Emblem'
+import SiteNav from '../../_components/SiteNav'
+import { nolmirCrumbs } from '../lib/nav'
 import { useGainFx, FloatLayer, flashCls, GainFxStyles } from '../components/gainfx'
 import { DOCTRINES, DoctrineId, RunConfig, RunResult, defaultAnchors } from '../lib/expedition'
 import {
@@ -51,6 +53,13 @@ export default function ExpeditionsPage() {
   const [after, setAfter] = useState<AfterState | null>(null)
   const [mounted, setMounted] = useState(false)
   const [muted, setMuted] = useState(false)
+  const toggleMute = useCallback(() => {
+    sfx.ensure()
+    const m = !sfx.isMuted()
+    sfx.setMuted(m)
+    setMuted(m)
+    if (!m) sfx.play('click')
+  }, [])
   const [awayMarks, setAwayMarks] = useState(0)
 
   useEffect(() => {
@@ -218,6 +227,7 @@ export default function ExpeditionsPage() {
 
   return (
     <div className="min-h-screen bg-[#070a10] text-slate-300 font-mono">
+      <SiteNav gameId="nolmir" wall={1} crumbs={nolmirCrumbs('Expeditions')} soundOn={!muted} onToggleSound={toggleMute} />
       <div className="max-w-[1200px] mx-auto px-4 py-6">
         <header className="flex items-baseline justify-between mb-4">
           <div>
@@ -236,19 +246,7 @@ export default function ExpeditionsPage() {
                 </span>
               )}
             </span>
-            <button
-              onClick={() => {
-                sfx.ensure()
-                const m = !muted
-                sfx.setMuted(m)
-                setMuted(m)
-                if (!m) sfx.play('click')
-              }}
-              title={muted ? 'sound off — click to enable' : 'sound on'}
-              className="text-base leading-none text-slate-500 hover:text-cyan-300 transition-colors"
-            >
-              {muted ? '🔇' : '🔊'}
-            </button>
+            <Emblem kind="deck" href="/nolmir" label="DECK" />
             <Emblem kind="crucible" href="/nolmir/crucible" label="CRUCIBLE" />
             <Emblem kind="starforge" href="/nolmir/starforge" label="STARFORGE" />
           </div>

@@ -9,6 +9,8 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { Chakra_Petch } from 'next/font/google'
 import Orrery from '../components/Orrery'
 import Emblem from '../components/Emblem'
+import SiteNav from '../../_components/SiteNav'
+import { nolmirCrumbs } from '../lib/nav'
 import { useGainFx, FloatLayer, flashCls, GainFxStyles } from '../components/gainfx'
 import { planetMilestone } from '../lib/milestones'
 
@@ -100,6 +102,13 @@ export default function StarforgePage() {
   const [room, setRoom] = useState<Room>('orrery')
   const [armed, setArmed] = useState(false)
   const [muted, setMuted] = useState(false)
+  const toggleMute = useCallback(() => {
+    sfx.ensure()
+    const m = !sfx.isMuted()
+    sfx.setMuted(m)
+    setMuted(m)
+    if (!m) sfx.play('click')
+  }, [])
   const [warpSeq, setWarpSeq] = useState<WarpData | null>(null)
   const [rehearsing, setRehearsing] = useState(false)
   const { floaters, flash: coreFlash, push: pushFloat } = useGainFx()
@@ -272,6 +281,7 @@ export default function StarforgePage() {
 
   return (
     <div className="min-h-screen bg-[#070a10] text-slate-300 font-mono overflow-hidden">
+      <SiteNav gameId="nolmir" wall={1} crumbs={nolmirCrumbs('The Starforge')} soundOn={!muted} onToggleSound={toggleMute} />
       {/* the system — always turning behind the rooms; clicks only land from the orrery room */}
       <div
         className={`fixed inset-0 z-0 flex items-center justify-center ${
@@ -305,21 +315,9 @@ export default function StarforgePage() {
             <span className="text-fuchsia-300/90">
               mana <b className="tabular-nums">{fmt(host.mana)}</b>
             </span>
+            <Emblem kind="deck" href="/nolmir" label="DECK" />
             <Emblem kind="crucible" href="/nolmir/crucible" label="CRUCIBLE" />
             <Emblem kind="expeditions" href="/nolmir/expeditions" label="EXPEDITIONS" />
-            <button
-              onClick={() => {
-                sfx.ensure()
-                const m = !muted
-                sfx.setMuted(m)
-                setMuted(m)
-                if (!m) sfx.play('click')
-              }}
-              title={muted ? 'sound off — click to enable' : 'sound on'}
-              className="text-base leading-none text-slate-500 hover:text-cyan-300 transition-colors"
-            >
-              {muted ? '🔇' : '🔊'}
-            </button>
           </div>
         </header>
 

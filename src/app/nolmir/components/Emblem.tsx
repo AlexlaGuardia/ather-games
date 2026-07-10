@@ -6,9 +6,15 @@
 
 import { useState } from 'react'
 
-type Kind = 'crucible' | 'expeditions' | 'starforge'
+type Kind = 'crucible' | 'expeditions' | 'starforge' | 'deck'
 
 const EMBLEM: Record<Kind, { src: string; glyph: string; tint: string }> = {
+  // The command deck — home. Warm/gold to read as "the hub", not another hall.
+  deck: {
+    src: '/nolmir/sprites/emblem-deck.png',
+    glyph: '⌂',
+    tint: 'border-amber-900/60 text-amber-400/90 group-hover:border-amber-500/70 group-hover:text-amber-300',
+  },
   crucible: {
     src: '/nolmir/sprites/emblem-crucible.png',
     glyph: '⬡',

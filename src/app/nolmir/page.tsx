@@ -189,7 +189,7 @@ export default function DeckPage() {
             <div className="text-[10px] text-slate-500 italic truncate max-w-[160px]">{tiles.crucible.sub}</div>
           </Tile>
 
-          <Tile href="/nolmir/starforge" name="The Orrery" glyph="◉" ready={tiles.orrery.ready} accent={tiles.orrery.warp ? '#fbbf24' : '#22d3ee'} line={tiles.orrery.line}>
+          <Tile href="/nolmir/starforge" name="The Starforge" glyph="◉" ready={tiles.orrery.ready} accent={tiles.orrery.warp ? '#fbbf24' : '#22d3ee'} line={tiles.orrery.line}>
             <Stat label="corelight" value={fmt(tiles.orrery.core)} live />
             <Stat label="+/s" value={fmt(tiles.orrery.rate)} />
             <Stat label="planets" value={String(tiles.orrery.planets)} />

@@ -4,6 +4,9 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import Terrarium from '../components/Terrarium'
 import Drift from '../components/Drift'
 import Emblem from '../components/Emblem'
+import SiteNav from '../../_components/SiteNav'
+import { useIsOwner } from '../../_components/useIsOwner'
+import { nolmirCrumbs } from '../lib/nav'
 import { loadHost, saveHost, hostProgress, HOST_UNLOCKS } from '../lib/host'
 import {
   loadForge,
@@ -44,6 +47,14 @@ export default function NolmirPage() {
   const [mods, setMods] = useState<MatchMods | undefined>(undefined)
   const [corelight, setCorelight] = useState(0)
   const [muted, setMuted] = useState(false)
+  const isOwner = useIsOwner()
+  const toggleMute = useCallback(() => {
+    sfx.ensure()
+    const m = !sfx.isMuted()
+    sfx.setMuted(m)
+    setMuted(m)
+    if (!m) sfx.play('click')
+  }, [])
 
   const manaFx = useGainFx()
   // host level-up beat — watch the displayed level; fires for live wins AND the away-settle
@@ -133,6 +144,7 @@ export default function NolmirPage() {
 
   return (
     <div className="min-h-screen bg-[#070a10] text-slate-300 font-mono overflow-x-hidden">
+      <SiteNav gameId="nolmir" wall={1} crumbs={nolmirCrumbs('The Crucible')} soundOn={!muted} onToggleSound={toggleMute} />
       {/* toasts — top right, pop and fade */}
       <div className="fixed top-4 right-4 z-50 flex flex-col gap-2 items-end pointer-events-none">
         {toasts.map((t) => (
@@ -192,7 +204,7 @@ export default function NolmirPage() {
       <div className="max-w-[1200px] mx-auto px-4 py-6">
         <header className="flex flex-col gap-3 sm:flex-row sm:items-baseline sm:justify-between mb-4">
           <div>
-            <h1 className="text-cyan-300 text-xl tracking-[0.3em]">NOLMIR</h1>
+            <h1 className="text-cyan-300 text-xl tracking-[0.3em]">THE CRUCIBLE</h1>
             <p className="text-slate-500 text-xs mt-1">
               {doc.name} · the beacon is lit · challengers are coming
             </p>
@@ -216,22 +228,9 @@ export default function NolmirPage() {
             <span className="text-sky-300/90" title="corelight — the forge's bank">
               ◈ <b className="tabular-nums">{Math.floor(corelight).toLocaleString()}</b>
             </span>
-            <a href="/nolmir" className="tracking-[0.2em] text-xs uppercase text-cyan-400/70 hover:text-cyan-300 border border-cyan-900/60 rounded px-2 py-1" title="the command deck — the whole ship at a glance">⌂ deck</a>
+            <Emblem kind="deck" href="/nolmir" label="DECK" />
             <Emblem kind="starforge" href="/nolmir/starforge" label="STARFORGE" />
             <Emblem kind="expeditions" href="/nolmir/expeditions" label="EXPEDITIONS" />
-            <button
-              onClick={() => {
-                sfx.ensure()
-                const m = !muted
-                sfx.setMuted(m)
-                setMuted(m)
-                if (!m) sfx.play('click')
-              }}
-              title={muted ? 'sound off — click to enable' : 'sound on'}
-              className="text-base leading-none text-slate-500 hover:text-cyan-300 transition-colors"
-            >
-              {muted ? '🔇' : '🔊'}
-            </button>
             {/* ledger icon — placeholder glyph until Alex draws the real one */}
             <button
               onClick={() => setLedgerOpen((v) => !v)}
@@ -249,9 +248,11 @@ export default function NolmirPage() {
                 </span>
               )}
             </button>
-            <a href="/nolmir/dev" className="text-slate-500 hover:text-cyan-300 transition-colors">
-              [edit]
-            </a>
+            {isOwner && (
+              <a href="/nolmir/dev" className="text-slate-500 hover:text-cyan-300 transition-colors">
+                [edit]
+              </a>
+            )}
           </div>
         </header>
 

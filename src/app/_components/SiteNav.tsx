@@ -29,7 +29,7 @@ const focusables = (root: HTMLElement) =>
     root.querySelectorAll<HTMLElement>('a[href], button:not([disabled])'),
   ).filter((el) => el.offsetParent !== null);
 
-type Crumb = { label: string; href?: string; onClick?: () => void };
+export type Crumb = { label: string; href?: string; onClick?: () => void };
 
 export default function SiteNav({
   gameId,
