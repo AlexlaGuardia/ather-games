@@ -6,8 +6,13 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import Breach, { HudSnapshot } from '../components/Breach'
 import Emblem from '../components/Emblem'
+import Panel from '../components/Panel'
+import { useFitScale } from '../components/useFitScale'
 import SiteNav from '../../_components/SiteNav'
 import { nolmirCrumbs } from '../lib/nav'
+
+const VIOLET = '#a78bfa'
+const BREACH_PX = 640 // the arena's natural square size (see Breach.tsx)
 import { useGainFx, FloatLayer, flashCls, GainFxStyles } from '../components/gainfx'
 import { DOCTRINES, DoctrineId, RunConfig, RunResult, defaultAnchors } from '../lib/expedition'
 import {
@@ -48,6 +53,8 @@ export default function ExpeditionsPage() {
   const [tier, setTier] = useState(1)
   const [anchors, setAnchors] = useState(defaultAnchors())
   const [placeIdx, setPlaceIdx] = useState(0)
+  const [overlay, setOverlay] = useState<null | 'setup' | 'workshop'>(null)
+  const fit = useFitScale(BREACH_PX, BREACH_PX)
   const [cfg, setCfg] = useState<RunConfig | null>(null)
   const [hud, setHud] = useState<HudSnapshot | null>(null)
   const [after, setAfter] = useState<AfterState | null>(null)
@@ -226,35 +233,35 @@ export default function ExpeditionsPage() {
   if (!mounted) return <div className="min-h-screen bg-[#070a10]" />
 
   return (
-    <div className="min-h-screen bg-[#070a10] text-slate-300 font-mono">
+    <div className="h-[100dvh] flex flex-col overflow-hidden bg-[#070a10] text-slate-300 font-mono">
       <SiteNav gameId="nolmir" wall={1} crumbs={nolmirCrumbs('Expeditions')} soundOn={!muted} onToggleSound={toggleMute} />
-      <div className="max-w-[1200px] mx-auto px-4 py-6">
-        <header className="flex items-baseline justify-between mb-4">
-          <div>
-            <h1 className="text-violet-300 text-xl tracking-[0.3em]">EXPEDITIONS</h1>
-            <p className="text-slate-500 text-xs mt-1">
-              hold the breach · there is no winning · you survive longer
-            </p>
-          </div>
-          <div className="flex gap-5 text-sm items-center">
-            <span className="text-amber-300 relative" title="marks — the workshop's coin">
-              ✶ <b className={`tabular-nums inline-block ${flashCls(marksFx.flash)}`}>{(host.marks ?? 0).toLocaleString()}</b>
-              <FloatLayer floaters={marksFx.floaters} />
-              {awayMarks > 0 && (
-                <span className="ml-1.5 text-[11px] text-emerald-300/90" title="salvage the garrison gathered while you were away">
-                  +{awayMarks.toLocaleString()} held
-                </span>
-              )}
-            </span>
+
+      {/* header — pinned, compact */}
+      <header className="shrink-0 flex items-center justify-between gap-3 px-4 pt-4 pb-2">
+        <div className="min-w-0">
+          <h1 className="text-violet-300 text-lg sm:text-xl tracking-[0.3em]">EXPEDITIONS</h1>
+          <p className="text-slate-500 text-[11px] mt-0.5 hidden sm:block">hold the breach · there is no winning · you survive longer</p>
+        </div>
+        <div className="flex gap-3 sm:gap-5 text-sm items-center">
+          <span className="text-amber-300 relative" title="marks — the workshop's coin">
+            ✶ <b className={`tabular-nums inline-block ${flashCls(marksFx.flash)}`}>{(host.marks ?? 0).toLocaleString()}</b>
+            <FloatLayer floaters={marksFx.floaters} />
+            {awayMarks > 0 && (
+              <span className="ml-1.5 text-[11px] text-emerald-300/90" title="salvage the garrison gathered while you were away">+{awayMarks.toLocaleString()} held</span>
+            )}
+          </span>
+          <div className="hidden sm:flex gap-3 items-center">
             <Emblem kind="deck" href="/nolmir" label="DECK" />
             <Emblem kind="crucible" href="/nolmir/crucible" label="CRUCIBLE" />
             <Emblem kind="starforge" href="/nolmir/starforge" label="STARFORGE" />
           </div>
-        </header>
+        </div>
+      </header>
 
-        <div className="flex flex-col lg:flex-row gap-4">
-          {/* the breach */}
-          <div className="overflow-x-auto flex justify-center">
+      {/* HERO: the arena fills the space, scaled to fit; controls dock at the bottom */}
+      <main className="flex-1 min-h-0 relative">
+        <div ref={fit.ref} className="absolute inset-0 grid place-items-center overflow-hidden px-2 pb-[96px]">
+          <div style={{ width: BREACH_PX, height: BREACH_PX, transform: `scale(${fit.scale})` }} className="origin-center shrink-0">
             <Breach
               placing={phase === 'prep'}
               anchors={anchors}
@@ -273,354 +280,277 @@ export default function ExpeditionsPage() {
               onEnd={onEnd}
             />
           </div>
+        </div>
 
-          {/* the panel */}
-          <div className="flex-1 min-w-[18rem] space-y-3 text-sm">
+        {/* control dock — over the arena, never scrolls the page */}
+        <div className="absolute inset-x-0 bottom-0 p-3">
+          <div className="mx-auto max-w-3xl rounded-lg border border-violet-900/50 bg-[#0b101c]/92 backdrop-blur px-3 py-2">
             {phase === 'prep' && (
-              <>
-                <section className="rounded-lg border border-slate-800 bg-[#0b101c]/80 p-3">
-                  <h2 className="text-slate-500 text-xs tracking-widest mb-2">THE SQUAD</h2>
-                  <ul className="space-y-1">
-                    {squad.map((g, i) => (
-                      <li key={i} className="flex items-baseline gap-2">
-                        <span className="text-amber-300">{g.glyph}</span>
-                        <span className="text-slate-200 w-14">{g.name}</span>
-                        <span className="text-violet-300/80 text-xs tabular-nums w-8">lv{g.level}</span>
-                        <span className="text-slate-500 text-xs">
-                          {g.role} · v{g.hp} e{g.atk} r{g.range}
-                        </span>
-                        <button
-                          onClick={() => setPlaceIdx(i)}
-                          className={`ml-auto text-xs px-2 rounded border ${
-                            placeIdx === i
-                              ? 'border-amber-400 text-amber-300'
-                              : 'border-slate-800 text-slate-500 hover:border-slate-600'
-                          }`}
-                        >
-                          place
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                  <p className="text-slate-600 text-xs mt-2">
-                    click the arena to set {squad[placeIdx]?.name ?? 'a guard'}&apos;s post — the trinity holds the core, ranges go dark once the tide comes
-                  </p>
-                </section>
-
-                <section className="rounded-lg border border-slate-800 bg-[#0b101c]/80 p-3">
-                  <h2 className="text-slate-500 text-xs tracking-widest mb-2">
-                    YOUR ROSTER — equip slot {placeIdx + 1}
-                  </h2>
-                  <div className="grid grid-cols-2 gap-1.5">
-                    {(forge?.collection ?? []).map((id) => {
-                      const p = profileById(id)
-                      const equippedHere = forge?.sigils[placeIdx]?.profileId === id
-                      const equippedElsewhere = forge?.sigils.some((s, i) => i !== placeIdx && s.profileId === id)
-                      return (
-                        <button
-                          key={id}
-                          onClick={() => equipProfile(placeIdx, id)}
-                          className={`text-left px-2 py-1 rounded border text-xs ${
-                            equippedHere
-                              ? 'border-amber-400 text-amber-200 bg-amber-950/20'
-                              : 'border-slate-800 text-slate-400 hover:border-slate-600'
-                          }`}
-                        >
-                          <span className="text-amber-300 mr-1">{p.glyph}</span>
-                          <b>{p.name}</b>
-                          <span className="text-slate-600"> · t{p.tier}</span>
-                          <div className="text-slate-600 leading-tight">
-                            {ROLE_LABEL[p.role]}
-                            {equippedElsewhere ? ' · equipped' : ''}
-                          </div>
-                        </button>
-                      )
-                    })}
-                  </div>
-                  {forge &&
-                    (() => {
-                      const sig = forge.sigils[placeIdx]
-                      const o = ownedFor(forge, sig.profileId)
-                      const prof = profileById(sig.profileId ?? 'lancer')
-                      const skills = profileSkills(prof.id)
-                      const tal = o.talent ?? 0
-                      const cost = marksTalentCost(o)
-                      const prog = guardProgress(o.xp)
-                      const levelReq = talentLevelReq(tal + 1)
-                      const levelGated = tal < TALENT_CAP && o.level < levelReq
-                      const can = (host.marks ?? 0) >= cost && tal < TALENT_CAP && !levelGated
-                      return (
-                        <div className="mt-3 border-t border-slate-800 pt-2">
-                          {/* the equipped creature's level — grows from holding breaches */}
-                          <div className="flex items-baseline justify-between mb-0.5">
-                            <span className="text-violet-300 text-xs tracking-widest">LEVEL {prog.level}</span>
-                            <span className="text-slate-600 text-[10px] tabular-nums">{prog.into}/{prog.span} xp</span>
-                          </div>
-                          <div className="h-1 bg-slate-900 rounded mb-2">
-                            <div className="h-1 rounded bg-violet-400/80" style={{ width: `${(100 * prog.into) / prog.span}%` }} />
-                          </div>
-                          <div className="flex items-center justify-between mb-1">
-                            <span className="text-slate-500 text-xs tracking-widest">
-                              {prof.name.toUpperCase()} · TALENT {tal}/{TALENT_CAP}
-                            </span>
-                            <button
-                              onClick={() => upgradeTalent(placeIdx)}
-                              disabled={!can}
-                              title={levelGated ? `needs level ${levelReq}` : ''}
-                              className={`text-xs px-2 py-0.5 rounded border tabular-nums ${
-                                can
-                                  ? 'border-amber-700 text-amber-300 hover:bg-amber-950/30'
-                                  : 'border-slate-900 text-slate-700 cursor-not-allowed'
-                              }`}
-                            >
-                              {tal >= TALENT_CAP ? 'maxed' : levelGated ? `lv ${levelReq}` : `✶${cost}`}
-                            </button>
-                          </div>
-                          <ul className="space-y-0.5 text-xs">
-                            {skills.map((sk, i) => {
-                              const unlocked = i < tal
-                              const reqFor = talentLevelReq(i + 1)
-                              return (
-                                <li key={i} className={unlocked ? 'text-violet-200' : 'text-slate-600'}>
-                                  <span className="mr-1">{unlocked ? '◆' : '◇'}</span>
-                                  <b>{sk.name}</b> <span className="text-slate-600">— {sk.line}</span>
-                                  {!unlocked && o.level < reqFor && (
-                                    <span className="text-slate-700"> · lv {reqFor}</span>
-                                  )}
-                                </li>
-                              )
-                            })}
-                          </ul>
-                        </div>
-                      )
-                    })()}
-                  <p className="text-slate-600 text-xs mt-2">
-                    pick a slot above (place), then equip a profile + spend marks on talent — combinations beat raw power
-                  </p>
-                </section>
-
-                <section className="rounded-lg border border-slate-800 bg-[#0b101c]/80 p-3">
-                  <h2 className="text-slate-500 text-xs tracking-widest mb-2">DOCTRINE</h2>
-                  <div className="space-y-1">
-                    {DOCTRINES.map((d) => (
-                      <button
-                        key={d.id}
-                        onClick={() => setDoctrine(d.id)}
-                        className={`block w-full text-left px-2 py-1 rounded border text-xs ${
-                          doctrine === d.id
-                            ? 'border-violet-500 text-violet-200 bg-violet-950/30'
-                            : 'border-slate-800 text-slate-400 hover:border-slate-600'
-                        }`}
-                      >
-                        <b>{d.name}</b> — {d.line}
-                      </button>
-                    ))}
-                  </div>
-                  <p className="text-slate-600 text-xs mt-2">
-                    salvage spends itself — the squad manages the hold. your hand stays on this side of the gate.
-                  </p>
-                </section>
-
-                <section className="rounded-lg border border-slate-800 bg-[#0b101c]/80 p-3">
-                  <h2 className="text-slate-500 text-xs tracking-widest mb-2">THE BREACH</h2>
-                  <div className="flex gap-2 flex-wrap">
-                    {Array.from({ length: unlocked }, (_, i) => i + 1).map((t) => (
-                      <button
-                        key={t}
-                        onClick={() => setTier(t)}
-                        className={`px-2 py-1 rounded border text-xs ${
-                          tier === t
-                            ? 'border-violet-500 text-violet-200'
-                            : 'border-slate-800 text-slate-400 hover:border-slate-600'
-                        }`}
-                      >
-                        breach {t}
-                        <span className="text-slate-600 ml-1">best {bestWave(meta, t)}</span>
-                      </button>
-                    ))}
-                    <span className="px-2 py-1 text-xs text-slate-700 border border-slate-900 rounded">
-                      hold wave {TIER_UNLOCK_WAVE} to descend
-                    </span>
-                  </div>
-                </section>
-
-                <button
-                  onClick={deploy}
-                  className="w-full py-2 rounded border text-sm tracking-widest border-violet-500 text-violet-200 hover:bg-violet-950/40"
-                >
-                  OPEN THE GATE
-                </button>
-              </>
+              <div className="flex items-center gap-2 flex-wrap">
+                <div className="flex gap-1.5">
+                  {squad.map((g, i) => (
+                    <button
+                      key={i}
+                      onClick={() => setPlaceIdx(i)}
+                      title={`${g.name} lv${g.level} · click, then click the arena to set its post`}
+                      className={`flex items-center gap-1 px-2 py-1 rounded border text-xs ${
+                        placeIdx === i ? 'border-amber-400 text-amber-200 bg-amber-950/20' : 'border-slate-800 text-slate-400 hover:border-slate-600'
+                      }`}
+                    >
+                      <span className="text-amber-300">{g.glyph}</span>
+                      <span className="hidden sm:inline">{g.name}</span>
+                      <span className="text-violet-300/70 tabular-nums">lv{g.level}</span>
+                    </button>
+                  ))}
+                </div>
+                <span className="text-slate-600 text-[10px] hidden md:inline">click a post, then the arena</span>
+                <div className="ml-auto flex items-center gap-2">
+                  <button onClick={() => setOverlay('setup')} className="px-2.5 py-1 rounded border border-slate-700 text-slate-300 text-xs hover:border-violet-500 hover:text-violet-200">⚙ staging</button>
+                  <button onClick={() => setOverlay('workshop')} className="px-2.5 py-1 rounded border border-slate-700 text-slate-300 text-xs hover:border-amber-600 hover:text-amber-200">⚒ workshop</button>
+                  <button onClick={deploy} className="px-3 py-1 rounded border border-violet-500 text-violet-100 text-xs tracking-widest hover:bg-violet-950/40">OPEN THE GATE</button>
+                </div>
+              </div>
             )}
 
             {phase === 'run' && hud && (
-              <>
-                <section className="rounded-lg border border-slate-800 bg-[#0b101c]/80 p-3 space-y-2">
-                  <div className="flex items-baseline justify-between">
-                    <span className="text-violet-300 text-lg">
-                      wave <b className="tabular-nums">{hud.wave}</b>
-                    </span>
-                    <span className="text-xs text-slate-500">{hud.phase === 'breaking' ? 'the lull' : 'the tide'}</span>
+              <div className="flex items-center gap-x-3 gap-y-1 flex-wrap text-xs">
+                <span className="text-violet-300">wave <b className="tabular-nums">{hud.wave}</b></span>
+                <span className="text-slate-500">{hud.phase === 'breaking' ? 'the lull' : 'the tide'}</span>
+                <div className="flex-1 min-w-[130px]">
+                  <div className="flex justify-between text-[10px] text-slate-500 mb-0.5">
+                    <span>the core</span>
+                    <span className="tabular-nums">{hud.gate}/{hud.gateMax}</span>
                   </div>
-                  <div>
-                    <div className="flex justify-between text-xs text-slate-500 mb-1">
-                      <span>the core</span>
-                      <span className="tabular-nums">
-                        {hud.gate}/{hud.gateMax}
+                  <div className="h-1.5 bg-slate-900 rounded">
+                    <div className={`h-1.5 rounded ${hud.gate / hud.gateMax > 0.35 ? 'bg-cyan-400' : 'bg-red-400'}`} style={{ width: `${(100 * hud.gate) / hud.gateMax}%` }} />
+                  </div>
+                </div>
+                <span className="text-amber-300">salvage <b className="tabular-nums">{hud.salvage}</b></span>
+                <span className="text-slate-400">fallen <b className="tabular-nums">{hud.kills}</b></span>
+                <div className="flex gap-2">
+                  {hud.guards.map((g) => (
+                    <span key={g.name} title={g.name} className="flex items-center gap-1">
+                      <span className={`text-[10px] ${g.alive ? 'text-amber-300' : 'text-slate-600 line-through'}`}>{g.name}</span>
+                      <span className="w-8 h-1 bg-slate-900 rounded inline-block align-middle">
+                        <span className="block h-1 rounded bg-green-400" style={{ width: `${(100 * g.hp) / g.maxHp}%` }} />
                       </span>
-                    </div>
-                    <div className="h-1.5 bg-slate-900 rounded">
-                      <div
-                        className={`h-1.5 rounded ${hud.gate / hud.gateMax > 0.35 ? 'bg-cyan-400' : 'bg-red-400'}`}
-                        style={{ width: `${(100 * hud.gate) / hud.gateMax}%` }}
-                      />
-                    </div>
-                  </div>
-                  <div className="flex gap-4 text-xs">
-                    <span className="text-amber-300">
-                      salvage <b className="tabular-nums">{hud.salvage}</b>
                     </span>
-                    <span className="text-slate-400">
-                      fallen <b className="tabular-nums">{hud.kills}</b>
-                    </span>
-                    <span className="text-slate-500 tabular-nums">
-                      A{hud.tracks[0]} · B{hud.tracks[1]} · L{hud.tracks[2]}
-                    </span>
-                  </div>
-                </section>
-
-                <section className="rounded-lg border border-slate-800 bg-[#0b101c]/80 p-3">
-                  <h2 className="text-slate-500 text-xs tracking-widest mb-2">THE LINE</h2>
-                  <ul className="space-y-1 text-xs">
-                    {hud.guards.map((g) => (
-                      <li key={g.name} className="flex items-center gap-2">
-                        <span className={`w-12 ${g.alive ? 'text-amber-300' : 'text-slate-600 line-through'}`}>{g.name}</span>
-                        <div className="flex-1 h-1 bg-slate-900 rounded">
-                          <div className="h-1 rounded bg-green-400" style={{ width: `${(100 * g.hp) / g.maxHp}%` }} />
-                        </div>
-                      </li>
-                    ))}
-                  </ul>
-                </section>
-
-                {hud.feed.length > 0 && (
-                  <section className="rounded-lg border border-slate-800 bg-[#0b101c]/80 p-3">
-                    <ul className="space-y-1 text-xs text-slate-500">
-                      {hud.feed.map((f, i) => (
-                        <li key={i} className={i === 0 ? 'text-slate-300' : ''}>
-                          {f}
-                        </li>
-                      ))}
-                    </ul>
-                  </section>
-                )}
-              </>
+                  ))}
+                </div>
+                {hud.feed[0] && <span className="text-slate-500 w-full text-[10px] truncate">{hud.feed[0]}</span>}
+              </div>
             )}
 
-            {phase === 'after' && r && (
-              <>
-                <section className="rounded-lg border border-violet-900/60 bg-[#0b101c]/90 p-4 space-y-2">
-                  <h2 className="text-violet-300 text-xs tracking-[0.25em]">THE WASH TOOK THE BREACH</h2>
-                  <p className="text-slate-300">
-                    breach {r.tier} · held to wave <b className="text-slate-100">{r.wave}</b>
-                    {after?.newRecord && <span className="text-amber-300 ml-2">— a deeper hold than any before</span>}
-                  </p>
-                  <p className="text-slate-500 text-xs">
-                    {r.gateFell ? 'the core filled — the Tsunamizilla rose and washed the board' : 'the breach reached its end'} ·{' '}
-                    {r.kills} of the flood undone
-                  </p>
-                  <div className="flex gap-4 text-sm pt-1">
-                    <span className="text-amber-300">
-                      +<b className="tabular-nums">{r.marks}</b> marks
-                    </span>
-                    <span className="text-violet-300 text-xs">
-                      +<b className="tabular-nums">{guardXpGain(r.wave, r.tier)}</b> xp each
-                    </span>
-                    {after?.oreDrop && (
-                      <span className="text-sky-300 text-xs">
-                        +{after.oreDrop.aetherite} aetherite · +{after.oreDrop.manapearl} manapearl
-                      </span>
-                    )}
-                  </div>
-                  {after && after.levelUps.length > 0 && (
-                    <p className="text-violet-200 text-xs pt-1">
-                      {after.levelUps.map((l) => `${l.name} → lv ${l.level}`).join(' · ')}
-                    </p>
-                  )}
-                </section>
-
-                <button
-                  onClick={() => {
-                    setPhase('prep')
-                    setHud(null)
-                  }}
-                  className="w-full py-2 rounded border border-slate-700 text-slate-300 hover:border-violet-500 hover:text-violet-200 text-sm tracking-widest"
-                >
-                  BACK TO THE STAGING GROUND
-                </button>
-              </>
-            )}
-
-            {/* workshop + records — always visible below the fold */}
-            {phase !== 'run' && (
-              <>
-                <section className="rounded-lg border border-slate-800 bg-[#0b101c]/80 p-3">
-                  <h2 className="text-slate-500 text-xs tracking-widest mb-2">THE WORKSHOP</h2>
-                  <ul className="space-y-1.5 text-xs">
-                    {WORKSHOP.map((w) => {
-                      const lv = meta.workshop[w.id] ?? 0
-                      const cost = workshopCost(lv)
-                      const can = (host.marks ?? 0) >= cost
-                      return (
-                        <li key={w.id} className="flex items-center gap-2">
-                          <span className="text-slate-300 w-36">{w.name}</span>
-                          <span className="text-slate-600 flex-1">
-                            lv {lv} — {w.line}
-                          </span>
-                          <button
-                            onClick={() => buyWorkshop(w.id)}
-                            disabled={!can}
-                            className={`px-2 py-0.5 rounded border tabular-nums ${
-                              can
-                                ? 'border-amber-700 text-amber-300 hover:bg-amber-950/30'
-                                : 'border-slate-900 text-slate-700 cursor-not-allowed'
-                            }`}
-                          >
-                            ✶{cost}
-                          </button>
-                        </li>
-                      )
-                    })}
-                  </ul>
-                </section>
-
-                {meta.records.length > 0 && (
-                  <section className="rounded-lg border border-slate-800 bg-[#0b101c]/80 p-3">
-                    <h2 className="text-slate-500 text-xs tracking-widest mb-2">DEEPEST HOLDS</h2>
-                    <ul className="space-y-1 text-xs">
-                      {meta.records.map((rec) => (
-                        <li key={rec.tier} className="flex gap-2 items-baseline">
-                          <span className="text-violet-300 w-20">breach {rec.tier}</span>
-                          <span className="text-slate-200">wave {rec.wave}</span>
-                          <span className="text-slate-600">
-                            {rec.roster.join(' · ')} — {rec.doctrine}
-                          </span>
-                          <span className="text-slate-700 ml-auto">{new Date(rec.at).toLocaleDateString()}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </section>
-                )}
-              </>
+            {phase === 'after' && (
+              <div className="flex items-center justify-between gap-3 text-xs">
+                <span className="text-slate-500">the breach washed — read the salvage</span>
+                <button onClick={() => { setPhase('prep'); setHud(null); setAfter(null) }} className="px-3 py-1 rounded border border-slate-700 text-slate-300 tracking-widest hover:border-violet-500 hover:text-violet-200">BACK TO STAGING</button>
+              </div>
             )}
           </div>
         </div>
+      </main>
 
-        <footer className="mt-6 text-xs text-slate-700 text-center space-y-1">
-          <div>one core · three posts · the flood from every side — wave after wave until the wash takes it</div>
-          <div>an Athernyx story · what took them is not named here</div>
-        </footer>
-      </div>
+      {/* STAGING overlay — roster + talents + doctrine + breach tier */}
+      {overlay === 'setup' && phase === 'prep' && (
+        <Panel title="STAGING GROUND" accent={VIOLET} wide onClose={() => setOverlay(null)}>
+          <div className="space-y-5 text-sm">
+            <div>
+              <div className="text-slate-500 text-xs tracking-widest mb-2">ROSTER — equip slot {placeIdx + 1}</div>
+              <div className="flex gap-1.5 mb-2">
+                {squad.map((g, i) => (
+                  <button
+                    key={i}
+                    onClick={() => setPlaceIdx(i)}
+                    className={`px-2 py-1 rounded border text-xs ${placeIdx === i ? 'border-amber-400 text-amber-200 bg-amber-950/20' : 'border-slate-800 text-slate-500 hover:border-slate-600'}`}
+                  >
+                    slot {i + 1} · {g.name}
+                  </button>
+                ))}
+              </div>
+              <div className="grid grid-cols-2 gap-1.5">
+                {(forge?.collection ?? []).map((id) => {
+                  const p = profileById(id)
+                  const equippedHere = forge?.sigils[placeIdx]?.profileId === id
+                  const equippedElsewhere = forge?.sigils.some((s, i) => i !== placeIdx && s.profileId === id)
+                  return (
+                    <button
+                      key={id}
+                      onClick={() => equipProfile(placeIdx, id)}
+                      className={`text-left px-2 py-1 rounded border text-xs ${
+                        equippedHere ? 'border-amber-400 text-amber-200 bg-amber-950/20' : 'border-slate-800 text-slate-400 hover:border-slate-600'
+                      }`}
+                    >
+                      <span className="text-amber-300 mr-1">{p.glyph}</span>
+                      <b>{p.name}</b>
+                      <span className="text-slate-600"> · t{p.tier}</span>
+                      <div className="text-slate-600 leading-tight">
+                        {ROLE_LABEL[p.role]}
+                        {equippedElsewhere ? ' · equipped' : ''}
+                      </div>
+                    </button>
+                  )
+                })}
+              </div>
+              {forge &&
+                (() => {
+                  const sig = forge.sigils[placeIdx]
+                  const o = ownedFor(forge, sig.profileId)
+                  const prof = profileById(sig.profileId ?? 'lancer')
+                  const skills = profileSkills(prof.id)
+                  const tal = o.talent ?? 0
+                  const cost = marksTalentCost(o)
+                  const prog = guardProgress(o.xp)
+                  const levelReq = talentLevelReq(tal + 1)
+                  const levelGated = tal < TALENT_CAP && o.level < levelReq
+                  const can = (host.marks ?? 0) >= cost && tal < TALENT_CAP && !levelGated
+                  return (
+                    <div className="mt-3 border-t border-slate-800 pt-2">
+                      <div className="flex items-baseline justify-between mb-0.5">
+                        <span className="text-violet-300 text-xs tracking-widest">LEVEL {prog.level}</span>
+                        <span className="text-slate-600 text-[10px] tabular-nums">{prog.into}/{prog.span} xp</span>
+                      </div>
+                      <div className="h-1 bg-slate-900 rounded mb-2">
+                        <div className="h-1 rounded bg-violet-400/80" style={{ width: `${(100 * prog.into) / prog.span}%` }} />
+                      </div>
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-slate-500 text-xs tracking-widest">{prof.name.toUpperCase()} · TALENT {tal}/{TALENT_CAP}</span>
+                        <button
+                          onClick={() => upgradeTalent(placeIdx)}
+                          disabled={!can}
+                          title={levelGated ? `needs level ${levelReq}` : ''}
+                          className={`text-xs px-2 py-0.5 rounded border tabular-nums ${
+                            can ? 'border-amber-700 text-amber-300 hover:bg-amber-950/30' : 'border-slate-900 text-slate-700 cursor-not-allowed'
+                          }`}
+                        >
+                          {tal >= TALENT_CAP ? 'maxed' : levelGated ? `lv ${levelReq}` : `✶${cost}`}
+                        </button>
+                      </div>
+                      <ul className="space-y-0.5 text-xs">
+                        {skills.map((sk, i) => {
+                          const unlocked = i < tal
+                          const reqFor = talentLevelReq(i + 1)
+                          return (
+                            <li key={i} className={unlocked ? 'text-violet-200' : 'text-slate-600'}>
+                              <span className="mr-1">{unlocked ? '◆' : '◇'}</span>
+                              <b>{sk.name}</b> <span className="text-slate-600">— {sk.line}</span>
+                              {!unlocked && o.level < reqFor && <span className="text-slate-700"> · lv {reqFor}</span>}
+                            </li>
+                          )
+                        })}
+                      </ul>
+                    </div>
+                  )
+                })()}
+            </div>
+
+            <div>
+              <div className="text-slate-500 text-xs tracking-widest mb-2">DOCTRINE</div>
+              <div className="space-y-1">
+                {DOCTRINES.map((d) => (
+                  <button
+                    key={d.id}
+                    onClick={() => setDoctrine(d.id)}
+                    className={`block w-full text-left px-2 py-1 rounded border text-xs ${
+                      doctrine === d.id ? 'border-violet-500 text-violet-200 bg-violet-950/30' : 'border-slate-800 text-slate-400 hover:border-slate-600'
+                    }`}
+                  >
+                    <b>{d.name}</b> — {d.line}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <div className="text-slate-500 text-xs tracking-widest mb-2">THE BREACH</div>
+              <div className="flex gap-2 flex-wrap">
+                {Array.from({ length: unlocked }, (_, i) => i + 1).map((t) => (
+                  <button
+                    key={t}
+                    onClick={() => setTier(t)}
+                    className={`px-2 py-1 rounded border text-xs ${tier === t ? 'border-violet-500 text-violet-200' : 'border-slate-800 text-slate-400 hover:border-slate-600'}`}
+                  >
+                    breach {t}
+                    <span className="text-slate-600 ml-1">best {bestWave(meta, t)}</span>
+                  </button>
+                ))}
+                <span className="px-2 py-1 text-xs text-slate-700 border border-slate-900 rounded">hold wave {TIER_UNLOCK_WAVE} to descend</span>
+              </div>
+            </div>
+          </div>
+        </Panel>
+      )}
+
+      {/* WORKSHOP overlay — upgrades + records */}
+      {overlay === 'workshop' && (
+        <Panel title="THE WORKSHOP" accent={VIOLET} onClose={() => setOverlay(null)}>
+          <ul className="space-y-1.5 text-xs">
+            {WORKSHOP.map((w) => {
+              const lv = meta.workshop[w.id] ?? 0
+              const cost = workshopCost(lv)
+              const can = (host.marks ?? 0) >= cost
+              return (
+                <li key={w.id} className="flex items-center gap-2">
+                  <span className="text-slate-300 w-36">{w.name}</span>
+                  <span className="text-slate-600 flex-1">lv {lv} — {w.line}</span>
+                  <button
+                    onClick={() => buyWorkshop(w.id)}
+                    disabled={!can}
+                    className={`px-2 py-0.5 rounded border tabular-nums ${can ? 'border-amber-700 text-amber-300 hover:bg-amber-950/30' : 'border-slate-900 text-slate-700 cursor-not-allowed'}`}
+                  >
+                    ✶{cost}
+                  </button>
+                </li>
+              )
+            })}
+          </ul>
+          {meta.records.length > 0 && (
+            <div className="mt-4 border-t border-slate-800 pt-3">
+              <div className="text-slate-500 text-xs tracking-widest mb-2">DEEPEST HOLDS</div>
+              <ul className="space-y-1 text-xs">
+                {meta.records.map((rec) => (
+                  <li key={rec.tier} className="flex gap-2 items-baseline">
+                    <span className="text-violet-300 w-20">breach {rec.tier}</span>
+                    <span className="text-slate-200">wave {rec.wave}</span>
+                    <span className="text-slate-600 truncate">{rec.roster.join(' · ')} — {rec.doctrine}</span>
+                    <span className="text-slate-700 ml-auto shrink-0">{new Date(rec.at).toLocaleDateString()}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </Panel>
+      )}
+
+      {/* RESULTS overlay — the after-run salvage */}
+      {phase === 'after' && r && (
+        <Panel title="THE WASH TOOK THE BREACH" accent={VIOLET} onClose={() => { setPhase('prep'); setHud(null); setAfter(null) }}>
+          <p className="text-slate-300">
+            breach {r.tier} · held to wave <b className="text-slate-100">{r.wave}</b>
+            {after?.newRecord && <span className="text-amber-300 ml-2">— a deeper hold than any before</span>}
+          </p>
+          <p className="text-slate-500 text-xs mt-1">
+            {r.gateFell ? 'the core filled — the Tsunamizilla rose and washed the board' : 'the breach reached its end'} · {r.kills} of the flood undone
+          </p>
+          <div className="flex gap-4 text-sm pt-2">
+            <span className="text-amber-300">+<b className="tabular-nums">{r.marks}</b> marks</span>
+            <span className="text-violet-300 text-xs">+<b className="tabular-nums">{guardXpGain(r.wave, r.tier)}</b> xp each</span>
+            {after?.oreDrop && (
+              <span className="text-sky-300 text-xs">+{after.oreDrop.aetherite} aetherite · +{after.oreDrop.manapearl} manapearl</span>
+            )}
+          </div>
+          {after && after.levelUps.length > 0 && (
+            <p className="text-violet-200 text-xs pt-1">{after.levelUps.map((l) => `${l.name} → lv ${l.level}`).join(' · ')}</p>
+          )}
+          <button
+            onClick={() => { setPhase('prep'); setHud(null); setAfter(null) }}
+            className="mt-4 w-full py-2 rounded border border-slate-700 text-slate-300 hover:border-violet-500 hover:text-violet-200 text-sm tracking-widest"
+          >
+            BACK TO THE STAGING GROUND
+          </button>
+        </Panel>
+      )}
+
       <GainFxStyles />
     </div>
   )
