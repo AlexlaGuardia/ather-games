@@ -292,11 +292,11 @@ export default function StarforgePage() {
       </div>
 
       {/* the rooms float over the system; empty space passes clicks through */}
-      <div className="relative z-10 max-w-4xl mx-auto px-4 py-6 pointer-events-none [&>*]:pointer-events-auto">
-        <header className="flex flex-col gap-3 sm:flex-row sm:items-baseline sm:justify-between mb-4">
-          <div>
-            <h1 className={`${display.className} text-sky-300 text-xl tracking-[0.3em]`}>THE STARFORGE</h1>
-            <p className="text-slate-500 text-xs mt-1">
+      <div className="relative z-10 max-w-4xl mx-auto px-4 py-3 pointer-events-none [&>*]:pointer-events-auto">
+        <header className="flex items-start justify-between gap-3 mb-3">
+          <div className="min-w-0">
+            <h1 className={`${display.className} text-sky-300 text-lg sm:text-xl tracking-[0.3em]`}>THE STARFORGE</h1>
+            <p className="text-slate-500 text-[11px] mt-0.5 hidden sm:block">
               node {forge.node ?? 1} · the core hums · the system turns · nobody is watching
               {(forge.echoes ?? 0) > 0 && (
                 <span className="text-amber-300/70"> · {forge.echoes} echoes ×{echoMult(forge).toFixed(2)}</span>
@@ -306,7 +306,7 @@ export default function StarforgePage() {
               )}
             </p>
           </div>
-          <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
+          <div className="flex flex-wrap items-center justify-end gap-x-3 gap-y-1 text-sm">
             <span className="text-sky-300 relative">
               ◈ <b className={`tabular-nums inline-block ${flashCls(coreFlash)}`}>{fmt(forge.corelight)}</b>
               <span className="text-slate-600 text-xs ml-1">+{rate.toFixed(1)}/s</span>
@@ -315,19 +315,22 @@ export default function StarforgePage() {
             <span className="text-fuchsia-300/90">
               mana <b className="tabular-nums">{fmt(host.mana)}</b>
             </span>
-            <Emblem kind="deck" href="/nolmir" label="DECK" />
-            <Emblem kind="crucible" href="/nolmir/crucible" label="CRUCIBLE" />
-            <Emblem kind="expeditions" href="/nolmir/expeditions" label="EXPEDITIONS" />
+            {/* siblings live in the ☰ drawer on mobile — the corner button covers nav there */}
+            <div className="hidden sm:flex items-center gap-3">
+              <Emblem kind="deck" href="/nolmir" label="DECK" />
+              <Emblem kind="crucible" href="/nolmir/crucible" label="CRUCIBLE" />
+              <Emblem kind="expeditions" href="/nolmir/expeditions" label="EXPEDITIONS" />
+            </div>
           </div>
         </header>
 
-        {/* the deck — one room at a time */}
-        <nav className="flex gap-1 mb-5 flex-wrap">
+        {/* the deck — one room at a time; single scrollable row, never wraps */}
+        <nav className="flex gap-1 mb-3 overflow-x-auto no-scrollbar -mx-1 px-1">
           {ROOMS.map((r) => (
             <button
               key={r.id}
               onClick={() => setRoom(r.id)}
-              className={`${display.className} px-3 py-1 text-[11px] tracking-[0.2em] rounded border transition-colors backdrop-blur-sm ${
+              className={`${display.className} shrink-0 px-3 py-1 text-[11px] tracking-[0.2em] rounded border transition-colors backdrop-blur-sm ${
                 room === r.id
                   ? 'border-sky-500 text-sky-200 bg-sky-950/40'
                   : 'border-slate-800 text-slate-600 bg-[#070a10]/60 hover:border-slate-600 hover:text-slate-300'

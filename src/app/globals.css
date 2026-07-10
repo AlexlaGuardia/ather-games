@@ -37,6 +37,10 @@ body {
 .shimmer-scroll::-webkit-scrollbar-thumb:hover { background: rgba(212, 168, 67, 0.3); }
 .shimmer-scroll { scrollbar-width: thin; scrollbar-color: rgba(212, 168, 67, 0.15) transparent; }
 
+/* Hide the scrollbar on a horizontally-scrollable strip (e.g. the Starforge tab row) */
+.no-scrollbar { scrollbar-width: none; -ms-overflow-style: none; }
+.no-scrollbar::-webkit-scrollbar { display: none; }
+
 /* Hero atmosphere */
 .hero-void-glow {
   background:
