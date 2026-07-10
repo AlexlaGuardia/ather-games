@@ -75,6 +75,19 @@ Fix: `memo` on `Scene` + markers, `useMemo` the two filtered arrays keyed on `[z
 Drives idle render cost to ~zero. This is the cheapest perf win in the codebase.
 
 ### 6. Save routes interpolate unvalidated payload into source files
+> **✅ FIXED 2026-07-10 (`a97cd9c`).** Shared guards in `shimmer/lib/safe.ts` (`safeId` / `safeTsFile` /
+> `safeInt` / `safeNum` / `safeColors` / `escText` / `gridMax` / `lookup`), applied across all 26 body
+> blocks of `save-map`, all 5 handlers of `save-sprite`, and `save-npc`. Guard failures now 400.
+> `lib/safe.test.ts` = 57 assertions, mutation-checked (7 guards loosened one at a time, each fails the
+> suite). Verified live: every payload below 400s and writes nothing; legit saves round-trip byte-identical.
+>
+> **The audit undersold two of these — they were the sharp ones.** `save-sprite`'s `species` traversal was
+> a *write* outside `sprites/` (creates `../../world/x.ts`), and `save-npc`'s `spriteFile` — not listed
+> below — was joined onto `SPRITE_DIR` and **read**, so `"../../../../.env"` was an arbitrary file read.
+> Also unlisted: `Record<string,T>[key]` returns truthy for `constructor`/`toString`, and that value flowed
+> on as a filename. Two enum mirrors were needed (`Rarity` has five members incl. `epic`; `CharRole` is
+> `player|npc`) — reading the union beat assuming it.
+
 Owner-only (see "ruled out"), so this is *self*-corruption, not a vuln. Still a real footgun — a
 malformed editor payload writes broken TypeScript into tracked source and breaks the build.
 
@@ -88,6 +101,14 @@ malformed editor payload writes broken TypeScript into tracked source and breaks
 
 `save-dialogue/route.ts:16` and `save-structure/route.ts:41` already have the fix: `SAFE_ID = /^[a-zA-Z0-9_-]+$/`.
 Copy it to `save-map`, `save-sprite`, `save-npc`. Coerce numerics; `JSON.stringify` interpolated strings.
+
+**Found while fixing (new, unclaimed):** `src/app/api/shimmer/save-sprite/route.ts` (70 lines) is a **dead
+duplicate** of `src/app/shimmer/save-sprite/route.ts`. Zero callers — every editor fetches `/shimmer/save-sprite`
+(`PixelEditor.tsx`, `NodeEditor.tsx`, `FurnitureEditor.tsx`, …). It is the *safer* of the two (allowlisted
+species + anim, digit-format checked) but it is a live, owner-gated, source-mutating endpoint that nothing
+uses and nobody maintains — its `FRAME_MAP` has already drifted from the real one. Candidate for deletion;
+left in place because deleting a reachable route is Alex's call, not a drive-by. (`.sim.ts` lesson: a name
+is a claim, not a fact — this one was verified by grep across the whole repo, not by its path.)
 
 ---
 

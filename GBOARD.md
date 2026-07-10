@@ -25,6 +25,10 @@ the Arcade frame.
 > brew/craft to 5 — added **Chest / Exchange Booth / Farm Planter** on a generalized station-menu system.
 > Full detail + Left off/Next lives in `SHIMMER_SESSION.md` (its own session cadence, not cabinet-shaped).
 >
+> **Shimmer save-route guards SHIPPED 2026-07-10 (`a97cd9c`)** — `shimmer/lib/safe.ts` + 57 mutation-checked
+> assertions; closed the audit's P1. Two real defects behind it (a sprite-dir write escape, an arbitrary file
+> read via `save-npc`'s `spriteFile`), not just cosmetics. Detail in `SHIMMER_SESSION.md` + the audit doc.
+>
 > **Shimmer Decisions (don't relitigate):**
 > - **✖ KILLED — Mana'mal care loop / races / menagerie (Alex, 2026-07-05).** Companions stay **simple**:
 >   one flat passive perk each, no feed→happiness→perk-strength tending, no races mini-game, no home-plot
