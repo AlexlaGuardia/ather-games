@@ -162,8 +162,11 @@ export default function DeckPage() {
     <div className={`gx-chrome min-h-screen bg-[#070a10] text-slate-300 font-mono ${display.className}`}>
       <SiteNav gameId="nolmir" wall={1} />
       <div className="mx-auto w-full max-w-[520px] px-4 py-6">
-        <header className="flex items-center justify-between mb-5">
-          <a href="/arcade/all" className="text-[10px] tracking-[0.25em] uppercase text-cyan-400/50 hover:text-cyan-300">&#8592; arcade</a>
+        {/* 3-col grid, not justify-between: the "← arcade" link used to hold the left
+            slot open and the drawer replaced it. A grid keeps the title centred
+            without a link (or a spacer div) propping it up. */}
+        <header className="grid grid-cols-3 items-center mb-5">
+          <div aria-hidden />
           <div className="text-center">
             <div className="text-cyan-300 text-lg tracking-[0.4em] uppercase" style={{ textShadow: '0 0 10px #22d3ee70' }}>Nolmir</div>
             <div className="text-[9px] text-slate-500 tracking-[0.3em] uppercase">command deck</div>

@@ -11,12 +11,23 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { liveGames, gameById, type GameEntry } from "@/lib/games";
 import { getFavs, toggleFav } from "@/lib/favorites";
 import { getRecents, pushRecent } from "@/lib/recents";
 
 const GOLD = "#d4a843"; // arcade "furniture" colour — the nav is furniture, fixed across games
+const CLOSE_MS = 170; // must match the sitenav-slide-out duration below
+
+const prefersReducedMotion = () =>
+  typeof window !== "undefined" &&
+  window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+
+/** Focusable descendants, in DOM order. Enough for a drawer of links and buttons. */
+const focusables = (root: HTMLElement) =>
+  Array.from(
+    root.querySelectorAll<HTMLElement>('a[href], button:not([disabled])'),
+  ).filter((el) => el.offsetParent !== null);
 
 type Crumb = { label: string; href?: string; onClick?: () => void };
 
@@ -45,10 +56,17 @@ export default function SiteNav({
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
+  // `closing` keeps the drawer mounted for one exit animation. Without it the
+  // drawer slid in and then vanished on a hard cut.
+  const [closing, setClosing] = useState(false);
   // re-read local state each open so recents/faves reflect the latest play
   const [recents, setRecents] = useState<GameEntry[]>([]);
   const [favs, setFavs] = useState<GameEntry[]>([]);
   const [isFav, setIsFav] = useState(false);
+
+  const navRef = useRef<HTMLElement | null>(null);
+  const buttonRef = useRef<HTMLButtonElement | null>(null);
+  const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const roomHref = wall === undefined ? "/room" : `/room?wall=${wall}`;
 
@@ -58,8 +76,15 @@ export default function SiteNav({
   }, [gameId]);
 
   const refresh = useCallback(() => {
+    // Resolve against the JUMPABLE set, not the whole registry. `gameById` happily
+    // returns a shelved back-room game (Lucernyx, Gravitar) or a room wall, and its
+    // chip then routes into a redirect. localStorage outlives a game's tier, so ids
+    // linger here long after the game leaves the lineup. Same pool surprise-me uses.
+    const jumpable = new Set(liveGames().map((g) => g.id));
     const resolve = (ids: string[]) =>
-      ids.map(gameById).filter((g): g is GameEntry => !!g && g.id !== gameId);
+      ids
+        .map(gameById)
+        .filter((g): g is GameEntry => !!g && g.id !== gameId && jumpable.has(g.id));
     setRecents(resolve(getRecents()).slice(0, 6));
     setFavs(resolve(getFavs()));
     setIsFav(!!gameId && getFavs().includes(gameId));
@@ -69,8 +94,27 @@ export default function SiteNav({
   // the All Games catalog before; now it's one tap from inside any game.
   const toggleFavHere = () => { if (gameId) { toggleFav(gameId); refresh(); } };
 
-  const openMenu = () => { refresh(); setOpen(true); };
-  const close = () => setOpen(false);
+  const openMenu = () => {
+    if (closeTimer.current) { clearTimeout(closeTimer.current); closeTimer.current = null; }
+    setClosing(false);
+    refresh();
+    setOpen(true);
+  };
+
+  // Unmount after the exit animation — but immediately when motion is reduced,
+  // so the drawer can never linger for someone who opted out of animation.
+  const close = useCallback(() => {
+    if (closeTimer.current) return; // already closing; don't queue a second timer
+    if (prefersReducedMotion()) { setOpen(false); return; }
+    setClosing(true);
+    closeTimer.current = setTimeout(() => {
+      setOpen(false);
+      setClosing(false);
+      closeTimer.current = null;
+    }, CLOSE_MS);
+  }, []);
+
+  useEffect(() => () => { if (closeTimer.current) clearTimeout(closeTimer.current); }, []);
 
   // ESC closes
   useEffect(() => {
@@ -78,6 +122,45 @@ export default function SiteNav({
     const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") close(); };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
+  }, [open, close]);
+
+  // `aria-modal` promises focus lives inside the dialog. It didn't: focus stayed
+  // on the page behind, so Tab walked the game instead of the drawer. Move focus
+  // in on open, trap Tab, and hand it back to the ☰ button on close.
+  useEffect(() => {
+    if (!open || closing) return;
+    const nav = navRef.current;
+    if (!nav) return;
+    focusables(nav)[0]?.focus();
+
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Tab") return;
+      const items = focusables(nav);
+      if (!items.length) return;
+      const first = items[0];
+      const last = items[items.length - 1];
+      const active = document.activeElement;
+      if (e.shiftKey && (active === first || !nav.contains(active))) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && active === last) {
+        e.preventDefault();
+        first.focus();
+      }
+    };
+    nav.addEventListener("keydown", onKey);
+    return () => nav.removeEventListener("keydown", onKey);
+  }, [open, closing]);
+
+  // Restore focus to the opener once the drawer is fully gone — but only if it
+  // was actually open. Without the guard this fires on mount and steals focus to
+  // the ☰ button on every page load.
+  const wasOpen = useRef(false);
+  useEffect(() => {
+    if (open) { wasOpen.current = true; return; }
+    if (!wasOpen.current) return;
+    wasOpen.current = false;
+    buttonRef.current?.focus({ preventScroll: true });
   }, [open]);
 
   const surprise = () => {
@@ -101,8 +184,10 @@ export default function SiteNav({
     <>
       {/* the one persistent affordance — same corner on every game + hub */}
       <button
+        ref={buttonRef}
         type="button"
         aria-label="Menu — get around the site"
+        aria-expanded={open}
         onClick={openMenu}
         className="fixed top-4 right-4 z-[60] flex items-center gap-2 rounded-md border bg-[#12121e]/80 backdrop-blur px-3 py-2 text-[11px] uppercase tracking-[0.2em] transition"
         style={{ borderColor: `${GOLD}4d`, color: `${GOLD}cc` }}
@@ -117,13 +202,25 @@ export default function SiteNav({
           <button
             aria-label="Close menu"
             onClick={close}
+            data-sitenav-anim
             className="absolute inset-0 bg-black/55 backdrop-blur-[2px]"
-            style={{ animation: "sitenav-fade .18s ease-out" }}
+            style={{
+              animation: closing
+                ? `sitenav-fade-out ${CLOSE_MS}ms ease-in forwards`
+                : "sitenav-fade .18s ease-out",
+            }}
           />
-          {/* the sheet — slides from the left, full height, scrollable */}
+          {/* the sheet — slides in from the right, full height, scrollable */}
           <nav
+            ref={navRef}
+            data-sitenav-anim
             className="gx-chrome absolute right-0 top-0 h-full w-[min(84vw,340px)] overflow-y-auto border-l bg-[#0b0b14]/95 backdrop-blur"
-            style={{ borderColor: `${GOLD}33`, animation: "sitenav-slide .22s cubic-bezier(.2,.7,.3,1)" }}
+            style={{
+              borderColor: `${GOLD}33`,
+              animation: closing
+                ? `sitenav-slide-out ${CLOSE_MS}ms cubic-bezier(.4,0,.8,.3) forwards`
+                : "sitenav-slide .22s cubic-bezier(.2,.7,.3,1)",
+            }}
           >
             <div className="flex flex-col gap-5 px-5 py-6">
               {/* breadcrumb — orientation folded into the drawer (the hybrid) —
@@ -220,6 +317,13 @@ export default function SiteNav({
           <style>{`
             @keyframes sitenav-fade { from { opacity: 0 } to { opacity: 1 } }
             @keyframes sitenav-slide { from { transform: translateX(100%) } to { transform: none } }
+            @keyframes sitenav-fade-out { from { opacity: 1 } to { opacity: 0 } }
+            @keyframes sitenav-slide-out { from { transform: none } to { transform: translateX(100%) } }
+            /* Reduced motion unmounts immediately (see close()), so these never run —
+               but if one somehow does, collapse it rather than animate. */
+            @media (prefers-reduced-motion: reduce) {
+              [data-sitenav-anim] { animation: none !important }
+            }
           `}</style>
         </div>
       )}
