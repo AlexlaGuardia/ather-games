@@ -47,7 +47,7 @@ const BLANK = '#dfe8f0'
 // world-space ambient drift specks (parallax with the camera)
 const SPECKS = (() => {
   const r = mulberry32(0x511)
-  return Array.from({ length: 160 }, () => ({ x: (r() - 0.5) * 2400, y: (r() - 0.5) * 2400, s: 0.5 + r() * 1.3, p: r() * 6.28 }))
+  return Array.from({ length: 300 }, () => ({ x: (r() - 0.5) * 6800, y: (r() - 0.5) * 6800, s: 0.5 + r() * 1.3, p: r() * 6.28 }))
 })()
 
 function taunt(mass: number): string {

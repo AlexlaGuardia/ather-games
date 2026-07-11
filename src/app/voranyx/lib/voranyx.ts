@@ -13,9 +13,10 @@ export type Element = 'mana' | 'storm' | 'earth' | 'water'
 export const ELEMENTS: Element[] = ['mana', 'storm', 'earth', 'water']
 
 // ── tuning ──────────────────────────────────────────────────────────────────────
-export const ARENA_R0 = 1500 // starting void-ring radius — a big opening Silt to roam
-export const ARENA_RMIN = 560 // the ring never closes tighter than this (was 380 — too cramped for a mid-game worm)
-export const ARENA_SHRINK = 6.5 // units/sec the void creeps in — slower, so the squeeze is a late-game pressure not a 70s guillotine
+export const ARENA_R0 = 3200 // starting void-ring radius — a wide-open Silt to roam (was 1500)
+export const ARENA_RMIN = 2200 // the ring never closes tighter than this (was 560 — a length-150 worm is ~1500u
+// long and couldn't fit an 1120-wide ring → the "cage". 2200 = a 4400-wide floor, ~3× a big worm. Alex 2026-07-11)
+export const ARENA_SHRINK = 5.0 // units/sec the void creeps in — a gentle late-game pressure, never a cage
 
 export const BASE_MASS = 8 // the blank thread — you can't shrink below this
 export const START_MASS = 16
@@ -37,7 +38,10 @@ export const SEED_MASS = 3.0
 export const BUBBLE_MASS = 1.1
 
 const SEG_SPACING = 6 // trail point spacing (world units)
-const FOOD_TARGET = 480 // ambient food the arena tries to keep stocked (dense = growth feels good); scaled up with the bigger arena to keep density
+const FOOD_TARGET = 900 // ambient food at the FULL ring (dense = growth feels good)
+export const SPAWN_CLEAR = 780 // min distance a rival may spawn from the player's head (no ambushes)
+// hold food DENSITY constant as the ring is bigger now and shrinks — target scales with area
+function foodTarget(radius: number): number { return Math.max(140, Math.round(FOOD_TARGET * (radius / ARENA_R0) ** 2)) }
 
 export interface FoodItem {
   x: number
@@ -91,10 +95,18 @@ export function bodyRadius(mass: number): number {
 }
 
 function spawnWyrm(w: World, isPlayer: boolean): Wyrm {
-  const r = w.rng() * (w.radius * 0.7)
-  const a = w.rng() * Math.PI * 2
-  const x = Math.cos(a) * r
-  const y = Math.sin(a) * r
+  // area-uniform placement (sqrt), and a rival never materialises on top of the player's head
+  const you = isPlayer ? null : w.wyrms.find((q) => q.isPlayer && q.alive)
+  let x = 0, y = 0
+  for (let tries = 0; tries < 14; tries++) {
+    const r = Math.sqrt(w.rng()) * (w.radius * 0.9)
+    const a = w.rng() * Math.PI * 2
+    x = Math.cos(a) * r
+    y = Math.sin(a) * r
+    if (!you) break
+    const dx = x - you.x, dy = y - you.y
+    if (dx * dx + dy * dy >= SPAWN_CLEAR * SPAWN_CLEAR) break // far enough from you → no ambush
+  }
   const ang = w.rng() * Math.PI * 2
   return {
     id: w.nextId++,
@@ -138,7 +150,7 @@ export function makeWorld(seed: number, aiCount = 6): World {
   }
   w.wyrms.push(spawnWyrm(w, true))
   for (let i = 0; i < aiCount; i++) w.wyrms.push(spawnWyrm(w, false))
-  scatterFood(w, FOOD_TARGET)
+  scatterFood(w, foodTarget(w.radius))
   return w
 }
 
@@ -320,7 +332,8 @@ export function tick(w: World, dt: number): TickEvents {
   w.wyrms = w.wyrms.filter((s) => s.alive || s.isPlayer)
   const aiAlive = w.wyrms.filter((s) => !s.isPlayer && s.alive).length
   if (aiAlive < 6 && w.rng() < 0.04) w.wyrms.push(spawnWyrm(w, false))
-  if (w.food.length < FOOD_TARGET) scatterFood(w, Math.min(6, FOOD_TARGET - w.food.length))
+  const foodGoal = foodTarget(w.radius)
+  if (w.food.length < foodGoal) scatterFood(w, Math.min(24, foodGoal - w.food.length))
 
   const p = player(w)
   if (!p || !p.alive) w.state = 'over'
