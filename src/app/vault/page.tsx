@@ -510,6 +510,17 @@ function render(canvas: HTMLCanvasElement, w: World, ts: number, trail: number[]
   const camX = w.dist - RUNNER_SX
   const sx = (x: number) => x - camX
 
+  // ── the descent, lit up: theme by area (bright First Light → dead Grey Heart). A story level's
+  // cfg.id is 'aN-lM' → its area's accent + descent-depth; endless has no area → drive it off difficulty.
+  const areaMatch = /^a(\d)/.exec(w.cfg.id)
+  const areaIdx = areaMatch ? Math.min(AREAS.length - 1, +areaMatch[1] - 1) : -1
+  const depth = areaIdx >= 0 ? areaIdx / (AREAS.length - 1) : Math.min(1, d) // 0 = surface, 1 = the grey heart
+  const accent = areaIdx >= 0 ? AREAS[areaIdx].accent : sampleAccent(depth)
+  const life = 1 - depth // 1 = the light still holds the land, 0 = the greying has drained it
+  const landCol = mix('#2a2c30', mix(LAND, accent, 0.22), life) // living accent-green → dead grey
+  const landBot = mix('#0d0d11', '#11201f', life)
+  const lipCol = mix('#474751', mix(LAND_LIP, accent, 0.5), life) // lit accent edge → dead grey lip
+
   // vertical follow-camera: the light RESTS in the bottom quarter (camY 0 — ground sits ~78% down).
   // It only climbs when a jump or a high ledge would push the light near the roof: past the TOP_LINE
   // the camera follows up so the light holds ~30% down and the whole arc stays framed — never "jumping
@@ -524,14 +535,15 @@ function render(canvas: HTMLCanvasElement, w: World, ts: number, trail: number[]
   ctx.save()
   if (shake > 0) ctx.translate((Math.random() - 0.5) * shake * 22, (Math.random() - 0.5) * shake * 22)
 
-  // sky — darkens/greys as the Dying gains ground
+  // sky — a whisper of the area's light up top (dawn in First Light, gone by the Grey Heart),
+  // draining toward dead at the horizon as the descent deepens
   const g = ctx.createLinearGradient(0, 0, 0, VH)
-  g.addColorStop(0, BG_TOP)
-  g.addColorStop(1, BG_BOT)
+  g.addColorStop(0, mix(BG_TOP, accent, 0.12 * life))
+  g.addColorStop(1, mix(BG_BOT, '#100f14', depth * 0.7))
   ctx.fillStyle = g
   ctx.fillRect(-30, -30, VW + 60, VH + 60)
-  // a creeping grey wash from the top, thicker with difficulty (the greying)
-  ctx.globalAlpha = 0.04 + d * 0.16
+  // the greying wash — thicker the deeper the descent (the Dying gaining ground)
+  ctx.globalAlpha = 0.04 + depth * 0.26
   ctx.fillStyle = GREY
   ctx.fillRect(-30, -30, VW + 60, VH + 60)
   ctx.globalAlpha = 1
@@ -560,18 +572,18 @@ function render(canvas: HTMLCanvasElement, w: World, ts: number, trail: number[]
     if (x1 < -20 || x0 > VW + 20) continue
     const wdt = x1 - x0
     const floating = s.top < TOP_MIN
-    const depth = floating ? 26 : VH - s.top + 30
-    // body of living ground
-    const gg = ctx.createLinearGradient(0, s.top, 0, s.top + depth)
-    gg.addColorStop(0, LAND)
-    gg.addColorStop(1, floating ? 'rgba(17,32,31,0)' : '#11201f')
+    const colH = floating ? 26 : VH - s.top + 30 // this column's draw height (renamed off the descent `depth`)
+    // body of ground — accent-lit green up high in the descent, drained to dead grey in the deep
+    const gg = ctx.createLinearGradient(0, s.top, 0, s.top + colH)
+    gg.addColorStop(0, landCol)
+    gg.addColorStop(1, floating ? 'rgba(17,32,31,0)' : landBot)
     ctx.fillStyle = gg
-    ctx.fillRect(x0, s.top, wdt, depth)
-    // the lit living edge (brighter = the light still holds here)
-    ctx.strokeStyle = LAND_LIP
+    ctx.fillRect(x0, s.top, wdt, colH)
+    // the lit living edge (glows the area's accent while the light holds; dead grey in the Grey Heart)
+    ctx.strokeStyle = lipCol
     ctx.globalAlpha = 0.9
     ctx.shadowBlur = 8
-    ctx.shadowColor = LAND_LIP
+    ctx.shadowColor = lipCol
     ctx.lineWidth = 2
     seg(ctx, x0, s.top, x1, s.top)
     ctx.shadowBlur = 0
@@ -689,6 +701,23 @@ function seg(ctx: CanvasRenderingContext2D, x0: number, y0: number, x1: number, 
 function dot(ctx: CanvasRenderingContext2D, x: number, y: number, r: number) {
   ctx.beginPath(); ctx.arc(x, y, Math.max(0.5, r), 0, Math.PI * 2); ctx.fill()
 }
+// hex → rgb() lerp, for the per-area descent theming (bright land/sky → dead grey)
+function mix(a: string, b: string, t: number): string {
+  const pa = parseInt(a.slice(1), 16), pb = parseInt(b.slice(1), 16)
+  const k = Math.max(0, Math.min(1, t))
+  const r = Math.round(((pa >> 16) & 255) + (((pb >> 16) & 255) - ((pa >> 16) & 255)) * k)
+  const g = Math.round(((pa >> 8) & 255) + (((pb >> 8) & 255) - ((pa >> 8) & 255)) * k)
+  const bl = Math.round((pa & 255) + ((pb & 255) - (pa & 255)) * k)
+  return `rgb(${r},${g},${bl})`
+}
+// endless has no discrete area → sample the six area accents by descent-depth so it passes through the same palette
+function sampleAccent(depth: number): string {
+  const n = AREAS.length - 1
+  const f = Math.max(0, Math.min(0.999, depth)) * n
+  const i = Math.floor(f)
+  return mix(AREAS[i].accent, AREAS[Math.min(n, i + 1)].accent, f - i)
+}
+
 // stable per-entity pseudo-random from a seed (so a foe/spike looks the same every frame, no flicker)
 function hash(seed: number, n: number): number {
   const s = Math.sin(seed * 12.9898 + n * 78.233) * 43758.5453
