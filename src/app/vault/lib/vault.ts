@@ -508,12 +508,25 @@ function generate(w: World, cull = true): void {
     const d = diffOf(w, w.genX)
     const speed = speedOf(w, w.genX)
 
-    // past the runway, most segments are reached across a gap (where height can change). An ease-in
-    // window right after the runway stays gentle (no gaps, no hazards) so the first real obstacle never
-    // ambushes a player who just got moving.
+    // Height only changes across a GAP. Between gaps a platform is ONE long, flat surface — a flat
+    // continuation EXTENDS the current segment instead of butting a new little one against it (that
+    // stair-stepped, chopped-up look). An ease-in window right after the runway stays gentle (no gaps).
     const past = w.genX >= w.cfg.runway
     const eased = w.genX < w.cfg.runway + 280
     const wantGap = past && !eased && w.cfg.gaps && w.rng() < 0.42 + d * 0.3
+    const last = w.segs[w.segs.length - 1]
+
+    if (!wantGap && last && last.top === w.lastTop) {
+      // flat continuation → grow the current platform into one long run (no seam, no choppy step)
+      const grow = SEG_MIN + w.rng() * (SEG_MAX - SEG_MIN)
+      const x0 = last.x1
+      last.x1 += grow
+      if (past) populate(w, { x0, x1: last.x1, top: last.top }, d)
+      w.genX = last.x1
+      continue
+    }
+
+    // a NEW platform: reached across a gap (where the height swings), or the very first one
     let top = w.lastTop
     if (wantGap) {
       // a gap the runner can clear: bounded by the airtime * speed (with margin)
@@ -523,11 +536,7 @@ function generate(w: World, cull = true): void {
       // height can change across the gap (gentle; widens with difficulty)
       const swing = (28 + d * 70) * (w.rng() * 2 - 1)
       top = clamp(w.lastTop + swing, TOP_MIN, TOP_MAX)
-    } else if (past && w.rng() < 0.35) {
-      // occasional flush step (no gap): only a small, free up/down step
-      top = clamp(w.lastTop + (w.rng() * 2 - 1) * STEP_UP, TOP_MIN, TOP_MAX)
     }
-
     const len = SEG_MIN + w.rng() * (SEG_MAX - SEG_MIN)
     const seg: Seg = { x0: w.genX, x1: w.genX + len, top }
     w.segs.push(seg)
