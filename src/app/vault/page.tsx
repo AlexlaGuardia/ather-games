@@ -32,7 +32,6 @@ import {
   MOTE_R,
   MAX_HEARTS,
   MAX_FUEL,
-  TOP_BASE,
   TOP_MIN,
   AREAS,
   LEVELS_PER_AREA,
@@ -511,13 +510,13 @@ function render(canvas: HTMLCanvasElement, w: World, ts: number, trail: number[]
   const camX = w.dist - RUNNER_SX
   const sx = (x: number) => x - camX
 
-  // vertical follow-camera: keep the light ~60% down the screen when it climbs above the normal frame;
-  // rest at 0 (identical to the flat game) whenever content fits the view. `camY` = world-y at the top edge.
-  let worldTop = TOP_BASE
-  for (const s of w.segs) if (s.top < worldTop) worldTop = s.top
-  const camLo = Math.min(0, worldTop - 34) // furthest up the camera may travel (never below 0 = normal frame)
-  const camTarget = Math.max(camLo, Math.min(0, w.y - VH * 0.6))
-  w.camY += (camTarget - w.camY) * 0.18
+  // vertical follow-camera: the light RESTS in the bottom quarter (camY 0 — ground sits ~78% down).
+  // It only climbs when a jump or a high ledge would push the light near the roof: past the TOP_LINE
+  // the camera follows up so the light holds ~30% down and the whole arc stays framed — never "jumping
+  // past the roof" (Alex 2026-07-11). Small hops stay static; it eases back to rest on the ground.
+  const TOP_LINE = VH * 0.3 // knob: the highest the light may appear before the camera follows it up
+  const camTarget = Math.min(0, w.y - TOP_LINE) // `camY` = world-y at the top edge; only ever ≤ 0
+  w.camY += (camTarget - w.camY) * 0.16
   if (Math.abs(w.camY) < 0.3) w.camY = 0
   const camY = w.camY
 

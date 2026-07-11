@@ -36,10 +36,10 @@ export const STEP_UP = 14 // a flush height change up to this is a free step; bi
 export const WORLD_CEIL = -260 // highest y a platform/mote can be authored (≈ 1.3 screens of headroom above y=0)
 
 // ── jump / gravity (variable jump: low grav while rising+held, snappy fall) ────────
-export const JUMP_V0 = 560 // launch velocity (up)
-export const GRAV_RISE_HOLD = 900 // floaty while you HOLD on the way up
+export const JUMP_V0 = 580 // launch velocity (up) — a touch more pop (Alex: wider arc, 2026-07-11)
+export const GRAV_RISE_HOLD = 850 // floatier on the way up → the arc carries wider
 export const GRAV_RISE_FREE = 1550 // released early on the way up → comes down sooner (short hop)
-export const GRAV_FALL = 1950 // snappy on the way down
+export const GRAV_FALL = 1700 // a little more hang on the way down (was 1950) — momentum without floatiness
 export const CUT_V = 170 // release while rising clamps upward speed to this → the short hop
 export const COYOTE = 0.09 // s — jump just after leaving a ledge still fires
 export const BUFFER = 0.12 // s — press just before landing still fires on touchdown
@@ -301,6 +301,15 @@ export function makeAuthoredWorld(level: AuthoredLevel, cfg: MovementCfg = ENDLE
   w.motes = level.motes.map((m) => ({ x: m.x, y: m.y, got: false }))
   w.genX = level.end
   w.lastTop = level.segs.length ? level.segs[level.segs.length - 1].top : TOP_BASE
+  // FINISH PLATFORM: authored levels don't stream, so extend the last ground WELL past the goal.
+  // Without this, crossing the finish airborne (or a last segment that ends right at the goal) runs
+  // the light off the end into the void — the win only fires while grounded. (Alex bug 2026-07-11.)
+  if (w.segs.length) {
+    const last = w.segs[w.segs.length - 1]
+    last.x1 = Math.max(last.x1, level.end + VW)
+  } else {
+    w.segs.push({ x0: 0, x1: level.end + VW, top: TOP_BASE })
+  }
   w.authored = true
   return w
 }
