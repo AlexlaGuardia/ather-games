@@ -14,6 +14,7 @@ import { dailySeed, dailyNumber, loadDailyBest, saveDailyBest, dailyShare, copyS
 import DailyLeaderboard from '../_components/DailyLeaderboard'
 import {
   makeWorld,
+  setDir,
   setHeading,
   tick,
   loadBest,
@@ -25,6 +26,7 @@ import {
   DEWBEAR_COLOR,
   type World,
   type Ghost,
+  type Dir,
 } from './lib/dewdrop'
 import { sfx } from './lib/sfx'
 
@@ -42,6 +44,13 @@ const JOY_R = 56
 
 type Phase = 'ready' | 'playing' | 'dead' | 'won'
 
+// keyboard → cardinal. Held keys are tracked in press order (most-recent wins) instead of summed
+// into a vector, so a perpendicular turn while holding a key registers instead of losing a tie.
+const KEY_DIR: Record<string, Dir> = {
+  arrowleft: 'left', a: 'left', arrowright: 'right', d: 'right',
+  arrowup: 'up', w: 'up', arrowdown: 'down', s: 'down',
+}
+
 export default function DewdropPage() {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const worldRef = useRef<World | null>(null)
@@ -50,7 +59,10 @@ export default function DewdropPage() {
   const deck = useRef({ active: false, x: 0, y: 0 })
   // kept inert so the canvas render's floating-stick block stays hidden (steering is the deck now).
   const joy = useRef({ active: false, baseX: 0, baseY: 0, curX: 0, curY: 0, pid: -1 })
-  const keys = useRef<Set<string>>(new Set())
+  // held direction keys in press order, most-recent LAST (last-key-wins, like a real stick).
+  // Summing keys into a vector made two held keys a permanent tie that horizontal always won,
+  // so ↑/↓ were eaten while a ←/→ was held — turns felt impossible. This fixes that.
+  const heldDirs = useRef<Dir[]>([])
   const syncT = useRef(0)
 
   const [phase, setPhase] = useState<Phase>('ready')
@@ -73,7 +85,7 @@ export default function DewdropPage() {
     else { seedRef.current = (seedRef.current * 1103515245 + 12345) >>> 0; seed = seedRef.current ^ (Date.now() >>> 0) }
     worldRef.current = makeWorld(seed)
     deck.current = { active: false, x: 0, y: 0 }
-    keys.current.clear()
+    heldDirs.current.length = 0
     setScore(0); setLives(START_LIVES); setNewBest(false); setShared(false)
     setPhase('ready')
   }, [])
@@ -101,25 +113,35 @@ export default function DewdropPage() {
   }
 
   useEffect(() => {
-    const down = (e: KeyboardEvent) => keys.current.add(e.key.toLowerCase())
-    const up = (e: KeyboardEvent) => keys.current.delete(e.key.toLowerCase())
+    const arr = heldDirs.current
+    const down = (e: KeyboardEvent) => {
+      const d = KEY_DIR[e.key.toLowerCase()]
+      if (!d || e.repeat) return // ignore key-repeat so an older held key can't steal "most recent"
+      e.preventDefault()
+      const i = arr.indexOf(d); if (i >= 0) arr.splice(i, 1)
+      arr.push(d) // freshest press wins
+      // a keypress also launches the run (was D-pad-only, so keyboard players were stuck on ready)
+      const w = worldRef.current
+      if (w && w.state === 'ready') { sfx.ensure(); setDir(w, d); setPhase('playing') }
+    }
+    const up = (e: KeyboardEvent) => {
+      const d = KEY_DIR[e.key.toLowerCase()]
+      if (!d) return
+      const i = arr.indexOf(d); if (i >= 0) arr.splice(i, 1)
+    }
     window.addEventListener('keydown', down)
     window.addEventListener('keyup', up)
     return () => { window.removeEventListener('keydown', down); window.removeEventListener('keyup', up) }
   }, [])
 
-  // keys / joystick → a cardinal heading (the maze keeps your last dir when input is idle)
+  // keys / deck → a heading. Keyboard = last key pressed still held (real-stick feel); the maze
+  // coasts on its last dir when input is idle.
   const applyHeading = () => {
     const w = worldRef.current
     if (!w) return
-    const k = keys.current
-    let kx = 0, ky = 0
-    if (k.has('a') || k.has('arrowleft')) kx -= 1
-    if (k.has('d') || k.has('arrowright')) kx += 1
-    if (k.has('w') || k.has('arrowup')) ky -= 1
-    if (k.has('s') || k.has('arrowdown')) ky += 1
-    if (kx || ky) { setHeading(w, kx, ky); return }
-    // the cabinet stick steers; idle keeps the last heading (the maze coasts on dir).
+    const arr = heldDirs.current
+    if (arr.length) { setDir(w, arr[arr.length - 1]); return }
+    // the cabinet D-pad steers; idle keeps the last heading (the maze coasts on dir).
     if (deck.current.active) setHeading(w, deck.current.x, deck.current.y)
   }
 
