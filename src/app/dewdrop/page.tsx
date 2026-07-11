@@ -12,6 +12,7 @@ import { useNoScroll } from '@/lib/arcade/useNoScroll'
 import { screenMaxW, deckMaxW, cabinetMaxW, DPAD_RESERVE } from '@/lib/arcade/fit'
 import { dailySeed, dailyNumber, loadDailyBest, saveDailyBest, dailyShare, copyShare } from '@/lib/arcade/daily'
 import DailyLeaderboard from '../_components/DailyLeaderboard'
+import { StartButton, useStartKey } from '../_components/ArcadeStart'
 import {
   makeWorld,
   setDir,
@@ -119,10 +120,7 @@ export default function DewdropPage() {
       if (!d || e.repeat) return // ignore key-repeat so an older held key can't steal "most recent"
       e.preventDefault()
       const i = arr.indexOf(d); if (i >= 0) arr.splice(i, 1)
-      arr.push(d) // freshest press wins
-      // a keypress also launches the run (was D-pad-only, so keyboard players were stuck on ready)
-      const w = worldRef.current
-      if (w && w.state === 'ready') { sfx.ensure(); setDir(w, d); setPhase('playing') }
+      arr.push(d) // freshest press wins; direction only STEERS now — START owns launching the run
     }
     const up = (e: KeyboardEvent) => {
       const d = KEY_DIR[e.key.toLowerCase()]
@@ -179,22 +177,30 @@ export default function DewdropPage() {
     return () => cancelAnimationFrame(raf)
   }, [phase])
 
+  // START owns launching the run (flip ready → playing WITHOUT committing a heading — the bear waits
+  // at spawn so you can read the board; your first direction then steers). Decoupled from movement.
+  const start = useCallback(() => {
+    const w = worldRef.current
+    if (!w || w.state !== 'ready') return
+    sfx.ensure()
+    w.state = 'playing'
+    setPhase('playing')
+  }, [])
+  useStartKey(start, phase === 'ready') // Enter / Space also start
+
   // ── input ── the cabinet deck D-pad (tap a direction to turn; screen is a neutral display) ──
   // Narrow hallways want precise turn-timing, so the deck is a 4-way D-pad, not a stick (Alex's call):
   // tapping a direction sets the heading and it PERSISTS (the maze coasts on last dir, turns at junctions).
-  const launchIfReady = () => { if (worldRef.current?.state === 'playing' && phase === 'ready') setPhase('playing') }
   const DPAD_VEC: Record<string, [number, number]> = { up: [0, -1], down: [0, 1], left: [-1, 0], right: [1, 0] }
   const deckDir = useCallback((id: string) => {
     sfx.ensure()
     const w = worldRef.current
-    const st = w?.state
-    if (!w || st === 'dead' || st === 'won') return
+    if (!w || w.state !== 'playing') return // direction only STEERS; START launches (tap the START button)
     const v = DPAD_VEC[id]
     if (!v) return
     deck.current = { active: true, x: v[0], y: v[1] } // persists → maze coasts on last dir
     setHeading(w, v[0], v[1])
-    launchIfReady()
-  }, [phase])
+  }, [])
 
   const restart = useCallback(() => { sfx.ensure(); boot() }, [boot])
   const toggleMute = () => { sfx.ensure(); const m = !sfx.isMuted(); sfx.setMuted(m); setMuted(m) }
@@ -245,7 +251,7 @@ export default function DewdropPage() {
               ))}
             </div>
             {mode === 'daily' && <div className="text-[9px] font-mono text-[#7fd8e6]/45 tracking-wider -mt-1">the same warren for everyone today</div>}
-            <div className="gx-label text-[12px] text-[#05060f] px-6 py-2.5 rounded-[2px] mt-1" style={{ background: ACCENT, boxShadow: `0 0 18px ${ACCENT}80` }}>tap a direction to roam</div>
+            <div className="mt-1"><StartButton accent={ACCENT} onStart={start} hint="then a direction to roam" /></div>
             {mode === 'daily'
               ? dailyBest > 0 && <div className="gx-label text-[10px] font-mono text-[#7fd8e6]/50 tracking-wider mt-1">today&apos;s best <span className="text-[#e8feff] tabular-nums">{dailyBest}</span></div>
               : best > 0 && <div className="gx-label text-[10px] font-mono text-[#7fd8e6]/50 tracking-wider mt-1">best <span className="text-[#e8feff] tabular-nums">{best}</span></div>}
