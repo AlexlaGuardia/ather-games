@@ -585,13 +585,18 @@ function render(canvas: HTMLCanvasElement, w: World, ts: number, trail: number[]
     const mx = sx(m.x)
     if (mx < -10 || mx > VW + 10) continue
     const bob = Math.sin(t * 4 + m.x * 0.05) * 2
-    ctx.fillStyle = GOLD
+    const pulse = 0.5 + 0.5 * Math.sin(t * 5 + m.x * 0.05)
+    const my = m.y + bob
+    // a soft living halo — the light is precious, and it reads against the grey
+    ctx.globalAlpha = 0.18 + 0.16 * pulse
+    ctx.fillStyle = GOLD; ctx.shadowBlur = 14; ctx.shadowColor = GOLD
+    dot(ctx, mx, my, MOTE_R * 1.7)
+    ctx.globalAlpha = 1
     ctx.shadowBlur = 10
-    ctx.shadowColor = GOLD
-    dot(ctx, mx, m.y + bob, MOTE_R)
+    dot(ctx, mx, my, MOTE_R * (0.92 + 0.12 * pulse))
     ctx.fillStyle = HOT
-    ctx.globalAlpha = 0.6
-    dot(ctx, mx, m.y + bob, MOTE_R * 0.4)
+    ctx.globalAlpha = 0.85
+    dot(ctx, mx, my, MOTE_R * 0.42)
     ctx.globalAlpha = 1
   }
   ctx.shadowBlur = 0
@@ -600,17 +605,7 @@ function render(canvas: HTMLCanvasElement, w: World, ts: number, trail: number[]
   for (const s of w.spikes) {
     const cx = sx(s.x)
     if (cx < -16 || cx > VW + 16) continue
-    ctx.fillStyle = GREY
-    ctx.strokeStyle = GREY_HOT
-    ctx.lineWidth = 1
-    const base = s.y, half = SPIKE_W * 0.5
-    ctx.beginPath()
-    ctx.moveTo(cx - half, base)
-    ctx.lineTo(cx, base - SPIKE_H)
-    ctx.lineTo(cx + half, base)
-    ctx.closePath()
-    ctx.fill()
-    ctx.stroke()
+    drawSpike(ctx, cx, s.y, s.x) // seed by world-x → stable, varied cluster
   }
 
   // ── grey void-spawn (foes) — soulless, colourless; unmake from above ──────────
@@ -619,16 +614,7 @@ function render(canvas: HTMLCanvasElement, w: World, ts: number, trail: number[]
     const fx2 = sx(f.x)
     if (fx2 < -18 || fx2 > VW + 18) continue
     const wob = Math.sin(t * 8 + f.x * 0.1) * 1.5
-    ctx.fillStyle = GREY
-    ctx.shadowBlur = 6
-    ctx.shadowColor = GREY_HOT
-    roundRect(ctx, fx2 - FOE_W / 2, f.y - FOE_H + wob, FOE_W, FOE_H, 4)
-    ctx.fill()
-    ctx.shadowBlur = 0
-    // dead-eyes (the soullessness)
-    ctx.fillStyle = '#0c0f18'
-    dot(ctx, fx2 - 3.5, f.y - FOE_H * 0.6 + wob, 1.6)
-    dot(ctx, fx2 + 3.5, f.y - FOE_H * 0.6 + wob, 1.6)
+    drawFoe(ctx, fx2, f.y + wob, t, f.x * 0.1) // base at f.y; bob the whole body
   }
 
   // ── transient FX (unmaking burst / collect spark) ─────────────────────────────
@@ -704,12 +690,73 @@ function seg(ctx: CanvasRenderingContext2D, x0: number, y0: number, x1: number, 
 function dot(ctx: CanvasRenderingContext2D, x: number, y: number, r: number) {
   ctx.beginPath(); ctx.arc(x, y, Math.max(0.5, r), 0, Math.PI * 2); ctx.fill()
 }
-function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
+// stable per-entity pseudo-random from a seed (so a foe/spike looks the same every frame, no flicker)
+function hash(seed: number, n: number): number {
+  const s = Math.sin(seed * 12.9898 + n * 78.233) * 43758.5453
+  return s - Math.floor(s)
+}
+
+// ── rooted grey corruption — a cluster of jagged crystalline shards gripping the ground ──
+// (was a single flat triangle). Kept inside the SPIKE_W × SPIKE_H hitbox so the read = the hazard.
+function drawSpike(ctx: CanvasRenderingContext2D, cx: number, base: number, seed: number) {
+  const half = SPIKE_W * 0.5
+  // dark rooted mound where it grips the failing ground
+  ctx.fillStyle = '#191a20'
+  ctx.beginPath(); ctx.ellipse(cx, base, half * 0.95, 3.5, 0, 0, Math.PI * 2); ctx.fill()
+  // three shards: tall jagged centre + two flanking, leaning off-true (corrupt, not geometric)
+  const shards = [
+    { off: -SPIKE_W * 0.30, hf: 0.60, wf: 0.30 },
+    { off: SPIKE_W * 0.30, hf: 0.56, wf: 0.28 },
+    { off: 0, hf: 0.96, wf: 0.36 },
+  ]
+  for (let i = 0; i < shards.length; i++) {
+    const sh = shards[i]
+    const x = cx + sh.off
+    const h = SPIKE_H * (sh.hf * (0.85 + 0.3 * hash(seed, i)))
+    const w = SPIKE_W * sh.wf
+    const lean = (hash(seed, i + 5) - 0.5) * w * 0.7 // the tip leans — grey that grew wrong
+    const tipX = Math.max(cx - half, Math.min(cx + half, x + lean))
+    ctx.beginPath()
+    ctx.moveTo(x - w / 2, base)
+    ctx.lineTo(tipX, base - h)
+    ctx.lineTo(x + w / 2, base)
+    ctx.closePath()
+    ctx.fillStyle = GREY
+    ctx.fill()
+    // lit cold facet down one edge + a sickly tip glint
+    ctx.strokeStyle = GREY_HOT; ctx.lineWidth = 1; ctx.globalAlpha = 0.75
+    ctx.beginPath(); ctx.moveTo(x - w / 2, base); ctx.lineTo(tipX, base - h); ctx.stroke()
+    ctx.globalAlpha = 1
+    ctx.fillStyle = GREY_HOT; ctx.shadowBlur = 5; ctx.shadowColor = GREY_HOT
+    dot(ctx, tipX, base - h, 1); ctx.shadowBlur = 0
+  }
+}
+
+// ── grey void-spawn — a blank, soulless thing barely cohered: unstable dome, dissolving jagged
+// underside, a void-BLACK hollow where a soul would be. (was a rounded rect + two dots.) ──
+function drawFoe(ctx: CanvasRenderingContext2D, cx: number, base: number, t: number, seed: number) {
+  const w = FOE_W, h = FOE_H
+  const top = base - h
+  ctx.save()
+  ctx.shadowBlur = 8; ctx.shadowColor = GREY_HOT
+  ctx.fillStyle = GREY
   ctx.beginPath()
-  ctx.moveTo(x + r, y)
-  ctx.arcTo(x + w, y, x + w, y + h, r)
-  ctx.arcTo(x + w, y + h, x, y + h, r)
-  ctx.arcTo(x, y + h, x, y, r)
-  ctx.arcTo(x, y, x + w, y, r)
-  ctx.closePath()
+  ctx.moveTo(cx - w / 2, base - 5)
+  ctx.quadraticCurveTo(cx - w / 2, top, cx, top) // dome shoulders
+  ctx.quadraticCurveTo(cx + w / 2, top, cx + w / 2, base - 5)
+  const teeth = 5 // dissolving jagged underside (it's void — it doesn't hold a clean edge)
+  for (let i = teeth; i >= 0; i--) {
+    const fx = cx - w / 2 + w * (i / teeth)
+    const dy = i % 2 === 0 ? 0 : 3 + Math.sin(t * 9 + seed + i) * 1.5
+    ctx.lineTo(fx, base - dy)
+  }
+  ctx.closePath(); ctx.fill()
+  ctx.shadowBlur = 0
+  // the void-black hollow — an absence given form (the soullessness, canon)
+  ctx.fillStyle = '#05060b'
+  ctx.beginPath(); ctx.ellipse(cx, top + h * 0.52, w * 0.3, h * 0.32, 0, 0, Math.PI * 2); ctx.fill()
+  // two dead pinpoint glints barely visible in the void
+  ctx.fillStyle = '#3b4150'
+  dot(ctx, cx - 3, top + h * 0.44, 1.3); dot(ctx, cx + 3, top + h * 0.44, 1.3)
+  ctx.restore()
 }
