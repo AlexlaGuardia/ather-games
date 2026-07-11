@@ -1,5 +1,5 @@
 // SEEDFALL — the long drop. A Mana Seed falls down the canopy on the wind; you feather
-// the Ather to weave through branches and out-drift a curious Havari (a bird spirit that
+// the Ather to weave through branches and out-drift a curious Skirl (a bird spirit that
 // swoops to snatch it), then set it down soft on the garden soil at the bottom. DEPTH is
 // the score; the soft-landing is the payoff. Floaty drift physics: gentle gravity, lateral
 // Ather thrust, a wandering breeze. Deterministic from a seed (mulberry32) for the Daily.
@@ -19,7 +19,7 @@ export const SEED_SCREEN_Y = 200 // the seed holds here on screen; the world scr
 // Languid on purpose: a slow drift gives time to weave the gaps (the cozy lane).
 export const GRAVITY = 54 // steady downward pull — gentle, this is a drift not a plummet
 export const THRUST_UP = 168 // both-side hold: slow the fall / briefly rise
-export const THRUST_LAT = 165 // single-side: steer (the drift authority that out-runs the Havari)
+export const THRUST_LAT = 165 // single-side: steer (the drift authority that out-runs the Skirl)
 export const THRUST_LIFT = 0.42 // a single-side thrust also gives this fraction of lift
 export const MAX_VY = 170 // terminal fall speed
 export const FUEL_MAX = 130
@@ -36,32 +36,34 @@ export const SEED_START_Y = 0
 // tighten the deeper you fall.
 export interface Branch {
   y: number // world-y of the limb centre
-  gap: number // opening width
+  gap: number // opening width (base; a fold branch BREATHES around this — see effGap)
   gapX: number // opening centre x
+  fold: boolean // Driftfolds band: the opening opens and closes as you fall
+  phase: number // per-branch breathe phase so folds are out of sync (organic)
   passed: boolean
 }
 
-// the Havari doesn't track you — it commits to a SWOOP: enters from one side and arcs down
+// the Skirl doesn't track you — it commits to a SWOOP: enters from one side and arcs down
 // across the screen (an inverted-U), diving to one intercept point, then climbs out the far
 // side. You read the telegraph + the dive line and drift off it. A pass, not a hover.
-export type HavariState = 'warn' | 'sweep' | 'gone'
-export interface Havari {
+export type SkirlState = 'warn' | 'sweep' | 'gone'
+export interface Skirl {
   x: number // current screen-x (x isn't scrolled)
   dy: number // vertical offset from the seed centre (negative = above the seed)
   side: -1 | 1 // enters from left(-1)/right(1)
   targetX: number // the low-point x it dives at (snapshot when the sweep begins)
-  state: HavariState
+  state: SkirlState
   t: number // time in current state
 }
-export const HAVARI_R = 13
-export const HAVARI_CATCH = SEED_R + HAVARI_R - 3 // ~19px — must really meet the seed to snatch it
-export const HAVARI_WARN_T = 1.4 // telegraph (danger band shows the dive point) before it commits — your reaction window
-export const HAVARI_SWEEP_T = 1.6 // seconds to cross the screen
-export const HAVARI_SWOOP_H = 122 // how high above the seed it rides at the edges
-export const HAVARI_DIP = 4 // how far past the seed's centre the dive bottoms out
-export const HAVARI_DIP_W = 56 // half-width of the dive's influence — a tight plunge = a narrow, dodgeable kill-zone
+export const SKIRL_R = 13
+export const SKIRL_CATCH = SEED_R + SKIRL_R - 3 // ~19px — must really meet the seed to snatch it
+export const SKIRL_WARN_T = 1.4 // telegraph (danger band shows the dive point) before it commits — your reaction window
+export const SKIRL_SWEEP_T = 1.6 // seconds to cross the screen
+export const SKIRL_SWOOP_H = 122 // how high above the seed it rides at the edges
+export const SKIRL_DIP = 4 // how far past the seed's centre the dive bottoms out
+export const SKIRL_DIP_W = 56 // half-width of the dive's influence — a tight plunge = a narrow, dodgeable kill-zone
 // the actual danger half-width in x: where the dive comes low enough to catch you. Drift past this and you're clear.
-export const HAVARI_KILL_W = Math.round(HAVARI_DIP_W * 0.48) // ~27px — render a band this wide so the dodge is honest
+export const SKIRL_KILL_W = Math.round(SKIRL_DIP_W * 0.48) // ~27px — render a band this wide so the dodge is honest
 
 // landing tolerances at the soil — under these = a clean set-down (cozy-forgiving)
 export const PAD_W_MIN = 96
@@ -89,13 +91,14 @@ export interface World {
   windT: number
   input: Input
   thrusting: boolean
+  t: number // elapsed sim seconds — drives the Driftfolds' breathing gaps (deterministic)
   branches: Branch[]
-  havari: Havari | null
-  nextHavariDepth: number
+  skirl: Skirl | null
+  nextSkirlDepth: number
   padX: number
   padW: number
   threads: number // branches threaded
-  dodges: number // havari out-drifted
+  dodges: number // skirl out-drifted
   bonus: number // event bonuses (threads/dodges/landing) added to the depth score
   score: number
   state: SeedState
@@ -106,9 +109,9 @@ export interface World {
 export interface TickEvents {
   thrust: boolean
   thread: boolean // passed a branch cleanly
-  havariWarn: -1 | 1 | null // a Havari is about to enter from this side
-  havariEnter: boolean
-  dodged: boolean // a Havari gave up and peeled off
+  skirlWarn: -1 | 1 | null // a Skirl is about to enter from this side
+  skirlEnter: boolean
+  dodged: boolean // a Skirl gave up and peeled off
   caught: boolean
   landed: boolean
   crashed: boolean
@@ -126,18 +129,60 @@ function diffAt(depth: number): number {
   return d * d * 0.6 + d * 0.4
 }
 
+// ── the four bands of the fall (canon: game/seedfall.md) ─────────────────────────
+// seeding-floor (calm warmup) → the Wilds' canopy (weave + the Skirl roosts here) →
+// the Driftfolds (openings breathe open/closed) → a keeper's clearing (eases for the landing).
+export type Band = 'seedfloor' | 'canopy' | 'folds' | 'clearing'
+const BANDS: { name: Band; to: number }[] = [
+  { name: 'seedfloor', to: 0.15 },
+  { name: 'canopy', to: 0.5 },
+  { name: 'folds', to: 0.82 },
+  { name: 'clearing', to: 1.01 },
+]
+export function bandAt(depth: number): Band {
+  const f = depth / DEPTH_GOAL
+  for (const b of BANDS) if (f < b.to) return b.name
+  return 'clearing'
+}
+// 0→1 progress within the current band (for a gentle in-band ramp)
+function bandK(depth: number): number {
+  const f = depth / DEPTH_GOAL
+  let from = 0
+  for (const b of BANDS) {
+    if (f < b.to) return Math.max(0, Math.min(1, (f - from) / (b.to - from)))
+    from = b.to
+  }
+  return 1
+}
+
+export const FOLD_RATE = 2.0 // radians/sec — how fast the Driftfolds breathe
+// a fold branch's opening at time t: breathes between a fair floor and its base width, out of
+// phase per branch. Render + collision BOTH call this, so the pinch you see is the pinch that bites.
+export function effGap(b: Branch, t: number): number {
+  if (!b.fold) return b.gap
+  const o = Math.sin(t * FOLD_RATE + b.phase) * 0.5 + 0.5 // 0..1
+  const floor = Math.max(SEED_R * 5, b.gap * 0.42) // always threadable if you time it
+  return floor + (b.gap - floor) * o
+}
+
 function genBranches(rng: Rng): Branch[] {
   const out: Branch[] = []
   let y = 380 // first limb — a beat of free fall to settle in
   let gapX = VW / 2
   while (y < DEPTH_GOAL - 300) {
-    const k = diffAt(y)
-    const gap = Math.round(190 - k * 70) // 190 → ~120
-    const maxStep = 80 + k * 54 // how far the opening can shift from the last one (80 → ~134)
-    gapX += (rng() * 2 - 1) * maxStep
+    const band = bandAt(y)
+    const k = bandK(y)
+    // per-band shape: gap width, how far the opening can shift, and row spacing
+    let gap: number, step: number, spacing: number, fold = false
+    if (band === 'seedfloor') { gap = 210; step = 66; spacing = 300 } // wide + roomy
+    else if (band === 'canopy') { gap = 186 - k * 54; step = 84 + k * 46; spacing = 252 - k * 48 } // tightens
+    else if (band === 'folds') { gap = 172; step = 74; spacing = 214; fold = true } // openings breathe
+    else { gap = 178; step = 56; spacing = 246 } // clearing — eases for the set-down
+    gap = Math.round(gap)
+    gapX += (rng() * 2 - 1) * step
     gapX = Math.max(gap / 2 + 10, Math.min(VW - gap / 2 - 10, gapX))
-    out.push({ y, gap, gapX, passed: false })
-    y += Math.round(264 - k * 74) // 264 → ~190 spacing
+    out.push({ y, gap, gapX, fold, phase: rng() * Math.PI * 2, passed: false })
+    y += Math.round(spacing)
   }
   return out
 }
@@ -157,9 +202,10 @@ export function makeWorld(seed: number): World {
     windT: 0,
     input: { left: false, right: false },
     thrusting: false,
+    t: 0,
     branches: genBranches(rng),
-    havari: null,
-    nextHavariDepth: 780,
+    skirl: null,
+    nextSkirlDepth: 760, // first Skirl comes a beat into the canopy band (~0.15·GOAL)
     padX,
     padW,
     threads: 0,
@@ -182,15 +228,16 @@ export function setInput(w: World, left: boolean, right: boolean) {
 }
 
 // is x inside the OPENING of this branch? (else it's under a limb → collision)
-function inGap(b: Branch, x: number): boolean {
-  return Math.abs(x - b.gapX) <= b.gap / 2 - SEED_R * 0.5
+// gap is the EFFECTIVE width at this instant (breathes on fold branches)
+function inGap(b: Branch, x: number, gap: number): boolean {
+  return Math.abs(x - b.gapX) <= gap / 2 - SEED_R * 0.5
 }
 
-function spawnHavari(w: World) {
+function spawnSkirl(w: World) {
   const side: -1 | 1 = w.rng() < 0.5 ? -1 : 1
-  w.havari = {
-    x: side < 0 ? -HAVARI_R : VW + HAVARI_R,
-    dy: -HAVARI_SWOOP_H,
+  w.skirl = {
+    x: side < 0 ? -SKIRL_R : VW + SKIRL_R,
+    dy: -SKIRL_SWOOP_H,
     side,
     targetX: w.x, // refreshed when the sweep actually begins
     state: 'warn',
@@ -207,11 +254,12 @@ function ratingFor(vy: number, vx: number, centered: boolean): Rating {
 
 // Advance dt seconds. Returns events for sound/FX. No-op unless playing.
 export function tick(w: World, dt: number): TickEvents {
-  const ev: TickEvents = { thrust: false, thread: false, havariWarn: null, havariEnter: false, dodged: false, caught: false, landed: false, crashed: false, rating: null }
+  const ev: TickEvents = { thrust: false, thread: false, skirlWarn: null, skirlEnter: false, dodged: false, caught: false, landed: false, crashed: false, rating: null }
   if (w.state !== 'playing') {
     w.thrusting = false
     return ev
   }
+  w.t += dt // drives the Driftfolds' breathing openings
 
   // wind drifts toward a re-rolled target
   w.windT -= dt
@@ -254,10 +302,10 @@ export function tick(w: World, dt: number): TickEvents {
   // ── branch collisions + thread scoring ─────────────────────────────────────
   for (const b of w.branches) {
     if (b.passed) continue
-    const band = THICK / 2 + SEED_R
+    const yband = THICK / 2 + SEED_R
     // crossed into the limb's y-band this frame?
-    if (w.y + SEED_R >= b.y - band && prevY - SEED_R <= b.y + band) {
-      if (!inGap(b, w.x)) {
+    if (w.y + SEED_R >= b.y - yband && prevY - SEED_R <= b.y + yband) {
+      if (!inGap(b, w.x, effGap(b, w.t))) { // effective (breathing) opening
         w.state = 'crashed'
         ev.crashed = true
         return ev
@@ -272,39 +320,40 @@ export function tick(w: World, dt: number): TickEvents {
     }
   }
 
-  // ── Havari: telegraph → enter → hunt → peel off ────────────────────────────
-  if (!w.havari && w.y >= w.nextHavariDepth && w.y < DEPTH_GOAL - 360) {
-    spawnHavari(w)
-    ev.havariWarn = w.havari!.side
-    // next one comes sooner the deeper you are (but never back-to-back)
-    w.nextHavariDepth = w.y + 660 - diffAt(w.y) * 240
+  // ── Skirl: telegraph → enter → hunt → peel off ────────────────────────────
+  // The Skirl ROOSTS in the canopy band only (canon: game/seedfall.md) — not the whole fall.
+  // A generous fixed spacing keeps it a beat you anticipate, never a metronome.
+  if (!w.skirl && bandAt(w.y) === 'canopy' && w.y >= w.nextSkirlDepth) {
+    spawnSkirl(w)
+    ev.skirlWarn = w.skirl!.side
+    w.nextSkirlDepth = w.y + 720 // real breather between passes (canopy ≈ 1470px → ~2 passes)
   }
-  const h = w.havari
+  const h = w.skirl
   if (h) {
     h.t += dt
     if (h.state === 'warn') {
       // park at the entry edge, telegraphing the side, then commit the swoop
-      h.x = h.side < 0 ? -HAVARI_R : VW + HAVARI_R
-      h.dy = -HAVARI_SWOOP_H
+      h.x = h.side < 0 ? -SKIRL_R : VW + SKIRL_R
+      h.dy = -SKIRL_SWOOP_H
       // targetX stays as snapshot at SPAWN — so drifting away during the warn actually counts
-      if (h.t >= HAVARI_WARN_T) { h.state = 'sweep'; h.t = 0; ev.havariEnter = true }
+      if (h.t >= SKIRL_WARN_T) { h.state = 'sweep'; h.t = 0; ev.skirlEnter = true }
     } else if (h.state === 'sweep') {
-      const p = h.t / HAVARI_SWEEP_T
+      const p = h.t / SKIRL_SWEEP_T
       if (p >= 1) {
         // crossed the screen without snatching it — a clean dodge
-        w.havari = null
+        w.skirl = null
         w.dodges++
         w.bonus += 12
         ev.dodged = true
       } else {
-        const entryX = h.side < 0 ? -HAVARI_R : VW + HAVARI_R
-        const exitX = h.side < 0 ? VW + HAVARI_R : -HAVARI_R
+        const entryX = h.side < 0 ? -SKIRL_R : VW + SKIRL_R
+        const exitX = h.side < 0 ? VW + SKIRL_R : -SKIRL_R
         h.x = entryX + (exitX - entryX) * easeInOut(p)
         // inverted-U dive: rides high at the edges, plunges to the seed's band at targetX
-        const f = Math.max(0, 1 - ((h.x - h.targetX) / HAVARI_DIP_W) ** 2)
-        h.dy = -HAVARI_SWOOP_H + (HAVARI_SWOOP_H + HAVARI_DIP) * f
+        const f = Math.max(0, 1 - ((h.x - h.targetX) / SKIRL_DIP_W) ** 2)
+        h.dy = -SKIRL_SWOOP_H + (SKIRL_SWOOP_H + SKIRL_DIP) * f
         // caught only when the dive actually meets the seed (near targetX AND near the seed's x)
-        if (Math.hypot(h.x - w.x, h.dy) <= HAVARI_CATCH) {
+        if (Math.hypot(h.x - w.x, h.dy) <= SKIRL_CATCH) {
           w.state = 'caught'
           ev.caught = true
           return ev

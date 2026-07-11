@@ -2,7 +2,7 @@
 
 // SEEDFALL — the long drop. A Mana Seed falls down the canopy; hold the left/right half of
 // the screen to drift that way (both = slow the fall), weave through the branches, out-drift
-// the curious Havari, and set down soft on the garden soil at the bottom. Depth is the score;
+// the curious Skirl, and set down soft on the garden soil at the bottom. Depth is the score;
 // the soft-landing is the payoff. Atari vector-glow on a scrolling canvas. Sim in lib/seedfall.ts.
 
 import { useCallback, useEffect, useRef, useState } from 'react'
@@ -25,13 +25,16 @@ import {
   SEED_SCREEN_Y,
   DEPTH_GOAL,
   THICK,
-  HAVARI_SWOOP_H,
-  HAVARI_KILL_W,
+  SKIRL_SWOOP_H,
+  SKIRL_KILL_W,
   FUEL_MAX,
   SOFT_VY,
+  bandAt,
+  effGap,
   type World,
   type Garden,
   type Rating,
+  type Band,
 } from './lib/seedfall'
 import { sfx } from './lib/sfx'
 
@@ -40,7 +43,28 @@ const ATHER = '#37e6ff'
 const HOT = '#e8feff'
 const LEAF = '#54ffc8' // soil + branches + safe-descent
 const WARM = '#ff8a5c' // coming-in-too-hot
-const VOID = '#c86bff' // the Havari + a shatter
+const VOID = '#c86bff' // the Skirl + a shatter
+
+// per-band palette (canon four bands — game/seedfall.md). tint = a low-alpha full-screen wash so
+// each zone reads as a different place; leaf = the branch/limb colour for that band.
+const BAND_TINT: Record<Band, string> = {
+  seedfloor: '#1c3a2e', // the Gardens' airy green-gold near the Bloom
+  canopy: '#123a2c',    // deeper leaf-green — the roost
+  folds: '#241a4a',     // the fold-sea's violet wonder/vertigo
+  clearing: '#2e2113',  // warm earth — the tended ground nears
+}
+const BAND_LEAF: Record<Band, string> = {
+  seedfloor: '#7affc0',
+  canopy: '#54ffc8',
+  folds: '#b78bff', // fold limbs read violet (and they breathe)
+  clearing: '#ffcf8a',
+}
+const BAND_NAME: Record<Band, string> = {
+  seedfloor: 'the seeding-floor',
+  canopy: 'the canopy',
+  folds: 'the driftfolds',
+  clearing: 'the clearing',
+}
 
 // camera: keep the soil ~64px off the bottom once we reach it
 const MAX_CAM_Y = DEPTH_GOAL - (VH - 64)
@@ -122,7 +146,7 @@ export default function SeedfallPage() {
         const ev = tick(w, dt)
         if (ev.thrust) sfx.play('thrust')
         if (ev.thread) sfx.play('thread')
-        if (ev.havariEnter) sfx.play('thread')
+        if (ev.skirlEnter) sfx.play('thread')
         if (ev.landed) {
           sfx.play('plant')
           if (ev.rating === 'perfect') window.setTimeout(() => sfx.play('perfect'), 120)
@@ -235,7 +259,7 @@ export default function SeedfallPage() {
             <div className="absolute inset-0 -z-10 bg-[#04040a]/66" />
             <div className="gx-title text-[#54ffc8] text-2xl tracking-[0.3em] uppercase" style={{ textShadow: '0 0 18px #54ffc8' }}>Seedfall</div>
             <p className="text-[11px] leading-relaxed text-[#9fd6e0]/80 max-w-[280px]">
-              hold a side to drift that way, both to slow the fall. weave the branches, slip the Havari, and set the seed down soft on the soil far below.
+              hold a side to drift that way, both to slow the fall. weave the branches, slip the Skirl, and set the seed down soft on the soil far below.
             </p>
             <div className="gx-label pointer-events-auto flex items-center gap-1.5 text-[10px]">
               {(['endless', 'daily'] as const).map((m) => (
@@ -272,7 +296,7 @@ export default function SeedfallPage() {
             <div className="gx-title text-[#c86bff] text-lg tracking-[0.3em] uppercase" style={{ textShadow: '0 0 14px #c86bff' }}>{phase === 'caught' ? 'Snatched' : 'Shattered'}</div>
             <div className="gx-value font-mono text-[#e8feff] text-3xl leading-none tabular-nums" style={{ textShadow: '0 0 12px #54ffc880' }}>{score}</div>
             <p className="text-[10px] leading-relaxed text-[#9fd6e0]/70 max-w-[250px] italic">
-              {phase === 'caught' ? 'the Havari plucks the seed from the air, curious, and carries it off.' : 'it clips a branch and scatters to the wind. drift cleaner next time.'}
+              {phase === 'caught' ? 'the Skirl plucks the seed from the air, curious, and carries it off.' : 'it clips a branch and scatters to the wind. drift cleaner next time.'}
             </p>
             <OverFooter mode={mode} score={score} dailyBest={dailyBest} shared={shared} onShare={onShare} onRestart={restart} garden={garden} />
            </div>
@@ -348,6 +372,16 @@ function render(canvas: HTMLCanvasElement, w: World, ts: number, planted: number
   const camY = Math.max(-40, Math.min(w.y - SEED_SCREEN_Y, MAX_CAM_Y))
   const sy = (worldY: number) => worldY - camY
 
+  // ── band wash: a vertical gradient between the band at the top of view and the one at the
+  // bottom, so crossing a boundary crossfades the whole zone's palette (the four canon bands) ──
+  const bandGrad = ctx.createLinearGradient(0, 0, 0, VH)
+  bandGrad.addColorStop(0, BAND_TINT[bandAt(Math.max(0, camY))])
+  bandGrad.addColorStop(1, BAND_TINT[bandAt(camY + VH)])
+  ctx.globalAlpha = 0.55
+  ctx.fillStyle = bandGrad
+  ctx.fillRect(0, 0, VW, VH)
+  ctx.globalAlpha = 1
+
   // parallax stars (wrap over a 1600 band, scaled by per-star parallax)
   for (const s of STARS) {
     const yy = ((s.y - camY * s.par) % 1600 + 1600) % 1600 - 200
@@ -389,14 +423,16 @@ function render(canvas: HTMLCanvasElement, w: World, ts: number, planted: number
   for (const b of w.branches) {
     const py = sy(b.y)
     if (py < -THICK || py > VH + THICK) continue
-    const gl = b.gapX - b.gap / 2
-    const gr = b.gapX + b.gap / 2
-    const col = b.passed ? '#2f6f5a' : LEAF
+    const eg = effGap(b, w.t) // breathing opening on fold branches (matches collision exactly)
+    const gl = b.gapX - eg / 2
+    const gr = b.gapX + eg / 2
+    const leaf = BAND_LEAF[bandAt(b.y)]
+    const col = b.passed ? '#2f6f5a' : leaf
     ctx.strokeStyle = col
     ctx.globalAlpha = b.passed ? 0.4 : 0.92
     ctx.lineWidth = THICK
-    ctx.shadowBlur = b.passed ? 0 : 9
-    ctx.shadowColor = LEAF
+    ctx.shadowBlur = b.passed ? 0 : (b.fold ? 13 : 9) // folds glow a touch more — they move
+    ctx.shadowColor = leaf
     if (gl > 2) seg(ctx, 0, py, gl, py)
     if (gr < VW - 2) seg(ctx, gr, py, VW, py)
     // little leaf nubs along the limb (cheap texture)
@@ -447,25 +483,25 @@ function render(canvas: HTMLCanvasElement, w: World, ts: number, planted: number
     ctx.shadowBlur = 0
   }
 
-  // ── the Havari (bird spirit) — a committed swoop, not a hover ────────────────
-  const hv = w.havari
+  // ── the Skirl (bird spirit) — a committed swoop, not a hover ────────────────
+  const hv = w.skirl
   const seedScreenY = sy(w.y)
   if (hv) {
     // DANGER BAND at the intercept point — shown from the warn. Drift out of this column to live.
     const bandPulse = 0.5 + 0.5 * Math.sin(t * 9)
-    const bandTop = seedScreenY - HAVARI_SWOOP_H
-    const bandH = HAVARI_SWOOP_H + 18
+    const bandTop = seedScreenY - SKIRL_SWOOP_H
+    const bandH = SKIRL_SWOOP_H + 18
     const grad = ctx.createLinearGradient(0, bandTop, 0, bandTop + bandH)
     grad.addColorStop(0, 'rgba(200,107,255,0)')
     grad.addColorStop(1, `rgba(200,107,255,${0.1 + 0.12 * bandPulse})`)
     ctx.fillStyle = grad
-    ctx.fillRect(hv.targetX - HAVARI_KILL_W, bandTop, HAVARI_KILL_W * 2, bandH)
+    ctx.fillRect(hv.targetX - SKIRL_KILL_W, bandTop, SKIRL_KILL_W * 2, bandH)
     ctx.globalAlpha = 0.5 + 0.3 * bandPulse
     ctx.strokeStyle = VOID
     ctx.lineWidth = 1
     ctx.setLineDash([4, 5])
-    seg(ctx, hv.targetX - HAVARI_KILL_W, bandTop, hv.targetX - HAVARI_KILL_W, bandTop + bandH)
-    seg(ctx, hv.targetX + HAVARI_KILL_W, bandTop, hv.targetX + HAVARI_KILL_W, bandTop + bandH)
+    seg(ctx, hv.targetX - SKIRL_KILL_W, bandTop, hv.targetX - SKIRL_KILL_W, bandTop + bandH)
+    seg(ctx, hv.targetX + SKIRL_KILL_W, bandTop, hv.targetX + SKIRL_KILL_W, bandTop + bandH)
     ctx.setLineDash([])
     ctx.globalAlpha = 1
     if (hv.state === 'warn') {
@@ -487,7 +523,7 @@ function render(canvas: HTMLCanvasElement, w: World, ts: number, planted: number
       const px = hv.x
       const py = seedScreenY + hv.dy
       const flap = Math.sin(t * 18) * 7
-      const bank = Math.max(0, 1 + hv.dy / HAVARI_SWOOP_H) // 0 high → 1 at the bottom of the dive
+      const bank = Math.max(0, 1 + hv.dy / SKIRL_SWOOP_H) // 0 high → 1 at the bottom of the dive
       ctx.globalAlpha = 0.96
       ctx.strokeStyle = VOID
       ctx.lineWidth = 2.5
@@ -501,6 +537,18 @@ function render(canvas: HTMLCanvasElement, w: World, ts: number, planted: number
     }
   }
   ctx.globalAlpha = 1
+
+  // ── current-band wayfinding label — a faint name so each zone announces itself ──
+  if (w.state === 'playing') {
+    const bn = bandAt(w.y)
+    ctx.font = '600 10px ui-monospace, SFMono-Regular, monospace'
+    ctx.textAlign = 'center'
+    ctx.globalAlpha = 0.34
+    ctx.fillStyle = BAND_LEAF[bn]
+    ctx.fillText(BAND_NAME[bn].toUpperCase(), VW / 2, 24)
+    ctx.globalAlpha = 1
+    ctx.textAlign = 'start'
+  }
 
   // ── the Mana Seed ────────────────────────────────────────────────────────────
   const seedY = sy(w.y) // == SEED_SCREEN_Y except during intro fall-in / soil approach

@@ -58,7 +58,7 @@ function calm(w: World) { w.wind = 0; w.windTarget = 0; w.windT = 999 }
   ok('no fuel → still falls', w.vy > 0 && w.thrusting === false)
 }
 
-// 5. lateral thrust steers (the drift that out-runs the Havari)
+// 5. lateral thrust steers (the drift that out-runs the Skirl)
 {
   const l = makeWorld(1); l.state = 'playing'; calm(l); setInput(l, true, false); tick(l, 0.1)
   ok('left thrust pushes left', l.vx < 0)
@@ -82,18 +82,18 @@ function calm(w: World) { w.wind = 0; w.windTarget = 0; w.windT = 999 }
   ok('threading scores', w2.score > 0)
 }
 
-// 7. the Havari's swoop snatches a seed left in its dive line; drift off it and it passes
+// 7. the Skirl's swoop snatches a seed left in its dive line; drift off it and it passes
 {
   // dive aimed right at a stationary seed → caught somewhere in the sweep
   const w = makeWorld(1); w.state = 'playing'; calm(w); w.x = 200
-  w.havari = { x: -13, dy: -122, side: 1, targetX: 200, state: 'sweep', t: 0 }
+  w.skirl = { x: -13, dy: -122, side: 1, targetX: 200, state: 'sweep', t: 0 }
   let caught = false
   for (let i = 0; i < 200 && w.state === 'playing'; i++) { if (tick(w, 1 / 60).caught) caught = true }
   ok('swoop snatches a seed in its dive line', caught && w.state === 'caught')
 
   // dive aimed far from the seed → it crosses and peels off (a dodge)
   const w2 = makeWorld(1); w2.state = 'playing'; calm(w2); w2.x = 360
-  w2.havari = { x: -13, dy: -122, side: 1, targetX: 40, state: 'sweep', t: 0 }
+  w2.skirl = { x: -13, dy: -122, side: 1, targetX: 40, state: 'sweep', t: 0 }
   let dodged = false
   for (let i = 0; i < 200 && w2.state === 'playing'; i++) { if (tick(w2, 1 / 60).dodged) dodged = true }
   ok('a swoop off the seed = dodge (+score)', dodged && w2.dodges === 1 && w2.state === 'playing')
