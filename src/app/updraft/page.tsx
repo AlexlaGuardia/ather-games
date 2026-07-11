@@ -14,18 +14,21 @@ import { screenMaxW, deckMaxW, cabinetMaxW } from '@/lib/arcade/fit'
 import {
   makeWorld,
   flap,
+  launch,
   tick,
   loadHiScore,
   saveHiScore,
+  airAt,
+  effGapY,
   VW,
   VH,
   GROUND_Y,
   BIRD_X,
   BIRD_R,
   GATE_W,
-  GAP_H,
   SCROLL,
   type World,
+  type Air,
 } from './lib/updraft'
 import { sfx } from './lib/sfx'
 import { music } from './music'
@@ -39,6 +42,21 @@ const ATHER = '#37e6ff'
 const HOT = '#e8feff'
 const VOID = '#c86bff'
 const VOID_DIM = '#4a2078'
+
+// per-air palette (canon four airs — game/updraft.md). tint = a low-alpha wash so each air reads
+// as a different sky; gate = the void-gate colour for that air; name = the wayfinding label.
+const AIR_TINT: Record<Air, string> = {
+  open: '#0e3552',    // the open current — clear airy blue
+  gates: '#2a1846',   // the gate-reach — the void crowds, violet
+  thermal: '#4a3210', // the rising thermal — warm updraft glow
+  churn: '#123a37',   // the churn — turbulent teal near the void's tears
+}
+const AIR_GATE: Record<Air, string> = {
+  open: '#7fb8ff', gates: '#c86bff', thermal: '#ffb066', churn: '#4ce0c8',
+}
+const AIR_NAME: Record<Air, string> = {
+  open: 'the open current', gates: 'the gate-reach', thermal: 'the rising thermal', churn: 'the churn',
+}
 
 // a fixed parallax star-field (drifts left for a sense of speed)
 const STARS = (() => {
@@ -154,7 +172,7 @@ export default function UpdraftPage() {
     const w = worldRef.current
     if (!w || w.state !== 'ready') return
     sfx.ensure() // the START gesture unlocks audio + starts the bed
-    w.state = 'playing'
+    launch(w) // ready → playing + spawns the first gate with breathing room (restored)
     setPhase('playing')
     music.start()
     vo.play('start')
@@ -334,19 +352,50 @@ function render(canvas: HTMLCanvasElement, w: World, ts: number, nebula: HTMLIma
   }
   ctx.globalAlpha = 1
 
-  // void gates
+  // ── air wash: tint the whole sky by the current air (the four canon airs) ──────
+  const air = airAt(w.dist)
+  ctx.globalAlpha = 0.2
+  ctx.fillStyle = AIR_TINT[air]
+  ctx.fillRect(0, 0, VW, VH)
+  ctx.globalAlpha = 1
+  // the Rising Thermal: motes stream UPWARD to telegraph the lift you feel
+  if (air === 'thermal' && moving) {
+    ctx.fillStyle = AIR_GATE.thermal
+    for (let i = 0; i < 7; i++) {
+      const mx = ((i * 61) % VW)
+      const my = (GROUND_Y - ((t * 90 + i * 83) % GROUND_Y))
+      ctx.globalAlpha = 0.16 + 0.14 * Math.sin(t * 3 + i)
+      dot(ctx, mx, my, 1.6)
+    }
+    ctx.globalAlpha = 1
+  }
+
+  // void gates — coloured by their air; the Churn's openings drift (effGapY)
   for (const g of w.gates) {
-    const top = g.gapY - GAP_H / 2
-    const bot = g.gapY + GAP_H / 2
-    drawGate(ctx, g.x, 0, top) // upper column
-    drawGate(ctx, g.x, bot, GROUND_Y - bot) // lower column
+    const cy = effGapY(g, w.t)
+    const top = cy - g.gapH / 2
+    const bot = cy + g.gapH / 2
+    const gc = AIR_GATE[g.air]
+    drawGate(ctx, g.x, 0, top, gc) // upper column
+    drawGate(ctx, g.x, bot, GROUND_Y - bot, gc) // lower column
     // gap-edge glints
     ctx.fillStyle = HOT
     ctx.shadowBlur = 10
-    ctx.shadowColor = VOID
+    ctx.shadowColor = gc
     dot(ctx, g.x + GATE_W / 2, top, 2)
     dot(ctx, g.x + GATE_W / 2, bot, 2)
     ctx.shadowBlur = 0
+  }
+
+  // current-air wayfinding label — a faint name so each air announces itself
+  if (moving) {
+    ctx.font = '600 10px ui-monospace, SFMono-Regular, monospace'
+    ctx.textAlign = 'center'
+    ctx.globalAlpha = 0.36
+    ctx.fillStyle = AIR_GATE[air]
+    ctx.fillText(AIR_NAME[air].toUpperCase(), VW / 2, 26)
+    ctx.globalAlpha = 1
+    ctx.textAlign = 'start'
   }
 
   // ground line
@@ -389,14 +438,14 @@ function render(canvas: HTMLCanvasElement, w: World, ts: number, nebula: HTMLIma
   ctx.shadowBlur = 0
 }
 
-function drawGate(ctx: CanvasRenderingContext2D, x: number, y: number, h: number) {
+function drawGate(ctx: CanvasRenderingContext2D, x: number, y: number, h: number, col: string) {
   if (h <= 0) return
   ctx.fillStyle = 'rgba(74,32,120,0.18)'
   ctx.fillRect(x, y, GATE_W, h)
-  ctx.strokeStyle = VOID
+  ctx.strokeStyle = col
   ctx.lineWidth = 2
   ctx.shadowBlur = 10
-  ctx.shadowColor = VOID
+  ctx.shadowColor = col
   ctx.strokeRect(x + 1, y, GATE_W - 2, h)
   ctx.shadowBlur = 0
 }
