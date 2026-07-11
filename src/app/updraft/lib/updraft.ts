@@ -42,6 +42,12 @@ const AIR_YBIAS: Record<Air, 'centred' | 'anywhere' | 'high' | 'choppy'> = {
   open: 'centred', gates: 'anywhere', thermal: 'high', churn: 'choppy',
 }
 
+// solvability caps: the most the opening may shift from the previous gate. Climbing between two
+// gates is flap-limited (you fight gravity), so a big UP jump in little horizontal room is
+// unmakeable — cap it. Dropping is gravity-easy, so a bigger fall stays fair. (Alex bug 2026-07-11.)
+export const MAX_UP_STEP = 196
+export const MAX_DOWN_STEP = 300
+
 // endless ramp: openings narrow + the scroll quickens a touch as you climb, both capped fair
 function rampGap(dist: number): number { return Math.min(34, Math.max(0, dist) / 340) }
 export function scrollAt(dist: number): number { return SCROLL + Math.min(54, Math.max(0, dist) / 260) }
@@ -99,6 +105,14 @@ function spawnGate(w: World, x: number) {
       gapY = lo + span * 0.26 + r * span * 0.48; break
     default: // Gate-Reach — the tight squeeze can be anywhere
       gapY = lo + r * span
+  }
+  // SOLVABILITY: never place the next opening farther from the last one than the mote can travel
+  // between them. Climbing is flap-limited (the hard way), so cap the upward jump tight; dropping
+  // is gravity-easy, so allow bigger falls. Without this, a low→high pair too close is unmakeable.
+  if (w.gates.length) {
+    const prev = w.gates[w.gates.length - 1].gapY
+    gapY = Math.max(prev - MAX_UP_STEP, Math.min(prev + MAX_DOWN_STEP, gapY)) // up = smaller y
+    gapY = Math.max(lo, Math.min(GROUND_Y - m, gapY)) // keep it in the lane
   }
   w.gates.push({ x, gapY, gapH, air, passed: false })
 }
