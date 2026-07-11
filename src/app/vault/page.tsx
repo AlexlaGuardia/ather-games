@@ -56,6 +56,7 @@ import Trail from './Trail'
 import { dailySeed, dailyNumber, loadDailyBest, saveDailyBest, dailyShare, copyShare } from '@/lib/arcade/daily'
 import DailyLeaderboard from '../_components/DailyLeaderboard'
 import ArcadeControls from '../_components/ArcadeControls'
+import { StartButton, useStartKey } from '../_components/ArcadeStart'
 
 // ── the greying palette ───────────────────────────────────────────────────────────
 const BG_TOP = '#070a12' // night over the failing land
@@ -187,14 +188,23 @@ export default function VaultPage() {
     }
   }
 
-  // ── the one input: the vault (jump). Variable via hold (press → up-arc, release → cut). ──────────
-  const doPress = useCallback(() => {
-    // on the Story trail the world sits 'ready' behind the menu — ignore the Vault button there
+  // START launches the run (ready → playing) — the click/key IS the audio-unlock gesture. It flips the
+  // world + phase WITHOUT committing a vault, so the first Vault input only jumps, never launches.
+  const start = useCallback(() => {
+    // on the Story trail the world sits 'ready' behind the menu — never launch from there
     if (modeRef.current === 'story' && storyViewRef.current === 'trail') return
-    sfx.ensure()
     const w = worldRef.current
-    if (!w || w.state === 'dead' || w.state === 'won') return
-    if (w.state === 'ready') { setPhase('playing'); music.start(); vo.play('start') }
+    if (!w || w.state !== 'ready') return
+    sfx.ensure()
+    w.state = 'playing'
+    setPhase('playing'); music.start(); vo.play('start')
+  }, [])
+
+  // ── the one input: the vault (jump). Variable via hold (press → up-arc, release → cut). ──────────
+  // Acts only mid-run now — START owns launching, so the first press no longer starts the game.
+  const doPress = useCallback(() => {
+    const w = worldRef.current
+    if (!w || w.state !== 'playing') return
     pressJump(w)
   }, [])
   const doRelease = useCallback(() => {
@@ -316,6 +326,10 @@ export default function VaultPage() {
   // the Story trail is a MENU, not gameplay — render it full-height (not jammed in the landscape
   // canvas letterbox), and hide the score row + controller while it's up.
   const isStoryTrail = mode === 'story' && storyView === 'trail'
+
+  // Enter / Space launch the run — but only on an actual level's ready screen, never while the Story
+  // trail menu is up (there the world sits 'ready' behind the menu and a keypress must not launch).
+  useStartKey(start, phase === 'ready' && !isStoryTrail)
 
   return (
     <ArcadeCabinet gameId="vault" accent={ACCENT} wall={1} maxWidth={cabinetMaxW(VW, VH)}>
@@ -454,7 +468,7 @@ export default function VaultPage() {
               </>
             )}
             {mode === 'daily' && <div className="text-[9px] font-mono text-[#7fd8e6]/45 tracking-wider">same crossing for everyone today</div>}
-            <div className="gx-label text-[11px] text-[#7fd8e6]/70 mt-1">press <span style={{ color: ACCENT }}>↟ Vault</span> below to begin</div>
+            <StartButton accent={ACCENT} onStart={start} hint="or press Space" />
             {best > 0 && mode !== 'story' && <div className="gx-label text-[10px] font-mono text-[#7fd8e6]/50 tracking-wider mt-1">best <span className="text-[#e8feff] tabular-nums">{best}</span></div>}
           </div>
         )}

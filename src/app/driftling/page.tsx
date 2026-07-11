@@ -8,6 +8,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import ArcadeCabinet from '../_components/ArcadeCabinet'
 import ArcadeControls from '../_components/ArcadeControls'
+import { StartButton, useStartKey } from '../_components/ArcadeStart'
 import { mulberry32 } from '@/lib/arcade/rng'
 import { useNoScroll } from '@/lib/arcade/useNoScroll'
 import { screenMaxW, deckMaxW, cabinetMaxW } from '@/lib/arcade/fit'
@@ -196,19 +197,24 @@ export default function DriftlingPage() {
     return () => cancelAnimationFrame(raf)
   }, [phase])
 
-  // ── steering input ── the cabinet deck stick (screen is a neutral display) ──────
-  const launchIfReady = () => {
-    if (worldRef.current?.state === 'playing' && phase === 'ready') setPhase('playing')
-  }
-  const deckStick = useCallback((x: number, y: number) => {
-    sfx.ensure()
+  // START launches the run (the click/key IS the audio-unlock gesture); the first steer input
+  // then ONLY steers — it never launches. Flip the sim + React together, without committing a heading.
+  const start = useCallback(() => {
     const w = worldRef.current
-    if (!w || w.state === 'dead') return
-    const live = Math.hypot(x, y) > 0.18 // deadzone — a resting stick doesn't steer or launch
+    if (!w || w.state !== 'ready') return
+    sfx.ensure()
+    w.state = 'playing'
+    setPhase('playing')
+  }, [])
+
+  // ── steering input ── the cabinet deck stick (screen is a neutral display) ──────
+  const deckStick = useCallback((x: number, y: number) => {
+    const w = worldRef.current
+    if (!w || w.state !== 'playing') return // steers only once START launched the run
+    const live = Math.hypot(x, y) > 0.18 // deadzone — a resting stick coasts
     deck.current = { active: live, x, y }
     setHeading(w, live ? x : 0, live ? y : 0)
-    launchIfReady()
-  }, [phase])
+  }, [])
   const deckEnd = useCallback(() => {
     deck.current = { active: false, x: 0, y: 0 }
     if (worldRef.current) setHeading(worldRef.current, 0, 0)
@@ -216,6 +222,9 @@ export default function DriftlingPage() {
 
   const restart = useCallback(() => { sfx.ensure(); boot() }, [boot])
   const toggleMute = () => { sfx.ensure(); const m = !sfx.isMuted(); sfx.setMuted(m); setMuted(m) }
+
+  // Enter / Space launch from the ready screen (desktop) — fires only while ready
+  useStartKey(start, phase === 'ready')
 
   const accent = branch ? elColor[branch] : '#37d4e6'
 
@@ -267,7 +276,7 @@ export default function DriftlingPage() {
               ))}
             </div>
             {mode === 'daily' && <div className="text-[9px] font-mono text-[#7fd8e6]/45 tracking-wider -mt-1">the same ocean for everyone today</div>}
-            <div className="gx-label text-[12px] text-[#03060f] px-6 py-2.5 rounded-[2px] mt-1" style={{ background: accent, boxShadow: `0 0 18px ${accent}80` }}>drift to begin</div>
+            <div className="mt-1"><StartButton accent={accent} onStart={start} hint="drag the stick to swim" /></div>
             {mode === 'daily'
               ? dailyBest > 0 && <div className="gx-label text-[10px] font-mono text-[#7fd8e6]/50 tracking-wider mt-1">today&apos;s best <span className="text-[#e8feff] tabular-nums">{dailyBest}</span></div>
               : best > 0 && <div className="gx-label text-[10px] font-mono text-[#7fd8e6]/50 tracking-wider mt-1">best <span className="text-[#e8feff] tabular-nums">{best}</span></div>}

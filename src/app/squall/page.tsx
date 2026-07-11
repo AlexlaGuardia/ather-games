@@ -28,6 +28,7 @@ import { sfx } from './lib/sfx'
 import { music } from './music'
 import { vo } from './vo'
 import ArcadeControls from '../_components/ArcadeControls'
+import { StartButton, useStartKey } from '../_components/ArcadeStart'
 
 const BG_TOP = '#05030d'
 const BG_BOT = '#0a0716'
@@ -175,18 +176,29 @@ export default function SquallPage() {
   }, [phase])
 
   // ── input ──────────────────────────────────────────────────────────────────────
+  // START launches the run; the first steer then ONLY moves the mote (no launch double-duty).
+  const start = useCallback(() => {
+    const w = worldRef.current
+    if (!w || w.state !== 'ready') return
+    sfx.ensure()
+    w.state = 'playing' // flip the sim (setHeading used to do this — but START commits no heading)
+    setPhase('playing'); music.start(); vo.play('start')
+  }, [])
+
   // DECK steering: the cabinet stick gives a -1..1 vector; the per-frame applyHeading reads it.
-  // First steer kicks the sim from ready→playing (setHeading auto-starts it).
+  // Only steers once playing — launching is START's job now.
   const onStick = useCallback((x: number, y: number) => {
     sfx.ensure()
     deckVec.current = { x, y, active: true }
     const w = worldRef.current
-    if (w && w.state === 'ready') { setHeading(w, x, y); setPhase('playing'); music.start(); vo.play('start') }
+    if (w && w.state === 'playing') setHeading(w, x, y)
   }, [])
   const onStickEnd = useCallback(() => { deckVec.current = { x: 0, y: 0, active: false } }, [])
 
   const restart = useCallback(() => { sfx.ensure(); boot() }, [boot])
   const toggleMute = () => { sfx.ensure(); const m = !sfx.isMuted(); sfx.setMuted(m); music.setMuted(m); vo.setMuted(m); setMuted(m) }
+
+  useStartKey(start, phase === 'ready')
 
   return (
     <ArcadeCabinet gameId="squall" accent={ACCENT} wall={1} maxWidth={cabinetMaxW(VW, VH)}>
@@ -230,7 +242,7 @@ export default function SquallPage() {
               ))}
             </div>
             {mode === 'daily' && <div className="text-[9px] font-mono text-[#7fd8e6]/45 tracking-wider -mt-1">the same storm for everyone today</div>}
-            <div className="gx-label text-[11px] text-[#7fd8e6]/70 mt-1">steer the stick below to begin</div>
+            <StartButton accent={ACCENT} onStart={start} hint="or press Enter · then steer" />
             {mode === 'daily'
               ? dailyBest > 0 && <div className="gx-label text-[10px] font-mono text-[#7fd8e6]/50 tracking-wider mt-1">today&apos;s best <span className="text-[#e8feff] tabular-nums">{dailyBest}</span></div>
               : best > 0 && <div className="gx-label text-[10px] font-mono text-[#7fd8e6]/50 tracking-wider mt-1">best <span className="text-[#e8feff] tabular-nums">{best}</span></div>}

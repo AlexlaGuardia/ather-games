@@ -32,6 +32,7 @@ import {
 import { sfx } from './lib/sfx'
 import ArcadeCabinet from '../_components/ArcadeCabinet'
 import ArcadeControls from '../_components/ArcadeControls'
+import { StartButton, useStartKey } from '../_components/ArcadeStart'
 import { dailySeed, dailyNumber, loadDailyBest, saveDailyBest, dailyShare, copyShare } from '@/lib/arcade/daily'
 import { screenMaxW, deckMaxW, cabinetMaxW } from '@/lib/arcade/fit'
 import DailyLeaderboard from '../_components/DailyLeaderboard'
@@ -177,6 +178,7 @@ export default function AtherdashPage() {
     start(w)
     setPhase('playing')
   }, [])
+  useStartKey(launch, phase === 'ready') // Enter / Space begins the run from the title screen
 
   const doJump = useCallback(() => {
     const w = worldRef.current
@@ -192,35 +194,33 @@ export default function AtherdashPage() {
     setMuted(m)
   }
 
-  // keyboard: ←/→ or A/D swap · ↑/W/Space jump (and launch from ready)
+  // keyboard: ←/→ or A/D swap · ↑/W/Space jump. START (Enter/Space) launches the
+  // run — see useStartKey below — so movement keys only act once we're playing.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const w = worldRef.current
-      if (!w) return
+      if (!w || w.state !== 'playing') return
       const left = e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'A'
       const right = e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D'
       const up = e.key === 'ArrowUp' || e.key === 'w' || e.key === 'W' || e.key === ' '
       if (!left && !right && !up) return
       e.preventDefault()
-      if (w.state === 'ready') { launch(); if (up) return }
       if (up) doJump()
       else swap(w, left ? -1 : +1)
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [launch, doJump])
+  }, [doJump])
 
-  // the cabinet deck: LEFT / RIGHT slide lanes, JUMP hops. From ready, any press
-  // launches first (a launch-press with LEFT/RIGHT also slides; JUMP just launches),
-  // mirroring the keyboard so the screen stays a neutral display.
+  // the cabinet deck: LEFT / RIGHT slide lanes, JUMP hops. The run is launched by
+  // START (the ready-screen button), so these act only once we're playing — the
+  // first press is a move, never a launch.
   const deckPress = useCallback((id: string) => {
     const w = worldRef.current
-    if (!w) return
-    sfx.ensure()
-    if (w.state === 'ready') { launch(); if (id === 'jump') return }
+    if (!w || w.state !== 'playing') return
     if (id === 'jump') doJump()
     else swap(w, id === 'left' ? -1 : +1)
-  }, [launch, doJump])
+  }, [doJump])
 
   return (
     <ArcadeCabinet gameId="atherdash" accent="#37e6ff" wall={1} maxWidth={cabinetMaxW(VW, VH)}>
@@ -280,8 +280,8 @@ export default function AtherdashPage() {
             {mode === 'daily' && (
               <div className="text-[9px] font-mono text-[#7fd8e6]/45 tracking-wider -mt-1">same course for everyone today</div>
             )}
-            <div className="gx-label text-[12px] text-[#04040a] bg-[#37e6ff] px-6 py-2.5 rounded-[2px] mt-1" style={{ boxShadow: '0 0 18px #37e6ff80' }}>
-              swipe to slide · tap to hop
+            <div className="mt-1">
+              <StartButton accent={ATHER} onStart={launch} hint="or press Enter · then hop" />
             </div>
           </div>
         )}

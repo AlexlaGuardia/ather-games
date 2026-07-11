@@ -32,6 +32,7 @@ import { music } from './music'
 import { vo } from './vo'
 import { dailySeed, dailyNumber, loadDailyBest, saveDailyBest, dailyShare, copyShare } from '@/lib/arcade/daily'
 import DailyLeaderboard from '../_components/DailyLeaderboard'
+import { StartButton, useStartKey } from '../_components/ArcadeStart'
 
 const BG = '#04040a'
 const ATHER = '#37e6ff'
@@ -147,14 +148,24 @@ export default function UpdraftPage() {
     return () => cancelAnimationFrame(raf)
   }, [])
 
-  const onDown = useCallback(() => {
-    sfx.ensure()
+  // START owns launching the run (flip ready → playing WITHOUT beating the wings — the rider waits on
+  // the updraft so you can read the first gate; your first tap then only flaps). Decoupled from input.
+  const start = useCallback(() => {
     const w = worldRef.current
-    if (!w || w.state === 'over') return // retry is the explicit button
-    const wasReady = w.state === 'ready'
+    if (!w || w.state !== 'ready') return
+    sfx.ensure() // the START gesture unlocks audio + starts the bed
+    w.state = 'playing'
+    setPhase('playing')
+    music.start()
+    vo.play('start')
+  }, [])
+  useStartKey(start, phase === 'ready') // Enter / Space also start
+
+  const onDown = useCallback(() => {
+    const w = worldRef.current
+    if (!w || w.state !== 'playing') return // START launches the run; a tap only flaps while playing
     flap(w)
     sfx.play('flap')
-    if (wasReady) { setPhase('playing'); music.start(); vo.play('start') }
   }, [])
 
   const restart = useCallback(() => {
@@ -213,7 +224,7 @@ export default function UpdraftPage() {
               ))}
             </div>
             {mode === 'daily' && <div className="text-[9px] font-mono text-[#7fd8e6]/45 tracking-wider -mt-1">same currents for everyone today</div>}
-            <div className="gx-label text-[11px] text-[#7fd8e6]/70 mt-1">press <span className="text-[#37e6ff]">➶ Fly</span> below to begin</div>
+            <div className="mt-1"><StartButton accent={ATHER} onStart={start} hint="then tap to fly" /></div>
           </div>
         )}
 

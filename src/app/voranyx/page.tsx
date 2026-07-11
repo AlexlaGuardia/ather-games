@@ -8,6 +8,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import ArcadeCabinet from '../_components/ArcadeCabinet'
+import { StartButton, useStartKey } from '../_components/ArcadeStart'
 import { mulberry32 } from '@/lib/arcade/rng'
 import { useNoScroll } from '@/lib/arcade/useNoScroll'
 import { screenMaxW, deckMaxW, cabinetMaxW } from '@/lib/arcade/fit'
@@ -150,17 +151,25 @@ export default function VoranyxPage() {
     return () => cancelAnimationFrame(raf)
   }, [])
 
-  // start on first deck interaction (the screen is a neutral display now)
-  const begin = useCallback(() => { sfx.ensure(); if (!startedRef.current) { startedRef.current = true; setStarted(true) } }, [])
-  // DECK steering: the cabinet stick gives a -1..1 vector; steer the worm toward it past a deadzone.
-  // Releasing the stick leaves the last heading (the worm keeps gliding) — same as before.
-  const deckStick = useCallback((x: number, y: number) => {
-    begin()
-    if (Math.hypot(x, y) > 0.2 && worldRef.current) steer(worldRef.current, Math.atan2(y, x))
-  }, [begin])
+  // START owns launching the run (flip started WITHOUT committing a heading — the worm coasts on its
+  // spawn heading so you can read the silt; your first stick input then steers). Decoupled from movement.
+  const start = useCallback(() => {
+    if (startedRef.current || overRef.current) return
+    sfx.ensure()
+    startedRef.current = true
+    setStarted(true)
+  }, [])
+  useStartKey(start, !started && !over) // Enter / Space also start
 
-  // dedicated boost (touch thumb + Space)
-  const boostOn = useCallback(() => { sfx.ensure(); if (worldRef.current) setBoost(worldRef.current, true) }, [])
+  // DECK steering: the cabinet stick gives a -1..1 vector; steer the worm toward it past a deadzone.
+  // Releasing the stick leaves the last heading (the worm keeps gliding). Steers only once launched.
+  const deckStick = useCallback((x: number, y: number) => {
+    if (!startedRef.current || overRef.current) return
+    if (Math.hypot(x, y) > 0.2 && worldRef.current) steer(worldRef.current, Math.atan2(y, x))
+  }, [])
+
+  // dedicated boost (touch thumb + Space) — acts only once launched
+  const boostOn = useCallback(() => { if (!startedRef.current || overRef.current) return; if (worldRef.current) setBoost(worldRef.current, true) }, [])
   const boostOff = useCallback(() => { if (worldRef.current) setBoost(worldRef.current, false) }, [])
   useEffect(() => {
     const kd = (e: KeyboardEvent) => { if (e.code === 'Space') { e.preventDefault(); boostOn() } }
@@ -220,7 +229,7 @@ export default function VoranyxPage() {
               ))}
             </div>
             {mode === 'daily' && <div className="text-[9px] font-mono text-[#7fd8e6]/45 tracking-wider -mt-1">same silt for everyone today</div>}
-            <div className="gx-label text-[11px] text-[#7fd8e6]/70 mt-1">steer the stick below to dive in</div>
+            <div className="mt-1"><StartButton accent={ATHER} onStart={start} hint="then steer to dive" /></div>
           </div>
         )}
 
@@ -254,7 +263,7 @@ export default function VoranyxPage() {
         stick
         onStick={deckStick}
         buttons={[{ id: 'boost', label: 'Boost', glyph: '»', hint: 'space', size: 'lg' }]}
-        onPress={() => { begin(); boostOn() }}
+        onPress={boostOn}
         onRelease={boostOff}
         hint="drag the stick to steer · hold boost to surge"
       />

@@ -30,6 +30,7 @@ import {
 } from './lib/ward'
 import { sfx } from './lib/sfx'
 import ArcadeCabinet from '../_components/ArcadeCabinet'
+import { StartButton, useStartKey } from '../_components/ArcadeStart'
 import { dailySeed, dailyNumber, loadDailyBest, saveDailyBest, dailyShare, copyShare } from '@/lib/arcade/daily'
 import DailyLeaderboard from '../_components/DailyLeaderboard'
 
@@ -162,22 +163,20 @@ export default function WardPage() {
     }
   }
 
-  const startGame = useCallback(() => {
+  // START launches the run (the click/key is the audio-unlock gesture). It does NOT
+  // bloom — the first tap after starting only fires, never double-duties as launch.
+  const start = useCallback(() => {
+    if (startedRef.current || overRef.current) return
     sfx.ensure()
     startedRef.current = true
     setStarted(true)
   }, [])
 
   const onDown = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
-    sfx.ensure()
     const p = toVirtual(e)
     pointerRef.current = { ...p, active: true }
-    if (!startedRef.current) {
-      startedRef.current = true
-      setStarted(true)
-      return
-    }
-    if (overRef.current) return
+    if (!startedRef.current || overRef.current) return
+    sfx.ensure()
     const w = worldRef.current
     if (w && fireBloom(w, p.x, p.y)) {
       sfx.play('launch')
@@ -217,6 +216,8 @@ export default function WardPage() {
     sfx.setMuted(m)
     setMuted(m)
   }
+
+  useStartKey(start, !started && !over) // Enter / Space launch only on the ready screen
 
   const lowAmmo = hud.maxAmmo > 0 && hud.ammo <= 3
 
@@ -275,7 +276,7 @@ export default function WardPage() {
         <div className="pointer-events-none absolute inset-0 rounded-md wd-crt" />
 
         {!started && (
-          <div onPointerDown={startGame} className="cursor-pointer absolute inset-0 isolate overflow-hidden flex flex-col items-center justify-center gap-3 rounded-md text-center px-6">
+          <div className="absolute inset-0 isolate overflow-hidden flex flex-col items-center justify-center gap-3 rounded-md text-center px-6">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src="/ward/card.webp" alt="" aria-hidden="true" className="absolute inset-0 -z-10 h-full w-full object-cover opacity-[0.65]" />
             <div className="absolute inset-0 -z-10 bg-[#04040a]/65" />
@@ -296,9 +297,7 @@ export default function WardPage() {
               ))}
             </div>
             {mode === 'daily' && <div className="text-[9px] font-mono text-[#7fd8e6]/45 tracking-wider -mt-1">same onslaught for everyone today</div>}
-            <button className="gx-label text-[12px] text-[#04040a] bg-[#37e6ff] hover:bg-[#7df0ff] px-6 py-2.5 rounded-[2px] mt-1" style={{ boxShadow: '0 0 18px #37e6ff80' }}>
-              tap to defend
-            </button>
+            <StartButton accent={ATHER} onStart={start} hint="or press Enter" />
           </div>
         )}
 

@@ -8,6 +8,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import ArcadeCabinet from '../_components/ArcadeCabinet'
 import ArcadeControls from '../_components/ArcadeControls'
+import { StartButton, useStartKey } from '../_components/ArcadeStart'
 import DailyLeaderboard from '../_components/DailyLeaderboard'
 import { mulberry32 } from '@/lib/arcade/rng'
 import { useNoScroll } from '@/lib/arcade/useNoScroll'
@@ -152,16 +153,26 @@ export default function SeedfallPage() {
     return () => cancelAnimationFrame(raf)
   }, [garden.planted])
 
+  // START owns launching the drop (flip ready → playing WITHOUT committing a drift — the seed falls
+  // straight so you can read the canopy; your first held side then steers). Decoupled from movement.
+  const start = useCallback(() => {
+    const w = worldRef.current
+    if (!w || w.state !== 'ready') return
+    sfx.ensure()
+    w.state = 'playing'
+    setPhase('playing')
+  }, [])
+  useStartKey(start, phase === 'ready') // Enter / Space also start
+
   // ── two-button hold input (cabinet deck + L/R keys; screen is a neutral display) ──
   const applyInput = () => {
     const w = worldRef.current
     if (!w) return
     setInput(w, held.current.L, held.current.R)
-    if (w.state === 'playing' && phase === 'ready') setPhase('playing')
   }
   const setHalf = (which: 'L' | 'R', on: boolean) => {
-    const st = worldRef.current?.state
-    if (on && (st === 'landed' || st === 'crashed' || st === 'caught')) return
+    const w = worldRef.current
+    if (!w || w.state !== 'playing') return // a held side only STEERS; START launches the drop
     held.current[which] = on
     applyInput()
   }
@@ -238,7 +249,7 @@ export default function SeedfallPage() {
               ))}
             </div>
             {mode === 'daily' && <div className="text-[9px] font-mono text-[#7fd8e6]/45 tracking-wider -mt-1">same canopy for everyone today</div>}
-            <div className="gx-label text-[12px] text-[#04040a] bg-[#54ffc8] px-6 py-2.5 rounded-[2px] mt-1" style={{ boxShadow: '0 0 18px #54ffc880' }}>hold to drop</div>
+            <div className="mt-1"><StartButton accent="#54ffc8" onStart={start} hint="then hold a side to drift" /></div>
           </div>
         )}
 
