@@ -24,6 +24,7 @@ import {
   bodyRadius,
   segCount,
   BOOST_MAX,
+  MAGNET_R,
   type World,
   type Wyrm,
   type Element,
@@ -36,6 +37,8 @@ import ArcadeControls from '../_components/ArcadeControls'
 const ATHER = '#37e6ff'
 const HOT = '#e8feff'
 const VOID_EDGE = '#c86bff'
+const MAGNET_COL = '#ff5cc8' // magnet power-up (pull)
+const STASIS_COL = '#ffe08a' // stasis / "infinity" power-up (no drain)
 const ELEM_COLOR: Record<Element, string> = {
   mana: '#37e6ff',
   storm: '#ffd54a',
@@ -351,6 +354,14 @@ function render(canvas: HTMLCanvasElement, w: World, ts: number, cam: { x: numbe
     } else if (f.kind === 'mote') {
       ctx.fillStyle = ATHER; ctx.shadowBlur = 9; ctx.shadowColor = ATHER
       dot(ctx, fx, fy, 2.4 + 0.5 * Math.sin(t * 6 + f.y))
+    } else if (f.kind === 'magnet' || f.kind === 'stasis') {
+      // rare power-ups — bright, pulsing, with a ring so they pop against the dross
+      const col = f.kind === 'magnet' ? MAGNET_COL : STASIS_COL
+      const p = 0.5 + 0.5 * Math.sin(t * 5 + f.x)
+      ctx.fillStyle = col; ctx.shadowBlur = 16; ctx.shadowColor = col
+      dot(ctx, fx, fy, 4.2)
+      ctx.strokeStyle = col; ctx.globalAlpha = 0.45 + 0.4 * p; ctx.lineWidth = 1.5
+      ctx.beginPath(); ctx.arc(fx, fy, 7.5 + p * 3, 0, Math.PI * 2); ctx.stroke(); ctx.globalAlpha = 1
     } else {
       ctx.fillStyle = '#9fb6c8'; ctx.shadowBlur = 5; ctx.shadowColor = '#9fb6c8'
       dot(ctx, fx, fy, 1.7)
@@ -387,6 +398,28 @@ function render(canvas: HTMLCanvasElement, w: World, ts: number, cam: { x: numbe
     dot(ctx, hx + Math.cos(s.angle) * bw * 0.3, hy + Math.sin(s.angle) * bw * 0.3, Math.max(1, bw * 0.22))
   }
   ctx.globalAlpha = 1; ctx.shadowBlur = 0
+
+  // ── power-up feedback ─────────────────────────────────────────────────────────
+  const pl = w.wyrms.find((s) => s.isPlayer && s.alive)
+  if (pl) {
+    if (pl.magnetT > 0) {
+      // a faint pull-ring around your head showing the magnet's reach
+      const hx = toX(pl.trail[0]), hy = toY(pl.trail[1])
+      ctx.strokeStyle = MAGNET_COL; ctx.globalAlpha = 0.16 + 0.1 * Math.sin(t * 5)
+      ctx.lineWidth = 2; ctx.setLineDash([5, 7])
+      ctx.beginPath(); ctx.arc(hx, hy, MAGNET_R * zoom, 0, Math.PI * 2); ctx.stroke()
+      ctx.setLineDash([]); ctx.globalAlpha = 1
+    }
+    // active-effect badges (screen-fixed, top-left) with a live countdown
+    let by = 22
+    const badge = (label: string, col: string) => {
+      ctx.font = '600 11px ui-monospace, monospace'; ctx.textAlign = 'left'
+      ctx.fillStyle = col; ctx.shadowBlur = 6; ctx.shadowColor = col
+      ctx.fillText(label, 12, by); ctx.shadowBlur = 0; by += 17
+    }
+    if (pl.stasisT > 0) badge('∞ STASIS ' + Math.ceil(pl.stasisT) + 's', STASIS_COL)
+    if (pl.magnetT > 0) badge('✦ MAGNET ' + Math.ceil(pl.magnetT) + 's', MAGNET_COL)
+  }
 }
 
 function dot(ctx: CanvasRenderingContext2D, x: number, y: number, r: number) {

@@ -33,12 +33,23 @@ export const MOTE_CHARGE = 22 // charge per mote eaten
 export const METAB_FLAT = 0.15
 export const METAB_PROP = 0.004
 
+// ── power-up motes (rare finds) ──────────────────────────────────────────────────
+export const MAGNET_TIME = 15 // s — pulls nearby motes to you
+export const STASIS_TIME = 30 // s — the "infinity": your points stop draining
+export const MAGNET_R = 260 // reach of the magnet pull
+export const MAGNET_SPEED = 640 // units/sec loose food streams toward your head while magnetised
+
+// ── AI (anti-death-spiral) ───────────────────────────────────────────────────────
+export const AI_FOOD_RANGE = 720 // how far a rival looks for food (wide, for the big Silt — less aimless wander)
+export const AI_LOOK = 96 // look-ahead distance for body avoidance
+export const AI_AVOID_R = 62 // veer if a body is within this of the look-ahead point
+
 export const DROSS_MASS = 1.0
 export const SEED_MASS = 3.0
 export const BUBBLE_MASS = 1.1
 
 const SEG_SPACING = 6 // trail point spacing (world units)
-const FOOD_TARGET = 900 // ambient food at the FULL ring (dense = growth feels good)
+const FOOD_TARGET = 1500 // ambient food at the FULL ring — dense enough the big Silt never feels empty
 export const SPAWN_CLEAR = 780 // min distance a rival may spawn from the player's head (no ambushes)
 // hold food DENSITY constant as the ring is bigger now and shrinks — target scales with area
 function foodTarget(radius: number): number { return Math.max(140, Math.round(FOOD_TARGET * (radius / ARENA_R0) ** 2)) }
@@ -46,7 +57,7 @@ function foodTarget(radius: number): number { return Math.max(140, Math.round(FO
 export interface FoodItem {
   x: number
   y: number
-  kind: 'dross' | 'seed' | 'mote'
+  kind: 'dross' | 'seed' | 'mote' | 'magnet' | 'stasis'
   element?: Element // seeds carry an element (colour)
 }
 
@@ -63,6 +74,8 @@ export interface Wyrm {
   boosting: boolean
   alive: boolean
   trail: number[] // flat [x0,y0,x1,y1,...], head-first
+  magnetT: number // seconds of magnet left (pulls nearby motes)
+  stasisT: number // seconds of stasis left ("infinity": points don't drain)
   _acc: number // distance accumulator for trail sampling
   _wander: number // ai wander timer
 }
@@ -121,6 +134,8 @@ function spawnWyrm(w: World, isPlayer: boolean): Wyrm {
     boosting: false,
     alive: true,
     trail: [x, y],
+    magnetT: 0,
+    stasisT: 0,
     _acc: 0,
     _wander: 0,
   }
@@ -131,7 +146,12 @@ function scatterFood(w: World, n: number) {
     const r = Math.sqrt(w.rng()) * (w.radius * 0.95)
     const a = w.rng() * Math.PI * 2
     const roll = w.rng()
-    const kind: FoodItem['kind'] = roll < 0.12 ? 'seed' : roll < 0.24 ? 'mote' : 'dross'
+    // rare power-ups first, then colour seeds + energy motes, then the basic dross that fills the Silt
+    const kind: FoodItem['kind'] =
+      roll < 0.012 ? 'magnet' :
+      roll < 0.024 ? 'stasis' :
+      roll < 0.13 ? 'seed' :
+      roll < 0.25 ? 'mote' : 'dross'
     const item: FoodItem = { x: Math.cos(a) * r, y: Math.sin(a) * r, kind }
     if (kind === 'seed') item.element = ELEMENTS[randInt(w.rng, 0, 3)]
     w.food.push(item)
@@ -177,13 +197,20 @@ function turnToward(a: number, target: number, maxStep: number): number {
   return a + d
 }
 
-// burst a fallen wyrm into bubbles along its body (food for the survivors)
+// a fallen wyrm drops ALL of its points as food, spilled along its body where it fell (Alex 2026-07-11) —
+// so felling a fat rival is a real jackpot: eat the whole ribbon and take everything it carried.
 function burst(w: World, victim: Wyrm) {
-  const step = 4
-  for (let i = 0; i < victim.trail.length; i += 2 * step) {
-    if (w.rng() < 0.6) w.food.push({ x: victim.trail[i] + (w.rng() - 0.5) * 8, y: victim.trail[i + 1] + (w.rng() - 0.5) * 8, kind: 'dross' })
+  const points = Math.max(0, victim.mass - BASE_MASS) // what it had grown = what it drops
+  const n = Math.min(240, Math.round(points / DROSS_MASS)) // one dross per point (capped for perf)
+  const tl = victim.trail.length
+  for (let i = 0; i < n; i++) {
+    // scatter along the trail (the body's shape), jittered — a long worm leaves a long spill
+    const ti = tl >= 2 ? Math.min(tl - 2, Math.floor(w.rng() * (tl / 2)) * 2) : -1
+    const bx = ti >= 0 ? victim.trail[ti] : victim.x
+    const by = ti >= 0 ? victim.trail[ti + 1] : victim.y
+    w.food.push({ x: bx + (w.rng() - 0.5) * 16, y: by + (w.rng() - 0.5) * 16, kind: 'dross' })
   }
-  // a couple of motes + a seed in its colour, as a reward
+  // an energy mote + its colour seed at the head, as before
   w.food.push({ x: victim.x, y: victim.y, kind: 'mote' })
   if (victim.element) w.food.push({ x: victim.x + 6, y: victim.y, kind: 'seed', element: victim.element })
 }
@@ -202,23 +229,46 @@ function nearestFood(w: World, x: number, y: number, maxD: number): number {
 }
 
 function aiThink(w: World, s: Wyrm, dt: number) {
-  // seek nearest food; veer from the void edge; occasional wander
   s._wander -= dt
   const distC = Math.hypot(s.x, s.y)
-  if (distC > w.radius - 60) {
-    // steer back toward center, hard
+  // 1) the void edge — turn back toward centre before it's lethal (early, so it never gets cornered)
+  if (distC > w.radius - 130) {
     s.target = Math.atan2(-s.y, -s.x)
-    s.boosting = s.boost > 20 && distC > w.radius - 30
+    s.boosting = distC > w.radius - 70 && s.boost > 20
     return
   }
-  const fi = nearestFood(w, s.x, s.y, 260)
+  // 2) a body just ahead? veer off it — the fix for spiralling into anyone (incl your own coil)
+  const lx = s.x + Math.cos(s.angle) * AI_LOOK
+  const ly = s.y + Math.sin(s.angle) * AI_LOOK
+  const avoid2 = AI_AVOID_R * AI_AVOID_R
+  let blocked = false
+  for (const o of w.wyrms) {
+    if (!o.alive) continue
+    const start = o === s ? 16 : 0 // skip your own neck (it's always "ahead")
+    for (let i = start; i < o.trail.length; i += 8) {
+      const dx = o.trail[i] - lx, dy = o.trail[i + 1] - ly
+      if (dx * dx + dy * dy < avoid2) { blocked = true; break }
+    }
+    if (blocked) break
+  }
+  if (blocked) {
+    s.target = s.angle + (s.id % 2 ? 0.9 : -0.9) // veer a consistent way (no left-right jitter-spin)
+    s.boosting = false
+    return
+  }
+  // 3) seek the nearest food across the wide Silt (wide range → far less aimless wandering)
+  const fi = nearestFood(w, s.x, s.y, AI_FOOD_RANGE)
   if (fi >= 0) {
     s.target = Math.atan2(w.food[fi].y - s.y, w.food[fi].x - s.x)
     s.boosting = w.food[fi].kind === 'seed' && s.boost > 40 && w.rng() < 0.02
-  } else if (s._wander <= 0) {
-    s.target = s.angle + (w.rng() - 0.5) * 1.4
-    s._wander = 0.6 + w.rng() * 1.2
-    s.boosting = false
+    return
+  }
+  // 4) nothing to chase, nothing in the way → cruise mostly STRAIGHT: tiny nudges held for seconds,
+  // so a rival crosses open Silt in long lines instead of grinding itself into the classic death circle
+  s.boosting = false
+  if (s._wander <= 0) {
+    s.target = s.angle + (w.rng() - 0.5) * 0.45
+    s._wander = 1.6 + w.rng() * 2.2
   }
 }
 
@@ -235,6 +285,12 @@ function eatFoodNear(w: World, s: Wyrm): { ate: number; seed: boolean; motes: nu
     if (dx * dx + dy * dy > r2) continue
     if (f.kind === 'mote') {
       s.boost = Math.min(BOOST_MAX, s.boost + MOTE_CHARGE)
+      motes++
+    } else if (f.kind === 'magnet') {
+      s.magnetT = MAGNET_TIME // pull nearby motes for a while
+      motes++
+    } else if (f.kind === 'stasis') {
+      s.stasisT = STASIS_TIME // the "infinity" — your points stop draining
       motes++
     } else if (f.kind === 'seed') {
       s.mass += SEED_MASS
@@ -284,9 +340,29 @@ export function tick(w: World, dt: number): TickEvents {
     s.x += Math.cos(s.angle) * spd * dt
     s.y += Math.sin(s.angle) * spd * dt
 
-    // metabolism — sublimate toward the blank thread unless fed
-    s.mass = Math.max(BASE_MASS, s.mass - (METAB_FLAT + s.mass * METAB_PROP) * dt)
-    if (s.mass <= BASE_MASS + 0.01) s.element = null // reverted to blank
+    // power-up timers
+    if (s.magnetT > 0) s.magnetT = Math.max(0, s.magnetT - dt)
+    if (s.stasisT > 0) s.stasisT = Math.max(0, s.stasisT - dt)
+
+    // magnet — vacuum loose food within reach toward the head
+    if (s.magnetT > 0) {
+      const pr2 = MAGNET_R * MAGNET_R
+      const step = MAGNET_SPEED * dt
+      for (const f of w.food) {
+        const dx = s.x - f.x, dy = s.y - f.y
+        const d2 = dx * dx + dy * dy
+        if (d2 > pr2 || d2 < 1) continue
+        const d = Math.sqrt(d2)
+        const m = Math.min(step, d) / d
+        f.x += dx * m; f.y += dy * m
+      }
+    }
+
+    // metabolism — sublimate toward the blank thread unless fed. STASIS ("infinity") freezes the drain.
+    if (s.stasisT <= 0) {
+      s.mass = Math.max(BASE_MASS, s.mass - (METAB_FLAT + s.mass * METAB_PROP) * dt)
+      if (s.mass <= BASE_MASS + 0.01) s.element = null // reverted to blank
+    }
 
     // trail sampling
     s._acc += spd * dt
