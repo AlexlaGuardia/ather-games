@@ -19,7 +19,6 @@ import {
   loadHiScore,
   saveHiScore,
   airAt,
-  effGapY,
   VW,
   VH,
   GROUND_Y,
@@ -370,9 +369,9 @@ function render(canvas: HTMLCanvasElement, w: World, ts: number, nebula: HTMLIma
     ctx.globalAlpha = 1
   }
 
-  // void gates — coloured by their air; the Churn's openings drift (effGapY)
+  // void gates — coloured by their air; openings are FIXED (a gate never moves)
   for (const g of w.gates) {
-    const cy = effGapY(g, w.t)
+    const cy = g.gapY
     const top = cy - g.gapH / 2
     const bot = cy + g.gapH / 2
     const gc = AIR_GATE[g.air]

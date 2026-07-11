@@ -34,9 +34,13 @@ export function airAt(dist: number): Air { return AIR_ORDER[Math.floor(Math.max(
 const airGap: Record<Air, number> = { open: 206, gates: 150, thermal: 180, churn: 172 }
 const airSpacing: Record<Air, number> = { open: 240, gates: 190, thermal: 210, churn: 206 }
 
-export const THERMAL_G = 0.4 // gravity multiplier while riding the Rising Thermal (floaty lift)
-export const CHURN_RATE = 1.7 // rad/s the Churn's openings drift
-export const CHURN_AMP = 46 // px the opening centre drifts up/down in the Churn
+// The airs vary LAYOUT + look, never the physics under you and never a gate that moves.
+// Twitch-flappy contract: the world is static and predictable; only the mote moves; every
+// death is the player's input. (Learned the hard way — dynamic hazards fit Seedfall's floaty
+// drift, NOT this.) Each air just biases WHERE its openings sit (all fixed at spawn):
+const AIR_YBIAS: Record<Air, 'centred' | 'anywhere' | 'high' | 'choppy'> = {
+  open: 'centred', gates: 'anywhere', thermal: 'high', churn: 'choppy',
+}
 
 // endless ramp: openings narrow + the scroll quickens a touch as you climb, both capped fair
 function rampGap(dist: number): number { return Math.min(34, Math.max(0, dist) / 340) }
@@ -44,20 +48,10 @@ export function scrollAt(dist: number): number { return SCROLL + Math.min(54, Ma
 
 export interface Gate {
   x: number // left edge
-  gapY: number // gap centre (base; drifts in the Churn — see effGapY)
+  gapY: number // gap centre — FIXED at spawn (a gate NEVER moves; only the mote moves)
   gapH: number // this gate's opening height (per-air + ramp, set at spawn)
-  air: Air // the air this gate belongs to (colour + behaviour)
-  drift: boolean // Churn air: the opening drifts up and down
-  phase: number // per-gate drift phase so churn gates aren't in lockstep
+  air: Air // the air this gate belongs to (colour + layout)
   passed: boolean
-}
-
-// a Churn gate's opening centre at time t (clamped inside the lane); others hold still.
-// render + collision BOTH call this, so the drift you see is the drift that bites.
-export function effGapY(g: Gate, t: number): number {
-  if (!g.drift) return g.gapY
-  const y = g.gapY + Math.sin(t * CHURN_RATE + g.phase) * CHURN_AMP
-  return Math.max(GAP_MARGIN, Math.min(GROUND_Y - GAP_MARGIN, y))
 }
 
 export type UpdraftState = 'ready' | 'playing' | 'over'
@@ -66,7 +60,6 @@ export interface World {
   y: number // Lazerin's vertical position
   vy: number
   dist: number // total px climbed — drives which air you're in + the endless ramp
-  t: number // elapsed sim seconds — drives the Churn's drift
   gates: Gate[]
   score: number
   state: UpdraftState
@@ -83,7 +76,6 @@ export function makeWorld(seed: number): World {
     y: VH * 0.42,
     vy: 0,
     dist: 0,
-    t: 0,
     gates: [],
     score: 0,
     state: 'ready',
@@ -95,8 +87,20 @@ function spawnGate(w: World, x: number) {
   const air = airAt(w.dist)
   const gapH = Math.max(120, airGap[air] - rampGap(w.dist)) // ramp tightens; fair floor
   const m = Math.max(GAP_MARGIN, gapH / 2 + 12) // keep the whole opening inside the lane
-  const gapY = m + w.rng() * (GROUND_Y - m * 2)
-  w.gates.push({ x, gapY, gapH, air, drift: air === 'churn', phase: w.rng() * Math.PI * 2, passed: false })
+  const lo = m, span = GROUND_Y - m * 2
+  const r = w.rng()
+  let gapY: number
+  switch (AIR_YBIAS[air]) {
+    case 'high': // Rising Thermal — the path rides HIGH, so you climb the current (no physics change)
+      gapY = lo + r * span * 0.42; break
+    case 'choppy': // Churn — a static zigzag: alternate upper/lower, turbulent but fully readable
+      gapY = w.gates.length % 2 === 0 ? lo + r * span * 0.34 : lo + span - r * span * 0.34; break
+    case 'centred': // Open Current — roomy, kept off the extremes
+      gapY = lo + span * 0.26 + r * span * 0.48; break
+    default: // Gate-Reach — the tight squeeze can be anywhere
+      gapY = lo + r * span
+  }
+  w.gates.push({ x, gapY, gapH, air, passed: false })
 }
 
 // START owns launching the run now (the page calls launch()); flap only beats the wings mid-flight.
@@ -115,10 +119,9 @@ export function flap(w: World) {
 function hitsGate(w: World, g: Gate): boolean {
   // horizontal overlap of Lazerin's circle with the gate column
   if (BIRD_X + BIRD_R < g.x || BIRD_X - BIRD_R > g.x + GATE_W) return false
-  // safe only while fully inside the (possibly-drifting) opening
-  const cy = effGapY(g, w.t)
-  const top = cy - g.gapH / 2
-  const bot = cy + g.gapH / 2
+  // safe only while fully inside the (fixed) opening
+  const top = g.gapY - g.gapH / 2
+  const bot = g.gapY + g.gapH / 2
   return w.y - BIRD_R < top || w.y + BIRD_R > bot
 }
 
@@ -126,14 +129,12 @@ function hitsGate(w: World, g: Gate): boolean {
 export function tick(w: World, dt: number): TickEvents {
   const ev: TickEvents = { pass: 0, crash: false }
   if (w.state !== 'playing') return ev
-  w.t += dt
   const air = airAt(w.dist)
   const scroll = scrollAt(w.dist)
   w.dist += scroll * dt
 
-  // gravity — the Rising Thermal eases it (a real updraft lifts the mote; you flap less)
-  const grav = air === 'thermal' ? GRAVITY * THERMAL_G : GRAVITY
-  w.vy += grav * dt
+  // gravity is CONSTANT — the airs vary layout + look, never the physics under you
+  w.vy += GRAVITY * dt
   w.y += w.vy * dt
   // ceiling clamps (fairer than instant death); floor kills
   if (w.y - BIRD_R < 0) {
