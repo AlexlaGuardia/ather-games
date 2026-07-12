@@ -506,37 +506,6 @@ function GameLog({ log }: { log: string[] }) {
   )
 }
 
-// --- Double Down Modal ---
-
-export function DoubleDownModal({ onChoice, marks, anteBase, anteDoubled }: {
-  onChoice: (doubled: boolean) => void
-  marks: number
-  anteBase: number
-  anteDoubled: number
-}) {
-  return (
-    <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 px-4 magii-modal-enter">
-      <div className="bg-[#13111d] rounded-xl p-6 md:p-8 max-w-sm w-full border border-[#2a2540] text-center magii-modal-content">
-        <p className="font-display text-2xl font-bold text-text mb-2">Set Your Stakes</p>
-        <p className="text-text-dim text-sm mb-1">Win the round to bank your score. Lose, and your ante is gone.</p>
-        <p className="text-[11px] text-[#d4a843]/70 font-display mb-6">⬡ {marks} Marks in your purse</p>
-        <div className="flex gap-3 justify-center">
-          <button onClick={() => onChoice(false)}
-            className="flex flex-col items-center px-6 py-3 rounded-lg bg-black/30 border border-white/10 text-text hover:border-gold/30 transition-colors font-display font-semibold">
-            I&apos;m in.
-            <span className="text-[10px] text-text-faint font-normal mt-0.5">ante {anteBase}</span>
-          </button>
-          <button onClick={() => onChoice(true)}
-            className="flex flex-col items-center px-6 py-3 rounded-lg bg-gold text-black hover:brightness-110 transition-colors font-display font-semibold shadow-lg shadow-gold/20">
-            Double.
-            <span className="text-[10px] text-black/55 font-normal mt-0.5">ante {anteDoubled} · 2× score</span>
-          </button>
-        </div>
-      </div>
-    </div>
-  )
-}
-
 // --- Game Over Overlay ---
 
 export function GameOverOverlay({ state, onPlayAgain, marksDelta, walletBalance }: {

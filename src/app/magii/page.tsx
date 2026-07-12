@@ -4,20 +4,22 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { useCloudSave } from '@/lib/use-cloud-save'
 import { useWallet } from '@/lib/use-wallet'
 import {
-  GameState, initGame, setDoubleDown, startPlaying,
+  GameState, initGame, startPlaying,
   drawFromDeck, drawFromDiscard, discardCard, callMagii,
 } from './lib/engine'
-import { chooseDrawAction, chooseDiscardAction, shouldCallMagii, decideDoubleDown, getNPCDifficulty } from './lib/npc'
+import { chooseDrawAction, chooseDiscardAction, shouldCallMagii, getNPCDifficulty } from './lib/npc'
 import { getMagiiAudio } from './lib/audio'
 import { getHubAudio } from '@/lib/hub-audio'
-import { GameBoard, DoubleDownModal, GameOverOverlay, Card } from './game-board'
+import { GameBoard, GameOverOverlay, Card } from './game-board'
 import type { Card as CardType } from './lib/data'
 import { COLLECTIONS, getCollectionEntry } from './lib/data'
 
-// Ante (buy-in) wagered each round. Doubling down stakes more — and risks more.
-const ANTE_BASE = 10
-const ANTE_DOUBLED = 20
-const WELCOME_STAKE = 100  // one-time bankroll for brand-new players
+// The card game is the Marks FAUCET (canon: Marks = the Mug's coin). No ante, no
+// double-down — one flat prize: win → 10 + 30% of your score; everyone else leaves
+// with 10. You never lose Marks at the table; the arcade games are where they're spent.
+const PRIZE_FLOOR = 10        // consolation — everyone leaves the table with at least this
+const PRIZE_SCORE_RATE = 0.3  // winner's bonus = this × their winning score
+const WELCOME_STAKE = 100     // one-time bankroll for brand-new players
 
 export default function MagiiPage() {
   const [gameState, setGameState] = useState<GameState | null>(null)
@@ -28,7 +30,6 @@ export default function MagiiPage() {
 
   const prevPhase = useRef<string | null>(null)
   const prevTurn = useRef<number | null>(null)
-  const wagerRef = useRef(ANTE_BASE)
   const { load, save, submitScore, isSignedIn } = useCloudSave('magii')
   const wallet = useWallet()
   const statsRef = useRef({ wins: 0, losses: 0, highScore: 0, totalScore: 0, gamesPlayed: 0, seeded: false, ownedCollections: ['tavern'] as string[] })
@@ -82,7 +83,8 @@ export default function MagiiPage() {
     audio.init()
     audio.play('game-start')
     const entry = getCollectionEntry(owned.includes(selectedId) ? selectedId : 'tavern')
-    const state = initGame(entry.collection)
+    // no stakes step — deal and play straight through to the flat prize
+    const state = startPlaying(initGame(entry.collection))
     setGameState(state)
     setNpcProcessing(false)
     setMarksDelta(0)
@@ -98,20 +100,6 @@ export default function MagiiPage() {
     setSelectedId(id)
     statsRef.current.ownedCollections = next
     if (isSignedIn) save({ ...statsRef.current })
-  }
-
-  function handleDoubleDown(doubled: boolean) {
-    if (!gameState) return
-    if (doubled) getMagiiAudio().play('double-down')
-    else getMagiiAudio().play('button-click')
-    wagerRef.current = doubled ? ANTE_DOUBLED : ANTE_BASE
-    let next = setDoubleDown(gameState, 0, doubled)
-    for (let i = 1; i < 4; i++) {
-      const npcDoubled = decideDoubleDown(next.players[i], getNPCDifficulty(i))
-      next = setDoubleDown(next, i, npcDoubled)
-    }
-    next = startPlaying(next)
-    setGameState(next)
   }
 
   function handleDrawDeck() {
@@ -218,16 +206,11 @@ export default function MagiiPage() {
       else stats.losses++
       if (playerScore > stats.highScore) stats.highScore = playerScore
 
-      // Settle the wager: win → bank winnings; lose → forfeit the ante.
-      if (won) {
-        const winnings = Math.max(0, Math.ceil(playerScore / 5))
-        setMarksDelta(winnings)
-        if (winnings > 0) wallet.earn(winnings)
-      } else {
-        const loss = Math.min(wagerRef.current, wallet.marks)
-        setMarksDelta(-loss)
-        if (loss > 0) wallet.spend(loss)
-      }
+      // Flat prize — the faucet. Win → 10 + 30% of your score; everyone else → 10.
+      // No forfeit: you always leave the table richer (marks are spent at the arcade).
+      const prize = won ? Math.round(PRIZE_FLOOR + PRIZE_SCORE_RATE * playerScore) : PRIZE_FLOOR
+      setMarksDelta(prize)
+      wallet.earn(prize)
 
       if (isSignedIn) {
         save({ ...stats })
@@ -385,14 +368,6 @@ export default function MagiiPage() {
         </div>
       </div>
 
-      {gameState.phase === 'double-down' && (
-        <DoubleDownModal
-          onChoice={handleDoubleDown}
-          marks={wallet.marks}
-          anteBase={ANTE_BASE}
-          anteDoubled={ANTE_DOUBLED}
-        />
-      )}
       {gameState.phase === 'game-over' && (
         <GameOverOverlay
           state={gameState}

@@ -58,7 +58,7 @@ export function initGame(collection: Collection = TAVERN_STANDARD): GameState {
     winner: null,
     calledBy: null,
     scores: [0, 0, 0, 0],
-    log: ['The cards are dealt. Set your stakes.'],
+    log: ['The cards are dealt.'],
   }
 }
 
@@ -73,7 +73,7 @@ export function startPlaying(state: GameState): GameState {
   next.phase = 'playing'
   next.currentPlayer = 0
   next.turnPhase = 'draw'
-  next.log = [...next.log, 'Stakes are set. The game begins.']
+  next.log = [...next.log, 'The game begins.']
   return next
 }
 
