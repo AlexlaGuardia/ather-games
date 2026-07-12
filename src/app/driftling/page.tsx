@@ -32,6 +32,7 @@ import {
   type ElementId,
 } from './lib/driftling'
 import { sfx } from './lib/sfx'
+import { music } from './music'
 
 // virtual viewport (portrait, mobile-fit). The camera centres the player; the renderer scales.
 const VW = 420
@@ -119,6 +120,8 @@ export default function DriftlingPage() {
     setMuted(sfx.isMuted())
     setBest(loadBest())
     setDailyBest(loadDailyBest('driftling'))
+    music.setMuted(sfx.isMuted()); void music.ensure() // decode the ocean bed ahead of the first drift
+    return () => { music.stop() } // tear the audio down on leave — never follows you out
   }, [boot])
 
   const pickMode = (m: 'endless' | 'daily') => {
@@ -210,6 +213,7 @@ export default function DriftlingPage() {
     const w = worldRef.current
     if (!w || w.state !== 'ready') return
     sfx.ensure()
+    music.start() // the START gesture unlocks + starts the ocean bed
     w.state = 'playing'
     setPhase('playing')
   }, [])
@@ -228,7 +232,7 @@ export default function DriftlingPage() {
   }, [])
 
   const restart = useCallback(() => { sfx.ensure(); boot() }, [boot])
-  const toggleMute = () => { sfx.ensure(); const m = !sfx.isMuted(); sfx.setMuted(m); setMuted(m) }
+  const toggleMute = () => { sfx.ensure(); const m = !sfx.isMuted(); sfx.setMuted(m); music.setMuted(m); setMuted(m) }
 
   // Enter / Space launch from the ready screen (desktop) — fires only while ready
   useStartKey(start, phase === 'ready')
