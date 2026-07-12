@@ -105,15 +105,23 @@ the Arcade frame.
 > keyboard-less game never loses its sole input).
 >
 > - [x] **Updraft = reference game** (`0a01548`) — Space/↑/W + click-to-flap gameplay input, keyLegend wired.
->   Verified live on ather.games desktop viewport: deck hidden, plate shown, screen grown, Space drove a
->   run to score 7.
-> - [ ] **Roll to the other 10.** Keyboard-having 7 (seedfall/voranyx/driftling/squall/dewdrop/vault/atherdash)
->   = just add `keyLegend` + screen click where it makes sense. **The 3 keyboardless (manana/rekindle/ward)
->   need REAL gameplay keys added first**, else their deck vanishes on desktop and they become unplayable.
-> - [ ] **Crispness pass (optional):** canvas backing store is fixed at `VW×VH×dpr`; a big *landscape* desktop
->   screen may upscale/blur. Size the backing store off displayed px for those. Portrait games (updraft) stay
->   crisp as-is (they downscale when filling height).
-> - **Files:** `lib/arcade/fit.ts`, `_components/ArcadeCabinet.tsx`, `_components/ArcadeControls.tsx`, `updraft/page.tsx`.
+>   Verified live: deck hidden, plate shown, screen grown, Space drove a run to score 7.
+> - [x] **All 7 deck-games rolled out** (`45c232b`) — seedfall/driftling/squall/dewdrop/vault/voranyx/atherdash
+>   each got a `keyLegend` matching their real keys (← → / W A S D / Space). All already had full keyboard,
+>   so it was pure wiring. Verified live: squall(stick)/atherdash(multi-key)/dewdrop(dpad) all hide the deck +
+>   show the plate, overflowY 0.
+> - [x] **ward + rekindle need nothing** — they're direct-**click** puzzles (no deck ever), and they use
+>   `screenMaxW`, so they inherited the bigger desktop screen from the shared vars for free. Verified live:
+>   mouse-playable, no overflow clip (screen height = viewport − reserve, chrome fits exactly).
+> - **manana:** mouse-native controls (click tiles) already fine on desktop; it has its own board layout (no
+>   cabinet), so it's outside desktop-mode. **Known separate polish:** on an atypically SHORT desktop window
+>   (<~600px tall) its board can clip the bottom rows under useNoScroll — pre-existing, not a regression. Fix
+>   later by clamping the board to `min(width, avail)` more defensively.
+> - [ ] **Crispness pass (optional, deferred):** canvas backing store is fixed at `VW×VH×dpr`; a big
+>   *landscape* desktop screen may upscale/blur. Size the backing store off displayed px for those. Portrait
+>   games stay crisp (they downscale when filling height). No game looked soft in verification — do if noticed.
+> - **Files:** `lib/arcade/fit.ts`, `_components/ArcadeCabinet.tsx`, `_components/ArcadeControls.tsx`,
+>   `updraft/page.tsx` + the 7 deck-games' `page.tsx`.
 
 ## 🔁 Cross-cutting — THE DAILY CHALLENGE (shipped 2026-06-21, `b4c3ddb`→`7902b30`)
 > Retention loop: one seeded run per UTC day, the SAME course for everyone, shareable score.
