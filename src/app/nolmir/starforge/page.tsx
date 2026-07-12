@@ -68,6 +68,7 @@ import {
   doWarp,
   WARP_HEAT,
   echoMult,
+  revealedRooms,
 } from '../lib/starforge'
 import { unlockedTier } from '../lib/teams'
 
@@ -116,6 +117,16 @@ export default function StarforgePage() {
   // full system get a celebratory toast (mirrors the Crucible's host level-up beat).
   const [milestone, setMilestone] = useState<{ text: string; sub: string } | null>(null)
   const prevWorkedMask = useRef<boolean[] | null>(null)
+
+  // progressive disclosure — chime the moment a new room unfolds (never on the
+  // initial load; prev=0 is the mount baseline, so only real growth rings).
+  const prevRevealCount = useRef(0)
+  useEffect(() => {
+    if (!forge) return
+    const n = revealedRooms(forge).size
+    if (n > prevRevealCount.current && prevRevealCount.current > 0) sfx.play('unlock')
+    prevRevealCount.current = n
+  }, [forge])
 
   useEffect(() => {
     const now = Date.now()
@@ -230,6 +241,11 @@ export default function StarforgePage() {
   const rates = oreRates(forge)
   const sellValue = transmuteValue(forge)
 
+  // which rooms are unfolded (progressive disclosure), and a fallback so we never
+  // render a body for a tab that isn't visible (monotonic reveals make this a no-op).
+  const revealed = revealedRooms(forge)
+  const activeRoom: Room = revealed.has(room) ? room : 'orrery'
+
   const row = (
     label: string,
     desc: string,
@@ -285,7 +301,7 @@ export default function StarforgePage() {
       {/* the system — always turning behind the rooms; clicks only land from the orrery room */}
       <div
         className={`fixed inset-0 z-0 flex items-center justify-center ${
-          room === 'orrery' ? '' : 'pointer-events-none'
+          activeRoom === 'orrery' ? '' : 'pointer-events-none'
         }`}
       >
         <Orrery forge={forge} selected={selected} onSelect={setSelected} backdrop />
@@ -326,12 +342,12 @@ export default function StarforgePage() {
 
         {/* the deck — one room at a time; single scrollable row, never wraps */}
         <nav className="flex gap-1 mb-3 overflow-x-auto no-scrollbar -mx-1 px-1">
-          {ROOMS.map((r) => (
+          {ROOMS.filter((r) => revealed.has(r.id)).map((r) => (
             <button
               key={r.id}
               onClick={() => setRoom(r.id)}
               className={`${display.className} shrink-0 px-3 py-1 text-[11px] tracking-[0.2em] rounded border transition-colors backdrop-blur-sm ${
-                room === r.id
+                activeRoom === r.id
                   ? 'border-sky-500 text-sky-200 bg-sky-950/40'
                   : 'border-slate-800 text-slate-600 bg-[#070a10]/60 hover:border-slate-600 hover:text-slate-300'
               }`}
@@ -341,7 +357,7 @@ export default function StarforgePage() {
           ))}
         </nav>
 
-        {room === 'orrery' && (
+        {activeRoom === 'orrery' && (
         <>
         {/* the unobstructed view — the system IS the room; click a world to work it */}
         {sel && selected !== null && (
@@ -435,7 +451,7 @@ export default function StarforgePage() {
         </>
         )}
 
-        {room === 'refinery' && (
+        {activeRoom === 'refinery' && (
         <>
         <div className="mb-6">
           <section className="rounded-lg border border-slate-800 bg-[#0b101c]/85 p-4">
@@ -538,7 +554,7 @@ export default function StarforgePage() {
         </>
         )}
 
-        {room === 'core' && (
+        {activeRoom === 'core' && (
         <>
         {/* the heat gauge — the deep is loud */}
         <section className="mb-6 rounded-lg border border-slate-800 bg-[#0b101c]/85 p-4">
@@ -674,7 +690,7 @@ export default function StarforgePage() {
 
         {/* THE ARMORY — the three slots. Guards are the collected shells;
             sigils are the stats. Click a slot for the profile. */}
-        {room === 'armory' && (
+        {activeRoom === 'armory' && (
         <section className="mb-6">
           <h2 className={`${display.className} text-slate-500 text-xs tracking-widest mb-2`}>
             THE ARMORY — your three Guards <span className="text-slate-700">· sigils fed by mana &amp; expedition marks</span>
@@ -706,7 +722,7 @@ export default function StarforgePage() {
         )}
 
         {/* THE GATE — the escape valve. warp when the node outpaces you */}
-        {room === 'gate' &&
+        {activeRoom === 'gate' &&
           (() => {
             const heat = forgeHeat(forge)
             const ready = canWarp(forge)

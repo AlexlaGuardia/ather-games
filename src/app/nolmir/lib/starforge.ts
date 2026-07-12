@@ -453,6 +453,25 @@ export function canWarp(f: ForgeState): boolean {
   return forgeHeat(f) >= WARP_HEAT
 }
 
+// Progressive disclosure — which Starforge rooms are revealed right now. The forge
+// used to open all five tabs at once (Core/Orrery/Refinery/Armory/Gate), which read
+// as clutter on a fresh save. First touch is now just the Orrery (the system) + the
+// Core (the tap); the rest unfold as the mechanic that needs them comes online.
+//
+// Keyed to MONOTONIC progress only — planet claims, the node counter, permanent
+// mana investments — so a revealed room never vanishes out from under a player who's
+// standing in it. Planets reset on warp, so every gate also latches on `node > 1`:
+// once you've made the first jump you're a veteran and keep the full deck forever.
+export function revealedRooms(f: ForgeState): Set<string> {
+  const claimed = f.planets.filter((p) => p > 0).length
+  const warped = (f.node ?? 1) > 1
+  const rooms = new Set<string>(['orrery', 'core'])
+  if (warped || claimed >= 1) rooms.add('refinery') // planets feed ore → castings → research
+  if (warped || claimed >= 2 || f.guardPlating > 0 || f.spikeVenom > 0) rooms.add('armory') // supply lines to defend
+  if (warped || canWarp(f)) rooms.add('gate') // the escape valve — noise until it's usable
+  return rooms
+}
+
 // deterministic — the long-scan shows THE next system, not a reroll
 export function nextSystemSeed(f: ForgeState): number {
   return ((((f.systemSeed ?? 0) ^ 0x9e3779b9) + (f.node ?? 1) * 2654435761) >>> 0) || 1

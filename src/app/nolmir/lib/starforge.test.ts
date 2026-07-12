@@ -24,6 +24,7 @@ import {
   genSystem,
   doWarp,
   canWarp,
+  revealedRooms,
   nextSystemSeed,
   echoMult,
   forgeMods,
@@ -195,6 +196,34 @@ const near = (a: number, b: number, eps = 1e-6) => Math.abs(a - b) <= eps
   ok('base guard hp mult >= 1', m.guardHpMult >= 1)
   ok('base spike dmg mult >= 1', m.spikeDmgMult >= 1)
   ok('plating research lifts guard hp', forgeMods({ ...f, research: { 'guard-lattice': 3 } }).guardHpMult > m.guardHpMult)
+}
+
+// ── progressive disclosure: revealedRooms unfolds, never soft-locks ──────────
+{
+  const fresh = defaultForge(0)
+  const r0 = revealedRooms(fresh)
+  ok('fresh save shows exactly Orrery + Core', r0.size === 2 && r0.has('orrery') && r0.has('core'))
+  ok('fresh save hides Refinery/Armory/Gate', !r0.has('refinery') && !r0.has('armory') && !r0.has('gate'))
+
+  const one = { ...fresh, planets: [1, 0, 0, 0, 0, 0, 0, 0] }
+  ok('first planet unfolds the Refinery', revealedRooms(one).has('refinery'))
+  ok('one planet is not yet the Armory', !revealedRooms(one).has('armory'))
+
+  const two = { ...fresh, planets: [1, 1, 0, 0, 0, 0, 0, 0] }
+  ok('second planet unfolds the Armory', revealedRooms(two).has('armory'))
+
+  // mana-bought armory investment reveals it even at one planet (never hide what you own)
+  ok('guard investment unfolds the Armory early', revealedRooms({ ...one, guardPlating: 1 }).has('armory'))
+
+  // the Gate stays noise until the ship can actually warp
+  ok('Gate hidden below warp heat', !revealedRooms(fresh).has('gate'))
+  const hot = { ...fresh, depth: 20, beaconTuning: 20 }
+  ok('warp-ready forge reveals the Gate', canWarp(hot) === revealedRooms(hot).has('gate') && revealedRooms(hot).has('gate'))
+
+  // monotonic across the warp: node 2 resets planets to 0 but keeps the full deck
+  const veteran = { ...fresh, node: 2, planets: [0, 0, 0, 0, 0, 0, 0, 0] }
+  const rv = revealedRooms(veteran)
+  ok('a veteran (node>1) keeps all five rooms after warp', rv.size === 5)
 }
 
 console.log(`\nSTARFORGE economy: ${pass} passed, ${fail} failed`)
