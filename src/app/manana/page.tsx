@@ -260,8 +260,22 @@ export default function MananaPage() {
     update()
     const ro = new ResizeObserver(update)
     ro.observe(el)
-    return () => ro.disconnect()
-  }, [mounted])
+    // `avail` is height-driven, but the wrapper is width-capped (max-w-560) — shrinking the
+    // window HEIGHT alone never changes the wrapper's box, so the ResizeObserver wouldn't
+    // fire and the board kept a size from a taller viewport, clipping its bottom rows under
+    // useNoScroll. Recompute on viewport resize too (visualViewport catches the mobile URL bar).
+    window.addEventListener('resize', update)
+    window.visualViewport?.addEventListener('resize', update)
+    return () => {
+      ro.disconnect()
+      window.removeEventListener('resize', update)
+      window.visualViewport?.removeEventListener('resize', update)
+    }
+    // `view` matters: the board (boardWrapRef) only mounts on the 'board' view. Keyed on
+    // [mounted] alone, this ran once on the 'home' front door with a null ref, bailed, and
+    // never re-ran on entering a game — so boardPx stayed null and the board fell back to
+    // width:100% (a width-square that overflows short viewports). Re-run when view flips.
+  }, [mounted, view])
 
   // iOS locks to the board: React touch handlers are passive, so kill the page's
   // rubber-band scroll/bounce with a real non-passive listener on the board.
