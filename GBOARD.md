@@ -113,10 +113,13 @@ the Arcade frame.
 > - [x] **ward + rekindle need nothing** — they're direct-**click** puzzles (no deck ever), and they use
 >   `screenMaxW`, so they inherited the bigger desktop screen from the shared vars for free. Verified live:
 >   mouse-playable, no overflow clip (screen height = viewport − reserve, chrome fits exactly).
-> - **manana:** mouse-native controls (click tiles) already fine on desktop; it has its own board layout (no
->   cabinet), so it's outside desktop-mode. **Known separate polish:** on an atypically SHORT desktop window
->   (<~600px tall) its board can clip the bottom rows under useNoScroll — pre-existing, not a regression. Fix
->   later by clamping the board to `min(width, avail)` more defensively.
+> - [x] **manana board-clip FIXED** (`52ff2f0`) — on short desktop windows the board clipped its bottom rows.
+>   Root cause deeper than expected: `boardPx` stayed null because the sizing effect keyed on `[mounted]` but
+>   `boardWrapRef` only mounts on the 'board' view — it first ran on the 'home' front door with a null ref,
+>   bailed, never re-ran on entering a game, so the board fell back to `width:100%` (a width-square ignoring
+>   available height; the height-fit was effectively dead, only looked fine on tall windows). Fixed: key on
+>   `[mounted, view]` + window/visualViewport resize listeners. Verified: 543px window board 259px (fits) vs
+>   506px (clipped) before. (manana controls were always mouse-native, fine on desktop.)
 > - [ ] **Crispness pass (optional, deferred):** canvas backing store is fixed at `VW×VH×dpr`; a big
 >   *landscape* desktop screen may upscale/blur. Size the backing store off displayed px for those. Portrait
 >   games stay crisp (they downscale when filling height). No game looked soft in verification — do if noticed.
