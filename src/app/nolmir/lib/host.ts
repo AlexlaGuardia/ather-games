@@ -2,8 +2,20 @@
 // Read/written by both the Crucible page and the Starforge.
 
 import { HostState } from './types'
+import { getMarks, setMarks, walletExists } from '@/lib/wallet'
 
 export const HOST_KEY = 'nolmir.host.v2'
+
+// Marks are the shared ather.games currency (canon: the realm's coin — see
+// athernyx world/rune-hold.md). The global wallet (`lib/wallet.ts`) is the source of
+// truth; Nolmir keeps its in-memory `host.marks` working by mirroring the wallet on
+// load/save, so every `host.marks` call site stays untouched. A legacy Nolmir save's
+// marks migrate into the wallet exactly once (the first load before any wallet exists).
+function syncMarksFromWallet(h: HostState): HostState {
+  if (!walletExists() && (h.marks ?? 0) > 0) setMarks(h.marks!) // one-time legacy migration
+  h.marks = getMarks()
+  return h
+}
 
 export function loadHost(): HostState {
   try {
@@ -11,10 +23,10 @@ export function loadHost(): HostState {
     if (raw) {
       const h = JSON.parse(raw) as HostState
       h.marks = h.marks ?? 0
-      return h
+      return syncMarksFromWallet(h)
     }
   } catch {}
-  return { mana: 0, exp: 0, marks: 0, ledger: [] }
+  return syncMarksFromWallet({ mana: 0, exp: 0, marks: 0, ledger: [] })
 }
 
 export function spendMarks(h: HostState, amount: number): HostState | null {
@@ -83,6 +95,7 @@ export const HOST_UNLOCKS: { level: number; what: string }[] = [
 ]
 
 export function saveHost(h: HostState) {
+  setMarks(h.marks ?? 0) // mirror marks out to the shared wallet (the source of truth)
   try {
     localStorage.setItem(HOST_KEY, JSON.stringify(h))
   } catch {}
