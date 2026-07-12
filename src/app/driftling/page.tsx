@@ -25,6 +25,9 @@ import {
   START_TIER,
   EQUAL_BAND,
   ELEMENTS,
+  MATCH_TIME,
+  DEPTH_PER_TIER,
+  APEX_TIER,
   type World,
   type ElementId,
 } from './lib/driftling'
@@ -33,8 +36,10 @@ import { sfx } from './lib/sfx'
 // virtual viewport (portrait, mobile-fit). The camera centres the player; the renderer scales.
 const VW = 420
 const VH = 620
-const BG_TOP = '#03060f'
-const BG_BOT = '#06121f'
+const SHALLOW_TOP = '#0c3446' // bright teal — the surface shallows (left / start)
+const SHALLOW_BOT = '#114c60'
+const DEEP_TOP = '#02040b' // the black abyss — deep right
+const DEEP_BOT = '#04101c'
 const NEUTRAL = '#cfeaf2' // pre-fork player + UI light
 const DANGER = '#ff5d6c' // threat ring (bigger than you)
 const JOY_R = 62 // virtual-px deflection radius of the touch joystick (full tilt at the rim)
@@ -72,6 +77,7 @@ export default function DriftlingPage() {
   const growFx = useRef(0) // seconds left on the evolve/fork payoff burst
 
   const [phase, setPhase] = useState<Phase>('ready')
+  const [endReason, setEndReason] = useState<'eaten' | 'time' | null>(null)
   const [tierName, setTierName] = useState(cap(LADDER[START_TIER].key))
   const [score, setScore] = useState(0)
   const [branch, setBranch] = useState<ElementId | null>(null)
@@ -176,10 +182,11 @@ export default function DriftlingPage() {
         if (ev.grew || ev.forkLocked) growFx.current = 0.7 // fire the payoff burst
         if (ev.grew) setTierName(cap(LADDER[w.tier].key))
         if (ev.forkLocked) { setBranch(w.branch); setApex(apexName(w)) }
-        if (ev.eaten) {
-          sfx.play('death')
+        if (ev.eaten || ev.timeup) {
+          sfx.play(ev.timeup ? 'grow' : 'death') // time-up is a proud finish; eaten is the sting
           setScore(w.score)
           setEaten(w.eaten)
+          setEndReason(w.endReason)
           const b = saveBest(w.score)
           setBest(b)
           setNewBest(w.score > 0 && w.score >= b)
@@ -286,7 +293,7 @@ export default function DriftlingPage() {
         {phase === 'dead' && (
           <div className="absolute inset-0 overflow-y-auto bg-[#03060f]/75 rounded-md">
            <div className="min-h-full flex flex-col items-center justify-center gap-2 text-center px-6 py-4">
-            <div className="gx-title text-[#ff5d6c] text-lg tracking-[0.3em] uppercase" style={{ textShadow: '0 0 14px #ff5d6c' }}>Swallowed</div>
+            <div className="gx-title text-lg tracking-[0.3em] uppercase" style={{ color: endReason === 'time' ? accent : '#ff5d6c', textShadow: `0 0 14px ${endReason === 'time' ? accent : '#ff5d6c'}` }}>{endReason === 'time' ? 'The Deep Holds' : 'Swallowed'}</div>
             <div className="gx-value font-mono text-[#e8feff] text-3xl leading-none tabular-nums" style={{ textShadow: `0 0 12px ${accent}80` }}>{score}</div>
             {mode === 'daily'
               ? <div className="gx-label text-[10px] font-mono tracking-wider" style={{ color: accent }}>daily #{dailyNumber()} · today&apos;s best {dailyBest}{score >= dailyBest && score > 0 ? ' ✦' : ''}</div>
@@ -298,7 +305,9 @@ export default function DriftlingPage() {
               reached <span style={{ color: accent }}>{tierName}</span> · ate <span className="text-[#e8feff] tabular-nums">{eaten}</span>{branch ? <> · <span style={{ color: accent }}>{cap(branch)}</span>-line</> : ''}
             </div>
             <p className="text-[10px] leading-relaxed text-[#9fd6e0]/70 max-w-[250px] italic mt-0.5">
-              {branch ? `a bigger thing of the deep took you. the ${cap(branch)}-line ends here.` : 'something bigger took you before you ever fed. drift wary.'}
+              {endReason === 'time'
+                ? `three minutes in the current, and the deep let you go this far. push further next drift.`
+                : branch ? `a bigger thing of the deep took you. the ${cap(branch)}-line ends here.` : 'something bigger took you before you ever fed. drift wary.'}
             </p>
             <button onClick={restart} className="gx-label text-[11px] text-[#03060f] hover:brightness-110 px-5 py-2 rounded-[2px] mt-1" style={{ background: accent, boxShadow: `0 0 18px ${accent}80` }}>drift again →</button>
             {mode === 'daily' && (
@@ -338,10 +347,11 @@ function render(canvas: HTMLCanvasElement, w: World, ts: number, growFx: number,
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
   const t = ts / 1000
 
-  // ocean gradient
+  // the water DARKENS with depth: bright teal shallows → black abyss as you push right (sells the descent)
+  const depthFrac = Math.min(1, w.x / (DEPTH_PER_TIER * APEX_TIER))
   const g = ctx.createLinearGradient(0, 0, 0, VH)
-  g.addColorStop(0, BG_TOP)
-  g.addColorStop(1, BG_BOT)
+  g.addColorStop(0, mix(SHALLOW_TOP, DEEP_TOP, depthFrac))
+  g.addColorStop(1, mix(SHALLOW_BOT, DEEP_BOT, depthFrac))
   ctx.fillStyle = g
   ctx.fillRect(0, 0, VW, VH)
   ctx.lineCap = 'round'
@@ -493,6 +503,30 @@ function render(canvas: HTMLCanvasElement, w: World, ts: number, growFx: number,
     ctx.shadowBlur = 0
     ctx.globalAlpha = 1
   }
+
+  // ── the 3-minute match clock (top-right; turns urgent in the last 30s) ─────────
+  if (w.state === 'playing') {
+    const left = Math.max(0, MATCH_TIME - w.t)
+    const mm = Math.floor(left / 60), ss = Math.floor(left % 60)
+    const urgent = left <= 30
+    ctx.font = '600 15px ui-monospace, SFMono-Regular, monospace'
+    ctx.textAlign = 'right'
+    ctx.fillStyle = urgent ? '#ff5d6c' : '#cfeaf2'
+    ctx.globalAlpha = urgent ? 0.7 + 0.3 * Math.sin(t * 8) : 0.85
+    ctx.shadowBlur = urgent ? 8 : 0; ctx.shadowColor = '#ff5d6c'
+    ctx.fillText(`${mm}:${ss < 10 ? '0' : ''}${ss}`, VW - 12, 24)
+    ctx.shadowBlur = 0; ctx.globalAlpha = 1; ctx.textAlign = 'left'
+  }
+}
+
+// hex → rgb() lerp for the depth-darkening water
+function mix(a: string, b: string, tt: number): string {
+  const pa = parseInt(a.slice(1), 16), pb = parseInt(b.slice(1), 16)
+  const k = Math.max(0, Math.min(1, tt))
+  const r = Math.round(((pa >> 16) & 255) + (((pb >> 16) & 255) - ((pa >> 16) & 255)) * k)
+  const g = Math.round(((pa >> 8) & 255) + (((pb >> 8) & 255) - ((pa >> 8) & 255)) * k)
+  const bl = Math.round((pa & 255) + ((pb & 255) - (pa & 255)) * k)
+  return `rgb(${r},${g},${bl})`
 }
 
 // a tiny teardrop "fish": a body circle + a tail nub pointing opposite the heading

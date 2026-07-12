@@ -16,8 +16,16 @@
 import { mulberry32, type Rng } from '@/lib/arcade/rng'
 
 // ── the ocean (world coords; the renderer follows the player with a camera) ──────
-export const WORLD_W = 2400
-export const WORLD_H = 1800
+export const WORLD_H = 1800 // vertical swim band (surface → floor); the ocean is ENDLESS to the RIGHT
+export const START_X = 260 // you begin in the shallows (left); the deep is the journey rightward
+export const DEPTH_PER_TIER = 1600 // world-x swum right to raise the ambient danger by one tier
+export const MATCH_TIME = 180 // seconds per run — a 3-minute time attack: how deep can you get?
+
+// the ambient danger tier at a depth (world-x): shallows = tiny fish, the deep = giants. This is
+// what makes the ocean SPATIAL — swim right and everything around you gets bigger.
+export function depthTier(x: number): number {
+  return Math.max(0, Math.min(APEX_TIER, x / DEPTH_PER_TIER))
+}
 
 // ── drift physics (flOw-like: heading nudges, body eases, water drags) ───────────
 export const ACCEL = 820 // how hard the body pulls toward the heading (tightened — was floaty/hard to steer)
@@ -116,6 +124,9 @@ export interface World {
   creatures: Creature[]
   eaten: number // creatures consumed (run stat)
   score: number
+  t: number // seconds elapsed this run (the 3-min match clock)
+  maxX: number // deepest (rightmost) point reached → the headline score
+  endReason: 'eaten' | 'time' | null // how the run ended
   state: DriftState
   spawnPaused: boolean // tests flip this to freeze the field
   nextId: number
@@ -128,9 +139,15 @@ export interface TickEvents {
   forkLocked: ElementId | null // the first eat just locked the branch
   bumped: boolean // touched an equal — neither ate
   eaten: boolean // a bigger creature got you → run ends
+  timeup: boolean // the 3-min clock ran out → run ends
 }
 
-const noEvents = (): TickEvents => ({ ate: false, grew: false, forkLocked: null, bumped: false, eaten: false })
+const noEvents = (): TickEvents => ({ ate: false, grew: false, forkLocked: null, bumped: false, eaten: false, timeup: false })
+
+// the run's score is HOW DEEP you got (rightmost point), + a growth bonus. Depth is the headline.
+function depthScore(w: World): number {
+  return Math.floor(w.maxX / 10) + w.tier * 15
+}
 
 function maxSpeed(tier: number): number {
   return BASE_MAXV * Math.max(MIN_MAXV_FRAC, 1 - tier * TIER_SLOW)
@@ -141,31 +158,30 @@ function pickElement(w: World): ElementId {
   return ELEMENTS[Math.floor(w.rng() * ELEMENTS.length)].id
 }
 
-// choose a creature tier relative to the player's. Threat exposure RAMPS with how far you
-// have climbed: the bottom of the ladder is a sheltered nursery (mostly prey + peers, big
-// fish rare), the deep end is a gauntlet. Always leaves prey to chase at every station.
-export function pickTier(w: World): number {
-  const climb = (w.tier - START_TIER) / (APEX_TIER - START_TIER) // 0 at start → 1 at apex
-  const pThreat = 0.08 + climb * 0.34 // 8% big-fish near the surface → ~40% in the deep
-  const pPrey = 0.6 - climb * 0.22 // lots of prey early, thinning as you grow
+// choose a creature tier by the DEPTH it spawns at (not by how big the player is). Every stretch
+// of ocean has its own size band — small fish in the shallows, giants in the deep — with prey to
+// chase and something bigger lurking at every depth. This is the spatial food chain.
+export function pickTier(w: World, atX: number): number {
+  const local = depthTier(atX) // the ocean's ambient tier HERE
   const r = w.rng()
   let delta: number
-  if (r < pPrey) delta = w.rng() < 0.45 ? -2 : -1 // prey (some easy, some near-tier)
-  else if (r < 1 - pThreat) delta = 0 // a peer (bump)
-  else delta = w.rng() < 0.72 ? 1 : 2 // a threat (mostly one tier up, rarely two)
-  return Math.max(0, Math.min(APEX_TIER, w.tier + delta))
+  if (r < 0.56) delta = w.rng() < 0.5 ? -2 : -1 // prey — the small fish of this depth
+  else if (r < 0.8) delta = 0 // a peer (bump)
+  else delta = w.rng() < 0.7 ? 1 : 2 // something bigger, lurking (deep water = these are large)
+  return Math.max(0, Math.min(APEX_TIER, Math.round(local + delta)))
 }
 
 function spawnOne(w: World, minDist = SPAWN_RING, maxDist = SPAWN_RING + 140) {
   const ang = w.rng() * Math.PI * 2
   const dist = minDist + w.rng() * (maxDist - minDist)
-  const tier = pickTier(w)
+  const x = Math.max(0, w.x + Math.cos(ang) * dist) // never spawn behind the shallow edge
+  const y = Math.max(0, Math.min(WORLD_H, w.y + Math.sin(ang) * dist)) // stay in the vertical band
+  const tier = pickTier(w, x) // sized by the depth it appears at
   const dvAng = w.rng() * Math.PI * 2
   const dv = w.rng() * CREATURE_DRIFT
   w.creatures.push({
     id: w.nextId++,
-    x: w.x + Math.cos(ang) * dist,
-    y: w.y + Math.sin(ang) * dist,
+    x, y,
     vx: Math.cos(dvAng) * dv,
     vy: Math.sin(dvAng) * dv,
     tier,
@@ -178,7 +194,7 @@ function spawnOne(w: World, minDist = SPAWN_RING, maxDist = SPAWN_RING + 140) {
 export function makeWorld(seed: number): World {
   const rng = mulberry32(seed >>> 0)
   const w: World = {
-    x: WORLD_W / 2,
+    x: START_X, // begin in the shallows (left) — the deep is the journey right
     y: WORLD_H / 2,
     vx: 0,
     vy: 0,
@@ -191,6 +207,9 @@ export function makeWorld(seed: number): World {
     creatures: [],
     eaten: 0,
     score: 0,
+    t: 0,
+    maxX: START_X,
+    endReason: null,
     state: 'ready',
     spawnPaused: false,
     nextId: 1,
@@ -248,6 +267,15 @@ export function tick(w: World, dt: number): TickEvents {
   const ev = noEvents()
   if (w.state !== 'playing') return ev
 
+  // ── the 3-minute clock: run ends when it hits zero (score = how deep you got) ──
+  w.t += dt
+  if (w.t >= MATCH_TIME) {
+    w.maxX = Math.max(w.maxX, w.x)
+    w.state = 'dead'; w.endReason = 'time'; ev.timeup = true
+    w.score = depthScore(w)
+    return ev
+  }
+
   // ── player drift: ease toward heading, bleed with drag, cap by tier ───────────
   w.vx += w.hx * ACCEL * dt
   w.vy += w.hy * ACCEL * dt
@@ -263,11 +291,12 @@ export function tick(w: World, dt: number): TickEvents {
   }
   w.x += w.vx * dt
   w.y += w.vy * dt
-  // soft world bounds — nudge back, don't hard-stop the drift
+  // soft bounds: a shallow edge behind you (can't swim past the start) + the vertical band.
+  // NO right wall — the deep is endless; how far right you push IS the score.
   if (w.x < 0) { w.x = 0; w.vx = Math.abs(w.vx) * 0.3 }
-  if (w.x > WORLD_W) { w.x = WORLD_W; w.vx = -Math.abs(w.vx) * 0.3 }
   if (w.y < 0) { w.y = 0; w.vy = Math.abs(w.vy) * 0.3 }
   if (w.y > WORLD_H) { w.y = WORLD_H; w.vy = -Math.abs(w.vy) * 0.3 }
+  if (w.x > w.maxX) w.maxX = w.x // deepest point reached
 
   // ── ocean life: gentle wander + a lean toward/away from the player ─────────────
   for (const c of w.creatures) {
@@ -301,10 +330,11 @@ export function tick(w: World, dt: number): TickEvents {
       w.creatures.splice(i, 1)
       eat(w, c, ev)
     } else if (ratio > 1 + EQUAL_BAND) {
-      // bigger → it eats you, run ends
+      // bigger → it eats you, run ends early
       w.state = 'dead'
       ev.eaten = true
-      w.score = Math.floor(w.mass) + w.tier * 25
+      w.endReason = 'eaten'
+      w.score = depthScore(w)
       return ev
     } else {
       // roughly equal → a bump, push apart so they don't sit overlapped
@@ -333,7 +363,7 @@ export function tick(w: World, dt: number): TickEvents {
     }
   }
 
-  w.score = Math.floor(w.mass) + w.tier * 25
+  w.score = depthScore(w)
   return ev
 }
 
