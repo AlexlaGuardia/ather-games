@@ -354,7 +354,8 @@ export default function MagiiPage() {
       )}
       {/* Minimal header */}
       <div className="flex items-center justify-between mb-2 md:mb-3 px-1">
-        <span className="font-display text-sm text-text-faint tracking-widest uppercase">
+        {/* hidden on mobile when the fixed "back to the room" pill occupies this corner */}
+        <span className={`font-display text-sm text-text-faint tracking-widest uppercase ${roomDest ? 'hidden sm:inline' : ''}`}>
           Magii <span className="text-text-faint/40 normal-case tracking-normal">· {getCollectionEntry(selectedId).collection.name}</span>
         </span>
         <div className="flex items-center gap-4">

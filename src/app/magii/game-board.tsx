@@ -390,7 +390,7 @@ function PlayerArea({
   const roomy = step >= cardW * 0.7  // enough slack to separate element groups
 
   return (
-    <div className="flex flex-col items-center gap-2 md:gap-4">
+    <div className="flex flex-col items-center gap-2 md:gap-4 w-full">
       {/* Discard pile + status area */}
       <div className="flex items-end gap-3 md:gap-6">
         {/* Your discard pile */}
@@ -717,7 +717,7 @@ export function GameBoard({
         </div>
 
         {/* Player area (bottom of table) */}
-        <div className={npcProcessing ? 'magii-waiting' : ''}>
+        <div className={`w-full ${npcProcessing ? 'magii-waiting' : ''}`}>
           <PlayerArea
             player={human}
             isDrawPhase={isDrawPhase}
