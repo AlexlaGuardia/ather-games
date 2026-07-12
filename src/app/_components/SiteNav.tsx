@@ -16,6 +16,7 @@ import { liveGames, gameById, type GameEntry } from "@/lib/games";
 import { getFavs, toggleFav } from "@/lib/favorites";
 import { getRecents, pushRecent } from "@/lib/recents";
 import { hasSave, saveHint } from "@/lib/saves";
+import { getMarks, MARKS_EVENT } from "@/lib/wallet";
 
 const GOLD = "#d4a843"; // arcade "furniture" colour — the nav is furniture, fixed across games
 const CLOSE_MS = 170; // must match the sitenav-slide-out duration below
@@ -64,6 +65,20 @@ export default function SiteNav({
   const [recents, setRecents] = useState<GameEntry[]>([]);
   const [favs, setFavs] = useState<GameEntry[]>([]);
   const [isFav, setIsFav] = useState(false);
+  // the shared Marks balance — live across the whole hub (MARKS_EVENT fires on any
+  // earn/spend in any game; storage event catches another tab). The component is
+  // always mounted, so the subscription outlives the drawer's open/close.
+  const [marks, setMarksBal] = useState(0);
+  useEffect(() => {
+    const sync = () => setMarksBal(getMarks());
+    sync();
+    window.addEventListener(MARKS_EVENT, sync);
+    window.addEventListener("storage", sync);
+    return () => {
+      window.removeEventListener(MARKS_EVENT, sync);
+      window.removeEventListener("storage", sync);
+    };
+  }, []);
 
   const navRef = useRef<HTMLElement | null>(null);
   const buttonRef = useRef<HTMLButtonElement | null>(null);
@@ -252,6 +267,13 @@ export default function SiteNav({
                     {isFav ? "★" : "☆"}
                   </button>
                 )}
+              </div>
+
+              {/* the shared purse — Marks, the realm's coin (earned at the games, spent down the Passage) */}
+              <div className="flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-xs" style={{ borderColor: `${GOLD}33`, background: `${GOLD}0d` }}>
+                <span aria-hidden style={{ color: GOLD }}>✶</span>
+                <b className="tabular-nums" style={{ color: "#e8e8f0" }}>{marks.toLocaleString()}</b>
+                <span className="uppercase tracking-[0.16em] text-[9px]" style={{ color: `${GOLD}99` }}>marks</span>
               </div>
 
               {/* HERO: jump to a game */}
