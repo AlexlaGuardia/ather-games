@@ -315,6 +315,7 @@ export default function SeedfallPage() {
         onPress={deckPress}
         onRelease={deckRelease}
         hint="hold a side to drift · both to slow · go deep"
+        keyLegend={[{ keys: '← →', label: 'drift' }]}
       />
 
       <style jsx>{`

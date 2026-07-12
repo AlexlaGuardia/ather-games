@@ -323,6 +323,7 @@ export default function AtherdashPage() {
         ]}
         onPress={deckPress}
         hint="slide to the matching lane · hop the gaps"
+        keyLegend={[{ keys: '← →', label: 'lane' }, { keys: 'Space', label: 'hop' }]}
       />
 
       <style jsx>{`

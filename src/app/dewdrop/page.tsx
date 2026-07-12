@@ -292,6 +292,7 @@ export default function DewdropPage() {
         dpad
         onPress={deckDir}
         hint="tap a direction to turn · grab a wildbloom · clear the dew"
+        keyLegend={[{ keys: 'W A S D', label: 'turn' }]}
       />
     </ArcadeCabinet>
   )

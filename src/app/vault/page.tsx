@@ -481,6 +481,7 @@ export default function VaultPage() {
         onPress={doPress}
         onRelease={doRelease}
         hint="tap = short hop · hold = float higher"
+        keyLegend={[{ keys: 'Space', label: 'vault' }]}
       />
 
       <div className="w-full flex items-center justify-center mt-3" style={{ maxWidth: screenMaxW(VW, VH) }}>

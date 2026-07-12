@@ -283,6 +283,7 @@ export default function SquallPage() {
         onStick={onStick}
         onStickEnd={onStickEnd}
         hint="drag the stick to weave the storm"
+        keyLegend={[{ keys: 'W A S D', label: 'weave' }]}
       />
 
     </ArcadeCabinet>

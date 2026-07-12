@@ -333,6 +333,7 @@ export default function DriftlingPage() {
         onStick={deckStick}
         onStickEnd={deckEnd}
         hint="drag the stick to swim · eat up the ladder"
+        keyLegend={[{ keys: 'W A S D', label: 'swim' }]}
       />
     </ArcadeCabinet>
   )

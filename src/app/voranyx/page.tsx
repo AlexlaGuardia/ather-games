@@ -269,6 +269,7 @@ export default function VoranyxPage() {
         onPress={boostOn}
         onRelease={boostOff}
         hint="drag the stick to steer · hold boost to surge"
+        keyLegend={[{ keys: 'W A S D', label: 'steer' }, { keys: 'Space', label: 'boost' }]}
       />
 
 
