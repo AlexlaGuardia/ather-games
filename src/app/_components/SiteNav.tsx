@@ -15,6 +15,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { liveGames, gameById, type GameEntry } from "@/lib/games";
 import { getFavs, toggleFav } from "@/lib/favorites";
 import { getRecents, pushRecent } from "@/lib/recents";
+import { hasSave, saveHint } from "@/lib/saves";
 
 const GOLD = "#d4a843"; // arcade "furniture" colour — the nav is furniture, fixed across games
 const CLOSE_MS = 170; // must match the sitenav-slide-out duration below
@@ -331,17 +332,28 @@ export default function SiteNav({
   );
 }
 
-// compact chip for the recents strip — glyph + short name, accent-tinted
+// compact chip for the recents strip — glyph + short name, accent-tinted.
+// A save-backed game with a live save reads as "Resume": gold-tinted border, a
+// trailing ↻, and its progress hint (Node 4 · Quest 5) so the tap says "continue".
 function GameChip({ g, onClick }: { g: GameEntry; onClick: () => void }) {
+  const resumable = hasSave(g.id);
+  const hint = resumable ? saveHint(g.id) : null;
   return (
     <Link
       href={g.href}
       onClick={onClick}
+      aria-label={resumable ? `Resume ${g.title}${hint ? ` — ${hint}` : ""}` : g.title}
       className="flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-xs transition hover:bg-white/5"
-      style={{ borderColor: "#ffffff1f", color: "#dcdcea" }}
+      style={{ borderColor: resumable ? `${GOLD}66` : "#ffffff1f", color: "#dcdcea" }}
     >
       <span aria-hidden style={{ color: GOLD }}>{g.glyph}</span>
       <span className="max-w-[9ch] truncate">{g.title}</span>
+      {resumable && (
+        <span aria-hidden className="flex items-center gap-1 pl-0.5" style={{ color: `${GOLD}cc` }}>
+          {hint && <span className="text-[9px] tabular-nums tracking-tight opacity-90">{hint}</span>}
+          <span className="text-[11px] leading-none">↻</span>
+        </span>
+      )}
     </Link>
   );
 }

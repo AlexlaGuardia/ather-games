@@ -224,8 +224,17 @@ the Arcade frame.
 > `aria-expanded`) · **tier filter** on recents/favs (above) · **Nolmir's redundant "← arcade" link removed** (header
 > `justify-between` → 3-col grid so the title stays centred without the link propping the left slot open).
 > **Already shipped earlier, board was stale:** ★-favorite-from-the-drawer (`toggleFavHere`) exists and works.
-> **▶ Still open:** recents→"resume" for save-backed games (nolmir/manana/play3d) · Alex's phone pass on the drawer feel.
-> **Files:** `src/lib/recents.ts`, `_components/SiteNav.tsx`, `_components/ArcadeCabinet.tsx`,
+> **✅ recents→"resume" SHIPPED 2026-07-12, jin-cc:** new `src/lib/saves.ts` — a registry of per-game save probes
+> (`hasSave`/`saveHint`/`isSaveBacked`); a recents chip with a live save now reads as "Resume" (gold-tinted border,
+> trailing ↻, a progress hint: nolmir "Node N" from `forge.v2`, manana "Quest N" from `quest.level`). The hint guards
+> against "played once" — manana's lone high score does NOT trigger resume, only real quest progress does. Every
+> save-backed game already auto-loads on mount, so the tap genuinely continues. Registry-driven: a game earns the
+> affordance by registering a probe, nothing more. **play3d not wired** — it shares Shimmer's `ather:save:shimmer`
+> slot and Shimmer is a room-wall (excluded from the recents pool), so it never reaches the strip today; drop a probe
+> under its id if that changes. Verified live on `ather.games` (DOM assertions: gold border + hint + ↻ present for
+> seeded nolmir/manana, absent for a no-save chip).
+> **▶ Still open:** Alex's phone pass on the drawer feel (`CLOSE_MS` knob).
+> **Files:** `src/lib/recents.ts`, `src/lib/saves.ts`, `_components/SiteNav.tsx`, `_components/ArcadeCabinet.tsx`,
 > `manana/page.tsx` + `manana/Home.tsx`, `arcade/all/page.tsx`, `nolmir/page.tsx`, `grimoire/page.tsx`,
 > `shimmer/page.tsx`, `shimmer/play3d/Shimmer3D.tsx`.
 
