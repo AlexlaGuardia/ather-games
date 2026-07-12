@@ -1,71 +1,36 @@
 'use client'
 
-import { useCallback, useEffect, useRef, useState } from 'react'
-import { useCloudSave } from './use-cloud-save'
+import { useCallback, useEffect, useState } from 'react'
+import { getMarks, addMarks, spendMarks, MARKS_EVENT } from './wallet'
 
-interface WalletData {
-  marks: number
-  totalEarned: number
-  totalSpent: number
-}
-
-const EMPTY_WALLET: WalletData = { marks: 0, totalEarned: 0, totalSpent: 0 }
-
+// Thin React wrapper over lib/wallet.ts — the single shared Marks store. API-compatible
+// with the old hook ({ marks, earn, spend, loading, isSignedIn }) so the Magii card game
+// and Shimmer compile unchanged; the difference is every surface now shares ONE store and
+// the balance updates live across components (MARKS_EVENT), instead of each hook holding
+// its own copy.
+//
+// `loading` is preserved deliberately: it starts true and flips false after the mount
+// read. That keeps SSR/first-render at marks=0 (no hydration mismatch) AND lets callers
+// that gate on it — e.g. the card game's one-time WELCOME_STAKE seed — wait for the real
+// balance before acting, so a returning player is never re-seeded.
 export function useWallet() {
-  const { load, save, isSignedIn } = useCloudSave('wallet')
-  const [wallet, setWallet] = useState<WalletData>(EMPTY_WALLET)
+  const [marks, setMarks] = useState(0)
   const [loading, setLoading] = useState(true)
-  const walletRef = useRef(wallet)
-  const loadedRef = useRef(false)
-
-  walletRef.current = wallet
 
   useEffect(() => {
-    if (!isSignedIn || loadedRef.current) {
-      setLoading(false)
-      return
+    const sync = () => setMarks(getMarks())
+    sync()
+    setLoading(false)
+    window.addEventListener(MARKS_EVENT, sync)
+    window.addEventListener('storage', sync) // another tab spent/earned
+    return () => {
+      window.removeEventListener(MARKS_EVENT, sync)
+      window.removeEventListener('storage', sync)
     }
-    loadedRef.current = true
-    load().then(data => {
-      if (data) {
-        const w = { ...EMPTY_WALLET, ...data }
-        setWallet(w)
-        walletRef.current = w
-      }
-      setLoading(false)
-    })
-  }, [isSignedIn, load])
+  }, [])
 
-  const earn = useCallback(
-    (amount: number) => {
-      if (amount <= 0) return
-      const next: WalletData = {
-        marks: walletRef.current.marks + amount,
-        totalEarned: walletRef.current.totalEarned + amount,
-        totalSpent: walletRef.current.totalSpent,
-      }
-      setWallet(next)
-      walletRef.current = next
-      if (isSignedIn) save(next)
-    },
-    [isSignedIn, save],
-  )
+  const earn = useCallback((amount: number) => { addMarks(amount) }, [])
+  const spend = useCallback((amount: number): boolean => spendMarks(amount), [])
 
-  const spend = useCallback(
-    (amount: number): boolean => {
-      if (amount <= 0 || walletRef.current.marks < amount) return false
-      const next: WalletData = {
-        marks: walletRef.current.marks - amount,
-        totalEarned: walletRef.current.totalEarned,
-        totalSpent: walletRef.current.totalSpent + amount,
-      }
-      setWallet(next)
-      walletRef.current = next
-      if (isSignedIn) save(next)
-      return true
-    },
-    [isSignedIn, save],
-  )
-
-  return { marks: wallet.marks, earn, spend, loading, isSignedIn }
+  return { marks, earn, spend, loading, isSignedIn: true }
 }

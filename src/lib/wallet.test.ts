@@ -1,9 +1,10 @@
-// The global Marks wallet — guards the shared-currency math + the legacy-migration
-// contract. Run: npx tsx src/lib/wallet.test.ts
+// The global Marks wallet — guards the shared-currency math + the store shape.
+// Run: npx tsx src/lib/wallet.test.ts
 //
 // wallet.ts is browser code (window + localStorage). We shim both with an in-memory
 // store so the REAL code paths execute under tsx/Node.
 
+const KEY = "ather:save:wallet";
 let store: Record<string, string> = {};
 const events: number[] = [];
 // @ts-expect-error — minimal localStorage shim
@@ -27,26 +28,30 @@ function ok(name: string, cond: boolean) {
 const reset = () => { store = {}; events.length = 0; };
 
 void (async () => {
-  // dynamic import so the shims above are in place before wallet.ts evaluates
-  const { getMarks, setMarks, addMarks, spendMarks, walletExists } = await import("./wallet");
+  const { getMarks, getWallet, setMarks, addMarks, spendMarks, walletExists } = await import("./wallet");
 
   // ── empty / unset ──────────────────────────────────────────────────────────
   reset();
   ok("unset wallet reads 0", getMarks() === 0);
   ok("unset wallet does not 'exist' yet", walletExists() === false);
   ok("spending from empty fails", spendMarks(10) === false);
-  ok("failed spend left balance at 0", getMarks() === 0);
 
-  // ── earn + spend ─────────────────────────────────────────────────────────────
+  // ── earn tracks marks AND lifetime earned ────────────────────────────────────
   reset();
   ok("addMarks returns the new balance", addMarks(50) === 50);
-  ok("earning persists", getMarks() === 50);
   ok("wallet exists after first write", walletExists() === true);
   ok("earning stacks", addMarks(25) === 75);
+  ok("totalEarned accrues", getWallet().totalEarned === 75);
+  ok("totalSpent still 0", getWallet().totalSpent === 0);
+
+  // ── spend tracks marks AND lifetime spent ────────────────────────────────────
   ok("affordable spend succeeds", spendMarks(30) === true);
-  ok("spend debits", getMarks() === 45);
+  ok("spend debits the balance", getMarks() === 45);
+  ok("totalSpent accrues", getWallet().totalSpent === 30);
+  ok("totalEarned unchanged by a spend", getWallet().totalEarned === 75);
   ok("overspend fails", spendMarks(1000) === false);
   ok("failed overspend left balance intact", getMarks() === 45);
+  ok("failed overspend did NOT touch totalSpent", getWallet().totalSpent === 30);
   ok("exact-balance spend clears to 0", spendMarks(45) === true && getMarks() === 0);
 
   // ── guards: never negative, non-positive is a no-op ──────────────────────────
@@ -55,13 +60,18 @@ void (async () => {
   ok("addMarks(0) is a no-op", addMarks(0) === 10);
   ok("addMarks(-5) is a no-op", addMarks(-5) === 10);
   ok("spendMarks(0) is a trivial success, no debit", spendMarks(0) === true && getMarks() === 10);
-  ok("a garbage stored value reads as 0-floor", (() => { store["ather.marks"] = "NaN"; return getMarks() === 0; })());
-  ok("a negative stored value floors to 0", (() => { store["ather.marks"] = "-99"; return getMarks() === 0; })());
+  ok("a garbage stored blob reads as 0-floor", (() => { store[KEY] = "{not json"; return getMarks() === 0; })());
+  ok("a negative stored marks floors to 0", (() => { store[KEY] = JSON.stringify({ marks: -99 }); return getMarks() === 0; })());
 
-  // ── setMarks + the legacy-migration contract ─────────────────────────────────
+  // ── compatibility with the pre-existing {marks,totalEarned,totalSpent} shape ──
+  reset();
+  store[KEY] = JSON.stringify({ marks: 120, totalEarned: 300, totalSpent: 180 });
+  ok("reads a legacy card-game/Shimmer wallet blob", getMarks() === 120 && getWallet().totalEarned === 300);
+  ok("earning onto a legacy blob preserves totals", (() => { addMarks(10); const w = getWallet(); return w.marks === 130 && w.totalEarned === 310 && w.totalSpent === 180; })());
+
+  // ── setMarks + event hygiene ─────────────────────────────────────────────────
   reset();
   ok("setMarks seeds a fresh wallet", setMarks(200) === 200 && getMarks() === 200);
-  ok("setMarks overwrites (mirror behaviour)", setMarks(180) === 180);
   reset();
   setMarks(100);            // 1 event (creation)
   const before = events.length;
