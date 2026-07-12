@@ -88,6 +88,33 @@ the Arcade frame.
 >
 > ---
 
+## 🖥️ Cross-cutting — DESKTOP MODE (building, jin-cc, 2026-07-12, `0a01548`)
+> A tester on **desktop** flagged screen-size + controls. Root cause: the arcade is **mobile-native** —
+> the phone-shaped cabinet (header → screen → thumb deck) just floats small in a monitor with big dead
+> margins, and **4/11 games (manana, rekindle, ward, updraft) have NO gameplay keyboard at all** — the
+> canvas is `pointer-events-none`, so on desktop you literally mouse-click the on-screen FLY button to
+> play. (The `ArcadeControls` comment claiming "keyboard still drives on desktop" was false for those 4.)
+> **Alex's call (2026-07-12): "Big-screen cabinet"** — keep the cabinet furniture, but on desktop grow the
+> screen to fill the height, drop the touch deck for a slim keybind plate, keyboard drives.
+>
+> **Mechanism (shared, one switch → all cabinets):** `fit.ts` `screenMaxW` reads CSS vars
+> `--ac-reserve`/`--ac-wscale`/`--ac-vwcap`; **mobile leaves them unset so the old expression is
+> reproduced byte-for-byte** (zero phone change, no hydration flash). `ArcadeCabinet` sets them + toggles
+> `.ac-deck`/`.ac-keys` under one global `@media (hover:hover) and (pointer:fine)`. `ArcadeControls` gets a
+> `keyLegend` prop → gold keycap plate on desktop, deck hidden (only when a legend exists, so a
+> keyboard-less game never loses its sole input).
+>
+> - [x] **Updraft = reference game** (`0a01548`) — Space/↑/W + click-to-flap gameplay input, keyLegend wired.
+>   Verified live on ather.games desktop viewport: deck hidden, plate shown, screen grown, Space drove a
+>   run to score 7.
+> - [ ] **Roll to the other 10.** Keyboard-having 7 (seedfall/voranyx/driftling/squall/dewdrop/vault/atherdash)
+>   = just add `keyLegend` + screen click where it makes sense. **The 3 keyboardless (manana/rekindle/ward)
+>   need REAL gameplay keys added first**, else their deck vanishes on desktop and they become unplayable.
+> - [ ] **Crispness pass (optional):** canvas backing store is fixed at `VW×VH×dpr`; a big *landscape* desktop
+>   screen may upscale/blur. Size the backing store off displayed px for those. Portrait games (updraft) stay
+>   crisp as-is (they downscale when filling height).
+> - **Files:** `lib/arcade/fit.ts`, `_components/ArcadeCabinet.tsx`, `_components/ArcadeControls.tsx`, `updraft/page.tsx`.
+
 ## 🔁 Cross-cutting — THE DAILY CHALLENGE (shipped 2026-06-21, `b4c3ddb`→`7902b30`)
 > Retention loop: one seeded run per UTC day, the SAME course for everyone, shareable score.
 - **Shared lib `src/lib/arcade/daily.ts`** (reusable like ArcadeCabinet): `dailyKey`/`dailySeed`/
