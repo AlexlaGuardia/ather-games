@@ -83,8 +83,8 @@ export const APEX_BY_ELEMENT: Record<ElementId, string> = {
 }
 
 // ── spawning ──────────────────────────────────────────────────────────────────────
-export const TARGET_CREATURES = 32 // how full the visible ocean stays
-export const SPAWN_PER_TICK = 2 // gentle top-up so the field doesn't pop in all at once
+export const TARGET_CREATURES = 48 // how full the visible ocean stays (room for shoals + lone hunters)
+export const SPAWN_PER_TICK = 3 // gentle top-up so the field doesn't pop in all at once
 // the viewport is ~420×620 (corner ~373px from the player). Top-ups appear just beyond that
 // edge so they drift INTO view rather than popping in; the initial seed (makeWorld) scatters
 // across the visible disc so you start surrounded, not staring at an empty sea.
@@ -96,6 +96,18 @@ export const BRANCH_BIAS = 0.5 // P(a spawn carries your branch element) once th
 export const CREATURE_DRIFT = 34 // base wander speed of ocean life
 export const THREAT_HOMING = 11 // bigger creatures lean toward you; prey lean away (gentle — flee-able)
 
+// ── schools (boids): the small fish shoal together and scatter from you or a predator ──
+export const SCHOOL_MIN = 6
+export const SCHOOL_MAX = 11
+export const SCHOOL_CHANCE = 0.5 // a field top-up spawns a whole school (vs a lone fish) this often
+export const SCHOOL_PERCEPT = 130 // neighbour radius for flocking
+export const SCHOOL_SEP = 32 // hold at least this much space between shoal-mates
+export const W_COHESION = 0.9 // steer toward the shoal's centre
+export const W_ALIGN = 1.5 // match the shoal's heading
+export const W_SEPARATION = 2.6 // don't crowd
+export const SCATTER_R = 150 // schoolers bolt when you or a bigger fish come within this
+export const SCATTER_FORCE = 300
+
 export interface Creature {
   id: number
   x: number
@@ -106,6 +118,7 @@ export interface Creature {
   size: number // = LADDER[tier].size (cached)
   element: ElementId
   wanderT: number // seconds until the drift heading re-rolls
+  school: number // 0 = a lone fish; >0 = a shoal id (flocks + scatters)
 }
 
 export type DriftState = 'ready' | 'playing' | 'dead'
@@ -188,7 +201,73 @@ function spawnOne(w: World, minDist = SPAWN_RING, maxDist = SPAWN_RING + 140) {
     size: LADDER[tier].size,
     element: pickElement(w),
     wanderT: 1 + w.rng() * 3,
+    school: 0,
   })
+}
+
+// spawn a whole SHOAL of small fish: a cluster of one colour + tier, sharing a heading, that flocks
+function spawnSchool(w: World) {
+  const ang = w.rng() * Math.PI * 2
+  const dist = SPAWN_RING + w.rng() * 160
+  const cx = Math.max(60, w.x + Math.cos(ang) * dist)
+  const cy = Math.max(0, Math.min(WORLD_H, w.y + Math.sin(ang) * dist))
+  const tier = Math.max(0, Math.min(APEX_TIER, Math.round(depthTier(cx) - 1))) // the small fish of this depth
+  const element = pickElement(w)
+  const sid = w.nextId++ // reserve a shoal id
+  const n = SCHOOL_MIN + Math.floor(w.rng() * (SCHOOL_MAX - SCHOOL_MIN + 1))
+  const hAng = w.rng() * Math.PI * 2 // the shoal's shared travel heading
+  for (let i = 0; i < n; i++) {
+    w.creatures.push({
+      id: w.nextId++,
+      x: Math.max(0, cx + (w.rng() - 0.5) * 70),
+      y: Math.max(0, Math.min(WORLD_H, cy + (w.rng() - 0.5) * 70)),
+      vx: Math.cos(hAng) * CREATURE_DRIFT,
+      vy: Math.sin(hAng) * CREATURE_DRIFT,
+      tier, size: LADDER[tier].size,
+      element, // a shoal is one colour
+      wanderT: 1 + w.rng() * 3,
+      school: sid,
+    })
+  }
+}
+
+// one schooler's flocking: cohere/align/separate with shoal-mates, bolt from you or any bigger fish
+function flock(w: World, c: Creature, dt: number) {
+  let cxs = 0, cys = 0, hxs = 0, hys = 0, sepx = 0, sepy = 0, n = 0
+  let flx = 0, fly = 0 // accumulated flee (from the player + predators)
+  const percept2 = SCHOOL_PERCEPT * SCHOOL_PERCEPT
+  const scatter2 = SCATTER_R * SCATTER_R
+  for (const o of w.creatures) {
+    if (o === c) continue
+    const ox = o.x - c.x, oy = o.y - c.y
+    const d2 = ox * ox + oy * oy
+    if (o.school === c.school) {
+      if (d2 > percept2) continue
+      cxs += o.x; cys += o.y; hxs += o.vx; hys += o.vy; n++
+      if (d2 < SCHOOL_SEP * SCHOOL_SEP) { const d = Math.sqrt(d2) || 1; sepx -= ox / d; sepy -= oy / d }
+    } else if (o.size > c.size * 1.35 && d2 < scatter2) {
+      const d = Math.sqrt(d2) || 1; flx -= (ox / d) * (1 - d / SCATTER_R); fly -= (oy / d) * (1 - d / SCATTER_R) // bolt from a predator
+    }
+  }
+  if (n > 0) {
+    const ccx = cxs / n - c.x, ccy = cys / n - c.y, cl = Math.hypot(ccx, ccy) || 1
+    const ah = Math.hypot(hxs, hys) || 1
+    c.vx += (ccx / cl) * W_COHESION + (hxs / ah) * W_ALIGN + sepx * W_SEPARATION
+    c.vy += (ccy / cl) * W_COHESION + (hys / ah) * W_ALIGN + sepy * W_SEPARATION
+  } else {
+    c.wanderT -= dt
+    if (c.wanderT <= 0) { const a = w.rng() * Math.PI * 2; c.vx = Math.cos(a) * CREATURE_DRIFT; c.vy = Math.sin(a) * CREATURE_DRIFT; c.wanderT = 1 + w.rng() * 3 }
+  }
+  // bolt from the player too, if it could eat this fish
+  const pdx = c.x - w.x, pdy = c.y - w.y, pd = Math.hypot(pdx, pdy)
+  if (pd < SCATTER_R && w.size > c.size * (1 - EQUAL_BAND)) { flx += (pdx / (pd || 1)) * (1 - pd / SCATTER_R); fly += (pdy / (pd || 1)) * (1 - pd / SCATTER_R) }
+  c.vx += flx * SCATTER_FORCE * dt
+  c.vy += fly * SCATTER_FORCE * dt
+  // cap so a scattering shoal streaks but doesn't teleport
+  const sp = Math.hypot(c.vx, c.vy), cap = CREATURE_DRIFT * 2.4
+  if (sp > cap) { c.vx = (c.vx / sp) * cap; c.vy = (c.vy / sp) * cap }
+  c.x += c.vx * dt; c.y += c.vy * dt
+  if (c.y < 0) { c.y = 0 } else if (c.y > WORLD_H) { c.y = WORLD_H }
 }
 
 export function makeWorld(seed: number): World {
@@ -237,7 +316,7 @@ export function setHeading(w: World, dx: number, dy: number) {
 
 // test/utility: drop a creature into the field at an exact spot + tier.
 export function addCreature(w: World, x: number, y: number, tier: number, element: ElementId): Creature {
-  const c: Creature = { id: w.nextId++, x, y, vx: 0, vy: 0, tier, size: LADDER[tier].size, element, wanderT: 2 }
+  const c: Creature = { id: w.nextId++, x, y, vx: 0, vy: 0, tier, size: LADDER[tier].size, element, wanderT: 2, school: 0 }
   w.creatures.push(c)
   return c
 }
@@ -298,8 +377,9 @@ export function tick(w: World, dt: number): TickEvents {
   if (w.y > WORLD_H) { w.y = WORLD_H; w.vy = -Math.abs(w.vy) * 0.3 }
   if (w.x > w.maxX) w.maxX = w.x // deepest point reached
 
-  // ── ocean life: gentle wander + a lean toward/away from the player ─────────────
+  // ── ocean life: shoals flock (boids) + scatter; lone fish wander + lean ────────
   for (const c of w.creatures) {
+    if (c.school > 0) { flock(w, c, dt); continue }
     c.wanderT -= dt
     if (c.wanderT <= 0) {
       const a = w.rng() * Math.PI * 2
@@ -358,8 +438,8 @@ export function tick(w: World, dt: number): TickEvents {
     }
     let added = 0
     while (w.creatures.length < TARGET_CREATURES && added < SPAWN_PER_TICK) {
-      spawnOne(w)
-      added++
+      if (w.rng() < SCHOOL_CHANCE) { spawnSchool(w); added += 3 } // a shoal fills more of the field at once
+      else { spawnOne(w); added++ }
     }
   }
 
