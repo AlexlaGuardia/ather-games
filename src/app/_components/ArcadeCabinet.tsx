@@ -63,6 +63,23 @@ export default function ArcadeCabinet({
       >
         {children}
       </div>
+
+      {/* DESKTOP MODE — one global switch for every cabinet (2026-07-12). A pointer:fine +
+          hover device (a real mouse, i.e. desktop) gets a bigger screen and a keybind
+          plate instead of the thumb deck. Pure CSS media query so it resolves at paint —
+          no hydration flash, and phones (no override) keep the exact mobile cabinet.
+          fit.ts reads --ac-* for sizing; ArcadeControls toggles .ac-deck/.ac-keys. */}
+      <style>{`
+        @media (hover: hover) and (pointer: fine) {
+          :root {
+            --ac-reserve: 116px;
+            --ac-wscale: 2.2;
+            --ac-vwcap: 94vw;
+          }
+          .ac-deck.ac-has-keys { display: none; }
+          .ac-keys { display: flex !important; }
+        }
+      `}</style>
     </div>
   )
 }

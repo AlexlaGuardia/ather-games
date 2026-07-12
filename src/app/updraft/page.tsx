@@ -185,6 +185,20 @@ export default function UpdraftPage() {
     sfx.play('flap')
   }, [])
 
+  // Desktop keyboard: Space / ↑ / W flap while playing (useStartKey owns them pre-play, so
+  // this only binds once the run is live — no double-fire at the ready→playing hand-off).
+  useEffect(() => {
+    if (phase !== 'playing') return
+    const h = (e: KeyboardEvent) => {
+      if (e.key === ' ' || e.code === 'Space' || e.key === 'ArrowUp' || e.key === 'w' || e.key === 'W') {
+        e.preventDefault()
+        onDown()
+      }
+    }
+    window.addEventListener('keydown', h)
+    return () => window.removeEventListener('keydown', h)
+  }, [phase, onDown])
+
   const restart = useCallback(() => {
     sfx.ensure()
     boot()
@@ -212,7 +226,11 @@ export default function UpdraftPage() {
         </button>
       </div>
 
-      <div className="gx-chrome relative w-full" style={{ maxWidth: screenMaxW(VW, VH), aspectRatio: `${VW} / ${VH}`, ['--gx-accent' as string]: '#37e6ff' } as React.CSSProperties}>
+      <div
+        className="gx-chrome relative w-full"
+        onPointerDown={onDown} // click/tap the screen itself flaps (desktop mouse; overlays sit above and self-guard)
+        style={{ maxWidth: screenMaxW(VW, VH), aspectRatio: `${VW} / ${VH}`, ['--gx-accent' as string]: '#37e6ff' } as React.CSSProperties}
+      >
         <canvas ref={canvasRef} className="w-full h-full block rounded-md pointer-events-none" />
         <div className="pointer-events-none absolute inset-0 rounded-md updraft-crt" />
 
@@ -278,6 +296,7 @@ export default function UpdraftPage() {
         buttons={[{ id: 'flap', label: 'Fly', glyph: '➶', hint: 'tap', size: 'lg' }]}
         onPress={onDown}
         hint="tap to beat your wings · rise"
+        keyLegend={[{ keys: 'Space', label: 'fly' }, { keys: 'click', label: 'fly' }]}
       />
 
 

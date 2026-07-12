@@ -34,6 +34,11 @@ export interface ArcadeControlsProps {
   hint?: string
   maxWidth?: number | string
   className?: string
+  /** Desktop keybind legend. When provided, the game has REAL keyboard controls, so on a
+   *  mouse+hover device the thumb deck is swapped for this slim keycap plate (see the
+   *  media query in ArcadeCabinet). Omit it and the deck stays on desktop too — the
+   *  fallback for games not yet wired for keyboard, so they never lose their only input. */
+  keyLegend?: { keys: string; label: string }[]
 }
 
 const STICK_R = 60 // gate radius (px, virtual — the panel scales). Sized so the joystick deck
@@ -58,6 +63,7 @@ export default function ArcadeControls({
   hint,
   maxWidth = 480,
   className = '',
+  keyLegend,
 }: ArcadeControlsProps) {
   const rgb = hexRgb(accent)
   const [held, setHeld] = useState<Record<string, boolean>>({})
@@ -160,14 +166,50 @@ export default function ArcadeControls({
     </div>
   )
 
+  const hasKeys = !!keyLegend?.length
+
   return (
     <div className={`w-full ${className}`} style={{ maxWidth }}>
       {/* the attract pulse — the deck button breathes so the SCREEN can stay neutral and the
           BUTTON is what calls the eye (idle only; killed the moment you press) */}
       <style>{`@keyframes acAttract{0%,100%{filter:brightness(1)}50%{filter:brightness(1.22)}}`}</style>
-      {/* the control panel — recessed dark deck, gold cabinet trim, corner screws */}
+
+      {/* DESKTOP KEYBIND PLATE — hidden on mobile (.ac-keys), shown by the ArcadeCabinet
+          media query on mouse+hover devices. Slim gold-trim strip of keycaps that reads as
+          the same cabinet furniture, minus the thumb hardware nobody uses with a mouse. */}
+      {hasKeys && (
+        <div
+          className="ac-keys mt-1.5 rounded-xl border border-[#d4a843]/30 px-4 py-2.5 items-center justify-center gap-5 flex-wrap"
+          style={{
+            display: 'none',
+            background: 'linear-gradient(to bottom, #15151d 0%, #0c0c12 55%, #08080d 100%)',
+            boxShadow: `inset 0 2px 10px rgba(0,0,0,0.65), inset 0 0 24px rgba(${rgb},0.04), 0 6px 22px rgba(0,0,0,0.5)`,
+          }}
+        >
+          {keyLegend!.map((k) => (
+            <span key={k.label} className="flex items-center gap-2 shrink-0">
+              <kbd
+                className="font-mono text-[11px] font-bold leading-none px-2.5 py-1.5 rounded-[5px] select-none"
+                style={{
+                  color: '#eafcff',
+                  background: `radial-gradient(circle at 50% 34%, rgba(${rgb},0.55), rgba(${rgb},0.2) 70%)`,
+                  boxShadow: `0 3px 0 rgba(${rgb},0.28), 0 5px 10px rgba(0,0,0,0.5), inset 0 1px 2px rgba(255,255,255,0.3)`,
+                  textShadow: '0 1px 2px rgba(0,0,0,0.6)',
+                }}
+              >
+                {k.keys}
+              </kbd>
+              <span className="text-[9px] font-mono tracking-[0.15em] uppercase text-[#d4a843]/70">{k.label}</span>
+            </span>
+          ))}
+        </div>
+      )}
+
+      {/* the control panel — recessed dark deck, gold cabinet trim, corner screws.
+          .ac-has-keys marks it hideable on desktop (only when a keyLegend exists, so a
+          keyboard-less game keeps the deck as its sole input everywhere). */}
       <div
-        className="relative mt-1.5 rounded-xl border border-[#d4a843]/30 px-4 py-1.5 touch-none"
+        className={`ac-deck ${hasKeys ? 'ac-has-keys' : ''} relative mt-1.5 rounded-xl border border-[#d4a843]/30 px-4 py-1.5 touch-none`}
         style={{
           background: 'linear-gradient(to bottom, #15151d 0%, #0c0c12 55%, #08080d 100%)',
           boxShadow: `inset 0 2px 10px rgba(0,0,0,0.65), inset 0 0 24px rgba(${rgb},0.04), 0 6px 22px rgba(0,0,0,0.5)`,

@@ -27,8 +27,27 @@ export const DPAD_RESERVE = 342 // a 4-way D-pad is 3 rows tall (~2x a stick/but
                                 // D-pad games (dewdrop) pass this instead — the screen shrinks
                                 // to make room for the taller deck. screenMaxW(VW, VH, DPAD_RESERVE).
 
+// DESKTOP MODE (added 2026-07-12): the cabinet is mobile-native — on a monitor the same
+// portrait cabinet just floated small in the middle with big dead margins, and the touch
+// deck stayed the only input. `ArcadeCabinet` sets three CSS vars on `:root`, overridden
+// under `@media (hover:hover) and (pointer:fine)`:
+//   --ac-reserve : deck-height budget. Desktop drops the touch deck for a slim keybind
+//                  plate, so far less vertical chrome to subtract → the screen grows.
+//   --ac-wscale  : native-width multiplier. 1 on mobile (never upscale a phone); >1 on
+//                  desktop so a small-native game fills more of the monitor.
+//   --ac-vwcap   : hard viewport-width clamp so a wide/landscape game can't overflow.
+// Mobile leaves every var UNSET, so the `var(…, fallback)` fallbacks reproduce the old
+// expression byte-for-byte — zero behaviour change on phones, and no hydration flash
+// (pure CSS, the media query resolves at paint).
+
 export function screenMaxW(vw: number, vh: number, reserve: number = DECK_RESERVE): string {
-  return `min(${vw}px, calc((100dvh - ${reserve}px) * ${vw} / ${vh}))`
+  return (
+    `min(` +
+    `calc(${vw}px * var(--ac-wscale, 1)), ` +
+    `calc((100dvh - var(--ac-reserve, ${reserve}px)) * ${vw} / ${vh}), ` +
+    `var(--ac-vwcap, 100vw)` +
+    `)`
+  )
 }
 
 // The control deck is thumb-sized and must stay comfortable regardless of the game's
@@ -43,3 +62,9 @@ export const deckMaxW = 'min(460px, 94vw)'
 export function cabinetMaxW(vw: number, vh: number, reserve: number = DECK_RESERVE): string {
   return `max(${screenMaxW(vw, vh, reserve)}, ${deckMaxW})`
 }
+
+// Desktop tuning — the values the `@media (hover:hover) and (pointer:fine)` block writes
+// onto `:root`. Kept here (next to the fallbacks they override) so the two stay in sync.
+export const DESKTOP_RESERVE = 116 // header + slim keybind plate + padding (deck is gone)
+export const DESKTOP_WSCALE = 2.2  // let a small-native game grow ~2.2x toward the monitor
+export const DESKTOP_VWCAP = '94vw' // never let a wide game touch the window edges
