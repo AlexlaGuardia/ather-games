@@ -78,7 +78,7 @@ the Arcade frame.
 > - [x] **Daily leaderboard** — ✅ **VERIFIED + FIXED 2026-07-01** (`bb55f38`). Browser-verified the board renders inside the game-over overlay (Vault + Updraft played to death live). **Found + fixed a real clip:** the `justify-center` overlay in the fixed-height cabinet screen + the leaderboard = content taller than the screen → board (+ RENAME) spilled below, occluded by the control deck, no scroll to recover. Wrapped all 7 leaderboard overlays (vault/updraft/atherdash/voranyx/ward/seedfall/manana) in `overflow-y-auto` + `min-h-full` inner flex (centers when short, scrolls when tall).
 > - [ ] **Daily toggle + share** — does Endless/Daily read right; is the share line satisfying
 > - [ ] **Mana'nana** — taste call: keep the candy match-3 look, or push it into the squared gx-* family
-> - [ ] **Nolmir** — unified return beat (needs >20min away for a real haul) + rehearse the warp ceremony + mobile-idle direction call
+> - [~] **Nolmir** — 📦 **SHELVED 2026-07-16, don't pick up.** (Was: unified return beat + rehearse the warp ceremony + mobile-idle direction call.) Parked pending a proper home — it's an idle game in a cabinet frame; 4 passes at "too much" all missed. See the Nolmir block.
 > - [x] **Nolmir density — progressive disclosure SHIPPED 2026-07-12, jin-cc (`ac9608a`).** Alex flagged the Starforge as "too much at once": `ROOMS.map` opened all 5 room tabs (Core/Orrery/Refinery/Armory/Gate) on a fresh save, nothing eased in. Now first touch = Orrery + Core only; Refinery unfolds on the 1st claimed planet, Armory on the 2nd (or any mana-bought guard investment), Gate when heat hits warp. New `revealedRooms(forge)` in `lib/starforge.ts` keyed to MONOTONIC signals only (planet claims / node counter / permanent investments) so a room never vanishes under a player standing in it; every gate latches on `node>1` so a post-first-warp veteran keeps the full deck forever. `activeRoom` falls back to Orrery if the current tab isn't revealed; a soft `unlock` chime rings on each new room. +10 assertions in `starforge.test.ts` (68 total, all green). Build + canon clean. **Live browser-verify was BLOCKED** — the Chrome extension went unresponsive (the known Nolmir renderer-freeze flake); logic is test-proven, but the *unfold feel* (chime, tab appearing) wants an Alex device pass. **The currency-TRIM half is deliberately untouched — still Alex's-eye** (8 currencies; the HUD already hides echoes/networkRate until >0).
 > - [x] **Voranyx** — phone playtest PASSED 2026-06-15 (no action; here for completeness)
 >
@@ -332,7 +332,7 @@ the Arcade frame.
 |------|--------|--------------|------------|
 | The Room | 🟢 live | 2026-07-04 | the hub — arcade hall, Desk wall, Grimoire/AtherPages, Momo→Bookstore, nav spine |
 | Eyuun's Bookstore | 🟢 live | 2026-07-04 | public audiobook player — Athernyx narrations off the Desk (Secrets hero + 15 Spirit Tales) |
-| Nolmir | 🟢 live | 2026-06-18 | idle Athernyx defense/arena |
+| Nolmir | 📦 shelved (live) | 2026-07-16 | idle Athernyx defense/arena — parked pending a proper home; see its block |
 | Mana'nana | 🟢 live | 2026-06-22 | match-3, blooming specials |
 | Rekindle #3 | 🟢 live | 2026-06-22 | conduit puzzle + Aeterna node-map |
 | Ward #4 | 🟢 live | 2026-06-22 | Missile Command / touch aim-trainer |
@@ -419,8 +419,37 @@ the Arcade frame.
 **Files:** `src/app/room/page.tsx` (walls + DeskWall + ArcadeArch) · `_components/RoomReturn.tsx`
   (sticky from-room) · `public/room/news.json` (live feed) · `scripts/news.py` (add/suggest feed tooling) · `/grimoire` (AtherPages, off the Desk)
 
-### Nolmir — 🟢 live · idle Athernyx defense/arena → `/nolmir`
-*Last touched: 2026-07-10 — one-screen redesign: Expeditions shipped hero+overlay (`057e54a`)*
+### Nolmir — 📦 SHELVED (still live at `/nolmir`) · idle Athernyx defense/arena
+*Last touched: 2026-07-16 — SHELVED pending a proper home (Alex's call)*
+
+**📦 SHELVED 2026-07-16 (Alex): "it still feels weird… a lot to take in compared to the other games. We might
+need to shelf this one until we can give it a proper home."** Stop pouring fix passes in. Code untouched, route
+stays LIVE, save data intact — this is a ROADMAP park, not a teardown.
+  - **Why it's structural, not a fix-list item — FOUR passes all aimed at "too much" and none landed:**
+    (1) 07-10 wayfinding audit (`bb856d2`) — nav was a maze, no route home; (2) 07-10 one-screen redesign
+    (`057e54a`) — Expeditions overflowed **2.6× viewport**; (3) 07-12 progressive disclosure (`ac9608a`) — all 5
+    Starforge tabs opened on a fresh save; (4) currency trim — **never done, still 8 currencies**. Four angles,
+    same complaint survives.
+  - **The diagnosis: genre/frame mismatch.** Nolmir is an IDLE game sitting in a CABINET frame. The arcade is
+    pick-one, play 3min, leave. Idle games are *supposed* to be dense, systemic, accretive — they pay off over
+    return visits. Every pass has tried to make an idle game legible in a frame that punishes what makes idle
+    games good. It reads as "a lot" because it correctly IS a lot; the frame is what's wrong, not the density.
+  - **⭐ INDEPENDENT CONFIRMATION — the economy exiled it first, on pure economy logic.** The wallet
+    reconciliation (`5e4ad71`, 07-12) had to **revert Nolmir out of the global Marks wallet**: it mints marks
+    passively/idle = an uncapped 2nd faucet fighting the card=faucet economy. Board's own words: *"Nolmir = its
+    own internal machine."* It is already **in the hub but not OF it** — the one game that can't share the
+    economy. Nobody was thinking about feel when that call was made, and it landed on the same seam.
+  - **"A proper home" — the design thesis (pure game-design, GBOARD's call, NOT canon):** an idle game isn't a
+    cabinet you sit at, it's **a place you return to**. The likely shape is a standing holding/property you own
+    and check on, not a peer tile in the arcade grid. ⚠ If that home turns out to be a Rune Hold *building* or
+    any new world-fact, that is **Magii's ruling** (Rune Hold is ruled canon, `athernyx world/rune-hold.md` ›
+    The Hub) → log a gap in `CANON_GAPS.md`, do NOT invent it here.
+  - **Left ON the arcade floor deliberately** (`games.ts` still `tier:"live"`; catalog + recents/resume probe
+    untouched). It works and may have real save progress — shelving the roadmap ≠ breaking a live URL. If Alex
+    wants it pulled off the floor too, that's a small change (`games.ts` tier + the `saves.ts` probe), ~10min.
+  - **Was open when shelved (do NOT pick these up):** ~~device pass on the disclosure/drawer feel~~ · ~~currency
+    trim (8 → fewer)~~ · ~~unified return beat + warp ceremony + mobile-idle direction call~~ — all superseded;
+    they're fix-list items and the fix list is not the problem. Revisit only WITH a home.
 **🖥️ ONE-SCREEN REDESIGN (2026-07-10, jin-cc) — Alex: "make it fit on one screen, scrolling isn't the way."**
   Measured overflow at a ~540px window: **Expeditions +781px (2.6× viewport)** — the disaster, six panels stacked
   in a right column; **Crucible +146** (mild); **Starforge** already tabbed, 3 of 5 tabs fit at 0, Core +290 /
