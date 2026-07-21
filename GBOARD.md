@@ -272,9 +272,15 @@ the Arcade frame.
 > - ⚠ Per-cabinet **render camera must match that game's view** (side vs top-down vs 3/4) — set per target.
 >
 > **THE REGISTER — what we hit / plan to hit:**
-> - **HIT:** Vault · grey void-spawn foe (`foe-void.png`).
-> - **PLAN TO HIT (next):** Vault · **rooted grey spikes/thorns** (Alex flagged these — currently still vector; render
->   as lit crystalline shards, the natural #2 for the cabinet).
+> - **HIT:** Vault · grey void-spawn foe (`foe-void.png`) · **blight-thorns** (`spike-thorns.png`, 3 wooden-thorn variants
+>   w/ silver glowing tips, Alex-directed 2026-07-21; `drawSpike` picks a variant by seed, procedural fallback kept).
+> - **PLAN TO HIT (next):** a NEW obstacle — the **hanging thorn-vine** (Alex idea 2026-07-21). *Design (Jin):* Vault's
+>   FIRST ceiling hazard — every hazard today is ground-based and the answer is always "jump higher," so over-jumping is
+>   never punished. A hanging vine makes the HOLD (float higher) dangerous → the variable jump goes two-sided (tap low to
+>   pass under vs hold to clear a gap), and pairs with a gap below to make a "squeeze" corridor you thread. Deepens the one
+>   input instead of adding a new one — the good kind. *Canon flag (Magii):* what it IS + what it hangs FROM is a ruling
+>   before it ships lore-bearing (Vault's an open-sky crossing; nothing overhead is established). Prototype w/ placeholder
+>   art; settle canon before baking a model.
 > - **✖ JUICE PASS REVERTED — the direction is MODELS, not juicing (Alex 2026-07-21, ather-games reverted post-`c0a99d8`).**
 >   A procedural "living-light wisp" mote pass shipped and Alex killed it: *"you're just drawing with shapes — that's not a
 >   sprite, that's circles in an arrangement, and it looks nothing like the silhouette."* **The standing rule this sets:**

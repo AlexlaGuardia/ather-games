@@ -86,6 +86,7 @@ export default function VaultPage() {
   const comboFx = useRef(0)
   const syncT = useRef(0)
   const foeImg = useRef<HTMLImageElement | null>(null) // pre-rendered (Blender→sprite) void-spawn; null until loaded → procedural fallback
+  const spikeImg = useRef<HTMLImageElement | null>(null) // pre-rendered blight-thorns (3 variants); null → procedural fallback
 
   const [phase, setPhase] = useState<Phase>('ready')
   const [score, setScore] = useState(0)
@@ -151,6 +152,7 @@ export default function VaultPage() {
     setProgress(loadProgress())
     // pre-rendered void-spawn sprite sheet (8-frame breathe loop, baked from a 3D model)
     const fi = new Image(); fi.src = '/vault/foe-void.png'; fi.onload = () => { foeImg.current = fi }
+    const si = new Image(); si.src = '/vault/spike-thorns.png'; si.onload = () => { spikeImg.current = si } // 3-variant blight-thorns sheet
     // pull any hand-authored ladder levels (published from /vault/dev) so a slot plays its authored layout
     fetch('/vault/dev/save', { cache: 'no-store' })
       .then((r) => (r.ok ? r.json() : {}))
@@ -289,7 +291,7 @@ export default function VaultPage() {
         syncT.current += dt
         if (syncT.current >= 0.1) { syncT.current = 0; setScore(w.score); setMotes(w.motesGot); setFuel(w.fuel); setHearts(w.hearts) }
       }
-      render(canvas, w, ts, trail.current, fx.current, shake.current, comboFx.current, foeImg.current)
+      render(canvas, w, ts, trail.current, fx.current, shake.current, comboFx.current, foeImg.current, spikeImg.current)
     }
     raf = requestAnimationFrame(draw)
     return () => cancelAnimationFrame(raf)
@@ -501,7 +503,7 @@ const DEATH_LINE: Record<'gap' | 'grey', string> = {
 }
 
 // ── rendering ───────────────────────────────────────────────────────────────────
-function render(canvas: HTMLCanvasElement, w: World, ts: number, trail: number[], fx: Particle[], shake: number, comboFx: number, foeImg: HTMLImageElement | null) {
+function render(canvas: HTMLCanvasElement, w: World, ts: number, trail: number[], fx: Particle[], shake: number, comboFx: number, foeImg: HTMLImageElement | null, spikeImg: HTMLImageElement | null) {
   const dpr = Math.min(2, typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1)
   if (canvas.width !== VW * dpr || canvas.height !== VH * dpr) {
     canvas.width = VW * dpr
@@ -620,7 +622,7 @@ function render(canvas: HTMLCanvasElement, w: World, ts: number, trail: number[]
   for (const s of w.spikes) {
     const cx = sx(s.x)
     if (cx < -16 || cx > VW + 16) continue
-    drawSpike(ctx, cx, s.y, s.x) // seed by world-x → stable, varied cluster
+    drawSpike(ctx, cx, s.y, s.x, spikeImg) // seed by world-x → stable, varied cluster
   }
 
   // ── grey void-spawn (foes) — soulless, colourless; unmake from above ──────────
@@ -728,9 +730,18 @@ function hash(seed: number, n: number): number {
   return s - Math.floor(s)
 }
 
-// ── rooted grey corruption — a cluster of jagged crystalline shards gripping the ground ──
-// (was a single flat triangle). Kept inside the SPIKE_W × SPIKE_H hitbox so the read = the hazard.
-function drawSpike(ctx: CanvasRenderingContext2D, cx: number, base: number, seed: number) {
+// ── rooted grey corruption (blight-thorns) — leapt, never stomped ──
+// Pre-rendered path: blit one of 3 baked wooden-thorn variants (Blender→sprite) with silver glowing tips,
+// picked by seed so a row of thorns doesn't read copy-pasted. Bottom-centre sits at (cx, base).
+// Fallback (sheet not loaded): the procedural crystalline shards below, kept inside the SPIKE_W×SPIKE_H hitbox.
+function drawSpike(ctx: CanvasRenderingContext2D, cx: number, base: number, seed: number, spikeImg: HTMLImageElement | null) {
+  if (spikeImg && spikeImg.complete && spikeImg.naturalWidth > 0) {
+    const N = 3, S = 256
+    const idx = ((Math.floor(seed * 7.3) % N) + N) % N // stable per-cluster variant
+    const dw = SPIKE_W * 1.7, dh = dw // square frame; visible thorns ≈ hitbox width
+    ctx.drawImage(spikeImg, idx * S, 0, S, S, cx - dw / 2, base - dh * 0.86, dw, dh) // 0.86 = baked foot line
+    return
+  }
   const half = SPIKE_W * 0.5
   // dark rooted mound where it grips the failing ground
   ctx.fillStyle = '#191a20'
