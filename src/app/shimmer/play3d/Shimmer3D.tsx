@@ -60,8 +60,9 @@ const FPS_FOV = 72
 const ORBIT_FOV = 45
 // ── Locomotion feel (tier units; STEP=1 so tiers≈world units). All Alex-tunable. Apex-style flow. ──
 const RUN_SPEED = 6.5       // AUTO-RUN: the default sustained ground speed (no sprint key)
+const BACK_SPEED = 3.5      // backpedal cap — moving against your look dir stays a walk (no reverse-sprint)
 const CROUCH_SPEED = 2.6    // crouch-walk speed (hold crouch while slow / standing)
-const GROUND_ACCEL = 9      // ramp-UP rate toward target speed — the "starts as a walk, builds to a run" flow
+const GROUND_ACCEL = 7      // ramp-UP rate toward target speed — the "starts as a walk, builds to a run" flow
 const GROUND_FRICTION = 13  // coast-DOWN rate on release (stop has weight, not a dead halt)
 const GRAVITY = 22          // downward accel while airborne
 const JUMP_V0 = 7.4         // jump launch speed → ~1.25-tier apex (clears a 1-tier step, reaches low segs)
@@ -639,8 +640,10 @@ function Player({ posRef, gridRef, heightsRef, zoneIdRef, editRef, onWarp, battl
         } else hvel.setLength(t)
       } else {
         // grounded run / crouch-walk: accelerate toward target speed (ramp up from a walk), coast to a
-        // stop on release. This easing IS the "flow" — no more instant on/off.
-        const targetSpeed = crouching ? CROUCH_SPEED : RUN_SPEED
+        // stop on release. This easing IS the "flow" — no more instant on/off. Backpedaling (input
+        // pointing against your look dir) caps to a walk — no reverse-sprint. Strafe stays at run.
+        const backpedal = hasInput && move.dot(fwd) < -0.2
+        const targetSpeed = crouching ? CROUCH_SPEED : backpedal ? BACK_SPEED : RUN_SPEED
         const rate = Math.min(1, (hasInput ? GROUND_ACCEL : GROUND_FRICTION) * dt2)
         hvel.x += ((hasInput ? move.x * targetSpeed : 0) - hvel.x) * rate
         hvel.z += ((hasInput ? move.z * targetSpeed : 0) - hvel.z) * rate
