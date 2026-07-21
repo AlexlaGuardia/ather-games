@@ -745,13 +745,14 @@ function Player({ posRef, gridRef, heightsRef, zoneIdRef, editRef, onWarp, battl
       const jumpKey = !!k[' '] || jumpRef.current
       jumpRef.current = false  // consume the touch edge
       const jumpEdge = jumpKey && !jumpHeld.current
-      // MANTLE target: airborne + a ledge/wall TOP ahead (in move dir, else facing) whose height sits within
-      // grab reach of your feet → a well-timed TAP JUMP pulls you up over it. Works on any wall your jump (or
-      // jump+climb) brings into reach. `dir` is the horizontal we grab toward.
+      // MANTLE target: airborne + a genuine RAISED ledge/wall TOP ahead (in move dir, else facing) that is
+      // both within grab reach of your feet AND more than a step above the floor beneath you (so a plain
+      // jump over FLAT ground — or a walkable 1-tier step — never counts as a mantle; that was the skip bug).
       const dir = hasInput ? move : fwd
+      const floorTier = floorY / STEP
       const mantle = airborne.current ? (() => {
         const cx = Math.round(p.x + dir.x * (PLAYER_R + 0.4)), cz = Math.round(p.z + dir.z * (PLAYER_R + 0.4))
-        const s = surfacesAt(ctx, cx, cz).find(su => su.y >= fromY - 0.4 && su.y <= fromY + MANTLE_REACH)  // a grabbable lip
+        const s = surfacesAt(ctx, cx, cz).find(su => su.y <= fromY + MANTLE_REACH && su.y > floorTier + 1)  // a real lip, in reach
         return s ? { cx, cz, y: s.y } : null
       })() : null
       // MANTLE fires while the climb button is HELD and a lip is in reach — so holding Space carries you up a
