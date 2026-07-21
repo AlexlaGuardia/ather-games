@@ -20,10 +20,11 @@ import {
   type AuthoredLevel, type World, type MovementCfg,
 } from '../lib/vault'
 
-type Tool = 'platform' | 'stairs' | 'mote' | 'foe' | 'spike' | 'erase' | 'move'
+type Tool = 'platform' | 'stairs' | 'highroad' | 'mote' | 'foe' | 'spike' | 'erase' | 'move'
 const TOOLS: { id: Tool; label: string; hint: string }[] = [
-  { id: 'platform', label: '▭ Platform', hint: 'drag to draw a ledge' },
+  { id: 'platform', label: '▭ Ground', hint: 'drag the low road (miss it = the void)' },
   { id: 'stairs', label: '◥ Stairs', hint: 'drag to lay a walkable staircase' },
+  { id: 'highroad', label: '▤ High road', hint: 'drag an overhead alt-route (branch; miss = fall to the ground)' },
   { id: 'mote', label: '● Mote', hint: 'click to drop (floats)' },
   { id: 'foe', label: '✖ Foe', hint: 'click a ledge (stompable)' },
   { id: 'spike', label: '▲ Spike', hint: 'click a ledge (leap only)' },
@@ -39,10 +40,10 @@ const VSPAN = VH - WORLD_CEIL // total authorable vertical span (world units)
 const SNAP = (v: number, g: number) => Math.round(v / g) * g
 const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v))
 
-const COL = { bg: '#0d0b14', grid: '#241d33', ledge: '#3b4b63', ledgeTop: '#8fb0d8', mote: '#ffd15c', foe: '#71717a', spike: '#e8554e', finish: '#7fe0a0', runner: '#fff2b0' }
+const COL = { bg: '#0d0b14', grid: '#241d33', ledge: '#3b4b63', ledgeTop: '#8fb0d8', hi: '#5a4a86', hiTop: '#c3a6f0', mote: '#ffd15c', foe: '#71717a', spike: '#e8554e', finish: '#7fe0a0', runner: '#fff2b0' }
 
 function emptyLevel(end = 5000): AuthoredLevel {
-  return { seed: 1, end, segs: [{ x0: -RUNNER_SX, x1: 900, top: TOP_BASE }], foes: [], spikes: [], motes: [] }
+  return { seed: 1, end, segs: [{ x0: -RUNNER_SX, x1: 900, top: TOP_BASE }], ledges: [], foes: [], spikes: [], motes: [] }
 }
 
 // a drag (a→b) becomes a run of FLUSH platforms stepping from a's height to b's, each
@@ -98,7 +99,7 @@ export default function VaultDevPage() {
   const [dims, setDims] = useState({ w: 960, h: Math.round(VSPAN * 1.4) })
 
   // drag state (edit mode)
-  const drag = useRef<{ kind: 'platform' | 'stairs' | 'move' | 'pan'; x0: number; y0: number; ref?: unknown; camStart?: number } | null>(null)
+  const drag = useRef<{ kind: 'platform' | 'highroad' | 'stairs' | 'move' | 'pan'; x0: number; y0: number; ref?: unknown; camStart?: number } | null>(null)
   const [preview, setPreview] = useState<{ x0: number; x1: number; top: number } | null>(null)
   const previewRef = useRef(preview); previewRef.current = preview
   const stairsPrevRef = useRef<{ x0: number; x1: number; top: number }[]>([]) // live staircase preview segs
@@ -215,13 +216,19 @@ export default function VaultDevPage() {
     }
     // death line
     ctx.strokeStyle = '#3a1d24'; ctx.setLineDash([4, 4]); ctx.beginPath(); ctx.moveTo(0, wy(VH)); ctx.lineTo(W, wy(VH)); ctx.stroke(); ctx.setLineDash([])
-    // platforms — normal-band segs fill to the death floor (land); segs above the frame (top < TOP_MIN) are
-    // floating alt-route ledges → a thin slab, matching how the game renders them.
+    // the LOW ROAD (ground track) — segs fill down to the death floor (you stand on top; miss = the void).
     for (const s of lvl.segs) {
       const x = wx(s.x0), w = (s.x1 - s.x0) * sc, y = wy(s.top)
       const depth = s.top < TOP_MIN ? 22 * sc : wy(VH) - y
       ctx.fillStyle = COL.ledge; ctx.fillRect(x, y, w, depth)
       ctx.fillStyle = COL.ledgeTop; ctx.fillRect(x, y - 2 * sc, w, 3 * sc)
+    }
+    // the HIGH ROAD (ledges array) — thin floating slabs in a distinct violet, matching the game's
+    // separate multi-surface layer. Land on one and you follow it, then fall to the ground past its end.
+    for (const L of (lvl.ledges ?? [])) {
+      const x = wx(L.x0), w = (L.x1 - L.x0) * sc, y = wy(L.top)
+      ctx.fillStyle = COL.hi; ctx.fillRect(x, y, w, 20 * sc)
+      ctx.fillStyle = COL.hiTop; ctx.fillRect(x, y - 2 * sc, w, 3 * sc)
     }
     // motes
     for (const m of lvl.motes) { if (m.got) continue; ctx.fillStyle = COL.mote; ctx.beginPath(); ctx.arc(wx(m.x), wy(m.y), 5 * sc, 0, 7); ctx.fill() }
@@ -258,6 +265,9 @@ export default function VaultDevPage() {
     for (let i = lvl.motes.length - 1; i >= 0; i--) { const m = lvl.motes[i]; if (Math.hypot(m.x - wx, m.y - wy) < 14) return { t: 'mote' as const, i } }
     for (let i = lvl.foes.length - 1; i >= 0; i--) { const f = lvl.foes[i]; if (Math.abs(f.x - wx) < FOE_W / 2 + 4 && wy > f.y - FOE_H && wy < f.y + 6) return { t: 'foe' as const, i } }
     for (let i = lvl.spikes.length - 1; i >= 0; i--) { const s = lvl.spikes[i]; if (Math.abs(s.x - wx) < 14 && wy > s.y - 22 && wy < s.y + 6) return { t: 'spike' as const, i } }
+    // high road first (it floats above the ground; a thin band around its top) so it stays grabbable over a seg
+    const ledges = lvl.ledges ?? []
+    for (let i = ledges.length - 1; i >= 0; i--) { const L = ledges[i]; if (wx >= L.x0 && wx <= L.x1 && wy >= L.top - 8 && wy <= L.top + 20) return { t: 'ledge' as const, i } }
     for (let i = lvl.segs.length - 1; i >= 0; i--) { const s = lvl.segs[i]; if (wx >= s.x0 && wx <= s.x1 && wy >= s.top - 6) return { t: 'seg' as const, i } }
     return null
   }
@@ -271,6 +281,7 @@ export default function VaultDevPage() {
     if (e.button === 1 || e.shiftKey) { drag.current = { kind: 'pan', x0: px, y0: py, camStart: camXRef.current }; return }
     const t = toolRef.current
     if (t === 'platform') { const sx = Math.max(0, SNAP(x, GRID_X)); const top = clamp(SNAP(y, 4), WORLD_CEIL, TOP_MAX); drag.current = { kind: 'platform', x0: sx, y0: top }; setPreview({ x0: sx, x1: sx, top }); return }
+    if (t === 'highroad') { const sx = Math.max(0, SNAP(x, GRID_X)); const top = clamp(SNAP(y, 4), WORLD_CEIL, TOP_MAX); drag.current = { kind: 'highroad', x0: sx, y0: top }; setPreview({ x0: sx, x1: sx, top }); return }
     if (t === 'stairs') { drag.current = { kind: 'stairs', x0: Math.max(0, x), y0: clamp(y, WORLD_CEIL, TOP_MAX) }; stairsPrevRef.current = []; return }
     if (t === 'mote') { setLevel((L) => ({ ...L, motes: [...L.motes, { x: SNAP(x, GRID_X), y: clamp(SNAP(y, 8), WORLD_CEIL, TOP_MAX), got: false }] })); return }
     if (t === 'foe') { const fx = SNAP(x, GRID_X); setLevel((L) => ({ ...L, foes: [...L.foes, { x: fx, y: segTopAt(fx), dead: false }] })); return }
@@ -284,7 +295,7 @@ export default function VaultDevPage() {
     const px = e.clientX - rect.left, py = e.clientY - rect.top
     const { x, y } = s2w(px, py)
     if (d.kind === 'pan') { setCamX(Math.max(-RUNNER_SX, d.camStart! - (px - d.x0) / scaleRef.current)); return }
-    if (d.kind === 'platform') { const x1 = Math.max(d.x0 + GRID_X, SNAP(x, GRID_X)); setPreview({ x0: d.x0, x1, top: d.y0 }); return }
+    if (d.kind === 'platform' || d.kind === 'highroad') { const x1 = Math.max(d.x0 + GRID_X, SNAP(x, GRID_X)); setPreview({ x0: d.x0, x1, top: d.y0 }); return }
     if (d.kind === 'stairs') { stairsPrevRef.current = makeStairs(d.x0, d.y0, Math.max(0, x), clamp(y, WORLD_CEIL, TOP_MAX)); return }
     if (d.kind === 'move') { moveRef(d.ref as ReturnType<typeof pick>, x, y); d.x0 = x; d.y0 = y }
   }
@@ -293,6 +304,9 @@ export default function VaultDevPage() {
     if (!d) return
     if (d.kind === 'platform' && preview && preview.x1 > preview.x0) {
       const p = preview; setLevel((L) => ({ ...L, segs: [...L.segs, { x0: p.x0, x1: p.x1, top: p.top }] }))
+    }
+    if (d.kind === 'highroad' && preview && preview.x1 > preview.x0) {
+      const p = preview; setLevel((L) => ({ ...L, ledges: [...(L.ledges ?? []), { x0: p.x0, x1: p.x1, top: p.top }] }))
     }
     if (d.kind === 'stairs' && stairsPrevRef.current.length) {
       const steps = stairsPrevRef.current; setLevel((L) => ({ ...L, segs: [...L.segs, ...steps] }))
@@ -305,6 +319,7 @@ export default function VaultDevPage() {
       if (p.t === 'mote') return { ...L, motes: L.motes.filter((_, i) => i !== p.i) }
       if (p.t === 'foe') return { ...L, foes: L.foes.filter((_, i) => i !== p.i) }
       if (p.t === 'spike') return { ...L, spikes: L.spikes.filter((_, i) => i !== p.i) }
+      if (p.t === 'ledge') return { ...L, ledges: (L.ledges ?? []).filter((_, i) => i !== p.i) }
       return { ...L, segs: L.segs.filter((_, i) => i !== p.i) }
     })
   }
@@ -314,6 +329,7 @@ export default function VaultDevPage() {
       if (p.t === 'mote') { const motes = L.motes.slice(); motes[p.i] = { ...motes[p.i], x: SNAP(x, GRID_X), y: clamp(SNAP(y, 8), WORLD_CEIL, TOP_MAX) }; return { ...L, motes } }
       if (p.t === 'foe') { const foes = L.foes.slice(); const fx = SNAP(x, GRID_X); foes[p.i] = { ...foes[p.i], x: fx, y: segTopAt(fx) }; return { ...L, foes } }
       if (p.t === 'spike') { const spikes = L.spikes.slice(); const sx = SNAP(x, GRID_X); spikes[p.i] = { x: sx, y: segTopAt(sx) }; return { ...L, spikes } }
+      if (p.t === 'ledge') { const ledges = (L.ledges ?? []).slice(); const s = ledges[p.i]; const w = s.x1 - s.x0; const nx = Math.max(0, SNAP(x - w / 2, GRID_X)); ledges[p.i] = { x0: nx, x1: nx + w, top: clamp(SNAP(y, 4), WORLD_CEIL, TOP_MAX) }; return { ...L, ledges } }
       const segs = L.segs.slice(); const s = segs[p.i]; const w = s.x1 - s.x0; const nx = Math.max(0, SNAP(x - w / 2, GRID_X)); segs[p.i] = { x0: nx, x1: nx + w, top: clamp(SNAP(y, 4), WORLD_CEIL, TOP_MAX) }; return { ...L, segs }
     })
   }
@@ -332,7 +348,7 @@ export default function VaultDevPage() {
   const isLive = !!liveStore[slotKey]
   // dirty = the editor differs from what's published. seed is cosmetic for authored levels
   // (makeAuthoredWorld replaces all entities), so compare only the gameplay-bearing fields.
-  const layoutSig = (L?: AuthoredLevel) => L ? JSON.stringify({ e: L.end, s: L.segs.map((s) => [s.x0, s.x1, s.top]), f: L.foes.map((f) => [f.x, f.y]), k: L.spikes.map((s) => [s.x, s.y]), m: L.motes.map((m) => [m.x, m.y]) }) : ''
+  const layoutSig = (L?: AuthoredLevel) => L ? JSON.stringify({ e: L.end, s: L.segs.map((s) => [s.x0, s.x1, s.top]), h: (L.ledges ?? []).map((s) => [s.x0, s.x1, s.top]), f: L.foes.map((f) => [f.x, f.y]), k: L.spikes.map((s) => [s.x, s.y]), m: L.motes.map((m) => [m.x, m.y]) }) : ''
   const dirty = isLive && layoutSig(level) !== layoutSig(liveStore[slotKey])
   const publish = async () => {
     setSaveMsg({ ok: true, text: 'saving…' })
