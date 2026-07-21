@@ -72,6 +72,8 @@ const SLIDE_TIME = 0.6      // slide duration before it bleeds back to the run
 const AIR_CONTROL = 0.4     // how much WASD can steer horizontal velocity while airborne (0=none,1=full)
 const FALL_OFF = 0.32       // step down more than this below the resolved floor → you've walked off a ledge → fall
 const PLAYER_R = 0.4        // body radius — keeps the first-person eye this far out of walls/objects (no clip-in)
+const CLIMB_SPEED = 4.5     // upward speed while wall-climbing (tier units/s)
+const CLIMB_TIME = 1.3      // max continuous climb before the grip runs out (~5.8 tiers), refills on landing
 const DIR_YAW: Record<string, number> = { up: 0, down: Math.PI, left: Math.PI / 2, right: -Math.PI / 2 }
 
 type Cell = [number, number]
@@ -563,6 +565,9 @@ function Player({ posRef, gridRef, heightsRef, zoneIdRef, editRef, onWarp, battl
   const crouchHeld = useRef(false)  // edge-detect crouch key so one press = one slide
   const hvel = useMemo(() => new THREE.Vector3(), [])  // horizontal velocity (carries through slide+air)
   const airSpeed = useRef(0)        // horizontal speed locked at takeoff → preserved through the jump
+  const climbT = useRef(CLIMB_TIME) // remaining wall-climb grip (refills on landing)
+  const wallNormal = useMemo(() => new THREE.Vector3(), [])  // away-from-wall dir when in contact (climb + wall-jump)
+  const onWall = useRef(false)      // pressed against a climbable wall this frame
 
   useEffect(() => {
     const dn = (e: KeyboardEvent) => {
@@ -641,8 +646,23 @@ function Player({ posRef, gridRef, heightsRef, zoneIdRef, editRef, onWarp, battl
       if (sliding) slideT.current -= dt
       const crouching = crouchKey && !sliding && !airborne.current  // slow crouch-walk (not a slide)
 
+      // ── WALL CONTACT (climb + wall-jump foundation): pressed into a climbable wall in the direction
+      //    we're pushing? Probe a body-radius ahead in the input dir at our current height. ──
+      onWall.current = false
+      if (hasInput) {
+        const wx = Math.round(p.x + move.x * (PLAYER_R + 0.2))
+        const wz = Math.round(p.z + move.z * (PLAYER_R + 0.2))
+        if (isBlocker(wx, wz)) { onWall.current = true; wallNormal.set(-move.x, 0, -move.z).normalize() }
+      }
+      // WALL-CLIMB: airborne + pushing into a wall + grip left → scramble up the face, mantle the top.
+      const climbing = airborne.current && onWall.current && hasInput && climbT.current > 0
+
       // ── HORIZONTAL VELOCITY — auto-run with an accel RAMP (the flow), momentum through slide + air ──
-      if (airborne.current) {
+      if (climbing) {
+        // gentle forward creep so you mantle onto the top the instant the wall clears; collision pins
+        // you to the face until then.
+        hvel.copy(move).multiplyScalar(RUN_SPEED * 0.35)
+      } else if (airborne.current) {
         // steer the preserved takeoff momentum toward input, keep the magnitude (air control)
         if (hasInput && airSpeed.current > 0.01) {
           const dir = hvel.lengthSq() > 1e-5 ? hvel.clone().normalize() : move.clone()
@@ -690,9 +710,10 @@ function Player({ posRef, gridRef, heightsRef, zoneIdRef, editRef, onWarp, battl
       const jumpKey = !!k[' '] || jumpRef.current
       jumpRef.current = false  // consume the touch edge
       if (airborne.current) {
-        vy.current -= GRAVITY * dt2
+        if (climbing) { vy.current = CLIMB_SPEED; climbT.current -= dt }  // scramble up the wall face
+        else vy.current -= GRAVITY * dt2
         p.y += vy.current * dt2
-        if (vy.current <= 0 && p.y <= floorY) { p.y = floorY; vy.current = 0; airborne.current = false }  // land
+        if (vy.current <= 0 && p.y <= floorY) { p.y = floorY; vy.current = 0; airborne.current = false; climbT.current = CLIMB_TIME }  // land + refill grip
       } else if (jumpKey && !jumpHeld.current) {
         airborne.current = true; vy.current = JUMP_V0
         airSpeed.current = Math.max(hvel.length(), hasInput ? RUN_SPEED : 0)  // carry slide/run speed up
@@ -700,6 +721,7 @@ function Player({ posRef, gridRef, heightsRef, zoneIdRef, editRef, onWarp, battl
         airborne.current = true; vy.current = 0; airSpeed.current = hvel.length()  // walked off a ledge → fall
       } else {
         p.y += (floorY - p.y) * 0.25  // grounded: ease onto the floor (smooth stairs / seg step-ups)
+        climbT.current = CLIMB_TIME   // grounded → refill climb grip
       }
       jumpHeld.current = jumpKey
 
@@ -2109,7 +2131,7 @@ export default function Shimmer3D() {
       }}>
         Shimmer 3D — {zone.name}{editMode ? '  ·  EDIT' : ''}<br />
         <span style={{ opacity: 0.8 }}>
-          {editMode ? 'left-drag paint · WASD fly · Q/E down·up · right-drag look · scroll zoom' : `WASD run · Space jump · Shift slide/crouch · mouse look · ${hasStarter ? 'mist = wild spirits' : 'meet Gregory first'}${isOwner ? ' · B to edit' : ''}`}
+          {editMode ? 'left-drag paint · WASD fly · Q/E down·up · right-drag look · scroll zoom' : `WASD run · Space jump · Shift slide · jump into wall + hold = climb · ${hasStarter ? 'mist = wild spirits' : 'meet Gregory first'}${isOwner ? ' · B edit' : ''}`}
         </span>
         {!editMode && <><br /><span style={{ color: '#ffe08a' }}>✦ {wallet.marks} marks</span></>}
       </div>
