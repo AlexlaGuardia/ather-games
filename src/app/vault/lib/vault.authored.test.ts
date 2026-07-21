@@ -3,8 +3,11 @@
 // Run: npx tsx src/app/vault/lib/vault.authored.test.ts
 import {
   makeWorld, makeAuthoredWorld, bakeLevel, tick, pressJump, releaseJump, speedOf,
-  STEP_UP, FOE_W, levelCfg, type World, type AuthoredLevel,
+  STEP_UP, FOE_W, levelCfg, type World, type AuthoredLevel, type BoundState,
 } from './vault'
+
+const PLAYING: BoundState = 'playing' // widen so TS doesn't narrow w.state to the literal (tick() mutates it)
+const stateOf = (w: World): BoundState => w.state // read across a fn boundary so a preceding loop can't narrow it
 
 let ok = 0, bad = 0
 const chk = (n: string, c: boolean, x = '') => { c ? ok++ : (bad++, console.error('  FAIL:', n, x)) }
@@ -109,16 +112,16 @@ const ledgedCfg = { ...cfg, ledges: true }
   // low road: never touch jump → finish grounded on the ground track, never on a ledge
   {
     const w = makeAuthoredWorld(flat(2400))
-    w.state = 'playing' // start the run without any input (pressJump would buffer a hop)
+    w.state = PLAYING // start the run without any input (pressJump would buffer a hop)
     let everHigh = false
     for (let t = 0; t < 30 && w.state === 'playing'; t += 1 / 60) { tick(w, 1 / 60); if (w.onLedge) everHigh = true }
-    chk('low road: reaches the finish without jumping', w.state === 'won', w.state)
+    chk('low road: reaches the finish without jumping', stateOf(w) === 'won', stateOf(w))
     chk('low road: never stood on the high road', !everHigh)
   }
   // high road: hop while crossing the ledge span → the resolver lands the runner on the authored ledge
   {
     const w = makeAuthoredWorld(flat(2400))
-    w.state = 'playing'
+    w.state = PLAYING
     let landedHigh = false, landedTop = 0
     for (let t = 0; t < 30 && w.state === 'playing'; t += 1 / 60) {
       if (w.grounded && w.dist > 780 && w.dist < 1400) pressJump(w) // hop up onto the ledge as it arrives
