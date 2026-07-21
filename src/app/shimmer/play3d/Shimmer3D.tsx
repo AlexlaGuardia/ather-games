@@ -24,6 +24,8 @@ import { findAdjacentNode, addHarvestItems } from '../engine/harvesting'
 import { newCast as newRinCast, phaseAt as rinPhaseAt, hook as rinHook, type RinCast } from '../engine/rinning'
 import { rinBite, rinCatch, rinMiss } from './rin-fx'
 import { gatherTick, gatherPop } from './gather-fx'
+import BirthScreen from './birth/BirthScreen'
+import { RUNES } from './birth/runes.data'
 import { createSkillSet, skillSetToSave, skillSetFromSave, addSkillXP, xpForSkillLevel, SKILL_META, type SkillSet, type SkillId } from '../engine/skills'
 import { createBeast, checkBeastUnlock, beastsToSave, beastsFromSave, BEAST_SPECIES, BEAST_DEFS, BEAST_PERKS, PERK_INFO, getBonusFindChance, getSpeedBonus, type ManaBeast, type BeastSpecies } from '../beasts/beast'
 import { createInventory, inventoryToSave, inventoryFromSave, addItems, removeItems, countItem, transferItem, createChestStorage, chestToSave, chestFromSave, type Inventory, type ItemStack, type ChestStorage, type ChestSave } from '../engine/inventory'
@@ -1974,6 +1976,10 @@ export default function Shimmer3D() {
   const [version, setVersion] = useState(0)
   const [editMode, setEditMode] = useState(false)
   const [confirmNew, setConfirmNew] = useState(false)
+  // Birth Rune gate — New Game opens this before resetting; choosing a rune is the player's
+  // one "who am I" moment (play3d is first-person, so birth IS the character moment).
+  const [birthOpen, setBirthOpen] = useState(false)
+  const birthRuneRef = useRef<string | null>(null)  // chosen rune id; TODO(mechanics): fold into persist()/load() + grant a starting ability off it
   const editRef = useRef(false); editRef.current = editMode
 
   // The walker is public; the terrain editor is owner-only. ather.games has no cloud auth, so owner
@@ -2301,7 +2307,7 @@ export default function Shimmer3D() {
               {confirmNew ? (
                 <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
                   <span style={{ color: '#e9dfc8', font: '700 11px ui-monospace, monospace' }}>reset?</span>
-                  <button onClick={() => { setConfirmNew(false); setMenuOpen(false); newGame() }} style={{ ...menuBtn, background: '#b9483f', color: '#fff' }}>Yes</button>
+                  <button onClick={() => { setConfirmNew(false); setMenuOpen(false); setBirthOpen(true) }} style={{ ...menuBtn, background: '#b9483f', color: '#fff' }}>Yes</button>
                   <button onClick={() => setConfirmNew(false)} style={menuBtn}>No</button>
                 </div>
               ) : <button onClick={() => setConfirmNew(true)} style={menuBtn}>↺ New Game</button>}
@@ -2350,6 +2356,20 @@ export default function Shimmer3D() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Birth Rune gate — opened by New Game; choose a rune, then reset into a fresh run carrying it */}
+      {birthOpen && (
+        <BirthScreen
+          onChoose={(id) => {
+            setBirthOpen(false)
+            birthRuneRef.current = id  // BirthScreen also stashes it in localStorage (ather:shimmer:birthRune)
+            newGame()                  // fresh run — sets its own banner; we override below
+            const rn = RUNES.find(r => r.id === id)?.name ?? 'your rune'
+            setBanner(`Born of ${rn} — find Gregory in the glade`)
+          }}
+          onCancel={() => setBirthOpen(false)}
+        />
       )}
 
       {/* milestone toast (evolution-ready, new game) */}
@@ -2440,7 +2460,7 @@ export default function Shimmer3D() {
             >✕</button>
             {/* A — interact/confirm (lower, bigger, where the thumb rests): advance dialogue / talk to an NPC / confirm New Game. */}
             <button
-              onPointerDown={(e) => { e.stopPropagation(); if (dialogue) advanceDialogue(); else if (nearNpc) talk(nearNpc); else if (fish || nearNode || channel) toggleChannel(); else if (nearStation) openStation(); else if (confirmNew) { setConfirmNew(false); newGame() } }}
+              onPointerDown={(e) => { e.stopPropagation(); if (dialogue) advanceDialogue(); else if (nearNpc) talk(nearNpc); else if (fish || nearNode || channel) toggleChannel(); else if (nearStation) openStation(); else if (confirmNew) { setConfirmNew(false); setBirthOpen(true) } }}
               aria-label="interact"
               style={{ width: 76, height: 76, borderRadius: '50%', border: '2px solid #ffffff4d', background: fish ? (fish.bite ? 'rgba(55,230,255,0.92)' : 'rgba(58,123,213,0.9)') : nearNpc || dialogue ? 'rgba(212,168,67,0.85)' : channel ? 'rgba(58,123,213,0.9)' : nearNode ? 'rgba(79,199,154,0.85)' : nearStation && !nearNpc && !dialogue ? `${STATIONS[nearStation.itemId].accent}d9` : 'rgba(36,84,72,0.8)', color: fish || nearNpc || dialogue || nearNode || channel || nearStation ? '#0d1a17' : '#dffaf0', font: '800 23px ui-monospace, monospace', cursor: 'pointer', touchAction: 'none' }}
             >{fish ? (fish.bite ? '❗' : '🎣') : channel ? '⏹' : nearNode && !nearNpc && !dialogue ? '🪓' : nearStation && !nearNpc && !dialogue ? STATIONS[nearStation.itemId].emoji : '✦'}</button>
