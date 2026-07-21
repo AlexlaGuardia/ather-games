@@ -77,6 +77,10 @@ const FALL_OFF = 0.32       // step down more than this below the resolved floor
 const PLAYER_R = 0.4        // body radius — keeps the first-person eye this far out of walls/objects (no clip-in)
 const CLIMB_SPEED = 4.5     // upward speed while wall-climbing (tier units/s)
 const CLIMB_TIME = 1.3      // max continuous climb before the grip runs out (~5.8 tiers), refills on landing
+const WALLJUMP_UP = 7.0     // vertical kick of a wall-jump (~JUMP_V0; carries you up the face in bounds)
+const WALLJUMP_PUSH = 6.0   // horizontal shove AWAY from the wall along wallNormal (near run speed)
+const WALL_COYOTE = 0.18    // grace after leaving a wall in which Space still counts as a wall-jump
+const WALLJUMP_LOCK = 0.22  // after a kick, suppress re-gripping the SAME wall so the push separates
 const DIR_YAW: Record<string, number> = { up: 0, down: Math.PI, left: Math.PI / 2, right: -Math.PI / 2 }
 
 type Cell = [number, number]
@@ -571,6 +575,8 @@ function Player({ posRef, gridRef, heightsRef, zoneIdRef, editRef, onWarp, battl
   const climbT = useRef(CLIMB_TIME) // remaining wall-climb grip (refills on landing)
   const wallNormal = useMemo(() => new THREE.Vector3(), [])  // away-from-wall dir when in contact (climb + wall-jump)
   const onWall = useRef(false)      // pressed against a climbable wall this frame
+  const wallStick = useRef(0)       // wall-jump coyote timer: >0 = a wall was touched recently, Space kicks off it
+  const wallLock = useRef(0)        // post-kick lockout: no re-gripping the wall until this drains
 
   useEffect(() => {
     const dn = (e: KeyboardEvent) => {
@@ -658,14 +664,20 @@ function Player({ posRef, gridRef, heightsRef, zoneIdRef, editRef, onWarp, battl
       if (sliding) slideT.current -= dt
       const crouching = crouchKey && !sliding && !airborne.current  // slow crouch-walk (not a slide)
 
-      // ── WALL CONTACT (climb + wall-jump foundation): pressed into a climbable wall in the direction
-      //    we're pushing? Probe a body-radius ahead in the input dir at our current height. ──
+      // ── WALL CONTACT (climb + wall-jump): pressed into a climbable wall in the direction we're
+      //    pushing? Probe a body-radius ahead in the input dir at our current height. The post-kick
+      //    lockout suppresses contact so a wall-jump actually separates instead of instantly re-gripping. ──
+      if (wallLock.current > 0) wallLock.current -= dt
       onWall.current = false
-      if (hasInput) {
+      if (hasInput && wallLock.current <= 0) {
         const wx = Math.round(p.x + move.x * (PLAYER_R + 0.2))
         const wz = Math.round(p.z + move.z * (PLAYER_R + 0.2))
         if (isBlocker(wx, wz)) { onWall.current = true; wallNormal.set(-move.x, 0, -move.z).normalize() }
       }
+      // wall-jump COYOTE: refreshed while touching a wall, bled down after — so a Space a hair after you
+      // let go of the wall still kicks off it (wallNormal stays the last contact's away-dir).
+      if (onWall.current) wallStick.current = WALL_COYOTE
+      else if (wallStick.current > 0) wallStick.current -= dt
       // WALL-CLIMB: airborne + pushing into a wall + grip left → scramble up the face, mantle the top.
       const climbing = airborne.current && onWall.current && hasInput && climbT.current > 0
 
@@ -721,10 +733,22 @@ function Player({ posRef, gridRef, heightsRef, zoneIdRef, editRef, onWarp, battl
       const floorY = (surf ? surf.y : (heights[Math.round(p.z)]?.[Math.round(p.x)] ?? 0)) * STEP
       const jumpKey = !!k[' '] || jumpRef.current
       jumpRef.current = false  // consume the touch edge
+      const jumpEdge = jumpKey && !jumpHeld.current
+      // WALL-JUMP: airborne + Space edge + a wall touched within coyote → kick UP + AWAY along wallNormal.
+      // Space beats "hold-into-wall", so it overrides an in-progress climb; consumes the coyote and arms
+      // the re-grip lock so the push separates instead of sticking back to the same face.
+      const wallJumping = airborne.current && jumpEdge && wallStick.current > 0
+      if (wallJumping) {
+        vy.current = WALLJUMP_UP
+        hvel.copy(wallNormal).multiplyScalar(WALLJUMP_PUSH)
+        airSpeed.current = WALLJUMP_PUSH
+        wallStick.current = 0
+        wallLock.current = WALLJUMP_LOCK
+      }
       if (airborne.current) {
-        if (climbing) { vy.current = CLIMB_SPEED; climbT.current -= dt }  // scramble up the wall face
-        else vy.current -= GRAVITY * dt2
-        p.y += vy.current * dt2
+        if (wallJumping) { p.y += vy.current * dt2 }                     // just launched: up-kick, no gravity this frame
+        else if (climbing) { vy.current = CLIMB_SPEED; climbT.current -= dt; p.y += vy.current * dt2 }  // scramble up the wall face
+        else { vy.current -= GRAVITY * dt2; p.y += vy.current * dt2 }
         if (vy.current <= 0 && p.y <= floorY) { p.y = floorY; vy.current = 0; airborne.current = false; climbT.current = CLIMB_TIME }  // land + refill grip
       } else if (jumpKey && !jumpHeld.current) {
         airborne.current = true; vy.current = JUMP_V0
