@@ -79,9 +79,9 @@ const CLIMB_SPEED = 4.5     // upward speed while wall-climbing (tier units/s)
 const CLIMB_MAX_RISE = 2.5  // max VERTICAL rise per climb before the grip gives out (tiers). Caps distance,
                             // not time — refills only on solid ground, so you scale multi-tier terrain one
                             // ledge at a time but can't scramble up a single tall face forever.
-const VAULT_MAX = 2.0       // an obstacle up to this tall (tiers) auto-VAULTS at run speed — a quick hop onto
-                            // it, no jump needed. Taller than this = a wall you climb. (1-tier steps just walk up.)
-const VAULT_MIN_SPEED = 2.5 // need at least this much ground speed to vault, so a standstill nudge won't hop
+const MANTLE_REACH = 1.4    // grab reach (tiers): airborne, if a ledge/wall TOP ahead sits within this above
+                            // your feet, TAP JUMP to pull up over it. Jump alone reaches low ledges; jump then
+                            // wall-climb brings a taller wall's top into reach. Skill-timed, works on any wall.
 const WALLJUMP_UP = 7.0     // vertical kick of a wall-jump (~JUMP_V0; carries you up the face in bounds)
 const WALLJUMP_PUSH = 6.0   // horizontal shove AWAY from the wall along wallNormal (near run speed)
 const WALL_COYOTE = 0.18    // grace after leaving a wall in which Space still counts as a wall-jump
@@ -578,7 +578,6 @@ function Player({ posRef, gridRef, heightsRef, zoneIdRef, editRef, onWarp, battl
   const hvel = useMemo(() => new THREE.Vector3(), [])  // horizontal velocity (carries through slide+air)
   const airSpeed = useRef(0)        // horizontal speed locked at takeoff → preserved through the jump
   const climbRise = useRef(0)       // vertical distance climbed this airborne stint (tiers); caps the climb, resets on ground
-  const wasClimbing = useRef(false) // climbing last frame? → detect the mantle moment (climb ended by clearing the lip)
   const wallNormal = useMemo(() => new THREE.Vector3(), [])  // away-from-wall dir when in contact (climb + wall-jump)
   const onWall = useRef(false)      // pressed against a climbable wall this frame
   const wallStick = useRef(0)       // wall-jump coyote timer: >0 = a wall was touched recently, Space kicks off it
@@ -689,9 +688,9 @@ function Player({ posRef, gridRef, heightsRef, zoneIdRef, editRef, onWarp, battl
 
       // ── HORIZONTAL VELOCITY — auto-run with an accel RAMP (the flow), momentum through slide + air ──
       if (climbing) {
-        // gentle forward creep so you mantle onto the top the instant the wall clears; collision pins
-        // you to the face until then.
-        hvel.copy(move).multiplyScalar(RUN_SPEED * 0.35)
+        // pinned to the face while scrambling up (no auto-creep over the top) — topping out is a deliberate
+        // TAP-JUMP mantle, so climbing just extends your reach up a tall wall.
+        hvel.set(0, 0, 0)
       } else if (airborne.current) {
         // steer the preserved takeoff momentum toward input, keep the magnitude (air control)
         if (hasInput && airSpeed.current > 0.01) {
@@ -720,7 +719,6 @@ function Player({ posRef, gridRef, heightsRef, zoneIdRef, editRef, onWarp, battl
         hvel.z += ((hasInput ? move.z * targetSpeed : 0) - hvel.z) * rate
       }
       if (hvel.lengthSq() > 1e-4) yaw.current = Math.atan2(hvel.x, hvel.z)  // face travel dir (avatar, seen in edit view)
-      const moveSpeed = Math.hypot(hvel.x, hvel.z)  // intended ground speed (pre-collision) — gates the vault
 
       // ── apply horizontal with axis-separated collision (blocked axis kills that component). Each axis
       //    also keeps a PLAYER_R buffer against walls/objects (the cell one radius ahead in the move
@@ -738,23 +736,22 @@ function Player({ posRef, gridRef, heightsRef, zoneIdRef, editRef, onWarp, battl
       // ── VERTICAL: gravity + jump + smooth ground-follow ──
       const surf = resolveStand(ctx, Math.round(p.x), Math.round(p.z), p.y / STEP)
       const floorY = (surf ? surf.y : (heights[Math.round(p.z)]?.[Math.round(p.x)] ?? 0)) * STEP
-      // AUTO-VAULT: grounded + moving into a waist-high ledge (too tall to step, low enough to hop) → the
-      // cell ahead has no surface at our level (blocked) but a standable top within VAULT_MAX. Read it here
-      // so the branch below can pop us over it at run speed instead of stopping dead.
-      const vaultTop = (!airborne.current && !sliding && hasInput && moveSpeed > VAULT_MIN_SPEED)
-        ? (() => {
-            const cx = Math.round(p.x + move.x * (PLAYER_R + 0.3)), cz = Math.round(p.z + move.z * (PLAYER_R + 0.3))
-            if (canStandAt(ctx, cx, cz, fromY)) return null                       // walkable/step-up ahead → not a vault
-            return surfacesAt(ctx, cx, cz).find(s => s.y <= fromY + VAULT_MAX) ?? null  // lowest top we can hop onto
-          })()
-        : null
       const jumpKey = !!k[' '] || jumpRef.current
       jumpRef.current = false  // consume the touch edge
       const jumpEdge = jumpKey && !jumpHeld.current
-      // WALL-JUMP: airborne + Space edge + a wall touched within coyote → kick UP + AWAY along wallNormal.
-      // Space beats "hold-into-wall", so it overrides an in-progress climb; consumes the coyote and arms
-      // the re-grip lock so the push separates instead of sticking back to the same face.
-      const wallJumping = airborne.current && jumpEdge && wallStick.current > 0
+      // MANTLE target: airborne + a ledge/wall TOP ahead (in move dir, else facing) whose height sits within
+      // grab reach of your feet → a well-timed TAP JUMP pulls you up over it. Works on any wall your jump (or
+      // jump+climb) brings into reach. `dir` is the horizontal we grab toward.
+      const dir = hasInput ? move : fwd
+      const mantle = airborne.current ? (() => {
+        const cx = Math.round(p.x + dir.x * (PLAYER_R + 0.4)), cz = Math.round(p.z + dir.z * (PLAYER_R + 0.4))
+        const s = surfacesAt(ctx, cx, cz).find(su => su.y >= fromY - 0.4 && su.y <= fromY + MANTLE_REACH)  // a grabbable lip
+        return s ? { cx, cz, y: s.y } : null
+      })() : null
+      const mantling = jumpEdge && !!mantle
+      // WALL-JUMP: airborne + Space edge + a wall in coyote, but ONLY when there's no grabbable lip (mantle wins
+      // when a top is in reach; otherwise kick UP + AWAY along wallNormal). Consumes coyote + arms the re-grip lock.
+      const wallJumping = airborne.current && jumpEdge && !mantling && wallStick.current > 0
       if (wallJumping) {
         vy.current = WALLJUMP_UP
         hvel.copy(wallNormal).multiplyScalar(WALLJUMP_PUSH)
@@ -762,13 +759,12 @@ function Player({ posRef, gridRef, heightsRef, zoneIdRef, editRef, onWarp, battl
         wallStick.current = 0
         wallLock.current = WALLJUMP_LOCK
       }
-      // MANTLE: a climb that ended by CLEARING the lip (not by grip-out) → carry forward momentum + kill any
-      // downward yank so you flow up and over onto the ledge, instead of the slow creep-then-snap.
-      if (wasClimbing.current && !climbing && airborne.current && climbRise.current < CLIMB_MAX_RISE) {
-        airSpeed.current = Math.max(airSpeed.current, RUN_SPEED * 0.7)
-        if (vy.current < 0) vy.current = 0
-      }
-      if (airborne.current) {
+      if (mantling && mantle) {
+        // pull up + over: snap onto the lip's cell + height, kill vertical, land grounded, small forward settle.
+        p.x = mantle.cx; p.z = mantle.cz; p.y = mantle.y * STEP
+        vy.current = 0; airborne.current = false; climbRise.current = 0
+        hvel.copy(dir).setLength(RUN_SPEED * 0.4)
+      } else if (airborne.current) {
         if (wallJumping) { p.y += vy.current * dt2 }                     // just launched: up-kick, no gravity this frame
         else if (climbing) { vy.current = CLIMB_SPEED; climbRise.current += CLIMB_SPEED * dt2; p.y += vy.current * dt2 }  // scramble up the wall face (grip caps total rise)
         else { vy.current -= GRAVITY * dt2; p.y += vy.current * dt2 }
@@ -776,12 +772,6 @@ function Player({ posRef, gridRef, heightsRef, zoneIdRef, editRef, onWarp, battl
       } else if (jumpKey && !jumpHeld.current) {
         airborne.current = true; vy.current = JUMP_V0
         airSpeed.current = Math.max(hvel.length(), hasInput ? RUN_SPEED : 0)  // carry slide/run speed up
-      } else if (vaultTop) {
-        // pop over the low ledge — a proportional hop (just clears the lip + a hair) that keeps run speed,
-        // so the existing air+collision carries you forward onto the top. Low ledge = tiny hop, 2-tier = bigger.
-        airborne.current = true
-        vy.current = Math.sqrt(2 * GRAVITY * ((vaultTop.y - fromY) + 0.2))
-        airSpeed.current = Math.max(hvel.length(), RUN_SPEED * 0.85)
       } else if (floorY < p.y - FALL_OFF) {
         airborne.current = true; vy.current = 0; airSpeed.current = hvel.length()  // walked off a ledge → fall
       } else {
@@ -789,7 +779,6 @@ function Player({ posRef, gridRef, heightsRef, zoneIdRef, editRef, onWarp, battl
         climbRise.current = 0         // grounded → refill climb grip
       }
       jumpHeld.current = jumpKey
-      wasClimbing.current = climbing  // remember for next frame's mantle detection
 
       // eye dips while sliding OR crouch-walking, springs back when standing/running
       eyeRef.current += (((sliding || crouching) ? EYE_SLIDE : EYE_H) - eyeRef.current) * 0.25
