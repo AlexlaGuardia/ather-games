@@ -10,6 +10,7 @@ import { useRef, useEffect, useLayoutEffect, useMemo, useState, useCallback, mem
 import * as THREE from 'three'
 import { walkable } from '../engine/player'
 import { resolveStand, canStandAt, surfacesAt, EMPTY_SEGS, type CollisionCtx } from '../engine/segs-collision'
+import { SOLID } from '../world/tiles'
 import { ZONES, getZone, checkWarp, type Zone, type Warp } from '../world/zones'
 import { getHeightGrid } from '../world/heightmaps'
 import { rollEncounter, type WildEncounter } from '../engine/encounters'
@@ -606,11 +607,20 @@ function Player({ posRef, gridRef, heightsRef, zoneIdRef, editRef, onWarp, battl
     const canStep = (cx: number, cz: number) =>
       editRef.current ? true : (canStandAt(ctx, cx, cz, fromY) && !blockedByObject(cx, cz))  // roam freely while editing
     // A SOLID BLOCKER (wall or object) for the body-radius buffer — vs a mere ledge/gap, which is a
-    // void cell we must NOT buffer (you can still walk off drops). A wall = a cell that HAS surfaces
-    // but none you can step onto from here; a void has no surfaces at all.
+    // void cell we must NOT buffer (you can still walk off drops). Three wall kinds, one non-wall:
+    //   • a SOLID grid tile (console, water, world-border clouds) — has NO walkable surface, so
+    //     surfacesAt sees nothing, yet the body must still buffer off its face (this is the clip-into-
+    //     walls bug: the eye poked the face because the buffer treated a solid tile like empty air).
+    //   • the world edge (out of bounds) — same, never let the first-person eye leave the map.
+    //   • a tall cliff — HAS surfaces but none reachable from here (top > fromY+1).
+    //   • a VOID cell (-1) — an intentional gap you can walk off: NOT a blocker.
     const isBlocker = (cx: number, cz: number) => {
       if (editRef.current) return false
       if (blockedByObject(cx, cz)) return true
+      const row = grid[cz]
+      if (cz < 0 || cz >= grid.length || !row || cx < 0 || cx >= row.length) return true  // world edge
+      const tile = row[cx]
+      if (tile !== -1 && SOLID[tile & 0xFF]) return true  // solid wall (VOID -1 stays walk-off-able)
       const surfs = surfacesAt(ctx, cx, cz)
       return surfs.length > 0 && !surfs.some((s) => s.y <= fromY + 1)
     }
