@@ -764,8 +764,18 @@ function CameraRig({ posRef, editFocusRef, yawRef, editRef, viewRef }: {
   const right = useMemo(() => new THREE.Vector3(), [])
   useEffect(() => {
     let dragging = false, lx = 0, ly = 0
-    // non-edit: left-drag orbits (follow-cam). edit (spectator): right-drag looks (left = brush).
+    const isLocked = () => document.pointerLockElement instanceof Element
+    // First-person play: a click on the canvas CAPTURES the pointer (requestPointerLock) so the mouse
+    // just moves the view — the Supra free-look feel. Esc releases (browser default). Drag-look stays
+    // as the fallback when unlocked (and on touch), and orbit/edit keep their drag behavior.
     const dn = (e: PointerEvent) => {
+      if (isLocked()) return // already captured — clicks are for future interact, not re-locking
+      // Mouse only: pointer-lock is a desktop concept. Touch/pen fall through to drag-look below so
+      // phones keep their finger-drag look (and the joystick handles movement).
+      if (e.pointerType === 'mouse' && !editRef.current && viewRef.current === 'first' && e.target instanceof HTMLCanvasElement) {
+        void (e.target as HTMLCanvasElement).requestPointerLock?.()
+        return
+      }
       const ok = editRef.current ? e.button === 2 : e.button === 0
       if (!ok) return
       // only orbit from drags that START on the 3D canvas — touches on the joystick / buttons / HUD
@@ -774,6 +784,13 @@ function CameraRig({ posRef, editFocusRef, yawRef, editRef, viewRef }: {
       dragging = true; lx = e.clientX; ly = e.clientY
     }
     const mv = (e: PointerEvent) => {
+      if (isLocked()) {
+        // captured free-look: raw mouse deltas drive yaw + look elevation directly.
+        if (editRef.current || viewRef.current !== 'first') { document.exitPointerLock?.(); return }
+        yaw.current -= e.movementX * 0.0022
+        lookPitch.current = Math.max(-1.25, Math.min(1.25, lookPitch.current - e.movementY * 0.0022))
+        return
+      }
       if (!dragging) return
       yaw.current -= (e.clientX - lx) * 0.005
       pitch.current = Math.max(0.2, Math.min(1.45, pitch.current - (e.clientY - ly) * 0.004))
@@ -1041,6 +1058,13 @@ export default function Shimmer3D() {
   const viewRef = useRef<'first' | 'third'>('first')
   const [view, setView] = useState<'first' | 'third'>('first')
   viewRef.current = view
+  // Pointer-lock state → drives the "click to look" nudge (shown only when first-person + uncaptured).
+  const [pointerLocked, setPointerLocked] = useState(false)
+  useEffect(() => {
+    const onLock = () => setPointerLocked(document.pointerLockElement instanceof Element)
+    document.addEventListener('pointerlockchange', onLock)
+    return () => document.removeEventListener('pointerlockchange', onLock)
+  }, [])
   const editFocusRef = useRef(new THREE.Vector3())
   const joyRef = useRef({ x: 0, y: 0 }) // touch-joystick analog input → Player movement
 
@@ -1971,7 +1995,7 @@ export default function Shimmer3D() {
       }}>
         Shimmer 3D — {zone.name}{editMode ? '  ·  EDIT' : ''}<br />
         <span style={{ opacity: 0.8 }}>
-          {editMode ? 'left-drag paint · WASD fly · Q/E down·up · right-drag look · scroll zoom' : `WASD · drag look · ${view === 'first' ? 'V for 3rd-person' : 'V for 1st-person'} · edges warp · ${hasStarter ? 'mist = wild spirits' : 'meet Gregory first'}${isOwner ? ' · B to edit' : ''}`}
+          {editMode ? 'left-drag paint · WASD fly · Q/E down·up · right-drag look · scroll zoom' : `WASD · ${view === 'first' ? 'mouse look · V for 3rd-person' : 'drag orbit · V for 1st-person'} · edges warp · ${hasStarter ? 'mist = wild spirits' : 'meet Gregory first'}${isOwner ? ' · B to edit' : ''}`}
         </span>
         {!editMode && <><br /><span style={{ color: '#ffe08a' }}>✦ {wallet.marks} marks</span></>}
       </div>
@@ -1986,6 +2010,15 @@ export default function Shimmer3D() {
             font: '800 12px ui-monospace, monospace', cursor: 'pointer', touchAction: 'none',
           }}
         >{view === 'first' ? '◉ 1st' : '⊙ 3rd'}</button>
+      )}
+
+      {/* free-look nudge: only when first-person play AND the pointer isn't captured yet */}
+      {!editMode && view === 'first' && !pointerLocked && !isTouch && !dialogue && !battle && (
+        <div style={{
+          position: 'fixed', left: '50%', bottom: 108, transform: 'translateX(-50%)', zIndex: 34,
+          padding: '6px 13px', borderRadius: 999, background: 'rgba(16,14,32,0.8)', border: '1px solid #7fe3c855',
+          color: '#cfeee2', font: '700 12px ui-monospace, monospace', whiteSpace: 'nowrap', pointerEvents: 'none',
+        }}>click to look around <span style={{ opacity: 0.6 }}>· Esc releases</span></div>
       )}
 
       <Compass yawRef={camYaw} />
