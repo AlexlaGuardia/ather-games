@@ -971,8 +971,8 @@ function CameraRig({ posRef, editFocusRef, yawRef, editRef, eyeRef }: {
       lx = e.clientX; ly = e.clientY
     }
     const up = () => { dragging = false }
-    const wh = (e: WheelEvent) => { dist.current = Math.max(4, Math.min(40, dist.current + e.deltaY * 0.012)) }
-    const ctx = (e: Event) => { if (editRef.current) e.preventDefault() } // no menu during right-drag
+    const wh = (e: WheelEvent) => { if (editRef.current) dist.current = Math.max(4, Math.min(40, dist.current + e.deltaY * 0.012)) }  // edit-only orbit zoom; in play the wheel is the hotbar's (HotBar)
+    const ctx = (e: Event) => { if (editRef.current || e.target instanceof HTMLCanvasElement) e.preventDefault() } // no browser menu on the play/edit canvas (right-click is use-item)
     const kd = (e: KeyboardEvent) => { keys.current[e.key.toLowerCase()] = true }
     const ku = (e: KeyboardEvent) => { keys.current[e.key.toLowerCase()] = false }
     window.addEventListener('pointerdown', dn); window.addEventListener('pointermove', mv)
@@ -1476,6 +1476,7 @@ export default function Shimmer3D() {
   // ── Build placement: double-tap a placeable → ghost on the tile in front → rotate → confirm/cancel ──
   const [placing, setPlacing] = useState<{ itemId: string; facing: number } | null>(null)
   const placingRef = useRef(placing); placingRef.current = placing
+  const selSlotRef = useRef(0)  // live hotbar slot (HotBar drives it via onSelect); right-click uses this item
   const placeTargetRef = useRef<{ x: number; y: number } | null>(null)     // front tile, updated by the ghost
   const [structures, setStructures] = useState<PlacedStruct[]>([])
   const structuresRef = useRef(structures); structuresRef.current = structures
@@ -2003,6 +2004,7 @@ export default function Shimmer3D() {
   // Birth Rune gate — New Game opens this before resetting; choosing a rune is the player's
   // one "who am I" moment (play3d is first-person, so birth IS the character moment).
   const [birthOpen, setBirthOpen] = useState(false)
+  const [birthCancelable, setBirthCancelable] = useState(true) // New Game birth is escapable; first-entry birth is not
   const birthRuneRef = useRef<string | null>(null)  // chosen rune id; TODO(mechanics): fold into persist()/load() + grant a starting ability off it
   const editRef = useRef(false); editRef.current = editMode
 
@@ -2035,6 +2037,37 @@ export default function Shimmer3D() {
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [editMode, battle, nearNpc, advanceDialogue, talk, toggleChannel, openStation])
+
+  // ── Mouse-look controls (FPS model): once the pointer is CAPTURED (first canvas click locks it),
+  //    left-click = interact with what's in front, right-click = use/place the selected hotbar item,
+  //    scroll = cycle the hotbar (handled in HotBar). Before capture, the first click just locks — so
+  //    we no-op unless pointerLockElement is set. Keyboard (E/Space/Enter) stays a parallel interact. ──
+  useEffect(() => {
+    const onDown = (e: PointerEvent) => {
+      if (editMode || e.pointerType !== 'mouse') return
+      if (!(document.pointerLockElement instanceof Element)) return  // pre-capture click just locks; ignore
+      // Aiming a build ghost: right-click plants it, left-click rotates it (Enter/arrows/Esc still work).
+      if (placingRef.current) {
+        e.preventDefault()
+        if (e.button === 2) confirmPlacing()
+        else if (e.button === 0) rotatePlacing()
+        return
+      }
+      if (battleRef.current) return  // a menu/battle overlay owns input
+      if (e.button === 0) {
+        // interact — same priority ladder as the E key
+        if (dialogueRef.current) advanceDialogue()
+        else if (nearNpc) talk(nearNpc)
+        else if (fishRef.current || nearNodeRef.current || channelRef.current) toggleChannel()
+        else if (nearStationRef.current) { document.exitPointerLock?.(); openStation() }  // free the cursor for the menu
+      } else if (e.button === 2) {
+        e.preventDefault()
+        useItem(invRef.current.slots[selSlotRef.current]?.itemId)  // use/place the selected hotbar item
+      }
+    }
+    window.addEventListener('pointerdown', onDown)
+    return () => window.removeEventListener('pointerdown', onDown)
+  }, [editMode, nearNpc, advanceDialogue, talk, toggleChannel, openStation, useItem, confirmPlacing, rotatePlacing])
   // entering edit mode: start the spectator camera where the player is standing
   useEffect(() => { if (editMode) editFocusRef.current.copy(posRef.current!) }, [editMode])
   const [tool, setTool] = useState<Tool>('raise')
@@ -2463,7 +2496,7 @@ export default function Shimmer3D() {
       )}
 
       {/* Hotbar HUD — bag + 6 quick-slots + tool gauges + mana vial. Only while walking the world. */}
-      {!battle && !approach && !rewards && !editMode && !dialogue && !placing && <HotBar items={invSlots} onUse={useItem} onReorder={reorderSlots} usable={USE_HINTS}
+      {!battle && !approach && !rewards && !editMode && !dialogue && !placing && <HotBar items={invSlots} onUse={useItem} onReorder={reorderSlots} onSelect={(i) => { selSlotRef.current = i }} usable={USE_HINTS}
         tools={(void toolTick, (['forestry', 'prospecting', 'rinning'] as const).map(skill => {
           const t = equippedToolsRef.current[skill]
           const def = t ? TOOL_DEFS[t.toolId] : null

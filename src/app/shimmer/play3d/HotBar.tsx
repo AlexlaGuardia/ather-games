@@ -57,11 +57,12 @@ function ItemTile({ item }: { item: ItemStack | null }) {
   )
 }
 
-export default function HotBar({ items: propItems, onUse, onReorder, usable, tools: propTools }: { items?: (ItemStack | null)[]; onUse?: (itemId: string) => void; onReorder?: (from: number, to: number) => void; usable?: Record<string, unknown>; tools?: ToolGauge[] } = {}) {
+export default function HotBar({ items: propItems, onUse, onReorder, onSelect, usable, tools: propTools }: { items?: (ItemStack | null)[]; onUse?: (itemId: string) => void; onReorder?: (from: number, to: number) => void; onSelect?: (idx: number) => void; usable?: Record<string, unknown>; tools?: ToolGauge[] } = {}) {
   const [items, setItems] = useState<(ItemStack | null)[]>(propItems ?? PH_ITEMS)
   const itemsRef = useRef(items); itemsRef.current = items
   const onUseRef = useRef(onUse); onUseRef.current = onUse
   const onReorderRef = useRef(onReorder); onReorderRef.current = onReorder
+  const onSelectRef = useRef(onSelect); onSelectRef.current = onSelect
   const usableRef = useRef(usable); usableRef.current = usable
   const [sel, setSel] = useState(0)
   const [bagOpen, setBagOpen] = useState(false)
@@ -80,6 +81,22 @@ export default function HotBar({ items: propItems, onUse, onReorder, usable, too
     const onKey = (e: KeyboardEvent) => { const n = parseInt(e.key, 10); if (n >= 1 && n <= SLOTS) setSel(n - 1) }
     window.addEventListener('keydown', onKey); return () => window.removeEventListener('keydown', onKey)
   }, [])
+  // mouse wheel → cycle the selected hotbar slot (only while the bar is up = first-person walking).
+  // Pops the name tag so you see what you landed on without looking down at the bar.
+  useEffect(() => {
+    const onWheel = (e: WheelEvent) => {
+      setSel(s => {
+        const n = (s + (e.deltaY > 0 ? 1 : -1) + SLOTS) % SLOTS
+        const it = itemsRef.current[n]
+        setNameTag(it ? { text: pretty(it.itemId) + (it.count > 1 ? `  ×${it.count}` : ''), sub: usableRef.current && it.itemId in usableRef.current ? String((usableRef.current as Record<string, string>)[it.itemId]) : undefined } : { text: `Slot ${n + 1} · empty` })
+        return n
+      })
+    }
+    window.addEventListener('wheel', onWheel, { passive: true })
+    return () => window.removeEventListener('wheel', onWheel)
+  }, [])
+  // tell the parent which slot is live so its right-click "use/place" acts on the right item
+  useEffect(() => { onSelectRef.current?.(sel) }, [sel])
 
   // ── drag & drop (pointer-based → works on touch). Tap w/o moving = select. ──
   const press = useRef<{ idx: number; x: number; y: number; moved: boolean } | null>(null)
