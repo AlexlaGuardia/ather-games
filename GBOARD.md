@@ -275,11 +275,14 @@ the Arcade frame.
 > - **HIT:** Vault · grey void-spawn foe (`foe-void.png`).
 > - **PLAN TO HIT (next):** Vault · **rooted grey spikes/thorns** (Alex flagged these — currently still vector; render
 >   as lit crystalline shards, the natural #2 for the cabinet).
-> - **OPEN CALL — the player-mote imbalance (Alex 2026-07-21):** rendering enemies EXPOSED that the player is "just an
->   orb rolling across the screen." The mote is canon Ather-*light* (not a creature), so the fix is a **JUICE pass, not a
->   3D render** — more form / better trail / a rendered light-*wisp* that's still light. **Sequencing rule: don't roll
->   pre-rendered enemies into a cabinet whose player/hero still under-reads next to them.** → possible Magii canon check:
->   *how much rendered form can Ather-light take and stay canon light?* (park the answer here, don't invent it.)
+> - **✅ RULED — the player-mote imbalance (Magii + Alex 2026-07-21, `CANON/game/vault.md` "The mote's FORM"):** the mote
+>   is settled canon (light, not a creature) — and the flat disc renders *less* than canon (Ather-light is "light and mana
+>   threads," translucent, shimmer-touched, trailing). So the fix is a canon-CORRECTIVE **juice pass**: richer light-form
+>   (flicker/pulse core, threading wisps, stronger comet-trail, layered cyan/gold, fuel-reactive brightness). **MAY NOT**
+>   become a creature (face/eyes/limbs/species/`-nyx`) — that needs a new ruling + a title change. **Art-medium law (settles
+>   the lane):** living things (the mote, loose motes) stay **live glow/particles, never baked**; only the DEAD of-the-Dying
+>   things (void-spawn, blight-thorns) take pre-rendered 3D. Medium mirrors meaning — light is alive, grey is baked/still.
+>   **Sequencing rule stands:** do the mote juice pass before rolling more rendered enemies into Vault, so the hero holds up.
 > - **TO-AUDIT (later pass):** walk each cabinet (Rekindle · Ward · Updraft · Seedfall · Voranyx · Atherdash · Driftling ·
 >   Squall · Dewdrop · Mana'nana) and slot its hero entities/hazards into HIT/PLAN/NO-FIT. Don't guess fit blind — audit
 >   the actual entities first. Leaderboard the strongest candidates; ship a cabinet's render pass as one unit.

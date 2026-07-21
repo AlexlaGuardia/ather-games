@@ -640,47 +640,71 @@ function render(canvas: HTMLCanvasElement, w: World, ts: number, trail: number[]
   }
   ctx.globalAlpha = 1
 
-  // ── the mote (you) — light-trail arc + bright cyan/gold core ──────────────────
+  // ── the mote (you) — a wisp of living Ather-light (canon: CANON/game/vault.md "The mote's FORM"):
+  //    a ghost-drift silhouette (comet-tail + faceless wisp-tendrils + breathing aura + flickering spark),
+  //    NOT a hard disc and NEVER a face/creature. Live-rendered glow — never a baked sprite (the art-medium law:
+  //    the light is alive and moves, the grey is baked and still). SIZE/BRIGHTNESS ride fuel; greys when dry. ──
   if (w.state !== 'dead') {
-    // light-trail: fading after-images along the recent arc (offset left = motion)
-    for (let i = trail.length - 1; i > 0; i--) {
-      ctx.globalAlpha = 0.04 + 0.12 * (1 - i / trail.length)
-      ctx.fillStyle = ATHER
-      dot(ctx, RUNNER_SX - i * 3.2, trail[i] - RUNNER_H * 0.5, RUNNER_W * 0.34)
-    }
-    ctx.globalAlpha = 1
-    const cy = w.y - RUNNER_H * 0.5
-    // ground-shadow under the mote (reads height/landing)
-    const segUnder = w.segs.find(s => w.dist >= s.x0 && w.dist <= s.x1)
-    if (segUnder) {
-      ctx.globalAlpha = 0.25
-      ctx.fillStyle = '#000'
-      ctx.beginPath()
-      ctx.ellipse(RUNNER_SX, segUnder.top - 1, RUNNER_W * 0.5, 3, 0, 0, Math.PI * 2)
-      ctx.fill()
-      ctx.globalAlpha = 1
-    }
-    // the carried light — its SIZE + BRIGHTNESS ride on fuel (bright/big when fed → small/dim when
-    // starving), it greys as it runs dry, and it flickers during invuln right after a hit.
     const fuelFrac = Math.max(0, Math.min(1, w.fuel / MAX_FUEL))
     const lit = 0.6 + 0.4 * fuelFrac
     const dry = w.fuel <= 0
-    ctx.globalAlpha = w.iframes > 0 && Math.floor(w.iframes * 18) % 2 === 0 ? 0.4 : 1
-    // gold outer glow
-    ctx.fillStyle = dry ? GREY_HOT : GOLD
-    ctx.shadowBlur = 16 * lit
-    ctx.shadowColor = dry ? GREY_HOT : GOLD
-    dot(ctx, RUNNER_SX, cy, RUNNER_W * 0.55 * lit)
-    // cyan core
-    ctx.fillStyle = dry ? '#9aa6b0' : ATHER
-    ctx.shadowBlur = 12 * lit
-    ctx.shadowColor = dry ? '#8890a0' : ATHER
-    dot(ctx, RUNNER_SX, cy, RUNNER_W * 0.42 * lit)
-    // hot center
-    ctx.shadowBlur = 6
-    ctx.fillStyle = dry ? '#ccd2da' : HOT
-    dot(ctx, RUNNER_SX, cy, RUNNER_W * 0.2 * lit)
+    const flick = w.iframes > 0 && Math.floor(w.iframes * 18) % 2 === 0 ? 0.4 : 1 // invuln flicker after a hit
+    const cy = w.y - RUNNER_H * 0.5
+    const coreC = dry ? '#ccd2da' : HOT
+    const bodyC = dry ? '#9aa6b0' : ATHER
+    const auraC = dry ? GREY_HOT : GOLD
+    const pulse = 1 + 0.06 * Math.sin(t * 4.5) // the aura breathes
+
+    // comet wisp-tail — living light streaming back (left), undulating like a ghost's trail (tip gold → cyan near head)
+    for (let i = trail.length - 1; i > 0; i--) {
+      const f = 1 - i / trail.length // 1 near the head → 0 at the tip
+      const waver = Math.sin(t * 7 - i * 0.55) * i * 0.4
+      ctx.globalAlpha = flick * (0.03 + 0.15 * f) * (0.6 + 0.4 * lit)
+      ctx.fillStyle = i > trail.length * 0.5 ? auraC : bodyC
+      ctx.shadowBlur = 6 * lit; ctx.shadowColor = auraC
+      dot(ctx, RUNNER_SX - i * 3.4, trail[i] - RUNNER_H * 0.5 + waver, RUNNER_W * (0.1 + 0.34 * f) * lit)
+    }
+    ctx.shadowBlur = 0; ctx.globalAlpha = 1
+
+    // ground-shadow under the mote (reads height/landing)
+    const segUnder = w.segs.find(s => w.dist >= s.x0 && w.dist <= s.x1)
+    if (segUnder) {
+      ctx.globalAlpha = 0.25; ctx.fillStyle = '#000'
+      ctx.beginPath(); ctx.ellipse(RUNNER_SX, segUnder.top - 1, RUNNER_W * 0.5, 3, 0, 0, Math.PI * 2); ctx.fill()
+      ctx.globalAlpha = 1
+    }
+
+    // wispy bottom tendrils — the ghost's trailing wisps (FACELESS: silhouette only, no eyes — the canon guard)
+    for (let k = -1; k <= 1; k++) {
+      const tx = RUNNER_SX + k * RUNNER_W * 0.24
+      for (let s = 1; s <= 3; s++) {
+        const sway = Math.sin(t * 6 + k * 1.7 + s * 0.6) * s * 0.8
+        ctx.globalAlpha = flick * (0.16 - s * 0.035) * (0.6 + 0.4 * lit)
+        ctx.fillStyle = bodyC; ctx.shadowBlur = 5 * lit; ctx.shadowColor = auraC
+        dot(ctx, tx + sway, cy + RUNNER_H * (0.3 + s * 0.15), RUNNER_W * (0.2 - s * 0.045) * lit)
+      }
+    }
     ctx.shadowBlur = 0
+
+    // the head — layered living light: breathing aura → cyan body → flickering hot spark
+    ctx.globalAlpha = flick
+    ctx.fillStyle = auraC; ctx.shadowBlur = 18 * lit; ctx.shadowColor = auraC
+    dot(ctx, RUNNER_SX, cy, RUNNER_W * 0.58 * lit * pulse)
+    ctx.fillStyle = bodyC; ctx.shadowBlur = 12 * lit; ctx.shadowColor = bodyC
+    dot(ctx, RUNNER_SX, cy, RUNNER_W * 0.42 * lit)
+    const spark = 0.16 + 0.06 * (0.5 + 0.5 * Math.sin(t * 13)) // the living spark flickers
+    ctx.shadowBlur = 7; ctx.fillStyle = coreC
+    dot(ctx, RUNNER_SX, cy, RUNNER_W * spark * lit)
+    ctx.shadowBlur = 0
+
+    // drifting light-specks — faint embers of Ather shed off the wisp (the living shimmer)
+    for (let e = 0; e < 4; e++) {
+      const a = t * 1.3 + e * 1.9
+      const rad = RUNNER_W * (0.5 + 0.18 * Math.sin(a * 1.7))
+      ctx.globalAlpha = flick * (0.1 + 0.1 * Math.sin(a * 2.3)) * lit
+      ctx.fillStyle = e % 2 ? auraC : bodyC
+      dot(ctx, RUNNER_SX + Math.cos(a) * rad * 0.6, cy + Math.sin(a) * rad * 0.5, 1.1)
+    }
     ctx.globalAlpha = 1
   }
 
