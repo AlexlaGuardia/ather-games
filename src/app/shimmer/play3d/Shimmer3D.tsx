@@ -75,7 +75,8 @@ const SLIDE_TIME = 0.6      // slide duration before it bleeds back to the run
 const AIR_CONTROL = 0.4     // how much WASD can steer horizontal velocity while airborne (0=none,1=full)
 const FALL_OFF = 0.32       // step down more than this below the resolved floor → you've walked off a ledge → fall
 const PLAYER_R = 0.4        // body radius — keeps the first-person eye this far out of walls/objects (no clip-in)
-const CLIMB_SPEED = 4.5     // upward speed while wall-climbing (tier units/s)
+const CLIMB_SPEED = 2.5     // upward speed while wall-climbing (tier units/s) — a deliberate scramble, not a rocket
+const CLIMB_STRAFE = 1.6   // lateral speed while climbing — A/D slide you ALONG the wall face (W just climbs)
 const CLIMB_MAX_RISE = 2.5  // max VERTICAL rise per climb before the grip gives out (tiers). Caps distance,
                             // not time — refills only on solid ground, so you scale multi-tier terrain one
                             // ledge at a time but can't scramble up a single tall face forever.
@@ -694,9 +695,11 @@ function Player({ posRef, gridRef, heightsRef, zoneIdRef, editRef, onWarp, battl
 
       // ── HORIZONTAL VELOCITY — auto-run with an accel RAMP (the flow), momentum through slide + air ──
       if (climbing) {
-        // pinned to the face while scrambling up (no auto-creep over the top) — topping out is a deliberate
-        // TAP-JUMP mantle, so climbing just extends your reach up a tall wall.
-        hvel.set(0, 0, 0)
+        // input-driven on the wall: A/D strafe ALONG the face (camera-right axis), W/S just climb. Fully
+        // determined by input each frame → zero residual drift. No auto-creep over the top; topping out is a
+        // deliberate held-Space mantle, so climbing just extends your reach up a tall wall.
+        const strafe = Math.max(-1, Math.min(1, move.dot(right)))
+        hvel.copy(right).multiplyScalar(strafe * CLIMB_STRAFE)
       } else if (airborne.current) {
         // steer the preserved takeoff momentum toward input, keep the magnitude (air control)
         if (hasInput && airSpeed.current > 0.01) {
@@ -748,10 +751,14 @@ function Player({ posRef, gridRef, heightsRef, zoneIdRef, editRef, onWarp, battl
       // MANTLE target: airborne + a genuine RAISED ledge/wall TOP ahead (in move dir, else facing) that is
       // both within grab reach of your feet AND more than a step above the floor beneath you (so a plain
       // jump over FLAT ground — or a walkable 1-tier step — never counts as a mantle; that was the skip bug).
-      const dir = hasInput ? move : fwd
+      // Grab straight over the lip along the DOMINANT cardinal axis (walls are grid-aligned), so a mantle
+      // pulls you forward-perpendicular — never diagonally off to the side.
+      const gdir = hasInput ? move : fwd
+      const card = Math.abs(gdir.x) >= Math.abs(gdir.z)
+        ? { x: Math.sign(gdir.x) || 1, z: 0 } : { x: 0, z: Math.sign(gdir.z) || 1 }
       const floorTier = floorY / STEP
       const mantle = airborne.current ? (() => {
-        const cx = Math.round(p.x + dir.x * (PLAYER_R + 0.4)), cz = Math.round(p.z + dir.z * (PLAYER_R + 0.4))
+        const cx = Math.round(p.x + card.x * (PLAYER_R + 0.4)), cz = Math.round(p.z + card.z * (PLAYER_R + 0.4))
         const s = surfacesAt(ctx, cx, cz).find(su => su.y <= fromY + MANTLE_REACH && su.y > floorTier + 1)  // a real lip, in reach
         return s ? { cx, cz, y: s.y } : null
       })() : null
@@ -772,7 +779,7 @@ function Player({ posRef, gridRef, heightsRef, zoneIdRef, editRef, onWarp, battl
         // pull up + over: snap onto the lip's cell + height, kill vertical, land grounded, small forward settle.
         p.x = mantle.cx; p.z = mantle.cz; p.y = mantle.y * STEP
         vy.current = 0; airborne.current = false; climbRise.current = 0
-        hvel.copy(dir).setLength(RUN_SPEED * 0.4)
+        hvel.set(card.x, 0, card.z).setLength(RUN_SPEED * 0.4)  // small straight settle onto the ledge
       } else if (airborne.current) {
         if (wallJumping) { p.y += vy.current * dt2 }                     // just launched: up-kick, no gravity this frame
         else if (climbing) { vy.current = CLIMB_SPEED; climbRise.current += CLIMB_SPEED * dt2; p.y += vy.current * dt2 }  // scramble up the wall face (grip caps total rise)
