@@ -51,6 +51,8 @@ export async function POST(req: NextRequest) {
       end: Math.round(num(lvl.end, 5000)),
       areaId: key.split('-')[0],
       segs: lvl.segs.map((s: Record<string, unknown>) => ({ x0: num(s.x0), x1: num(s.x1), top: num(s.top) })),
+      // the high road (optional): same shape as segs, normalized the same way. Absent → no high road.
+      ledges: Array.isArray(lvl.ledges) ? lvl.ledges.map((s: Record<string, unknown>) => ({ x0: num(s.x0), x1: num(s.x1), top: num(s.top) })) : [],
       foes: Array.isArray(lvl.foes) ? lvl.foes.map((f: Record<string, unknown>) => ({ x: num(f.x), y: num(f.y), dead: false })) : [],
       spikes: Array.isArray(lvl.spikes) ? lvl.spikes.map((s: Record<string, unknown>) => ({ x: num(s.x), y: num(s.y) })) : [],
       motes: Array.isArray(lvl.motes) ? lvl.motes.map((m: Record<string, unknown>) => ({ x: num(m.x), y: num(m.y), got: false })) : [],

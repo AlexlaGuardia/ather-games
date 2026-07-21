@@ -79,5 +79,69 @@ const cfg = levelCfg(1, 4) // a mid-ladder movement (has foes/spikes, finite goa
   chk('bake is deterministic', JSON.stringify(a) === JSON.stringify(b))
 }
 
+// ── THE HIGH ROAD: authored multi-surface branching (2026-07-21) ──────────────
+// Baking from a ledged cfg captures the high road; it survives bake → load into the
+// same w.ledges the resolver already reads, so authored levels branch high/low too.
+const ledgedCfg = { ...cfg, ledges: true }
+{
+  const lvl = bakeLevel(4242, ledgedCfg, 6000)
+  chk('bake captured a high road', (lvl.ledges?.length ?? 0) > 0, JSON.stringify({ ledges: lvl.ledges?.length }))
+  chk('ledges within [.., end]', (lvl.ledges ?? []).every((s) => s.x0 < 6000 && s.x1 <= 6000))
+  chk('ledges sit above the ground track', (lvl.ledges ?? []).every((s) => s.top < 224)) // TOP_MAX; a ledge is higher (smaller y) than default ground
+  const w = makeAuthoredWorld(lvl)
+  chk('authored world loaded the high road', w.ledges.length === (lvl.ledges?.length ?? 0))
+  const r = botBeats(w)
+  chk('no streaming with a high road present', r.genXEnd === r.genX0)
+  // (a ground-blind bot may die on the high road — landing up top then walking off a gap it meant to
+  //  clear is CORRECT multi-surface behavior, not a failure. Branching is proven directly below.)
+}
+// ── DIRECT branching proof: same x, two surfaces, both reachable ──────────────
+// A flat low road the whole way + one easy-hop ledge over the middle. Never jumping →
+// stay on the low road to the finish. Hop over the ledge span → the resolver stands the
+// runner ON the authored ledge (onLedge set, feet at its top). That is the branch.
+{
+  const flat = (end: number): AuthoredLevel => ({
+    seed: 1, end,
+    segs: [{ x0: -200, x1: end + 1200, top: 212 }], // TOP_BASE ground, gap-free, extends past the goal
+    ledges: [{ x0: 900, x1: 1500, top: 176 }],       // ~36px up — a comfortable hop, long enough to stand on
+    foes: [], spikes: [], motes: [],
+  })
+  // low road: never touch jump → finish grounded on the ground track, never on a ledge
+  {
+    const w = makeAuthoredWorld(flat(2400))
+    w.state = 'playing' // start the run without any input (pressJump would buffer a hop)
+    let everHigh = false
+    for (let t = 0; t < 30 && w.state === 'playing'; t += 1 / 60) { tick(w, 1 / 60); if (w.onLedge) everHigh = true }
+    chk('low road: reaches the finish without jumping', w.state === 'won', w.state)
+    chk('low road: never stood on the high road', !everHigh)
+  }
+  // high road: hop while crossing the ledge span → the resolver lands the runner on the authored ledge
+  {
+    const w = makeAuthoredWorld(flat(2400))
+    w.state = 'playing'
+    let landedHigh = false, landedTop = 0
+    for (let t = 0; t < 30 && w.state === 'playing'; t += 1 / 60) {
+      if (w.grounded && w.dist > 780 && w.dist < 1400) pressJump(w) // hop up onto the ledge as it arrives
+      tick(w, 1 / 60)
+      if (w.onLedge) { landedHigh = true; landedTop = w.y }
+    }
+    chk('high road: the runner stood on the authored ledge', landedHigh)
+    chk('high road: feet sat at the ledge top (176)', landedHigh && Math.abs(landedTop - 176) < 1, String(landedTop))
+  }
+}
+// back-compat: a pre-high-road level (no `ledges` field) loads with an empty high road and still plays.
+{
+  const base = bakeLevel(88, cfg, 4000)
+  const legacy: AuthoredLevel = { seed: base.seed, end: base.end, segs: base.segs, foes: base.foes, spikes: base.spikes, motes: base.motes }
+  const w = makeAuthoredWorld(legacy)
+  chk('legacy level → empty high road (no crash)', w.ledges.length === 0)
+  chk('legacy level still clears', botBeats(w).won)
+}
+// bake with a high road is deterministic (same seed → identical ledges)
+{
+  const a = bakeLevel(999, ledgedCfg, 3000), b = bakeLevel(999, ledgedCfg, 3000)
+  chk('ledged bake is deterministic', JSON.stringify(a.ledges) === JSON.stringify(b.ledges))
+}
+
 console.log(`\nvault authored: ${ok} passed, ${bad} failed`)
 if (bad) process.exit(1)

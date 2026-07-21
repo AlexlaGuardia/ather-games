@@ -280,7 +280,8 @@ export interface AuthoredLevel {
   seed: number    // the seed it was baked from (for reference / re-roll)
   end: number     // finish line in world-x; cross it grounded → won
   areaId?: string // which area's look/movement it belongs to (optional; set when saved to the ladder)
-  segs: Seg[]
+  segs: Seg[]     // the LOW ROAD — the ground track (miss it → the void)
+  ledges?: Seg[]  // the HIGH ROAD — authored structure-ledges above the ground (miss → fall to the low road, or the void over a gap). Optional: pre-2026-07-21 saves have none.
   foes: Foe[]
   spikes: Spike[]
   motes: Mote[]
@@ -292,10 +293,14 @@ export function bakeLevel(seed: number, cfg: MovementCfg, end: number): Authored
   w.dist = end // push the frontier so one uncull'd pass fills the whole span
   generate(w, false)
   const clip = (x: number) => x < end
-  const segs = w.segs.filter((s) => s.x0 < end).map((s) => ({ x0: s.x0, x1: Math.min(s.x1, end), top: s.top }))
+  const clipSeg = (s: Seg) => ({ x0: s.x0, x1: Math.min(s.x1, end), top: s.top })
+  const segs = w.segs.filter((s) => s.x0 < end).map(clipSeg)
+  // the high road only exists when baked from a ledged cfg (ENDLESS_LEDGES_CFG); a clean bake yields [].
+  const ledges = w.ledges.filter((s) => s.x0 < end).map(clipSeg)
   return {
     seed, end,
     segs,
+    ledges,
     foes: w.foes.filter((f) => clip(f.x)).map((f) => ({ x: f.x, y: f.y, dead: false })),
     spikes: w.spikes.filter((s) => clip(s.x)).map((s) => ({ x: s.x, y: s.y })),
     motes: w.motes.filter((m) => clip(m.x)).map((m) => ({ x: m.x, y: m.y, got: false })),
@@ -307,6 +312,9 @@ export function bakeLevel(seed: number, cfg: MovementCfg, end: number): Authored
 export function makeAuthoredWorld(level: AuthoredLevel, cfg: MovementCfg = ENDLESS_CFG): World {
   const w = makeWorld(level.seed, { ...cfg, goalDist: level.end })
   w.segs = level.segs.map((s) => ({ ...s }))
+  // the high road: load authored ledges into the same array the resolver already reads (grounded
+  // follow-off + airborne highest-ledge landing). Old saves have no `ledges` → an empty high road.
+  w.ledges = (level.ledges ?? []).map((s) => ({ ...s }))
   w.foes = level.foes.map((f) => ({ x: f.x, y: f.y, dead: false }))
   w.spikes = level.spikes.map((s) => ({ ...s }))
   w.motes = level.motes.map((m) => ({ x: m.x, y: m.y, got: false }))
