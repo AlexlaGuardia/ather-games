@@ -33,7 +33,9 @@ export const STEP_UP = 14 // a flush height change up to this is a free step; bi
 // authored levels may stack routes ABOVE the normal frame (canon: layers of the greying you climb through);
 // the camera follows the light up into them, the player only ever seeing a screen-tall sliver. Procedural
 // (Endless/Daily) stays flat in [TOP_MIN, TOP_MAX] → its content never rises past the frame → camera stays put.
-export const WORLD_CEIL = -260 // highest y a platform/mote can be authored (≈ 1.3 screens of headroom above y=0)
+export const WORLD_CEIL = -810 // highest y a platform/mote can be authored — a 4×-screen-tall map (VH-WORLD_CEIL≈4·VH)
+// (2026-07-21, Alex: taller maps → high/low routes, hidden areas + collectible tokens. Editor-only ceiling;
+//  the game camera follows the light up unboundedly, so this just extends the authorable vertical world.)
 
 // ── jump / gravity (variable jump: low grav while rising+held, snappy fall) ────────
 export const JUMP_V0 = 580 // launch velocity (up) — a touch more pop (Alex: wider arc, 2026-07-11)

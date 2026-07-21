@@ -291,6 +291,16 @@ the Arcade frame.
 >   the "art-medium law" (living light stays live-glow, never baked) now has TENSION with Alex's "produce models" want** —
 >   the light's eventual real form (a produced/animated light-wisp asset vs live glow) is **reopened**, a Magii+Alex call,
 >   not decided here. Until then: placeholder orb.
+> - **VAULT MAP EDITOR (`/vault/dev`) — de-staled + 4× height (2026-07-21, Alex):** the editor is alive/capable (slot
+>   picker, drag platforms/stairs, place motes/foes/spikes, in-engine test-play, publish-live). **Placed foes/spikes already
+>   render as the void-spawn / blight-thorn MODELS in-game** (editor shows blockout shapes for editing clarity, real sprites
+>   in play) — so "assets are placeable" is already true; NEW asset types (vine, structure-ledge as a distinct piece) get
+>   their own tool when added. **Map height bumped to 4× screen** (`WORLD_CEIL -260→-810`; editor-only ceiling, game camera
+>   follows up unbounded) + editor zoom + screen-height rulers so a tall map is navigable. Toward hidden areas + collectible
+>   tokens. **⚠ THE REAL NEXT STEP (needs Alex's nod — touches the tuned collision):** authored maps still use SINGLE-LANE
+>   collision (`segAt` returns the first seg), so two platforms at the SAME x aren't both walkable → no true high/low
+>   BRANCHING in authored mode yet. The multi-surface collision from the endless blockout must extend to authored `segs`.
+>   Pairs with feeling the endless blockout first.
 > - **TO-AUDIT (later pass):** walk each cabinet (Rekindle · Ward · Updraft · Seedfall · Voranyx · Atherdash · Driftling ·
 >   Squall · Dewdrop · Mana'nana) and slot its hero entities/hazards into HIT/PLAN/NO-FIT. Don't guess fit blind — audit
 >   the actual entities first. Leaderboard the strongest candidates; ship a cabinet's render pass as one unit.

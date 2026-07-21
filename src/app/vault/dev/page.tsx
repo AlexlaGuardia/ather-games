@@ -86,6 +86,9 @@ export default function VaultDevPage() {
   const camXRef = useRef(0); camXRef.current = camX
   const [scale, setScale] = useState(1.4)
   const scaleRef = useRef(scale); scaleRef.current = scale
+  const [zoom, setZoom] = useState(0.5) // overall zoom — a tall (4×) map needs to zoom out to fit the viewport
+  const zoomRef = useRef(zoom); zoomRef.current = zoom
+  const fitRef = useRef<(() => void) | null>(null)
   const [testing, setTesting] = useState(false)
   const testRef = useRef(false); testRef.current = testing
   const worldRef = useRef<World | null>(null)
@@ -156,9 +159,12 @@ export default function VaultDevPage() {
   // ── size to container ─────────────────────────────────────────────────────────
   useEffect(() => {
     const el = wrapRef.current; if (!el) return
-    const measure = () => { const w = el.clientWidth; const sc = Math.max(0.5, Math.min(1.6, w / 1100)); setScale(sc); setDims({ w, h: Math.round(VSPAN * sc) }) } // ~1100 world units across; height spans WORLD_CEIL..VH
-    measure(); const ro = new ResizeObserver(measure); ro.observe(el); return () => ro.disconnect()
+    // base scale from width (~1100 world units across at 100%), times the zoom so a 4×-tall map fits the viewport
+    const fit = () => { const w = el.clientWidth; const base = Math.max(0.4, Math.min(1.6, w / 1100)); const sc = base * zoomRef.current; setScale(sc); setDims({ w, h: Math.round(VSPAN * sc) }) }
+    fitRef.current = fit
+    fit(); const ro = new ResizeObserver(fit); ro.observe(el); return () => ro.disconnect()
   }, [])
+  useEffect(() => { fitRef.current?.() }, [zoom]) // re-fit when zoom changes
 
   // ── coordinate transforms ──────────────────────────────────────────────────────
   const s2w = useCallback((px: number, py: number) => ({ x: px / scaleRef.current + camXRef.current, y: py / scaleRef.current + WORLD_CEIL }), [])
@@ -201,6 +207,12 @@ export default function VaultDevPage() {
     }
     ctx.setLineDash([])
     ctx.fillStyle = '#3a5a3a'; ctx.fillText('↑ alt-route headroom (camera follows the light up here)', 4, wy(WORLD_CEIL) + 12)
+    // screen-height rulers (one screen = VH) so the 4× vertical scale is legible while laying out height
+    for (let n = 0, gy = 0; gy >= WORLD_CEIL; n++, gy -= VH) {
+      const py = wy(gy)
+      ctx.strokeStyle = '#22314a'; ctx.setLineDash([1, 6]); ctx.beginPath(); ctx.moveTo(0, py); ctx.lineTo(W, py); ctx.stroke(); ctx.setLineDash([])
+      ctx.fillStyle = '#41618f'; ctx.fillText(n === 0 ? 'ground · screen 1' : `${n} screen${n > 1 ? 's' : ''} up`, W - 96, py + 11)
+    }
     // death line
     ctx.strokeStyle = '#3a1d24'; ctx.setLineDash([4, 4]); ctx.beginPath(); ctx.moveTo(0, wy(VH)); ctx.lineTo(W, wy(VH)); ctx.stroke(); ctx.setLineDash([])
     // platforms — normal-band segs fill to the death floor (land); segs above the frame (top < TOP_MIN) are
@@ -477,7 +489,12 @@ export default function VaultDevPage() {
               <input type="range" min={1200} max={20000} step={100} value={level.end} onChange={(e) => setEnd(Number(e.target.value))} className="flex-1" />
               <span className="w-12 tabular-nums text-right">{level.end}</span>
             </label>
-            <div className="text-[11px] text-slate-500">shift-drag or middle-drag to pan · {TOOLS.find((t) => t.id === tool)?.hint}</div>
+            <label className="flex items-center gap-2 text-xs text-slate-400">
+              <span className="w-14">zoom</span>
+              <input type="range" min={0.3} max={1.4} step={0.05} value={zoom} onChange={(e) => setZoom(Number(e.target.value))} className="flex-1" />
+              <span className="w-12 tabular-nums text-right">{Math.round(zoom * 100)}%</span>
+            </label>
+            <div className="text-[11px] text-slate-500">shift-drag or middle-drag to pan · zoom out to see the full 4×-tall map · {TOOLS.find((t) => t.id === tool)?.hint}</div>
           </div>
         )}
 
