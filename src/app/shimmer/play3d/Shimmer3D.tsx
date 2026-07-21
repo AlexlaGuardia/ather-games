@@ -9,7 +9,7 @@ import { Html } from '@react-three/drei'
 import { useRef, useEffect, useLayoutEffect, useMemo, useState, useCallback, memo } from 'react'
 import * as THREE from 'three'
 import { walkable } from '../engine/player'
-import { resolveStand, canStandAt, EMPTY_SEGS, type CollisionCtx } from '../engine/segs-collision'
+import { resolveStand, canStandAt, surfacesAt, EMPTY_SEGS, type CollisionCtx } from '../engine/segs-collision'
 import { ZONES, getZone, checkWarp, type Zone, type Warp } from '../world/zones'
 import { getHeightGrid } from '../world/heightmaps'
 import { rollEncounter, type WildEncounter } from '../engine/encounters'
@@ -71,6 +71,7 @@ const SLIDE_MIN_SPEED = 3.8 // crouch below this speed = crouch-walk; at/above =
 const SLIDE_TIME = 0.6      // slide duration before it bleeds back to the run
 const AIR_CONTROL = 0.4     // how much WASD can steer horizontal velocity while airborne (0=none,1=full)
 const FALL_OFF = 0.32       // step down more than this below the resolved floor → you've walked off a ledge → fall
+const PLAYER_R = 0.4        // body radius — keeps the first-person eye this far out of walls/objects (no clip-in)
 const DIR_YAW: Record<string, number> = { up: 0, down: Math.PI, left: Math.PI / 2, right: -Math.PI / 2 }
 
 type Cell = [number, number]
@@ -599,6 +600,15 @@ function Player({ posRef, gridRef, heightsRef, zoneIdRef, editRef, onWarp, battl
     }
     const canStep = (cx: number, cz: number) =>
       editRef.current ? true : (canStandAt(ctx, cx, cz, fromY) && !blockedByObject(cx, cz))  // roam freely while editing
+    // A SOLID BLOCKER (wall or object) for the body-radius buffer — vs a mere ledge/gap, which is a
+    // void cell we must NOT buffer (you can still walk off drops). A wall = a cell that HAS surfaces
+    // but none you can step onto from here; a void has no surfaces at all.
+    const isBlocker = (cx: number, cz: number) => {
+      if (editRef.current) return false
+      if (blockedByObject(cx, cz)) return true
+      const surfs = surfacesAt(ctx, cx, cz)
+      return surfs.length > 0 && !surfs.some((s) => s.y <= fromY + 1)
+    }
 
     // Edit mode → WASD drives the spectator camera. Battle / dialogue → walker is frozen behind the
     // overlay. Either way, skip player movement / warps / encounters / NPC proximity.
@@ -661,12 +671,17 @@ function Player({ posRef, gridRef, heightsRef, zoneIdRef, editRef, onWarp, battl
       }
       if (hvel.lengthSq() > 1e-4) yaw.current = Math.atan2(hvel.x, hvel.z)  // face travel dir (avatar, 3rd-person)
 
-      // ── apply horizontal with axis-separated collision (blocked axis kills that component) ──
+      // ── apply horizontal with axis-separated collision (blocked axis kills that component). Each axis
+      //    also keeps a PLAYER_R buffer against walls/objects (the cell one radius ahead in the move
+      //    direction), so the first-person eye never enters a solid. Ledges aren't buffered (isBlocker
+      //    ignores void), so you can still step off a drop. ──
       if (hvel.lengthSq() > 1e-6) {
         const nx = p.x + hvel.x * dt2
-        if (canStep(Math.round(nx), Math.round(p.z))) p.x = nx; else hvel.x = 0
+        const aheadX = Math.round(nx + Math.sign(hvel.x) * PLAYER_R)
+        if (canStep(Math.round(nx), Math.round(p.z)) && !isBlocker(aheadX, Math.round(p.z))) p.x = nx; else hvel.x = 0
         const nz = p.z + hvel.z * dt2
-        if (canStep(Math.round(p.x), Math.round(nz))) p.z = nz; else hvel.z = 0
+        const aheadZ = Math.round(nz + Math.sign(hvel.z) * PLAYER_R)
+        if (canStep(Math.round(p.x), Math.round(nz)) && !isBlocker(Math.round(p.x), aheadZ)) p.z = nz; else hvel.z = 0
       }
 
       // ── VERTICAL: gravity + jump + smooth ground-follow ──
