@@ -2499,6 +2499,34 @@ export default function Shimmer3D() {
         }}>Done editing</button>
       )}
 
+      {/* First-person reticle — the aim point for left-click interact / right-click use. Lights up and
+          names the action when an interactable sits under it (proximity-driven, reusing the near* state
+          that already drives the bottom prompts). Desktop only; touch drives interaction via the A/B pad. */}
+      {!isTouch && !editMode && !battle && !approach && !rewards && !dialogue && !openMenu && !placing && (() => {
+        const t = fish ? { c: fish.bite ? '#ff6a5a' : '#5aa9e6', verb: fish.bite ? 'Strike!' : 'Fishing' }
+          : channel ? { c: '#5aa9e6', verb: 'Gathering' }
+          : nearNpc ? { c: '#e8c86a', verb: `Talk to ${nearNpc.name}` }
+          : nearNode ? { c: '#7fd9a0', verb: 'Harvest' }
+          : nearStation ? { c: STATIONS[nearStation.itemId]?.accent ?? '#7fe3c8', verb: STATIONS[nearStation.itemId]?.verb ?? 'Use' }
+          : null
+        const on = !!t, c = t?.c ?? '#dffaf0'
+        return (
+          <div style={{ position: 'fixed', left: '50%', top: '50%', transform: 'translate(-50%,-50%)', zIndex: 30, pointerEvents: 'none' }}>
+            <div style={{ position: 'relative', width: on ? 26 : 13, height: on ? 26 : 13, transition: 'width 0.12s ease-out, height 0.12s ease-out' }}>
+              <div style={{ position: 'absolute', inset: 0, borderRadius: '50%', border: `2px solid ${c}`, opacity: on ? 0.95 : 0.32, boxShadow: on ? `0 0 9px ${c}88` : 'none', transition: 'opacity 0.12s' }} />
+              <div style={{ position: 'absolute', left: '50%', top: '50%', width: 3, height: 3, borderRadius: '50%', background: c, opacity: on ? 1 : 0.55, transform: 'translate(-50%,-50%)' }} />
+            </div>
+            {on && t && (
+              <div style={{ position: 'absolute', left: '50%', top: 'calc(100% + 9px)', transform: 'translateX(-50%)', whiteSpace: 'nowrap',
+                background: 'rgba(11,21,19,0.9)', border: `1px solid ${c}66`, borderRadius: 7, padding: '3px 10px',
+                font: '800 11px ui-monospace, monospace', color: '#eafff6' }}>
+                {t.verb} <span style={{ opacity: 0.5 }}>· click</span>
+              </div>
+            )}
+          </div>
+        )
+      })()}
+
       {/* Hotbar HUD — bag + 6 quick-slots + tool gauges + mana vial. Only while walking the world. */}
       {!battle && !approach && !rewards && !editMode && !dialogue && !placing && <HotBar items={invSlots} onUse={useItem} onReorder={reorderSlots} onSelect={(i) => { selSlotRef.current = i }} usable={USE_HINTS}
         tools={(void toolTick, (['forestry', 'prospecting', 'rinning'] as const).map(skill => {
