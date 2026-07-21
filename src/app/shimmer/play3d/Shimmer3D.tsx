@@ -685,8 +685,12 @@ function Player({ posRef, gridRef, heightsRef, zoneIdRef, editRef, onWarp, battl
       // let go of the wall still kicks off it (wallNormal stays the last contact's away-dir).
       if (onWall.current) wallStick.current = WALL_COYOTE
       else if (wallStick.current > 0) wallStick.current -= dt
-      // WALL-CLIMB: airborne + pushing into a wall + grip left → scramble up the face, mantle the top.
-      const climbing = airborne.current && onWall.current && hasInput && climbRise.current < CLIMB_MAX_RISE
+      // WALL-CLIMB: airborne + pushing into a wall + HOLDING the climb button (Space) + grip left → scramble
+      // up the face. Deliberate: release Space and you stop ascending (cling to gravity), so a wall never
+      // auto-climbs just because you drifted into it. `climbHeld` is Space held (jump edge already spent on
+      // takeoff), and onWall already requires pushing forward into the face — so you only climb forward.
+      const climbHeld = !!k[' '] || jumpRef.current
+      const climbing = airborne.current && onWall.current && climbHeld && climbRise.current < CLIMB_MAX_RISE
 
       // ── HORIZONTAL VELOCITY — auto-run with an accel RAMP (the flow), momentum through slide + air ──
       if (climbing) {
@@ -750,10 +754,12 @@ function Player({ posRef, gridRef, heightsRef, zoneIdRef, editRef, onWarp, battl
         const s = surfacesAt(ctx, cx, cz).find(su => su.y >= fromY - 0.4 && su.y <= fromY + MANTLE_REACH)  // a grabbable lip
         return s ? { cx, cz, y: s.y } : null
       })() : null
-      const mantling = jumpEdge && !!mantle
-      // WALL-JUMP: airborne + Space edge + a wall in coyote, but ONLY when there's no grabbable lip (mantle wins
-      // when a top is in reach; otherwise kick UP + AWAY along wallNormal). Consumes coyote + arms the re-grip lock.
-      const wallJumping = airborne.current && jumpEdge && !mantling && wallStick.current > 0
+      // MANTLE fires while the climb button is HELD and a lip is in reach — so holding Space carries you up a
+      // wall and pulls you over the top, and a low ledge is grabbed by holding Space as you reach its lip.
+      const mantling = climbHeld && !!mantle
+      // WALL-JUMP: airborne + Space edge + a wall in coyote, but ONLY when you're neither mantling nor climbing
+      // (so pressing Space INTO a wall climbs; a tap while NOT pushing in — within coyote — kicks off instead).
+      const wallJumping = airborne.current && jumpEdge && !mantling && !climbing && wallStick.current > 0
       if (wallJumping) {
         vy.current = WALLJUMP_UP
         hvel.copy(wallNormal).multiplyScalar(WALLJUMP_PUSH)
