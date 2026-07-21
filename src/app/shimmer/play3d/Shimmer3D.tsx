@@ -527,7 +527,7 @@ function npcInWorld(n: NPC3D, defeated: Record<string, boolean>, flags: Record<s
   return true
 }
 
-function Player({ posRef, gridRef, heightsRef, zoneIdRef, editRef, onWarp, battleRef, partyLevelRef, onEncounter, joyRef, talkingRef, hasPartyRef, onNearChange, defeatedRef, flagsRef, harvestNodesRef, onNearNode, stationsRef, onNearStation, viewRef, eyeRef, jumpRef, slideRef }: {
+function Player({ posRef, gridRef, heightsRef, zoneIdRef, editRef, onWarp, battleRef, partyLevelRef, onEncounter, joyRef, talkingRef, hasPartyRef, onNearChange, defeatedRef, flagsRef, harvestNodesRef, onNearNode, stationsRef, onNearStation, eyeRef, jumpRef, slideRef }: {
   posRef: React.RefObject<THREE.Vector3>; gridRef: React.RefObject<number[][]>
   heightsRef: React.RefObject<number[][]>; zoneIdRef: React.RefObject<string>
   editRef: React.RefObject<boolean>; onWarp: (w: Warp) => void
@@ -540,7 +540,7 @@ function Player({ posRef, gridRef, heightsRef, zoneIdRef, editRef, onWarp, battl
   flagsRef: React.RefObject<Record<string, boolean>>
   harvestNodesRef: React.RefObject<ResourceNode[]>; onNearNode: (n: ResourceNode | null) => void
   stationsRef: React.RefObject<PlacedStruct[]>; onNearStation: (s: PlacedStruct | null) => void
-  viewRef: React.RefObject<'first' | 'third'>; eyeRef: React.RefObject<number>
+  eyeRef: React.RefObject<number>
   jumpRef: React.RefObject<boolean>; slideRef: React.RefObject<boolean>
 }) {
   const group = useRef<THREE.Group>(null)
@@ -669,7 +669,7 @@ function Player({ posRef, gridRef, heightsRef, zoneIdRef, editRef, onWarp, battl
         hvel.x += ((hasInput ? move.x * targetSpeed : 0) - hvel.x) * rate
         hvel.z += ((hasInput ? move.z * targetSpeed : 0) - hvel.z) * rate
       }
-      if (hvel.lengthSq() > 1e-4) yaw.current = Math.atan2(hvel.x, hvel.z)  // face travel dir (avatar, 3rd-person)
+      if (hvel.lengthSq() > 1e-4) yaw.current = Math.atan2(hvel.x, hvel.z)  // face travel dir (avatar, seen in edit view)
 
       // ── apply horizontal with axis-separated collision (blocked axis kills that component). Each axis
       //    also keeps a PLAYER_R buffer against walls/objects (the cell one radius ahead in the move
@@ -764,7 +764,7 @@ function Player({ posRef, gridRef, heightsRef, zoneIdRef, editRef, onWarp, battl
     const g = group.current!
     // First-person: camera lives at the eye, so the avatar would clip the lens — hide it (still shown
     // in edit/spectator and third-person).
-    g.visible = !(viewRef.current === 'first' && !editRef.current)
+    g.visible = editRef.current  // avatar shows only in edit's spectator view; hidden in first-person play
     g.position.set(p.x, p.y + 0.7, p.z)
     g.rotation.y = lerpAngle(g.rotation.y, yaw.current, 0.3)
   })
@@ -864,10 +864,10 @@ function HarvestPop({ pop }: { pop: { x: number; y: number; z: number; glyph: st
   )
 }
 
-function CameraRig({ posRef, editFocusRef, yawRef, editRef, viewRef, eyeRef }: {
+function CameraRig({ posRef, editFocusRef, yawRef, editRef, eyeRef }: {
   posRef: React.RefObject<THREE.Vector3>; editFocusRef: React.RefObject<THREE.Vector3>
   yawRef: React.RefObject<number>; editRef: React.RefObject<boolean>
-  viewRef: React.RefObject<'first' | 'third'>; eyeRef: React.RefObject<number>
+  eyeRef: React.RefObject<number>
 }) {
   const yaw = yawRef
   const pitch = useRef(0.6)          // orbit polar angle (third-person / spectator)
@@ -886,7 +886,7 @@ function CameraRig({ posRef, editFocusRef, yawRef, editRef, viewRef, eyeRef }: {
       if (isLocked()) return // already captured — clicks are for future interact, not re-locking
       // Mouse only: pointer-lock is a desktop concept. Touch/pen fall through to drag-look below so
       // phones keep their finger-drag look (and the joystick handles movement).
-      if (e.pointerType === 'mouse' && !editRef.current && viewRef.current === 'first' && e.target instanceof HTMLCanvasElement) {
+      if (e.pointerType === 'mouse' && !editRef.current && e.target instanceof HTMLCanvasElement) {
         void (e.target as HTMLCanvasElement).requestPointerLock?.()
         return
       }
@@ -900,7 +900,7 @@ function CameraRig({ posRef, editFocusRef, yawRef, editRef, viewRef, eyeRef }: {
     const mv = (e: PointerEvent) => {
       if (isLocked()) {
         // captured free-look: raw mouse deltas drive yaw + look elevation directly.
-        if (editRef.current || viewRef.current !== 'first') { document.exitPointerLock?.(); return }
+        if (editRef.current) { document.exitPointerLock?.(); return }
         yaw.current -= e.movementX * 0.0022
         lookPitch.current = Math.max(-1.25, Math.min(1.25, lookPitch.current - e.movementY * 0.0022))
         return
@@ -943,7 +943,7 @@ function CameraRig({ posRef, editFocusRef, yawRef, editRef, viewRef, eyeRef }: {
       if (k['q']) target.y -= sp
     }
     const cam = state.camera as THREE.PerspectiveCamera
-    const fps = !editing && viewRef.current === 'first'
+    const fps = !editing  // play is always first-person; edit uses the spectator orbit cam
     // Wider fov in FPS for the Supra feel; only touch the projection matrix on an actual change.
     const wantFov = fps ? FPS_FOV : ORBIT_FOV
     if (cam.fov !== wantFov) { cam.fov = wantFov; cam.updateProjectionMatrix() }
@@ -980,7 +980,7 @@ const Scene = memo(function Scene(props: {
   posRef: React.RefObject<THREE.Vector3>; heightsRef: React.RefObject<number[][]>; zoneIdRef: React.RefObject<string>
   editFocusRef: React.RefObject<THREE.Vector3>
   onWarp: (w: Warp) => void; yawRef: React.RefObject<number>; editRef: React.RefObject<boolean>
-  viewRef: React.RefObject<'first' | 'third'>; eyeRef: React.RefObject<number>
+  eyeRef: React.RefObject<number>
   jumpRef: React.RefObject<boolean>; slideRef: React.RefObject<boolean>
   paint: (c: number, r: number, shift: boolean) => void; editing: boolean
   battleRef: React.RefObject<boolean>; partyLevelRef: React.RefObject<number>
@@ -1024,11 +1024,11 @@ const Scene = memo(function Scene(props: {
       <NodeMarkers nodes={props.nodes} heights={props.heights} editing={props.editing} channel={props.channel} />
       <StructureMarkers structures={structuresInZone} heights={props.heights} />
       <PlacementGhost placing={props.placing} posRef={props.posRef} heights={props.heights} gridRef={props.gridRef} placeTargetRef={props.placeTargetRef} structuresRef={props.structuresRef} zoneIdRef={props.zoneIdRef} />
-      <Player posRef={props.posRef} gridRef={props.gridRef} heightsRef={props.heightsRef} zoneIdRef={props.zoneIdRef} editRef={props.editRef} onWarp={props.onWarp} battleRef={props.battleRef} partyLevelRef={props.partyLevelRef} onEncounter={props.onEncounter} joyRef={props.joyRef} talkingRef={props.talkingRef} hasPartyRef={props.hasPartyRef} onNearChange={props.onNearChange} defeatedRef={props.defeatedRef} flagsRef={props.flagsRef} harvestNodesRef={props.harvestNodesRef} onNearNode={props.onNearNode} stationsRef={props.structuresRef} onNearStation={props.onNearStation} viewRef={props.viewRef} eyeRef={props.eyeRef} jumpRef={props.jumpRef} slideRef={props.slideRef} />
+      <Player posRef={props.posRef} gridRef={props.gridRef} heightsRef={props.heightsRef} zoneIdRef={props.zoneIdRef} editRef={props.editRef} onWarp={props.onWarp} battleRef={props.battleRef} partyLevelRef={props.partyLevelRef} onEncounter={props.onEncounter} joyRef={props.joyRef} talkingRef={props.talkingRef} hasPartyRef={props.hasPartyRef} onNearChange={props.onNearChange} defeatedRef={props.defeatedRef} flagsRef={props.flagsRef} harvestNodesRef={props.harvestNodesRef} onNearNode={props.onNearNode} stationsRef={props.structuresRef} onNearStation={props.onNearStation} eyeRef={props.eyeRef} jumpRef={props.jumpRef} slideRef={props.slideRef} />
       {props.companionColor && !props.editing && <Follower posRef={props.posRef} heightsRef={props.heightsRef} color={props.companionColor} />}
       {props.fishing && <FishTell posRef={props.posRef} heightsRef={props.heightsRef} bite={props.fishBite} />}
       <HarvestPop pop={props.harvestPop} />
-      <CameraRig posRef={props.posRef} editFocusRef={props.editFocusRef} yawRef={props.yawRef} editRef={props.editRef} viewRef={props.viewRef} eyeRef={props.eyeRef} />
+      <CameraRig posRef={props.posRef} editFocusRef={props.editFocusRef} yawRef={props.yawRef} editRef={props.editRef} eyeRef={props.eyeRef} />
     </>
   )
 })
@@ -1166,13 +1166,6 @@ export default function Shimmer3D() {
     posRef.current = new THREE.Vector3(ps.tileX, 0, ps.tileY)
   }
   const camYaw = useRef(0)
-  // Play-camera perspective: 'first' = FPS eye-cam (default, the direction we're taking play3d),
-  // 'third' = the classic orbit follow-cam (kept for comparison + a wider situational view).
-  // Edit mode always uses the spectator fly-cam regardless. viewRef drives the render loop; `view`
-  // state only exists to relabel the toggle button + hint.
-  const viewRef = useRef<'first' | 'third'>('first')
-  const [view, setView] = useState<'first' | 'third'>('first')
-  viewRef.current = view
   // Live eye height — Player writes it (dips mid-slide), CameraRig reads it for the FPS eye position.
   const eyeRef = useRef(EYE_H)
   // Touch triggers for jump/slide (mobile). jumpRef = edge (button sets true, Player consumes+clears);
@@ -2097,7 +2090,7 @@ export default function Shimmer3D() {
           zone={zone} gridRef={gridRef} heights={heightsRef.current} version={version} dims={dims}
           posRef={posRef as React.RefObject<THREE.Vector3>} heightsRef={heightsRef} zoneIdRef={zoneIdRef}
           editFocusRef={editFocusRef}
-          onWarp={onWarp} yawRef={camYaw} editRef={editRef} viewRef={viewRef} eyeRef={eyeRef} jumpRef={jumpRef} slideRef={slideRef} paint={paint} editing={editMode}
+          onWarp={onWarp} yawRef={camYaw} editRef={editRef} eyeRef={eyeRef} jumpRef={jumpRef} slideRef={slideRef} paint={paint} editing={editMode}
           battleRef={battleRef} partyLevelRef={partyLevelRef} onEncounter={onEncounter} joyRef={joyRef}
           talkingRef={talkingRef} hasPartyRef={hasPartyRef} onNearChange={setNearNpc}
           harvestNodesRef={runtimeNodesRef} onNearNode={setNearNode} channel={channel}
@@ -2116,25 +2109,13 @@ export default function Shimmer3D() {
       }}>
         Shimmer 3D — {zone.name}{editMode ? '  ·  EDIT' : ''}<br />
         <span style={{ opacity: 0.8 }}>
-          {editMode ? 'left-drag paint · WASD fly · Q/E down·up · right-drag look · scroll zoom' : `WASD run · Space jump · Shift slide/crouch ·${view === 'first' ? 'mouse look · V for 3rd-person' : 'drag orbit · V for 1st-person'} · ${hasStarter ? 'mist = wild spirits' : 'meet Gregory first'}${isOwner ? ' · B to edit' : ''}`}
+          {editMode ? 'left-drag paint · WASD fly · Q/E down·up · right-drag look · scroll zoom' : `WASD run · Space jump · Shift slide/crouch · mouse look · ${hasStarter ? 'mist = wild spirits' : 'meet Gregory first'}${isOwner ? ' · B to edit' : ''}`}
         </span>
         {!editMode && <><br /><span style={{ color: '#ffe08a' }}>✦ {wallet.marks} marks</span></>}
       </div>
 
-      {!editMode && (
-        <button
-          onClick={() => setView((v) => (v === 'first' ? 'third' : 'first'))}
-          aria-label={view === 'first' ? 'switch to third-person view' : 'switch to first-person view'}
-          style={{
-            position: 'fixed', top: 12, right: 12, zIndex: 36, padding: '7px 12px', borderRadius: 8,
-            border: '2px solid #7fe3c8', background: 'rgba(12,16,26,0.9)', color: '#eafff6',
-            font: '800 12px ui-monospace, monospace', cursor: 'pointer', touchAction: 'none',
-          }}
-        >{view === 'first' ? '◉ 1st' : '⊙ 3rd'}</button>
-      )}
-
-      {/* free-look nudge: only when first-person play AND the pointer isn't captured yet */}
-      {!editMode && view === 'first' && !pointerLocked && !isTouch && !dialogue && !battle && (
+      {/* free-look nudge: first-person play, before the pointer is captured */}
+      {!editMode && !pointerLocked && !isTouch && !dialogue && !battle && (
         <div style={{
           position: 'fixed', left: '50%', bottom: 108, transform: 'translateX(-50%)', zIndex: 34,
           padding: '6px 13px', borderRadius: 999, background: 'rgba(16,14,32,0.8)', border: '1px solid #7fe3c855',
@@ -2451,7 +2432,7 @@ export default function Shimmer3D() {
       )}
 
       {/* B hotkey (keyboard) — owner only, and not while a battle overlay is up */}
-      <KeyToggle onB={() => { if (isOwner && !battleRef.current) setEditMode((e) => !e) }} onV={() => { if (!editMode) setView((v) => (v === 'first' ? 'third' : 'first')) }} />
+      <KeyToggle onB={() => { if (isOwner && !battleRef.current) setEditMode((e) => !e) }} />
 
       {/* Combat, mounted over the 3D world. ALL fights — wild and the scripted liberation holds
           (thistle/sorrel/brack) — run the real-time Keeper's Arena. The collar breaks on the win
@@ -2590,15 +2571,11 @@ function BattleRewards({ gold, rows, onClose }: {
 // Tap-to-transfer slot grid — used by the Chest menu for both the chest's storage and the
 // player's satchel. No drag needed (mobile-first): tap a filled slot to move that stack.
 
-function KeyToggle({ onB, onV }: { onB: () => void; onV?: () => void }) {
+function KeyToggle({ onB }: { onB: () => void }) {
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      const k = e.key.toLowerCase()
-      if (k === 'b') onB()
-      else if (k === 'v') onV?.()
-    }
+    const onKey = (e: KeyboardEvent) => { if (e.key.toLowerCase() === 'b') onB() }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [onB, onV])
+  }, [onB])
   return null
 }
