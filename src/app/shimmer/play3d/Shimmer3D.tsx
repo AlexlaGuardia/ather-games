@@ -9,6 +9,7 @@ import { Html } from '@react-three/drei'
 import { useRef, useEffect, useLayoutEffect, useMemo, useState, useCallback, memo } from 'react'
 import * as THREE from 'three'
 import { walkable } from '../engine/player'
+import { resolveStand, canStandAt, EMPTY_SEGS, type CollisionCtx } from '../engine/segs-collision'
 import { ZONES, getZone, checkWarp, type Zone, type Warp } from '../world/zones'
 import { getHeightGrid } from '../world/heightmaps'
 import { rollEncounter, type WildEncounter } from '../engine/encounters'
@@ -551,13 +552,15 @@ function Player({ posRef, gridRef, heightsRef, zoneIdRef, editRef, onWarp, battl
     const grid = gridRef.current
     const heights = heightsRef.current
     const p = posRef.current
-    const curH = heights[Math.round(p.z)]?.[Math.round(p.x)] ?? 0
-    const canStand = (cx: number, cz: number) => {
-      if (cz < 0 || cz >= grid.length || cx < 0 || cx >= grid[0].length) return false
-      if (editRef.current) return true // roam freely while editing (so you can paint anywhere)
-      if (grid[cz][cx] === VOID) return false
-      return walkable(grid, cx, cz) && (heights[cz]?.[cx] ?? 0) - curH <= 1
-    }
+    // Multi-surface collision via the hub's segs engine. fromY = the walker's CURRENT elevation
+    // (tier units) so a high road walks OVER a low road and climbing puts you onto it. EMPTY_SEGS
+    // reproduces today's flat-grid behavior EXACTLY (200/200 parity) — the world lane drops its
+    // authored segs in here via buildSegLayer(save-structure) once that data path lands, and nothing
+    // else in this loop changes.
+    const ctx: CollisionCtx = { grid, heights, segs: EMPTY_SEGS }
+    const fromY = p.y / STEP
+    const canStep = (cx: number, cz: number) =>
+      editRef.current ? true : canStandAt(ctx, cx, cz, fromY)  // roam freely while editing
 
     // Edit mode → WASD drives the spectator camera. Battle / dialogue → walker is frozen behind the
     // overlay. Either way, skip player movement / warps / encounters / NPC proximity.
@@ -577,13 +580,16 @@ function Player({ posRef, gridRef, heightsRef, zoneIdRef, editRef, onWarp, battl
         move.normalize()
         const dstep = Math.min(dt, 0.05) * 5
         const nx = p.x + move.x * dstep
-        if (canStand(Math.round(nx), Math.round(p.z))) p.x = nx
+        if (canStep(Math.round(nx), Math.round(p.z))) p.x = nx
         const nz = p.z + move.z * dstep
-        if (canStand(Math.round(p.x), Math.round(nz))) p.z = nz
+        if (canStep(Math.round(p.x), Math.round(nz))) p.z = nz
         yaw.current = Math.atan2(move.x, move.z)
       }
 
-      const standTop = (heights[Math.round(p.z)]?.[Math.round(p.x)] ?? 0) * STEP
+      // Ride onto the surface the engine resolves at the new cell (ground OR the seg you're on),
+      // not just the tile's ground height — this is what carries you along a high road.
+      const surf = resolveStand(ctx, Math.round(p.x), Math.round(p.z), fromY)
+      const standTop = (surf ? surf.y : (heights[Math.round(p.z)]?.[Math.round(p.x)] ?? 0)) * STEP
       p.y += (standTop - p.y) * 0.25
 
       const tx = Math.round(p.x), tz = Math.round(p.z)
