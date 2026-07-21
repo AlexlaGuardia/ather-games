@@ -84,6 +84,7 @@ export interface MovementCfg {
   spikes: boolean    // rooted grey corruption (leap-only)
   hazMul: number     // hazard-DENSITY scalar (1 = endless density) — low = a gentle teaching movement
   runway: number     // flat hazard-free lead-in
+  ledges?: boolean   // BLOCKOUT (2026-07-21): overlay a high-road of broken structure-ledges (the high/low pathing)
 }
 
 // endless / daily = the crossing without end (original single-ramp feel preserved)
@@ -91,6 +92,8 @@ export const ENDLESS_CFG: MovementCfg = {
   id: 'endless', name: 'The Crossing', blurb: 'the crossing without end',
   goalDist: 0, diffBase: 0, diffSpan: 1, gaps: true, foes: true, spikes: true, hazMul: 1, runway: RUNWAY,
 }
+// Endless-mode play with the high-road blockout on (Daily still uses ENDLESS_CFG so its leaderboard is untouched)
+export const ENDLESS_LEDGES_CFG: MovementCfg = { ...ENDLESS_CFG, ledges: true }
 
 // ── AREAS × LEVELS (the descent as a level ladder) ──────────────────────────────────
 // An AREA is a *look* + a hazard set + a difficulty BAND (canon: one named stretch of the greying, the 6
@@ -237,6 +240,11 @@ export interface World {
   foes: Foe[]
   spikes: Spike[]
   motes: Mote[]
+  // high-road blockout: broken structure-ledges overlaid above the ground track (own RNG → ground stays deterministic)
+  ledges: Seg[]
+  ledgeGenX: number
+  rngLedge: Rng
+  onLedge: Seg | null // the ledge the runner is currently standing on (null = on the ground track or airborne)
   genX: number // world-x generated up to
   lastTop: number // top of the last generated segment (gen continuity)
   authored?: boolean // true = hand-built level (fixed data, no procedural streaming)
@@ -252,6 +260,7 @@ export function makeWorld(seed: number, cfg: MovementCfg = ENDLESS_CFG): World {
     hearts: MAX_HEARTS, fuel: MAX_FUEL, grayTic: 0, grayCount: 0, iframes: 0,
     score: 0, motesGot: 0, stompScore: 0, camY: 0,
     segs: [], foes: [], spikes: [], motes: [],
+    ledges: [], ledgeGenX: cfg.runway, rngLedge: mulberry32((seed ^ 0x1ed6e) >>> 0), onLedge: null,
     genX: 0, lastTop: TOP_BASE, events: [],
   }
   // the nursery: a flat hazard-free runway so the player gets going (Seedfall/Driftling lesson)
@@ -382,6 +391,7 @@ export function tick(w: World, dt: number): void {
     const air = !w.grounded && w.coyote <= 0 // not grounded and not in coyote → spending an air-jump
     w.vy = air ? -AIR_JUMP_V0 : -JUMP_V0
     w.grounded = false
+    w.onLedge = null // leaving whatever surface (ground or ledge) we launched from
     w.jumping = true
     w.coyote = 0
     w.buffer = 0
@@ -402,7 +412,12 @@ export function tick(w: World, dt: number): void {
   const segHere = segAt(w, w.dist)
   const segPrev = segAt(w, prevDist)
 
-  if (w.grounded) {
+  if (w.grounded && w.onLedge) {
+    // HIGH ROAD: standing on a structure-ledge — follow it flat until we run off its end, then fall
+    // toward whatever's below (the ground, or the void if it's over a gap — that's the high-road risk).
+    if (w.dist >= w.onLedge.x0 && w.dist <= w.onLedge.x1) { w.y = w.onLedge.top }
+    else { w.onLedge = null; w.grounded = false; w.coyote = COYOTE }
+  } else if (w.grounded) {
     if (segHere) {
       // follow the ground; a small up-step is free, a drop means we walk off and fall
       if (segHere.top <= w.y + STEP_UP) { w.y = segHere.top }
@@ -410,23 +425,36 @@ export function tick(w: World, dt: number): void {
     } else {
       w.grounded = false; w.coyote = COYOTE // ran out over a gap
     }
-  } else if (w.vy >= 0 && segHere && prevY <= segHere.top + FACE_TOL && w.y >= segHere.top) {
-    // SWEPT LANDING: descending, and the feet crossed this segment's top this frame → land on it. Robust
-    // to ANY fall speed — an arc over a gap that comes down onto the far ledge no longer tunnels through
-    // (this was the old "ignores the platform and falls through" bug).
-    w.y = segHere.top
-    w.vy = 0
-    w.grounded = true
-    w.jumping = false
-    if (w.combo > 0) w.combo = 0 // a touchdown ends the bounce-chain
-    w.airJumps = 0 // landing clears any banked air-jump (the double-jump only carries while aloft)
-    w.events.push({ type: 'land' })
-  } else if (segHere && segHere !== segPrev) {
-    // FACE-HIT: entered a gap-separated ledge while already BELOW its lip (came in low, didn't clear it).
-    // A proper descent onto the top lands above (handled just above), so this only fires on a genuine
-    // low entry — never on a clean landing.
-    const gapBefore = !segPrev || segHere.x0 > segPrev.x1 + 1
-    if (gapBefore && prevY > segHere.top + FACE_TOL) return die(w, 'gap')
+  } else {
+    // AIRBORNE: land on a high LEDGE first (the highest one the feet crossed this frame), else the ground.
+    let onL: Seg | null = null
+    if (w.vy >= 0) {
+      for (const L of w.ledges) {
+        if (w.dist < L.x0 || w.dist > L.x1) continue
+        if (prevY <= L.top + FACE_TOL && w.y >= L.top && (!onL || L.top < onL.top)) onL = L
+      }
+    }
+    if (onL) {
+      // landed on the high road
+      w.y = onL.top; w.vy = 0; w.grounded = true; w.jumping = false; w.onLedge = onL
+      if (w.combo > 0) w.combo = 0
+      w.airJumps = 0
+      w.events.push({ type: 'land' })
+    } else if (w.vy >= 0 && segHere && prevY <= segHere.top + FACE_TOL && w.y >= segHere.top) {
+      // SWEPT LANDING on the ground (robust to any fall speed) — clears any ledge
+      w.y = segHere.top
+      w.vy = 0
+      w.grounded = true
+      w.jumping = false
+      w.onLedge = null
+      if (w.combo > 0) w.combo = 0 // a touchdown ends the bounce-chain
+      w.airJumps = 0 // landing clears any banked air-jump (the double-jump only carries while aloft)
+      w.events.push({ type: 'land' })
+    } else if (segHere && segHere !== segPrev) {
+      // FACE-HIT: entered a gap-separated ledge while already BELOW its lip (came in low, didn't clear it).
+      const gapBefore = !segPrev || segHere.x0 > segPrev.x1 + 1
+      if (gapBefore && prevY > segHere.top + FACE_TOL) return die(w, 'gap')
+    }
   }
 
   // fell into a gap
@@ -443,6 +471,7 @@ export function tick(w: World, dt: number): void {
       w.combo++
       w.vy = -STOMP_BOUNCE
       w.grounded = false
+      w.onLedge = null
       w.jumping = true
       w.airJumps = AIR_JUMPS_PER_STOMP // unmaking a foe banks a double-jump — tap to keep the momentum
       const gain = STOMP_BASE * w.combo
@@ -544,13 +573,40 @@ function generate(w: World, cull = true): void {
     w.genX = seg.x1
     w.lastTop = top
   }
+  if (w.cfg.ledges) generateLedges(w)
   // cull behind
   if (!cull) return
   const cutoff = w.dist - GEN_BEHIND
   if (w.segs.length > 60) w.segs = w.segs.filter(s => s.x1 > cutoff)
+  if (w.ledges.length > 40) w.ledges = w.ledges.filter(l => l.x1 > cutoff)
   if (w.foes.length > 40) w.foes = w.foes.filter(f => f.x > cutoff && !f.dead)
   if (w.spikes.length > 40) w.spikes = w.spikes.filter(s => s.x > cutoff)
   if (w.motes.length > 40) w.motes = w.motes.filter(m => m.x > cutoff && !m.got)
+}
+
+// ── high-road blockout: broken structure-ledges above the ground track (2026-07-21, feel-first) ──
+// A parallel stream, seeded off its OWN rng so the ground layout stays byte-identical (Daily/oracle safe).
+// Bursts of 2-4 leapable ledges (each with a mote reward), then a stretch of low-road-only. The high road
+// is optional: jump up for the motes, but a missed leap drops you back to the ground (or the void over a gap).
+const LEDGE_MIN_TOP = 105
+const LEDGE_MAX_TOP = 150
+function generateLedges(w: World): void {
+  const ahead = w.dist + GEN_AHEAD
+  while (w.ledgeGenX < ahead) {
+    if (w.ledgeGenX < w.cfg.runway + 150) { w.ledgeGenX = w.cfg.runway + 150; continue } // high road opens soon after the nursery
+    if (w.rngLedge() < 0.30) { w.ledgeGenX += 200 + w.rngLedge() * 260; continue }        // a low-road-only stretch (rarer → high road is easy to find)
+    const n = 2 + Math.floor(w.rngLedge() * 3) // a burst of 2-4 broken ledges to leap along
+    let top = clamp(112 + w.rngLedge() * 30, LEDGE_MIN_TOP, LEDGE_MAX_TOP)
+    for (let k = 0; k < n; k++) {
+      const len = 92 + w.rngLedge() * 68
+      const L: Seg = { x0: w.ledgeGenX, x1: w.ledgeGenX + len, top }
+      w.ledges.push(L)
+      w.motes.push({ x: L.x0 + len * 0.5, y: top - 20, got: false }) // the high-road reward
+      w.ledgeGenX = L.x1 + (52 + w.rngLedge() * 44) // a leapable gap to the next ledge
+      top = clamp(top + (w.rngLedge() * 2 - 1) * 20, LEDGE_MIN_TOP, LEDGE_MAX_TOP)
+    }
+    w.ledgeGenX += 160 + w.rngLedge() * 220 // rejoin the low road for a stretch
+  }
 }
 
 function populate(w: World, seg: Seg, d: number): void {

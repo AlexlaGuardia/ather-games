@@ -44,6 +44,8 @@ import {
   areaDone,
   allAreasDone,
   ENDLESS_CFG,
+  ENDLESS_LEDGES_CFG,
+  TOP_BASE,
   type World,
   type MovementCfg,
   type AuthoredLevel,
@@ -166,7 +168,7 @@ export default function VaultPage() {
     modeRef.current = m
     setMode(m)
     if (m === 'story') { setStoryView('trail'); setPhase('ready') } // show the trail; a level boots on tap
-    else boot(ENDLESS_CFG) // endless + daily both run the endless crossing (daily just seeds it fixed)
+    else boot(m === 'endless' ? ENDLESS_LEDGES_CFG : ENDLESS_CFG) // endless gets the high-road blockout; daily stays clean (leaderboard)
   }
   const openArea = (a: number) => { if (areaUnlocked(loadProgress(), a)) { setSelArea(a); setTrailView('levels') } }
   // play a specific level (from the levels view). Locked levels can't be picked; a level = a FIXED seed.
@@ -183,7 +185,7 @@ export default function VaultPage() {
   const carryOnEndless = () => {
     modeRef.current = 'endless'; setMode('endless')
     setStoryView('trail'); setTrailView('areas')
-    boot(ENDLESS_CFG)
+    boot(ENDLESS_LEDGES_CFG)
   }
   const onShare = async () => {
     if (await copyShare(dailyShare('Vault', score))) {
@@ -594,6 +596,24 @@ function render(canvas: HTMLCanvasElement, w: World, ts: number, trail: number[]
     seg(ctx, x0, s.top, x1, s.top)
     ctx.shadowBlur = 0
     ctx.globalAlpha = 1
+  }
+
+  // ── high-road ledges (BLOCKOUT — placeholder structures jutting from the background) ──
+  for (const L of w.ledges) {
+    const lx0 = sx(L.x0), lx1 = sx(L.x1)
+    if (lx1 < -20 || lx0 > VW + 20) continue
+    const lw = lx1 - lx0
+    // a support column dropping toward the ground → reads as a ledge on a structure, not a floating slab
+    ctx.fillStyle = 'rgba(38,36,56,0.5)'
+    ctx.fillRect(lx0 + lw * 0.5 - 6, L.top + 8, 12, TOP_BASE - L.top)
+    // the ledge slab
+    ctx.fillStyle = '#2c2a3e'
+    ctx.fillRect(lx0, L.top, lw, 9)
+    // lit lip — indigo, to read as distinct from the teal living ground
+    ctx.strokeStyle = '#9a86ff'
+    ctx.globalAlpha = 0.9; ctx.shadowBlur = 8; ctx.shadowColor = '#9a86ff'; ctx.lineWidth = 2
+    seg(ctx, lx0, L.top, lx1, L.top)
+    ctx.shadowBlur = 0; ctx.globalAlpha = 1
   }
 
   // ── motes — loose Ather-light (gather them) ───────────────────────────────────
