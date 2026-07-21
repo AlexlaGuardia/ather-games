@@ -10,6 +10,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Chakra_Petch } from 'next/font/google'
 import { ELEMENTS, RUNES, runesOf, type ElementId, type Rune } from './runes.data'
+import { RuneMark } from './RuneMark'
 
 const display = Chakra_Petch({ weight: ['500', '600', '700'], subsets: ['latin'] })
 
@@ -247,11 +248,13 @@ function RuneCard({ rune, active }: { rune: Rune; active: boolean }) {
           : `0 0 20px -4px ${rune.glow}`,
         transition: 'all 320ms ease',
         animation: active ? 'pulseGlow 3.4s ease-in-out infinite' : 'none',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
       }}>
         <div style={{
           position: 'absolute', inset: 0, borderRadius: '50%',
           border: `1px solid ${rune.glow}66`,
         }} />
+        <RuneMark rune={rune} size={active ? 56 : 44} />
       </div>
 
       <div style={{
@@ -286,7 +289,10 @@ function BornState({ rune, onReset, display }: { rune: Rune; onReset: () => void
         background: `radial-gradient(circle at 50% 42%, ${rune.core} 0%, ${rune.glow} 44%, transparent 74%)`,
         boxShadow: `0 0 70px 8px ${rune.glow}66`,
         animation: 'pulseGlow 3s ease-in-out infinite',
-      }} />
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+      }}>
+        <RuneMark rune={rune} size={74} />
+      </div>
       <div style={{ fontSize: 12, letterSpacing: '.4em', color: '#6b7686', textTransform: 'uppercase' }}>You are born of</div>
       <div style={{ fontSize: 40, fontWeight: 700, letterSpacing: '.08em', textShadow: `0 0 24px ${rune.glow}` }}>{rune.name}</div>
       <div style={{ fontSize: 12.5, color: '#aeb8c4', maxWidth: 300, lineHeight: 1.5 }}>{rune.essence}</div>

@@ -45,6 +45,15 @@ onCancel={birthCancelable ? () => setBirthOpen(false) : undefined}
 ## Flow after this
 fresh player enters → void carousel (no back) → pick rune → `onChoose` → `newGame()` fresh run + "Born of <Rune>" banner + rune saved to `ather:shimmer:birthRune`. Reload won't re-trigger (save now exists).
 
+## Change 4 (optional now) — mount the HUD rune badge
+Art built `RuneBadge` (in `birth/RuneBadge.tsx`) — it shows the player's chosen rune mark on the HUD so first-person-you carries your birth. It self-sources from localStorage, so it's a **zero-wiring one-liner** anywhere in your HUD DOM overlay (near the compass / objective toast). Pick a spot that doesn't collide with existing top-left/top-center HUD:
+```tsx
+import RuneBadge from './birth/RuneBadge'
+// …in the HUD overlay JSX (not inside <Canvas>):
+{!editMode && <RuneBadge style={{ position: 'fixed', top: 12, right: 12, zIndex: 36 }} />}
+```
+Pass `runeId={birthRuneRef.current}` instead if you want it to update instantly on New-Game birth without a reload. Renders nothing until a rune is chosen, so it's safe to always mount.
+
 ## Also in your lane (separate, when you're ready)
-Fold `birthRuneRef.current` into `persist()`/`load()` and **grant a starting ability/glow** off the chosen rune — that's what turns birth from cosmetic into felt play. Art side (me) is doing rune sigils + a HUD rune badge in disjoint files; no overlap with `Shimmer3D.tsx`.
+Fold `birthRuneRef.current` into `persist()`/`load()` and **grant a starting ability/glow** off the chosen rune — that's what turns birth from cosmetic into felt play. Art side (me) built the rune **marks** (`birth/RuneMark.tsx`, systematic element+state glyphs — NOT "sigils", that's the weapon system) + the badge; no overlap with `Shimmer3D.tsx`.
 ```
