@@ -249,6 +249,17 @@ the Arcade frame.
 > **✅ FIXED — Magii MOBILE cards cut off (2026-07-12, jin-cc, `f4180d8`, pushed, live):** the fan's `w-full` chain was broken above it (player-area wrapper + PlayerArea root lacked `w-full`), so it measured up to `max-w-[660px]` even on a 390px screen and the board's `overflow-hidden` clipped the last 2 cards (+ slid the discard pile off the left). Chained `w-full` to the fan → `fanW` = real board width → step-math fits all 8. Verified 8/8 visible at narrow viewport, no overflow. Also hid the redundant header 'Magii' title on mobile where the back-to-room pill overlapped it. — wire a marks earn into ONE score-chase game (scaled to score, capped) to prove the earn loop before rolling across the arcade — balancing is the real work, start with 2-3 games not all 13. (3) a **sink** — the Passage market surface (v1 sink) and/or Shimmer spend. (4) re-skin the Room's walls as Rune Hold storefronts → grow into the town square (big Jin build, stageable). **Design open (GBOARD, not canon):** per-game payout curves; what the Passage v1 sink actually sells.
 
 ## 🎨 Cross-cutting — PRE-RENDERED 3D ART (render-to-sprite, PROVING 2026-07-21, jin-cc)
+> **✅ ASSET #2 + `/picaso` AGENT CODIFIED (2026-07-21, jin-cc).** Stood up the render-to-sprite pipeline as a reusable
+> **agent** (`.claude/agents/picaso.md`). The proven loop: grill → canon-gate → bpy producer → headless render →
+> **look-at-the-PNG-and-critique** → iterate craft alone → STOP for identity/canon calls → hand sprite to the sprites lane.
+> Boundary: material/lighting/camera = picaso's call; the identity element (a sigil, a silhouette that becomes a locked
+> ref) = Alex's eye. **First hit through the agent — THE MARK coin family:** one struck bpy model → 3 metal+wear passes
+> (copper Mark / silver Crown / gold Sovereign), milled edge, denticle legend band, Bind seal struck as a **barred
+> gate-rune**. Built against the LOCKED canon brief `athernyx/CANON/design-briefs/coin-family.md` (look ruled by /magii
+> same day; renders recorded back as the locked ref). Producer `tools/render/coin.py` → `public/coins/coin-{mark,crown,
+> sovereign}.png`. **NEXT: wire the coin into the Marks HUD/inventory (sprites lane) + move the render node to elitedesk
+> so asset windows can tag-team renders without OOMing the game server.** Assets are now a tag-team lane (hub + window 2).
+
 > **The vision (Alex, 2026-07-21):** nicer arcade art than flat vector/pixel, the **Clash Royale** look. Clash's units
 > aren't 3D at runtime — Supercell models + animates in 3D, then **bakes each to a flat sprite sheet** the game plays
 > as 2D. Old trick (Donkey Kong Country, Diablo, RollerCoaster Tycoon): "pre-rendered 3D" / render-to-sprite. Gives real
