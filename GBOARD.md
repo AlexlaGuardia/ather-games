@@ -248,6 +248,45 @@ the Arcade frame.
 > **▶ NEXT (build order):** ~~(1) HUD~~ ✅ · ~~reconcile~~ ✅ · ~~(2a) card faucet~~ ✅. **(2b) arcade SINKS** — charge 1-5 marks/play; DESIGN OPEN (Alex): per-game price, where the charge lands (page-load vs a "sit/insert-coin" start vs per-run), and the broke-player UX (free-play-no-leaderboard vs redirect-to-earn vs block). **(3)** Passage market / cosmetics sink. **(4)** re-skin Room walls as Rune Hold storefronts.
 > **✅ FIXED — Magii MOBILE cards cut off (2026-07-12, jin-cc, `f4180d8`, pushed, live):** the fan's `w-full` chain was broken above it (player-area wrapper + PlayerArea root lacked `w-full`), so it measured up to `max-w-[660px]` even on a 390px screen and the board's `overflow-hidden` clipped the last 2 cards (+ slid the discard pile off the left). Chained `w-full` to the fan → `fanW` = real board width → step-math fits all 8. Verified 8/8 visible at narrow viewport, no overflow. Also hid the redundant header 'Magii' title on mobile where the back-to-room pill overlapped it. — wire a marks earn into ONE score-chase game (scaled to score, capped) to prove the earn loop before rolling across the arcade — balancing is the real work, start with 2-3 games not all 13. (3) a **sink** — the Passage market surface (v1 sink) and/or Shimmer spend. (4) re-skin the Room's walls as Rune Hold storefronts → grow into the town square (big Jin build, stageable). **Design open (GBOARD, not canon):** per-game payout curves; what the Passage v1 sink actually sells.
 
+## 🎨 Cross-cutting — PRE-RENDERED 3D ART (render-to-sprite, PROVING 2026-07-21, jin-cc)
+> **The vision (Alex, 2026-07-21):** nicer arcade art than flat vector/pixel, the **Clash Royale** look. Clash's units
+> aren't 3D at runtime — Supercell models + animates in 3D, then **bakes each to a flat sprite sheet** the game plays
+> as 2D. Old trick (Donkey Kong Country, Diablo, RollerCoaster Tycoon): "pre-rendered 3D" / render-to-sprite. Gives real
+> 3D volume + lighting + frame-consistency for FREE, at **2D runtime cost** — no 3D engine, drops into our existing
+> canvas exactly like any sprite. This is the "nicer art" lane, and it suits Alex (model/pose once, machine renders every
+> frame) better than hand-drawing frame-by-frame.
+> **✅ PIPELINE PROVEN + $0 (2026-07-21):** headless **Blender 4.2.9 LTS** at `/opt/blender` (CPU/Cycles, film-transparent,
+> ~40s per 8-frame 128px render on this box). Fully scriptable — a `.py` builds the model + lights + ortho camera + a
+> frame loop, renders RGBA PNGs; Pillow packs the strip. **Nothing to buy** (Blender free; Mixamo not needed for our own).
+> **✅ FIRST HIT — Vault void-spawn foe:** modeled an original grey void-spawn (lumpy dome + recessed void + cold dead
+> glint-eyes — a RESKIN of the existing canon foe, no lore invented) → `public/vault/foe-void.png` (1024×128, 8-frame
+> breathe loop), wired into `vault/page.tsx` `drawFoe` as a sprite blit with the **procedural draw kept as fallback**.
+> Live on ather.games/vault. Render script in-repo at `tools/render/voidspawn.py`.
+>
+> **THE FILTER — what qualifies (so we don't over-invest):** a target must be a *discrete entity that gains from 3D
+> volume* AND a *hero/repeated readable element*. Render is REAL hours per creature, so a cabinet gets **1-3 rendered
+> elements max, not a full reskin.**
+> - ✅ YES: creatures/enemies, bosses, hazards/obstacles with form (spikes, rocks), hero props/pickups that want shine.
+> - ✋ KEEP VECTOR/light: backgrounds, ground/terrain, UI/HUD, **abstract light entities** (Vault's player-mote + the
+>   collectible motes are canon *light*, not creatures), and **particle FX** (Alex 2026-07-21: these already look great).
+> - ⚠ Per-cabinet **render camera must match that game's view** (side vs top-down vs 3/4) — set per target.
+>
+> **THE REGISTER — what we hit / plan to hit:**
+> - **HIT:** Vault · grey void-spawn foe (`foe-void.png`).
+> - **PLAN TO HIT (next):** Vault · **rooted grey spikes/thorns** (Alex flagged these — currently still vector; render
+>   as lit crystalline shards, the natural #2 for the cabinet).
+> - **OPEN CALL — the player-mote imbalance (Alex 2026-07-21):** rendering enemies EXPOSED that the player is "just an
+>   orb rolling across the screen." The mote is canon Ather-*light* (not a creature), so the fix is a **JUICE pass, not a
+>   3D render** — more form / better trail / a rendered light-*wisp* that's still light. **Sequencing rule: don't roll
+>   pre-rendered enemies into a cabinet whose player/hero still under-reads next to them.** → possible Magii canon check:
+>   *how much rendered form can Ather-light take and stay canon light?* (park the answer here, don't invent it.)
+> - **TO-AUDIT (later pass):** walk each cabinet (Rekindle · Ward · Updraft · Seedfall · Voranyx · Atherdash · Driftling ·
+>   Squall · Dewdrop · Mana'nana) and slot its hero entities/hazards into HIT/PLAN/NO-FIT. Don't guess fit blind — audit
+>   the actual entities first. Leaderboard the strongest candidates; ship a cabinet's render pass as one unit.
+>
+> **Files:** pipeline `/opt/blender` (4.2.9 LTS, not in git) · render scripts `tools/render/*.py` · assets `public/<game>/*.png`
+> · wiring per-cabinet render fn (Vault: `page.tsx` `drawFoe`, sprite-blit + procedural fallback).
+
 ## 🔊 Cross-cutting — THE AUDIO LAYER (music beds + VO commentator, 2026-07-06→07, jin-cc)
 > **A reusable audio stack, extracted from Mana'nana and rolled across the score-chase games.** Three shared libs
 > under `src/lib/arcade/`:

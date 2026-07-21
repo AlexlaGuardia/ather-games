@@ -85,6 +85,7 @@ export default function VaultPage() {
   const shake = useRef(0)
   const comboFx = useRef(0)
   const syncT = useRef(0)
+  const foeImg = useRef<HTMLImageElement | null>(null) // pre-rendered (Blender→sprite) void-spawn; null until loaded → procedural fallback
 
   const [phase, setPhase] = useState<Phase>('ready')
   const [score, setScore] = useState(0)
@@ -148,6 +149,8 @@ export default function VaultPage() {
     setBest(loadBest())
     setDailyBest(loadDailyBest('vault'))
     setProgress(loadProgress())
+    // pre-rendered void-spawn sprite sheet (8-frame breathe loop, baked from a 3D model)
+    const fi = new Image(); fi.src = '/vault/foe-void.png'; fi.onload = () => { foeImg.current = fi }
     // pull any hand-authored ladder levels (published from /vault/dev) so a slot plays its authored layout
     fetch('/vault/dev/save', { cache: 'no-store' })
       .then((r) => (r.ok ? r.json() : {}))
@@ -286,7 +289,7 @@ export default function VaultPage() {
         syncT.current += dt
         if (syncT.current >= 0.1) { syncT.current = 0; setScore(w.score); setMotes(w.motesGot); setFuel(w.fuel); setHearts(w.hearts) }
       }
-      render(canvas, w, ts, trail.current, fx.current, shake.current, comboFx.current)
+      render(canvas, w, ts, trail.current, fx.current, shake.current, comboFx.current, foeImg.current)
     }
     raf = requestAnimationFrame(draw)
     return () => cancelAnimationFrame(raf)
@@ -498,7 +501,7 @@ const DEATH_LINE: Record<'gap' | 'grey', string> = {
 }
 
 // ── rendering ───────────────────────────────────────────────────────────────────
-function render(canvas: HTMLCanvasElement, w: World, ts: number, trail: number[], fx: Particle[], shake: number, comboFx: number) {
+function render(canvas: HTMLCanvasElement, w: World, ts: number, trail: number[], fx: Particle[], shake: number, comboFx: number, foeImg: HTMLImageElement | null) {
   const dpr = Math.min(2, typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1)
   if (canvas.width !== VW * dpr || canvas.height !== VH * dpr) {
     canvas.width = VW * dpr
@@ -626,7 +629,7 @@ function render(canvas: HTMLCanvasElement, w: World, ts: number, trail: number[]
     const fx2 = sx(f.x)
     if (fx2 < -18 || fx2 > VW + 18) continue
     const wob = Math.sin(t * 8 + f.x * 0.1) * 1.5
-    drawFoe(ctx, fx2, f.y + wob, t, f.x * 0.1) // base at f.y; bob the whole body
+    drawFoe(ctx, fx2, f.y + wob, t, f.x * 0.1, foeImg) // base at f.y; bob the whole body
   }
 
   // ── transient FX (unmaking burst / collect spark) ─────────────────────────────
@@ -763,7 +766,17 @@ function drawSpike(ctx: CanvasRenderingContext2D, cx: number, base: number, seed
 
 // ── grey void-spawn — a blank, soulless thing barely cohered: unstable dome, dissolving jagged
 // underside, a void-BLACK hollow where a soul would be. (was a rounded rect + two dots.) ──
-function drawFoe(ctx: CanvasRenderingContext2D, cx: number, base: number, t: number, seed: number) {
+function drawFoe(ctx: CanvasRenderingContext2D, cx: number, base: number, t: number, seed: number, foeImg: HTMLImageElement | null) {
+  // pre-rendered path: blit the current frame of the 3D-baked sprite sheet (8 frames, 128px each).
+  // seed (per-foe) offsets the loop so a cluster doesn't breathe in lockstep. Bottom-centre sits at (cx, base).
+  if (foeImg && foeImg.complete && foeImg.naturalWidth > 0) {
+    const N = 8, S = 128
+    const idx = ((Math.floor(t * 9 + seed * 5) % N) + N) % N
+    const dw = FOE_W * 1.5, dh = dw            // square frame; visible creature ≈ FOE_W wide
+    ctx.drawImage(foeImg, idx * S, 0, S, S, cx - dw / 2, base - dh * 0.82, dw, dh) // 0.82 = baked foot line
+    return
+  }
+  // procedural fallback (sheet not loaded) — a blank, soulless thing barely cohered
   const w = FOE_W, h = FOE_H
   const top = base - h
   ctx.save()
