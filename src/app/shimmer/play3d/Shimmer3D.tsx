@@ -50,6 +50,12 @@ const VOID = -1 // empty cell — renders nothing, not walkable (draw land onto 
 const STEP = 1.0
 const MAX_TIER = 8
 const UP = new THREE.Vector3(0, 1, 0)
+// First-person rig: camera sits at eye height on the walker; wider fov for the Supra FPS feel
+// (orbit follow-cam keeps the calmer 45). Camera-only for now — movement still rides the flat-grid
+// canStand() until the world lane exposes a segs-collision read-API.
+const EYE_H = 1.15          // eye offset above the player's foot position (capsule center is +0.7)
+const FPS_FOV = 72
+const ORBIT_FOV = 45
 const DIR_YAW: Record<string, number> = { up: 0, down: Math.PI, left: Math.PI / 2, right: -Math.PI / 2 }
 
 type Cell = [number, number]
@@ -505,7 +511,7 @@ function npcInWorld(n: NPC3D, defeated: Record<string, boolean>, flags: Record<s
   return true
 }
 
-function Player({ posRef, gridRef, heightsRef, zoneIdRef, editRef, onWarp, battleRef, partyLevelRef, onEncounter, joyRef, talkingRef, hasPartyRef, onNearChange, defeatedRef, flagsRef, harvestNodesRef, onNearNode, stationsRef, onNearStation }: {
+function Player({ posRef, gridRef, heightsRef, zoneIdRef, editRef, onWarp, battleRef, partyLevelRef, onEncounter, joyRef, talkingRef, hasPartyRef, onNearChange, defeatedRef, flagsRef, harvestNodesRef, onNearNode, stationsRef, onNearStation, viewRef }: {
   posRef: React.RefObject<THREE.Vector3>; gridRef: React.RefObject<number[][]>
   heightsRef: React.RefObject<number[][]>; zoneIdRef: React.RefObject<string>
   editRef: React.RefObject<boolean>; onWarp: (w: Warp) => void
@@ -518,6 +524,7 @@ function Player({ posRef, gridRef, heightsRef, zoneIdRef, editRef, onWarp, battl
   flagsRef: React.RefObject<Record<string, boolean>>
   harvestNodesRef: React.RefObject<ResourceNode[]>; onNearNode: (n: ResourceNode | null) => void
   stationsRef: React.RefObject<PlacedStruct[]>; onNearStation: (s: PlacedStruct | null) => void
+  viewRef: React.RefObject<'first' | 'third'>
 }) {
   const group = useRef<THREE.Group>(null)
   const keys = useRef<Record<string, boolean>>({})
@@ -635,6 +642,9 @@ function Player({ posRef, gridRef, heightsRef, zoneIdRef, editRef, onWarp, battl
     }
 
     const g = group.current!
+    // First-person: camera lives at the eye, so the avatar would clip the lens — hide it (still shown
+    // in edit/spectator and third-person).
+    g.visible = !(viewRef.current === 'first' && !editRef.current)
     g.position.set(p.x, p.y + 0.7, p.z)
     g.rotation.y = lerpAngle(g.rotation.y, yaw.current, 0.3)
   })
@@ -734,12 +744,14 @@ function HarvestPop({ pop }: { pop: { x: number; y: number; z: number; glyph: st
   )
 }
 
-function CameraRig({ posRef, editFocusRef, yawRef, editRef }: {
+function CameraRig({ posRef, editFocusRef, yawRef, editRef, viewRef }: {
   posRef: React.RefObject<THREE.Vector3>; editFocusRef: React.RefObject<THREE.Vector3>
   yawRef: React.RefObject<number>; editRef: React.RefObject<boolean>
+  viewRef: React.RefObject<'first' | 'third'>
 }) {
   const yaw = yawRef
-  const pitch = useRef(0.6)
+  const pitch = useRef(0.6)          // orbit polar angle (third-person / spectator)
+  const lookPitch = useRef(0)        // FPS look elevation, radians above/below horizon
   const dist = useRef(11)
   const keys = useRef<Record<string, boolean>>({})
   const fwd = useMemo(() => new THREE.Vector3(), [])
@@ -759,6 +771,8 @@ function CameraRig({ posRef, editFocusRef, yawRef, editRef }: {
       if (!dragging) return
       yaw.current -= (e.clientX - lx) * 0.005
       pitch.current = Math.max(0.2, Math.min(1.45, pitch.current - (e.clientY - ly) * 0.004))
+      // FPS look elevation shares the same drag; clamped short of straight up/down so the horizon never flips.
+      lookPitch.current = Math.max(-1.25, Math.min(1.25, lookPitch.current - (e.clientY - ly) * 0.004))
       lx = e.clientX; ly = e.clientY
     }
     const up = () => { dragging = false }
@@ -791,13 +805,31 @@ function CameraRig({ posRef, editFocusRef, yawRef, editRef }: {
       if (k['e']) target.y += sp
       if (k['q']) target.y -= sp
     }
+    const cam = state.camera as THREE.PerspectiveCamera
+    const fps = !editing && viewRef.current === 'first'
+    // Wider fov in FPS for the Supra feel; only touch the projection matrix on an actual change.
+    const wantFov = fps ? FPS_FOV : ORBIT_FOV
+    if (cam.fov !== wantFov) { cam.fov = wantFov; cam.updateProjectionMatrix() }
+
+    if (fps) {
+      // Eye-cam: camera AT the walker, looking along (yaw, lookPitch). Horizontal forward matches the
+      // orbit's so WASD (which reads camera.getWorldDirection) stays identical between views.
+      const cp = Math.cos(lookPitch.current), sp = Math.sin(lookPitch.current)
+      const fx = -Math.sin(yaw.current) * cp, fz = -Math.cos(yaw.current) * cp
+      const ey = target.y + EYE_H
+      cam.position.set(target.x, ey, target.z)
+      cam.lookAt(target.x + fx, ey + sp, target.z + fz)
+      return
+    }
+
+    // Orbit / spectator follow-cam.
     const s = Math.sin(pitch.current), c = Math.cos(pitch.current)
-    state.camera.position.set(
+    cam.position.set(
       target.x + dist.current * s * Math.sin(yaw.current),
       target.y + dist.current * c,
       target.z + dist.current * s * Math.cos(yaw.current),
     )
-    state.camera.lookAt(target.x, target.y + 0.4, target.z)
+    cam.lookAt(target.x, target.y + 0.4, target.z)
   })
   return null
 }
@@ -811,6 +843,7 @@ const Scene = memo(function Scene(props: {
   posRef: React.RefObject<THREE.Vector3>; heightsRef: React.RefObject<number[][]>; zoneIdRef: React.RefObject<string>
   editFocusRef: React.RefObject<THREE.Vector3>
   onWarp: (w: Warp) => void; yawRef: React.RefObject<number>; editRef: React.RefObject<boolean>
+  viewRef: React.RefObject<'first' | 'third'>
   paint: (c: number, r: number, shift: boolean) => void; editing: boolean
   battleRef: React.RefObject<boolean>; partyLevelRef: React.RefObject<number>
   onEncounter: (enc: WildEncounter) => void
@@ -853,11 +886,11 @@ const Scene = memo(function Scene(props: {
       <NodeMarkers nodes={props.nodes} heights={props.heights} editing={props.editing} channel={props.channel} />
       <StructureMarkers structures={structuresInZone} heights={props.heights} />
       <PlacementGhost placing={props.placing} posRef={props.posRef} heights={props.heights} gridRef={props.gridRef} placeTargetRef={props.placeTargetRef} structuresRef={props.structuresRef} zoneIdRef={props.zoneIdRef} />
-      <Player posRef={props.posRef} gridRef={props.gridRef} heightsRef={props.heightsRef} zoneIdRef={props.zoneIdRef} editRef={props.editRef} onWarp={props.onWarp} battleRef={props.battleRef} partyLevelRef={props.partyLevelRef} onEncounter={props.onEncounter} joyRef={props.joyRef} talkingRef={props.talkingRef} hasPartyRef={props.hasPartyRef} onNearChange={props.onNearChange} defeatedRef={props.defeatedRef} flagsRef={props.flagsRef} harvestNodesRef={props.harvestNodesRef} onNearNode={props.onNearNode} stationsRef={props.structuresRef} onNearStation={props.onNearStation} />
+      <Player posRef={props.posRef} gridRef={props.gridRef} heightsRef={props.heightsRef} zoneIdRef={props.zoneIdRef} editRef={props.editRef} onWarp={props.onWarp} battleRef={props.battleRef} partyLevelRef={props.partyLevelRef} onEncounter={props.onEncounter} joyRef={props.joyRef} talkingRef={props.talkingRef} hasPartyRef={props.hasPartyRef} onNearChange={props.onNearChange} defeatedRef={props.defeatedRef} flagsRef={props.flagsRef} harvestNodesRef={props.harvestNodesRef} onNearNode={props.onNearNode} stationsRef={props.structuresRef} onNearStation={props.onNearStation} viewRef={props.viewRef} />
       {props.companionColor && !props.editing && <Follower posRef={props.posRef} heightsRef={props.heightsRef} color={props.companionColor} />}
       {props.fishing && <FishTell posRef={props.posRef} heightsRef={props.heightsRef} bite={props.fishBite} />}
       <HarvestPop pop={props.harvestPop} />
-      <CameraRig posRef={props.posRef} editFocusRef={props.editFocusRef} yawRef={props.yawRef} editRef={props.editRef} />
+      <CameraRig posRef={props.posRef} editFocusRef={props.editFocusRef} yawRef={props.yawRef} editRef={props.editRef} viewRef={props.viewRef} />
     </>
   )
 })
@@ -995,6 +1028,13 @@ export default function Shimmer3D() {
     posRef.current = new THREE.Vector3(ps.tileX, 0, ps.tileY)
   }
   const camYaw = useRef(0)
+  // Play-camera perspective: 'first' = FPS eye-cam (default, the direction we're taking play3d),
+  // 'third' = the classic orbit follow-cam (kept for comparison + a wider situational view).
+  // Edit mode always uses the spectator fly-cam regardless. viewRef drives the render loop; `view`
+  // state only exists to relabel the toggle button + hint.
+  const viewRef = useRef<'first' | 'third'>('first')
+  const [view, setView] = useState<'first' | 'third'>('first')
+  viewRef.current = view
   const editFocusRef = useRef(new THREE.Vector3())
   const joyRef = useRef({ x: 0, y: 0 }) // touch-joystick analog input → Player movement
 
@@ -1906,7 +1946,7 @@ export default function Shimmer3D() {
           zone={zone} gridRef={gridRef} heights={heightsRef.current} version={version} dims={dims}
           posRef={posRef as React.RefObject<THREE.Vector3>} heightsRef={heightsRef} zoneIdRef={zoneIdRef}
           editFocusRef={editFocusRef}
-          onWarp={onWarp} yawRef={camYaw} editRef={editRef} paint={paint} editing={editMode}
+          onWarp={onWarp} yawRef={camYaw} editRef={editRef} viewRef={viewRef} paint={paint} editing={editMode}
           battleRef={battleRef} partyLevelRef={partyLevelRef} onEncounter={onEncounter} joyRef={joyRef}
           talkingRef={talkingRef} hasPartyRef={hasPartyRef} onNearChange={setNearNpc}
           harvestNodesRef={runtimeNodesRef} onNearNode={setNearNode} channel={channel}
@@ -1925,10 +1965,22 @@ export default function Shimmer3D() {
       }}>
         Shimmer 3D — {zone.name}{editMode ? '  ·  EDIT' : ''}<br />
         <span style={{ opacity: 0.8 }}>
-          {editMode ? 'left-drag paint · WASD fly · Q/E down·up · right-drag look · scroll zoom' : `WASD · drag look · scroll zoom · edges warp · ${hasStarter ? 'mist = wild spirits' : 'meet Gregory first'}${isOwner ? ' · B to edit' : ''}`}
+          {editMode ? 'left-drag paint · WASD fly · Q/E down·up · right-drag look · scroll zoom' : `WASD · drag look · ${view === 'first' ? 'V for 3rd-person' : 'V for 1st-person'} · edges warp · ${hasStarter ? 'mist = wild spirits' : 'meet Gregory first'}${isOwner ? ' · B to edit' : ''}`}
         </span>
         {!editMode && <><br /><span style={{ color: '#ffe08a' }}>✦ {wallet.marks} marks</span></>}
       </div>
+
+      {!editMode && (
+        <button
+          onClick={() => setView((v) => (v === 'first' ? 'third' : 'first'))}
+          aria-label={view === 'first' ? 'switch to third-person view' : 'switch to first-person view'}
+          style={{
+            position: 'fixed', top: 12, right: 12, zIndex: 36, padding: '7px 12px', borderRadius: 8,
+            border: '2px solid #7fe3c8', background: 'rgba(12,16,26,0.9)', color: '#eafff6',
+            font: '800 12px ui-monospace, monospace', cursor: 'pointer', touchAction: 'none',
+          }}
+        >{view === 'first' ? '◉ 1st' : '⊙ 3rd'}</button>
+      )}
 
       <Compass yawRef={camYaw} />
 
@@ -2224,7 +2276,7 @@ export default function Shimmer3D() {
       )}
 
       {/* B hotkey (keyboard) — owner only, and not while a battle overlay is up */}
-      <KeyToggle onB={() => { if (isOwner && !battleRef.current) setEditMode((e) => !e) }} />
+      <KeyToggle onB={() => { if (isOwner && !battleRef.current) setEditMode((e) => !e) }} onV={() => { if (!editMode) setView((v) => (v === 'first' ? 'third' : 'first')) }} />
 
       {/* Combat, mounted over the 3D world. ALL fights — wild and the scripted liberation holds
           (thistle/sorrel/brack) — run the real-time Keeper's Arena. The collar breaks on the win
@@ -2363,11 +2415,15 @@ function BattleRewards({ gold, rows, onClose }: {
 // Tap-to-transfer slot grid — used by the Chest menu for both the chest's storage and the
 // player's satchel. No drag needed (mobile-first): tap a filled slot to move that stack.
 
-function KeyToggle({ onB }: { onB: () => void }) {
+function KeyToggle({ onB, onV }: { onB: () => void; onV?: () => void }) {
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key.toLowerCase() === 'b') onB() }
+    const onKey = (e: KeyboardEvent) => {
+      const k = e.key.toLowerCase()
+      if (k === 'b') onB()
+      else if (k === 'v') onV?.()
+    }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [onB])
+  }, [onB, onV])
   return null
 }
