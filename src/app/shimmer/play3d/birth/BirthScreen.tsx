@@ -95,7 +95,7 @@ export default function BirthScreen({
       onTouchStart={onTouchStart}
       onTouchEnd={onTouchEnd}
       style={{
-        position: 'fixed', inset: 0, overflow: 'hidden',
+        position: 'fixed', inset: 0, overflow: 'hidden', zIndex: 200, // above all play3d HUD (hotbar 35-37, tooltip 60, menus 50) — birth is a full takeover
         background: born ? '#000' : `radial-gradient(120% 90% at 50% 40%, ${el.bg} 0%, #04060a 70%, #000 100%)`,
         transition: 'background 700ms ease',
         color: '#fff', userSelect: 'none', touchAction: 'none',
