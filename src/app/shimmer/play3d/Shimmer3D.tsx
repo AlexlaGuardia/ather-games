@@ -586,8 +586,19 @@ function Player({ posRef, gridRef, heightsRef, zoneIdRef, editRef, onWarp, battl
     // else in this loop changes.
     const ctx: CollisionCtx = { grid, heights, segs: EMPTY_SEGS }
     const fromY = p.y / STEP
+    // Placed objects are solid to movement (you smack into them, no clip-through): stations always,
+    // resource nodes unless they're water (wade in to fish). Adjacency interact/harvest still works
+    // because you stand NEXT to the tile, never on it.
+    const zoneNow = zoneIdRef.current
+    const blockedByObject = (cx: number, cz: number) => {
+      const structs = stationsRef.current
+      if (structs) for (const s of structs) if (s.zoneId === zoneNow && s.tileX === cx && s.tileY === cz) return true
+      const nodes = harvestNodesRef.current
+      if (nodes) for (const n of nodes) if (n.zoneId === zoneNow && n.tileX === cx && n.tileY === cz && (NODE_LOOK[n.type]?.kind ?? 'tree') !== 'water') return true
+      return false
+    }
     const canStep = (cx: number, cz: number) =>
-      editRef.current ? true : canStandAt(ctx, cx, cz, fromY)  // roam freely while editing
+      editRef.current ? true : (canStandAt(ctx, cx, cz, fromY) && !blockedByObject(cx, cz))  // roam freely while editing
 
     // Edit mode → WASD drives the spectator camera. Battle / dialogue → walker is frozen behind the
     // overlay. Either way, skip player movement / warps / encounters / NPC proximity.
