@@ -2023,14 +2023,18 @@ export default function Shimmer3D() {
   const [isTouch, setIsTouch] = useState(false)
   useEffect(() => { setIsTouch((window.matchMedia?.('(pointer: coarse)').matches ?? false) || 'ontouchstart' in window) }, [])
 
-  // Desktop interact key (E / Space / Enter): advance dialogue, or talk to a nearby NPC.
+  // Desktop interact key: E / Enter (or left-click) — advance dialogue, talk, harvest, open a station.
+  // Space is JUMP, never an interact initiator (jumping next to an NPC/node/station used to fire it).
+  // The one exception: Space still ADVANCES an open dialogue, where the walker is frozen so there's no
+  // jump to collide with.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (editMode || battle) return
       const k = e.key.toLowerCase()
       if (k !== 'e' && k !== ' ' && k !== 'enter') return
-      if (dialogueRef.current) { e.preventDefault(); advanceDialogue() }
-      else if (nearNpc) { e.preventDefault(); talk(nearNpc) }
+      if (dialogueRef.current) { e.preventDefault(); advanceDialogue(); return }
+      if (k === ' ') return  // Space outside dialogue = jump only; E/Enter initiate interactions
+      if (nearNpc) { e.preventDefault(); talk(nearNpc) }
       else if (fishRef.current || nearNodeRef.current || channelRef.current) { e.preventDefault(); toggleChannel() }
       else if (nearStationRef.current) { e.preventDefault(); openStation() }
     }
