@@ -1359,6 +1359,21 @@ export default function Shimmer3D() {
 
   // Load once on mount: restore party + zone + position, or bank the starter party on first visit.
   const loadedRef = useRef(false)
+  // Birth on first entry — no save yet ⇒ born before spawn. Reads localStorage synchronously
+  // at mount (BEFORE load()'s async .then persist() writes), so a genuinely fresh player reads
+  // as fresh. Non-cancelable: a new player must choose a rune. Returning players skip it.
+  const bornCheckedRef = useRef(false)
+  useEffect(() => {
+    if (bornCheckedRef.current) return
+    bornCheckedRef.current = true
+    try {
+      if (!localStorage.getItem('ather:save:shimmer')) {
+        setBirthCancelable(false)
+        setBirthOpen(true)
+      }
+    } catch { /* private mode — skip, just spawn */ }
+  }, [])
+
   useEffect(() => {
     if (loadedRef.current) return
     loadedRef.current = true
@@ -2399,7 +2414,7 @@ export default function Shimmer3D() {
               {confirmNew ? (
                 <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
                   <span style={{ color: '#e9dfc8', font: '700 11px ui-monospace, monospace' }}>reset?</span>
-                  <button onClick={() => { setConfirmNew(false); setMenuOpen(false); setBirthOpen(true) }} style={{ ...menuBtn, background: '#b9483f', color: '#fff' }}>Yes</button>
+                  <button onClick={() => { setConfirmNew(false); setMenuOpen(false); setBirthCancelable(true); setBirthOpen(true) }} style={{ ...menuBtn, background: '#b9483f', color: '#fff' }}>Yes</button>
                   <button onClick={() => setConfirmNew(false)} style={menuBtn}>No</button>
                 </div>
               ) : <button onClick={() => setConfirmNew(true)} style={menuBtn}>↺ New Game</button>}
@@ -2460,7 +2475,7 @@ export default function Shimmer3D() {
             const rn = RUNES.find(r => r.id === id)?.name ?? 'your rune'
             setBanner(`Born of ${rn} — find Gregory in the glade`)
           }}
-          onCancel={() => setBirthOpen(false)}
+          onCancel={birthCancelable ? () => setBirthOpen(false) : undefined}
         />
       )}
 
@@ -2580,7 +2595,7 @@ export default function Shimmer3D() {
             >✕</button>
             {/* A — interact/confirm (lower, bigger, where the thumb rests): advance dialogue / talk to an NPC / confirm New Game. */}
             <button
-              onPointerDown={(e) => { e.stopPropagation(); if (dialogue) advanceDialogue(); else if (nearNpc) talk(nearNpc); else if (fish || nearNode || channel) toggleChannel(); else if (nearStation) openStation(); else if (confirmNew) { setConfirmNew(false); setBirthOpen(true) } }}
+              onPointerDown={(e) => { e.stopPropagation(); if (dialogue) advanceDialogue(); else if (nearNpc) talk(nearNpc); else if (fish || nearNode || channel) toggleChannel(); else if (nearStation) openStation(); else if (confirmNew) { setConfirmNew(false); setBirthCancelable(true); setBirthOpen(true) } }}
               aria-label="interact"
               style={{ width: 76, height: 76, borderRadius: '50%', border: '2px solid #ffffff4d', background: fish ? (fish.bite ? 'rgba(55,230,255,0.92)' : 'rgba(58,123,213,0.9)') : nearNpc || dialogue ? 'rgba(212,168,67,0.85)' : channel ? 'rgba(58,123,213,0.9)' : nearNode ? 'rgba(79,199,154,0.85)' : nearStation && !nearNpc && !dialogue ? `${STATIONS[nearStation.itemId].accent}d9` : 'rgba(36,84,72,0.8)', color: fish || nearNpc || dialogue || nearNode || channel || nearStation ? '#0d1a17' : '#dffaf0', font: '800 23px ui-monospace, monospace', cursor: 'pointer', touchAction: 'none' }}
             >{fish ? (fish.bite ? '❗' : '🎣') : channel ? '⏹' : nearNode && !nearNpc && !dialogue ? '🪓' : nearStation && !nearNpc && !dialogue ? STATIONS[nearStation.itemId].emoji : '✦'}</button>
