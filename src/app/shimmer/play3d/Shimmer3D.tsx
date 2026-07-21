@@ -55,8 +55,17 @@ const UP = new THREE.Vector3(0, 1, 0)
 // (orbit follow-cam keeps the calmer 45). Camera-only for now — movement still rides the flat-grid
 // canStand() until the world lane exposes a segs-collision read-API.
 const EYE_H = 1.15          // eye offset above the player's foot position (capsule center is +0.7)
+const EYE_SLIDE = 0.5       // eye dips this low mid-slide (crouched)
 const FPS_FOV = 72
 const ORBIT_FOV = 45
+// ── Locomotion feel (tier units; STEP=1 so tiers≈world units). All Alex-tunable. ──
+const WALK_SPEED = 5        // crisp ground walk (unchanged from the original instant model)
+const GRAVITY = 22          // downward accel while airborne
+const JUMP_V0 = 7.4         // jump launch speed → ~1.25-tier apex (clears a 1-tier step, reaches low segs)
+const SLIDE_SPEED = 9.5     // burst speed at slide start
+const SLIDE_TIME = 0.55     // slide duration before it bleeds back to a walk
+const AIR_CONTROL = 0.35    // how much WASD can steer horizontal velocity while airborne (0=none,1=full)
+const FALL_OFF = 0.32       // step down more than this below the resolved floor → you've walked off a ledge → fall
 const DIR_YAW: Record<string, number> = { up: 0, down: Math.PI, left: Math.PI / 2, right: -Math.PI / 2 }
 
 type Cell = [number, number]
@@ -512,7 +521,7 @@ function npcInWorld(n: NPC3D, defeated: Record<string, boolean>, flags: Record<s
   return true
 }
 
-function Player({ posRef, gridRef, heightsRef, zoneIdRef, editRef, onWarp, battleRef, partyLevelRef, onEncounter, joyRef, talkingRef, hasPartyRef, onNearChange, defeatedRef, flagsRef, harvestNodesRef, onNearNode, stationsRef, onNearStation, viewRef }: {
+function Player({ posRef, gridRef, heightsRef, zoneIdRef, editRef, onWarp, battleRef, partyLevelRef, onEncounter, joyRef, talkingRef, hasPartyRef, onNearChange, defeatedRef, flagsRef, harvestNodesRef, onNearNode, stationsRef, onNearStation, viewRef, eyeRef, jumpRef, slideRef }: {
   posRef: React.RefObject<THREE.Vector3>; gridRef: React.RefObject<number[][]>
   heightsRef: React.RefObject<number[][]>; zoneIdRef: React.RefObject<string>
   editRef: React.RefObject<boolean>; onWarp: (w: Warp) => void
@@ -525,7 +534,8 @@ function Player({ posRef, gridRef, heightsRef, zoneIdRef, editRef, onWarp, battl
   flagsRef: React.RefObject<Record<string, boolean>>
   harvestNodesRef: React.RefObject<ResourceNode[]>; onNearNode: (n: ResourceNode | null) => void
   stationsRef: React.RefObject<PlacedStruct[]>; onNearStation: (s: PlacedStruct | null) => void
-  viewRef: React.RefObject<'first' | 'third'>
+  viewRef: React.RefObject<'first' | 'third'>; eyeRef: React.RefObject<number>
+  jumpRef: React.RefObject<boolean>; slideRef: React.RefObject<boolean>
 }) {
   const group = useRef<THREE.Group>(null)
   const keys = useRef<Record<string, boolean>>({})
@@ -539,9 +549,21 @@ function Player({ posRef, gridRef, heightsRef, zoneIdRef, editRef, onWarp, battl
   const fwd = useMemo(() => new THREE.Vector3(), [])
   const right = useMemo(() => new THREE.Vector3(), [])
   const move = useMemo(() => new THREE.Vector3(), [])
+  // ── Vertical + momentum physics (jump / slide-hop) ──
+  const vy = useRef(0)              // vertical velocity, tier units/s
+  const airborne = useRef(false)    // in a jump/fall (gravity owns p.y) vs grounded (ease to floor)
+  const slideT = useRef(0)          // seconds of slide remaining (0 = not sliding)
+  const jumpHeld = useRef(false)    // edge-detect Space so holding it doesn't auto-bounce
+  const slideHeld = useRef(false)   // edge-detect slide key so one press = one slide
+  const hvel = useMemo(() => new THREE.Vector3(), [])  // horizontal velocity (carries through slide+air)
+  const airSpeed = useRef(0)        // horizontal speed locked at takeoff → preserved through the jump
 
   useEffect(() => {
-    const dn = (e: KeyboardEvent) => { keys.current[e.key.toLowerCase()] = true }
+    const dn = (e: KeyboardEvent) => {
+      const key = e.key.toLowerCase()
+      if (key === ' ') e.preventDefault()  // space = jump, never page-scroll
+      keys.current[key] = true
+    }
     const up = (e: KeyboardEvent) => { keys.current[e.key.toLowerCase()] = false }
     window.addEventListener('keydown', dn); window.addEventListener('keyup', up)
     return () => { window.removeEventListener('keydown', dn); window.removeEventListener('keyup', up) }
@@ -575,22 +597,74 @@ function Player({ posRef, gridRef, heightsRef, zoneIdRef, editRef, onWarp, battl
       // touch joystick (camera-relative, same as WASD): y = forward/back, x = strafe
       const j = joyRef.current
       if (j.x || j.y) { move.addScaledVector(fwd, j.y); move.addScaledVector(right, j.x) }
+      const hasInput = move.lengthSq() > 0
+      if (hasInput) move.normalize()
+      const dt2 = Math.min(dt, 0.05)  // clamp so a stutter frame can't launch a huge step
 
-      if (move.lengthSq() > 0) {
-        move.normalize()
-        const dstep = Math.min(dt, 0.05) * 5
-        const nx = p.x + move.x * dstep
-        if (canStep(Math.round(nx), Math.round(p.z))) p.x = nx
-        const nz = p.z + move.z * dstep
-        if (canStep(Math.round(p.x), Math.round(nz))) p.z = nz
-        yaw.current = Math.atan2(move.x, move.z)
+      // ── SLIDE: Shift (or the touch slide button) while grounded + moving → a timed forward burst
+      //    that bleeds back to a walk. Jumping mid-slide preserves the speed into the air (slide-hop).
+      const slideKey = !!k['shift'] || slideRef.current
+      if (slideKey && !slideHeld.current && !airborne.current && hasInput && slideT.current <= 0) {
+        slideT.current = SLIDE_TIME
+        hvel.copy(move).multiplyScalar(SLIDE_SPEED)
+      }
+      slideHeld.current = slideKey
+      const sliding = slideT.current > 0 && !airborne.current
+      if (sliding) slideT.current -= dt
+
+      // ── HORIZONTAL VELOCITY (crisp on the ground, momentum-carrying in slide + air) ──
+      if (airborne.current) {
+        // steer the preserved takeoff momentum toward input, keep the magnitude (air control)
+        if (hasInput && airSpeed.current > 0.01) {
+          const dir = hvel.lengthSq() > 1e-5 ? hvel.clone().normalize() : move.clone()
+          dir.lerp(move, Math.min(1, AIR_CONTROL * dt2 * 12)).normalize()
+          hvel.copy(dir).multiplyScalar(airSpeed.current)
+        } else if (hasInput) {
+          airSpeed.current = WALK_SPEED * 0.6  // let a pure-vertical jump gain a little drift
+          hvel.copy(move).multiplyScalar(airSpeed.current)
+        }
+      } else if (sliding) {
+        // bleed the burst back toward walk speed over the slide; a little steering allowed
+        const t = Math.max(WALK_SPEED, hvel.length() - (SLIDE_SPEED - WALK_SPEED) * (dt / SLIDE_TIME))
+        if (hasInput && hvel.lengthSq() > 1e-5) {
+          const dir = hvel.clone().normalize().lerp(move, 0.05).normalize()
+          hvel.copy(dir).multiplyScalar(t)
+        } else hvel.setLength(t)
+      } else {
+        // normal ground walk: velocity IS the input — instant start, instant stop (unchanged feel)
+        hvel.copy(move).multiplyScalar(hasInput ? WALK_SPEED : 0)
+      }
+      if (hvel.lengthSq() > 1e-4) yaw.current = Math.atan2(hvel.x, hvel.z)  // face travel dir (avatar, 3rd-person)
+
+      // ── apply horizontal with axis-separated collision (blocked axis kills that component) ──
+      if (hvel.lengthSq() > 1e-6) {
+        const nx = p.x + hvel.x * dt2
+        if (canStep(Math.round(nx), Math.round(p.z))) p.x = nx; else hvel.x = 0
+        const nz = p.z + hvel.z * dt2
+        if (canStep(Math.round(p.x), Math.round(nz))) p.z = nz; else hvel.z = 0
       }
 
-      // Ride onto the surface the engine resolves at the new cell (ground OR the seg you're on),
-      // not just the tile's ground height — this is what carries you along a high road.
-      const surf = resolveStand(ctx, Math.round(p.x), Math.round(p.z), fromY)
-      const standTop = (surf ? surf.y : (heights[Math.round(p.z)]?.[Math.round(p.x)] ?? 0)) * STEP
-      p.y += (standTop - p.y) * 0.25
+      // ── VERTICAL: gravity + jump + smooth ground-follow ──
+      const surf = resolveStand(ctx, Math.round(p.x), Math.round(p.z), p.y / STEP)
+      const floorY = (surf ? surf.y : (heights[Math.round(p.z)]?.[Math.round(p.x)] ?? 0)) * STEP
+      const jumpKey = !!k[' '] || jumpRef.current
+      jumpRef.current = false  // consume the touch edge
+      if (airborne.current) {
+        vy.current -= GRAVITY * dt2
+        p.y += vy.current * dt2
+        if (vy.current <= 0 && p.y <= floorY) { p.y = floorY; vy.current = 0; airborne.current = false }  // land
+      } else if (jumpKey && !jumpHeld.current) {
+        airborne.current = true; vy.current = JUMP_V0
+        airSpeed.current = Math.max(hvel.length(), hasInput ? WALK_SPEED : 0)  // carry slide/walk speed up
+      } else if (floorY < p.y - FALL_OFF) {
+        airborne.current = true; vy.current = 0; airSpeed.current = hvel.length()  // walked off a ledge → fall
+      } else {
+        p.y += (floorY - p.y) * 0.25  // grounded: ease onto the floor (smooth stairs / seg step-ups)
+      }
+      jumpHeld.current = jumpKey
+
+      // eye dips mid-slide, springs back otherwise
+      eyeRef.current += ((sliding ? EYE_SLIDE : EYE_H) - eyeRef.current) * 0.25
 
       const tx = Math.round(p.x), tz = Math.round(p.z)
       const tileKey = `${tx},${tz}`
@@ -750,10 +824,10 @@ function HarvestPop({ pop }: { pop: { x: number; y: number; z: number; glyph: st
   )
 }
 
-function CameraRig({ posRef, editFocusRef, yawRef, editRef, viewRef }: {
+function CameraRig({ posRef, editFocusRef, yawRef, editRef, viewRef, eyeRef }: {
   posRef: React.RefObject<THREE.Vector3>; editFocusRef: React.RefObject<THREE.Vector3>
   yawRef: React.RefObject<number>; editRef: React.RefObject<boolean>
-  viewRef: React.RefObject<'first' | 'third'>
+  viewRef: React.RefObject<'first' | 'third'>; eyeRef: React.RefObject<number>
 }) {
   const yaw = yawRef
   const pitch = useRef(0.6)          // orbit polar angle (third-person / spectator)
@@ -839,7 +913,7 @@ function CameraRig({ posRef, editFocusRef, yawRef, editRef, viewRef }: {
       // orbit's so WASD (which reads camera.getWorldDirection) stays identical between views.
       const cp = Math.cos(lookPitch.current), sp = Math.sin(lookPitch.current)
       const fx = -Math.sin(yaw.current) * cp, fz = -Math.cos(yaw.current) * cp
-      const ey = target.y + EYE_H
+      const ey = target.y + (eyeRef.current ?? EYE_H)
       cam.position.set(target.x, ey, target.z)
       cam.lookAt(target.x + fx, ey + sp, target.z + fz)
       return
@@ -866,7 +940,8 @@ const Scene = memo(function Scene(props: {
   posRef: React.RefObject<THREE.Vector3>; heightsRef: React.RefObject<number[][]>; zoneIdRef: React.RefObject<string>
   editFocusRef: React.RefObject<THREE.Vector3>
   onWarp: (w: Warp) => void; yawRef: React.RefObject<number>; editRef: React.RefObject<boolean>
-  viewRef: React.RefObject<'first' | 'third'>
+  viewRef: React.RefObject<'first' | 'third'>; eyeRef: React.RefObject<number>
+  jumpRef: React.RefObject<boolean>; slideRef: React.RefObject<boolean>
   paint: (c: number, r: number, shift: boolean) => void; editing: boolean
   battleRef: React.RefObject<boolean>; partyLevelRef: React.RefObject<number>
   onEncounter: (enc: WildEncounter) => void
@@ -909,11 +984,11 @@ const Scene = memo(function Scene(props: {
       <NodeMarkers nodes={props.nodes} heights={props.heights} editing={props.editing} channel={props.channel} />
       <StructureMarkers structures={structuresInZone} heights={props.heights} />
       <PlacementGhost placing={props.placing} posRef={props.posRef} heights={props.heights} gridRef={props.gridRef} placeTargetRef={props.placeTargetRef} structuresRef={props.structuresRef} zoneIdRef={props.zoneIdRef} />
-      <Player posRef={props.posRef} gridRef={props.gridRef} heightsRef={props.heightsRef} zoneIdRef={props.zoneIdRef} editRef={props.editRef} onWarp={props.onWarp} battleRef={props.battleRef} partyLevelRef={props.partyLevelRef} onEncounter={props.onEncounter} joyRef={props.joyRef} talkingRef={props.talkingRef} hasPartyRef={props.hasPartyRef} onNearChange={props.onNearChange} defeatedRef={props.defeatedRef} flagsRef={props.flagsRef} harvestNodesRef={props.harvestNodesRef} onNearNode={props.onNearNode} stationsRef={props.structuresRef} onNearStation={props.onNearStation} viewRef={props.viewRef} />
+      <Player posRef={props.posRef} gridRef={props.gridRef} heightsRef={props.heightsRef} zoneIdRef={props.zoneIdRef} editRef={props.editRef} onWarp={props.onWarp} battleRef={props.battleRef} partyLevelRef={props.partyLevelRef} onEncounter={props.onEncounter} joyRef={props.joyRef} talkingRef={props.talkingRef} hasPartyRef={props.hasPartyRef} onNearChange={props.onNearChange} defeatedRef={props.defeatedRef} flagsRef={props.flagsRef} harvestNodesRef={props.harvestNodesRef} onNearNode={props.onNearNode} stationsRef={props.structuresRef} onNearStation={props.onNearStation} viewRef={props.viewRef} eyeRef={props.eyeRef} jumpRef={props.jumpRef} slideRef={props.slideRef} />
       {props.companionColor && !props.editing && <Follower posRef={props.posRef} heightsRef={props.heightsRef} color={props.companionColor} />}
       {props.fishing && <FishTell posRef={props.posRef} heightsRef={props.heightsRef} bite={props.fishBite} />}
       <HarvestPop pop={props.harvestPop} />
-      <CameraRig posRef={props.posRef} editFocusRef={props.editFocusRef} yawRef={props.yawRef} editRef={props.editRef} viewRef={props.viewRef} />
+      <CameraRig posRef={props.posRef} editFocusRef={props.editFocusRef} yawRef={props.yawRef} editRef={props.editRef} viewRef={props.viewRef} eyeRef={props.eyeRef} />
     </>
   )
 })
@@ -1058,6 +1133,12 @@ export default function Shimmer3D() {
   const viewRef = useRef<'first' | 'third'>('first')
   const [view, setView] = useState<'first' | 'third'>('first')
   viewRef.current = view
+  // Live eye height — Player writes it (dips mid-slide), CameraRig reads it for the FPS eye position.
+  const eyeRef = useRef(EYE_H)
+  // Touch triggers for jump/slide (mobile). jumpRef = edge (button sets true, Player consumes+clears);
+  // slideRef = held (true while the slide button is pressed). Keyboard uses Space/Shift directly.
+  const jumpRef = useRef(false)
+  const slideRef = useRef(false)
   // Pointer-lock state → drives the "click to look" nudge (shown only when first-person + uncaptured).
   const [pointerLocked, setPointerLocked] = useState(false)
   useEffect(() => {
@@ -1976,7 +2057,7 @@ export default function Shimmer3D() {
           zone={zone} gridRef={gridRef} heights={heightsRef.current} version={version} dims={dims}
           posRef={posRef as React.RefObject<THREE.Vector3>} heightsRef={heightsRef} zoneIdRef={zoneIdRef}
           editFocusRef={editFocusRef}
-          onWarp={onWarp} yawRef={camYaw} editRef={editRef} viewRef={viewRef} paint={paint} editing={editMode}
+          onWarp={onWarp} yawRef={camYaw} editRef={editRef} viewRef={viewRef} eyeRef={eyeRef} jumpRef={jumpRef} slideRef={slideRef} paint={paint} editing={editMode}
           battleRef={battleRef} partyLevelRef={partyLevelRef} onEncounter={onEncounter} joyRef={joyRef}
           talkingRef={talkingRef} hasPartyRef={hasPartyRef} onNearChange={setNearNpc}
           harvestNodesRef={runtimeNodesRef} onNearNode={setNearNode} channel={channel}
@@ -1995,7 +2076,7 @@ export default function Shimmer3D() {
       }}>
         Shimmer 3D — {zone.name}{editMode ? '  ·  EDIT' : ''}<br />
         <span style={{ opacity: 0.8 }}>
-          {editMode ? 'left-drag paint · WASD fly · Q/E down·up · right-drag look · scroll zoom' : `WASD · ${view === 'first' ? 'mouse look · V for 3rd-person' : 'drag orbit · V for 1st-person'} · edges warp · ${hasStarter ? 'mist = wild spirits' : 'meet Gregory first'}${isOwner ? ' · B to edit' : ''}`}
+          {editMode ? 'left-drag paint · WASD fly · Q/E down·up · right-drag look · scroll zoom' : `WASD · Space jump · Shift slide · ${view === 'first' ? 'mouse look · V for 3rd-person' : 'drag orbit · V for 1st-person'} · ${hasStarter ? 'mist = wild spirits' : 'meet Gregory first'}${isOwner ? ' · B to edit' : ''}`}
         </span>
         {!editMode && <><br /><span style={{ color: '#ffe08a' }}>✦ {wallet.marks} marks</span></>}
       </div>
@@ -2310,6 +2391,21 @@ export default function Shimmer3D() {
               aria-label="interact"
               style={{ width: 76, height: 76, borderRadius: '50%', border: '2px solid #ffffff4d', background: fish ? (fish.bite ? 'rgba(55,230,255,0.92)' : 'rgba(58,123,213,0.9)') : nearNpc || dialogue ? 'rgba(212,168,67,0.85)' : channel ? 'rgba(58,123,213,0.9)' : nearNode ? 'rgba(79,199,154,0.85)' : nearStation && !nearNpc && !dialogue ? `${STATIONS[nearStation.itemId].accent}d9` : 'rgba(36,84,72,0.8)', color: fish || nearNpc || dialogue || nearNode || channel || nearStation ? '#0d1a17' : '#dffaf0', font: '800 23px ui-monospace, monospace', cursor: 'pointer', touchAction: 'none' }}
             >{fish ? (fish.bite ? '❗' : '🎣') : channel ? '⏹' : nearNode && !nearNpc && !dialogue ? '🪓' : nearStation && !nearNpc && !dialogue ? STATIONS[nearStation.itemId].emoji : '✦'}</button>
+          </div>
+          {/* Jump (edge) + Slide (held) — left of the A/B column. Only meaningful in first-person play. */}
+          <div style={{ position: 'fixed', bottom: 96, right: 118, zIndex: 30, display: 'flex', flexDirection: 'column', gap: 14, alignItems: 'center' }}>
+            <button
+              onPointerDown={(e) => { e.stopPropagation(); slideRef.current = true }}
+              onPointerUp={(e) => { e.stopPropagation(); slideRef.current = false }}
+              onPointerCancel={() => { slideRef.current = false }}
+              aria-label="slide"
+              style={{ width: 56, height: 56, borderRadius: '50%', border: '2px solid #7fe3c855', background: 'rgba(20,46,54,0.72)', color: '#bfeee2', font: '800 20px ui-monospace, monospace', cursor: 'pointer', touchAction: 'none' }}
+            >⇊</button>
+            <button
+              onPointerDown={(e) => { e.stopPropagation(); jumpRef.current = true }}
+              aria-label="jump"
+              style={{ width: 68, height: 68, borderRadius: '50%', border: '2px solid #ffffff4d', background: 'rgba(36,84,72,0.8)', color: '#dffaf0', font: '800 24px ui-monospace, monospace', cursor: 'pointer', touchAction: 'none' }}
+            >⤒</button>
           </div>
         </>
       )}
