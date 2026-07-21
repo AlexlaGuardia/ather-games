@@ -58,13 +58,17 @@ const EYE_H = 1.15          // eye offset above the player's foot position (caps
 const EYE_SLIDE = 0.5       // eye dips this low mid-slide (crouched)
 const FPS_FOV = 72
 const ORBIT_FOV = 45
-// ── Locomotion feel (tier units; STEP=1 so tiers≈world units). All Alex-tunable. ──
-const WALK_SPEED = 5        // crisp ground walk (unchanged from the original instant model)
+// ── Locomotion feel (tier units; STEP=1 so tiers≈world units). All Alex-tunable. Apex-style flow. ──
+const RUN_SPEED = 6.5       // AUTO-RUN: the default sustained ground speed (no sprint key)
+const CROUCH_SPEED = 2.6    // crouch-walk speed (hold crouch while slow / standing)
+const GROUND_ACCEL = 11     // ramp-UP rate toward target speed — the "starts as a walk, builds to a run" flow
+const GROUND_FRICTION = 13  // coast-DOWN rate on release (stop has weight, not a dead halt)
 const GRAVITY = 22          // downward accel while airborne
 const JUMP_V0 = 7.4         // jump launch speed → ~1.25-tier apex (clears a 1-tier step, reaches low segs)
-const SLIDE_SPEED = 9.5     // burst speed at slide start
-const SLIDE_TIME = 0.55     // slide duration before it bleeds back to a walk
-const AIR_CONTROL = 0.35    // how much WASD can steer horizontal velocity while airborne (0=none,1=full)
+const SLIDE_SPEED = 10      // slide speed FLOOR — a fast entry scales above it (curSpeed * 1.35)
+const SLIDE_MIN_SPEED = 3.8 // crouch below this speed = crouch-walk; at/above = a slide
+const SLIDE_TIME = 0.6      // slide duration before it bleeds back to the run
+const AIR_CONTROL = 0.4     // how much WASD can steer horizontal velocity while airborne (0=none,1=full)
 const FALL_OFF = 0.32       // step down more than this below the resolved floor → you've walked off a ledge → fall
 const DIR_YAW: Record<string, number> = { up: 0, down: Math.PI, left: Math.PI / 2, right: -Math.PI / 2 }
 
@@ -554,7 +558,7 @@ function Player({ posRef, gridRef, heightsRef, zoneIdRef, editRef, onWarp, battl
   const airborne = useRef(false)    // in a jump/fall (gravity owns p.y) vs grounded (ease to floor)
   const slideT = useRef(0)          // seconds of slide remaining (0 = not sliding)
   const jumpHeld = useRef(false)    // edge-detect Space so holding it doesn't auto-bounce
-  const slideHeld = useRef(false)   // edge-detect slide key so one press = one slide
+  const crouchHeld = useRef(false)  // edge-detect crouch key so one press = one slide
   const hvel = useMemo(() => new THREE.Vector3(), [])  // horizontal velocity (carries through slide+air)
   const airSpeed = useRef(0)        // horizontal speed locked at takeoff → preserved through the jump
 
@@ -601,18 +605,21 @@ function Player({ posRef, gridRef, heightsRef, zoneIdRef, editRef, onWarp, battl
       if (hasInput) move.normalize()
       const dt2 = Math.min(dt, 0.05)  // clamp so a stutter frame can't launch a huge step
 
-      // ── SLIDE: Shift (or the touch slide button) while grounded + moving → a timed forward burst
-      //    that bleeds back to a walk. Jumping mid-slide preserves the speed into the air (slide-hop).
-      const slideKey = !!k['shift'] || slideRef.current
-      if (slideKey && !slideHeld.current && !airborne.current && hasInput && slideT.current <= 0) {
+      // ── CROUCH / SLIDE (Ctrl · C · touch ⇊), Apex-style. Crouch AT SPEED = a SLIDE (a burst that
+      //    bleeds back to the run, and hops if you jump mid-slide). Crouch while SLOW = CROUCH-WALK.
+      // Shift or C (NOT Ctrl — Ctrl+W closes the tab and isn't preventable in-browser).
+      const crouchKey = !!k['shift'] || !!k['c'] || slideRef.current
+      const curSpeed = Math.hypot(hvel.x, hvel.z)
+      if (crouchKey && !crouchHeld.current && !airborne.current && curSpeed > SLIDE_MIN_SPEED && slideT.current <= 0) {
         slideT.current = SLIDE_TIME
-        hvel.copy(move).multiplyScalar(SLIDE_SPEED)
+        hvel.setLength(Math.max(SLIDE_SPEED, curSpeed * 1.35))  // faster entry → faster slide
       }
-      slideHeld.current = slideKey
+      crouchHeld.current = crouchKey
       const sliding = slideT.current > 0 && !airborne.current
       if (sliding) slideT.current -= dt
+      const crouching = crouchKey && !sliding && !airborne.current  // slow crouch-walk (not a slide)
 
-      // ── HORIZONTAL VELOCITY (crisp on the ground, momentum-carrying in slide + air) ──
+      // ── HORIZONTAL VELOCITY — auto-run with an accel RAMP (the flow), momentum through slide + air ──
       if (airborne.current) {
         // steer the preserved takeoff momentum toward input, keep the magnitude (air control)
         if (hasInput && airSpeed.current > 0.01) {
@@ -620,19 +627,23 @@ function Player({ posRef, gridRef, heightsRef, zoneIdRef, editRef, onWarp, battl
           dir.lerp(move, Math.min(1, AIR_CONTROL * dt2 * 12)).normalize()
           hvel.copy(dir).multiplyScalar(airSpeed.current)
         } else if (hasInput) {
-          airSpeed.current = WALK_SPEED * 0.6  // let a pure-vertical jump gain a little drift
+          airSpeed.current = RUN_SPEED * 0.5  // let a pure-vertical jump gain a little drift
           hvel.copy(move).multiplyScalar(airSpeed.current)
         }
       } else if (sliding) {
-        // bleed the burst back toward walk speed over the slide; a little steering allowed
-        const t = Math.max(WALK_SPEED, hvel.length() - (SLIDE_SPEED - WALK_SPEED) * (dt / SLIDE_TIME))
+        // bleed the burst back toward run speed over the slide; a little steering allowed
+        const t = Math.max(RUN_SPEED, hvel.length() - (SLIDE_SPEED - RUN_SPEED) * (dt / SLIDE_TIME))
         if (hasInput && hvel.lengthSq() > 1e-5) {
           const dir = hvel.clone().normalize().lerp(move, 0.05).normalize()
           hvel.copy(dir).multiplyScalar(t)
         } else hvel.setLength(t)
       } else {
-        // normal ground walk: velocity IS the input — instant start, instant stop (unchanged feel)
-        hvel.copy(move).multiplyScalar(hasInput ? WALK_SPEED : 0)
+        // grounded run / crouch-walk: accelerate toward target speed (ramp up from a walk), coast to a
+        // stop on release. This easing IS the "flow" — no more instant on/off.
+        const targetSpeed = crouching ? CROUCH_SPEED : RUN_SPEED
+        const rate = Math.min(1, (hasInput ? GROUND_ACCEL : GROUND_FRICTION) * dt2)
+        hvel.x += ((hasInput ? move.x * targetSpeed : 0) - hvel.x) * rate
+        hvel.z += ((hasInput ? move.z * targetSpeed : 0) - hvel.z) * rate
       }
       if (hvel.lengthSq() > 1e-4) yaw.current = Math.atan2(hvel.x, hvel.z)  // face travel dir (avatar, 3rd-person)
 
@@ -655,7 +666,7 @@ function Player({ posRef, gridRef, heightsRef, zoneIdRef, editRef, onWarp, battl
         if (vy.current <= 0 && p.y <= floorY) { p.y = floorY; vy.current = 0; airborne.current = false }  // land
       } else if (jumpKey && !jumpHeld.current) {
         airborne.current = true; vy.current = JUMP_V0
-        airSpeed.current = Math.max(hvel.length(), hasInput ? WALK_SPEED : 0)  // carry slide/walk speed up
+        airSpeed.current = Math.max(hvel.length(), hasInput ? RUN_SPEED : 0)  // carry slide/run speed up
       } else if (floorY < p.y - FALL_OFF) {
         airborne.current = true; vy.current = 0; airSpeed.current = hvel.length()  // walked off a ledge → fall
       } else {
@@ -663,8 +674,8 @@ function Player({ posRef, gridRef, heightsRef, zoneIdRef, editRef, onWarp, battl
       }
       jumpHeld.current = jumpKey
 
-      // eye dips mid-slide, springs back otherwise
-      eyeRef.current += ((sliding ? EYE_SLIDE : EYE_H) - eyeRef.current) * 0.25
+      // eye dips while sliding OR crouch-walking, springs back when standing/running
+      eyeRef.current += (((sliding || crouching) ? EYE_SLIDE : EYE_H) - eyeRef.current) * 0.25
 
       const tx = Math.round(p.x), tz = Math.round(p.z)
       const tileKey = `${tx},${tz}`
@@ -2076,7 +2087,7 @@ export default function Shimmer3D() {
       }}>
         Shimmer 3D — {zone.name}{editMode ? '  ·  EDIT' : ''}<br />
         <span style={{ opacity: 0.8 }}>
-          {editMode ? 'left-drag paint · WASD fly · Q/E down·up · right-drag look · scroll zoom' : `WASD · Space jump · Shift slide · ${view === 'first' ? 'mouse look · V for 3rd-person' : 'drag orbit · V for 1st-person'} · ${hasStarter ? 'mist = wild spirits' : 'meet Gregory first'}${isOwner ? ' · B to edit' : ''}`}
+          {editMode ? 'left-drag paint · WASD fly · Q/E down·up · right-drag look · scroll zoom' : `WASD run · Space jump · Shift slide/crouch ·${view === 'first' ? 'mouse look · V for 3rd-person' : 'drag orbit · V for 1st-person'} · ${hasStarter ? 'mist = wild spirits' : 'meet Gregory first'}${isOwner ? ' · B to edit' : ''}`}
         </span>
         {!editMode && <><br /><span style={{ color: '#ffe08a' }}>✦ {wallet.marks} marks</span></>}
       </div>
@@ -2398,7 +2409,7 @@ export default function Shimmer3D() {
               onPointerDown={(e) => { e.stopPropagation(); slideRef.current = true }}
               onPointerUp={(e) => { e.stopPropagation(); slideRef.current = false }}
               onPointerCancel={() => { slideRef.current = false }}
-              aria-label="slide"
+              aria-label="crouch / slide"
               style={{ width: 56, height: 56, borderRadius: '50%', border: '2px solid #7fe3c855', background: 'rgba(20,46,54,0.72)', color: '#bfeee2', font: '800 20px ui-monospace, monospace', cursor: 'pointer', touchAction: 'none' }}
             >⇊</button>
             <button
