@@ -82,6 +82,8 @@ const CLIMB_MAX_RISE = 2.5  // max VERTICAL rise per climb before the grip gives
 const MANTLE_REACH = 1.4    // grab reach (tiers): airborne, if a ledge/wall TOP ahead sits within this above
                             // your feet, TAP JUMP to pull up over it. Jump alone reaches low ledges; jump then
                             // wall-climb brings a taller wall's top into reach. Skill-timed, works on any wall.
+const TEST_WALL_MOONWELL = true  // TEMP scaffold (mechanics lane): stamps a stepped test wall (1..6 tiers) in
+                                 // moonwell-glade for climb/mantle feel-testing. Flip false / delete to remove.
 const WALLJUMP_UP = 7.0     // vertical kick of a wall-jump (~JUMP_V0; carries you up the face in bounds)
 const WALLJUMP_PUSH = 6.0   // horizontal shove AWAY from the wall along wallNormal (near run speed)
 const WALL_COYOTE = 0.18    // grace after leaving a wall in which Space still counts as a wall-jump
@@ -1235,6 +1237,16 @@ export default function Shimmer3D() {
     initedZone.current = zone.id
     gridRef.current = zone.grid.map((row) => [...row])
     heightsRef.current = getHeightGrid(zone.id, zone.grid.length, zone.grid[0].length)
+    // TEMP mantle/climb test scaffold — six wall blocks of rising height (1..6 tiers), 2 wide x 2 deep at
+    // rows 10-11, spaced across the open grass. Approach each from row 9. Heights 1-3 mantle off a jump,
+    // 4-5 need a wall-climb to reach the lip, 6 is beyond reach (confirms a too-tall wall just blocks).
+    if (TEST_WALL_MOONWELL && zone.id === 'moonwell-glade') {
+      const H = heightsRef.current
+      for (let i = 0; i < 6; i++) {
+        const h = i + 1, c0 = 2 + i * 3
+        for (let r = 10; r <= 11; r++) for (let c = c0; c <= c0 + 1; c++) if (H[r] && c < H[r].length) H[r][c] = h
+      }
+    }
   }
   const zoneIdRef = useRef(zone.id); zoneIdRef.current = zone.id
   const posRef = useRef<THREE.Vector3 | null>(null)
