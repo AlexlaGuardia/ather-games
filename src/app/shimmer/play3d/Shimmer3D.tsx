@@ -13,6 +13,8 @@ import { resolveStand, canStandAt, surfacesAt, EMPTY_SEGS, type CollisionCtx } f
 import { SOLID } from '../world/tiles'
 import { ZONES, getZone, checkWarp, type Zone, type Warp } from '../world/zones'
 import { getHeightGrid } from '../world/heightmaps'
+import { GardenAtmosphere } from '../world/atmosphere'
+import { FloraTree, FloraDressing } from '../world/flora'
 import { rollEncounter, type WildEncounter } from '../engine/encounters'
 import { createSpirit, addXP, xpForLevel, speciesDisplayName, ELEMENT_COLORS, type Spirit, type Species, type Element } from '../spirits/spirit'
 import { spiritsToSave, spiritsFromSave } from '../spirits/spirit-save'
@@ -291,11 +293,7 @@ function NodeMarkers({ nodes, heights, editing, channel }: { nodes: ResourceNode
                 </div>
               </Html>
             )}
-            {look.kind === 'tree' && <>
-              {/* trunk — a lone stump when depleted (canopy harvested, regrowing) */}
-              <mesh position={[0, (depleted ? 0.18 : 0.5) * s, 0]} castShadow><cylinderGeometry args={[0.13 * s, 0.17 * s, (depleted ? 0.36 : 1) * s, 7]} /><meshStandardMaterial color={look.trunk} roughness={0.9} opacity={depleted ? 0.7 : 1} transparent={depleted} /></mesh>
-              {!depleted && <mesh position={[0, s + 0.35 * s, 0]} castShadow><icosahedronGeometry args={[0.62 * s, 0]} /><meshStandardMaterial color={look.canopy} emissive={look.canopy} emissiveIntensity={look.glow ?? 0} roughness={0.8} flatShading /></mesh>}
-            </>}
+            {look.kind === 'tree' && <FloraTree look={look} depleted={depleted} />}
 
             {look.kind === 'crystal' && <>
               {/* rock base — always present; the shards break off it when mined */}
@@ -1124,7 +1122,7 @@ const Scene = memo(function Scene(props: {
   )
   return (
     <>
-      <color attach="background" args={['#bfe3ef']} />
+      <GardenAtmosphere zoneId={props.zone.id} />
       <ambientLight intensity={0.65} />
       <directionalLight
         position={[18, 26, 12]} intensity={1.25} castShadow
@@ -1136,6 +1134,7 @@ const Scene = memo(function Scene(props: {
       <ZoneGeometry key={`${props.zone.id}-${props.dims}`} gridRef={props.gridRef} heights={props.heights} version={props.version} paint={props.paint} editing={props.editing} />
       <NPCMarkers npcs={NPCS_3D.filter((n) => n.zone === props.zone.id && npcInWorld(n, props.defeated, props.flagsRef.current))} heights={props.heights} />
       <NodeMarkers nodes={props.nodes} heights={props.heights} editing={props.editing} channel={props.channel} />
+      <FloraDressing zoneId={props.zone.id} heights={props.heights} />
       <StructureMarkers structures={structuresInZone} heights={props.heights} />
       <PlacementGhost placing={props.placing} posRef={props.posRef} heights={props.heights} gridRef={props.gridRef} placeTargetRef={props.placeTargetRef} structuresRef={props.structuresRef} zoneIdRef={props.zoneIdRef} />
       <Player posRef={props.posRef} gridRef={props.gridRef} heightsRef={props.heightsRef} zoneIdRef={props.zoneIdRef} editRef={props.editRef} onWarp={props.onWarp} battleRef={props.battleRef} partyLevelRef={props.partyLevelRef} onEncounter={props.onEncounter} joyRef={props.joyRef} talkingRef={props.talkingRef} hasPartyRef={props.hasPartyRef} onNearChange={props.onNearChange} defeatedRef={props.defeatedRef} flagsRef={props.flagsRef} harvestNodesRef={props.harvestNodesRef} onNearNode={props.onNearNode} stationsRef={props.structuresRef} onNearStation={props.onNearStation} eyeRef={props.eyeRef} jumpRef={props.jumpRef} slideRef={props.slideRef} />
