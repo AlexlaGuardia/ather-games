@@ -68,6 +68,13 @@ coord build "what changed"     # acquire lock -> npm run build -> pm2 restart ->
   Hit an unsettled fact → park the build piece, add an `[OPEN]` block, let Alex bridge to /magii.
 - Canon-touching work runs the drift gate: `npm run canon` (safe concurrently — read-only).
 
+## Remote render node (cross-machine — the elitedesk)
+> The swarm's `.coord/` board is a SERVER filesystem thing; a window on another box can't share it.
+- The **elitedesk render node** owns the `render` lane: runs `/picaso` (Blender/bpy) on its own clone, **syncs via `origin`** (git push producer + sprite), holds **NO build-lock**, and **never deploys** — the hub pulls its push, wires, and `coord build`s.
+- **Its lane is registered on the board by HUB PROXY** (it can't write the server's `.coord/`). Its local `coord status` shows only its own empty board — ignore that for swarm state.
+- **Cross-machine coordination is the `[coord]` cortex thread**, the one bus that spans both boxes. The render node's live status = its `[coord]` signals (rendering X / pushed Y), not the filesystem board.
+- **Naming:** the asset-*wiring* window may claim `sprites`, but that clashes with the SOP's Shimmer-pixel meaning — prefer lane name `assets` for render-to-sprite wiring to keep the two distinct.
+
 ## Anti-patterns
 - ❌ `git add -A` — sweeps another window's uncommitted lane into your commit.
 - ❌ Direct `npm run build` / `pm2 restart` — the `.next`-corruption + OOM footgun the lock exists to kill.
