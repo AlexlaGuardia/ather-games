@@ -583,6 +583,7 @@ function Player({ posRef, gridRef, heightsRef, zoneIdRef, editRef, onWarp, battl
   const climbRise = useRef(0)       // vertical distance climbed this airborne stint (tiers); caps the climb, resets on ground
   const wallNormal = useMemo(() => new THREE.Vector3(), [])  // away-from-wall dir when in contact (climb + wall-jump)
   const onWall = useRef(false)      // pressed against a climbable wall this frame
+  const wallCard = useRef({ x: 0, z: 0 })  // the GRID cardinal of the wall face we're on (pure ±1 on one axis) — mantle grabs straight over THIS, not the raw (diagonal) input dir
   const wallStick = useRef(0)       // wall-jump coyote timer: >0 = a wall was touched recently, Space kicks off it
   const wallLock = useRef(0)        // post-kick lockout: no re-gripping the wall until this drains
 
@@ -678,9 +679,23 @@ function Player({ posRef, gridRef, heightsRef, zoneIdRef, editRef, onWarp, battl
       if (wallLock.current > 0) wallLock.current -= dt
       onWall.current = false
       if (hasInput && wallLock.current <= 0) {
-        const wx = Math.round(p.x + move.x * (PLAYER_R + 0.2))
-        const wz = Math.round(p.z + move.z * (PLAYER_R + 0.2))
-        if (isBlocker(wx, wz)) { onWall.current = true; wallNormal.set(-move.x, 0, -move.z).normalize() }
+        // Which CARDINAL neighbour is actually a wall? Probe the two axis neighbours in the push
+        // direction and lock onto a PURE cardinal (walls are grid-aligned). An angled approach used to
+        // grab whichever axis the input leaned into even when the real wall was on the other axis — that
+        // was the sideways "drift-right" on climb/mantle. Prefer the dominant input axis, but only when
+        // that neighbour is genuinely blocked; otherwise take the axis that actually is.
+        const pcx = Math.round(p.x), pcz = Math.round(p.z)
+        const sx = Math.sign(move.x), sz = Math.sign(move.z)
+        const xWall = sx !== 0 && isBlocker(pcx + sx, pcz)
+        const zWall = sz !== 0 && isBlocker(pcx, pcz + sz)
+        let cx = 0, cz = 0
+        if (xWall && (!zWall || Math.abs(move.x) >= Math.abs(move.z))) cx = sx
+        else if (zWall) cz = sz
+        if (cx || cz) {
+          onWall.current = true
+          wallCard.current = { x: cx, z: cz }
+          wallNormal.set(-cx, 0, -cz).normalize()  // pure cardinal → wall-jump kicks straight off the face too
+        }
       }
       // wall-jump COYOTE: refreshed while touching a wall, bled down after — so a Space a hair after you
       // let go of the wall still kicks off it (wallNormal stays the last contact's away-dir).
@@ -753,8 +768,14 @@ function Player({ posRef, gridRef, heightsRef, zoneIdRef, editRef, onWarp, battl
       // jump over FLAT ground — or a walkable 1-tier step — never counts as a mantle; that was the skip bug).
       // Grab straight over the lip along the DOMINANT cardinal axis (walls are grid-aligned), so a mantle
       // pulls you forward-perpendicular — never diagonally off to the side.
+      // Grab straight over the wall we're climbing: when on (or just off) a wall, use its locked GRID
+      // cardinal so a mantle pulls forward-perpendicular over the lip — never sideways off a diagonal
+      // input. Only a mantle onto a plain ledge off a jump (no wall contact) falls back to input dir.
+      const wc = wallCard.current
+      const onWallCard = (onWall.current || wallStick.current > 0) && (wc.x !== 0 || wc.z !== 0)
       const gdir = hasInput ? move : fwd
-      const card = Math.abs(gdir.x) >= Math.abs(gdir.z)
+      const card = onWallCard ? wc
+        : Math.abs(gdir.x) >= Math.abs(gdir.z)
         ? { x: Math.sign(gdir.x) || 1, z: 0 } : { x: 0, z: Math.sign(gdir.z) || 1 }
       const floorTier = floorY / STEP
       const mantle = airborne.current ? (() => {
