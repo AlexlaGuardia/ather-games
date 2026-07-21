@@ -24,13 +24,23 @@ Lanes are a starting cut, not law — repartition per session, but keep them **f
 the **hub the sole owner of the shared surface**. A satellite that needs an engine change asks the hub.
 
 ## Per-window boot ritual
+> **Identity is inlined per call — do NOT rely on `export`.** CC tool calls run a fresh shell each
+> time, so `export COORD_WIN=...` dies between calls. Each Jin window's instance REMEMBERS its lane
+> + its cc-session-id and prepends both to every `coord` call. (A human at a persistent terminal
+> prompt *can* `export` once — but a CC window can't.)
 ```bash
-export COORD_WIN=<lane>                 # hub | world | sprites | play — your identity
-export COORD_SESSION=<this-cc-session>  # so [coord] signals land in YOUR handoff
-alias coord='tools/coord.sh'            # from /root/ather-games
-coord claim <lane> "one-line what you're doing"
-coord status                           # see who else is live + build-lock state
+cd /root/ather-games
+tools/coord.sh status                                  # who's live + build-lock state
+COORD_WIN=<lane> COORD_SESSION=<cc-session> tools/coord.sh claim <lane> "what you're doing"
 ```
+`<lane>` = hub | world | sprites | play. Claim a FREE lane (check `status` first) or take the one
+Alex assigns. From then on, prefix every `coord` call with `COORD_WIN=<lane> COORD_SESSION=<id>`.
+
+## New Jin window joins the swarm
+1. Boot `/jin` — its boot sequence runs `coord status` and detects the live swarm automatically.
+2. Read this file.
+3. Claim a free lane (inlined identity, as above). Tell Alex which lane you took.
+4. Work your lane only. **Satellites edit + commit their lane; they do NOT `coord build`.** The hub ships.
 
 ## Git discipline (trunk-based)
 - **Stage by pathspec, never `git add -A`.** `git add src/app/shimmer/world/...` — only your lane.
@@ -42,7 +52,7 @@ coord status                           # see who else is live + build-lock state
 ```bash
 coord build "what changed"     # acquire lock -> npm run build -> pm2 restart -> release
 ```
-- Any window may deploy; the lock **serializes** it. If another window is building you wait (up to 4m), then it's your turn.
+- **Convention: only the hub deploys.** Satellites edit + commit their lane; the hub integrates and runs `coord build`. Keeps git + lock contention near zero. The lock still **serializes** any build as a backstop (and protects you if a second deployer ever happens or you open a real extra window), waiting up to 4m for a held lock.
 - A build older than 15m is treated as dead and stolen (a wedged build never blocks the team forever).
 - **Never run `npm run build` / `pm2 restart` / a side `npm run dev` directly.** All three touch `.next`; only `coord build` is safe. No background dev servers in swarm mode — they hold `.next` and block every build.
 - Iterate by reading code, running the **doctor** (`/shimmer/dev?mode=doctor`) and tests; see it live by deploying through the lock.
