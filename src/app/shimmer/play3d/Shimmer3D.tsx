@@ -76,7 +76,9 @@ const AIR_CONTROL = 0.4     // how much WASD can steer horizontal velocity while
 const FALL_OFF = 0.32       // step down more than this below the resolved floor → you've walked off a ledge → fall
 const PLAYER_R = 0.4        // body radius — keeps the first-person eye this far out of walls/objects (no clip-in)
 const CLIMB_SPEED = 4.5     // upward speed while wall-climbing (tier units/s)
-const CLIMB_TIME = 1.3      // max continuous climb before the grip runs out (~5.8 tiers), refills on landing
+const CLIMB_MAX_RISE = 2.5  // max VERTICAL rise per climb before the grip gives out (tiers). Caps distance,
+                            // not time — refills only on solid ground, so you scale multi-tier terrain one
+                            // ledge at a time but can't scramble up a single tall face forever.
 const WALLJUMP_UP = 7.0     // vertical kick of a wall-jump (~JUMP_V0; carries you up the face in bounds)
 const WALLJUMP_PUSH = 6.0   // horizontal shove AWAY from the wall along wallNormal (near run speed)
 const WALL_COYOTE = 0.18    // grace after leaving a wall in which Space still counts as a wall-jump
@@ -572,7 +574,7 @@ function Player({ posRef, gridRef, heightsRef, zoneIdRef, editRef, onWarp, battl
   const crouchHeld = useRef(false)  // edge-detect crouch key so one press = one slide
   const hvel = useMemo(() => new THREE.Vector3(), [])  // horizontal velocity (carries through slide+air)
   const airSpeed = useRef(0)        // horizontal speed locked at takeoff → preserved through the jump
-  const climbT = useRef(CLIMB_TIME) // remaining wall-climb grip (refills on landing)
+  const climbRise = useRef(0)       // vertical distance climbed this airborne stint (tiers); caps the climb, resets on ground
   const wallNormal = useMemo(() => new THREE.Vector3(), [])  // away-from-wall dir when in contact (climb + wall-jump)
   const onWall = useRef(false)      // pressed against a climbable wall this frame
   const wallStick = useRef(0)       // wall-jump coyote timer: >0 = a wall was touched recently, Space kicks off it
@@ -679,7 +681,7 @@ function Player({ posRef, gridRef, heightsRef, zoneIdRef, editRef, onWarp, battl
       if (onWall.current) wallStick.current = WALL_COYOTE
       else if (wallStick.current > 0) wallStick.current -= dt
       // WALL-CLIMB: airborne + pushing into a wall + grip left → scramble up the face, mantle the top.
-      const climbing = airborne.current && onWall.current && hasInput && climbT.current > 0
+      const climbing = airborne.current && onWall.current && hasInput && climbRise.current < CLIMB_MAX_RISE
 
       // ── HORIZONTAL VELOCITY — auto-run with an accel RAMP (the flow), momentum through slide + air ──
       if (climbing) {
@@ -747,9 +749,9 @@ function Player({ posRef, gridRef, heightsRef, zoneIdRef, editRef, onWarp, battl
       }
       if (airborne.current) {
         if (wallJumping) { p.y += vy.current * dt2 }                     // just launched: up-kick, no gravity this frame
-        else if (climbing) { vy.current = CLIMB_SPEED; climbT.current -= dt; p.y += vy.current * dt2 }  // scramble up the wall face
+        else if (climbing) { vy.current = CLIMB_SPEED; climbRise.current += CLIMB_SPEED * dt2; p.y += vy.current * dt2 }  // scramble up the wall face (grip caps total rise)
         else { vy.current -= GRAVITY * dt2; p.y += vy.current * dt2 }
-        if (vy.current <= 0 && p.y <= floorY) { p.y = floorY; vy.current = 0; airborne.current = false; climbT.current = CLIMB_TIME }  // land + refill grip
+        if (vy.current <= 0 && p.y <= floorY) { p.y = floorY; vy.current = 0; airborne.current = false; climbRise.current = 0 }  // land + refill grip
       } else if (jumpKey && !jumpHeld.current) {
         airborne.current = true; vy.current = JUMP_V0
         airSpeed.current = Math.max(hvel.length(), hasInput ? RUN_SPEED : 0)  // carry slide/run speed up
@@ -757,7 +759,7 @@ function Player({ posRef, gridRef, heightsRef, zoneIdRef, editRef, onWarp, battl
         airborne.current = true; vy.current = 0; airSpeed.current = hvel.length()  // walked off a ledge → fall
       } else {
         p.y += (floorY - p.y) * 0.25  // grounded: ease onto the floor (smooth stairs / seg step-ups)
-        climbT.current = CLIMB_TIME   // grounded → refill climb grip
+        climbRise.current = 0         // grounded → refill climb grip
       }
       jumpHeld.current = jumpKey
 
