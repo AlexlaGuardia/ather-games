@@ -1218,6 +1218,93 @@ function CameraRig({ posRef, editFocusRef, yawRef, editRef, eyeRef }: {
 // is below full, and the harvest channel driver fires setChannel at ~11 Hz. Neither touches a Scene
 // prop, so without memo the entire 3D subtree was reconciled for a number that only the HUD reads.
 // Every prop here is a ref, a primitive, a useCallback, or state that genuinely should redraw.
+// ── FIRING RANGE / WEAPON (outside-Ather) ──────────────────────────────────────────────────────
+// The first weapon is a projectile caster: click fires a travelling energy round from the reticle.
+// Hitscan would be snappier, but a visible round reads like a sigil-cast — the outside-Ather weapon.
+// Mounted only in 'outside' zones. Ref-based pool + instanced render (no per-shot React re-render).
+const PROJECTILE_SPEED = 30   // tiles/sec
+const PROJECTILE_LIFE = 2.0   // seconds before it fizzles
+const FIRE_COOLDOWN = 0.16    // min seconds between casts (semi-auto)
+const TARGET_HIT_R2 = 0.72 * 0.72
+const TARGET_RESPAWN = 2.5     // seconds a popped target stays down
+// Downrange targets for the range — floating orbs at varied spots/heights in Alex's 50×50.
+const RANGE_TARGETS: [number, number, number][] = [
+  [15, 1.8, 26], [20, 2.5, 31], [25, 1.6, 23], [30, 2.9, 33],
+  [35, 2.0, 27], [12, 2.3, 35], [38, 1.7, 21], [22, 3.1, 39],
+]
+function FiringRange({ fireReqRef, gridRef, onHit }: {
+  fireReqRef: React.MutableRefObject<boolean>
+  gridRef: React.RefObject<number[][]>
+  onHit: () => void
+}) {
+  const MAX = 24
+  const pool = useMemo(() => Array.from({ length: MAX }, () => ({ pos: new THREE.Vector3(), vel: new THREE.Vector3(), life: 0 })), [])
+  const targets = useMemo(() => RANGE_TARGETS.map(([x, y, z]) => ({ pos: new THREE.Vector3(x, y, z), alive: true, down: 0 })), [])
+  const shotRef = useRef<THREE.InstancedMesh>(null)
+  const tgtRef = useRef<THREE.InstancedMesh>(null)
+  const cd = useRef(0)
+  const m = useMemo(() => new THREE.Matrix4(), [])
+  const q = useMemo(() => new THREE.Quaternion(), [])
+  const one = useMemo(() => new THREE.Vector3(1, 1, 1), [])
+  const zero = useMemo(() => new THREE.Vector3(0, 0, 0), [])
+  const dir = useMemo(() => new THREE.Vector3(), [])
+  useFrame((state, dt) => {
+    cd.current -= dt
+    // fire: consume the request (even mid-cooldown, so clicks don't queue up)
+    if (fireReqRef.current) {
+      fireReqRef.current = false
+      if (cd.current <= 0) {
+        cd.current = FIRE_COOLDOWN
+        const p = pool.find((pr) => pr.life <= 0)
+        if (p) {
+          state.camera.getWorldDirection(dir)
+          p.pos.copy(state.camera.position).addScaledVector(dir, 0.7)
+          p.vel.copy(dir).multiplyScalar(PROJECTILE_SPEED)
+          p.life = PROJECTILE_LIFE
+        }
+      }
+    }
+    // advance + collide projectiles
+    for (const p of pool) {
+      if (p.life <= 0) continue
+      p.life -= dt
+      p.pos.addScaledVector(p.vel, dt)
+      const cx = Math.round(p.pos.x), cz = Math.round(p.pos.z)
+      const cell = gridRef.current?.[cz]?.[cx]
+      if (cell === undefined || (cell & 0xFF) === WALL_ID) { p.life = 0; continue }  // wall/OOB stops it
+      for (const t of targets) {
+        if (t.alive && p.pos.distanceToSquared(t.pos) < TARGET_HIT_R2) {
+          t.alive = false; t.down = TARGET_RESPAWN; p.life = 0; onHit(); break
+        }
+      }
+    }
+    // respawn downed targets
+    for (const t of targets) { if (!t.alive) { t.down -= dt; if (t.down <= 0) t.alive = true } }
+    // render projectiles
+    if (shotRef.current) {
+      pool.forEach((p, i) => { m.compose(p.life > 0 ? p.pos : zero, q, p.life > 0 ? one : zero); shotRef.current!.setMatrixAt(i, m) })
+      shotRef.current.instanceMatrix.needsUpdate = true
+    }
+    // render targets (pulse scale slightly for life)
+    if (tgtRef.current) {
+      targets.forEach((t, i) => { m.compose(t.alive ? t.pos : zero, q, t.alive ? one : zero); tgtRef.current!.setMatrixAt(i, m) })
+      tgtRef.current.instanceMatrix.needsUpdate = true
+    }
+  })
+  return (
+    <>
+      <instancedMesh ref={shotRef} args={[undefined, undefined, MAX]}>
+        <sphereGeometry args={[0.16, 8, 8]} />
+        <meshStandardMaterial color="#8fe0ff" emissive="#8fe0ff" emissiveIntensity={2.4} toneMapped={false} />
+      </instancedMesh>
+      <instancedMesh ref={tgtRef} args={[undefined, undefined, targets.length]}>
+        <sphereGeometry args={[0.5, 14, 14]} />
+        <meshStandardMaterial color="#ff6a52" emissive="#ff6a52" emissiveIntensity={0.9} />
+      </instancedMesh>
+    </>
+  )
+}
+
 // Owner-only test-hub gate markers — glowing labeled pillars at the Crucible + Rune Hold gate tiles
 // in Greg's home. Rendered only when isOwner (players never see them); tiles match the ownerOnly warps.
 function HubGateMarkers({ heights }: { heights: number[][] }) {
@@ -1271,6 +1358,8 @@ const Scene = memo(function Scene(props: {
   harvestPop: { x: number; y: number; z: number; glyph: string; key: number } | null
   atmosZone: string
   isOwner: boolean
+  fireReqRef: React.MutableRefObject<boolean>
+  onRangeHit: () => void
 }) {
   // Pure-prop filter → safe to memo, so a channel tick doesn't re-allocate the structure list.
   // The NPC filter below is deliberately NOT memoized: npcInWorld() reads flagsRef.current, which is
@@ -1294,6 +1383,7 @@ const Scene = memo(function Scene(props: {
       <ZoneGeometry key={`${props.zone.id}-${props.dims}`} gridRef={props.gridRef} heights={props.heights} version={props.version} paint={props.paint} editing={props.editing} />
       <NPCMarkers npcs={ALL_NPCS.filter((n) => n.zone === props.zone.id && npcInWorld(n, props.defeated, props.flagsRef.current))} heights={props.heights} />
       {props.isOwner && props.zone.id === 'moonwell-glade-gregory-s-home' && <HubGateMarkers heights={props.heights} />}
+      {props.zone.realm === 'outside' && <FiringRange fireReqRef={props.fireReqRef} gridRef={props.gridRef} onHit={props.onRangeHit} />}
       <NodeMarkers nodes={props.nodes} heights={props.heights} editing={props.editing} channel={props.channel} />
       {props.zone.id === WORLD_ZONE_ID ? <WorldFlora heights={props.heights} /> : <FloraDressing zoneId={props.zone.id} heights={props.heights} />}
       <StructureMarkers structures={structuresInZone} heights={props.heights} />
@@ -2256,6 +2346,14 @@ export default function Shimmer3D() {
   // status comes from the httpOnly `ather_owner` cookie via /api/owner (set it at /owner?key=OWNER_KEY).
   const [isOwner, setIsOwner] = useState(false)
   const isOwnerRef = useRef(isOwner); isOwnerRef.current = isOwner  // stable read for onWarp's owner-only gate
+  // Weapon (outside-Ather only): drawn when the current zone's realm is 'outside'. fireReqRef bridges
+  // the DOM click → the FiringRange useFrame (which spawns from the live camera). Spirits stay holstered.
+  const weaponDrawn = zone.realm === 'outside'
+  const weaponDrawnRef = useRef(weaponDrawn); weaponDrawnRef.current = weaponDrawn
+  const fireReqRef = useRef(false)
+  const [rangeStats, setRangeStats] = useState({ shots: 0, hits: 0 })
+  const onRangeHit = useCallback(() => setRangeStats((s) => ({ ...s, hits: s.hits + 1 })), [])
+  useEffect(() => { if (!weaponDrawn) setRangeStats({ shots: 0, hits: 0 }) }, [weaponDrawn])  // reset on leaving the range
   useEffect(() => {
     let alive = true
     fetch('/api/owner', { cache: 'no-store' })
@@ -2337,6 +2435,9 @@ export default function Shimmer3D() {
       }
       if (battleRef.current) return  // a menu/battle overlay owns input
       if (e.button === 0) {
+        // outside the Ather the weapon is drawn: left-click FIRES a projectile (the FiringRange's
+        // useFrame reads fireReqRef and spawns from the camera). Takes priority over interact.
+        if (weaponDrawnRef.current) { e.preventDefault(); fireReqRef.current = true; setRangeStats((s) => ({ ...s, shots: s.shots + 1 })); return }
         // interact — same priority ladder as the E key
         if (dialogueRef.current) advanceDialogue()
         else if (nearNpc) talk(nearNpc)
@@ -2528,6 +2629,8 @@ export default function Shimmer3D() {
           harvestPop={harvestPop}
           atmosZone={districtZone}
           isOwner={isOwner}
+          fireReqRef={fireReqRef}
+          onRangeHit={onRangeHit}
         />
       </Canvas>
 
@@ -2864,6 +2967,33 @@ export default function Shimmer3D() {
           the pointer under the panel) and let clicking outside the bag close it. Below the hotbar (z35)
           + satchel (z37), above the canvas. */}
       {bagOpen && <div onPointerDown={() => toggleBag(false)} style={{ position: 'fixed', inset: 0, zIndex: 34, background: 'transparent' }} />}
+
+      {/* ── Weapon viewmodel + firing-range HUD — outside the Ather only, desktop (click = fire) ── */}
+      {weaponDrawn && !editMode && !dialogue && !battle && !placing && !isTouch && (
+        <>
+          <div style={{
+            position: 'fixed', top: 12, left: '50%', transform: 'translateX(-50%)', zIndex: 35, pointerEvents: 'none',
+            padding: '6px 14px', borderRadius: 999, background: 'rgba(16,20,32,0.85)', border: '1px solid #8fe0ff44',
+            font: '800 12px ui-monospace, monospace', color: '#cfeeff', letterSpacing: '0.08em', display: 'flex', gap: 13, alignItems: 'center',
+          }}>
+            <span>FIRING RANGE</span><span style={{ opacity: 0.4 }}>·</span>
+            <span>shots <span style={{ color: '#8fe0ff' }}>{rangeStats.shots}</span></span>
+            <span>hits <span style={{ color: '#7fffa0' }}>{rangeStats.hits}</span></span>
+            <span style={{ opacity: 0.5, fontWeight: 600 }}>click to fire</span>
+          </div>
+          {/* caster viewmodel — kicks on each shot (keyed on the shot count so the anim restarts) */}
+          <div key={rangeStats.shots} style={{ position: 'fixed', right: '17%', bottom: 0, zIndex: 33, pointerEvents: 'none', animation: 'casterKick 0.13s ease-out' }}>
+            <style>{`@keyframes casterKick { 0% { transform: translateY(16px) } 60% { transform: translateY(-3px) } 100% { transform: translateY(0) } }`}</style>
+            <svg width="240" height="168" viewBox="0 0 240 168" style={{ display: 'block' }}>
+              <polygon points="46,168 66,92 158,122 138,168" fill="#161d2a" stroke="#3a4a63" strokeWidth="2" />
+              <polygon points="58,98 100,70 126,96 104,122" fill="#212b3d" stroke="#4a5d7d" strokeWidth="2" />
+              <circle cx="94" cy="96" r="17" fill="none" stroke="#8fe0ff" strokeOpacity="0.35" strokeWidth="2" />
+              <circle cx="94" cy="96" r="10" fill="#8fe0ff" />
+              <rect x="100" y="90" width="52" height="6" rx="3" fill="#8fe0ff" opacity="0.9" />
+            </svg>
+          </div>
+        </>
+      )}
 
       {!battle && !approach && !rewards && !editMode && !dialogue && !placing && <HotBar items={invSlots} bagOpen={bagOpen} onBagChange={toggleBag} onUse={useItem} onReorder={reorderSlots} onSelect={(i) => { selSlotRef.current = i }} usable={USE_HINTS}
         tools={(void toolTick, (['forestry', 'prospecting', 'rinning'] as const).map(skill => {
