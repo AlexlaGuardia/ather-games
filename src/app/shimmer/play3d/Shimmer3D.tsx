@@ -2640,8 +2640,23 @@ export default function Shimmer3D() {
     return () => clearInterval(id)
   }, [syncSkillHud, persist, grantHarvest])
 
+  // Show on-screen touch controls (joystick + A/B) on touch devices; desktop keeps WASD + drag-look.
+  const [isTouch, setIsTouch] = useState(false)
+  useEffect(() => { setIsTouch((window.matchMedia?.('(pointer: coarse)').matches ?? false) || 'ontouchstart' in window) }, [])
+
+  // ── Pointer-lock handoff (shared by satchel / range console / BATTLE) ────────────────────────
+  // Overlays own the cursor; play owns the look. Every overlay opening releases the pointer and
+  // every return to play re-captures it — the player should NEVER have to Esc + re-click at a seam.
+  const canvasElRef = useRef<HTMLCanvasElement | null>(null)
+  const relockPointer = useCallback(() => {
+    if (editRef.current || isTouch) return
+    const c = canvasElRef.current
+    if (c) { try { const r = c.requestPointerLock?.() as unknown as Promise<void> | undefined; r?.catch?.(() => {}) } catch { /* re-lock cooldown — a canvas click resumes look */ } }
+  }, [isTouch])
+
   const onEncounter = useCallback((enc: WildEncounter) => {
     battleRef.current = true   // freeze the walker through the approach beat AND the fight
+    document.exitPointerLock?.()  // free the cursor DURING the approach beat — arena mounts click-ready
     const size = partyRef.current?.length ?? 1
     // Stage the fight, but show the approach beat first — the arena mounts when it commits.
     setApproach({ enc, battle: { allies: partyRef.current!, enemies: buildWildParty(enc, size), aiTier: enc.aiTier, zoneId: logicalZoneAt(zoneIdRef.current, posRef.current!.x, posRef.current!.z), kind: 'wild' } })
@@ -2678,6 +2693,7 @@ export default function Shimmer3D() {
           return s
         })
     battleRef.current = true
+    document.exitPointerLock?.()
     setBattle({ allies, enemies, aiTier: enc?.aiTier ?? 'wild', zoneId: logicalZoneAt(zoneIdRef.current, posRef.current!.x, posRef.current!.z), kind: 'wild' })
   }, [])
 
@@ -2708,6 +2724,7 @@ export default function Shimmer3D() {
     }
     setBattle(null)
     if (spoils) { battleRef.current = true; setRewards(spoils) }   // stay frozen behind the reveal
+    else relockPointer()   // scripted/loss paths return straight to play — look re-captures itself
     // Liberation beat: freeing Thistle's collared spirit clears Hold 1 — he deflates and retreats east.
     if (outcome === 'win' && bd?.kind === 'thistle') {
       flagsRef.current.freedThistle = true
@@ -2746,7 +2763,7 @@ export default function Shimmer3D() {
       })
     }
     persist()
-  }, [wallet, persist])
+  }, [wallet, persist, relockPointer])
 
   // New Game: empty party back at the start zone — the player meets Gregory again for a fresh starter.
   const newGame = useCallback(() => {
@@ -2818,6 +2835,7 @@ export default function Shimmer3D() {
     captive.level = 5
     captive.seeds = Array.from({ length: 6 }, () => Math.floor(Math.random() * 32))
     battleRef.current = true
+    document.exitPointerLock?.()
     setBattle({ allies: partyRef.current!, enemies: [captive], aiTier: 'wild', zoneId: logicalZoneAt(zoneIdRef.current, posRef.current!.x, posRef.current!.z), kind: 'thistle' })
   }, [])
 
@@ -2838,6 +2856,7 @@ export default function Shimmer3D() {
       return c
     }
     battleRef.current = true
+    document.exitPointerLock?.()
     setBattle({ allies: partyRef.current!, enemies: [guard, mkCaptive(), mkCaptive()], aiTier: 'champion', zoneId: logicalZoneAt(zoneIdRef.current, posRef.current!.x, posRef.current!.z), kind: 'sorrel' })
   }, [])
 
@@ -2860,6 +2879,7 @@ export default function Shimmer3D() {
       return c
     }
     battleRef.current = true
+    document.exitPointerLock?.()
     setBattle({ allies: partyRef.current!, enemies: [mkGuard('Brack’s Muscle', 3), mkGuard('Brack’s Enforcer', 2), mkCaptive(), mkCaptive(), mkCaptive()], aiTier: 'champion', zoneId: zoneIdRef.current, kind: 'brack' })
   }, [])
 
@@ -2960,26 +2980,18 @@ export default function Shimmer3D() {
       .catch(() => {})
     return () => { alive = false }
   }, [])
-  // Show on-screen touch controls (joystick + A/B) on touch devices; desktop keeps WASD + drag-look.
-  const [isTouch, setIsTouch] = useState(false)
-  useEffect(() => { setIsTouch((window.matchMedia?.('(pointer: coarse)').matches ?? false) || 'ontouchstart' in window) }, [])
-
   // ── Inventory (satchel) open/close, hijacking the mouse while it's up ──────────────────────────
   // First-person play captures the pointer, so the satchel's drag-and-drop is unreachable mid-play.
   // Opening the bag RELEASES the pointer (free cursor to click/drag); closing re-captures the look.
   // Same move the station menu already does (exitPointerLock → menu). Bag state lives here (not in
-  // HotBar) so the "I" key and the pointer-lock toggle stay in one place. canvasElRef re-locks on close.
-  const canvasElRef = useRef<HTMLCanvasElement | null>(null)
+  // HotBar) so the "I" key and the pointer-lock toggle stay in one place. relockPointer re-locks on close.
   const [bagOpen, setBagOpen] = useState(false)
   const bagOpenRef = useRef(false); bagOpenRef.current = bagOpen
   const toggleBag = useCallback((open: boolean) => {
     setBagOpen(open)
-    if (open) { document.exitPointerLock?.() }                       // free the cursor for the satchel
-    else if (!editRef.current && !isTouch) {                          // re-capture first-person look on close
-      const c = canvasElRef.current
-      if (c) { try { const r = c.requestPointerLock?.() as unknown as Promise<void> | undefined; r?.catch?.(() => {}) } catch { /* re-lock cooldown — a canvas click resumes look */ } }
-    }
-  }, [isTouch])
+    if (open) { document.exitPointerLock?.() }   // free the cursor for the satchel
+    else relockPointer()                          // re-capture first-person look on close
+  }, [relockPointer])
   // "I" toggles the bag (not while a blocking overlay owns the screen); Esc closes it.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -3003,11 +3015,8 @@ export default function Shimmer3D() {
   const toggleRange = useCallback((open: boolean) => {
     setRangeOpen(open)
     if (open) { document.exitPointerLock?.() }
-    else if (!editRef.current && !isTouch) {
-      const c = canvasElRef.current
-      if (c) { try { const r = c.requestPointerLock?.() as unknown as Promise<void> | undefined; r?.catch?.(() => {}) } catch { /* re-lock cooldown — a canvas click resumes look */ } }
-    }
-  }, [isTouch])
+    else relockPointer()
+  }, [relockPointer])
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const k = e.key.toLowerCase()
@@ -3812,7 +3821,7 @@ export default function Shimmer3D() {
 
       {/* post-win spoils reveal — the payoff: gold + per-spirit XP/level breakdown. Unfreezes on close. */}
       {rewards && !battle && (
-        <BattleRewards gold={rewards.gold} rows={rewards.rows} onClose={() => { setRewards(null); battleRef.current = false }} />
+        <BattleRewards gold={rewards.gold} rows={rewards.rows} onClose={() => { setRewards(null); battleRef.current = false; relockPointer() }} />
       )}
 
       {/* The five placeable-station menus (alchemy / craft / chest / exchange / farm).
