@@ -488,10 +488,19 @@ the Arcade frame.
 > skill delta +95pts), arena-moves.test 16/16 (median 17s, p90 24s — the cinematic band).
 > **CANON RULED same session (one-registry):** `game/moves.md` is caster-agnostic master; 5 renames
 > shipped (Ice Dart/Mend/Barrier/Enlighten/Shackle, ids stable); all kit moves + 40 signatures registered.
-> **NEXT (pass 2 — the playback choreography):** renderer performs the event stream — move-name
-> callouts, per-state choreography verbs (strike/shield/wave/burst/current/disruption/lock), hit-stop,
-> KO slow-mo, hold-to-skip off simulate()'s known outcome/duration. Then a feel-pass on dials
-> (arena-moves.ts top: DODGE_AGI_SLOPE, windup/cd curves, TIRE).
+> **PASS 2 SHIPPED same night (`b3915fb`, verified live):** renderer performs the event stream —
+> canon move callouts (announcer stack, heavy glow), per-state execute FX, dmg/dodge/FUMBLE floaters,
+> hit-stop, KO slow-mo + fall, windup body-lean, hold-to-skip. Mana'mal picker REMOVED from harness
+> (a companion is a bond, not a loadout — Alex).
+> **BOSS LAYER SHIPPED same night:** AI tiers wired end-to-end (wild/trained/champion = decision
+> quality ONLY — focus-fire weakest, near-perfect scoring, earlier sustain, reliable shields; mirror
+> oracle: 47% vs wild → 15% vs champion, same spirits). Collared captives render muted + ember collar
+> band, collars shatter + FREED beat on win. Holds mount w/ amber title banner + intro splash
+> (HOLD 1 — THISTLE / HOLD 2 — SORREL'S STRONGHOLD / HOLD 3 — BRACK'S GAUNTLET). Boss test slice:
+> `/shimmer/arena?mode=hold`. Oracles 17/17 + 4/4.
+> **NEXT:** Alex feel-pass (dials at arena-moves.ts top) · moglins-as-fighters talk (what canon
+> exists for their kits?) · then possibly guard-protects-captive spatial AI (guards intercept,
+> captives hang back) if the holds want more shape.
 > **Parked:** sunfruit + moonberry are Exchange-BUY-only reagents (salve lv3, bond_philter lv8) — works, but
 > a forageable berry-bush node type would be cozier; new content scope, needs its own pass (+ canon look Q).
 > **Decisions:** effects = build-side mechanics (canon names untouched, per SHIMMER-CANON-BOUNDARY) ·
