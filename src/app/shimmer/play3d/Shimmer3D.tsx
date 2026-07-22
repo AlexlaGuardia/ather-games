@@ -2371,9 +2371,47 @@ export default function Shimmer3D() {
   }, [])
 
   const save = useCallback(async () => {
-    if (zone.id === WORLD_ZONE_ID) { setSaveMsg('world is composed — pick a zone in the dropdown to edit/save it'); setTimeout(() => setSaveMsg(''), 3500); return }
     setSaveMsg('saving…')
     try {
+      if (zone.id === WORLD_ZONE_ID) {
+        // World-mode save: split the composed edit back to its SOURCE zones (the authored
+        // truth). Only districts whose slice actually changed get POSTed. Edits to the
+        // derived mortar/corridor cells can't be owned by any zone — counted + reported.
+        const w = getGardenWorld()
+        const posts: Promise<Response>[] = []
+        let touched = 0
+        for (const p of w.placements.values()) {
+          const gSlice = gridRef.current.slice(p.oy, p.oy + p.rows).map(row => row.slice(p.ox, p.ox + p.cols))
+          const hSlice = heightsRef.current.slice(p.oy, p.oy + p.rows).map(row => row.slice(p.ox, p.ox + p.cols))
+          // The composer demotes stitched-warp tiles to floor in the world view — restore the
+          // authored warp cells so a save-back never erases a zone's door markers.
+          for (let r = 0; r < p.rows; r++) for (let c = 0; c < p.cols; c++)
+            if ((p.zone.grid[r][c] & 0xFF) === WARP_ID && gSlice[r][c] !== p.zone.grid[r][c]) gSlice[r][c] = p.zone.grid[r][c]
+          const zNodes = nodesRef.current
+            .filter(nd => w.zoneAt(nd.tileX, nd.tileY) === p.zone.id)
+            .map(nd => ({ nodeType: nd.type, x: nd.tileX - p.ox, y: nd.tileY - p.oy }))
+          const gChanged = JSON.stringify(gSlice) !== JSON.stringify(p.zone.grid)
+          const hChanged = JSON.stringify(hSlice) !== JSON.stringify(getHeightGrid(p.zone.id, p.rows, p.cols))
+          const nChanged = JSON.stringify(zNodes) !== JSON.stringify((ZONE_NODES[p.zone.id] ?? []).map(nd => ({ nodeType: nd.type, x: nd.tileX, y: nd.tileY })))
+          if (!gChanged && !hChanged && !nChanged) continue
+          touched++
+          if (hChanged) posts.push(fetch('/shimmer/save-heights', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ zoneId: p.zone.id, heights: hSlice }) }))
+          if (gChanged) posts.push(fetch('/shimmer/save-map', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ grid: gSlice, mapId: p.zone.id }) }))
+          if (nChanged) posts.push(fetch('/shimmer/save-map', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ nodes: zNodes, mapId: p.zone.id }) }))
+        }
+        // Edits landing in the derived mortar/corridors (no owning zone) can't persist — detect
+        // grid/height/node changes out there so the save message says so instead of lying "saved".
+        let mortarEdits = nodesRef.current.some(nd => !w.zoneAt(nd.tileX, nd.tileY))
+        for (let r = 0; r < w.rows && !mortarEdits; r++) for (let c = 0; c < w.cols; c++)
+          if (!w.zoneAt(c, r) && (gridRef.current[r][c] !== w.grid[r][c] || heightsRef.current[r][c] !== w.heights[r][c])) { mortarEdits = true; break }
+        const rs = await Promise.all(posts)
+        const ok = rs.every(r => r.ok)
+        setSaveMsg(!touched ? 'no district changes to save'
+          : ok ? `saved ${touched} district${touched > 1 ? 's' : ''} ✓ (ping Jin to build it live)${mortarEdits ? ' · mortar/corridor edits are derived — not saved' : ''}`
+          : 'save failed')
+        setTimeout(() => setSaveMsg(''), 4500)
+        return
+      }
       const id = zone.id
       const [h, g, n] = await Promise.all([
         fetch('/shimmer/save-heights', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ zoneId: id, heights: heightsRef.current }) }),
