@@ -95,6 +95,14 @@ const CLIMB_HOLD_MIN = 0.18 // Space must be HELD this long before climb/mantle 
                             // never reaches it → tapping Space is ALWAYS a pure ballistic jump, never a mantle.
                             // This is the Apex release-vs-hold line: tap = bounce/jump, HOLD = climb. Kills the
                             // "jump lunges sideways" bug where a tap-jump near a wall was read as a mantle-grab.
+const HANG_DROP = 0.9       // how far below the lip your grip sits while ledge-hanging (tiers) — you hang OFF the
+                            // edge, head near the top, not standing on it. The PAUSE that replaces the teleport.
+const MANTLE_TIME = 0.30    // seconds to pull up + over once you COMMIT a hang (press forward) — a visible
+                            // climb-over, never an instant snap. This is what killed the "teleport" feel.
+const HANG_COMMIT = 0.35    // input·(over-lip cardinal): press INTO the ledge past +this to pull up, AWAY past
+                            // -this to drop off. Neutral = keep hanging.
+const HANG_MIN = 0.22       // guaranteed grip beat (s) before commit/drop can fire — so even climbing up with W
+                            // held you CATCH and hang for a moment, never insta-mantle. This IS the "pause".
 const DIR_YAW: Record<string, number> = { up: 0, down: Math.PI, left: Math.PI / 2, right: -Math.PI / 2 }
 
 type Cell = [number, number]
@@ -588,6 +596,14 @@ function Player({ posRef, gridRef, heightsRef, zoneIdRef, editRef, onWarp, battl
   const wallCard = useRef({ x: 0, z: 0 })  // the GRID cardinal of the wall face we're on (pure ±1 on one axis) — mantle grabs straight over THIS, not the raw (diagonal) input dir
   const wallStick = useRef(0)       // wall-jump coyote timer: >0 = a wall was touched recently, Space kicks off it
   const spaceHeldT = useRef(0)      // seconds Space has been continuously held — gates a DELIBERATE climb/mantle vs a jump tap
+  const hanging = useRef(false)     // gripping a ledge (the pause). forward commits up, back drops off
+  const hangAt = useRef<{ cx: number; cz: number; y: number } | null>(null)  // the lip we're gripping
+  const hangCard = useRef({ x: 0, z: 0 })  // over-the-lip cardinal at the moment of grab (commit/drop axis)
+  const mantleT = useRef(0)         // pull-up animation timer (s), >0 while climbing over after a commit
+  const mantleFrom = useMemo(() => new THREE.Vector3(), [])  // pull-up lerp endpoints
+  const mantleTo = useMemo(() => new THREE.Vector3(), [])
+  const hangT = useRef(0)           // time gripped (s) — must clear HANG_MIN before commit/drop can fire
+  const hangLock = useRef(0)        // suppress re-grabbing a lip right after dropping off it
   const wallLock = useRef(0)        // post-kick lockout: no re-gripping the wall until this drains
 
   useEffect(() => {
@@ -718,7 +734,9 @@ function Player({ posRef, gridRef, heightsRef, zoneIdRef, editRef, onWarp, battl
       const climbing = airborne.current && onWall.current && climbActive && climbRise.current < CLIMB_MAX_RISE
 
       // ── HORIZONTAL VELOCITY — auto-run with an accel RAMP (the flow), momentum through slide + air ──
-      if (climbing) {
+      if (hanging.current || mantleT.current > 0) {
+        hvel.set(0, 0, 0)  // gripping a ledge / pulling up — no horizontal drift; the vertical block owns position
+      } else if (climbing) {
         // input-driven on the wall: A/D strafe ALONG the face (camera-right axis), W/S just climb. Fully
         // determined by input each frame → zero residual drift. No auto-creep over the top; topping out is a
         // deliberate held-Space mantle, so climbing just extends your reach up a tall wall.
@@ -792,14 +810,20 @@ function Player({ posRef, gridRef, heightsRef, zoneIdRef, editRef, onWarp, battl
         const s = surfacesAt(ctx, cx, cz).find(su => su.y <= fromY + MANTLE_REACH && su.y > floorTier + 1)  // a real lip, in reach
         return s ? { cx, cz, y: s.y } : null
       })() : null
-      // MANTLE — auto-mantle ROLLED BACK (Alex, 07-22). It no longer fires on a jump tap; it requires a
-      // DELIBERATE Space hold past the threshold (same gate as climb) AND a lip in reach. So holding Space
-      // carries you up a wall and pulls you over the top; a plain jump toward a ledge stays purely ballistic
-      // (no auto-grab, no sideways lunge). Only a held climb tops out over a lip now.
-      const mantling = climbActive && !!mantle
-      // WALL-JUMP: airborne + Space edge + a wall in coyote, but ONLY when you're neither mantling nor climbing
-      // (so pressing Space INTO a wall climbs; a tap while NOT pushing in — within coyote — kicks off instead).
-      const wallJumping = airborne.current && jumpEdge && !mantling && !climbing && wallStick.current > 0
+      // LEDGE-GRAB (Titanfall/Apex feel, 07-22) — auto-mantle ROLLED BACK. Reaching a lip while a deliberate
+      // climb/hold is active no longer teleports you on top: you GRAB the ledge and HANG (a real pause). From
+      // the hang, press INTO the ledge to pull up + over (an eased climb, not a snap), press AWAY to drop off,
+      // stay neutral to keep hanging. Enter the grab the moment a held climb brings a lip into reach.
+      if (hangLock.current > 0) hangLock.current -= dt2
+      if (!hanging.current && mantleT.current <= 0 && hangLock.current <= 0 && climbActive && mantle && airborne.current) {
+        hanging.current = true; hangAt.current = mantle; hangT.current = 0
+        hangCard.current = { x: card.x, z: card.z }  // the over-the-lip cardinal = the commit axis (never sideways)
+        climbRise.current = 0
+      }
+      const hc = hangCard.current
+      const intoLedge = hasInput ? (move.x * hc.x + move.z * hc.z) : 0  // cos to the over-lip dir: + = into, - = away
+      // WALL-JUMP: airborne + Space edge + a wall in coyote, but ONLY when not hanging / pulling up / climbing.
+      const wallJumping = airborne.current && jumpEdge && !hanging.current && mantleT.current <= 0 && !climbing && wallStick.current > 0
       if (wallJumping) {
         vy.current = WALLJUMP_UP
         hvel.copy(wallNormal).multiplyScalar(WALLJUMP_PUSH)
@@ -807,11 +831,35 @@ function Player({ posRef, gridRef, heightsRef, zoneIdRef, editRef, onWarp, battl
         wallStick.current = 0
         wallLock.current = WALLJUMP_LOCK
       }
-      if (mantling && mantle) {
-        // pull up + over: snap onto the lip's cell + height, kill vertical, land grounded, small forward settle.
-        p.x = mantle.cx; p.z = mantle.cz; p.y = mantle.y * STEP
-        vy.current = 0; airborne.current = false; climbRise.current = 0
-        hvel.set(card.x, 0, card.z).setLength(RUN_SPEED * 0.4)  // small straight settle onto the ledge
+      if (mantleT.current > 0) {
+        // COMMIT pull-up: an eased climb-over from the grip to on-lip (up-biased so it reads up-then-forward).
+        mantleT.current -= dt2
+        const t = 1 - Math.max(0, mantleT.current) / MANTLE_TIME
+        const e = t * t * (3 - 2 * t)                 // smoothstep forward
+        const eUp = Math.min(1, e * 1.5)              // reach the top height a touch ahead of the forward slide
+        p.x = mantleFrom.x + (mantleTo.x - mantleFrom.x) * e
+        p.z = mantleFrom.z + (mantleTo.z - mantleFrom.z) * e
+        p.y = mantleFrom.y + (mantleTo.y - mantleFrom.y) * eUp
+        vy.current = 0
+        if (mantleT.current <= 0) {
+          p.x = mantleTo.x; p.y = mantleTo.y; p.z = mantleTo.z
+          airborne.current = false; climbRise.current = 0
+          hvel.set(hc.x, 0, hc.z).setLength(RUN_SPEED * 0.4)  // small settle onto the ledge
+        }
+      } else if (hanging.current && hangAt.current) {
+        // HANG: gripped + frozen at the lip. A guaranteed HANG_MIN beat, THEN input decides.
+        const lip = hangAt.current
+        vy.current = 0
+        p.y = lip.y * STEP - HANG_DROP  // hang OFF the edge, head near the top
+        hangT.current += dt2
+        if (hangT.current >= HANG_MIN && intoLedge > HANG_COMMIT) {
+          mantleFrom.set(p.x, p.y, p.z); mantleTo.set(lip.cx, lip.y * STEP, lip.cz)
+          mantleT.current = MANTLE_TIME; hanging.current = false; hangAt.current = null  // COMMIT → pull up
+        } else if (hangT.current >= HANG_MIN && intoLedge < -HANG_COMMIT) {
+          hanging.current = false; hangAt.current = null; hangLock.current = 0.35        // DROP → let go
+          airborne.current = true; vy.current = 0
+          hvel.set(hc.x, 0, hc.z).multiplyScalar(-2.2)  // small shove off the face so you don't instantly re-grip
+        }
       } else if (airborne.current) {
         if (wallJumping) { p.y += vy.current * dt2 }                     // just launched: up-kick, no gravity this frame
         else if (climbing) { vy.current = CLIMB_SPEED; climbRise.current += CLIMB_SPEED * dt2; p.y += vy.current * dt2 }  // scramble up the wall face (grip caps total rise)
