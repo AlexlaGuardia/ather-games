@@ -319,6 +319,25 @@ the Arcade frame.
 > **Files:** pipeline `/opt/blender` (4.2.9 LTS, not in git) · render scripts `tools/render/*.py` · assets `public/<game>/*.png`
 > · wiring per-cabinet render fn (Vault: `page.tsx` `drawFoe`, sprite-blit + procedural fallback).
 
+## 🗺️ Shimmer play3d — THE CONTINENT / REALM MODEL (SHIPPED 2026-07-22, jin-cc)
+> **The Shimmer Garden is ONE open map now** — RS-style feel, Apex-style tech (Alex ruled it after the RS/Apex
+> comparison talk). Live on :3200: 14 surface zones composed into a **456×304 continent** (`world/garden-world.ts`),
+> cloud-mortar bands between districts, old zone-warps carved into walkable corridors, interiors (Voranyx Caverns /
+> Gregory's / holds) stay doors. Chunked instanced rendering (64×64 + bounding spheres = real frustum culling).
+> - **Left off:** composer `f1bdb01` + integration `d861e3b` deployed. Saves store LOGICAL zone+tile (layout-proof);
+>   encounters/atmosphere/battles key by district under the player; world editor Save blocked (zones stay authoring truth).
+> - **Next:** Alex walk-the-continent eye-pass → `LAYOUT_TWEAKS` nudges (spirit-meadow's two south doors disagree by
+>   (80,22) → long corridor) · cloud-border dressing (mortar = flat clouds, wants banks) · corridor look · world-map UI.
+> - **Realm model (the whole game's shape):** `{preload|stream}` per world — Garden preload (bounded IS canon: Gregory's
+>   Bubble) · **Ather Wilds stream** (ever-growing by region files — the chunk layer is already the streaming core's
+>   render half) · **Runehold stream** (Spirit Corner gate, canon; era + Lucernyx-at-the-seam rulings queued) · **Laz's
+>   pyramid preload** (canon Crucible, `pyramid-zero.md`; lean = practice-Crucible in-frame first, no tonal-wall cost).
+> - **Decisions:** zones stay authored-per-zone + composed at load (editors untouched, layout re-tweakable) · warp graph
+>   = layout solver (placement derived, not guessed) · structures carry src* identity so chests/crops survive coordinate
+>   translation · orphan zones route-mycelial-spirit / route-spirit-moonwell excluded (exits, no entrances — salvage or
+>   retire).
+> - **Files:** `world/garden-world.ts` (+`.test.ts`, 18/18) · `play3d/world-adapter.ts` · Shimmer3D chunked ZoneGeometry.
+
 ## 🏃 Shimmer play3d — MOVEMENT TECH (Apex model, researched + gameplan 2026-07-22, jin-cc)
 > **The 3D walker's traversal system.** Grew organically as a room-wall side-track (never had a roadmap block — that IS
 > why it tangled: fix layered on fix with no north star). Alex flagged it 07-22: *"the movement is getting worse the more
