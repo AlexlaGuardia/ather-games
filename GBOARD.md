@@ -474,6 +474,16 @@ the Arcade frame.
 >   Audit after: zero unplaced types, zero unreachable reagents.
 > **Next:** Alex feel-pass buff magnitudes/durations · rin a lake (lv7) to confirm the T3 fish flow ·
 > harvest_brew ergonomics (needs crops planted to feel it).
+>
+> **⚔️ SPIRIT BATTLE — CINEMATIC DIRECTION (Alex ruled 07-22 eve; next session's opener):**
+> Keep initiation; the FIGHT becomes a pre-scripted cinematic — sim runs to completion at mount
+> (arena engine is already pure+seeded+evented), renderer performs the timeline (hit-stop, KO slow-mo,
+> hold-to-skip). Shipped now: pointer-lock handoff at every battle seam (`a8bcc39`), Aid kit out of the
+> arena UI, XP by level relation 0.25×–2×, wild spirits pay no marks (`51b3e57`). **The key find: content
+> already exists** — canon `shimmer-battles.md` (4-move kits, 7-state grammar, bond-50 signatures) is
+> fully implemented in `engine/moves.ts` (74 moves, `getMovesForSpirit()` works today); the arena sim
+> just never consumed it. Port = kits→arena actions (cooldowns replace PP) + accuracy-vs-agi as visible
+> dodges + 7 states = 7 choreography verbs. Sim-first headless, then the playback choreography.
 > **Parked:** sunfruit + moonberry are Exchange-BUY-only reagents (salve lv3, bond_philter lv8) — works, but
 > a forageable berry-bush node type would be cozier; new content scope, needs its own pass (+ canon look Q).
 > **Decisions:** effects = build-side mechanics (canon names untouched, per SHIMMER-CANON-BOUNDARY) ·
