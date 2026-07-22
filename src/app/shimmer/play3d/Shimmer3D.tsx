@@ -1108,10 +1108,11 @@ function HarvestPop({ pop }: { pop: { x: number; y: number; z: number; glyph: st
   )
 }
 
-function CameraRig({ posRef, editFocusRef, yawRef, editRef, eyeRef, adsRef }: {
+function CameraRig({ posRef, editFocusRef, yawRef, editRef, eyeRef, adsRef, recoilRef }: {
   posRef: React.RefObject<THREE.Vector3>; editFocusRef: React.RefObject<THREE.Vector3>
   yawRef: React.RefObject<number>; editRef: React.RefObject<boolean>
   eyeRef: React.RefObject<number>; adsRef: React.RefObject<boolean>
+  recoilRef: React.MutableRefObject<{ p: number; y: number }>
 }) {
   const yaw = yawRef
   const pitch = useRef(0.6)          // orbit polar angle (third-person / spectator)
@@ -1198,6 +1199,16 @@ function CameraRig({ posRef, editFocusRef, yawRef, editRef, eyeRef, adsRef }: {
     } else if (cam.fov !== wantFov) { cam.fov = wantFov; cam.updateProjectionMatrix() }
 
     if (fps) {
+      // Weapon recoil: drain the pending kick into the REAL look angles over ~50ms (smooth, not a snap).
+      // No auto-return — the climb is the player's to fight, so spray control is a skill (Apex model).
+      const rec = recoilRef.current
+      if (rec.p !== 0 || rec.y !== 0) {
+        const k = Math.min(1, dt * 22)
+        lookPitch.current = Math.min(1.25, lookPitch.current + rec.p * k)
+        yaw.current += rec.y * k
+        rec.p *= 1 - k; rec.y *= 1 - k
+        if (Math.abs(rec.p) < 1e-4 && Math.abs(rec.y) < 1e-4) { rec.p = 0; rec.y = 0 }
+      }
       // Eye-cam: camera AT the walker, looking along (yaw, lookPitch). Horizontal forward matches the
       // orbit's so WASD (which reads camera.getWorldDirection) stays identical between views.
       const cp = Math.cos(lookPitch.current), sp = Math.sin(lookPitch.current)
@@ -1241,15 +1252,29 @@ const CONVERGE_DIST = 38      // muzzle rounds converge onto the crosshair ray a
 // tracer visibly rises from low-right up to the reticle. ADS pulls the muzzle near center for a flat streak.
 const MUZZLE_HIP: [number, number, number] = [0.34, 0.26, 0.6]
 const MUZZLE_ADS: [number, number, number] = [0.1, 0.08, 0.6]
+// ── AM RISER accuracy model (Apex-style) ── hipfire fires inside a spread cone that BLOOMS while you
+// spray and recovers when you let off; ADS collapses the cone to near-true. Recoil kicks the ACTUAL
+// camera (pitch climb + horizontal jitter) and never auto-returns — you fight it by pulling down.
+const HIP_SPREAD = 2.2        // deg — base hipfire cone half-angle
+const ADS_SPREAD = 0.25       // deg — aimed fire is near-true
+const BLOOM_PER_SHOT = 0.45   // deg of cone added per round fired
+const BLOOM_MAX = 2.6         // deg — bloom cap (hip cone tops out ~4.8°)
+const BLOOM_DECAY = 5         // deg/sec cone recovery while not firing
+const ADS_BLOOM_SCALE = 0.35  // aimed fire blooms much less
+const KICK_PITCH = 0.0075     // rad of camera climb per round
+const KICK_YAW = 0.0035       // rad max random horizontal drift per round
+const DEG = Math.PI / 180
 // Downrange targets for the range — floating orbs at varied spots/heights in Alex's 50×50.
 const RANGE_TARGETS: [number, number, number][] = [
   [15, 1.8, 26], [20, 2.5, 31], [25, 1.6, 23], [30, 2.9, 33],
   [35, 2.0, 27], [12, 2.3, 35], [38, 1.7, 21], [22, 3.1, 39],
 ]
-function FiringRange({ firingRef, adsRef, gridRef, onHit, onShot }: {
+function FiringRange({ firingRef, adsRef, gridRef, recoilRef, bloomRef, onHit, onShot }: {
   firingRef: React.RefObject<boolean>   // held while left-click is down → full-auto
   adsRef: React.RefObject<boolean>      // aiming → muzzle offset moves to center (ADS tracer runs flat)
   gridRef: React.RefObject<number[][]>
+  recoilRef: React.MutableRefObject<{ p: number; y: number }>  // pending camera kick; CameraRig drains it
+  bloomRef: React.MutableRefObject<number>  // current spread bloom (deg); WeaponReticle reads it too
   onHit: () => void
   onShot: () => void
 }) {
@@ -1278,6 +1303,7 @@ function FiringRange({ firingRef, adsRef, gridRef, onHit, onShot }: {
   const AXIS_Z = useMemo(() => new THREE.Vector3(0, 0, 1), [])
   useFrame((state, dt) => {
     cd.current -= dt
+    bloomRef.current = Math.max(0, bloomRef.current - BLOOM_DECAY * dt)  // cone recovers while not firing
     // full-auto: while fire is held and the cadence is ready, spawn a round from the camera
     if (firingRef.current && cd.current <= 0) {
       cd.current = FIRE_COOLDOWN
@@ -1288,13 +1314,23 @@ function FiringRange({ firingRef, adsRef, gridRef, onHit, onShot }: {
         state.camera.getWorldDirection(dir)
         camRight.setFromMatrixColumn(state.camera.matrixWorld, 0)
         camUp.setFromMatrixColumn(state.camera.matrixWorld, 1)
-        const [mr, md, mf] = adsRef.current ? MUZZLE_ADS : MUZZLE_HIP
+        const ads = adsRef.current
+        const [mr, md, mf] = ads ? MUZZLE_ADS : MUZZLE_HIP
         p.pos.copy(state.camera.position)
           .addScaledVector(camRight, mr).addScaledVector(camUp, -md).addScaledVector(dir, mf)
         aim.copy(state.camera.position).addScaledVector(dir, CONVERGE_DIST)
-        p.vel.copy(aim).sub(p.pos).normalize().multiplyScalar(PROJECTILE_SPEED)
+        // spread: uniform random point in the current cone's disc, perpendicular to the flight line
+        const spread = (ads ? ADS_SPREAD : HIP_SPREAD) + bloomRef.current * (ads ? ADS_BLOOM_SCALE : 1)
+        const r = Math.tan(spread * DEG) * Math.sqrt(Math.random())
+        const th = Math.random() * Math.PI * 2
+        p.vel.copy(aim).sub(p.pos).normalize()
+          .addScaledVector(camRight, Math.cos(th) * r).addScaledVector(camUp, Math.sin(th) * r)
+          .normalize().multiplyScalar(PROJECTILE_SPEED)
         p.life = PROJECTILE_LIFE
         for (const t of p.trail) t.copy(p.pos)  // collapse the trail onto the muzzle at spawn
+        bloomRef.current = Math.min(BLOOM_MAX, bloomRef.current + BLOOM_PER_SHOT)
+        recoilRef.current.p += KICK_PITCH
+        recoilRef.current.y += (Math.random() * 2 - 1) * KICK_YAW
         onShot()
       }
     }
@@ -1357,6 +1393,47 @@ function FiringRange({ firingRef, adsRef, gridRef, onHit, onShot }: {
         <meshStandardMaterial color="#ff6a52" emissive="#ff6a52" emissiveIntensity={0.9} />
       </instancedMesh>
     </>
+  )
+}
+
+// Weapon crosshair — replaces the interact reticle while the weapon is drawn. White core + dark
+// outline + faint cyan glow reads on any background. The four arms sit at the CURRENT spread cone's
+// edge — rAF reads bloomRef/adsRef and writes CSS vars directly, so the reticle tells the truth about
+// accuracy (blooms as you spray, snaps tight on ADS) with zero React renders while firing.
+function WeaponReticle({ bloomRef, adsRef }: {
+  bloomRef: React.MutableRefObject<number>
+  adsRef: React.RefObject<boolean>
+}) {
+  const ref = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    let raf = 0, cur = 8
+    const tick = () => {
+      const el = ref.current
+      if (el) {
+        const ads = adsRef.current
+        const spread = (ads ? ADS_SPREAD : HIP_SPREAD) + bloomRef.current * (ads ? ADS_BLOOM_SCALE : 1)
+        cur += (3 + spread * 9 - cur) * 0.25  // lerp so the hip↔ADS jump glides instead of snapping
+        el.style.setProperty('--gap', `${cur.toFixed(2)}px`)
+        el.style.setProperty('--arm', ads ? '5px' : '8px')
+      }
+      raf = requestAnimationFrame(tick)
+    }
+    raf = requestAnimationFrame(tick)
+    return () => cancelAnimationFrame(raf)
+  }, [bloomRef, adsRef])
+  const ink = '0 0 0 1px rgba(8,12,18,0.85), 0 0 5px rgba(143,224,255,0.7)'
+  const arm = (s: React.CSSProperties): React.CSSProperties => ({
+    position: 'absolute', background: '#f2ffff', borderRadius: 1, boxShadow: ink, ...s,
+  })
+  return (
+    <div ref={ref} style={{ position: 'fixed', left: '50%', top: '50%', zIndex: 30, pointerEvents: 'none',
+      ['--gap' as string]: '8px', ['--arm' as string]: '8px' }}>
+      <div style={{ position: 'absolute', left: -1.75, top: -1.75, width: 3.5, height: 3.5, borderRadius: '50%', background: '#f2ffff', boxShadow: ink }} />
+      <div style={arm({ left: -1, bottom: 'var(--gap)', width: 2, height: 'var(--arm)' })} />
+      <div style={arm({ left: -1, top: 'var(--gap)', width: 2, height: 'var(--arm)' })} />
+      <div style={arm({ top: -1, right: 'var(--gap)', height: 2, width: 'var(--arm)' })} />
+      <div style={arm({ top: -1, left: 'var(--gap)', height: 2, width: 'var(--arm)' })} />
+    </div>
   )
 }
 
@@ -1440,6 +1517,8 @@ const Scene = memo(function Scene(props: {
   onRangeHit: () => void
   onRangeShot: () => void
   adsRef: React.RefObject<boolean>
+  recoilRef: React.MutableRefObject<{ p: number; y: number }>
+  bloomRef: React.MutableRefObject<number>
 }) {
   // Pure-prop filter → safe to memo, so a channel tick doesn't re-allocate the structure list.
   // The NPC filter below is deliberately NOT memoized: npcInWorld() reads flagsRef.current, which is
@@ -1463,7 +1542,7 @@ const Scene = memo(function Scene(props: {
       <ZoneGeometry key={`${props.zone.id}-${props.dims}`} gridRef={props.gridRef} heights={props.heights} version={props.version} paint={props.paint} editing={props.editing} />
       <NPCMarkers npcs={ALL_NPCS.filter((n) => n.zone === props.zone.id && npcInWorld(n, props.defeated, props.flagsRef.current))} heights={props.heights} />
       {props.isOwner && props.zone.id === 'moonwell-glade-gregory-s-home' && <HubGateMarkers heights={props.heights} />}
-      {props.zone.realm === 'outside' && <FiringRange firingRef={props.firingRef} adsRef={props.adsRef} gridRef={props.gridRef} onHit={props.onRangeHit} onShot={props.onRangeShot} />}
+      {props.zone.realm === 'outside' && <FiringRange firingRef={props.firingRef} adsRef={props.adsRef} gridRef={props.gridRef} recoilRef={props.recoilRef} bloomRef={props.bloomRef} onHit={props.onRangeHit} onShot={props.onRangeShot} />}
       {props.zone.realm === 'outside' && <ExitMarkers warps={props.zone.warps} heights={props.heights} />}
       <NodeMarkers nodes={props.nodes} heights={props.heights} editing={props.editing} channel={props.channel} />
       {props.zone.id === WORLD_ZONE_ID ? <WorldFlora heights={props.heights} /> : <FloraDressing zoneId={props.zone.id} heights={props.heights} />}
@@ -1473,7 +1552,7 @@ const Scene = memo(function Scene(props: {
       {props.companionColor && !props.editing && <Follower posRef={props.posRef} heightsRef={props.heightsRef} color={props.companionColor} />}
       {props.fishing && <FishTell posRef={props.posRef} heightsRef={props.heightsRef} bite={props.fishBite} />}
       <HarvestPop pop={props.harvestPop} />
-      <CameraRig posRef={props.posRef} editFocusRef={props.editFocusRef} yawRef={props.yawRef} editRef={props.editRef} eyeRef={props.eyeRef} adsRef={props.adsRef} />
+      <CameraRig posRef={props.posRef} editFocusRef={props.editFocusRef} yawRef={props.yawRef} editRef={props.editRef} eyeRef={props.eyeRef} adsRef={props.adsRef} recoilRef={props.recoilRef} />
     </>
   )
 })
@@ -2442,6 +2521,8 @@ export default function Shimmer3D() {
   const [hudStats, setHudStats] = useState({ shots: 0, hits: 0 })  // display only, synced on a throttle
   const adsRef = useRef(false)  // aim-down-sights (right-click hold); CameraRig reads it for fov + sensitivity
   const [ads, setAds] = useState(false)  // drives the viewmodel raise (toggles ~twice per aim, not per-frame)
+  const recoilRef = useRef({ p: 0, y: 0 })  // pending camera kick (rad); FiringRange writes, CameraRig drains
+  const bloomRef = useRef(0)  // current spread bloom (deg); FiringRange writes, WeaponReticle reads
   const onRangeHit = useCallback(() => { hitsRef.current++ }, [])
   // called by FiringRange per actual spawn (full-auto): bump the counter + kick the recoil, no re-render
   const onRangeShot = useCallback(() => {
@@ -2452,7 +2533,7 @@ export default function Shimmer3D() {
   // Sync the HUD counters at ~5fps while the weapon is out, so firing never touches the (huge) component's
   // render path — that churn was stuttering the movement rAF. Reset counters when the weapon holsters.
   useEffect(() => {
-    if (!weaponDrawn) { shotsRef.current = 0; hitsRef.current = 0; setHudStats({ shots: 0, hits: 0 }); firingRef.current = false; adsRef.current = false; setAds(false); return }
+    if (!weaponDrawn) { shotsRef.current = 0; hitsRef.current = 0; setHudStats({ shots: 0, hits: 0 }); firingRef.current = false; adsRef.current = false; setAds(false); recoilRef.current.p = 0; recoilRef.current.y = 0; bloomRef.current = 0; return }
     const id = setInterval(() => setHudStats((s) => (s.shots === shotsRef.current && s.hits === hitsRef.current) ? s : { shots: shotsRef.current, hits: hitsRef.current }), 200)
     return () => clearInterval(id)
   }, [weaponDrawn])
@@ -2758,6 +2839,8 @@ export default function Shimmer3D() {
           onRangeHit={onRangeHit}
           onRangeShot={onRangeShot}
           adsRef={adsRef}
+          recoilRef={recoilRef}
+          bloomRef={bloomRef}
         />
       </Canvas>
 
@@ -3064,7 +3147,7 @@ export default function Shimmer3D() {
       {/* First-person reticle — the aim point for left-click interact / right-click use. Lights up and
           names the action when an interactable sits under it (proximity-driven, reusing the near* state
           that already drives the bottom prompts). Desktop only; touch drives interaction via the A/B pad. */}
-      {!isTouch && !editMode && !battle && !approach && !rewards && !dialogue && !openMenu && !placing && (() => {
+      {!isTouch && !editMode && !battle && !approach && !rewards && !dialogue && !openMenu && !placing && !weaponDrawn && (() => {
         const t = fish ? { c: fish.bite ? '#ff6a5a' : '#5aa9e6', verb: fish.bite ? 'Strike!' : 'Fishing' }
           : channel ? { c: '#5aa9e6', verb: 'Gathering' }
           : nearNpc ? { c: '#e8c86a', verb: `Talk to ${nearNpc.name}` }
@@ -3103,11 +3186,12 @@ export default function Shimmer3D() {
             padding: '6px 14px', borderRadius: 999, background: 'rgba(16,20,32,0.85)', border: '1px solid #8fe0ff44',
             font: '800 12px ui-monospace, monospace', color: '#cfeeff', letterSpacing: '0.08em', display: 'flex', gap: 13, alignItems: 'center',
           }}>
-            <span>FIRING RANGE</span><span style={{ opacity: 0.4 }}>·</span>
+            <span>AM RISER</span><span style={{ opacity: 0.4 }}>·</span>
             <span>shots <span style={{ color: '#8fe0ff' }}>{hudStats.shots}</span></span>
             <span>hits <span style={{ color: '#7fffa0' }}>{hudStats.hits}</span></span>
-            <span style={{ opacity: 0.5, fontWeight: 600 }}>click to fire</span>
+            <span style={{ opacity: 0.5, fontWeight: 600 }}>hold to fire · r-click aim</span>
           </div>
+          <WeaponReticle bloomRef={bloomRef} adsRef={adsRef} />
           {/* caster viewmodel — outer div raises it to the sighted pose on ADS (React, transitioned);
               inner casterRef keeps the imperative recoil kick, so the two transforms don't fight. */}
           <div style={{ position: 'fixed', right: '17%', bottom: 0, zIndex: 33, pointerEvents: 'none',
