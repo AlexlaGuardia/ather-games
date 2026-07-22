@@ -2121,13 +2121,12 @@ export default function Shimmer3D() {
   const newGame = useCallback(() => {
     partyRef.current = []
     flagsRef.current = {}
-    // fresh skilling state: reset skills/mana/inventory, seed a few starter mana potions
+    // fresh skilling state: reset skills/mana, EMPTY bag — the builder kit is Gregory's gift now
     skillsRef.current = createSkillSet()
     manaRef.current = createManaPool(1)
     invRef.current = createInventory()
-    grantStarterKit(invRef.current)
     equippedToolsRef.current = ensureBasicTools({})  // Greg's basic blade/spike/rinstick
-    flagsRef.current[STARTER_KIT_FLAG] = true // already granted; keep the load-path migration from re-seeding
+    flagsRef.current[STARTER_KIT_FLAG] = true // suppress the load-path migration so a fresh player stays empty until Gregory
     // The rest of the run's economy. persist() writes every one of these refs, so anything left
     // un-reset here gets saved straight back into the "new" game.
     beastsRef.current = []
@@ -2155,6 +2154,13 @@ export default function Shimmer3D() {
     partyRef.current = [s]
     flagsRef.current.gotStarter = true
     setHasStarter(true)
+    // Gregory also sets you up with the builder kit (stations + mats) — the moment the crafting loop opens.
+    // Granted unconditionally: this fires exactly once per save (gated by gotStarter, so Gregory's gift can't
+    // repeat), and newGame sets STARTER_KIT_FLAG=true purely to suppress the load-path migration, not to record
+    // an actual grant — so guarding on that flag here would wrongly skip Gregory's kit.
+    grantStarterKit(invRef.current)
+    flagsRef.current[STARTER_KIT_FLAG] = true
+    setInvSlots([...invRef.current.slots])
     setBanner(`✦ a young ${speciesDisplayName(s.species)} joined you!`)
     persist()
   }, [persist])
