@@ -59,6 +59,11 @@ export interface Fighter {
   orbitDir: 1 | -1          // which way this one circles (deterministic per slot)
   tier: ArenaAITier         // decision quality — never stats (champion reads, doesn't cheat)
   collared: boolean         // a captive compelled to fight — renders collared, freed on the win
+  // fight personality (seeded per fighter) — breaks the mirror: two spirits must never
+  // share a metronome. Different nerve, different circling, different spacing.
+  thinkT: number            // beat of consideration before the next move
+  orbitPace: number         // how hard this one circles (multiplier on the tangential drift)
+  spaceJitter: number       // personal comfort distance offset for the dance
   stance: Stance
   targetId: string | null
   kit: ArenaMove[]          // the canon 4-move kit as timed actions (cdLeft lives here)
@@ -178,6 +183,7 @@ function fighterFromSpirit(spirit: Spirit, id: string, side: Side, x: number, y:
     radius: 0.35 + s.maxHp / 260, speed,
     reach: 0.9, orbitDir: slot % 2 === 0 ? 1 : -1,
     tier, collared,
+    thinkT: 0, orbitPace: 0.55, spaceJitter: 0,
     stance: 'aggressive', targetId: null,
     kit: kitForSpirit(spirit), act: null, st: freshStatus(), stage: freshStages(),
     flinch: 0, defDownT: 0, defDownAmt: 0, shieldT: 0, numbT: 0, braceT: 0, hitFlash: 0,
@@ -205,10 +211,19 @@ export function createArena(spec: ArenaSpec): ArenaState {
     const n = spec.enemies.length
     fighters.push(fighterFromSpirit(sp, `e${i}`, 'enemy', spread(i, n) * 2.2, R * 0.55, i, spec.enemyTier ?? 'wild', spec.collared?.includes(i) ?? false))
   })
+  const rng = mulberry32(spec.seed)
+  // Break the mirror before the first tick: stagger each fighter's opening clocks and
+  // seed a personal movement temperament, all off the arena seed (still deterministic).
+  for (const f of fighters) {
+    f.thinkT = rng() * 0.7
+    for (const m of f.kit) m.cdLeft = rng() * 0.9
+    f.orbitPace = 0.3 + rng() * 0.5
+    f.spaceJitter = (rng() - 0.5) * 0.7
+  }
   return {
     t: 0, R, fighters,
     keeper: { mana: 6, maxMana: 12, manaRegen: 1.1, breezeBoostT: 0, aid: buildAid(spec.aidKit ?? BONN_MOMO_KIT), bagCdLeft: 0 },
-    outcome: 'ongoing', events: [], rng: mulberry32(spec.seed),
+    outcome: 'ongoing', events: [], rng,
   }
 }
 
@@ -373,13 +388,26 @@ export function tick(state: ArenaState, dt: number, commands: KeeperCommand[] = 
       } else {
         // recover: give ground — the strike-and-reposition tempo, no glued scrum
         if (d < f.reach + f.radius + target.radius + 1.2) moveAway(f, target, dt * 0.85)
-        if (a.t >= a.dur) f.act = null
+        if (a.t >= a.dur) {
+          f.act = null
+          // a beat of consideration — different nerve per spirit, so cadences drift
+          // apart instead of locking step (champions barely hesitate)
+          f.thinkT = f.tier === 'champion' ? 0.05 : 0.12 + state.rng() * 0.5
+        }
       }
       clampToRing(state, f)
       continue
     }
 
     f.facing = Math.atan2(target.y - f.y, target.x - f.x)
+
+    // considering: keep the feet moving (the dance) but hold the next move a beat
+    if (f.thinkT > 0) {
+      f.thinkT = Math.max(0, f.thinkT - dt)
+      if (f.stance !== 'defend') orbit(f, target, dt)
+      clampToRing(state, f)
+      continue
+    }
 
     // defending: hold at mid range; brace when a heavy is bearing down on me
     if (f.stance === 'defend') {
@@ -508,13 +536,13 @@ function moveAway(f: Fighter, t: Fighter, dt: number) {
 function orbit(f: Fighter, t: Fighter, dt: number) {
   const spd = effSpeed(f)
   if (spd <= 0) return
-  const want = f.reach + f.radius + t.radius + 1.1
+  const want = f.reach + f.radius + t.radius + 1.1 + f.spaceJitter
   const d = dist(f, t)
   if (d > want + 0.5) moveTowardSpd(f, t, dt, spd)
   else if (d < want - 0.5) moveAway(f, t, dt)
   const a = Math.atan2(t.y - f.y, t.x - f.x) + (Math.PI / 2) * f.orbitDir
-  f.x += Math.cos(a) * spd * 0.55 * dt
-  f.y += Math.sin(a) * spd * 0.55 * dt
+  f.x += Math.cos(a) * spd * f.orbitPace * dt
+  f.y += Math.sin(a) * spd * f.orbitPace * dt
 }
 
 function clampToRing(state: ArenaState, f: Fighter) {
