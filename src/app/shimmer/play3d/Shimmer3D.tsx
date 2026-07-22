@@ -1254,6 +1254,8 @@ function FiringRange({ fireReqRef, gridRef, onHit }: {
   const one = useMemo(() => new THREE.Vector3(1, 1, 1), [])
   const zero = useMemo(() => new THREE.Vector3(0, 0, 0), [])
   const dir = useMemo(() => new THREE.Vector3(), [])
+  const pdir = useMemo(() => new THREE.Vector3(), [])       // per-projectile travel dir (streak orientation)
+  const UP = useMemo(() => new THREE.Vector3(0, 1, 0), [])  // the cylinder's long axis, aligned to velocity
   useFrame((state, dt) => {
     cd.current -= dt
     // fire: consume the request (even mid-cooldown, so clicks don't queue up)
@@ -1286,9 +1288,13 @@ function FiringRange({ fireReqRef, gridRef, onHit }: {
     }
     // respawn downed targets
     for (const t of targets) { if (!t.alive) { t.down -= dt; if (t.down <= 0) t.alive = true } }
-    // render projectiles
+    // render projectiles — orient the streak along its velocity (cylinder long-axis → travel dir)
     if (shotRef.current) {
-      pool.forEach((p, i) => { m.compose(p.life > 0 ? p.pos : zero, q, p.life > 0 ? one : zero); shotRef.current!.setMatrixAt(i, m) })
+      pool.forEach((p, i) => {
+        if (p.life > 0) { pdir.copy(p.vel).normalize(); q.setFromUnitVectors(UP, pdir); m.compose(p.pos, q, one) }
+        else m.compose(zero, q, zero)
+        shotRef.current!.setMatrixAt(i, m)
+      })
       shotRef.current.instanceMatrix.needsUpdate = true
     }
     // render targets (pulse scale slightly for life)
@@ -1302,8 +1308,8 @@ function FiringRange({ fireReqRef, gridRef, onHit }: {
       {/* frustumCulled=false: instances move/scatter far from the mesh origin, so the default
           origin-centered bounding sphere would cull the whole mesh whenever you look downrange. */}
       <instancedMesh ref={shotRef} args={[undefined, undefined, MAX]} frustumCulled={false}>
-        <sphereGeometry args={[0.18, 8, 8]} />
-        <meshStandardMaterial color="#8fe0ff" emissive="#8fe0ff" emissiveIntensity={2.4} toneMapped={false} />
+        <cylinderGeometry args={[0.07, 0.07, 1.5, 6]} />
+        <meshBasicMaterial color="#aef2ff" transparent opacity={0.95} blending={THREE.AdditiveBlending} depthWrite={false} toneMapped={false} />
       </instancedMesh>
       <instancedMesh ref={tgtRef} args={[undefined, undefined, targets.length]} frustumCulled={false}>
         <sphereGeometry args={[0.5, 14, 14]} />
