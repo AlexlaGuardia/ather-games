@@ -57,7 +57,7 @@ function ItemTile({ item }: { item: ItemStack | null }) {
   )
 }
 
-export default function HotBar({ items: propItems, onUse, onReorder, onSelect, usable, tools: propTools }: { items?: (ItemStack | null)[]; onUse?: (itemId: string) => void; onReorder?: (from: number, to: number) => void; onSelect?: (idx: number) => void; usable?: Record<string, unknown>; tools?: ToolGauge[] } = {}) {
+export default function HotBar({ items: propItems, onUse, onReorder, onSelect, usable, tools: propTools, bagOpen: bagOpenProp, onBagChange }: { items?: (ItemStack | null)[]; onUse?: (itemId: string) => void; onReorder?: (from: number, to: number) => void; onSelect?: (idx: number) => void; usable?: Record<string, unknown>; tools?: ToolGauge[]; bagOpen?: boolean; onBagChange?: (open: boolean) => void } = {}) {
   const [items, setItems] = useState<(ItemStack | null)[]>(propItems ?? PH_ITEMS)
   const itemsRef = useRef(items); itemsRef.current = items
   const onUseRef = useRef(onUse); onUseRef.current = onUse
@@ -65,7 +65,12 @@ export default function HotBar({ items: propItems, onUse, onReorder, onSelect, u
   const onSelectRef = useRef(onSelect); onSelectRef.current = onSelect
   const usableRef = useRef(usable); usableRef.current = usable
   const [sel, setSel] = useState(0)
-  const [bagOpen, setBagOpen] = useState(false)
+  // Bag can run controlled (Shimmer3D owns it, so the "I" key + pointer-lock release stay in sync) or
+  // standalone (internal state). onBagChange fires either way so the parent can hook the cursor toggle.
+  const [bagOpenLocal, setBagOpenLocal] = useState(false)
+  const bagControlled = bagOpenProp !== undefined
+  const bagOpen = bagControlled ? bagOpenProp! : bagOpenLocal
+  const setBagOpen = (next: boolean) => { if (!bagControlled) setBagOpenLocal(next); onBagChange?.(next) }
   const tools = propTools ?? PH_TOOLS
   const [isTouch, setIsTouch] = useState(false)
   const [nameTag, setNameTag] = useState<{ text: string; sub?: string } | null>(null)  // fades above the bar on select
@@ -193,7 +198,7 @@ export default function HotBar({ items: propItems, onUse, onReorder, onSelect, u
   }
 
   const BagBtn = ({ size }: { size: number }) => (
-    <button onClick={() => setBagOpen(o => !o)} title="Satchel" style={{
+    <button onClick={() => setBagOpen(!bagOpen)} title="Satchel (I)" style={{
       width: size, height: size, flexShrink: 0, borderRadius: 12, cursor: 'pointer', touchAction: 'none',
       border: `2px solid ${bagOpen ? '#d4a843' : '#ffffff2a'}`, background: bagOpen ? '#241d10' : '#1a140c',
       font: `${size * 0.5}px serif`, lineHeight: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',

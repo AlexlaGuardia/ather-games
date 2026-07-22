@@ -2272,6 +2272,39 @@ export default function Shimmer3D() {
   const [isTouch, setIsTouch] = useState(false)
   useEffect(() => { setIsTouch((window.matchMedia?.('(pointer: coarse)').matches ?? false) || 'ontouchstart' in window) }, [])
 
+  // ── Inventory (satchel) open/close, hijacking the mouse while it's up ──────────────────────────
+  // First-person play captures the pointer, so the satchel's drag-and-drop is unreachable mid-play.
+  // Opening the bag RELEASES the pointer (free cursor to click/drag); closing re-captures the look.
+  // Same move the station menu already does (exitPointerLock → menu). Bag state lives here (not in
+  // HotBar) so the "I" key and the pointer-lock toggle stay in one place. canvasElRef re-locks on close.
+  const canvasElRef = useRef<HTMLCanvasElement | null>(null)
+  const [bagOpen, setBagOpen] = useState(false)
+  const bagOpenRef = useRef(false); bagOpenRef.current = bagOpen
+  const toggleBag = useCallback((open: boolean) => {
+    setBagOpen(open)
+    if (open) { document.exitPointerLock?.() }                       // free the cursor for the satchel
+    else if (!editRef.current && !isTouch) {                          // re-capture first-person look on close
+      const c = canvasElRef.current
+      if (c) { try { const r = c.requestPointerLock?.() as unknown as Promise<void> | undefined; r?.catch?.(() => {}) } catch { /* re-lock cooldown — a canvas click resumes look */ } }
+    }
+  }, [isTouch])
+  // "I" toggles the bag (not while a blocking overlay owns the screen); Esc closes it.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const k = e.key.toLowerCase()
+      if (k === 'i') {
+        // battleRef.current = walker frozen by a station menu / rinning / placing; curBattleRef = real battle
+        if (editRef.current || battleRef.current || curBattleRef.current || dialogueRef.current) return
+        e.preventDefault(); toggleBag(!bagOpenRef.current)
+      } else if (k === 'escape' && bagOpenRef.current) { e.preventDefault(); toggleBag(false) }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [toggleBag])
+  // If a blocking mode takes over while the bag is open (battle/dialogue/edit/placing/reward), drop the
+  // bag — those own the cursor themselves, so no re-lock (plain setBagOpen, not toggleBag).
+  useEffect(() => { if (bagOpen && (battle || editMode || dialogue || placing || approach || rewards || openMenu)) setBagOpen(false) }, [bagOpen, battle, editMode, dialogue, placing, approach, rewards, openMenu])
+
   // Desktop interact key: E / Enter (or left-click) — advance dialogue, talk, harvest, open a station.
   // Space is JUMP, never an interact initiator (jumping next to an NPC/node/station used to fire it).
   // The one exception: Space still ADVANCES an open dialogue, where the walker is frozen so there's no
@@ -2480,7 +2513,8 @@ export default function Shimmer3D() {
 
   return (
     <div style={{ position: 'fixed', inset: 0, background: '#bfe3ef', cursor: editMode ? 'crosshair' : 'default', touchAction: 'none', overscrollBehavior: 'none' }}>
-      <Canvas shadows camera={{ fov: 45, position: [1, 6, 14], near: 0.1, far: 500 }} gl={{ antialias: true }}>
+      <Canvas shadows camera={{ fov: 45, position: [1, 6, 14], near: 0.1, far: 500 }} gl={{ antialias: true }}
+        onCreated={(state) => { canvasElRef.current = state.gl.domElement }}>
         <Scene
           zone={zone} gridRef={gridRef} heights={heightsRef.current} version={version} dims={dims}
           posRef={posRef as React.RefObject<THREE.Vector3>} heightsRef={heightsRef} zoneIdRef={zoneIdRef}
@@ -2831,7 +2865,12 @@ export default function Shimmer3D() {
       })()}
 
       {/* Hotbar HUD — bag + 6 quick-slots + tool gauges + mana vial. Only while walking the world. */}
-      {!battle && !approach && !rewards && !editMode && !dialogue && !placing && <HotBar items={invSlots} onUse={useItem} onReorder={reorderSlots} onSelect={(i) => { selSlotRef.current = i }} usable={USE_HINTS}
+      {/* click-catcher — while the satchel is open, swallow canvas clicks (so a stray click can't re-lock
+          the pointer under the panel) and let clicking outside the bag close it. Below the hotbar (z35)
+          + satchel (z37), above the canvas. */}
+      {bagOpen && <div onPointerDown={() => toggleBag(false)} style={{ position: 'fixed', inset: 0, zIndex: 34, background: 'transparent' }} />}
+
+      {!battle && !approach && !rewards && !editMode && !dialogue && !placing && <HotBar items={invSlots} bagOpen={bagOpen} onBagChange={toggleBag} onUse={useItem} onReorder={reorderSlots} onSelect={(i) => { selSlotRef.current = i }} usable={USE_HINTS}
         tools={(void toolTick, (['forestry', 'prospecting', 'rinning'] as const).map(skill => {
           const t = equippedToolsRef.current[skill]
           const def = t ? TOOL_DEFS[t.toolId] : null
