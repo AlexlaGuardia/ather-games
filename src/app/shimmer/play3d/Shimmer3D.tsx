@@ -69,6 +69,7 @@ const UP = new THREE.Vector3(0, 1, 0)
 const EYE_H = 1.15          // eye offset above the player's foot position (capsule center is +0.7)
 const EYE_SLIDE = 0.5       // eye dips this low mid-slide (crouched)
 const FPS_FOV = 72
+const ADS_FOV = 50   // aim-down-sights zoom (outside-Ather weapon); lerped from FPS_FOV on right-click hold
 const ORBIT_FOV = 45
 // ── Locomotion feel (tier units; STEP=1 so tiers≈world units). All Alex-tunable. Apex-style flow. ──
 const RUN_SPEED = 6.5       // AUTO-RUN: the default sustained ground speed (no sprint key)
@@ -1107,10 +1108,10 @@ function HarvestPop({ pop }: { pop: { x: number; y: number; z: number; glyph: st
   )
 }
 
-function CameraRig({ posRef, editFocusRef, yawRef, editRef, eyeRef }: {
+function CameraRig({ posRef, editFocusRef, yawRef, editRef, eyeRef, adsRef }: {
   posRef: React.RefObject<THREE.Vector3>; editFocusRef: React.RefObject<THREE.Vector3>
   yawRef: React.RefObject<number>; editRef: React.RefObject<boolean>
-  eyeRef: React.RefObject<number>
+  eyeRef: React.RefObject<number>; adsRef: React.RefObject<boolean>
 }) {
   const yaw = yawRef
   const pitch = useRef(0.6)          // orbit polar angle (third-person / spectator)
@@ -1144,8 +1145,9 @@ function CameraRig({ posRef, editFocusRef, yawRef, editRef, eyeRef }: {
       if (isLocked()) {
         // captured free-look: raw mouse deltas drive yaw + look elevation directly.
         if (editRef.current) { document.exitPointerLock?.(); return }
-        yaw.current -= e.movementX * 0.0022
-        lookPitch.current = Math.max(-1.25, Math.min(1.25, lookPitch.current - e.movementY * 0.0022))
+        const sens = adsRef.current ? 0.0014 : 0.0022  // slower turn while aiming, for precision
+        yaw.current -= e.movementX * sens
+        lookPitch.current = Math.max(-1.25, Math.min(1.25, lookPitch.current - e.movementY * sens))
         return
       }
       if (!dragging) return
@@ -1187,9 +1189,13 @@ function CameraRig({ posRef, editFocusRef, yawRef, editRef, eyeRef }: {
     }
     const cam = state.camera as THREE.PerspectiveCamera
     const fps = !editing  // play is always first-person; edit uses the spectator orbit cam
-    // Wider fov in FPS for the Supra feel; only touch the projection matrix on an actual change.
-    const wantFov = fps ? FPS_FOV : ORBIT_FOV
-    if (cam.fov !== wantFov) { cam.fov = wantFov; cam.updateProjectionMatrix() }
+    // Wider fov in FPS for the Supra feel; ADS (right-click hold) lerps it down to zoom. Lerp toward
+    // the target so the zoom is smooth, then snap+stop touching the projection matrix once settled.
+    const wantFov = fps ? (adsRef.current ? ADS_FOV : FPS_FOV) : ORBIT_FOV
+    if (Math.abs(cam.fov - wantFov) > 0.1) {
+      cam.fov += (wantFov - cam.fov) * Math.min(1, dt * 14)
+      cam.updateProjectionMatrix()
+    } else if (cam.fov !== wantFov) { cam.fov = wantFov; cam.updateProjectionMatrix() }
 
     if (fps) {
       // Eye-cam: camera AT the walker, looking along (yaw, lookPitch). Horizontal forward matches the
@@ -1385,6 +1391,7 @@ const Scene = memo(function Scene(props: {
   isOwner: boolean
   fireReqRef: React.MutableRefObject<boolean>
   onRangeHit: () => void
+  adsRef: React.RefObject<boolean>
 }) {
   // Pure-prop filter → safe to memo, so a channel tick doesn't re-allocate the structure list.
   // The NPC filter below is deliberately NOT memoized: npcInWorld() reads flagsRef.current, which is
@@ -1418,7 +1425,7 @@ const Scene = memo(function Scene(props: {
       {props.companionColor && !props.editing && <Follower posRef={props.posRef} heightsRef={props.heightsRef} color={props.companionColor} />}
       {props.fishing && <FishTell posRef={props.posRef} heightsRef={props.heightsRef} bite={props.fishBite} />}
       <HarvestPop pop={props.harvestPop} />
-      <CameraRig posRef={props.posRef} editFocusRef={props.editFocusRef} yawRef={props.yawRef} editRef={props.editRef} eyeRef={props.eyeRef} />
+      <CameraRig posRef={props.posRef} editFocusRef={props.editFocusRef} yawRef={props.yawRef} editRef={props.editRef} eyeRef={props.eyeRef} adsRef={props.adsRef} />
     </>
   )
 })
@@ -2381,11 +2388,13 @@ export default function Shimmer3D() {
   const hitsRef = useRef(0)
   const casterRef = useRef<HTMLDivElement>(null)  // viewmodel node; recoil kicked imperatively (no key remount)
   const [hudStats, setHudStats] = useState({ shots: 0, hits: 0 })  // display only, synced on a throttle
+  const adsRef = useRef(false)  // aim-down-sights (right-click hold); CameraRig reads it for fov + sensitivity
+  const [ads, setAds] = useState(false)  // drives the viewmodel raise (toggles ~twice per aim, not per-frame)
   const onRangeHit = useCallback(() => { hitsRef.current++ }, [])
   // Sync the HUD counters at ~5fps while the weapon is out, so firing never touches the (huge) component's
   // render path — that churn was stuttering the movement rAF. Reset counters when the weapon holsters.
   useEffect(() => {
-    if (!weaponDrawn) { shotsRef.current = 0; hitsRef.current = 0; setHudStats({ shots: 0, hits: 0 }); return }
+    if (!weaponDrawn) { shotsRef.current = 0; hitsRef.current = 0; setHudStats({ shots: 0, hits: 0 }); adsRef.current = false; setAds(false); return }
     const id = setInterval(() => setHudStats((s) => (s.shots === shotsRef.current && s.hits === hitsRef.current) ? s : { shots: shotsRef.current, hits: hitsRef.current }), 200)
     return () => clearInterval(id)
   }, [weaponDrawn])
@@ -2483,14 +2492,33 @@ export default function Shimmer3D() {
         else if (nearNpc) talk(nearNpc)
         else if (fishRef.current || nearNodeRef.current || channelRef.current) toggleChannel()
         else if (nearStationRef.current) { document.exitPointerLock?.(); openStation() }  // free the cursor for the menu
-      } else if (e.button === 2) {
+      } else if (e.button === 1) {
+        // middle-click (scroll-wheel press) = use/place the selected hotbar item (moved off right-click)
         e.preventDefault()
-        useItem(invRef.current.slots[selSlotRef.current]?.itemId)  // use/place the selected hotbar item
+        useItem(invRef.current.slots[selSlotRef.current]?.itemId)
+      } else if (e.button === 2 && weaponDrawnRef.current) {
+        // right-click HOLD = aim down sights (weapon only). Released in onUp below.
+        e.preventDefault(); adsRef.current = true; setAds(true)
       }
     }
+    const onUp = (e: PointerEvent) => {
+      if (e.button === 2 && adsRef.current) { adsRef.current = false; setAds(false) }
+    }
     window.addEventListener('pointerdown', onDown)
-    return () => window.removeEventListener('pointerdown', onDown)
+    window.addEventListener('pointerup', onUp)
+    return () => { window.removeEventListener('pointerdown', onDown); window.removeEventListener('pointerup', onUp) }
   }, [editMode, nearNpc, advanceDialogue, talk, toggleChannel, openStation, useItem, confirmPlacing, rotatePlacing])
+  // Numpad0 = use the selected hotbar item (keyboard alt to middle-click). e.code (not e.key) so it
+  // binds to the NUMPAD zero specifically — the number ROW / numpad digits still select slots.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (editMode || battleRef.current) return
+      if (e.code === 'Numpad0') { e.preventDefault(); useItem(invRef.current.slots[selSlotRef.current]?.itemId) }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [editMode, useItem])
+
   // entering edit mode: start the spectator camera where the player is standing
   useEffect(() => { if (editMode) editFocusRef.current.copy(posRef.current!) }, [editMode])
   const [tool, setTool] = useState<Tool>('raise')
@@ -2671,6 +2699,7 @@ export default function Shimmer3D() {
           isOwner={isOwner}
           fireReqRef={fireReqRef}
           onRangeHit={onRangeHit}
+          adsRef={adsRef}
         />
       </Canvas>
 
@@ -3021,16 +3050,20 @@ export default function Shimmer3D() {
             <span>hits <span style={{ color: '#7fffa0' }}>{hudStats.hits}</span></span>
             <span style={{ opacity: 0.5, fontWeight: 600 }}>click to fire</span>
           </div>
-          {/* caster viewmodel — recoil kicked imperatively via casterRef (no per-shot remount) */}
-          <div ref={casterRef} style={{ position: 'fixed', right: '17%', bottom: 0, zIndex: 33, pointerEvents: 'none' }}>
-            <style>{`@keyframes casterKick { 0% { transform: translateY(16px) } 60% { transform: translateY(-3px) } 100% { transform: translateY(0) } }`}</style>
-            <svg width="240" height="168" viewBox="0 0 240 168" style={{ display: 'block' }}>
-              <polygon points="46,168 66,92 158,122 138,168" fill="#161d2a" stroke="#3a4a63" strokeWidth="2" />
-              <polygon points="58,98 100,70 126,96 104,122" fill="#212b3d" stroke="#4a5d7d" strokeWidth="2" />
-              <circle cx="94" cy="96" r="17" fill="none" stroke="#8fe0ff" strokeOpacity="0.35" strokeWidth="2" />
-              <circle cx="94" cy="96" r="10" fill="#8fe0ff" />
-              <rect x="100" y="90" width="52" height="6" rx="3" fill="#8fe0ff" opacity="0.9" />
-            </svg>
+          {/* caster viewmodel — outer div raises it to the sighted pose on ADS (React, transitioned);
+              inner casterRef keeps the imperative recoil kick, so the two transforms don't fight. */}
+          <div style={{ position: 'fixed', right: '17%', bottom: 0, zIndex: 33, pointerEvents: 'none',
+            transform: ads ? 'translate(-150px, -30px) scale(1.14)' : 'translate(0,0) scale(1)', transition: 'transform 0.14s ease-out' }}>
+            <div ref={casterRef}>
+              <style>{`@keyframes casterKick { 0% { transform: translateY(16px) } 60% { transform: translateY(-3px) } 100% { transform: translateY(0) } }`}</style>
+              <svg width="240" height="168" viewBox="0 0 240 168" style={{ display: 'block' }}>
+                <polygon points="46,168 66,92 158,122 138,168" fill="#161d2a" stroke="#3a4a63" strokeWidth="2" />
+                <polygon points="58,98 100,70 126,96 104,122" fill="#212b3d" stroke="#4a5d7d" strokeWidth="2" />
+                <circle cx="94" cy="96" r="17" fill="none" stroke="#8fe0ff" strokeOpacity="0.35" strokeWidth="2" />
+                <circle cx="94" cy="96" r="10" fill="#8fe0ff" />
+                <rect x="100" y="90" width="52" height="6" rx="3" fill="#8fe0ff" opacity="0.9" />
+              </svg>
+            </div>
           </div>
         </>
       )}
