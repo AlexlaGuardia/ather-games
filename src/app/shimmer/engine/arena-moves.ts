@@ -121,6 +121,14 @@ export function applyStatus(st: StatusState, id: StatusId) {
 // The spirit reads the fight: sustain when hurt, shield the incoming heavy, otherwise
 // throw its best answer to the foe's element. Small rng jitter keeps replays from
 // feeling robotic across DIFFERENT fights while staying deterministic per seed.
+//
+// AI tiers grade DECISION QUALITY, never stats (bosses are stronger because they read
+// the fight better, not because their numbers cheat):
+//   wild     — instinct: nearest target, loose scoring, late heals
+//   trained  — focuses the weakest foe, steadier scoring
+//   champion — trained + near-perfect move scoring, earlier sustain, reliable shields
+export type ArenaAITier = 'wild' | 'trained' | 'champion'
+
 export interface ChooserView {
   hpFrac: number
   stages: StageState
@@ -129,19 +137,23 @@ export interface ChooserView {
   targetElement: BattleElement
   targetAnchored: boolean
   defending: boolean              // stance === 'defend' ⇒ no damage windups, kit turns supportive
+  tier: ArenaAITier
 }
+
+const TIER_JITTER: Record<ArenaAITier, number> = { wild: 0.2, trained: 0.1, champion: 0.02 }
 
 export function chooseMove(kit: ArenaMove[], v: ChooserView, rng: () => number): ArenaMove | null {
   const ready = kit.filter(m => m.cdLeft <= 0)
   if (!ready.length) return null
 
-  // 1) hurt → the kit's sustain (a flow heal / regen move)
-  if (v.hpFrac < 0.45) {
+  // 1) hurt → the kit's sustain (a flow heal / regen move). Champions don't wait until desperate.
+  if (v.hpFrac < (v.tier === 'champion' ? 0.55 : 0.45)) {
     const heal = ready.find(m => m.selfEffect === 'regen' && m.power === 0)
     if (heal) return heal
   }
-  // 2) a heavy bearing down → raise the shield (unless already fortified/stacked)
-  if (v.incomingHeavy && !v.fortified && v.stages.grd < 2) {
+  // 2) a heavy bearing down → raise the shield. Champions always take the read; instinct
+  //    skips it when already stacked.
+  if (v.incomingHeavy && !v.fortified && (v.tier === 'champion' || v.stages.grd < 2)) {
     const shield = ready.find(m => m.state === 'compact')
     if (shield) return shield
   }
@@ -153,11 +165,12 @@ export function chooseMove(kit: ArenaMove[], v: ChooserView, rng: () => number):
   // 3) damage moves, scored by what actually bites this foe
   const dmg = ready.filter(m => m.power > 0)
   if (dmg.length) {
+    const j = TIER_JITTER[v.tier]
     let best: ArenaMove | null = null, bs = -1
     for (const m of dmg) {
       const s = m.power
         * getEffectiveness(m.element, v.targetElement)
-        * (0.9 + rng() * 0.2)
+        * (1 - j / 2 + rng() * j)
       if (s > bs) { bs = s; best = m }
     }
     return best

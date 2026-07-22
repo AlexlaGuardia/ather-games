@@ -141,5 +141,27 @@ const count = (r: SimResult, type: string, pred: (e: any) => boolean = () => tru
   console.log(`  (pacing: median ${med.toFixed(1)}s, p10 ${durations[Math.floor(durations.length * 0.1)].toFixed(1)}s, p90 ${durations[Math.floor(durations.length * 0.9)].toFixed(1)}s)`)
 }
 
+// ── 8) AI tiers — champion enemies are harder on decisions ALONE (same spirits, same stats) ──
+{
+  // MIRROR teams — identical species/levels/elements both sides, so the only lever
+  // left is the enemy tier's decision quality. Wild-vs-wild ⇒ ~coin flip; champion
+  // enemies must bend that coin.
+  let wildWins = 0, champWins = 0
+  const N = 60
+  for (let i = 0; i < N; i++) {
+    const mkSide = () => ({
+      allies: [mk('fox', 22, 'storm'), mk('rabbit', 22, 'earth')],
+      enemies: [mk('fox', 22, 'storm'), mk('rabbit', 22, 'earth')],
+    })
+    const a = mkSide()
+    if (simulate({ ...a, seed: i * 131 + 7 }).outcome === 'win') wildWins++
+    const b = mkSide()
+    if (simulate({ ...b, seed: i * 131 + 7, enemyTier: 'champion' }).outcome === 'win') champWins++
+  }
+  const wPct = (wildWins / N) * 100, cPct = (champWins / N) * 100
+  chk('champion tier bites (≥10pts harder than wild)', wPct - cPct >= 10, `vs wild ${wPct.toFixed(0)}% vs champion ${cPct.toFixed(0)}%`)
+  console.log(`  (tiers: ally win ${wPct.toFixed(0)}% vs wild enemies, ${cPct.toFixed(0)}% vs champion — same spirits, decisions only)`)
+}
+
 if (bad) { console.error(`❌ arena-moves oracle: ${bad} failed, ${ok} passed`); process.exit(1) }
 console.log(`✅ arena-moves oracle: ${ok}/${ok} — kits, determinism, dodges, element wheel, cooldowns, choreography, pacing.`)

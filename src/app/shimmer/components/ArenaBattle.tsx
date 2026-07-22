@@ -12,7 +12,7 @@ import { Canvas, useFrame } from '@react-three/fiber'
 import { Html, OrbitControls } from '@react-three/drei'
 import * as THREE from 'three'
 import { useRef, useState, useCallback } from 'react'
-import { createArena, tick, type ArenaState, type KeeperCommand, type Stance, type AidKit, type ArenaEvent } from '../engine/arena'
+import { createArena, tick, type ArenaState, type KeeperCommand, type Stance, type AidKit, type ArenaEvent, type ArenaAITier } from '../engine/arena'
 import type { MoveState } from '../engine/arena-moves'
 import { ELEMENT_COLORS, type Element, type Spirit } from '../spirits/spirit'
 
@@ -122,6 +122,8 @@ function Scene({ arenaRef, cmdQueue, skipRef, onSnap, onCallout }: {
   const shields = useRef(new Map<string, THREE.Mesh>())
   const softens = useRef(new Map<string, THREE.Mesh>())
   const poisons = useRef(new Map<string, THREE.Mesh>())
+  const collars = useRef(new Map<string, THREE.Mesh>())
+  const prevOutcome = useRef<ArenaState['outcome']>('ongoing')
   const acc = useRef(0)
   // pacing + performance state
   const hitStopT = useRef(0)        // realtime seconds of freeze left
@@ -223,6 +225,20 @@ function Scene({ arenaRef, cmdQueue, skipRef, onSnap, onCallout }: {
     const cmds = cmdQueue.current.splice(0)
     tick(s, dt, cmds)
     perform(s, s.events)
+
+    // the liberation beat: the moment the field is won, every collar shatters — the
+    // arc's payoff rendered where it happens (upstream dialogue carries the story).
+    if (s.outcome === 'win' && prevOutcome.current === 'ongoing') {
+      for (const f of s.fighters) {
+        if (!f.collared) continue
+        const c = collars.current.get(f.id)
+        if (c) c.visible = false
+        spawnFx('expanding', f.x, f.y, '#ffd75e', true, 0.9)
+        spawnFloat(f.x, f.y, f.radius * 2.2 + 1.0, 'FREED', '#ffd75e', true)
+      }
+      bump(n => n + 1)
+    }
+    prevOutcome.current = s.outcome
 
     // prune expired FX (sim-time life)
     if (fx.current.some(f => s.t - f.born > f.life)) {
@@ -395,14 +411,21 @@ function Scene({ arenaRef, cmdQueue, skipRef, onSnap, onCallout }: {
       ))}
       {/* fighters — element-tinted blockout capsules + floating nameplate/HP */}
       {s0.fighters.map(f => {
-        const col = colorFor(f.element, f.side)
+        const col = f.collared ? '#4c4c56' : colorFor(f.element, f.side)   // a captive reads MUTED — the collar dims the spirit
         const h = f.radius * 1.2
         return (
           <group key={f.id} ref={g => { if (g) groups.current.set(f.id, g) }} position={[f.x, 0, f.y]}>
             <mesh ref={m => { if (m) bodies.current.set(f.id, m) }} position={[0, f.radius * 0.6 + h / 2, 0]} castShadow>
               <capsuleGeometry args={[f.radius * 0.6, h, 6, 12]} />
-              <meshStandardMaterial color={col} emissive={col} emissiveIntensity={f.side === 'ally' ? 0.35 : 0.12} roughness={0.5} />
+              <meshStandardMaterial color={col} emissive={col} emissiveIntensity={f.side === 'ally' ? 0.35 : f.collared ? 0.04 : 0.12} roughness={0.5} />
             </mesh>
+            {/* the collar — a dull-ember band at the neck; it shatters (hides + bursts) on the win */}
+            {f.collared && (
+              <mesh ref={m => { if (m) collars.current.set(f.id, m) }} position={[0, f.radius * 0.6 + h * 0.92, 0]} rotation={[Math.PI / 2, 0, 0]}>
+                <torusGeometry args={[f.radius * 0.52, 0.05, 8, 24]} />
+                <meshStandardMaterial color="#2a2126" emissive="#b04a30" emissiveIntensity={0.9} roughness={0.4} />
+              </mesh>
+            )}
             {/* facing nub */}
             <mesh position={[f.radius * 0.7, f.radius * 0.9, 0]}>
               <sphereGeometry args={[0.08, 8, 8]} />
@@ -442,16 +465,19 @@ function CornerBtn({ label, sub, disabled, accent, cd, cdMax, onClick, style }: 
 }
 
 // ── the battle: sim + HUD. One renderer for both the harness and in-world play3d. ──
-export default function ArenaBattle({ allies, enemies, seed, aidKit, onEnd, continueLabel = 'CONTINUE' }: {
+export default function ArenaBattle({ allies, enemies, seed, aidKit, enemyTier, collaredIndices, title, onEnd, continueLabel = 'CONTINUE' }: {
   allies: Spirit[]
   enemies: Spirit[]
   seed?: number
   aidKit?: AidKit
+  enemyTier?: ArenaAITier          // holds pass 'champion' — decision quality, never stats
+  collaredIndices?: number[]       // enemy indices rendered as collared captives (freed on win)
+  title?: string                   // hold framing, e.g. "HOLD 2 — SORREL'S STRONGHOLD"
   onEnd: (outcome: 'win' | 'lose' | 'fled') => void
   continueLabel?: string
 }) {
   const arenaRef = useRef<ArenaState | null>(null)
-  if (!arenaRef.current) arenaRef.current = createArena({ allies, enemies, aidKit, seed: seed ?? ((Math.random() * 1e9) | 0) })
+  if (!arenaRef.current) arenaRef.current = createArena({ allies, enemies, aidKit, enemyTier, collared: collaredIndices, seed: seed ?? ((Math.random() * 1e9) | 0) })
   const cmdQueue = useRef<KeeperCommand[]>([])
   const skipRef = useRef(false)
   const [ui, setUi] = useState<UISnap>(() => snap(arenaRef.current!))
@@ -482,6 +508,7 @@ export default function ArenaBattle({ allies, enemies, seed, aidKit, onEnd, cont
         @keyframes arenaFloat { 0% { transform: translateY(6px); opacity: 0 } 12% { opacity: 1 } 100% { transform: translateY(-30px); opacity: 0 } }
         @keyframes calloutIn { 0% { transform: translateX(-8px); opacity: 0 } 100% { transform: translateX(0); opacity: 1 } }
         @keyframes skipFill { 0% { width: 0 } 100% { width: 100% } }
+        @keyframes holdIntro { 0% { opacity: 0; transform: scale(0.94) } 10% { opacity: 1; transform: scale(1) } 78% { opacity: 1 } 100% { opacity: 0; visibility: hidden } }
       `}</style>
       <Canvas shadows camera={{ position: [0, 10, -9.5], fov: 40 }} style={{ position: 'absolute', inset: 0 }}>
         <color attach="background" args={['#0a0f0e']} />
@@ -490,8 +517,18 @@ export default function ArenaBattle({ allies, enemies, seed, aidKit, onEnd, cont
 
       {/* title */}
       <div style={{ position: 'absolute', top: 14, left: '50%', transform: 'translateX(-50%)', textAlign: 'center', pointerEvents: 'none' }}>
-        <div style={{ font: '800 13px ui-monospace, monospace', color: '#7fe3c8', letterSpacing: '0.14em', opacity: 0.85 }}>THE KEEPER&apos;S ARENA</div>
+        <div style={{ font: '800 13px ui-monospace, monospace', color: title ? '#f0a526' : '#7fe3c8', letterSpacing: '0.14em', opacity: 0.85, whiteSpace: 'nowrap' }}>{title ?? "THE KEEPER'S ARENA"}</div>
       </div>
+
+      {/* hold intro splash — the boss framing lands big, then hands the screen back */}
+      {title && (
+        <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none', animation: 'holdIntro 2.4s ease-out forwards' }}>
+          <div style={{ textAlign: 'center', padding: '18px 34px', borderRadius: 14, background: '#0d1413ee', border: '2px solid #f0a526', boxShadow: '0 0 34px #f0a52644' }}>
+            <div style={{ font: '900 26px ui-monospace, monospace', color: '#f0a526', letterSpacing: '0.12em' }}>{title}</div>
+            <div style={{ font: '700 11px ui-monospace, monospace', color: '#8fa8a0', letterSpacing: '0.2em', marginTop: 6 }}>BREAK THE HOLD</div>
+          </div>
+        </div>
+      )}
 
       {/* move callouts — the announcer stack, canon move names */}
       <div style={{ position: 'absolute', top: 44, left: 14, display: 'flex', flexDirection: 'column', gap: 5, pointerEvents: 'none' }}>

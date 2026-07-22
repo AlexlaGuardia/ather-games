@@ -25,8 +25,10 @@ import { derivePartyStats } from './party-stats'
 import {
   kitForSpirit, chooseMove, hitChance, moveDamage, applyStatus, stageMult,
   freshStatus, freshStages, toBattleElement,
-  type ArenaMove, type StatusState, type StageState, type MoveState, type StatusId, type BattleElement,
+  type ArenaMove, type ArenaAITier, type StatusState, type StageState, type MoveState, type StatusId, type BattleElement,
 } from './arena-moves'
+
+export type { ArenaAITier }
 
 export type Side = 'ally' | 'enemy'
 export type Stance = 'aggressive' | 'defend'   // the live-nudgeable instinct (Speak flicks this)
@@ -55,6 +57,8 @@ export interface Fighter {
   speed: number             // floor units / sec
   reach: number             // spacing anchor for the between-moves dance
   orbitDir: 1 | -1          // which way this one circles (deterministic per slot)
+  tier: ArenaAITier         // decision quality — never stats (champion reads, doesn't cheat)
+  collared: boolean         // a captive compelled to fight — renders collared, freed on the win
   stance: Stance
   targetId: string | null
   kit: ArenaMove[]          // the canon 4-move kit as timed actions (cdLeft lives here)
@@ -159,7 +163,7 @@ function buildAid(kit: AidKit): AidSlot[] {
 // telegraph→react→payoff loop cycles many times before anyone falls.
 const HP_MULT = 2.6
 
-function fighterFromSpirit(spirit: Spirit, id: string, side: Side, x: number, y: number, slot: number): Fighter {
+function fighterFromSpirit(spirit: Spirit, id: string, side: Side, x: number, y: number, slot: number, tier: ArenaAITier, collared: boolean): Fighter {
   const s = derivePartyStats(spirit)
   const speed = 1.6 + s.agi / 40           // agi → footspeed
   const maxHp = Math.round(s.maxHp * HP_MULT)
@@ -173,6 +177,7 @@ function fighterFromSpirit(spirit: Spirit, id: string, side: Side, x: number, y:
     hp: maxHp, maxHp, pwr: atk, grd: s.grd, agi: s.agi,
     radius: 0.35 + s.maxHp / 260, speed,
     reach: 0.9, orbitDir: slot % 2 === 0 ? 1 : -1,
+    tier, collared,
     stance: 'aggressive', targetId: null,
     kit: kitForSpirit(spirit), act: null, st: freshStatus(), stage: freshStages(),
     flinch: 0, defDownT: 0, defDownAmt: 0, shieldT: 0, numbT: 0, braceT: 0, hitFlash: 0,
@@ -185,6 +190,8 @@ export interface ArenaSpec {
   seed: number
   R?: number
   aidKit?: AidKit           // the Keeper's kit (2 channels + bonded Mana'mal gift); defaults to Bonn + Momo
+  enemyTier?: ArenaAITier   // enemy decision quality (holds pass 'champion'); default wild instinct
+  collared?: number[]       // enemy indices that are collared captives (compelled fighters, freed on win)
 }
 
 export function createArena(spec: ArenaSpec): ArenaState {
@@ -192,11 +199,11 @@ export function createArena(spec: ArenaSpec): ArenaState {
   const fighters: Fighter[] = []
   spec.allies.forEach((sp, i) => {
     const n = spec.allies.length
-    fighters.push(fighterFromSpirit(sp, `a${i}`, 'ally', spread(i, n) * 2.2, -R * 0.55, i))
+    fighters.push(fighterFromSpirit(sp, `a${i}`, 'ally', spread(i, n) * 2.2, -R * 0.55, i, 'wild', false))
   })
   spec.enemies.forEach((sp, i) => {
     const n = spec.enemies.length
-    fighters.push(fighterFromSpirit(sp, `e${i}`, 'enemy', spread(i, n) * 2.2, R * 0.55, i))
+    fighters.push(fighterFromSpirit(sp, `e${i}`, 'enemy', spread(i, n) * 2.2, R * 0.55, i, spec.enemyTier ?? 'wild', spec.collared?.includes(i) ?? false))
   })
   return {
     t: 0, R, fighters,
@@ -217,6 +224,24 @@ function nearestEnemy(state: ArenaState, f: Fighter): Fighter | null {
     if (g.side === f.side || !alive(g)) continue
     const d = dist(f, g)
     if (d < bd) { bd = d; best = g }
+  }
+  return best
+}
+
+// Trained/champion fighters FOCUS: they hunt the weakest standing foe (distance breaks
+// ties) instead of whoever's closest. This is the real boss difficulty — coordinated
+// pressure — with zero stat cheating.
+function pickTarget(state: ArenaState, f: Fighter): Fighter | null {
+  if (f.tier === 'wild') {
+    // instinct is sticky: keep the current quarrel while it stands, else nearest
+    const cur = f.targetId ? state.fighters.find(g => g.id === f.targetId && g.side !== f.side && alive(g)) : null
+    return cur ?? nearestEnemy(state, f)
+  }
+  let best: Fighter | null = null, bs = Infinity
+  for (const g of state.fighters) {
+    if (g.side === f.side || !alive(g)) continue
+    const s = g.hp / g.maxHp + dist(f, g) * 0.01
+    if (s < bs) { bs = s; best = g }
   }
   return best
 }
@@ -329,7 +354,7 @@ export function tick(state: ArenaState, dt: number, commands: KeeperCommand[] = 
       continue
     }
 
-    const target = f.targetId ? state.fighters.find(g => g.id === f.targetId && alive(g)) ?? nearestEnemy(state, f) : nearestEnemy(state, f)
+    const target = pickTarget(state, f)
     if (!target) continue
     f.targetId = target.id
     const d = dist(f, target)
@@ -374,6 +399,7 @@ export function tick(state: ArenaState, dt: number, commands: KeeperCommand[] = 
       targetElement: target.bElement,
       targetAnchored: target.st.anchorT > 0,
       defending: f.stance === 'defend',
+      tier: f.tier,
     }, state.rng)
 
     if (mv) {

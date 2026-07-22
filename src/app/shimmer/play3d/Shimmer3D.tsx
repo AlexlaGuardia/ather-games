@@ -2027,7 +2027,7 @@ export default function Shimmer3D() {
   const [hasStarter, setHasStarter] = useState(false) // reactive mirror of "party has ≥1 spirit" for HUD
   const [defeated, setDefeated] = useState<Record<string, boolean>>({}) // NPCs cleared from the world (by id)
   const defeatedRef = useRef(defeated); defeatedRef.current = defeated
-  const [battle, setBattle] = useState<{ allies: Spirit[]; enemies: Spirit[]; aiTier: AITier; zoneId: string; kind?: 'wild' | 'thistle' | 'sorrel' | 'brack' } | null>(null)
+  const [battle, setBattle] = useState<{ allies: Spirit[]; enemies: Spirit[]; aiTier: AITier; zoneId: string; kind?: 'wild' | 'thistle' | 'sorrel' | 'brack'; title?: string; collared?: number[] } | null>(null)
   const curBattleRef = useRef(battle); curBattleRef.current = battle
   // Wild encounters play a brief "drawn to you" approach beat before the arena mounts (see below).
   const [approach, setApproach] = useState<{ enc: WildEncounter; battle: NonNullable<typeof battle> } | null>(null)
@@ -2844,7 +2844,7 @@ export default function Shimmer3D() {
     captive.seeds = Array.from({ length: 6 }, () => Math.floor(Math.random() * 32))
     battleRef.current = true
     document.exitPointerLock?.()
-    setBattle({ allies: partyRef.current!, enemies: [captive], aiTier: 'wild', zoneId: logicalZoneAt(zoneIdRef.current, posRef.current!.x, posRef.current!.z), kind: 'thistle' })
+    setBattle({ allies: partyRef.current!, enemies: [captive], aiTier: 'wild', zoneId: logicalZoneAt(zoneIdRef.current, posRef.current!.x, posRef.current!.z), kind: 'thistle', title: 'HOLD 1 — THISTLE', collared: [0] })
   }, [])
 
   // Sorrel — Hold 2, the stronghold. Enemies = [guard, captive, captive]. The guard (no collar) SHIELDS
@@ -2865,7 +2865,7 @@ export default function Shimmer3D() {
     }
     battleRef.current = true
     document.exitPointerLock?.()
-    setBattle({ allies: partyRef.current!, enemies: [guard, mkCaptive(), mkCaptive()], aiTier: 'champion', zoneId: logicalZoneAt(zoneIdRef.current, posRef.current!.x, posRef.current!.z), kind: 'sorrel' })
+    setBattle({ allies: partyRef.current!, enemies: [guard, mkCaptive(), mkCaptive()], aiTier: 'champion', zoneId: logicalZoneAt(zoneIdRef.current, posRef.current!.x, posRef.current!.z), kind: 'sorrel', title: "HOLD 2 — SORREL'S STRONGHOLD", collared: [1, 2] })
   }, [])
 
   // Brack — Hold 3, the climax. The pooled force: TWO enforcers (guards) shielding THREE collared
@@ -2888,7 +2888,7 @@ export default function Shimmer3D() {
     }
     battleRef.current = true
     document.exitPointerLock?.()
-    setBattle({ allies: partyRef.current!, enemies: [mkGuard('Brack’s Muscle', 3), mkGuard('Brack’s Enforcer', 2), mkCaptive(), mkCaptive(), mkCaptive()], aiTier: 'champion', zoneId: zoneIdRef.current, kind: 'brack' })
+    setBattle({ allies: partyRef.current!, enemies: [mkGuard('Brack’s Muscle', 3), mkGuard('Brack’s Enforcer', 2), mkCaptive(), mkCaptive(), mkCaptive()], aiTier: 'champion', zoneId: zoneIdRef.current, kind: 'brack', title: "HOLD 3 — BRACK'S GAUNTLET", collared: [2, 3, 4] })
   }, [])
 
   // Talk to an NPC. Gregory: no spirit → intro + starter handoff; else a sendoff. Thistle: no spirit → he
@@ -3854,6 +3854,9 @@ export default function Shimmer3D() {
           <ArenaBattle
             allies={battle.allies}
             enemies={battle.enemies}
+            enemyTier={battle.aiTier}
+            collaredIndices={battle.collared}
+            title={battle.title}
             onEnd={(o) => endBattle(o === 'win' ? 'win' : 'lose')}
           />
         </div>
