@@ -455,6 +455,34 @@ the Arcade frame.
 > `KICK_*`/`HUNTER_*`/`MAX_HP`/`MAX_SHIELD`/`BARRIER_SHIELD_BONUS`), `FiringRange()` sim, `WeaponReticle`/
 > `ResourceBars`/`AmmoCounter` HUD comps, `HEAL_POTIONS`/`startReload`/range-console state in the page comp.
 
+## ⚗️ Shimmer play3d — THE COZY LOOP (potions + stations + gather economy, 2026-07-22 eve, jin-cc)
+> **The pivot back to the soul side (Alex): home plot, crafting + alchemy tables.** The finding: the loop
+> existed but didn't PAY OFF — 9 of 13 potions were brew-for-XP dead ends, and placed stations were ghosts.
+>
+> **Left off (2026-07-22 eve, `9807ae1`→`d999d51`, all live :3200):**
+> - **Potion effects layer** — `engine/potion-effects.ts` owns every drink effect (one source of truth,
+>   59/59 tests incl. "no potion may be inert"). 8 timed buffs: fleetfoot speed / angler's-eye rin bites /
+>   kindred companion-assist ×2 / starlight gather-XP / deepsight finds / dreamwalk calm-mist / ather-flow
+>   mana regen / dawn broad-lift; harvest_brew = instant crop advance. HUD chips (top-right) w/ countdown;
+>   Alchemy menu prints each bottle's effect line; buffs persist in save. Dials at file top.
+> - **Stations-were-ghosts FIX** (`14d1f7f`): structuresView remapped placements for rendering only —
+>   collision/interact/ghost compared logical zoneIds vs garden-world. `structuresViewRef` mirrors into
+>   player space; persist stays logical. Alex-verified on the home plot.
+> - **Lake nodes placed** (`d999d51`): reagent audit (scratchpad script, rerunnable) found `lake` defined but
+>   placed NOWHERE → rinning T3 (moonkoi/pearlshell/crystal_rinn), T3 rinstick, deep_essence, dawn_cordial
+>   all Exchange-buy-only. Lakes: moonwell (19,14)+(16,13), mana-springs (10,4), twilight-thicket (11,9).
+>   Audit after: zero unplaced types, zero unreachable reagents.
+> **Next:** Alex feel-pass buff magnitudes/durations · rin a lake (lv7) to confirm the T3 fish flow ·
+> harvest_brew ergonomics (needs crops planted to feel it).
+> **Parked:** sunfruit + moonberry are Exchange-BUY-only reagents (salve lv3, bond_philter lv8) — works, but
+> a forageable berry-bush node type would be cozier; new content scope, needs its own pass (+ canon look Q).
+> **Decisions:** effects = build-side mechanics (canon names untouched, per SHIMMER-CANON-BOUNDARY) ·
+> re-drinking refreshes (never stacks) · dreamwalk never eats the guaranteed first-mist draw · seeds stay
+> shop-bought (the booth IS the seed shop) · buff potions deliberately skip outside-Ather combat stats.
+> **Files:** `engine/potion-effects.ts`(+test) · `Shimmer3D.tsx` (useItem branches, grantHarvest/harvestAt/
+> brew hooks, structuresViewRef, buff HUD chips, coarse-tick regen/mirrors) · `StationMenus.tsx` effect
+> lines · `world/node-placements.ts` lakes · `engine/farming.ts` harvestCrop xpMult param.
+
 ## 🔊 Cross-cutting — THE AUDIO LAYER (music beds + VO commentator, 2026-07-06→07, jin-cc)
 > **A reusable audio stack, extracted from Mana'nana and rolled across the score-chase games.** Three shared libs
 > under `src/lib/arcade/`:
