@@ -475,15 +475,23 @@ the Arcade frame.
 > **Next:** Alex feel-pass buff magnitudes/durations · rin a lake (lv7) to confirm the T3 fish flow ·
 > harvest_brew ergonomics (needs crops planted to feel it).
 >
-> **⚔️ SPIRIT BATTLE — CINEMATIC DIRECTION (Alex ruled 07-22 eve; next session's opener):**
-> Keep initiation; the FIGHT becomes a pre-scripted cinematic — sim runs to completion at mount
-> (arena engine is already pure+seeded+evented), renderer performs the timeline (hit-stop, KO slow-mo,
-> hold-to-skip). Shipped now: pointer-lock handoff at every battle seam (`a8bcc39`), Aid kit out of the
-> arena UI, XP by level relation 0.25×–2×, wild spirits pay no marks (`51b3e57`). **The key find: content
-> already exists** — canon `shimmer-battles.md` (4-move kits, 7-state grammar, bond-50 signatures) is
-> fully implemented in `engine/moves.ts` (74 moves, `getMovesForSpirit()` works today); the arena sim
-> just never consumed it. Port = kits→arena actions (cooldowns replace PP) + accuracy-vs-agi as visible
-> dodges + 7 states = 7 choreography verbs. Sim-first headless, then the playback choreography.
+> **⚔️ SPIRIT BATTLE — CINEMATIC OVERHAUL (Alex ruled 07-22 eve; SIM PASS 1 SHIPPED 07-22 late, `76ff1c5`):**
+> Keep initiation; the FIGHT becomes a pre-scripted cinematic — sim runs to completion at mount,
+> renderer performs the timeline. **Shipped: the moveset sim** — spirits fight with their real canon
+> 4-move kits (`engine/arena-moves.ts` adapts moves.ts → timed windup/execute/recover actions;
+> cooldowns replace PP; live element wheel + STAB; accuracy-vs-agi = visible dodge sidesteps; canon
+> statuses ignition/regen/crystallize/fortify/surge/erosion/anchor; stat stages ±3; generic wind
+> system retired — heavies power≥60 ARE the telegraphs; orbit dance between moves). Guard switched to
+> ratio mitigation `K/(K+grd)` (linear subtraction let a warded water-bear stall 96% of party fights);
+> tire ramp (25s, +5%/s) guarantees resolution. `simulate()` pre-scripts a fight at mount (determinism
+> proven — same seed + same spirit objects ⇒ identical timeline). Oracles green: arena.test 4/4 (Keeper
+> skill delta +95pts), arena-moves.test 16/16 (median 17s, p90 24s — the cinematic band).
+> **CANON RULED same session (one-registry):** `game/moves.md` is caster-agnostic master; 5 renames
+> shipped (Ice Dart/Mend/Barrier/Enlighten/Shackle, ids stable); all kit moves + 40 signatures registered.
+> **NEXT (pass 2 — the playback choreography):** renderer performs the event stream — move-name
+> callouts, per-state choreography verbs (strike/shield/wave/burst/current/disruption/lock), hit-stop,
+> KO slow-mo, hold-to-skip off simulate()'s known outcome/duration. Then a feel-pass on dials
+> (arena-moves.ts top: DODGE_AGI_SLOPE, windup/cd curves, TIRE).
 > **Parked:** sunfruit + moonberry are Exchange-BUY-only reagents (salve lv3, bond_philter lv8) — works, but
 > a forageable berry-bush node type would be cozier; new content scope, needs its own pass (+ canon look Q).
 > **Decisions:** effects = build-side mechanics (canon names untouched, per SHIMMER-CANON-BOUNDARY) ·
