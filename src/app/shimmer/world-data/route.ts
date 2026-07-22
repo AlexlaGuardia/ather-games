@@ -14,18 +14,22 @@ const WORLD_DIR = join(process.cwd(), 'src/app/shimmer/world')
 function parseGrid(content: string, name: string): number[][] | null {
   const declStart = content.indexOf(`export const ${name}`)
   if (declStart === -1) return null
-  const bracketStart = content.indexOf('[', declStart)
+  // anchor on the '=' — the first '[' after the declaration is the TYPE's (number[][])
+  const eq = content.indexOf('=', declStart)
+  if (eq === -1) return null
+  const bracketStart = content.indexOf('[', eq)
   if (bracketStart === -1) return null
-  if (content.substring(declStart, bracketStart).includes('createStubMap')) return null
+  if (content.substring(eq, bracketStart).includes('createStubMap')) return null
   let depth = 0, pos = bracketStart
   while (pos < content.length) {
     if (content[pos] === '[') depth++
     else if (content[pos] === ']') { depth--; if (depth === 0) break }
     pos++
   }
-  const rows = content.substring(bracketStart, pos + 1).match(/\[([^\]]+)\]/g)
+  // strip the outer brackets, then every remaining [...] is exactly one row
+  const rows = content.substring(bracketStart + 1, pos).match(/\[([^\]]*)\]/g)
   if (!rows || rows.length < 2) return null
-  return rows.slice(1).map(row =>
+  return rows.map(row =>
     row.replace(/[\[\]]/g, '').split(',').map(n => parseInt(n.trim())).filter(n => !isNaN(n)))
 }
 
