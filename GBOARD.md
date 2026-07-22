@@ -334,6 +334,10 @@ the Arcade frame.
 >   pipeline scales up; the bones don't change. (And Supra is the same destination on native metal when it wakes.)
 > - **Open:** meshy paid tier ($10 first mo, commercial-private exports) + API key when the art era opens · target
 >   reference set = Alex draws it · Gregory-blockout = interim NPC only.
+> - **⏸️ ART ERA GATE HARDENED (Alex, 2026-07-22, same day):** *"game art is on hold until we get the hardware to
+>   actually run Supra."* Picaso Gregory run STOPPED mid-final (6 iters + renders on disk at public/picaso-review/
+>   gregory/, no GLB — salvageable if ever wanted). Don't start character/art workstreams — the north star above is
+>   for STEERING (what not to over-invest in), not a build queue. Current lane stays mechanics + map layouts.
 
 ## 🗺️ Shimmer play3d — THE CONTINENT / REALM MODEL (SHIPPED 2026-07-22, jin-cc)
 > **The Shimmer Garden is ONE open map now** — RS-style feel, Apex-style tech (Alex ruled it after the RS/Apex
