@@ -338,8 +338,17 @@ the Arcade frame.
 > Apex's wall tech is *"release forward = bounce, HOLD forward = climb"* — holding too long is what triggers a climb. Our
 > threshold is missing, so a tap = a hold.
 >
+> **✅ SHIPPED 2026-07-22 (`148bd6c`, `5a19a71`) — Alex-approved feel:** (1) **input-decouple** — jump/climb/mantle
+> no longer share raw Space-down; `spaceHeldT` + `CLIMB_HOLD_MIN=0.18s` gate: **tap Space = pure ballistic jump**
+> (kills the sideways lunge), **hold Space = climb/mantle**. Auto-mantle rolled back. (2) **ledge-grab HANG** — reaching
+> a lip no longer teleports you on top; you GRAB + hang (a real pause, `HANG_MIN=0.22s`), then press INTO the ledge to
+> pull up+over via an eased `MANTLE_TIME=0.30s` climb-over (up-biased, never a snap), press AWAY to drop, neutral to
+> keep hanging. Commit axis = wall cardinal (always straight over, never sideways). FEEL knobs atop `Shimmer3D.tsx`:
+> `CLIMB_HOLD_MIN`/`HANG_DROP`/`MANTLE_TIME`/`HANG_COMMIT`/`HANG_MIN`. **So Tier 1 (clean jump) + Tier 3 (mantle/climb)
+> foundations are DONE; remaining ladder below is the deliberate next work.**
+>
 > **The tech ladder (build in this order, each shipped + Alex-eyeballed on moonwell-glade before the next):**
-> - **Tier 1 — Foundation (get this clean FIRST):** clean **ballistic jump** (tap = pure jump, zero sideways) · **slide**
+> - **Tier 1 — Foundation (✅ clean ballistic jump done):** **slide**
 >   (crouch at speed — have it) · **slide-hop** (jump near the END of a slide preserves+boosts horizontal speed, Apex
 >   299→450) · momentum preserved through air (`airSpeed`, have it).
 > - **Tier 2 — Air control:** **air-strafe / lurch** (redirect momentum by input+camera, magnitude-preserving; Source
