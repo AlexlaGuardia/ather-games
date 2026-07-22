@@ -536,8 +536,16 @@ export async function POST(req: NextRequest) {
         const anchorIdx = existing.indexOf(anchor)
         if (anchorIdx !== -1) {
           const withConst = existing.substring(0, anchorIdx) + newBlock + '\n\n' + existing.substring(anchorIdx)
-          const mapOpen = withConst.indexOf('{', withConst.indexOf(anchor)) + 1
-          const updated = withConst.substring(0, mapOpen) + `\n  '${mapId}': ${constName},` + withConst.substring(mapOpen)
+          // The zone-create flow may have already seeded `'${mapId}': [],` — REPLACE that entry
+          // rather than inserting a duplicate key (a dup breaks the whole build).
+          const entryRe = new RegExp(`'${mapId}':\\s*[^,\\n]+,`)
+          let updated: string
+          if (entryRe.test(withConst)) {
+            updated = withConst.replace(entryRe, `'${mapId}': ${constName},`)
+          } else {
+            const mapOpen = withConst.indexOf('{', withConst.indexOf(anchor)) + 1
+            updated = withConst.substring(0, mapOpen) + `\n  '${mapId}': ${constName},` + withConst.substring(mapOpen)
+          }
           await writeFile(NODES_FILE, updated, 'utf-8')
           saved.push('nodes')
         }

@@ -108,9 +108,10 @@ chk('safeText leaves text untouched', safeText("it's", 'x') === "it's")
 // ── gridMax: validates cells AND survives a grid that would blow the arg limit ──
 chk('gridMax finds the max', gridMax([[1, 2], [9, 3]], 'x') === 9)
 chk('gridMax of all-zero is 0', gridMax([[0, 0]], 'x') === 0)
+chk('gridMax allows VOID (-1) cells', gridMax([[-1, 4]], 'x') === 4)
+rejects('gridMax rejects below -1', () => gridMax([[-2]], 'x'))
 rejects('gridMax rejects a NaN cell', () => gridMax([[1, NaN]], 'x'))
 rejects('gridMax rejects a string cell', () => gridMax([['1' as unknown as number]], 'x'))
-rejects('gridMax rejects a negative cell', () => gridMax([[-1]], 'x'))
 rejects('gridMax rejects a non-array row', () => gridMax([42 as unknown as number[]], 'x'))
 
 // The bug this replaced: `Math.max(...grid.flat())` throws RangeError past the

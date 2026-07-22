@@ -126,8 +126,9 @@ export function gridMax(grid: number[][], field: string): number {
   for (const row of grid) {
     if (!Array.isArray(row)) throw new BadRequest(`Invalid ${field}: row is not an array`)
     for (const cell of row) {
-      if (typeof cell !== 'number' || !Number.isInteger(cell) || cell < 0)
-        throw new BadRequest(`Invalid ${field}: cell ${JSON.stringify(cell)} is not a non-negative integer`)
+      // -1 = VOID (empty sky) — a legal, saved tile state; 12 authored zones carry it.
+      if (typeof cell !== 'number' || !Number.isInteger(cell) || cell < -1)
+        throw new BadRequest(`Invalid ${field}: cell ${JSON.stringify(cell)} is not an integer >= -1`)
       if (cell > max) max = cell
     }
   }

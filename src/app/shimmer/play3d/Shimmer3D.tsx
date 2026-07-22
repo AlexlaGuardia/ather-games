@@ -2417,10 +2417,11 @@ export default function Shimmer3D() {
         for (let r = 0; r < w.rows && !mortarEdits; r++) for (let c = 0; c < w.cols; c++)
           if (!w.zoneAt(c, r) && (gridRef.current[r][c] !== w.grid[r][c] || heightsRef.current[r][c] !== w.heights[r][c])) { mortarEdits = true; break }
         const rs = await Promise.all(posts)
-        const ok = rs.every(r => r.ok)
+        const bad = rs.find(r => !r.ok)
+        const detail = bad ? `save failed — ${bad.status}: ${(await bad.text()).slice(0, 140)}` : null
         setSaveMsg(!touched ? 'no district changes to save'
-          : ok ? `saved ${touched} district${touched > 1 ? 's' : ''} ✓ — live on next refresh${mortarEdits ? ' · mortar/corridor edits are derived — not saved' : ''}`
-          : 'save failed')
+          : !detail ? `saved ${touched} district${touched > 1 ? 's' : ''} ✓ — live on next refresh${mortarEdits ? ' · mortar/corridor edits are derived — not saved' : ''}`
+          : detail)
         setTimeout(() => setSaveMsg(''), 4500)
         return
       }
@@ -2431,7 +2432,8 @@ export default function Shimmer3D() {
         // node layer → node-placements.ts (same endpoint, `nodes` payload; {nodeType,x,y} shape)
         fetch('/shimmer/save-map', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ nodes: nodesRef.current.map(nd => ({ nodeType: nd.type, x: nd.tileX, y: nd.tileY })), mapId: id }) }),
       ])
-      setSaveMsg(h.ok && g.ok && n.ok ? 'saved ✓ — live on next refresh' : 'save failed')
+      const zbad = [h, g, n].find(r => !r.ok)
+      setSaveMsg(!zbad ? 'saved ✓ — live on next refresh' : `save failed — ${zbad.status}: ${(await zbad.text()).slice(0, 140)}`)
     } catch { setSaveMsg('save failed') }
     setTimeout(() => setSaveMsg(''), 3500)
   }, [zone.id])
