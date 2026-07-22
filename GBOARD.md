@@ -319,6 +319,22 @@ the Arcade frame.
 > **Files:** pipeline `/opt/blender` (4.2.9 LTS, not in git) · render scripts `tools/render/*.py` · assets `public/<game>/*.png`
 > · wiring per-cabinet render fn (Vault: `page.tsx` `drawFoe`, sprite-blit + procedural fallback).
 
+## 🎯 Shimmer play3d — THE GOAL IS APEX (art-direction north star, Alex, 2026-07-22)
+> **"Apex Legends — that's the goal in a nutshell."** Ruled during the meshy.ai/character-pipeline talk. The blockout
+> world is SCAFFOLDING, not the aesthetic — the destination is Apex-tier presentation: real meshes, materials,
+> lighting, rigged animated characters. Aligns with canon (`two-lines-two-games.md`: the web game = the movement lab
+> toward the dark-half game; movement + map models are already Apex-lineage).
+> - **What this changes:** stop benchmarking art against the blockout (the Gregory-blockout lesson — "on-style with
+>   placeholder" is a non-goal). Character pipeline = **meshy.ai from Alex's art** (API into the picaso back half:
+>   decimate/LOD/GLB/render-QA — that half is proven). Blockout-native art investments (per-zone charm passes) are
+>   placeholder-era only.
+> - **The ladder:** blockout (now, mechanics+layouts era) → dressed stylized (meshy meshes + textures + auto-rig
+>   animate) → high-fidelity. Each rung gated on Alex's reference art + the runway; don't boil the ocean mid-pivot.
+> - **What survives every rung:** the realm/chunk architecture, movement tech, map layouts, canon briefs. The ART
+>   pipeline scales up; the bones don't change. (And Supra is the same destination on native metal when it wakes.)
+> - **Open:** meshy paid tier ($10 first mo, commercial-private exports) + API key when the art era opens · target
+>   reference set = Alex draws it · Gregory-blockout = interim NPC only.
+
 ## 🗺️ Shimmer play3d — THE CONTINENT / REALM MODEL (SHIPPED 2026-07-22, jin-cc)
 > **The Shimmer Garden is ONE open map now** — RS-style feel, Apex-style tech (Alex ruled it after the RS/Apex
 > comparison talk). Live on :3200: 14 surface zones composed into a **456×304 continent** (`world/garden-world.ts`),
