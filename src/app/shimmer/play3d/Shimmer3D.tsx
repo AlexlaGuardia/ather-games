@@ -82,6 +82,14 @@ const SLIDE_SPEED = 10      // slide speed FLOOR — a fast entry scales above i
 const SLIDE_MIN_SPEED = 3.8 // crouch below this speed = crouch-walk; at/above = a slide
 const SLIDE_TIME = 0.6      // slide duration before it bleeds back to the run
 const AIR_CONTROL = 0.4     // how much WASD can steer horizontal velocity while airborne (0=none,1=full)
+// ── Tier-1/2 movement tech (slide-hop · bhop chain · lurch) — all tunable, Apex/Titanfall lineage ──
+const SLIDEHOP_BOOST = 1.12 // jump mid-slide multiplies current speed by this (the slide-hop pop)
+const SPEED_CAP = 14        // hard ceiling on any takeoff speed — keeps hop-chains from going infinite
+const BHOP_WINDOW = 0.15    // jump within this many seconds of landing = chain: keep incoming air speed
+const BHOP_KEEP = 0.97      // each chained hop keeps this fraction (gentle fatigue, not a hard cap)
+const LURCH_TURN = 0.64     // input-direction dot below this (≈50°+ turn) while airborne = a lurch
+const LURCH_STRENGTH = 0.65 // how hard a lurch snaps momentum toward the new input direction
+const LURCH_KEEP = 0.93     // speed kept through a lurch (small cost, Titanfall-style)
 const FALL_OFF = 0.32       // step down more than this below the resolved floor → you've walked off a ledge → fall
 const PLAYER_R = 0.4        // body radius — keeps the first-person eye this far out of walls/objects (no clip-in)
 const CLIMB_SPEED = 2.5     // upward speed while wall-climbing (tier units/s) — a deliberate scramble, not a rocket
@@ -634,6 +642,9 @@ function Player({ posRef, gridRef, heightsRef, zoneIdRef, editRef, onWarp, battl
   const crouchHeld = useRef(false)  // edge-detect crouch key so one press = one slide
   const hvel = useMemo(() => new THREE.Vector3(), [])  // horizontal velocity (carries through slide+air)
   const airSpeed = useRef(0)        // horizontal speed locked at takeoff → preserved through the jump
+  const landGrace = useRef(0)       // bhop window: counts down after landing; jump inside it = chain
+  const landSpeed = useRef(0)       // horizontal speed at the moment of landing (what a chained hop keeps)
+  const prevMove = useMemo(() => new THREE.Vector3(), [])  // last frame's air input dir (lurch edge-detect)
   const climbRise = useRef(0)       // vertical distance climbed this airborne stint (tiers); caps the climb, resets on ground
   const wallNormal = useMemo(() => new THREE.Vector3(), [])  // away-from-wall dir when in contact (climb + wall-jump)
   const onWall = useRef(false)      // pressed against a climbable wall this frame
@@ -790,6 +801,12 @@ function Player({ posRef, gridRef, heightsRef, zoneIdRef, editRef, onWarp, battl
         // steer the preserved takeoff momentum toward input, keep the magnitude (air control)
         if (hasInput && airSpeed.current > 0.01) {
           const dir = hvel.lengthSq() > 1e-5 ? hvel.clone().normalize() : move.clone()
+          // LURCH: a sharp NEW input direction snaps momentum toward it once (Titanfall lineage).
+          // Neutral→input redirects free; an actual direction CHANGE costs a little speed.
+          if (prevMove.lengthSq() > 1e-5 && prevMove.dot(move) < LURCH_TURN) {
+            dir.lerp(move, LURCH_STRENGTH).normalize()
+            airSpeed.current *= LURCH_KEEP
+          }
           dir.lerp(move, Math.min(1, AIR_CONTROL * dt2 * 12)).normalize()
           hvel.copy(dir).multiplyScalar(airSpeed.current)
         } else if (hasInput) {
@@ -908,10 +925,17 @@ function Player({ posRef, gridRef, heightsRef, zoneIdRef, editRef, onWarp, battl
         if (wallJumping) { p.y += vy.current * dt2 }                     // just launched: up-kick, no gravity this frame
         else if (climbing) { vy.current = CLIMB_SPEED; climbRise.current += CLIMB_SPEED * dt2; p.y += vy.current * dt2 }  // scramble up the wall face (grip caps total rise)
         else { vy.current -= GRAVITY * dt2; p.y += vy.current * dt2 }
-        if (vy.current <= 0 && p.y <= floorY) { p.y = floorY; vy.current = 0; airborne.current = false; climbRise.current = 0 }  // land + refill grip
+        if (vy.current <= 0 && p.y <= floorY) {
+          p.y = floorY; vy.current = 0; airborne.current = false; climbRise.current = 0  // land + refill grip
+          landGrace.current = BHOP_WINDOW; landSpeed.current = hvel.length()             // open the hop-chain window
+        }
       } else if (jumpKey && !jumpHeld.current) {
         airborne.current = true; vy.current = JUMP_V0
-        airSpeed.current = Math.max(hvel.length(), hasInput ? RUN_SPEED : 0)  // carry slide/run speed up
+        let takeoff = Math.max(hvel.length(), hasInput ? RUN_SPEED : 0)  // carry slide/run speed up
+        if (sliding) takeoff = Math.min(SPEED_CAP, hvel.length() * SLIDEHOP_BOOST)  // slide-hop: pop off the slide
+        else if (landGrace.current > 0) takeoff = Math.min(SPEED_CAP, Math.max(takeoff, landSpeed.current * BHOP_KEEP))  // bhop chain
+        airSpeed.current = takeoff
+        if (sliding) slideT.current = 0  // the hop consumes the slide
       } else if (floorY < p.y - FALL_OFF) {
         airborne.current = true; vy.current = 0; airSpeed.current = hvel.length()  // walked off a ledge → fall
       } else {
@@ -928,6 +952,8 @@ function Player({ posRef, gridRef, heightsRef, zoneIdRef, editRef, onWarp, battl
       const tileChanged = tileKey !== lastTile.current
       lastTile.current = tileKey
       if (encGrace.current > 0) encGrace.current -= dt
+      if (landGrace.current > 0) landGrace.current -= dt
+      if (airborne.current && hasInput) prevMove.copy(move); else prevMove.set(0, 0, 0)
       if (warpCd.current > 0) warpCd.current -= dt
       else if (tileChanged) {
         const w = checkWarp(ZONES, zoneIdRef.current, tx, tz)
