@@ -91,6 +91,10 @@ const WALLJUMP_UP = 7.0     // vertical kick of a wall-jump (~JUMP_V0; carries y
 const WALLJUMP_PUSH = 6.0   // horizontal shove AWAY from the wall along wallNormal (near run speed)
 const WALL_COYOTE = 0.18    // grace after leaving a wall in which Space still counts as a wall-jump
 const WALLJUMP_LOCK = 0.22  // after a kick, suppress re-gripping the SAME wall so the push separates
+const CLIMB_HOLD_MIN = 0.18 // Space must be HELD this long before climb/mantle engage. A jump tap (~80-120ms)
+                            // never reaches it → tapping Space is ALWAYS a pure ballistic jump, never a mantle.
+                            // This is the Apex release-vs-hold line: tap = bounce/jump, HOLD = climb. Kills the
+                            // "jump lunges sideways" bug where a tap-jump near a wall was read as a mantle-grab.
 const DIR_YAW: Record<string, number> = { up: 0, down: Math.PI, left: Math.PI / 2, right: -Math.PI / 2 }
 
 type Cell = [number, number]
@@ -583,6 +587,7 @@ function Player({ posRef, gridRef, heightsRef, zoneIdRef, editRef, onWarp, battl
   const onWall = useRef(false)      // pressed against a climbable wall this frame
   const wallCard = useRef({ x: 0, z: 0 })  // the GRID cardinal of the wall face we're on (pure ±1 on one axis) — mantle grabs straight over THIS, not the raw (diagonal) input dir
   const wallStick = useRef(0)       // wall-jump coyote timer: >0 = a wall was touched recently, Space kicks off it
+  const spaceHeldT = useRef(0)      // seconds Space has been continuously held — gates a DELIBERATE climb/mantle vs a jump tap
   const wallLock = useRef(0)        // post-kick lockout: no re-gripping the wall until this drains
 
   useEffect(() => {
@@ -699,12 +704,18 @@ function Player({ posRef, gridRef, heightsRef, zoneIdRef, editRef, onWarp, battl
       // let go of the wall still kicks off it (wallNormal stays the last contact's away-dir).
       if (onWall.current) wallStick.current = WALL_COYOTE
       else if (wallStick.current > 0) wallStick.current -= dt
-      // WALL-CLIMB: airborne + pushing into a wall + HOLDING the climb button (Space) + grip left → scramble
-      // up the face. Deliberate: release Space and you stop ascending (cling to gravity), so a wall never
-      // auto-climbs just because you drifted into it. `climbHeld` is Space held (jump edge already spent on
-      // takeoff), and onWall already requires pushing forward into the face — so you only climb forward.
-      const climbHeld = !!k[' '] || jumpRef.current
-      const climbing = airborne.current && onWall.current && climbHeld && climbRise.current < CLIMB_MAX_RISE
+      // INPUT DECOUPLE (Apex model): jump, climb, and mantle used to all read raw "Space is down", so a jump
+      // tap (Space down ~5-7 frames) was read as a climb/mantle HOLD and grabbed sideways. Now climb + mantle
+      // require Space held past CLIMB_HOLD_MIN; the jump edge below is untouched, so a tap is a pure ballistic
+      // jump. Touch = tap only (jumpRef is a one-frame edge) → touch never climbs, which is the intended
+      // keyboard-skill split for now.
+      if (k[' ']) spaceHeldT.current += dt2; else spaceHeldT.current = 0
+      const climbActive = spaceHeldT.current >= CLIMB_HOLD_MIN
+      // WALL-CLIMB: airborne + pushing into a wall + HOLDING Space past the threshold + grip left → scramble up
+      // the face. Deliberate: release Space and you stop ascending (cling to gravity), so a wall never
+      // auto-climbs just because you tapped-jumped into it. onWall already requires pushing forward into the
+      // face — so you only climb forward.
+      const climbing = airborne.current && onWall.current && climbActive && climbRise.current < CLIMB_MAX_RISE
 
       // ── HORIZONTAL VELOCITY — auto-run with an accel RAMP (the flow), momentum through slide + air ──
       if (climbing) {
@@ -781,9 +792,11 @@ function Player({ posRef, gridRef, heightsRef, zoneIdRef, editRef, onWarp, battl
         const s = surfacesAt(ctx, cx, cz).find(su => su.y <= fromY + MANTLE_REACH && su.y > floorTier + 1)  // a real lip, in reach
         return s ? { cx, cz, y: s.y } : null
       })() : null
-      // MANTLE fires while the climb button is HELD and a lip is in reach — so holding Space carries you up a
-      // wall and pulls you over the top, and a low ledge is grabbed by holding Space as you reach its lip.
-      const mantling = climbHeld && !!mantle
+      // MANTLE — auto-mantle ROLLED BACK (Alex, 07-22). It no longer fires on a jump tap; it requires a
+      // DELIBERATE Space hold past the threshold (same gate as climb) AND a lip in reach. So holding Space
+      // carries you up a wall and pulls you over the top; a plain jump toward a ledge stays purely ballistic
+      // (no auto-grab, no sideways lunge). Only a held climb tops out over a lip now.
+      const mantling = climbActive && !!mantle
       // WALL-JUMP: airborne + Space edge + a wall in coyote, but ONLY when you're neither mantling nor climbing
       // (so pressing Space INTO a wall climbs; a tap while NOT pushing in — within coyote — kicks off instead).
       const wallJumping = airborne.current && jumpEdge && !mantling && !climbing && wallStick.current > 0
