@@ -1293,14 +1293,39 @@ function FiringRange({ fireReqRef, gridRef, onHit }: {
   })
   return (
     <>
-      <instancedMesh ref={shotRef} args={[undefined, undefined, MAX]}>
-        <sphereGeometry args={[0.16, 8, 8]} />
+      {/* frustumCulled=false: instances move/scatter far from the mesh origin, so the default
+          origin-centered bounding sphere would cull the whole mesh whenever you look downrange. */}
+      <instancedMesh ref={shotRef} args={[undefined, undefined, MAX]} frustumCulled={false}>
+        <sphereGeometry args={[0.18, 8, 8]} />
         <meshStandardMaterial color="#8fe0ff" emissive="#8fe0ff" emissiveIntensity={2.4} toneMapped={false} />
       </instancedMesh>
-      <instancedMesh ref={tgtRef} args={[undefined, undefined, targets.length]}>
+      <instancedMesh ref={tgtRef} args={[undefined, undefined, targets.length]} frustumCulled={false}>
         <sphereGeometry args={[0.5, 14, 14]} />
         <meshStandardMaterial color="#ff6a52" emissive="#ff6a52" emissiveIntensity={0.9} />
       </instancedMesh>
+    </>
+  )
+}
+
+// Visible EXIT markers at a zone's warp tiles — for outside-Ather zones, where warps aren't painted
+// into the grid (no gold beacon), so the way back stays obvious. Green pillar + floating EXIT label.
+function ExitMarkers({ warps, heights }: { warps: Warp[]; heights: number[][] }) {
+  return (
+    <>
+      {warps.map((w, i) => {
+        const y = (heights[w.fromY]?.[w.fromX] ?? 0) * STEP
+        return (
+          <group key={i} position={[w.fromX, y, w.fromY]}>
+            <mesh position={[0, 1.4, 0]}>
+              <cylinderGeometry args={[0.3, 0.42, 2.8, 6]} />
+              <meshStandardMaterial color="#5fe0a0" emissive="#5fe0a0" emissiveIntensity={0.85} transparent opacity={0.55} />
+            </mesh>
+            <Html position={[0, 3.2, 0]} center distanceFactor={14} style={{ pointerEvents: 'none' }}>
+              <div style={{ font: '800 11px ui-monospace, monospace', color: '#7fffc0', background: 'rgba(8,14,10,0.7)', padding: '2px 7px', borderRadius: 6, whiteSpace: 'nowrap', border: '1px solid #5fe0a066' }}>EXIT</div>
+            </Html>
+          </group>
+        )
+      })}
     </>
   )
 }
@@ -1384,6 +1409,7 @@ const Scene = memo(function Scene(props: {
       <NPCMarkers npcs={ALL_NPCS.filter((n) => n.zone === props.zone.id && npcInWorld(n, props.defeated, props.flagsRef.current))} heights={props.heights} />
       {props.isOwner && props.zone.id === 'moonwell-glade-gregory-s-home' && <HubGateMarkers heights={props.heights} />}
       {props.zone.realm === 'outside' && <FiringRange fireReqRef={props.fireReqRef} gridRef={props.gridRef} onHit={props.onRangeHit} />}
+      {props.zone.realm === 'outside' && <ExitMarkers warps={props.zone.warps} heights={props.heights} />}
       <NodeMarkers nodes={props.nodes} heights={props.heights} editing={props.editing} channel={props.channel} />
       {props.zone.id === WORLD_ZONE_ID ? <WorldFlora heights={props.heights} /> : <FloraDressing zoneId={props.zone.id} heights={props.heights} />}
       <StructureMarkers structures={structuresInZone} heights={props.heights} />
@@ -2351,9 +2377,18 @@ export default function Shimmer3D() {
   const weaponDrawn = zone.realm === 'outside'
   const weaponDrawnRef = useRef(weaponDrawn); weaponDrawnRef.current = weaponDrawn
   const fireReqRef = useRef(false)
-  const [rangeStats, setRangeStats] = useState({ shots: 0, hits: 0 })
-  const onRangeHit = useCallback(() => setRangeStats((s) => ({ ...s, hits: s.hits + 1 })), [])
-  useEffect(() => { if (!weaponDrawn) setRangeStats({ shots: 0, hits: 0 }) }, [weaponDrawn])  // reset on leaving the range
+  const shotsRef = useRef(0)   // hot-path counters live in refs — NO per-shot/per-hit React re-render
+  const hitsRef = useRef(0)
+  const casterRef = useRef<HTMLDivElement>(null)  // viewmodel node; recoil kicked imperatively (no key remount)
+  const [hudStats, setHudStats] = useState({ shots: 0, hits: 0 })  // display only, synced on a throttle
+  const onRangeHit = useCallback(() => { hitsRef.current++ }, [])
+  // Sync the HUD counters at ~5fps while the weapon is out, so firing never touches the (huge) component's
+  // render path — that churn was stuttering the movement rAF. Reset counters when the weapon holsters.
+  useEffect(() => {
+    if (!weaponDrawn) { shotsRef.current = 0; hitsRef.current = 0; setHudStats({ shots: 0, hits: 0 }); return }
+    const id = setInterval(() => setHudStats((s) => (s.shots === shotsRef.current && s.hits === hitsRef.current) ? s : { shots: shotsRef.current, hits: hitsRef.current }), 200)
+    return () => clearInterval(id)
+  }, [weaponDrawn])
   useEffect(() => {
     let alive = true
     fetch('/api/owner', { cache: 'no-store' })
@@ -2437,7 +2472,12 @@ export default function Shimmer3D() {
       if (e.button === 0) {
         // outside the Ather the weapon is drawn: left-click FIRES a projectile (the FiringRange's
         // useFrame reads fireReqRef and spawns from the camera). Takes priority over interact.
-        if (weaponDrawnRef.current) { e.preventDefault(); fireReqRef.current = true; setRangeStats((s) => ({ ...s, shots: s.shots + 1 })); return }
+        if (weaponDrawnRef.current) {
+          e.preventDefault(); fireReqRef.current = true; shotsRef.current++
+          const el = casterRef.current  // restart the recoil kick imperatively (no React state → no re-render)
+          if (el) { el.style.animation = 'none'; void el.offsetHeight; el.style.animation = 'casterKick 0.13s ease-out' }
+          return
+        }
         // interact — same priority ladder as the E key
         if (dialogueRef.current) advanceDialogue()
         else if (nearNpc) talk(nearNpc)
@@ -2977,12 +3017,12 @@ export default function Shimmer3D() {
             font: '800 12px ui-monospace, monospace', color: '#cfeeff', letterSpacing: '0.08em', display: 'flex', gap: 13, alignItems: 'center',
           }}>
             <span>FIRING RANGE</span><span style={{ opacity: 0.4 }}>·</span>
-            <span>shots <span style={{ color: '#8fe0ff' }}>{rangeStats.shots}</span></span>
-            <span>hits <span style={{ color: '#7fffa0' }}>{rangeStats.hits}</span></span>
+            <span>shots <span style={{ color: '#8fe0ff' }}>{hudStats.shots}</span></span>
+            <span>hits <span style={{ color: '#7fffa0' }}>{hudStats.hits}</span></span>
             <span style={{ opacity: 0.5, fontWeight: 600 }}>click to fire</span>
           </div>
-          {/* caster viewmodel — kicks on each shot (keyed on the shot count so the anim restarts) */}
-          <div key={rangeStats.shots} style={{ position: 'fixed', right: '17%', bottom: 0, zIndex: 33, pointerEvents: 'none', animation: 'casterKick 0.13s ease-out' }}>
+          {/* caster viewmodel — recoil kicked imperatively via casterRef (no per-shot remount) */}
+          <div ref={casterRef} style={{ position: 'fixed', right: '17%', bottom: 0, zIndex: 33, pointerEvents: 'none' }}>
             <style>{`@keyframes casterKick { 0% { transform: translateY(16px) } 60% { transform: translateY(-3px) } 100% { transform: translateY(0) } }`}</style>
             <svg width="240" height="168" viewBox="0 0 240 168" style={{ display: 'block' }}>
               <polygon points="46,168 66,92 158,122 138,168" fill="#161d2a" stroke="#3a4a63" strokeWidth="2" />
