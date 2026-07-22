@@ -1233,15 +1233,22 @@ const PROJECTILE_LIFE = 1.8   // seconds before it fizzles
 const FIRE_COOLDOWN = 0.11    // seconds between shots while holding fire (~9/sec full-auto)
 const TARGET_HIT_R2 = 0.72 * 0.72
 const TARGET_RESPAWN = 2.5     // seconds a popped target stays down
-const TRAIL_N = 8             // comet-trail segments behind each round (reads as a streak head-on too)
-const HEAD_R = 0.17          // round head radius; trail segs fade down from it
+const TRAIL_N = 8             // trail links behind each round — rendered as stretched segments = one thin tracer line
+const HEAD_R = 0.06           // round head radius — tracers are THIN (Apex-style), the streak is the read, not the ball
+const TRAIL_R = 0.045         // tracer line radius at the head end; tapers to ~0 down the tail
+const CONVERGE_DIST = 38      // muzzle rounds converge onto the crosshair ray at this range (Apex muzzle→reticle model)
+// Muzzle offset in camera space [right, down, forward]: rounds spawn at the weapon, not the eye, so the
+// tracer visibly rises from low-right up to the reticle. ADS pulls the muzzle near center for a flat streak.
+const MUZZLE_HIP: [number, number, number] = [0.34, 0.26, 0.6]
+const MUZZLE_ADS: [number, number, number] = [0.1, 0.08, 0.6]
 // Downrange targets for the range — floating orbs at varied spots/heights in Alex's 50×50.
 const RANGE_TARGETS: [number, number, number][] = [
   [15, 1.8, 26], [20, 2.5, 31], [25, 1.6, 23], [30, 2.9, 33],
   [35, 2.0, 27], [12, 2.3, 35], [38, 1.7, 21], [22, 3.1, 39],
 ]
-function FiringRange({ firingRef, gridRef, onHit, onShot }: {
+function FiringRange({ firingRef, adsRef, gridRef, onHit, onShot }: {
   firingRef: React.RefObject<boolean>   // held while left-click is down → full-auto
+  adsRef: React.RefObject<boolean>      // aiming → muzzle offset moves to center (ADS tracer runs flat)
   gridRef: React.RefObject<number[][]>
   onHit: () => void
   onShot: () => void
@@ -1262,6 +1269,13 @@ function FiringRange({ firingRef, gridRef, onHit, onShot }: {
   const zero = useMemo(() => new THREE.Vector3(0, 0, 0), [])
   const scl = useMemo(() => new THREE.Vector3(), [])
   const dir = useMemo(() => new THREE.Vector3(), [])
+  const camRight = useMemo(() => new THREE.Vector3(), [])
+  const camUp = useMemo(() => new THREE.Vector3(), [])
+  const aim = useMemo(() => new THREE.Vector3(), [])
+  const seg = useMemo(() => new THREE.Vector3(), [])
+  const mid = useMemo(() => new THREE.Vector3(), [])
+  const qSeg = useMemo(() => new THREE.Quaternion(), [])
+  const AXIS_Z = useMemo(() => new THREE.Vector3(0, 0, 1), [])
   useFrame((state, dt) => {
     cd.current -= dt
     // full-auto: while fire is held and the cadence is ready, spawn a round from the camera
@@ -1269,9 +1283,16 @@ function FiringRange({ firingRef, gridRef, onHit, onShot }: {
       cd.current = FIRE_COOLDOWN
       const p = pool.find((pr) => pr.life <= 0)
       if (p) {
+        // Apex muzzle model: spawn at the weapon (low-right of the eye), aim the velocity at the point
+        // the crosshair ray hits at CONVERGE_DIST — the tracer rises up-and-in to the reticle.
         state.camera.getWorldDirection(dir)
-        p.pos.copy(state.camera.position).addScaledVector(dir, 0.7)
-        p.vel.copy(dir).multiplyScalar(PROJECTILE_SPEED)
+        camRight.setFromMatrixColumn(state.camera.matrixWorld, 0)
+        camUp.setFromMatrixColumn(state.camera.matrixWorld, 1)
+        const [mr, md, mf] = adsRef.current ? MUZZLE_ADS : MUZZLE_HIP
+        p.pos.copy(state.camera.position)
+          .addScaledVector(camRight, mr).addScaledVector(camUp, -md).addScaledVector(dir, mf)
+        aim.copy(state.camera.position).addScaledVector(dir, CONVERGE_DIST)
+        p.vel.copy(aim).sub(p.pos).normalize().multiplyScalar(PROJECTILE_SPEED)
         p.life = PROJECTILE_LIFE
         for (const t of p.trail) t.copy(p.pos)  // collapse the trail onto the muzzle at spawn
         onShot()
@@ -1294,15 +1315,25 @@ function FiringRange({ firingRef, gridRef, onHit, onShot }: {
       }
     }
     for (const t of targets) { if (!t.alive) { t.down -= dt; if (t.down <= 0) t.alive = true } }
-    // render each round as a head + fading comet-trail (reads as a streak from any angle, incl. head-on)
+    // render each round as a small head + trail LINKS: each link is a unit sphere stretched along the
+    // gap between consecutive trail points → one continuous thin tracer line, tapering to the tail.
+    // (Shrinking-ball trails read as orbs; a stretched line is the Apex tracer read.)
     if (shotRef.current) {
       pool.forEach((p, i) => {
         const base = i * SEG
         if (p.life > 0) { scl.set(HEAD_R, HEAD_R, HEAD_R); m.compose(p.pos, q, scl) } else m.compose(zero, q, zero)
         shotRef.current!.setMatrixAt(base, m)
         for (let j = 0; j < TRAIL_N; j++) {
-          if (p.life > 0) { const s = HEAD_R * (1 - (j + 1) / (TRAIL_N + 1)); scl.set(s, s, s); m.compose(p.trail[j], q, scl) }
-          else m.compose(zero, q, zero)
+          const a = p.trail[j], b = j === 0 ? p.pos : p.trail[j - 1]
+          seg.copy(b).sub(a)
+          const len = seg.length()
+          if (p.life > 0 && len > 1e-4) {
+            qSeg.setFromUnitVectors(AXIS_Z, seg.multiplyScalar(1 / len))
+            const r = TRAIL_R * (1 - j / TRAIL_N)  // taper toward the tail
+            mid.copy(a).add(b).multiplyScalar(0.5)
+            scl.set(r, r, len / 2 + r)  // half-length + radius so links overlap into a continuous line
+            m.compose(mid, qSeg, scl)
+          } else m.compose(zero, q, zero)
           shotRef.current!.setMatrixAt(base + 1 + j, m)
         }
       })
@@ -1432,7 +1463,7 @@ const Scene = memo(function Scene(props: {
       <ZoneGeometry key={`${props.zone.id}-${props.dims}`} gridRef={props.gridRef} heights={props.heights} version={props.version} paint={props.paint} editing={props.editing} />
       <NPCMarkers npcs={ALL_NPCS.filter((n) => n.zone === props.zone.id && npcInWorld(n, props.defeated, props.flagsRef.current))} heights={props.heights} />
       {props.isOwner && props.zone.id === 'moonwell-glade-gregory-s-home' && <HubGateMarkers heights={props.heights} />}
-      {props.zone.realm === 'outside' && <FiringRange firingRef={props.firingRef} gridRef={props.gridRef} onHit={props.onRangeHit} onShot={props.onRangeShot} />}
+      {props.zone.realm === 'outside' && <FiringRange firingRef={props.firingRef} adsRef={props.adsRef} gridRef={props.gridRef} onHit={props.onRangeHit} onShot={props.onRangeShot} />}
       {props.zone.realm === 'outside' && <ExitMarkers warps={props.zone.warps} heights={props.heights} />}
       <NodeMarkers nodes={props.nodes} heights={props.heights} editing={props.editing} channel={props.channel} />
       {props.zone.id === WORLD_ZONE_ID ? <WorldFlora heights={props.heights} /> : <FloraDressing zoneId={props.zone.id} heights={props.heights} />}
@@ -2494,9 +2525,12 @@ export default function Shimmer3D() {
   //    scroll = cycle the hotbar (handled in HotBar). Before capture, the first click just locks — so
   //    we no-op unless pointerLockElement is set. Keyboard (E/Space/Enter) stays a parallel interact. ──
   useEffect(() => {
-    const onDown = (e: PointerEvent) => {
-      if (editMode || e.pointerType !== 'mouse') return
-      if (!(document.pointerLockElement instanceof Element)) return  // pre-capture click just locks; ignore
+    // mousedown/mouseup, NOT pointerdown/pointerup: Pointer Events fire pointerdown only for the FIRST
+    // button of a chord — a second button pressed while one is held arrives as pointermove. That made
+    // ADS-hold (right) swallow fire (left). Mouse events fire per button, so aim+fire chords work.
+    const onDown = (e: MouseEvent) => {
+      if (editMode) return
+      if (!(document.pointerLockElement instanceof Element)) return  // pre-capture click just locks; ignore (also gates out touch)
       // Aiming a build ghost: right-click plants it, left-click rotates it (Enter/arrows/Esc still work).
       if (placingRef.current) {
         e.preventDefault()
@@ -2523,13 +2557,13 @@ export default function Shimmer3D() {
         e.preventDefault(); adsRef.current = true; setAds(true)
       }
     }
-    const onUp = (e: PointerEvent) => {
+    const onUp = (e: MouseEvent) => {
       if (e.button === 0) firingRef.current = false  // release = stop full-auto
       if (e.button === 2 && adsRef.current) { adsRef.current = false; setAds(false) }
     }
-    window.addEventListener('pointerdown', onDown)
-    window.addEventListener('pointerup', onUp)
-    return () => { window.removeEventListener('pointerdown', onDown); window.removeEventListener('pointerup', onUp) }
+    window.addEventListener('mousedown', onDown)
+    window.addEventListener('mouseup', onUp)
+    return () => { window.removeEventListener('mousedown', onDown); window.removeEventListener('mouseup', onUp) }
   }, [editMode, nearNpc, advanceDialogue, talk, toggleChannel, openStation, useItem, confirmPlacing, rotatePlacing])
   // Numpad0 = use the selected hotbar item (keyboard alt to middle-click). e.code (not e.key) so it
   // binds to the NUMPAD zero specifically — the number ROW / numpad digits still select slots.
