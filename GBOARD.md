@@ -319,6 +319,60 @@ the Arcade frame.
 > **Files:** pipeline `/opt/blender` (4.2.9 LTS, not in git) · render scripts `tools/render/*.py` · assets `public/<game>/*.png`
 > · wiring per-cabinet render fn (Vault: `page.tsx` `drawFoe`, sprite-blit + procedural fallback).
 
+## 🏃 Shimmer play3d — MOVEMENT TECH (Apex model, researched + gameplan 2026-07-22, jin-cc)
+> **The 3D walker's traversal system.** Grew organically as a room-wall side-track (never had a roadmap block — that IS
+> why it tangled: fix layered on fix with no north star). Alex flagged it 07-22: *"the movement is getting worse the more
+> we work on it… if I don't HOLD jump/space it still jumps to the right side."* Researched Apex Legends movement tech to
+> get a real model instead of another patch.
+>
+> **★ ROOT CAUSE of the "jumps right" bug (found 07-22).** Jump, climb, and mantle are all wired to **Space-down state**.
+> A normal jump tap holds Space ~5-7 frames — long enough that the loop reads every jump as a *climb/mantle-hold*. Near a
+> wall the mantle grabs the wall's grid-cardinal and the pull-up settle (`hvel.set(card.x,0,card.z)`) shoves you ALONG it
+> — wall to your east = a lunge to your **right**. The mechanics seat kept patching *which cell the mantle grabs*
+> (`abd8ef0`, `731d01a`) but the real bug is upstream: **every jump is also a mantle attempt**, so no grab-direction patch
+> can fix a mantle that should never have fired.
+>
+> **★ THE APEX LESSON (the fix is the input model, not the grab math).** Apex separates three inputs we conflated:
+> **JUMP** = edge/tap, purely ballistic, grabs nothing · **CLIMB** = *hold forward INTO a wall* (deliberate) · **MANTLE**
+> = contextual, auto over the ledge you're FACING, pulls straight up-and-over, never sideways. The whole distinction in
+> Apex's wall tech is *"release forward = bounce, HOLD forward = climb"* — holding too long is what triggers a climb. Our
+> threshold is missing, so a tap = a hold.
+>
+> **The tech ladder (build in this order, each shipped + Alex-eyeballed on moonwell-glade before the next):**
+> - **Tier 1 — Foundation (get this clean FIRST):** clean **ballistic jump** (tap = pure jump, zero sideways) · **slide**
+>   (crouch at speed — have it) · **slide-hop** (jump near the END of a slide preserves+boosts horizontal speed, Apex
+>   299→450) · momentum preserved through air (`airSpeed`, have it).
+> - **Tier 2 — Air control:** **air-strafe / lurch** (redirect momentum by input+camera, magnitude-preserving; Source
+>   air-accel) · optional **bunny-hop** (chain jumps to keep momentum, cap with fatigue if it gets abusable).
+> - **Tier 3 — Wall tech (the tangled part — rebuild on the decoupled inputs):** **mantle** (contextual, faced-ledge only,
+>   up-and-over along FACING cardinal) · **wall-bounce/wall-jump** (tap + release-forward off a wall = redirect+height) ·
+>   **wall-climb** (HOLD forward into a wall to scramble up, capped — the `CLIMB_MAX_RISE` grip).
+> - **Tier 4 — Skill ceiling (NOTE ONLY, do not build yet):** **superglide** (mantle→jump+crouch, ~1 frame @60fps) ·
+>   **tap-strafe** (MnK scroll-wheel lurch stacking, PC-only). Leave headroom in the model; don't chase these now.
+>
+> **★ GAMEPLAN — decouple the three inputs (this is the actual fix, replaces all prior grab-cardinal patches):**
+> 1. **JUMP = down-edge, ballistic only.** Climb/mantle NEVER read raw `k[' ']` / "Space is down."
+> 2. **CLIMB = deliberate hold:** Space held past a threshold (~0.15-0.2s, a `spaceHeldT` accumulator) AND pushing forward
+>    INTO a wall. A tap can't reach the threshold → can't climb. (This IS Apex's release-vs-hold line.)
+> 3. **MANTLE = contextual + faced-ledge only:** fire only when airborne with a ledge you're FACING in reach; pull
+>    straight up-and-over along the FACING cardinal, never a perpendicular wall cardinal. Open-air jump with no ledge
+>    ahead stays pure ballistic.
+> 4. **Then layer the ladder deliberately, one tier at a time,** feel-tested on moonwell-glade (`CLIMB_TEST` zone).
+>
+> **Decisions (don't relitigate):**
+> - Movement FEEL is Alex's call — ship to moonwell-glade, he plays it, then iterate.
+> - Target = **Apex/Titanfall momentum feel** (already the stated aim: the slide is commented "Apex-style"). Not a
+>   floaty platformer, not a rigid grid-hop.
+> - **Stop patching grab-direction.** Any "it dashed sideways" symptom traces to the shared-input root cause above; fix
+>   the input model, not the cardinal selection.
+> - Atmosphere/flora (`GardenAtmosphere`, `FloraDressing`) are a SEPARATE system — not the movement issue. Motes are a
+>   possible lag source; check after movement lands.
+> **Files:** `play3d/Shimmer3D.tsx` — FEEL consts ~L73-92 (`JUMP_V0`/`CLIMB_SPEED`/`CLIMB_STRAFE`/`CLIMB_MAX_RISE`/
+> `MANTLE_REACH`/`WALLJUMP_*`/`WALL_COYOTE`), `Player()` physics loop ~L599-816 (wall-contact, climb, mantle, wall-jump,
+> vertical). Test zone: `moonwell-glade` (`CLIMB_TEST` flag ~L88).
+> **Research sources:** Apex movement tech (slide-hop, tap-strafe, wall-bounce, superglide, mantle input model) —
+> BoostRoom + ProGuides + Alegends movement guides, 07-22.
+
 ## 🔊 Cross-cutting — THE AUDIO LAYER (music beds + VO commentator, 2026-07-06→07, jin-cc)
 > **A reusable audio stack, extracted from Mana'nana and rolled across the score-chase games.** Three shared libs
 > under `src/lib/arcade/`:
