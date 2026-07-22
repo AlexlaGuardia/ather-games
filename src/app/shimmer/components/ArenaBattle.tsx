@@ -42,7 +42,6 @@ function snap(s: ArenaState): UISnap {
 }
 
 // Reach/Witherbloom (an enemy) + Wardcoil (an ally) take a target; Flash/Breeze don't.
-const TARGETED: Record<string, 'enemy' | 'ally'> = { reach: 'enemy', witherbloom: 'enemy', wardcoil: 'ally' }
 
 function Scene({ arenaRef, cmdQueue, onSnap }: {
   arenaRef: React.RefObject<ArenaState>
@@ -250,18 +249,8 @@ export default function ArenaBattle({ allies, enemies, seed, aidKit, onEnd, cont
   const cmdQueue = useRef<KeeperCommand[]>([])
   const [ui, setUi] = useState<UISnap>(() => snap(arenaRef.current!))
   const [speakOpen, setSpeakOpen] = useState(false)
-  const [armed, setArmed] = useState<AidId | null>(null)   // a targeted Aid awaiting a target pick
-
   const send = useCallback((c: KeeperCommand) => { cmdQueue.current.push(c) }, [])
   const over = ui.outcome !== 'ongoing'
-  if (over && armed) setArmed(null)
-
-  // Aid tap: targeted aids (reach/witherbloom on an enemy, wardcoil on an ally) arm a target picker; the rest fire on tap.
-  const onAid = (id: AidId) => {
-    if (TARGETED[id]) { setSpeakOpen(false); setArmed(a => (a === id ? null : id)) }
-    else send({ type: 'aid', id })
-  }
-  const fireAt = (id: AidId, targetId?: string) => { send({ type: 'aid', id, targetId }); setArmed(null) }
 
   return (
     <div style={{ position: 'fixed', inset: 0, background: '#0a0f0e', overflow: 'hidden', touchAction: 'none' }}>
@@ -273,56 +262,6 @@ export default function ArenaBattle({ allies, enemies, seed, aidKit, onEnd, cont
       {/* title / mana */}
       <div style={{ position: 'absolute', top: 14, left: '50%', transform: 'translateX(-50%)', textAlign: 'center', pointerEvents: 'none' }}>
         <div style={{ font: '800 13px ui-monospace, monospace', color: '#7fe3c8', letterSpacing: '0.14em', opacity: 0.85 }}>THE KEEPER&apos;S ARENA</div>
-        <div style={{ width: 180, height: 8, background: '#0007', border: '1px solid #2f5c4f', borderRadius: 5, margin: '6px auto 0', overflow: 'hidden' }}>
-          <div style={{ height: '100%', width: `${(ui.mana / ui.maxMana) * 100}%`, background: 'linear-gradient(90deg,#3a7bd5,#6fd0e6)', transition: 'width 0.1s linear' }} />
-        </div>
-        <div style={{ font: '600 9px ui-monospace, monospace', color: '#9fb8c8', marginTop: 2 }}>MANA {Math.floor(ui.mana)}/{ui.maxMana}</div>
-      </div>
-
-      {/* AID — top-left (3 techniques: bonded Mana'mal gift on top, then the Keeper's 2 channels).
-          Reach/Witherbloom/Wardcoil arm a target picker; Flash/Breeze fire on tap. */}
-      <div style={{ position: 'absolute', top: 74, left: 14, display: 'flex', alignItems: 'flex-start', gap: 8 }}>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          {ui.aid.map(a => {
-            const disabled = over || a.cdLeft > 0 || ui.mana < a.cost
-            const isArmed = armed === a.id
-            return <CornerBtn key={a.id} label={a.name.split(' ')[a.name.split(' ').length - 1].toUpperCase()} sub={isArmed ? 'pick…' : `${a.cost}◈`}
-              accent={isArmed ? '#f0a526' : '#6fd0e6'} disabled={disabled} cd={a.cdLeft} cdMax={a.cd} onClick={() => onAid(a.id)} style={{ position: 'static' }} />
-          })}
-        </div>
-        {/* target picker — chips for the armed aid's valid side (tap a name, not a moving body) */}
-        {armed && !over && (() => {
-          const side = TARGETED[armed]
-          const list = side === 'enemy' ? ui.enemies : ui.allies
-          return (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 7, background: '#0b1211f2', border: '1px solid #f0a52666', borderRadius: 12, padding: 9, maxWidth: 190 }}>
-              <div style={{ font: '700 10px ui-monospace, monospace', color: '#f0a526', letterSpacing: '0.1em', padding: '1px 3px' }}>
-                {side === 'enemy' ? 'SOFTEN WHICH?' : 'SHELTER WHO?'}
-              </div>
-              <button onClick={() => fireAt(armed)}
-                style={{ textAlign: 'left', padding: '9px 12px', borderRadius: 9, border: '1px dashed #6fd0e688', background: '#12181aee', color: '#9fe3d2', font: '800 12px ui-monospace, monospace', letterSpacing: '0.04em', cursor: 'pointer', touchAction: 'none' }}>
-                ⤿ AUTO
-              </button>
-              {list.filter(t => t.hp > 0).map(t => {
-                const flag = side === 'enemy' ? (t as UISnap['enemies'][number]).winding : (t as UISnap['allies'][number]).windTargeted
-                const col = ELEMENT_COLORS[t.element] ?? '#7fe3c8'
-                return (
-                  <button key={t.id} onClick={() => fireAt(armed, t.id)}
-                    style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 9, width: 168, padding: '9px 12px', borderRadius: 9,
-                      border: `2px solid ${flag ? '#ff5a4d' : '#ffffff2a'}`, background: '#12181aee', color: '#eafff6', font: '700 12px ui-monospace, monospace', cursor: 'pointer', touchAction: 'none' }}>
-                    <span style={{ display: 'flex', alignItems: 'center', gap: 7, overflow: 'hidden' }}>
-                      <span style={{ width: 9, height: 9, borderRadius: 2, background: side === 'enemy' ? '#c9c9d2' : col, flexShrink: 0 }} />
-                      <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{t.name}</span>
-                    </span>
-                    <span style={{ font: '700 10px ui-monospace, monospace', color: flag ? '#ff8a7a' : '#7f9a92', flexShrink: 0 }}>
-                      {flag ? '⚠' : `${Math.max(0, Math.round((t.hp / t.maxHp) * 100))}%`}
-                    </span>
-                  </button>
-                )
-              })}
-            </div>
-          )
-        })()}
       </div>
 
       {/* SPEAK — top-right (per-ally tactics, no pause) */}
@@ -369,7 +308,7 @@ export default function ArenaBattle({ allies, enemies, seed, aidKit, onEnd, cont
       )}
 
       {/* hint */}
-      {!over && <div style={{ position: 'absolute', bottom: 26, left: '50%', transform: 'translateX(-50%)', font: '600 10px ui-monospace, monospace', color: '#5f7a72', textAlign: 'center', maxWidth: 268, pointerEvents: 'none' }}>{armed ? (TARGETED[armed] === 'enemy' ? 'Pick an enemy — ⚠ marks one winding up.' : 'Pick an ally to shelter — ⚠ marks one about to be hit.') : 'Your spirit fights on its own. Time your Aid — FLASH interrupts · REACH softens · WITHER numbs · WARDCOIL shelters · BREEZE sustains.'}</div>}
+      {!over && <div style={{ position: 'absolute', bottom: 26, left: '50%', transform: 'translateX(-50%)', font: '600 10px ui-monospace, monospace', color: '#5f7a72', textAlign: 'center', maxWidth: 268, pointerEvents: 'none' }}>Your spirit fights on its own instinct — you raised it for this.</div>}
     </div>
   )
 }

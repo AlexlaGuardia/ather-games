@@ -2703,9 +2703,17 @@ export default function Shimmer3D() {
     const bd = curBattleRef.current
     let spoils: { gold: number; rows: RewardRow[] } | null = null
     if (outcome === 'win' && bd) {
-      const totalXp = bd.enemies.reduce((s, e) => s + Math.max(8, e.level * 12), 0)
-      const gold = bd.enemies.reduce((s, e) => s + e.level * 3, 0)
       const allies = (partyRef.current ?? []).slice(0, MAX_PARTY)
+      // XP scales with the LEVEL RELATION, not just the enemy's level: punching up pays up to
+      // 2×, stomping something far below you pays a quarter. avg ally level is the yardstick.
+      const avgAlly = Math.max(1, allies.reduce((s, a) => s + a.level, 0) / Math.max(1, allies.length))
+      const totalXp = bd.enemies.reduce((s, e) => {
+        const diff = Math.min(2, Math.max(0.25, e.level / avgAlly))  // 0.25×..2× dial
+        return s + Math.max(4, Math.round(e.level * 12 * diff))
+      }, 0)
+      // Marks come from the liberation holds (a stronghold's spoils), never from wild spirits —
+      // a wild spirit carries no purse. Wild pays in XP/bond only.
+      const gold = bd.kind && bd.kind !== 'wild' ? bd.enemies.reduce((s, e) => s + e.level * 3, 0) : 0
       const perXp = Math.max(1, Math.round(totalXp / Math.max(1, allies.length)))
       if (gold > 0) wallet.earn(gold)
       const rows: RewardRow[] = []
