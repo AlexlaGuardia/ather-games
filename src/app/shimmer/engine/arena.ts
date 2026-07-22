@@ -52,6 +52,7 @@ export interface Fighter {
   x: number; y: number
   facing: number            // radians — toward target / move dir (renderer turns the blockout to face)
   hp: number; maxHp: number
+  level: number             // display only (team cards)
   pwr: number; grd: number; agi: number
   radius: number            // body scale — the "little one" reads small, gets swarmed
   speed: number             // floor units / sec
@@ -179,7 +180,7 @@ function fighterFromSpirit(spirit: Spirit, id: string, side: Side, x: number, y:
     id, side, species: spirit.species, element: spirit.element, bElement: toBattleElement(spirit.element),
     name: spirit.name,
     x, y, facing: side === 'ally' ? 0 : Math.PI,
-    hp: maxHp, maxHp, pwr: atk, grd: s.grd, agi: s.agi,
+    hp: maxHp, maxHp, level: spirit.level, pwr: atk, grd: s.grd, agi: s.agi,
     radius: 0.35 + s.maxHp / 260, speed,
     reach: 0.9, orbitDir: slot % 2 === 0 ? 1 : -1,
     tier, collared,

@@ -48,23 +48,86 @@ export interface Callout { id: number; side: 'ally' | 'enemy'; who: string; move
 let uid = 1
 
 // ── snapshot the HUD reads (throttled from the sim each frame) ──
+export interface CardSnap {
+  id: string; name: string; element: Element; level: number
+  hp: number; maxHp: number
+  stance: Stance; windTargeted: boolean   // ally reads
+  winding: boolean; collared: boolean     // enemy reads
+}
 interface UISnap {
   mana: number; maxMana: number
   bagCdLeft: number
-  allies: { id: string; name: string; element: Element; hp: number; maxHp: number; stance: Stance; windTargeted: boolean }[]
-  enemies: { id: string; name: string; element: Element; hp: number; maxHp: number; winding: boolean }[]
+  allies: CardSnap[]
+  enemies: CardSnap[]
   outcome: ArenaState['outcome']
 }
 function snap(s: ArenaState): UISnap {
   // which allies are the target of a live enemy heavy windup (the ones worth sheltering)
   const windTargets = new Set(s.fighters.filter(f => f.act?.phase === 'windup' && f.act.move.heavy).map(f => f.act!.targetId))
+  const card = (f: (typeof s.fighters)[number]): CardSnap => ({
+    id: f.id, name: f.name, element: f.element, level: f.level,
+    hp: f.hp, maxHp: f.maxHp,
+    stance: f.stance, windTargeted: windTargets.has(f.id),
+    winding: !!(f.act?.phase === 'windup' && f.act.move.heavy), collared: f.collared,
+  })
   return {
     mana: s.keeper.mana, maxMana: s.keeper.maxMana,
     bagCdLeft: s.keeper.bagCdLeft,
-    allies: s.fighters.filter(f => f.side === 'ally').map(f => ({ id: f.id, name: f.name, element: f.element, hp: f.hp, maxHp: f.maxHp, stance: f.stance, windTargeted: windTargets.has(f.id) })),
-    enemies: s.fighters.filter(f => f.side === 'enemy').map(f => ({ id: f.id, name: f.name, element: f.element, hp: f.hp, maxHp: f.maxHp, winding: !!(f.act?.phase === 'windup' && f.act.move.heavy) })),
+    allies: s.fighters.filter(f => f.side === 'ally').map(card),
+    enemies: s.fighters.filter(f => f.side === 'enemy').map(card),
     outcome: s.outcome,
   }
+}
+
+// ── the team cards — Pokémon-style battle plates, staggered per team (Alex's whiteboard) ──
+function hpColor(frac: number): string { return frac > 0.5 ? '#4fbf87' : frac > 0.2 ? '#f0a526' : '#e05a4d' }
+
+function TeamCards({ team, side }: { team: CardSnap[]; side: 'ally' | 'enemy' }) {
+  const right = side === 'enemy'
+  return (
+    <div style={{
+      position: 'absolute', top: 40, [right ? 'right' : 'left']: 10, maxWidth: '42vw',
+      display: 'flex', flexWrap: 'wrap', flexDirection: right ? 'row-reverse' : 'row',
+      alignItems: 'flex-start', pointerEvents: 'none',
+    }}>
+      {team.map((f, i) => {
+        const frac = Math.max(0, f.hp / f.maxHp)
+        const down = f.hp <= 0
+        const accent = down ? '#ffffff22'
+          : f.collared ? '#b04a30'
+          : side === 'ally' ? (ELEMENT_COLORS[f.element] ?? '#7fe3c8')
+          : f.winding ? '#f0a526' : '#ffffff2e'
+        return (
+          <div key={f.id} style={{
+            width: 158, padding: '6px 9px 7px', borderRadius: 9,
+            background: '#0d1413e6', border: `1.5px solid ${accent}`,
+            boxShadow: f.winding && !down ? '0 0 12px #f0a52655' : f.windTargeted && !down ? '0 0 12px #e05a4d44' : '0 2px 8px #0008',
+            marginTop: (i % 2) * 13, [right ? 'marginRight' : 'marginLeft']: i > 0 ? -14 : 0,
+            zIndex: 10 + i, position: 'relative',
+            opacity: down ? 0.4 : 1, filter: down ? 'grayscale(0.8)' : 'none',
+            transition: 'opacity 0.4s, box-shadow 0.2s, border-color 0.2s',
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 6 }}>
+              <span style={{ font: '800 11px ui-monospace, monospace', color: down ? '#8a9a94' : '#eafff6', letterSpacing: '0.03em', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.name}</span>
+              <span style={{ font: '700 9px ui-monospace, monospace', color: '#8fa8a0', flexShrink: 0 }}>Lv{f.level}</span>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
+              <span style={{ width: 7, height: 7, borderRadius: '50%', background: side === 'ally' ? (ELEMENT_COLORS[f.element] ?? '#7fe3c8') : f.collared ? '#b04a30' : ENEMY_GREY, flexShrink: 0 }} />
+              <div style={{ flex: 1, height: 7, background: '#00000088', borderRadius: 4, border: '1px solid #00000066', overflow: 'hidden' }}>
+                <div style={{ height: '100%', width: `${frac * 100}%`, background: hpColor(frac), borderRadius: 3, transition: 'width 0.25s ease-out, background 0.25s' }} />
+              </div>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginTop: 3 }}>
+              <span style={{ font: '700 8.5px ui-monospace, monospace', color: down ? '#e05a4d' : f.collared ? '#c9836f' : '#5f7a72', letterSpacing: '0.1em' }}>
+                {down ? 'DOWN' : f.collared ? 'COLLARED' : side === 'ally' ? (f.stance === 'aggressive' ? 'ATK' : 'DEF') : ''}
+              </span>
+              <span style={{ font: '700 9px ui-monospace, monospace', color: '#8fa8a0', fontVariantNumeric: 'tabular-nums' }}>{Math.ceil(Math.max(0, f.hp))}/{f.maxHp}</span>
+            </div>
+          </div>
+        )
+      })}
+    </div>
+  )
 }
 
 // One FX mesh, self-animating on sim time (so hit-stop freezes the burst too — coherent time).
@@ -117,7 +180,6 @@ function Scene({ arenaRef, cmdQueue, skipRef, onSnap, onCallout }: {
 }) {
   const groups = useRef(new Map<string, THREE.Group>())
   const bodies = useRef(new Map<string, THREE.Mesh>())
-  const hpFills = useRef(new Map<string, HTMLDivElement>())
   const rings = useRef(new Map<string, THREE.Mesh>())
   const shields = useRef(new Map<string, THREE.Mesh>())
   const softens = useRef(new Map<string, THREE.Mesh>())
@@ -287,8 +349,6 @@ function Scene({ arenaRef, cmdQueue, skipRef, onSnap, onCallout }: {
         const mat = body.material as THREE.MeshStandardMaterial
         mat.emissiveIntensity = (f.side === 'ally' ? 0.35 : 0.12) + f.hitFlash * 6
       }
-      const fill = hpFills.current.get(f.id)
-      if (fill) fill.style.width = `${Math.max(0, (f.hp / f.maxHp) * 100)}%`
     }
 
     // enemy telegraph rings — one per winding enemy heavy (the clock the Keeper reads)
@@ -431,13 +491,9 @@ function Scene({ arenaRef, cmdQueue, skipRef, onSnap, onCallout }: {
               <sphereGeometry args={[0.08, 8, 8]} />
               <meshBasicMaterial color="#ffffff" />
             </mesh>
+            {/* over-head: name only — health lives in the team cards now (whiteboard 07-22) */}
             <Html position={[0, f.radius * 1.2 + h + 0.5, 0]} center distanceFactor={10} pointerEvents="none">
-              <div style={{ width: 74, textAlign: 'center', userSelect: 'none' }}>
-                <div style={{ font: '700 11px ui-monospace, monospace', color: f.side === 'enemy' ? '#c9c9d2' : col, letterSpacing: '0.04em', textShadow: '0 1px 2px #000', marginBottom: 2 }}>{f.name}</div>
-                <div style={{ height: 5, background: '#0008', borderRadius: 3, border: '1px solid #0006', overflow: 'hidden' }}>
-                  <div ref={d => { if (d) hpFills.current.set(f.id, d) }} style={{ height: '100%', width: '100%', background: f.side === 'enemy' ? '#c0504a' : '#4fbf87', transition: 'width 0.12s linear' }} />
-                </div>
-              </div>
+              <div style={{ width: 74, textAlign: 'center', userSelect: 'none', font: '700 11px ui-monospace, monospace', color: f.side === 'enemy' ? '#c9c9d2' : col, letterSpacing: '0.04em', textShadow: '0 1px 2px #000' }}>{f.name}</div>
             </Html>
           </group>
         )
@@ -515,10 +571,15 @@ export default function ArenaBattle({ allies, enemies, seed, aidKit, enemyTier, 
         <Scene arenaRef={arenaRef as React.RefObject<ArenaState>} cmdQueue={cmdQueue} skipRef={skipRef} onSnap={setUi} onCallout={onCallout} />
       </Canvas>
 
-      {/* title */}
-      <div style={{ position: 'absolute', top: 14, left: '50%', transform: 'translateX(-50%)', textAlign: 'center', pointerEvents: 'none' }}>
+      {/* title + the VS mark between the two team stacks */}
+      <div style={{ position: 'absolute', top: 12, left: '50%', transform: 'translateX(-50%)', textAlign: 'center', pointerEvents: 'none' }}>
         <div style={{ font: '800 13px ui-monospace, monospace', color: title ? '#f0a526' : '#7fe3c8', letterSpacing: '0.14em', opacity: 0.85, whiteSpace: 'nowrap' }}>{title ?? "THE KEEPER'S ARENA"}</div>
+        <div style={{ font: '900 15px ui-monospace, monospace', color: '#8fa8a0', letterSpacing: '0.18em', marginTop: 8, opacity: 0.9 }}>VS</div>
       </div>
+
+      {/* the team cards — allies stack left, foes stack right (whiteboard 07-22) */}
+      <TeamCards team={ui.allies} side="ally" />
+      <TeamCards team={ui.enemies} side="enemy" />
 
       {/* hold intro splash — the boss framing lands big, then hands the screen back */}
       {title && (
@@ -530,8 +591,8 @@ export default function ArenaBattle({ allies, enemies, seed, aidKit, enemyTier, 
         </div>
       )}
 
-      {/* move callouts — the announcer stack, canon move names */}
-      <div style={{ position: 'absolute', top: 44, left: 14, display: 'flex', flexDirection: 'column', gap: 5, pointerEvents: 'none' }}>
+      {/* move callouts — the announcer stack, canon move names (left-middle: the top strip belongs to the cards) */}
+      <div style={{ position: 'absolute', top: '38%', left: 12, display: 'flex', flexDirection: 'column', gap: 5, pointerEvents: 'none' }}>
         {callouts.map(c => (
           <div key={c.id} style={{
             display: 'flex', alignItems: 'baseline', gap: 8, padding: '5px 12px', borderRadius: 8,
@@ -546,8 +607,8 @@ export default function ArenaBattle({ allies, enemies, seed, aidKit, enemyTier, 
         ))}
       </div>
 
-      {/* SPEAK — top-right (per-ally tactics, no pause) */}
-      <div style={{ position: 'absolute', top: 74, right: 14, display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 8 }}>
+      {/* SPEAK — bottom-right above BAG (per-ally tactics, no pause; list opens upward) */}
+      <div style={{ position: 'absolute', bottom: 96, right: 14, display: 'flex', flexDirection: 'column-reverse', alignItems: 'flex-end', gap: 8 }}>
         <CornerBtn label="SPEAK" sub={speakOpen ? 'close' : 'tactics'} accent="#f0a526" disabled={over}
           onClick={() => setSpeakOpen(o => !o)} style={{ position: 'static' }} />
         {speakOpen && !over && (
@@ -582,7 +643,7 @@ export default function ArenaBattle({ allies, enemies, seed, aidKit, enemyTier, 
       {!over && (
         <button
           onPointerDown={startSkip} onPointerUp={cancelSkip} onPointerLeave={cancelSkip}
-          style={{ position: 'absolute', top: 14, right: 14, width: 108, height: 34, borderRadius: 10,
+          style={{ position: 'absolute', bottom: 60, left: '50%', transform: 'translateX(-50%)', width: 108, height: 34, borderRadius: 10,
             border: '2px solid #ffffff2a', background: '#12181acc', color: '#8fa8a0', cursor: 'pointer',
             overflow: 'hidden', touchAction: 'none' }}>
           {skipHold && <div style={{ position: 'absolute', inset: 0, background: '#7fe3c833', animation: `skipFill ${SKIP_HOLD_S}s linear forwards` }} />}
