@@ -1228,23 +1228,30 @@ function CameraRig({ posRef, editFocusRef, yawRef, editRef, eyeRef, adsRef }: {
 // The first weapon is a projectile caster: click fires a travelling energy round from the reticle.
 // Hitscan would be snappier, but a visible round reads like a sigil-cast — the outside-Ather weapon.
 // Mounted only in 'outside' zones. Ref-based pool + instanced render (no per-shot React re-render).
-const PROJECTILE_SPEED = 30   // tiles/sec
-const PROJECTILE_LIFE = 2.0   // seconds before it fizzles
-const FIRE_COOLDOWN = 0.16    // min seconds between casts (semi-auto)
+const PROJECTILE_SPEED = 34   // tiles/sec
+const PROJECTILE_LIFE = 1.8   // seconds before it fizzles
+const FIRE_COOLDOWN = 0.11    // seconds between shots while holding fire (~9/sec full-auto)
 const TARGET_HIT_R2 = 0.72 * 0.72
 const TARGET_RESPAWN = 2.5     // seconds a popped target stays down
+const TRAIL_N = 8             // comet-trail segments behind each round (reads as a streak head-on too)
+const HEAD_R = 0.17          // round head radius; trail segs fade down from it
 // Downrange targets for the range — floating orbs at varied spots/heights in Alex's 50×50.
 const RANGE_TARGETS: [number, number, number][] = [
   [15, 1.8, 26], [20, 2.5, 31], [25, 1.6, 23], [30, 2.9, 33],
   [35, 2.0, 27], [12, 2.3, 35], [38, 1.7, 21], [22, 3.1, 39],
 ]
-function FiringRange({ fireReqRef, gridRef, onHit }: {
-  fireReqRef: React.MutableRefObject<boolean>
+function FiringRange({ firingRef, gridRef, onHit, onShot }: {
+  firingRef: React.RefObject<boolean>   // held while left-click is down → full-auto
   gridRef: React.RefObject<number[][]>
   onHit: () => void
+  onShot: () => void
 }) {
-  const MAX = 24
-  const pool = useMemo(() => Array.from({ length: MAX }, () => ({ pos: new THREE.Vector3(), vel: new THREE.Vector3(), life: 0 })), [])
+  const MAX = 20
+  const SEG = TRAIL_N + 1  // instances per round = head + trail
+  const pool = useMemo(() => Array.from({ length: MAX }, () => ({
+    pos: new THREE.Vector3(), vel: new THREE.Vector3(), life: 0,
+    trail: Array.from({ length: TRAIL_N }, () => new THREE.Vector3()),
+  })), [])
   const targets = useMemo(() => RANGE_TARGETS.map(([x, y, z]) => ({ pos: new THREE.Vector3(x, y, z), alive: true, down: 0 })), [])
   const shotRef = useRef<THREE.InstancedMesh>(null)
   const tgtRef = useRef<THREE.InstancedMesh>(null)
@@ -1253,29 +1260,29 @@ function FiringRange({ fireReqRef, gridRef, onHit }: {
   const q = useMemo(() => new THREE.Quaternion(), [])
   const one = useMemo(() => new THREE.Vector3(1, 1, 1), [])
   const zero = useMemo(() => new THREE.Vector3(0, 0, 0), [])
+  const scl = useMemo(() => new THREE.Vector3(), [])
   const dir = useMemo(() => new THREE.Vector3(), [])
-  const pdir = useMemo(() => new THREE.Vector3(), [])       // per-projectile travel dir (streak orientation)
-  const UP = useMemo(() => new THREE.Vector3(0, 1, 0), [])  // the cylinder's long axis, aligned to velocity
   useFrame((state, dt) => {
     cd.current -= dt
-    // fire: consume the request (even mid-cooldown, so clicks don't queue up)
-    if (fireReqRef.current) {
-      fireReqRef.current = false
-      if (cd.current <= 0) {
-        cd.current = FIRE_COOLDOWN
-        const p = pool.find((pr) => pr.life <= 0)
-        if (p) {
-          state.camera.getWorldDirection(dir)
-          p.pos.copy(state.camera.position).addScaledVector(dir, 0.7)
-          p.vel.copy(dir).multiplyScalar(PROJECTILE_SPEED)
-          p.life = PROJECTILE_LIFE
-        }
+    // full-auto: while fire is held and the cadence is ready, spawn a round from the camera
+    if (firingRef.current && cd.current <= 0) {
+      cd.current = FIRE_COOLDOWN
+      const p = pool.find((pr) => pr.life <= 0)
+      if (p) {
+        state.camera.getWorldDirection(dir)
+        p.pos.copy(state.camera.position).addScaledVector(dir, 0.7)
+        p.vel.copy(dir).multiplyScalar(PROJECTILE_SPEED)
+        p.life = PROJECTILE_LIFE
+        for (const t of p.trail) t.copy(p.pos)  // collapse the trail onto the muzzle at spawn
+        onShot()
       }
     }
-    // advance + collide projectiles
+    // advance + trail + collide
     for (const p of pool) {
       if (p.life <= 0) continue
       p.life -= dt
+      for (let k = TRAIL_N - 1; k > 0; k--) p.trail[k].copy(p.trail[k - 1])  // age the trail
+      p.trail[0].copy(p.pos)
       p.pos.addScaledVector(p.vel, dt)
       const cx = Math.round(p.pos.x), cz = Math.round(p.pos.z)
       const cell = gridRef.current?.[cz]?.[cx]
@@ -1286,18 +1293,21 @@ function FiringRange({ fireReqRef, gridRef, onHit }: {
         }
       }
     }
-    // respawn downed targets
     for (const t of targets) { if (!t.alive) { t.down -= dt; if (t.down <= 0) t.alive = true } }
-    // render projectiles — orient the streak along its velocity (cylinder long-axis → travel dir)
+    // render each round as a head + fading comet-trail (reads as a streak from any angle, incl. head-on)
     if (shotRef.current) {
       pool.forEach((p, i) => {
-        if (p.life > 0) { pdir.copy(p.vel).normalize(); q.setFromUnitVectors(UP, pdir); m.compose(p.pos, q, one) }
-        else m.compose(zero, q, zero)
-        shotRef.current!.setMatrixAt(i, m)
+        const base = i * SEG
+        if (p.life > 0) { scl.set(HEAD_R, HEAD_R, HEAD_R); m.compose(p.pos, q, scl) } else m.compose(zero, q, zero)
+        shotRef.current!.setMatrixAt(base, m)
+        for (let j = 0; j < TRAIL_N; j++) {
+          if (p.life > 0) { const s = HEAD_R * (1 - (j + 1) / (TRAIL_N + 1)); scl.set(s, s, s); m.compose(p.trail[j], q, scl) }
+          else m.compose(zero, q, zero)
+          shotRef.current!.setMatrixAt(base + 1 + j, m)
+        }
       })
       shotRef.current.instanceMatrix.needsUpdate = true
     }
-    // render targets (pulse scale slightly for life)
     if (tgtRef.current) {
       targets.forEach((t, i) => { m.compose(t.alive ? t.pos : zero, q, t.alive ? one : zero); tgtRef.current!.setMatrixAt(i, m) })
       tgtRef.current.instanceMatrix.needsUpdate = true
@@ -1305,11 +1315,11 @@ function FiringRange({ fireReqRef, gridRef, onHit }: {
   })
   return (
     <>
-      {/* frustumCulled=false: instances move/scatter far from the mesh origin, so the default
-          origin-centered bounding sphere would cull the whole mesh whenever you look downrange. */}
-      <instancedMesh ref={shotRef} args={[undefined, undefined, MAX]} frustumCulled={false}>
-        <cylinderGeometry args={[0.07, 0.07, 1.5, 6]} />
-        <meshBasicMaterial color="#aef2ff" transparent opacity={0.95} blending={THREE.AdditiveBlending} depthWrite={false} toneMapped={false} />
+      {/* frustumCulled=false: instances scatter far from the mesh origin, so the default origin-centered
+          bounding sphere would cull the whole mesh whenever you look downrange. Unit sphere, scaled per-instance. */}
+      <instancedMesh ref={shotRef} args={[undefined, undefined, MAX * SEG]} frustumCulled={false}>
+        <sphereGeometry args={[1, 8, 8]} />
+        <meshBasicMaterial color="#aef2ff" transparent opacity={0.9} blending={THREE.AdditiveBlending} depthWrite={false} toneMapped={false} />
       </instancedMesh>
       <instancedMesh ref={tgtRef} args={[undefined, undefined, targets.length]} frustumCulled={false}>
         <sphereGeometry args={[0.5, 14, 14]} />
@@ -1395,8 +1405,9 @@ const Scene = memo(function Scene(props: {
   harvestPop: { x: number; y: number; z: number; glyph: string; key: number } | null
   atmosZone: string
   isOwner: boolean
-  fireReqRef: React.MutableRefObject<boolean>
+  firingRef: React.RefObject<boolean>
   onRangeHit: () => void
+  onRangeShot: () => void
   adsRef: React.RefObject<boolean>
 }) {
   // Pure-prop filter → safe to memo, so a channel tick doesn't re-allocate the structure list.
@@ -1421,7 +1432,7 @@ const Scene = memo(function Scene(props: {
       <ZoneGeometry key={`${props.zone.id}-${props.dims}`} gridRef={props.gridRef} heights={props.heights} version={props.version} paint={props.paint} editing={props.editing} />
       <NPCMarkers npcs={ALL_NPCS.filter((n) => n.zone === props.zone.id && npcInWorld(n, props.defeated, props.flagsRef.current))} heights={props.heights} />
       {props.isOwner && props.zone.id === 'moonwell-glade-gregory-s-home' && <HubGateMarkers heights={props.heights} />}
-      {props.zone.realm === 'outside' && <FiringRange fireReqRef={props.fireReqRef} gridRef={props.gridRef} onHit={props.onRangeHit} />}
+      {props.zone.realm === 'outside' && <FiringRange firingRef={props.firingRef} gridRef={props.gridRef} onHit={props.onRangeHit} onShot={props.onRangeShot} />}
       {props.zone.realm === 'outside' && <ExitMarkers warps={props.zone.warps} heights={props.heights} />}
       <NodeMarkers nodes={props.nodes} heights={props.heights} editing={props.editing} channel={props.channel} />
       {props.zone.id === WORLD_ZONE_ID ? <WorldFlora heights={props.heights} /> : <FloraDressing zoneId={props.zone.id} heights={props.heights} />}
@@ -1575,7 +1586,11 @@ export default function Shimmer3D() {
   const [showLookHint, setShowLookHint] = useState(true)  // the "click to look" nudge fades a few seconds after spawn
   useEffect(() => { const t = setTimeout(() => setShowLookHint(false), 5000); return () => clearTimeout(t) }, [])
   useEffect(() => {
-    const onLock = () => setPointerLocked(document.pointerLockElement instanceof Element)
+    const onLock = () => {
+      const locked = document.pointerLockElement instanceof Element
+      setPointerLocked(locked)
+      if (!locked) { firingRef.current = false; adsRef.current = false; setAds(false) }  // Esc/unlock stops fire+ADS
+    }
     document.addEventListener('pointerlockchange', onLock)
     return () => document.removeEventListener('pointerlockchange', onLock)
   }, [])
@@ -2385,11 +2400,11 @@ export default function Shimmer3D() {
   // status comes from the httpOnly `ather_owner` cookie via /api/owner (set it at /owner?key=OWNER_KEY).
   const [isOwner, setIsOwner] = useState(false)
   const isOwnerRef = useRef(isOwner); isOwnerRef.current = isOwner  // stable read for onWarp's owner-only gate
-  // Weapon (outside-Ather only): drawn when the current zone's realm is 'outside'. fireReqRef bridges
+  // Weapon (outside-Ather only): drawn when the current zone's realm is 'outside'. firingRef bridges
   // the DOM click → the FiringRange useFrame (which spawns from the live camera). Spirits stay holstered.
   const weaponDrawn = zone.realm === 'outside'
   const weaponDrawnRef = useRef(weaponDrawn); weaponDrawnRef.current = weaponDrawn
-  const fireReqRef = useRef(false)
+  const firingRef = useRef(false)  // held while left-click is down → FiringRange auto-fires at the cadence
   const shotsRef = useRef(0)   // hot-path counters live in refs — NO per-shot/per-hit React re-render
   const hitsRef = useRef(0)
   const casterRef = useRef<HTMLDivElement>(null)  // viewmodel node; recoil kicked imperatively (no key remount)
@@ -2397,10 +2412,16 @@ export default function Shimmer3D() {
   const adsRef = useRef(false)  // aim-down-sights (right-click hold); CameraRig reads it for fov + sensitivity
   const [ads, setAds] = useState(false)  // drives the viewmodel raise (toggles ~twice per aim, not per-frame)
   const onRangeHit = useCallback(() => { hitsRef.current++ }, [])
+  // called by FiringRange per actual spawn (full-auto): bump the counter + kick the recoil, no re-render
+  const onRangeShot = useCallback(() => {
+    shotsRef.current++
+    const el = casterRef.current
+    if (el) { el.style.animation = 'none'; void el.offsetHeight; el.style.animation = 'casterKick 0.13s ease-out' }
+  }, [])
   // Sync the HUD counters at ~5fps while the weapon is out, so firing never touches the (huge) component's
   // render path — that churn was stuttering the movement rAF. Reset counters when the weapon holsters.
   useEffect(() => {
-    if (!weaponDrawn) { shotsRef.current = 0; hitsRef.current = 0; setHudStats({ shots: 0, hits: 0 }); adsRef.current = false; setAds(false); return }
+    if (!weaponDrawn) { shotsRef.current = 0; hitsRef.current = 0; setHudStats({ shots: 0, hits: 0 }); firingRef.current = false; adsRef.current = false; setAds(false); return }
     const id = setInterval(() => setHudStats((s) => (s.shots === shotsRef.current && s.hits === hitsRef.current) ? s : { shots: shotsRef.current, hits: hitsRef.current }), 200)
     return () => clearInterval(id)
   }, [weaponDrawn])
@@ -2486,13 +2507,8 @@ export default function Shimmer3D() {
       if (battleRef.current) return  // a menu/battle overlay owns input
       if (e.button === 0) {
         // outside the Ather the weapon is drawn: left-click FIRES a projectile (the FiringRange's
-        // useFrame reads fireReqRef and spawns from the camera). Takes priority over interact.
-        if (weaponDrawnRef.current) {
-          e.preventDefault(); fireReqRef.current = true; shotsRef.current++
-          const el = casterRef.current  // restart the recoil kick imperatively (no React state → no re-render)
-          if (el) { el.style.animation = 'none'; void el.offsetHeight; el.style.animation = 'casterKick 0.13s ease-out' }
-          return
-        }
+        // useFrame reads firingRef and auto-fires from the camera). Takes priority over interact.
+        if (weaponDrawnRef.current) { e.preventDefault(); firingRef.current = true; return }  // hold = full-auto
         // interact — same priority ladder as the E key
         if (dialogueRef.current) advanceDialogue()
         else if (nearNpc) talk(nearNpc)
@@ -2508,6 +2524,7 @@ export default function Shimmer3D() {
       }
     }
     const onUp = (e: PointerEvent) => {
+      if (e.button === 0) firingRef.current = false  // release = stop full-auto
       if (e.button === 2 && adsRef.current) { adsRef.current = false; setAds(false) }
     }
     window.addEventListener('pointerdown', onDown)
@@ -2703,8 +2720,9 @@ export default function Shimmer3D() {
           harvestPop={harvestPop}
           atmosZone={districtZone}
           isOwner={isOwner}
-          fireReqRef={fireReqRef}
+          firingRef={firingRef}
           onRangeHit={onRangeHit}
+          onRangeShot={onRangeShot}
           adsRef={adsRef}
         />
       </Canvas>
