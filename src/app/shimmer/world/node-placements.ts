@@ -16,7 +16,8 @@ export interface NodePlacement {
 const GARDEN_NODES: NodePlacement[] = [
   { type: 'goldwood' as NodeType, tileX: 22, tileY: 4 },
   { type: 'goldwood' as NodeType, tileX: 19, tileY: 3 },
-  { type: 'goldwood' as NodeType, tileX: 14, tileY: 2 },
+  // (14,2) removed — it sat on the Spirit Corner gate's return-warp landing tile and trapped the
+  // player against the gate on the way back. 5 other goldwoods remain in the plot.
   { type: 'goldwood' as NodeType, tileX: 2, tileY: 25 },
   { type: 'goldwood' as NodeType, tileX: 3, tileY: 27 },
   { type: 'goldwood' as NodeType, tileX: 5, tileY: 26 },
