@@ -102,8 +102,8 @@ function TeamCards({ team, side }: { team: CardSnap[]; side: 'ally' | 'enemy' })
             width: 158, padding: '6px 9px 7px', borderRadius: 9,
             background: '#0d1413e6', border: `1.5px solid ${accent}`,
             boxShadow: f.winding && !down ? '0 0 12px #f0a52655' : f.windTargeted && !down ? '0 0 12px #e05a4d44' : '0 2px 8px #0008',
-            marginTop: (i % 2) * 13, [right ? 'marginRight' : 'marginLeft']: i > 0 ? -14 : 0,
-            zIndex: 10 + i, position: 'relative',
+            marginTop: (i % 2) * 13, [right ? 'marginRight' : 'marginLeft']: i > 0 ? -8 : 0,
+            zIndex: 10 + (team.length - i), position: 'relative',
             opacity: down ? 0.4 : 1, filter: down ? 'grayscale(0.8)' : 'none',
             transition: 'opacity 0.4s, box-shadow 0.2s, border-color 0.2s',
           }}>
