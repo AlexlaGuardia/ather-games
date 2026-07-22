@@ -29,14 +29,14 @@ interface UISnap {
   outcome: ArenaState['outcome']
 }
 function snap(s: ArenaState): UISnap {
-  // which allies are the target of a live enemy wind-up (the ones worth sheltering)
-  const windTargets = new Set(s.fighters.filter(f => f.wind).map(f => f.wind!.targetId))
+  // which allies are the target of a live enemy heavy windup (the ones worth sheltering)
+  const windTargets = new Set(s.fighters.filter(f => f.act?.phase === 'windup' && f.act.move.heavy).map(f => f.act!.targetId))
   return {
     mana: s.keeper.mana, maxMana: s.keeper.maxMana,
     aid: s.keeper.aid.map(a => ({ id: a.id, name: a.name, cost: a.cost, cdLeft: a.cdLeft, cd: a.cd })),
     bagCdLeft: s.keeper.bagCdLeft,
     allies: s.fighters.filter(f => f.side === 'ally').map(f => ({ id: f.id, name: f.name, element: f.element, hp: f.hp, maxHp: f.maxHp, stance: f.stance, windTargeted: windTargets.has(f.id) })),
-    enemies: s.fighters.filter(f => f.side === 'enemy').map(f => ({ id: f.id, name: f.name, element: f.element, hp: f.hp, maxHp: f.maxHp, winding: !!f.wind })),
+    enemies: s.fighters.filter(f => f.side === 'enemy').map(f => ({ id: f.id, name: f.name, element: f.element, hp: f.hp, maxHp: f.maxHp, winding: !!(f.act?.phase === 'windup' && f.act.move.heavy) })),
     outcome: s.outcome,
   }
 }
@@ -88,10 +88,12 @@ function Scene({ arenaRef, cmdQueue, onSnap }: {
       if (f.side !== 'enemy') continue
       const r = rings.current.get(f.id)
       if (!r) continue
-      if (f.wind && f.hp > 0) {
-        const tgt = s.fighters.find(g => g.id === f.wind!.targetId)
-        const p = f.wind.t / f.wind.dur
-        if (tgt) { r.visible = true; r.position.set(tgt.x, 0.02, tgt.y); r.scale.setScalar(f.wind.range * (0.4 + 0.6 * p)) }
+      const act = f.act
+      if (act && act.phase === 'windup' && act.move.heavy && f.hp > 0) {
+        const tgt = s.fighters.find(g => g.id === act.targetId)
+        const p = act.t / act.dur
+        const range = act.move.aoe > 0 ? act.move.aoe : 1.0
+        if (tgt) { r.visible = true; r.position.set(tgt.x, 0.02, tgt.y); r.scale.setScalar(range * (0.4 + 0.6 * p)) }
         const m = r.material as THREE.MeshBasicMaterial
         m.opacity = 0.25 + 0.55 * p; m.color.setStyle(p > 0.75 ? '#ff5a4d' : '#f0a526')
       } else r.visible = false

@@ -41,8 +41,8 @@ const skilled: Policy = (s, lastCmdT) => {
   const off = (id: 'flash' | 'breeze' | 'reach') => { const a = k.aid.find(x => x.id === id)!; return a.cdLeft <= 0 && k.mana >= a.cost }
   const ally = s.fighters.find(f => f.side === 'ally' && f.hp > 0)
   const lowAlly = s.fighters.find(f => f.side === 'ally' && f.hp > 0 && f.hp / f.maxHp < 0.3)
-  // 1) a heavy wind-up is bearing down and past the reaction point → interrupt it
-  const winding = s.fighters.find(f => f.side === 'enemy' && f.wind && f.wind.t / f.wind.dur > 0.35)
+  // 1) a heavy move is winding up and past the reaction point → interrupt it
+  const winding = s.fighters.find(f => f.side === 'enemy' && f.act?.phase === 'windup' && f.act.move.heavy && f.act.t / f.act.dur > 0.35)
   if (winding && off('flash')) return { type: 'aid', id: 'flash' }
   // 2) about to die → the one panic heal
   if (lowAlly && k.bagCdLeft <= 0) return { type: 'bag', targetId: lowAlly.id }

@@ -6,26 +6,46 @@
 // NOT a move menu. This is the anti-collar identity made mechanical: you coach and
 // enable, you don't command. Pokémon = collar (order every move); Shimmer = Keeper.
 //
+// CINEMATIC PASS (2026-07-22, Alex): the fight is a performance the renderer plays
+// back — spirits fight with their REAL canon kits (engine/arena-moves.ts ← moves.ts
+// ← CANON/game/moves.md). Every attack is a timed move action (windup → execute →
+// recover) with cooldowns replacing PP; misses are VISIBLE dodges (the target
+// sidesteps); heavies telegraph. Because the sim is pure + seeded, the whole fight
+// can be pre-scripted at mount (see simulate()) and replayed identically live.
+//
 // This module is PURE + DETERMINISTIC (seeded rng, fixed-timestep tick) so the feel
 // can be oracle-proven headless before a single triangle is drawn — the same
-// sim-first discipline every arcade cabinet shipped on. The proof we want: a good
-// Keeper turns a losing fight (see arena.test.ts).
+// sim-first discipline every arcade cabinet shipped on.
 //
 // Coordinate space: a flat disc of radius R. Fighters carry (x,y) on that floor;
-// the 3D renderer (later) maps y→z and lifts a 3/4 iso camera over the ring.
+// the 3D renderer maps y→z and lifts a 3/4 iso camera over the ring.
 
 import type { Species, Element, Spirit } from '../spirits/spirit'
 import { derivePartyStats } from './party-stats'
+import {
+  kitForSpirit, chooseMove, hitChance, moveDamage, applyStatus, stageMult,
+  freshStatus, freshStages, toBattleElement,
+  type ArenaMove, type StatusState, type StageState, type MoveState, type StatusId, type BattleElement,
+} from './arena-moves'
 
 export type Side = 'ally' | 'enemy'
 export type Stance = 'aggressive' | 'defend'   // the live-nudgeable instinct (Speak flicks this)
 export type AidId = 'flash' | 'breeze' | 'reach' | 'wardcoil' | 'witherbloom'
+
+// A move in flight: windup (telegraphed if heavy) → execute at t=dur → recover.
+export interface Act {
+  move: ArenaMove
+  phase: 'windup' | 'recover'
+  t: number; dur: number
+  targetId: string
+}
 
 export interface Fighter {
   id: string
   side: Side
   species: Species
   element: Element
+  bElement: BattleElement   // element in move-space (base → neutral), computed once
   name: string
   x: number; y: number
   facing: number            // radians — toward target / move dir (renderer turns the blockout to face)
@@ -33,21 +53,21 @@ export interface Fighter {
   pwr: number; grd: number; agi: number
   radius: number            // body scale — the "little one" reads small, gets swarmed
   speed: number             // floor units / sec
-  reach: number             // melee range
-  atkCd: number; atkInterval: number
+  reach: number             // spacing anchor for the between-moves dance
+  orbitDir: 1 | -1          // which way this one circles (deterministic per slot)
   stance: Stance
   targetId: string | null
-  // status timers, in seconds remaining
-  flinch: number            // stunned — cannot act (Momo's flash)
+  kit: ArenaMove[]          // the canon 4-move kit as timed actions (cdLeft lives here)
+  act: Act | null           // current move in flight
+  st: StatusState           // canon statuses (ignition/regen/crystallize/fortify/surge/erosion/anchor)
+  stage: StageState         // stat stages ±3 (pwr/grd/agi)
+  // status timers, in seconds remaining (Keeper-aid layer)
+  flinch: number            // stunned — cannot act, interrupts windups (Momo's flash)
   defDownT: number; defDownAmt: number   // grd reduced (Bonn's Reach)
-  shieldT: number           // incoming damage reduced (Coilguard's Wardcoil — plates lock, tail-coil shelters)
-  numbT: number             // Witherbloom — Frilldrift's toxin numbs a foe; its strikes often whiff (a debuff, no damage)
+  shieldT: number           // incoming damage reduced (Coilguard's Wardcoil)
+  numbT: number             // Witherbloom — numbed strikes often whiff
   braceT: number            // defending → incoming halved
-  recoverT: number          // just struck → give ground (the strike-and-reposition tempo, no glued scrum)
   hitFlash: number          // took a hit → renderer flashes the body white (impact read)
-  // enemy heavy attack telegraph (the CLOCK the Keeper reads)
-  wind: { t: number; dur: number; range: number; dmg: number; targetId: string } | null
-  winCd: number
 }
 
 export interface AidSlot { id: AidId; name: string; cost: number; cd: number; cdLeft: number }
@@ -60,13 +80,15 @@ export interface Keeper {
 }
 
 export type ArenaEvent =
-  | { type: 'hit'; from: string; to: string; dmg: number }
-  | { type: 'wind_start'; who: string; target: string }
-  | { type: 'wind_land'; who: string; target: string; dmg: number }
-  | { type: 'wind_interrupt'; who: string }
+  | { type: 'hit'; from: string; to: string; dmg: number; moveId: string; eff: 'super' | 'weak' | 'neutral' }
+  | { type: 'move_start'; who: string; target: string; moveId: string; name: string; state: MoveState; heavy: boolean; windup: number }
+  | { type: 'move_interrupt'; who: string; moveId: string }
+  | { type: 'dodge'; who: string; from: string; moveId: string }        // the visible sidestep
+  | { type: 'status'; who: string; status: StatusId }
+  | { type: 'stat'; who: string; stat: 'pwr' | 'grd' | 'agi'; stages: number }
   | { type: 'aid'; id: AidId; target?: string }
   | { type: 'bag' }
-  | { type: 'miss'; who: string }
+  | { type: 'miss'; who: string }                                       // a self-fumble (numbed), NOT a dodge
   | { type: 'ko'; who: string }
 
 export interface ArenaState {
@@ -114,7 +136,7 @@ const CHANNELS: Record<string, AidDef> = {
 const GIFTS: Record<string, AidDef> = {
   duskpuff:   { id: 'flash',       name: 'Rainbow Flash', cost: 4, cd: 6 },   // Momo — startle-burst → flinch/interrupt (RULED)
   coilguard:  { id: 'wardcoil',    name: 'Wardcoil',      cost: 3, cd: 9 },   // Coilguard — plates lock + tail-coil shelters an ally, damage cut (RULED 2026-07-05)
-  frilldrift: { id: 'witherbloom', name: 'Witherbloom',   cost: 4, cd: 10 },  // Frilldrift — contact toxin bleeds a target over time, a slow wither (RULED 2026-07-05)
+  frilldrift: { id: 'witherbloom', name: 'Witherbloom',   cost: 4, cd: 10 },  // Frilldrift — contact toxin numbs a foe; its strikes often whiff (RULED 2026-07-05)
 }
 export type ManamalId = keyof typeof GIFTS
 export interface AidKit { channels: AidId[]; gift: AidId }
@@ -134,10 +156,10 @@ function buildAid(kit: AidKit): AidSlot[] {
 }
 
 // Fights are duels, not pings — HP is padded well above the turn-based pool so the
-// telegraph→react→payoff loop cycles many times before anyone falls (~5-6x longer).
+// telegraph→react→payoff loop cycles many times before anyone falls.
 const HP_MULT = 2.6
 
-function fighterFromSpirit(spirit: Spirit, id: string, side: Side, x: number, y: number): Fighter {
+function fighterFromSpirit(spirit: Spirit, id: string, side: Side, x: number, y: number, slot: number): Fighter {
   const s = derivePartyStats(spirit)
   const speed = 1.6 + s.agi / 40           // agi → footspeed
   const maxHp = Math.round(s.maxHp * HP_MULT)
@@ -145,14 +167,15 @@ function fighterFromSpirit(spirit: Spirit, id: string, side: Side, x: number, y:
   // (owl/firefly/bat). Reading pwr alone gimped every caster — use whichever is their strength.
   const atk = Math.max(s.pwr, s.foc)
   return {
-    id, side, species: spirit.species, element: spirit.element, name: spirit.name,
+    id, side, species: spirit.species, element: spirit.element, bElement: toBattleElement(spirit.element),
+    name: spirit.name,
     x, y, facing: side === 'ally' ? 0 : Math.PI,
     hp: maxHp, maxHp, pwr: atk, grd: s.grd, agi: s.agi,
     radius: 0.35 + s.maxHp / 260, speed,
-    reach: 0.9, atkCd: 0.4, atkInterval: Math.max(0.95, 1.9 - s.agi / 70),
+    reach: 0.9, orbitDir: slot % 2 === 0 ? 1 : -1,
     stance: 'aggressive', targetId: null,
-    flinch: 0, defDownT: 0, defDownAmt: 0, shieldT: 0, numbT: 0, braceT: 0, recoverT: 0, hitFlash: 0,
-    wind: null, winCd: 2.5,
+    kit: kitForSpirit(spirit), act: null, st: freshStatus(), stage: freshStages(),
+    flinch: 0, defDownT: 0, defDownAmt: 0, shieldT: 0, numbT: 0, braceT: 0, hitFlash: 0,
   }
 }
 
@@ -169,11 +192,11 @@ export function createArena(spec: ArenaSpec): ArenaState {
   const fighters: Fighter[] = []
   spec.allies.forEach((sp, i) => {
     const n = spec.allies.length
-    fighters.push(fighterFromSpirit(sp, `a${i}`, 'ally', spread(i, n) * 2.2, -R * 0.55))
+    fighters.push(fighterFromSpirit(sp, `a${i}`, 'ally', spread(i, n) * 2.2, -R * 0.55, i))
   })
   spec.enemies.forEach((sp, i) => {
     const n = spec.enemies.length
-    fighters.push(fighterFromSpirit(sp, `e${i}`, 'enemy', spread(i, n) * 2.2, R * 0.55))
+    fighters.push(fighterFromSpirit(sp, `e${i}`, 'enemy', spread(i, n) * 2.2, R * 0.55, i))
   })
   return {
     t: 0, R, fighters,
@@ -198,22 +221,49 @@ function nearestEnemy(state: ArenaState, f: Fighter): Fighter | null {
   return best
 }
 
-function effGrd(f: Fighter): number { return f.defDownT > 0 ? f.grd * (1 - f.defDownAmt) : f.grd }
+// ── effective stats — Keeper aids + canon statuses + stat stages, one place ────
+function effGrd(f: Fighter): number {
+  let g = f.grd * stageMult(f.stage.grd)
+  if (f.defDownT > 0) g *= 1 - f.defDownAmt
+  if (f.st.fortifyT > 0) g *= 1.25
+  if (f.st.crystallized) g *= 0.8
+  return g
+}
+function effAgi(f: Fighter): number { return f.agi * stageMult(f.stage.agi) }
+function effSpeed(f: Fighter): number {
+  if (f.st.anchorT > 0) return 0                  // rooted
+  return f.speed * (f.st.fortifyT > 0 ? 0.7 : 1)  // locked in place is slow
+}
 
-function applyDamage(state: ArenaState, from: Fighter, to: Fighter, base: number, braceHalves = true) {
+/** An enemy heavy is winding at `id` — the clock defensive reads run on. */
+function incomingHeavy(state: ArenaState, id: string): Fighter | null {
+  return state.fighters.find(g =>
+    alive(g) && g.act?.phase === 'windup' && g.act.move.heavy && g.act.targetId === id) ?? null
+}
+
+// Guard mitigates as a RATIO, never a wall: dmg = base * K/(K+grd). A stacked tank
+// shrugs hits down to a third, but nothing reaches immunity — the linear subtraction
+// this replaced let a +2-warded water-bear take literal 1s forever (96% stalemates).
+const GRD_K = 80
+
+function applyDamage(state: ArenaState, from: Fighter, to: Fighter, base: number, moveId: string, eff: 'super' | 'weak' | 'neutral', braceHalves = true) {
   const braced = braceHalves && to.braceT > 0
-  let dmg = Math.max(1, Math.round(base - effGrd(to) * 0.25))
+  let dmg = Math.max(1, Math.round(base * GRD_K / (GRD_K + effGrd(to))))
   if (braced) dmg = Math.max(1, Math.round(dmg * 0.5))
-  if (to.shieldT > 0) dmg = Math.max(1, Math.round(dmg * 0.45))   // guarded → incoming softened
+  if (to.shieldT > 0) dmg = Math.max(1, Math.round(dmg * 0.45))          // guarded → incoming softened
+  if (to.st.crystallized) { dmg = Math.round(dmg * 1.25); to.st.crystallized = false }  // brittle shatters
+  if (to.st.surgeT > 0) dmg = Math.round(dmg * 1.15)                     // rattled defenses
   to.hp = Math.max(0, to.hp - dmg)
   to.hitFlash = 0.16
   // knockback — the hit visibly lands (shoved along the attacker→target axis)
   const kb = braced ? 0.06 : 0.17
   const ang = Math.atan2(to.y - from.y, to.x - from.x)
   to.x += Math.cos(ang) * kb; to.y += Math.sin(ang) * kb
-  state.events.push({ type: 'hit', from: from.id, to: to.id, dmg })
+  state.events.push({ type: 'hit', from: from.id, to: to.id, dmg, moveId, eff })
   if (to.hp <= 0) state.events.push({ type: 'ko', who: to.id })
 }
+
+const WITHER_MISS = 0.5   // numbed → half its strikes whiff (knob)
 
 // ── the tick — fixed dt, deterministic ─────────────────────────────────────────
 export function tick(state: ArenaState, dt: number, commands: KeeperCommand[] = []) {
@@ -233,54 +283,113 @@ export function tick(state: ArenaState, dt: number, commands: KeeperCommand[] = 
   k.bagCdLeft = Math.max(0, k.bagCdLeft - dt)
   for (const a of k.aid) a.cdLeft = Math.max(0, a.cdLeft - dt)
 
-  // 3) per-fighter status clocks + AI
+  // 3) per-fighter clocks + statuses + AI
   for (const f of state.fighters) {
     if (!alive(f)) continue
     f.flinch = Math.max(0, f.flinch - dt)
     f.defDownT = Math.max(0, f.defDownT - dt)
     f.shieldT = Math.max(0, f.shieldT - dt)
-    f.numbT = Math.max(0, f.numbT - dt)   // Witherbloom's numbness fading
+    f.numbT = Math.max(0, f.numbT - dt)
     f.braceT = Math.max(0, f.braceT - dt)
-    f.recoverT = Math.max(0, f.recoverT - dt)
     f.hitFlash = Math.max(0, f.hitFlash - dt)
-    f.atkCd = Math.max(0, f.atkCd - dt)
-    f.winCd = Math.max(0, f.winCd - dt)
+    for (const m of f.kit) m.cdLeft = Math.max(0, m.cdLeft - dt)
 
-    if (f.flinch > 0) { if (f.wind) { state.events.push({ type: 'wind_interrupt', who: f.id }); f.wind = null; f.winCd = Math.max(f.winCd, 1.2) } continue }
+    // canon status clocks
+    const st = f.st
+    if (st.ignitionT > 0) {                          // burning mana — DOT
+      st.ignitionT = Math.max(0, st.ignitionT - dt)
+      f.hp = Math.max(0, f.hp - (f.maxHp / 36) * dt)
+      if (f.hp <= 0) { state.events.push({ type: 'ko', who: f.id }); continue }
+    }
+    if (st.regenT > 0) {                             // mending current
+      st.regenT = Math.max(0, st.regenT - dt)
+      f.hp = Math.min(f.maxHp, f.hp + (f.maxHp / 45) * dt)
+    }
+    if (st.erosionT > 0) {                           // stats crumble
+      st.erosionT = Math.max(0, st.erosionT - dt)
+      st.erosionTick -= dt
+      if (st.erosionTick <= 0) {
+        st.erosionTick = 2
+        const stats: ('pwr' | 'grd' | 'agi')[] = ['pwr', 'grd', 'agi']
+        const pick = stats[Math.floor(state.rng() * 3)]
+        f.stage[pick] = Math.max(-3, f.stage[pick] - 1)
+        state.events.push({ type: 'stat', who: f.id, stat: pick, stages: -1 })
+      }
+    }
+    st.fortifyT = Math.max(0, st.fortifyT - dt)
+    st.surgeT = Math.max(0, st.surgeT - dt)
+    st.anchorT = Math.max(0, st.anchorT - dt)
+
+    // flinch: frozen — and it breaks a windup (the Keeper's interrupt, and canon's)
+    if (f.flinch > 0) {
+      if (f.act?.phase === 'windup') {
+        state.events.push({ type: 'move_interrupt', who: f.id, moveId: f.act.move.id })
+        f.act = null
+      }
+      continue
+    }
 
     const target = f.targetId ? state.fighters.find(g => g.id === f.targetId && alive(g)) ?? nearestEnemy(state, f) : nearestEnemy(state, f)
     if (!target) continue
     f.targetId = target.id
-    f.facing = Math.atan2(target.y - f.y, target.x - f.x)
     const d = dist(f, target)
 
-    // heavy wind-up — both sides channel one (spirits fight on their own). A defending spirit
-    // holds instead. Enemy winds telegraph a danger-ring the Keeper times against; ally winds
-    // just fire (your spirits doing their thing).
-    if (f.stance !== 'defend') { stepWind(state, f, target, d, dt); if (f.wind) continue }
+    // a move in flight owns the fighter until it lands
+    if (f.act) {
+      const a = f.act
+      a.t += dt
+      if (a.phase === 'windup') {
+        const tgt = state.fighters.find(g => g.id === a.targetId && alive(g))
+        if (tgt) f.facing = Math.atan2(tgt.y - f.y, tgt.x - f.x)   // track through the windup
+        if (a.t >= a.dur) {
+          executeMove(state, f, a)
+          f.act = { ...a, phase: 'recover', t: 0, dur: a.move.recover }
+        }
+      } else {
+        // recover: give ground — the strike-and-reposition tempo, no glued scrum
+        if (d < f.reach + f.radius + target.radius + 1.2) moveAway(f, target, dt * 0.85)
+        if (a.t >= a.dur) f.act = null
+      }
+      clampToRing(state, f)
+      continue
+    }
 
-    const inReach = d <= f.reach + f.radius + target.radius
+    f.facing = Math.atan2(target.y - f.y, target.x - f.x)
+
+    // defending: hold at mid range; brace when a heavy is bearing down on me
     if (f.stance === 'defend') {
-      // hold at mid range; brace when a wind-up is bearing down on me
-      const incoming = state.fighters.find(g => g.wind && g.wind.targetId === f.id)
-      if (incoming && incoming.wind && incoming.wind.t / incoming.wind.dur > 0.45) f.braceT = Math.max(f.braceT, 0.4)
+      const inc = incomingHeavy(state, f.id)
+      if (inc && inc.act && inc.act.t / inc.act.dur > 0.45) f.braceT = Math.max(f.braceT, 0.4)
       const want = f.reach * 1.6
       if (d < want) moveAway(f, target, dt)
       else if (d > want + 0.6) moveToward(f, target, dt)
-      if (inReach && f.atkCd <= 0) { basicAttack(state, f, target); f.atkCd = f.atkInterval * 1.25 }
-    } else {
-      // aggressive: strike-and-reposition — dart in, hit, give ground, re-close (no glued hug)
-      if (f.recoverT > 0) {
-        const space = f.reach + f.radius + target.radius + 1.2
-        if (d < space) moveAway(f, target, dt * 0.85)
-      } else if (!inReach) {
-        moveToward(f, target, dt)
-      } else if (f.atkCd <= 0) {
-        moveToward(f, target, dt)      // small lunge into the blow
-        basicAttack(state, f, target)
-        f.atkCd = f.atkInterval; f.recoverT = f.atkInterval * 0.6
-      }
     }
+
+    // pick the next move by instinct
+    const mv = chooseMove(f.kit, {
+      hpFrac: f.hp / f.maxHp,
+      stages: f.stage,
+      fortified: f.st.fortifyT > 0,
+      incomingHeavy: !!incomingHeavy(state, f.id),
+      targetElement: target.bElement,
+      targetAnchored: target.st.anchorT > 0,
+      defending: f.stance === 'defend',
+    }, state.rng)
+
+    if (mv) {
+      const inRange = mv.range === 0 || d <= mv.range + f.radius + target.radius
+      if (inRange) {
+        mv.cdLeft = mv.cd
+        f.act = { move: mv, phase: 'windup', t: 0, dur: mv.windup, targetId: target.id }
+        state.events.push({ type: 'move_start', who: f.id, target: target.id, moveId: mv.id, name: mv.name, state: mv.state, heavy: mv.heavy, windup: mv.windup })
+      } else if (f.stance !== 'defend') {
+        moveTowardSpd(f, target, dt, effSpeed(f))
+      }
+    } else if (f.stance !== 'defend') {
+      // the between-moves dance: circle the foe at strike range, visibly alive
+      orbit(f, target, dt)
+    }
+    clampToRing(state, f)
   }
 
   // 4) outcome
@@ -290,48 +399,102 @@ export function tick(state: ArenaState, dt: number, commands: KeeperCommand[] = 
   else if (!allyLeft) state.outcome = 'lose'
 }
 
-const WITHER_MISS = 0.5   // numbed → half its strikes whiff (knob)
-
-function basicAttack(state: ArenaState, f: Fighter, target: Fighter) {
+// ── move execution — dodges are events, damage is elemental, statuses are canon ──
+function executeMove(state: ArenaState, f: Fighter, a: Act) {
+  const m = a.move
+  // numbed (Witherbloom) → the whole technique can fumble
   if (f.numbT > 0 && state.rng() < WITHER_MISS) { state.events.push({ type: 'miss', who: f.id }); return }
-  applyDamage(state, f, target, f.pwr * 0.34)   // light — the heavy wind-up is the real threat
-}
 
-function stepWind(state: ArenaState, f: Fighter, target: Fighter, d: number, dt: number) {
-  const foeSide: Side = f.side === 'ally' ? 'enemy' : 'ally'
-  if (f.wind) {
-    f.wind.t += dt
-    if (f.wind.t >= f.wind.dur) {
-      // numbed → even the heavy can fumble (Witherbloom): the whole wind-up whiffs
-      if (f.numbT > 0 && state.rng() < WITHER_MISS) { state.events.push({ type: 'miss', who: f.id }); f.wind = null; f.winCd = 5.5; return }
-      // land it on the opposite side within range of the strike point (target's position at fire)
-      const tgt = state.fighters.find(g => g.id === f.wind!.targetId && alive(g))
-      if (tgt) {
-        for (const g of state.fighters) {
-          if (g.side !== foeSide || !alive(g)) continue
-          if (Math.hypot(g.x - tgt.x, g.y - tgt.y) <= f.wind.range) applyDamage(state, f, g, f.wind.dmg)
-        }
-        state.events.push({ type: 'wind_land', who: f.id, target: tgt.id, dmg: f.wind.dmg })
-      }
-      f.wind = null
-      f.winCd = 5.5
+  // self-directed pieces land regardless of the foe
+  if (m.selfEffect && state.rng() * 100 < (m.selfEffectChance ?? 100)) {
+    applyStatus(f.st, m.selfEffect)
+    state.events.push({ type: 'status', who: f.id, status: m.selfEffect })
+  }
+  for (const c of m.statChanges ?? []) {
+    if (c.target !== 'self') continue
+    if (!(c.stat in f.stage)) continue
+    const key = c.stat as keyof StageState
+    f.stage[key] = Math.max(-3, Math.min(3, f.stage[key] + c.stages))
+    state.events.push({ type: 'stat', who: f.id, stat: key, stages: c.stages })
+  }
+
+  const foeDirected = m.power > 0 || m.effect || (m.statChanges ?? []).some(c => c.target === 'foe')
+  if (!foeDirected) return
+
+  let primary = state.fighters.find(g => g.id === a.targetId && alive(g))
+  if (!primary) primary = nearestEnemy(state, f) ?? undefined
+  if (!primary) return
+
+  // the field moved during the windup — a foe that broke away simply isn't there
+  const slack = 0.8
+  const targets = m.aoe > 0
+    ? state.fighters.filter(g => g.side !== f.side && alive(g) && Math.hypot(g.x - primary!.x, g.y - primary!.y) <= m.aoe)
+    : (dist(f, primary) <= m.range + f.radius + primary.radius + slack ? [primary] : [])
+  if (!targets.length) { state.events.push({ type: 'miss', who: f.id }); return }
+
+  for (const tgt of targets) {
+    // accuracy vs agility — resolved as a VISIBLE dodge
+    const p = hitChance(m.accuracy, effAgi(f), effAgi(tgt), tgt.st.anchorT > 0)
+    if (state.rng() >= p) {
+      sidestep(state, f, tgt)
+      state.events.push({ type: 'dodge', who: tgt.id, from: f.id, moveId: m.id })
+      continue
     }
-    return
-  }
-  // start a wind-up when off cooldown and roughly in position
-  if (f.winCd <= 0 && d <= f.reach + 2.5) {
-    f.wind = { t: 0, dur: 1.5, range: 1.0, dmg: f.pwr * 0.58, targetId: target.id }
-    state.events.push({ type: 'wind_start', who: f.id, target: target.id })
+    if (m.power > 0) {
+      const { base, label } = moveDamage(f.pwr, f.stage.pwr, m, f.bElement, tgt.bElement, state.t)
+      applyDamage(state, f, tgt, base, m.id, label)
+      if (!alive(tgt)) continue
+    }
+    if (m.effect && state.rng() * 100 < (m.effectChance ?? 100)) {
+      applyStatus(tgt.st, m.effect)
+      state.events.push({ type: 'status', who: tgt.id, status: m.effect })
+    }
+    for (const c of m.statChanges ?? []) {
+      if (c.target !== 'foe') continue
+      if (!(c.stat in tgt.stage)) continue
+      const key = c.stat as keyof StageState
+      tgt.stage[key] = Math.max(-3, Math.min(3, tgt.stage[key] + c.stages))
+      state.events.push({ type: 'stat', who: tgt.id, stat: key, stages: c.stages })
+    }
   }
 }
 
-function moveToward(f: Fighter, t: Fighter, dt: number) {
+/** The dodge made flesh: the target darts perpendicular to the attack axis. */
+function sidestep(state: ArenaState, from: Fighter, tgt: Fighter) {
+  const ang = Math.atan2(tgt.y - from.y, tgt.x - from.x) + (state.rng() < 0.5 ? 1 : -1) * Math.PI / 2
+  tgt.x += Math.cos(ang) * 0.9
+  tgt.y += Math.sin(ang) * 0.9
+  clampToRing(state, tgt)
+}
+
+function moveToward(f: Fighter, t: Fighter, dt: number) { moveTowardSpd(f, t, dt, f.speed) }
+function moveTowardSpd(f: Fighter, t: Fighter, dt: number, spd: number) {
   const a = Math.atan2(t.y - f.y, t.x - f.x)
-  f.x += Math.cos(a) * f.speed * dt; f.y += Math.sin(a) * f.speed * dt
+  f.x += Math.cos(a) * spd * dt; f.y += Math.sin(a) * spd * dt
 }
 function moveAway(f: Fighter, t: Fighter, dt: number) {
   const a = Math.atan2(t.y - f.y, t.x - f.x) + Math.PI
-  f.x += Math.cos(a) * f.speed * dt; f.y += Math.sin(a) * f.speed * dt
+  const spd = effSpeed(f)
+  f.x += Math.cos(a) * spd * dt; f.y += Math.sin(a) * spd * dt
+}
+
+/** Hold strike range and circle — the fight breathes between moves instead of hugging. */
+function orbit(f: Fighter, t: Fighter, dt: number) {
+  const spd = effSpeed(f)
+  if (spd <= 0) return
+  const want = f.reach + f.radius + t.radius + 1.1
+  const d = dist(f, t)
+  if (d > want + 0.5) moveTowardSpd(f, t, dt, spd)
+  else if (d < want - 0.5) moveAway(f, t, dt)
+  const a = Math.atan2(t.y - f.y, t.x - f.x) + (Math.PI / 2) * f.orbitDir
+  f.x += Math.cos(a) * spd * 0.55 * dt
+  f.y += Math.sin(a) * spd * 0.55 * dt
+}
+
+function clampToRing(state: ArenaState, f: Fighter) {
+  const lim = state.R * 0.97
+  const r = Math.hypot(f.x, f.y)
+  if (r > lim) { f.x *= lim / r; f.y *= lim / r }
 }
 
 function applyCommand(state: ArenaState, cmd: KeeperCommand) {
@@ -367,8 +530,8 @@ function applyCommand(state: ArenaState, cmd: KeeperCommand) {
     if (g) { g.defDownT = 5; g.defDownAmt = 0.5 }
   } else if (slot.id === 'wardcoil') {
     // Coilguard's gift — plates lock, tail-coil throws round the ally under the most pressure
-    // (targeted by a wind-up, else the lowest-HP standing ally). Incoming damage softened ~6s.
-    const winding = state.fighters.filter(f => f.side === 'enemy' && f.wind && alive(f)).map(f => f.wind!.targetId)
+    // (targeted by a heavy windup, else the lowest-HP standing ally). Incoming damage softened ~6s.
+    const winding = state.fighters.filter(x => x.side === 'enemy' && alive(x) && x.act?.phase === 'windup' && x.act.move.heavy).map(x => x.act!.targetId)
     const g = cmd.targetId
       ? state.fighters.find(x => x.id === cmd.targetId && x.side === 'ally' && alive(x))
       : state.fighters.filter(x => x.side === 'ally' && alive(x))
@@ -387,4 +550,23 @@ function applyCommand(state: ArenaState, cmd: KeeperCommand) {
 
 function nearestEnemyForKeeper(state: ArenaState): Fighter | null {
   return state.fighters.filter(f => f.side === 'enemy' && alive(f)).sort((a, b) => a.hp - b.hp)[0] ?? null
+}
+
+// ── pre-script the whole fight at mount ─────────────────────────────────────────
+// Runs the sim headless to completion and returns the outcome + the full event
+// timeline. Because tick() is deterministic per seed, a renderer can then replay the
+// SAME seed live — pacing it with hit-stop and KO slow-mo — and land on this exact
+// outcome; skip jumps straight here.
+export interface SimFrame { t: number; e: ArenaEvent }
+export interface SimResult { outcome: ArenaState['outcome']; duration: number; timeline: SimFrame[] }
+
+export function simulate(spec: ArenaSpec, capS = 90, commandsAt?: (s: ArenaState) => KeeperCommand[]): SimResult {
+  const s = createArena(spec)
+  const dt = 1 / 30
+  const timeline: SimFrame[] = []
+  while (s.outcome === 'ongoing' && s.t < capS) {
+    tick(s, dt, commandsAt ? commandsAt(s) : [])
+    for (const e of s.events) timeline.push({ t: s.t, e })
+  }
+  return { outcome: s.outcome, duration: s.t, timeline }
 }

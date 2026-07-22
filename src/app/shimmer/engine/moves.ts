@@ -1,5 +1,9 @@
 // Battle move system — element matchups, move definitions, state access
 // Canon: shimmer-battles.md — 4 elements, 7 states, soft matchups (no immunities)
+// Names: CANON/game/moves.md is the ONE registry (ruled 2026-07-22) — every name here is
+// registered there. Ids are build-side and stable; five names were merged onto registry
+// names on ruling day (ice_spike=Ice Dart, life_mend=Mend, barrier_wall=Barrier,
+// illuminate=Enlighten, metal_snare=Shackle). New moves must register there first.
 
 import type { Species, Element } from '../spirits/spirit'
 
@@ -106,7 +110,7 @@ export const MOVES_SOLID = {
   // Starter tier (55 power)
   mana_shard:    m('mana_shard', 'Mana Shard', 'mana', 'solid', 55, 95, 20, 0, 'A sharp fragment of crystallized mana.'),
   stone_throw:   m('stone_throw', 'Stone Throw', 'earth', 'solid', 55, 95, 20, 0, 'Hurl a dense chunk of earth crystal.'),
-  ice_spike:     m('ice_spike', 'Ice Spike', 'water', 'solid', 55, 95, 20, 0, 'A frozen shard of compressed water mana.'),
+  ice_spike:     m('ice_spike', 'Ice Dart', 'water', 'solid', 55, 95, 20, 0, 'A frozen shard of compressed water mana.'),
   // High tier (70 power)
   manalic_lance: m('manalic_lance', 'Manalic Lance', 'mana', 'solid', 70, 90, 12, 0, 'Crystallized mana shaped into a piercing lance.'),
   iron_crush:    m('iron_crush', 'Iron Crush', 'earth', 'solid', 70, 90, 12, 0, 'A dense mass of earth mana slams into the target.'),
@@ -118,7 +122,7 @@ export const MOVES_SOLID = {
 // ──────────────────────────────────────────────
 
 export const MOVES_COMPACT = {
-  barrier_wall: m('barrier_wall', 'Barrier Wall', 'mana', 'compact', 0, 100, 15, 0, 'Raise a mana barrier. Fortifies defenses.', {
+  barrier_wall: m('barrier_wall', 'Barrier', 'mana', 'compact', 0, 100, 15, 0, 'Raise a mana barrier. Fortifies defenses.', {
     statChanges: [{ target: 'self', stat: 'grd', stages: 1 }],
     selfEffect: 'fortify', selfEffectChance: 40,
   }),
@@ -164,7 +168,7 @@ export const MOVES_FLOW = {
   // Starter (water)
   aqua_stream: m('aqua_stream', 'Aqua Stream', 'water', 'flow', 50, 100, 20, 0, 'A flowing current that may restore vitality.', { selfEffect: 'regen', selfEffectChance: 20 }),
   // Utility
-  life_mend: m('life_mend', 'Life Mend', 'mana', 'flow', 0, 100, 10, 0, 'Channel pure mana to mend wounds. Grants regen.', {
+  life_mend: m('life_mend', 'Mend', 'mana', 'flow', 0, 100, 10, 0, 'Channel pure mana to mend wounds. Grants regen.', {
     selfEffect: 'regen', selfEffectChance: 100,
     statChanges: [{ target: 'self', stat: 'grd', stages: 1 }],
   }),
@@ -205,8 +209,8 @@ export const MOVES_SCATTER = {
 
 export const MOVES_BIND = {
   enchant_lock: m('enchant_lock', 'Enchant Lock', 'mana', 'bind', 50, 90, 15, 0, 'Mana threads bind the target. May anchor.', { effect: 'anchor', effectChance: 30 }),
-  illuminate:   m('illuminate', 'Illuminate', 'storm', 'bind', 45, 95, 15, 0, 'Blinding light reveals and pins. May anchor.', { effect: 'anchor', effectChance: 25 }),
-  metal_snare:  m('metal_snare', 'Metal Snare', 'earth', 'bind', 55, 85, 15, 0, 'Earth-forged shackles grip the target. May anchor.', { effect: 'anchor', effectChance: 35 }),
+  illuminate:   m('illuminate', 'Enlighten', 'storm', 'bind', 45, 95, 15, 0, 'Blinding light reveals and pins. May anchor.', { effect: 'anchor', effectChance: 25 }),
+  metal_snare:  m('metal_snare', 'Shackle', 'earth', 'bind', 55, 85, 15, 0, 'Earth-forged shackles grip the target. May anchor.', { effect: 'anchor', effectChance: 35 }),
   // Utility bind
   mana_seal: m('mana_seal', 'Mana Seal', 'mana', 'bind', 0, 100, 10, 0, 'Seal the target in mana. Anchors and lowers Power.', {
     effect: 'anchor', effectChance: 100,
