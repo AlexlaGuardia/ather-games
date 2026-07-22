@@ -5,6 +5,11 @@ import SAVED from './heightmaps.json'
 
 const SAVED_HEIGHTS = SAVED as Record<string, number[][]>
 
+// Live on-disk heights fetched at boot (see /shimmer/world-data) — newer than the compiled
+// import whenever a sculpt was saved since the last build. Checked first when set.
+let LIVE_HEIGHTS: Record<string, number[][]> | null = null
+export function setLiveHeights(h: Record<string, number[][]>) { LIVE_HEIGHTS = h }
+
 // Demo fallback (Moonwell Glade pyramid) — only shown until real heights are sculpted + saved.
 const DEMO: Record<string, number[][]> = {}
 DEMO['moonwell-glade'] = (() => {
@@ -21,7 +26,7 @@ DEMO['moonwell-glade'] = (() => {
 
 // Returns a fresh COPY (the 3D sculpt brush mutates it in place; never touch the import).
 export function getHeightGrid(zoneId: string, rows: number, cols: number): number[][] {
-  const h = SAVED_HEIGHTS[zoneId] ?? DEMO[zoneId]
+  const h = LIVE_HEIGHTS?.[zoneId] ?? SAVED_HEIGHTS[zoneId] ?? DEMO[zoneId]
   if (h && h.length === rows && h[0]?.length === cols) return h.map((row) => [...row])
   return Array.from({ length: rows }, () => new Array(cols).fill(0))
 }

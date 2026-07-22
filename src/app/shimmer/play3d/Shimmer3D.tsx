@@ -44,6 +44,7 @@ import { useCloudSave } from '@/lib/use-cloud-save'
 import { useWallet } from '@/lib/use-wallet'
 import { StationMenus, type PlacedStruct, type StationKind } from './StationMenus'
 import { prettyItem, menuBtn, TOOL_HUD } from './ui'
+import { WorldMap } from './WorldMap'
 import { WORLD_ZONE_ID, registerGardenWorld, getGardenWorld, isStitched, fromWorld } from '../world/garden-world'
 import { allNpcs, nodePlacementsFor, logicalZoneAt, structuresView, logicalStruct } from './world-adapter'
 
@@ -1414,6 +1415,13 @@ export default function Shimmer3D() {
   // slideRef = held (true while the slide button is pressed). Keyboard uses Space/Shift directly.
   const jumpRef = useRef(false)
   const slideRef = useRef(false)
+  // World map overlay (M / HUD button). Closed during battles — the arena owns the screen.
+  const [showMap, setShowMap] = useState(false)
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.code === 'KeyM' && !curBattleRef.current) setShowMap(v => !v) }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
   // Pointer-lock state → drives the "click to look" nudge (shown only when first-person + uncaptured).
   const [pointerLocked, setPointerLocked] = useState(false)
   useEffect(() => {
@@ -2407,7 +2415,7 @@ export default function Shimmer3D() {
         const rs = await Promise.all(posts)
         const ok = rs.every(r => r.ok)
         setSaveMsg(!touched ? 'no district changes to save'
-          : ok ? `saved ${touched} district${touched > 1 ? 's' : ''} ✓ (ping Jin to build it live)${mortarEdits ? ' · mortar/corridor edits are derived — not saved' : ''}`
+          : ok ? `saved ${touched} district${touched > 1 ? 's' : ''} ✓ — live on next refresh${mortarEdits ? ' · mortar/corridor edits are derived — not saved' : ''}`
           : 'save failed')
         setTimeout(() => setSaveMsg(''), 4500)
         return
@@ -2419,7 +2427,7 @@ export default function Shimmer3D() {
         // node layer → node-placements.ts (same endpoint, `nodes` payload; {nodeType,x,y} shape)
         fetch('/shimmer/save-map', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ nodes: nodesRef.current.map(nd => ({ nodeType: nd.type, x: nd.tileX, y: nd.tileY })), mapId: id }) }),
       ])
-      setSaveMsg(h.ok && g.ok && n.ok ? 'saved ✓ (ping Jin to build it live)' : 'save failed')
+      setSaveMsg(h.ok && g.ok && n.ok ? 'saved ✓ — live on next refresh' : 'save failed')
     } catch { setSaveMsg('save failed') }
     setTimeout(() => setSaveMsg(''), 3500)
   }, [zone.id])
@@ -2459,7 +2467,7 @@ export default function Shimmer3D() {
       }}>
         Shimmer 3D — {zone.id === WORLD_ZONE_ID ? (getZone(ZONES, districtZone)?.name ?? zone.name) : zone.name}{editMode ? '  ·  EDIT' : ''}<br />
         <span style={{ opacity: 0.8 }}>
-          {editMode ? 'left-drag paint · WASD fly · Q/E down·up · right-drag look · scroll zoom' : `WASD run · Space jump · Shift slide · jump into wall + hold = climb · ${hasStarter ? 'mist = wild spirits' : 'meet Gregory first'}${isOwner ? ' · B edit' : ''}`}
+          {editMode ? 'left-drag paint · WASD fly · Q/E down·up · right-drag look · scroll zoom' : `WASD run · Space jump · Shift slide · jump into wall + hold = climb · M map · ${hasStarter ? 'mist = wild spirits' : 'meet Gregory first'}${isOwner ? ' · B edit' : ''}`}
         </span>
         {!editMode && <><br /><span style={{ color: '#ffe08a' }}>✦ {wallet.marks} marks</span></>}
       </div>
@@ -2474,6 +2482,15 @@ export default function Shimmer3D() {
       )}
 
       <Compass yawRef={camYaw} />
+
+      {/* world map — M key; the button serves touch */}
+      {!battle && !editMode && (
+        <button onClick={() => setShowMap(v => !v)} style={{
+          position: 'fixed', top: 12, left: 'calc(50% + 42px)', zIndex: 34, width: 34, height: 34, borderRadius: 8,
+          background: 'rgba(10,8,20,0.7)', border: '1px solid #ffffff44', color: '#ffe9b0', font: '700 15px ui-monospace, monospace', cursor: 'pointer',
+        }} title="World map (M)">🗺</button>
+      )}
+      {showMap && <WorldMap zoneId={zone.id} gridRef={gridRef} posRef={posRef} yawRef={camYaw} onClose={() => setShowMap(false)} />}
 
       {/* quest objective nudge — advances with the full hold chain (Greg → Thistle → Sorrel → Brack).
           Goes quiet once Hold 3 clears — the liberation arc is done. */}

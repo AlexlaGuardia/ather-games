@@ -10,6 +10,9 @@ import type { PlacedStruct } from './StationMenus'
 
 const toWorld = (zoneId: string, x: number, y: number) => getGardenWorld().toWorld(zoneId, x, y)
 
+/** Drop the memoized world-space remaps (call after applyLiveWorldData re-composes). */
+export function invalidateWorldCaches() { worldNpcs = null; worldNodes = null }
+
 // NPCs remapped into the continent, appended to the per-zone originals — the zone filter in
 // the Scene picks whichever set matches the mounted zone, so old per-zone mode still works.
 let worldNpcs: NPC3D[] | null = null

@@ -11,7 +11,8 @@
 // survive as real doors. LAYOUT_TWEAKS nudges placements — map placement is Alex's eye.
 
 import { ZONES, type Zone, type Warp } from './zones'
-import { getHeightGrid } from './heightmaps'
+import { getHeightGrid, setLiveHeights } from './heightmaps'
+import { ZONE_NODES, type NodePlacement } from './node-placements'
 import { SOLID } from './tiles'
 
 // The Garden continent = the canon surface loop (shimmer-geography.md). Underground
@@ -243,4 +244,74 @@ export function composeGardenWorld(): GardenWorld {
       return p ? { x: p.ox + x, y: p.oy + y } : null
     },
   }
+}
+
+// ── The live world realm ────────────────────────────────────────────────────────────────
+// The composed continent registers as a synthetic Zone so every existing consumer
+// (getZone, checkWarp, save/load validation, the dev zone dropdown) picks it up for free.
+// Compose is lazy + cached: first access pays ~10ms once, then it's a lookup.
+
+export const WORLD_ZONE_ID = 'garden-world'
+
+let cachedWorld: GardenWorld | null = null
+export function getGardenWorld(): GardenWorld {
+  if (!cachedWorld) cachedWorld = composeGardenWorld()
+  return cachedWorld
+}
+
+/** Overlay the live on-disk world data (from /shimmer/world-data) onto the compiled sources,
+ *  then invalidate any prior compose so the continent rebuilds from the fresh data. Call
+ *  BEFORE the game mounts (the play3d page boot does). Missing/failed pieces fall back to
+ *  the compiled data per zone — a partial payload is always safe. */
+export function applyLiveWorldData(data: {
+  grids?: Record<string, number[][]>
+  nodes?: Record<string, { type: string; tileX: number; tileY: number }[]>
+  heights?: Record<string, number[][]>
+}) {
+  for (const z of ZONES) {
+    if (z.id === WORLD_ZONE_ID) continue
+    const g = data.grids?.[z.id]
+    if (Array.isArray(g) && g.length > 1 && Array.isArray(g[0])) z.grid = g
+    const n = data.nodes?.[z.id]
+    if (Array.isArray(n)) ZONE_NODES[z.id] = n as NodePlacement[]
+  }
+  if (data.heights) setLiveHeights(data.heights)
+  // recompose from the fresh data on next access; drop the stale synthetic zone
+  cachedWorld = null
+  const i = ZONES.findIndex(z => z.id === WORLD_ZONE_ID)
+  if (i !== -1) ZONES.splice(i, 1)
+}
+
+export const isStitched = (zoneId: string) => SURFACE_ZONES.includes(zoneId)
+
+/** world coords → logical zone + local coords (null in the cloud mortar / corridors) */
+export function fromWorld(x: number, y: number): { zoneId: string; x: number; y: number } | null {
+  const id = getGardenWorld().zoneAt(x, y)
+  if (!id) return null
+  const p = getGardenWorld().placements.get(id)!
+  return { zoneId: id, x: x - p.ox, y: y - p.oy }
+}
+
+/** Push the composed world into ZONES (idempotent). Spawn = Moonwell Glade's spot in the
+ *  world (matches the old START_ZONE flow: find Gregory first). */
+export function registerGardenWorld(): Zone {
+  const existing = ZONES.find(z => z.id === WORLD_ZONE_ID)
+  if (existing) return existing
+  const w = getGardenWorld()
+  const moonwell = ZONES.find(z => z.id === 'moonwell-glade')
+  const spawn = moonwell?.playerStart
+    ? w.toWorld('moonwell-glade', moonwell.playerStart.tileX, moonwell.playerStart.tileY)
+    : null
+  const zone: Zone = {
+    id: WORLD_ZONE_ID,
+    name: 'The Shimmer Garden',
+    grid: w.grid,
+    playerStart: spawn ? { tileX: spawn.x, tileY: spawn.y } : w.playerStart,
+    warps: w.doorWarps.map(d => ({
+      fromX: d.worldX, fromY: d.worldY, toZone: d.toZone, toX: d.toX, toY: d.toY,
+      direction: d.direction, requiredFlag: d.requiredFlag,
+    })),
+  }
+  ZONES.push(zone)
+  return zone
 }
