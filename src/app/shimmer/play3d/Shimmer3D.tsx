@@ -1278,10 +1278,12 @@ const DEG = Math.PI / 180
 // range console (T): target drift, or a ground HUNTER that chases the player and returns fire — that's
 // when HP/shield matter. Shield drains first + recharges out of combat; HP does NOT regen (healing
 // arrives later as items — that's what makes them matter). HP empty → systems reset (full refill).
-const AM_DAMAGE = 7           // AM Riser damage per round, body
-const AM_CRIT = 11            // headshot — round lands in the target's upper cap
-const CRIT_Y = 0.25           // hit above target-center + this = the head zone
-const TARGET_HP = 21          // 3 body rounds / 2 crits to pop a floater (rescaled to the 7-dmg round)
+const AM_DAMAGE = 7           // AM Riser damage per round, body (it's a SIDEARM — no two-shot deletes)
+const AM_CRIT = 11            // crit — bullseye core on boards, head zone on the hunter
+const CRIT_Y = 0.25           // hunter: hit above center + this = the head zone
+const TARGET_R = 0.6          // target board radius (white disc; red ring inside it)
+const TARGET_CRIT_R = 0.2     // the gold core — a round landing inside it is the bullseye crit
+const TARGET_HP = 21          // 3 body rounds / 2 crits to pop a board (rescaled to the 7-dmg round)
 const DRONE_DMG = 11          // hunter orb damage to the player
 const DRONE_SPEED = 9         // tiles/sec — slow on purpose, dodging is the counterplay
 const DRONE_LIFE = 6          // seconds before an orb fizzles
@@ -1342,7 +1344,9 @@ function FiringRange({ firingRef, adsRef, gridRef, recoilRef, bloomRef, posRef, 
   const hunter = useRef({ pos: new THREE.Vector3(), hp: 0, alive: false, respawn: 0, fireCd: 0, strafe: 0 })
   const shotRef = useRef<THREE.InstancedMesh>(null)
   const orbRef = useRef<THREE.InstancedMesh>(null)
-  const tgtRef = useRef<THREE.InstancedMesh>(null)
+  const boardRef = useRef<THREE.InstancedMesh>(null)  // target-board layers: white disc / red ring / gold core
+  const ringRef = useRef<THREE.InstancedMesh>(null)
+  const coreRef = useRef<THREE.InstancedMesh>(null)
   const huntRef = useRef<THREE.Mesh>(null)
   const toPlayer = useMemo(() => new THREE.Vector3(), [])
   const step = useMemo(() => new THREE.Vector3(), [])
@@ -1361,6 +1365,10 @@ function FiringRange({ firingRef, adsRef, gridRef, recoilRef, bloomRef, posRef, 
   const qSeg = useMemo(() => new THREE.Quaternion(), [])
   const AXIS_Z = useMemo(() => new THREE.Vector3(0, 0, 1), [])
   const pEye = useMemo(() => new THREE.Vector3(), [])  // player body-center; drones aim + collide here
+  const rel = useMemo(() => new THREE.Vector3(), [])   // projectile→board offset, for the bullseye radial
+  const vhat = useMemo(() => new THREE.Vector3(), [])  // projectile flight direction, normalized
+  const qT = useMemo(() => new THREE.Quaternion(), []) // per-board billboard rotation (face the player)
+  const AXIS_Y = useMemo(() => new THREE.Vector3(0, 1, 0), [])
   useFrame((state, dt) => {
     cd.current -= dt
     bloomRef.current = Math.max(0, bloomRef.current - BLOOM_DECAY * dt)  // cone recovers while not firing
@@ -1411,7 +1419,12 @@ function FiringRange({ firingRef, adsRef, gridRef, recoilRef, bloomRef, posRef, 
       if (cell === undefined || (cell & 0xFF) === WALL_ID) { p.life = 0; continue }  // wall/OOB stops it
       for (const t of targets) {
         if (t.alive && p.pos.distanceToSquared(t.pos) < TARGET_HIT_R2) {
-          const crit = p.pos.y > t.pos.y + CRIT_Y  // upper cap = the head zone
+          // bullseye: radial miss-distance of the flight line from the board center. Inside the gold
+          // core = crit — dead center means dead center, whatever angle the board is facing.
+          vhat.copy(p.vel).normalize()
+          rel.copy(p.pos).sub(t.pos)
+          rel.addScaledVector(vhat, -rel.dot(vhat))  // strip the along-flight component → radial offset
+          const crit = rel.lengthSq() < TARGET_CRIT_R * TARGET_CRIT_R
           t.hp -= crit ? AM_CRIT : AM_DAMAGE; p.life = 0; onHit(crit)  // hitmarker on every landed round
           if (t.hp <= 0) { t.alive = false; t.down = TARGET_RESPAWN }
           break
@@ -1519,15 +1532,24 @@ function FiringRange({ firingRef, adsRef, gridRef, recoilRef, bloomRef, posRef, 
       })
       shotRef.current.instanceMatrix.needsUpdate = true
     }
-    if (tgtRef.current) {
-      // drones shrink as they take damage — health state readable at range without a floating bar
+    // target boards: three stacked disc layers (board/ring/core) sharing one transform per target —
+    // billboarded to face the player (a range target you can always square up on), shrinking with damage
+    if (boardRef.current && ringRef.current && coreRef.current) {
       targets.forEach((t, i) => {
         const s = t.alive ? 0.68 + 0.32 * (t.hp / TARGET_HP) : 0
-        scl.setScalar(s)
-        m.compose(t.alive ? t.pos : zero, q, t.alive ? scl : zero)
-        tgtRef.current!.setMatrixAt(i, m)
+        if (t.alive && posRef.current) {
+          rel.set(posRef.current.x, t.pos.y, posRef.current.z).sub(t.pos)  // yaw-only facing — boards stay upright
+          if (rel.lengthSq() > 1e-4) qT.setFromUnitVectors(AXIS_Y, rel.normalize()); else qT.identity()
+          scl.setScalar(s)
+          m.compose(t.pos, qT, scl)
+        } else m.compose(zero, q, zero)
+        boardRef.current!.setMatrixAt(i, m)
+        ringRef.current!.setMatrixAt(i, m)
+        coreRef.current!.setMatrixAt(i, m)
       })
-      tgtRef.current.instanceMatrix.needsUpdate = true
+      boardRef.current.instanceMatrix.needsUpdate = true
+      ringRef.current.instanceMatrix.needsUpdate = true
+      coreRef.current.instanceMatrix.needsUpdate = true
     }
     if (orbRef.current) {
       orbs.forEach((o, i) => { m.compose(o.life > 0 ? o.pos : zero, q, o.life > 0 ? one : zero); orbRef.current!.setMatrixAt(i, m) })
@@ -1552,9 +1574,19 @@ function FiringRange({ firingRef, adsRef, gridRef, recoilRef, bloomRef, posRef, 
         <sphereGeometry args={[1, 8, 8]} />
         <meshBasicMaterial color="#aef2ff" transparent opacity={0.9} blending={THREE.AdditiveBlending} depthWrite={false} toneMapped={false} />
       </instancedMesh>
-      <instancedMesh ref={tgtRef} args={[undefined, undefined, targets.length]} frustumCulled={false}>
-        <sphereGeometry args={[0.5, 14, 14]} />
-        <meshStandardMaterial color="#ff6a52" emissive="#ff6a52" emissiveIntensity={0.9} />
+      {/* target boards — cylinder axis aligns to the billboard facing, so each reads as a bullseye
+          disc squared up on the player. Layer heights differ slightly so the rings never z-fight. */}
+      <instancedMesh ref={boardRef} args={[undefined, undefined, targets.length]} frustumCulled={false}>
+        <cylinderGeometry args={[TARGET_R, TARGET_R, 0.07, 24]} />
+        <meshStandardMaterial color="#f2f5f7" emissive="#f2f5f7" emissiveIntensity={0.25} />
+      </instancedMesh>
+      <instancedMesh ref={ringRef} args={[undefined, undefined, targets.length]} frustumCulled={false}>
+        <cylinderGeometry args={[0.38, 0.38, 0.11, 24]} />
+        <meshStandardMaterial color="#e6483f" emissive="#e6483f" emissiveIntensity={0.45} />
+      </instancedMesh>
+      <instancedMesh ref={coreRef} args={[undefined, undefined, targets.length]} frustumCulled={false}>
+        <cylinderGeometry args={[TARGET_CRIT_R, TARGET_CRIT_R, 0.15, 16]} />
+        <meshStandardMaterial color="#ffd44a" emissive="#ffd44a" emissiveIntensity={0.9} />
       </instancedMesh>
       {/* hunter return-fire orbs — hot amber so they read as INCOMING vs the player's cyan tracers */}
       <instancedMesh ref={orbRef} args={[undefined, undefined, EMAX]} frustumCulled={false}>
