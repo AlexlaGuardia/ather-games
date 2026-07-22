@@ -33,19 +33,6 @@ export const ENCOUNTER_TABLES: Record<string, ZoneEncounters> = {
     aiTier: 'wild',
   },
 
-  // The Crucible (practice arena) — high rate + varied foes so combat comes fast for feel-testing.
-  'crucible': {
-    rate: 0.25,
-    entries: [
-      { species: 'frog',        weight: 3, levelRange: [-1, 2] },
-      { species: 'bat',         weight: 3, levelRange: [0, 3] },
-      { species: 'owl',         weight: 2, levelRange: [1, 4] },
-      { species: 'rabbit',      weight: 2, levelRange: [0, 3] },
-      { species: 'firefly',     weight: 2, levelRange: [0, 3] },
-      { species: 'hummingbird', weight: 2, levelRange: [1, 4] },
-    ],
-    aiTier: 'wild',
-  },
 
   // Mycelial Path — early area, gentle wilds
   'mycelial-path': {

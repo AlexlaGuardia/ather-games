@@ -23,6 +23,10 @@ export interface Zone {
   warps: Warp[]
   playerStart?: { tileX: number; tileY: number } // default spawn point for this zone
   element?: ZoneElement // cultivation element (undefined = dev/throwaway zone, no affinity)
+  // Which side of the Ather this zone sits on. 'ather' (default) = spirit world: spirits/turn-based
+  // battles work, weapons are holstered. 'outside' = the physical world (the Crucible battle-royale
+  // + its firing range): weapons work, spirits are put away. This one flag drives both combat modes.
+  realm?: 'ather' | 'outside'
 }
 
 // Check if player is standing on a warp tile (respects flag requirements)
@@ -313,10 +317,13 @@ export const ZONES: Zone[] = [
     ],
   },
   {
-    // Practice combat arena — reached only from the owner-gated Crucible gate in Greg's home.
+    // The Crucible (battle-royale) — OUTSIDE the Ather, so weapons work here and spirits don't.
+    // We start with a firing range: open space to feel the first weapon. Reached only from the
+    // owner-gated Crucible gate in Greg's home.
     id: 'crucible',
-    name: 'The Crucible (Practice)',
+    name: 'The Crucible — Firing Range',
     grid: CRUCIBLE,
+    realm: 'outside',
     playerStart: { tileX: 7, tileY: 13 },
     warps: [
       // exit → back to the hub, 2 tiles below the Crucible gate (10,7)
