@@ -1264,14 +1264,21 @@ const ADS_BLOOM_SCALE = 0.35  // aimed fire blooms much less
 const KICK_PITCH = 0.0075     // rad of camera climb per round
 const KICK_YAW = 0.0035       // rad max random horizontal drift per round
 const DEG = Math.PI / 180
-// ── damage model ── the range shoots BACK: targets are training drones that return slow, dodgeable
-// orbs. Player shield drains before HP; shield recharges out of combat, HP does NOT regen (healing
+// ── damage model ── the DEFAULT range is peaceful (targets never shoot). Danger is opt-in via the
+// range console (T): target drift, or a ground HUNTER that chases the player and returns fire — that's
+// when HP/shield matter. Shield drains first + recharges out of combat; HP does NOT regen (healing
 // arrives later as items — that's what makes them matter). HP empty → systems reset (full refill).
 const AM_DAMAGE = 12          // AM Riser damage per round
-const TARGET_HP = 30          // 3 rounds to pop a drone; they shrink as they take damage
-const DRONE_DMG = 11          // drone orb damage to the player
+const TARGET_HP = 30          // 3 rounds to pop a floating target; they shrink as they take damage
+const DRONE_DMG = 11          // hunter orb damage to the player
 const DRONE_SPEED = 9         // tiles/sec — slow on purpose, dodging is the counterplay
 const DRONE_LIFE = 6          // seconds before an orb fizzles
+const HUNTER_HP = 60          // ground hunter takes 5 rounds
+const HUNTER_SPEED = 3.2      // chase speed, tiles/sec — pressure, not a race
+const HUNTER_FIRE_CD = 2.2    // seconds between hunter shots
+const HUNTER_HIT_R2 = 0.8 * 0.8
+const HUNTER_RESPAWN = 4      // seconds after a kill before it re-spawns (while the console toggle is on)
+const DRIFT_AMP = 2.4         // moving-targets strafe amplitude (tiles)
 const PLAYER_HIT_R2 = 0.6 * 0.6
 const MAX_HP = 100
 const MAX_SHIELD = 75
@@ -1282,15 +1289,16 @@ const RANGE_TARGETS: [number, number, number][] = [
   [15, 1.8, 26], [20, 2.5, 31], [25, 1.6, 23], [30, 2.9, 33],
   [35, 2.0, 27], [12, 2.3, 35], [38, 1.7, 21], [22, 3.1, 39],
 ]
-function FiringRange({ firingRef, adsRef, gridRef, recoilRef, bloomRef, posRef, hpRef, shieldRef, onHit, onShot, onPlayerDamage, onPlayerDown }: {
+function FiringRange({ firingRef, adsRef, gridRef, recoilRef, bloomRef, posRef, hpRef, shieldRef, rangeCfgRef, onHit, onShot, onPlayerDamage, onPlayerDown }: {
   firingRef: React.RefObject<boolean>   // held while left-click is down → full-auto
   adsRef: React.RefObject<boolean>      // aiming → muzzle offset moves to center (ADS tracer runs flat)
   gridRef: React.RefObject<number[][]>
   recoilRef: React.MutableRefObject<{ p: number; y: number }>  // pending camera kick; CameraRig drains it
   bloomRef: React.MutableRefObject<number>  // current spread bloom (deg); WeaponReticle reads it too
-  posRef: React.RefObject<THREE.Vector3>    // player position — drone orbs aim at + collide with it
+  posRef: React.RefObject<THREE.Vector3>    // player position — hunter orbs aim at + collide with it
   hpRef: React.MutableRefObject<number>     // player HP; ResourceBars reads, this sim writes
   shieldRef: React.MutableRefObject<number> // player shield; drains first, recharges out of combat
+  rangeCfgRef: React.RefObject<{ moving: boolean; hostile: boolean }>  // range console (T) settings
   onHit: () => void
   onShot: () => void
   onPlayerDamage: () => void  // vignette flash
@@ -1302,15 +1310,22 @@ function FiringRange({ firingRef, adsRef, gridRef, recoilRef, bloomRef, posRef, 
     pos: new THREE.Vector3(), vel: new THREE.Vector3(), life: 0,
     trail: Array.from({ length: TRAIL_N }, () => new THREE.Vector3()),
   })), [])
-  const EMAX = 16  // enemy orb pool
+  const EMAX = 16  // enemy orb pool (fired by the hunter)
   const orbs = useMemo(() => Array.from({ length: EMAX }, () => ({ pos: new THREE.Vector3(), vel: new THREE.Vector3(), life: 0 })), [])
-  const targets = useMemo(() => RANGE_TARGETS.map(([x, y, z]) => ({
-    pos: new THREE.Vector3(x, y, z), alive: true, down: 0, hp: TARGET_HP, nextShot: 1.5 + Math.random() * 3,
+  const targets = useMemo(() => RANGE_TARGETS.map(([x, y, z], i) => ({
+    pos: new THREE.Vector3(x, y, z), ax: x, az: z,  // anchor — drift mode oscillates around it
+    phase: i * 1.7, spd: 0.55 + (i % 3) * 0.25,     // varied phase/speed so the wall doesn't move in lockstep
+    alive: true, down: 0, hp: TARGET_HP,
   })), [])
+  // the ground hunter — spawned by the console's HOSTILE toggle; chases, strafes, returns fire
+  const hunter = useRef({ pos: new THREE.Vector3(), hp: 0, alive: false, respawn: 0, fireCd: 0, strafe: 0 })
   const lastDmg = useRef(-999)  // clock time of the last damage taken, for the shield-regen delay
   const shotRef = useRef<THREE.InstancedMesh>(null)
   const orbRef = useRef<THREE.InstancedMesh>(null)
   const tgtRef = useRef<THREE.InstancedMesh>(null)
+  const huntRef = useRef<THREE.Mesh>(null)
+  const toPlayer = useMemo(() => new THREE.Vector3(), [])
+  const step = useMemo(() => new THREE.Vector3(), [])
   const cd = useRef(0)
   const m = useMemo(() => new THREE.Matrix4(), [])
   const q = useMemo(() => new THREE.Quaternion(), [])
@@ -1376,27 +1391,65 @@ function FiringRange({ firingRef, adsRef, gridRef, recoilRef, bloomRef, posRef, 
           break
         }
       }
+      const h = hunter.current
+      if (p.life > 0 && h.alive && p.pos.distanceToSquared(h.pos) < HUNTER_HIT_R2) {
+        h.hp -= AM_DAMAGE; p.life = 0; onHit()
+        if (h.hp <= 0) { h.alive = false; h.respawn = HUNTER_RESPAWN }
+      }
     }
     for (const t of targets) {
-      if (!t.alive) { t.down -= dt; if (t.down <= 0) { t.alive = true; t.hp = TARGET_HP; t.nextShot = 1.5 + Math.random() * 2 } }
+      if (!t.alive) { t.down -= dt; if (t.down <= 0) { t.alive = true; t.hp = TARGET_HP } }
     }
-    // ── drones return fire: alive targets lob slow orbs at the player's body on a per-drone cadence ──
+    // drift mode (console): targets strafe around their anchors — varied phase/speed per target
+    const cfg = rangeCfgRef.current
+    if (cfg?.moving) {
+      const now = state.clock.elapsedTime
+      for (const t of targets) t.pos.x = t.ax + Math.sin(now * t.spd + t.phase) * DRIFT_AMP
+    } else {
+      for (const t of targets) t.pos.x = t.ax
+    }
     if (posRef.current) {
       pEye.set(posRef.current.x, posRef.current.y + 1.1, posRef.current.z)
-      for (const t of targets) {
-        if (!t.alive) continue
-        t.nextShot -= dt
-        if (t.nextShot <= 0) {
-          t.nextShot = 2.5 + Math.random() * 2
-          const o = orbs.find((or) => or.life <= 0)
-          if (o) {
-            o.pos.copy(t.pos)
-            o.vel.copy(pEye).sub(t.pos).normalize().multiplyScalar(DRONE_SPEED)
-            o.life = DRONE_LIFE
+      const now = state.clock.elapsedTime
+      // ── ground hunter (console HOSTILE toggle): spawn → chase to mid-range → strafe → return fire ──
+      const h = hunter.current
+      if (cfg?.hostile) {
+        if (!h.alive) {
+          h.respawn -= dt
+          if (h.respawn <= 0) {
+            // spawn 12-16 tiles out at a random bearing; if that lands in a wall/OOB, tuck under target #1
+            const ang = Math.random() * Math.PI * 2, d = 12 + Math.random() * 4
+            h.pos.set(pEye.x + Math.cos(ang) * d, (posRef.current.y ?? 0) + 0.55, pEye.z + Math.sin(ang) * d)
+            const gx = Math.round(h.pos.x), gz = Math.round(h.pos.z)
+            const cell = gridRef.current?.[gz]?.[gx]
+            if (cell === undefined || (cell & 0xFF) === WALL_ID) h.pos.set(targets[0].ax, h.pos.y, targets[0].az)
+            h.hp = HUNTER_HP; h.alive = true; h.fireCd = 1.2; h.strafe = Math.random() * Math.PI * 2
+          }
+        } else {
+          toPlayer.copy(pEye).sub(h.pos); toPlayer.y = 0
+          const dist = toPlayer.length()
+          if (dist > 0.01) toPlayer.multiplyScalar(1 / dist)
+          h.strafe += dt * 0.9
+          // close to mid-range, then orbit-strafe (perpendicular sine) so it's not a static turret
+          step.set(0, 0, 0)
+          if (dist > 9.5) step.addScaledVector(toPlayer, HUNTER_SPEED * dt)
+          step.x += -toPlayer.z * Math.sin(h.strafe) * HUNTER_SPEED * 0.6 * dt
+          step.z += toPlayer.x * Math.sin(h.strafe) * HUNTER_SPEED * 0.6 * dt
+          const nx = h.pos.x + step.x, nz = h.pos.z + step.z
+          const cell = gridRef.current?.[Math.round(nz)]?.[Math.round(nx)]
+          if (cell !== undefined && (cell & 0xFF) !== WALL_ID) { h.pos.x = nx; h.pos.z = nz }
+          h.fireCd -= dt
+          if (h.fireCd <= 0) {
+            h.fireCd = HUNTER_FIRE_CD
+            const o = orbs.find((or) => or.life <= 0)
+            if (o) {
+              o.pos.copy(h.pos); o.pos.y += 0.4
+              o.vel.copy(pEye).sub(o.pos).normalize().multiplyScalar(DRONE_SPEED)
+              o.life = DRONE_LIFE
+            }
           }
         }
-      }
-      const now = state.clock.elapsedTime
+      } else if (h.alive || h.respawn > 0) { h.alive = false; h.respawn = 0 }  // toggle off = despawn now
       for (const o of orbs) {
         if (o.life <= 0) continue
         o.life -= dt
@@ -1459,6 +1512,16 @@ function FiringRange({ firingRef, adsRef, gridRef, recoilRef, bloomRef, posRef, 
       orbs.forEach((o, i) => { m.compose(o.life > 0 ? o.pos : zero, q, o.life > 0 ? one : zero); orbRef.current!.setMatrixAt(i, m) })
       orbRef.current.instanceMatrix.needsUpdate = true
     }
+    if (huntRef.current) {
+      const h = hunter.current
+      huntRef.current.visible = h.alive
+      if (h.alive) {
+        huntRef.current.position.copy(h.pos)
+        huntRef.current.rotation.y += dt * 2.2  // menace spin
+        const s = 0.75 + 0.25 * (h.hp / HUNTER_HP)  // same shrink-with-damage read as the targets
+        huntRef.current.scale.setScalar(s)
+      }
+    }
   })
   return (
     <>
@@ -1472,11 +1535,16 @@ function FiringRange({ firingRef, adsRef, gridRef, recoilRef, bloomRef, posRef, 
         <sphereGeometry args={[0.5, 14, 14]} />
         <meshStandardMaterial color="#ff6a52" emissive="#ff6a52" emissiveIntensity={0.9} />
       </instancedMesh>
-      {/* drone return-fire orbs — hot amber so they read as INCOMING vs the player's cyan tracers */}
+      {/* hunter return-fire orbs — hot amber so they read as INCOMING vs the player's cyan tracers */}
       <instancedMesh ref={orbRef} args={[undefined, undefined, EMAX]} frustumCulled={false}>
         <sphereGeometry args={[0.16, 10, 10]} />
         <meshBasicMaterial color="#ffb35c" transparent opacity={0.95} blending={THREE.AdditiveBlending} depthWrite={false} toneMapped={false} />
       </instancedMesh>
+      {/* the ground hunter — magenta spinning octahedron, unmistakably NOT a range target */}
+      <mesh ref={huntRef} visible={false} frustumCulled={false}>
+        <octahedronGeometry args={[0.5, 0]} />
+        <meshStandardMaterial color="#ff4f7d" emissive="#ff4f7d" emissiveIntensity={0.85} />
+      </mesh>
     </>
   )
 }
@@ -1522,7 +1590,8 @@ function WeaponReticle({ bloomRef, adsRef }: {
   )
 }
 
-// HP + Shield — two vertical percent bars on the right edge, under the top-right stack. Combat mutates
+// HP + Shield — two vertical percent bars, right edge, vertically centered (clear of the top-right
+// menu stack above and the hotbar below, whatever either grows into). Combat mutates
 // hpRef/shieldRef at frame rate, so rAF reads the refs and writes fill-height + text directly — same
 // zero-React-churn pattern as WeaponReticle. Shield bar dims while cracked; HP tints red when low.
 function ResourceBars({ hpRef, shieldRef }: {
@@ -1553,7 +1622,7 @@ function ResourceBars({ hpRef, shieldRef }: {
   const pct: React.CSSProperties = { font: '800 11px ui-monospace, monospace', color: '#bfe9cd', textShadow: '0 1px 2px rgba(0,0,0,0.8)' }
   const lbl: React.CSSProperties = { font: '700 9px ui-monospace, monospace', color: '#ffffff66', letterSpacing: '0.1em' }
   return (
-    <div style={{ position: 'fixed', right: 12, top: 200, zIndex: 34, display: 'flex', gap: 7, pointerEvents: 'none' }}>
+    <div style={{ position: 'fixed', right: 12, top: '50%', transform: 'translateY(-50%)', zIndex: 34, display: 'flex', gap: 7, pointerEvents: 'none' }}>
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3 }}>
         <div style={barShell}><div ref={shFill} style={{ ...fill, background: '#7fd0ff', boxShadow: '0 0 8px #7fd0ff88' }} /></div>
         <div ref={shTxt} style={{ ...pct, color: '#a8ddff' }}>100</div>
@@ -1652,6 +1721,7 @@ const Scene = memo(function Scene(props: {
   bloomRef: React.MutableRefObject<number>
   hpRef: React.MutableRefObject<number>
   shieldRef: React.MutableRefObject<number>
+  rangeCfgRef: React.RefObject<{ moving: boolean; hostile: boolean }>
   onPlayerDamage: () => void
   onPlayerDown: () => void
 }) {
@@ -1677,7 +1747,7 @@ const Scene = memo(function Scene(props: {
       <ZoneGeometry key={`${props.zone.id}-${props.dims}`} gridRef={props.gridRef} heights={props.heights} version={props.version} paint={props.paint} editing={props.editing} />
       <NPCMarkers npcs={ALL_NPCS.filter((n) => n.zone === props.zone.id && npcInWorld(n, props.defeated, props.flagsRef.current))} heights={props.heights} />
       {props.isOwner && props.zone.id === 'moonwell-glade-gregory-s-home' && <HubGateMarkers heights={props.heights} />}
-      {props.zone.realm === 'outside' && <FiringRange firingRef={props.firingRef} adsRef={props.adsRef} gridRef={props.gridRef} recoilRef={props.recoilRef} bloomRef={props.bloomRef} posRef={props.posRef} hpRef={props.hpRef} shieldRef={props.shieldRef} onHit={props.onRangeHit} onShot={props.onRangeShot} onPlayerDamage={props.onPlayerDamage} onPlayerDown={props.onPlayerDown} />}
+      {props.zone.realm === 'outside' && <FiringRange firingRef={props.firingRef} adsRef={props.adsRef} gridRef={props.gridRef} recoilRef={props.recoilRef} bloomRef={props.bloomRef} posRef={props.posRef} hpRef={props.hpRef} shieldRef={props.shieldRef} rangeCfgRef={props.rangeCfgRef} onHit={props.onRangeHit} onShot={props.onRangeShot} onPlayerDamage={props.onPlayerDamage} onPlayerDown={props.onPlayerDown} />}
       {props.zone.realm === 'outside' && <ExitMarkers warps={props.zone.warps} heights={props.heights} />}
       <NodeMarkers nodes={props.nodes} heights={props.heights} editing={props.editing} channel={props.channel} />
       {props.zone.id === WORLD_ZONE_ID ? <WorldFlora heights={props.heights} /> : <FloraDressing zoneId={props.zone.id} heights={props.heights} />}
@@ -2729,6 +2799,34 @@ export default function Shimmer3D() {
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [toggleBag])
+  // ── Range console (T, weapon out only) — new-player controls for the firing range: target drift,
+  // hostile ground hunter, stats reset. Same cursor dance as the satchel: open frees the pointer,
+  // close re-locks. Settings live in a ref so FiringRange reads them at frame rate with no re-render.
+  const [rangeOpen, setRangeOpen] = useState(false)
+  const rangeOpenRef = useRef(false); rangeOpenRef.current = rangeOpen
+  const [rangeCfg, setRangeCfg] = useState({ moving: false, hostile: false })
+  const rangeCfgRef = useRef(rangeCfg); rangeCfgRef.current = rangeCfg
+  const toggleRange = useCallback((open: boolean) => {
+    setRangeOpen(open)
+    if (open) { document.exitPointerLock?.() }
+    else if (!editRef.current && !isTouch) {
+      const c = canvasElRef.current
+      if (c) { try { const r = c.requestPointerLock?.() as unknown as Promise<void> | undefined; r?.catch?.(() => {}) } catch { /* re-lock cooldown — a canvas click resumes look */ } }
+    }
+  }, [isTouch])
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const k = e.key.toLowerCase()
+      if (k === 't') {
+        if (!weaponDrawnRef.current || editRef.current || battleRef.current || curBattleRef.current || dialogueRef.current) return
+        e.preventDefault(); toggleRange(!rangeOpenRef.current)
+      } else if (k === 'escape' && rangeOpenRef.current) { e.preventDefault(); toggleRange(false) }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [toggleRange])
+  // holstering (leaving the outside realm) closes the console and resets the range to peaceful defaults
+  useEffect(() => { if (!weaponDrawn) { setRangeOpen(false); setRangeCfg({ moving: false, hostile: false }) } }, [weaponDrawn])
   // If a blocking mode takes over while the bag is open (battle/dialogue/edit/placing/reward), drop the
   // bag — those own the cursor themselves, so no re-lock (plain setBagOpen, not toggleBag).
   useEffect(() => { if (bagOpen && (battle || editMode || dialogue || placing || approach || rewards || openMenu)) setBagOpen(false) }, [bagOpen, battle, editMode, dialogue, placing, approach, rewards, openMenu])
@@ -2994,6 +3092,7 @@ export default function Shimmer3D() {
           bloomRef={bloomRef}
           hpRef={hpRef}
           shieldRef={shieldRef}
+          rangeCfgRef={rangeCfgRef}
           onPlayerDamage={onPlayerDamage}
           onPlayerDown={onPlayerDown}
         />
@@ -3344,8 +3443,40 @@ export default function Shimmer3D() {
             <span>AM RISER</span><span style={{ opacity: 0.4 }}>·</span>
             <span>shots <span style={{ color: '#8fe0ff' }}>{hudStats.shots}</span></span>
             <span>hits <span style={{ color: '#7fffa0' }}>{hudStats.hits}</span></span>
-            <span style={{ opacity: 0.5, fontWeight: 600 }}>hold to fire · r-click aim</span>
+            <span style={{ opacity: 0.5, fontWeight: 600 }}>hold to fire · r-click aim · T console</span>
           </div>
+          {/* range console — new-player range controls; opt-in danger lives here, never sprung on you */}
+          {rangeOpen && (
+            <>
+              <div onPointerDown={() => toggleRange(false)} style={{ position: 'fixed', inset: 0, zIndex: 39, background: 'rgba(6,10,16,0.35)' }} />
+              <div style={{ position: 'fixed', left: '50%', top: '50%', transform: 'translate(-50%,-50%)', zIndex: 40,
+                width: 300, borderRadius: 12, background: 'rgba(14,19,30,0.96)', border: '1px solid #8fe0ff44',
+                padding: '14px 16px', font: '700 12px ui-monospace, monospace', color: '#cfeeff' }}>
+                <div style={{ font: '800 13px ui-monospace, monospace', letterSpacing: '0.12em', marginBottom: 10 }}>RANGE CONSOLE</div>
+                {([
+                  ['TARGET DRIFT', 'floating targets strafe side to side', 'moving'],
+                  ['HOSTILE HUNTER', 'ground drone hunts you + returns fire', 'hostile'],
+                ] as const).map(([label, desc, key]) => (
+                  <button key={key} onClick={() => setRangeCfg((c) => ({ ...c, [key]: !c[key] }))} style={{
+                    display: 'flex', width: '100%', alignItems: 'center', justifyContent: 'space-between', gap: 10,
+                    background: 'rgba(255,255,255,0.04)', border: '1px solid #ffffff1e', borderRadius: 8,
+                    padding: '9px 11px', marginBottom: 8, cursor: 'pointer', textAlign: 'left',
+                  }}>
+                    <span>
+                      <span style={{ color: '#eafff6', display: 'block' }}>{label}</span>
+                      <span style={{ color: '#ffffff77', fontWeight: 600, fontSize: 11 }}>{desc}</span>
+                    </span>
+                    <span style={{ color: rangeCfg[key] ? '#7fffa0' : '#ffffff55', letterSpacing: '0.08em' }}>{rangeCfg[key] ? 'ON' : 'OFF'}</span>
+                  </button>
+                ))}
+                <button onClick={() => { shotsRef.current = 0; hitsRef.current = 0; setHudStats({ shots: 0, hits: 0 }) }} style={{
+                  width: '100%', background: 'rgba(255,255,255,0.04)', border: '1px solid #ffffff1e', borderRadius: 8,
+                  padding: '8px 11px', cursor: 'pointer', color: '#ffd98a', font: '700 12px ui-monospace, monospace', letterSpacing: '0.06em',
+                }}>RESET STATS</button>
+                <div style={{ marginTop: 10, color: '#ffffff55', fontWeight: 600, fontSize: 11, textAlign: 'center' }}>T / Esc — close</div>
+              </div>
+            </>
+          )}
           <WeaponReticle bloomRef={bloomRef} adsRef={adsRef} />
           <ResourceBars hpRef={hpRef} shieldRef={shieldRef} />
           <style>{`@keyframes hitFlash{0%{opacity:1}100%{opacity:0}}@keyframes dmgFlash{0%{opacity:1}100%{opacity:0}}@keyframes downFlash{0%{opacity:1}55%{opacity:0.85}100%{opacity:0}}`}</style>
