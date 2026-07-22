@@ -2391,10 +2391,14 @@ export default function Shimmer3D() {
         for (const p of w.placements.values()) {
           const gSlice = gridRef.current.slice(p.oy, p.oy + p.rows).map(row => row.slice(p.ox, p.ox + p.cols))
           const hSlice = heightsRef.current.slice(p.oy, p.oy + p.rows).map(row => row.slice(p.ox, p.ox + p.cols))
-          // The composer demotes stitched-warp tiles to floor in the world view — restore the
-          // authored warp cells so a save-back never erases a zone's door markers.
+          // The composer rewrites warp cells in the world view (stitched warps demote to floor,
+          // unpainted door mouths force to gold) — restore the authored values at every warp
+          // position so a save-back never writes composer artifacts into a zone's source.
           for (let r = 0; r < p.rows; r++) for (let c = 0; c < p.cols; c++)
             if ((p.zone.grid[r][c] & 0xFF) === WARP_ID && gSlice[r][c] !== p.zone.grid[r][c]) gSlice[r][c] = p.zone.grid[r][c]
+          for (const wz of p.zone.warps)
+            if ((gSlice[wz.fromY]?.[wz.fromX] & 0xFF) === WARP_ID && gSlice[wz.fromY][wz.fromX] !== p.zone.grid[wz.fromY][wz.fromX])
+              gSlice[wz.fromY][wz.fromX] = p.zone.grid[wz.fromY][wz.fromX]
           const zNodes = nodesRef.current
             .filter(nd => w.zoneAt(nd.tileX, nd.tileY) === p.zone.id)
             .map(nd => ({ nodeType: nd.type, x: nd.tileX - p.ox, y: nd.tileY - p.oy }))

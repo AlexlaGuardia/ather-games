@@ -195,6 +195,9 @@ export function composeGardenWorld(): GardenWorld {
       const wx = p.ox + w.fromX, wy = p.oy + w.fromY
       if (!surface.has(w.toZone)) {
         doorWarps.push({ ...w, worldX: wx, worldY: wy })
+        // A door must be SEEN: some zones author the warp entry without painting the warp
+        // tile (Sorrel Hold's mouth) — force the gold tile in the composed view only.
+        if ((grid[wy][wx] & 0xFF) !== WARP_ID) grid[wy][wx] = WARP_ID
         continue
       }
       const q = placements.get(w.toZone)
