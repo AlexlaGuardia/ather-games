@@ -10,6 +10,7 @@
 // them the tick prop is unused, and a transfer/craft/plant would mutate a ref that nothing observes.
 
 import { canBrew, getVisiblePotions } from '../engine/alchemy'
+import { potionEffectLine } from '../engine/potion-effects'
 import { canCraft, getRecipes } from '../engine/crafting'
 import { TOOL_DEFS, canCraft as canCraftTool, wornFraction, repairCost, canRepair, type EquippedTools } from '../engine/tools'
 import { countItem, type Inventory, type ChestStorage } from '../engine/inventory'
@@ -95,6 +96,10 @@ export function StationMenus(p: StationMenusProps) {
                   <span style={{ font: '800 13px ui-monospace, monospace', color: '#eadcff' }}>{def.name}</span>
                   <span style={{ font: '700 10px ui-monospace, monospace', color: '#9b86b8' }}>{locked ? `Lv ${def.minAlchemyLevel}` : `${def.manaCost}◈ · +${def.xpGrant}xp`}</span>
                 </div>
+                {/* what drinking it DOES — the whole point of brewing it */}
+                {potionEffectLine(def.id) && (
+                  <div style={{ font: '600 10px ui-monospace, monospace', color: '#8fd9c4', marginTop: 3 }}>{potionEffectLine(def.id)}</div>
+                )}
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 6, alignItems: 'center' }}>
                   <Reagents recipe={def.recipe} inv={p.invRef.current} okColor="#9fd9c4" okBorder="#2f5c4f" />
                   <span style={{ flex: 1 }} />

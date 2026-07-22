@@ -33,9 +33,10 @@ import { createBeast, checkBeastUnlock, beastsToSave, beastsFromSave, BEAST_SPEC
 import { createInventory, inventoryToSave, inventoryFromSave, addItems, removeItems, countItem, transferItem, createChestStorage, chestToSave, chestFromSave, type Inventory, type ItemStack, type ChestStorage, type ChestSave } from '../engine/inventory'
 import { createManaPool, manaToSave, manaFromSave, getMaxPool, type ManaPool } from '../engine/mana'
 import { brewPotion, POTION_DEFS } from '../engine/alchemy'
+import { MANA_POTIONS, HEAL_POTIONS, POTION_BUFFS, BUFF_DEFS, HARVEST_BREW_ADVANCE_MS, drinkBuff, activeBuffList, pruneBuffs, gatherXpMult, bonusFind, kindredMult, speedMult, manaRegenMult, rinTune, suppressEncounters, potionEffectLine, type ActiveBuffs } from '../engine/potion-effects'
 import { canCraft, craftItem, RECIPE_DEFS } from '../engine/crafting'
 import { createGEState, buyFromGE, sellToGE, tickPriceDrift, GE_ITEM_IDS, geToSave, geFromSave, type GEMarketState, type GESave } from '../engine/exchange'
-import { CROP_DEFS, plantCrop, harvestCrop, plantedCropsToSave, plantedCropsFromSave, type PlantedCrop } from '../engine/farming'
+import { CROP_DEFS, plantCrop, harvestCrop, plantedCropsToSave, plantedCropsFromSave, isCropReady, type PlantedCrop } from '../engine/farming'
 import type { AITier } from '../engine/battle-ai'
 import ArenaBattle from '../components/ArenaBattle'
 import HotBar from './HotBar'
@@ -146,16 +147,8 @@ const placeIconBtn = (accent: string): React.CSSProperties => ({ width: 60, heig
 const nodeManaCost = (type: NodeType) => 6 + (NODE_DEFS[type].minLevel - 1) * 2
 const nodeChannelSec = (type: NodeType) => 2 + (NODE_DEFS[type].minLevel - 1) * 0.3
 const MANA_REGEN_PER_SEC = 1 / 60   // 1 mana per minute by design — the real refill is Alchemy-brewed potions
-// Mana-restore potions (Alchemy-brewed; canon economy — see project_shimmer_mana_economy). Drink to
-// refill the pool. Restore amounts are the feel knob. Only ids listed here are drinkable-for-mana.
-const MANA_POTIONS: Record<string, number> = { mana_draught: 40, shard_tonic: 65 }
-// Mend potions — HP/shield do NOT regen (outside-Ather combat); these brewed potions are the only
-// way back up. Both already exist in POTION_DEFS (Alchemy), they just gain a drink effect here:
-// a salve mends the body, a crystal elixir re-forms the shield lattice.
-const HEAL_POTIONS: Record<string, { hp?: number; sh?: number }> = {
-  shimmer_salve: { hp: 50 },
-  crystal_elixir: { sh: 75 },
-}
+// Drink effects (restore amounts, timed buffs, effect lines) live in engine/potion-effects.ts —
+// one file owns what every bottle does; this walker just applies them at its hook points.
 // Placeable stations — double-tap in the hotbar to enter placement mode, then confirm to build.
 // Placeholder blockout look (real models later, per the art rule). w/d = footprint tiles, h = height.
 const PLACEABLES: Record<string, { name: string; color: string; accent: string; h: number }> = {
@@ -198,10 +191,9 @@ function grantStarterKit(inv: Inventory) {
 }
 // hotbar double-tap hints (drinkable potions + placeable stations)
 const USE_HINTS: Record<string, string> = {
-  ...Object.fromEntries(Object.entries(MANA_POTIONS).map(([k, v]) => [k, `+${v} mana · double-tap to drink`])),
+  // every potion's hint derives from its engine effect line — one source of truth
+  ...Object.fromEntries(Object.keys(POTION_DEFS).map(k => [k, `${potionEffectLine(k)} · double-tap to drink`])),
   ...Object.fromEntries(Object.keys(PLACEABLES).map(k => [k, 'double-tap to place'])),
-  shimmer_salve: '+50 HP · double-tap to apply (outside the Ather)',
-  crystal_elixir: '+75 shield · double-tap to apply (outside the Ather)',
 }
 
 function bucketsRect(grid: number[][], r0: number, c0: number, r1: number, c1: number) {
@@ -617,7 +609,7 @@ function npcInWorld(n: NPC3D, defeated: Record<string, boolean>, flags: Record<s
   return true
 }
 
-function Player({ posRef, gridRef, heightsRef, zoneIdRef, editRef, onWarp, battleRef, partyLevelRef, onEncounter, joyRef, talkingRef, hasPartyRef, onNearChange, defeatedRef, flagsRef, harvestNodesRef, onNearNode, stationsRef, onNearStation, eyeRef, jumpRef, slideRef }: {
+function Player({ posRef, gridRef, heightsRef, zoneIdRef, editRef, onWarp, battleRef, partyLevelRef, onEncounter, joyRef, talkingRef, hasPartyRef, onNearChange, defeatedRef, flagsRef, harvestNodesRef, onNearNode, stationsRef, onNearStation, eyeRef, jumpRef, slideRef, speedMultRef, dreamwalkRef }: {
   posRef: React.RefObject<THREE.Vector3>; gridRef: React.RefObject<number[][]>
   heightsRef: React.RefObject<number[][]>; zoneIdRef: React.RefObject<string>
   editRef: React.RefObject<boolean>; onWarp: (w: Warp) => void
@@ -632,6 +624,8 @@ function Player({ posRef, gridRef, heightsRef, zoneIdRef, editRef, onWarp, battl
   stationsRef: React.RefObject<PlacedStruct[]>; onNearStation: (s: PlacedStruct | null) => void
   eyeRef: React.RefObject<number>
   jumpRef: React.RefObject<boolean>; slideRef: React.RefObject<boolean>
+  // potion-buff mirrors (walker updates on its coarse tick): ground-speed mult + calm-mist flag
+  speedMultRef: React.RefObject<number>; dreamwalkRef: React.RefObject<boolean>
 }) {
   const group = useRef<THREE.Group>(null)
   const keys = useRef<Record<string, boolean>>({})
@@ -836,7 +830,7 @@ function Player({ posRef, gridRef, heightsRef, zoneIdRef, editRef, onWarp, battl
         // stop on release. This easing IS the "flow" — no more instant on/off. Backpedaling (input
         // pointing against your look dir) caps to a walk — no reverse-sprint. Strafe stays at run.
         const backpedal = hasInput && move.dot(fwd) < -0.2
-        const targetSpeed = crouching ? CROUCH_SPEED : backpedal ? BACK_SPEED : RUN_SPEED
+        const targetSpeed = (crouching ? CROUCH_SPEED : backpedal ? BACK_SPEED : RUN_SPEED) * (speedMultRef.current ?? 1)
         const rate = Math.min(1, (hasInput ? GROUND_ACCEL : GROUND_FRICTION) * dt2)
         hvel.x += ((hasInput ? move.x * targetSpeed : 0) - hvel.x) * rate
         hvel.z += ((hasInput ? move.z * targetSpeed : 0) - hvel.z) * rate
@@ -977,9 +971,12 @@ function Player({ posRef, gridRef, heightsRef, zoneIdRef, editRef, onWarp, battl
             // The FIRST mist a new Keeper crosses is a guaranteed draw so the arena reliably
             // introduces itself (the start zone has no mist, so this lands on the way to Thistle).
             // Every crossing after is the normal per-step rate.
+            // Dreamwalk (dreamroot_elixir) calms the mist — but never eats the guaranteed first draw
             const force = !flagsRef.current.metFirstWild
-            const enc = rollEncounter(logicalZoneAt(zoneIdRef.current, tx, tz), partyLevelRef.current, false, force)
-            if (enc) { encGrace.current = ENCOUNTER_GRACE; flagsRef.current.metFirstWild = true; onEncounter(enc) }
+            if (force || !dreamwalkRef.current) {
+              const enc = rollEncounter(logicalZoneAt(zoneIdRef.current, tx, tz), partyLevelRef.current, false, force)
+              if (enc) { encGrace.current = ENCOUNTER_GRACE; flagsRef.current.metFirstWild = true; onEncounter(enc) }
+            }
           }
         }
       }
@@ -1780,6 +1777,7 @@ const Scene = memo(function Scene(props: {
   onWarp: (w: Warp) => void; yawRef: React.RefObject<number>; editRef: React.RefObject<boolean>
   eyeRef: React.RefObject<number>
   jumpRef: React.RefObject<boolean>; slideRef: React.RefObject<boolean>
+  speedMultRef: React.RefObject<number>; dreamwalkRef: React.RefObject<boolean>
   paint: (c: number, r: number, shift: boolean) => void; editing: boolean
   battleRef: React.RefObject<boolean>; partyLevelRef: React.RefObject<number>
   onEncounter: (enc: WildEncounter) => void
@@ -1843,7 +1841,7 @@ const Scene = memo(function Scene(props: {
       {props.zone.id === WORLD_ZONE_ID ? <WorldFlora heights={props.heights} /> : <FloraDressing zoneId={props.zone.id} heights={props.heights} />}
       <StructureMarkers structures={structuresInZone} heights={props.heights} />
       <PlacementGhost placing={props.placing} posRef={props.posRef} heights={props.heights} gridRef={props.gridRef} placeTargetRef={props.placeTargetRef} structuresRef={props.structuresRef} zoneIdRef={props.zoneIdRef} />
-      <Player posRef={props.posRef} gridRef={props.gridRef} heightsRef={props.heightsRef} zoneIdRef={props.zoneIdRef} editRef={props.editRef} onWarp={props.onWarp} battleRef={props.battleRef} partyLevelRef={props.partyLevelRef} onEncounter={props.onEncounter} joyRef={props.joyRef} talkingRef={props.talkingRef} hasPartyRef={props.hasPartyRef} onNearChange={props.onNearChange} defeatedRef={props.defeatedRef} flagsRef={props.flagsRef} harvestNodesRef={props.harvestNodesRef} onNearNode={props.onNearNode} stationsRef={props.structuresRef} onNearStation={props.onNearStation} eyeRef={props.eyeRef} jumpRef={props.jumpRef} slideRef={props.slideRef} />
+      <Player posRef={props.posRef} gridRef={props.gridRef} heightsRef={props.heightsRef} zoneIdRef={props.zoneIdRef} editRef={props.editRef} onWarp={props.onWarp} battleRef={props.battleRef} partyLevelRef={props.partyLevelRef} onEncounter={props.onEncounter} joyRef={props.joyRef} talkingRef={props.talkingRef} hasPartyRef={props.hasPartyRef} onNearChange={props.onNearChange} defeatedRef={props.defeatedRef} flagsRef={props.flagsRef} harvestNodesRef={props.harvestNodesRef} onNearNode={props.onNearNode} stationsRef={props.structuresRef} onNearStation={props.onNearStation} eyeRef={props.eyeRef} jumpRef={props.jumpRef} slideRef={props.slideRef} speedMultRef={props.speedMultRef} dreamwalkRef={props.dreamwalkRef} />
       {props.companionColor && !props.editing && <Follower posRef={props.posRef} heightsRef={props.heightsRef} color={props.companionColor} />}
       {props.fishing && <FishTell posRef={props.posRef} heightsRef={props.heightsRef} bite={props.fishBite} />}
       <HarvestPop pop={props.harvestPop} />
@@ -2070,6 +2068,7 @@ export default function Shimmer3D() {
       chests: Object.values(chestsRef.current).map(c => chestToSave(c)),
       ge: geToSave(geRef.current),
       plantedCrops: plantedCropsToSave(plantedCropsRef.current),
+      buffs: pruneBuffs(buffsRef.current, Date.now()),
     })
   }, [load, saveGame])
 
@@ -2132,6 +2131,10 @@ export default function Shimmer3D() {
       if (Array.isArray(data?.plantedCrops)) {
         plantedCropsRef.current = plantedCropsFromSave(data.plantedCrops as PlantedCrop[])
         setCropsTick(t => t + 1)
+      }
+      if (data?.buffs && typeof data.buffs === 'object') {
+        buffsRef.current = pruneBuffs(data.buffs as ActiveBuffs, Date.now())
+        setBuffHud(activeBuffList(buffsRef.current, Date.now()))
       }
       syncSkillHud()
       if (data?.flags) {
@@ -2202,11 +2205,22 @@ export default function Shimmer3D() {
   // vial and the minutes-long respawn timers).
   useEffect(() => {
     const id = setInterval(() => {
+      const now = Date.now()
       const max = getMaxPool(skillsRef.current.mana.level)
       if (manaRef.current.current < max) {
-        manaRef.current.current = Math.min(max, manaRef.current.current + MANA_REGEN_PER_SEC * 0.5) // 0.5s tick
+        // 0.5s tick; Ather Flow (ather_infusion) lifts the trickle
+        manaRef.current.current = Math.min(max, manaRef.current.current + MANA_REGEN_PER_SEC * manaRegenMult(buffsRef.current, now) * 0.5)
         setManaFrac(manaRef.current.current / max)
       }
+      // potion buffs — refresh the HUD chips + the frame-loop mirrors (speed/dreamwalk)
+      speedMultRef.current = speedMult(buffsRef.current, now)
+      dreamwalkRef.current = suppressEncounters(buffsRef.current, now)
+      setBuffHud(prev => {
+        const next = activeBuffList(buffsRef.current, now)
+        // only re-render when the visible list actually changes (ids or the shown second)
+        const key = (l: typeof next) => l.map(b => `${b.id}:${Math.ceil(b.remainMs / 1000)}`).join('|')
+        return key(prev) === key(next) ? prev : next
+      })
       let respawned = false
       for (const n of runtimeNodesRef.current) if (tickNodeRespawn(n)) respawned = true
       if (respawned) setRuntimeNodes([...runtimeNodesRef.current])
@@ -2254,7 +2268,11 @@ export default function Shimmer3D() {
     // Rinning is a cast-and-catch, not a hold-to-channel — cast locks you to the node and waits
     // for the bite (see the fishing driver below). A catch drains mana + grants drops; a miss is free.
     if (skillId === 'rinning') {
-      fishRef.current = { node, manaCost, cast: newRinCast(performance.now(), Math.random), bitten: false }
+      // Angler's Eye (glowfin_brew): bites land sooner + the `!` window stays up longer
+      const cast = newRinCast(performance.now(), Math.random)
+      const tune = rinTune(buffsRef.current, Date.now())
+      cast.biteMs *= tune.bite; cast.windowMs *= tune.window
+      fishRef.current = { node, manaCost, cast, bitten: false }
       battleRef.current = true // lock the walker to the node while the line's out
       setFish({ label: prettyItem(node.type), bite: false })
       return
@@ -2289,6 +2307,14 @@ export default function Shimmer3D() {
   const plantedCropsRef = useRef<PlantedCrop[]>([])
   const [cropsTick, setCropsTick] = useState(0) // bump to re-render the open planter menu (plant/harvest)
 
+  // Timed potion buffs (engine/potion-effects) — the ref is truth, the HUD list re-renders on the
+  // 0.5s coarse tick. speedMultRef/dreamwalkRef are plain-value mirrors updated on that same tick
+  // so the Player frame loop reads a number, not the buff table.
+  const buffsRef = useRef<ActiveBuffs>({})
+  const [buffHud, setBuffHud] = useState<ReturnType<typeof activeBuffList>>([])
+  const speedMultRef = useRef(1)
+  const dreamwalkRef = useRef(false)
+
   // Double-tap use: drink a mana potion, or enter placement for a placeable.
   const useItem = useCallback((itemId?: string) => {
     if (!itemId) return
@@ -2311,6 +2337,30 @@ export default function Shimmer3D() {
       if (heal.sh) shieldRef.current = Math.min(shieldMaxRef.current, shieldRef.current + heal.sh)
       setInvSlots([...invRef.current.slots])
       setHarvestToast(`${prettyItem(itemId)} · ${heal.hp ? `+${heal.hp} HP` : `+${heal.sh} shield`}`)
+      persist()
+      return
+    }
+    // timed buff potions — drink to set/refresh the effect (engine owns durations + magnitudes)
+    if (POTION_BUFFS[itemId]) {
+      if (countItem(invRef.current, itemId) < 1) return
+      removeItems(invRef.current, itemId, 1)
+      const buff = drinkBuff(buffsRef.current, itemId, Date.now())!
+      setBuffHud(activeBuffList(buffsRef.current, Date.now()))
+      setInvSlots([...invRef.current.slots])
+      setHarvestToast(`${BUFF_DEFS[buff].glyph} ${BUFF_DEFS[buff].name} — ${BUFF_DEFS[buff].line}`)
+      persist()
+      return
+    }
+    // harvest brew — instant: every planted crop jumps ahead in its growth
+    if (itemId === 'harvest_brew') {
+      if (countItem(invRef.current, itemId) < 1) return
+      const growing = plantedCropsRef.current.filter(c => !isCropReady(c))
+      if (growing.length === 0) { setHarvestToast('Nothing growing to hurry along'); return }
+      removeItems(invRef.current, itemId, 1)
+      for (const c of growing) c.plantedAt -= HARVEST_BREW_ADVANCE_MS
+      setCropsTick(t => t + 1)
+      setInvSlots([...invRef.current.slots])
+      setHarvestToast(`🌱 Harvest Brew — ${growing.length} crop${growing.length > 1 ? 's' : ''} surge ahead`)
       persist()
       return
     }
@@ -2362,9 +2412,10 @@ export default function Shimmer3D() {
 
   const brew = useCallback((potionId: string) => {
     const before = skillsRef.current.alchemy.level
-    // Active companion @15 perk — Sporebloom bonus draught (Sporeling)
+    // Active companion @15 perk — Sporebloom bonus draught (Sporeling, ×2 under Kindred)
     const brewBeast = beastsRef.current.find(b => b.id === activeBeastIdRef.current) ?? null
-    if (!brewPotion(potionId, invRef.current, skillsRef.current, manaRef.current, getBonusFindChance(brewBeast, 'alchemy'))) { setHarvestToast('Missing ingredients or mana'); return }
+    const brewFind = getBonusFindChance(brewBeast, 'alchemy') * kindredMult(buffsRef.current, Date.now())
+    if (!brewPotion(potionId, invRef.current, skillsRef.current, manaRef.current, brewFind)) { setHarvestToast('Missing ingredients or mana'); return }
     syncSkillHud()
     const def = POTION_DEFS[potionId]
     setHarvestToast(`Brewed ${def.name} ×${def.resultCount}`)
@@ -2475,9 +2526,11 @@ export default function Shimmer3D() {
   }, [syncSkillHud, persist])
   const harvestAt = useCallback((crop: PlantedCrop) => {
     const before = skillsRef.current.farming.level
-    // Active companion @15 perk — Tuberfind bonus crop (Dustwhisker)
+    // Active companion @15 perk — Tuberfind bonus crop (Dustwhisker, ×2 under Kindred) + potion buffs
     const activeBeast = beastsRef.current.find(b => b.id === activeBeastIdRef.current) ?? null
-    const result = harvestCrop(crop, invRef.current, skillsRef.current, getBonusFindChance(activeBeast, 'farming'))
+    const now = Date.now()
+    const find = getBonusFindChance(activeBeast, 'farming') * kindredMult(buffsRef.current, now) + bonusFind(buffsRef.current, now)
+    const result = harvestCrop(crop, invRef.current, skillsRef.current, find, gatherXpMult(buffsRef.current, now))
     plantedCropsRef.current = plantedCropsRef.current.filter(c => c.id !== crop.id)
     setCropsTick(t => t + 1)
     syncSkillHud()
@@ -2496,10 +2549,12 @@ export default function Shimmer3D() {
   const grantHarvest = useCallback((node: ResourceNode) => {
     const skillId = getNodeSkill(node.type)
     const tool = getEquippedTool(equippedToolsRef.current, skillId)
-    const xp = Math.round(NODE_DEFS[node.type].xp * (tool?.xpBonus ?? 1))
-    // Active companion @15 perk — skill-matched bonus find (Grovekin/Gemsense/Truesight)
+    const now = Date.now()
+    const xp = Math.round(NODE_DEFS[node.type].xp * (tool?.xpBonus ?? 1) * gatherXpMult(buffsRef.current, now))
+    // Find chance = companion @15 perk (Grovekin/Gemsense/Truesight, ×2 under Kindred) + potion buffs
     const activeBeast = beastsRef.current.find(b => b.id === activeBeastIdRef.current) ?? null
-    const added = addHarvestItems(invRef.current, rollDrops(node.type, getBonusFindChance(activeBeast, skillId)))
+    const find = getBonusFindChance(activeBeast, skillId) * kindredMult(buffsRef.current, now) + bonusFind(buffsRef.current, now)
+    const added = addHarvestItems(invRef.current, rollDrops(node.type, find))
     const xpr = addSkillXP(skillsRef.current[skillId], xp)
     // Wear the tool — basics never break; when an improved tool breaks, fall back to the basic.
     if (tool && !useTool(tool)) {
@@ -2703,6 +2758,8 @@ export default function Shimmer3D() {
     chestsRef.current = {}
     geRef.current = createGEState()
     plantedCropsRef.current = []
+    buffsRef.current = {}
+    setBuffHud([])
     setChestsTick(t => t + 1)
     setCropsTick(t => t + 1)
     setStructures([])
@@ -3233,7 +3290,7 @@ export default function Shimmer3D() {
           zone={zone} gridRef={gridRef} heights={heightsRef.current} version={version} dims={dims}
           posRef={posRef as React.RefObject<THREE.Vector3>} heightsRef={heightsRef} zoneIdRef={zoneIdRef}
           editFocusRef={editFocusRef}
-          onWarp={onWarp} yawRef={camYaw} editRef={editRef} eyeRef={eyeRef} jumpRef={jumpRef} slideRef={slideRef} paint={paint} editing={editMode}
+          onWarp={onWarp} yawRef={camYaw} editRef={editRef} eyeRef={eyeRef} jumpRef={jumpRef} slideRef={slideRef} speedMultRef={speedMultRef} dreamwalkRef={dreamwalkRef} paint={paint} editing={editMode}
           battleRef={battleRef} partyLevelRef={partyLevelRef} onEncounter={onEncounter} joyRef={joyRef}
           talkingRef={talkingRef} hasPartyRef={hasPartyRef} onNearChange={setNearNpc}
           harvestNodesRef={runtimeNodesRef} onNearNode={setNearNode} channel={channel}
@@ -3416,6 +3473,20 @@ export default function Shimmer3D() {
               </button>
             )
           })()}
+
+          {/* Active potion buffs — glyph + name + countdown, one chip per live effect */}
+          {buffHud.map(b => (
+            <div key={b.id} title={BUFF_DEFS[b.id].line} style={{
+              display: 'flex', alignItems: 'center', gap: 6, padding: '4px 9px', borderRadius: 999,
+              background: 'rgba(20,20,14,0.82)', border: `1px solid ${b.color}55`,
+            }}>
+              <span style={{ font: '12px serif', lineHeight: 1 }}>{b.glyph}</span>
+              <span style={{ font: '700 10px ui-monospace, monospace', color: b.color, whiteSpace: 'nowrap' }}>{b.name}</span>
+              <span style={{ font: '600 9px ui-monospace, monospace', color: '#b8ae94', fontVariantNumeric: 'tabular-nums' }}>
+                {(() => { const s = Math.ceil(b.remainMs / 1000); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}` })()}
+              </span>
+            </div>
+          ))}
 
           {/* ☰ menu button */}
           <button onClick={() => { setMenuOpen(o => !o); setSkillsOpen(false) }} style={{

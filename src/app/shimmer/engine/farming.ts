@@ -178,7 +178,7 @@ export interface HarvestCropResult {
  * Harvest a ready crop — rolls yields with level bonus, adds items, grants farming XP.
  * bonusFindChance: companion Tuberfind perk (Dustwhisker @15) — a chance for one bonus crop.
  */
-export function harvestCrop(crop: PlantedCrop, inv: Inventory, skills: SkillSet, bonusFindChance = 0): HarvestCropResult {
+export function harvestCrop(crop: PlantedCrop, inv: Inventory, skills: SkillSet, bonusFindChance = 0, xpMult = 1): HarvestCropResult {
   const def = CROP_DEFS[crop.cropId]
   if (!def) return { items: [], xpGained: 0 }
 
@@ -196,8 +196,9 @@ export function harvestCrop(crop: PlantedCrop, inv: Inventory, skills: SkillSet,
     }
   }
 
-  addSkillXP(skills.farming, def.xpGrant)
-  return { items, xpGained: def.xpGrant }
+  const xp = Math.round(def.xpGrant * xpMult)
+  addSkillXP(skills.farming, xp)
+  return { items, xpGained: xp }
 }
 
 /** Get crops visible to the player (within 3 levels of farming level) */
