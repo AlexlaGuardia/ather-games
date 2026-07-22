@@ -147,7 +147,12 @@ const ROUTE_MOONWELL_GARDEN_NODES: NodePlacement[] = [
   { type: 'shimmeroak' as NodeType, tileX: 19, tileY: 5 },
 ]
 
+const CRUCIBLE_NODES: NodePlacement[] = [
+
+]
+
 export const ZONE_NODES: Record<string, NodePlacement[]> = {
+  'crucible': CRUCIBLE_NODES,
   garden: GARDEN_NODES,
   'mycelial-path': MYCELIAL_PATH_NODES,
   'moonwell-glade': MOONWELL_GLADE_NODES,
