@@ -307,7 +307,10 @@ const WITHER_MISS = 0.5   // numbed → half its strikes whiff (knob)
 
 // ── the tick — fixed dt, deterministic ─────────────────────────────────────────
 export function tick(state: ArenaState, dt: number, commands: KeeperCommand[] = []) {
-  if (state.outcome !== 'ongoing') return
+  // A settled fight must also settle its event buffer — leaving the killing blow's
+  // events in place had the renderer re-performing them every frame (dmg-number spam
+  // under the result overlay).
+  if (state.outcome !== 'ongoing') { state.events.length = 0; return }
   state.events.length = 0
   state.t += dt
 
