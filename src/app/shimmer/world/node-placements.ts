@@ -50,6 +50,11 @@ const MYCELIAL_PATH_NODES: NodePlacement[] = [
 
 // Moonwell Glade — deeper zone, level 4-7 nodes
 const MOONWELL_GLADE_NODES: NodePlacement[] = [
+  // Deep water (Rinning lv7) — the moonkoi swim the moonwell. Before these, the `lake` node
+  // type existed but was placed NOWHERE: moonkoi/pearlshell/crystal_rinn were Exchange-buy
+  // only, walling the T3 rinstick + deep_essence/dawn_cordial off from honest gathering.
+  { type: 'lake' as NodeType, tileX: 19, tileY: 14 },
+  { type: 'lake' as NodeType, tileX: 16, tileY: 13 },
   { type: 'shimmeroak' as NodeType, tileX: 5, tileY: 10 },
   { type: 'starwillow' as NodeType, tileX: 12, tileY: 18 },
   { type: 'shimmeroak' as NodeType, tileX: 5, tileY: 12 },
@@ -93,10 +98,12 @@ const TWILIGHT_THICKET_NODES: NodePlacement[] = [
   { type: 'dawnwood' as NodeType, tileX: 19, tileY: 16 },
   { type: 'element_crystal_node' as NodeType, tileX: 21, tileY: 14 },
   { type: 'element_crystal_node' as NodeType, tileX: 18, tileY: 11 },
+  { type: 'lake' as NodeType, tileX: 11, tileY: 9 },  // dark still water in the thicket's heart (lv7 zone pairing)
 ]
 
 // Mana Springs — sacred pools, heavy fishing + prospecting
 const MANA_SPRINGS_NODES: NodePlacement[] = [
+  { type: 'lake' as NodeType, tileX: 10, tileY: 4 },  // the deep spring among the pools (lv7, matches its pure_core_node)
   { type: 'small_pond' as NodeType, tileX: 3, tileY: 1 },
   { type: 'small_pond' as NodeType, tileX: 5, tileY: 5 },
   { type: 'small_pond' as NodeType, tileX: 15, tileY: 5 },
