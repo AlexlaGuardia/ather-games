@@ -44,7 +44,7 @@ import { useCloudSave } from '@/lib/use-cloud-save'
 import { useWallet } from '@/lib/use-wallet'
 import { StationMenus, type PlacedStruct, type StationKind } from './StationMenus'
 import { prettyItem, menuBtn, TOOL_HUD } from './ui'
-import { WorldMap } from './WorldMap'
+import { WorldMap, MiniMap } from './WorldMap'
 import { WORLD_ZONE_ID, registerGardenWorld, getGardenWorld, isStitched, fromWorld } from '../world/garden-world'
 import { allNpcs, nodePlacementsFor, logicalZoneAt, structuresView, logicalStruct } from './world-adapter'
 
@@ -2483,12 +2483,9 @@ export default function Shimmer3D() {
 
       <Compass yawRef={camYaw} />
 
-      {/* world map — M key; the button serves touch */}
-      {!battle && !editMode && (
-        <button onClick={() => setShowMap(v => !v)} style={{
-          position: 'fixed', top: 12, left: 'calc(50% + 42px)', zIndex: 34, width: 34, height: 34, borderRadius: 8,
-          background: 'rgba(10,8,20,0.7)', border: '1px solid #ffffff44', color: '#ffe9b0', font: '700 15px ui-monospace, monospace', cursor: 'pointer',
-        }} title="World map (M)">🗺</button>
+      {/* minimap — persistent, click (or M) expands to the full map */}
+      {!battle && !editMode && !showMap && (
+        <MiniMap zoneId={zone.id} gridRef={gridRef} posRef={posRef} yawRef={camYaw} onExpand={() => setShowMap(true)} />
       )}
       {showMap && <WorldMap zoneId={zone.id} gridRef={gridRef} posRef={posRef} yawRef={camYaw} onClose={() => setShowMap(false)} />}
 
