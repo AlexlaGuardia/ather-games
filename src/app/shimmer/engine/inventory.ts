@@ -8,7 +8,7 @@ import { FURNITURE } from '../sprites/furniture'
 // --- Constants ---
 export const INVENTORY_COLS = 5
 export const INVENTORY_ROWS = 4
-export const INVENTORY_SLOTS = 20
+export const INVENTORY_SLOTS = 24  // 6 hotbar + 18 satchel = a clean 6×4 grid (older 20-slot saves pad to 24)
 export const HOTBAR_START = 15
 export const HOTBAR_SIZE = 5
 export const CHEST_COLS = 5
