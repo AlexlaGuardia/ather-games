@@ -1278,42 +1278,6 @@ const Scene = memo(function Scene(props: {
   )
 })
 
-// Compass — a needle that points to grid-north on screen. Driven by the live camera yaw via rAF
-// (no React re-render). North = world -z; the rose rotates with the camera so N tracks the map.
-function Compass({ yawRef }: { yawRef: React.RefObject<number> }) {
-  const rose = useRef<HTMLDivElement>(null)
-  const nlabel = useRef<HTMLSpanElement>(null)
-  useEffect(() => {
-    let id = 0
-    const tick = () => {
-      const y = yawRef.current
-      if (rose.current) rose.current.style.transform = `rotate(${y}rad)`
-      if (nlabel.current) nlabel.current.style.transform = `translate(-50%, -50%) rotate(${-y}rad)`
-      id = requestAnimationFrame(tick)
-    }
-    id = requestAnimationFrame(tick)
-    return () => cancelAnimationFrame(id)
-  }, [yawRef])
-  return (
-    <div style={{
-      position: 'fixed', top: 12, left: '50%', marginLeft: -30, width: 60, height: 60, borderRadius: '50%',
-      background: 'rgba(10,8,20,0.7)', border: '1px solid #ffffff44', pointerEvents: 'none',
-    }}>
-      <div ref={rose} style={{ position: 'absolute', inset: 0 }}>
-        <div style={{
-          position: 'absolute', top: 5, left: '50%', transform: 'translateX(-50%)', width: 0, height: 0,
-          borderLeft: '6px solid transparent', borderRight: '6px solid transparent', borderBottom: '12px solid #e8584a',
-        }} />
-        <div style={{
-          position: 'absolute', bottom: 5, left: '50%', transform: 'translateX(-50%)', width: 0, height: 0,
-          borderLeft: '6px solid transparent', borderRight: '6px solid transparent', borderTop: '12px solid #cdd4e3',
-        }} />
-        <span ref={nlabel} style={{ position: 'absolute', top: '24%', left: '50%', color: '#ffd9d2', font: '800 11px ui-monospace, monospace' }}>N</span>
-      </div>
-    </div>
-  )
-}
-
 // Floating touch joystick (bottom-left). Writes an analog {x,y} (camera-relative: y up = forward) into
 // joyRef, which Player reads alongside WASD. Captures its own pointer so the camera never sees the drag.
 function TouchJoystick({ joyRef, bottom = 30 }: { joyRef: React.RefObject<{ x: number; y: number }>; bottom?: number }) {
@@ -1450,6 +1414,8 @@ export default function Shimmer3D() {
   }, [])
   // Pointer-lock state → drives the "click to look" nudge (shown only when first-person + uncaptured).
   const [pointerLocked, setPointerLocked] = useState(false)
+  const [showLookHint, setShowLookHint] = useState(true)  // the "click to look" nudge fades a few seconds after spawn
+  useEffect(() => { const t = setTimeout(() => setShowLookHint(false), 5000); return () => clearTimeout(t) }, [])
   useEffect(() => {
     const onLock = () => setPointerLocked(document.pointerLockElement instanceof Element)
     document.addEventListener('pointerlockchange', onLock)
@@ -2533,43 +2499,35 @@ export default function Shimmer3D() {
         />
       </Canvas>
 
-      <div style={{
-        position: 'fixed', top: 12, left: 12, padding: '8px 12px', borderRadius: 8,
-        background: 'rgba(10,8,20,0.66)', color: '#e9dfc8', font: '600 13px ui-monospace, monospace', lineHeight: 1.5,
-      }}>
-        Shimmer 3D — {zone.id === WORLD_ZONE_ID ? (getZone(ZONES, districtZone)?.name ?? zone.name) : zone.name}{editMode ? '  ·  EDIT' : ''}<br />
-        <span style={{ opacity: 0.8 }}>
-          {editMode ? 'left-drag paint · WASD fly · Q/E down·up · right-drag look · scroll zoom' : `WASD run · Space jump · Shift slide · jump into wall + hold = climb · M map · ${hasStarter ? 'mist = wild spirits' : 'meet Gregory first'}${isOwner ? ' · B edit' : ''}`}
-        </span>
-        {!editMode && <><br /><span style={{ color: '#ffe08a' }}>✦ {wallet.marks} marks</span></>}
-      </div>
+      {/* edit-mode keeps a minimal zone/controls strip; play HUD is clean (marks moved to the top-right stack) */}
+      {editMode && (
+        <div style={{
+          position: 'fixed', top: 12, left: 12, padding: '8px 12px', borderRadius: 8,
+          background: 'rgba(10,8,20,0.66)', color: '#e9dfc8', font: '600 13px ui-monospace, monospace', lineHeight: 1.5,
+        }}>
+          Shimmer 3D — {zone.id === WORLD_ZONE_ID ? (getZone(ZONES, districtZone)?.name ?? zone.name) : zone.name}  ·  EDIT<br />
+          <span style={{ opacity: 0.8 }}>left-drag paint · WASD fly · Q/E down·up · right-drag look · scroll zoom</span>
+        </div>
+      )}
 
-      {/* free-look nudge: first-person play, before the pointer is captured */}
-      {!editMode && !pointerLocked && !isTouch && !dialogue && !battle && (
+      {/* free-look nudge: first-person play, before the pointer is captured. Fades out a few seconds after
+          spawn (showLookHint) so it's a welcome, not permanent chrome. */}
+      {!editMode && !pointerLocked && !isTouch && !dialogue && !battle && showLookHint && (
         <div style={{
           position: 'fixed', left: '50%', bottom: 108, transform: 'translateX(-50%)', zIndex: 34,
           padding: '6px 13px', borderRadius: 999, background: 'rgba(16,14,32,0.8)', border: '1px solid #7fe3c855',
           color: '#cfeee2', font: '700 12px ui-monospace, monospace', whiteSpace: 'nowrap', pointerEvents: 'none',
-        }}>click to look around <span style={{ opacity: 0.6 }}>· Esc releases</span></div>
+          animation: 'lookHintFade 5s ease-out forwards',
+        }}>
+          <style>{`@keyframes lookHintFade { 0%,70% { opacity: 1 } 100% { opacity: 0 } }`}</style>
+          click to look around <span style={{ opacity: 0.6 }}>· Esc releases</span></div>
       )}
-
-      <Compass yawRef={camYaw} />
 
       {/* minimap — persistent, click (or M) expands to the full map */}
       {!battle && !editMode && !showMap && (
         <MiniMap zoneId={zone.id} gridRef={gridRef} posRef={posRef} yawRef={camYaw} onExpand={() => setShowMap(true)} />
       )}
       {showMap && <WorldMap zoneId={zone.id} gridRef={gridRef} posRef={posRef} yawRef={camYaw} onClose={() => setShowMap(false)} />}
-
-      {/* quest objective nudge — advances with the full hold chain (Greg → Thistle → Sorrel → Brack).
-          Goes quiet once Hold 3 clears — the liberation arc is done. */}
-      {!dialogue && !nearNpc && !battle && !editMode && (!hasStarter || !defeated.thistle || !defeated.sorrel || !defeated.brack) && (
-        <div style={{
-          position: 'fixed', top: 84, left: '50%', transform: 'translateX(-50%)', zIndex: 35,
-          padding: '7px 15px', borderRadius: 999, background: 'rgba(16,14,32,0.88)', border: '1px solid #d4a84355',
-          color: '#ffe9b0', font: '700 13px ui-monospace, monospace', whiteSpace: 'nowrap', pointerEvents: 'none',
-        }}>{!hasStarter ? '✦ Find Gregory — follow the glow in the glade' : !defeated.thistle ? '✦ Spirit Meadows — free the spirit Thistle holds' : !defeated.sorrel ? '✦ Mana Springs — climb to the spirits Sorrel holds' : '✦ Mana Springs — climb to the top hold, where Brack waits'}</div>
-      )}
 
       {/* talk prompt when standing by an NPC */}
       {nearNpc && !dialogue && !battle && !editMode && (
@@ -2650,6 +2608,11 @@ export default function Shimmer3D() {
       {/* ── TOP-RIGHT HUD: mana pie gauge · ☰ menu (edit/new game) · skills panel ── */}
       {!battle && !approach && !rewards && !editMode && !dialogue && (
         <div data-ct={companionTick} style={{ position: 'fixed', top: 12, right: 12, zIndex: 34, display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 9 }}>
+          {/* marks wallet — moved here from the (now-removed) top-left box */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 11px', borderRadius: 999, background: 'rgba(20,20,14,0.82)', border: '1px solid #d4a84340' }}>
+            <span style={{ font: '800 14px ui-monospace, monospace', color: '#ffe08a', lineHeight: 1 }}>✦ {wallet.marks}</span>
+            <span style={{ font: '700 9px ui-monospace, monospace', color: '#c8b06a', letterSpacing: '0.12em' }}>MARKS</span>
+          </div>
           {/* mana pie — 1-100% of the pool; drains live while channeling */}
           <div style={{
             width: 104, height: 104, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center',
