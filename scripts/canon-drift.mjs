@@ -169,6 +169,9 @@ const CANON_V1_ZONES = [
   'Route One', 'Route Two', 'Route Three', 'Route Four', 'Route Five',
   'Brack Hold', 'Sorrel Hold', 'Thistle Hold',
   'Gloview Village', 'The Outfields',
+  // ruled 2026-07-22 (Alex, home-plot gate build): the Rune Hold shop interior across the
+  // permanent gate — shimmer-storyline.md + shimmer-geography.md; street door stays sealed.
+  'The Spirit Corner',
 ]
 // dev/benchmark zones that are intentionally non-canon — excluded from the check.
 const ZONE_IGNORE = /sandbox|demo|terrain|hub|^fp-|garden \(hub\)|large |medium |huge|chunk|bake|proof|test|[–—]/i
