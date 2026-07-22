@@ -15,13 +15,18 @@ const Shimmer3D = dynamic(() => import('./Shimmer3D'), { ssr: false })
 export default function Play3DPage() {
   const [ready, setReady] = useState(false)
   useEffect(() => {
+    const report = (m: string) => { try { navigator.sendBeacon('/shimmer/client-log', m) } catch { /* noop */ } }
+    const onErr = (e: ErrorEvent) => report(`${e.message}\n${e.error?.stack ?? ''}`)
+    const onRej = (e: PromiseRejectionEvent) => report(`unhandledrejection: ${e.reason?.message ?? e.reason}\n${e.reason?.stack ?? ''}`)
+    window.addEventListener('error', onErr)
+    window.addEventListener('unhandledrejection', onRej)
     let alive = true
     fetch('/shimmer/world-data', { cache: 'no-store' })
       .then(r => r.json())
       .then(d => { if (!d.error) { applyLiveWorldData(d); invalidateWorldCaches() } })
       .catch(() => { /* compiled fallback */ })
       .finally(() => { if (alive) { registerGardenWorld(); setReady(true) } })
-    return () => { alive = false }
+    return () => { alive = false; window.removeEventListener('error', onErr); window.removeEventListener('unhandledrejection', onRej) }
   }, [])
   if (!ready) return (
     <div style={{ position: 'fixed', inset: 0, display: 'grid', placeItems: 'center', background: '#0e0c1c', color: '#e9dfc8', font: '700 15px ui-monospace, monospace' }}>
