@@ -2293,6 +2293,13 @@ export default function Shimmer3D() {
   const placeTargetRef = useRef<{ x: number; y: number } | null>(null)     // front tile, updated by the ghost
   const [structures, setStructures] = useState<PlacedStruct[]>([])
   const structuresRef = useRef(structures); structuresRef.current = structures
+  // World-VIEW mirror of the placed structures — collision, the interact prompt, and placement
+  // checks all compare against the PLAYER's coordinate space, which on the continent is world
+  // coords, not the logical district coords structures are SAVED in. structuresRef stays logical
+  // (that's what persists); this ref is what the Scene (Player + PlacementGhost) reads. Without
+  // it, stations placed in a district were ghosts in world mode: walk-through + no menu.
+  const structuresViewRef = useRef<PlacedStruct[]>([])
+  structuresViewRef.current = structuresView(structures, zoneId)
   const [nearStation, setNearStation] = useState<PlacedStruct | null>(null)
   const nearStationRef = useRef<PlacedStruct | null>(null); nearStationRef.current = nearStation
   const [openMenu, setOpenMenu] = useState<{ kind: StationKind; struct: PlacedStruct } | null>(null)
@@ -2381,7 +2388,8 @@ export default function Shimmer3D() {
     const pl = placingRef.current, t = placeTargetRef.current
     if (!pl || !t) return
     const gr = gridRef.current
-    const blocked = !walkable(gr, t.x, t.y) || structuresRef.current.some(s => s.tileX === t.x && s.tileY === t.y)
+    // check occupancy in VIEW space — the target tile is in the player's (possibly world) coords
+    const blocked = !walkable(gr, t.x, t.y) || structuresViewRef.current.some(s => s.tileX === t.x && s.tileY === t.y)
     if (blocked) { setHarvestToast('Can’t build there'); return }
     if (countItem(invRef.current, pl.itemId) < 1) { cancelPlacing(); return }
     removeItems(invRef.current, pl.itemId, 1)
@@ -3294,7 +3302,7 @@ export default function Shimmer3D() {
           battleRef={battleRef} partyLevelRef={partyLevelRef} onEncounter={onEncounter} joyRef={joyRef}
           talkingRef={talkingRef} hasPartyRef={hasPartyRef} onNearChange={setNearNpc}
           harvestNodesRef={runtimeNodesRef} onNearNode={setNearNode} channel={channel}
-          structures={structures} placing={placing} placeTargetRef={placeTargetRef} structuresRef={structuresRef} onNearStation={setNearStation}
+          structures={structures} placing={placing} placeTargetRef={placeTargetRef} structuresRef={structuresViewRef} onNearStation={setNearStation}
           defeatedRef={defeatedRef} defeated={defeated} flagsRef={flagsRef}
           nodes={runtimeNodes}
           companionColor={(() => { const b = beastsRef.current.find(x => x.id === activeBeastIdRef.current); void companionTick; return b ? (BEAST_COLOR[b.species] ?? '#9fd9c4') : null })()}
