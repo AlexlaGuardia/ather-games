@@ -149,6 +149,13 @@ const MANA_REGEN_PER_SEC = 1 / 60   // 1 mana per minute by design — the real 
 // Mana-restore potions (Alchemy-brewed; canon economy — see project_shimmer_mana_economy). Drink to
 // refill the pool. Restore amounts are the feel knob. Only ids listed here are drinkable-for-mana.
 const MANA_POTIONS: Record<string, number> = { mana_draught: 40, shard_tonic: 65 }
+// Mend potions — HP/shield do NOT regen (outside-Ather combat); these brewed potions are the only
+// way back up. Both already exist in POTION_DEFS (Alchemy), they just gain a drink effect here:
+// a salve mends the body, a crystal elixir re-forms the shield lattice.
+const HEAL_POTIONS: Record<string, { hp?: number; sh?: number }> = {
+  shimmer_salve: { hp: 50 },
+  crystal_elixir: { sh: 75 },
+}
 // Placeable stations — double-tap in the hotbar to enter placement mode, then confirm to build.
 // Placeholder blockout look (real models later, per the art rule). w/d = footprint tiles, h = height.
 const PLACEABLES: Record<string, { name: string; color: string; accent: string; h: number }> = {
@@ -184,6 +191,7 @@ const stationInstanceId = (s: PlacedStruct) => `${s.srcZoneId ?? s.zoneId}:${s.s
 const STARTER_KIT_FLAG = 'starterKitV2'
 function grantStarterKit(inv: Inventory) {
   addItems(inv, 'mana_draught', 3)                                              // refill potions
+  addItems(inv, 'shimmer_salve', 2); addItems(inv, 'crystal_elixir', 1)         // combat mend potions
   addItems(inv, 'alchemy_station', 1); addItems(inv, 'crafting_table', 1)       // the two seed stations
   addItems(inv, 'raw_mana_shard', 12)                                           // brew fuel + station mats
   addItems(inv, 'goldwood_plank', 6); addItems(inv, 'goldwood_bark', 3); addItems(inv, 'shimmeroak_plank', 6) // build mats
@@ -192,6 +200,8 @@ function grantStarterKit(inv: Inventory) {
 const USE_HINTS: Record<string, string> = {
   ...Object.fromEntries(Object.entries(MANA_POTIONS).map(([k, v]) => [k, `+${v} mana · double-tap to drink`])),
   ...Object.fromEntries(Object.keys(PLACEABLES).map(k => [k, 'double-tap to place'])),
+  shimmer_salve: '+50 HP · double-tap to apply (outside the Ather)',
+  crystal_elixir: '+75 shield · double-tap to apply (outside the Ather)',
 }
 
 function bucketsRect(grid: number[][], r0: number, c0: number, r1: number, c1: number) {
@@ -1282,14 +1292,17 @@ const DRIFT_AMP = 2.4         // moving-targets strafe amplitude (tiles)
 const PLAYER_HIT_R2 = 0.6 * 0.6
 const MAX_HP = 100
 const MAX_SHIELD = 75
-const SHIELD_DELAY = 5        // seconds after last damage before the shield recharges
-const SHIELD_REGEN = 30       // shield points/sec once recharging
+// NO auto-regen on HP or shield — Shimmer Salve mends HP, Crystal Elixir re-forms the shield
+// (HEAL_POTIONS above). Resource discipline is the game: mana is the clip, potions are the comeback.
+const CLIP_SIZE = 24          // rounds per recharge of the AM Riser's clip
+const RELOAD_TIME = 1.4       // seconds — the recharge channel
+const RELOAD_MANA = 10        // mana for a FULL clip recharge (partial recharges cost proportionally)
 // Downrange targets for the range — floating orbs at varied spots/heights in Alex's 50×50.
 const RANGE_TARGETS: [number, number, number][] = [
   [15, 1.8, 26], [20, 2.5, 31], [25, 1.6, 23], [30, 2.9, 33],
   [35, 2.0, 27], [12, 2.3, 35], [38, 1.7, 21], [22, 3.1, 39],
 ]
-function FiringRange({ firingRef, adsRef, gridRef, recoilRef, bloomRef, posRef, hpRef, shieldRef, rangeCfgRef, onHit, onShot, onPlayerDamage, onPlayerDown }: {
+function FiringRange({ firingRef, adsRef, gridRef, recoilRef, bloomRef, posRef, hpRef, shieldRef, rangeCfgRef, ammoRef, reloadingRef, onNeedReload, onHit, onShot, onPlayerDamage, onPlayerDown }: {
   firingRef: React.RefObject<boolean>   // held while left-click is down → full-auto
   adsRef: React.RefObject<boolean>      // aiming → muzzle offset moves to center (ADS tracer runs flat)
   gridRef: React.RefObject<number[][]>
@@ -1299,6 +1312,9 @@ function FiringRange({ firingRef, adsRef, gridRef, recoilRef, bloomRef, posRef, 
   hpRef: React.MutableRefObject<number>     // player HP; ResourceBars reads, this sim writes
   shieldRef: React.MutableRefObject<number> // player shield; drains first, recharges out of combat
   rangeCfgRef: React.RefObject<{ moving: boolean; hostile: boolean }>  // range console (T) settings
+  ammoRef: React.MutableRefObject<number>       // rounds left in the clip; this sim decrements
+  reloadingRef: React.MutableRefObject<number>  // >0 while the recharge channel runs — fire is blocked
+  onNeedReload: () => void  // dry trigger on an empty clip → parent starts the recharge
   onHit: () => void
   onShot: () => void
   onPlayerDamage: () => void  // vignette flash
@@ -1319,7 +1335,6 @@ function FiringRange({ firingRef, adsRef, gridRef, recoilRef, bloomRef, posRef, 
   })), [])
   // the ground hunter — spawned by the console's HOSTILE toggle; chases, strafes, returns fire
   const hunter = useRef({ pos: new THREE.Vector3(), hp: 0, alive: false, respawn: 0, fireCd: 0, strafe: 0 })
-  const lastDmg = useRef(-999)  // clock time of the last damage taken, for the shield-regen delay
   const shotRef = useRef<THREE.InstancedMesh>(null)
   const orbRef = useRef<THREE.InstancedMesh>(null)
   const tgtRef = useRef<THREE.InstancedMesh>(null)
@@ -1344,11 +1359,15 @@ function FiringRange({ firingRef, adsRef, gridRef, recoilRef, bloomRef, posRef, 
   useFrame((state, dt) => {
     cd.current -= dt
     bloomRef.current = Math.max(0, bloomRef.current - BLOOM_DECAY * dt)  // cone recovers while not firing
-    // full-auto: while fire is held and the cadence is ready, spawn a round from the camera
-    if (firingRef.current && cd.current <= 0) {
+    // full-auto: while fire is held and the cadence is ready, spawn a round from the camera.
+    // The clip gates it: recharge channel blocks fire, a dry trigger auto-starts the recharge.
+    if (firingRef.current && cd.current <= 0 && reloadingRef.current <= 0) {
+      if (ammoRef.current <= 0) { cd.current = 0.25; onNeedReload() }
+      else {
       cd.current = FIRE_COOLDOWN
       const p = pool.find((pr) => pr.life <= 0)
       if (p) {
+        ammoRef.current -= 1
         // Apex muzzle model: spawn at the weapon (low-right of the eye), aim the velocity at the point
         // the crosshair ray hits at CONVERGE_DIST — the tracer rises up-and-in to the reticle.
         state.camera.getWorldDirection(dir)
@@ -1372,6 +1391,7 @@ function FiringRange({ firingRef, adsRef, gridRef, recoilRef, bloomRef, posRef, 
         recoilRef.current.p += KICK_PITCH
         recoilRef.current.y += (Math.random() * 2 - 1) * KICK_YAW
         onShot()
+      }
       }
     }
     // advance + trail + collide
@@ -1410,7 +1430,6 @@ function FiringRange({ firingRef, adsRef, gridRef, recoilRef, bloomRef, posRef, 
     }
     if (posRef.current) {
       pEye.set(posRef.current.x, posRef.current.y + 1.1, posRef.current.z)
-      const now = state.clock.elapsedTime
       // ── ground hunter (console HOSTILE toggle): spawn → chase to mid-range → strafe → return fire ──
       const h = hunter.current
       if (cfg?.hostile) {
@@ -1464,14 +1483,9 @@ function FiringRange({ firingRef, adsRef, gridRef, recoilRef, bloomRef, posRef, 
           shieldRef.current = Math.max(0, sh - DRONE_DMG)
           const spill = DRONE_DMG - (sh - shieldRef.current)
           if (spill > 0) hpRef.current = Math.max(0, hpRef.current - spill)
-          lastDmg.current = now
           if (hpRef.current <= 0) { hpRef.current = MAX_HP; shieldRef.current = MAX_SHIELD; onPlayerDown() }
           else onPlayerDamage()
         }
-      }
-      // shield recharge after SHIELD_DELAY seconds without taking damage (HP never regens)
-      if (shieldRef.current < MAX_SHIELD && now - lastDmg.current > SHIELD_DELAY) {
-        shieldRef.current = Math.min(MAX_SHIELD, shieldRef.current + SHIELD_REGEN * dt)
       }
     }
     // render each round as a small head + trail LINKS: each link is a unit sphere stretched along the
@@ -1637,6 +1651,38 @@ function ResourceBars({ hpRef, shieldRef }: {
   )
 }
 
+// Ammo — the AM Riser clip readout, bottom-right corner. Recharge draws from MANA (RELOAD_MANA per
+// full clip), so this and the mana vial are two views of one economy. rAF off refs, zero React churn.
+function AmmoCounter({ ammoRef, reloadingRef }: {
+  ammoRef: React.MutableRefObject<number>
+  reloadingRef: React.MutableRefObject<number>
+}) {
+  const num = useRef<HTMLDivElement>(null), sub = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    let raf = 0
+    const tick = () => {
+      const a = ammoRef.current, rel = reloadingRef.current > 0
+      if (num.current) {
+        num.current.textContent = rel ? '——' : String(a)
+        num.current.style.color = rel ? '#8fe0ff' : a === 0 ? '#ff7a5f' : a <= 6 ? '#ffd98a' : '#eafff6'
+      }
+      if (sub.current) {
+        sub.current.textContent = rel ? 'RECHARGING' : a === 0 ? 'R — RECHARGE' : `/ ${CLIP_SIZE}`
+        sub.current.style.color = rel ? '#8fe0ffaa' : a === 0 ? '#ff7a5f' : '#ffffff66'
+      }
+      raf = requestAnimationFrame(tick)
+    }
+    raf = requestAnimationFrame(tick)
+    return () => cancelAnimationFrame(raf)
+  }, [ammoRef, reloadingRef])
+  return (
+    <div style={{ position: 'fixed', right: 18, bottom: 16, zIndex: 35, pointerEvents: 'none', textAlign: 'right' }}>
+      <div ref={num} style={{ font: '800 30px ui-monospace, monospace', color: '#eafff6', textShadow: '0 2px 4px rgba(0,0,0,0.8)', lineHeight: 1 }}>{CLIP_SIZE}</div>
+      <div ref={sub} style={{ font: '700 10px ui-monospace, monospace', color: '#ffffff66', letterSpacing: '0.12em', marginTop: 3 }}>/ {CLIP_SIZE}</div>
+    </div>
+  )
+}
+
 // Visible EXIT markers at a zone's warp tiles — for outside-Ather zones, where warps aren't painted
 // into the grid (no gold beacon), so the way back stays obvious. Green pillar + floating EXIT label.
 function ExitMarkers({ warps, heights }: { warps: Warp[]; heights: number[][] }) {
@@ -1722,6 +1768,9 @@ const Scene = memo(function Scene(props: {
   hpRef: React.MutableRefObject<number>
   shieldRef: React.MutableRefObject<number>
   rangeCfgRef: React.RefObject<{ moving: boolean; hostile: boolean }>
+  ammoRef: React.MutableRefObject<number>
+  reloadingRef: React.MutableRefObject<number>
+  onNeedReload: () => void
   onPlayerDamage: () => void
   onPlayerDown: () => void
 }) {
@@ -1747,7 +1796,7 @@ const Scene = memo(function Scene(props: {
       <ZoneGeometry key={`${props.zone.id}-${props.dims}`} gridRef={props.gridRef} heights={props.heights} version={props.version} paint={props.paint} editing={props.editing} />
       <NPCMarkers npcs={ALL_NPCS.filter((n) => n.zone === props.zone.id && npcInWorld(n, props.defeated, props.flagsRef.current))} heights={props.heights} />
       {props.isOwner && props.zone.id === 'moonwell-glade-gregory-s-home' && <HubGateMarkers heights={props.heights} />}
-      {props.zone.realm === 'outside' && <FiringRange firingRef={props.firingRef} adsRef={props.adsRef} gridRef={props.gridRef} recoilRef={props.recoilRef} bloomRef={props.bloomRef} posRef={props.posRef} hpRef={props.hpRef} shieldRef={props.shieldRef} rangeCfgRef={props.rangeCfgRef} onHit={props.onRangeHit} onShot={props.onRangeShot} onPlayerDamage={props.onPlayerDamage} onPlayerDown={props.onPlayerDown} />}
+      {props.zone.realm === 'outside' && <FiringRange firingRef={props.firingRef} adsRef={props.adsRef} gridRef={props.gridRef} recoilRef={props.recoilRef} bloomRef={props.bloomRef} posRef={props.posRef} hpRef={props.hpRef} shieldRef={props.shieldRef} rangeCfgRef={props.rangeCfgRef} ammoRef={props.ammoRef} reloadingRef={props.reloadingRef} onNeedReload={props.onNeedReload} onHit={props.onRangeHit} onShot={props.onRangeShot} onPlayerDamage={props.onPlayerDamage} onPlayerDown={props.onPlayerDown} />}
       {props.zone.realm === 'outside' && <ExitMarkers warps={props.zone.warps} heights={props.heights} />}
       <NodeMarkers nodes={props.nodes} heights={props.heights} editing={props.editing} channel={props.channel} />
       {props.zone.id === WORLD_ZONE_ID ? <WorldFlora heights={props.heights} /> : <FloraDressing zoneId={props.zone.id} heights={props.heights} />}
@@ -2088,6 +2137,14 @@ export default function Shimmer3D() {
         setInvSlots([...invRef.current.slots])
         persist()
       }
+      // One-time mend-potion grant for saves that predate HP/shield (starter kit already has them,
+      // but its flag is burned on returning saves) — same idempotent-flag pattern.
+      if (!flagsRef.current.mendKitV1) {
+        addItems(invRef.current, 'shimmer_salve', 2); addItems(invRef.current, 'crystal_elixir', 1)
+        flagsRef.current.mendKitV1 = true
+        setInvSlots([...invRef.current.slots])
+        persist()
+      }
     }).catch(() => {})
     return () => { alive = false }
   }, [load, persist])
@@ -2198,6 +2255,22 @@ export default function Shimmer3D() {
       if (countItem(invRef.current, itemId) < 1) return
       battleRef.current = true                       // freeze the walker while aiming the ghost
       setPlacing({ itemId, facing: 0 })
+      return
+    }
+    // mend potions — the ONLY way HP/shield come back (no auto-regen in outside-Ather combat)
+    const heal = HEAL_POTIONS[itemId]
+    if (heal) {
+      if (countItem(invRef.current, itemId) < 1) return
+      if (!weaponDrawnRef.current) { setHarvestToast('Nothing to mend inside the Ather'); return }
+      const needHp = (heal.hp ?? 0) > 0 && hpRef.current < MAX_HP
+      const needSh = (heal.sh ?? 0) > 0 && shieldRef.current < MAX_SHIELD
+      if (!needHp && !needSh) { setHarvestToast(heal.hp ? 'HP already full' : 'Shield already full'); return }
+      removeItems(invRef.current, itemId, 1)
+      if (heal.hp) hpRef.current = Math.min(MAX_HP, hpRef.current + heal.hp)
+      if (heal.sh) shieldRef.current = Math.min(MAX_SHIELD, shieldRef.current + heal.sh)
+      setInvSlots([...invRef.current.slots])
+      setHarvestToast(`${prettyItem(itemId)} · ${heal.hp ? `+${heal.hp} HP` : `+${heal.sh} shield`}`)
+      persist()
       return
     }
     const restore = MANA_POTIONS[itemId]
@@ -2581,6 +2654,7 @@ export default function Shimmer3D() {
     invRef.current = createInventory()
     equippedToolsRef.current = ensureBasicTools({})  // Greg's basic blade/spike/rinstick
     flagsRef.current[STARTER_KIT_FLAG] = true // suppress the load-path migration so a fresh player stays empty until Gregory
+    flagsRef.current.mendKitV1 = true // ditto for the mend-potion migration (Gregory's kit carries them)
     // The rest of the run's economy. persist() writes every one of these refs, so anything left
     // un-reset here gets saved straight back into the "new" game.
     beastsRef.current = []
@@ -2614,6 +2688,7 @@ export default function Shimmer3D() {
     // an actual grant — so guarding on that flag here would wrongly skip Gregory's kit.
     grantStarterKit(invRef.current)
     flagsRef.current[STARTER_KIT_FLAG] = true
+    flagsRef.current.mendKitV1 = true  // Gregory's kit includes the mend potions — don't re-grant on load
     setInvSlots([...invRef.current.slots])
     setBanner(`✦ a young ${speciesDisplayName(s.species)} joined you!`)
     persist()
@@ -2730,6 +2805,9 @@ export default function Shimmer3D() {
   const bloomRef = useRef(0)  // current spread bloom (deg); FiringRange writes, WeaponReticle reads
   const hpRef = useRef(MAX_HP)        // player HP/shield — combat sim writes, ResourceBars reads
   const shieldRef = useRef(MAX_SHIELD)
+  const ammoRef = useRef(CLIP_SIZE)   // AM Riser clip; FiringRange decrements, AmmoCounter reads
+  const reloadingRef = useRef(0)      // >0 while the recharge channel runs
+  const reloadTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const hitmarkRef = useRef<HTMLDivElement>(null)   // × flash at the reticle on a landed round
   const vignetteRef = useRef<HTMLDivElement>(null)  // red edge flash when the player takes damage
   const onRangeHit = useCallback(() => {
@@ -2754,7 +2832,13 @@ export default function Shimmer3D() {
   // Sync the HUD counters at ~5fps while the weapon is out, so firing never touches the (huge) component's
   // render path — that churn was stuttering the movement rAF. Reset counters when the weapon holsters.
   useEffect(() => {
-    if (!weaponDrawn) { shotsRef.current = 0; hitsRef.current = 0; setHudStats({ shots: 0, hits: 0 }); firingRef.current = false; adsRef.current = false; setAds(false); recoilRef.current.p = 0; recoilRef.current.y = 0; bloomRef.current = 0; hpRef.current = MAX_HP; shieldRef.current = MAX_SHIELD; return }
+    if (!weaponDrawn) {
+      shotsRef.current = 0; hitsRef.current = 0; setHudStats({ shots: 0, hits: 0 }); firingRef.current = false; adsRef.current = false; setAds(false)
+      recoilRef.current.p = 0; recoilRef.current.y = 0; bloomRef.current = 0; hpRef.current = MAX_HP; shieldRef.current = MAX_SHIELD
+      ammoRef.current = CLIP_SIZE; reloadingRef.current = 0
+      if (reloadTimer.current) { clearTimeout(reloadTimer.current); reloadTimer.current = null }
+      return
+    }
     const id = setInterval(() => setHudStats((s) => (s.shots === shotsRef.current && s.hits === hitsRef.current) ? s : { shots: shotsRef.current, hits: hitsRef.current }), 200)
     return () => clearInterval(id)
   }, [weaponDrawn])
@@ -2827,6 +2911,38 @@ export default function Shimmer3D() {
   }, [toggleRange])
   // holstering (leaving the outside realm) closes the console and resets the range to peaceful defaults
   useEffect(() => { if (!weaponDrawn) { setRangeOpen(false); setRangeCfg({ moving: false, hostile: false }) } }, [weaponDrawn])
+  // ── Clip recharge (R, or a dry trigger) — the clip refills FROM MANA: RELOAD_MANA for a full clip,
+  // partial recharges cost proportionally. Low mana = a short clip; none = drink a draught first.
+  // The weapon runs on the same resource economy as the tools — nothing in the Crucible is free.
+  const dryToastAt = useRef(0)
+  const startReload = useCallback(() => {
+    if (!weaponDrawnRef.current || reloadingRef.current > 0 || ammoRef.current >= CLIP_SIZE) return
+    const missing = CLIP_SIZE - ammoRef.current
+    const rounds = Math.min(missing, Math.floor((manaRef.current.current / RELOAD_MANA) * CLIP_SIZE))
+    if (rounds < 1) {
+      const t = performance.now()  // dry-fire calls this every 0.25s — don't toast-spam
+      if (t - dryToastAt.current > 1500) { dryToastAt.current = t; setHarvestToast('No mana to recharge — drink a Mana Draught') }
+      return
+    }
+    reloadingRef.current = 1
+    const el = casterRef.current
+    if (el) { el.style.animation = 'none'; void el.offsetHeight; el.style.animation = `casterReload ${RELOAD_TIME}s ease-in-out` }
+    reloadTimer.current = setTimeout(() => {
+      reloadingRef.current = 0
+      ammoRef.current = Math.min(CLIP_SIZE, ammoRef.current + rounds)
+      manaRef.current.current = Math.max(0, manaRef.current.current - (RELOAD_MANA * rounds) / CLIP_SIZE)
+      setManaFrac(manaRef.current.current / getMaxPool(skillsRef.current.mana.level))
+    }, RELOAD_TIME * 1000)
+  }, [])
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key.toLowerCase() !== 'r') return
+      if (!weaponDrawnRef.current || editRef.current || battleRef.current || curBattleRef.current || dialogueRef.current) return
+      e.preventDefault(); startReload()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [startReload])
   // If a blocking mode takes over while the bag is open (battle/dialogue/edit/placing/reward), drop the
   // bag — those own the cursor themselves, so no re-lock (plain setBagOpen, not toggleBag).
   useEffect(() => { if (bagOpen && (battle || editMode || dialogue || placing || approach || rewards || openMenu)) setBagOpen(false) }, [bagOpen, battle, editMode, dialogue, placing, approach, rewards, openMenu])
@@ -3093,6 +3209,9 @@ export default function Shimmer3D() {
           hpRef={hpRef}
           shieldRef={shieldRef}
           rangeCfgRef={rangeCfgRef}
+          ammoRef={ammoRef}
+          reloadingRef={reloadingRef}
+          onNeedReload={startReload}
           onPlayerDamage={onPlayerDamage}
           onPlayerDown={onPlayerDown}
         />
@@ -3479,6 +3598,7 @@ export default function Shimmer3D() {
           )}
           <WeaponReticle bloomRef={bloomRef} adsRef={adsRef} />
           <ResourceBars hpRef={hpRef} shieldRef={shieldRef} />
+          <AmmoCounter ammoRef={ammoRef} reloadingRef={reloadingRef} />
           <style>{`@keyframes hitFlash{0%{opacity:1}100%{opacity:0}}@keyframes dmgFlash{0%{opacity:1}100%{opacity:0}}@keyframes downFlash{0%{opacity:1}55%{opacity:0.85}100%{opacity:0}}`}</style>
           {/* hitmarker — four outward diagonal ticks around the reticle, flashed per landed round */}
           <div ref={hitmarkRef} style={{ position: 'fixed', left: '50%', top: '50%', zIndex: 31, pointerEvents: 'none', opacity: 0 }}>
@@ -3495,7 +3615,8 @@ export default function Shimmer3D() {
           <div style={{ position: 'fixed', right: '17%', bottom: 0, zIndex: 33, pointerEvents: 'none',
             transform: ads ? 'translate(-150px, -30px) scale(1.14)' : 'translate(0,0) scale(1)', transition: 'transform 0.14s ease-out' }}>
             <div ref={casterRef}>
-              <style>{`@keyframes casterKick { 0% { transform: translateY(16px) } 60% { transform: translateY(-3px) } 100% { transform: translateY(0) } }`}</style>
+              <style>{`@keyframes casterKick { 0% { transform: translateY(16px) } 60% { transform: translateY(-3px) } 100% { transform: translateY(0) } }
+@keyframes casterReload { 0% { transform: translateY(0) rotate(0deg) } 30% { transform: translateY(36px) rotate(-7deg) } 70% { transform: translateY(30px) rotate(-5deg) } 100% { transform: translateY(0) rotate(0deg) } }`}</style>
               <svg width="240" height="168" viewBox="0 0 240 168" style={{ display: 'block' }}>
                 <polygon points="46,168 66,92 158,122 138,168" fill="#161d2a" stroke="#3a4a63" strokeWidth="2" />
                 <polygon points="58,98 100,70 126,96 104,122" fill="#212b3d" stroke="#4a5d7d" strokeWidth="2" />
