@@ -421,6 +421,40 @@ the Arcade frame.
 > **Research sources:** Apex movement tech (slide-hop, tap-strafe, wall-bounce, superglide, mantle input model) —
 > BoostRoom + ProGuides + Alegends movement guides, 07-22.
 
+## 🔫 Shimmer play3d — CRUCIBLE COMBAT (weapon + damage + economy, 2026-07-22→22 PM, jin-cc)
+> **The Crucible = BATTLE ROYALE lane (Alex ruled 07-22; Apex is the north star).** The firing range in Alex's
+> 50×50 is the combat lab. Two sessions in, the full loop is live on :3200.
+>
+> **Left off (2026-07-22 late, `2406732`):** the whole single-player combat loop shipped + Alex-approved:
+> - **AM Riser = the SIDEARM** (Alex ruled: no two-shot deletes). Full-auto ~9/s, Apex muzzle model (spawns
+>   low-right, converges on the crosshair ray @38 tiles; ADS near-center), thin comet tracers, spread+bloom
+>   (hip 2.2° +0.45°/shot cap +2.6, ADS 0.25°), REAL camera recoil (no auto-return, fight the climb),
+>   truth reticle (arms track the live cone), gold-tick hitmarker on crit.
+> - **Damage (Alex's numbers):** 7 body / 11 crit. Player = 100 HP + 100 SH (200 effective); Barrier birth
+>   rune wired as `shieldMaxRef` hook (+25 → 125, one-line hookup when rune selection lands). NO auto-regen —
+>   mend potions only: Shimmer Salve +50 HP / Crystal Elixir +75 SH (both were already brewable in Alchemy;
+>   granted via starter kit + one-time `mendKitV1` migration; new-game stays empty until Gregory).
+> - **Ammo = MANA:** 24-round clip; recharge (R / dry-trigger auto) = 1.4s channel drawing mana (10/full clip,
+>   partial proportional). Gather → brew → fight: one economy, nothing free.
+> - **Bullseye boards:** targets are 3-layer instanced discs (white 0.6 / red ring / gold core 0.2),
+>   yaw-billboard to the player, shrink w/ damage; crit = radial miss-distance inside the gold core (geometric
+>   dead-center, teaches the zone visually). Hunter keeps height-based head zone.
+> - **Range console (T, weapon out):** danger is OPT-IN (Alex vetoed the surprise firing squad) — TARGET DRIFT
+>   (strafe anchors) · HOSTILE HUNTER (magenta octahedron: chase→orbit-strafe, amber orbs @2.2s, 35 HP, 4s
+>   respawn) · RESET STATS. Holster = console closed + peaceful defaults.
+> - **HUD:** SH/HP vertical percent bars right-center · ammo counter bottom-right · damage vignette · hitmarker.
+>   All rAF-off-refs, zero React churn in combat.
+> **Next:** weapon #2 — the PRIMARY slot (Riser is the sidearm; a slow heavy mid-range piece contrasts best) ·
+> crucible arena layout pass (cover, lanes, verticality for the movement tech) · reload/holster polish riffs.
+> **Parked:** birth-rune selection UI (hook is live) · player-vs-player (needs shimmer-server netcode lane) ·
+> potion quick-use keybind if hotbar double-tap feels slow in a fight.
+> **Decisions:** sidearm TTK intended (~29 body/18 crit vs full 200) · crit must be GEOMETRIC not RNG ·
+> danger always opt-in on the range · boards = in-engine primitives NOT Blender (live billboard/instance/scale;
+> picaso enters for baked hero props) · `T` console / `R` recharge / `c`+shift crouch untouched.
+> **Files:** `play3d/Shimmer3D.tsx` — weapon consts ~L1290-1340 (`AM_*`/`CLIP_*`/`RELOAD_*`/`HIP_SPREAD`/
+> `KICK_*`/`HUNTER_*`/`MAX_HP`/`MAX_SHIELD`/`BARRIER_SHIELD_BONUS`), `FiringRange()` sim, `WeaponReticle`/
+> `ResourceBars`/`AmmoCounter` HUD comps, `HEAL_POTIONS`/`startReload`/range-console state in the page comp.
+
 ## 🔊 Cross-cutting — THE AUDIO LAYER (music beds + VO commentator, 2026-07-06→07, jin-cc)
 > **A reusable audio stack, extracted from Mana'nana and rolled across the score-chase games.** Three shared libs
 > under `src/lib/arcade/`:
