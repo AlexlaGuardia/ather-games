@@ -44,8 +44,14 @@ import { useCloudSave } from '@/lib/use-cloud-save'
 import { useWallet } from '@/lib/use-wallet'
 import { StationMenus, type PlacedStruct, type StationKind } from './StationMenus'
 import { prettyItem, menuBtn, TOOL_HUD } from './ui'
+import { WORLD_ZONE_ID, registerGardenWorld, getGardenWorld, isStitched, fromWorld } from '../world/garden-world'
+import { allNpcs, nodePlacementsFor, logicalZoneAt, structuresView, logicalStruct } from './world-adapter'
 
-const START_ZONE = 'moonwell-glade'
+// The composed continent registers as a zone before any getZone/save-load runs.
+registerGardenWorld()
+const ALL_NPCS = allNpcs()
+
+const START_ZONE = WORLD_ZONE_ID // the continent IS the overworld; old zones stay editable via the dropdown
 const WATER_ID = 8, FLOOR_ID = 97, WALL_ID = 34, WARP_ID = 14, MIST_ID = 31
 // Encounters: stepping onto a fresh MIST tile can draw a wild spirit. Per-zone odds live in
 // ENCOUNTER_TABLES (engine/encounters.ts → `rate`); these dials shape it for the 3D walker so a
@@ -156,7 +162,7 @@ const STATIONS: Record<string, { kind: StationKind; verb: string; emoji: string;
 }
 // Stable per-placement instance id — used to key chest contents + planted crops to a specific
 // station in the world (survives save/load since it's derived, not stored).
-const stationInstanceId = (s: PlacedStruct) => `${s.zoneId}:${s.tileX},${s.tileY}`
+const stationInstanceId = (s: PlacedStruct) => `${s.srcZoneId ?? s.zoneId}:${s.srcTileX ?? s.tileX},${s.srcTileY ?? s.tileY}`
 
 // Exchange Booth "Buy" shelf — a curated shortlist (the full GE_ITEM_IDS is ~80 items; showing
 // all of them on a phone-sized menu isn't usable). "Sell" already covers everything tradeable
@@ -178,10 +184,9 @@ const USE_HINTS: Record<string, string> = {
   ...Object.fromEntries(Object.keys(PLACEABLES).map(k => [k, 'double-tap to place'])),
 }
 
-function buckets(grid: number[][]) {
+function bucketsRect(grid: number[][], r0: number, c0: number, r1: number, c1: number) {
   const floors: Cell[] = [], walls: Cell[] = [], waters: Cell[] = [], voids: Cell[] = [], warps: Cell[] = [], mists: Cell[] = []
-  const rows = grid.length, cols = grid[0].length
-  for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) {
+  for (let r = r0; r < r1; r++) for (let c = c0; c < c1; c++) {
     const v = grid[r][c]
     if (v === VOID) { voids.push([c, r]); continue }
     const id = v & 0xFF
@@ -192,6 +197,22 @@ function buckets(grid: number[][]) {
     else walls.push([c, r])
   }
   return { floors, walls, waters, voids, warps, mists }
+}
+
+// The world renders in CHUNK×CHUNK blocks, one instanced-mesh set each, so three.js frustum-
+// culls what's behind the camera and the fog hides the far edge. This is the streaming core's
+// render layer: preload mounts every chunk (fine — the data is tiny); a streaming realm later
+// just mounts a radius instead. Small zones land in 1-2 chunks ≈ the old single-bucket path.
+const CHUNK = 64
+function chunkBuckets(grid: number[][]) {
+  const rows = grid.length, cols = grid[0].length
+  const out: { key: string; b: ReturnType<typeof bucketsRect> }[] = []
+  for (let r0 = 0; r0 < rows; r0 += CHUNK) for (let c0 = 0; c0 < cols; c0 += CHUNK) {
+    const b = bucketsRect(grid, r0, c0, Math.min(r0 + CHUNK, rows), Math.min(c0 + CHUNK, cols))
+    if (b.floors.length || b.walls.length || b.waters.length || b.voids.length || b.warps.length || b.mists.length)
+      out.push({ key: `${r0}:${c0}`, b })
+  }
+  return out
 }
 
 function lerpAngle(a: number, b: number, t: number) {
@@ -456,6 +477,7 @@ function FloorTerrain({ floors, heights, version, paint, editing, color = '#7cc4
       mesh.setMatrixAt(i, m)
     })
     mesh.instanceMatrix.needsUpdate = true
+    mesh.computeBoundingSphere() // instances sit at absolute tile coords — per-chunk culling needs real bounds
   }, [floors, heights, version])
   const h = usePaint(floors, paint, editing)
   return (
@@ -474,6 +496,7 @@ function MistOverlay({ mists, heights }: { mists: Cell[]; heights: number[][] })
     const m = new THREE.Matrix4(), q = new THREE.Quaternion(), pos = new THREE.Vector3(), scl = new THREE.Vector3(0.98, 0.8, 0.98)
     mists.forEach(([c, r], i) => { pos.set(c, (heights[r]?.[c] ?? 0) * STEP + 0.55, r); m.compose(pos, q, scl); mesh.setMatrixAt(i, m) })
     mesh.instanceMatrix.needsUpdate = true
+    mesh.computeBoundingSphere()
   }, [mists, heights])
   return (
     <instancedMesh ref={ref} args={[undefined, undefined, Math.max(mists.length, 1)]}>
@@ -491,6 +514,7 @@ function WarpBeacons({ warps, heights }: { warps: Cell[]; heights: number[][] })
     const m = new THREE.Matrix4(), q = new THREE.Quaternion(), pos = new THREE.Vector3(), scl = new THREE.Vector3(1, 1, 1)
     warps.forEach(([c, r], i) => { pos.set(c, (heights[r]?.[c] ?? 0) * STEP + 1.5, r); m.compose(pos, q, scl); mesh.setMatrixAt(i, m) })
     mesh.instanceMatrix.needsUpdate = true
+    mesh.computeBoundingSphere()
   }, [warps, heights])
   return (
     <instancedMesh ref={ref} args={[undefined, undefined, Math.max(warps.length, 1)]}>
@@ -510,6 +534,7 @@ function Tiles({ cells, size, y, color, opacity = 1, paint, editing }: {
     const m = new THREE.Matrix4()
     cells.forEach(([c, r], i) => { m.setPosition(c, y, r); mesh.setMatrixAt(i, m) })
     mesh.instanceMatrix.needsUpdate = true
+    mesh.computeBoundingSphere()
   }, [cells, y])
   const h = usePaint(cells, paint, editing)
   return (
@@ -520,6 +545,20 @@ function Tiles({ cells, size, y, color, opacity = 1, paint, editing }: {
   )
 }
 
+// World-mode flora: every district's authored dressing, each mounted at its composed offset
+// with a local heights slice (FloraDressing seats trees in zone-local coords).
+const WorldFlora = memo(function WorldFlora({ heights }: { heights: number[][] }) {
+  const parts = useMemo(() => [...getGardenWorld().placements.values()].map(p => ({
+    id: p.zone.id, ox: p.ox, oy: p.oy,
+    local: heights.slice(p.oy, p.oy + p.rows).map(row => row.slice(p.ox, p.ox + p.cols)),
+  })), [heights])
+  return <>{parts.map(pt => (
+    <group key={pt.id} position={[pt.ox, 0, pt.oy]}>
+      <FloraDressing zoneId={pt.id} heights={pt.local} />
+    </group>
+  ))}</>
+})
+
 // memo: the terrain is the heaviest node in the scene and depends on nothing that ticks. Without it,
 // every channel tick (~11 Hz) rebuilt the whole floor/wall/water/mist JSX tree. All five props are
 // stable (a ref, a ref's array, a version int, a useCallback, a bool), so this skips cleanly.
@@ -527,21 +566,25 @@ const ZoneGeometry = memo(function ZoneGeometry({ gridRef, heights, version, pai
   gridRef: React.RefObject<number[][]>; heights: number[][]; version: number
   paint: (c: number, r: number, shift: boolean) => void; editing: boolean
 }) {
-  const { floors, walls, waters, voids, warps, mists } = useMemo(() => buckets(gridRef.current), [version, gridRef])
+  const chunks = useMemo(() => chunkBuckets(gridRef.current), [version, gridRef])
   return (
     <>
-      <FloorTerrain floors={floors} heights={heights} version={version} paint={paint} editing={editing} />
-      {/* solid clouds = the walls */}
-      <Tiles cells={walls} size={[1, 1.3, 1]} y={0.55} color="#e3e9f4" paint={paint} editing={editing} />
-      <Tiles cells={waters} size={[1, 0.3, 1]} y={-0.15} color="#3aa0d6" opacity={0.85} paint={paint} editing={editing} />
-      {/* cloud mist = walkable encounter areas: land + a wispy translucent overlay */}
-      <FloorTerrain floors={mists} heights={heights} version={version} paint={paint} editing={editing} />
-      <MistOverlay mists={mists} heights={heights} />
-      {/* warp markers — glowing gold columns + beacons (you place; Jin wires the destinations) */}
-      <FloorTerrain floors={warps} heights={heights} version={version} paint={paint} editing={editing} color="#caa233" emissive="#ffcf4d" />
-      <WarpBeacons warps={warps} heights={heights} />
-      {/* empty cells: invisible in play; a faint clickable grid-canvas to draw land onto while editing */}
-      {editing && <Tiles cells={voids} size={[0.92, 0.05, 0.92]} y={-0.02} color="#39406b" opacity={0.5} paint={paint} editing={editing} />}
+      {chunks.map(({ key, b: { floors, walls, waters, voids, warps, mists } }) => (
+        <group key={key}>
+          <FloorTerrain floors={floors} heights={heights} version={version} paint={paint} editing={editing} />
+          {/* solid clouds = the walls */}
+          <Tiles cells={walls} size={[1, 1.3, 1]} y={0.55} color="#e3e9f4" paint={paint} editing={editing} />
+          <Tiles cells={waters} size={[1, 0.3, 1]} y={-0.15} color="#3aa0d6" opacity={0.85} paint={paint} editing={editing} />
+          {/* cloud mist = walkable encounter areas: land + a wispy translucent overlay */}
+          <FloorTerrain floors={mists} heights={heights} version={version} paint={paint} editing={editing} />
+          <MistOverlay mists={mists} heights={heights} />
+          {/* warp markers — glowing gold columns + beacons (you place; Jin wires the destinations) */}
+          <FloorTerrain floors={warps} heights={heights} version={version} paint={paint} editing={editing} color="#caa233" emissive="#ffcf4d" />
+          <WarpBeacons warps={warps} heights={heights} />
+          {/* empty cells: invisible in play; a faint clickable grid-canvas to draw land onto while editing */}
+          {editing && <Tiles cells={voids} size={[0.92, 0.05, 0.92]} y={-0.02} color="#39406b" opacity={0.5} paint={paint} editing={editing} />}
+        </group>
+      ))}
     </>
   )
 })
@@ -897,7 +940,7 @@ function Player({ posRef, gridRef, heightsRef, zoneIdRef, editRef, onWarp, battl
             // introduces itself (the start zone has no mist, so this lands on the way to Thistle).
             // Every crossing after is the normal per-step rate.
             const force = !flagsRef.current.metFirstWild
-            const enc = rollEncounter(zoneIdRef.current, partyLevelRef.current, false, force)
+            const enc = rollEncounter(logicalZoneAt(zoneIdRef.current, tx, tz), partyLevelRef.current, false, force)
             if (enc) { encGrace.current = ENCOUNTER_GRACE; flagsRef.current.metFirstWild = true; onEncounter(enc) }
           }
         }
@@ -907,7 +950,7 @@ function Player({ posRef, gridRef, heightsRef, zoneIdRef, editRef, onWarp, battl
       // onNearChange only on enter/leave so we don't churn React state every frame.
       let near: NPC3D | null = null
       let best = 1.7
-      for (const n of NPCS_3D) {
+      for (const n of ALL_NPCS) {
         if (n.zone !== zoneIdRef.current || !npcInWorld(n, defeatedRef.current, flagsRef.current)) continue
         const d = Math.hypot(n.tileX - p.x, n.tileY - p.z)
         if (d < best) { best = d; near = n }
@@ -1172,18 +1215,19 @@ const Scene = memo(function Scene(props: {
   companionColor: string | null
   fishing: boolean; fishBite: boolean
   harvestPop: { x: number; y: number; z: number; glyph: string; key: number } | null
+  atmosZone: string
 }) {
   // Pure-prop filter → safe to memo, so a channel tick doesn't re-allocate the structure list.
   // The NPC filter below is deliberately NOT memoized: npcInWorld() reads flagsRef.current, which is
   // mutated in place, so any dep list would go stale the moment a story flag flips. It's a ~20-item
   // filter — recomputing it is cheaper than a subtle "the NPC never disappeared" bug.
   const structuresInZone = useMemo(
-    () => props.structures.filter(s => s.zoneId === props.zone.id),
+    () => structuresView(props.structures, props.zone.id),
     [props.structures, props.zone.id],
   )
   return (
     <>
-      <GardenAtmosphere zoneId={props.zone.id} />
+      <GardenAtmosphere zoneId={props.atmosZone} />
       <ambientLight intensity={0.65} />
       <directionalLight
         position={[18, 26, 12]} intensity={1.25} castShadow
@@ -1193,9 +1237,9 @@ const Scene = memo(function Scene(props: {
         shadow-camera-near={0.5} shadow-camera-far={160}
       />
       <ZoneGeometry key={`${props.zone.id}-${props.dims}`} gridRef={props.gridRef} heights={props.heights} version={props.version} paint={props.paint} editing={props.editing} />
-      <NPCMarkers npcs={NPCS_3D.filter((n) => n.zone === props.zone.id && npcInWorld(n, props.defeated, props.flagsRef.current))} heights={props.heights} />
+      <NPCMarkers npcs={ALL_NPCS.filter((n) => n.zone === props.zone.id && npcInWorld(n, props.defeated, props.flagsRef.current))} heights={props.heights} />
       <NodeMarkers nodes={props.nodes} heights={props.heights} editing={props.editing} channel={props.channel} />
-      <FloraDressing zoneId={props.zone.id} heights={props.heights} />
+      {props.zone.id === WORLD_ZONE_ID ? <WorldFlora heights={props.heights} /> : <FloraDressing zoneId={props.zone.id} heights={props.heights} />}
       <StructureMarkers structures={structuresInZone} heights={props.heights} />
       <PlacementGhost placing={props.placing} posRef={props.posRef} heights={props.heights} gridRef={props.gridRef} placeTargetRef={props.placeTargetRef} structuresRef={props.structuresRef} zoneIdRef={props.zoneIdRef} />
       <Player posRef={props.posRef} gridRef={props.gridRef} heightsRef={props.heightsRef} zoneIdRef={props.zoneIdRef} editRef={props.editRef} onWarp={props.onWarp} battleRef={props.battleRef} partyLevelRef={props.partyLevelRef} onEncounter={props.onEncounter} joyRef={props.joyRef} talkingRef={props.talkingRef} hasPartyRef={props.hasPartyRef} onNearChange={props.onNearChange} defeatedRef={props.defeatedRef} flagsRef={props.flagsRef} harvestNodesRef={props.harvestNodesRef} onNearNode={props.onNearNode} stationsRef={props.structuresRef} onNearStation={props.onNearStation} eyeRef={props.eyeRef} jumpRef={props.jumpRef} slideRef={props.slideRef} />
@@ -1298,9 +1342,9 @@ export default function Shimmer3D() {
 
   // Resource nodes for this zone — seeded from the authored ZONE_NODES layer; the editor
   // adds/removes them and the Save button writes them back to node-placements.ts.
-  const [nodes, setNodes] = useState<NodePlacement[]>(() => (ZONE_NODES[zone.id] ?? []).map(n => ({ ...n })))
+  const [nodes, setNodes] = useState<NodePlacement[]>(() => nodePlacementsFor(zone.id))
   const nodesRef = useRef(nodes); nodesRef.current = nodes
-  useEffect(() => { setNodes((ZONE_NODES[zone.id] ?? []).map(n => ({ ...n }))) }, [zone.id])
+  useEffect(() => { setNodes(nodePlacementsFor(zone.id)) }, [zone.id])
 
   // ── Skilling: the forestry harvest loop. The real engine state (skills / mana / inventory) lives
   // in refs, persisted via the merge-save; small mirrors drive the HUD. Nodes get a runtime state
@@ -1331,7 +1375,9 @@ export default function Shimmer3D() {
   if (initedZone.current !== zone.id) {
     initedZone.current = zone.id
     gridRef.current = zone.grid.map((row) => [...row])
-    heightsRef.current = getHeightGrid(zone.id, zone.grid.length, zone.grid[0].length)
+    heightsRef.current = zone.id === WORLD_ZONE_ID
+      ? getGardenWorld().heights.map((row) => [...row]) // composed terrain — per-zone sculpts already blitted in
+      : getHeightGrid(zone.id, zone.grid.length, zone.grid[0].length)
     // TEMP mantle/climb test scaffold — six wall blocks of rising height (1..6 tiers), 2 wide x 2 deep at
     // rows 10-11, spaced across the open grass. Approach each from row 9. Heights 1-3 mantle off a jump,
     // 4-5 need a wall-climb to reach the lip, 6 is beyond reach (confirms a too-tall wall just blocks).
@@ -1344,6 +1390,18 @@ export default function Shimmer3D() {
     }
   }
   const zoneIdRef = useRef(zone.id); zoneIdRef.current = zone.id
+  // The district under the player's feet (world mode) — drives atmosphere mood + the HUD
+  // name. Sampled at 0.8s; setState only on change, so play frames never re-render for it.
+  const [districtZone, setDistrictZone] = useState(zone.id)
+  useEffect(() => {
+    const id = setInterval(() => {
+      const p = posRef.current
+      if (!p) return
+      const d = logicalZoneAt(zoneIdRef.current, p.x, p.z)
+      setDistrictZone(prev => (prev === d ? prev : d))
+    }, 800)
+    return () => clearInterval(id)
+  }, [])
   const posRef = useRef<THREE.Vector3 | null>(null)
   if (!posRef.current) {
     const ps = zone.playerStart ?? { tileX: 1, tileY: 1 }
@@ -1419,9 +1477,14 @@ export default function Shimmer3D() {
       activeBeastId: activeBeastIdRef.current,
       tools: toolsToSave(equippedToolsRef.current),
       flags: opts?.replaceFlags ? { ...flagsRef.current } : { ...(prev.flags ?? {}), ...flagsRef.current },
-      zoneId: zoneIdRef.current,
-      playerTileX: Math.round(posRef.current!.x),
-      playerTileY: Math.round(posRef.current!.z),
+      ...(() => {
+        // World saves store the logical district + local tile, so LAYOUT_TWEAKS can move
+        // districts without stranding saved players in the clouds. Corridor spots (no
+        // district) fall back to world coords.
+        const px = Math.round(posRef.current!.x), pz = Math.round(posRef.current!.z)
+        const l = zoneIdRef.current === WORLD_ZONE_ID ? fromWorld(px, pz) : null
+        return l ? { zoneId: l.zoneId, playerTileX: l.x, playerTileY: l.y } : { zoneId: zoneIdRef.current, playerTileX: px, playerTileY: pz }
+      })(),
       skills: skillSetToSave(skillsRef.current),
       mana: manaToSave(manaRef.current),
       inventory: inventoryToSave(invRef.current),
@@ -1522,7 +1585,12 @@ export default function Shimmer3D() {
         if (typeof data.playerTileX === 'number' && typeof data.playerTileY === 'number') {
           posRef.current!.set(data.playerTileX, posRef.current!.y, data.playerTileY)
         }
-        if (data.zoneId && getZone(ZONES, data.zoneId)) setZoneId(data.zoneId)
+        if (data.zoneId && isStitched(data.zoneId)) {
+          // logical save (or a pre-continent save) → its composed-world spot
+          const wp = getGardenWorld().toWorld(data.zoneId, data.playerTileX ?? 1, data.playerTileY ?? 1)
+          if (wp) posRef.current!.set(wp.x, posRef.current!.y, wp.y)
+          setZoneId(WORLD_ZONE_ID)
+        } else if (data.zoneId && getZone(ZONES, data.zoneId)) setZoneId(data.zoneId)
       }
       // One-time starter-kit grant — reaches fresh AND returning saves (older saves with a party
       // never got seeded stations/mats, so the Alchemy Station wasn't obtainable). Idempotent via flag.
@@ -1665,7 +1733,7 @@ export default function Shimmer3D() {
     if (blocked) { setHarvestToast('Can’t build there'); return }
     if (countItem(invRef.current, pl.itemId) < 1) { cancelPlacing(); return }
     removeItems(invRef.current, pl.itemId, 1)
-    setStructures(prev => [...prev, { itemId: pl.itemId, tileX: t.x, tileY: t.y, facing: pl.facing, zoneId: zoneIdRef.current }])
+    setStructures(prev => [...prev, logicalStruct({ itemId: pl.itemId, tileX: t.x, tileY: t.y, facing: pl.facing, zoneId: zoneIdRef.current })])
     setInvSlots([...invRef.current.slots])
     setHarvestToast(`Placed ${PLACEABLES[pl.itemId].name}`)
     setPlacing(null); battleRef.current = false
@@ -1793,7 +1861,7 @@ export default function Shimmer3D() {
   // ── Farm Planter (open at a placed planter) — ONE crop slot per planter, keyed by tile+zone ──
   const plantAt = useCallback((struct: PlacedStruct, cropId: string) => {
     const before = skillsRef.current.farming.level
-    const crop = plantCrop(cropId, invRef.current, skillsRef.current, manaRef.current, struct.tileX, struct.tileY, struct.zoneId)
+    const crop = plantCrop(cropId, invRef.current, skillsRef.current, manaRef.current, struct.srcTileX ?? struct.tileX, struct.srcTileY ?? struct.tileY, struct.srcZoneId ?? struct.zoneId)
     if (!crop) { setHarvestToast('Missing seed, level, or mana'); return }
     plantedCropsRef.current = [...plantedCropsRef.current, crop]
     setCropsTick(t => t + 1)
@@ -1911,7 +1979,7 @@ export default function Shimmer3D() {
     battleRef.current = true   // freeze the walker through the approach beat AND the fight
     const size = partyRef.current?.length ?? 1
     // Stage the fight, but show the approach beat first — the arena mounts when it commits.
-    setApproach({ enc, battle: { allies: partyRef.current!, enemies: buildWildParty(enc, size), aiTier: enc.aiTier, zoneId: zoneIdRef.current, kind: 'wild' } })
+    setApproach({ enc, battle: { allies: partyRef.current!, enemies: buildWildParty(enc, size), aiTier: enc.aiTier, zoneId: logicalZoneAt(zoneIdRef.current, posRef.current!.x, posRef.current!.z), kind: 'wild' } })
   }, [])
 
   // Approach beat → arena: hold the "drawn to you" flash ~1.3s, then mount the real fight.
@@ -1936,7 +2004,7 @@ export default function Shimmer3D() {
           s.level = 12; s.bond = 60; s.happiness = 128
           return s
         })
-    const enc = rollEncounter(zoneIdRef.current, partyLevelRef.current || 12)
+    const enc = rollEncounter(logicalZoneAt(zoneIdRef.current, posRef.current!.x, posRef.current!.z), partyLevelRef.current || 12)
     const enemies = enc
       ? buildWildParty(enc, allies.length)
       : (['frog', 'bat'] as const).map((sp, i) => {
@@ -1945,7 +2013,7 @@ export default function Shimmer3D() {
           return s
         })
     battleRef.current = true
-    setBattle({ allies, enemies, aiTier: enc?.aiTier ?? 'wild', zoneId: zoneIdRef.current, kind: 'wild' })
+    setBattle({ allies, enemies, aiTier: enc?.aiTier ?? 'wild', zoneId: logicalZoneAt(zoneIdRef.current, posRef.current!.x, posRef.current!.z), kind: 'wild' })
   }, [])
 
   // Battle end: on a win, split rewards across the party (XP / bond / happiness / gold), then save.
@@ -2075,7 +2143,7 @@ export default function Shimmer3D() {
     captive.level = 5
     captive.seeds = Array.from({ length: 6 }, () => Math.floor(Math.random() * 32))
     battleRef.current = true
-    setBattle({ allies: partyRef.current!, enemies: [captive], aiTier: 'wild', zoneId: zoneIdRef.current, kind: 'thistle' })
+    setBattle({ allies: partyRef.current!, enemies: [captive], aiTier: 'wild', zoneId: logicalZoneAt(zoneIdRef.current, posRef.current!.x, posRef.current!.z), kind: 'thistle' })
   }, [])
 
   // Sorrel — Hold 2, the stronghold. Enemies = [guard, captive, captive]. The guard (no collar) SHIELDS
@@ -2095,7 +2163,7 @@ export default function Shimmer3D() {
       return c
     }
     battleRef.current = true
-    setBattle({ allies: partyRef.current!, enemies: [guard, mkCaptive(), mkCaptive()], aiTier: 'champion', zoneId: zoneIdRef.current, kind: 'sorrel' })
+    setBattle({ allies: partyRef.current!, enemies: [guard, mkCaptive(), mkCaptive()], aiTier: 'champion', zoneId: logicalZoneAt(zoneIdRef.current, posRef.current!.x, posRef.current!.z), kind: 'sorrel' })
   }, [])
 
   // Brack — Hold 3, the climax. The pooled force: TWO enforcers (guards) shielding THREE collared
@@ -2284,9 +2352,11 @@ export default function Shimmer3D() {
   }, [])
 
   const onWarp = useCallback((w: Warp) => {
-    posRef.current!.set(w.toX, posRef.current!.y, w.toY)
+    // Doors back onto the continent land at the zone's composed-world spot; interiors mount as before.
+    const world = isStitched(w.toZone) ? getGardenWorld().toWorld(w.toZone, w.toX, w.toY) : null
+    posRef.current!.set(world?.x ?? w.toX, posRef.current!.y, world?.y ?? w.toY)
     if (w.direction && DIR_YAW[w.direction] !== undefined) camYaw.current = DIR_YAW[w.direction]
-    setZoneId(w.toZone)
+    setZoneId(world ? WORLD_ZONE_ID : w.toZone)
   }, [])
 
   // Jump straight to a zone to edit it (no walking/warping). Resets the player + camera focus
@@ -2301,6 +2371,7 @@ export default function Shimmer3D() {
   }, [])
 
   const save = useCallback(async () => {
+    if (zone.id === WORLD_ZONE_ID) { setSaveMsg('world is composed — pick a zone in the dropdown to edit/save it'); setTimeout(() => setSaveMsg(''), 3500); return }
     setSaveMsg('saving…')
     try {
       const id = zone.id
@@ -2340,6 +2411,7 @@ export default function Shimmer3D() {
           companionColor={(() => { const b = beastsRef.current.find(x => x.id === activeBeastIdRef.current); void companionTick; return b ? (BEAST_COLOR[b.species] ?? '#9fd9c4') : null })()}
           fishing={!!fish} fishBite={!!fish?.bite}
           harvestPop={harvestPop}
+          atmosZone={districtZone}
         />
       </Canvas>
 
@@ -2347,7 +2419,7 @@ export default function Shimmer3D() {
         position: 'fixed', top: 12, left: 12, padding: '8px 12px', borderRadius: 8,
         background: 'rgba(10,8,20,0.66)', color: '#e9dfc8', font: '600 13px ui-monospace, monospace', lineHeight: 1.5,
       }}>
-        Shimmer 3D — {zone.name}{editMode ? '  ·  EDIT' : ''}<br />
+        Shimmer 3D — {zone.id === WORLD_ZONE_ID ? (getZone(ZONES, districtZone)?.name ?? zone.name) : zone.name}{editMode ? '  ·  EDIT' : ''}<br />
         <span style={{ opacity: 0.8 }}>
           {editMode ? 'left-drag paint · WASD fly · Q/E down·up · right-drag look · scroll zoom' : `WASD run · Space jump · Shift slide · jump into wall + hold = climb · ${hasStarter ? 'mist = wild spirits' : 'meet Gregory first'}${isOwner ? ' · B edit' : ''}`}
         </span>

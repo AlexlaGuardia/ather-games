@@ -20,7 +20,9 @@ import type { ManaPool } from '../engine/mana'
 import type { ItemStack } from '../engine/inventory'
 import { prettyItem, menuBtn, TOOL_HUD, GE_BUY_CURATED, SlotGrid, StationShell } from './ui'
 
-export type PlacedStruct = { itemId: string; tileX: number; tileY: number; facing: number; zoneId: string }
+// src* — set only on world-view clones (see world-adapter): the logical zone/tile the
+// structure is SAVED under, so identity keys survive the world-coordinate translation.
+export type PlacedStruct = { itemId: string; tileX: number; tileY: number; facing: number; zoneId: string; srcZoneId?: string; srcTileX?: number; srcTileY?: number }
 export type StationKind = 'brew' | 'craft' | 'chest' | 'exchange' | 'farm'
 
 export interface StationMenusProps {
