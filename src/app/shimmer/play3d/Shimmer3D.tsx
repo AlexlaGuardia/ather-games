@@ -1278,20 +1278,24 @@ const DEG = Math.PI / 180
 // range console (T): target drift, or a ground HUNTER that chases the player and returns fire — that's
 // when HP/shield matter. Shield drains first + recharges out of combat; HP does NOT regen (healing
 // arrives later as items — that's what makes them matter). HP empty → systems reset (full refill).
-const AM_DAMAGE = 12          // AM Riser damage per round
-const TARGET_HP = 30          // 3 rounds to pop a floating target; they shrink as they take damage
+const AM_DAMAGE = 7           // AM Riser damage per round, body
+const AM_CRIT = 11            // headshot — round lands in the target's upper cap
+const CRIT_Y = 0.25           // hit above target-center + this = the head zone
+const TARGET_HP = 21          // 3 body rounds / 2 crits to pop a floater (rescaled to the 7-dmg round)
 const DRONE_DMG = 11          // hunter orb damage to the player
 const DRONE_SPEED = 9         // tiles/sec — slow on purpose, dodging is the counterplay
 const DRONE_LIFE = 6          // seconds before an orb fizzles
-const HUNTER_HP = 60          // ground hunter takes 5 rounds
+const HUNTER_HP = 35          // ground hunter takes 5 body rounds (rescaled)
 const HUNTER_SPEED = 3.2      // chase speed, tiles/sec — pressure, not a race
 const HUNTER_FIRE_CD = 2.2    // seconds between hunter shots
 const HUNTER_HIT_R2 = 0.8 * 0.8
 const HUNTER_RESPAWN = 4      // seconds after a kill before it re-spawns (while the console toggle is on)
 const DRIFT_AMP = 2.4         // moving-targets strafe amplitude (tiles)
 const PLAYER_HIT_R2 = 0.6 * 0.6
-const MAX_HP = 100
-const MAX_SHIELD = 75
+const MAX_HP = 100            // health and shields each count 100 — 200 effective, Apex-style
+const MAX_SHIELD = 100
+const BARRIER_SHIELD_BONUS = 25  // the Barrier birth rune's extra shield (125 total for that mage).
+// shieldMaxRef carries the live max — birth-rune selection just writes MAX_SHIELD + BARRIER_SHIELD_BONUS.
 // NO auto-regen on HP or shield — Shimmer Salve mends HP, Crystal Elixir re-forms the shield
 // (HEAL_POTIONS above). Resource discipline is the game: mana is the clip, potions are the comeback.
 const CLIP_SIZE = 24          // rounds per recharge of the AM Riser's clip
@@ -1302,7 +1306,7 @@ const RANGE_TARGETS: [number, number, number][] = [
   [15, 1.8, 26], [20, 2.5, 31], [25, 1.6, 23], [30, 2.9, 33],
   [35, 2.0, 27], [12, 2.3, 35], [38, 1.7, 21], [22, 3.1, 39],
 ]
-function FiringRange({ firingRef, adsRef, gridRef, recoilRef, bloomRef, posRef, hpRef, shieldRef, rangeCfgRef, ammoRef, reloadingRef, onNeedReload, onHit, onShot, onPlayerDamage, onPlayerDown }: {
+function FiringRange({ firingRef, adsRef, gridRef, recoilRef, bloomRef, posRef, hpRef, shieldRef, shieldMaxRef, rangeCfgRef, ammoRef, reloadingRef, onNeedReload, onHit, onShot, onPlayerDamage, onPlayerDown }: {
   firingRef: React.RefObject<boolean>   // held while left-click is down → full-auto
   adsRef: React.RefObject<boolean>      // aiming → muzzle offset moves to center (ADS tracer runs flat)
   gridRef: React.RefObject<number[][]>
@@ -1310,12 +1314,13 @@ function FiringRange({ firingRef, adsRef, gridRef, recoilRef, bloomRef, posRef, 
   bloomRef: React.MutableRefObject<number>  // current spread bloom (deg); WeaponReticle reads it too
   posRef: React.RefObject<THREE.Vector3>    // player position — hunter orbs aim at + collide with it
   hpRef: React.MutableRefObject<number>     // player HP; ResourceBars reads, this sim writes
-  shieldRef: React.MutableRefObject<number> // player shield; drains first, recharges out of combat
+  shieldRef: React.MutableRefObject<number> // player shield; drains first — mend potions refill it
+  shieldMaxRef: React.RefObject<number>     // live shield cap (100, +25 with the Barrier birth rune)
   rangeCfgRef: React.RefObject<{ moving: boolean; hostile: boolean }>  // range console (T) settings
   ammoRef: React.MutableRefObject<number>       // rounds left in the clip; this sim decrements
   reloadingRef: React.MutableRefObject<number>  // >0 while the recharge channel runs — fire is blocked
   onNeedReload: () => void  // dry trigger on an empty clip → parent starts the recharge
-  onHit: () => void
+  onHit: (crit: boolean) => void  // landed round; crit = head-zone hit (gold hitmarker)
   onShot: () => void
   onPlayerDamage: () => void  // vignette flash
   onPlayerDown: () => void    // HP hit zero → systems reset (longer flash)
@@ -1406,14 +1411,16 @@ function FiringRange({ firingRef, adsRef, gridRef, recoilRef, bloomRef, posRef, 
       if (cell === undefined || (cell & 0xFF) === WALL_ID) { p.life = 0; continue }  // wall/OOB stops it
       for (const t of targets) {
         if (t.alive && p.pos.distanceToSquared(t.pos) < TARGET_HIT_R2) {
-          t.hp -= AM_DAMAGE; p.life = 0; onHit()  // hitmarker on every landed round
+          const crit = p.pos.y > t.pos.y + CRIT_Y  // upper cap = the head zone
+          t.hp -= crit ? AM_CRIT : AM_DAMAGE; p.life = 0; onHit(crit)  // hitmarker on every landed round
           if (t.hp <= 0) { t.alive = false; t.down = TARGET_RESPAWN }
           break
         }
       }
       const h = hunter.current
       if (p.life > 0 && h.alive && p.pos.distanceToSquared(h.pos) < HUNTER_HIT_R2) {
-        h.hp -= AM_DAMAGE; p.life = 0; onHit()
+        const crit = p.pos.y > h.pos.y + CRIT_Y
+        h.hp -= crit ? AM_CRIT : AM_DAMAGE; p.life = 0; onHit(crit)
         if (h.hp <= 0) { h.alive = false; h.respawn = HUNTER_RESPAWN }
       }
     }
@@ -1483,7 +1490,7 @@ function FiringRange({ firingRef, adsRef, gridRef, recoilRef, bloomRef, posRef, 
           shieldRef.current = Math.max(0, sh - DRONE_DMG)
           const spill = DRONE_DMG - (sh - shieldRef.current)
           if (spill > 0) hpRef.current = Math.max(0, hpRef.current - spill)
-          if (hpRef.current <= 0) { hpRef.current = MAX_HP; shieldRef.current = MAX_SHIELD; onPlayerDown() }
+          if (hpRef.current <= 0) { hpRef.current = MAX_HP; shieldRef.current = shieldMaxRef.current ?? MAX_SHIELD; onPlayerDown() }
           else onPlayerDamage()
         }
       }
@@ -1608,16 +1615,17 @@ function WeaponReticle({ bloomRef, adsRef }: {
 // menu stack above and the hotbar below, whatever either grows into). Combat mutates
 // hpRef/shieldRef at frame rate, so rAF reads the refs and writes fill-height + text directly — same
 // zero-React-churn pattern as WeaponReticle. Shield bar dims while cracked; HP tints red when low.
-function ResourceBars({ hpRef, shieldRef }: {
+function ResourceBars({ hpRef, shieldRef, shieldMaxRef }: {
   hpRef: React.MutableRefObject<number>
   shieldRef: React.MutableRefObject<number>
+  shieldMaxRef: React.RefObject<number>
 }) {
   const shFill = useRef<HTMLDivElement>(null), shTxt = useRef<HTMLDivElement>(null)
   const hpFill = useRef<HTMLDivElement>(null), hpTxt = useRef<HTMLDivElement>(null)
   useEffect(() => {
     let raf = 0
     const tick = () => {
-      const sh = Math.max(0, Math.round((shieldRef.current / MAX_SHIELD) * 100))
+      const sh = Math.max(0, Math.round((shieldRef.current / (shieldMaxRef.current || MAX_SHIELD)) * 100))
       const hp = Math.max(0, Math.round((hpRef.current / MAX_HP) * 100))
       if (shFill.current) { shFill.current.style.height = `${sh}%`; shFill.current.style.opacity = sh === 0 ? '0.25' : '1' }
       if (shTxt.current) shTxt.current.textContent = `${sh}`
@@ -1627,7 +1635,7 @@ function ResourceBars({ hpRef, shieldRef }: {
     }
     raf = requestAnimationFrame(tick)
     return () => cancelAnimationFrame(raf)
-  }, [hpRef, shieldRef])
+  }, [hpRef, shieldRef, shieldMaxRef])
   const barShell: React.CSSProperties = {
     width: 14, height: 118, borderRadius: 7, overflow: 'hidden', position: 'relative',
     background: 'rgba(10,16,26,0.72)', border: '1px solid #ffffff2e', display: 'flex', alignItems: 'flex-end',
@@ -1760,13 +1768,14 @@ const Scene = memo(function Scene(props: {
   atmosZone: string
   isOwner: boolean
   firingRef: React.RefObject<boolean>
-  onRangeHit: () => void
+  onRangeHit: (crit: boolean) => void
   onRangeShot: () => void
   adsRef: React.RefObject<boolean>
   recoilRef: React.MutableRefObject<{ p: number; y: number }>
   bloomRef: React.MutableRefObject<number>
   hpRef: React.MutableRefObject<number>
   shieldRef: React.MutableRefObject<number>
+  shieldMaxRef: React.RefObject<number>
   rangeCfgRef: React.RefObject<{ moving: boolean; hostile: boolean }>
   ammoRef: React.MutableRefObject<number>
   reloadingRef: React.MutableRefObject<number>
@@ -1796,7 +1805,7 @@ const Scene = memo(function Scene(props: {
       <ZoneGeometry key={`${props.zone.id}-${props.dims}`} gridRef={props.gridRef} heights={props.heights} version={props.version} paint={props.paint} editing={props.editing} />
       <NPCMarkers npcs={ALL_NPCS.filter((n) => n.zone === props.zone.id && npcInWorld(n, props.defeated, props.flagsRef.current))} heights={props.heights} />
       {props.isOwner && props.zone.id === 'moonwell-glade-gregory-s-home' && <HubGateMarkers heights={props.heights} />}
-      {props.zone.realm === 'outside' && <FiringRange firingRef={props.firingRef} adsRef={props.adsRef} gridRef={props.gridRef} recoilRef={props.recoilRef} bloomRef={props.bloomRef} posRef={props.posRef} hpRef={props.hpRef} shieldRef={props.shieldRef} rangeCfgRef={props.rangeCfgRef} ammoRef={props.ammoRef} reloadingRef={props.reloadingRef} onNeedReload={props.onNeedReload} onHit={props.onRangeHit} onShot={props.onRangeShot} onPlayerDamage={props.onPlayerDamage} onPlayerDown={props.onPlayerDown} />}
+      {props.zone.realm === 'outside' && <FiringRange firingRef={props.firingRef} adsRef={props.adsRef} gridRef={props.gridRef} recoilRef={props.recoilRef} bloomRef={props.bloomRef} posRef={props.posRef} hpRef={props.hpRef} shieldRef={props.shieldRef} shieldMaxRef={props.shieldMaxRef} rangeCfgRef={props.rangeCfgRef} ammoRef={props.ammoRef} reloadingRef={props.reloadingRef} onNeedReload={props.onNeedReload} onHit={props.onRangeHit} onShot={props.onRangeShot} onPlayerDamage={props.onPlayerDamage} onPlayerDown={props.onPlayerDown} />}
       {props.zone.realm === 'outside' && <ExitMarkers warps={props.zone.warps} heights={props.heights} />}
       <NodeMarkers nodes={props.nodes} heights={props.heights} editing={props.editing} channel={props.channel} />
       {props.zone.id === WORLD_ZONE_ID ? <WorldFlora heights={props.heights} /> : <FloraDressing zoneId={props.zone.id} heights={props.heights} />}
@@ -2263,11 +2272,11 @@ export default function Shimmer3D() {
       if (countItem(invRef.current, itemId) < 1) return
       if (!weaponDrawnRef.current) { setHarvestToast('Nothing to mend inside the Ather'); return }
       const needHp = (heal.hp ?? 0) > 0 && hpRef.current < MAX_HP
-      const needSh = (heal.sh ?? 0) > 0 && shieldRef.current < MAX_SHIELD
+      const needSh = (heal.sh ?? 0) > 0 && shieldRef.current < shieldMaxRef.current
       if (!needHp && !needSh) { setHarvestToast(heal.hp ? 'HP already full' : 'Shield already full'); return }
       removeItems(invRef.current, itemId, 1)
       if (heal.hp) hpRef.current = Math.min(MAX_HP, hpRef.current + heal.hp)
-      if (heal.sh) shieldRef.current = Math.min(MAX_SHIELD, shieldRef.current + heal.sh)
+      if (heal.sh) shieldRef.current = Math.min(shieldMaxRef.current, shieldRef.current + heal.sh)
       setInvSlots([...invRef.current.slots])
       setHarvestToast(`${prettyItem(itemId)} · ${heal.hp ? `+${heal.hp} HP` : `+${heal.sh} shield`}`)
       persist()
@@ -2805,15 +2814,19 @@ export default function Shimmer3D() {
   const bloomRef = useRef(0)  // current spread bloom (deg); FiringRange writes, WeaponReticle reads
   const hpRef = useRef(MAX_HP)        // player HP/shield — combat sim writes, ResourceBars reads
   const shieldRef = useRef(MAX_SHIELD)
+  const shieldMaxRef = useRef(MAX_SHIELD)  // birth-rune hook: Barrier rune sets MAX_SHIELD + BARRIER_SHIELD_BONUS
   const ammoRef = useRef(CLIP_SIZE)   // AM Riser clip; FiringRange decrements, AmmoCounter reads
   const reloadingRef = useRef(0)      // >0 while the recharge channel runs
   const reloadTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const hitmarkRef = useRef<HTMLDivElement>(null)   // × flash at the reticle on a landed round
   const vignetteRef = useRef<HTMLDivElement>(null)  // red edge flash when the player takes damage
-  const onRangeHit = useCallback(() => {
+  const onRangeHit = useCallback((crit: boolean) => {
     hitsRef.current++
     const el = hitmarkRef.current
-    if (el) { el.style.animation = 'none'; void el.offsetHeight; el.style.animation = 'hitFlash 0.22s ease-out' }
+    if (el) {
+      el.style.setProperty('--hm', crit ? '#ffd44a' : '#ffffff')  // gold ticks on a headshot
+      el.style.animation = 'none'; void el.offsetHeight; el.style.animation = 'hitFlash 0.22s ease-out'
+    }
   }, [])
   const onPlayerDamage = useCallback(() => {
     const el = vignetteRef.current
@@ -2834,7 +2847,7 @@ export default function Shimmer3D() {
   useEffect(() => {
     if (!weaponDrawn) {
       shotsRef.current = 0; hitsRef.current = 0; setHudStats({ shots: 0, hits: 0 }); firingRef.current = false; adsRef.current = false; setAds(false)
-      recoilRef.current.p = 0; recoilRef.current.y = 0; bloomRef.current = 0; hpRef.current = MAX_HP; shieldRef.current = MAX_SHIELD
+      recoilRef.current.p = 0; recoilRef.current.y = 0; bloomRef.current = 0; hpRef.current = MAX_HP; shieldRef.current = shieldMaxRef.current
       ammoRef.current = CLIP_SIZE; reloadingRef.current = 0
       if (reloadTimer.current) { clearTimeout(reloadTimer.current); reloadTimer.current = null }
       return
@@ -3208,6 +3221,7 @@ export default function Shimmer3D() {
           bloomRef={bloomRef}
           hpRef={hpRef}
           shieldRef={shieldRef}
+          shieldMaxRef={shieldMaxRef}
           rangeCfgRef={rangeCfgRef}
           ammoRef={ammoRef}
           reloadingRef={reloadingRef}
@@ -3597,13 +3611,13 @@ export default function Shimmer3D() {
             </>
           )}
           <WeaponReticle bloomRef={bloomRef} adsRef={adsRef} />
-          <ResourceBars hpRef={hpRef} shieldRef={shieldRef} />
+          <ResourceBars hpRef={hpRef} shieldRef={shieldRef} shieldMaxRef={shieldMaxRef} />
           <AmmoCounter ammoRef={ammoRef} reloadingRef={reloadingRef} />
           <style>{`@keyframes hitFlash{0%{opacity:1}100%{opacity:0}}@keyframes dmgFlash{0%{opacity:1}100%{opacity:0}}@keyframes downFlash{0%{opacity:1}55%{opacity:0.85}100%{opacity:0}}`}</style>
           {/* hitmarker — four outward diagonal ticks around the reticle, flashed per landed round */}
           <div ref={hitmarkRef} style={{ position: 'fixed', left: '50%', top: '50%', zIndex: 31, pointerEvents: 'none', opacity: 0 }}>
             {[45, 135, 225, 315].map((a) => (
-              <div key={a} style={{ position: 'absolute', left: -1, top: -3.5, width: 2, height: 7, background: '#ffffff',
+              <div key={a} style={{ position: 'absolute', left: -1, top: -3.5, width: 2, height: 7, background: 'var(--hm, #ffffff)',
                 boxShadow: '0 0 0 1px rgba(8,12,18,0.8)', transform: `rotate(${a}deg) translateY(-11px)` }} />
             ))}
           </div>
