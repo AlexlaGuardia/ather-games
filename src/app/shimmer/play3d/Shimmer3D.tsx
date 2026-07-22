@@ -1218,6 +1218,33 @@ function CameraRig({ posRef, editFocusRef, yawRef, editRef, eyeRef }: {
 // is below full, and the harvest channel driver fires setChannel at ~11 Hz. Neither touches a Scene
 // prop, so without memo the entire 3D subtree was reconciled for a number that only the HUD reads.
 // Every prop here is a ref, a primitive, a useCallback, or state that genuinely should redraw.
+// Owner-only test-hub gate markers — glowing labeled pillars at the Crucible + Rune Hold gate tiles
+// in Greg's home. Rendered only when isOwner (players never see them); tiles match the ownerOnly warps.
+function HubGateMarkers({ heights }: { heights: number[][] }) {
+  const gates = [
+    { c: 10, r: 7, color: '#ff7a4a', label: 'CRUCIBLE' },
+    { c: 16, r: 7, color: '#b07aff', label: 'RUNE HOLD' },
+  ]
+  return (
+    <>
+      {gates.map((g) => {
+        const y = (heights[g.r]?.[g.c] ?? 0) * STEP
+        return (
+          <group key={g.label} position={[g.c, y, g.r]}>
+            <mesh position={[0, 1.5, 0]}>
+              <cylinderGeometry args={[0.32, 0.5, 3, 6]} />
+              <meshStandardMaterial color={g.color} emissive={g.color} emissiveIntensity={0.9} transparent opacity={0.5} />
+            </mesh>
+            <Html position={[0, 3.4, 0]} center distanceFactor={12} style={{ pointerEvents: 'none' }}>
+              <div style={{ font: '800 12px ui-monospace, monospace', color: g.color, background: 'rgba(8,8,14,0.7)', padding: '2px 7px', borderRadius: 6, whiteSpace: 'nowrap', border: `1px solid ${g.color}66` }}>{g.label}</div>
+            </Html>
+          </group>
+        )
+      })}
+    </>
+  )
+}
+
 const Scene = memo(function Scene(props: {
   zone: Zone; gridRef: React.RefObject<number[][]>; heights: number[][]; version: number; dims: string
   posRef: React.RefObject<THREE.Vector3>; heightsRef: React.RefObject<number[][]>; zoneIdRef: React.RefObject<string>
@@ -1243,6 +1270,7 @@ const Scene = memo(function Scene(props: {
   fishing: boolean; fishBite: boolean
   harvestPop: { x: number; y: number; z: number; glyph: string; key: number } | null
   atmosZone: string
+  isOwner: boolean
 }) {
   // Pure-prop filter → safe to memo, so a channel tick doesn't re-allocate the structure list.
   // The NPC filter below is deliberately NOT memoized: npcInWorld() reads flagsRef.current, which is
@@ -1265,6 +1293,7 @@ const Scene = memo(function Scene(props: {
       />
       <ZoneGeometry key={`${props.zone.id}-${props.dims}`} gridRef={props.gridRef} heights={props.heights} version={props.version} paint={props.paint} editing={props.editing} />
       <NPCMarkers npcs={ALL_NPCS.filter((n) => n.zone === props.zone.id && npcInWorld(n, props.defeated, props.flagsRef.current))} heights={props.heights} />
+      {props.isOwner && props.zone.id === 'moonwell-glade-gregory-s-home' && <HubGateMarkers heights={props.heights} />}
       <NodeMarkers nodes={props.nodes} heights={props.heights} editing={props.editing} channel={props.channel} />
       {props.zone.id === WORLD_ZONE_ID ? <WorldFlora heights={props.heights} /> : <FloraDressing zoneId={props.zone.id} heights={props.heights} />}
       <StructureMarkers structures={structuresInZone} heights={props.heights} />
@@ -2226,6 +2255,7 @@ export default function Shimmer3D() {
   // The walker is public; the terrain editor is owner-only. ather.games has no cloud auth, so owner
   // status comes from the httpOnly `ather_owner` cookie via /api/owner (set it at /owner?key=OWNER_KEY).
   const [isOwner, setIsOwner] = useState(false)
+  const isOwnerRef = useRef(isOwner); isOwnerRef.current = isOwner  // stable read for onWarp's owner-only gate
   useEffect(() => {
     let alive = true
     fetch('/api/owner', { cache: 'no-store' })
@@ -2391,6 +2421,7 @@ export default function Shimmer3D() {
   }, [])
 
   const onWarp = useCallback((w: Warp) => {
+    if (w.ownerOnly && !isOwnerRef.current) return  // dev/test gate — silent no-op for players
     // Doors back onto the continent land at the zone's composed-world spot; interiors mount as before.
     const world = isStitched(w.toZone) ? getGardenWorld().toWorld(w.toZone, w.toX, w.toY) : null
     posRef.current!.set(world?.x ?? w.toX, posRef.current!.y, world?.y ?? w.toY)
@@ -2496,6 +2527,7 @@ export default function Shimmer3D() {
           fishing={!!fish} fishBite={!!fish?.bite}
           harvestPop={harvestPop}
           atmosZone={districtZone}
+          isOwner={isOwner}
         />
       </Canvas>
 

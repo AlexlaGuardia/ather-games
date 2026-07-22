@@ -646,6 +646,28 @@ export const BRACK_HOLD: number[][] = createStubMap(40, 30, [
 // BLOCKOUT ONLY: the room exists so the gate crossing is real; the shop dressing and the
 // street door out to Rune Hold proper are SEALED pending the era/Lucernyx/tonal-wall canon
 // rulings (CANON_GAPS 'realm map'). South opening (7-8,11) = the permanent gate home.
+// The Crucible (practice) — a blockout combat arena reached from the Greg's-home test hub.
+// Walled ring, a central MIST(31) field that draws wild encounters for feel-testing, and a single
+// exit warp(14) at (7,14) back to the hub. Flat (no heightmap entry → getHeightGrid returns level 0).
+export const CRUCIBLE: number[][] = [
+  [34,34,34,34,34,34,34,34,34,34,34,34,34,34,34,34],  // 0
+  [34,97,97,97,97,97,97,97,97,97,97,97,97,97,97,34],  // 1
+  [34,97,97,97,97,97,97,97,97,97,97,97,97,97,97,34],  // 2
+  [34,97,97,31,31,31,31,31,31,31,31,31,31,97,97,34],  // 3
+  [34,97,97,31,31,31,31,31,31,31,31,31,31,97,97,34],  // 4
+  [34,97,97,31,31,31,31,31,31,31,31,31,31,97,97,34],  // 5
+  [34,97,97,31,31,31,31,31,31,31,31,31,31,97,97,34],  // 6
+  [34,97,97,31,31,31,31,31,31,31,31,31,31,97,97,34],  // 7
+  [34,97,97,31,31,31,31,31,31,31,31,31,31,97,97,34],  // 8
+  [34,97,97,97,97,97,97,97,97,97,97,97,97,97,97,34],  // 9
+  [34,97,97,97,97,97,97,97,97,97,97,97,97,97,97,34],  // 10
+  [34,97,97,97,97,97,97,97,97,97,97,97,97,97,97,34],  // 11
+  [34,97,97,97,97,97,97,97,97,97,97,97,97,97,97,34],  // 12
+  [34,97,97,97,97,97,97,97,97,97,97,97,97,97,97,34],  // 13
+  [34,97,97,97,97,97,97,14,97,97,97,97,97,97,97,34],  // 14  exit warp → hub
+  [34,34,34,34,34,34,34,34,34,34,34,34,34,34,34,34],  // 15
+]
+
 export const SPIRIT_CORNER: number[][] = [
   [34,34,34,34,34,34,34,34,34,34,34,34,34,34,34,34],  // 0
   [34,97,97,97,97,97,97,97,97,97,97,97,97,97,97,34],  // 1

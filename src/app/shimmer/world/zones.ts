@@ -9,6 +9,7 @@ export interface Warp {
   toY: number
   direction?: 'up' | 'down' | 'left' | 'right' // player faces this direction on arrival
   requiredFlag?: string // warp only works when this flag is set (e.g., 'tutorialComplete')
+  ownerOnly?: boolean // dev/test gate — only fires for the site owner (onWarp gates it), invisible to players
 }
 
 // Elemental theme of a zone — drives spirit-condensation affinity (see SPIRIT_CONDENSE.md).
@@ -45,7 +46,7 @@ export function getZone(zones: Zone[], id: string): Zone | null {
 // Garden → east → Moonwell Glade (shortcut, blocked until tutorialComplete)
 // Moonwell Glade → east → Spore Hollow (post-tutorial)
 
-import { GARDEN, MYCELIAL_PATH, MOONWELL_GLADE, SPORE_HOLLOW, VORANYX_DEEP, TWILIGHT_THICKET, WOODED_TRAIL, THE_THRESHOLD, MANA_SPRINGS, ROUTE_2, ROUTE_3, THE_OUTFIELDS, GLOVIEW_VILLAGE, SPIRIT_MEADOW, MOONWELL_GLADE_GREGORY_S_HOME, SPIRIT_CORNER, SORREL_HOLD, BRACK_HOLD, TEST_SANDBOX,
+import { GARDEN, MYCELIAL_PATH, MOONWELL_GLADE, SPORE_HOLLOW, VORANYX_DEEP, TWILIGHT_THICKET, WOODED_TRAIL, THE_THRESHOLD, MANA_SPRINGS, ROUTE_2, ROUTE_3, THE_OUTFIELDS, GLOVIEW_VILLAGE, SPIRIT_MEADOW, MOONWELL_GLADE_GREGORY_S_HOME, SPIRIT_CORNER, CRUCIBLE, SORREL_HOLD, BRACK_HOLD, TEST_SANDBOX,
   FLAT_TERRAIN_DEMO,
   FP_GARDEN, FP_LARGE_1, FP_LARGE_2, FP_LARGE_3, FP_MED_1, FP_MED_2, FP_MED_3, FP_MED_4, FP_HUGE,
   ROUTE_GARDEN_MYCELIAL, ROUTE_MYCELIAL_SPIRIT, ROUTE_SPIRIT_MOONWELL, ROUTE_MOONWELL_GARDEN } from './tilemap'
@@ -56,10 +57,8 @@ export const ZONES: Zone[] = [
     grid: GARDEN, // 32x32, redesigned in the editor by Alex
     playerStart: { tileX: 30, tileY: 9 },
     warps: [
-      // NORTH GATE (14-15,1) → The Spirit Corner (Gregory's shop, Rune Hold) — the canon
-      // permanent gate, walked from our side. TODO(gate-placement): provisional spot, Alex's eye.
-      { fromX: 14, fromY: 1, toZone: 'spirit-corner', toX: 7, toY: 10, direction: 'up' },
-      { fromX: 15, fromY: 1, toZone: 'spirit-corner', toX: 8, toY: 10, direction: 'up' },
+      // NORTH GATE to The Spirit Corner (Rune Hold) RELOCATED into Greg's home (the test hub) —
+      // it's now an owner-gated gate inside moonwell-glade-gregory-s-home, not off the home plot.
       // LEFT door (0,11-12, placed in the editor) → Route 1 (leads to Mycelial Path)
       { fromX: 0, fromY: 11, toZone: 'route-garden-mycelial', toX: 58, toY: 7, direction: 'left' }, // arrive at Route 1's E door
       { fromX: 0, fromY: 12, toZone: 'route-garden-mycelial', toX: 58, toY: 8, direction: 'left' },
@@ -307,9 +306,21 @@ export const ZONES: Zone[] = [
     grid: SPIRIT_CORNER,
     playerStart: { tileX: 7, tileY: 9 },
     warps: [
-      // the permanent gate home — south opening back to the Home Plot
-      { fromX: 7, fromY: 11, toZone: 'garden', toX: 14, toY: 2, direction: 'down' },
-      { fromX: 8, fromY: 11, toZone: 'garden', toX: 15, toY: 2, direction: 'down' },
+      // gate home — south opening back to the test hub (Greg's home), landing 2 tiles below the
+      // Rune Hold gate tile (16,7) so you don't instantly re-warp.
+      { fromX: 7, fromY: 11, toZone: 'moonwell-glade-gregory-s-home', toX: 16, toY: 9, direction: 'down' },
+      { fromX: 8, fromY: 11, toZone: 'moonwell-glade-gregory-s-home', toX: 17, toY: 9, direction: 'down' },
+    ],
+  },
+  {
+    // Practice combat arena — reached only from the owner-gated Crucible gate in Greg's home.
+    id: 'crucible',
+    name: 'The Crucible (Practice)',
+    grid: CRUCIBLE,
+    playerStart: { tileX: 7, tileY: 13 },
+    warps: [
+      // exit → back to the hub, 2 tiles below the Crucible gate (10,7)
+      { fromX: 7, fromY: 14, toZone: 'moonwell-glade-gregory-s-home', toX: 10, toY: 9, direction: 'down' },
     ],
   },
   {
@@ -323,6 +334,11 @@ export const ZONES: Zone[] = [
       // Greg's house door (22-23,17).
       { fromX: 14, fromY: 22, toZone: 'moonwell-glade', toX: 22, toY: 18, direction: 'down' },
       { fromX: 15, fromY: 22, toZone: 'moonwell-glade', toX: 23, toY: 18, direction: 'down' },
+      // ── TEST HUB (owner-only, invisible to players; markers render only for the owner) ──
+      // Crucible gate (left) → the practice arena; Rune Hold gate (right) → The Spirit Corner.
+      // The Folds gate goes here later. Both land back near these tiles (2 south) on return.
+      { fromX: 10, fromY: 7, toZone: 'crucible', toX: 7, toY: 13, direction: 'up', ownerOnly: true },
+      { fromX: 16, fromY: 7, toZone: 'spirit-corner', toX: 7, toY: 9, direction: 'up', ownerOnly: true },
     ],
   },
   {
