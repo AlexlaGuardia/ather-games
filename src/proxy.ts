@@ -33,6 +33,11 @@ function classify(path: string): "tool" | "gated-game" | null {
   if (path === "/shimmer/play3d" || path.startsWith("/shimmer/play3d/")) {
     return null;
   }
+  // Live world data — read-only map payload (tile/height/node numbers) the public 3D walker
+  // boots from; saves stay owner-gated above, this is just the reading side.
+  if (path === "/shimmer/world-data") {
+    return null;
+  }
   // Keeper's Arena test harness — public so Alex can cold-play the new combat on his device.
   if (path === "/shimmer/arena" || path.startsWith("/shimmer/arena/")) {
     return null;
