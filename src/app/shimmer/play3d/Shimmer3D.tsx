@@ -15,7 +15,7 @@ import { ZONES, getZone, checkWarp, type Zone, type Warp } from '../world/zones'
 import { getHeightGrid } from '../world/heightmaps'
 import { GardenAtmosphere } from '../world/atmosphere'
 import { FloraTree, FloraDressing } from '../world/flora'
-import { StationProp } from '../world/prop-models'
+import { StationProp, GhostProp } from '../world/prop-models'
 import { rollEncounter, HOLD_LEVELS, type WildEncounter } from '../engine/encounters'
 import { derivePartyStats, type PartyStats } from '../engine/party-stats'
 import { getMovesForSpirit } from '../engine/moves'
@@ -478,8 +478,11 @@ function PlacementGhost({ placing, posRef, heights, gridRef, placeTargetRef, str
 }) {
   const grp = useRef<THREE.Group>(null)
   const ringMat = useRef<THREE.MeshBasicMaterial>(null)
-  const bodyMat = useRef<THREE.MeshStandardMaterial>(null)
   const fwd = useMemo(() => new THREE.Vector3(), [])
+  // The ghost renders the REAL mesh now, so "blocked" has to reach a material it doesn't own.
+  // State rather than a ref: it flips only when you cross onto a different tile, not per frame.
+  const [blocked, setBlocked] = useState(false)
+  const blockedRef = useRef(false)
   useFrame((state) => {
     if (!placing || !grp.current) { if (grp.current) grp.current.visible = false; return }
     state.camera.getWorldDirection(fwd); fwd.y = 0; fwd.normalize()
@@ -487,18 +490,19 @@ function PlacementGhost({ placing, posRef, heights, gridRef, placeTargetRef, str
     const tx = Math.round(p.x + fwd.x * 1.4), tz = Math.round(p.z + fwd.z * 1.4)
     placeTargetRef.current = { x: tx, y: tz }
     const y = (heights[tz]?.[tx] ?? 0) * STEP
-    const blocked = !walkable(gridRef.current, tx, tz) || structuresRef.current!.some(s => s.zoneId === zoneIdRef.current && s.tileX === tx && s.tileY === tz)
+    const isBlocked = !walkable(gridRef.current, tx, tz) || structuresRef.current!.some(s => s.zoneId === zoneIdRef.current && s.tileX === tx && s.tileY === tz)
     grp.current.visible = true
     grp.current.position.set(tx, y, tz)
     grp.current.rotation.y = -placing.facing * Math.PI / 180
-    if (ringMat.current) ringMat.current.color.setStyle(blocked ? '#ff5a4d' : '#7fe3c8')
-    if (bodyMat.current) { bodyMat.current.color.setStyle(blocked ? '#ff5a4d' : (PLACEABLES[placing.itemId]?.accent ?? '#7fe3c8')) }
+    if (ringMat.current) ringMat.current.color.setStyle(isBlocked ? '#ff5a4d' : '#7fe3c8')
+    if (isBlocked !== blockedRef.current) { blockedRef.current = isBlocked; setBlocked(isBlocked) }
   })
   const def = placing ? PLACEABLES[placing.itemId] : null
   return (
     <group ref={grp} visible={false}>
-      {def && <>
-        <mesh position={[0, def.h / 2 + 0.05, 0]}><boxGeometry args={[0.82, def.h, 0.82]} /><meshStandardMaterial ref={bodyMat} color={def.accent} transparent opacity={0.45} emissive={def.accent} emissiveIntensity={0.5} /></mesh>
+      {def && placing && <>
+        {/* real silhouette, so rotating the ghost actually shows you where the front will point */}
+        <GhostProp id={placing.itemId} def={def} blocked={blocked} />
         <mesh position={[0.35, def.h * 0.6, 0]}><sphereGeometry args={[0.09, 8, 8]} /><meshBasicMaterial color="#ffffff" /></mesh>
         <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.03, 0]}><ringGeometry args={[0.44, 0.54, 4]} /><meshBasicMaterial ref={ringMat} color="#7fe3c8" transparent opacity={0.85} side={THREE.DoubleSide} /></mesh>
       </>}

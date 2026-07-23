@@ -71,7 +71,7 @@ const DEFAULT_HEIGHT_SCALE = 1.0
 // therefore chosen blind and may still look wrong after this fix — rotate and re-place it.
 const MODEL_FORWARD_OFFSET = Math.PI / 2
 
-function GlbProp({ id, def }: { id: string; def: PropDef }) {
+function GlbProp({ id, def, ghost, blocked }: { id: string; def: PropDef; ghost?: boolean; blocked?: boolean }) {
   const entry = PROP_MODELS[id]
   const { scene } = useGLTF(entry.url, DRACO_PATH)
 
@@ -80,8 +80,23 @@ function GlbProp({ id, def }: { id: string; def: PropDef }) {
     root.traverse((o) => {
       const mesh = o as THREE.Mesh
       if (!mesh.isMesh) return
-      mesh.castShadow = true
-      mesh.receiveShadow = true
+      mesh.castShadow = !ghost
+      mesh.receiveShadow = !ghost
+      if (ghost) {
+        // Ghost keeps the real SILHOUETTE — that's the whole point, you're aiming a shape.
+        // Tinted flat (red = blocked) rather than showing baked colours, so it never reads as
+        // an already-placed station.
+        const mat = new THREE.MeshStandardMaterial({
+          color: blocked ? '#ff5a4d' : (def.accent ?? '#7fe3c8'),
+          emissive: blocked ? '#ff5a4d' : (def.accent ?? '#7fe3c8'),
+          emissiveIntensity: 0.5,
+          transparent: true,
+          opacity: 0.45,
+          depthWrite: false,
+        })
+        mesh.material = mat
+        return
+      }
       if (entry.glow) {
         // clone before touching: GLTF materials are shared by reference across instances
         const mat = (mesh.material as THREE.MeshStandardMaterial)?.clone?.()
@@ -105,7 +120,7 @@ function GlbProp({ id, def }: { id: string; def: PropDef }) {
     const target = (def.h * (entry.scale ?? DEFAULT_HEIGHT_SCALE)) / tall
     // lift so the model's lowest point rests at y=0 after scaling
     return { object: root, scale: target, y: -box.min.y * target }
-  }, [scene, entry, def.h])
+  }, [scene, entry, def.h, def.accent, ghost, blocked])
 
   return (
     <group position={[0, y, 0]} rotation={[0, MODEL_FORWARD_OFFSET + (entry.yaw ?? 0), 0]} scale={[scale, scale, scale]}>
@@ -146,6 +161,34 @@ export function StationProp({ id, def }: { id: string; def: PropDef }) {
     <PropBoundary fallback={fallback}>
       <Suspense fallback={fallback}>
         <GlbProp id={id} def={def} />
+      </Suspense>
+    </PropBoundary>
+  )
+}
+
+// The PLACEMENT GHOST, as the real silhouette.
+//
+// This is the fix for aiming, not a polish pass. The ghost used to be a symmetric translucent
+// box, so pressing rotate changed nothing on screen and a player could not tell which way a
+// station would end up facing — which is exactly how saves ended up full of arbitrary facings.
+// A station with a visible front is only aimable if the thing you aim is that same front.
+//
+// Falls back to the old translucent box on every failure path, same contract as StationProp.
+export function GhostProp({ id, def, blocked }: { id: string; def: PropDef; blocked?: boolean }) {
+  const fallback = (
+    <mesh position={[0, def.h / 2 + 0.05, 0]}>
+      <boxGeometry args={[0.82, def.h, 0.82]} />
+      <meshStandardMaterial
+        color={blocked ? '#ff5a4d' : def.accent} emissive={blocked ? '#ff5a4d' : def.accent}
+        emissiveIntensity={0.5} transparent opacity={0.45}
+      />
+    </mesh>
+  )
+  if (!hasPropModel(id)) return fallback
+  return (
+    <PropBoundary fallback={fallback}>
+      <Suspense fallback={fallback}>
+        <GlbProp id={id} def={def} ghost blocked={blocked} />
       </Suspense>
     </PropBoundary>
   )
