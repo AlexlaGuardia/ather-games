@@ -455,6 +455,30 @@ the Arcade frame.
 > `KICK_*`/`HUNTER_*`/`MAX_HP`/`MAX_SHIELD`/`BARRIER_SHIELD_BONUS`), `FiringRange()` sim, `WeaponReticle`/
 > `ResourceBars`/`AmmoCounter` HUD comps, `HEAL_POTIONS`/`startReload`/range-console state in the page comp.
 
+## 👥 Shimmer play3d — MULTIPLAYER PRESENCE (LIVE 2026-07-23, jin-cc) · *Last touched 2026-07-23*
+> **Shipped + verified end-to-end (`a7ef867` client, `33caddb` remount, deployed :3200):** see other
+> players in the same world. Position + facing only; game stays client-authoritative, nothing else
+> synced. Server = `shimmer-server` (FastAPI+WS :8400, running since March: instances, 15-cap, friend
+> gravity); route = `wss://ather.games/shimmer-ws/ws` via the tunnel's REMOTE config (Cloudflare API —
+> local config.yml is fetched-over, editing it does nothing). Zone key prefixed `play3d:` so 2D/3D
+> never share an instance. 12Hz sends gated on actual movement; remote avatars lerp + hide after 12s
+> silence; fails soft to single-player on any socket failure.
+> **Verified:** MultiplayerLayer renders in-scene · WS joins `play3d:garden-world` through the public
+> tunnel · bot-to-bot relay 24/24 moves with z/yaw intact (`scratchpad mp_relay_test.py` pattern).
+> **The 07-23 "two unexplained bugs" postmortem (don't re-live it):** blockout-box props AND
+> never-rendering MultiplayerLayer were ONE phantom — corrupted/mixed `.next` after stacked debug
+> deploys; the browser ran chunks the server no longer had. `rm -rf .next` + one clean build fixed
+> both with zero code changes. If a loaded chunk contains code that provably never executes, diff the
+> served chunk hashes against `.next` on disk before debugging the code.
+> **Testing gotcha:** a backgrounded Chrome tab freezes rAF = the whole R3F loop (movement, net send)
+> is dead while hidden. Presence tests need a FOCUSED tab, or go headless bot-to-bot.
+> **Next:** Alex eyeball pass (walk a step, a Testbot orbits you) · real avatar models (blockout
+> capsule + name tag today; rigged characters are the expensive part) · presence polish (join/leave
+> toasts?, friend gravity surfacing) — Alex's call on scope before more sync (trade/party/chat all
+> need server-side state first, per multiplayer.ts SCOPE note).
+> **Files:** `play3d/multiplayer.ts` (hook + protocol) · `play3d/RemotePlayers.tsx` (avatars + layer)
+> · mount in `Shimmer3D.tsx` Scene · server `/root/shimmer-server`.
+
 ## ⚖️ Shimmer — PARTY BALANCE (measuring instrument built 2026-07-23, jin-cc)
 > ### ⚠️ READ FIRST — THIS BLOCK MEASURES A BATTLE SYSTEM NOBODY PLAYS (correction, 2026-07-23 later)
 > Everything below profiles **`engine/party-battle.ts`**, which is imported only by the old 2D
