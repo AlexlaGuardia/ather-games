@@ -41,6 +41,7 @@ import { createBeast, checkBeastUnlock, beastsToSave, beastsFromSave, BEAST_SPEC
 import { createInventory, inventoryToSave, inventoryFromSave, addItems, removeItems, countItem, transferItem, createChestStorage, chestToSave, chestFromSave, type Inventory, type ItemStack, type ChestStorage, type ChestSave } from '../engine/inventory'
 import { createBank, bankFromSave, bankToSave, bankUsed, bankCapacity, bankDeposit, bankWithdraw, bankForceDeposit, bankReachable, isChestFurniture, migrateChestsToBank, CHEST_CAPACITY, type BankState, type BankSave } from '../engine/bank'
 import { ITEMS } from '../sprites/items'
+import { startPerfLog, mark, logPerf } from './perflog'
 import { createManaPool, manaToSave, manaFromSave, getMaxPool, type ManaPool } from '../engine/mana'
 import { brewPotion, POTION_DEFS } from '../engine/alchemy'
 import { MANA_POTIONS, HEAL_POTIONS, POTION_BUFFS, BUFF_DEFS, HARVEST_BREW_ADVANCE_MS, drinkBuff, activeBuffList, pruneBuffs, gatherXpMult, bonusFind, kindredMult, speedMult, manaRegenMult, rinTune, suppressEncounters, potionEffectLine, type ActiveBuffs } from '../engine/potion-effects'
@@ -2344,6 +2345,7 @@ export default function Shimmer3D() {
       s.kb = json.length / 1024
     }
     s.ms = performance.now() - t0
+    logPerf('autosave', s.ms)   // surfaces in the lag log — a 30s save that lands mid-frame shows here
   }, [buildSave, loadSync, saveRaw])
 
   /**
@@ -2414,6 +2416,9 @@ export default function Shimmer3D() {
   // Birth on first entry — no save yet ⇒ born before spawn. Reads localStorage synchronously
   // at mount (BEFORE load()'s async .then persist() writes), so a genuinely fresh player reads
   // as fresh. Non-cancelable: a new player must choose a rune. Returning players skip it.
+  // Start the lag log's long-task observer once, on mount. Cheap and idempotent (see perflog.ts).
+  useEffect(() => { startPerfLog() }, [])
+
   const bornCheckedRef = useRef(false)
   useEffect(() => {
     if (bornCheckedRef.current) return
@@ -2805,7 +2810,7 @@ export default function Shimmer3D() {
     // Active companion @15 perk — Sporebloom bonus draught (Sporeling, ×2 under Kindred)
     const brewBeast = beastsRef.current.find(b => b.id === activeBeastIdRef.current) ?? null
     const brewFind = getBonusFindChance(brewBeast, 'alchemy') * kindredMult(buffsRef.current, Date.now())
-    if (!brewPotion(potionId, invRef.current, skillsRef.current, manaRef.current, brewFind, bankForZone())) { setHarvestToast('Missing ingredients or mana'); return }
+    if (!mark('brewPotion', () => brewPotion(potionId, invRef.current, skillsRef.current, manaRef.current, brewFind, bankForZone()))) { setHarvestToast('Missing ingredients or mana'); return }
     syncSkillHud()
     const def = POTION_DEFS[potionId]
     setHarvestToast(`Brewed ${def.name} ×${def.resultCount}`)
@@ -2814,7 +2819,7 @@ export default function Shimmer3D() {
   }, [syncSkillHud, persist])
 
   const craft = useCallback((recipeId: string) => {
-    if (!craftItem(recipeId, invRef.current, manaRef.current, bankForZone())) { setHarvestToast('Missing materials or mana'); return }
+    if (!mark('craftItem', () => craftItem(recipeId, invRef.current, manaRef.current, bankForZone()))) { setHarvestToast('Missing materials or mana'); return }
     syncSkillHud() // refreshes the mana pie (craft drained mana)
     setInvSlots([...invRef.current.slots])
     const def = RECIPE_DEFS[recipeId]
@@ -2893,7 +2898,7 @@ export default function Shimmer3D() {
     persist()
   }, [BANK_ITEM_IDS, depositStack, persist])
 
-  const bankDepositAllMaterials = useCallback(() => {
+  const bankDepositAllMaterials = useCallback(() => mark('bank deposit-all', () => {
     let moved = 0, hitCap = false
     for (const slot of invRef.current.slots) {
       if (!slot || !BANK_ITEM_IDS.has(slot.itemId)) continue
@@ -2906,7 +2911,7 @@ export default function Shimmer3D() {
     setBankTick(t => t + 1)
     setHarvestToast(hitCap ? `Banked ${moved} — bank is now full` : `Banked ${moved} materials`)
     persist()
-  }, [BANK_ITEM_IDS, depositStack, persist])
+  }), [BANK_ITEM_IDS, depositStack, persist])
 
   const bankWithdrawItem = useCallback((itemId: string, qty: number) => {
     const got = bankWithdraw(bankRef.current, itemId, qty)
@@ -3116,14 +3121,18 @@ export default function Shimmer3D() {
 
   const openStation = useCallback(() => {
     const s = nearStationRef.current; if (!s) return
-    battleRef.current = true
-    openCursorUI()
-    setOpenMenu({ kind: STATIONS[s.itemId].kind, struct: s })
+    mark(`open ${STATIONS[s.itemId].kind}`, () => {
+      battleRef.current = true
+      openCursorUI()
+      setOpenMenu({ kind: STATIONS[s.itemId].kind, struct: s })
+    })
   }, [openCursorUI])
   const closeStation = useCallback(() => {
-    battleRef.current = false
-    setOpenMenu(null)
-    closeCursorUI()
+    mark('close station', () => {
+      battleRef.current = false
+      setOpenMenu(null)
+      closeCursorUI()
+    })
   }, [closeCursorUI])
 
   const onEncounter = useCallback((enc: WildEncounter) => {

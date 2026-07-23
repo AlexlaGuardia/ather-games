@@ -13,6 +13,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useFrame } from '@react-three/fiber'
 import { menuBtn } from './ui'
 import { type GfxSettings, type ShadowQuality, GFX_DEFAULTS } from './gfx'
+import { readPerfLog, perfSeq, perfClockStart, clearPerfLog, type PerfEntry } from './perflog'
 
 export type FrameStats = {
   fps: number; worstMs: number; spikes: number; dpr: number
@@ -143,10 +144,14 @@ export function GfxPanel({ gfx, onGfx, statsRef, saveRef }: {
     geometries: 0, textures: 0, programs: 0, calls: 0, triangles: 0, heapMB: 0, base: null,
   })
   const [save, setSave] = useState<SaveStats>({ ms: 0, kb: 0, writes: 0, skipped: 0 })
+  const [log, setLog] = useState<PerfEntry[]>([])
+  const lastSeq = useRef(-1)
   useEffect(() => {
     const t = setInterval(() => {
       if (statsRef.current) setStats(statsRef.current)
       if (saveRef.current) setSave({ ...saveRef.current })
+      // Only re-read the lag log when something new landed — perfSeq changes on every push.
+      if (perfSeq() !== lastSeq.current) { lastSeq.current = perfSeq(); setLog(readPerfLog()) }
     }, 250)
     return () => clearInterval(t)
   }, [statsRef, saveRef])
@@ -166,6 +171,33 @@ export function GfxPanel({ gfx, onGfx, statsRef, saveRef }: {
       </div>
       <div style={{ font: '600 9px/1.4 ui-monospace, monospace', color: '#8aa9a0', margin: '5px 0 2px' }}>
         Worst frame is the number that matters for stutter. Under {SPIKE_MS}ms is smooth.
+      </div>
+
+      {/* ── LAG LOG — the "when and where did it freeze" readout. Long tasks (main-thread blocks
+          ≥50ms) auto-logged; craft/deposit/save/open marked by name so a block can be attributed. */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', margin: '12px 0 4px' }}>
+        <span style={label}>LAG LOG</span>
+        <button onClick={() => { clearPerfLog(); setLog([]) }} style={{ font: '700 9px ui-monospace, monospace', color: '#8aa9a0', background: 'none', border: '1px solid #ffffff22', borderRadius: 5, padding: '1px 6px', cursor: 'pointer' }}>clear</button>
+      </div>
+      <div style={{ background: '#0b1513', border: '1px solid #ffffff18', borderRadius: 8, padding: '6px 9px', maxHeight: 168, overflowY: 'auto' }}>
+        {log.length === 0 && <div style={{ font: '600 10px ui-monospace, monospace', color: '#5a7a6e' }}>No hitches yet. Go do the thing that lags.</div>}
+        {log.map((e, i) => {
+          const secs = ((e.t - perfClockStart()) / 1000)
+          const bad = e.ms >= 100
+          return (
+            <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 6, lineHeight: 1.7 }}>
+              <span style={{ font: '700 9px ui-monospace, monospace', color: e.kind === 'longtask' ? '#ff9d7a' : '#cfeee2', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                {e.kind === 'longtask' ? '■ ' : ''}{e.label}
+              </span>
+              <span style={{ font: '800 10px ui-monospace, monospace', fontVariantNumeric: 'tabular-nums', color: bad ? '#ff7a5c' : e.ms >= 50 ? '#ffb35c' : '#9fd9c4', whiteSpace: 'nowrap' }}>
+                {e.ms.toFixed(0)}ms<span style={{ color: '#5a7a6e', marginLeft: 5 }}>{secs.toFixed(0)}s</span>
+              </span>
+            </div>
+          )
+        })}
+      </div>
+      <div style={{ font: '600 9px/1.4 ui-monospace, monospace', color: '#8aa9a0', margin: '5px 0 2px' }}>
+        Orange ■ = a main-thread freeze. A named row right beside it is the likely cause.
       </div>
 
       <div style={{ ...label, margin: '12px 0 4px' }}>LEAK WATCH</div>
