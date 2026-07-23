@@ -578,6 +578,70 @@ the Arcade frame.
 > **Files:** `engine/arena.ts` (`grdK`/`levelEdge`), `engine/arena-moves.ts` (`TIRE_*`),
 > `engine/arena.test.ts` (determinism + PACING).
 
+## ⚔️ Shimmer — BASE SPIRITS LEARN A REAL KIT (2026-07-23, jin-cc) · *Last touched 2026-07-23*
+> **Alex:** *"give base spirits a real kit — the spirits base level should start at 3 when they first
+> bloom, from there to 34 they should have a variety of moves to learn"* + *"carry the kit over, but
+> lets remember evolution is like a prestige event."* Shipped + deployed (`86b2753`).
+>
+> **THE FIND:** element moves were gated behind `element !== 'base'`, and a spirit only gains an
+> element by evolving at **level 34** — while the shipped continent bands at **levels 2-22**. So every
+> spirit in the playable game held exactly two moves (Mana Pulse + Spirit Ward) and **73 of the 75
+> moves in `engine/moves.ts` were unreachable**. Not a likely cause of samey fights, THE cause.
+>
+> **THE RULE — raw vs runed.** A base spirit cannot hold a rune, so it channels registered moves
+> **RAW**: full power, forced `neutral`, no STAB and no matchup multiplier. On evolution the same
+> moves express their true runes. Evolution does not hand you a new list, it **ignites the list you
+> built** — which is how carry-over and prestige coexist, and it makes a base-kit pick you made 20
+> levels earlier pay off differently depending on what you evolve into. Canon backs all of it:
+> `CANON/game/moves.md` is caster-agnostic ("the caster supplies medium, colour, and potency") and
+> hands progression to the build in as many words. **Zero new move names invented; none may be.**
+>
+> **Left off:** learnset live, 69 of 74 moves reachable, bloom level 1 -> 3, curve at 5/10/15/22/29.
+> **Next:** the arena re-tune below (Alex feel call) · player-chosen kit slots (the 4-move kit is
+> auto-selected as Mana Pulse + 3 most recent, so there is variety across species but no player
+> choice — needs a `knownMoves` field on Spirit + save migration) · a home for the 100%-proc anchors.
+>
+> **⚠ THE ONE RED, NOT FIXED — `arena.test.ts` win-rate bands.** Every fight-LENGTH assertion passes
+> now (the L50 tank mirror resolves, level drift is gone), but **a fox cannot beat a 4-level-higher
+> frog at any Keeper skill (0% both policies), and the 3v3 party baseline is 2% against a 40-60%
+> band.** Those bands were calibrated when both sides fought identical two-move kits, so level and
+> stat gaps expressed weakly; real kits make them decisive. **`HP_MULT` does not move it — 0% at
+> 1.8, 2.0 and 2.4 alike — so this is NOT a pacing knob, it is the level cliff** that
+> `party-balance.test.ts` has carried as a known gap since 07-22. Needs a real arena re-tune.
+>
+> **★ FOUR BUGS THE ORACLES CAUGHT IN MY OWN TABLES, each now an assertion so it cannot return:**
+> - **Two stacked utility picks** left water-bear's lv19-24 kit with one real strike. The ally party
+>   *tanks with that species*, so that alone dropped the arena party baseline **38% -> 9.5%**. Rule:
+>   one utility pick per species, never before lv15. **A damage-move COUNT is not a damage floor** —
+>   the first version counted the pinned 40-power Mana Pulse and read green on a kit that could not
+>   kill anything.
+> - **A pwr-debuff capstone on the tank** meets its own mirror, where both sides floor each other's
+>   power behind stacked guard and **the L50 fight never resolves** (0.0 hits in 60s).
+> - **The 100%-proc anchors** (Mana Seal, Static Cage, Root Grip) are evolution-tier control, not
+>   something a lv19 spirit holds. Pulled from the base pool — and now unreachable, no tier grants them.
+> - **Still-Breath was diluting every low-level kit.** A power-0 move sitting in the combat kit from
+>   lv5-18 left a spirit ONE useful move in three. It now leaves the learnset and is granted by
+>   `createReachBattle`, which *also* makes the Reach mechanic kit-independent — it can no longer
+>   rotate out and strand a collared spirit. Strictly better than where it started.
+>
+> **★ THE CURVE STARTS AT 5, NOT 9 — kit size now varies with level, and flat HP cannot serve both
+> ends.** With the first strike at 9, a lv5 spirit fought with Mana Pulse + Spirit Ward and the lv5
+> tank mirror burned 58s of a 60s cap. Tuning `HP_MULT` up for 4-move fights drags the 2-move ones
+> badly; getting a real strike in early is what closed the level-drift assertion, not the HP dial.
+>
+> **★ UNEXPECTED WIN — the species league flattened.** `party-balance.test.ts`'s `species-ceiling:frog`
+> and `species-floor:owl` / `:firefly` known-gaps now **PASS** and were retired. That league (frog
+> 89.1% · firefly 4.1%) was measured when NO spirit had a moveset, so it was reading pure stat-blocks
+> with nothing to express or offset them. **A balance number measured on a stub measures the stub.**
+>
+> **Files:** `engine/base-learnset.ts` (the tables + the rule, tunable), `engine/base-learnset.test.ts`
+> (new oracle: id resolution, damage floor, utility budget, raw/runed contract, evolution payout,
+> variety), `engine/moves.ts` (`getMovesForSpirit` rewrite, `ELEMENT_MID_LEVEL` 34 / `ELEMENT_HIGH_LEVEL`
+> 45), `engine/battle.ts` (reach grant), `engine/arena.ts` (`HP_MULT` 2.4), `spirits/evolution-config.ts`
+> (`bloomLevel`), `spirits/spirit.ts`.
+> **Note:** `BASE_LEARNSET` names moves by **id**, not const reference — `moves.ts` imports this file,
+> so a const read at module scope is a TDZ crash on import order. The oracle asserts every id resolves.
+
 ## 🗺️ Shimmer play3d — AREA LEVEL BANDS + SPECIES ECOLOGY (2026-07-23, jin-cc) · *Last touched 2026-07-23*
 > **Alex:** *"level cap on spirits per area — moonwell pass 3-5, spirit meadows 7-8 — as well as only
 > certain species spawn in certain areas, kinda like where you'd expect to find a Manalotl and
