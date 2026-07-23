@@ -16,6 +16,9 @@ import { type GfxSettings, type ShadowQuality, GFX_DEFAULTS } from './gfx'
 
 export type FrameStats = { fps: number; worstMs: number; spikes: number; dpr: number }
 
+/** Autosave cost, written by flushPersist in Shimmer3D. Here because this is the diagnostics panel. */
+export type SaveStats = { ms: number; kb: number; writes: number; skipped: number }
+
 // A frame slower than this reads as a hitch rather than a slow-but-smooth frame. 50ms = 20fps
 // instantaneous; below that the eye stops reading motion and starts reading a stutter.
 const SPIKE_MS = 50
@@ -78,16 +81,21 @@ function Seg({ active, onClick, children }: { active: boolean; onClick: () => vo
  * The DOM half. Polls statsRef at 4Hz — the same polling shape useRoster uses, and for the same
  * reason: a readout that re-rendered per frame would be measuring its own overhead.
  */
-export function GfxPanel({ gfx, onGfx, statsRef }: {
+export function GfxPanel({ gfx, onGfx, statsRef, saveRef }: {
   gfx: GfxSettings
   onGfx: (next: GfxSettings) => void
   statsRef: React.RefObject<FrameStats>
+  saveRef: React.RefObject<SaveStats>
 }) {
   const [stats, setStats] = useState<FrameStats>({ fps: 0, worstMs: 0, spikes: 0, dpr: 1 })
+  const [save, setSave] = useState<SaveStats>({ ms: 0, kb: 0, writes: 0, skipped: 0 })
   useEffect(() => {
-    const t = setInterval(() => { if (statsRef.current) setStats(statsRef.current) }, 250)
+    const t = setInterval(() => {
+      if (statsRef.current) setStats(statsRef.current)
+      if (saveRef.current) setSave({ ...saveRef.current })
+    }, 250)
     return () => clearInterval(t)
-  }, [statsRef])
+  }, [statsRef, saveRef])
 
   const set = (patch: Partial<GfxSettings>) => onGfx({ ...gfx, ...patch })
   const isLight = !gfx.antialias && gfx.shadows !== 'high' && gfx.adaptiveDpr
@@ -104,6 +112,16 @@ export function GfxPanel({ gfx, onGfx, statsRef }: {
       </div>
       <div style={{ font: '600 9px/1.4 ui-monospace, monospace', color: '#8aa9a0', margin: '5px 0 2px' }}>
         Worst frame is the number that matters for stutter. Under {SPIKE_MS}ms is smooth.
+      </div>
+
+      <div style={{ ...label, margin: '12px 0 4px' }}>AUTOSAVE</div>
+      <div style={{ background: '#0b1513', border: '1px solid #ffffff18', borderRadius: 8, padding: '6px 9px' }}>
+        <Row k="last save" v={save.writes || save.skipped ? `${save.ms.toFixed(1)}ms` : '—'} warn={save.ms > 16} />
+        <Row k="save size" v={save.kb ? `${save.kb.toFixed(0)}kb` : '—'} />
+        <Row k="writes/skips" v={`${save.writes}/${save.skipped}`} />
+      </div>
+      <div style={{ font: '600 9px/1.4 ui-monospace, monospace', color: '#8aa9a0', margin: '5px 0 2px' }}>
+        Skips are saves where nothing changed. Runs in idle time, not mid-frame.
       </div>
 
       <div style={{ ...label, margin: '12px 0 4px' }}>EDGE SMOOTHING</div>

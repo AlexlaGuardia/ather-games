@@ -38,6 +38,36 @@ export function useCloudSave(game: Game) {
     [game],
   );
 
+  // Write an ALREADY-serialized payload. Exists so a caller that stringifies for its own reasons
+  // (dirty-checking against the last write) doesn't pay for a second JSON.stringify of the whole
+  // save. `save` above is unchanged and still the right call for everyone else.
+  // Returns whether the write actually landed. Callers that cache "what we last wrote" need to
+  // know — marking a failed write as written would make the next identical save get skipped as a
+  // no-op, so one quota error would silently stop saving forever.
+  const saveRaw = useCallback(
+    (json: string): boolean => {
+      if (typeof window === "undefined") return false;
+      try {
+        localStorage.setItem(saveKey(game), json);
+        return true;
+      } catch {
+        return false; // quota / private-mode
+      }
+    },
+    [game],
+  );
+
+  // Synchronous read of the raw string. The async `load` is the general path; this one exists for
+  // the beforeunload flush, where a promise would never settle before the page is gone.
+  const loadSync = useCallback((): string | null => {
+    if (typeof window === "undefined") return null;
+    try {
+      return localStorage.getItem(saveKey(game));
+    } catch {
+      return null;
+    }
+  }, [game]);
+
   const submitScore = useCallback(
     async (value: number, category = "score"): Promise<void> => {
       if (typeof window === "undefined") return;
@@ -51,5 +81,5 @@ export function useCloudSave(game: Game) {
     [game],
   );
 
-  return { isSignedIn, load, save, submitScore, userName: undefined as string | undefined };
+  return { isSignedIn, load, save, saveRaw, loadSync, submitScore, userName: undefined as string | undefined };
 }

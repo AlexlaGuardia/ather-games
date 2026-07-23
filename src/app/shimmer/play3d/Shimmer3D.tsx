@@ -53,7 +53,7 @@ import { useCloudSave } from '@/lib/use-cloud-save'
 import { useWallet } from '@/lib/use-wallet'
 import { StationMenus, type PlacedStruct, type StationKind } from './StationMenus'
 import { prettyItem, menuBtn, TOOL_HUD } from './ui'
-import { GfxPanel, FrameProbe, type FrameStats } from './GfxPanel'
+import { GfxPanel, FrameProbe, type FrameStats, type SaveStats } from './GfxPanel'
 import { loadGfx, storeGfx, gfxKey, dprCeiling, SHADOW_MAP_SIZE, DPR_FLOOR, type GfxSettings } from './gfx'
 import { WorldMap, MiniMap } from './WorldMap'
 import { WORLD_ZONE_ID, registerGardenWorld, getGardenWorld, isStitched, fromWorld } from '../world/garden-world'
@@ -2199,7 +2199,9 @@ export default function Shimmer3D() {
 
   // ── Party + save. ather.games saves are per-browser localStorage (no login); the 3D walker shares
   // Shimmer's slot (`ather:save:shimmer`) and MERGES on write so it never clobbers 2D-only fields. ──
-  const { load, save: saveGame } = useCloudSave('shimmer')
+  // saveRaw/loadSync (not save/load) — the save path dirty-checks its own JSON, so it must write a
+  // string it already has rather than hand an object back to be stringified a second time.
+  const { load, saveRaw, loadSync } = useCloudSave('shimmer')
   const wallet = useWallet()
   const partyRef = useRef<Spirit[] | null>(null)
   if (!partyRef.current) partyRef.current = [] // empty until Greg's starter handoff; load() may replace it
@@ -2242,12 +2244,34 @@ export default function Shimmer3D() {
   useEffect(() => { talkingRef.current = !!dialogue }, [dialogue])
   useEffect(() => { if (!banner) return; const t = setTimeout(() => setBanner(null), 2600); return () => clearTimeout(t) }, [banner])
 
+  // ── SAVING, AND WHY IT LOOKS LIKE THIS ────────────────────────────────────────────────────────
+  // This used to be one `async` function that read the whole save back, parsed it, rebuilt it,
+  // re-serialized it and wrote it — every 30 seconds and after every harvest. The `async` was
+  // decorative: localStorage is synchronous, so all of it landed on the RENDER THREAD, and a save
+  // big enough to matter turned into a dropped frame. That was a real hitch on top of the GPU one
+  // (2026-07-23; see gfx.ts for the other half of that day).
+  //
+  // Three changes, in order of how much they bought:
+  //   1. MIRROR the last-known save in memory, so a write no longer reads+parses the old one first.
+  //      The read only happens once at mount, or after another tab writes (storage event).
+  //   2. DIRTY-CHECK the serialized payload. Standing still costs a compare, not a write.
+  //   3. DEFER to idle. The work is the same size; it just stops landing mid-frame.
+  // Call sites are unchanged — persist() still means "save now-ish".
+
+  /** Last full save object we know about. null = must re-read before merging (see storage event). */
+  const saveMirrorRef = useRef<Record<string, unknown> | null>(null)
+  /** Exact JSON of the last write, so an unchanged world skips the write entirely. */
+  const lastWrittenRef = useRef<string>('')
+  const persistIdleRef = useRef<number | null>(null)
+  const persistTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  /** Surfaced in the ⚙ panel — proves the fix instead of asserting it. */
+  const saveStatsRef = useRef<SaveStats>({ ms: 0, kb: 0, writes: 0, skipped: 0 })
+
   // Merge-save: preserve any 2D-only fields (furniture/crops/quests…) the 2D game may have written.
   // `replaceFlags` — New Game must not inherit the old run's story flags. Normal saves merge
   // (the 2D walker writes flags this save path doesn't know about); a fresh start replaces.
-  const persist = useCallback(async (opts?: { replaceFlags?: boolean }) => {
-    const prev = (await load()) ?? {}
-    await saveGame({
+  const buildSave = useCallback((prev: Record<string, unknown>, opts?: { replaceFlags?: boolean }) => {
+    return ({
       ...prev,
       spirits: spiritsToSave(partyRef.current ?? []),
       beasts: beastsToSave(beastsRef.current),
@@ -2272,7 +2296,83 @@ export default function Shimmer3D() {
       plantedCrops: plantedCropsToSave(plantedCropsRef.current),
       buffs: pruneBuffs(buffsRef.current, Date.now()),
     })
-  }, [load, saveGame])
+  }, [])
+
+  /**
+   * Do the write, right now, on this thread. Everything expensive lives here so there is exactly
+   * one copy of it — the deferred path just decides *when* to call this.
+   */
+  const flushPersist = useCallback((opts?: { replaceFlags?: boolean }) => {
+    if (!posRef.current) return   // pre-spawn; nothing meaningful to save yet
+    const t0 = performance.now()
+    // Mirror miss (first write, or another tab wrote) — pay the read once to merge correctly.
+    if (!saveMirrorRef.current) {
+      const raw = loadSync()
+      try { saveMirrorRef.current = raw ? JSON.parse(raw) as Record<string, unknown> : {} } catch { saveMirrorRef.current = {} }
+      if (raw) lastWrittenRef.current = raw
+    }
+    const data = buildSave(saveMirrorRef.current, opts)
+    const json = JSON.stringify(data)
+    const s = saveStatsRef.current
+    if (json === lastWrittenRef.current) {
+      // Nothing changed since the last write — standing still costs a compare, not a disk write.
+      s.skipped++
+      s.ms = performance.now() - t0
+      return
+    }
+    // Only record it as written if it actually landed. A quota failure that updated the cache
+    // would make every later identical save skip as a no-op — saving would stop, silently.
+    if (saveRaw(json)) {
+      saveMirrorRef.current = data
+      lastWrittenRef.current = json
+      s.writes++
+      s.kb = json.length / 1024
+    }
+    s.ms = performance.now() - t0
+  }, [buildSave, loadSync, saveRaw])
+
+  /**
+   * The call every site uses. Coalesces into one idle flush instead of writing inline.
+   *
+   * `replaceFlags` (New Game) flushes IMMEDIATELY and deliberately: it is a destructive wipe, and
+   * deferring it risks the old run's flags surviving a tab close. It is also the only caller that
+   * passes options, so coalescing never has to merge conflicting intents.
+   */
+  const persist = useCallback((opts?: { replaceFlags?: boolean }) => {
+    if (opts?.replaceFlags) {
+      if (persistIdleRef.current !== null) { cancelIdleCallback?.(persistIdleRef.current); persistIdleRef.current = null }
+      if (persistTimerRef.current) { clearTimeout(persistTimerRef.current); persistTimerRef.current = null }
+      flushPersist(opts)
+      return
+    }
+    if (persistIdleRef.current !== null || persistTimerRef.current) return   // already queued
+    const run = () => { persistIdleRef.current = null; persistTimerRef.current = null; flushPersist() }
+    // requestIdleCallback puts the work in the browser's slack instead of the middle of a frame.
+    // The timeout is the safety net: under sustained load idle never arrives, and a save that
+    // never runs is worse than one that costs a frame. Safari lacks rIC — fall back to a timer.
+    if (typeof requestIdleCallback === 'function') {
+      persistIdleRef.current = requestIdleCallback(run, { timeout: 2000 })
+    } else {
+      persistTimerRef.current = setTimeout(run, 250)
+    }
+  }, [flushPersist])
+
+  // Another tab wrote the same save — our mirror is stale, so drop it and re-read before the next
+  // merge. Without this we would happily clobber whatever that tab saved with our own `...prev`.
+  useEffect(() => {
+    const onStorage = (e: StorageEvent) => {
+      if (e.key === 'ather:save:shimmer') { saveMirrorRef.current = null; lastWrittenRef.current = '' }
+    }
+    window.addEventListener('storage', onStorage)
+    return () => window.removeEventListener('storage', onStorage)
+  }, [])
+
+  // Drop any queued save on unmount. The autosave effect flushes synchronously on its way out, so
+  // the data is already safe — this just stops a stale idle callback firing into a dead component.
+  useEffect(() => () => {
+    if (persistIdleRef.current !== null) cancelIdleCallback?.(persistIdleRef.current)
+    if (persistTimerRef.current) clearTimeout(persistTimerRef.current)
+  }, [])
 
   // Grant any skill-15 companion the player has newly earned (canon @15 unlock). Idempotent —
   // skips species already owned. Auto-selects the first companion as active. Returns the granted
@@ -2397,12 +2497,23 @@ export default function Shimmer3D() {
   }, [load, persist])
 
   // Auto-save every 30s + on page close (the walker can be left mid-stride).
+  //
+  // The tick goes through persist() so it lands in idle slack. The LEAVE paths call flushPersist
+  // directly and synchronously — a deferred save on beforeunload never runs, the page is already
+  // gone. `pagehide` is there because mobile Safari/Chrome often background-kill a tab without
+  // ever firing beforeunload, which is exactly the phone-in-pocket case.
   useEffect(() => {
     const id = setInterval(() => { persist() }, 30_000)
-    const onLeave = () => { persist() }
+    const onLeave = () => flushPersist()
     window.addEventListener('beforeunload', onLeave)
-    return () => { clearInterval(id); window.removeEventListener('beforeunload', onLeave); persist() }
-  }, [persist])
+    window.addEventListener('pagehide', onLeave)
+    return () => {
+      clearInterval(id)
+      window.removeEventListener('beforeunload', onLeave)
+      window.removeEventListener('pagehide', onLeave)
+      flushPersist()
+    }
+  }, [persist, flushPersist])
 
   // Mana regen + node respawn — a coarse tick (the real engine runs 15 TPS; 2 Hz is plenty for the
   // vial and the minutes-long respawn timers).
@@ -3914,7 +4025,7 @@ export default function Shimmer3D() {
             width: 40, height: 40, borderRadius: 10, border: `1px solid ${gfxOpen ? '#7fe3c8' : '#ffffff33'}`,
             background: gfxOpen ? '#12352c' : 'rgba(16,20,32,0.86)', color: '#bfe0ff', font: '800 15px ui-monospace, monospace', cursor: 'pointer',
           }} title="Graphics">⚙</button>
-          {gfxOpen && <GfxPanel gfx={gfx} onGfx={setGfx} statsRef={frameStats} />}
+          {gfxOpen && <GfxPanel gfx={gfx} onGfx={setGfx} statsRef={frameStats} saveRef={saveStatsRef} />}
         </div>
       )}
 
