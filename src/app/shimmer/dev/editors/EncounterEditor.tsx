@@ -28,8 +28,9 @@ function deepCloneTables(): Record<string, ZoneEncounters> {
   for (const [k, v] of Object.entries(ENCOUNTER_TABLES)) {
     clone[k] = {
       rate: v.rate,
+      levels: [...v.levels] as [number, number],
       aiTier: v.aiTier,
-      entries: v.entries.map(e => ({ ...e, levelRange: [...e.levelRange] as [number, number] })),
+      entries: v.entries.map(e => ({ ...e, levels: e.levels ? [...e.levels] as [number, number] : undefined })),
     }
   }
   return clone
@@ -124,7 +125,7 @@ export default function EncounterEditor({ onDeploy, deployState }: Props) {
     setTables(prev => {
       const zone = prev[zoneId]
       if (!zone) return prev
-      const newEntry: EncounterEntry = { species: 'fox' as Species, weight: 3, levelRange: [0, 2] }
+      const newEntry: EncounterEntry = { species: 'fox' as Species, weight: 3 }
       return { ...prev, [zoneId]: { ...zone, entries: [...zone.entries, newEntry] } }
     })
     setDirty(true)
@@ -142,7 +143,7 @@ export default function EncounterEditor({ onDeploy, deployState }: Props) {
   const enableZone = useCallback((zoneId: string) => {
     setTables(prev => ({
       ...prev,
-      [zoneId]: { rate: 0.05, aiTier: 'wild', entries: [] },
+      [zoneId]: { rate: 0.05, levels: [2, 4], aiTier: 'wild', entries: [] },
     }))
     setDirty(true)
   }, [])
@@ -223,6 +224,28 @@ export default function EncounterEditor({ onDeploy, deployState }: Props) {
                 <h2 className="font-display text-lg text-white/80">{selectedZone.replace(/-/g, ' ')}</h2>
                 {current.rate === 0 && (
                   <span className="text-[10px] text-green-400/60 bg-green-400/10 px-2 py-0.5 rounded">safe zone</span>
+                )}
+              </div>
+
+              {/* Level band — the area's difficulty. ABSOLUTE (2026-07-23): this is the level
+                  a spirit here IS, not an offset from the player. */}
+              <div className="flex items-center gap-3 mb-3">
+                <label className="text-[10px] text-white/40 uppercase tracking-wider">Level Band</label>
+                <input
+                  type="number" min={1} max={100}
+                  value={current.levels[0]}
+                  onChange={e => updateZone(selectedZone, { levels: [parseInt(e.target.value) || 1, current.levels[1]] })}
+                  className="bg-transparent border border-white/10 rounded px-2 py-1 text-xs text-white/80 outline-none focus:border-violet-500/50 w-16 tabular-nums"
+                />
+                <span className="text-white/30 text-xs">to</span>
+                <input
+                  type="number" min={1} max={100}
+                  value={current.levels[1]}
+                  onChange={e => updateZone(selectedZone, { levels: [current.levels[0], parseInt(e.target.value) || 1] })}
+                  className="bg-transparent border border-white/10 rounded px-2 py-1 text-xs text-white/80 outline-none focus:border-violet-500/50 w-16 tabular-nums"
+                />
+                {current.levels[1] < current.levels[0] && (
+                  <span className="text-[10px] text-red-400/80">max is below min</span>
                 )}
               </div>
 
@@ -313,21 +336,33 @@ export default function EncounterEditor({ onDeploy, deployState }: Props) {
                           onChange={e => updateEntry(selectedZone, i, { weight: parseInt(e.target.value) || 1 })}
                           className="bg-transparent border border-white/10 rounded px-1.5 py-1 text-xs text-white/80 outline-none focus:border-violet-500/50 w-full tabular-nums"
                         />
+                        {/* Per-species ABSOLUTE override. Blank = inherit the zone band, which is
+                            what almost every entry should do — an override is for a rare tough spawn. */}
                         <input
                           type="number"
-                          min={-5}
-                          max={10}
-                          value={entry.levelRange[0]}
-                          onChange={e => updateEntry(selectedZone, i, { levelRange: [parseInt(e.target.value) || 0, entry.levelRange[1]] })}
-                          className="bg-transparent border border-white/10 rounded px-1.5 py-1 text-xs text-white/80 outline-none focus:border-violet-500/50 w-full tabular-nums"
+                          min={1}
+                          max={100}
+                          placeholder={String(current.levels[0])}
+                          value={entry.levels ? entry.levels[0] : ''}
+                          onChange={e => {
+                            const v = e.target.value
+                            if (v === '') return updateEntry(selectedZone, i, { levels: undefined })
+                            updateEntry(selectedZone, i, { levels: [parseInt(v) || 1, entry.levels?.[1] ?? current.levels[1]] })
+                          }}
+                          className="bg-transparent border border-white/10 rounded px-1.5 py-1 text-xs text-white/80 outline-none focus:border-violet-500/50 w-full tabular-nums placeholder:text-white/20"
                         />
                         <input
                           type="number"
-                          min={-5}
-                          max={10}
-                          value={entry.levelRange[1]}
-                          onChange={e => updateEntry(selectedZone, i, { levelRange: [entry.levelRange[0], parseInt(e.target.value) || 0] })}
-                          className="bg-transparent border border-white/10 rounded px-1.5 py-1 text-xs text-white/80 outline-none focus:border-violet-500/50 w-full tabular-nums"
+                          min={1}
+                          max={100}
+                          placeholder={String(current.levels[1])}
+                          value={entry.levels ? entry.levels[1] : ''}
+                          onChange={e => {
+                            const v = e.target.value
+                            if (v === '') return updateEntry(selectedZone, i, { levels: undefined })
+                            updateEntry(selectedZone, i, { levels: [entry.levels?.[0] ?? current.levels[0], parseInt(v) || 1] })
+                          }}
+                          className="bg-transparent border border-white/10 rounded px-1.5 py-1 text-xs text-white/80 outline-none focus:border-violet-500/50 w-full tabular-nums placeholder:text-white/20"
                         />
                         <select
                           value={entry.element ?? 'base'}

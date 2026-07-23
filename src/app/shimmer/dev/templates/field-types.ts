@@ -33,6 +33,7 @@ export const TEXT_NODE_FIELDS: FieldDef[] = [
 
 export const ENCOUNTER_ENTRY_FIELDS: FieldDef[] = [
   { key: 'weight', label: 'Weight', type: 'number', min: 1, max: 10 },
-  { key: 'levelRange.0', label: 'Level Min', type: 'number', min: -5, max: 10 },
-  { key: 'levelRange.1', label: 'Level Max', type: 'number', min: -5, max: 10 },
+  // Absolute level override for a single species (blank = inherit the zone band).
+  { key: 'levels.0', label: 'Level Min', type: 'number', min: 1, max: 100 },
+  { key: 'levels.1', label: 'Level Max', type: 'number', min: 1, max: 100 },
 ]

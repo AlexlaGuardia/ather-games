@@ -771,8 +771,14 @@ export async function POST(req: NextRequest) {
     }
 
     // ── Save Encounter Tables ──
+    // ⚠ THIS REGENERATES THE WHOLE ENCOUNTER_TABLES BLOCK, so every comment inside it is
+    // DESTROYED on save (the ecology notes, the "band set by Alex" markers). The consts
+    // outside the block — SPECIES_AFFINITY, ZONE_ECOLOGY — are untouched by the regex and
+    // survive, which is exactly why the ecology contract lives out there rather than in
+    // comments on the entries. If the editor ever needs to own ecology too, this writer has
+    // to learn to emit it; do NOT move ZONE_ECOLOGY inside the block.
     if (body.encounters && typeof body.encounters === 'object') {
-      const encounterData: Record<string, { rate: number; entries: { species: string; weight: number; levelRange: [number, number]; element?: string }[]; aiTier: string }> = body.encounters
+      const encounterData: Record<string, { rate: number; levels?: [number, number]; entries: { species: string; weight: number; levels?: [number, number]; element?: string }[]; aiTier: string }> = body.encounters
 
       // Generate ENCOUNTER_TABLES const block
       const zoneBlocks: string[] = []
@@ -783,16 +789,26 @@ export async function POST(req: NextRequest) {
           const elStr = element && element !== 'base' ? `, element: '${element}'` : ''
           const sp = `'${safeId(e.species, `encounters.${zoneId}.entries[${i}].species`)}'`
           const weight = safeNum(e.weight, `encounters.${zoneId}.entries[${i}].weight`, 0, 1_000_000)
-          const lo = safeInt(e.levelRange?.[0], `encounters.${zoneId}.entries[${i}].levelRange[0]`, 0, 999)
-          const hi = safeInt(e.levelRange?.[1], `encounters.${zoneId}.entries[${i}].levelRange[1]`, 0, 999)
-          return `      { species: ${sp.padEnd(14)}, weight: ${weight}, levelRange: [${lo}, ${hi}]${elStr} },`
+          // Per-species band is an OPTIONAL absolute override; omit it and the entry inherits
+          // the zone band. Writing one unconditionally is what would flatten the tables.
+          let lvlStr = ''
+          if (Array.isArray(e.levels)) {
+            const lo = safeInt(e.levels[0], `encounters.${zoneId}.entries[${i}].levels[0]`, 1, 100)
+            const hi = safeInt(e.levels[1], `encounters.${zoneId}.entries[${i}].levels[1]`, 1, 100)
+            lvlStr = `, levels: [${lo}, ${hi}]`
+          }
+          return `      { species: ${sp.padEnd(14)}, weight: ${weight}${lvlStr}${elStr} },`
         })
         const entriesStr = entryLines.length > 0
           ? `[\n${entryLines.join('\n')}\n    ]`
           : '[]'
         const rate = safeNum(zone.rate, `encounters.${zoneId}.rate`, 0, 1)
         const aiTier = safeId(zone.aiTier, `encounters.${zoneId}.aiTier`)
-        zoneBlocks.push(`  '${zoneId}': {\n    rate: ${rate},\n    entries: ${entriesStr},\n    aiTier: '${aiTier}',\n  },`)
+        // The zone's ABSOLUTE level band. Required — an editor payload that omits it would
+        // otherwise silently write a table with no band and break every roll in that zone.
+        const bandLo = safeInt(zone.levels?.[0], `encounters.${zoneId}.levels[0]`, 1, 100)
+        const bandHi = safeInt(zone.levels?.[1], `encounters.${zoneId}.levels[1]`, 1, 100)
+        zoneBlocks.push(`  '${zoneId}': {\n    rate: ${rate},\n    levels: [${bandLo}, ${bandHi}],\n    entries: ${entriesStr},\n    aiTier: '${aiTier}',\n  },`)
       }
 
       const newTableBlock = `const ENCOUNTER_TABLES: Record<string, ZoneEncounters> = {\n${zoneBlocks.join('\n\n')}\n}`

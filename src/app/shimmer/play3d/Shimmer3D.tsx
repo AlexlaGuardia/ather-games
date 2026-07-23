@@ -15,7 +15,7 @@ import { ZONES, getZone, checkWarp, type Zone, type Warp } from '../world/zones'
 import { getHeightGrid } from '../world/heightmaps'
 import { GardenAtmosphere } from '../world/atmosphere'
 import { FloraTree, FloraDressing } from '../world/flora'
-import { rollEncounter, type WildEncounter } from '../engine/encounters'
+import { rollEncounter, HOLD_LEVELS, type WildEncounter } from '../engine/encounters'
 import { derivePartyStats, type PartyStats } from '../engine/party-stats'
 import { getMovesForSpirit } from '../engine/moves'
 import { createSpirit, addXP, xpForLevel, speciesDisplayName, ELEMENT_COLORS, type Spirit, type Species, type Element } from '../spirits/spirit'
@@ -1034,7 +1034,7 @@ function Player({ posRef, gridRef, heightsRef, zoneIdRef, editRef, onWarp, battl
             // Dreamwalk (dreamroot_elixir) calms the mist — but never eats the guaranteed first draw
             const force = !flagsRef.current.metFirstWild
             if (force || !dreamwalkRef.current) {
-              const enc = rollEncounter(logicalZoneAt(zoneIdRef.current, tx, tz), partyLevelRef.current, false, force)
+              const enc = rollEncounter(logicalZoneAt(zoneIdRef.current, tx, tz), false, force)
               if (enc) { encGrace.current = ENCOUNTER_GRACE; flagsRef.current.metFirstWild = true; onEncounter(enc) }
             }
           }
@@ -2758,7 +2758,7 @@ export default function Shimmer3D() {
           s.level = 12; s.bond = 60; s.happiness = 128
           return s
         })
-    const enc = rollEncounter(logicalZoneAt(zoneIdRef.current, posRef.current!.x, posRef.current!.z), partyLevelRef.current || 12)
+    const enc = rollEncounter(logicalZoneAt(zoneIdRef.current, posRef.current!.x, posRef.current!.z))
     const enemies = enc
       ? buildWildParty(enc, allies.length)
       : (['frog', 'bat'] as const).map((sp, i) => {
@@ -2982,7 +2982,9 @@ export default function Shimmer3D() {
   const startThistleBattle = useCallback(() => {
     const sp = LAUNCHED_SPECIES[Math.floor(Math.random() * LAUNCHED_SPECIES.length)]
     const captive = createSpirit(sp, `Collared ${speciesDisplayName(sp)}`, 0, 0)
-    captive.level = 5
+    // ABSOLUTE, like the zone bands (Alex 2026-07-23). Hold 1 sits just under the Spirit
+    // Meadows wild band (Lv 7-8) so the boss reads as the area's gatekeeper, not a spike.
+    captive.level = HOLD_LEVELS.thistle
     captive.seeds = Array.from({ length: 6 }, () => Math.floor(Math.random() * 32))
     battleRef.current = true
     document.exitPointerLock?.()
@@ -2993,15 +2995,14 @@ export default function Shimmer3D() {
   // the two collared captives: you break the brute first, then reach BOTH to free them. KO'ing either
   // captive = "forced" (you broke who you came to save). Tougher than Thistle (champion AI, higher levels).
   const startSorrelBattle = useCallback(() => {
-    const lvl = Math.max(6, partyLevelRef.current)
     const pick = () => LAUNCHED_SPECIES[Math.floor(Math.random() * LAUNCHED_SPECIES.length)]
     const guard = createSpirit(pick(), 'Sorrel’s Brute', 0, 0)
-    guard.level = lvl + 2
+    guard.level = HOLD_LEVELS.sorrel.guard
     guard.seeds = Array.from({ length: 6 }, () => 16 + Math.floor(Math.random() * 16))
     const mkCaptive = () => {
       const sp = pick()
       const c = createSpirit(sp, `Collared ${speciesDisplayName(sp)}`, 0, 0)
-      c.level = lvl
+      c.level = HOLD_LEVELS.sorrel.captive
       c.seeds = Array.from({ length: 6 }, () => Math.floor(Math.random() * 32))
       return c
     }
@@ -3013,24 +3014,23 @@ export default function Shimmer3D() {
   // Brack — Hold 3, the climax. The pooled force: TWO enforcers (guards) shielding THREE collared
   // captives. Break both guards, then reach all three. The wall of the arc — canon wants a real team.
   const startBrackBattle = useCallback(() => {
-    const lvl = Math.max(8, partyLevelRef.current)
     const pick = () => LAUNCHED_SPECIES[Math.floor(Math.random() * LAUNCHED_SPECIES.length)]
-    const mkGuard = (name: string, bump: number) => {
+    const mkGuard = (name: string, lv: number) => {
       const g = createSpirit(pick(), name, 0, 0)
-      g.level = lvl + bump
+      g.level = lv
       g.seeds = Array.from({ length: 6 }, () => 18 + Math.floor(Math.random() * 14))
       return g
     }
     const mkCaptive = () => {
       const sp = pick()
       const c = createSpirit(sp, `Collared ${speciesDisplayName(sp)}`, 0, 0)
-      c.level = lvl
+      c.level = HOLD_LEVELS.brack.captive
       c.seeds = Array.from({ length: 6 }, () => Math.floor(Math.random() * 32))
       return c
     }
     battleRef.current = true
     document.exitPointerLock?.()
-    setBattle({ allies: partyRef.current!, enemies: [mkGuard('Brack’s Muscle', 3), mkGuard('Brack’s Enforcer', 2), mkCaptive(), mkCaptive(), mkCaptive()], aiTier: 'champion', zoneId: zoneIdRef.current, kind: 'brack', title: "HOLD 3 — BRACK'S GAUNTLET", collared: [2, 3, 4] })
+    setBattle({ allies: partyRef.current!, enemies: [mkGuard('Brack’s Muscle', HOLD_LEVELS.brack.muscle), mkGuard('Brack’s Enforcer', HOLD_LEVELS.brack.enforcer), mkCaptive(), mkCaptive(), mkCaptive()], aiTier: 'champion', zoneId: zoneIdRef.current, kind: 'brack', title: "HOLD 3 — BRACK'S GAUNTLET", collared: [2, 3, 4] })
   }, [])
 
   // Talk to an NPC. Gregory: no spirit → intro + starter handoff; else a sendoff. Thistle: no spirit → he
