@@ -47,7 +47,8 @@ import { StationMenus, type PlacedStruct, type StationKind } from './StationMenu
 import { prettyItem, menuBtn, TOOL_HUD } from './ui'
 import { WorldMap, MiniMap } from './WorldMap'
 import { WORLD_ZONE_ID, registerGardenWorld, getGardenWorld, isStitched, fromWorld } from '../world/garden-world'
-import { allNpcs, nodePlacementsFor, logicalZoneAt, structuresView, logicalStruct } from './world-adapter'
+import { allNpcs, nodePlacementsFor, spawnerPlacementsFor, logicalZoneAt, structuresView, logicalStruct } from './world-adapter'
+import { ZONE_SPAWNERS, SPAWNER_COOLDOWN_MS, type SpawnerPlacement } from '../world/spawn-placements'
 
 // The composed continent registers as a zone before any getZone/save-load runs.
 registerGardenWorld()
@@ -123,13 +124,29 @@ const HANG_MIN = 0.22       // guaranteed grip beat (s) before commit/drop can f
 const DIR_YAW: Record<string, number> = { up: 0, down: Math.PI, left: Math.PI / 2, right: -Math.PI / 2 }
 
 type Cell = [number, number]
-type Tool = 'raise' | 'lower' | 'floor' | 'wall' | 'water' | 'mist' | 'warp' | 'void' | NodeType
+type SpawnerTool = 'sp_thistle' | 'sp_sorrel' | 'sp_brack'
+type Tool = 'raise' | 'lower' | 'floor' | 'wall' | 'water' | 'mist' | 'warp' | 'void' | NodeType | SpawnerTool
 // Node-placing tools exposed in the editor (place = click, erase = shift-click). Terrain tools
 // paint the tile grid; node tools drop/remove a resource node in the separate node layer.
+// Full harvestable roster (was shimmeroak-only — Alex 07-22: "nodes aren't placeable").
 const NODE_TOOLS: { id: NodeType; label: string }[] = [
-  { id: 'shimmeroak', label: 'Shimmeroak' },
+  { id: 'goldwood', label: 'Goldwood' }, { id: 'shimmeroak', label: 'Shimmeroak' },
+  { id: 'starwillow', label: 'Starwillow' }, { id: 'dawnwood', label: 'Dawnwood' },
+  { id: 'raw_mana_node', label: 'Raw Mana' }, { id: 'element_crystal_node', label: 'Elem Crystal' },
+  { id: 'pure_core_node', label: 'Pure Core' }, { id: 'ather_crystal_node', label: 'Ather Crystal' },
+  { id: 'small_pond', label: 'Pond' }, { id: 'stream', label: 'Stream' }, { id: 'lake', label: 'Lake' },
+  { id: 'ather_soil', label: 'Soil' },
 ]
 const NODE_TOOL_IDS = new Set<string>(NODE_TOOLS.map(t => t.id))
+// Moglin-patrol spawner tools — one per hold gate. A spawner's patrols run until ITS boss
+// falls (the grind-ladder: better XP + marks than wilds, worth farming until hold-ready).
+const SPAWNER_TOOLS: { id: SpawnerTool; gate: SpawnerPlacement['gate']; label: string }[] = [
+  { id: 'sp_thistle', gate: 'thistle', label: 'Sp·Thistle' },
+  { id: 'sp_sorrel', gate: 'sorrel', label: 'Sp·Sorrel' },
+  { id: 'sp_brack', gate: 'brack', label: 'Sp·Brack' },
+]
+const SPAWNER_TOOL_IDS = new Set<string>(SPAWNER_TOOLS.map(t => t.id))
+const GATE_COLORS: Record<SpawnerPlacement['gate'], string> = { thistle: '#8fd14f', sorrel: '#f0a526', brack: '#e05a4d' }
 // itemId → display label (e.g. shimmeroak_plank → "Shimmeroak Plank"). Real item names live in
 // sprites/items.ts; this prettifier is enough for harvest toasts until those are wired.
 // Tap-to-transfer destination pick: a slot already holding the same item (merge target) wins,
@@ -316,6 +333,47 @@ function nodeShards(tx: number, ty: number, count: number): { a: number; tilt: n
     r: 0.14 + rnd() * 0.16,                        // distance from center
   }))
 }
+// Spawner markers: edit mode shows every spawner as a gate-colored floating diamond
+// (shift-click erases via the sp_* tools); play mode shows an ARMED spawner as a lurking
+// lesser moglin — a dark hunched blockout with an ember ring, idling until you close in.
+function SpawnerMarkers({ spawners, heights, editing, defeated, ready }: {
+  spawners: SpawnerPlacement[]; heights: number[][]; editing: boolean
+  defeated: Record<string, boolean>; ready: (sp: SpawnerPlacement) => boolean
+}) {
+  const [, setTick] = useState(0)
+  useEffect(() => { const iv = setInterval(() => setTick(t => t + 1), 2000); return () => clearInterval(iv) }, [])
+  return (
+    <>
+      {spawners.map((sp, i) => {
+        const y = (heights[sp.tileY]?.[sp.tileX] ?? 0) * STEP
+        const col = GATE_COLORS[sp.gate]
+        const retired = !!defeated[sp.gate]
+        if (editing) {
+          return (
+            <group key={`sp-${i}`} position={[sp.tileX, y + 0.9, sp.tileY]}>
+              <mesh><octahedronGeometry args={[0.32, 0]} /><meshStandardMaterial color={col} emissive={col} emissiveIntensity={retired ? 0.1 : 0.7} transparent opacity={retired ? 0.4 : 0.95} /></mesh>
+            </group>
+          )
+        }
+        if (retired || !ready(sp)) return null
+        return (
+          <group key={`sp-${i}`} position={[sp.tileX, y, sp.tileY]}>
+            {/* the lurker — hunched dark blockout, ember collar-runner's ring at its feet */}
+            <mesh position={[0, 0.55, 0]} scale={[1, 0.82, 1]} castShadow>
+              <capsuleGeometry args={[0.34, 0.72, 6, 12]} />
+              <meshStandardMaterial color="#2c2733" emissive="#b04a30" emissiveIntensity={0.12} roughness={0.7} />
+            </mesh>
+            <mesh position={[0, 0.03, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+              <ringGeometry args={[0.5, 0.62, 24]} />
+              <meshBasicMaterial color={col} transparent opacity={0.35} side={THREE.DoubleSide} />
+            </mesh>
+          </group>
+        )
+      })}
+    </>
+  )
+}
+
 function NodeMarkers({ nodes, heights, editing, channel }: { nodes: ResourceNode[]; heights: number[][]; editing: boolean; channel?: { nodeId: string; hp: number } | null }) {
   return (
     <>
@@ -1787,6 +1845,7 @@ const Scene = memo(function Scene(props: {
   defeatedRef: React.RefObject<Record<string, boolean>>; defeated: Record<string, boolean>
   flagsRef: React.RefObject<Record<string, boolean>>
   nodes: ResourceNode[]
+  spawners: SpawnerPlacement[]; spawnerReady: (sp: SpawnerPlacement) => boolean
   harvestNodesRef: React.RefObject<ResourceNode[]>; onNearNode: (n: ResourceNode | null) => void
   channel: { nodeId: string; hp: number } | null
   structures: PlacedStruct[]; placing: { itemId: string; facing: number } | null
@@ -1838,6 +1897,7 @@ const Scene = memo(function Scene(props: {
       {props.zone.realm === 'outside' && <FiringRange firingRef={props.firingRef} adsRef={props.adsRef} gridRef={props.gridRef} recoilRef={props.recoilRef} bloomRef={props.bloomRef} posRef={props.posRef} hpRef={props.hpRef} shieldRef={props.shieldRef} shieldMaxRef={props.shieldMaxRef} rangeCfgRef={props.rangeCfgRef} ammoRef={props.ammoRef} reloadingRef={props.reloadingRef} onNeedReload={props.onNeedReload} onHit={props.onRangeHit} onShot={props.onRangeShot} onPlayerDamage={props.onPlayerDamage} onPlayerDown={props.onPlayerDown} />}
       {props.zone.realm === 'outside' && <ExitMarkers warps={props.zone.warps} heights={props.heights} />}
       <NodeMarkers nodes={props.nodes} heights={props.heights} editing={props.editing} channel={props.channel} />
+      <SpawnerMarkers spawners={props.spawners} heights={props.heights} editing={props.editing} defeated={props.defeated} ready={props.spawnerReady} />
       {props.zone.id === WORLD_ZONE_ID ? <WorldFlora heights={props.heights} /> : <FloraDressing zoneId={props.zone.id} heights={props.heights} />}
       <StructureMarkers structures={structuresInZone} heights={props.heights} />
       <PlacementGhost placing={props.placing} posRef={props.posRef} heights={props.heights} gridRef={props.gridRef} placeTargetRef={props.placeTargetRef} structuresRef={props.structuresRef} zoneIdRef={props.zoneIdRef} />
@@ -1908,6 +1968,12 @@ export default function Shimmer3D() {
   const [nodes, setNodes] = useState<NodePlacement[]>(() => nodePlacementsFor(zone.id))
   const nodesRef = useRef(nodes); nodesRef.current = nodes
   useEffect(() => { setNodes(nodePlacementsFor(zone.id)) }, [zone.id])
+
+  // Moglin-patrol spawners for this zone (world coords in world mode) — editor places/removes,
+  // Save writes them to spawn-placements.ts, the runtime arms them while their hold stands.
+  const [spawners, setSpawners] = useState<SpawnerPlacement[]>(() => spawnerPlacementsFor(zone.id))
+  const spawnersRef = useRef(spawners); spawnersRef.current = spawners
+  useEffect(() => { setSpawners(spawnerPlacementsFor(zone.id)) }, [zone.id])
 
   // ── Skilling: the forestry harvest loop. The real engine state (skills / mana / inventory) lives
   // in refs, persisted via the merge-save; small mirrors drive the HUD. Nodes get a runtime state
@@ -2027,7 +2093,11 @@ export default function Shimmer3D() {
   const [hasStarter, setHasStarter] = useState(false) // reactive mirror of "party has ≥1 spirit" for HUD
   const [defeated, setDefeated] = useState<Record<string, boolean>>({}) // NPCs cleared from the world (by id)
   const defeatedRef = useRef(defeated); defeatedRef.current = defeated
-  const [battle, setBattle] = useState<{ allies: Spirit[]; enemies: Spirit[]; aiTier: AITier; zoneId: string; kind?: 'wild' | 'thistle' | 'sorrel' | 'brack'; title?: string; collared?: number[] } | null>(null)
+  // Moglin-patrol spawner cooldowns — real-time timestamps keyed by LOGICAL zone:x,y (layout-proof),
+  // persisted in the save so a beaten patrol stays gone across sessions.
+  const spawnerCdRef = useRef<Record<string, number>>({})
+  const patrolKeyRef = useRef<string | null>(null)
+  const [battle, setBattle] = useState<{ allies: Spirit[]; enemies: Spirit[]; aiTier: AITier; zoneId: string; kind?: 'wild' | 'thistle' | 'sorrel' | 'brack' | 'patrol'; title?: string; collared?: number[] } | null>(null)
   const curBattleRef = useRef(battle); curBattleRef.current = battle
   // Wild encounters play a brief "drawn to you" approach beat before the arena mounts (see below).
   const [approach, setApproach] = useState<{ enc: WildEncounter; battle: NonNullable<typeof battle> } | null>(null)
@@ -2053,6 +2123,7 @@ export default function Shimmer3D() {
       activeBeastId: activeBeastIdRef.current,
       tools: toolsToSave(equippedToolsRef.current),
       flags: opts?.replaceFlags ? { ...flagsRef.current } : { ...(prev.flags ?? {}), ...flagsRef.current },
+      spawnerCds: { ...spawnerCdRef.current },
       ...(() => {
         // World saves store the logical district + local tile, so LAYOUT_TWEAKS can move
         // districts without stranding saved players in the clouds. Corridor spots (no
@@ -2139,6 +2210,7 @@ export default function Shimmer3D() {
       syncSkillHud()
       if (data?.flags) {
         flagsRef.current = data.flags
+        if (data.spawnerCds) spawnerCdRef.current = data.spawnerCds as Record<string, number>
         // re-hide any NPC whose defeated-flag is already set in the save (e.g. Thistle, once freed)
         const cleared: Record<string, boolean> = {}
         for (const n of NPCS_3D) if (n.defeatedFlag && data.flags[n.defeatedFlag]) cleared[n.id] = true
@@ -2732,8 +2804,13 @@ export default function Shimmer3D() {
         if (xpResult.evolved) setBanner(`✦ ${spirit.name} is ready to evolve!`)
         rows.push({ name: spirit.name, element: spirit.element, fromLevel, toLevel: spirit.level, xpGained: perXp, curXp: spirit.xp, needXp: xpForLevel(spirit.level), evolved: !!xpResult.evolved })
       }
-      // Wild fights get the spoils reveal; the scripted holds keep their narrative payoff (dialogue below).
-      if (!bd.kind || bd.kind === 'wild') spoils = { gold, rows }
+      // Wild + patrol fights get the spoils reveal; the scripted holds keep their narrative payoff (dialogue below).
+      if (!bd.kind || bd.kind === 'wild' || bd.kind === 'patrol') spoils = { gold, rows }
+    }
+    // A beaten patrol's spawner sleeps on the long clock (win only — a loss leaves it prowling).
+    if (bd?.kind === 'patrol' && patrolKeyRef.current) {
+      if (outcome === 'win') spawnerCdRef.current[patrolKeyRef.current] = Date.now() + SPAWNER_COOLDOWN_MS
+      patrolKeyRef.current = null
     }
     setBattle(null)
     if (spoils) { battleRef.current = true; setRewards(spoils) }   // stay frozen behind the reveal
@@ -2839,6 +2916,54 @@ export default function Shimmer3D() {
     if (d.grantAt !== undefined && next === d.grantAt) grantStarter()
     setDialogue({ ...d, idx: next })
   }, [grantStarter])
+
+  // A spawner's cooldown key must be LOGICAL (zone-local), so layout tweaks never orphan it.
+  const spawnerKeyFor = useCallback((sp: SpawnerPlacement) => {
+    const l = zoneIdRef.current === WORLD_ZONE_ID ? fromWorld(sp.tileX, sp.tileY) : null
+    return l ? `${l.zoneId}:${l.x},${l.y}` : `${zoneIdRef.current}:${sp.tileX},${sp.tileY}`
+  }, [])
+  const spawnerReady = useCallback((sp: SpawnerPlacement) =>
+    (spawnerCdRef.current[spawnerKeyFor(sp)] ?? 0) <= Date.now(), [spawnerKeyFor])
+
+  // Lesser-moglin patrol — the grind-ladder fight (Alex 07-22): a moglin handler's pair of
+  // collared spirits at party level +1. Trained tier (they coordinate), collared render +
+  // FREED beat, and unlike wilds the HANDLER pays marks (a moglin has pockets). Its spawner
+  // then sleeps on a long clock; freeing the hold retires it for good.
+  const startPatrolBattle = useCallback((sp: SpawnerPlacement, key: string) => {
+    const lvl = Math.max(4, partyLevelRef.current + 1)
+    const mkCaptive = () => {
+      const species = LAUNCHED_SPECIES[Math.floor(Math.random() * LAUNCHED_SPECIES.length)]
+      const c = createSpirit(species, `Collared ${speciesDisplayName(species)}`, 0, 0)
+      c.level = lvl
+      c.seeds = Array.from({ length: 6 }, () => Math.floor(Math.random() * 32))
+      return c
+    }
+    battleRef.current = true
+    patrolKeyRef.current = key
+    document.exitPointerLock?.()
+    setBattle({ allies: partyRef.current!, enemies: [mkCaptive(), mkCaptive()], aiTier: 'trained', zoneId: logicalZoneAt(zoneIdRef.current, posRef.current!.x, posRef.current!.z), kind: 'patrol', collared: [0, 1] })
+  }, [])
+
+  // Arm the patrols: walk into an armed spawner's reach (its hold still standing) → the fight.
+  useEffect(() => {
+    const iv = setInterval(() => {
+      if (battleRef.current || editRef.current || dialogueRef.current) return
+      if (!(partyRef.current?.length)) return
+      const pos = posRef.current
+      if (!pos) return
+      const now = Date.now()
+      for (const sp of spawnersRef.current) {
+        if (defeatedRef.current[sp.gate]) continue
+        const key = spawnerKeyFor(sp)
+        if ((spawnerCdRef.current[key] ?? 0) > now) continue
+        const dx = pos.x - sp.tileX, dz = pos.z - sp.tileY
+        if (dx * dx + dz * dz > 4.4) continue
+        startPatrolBattle(sp, key)
+        break
+      }
+    }, 600)
+    return () => clearInterval(iv)
+  }, [spawnerKeyFor, startPatrolBattle])
 
   // Thistle's collared captive — the spirit you free in the Reach battle (enemy index 0, auto-collared by
   // createPartyBattle's reach mode, which also dims it and hands your party the calming moves).
@@ -3166,6 +3291,17 @@ export default function Shimmer3D() {
 
   const paint = useCallback((c: number, r: number, shift: boolean) => {
     const t = toolRef.current, b = brushRef.current
+    // Spawner tools drop/remove a moglin-patrol spawner (its own layer; one per tile).
+    if (SPAWNER_TOOL_IDS.has(t)) {
+      const gate = SPAWNER_TOOLS.find(x => x.id === t)!.gate
+      setSpawners(prev => {
+        const without = prev.filter(sp => !(sp.tileX === c && sp.tileY === r))
+        if (shift) return without
+        if (without.length !== prev.length) return prev
+        return [...prev, { kind: 'moglin' as const, gate, tileX: c, tileY: r }]
+      })
+      return
+    }
     // Node tools drop/remove a single resource node in the node layer (not the tile grid).
     if (NODE_TOOL_IDS.has(t)) {
       setNodes(prev => {
@@ -3268,14 +3404,19 @@ export default function Shimmer3D() {
           const zNodes = nodesRef.current
             .filter(nd => w.zoneAt(nd.tileX, nd.tileY) === p.zone.id)
             .map(nd => ({ nodeType: nd.type, x: nd.tileX - p.ox, y: nd.tileY - p.oy }))
+          const zSpawners = spawnersRef.current
+            .filter(sp => w.zoneAt(sp.tileX, sp.tileY) === p.zone.id)
+            .map(sp => ({ gate: sp.gate, x: sp.tileX - p.ox, y: sp.tileY - p.oy }))
           const gChanged = JSON.stringify(gSlice) !== JSON.stringify(p.zone.grid)
           const hChanged = JSON.stringify(hSlice) !== JSON.stringify(getHeightGrid(p.zone.id, p.rows, p.cols))
           const nChanged = JSON.stringify(zNodes) !== JSON.stringify((ZONE_NODES[p.zone.id] ?? []).map(nd => ({ nodeType: nd.type, x: nd.tileX, y: nd.tileY })))
-          if (!gChanged && !hChanged && !nChanged) continue
+          const sChanged = JSON.stringify(zSpawners) !== JSON.stringify((ZONE_SPAWNERS[p.zone.id] ?? []).map(sp => ({ gate: sp.gate, x: sp.tileX, y: sp.tileY })))
+          if (!gChanged && !hChanged && !nChanged && !sChanged) continue
           touched++
           if (hChanged) posts.push(fetch('/shimmer/save-heights', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ zoneId: p.zone.id, heights: hSlice }) }))
           if (gChanged) posts.push(fetch('/shimmer/save-map', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ grid: gSlice, mapId: p.zone.id }) }))
           if (nChanged) posts.push(fetch('/shimmer/save-map', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ nodes: zNodes, mapId: p.zone.id }) }))
+          if (sChanged) posts.push(fetch('/shimmer/save-map', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ spawners: zSpawners, mapId: p.zone.id }) }))
         }
         // Edits landing in the derived mortar/corridors (no owning zone) can't persist — detect
         // grid/height/node changes out there so the save message says so instead of lying "saved".
@@ -3292,13 +3433,15 @@ export default function Shimmer3D() {
         return
       }
       const id = zone.id
-      const [h, g, n] = await Promise.all([
+      const [h, g, n, sp] = await Promise.all([
         fetch('/shimmer/save-heights', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ zoneId: id, heights: heightsRef.current }) }),
         fetch('/shimmer/save-map', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ grid: gridRef.current, mapId: id }) }),
         // node layer → node-placements.ts (same endpoint, `nodes` payload; {nodeType,x,y} shape)
         fetch('/shimmer/save-map', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ nodes: nodesRef.current.map(nd => ({ nodeType: nd.type, x: nd.tileX, y: nd.tileY })), mapId: id }) }),
+        // spawner layer → spawn-placements.ts ({gate,x,y} shape)
+        fetch('/shimmer/save-map', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ spawners: spawnersRef.current.map(x => ({ gate: x.gate, x: x.tileX, y: x.tileY })), mapId: id }) }),
       ])
-      const zbad = [h, g, n].find(r => !r.ok)
+      const zbad = [h, g, n, sp].find(r => !r.ok)
       setSaveMsg(!zbad ? 'saved ✓ — live on next refresh' : `save failed — ${zbad.status}: ${(await zbad.text()).slice(0, 140)}`)
     } catch { setSaveMsg('save failed') }
     setTimeout(() => setSaveMsg(''), 3500)
@@ -3327,6 +3470,7 @@ export default function Shimmer3D() {
           structures={structures} placing={placing} placeTargetRef={placeTargetRef} structuresRef={structuresViewRef} onNearStation={setNearStation}
           defeatedRef={defeatedRef} defeated={defeated} flagsRef={flagsRef}
           nodes={runtimeNodes}
+          spawners={spawners} spawnerReady={spawnerReady}
           companionColor={(() => { const b = beastsRef.current.find(x => x.id === activeBeastIdRef.current); void companionTick; return b ? (BEAST_COLOR[b.species] ?? '#9fd9c4') : null })()}
           fishing={!!fish} fishBite={!!fish?.bite}
           harvestPop={harvestPop}
@@ -3633,6 +3777,11 @@ export default function Shimmer3D() {
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end', alignItems: 'center', maxWidth: 480 }}>
             <span style={{ color: '#8fd9c4', font: '700 11px ui-monospace, monospace', letterSpacing: '0.06em' }}>NODES</span>
             {NODE_TOOLS.map((t) => <Btn key={t.id} active={tool === t.id} onClick={() => setTool(t.id)}>{t.label}</Btn>)}
+          </div>
+          {/* moglin-patrol spawners — click places, shift-click erases; gate = the hold that retires it */}
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end', alignItems: 'center', maxWidth: 480 }}>
+            <span style={{ color: '#e0987f', font: '700 11px ui-monospace, monospace', letterSpacing: '0.06em' }}>SPAWNERS</span>
+            {SPAWNER_TOOLS.map((t) => <Btn key={t.id} active={tool === t.id} onClick={() => setTool(t.id)}>{t.label}</Btn>)}
           </div>
           <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
             <span style={{ color: '#e9dfc8', font: '700 13px ui-monospace, monospace' }}>brush {brush * 2 + 1}×{brush * 2 + 1}</span>

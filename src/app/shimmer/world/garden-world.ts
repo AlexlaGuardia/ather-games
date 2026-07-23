@@ -12,6 +12,7 @@
 
 import { ZONES, type Zone, type Warp } from './zones'
 import { getHeightGrid, setLiveHeights } from './heightmaps'
+import { ZONE_SPAWNERS, type SpawnerPlacement } from './spawn-placements'
 import { ZONE_NODES, type NodePlacement } from './node-placements'
 import { SOLID } from './tiles'
 
@@ -270,6 +271,7 @@ export function applyLiveWorldData(data: {
   grids?: Record<string, number[][]>
   nodes?: Record<string, { type: string; tileX: number; tileY: number }[]>
   heights?: Record<string, number[][]>
+  spawners?: Record<string, { kind: string; gate: string; tileX: number; tileY: number }[]>
 }) {
   for (const z of ZONES) {
     if (z.id === WORLD_ZONE_ID) continue
@@ -277,6 +279,8 @@ export function applyLiveWorldData(data: {
     if (Array.isArray(g) && g.length > 1 && Array.isArray(g[0])) z.grid = g
     const n = data.nodes?.[z.id]
     if (Array.isArray(n)) ZONE_NODES[z.id] = n as NodePlacement[]
+    const sp = data.spawners?.[z.id]
+    if (Array.isArray(sp)) ZONE_SPAWNERS[z.id] = sp as SpawnerPlacement[]
   }
   if (data.heights) setLiveHeights(data.heights)
   // recompose from the fresh data on next access; drop the stale synthetic zone

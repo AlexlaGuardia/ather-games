@@ -6,12 +6,13 @@
 import { WORLD_ZONE_ID, isStitched, getGardenWorld, fromWorld } from '../world/garden-world'
 import { NPCS_3D, type NPC3D } from './npcs3d'
 import { ZONE_NODES, type NodePlacement } from '../world/node-placements'
+import { ZONE_SPAWNERS, type SpawnerPlacement } from '../world/spawn-placements'
 import type { PlacedStruct } from './StationMenus'
 
 const toWorld = (zoneId: string, x: number, y: number) => getGardenWorld().toWorld(zoneId, x, y)
 
 /** Drop the memoized world-space remaps (call after applyLiveWorldData re-composes). */
-export function invalidateWorldCaches() { worldNpcs = null; worldNodes = null }
+export function invalidateWorldCaches() { worldNpcs = null; worldNodes = null; worldSpawners = null }
 
 // NPCs remapped into the continent, appended to the per-zone originals — the zone filter in
 // the Scene picks whichever set matches the mounted zone, so old per-zone mode still works.
@@ -41,6 +42,23 @@ export function nodePlacementsFor(zoneId: string): NodePlacement[] {
     }
   }
   return worldNodes.map(n => ({ ...n }))
+}
+
+// Moglin-patrol spawners aggregated across every stitched zone, in world coords (mirror of nodes).
+let worldSpawners: SpawnerPlacement[] | null = null
+export function spawnerPlacementsFor(zoneId: string): SpawnerPlacement[] {
+  if (zoneId !== WORLD_ZONE_ID) return (ZONE_SPAWNERS[zoneId] ?? []).map(n => ({ ...n }))
+  if (!worldSpawners) {
+    worldSpawners = []
+    for (const [zid, sps] of Object.entries(ZONE_SPAWNERS)) {
+      if (!isStitched(zid)) continue
+      for (const sp of sps) {
+        const p = toWorld(zid, sp.tileX, sp.tileY)
+        if (p) worldSpawners.push({ ...sp, tileX: p.x, tileY: p.y })
+      }
+    }
+  }
+  return worldSpawners.map(n => ({ ...n }))
 }
 
 // The district the player is actually standing in — drives encounters, battle backdrops, and

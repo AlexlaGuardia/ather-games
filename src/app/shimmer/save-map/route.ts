@@ -40,6 +40,7 @@ const INTGRIDS_FILE = join(WORLD_DIR, 'intgrids.ts')
 const TILES_FILE = join(WORLD_DIR, 'tiles.ts')
 const TILEMAP_FILE = join(WORLD_DIR, 'tilemap.ts')
 const NODES_FILE = join(WORLD_DIR, 'node-placements.ts')
+const SPAWNERS_FILE = join(WORLD_DIR, 'spawn-placements.ts')
 const STRUCTURES_FILE = join(WORLD_DIR, 'structure-placements.ts')
 const FURNITURE_FILE = join(WORLD_DIR, 'furniture-placements.ts')
 const PICKUPS_FILE = join(WORLD_DIR, 'static-pickups.ts')
@@ -548,6 +549,50 @@ export async function POST(req: NextRequest) {
           }
           await writeFile(NODES_FILE, updated, 'utf-8')
           saved.push('nodes')
+        }
+      }
+    }
+
+    // Save moglin-patrol spawner placements for the current map (mirror of the nodes flow)
+    if (body.spawners && Array.isArray(body.spawners)) {
+      const mapId = bodyMapId(body)
+      const GATES = new Set(['thistle', 'sorrel', 'brack'])
+      const spawners = (body.spawners as unknown[]).map((n, i) => {
+        const gate = safeId((n as { gate: unknown }).gate, `spawners[${i}].gate`)
+        if (!GATES.has(gate)) throw new Error(`spawners[${i}].gate must be thistle|sorrel|brack`)
+        return {
+          gate,
+          x: safeInt((n as { x: unknown }).x, `spawners[${i}].x`, 0, 9999),
+          y: safeInt((n as { y: unknown }).y, `spawners[${i}].y`, 0, 9999),
+        }
+      })
+      const existing = await readFile(SPAWNERS_FILE, 'utf-8')
+      const constName = mapId.replace(/-/g, '_').toUpperCase() + '_SPAWNERS'
+      const lines = spawners.map(n => `  { kind: 'moglin', gate: '${n.gate}', tileX: ${n.x}, tileY: ${n.y} },`)
+      const newBlock = `const ${constName}: SpawnerPlacement[] = [\n${lines.join('\n')}\n]`
+      const constStart = existing.indexOf(`const ${constName}`)
+      if (constStart !== -1) {
+        const arrayEnd = existing.indexOf('\n]', constStart)
+        if (arrayEnd !== -1) {
+          const updated = existing.substring(0, constStart) + newBlock + existing.substring(arrayEnd + 2)
+          await writeFile(SPAWNERS_FILE, updated, 'utf-8')
+          saved.push('spawners')
+        }
+      } else {
+        const anchor = 'export const ZONE_SPAWNERS'
+        const anchorIdx = existing.indexOf(anchor)
+        if (anchorIdx !== -1) {
+          const withConst = existing.substring(0, anchorIdx) + newBlock + '\n\n' + existing.substring(anchorIdx)
+          const entryRe = new RegExp(`'${mapId}':\\s*[^,\\n]+,`)
+          let updated: string
+          if (entryRe.test(withConst)) {
+            updated = withConst.replace(entryRe, `'${mapId}': ${constName},`)
+          } else {
+            const mapOpen = withConst.indexOf('{', withConst.indexOf(anchor)) + 1
+            updated = withConst.substring(0, mapOpen) + `\n  '${mapId}': ${constName},` + withConst.substring(mapOpen)
+          }
+          await writeFile(SPAWNERS_FILE, updated, 'utf-8')
+          saved.push('spawners')
         }
       }
     }

@@ -33,6 +33,21 @@ function parseGrid(content: string, name: string): number[][] | null {
     row.replace(/[\[\]]/g, '').split(',').map(n => parseInt(n.trim())).filter(n => !isNaN(n)))
 }
 
+function parseSpawnerBlocks(content: string): Record<string, { kind: string; gate: string; tileX: number; tileY: number }[]> {
+  const out: Record<string, { kind: string; gate: string; tileX: number; tileY: number }[]> = {}
+  const blockRe = /const (\w+)_SPAWNERS: SpawnerPlacement\[\] = \[([\s\S]*?)\n\]/g
+  let m: RegExpExecArray | null
+  while ((m = blockRe.exec(content)) !== null) {
+    const zoneId = m[1].toLowerCase().replace(/_/g, '-')
+    const rows: { kind: string; gate: string; tileX: number; tileY: number }[] = []
+    const rowRe = /\{ kind: '(\w+)', gate: '(\w+)', tileX: (\d+), tileY: (\d+) \}/g
+    let n: RegExpExecArray | null
+    while ((n = rowRe.exec(m[2])) !== null) rows.push({ kind: n[1], gate: n[2], tileX: +n[3], tileY: +n[4] })
+    out[zoneId] = rows
+  }
+  return out
+}
+
 function parseNodeBlocks(content: string): Record<string, { type: string; tileX: number; tileY: number }[]> {
   const out: Record<string, { type: string; tileX: number; tileY: number }[]> = {}
   const blockRe = /const (\w+)_NODES: NodePlacement\[\] = \[([\s\S]*?)\n\]/g
@@ -50,10 +65,11 @@ function parseNodeBlocks(content: string): Record<string, { type: string; tileX:
 
 export async function GET() {
   try {
-    const [tilemap, nodesSrc, heightsRaw] = await Promise.all([
+    const [tilemap, nodesSrc, heightsRaw, spawnersSrc] = await Promise.all([
       readFile(join(WORLD_DIR, 'tilemap.ts'), 'utf-8'),
       readFile(join(WORLD_DIR, 'node-placements.ts'), 'utf-8'),
       readFile(join(WORLD_DIR, 'heightmaps.json'), 'utf-8').catch(() => '{}'),
+      readFile(join(WORLD_DIR, 'spawn-placements.ts'), 'utf-8').catch(() => ''),
     ])
     // every exported grid const in tilemap.ts, keyed by zone id
     const grids: Record<string, number[][]> = {}
@@ -64,7 +80,7 @@ export async function GET() {
       if (g && g.length > 1) grids[d[1].toLowerCase().replace(/_/g, '-')] = g
     }
     return NextResponse.json(
-      { grids, nodes: parseNodeBlocks(nodesSrc), heights: JSON.parse(heightsRaw) },
+      { grids, nodes: parseNodeBlocks(nodesSrc), heights: JSON.parse(heightsRaw), spawners: parseSpawnerBlocks(spawnersSrc) },
       { headers: { 'Cache-Control': 'no-store' } },
     )
   } catch (e) {
