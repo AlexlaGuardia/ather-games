@@ -29,8 +29,15 @@ export const HIT_FLOOR = 0.55         // even wild swings connect sometimes
 export const HIT_CEIL = 0.98          // nothing is a guaranteed hit
 export const SIDESTEP = 0.9           // dodge displacement (floor units)
 export const STAGE_MULT = 0.22        // per stat stage (±3 cap)
-export const TIRE_AT = 25             // sudden-death: after this many seconds…
-export const TIRE_RAMP = 0.05         // …damage climbs +5%/s (spirits tire; no stall-fests)
+// Sudden-death ramp — the ONLY knob that shortens long fights without touching short ones,
+// which is why the 2026-07-23 pacing pass leans on it instead of on HP_MULT or guard.
+// Was 25s/+5%: too late and too shallow to save a tank matchup, so a water-bear mirror
+// stalemated outright (L50: zero KOs inside the oracle's 60s cap) and Alex was skipping
+// battles. At 14s/+16% a duel lands ~6 hits/22s and the worst case in the game — a
+// high-guard, high-vig mirror — resolves in ~11 hits/40s. Raising TIRE_AT or lowering
+// TIRE_RAMP brings the slog straight back; arena.test.ts's PACING block is the guard.
+export const TIRE_AT = 14             // sudden-death: after this many seconds…
+export const TIRE_RAMP = 0.16         // …damage climbs per second (spirits tire; no stall-fests)
 
 // per-state action profile: range (0 = self/cast-in-place), aoe radius (0 = single target)
 const STATE_PROFILE: Record<MoveState, { range: number; aoe: number }> = {

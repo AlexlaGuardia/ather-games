@@ -16,12 +16,24 @@
 // If (B) wins far more than (A), the timing loop carries the game. We also assert
 // hard invariants: no negative hp/mana, every fight RESOLVES (no real-time stalemate).
 
-import { createSpirit, type Spirit, type Species } from '../spirits/spirit'
-import { createArena, tick, type ArenaState, type KeeperCommand } from './arena'
+import { createSpirit, TEMPERAMENTS, type Spirit, type Species } from '../spirits/spirit'
+import { createArena, tick, mulberry32, type ArenaState, type KeeperCommand } from './arena'
+
+// createSpirit() rolls IVs (seeds) and temperament off Math.random(), so until 2026-07-23
+// this oracle was NOT reproducible: mulberry32 seeded the FIGHT but not the FIGHTERS, and
+// the same constants scored a 33% party baseline on one run and 26.5% on the next. Every
+// band here is ±6 points wide in noise, which is wide enough to pass or fail a tuning pass
+// by luck — the exact trap party-balance.test.ts already avoids by pinning seeds. Roll the
+// combatants off our own deterministic stream and reset it before each measurement, so we
+// still sample IV variety across the 200 runs but get identical spirits every time.
+let detRng = mulberry32(0x5EED)
+const resetSpirits = () => { detRng = mulberry32(0x5EED) }
 
 function mk(species: Species, level: number): Spirit {
   const s = createSpirit(species, species, 0, 0)
   s.level = level; s.bond = 60; s.happiness = 128
+  s.seeds = Array.from({ length: 6 }, () => Math.floor(detRng() * 24) + 8)
+  s.temperament = TEMPERAMENTS[Math.floor(detRng() * TEMPERAMENTS.length)]
   return s
 }
 
@@ -70,6 +82,7 @@ function runFight(seed: number, policy: Policy, allies: Spirit[], enemies: Spiri
 }
 
 function winRate(policy: Policy, allies: () => Spirit[], enemies: () => Spirit[], n: number) {
+  resetSpirits()
   let win = 0, resolved = 0, badMana = false, badHp = false
   for (let i = 0; i < n; i++) {
     const r = runFight(i * 2654435761, policy, allies(), enemies())
@@ -104,8 +117,75 @@ console.log(`=== PARTY — 3 allies vs 3 enemies, all L22, ${N} seeds/policy ===
 console.log(`  passive Keeper : ${Ap.pct.toFixed(1).padStart(5)}% win   (resolved ${Ap.resolvedPct.toFixed(0)}%)`)
 console.log(`  skilled Keeper : ${Bp.pct.toFixed(1).padStart(5)}% win   (resolved ${Bp.resolvedPct.toFixed(0)}%)\n`)
 
+// ── PACING — fights must not drag, and levelling must LAND ─────────────────────
+// Added 2026-07-23 after Alex reported skipping battles: the win-rate bands above were
+// all green while a water-bear mirror ran 17-20 hits / 64s, because nothing here measured
+// fight LENGTH. Worse, the drag got worse as you levelled — GRD_K was a flat constant
+// while `grd` grew with level, so mitigation strengthened every level and a L50 mirror
+// ran LONGER than a L5 one. Both are now asserted, so neither can come back quietly.
+interface Pace { hitsToFirstKO: number; durS: number }
+
+function pace(seed: number, allies: Spirit[], enemies: Spirit[]): Pace {
+  const s = createArena({ allies, enemies, seed })
+  const hitsOn: Record<string, number> = {}
+  let hitsToFirstKO = 0, done = false
+  for (let step = 0; step < CAP_S / DT && s.outcome === 'ongoing'; step++) {
+    tick(s, DT, [])
+    for (const e of s.events) {
+      if (e.type === 'hit') hitsOn[e.to] = (hitsOn[e.to] ?? 0) + 1
+      else if (e.type === 'ko' && !done) { done = true; hitsToFirstKO = hitsOn[e.who] ?? 0 }
+    }
+  }
+  return { hitsToFirstKO, durS: s.t }
+}
+
+function avgPace(allies: () => Spirit[], enemies: () => Spirit[], n = 40): Pace {
+  resetSpirits()
+  const rs = Array.from({ length: n }, (_, i) => pace(i * 2654435761, allies(), enemies()))
+  return {
+    hitsToFirstKO: rs.reduce((a, p) => a + p.hitsToFirstKO, 0) / n,
+    durS: rs.reduce((a, p) => a + p.durS, 0) / n,
+  }
+}
+
+const wb = (lv: number) => () => [mk('water-bear', lv)]
+const duelPace = avgPace(allies, enemies)
+const partyPace = avgPace(pAllies, pEnemies)
+const tankL5 = avgPace(wb(5), wb(5))
+const tankL50 = avgPace(wb(50), wb(50))
+const tankGap = avgPace(wb(20), wb(30))
+const tankEven = avgPace(wb(20), wb(20))
+
+console.log('=== PACING — hits until the first fighter falls ===')
+const row = (l: string, p: Pace) => console.log(`  ${l.padEnd(24)} ${p.hitsToFirstKO.toFixed(1).padStart(5)} hits | ${p.durS.toFixed(1).padStart(5)}s`)
+row('duel fox/frog', duelPace)
+row('party 3v3', partyPace)
+row('water-bear mirror L5', tankL5)
+row('water-bear mirror L50', tankL50)
+row('water-bear L20 vs L30', tankGap)
+console.log()
+
 // ── hard assertions ──
 const fails: string[] = []
+
+// Nothing should be a 15-hit slog. The tank mirror is the worst case in the game by
+// design (two high-guard, high-vig bodies) — it is the ceiling, not the typical fight.
+if (tankL50.hitsToFirstKO > 15) fails.push(`tank mirror drags (${tankL50.hitsToFirstKO.toFixed(1)} hits) — the slog is back`)
+if (duelPace.hitsToFirstKO > 9) fails.push(`duel drags (${duelPace.hitsToFirstKO.toFixed(1)} hits)`)
+// …and nothing should be over before the choreography reads. Moves telegraph and dodge;
+// a 3-hit fight never shows them.
+if (duelPace.hitsToFirstKO < 4) fails.push(`duel too fast (${duelPace.hitsToFirstKO.toFixed(1)} hits) — the moveset never reads`)
+
+// Levelling must not silently change the pace of an even fight. This is the guard on
+// GRD_K tracking level: if K ever goes back to a flat constant, high-level mirrors
+// stretch out and this trips.
+const drift = tankL50.hitsToFirstKO / tankL5.hitsToFirstKO
+if (drift > 1.15 || drift < 0.85) fails.push(`levelling drifts fight length (L50 mirror is ${drift.toFixed(2)}× the L5 mirror) — mitigation is not tracking level`)
+
+// Levelling must LAND: out-levelling something by 10 has to kill visibly faster, or
+// the player's "my L6 feels the same" complaint is true again.
+const gain = 1 - tankGap.hitsToFirstKO / tankEven.hitsToFirstKO
+if (gain < 0.12) fails.push(`+10 levels barely matters (${(gain * 100).toFixed(0)}% fewer hits) — levelEdge is too weak to feel`)
 if (A.badHp || B.badHp) fails.push('hp went negative')
 if (A.badMana || B.badMana) fails.push('mana went negative')
 if (A.resolvedPct < 100 || B.resolvedPct < 100) fails.push(`fights stalled (resolved A=${A.resolvedPct}% B=${B.resolvedPct}%)`)

@@ -52,7 +52,7 @@ export interface Fighter {
   x: number; y: number
   facing: number            // radians — toward target / move dir (renderer turns the blockout to face)
   hp: number; maxHp: number
-  level: number             // display only (team cards)
+  level: number             // team cards + guard scaling (grdK) + the damage gap term (levelEdge)
   pwr: number; grd: number; agi: number
   radius: number            // body scale — the "little one" reads small, gets swarmed
   speed: number             // floor units / sec
@@ -285,11 +285,38 @@ function incomingHeavy(state: ArenaState, id: string): Fighter | null {
 // Guard mitigates as a RATIO, never a wall: dmg = base * K/(K+grd). A stacked tank
 // shrugs hits down to a third, but nothing reaches immunity — the linear subtraction
 // this replaced let a +2-warded water-bear take literal 1s forever (96% stalemates).
-const GRD_K = 80
+//
+// K SCALES WITH THE DEFENDER'S LEVEL, and that is load-bearing (fixed 2026-07-23).
+// `grd` grows with level (derivePartyStats: k = 1 + level/60) but K used to be a flat
+// 80 — so mitigation silently strengthened every level: a L5 water-bear kept 71% of an
+// incoming hit, a L50 one kept 57%. Defense outscaled offense for free, HP grew
+// alongside it, and fights got LONGER as you leveled (L5 mirror 17.4 hits/64s →
+// L50 20.1 hits/74s). Levelling was a net pacing downgrade. Track the same growth
+// factor and mitigation stays level-invariant: a level GAP still matters (the
+// attacker's atk outruns the defender's grd), a level MATCH doesn't drift.
+const GRD_K_BASE = 80
+const grdK = (f: Fighter) => GRD_K_BASE * (1 + f.level / 60)
+
+// LEVEL LANDS IN THE FIGHT (added 2026-07-23). `level` used to be flagged "display only
+// (team cards)" up in Fighter, and it showed: a +10-level attacker killed barely 4% faster,
+// because level only reached combat through the slow derived-stat curve (k = 1 + level/60)
+// and the defender's guard grew right alongside it. Alex's read — "my L6 Dewbear feels the
+// same" — was literally true. So the level GAP gets its own multiplier, the way the
+// turn-based formula has always had one. Deliberately a DIFFERENTIAL, not an absolute
+// level term: a mirror match is untouched (edge 1.0, so the pacing tuned above holds at
+// every level), while out-levelling something you already beat feels like the reward it is.
+// Clamped both ways — an over-levelled wild spirit should sting, never one-shot, and a
+// low-level underdog should stay winnable with good Keeper timing.
+const LEVEL_EDGE_PER = 0.025
+const LEVEL_EDGE_MIN = 0.6
+const LEVEL_EDGE_MAX = 1.8
+const levelEdge = (from: Fighter, to: Fighter) =>
+  Math.min(LEVEL_EDGE_MAX, Math.max(LEVEL_EDGE_MIN, 1 + (from.level - to.level) * LEVEL_EDGE_PER))
 
 function applyDamage(state: ArenaState, from: Fighter, to: Fighter, base: number, moveId: string, eff: 'super' | 'weak' | 'neutral', braceHalves = true) {
   const braced = braceHalves && to.braceT > 0
-  let dmg = Math.max(1, Math.round(base * GRD_K / (GRD_K + effGrd(to))))
+  const K = grdK(to)
+  let dmg = Math.max(1, Math.round(base * K / (K + effGrd(to)) * levelEdge(from, to)))
   if (braced) dmg = Math.max(1, Math.round(dmg * 0.5))
   if (to.shieldT > 0) dmg = Math.max(1, Math.round(dmg * 0.45))          // guarded → incoming softened
   if (to.st.crystallized) { dmg = Math.round(dmg * 1.25); to.st.crystallized = false }  // brittle shatters
