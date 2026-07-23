@@ -807,6 +807,43 @@ the Arcade frame.
 > - **Files:** `play3d/Shimmer3D.tsx` (`StatTick`, `STAT_LABELS`, `BattleRewards`, reward loop).
 > **NEXT:** Alex eye-pass the card (tick is 620ms ease, 55ms per-stat stagger in `StatTick`).
 
+## 🏦 Shimmer play3d — THE GARDEN BANK (pooled crafting store, SHIPPED 2026-07-23, jin-cc) · *Last touched 2026-07-23*
+> **Left off:** live on `:3200` (`2dfff8a` engine + `be35acf` wiring). Chests WERE ten independent slot grids and
+> `craftItem` only read the satchel, so crafting meant remembering which box held the planks, ferrying stacks out,
+> then walking to a station. Capacity was never the problem — the shuffling was. Now every placed chest contributes
+> capacity to ONE pooled material store; gathered mats deposit into it; every station on your land crafts straight
+> from it. The chest panel became the bank view (capacity meter, one-tap **Deposit all materials**, withdraw list,
+> tap-to-deposit satchel).
+> - **Scope = the garden, and that line already existed (Alex's call, better than the global bank I first proposed):**
+>   zones carry `realm?: 'ather' | 'outside'` defaulting to `'ather'`, and exactly ONE of 34 zones is `'outside'` —
+>   the Crucible. So the bank covers all 33 Ather zones and stops at the Crucible gate. **The same flag that gates
+>   weapons-vs-spirits now gates bank-vs-satchel**, so the realms differ along one axis, not two. It also finally
+>   gives the satchel a job: your Crucible loadout.
+> - **Craft rule (Alex):** consume **inventory first, then bank**; crafted output lands in inventory. `spendMaterials`
+>   is satchel-first + all-or-nothing (a failed craft never half-eats mats). Threaded through all four consuming
+>   paths (craft/brew/tool-craft/repair) as an **optional trailing `bank` param** — omitted = satchel only = the
+>   Crucible case = every pre-bank caller/test unchanged. Only Shimmer3D passes a real bank via `bankForZone()`.
+> - **Numbers (feel, tune freely):** base 250, wooden +500, iron +750, ornate +1000, 10-chest cap unchanged. Tiered
+>   so upgrading a chest isn't decoration.
+> - **Decisions:** ▸ **count cap, not a slot grid** — a grid is Tetris with extra steps; "3,240 / 5,250" reads at a
+>   glance. ▸ **only PLACED chests count** (a chest in your pocket isn't storage — the rule the old model implied by
+>   making carried contents unreachable). ▸ **only resources bank** — tools/potions/seeds/furniture stay in hand.
+> - **★ MIGRATION — the part that touches a LIVE save. Runs once, flag-gated (`bankMigratedV1`), placed AFTER flags
+>   restore in the load path so the guard reads the real saved value not the fresh-mount default** (this ordering was
+>   a real bug in the first draft, caught before shipping). Drains placed chests AND chests carried in the satchel
+>   (chestData was unreachable until re-placed, so banking it hands items back). Force-deposit, **over-cap tolerant,
+>   strictly non-lossy**: a maxed old save (~7,500 items) migrates intact above the 5,250 cap and just blocks new
+>   deposits until it drains — nothing trimmed. Old stores emptied after so nothing double-counts; banner reports
+>   what moved. New Game clears the bank + (via replaceFlags) the flag.
+> - **Not runtime-tested in a browser (same reason as always):** the automation tab shares localStorage + mp identity
+>   with Alex's live tab. bank oracle PASS (conservation + over-cap + spend-order), StationMenus 27/0, canon 5 CLEAN,
+>   build clean, markers in served chunks. **NEXT{Shimmer bank: Alex plays it — gather, open a chest, Deposit all, craft
+>   at a station and confirm it pulls from the pool; watch the migration banner on first load report the right count.
+>   Feel-tune the 250/500/750/1000 numbers if the cap bites too early or too late}**
+> - **Files:** `engine/bank.ts` + `engine/bank.test.ts` (new) · `engine/{crafting,alchemy,tools}.ts` (optional bank
+>   param) · `play3d/Shimmer3D.tsx` (bankRef, capacity, 3 deposit/withdraw callbacks, save+migration) ·
+>   `play3d/StationMenus.tsx` (bank panel replaces chest grid).
+
 ## ⚗️ Shimmer play3d — THE COZY LOOP (potions + stations + gather economy, 2026-07-22 eve, jin-cc)
 > **The pivot back to the soul side (Alex): home plot, crafting + alchemy tables.** The finding: the loop
 > existed but didn't PAY OFF — 9 of 13 potions were brew-for-XP dead ends, and placed stations were ghosts.
