@@ -72,21 +72,9 @@ const DEFAULT_HEIGHT_SCALE = 1.0
 // therefore chosen blind and may still look wrong after this fix — rotate and re-place it.
 const MODEL_FORWARD_OFFSET = Math.PI / 2
 
-// TEMP diagnostics for the blockout regression (2026-07-23): a station stuck on its fallback has
-// three distinct causes — GLB resolved fine / load threw / load never settled (Suspense forever).
-// The last two were indistinguishable from the console. Remove with the PropBoundary logging.
-const propDiagSeen = new Set<string>()
-const propDiag = (msg: string) => {
-  if (propDiagSeen.has(msg)) return
-  propDiagSeen.add(msg)
-  console.error('[prop]', msg)
-  try { navigator.sendBeacon('/shimmer/client-log', `[prop] ${msg}`) } catch { /* noop */ }
-}
-
 function GlbProp({ id, def, ghost, blocked }: { id: string; def: PropDef; ghost?: boolean; blocked?: boolean }) {
   const entry = PROP_MODELS[id]
   const { scene } = useGLTF(entry.url, DRACO_PATH)
-  propDiag(`glb resolved: ${id}`)
 
   const { object, scale, y } = useMemo(() => {
     const root = scene.clone(true)
@@ -164,8 +152,8 @@ class PropBoundary extends Component<{ fallback: ReactNode; children: ReactNode 
   state = { failed: false }
   static getDerivedStateFromError() { return { failed: true } }
   componentDidCatch(error: Error) {
-    // TEMP diagnostics (2026-07-23): the swallowed throw was invisible — surface it
-    propDiag(`boundary caught: ${error?.message ?? error}\n${error?.stack ?? ''}`)
+    // A boundary that swallows silently costs a debugging session (2026-07-23) — always say why.
+    console.error('[prop] falling back to blockout:', error)
   }
   render() { return this.state.failed ? this.props.fallback : this.props.children }
 }
