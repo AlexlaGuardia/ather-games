@@ -6,6 +6,7 @@
 // illuminate=Enlighten, metal_snare=Shackle). New moves must register there first.
 
 import type { Species, Element } from '../spirits/spirit'
+import { BASE_LEARNSET, baseLearnedBy, BLOOM_LEVEL, STILL_BREATH_LEVEL, KIT_SIZE } from './base-learnset'
 
 // ============================================
 // Types
@@ -365,48 +366,69 @@ export function toBattleElement(element: Element): BattleElement {
   return element
 }
 
+// ── Evolution reward gates ─────────────────────────────
+// Evolution is a prestige event, so its payoff sits AT the threshold, not before it.
+// (These used to be 15 and 25 — below the level a spirit can even have an element, so
+//  they both fired the instant it evolved and neither read as a reward.)
+export const ELEMENT_MID_LEVEL = 34   // unlocks with the form itself
+export const ELEMENT_HIGH_LEVEL = 45  // the second-form mastery move
+
+/** A base spirit cannot hold a rune yet, so it channels a registered move RAW:
+ *  full power, forced neutral — no STAB, no matchup multiplier. On evolution the same
+ *  move expresses its true rune. Canon: moves are caster-agnostic (name + runes + effect);
+ *  the caster supplies medium, colour, and potency. */
+function rawChannel(move: Move): Move {
+  return move.element === 'neutral' ? move : { ...move, element: 'neutral' }
+}
+
 /** Get the move pool for a spirit based on species, element, level, and bond.
- *  Progression: base form → starter moves, mid-level → element moves, high-level → power moves, bond → signature.
- *  Always returns exactly 4 moves (best available, capped). */
+ *
+ *  Progression:
+ *    lv3  bloom       — Mana Pulse + Spirit Ward, the raw-mana pair every spirit is born knowing
+ *    lv5              — Still-Breath (the Reach move; holds are early-game content)
+ *    lv9-30           — the species base learnset (base-learnset.ts), channelled RAW
+ *    lv34 evolution   — the whole carried kit ignites (moves express their runes) + element mid
+ *    lv45             — element high
+ *    bond 50          — species signature
+ *
+ *  The kit is KIT_SIZE moves: Mana Pulse is pinned (a spirit is never left with nothing to
+ *  throw when everything else is on cooldown) plus the most recently learned. */
 export function getMovesForSpirit(
   species: Species,
   element: Element,
   level: number,
   bond: number,
 ): Move[] {
-  const pool: Move[] = []
+  const isBase = element === 'base'
   const bElement = toBattleElement(element)
   const elKey = bElement as Exclude<BattleElement, 'neutral'>
+  const pool: Move[] = []
 
-  // === Always available ===
-  pool.push(MOVE_MANA_PULSE)
+  // === Born knowing — raw mana, runeless, every spirit ===
+  // Still-Breath is NOT here. It is the Reach move (power 0, honest calm) and belongs to reach
+  // encounters, not to a combat kit: as a general learnset entry it occupied a slot from lv5-18,
+  // leaving a low-level spirit ONE useful move in three, and a lv5 mirror burned the arena's whole
+  // 60s cap on two spirits warding at each other. battle.ts grants it in reach mode instead, which
+  // also makes the mechanic kit-independent — it can no longer rotate out and strand a collared spirit.
+  if (level >= BLOOM_LEVEL) pool.push(MOVE_SPIRIT_WARD)
 
-  // === Level 1+: Spirit Ward (universal defense) ===
-  pool.push(MOVE_SPIRIT_WARD)
-
-  // === Element starter (on evolution / non-base element) ===
-  if (element !== 'base' && ELEMENT_STARTERS[elKey]) {
-    pool.push(ELEMENT_STARTERS[elKey])
+  // === The base learnset — carried for life. Raw while base, runed once evolved. ===
+  for (const move of baseLearnedBy(species, level)) {
+    pool.push(isBase ? rawChannel(move) : move)
   }
 
-  // === Level 15+: mid-tier element move ===
-  if (element !== 'base' && level >= 15 && ELEMENT_MID[elKey]) {
-    pool.push(ELEMENT_MID[elKey])
+  // === Evolution reward tiers ===
+  if (!isBase) {
+    if (level >= ELEMENT_MID_LEVEL && ELEMENT_MID[elKey]) pool.push(ELEMENT_MID[elKey])
+    if (level >= ELEMENT_HIGH_LEVEL && ELEMENT_HIGH[elKey]) pool.push(ELEMENT_HIGH[elKey])
+    if (bond >= 50) {
+      const sig = SPECIES_SIGNATURES[species]?.[elKey]
+      if (sig) pool.push(sig)
+    }
   }
 
-  // === Level 25+: high-tier element move ===
-  if (element !== 'base' && level >= 25 && ELEMENT_HIGH[elKey]) {
-    pool.push(ELEMENT_HIGH[elKey])
-  }
-
-  // === Bond 50+: species signature move ===
-  if (bond >= 50 && element !== 'base') {
-    const sig = SPECIES_SIGNATURES[species]?.[elKey]
-    if (sig) pool.push(sig)
-  }
-
-  // Take the 4 strongest (most recently learned) — last 4
-  return pool.slice(-4)
+  // Mana Pulse pinned, then the most recently learned fill the rest.
+  return [MOVE_MANA_PULSE, ...pool.slice(-(KIT_SIZE - 1))]
 }
 
 // ============================================

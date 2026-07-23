@@ -194,7 +194,7 @@ export function createSpirit(species: Species, name: string, tileX: number, tile
     animTimer: 0,
     blinkTimer: 45 + Math.floor(Math.random() * 30),
 
-    level: 1,
+    level: EVOLUTION_THRESHOLDS.bloomLevel,  // blooms at 3, not 1 — its learnset starts here
     xp: 0,
     seeds: randomSeeds(),
     temperament: TEMPERAMENTS[Math.floor(Math.random() * TEMPERAMENTS.length)],

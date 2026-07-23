@@ -7,7 +7,7 @@ import type { Spirit, Species, Element } from '../spirits/spirit'
 import { formStage } from '../spirits/spirit'
 import { ELEMENT_STAT_MODS } from '../spirits/evolution-config'
 import type { Move, BattleElement, CombatStat, StatusId } from './moves'
-import { getEffectiveness, effectivenessLabel, hasSTAB, toBattleElement, getMovesForSpirit } from './moves'
+import { getEffectiveness, effectivenessLabel, hasSTAB, toBattleElement, getMovesForSpirit, MOVE_STILL_BREATH } from './moves'
 import { applyPassiveHeldItem, checkBerryTrigger, checkStatusCureTrigger, getCharmSTABBonus, getCharmEndureBoost, getCharmAccuracyBonus } from './held-items'
 
 // ============================================
@@ -234,6 +234,13 @@ export function createReachBattle(playerSpirit: Spirit, collaredSpirit: Spirit):
   state.enemy.collared = true
   state.enemy.reach = 0
   state.enemy.reachMax = REACH_MAX
+  // Grant Still-Breath for the encounter. It is deliberately absent from the general learnset
+  // (a power-0 move sitting in every low-level combat kit diluted fights badly), so reach mode
+  // hands it over here. Granting it per-encounter also means it can never rotate out of a kit
+  // and leave a player with no honest way to free the spirit in front of them.
+  if (!state.player.moves.some(m => m.move.id === MOVE_STILL_BREATH.id)) {
+    state.player.moves.push({ move: MOVE_STILL_BREATH, ppLeft: MOVE_STILL_BREATH.pp })
+  }
   // The collar DIMS the spirit (canon: grays its light, silences its burst) — so it hits softer.
   // This is also the survivability knob: a dimmer spirit = a more weatherable, reachable fight.
   state.enemy.stats.pwr = Math.round(state.enemy.stats.pwr * DIM_FACTOR)

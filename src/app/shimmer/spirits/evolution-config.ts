@@ -10,6 +10,7 @@ import type { Species, Element } from './spirit'
 // ── Global thresholds ──────────────────────────────────
 
 export const EVOLUTION_THRESHOLDS = {
+  bloomLevel: 3,             // level a spirit blooms at — where its learnset starts (not 1)
   secondFormLevel: 34,       // level at which base → second form triggers
   awakenedFormLevel: 67,     // level at which second → awakened triggers
   maxLevel: 100,

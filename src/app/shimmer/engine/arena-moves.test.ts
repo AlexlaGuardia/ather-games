@@ -42,7 +42,14 @@ function mk(species: Species, level: number, element: Element = 'base'): Spirit 
 // ── 2) kits ──
 {
   chk('evolved spirit carries 4 moves', kitForSpirit(mk('fox', 30, 'storm')).length === 4)
-  chk('base form carries its 2 starters', kitForSpirit(mk('fox', 10)).length === 2)
+  // Was: "base form carries its 2 starters" (length === 2). That asserted the bug — element moves
+  // were gated behind evolution at lv34 while the whole shipped map bands at 2-22, so every spirit
+  // in the playable game held Mana Pulse + Spirit Ward. Base spirits now learn a real kit (raw,
+  // neutral-element) from lv9; the contract below is what replaced it.
+  chk('base form carries a full kit by lv10', kitForSpirit(mk('fox', 10)).length === 4)
+  chk('base form channels RAW — no rune, so no STAB or matchup',
+    kitForSpirit(mk('fox', 20)).every(m => m.element === 'neutral'))
+  chk('a freshly bloomed spirit has only the raw-mana pair', kitForSpirit(mk('fox', 3)).length === 2)
   const sig = kitForSpirit(mk('owl', 30, 'mana')).map(m => m.id)
   chk('bond-50 signature in the kit', sig.includes('oracle_sight'), sig.join(','))
 }

@@ -144,9 +144,11 @@ const TRIO: Species[] = ['fox', 'axolotl', 'frog']
 // failure NOT in this set exits non-zero. Delete an entry the moment its fix lands; if a
 // known-gap check starts passing, the run also fails, so the list can't quietly rot.
 const KNOWN_GAPS = new Set([
-  'species-ceiling:frog',
-  'species-floor:owl',
-  'species-floor:firefly',
+  // Removed 2026-07-23 when base spirits gained real kits (base-learnset.ts): the species league
+  // was measured on a roster where EVERY spirit fought with Mana Pulse + Spirit Ward, so the
+  // spread was pure stat-block — frog's ceiling (89.1%) and owl's / firefly's floors (11.5% /
+  // 4.1%) were species stats with no moveset to express or offset them. With per-species kits
+  // all three now pass on their own. The level cliffs below are untouched by that and remain.
   'level-cliff:2',
   'level-cliff:5',
 ])

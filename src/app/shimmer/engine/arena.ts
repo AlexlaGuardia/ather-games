@@ -177,7 +177,9 @@ function buildAid(kit: AidKit): AidSlot[] {
 // makes the fight escalate into a decision instead of being decided (see arena-moves.ts).
 // Floor is real: below ~1.5 the duel drops under 4 hits and the telegraph/dodge
 // choreography never gets to read. arena.test.ts's PACING block holds both ends.
-const HP_MULT = 1.8
+const HP_MULT = 2.4   // 1.8 -> 2.4 when base spirits gained real kits (2 moves -> 4). More damage
+                      // per fight cut the duel to 3.9 hits, under the oracle's band. Flat HP is the
+                      // ONLY pacing knob here — the TIRE ramp was tried and Alex rejected the feel.
 
 function fighterFromSpirit(spirit: Spirit, id: string, side: Side, x: number, y: number, slot: number, tier: ArenaAITier, collared: boolean): Fighter {
   const s = derivePartyStats(spirit)
