@@ -2176,8 +2176,17 @@ export default function Shimmer3D() {
   const slideRef = useRef(false)
   // World map overlay (M / HUD button). Closed during battles — the arena owns the screen.
   const [showMap, setShowMap] = useState(false)
+  // The mouse-handoff pair, reached through refs because the helpers are defined further down
+  // (they need canvasElRef/isTouch) and this effect would otherwise touch them before init.
+  const openCursorUIRef = useRef<() => void>(() => {})
+  const closeCursorUIRef = useRef<() => void>(() => {})
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.code === 'KeyM' && !curBattleRef.current) setShowMap(v => !v) }
+    // M toggles the map, and the map is a cursor surface — same handoff as the station menus, or
+    // it opens with the pointer still captured and its close button is unclickable.
+    const onKey = (e: KeyboardEvent) => {
+      if (e.code !== 'KeyM' || curBattleRef.current) return
+      setShowMap(v => { if (v) closeCursorUIRef.current(); else openCursorUIRef.current(); return !v })
+    }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [])
@@ -2635,6 +2644,9 @@ export default function Shimmer3D() {
   const [nearStation, setNearStation] = useState<PlacedStruct | null>(null)
   const nearStationRef = useRef<PlacedStruct | null>(null); nearStationRef.current = nearStation
   const [openMenu, setOpenMenu] = useState<{ kind: StationKind; struct: PlacedStruct } | null>(null)
+  // Ref mirror so the interact-key handler can ask "is a menu open?" without taking openMenu as a
+  // dependency and re-binding the listener every time a menu opens or closes.
+  const openMenuRef = useRef(false); openMenuRef.current = !!openMenu
 
   // ── Chest storage (keyed by stationInstanceId) · shared Exchange market · planted crops ──
   // Save fields (`chests`/`ge`/`plantedCrops`) are the SAME ones the 2D game already writes
@@ -2743,13 +2755,6 @@ export default function Shimmer3D() {
   }, [placing, confirmPlacing, cancelPlacing, rotatePlacing])
 
   // ── Station menus (open at any placed station — brew/craft/chest/exchange/farm, keyed by kind) ──
-  const openStation = useCallback(() => {
-    const s = nearStationRef.current; if (!s) return
-    battleRef.current = true
-    setOpenMenu({ kind: STATIONS[s.itemId].kind, struct: s })
-  }, [])
-  const closeStation = useCallback(() => { battleRef.current = false; setOpenMenu(null) }, [])
-
   const brew = useCallback((potionId: string) => {
     const before = skillsRef.current.alchemy.level
     // Active companion @15 perk — Sporebloom bonus draught (Sporeling, ×2 under Kindred)
@@ -2985,6 +2990,44 @@ export default function Shimmer3D() {
     const c = canvasElRef.current
     if (c) { try { const r = c.requestPointerLock?.() as unknown as Promise<void> | undefined; r?.catch?.(() => {}) } catch { /* re-lock cooldown — a canvas click resumes look */ } }
   }, [isTouch])
+
+  // ── THE MOUSE HANDOFF ─────────────────────────────────────────────────────────────────────────
+  // Every cursor-driven surface (station menus, the map) borrows the mouse from first-person look
+  // and must hand it BACK on close. Before this, closing a crafting menu left the player looking at
+  // a dead screen until they clicked it again — and worse, opening a station with the E key never
+  // released the lock at all, so the menu appeared with the cursor still captured and unclickable.
+  //
+  // Whether to re-lock is remembered from OPEN time rather than assumed. A player who was already
+  // cursor-free (never clicked in, or on a trackpad) should not have their mouse seized just
+  // because they closed a menu — the handoff gives back exactly what it borrowed.
+  const lockOnCloseRef = useRef(false)
+  const openCursorUI = useCallback(() => {
+    lockOnCloseRef.current = !!document.pointerLockElement
+    document.exitPointerLock?.()
+  }, [])
+  const closeCursorUI = useCallback(() => {
+    const relock = lockOnCloseRef.current
+    lockOnCloseRef.current = false
+    // The close is itself a user gesture (button click or keypress), which is what the browser
+    // requires to grant pointer lock. relockPointer already swallows the rare cooldown rejection,
+    // and a canvas click is always the fallback.
+    if (relock) relockPointer()
+  }, [relockPointer])
+  // Publish for the surfaces defined above this point (the map's M-key effect).
+  openCursorUIRef.current = openCursorUI
+  closeCursorUIRef.current = closeCursorUI
+
+  const openStation = useCallback(() => {
+    const s = nearStationRef.current; if (!s) return
+    battleRef.current = true
+    openCursorUI()
+    setOpenMenu({ kind: STATIONS[s.itemId].kind, struct: s })
+  }, [openCursorUI])
+  const closeStation = useCallback(() => {
+    battleRef.current = false
+    setOpenMenu(null)
+    closeCursorUI()
+  }, [closeCursorUI])
 
   const onEncounter = useCallback((enc: WildEncounter) => {
     battleRef.current = true   // freeze the walker through the approach beat AND the fight
@@ -3390,16 +3433,18 @@ export default function Shimmer3D() {
   }, [])
   // ── Inventory (satchel) open/close, hijacking the mouse while it's up ──────────────────────────
   // First-person play captures the pointer, so the satchel's drag-and-drop is unreachable mid-play.
-  // Opening the bag RELEASES the pointer (free cursor to click/drag); closing re-captures the look.
-  // Same move the station menu already does (exitPointerLock → menu). Bag state lives here (not in
-  // HotBar) so the "I" key and the pointer-lock toggle stay in one place. relockPointer re-locks on close.
+  // Opening the bag RELEASES the pointer (free cursor to click/drag); closing hands look back.
+  // Runs through the shared mouse handoff (openCursorUI/closeCursorUI) so every cursor surface in
+  // the game behaves identically. Bag state lives here (not in HotBar) so the "I" key and the
+  // pointer-lock toggle stay in one place.
   const [bagOpen, setBagOpen] = useState(false)
   const bagOpenRef = useRef(false); bagOpenRef.current = bagOpen
   const toggleBag = useCallback((open: boolean) => {
     setBagOpen(open)
-    if (open) { document.exitPointerLock?.() }   // free the cursor for the satchel
-    else relockPointer()                          // re-capture first-person look on close
-  }, [relockPointer])
+    // Same handoff as the station menus — and via openCursorUI rather than a bare relock, so a
+    // player who was already cursor-free doesn't get the mouse seized on close.
+    if (open) openCursorUI(); else closeCursorUI()
+  }, [openCursorUI, closeCursorUI])
   // "I" toggles the bag (not while a blocking overlay owns the screen); Esc closes it.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -3422,9 +3467,8 @@ export default function Shimmer3D() {
   const rangeCfgRef = useRef(rangeCfg); rangeCfgRef.current = rangeCfg
   const toggleRange = useCallback((open: boolean) => {
     setRangeOpen(open)
-    if (open) { document.exitPointerLock?.() }
-    else relockPointer()
-  }, [relockPointer])
+    if (open) openCursorUI(); else closeCursorUI()
+  }, [openCursorUI, closeCursorUI])
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const k = e.key.toLowerCase()
@@ -3481,6 +3525,13 @@ export default function Shimmer3D() {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (editMode || battle) return
+      // A station menu is open: E and Escape CLOSE it, and the handoff gives look straight back.
+      // This is the seamless half of the loop — open with E, craft, close with E, keep walking,
+      // never touching the mouse to re-capture the camera.
+      if (openMenuRef.current) {
+        if (e.key === 'Escape' || e.key.toLowerCase() === 'e') { e.preventDefault(); closeStation() }
+        return
+      }
       const k = e.key.toLowerCase()
       if (k !== 'e' && k !== ' ' && k !== 'enter') return
       if (dialogueRef.current) { e.preventDefault(); advanceDialogue(); return }
@@ -3491,7 +3542,7 @@ export default function Shimmer3D() {
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [editMode, battle, nearNpc, advanceDialogue, talk, toggleChannel, openStation])
+  }, [editMode, battle, nearNpc, advanceDialogue, talk, toggleChannel, openStation, closeStation])
 
   // ── Mouse-look controls (FPS model): once the pointer is CAPTURED (first canvas click locks it),
   //    left-click = interact with what's in front, right-click = use/place the selected hotbar item,
@@ -3520,7 +3571,7 @@ export default function Shimmer3D() {
         if (dialogueRef.current) advanceDialogue()
         else if (nearNpc) talk(nearNpc)
         else if (fishRef.current || nearNodeRef.current || channelRef.current) toggleChannel()
-        else if (nearStationRef.current) { document.exitPointerLock?.(); openStation() }  // free the cursor for the menu
+        else if (nearStationRef.current) openStation()  // openStation owns the cursor handoff for every entry path
       } else if (e.button === 1) {
         // middle-click (scroll-wheel press) = use/place the selected hotbar item (moved off right-click)
         e.preventDefault()
@@ -3820,9 +3871,9 @@ export default function Shimmer3D() {
 
       {/* minimap — persistent, click (or M) expands to the full map */}
       {!battle && !editMode && !showMap && (
-        <MiniMap zoneId={zone.id} gridRef={gridRef} posRef={posRef} yawRef={camYaw} onExpand={() => setShowMap(true)} />
+        <MiniMap zoneId={zone.id} gridRef={gridRef} posRef={posRef} yawRef={camYaw} onExpand={() => { openCursorUI(); setShowMap(true) }} />
       )}
-      {showMap && <WorldMap zoneId={zone.id} gridRef={gridRef} posRef={posRef} yawRef={camYaw} onClose={() => setShowMap(false)} />}
+      {showMap && <WorldMap zoneId={zone.id} gridRef={gridRef} posRef={posRef} yawRef={camYaw} onClose={() => { setShowMap(false); closeCursorUI() }} />}
 
       {/* talk prompt when standing by an NPC */}
       {nearNpc && !dialogue && !battle && !editMode && (
