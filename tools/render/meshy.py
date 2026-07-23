@@ -109,9 +109,13 @@ def image_to_data_uri(path):
     return f"data:image/{mime};base64,{base64.b64encode(open(path, 'rb').read()).decode()}"
 
 
-def generate_text(client, prompt, out, refine=False):
-    print(f"[meshy] text-to-3d preview: {prompt!r}")
-    pid = client.create_text_to_3d(prompt, mode="preview")
+def generate_text(client, prompt, out, refine=False, **opts):
+    # target_polycount/topology belong on the PREVIEW call — that's the stage that builds
+    # geometry, so asking Meshy for a low-poly mesh gets real retopology instead of the
+    # blind collapse-decimate a post-pass can do. Texture size is NOT controllable here,
+    # so glb_optimize.py still runs after (downscale + Draco).
+    print(f"[meshy] text-to-3d preview: {prompt!r}" + (f"  {opts}" if opts else ""))
+    pid = client.create_text_to_3d(prompt, mode="preview", **opts)
     client.poll(client.get_text_to_3d, pid)
     if refine:
         print("[meshy] refine pass (texture)…")
@@ -139,8 +143,8 @@ def main():
     ap.add_argument("--image", help="image path or URL (image-to-3d)")
     ap.add_argument("--out", default="/tmp/meshy/out.glb", help="GLB output path")
     ap.add_argument("--refine", action="store_true", help="text: run a refine (texture) pass after preview")
-    ap.add_argument("--polycount", type=int, help="image: target polycount (100-300000)")
-    ap.add_argument("--topology", choices=["quad", "triangle"], help="image: mesh topology")
+    ap.add_argument("--polycount", type=int, help="target polycount (100-300000) — text + image")
+    ap.add_argument("--topology", choices=["quad", "triangle"], help="mesh topology — text + image")
     ap.add_argument("--no-texture", action="store_true", help="image: skip texturing (should_texture=false)")
     a = ap.parse_args()
 
@@ -148,14 +152,14 @@ def main():
     if a.balance and not (a.text or a.image):
         print(f"balance: {c.balance()} credits")
         return
+    opts = {}
+    if a.polycount:
+        opts["target_polycount"] = a.polycount
+    if a.topology:
+        opts["topology"] = a.topology
     if a.text:
-        generate_text(c, a.text, a.out, refine=a.refine)
+        generate_text(c, a.text, a.out, refine=a.refine, **opts)
     elif a.image:
-        opts = {}
-        if a.polycount:
-            opts["target_polycount"] = a.polycount
-        if a.topology:
-            opts["topology"] = a.topology
         if a.no_texture:
             opts["should_texture"] = False
         generate_image(c, a.image, a.out, **opts)
