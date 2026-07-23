@@ -27,3 +27,4 @@ public/*/vo/
 
 .shimmer-backups/
 .coord/
+__pycache__/
