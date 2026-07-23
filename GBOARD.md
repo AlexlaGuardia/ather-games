@@ -352,10 +352,24 @@ the Arcade frame.
 > - **Next:** Alex A/Bs on the elitedesk and rules on **MSAA off + shadows Soft**. Watch **worst-frame, not fps.**
 >   If hitching survives that, next levers in order: per-peer `<Html>` nametags → peer `castShadow` → shadow-camera
 >   range (currently ±40).
-> - **Parked (separate real bug, not the GPU):** `persist()` (`Shimmer3D.tsx:2241`, on a 30s timer at `:2394`) is
->   **fully synchronous despite the `async`** — `use-cloud-save.ts` is localStorage-backed, so it does `getItem` →
->   `JSON.parse` → rebuild the whole save → `JSON.stringify` → `setItem` **on the render thread**. That is a hitch
->   every 30s independent of everything above.
+> - **✅ FIXED same day (`595f091`) — the autosave half.** `persist()` was **fully synchronous despite the `async`**
+>   (localStorage is a blocking API), so `getItem` → `JSON.parse` → rebuild the whole save → `JSON.stringify` →
+>   `setItem` all ran **on the render thread**, every 30s *and after every harvest*. Three changes: **mirror** the
+>   last save in memory (no read-parse before each write), **dirty-check** the serialized payload (standing still
+>   costs a compare, not a write), **defer to `requestIdleCallback`** with a 2s timeout (same work, no longer
+>   mid-frame; calls coalesce so a harvest burst is one save). All 28 call sites unchanged.
+>   - **Save-correctness rules baked in, because a save bug costs more than a hitch:** `newGame`'s
+>     `persist({replaceFlags:true})` flushes **immediately** (destructive wipe; deferring risks old flags surviving
+>     a tab close, and it is the only caller passing options so coalescing never merges intents) · `beforeunload` /
+>     **`pagehide`** / unmount flush **synchronously** (a deferred save on unload never runs; `pagehide` covers
+>     mobile background-kill, the phone-in-pocket case) · `saveRaw` now **reports success** and the last-written
+>     cache only updates on a real write — **marking a failed write as written would make every later identical
+>     save skip as a no-op, so one quota error would stop saving forever, silently** · a `storage` event drops the
+>     mirror so a second tab's write is re-read, not clobbered by a stale `...prev`.
+>   - Panel gained an **AUTOSAVE readout** (last save ms / size / writes-skips) so it is verifiable in play.
+>   - **Not runtime-tested in a browser on purpose:** the automation tab shares localStorage *and* mp identity with
+>     Alex's live tab, so driving it would risk his real save. Build + typecheck clean, new code confirmed present
+>     in the served chunks.
 > - **Decisions:** ▸ **A panel, not a tune.** Cutting MSAA/shadows is a LOOK trade and look calls are Alex's, so the
 >   toggles ship beside a live readout and he rules from what he sees — not from my description of jaggies.
 >   **Defaults reproduce the shipped look exactly**, making it a comparison instrument, never a silent downgrade.
