@@ -456,6 +456,23 @@ the Arcade frame.
 > `ResourceBars`/`AmmoCounter` HUD comps, `HEAL_POTIONS`/`startReload`/range-console state in the page comp.
 
 ## ⚖️ Shimmer — PARTY BALANCE (measuring instrument built 2026-07-23, jin-cc)
+> ### ⚠️ READ FIRST — THIS BLOCK MEASURES A BATTLE SYSTEM NOBODY PLAYS (correction, 2026-07-23 later)
+> Everything below profiles **`engine/party-battle.ts`**, which is imported only by the old 2D
+> `/play` page and the dev `BattleTester`. **`play3d` — the actual game — mounts `ArenaBattle`
+> → `engine/arena.ts`** (`play3d/Shimmer3D.tsx:4017`). So the headline finding here (the "level
+> cliff", ~5-6 hits per KO, the species league) describes a code path Alex never touches, and its
+> prescription was aimed at the wrong file.
+>
+> **How it was caught:** Alex playtested and said the opposite of the sim — no difficulty problem,
+> and fights of **15-20 hits**, not 5-6. Both halves of that were right, and the mismatch was the
+> tell. The arena's real numbers, and the fix, are in the **ARENA PACING** block below.
+>
+> **The oracle itself is still sound** and worth keeping — but it guards `party-battle.ts`, so treat
+> its output as informing the 2D path (and the shared `party-stats.ts` growth curve) only. Anything
+> below about TTK, level sensitivity or species win-rates does **not** transfer to the arena.
+> **Lesson: when a sim and the player's hands disagree, the player is the ground truth — go find
+> out which code the hands were touching before trusting a single number.**
+>
 > **Started from Alex's question: "my Dewbear hit level 6 and I don't see much difference —
 > how does the game decide what to increase?"** Answer: it doesn't decide anything. `addXP()`
 > only increments `level`; stats are recomputed every read as
@@ -497,6 +514,55 @@ the Arcade frame.
 > term out of `calcPartyDamage`, steepen growth to `1 + level/30` so levels read in the menu, add a
 > level-up delta panel, retune the species floors (firefly/owl) and frog's ceiling — gating every
 > step on the oracle's before/after.
+
+## ⏱️ Shimmer play3d — ARENA PACING (the battle slog, fixed 2026-07-23, jin-cc)
+> **Started from Alex playtesting: "TTK is more like 15-20 hits, I've been skipping since it's so
+> dragged out."** That contradicted the party-balance oracle (5-6 hits) and the contradiction was
+> the finding — that oracle measures `party-battle.ts`; play3d runs `engine/arena.ts`. Three real
+> bugs sat under the complaint, all shipped fixed + deployed (`2d94e43`).
+>
+> **Left off (2026-07-23, `2d94e43` + `087535d`, live on :3200 — Alex FEEL-PASS pending):**
+> - **Guard outscaled offence.** `GRD_K` was a flat `80` while `grd` grows with level, so mitigation
+>   strengthened every level (L5 water-bear kept 71% of a hit, L50 kept 57%). Fights got **longer**
+>   as you levelled, and a L50 tank mirror **stalemated outright** — zero KOs inside the oracle's
+>   60s cap. `grdK(f)` now tracks the same `1 + level/60` growth factor the stats use.
+> - **Level did nothing.** `Fighter.level` was literally commented *"display only"*; a +10-level
+>   attacker killed 4% faster. Alex's "my L6 Dewbear feels the same" was true. Added `levelEdge` —
+>   a **differential** damage term, so mirrors keep the tuned pacing and out-levelling reads as
+>   reward. Slope is capped by the oracle, not taste: `0.05`/level made a 4-level gap a 1.5×
+>   swing that skilled play could no longer flip, so it sits at **`0.025`**.
+> - **The slog itself → TIRE.** `TIRE_AT` 25s→**14s**, `TIRE_RAMP` +5%→**+16%**/s. This is the only
+>   knob that shortens *long* fights without touching short ones. **A first attempt got the same TTK
+>   by nerfing guard + cutting `HP_MULT` and quietly dropped the party baseline 38%→27%** (the ally
+>   team runs a tank) — tire leaves `HP_MULT`, `GRD_K_BASE` and the Keeper's aid clocks alone.
+> - **Numbers now:** duel ~6 hits/22s · party 3v3 ~6.7/31s · worst case in the game (high-guard
+>   mirror) ~11/40s · L50 mirror 0.96× the L5 mirror (was stalemate) · +10 levels ≈ 16% fewer hits.
+>   Oracle: skill delta **+64.5 pts**, party baseline 39.5%, 100% resolved.
+>
+> **★ THE ORACLE WAS NOT REPRODUCIBLE, which is how all of this hid.** `createSpirit()` rolls IVs and
+> temperament off `Math.random()`, so mulberry32 seeded the **fight** but not the **fighters**:
+> identical constants scored a 33% party baseline on one run and 26.5% on the next. Every band is
+> ~6 points wide in pure noise — wide enough to pass a tuning pass by luck, **and it did** (a config
+> was accepted on a lucky run, then failed on re-measure). Combatants now roll off a deterministic
+> stream reset per measurement; two consecutive runs are byte-identical. `party-balance.test.ts`
+> already pinned seeds for exactly this reason — the arena oracle just never got the treatment.
+> **Any oracle that builds its subjects with `Math.random()` is a coin flip wearing a lab coat.**
+>
+> **Also added: the `PACING` assertion block** in `arena.test.ts`. Fight *length* was never asserted,
+> which is why a stalemating tank mirror sat green under passing win-rate bands. Now guarded both
+> ways — no slog, and no fight so short the telegraph/dodge choreography never reads — plus
+> level-drift and does-levelling-land asserts, so all three bugs fail loudly if they return.
+>
+> **NEXT:** Alex feel-pass the new pacing (dials: `TIRE_AT`/`TIRE_RAMP` in `arena-moves.ts`,
+> `LEVEL_EDGE_PER` in `arena.ts`). Then the **level-up card** Alex asked for — banner + stat deltas
+> ticking + new moves named, since growth is still invisible in the menu even now that it lands in
+> the fight. **Known, NOT fixed:** `arena-moves.test.ts`'s "fast evader dodges ≥2× the wall"
+> assertion fails on the *original* engine too (3.9% vs 2.9%) — the agi slope can't produce a 2×
+> differential; separate issue. **No EVs exist** — IVs (`seeds`, 8-31, rolled once at generation)
+> and temperaments (natures) are in, but nothing tracks what you battled; PokéAPI is the reference
+> if we build them.
+> **Files:** `engine/arena.ts` (`grdK`/`levelEdge`), `engine/arena-moves.ts` (`TIRE_*`),
+> `engine/arena.test.ts` (determinism + PACING).
 
 ## ⚗️ Shimmer play3d — THE COZY LOOP (potions + stations + gather economy, 2026-07-22 eve, jin-cc)
 > **The pivot back to the soul side (Alex): home plot, crafting + alchemy tables.** The finding: the loop
