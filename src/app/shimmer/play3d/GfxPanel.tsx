@@ -14,7 +14,21 @@ import { useFrame } from '@react-three/fiber'
 import { menuBtn } from './ui'
 import { type GfxSettings, type ShadowQuality, GFX_DEFAULTS } from './gfx'
 
-export type FrameStats = { fps: number; worstMs: number; spikes: number; dpr: number }
+export type FrameStats = {
+  fps: number; worstMs: number; spikes: number; dpr: number
+  // ── Leak detection ────────────────────────────────────────────────────────────────────────────
+  // Alex's lag arrives "after a while", which is the signature of something GROWING, not of a
+  // scene that is simply too heavy — that would stutter from the first second. These are three.js's
+  // own accounting plus the JS heap, with a baseline captured on the first sample so DRIFT is
+  // visible rather than an absolute nobody can calibrate against. Geometries/textures/programs
+  // climbing while you stand still is a leak and a code bug. All flat while frames get worse is
+  // the GPU genuinely being out of room, and only then is it a hardware conversation.
+  geometries: number; textures: number; programs: number
+  calls: number; triangles: number
+  heapMB: number
+  /** First-sample values — the "what did we start at" column. */
+  base: { geometries: number; textures: number; programs: number; heapMB: number } | null
+}
 
 /** Autosave cost, written by flushPersist in Shimmer3D. Here because this is the diagnostics panel. */
 export type SaveStats = { ms: number; kb: number; writes: number; skipped: number }
@@ -30,6 +44,7 @@ const WINDOW_S = 0.5
  */
 export function FrameProbe({ statsRef }: { statsRef: React.RefObject<FrameStats> }) {
   const acc = useRef({ frames: 0, t: 0, worst: 0, spikes: 0 })
+  const baseRef = useRef<FrameStats['base']>(null)
   useFrame((state, dt) => {
     const a = acc.current
     a.frames++
@@ -38,11 +53,27 @@ export function FrameProbe({ statsRef }: { statsRef: React.RefObject<FrameStats>
     if (ms > a.worst) a.worst = ms
     if (ms > SPIKE_MS) a.spikes++
     if (a.t >= WINDOW_S) {
+      const info = state.gl.info
+      // Chrome-only and not in TS's DOM lib. Absent elsewhere, which is fine — the three.js
+      // counters are the load-bearing ones and they work everywhere.
+      const mem = (performance as unknown as { memory?: { usedJSHeapSize: number } }).memory
+      const heapMB = mem ? mem.usedJSHeapSize / 1048576 : 0
+      const geometries = info.memory.geometries
+      const textures = info.memory.textures
+      const programs = info.programs?.length ?? 0
+      // Baseline on the first full sample, not at mount — the scene is still streaming in at mount,
+      // so a mount-time baseline would count normal warm-up as a leak.
+      if (!baseRef.current) baseRef.current = { geometries, textures, programs, heapMB }
       statsRef.current = {
         fps: a.frames / a.t,
         worstMs: a.worst,
         spikes: a.spikes / a.t,          // spikes per second — comparable across window lengths
         dpr: state.gl.getPixelRatio(),   // reads what AdaptiveDpr actually settled on, not what we asked for
+        geometries, textures, programs,
+        calls: info.render.calls,        // per-frame; three.js resets these each frame
+        triangles: info.render.triangles,
+        heapMB,
+        base: baseRef.current,
       }
       a.frames = 0; a.t = 0; a.worst = 0; a.spikes = 0
     }
@@ -62,6 +93,26 @@ function Row({ k, v, warn }: { k: string; v: string; warn?: boolean }) {
         font: '800 12px ui-monospace, monospace', fontVariantNumeric: 'tabular-nums',
         color: warn ? '#ff9d7a' : '#eafff6',
       }}>{v}</span>
+    </div>
+  )
+}
+
+/**
+ * A counter next to how far it has drifted from its baseline. The delta is the whole point — an
+ * absolute geometry count means nothing without knowing whether it is going up.
+ */
+function Drift({ k, v, base, unit = '' }: { k: string; v: number; base?: number; unit?: string }) {
+  const d = base === undefined ? 0 : v - base
+  // 5% of baseline (min 2 units) before it counts as growth — small churn is normal as the player
+  // crosses chunk boundaries and props stream in and out.
+  const grew = base !== undefined && d > Math.max(2, base * 0.05)
+  return (
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', lineHeight: 1.8 }}>
+      <span style={{ font: '700 10px ui-monospace, monospace', color: '#cfeee2' }}>{k}</span>
+      <span style={{ font: '800 12px ui-monospace, monospace', fontVariantNumeric: 'tabular-nums', color: grew ? '#ff9d7a' : '#eafff6' }}>
+        {v ? v.toFixed(0) : '—'}{v ? unit : ''}
+        {grew && <span style={{ font: '700 10px ui-monospace, monospace' }}> +{d.toFixed(0)}</span>}
+      </span>
     </div>
   )
 }
@@ -87,7 +138,10 @@ export function GfxPanel({ gfx, onGfx, statsRef, saveRef }: {
   statsRef: React.RefObject<FrameStats>
   saveRef: React.RefObject<SaveStats>
 }) {
-  const [stats, setStats] = useState<FrameStats>({ fps: 0, worstMs: 0, spikes: 0, dpr: 1 })
+  const [stats, setStats] = useState<FrameStats>({
+    fps: 0, worstMs: 0, spikes: 0, dpr: 1,
+    geometries: 0, textures: 0, programs: 0, calls: 0, triangles: 0, heapMB: 0, base: null,
+  })
   const [save, setSave] = useState<SaveStats>({ ms: 0, kb: 0, writes: 0, skipped: 0 })
   useEffect(() => {
     const t = setInterval(() => {
@@ -112,6 +166,20 @@ export function GfxPanel({ gfx, onGfx, statsRef, saveRef }: {
       </div>
       <div style={{ font: '600 9px/1.4 ui-monospace, monospace', color: '#8aa9a0', margin: '5px 0 2px' }}>
         Worst frame is the number that matters for stutter. Under {SPIKE_MS}ms is smooth.
+      </div>
+
+      <div style={{ ...label, margin: '12px 0 4px' }}>LEAK WATCH</div>
+      <div style={{ background: '#0b1513', border: '1px solid #ffffff18', borderRadius: 8, padding: '6px 9px' }}>
+        <Drift k="geometries" v={stats.geometries} base={stats.base?.geometries} />
+        <Drift k="textures" v={stats.textures} base={stats.base?.textures} />
+        <Drift k="shaders" v={stats.programs} base={stats.base?.programs} />
+        <Drift k="js heap" v={stats.heapMB} base={stats.base?.heapMB} unit="mb" />
+        <Row k="draw calls" v={stats.calls ? String(stats.calls) : '—'} />
+        <Row k="triangles" v={stats.triangles ? `${(stats.triangles / 1000).toFixed(0)}k` : '—'} />
+      </div>
+      <div style={{ font: '600 9px/1.4 ui-monospace, monospace', color: '#8aa9a0', margin: '5px 0 2px' }}>
+        Numbers in orange are climbing since you opened this. Standing still should hold them
+        steady — if they creep, it is a leak in the code, not the GPU.
       </div>
 
       <div style={{ ...label, margin: '12px 0 4px' }}>AUTOSAVE</div>

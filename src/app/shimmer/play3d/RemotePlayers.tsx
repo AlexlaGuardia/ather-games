@@ -113,6 +113,14 @@ export function useRoster(peers: React.RefObject<Map<string, RemotePlayer>>): Re
     const t = setInterval(() => {
       const m = peers.current
       if (!m) return
+      // EVICT the long-dead before building the roster. `player_left` covers clean disconnects, but
+      // a killed tab or a dropped tunnel never sends it — those entries used to sit in the map
+      // forever, each one keeping an Avatar (and its per-frame useFrame, and a drei <Html> DOM node)
+      // mounted and invisible for the rest of the session. A long session in a busy zone accumulated
+      // ghosts that cost real frame time and rendered nothing. Evicting at 4x STALE_MS keeps the
+      // "hidden but might come back" grace period that STALE_MS exists for, then reclaims.
+      const cutoff = performance.now() - STALE_MS * 4
+      for (const [id, p] of m) if (p.lastSeen < cutoff) m.delete(id)
       const next = Array.from(m.values())
       setList((prev) => {
         if (prev.length === next.length && prev.every((p, i) => p.id === next[i].id)) return prev

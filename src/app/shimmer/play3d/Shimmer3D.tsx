@@ -2569,7 +2569,10 @@ export default function Shimmer3D() {
   // every change is persisted so the player rules once, not every session.
   const [gfx, setGfxState] = useState<GfxSettings>(loadGfx)
   const setGfx = useCallback((next: GfxSettings) => { setGfxState(next); storeGfx(next) }, [])
-  const frameStats = useRef<FrameStats>({ fps: 0, worstMs: 0, spikes: 0, dpr: 1 })
+  const frameStats = useRef<FrameStats>({
+    fps: 0, worstMs: 0, spikes: 0, dpr: 1,
+    geometries: 0, textures: 0, programs: 0, calls: 0, triangles: 0, heapMB: 0, base: null,
+  })
 
   // Live resolution scale. Starts at the ceiling; PerformanceMonitor walks it down toward
   // DPR_FLOOR while the GPU is behind and back up when it catches up — but ONLY when the player
