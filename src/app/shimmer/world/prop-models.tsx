@@ -39,10 +39,11 @@ export const PROP_MODELS: Record<string, { url: string; scale?: number; yaw?: nu
   crafting_table: { url: '/models/props/crafting_table.glb', scale: 1.3 },
   chest: { url: '/models/props/chest.glb' },
   exchange_booth: { url: '/models/props/exchange_booth.glb' },
-  // farm_planter: REJECTED on the eyeball gate — Meshy baked a terrain disc under it despite a
-  // "no ground plane" prompt, which reads as a pale splat on the grass AND poisons the auto-fit
-  // (the disc becomes the widest axis, so the real prop scales down to fit it). Falls back to the
-  // blockout until re-rolled. Two of five came back this way: the preview gate is not optional.
+  // Re-rolled: the first pass baked a terrain disc underneath despite a "no ground plane" prompt.
+  // What actually worked was naming every form of it — "isolated object floating on empty
+  // background, no ground, no terrain, no base plate, no diorama". Two of five came back with a
+  // disc, so this belongs in every prop prompt from here on.
+  farm_planter: { url: '/models/props/farm_planter.glb' },
 }
 
 export const hasPropModel = (id: string) => id in PROP_MODELS
