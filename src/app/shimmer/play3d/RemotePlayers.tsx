@@ -5,18 +5,18 @@
 // bodies on purpose: this proves presence works. Real character models are a separate job and
 // need a rig, which is the expensive part (see the Meshy notes — static props are cheap,
 // animated characters are not).
-import { useRef, useMemo, useState, useEffect, Suspense, Component, type ReactNode } from 'react'
+import { useRef, useMemo, useState, useEffect } from 'react'
 import { useFrame } from '@react-three/fiber'
-import { Html, useGLTF, useAnimations } from '@react-three/drei'
+import { Html } from '@react-three/drei'
 import * as THREE from 'three'
-import { SkeletonUtils } from 'three-stdlib'
 import { type RemotePlayer } from './multiplayer'
 
-// Rigged avatar (Meshy auto-rig pipeline). One shared GLB; every remote player gets a
-// SkeletonUtils.clone — a plain .clone() breaks skinned meshes (bones don't rebind).
-// Contains the walk clip; idle = clip paused at rest. Draco decoder is vendored (see prop-models).
-const AVATAR_URL = '/models/avatars/traveler.glb'
-const AVATAR_HEIGHT = 1.55  // world units — a touch under the 1.6 camera eye
+// AVATARS ARE CAPSULES ON PURPOSE (Alex, 2026-07-23). A Meshy text-to-3d character was
+// generated, rigged and shipped — the RIG PIPELINE works (see 713b83b / meshy.py --rig:
+// 9k tris, 22 joints, in-place walk clip, 5 credits, 12s) but the generated LOOK failed
+// on sight. Verdict: player/NPC/spirit models wait for Alex's character art through
+// image-to-3d + rig; Meshy-from-text stays for ITEMS/props only. Don't re-attempt
+// characters from a text prompt.
 
 // Positions arrive ~12x/sec; at 60fps that's a fresh target every 5th frame. Chasing the target
 // with an exponential ease hides the gap without adding visible latency at walking speed.
@@ -30,9 +30,8 @@ const LERP = 9
 // removes clean disconnects instantly.
 const STALE_MS = 90_000
 
-// The pre-rig blockout — also the Suspense/error fallback, so a missing/broken avatar GLB
-// degrades to the proven capsule instead of an invisible player.
-function CapsuleBody({ peer, bob }: { peer: RemotePlayer; bob: boolean }) {
+function Avatar({ peer }: { peer: RemotePlayer }) {
+  const grp = useRef<THREE.Group>(null)
   const inner = useRef<THREE.Group>(null)
   // one hue per player, stable across sessions — derived from the id so both clients agree
   const color = useMemo(() => {
@@ -40,76 +39,8 @@ function CapsuleBody({ peer, bob }: { peer: RemotePlayer; bob: boolean }) {
     for (let i = 0; i < peer.id.length; i++) h = (h * 31 + peer.id.charCodeAt(i)) >>> 0
     return new THREE.Color().setHSL((h % 360) / 360, 0.55, 0.6)
   }, [peer.id])
-  useFrame((state) => {
-    // gentle bob only while moving — the capsule has no walk cycle to sell motion
-    if (inner.current) inner.current.position.y = bob && peer.moving ? Math.sin(state.clock.elapsedTime * 6) * 0.04 : 0
-  })
-  return (
-    <group ref={inner}>
-      <mesh position={[0, 0.85, 0]} castShadow>
-        <capsuleGeometry args={[0.32, 0.7, 4, 10]} />
-        <meshStandardMaterial color={color} roughness={0.65} />
-      </mesh>
-      {/* facing nub, so you can tell which way another player is looking */}
-      <mesh position={[0, 0.95, 0.34]}>
-        <sphereGeometry args={[0.09, 8, 8]} />
-        <meshStandardMaterial color="#0d1a17" />
-      </mesh>
-    </group>
-  )
-}
 
-// Rigged body — the shared avatar GLB, cloned per player, walk clip driven by peer.moving.
-function RiggedBody({ peer }: { peer: RemotePlayer }) {
-  const { scene, animations } = useGLTF(AVATAR_URL, '/draco/')
-  const holder = useRef<THREE.Group>(null)
-  const { object, scale } = useMemo(() => {
-    const obj = SkeletonUtils.clone(scene)
-    obj.traverse((o) => {
-      const m = o as THREE.Mesh
-      if (m.isMesh) { m.castShadow = true; m.frustumCulled = false } // skinned bounds lie; never cull a player
-    })
-    const box = new THREE.Box3().setFromObject(scene)
-    const size = new THREE.Vector3(); box.getSize(size)
-    return { object: obj, scale: AVATAR_HEIGHT / (size.y || 1) }
-  }, [scene])
-  const { actions } = useAnimations(animations, holder)
-  const walkRef = useRef<THREE.AnimationAction | null>(null)
-  const wasMoving = useRef(false)
-  useEffect(() => {
-    const key = Object.keys(actions).find(k => /walk/i.test(k)) ?? Object.keys(actions)[0]
-    walkRef.current = key ? actions[key] : null
-    const walk = walkRef.current
-    if (walk) { walk.play(); walk.paused = true }
-  }, [actions])
-  useFrame(() => {
-    const walk = walkRef.current
-    if (!walk) return
-    if (peer.moving !== wasMoving.current) {
-      wasMoving.current = peer.moving
-      walk.paused = !peer.moving
-      if (!peer.moving) walk.time = 0  // rest at the neutral frame, not frozen mid-stride
-    }
-  })
-  return (
-    <group ref={holder} scale={[scale, scale, scale]}>
-      <primitive object={object} />
-    </group>
-  )
-}
-
-// error boundary → capsule, and it SAYS why (a silent boundary cost us a session — see prop-models)
-class AvatarBoundary extends Component<{ fallback: ReactNode; children: ReactNode }, { failed: boolean }> {
-  state = { failed: false }
-  static getDerivedStateFromError() { return { failed: true } }
-  componentDidCatch(error: Error) { console.error('[avatar] falling back to capsule:', error) }
-  render() { return this.state.failed ? this.props.fallback : this.props.children }
-}
-
-function Avatar({ peer }: { peer: RemotePlayer }) {
-  const grp = useRef<THREE.Group>(null)
-
-  useFrame((_, dt) => {
+  useFrame((state, dt) => {
     const g = grp.current
     if (!g) return
     const stale = performance.now() - peer.lastSeen > STALE_MS
@@ -125,19 +56,26 @@ function Avatar({ peer }: { peer: RemotePlayer }) {
     peer.yaw += d * k
     g.position.set(peer.x, peer.y, peer.z)
     // +π: the sender's yaw=0 means LOOKING down -Z (camera forward = (-sin yaw, -cos yaw)),
-    // but the model's front is +Z (Meshy convention — same as the props). Without the flip
-    // every avatar walks backwards, which the old capsule's tiny nub never made visible.
+    // but the body's front is authored on +Z. Found during the rigged-avatar experiment —
+    // the nub had pointed backwards since the capsule was born; keep the flip.
     g.rotation.y = peer.yaw + Math.PI
+    // gentle bob only while moving — the capsule has no walk cycle to sell motion
+    if (inner.current) inner.current.position.y = peer.moving ? Math.sin(state.clock.elapsedTime * 6) * 0.04 : 0
   })
 
-  const fallback = <CapsuleBody peer={peer} bob />
   return (
     <group ref={grp}>
-      <AvatarBoundary fallback={fallback}>
-        <Suspense fallback={fallback}>
-          <RiggedBody peer={peer} />
-        </Suspense>
-      </AvatarBoundary>
+      <group ref={inner}>
+        <mesh position={[0, 0.85, 0]} castShadow>
+          <capsuleGeometry args={[0.32, 0.7, 4, 10]} />
+          <meshStandardMaterial color={color} roughness={0.65} />
+        </mesh>
+        {/* facing nub, so you can tell which way another player is looking */}
+        <mesh position={[0, 0.95, 0.34]}>
+          <sphereGeometry args={[0.09, 8, 8]} />
+          <meshStandardMaterial color="#0d1a17" />
+        </mesh>
+      </group>
       <Html position={[0, 1.75, 0]} center distanceFactor={12} zIndexRange={[10, 0]}>
         <div style={{
           font: '700 12px ui-monospace, monospace', color: '#eafff6',

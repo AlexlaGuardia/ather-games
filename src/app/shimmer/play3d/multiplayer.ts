@@ -28,7 +28,11 @@ export interface RemotePlayer {
 
 const SEND_HZ = 12          // position updates/sec. 2D shipped 5Hz on a grid; a first-person
                             // player who slides and bhops needs more or remote motion strobes.
-const SEND_MIN_DELTA = 0.02 // don't spend a packet on standing still
+const SEND_MIN_DELTA = 0.02 // don't spend a packet on standing still...
+const KEEPALIVE_MS = 4000   // ...but never fall SILENT: peers hide who they stop hearing from.
+                            // Background tabs matter here — Chrome throttles timers to ~1/min
+                            // after a while, so the renderer's stale window must sit well above
+                            // that, not above this number (see STALE_MS in RemotePlayers).
 const ZONE_PREFIX = 'play3d:'
 
 /** Stable per-browser identity. Incognito gets its own — which is exactly how you test this. */
@@ -182,6 +186,7 @@ export function useMultiplayer(opts: {
       ws.onopen = () => {
         attempt = 0
         status.current = 'live'
+        let lastSent = 0
         sendTimer = setInterval(() => {
           const p = posRef.current
           if (!p || !ws || ws.readyState !== WebSocket.OPEN) return
@@ -190,9 +195,15 @@ export function useMultiplayer(opts: {
             || Math.abs(p.y - last.y) > SEND_MIN_DELTA
             || Math.abs(p.z - last.z) > SEND_MIN_DELTA
             || Math.abs(yaw - last.yaw) > 0.03
-          if (!moved) return
+          // KEEPALIVE: a standing player must not fall silent. Peers hide anyone they haven't
+          // heard from in STALE_MS (the only way to notice a killed tab), so before this, standing
+          // still for 12s made you INVISIBLE to everyone — "made a party, can't see each other",
+          // because making the party is exactly when both players are standing still.
+          const now = performance.now()
+          if (!moved && now - lastSent < KEEPALIVE_MS) return
+          lastSent = now
           last.x = p.x; last.y = p.y; last.z = p.z; last.yaw = yaw
-          ws.send(JSON.stringify({ type: 'move', x: p.x, y: p.y, z: p.z, yaw, moving: true }))
+          ws.send(JSON.stringify({ type: 'move', x: p.x, y: p.y, z: p.z, yaw, moving: moved }))
         }, 1000 / SEND_HZ)
       }
 
