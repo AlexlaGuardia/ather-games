@@ -15,6 +15,10 @@ def parse_args():
     ap.add_argument("--in", dest="src", required=True)
     ap.add_argument("--out", dest="dst", required=True)
     ap.add_argument("--res", type=int, default=512)
+    # 0 = look at the model from +Z, i.e. straight at whatever face points along the game's
+    # forward axis (Follower uses atan2(dx,dz), so +Z is forward at rotation 0). Use this to
+    # find a model's natural facing: front visible = yaw 0, back = pi, side = +/-pi/2.
+    ap.add_argument("--azimuth", type=float, default=None, help="degrees around Y; omit for 3/4 view")
     return ap.parse_args(argv)
 
 
@@ -45,7 +49,13 @@ def main():
     cam_data = bpy.data.cameras.new("cam")
     cam = bpy.data.objects.new("cam", cam_data)
     bpy.context.scene.collection.objects.link(cam)
-    cam.location = ctr + Vector((d * 0.72, -d * 0.72, d * 0.52))
+    if a.azimuth is None:
+        cam.location = ctr + Vector((d * 0.72, -d * 0.72, d * 0.52))
+    else:
+        # glTF +Z (the game's forward) is Blender's -Y after import, so azimuth 0 parks the
+        # camera on -Y looking back at the model — dead-on at its game-forward face.
+        th = math.radians(a.azimuth)
+        cam.location = ctr + Vector((d * math.sin(th), -d * math.cos(th), d * 0.22))
     dirv = (ctr - cam.location).normalized()
     cam.rotation_euler = dirv.to_track_quat("-Z", "Y").to_euler()
     bpy.context.scene.camera = cam
