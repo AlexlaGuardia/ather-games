@@ -50,25 +50,16 @@ const MYCELIAL_PATH_NODES: NodePlacement[] = [
 
 // Moonwell Glade — deeper zone, level 4-7 nodes
 const MOONWELL_GLADE_NODES: NodePlacement[] = [
-  // Deep water (Rinning lv7) — the moonkoi swim the moonwell. Before these, the `lake` node
-  // type existed but was placed NOWHERE: moonkoi/pearlshell/crystal_rinn were Exchange-buy
-  // only, walling the T3 rinstick + deep_essence/dawn_cordial off from honest gathering.
-  { type: 'lake' as NodeType, tileX: 19, tileY: 14 },
-  { type: 'lake' as NodeType, tileX: 16, tileY: 13 },
-  { type: 'shimmeroak' as NodeType, tileX: 5, tileY: 10 },
   { type: 'starwillow' as NodeType, tileX: 12, tileY: 18 },
-  { type: 'shimmeroak' as NodeType, tileX: 5, tileY: 12 },
   { type: 'small_pond' as NodeType, tileX: 17, tileY: 8 },
-  { type: 'small_pond' as NodeType, tileX: 20, tileY: 12 },
   { type: 'small_pond' as NodeType, tileX: 21, tileY: 15 },
-  { type: 'small_pond' as NodeType, tileX: 17, tileY: 20 },
-  { type: 'small_pond' as NodeType, tileX: 15, tileY: 19 },
   { type: 'small_pond' as NodeType, tileX: 24, tileY: 5 },
   { type: 'small_pond' as NodeType, tileX: 10, tileY: 6 },
-  { type: 'small_pond' as NodeType, tileX: 24, tileY: 25 },
-  { type: 'raw_mana_node' as NodeType, tileX: 16, tileY: 11 },
   { type: 'raw_mana_node' as NodeType, tileX: 17, tileY: 10 },
   { type: 'raw_mana_node' as NodeType, tileX: 18, tileY: 12 },
+  { type: 'shimmeroak' as NodeType, tileX: 3, tileY: 17 },
+  { type: 'shimmeroak' as NodeType, tileX: 3, tileY: 21 },
+  { type: 'stream' as NodeType, tileX: 32, tileY: 44 },
 ]
 
 // Spore Hollow — end zone, level 7-10 nodes
@@ -148,10 +139,29 @@ const THE_THRESHOLD_NODES: NodePlacement[] = [
 
 // Moonwell Pass — the route out of the glade; a starter Shimmeroak grove (Alex can move these in-editor)
 const ROUTE_MOONWELL_GARDEN_NODES: NodePlacement[] = [
-  { type: 'shimmeroak' as NodeType, tileX: 7, tileY: 5 },
-  { type: 'shimmeroak' as NodeType, tileX: 11, tileY: 5 },
-  { type: 'shimmeroak' as NodeType, tileX: 15, tileY: 5 },
-  { type: 'shimmeroak' as NodeType, tileX: 19, tileY: 5 },
+  { type: 'small_pond' as NodeType, tileX: 16, tileY: 21 },
+]
+
+const CRUCIBLE_NODES: NodePlacement[] = [
+
+]
+
+export const ZONE_NODES: Record<string, NodePlacement[]> = {
+  'crucible': CRUCIBLE_NODES,
+  garden: GARDEN_NODES,
+  'mycelial-path': MYCELIAL_PATH_NODES,
+  'moonwell-glade': MOONWELL_GLADE_NODES,
+  'route-moonwell-garden': ROUTE_MOONWELL_GARDEN_NODES,
+  'spore-hollow': SPORE_HOLLOW_NODES,
+  'twilight-thicket': TWILIGHT_THICKET_NODES,
+  'the-threshold': THE_THRESHOLD_NODES,
+  'mana-springs': MANA_SPRINGS_NODES,
+  'spirit-meadow': SPIRIT_MEADOW_NODES,
+  'moonwell-glade-gregory-s-home': [],
+  'test-sandbox': [],
+}
+ = [
+  { type: 'small_pond' as NodeType, tileX: 16, tileY: 21 },
 ]
 
 const CRUCIBLE_NODES: NodePlacement[] = [
