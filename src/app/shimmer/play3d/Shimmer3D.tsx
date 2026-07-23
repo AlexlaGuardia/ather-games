@@ -15,6 +15,7 @@ import { ZONES, getZone, checkWarp, type Zone, type Warp } from '../world/zones'
 import { getHeightGrid } from '../world/heightmaps'
 import { GardenAtmosphere } from '../world/atmosphere'
 import { FloraTree, FloraDressing } from '../world/flora'
+import { StationProp } from '../world/prop-models'
 import { rollEncounter, HOLD_LEVELS, type WildEncounter } from '../engine/encounters'
 import { derivePartyStats, type PartyStats } from '../engine/party-stats'
 import { getMovesForSpirit } from '../engine/moves'
@@ -458,8 +459,8 @@ const StructureMarkers = memo(function StructureMarkers({ structures, heights }:
         const y = (heights[s.tileY]?.[s.tileX] ?? 0) * STEP
         return (
           <group key={`${s.itemId}-${s.tileX}-${s.tileY}-${i}`} position={[s.tileX, y, s.tileY]} rotation={[0, -s.facing * Math.PI / 180, 0]}>
-            <mesh position={[0, def.h / 2 + 0.05, 0]} castShadow><boxGeometry args={[0.82, def.h, 0.82]} /><meshStandardMaterial color={def.color} roughness={0.7} /></mesh>
-            <mesh position={[0, def.h + 0.12, 0]}><boxGeometry args={[0.5, 0.12, 0.5]} /><meshStandardMaterial color={def.accent} emissive={def.accent} emissiveIntensity={0.35} /></mesh>
+            {/* real mesh where we have one; falls back to the old body+cap blockout otherwise */}
+            <StationProp id={s.itemId} def={def} />
             <mesh position={[0.35, def.h * 0.6, 0]}><sphereGeometry args={[0.08, 8, 8]} /><meshBasicMaterial color="#ffffff" /></mesh>
           </group>
         )
