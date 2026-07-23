@@ -85,8 +85,11 @@ export function useMultiplayer(opts: {
   const status = useRef<'off' | 'connecting' | 'live' | 'error'>('off')
 
   useEffect(() => {
+    // TEMP diagnostic — remove once presence is confirmed connecting.
+    console.log('[mp] effect', { enabled, zoneId })
     if (!enabled || !zoneId) return
     const url = wsUrl(zoneId)
+    console.log('[mp] url', url)
     if (!url) return
     selfId.current = identity().id
 

@@ -96,6 +96,13 @@ export function MultiplayerLayer({ zoneId, posRef, yawRef, enabled = true }: {
   yawRef: React.RefObject<number>
   enabled?: boolean
 }) {
+  // TEMP diagnostic — presence is not connecting and the module is provably in the loaded
+  // chunk, so prove whether this component actually renders. Remove once resolved.
+  if (typeof window !== 'undefined') {
+    const w = window as unknown as Record<string, unknown>
+    w.__mpRender = ((w.__mpRender as number) ?? 0) + 1
+    w.__mpArgs = { zoneId, enabled, hasPos: !!posRef?.current }
+  }
   const { peers } = useMultiplayer({ enabled, zoneId, posRef, yawRef })
   return <RemotePlayers peers={peers} />
 }
