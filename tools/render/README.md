@@ -22,3 +22,26 @@ Writes frames to a scratch dir; pack into a strip with Pillow, e.g.:
 - Wire the game's draw fn to blit the frame, and KEEP the procedural draw as a fallback.
 
 First target shipped: `voidspawn.py` → `public/vault/foe-void.png` (Vault foe).
+
+## Meshy.ai — AI mesh generation (front end of the modeling step)
+
+`meshy.py` generates the *mesh* from a text prompt or a reference image, so a render
+script imports a ready GLB instead of hand-authoring geometry in bpy. The rest of the
+lane (light → ortho camera → render → sprite strip) is unchanged.
+
+    # outside Blender — create + poll + download a GLB (stdlib only, key in ../../.env):
+    python3 tools/render/meshy.py --balance
+    python3 tools/render/meshy.py --text "a weathered dead-grey stone lantern" --out /tmp/meshy/lantern.glb
+    python3 tools/render/meshy.py --image ref.png --out /tmp/meshy/prop.glb --polycount 20000 --topology quad
+
+    # inside a render script — drop the GLB into the scene, then light + render as usual:
+    from meshy_import import import_glb
+    obj = import_glb("/tmp/meshy/lantern.glb", fit_size=2.0)
+
+**Guardrails (baked into the file headers):**
+- **Art-medium law:** dead-grey props / arcade code-built assets ONLY. Living Shimmer
+  things (spirits) stay Alex's hand-drawn pixel art — never route them through Meshy.
+- **Canon:** lock the design-brief first (`athernyx/CANON/design-briefs/`). Meshy
+  generates *inside* the brief; you critique the render against it. It never invents a look.
+- Key `MESHY_API_KEY` lives in `ather-games/.env` (gitignored). Text-to-3D = preview
+  (geometry) then optional `--refine` (texture). Image-to-3D is one shot.
