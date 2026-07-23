@@ -482,10 +482,22 @@ the Arcade frame.
 > party BF63W, roster switched instances correctly, headless FriendBot joined the code and appeared.
 > **Known wrinkle (deliberate):** two tabs in one browser share player_id → second connection
 > shadows the first server-side. Fix belongs to server-trusted identity, later.
-> **Next:** Alex two-device test (phone + desktop = different identities) · real avatar models
-> (blockout capsule + name tag today; rigs are the expensive part) · join/leave toasts · then the
-> friends-list question IF codes prove insufficient — needs server-side identity + storage first
-> (trade/party-sync/chat same gate, per multiplayer.ts SCOPE note).
+> **Two-device test PASSED 2026-07-23** (desktop + phone, party code, mutual visibility) after the
+> keepalive fix: clients only spoke when MOVING and peers hid after 12s silence, so two players who
+> stood still making the party were invisible to each other. Keepalive 4s + STALE_MS 90s (survives
+> background-tab timer throttling).
+> **RIGGED AVATARS: BUILT, SHIPPED, ROLLED BACK SAME DAY (713b83b → f3393e8, Alex on sight).** The
+> Meshy auto-rig PIPELINE is proven and kept (meshy.py --rig: decimate-first → rig via data-URI →
+> 22 joints + in-place walk/run clips, 5 credits, 12s) — the text-to-3d generated LOOK is what
+> failed. **RULING: player/NPC/SPIRIT models wait for Alex's character art (image-to-3d + rig);
+> Meshy text-to-3d = ITEMS/props only. Don't re-attempt characters from a text prompt.** Kept from
+> the experiment: yaw+π facing fix (avatars had faced backwards since the capsule was born — nub
+> too small to show it) and the verified no-root-motion check pattern (bounded hip ranges = in-place
+> clip = no network-position drift).
+> **Next:** items lane via the proven pipeline (first-person TOOL VIEWMODELS — axe/pickaxe/rod in
+> hand — are the highest-visibility 'items' and answer the no-hands feel) · join/leave toasts ·
+> friends-list question only IF codes prove insufficient — needs server-side identity + storage
+> first (trade/party-sync/chat same gate, per multiplayer.ts SCOPE note).
 > **Files:** `play3d/multiplayer.ts` (hook + protocol + party/name helpers) · `play3d/RemotePlayers.tsx`
 > (avatars + useRoster) · `Shimmer3D.tsx` (PlayTogetherPanel + hook in page comp) · server
 > `/root/shimmer-server/main.py` (party routing).
