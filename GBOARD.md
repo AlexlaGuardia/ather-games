@@ -339,6 +339,43 @@ the Arcade frame.
 >   gregory/, no GLB — salvageable if ever wanted). Don't start character/art workstreams — the north star above is
 >   for STEERING (what not to over-invest in), not a build queue. Current lane stays mechanics + map layouts.
 
+## 🎛️ Shimmer play3d — GRAPHICS QUALITY / GPU BUDGET (SHIPPED 2026-07-23, jin-cc) · *Last touched 2026-07-23*
+> **Left off:** quality panel live on `:3200` (`0998a65`). Alex reported lag spikes in-game **and** in his terminal;
+> root cause measured, not guessed — the client box's **Intel UHD 630 pegged at 96-98%** on its 3D engine. Everything
+> else was clean: server load 0.17/5GB free, WSL idle (0.00, 11GB of 12), Windows host 8.3GB of 15.8GB free, Chrome
+> ~0.76 of 12 cores, tailnet 15ms/0.665ms on resample. **Windows composites the desktop on that same GPU — that is
+> why one bug wore two faces (game stutter + laggy terminal).**
+> - **Why the scene is over budget:** MSAA + a **2048² shadow map re-rendered every frame across 14 castShadow
+>   sites**. On an integrated GPU those are the expensive pair, because it shares system RAM bandwidth instead of
+>   having its own. Multiplayer didn't break it — per-peer shadow-casting capsules + a drei `<Html>` nametag per peer
+>   pushed an already-marginal frame budget over the line, which is why Alex read it as "started after multiplayer".
+> - **Next:** Alex A/Bs on the elitedesk and rules on **MSAA off + shadows Soft**. Watch **worst-frame, not fps.**
+>   If hitching survives that, next levers in order: per-peer `<Html>` nametags → peer `castShadow` → shadow-camera
+>   range (currently ±40).
+> - **Parked (separate real bug, not the GPU):** `persist()` (`Shimmer3D.tsx:2241`, on a 30s timer at `:2394`) is
+>   **fully synchronous despite the `async`** — `use-cloud-save.ts` is localStorage-backed, so it does `getItem` →
+>   `JSON.parse` → rebuild the whole save → `JSON.stringify` → `setItem` **on the render thread**. That is a hitch
+>   every 30s independent of everything above.
+> - **Decisions:** ▸ **A panel, not a tune.** Cutting MSAA/shadows is a LOOK trade and look calls are Alex's, so the
+>   toggles ship beside a live readout and he rules from what he sees — not from my description of jaggies.
+>   **Defaults reproduce the shipped look exactly**, making it a comparison instrument, never a silent downgrade.
+>   ▸ **Worst-frame + hitches/sec get equal billing with fps** — a scene can average a healthy 55fps and still
+>   stutter; one 180ms frame is the complaint and a 1s average smears it away. ▸ **Draw distance / chunk streaming /
+>   fog deliberately untouched** — Alex asked directly whether range would change; it does not. That lever changes
+>   what the world generates and is a different conversation. ▸ **dprCeiling() caps R3F's `[1,2]` default at 1.5 but
+>   is NOT the desktop fix** — that display runs 100% scaling so `devicePixelRatio` is already 1.0; it protects the
+>   phone. ▸ Settings load through an **allowlist**, so an unknown stored value falls back to the shipped look
+>   instead of reading as `off`.
+> - **Gotchas worth keeping:** `antialias` is a **WebGL context flag** and `shadowMap.enabled` needs every shader
+>   recompiled → a quality change **remounts the Canvas** (`key={gfxKey(gfx)}`). Safe only because `posRef`/`camYaw`
+>   live in the page component behind an `if (!posRef.current)` guard, so the player keeps their spot; pointer lock
+>   does drop with the old canvas element. A `shadow-mapSize` prop **does not resize a map three.js already
+>   allocated** — the light is keyed on the size to force reallocation. `PerformanceMonitor` uses `flipflops={3}`
+>   settling at the floor, because a borderline GPU that **ping-pongs resolution reads worse than one running soft**.
+> - **Files:** `play3d/gfx.ts` (new — settings, localStorage, `gfxKey`, dpr ceiling/floor) · `play3d/GfxPanel.tsx`
+>   (new — in-Canvas `FrameProbe` + DOM panel) · `play3d/Shimmer3D.tsx` (Canvas key/dpr/shadows, keyed
+>   directionalLight, HUD ⚙ button).
+
 ## 🗺️ Shimmer play3d — THE CONTINENT / REALM MODEL (SHIPPED 2026-07-22, jin-cc)
 > **The Shimmer Garden is ONE open map now** — RS-style feel, Apex-style tech (Alex ruled it after the RS/Apex
 > comparison talk). Live on :3200: 14 surface zones composed into a **456×304 continent** (`world/garden-world.ts`),
