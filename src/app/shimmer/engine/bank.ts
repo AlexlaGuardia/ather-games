@@ -19,6 +19,7 @@
 
 import { ITEMS } from '../sprites/items'
 import { FURNITURE } from '../sprites/furniture'
+import { removeItems } from './inventory'
 import type { Inventory } from './inventory'
 
 /** Capacity each placed chest contributes. Tiered so upgrading a chest still means something —
@@ -121,6 +122,40 @@ export function availableCount(inv: Inventory, bank: BankState | null, itemId: s
   let n = 0
   for (const s of inv.slots) if (s?.itemId === itemId) n += s.count
   return n + (bank ? bankCount(bank, itemId) : 0)
+}
+
+/** A recipe requirement — every consuming action (craft/brew/tool/repair) speaks this shape. */
+export type Requirement = { itemId: string; count: number }
+
+/** Can every requirement be met from satchel + bank combined? Pass bank=null in the Crucible. */
+export function canAfford(inv: Inventory, bank: BankState | null, recipe: Requirement[]): boolean {
+  return recipe.every(r => availableCount(inv, bank, r.itemId) >= r.count)
+}
+
+/**
+ * Consume a recipe's materials: INVENTORY FIRST, then the bank for any shortfall (Alex's rule —
+ * crafted output lands in the satchel, so spending the satchel first keeps a material's whole
+ * lifecycle in one place and leaves the bank as the deep reserve). Returns false and touches
+ * NOTHING if the full recipe cannot be paid — callers rely on this being all-or-nothing so a
+ * failed craft never half-eats a player's materials.
+ *
+ * bank=null models the Crucible (satchel only), where this degrades to plain inventory removal.
+ */
+export function spendMaterials(inv: Inventory, bank: BankState | null, recipe: Requirement[]): boolean {
+  if (!canAfford(inv, bank, recipe)) return false
+  for (const r of recipe) {
+    const fromSatchel = Math.min(countInventory(inv, r.itemId), r.count)
+    if (fromSatchel > 0) removeItems(inv, r.itemId, fromSatchel)
+    const remainder = r.count - fromSatchel
+    if (remainder > 0 && bank) bankWithdraw(bank, r.itemId, remainder)
+  }
+  return true
+}
+
+function countInventory(inv: Inventory, itemId: string): number {
+  let n = 0
+  for (const s of inv.slots) if (s?.itemId === itemId) n += s.count
+  return n
 }
 
 /**

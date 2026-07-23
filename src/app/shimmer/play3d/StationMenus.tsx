@@ -14,6 +14,8 @@ import { potionEffectLine } from '../engine/potion-effects'
 import { canCraft, getRecipes } from '../engine/crafting'
 import { TOOL_DEFS, canCraft as canCraftTool, wornFraction, repairCost, canRepair, type EquippedTools } from '../engine/tools'
 import { countItem, type Inventory, type ChestStorage } from '../engine/inventory'
+import { bankUsed, bankCount, CHEST_CAPACITY, type BankState } from '../engine/bank'
+import { ITEMS } from '../sprites/items'
 import { getMarketPrice, GE_ITEM_IDS, TAX_RATE, type GEMarketState } from '../engine/exchange'
 import { CROP_DEFS, canPlantCrop, getCropGrowthPhase, isCropReady, getVisibleCrops, type PlantedCrop } from '../engine/farming'
 import type { SkillSet, SkillId } from '../engine/skills'
@@ -48,6 +50,14 @@ export interface StationMenusProps {
   craft: (recipeId: string) => void
   craftToolAction: (toolId: string) => void
   repairToolAction: (skillId: SkillId) => void
+  // ── Garden Bank — the pooled material store (replaces per-chest storage). The chest panel is now
+  // this bank's deposit/withdraw view; craftability checks count satchel+bank together.
+  bankRef: React.RefObject<BankState>
+  bankTick: number                 // bump to re-render after a deposit/withdraw
+  bankCapacityNow: () => number
+  bankDepositSlot: (slotIdx: number) => void      // deposit one satchel stack
+  bankDepositAllMaterials: () => void             // the anti-Tetris button: dump every material at once
+  bankWithdrawItem: (itemId: string, qty: number) => void
   getChest: (struct: PlacedStruct) => ChestStorage
   transferChestSlot: (struct: PlacedStruct, idx: number, toChest: boolean) => void
   tradeSell: (itemId: string, qty: number) => void
@@ -59,13 +69,15 @@ export interface StationMenusProps {
 const sub = (color: string, children: React.ReactNode) => (
   <div style={{ font: '600 10px ui-monospace, monospace', color, marginBottom: 12 }}>{children}</div>
 )
-/** A recipe's ingredient chips — green when you have enough, red when short. */
-function Reagents({ recipe, inv, okColor, okBorder }: {
-  recipe: { itemId: string; count: number }[]; inv: Inventory; okColor: string; okBorder: string
+/** A recipe's ingredient chips — green when you have enough, red when short. `have` counts the
+ *  satchel AND the bank, so the chips agree with the (bank-aware) craft button instead of showing
+ *  red while the button is green. */
+function Reagents({ recipe, inv, bank, okColor, okBorder }: {
+  recipe: { itemId: string; count: number }[]; inv: Inventory; bank: BankState; okColor: string; okBorder: string
 }) {
   return <>
     {recipe.map(r => {
-      const have = countItem(inv, r.itemId)
+      const have = countItem(inv, r.itemId) + bankCount(bank, r.itemId)
       const short = have < r.count
       return (
         <span key={r.itemId} style={{ font: '700 10px ui-monospace, monospace', color: short ? '#ff8a7a' : okColor, background: '#0007', border: `1px solid ${short ? '#ff5a4d55' : okBorder}`, borderRadius: 6, padding: '2px 7px' }}>
@@ -89,7 +101,7 @@ export function StationMenus(p: StationMenusProps) {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
           {getVisiblePotions(alch).map(def => {
             const locked = alch < def.minAlchemyLevel
-            const ok = !locked && canBrew(def.id, p.invRef.current, alch, p.manaRef.current)
+            const ok = !locked && canBrew(def.id, p.invRef.current, alch, p.manaRef.current, p.bankRef.current)
             return (
               <div key={def.id} style={{ background: '#1c1730', border: '1px solid #ffffff14', borderRadius: 10, padding: '9px 11px', opacity: locked ? 0.5 : 1 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
@@ -101,7 +113,7 @@ export function StationMenus(p: StationMenusProps) {
                   <div style={{ font: '600 10px ui-monospace, monospace', color: '#8fd9c4', marginTop: 3 }}>{potionEffectLine(def.id)}</div>
                 )}
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 6, alignItems: 'center' }}>
-                  <Reagents recipe={def.recipe} inv={p.invRef.current} okColor="#9fd9c4" okBorder="#2f5c4f" />
+                  <Reagents recipe={def.recipe} inv={p.invRef.current} bank={p.bankRef.current} okColor="#9fd9c4" okBorder="#2f5c4f" />
                   <span style={{ flex: 1 }} />
                   <button onClick={() => p.brew(def.id)} disabled={!ok} style={{ padding: '6px 14px', borderRadius: 8, border: 'none', background: ok ? '#7a4fc0' : '#2a2540', color: ok ? '#fff' : '#ffffff55', font: '800 12px ui-monospace, monospace', cursor: ok ? 'pointer' : 'default', touchAction: 'none' }}>Brew{def.resultCount > 1 ? ` ×${def.resultCount}` : ''}</button>
                 </div>
@@ -123,7 +135,7 @@ export function StationMenus(p: StationMenusProps) {
         onClose={p.closeStation} subtitle={sub('#b09660', 'Build stations from gathered materials')}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
           {getRecipes().map(def => {
-            const ok = canCraft(def.id, p.invRef.current, p.manaRef.current)
+            const ok = canCraft(def.id, p.invRef.current, p.manaRef.current, p.bankRef.current)
             return (
               <div key={def.id} style={{ background: '#241b09', border: '1px solid #ffffff14', borderRadius: 10, padding: '9px 11px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
@@ -131,7 +143,7 @@ export function StationMenus(p: StationMenusProps) {
                   <span style={{ font: '700 10px ui-monospace, monospace', color: '#b09660' }}>{def.manaCost}◈</span>
                 </div>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 6, alignItems: 'center' }}>
-                  <Reagents recipe={def.recipe} inv={p.invRef.current} okColor="#d9c78a" okBorder="#5c4f2f" />
+                  <Reagents recipe={def.recipe} inv={p.invRef.current} bank={p.bankRef.current} okColor="#d9c78a" okBorder="#5c4f2f" />
                   <span style={{ flex: 1 }} />
                   <button onClick={() => p.craft(def.id)} disabled={!ok} style={{ padding: '6px 14px', borderRadius: 8, border: 'none', background: ok ? '#b0862a' : '#3a3018', color: ok ? '#fff' : '#ffffff55', font: '800 12px ui-monospace, monospace', cursor: ok ? 'pointer' : 'default', touchAction: 'none' }}>Craft{def.resultCount > 1 ? ` ×${def.resultCount}` : ''}</button>
                 </div>
@@ -147,7 +159,7 @@ export function StationMenus(p: StationMenusProps) {
         <div style={{ font: '600 10px ui-monospace, monospace', color: '#b09660', marginBottom: 10 }}>Sharper than Greg&apos;s basics — but they wear out</div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
           {craftableTools.map(def => {
-            const ok = canCraftTool(def.id, p.invRef.current)
+            const ok = canCraftTool(def.id, p.invRef.current, p.bankRef.current)
             const eq = p.equippedToolsRef.current[def.skillId]
             const equipped = eq?.toolId === def.id
             return (
@@ -166,7 +178,7 @@ export function StationMenus(p: StationMenusProps) {
                   const frac = Math.max(0, eq.usesRemaining / def.durability)
                   const worn = wornFraction(eq)
                   const rep = repairCost(eq)
-                  const repOk = canRepair(eq, p.invRef.current)
+                  const repOk = canRepair(eq, p.invRef.current, p.bankRef.current)
                   const barCol = frac > 0.5 ? 'linear-gradient(90deg,#6fd08f,#a7e07f)' : frac > 0.25 ? 'linear-gradient(90deg,#e0c060,#e0a860)' : 'linear-gradient(90deg,#e0806a,#e05a4d)'
                   return (
                     <div style={{ marginTop: 8 }}>
@@ -179,7 +191,7 @@ export function StationMenus(p: StationMenusProps) {
                       {worn >= 0.25 ? (
                         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 7, alignItems: 'center' }}>
                           <span style={{ font: '700 9px ui-monospace, monospace', color: '#b09660' }}>repair:</span>
-                          <Reagents recipe={rep} inv={p.invRef.current} okColor="#d9c78a" okBorder="#5c4f2f" />
+                          <Reagents recipe={rep} inv={p.invRef.current} bank={p.bankRef.current} okColor="#d9c78a" okBorder="#5c4f2f" />
                           <span style={{ flex: 1 }} />
                           <button onClick={() => p.repairToolAction(def.skillId)} disabled={!repOk} style={{ padding: '6px 14px', borderRadius: 8, border: 'none', background: repOk ? '#3a7a52' : '#243a2f', color: repOk ? '#eafff4' : '#ffffff55', font: '800 12px ui-monospace, monospace', cursor: repOk ? 'pointer' : 'default', touchAction: 'none' }}>Repair</button>
                         </div>
@@ -190,7 +202,7 @@ export function StationMenus(p: StationMenusProps) {
                   )
                 })() : (
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 6, alignItems: 'center' }}>
-                    <Reagents recipe={def.recipe} inv={p.invRef.current} okColor="#d9c78a" okBorder="#5c4f2f" />
+                    <Reagents recipe={def.recipe} inv={p.invRef.current} bank={p.bankRef.current} okColor="#d9c78a" okBorder="#5c4f2f" />
                     <span style={{ flex: 1 }} />
                     <button onClick={() => p.craftToolAction(def.id)} disabled={!ok} style={{ padding: '6px 14px', borderRadius: 8, border: 'none', background: ok ? '#b0862a' : '#3a3018', color: ok ? '#fff' : '#ffffff55', font: '800 12px ui-monospace, monospace', cursor: ok ? 'pointer' : 'default', touchAction: 'none' }}>Craft</button>
                   </div>
@@ -204,17 +216,67 @@ export function StationMenus(p: StationMenusProps) {
     )
   }
 
-  // ── CHEST ─── tap a slot to move that stack (chest ⇄ satchel); no drag needed ───────────────
+  // ── GARDEN BANK ─── every chest opens the SAME pooled store (engine/bank.ts). Deposit gathered
+  // materials once, and every station on your land crafts straight from the pool — no ferrying.
   if (kind === 'chest') {
-    void p.chestsTick // subscribe: re-render this menu after a transfer bumps the tick
-    const chest = p.getChest(struct)
+    void p.bankTick // subscribe: re-render after a deposit/withdraw
+    const bank = p.bankRef.current
+    const cap = p.bankCapacityNow()
+    const used = bankUsed(bank)
+    const frac = cap > 0 ? Math.min(1, used / cap) : 0
+    const over = used > cap    // a migrated hoard can start above cap — show it honestly, block deposits
+    // Banked contents, richest first. Only resources are bankable, so this is always craft materials.
+    const banked = Object.entries(bank.items).filter(([, n]) => n > 0).sort((a, b) => b[1] - a[1])
+    // Which satchel stacks are depositable (resources only — tools/potions/seeds/furniture stay in hand).
+    const RESOURCE = new Set(ITEMS.filter(i => i.type === 'resource').map(i => i.id))
+    const hasDepositable = p.invRef.current.slots.some(s => s && RESOURCE.has(s.itemId))
+    const barColor = over ? '#e0685f' : frac > 0.9 ? '#e0a85f' : '#6ad0a0'
     return (
-      <StationShell accent="#c9a86a" border="#6b5220" bg="#171205" title="📦 CHEST"
-        onClose={p.closeStation} subtitle={sub('#b09660', 'Tap an item to move it — chest ⇄ satchel')}>
-        <div style={{ font: '800 11px ui-monospace, monospace', color: '#d9c78a', marginBottom: 6 }}>CHEST ({chest.slots.filter(Boolean).length}/{chest.slots.length})</div>
-        <SlotGrid slots={chest.slots} onTap={(i) => p.transferChestSlot(struct, i, false)} accent="#c9a86a" />
-        <div style={{ font: '800 11px ui-monospace, monospace', color: '#d9c78a', margin: '14px 0 6px' }}>SATCHEL</div>
-        <SlotGrid slots={p.invRef.current.slots} onTap={(i) => p.transferChestSlot(struct, i, true)} accent="#7fd0e6" />
+      <StationShell accent="#c9a86a" border="#6b5220" bg="#171205" title="🏦 GARDEN BANK"
+        onClose={p.closeStation} subtitle={sub('#b09660', 'Shared across every chest on your land · stations craft straight from here')}>
+        {/* capacity meter */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 4 }}>
+          <span style={{ font: '800 11px ui-monospace, monospace', color: '#d9c78a' }}>MATERIALS</span>
+          <span style={{ font: '800 12px ui-monospace, monospace', fontVariantNumeric: 'tabular-nums', color: over ? '#ff9d7a' : '#eafff6' }}>
+            {used.toLocaleString()} / {cap.toLocaleString()}
+          </span>
+        </div>
+        <div style={{ height: 7, background: '#0008', borderRadius: 4, overflow: 'hidden', border: '1px solid #0006' }}>
+          <div style={{ height: '100%', width: `${Math.round(frac * 100)}%`, background: barColor, transition: 'width 0.2s' }} />
+        </div>
+        <div style={{ font: '600 9px/1.4 ui-monospace, monospace', color: over ? '#e0a85f' : '#7d6a3e', marginTop: 5 }}>
+          {over
+            ? 'Over capacity from your old chests — nothing lost. Craft it down or place another chest to raise the cap.'
+            : `Each placed chest raises the cap (wooden +${CHEST_CAPACITY.chest}, iron +${CHEST_CAPACITY.iron_chest}, ornate +${CHEST_CAPACITY.ornate_chest}).`}
+        </div>
+
+        {/* one-tap deposit — the anti-Tetris payoff */}
+        <button
+          onClick={p.bankDepositAllMaterials}
+          disabled={!hasDepositable || (over)}
+          style={{ ...menuBtn, width: '100%', textAlign: 'center', marginTop: 10,
+            background: hasDepositable && !over ? '#1c3a2c' : '#161410',
+            color: hasDepositable && !over ? '#bfe0c8' : '#ffffff44', cursor: hasDepositable && !over ? 'pointer' : 'default' }}>
+          ⤓ Deposit all materials
+        </button>
+
+        {/* banked contents */}
+        <div style={{ font: '800 11px ui-monospace, monospace', color: '#d9c78a', margin: '14px 0 6px' }}>BANKED</div>
+        {banked.length === 0 && <div style={{ font: '600 11px ui-monospace, monospace', color: '#7d6a3e' }}>Empty — deposit materials to start the pool.</div>}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 190, overflowY: 'auto' }}>
+          {banked.map(([id, n]) => (
+            <div key={id} style={{ display: 'flex', alignItems: 'center', gap: 8, background: '#1a1608', border: '1px solid #ffffff14', borderRadius: 9, padding: '6px 10px' }}>
+              <span style={{ flex: 1, font: '700 12px ui-monospace, monospace', color: '#eafff6' }}>{prettyItem(id)}</span>
+              <span style={{ font: '800 11px ui-monospace, monospace', fontVariantNumeric: 'tabular-nums', color: '#d9c78a' }}>{n.toLocaleString()}</span>
+              <button onClick={() => p.bankWithdrawItem(id, 1)} style={{ padding: '4px 9px', borderRadius: 7, border: '1px solid #ffffff22', background: '#2a2410', color: '#eadcb0', font: '800 11px ui-monospace, monospace', cursor: 'pointer', touchAction: 'none' }}>−1</button>
+              {n > 1 && <button onClick={() => p.bankWithdrawItem(id, n)} style={{ padding: '4px 9px', borderRadius: 7, border: '1px solid #ffffff22', background: '#241f0d', color: '#eadcb0', font: '800 11px ui-monospace, monospace', cursor: 'pointer', touchAction: 'none' }}>All</button>}
+            </div>
+          ))}
+        </div>
+
+        {/* satchel — tap a material stack to deposit it */}
+        <div style={{ font: '800 11px ui-monospace, monospace', color: '#d9c78a', margin: '14px 0 6px' }}>SATCHEL <span style={{ font: '600 9px ui-monospace, monospace', color: '#7d6a3e' }}>· tap a material to deposit</span></div>
+        <SlotGrid slots={p.invRef.current.slots} onTap={(i) => p.bankDepositSlot(i)} accent="#7fd0e6" />
       </StationShell>
     )
   }

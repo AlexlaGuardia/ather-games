@@ -9,6 +9,7 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import { StationMenus, type PlacedStruct, type StationKind } from './StationMenus'
 import { createSkillSet } from '../engine/skills'
 import { createInventory, addItems, createChestStorage } from '../engine/inventory'
+import { createBank } from '../engine/bank'
 import { createManaPool } from '../engine/mana'
 import { ensureBasicTools } from '../engine/tools'
 import { createGEState } from '../engine/exchange'
@@ -44,6 +45,8 @@ function makeProps(kind: StationKind, crops: PlantedCrop[] = []) {
     wallet: { marks: 500 },
     tradeToast: null,
     brew: noop, craft: noop, craftToolAction: noop, repairToolAction: noop,
+    bankRef: ref(createBank()), bankTick: 0, bankCapacityNow: () => 5250,
+    bankDepositSlot: noop, bankDepositAllMaterials: noop, bankWithdrawItem: noop,
     getChest: () => createChestStorage('home-plot:3,4'),
     transferChestSlot: noop,
     tradeSell: noop, tradeBuy: noop,
@@ -61,7 +64,7 @@ const render = (kind: StationKind, crops?: PlantedCrop[]) =>
 const expect: Record<StationKind, string> = {
   brew: '⚗ ALCHEMY STATION',
   craft: '🔨 CRAFTING TABLE',
-  chest: '📦 CHEST',
+  chest: '🏦 GARDEN BANK',
   exchange: '💰 EXCHANGE BOOTH',
   farm: '🌱 PLANTER',
 }

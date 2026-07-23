@@ -4,7 +4,7 @@
 
 import type { SkillId } from './skills'
 import type { Inventory } from './inventory'
-import { countItem, removeItems } from './inventory'
+import { canAfford, spendMaterials, type BankState } from './bank'
 
 export interface ToolDef {
   id: string
@@ -135,19 +135,17 @@ export function ensureBasicTools(equipped: EquippedTools): EquippedTools {
 }
 
 /** Check if player has materials to craft a tool */
-export function canCraft(toolId: string, inv: Inventory): boolean {
+export function canCraft(toolId: string, inv: Inventory, bank: BankState | null = null): boolean {
   const def = TOOL_DEFS[toolId]
   if (!def) return false
-  return def.recipe.every(r => countItem(inv, r.itemId) >= r.count)
+  return canAfford(inv, bank, def.recipe)
 }
 
 /** Craft a tool — consumes materials from inventory, returns new EquippedTool or null if can't craft */
-export function craftTool(toolId: string, inv: Inventory): EquippedTool | null {
+export function craftTool(toolId: string, inv: Inventory, bank: BankState | null = null): EquippedTool | null {
   const def = TOOL_DEFS[toolId]
-  if (!def || !canCraft(toolId, inv)) return null
-  for (const r of def.recipe) {
-    removeItems(inv, r.itemId, r.count)
-  }
+  if (!def || !canCraft(toolId, inv, bank)) return null
+  spendMaterials(inv, bank, def.recipe)   // satchel-first then bank
   return { toolId, usesRemaining: def.durability, speedBonus: def.speedBonus, xpBonus: def.xpBonus }
 }
 
@@ -175,17 +173,17 @@ export function repairCost(tool: EquippedTool): { itemId: string; count: number 
 }
 
 /** Can this tool be repaired right now (worn enough + materials on hand)? */
-export function canRepair(tool: EquippedTool, inv: Inventory): boolean {
+export function canRepair(tool: EquippedTool, inv: Inventory, bank: BankState | null = null): boolean {
   const def = TOOL_DEFS[tool.toolId]
   if (!def || def.basic || wornFraction(tool) < REPAIR_MIN_WEAR) return false
-  return repairCost(tool).every(r => countItem(inv, r.itemId) >= r.count)
+  return canAfford(inv, bank, repairCost(tool))
 }
 
 /** Repair a tool to full durability, consuming the repair cost. Returns true on success. */
-export function repairTool(tool: EquippedTool, inv: Inventory): boolean {
+export function repairTool(tool: EquippedTool, inv: Inventory, bank: BankState | null = null): boolean {
   const def = TOOL_DEFS[tool.toolId]
-  if (!def || def.basic || !canRepair(tool, inv)) return false
-  for (const r of repairCost(tool)) removeItems(inv, r.itemId, r.count)
+  if (!def || def.basic || !canRepair(tool, inv, bank)) return false
+  spendMaterials(inv, bank, repairCost(tool))   // satchel-first then bank
   tool.usesRemaining = def.durability
   return true
 }

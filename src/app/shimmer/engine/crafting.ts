@@ -5,8 +5,9 @@
 
 import type { Inventory } from './inventory'
 import type { ManaPool } from './mana'
-import { countItem, removeItems, addItems } from './inventory'
+import { addItems } from './inventory'
 import { drainMana } from './mana'
+import { canAfford, spendMaterials, type BankState } from './bank'
 
 export interface RecipeDef {
   id: string          // == the produced item id
@@ -59,22 +60,27 @@ export const RECIPE_DEFS: Record<string, RecipeDef> = {
 
 export const RECIPE_IDS = Object.keys(RECIPE_DEFS)
 
-/** Can the player craft this recipe? (has materials + mana) */
-export function canCraft(recipeId: string, inv: Inventory, mana?: ManaPool): boolean {
+/** Can the player craft this recipe? (has materials + mana) — materials counted across satchel+bank. */
+export function canCraft(recipeId: string, inv: Inventory, mana?: ManaPool, bank: BankState | null = null): boolean {
   const def = RECIPE_DEFS[recipeId]
   if (!def) return false
   if (mana && mana.current < def.manaCost) return false
-  return def.recipe.every(r => countItem(inv, r.itemId) >= r.count)
+  return canAfford(inv, bank, def.recipe)
 }
 
 /** Craft a recipe — consumes materials, drains mana, adds result. Returns false on failure. */
-export function craftItem(recipeId: string, inv: Inventory, mana: ManaPool): boolean {
+// bank is optional and trailing: omitted (or null) = satchel only, which is exactly the Crucible
+// case and the behaviour every pre-bank caller/test already expects. When present, materials come
+// from satchel-first then bank (spendMaterials), and the crafted item always lands in the satchel.
+export function craftItem(recipeId: string, inv: Inventory, mana: ManaPool, bank: BankState | null = null): boolean {
   const def = RECIPE_DEFS[recipeId]
   if (!def) return false
-  if (!def.recipe.every(r => countItem(inv, r.itemId) >= r.count)) return false
+  if (!canAfford(inv, bank, def.recipe)) return false
+  // Mana is checked AFTER affordability but drained only once we know materials exist — mirrors the
+  // original order (material check, then drainMana) so a mana-poor attempt never spends materials.
   if (!drainMana(mana, def.manaCost)) return false
 
-  for (const r of def.recipe) removeItems(inv, r.itemId, r.count)
+  spendMaterials(inv, bank, def.recipe)   // cannot fail: canAfford already passed
   addItems(inv, def.id, def.resultCount)
   return true
 }

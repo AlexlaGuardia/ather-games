@@ -9,7 +9,7 @@
 import {
   createBank, bankUsed, bankCapacity, bankDeposit, bankWithdraw, bankForceDeposit,
   bankCount, bankReachable, bankToSave, bankFromSave, migrateChestsToBank,
-  availableCount, isChestFurniture, CHEST_CAPACITY, BASE_CAPACITY,
+  availableCount, isChestFurniture, canAfford, spendMaterials, CHEST_CAPACITY, BASE_CAPACITY,
 } from './bank'
 import { createInventory, addItems } from './inventory'
 
@@ -134,5 +134,55 @@ console.log('\n[save round-trip]')
   check('empty save is fine', bankUsed(bankFromSave(undefined)) === 0)
 }
 
+// ── 9. spendMaterials: INVENTORY FIRST, then bank (Alex's rule) ──
+console.log('\n[spend order]')
+{
+  const inv = createInventory()
+  addItems(inv, 'goldwood_plank', 5)        // satchel has 5
+  const b = createBank()
+  bankForceDeposit(b, 'goldwood_plank', 100) // bank has 100
+  const ok = spendMaterials(inv, b, [{ itemId: 'goldwood_plank', count: 8 }])
+  check('spend succeeds', ok)
+  check('satchel drained first', countInv(inv, 'goldwood_plank') === 0, `satchel still has ${countInv(inv, 'goldwood_plank')}`)
+  check('bank covers the remainder only', bankCount(b, 'goldwood_plank') === 97,
+    `bank should have paid 3 (8 - 5 satchel), holds ${bankCount(b, 'goldwood_plank')}`)
+}
+{
+  // Satchel alone covers it → bank is never touched.
+  const inv = createInventory()
+  addItems(inv, 'goldwood_plank', 20)
+  const b = createBank()
+  bankForceDeposit(b, 'goldwood_plank', 50)
+  spendMaterials(inv, b, [{ itemId: 'goldwood_plank', count: 8 }])
+  check('bank untouched when satchel suffices', bankCount(b, 'goldwood_plank') === 50)
+  check('satchel paid all of it', countInv(inv, 'goldwood_plank') === 12)
+}
+{
+  // All-or-nothing: a recipe the player cannot afford spends NOTHING.
+  const inv = createInventory()
+  addItems(inv, 'goldwood_plank', 3)
+  const b = createBank()
+  bankForceDeposit(b, 'goldwood_bark', 2)
+  const ok = spendMaterials(inv, b, [{ itemId: 'goldwood_plank', count: 4 }, { itemId: 'goldwood_bark', count: 4 }])
+  check('unaffordable spend refused', !ok)
+  check('planks untouched on refusal', countInv(inv, 'goldwood_plank') === 3, 'a failed craft must not half-eat materials')
+  check('bark untouched on refusal', bankCount(b, 'goldwood_bark') === 2)
+}
+{
+  // Crucible: bank=null means satchel only, and the bank is invisible.
+  const inv = createInventory()
+  addItems(inv, 'goldwood_plank', 10)
+  const affordable = canAfford(inv, null, [{ itemId: 'goldwood_plank', count: 8 }])
+  const notAfford = canAfford(inv, null, [{ itemId: 'goldwood_plank', count: 20 }])
+  check('satchel-only affords what it holds', affordable)
+  check('satchel-only cannot reach the bank', !notAfford, 'outside the garden, only the satchel counts')
+}
+
 console.log(failures === 0 ? '\nbank: PASS\n' : `\nbank: ${failures} FAILURE(S)\n`)
 process.exit(failures === 0 ? 0 : 1)
+
+function countInv(inv: ReturnType<typeof createInventory>, itemId: string): number {
+  let n = 0
+  for (const s of inv.slots) if (s?.itemId === itemId) n += s.count
+  return n
+}

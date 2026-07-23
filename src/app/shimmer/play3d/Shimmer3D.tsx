@@ -39,6 +39,8 @@ import { RUNES } from './birth/runes.data'
 import { createSkillSet, skillSetToSave, skillSetFromSave, addSkillXP, xpForSkillLevel, SKILL_META, type SkillSet, type SkillId } from '../engine/skills'
 import { createBeast, checkBeastUnlock, beastsToSave, beastsFromSave, BEAST_SPECIES, BEAST_DEFS, BEAST_PERKS, PERK_INFO, getBonusFindChance, getSpeedBonus, type ManaBeast, type BeastSpecies } from '../beasts/beast'
 import { createInventory, inventoryToSave, inventoryFromSave, addItems, removeItems, countItem, transferItem, createChestStorage, chestToSave, chestFromSave, type Inventory, type ItemStack, type ChestStorage, type ChestSave } from '../engine/inventory'
+import { createBank, bankFromSave, bankToSave, bankUsed, bankCapacity, bankDeposit, bankWithdraw, bankForceDeposit, bankReachable, isChestFurniture, migrateChestsToBank, CHEST_CAPACITY, type BankState, type BankSave } from '../engine/bank'
+import { ITEMS } from '../sprites/items'
 import { createManaPool, manaToSave, manaFromSave, getMaxPool, type ManaPool } from '../engine/mana'
 import { brewPotion, POTION_DEFS } from '../engine/alchemy'
 import { MANA_POTIONS, HEAL_POTIONS, POTION_BUFFS, BUFF_DEFS, HARVEST_BREW_ADVANCE_MS, drinkBuff, activeBuffList, pruneBuffs, gatherXpMult, bonusFind, kindredMult, speedMult, manaRegenMult, rinTune, suppressEncounters, potionEffectLine, type ActiveBuffs } from '../engine/potion-effects'
@@ -2128,6 +2130,9 @@ export default function Shimmer3D() {
     }
   }
   const zoneIdRef = useRef(zone.id); zoneIdRef.current = zone.id
+  // Realm mirror for callbacks (bank reach, and anything else that keys on ather-vs-outside without
+  // wanting `zone` as a dependency). Same flag that drives weapons-vs-spirits.
+  const zoneRealmRef = useRef(zone.realm); zoneRealmRef.current = zone.realm
   // The district under the player's feet (world mode) — drives atmosphere mood + the HUD
   // name. Sampled at 0.8s; setState only on change, so play frames never re-render for it.
   const [districtZone, setDistrictZone] = useState(zone.id)
@@ -2301,6 +2306,7 @@ export default function Shimmer3D() {
       inventory: inventoryToSave(invRef.current),
       built: structuresRef.current,
       chests: Object.values(chestsRef.current).map(c => chestToSave(c)),
+      bank: bankToSave(bankRef.current),
       ge: geToSave(geRef.current),
       plantedCrops: plantedCropsToSave(plantedCropsRef.current),
       buffs: pruneBuffs(buffsRef.current, Date.now()),
@@ -2438,6 +2444,10 @@ export default function Shimmer3D() {
         chestsRef.current = byId
         setChestsTick(t => t + 1)
       }
+      // Garden Bank restore. The bank save is authoritative once written; the one-time migration
+      // off the old per-chest storage runs AFTER flags are restored (below), so its guard flag reads
+      // the real saved value instead of the fresh-mount default.
+      bankRef.current = bankFromSave(data?.bank as BankSave | undefined)
       if (data?.ge) geRef.current = geFromSave(data.ge as GESave)
       if (Array.isArray(data?.plantedCrops)) {
         plantedCropsRef.current = plantedCropsFromSave(data.plantedCrops as PlantedCrop[])
@@ -2455,6 +2465,24 @@ export default function Shimmer3D() {
         const cleared: Record<string, boolean> = {}
         for (const n of NPCS_3D) if (n.defeatedFlag && data.flags[n.defeatedFlag]) cleared[n.id] = true
         if (Object.keys(cleared).length) setDefeated(cleared)
+      }
+      // ── ONE-TIME Garden Bank migration off the old per-chest storage ──
+      // Now that flags are restored, the guard reads the real saved value. On a pre-bank save, drain
+      // every chest (placed AND carried in the satchel — carried chestData was unreachable until
+      // re-placed, so banking it hands items back) into the pool exactly once. migrateChestsToBank is
+      // force-deposit (over-cap tolerant) and STRICTLY non-lossy — see engine/bank.ts. persist() at
+      // the end of load writes the result, so it runs at most once per save.
+      if (!flagsRef.current.bankMigratedV1) {
+        const grids: (ItemStack | null)[][] = []
+        for (const c of Object.values(chestsRef.current)) grids.push(c.slots)
+        for (const slot of invRef.current.slots) if (slot?.chestData) grids.push(slot.chestData.slots)
+        const moved = migrateChestsToBank(bankRef.current, grids)
+        // Empty the old stores so nothing is double-counted (the bank is the store now).
+        for (const c of Object.values(chestsRef.current)) c.slots = c.slots.map(() => null)
+        for (const slot of invRef.current.slots) if (slot?.chestData) slot.chestData.slots = slot.chestData.slots.map(() => null)
+        flagsRef.current.bankMigratedV1 = true
+        setBankTick(t => t + 1)
+        if (moved > 0) setBanner(`✦ ${moved} materials moved into your Garden Bank`)
       }
       if (Array.isArray(data?.beasts)) {
         beastsRef.current = beastsFromSave(data.beasts as Parameters<typeof beastsFromSave>[0], posRef.current?.x ?? 0, posRef.current?.z ?? 0)
@@ -2654,6 +2682,23 @@ export default function Shimmer3D() {
   // instead of forking a parallel, orphaned save shape.
   const chestsRef = useRef<Record<string, ChestStorage>>({})
   const [chestsTick, setChestsTick] = useState(0) // bump to re-render the open chest menu after a transfer
+
+  // ── The Garden Bank — one pooled material store for the homeplot (all Ather zones; not the
+  // Crucible). Replaces per-chest storage: placed chests contribute capacity, gathered materials
+  // pool here, and stations draw satchel-first then bank. See engine/bank.ts. chestsRef stays for
+  // the one-time migration and for any dungeon-chest decoration, but is no longer the store.
+  const bankRef = useRef<BankState>(createBank())
+  const [bankTick, setBankTick] = useState(0)   // bump to re-render the open bank panel
+  // Capacity from PLACED chests, garden-wide (structuresRef holds every zone's placements).
+  const bankCapacityNow = useCallback(() => {
+    const chestIds = (structuresRef.current ?? []).filter(s => isChestFurniture(s.itemId)).map(s => s.itemId)
+    return bankCapacity(chestIds)
+  }, [])
+  // The bank a station action should see RIGHT NOW: the real pool on your land, null in the Crucible
+  // (realm 'outside'), where only the satchel counts. One flag, same one that gates weapons/spirits.
+  const bankForZone = useCallback((): BankState | null => {
+    return bankReachable(zoneRealmRef.current) ? bankRef.current : null
+  }, [])
   const geRef = useRef<GEMarketState>(createGEState())
   const plantedCropsRef = useRef<PlantedCrop[]>([])
   const [cropsTick, setCropsTick] = useState(0) // bump to re-render the open planter menu (plant/harvest)
@@ -2760,7 +2805,7 @@ export default function Shimmer3D() {
     // Active companion @15 perk — Sporebloom bonus draught (Sporeling, ×2 under Kindred)
     const brewBeast = beastsRef.current.find(b => b.id === activeBeastIdRef.current) ?? null
     const brewFind = getBonusFindChance(brewBeast, 'alchemy') * kindredMult(buffsRef.current, Date.now())
-    if (!brewPotion(potionId, invRef.current, skillsRef.current, manaRef.current, brewFind)) { setHarvestToast('Missing ingredients or mana'); return }
+    if (!brewPotion(potionId, invRef.current, skillsRef.current, manaRef.current, brewFind, bankForZone())) { setHarvestToast('Missing ingredients or mana'); return }
     syncSkillHud()
     const def = POTION_DEFS[potionId]
     setHarvestToast(`Brewed ${def.name} ×${def.resultCount}`)
@@ -2769,7 +2814,7 @@ export default function Shimmer3D() {
   }, [syncSkillHud, persist])
 
   const craft = useCallback((recipeId: string) => {
-    if (!craftItem(recipeId, invRef.current, manaRef.current)) { setHarvestToast('Missing materials or mana'); return }
+    if (!craftItem(recipeId, invRef.current, manaRef.current, bankForZone())) { setHarvestToast('Missing materials or mana'); return }
     syncSkillHud() // refreshes the mana pie (craft drained mana)
     setInvSlots([...invRef.current.slots])
     const def = RECIPE_DEFS[recipeId]
@@ -2780,7 +2825,7 @@ export default function Shimmer3D() {
   // Craft a tiered tool (blade/spike/rinstick) — consumes gathered mats, auto-equips it for its
   // skill (replacing the basic/current). It wears out and breaks; the basic is always the fallback.
   const craftToolAction = useCallback((toolId: string) => {
-    const newTool = craftTool(toolId, invRef.current)
+    const newTool = craftTool(toolId, invRef.current, bankForZone())
     if (!newTool) { setHarvestToast('Missing materials'); return }
     const def = TOOL_DEFS[toolId]
     equippedToolsRef.current[def.skillId] = newTool
@@ -2794,7 +2839,7 @@ export default function Shimmer3D() {
   // so you keep a tool going instead of running it to break + re-crafting from scratch).
   const repairToolAction = useCallback((skillId: SkillId) => {
     const tool = equippedToolsRef.current[skillId]
-    if (!tool || !repairTool(tool, invRef.current)) { setHarvestToast('Missing materials to repair'); return }
+    if (!tool || !repairTool(tool, invRef.current, bankForZone())) { setHarvestToast('Missing materials to repair'); return }
     setToolTick(t => t + 1)
     setInvSlots([...invRef.current.slots])
     setHarvestToast(`Repaired ${TOOL_DEFS[tool.toolId]?.name} — full again (${TOOL_DEFS[tool.toolId]?.durability} uses)`)
@@ -2825,6 +2870,58 @@ export default function Shimmer3D() {
     setChestsTick(t => t + 1)
     persist()
   }, [getChest, persist])
+
+  // ── Garden Bank actions — deposit/withdraw against the pooled store. Only RESOURCES bank; tools,
+  // potions, seeds and furniture stay in hand (you don't want your axe or your last mend potion
+  // silently vacuumed into a materials pool).
+  const BANK_ITEM_IDS = useMemo(() => new Set(ITEMS.filter(i => i.type === 'resource').map(i => i.id)), [])
+  const depositStack = useCallback((itemId: string, count: number): number => {
+    // Deposit through the real capacity; returns how many landed so the caller reports partials.
+    return bankDeposit(bankRef.current, itemId, count, bankCapacityNow())
+  }, [bankCapacityNow])
+
+  const bankDepositSlot = useCallback((slotIdx: number) => {
+    const slot = invRef.current.slots[slotIdx]
+    if (!slot) return
+    if (!BANK_ITEM_IDS.has(slot.itemId)) { setHarvestToast('Only gathered materials bank here'); return }
+    const landed = depositStack(slot.itemId, slot.count)
+    if (landed <= 0) { setHarvestToast('Bank is full — place another chest'); return }
+    removeItems(invRef.current, slot.itemId, landed)
+    setInvSlots([...invRef.current.slots])
+    setBankTick(t => t + 1)
+    if (landed < slot.count) setHarvestToast(`Banked ${landed} — the rest didn't fit`)
+    persist()
+  }, [BANK_ITEM_IDS, depositStack, persist])
+
+  const bankDepositAllMaterials = useCallback(() => {
+    let moved = 0, hitCap = false
+    for (const slot of invRef.current.slots) {
+      if (!slot || !BANK_ITEM_IDS.has(slot.itemId)) continue
+      const landed = depositStack(slot.itemId, slot.count)
+      if (landed > 0) { removeItems(invRef.current, slot.itemId, landed); moved += landed }
+      if (landed < slot.count) { hitCap = true; break }   // cap reached — stop, nothing more will fit
+    }
+    if (moved === 0) { setHarvestToast(hitCap ? 'Bank is full — place another chest' : 'No materials to deposit'); return }
+    setInvSlots([...invRef.current.slots])
+    setBankTick(t => t + 1)
+    setHarvestToast(hitCap ? `Banked ${moved} — bank is now full` : `Banked ${moved} materials`)
+    persist()
+  }, [BANK_ITEM_IDS, depositStack, persist])
+
+  const bankWithdrawItem = useCallback((itemId: string, qty: number) => {
+    const got = bankWithdraw(bankRef.current, itemId, qty)
+    if (got <= 0) return
+    const leftover = addItems(invRef.current, itemId, got)   // returns what DIDN'T fit the satchel
+    if (leftover > 0) {
+      // Satchel couldn't hold it all — put the overflow back rather than deleting it. Force is safe:
+      // it was in the bank a moment ago, so it fits the count it just left.
+      bankForceDeposit(bankRef.current, itemId, leftover)
+      setHarvestToast(`Satchel full — withdrew ${got - leftover}`)
+    }
+    setInvSlots([...invRef.current.slots])
+    setBankTick(t => t + 1)
+    persist()
+  }, [persist])
 
   // ── Hotbar/satchel drag-reorder → swap the REAL inventory slots so it persists and survives
   // the next inventory update (otherwise HotBar only reorders a local mirror and it reverts). ──
@@ -3184,6 +3281,11 @@ export default function Shimmer3D() {
     beastsRef.current = []
     activeBeastIdRef.current = null
     chestsRef.current = {}
+    bankRef.current = createBank()
+    setBankTick(t => t + 1)
+    // New Game uses replaceFlags, so bankMigratedV1 is dropped with every other flag — which is
+    // correct: a fresh save has no old chests to migrate, and the empty-chest migration on next load
+    // is a harmless no-op that just re-sets the flag.
     geRef.current = createGEState()
     plantedCropsRef.current = []
     buffsRef.current = {}
@@ -4366,6 +4468,8 @@ export default function Shimmer3D() {
         toolTick={toolTick} chestsTick={chestsTick} cropsTick={cropsTick}
         wallet={wallet} tradeToast={tradeToast}
         brew={brew} craft={craft} craftToolAction={craftToolAction} repairToolAction={repairToolAction}
+        bankRef={bankRef} bankTick={bankTick} bankCapacityNow={bankCapacityNow}
+        bankDepositSlot={bankDepositSlot} bankDepositAllMaterials={bankDepositAllMaterials} bankWithdrawItem={bankWithdrawItem}
         getChest={getChest} transferChestSlot={transferChestSlot}
         tradeSell={tradeSell} tradeBuy={tradeBuy}
         harvestAt={harvestAt} plantAt={plantAt}

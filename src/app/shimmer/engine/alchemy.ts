@@ -5,9 +5,10 @@
 import type { Inventory } from './inventory'
 import type { SkillSet } from './skills'
 import type { ManaPool } from './mana'
-import { countItem, removeItems, addItems } from './inventory'
+import { addItems } from './inventory'
 import { addSkillXP } from './skills'
 import { drainMana } from './mana'
+import { canAfford, spendMaterials, type BankState } from './bank'
 
 export interface PotionDef {
   id: string
@@ -100,12 +101,12 @@ export const POTION_DEFS: Record<string, PotionDef> = {
 export const POTION_IDS = Object.keys(POTION_DEFS)
 
 /** Check if player can brew a potion (has materials, level, mana) */
-export function canBrew(potionId: string, inv: Inventory, alchemyLevel: number, mana?: ManaPool): boolean {
+export function canBrew(potionId: string, inv: Inventory, alchemyLevel: number, mana?: ManaPool, bank: BankState | null = null): boolean {
   const def = POTION_DEFS[potionId]
   if (!def) return false
   if (alchemyLevel < def.minAlchemyLevel) return false
   if (mana && mana.current < def.manaCost) return false
-  return def.recipe.every(r => countItem(inv, r.itemId) >= r.count)
+  return canAfford(inv, bank, def.recipe)
 }
 
 /** Brew a potion — consumes materials, drains mana, adds result, grants XP. Returns false on failure. */
@@ -119,16 +120,17 @@ export function brewPotion(
   skills: SkillSet,
   mana: ManaPool,
   bonusYieldChance = 0,
+  bank: BankState | null = null,   // trailing + optional: omitted = satchel only (Crucible / old callers)
 ): boolean {
   const def = POTION_DEFS[potionId]
   if (!def) return false
   if (skills.alchemy.level < def.minAlchemyLevel) return false
+  // Affordability BEFORE draining mana, so a materials-short brew doesn't burn mana (the original
+  // drained first; checking materials first is strictly friendlier and matches craftItem's order).
+  if (!canAfford(inv, bank, def.recipe)) return false
   if (!drainMana(mana, def.manaCost)) return false
-  if (!def.recipe.every(r => countItem(inv, r.itemId) >= r.count)) return false
 
-  for (const r of def.recipe) {
-    removeItems(inv, r.itemId, r.count)
-  }
+  spendMaterials(inv, bank, def.recipe)   // satchel-first then bank; cannot fail past canAfford
   let count = def.resultCount
   // Companion perk (Sporebloom @15) — the Sporeling's fungal read turns up one more draught.
   if (bonusYieldChance > 0 && Math.random() < bonusYieldChance) count += 1
