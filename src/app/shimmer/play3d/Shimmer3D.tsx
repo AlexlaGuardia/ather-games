@@ -16,6 +16,8 @@ import { getHeightGrid } from '../world/heightmaps'
 import { GardenAtmosphere } from '../world/atmosphere'
 import { FloraTree, FloraDressing } from '../world/flora'
 import { rollEncounter, type WildEncounter } from '../engine/encounters'
+import { derivePartyStats, type PartyStats } from '../engine/party-stats'
+import { getMovesForSpirit } from '../engine/moves'
 import { createSpirit, addXP, xpForLevel, speciesDisplayName, ELEMENT_COLORS, type Spirit, type Species, type Element } from '../spirits/spirit'
 import { spiritsToSave, spiritsFromSave } from '../spirits/spirit-save'
 import { LAUNCHED_SPECIES } from '../engine/spirit-index'
@@ -2102,7 +2104,7 @@ export default function Shimmer3D() {
   // Wild encounters play a brief "drawn to you" approach beat before the arena mounts (see below).
   const [approach, setApproach] = useState<{ enc: WildEncounter; battle: NonNullable<typeof battle> } | null>(null)
   // Post-win spoils reveal (wild fights): per-spirit XP/level breakdown + gold, shown before returning.
-  type RewardRow = { name: string; element: Element; fromLevel: number; toLevel: number; xpGained: number; curXp: number; needXp: number; evolved: boolean }
+  type RewardRow = { name: string; element: Element; fromLevel: number; toLevel: number; xpGained: number; curXp: number; needXp: number; evolved: boolean; statsBefore: PartyStats; statsAfter: PartyStats; learned: string[] }
   const [rewards, setRewards] = useState<{ gold: number; rows: RewardRow[] } | null>(null)
   const [banner, setBanner] = useState<string | null>(null)
   const [nearNpc, setNearNpc] = useState<NPC3D | null>(null)
@@ -2796,13 +2798,23 @@ export default function Shimmer3D() {
       const rows: RewardRow[] = []
       for (const spirit of allies) {
         const fromLevel = spirit.level
+        // Snapshot BEFORE the level lands — stats are recomputed from `level` on every read
+        // (derivePartyStats), so once addXP bumps it the old numbers are gone. This snapshot is
+        // the whole reason a level-up can show its work: growth is otherwise invisible, which is
+        // exactly what "my L6 Dewbear feels the same" was about.
+        const statsBefore = derivePartyStats(spirit)
+        const movesBefore = new Set(getMovesForSpirit(spirit.species, spirit.element, spirit.level, spirit.bond).map(m => m.id))
         const xpResult = addXP(spirit, perXp)
         spirit.bond = Math.min(255, spirit.bond + 4)
         spirit.happiness = Math.min(255, spirit.happiness + 3)
+        // …and after, with the bond bump applied, since kits key off bond as well as level.
+        const statsAfter = derivePartyStats(spirit)
+        const learned = getMovesForSpirit(spirit.species, spirit.element, spirit.level, spirit.bond)
+          .filter(m => !movesBefore.has(m.id)).map(m => m.name)
         // Full evolution (form/element change) is the 2D EvolutionScene's job — not ported yet. We just
         // celebrate the threshold here; the spirit keeps leveling until it can evolve in the full flow.
         if (xpResult.evolved) setBanner(`✦ ${spirit.name} is ready to evolve!`)
-        rows.push({ name: spirit.name, element: spirit.element, fromLevel, toLevel: spirit.level, xpGained: perXp, curXp: spirit.xp, needXp: xpForLevel(spirit.level), evolved: !!xpResult.evolved })
+        rows.push({ name: spirit.name, element: spirit.element, fromLevel, toLevel: spirit.level, xpGained: perXp, curXp: spirit.xp, needXp: xpForLevel(spirit.level), evolved: !!xpResult.evolved, statsBefore, statsAfter, learned })
       }
       // Wild + patrol fights get the spoils reveal; the scripted holds keep their narrative payoff (dialogue below).
       if (!bd.kind || bd.kind === 'wild' || bd.kind === 'patrol') spoils = { gold, rows }
@@ -4064,16 +4076,64 @@ function EncounterApproach({ name, element, onSkip }: { name: string; element: E
 
 // Post-win spoils reveal — the loop's payoff. Gold + a per-spirit row: level (with a Lv↑ jump when
 // they leveled), XP gained, and an animated bar filling toward the next level. Tap CONTINUE to return.
+// ── Level-up card ──────────────────────────────────────────────────────────────
+// Alex, on his level-6 Dewbear: "I don't see much difference." He was right twice over —
+// the arena ignored level entirely (fixed in engine/arena.ts), and NOTHING ever showed the
+// growth, because stats are recomputed from `level` on every read and never announced.
+//
+// Design note, and it is load-bearing: a real level-up here is +1 to a couple of stats and
+// +0 to the rest (water-bear L6→7 = +1 pwr/grd/foc/res/agi/vig, +1 HP). So the CURRENT VALUE
+// is the hero and the delta is an accent chip — a card built the other way round renders
+// "+0 +0 +1 +0" and reads worse than showing nothing at all. Unchanged stats stay dim rather
+// than shouting a zero. If the deltas ever deserve top billing, that is a growth-curve change
+// (party-stats.ts `1 + level/60`), not a card change.
+const STAT_LABELS: [keyof PartyStats, string][] = [
+  ['maxHp', 'HP'], ['pwr', 'PWR'], ['grd', 'GRD'], ['foc', 'FOC'], ['res', 'RES'], ['agi', 'AGI'], ['vig', 'VIG'],
+]
+
+function StatTick({ label, from, to, col, delay }: { label: string; from: number; to: number; col: string; delay: number }) {
+  const [v, setV] = useState(from)
+  const gained = to - from
+  useEffect(() => {
+    if (gained === 0) { setV(to); return }
+    let raf = 0, t0 = 0
+    const DUR = 620
+    const start = (ts: number) => {
+      if (!t0) t0 = ts
+      const p = Math.min(1, (ts - t0) / DUR)
+      const ease = 1 - Math.pow(1 - p, 3)
+      setV(Math.round(from + (to - from) * ease))
+      if (p < 1) raf = requestAnimationFrame(start)
+    }
+    const timer = setTimeout(() => { raf = requestAnimationFrame(start) }, delay)
+    return () => { clearTimeout(timer); cancelAnimationFrame(raf) }
+  }, [from, to, gained, delay])
+  const hot = gained > 0
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1, padding: '4px 2px', borderRadius: 6, background: hot ? `${col}14` : '#0000' }}>
+      <span style={{ font: '700 8px ui-monospace, monospace', letterSpacing: '0.14em', color: hot ? col : '#6f8b83' }}>{label}</span>
+      <span style={{ font: `800 13px ui-monospace, monospace`, color: hot ? '#eafff6' : '#9db3ac', fontVariantNumeric: 'tabular-nums' }}>{v}</span>
+      <span style={{ font: '800 8px ui-monospace, monospace', letterSpacing: '0.06em', color: hot ? col : '#3f544e', textShadow: hot ? `0 0 8px ${col}88` : 'none' }}>
+        {hot ? `+${gained}` : '·'}
+      </span>
+    </div>
+  )
+}
+
 function BattleRewards({ gold, rows, onClose }: {
   gold: number
-  rows: { name: string; element: Element; fromLevel: number; toLevel: number; xpGained: number; curXp: number; needXp: number; evolved: boolean }[]
+  rows: { name: string; element: Element; fromLevel: number; toLevel: number; xpGained: number; curXp: number; needXp: number; evolved: boolean; statsBefore: PartyStats; statsAfter: PartyStats; learned: string[] }[]
   onClose: () => void
 }) {
   const [shown, setShown] = useState(false)
   useEffect(() => { const t = setTimeout(() => setShown(true), 70); return () => clearTimeout(t) }, [])
   return (
     <div style={{ position: 'fixed', inset: 0, zIndex: 50, background: '#05070ae8', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16, touchAction: 'none', animation: 'rwdFade 0.25s ease-out' }}>
-      <style>{`@keyframes rwdFade { from { opacity: 0 } to { opacity: 1 } }`}</style>
+      <style>{`
+        @keyframes rwdFade { from { opacity: 0 } to { opacity: 1 } }
+        @keyframes lvlPop { from { transform: scale(0.6); opacity: 0 } to { transform: scale(1); opacity: 1 } }
+        @keyframes lvlSlide { from { opacity: 0; transform: translateY(-4px) } to { opacity: 1; transform: none } }
+      `}</style>
       <div style={{ width: 'min(430px, 94vw)', maxHeight: '88vh', overflowY: 'auto', background: '#0d1614', border: '2px solid #2f5c4f', borderRadius: 16, padding: '20px 20px 16px', boxShadow: '0 12px 48px #000a' }}>
         <div style={{ textAlign: 'center', font: '900 20px ui-monospace, monospace', color: '#7fe3c8', letterSpacing: '0.14em', textShadow: '0 0 18px #7fe3c855' }}>SPOILS</div>
         {gold > 0 && (
@@ -4104,8 +4164,26 @@ function BattleRewards({ gold, rows, onClose }: {
                 </div>
                 {(leveled || r.evolved) && (
                   <div style={{ display: 'flex', gap: 6, marginTop: 7 }}>
-                    {leveled && <span style={{ font: '800 9px ui-monospace, monospace', color: '#05070a', background: col, borderRadius: 999, padding: '2px 8px', letterSpacing: '0.08em' }}>LEVEL UP</span>}
+                    {leveled && <span style={{ font: '800 9px ui-monospace, monospace', color: '#05070a', background: col, borderRadius: 999, padding: '2px 8px', letterSpacing: '0.08em', animation: 'lvlPop 0.45s cubic-bezier(0.2,1.4,0.4,1) both' }}>LEVEL UP</span>}
                     {r.evolved && <span style={{ font: '800 9px ui-monospace, monospace', color: '#ffe9b0', background: '#0000', border: '1px solid #d4a843', borderRadius: 999, padding: '2px 8px', letterSpacing: '0.08em' }}>✦ READY TO EVOLVE</span>}
+                  </div>
+                )}
+                {/* The growth itself — the half that was never shown. */}
+                {leveled && shown && (
+                  <div style={{ marginTop: 8, borderTop: `1px solid ${col}33`, paddingTop: 8, animation: 'lvlSlide 0.4s ease-out both' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 2 }}>
+                      {STAT_LABELS.map(([k, lab], si) => (
+                        <StatTick key={k} label={lab} from={r.statsBefore[k]} to={r.statsAfter[k]} col={col} delay={120 + si * 55} />
+                      ))}
+                    </div>
+                    {r.learned.length > 0 && (
+                      <div style={{ marginTop: 8, display: 'flex', alignItems: 'baseline', gap: 7, flexWrap: 'wrap' }}>
+                        <span style={{ font: '700 8px ui-monospace, monospace', letterSpacing: '0.16em', color: '#6f8b83', flexShrink: 0 }}>LEARNED</span>
+                        {r.learned.map((mv) => (
+                          <span key={mv} style={{ font: '800 11px ui-monospace, monospace', color: '#eafff6', background: `${col}22`, border: `1px solid ${col}66`, borderRadius: 999, padding: '2px 9px', textShadow: `0 0 10px ${col}77` }}>{mv}</span>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
