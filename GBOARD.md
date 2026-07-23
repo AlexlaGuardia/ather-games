@@ -578,6 +578,73 @@ the Arcade frame.
 > **Files:** `engine/arena.ts` (`grdK`/`levelEdge`), `engine/arena-moves.ts` (`TIRE_*`),
 > `engine/arena.test.ts` (determinism + PACING).
 
+## 🗺️ Shimmer play3d — AREA LEVEL BANDS + SPECIES ECOLOGY (2026-07-23, jin-cc) · *Last touched 2026-07-23*
+> **Alex:** *"level cap on spirits per area — moonwell pass 3-5, spirit meadows 7-8 — as well as only
+> certain species spawn in certain areas, kinda like where you'd expect to find a Manalotl and
+> Croakling would be the mana springs."* Shipped + deployed (`9444685`).
+>
+> **The bug under the ask: levels were OFFSETS FROM THE PLAYER** (`levelRange: [-2, 1]`), so every area
+> re-levelled itself to whoever walked in. Out-levelling never paid — the starter route scaled up to
+> meet you, deleting the reward for progress (**the same complaint as "my L6 Dewbear feels the same",
+> one layer up**) — and the map had no shape, so *"go north when you're ready"* could not mean
+> anything. **Bands are ABSOLUTE now**; `rollEncounter` no longer takes a player level at all, and
+> that is asserted so it cannot quietly come back.
+>
+> **The world, by level** (`levels: [lo, hi]` per zone — one edit to retune):
+> ```
+> moonwell-glade  2-4 · route-garden-mycelial 3-5 · route-moonwell-garden 3-5 ←ALEX
+> mycelial-path   4-6 · spirit-meadow 7-8 ←ALEX  · sorrel-hold 7-9 · wooded-trail 8-10
+> twilight-thicket 9-11 · mana-springs 11-13 · spore-hollow 13-15 · voranyx-deep 15-18
+> brack-hold 17-19 · the-threshold (Ather Winds) 19-22
+> holds: Thistle Lv 7 · Sorrel 6/7/6 · Brack 19/18 + 3× Lv 17
+> ```
+> **Alex's shape for bosses: at or just UNDER the local band** — the gatekeeper of a region, not a
+> spike. Hold 1 stays ONE collared captive (his call, keeps the canon liberation beat) rather than
+> becoming a squad. **The holds were player-relative too** (`Math.max(6, partyLevel) + 2`) which made
+> the arc literally un-outrunnable; pinned in `HOLD_LEVELS` beside the bands they must agree with.
+>
+> **Species by CANON affinity.** `SPECIES_AFFINITY` transcribes the Element Affinity column of
+> `CANON/world/spirits-species.md`; `ZONE_ECOLOGY` declares what each landscape supports; a species
+> may only appear where its affinity fits. Mana Springs = Manalotl + Croakling; the Voranyx caverns
+> honour canon's one habitat line (*"Cavern | Earth | Noctyx | Cave dwelling"*); Ather Winds is
+> Storm's. **Canon rules affinity but NOT habitat**, so distribution is a build call derived from
+> canon rather than invented against it — gate stayed 5 CLEAN.
+>
+> **★ THE ENCOUNTER EDITOR WOULD HAVE SILENTLY WIPED ALL OF IT.** `save-map/route.ts` regenerates the
+> whole `ENCOUNTER_TABLES` block from the editor payload and still emitted the old per-entry
+> `levelRange` with no zone band — **the first editor save would have flattened every band back to the
+> old shape.** Same family as the `node-placements` duplication that broke master the same morning: a
+> regex writer nobody re-checked after the data model moved. **When you change a data model, grep for
+> who WRITES it, not just who reads it** — readers fail loudly at build time, writers corrupt silently
+> at runtime. Editor + writer + field-types all moved over; the writer now documents that it DESTROYS
+> every comment in the block, which is why the ecology contract lives in consts *outside* it.
+>
+> **Files:** `engine/encounters.ts` (bands, `SPECIES_AFFINITY`, `ZONE_ECOLOGY`, `HOLD_LEVELS`) ·
+> `engine/encounters.test.ts` (new) · `play3d/Shimmer3D.tsx` (hold levels, roll callers) ·
+> `dev/editors/EncounterEditor.tsx` · `dev/templates/field-types.ts` · `save-map/route.ts`.
+> **NEXT:** Alex feel-pass the bands while walking the continent; retune any zone via its `levels`.
+> Then decide whether the extrapolated middle (thicket→Ather Winds) matches the intended pace.
+
+## ⬆️ Shimmer play3d — THE LEVEL-UP CARD (2026-07-23, jin-cc) · *Last touched 2026-07-23*
+> Second half of *"my L6 Dewbear feels the same"* — the first half was the arena ignoring level
+> (`9c88ef4`), this is that **nothing ever SHOWED the growth**. Shipped + deployed (`bb1fe85`).
+> - The reward loop snapshots `derivePartyStats()` + the move kit **BEFORE** `addXP` lands (after it,
+>   the old values are unrecoverable — they were never stored) and again after, including the +4 bond
+>   bump since kits key off bond as well as level. The spoils row expands on a level-up: 7 stats tick
+>   old→new on a staggered ease, gained ones lit in the element colour, newly learned moves on chips.
+> - **★ THE CURRENT VALUE IS THE HERO, THE DELTA IS AN ACCENT — deliberately.** A real level-up is
+>   *small*: water-bear L6→7 is +1 to six stats and +1 HP, and several stats move **+0** at low levels.
+>   A delta-first card renders `+0 +0 +1 +0` and **reads worse than showing nothing**. Unchanged stats
+>   stay dim rather than shouting a zero. If deltas ever deserve top billing that is a **growth-curve**
+>   change (`party-stats.ts`'s `1 + level/60`), not a card change — Alex's feel call, not made.
+> - **FOUND, NOT FIXED — a base-element spirit has exactly TWO moves and learns nothing, ever.**
+>   `getMovesForSpirit` gates every element move behind `element !== 'base'`, so an unevolved spirit is
+>   frozen at Mana Pulse + Spirit Ward from L1 to L30. Moves only start at evolution (L15 mid, L25
+>   high, signature at bond 50). **Very likely a real contributor to fights reading samey — two moves
+>   cannot make a varied fight no matter how good the pacing is.** Design gate, not a bug; Alex's call.
+> - **Files:** `play3d/Shimmer3D.tsx` (`StatTick`, `STAT_LABELS`, `BattleRewards`, reward loop).
+> **NEXT:** Alex eye-pass the card (tick is 620ms ease, 55ms per-stat stagger in `StatTick`).
+
 ## ⚗️ Shimmer play3d — THE COZY LOOP (potions + stations + gather economy, 2026-07-22 eve, jin-cc)
 > **The pivot back to the soul side (Alex): home plot, crafting + alchemy tables.** The finding: the loop
 > existed but didn't PAY OFF — 9 of 13 potions were brew-for-XP dead ends, and placed stations were ghosts.
