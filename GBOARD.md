@@ -455,6 +455,49 @@ the Arcade frame.
 > `KICK_*`/`HUNTER_*`/`MAX_HP`/`MAX_SHIELD`/`BARRIER_SHIELD_BONUS`), `FiringRange()` sim, `WeaponReticle`/
 > `ResourceBars`/`AmmoCounter` HUD comps, `HEAL_POTIONS`/`startReload`/range-console state in the page comp.
 
+## ⚖️ Shimmer — PARTY BALANCE (measuring instrument built 2026-07-23, jin-cc)
+> **Started from Alex's question: "my Dewbear hit level 6 and I don't see much difference —
+> how does the game decide what to increase?"** Answer: it doesn't decide anything. `addXP()`
+> only increments `level`; stats are recomputed every read as
+> `base × (1 + level/60) + seed × level/120` (`engine/party-stats.ts:57`). No growth-rate table,
+> no per-level roll, no level-up moment. A stat rises by a flat fraction of its species base,
+> so a Dewbear's Guard grows fastest only because 70 is its biggest number.
+>
+> **Left off (2026-07-23, `7c17653`, committed + pushed — nothing deployed, this is headless):**
+> - **`engine/party-balance.test.ts`** — the oracle. Drives the REAL `party-battle.ts` turn loop
+>   + AI under a seeded mulberry32 stream, so before/after tuning is the same dice with different
+>   formulas. Run: `npx tsx src/app/shimmer/engine/party-balance.test.ts [--report]`.
+>   Deliberately a `.test.ts`, not a `.sim.ts`: its ancestors `party-battle.sim.ts` +
+>   `species-balance.sim.ts` were deleted 2026-07-09 for being print-only reports nobody checked.
+>   This one asserts its own tables — invariants/resolution, mirror fairness, level-meaning in
+>   BOTH directions, TTK band, species league.
+> - **`KNOWN_GAPS`** records today's real failures so the gate is green-for-regressions instead of
+>   always-red-and-ignored. A known gap that starts PASSING also fails the run, so the list can't
+>   rot silently (it caught `species-floor:axolotl` on the first run).
+>
+> **Baseline it found (the numbers to beat):**
+> - **The level CLIFF (the real bug).** ally lv20 vs enemy +0/+2/+5 = **45.0% / 1.5% / 0.0%** win.
+>   Reproduces at 1v1, so it is NOT the focus-fire snowball — it is **short TTK**. Traced a fight:
+>   ~5-6 hits per KO, so a ~13% per-hit edge (damage's own `(2L/5+2)` term, +8%, plus stat drift)
+>   turns a 6-hit kill into a 5-hit kill = deterministic, not probabilistic. The higher level also
+>   wins the AGI initiative sort every round. Mirror TTK shrinks 26 rounds (lv5) → 11 (lv50).
+> - **Growth is invisible where the cliff is steepest.** Dewbear lv1→lv6 = +3 pwr, +2 foc, +2 agi,
+>   +5 HP; its agi gains 1 point per 2.3 levels. Seeds (IVs 0-31) are worth ≤1.5 pts before ~lv30.
+> - **The species league is not a league.** frog 89.1% · water-bear 77.4% · fox 73.7% · rabbit 72.8%
+>   · turtle 55.0% · hummingbird 50.9% · bat 40.0% · axolotl 25.4% · owl 11.5% · firefly 4.1%.
+>
+> **Decision (why the tuning pass did NOT start):** one root cause — level scaling lives in the
+> DAMAGE formula instead of in the stats, so the game is simultaneously invisible in the menu and
+> hyper-sensitive in combat to the same 3 points. But fixing the cliff means giving small edges room
+> to be edges, which means **longer fights** — and `HP_SCALE` was cut 1.6 → 0.85 precisely because
+> 26-round mirrors were a slog (Alex). That is a feel call, not a math call.
+>
+> **NEXT — needs Alex's answer first:** buy TTK headroom back with HP, *or* hold TTK and flatten the
+> damage level-term so the gap shrinks without fights getting longer? Then the pass: pull the level
+> term out of `calcPartyDamage`, steepen growth to `1 + level/30` so levels read in the menu, add a
+> level-up delta panel, retune the species floors (firefly/owl) and frog's ceiling — gating every
+> step on the oracle's before/after.
+
 ## ⚗️ Shimmer play3d — THE COZY LOOP (potions + stations + gather economy, 2026-07-22 eve, jin-cc)
 > **The pivot back to the soul side (Alex): home plot, crafting + alchemy tables.** The finding: the loop
 > existed but didn't PAY OFF — 9 of 13 potions were brew-for-XP dead ends, and placed stations were ghosts.
