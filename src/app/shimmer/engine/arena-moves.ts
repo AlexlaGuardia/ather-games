@@ -29,15 +29,22 @@ export const HIT_FLOOR = 0.55         // even wild swings connect sometimes
 export const HIT_CEIL = 0.98          // nothing is a guaranteed hit
 export const SIDESTEP = 0.9           // dodge displacement (floor units)
 export const STAGE_MULT = 0.22        // per stat stage (±3 cap)
-// Sudden-death ramp — the ONLY knob that shortens long fights without touching short ones,
-// which is why the 2026-07-23 pacing pass leans on it instead of on HP_MULT or guard.
-// Was 25s/+5%: too late and too shallow to save a tank matchup, so a water-bear mirror
-// stalemated outright (L50: zero KOs inside the oracle's 60s cap) and Alex was skipping
-// battles. At 14s/+16% a duel lands ~6 hits/22s and the worst case in the game — a
-// high-guard, high-vig mirror — resolves in ~11 hits/40s. Raising TIRE_AT or lowering
-// TIRE_RAMP brings the slog straight back; arena.test.ts's PACING block is the guard.
-export const TIRE_AT = 14             // sudden-death: after this many seconds…
-export const TIRE_RAMP = 0.16         // …damage climbs per second (spirits tire; no stall-fests)
+// Sudden-death ramp — a STALEMATE BACKSTOP, not a pacing knob. Keep it barely visible.
+//
+// ★ DO NOT TUNE TTK WITH THIS (learned the hard way 2026-07-23). The pacing pass first
+// shortened fights by moving this to 14s/+16%/s, because it was the one lever that cut
+// long fights without disturbing guard, HP or the win-rate bands. Every oracle band went
+// green and Alex rejected it on sight: "it's almost like it forced it, with a super crit
+// — it's ramping up the damage as the battle progresses." He was right. At that slope a
+// hit at 40s is 5.2x an opening hit, so fights stop being won by the fighters and start
+// being ended by the clock. The oracle measures WHEN a fight ends, never WHY — a metric
+// this knob can satisfy while destroying the feel, which is exactly the trap.
+//
+// Pacing belongs in HP_MULT (flat: every hit matters the same at 5s and 45s). Left at the
+// long-standing 25s/+5%, where a duel finishes before the ramp starts (1.00x), a party
+// fight sees ~1.4x, and only a true high-guard grind reaches ~2x — the case it exists for.
+export const TIRE_AT = 25             // sudden-death: after this many seconds…
+export const TIRE_RAMP = 0.05         // …damage climbs per second (spirits tire; no stall-fests)
 
 // per-state action profile: range (0 = self/cast-in-place), aoe radius (0 = single target)
 const STATE_PROFILE: Record<MoveState, { range: number; aoe: number }> = {

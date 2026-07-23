@@ -165,9 +165,19 @@ function buildAid(kit: AidKit): AidSlot[] {
   return [kit.gift, ...kit.channels].map(id => ({ ...AID_DEFS[id], cdLeft: 0 }))
 }
 
-// Fights are duels, not pings — HP is padded well above the turn-based pool so the
-// telegraph→react→payoff loop cycles many times before anyone falls.
-const HP_MULT = 2.6
+// Fights are duels, not pings — HP is padded above the turn-based pool so the
+// telegraph→react→payoff loop cycles a few times before anyone falls.
+//
+// THIS IS THE PACING KNOB. 2.6 was a slog: Alex was skipping battles, and the padding
+// stacked with guard mitigation into fights of 15-20 hits (a high-guard mirror didn't
+// resolve inside 60s at all). Cut to 1.8 — duel ~5.3 hits/19s, party ~6.3/33s, worst
+// case ~13/48s. Tune pacing HERE and nowhere else: it is FLAT, so a hit lands the same
+// at 5s as at 45s. The alternatives all deform something — raising GRD_K nerfs guard as
+// a stat and drops the party baseline (the ally team runs a tank), and steepening TIRE
+// makes the fight escalate into a decision instead of being decided (see arena-moves.ts).
+// Floor is real: below ~1.5 the duel drops under 4 hits and the telegraph/dodge
+// choreography never gets to read. arena.test.ts's PACING block holds both ends.
+const HP_MULT = 1.8
 
 function fighterFromSpirit(spirit: Spirit, id: string, side: Side, x: number, y: number, slot: number, tier: ArenaAITier, collared: boolean): Fighter {
   const s = derivePartyStats(spirit)

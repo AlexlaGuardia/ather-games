@@ -18,6 +18,7 @@
 
 import { createSpirit, TEMPERAMENTS, type Spirit, type Species } from '../spirits/spirit'
 import { createArena, tick, mulberry32, type ArenaState, type KeeperCommand } from './arena'
+import { TIRE_AT, TIRE_RAMP } from './arena-moves'
 
 // createSpirit() rolls IVs (seeds) and temperament off Math.random(), so until 2026-07-23
 // this oracle was NOT reproducible: mulberry32 seeded the FIGHT but not the FIGHTERS, and
@@ -181,6 +182,18 @@ if (duelPace.hitsToFirstKO < 4) fails.push(`duel too fast (${duelPace.hitsToFirs
 // stretch out and this trips.
 const drift = tankL50.hitsToFirstKO / tankL5.hitsToFirstKO
 if (drift > 1.15 || drift < 0.85) fails.push(`levelling drifts fight length (L50 mirror is ${drift.toFixed(2)}× the L5 mirror) — mitigation is not tracking level`)
+
+// A fight must be decided by the FIGHTERS, not by the sudden-death clock. Every band in
+// this file went green on a build Alex rejected on sight — TIRE at 14s/+16% ended fights
+// on schedule while damage ramped 5.2x, "almost like it forced it, with a super crit".
+// Nothing here could see that, because a fight ending fast and a fight being *escalated*
+// to an ending look identical in a win-rate or a hit count. So measure the ramp itself:
+// by the time a normal fight resolves, tire should still be nearly invisible.
+const tireAt = (durS: number) => 1 + Math.max(0, durS - TIRE_AT) * TIRE_RAMP
+for (const [label, p] of [['duel', duelPace], ['party', partyPace]] as const) {
+  const mult = tireAt(p.durS)
+  if (mult > 1.5) fails.push(`${label} fights are being ended by the tire ramp (${mult.toFixed(2)}× damage by ${p.durS.toFixed(0)}s) — pace with HP_MULT, not TIRE`)
+}
 
 // Levelling must LAND: out-levelling something by 10 has to kill visibly faster, or
 // the player's "my L6 feels the same" complaint is true again.
