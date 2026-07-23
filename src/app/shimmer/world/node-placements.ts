@@ -160,25 +160,3 @@ export const ZONE_NODES: Record<string, NodePlacement[]> = {
   'moonwell-glade-gregory-s-home': [],
   'test-sandbox': [],
 }
- = [
-  { type: 'small_pond' as NodeType, tileX: 16, tileY: 21 },
-]
-
-const CRUCIBLE_NODES: NodePlacement[] = [
-
-]
-
-export const ZONE_NODES: Record<string, NodePlacement[]> = {
-  'crucible': CRUCIBLE_NODES,
-  garden: GARDEN_NODES,
-  'mycelial-path': MYCELIAL_PATH_NODES,
-  'moonwell-glade': MOONWELL_GLADE_NODES,
-  'route-moonwell-garden': ROUTE_MOONWELL_GARDEN_NODES,
-  'spore-hollow': SPORE_HOLLOW_NODES,
-  'twilight-thicket': TWILIGHT_THICKET_NODES,
-  'the-threshold': THE_THRESHOLD_NODES,
-  'mana-springs': MANA_SPRINGS_NODES,
-  'spirit-meadow': SPIRIT_MEADOW_NODES,
-  'moonwell-glade-gregory-s-home': [],
-  'test-sandbox': [],
-}
