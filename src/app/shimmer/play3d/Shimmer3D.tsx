@@ -16,7 +16,11 @@ import { getHeightGrid } from '../world/heightmaps'
 import { GardenAtmosphere } from '../world/atmosphere'
 import { FloraTree, FloraDressing } from '../world/flora'
 import { StationProp, GhostProp } from '../world/prop-models'
-import { MultiplayerLayer } from './RemotePlayers'
+import { RemotePlayers, useRoster } from './RemotePlayers'
+import {
+  useMultiplayer, newPartyCode, sanitizePartyCode, storedParty, storeParty,
+  storedName, storeName, inviteUrl, type RemotePlayer,
+} from './multiplayer'
 import { rollEncounter, HOLD_LEVELS, type WildEncounter } from '../engine/encounters'
 import { derivePartyStats, type PartyStats } from '../engine/party-stats'
 import { getMovesForSpirit } from '../engine/moves'
@@ -1879,6 +1883,7 @@ const Scene = memo(function Scene(props: {
   onNeedReload: () => void
   onPlayerDamage: () => void
   onPlayerDown: () => void
+  mpPeers: React.RefObject<Map<string, RemotePlayer>>
 }) {
   // Pure-prop filter → safe to memo, so a channel tick doesn't re-allocate the structure list.
   // The NPC filter below is deliberately NOT memoized: npcInWorld() reads flagsRef.current, which is
@@ -1910,8 +1915,8 @@ const Scene = memo(function Scene(props: {
       <StructureMarkers structures={structuresInZone} heights={props.heights} />
       <PlacementGhost placing={props.placing} posRef={props.posRef} heights={props.heights} gridRef={props.gridRef} placeTargetRef={props.placeTargetRef} structuresRef={props.structuresRef} zoneIdRef={props.zoneIdRef} />
       <Player posRef={props.posRef} gridRef={props.gridRef} heightsRef={props.heightsRef} zoneIdRef={props.zoneIdRef} editRef={props.editRef} onWarp={props.onWarp} battleRef={props.battleRef} partyLevelRef={props.partyLevelRef} onEncounter={props.onEncounter} joyRef={props.joyRef} talkingRef={props.talkingRef} hasPartyRef={props.hasPartyRef} onNearChange={props.onNearChange} defeatedRef={props.defeatedRef} flagsRef={props.flagsRef} harvestNodesRef={props.harvestNodesRef} onNearNode={props.onNearNode} stationsRef={props.structuresRef} onNearStation={props.onNearStation} eyeRef={props.eyeRef} jumpRef={props.jumpRef} slideRef={props.slideRef} speedMultRef={props.speedMultRef} dreamwalkRef={props.dreamwalkRef} />
-      {/* presence: other players in this zone. Fails soft to single-player. */}
-      <MultiplayerLayer zoneId={props.zone.id} posRef={props.posRef} yawRef={props.yawRef} />
+      {/* presence: other players in this zone (socket lives in the page comp — shared with the panel) */}
+      <RemotePlayers peers={props.mpPeers} />
       {props.companionColor && !props.editing && <Follower posRef={props.posRef} heightsRef={props.heightsRef} color={props.companionColor} />}
       {props.fishing && <FishTell posRef={props.posRef} heightsRef={props.heightsRef} bite={props.fishBite} />}
       <HarvestPop pop={props.harvestPop} />
@@ -1968,6 +1973,93 @@ const TOOLS: { id: Tool; label: string }[] = [
   { id: 'wall', label: 'Cloud' }, { id: 'water', label: 'Water' }, { id: 'mist', label: 'Mist' },
   { id: 'warp', label: 'Warp' }, { id: 'void', label: 'Erase' },
 ]
+
+// ── Play Together panel — party codes + invite links + who's here ─────────────
+//
+// A party is a shared code, not an account (see multiplayer.ts). This panel is the whole
+// social UI: name yourself, make/join/leave a party, copy the invite link, see the roster.
+function PlayTogetherPanel({ name, onName, party, onParty, peers }: {
+  name: string
+  onName: (n: string) => void
+  party: string | null
+  onParty: (code: string | null) => void
+  peers: React.RefObject<Map<string, RemotePlayer>>
+}) {
+  const roster = useRoster(peers)
+  const [nameDraft, setNameDraft] = useState(name)
+  const [joinDraft, setJoinDraft] = useState('')
+  const [copied, setCopied] = useState(false)
+  const label: React.CSSProperties = { font: '800 9px ui-monospace, monospace', color: '#8fd9c4', letterSpacing: '0.14em' }
+  const input: React.CSSProperties = {
+    width: '100%', boxSizing: 'border-box', padding: '6px 8px', borderRadius: 8,
+    border: '1px solid #ffffff28', background: '#0b1513', color: '#eafff6',
+    font: '700 12px ui-monospace, monospace', outline: 'none',
+  }
+  const commitName = () => {
+    const clean = storeName(nameDraft)
+    setNameDraft(clean)
+    if (clean !== name) onName(clean)
+  }
+  const joinParty = () => {
+    const code = sanitizePartyCode(joinDraft)
+    if (!code) return
+    setJoinDraft('')
+    onParty(code)
+  }
+  const copyInvite = async () => {
+    if (!party) return
+    try { await navigator.clipboard.writeText(inviteUrl(party)) } catch { /* clipboard denied — code is visible to copy by hand */ }
+    setCopied(true); setTimeout(() => setCopied(false), 1600)
+  }
+  return (
+    <div style={{ width: 216, background: 'rgba(11,21,19,0.96)', border: '1px solid #2f5c4f', borderRadius: 11, padding: 12 }}>
+      <div style={{ ...label, textAlign: 'center', marginBottom: 10 }}>PLAY TOGETHER</div>
+
+      <div style={{ ...label, marginBottom: 4 }}>YOUR NAME</div>
+      <input
+        value={nameDraft} maxLength={24} style={input}
+        onChange={(e) => setNameDraft(e.target.value)}
+        onBlur={commitName}
+        onKeyDown={(e) => { e.stopPropagation(); if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
+      />
+
+      <div style={{ ...label, margin: '12px 0 4px' }}>PARTY</div>
+      {party ? (
+        <>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+            <span style={{ font: '800 18px ui-monospace, monospace', color: '#ffe08a', letterSpacing: '0.18em' }}>{party}</span>
+            <button onClick={() => onParty(null)} title="Leave party" style={{ ...menuBtn, padding: '4px 8px' }}>Leave</button>
+          </div>
+          <button onClick={copyInvite} style={{ ...menuBtn, width: '100%', textAlign: 'center', background: copied ? '#12261f' : undefined }}>
+            {copied ? '✓ Link copied' : '⧉ Copy invite link'}
+          </button>
+          <div style={{ font: '600 10px/1.5 ui-monospace, monospace', color: '#b8ae94', marginTop: 6 }}>
+            Friends who open the link (or enter the code) land in your world.
+          </div>
+        </>
+      ) : (
+        <>
+          <button onClick={() => onParty(newPartyCode())} style={{ ...menuBtn, width: '100%', textAlign: 'center' }}>⚑ Start a party</button>
+          <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
+            <input
+              value={joinDraft} placeholder="CODE" maxLength={12} style={{ ...input, letterSpacing: '0.14em' }}
+              onChange={(e) => setJoinDraft(e.target.value.toUpperCase())}
+              onKeyDown={(e) => { e.stopPropagation(); if (e.key === 'Enter') joinParty() }}
+            />
+            <button onClick={joinParty} style={{ ...menuBtn, padding: '4px 10px' }}>Join</button>
+          </div>
+        </>
+      )}
+
+      <div style={{ ...label, margin: '12px 0 4px' }}>IN YOUR WORLD</div>
+      <div style={{ font: '700 11px/1.7 ui-monospace, monospace', color: '#cfeee2' }}>
+        <div style={{ color: '#eafff6' }}>{name} <span style={{ color: '#8fd9c4' }}>(you)</span></div>
+        {roster.map(p => <div key={p.id}>{p.name}</div>)}
+        {roster.length === 0 && <div style={{ color: '#ffffff5e' }}>no one else yet</div>}
+      </div>
+    </div>
+  )
+}
 
 export default function Shimmer3D() {
   const [zoneId, setZoneId] = useState(START_ZONE)
@@ -2049,6 +2141,28 @@ export default function Shimmer3D() {
   const camYaw = useRef(0)
   // Live eye height — Player writes it (dips mid-slide), CameraRig reads it for the FPS eye position.
   const eyeRef = useRef(EYE_H)
+
+  // ── Play Together: one socket for the whole page (scene avatars + DOM panel). Party/name
+  // changes flow through the hook's effect deps = clean reconnect into the right instance. ──
+  const [mpName, setMpName] = useState('')            // '' until mount — storedName touches localStorage
+  const [mpParty, setMpParty] = useState<string | null>(null)
+  const [mpReady, setMpReady] = useState(false)       // gates the socket until identity is loaded
+  useEffect(() => {
+    // ?party=CODE in the URL is an INVITE — store it, join it, then strip it so a copied/bookmarked
+    // address doesn't keep re-asserting a party the player has since left.
+    const fromUrl = sanitizePartyCode(new URLSearchParams(window.location.search).get('party') ?? '')
+    if (fromUrl) {
+      storeParty(fromUrl)
+      const u = new URL(window.location.href); u.searchParams.delete('party')
+      window.history.replaceState(null, '', u.toString())
+    }
+    setMpParty(fromUrl ?? storedParty())
+    setMpName(storedName())
+    setMpReady(true)
+  }, [])
+  const { peers: mpPeers } = useMultiplayer({
+    enabled: mpReady, zoneId: zone.id, posRef, yawRef: camYaw, party: mpParty, playerName: mpName,
+  })
   // Touch triggers for jump/slide (mobile). jumpRef = edge (button sets true, Player consumes+clears);
   // slideRef = held (true while the slide button is pressed). Keyboard uses Space/Shift directly.
   const jumpRef = useRef(false)
@@ -2330,6 +2444,7 @@ export default function Shimmer3D() {
   const hookFishRef = useRef<() => void>(() => {}) // set below (needs grantHarvest, defined later)
   const [menuOpen, setMenuOpen] = useState(false)     // ☰ — edit terrain / new game
   const [skillsOpen, setSkillsOpen] = useState(false) // skills panel
+  const [mpOpen, setMpOpen] = useState(false)         // 👥 — play together (party / invite)
   const toggleChannel = useCallback(() => {
     if (fishRef.current) { hookFishRef.current(); return }   // fishing: this press is the strike (hook or slip)
     if (channelRef.current) { channelRef.current = null; setChannel(null); return }   // unlink
@@ -3520,6 +3635,7 @@ export default function Shimmer3D() {
           onNeedReload={startReload}
           onPlayerDamage={onPlayerDamage}
           onPlayerDown={onPlayerDown}
+          mpPeers={mpPeers}
         />
       </Canvas>
 
@@ -3692,7 +3808,7 @@ export default function Shimmer3D() {
           ))}
 
           {/* ☰ menu button */}
-          <button onClick={() => { setMenuOpen(o => !o); setSkillsOpen(false) }} style={{
+          <button onClick={() => { setMenuOpen(o => !o); setSkillsOpen(false); setMpOpen(false) }} style={{
             width: 40, height: 40, borderRadius: 10, border: `1px solid ${menuOpen ? '#d4a843' : '#ffffff33'}`,
             background: menuOpen ? '#241d10' : 'rgba(16,20,32,0.86)', color: '#e9dfc8', font: '800 18px ui-monospace, monospace', cursor: 'pointer',
           }}>☰</button>
@@ -3714,7 +3830,7 @@ export default function Shimmer3D() {
           )}
 
           {/* skills button */}
-          <button onClick={() => { setSkillsOpen(o => !o); setMenuOpen(false) }} style={{
+          <button onClick={() => { setSkillsOpen(o => !o); setMenuOpen(false); setMpOpen(false) }} style={{
             width: 40, height: 40, borderRadius: 10, border: `1px solid ${skillsOpen ? '#4fc79a' : '#ffffff33'}`,
             background: skillsOpen ? '#12261f' : 'rgba(16,20,32,0.86)', color: '#cfeee2', font: '800 16px ui-monospace, monospace', cursor: 'pointer',
           }}>⬡</button>
@@ -3737,6 +3853,19 @@ export default function Shimmer3D() {
                 )
               })}
             </div>
+          )}
+
+          {/* 👥 play together — party / invite / roster */}
+          <button onClick={() => { setMpOpen(o => !o); setMenuOpen(false); setSkillsOpen(false) }} style={{
+            width: 40, height: 40, borderRadius: 10, border: `1px solid ${mpOpen ? '#4aa3e6' : '#ffffff33'}`,
+            background: mpOpen ? '#101c2b' : 'rgba(16,20,32,0.86)', color: '#bfe0ff', font: '800 15px ui-monospace, monospace', cursor: 'pointer',
+          }} title="Play together">👥</button>
+          {mpOpen && (
+            <PlayTogetherPanel
+              name={mpName} onName={setMpName}
+              party={mpParty} onParty={(code) => { storeParty(code); setMpParty(code) }}
+              peers={mpPeers}
+            />
           )}
         </div>
       )}

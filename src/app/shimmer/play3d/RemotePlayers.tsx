@@ -9,7 +9,7 @@ import { useRef, useMemo, useState, useEffect } from 'react'
 import { useFrame } from '@react-three/fiber'
 import { Html } from '@react-three/drei'
 import * as THREE from 'three'
-import { useMultiplayer, type RemotePlayer } from './multiplayer'
+import { type RemotePlayer } from './multiplayer'
 
 // Positions arrive ~12x/sec; at 60fps that's a fresh target every 5th frame. Chasing the target
 // with an exponential ease hides the gap without adding visible latency at walking speed.
@@ -82,27 +82,15 @@ export function RemotePlayers({ peers }: { peers: React.RefObject<Map<string, Re
   return <>{roster.map((p) => <Avatar key={p.id} peer={p} />)}</>
 }
 
-/**
- * One-line mount inside the scene graph — owns the socket and draws everyone else:
- *   <MultiplayerLayer zoneId={props.zone.id} posRef={props.posRef} yawRef={props.yawRef} />
- *
- * Fails soft by design. If the WS is unreachable the hook retries with backoff and this renders
- * nothing — a single-player session, not a broken one. Presence must never be able to take the
- * game down with it.
- */
-export function MultiplayerLayer({ zoneId, posRef, yawRef, enabled = true }: {
-  zoneId: string
-  posRef: React.RefObject<{ x: number; y: number; z: number } | null>
-  yawRef: React.RefObject<number>
-  enabled?: boolean
-}) {
-  const { peers } = useMultiplayer({ enabled, zoneId, posRef, yawRef })
-  return <RemotePlayers peers={peers} />
-}
+// The socket hook (useMultiplayer) lives in the PAGE component, not here — the Play Together
+// panel (DOM, outside the Canvas) needs the same peers/party/name state, and one socket serving
+// both beats two components fighting over who owns the connection. The scene mounts
+// <RemotePlayers peers={...}/> directly; it fails soft to an empty roster.
 
 // Watches the peer map for membership changes at a low rate. Polling beats threading a
 // subscription through the socket layer, and joins/leaves are rare enough that 2Hz is invisible.
-function useRoster(peers: React.RefObject<Map<string, RemotePlayer>>): RemotePlayer[] {
+// Exported for the Play Together panel's roster — same polling, DOM side.
+export function useRoster(peers: React.RefObject<Map<string, RemotePlayer>>): RemotePlayer[] {
   const [list, setList] = useState<RemotePlayer[]>([])
   useEffect(() => {
     const t = setInterval(() => {

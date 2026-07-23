@@ -54,16 +54,69 @@ function identity(): { id: string; name: string } {
   return { id, name }
 }
 
-export function wsUrl(zoneId: string): string | null {
+// ── Play-Together identity + party (the UI reads/writes through these) ─────────
+//
+// A party is a shared CODE, not an account: everyone connecting with the same code
+// lands in the same instance per zone (server keys `party_<code>__<zone>`), and the
+// code persists in localStorage so warps and reloads keep the party together.
+// Possession of the code IS membership — there's no server-side friend state yet,
+// deliberately: player_id is client-claimed, so a "real" friends list would be
+// security theater until identity is server-trusted.
+
+const PARTY_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789' // no I/L/O/0/1 — read-aloud safe
+
+export function sanitizePartyCode(raw: string): string | null {
+  const clean = raw.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 12)
+  return clean.length >= 4 ? clean : null
+}
+
+export function newPartyCode(): string {
+  let code = ''
+  for (let i = 0; i < 5; i++) code += PARTY_ALPHABET[Math.floor(Math.random() * PARTY_ALPHABET.length)]
+  return code
+}
+
+export function storedParty(): string | null {
+  try { return sanitizePartyCode(localStorage.getItem('ather:mp:party') ?? '') } catch { return null }
+}
+
+export function storeParty(code: string | null) {
+  try {
+    if (code) localStorage.setItem('ather:mp:party', code)
+    else localStorage.removeItem('ather:mp:party')
+  } catch { /* private mode — party just won't survive a reload */ }
+}
+
+export function storedName(): string {
+  return identity().name
+}
+
+export function storeName(name: string): string {
+  const clean = name.trim().slice(0, 24)
+  if (!clean) return identity().name
+  try { localStorage.setItem('ather:mp:name', clean) } catch { /* session-only then */ }
+  return clean
+}
+
+export function selfPlayerId(): string {
+  return identity().id
+}
+
+export function inviteUrl(code: string): string {
+  return `${window.location.origin}/shimmer/play3d?party=${code}`
+}
+
+export function wsUrl(zoneId: string, party: string | null, playerName: string): string | null {
   if (typeof window === 'undefined') return null
   const { protocol, host } = window.location
   const scheme = protocol === 'https:' ? 'wss:' : 'ws:'
   const { id, name } = identity()
   const q = new URLSearchParams({
-    player_id: id, name,
+    player_id: id, name: playerName || name,
     zone: ZONE_PREFIX + zoneId,
     instance_type: 'zone',
   })
+  if (party) q.set('party', party)
   return `${scheme}//${host}/shimmer-ws/ws?${q}`
 }
 
@@ -78,15 +131,19 @@ export function useMultiplayer(opts: {
   zoneId: string
   posRef: React.RefObject<{ x: number; y: number; z: number } | null>
   yawRef: React.RefObject<number>
+  /** shared party code — a change reconnects into the party's instance */
+  party?: string | null
+  /** display name — a change reconnects so the roster shows the new name */
+  playerName?: string
 }) {
-  const { enabled, zoneId, posRef, yawRef } = opts
+  const { enabled, zoneId, posRef, yawRef, party = null, playerName = '' } = opts
   const peers = useRef<Map<string, RemotePlayer>>(new Map())
   const selfId = useRef<string>('')
   const status = useRef<'off' | 'connecting' | 'live' | 'error'>('off')
 
   useEffect(() => {
     if (!enabled || !zoneId) return
-    const url = wsUrl(zoneId)
+    const url = wsUrl(zoneId, party, playerName)
     if (!url) return
     selfId.current = identity().id
 
@@ -182,7 +239,7 @@ export function useMultiplayer(opts: {
       peers.current.clear()
       status.current = 'off'
     }
-  }, [enabled, zoneId, posRef, yawRef])
+  }, [enabled, zoneId, posRef, yawRef, party, playerName])
 
   return { peers, status }
 }
