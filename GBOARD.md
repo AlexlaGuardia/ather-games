@@ -498,9 +498,21 @@ the Arcade frame.
 > band, collars shatter + FREED beat on win. Holds mount w/ amber title banner + intro splash
 > (HOLD 1 — THISTLE / HOLD 2 — SORREL'S STRONGHOLD / HOLD 3 — BRACK'S GAUNTLET). Boss test slice:
 > `/shimmer/arena?mode=hold`. Oracles 17/17 + 4/4.
-> **NEXT:** Alex feel-pass (dials at arena-moves.ts top) · moglins-as-fighters talk (what canon
-> exists for their kits?) · then possibly guard-protects-captive spatial AI (guards intercept,
-> captives hang back) if the holds want more shape.
+> **SAME NIGHT (07-22→23): team cards + editor/spawner block.** Pokemon-style team cards
+> (Alex whiteboard: staggered stacks, VS center; banded HP, stance/COLLARED/DOWN/winding reads;
+> over-head bars retired). Battle-end event-spam fixed; XP re-curved (fraction-of-bar, XP_FRAC
+> 0.08 — flat chunks were invisible past L15). Mirror-fight fix (per-fighter seeded personality).
+> **EDITOR:** full node palette (12 types, was shimmeroak-only) + SPAWNER layer (Sp:Thistle/
+> Sorrel/Brack) → spawn-placements.ts via save-map, served by world-data, live-overlay at boot.
+> **MOGLIN PATROLS (Alex direction):** armed spawner = lurking lesser moglin; proximity → patrol
+> fight (2 collared spirits @ party+1, trained tier); handler pays MARKS + relation XP; win →
+> 10min spawner sleep (persisted); freeing the hold retires its patrols. 3 seed spawners in
+> the-outfields — Alex repositions in-editor.
+> **OPEN BUG:** Alex reports map saves not sticking — every server path verified working
+> (grid/stub-conversion/nodes/spawners all round-trip); need his repro (zone + corner message).
+> **NEXT:** Alex map pass w/ new palette · per-move animation pass (readability milestone) ·
+> moglin canon Q (lesser-moglin look/name for the lurker + patrol framing) · boss placement
+> tweaks now Alex-doable via editor.
 > **Parked:** sunfruit + moonberry are Exchange-BUY-only reagents (salve lv3, bond_philter lv8) — works, but
 > a forageable berry-bush node type would be cozier; new content scope, needs its own pass (+ canon look Q).
 > **Decisions:** effects = build-side mechanics (canon names untouched, per SHIMMER-CANON-BOUNDARY) ·
