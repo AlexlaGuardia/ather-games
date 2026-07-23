@@ -531,13 +531,18 @@ the Arcade frame.
 >   a **differential** damage term, so mirrors keep the tuned pacing and out-levelling reads as
 >   reward. Slope is capped by the oracle, not taste: `0.05`/level made a 4-level gap a 1.5×
 >   swing that skilled play could no longer flip, so it sits at **`0.025`**.
-> - **The slog itself → TIRE.** `TIRE_AT` 25s→**14s**, `TIRE_RAMP` +5%→**+16%**/s. This is the only
->   knob that shortens *long* fights without touching short ones. **A first attempt got the same TTK
->   by nerfing guard + cutting `HP_MULT` and quietly dropped the party baseline 38%→27%** (the ally
->   team runs a tank) — tire leaves `HP_MULT`, `GRD_K_BASE` and the Keeper's aid clocks alone.
-> - **Numbers now:** duel ~6 hits/22s · party 3v3 ~6.7/31s · worst case in the game (high-guard
->   mirror) ~11/40s · L50 mirror 0.96× the L5 mirror (was stalemate) · +10 levels ≈ 16% fewer hits.
->   Oracle: skill delta **+64.5 pts**, party baseline 39.5%, 100% resolved.
+> - **The slog itself → `HP_MULT` 2.6 → 1.8.** Flat: a hit lands the same at 5s as at 45s.
+>   **Took three attempts, and the two rejected ones are the lesson:** (a) nerfing guard
+>   (`GRD_K_BASE` 80→120/200) + cutting HP hit the TTK but quietly dropped the party baseline
+>   **38%→27%** — the ally team runs a tank, so nerfing guard nerfs the player. (b) `TIRE`
+>   14s/+16%/s hit the TTK, went **fully green on every oracle band**, and **Alex rejected it on
+>   sight**: *"it's almost like it forced it, with a super crit — it's ramping up the damage as the
+>   battle progresses."* At that slope a hit at 40s is **5.2× an opening hit**. TIRE is a stalemate
+>   backstop, not a pacing knob; it is back at 25s/+5%, where a duel ends before the ramp starts.
+> - **Numbers now:** duel ~5.3 hits/19s · party 3v3 ~6.3/33s · worst case in the game (high-guard
+>   mirror) ~13/48s · L50 mirror 0.96× the L5 mirror (was a **stalemate** — zero KOs in 60s) ·
+>   +10 levels ≈ 17% fewer hits. Oracle: skill delta **+72.5 pts**, party baseline **37%** (vs 38%
+>   on the original engine — the balance attempt (a) disturbed is intact), 100% resolved.
 >
 > **★ THE ORACLE WAS NOT REPRODUCIBLE, which is how all of this hid.** `createSpirit()` rolls IVs and
 > temperament off `Math.random()`, so mulberry32 seeded the **fight** but not the **fighters**:
@@ -552,6 +557,15 @@ the Arcade frame.
 > which is why a stalemating tank mirror sat green under passing win-rate bands. Now guarded both
 > ways — no slog, and no fight so short the telegraph/dodge choreography never reads — plus
 > level-drift and does-levelling-land asserts, so all three bugs fail loudly if they return.
+>
+> **★ AND: "was this fight decided by the FIGHTERS?" is asserted too** — the lesson from the
+> rejected TIRE build. Every band passed while the feel was destroyed, because *a fight ending fast*
+> and *a fight escalated to an ending* look identical in a win-rate or a hit count: the oracle
+> measured **when** a fight ends, never **why**. It now checks the tire multiplier at the moment a
+> normal fight resolves (must stay <1.5×), and that assert was **verified to fire on the rejected
+> config** (duel 1.56×, party 3.03×) before being trusted. **An oracle only defends the properties
+> it names — when a build passes every check and still feels wrong, the missing assertion IS the
+> finding.** Write it before moving on, and prove it fails on the bad build.
 >
 > **NEXT:** Alex feel-pass the new pacing (dials: `TIRE_AT`/`TIRE_RAMP` in `arena-moves.ts`,
 > `LEVEL_EDGE_PER` in `arena.ts`). Then the **level-up card** Alex asked for — banner + stat deltas
