@@ -23,7 +23,7 @@
 import type { Species, Element, Spirit } from '../spirits/spirit'
 import { derivePartyStats } from './party-stats'
 import {
-  kitForSpirit, chooseMove, hitChance, moveDamage, applyStatus, stageMult,
+  kitForSpirit, chooseMove, hitChance, moveDamage, applyStatus, stageMult, SECONDARY_STAT_CHANCE,
   freshStatus, freshStages, toBattleElement,
   type ArenaMove, type ArenaAITier, type StatusState, type StageState, type MoveState, type StatusId, type BattleElement,
 } from './arena-moves'
@@ -546,12 +546,17 @@ function executeMove(state: ArenaState, f: Fighter, a: Act) {
       applyStatus(tgt.st, m.effect)
       state.events.push({ type: 'status', who: tgt.id, status: m.effect })
     }
-    for (const c of m.statChanges ?? []) {
-      if (c.target !== 'foe') continue
-      if (!(c.stat in tgt.stage)) continue
-      const key = c.stat as keyof StageState
-      tgt.stage[key] = Math.max(-3, Math.min(3, tgt.stage[key] + c.stages))
-      state.events.push({ type: 'stat', who: tgt.id, stat: key, stages: c.stages })
+    // ONE roll per move, not per stat: a secondary debuff lands whole or not at all, so
+    // quake_dust is "sometimes takes both" rather than "usually takes one".
+    const dropChance = m.power > 0 ? SECONDARY_STAT_CHANCE : 100
+    if (state.rng() * 100 < dropChance) {
+      for (const c of m.statChanges ?? []) {
+        if (c.target !== 'foe') continue
+        if (!(c.stat in tgt.stage)) continue
+        const key = c.stat as keyof StageState
+        tgt.stage[key] = Math.max(-3, Math.min(3, tgt.stage[key] + c.stages))
+        state.events.push({ type: 'stat', who: tgt.id, stat: key, stages: c.stages })
+      }
     }
   }
 }

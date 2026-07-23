@@ -29,6 +29,18 @@ export const HIT_FLOOR = 0.55         // even wild swings connect sometimes
 export const HIT_CEIL = 0.98          // nothing is a guaranteed hit
 export const SIDESTEP = 0.9           // dodge displacement (floor units)
 export const STAGE_MULT = 0.22        // per stat stage (±3 cap)
+
+// A stat drop riding a DAMAGING move is a SECONDARY effect and rolls like one — the same way
+// `effect` already rolls against effectChance. A dedicated status move (power 0) is the whole
+// point of the move, so it still lands every time.
+//
+// Why this exists: foe stat changes used to apply unconditionally on every hit. `quake_dust`
+// (55 power, lv22, pwr-1 AND agi-1) therefore put a foe at 34% power and 34% agility inside
+// three hits — at STAGE_MULT 0.22 the -3 floor is 1 - 0.66. That made a spirit one level past
+// a learn threshold literally unbeatable, and it read as a "level cliff" because learn levels
+// and level gaps move together. It was never level scaling: with levelEdge disabled entirely
+// the cliff was unchanged, and a +4 gap that crosses no learn level is perfectly winnable.
+export const SECONDARY_STAT_CHANCE = 30
 // Sudden-death ramp — a STALEMATE BACKSTOP, not a pacing knob. Keep it barely visible.
 //
 // ★ DO NOT TUNE TTK WITH THIS (learned the hard way 2026-07-23). The pacing pass first
