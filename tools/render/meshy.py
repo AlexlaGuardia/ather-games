@@ -78,6 +78,23 @@ class MeshyClient:
     def get_image_to_3d(self, task_id):
         return self._req("GET", f"/openapi/v1/image-to-3d/{task_id}")
 
+    # ── rigging (v1): auto-rig a TEXTURED humanoid + basic walk/run animation clips ──
+    # Constraints per docs: textured bipedal humanoids with clear limbs only, front on +Z
+    # (Meshy's own convention, so a Meshy-generated character is already compliant),
+    # ≤300k faces via input_task_id. 5 credits; failed tasks refund.
+    def create_rigging(self, input_task_id=None, model_url=None, height_meters=1.7, **opts):
+        body = {"height_meters": height_meters, **opts}
+        if input_task_id:
+            body["input_task_id"] = input_task_id
+        elif model_url:
+            body["model_url"] = model_url
+        else:
+            raise MeshyError("rigging needs input_task_id or model_url")
+        return self._req("POST", "/openapi/v1/rigging", body)["result"]
+
+    def get_rigging(self, task_id):
+        return self._req("GET", f"/openapi/v1/rigging/{task_id}")
+
     # ── poll a task to a terminal state ──
     def poll(self, getter, task_id, every=5, max_wait=900, log=True):
         t0 = time.time()
@@ -136,6 +153,33 @@ def generate_image(client, image, out, **opts):
     return out
 
 
+def rig_task(client, task_id, out_dir, height=1.7):
+    """Rig a finished text/image-to-3d task; saves rigged model + every animation GLB Meshy
+    returns (walking/running). Prints the full result key map — the docs undersell what
+    comes back, so SEE it rather than assume."""
+    print(f"[meshy] rigging task {task_id} (height {height}m)…")
+    rid = client.create_rigging(input_task_id=task_id, height_meters=height)
+    task = client.poll(client.get_rigging, rid, every=5)
+    result = task.get("result", task)
+    os.makedirs(out_dir, exist_ok=True)
+    saved = []
+    def grab(node, prefix=""):
+        if isinstance(node, dict):
+            for k, v in node.items():
+                grab(v, f"{prefix}{k}.")
+        elif isinstance(node, str) and node.startswith("http") and ".glb" in node.split("?")[0]:
+            name = prefix.rstrip(".").replace(".", "_") + ".glb"
+            dest = os.path.join(out_dir, name)
+            download(node, dest)
+            saved.append(dest)
+            print(f"  saved {dest}")
+    grab(result)
+    if not saved:
+        print(f"  no GLB urls found — raw result keys: {json.dumps(result)[:800]}")
+    print(f"[meshy] rigging done  ·  credits left: {client.balance()}")
+    return saved
+
+
 def main():
     ap = argparse.ArgumentParser(description="Meshy.ai -> GLB (mesh-gen front end of the picaso render pipeline)")
     ap.add_argument("--balance", action="store_true", help="print credit balance and exit")
@@ -146,6 +190,9 @@ def main():
     ap.add_argument("--polycount", type=int, help="target polycount (100-300000) — text + image")
     ap.add_argument("--topology", choices=["quad", "triangle"], help="mesh topology — text + image")
     ap.add_argument("--no-texture", action="store_true", help="image: skip texturing (should_texture=false)")
+    ap.add_argument("--rig", metavar="TASK_ID", help="rig a finished text/image-to-3d task; saves rigged + animation GLBs")
+    ap.add_argument("--rig-height", type=float, default=1.7, help="character height in meters for rigging (default 1.7)")
+    ap.add_argument("--out-dir", default="/tmp/meshy/rig", help="rig: output directory for rigged/animation GLBs")
     a = ap.parse_args()
 
     c = MeshyClient()
@@ -157,14 +204,16 @@ def main():
         opts["target_polycount"] = a.polycount
     if a.topology:
         opts["topology"] = a.topology
-    if a.text:
+    if a.rig:
+        rig_task(c, a.rig, a.out_dir, height=a.rig_height)
+    elif a.text:
         generate_text(c, a.text, a.out, refine=a.refine, **opts)
     elif a.image:
         if a.no_texture:
             opts["should_texture"] = False
         generate_image(c, a.image, a.out, **opts)
     else:
-        ap.error("give --text, --image, or --balance")
+        ap.error("give --text, --image, --rig, or --balance")
 
 
 if __name__ == "__main__":
