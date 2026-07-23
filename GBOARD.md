@@ -472,12 +472,23 @@ the Arcade frame.
 > served chunk hashes against `.next` on disk before debugging the code.
 > **Testing gotcha:** a backgrounded Chrome tab freezes rAF = the whole R3F loop (movement, net send)
 > is dead while hidden. Presence tests need a FOCUSED tab, or go headless bot-to-bot.
-> **Next:** Alex eyeball pass (walk a step, a Testbot orbits you) · real avatar models (blockout
-> capsule + name tag today; rigged characters are the expensive part) · presence polish (join/leave
-> toasts?, friend gravity surfacing) — Alex's call on scope before more sync (trade/party/chat all
-> need server-side state first, per multiplayer.ts SCOPE note).
-> **Files:** `play3d/multiplayer.ts` (hook + protocol) · `play3d/RemotePlayers.tsx` (avatars + layer)
-> · mount in `Shimmer3D.tsx` Scene · server `/root/shimmer-server`.
+> **PLAY TOGETHER shipped same day (`561e9c6` client, shimmer-server `5a98ffb`):** party codes +
+> invite links + names + live roster. 👥 HUD button → panel: editable name, start/join/leave party,
+> copy invite (`?party=CODE` — stored, joined, stripped from URL). A party is a shared CODE not an
+> account — DELIBERATE: player_id is client-claimed, a friends list is security theater until
+> identity is server-trusted. Server keys `party_<code>__<zone>` (type 'party', invisible to zone
+> matchmaking) so parties survive warps and strangers never bleed in. Socket hook lives in the PAGE
+> comp now (panel + avatars share one connection); Scene takes `mpPeers`. Verified live: UI-created
+> party BF63W, roster switched instances correctly, headless FriendBot joined the code and appeared.
+> **Known wrinkle (deliberate):** two tabs in one browser share player_id → second connection
+> shadows the first server-side. Fix belongs to server-trusted identity, later.
+> **Next:** Alex two-device test (phone + desktop = different identities) · real avatar models
+> (blockout capsule + name tag today; rigs are the expensive part) · join/leave toasts · then the
+> friends-list question IF codes prove insufficient — needs server-side identity + storage first
+> (trade/party-sync/chat same gate, per multiplayer.ts SCOPE note).
+> **Files:** `play3d/multiplayer.ts` (hook + protocol + party/name helpers) · `play3d/RemotePlayers.tsx`
+> (avatars + useRoster) · `Shimmer3D.tsx` (PlayTogetherPanel + hook in page comp) · server
+> `/root/shimmer-server/main.py` (party routing).
 
 ## ⚖️ Shimmer — PARTY BALANCE (measuring instrument built 2026-07-23, jin-cc)
 > ### ⚠️ READ FIRST — THIS BLOCK MEASURES A BATTLE SYSTEM NOBODY PLAYS (correction, 2026-07-23 later)
