@@ -5,7 +5,7 @@
 // height grid; cell tools edit the tile grid (so you can remove water/walls). Save persists both
 // (heights→/shimmer/save-heights, grid→/shimmer/save-map). Warps/collision reuse the 2D engine.
 import { Canvas, useFrame, type ThreeEvent } from '@react-three/fiber'
-import { Html } from '@react-three/drei'
+import { Html, PerformanceMonitor } from '@react-three/drei'
 import { useRef, useEffect, useLayoutEffect, useMemo, useState, useCallback, memo } from 'react'
 import * as THREE from 'three'
 import { walkable } from '../engine/player'
@@ -53,6 +53,8 @@ import { useCloudSave } from '@/lib/use-cloud-save'
 import { useWallet } from '@/lib/use-wallet'
 import { StationMenus, type PlacedStruct, type StationKind } from './StationMenus'
 import { prettyItem, menuBtn, TOOL_HUD } from './ui'
+import { GfxPanel, FrameProbe, type FrameStats } from './GfxPanel'
+import { loadGfx, storeGfx, gfxKey, dprCeiling, SHADOW_MAP_SIZE, DPR_FLOOR, type GfxSettings } from './gfx'
 import { WorldMap, MiniMap } from './WorldMap'
 import { WORLD_ZONE_ID, registerGardenWorld, getGardenWorld, isStitched, fromWorld } from '../world/garden-world'
 import { allNpcs, nodePlacementsFor, spawnerPlacementsFor, logicalZoneAt, structuresView, logicalStruct } from './world-adapter'
@@ -1884,6 +1886,8 @@ const Scene = memo(function Scene(props: {
   onPlayerDamage: () => void
   onPlayerDown: () => void
   mpPeers: React.RefObject<Map<string, RemotePlayer>>
+  /** Directional-light shadow map edge, or null for shadows off. Player-set — see gfx.ts. */
+  shadowMap: number | null
 }) {
   // Pure-prop filter → safe to memo, so a channel tick doesn't re-allocate the structure list.
   // The NPC filter below is deliberately NOT memoized: npcInWorld() reads flagsRef.current, which is
@@ -1897,9 +1901,12 @@ const Scene = memo(function Scene(props: {
     <>
       <GardenAtmosphere zoneId={props.atmosZone} />
       <ambientLight intensity={0.65} />
+      {/* Shadow map size is player-set (gfx.ts). Keyed on the size so a change reallocates the map
+          instead of leaving three.js holding the old one — the prop alone would not resize it. */}
       <directionalLight
-        position={[18, 26, 12]} intensity={1.25} castShadow
-        shadow-mapSize-width={2048} shadow-mapSize-height={2048}
+        key={`sun-${props.shadowMap ?? 'off'}`}
+        position={[18, 26, 12]} intensity={1.25} castShadow={props.shadowMap !== null}
+        shadow-mapSize-width={props.shadowMap ?? 1024} shadow-mapSize-height={props.shadowMap ?? 1024}
         shadow-camera-left={-40} shadow-camera-right={40}
         shadow-camera-top={40} shadow-camera-bottom={-40}
         shadow-camera-near={0.5} shadow-camera-far={160}
@@ -2445,6 +2452,20 @@ export default function Shimmer3D() {
   const [menuOpen, setMenuOpen] = useState(false)     // ☰ — edit terrain / new game
   const [skillsOpen, setSkillsOpen] = useState(false) // skills panel
   const [mpOpen, setMpOpen] = useState(false)         // 👥 — play together (party / invite)
+  const [gfxOpen, setGfxOpen] = useState(false)       // ⚙ — graphics quality + frame readout
+
+  // ── Graphics quality. Read once from localStorage (lazy init, so SSR never touches it), and
+  // every change is persisted so the player rules once, not every session.
+  const [gfx, setGfxState] = useState<GfxSettings>(loadGfx)
+  const setGfx = useCallback((next: GfxSettings) => { setGfxState(next); storeGfx(next) }, [])
+  const frameStats = useRef<FrameStats>({ fps: 0, worstMs: 0, spikes: 0, dpr: 1 })
+
+  // Live resolution scale. Starts at the ceiling; PerformanceMonitor walks it down toward
+  // DPR_FLOOR while the GPU is behind and back up when it catches up — but ONLY when the player
+  // has asked for adaptive. With it off, dpr is pinned so the look is exactly what they chose.
+  const [dpr, setDpr] = useState(1)
+  useEffect(() => { setDpr(dprCeiling()) }, [])
+  useEffect(() => { if (!gfx.adaptiveDpr) setDpr(dprCeiling()) }, [gfx.adaptiveDpr])
   const toggleChannel = useCallback(() => {
     if (fishRef.current) { hookFishRef.current(); return }   // fishing: this press is the strike (hook or slip)
     if (channelRef.current) { channelRef.current = null; setChannel(null); return }   // unlink
@@ -3601,8 +3622,27 @@ export default function Shimmer3D() {
 
   return (
     <div style={{ position: 'fixed', inset: 0, background: '#bfe3ef', cursor: editMode ? 'crosshair' : 'default', touchAction: 'none', overscrollBehavior: 'none' }}>
-      <Canvas shadows camera={{ fov: 45, position: [1, 6, 14], near: 0.1, far: 500 }} gl={{ antialias: true }}
+      {/* key: antialias is a WebGL CONTEXT flag and shadowMap.enabled needs every shader recompiled,
+          so a quality change remounts the canvas rather than half-applying. Position/yaw survive —
+          they live in this component's refs, not the scene graph. See gfx.ts gfxKey(). */}
+      <Canvas key={gfxKey(gfx)}
+        shadows={gfx.shadows !== 'off'}
+        dpr={dpr}
+        camera={{ fov: 45, position: [1, 6, 14], near: 0.1, far: 500 }}
+        gl={{ antialias: gfx.antialias }}
         onCreated={(state) => { canvasElRef.current = state.gl.domElement }}>
+        <FrameProbe statsRef={frameStats} />
+        {gfx.adaptiveDpr && (
+          <PerformanceMonitor
+            onDecline={() => setDpr(d => Math.max(DPR_FLOOR, +(d - 0.2).toFixed(2)))}
+            onIncline={() => setDpr(d => Math.min(dprCeiling(), +(d + 0.2).toFixed(2)))}
+            // Oscillation guard: if it keeps crossing the line, stop chasing and settle at the
+            // floor. Without this a borderline GPU ping-pongs the resolution, which reads WORSE
+            // than simply running soft — the image would breathe every couple of seconds.
+            flipflops={3}
+            onFallback={() => setDpr(DPR_FLOOR)}
+          />
+        )}
         <Scene
           zone={zone} gridRef={gridRef} heights={heightsRef.current} version={version} dims={dims}
           posRef={posRef as React.RefObject<THREE.Vector3>} heightsRef={heightsRef} zoneIdRef={zoneIdRef}
@@ -3636,6 +3676,7 @@ export default function Shimmer3D() {
           onPlayerDamage={onPlayerDamage}
           onPlayerDown={onPlayerDown}
           mpPeers={mpPeers}
+          shadowMap={SHADOW_MAP_SIZE[gfx.shadows]}
         />
       </Canvas>
 
@@ -3808,7 +3849,7 @@ export default function Shimmer3D() {
           ))}
 
           {/* ☰ menu button */}
-          <button onClick={() => { setMenuOpen(o => !o); setSkillsOpen(false); setMpOpen(false) }} style={{
+          <button onClick={() => { setMenuOpen(o => !o); setSkillsOpen(false); setMpOpen(false); setGfxOpen(false) }} style={{
             width: 40, height: 40, borderRadius: 10, border: `1px solid ${menuOpen ? '#d4a843' : '#ffffff33'}`,
             background: menuOpen ? '#241d10' : 'rgba(16,20,32,0.86)', color: '#e9dfc8', font: '800 18px ui-monospace, monospace', cursor: 'pointer',
           }}>☰</button>
@@ -3830,7 +3871,7 @@ export default function Shimmer3D() {
           )}
 
           {/* skills button */}
-          <button onClick={() => { setSkillsOpen(o => !o); setMenuOpen(false); setMpOpen(false) }} style={{
+          <button onClick={() => { setSkillsOpen(o => !o); setMenuOpen(false); setMpOpen(false); setGfxOpen(false) }} style={{
             width: 40, height: 40, borderRadius: 10, border: `1px solid ${skillsOpen ? '#4fc79a' : '#ffffff33'}`,
             background: skillsOpen ? '#12261f' : 'rgba(16,20,32,0.86)', color: '#cfeee2', font: '800 16px ui-monospace, monospace', cursor: 'pointer',
           }}>⬡</button>
@@ -3856,7 +3897,7 @@ export default function Shimmer3D() {
           )}
 
           {/* 👥 play together — party / invite / roster */}
-          <button onClick={() => { setMpOpen(o => !o); setMenuOpen(false); setSkillsOpen(false) }} style={{
+          <button onClick={() => { setMpOpen(o => !o); setMenuOpen(false); setSkillsOpen(false); setGfxOpen(false) }} style={{
             width: 40, height: 40, borderRadius: 10, border: `1px solid ${mpOpen ? '#4aa3e6' : '#ffffff33'}`,
             background: mpOpen ? '#101c2b' : 'rgba(16,20,32,0.86)', color: '#bfe0ff', font: '800 15px ui-monospace, monospace', cursor: 'pointer',
           }} title="Play together">👥</button>
@@ -3867,6 +3908,13 @@ export default function Shimmer3D() {
               peers={mpPeers}
             />
           )}
+
+          {/* ⚙ graphics — quality toggles + live frame readout */}
+          <button onClick={() => { setGfxOpen(o => !o); setMenuOpen(false); setSkillsOpen(false); setMpOpen(false) }} style={{
+            width: 40, height: 40, borderRadius: 10, border: `1px solid ${gfxOpen ? '#7fe3c8' : '#ffffff33'}`,
+            background: gfxOpen ? '#12352c' : 'rgba(16,20,32,0.86)', color: '#bfe0ff', font: '800 15px ui-monospace, monospace', cursor: 'pointer',
+          }} title="Graphics">⚙</button>
+          {gfxOpen && <GfxPanel gfx={gfx} onGfx={setGfx} statsRef={frameStats} />}
         </div>
       )}
 
