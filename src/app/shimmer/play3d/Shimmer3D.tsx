@@ -3295,20 +3295,22 @@ export default function Shimmer3D() {
     if (SPAWNER_TOOL_IDS.has(t)) {
       const gate = SPAWNER_TOOLS.find(x => x.id === t)!.gate
       setSpawners(prev => {
+        const here = prev.find(sp => sp.tileX === c && sp.tileY === r)
         const without = prev.filter(sp => !(sp.tileX === c && sp.tileY === r))
         if (shift) return without
-        if (without.length !== prev.length) return prev
-        return [...prev, { kind: 'moglin' as const, gate, tileX: c, tileY: r }]
+        if (here?.gate === gate) return without                    // same gate again = toggle off
+        return [...without, { kind: 'moglin' as const, gate, tileX: c, tileY: r }]  // place / swap gate
       })
       return
     }
     // Node tools drop/remove a single resource node in the node layer (not the tile grid).
     if (NODE_TOOL_IDS.has(t)) {
       setNodes(prev => {
+        const here = prev.find(n => n.tileX === c && n.tileY === r)
         const without = prev.filter(n => !(n.tileX === c && n.tileY === r))
         if (shift) return without                                  // shift-click erases any node here
-        if (without.length !== prev.length) return prev            // already a node here — leave it
-        return [...prev, { type: t as NodeType, tileX: c, tileY: r }]
+        if (here?.type === t) return without                       // same type again = toggle off
+        return [...without, { type: t as NodeType, tileX: c, tileY: r }]  // place / swap type
       })
       return
     }
@@ -3326,6 +3328,13 @@ export default function Shimmer3D() {
       else if (t === 'warp') G[rr][cc] = WARP_ID
       else if (t === 'void') { G[rr][cc] = VOID; H[rr][cc] = 0 }
       if (t === 'raise') H[rr][cc] = Math.max(0, H[rr][cc])
+    }
+    // Erase means ERASE — the void tool also clears any nodes/spawners under the brush
+    // (they're separate layers; leaving them floating on erased ground read as "erase is broken").
+    if (t === 'void') {
+      const inBrush = (x: number, y: number) => Math.abs(x - c) <= b && Math.abs(y - r) <= b
+      setNodes(prev => prev.some(n => inBrush(n.tileX, n.tileY)) ? prev.filter(n => !inBrush(n.tileX, n.tileY)) : prev)
+      setSpawners(prev => prev.some(sp => inBrush(sp.tileX, sp.tileY)) ? prev.filter(sp => !inBrush(sp.tileX, sp.tileY)) : prev)
     }
     setVersion((v) => v + 1)
   }, [])
