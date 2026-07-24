@@ -1335,7 +1335,7 @@ const CONVERGE_DIST = 38      // muzzle rounds converge onto the crosshair ray a
 // tracer visibly rises from low-right up to the reticle. ADS pulls the muzzle near center for a flat streak.
 const MUZZLE_HIP: [number, number, number] = [0.34, 0.26, 0.6]
 const MUZZLE_ADS: [number, number, number] = [0.1, 0.08, 0.6]
-// ── AM RISER accuracy model (Apex-style) ── hipfire fires inside a spread cone that BLOOMS while you
+// ── SPITTER accuracy model (Apex-style) — the shortbarrel's consts, reused as WEAPONS[0] ── hipfire fires inside a spread cone that BLOOMS while you
 // spray and recovers when you let off; ADS collapses the cone to near-true. Recoil kicks the ACTUAL
 // camera (pitch climb + horizontal jitter) and never auto-returns — you fight it by pulling down.
 const HIP_SPREAD = 2.2        // deg — base hipfire cone half-angle
@@ -1376,29 +1376,38 @@ const BARRIER_SHIELD_BONUS = 25  // the Barrier birth rune's extra shield (125 t
 const CLIP_SIZE = 24          // rounds per recharge of the AM Riser's clip
 const RELOAD_TIME = 1.4       // seconds — the recharge channel
 const RELOAD_MANA = 10        // mana for a FULL clip recharge (partial recharges cost proportionally)
-// ── WEAPON TABLE ── two casters share the FiringRange sim; the current weapon's stats drive fire
-// behaviour, tracer look, AND the movement penalty (weaponIdxRef selects — Q swaps, F holsters).
-// Weapon 0 REUSES the Riser consts above so there is one source of truth; weapon 1 is the heavy
-// primary. hipMove/adsMove = ground-speed multipliers vs RUN_SPEED — holstered is always 1.0, so
-// stowing the weapon is how you run full-speed. ADS < hip < holstered, and the heavy Lance slows
-// you more than the sidearm. Canon weapon NAMES are a Magii call (placeholder viewmodels only, per
-// GBOARD's Crucible note) — 'AM RISER' / 'AM LANCE' are working labels, not authored canon.
+// ★ CANON COLOUR LAW (game/weapons.md): "colour is never part of a weapon — the colour is whose hand
+// it answers." A manabox is dead grey metal; the compacted-mana round trails the WIELDER's own
+// soul-frequency colour, ONE colour across every gun they hold. Placeholder player-cyan (Kael's
+// frequency) until birth-rune selection sets the player's frequency → then this reads from it.
+const SOUL_COLOR = '#aef2ff'
+// ── MANABOX TABLE ── the two Crucible casters share the FiringRange sim; the live weapon's stats
+// drive fire behaviour, round SHAPE, AND the movement penalty (weaponIdxRef selects — Q swaps, F
+// holsters). Weapon 0 REUSES the shortbarrel consts above so there is one source of truth.
+// hipMove/adsMove = ground-speed multipliers vs RUN_SPEED — holstered is always 1.0, so stowing is
+// how you run full-speed. ADS < hip < holstered, and the heavy Lance slows you more than the SMG.
+// ── CANON (game/pyramid-zero.md › Manaboxes, RULED 2026-07-24): these are Manalic-tier manaboxes,
+// named by SLATE+MODEL from game/weapons.md. The two starters are the code-less baseline anchors:
+// SPITTER (shortbarrel/SMG, full-auto) + LANCE (reacher/sniper, single-shot). ★ COLOUR LAW: colour is
+// never part of a weapon — the gun is dead grey metal and the round trails the WIELDER's soul-colour
+// (SOUL_COLOR below), ONE colour across both guns. Weapons read distinct by silhouette + round shape
+// (headR/trailR) + fire behaviour, NEVER by tracer colour. So no per-weapon `color` field exists.
 const WEAPONS = [
-  { id: 'riser', name: 'AM RISER', slot: 'SIDEARM', auto: true,
+  { id: 'spitter', name: 'SPITTER', slot: 'SHORTBARREL', auto: true,
     fireCd: FIRE_COOLDOWN, projSpeed: PROJECTILE_SPEED, projLife: PROJECTILE_LIFE,
     damage: AM_DAMAGE, crit: AM_CRIT, clip: CLIP_SIZE, reloadTime: RELOAD_TIME, reloadMana: RELOAD_MANA,
     hipSpread: HIP_SPREAD, adsSpread: ADS_SPREAD, bloomPerShot: BLOOM_PER_SHOT, bloomMax: BLOOM_MAX,
     bloomDecay: BLOOM_DECAY, adsBloomScale: ADS_BLOOM_SCALE, kickPitch: KICK_PITCH, kickYaw: KICK_YAW,
-    converge: CONVERGE_DIST, color: '#aef2ff', headR: HEAD_R, trailR: TRAIL_R, hipMove: 0.85, adsMove: 0.55 },
-  // AM LANCE — slow heavy mid-range primary. Semi-auto (one deliberate bolt per click, no spray),
-  // a fast fat gold round that punches, a laser when aimed but loose from the hip (rewards ADS),
-  // small clip, heavy kick, and it slows you the most. The counterweight to the Riser's run-and-gun.
-  { id: 'lance', name: 'AM LANCE', slot: 'PRIMARY', auto: false,
+    converge: CONVERGE_DIST, headR: HEAD_R, trailR: TRAIL_R, hipMove: 0.85, adsMove: 0.55 },
+  // LANCE (reacher) — slow heavy single-shot marksman. Semi-auto (one deliberate bolt per click, no
+  // spray), a fast FAT round that punches, a laser when aimed but loose from the hip (rewards ADS),
+  // small clip, heavy kick, and it slows you the most. The counterweight to the Spitter's run-and-gun.
+  { id: 'lance', name: 'LANCE', slot: 'REACHER', auto: false,
     fireCd: 0.5, projSpeed: 54, projLife: 2.4,
     damage: 22, crit: 34, clip: 8, reloadTime: 2.0, reloadMana: 12,
     hipSpread: 3.4, adsSpread: 0.14, bloomPerShot: 0.9, bloomMax: 3.6,
     bloomDecay: 6, adsBloomScale: 0.3, kickPitch: 0.021, kickYaw: 0.006,
-    converge: 46, color: '#ffce7a', headR: 0.12, trailR: 0.085, hipMove: 0.70, adsMove: 0.42 },
+    converge: 46, headR: 0.12, trailR: 0.085, hipMove: 0.70, adsMove: 0.42 },
 ] as const
 // Downrange targets for the range — floating orbs at varied spots/heights in Alex's 50×50.
 const RANGE_TARGETS: [number, number, number][] = [
@@ -1615,11 +1624,11 @@ function FiringRange({ firingRef, adsRef, weaponIdxRef, gridRef, recoilRef, bloo
     // gap between consecutive trail points → one continuous thin tracer line, tapering to the tail.
     // (Shrinking-ball trails read as orbs; a stretched line is the Apex tracer read.)
     if (shotRef.current) {
-      // tracer look is per-weapon: the shared pool material gets the live weapon's tint (cheap in-place
-      // .set, no alloc), and head/trail radii scale to the round — the fat gold Lance reads instantly
-      // different from the thin cyan Riser even mid-flight.
+      // COLOUR LAW: the tracer is the WIELDER's soul-colour, never the weapon's — one colour across
+      // both guns (cheap in-place .set, no alloc). The Lance reads distinct from the Spitter by its
+      // fatter/slower ROUND (headR/trailR), not by colour.
       const mat = shotRef.current.material as THREE.MeshBasicMaterial
-      if (mat?.color) mat.color.set(W.color)
+      if (mat?.color) mat.color.set(SOUL_COLOR)
       pool.forEach((p, i) => {
         const base = i * SEG
         if (p.life > 0) { scl.set(W.headR, W.headR, W.headR); m.compose(p.pos, q, scl) } else m.compose(zero, q, zero)
@@ -4438,7 +4447,7 @@ export default function Shimmer3D() {
           }}>
             {weaponUi.holstered
               ? <span style={{ color: '#ffd98a' }}>HOLSTERED <span style={{ opacity: 0.55, fontWeight: 600 }}>· running</span></span>
-              : <span style={{ color: WEAPONS[weaponUi.idx].color }}>{WEAPONS[weaponUi.idx].name} <span style={{ opacity: 0.5, fontWeight: 600, color: '#cfeeff' }}>{WEAPONS[weaponUi.idx].slot}</span></span>}
+              : <span style={{ color: '#dfe7ee' }}>{WEAPONS[weaponUi.idx].name} <span style={{ opacity: 0.5, fontWeight: 600, color: '#9fb0c0' }}>{WEAPONS[weaponUi.idx].slot}</span></span>}
             <span style={{ opacity: 0.4 }}>·</span>
             <span>shots <span style={{ color: '#8fe0ff' }}>{hudStats.shots}</span></span>
             <span>hits <span style={{ color: '#7fffa0' }}>{hudStats.hits}</span></span>
@@ -4492,7 +4501,10 @@ export default function Shimmer3D() {
             background: 'radial-gradient(ellipse at center, transparent 52%, rgba(255,58,44,0.5) 100%)' }} />
           {/* caster viewmodel — outer div raises it to the sighted pose on ADS (React, transitioned);
               inner casterRef keeps the imperative recoil kick, so the two transforms don't fight.
-              Per-weapon silhouette: the thin cyan Riser vs the heavy amber Lance. Hidden while holstered. */}
+              ★ CANON: a manabox is dead grey CAST metal (iron-grey + dull bronze, Roman-bones/mana-veins).
+              It only lights IN A HAND — so the emitter core glows the wielder's SOUL_COLOR (channels
+              running), never the body. Weapons differ by SILHOUETTE (thin Spitter vs heavy Lance), not
+              colour. Hidden while holstered. */}
           {!weaponUi.holstered && (
           <div style={{ position: 'fixed', right: '17%', bottom: 0, zIndex: 33, pointerEvents: 'none',
             transform: ads ? 'translate(-150px, -30px) scale(1.14)' : 'translate(0,0) scale(1)', transition: 'transform 0.14s ease-out' }}>
@@ -4500,22 +4512,24 @@ export default function Shimmer3D() {
               <style>{`@keyframes casterKick { 0% { transform: translateY(16px) } 60% { transform: translateY(-3px) } 100% { transform: translateY(0) } }
 @keyframes casterReload { 0% { transform: translateY(0) rotate(0deg) } 30% { transform: translateY(36px) rotate(-7deg) } 70% { transform: translateY(30px) rotate(-5deg) } 100% { transform: translateY(0) rotate(0deg) } }`}</style>
               {weaponUi.idx === 1 ? (
-                // AM LANCE — a longer, heavier amber caster: thick body, long barrel, gold focusing core.
+                // LANCE (reacher) — a longer, heavier cast body: thick receiver, long barrel, bronze trim.
+                // Dead grey/bronze metal; the focusing core lights SOUL_COLOR (in-hand).
                 <svg width="272" height="176" viewBox="0 0 272 176" style={{ display: 'block' }}>
-                  <polygon points="40,176 60,84 178,120 158,176" fill="#241a12" stroke="#6d5228" strokeWidth="2" />
-                  <polygon points="54,92 96,58 236,96 150,120" fill="#33261a" stroke="#8a6a34" strokeWidth="2" />
-                  <rect x="150" y="86" width="96" height="12" rx="5" fill="#4a3820" stroke="#8a6a34" strokeWidth="2" transform="rotate(-8 150 92)" />
-                  <circle cx="92" cy="88" r="20" fill="none" stroke="#ffce7a" strokeOpacity="0.4" strokeWidth="3" />
-                  <circle cx="92" cy="88" r="12" fill="#ffce7a" />
-                  <circle cx="240" cy="80" r="6" fill="#ffe6b0" />
+                  <polygon points="40,176 60,84 178,120 158,176" fill="#22262b" stroke="#6d5a3a" strokeWidth="2" />
+                  <polygon points="54,92 96,58 236,96 150,120" fill="#2e343b" stroke="#7c6a44" strokeWidth="2" />
+                  <rect x="150" y="86" width="96" height="12" rx="5" fill="#3a4048" stroke="#7c6a44" strokeWidth="2" transform="rotate(-8 150 92)" />
+                  <circle cx="92" cy="88" r="20" fill="none" stroke={SOUL_COLOR} strokeOpacity="0.4" strokeWidth="3" />
+                  <circle cx="92" cy="88" r="12" fill={SOUL_COLOR} />
+                  <circle cx="240" cy="80" r="6" fill={SOUL_COLOR} opacity="0.9" />
                 </svg>
               ) : (
+                // SPITTER (shortbarrel) — the thin light SMG silhouette. Dead grey/bronze; emitter glows SOUL_COLOR.
                 <svg width="240" height="168" viewBox="0 0 240 168" style={{ display: 'block' }}>
-                  <polygon points="46,168 66,92 158,122 138,168" fill="#161d2a" stroke="#3a4a63" strokeWidth="2" />
-                  <polygon points="58,98 100,70 126,96 104,122" fill="#212b3d" stroke="#4a5d7d" strokeWidth="2" />
-                  <circle cx="94" cy="96" r="17" fill="none" stroke="#8fe0ff" strokeOpacity="0.35" strokeWidth="2" />
-                  <circle cx="94" cy="96" r="10" fill="#8fe0ff" />
-                  <rect x="100" y="90" width="52" height="6" rx="3" fill="#8fe0ff" opacity="0.9" />
+                  <polygon points="46,168 66,92 158,122 138,168" fill="#20242a" stroke="#5a5140" strokeWidth="2" />
+                  <polygon points="58,98 100,70 126,96 104,122" fill="#2b3038" stroke="#6f6650" strokeWidth="2" />
+                  <circle cx="94" cy="96" r="17" fill="none" stroke={SOUL_COLOR} strokeOpacity="0.35" strokeWidth="2" />
+                  <circle cx="94" cy="96" r="10" fill={SOUL_COLOR} />
+                  <rect x="100" y="90" width="52" height="6" rx="3" fill={SOUL_COLOR} opacity="0.9" />
                 </svg>
               )}
             </div>

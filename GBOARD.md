@@ -483,7 +483,15 @@ the Arcade frame.
 > **The Crucible = BATTLE ROYALE lane (Alex ruled 07-22; Apex is the north star).** The firing range in Alex's
 > 50×50 is the combat lab. Three sessions in, the full loop + a two-weapon loadout + a movement ladder are live on :3200.
 >
-> **Left off (2026-07-24, jin-cc) — SECOND WEAPON + STOW-TO-RUN MOVEMENT LADDER shipped (build+deploy clean).**
+> **Left off (2026-07-24, jin-cc) — MANABOX CANON BOUND (Magii RULED) — Spitter+Lance rename + colour law applied, live+deploy clean.**
+> - **The weapon naming was a CANON GAP — settled by /magii (`game/pyramid-zero.md` › Manaboxes, athernyx `f21b58f`).** Key ruling: the Crucible does NOT cross the cozy-line wall — it IS the far/dark side (Year 1672, the Pyramid-Zero gunplay); the build's `realm 'ather'|'outside'` flag IS that wall, so manaboxes apply in full outside. Applied to the build:
+>   - **Renamed to canon SLATE+MODEL:** `AM RISER`→**SPITTER** (shortbarrel/SMG, full-auto), `AM LANCE`→**LANCE** (reacher/sniper, single-shot). Both are the code-less baseline anchors from `game/weapons.md`. ("AM Riser" was a real canon model but a semi-auto *sidearm* — Samantha's holdout — so wrong for a full-auto gun; freed it.)
+>   - **★ COLOUR LAW applied** (`game/weapons.md` opening line: *colour is never part of a weapon*): dropped the per-weapon tracer colours (cyan/amber). New module `SOUL_COLOR` (placeholder player-cyan until birth-rune picks the frequency) tints BOTH guns' tracers — one soul-colour across the loadout. Guns now read distinct by **round shape** (`headR`/`trailR` — fat Lance vs thin Spitter) + silhouette + fire behaviour, never colour. Viewmodels recoloured to **dead grey/bronze CAST metal**; only the emitter core glows `SOUL_COLOR` (canon: a manabox lights only in a hand). HUD badge name de-tinted (neutral steel).
+>   - **Mana-clip = Manalic tier** — already canon-correct (runs off the wielder's own pool), no change.
+> - **NEXT{Shimmer Crucible sigils/sockets = ITS OWN session (Alex + canon deferred). game/weapons.md has the full system — 14 sigils (SUR/VEX/JAH…), resonances (SIPHON/GHOST/ANCHOR…), socket cap ≤3 (sidearm ≤2), wielder-slot gating. Gun benches ship as slate/model swap FIRST; the socket UI comes in the sigil session.}**
+> - **NEXT{Shimmer Crucible gun benches: build the practice-range armory — swap slate/model to test-fire. Starter rack = code-less baseline anchors: Spitter(shortbarrel)·Backbone(longbarrel)·Roar(breacher)·Lance(reacher)·Repeater(sidearm) per game/weapons.md. Named models (Drummer 47/M1 Anvil/XL9 Longshot) as later unlocks. NO sigil UI yet.}**
+>
+> **Prior (2026-07-24, jin-cc) — SECOND WEAPON + STOW-TO-RUN MOVEMENT LADDER shipped (build+deploy clean).**
 > - **A `WEAPONS` table now drives the FiringRange** (slot 0 REUSES the old Riser consts so there's one source of
 >   truth; slot 1 is new). Each weapon carries its own fire cadence, projectile, damage, spread/bloom, kick, clip,
 >   reload, tracer look (color/head/trail), AND movement penalties. The sim reads `WEAPONS[weaponIdxRef.current]`.
