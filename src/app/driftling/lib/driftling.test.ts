@@ -12,6 +12,10 @@ import {
   APEX_TIER,
   ELEMENTS, // ensure exports resolve
   TARGET_CREATURES,
+  current,
+  CURRENT_STRENGTH,
+  BASE_MAXV,
+  WORLD_H,
   type World,
 } from './driftling'
 
@@ -146,6 +150,35 @@ function solo(w: World) { w.creatures = []; w.spawnPaused = true }
   let b = -1
   try { b = saveBest(123); loadBest() } catch { threw = true }
   ok('best-score helpers survive a no-storage env', !threw && b >= 0)
+}
+
+// 12. the drift current — bounded (agency), it actually pushes, and it stays deterministic
+{
+  // agency: the current can NEVER exceed a fraction of the player's top speed, anywhere/anytime.
+  // sample a wide net of positions + times and assert the magnitude ceiling holds.
+  let peak = 0
+  for (let x = 0; x < 12000; x += 137) {
+    for (let y = 0; y < WORLD_H; y += 90) {
+      for (let ti = 0; ti < 40; ti += 3) {
+        const [cx, cy] = current(x, y, ti)
+        peak = Math.max(peak, Math.hypot(cx, cy))
+      }
+    }
+  }
+  ok('current stays well under player top speed (fightable)', peak < BASE_MAXV * 0.4)
+  ok('current is a felt push, not zero', peak > CURRENT_STRENGTH * 0.5)
+
+  // it carries a still, non-swimming body downstream (advection): a coasting player drifts
+  const w = makeWorld(7); w.state = 'playing'; solo(w)
+  setHeading(w, 0, 0) // coast — no self-propulsion
+  const x0 = w.x, y0 = w.y
+  for (let i = 0; i < 120; i++) tick(w, 1 / 60)
+  ok('current drifts a coasting body', Math.hypot(w.x - x0, w.y - y0) > 1)
+
+  // pure: same (x,y,t) → same vector; determinism preserved end-to-end
+  const [ax, ay] = current(500, 400, 3)
+  const [bx, by] = current(500, 400, 3)
+  ok('current is pure (same input → same output)', ax === bx && ay === by)
 }
 
 console.log(`\nDRIFTLING sim: ${pass} passed, ${fail} failed`)

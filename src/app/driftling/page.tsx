@@ -28,6 +28,7 @@ import {
   MATCH_TIME,
   DEPTH_PER_TIER,
   APEX_TIER,
+  current,
   type World,
   type ElementId,
 } from './lib/driftling'
@@ -366,14 +367,24 @@ function render(canvas: HTMLCanvasElement, w: World, ts: number, growFx: number,
   const sx = (wx: number) => VW / 2 + (wx - w.x)
   const sy = (wy: number) => VH / 2 + (wy - w.y)
 
-  // drifting plankton motes (parallax)
+  // drifting plankton — streaked ALONG the local current so the flow field is legible (an invisible
+  // force that shoves you is disorienting; leaning every mote the way the water pushes makes it a read)
+  ctx.strokeStyle = '#9fb8c8'
   for (const m of MOTES) {
     const px = ((m.x - w.x * m.par) % 3000 + 3000) % 3000 - 800
     const py = ((m.y - w.y * m.par) % 3000 + 3000) % 3000 - 800
     if (px < -10 || px > VW + 10 || py < -10 || py > VH + 10) continue
-    ctx.globalAlpha = 0.06 + 0.06 * (0.5 + 0.5 * Math.sin(t * 0.8 + m.p))
-    ctx.fillStyle = '#9fb8c8'
-    dot(ctx, px, py, m.s)
+    // sample the current at this mote's world position (camera-mapped); w.t so streaks match the water
+    const [cx, cy] = current(w.x + (px - VW / 2), w.y + (py - VH / 2), w.t)
+    const cm = Math.hypot(cx, cy) || 1
+    const ux = cx / cm, uy = cy / cm
+    const len = 3 + m.s * 4.5
+    ctx.globalAlpha = 0.05 + 0.06 * (0.5 + 0.5 * Math.sin(t * 0.8 + m.p))
+    ctx.lineWidth = Math.max(0.6, m.s * 0.85)
+    ctx.beginPath()
+    ctx.moveTo(px - ux * len * 0.5, py - uy * len * 0.5)
+    ctx.lineTo(px + ux * len * 0.5, py + uy * len * 0.5)
+    ctx.stroke()
   }
   ctx.globalAlpha = 1
 

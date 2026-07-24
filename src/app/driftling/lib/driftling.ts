@@ -34,6 +34,28 @@ export const BASE_MAXV = 250 // top drift speed at the smallest tier
 export const TIER_SLOW = 0.06 // each tier up shaves this fraction off max speed (giants are ponderous)
 export const MIN_MAXV_FRAC = 0.45 // never slower than this fraction of BASE_MAXV
 
+// ── the drift current (flOw): the game's namesake. A smooth flow field over the whole ocean
+// that carries you AND every creature — shoals ride the same stream together. Gentle enough to
+// always out-swim (agency: peak push is a fraction of BASE_MAXV, you can cross any stream), but
+// felt: the dominant sensation is vertical meanders you slalom, with a soft rightward mean so
+// "going with the flow" carries you deeper (riding a fast rightward band = a skill, not free depth).
+export const CURRENT_STRENGTH = 58 // peak vertical push (world u/s); vs BASE_MAXV 250 → always fightable
+export const CURRENT_RIGHT_BIAS = 0.28 // baseline rightward carry as a fraction of strength (aids the journey)
+export const CURRENT_WAVE_Y = 0.0042 // vertical wavelength of the meander (bigger = tighter streams)
+export const CURRENT_WAVE_X = 0.0011 // how the streams shift as you swim deeper (right)
+export const CURRENT_EVOLVE = 0.06 // how fast the field slowly churns over time (0 = frozen streams)
+
+// the water's velocity at a world point + time. Pure (no rng) → deterministic; headless + live agree.
+// Returns [cx, cy] in world u/s. Reads clean at any (x,y,t); the caller advects a body by it × dt.
+export function current(x: number, y: number, t: number): [number, number] {
+  const phase = y * CURRENT_WAVE_Y + x * CURRENT_WAVE_X + t * CURRENT_EVOLVE
+  const meander = Math.sin(phase) // -1..1: the vertical sway that forms the streams
+  const pulse = 0.5 + 0.5 * Math.cos(x * CURRENT_WAVE_X * 1.7 - t * CURRENT_EVOLVE * 0.8) // 0..1 slow horizontal breathing
+  const cx = CURRENT_STRENGTH * (CURRENT_RIGHT_BIAS + (1 - CURRENT_RIGHT_BIAS) * pulse * (0.35 + 0.35 * meander))
+  const cy = CURRENT_STRENGTH * 0.82 * meander
+  return [cx, cy]
+}
+
 // ── eating ───────────────────────────────────────────────────────────────────────
 // size compare against the player's body. A creature meaningfully smaller is prey;
 // meaningfully bigger is a threat; roughly equal just bumps (neither can swallow).
@@ -370,6 +392,10 @@ export function tick(w: World, dt: number): TickEvents {
   }
   w.x += w.vx * dt
   w.y += w.vy * dt
+  // the drift current carries the body along the water (advection, on top of your own swim)
+  const [pcx, pcy] = current(w.x, w.y, w.t)
+  w.x += pcx * dt
+  w.y += pcy * dt
   // soft bounds: a shallow edge behind you (can't swim past the start) + the vertical band.
   // NO right wall — the deep is endless; how far right you push IS the score.
   if (w.x < 0) { w.x = 0; w.vx = Math.abs(w.vx) * 0.3 }
@@ -397,6 +423,16 @@ export function tick(w: World, dt: number): TickEvents {
     c.vy += (dy / d) * lean * dt
     c.x += c.vx * dt
     c.y += c.vy * dt
+  }
+
+  // the current carries every creature too (schoolers included) — the whole ocean drifts as one body
+  // of water, so shoals ride a stream together and the field around you moves with the water you feel
+  for (const c of w.creatures) {
+    const [ccx, ccy] = current(c.x, c.y, w.t)
+    c.x += ccx * dt
+    c.y += ccy * dt
+    if (c.y < 0) c.y = 0
+    else if (c.y > WORLD_H) c.y = WORLD_H
   }
 
   // ── eat resolution: overlap the player vs each creature ───────────────────────
