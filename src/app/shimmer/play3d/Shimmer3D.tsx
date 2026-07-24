@@ -684,7 +684,7 @@ function npcInWorld(n: NPC3D, defeated: Record<string, boolean>, flags: Record<s
   return true
 }
 
-function Player({ posRef, gridRef, heightsRef, zoneIdRef, editRef, onWarp, battleRef, partyLevelRef, onEncounter, joyRef, talkingRef, hasPartyRef, onNearChange, defeatedRef, flagsRef, harvestNodesRef, onNearNode, stationsRef, onNearStation, eyeRef, jumpRef, slideRef, speedMultRef, dreamwalkRef }: {
+function Player({ posRef, gridRef, heightsRef, zoneIdRef, editRef, onWarp, battleRef, partyLevelRef, onEncounter, joyRef, talkingRef, hasPartyRef, onNearChange, defeatedRef, flagsRef, harvestNodesRef, onNearNode, stationsRef, onNearStation, eyeRef, jumpRef, slideRef, speedMultRef, weaponMoveRef, dreamwalkRef }: {
   posRef: React.RefObject<THREE.Vector3>; gridRef: React.RefObject<number[][]>
   heightsRef: React.RefObject<number[][]>; zoneIdRef: React.RefObject<string>
   editRef: React.RefObject<boolean>; onWarp: (w: Warp) => void
@@ -701,6 +701,7 @@ function Player({ posRef, gridRef, heightsRef, zoneIdRef, editRef, onWarp, battl
   jumpRef: React.RefObject<boolean>; slideRef: React.RefObject<boolean>
   // potion-buff mirrors (walker updates on its coarse tick): ground-speed mult + calm-mist flag
   speedMultRef: React.RefObject<number>; dreamwalkRef: React.RefObject<boolean>
+  weaponMoveRef: React.RefObject<number>  // weapon-state ground-speed mult: 1 holstered, <1 drawn, less ADS
 }) {
   const group = useRef<THREE.Group>(null)
   const keys = useRef<Record<string, boolean>>({})
@@ -905,7 +906,7 @@ function Player({ posRef, gridRef, heightsRef, zoneIdRef, editRef, onWarp, battl
         // stop on release. This easing IS the "flow" — no more instant on/off. Backpedaling (input
         // pointing against your look dir) caps to a walk — no reverse-sprint. Strafe stays at run.
         const backpedal = hasInput && move.dot(fwd) < -0.2
-        const targetSpeed = (crouching ? CROUCH_SPEED : backpedal ? BACK_SPEED : RUN_SPEED) * (speedMultRef.current ?? 1)
+        const targetSpeed = (crouching ? CROUCH_SPEED : backpedal ? BACK_SPEED : RUN_SPEED) * (speedMultRef.current ?? 1) * (weaponMoveRef.current ?? 1)
         const rate = Math.min(1, (hasInput ? GROUND_ACCEL : GROUND_FRICTION) * dt2)
         hvel.x += ((hasInput ? move.x * targetSpeed : 0) - hvel.x) * rate
         hvel.z += ((hasInput ? move.z * targetSpeed : 0) - hvel.z) * rate
@@ -1375,14 +1376,39 @@ const BARRIER_SHIELD_BONUS = 25  // the Barrier birth rune's extra shield (125 t
 const CLIP_SIZE = 24          // rounds per recharge of the AM Riser's clip
 const RELOAD_TIME = 1.4       // seconds — the recharge channel
 const RELOAD_MANA = 10        // mana for a FULL clip recharge (partial recharges cost proportionally)
+// ── WEAPON TABLE ── two casters share the FiringRange sim; the current weapon's stats drive fire
+// behaviour, tracer look, AND the movement penalty (weaponIdxRef selects — Q swaps, F holsters).
+// Weapon 0 REUSES the Riser consts above so there is one source of truth; weapon 1 is the heavy
+// primary. hipMove/adsMove = ground-speed multipliers vs RUN_SPEED — holstered is always 1.0, so
+// stowing the weapon is how you run full-speed. ADS < hip < holstered, and the heavy Lance slows
+// you more than the sidearm. Canon weapon NAMES are a Magii call (placeholder viewmodels only, per
+// GBOARD's Crucible note) — 'AM RISER' / 'AM LANCE' are working labels, not authored canon.
+const WEAPONS = [
+  { id: 'riser', name: 'AM RISER', slot: 'SIDEARM', auto: true,
+    fireCd: FIRE_COOLDOWN, projSpeed: PROJECTILE_SPEED, projLife: PROJECTILE_LIFE,
+    damage: AM_DAMAGE, crit: AM_CRIT, clip: CLIP_SIZE, reloadTime: RELOAD_TIME, reloadMana: RELOAD_MANA,
+    hipSpread: HIP_SPREAD, adsSpread: ADS_SPREAD, bloomPerShot: BLOOM_PER_SHOT, bloomMax: BLOOM_MAX,
+    bloomDecay: BLOOM_DECAY, adsBloomScale: ADS_BLOOM_SCALE, kickPitch: KICK_PITCH, kickYaw: KICK_YAW,
+    converge: CONVERGE_DIST, color: '#aef2ff', headR: HEAD_R, trailR: TRAIL_R, hipMove: 0.85, adsMove: 0.55 },
+  // AM LANCE — slow heavy mid-range primary. Semi-auto (one deliberate bolt per click, no spray),
+  // a fast fat gold round that punches, a laser when aimed but loose from the hip (rewards ADS),
+  // small clip, heavy kick, and it slows you the most. The counterweight to the Riser's run-and-gun.
+  { id: 'lance', name: 'AM LANCE', slot: 'PRIMARY', auto: false,
+    fireCd: 0.5, projSpeed: 54, projLife: 2.4,
+    damage: 22, crit: 34, clip: 8, reloadTime: 2.0, reloadMana: 12,
+    hipSpread: 3.4, adsSpread: 0.14, bloomPerShot: 0.9, bloomMax: 3.6,
+    bloomDecay: 6, adsBloomScale: 0.3, kickPitch: 0.021, kickYaw: 0.006,
+    converge: 46, color: '#ffce7a', headR: 0.12, trailR: 0.085, hipMove: 0.70, adsMove: 0.42 },
+] as const
 // Downrange targets for the range — floating orbs at varied spots/heights in Alex's 50×50.
 const RANGE_TARGETS: [number, number, number][] = [
   [15, 1.8, 26], [20, 2.5, 31], [25, 1.6, 23], [30, 2.9, 33],
   [35, 2.0, 27], [12, 2.3, 35], [38, 1.7, 21], [22, 3.1, 39],
 ]
-function FiringRange({ firingRef, adsRef, gridRef, recoilRef, bloomRef, posRef, hpRef, shieldRef, shieldMaxRef, rangeCfgRef, ammoRef, reloadingRef, onNeedReload, onHit, onShot, onPlayerDamage, onPlayerDown }: {
-  firingRef: React.RefObject<boolean>   // held while left-click is down → full-auto
+function FiringRange({ firingRef, adsRef, weaponIdxRef, gridRef, recoilRef, bloomRef, posRef, hpRef, shieldRef, shieldMaxRef, rangeCfgRef, ammoRef, reloadingRef, onNeedReload, onHit, onShot, onPlayerDamage, onPlayerDown }: {
+  firingRef: React.RefObject<boolean>   // held while left-click is down → full-auto (semi-auto weapons fire once per press)
   adsRef: React.RefObject<boolean>      // aiming → muzzle offset moves to center (ADS tracer runs flat)
+  weaponIdxRef: React.RefObject<number> // which WEAPONS entry is live — drives fire stats + tracer look
   gridRef: React.RefObject<number[][]>
   recoilRef: React.MutableRefObject<{ p: number; y: number }>  // pending camera kick; CameraRig drains it
   bloomRef: React.MutableRefObject<number>  // current spread bloom (deg); WeaponReticle reads it too
@@ -1423,6 +1449,7 @@ function FiringRange({ firingRef, adsRef, gridRef, recoilRef, bloomRef, posRef, 
   const toPlayer = useMemo(() => new THREE.Vector3(), [])
   const step = useMemo(() => new THREE.Vector3(), [])
   const cd = useRef(0)
+  const firedThisPress = useRef(false)  // semi-auto: a weapon with auto=false fires once per trigger press
   const m = useMemo(() => new THREE.Matrix4(), [])
   const q = useMemo(() => new THREE.Quaternion(), [])
   const one = useMemo(() => new THREE.Vector3(1, 1, 1), [])
@@ -1442,19 +1469,23 @@ function FiringRange({ firingRef, adsRef, gridRef, recoilRef, bloomRef, posRef, 
   const qT = useMemo(() => new THREE.Quaternion(), []) // per-board billboard rotation (face the player)
   const AXIS_Y = useMemo(() => new THREE.Vector3(0, 1, 0), [])
   useFrame((state, dt) => {
+    const W = WEAPONS[weaponIdxRef.current] ?? WEAPONS[0]   // live weapon — stats + tracer look
     cd.current -= dt
-    bloomRef.current = Math.max(0, bloomRef.current - BLOOM_DECAY * dt)  // cone recovers while not firing
-    // full-auto: while fire is held and the cadence is ready, spawn a round from the camera.
-    // The clip gates it: recharge channel blocks fire, a dry trigger auto-starts the recharge.
-    if (firingRef.current && cd.current <= 0 && reloadingRef.current <= 0) {
+    if (!firingRef.current) firedThisPress.current = false   // trigger released → re-arm a semi-auto
+    bloomRef.current = Math.max(0, bloomRef.current - W.bloomDecay * dt)  // cone recovers while not firing
+    // full-auto weapons fire while held; semi-auto (auto=false) fires once per press. The clip gates it:
+    // recharge channel blocks fire, a dry trigger auto-starts the recharge.
+    const wantFire = firingRef.current && (W.auto || !firedThisPress.current)
+    if (wantFire && cd.current <= 0 && reloadingRef.current <= 0) {
       if (ammoRef.current <= 0) { cd.current = 0.25; onNeedReload() }
       else {
-      cd.current = FIRE_COOLDOWN
+      cd.current = W.fireCd
+      firedThisPress.current = true
       const p = pool.find((pr) => pr.life <= 0)
       if (p) {
         ammoRef.current -= 1
         // Apex muzzle model: spawn at the weapon (low-right of the eye), aim the velocity at the point
-        // the crosshair ray hits at CONVERGE_DIST — the tracer rises up-and-in to the reticle.
+        // the crosshair ray hits at the converge range — the tracer rises up-and-in to the reticle.
         state.camera.getWorldDirection(dir)
         camRight.setFromMatrixColumn(state.camera.matrixWorld, 0)
         camUp.setFromMatrixColumn(state.camera.matrixWorld, 1)
@@ -1462,19 +1493,19 @@ function FiringRange({ firingRef, adsRef, gridRef, recoilRef, bloomRef, posRef, 
         const [mr, md, mf] = ads ? MUZZLE_ADS : MUZZLE_HIP
         p.pos.copy(state.camera.position)
           .addScaledVector(camRight, mr).addScaledVector(camUp, -md).addScaledVector(dir, mf)
-        aim.copy(state.camera.position).addScaledVector(dir, CONVERGE_DIST)
+        aim.copy(state.camera.position).addScaledVector(dir, W.converge)
         // spread: uniform random point in the current cone's disc, perpendicular to the flight line
-        const spread = (ads ? ADS_SPREAD : HIP_SPREAD) + bloomRef.current * (ads ? ADS_BLOOM_SCALE : 1)
+        const spread = (ads ? W.adsSpread : W.hipSpread) + bloomRef.current * (ads ? W.adsBloomScale : 1)
         const r = Math.tan(spread * DEG) * Math.sqrt(Math.random())
         const th = Math.random() * Math.PI * 2
         p.vel.copy(aim).sub(p.pos).normalize()
           .addScaledVector(camRight, Math.cos(th) * r).addScaledVector(camUp, Math.sin(th) * r)
-          .normalize().multiplyScalar(PROJECTILE_SPEED)
-        p.life = PROJECTILE_LIFE
+          .normalize().multiplyScalar(W.projSpeed)
+        p.life = W.projLife
         for (const t of p.trail) t.copy(p.pos)  // collapse the trail onto the muzzle at spawn
-        bloomRef.current = Math.min(BLOOM_MAX, bloomRef.current + BLOOM_PER_SHOT)
-        recoilRef.current.p += KICK_PITCH
-        recoilRef.current.y += (Math.random() * 2 - 1) * KICK_YAW
+        bloomRef.current = Math.min(W.bloomMax, bloomRef.current + W.bloomPerShot)
+        recoilRef.current.p += W.kickPitch
+        recoilRef.current.y += (Math.random() * 2 - 1) * W.kickYaw
         onShot()
       }
       }
@@ -1497,7 +1528,7 @@ function FiringRange({ firingRef, adsRef, gridRef, recoilRef, bloomRef, posRef, 
           rel.copy(p.pos).sub(t.pos)
           rel.addScaledVector(vhat, -rel.dot(vhat))  // strip the along-flight component → radial offset
           const crit = rel.lengthSq() < TARGET_CRIT_R * TARGET_CRIT_R
-          t.hp -= crit ? AM_CRIT : AM_DAMAGE; p.life = 0; onHit(crit)  // hitmarker on every landed round
+          t.hp -= crit ? W.crit : W.damage; p.life = 0; onHit(crit)  // hitmarker on every landed round
           if (t.hp <= 0) { t.alive = false; t.down = TARGET_RESPAWN }
           break
         }
@@ -1505,7 +1536,7 @@ function FiringRange({ firingRef, adsRef, gridRef, recoilRef, bloomRef, posRef, 
       const h = hunter.current
       if (p.life > 0 && h.alive && p.pos.distanceToSquared(h.pos) < HUNTER_HIT_R2) {
         const crit = p.pos.y > h.pos.y + CRIT_Y
-        h.hp -= crit ? AM_CRIT : AM_DAMAGE; p.life = 0; onHit(crit)
+        h.hp -= crit ? W.crit : W.damage; p.life = 0; onHit(crit)
         if (h.hp <= 0) { h.alive = false; h.respawn = HUNTER_RESPAWN }
       }
     }
@@ -1584,9 +1615,14 @@ function FiringRange({ firingRef, adsRef, gridRef, recoilRef, bloomRef, posRef, 
     // gap between consecutive trail points → one continuous thin tracer line, tapering to the tail.
     // (Shrinking-ball trails read as orbs; a stretched line is the Apex tracer read.)
     if (shotRef.current) {
+      // tracer look is per-weapon: the shared pool material gets the live weapon's tint (cheap in-place
+      // .set, no alloc), and head/trail radii scale to the round — the fat gold Lance reads instantly
+      // different from the thin cyan Riser even mid-flight.
+      const mat = shotRef.current.material as THREE.MeshBasicMaterial
+      if (mat?.color) mat.color.set(W.color)
       pool.forEach((p, i) => {
         const base = i * SEG
-        if (p.life > 0) { scl.set(HEAD_R, HEAD_R, HEAD_R); m.compose(p.pos, q, scl) } else m.compose(zero, q, zero)
+        if (p.life > 0) { scl.set(W.headR, W.headR, W.headR); m.compose(p.pos, q, scl) } else m.compose(zero, q, zero)
         shotRef.current!.setMatrixAt(base, m)
         for (let j = 0; j < TRAIL_N; j++) {
           const a = p.trail[j], b = j === 0 ? p.pos : p.trail[j - 1]
@@ -1594,7 +1630,7 @@ function FiringRange({ firingRef, adsRef, gridRef, recoilRef, bloomRef, posRef, 
           const len = seg.length()
           if (p.life > 0 && len > 1e-4) {
             qSeg.setFromUnitVectors(AXIS_Z, seg.multiplyScalar(1 / len))
-            const r = TRAIL_R * (1 - j / TRAIL_N)  // taper toward the tail
+            const r = W.trailR * (1 - j / TRAIL_N)  // taper toward the tail
             mid.copy(a).add(b).multiplyScalar(0.5)
             scl.set(r, r, len / 2 + r)  // half-length + radius so links overlap into a continuous line
             m.compose(mid, qSeg, scl)
@@ -1678,9 +1714,10 @@ function FiringRange({ firingRef, adsRef, gridRef, recoilRef, bloomRef, posRef, 
 // outline + faint cyan glow reads on any background. The four arms sit at the CURRENT spread cone's
 // edge — rAF reads bloomRef/adsRef and writes CSS vars directly, so the reticle tells the truth about
 // accuracy (blooms as you spray, snaps tight on ADS) with zero React renders while firing.
-function WeaponReticle({ bloomRef, adsRef }: {
+function WeaponReticle({ bloomRef, adsRef, weaponIdxRef }: {
   bloomRef: React.MutableRefObject<number>
   adsRef: React.RefObject<boolean>
+  weaponIdxRef: React.RefObject<number>
 }) {
   const ref = useRef<HTMLDivElement>(null)
   useEffect(() => {
@@ -1688,8 +1725,9 @@ function WeaponReticle({ bloomRef, adsRef }: {
     const tick = () => {
       const el = ref.current
       if (el) {
+        const W = WEAPONS[weaponIdxRef.current] ?? WEAPONS[0]
         const ads = adsRef.current
-        const spread = (ads ? ADS_SPREAD : HIP_SPREAD) + bloomRef.current * (ads ? ADS_BLOOM_SCALE : 1)
+        const spread = (ads ? W.adsSpread : W.hipSpread) + bloomRef.current * (ads ? W.adsBloomScale : 1)
         cur += (3 + spread * 9 - cur) * 0.25  // lerp so the hip↔ADS jump glides instead of snapping
         el.style.setProperty('--gap', `${cur.toFixed(2)}px`)
         el.style.setProperty('--arm', ads ? '5px' : '8px')
@@ -1698,7 +1736,7 @@ function WeaponReticle({ bloomRef, adsRef }: {
     }
     raf = requestAnimationFrame(tick)
     return () => cancelAnimationFrame(raf)
-  }, [bloomRef, adsRef])
+  }, [bloomRef, adsRef, weaponIdxRef])
   const ink = '0 0 0 1px rgba(8,12,18,0.85), 0 0 5px rgba(143,224,255,0.7)'
   const arm = (s: React.CSSProperties): React.CSSProperties => ({
     position: 'absolute', background: '#f2ffff', borderRadius: 1, boxShadow: ink, ...s,
@@ -1765,28 +1803,31 @@ function ResourceBars({ hpRef, shieldRef, shieldMaxRef }: {
 
 // Ammo — the AM Riser clip readout, bottom-right corner. Recharge draws from MANA (RELOAD_MANA per
 // full clip), so this and the mana vial are two views of one economy. rAF off refs, zero React churn.
-function AmmoCounter({ ammoRef, reloadingRef }: {
+function AmmoCounter({ ammoRef, reloadingRef, weaponIdxRef }: {
   ammoRef: React.MutableRefObject<number>
   reloadingRef: React.MutableRefObject<number>
+  weaponIdxRef: React.RefObject<number>
 }) {
   const num = useRef<HTMLDivElement>(null), sub = useRef<HTMLDivElement>(null)
   useEffect(() => {
     let raf = 0
     const tick = () => {
       const a = ammoRef.current, rel = reloadingRef.current > 0
+      const clip = (WEAPONS[weaponIdxRef.current] ?? WEAPONS[0]).clip
+      const lowAt = Math.max(2, Math.ceil(clip * 0.25))  // "low" is relative to the clip (the Lance's 8 warns sooner)
       if (num.current) {
         num.current.textContent = rel ? '——' : String(a)
-        num.current.style.color = rel ? '#8fe0ff' : a === 0 ? '#ff7a5f' : a <= 6 ? '#ffd98a' : '#eafff6'
+        num.current.style.color = rel ? '#8fe0ff' : a === 0 ? '#ff7a5f' : a <= lowAt ? '#ffd98a' : '#eafff6'
       }
       if (sub.current) {
-        sub.current.textContent = rel ? 'RECHARGING' : a === 0 ? 'R — RECHARGE' : `/ ${CLIP_SIZE}`
+        sub.current.textContent = rel ? 'RECHARGING' : a === 0 ? 'R — RECHARGE' : `/ ${clip}`
         sub.current.style.color = rel ? '#8fe0ffaa' : a === 0 ? '#ff7a5f' : '#ffffff66'
       }
       raf = requestAnimationFrame(tick)
     }
     raf = requestAnimationFrame(tick)
     return () => cancelAnimationFrame(raf)
-  }, [ammoRef, reloadingRef])
+  }, [ammoRef, reloadingRef, weaponIdxRef])
   return (
     <div style={{ position: 'fixed', right: 18, bottom: 16, zIndex: 35, pointerEvents: 'none', textAlign: 'right' }}>
       <div ref={num} style={{ font: '800 30px ui-monospace, monospace', color: '#eafff6', textShadow: '0 2px 4px rgba(0,0,0,0.8)', lineHeight: 1 }}>{CLIP_SIZE}</div>
@@ -1853,6 +1894,7 @@ const Scene = memo(function Scene(props: {
   eyeRef: React.RefObject<number>
   jumpRef: React.RefObject<boolean>; slideRef: React.RefObject<boolean>
   speedMultRef: React.RefObject<number>; dreamwalkRef: React.RefObject<boolean>
+  weaponMoveRef: React.RefObject<number>; weaponIdxRef: React.RefObject<number>
   paint: (c: number, r: number, shift: boolean) => void; editing: boolean
   battleRef: React.RefObject<boolean>; partyLevelRef: React.RefObject<number>
   onEncounter: (enc: WildEncounter) => void
@@ -1917,14 +1959,14 @@ const Scene = memo(function Scene(props: {
       <ZoneGeometry key={`${props.zone.id}-${props.dims}`} gridRef={props.gridRef} heights={props.heights} version={props.version} paint={props.paint} editing={props.editing} />
       <NPCMarkers npcs={ALL_NPCS.filter((n) => n.zone === props.zone.id && npcInWorld(n, props.defeated, props.flagsRef.current))} heights={props.heights} />
       {props.isOwner && props.zone.id === 'moonwell-glade-gregory-s-home' && <HubGateMarkers heights={props.heights} />}
-      {props.zone.realm === 'outside' && <FiringRange firingRef={props.firingRef} adsRef={props.adsRef} gridRef={props.gridRef} recoilRef={props.recoilRef} bloomRef={props.bloomRef} posRef={props.posRef} hpRef={props.hpRef} shieldRef={props.shieldRef} shieldMaxRef={props.shieldMaxRef} rangeCfgRef={props.rangeCfgRef} ammoRef={props.ammoRef} reloadingRef={props.reloadingRef} onNeedReload={props.onNeedReload} onHit={props.onRangeHit} onShot={props.onRangeShot} onPlayerDamage={props.onPlayerDamage} onPlayerDown={props.onPlayerDown} />}
+      {props.zone.realm === 'outside' && <FiringRange firingRef={props.firingRef} adsRef={props.adsRef} weaponIdxRef={props.weaponIdxRef} gridRef={props.gridRef} recoilRef={props.recoilRef} bloomRef={props.bloomRef} posRef={props.posRef} hpRef={props.hpRef} shieldRef={props.shieldRef} shieldMaxRef={props.shieldMaxRef} rangeCfgRef={props.rangeCfgRef} ammoRef={props.ammoRef} reloadingRef={props.reloadingRef} onNeedReload={props.onNeedReload} onHit={props.onRangeHit} onShot={props.onRangeShot} onPlayerDamage={props.onPlayerDamage} onPlayerDown={props.onPlayerDown} />}
       {props.zone.realm === 'outside' && <ExitMarkers warps={props.zone.warps} heights={props.heights} />}
       <NodeMarkers nodes={props.nodes} heights={props.heights} editing={props.editing} channel={props.channel} />
       <SpawnerMarkers spawners={props.spawners} heights={props.heights} editing={props.editing} defeated={props.defeated} ready={props.spawnerReady} />
       {props.zone.id === WORLD_ZONE_ID ? <WorldFlora heights={props.heights} /> : <FloraDressing zoneId={props.zone.id} heights={props.heights} />}
       <StructureMarkers structures={structuresInZone} heights={props.heights} />
       <PlacementGhost placing={props.placing} posRef={props.posRef} heights={props.heights} gridRef={props.gridRef} placeTargetRef={props.placeTargetRef} structuresRef={props.structuresRef} zoneIdRef={props.zoneIdRef} />
-      <Player posRef={props.posRef} gridRef={props.gridRef} heightsRef={props.heightsRef} zoneIdRef={props.zoneIdRef} editRef={props.editRef} onWarp={props.onWarp} battleRef={props.battleRef} partyLevelRef={props.partyLevelRef} onEncounter={props.onEncounter} joyRef={props.joyRef} talkingRef={props.talkingRef} hasPartyRef={props.hasPartyRef} onNearChange={props.onNearChange} defeatedRef={props.defeatedRef} flagsRef={props.flagsRef} harvestNodesRef={props.harvestNodesRef} onNearNode={props.onNearNode} stationsRef={props.structuresRef} onNearStation={props.onNearStation} eyeRef={props.eyeRef} jumpRef={props.jumpRef} slideRef={props.slideRef} speedMultRef={props.speedMultRef} dreamwalkRef={props.dreamwalkRef} />
+      <Player posRef={props.posRef} gridRef={props.gridRef} heightsRef={props.heightsRef} zoneIdRef={props.zoneIdRef} editRef={props.editRef} onWarp={props.onWarp} battleRef={props.battleRef} partyLevelRef={props.partyLevelRef} onEncounter={props.onEncounter} joyRef={props.joyRef} talkingRef={props.talkingRef} hasPartyRef={props.hasPartyRef} onNearChange={props.onNearChange} defeatedRef={props.defeatedRef} flagsRef={props.flagsRef} harvestNodesRef={props.harvestNodesRef} onNearNode={props.onNearNode} stationsRef={props.structuresRef} onNearStation={props.onNearStation} eyeRef={props.eyeRef} jumpRef={props.jumpRef} slideRef={props.slideRef} speedMultRef={props.speedMultRef} weaponMoveRef={props.weaponMoveRef} dreamwalkRef={props.dreamwalkRef} />
       {/* presence: other players in this zone (socket lives in the page comp — shared with the panel) */}
       <RemotePlayers peers={props.mpPeers} />
       {props.companionColor && !props.editing && <Follower posRef={props.posRef} heightsRef={props.heightsRef} color={props.companionColor} />}
@@ -2204,7 +2246,10 @@ export default function Shimmer3D() {
     const onLock = () => {
       const locked = document.pointerLockElement instanceof Element
       setPointerLocked(locked)
-      if (!locked) { firingRef.current = false; adsRef.current = false; setAds(false) }  // Esc/unlock stops fire+ADS
+      if (!locked) {  // Esc/unlock stops fire+ADS; drop the ADS speed penalty back to the hip mult
+        firingRef.current = false; adsRef.current = false; setAds(false)
+        weaponMoveRef.current = (!weaponDrawnRef.current || holsteredRef.current) ? 1 : WEAPONS[weaponIdxRef.current].hipMove
+      }
     }
     document.addEventListener('pointerlockchange', onLock)
     return () => document.removeEventListener('pointerlockchange', onLock)
@@ -2714,6 +2759,7 @@ export default function Shimmer3D() {
   const buffsRef = useRef<ActiveBuffs>({})
   const [buffHud, setBuffHud] = useState<ReturnType<typeof activeBuffList>>([])
   const speedMultRef = useRef(1)
+  const weaponMoveRef = useRef(1)   // weapon-state ground-speed mult (Player reads): 1 holstered / hipMove drawn / adsMove aiming
   const dreamwalkRef = useRef(false)
 
   // Double-tap use: drink a mana potion, or enter placement for a placeable.
@@ -3494,9 +3540,14 @@ export default function Shimmer3D() {
   const hpRef = useRef(MAX_HP)        // player HP/shield — combat sim writes, ResourceBars reads
   const shieldRef = useRef(MAX_SHIELD)
   const shieldMaxRef = useRef(MAX_SHIELD)  // birth-rune hook: Barrier rune sets MAX_SHIELD + BARRIER_SHIELD_BONUS
-  const ammoRef = useRef(CLIP_SIZE)   // AM Riser clip; FiringRange decrements, AmmoCounter reads
+  const ammoRef = useRef<number>(WEAPONS[0].clip)   // the LIVE weapon's clip; FiringRange decrements, AmmoCounter reads
   const reloadingRef = useRef(0)      // >0 while the recharge channel runs
   const reloadTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // ── weapon slots: 0 = Riser sidearm, 1 = Lance primary. Q swaps, F holsters (stow → full run speed).
+  const weaponIdxRef = useRef(0)
+  const holsteredRef = useRef(false)  // stowed → no fire/ADS, full move speed (weaponMoveRef = 1)
+  const ammoStashRef = useRef<number[]>([WEAPONS[0].clip, WEAPONS[1].clip])  // per-weapon magazines; swap parks/loads them
+  const [weaponUi, setWeaponUi] = useState<{ idx: number; holstered: boolean }>({ idx: 0, holstered: false })  // drives viewmodel + HUD label
   const hitmarkRef = useRef<HTMLDivElement>(null)   // × flash at the reticle on a landed round
   const vignetteRef = useRef<HTMLDivElement>(null)  // red edge flash when the player takes damage
   const onRangeHit = useCallback((crit: boolean) => {
@@ -3527,10 +3578,18 @@ export default function Shimmer3D() {
     if (!weaponDrawn) {
       shotsRef.current = 0; hitsRef.current = 0; setHudStats({ shots: 0, hits: 0 }); firingRef.current = false; adsRef.current = false; setAds(false)
       recoilRef.current.p = 0; recoilRef.current.y = 0; bloomRef.current = 0; hpRef.current = MAX_HP; shieldRef.current = shieldMaxRef.current
-      ammoRef.current = CLIP_SIZE; reloadingRef.current = 0
+      // holstering (leaving the outside realm) resets weapons to the sidearm with full mags, and drops
+      // the movement penalty back to 1 so inside-Ather walking is never slowed by a stale weapon state.
+      weaponIdxRef.current = 0; holsteredRef.current = false
+      ammoRef.current = WEAPONS[0].clip; ammoStashRef.current = [WEAPONS[0].clip, WEAPONS[1].clip]; reloadingRef.current = 0
+      weaponMoveRef.current = 1; setWeaponUi({ idx: 0, holstered: false })
       if (reloadTimer.current) { clearTimeout(reloadTimer.current); reloadTimer.current = null }
       return
     }
+    // entered the outside realm → the weapon draws; apply its hip movement penalty right away.
+    // Inlined (not syncWeaponMove()) on purpose: this effect is defined ABOVE that helper, so naming it
+    // in the dep array would be a TDZ crash at render. Fresh entry = drawn, not holstered, not aiming.
+    weaponMoveRef.current = holsteredRef.current ? 1 : WEAPONS[weaponIdxRef.current].hipMove
     const id = setInterval(() => setHudStats((s) => (s.shots === shotsRef.current && s.hits === hitsRef.current) ? s : { shots: shotsRef.current, hits: hitsRef.current }), 200)
     return () => clearInterval(id)
   }, [weaponDrawn])
@@ -3598,9 +3657,10 @@ export default function Shimmer3D() {
   // The weapon runs on the same resource economy as the tools — nothing in the Crucible is free.
   const dryToastAt = useRef(0)
   const startReload = useCallback(() => {
-    if (!weaponDrawnRef.current || reloadingRef.current > 0 || ammoRef.current >= CLIP_SIZE) return
-    const missing = CLIP_SIZE - ammoRef.current
-    const rounds = Math.min(missing, Math.floor((manaRef.current.current / RELOAD_MANA) * CLIP_SIZE))
+    const W = WEAPONS[weaponIdxRef.current] ?? WEAPONS[0]   // recharge the LIVE weapon's clip
+    if (!weaponDrawnRef.current || holsteredRef.current || reloadingRef.current > 0 || ammoRef.current >= W.clip) return
+    const missing = W.clip - ammoRef.current
+    const rounds = Math.min(missing, Math.floor((manaRef.current.current / W.reloadMana) * W.clip))
     if (rounds < 1) {
       const t = performance.now()  // dry-fire calls this every 0.25s — don't toast-spam
       if (t - dryToastAt.current > 1500) { dryToastAt.current = t; setHarvestToast('No mana to recharge — drink a Mana Draught') }
@@ -3608,14 +3668,41 @@ export default function Shimmer3D() {
     }
     reloadingRef.current = 1
     const el = casterRef.current
-    if (el) { el.style.animation = 'none'; void el.offsetHeight; el.style.animation = `casterReload ${RELOAD_TIME}s ease-in-out` }
+    if (el) { el.style.animation = 'none'; void el.offsetHeight; el.style.animation = `casterReload ${W.reloadTime}s ease-in-out` }
     reloadTimer.current = setTimeout(() => {
       reloadingRef.current = 0
-      ammoRef.current = Math.min(CLIP_SIZE, ammoRef.current + rounds)
-      manaRef.current.current = Math.max(0, manaRef.current.current - (RELOAD_MANA * rounds) / CLIP_SIZE)
+      ammoRef.current = Math.min(W.clip, ammoRef.current + rounds)
+      manaRef.current.current = Math.max(0, manaRef.current.current - (W.reloadMana * rounds) / W.clip)
       setManaFrac(manaRef.current.current / getMaxPool(skillsRef.current.mana.level))
-    }, RELOAD_TIME * 1000)
+    }, W.reloadTime * 1000)
   }, [])
+  // ── weapon-state → movement mult, and the swap / holster actions. syncWeaponMove is the single rule:
+  // holstered or inside-Ather = full speed; drawn = the weapon's hip mult; aiming = its (lower) ADS mult.
+  const syncWeaponMove = useCallback(() => {
+    weaponMoveRef.current = (!weaponDrawnRef.current || holsteredRef.current) ? 1
+      : adsRef.current ? WEAPONS[weaponIdxRef.current].adsMove
+      : WEAPONS[weaponIdxRef.current].hipMove
+  }, [])
+  const swapWeapon = useCallback(() => {
+    if (!weaponDrawnRef.current) return
+    const cur = weaponIdxRef.current, next = cur === 0 ? 1 : 0
+    ammoStashRef.current[cur] = ammoRef.current      // park the current magazine
+    weaponIdxRef.current = next
+    ammoRef.current = ammoStashRef.current[next]      // load the other weapon's magazine (each keeps its own)
+    holsteredRef.current = false                      // drawing a weapon un-holsters
+    if (reloadTimer.current) { clearTimeout(reloadTimer.current); reloadTimer.current = null }
+    reloadingRef.current = 0
+    syncWeaponMove()
+    setWeaponUi({ idx: next, holstered: false })
+  }, [syncWeaponMove])
+  const toggleHolster = useCallback(() => {
+    if (!weaponDrawnRef.current) return
+    const h = !holsteredRef.current
+    holsteredRef.current = h
+    if (h) { firingRef.current = false; adsRef.current = false; setAds(false) }  // stow drops fire + aim
+    syncWeaponMove()
+    setWeaponUi({ idx: weaponIdxRef.current, holstered: h })
+  }, [syncWeaponMove])
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key.toLowerCase() !== 'r') return
@@ -3625,6 +3712,18 @@ export default function Shimmer3D() {
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [startReload])
+  // Q = swap weapon (Riser ⇄ Lance, also un-holsters), F = holster toggle (stow → run at full speed).
+  // Both are inert unless a weapon is drawn (outside-Ather) and no menu/battle owns input.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (!weaponDrawnRef.current || editRef.current || battleRef.current || curBattleRef.current || dialogueRef.current || openMenuRef.current || placingRef.current) return
+      const k = e.key.toLowerCase()
+      if (k === 'q') { e.preventDefault(); swapWeapon() }
+      else if (k === 'f') { e.preventDefault(); toggleHolster() }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [swapWeapon, toggleHolster])
   // If a blocking mode takes over while the bag is open (battle/dialogue/edit/placing/reward), drop the
   // bag — those own the cursor themselves, so no re-lock (plain setBagOpen, not toggleBag).
   useEffect(() => { if (bagOpen && (battle || editMode || dialogue || placing || approach || rewards || openMenu)) setBagOpen(false) }, [bagOpen, battle, editMode, dialogue, placing, approach, rewards, openMenu])
@@ -3675,9 +3774,9 @@ export default function Shimmer3D() {
       }
       if (battleRef.current) return  // a menu/battle overlay owns input
       if (e.button === 0) {
-        // outside the Ather the weapon is drawn: left-click FIRES a projectile (the FiringRange's
-        // useFrame reads firingRef and auto-fires from the camera). Takes priority over interact.
-        if (weaponDrawnRef.current) { e.preventDefault(); firingRef.current = true; return }  // hold = full-auto
+        // outside the Ather with a weapon DRAWN (not holstered): left-click FIRES (the FiringRange's
+        // useFrame reads firingRef). Holstered = weapon stowed, so left-click falls through to interact.
+        if (weaponDrawnRef.current && !holsteredRef.current) { e.preventDefault(); firingRef.current = true; return }  // hold = auto / press = semi
         // interact — same priority ladder as the E key
         if (dialogueRef.current) advanceDialogue()
         else if (nearNpc) talk(nearNpc)
@@ -3687,19 +3786,19 @@ export default function Shimmer3D() {
         // middle-click (scroll-wheel press) = use/place the selected hotbar item (moved off right-click)
         e.preventDefault()
         useItem(invRef.current.slots[selSlotRef.current]?.itemId)
-      } else if (e.button === 2 && weaponDrawnRef.current) {
-        // right-click HOLD = aim down sights (weapon only). Released in onUp below.
-        e.preventDefault(); adsRef.current = true; setAds(true)
+      } else if (e.button === 2 && weaponDrawnRef.current && !holsteredRef.current) {
+        // right-click HOLD = aim down sights (weapon only). Aiming slows you the most (syncWeaponMove).
+        e.preventDefault(); adsRef.current = true; setAds(true); syncWeaponMove()
       }
     }
     const onUp = (e: MouseEvent) => {
-      if (e.button === 0) firingRef.current = false  // release = stop full-auto
-      if (e.button === 2 && adsRef.current) { adsRef.current = false; setAds(false) }
+      if (e.button === 0) firingRef.current = false  // release = stop fire (also re-arms a semi-auto)
+      if (e.button === 2 && adsRef.current) { adsRef.current = false; setAds(false); syncWeaponMove() }  // lower aim → back to hip speed
     }
     window.addEventListener('mousedown', onDown)
     window.addEventListener('mouseup', onUp)
     return () => { window.removeEventListener('mousedown', onDown); window.removeEventListener('mouseup', onUp) }
-  }, [editMode, nearNpc, advanceDialogue, talk, toggleChannel, openStation, useItem, confirmPlacing, rotatePlacing])
+  }, [editMode, nearNpc, advanceDialogue, talk, toggleChannel, openStation, useItem, confirmPlacing, rotatePlacing, syncWeaponMove])
   // Numpad0 = use the selected hotbar item (keyboard alt to middle-click). e.code (not e.key) so it
   // binds to the NUMPAD zero specifically — the number ROW / numpad digits still select slots.
   useEffect(() => {
@@ -3923,7 +4022,7 @@ export default function Shimmer3D() {
           zone={zone} gridRef={gridRef} heights={heightsRef.current} version={version} dims={dims}
           posRef={posRef as React.RefObject<THREE.Vector3>} heightsRef={heightsRef} zoneIdRef={zoneIdRef}
           editFocusRef={editFocusRef}
-          onWarp={onWarp} yawRef={camYaw} editRef={editRef} eyeRef={eyeRef} jumpRef={jumpRef} slideRef={slideRef} speedMultRef={speedMultRef} dreamwalkRef={dreamwalkRef} paint={paint} editing={editMode}
+          onWarp={onWarp} yawRef={camYaw} editRef={editRef} eyeRef={eyeRef} jumpRef={jumpRef} slideRef={slideRef} speedMultRef={speedMultRef} weaponMoveRef={weaponMoveRef} weaponIdxRef={weaponIdxRef} dreamwalkRef={dreamwalkRef} paint={paint} editing={editMode}
           battleRef={battleRef} partyLevelRef={partyLevelRef} onEncounter={onEncounter} joyRef={joyRef}
           talkingRef={talkingRef} hasPartyRef={hasPartyRef} onNearChange={setNearNpc}
           harvestNodesRef={runtimeNodesRef} onNearNode={setNearNode} channel={channel}
@@ -4337,10 +4436,13 @@ export default function Shimmer3D() {
             padding: '6px 14px', borderRadius: 999, background: 'rgba(16,20,32,0.85)', border: '1px solid #8fe0ff44',
             font: '800 12px ui-monospace, monospace', color: '#cfeeff', letterSpacing: '0.08em', display: 'flex', gap: 13, alignItems: 'center',
           }}>
-            <span>AM RISER</span><span style={{ opacity: 0.4 }}>·</span>
+            {weaponUi.holstered
+              ? <span style={{ color: '#ffd98a' }}>HOLSTERED <span style={{ opacity: 0.55, fontWeight: 600 }}>· running</span></span>
+              : <span style={{ color: WEAPONS[weaponUi.idx].color }}>{WEAPONS[weaponUi.idx].name} <span style={{ opacity: 0.5, fontWeight: 600, color: '#cfeeff' }}>{WEAPONS[weaponUi.idx].slot}</span></span>}
+            <span style={{ opacity: 0.4 }}>·</span>
             <span>shots <span style={{ color: '#8fe0ff' }}>{hudStats.shots}</span></span>
             <span>hits <span style={{ color: '#7fffa0' }}>{hudStats.hits}</span></span>
-            <span style={{ opacity: 0.5, fontWeight: 600 }}>hold to fire · r-click aim · T console</span>
+            <span style={{ opacity: 0.5, fontWeight: 600 }}>{weaponUi.holstered ? 'Q draw · F ready weapon' : 'Q swap · F holster · r-click aim · T console'}</span>
           </div>
           {/* range console — new-player range controls; opt-in danger lives here, never sprung on you */}
           {rangeOpen && (
@@ -4374,9 +4476,9 @@ export default function Shimmer3D() {
               </div>
             </>
           )}
-          <WeaponReticle bloomRef={bloomRef} adsRef={adsRef} />
+          {!weaponUi.holstered && <WeaponReticle bloomRef={bloomRef} adsRef={adsRef} weaponIdxRef={weaponIdxRef} />}
           <ResourceBars hpRef={hpRef} shieldRef={shieldRef} shieldMaxRef={shieldMaxRef} />
-          <AmmoCounter ammoRef={ammoRef} reloadingRef={reloadingRef} />
+          <AmmoCounter ammoRef={ammoRef} reloadingRef={reloadingRef} weaponIdxRef={weaponIdxRef} />
           <style>{`@keyframes hitFlash{0%{opacity:1}100%{opacity:0}}@keyframes dmgFlash{0%{opacity:1}100%{opacity:0}}@keyframes downFlash{0%{opacity:1}55%{opacity:0.85}100%{opacity:0}}`}</style>
           {/* hitmarker — four outward diagonal ticks around the reticle, flashed per landed round */}
           <div ref={hitmarkRef} style={{ position: 'fixed', left: '50%', top: '50%', zIndex: 31, pointerEvents: 'none', opacity: 0 }}>
@@ -4389,21 +4491,36 @@ export default function Shimmer3D() {
           <div ref={vignetteRef} style={{ position: 'fixed', inset: 0, zIndex: 29, pointerEvents: 'none', opacity: 0,
             background: 'radial-gradient(ellipse at center, transparent 52%, rgba(255,58,44,0.5) 100%)' }} />
           {/* caster viewmodel — outer div raises it to the sighted pose on ADS (React, transitioned);
-              inner casterRef keeps the imperative recoil kick, so the two transforms don't fight. */}
+              inner casterRef keeps the imperative recoil kick, so the two transforms don't fight.
+              Per-weapon silhouette: the thin cyan Riser vs the heavy amber Lance. Hidden while holstered. */}
+          {!weaponUi.holstered && (
           <div style={{ position: 'fixed', right: '17%', bottom: 0, zIndex: 33, pointerEvents: 'none',
             transform: ads ? 'translate(-150px, -30px) scale(1.14)' : 'translate(0,0) scale(1)', transition: 'transform 0.14s ease-out' }}>
             <div ref={casterRef}>
               <style>{`@keyframes casterKick { 0% { transform: translateY(16px) } 60% { transform: translateY(-3px) } 100% { transform: translateY(0) } }
 @keyframes casterReload { 0% { transform: translateY(0) rotate(0deg) } 30% { transform: translateY(36px) rotate(-7deg) } 70% { transform: translateY(30px) rotate(-5deg) } 100% { transform: translateY(0) rotate(0deg) } }`}</style>
-              <svg width="240" height="168" viewBox="0 0 240 168" style={{ display: 'block' }}>
-                <polygon points="46,168 66,92 158,122 138,168" fill="#161d2a" stroke="#3a4a63" strokeWidth="2" />
-                <polygon points="58,98 100,70 126,96 104,122" fill="#212b3d" stroke="#4a5d7d" strokeWidth="2" />
-                <circle cx="94" cy="96" r="17" fill="none" stroke="#8fe0ff" strokeOpacity="0.35" strokeWidth="2" />
-                <circle cx="94" cy="96" r="10" fill="#8fe0ff" />
-                <rect x="100" y="90" width="52" height="6" rx="3" fill="#8fe0ff" opacity="0.9" />
-              </svg>
+              {weaponUi.idx === 1 ? (
+                // AM LANCE — a longer, heavier amber caster: thick body, long barrel, gold focusing core.
+                <svg width="272" height="176" viewBox="0 0 272 176" style={{ display: 'block' }}>
+                  <polygon points="40,176 60,84 178,120 158,176" fill="#241a12" stroke="#6d5228" strokeWidth="2" />
+                  <polygon points="54,92 96,58 236,96 150,120" fill="#33261a" stroke="#8a6a34" strokeWidth="2" />
+                  <rect x="150" y="86" width="96" height="12" rx="5" fill="#4a3820" stroke="#8a6a34" strokeWidth="2" transform="rotate(-8 150 92)" />
+                  <circle cx="92" cy="88" r="20" fill="none" stroke="#ffce7a" strokeOpacity="0.4" strokeWidth="3" />
+                  <circle cx="92" cy="88" r="12" fill="#ffce7a" />
+                  <circle cx="240" cy="80" r="6" fill="#ffe6b0" />
+                </svg>
+              ) : (
+                <svg width="240" height="168" viewBox="0 0 240 168" style={{ display: 'block' }}>
+                  <polygon points="46,168 66,92 158,122 138,168" fill="#161d2a" stroke="#3a4a63" strokeWidth="2" />
+                  <polygon points="58,98 100,70 126,96 104,122" fill="#212b3d" stroke="#4a5d7d" strokeWidth="2" />
+                  <circle cx="94" cy="96" r="17" fill="none" stroke="#8fe0ff" strokeOpacity="0.35" strokeWidth="2" />
+                  <circle cx="94" cy="96" r="10" fill="#8fe0ff" />
+                  <rect x="100" y="90" width="52" height="6" rx="3" fill="#8fe0ff" opacity="0.9" />
+                </svg>
+              )}
             </div>
           </div>
+          )}
         </>
       )}
 

@@ -339,7 +339,14 @@ the Arcade frame.
 >   gregory/, no GLB — salvageable if ever wanted). Don't start character/art workstreams — the north star above is
 >   for STEERING (what not to over-invest in), not a build queue. Current lane stays mechanics + map layouts.
 
-## 🎛️ Shimmer play3d — GRAPHICS QUALITY / GPU BUDGET (SHIPPED 2026-07-23, jin-cc) · *Last touched 2026-07-23*
+## 🎛️ Shimmer play3d — GRAPHICS QUALITY / GPU BUDGET (SHIPPED 2026-07-23, jin-cc) · *Last touched 2026-07-24*
+> **✅ FIRING-RANGE LAG THREAD CLOSED (2026-07-24, Alex).** The localized range lag was a **transient GPU spike**,
+> not a leak and not a code bug — it appeared only when the two heaviest draw loads stacked (moving TARGET DRIFT +
+> HOSTILE HUNTER enemies + full-auto tracers all at once) and briefly pushed the UHD 630 over; it recovers on its own
+> because it's overdraw, not growth. Alex re-tested 07-24, no lag reproduced. FiringRange code stays clean (pooled
+> projectiles, instanced meshes, zero per-frame alloc). **Known lever if it ever bites again (do NOT do blind now):**
+> tracer overdraw is the one thing that scales with fire rate — shorten `TRAIL_N` / cheapen the additive muzzle flash /
+> faster tracer fade is a ~2-line cut with no look cost. Draw distance / fog / chunk streaming stay untouched (Alex).
 > **Left off:** quality panel live on `:3200` (`0998a65`). Alex reported lag spikes in-game **and** in his terminal;
 > root cause measured, not guessed — the client box's **Intel UHD 630 pegged at 96-98%** on its 3D engine. Everything
 > else was clean: server load 0.17/5GB free, WSL idle (0.00, 11GB of 12), Windows host 8.3GB of 15.8GB free, Chrome
@@ -472,11 +479,39 @@ the Arcade frame.
 > **Research sources:** Apex movement tech (slide-hop, tap-strafe, wall-bounce, superglide, mantle input model) —
 > BoostRoom + ProGuides + Alegends movement guides, 07-22.
 
-## 🔫 Shimmer play3d — CRUCIBLE COMBAT (weapon + damage + economy, 2026-07-22→22 PM, jin-cc)
+## 🔫 Shimmer play3d — CRUCIBLE COMBAT (weapon + damage + economy, 2026-07-22→24, jin-cc) · *Last touched 2026-07-24*
 > **The Crucible = BATTLE ROYALE lane (Alex ruled 07-22; Apex is the north star).** The firing range in Alex's
-> 50×50 is the combat lab. Two sessions in, the full loop is live on :3200.
+> 50×50 is the combat lab. Three sessions in, the full loop + a two-weapon loadout + a movement ladder are live on :3200.
 >
-> **Left off (2026-07-22 late, `2406732`):** the whole single-player combat loop shipped + Alex-approved:
+> **Left off (2026-07-24, jin-cc) — SECOND WEAPON + STOW-TO-RUN MOVEMENT LADDER shipped (build+deploy clean).**
+> - **A `WEAPONS` table now drives the FiringRange** (slot 0 REUSES the old Riser consts so there's one source of
+>   truth; slot 1 is new). Each weapon carries its own fire cadence, projectile, damage, spread/bloom, kick, clip,
+>   reload, tracer look (color/head/trail), AND movement penalties. The sim reads `WEAPONS[weaponIdxRef.current]`.
+> - **AM LANCE — the PRIMARY (Alex's "slow heavy mid-range piece").** SEMI-AUTO (one deliberate bolt per click, no
+>   spray — a `firedThisPress` gate re-arms on release), fast fat GOLD round (`#ffce7a`, projSpeed 54), punchy 22
+>   body / 34 crit, 8-round clip, 2.0s reload, heavy kick, laser when aimed (ADS 0.14°) but loose from the hip
+>   (3.4°, so it REWARDS ADS). Reads instantly different from the thin cyan full-auto Riser. Placeholder viewmodel
+>   (heavier amber SVG). **Canon weapon NAMES stay a Magii call** (per the Crucible note) — 'AM RISER'/'AM LANCE' are
+>   working labels, not authored canon.
+> - **★ THE MOVEMENT LADDER (Alex's "stow weapon to run faster") — holster > hip > ADS, per-weapon.** A weapon is no
+>   longer force-drawn by realm alone; a `holsteredRef` + `weaponMoveRef` (ground-speed mult the Player folds into
+>   `targetSpeed`, alongside the potion `speedMultRef`) give three speeds off RUN_SPEED 6.5: **holstered 1.0 (6.5,
+>   full sprint) · Riser hip 0.85 (5.5) / ADS 0.55 (3.6) · Lance hip 0.70 (4.55) / ADS 0.42 (2.7).** Stowing is how
+>   you reposition fast → the movement tech (slide-hop/bhop) finally has a job in a fight, and ADS is a real commit.
+>   Slide/air bursts stay UN-penalized on purpose (holster-to-slide is the reward). `syncWeaponMove()` is the one
+>   rule; recomputed on draw/holster/swap/ADS-down/ADS-up/Esc-unlock.
+> - **Keys: `Q` swap weapon (also un-holsters) · `F` holster toggle.** Both inert unless drawn + no menu owns input.
+>   Chosen because number-row 1-9 + wheel are the hotbar (potions in a fight), so weapon controls got dedicated keys.
+> - **Per-weapon magazines:** `ammoStashRef[2]` parks the current clip and loads the other on swap (each weapon keeps
+>   its own ammo). HUD badge shows the live weapon name in its tracer color + slot, or "HOLSTERED · running".
+> - **★ TDZ trap avoided (the wrap's known trap):** the `weaponDrawn` reset effect is defined ABOVE `syncWeaponMove`,
+>   so naming the helper in its dep array would crash at render — inlined the sync there instead. `as const` on
+>   WEAPONS also poisoned `useRef(WEAPONS[0].clip)` into `MutableRefObject<24>` → annotated `ammoRef`/`ammoStashRef`.
+> - **NEXT{Shimmer Crucible: Alex FEEL-PASS the two weapons + the movement ladder — Lance punch/clip/semi-cadence, the
+>   holster/hip/ADS speeds (all dials are `WEAPONS[]` fields + `hipMove`/`adsMove` atop Shimmer3D). Then: does the
+>   Lance want a distinct hunter-kill role, and is a 3rd weapon slot worth it or do 2 suffice for the BR feel?}**
+>
+> **Prior (2026-07-22 late, `2406732`):** the whole single-player combat loop shipped + Alex-approved:
 > - **AM Riser = the SIDEARM** (Alex ruled: no two-shot deletes). Full-auto ~9/s, Apex muzzle model (spawns
 >   low-right, converges on the crosshair ray @38 tiles; ADS near-center), thin comet tracers, spread+bloom
 >   (hip 2.2° +0.45°/shot cap +2.6, ADS 0.25°), REAL camera recoil (no auto-return, fight the climb),
@@ -495,16 +530,20 @@ the Arcade frame.
 >   respawn) · RESET STATS. Holster = console closed + peaceful defaults.
 > - **HUD:** SH/HP vertical percent bars right-center · ammo counter bottom-right · damage vignette · hitmarker.
 >   All rAF-off-refs, zero React churn in combat.
-> **Next:** weapon #2 — the PRIMARY slot (Riser is the sidearm; a slow heavy mid-range piece contrasts best) ·
-> crucible arena layout pass (cover, lanes, verticality for the movement tech) · reload/holster polish riffs.
+> **Next:** ✅ weapon #2 DONE (07-24, above) · crucible arena layout pass (cover, lanes, verticality for the movement
+> tech — now that stow-to-run makes the movement tech matter in a fight) · reload/holster polish riffs.
 > **Parked:** birth-rune selection UI (hook is live) · player-vs-player (needs shimmer-server netcode lane) ·
 > potion quick-use keybind if hotbar double-tap feels slow in a fight.
 > **Decisions:** sidearm TTK intended (~29 body/18 crit vs full 200) · crit must be GEOMETRIC not RNG ·
 > danger always opt-in on the range · boards = in-engine primitives NOT Blender (live billboard/instance/scale;
-> picaso enters for baked hero props) · `T` console / `R` recharge / `c`+shift crouch untouched.
-> **Files:** `play3d/Shimmer3D.tsx` — weapon consts ~L1290-1340 (`AM_*`/`CLIP_*`/`RELOAD_*`/`HIP_SPREAD`/
-> `KICK_*`/`HUNTER_*`/`MAX_HP`/`MAX_SHIELD`/`BARRIER_SHIELD_BONUS`), `FiringRange()` sim, `WeaponReticle`/
-> `ResourceBars`/`AmmoCounter` HUD comps, `HEAL_POTIONS`/`startReload`/range-console state in the page comp.
+> picaso enters for baked hero props) · `T` console / `R` recharge / `c`+shift crouch untouched · **weapon slots on
+> `Q`/`F` not the number row (that's the hotbar) · holster is the ONLY full-speed state, so stowing is a real
+> tactical choice · slide/air unpenalized so movement tech rewards holstering.**
+> **Files:** `play3d/Shimmer3D.tsx` — the `WEAPONS` table + old `AM_*`/`CLIP_*`/`RELOAD_*`/`HIP_SPREAD`/`KICK_*`
+> consts (weapon-0 source) ~L1330-1400, `HUNTER_*`/`MAX_HP`/`MAX_SHIELD`/`BARRIER_SHIELD_BONUS`, `FiringRange()` sim
+> (reads `weaponIdxRef`, semi-auto `firedThisPress`), `WeaponReticle`/`AmmoCounter` (read `weaponIdxRef`), `Player`
+> `targetSpeed` × `weaponMoveRef`, page comp: `weaponIdxRef`/`holsteredRef`/`ammoStashRef`/`weaponMoveRef` +
+> `syncWeaponMove`/`swapWeapon`/`toggleHolster` + Q/F keydown + the per-weapon viewmodel SVG.
 
 ## 👥 Shimmer play3d — MULTIPLAYER PRESENCE (LIVE 2026-07-23, jin-cc) · *Last touched 2026-07-23*
 > **Shipped + verified end-to-end (`a7ef867` client, `33caddb` remount, deployed :3200):** see other
