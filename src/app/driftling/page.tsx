@@ -55,6 +55,18 @@ const MOTES = (() => {
   return Array.from({ length: 60 }, () => ({ x: r() * 3000 - 800, y: r() * 3000 - 800, s: 0.4 + r() * 1.0, par: 0.4 + r() * 0.5, p: r() * 6.28 }))
 })()
 
+// sunlight shafts from the surface — fixed layout so they don't reshuffle each frame; they sway + fade with depth
+const RAYS = (() => {
+  const r = mulberry32(0x7a15)
+  return Array.from({ length: 5 }, (_, i) => ({ x: (i + 0.5) / 5, w: 0.09 + r() * 0.06, ph: r() * 6.28, sp: 0.10 + r() * 0.08 }))
+})()
+
+// far parallax silhouettes drifting in the murk — kelp/reef in the shallows, jagged spires in the abyss
+const BG = (() => {
+  const r = mulberry32(0x5eed)
+  return Array.from({ length: 22 }, () => ({ x: r() * 6000, yf: 0.5 + r() * 0.42, s: 0.6 + r() * 1.2, par: 0.16 + r() * 0.16, ph: r() * 6.28, lean: r() * 0.5 - 0.25 }))
+})()
+
 const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1)
 
 // progress 0..1 through the current tier toward the next evolution
@@ -367,6 +379,67 @@ function render(canvas: HTMLCanvasElement, w: World, ts: number, growFx: number,
   // camera centres the player
   const sx = (wx: number) => VW / 2 + (wx - w.x)
   const sy = (wy: number) => VH / 2 + (wy - w.y)
+
+  // ── background atmosphere (behind everything) ───────────────────────────────────
+  // sunlight shafts slanting from the surface — bright in the shallows, gone in the abyss (depth cue)
+  const rayStr = Math.max(0, 1 - depthFrac * 1.3)
+  if (rayStr > 0.02) {
+    ctx.save()
+    ctx.globalCompositeOperation = 'lighter'
+    for (const r of RAYS) {
+      const sway = Math.sin(t * r.sp + r.ph) * 34
+      const topx = r.x * VW + sway
+      const botx = topx + 70 + Math.sin(t * 0.12 + r.ph) * 18
+      const halfT = r.w * VW * 0.5
+      const halfB = halfT * 2.2
+      const grd = ctx.createLinearGradient(0, 0, 0, VH)
+      grd.addColorStop(0, `rgba(150,224,244,${0.07 * rayStr})`)
+      grd.addColorStop(0.55, `rgba(120,205,232,${0.028 * rayStr})`)
+      grd.addColorStop(1, 'rgba(120,205,232,0)')
+      ctx.fillStyle = grd
+      ctx.beginPath()
+      ctx.moveTo(topx - halfT, -20); ctx.lineTo(topx + halfT, -20)
+      ctx.lineTo(botx + halfB, VH); ctx.lineTo(botx - halfB, VH)
+      ctx.closePath(); ctx.fill()
+    }
+    ctx.restore()
+  }
+  // far silhouettes drifting in the murk — reads as a place, not a void. kelp/reef up shallow, spires deep.
+  for (const b of BG) {
+    const px = ((b.x - w.x * b.par) % 6000 + 6000) % 6000 - 1500
+    if (px < -160 || px > VW + 160) continue
+    const worldXHere = w.x + (px - VW / 2)
+    if (worldXHere < 0) continue // nothing behind the shallow start
+    const dHere = Math.min(1, worldXHere / (DEPTH_PER_TIER * APEX_TIER))
+    const baseY = VH * b.yf + Math.sin(t * 0.15 + b.ph) * 5
+    const h = 70 + b.s * 90
+    const wdt = 16 + b.s * 14
+    ctx.fillStyle = mix('#0e3a48', '#050810', dHere) // teal-dark shallows → near-black abyss
+    ctx.globalAlpha = 0.30 - dHere * 0.07
+    if (dHere < 0.4) {
+      // kelp — a few wavy fronds swaying up from baseY
+      for (let k = -1; k <= 1; k++) {
+        const kx = px + k * wdt * 0.6
+        ctx.beginPath()
+        ctx.moveTo(kx - wdt * 0.18, baseY)
+        for (let s = 0; s <= 1.001; s += 0.25) { const xx = kx + Math.sin(s * 3 + t * 0.5 + b.ph) * (8 + s * 10) + b.lean * s * 30; ctx.lineTo(xx, baseY - s * h) }
+        for (let s = 1; s >= 0; s -= 0.25) { const xx = kx + Math.sin(s * 3 + t * 0.5 + b.ph) * (8 + s * 10) + b.lean * s * 30 + wdt * 0.18; ctx.lineTo(xx, baseY - s * h) }
+        ctx.closePath(); ctx.fill()
+      }
+    } else {
+      // spire — a tall jagged mass rising into the dark
+      ctx.beginPath()
+      ctx.moveTo(px - wdt, baseY)
+      ctx.lineTo(px - wdt * 0.4, baseY - h * 0.55)
+      ctx.lineTo(px - wdt * 0.15, baseY - h * 0.5)
+      ctx.lineTo(px + b.lean * 20, baseY - h)
+      ctx.lineTo(px + wdt * 0.2, baseY - h * 0.5)
+      ctx.lineTo(px + wdt * 0.5, baseY - h * 0.62)
+      ctx.lineTo(px + wdt, baseY)
+      ctx.closePath(); ctx.fill()
+    }
+    ctx.globalAlpha = 1
+  }
 
   // world bounds made VISIBLE — they only slide into view as you near them, so "where the map ends"
   // reads before you reach it (no more slamming an invisible wall). Surface (top), floor (bottom),
