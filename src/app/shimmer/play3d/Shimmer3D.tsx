@@ -1408,12 +1408,54 @@ const WEAPONS = [
     hipSpread: 3.4, adsSpread: 0.14, bloomPerShot: 0.9, bloomMax: 3.6,
     bloomDecay: 6, adsBloomScale: 0.3, kickPitch: 0.021, kickYaw: 0.006,
     converge: 46, headR: 0.12, trailR: 0.085, hipMove: 0.70, adsMove: 0.42 },
+  // REPEATER (sidearm) — the everyman backup: semi-auto, fast follow-ups, tight, low heat, 12-shot clip
+  // (canon "12 shots before overheat"). Light — the LEAST movement penalty, a gun you keep up while
+  // running. Low damage; it's the finisher/holdout, not the punch. The third distinct feel at the bench.
+  { id: 'repeater', name: 'REPEATER', slot: 'SIDEARM', auto: false,
+    fireCd: 0.16, projSpeed: 40, projLife: 1.8,
+    damage: 10, crit: 16, clip: 12, reloadTime: 1.1, reloadMana: 8,
+    hipSpread: 1.6, adsSpread: 0.2, bloomPerShot: 0.35, bloomMax: 2.0,
+    bloomDecay: 6, adsBloomScale: 0.35, kickPitch: 0.011, kickYaw: 0.004,
+    converge: 34, headR: 0.07, trailR: 0.05, hipMove: 0.88, adsMove: 0.6 },
 ] as const
 // Downrange targets for the range — floating orbs at varied spots/heights in Alex's 50×50.
 const RANGE_TARGETS: [number, number, number][] = [
   [15, 1.8, 26], [20, 2.5, 31], [25, 1.6, 23], [30, 2.9, 33],
   [35, 2.0, 27], [12, 2.3, 35], [38, 1.7, 21], [22, 3.1, 39],
 ]
+// Gun benches — the practice-range armory. Walk up (E) to open the loadout editor and build your two
+// slots from the arsenal. Placed at the NEAR side of the range (the firing line is low-z; targets are
+// downrange z 21-39). [x, y, z] — TUNABLE like RANGE_TARGETS; nudge y to sit them on the arena floor.
+const GUN_BENCHES: [number, number, number][] = [
+  [14, 0, 12], [24, 0, 10], [34, 0, 12],
+]
+const BENCH_NEAR_R = 2.4  // tiles — how close you must stand to open a bench
+// Grey cast-metal weapon benches with a soul-colour channel strip (the armory's live mana routing).
+function GunBenches() {
+  return (
+    <>
+      {GUN_BENCHES.map(([x, y, z], i) => (
+        <group key={i} position={[x, y, z]}>
+          {/* bench body */}
+          <mesh position={[0, 0.45, 0]} castShadow receiveShadow>
+            <boxGeometry args={[1.8, 0.9, 0.7]} />
+            <meshStandardMaterial color="#2b3038" metalness={0.6} roughness={0.5} />
+          </mesh>
+          {/* upright rack behind */}
+          <mesh position={[0, 1.0, -0.28]} castShadow>
+            <boxGeometry args={[1.8, 1.1, 0.12]} />
+            <meshStandardMaterial color="#22262b" metalness={0.6} roughness={0.55} />
+          </mesh>
+          {/* live mana channel — the one lit line (soul-colour), additive so it glows on the grey */}
+          <mesh position={[0, 0.9, 0.36]}>
+            <boxGeometry args={[1.5, 0.05, 0.03]} />
+            <meshBasicMaterial color={SOUL_COLOR} transparent opacity={0.85} blending={THREE.AdditiveBlending} toneMapped={false} />
+          </mesh>
+        </group>
+      ))}
+    </>
+  )
+}
 function FiringRange({ firingRef, adsRef, weaponIdxRef, gridRef, recoilRef, bloomRef, posRef, hpRef, shieldRef, shieldMaxRef, rangeCfgRef, ammoRef, reloadingRef, onNeedReload, onHit, onShot, onPlayerDamage, onPlayerDown }: {
   firingRef: React.RefObject<boolean>   // held while left-click is down → full-auto (semi-auto weapons fire once per press)
   adsRef: React.RefObject<boolean>      // aiming → muzzle offset moves to center (ADS tracer runs flat)
@@ -1969,6 +2011,7 @@ const Scene = memo(function Scene(props: {
       <NPCMarkers npcs={ALL_NPCS.filter((n) => n.zone === props.zone.id && npcInWorld(n, props.defeated, props.flagsRef.current))} heights={props.heights} />
       {props.isOwner && props.zone.id === 'moonwell-glade-gregory-s-home' && <HubGateMarkers heights={props.heights} />}
       {props.zone.realm === 'outside' && <FiringRange firingRef={props.firingRef} adsRef={props.adsRef} weaponIdxRef={props.weaponIdxRef} gridRef={props.gridRef} recoilRef={props.recoilRef} bloomRef={props.bloomRef} posRef={props.posRef} hpRef={props.hpRef} shieldRef={props.shieldRef} shieldMaxRef={props.shieldMaxRef} rangeCfgRef={props.rangeCfgRef} ammoRef={props.ammoRef} reloadingRef={props.reloadingRef} onNeedReload={props.onNeedReload} onHit={props.onRangeHit} onShot={props.onRangeShot} onPlayerDamage={props.onPlayerDamage} onPlayerDown={props.onPlayerDown} />}
+      {props.zone.realm === 'outside' && <GunBenches />}
       {props.zone.realm === 'outside' && <ExitMarkers warps={props.zone.warps} heights={props.heights} />}
       <NodeMarkers nodes={props.nodes} heights={props.heights} editing={props.editing} channel={props.channel} />
       <SpawnerMarkers spawners={props.spawners} heights={props.heights} editing={props.editing} defeated={props.defeated} ready={props.spawnerReady} />
@@ -3553,10 +3596,16 @@ export default function Shimmer3D() {
   const reloadingRef = useRef(0)      // >0 while the recharge channel runs
   const reloadTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   // ── weapon slots: 0 = Riser sidearm, 1 = Lance primary. Q swaps, F holsters (stow → full run speed).
-  const weaponIdxRef = useRef(0)
+  // ── LOADOUT: two slots, each holding any arsenal weapon (built at a gun bench). Q swaps the active
+  // slot; benches reassign a slot from the full arsenal. weaponIdxRef stays the DERIVED active weapon
+  // index (= loadout[slot]) so the sim/HUD read one source; it's re-pointed whenever slot/loadout change.
+  const loadoutRef = useRef<number[]>([0, 1])   // [slot0 weapon idx, slot1 weapon idx] — default Spitter + Lance
+  const slotRef = useRef(0)                      // active loadout slot (0 or 1)
+  const weaponIdxRef = useRef(0)                 // DERIVED: loadoutRef.current[slotRef.current]
   const holsteredRef = useRef(false)  // stowed → no fire/ADS, full move speed (weaponMoveRef = 1)
-  const ammoStashRef = useRef<number[]>([WEAPONS[0].clip, WEAPONS[1].clip])  // per-weapon magazines; swap parks/loads them
+  const ammoStashRef = useRef<number[]>([WEAPONS[0].clip, WEAPONS[1].clip])  // per-SLOT magazines; swap parks/loads them
   const [weaponUi, setWeaponUi] = useState<{ idx: number; holstered: boolean }>({ idx: 0, holstered: false })  // drives viewmodel + HUD label
+  const [loadoutUi, setLoadoutUi] = useState<number[]>([0, 1])  // mirrors loadoutRef for the bench panel render
   const hitmarkRef = useRef<HTMLDivElement>(null)   // × flash at the reticle on a landed round
   const vignetteRef = useRef<HTMLDivElement>(null)  // red edge flash when the player takes damage
   const onRangeHit = useCallback((crit: boolean) => {
@@ -3587,11 +3636,14 @@ export default function Shimmer3D() {
     if (!weaponDrawn) {
       shotsRef.current = 0; hitsRef.current = 0; setHudStats({ shots: 0, hits: 0 }); firingRef.current = false; adsRef.current = false; setAds(false)
       recoilRef.current.p = 0; recoilRef.current.y = 0; bloomRef.current = 0; hpRef.current = MAX_HP; shieldRef.current = shieldMaxRef.current
-      // holstering (leaving the outside realm) resets weapons to the sidearm with full mags, and drops
-      // the movement penalty back to 1 so inside-Ather walking is never slowed by a stale weapon state.
-      weaponIdxRef.current = 0; holsteredRef.current = false
-      ammoRef.current = WEAPONS[0].clip; ammoStashRef.current = [WEAPONS[0].clip, WEAPONS[1].clip]; reloadingRef.current = 0
-      weaponMoveRef.current = 1; setWeaponUi({ idx: 0, holstered: false })
+      // Leaving the outside realm: reset combat state to slot 0 with full mags, drop the movement
+      // penalty to 1 (inside-Ather walking is never slowed by a stale weapon state). The bench-built
+      // LOADOUT is PRESERVED (loadoutRef survives) so a configured loadout carries across Crucible visits.
+      slotRef.current = 0; holsteredRef.current = false
+      const w0 = loadoutRef.current[0], w1 = loadoutRef.current[1]
+      weaponIdxRef.current = w0
+      ammoRef.current = WEAPONS[w0].clip; ammoStashRef.current = [WEAPONS[w0].clip, WEAPONS[w1].clip]; reloadingRef.current = 0
+      weaponMoveRef.current = 1; setWeaponUi({ idx: w0, holstered: false }); setLoadoutUi([w0, w1])
       if (reloadTimer.current) { clearTimeout(reloadTimer.current); reloadTimer.current = null }
       return
     }
@@ -3652,7 +3704,7 @@ export default function Shimmer3D() {
     const onKey = (e: KeyboardEvent) => {
       const k = e.key.toLowerCase()
       if (k === 't') {
-        if (!weaponDrawnRef.current || editRef.current || battleRef.current || curBattleRef.current || dialogueRef.current) return
+        if (!weaponDrawnRef.current || editRef.current || battleRef.current || curBattleRef.current || dialogueRef.current || benchOpenRef.current) return
         e.preventDefault(); toggleRange(!rangeOpenRef.current)
       } else if (k === 'escape' && rangeOpenRef.current) { e.preventDefault(); toggleRange(false) }
     }
@@ -3661,6 +3713,36 @@ export default function Shimmer3D() {
   }, [toggleRange])
   // holstering (leaving the outside realm) closes the console and resets the range to peaceful defaults
   useEffect(() => { if (!weaponDrawn) { setRangeOpen(false); setRangeCfg({ moving: false, hostile: false }) } }, [weaponDrawn])
+  // ── Gun bench (the armory) — walk up to a GUN_BENCH (E) to open the loadout editor. Proximity is
+  // polled off posRef (benches are static; a 200ms tick is plenty). Opening releases the cursor via the
+  // shared handoff, same as the range console / stations.
+  const [benchOpen, setBenchOpen] = useState(false)
+  const benchOpenRef = useRef(false); benchOpenRef.current = benchOpen
+  const [nearBench, setNearBench] = useState(false)
+  const nearBenchRef = useRef(false); nearBenchRef.current = nearBench
+  const [benchSlot, setBenchSlot] = useState(0)  // which loadout slot the bench is assigning into
+  useEffect(() => {
+    if (!weaponDrawn) { setNearBench(false); return }
+    const tick = () => {
+      const p = posRef.current
+      if (!p) return
+      let near = false
+      for (const [bx, , bz] of GUN_BENCHES) {
+        const dx = p.x - bx, dz = p.z - bz
+        if (dx * dx + dz * dz <= BENCH_NEAR_R * BENCH_NEAR_R) { near = true; break }
+      }
+      setNearBench(n => n === near ? n : near)
+    }
+    tick(); const id = setInterval(tick, 200)
+    return () => clearInterval(id)
+  }, [weaponDrawn])
+  const toggleBench = useCallback((open: boolean) => {
+    if (open) setBenchSlot(slotRef.current)  // default the assign target to the weapon you're holding
+    setBenchOpen(open)
+    if (open) openCursorUI(); else closeCursorUI()
+  }, [openCursorUI, closeCursorUI])
+  // close the bench if the player leaves the range or a blocking mode takes over
+  useEffect(() => { if (benchOpen && (!weaponDrawn || editMode || battle || dialogue)) toggleBench(false) }, [benchOpen, weaponDrawn, editMode, battle, dialogue, toggleBench])
   // ── Clip recharge (R, or a dry trigger) — the clip refills FROM MANA: RELOAD_MANA for a full clip,
   // partial recharges cost proportionally. Low mana = a short clip; none = drink a draught first.
   // The weapon runs on the same resource economy as the tools — nothing in the Crucible is free.
@@ -3692,17 +3774,37 @@ export default function Shimmer3D() {
       : adsRef.current ? WEAPONS[weaponIdxRef.current].adsMove
       : WEAPONS[weaponIdxRef.current].hipMove
   }, [])
+  // Q — swap the ACTIVE loadout slot (0↔1); each slot keeps its own weapon + magazine.
   const swapWeapon = useCallback(() => {
     if (!weaponDrawnRef.current) return
-    const cur = weaponIdxRef.current, next = cur === 0 ? 1 : 0
-    ammoStashRef.current[cur] = ammoRef.current      // park the current magazine
+    const oldSlot = slotRef.current, newSlot = oldSlot === 0 ? 1 : 0
+    ammoStashRef.current[oldSlot] = ammoRef.current   // park the current slot's magazine
+    slotRef.current = newSlot
+    const next = loadoutRef.current[newSlot]
     weaponIdxRef.current = next
-    ammoRef.current = ammoStashRef.current[next]      // load the other weapon's magazine (each keeps its own)
-    holsteredRef.current = false                      // drawing a weapon un-holsters
+    ammoRef.current = ammoStashRef.current[newSlot]    // load the new slot's magazine
+    holsteredRef.current = false                       // drawing a weapon un-holsters
     if (reloadTimer.current) { clearTimeout(reloadTimer.current); reloadTimer.current = null }
     reloadingRef.current = 0
     syncWeaponMove()
     setWeaponUi({ idx: next, holstered: false })
+  }, [syncWeaponMove])
+  // Gun bench — assign an arsenal weapon into a loadout slot (fresh magazine). If it's the active slot,
+  // it becomes the live weapon immediately. This is the only way to reach the arsenal beyond the two slots.
+  const equipWeapon = useCallback((slot: number, arsenalIdx: number) => {
+    if (slot < 0 || slot > 1 || arsenalIdx < 0 || arsenalIdx >= WEAPONS.length) return
+    loadoutRef.current[slot] = arsenalIdx
+    ammoStashRef.current[slot] = WEAPONS[arsenalIdx].clip   // new gun → fresh mag
+    if (slot === slotRef.current) {
+      weaponIdxRef.current = arsenalIdx
+      ammoRef.current = WEAPONS[arsenalIdx].clip
+      if (reloadTimer.current) { clearTimeout(reloadTimer.current); reloadTimer.current = null }
+      reloadingRef.current = 0
+      holsteredRef.current = false
+      syncWeaponMove()
+      setWeaponUi({ idx: arsenalIdx, holstered: false })
+    }
+    setLoadoutUi([...loadoutRef.current])
   }, [syncWeaponMove])
   const toggleHolster = useCallback(() => {
     if (!weaponDrawnRef.current) return
@@ -3725,7 +3827,7 @@ export default function Shimmer3D() {
   // Both are inert unless a weapon is drawn (outside-Ather) and no menu/battle owns input.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (!weaponDrawnRef.current || editRef.current || battleRef.current || curBattleRef.current || dialogueRef.current || openMenuRef.current || placingRef.current) return
+      if (!weaponDrawnRef.current || editRef.current || battleRef.current || curBattleRef.current || dialogueRef.current || openMenuRef.current || placingRef.current || benchOpenRef.current) return
       const k = e.key.toLowerCase()
       if (k === 'q') { e.preventDefault(); swapWeapon() }
       else if (k === 'f') { e.preventDefault(); toggleHolster() }
@@ -3751,17 +3853,23 @@ export default function Shimmer3D() {
         if (e.key === 'Escape' || e.key.toLowerCase() === 'e') { e.preventDefault(); closeStation() }
         return
       }
+      // Gun bench open: E and Escape close it, same seamless handoff as a station menu.
+      if (benchOpenRef.current) {
+        if (e.key === 'Escape' || e.key.toLowerCase() === 'e') { e.preventDefault(); toggleBench(false) }
+        return
+      }
       const k = e.key.toLowerCase()
       if (k !== 'e' && k !== ' ' && k !== 'enter') return
       if (dialogueRef.current) { e.preventDefault(); advanceDialogue(); return }
       if (k === ' ') return  // Space outside dialogue = jump only; E/Enter initiate interactions
-      if (nearNpc) { e.preventDefault(); talk(nearNpc) }
+      if (nearBenchRef.current) { e.preventDefault(); toggleBench(true) }  // at a gun bench → open the armory
+      else if (nearNpc) { e.preventDefault(); talk(nearNpc) }
       else if (fishRef.current || nearNodeRef.current || channelRef.current) { e.preventDefault(); toggleChannel() }
       else if (nearStationRef.current) { e.preventDefault(); openStation() }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [editMode, battle, nearNpc, advanceDialogue, talk, toggleChannel, openStation, closeStation])
+  }, [editMode, battle, nearNpc, advanceDialogue, talk, toggleChannel, openStation, closeStation, toggleBench])
 
   // ── Mouse-look controls (FPS model): once the pointer is CAPTURED (first canvas click locks it),
   //    left-click = interact with what's in front, right-click = use/place the selected hotbar item,
@@ -4535,6 +4643,72 @@ export default function Shimmer3D() {
             </div>
           </div>
           )}
+        </>
+      )}
+
+      {/* ── Gun bench prompt — shown when standing at a bench, weapon out, panel closed ── */}
+      {weaponDrawn && nearBench && !benchOpen && !editMode && !dialogue && !battle && !placing && !isTouch && (
+        <div style={{ position: 'fixed', left: '50%', bottom: 92, transform: 'translateX(-50%)', zIndex: 34, pointerEvents: 'none',
+          padding: '7px 15px', borderRadius: 999, background: 'rgba(14,19,30,0.9)', border: `1px solid ${SOUL_COLOR}55`,
+          font: '800 12px ui-monospace, monospace', color: '#eafff6', letterSpacing: '0.1em' }}>
+          <span style={{ color: SOUL_COLOR }}>E</span> — ARMORY <span style={{ opacity: 0.5, fontWeight: 600 }}>· build loadout</span>
+        </div>
+      )}
+
+      {/* ── Gun bench — the loadout editor: two slots you fill from the arsenal ── */}
+      {benchOpen && (
+        <>
+          <div onPointerDown={() => toggleBench(false)} style={{ position: 'fixed', inset: 0, zIndex: 44, background: 'rgba(6,10,16,0.45)' }} />
+          <div style={{ position: 'fixed', left: '50%', top: '50%', transform: 'translate(-50%,-50%)', zIndex: 45,
+            width: 460, maxWidth: '92vw', borderRadius: 14, background: 'rgba(14,19,30,0.97)', border: `1px solid ${SOUL_COLOR}44`,
+            padding: '16px 18px', font: '700 12px ui-monospace, monospace', color: '#cfeeff' }}>
+            <div style={{ font: '800 13px ui-monospace, monospace', letterSpacing: '0.14em', marginBottom: 3 }}>ARMORY</div>
+            <div style={{ color: '#ffffff66', fontWeight: 600, fontSize: 11, marginBottom: 12 }}>Pick a slot, then a manabox. The round always trails your own colour.</div>
+            {/* the two loadout slots */}
+            <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
+              {[0, 1].map(s => {
+                const w = WEAPONS[loadoutUi[s]] ?? WEAPONS[0]
+                const sel = benchSlot === s
+                return (
+                  <button key={s} onClick={() => setBenchSlot(s)} style={{
+                    flex: 1, textAlign: 'left', cursor: 'pointer', borderRadius: 9, padding: '9px 11px',
+                    background: sel ? `${SOUL_COLOR}1e` : 'rgba(255,255,255,0.04)',
+                    border: `1.5px solid ${sel ? SOUL_COLOR + 'cc' : '#ffffff1e'}`,
+                  }}>
+                    <div style={{ color: '#ffffff88', fontWeight: 700, fontSize: 10, letterSpacing: '0.12em' }}>SLOT {s + 1}{s === 0 ? '  ·  Q' : ''}</div>
+                    <div style={{ color: '#eafff6', fontWeight: 800, fontSize: 14, marginTop: 2 }}>{w.name}</div>
+                    <div style={{ color: '#9fb0c0', fontWeight: 600, fontSize: 10, letterSpacing: '0.08em' }}>{w.slot}</div>
+                  </button>
+                )
+              })}
+            </div>
+            <div style={{ color: '#ffffff66', fontWeight: 700, fontSize: 10, letterSpacing: '0.12em', marginBottom: 7 }}>ARSENAL → SLOT {benchSlot + 1}</div>
+            {/* the arsenal — click to equip into the selected slot */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {WEAPONS.map((w, i) => {
+                const equipped = loadoutUi[benchSlot] === i
+                return (
+                  <button key={w.id} onClick={() => equipWeapon(benchSlot, i)} style={{
+                    display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, width: '100%', textAlign: 'left',
+                    cursor: 'pointer', borderRadius: 8, padding: '9px 11px',
+                    background: equipped ? `${SOUL_COLOR}18` : 'rgba(255,255,255,0.03)',
+                    border: `1px solid ${equipped ? SOUL_COLOR + '99' : '#ffffff16'}`,
+                  }}>
+                    <span>
+                      <span style={{ color: '#eafff6', fontWeight: 800, fontSize: 13 }}>{w.name}</span>
+                      <span style={{ color: '#8fa0b0', fontWeight: 600, fontSize: 10, letterSpacing: '0.08em', marginLeft: 8 }}>{w.slot} · {w.auto ? 'AUTO' : 'SEMI'}</span>
+                    </span>
+                    <span style={{ display: 'flex', gap: 12, color: '#ffffff77', fontWeight: 700, fontSize: 11, fontVariantNumeric: 'tabular-nums' }}>
+                      <span>dmg <span style={{ color: '#eafff6' }}>{w.damage}</span></span>
+                      <span>clip <span style={{ color: '#eafff6' }}>{w.clip}</span></span>
+                      {equipped && <span style={{ color: SOUL_COLOR }}>◄ equipped</span>}
+                    </span>
+                  </button>
+                )
+              })}
+            </div>
+            <div style={{ marginTop: 12, color: '#ffffff55', fontWeight: 600, fontSize: 11, textAlign: 'center' }}>E / Esc — close</div>
+          </div>
         </>
       )}
 
