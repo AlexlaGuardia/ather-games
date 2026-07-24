@@ -1430,27 +1430,16 @@ const GUN_BENCHES: [number, number, number][] = [
   [14, 0, 12], [24, 0, 10], [34, 0, 12],
 ]
 const BENCH_NEAR_R = 2.4  // tiles — how close you must stand to open a bench
-// Grey cast-metal weapon benches with a soul-colour channel strip (the armory's live mana routing).
+// Cast-iron/bronze manabox armory bench — a real GLB prop (Meshy image-to-3d off the ruled concept),
+// rendered through the shared StationProp pipeline (Suspense + error boundary → blockout on any GLB
+// failure; height auto-fit; Draco). Dead grey per the colour law. Positions are the tunable GUN_BENCHES.
+const BENCH_DEF = { name: 'Gun Bench', color: '#2b3038', accent: SOUL_COLOR, h: 2.0 }
 function GunBenches() {
   return (
     <>
       {GUN_BENCHES.map(([x, y, z], i) => (
         <group key={i} position={[x, y, z]}>
-          {/* bench body */}
-          <mesh position={[0, 0.45, 0]} castShadow receiveShadow>
-            <boxGeometry args={[1.8, 0.9, 0.7]} />
-            <meshStandardMaterial color="#2b3038" metalness={0.6} roughness={0.5} />
-          </mesh>
-          {/* upright rack behind */}
-          <mesh position={[0, 1.0, -0.28]} castShadow>
-            <boxGeometry args={[1.8, 1.1, 0.12]} />
-            <meshStandardMaterial color="#22262b" metalness={0.6} roughness={0.55} />
-          </mesh>
-          {/* live mana channel — the one lit line (soul-colour), additive so it glows on the grey */}
-          <mesh position={[0, 0.9, 0.36]}>
-            <boxGeometry args={[1.5, 0.05, 0.03]} />
-            <meshBasicMaterial color={SOUL_COLOR} transparent opacity={0.85} blending={THREE.AdditiveBlending} toneMapped={false} />
-          </mesh>
+          <StationProp id="gun_bench" def={BENCH_DEF} />
         </group>
       ))}
     </>

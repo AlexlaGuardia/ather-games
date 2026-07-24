@@ -44,6 +44,10 @@ export const PROP_MODELS: Record<string, { url: string; scale?: number; yaw?: nu
   // background, no ground, no terrain, no base plate, no diorama". Two of five came back with a
   // disc, so this belongs in every prop prompt from here on.
   farm_planter: { url: '/models/props/farm_planter.glb' },
+  // Crucible armory bench — a cast-iron/bronze manabox-register workbench (Meshy image-to-3d off the
+  // ruled concept design-briefs/refs/armory-bench-1.png → 6000 tris / 0.21MB). Dead grey per the colour
+  // law; the yaw sets which way the open bench-front faces — eyeball it in-world and nudge.
+  gun_bench: { url: '/models/props/gun_bench.glb', yaw: 0 },
 }
 
 export const hasPropModel = (id: string) => id in PROP_MODELS
