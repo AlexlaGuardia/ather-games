@@ -28,6 +28,7 @@ import {
   MATCH_TIME,
   DEPTH_PER_TIER,
   APEX_TIER,
+  WORLD_H,
   current,
   type World,
   type ElementId,
@@ -366,6 +367,43 @@ function render(canvas: HTMLCanvasElement, w: World, ts: number, growFx: number,
   // camera centres the player
   const sx = (wx: number) => VW / 2 + (wx - w.x)
   const sy = (wy: number) => VH / 2 + (wy - w.y)
+
+  // world bounds made VISIBLE — they only slide into view as you near them, so "where the map ends"
+  // reads before you reach it (no more slamming an invisible wall). Surface (top), floor (bottom),
+  // shallow shelf (left). The ocean stays endless to the right.
+  const surfY = sy(0)
+  if (surfY > -30) {
+    const sg = ctx.createLinearGradient(0, 0, 0, Math.max(2, surfY))
+    sg.addColorStop(0, 'rgba(200,242,253,0.45)') // sunlit surface glare
+    sg.addColorStop(1, 'rgba(170,224,242,0)')
+    ctx.fillStyle = sg
+    ctx.fillRect(0, 0, VW, Math.max(0, surfY))
+    ctx.globalAlpha = 0.55; ctx.strokeStyle = '#e2f7ff'; ctx.lineWidth = 2
+    ctx.beginPath()
+    for (let x = 0; x <= VW; x += 12) { const yy = surfY + Math.sin(x * 0.06 + t * 1.4) * 2.5; x === 0 ? ctx.moveTo(x, yy) : ctx.lineTo(x, yy) }
+    ctx.stroke(); ctx.globalAlpha = 1
+  }
+  const floorY = sy(WORLD_H)
+  if (floorY < VH + 30) {
+    const top = Math.min(VH, floorY)
+    const fg = ctx.createLinearGradient(0, top, 0, VH)
+    fg.addColorStop(0, 'rgba(10,8,16,0)')
+    fg.addColorStop(1, 'rgba(6,5,12,0.72)') // seabed
+    ctx.fillStyle = fg
+    ctx.fillRect(0, top, VW, VH - top)
+    ctx.globalAlpha = 0.5; ctx.strokeStyle = '#2b2438'; ctx.lineWidth = 2
+    ctx.beginPath()
+    for (let x = 0; x <= VW; x += 16) { const yy = floorY + Math.sin(x * 0.05 + 2) * 3; x === 0 ? ctx.moveTo(x, yy) : ctx.lineTo(x, yy) }
+    ctx.stroke(); ctx.globalAlpha = 1
+  }
+  const shelfX = sx(0)
+  if (shelfX > -30) {
+    const xg = ctx.createLinearGradient(0, 0, Math.max(2, shelfX), 0)
+    xg.addColorStop(0, 'rgba(150,212,226,0.3)') // the pale shallows you came from
+    xg.addColorStop(1, 'rgba(150,212,226,0)')
+    ctx.fillStyle = xg
+    ctx.fillRect(0, 0, Math.max(0, shelfX), VH)
+  }
 
   // drifting plankton — streaked ALONG the local current so the flow field is legible (an invisible
   // force that shoves you is disorienting; leaning every mote the way the water pushes makes it a read)

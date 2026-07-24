@@ -181,5 +181,17 @@ function solo(w: World) { w.creatures = []; w.spawnPaused = true }
   ok('current is pure (same input → same output)', ax === bx && ay === by)
 }
 
+// 13. soft edges — driving hard into the surface/floor never leaves the band (cushion + backstop)
+{
+  const w = makeWorld(11); w.state = 'playing'; solo(w)
+  // slam upward into the surface for 3s
+  let maxOver = 0
+  for (let i = 0; i < 180; i++) { setHeading(w, 0, -1); tick(w, 1 / 60); maxOver = Math.max(maxOver, -Math.min(0, w.y)) }
+  ok('driving into the surface never leaves the band (top)', w.y >= 0 && maxOver === 0)
+  // now slam downward into the floor
+  for (let i = 0; i < 240; i++) { setHeading(w, 0, 1); tick(w, 1 / 60) }
+  ok('driving into the floor never leaves the band (bottom)', w.y <= WORLD_H)
+}
+
 console.log(`\nDRIFTLING sim: ${pass} passed, ${fail} failed`)
 process.exit(fail ? 1 : 0)

@@ -33,6 +33,12 @@ export const DRAG = 2.6 // velocity bleed per second when coasting (more bite = 
 export const BASE_MAXV = 250 // top drift speed at the smallest tier
 export const TIER_SLOW = 0.06 // each tier up shaves this fraction off max speed (giants are ponderous)
 export const MIN_MAXV_FRAC = 0.45 // never slower than this fraction of BASE_MAXV
+// ── the world's soft edges (surface / seafloor / shallow shelf) ──────────────────
+// The ocean is endless RIGHT but bounded up/down (surface↔floor) and left (the shallows you came
+// from). A cushion ramps up within EDGE_SOFT of a bound so you GLIDE to a stop, never slam an
+// invisible wall — the renderer draws all three so you see them coming. Creatures honor them too.
+export const EDGE_SOFT = 150 // world-units from a bound where the inward cushion begins
+export const EDGE_PUSH = 700 // cushion strength (world u/s²) — enough to stop a top-speed approach inside EDGE_SOFT
 
 // ── the drift current (flOw): the game's namesake. A smooth flow field over the whole ocean
 // that carries you AND every creature — shoals ride the same stream together. Gentle enough to
@@ -61,7 +67,7 @@ export function current(x: number, y: number, t: number): [number, number] {
 // meaningfully bigger is a threat; roughly equal just bumps (neither can swallow).
 export const EQUAL_BAND = 0.15 // ±15% of player size = a bump, no eat
 export const EAT_REACH = 0.7 // bodies must really overlap (fraction of summed radii) to resolve
-export const FOOD_PER_SIZE = 0.95 // mass gained = eaten creature's size × this (lower = a longer climb)
+export const FOOD_PER_SIZE = 0.45 // mass gained = eaten creature's size × this (lower = a longer climb; was 0.95, growth read WAY too fast)
 
 // ── the ladder (PROPOSED canon skin — drawn from rinn.md; pending /magii bless) ──
 // Player evolution STATIONS. `size` is the body radius at that tier; `evolveAt` is the
@@ -390,17 +396,22 @@ export function tick(w: World, dt: number): TickEvents {
     w.vx *= k
     w.vy *= k
   }
+  // soft edges: a cushion that ramps up near the surface / seafloor / shallow shelf, so you decelerate
+  // into the bound and glide to a stop instead of slamming an invisible wall (the render draws them).
+  if (w.y < EDGE_SOFT) w.vy += (1 - w.y / EDGE_SOFT) * EDGE_PUSH * dt
+  else if (w.y > WORLD_H - EDGE_SOFT) w.vy -= (1 - (WORLD_H - w.y) / EDGE_SOFT) * EDGE_PUSH * dt
+  if (w.x < EDGE_SOFT) w.vx += (1 - w.x / EDGE_SOFT) * EDGE_PUSH * dt
   w.x += w.vx * dt
   w.y += w.vy * dt
   // the drift current carries the body along the water (advection, on top of your own swim)
   const [pcx, pcy] = current(w.x, w.y, w.t)
   w.x += pcx * dt
   w.y += pcy * dt
-  // soft bounds: a shallow edge behind you (can't swim past the start) + the vertical band.
+  // hard backstop at the exact bound (the cushion should have caught you first) — stop, don't bounce.
   // NO right wall — the deep is endless; how far right you push IS the score.
-  if (w.x < 0) { w.x = 0; w.vx = Math.abs(w.vx) * 0.3 }
-  if (w.y < 0) { w.y = 0; w.vy = Math.abs(w.vy) * 0.3 }
-  if (w.y > WORLD_H) { w.y = WORLD_H; w.vy = -Math.abs(w.vy) * 0.3 }
+  if (w.x < 0) { w.x = 0; if (w.vx < 0) w.vx = 0 }
+  if (w.y < 0) { w.y = 0; if (w.vy < 0) w.vy = 0 }
+  if (w.y > WORLD_H) { w.y = WORLD_H; if (w.vy > 0) w.vy = 0 }
   if (w.x > w.maxX) w.maxX = w.x // deepest point reached
 
   // ── ocean life: shoals flock (boids) + scatter; lone fish wander + lean ────────
@@ -431,6 +442,10 @@ export function tick(w: World, dt: number): TickEvents {
     const [ccx, ccy] = current(c.x, c.y, w.t)
     c.x += ccx * dt
     c.y += ccy * dt
+    // ocean life honors the same surface/floor — a gentle steer-back so nothing swims through a
+    // bound the player can't (no more "the fish ignore the walls while you slam them")
+    if (c.y < EDGE_SOFT) c.vy += (1 - c.y / EDGE_SOFT) * EDGE_PUSH * 0.3 * dt
+    else if (c.y > WORLD_H - EDGE_SOFT) c.vy -= (1 - (WORLD_H - c.y) / EDGE_SOFT) * EDGE_PUSH * 0.3 * dt
     if (c.y < 0) c.y = 0
     else if (c.y > WORLD_H) c.y = WORLD_H
   }
