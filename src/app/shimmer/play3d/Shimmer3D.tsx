@@ -2102,7 +2102,10 @@ function AccountBlock({ account, label }: { account: UseAccount; label: React.CS
       {!session && (
         <>
           <button onClick={signIn} style={{ ...menuBtn, width: '100%', textAlign: 'center' }}>◆ Sign in with Google</button>
-          <div style={hint}>Optional. Claims a name only you can use, and puts your real name on the arcade board.</div>
+          <div style={hint}>
+            Optional. Claims a name only you can use, and puts your real name on the arcade board.{' '}
+            <a href="/privacy" target="_blank" rel="noopener" style={{ color: '#8fd9c4', textDecoration: 'underline' }}>What we store</a>
+          </div>
         </>
       )}
       {session && !session.username && (

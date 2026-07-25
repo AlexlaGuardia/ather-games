@@ -19,6 +19,7 @@ export interface UseAccount {
   signIn: () => void
   signOut: () => Promise<void>
   claimName: (username: string, characterId?: string) => Promise<{ ok: boolean; error?: string }>
+  deleteAccount: () => Promise<{ ok: boolean; error?: string }>
   refresh: () => Promise<void>
 }
 
@@ -66,5 +67,16 @@ export function useAccount(): UseAccount {
     }
   }, [])
 
-  return { session, loading, signIn, signOut, claimName, refresh }
+  const deleteAccount = useCallback(async () => {
+    try {
+      const res = await fetch('/api/auth/account', { method: 'DELETE' })
+      if (!res.ok) return { ok: false, error: 'Could not delete the account' }
+      setSession(null)
+      return { ok: true }
+    } catch {
+      return { ok: false, error: 'Network error' }
+    }
+  }, [])
+
+  return { session, loading, signIn, signOut, claimName, deleteAccount, refresh }
 }

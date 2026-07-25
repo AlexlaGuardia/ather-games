@@ -142,6 +142,22 @@ export function claimUsername(user_id: string, username: string, character_id?: 
   return account ? { ok: true, account } : { ok: false, error: 'Account not found' }
 }
 
+/**
+ * Right to erasure, and it is a real delete — the account row and every friend edge that
+ * mentions it, gone. Nothing here is soft-deleted or tombstoned, because a privacy page
+ * that says "we delete it" and a DB that keeps a shadow copy is a lie with extra steps.
+ *
+ * NOT covered (and the privacy page says so): the garden save, which lives in the player's
+ * own browser and was never ours to delete, and any arcade score rows, which are keyed by a
+ * derived id in a public daily board — those age out with the board.
+ */
+export function deleteAccount(user_id: string): boolean {
+  const d = db()
+  d.prepare('DELETE FROM friends WHERE a_id = ? OR b_id = ?').run(user_id, user_id)
+  const res = d.prepare('DELETE FROM accounts WHERE user_id = ?').run(user_id)
+  return Number(res.changes) > 0
+}
+
 /** Test/maintenance seam — lets an oracle point the module at a scratch file. */
 export function _openAt(path: string): DatabaseSync {
   const d = new DatabaseSync(path)

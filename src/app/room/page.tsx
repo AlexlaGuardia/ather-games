@@ -293,6 +293,15 @@ export default function RoomPrototype() {
               />
             ))}
           </div>
+          {/* Quiet corner link. The site sets no tracking cookies, so there is no banner to
+              show; this is the standing way in to what gets stored, and Google requires a
+              reachable privacy URL for the sign-in consent screen. */}
+          <Link
+            href="/privacy"
+            className="absolute bottom-6 right-6 z-30 text-[10px] uppercase tracking-[0.22em] text-white/20 hover:text-white/50 transition-colors"
+          >
+            Privacy
+          </Link>
         </>
       )}
 
