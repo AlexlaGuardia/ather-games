@@ -7,8 +7,8 @@ import { OAUTH_STATE_COOKIE, OAUTH_NEXT_COOKIE, OAUTH_COOKIE_OPTS, safeReturnPat
 // this for Drive/Gmail elsewhere and the whole flow is four small routes.
 
 export function GET(req: NextRequest) {
-  const clientId = process.env.GOOGLE_CLIENT_ID
-  const redirectUri = process.env.GOOGLE_REDIRECT_URI
+  const clientId = process.env.ATHER_GOOGLE_CLIENT_ID
+  const redirectUri = process.env.ATHER_GOOGLE_REDIRECT_URI
   if (!clientId || !redirectUri) {
     return NextResponse.json({ error: 'sign-in is not configured on this server' }, { status: 503 })
   }

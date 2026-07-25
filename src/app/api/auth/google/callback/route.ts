@@ -45,9 +45,9 @@ function fail(req: NextRequest, reason: string, back = '/shimmer/play3d') {
 }
 
 export async function GET(req: NextRequest) {
-  const clientId = process.env.GOOGLE_CLIENT_ID
-  const clientSecret = process.env.GOOGLE_CLIENT_SECRET
-  const redirectUri = process.env.GOOGLE_REDIRECT_URI
+  const clientId = process.env.ATHER_GOOGLE_CLIENT_ID
+  const clientSecret = process.env.ATHER_GOOGLE_CLIENT_SECRET
+  const redirectUri = process.env.ATHER_GOOGLE_REDIRECT_URI
   const back = safeReturnPath(req.cookies.get(OAUTH_NEXT_COOKIE)?.value ?? null)
 
   if (!clientId || !clientSecret || !redirectUri || !sessionSecret()) return fail(req, 'unconfigured', back)
