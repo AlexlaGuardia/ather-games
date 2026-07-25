@@ -10,6 +10,7 @@
 // ───────────────────────────────────────────────────────────────────
 
 import Link from "next/link";
+import AccountWidget from "../_components/AccountWidget";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { getHubAudio } from "@/lib/hub-audio";
@@ -264,14 +265,18 @@ export default function RoomPrototype() {
       {/* drifting dust motes — room-wide ambient life over the whole viewport */}
       <DustMotes />
 
-      {/* music toggle — unlocks on first interaction; this just mutes/unmutes */}
-      <button
-        onClick={() => { const h = getHubAudio(); h.start(); h.toggleMuted(); }}
-        aria-label={muted || !audioOn ? "Unmute" : "Mute"}
-        className="absolute top-5 right-5 z-40 grid place-items-center w-10 h-10 rounded-md border border-white/10 bg-[#12121e]/70 backdrop-blur text-[#8a879a] transition hover:text-[#d4a843] hover:border-[#d4a843]/40"
-      >
-        <span className="text-base leading-none">{muted || !audioOn ? "🔇" : "🔊"}</span>
-      </button>
+      {/* top-right chrome cluster — account chip + music toggle. Both float above the room
+          at every wall and during an approach, so they never turn with the scene. */}
+      <div className="absolute top-5 right-5 z-40 flex items-start gap-2">
+        <AccountWidget />
+        <button
+          onClick={() => { const h = getHubAudio(); h.start(); h.toggleMuted(); }}
+          aria-label={muted || !audioOn ? "Unmute" : "Mute"}
+          className="grid place-items-center w-10 h-10 rounded-md border border-white/10 bg-[#12121e]/70 backdrop-blur text-[#8a879a] transition hover:text-[#d4a843] hover:border-[#d4a843]/40"
+        >
+          <span className="text-base leading-none">{muted || !audioOn ? "🔇" : "🔊"}</span>
+        </button>
+      </div>
 
       {/* turn affordances — only while in the room */}
       {inRoom && (
