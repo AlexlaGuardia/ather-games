@@ -2,7 +2,8 @@ import { NextResponse, type NextRequest } from 'next/server'
 import { timingSafeEqual } from 'node:crypto'
 import { upsertGoogleAccount } from '@/lib/accounts/db'
 import { mintSession, sessionSecret, SESSION_COOKIE, sessionCookieOptions } from '@/lib/accounts/session'
-import { OAUTH_STATE_COOKIE, OAUTH_NEXT_COOKIE, safeReturnPath, siteOrigin } from '@/lib/accounts/oauth'
+import { OAUTH_STATE_COOKIE, OAUTH_NEXT_COOKIE, safeReturnPath } from '@/lib/accounts/oauth'
+import { siteOrigin } from '@/lib/site-origin'
 
 // Step 2: Google hands back a code, we trade it for an id_token, and that becomes an
 // account + a session cookie. Failures always land the player back in the game with a

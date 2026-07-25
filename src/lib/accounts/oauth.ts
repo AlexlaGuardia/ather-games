@@ -29,26 +29,3 @@ export function safeReturnPath(raw: string | null | undefined): string {
   if (!raw || !raw.startsWith('/') || raw.startsWith('//')) return DEFAULT_RETURN
   return raw
 }
-
-/**
- * The PUBLIC origin of this site.
- *
- * ⚠ Do NOT build a redirect on `req.nextUrl.origin` here. Cloudflare's tunnel forwards to
- * localhost:3200 and Next derives nextUrl from the incoming Host header, so the origin comes
- * out as `https://localhost:3200` — the player finishes a perfectly good Google login and
- * gets dumped on a dead address. (Real: `https://localhost:3200/room?auth=claim`.)
- *
- * ATHER_GOOGLE_REDIRECT_URI is the reliable answer because Google enforces an EXACT match
- * against it, so it cannot drift from the real public origin without login breaking loudly
- * first. The forwarded headers are a second try, and nextUrl is the last resort so a local
- * `npm run dev` still works.
- */
-export function siteOrigin(req: { headers: Headers; nextUrl: URL }): string {
-  const configured = process.env.ATHER_GOOGLE_REDIRECT_URI
-  if (configured) {
-    try { return new URL(configured).origin } catch { /* malformed — fall through */ }
-  }
-  const fwdHost = req.headers.get('x-forwarded-host')
-  if (fwdHost) return `${req.headers.get('x-forwarded-proto') ?? 'https'}://${fwdHost}`
-  return req.nextUrl.origin
-}
