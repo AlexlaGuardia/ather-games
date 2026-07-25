@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useCloudSave } from '@/lib/use-cloud-save'
 import { useWallet } from '@/lib/use-wallet'
+import { rememberSeed } from './lib/seed-history'
 import {
   GameState, initGame, startPlaying,
   drawFromDeck, drawFromDiscard, discardCard, callMagii,
@@ -85,6 +86,9 @@ export default function MagiiPage() {
     const entry = getCollectionEntry(owned.includes(selectedId) ? selectedId : 'tavern')
     // no stakes step — deal and play straight through to the flat prize
     const state = startPlaying(initGame(entry.collection))
+    // Remember the seed so this exact table can be dealt again from a bug report. Expires
+    // after a week — see lib/seed-history.
+    rememberSeed(state.seed, entry.collection.name)
     setGameState(state)
     setNpcProcessing(false)
     setMarksDelta(0)

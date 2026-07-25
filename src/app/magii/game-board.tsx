@@ -572,6 +572,12 @@ export function GameOverOverlay({ state, onPlayAgain, marksDelta, walletBalance 
           className="mt-4 w-full py-3 rounded-lg bg-gold text-white font-display font-semibold hover:bg-gold-dim transition-colors shadow-lg shadow-gold/20">
           Play Again
         </button>
+        {/* The table's seed. Quiet on purpose — it means nothing to most players, and
+            everything to anyone reporting a hand that went wrong, because this deals the
+            exact same table again. */}
+        <p className="mt-3 text-center text-text-faint/40 text-[10px] font-mono tracking-wider select-all">
+          table {state.seed}
+        </p>
       </div>
     </div>
   )

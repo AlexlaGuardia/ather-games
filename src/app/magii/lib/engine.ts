@@ -2,7 +2,7 @@
 // Draw 1 card → have 9 → call Magii or discard 1 → back to 8
 
 import { Card, buildDeck, Collection, TAVERN_STANDARD } from './data'
-import { makeRng } from './rng'
+import { makeRng, newSeed } from './rng'
 
 export interface Player {
   name: string
@@ -32,21 +32,24 @@ export interface GameState {
   calledBy: number | null   // who validly called Magii to end the race (null = deck ran out)
   scores: number[]
   log: string[]
-  // The seed this table was dealt from, or null for an unseeded local game. Carried on the
-  // state so a table can be reconstructed from (seed, moves) alone — which is what lets two
-  // machines share a game by relaying moves instead of shipping the whole state.
-  seed: string | null
+  // The seed this table was dealt from. Carried on the state so a table can be reconstructed
+  // from (seed, moves) alone — which is what lets two machines share a game by relaying
+  // moves instead of shipping the whole state, and what makes a reported game reproducible.
+  seed: string
 }
 
 const NPC_NAMES = ['Renna', 'Dorik', 'Sable']
 
 /**
- * Deal a table. Pass a seed and the deal is reproducible: the same seed and collection
- * produce byte-identical hands on any machine, which is the whole basis for playing a
- * friend. Omit it and the game deals from Math.random exactly as it always has.
+ * Deal a table. The same seed and collection produce byte-identical hands on any machine,
+ * which is the whole basis for playing a friend.
+ *
+ * EVERY game is seeded, including a solo one — a table you cannot deal again is a bug you
+ * cannot reproduce. Pass a seed to rebuild a specific table (a friend's, or one from a
+ * report); omit it and a fresh one is minted.
  */
-export function initGame(collection: Collection = TAVERN_STANDARD, seed?: string): GameState {
-  const deck = buildDeck(collection, seed ? makeRng(seed) : undefined)
+export function initGame(collection: Collection = TAVERN_STANDARD, seed: string = newSeed()): GameState {
+  const deck = buildDeck(collection, makeRng(seed))
   const players: Player[] = [
     { name: 'You', hand: [], discardPile: [], isHuman: true, doubled: false },
     ...NPC_NAMES.map(name => ({
@@ -69,7 +72,7 @@ export function initGame(collection: Collection = TAVERN_STANDARD, seed?: string
     calledBy: null,
     scores: [0, 0, 0, 0],
     log: ['The cards are dealt.'],
-    seed: seed ?? null,
+    seed,
   }
 }
 

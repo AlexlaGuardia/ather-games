@@ -69,7 +69,12 @@ console.log('the deal')
   check('same seed deals an identical table', tableFingerprint(g1) === tableFingerprint(g2))
   check('a different seed deals a different table', tableFingerprint(g1) !== tableFingerprint(g3))
   check('the seed is recorded on the state', g1.seed === 'SEED-ONE')
-  check('an unseeded game records no seed', initGame(TAVERN_STANDARD).seed === null)
+  // Every game is seeded now, including a solo one: a table you cannot deal again is a bug
+  // you cannot reproduce.
+  const solo = initGame(TAVERN_STANDARD)
+  check('an unseeded call mints its own seed', /^[A-Z2-9]{8}$/.test(solo.seed), solo.seed)
+  check('two unseeded games get different seeds', initGame(TAVERN_STANDARD).seed !== initGame(TAVERN_STANDARD).seed)
+  check('a minted seed deals the table it recorded', tableFingerprint(initGame(TAVERN_STANDARD, solo.seed)) === tableFingerprint(solo))
 
   check('four players are seated', g1.players.length === 4)
   check('one of them is you', g1.players.filter(p => p.isHuman).length === 1)
