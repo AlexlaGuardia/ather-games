@@ -1,6 +1,7 @@
 // Magii Card Game — Collection-Based Data
 // Each collection: 8 runes (2 per element), 3 spirits each, 4 copies = 96 cards
 
+import type { Rng } from './rng'
 export type Element = 'Mana' | 'Storm' | 'Earth' | 'Water'
 
 export interface Card {
@@ -105,7 +106,7 @@ export function getCollectionEntry(id: string): CollectionEntry {
   return COLLECTIONS.find(c => c.id === id) ?? COLLECTIONS[0]
 }
 
-export function buildDeck(collection: Collection = TAVERN_STANDARD): Card[] {
+export function buildDeck(collection: Collection = TAVERN_STANDARD, rng?: Rng): Card[] {
   const deck: Card[] = []
   for (const slot of collection.runes) {
     for (const spirit of slot.spirits) {
@@ -121,13 +122,15 @@ export function buildDeck(collection: Collection = TAVERN_STANDARD): Card[] {
     }
   }
   // 8 runes × 3 spirits × 4 copies = 96
-  return shuffle(deck)
+  return shuffle(deck, rng)
 }
 
-export function shuffle<T>(arr: T[]): T[] {
+// Fisher-Yates. `rng` defaults to Math.random so every existing caller is unchanged; pass a
+// seeded one and the deal becomes reproducible on any machine (see rng.ts).
+export function shuffle<T>(arr: T[], rng: Rng = Math.random): T[] {
   const a = [...arr]
   for (let i = a.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1))
+    const j = Math.floor(rng() * (i + 1))
     ;[a[i], a[j]] = [a[j], a[i]]
   }
   return a

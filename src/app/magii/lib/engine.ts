@@ -2,6 +2,7 @@
 // Draw 1 card → have 9 → call Magii or discard 1 → back to 8
 
 import { Card, buildDeck, Collection, TAVERN_STANDARD } from './data'
+import { makeRng } from './rng'
 
 export interface Player {
   name: string
@@ -31,12 +32,21 @@ export interface GameState {
   calledBy: number | null   // who validly called Magii to end the race (null = deck ran out)
   scores: number[]
   log: string[]
+  // The seed this table was dealt from, or null for an unseeded local game. Carried on the
+  // state so a table can be reconstructed from (seed, moves) alone — which is what lets two
+  // machines share a game by relaying moves instead of shipping the whole state.
+  seed: string | null
 }
 
 const NPC_NAMES = ['Renna', 'Dorik', 'Sable']
 
-export function initGame(collection: Collection = TAVERN_STANDARD): GameState {
-  const deck = buildDeck(collection)
+/**
+ * Deal a table. Pass a seed and the deal is reproducible: the same seed and collection
+ * produce byte-identical hands on any machine, which is the whole basis for playing a
+ * friend. Omit it and the game deals from Math.random exactly as it always has.
+ */
+export function initGame(collection: Collection = TAVERN_STANDARD, seed?: string): GameState {
+  const deck = buildDeck(collection, seed ? makeRng(seed) : undefined)
   const players: Player[] = [
     { name: 'You', hand: [], discardPile: [], isHuman: true, doubled: false },
     ...NPC_NAMES.map(name => ({
@@ -59,6 +69,7 @@ export function initGame(collection: Collection = TAVERN_STANDARD): GameState {
     calledBy: null,
     scores: [0, 0, 0, 0],
     log: ['The cards are dealt.'],
+    seed: seed ?? null,
   }
 }
 
