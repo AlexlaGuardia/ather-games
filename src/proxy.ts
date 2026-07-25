@@ -22,7 +22,11 @@ function classify(path: string): "tool" | "gated-game" | null {
     path.startsWith("/shimmer/deploy") ||
     path.startsWith("/nolmir/dev") ||
     path.startsWith("/nolmir/sfx-lab") ||
-    path.startsWith("/api/shimmer") ||
+    // NOTE the trailing slash: `/api/shimmer/*` is the source-mutating tooling (save-sprite).
+    // A bare `/api/shimmer` prefix ALSO swallows `/api/shimmerfile`, which is the public
+    // account/profile endpoint the username picker calls — that 403'd every non-owner player.
+    path === "/api/shimmer" ||
+    path.startsWith("/api/shimmer/") ||
     path.startsWith("/api/saves")
   ) {
     return "tool";

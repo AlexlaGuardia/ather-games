@@ -21,6 +21,7 @@ import {
   useMultiplayer, newPartyCode, sanitizePartyCode, storedParty, storeParty,
   storedName, storeName, inviteUrl, type RemotePlayer,
 } from './multiplayer'
+import { useAccount, type UseAccount } from '@/lib/accounts/use-account'
 import { rollEncounter, HOLD_LEVELS, type WildEncounter } from '../engine/encounters'
 import { derivePartyStats, type PartyStats } from '../engine/party-stats'
 import { getMovesForSpirit } from '../engine/moves'
@@ -2067,16 +2068,81 @@ const TOOLS: { id: Tool; label: string }[] = [
   { id: 'warp', label: 'Warp' }, { id: 'void', label: 'Erase' },
 ]
 
+// ── Account block — Google sign-in + the one-time username claim ──────────────
+//
+// Signing in is OPTIONAL and always will be: the whole game runs anonymously. What an
+// account buys is a name nobody else can wear — the trusted arcade row today, friends and
+// garden visits next. So this block never blocks; it sits above the party controls and
+// offers.
+function AccountBlock({ account, label }: { account: UseAccount; label: React.CSSProperties }) {
+  const { session, loading, signIn, signOut, claimName } = account
+  const [draft, setDraft] = useState('')
+  const [error, setError] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+
+  const input: React.CSSProperties = {
+    width: '100%', boxSizing: 'border-box', padding: '6px 8px', borderRadius: 8,
+    border: '1px solid #ffffff28', background: '#0b1513', color: '#eafff6',
+    font: '700 12px ui-monospace, monospace', outline: 'none',
+  }
+  const hint: React.CSSProperties = { font: '600 10px/1.5 ui-monospace, monospace', color: '#b8ae94', marginTop: 6 }
+
+  const claim = async () => {
+    setBusy(true); setError(null)
+    const res = await claimName(draft.trim())
+    if (!res.ok) setError(res.error ?? 'Could not claim that name')
+    setBusy(false)
+  }
+
+  if (loading) return null
+
+  return (
+    <>
+      <div style={{ ...label, marginBottom: 4 }}>ACCOUNT</div>
+      {!session && (
+        <>
+          <button onClick={signIn} style={{ ...menuBtn, width: '100%', textAlign: 'center' }}>◆ Sign in with Google</button>
+          <div style={hint}>Optional. Claims a name only you can use, and puts your real name on the arcade board.</div>
+        </>
+      )}
+      {session && !session.username && (
+        <>
+          <input
+            value={draft} placeholder="pick a name" maxLength={16} style={input}
+            onChange={(e) => setDraft(e.target.value.replace(/[^a-zA-Z0-9_]/g, ''))}
+            onKeyDown={(e) => { e.stopPropagation(); if (e.key === 'Enter' && draft.length >= 3 && !busy) claim() }}
+          />
+          <button
+            onClick={claim} disabled={draft.length < 3 || busy}
+            style={{ ...menuBtn, width: '100%', textAlign: 'center', marginTop: 6, opacity: draft.length < 3 || busy ? 0.4 : 1 }}
+          >
+            {busy ? 'Claiming...' : 'Claim this name'}
+          </button>
+          {error && <div style={{ ...hint, color: '#ff9b9b' }}>{error}</div>}
+        </>
+      )}
+      {session?.username && (
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}>
+          <span style={{ font: '800 13px ui-monospace, monospace', color: '#ffe08a' }}>◆ {session.username}</span>
+          <button onClick={signOut} style={{ ...menuBtn, padding: '4px 8px' }}>Sign out</button>
+        </div>
+      )}
+    </>
+  )
+}
+
 // ── Play Together panel — party codes + invite links + who's here ─────────────
 //
 // A party is a shared code, not an account (see multiplayer.ts). This panel is the whole
-// social UI: name yourself, make/join/leave a party, copy the invite link, see the roster.
-function PlayTogetherPanel({ name, onName, party, onParty, peers }: {
+// social UI: sign in, name yourself, make/join/leave a party, copy the invite link, see the
+// roster.
+function PlayTogetherPanel({ name, onName, party, onParty, peers, account }: {
   name: string
   onName: (n: string) => void
   party: string | null
   onParty: (code: string | null) => void
   peers: React.RefObject<Map<string, RemotePlayer>>
+  account: UseAccount
 }) {
   const roster = useRoster(peers)
   const [nameDraft, setNameDraft] = useState(name)
@@ -2108,13 +2174,21 @@ function PlayTogetherPanel({ name, onName, party, onParty, peers }: {
     <div style={{ width: 216, background: 'rgba(11,21,19,0.96)', border: '1px solid #2f5c4f', borderRadius: 11, padding: 12 }}>
       <div style={{ ...label, textAlign: 'center', marginBottom: 10 }}>PLAY TOGETHER</div>
 
-      <div style={{ ...label, marginBottom: 4 }}>YOUR NAME</div>
-      <input
-        value={nameDraft} maxLength={24} style={input}
-        onChange={(e) => setNameDraft(e.target.value)}
-        onBlur={commitName}
-        onKeyDown={(e) => { e.stopPropagation(); if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
-      />
+      <AccountBlock account={account} label={label} />
+
+      <div style={{ ...label, margin: '12px 0 4px' }}>YOUR NAME</div>
+      {account.session?.username ? (
+        // A claimed name IS your display name — editing a second, local one here would only
+        // create two answers to "who is that", which is the whole thing accounts fix.
+        <div style={{ ...input, color: '#8fd9c4' }}>{account.session.username}</div>
+      ) : (
+        <input
+          value={nameDraft} maxLength={24} style={input}
+          onChange={(e) => setNameDraft(e.target.value)}
+          onBlur={commitName}
+          onKeyDown={(e) => { e.stopPropagation(); if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
+        />
+      )}
 
       <div style={{ ...label, margin: '12px 0 4px' }}>PARTY</div>
       {party ? (
@@ -2256,6 +2330,16 @@ export default function Shimmer3D() {
     setMpName(storedName())
     setMpReady(true)
   }, [])
+  // A signed-in player's claimed username outranks the local one — it is the name the rest
+  // of the site (arcade board, friends, garden visits) already knows them by. Mirrored into
+  // localStorage so the next boot shows it before the session fetch resolves.
+  const account = useAccount()
+  const accountName = account.session?.username ?? null
+  useEffect(() => {
+    if (!accountName) return
+    storeName(accountName)
+    setMpName(accountName)
+  }, [accountName])
   const { peers: mpPeers } = useMultiplayer({
     enabled: mpReady, zoneId: zone.id, posRef, yawRef: camYaw, party: mpParty, playerName: mpName,
   })
@@ -4387,6 +4471,7 @@ export default function Shimmer3D() {
               name={mpName} onName={setMpName}
               party={mpParty} onParty={(code) => { storeParty(code); setMpParty(code) }}
               peers={mpPeers}
+              account={account}
             />
           )}
 

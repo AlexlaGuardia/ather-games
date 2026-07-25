@@ -2,11 +2,18 @@ import { NextRequest, NextResponse } from 'next/server'
 import { readFile, writeFile, mkdir } from 'fs/promises'
 import { join } from 'path'
 import { dailyKey, dailyNumber } from '@/lib/arcade/daily'
+import { getAccount } from '@/lib/accounts/db'
+import { readSessionToken, SESSION_COOKIE } from '@/lib/accounts/session'
 
 // ── Arcade Daily leaderboard ──────────────────────────────────────────────────
 // File-backed (one JSON per game), single pm2 process, writes serialized by an
-// in-process lock. No auth — scores are client-submitted and therefore trivially
-// spoofable; that's acceptable for a personal arcade. Light caps keep it sane.
+// in-process lock. Light caps keep it sane.
+//
+// IDENTITY: signed-in players are TRUSTED — id and display name come off the session
+// cookie and the body's id/name are ignored, so you cannot post a score as someone else.
+// Signed-out players keep the old client-submitted identity (login is optional; the arcade
+// stays playable anonymously), which is still spoofable — that is the honest trade, and the
+// reason a claimed row is worth more than an anonymous one.
 
 type Entry = { id: string; name: string; score: number; ts: number }
 type Board = Record<string, Entry[]> // dailyKey -> entries (sorted desc)
@@ -93,9 +100,15 @@ export async function POST(req: NextRequest) {
   if (!Number.isFinite(score) || score < 0 || score > cap)
     return NextResponse.json({ error: 'bad score' }, { status: 400 })
 
-  const id = cleanId(body.id)
+  // A verified session wins over anything in the body. cleanId() strips non-alphanumerics,
+  // so the stored id is the account's 'u_<hex>' minus its underscore — still unique per
+  // account, and it keeps the existing one-row-per-id logic and file format untouched.
+  const claims = readSessionToken(req.cookies.get(SESSION_COOKIE)?.value)
+  const account = claims ? getAccount(claims.user_id) : null
+
+  const id = account ? cleanId(account.user_id) : cleanId(body.id)
   if (!id) return NextResponse.json({ error: 'bad id' }, { status: 400 })
-  const name = cleanName(body.name)
+  const name = cleanName(account?.username ?? body.name)
   const key = String(body.day || dailyKey())
   const ts = Date.now()
 
