@@ -142,6 +142,100 @@ export function claimUsername(user_id: string, username: string, character_id?: 
   return account ? { ok: true, account } : { ok: false, error: 'Account not found' }
 }
 
+// ── friends ───────────────────────────────────────────────────────────────────
+//
+// One row per friendship, stored in the direction it was requested (a_id asked b_id).
+// 'accepted' is read as bidirectional; 'pending' keeps its direction so the UI can tell
+// "you asked them" from "they asked you". That is the whole model — deliberately no
+// blocking, no follows, no one-way edges.
+
+export interface FriendRow {
+  user_id: string
+  username: string
+  character_id: string | null
+  status: string
+  incoming: boolean
+}
+
+/** Everyone you are connected to or have a pending request with, in one list. */
+export function listFriends(user_id: string): FriendRow[] {
+  const rows = db().prepare(`
+    SELECT a.user_id, a.username, a.character_id, f.status,
+           -- "incoming" means they asked YOU and you have not answered. It is only
+           -- meaningful while pending: once accepted the relationship is undirected, and
+           -- reporting a direction there invites a caller to render one side as a request.
+           CASE WHEN f.b_id = ? AND f.status = 'pending' THEN 1 ELSE 0 END AS incoming
+    FROM friends f
+    JOIN accounts a ON a.user_id = CASE WHEN f.a_id = ? THEN f.b_id ELSE f.a_id END
+    WHERE (f.a_id = ? OR f.b_id = ?) AND a.username IS NOT NULL
+    ORDER BY f.status, a.username COLLATE NOCASE
+  `).all(user_id, user_id, user_id, user_id) as Array<Omit<FriendRow, 'incoming'> & { incoming: number }>
+  return rows.map(r => ({ ...r, incoming: r.incoming === 1 }))
+}
+
+export type FriendResult = { ok: true; friend: FriendRow; accepted?: boolean } | { ok: false; error: string }
+
+/**
+ * Send a request by username.
+ *
+ * The one non-obvious rule: if THEY already asked YOU, this accepts instead of opening a
+ * second edge pointing the other way. Two people adding each other at the same time is a
+ * normal thing to do, and it should mean "you are friends", not "you each have a pending
+ * request from someone you already asked".
+ */
+export function addFriend(user_id: string, username: string): FriendResult {
+  const target = getAccountByUsername(username)
+  if (!target || !target.username) return { ok: false, error: 'No player by that name' }
+  if (target.user_id === user_id) return { ok: false, error: 'You cannot add yourself' }
+
+  const d = db()
+  const existing = d.prepare(
+    'SELECT a_id, b_id, status FROM friends WHERE (a_id = ? AND b_id = ?) OR (a_id = ? AND b_id = ?)',
+  ).get(user_id, target.user_id, target.user_id, user_id) as { a_id: string; b_id: string; status: string } | undefined
+
+  const row = (status: string, incoming: boolean): FriendRow => ({
+    user_id: target.user_id, username: target.username!, character_id: target.character_id, status, incoming,
+  })
+
+  if (existing) {
+    if (existing.status === 'accepted') return { ok: false, error: 'Already friends' }
+    // They asked first — meeting in the middle accepts.
+    if (existing.a_id === target.user_id) {
+      d.prepare('UPDATE friends SET status = ? WHERE a_id = ? AND b_id = ?').run('accepted', target.user_id, user_id)
+      return { ok: true, friend: row('accepted', false), accepted: true }
+    }
+    return { ok: false, error: 'Request already sent' }
+  }
+
+  d.prepare('INSERT INTO friends (a_id, b_id, status, created_at) VALUES (?, ?, ?, ?)')
+    .run(user_id, target.user_id, 'pending', Date.now())
+  return { ok: true, friend: row('pending', false) }
+}
+
+/** Accept a request that was sent TO you. Accepting one you sent is not a thing. */
+export function acceptFriend(user_id: string, otherId: string): boolean {
+  const res = db().prepare(
+    "UPDATE friends SET status = 'accepted' WHERE a_id = ? AND b_id = ? AND status = 'pending'",
+  ).run(otherId, user_id)
+  return Number(res.changes) > 0
+}
+
+/** Remove, decline, or cancel — all the same operation on an undirected relationship. */
+export function removeFriend(user_id: string, otherId: string): boolean {
+  const res = db().prepare(
+    'DELETE FROM friends WHERE (a_id = ? AND b_id = ?) OR (a_id = ? AND b_id = ?)',
+  ).run(user_id, otherId, otherId, user_id)
+  return Number(res.changes) > 0
+}
+
+/** Are these two actually friends? The gate every invite and garden visit has to pass. */
+export function areFriends(a: string, b: string): boolean {
+  const row = db().prepare(
+    "SELECT 1 FROM friends WHERE status = 'accepted' AND ((a_id = ? AND b_id = ?) OR (a_id = ? AND b_id = ?))",
+  ).get(a, b, b, a)
+  return !!row
+}
+
 /**
  * Right to erasure, and it is a real delete — the account row and every friend edge that
  * mentions it, gone. Nothing here is soft-deleted or tombstoned, because a privacy page

@@ -14,7 +14,10 @@ import { unlinkSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { signJwt, verifyJwt, SESSION_TTL_SEC } from './session'
-import { _openAt, upsertGoogleAccount, claimUsername, checkUsername, getAccountByUsername, getAccount, newUserId } from './db'
+import {
+  _openAt, upsertGoogleAccount, claimUsername, checkUsername, getAccountByUsername, getAccount, newUserId,
+  listFriends, addFriend, acceptFriend, removeFriend, areFriends,
+} from './db'
 import { safeReturnPath } from './oauth'
 
 let failures = 0
@@ -113,6 +116,65 @@ console.log('accounts store')
 
   check('claiming a reserved name fails', claimUsername(b.user_id, 'system').ok === false)
   check('a failed claim leaves the old name intact', getAccount(b.user_id)?.username === 'kael_v')
+
+  try { unlinkSync(path) } catch { /* leave it */ }
+}
+
+// ── friends ───────────────────────────────────────────────────────────────────
+// The asserts that matter are the SYMMETRY ones: a friendship is stored as one directed
+// row but read as an undirected relationship, so every read has to give both sides the
+// same answer. A bug there means A sees a friend that B does not, and the invite gate
+// downstream would then admit someone B never agreed to play with.
+console.log('friends')
+{
+  const path = join(tmpdir(), `ather-friends-oracle-${process.pid}.db`)
+  try { unlinkSync(path) } catch { /* first run */ }
+  _openAt(path)
+
+  const mk = (sub: string, name: string) => {
+    const a = upsertGoogleAccount(sub, `${name}@example.com`, null)
+    claimUsername(a.user_id, name)
+    return a.user_id
+  }
+  const alex = mk('s-alex', 'serberus')
+  const jin = mk('s-jin', 'jin')
+  const mag = mk('s-mag', 'magii')
+
+  check('nobody starts with friends', listFriends(alex).length === 0)
+  check('unknown username is refused', !addFriend(alex, 'nobody_here').ok)
+  check('adding yourself is refused', !addFriend(alex, 'serberus').ok)
+
+  check('request sends', addFriend(alex, 'jin').ok)
+  check('duplicate request is refused', !addFriend(alex, 'jin').ok)
+  check('sender sees it as OUTGOING', listFriends(alex)[0]?.incoming === false)
+  check('target sees it as INCOMING', listFriends(jin)[0]?.incoming === true)
+  check('pending is not friendship', !areFriends(alex, jin))
+  check('the target cannot be accepted BY the sender', !acceptFriend(alex, jin))
+
+  check('target accepts', acceptFriend(jin, alex))
+  check('friendship reads true both ways', areFriends(alex, jin) && areFriends(jin, alex))
+  check('both lists show accepted', listFriends(alex)[0]?.status === 'accepted' && listFriends(jin)[0]?.status === 'accepted')
+  check('accepted has no direction', listFriends(alex)[0]?.incoming === false && listFriends(jin)[0]?.incoming === false)
+  check('already-friends is refused', !addFriend(alex, 'jin').ok)
+
+  // Both people adding each other at once must converge on friendship, not two edges.
+  check('mutual add: first direction opens', addFriend(alex, 'magii').ok)
+  const crossed = addFriend(mag, 'serberus')
+  check('mutual add: second direction ACCEPTS instead of duplicating', crossed.ok && crossed.accepted === true)
+  check('mutual add makes them friends', areFriends(alex, mag))
+  check('mutual add left exactly one row', listFriends(mag).filter(f => f.user_id === alex).length === 1)
+
+  check('remove works', removeFriend(alex, jin))
+  check('remove is symmetric', !areFriends(alex, jin) && !areFriends(jin, alex))
+  check('removed friend is gone from BOTH lists', !listFriends(alex).some(f => f.user_id === jin) && !listFriends(jin).some(f => f.user_id === alex))
+  check('removing a non-friend is a harmless no-op', removeFriend(alex, jin) === false)
+  check('you can re-add after removing', addFriend(alex, 'jin').ok)
+
+  // A nameless account is invisible: it cannot be found by name, and it must not surface as
+  // a blank row in anyone's list.
+  const ghost = upsertGoogleAccount('s-ghost', 'ghost@example.com', null)
+  check('a nameless account cannot be added', !addFriend(alex, '').ok)
+  check('a nameless account never appears in a list', !listFriends(ghost.user_id).length)
 
   try { unlinkSync(path) } catch { /* leave it */ }
 }

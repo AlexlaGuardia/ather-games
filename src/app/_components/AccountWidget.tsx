@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useAccount } from '@/lib/accounts/use-account'
+import FriendsPanel from '@/app/shimmer/components/FriendsPanel'
 
 // ── Floating account control ──────────────────────────────────────────────────
 //
@@ -21,6 +22,7 @@ export default function AccountWidget({ className = '' }: { className?: string }
   const [draft, setDraft] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const [showFriends, setShowFriends] = useState(false)
   const wrapRef = useRef<HTMLDivElement>(null)
 
   // Click-away and Escape both close it. A floating panel that only closes by re-clicking
@@ -117,8 +119,14 @@ export default function AccountWidget({ className = '' }: { className?: string }
               <p className="text-[11px] uppercase tracking-[0.18em] text-[#5a576a]">Signed in as</p>
               <p className="text-[#d4a843] text-[15px] mt-0.5 truncate">{session.username}</p>
               <button
+                onClick={() => { setShowFriends(true); setOpen(false) }}
+                className="w-full mt-3 px-3 py-2 rounded-md border border-[#d4a843]/30 bg-[#d4a843]/10 text-[#d4a843] text-[12px] hover:bg-[#d4a843]/20 transition-colors"
+              >
+                Friends
+              </button>
+              <button
                 onClick={() => { signOut(); setOpen(false) }}
-                className="w-full mt-3 px-3 py-2 rounded-md border border-white/10 text-[#8a879a] text-[12px] hover:text-[#e2e0ea] hover:border-white/20 transition-colors"
+                className="w-full mt-2 px-3 py-2 rounded-md border border-white/10 text-[#8a879a] text-[12px] hover:text-[#e2e0ea] hover:border-white/20 transition-colors"
               >
                 Sign out
               </button>
@@ -127,6 +135,29 @@ export default function AccountWidget({ className = '' }: { className?: string }
 
           <div className="mt-3 pt-3 border-t border-white/[0.07]">
             <Link href="/privacy" className={linkish}>What we store</Link>
+          </div>
+        </div>
+      )}
+
+      {/* Friends live in a modal rather than the dropdown: the panel is a real surface with
+          tabs and a list, and squeezing it into a 240px chip menu would make it unusable on
+          a phone. Fixed overlay, so it works from whatever page carries the widget. */}
+      {showFriends && (
+        <div
+          className="fixed inset-0 z-[60] bg-black/70 backdrop-blur-sm grid place-items-center p-4"
+          onClick={() => setShowFriends(false)}
+        >
+          <div
+            className="w-full max-w-md rounded-xl border border-white/10 bg-[#0d0d18] p-5 shadow-2xl"
+            onClick={e => e.stopPropagation()}
+          >
+            <FriendsPanel onClose={() => setShowFriends(false)} />
+            <button
+              onClick={() => setShowFriends(false)}
+              className="w-full mt-4 px-3 py-2 rounded-md border border-white/10 text-[#8a879a] text-[12px] hover:text-[#e2e0ea] hover:border-white/20 transition-colors"
+            >
+              Close
+            </button>
           </div>
         </div>
       )}
