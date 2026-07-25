@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from 'next/server'
 import { timingSafeEqual } from 'node:crypto'
 import { upsertGoogleAccount } from '@/lib/accounts/db'
 import { mintSession, sessionSecret, SESSION_COOKIE, sessionCookieOptions } from '@/lib/accounts/session'
-import { OAUTH_STATE_COOKIE, OAUTH_NEXT_COOKIE, safeReturnPath } from '@/lib/accounts/oauth'
+import { OAUTH_STATE_COOKIE, OAUTH_NEXT_COOKIE, safeReturnPath, siteOrigin } from '@/lib/accounts/oauth'
 
 // Step 2: Google hands back a code, we trade it for an id_token, and that becomes an
 // account + a session cookie. Failures always land the player back in the game with a
@@ -36,7 +36,7 @@ function decodeSegment(seg: string): Record<string, unknown> | null {
 }
 
 function fail(req: NextRequest, reason: string, back = '/shimmer/play3d') {
-  const url = new URL(back, req.nextUrl.origin)
+  const url = new URL(back, siteOrigin(req))
   url.searchParams.set('auth', reason)
   const res = NextResponse.redirect(url.toString())
   res.cookies.delete(OAUTH_STATE_COOKIE)
@@ -101,7 +101,7 @@ export async function GET(req: NextRequest) {
 
   // Land back where they were. The client reads /api/auth/session on mount; a null username
   // is what opens the picker, so no extra flag is needed in the URL.
-  const dest = new URL(back, req.nextUrl.origin)
+  const dest = new URL(back, siteOrigin(req))
   dest.searchParams.set('auth', account.username ? 'ok' : 'claim')
   const res = NextResponse.redirect(dest.toString())
   res.cookies.set(SESSION_COOKIE, mintSession(account.user_id, account.username), sessionCookieOptions())
