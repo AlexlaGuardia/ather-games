@@ -17,10 +17,8 @@ import { GardenAtmosphere } from '../world/atmosphere'
 import { FloraTree, FloraDressing } from '../world/flora'
 import { StationProp, GhostProp } from '../world/prop-models'
 import { RemotePlayers, useRoster } from './RemotePlayers'
-import {
-  useMultiplayer, newPartyCode, sanitizePartyCode, storedParty, storeParty,
-  storedName, storeName, inviteUrl, type RemotePlayer,
-} from './multiplayer'
+import { useMultiplayer, storedName, storeName, type RemotePlayer } from './multiplayer'
+import { useParty, newPartyCode, sanitizePartyCode, inviteUrl } from '@/lib/party'
 import { useAccount, type UseAccount } from '@/lib/accounts/use-account'
 import { rollEncounter, HOLD_LEVELS, type WildEncounter } from '../engine/encounters'
 import { derivePartyStats, type PartyStats } from '../engine/party-stats'
@@ -2170,7 +2168,7 @@ function PlayTogetherPanel({ name, onName, party, onParty, peers, account }: {
   }
   const copyInvite = async () => {
     if (!party) return
-    try { await navigator.clipboard.writeText(inviteUrl(party)) } catch { /* clipboard denied — code is visible to copy by hand */ }
+    try { await navigator.clipboard.writeText(inviteUrl(party, '/shimmer/play3d')) } catch { /* clipboard denied — code is visible to copy by hand */ }
     setCopied(true); setTimeout(() => setCopied(false), 1600)
   }
   return (
@@ -2318,21 +2316,13 @@ export default function Shimmer3D() {
   // ── Play Together: one socket for the whole page (scene avatars + DOM panel). Party/name
   // changes flow through the hook's effect deps = clean reconnect into the right instance. ──
   const [mpName, setMpName] = useState('')            // '' until mount — storedName touches localStorage
-  const [mpParty, setMpParty] = useState<string | null>(null)
-  const [mpReady, setMpReady] = useState(false)       // gates the socket until identity is loaded
-  useEffect(() => {
-    // ?party=CODE in the URL is an INVITE — store it, join it, then strip it so a copied/bookmarked
-    // address doesn't keep re-asserting a party the player has since left.
-    const fromUrl = sanitizePartyCode(new URLSearchParams(window.location.search).get('party') ?? '')
-    if (fromUrl) {
-      storeParty(fromUrl)
-      const u = new URL(window.location.href); u.searchParams.delete('party')
-      window.history.replaceState(null, '', u.toString())
-    }
-    setMpParty(fromUrl ?? storedParty())
-    setMpName(storedName())
-    setMpReady(true)
-  }, [])
+  const [mpNameReady, setMpNameReady] = useState(false)
+  useEffect(() => { setMpName(storedName()); setMpNameReady(true) }, [])
+  // The party is site-level state now (`@/lib/party`): the same group carries to the card
+  // table, an invite link is consumed on whatever page it lands on, and leaving from the
+  // account widget updates this panel without a reload.
+  const { party: mpParty, ready: mpPartyReady, leave: leaveParty, join: joinParty } = useParty()
+  const mpReady = mpNameReady && mpPartyReady   // gates the socket until identity is loaded
   // A signed-in player's claimed username outranks the local one — it is the name the rest
   // of the site (arcade board, friends, garden visits) already knows them by. Mirrored into
   // localStorage so the next boot shows it before the session fetch resolves.
@@ -4472,7 +4462,7 @@ export default function Shimmer3D() {
           {mpOpen && (
             <PlayTogetherPanel
               name={mpName} onName={setMpName}
-              party={mpParty} onParty={(code) => { storeParty(code); setMpParty(code) }}
+              party={mpParty} onParty={(code) => { if (code) joinParty(code); else leaveParty() }}
               peers={mpPeers}
               account={account}
             />

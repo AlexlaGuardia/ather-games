@@ -58,38 +58,15 @@ function identity(): { id: string; name: string } {
   return { id, name }
 }
 
-// ── Play-Together identity + party (the UI reads/writes through these) ─────────
+// ── Party lives at SITE level now ─────────────────────────────────────────────
 //
-// A party is a shared CODE, not an account: everyone connecting with the same code
-// lands in the same instance per zone (server keys `party_<code>__<zone>`), and the
-// code persists in localStorage so warps and reloads keep the party together.
-// Possession of the code IS membership — there's no server-side friend state yet,
-// deliberately: player_id is client-claimed, so a "real" friends list would be
-// security theater until identity is server-trusted.
-
-const PARTY_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789' // no I/L/O/0/1 — read-aloud safe
-
-export function sanitizePartyCode(raw: string): string | null {
-  const clean = raw.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 12)
-  return clean.length >= 4 ? clean : null
-}
-
-export function newPartyCode(): string {
-  let code = ''
-  for (let i = 0; i < 5; i++) code += PARTY_ALPHABET[Math.floor(Math.random() * PARTY_ALPHABET.length)]
-  return code
-}
-
-export function storedParty(): string | null {
-  try { return sanitizePartyCode(localStorage.getItem('ather:mp:party') ?? '') } catch { return null }
-}
-
-export function storeParty(code: string | null) {
-  try {
-    if (code) localStorage.setItem('ather:mp:party', code)
-    else localStorage.removeItem('ather:mp:party')
-  } catch { /* private mode — party just won't survive a reload */ }
-}
+// The party code, its storage and the invite link moved to `@/lib/party` when the party
+// stopped being a Shimmer concept and became the group you carry between games (the card
+// table reads the same one). This module keeps only what is genuinely play3d's: the
+// per-browser identity and the position netcode.
+//
+// Membership is still possession of the code — friends-grade trust, not proof, until the WS
+// trust bridge lands.
 
 export function storedName(): string {
   return identity().name
@@ -104,10 +81,6 @@ export function storeName(name: string): string {
 
 export function selfPlayerId(): string {
   return identity().id
-}
-
-export function inviteUrl(code: string): string {
-  return `${window.location.origin}/shimmer/play3d?party=${code}`
 }
 
 export function wsUrl(zoneId: string, party: string | null, playerName: string): string | null {

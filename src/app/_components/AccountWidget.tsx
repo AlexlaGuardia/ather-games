@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useAccount } from '@/lib/accounts/use-account'
 import FriendsPanel from '@/app/shimmer/components/FriendsPanel'
+import PartyBlock from './PartyBlock'
 
 // ── Floating account control ──────────────────────────────────────────────────
 //
@@ -132,6 +133,10 @@ export default function AccountWidget({ className = '' }: { className?: string }
               </button>
             </>
           )}
+
+          {/* Party sits below the account block on purpose: you can have one signed out
+              (a code in a link is a fine address), so it must not read as an account feature. */}
+          <PartyBlock signedIn={!!session?.username} onInviteFriend={() => { setShowFriends(true); setOpen(false) }} />
 
           <div className="mt-3 pt-3 border-t border-white/[0.07]">
             <Link href="/privacy" className={linkish}>What we store</Link>
