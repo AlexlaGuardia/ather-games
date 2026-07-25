@@ -14,9 +14,14 @@ interface FriendsPanelProps {
   onClose: () => void
   onVisitGarden?: (friendUserId: string) => void
   onInviteToGarden?: (friendUserId: string) => void
+  /** Invite this friend to your party. Returns a short result to show on the row. */
+  onInviteToParty?: (friendUserId: string, username: string) => Promise<string>
 }
 
-export default function FriendsPanel({ onClose, onVisitGarden, onInviteToGarden }: FriendsPanelProps) {
+export default function FriendsPanel({ onClose, onVisitGarden, onInviteToGarden, onInviteToParty }: FriendsPanelProps) {
+  // Per-row invite feedback. Keyed by friend so two invites cannot overwrite each other's
+  // message, and so the row you clicked is the row that answers.
+  const [inviteState, setInviteState] = useState<Record<string, string>>({})
   const [friends, setFriends] = useState<Friend[]>([])
   const [loading, setLoading] = useState(true)
   const [searchName, setSearchName] = useState('')
@@ -138,7 +143,23 @@ export default function FriendsPanel({ onClose, onVisitGarden, onInviteToGarden 
                 <span className="text-[13px] text-text font-display">{f.username}</span>
                 <span className="text-[11px] text-text-faint/40 ml-2 capitalize">{f.character_id}</span>
               </div>
-              <div className="flex gap-1.5">
+              <div className="flex gap-1.5 items-center">
+                {inviteState[f.user_id] && (
+                  <span className="text-[10px] text-text-faint mr-1">{inviteState[f.user_id]}</span>
+                )}
+                {onInviteToParty && (
+                  <button
+                    onClick={async () => {
+                      setInviteState(s => ({ ...s, [f.user_id]: '...' }))
+                      const msg = await onInviteToParty(f.user_id, f.username)
+                      setInviteState(s => ({ ...s, [f.user_id]: msg }))
+                      setTimeout(() => setInviteState(s => ({ ...s, [f.user_id]: '' })), 4000)
+                    }}
+                    className="px-2 py-1 rounded text-[11px] text-[#d4a843] bg-[#d4a843]/10 hover:bg-[#d4a843]/20 border border-[#d4a843]/25 transition-colors"
+                  >
+                    Invite
+                  </button>
+                )}
                 {onVisitGarden && (
                   <button
                     onClick={() => onVisitGarden(f.user_id)}

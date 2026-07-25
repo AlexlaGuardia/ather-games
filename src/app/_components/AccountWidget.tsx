@@ -5,6 +5,8 @@ import Link from 'next/link'
 import { useAccount } from '@/lib/accounts/use-account'
 import FriendsPanel from '@/app/shimmer/components/FriendsPanel'
 import PartyBlock from './PartyBlock'
+import { usePresence } from '@/lib/presence'
+import { useParty } from '@/lib/party'
 
 // ── Floating account control ──────────────────────────────────────────────────
 //
@@ -25,6 +27,24 @@ export default function AccountWidget({ className = '' }: { className?: string }
   const [busy, setBusy] = useState(false)
   const [showFriends, setShowFriends] = useState(false)
   const wrapRef = useRef<HTMLDivElement>(null)
+
+  // The site-wide socket. Only signed-in players get one: an invite is addressed to an
+  // account, so there is nothing to route to an anonymous browser yet.
+  const presence = usePresence(session?.username ? session.user_id : null, session?.username ?? '')
+  const { party, start: startParty, join: joinParty } = useParty()
+
+  /**
+   * Invite a friend to the party. If you have no party yet, this MAKES one rather than
+   * telling you to go make one first — the click already said what you wanted.
+   */
+  const inviteToParty = async (friendUserId: string, username: string): Promise<string> => {
+    const code = party ?? startParty()
+    const res = await presence.invite(friendUserId, code)
+    if (res.ok) return 'invited'
+    if (res.reason === 'offline') return `${username} is offline`
+    if (res.reason === 'unverified') return 'sign in again'
+    return 'not connected'
+  }
 
   // Click-away and Escape both close it. A floating panel that only closes by re-clicking
   // its own trigger is the kind of thing you notice once and resent forever.
@@ -144,6 +164,30 @@ export default function AccountWidget({ className = '' }: { className?: string }
         </div>
       )}
 
+      {/* An invite that found you. Sits under the chip because that is where the party
+          lives — accepting drops you straight into their code, and every game reads it. */}
+      {presence.incoming && (
+        <div className="absolute top-12 right-0 w-60 z-[55] rounded-md border border-[#d4a843]/40 bg-[#12121e]/95 backdrop-blur p-3.5 shadow-xl shadow-black/50">
+          <p className="text-[12px] text-[#e2e0ea] leading-relaxed">
+            <span className="text-[#d4a843]">{presence.incoming.from_name}</span> invited you to their party.
+          </p>
+          <div className="flex gap-2 mt-3">
+            <button
+              onClick={() => { joinParty(presence.incoming!.party); presence.dismiss() }}
+              className="flex-1 px-3 py-2 rounded-md border border-[#d4a843]/35 bg-[#d4a843]/10 text-[#d4a843] text-[12px] hover:bg-[#d4a843]/20 transition-colors"
+            >
+              Join
+            </button>
+            <button
+              onClick={presence.dismiss}
+              className="px-3 py-2 rounded-md border border-white/10 text-[#8a879a] text-[12px] hover:text-[#e2e0ea] transition-colors"
+            >
+              Dismiss
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Friends live in a modal rather than the dropdown: the panel is a real surface with
           tabs and a list, and squeezing it into a 240px chip menu would make it unusable on
           a phone. Fixed overlay, so it works from whatever page carries the widget. */}
@@ -156,7 +200,7 @@ export default function AccountWidget({ className = '' }: { className?: string }
             className="w-full max-w-md rounded-xl border border-white/10 bg-[#0d0d18] p-5 shadow-2xl"
             onClick={e => e.stopPropagation()}
           >
-            <FriendsPanel onClose={() => setShowFriends(false)} />
+            <FriendsPanel onClose={() => setShowFriends(false)} onInviteToParty={inviteToParty} />
             <button
               onClick={() => setShowFriends(false)}
               className="w-full mt-4 px-3 py-2 rounded-md border border-white/10 text-[#8a879a] text-[12px] hover:text-[#e2e0ea] hover:border-white/20 transition-colors"
