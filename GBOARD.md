@@ -239,6 +239,63 @@ the Arcade frame.
 > `manana/page.tsx` + `manana/Home.tsx`, `arcade/all/page.tsx`, `nolmir/page.tsx`, `grimoire/page.tsx`,
 > `shimmer/page.tsx`, `shimmer/play3d/Shimmer3D.tsx`.
 
+## 🔑 Cross-cutting — ACCOUNTS · PARTY · PRESENCE (the identity layer, SHIPPED 2026-07-25, jin-cc) · *Last touched 2026-07-25*
+> **What it is:** the layer three features were all waiting on — friend visits, trusted arcade
+> scores, and playing the Magii card game with people. `player_id` was client-claimed, so every
+> trust decision downstream ("whose garden", "whose score", "who is at my table") was theatre.
+> A server vouches now.
+>
+> **Shipped, all live on :3200:**
+> - **Accounts (Phase A, `38c08eb`)** — Google OAuth, 4 routes, httpOnly `ather_session` HS256 JWT
+>   the FastAPI WS server can verify with a shared secret. Accounts DB is **`node:sqlite`** (core in
+>   Node 24) — the spec's `better-sqlite3` was dropped: same sync API, zero deps, no native build.
+>   `/api/shimmerfile` + `/check` are real. Arcade leaderboard identity now comes off the session,
+>   so a signed-in score cannot be posted as someone else.
+> - **Privacy (`a51fce9`)** — `/privacy` + a REAL account delete (`DELETE /api/auth/account`).
+>   **No cookie banner, deliberately:** every cookie here is strictly necessary and there is zero
+>   analytics/ad/third-party. A banner is for tracking. ⚠ **That page is written to match the code —
+>   the day this site gains analytics, server-side garden saves, or stored chat, it is false.**
+> - **Account widget (`53b20e0`)** — one pill whose LABEL is the state (Sign in → Claim name → your
+>   username), in `_components/` so any page's corner cluster can take it.
+> - **Friends (Phase B, `7725076`)** — `/api/friends`; the panel existed as a stub and was never
+>   mounted anywhere, now a modal off the widget. Simultaneous adds CONVERGE (if they already asked
+>   you, add accepts instead of opening a crossed second edge).
+> - **Party goes SITE-LEVEL (`5754050`)** — `@/lib/party`, above the games. One group carries world →
+>   card table, so **per-game invite UI is unnecessary**: Sit Down will just read the party. An
+>   invite link is consumed on ANY page and stripped from the URL. Roles kept separate so they cannot
+>   drift: **PARTY** = the group · **FRIENDS** = the address book · **CODE/LINK** = the fallback
+>   address for someone with no account.
+> - **Presence socket (shimmer-server `b387ea5` + `e8cfe40`)** — `/presence`: account id → sockets,
+>   no instance/position/matchmaking, so a friend reading the bookstore is reachable. Click a friend
+>   → they get a toast → Join drops them into your party code.
+>
+> **★ Two finds worth keeping:**
+> - **The impersonation test caught a live leak.** Trust was tracked per ACCOUNT while sockets are
+>   per CONNECTION, so an unverified socket claiming a signed-in user's id joined their bucket and
+>   was handed their invite. Anonymous sockets are now filed under an `anon:` key that cannot collide
+>   with a real id — unaddressable by construction, not by a check someone must remember.
+>   `test_presence.py` guards it.
+> - **The owner-tool gate matched `/api/shimmer` as a bare prefix**, which also swallowed
+>   `/api/shimmerfile` — the username picker would have 403'd for every non-owner. Boundary is
+>   `/api/shimmer/` now.
+>
+> **Left off:** the chain works end to end for two accounts; Alex signed in on a second account and
+> added a friend. **Next:** Magii **Sit Down reads the party and seats them, NPC fallback** (Renna/
+> Dorik/Sable take back any empty seat) — the payoff the whole chain was built for. Then ephemeral
+> party chat on the same socket (relay only, never stored — persistent DMs would need storage,
+> retention, a real BLOCK the friends model has none of, and would make `/privacy` false).
+>
+> **⚠ ONE UNVERIFIED LINK:** does the `ather_session` cookie ride the WS upgrade through the
+> Cloudflare tunnel? Needs a real signed-in browser — load `/room`, then
+> `pm2 logs shimmer-server | grep presence+` and look for `trusted=True`. If false, mint a
+> short-lived signed ticket from `/api/auth/session` and pass it in the query; nothing else changes.
+>
+> **⚠ Google project:** ather.games shares project `874025740228` (ONE consent screen) with the
+> cockpit, and their needs CONFLICT — ather.games wants In-production for public sign-in, the planner
+> needs the SENSITIVE `calendar.events` scope which in production requires verification. **Publishing
+> the shared project breaks the planner.** Give ather.games its own project, then publish it freely
+> (non-sensitive scopes only). Until then, a second tester must be added as a test user.
+
 ## 💰 Cross-cutting — THE MARKS ECONOMY (one currency across all of ather.games)
 > **The vision (Alex, long-standing): one global Marks wallet for every game, tying the arcade into one world.** Ruled into canon 2026-07-12 (/magii + Alex, `athernyx world/rune-hold.md` › The Hub): **Marks = the realm's copper coin** (already in the athernyx glossary — NOT invented). The whole ather.games hub is canonically **Rune Hold** (an outdoor town center, doors = storefronts): 🍺 **Kindled Mug** → the games (EARN marks) · ✧ **Spirit Corner** → Shimmer (Greg's Ather-Bubble gate, canon-literal "a personal shimmer") · 📖 **Eyuun's Bookstore** → books/lore (the 07-04 audiobook player) · 🏪 **The Passage** → the market (SPEND marks; seed of the canon Grand Exchange) · 📌 **Notice Board** → news. Register = the enduring Year-1500 Rune Hold; the Year-600 occupation stays STORY.
 > **✅ Phase 0 SHIPPED 2026-07-12, jin-cc (`30b6829`, built + live :3200, pushed — "NOT pushed" corrected 2026-07-16; it reached `origin/master` the same day under later commits):** `src/lib/wallet.ts` — the global Marks store (per-browser localStorage; `getMarks/addMarks/spendMarks/setMarks/walletExists` + a `MARKS_EVENT` on change for live HUDs; non-negative floor). **Folded Nolmir's marks into it:** the wallet is now the source of truth and `nolmir/lib/host.ts` mirrors it on load/save, so all ~15 `host.marks` call sites stay untouched; a legacy Nolmir save's marks migrate into the wallet exactly once. 23-assertion `wallet.test.ts` (math + overspend guard + event hygiene + the migration contract, via a window/localStorage shim); 111 Nolmir tests + canon still green. Live-driving the HUD blocked by the frozen-renderer flake on canvas pages — test-proven, wants an Alex device pass.
@@ -1098,7 +1155,7 @@ the Arcade frame.
   being up. Memory: `project_eyuun_bookstore`.
 
 ### The Room — 🟢 live · the hub everything ties back to → `/room`
-*Last touched: 2026-07-03 — news fallback freshened + Daily ship in the feed; desk-panel fix teed for co-review*
+*Last touched: 2026-07-25 — top-right chrome cluster gained the ACCOUNT WIDGET beside the mute toggle (sign in / claim name / friends / party), plus a quiet PRIVACY link bottom-right. Meshy note: /room is a CSS-3D scene (walls are flat .webp on rotated divs, ZERO webgl) so GLBs cannot drop in — the path is the picaso pre-render lane, and the glb_optimize crack bug does NOT block it (that is decimate-without-smoothing; pre-render wants the full-res mesh). Real weakness = the bottom third is an empty black floor, nothing stands in the room. Next: one Blender render with rug/inlay + baked contact shadows swapped for floor.webp, then standing props as billboards (camera only yaws around a fixed centre, so billboards are correct here). Alex owns what stands in the room.*
 **What it is:** the spatial front door of ather.games (since `/`→`/room`). A 4-wall room you turn
   between, each wall a destination: **Mug door** (profile/settings), **Shimmer TV** (→ the 3D game),
   **Arcade arch** (→ `/arcade/all`, the cabinet hall), **Desk wall** (in-place UI — **Grimoire** link
