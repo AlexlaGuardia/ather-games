@@ -280,8 +280,8 @@ the Arcade frame.
 >   `/api/shimmer/` now.
 >
 > **Left off:** the chain works end to end for two accounts; Alex signed in on a second account and
-> added a friend. **Next:** Magii **Sit Down reads the party and seats them, NPC fallback** (Renna/
-> Dorik/Sable take back any empty seat) — the payoff the whole chain was built for. Then ephemeral
+> added a friend. **✅ The payoff landed 2026-07-29 — see the Magii block below: Sit Down reads the
+> party and seats them, regulars hold the empty chairs.** **Next:** ephemeral
 > party chat on the same socket (relay only, never stored — persistent DMs would need storage,
 > retention, a real BLOCK the friends model has none of, and would make `/privacy` false).
 >
@@ -1118,6 +1118,7 @@ the Arcade frame.
 | The Room | 🟢 live | 2026-07-04 | the hub — arcade hall, Desk wall, Grimoire/AtherPages, Momo→Bookstore, nav spine |
 | Eyuun's Bookstore | 🟢 live | 2026-07-04 | public audiobook player — Athernyx narrations off the Desk (Secrets hero + 15 Spirit Tales) |
 | Nolmir | 📦 shelved (live) | 2026-07-16 | idle Athernyx defense/arena — parked pending a proper home; see its block |
+| Magii | 🟢 live | 2026-07-29 | the tavern card game — sets-and-calls rummy, the Marks FAUCET, now playable WITH your party |
 | Mana'nana | 🟢 live | 2026-06-22 | match-3, blooming specials |
 | Rekindle #3 | 🟢 live | 2026-06-22 | conduit puzzle + Aeterna node-map |
 | Ward #4 | 🟢 live | 2026-06-22 | Missile Command / touch aim-trainer |
@@ -1132,6 +1133,81 @@ the Arcade frame.
 | Dewdrop #13 | 🟢 live | 2026-06-26 | Pac-Man riff — Dewbear vs collar-Moglins, wildbloom snaps the collar |
 | Vault #14 | 🟢 live | 2026-06-29 | auto-runner — mote of light crosses the greying, leaps the void's tears (render shipped, pending Alex feel-test) |
 | Anima | 🔬 tech demo | 2026-06-21 | procedural character (IK rig + verlet cloak), ZERO art files — linked in Room |
+
+---
+
+### Magii — 🟢 live · the tavern card game → `/magii`
+*Last touched: 2026-07-29 — NETPLAY: the party sits down together (`67368df` + shimmer-server `55ff47a`)*
+**What it is:** a four-seat sets-and-calls rummy in the tavern. Eight cards, build three sets of three
+  (Triad 40 / Spectrum 25), then **call Magii** to end the round — or call on an incomplete hand and eat
+  −50. It is also the **Marks FAUCET** for the whole site (win → `10 + 0.3×score`, everyone else → 10;
+  see the MARKS ECONOMY block). Collections are unlockable decks.
+
+**Left off (2026-07-29, jin-cc) — NETPLAY IS LIVE. Sit Down reads the site-level party and seats them;
+  the three regulars hold whatever chairs your friends have not taken.** No lobby, no waiting-room wall,
+  and a disconnect hands that hand back to a regular instead of ending the game for everyone else. This
+  was the payoff the whole accounts/party/presence chain was built for.
+- **The wire carries MOVES, not state**, because the engine was already a pure reducer over a seeded deal.
+  New socket `shimmer-server/table.py` + `/table` (public `wss://ather.games/shimmer-ws/table`, covered by
+  the existing `^/shimmer-ws/` ingress rule — no tunnel change needed).
+- **★ A move is NEVER applied locally.** You send it, the server stamps a sequence number, and every
+  client *including the sender* applies it on the echo. Costs one round trip on your own discard, which
+  nobody can perceive at a card table; buys the absence of prediction, rollback, and local-vs-remote
+  ordering. **Do not "optimise" this into an optimistic local apply** — that runs your discard twice on
+  your machine and once on everyone else's.
+- **★ Seating cannot reach the deal.** Names are labels applied at RENDER time (`applySeats`), so four
+  clients that each call their own chair "You" still hold identical cards. Guarded as a test with a ★ —
+  it is the invariant that silently breaks everything if it slips.
+- **The server owns only what cannot be decided twice:** seat, seed, move order, and the collection. It
+  does **not** know the rules of Magii and must not learn them — the reducer already no-ops an illegal
+  move, so a bad move relayed to four clients no-ops identically on all four. Convergence by
+  construction, not by two validators agreeing.
+- **`gen` (generation counter) is load-bearing twice:** Play Again is a compare-and-swap on it, so
+  simultaneous clicks yield ONE new deck; and every move carries its generation, so a discard in flight
+  when someone re-dealt is dropped rather than landed on the fresh table.
+- **The dealer (lowest occupied seat) is the only client that runs the NPC brains** — they read
+  `Math.random`, so two clients running them would pick two different discards for one chair and the
+  tables would fork. `for_seat` on the wire lets the dealer play an EMPTY chair only.
+- **★ The NPC loop is one move per step**, reacting to (whose turn, which phase). Playing a whole turn
+  straight through decided the discard against a hand the table had not dealt yet, AND the draw's echo
+  re-triggered the step and drew a tenth card. One move, then wait to see it land, is also self-healing.
+- **The deck belongs to the TABLE, not the player** — the same seed dealt from two collections is two
+  different decks, so a guest plays the host's cards even if they have not unlocked them.
+- `getNPCDifficulty` is clamped: seat 0 can be a regular now, and unclamped it asked for −1, which no
+  branch handles — the abandoned chair would have played as the **sharpest** opponent at the table.
+- Verified: engine oracle (seating / seat-map agreement / replay) + `test_table.py` (seating, relay order,
+  own echo, replay-on-join, generation CAS, stale drops, dealer succession, isolation, guest deck) +
+  three clients through the **public tunnel**.
+
+**Next:**
+1. **A real two-device playthrough with Alex.** The relay is proven headlessly end to end; what is
+   unproven is the React wiring under two live browsers. Deliberately not automated — the automation tab
+   shares localStorage and mp identity with Alex's live tab.
+2. **Ephemeral party chat** at the table, on the presence socket (relay only, never stored).
+3. A visible roster / "who is at this table" affordance beyond the `n/4 seated` pill.
+4. Mobile pass on the netplay affordances.
+
+**Parked:** trade/spectate; a persistent match history (would need storage + retention and makes
+  `/privacy` false — same gate as DMs).
+
+**Decisions (don't relitigate):**
+- **Four chairs, NPC fallback, no waiting room** (Alex, 07-25). An invite takes over a regular's seat;
+  nobody accepting, or someone dropping, hands it back. `Player.isHuman` already existed.
+- **One party across Shimmer AND Magii** (Alex, 07-25) — which is exactly why there is no per-game
+  invite UI: Sit Down just reads the party.
+- **Invites are live-only**, no inbox. **Chat ephemeral only.**
+- **Membership is possession of the party code** — friends-grade trust, documented in `lib/party.ts`.
+  Fine for sitting down with people you know; nothing here is authoritative enough to hang the
+  leaderboard on (that reads the signed-in session, not this socket).
+
+**Canon:** a **fourth tavern regular** is an `[OPEN]` gap in `CANON_GAPS.md` (flagged 07-29). Netplay made
+  seat 0 emptiable and only three regulars are named (Renna/Dorik/Sable). The build does NOT invent one —
+  an emptied seat 0 borrows the name freed by the lowest occupied seat (provably collision-free, and every
+  client computes the same map). Cost is cosmetic: a regular appears to change chairs after the host
+  leaves. With a ruled fourth name, `regularFor()` collapses to a flat per-seat map.
+
+**Files:** `magii/page.tsx`, `magii/game-board.tsx`, `magii/lib/{engine,table,npc,rng,data,audio,seed-history}.ts`,
+  `magii/lib/magii.test.ts`, `src/lib/party.ts`; server `shimmer-server/{table,main,protocol}.py` + `test_table.py`.
 
 ---
 
