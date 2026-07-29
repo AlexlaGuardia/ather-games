@@ -16,7 +16,12 @@
 
 import { makeRng, newSeed } from './rng'
 import { shuffle, buildDeck, TAVERN_STANDARD, WILDWOOD } from './data'
-import { initGame, drawFromDeck, discardCard, startPlaying, scoreHand, type GameState } from './engine'
+import {
+  initGame, drawFromDeck, discardCard, startPlaying, scoreHand, applySeats, soloSeats,
+  NPC_NAMES, type GameState, type SeatSpec,
+} from './engine'
+import { getNPCDifficulty } from './npc'
+import { replay, reduceMove, tableSeats, type StampedMove, type SeatInfo } from './table'
 
 let failures = 0
 function check(label: string, ok: boolean, detail = '') {
@@ -127,6 +132,144 @@ console.log('purity and replay')
   const stuck = discardCard(runA, runA.currentPlayer, 0) // hand is 8, not 9: not discardable yet
   check('an illegal discard is refused, unchanged', stuck === runA)
   check('drawing for a hand that has not discarded is still safe', drawFromDeck(runA, runA.currentPlayer).players[runA.currentPlayer].hand.length === 9)
+}
+
+// ── seating ───────────────────────────────────────────────────────────────────
+//
+// The netplay-bearing property here is the NEGATIVE one: seating must have no effect on the
+// deal. Four clients each label the chairs from their own point of view — everyone calls
+// their own seat "You" — so if a name could reach the shuffle, every player would be holding
+// a different hand while believing they shared a table.
+console.log('seating')
+{
+  const roster: SeatSpec[] = [
+    { name: 'Ana', isHuman: true },
+    { name: 'Bo', isHuman: true },
+    { name: 'Renna', isHuman: false },
+    { name: 'Dorik', isHuman: false },
+  ]
+  const seated = initGame(TAVERN_STANDARD, 'SEATS', roster)
+  check('the roster is seated in order', seated.players.map(p => p.name).join() === 'Ana,Bo,Renna,Dorik')
+  check('people and regulars are distinguished', seated.players.map(p => p.isHuman).join() === 'true,true,false,false')
+
+  const mine = initGame(TAVERN_STANDARD, 'SEATS', [{ name: 'You', isHuman: true }, ...roster.slice(1)])
+  check('★ what the chairs are called cannot change the deal',
+    tableFingerprint(seated) === tableFingerprint(mine))
+  check('and neither can who is a person',
+    tableFingerprint(initGame(TAVERN_STANDARD, 'SEATS', roster.map(s => ({ ...s, isHuman: !s.isHuman })))) === tableFingerprint(seated))
+  check('an unseated call still deals the solo table', initGame(TAVERN_STANDARD, 'SEATS').players[0].name === 'You')
+  check('the default table is you and the three regulars',
+    soloSeats().map(s => s.name).join() === ['You', ...NPC_NAMES].join())
+
+  // Re-labelling is how a drop or a join is handled mid-hand: the hand belongs to the SEAT,
+  // so not one card may move.
+  const played = discardCard(drawFromDeck(startPlaying(seated), 0), 0, 2)
+  const relabelled = applySeats(played, [
+    { name: 'You', isHuman: true }, { name: 'Renna', isHuman: false },
+    { name: 'Dorik', isHuman: false }, { name: 'Cyd', isHuman: true },
+  ])
+  check('re-seating renames the chairs', relabelled.players.map(p => p.name).join() === 'You,Renna,Dorik,Cyd')
+  check('★ re-seating does not move a single card', tableFingerprint(relabelled) === tableFingerprint(played))
+  check('re-seating keeps the discards', relabelled.players[0].discardPile.length === played.players[0].discardPile.length)
+  check('a dropped player becomes a regular', relabelled.players[1].isHuman === false)
+  check('re-seating does not mutate its input', played.players[1].name === 'Bo')
+  check('re-seating twice is the same as once',
+    JSON.stringify(applySeats(relabelled, soloSeats())) === JSON.stringify(applySeats(applySeats(played, soloSeats()), soloSeats())))
+
+  // Seat 0 can be a regular now (the first player to sit left), and difficulty is indexed off
+  // the seat — unclamped that asked for −1, which no branch handles, so the abandoned chair
+  // would have played as the SHARPEST opponent at the table.
+  check('every seat maps to a real difficulty',
+    [0, 1, 2, 3].every(i => [0, 1, 2].includes(getNPCDifficulty(i))),
+    String([0, 1, 2, 3].map(getNPCDifficulty)))
+  check('the regulars keep their solo difficulties', [1, 2, 3].map(getNPCDifficulty).join() === '0,1,2')
+}
+
+// ── the table's seat map ──────────────────────────────────────────────────────
+console.log('the table seat map')
+{
+  const r = (occ: boolean[], names: string[] = []): SeatInfo[] =>
+    occ.map((o, i) => ({ seat: i, name: names[i] ?? `P${i}`, occupied: o, trusted: true }))
+
+  const two = r([true, true, false, false], ['Ana', 'Bo'])
+  const asAna = tableSeats(two, 0)
+  const asBo = tableSeats(two, 1)
+  check('you are always "You" to yourself', asAna[0].name === 'You' && asBo[1].name === 'You')
+  check('and named to everyone else', asAna[1].name === 'Bo' && asBo[0].name === 'Ana')
+  // ★ Two people must not disagree about which chair "Renna" is, or they cannot talk about
+  // the game they are both looking at.
+  check('★ every client agrees which regular holds which chair',
+    asAna.slice(2).map(s => s.name).join() === asBo.slice(2).map(s => s.name).join(),
+    `${asAna.slice(2).map(s => s.name)} vs ${asBo.slice(2).map(s => s.name)}`)
+  check('empty chairs are played by regulars', asAna.slice(2).every(s => !s.isHuman))
+  check('the regulars keep the seats they have in solo play',
+    asAna[2].name === NPC_NAMES[1] && asAna[3].name === NPC_NAMES[2])
+
+  // Seat 0 empty happens when the host leaves; there is no fourth regular to name (that is a
+  // canon call, not a build one), so it borrows a freed name and must not collide.
+  const hostGone = tableSeats(r([false, true, false, false], ['', 'Bo']), 1)
+  check('an abandoned seat 0 still gets a regular', !hostGone[0].isHuman && hostGone[0].name.length > 0)
+  check('and no two chairs share a name', new Set(hostGone.map(s => s.name)).size === 4,
+    String(hostGone.map(s => s.name)))
+  const onlySeat3 = tableSeats(r([false, false, false, true], ['', '', '', 'Dez']), 3)
+  check('the same holds when only the last chair is taken', new Set(onlySeat3.map(s => s.name)).size === 4,
+    String(onlySeat3.map(s => s.name)))
+
+  const impostor = tableSeats(r([true, true, false, false], ['Ana', 'You']), 0)
+  check('a player calling themselves "You" is disambiguated', impostor[1].name !== 'You', impostor[1].name)
+}
+
+// ── replay: what a latecomer runs ─────────────────────────────────────────────
+//
+// A friend who joins mid-hand is handed (seed, collection, log) and rebuilds the present from
+// it. If this ever stops landing where everyone else already is, they sit at a table that
+// merely resembles the real one.
+console.log('replay from a move log')
+{
+  const seats = tableSeats(
+    [0, 1, 2, 3].map(i => ({ seat: i, name: ['Ana', 'Bo', '', ''][i], occupied: i < 2, trusted: true })),
+    0,
+  )
+  const log: StampedMove[] = [
+    { seq: 1, seat: 0, move: { kind: 'draw-deck' } },
+    { seq: 2, seat: 0, move: { kind: 'discard', cardIdx: 4 } },
+    { seq: 3, seat: 1, move: { kind: 'draw-deck' } },
+    { seq: 4, seat: 1, move: { kind: 'discard', cardIdx: 0 } },
+    { seq: 5, seat: 2, move: { kind: 'draw-discard', targetId: 1 } },
+    { seq: 6, seat: 2, move: { kind: 'discard', cardIdx: 8 } },
+  ]
+  const live = replay(TAVERN_STANDARD, 'NETPLAY', seats, log)
+  const latecomer = replay(TAVERN_STANDARD, 'NETPLAY', seats, log)
+  check('★ two machines replaying one log land on the same table',
+    tableFingerprint(live) === tableFingerprint(latecomer))
+  check('replay agrees on whose turn it is', live.currentPlayer === 3 && latecomer.currentPlayer === 3,
+    `${live.currentPlayer}`)
+  check('replay reaches the playing phase', live.phase === 'playing')
+  check('cards are conserved through a replay',
+    new Set([...live.deck, ...live.players.flatMap(p => [...p.hand, ...p.discardPile])].map(c => c.id)).size === 96)
+  check('a take from a discard actually took it', live.players[1].discardPile.length === 0)
+
+  // Applying moves one at a time as they arrive — what a client that was present the whole
+  // time does — must land exactly where a from-scratch replay lands. This is the assertion
+  // that says a latecomer and a veteran are looking at the same table.
+  let stepwise = replay(TAVERN_STANDARD, 'NETPLAY', seats, [])
+  for (const m of log) stepwise = reduceMove(stepwise, m)
+  check('★ move-by-move play and a from-scratch replay agree',
+    tableFingerprint(stepwise) === tableFingerprint(live))
+  check('and they agree on the turn too',
+    stepwise.currentPlayer === live.currentPlayer && stepwise.turn === live.turn)
+
+  // The wire will carry a move from a client this one does not understand yet.
+  const withJunk = replay(TAVERN_STANDARD, 'NETPLAY', seats, [
+    ...log,
+    { seq: 7, seat: 3, move: { kind: 'somersault' } as unknown as StampedMove['move'] },
+  ])
+  check('an unknown move is skipped, not fatal', tableFingerprint(withJunk) === tableFingerprint(live))
+
+  check('a different seed replays a different table',
+    tableFingerprint(replay(TAVERN_STANDARD, 'OTHERSEED', seats, log)) !== tableFingerprint(live))
+  check('a different collection replays a different table',
+    tableFingerprint(replay(WILDWOOD, 'NETPLAY', seats, log)) !== tableFingerprint(live))
 }
 
 // ── scoring sanity ────────────────────────────────────────────────────────────

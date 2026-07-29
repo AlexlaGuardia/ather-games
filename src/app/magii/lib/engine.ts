@@ -38,7 +38,29 @@ export interface GameState {
   seed: string
 }
 
-const NPC_NAMES = ['Renna', 'Dorik', 'Sable']
+export const NPC_NAMES = ['Renna', 'Dorik', 'Sable']
+
+/**
+ * Who is in each chair. `isHuman` already existed on Player, which is what makes the NPC
+ * fallback nearly free: a seat is not "a player slot that might be empty", it is always
+ * occupied — by a person if one is sitting there, by a tavern regular if not. There is no
+ * waiting room and no such thing as a table short of four.
+ */
+export interface SeatSpec {
+  name: string
+  isHuman: boolean
+}
+
+/**
+ * The default table: you, and the three regulars. Named seats rather than "Player 2" so a
+ * solo game reads as a tavern and not as a lobby with nobody in it.
+ */
+export function soloSeats(): SeatSpec[] {
+  return [
+    { name: 'You', isHuman: true },
+    ...NPC_NAMES.map(name => ({ name, isHuman: false })),
+  ]
+}
 
 /**
  * Deal a table. The same seed and collection produce byte-identical hands on any machine,
@@ -47,15 +69,24 @@ const NPC_NAMES = ['Renna', 'Dorik', 'Sable']
  * EVERY game is seeded, including a solo one — a table you cannot deal again is a bug you
  * cannot reproduce. Pass a seed to rebuild a specific table (a friend's, or one from a
  * report); omit it and a fresh one is minted.
+ *
+ * `seats` is the only thing about a networked table that differs from a solo one, and it is
+ * deliberately NOT part of the deal: names have no effect on the shuffle, so four clients
+ * who each label the chairs from their own point of view still hold identical cards.
  */
-export function initGame(collection: Collection = TAVERN_STANDARD, seed: string = newSeed()): GameState {
+export function initGame(
+  collection: Collection = TAVERN_STANDARD,
+  seed: string = newSeed(),
+  seats: SeatSpec[] = soloSeats(),
+): GameState {
   const deck = buildDeck(collection, makeRng(seed))
-  const players: Player[] = [
-    { name: 'You', hand: [], discardPile: [], isHuman: true, doubled: false },
-    ...NPC_NAMES.map(name => ({
-      name, hand: [] as Card[], discardPile: [] as Card[], isHuman: false, doubled: false,
-    })),
-  ]
+  const players: Player[] = seats.slice(0, 4).map(s => ({
+    name: s.name,
+    hand: [] as Card[],
+    discardPile: [] as Card[],
+    isHuman: s.isHuman,
+    doubled: false,
+  }))
   // Deal 8 cards to each player (32 of 96)
   let d = [...deck]
   for (const p of players) {
@@ -88,6 +119,29 @@ export function startPlaying(state: GameState): GameState {
   next.currentPlayer = 0
   next.turnPhase = 'draw'
   next.log = [...next.log, 'The game begins.']
+  return next
+}
+
+/**
+ * Re-label the chairs without touching a single card.
+ *
+ * This is the whole NPC-fallback mechanism. When someone joins or drops mid-hand the cards
+ * must not move — the hand at that seat is mid-game and belongs to the seat, not to the
+ * person — so the ONLY thing that changes is whose name is on the chair and whether a brain
+ * or a person is driving it. A drop hands the hand to a regular; an arrival takes it over.
+ *
+ * Kept out of the move log on purpose: seating is not a move. It comes from the server's
+ * roster, is applied the same way by everyone who receives it, and re-deriving it during a
+ * replay would mean the log had to carry a history of who was connected when.
+ */
+export function applySeats(state: GameState, seats: SeatSpec[]): GameState {
+  const next = structuredClone(state)
+  for (let i = 0; i < next.players.length; i++) {
+    const s = seats[i]
+    if (!s) continue
+    next.players[i].name = s.name
+    next.players[i].isHuman = s.isHuman
+  }
   return next
 }
 

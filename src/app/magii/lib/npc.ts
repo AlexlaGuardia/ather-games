@@ -146,6 +146,15 @@ export function decideDoubleDown(player: Player, difficulty: number): boolean {
   return strength >= threshold
 }
 
+/**
+ * 0=cautious, 1=balanced, 2=sharp — the three regulars, in seat order.
+ *
+ * Clamped because seat 0 can be an NPC now: at a networked table the chairs nobody is
+ * sitting in are played by the tavern regulars, and if the first player to sit leaves,
+ * seat 0 is one of them. Unclamped that seat asked for difficulty −1, which no branch in
+ * this file handles — every `difficulty === 0` shortcut would silently fall through to the
+ * sharpest behaviour, making the abandoned seat the strongest player at the table.
+ */
 export function getNPCDifficulty(playerId: number): number {
-  return playerId - 1  // 0=cautious, 1=balanced, 2=sharp
+  return Math.min(2, Math.max(0, playerId - 1))
 }

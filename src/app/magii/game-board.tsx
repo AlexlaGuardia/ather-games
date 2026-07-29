@@ -296,6 +296,13 @@ function OpponentSeat({
           ? 'bg-gold/15 text-gold border border-gold/30'
           : 'bg-black/20 text-text-dim border border-white/5'
         }`}>
+        {/* A live person, not a regular. Worth a mark of its own: the whole point of the
+            table is knowing which of these chairs holds a friend, and once a drop hands a
+            hand back to an NPC mid-game the name alone stops telling you. */}
+        {player.isHuman && (
+          <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-400/80 mr-1.5 align-middle"
+            title="playing with you" />
+        )}
         {player.name}
         {player.doubled && <span className="text-gold text-[9px] ml-1.5">2x</span>}
         {isActive && <span className="text-gold/60 text-[9px] ml-1.5 animate-pulse">...</span>}
@@ -508,8 +515,12 @@ function GameLog({ log }: { log: string[] }) {
 
 // --- Game Over Overlay ---
 
-export function GameOverOverlay({ state, onPlayAgain, marksDelta, walletBalance }: {
+export function GameOverOverlay({ state, onPlayAgain, marksDelta, walletBalance, seat = 0 }: {
   state: GameState; onPlayAgain: () => void; marksDelta?: number; walletBalance?: number
+  /** Which chair is the reader's. Everyone at a networked table is `isHuman`, so the seat
+   *  index is the only thing that can answer "did I win" — asking `isHuman` would show
+   *  Victory! to all four players at once. */
+  seat?: number
 }) {
   const winner = state.winner !== null ? state.players[state.winner] : null
   const playerSets = state.players.map(p => findBestSets(p.hand))
@@ -521,13 +532,13 @@ export function GameOverOverlay({ state, onPlayAgain, marksDelta, walletBalance 
     <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 px-4 magii-game-over">
       <div className="bg-[#13111d] rounded-xl p-5 md:p-8 max-w-lg w-full border border-[#2a2540] magii-modal-content">
         <p className="font-display text-3xl font-bold text-text text-center mb-1">
-          {winner?.isHuman ? 'Victory!' : `${winner?.name} wins!`}
+          {state.winner === seat ? 'Victory!' : `${winner?.name} wins!`}
         </p>
         <p className="text-text-faint text-xs text-center mb-6">
           {falseCaller
-            ? `${falseCaller.isHuman ? 'You' : falseCaller.name} called on an incomplete hand — −50.`
+            ? `${falseCallerIdx === seat ? 'You' : falseCaller.name} called on an incomplete hand — −50.`
             : caller
-            ? `${caller.isHuman ? 'You' : caller.name} completed three sets first.`
+            ? `${state.calledBy === seat ? 'You' : caller.name} completed three sets first.`
             : 'The deck ran out — most points wins.'}
         </p>
         <div className="space-y-2">
@@ -646,7 +657,7 @@ function VolumeControl() {
 
 export function GameBoard({
   state, onDrawDeck, onDrawDiscard, onDiscard, onCallMagii,
-  npcProcessing, npcAction, turnFlashKey,
+  npcProcessing, npcAction, turnFlashKey, seat = 0,
 }: {
   state: GameState
   onDrawDeck: () => void
@@ -656,14 +667,22 @@ export function GameBoard({
   npcProcessing?: boolean
   npcAction?: string
   turnFlashKey?: number
+  /** Which chair is yours. A networked table can seat you anywhere, and you always want to
+   *  be looking at your own hand — so the table is ROTATED around you rather than the layout
+   *  changing. Everything below is expressed relative to this. */
+  seat?: number
 }) {
-  const human = state.players[0]
-  const isPlayerTurn = state.currentPlayer === 0 && state.phase === 'playing'
+  const human = state.players[seat]
+  const isPlayerTurn = state.currentPlayer === seat && state.phase === 'playing'
   const isDrawPhase = isPlayerTurn && state.turnPhase === 'draw'
   const isDiscardPhase = isPlayerTurn && state.turnPhase === 'discard'
 
+  // The other three, in seating order starting to your left — so the person on your left is
+  // on your left for both of you, which is what makes "took from Bo's discard" legible.
+  const opponents = [1, 2, 3].map(k => (seat + k) % 4)
+
   // Which opponent discard piles can be taken from
-  const availableDiscards = isDrawPhase ? getAvailableDiscardPiles(state, 0) : []
+  const availableDiscards = isDrawPhase ? getAvailableDiscardPiles(state, seat) : []
 
   return (
     <div className="magii-table relative rounded-2xl overflow-hidden min-h-[calc(100dvh-5rem)] md:min-h-[720px] flex flex-col">
@@ -702,7 +721,7 @@ export function GameBoard({
 
         {/* Opponents across the table */}
         <div className="flex items-start justify-center gap-3 md:gap-12 w-full">
-          {[1, 2, 3].map(i => (
+          {opponents.map(i => (
             <OpponentSeat
               key={i}
               player={state.players[i]}
