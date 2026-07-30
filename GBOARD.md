@@ -850,7 +850,71 @@ the Arcade frame.
 > **Files:** `engine/day-cycle.ts` (rewritten — clock only, no colour) + `.test.ts` · `world/atmosphere.tsx`
 > (night palettes + per-frame blend) · `play3d/Shimmer3D.tsx` (`SkyLight` rig, `DayClock` chip).
 
+## 🍃 Shimmer play3d — THE SPAWN BOARD: resources re-deal (SHIPPED 2026-07-30, jin-cc) · *Last touched 2026-07-30*
+> Step 2 of the living-spawners arc — the **resource half**. The moglin half is next and is now canon-unblocked
+> (see the burrow ruling below). Alex: *"each area gets authored spawn LOCATIONS, each location has a chance to
+> spawn, the world resets and places a new set, resources fade out over their last ~3 minutes."*
+>
+> **Left off (2026-07-30, `bbdc6dc` + `60dfd1c`, committed + built + live :3200):**
+> - **The board is DERIVED, never stored** — a pure function of `(worldSeed, windowIndex, authored locations)`.
+>   Nothing is rolled at spawn time and nothing is persisted, which buys four things at once: the world
+>   re-deals with the tab closed, two people in a field see the same clearing with nothing synced, there is no
+>   save to migrate, and `?window=` can look at any board instantly. `Math.random()` at spawn time would have
+>   forked the world per client and killed the multiplayer layer before it was written.
+> - **Locations are the AUTHORED placements, not a new layer.** `world/node-placements.ts` is already Alex's
+>   hand-tuned set (reachable tiles, harvest-stand positions), so every authored placement simply becomes a
+>   *possibility*. The map editor keeps working unchanged and the board breathes over the top.
+> - **Cadence = 2 per day, i.e. every 32 real minutes, on midnight/noon** — the two boundaries `day-cycle`
+>   was built to land on exactly. Alex's phrasing was "every hour of live game time"; a game hour is 2.7 real
+>   minutes, which re-deals the world mid-harvest. **THE pacing dial** (`RESETS_PER_DAY`).
+> - **Keys are LOGICAL (zone-local), and the deal runs BEFORE the world remap.** Dealing after it would have
+>   re-rolled the whole continent every time a district moved a tile. Same reasoning as the moglin cooldowns.
+> - **Fade:** doomed nodes dim across their last 3 minutes (glow first, form only in the last third — a single
+>   linear opacity ramp read as a rendering fault, not as the world breathing). Survivors of a boundary do not
+>   move a pixel: `leaving`/`arriving` are read off the neighbouring deals rather than remembered, so there is
+>   no flicker at the turn. A mid-harvest link is re-pointed across the boundary, or cut with a toast.
+> - **The Home Plot and planting soil never re-deal.** Your own plot is what you tend (canon seeds it with a
+>   specific pond + crystal pair), and a soil plot vanishing under a growing crop would destroy player state.
+>
+> **★ TWO BUGS FOUND, AND EACH ONE NEEDED A DIFFERENT INSTRUMENT.**
+> - **The oracle caught the guarantee being one level too shallow — 193 times in 300 windows.** First cut
+>   guaranteed a skill was *present*: if a zone authored fishing and the roll dropped every pond, one pond came
+>   back. But Mycelial Path deals a level-4 shimmeroak and no level-1 goldwood, so forestry counted as present
+>   and the guarantee never fired, while a level-1 player stood in a visible grove they could not touch.
+>   **Being able to SEE the resource you are locked out of is worse than the zone being empty** — it reads as a
+>   bug. The floor is now the zone's **entry tier per skill**, asserted over 300 windows against real placements.
+> - **The BROWSER caught the pin moving the clock.** `?window=` set the window's start/end to that index's own
+>   epoch, decades in the past, so everything measuring position *inside* a window read off a boundary long
+>   gone: the HUD sat on RENEWING permanently and every leaving node computed a negative remainder and rendered
+>   at **alpha 0 — invisible, in the one mode built for looking at them.** Outside a browser there is no pin to
+>   take, so no amount of oracle would have found it. Split `windowAt()` out as the seam and asserted it.
+>
+> **Dev tools:** `?window=N` pins which board is dealt (clock stays live) · `?fadetest=1` runs every node
+> through the dissolve on a 12s loop, so the look is judgeable in seconds instead of at the right minute of a
+> 32-minute window. Same reasoning as `?hour=`.
+> **Verified:** oracle **54 asserts** green (`npx tsx src/app/shimmer/engine/spawn-board.test.ts`) · `tsc` clean ·
+> build clean · live on :3200 (HUD chips confirmed rendering in-browser).
+> **NOT verified:** the fade and a re-dealt wild board **have not been seen in-world** — the camera could not be
+> driven from the automation harness (three approaches, pointer-lock and drag-look both refused). This is
+> Alex's eye-pass regardless, but nobody has looked at it yet.
+>
+> **Next:** **Alex eye-pass** — `?fadetest=1` for the dissolve look, then a wild zone (Mycelial Path / Spirit
+> Meadow) across two `?window=` values to feel the re-deal. Then the **feel dials**: `SPAWN_CHANCE` per type
+> (does a route still read as a route at 0.65-0.85?), `RESETS_PER_DAY` (is 32 min right?), `FADE_OUT_MS`.
+> Then the **moglin half** — burrows are canon-ruled as of today, see below.
+> **Files:** `engine/spawn-board.ts` + `.test.ts` (new) · `play3d/world-adapter.ts` (`dealtNodesFor`) ·
+> `play3d/Shimmer3D.tsx` (board state, `NodeFade`, re-deal tick, channel re-point, HUD chips) ·
+> `world/resources.ts` (`leaving`/`arriving` runtime tags).
+
 ## ⏳ Shimmer play3d — LIVING SPAWNERS: hourly world reset (IDEA, PINNED 2026-07-30 — Alex, not yet designed)
+> **UPDATE 2026-07-30 — the resource half is BUILT (block above) and the questions below are settled.** The
+> clock question is answered by the day-cycle's design, not by a ruling: the reset keys on `resetIndex()`, so
+> it is the in-game clock, global, derived from wall time, and the board is `f(seed, hourIndex)` — which
+> answers determinism and offline advance in the same stroke. Reset-while-standing-there is covered by the
+> 3-minute fade; mid-channel is re-pointed or cut cleanly. **Moglin burrows are RULED** (2026-07-30, /magii +
+> Alex, `CANON_GAPS.md` → `game/shimmer-geography.md`): burrow-folk anatomy and the collar-incursion were
+> already canon, a burrow is a mouth and the hold is the hand behind it, a free WARREN may never emit anything
+> hostile, and rates/placement/counts are Jin's. **What remains here is the moglin half only.**
 > **Parked deliberately, in Alex's own words, so it survives until we pick it up.** Raised right after the party
 > panel; he asked to finish the bank first and come back to this. **Nothing here is built or ruled.**
 >
