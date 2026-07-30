@@ -850,6 +850,67 @@ the Arcade frame.
 > **Files:** `engine/day-cycle.ts` (rewritten — clock only, no colour) + `.test.ts` · `world/atmosphere.tsx`
 > (night palettes + per-frame blend) · `play3d/Shimmer3D.tsx` (`SkyLight` rig, `DayClock` chip).
 
+## ☁️ Shimmer play3d — THE SPACE BETWEEN DISTRICTS IS TERRAIN (SHIPPED 2026-07-30, jin-cc) · *Last touched 2026-07-30*
+> **Alex:** *"i edited the tunnel from spirit meadows to route 1 and it reverted back… the map toggle
+> has a lot of black empty space."* Both true, same root cause.
+>
+> **★ THE MEASUREMENT THAT SETTLED IT — AGAINST ME.** I argued the gaps were "the look, not waste" and
+> that zones were 73% painted so nothing needed changing. I was measuring zone INTERIORS; Alex was
+> looking at the map toggle. Composed world = 456x304 = 138,624 tiles: **VOID 100,498 (72.5%), of
+> which 94,607 outside every zone** · cloud WALL only 11,901 (8.6%) · real content 26,225 (18.9%).
+> The black was not the cloud maze (a 3-tile rind) — it was bounding-box remainder nobody designed
+> and nobody could edit. **Corridors are GENERATED** (an L-path re-carved from warp tile to landing
+> tile on every load), and the per-zone save slices each district's rect, so an edit between them had
+> nowhere to go. The old code detected exactly this and printed *"mortar/corridor edits are derived —
+> not saved"*: the honest face of the bug, not a fix.
+>
+> **Shipped (`675be61`, `216ec23`, `61959f5` — pushed, live :3200):**
+> - **Cloud SUBSTRATE** — every out-of-zone empty tile becomes cloud. The map reads as one cloudscape
+>   with routes cut through it, and authoring becomes **subtraction**: carving through solid is work
+>   you can finish; painting a maze into 94k tiles of nothing is not. A district's own authored sky
+>   is left alone — that is a deliberate shape.
+> - **World OVERLAY** (`world/world-overlay.ts` + `.json`) — sparse out-of-zone terrain, painted LAST
+>   so a hand-carved route beats the generated one. World coords are the exposure (everything else
+>   here is logically keyed and this cannot be, since it describes the space between the things
+>   logical keys are relative to), so it carries a **layout fingerprint and FAILS CLOSED**: composer
+>   paints nothing + logs, save route 409s, rather than mixing two coordinate systems. Saves **MERGE**
+>   — one tunnel must not wipe every path carved before it.
+> - **✅ PROVEN BY ALEX** — 1,003 overlay tiles written from his own editing session.
+>
+> **★ AND THEN I TANKED THE FRAME RATE WITH IT.** In play mode `voids` render NOTHING (the void layer
+> is `editing &&`), so the substrate took wall geometry **11,901 → 106,508 shadow-casting boxes**, a
+> straight 9x on what the frame loop draws. I flagged the risk when making the change and talked
+> myself out of it with *"instanced meshes + frustum culling"* — true and irrelevant: **culling is per
+> chunk-OBJECT**, so a saturated 64x64 chunk draws all 4,096 boxes into the main pass AND the shadow
+> map. Alex hit it as lag within minutes. **Fix:** walls render at a FIXED height (they ignore the
+> height map), so a wall boxed in on all 8 sides has no visible side face from anywhere a player can
+> stand — a rounding error before, **94% of all wall geometry** after. Buried interior now draws as a
+> flat top quad, out of the shadow pass: **6,765 boxes + 99,743 quads**, fewer shadow casters than
+> before the substrate existed. Editor also got lighter (the clickable void grid went 100,498 → 5,891).
+> **Then the fix itself crashed** — `WallTops` early-returned `null` on a chunk with no buried tiles
+> (most small zones), and hooks run regardless of what render returns, so the effect dereferenced a
+> null ref and took the canvas down. `Tiles` allocates `max(len,1)` and renders unconditionally for
+> exactly this reason. **Lesson: an early return is not free in a component whose effect writes to
+> its own ref.**
+>
+> **Verified:** 29 overlay asserts green (`npx tsx src/app/shimmer/world/world-overlay.test.ts`) incl.
+> a **shell-size guard aimed at THIN cloud** (a stringy maze is nearly all surface and would tank the
+> frame rate while passing every other check) · save handler tested directly (merge OK, 409 on moved
+> layout, 400 on bad key, disk intact after rejects) · browser-confirmed map-toggle cloudscape + a
+> clean load after the crash fix.
+> **★ NOT verified:** the perf fix in Alex's hands — he crashed before testing it and stopped there.
+> **Found (pre-existing):** loop mismatch `mycelial-path→spirit-meadow` off by **(80,22)** — which is
+> why the corridor he picked is a long generated dog-leg and felt like fighting the map.
+>
+> **Next:** re-test lag on the fixed build (running vs standing, editor open vs not — different costs)
+> · commit Alex's uncommitted `tilemap.ts` / `node-placements.ts` / `world-overlay.json` · investigate
+> whether world-mode save bakes neighbouring cloud bands into a zone's authored voids (the `-1`→`34`
+> edge changes in MYCELIAL_PATH) · resource nodes still cannot live outside a district (no slot key
+> without a zone).
+> **Files:** `world/world-overlay.ts` + `.test.ts` + `.json` (new) · `world/garden-world.ts`
+> (substrate + overlay paint + fingerprint) · `save-map/route.ts` (overlay branch, merge + 409) ·
+> `world-data/route.ts` (serves it) · `play3d/Shimmer3D.tsx` (overlay save, shell/buried split, WallTops).
+
 ## 🍃 Shimmer play3d — THE SPAWN BOARD: resources re-deal (SHIPPED 2026-07-30, jin-cc) · *Last touched 2026-07-30*
 > Step 2 of the living-spawners arc — the **resource half**. The moglin half is next and is now canon-unblocked
 > (see the burrow ruling below). Alex: *"each area gets authored spawn LOCATIONS, each location has a chance to
