@@ -15,6 +15,7 @@
 // existing shadow-casting sun untouched) and the mote field. Self-contained; no other edits.
 
 import { useMemo, useRef, useLayoutEffect } from 'react'
+import { dayProgress, silver } from '../engine/day-cycle'
 import { useThree, useFrame } from '@react-three/fiber'
 import * as THREE from 'three'
 
@@ -57,6 +58,66 @@ const ZONE_MOOD: Record<string, Mood> = {
 }
 const moodFor = (zoneId: string): Mood => ZONE_MOOD[zoneId] ?? GOLD
 
+// ── Day / night — RULED 2026-07-21 (design-briefs/shimmer-garden-atmosphere.md) ────────────────
+// The load-bearing rule, quoted because it is the one that is easy to break by instinct:
+//   "night is NOT grey. It is a hue shift, not a drop toward grey."
+// Two axes that must stay ORTHOGONAL — time-of-day rides gold ⇄ SILVER (both poles fully
+// mana-alive and saturated); tended-ness rides colour ⇄ GREY (alive vs drained). If night
+// desaturated, every evening would read as the greying and destroy the one signal the whole system
+// carries (grey = something is wrong → warm it back = you fixed it).
+//
+// So the night look is AUTHORED per mood, not computed. A generic "darken and desaturate" filter is
+// exactly the failure canon names; lerping between two hand-picked saturated palettes makes that
+// failure structurally impossible rather than a thing to remember not to do.
+//
+// Night = "the Moonwell hour": the garden's canon silver rises garden-wide, the gold banks to
+// embers, and the MOTES GLOW BRIGHTER against the dark — luminous mana reads more at night, "like
+// the world lighting its own lamps." Register is rest and quiet wonder, never menace.
+const GOLD_NIGHT: Mood = {
+  bg: '#243a63', fog: '#2c4370', fogDensity: 0.013,
+  // The hemisphere is the night's real workhorse — it fills the faces the raking moon misses, and
+  // without it every prop reads as a silhouette. Ground bounce is lifted well off black for the
+  // same reason: canon's night is a settled garden, not an unlit one.
+  hemiSky: '#b6d0ff', hemiGround: '#44527e', hemiIntensity: 0.78,
+  mote: '#dbeaff', moteCount: 200, moteOpacity: 1,
+}
+const MOONWELL_NIGHT: Mood = {
+  // The moon-well's own hour — the brightest, richest silver in the garden.
+  bg: '#2b4676', fog: '#365285', fogDensity: 0.012,
+  hemiSky: '#cfe4ff', hemiGround: '#4a5a86', hemiIntensity: 0.9,
+  mote: '#f2f8ff', moteCount: 230, moteOpacity: 1,
+}
+const GREYING_NIGHT: Mood = {
+  // "The greying is time-invariant. A greyed plot is grey at noon and grey at midnight — drain
+  // ignores the sun." It gets DARKER with the hour but never gains the silver: staying desaturated
+  // is precisely what keeps a night zone legible from a greyed one.
+  bg: '#3c3f45', fog: '#41444a', fogDensity: 0.02,
+  hemiSky: '#5c6068', hemiGround: '#3a3a3d', hemiIntensity: 0.42,
+  mote: '#9a968a', moteCount: 90, moteOpacity: 0.55,
+}
+const NIGHT_MOOD = new Map<Mood, Mood>([
+  [GOLD, GOLD_NIGHT], [MOONWELL, MOONWELL_NIGHT], [GREYING, GREYING_NIGHT],
+])
+
+const mixNum = (a: number, b: number, t: number) => a + (b - a) * t
+
+/** Preallocated day/night colour pairs for one zone. Built once; lerped every frame with no
+ *  allocation, because this runs inside useFrame and a per-frame `new THREE.Color` is garbage. */
+function makeBlender(day: Mood) {
+  const night = NIGHT_MOOD.get(day) ?? GOLD_NIGHT
+  const pair = (a: string, b: string) => ({ d: new THREE.Color(a), n: new THREE.Color(b), out: new THREE.Color() })
+  return {
+    day, night,
+    bg: pair(day.bg, night.bg),
+    fog: pair(day.fog, night.fog),
+    hemiSky: pair(day.hemiSky, night.hemiSky),
+    hemiGround: pair(day.hemiGround, night.hemiGround),
+    mote: pair(day.mote, night.mote),
+  }
+}
+type Blender = ReturnType<typeof makeBlender>
+const lerpInto = (p: { d: THREE.Color; n: THREE.Color; out: THREE.Color }, t: number) => p.out.copy(p.d).lerp(p.n, t)
+
 // Mote field extent — a box that rides with the camera so seeds are always drifting nearby.
 const MOTE_HALF = 34   // half-width/depth of the field around the player
 const MOTE_HEIGHT = 26 // vertical span the seeds fall through before wrapping
@@ -83,9 +144,10 @@ function makeMoteSprite(): THREE.Texture | null {
   return tex
 }
 
-function Motes({ mood }: { mood: Mood }) {
+function Motes({ mood, blender }: { mood: Mood; blender: Blender }) {
   const { camera } = useThree()
   const ptsRef = useRef<THREE.Points>(null)
+  const matRef = useRef<THREE.PointsMaterial>(null)
   const sprite = useMemo(makeMoteSprite, [])
 
   // Base positions (local to the field's origin) + a per-mote sway phase.
@@ -111,6 +173,15 @@ function Motes({ mood }: { mood: Mood }) {
     const arr = attr.array as Float32Array
     const t = state.clock.elapsedTime
     const d = Math.min(dt, 0.05) // clamp so a tab-out doesn't teleport the field
+
+    // Canon: "the motes glow BRIGHTER against the dark" — luminous mana reads more at night, like
+    // the world lighting its own lamps. So the seed-wind is the one thing that gains as light goes.
+    const mat = matRef.current
+    if (mat) {
+      const sv = silver(dayProgress())
+      mat.color.copy(lerpInto(blender.mote, sv))
+      mat.opacity = mixNum(blender.day.moteOpacity, blender.night.moteOpacity, sv)
+    }
     for (let i = 0; i < phases.length; i++) {
       let y = arr[i * 3 + 1] - MOTE_FALL * d
       if (y < -MOTE_HEIGHT / 2) y += MOTE_HEIGHT // wrap back up to the canopy
@@ -127,6 +198,7 @@ function Motes({ mood }: { mood: Mood }) {
         <bufferAttribute attach="attributes-position" args={[positions, 3]} />
       </bufferGeometry>
       <pointsMaterial
+        ref={matRef}
         map={sprite ?? undefined}
         color={mood.mote}
         size={MOTE_SIZE}
@@ -143,24 +215,52 @@ function Motes({ mood }: { mood: Mood }) {
 export function GardenAtmosphere({ zoneId }: { zoneId: string }) {
   const { scene } = useThree()
   const mood = useMemo(() => moodFor(zoneId), [zoneId])
+  const blender = useMemo(() => makeBlender(mood), [mood])
+  const hemiRef = useRef<THREE.HemisphereLight>(null)
+  const fogRef = useRef<THREE.FogExp2 | null>(null)
 
   // Own background + fog imperatively; restore whatever was there on unmount.
   useLayoutEffect(() => {
     const prevBg = scene.background
     const prevFog = scene.fog
-    scene.background = new THREE.Color(mood.bg)
-    scene.fog = new THREE.FogExp2(mood.fog, mood.fogDensity)
+    const bg = new THREE.Color(mood.bg)
+    const fog = new THREE.FogExp2(mood.fog, mood.fogDensity)
+    scene.background = bg
+    scene.fog = fog
+    fogRef.current = fog
     return () => {
       scene.background = prevBg
       scene.fog = prevFog
+      fogRef.current = null
     }
   }, [scene, mood])
+
+  // The hour is read straight off the global clock rather than passed down — `dayProgress` is a
+  // pure function of wall time, so nothing has to be plumbed, synced or re-rendered to keep the
+  // sky honest. Mutating the live objects (no setState) keeps this off React's critical path
+  // entirely; at a 64-minute day the sky moves slowly enough that nobody can see the seams.
+  useFrame(() => {
+    const sv = silver(dayProgress())
+    const bg = scene.background
+    if (bg instanceof THREE.Color) bg.copy(lerpInto(blender.bg, sv))
+    const fog = fogRef.current
+    if (fog) {
+      fog.color.copy(lerpInto(blender.fog, sv))
+      fog.density = mixNum(blender.day.fogDensity, blender.night.fogDensity, sv)
+    }
+    const hemi = hemiRef.current
+    if (hemi) {
+      hemi.color.copy(lerpInto(blender.hemiSky, sv))
+      hemi.groundColor.copy(lerpInto(blender.hemiGround, sv))
+      hemi.intensity = mixNum(blender.day.hemiIntensity, blender.night.hemiIntensity, sv)
+    }
+  })
 
   return (
     <>
       {/* warm mana-light fill from the sky; the existing directional sun stays the key + shadow caster */}
-      <hemisphereLight args={[mood.hemiSky, mood.hemiGround, mood.hemiIntensity]} />
-      <Motes mood={mood} />
+      <hemisphereLight ref={hemiRef} args={[mood.hemiSky, mood.hemiGround, mood.hemiIntensity]} />
+      <Motes mood={mood} blender={blender} />
     </>
   )
 }

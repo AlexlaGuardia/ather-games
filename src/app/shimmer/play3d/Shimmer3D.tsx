@@ -14,6 +14,7 @@ import { SOLID } from '../world/tiles'
 import { ZONES, getZone, checkWarp, type Zone, type Warp } from '../world/zones'
 import { getHeightGrid } from '../world/heightmaps'
 import { GardenAtmosphere } from '../world/atmosphere'
+import { dayProgress, sunElevation, sunAzimuth, daylight, getPhase, getDisplayTime, CYCLE_MS, isTimePinned } from '../engine/day-cycle'
 import { FloraTree, FloraDressing } from '../world/flora'
 import { StationProp, GhostProp } from '../world/prop-models'
 import { RemotePlayers, useRoster } from './RemotePlayers'
@@ -1907,6 +1908,109 @@ function ExitMarkers({ warps, heights }: { warps: Warp[]; heights: number[][] })
 
 // Owner-only test-hub gate markers — glowing labeled pillars at the Crucible + Rune Hold gate tiles
 // in Greg's home. Rendered only when isOwner (players never see them); tiles match the ownerOnly warps.
+
+
+// ── The hour, on the HUD ────────────────────────────────────────────────────
+// Self-ticking on its own interval so the clock moving never re-renders the walker. 4s is plenty:
+// at a 64-minute day one game-minute is 2.7 real seconds, so the readout advances every tick.
+const PHASE_GLYPH: Record<string, { g: string; c: string }> = {
+  dawn:  { g: '◐', c: '#ffc48a' },
+  day:   { g: '☀', c: '#ffe08a' },
+  dusk:  { g: '◑', c: '#e0a0d0' },
+  night: { g: '☾', c: '#a9c8ff' },
+}
+
+function DayClock() {
+  const [, bump] = useState(0)
+  useEffect(() => { const id = setInterval(() => bump(n => n + 1), 4000); return () => clearInterval(id) }, [])
+  const p = dayProgress()
+  const phase = getPhase(p)
+  const look = PHASE_GLYPH[phase]
+  return (
+    <div title={`${phase} — a full day is ${Math.round(CYCLE_MS / 60000)} real minutes`} style={{
+      display: 'flex', alignItems: 'center', gap: 6, padding: '5px 11px', borderRadius: 999,
+      background: 'rgba(20,20,14,0.82)', border: `1px solid ${look.c}40`,
+    }}>
+      <span style={{ font: '13px serif', lineHeight: 1, color: look.c }}>{look.g}</span>
+      <span style={{ font: '800 12px ui-monospace, monospace', color: '#eafff6', fontVariantNumeric: 'tabular-nums' }}>{getDisplayTime(p)}</span>
+      <span style={{ font: '700 8.5px ui-monospace, monospace', color: look.c, letterSpacing: '0.12em' }}>{phase.toUpperCase()}</span>
+      {isTimePinned && <span title="clock pinned by ?hour= — drop the param for live time" style={{ font: '700 8.5px ui-monospace, monospace', color: '#e0a0d0' }}>PIN</span>}
+    </div>
+  )
+}
+
+// ── The sun, and the moon it becomes ────────────────────────────────────────
+// One directional light does both. Two lights would mean two shadow maps for a garden that never
+// has two shadow-casters up at once, and the handover at the horizon is exactly where a crossfade
+// between two rigs would show its seam.
+//
+// Everything here reads the global clock directly (`dayProgress` is pure over wall time) and
+// mutates the light in place — no state, no re-render, no prop plumbing. At a 64-minute day the sun
+// moves about a tenth of a degree per second, so per-frame mutation is both cheap and invisible.
+//
+// Canon (design-briefs/shimmer-garden-atmosphere.md, RULED 2026-07-21): day is honey-gold, night is
+// the Moonwell hour in SATURATED silver — never a desaturation. The colours below are that ruling;
+// the intensities are build tuning.
+const SUN_LOW = new THREE.Color('#ffb774')     // horizon gold — dawn and dusk, the seams
+const SUN_HIGH = new THREE.Color('#fff3d8')    // noon
+const MOON = new THREE.Color('#a9c8ff')        // the Moonwell hour, cool and still luminous
+const AMBIENT_DAY = new THREE.Color('#fff1d5')
+const AMBIENT_NIGHT = new THREE.Color('#8fadd8')
+
+function SkyLight({ shadowMap }: { shadowMap: number | null }) {
+  const sunRef = useRef<THREE.DirectionalLight>(null)
+  const ambRef = useRef<THREE.AmbientLight>(null)
+  const tint = useRef(new THREE.Color())
+
+  useFrame(() => {
+    const p = dayProgress()
+    const elev = sunElevation(p)
+    const azi = sunAzimuth(p)
+    const dl = daylight(p)
+
+    const sun = sunRef.current
+    if (sun) {
+      // Below the horizon the rig flips to the moon — mirrored, so moonlight rakes from the
+      // opposite side and night reads as a different time of day rather than a dimmer noon.
+      const night = elev < 0
+      const e = night ? -elev : elev
+      const a = night ? -azi : azi
+      sun.position.set(a * 30, Math.max(0.18, e) * 34 + 4, (night ? -1 : 1) * 14)
+
+      // Warm at the horizon, white overhead — the low sun is what makes dawn and dusk read.
+      tint.current.copy(SUN_LOW).lerp(SUN_HIGH, Math.max(0, Math.min(1, e)))
+      sun.color.copy(night ? MOON : tint.current)
+      // Moonlight is a real light, not a token one: canon's night is luminous and cozy-safe, and a
+      // garden you cannot see is not restful, it is just dark. First pass at 0.34 rendered the
+      // benches and chests as near-black silhouettes — readable as "night", useless as a place.
+      sun.intensity = night ? 0.62 : 0.30 + 1.05 * dl
+    }
+
+    const amb = ambRef.current
+    if (amb) {
+      amb.color.copy(AMBIENT_NIGHT).lerp(AMBIENT_DAY, dl)
+      amb.intensity = 0.50 + 0.20 * dl   // night floor is what keeps unlit faces legible
+    }
+  })
+
+  return (
+    <>
+      <ambientLight ref={ambRef} intensity={0.65} />
+      {/* Shadow map size is player-set (gfx.ts). Keyed on the size so a change reallocates the map
+          instead of leaving three.js holding the old one — the prop alone would not resize it. */}
+      <directionalLight
+        ref={sunRef}
+        key={`sun-${shadowMap ?? 'off'}`}
+        position={[18, 26, 12]} intensity={1.25} castShadow={shadowMap !== null}
+        shadow-mapSize-width={shadowMap ?? 1024} shadow-mapSize-height={shadowMap ?? 1024}
+        shadow-camera-left={-40} shadow-camera-right={40}
+        shadow-camera-top={40} shadow-camera-bottom={-40}
+        shadow-camera-near={0.5} shadow-camera-far={160}
+      />
+    </>
+  )
+}
+
 function HubGateMarkers({ heights }: { heights: number[][] }) {
   const gates = [
     { c: 10, r: 7, color: '#ff7a4a', label: 'CRUCIBLE' },
@@ -1991,17 +2095,7 @@ const Scene = memo(function Scene(props: {
   return (
     <>
       <GardenAtmosphere zoneId={props.atmosZone} />
-      <ambientLight intensity={0.65} />
-      {/* Shadow map size is player-set (gfx.ts). Keyed on the size so a change reallocates the map
-          instead of leaving three.js holding the old one — the prop alone would not resize it. */}
-      <directionalLight
-        key={`sun-${props.shadowMap ?? 'off'}`}
-        position={[18, 26, 12]} intensity={1.25} castShadow={props.shadowMap !== null}
-        shadow-mapSize-width={props.shadowMap ?? 1024} shadow-mapSize-height={props.shadowMap ?? 1024}
-        shadow-camera-left={-40} shadow-camera-right={40}
-        shadow-camera-top={40} shadow-camera-bottom={-40}
-        shadow-camera-near={0.5} shadow-camera-far={160}
-      />
+      <SkyLight shadowMap={props.shadowMap} />
       <ZoneGeometry key={`${props.zone.id}-${props.dims}`} gridRef={props.gridRef} heights={props.heights} version={props.version} paint={props.paint} editing={props.editing} />
       <NPCMarkers npcs={ALL_NPCS.filter((n) => n.zone === props.zone.id && npcInWorld(n, props.defeated, props.flagsRef.current))} heights={props.heights} />
       {props.isOwner && props.zone.id === 'moonwell-glade-gregory-s-home' && <HubGateMarkers heights={props.heights} />}
@@ -4535,6 +4629,7 @@ export default function Shimmer3D() {
       {/* ── TOP-RIGHT HUD: mana pie gauge · ☰ menu (edit/new game) · skills panel ── */}
       {!battle && !approach && !rewards && !editMode && !dialogue && (
         <div data-ct={companionTick} style={{ position: 'fixed', top: 12, right: 12, zIndex: 34, display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 9 }}>
+          <DayClock />
           {/* marks wallet — moved here from the (now-removed) top-left box */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 11px', borderRadius: 999, background: 'rgba(20,20,14,0.82)', border: '1px solid #d4a84340' }}>
             <span style={{ font: '800 14px ui-monospace, monospace', color: '#ffe08a', lineHeight: 1 }}>✦ {wallet.marks}</span>

@@ -1,131 +1,150 @@
-// Day/Night cycle engine
-// 30-minute full day — Dawn(3m) Day(20m) Dusk(3m) Night(4m) → wraps
-// Forestry respawns at dawn, Prospecting at dusk, Rinning at midnight
+// Day/Night cycle — the CLOCK. What the clock LOOKS like lives in world/atmosphere.tsx.
+//
+// ── Why this is derived from the wall clock, not ticked ──
+// The old version carried `elapsed` in state, advanced it every tick and saved it. That means the
+// world only moves while you are watching it, every client runs its own private time, and the value
+// has to survive a save round-trip. Deriving from `Date.now()` instead gives four things for free:
+//   • the world advances while the tab is closed — you come back to a different hour, as you should
+//   • two people in a party are in the SAME hour, without syncing anything
+//   • nothing to persist, nothing to drift, nothing to migrate
+//   • `resetIndex()` falls straight out, which is what the spawner layer will key its world-reset on
+// The cost is that time is global rather than per-save. For a shared garden that is the right trade:
+// night should be night for everybody.
+//
+// ── The shape of the day ──
+// 64 real minutes, and the number is not arbitrary: 2^6 means every subdivision a schedule might
+// want (32/16/8/4 min) is a whole number of minutes. Progress 0 is MIDNIGHT, so midnight and noon
+// land exactly on 0.0 and 0.5 — the two points the world-reset is planned to fire on.
+//
+// Canon (design-briefs/shimmer-garden-atmosphere.md, "Day / night arc", RULED 2026-07-21) fixes what
+// day and night MEAN and how they read; it states explicitly that the MECHANISM — real-time vs slow
+// vs toggle vs fixed — is Jin's build call. This file is that mechanism. It holds no colour.
 
 export type DayPhase = 'dawn' | 'day' | 'dusk' | 'night'
 
-// Full cycle = 30 real minutes (tuned for casual browser sessions)
-const CYCLE_MS = 30 * 60 * 1000
+/** One full day, in real milliseconds. */
+export const CYCLE_MS = 64 * 60 * 1000
 
-// Phase boundaries as fraction of cycle (0-1)
-const DAWN_START  = 0          // 0:00
-const DAY_START   = 3 / 30     // 3:00  (10%)
-const DUSK_START  = 23 / 30    // 23:00 (76.7%)
-const NIGHT_START = 26 / 30    // 26:00 (86.7%)
-const MIDNIGHT    = 28 / 30    // 28:00 (93.3%)
+/** Game hours, as a fraction of the cycle. Progress 0 = 00:00. */
+const H = (hour: number) => hour / 24
 
-// Respawn trigger thresholds (fraction of cycle)
+// ★ These are for the map editor ONLY — the PHASE NAMES are derived from the light curve itself
+// (see getPhase). The first cut declared them as independent constants and they immediately drifted:
+// the HUD said DUSK at 19:00 while `daylight()` had already reached zero at 18:51, so the label and
+// the sky disagreed by an hour. Two constants describing one thing will always come apart. The one
+// that survives is the one the renderer actually uses.
+const DAWN_START  = H(5)
+const DUSK_START  = H(18)
+
+/** Kept for the map editor, which rewrites this block textually (save-map/route.ts). */
 export const RESPAWN_TRIGGERS = {
   forestry:    DAWN_START,
   prospecting: DUSK_START,
-  rinning:     MIDNIGHT,
+  rinning:     0,
 } as const
 
-export interface DayCycleState {
-  elapsed: number        // ms into current cycle (0 to CYCLE_MS)
-  prevProgress: number   // previous tick's progress (for crossing detection)
-}
+// ── `?hour=` — the art-pass tool ────────────────────────────────────────────
+// Deriving the clock from wall time has one real cost: you cannot LOOK at dusk without waiting for
+// dusk, which makes an eyeball pass on the gold⇄silver crossfade a 64-minute round trip. `?hour=19`
+// pins the garden at that hour so a whole day can be judged in a minute. Read once at module load,
+// never written — so it cannot leak into normal play, and every other consumer of the clock
+// (spawner resets included) inherits the pin for free rather than needing its own override.
+const pinnedHour: number | null = (() => {
+  if (typeof window === 'undefined') return null
+  const raw = new URLSearchParams(window.location.search).get('hour')
+  if (raw === null) return null
+  const h = Number(raw)
+  return Number.isFinite(h) ? ((h % 24) + 24) % 24 : null
+})()
 
-/** Create a fresh cycle starting at dawn */
-export function createDayCycle(): DayCycleState {
-  return { elapsed: 0, prevProgress: 0 }
-}
+/** True when the clock is pinned — the HUD says so, so a pinned tab is never mistaken for a bug. */
+export const isTimePinned = pinnedHour !== null
 
-/** Create cycle from save data */
-export function dayCycleFromSave(elapsed: number): DayCycleState {
-  const e = elapsed % CYCLE_MS
-  return { elapsed: e, prevProgress: e / CYCLE_MS }
-}
-
-/** Get cycle progress as 0-1 float */
-export function getCycleProgress(cycle: DayCycleState): number {
-  return (cycle.elapsed % CYCLE_MS) / CYCLE_MS
-}
-
-/** Get current phase */
-export function getPhase(cycle: DayCycleState): DayPhase {
-  const p = getCycleProgress(cycle)
-  if (p < DAY_START) return 'dawn'
-  if (p < DUSK_START) return 'day'
-  if (p < NIGHT_START) return 'dusk'
-  return 'night'
-}
-
-/** Get progress within current phase (0-1) for smooth transitions */
-export function getPhaseProgress(cycle: DayCycleState): number {
-  const p = getCycleProgress(cycle)
-  if (p < DAY_START) return p / DAY_START
-  if (p < DUSK_START) return (p - DAY_START) / (DUSK_START - DAY_START)
-  if (p < NIGHT_START) return (p - DUSK_START) / (NIGHT_START - DUSK_START)
-  return (p - NIGHT_START) / (1 - NIGHT_START)
-}
-
-/** Get display time as HH:MM (24h cycle mapped to 45 min) */
-export function getDisplayTime(cycle: DayCycleState): string {
-  const p = getCycleProgress(cycle)
-  // Map dawn=6:00, day=7:00, dusk=19:00, night=20:00, midnight=0:00
-  const hour24 = ((p * 24) + 6) % 24
-  const h = Math.floor(hour24)
-  const m = Math.floor((hour24 - h) * 60)
-  return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`
+/** Where we are in the day, 0..1, with 0 = midnight. */
+export function dayProgress(nowMs: number = Date.now()): number {
+  if (pinnedHour !== null) return pinnedHour / 24
+  const m = nowMs % CYCLE_MS
+  return (m < 0 ? m + CYCLE_MS : m) / CYCLE_MS
 }
 
 /**
- * Tick the cycle forward. Returns skill IDs that should respawn this tick
- * (when a respawn threshold was crossed).
- * Call once per game tick (15 TPS).
+ * Which world-reset window we are in. The planned spawner layer deals its board from
+ * (worldSeed, resetIndex) so the layout is a pure function of the two — which is what makes it
+ * survive a closed tab and stay identical for everyone standing in the same field.
+ * `perDay` = how many resets a day holds (2 → midnight and noon).
  */
-export function tickDayCycle(cycle: DayCycleState, dtMs: number): string[] {
-  const prev = getCycleProgress(cycle)
-  cycle.elapsed = (cycle.elapsed + dtMs) % CYCLE_MS
-  const curr = getCycleProgress(cycle)
-  cycle.prevProgress = curr
+export function resetIndex(nowMs: number = Date.now(), perDay = 2): number {
+  return Math.floor(nowMs / (CYCLE_MS / perDay))
+}
 
-  const triggered: string[] = []
+/**
+ * The phase is READ OFF the light curve rather than declared alongside it, so the HUD can never
+ * claim dusk while the sky has already finished going dark. Rising vs falling is just which half of
+ * the day we are in — the sun climbs from midnight to noon and falls from noon to midnight.
+ */
+export function getPhase(progress: number): DayPhase {
+  const d = daylight(progress)
+  if (d <= 0.02) return 'night'
+  if (d >= 0.98) return 'day'
+  return progress < 0.5 ? 'dawn' : 'dusk'
+}
 
-  // Check each respawn trigger — did we cross it this tick?
-  for (const [skillId, threshold] of Object.entries(RESPAWN_TRIGGERS)) {
-    if (crossedThreshold(prev, curr, threshold)) {
-      triggered.push(skillId)
+/** HH:MM on a 24h clock. Progress maps straight to the hour — no offset, so the readout and the
+ *  sun agree by construction rather than by two constants being kept in step by hand. */
+export function getDisplayTime(progress: number): string {
+  const hour24 = progress * 24
+  const h = Math.floor(hour24)
+  const m = Math.floor((hour24 - h) * 60)
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`
+}
+
+/**
+ * Sun elevation, -1 (deep night) .. +1 (noon). Drives both the light rig and the gold⇄silver mix,
+ * so the crossfade and the sun's height can never disagree.
+ * Peaks at noon (progress 0.5) and bottoms at midnight (0).
+ */
+export function sunElevation(progress: number): number {
+  return -Math.cos(progress * Math.PI * 2)
+}
+
+/** Compass position of the sun on the unit circle: east at 06:00, west at 18:00. */
+export function sunAzimuth(progress: number): number {
+  return Math.sin(progress * Math.PI * 2)
+}
+
+/**
+ * How much of the daylight look is in effect, 0 (full Moonwell hour) .. 1 (full honey-gold).
+ * Canon calls dawn and dusk "the seams", so the band is deliberately soft and centred slightly
+ * BELOW the horizon — the crossfade should read as a long handover, not a switch at sunrise.
+ */
+// The band is wide on purpose. A tight one put the whole gold→silver handover inside about an hour
+// of game time (under three real minutes), which is not a seam, it is a light switch. At these
+// numbers twilight runs roughly 04:45-07:25 and 16:35-19:15 — long enough to stand still and watch.
+const TWILIGHT_LOW = 0.32   // daylight reaches 0 at this much sun BELOW the horizon
+const TWILIGHT_HIGH = 0.36  // ...and 1 at this much above it
+
+export function daylight(progress: number): number {
+  const e = sunElevation(progress)
+  const t = (e + TWILIGHT_LOW) / (TWILIGHT_LOW + TWILIGHT_HIGH)
+  const c = t < 0 ? 0 : t > 1 ? 1 : t
+  return c * c * (3 - 2 * c)      // smoothstep
+}
+
+/** The inverse: how far the garden has risen into its silver. Canon's night axis. */
+export function silver(progress: number): number {
+  return 1 - daylight(progress)
+}
+
+/** Real milliseconds until `phase` next begins. Scanned off the same curve everything else uses,
+ *  rather than a second table of boundaries that could drift from it. */
+export function msUntilPhase(phase: DayPhase, nowMs: number = Date.now()): number {
+  const start = dayProgress(nowMs)
+  const STEPS = 24 * 12          // 5-game-minute resolution; ample for scheduling
+  for (let i = 1; i <= STEPS; i++) {
+    const p = (start + i / STEPS) % 1
+    if (getPhase(p) === phase && getPhase((start + (i - 1) / STEPS) % 1) !== phase) {
+      return (i / STEPS) * CYCLE_MS
     }
   }
-
-  return triggered
-}
-
-/** Check if progress crossed a threshold (handles cycle wrap) */
-function crossedThreshold(prev: number, curr: number, threshold: number): boolean {
-  if (curr >= prev) {
-    // Normal forward: prev < threshold <= curr
-    return prev < threshold && curr >= threshold
-  } else {
-    // Wrapped around: check both sides of the wrap
-    return prev < threshold || curr >= threshold
-  }
-}
-
-// ============================================
-// Ambient lighting (canvas overlay colors)
-// ============================================
-
-/** Get ambient overlay color + opacity for the current cycle position */
-export function getAmbientOverlay(cycle: DayCycleState): { color: string; alpha: number } {
-  const phase = getPhase(cycle)
-  const pp = getPhaseProgress(cycle)
-
-  switch (phase) {
-    case 'dawn':
-      // Warm orange fading out as sun rises
-      return { color: '#ff9940', alpha: 0.18 * (1 - pp) }
-    case 'day':
-      // No tint
-      return { color: '#000000', alpha: 0 }
-    case 'dusk':
-      // Purple/orange creeping in
-      return { color: '#6030a0', alpha: 0.12 * pp }
-    case 'night':
-      // Deep blue, strongest at midnight (pp=0.5), slight ease
-      const nightIntensity = pp < 0.5 ? pp * 2 : 2 - pp * 2
-      return { color: '#101838', alpha: 0.25 + 0.1 * nightIntensity }
-  }
+  return CYCLE_MS
 }
