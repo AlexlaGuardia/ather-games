@@ -22,6 +22,7 @@
 
 import type { Species, Element, Spirit } from '../spirits/spirit'
 import { derivePartyStats } from './party-stats'
+import { hpFracOf } from './spirit-health'
 import {
   kitForSpirit, chooseMove, hitChance, moveDamage, applyStatus, stageMult, SECONDARY_STAT_CHANCE,
   freshStatus, freshStages, toBattleElement,
@@ -87,6 +88,12 @@ export interface Keeper {
   breezeBoostT: number      // cool breeze: extra regen active (seconds)
   aid: AidSlot[]
   bagCdLeft: number         // potion lockout (80s) so you can't spam-heal through a fight
+  // BAG spends REAL potions out of the player's satchel. It used to be a free 40% heal on an 80s
+  // lockout — and since a fight resolves in ~20-35s, that was one free top-up per battle, which
+  // would have quietly cancelled out persistent wounds the moment they shipped. The engine stays
+  // pure: it takes a count in and reports a count out, and the caller does the inventory maths.
+  bagCharges: number        // mend potions the Keeper is carrying (Infinity for the feel harness)
+  bagUsed: number           // how many BAG actually spent — the caller removes this many on end
 }
 
 export type ArenaEvent =
@@ -185,6 +192,10 @@ function fighterFromSpirit(spirit: Spirit, id: string, side: Side, x: number, y:
   const s = derivePartyStats(spirit)
   const speed = 1.6 + s.agi / 40           // agi → footspeed
   const maxHp = Math.round(s.maxHp * HP_MULT)
+  // Wounds carry in from the overworld. hpFrac is scale-free, so HP_MULT applies cleanly on top.
+  // Floored at 1: the caller is supposed to gate downed spirits out of the party, but if that
+  // ever leaks, a fighter born at 0 HP is an instant unexplained loss — a sliver is debuggable.
+  const hp = Math.max(1, Math.round(maxHp * hpFracOf(spirit)))
   // Attack = the spirit's real damage axis. Physical units hit on pwr, casters channel on foc
   // (owl/firefly/bat). Reading pwr alone gimped every caster — use whichever is their strength.
   const atk = Math.max(s.pwr, s.foc)
@@ -192,7 +203,7 @@ function fighterFromSpirit(spirit: Spirit, id: string, side: Side, x: number, y:
     id, side, species: spirit.species, element: spirit.element, bElement: toBattleElement(spirit.element),
     name: spirit.name,
     x, y, facing: side === 'ally' ? 0 : Math.PI,
-    hp: maxHp, maxHp, level: spirit.level, pwr: atk, grd: s.grd, agi: s.agi,
+    hp, maxHp, level: spirit.level, pwr: atk, grd: s.grd, agi: s.agi,
     radius: 0.35 + s.maxHp / 260, speed,
     reach: 0.9, orbitDir: slot % 2 === 0 ? 1 : -1,
     tier, collared,
@@ -211,6 +222,7 @@ export interface ArenaSpec {
   aidKit?: AidKit           // the Keeper's kit (2 channels + bonded Mana'mal gift); defaults to Bonn + Momo
   enemyTier?: ArenaAITier   // enemy decision quality (holds pass 'champion'); default wild instinct
   collared?: number[]       // enemy indices that are collared captives (compelled fighters, freed on win)
+  bagCharges?: number       // mend potions on hand; omit for unlimited (feel harness / oracles)
 }
 
 export function createArena(spec: ArenaSpec): ArenaState {
@@ -235,9 +247,33 @@ export function createArena(spec: ArenaSpec): ArenaState {
   }
   return {
     t: 0, R, fighters,
-    keeper: { mana: 6, maxMana: 12, manaRegen: 1.1, breezeBoostT: 0, aid: buildAid(spec.aidKit ?? BONN_MOMO_KIT), bagCdLeft: 0 },
+    keeper: {
+      mana: 6, maxMana: 12, manaRegen: 1.1, breezeBoostT: 0,
+      aid: buildAid(spec.aidKit ?? BONN_MOMO_KIT), bagCdLeft: 0,
+      // Unspecified = the feel harness / an oracle run, which has no satchel to draw from and
+      // shouldn't have its balance shifted by one. Real play always passes a real count.
+      bagCharges: spec.bagCharges ?? Infinity, bagUsed: 0,
+    },
     outcome: 'ongoing', events: [], rng,
   }
+}
+
+/** What a fight left of each ally, indexed back to the party slot it came from. The caller writes
+ *  this into the party save — the arena itself never touches a Spirit. */
+export interface AllyOutcome { index: number; hp: number; maxHp: number }
+
+/** Everything a fight hands back to the world: the state of the party, and what it cost. */
+export interface BattleResult {
+  allies: AllyOutcome[]
+  bagUsed: number           // mend potions BAG spent — the caller removes them from the satchel
+}
+
+export function battleResult(state: ArenaState): BattleResult {
+  const allies = state.fighters
+    .filter(f => f.side === 'ally')
+    .map(f => ({ index: Number(f.id.slice(1)), hp: Math.max(0, f.hp), maxHp: f.maxHp }))
+    .filter(o => Number.isInteger(o.index) && o.index >= 0)
+  return { allies, bagUsed: state.keeper.bagUsed }
 }
 
 // spread combatants across a row: -0.5..0.5 for n>1, 0 for a lone fighter
@@ -608,11 +644,13 @@ function applyCommand(state: ArenaState, cmd: KeeperCommand) {
     return
   }
   if (cmd.type === 'bag') {
-    if (k.bagCdLeft > 0) return
+    if (k.bagCdLeft > 0 || k.bagCharges <= 0) return
     const f = cmd.targetId ? state.fighters.find(g => g.id === cmd.targetId) : state.fighters.find(g => g.side === 'ally' && alive(g))
     if (!f || !alive(f)) return
     f.hp = Math.min(f.maxHp, f.hp + Math.round(f.maxHp * 0.4))
     k.bagCdLeft = 80
+    k.bagCharges -= 1
+    k.bagUsed += 1
     state.events.push({ type: 'bag' })
     return
   }

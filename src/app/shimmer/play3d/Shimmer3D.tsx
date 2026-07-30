@@ -22,6 +22,11 @@ import { useParty, newPartyCode, sanitizePartyCode, inviteUrl } from '@/lib/part
 import { useAccount, type UseAccount } from '@/lib/accounts/use-account'
 import { rollEncounter, HOLD_LEVELS, type WildEncounter } from '../engine/encounters'
 import { derivePartyStats, type PartyStats } from '../engine/party-stats'
+import { type BattleResult } from '../engine/arena'
+import {
+  applyFightResult, tickRecovery, fieldableSpirits, partyAllDowned,
+  isDowned, hpFracOf, currentHpOf, maxHpOf, healSpirit, reviveSpirit, pickMendTarget,
+} from '../engine/spirit-health'
 import { getMovesForSpirit } from '../engine/moves'
 import { createSpirit, addXP, xpForLevel, speciesDisplayName, ELEMENT_COLORS, type Spirit, type Species, type Element } from '../spirits/spirit'
 import { spiritsToSave, spiritsFromSave } from '../spirits/spirit-save'
@@ -43,7 +48,7 @@ import { ITEMS } from '../sprites/items'
 import { startPerfLog, mark, logPerf } from './perflog'
 import { createManaPool, manaToSave, manaFromSave, getMaxPool, type ManaPool } from '../engine/mana'
 import { brewPotion, POTION_DEFS } from '../engine/alchemy'
-import { MANA_POTIONS, HEAL_POTIONS, POTION_BUFFS, BUFF_DEFS, HARVEST_BREW_ADVANCE_MS, drinkBuff, activeBuffList, pruneBuffs, gatherXpMult, bonusFind, kindredMult, speedMult, manaRegenMult, rinTune, suppressEncounters, potionEffectLine, type ActiveBuffs } from '../engine/potion-effects'
+import { MANA_POTIONS, HEAL_POTIONS, SPIRIT_MEND_POTIONS, MEND_POTION_ID, POTION_BUFFS, BUFF_DEFS, HARVEST_BREW_ADVANCE_MS, drinkBuff, activeBuffList, pruneBuffs, gatherXpMult, bonusFind, kindredMult, speedMult, manaRegenMult, rinTune, suppressEncounters, potionEffectLine, type ActiveBuffs } from '../engine/potion-effects'
 import { canCraft, craftItem, RECIPE_DEFS } from '../engine/crafting'
 import { createGEState, buyFromGE, sellToGE, tickPriceDrift, GE_ITEM_IDS, geToSave, geFromSave, type GEMarketState, type GESave } from '../engine/exchange'
 import { CROP_DEFS, plantCrop, harvestCrop, plantedCropsToSave, plantedCropsFromSave, isCropReady, type PlantedCrop } from '../engine/farming'
@@ -2740,6 +2745,19 @@ export default function Shimmer3D() {
         const key = (l: typeof next) => l.map(b => `${b.id}:${Math.ceil(b.remainMs / 1000)}`).join('|')
         return key(prev) === key(next) ? prev : next
       })
+      // Spirits knit themselves back together as you walk — slowly. This is the anti-softlock
+      // valve, NOT a strategy: at REGEN_FRAC_PER_MIN a full bar takes ~50 minutes, so brewing is
+      // always the better answer. Skipped mid-fight, where the arena owns the HP and the
+      // write-back would overwrite this anyway.
+      if (!battleRef.current && partyRef.current?.length) tickRecovery(partyRef.current, 0.5)
+      setWoundHud(prev => {
+        const hurt = (partyRef.current ?? [])
+          .filter(sp => hpFracOf(sp) < 1)
+          .map(sp => ({ name: sp.name, frac: hpFracOf(sp), downed: isDowned(sp) }))
+        // The trickle moves every tick, so compare at display resolution or this re-renders at 2 Hz forever.
+        const key = (l: typeof hurt) => l.map(h => `${h.name}:${Math.round(h.frac * 100)}`).join('|')
+        return key(prev) === key(hurt) ? prev : hurt
+      })
       let respawned = false
       for (const n of runtimeNodesRef.current) if (tickNodeRespawn(n)) respawned = true
       if (respawned) setRuntimeNodes([...runtimeNodesRef.current])
@@ -2876,6 +2894,9 @@ export default function Shimmer3D() {
   // so the Player frame loop reads a number, not the buff table.
   const buffsRef = useRef<ActiveBuffs>({})
   const [buffHud, setBuffHud] = useState<ReturnType<typeof activeBuffList>>([])
+  // Wounded-party readout. Only populated while something is actually hurt, so a healthy party
+  // costs no HUD space — and a wound announces itself the moment you walk out of a fight.
+  const [woundHud, setWoundHud] = useState<{ name: string; frac: number; downed: boolean }[]>([])
   const speedMultRef = useRef(1)
   const weaponMoveRef = useRef(1)   // weapon-state ground-speed mult (Player reads): 1 holstered / hipMove drawn / adsMove aiming
   const dreamwalkRef = useRef(false)
@@ -2893,7 +2914,28 @@ export default function Shimmer3D() {
     const heal = HEAL_POTIONS[itemId]
     if (heal) {
       if (countItem(invRef.current, itemId) < 1) return
-      if (!weaponDrawnRef.current) { setHarvestToast('Nothing to mend inside the Ather'); return }
+      // Inside the Ather the salve goes to a SPIRIT, not the Keeper — arena wounds persist now, so
+      // this is the loop: gather → brew → put your party back together → fight again.
+      if (!weaponDrawnRef.current) {
+        const mend = SPIRIT_MEND_POTIONS[itemId]
+        if (!mend) { setHarvestToast('Nothing to mend inside the Ather'); return }
+        const party = partyRef.current ?? []
+        const target = pickMendTarget(party)
+        if (!target) { setHarvestToast('Your spirits are unhurt'); return }
+        const wasDowned = isDowned(target)
+        // Revive first (a body on its feet beats a topped-up one), then spend the rest of the salve
+        // mending it — otherwise a downed spirit gets back up at a sliver and the item feels wasted.
+        if (wasDowned) reviveSpirit(target)
+        const healed = healSpirit(target, mend)
+        if (!wasDowned && healed <= 0) { setHarvestToast(`${target.name} is unhurt`); return }
+        removeItems(invRef.current, itemId, 1)
+        setInvSlots([...invRef.current.slots])
+        setHarvestToast(wasDowned
+          ? `${target.name} is back on its feet · ${currentHpOf(target)}/${maxHpOf(target)}`
+          : `${target.name} mended · ${currentHpOf(target)}/${maxHpOf(target)}`)
+        persist()
+        return
+      }
       const needHp = (heal.hp ?? 0) > 0 && hpRef.current < MAX_HP
       const needSh = (heal.sh ?? 0) > 0 && shieldRef.current < shieldMaxRef.current
       if (!needHp && !needSh) { setHarvestToast(heal.hp ? 'HP already full' : 'Shield already full'); return }
@@ -3322,8 +3364,11 @@ export default function Shimmer3D() {
   // Uses the real party if present; otherwise a throwaway test trio (never persisted).
   const forceFight = useCallback(() => {
     const real = partyRef.current ?? []
+    // A real party goes through the same downed-gate as every other fight; only a player with NO
+    // party at all gets the throwaway trio (dev feel-testing, never persisted).
+    if (real.length > 0 && !fieldParty()) return
     const allies = real.length > 0
-      ? real
+      ? fieldableSpirits(real).slice(0, MAX_PARTY)
       : (['fox', 'owl', 'water-bear'] as const).map((sp, i) => {
           const s = createSpirit(sp, ['Kit', 'Sage', 'Tor'][i], 0, 0)
           s.level = 12; s.bond = 60; s.happiness = 128
@@ -3342,13 +3387,51 @@ export default function Shimmer3D() {
     setBattle({ allies, enemies, aiTier: enc?.aiTier ?? 'wild', zoneId: logicalZoneAt(zoneIdRef.current, posRef.current!.x, posRef.current!.z), kind: 'wild' })
   }, [])
 
+  // ONE gate in front of every fight-start path. A downed spirit sits the fight out; a party with
+  // nothing left standing cannot pick a fight at all. Returns null when the fight must not start.
+  // The returned array holds the SAME Spirit objects as the party, so the post-fight wound
+  // write-back (which indexes into it) lands on the real save.
+  const fieldParty = useCallback((): Spirit[] | null => {
+    const party = partyRef.current ?? []
+    const ready = fieldableSpirits(party).slice(0, MAX_PARTY)
+    if (ready.length === 0) {
+      setBanner(partyAllDowned(party)
+        ? '✦ Your whole party is down — mend them before you fight'
+        : '✦ You have no spirits to send in')
+      return null
+    }
+    return ready
+  }, [])
+
   // Battle end: on a win, split rewards across the party (XP / bond / happiness / gold), then save.
-  const endBattle = useCallback((outcome: 'win' | 'lose') => {
+  const endBattle = useCallback((outcome: 'win' | 'lose', result: BattleResult = { allies: [], bagUsed: 0 }) => {
     battleRef.current = false
     const bd = curBattleRef.current
     let spoils: { gold: number; rows: RewardRow[] } | null = null
+
+    // WOUNDS FIRST, and on every exit path. Win, loss and flight all leave the party as the fight
+    // left it — that persistence is the whole point of the healing loop, and a loss used to
+    // short-circuit this entire function, which would have made losing the cheapest way to fight.
+    // Write to the exact objects that fought (`bd.allies`, which the ids index) rather than the
+    // live party: on a dev forceFight those are throwaways and must not touch the save.
+    if (bd) {
+      for (const r of result.allies) {
+        const spirit = bd.allies[r.index]
+        if (spirit) applyFightResult(spirit, r.hp, r.maxHp)
+      }
+      // BAG drank real salves mid-fight — take them out of the satchel now.
+      if (result.bagUsed > 0) {
+        removeItems(invRef.current, MEND_POTION_ID, result.bagUsed)
+        setInvSlots([...invRef.current.slots])
+      }
+      const felled = result.allies.filter(r => r.hp <= 0).length
+      if (felled > 0) setBanner(felled === 1 ? '✦ A spirit went down — mend it before the next fight' : `✦ ${felled} spirits went down — mend them before the next fight`)
+    }
     if (outcome === 'win' && bd) {
-      const allies = (partyRef.current ?? []).slice(0, MAX_PARTY)
+      // The spirits that actually FOUGHT, not the whole roster — a downed spirit sat this one out
+      // and doesn't share the victory. (Everyone who was on the field still splits nothing: the
+      // XP below is per-ally, not divided.)
+      const allies = bd.allies.slice(0, MAX_PARTY)
       // XP scales with the LEVEL RELATION, not just the enemy's level: punching up pays up to
       // 2×, stomping something far below you pays a quarter. avg ally level is the yardstick.
       const avgAlly = Math.max(1, allies.reduce((s, a) => s + a.level, 0) / Math.max(1, allies.length))
@@ -3526,11 +3609,13 @@ export default function Shimmer3D() {
       c.seeds = Array.from({ length: 6 }, () => Math.floor(Math.random() * 32))
       return c
     }
+    const fielded = fieldParty()
+    if (!fielded) return
     battleRef.current = true
     patrolKeyRef.current = key
     document.exitPointerLock?.()
-    setBattle({ allies: partyRef.current!, enemies: [mkCaptive(), mkCaptive()], aiTier: 'trained', zoneId: logicalZoneAt(zoneIdRef.current, posRef.current!.x, posRef.current!.z), kind: 'patrol', collared: [0, 1] })
-  }, [])
+    setBattle({ allies: fielded, enemies: [mkCaptive(), mkCaptive()], aiTier: 'trained', zoneId: logicalZoneAt(zoneIdRef.current, posRef.current!.x, posRef.current!.z), kind: 'patrol', collared: [0, 1] })
+  }, [fieldParty])
 
   // Arm the patrols: walk into an armed spawner's reach (its hold still standing) → the fight.
   useEffect(() => {
@@ -3562,10 +3647,12 @@ export default function Shimmer3D() {
     // Meadows wild band (Lv 7-8) so the boss reads as the area's gatekeeper, not a spike.
     captive.level = HOLD_LEVELS.thistle
     captive.seeds = Array.from({ length: 6 }, () => Math.floor(Math.random() * 32))
+    const fielded = fieldParty()
+    if (!fielded) return
     battleRef.current = true
     document.exitPointerLock?.()
-    setBattle({ allies: partyRef.current!, enemies: [captive], aiTier: 'wild', zoneId: logicalZoneAt(zoneIdRef.current, posRef.current!.x, posRef.current!.z), kind: 'thistle', title: 'HOLD 1 — THISTLE', collared: [0] })
-  }, [])
+    setBattle({ allies: fielded, enemies: [captive], aiTier: 'wild', zoneId: logicalZoneAt(zoneIdRef.current, posRef.current!.x, posRef.current!.z), kind: 'thistle', title: 'HOLD 1 — THISTLE', collared: [0] })
+  }, [fieldParty])
 
   // Sorrel — Hold 2, the stronghold. Enemies = [guard, captive, captive]. The guard (no collar) SHIELDS
   // the two collared captives: you break the brute first, then reach BOTH to free them. KO'ing either
@@ -3582,10 +3669,12 @@ export default function Shimmer3D() {
       c.seeds = Array.from({ length: 6 }, () => Math.floor(Math.random() * 32))
       return c
     }
+    const fielded = fieldParty()
+    if (!fielded) return
     battleRef.current = true
     document.exitPointerLock?.()
-    setBattle({ allies: partyRef.current!, enemies: [guard, mkCaptive(), mkCaptive()], aiTier: 'champion', zoneId: logicalZoneAt(zoneIdRef.current, posRef.current!.x, posRef.current!.z), kind: 'sorrel', title: "HOLD 2 — SORREL'S STRONGHOLD", collared: [1, 2] })
-  }, [])
+    setBattle({ allies: fielded, enemies: [guard, mkCaptive(), mkCaptive()], aiTier: 'champion', zoneId: logicalZoneAt(zoneIdRef.current, posRef.current!.x, posRef.current!.z), kind: 'sorrel', title: "HOLD 2 — SORREL'S STRONGHOLD", collared: [1, 2] })
+  }, [fieldParty])
 
   // Brack — Hold 3, the climax. The pooled force: TWO enforcers (guards) shielding THREE collared
   // captives. Break both guards, then reach all three. The wall of the arc — canon wants a real team.
@@ -3604,10 +3693,12 @@ export default function Shimmer3D() {
       c.seeds = Array.from({ length: 6 }, () => Math.floor(Math.random() * 32))
       return c
     }
+    const fielded = fieldParty()
+    if (!fielded) return
     battleRef.current = true
     document.exitPointerLock?.()
-    setBattle({ allies: partyRef.current!, enemies: [mkGuard('Brack’s Muscle', HOLD_LEVELS.brack.muscle), mkGuard('Brack’s Enforcer', HOLD_LEVELS.brack.enforcer), mkCaptive(), mkCaptive(), mkCaptive()], aiTier: 'champion', zoneId: zoneIdRef.current, kind: 'brack', title: "HOLD 3 — BRACK'S GAUNTLET", collared: [2, 3, 4] })
-  }, [])
+    setBattle({ allies: fielded, enemies: [mkGuard('Brack’s Muscle', HOLD_LEVELS.brack.muscle), mkGuard('Brack’s Enforcer', HOLD_LEVELS.brack.enforcer), mkCaptive(), mkCaptive(), mkCaptive()], aiTier: 'champion', zoneId: zoneIdRef.current, kind: 'brack', title: "HOLD 3 — BRACK'S GAUNTLET", collared: [2, 3, 4] })
+  }, [fieldParty])
 
   // Talk to an NPC. Gregory: no spirit → intro + starter handoff; else a sendoff. Thistle: no spirit → he
   // sneers you off; with a bonded spirit → pre-fight swagger, then the Reach battle to free his captive.
@@ -4392,6 +4483,21 @@ export default function Shimmer3D() {
             )
           })()}
 
+          {/* Wounded spirits — arena damage persists, so this is where you notice you need to brew.
+              Absent entirely when the party is whole. */}
+          {woundHud.map(w => (
+            <div key={w.name} title={w.downed ? `${w.name} is down — a Shimmer Salve puts it back on its feet` : `${w.name} is hurt — a Shimmer Salve mends it`} style={{
+              display: 'flex', alignItems: 'center', gap: 6, padding: '4px 9px', borderRadius: 999,
+              background: 'rgba(20,20,14,0.82)', border: `1px solid ${w.downed ? '#e05a4d' : '#f0a526'}55`,
+            }}>
+              <span style={{ font: '12px serif', lineHeight: 1 }}>{w.downed ? '✖' : '✚'}</span>
+              <span style={{ font: '700 10px ui-monospace, monospace', color: w.downed ? '#e05a4d' : '#f0a526', whiteSpace: 'nowrap' }}>{w.name}</span>
+              <span style={{ font: '600 9px ui-monospace, monospace', color: '#b8ae94', fontVariantNumeric: 'tabular-nums' }}>
+                {w.downed ? 'DOWN' : `${Math.round(w.frac * 100)}%`}
+              </span>
+            </div>
+          ))}
+
           {/* Active potion buffs — glyph + name + countdown, one chip per live effect */}
           {buffHud.map(b => (
             <div key={b.id} title={BUFF_DEFS[b.id].line} style={{
@@ -4867,7 +4973,8 @@ export default function Shimmer3D() {
             enemyTier={battle.aiTier}
             collaredIndices={battle.collared}
             title={battle.title}
-            onEnd={(o) => endBattle(o === 'win' ? 'win' : 'lose')}
+            bagCharges={countItem(invRef.current, MEND_POTION_ID)}
+            onEnd={(o, result) => endBattle(o === 'win' ? 'win' : 'lose', result)}
           />
         </div>
       )}

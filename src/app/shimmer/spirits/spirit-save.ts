@@ -21,6 +21,7 @@ export interface SpiritSave {
   infusions?: Infusions
   happiness: number
   bond: number
+  hpFrac?: number           // wounds that outlive a fight. Optional: pre-wound saves load at full.
   fruitBoostUntil: number
   inParty?: boolean
 }
@@ -32,7 +33,7 @@ export function spiritsToSave(spirits: Spirit[]): SpiritSave[] {
     temperament: s.temperament, variant: s.variant, element: s.element,
     infusions: s.infusions,
     happiness: s.happiness,
-    bond: s.bond, fruitBoostUntil: s.fruitBoostUntil,
+    bond: s.bond, hpFrac: s.hpFrac, fruitBoostUntil: s.fruitBoostUntil,
     inParty: s.inParty,
   }))
 }
@@ -51,6 +52,9 @@ export function spiritsFromSave(saves: SpiritSave[]): Spirit[] {
     infusions: s.infusions ?? createInfusions(),
     happiness: s.happiness ?? 128,
     bond: s.bond ?? 0,
+    // No hpFrac in the save = a party from before wounds persisted. Load it whole rather than
+    // wounding someone's existing team on the update that shipped this.
+    hpFrac: typeof s.hpFrac === 'number' ? Math.max(0, Math.min(1, s.hpFrac)) : 1,
     fruitBoostUntil: s.fruitBoostUntil ?? 0,
     inParty: s.inParty ?? true,
   }))

@@ -67,12 +67,22 @@ export const HEAL_POTIONS: Record<string, { hp?: number; sh?: number }> = {
   shimmer_salve: { hp: 50 },
   crystal_elixir: { sh: 75 },
 }
+// The SAME salve, pointed at a spirit instead of the Keeper. Arena wounds persist between fights,
+// so this is the fast way back — the out-of-combat trickle exists only so a broke player is never
+// stuck, and it is ~50 minutes for a full bar. Deliberately NOT a new item: a bespoke revive potion
+// would mean inventing a name and, worse, a death-vs-downed rule the world has never stated. A
+// downed spirit is knocked out, and a salve is what you give something knocked out.
+export const SPIRIT_MEND_POTIONS: Record<string, number> = { shimmer_salve: 50 }
+/** The salve the in-battle BAG reaches for. One id, so the button and the satchel can't disagree. */
+export const MEND_POTION_ID = 'shimmer_salve'
 
 /** One-line "what drinking does" for the Alchemy menu — covers all 13 potions. */
 export function potionEffectLine(potionId: string): string | null {
   const buff = POTION_BUFFS[potionId]
   if (buff) return BUFF_DEFS[buff].line
   if (potionId in MANA_POTIONS) return `restores ${MANA_POTIONS[potionId]} mana`
+  const mend = SPIRIT_MEND_POTIONS[potionId]
+  if (mend) return `mends a spirit +${mend} HP · or your own out in the Crucible`
   const heal = HEAL_POTIONS[potionId]
   if (heal) return heal.hp ? `mends +${heal.hp} HP (outside the Ather)` : `re-forms +${heal.sh} shield (outside the Ather)`
   if (potionId === 'harvest_brew') return 'planted crops jump 3m of growth'

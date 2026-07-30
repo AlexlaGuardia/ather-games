@@ -12,7 +12,7 @@ import { Canvas, useFrame } from '@react-three/fiber'
 import { Html, OrbitControls } from '@react-three/drei'
 import * as THREE from 'three'
 import { useRef, useState, useCallback } from 'react'
-import { createArena, tick, type ArenaState, type KeeperCommand, type Stance, type AidKit, type ArenaEvent, type ArenaAITier } from '../engine/arena'
+import { createArena, tick, battleResult, type ArenaState, type KeeperCommand, type Stance, type AidKit, type ArenaEvent, type ArenaAITier, type BattleResult } from '../engine/arena'
 import type { MoveState } from '../engine/arena-moves'
 import { ELEMENT_COLORS, type Element, type Spirit } from '../spirits/spirit'
 
@@ -57,6 +57,7 @@ export interface CardSnap {
 interface UISnap {
   mana: number; maxMana: number
   bagCdLeft: number
+  bagCharges: number
   allies: CardSnap[]
   enemies: CardSnap[]
   outcome: ArenaState['outcome']
@@ -72,7 +73,7 @@ function snap(s: ArenaState): UISnap {
   })
   return {
     mana: s.keeper.mana, maxMana: s.keeper.maxMana,
-    bagCdLeft: s.keeper.bagCdLeft,
+    bagCdLeft: s.keeper.bagCdLeft, bagCharges: s.keeper.bagCharges,
     allies: s.fighters.filter(f => f.side === 'ally').map(card),
     enemies: s.fighters.filter(f => f.side === 'enemy').map(card),
     outcome: s.outcome,
@@ -521,7 +522,7 @@ function CornerBtn({ label, sub, disabled, accent, cd, cdMax, onClick, style }: 
 }
 
 // ── the battle: sim + HUD. One renderer for both the harness and in-world play3d. ──
-export default function ArenaBattle({ allies, enemies, seed, aidKit, enemyTier, collaredIndices, title, onEnd, continueLabel = 'CONTINUE' }: {
+export default function ArenaBattle({ allies, enemies, seed, aidKit, enemyTier, collaredIndices, title, bagCharges, onEnd, continueLabel = 'CONTINUE' }: {
   allies: Spirit[]
   enemies: Spirit[]
   seed?: number
@@ -529,11 +530,14 @@ export default function ArenaBattle({ allies, enemies, seed, aidKit, enemyTier, 
   enemyTier?: ArenaAITier          // holds pass 'champion' — decision quality, never stats
   collaredIndices?: number[]       // enemy indices rendered as collared captives (freed on win)
   title?: string                   // hold framing, e.g. "HOLD 2 — SORREL'S STRONGHOLD"
-  onEnd: (outcome: 'win' | 'lose' | 'fled') => void
+  bagCharges?: number              // mend potions on hand; omit for unlimited (the feel harness)
+  // Hands back what the fight left of the party AND what it spent, alongside the outcome. Wounds
+  // persist, so the caller writes them into the save. Fleeing counts: you still took the hits.
+  onEnd: (outcome: 'win' | 'lose' | 'fled', result: BattleResult) => void
   continueLabel?: string
 }) {
   const arenaRef = useRef<ArenaState | null>(null)
-  if (!arenaRef.current) arenaRef.current = createArena({ allies, enemies, aidKit, enemyTier, collared: collaredIndices, seed: seed ?? ((Math.random() * 1e9) | 0) })
+  if (!arenaRef.current) arenaRef.current = createArena({ allies, enemies, aidKit, enemyTier, collared: collaredIndices, bagCharges, seed: seed ?? ((Math.random() * 1e9) | 0) })
   const cmdQueue = useRef<KeeperCommand[]>([])
   const skipRef = useRef(false)
   const [ui, setUi] = useState<UISnap>(() => snap(arenaRef.current!))
@@ -633,7 +637,10 @@ export default function ArenaBattle({ allies, enemies, seed, aidKit, enemyTier, 
       </div>
 
       {/* BAG — bottom-right (80s lockout) */}
-      <CornerBtn label="BAG" sub={ui.bagCdLeft > 0 ? `${Math.ceil(ui.bagCdLeft)}s` : 'heal'} accent="#4fbf87" disabled={over || ui.bagCdLeft > 0}
+      {/* BAG spends a real salve out of the satchel — an empty bag reads as empty, not as cooling down. */}
+      <CornerBtn label="BAG" accent="#4fbf87"
+        sub={ui.bagCharges <= 0 ? 'empty' : ui.bagCdLeft > 0 ? `${Math.ceil(ui.bagCdLeft)}s` : Number.isFinite(ui.bagCharges) ? `heal ×${ui.bagCharges}` : 'heal'}
+        disabled={over || ui.bagCdLeft > 0 || ui.bagCharges <= 0}
         cd={ui.bagCdLeft} cdMax={80} onClick={() => send({ type: 'bag' })} style={{ bottom: 22, right: 14 }} />
 
       {/* FLEE — bottom-left */}
@@ -657,7 +664,7 @@ export default function ArenaBattle({ allies, enemies, seed, aidKit, enemyTier, 
           <div style={{ font: '900 30px ui-monospace, monospace', color: ui.outcome === 'win' ? '#7fe3c8' : ui.outcome === 'fled' ? '#c9c9d2' : '#e08a7a', letterSpacing: '0.1em' }}>
             {ui.outcome === 'win' ? 'THE FIELD IS YOURS' : ui.outcome === 'fled' ? 'YOU SLIPPED AWAY' : 'YOUR SPIRIT FELL'}
           </div>
-          <button onClick={() => onEnd(ui.outcome as 'win' | 'lose' | 'fled')}
+          <button onClick={() => onEnd(ui.outcome as 'win' | 'lose' | 'fled', arenaRef.current ? battleResult(arenaRef.current) : { allies: [], bagUsed: 0 })}
             style={{ marginTop: 22, padding: '12px 28px', borderRadius: 12, border: '2px solid #7fe3c8', background: '#12181a', color: '#eafff6', font: '800 14px ui-monospace, monospace', letterSpacing: '0.1em', cursor: 'pointer' }}>{continueLabel}</button>
         </div>
       )}

@@ -167,6 +167,13 @@ export interface Spirit {
   happiness: number         // 0-255 hidden stat
   bond: number              // 0-255 hidden stat
 
+  // Wounds — persists BETWEEN fights, which is the whole point (heal it or grind for potions).
+  // A FRACTION of maxHp, never an absolute: maxHp grows with level and the arena scales it by
+  // HP_MULT, a live pacing knob that has already moved once (1.8 -> 2.4). Storing absolutes
+  // would mean the next pacing retune silently wounds or heals every spirit in every save.
+  // 1 = untouched, 0 = downed.
+  hpFrac: number
+
   // Fruit boost
   fruitBoostUntil: number   // timestamp (ms) when boost expires, 0 = no boost
 
@@ -203,6 +210,7 @@ export function createSpirit(species: Species, name: string, tileX: number, tile
     infusions: createInfusions(),
     happiness: 128,
     bond: 0,
+    hpFrac: 1,
     fruitBoostUntil: 0,
     inParty: true,
   }
