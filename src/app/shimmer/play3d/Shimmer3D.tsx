@@ -1998,6 +1998,11 @@ function DayClock() {
       <span style={{ font: '700 8.5px ui-monospace, monospace', color: look.c, letterSpacing: '0.12em' }}>{phase.toUpperCase()}</span>
       {isTimePinned && <span title="clock pinned by ?hour= — drop the param for live time" style={{ font: '700 8.5px ui-monospace, monospace', color: '#e0a0d0' }}>PIN</span>}
       {isBoardPinned && <span title="spawn board pinned by ?window= — drop the param for the live board" style={{ font: '700 8.5px ui-monospace, monospace', color: '#9fe0c0' }}>BOARD</span>}
+      {/* ★ Loud on purpose, and in a warning colour. `?fadetest=1` cycles EVERY node through the
+          dissolve on a 12s loop, which is indistinguishable from the world being broken — the first
+          person to load a tab with it left on reported the game as buggy, correctly. `?hour=` had
+          shipped a PIN chip for exactly this reason and this flag went out without one. */}
+      {isFadeTest && <span title="?fadetest=1 is ON — every node is cycling the fade for inspection. Drop the param for the real world." style={{ font: '700 8.5px ui-monospace, monospace', color: '#f0a526', letterSpacing: '0.1em' }}>⚠ FADETEST</span>}
       {renewing && (
         <span title="the garden is re-dealing — fading resources are on their way out" style={{ font: '700 8.5px ui-monospace, monospace', color: '#9fe0c0', letterSpacing: '0.08em' }}>
           🍃 {toReset < 60_000 ? 'RENEWING' : `${Math.ceil(toReset / 60_000)}m`}
