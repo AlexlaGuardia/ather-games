@@ -58,6 +58,41 @@ console.log('the cloud substrate')
   for (const i of w.issues.filter(i => i.startsWith('loop mismatch'))) console.log(`  note  ${i}`)
 }
 
+console.log('\n★ the cloudscape stays cheap to draw')
+{
+  // Mirrors `bucketsRect`'s split in Shimmer3D.tsx. Walls render at a fixed height, so a wall boxed
+  // in on all eight sides has no visible side face and is drawn as a flat top quad outside the
+  // shadow pass. The SHELL is what costs — and the shell is a property of the world's SHAPE, which
+  // is why this assert lives with the composer rather than the renderer.
+  //
+  // The first cut of the substrate shipped 106,508 shadow-casting boxes (from 11,901) and Alex hit
+  // it immediately as lag while running around. The failure mode to guard is not "too much cloud" —
+  // it is cloud that is THIN, because a stringy maze is nearly all surface. A substrate change that
+  // carves the mass into corridors everywhere would pass every other assert here and tank the frame
+  // rate silently.
+  setLiveOverlay(null)
+  const w = composeGardenWorld()
+  const solid = (x: number, y: number) => {
+    const row = w.grid[y]; if (!row) return false
+    const v = row[x]
+    return v !== undefined && v !== VOID && (v & 0xFF) === WALL
+  }
+  let shell = 0, buried = 0
+  for (let y = 0; y < w.rows; y++) for (let x = 0; x < w.cols; x++) {
+    if (!solid(x, y)) continue
+    let all = true
+    for (let dy = -1; dy <= 1 && all; dy++) for (let dx = -1; dx <= 1; dx++) {
+      if (!dx && !dy) continue
+      if (!solid(x + dx, y + dy)) { all = false; break }
+    }
+    all ? buried++ : shell++
+  }
+  console.log(`  note  ${shell.toLocaleString()} shell · ${buried.toLocaleString()} buried`)
+  check('★ the drawn shell stays under 15k boxes', shell < 15_000, `${shell.toLocaleString()}`)
+  check('...which is no worse than before the substrate existed', shell < 11_901, `${shell.toLocaleString()} vs 11,901`)
+  check('the mass is mostly buried, not stringy', buried > shell * 5, `${(buried / shell).toFixed(1)}:1`)
+}
+
 console.log('\nthe fingerprint refuses a moved layout')
 {
   const w = composeGardenWorld()

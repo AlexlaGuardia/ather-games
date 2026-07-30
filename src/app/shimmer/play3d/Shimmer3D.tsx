@@ -234,8 +234,30 @@ const USE_HINTS: Record<string, string> = {
   ...Object.fromEntries(Object.keys(PLACEABLES).map(k => [k, 'double-tap to place'])),
 }
 
+/**
+ * ★ A wall boxed in on all eight sides has no visible side face, ever.
+ *
+ * Walls render at a FIXED height (y=0.55, 1.3 tall) — they do not read the height map — so a wall
+ * whose eight neighbours are all walls can only ever be seen from directly above. That used to be a
+ * rounding error. Once the cloud substrate filled every out-of-zone tile, it became 94% of all wall
+ * geometry: 99,743 of 106,508 boxes drawn every frame, each one casting a shadow, for nothing.
+ *
+ * So the interior is split out and drawn as a flat top-face quad instead of a box — same silhouette
+ * from any position a player can reach, a sixth of the triangles, and out of the shadow pass
+ * entirely. As you carve into a cloud mass its exposed tiles become shell again on the next rebuild,
+ * so nothing needs to know this happened.
+ */
+const isWallAt = (grid: number[][], x: number, y: number) => {
+  const row = grid[y]
+  if (!row) return false
+  const v = row[x]
+  return v !== undefined && v !== VOID && (v & 0xFF) !== WARP_ID && (v & 0xFF) !== MIST_ID
+    && (v & 0xFF) !== WATER_ID && !walkable(grid, x, y)
+}
+
 function bucketsRect(grid: number[][], r0: number, c0: number, r1: number, c1: number) {
   const floors: Cell[] = [], walls: Cell[] = [], waters: Cell[] = [], voids: Cell[] = [], warps: Cell[] = [], mists: Cell[] = []
+  const wallTops: Cell[] = []
   for (let r = r0; r < r1; r++) for (let c = c0; c < c1; c++) {
     const v = grid[r][c]
     if (v === VOID) { voids.push([c, r]); continue }
@@ -244,9 +266,18 @@ function bucketsRect(grid: number[][], r0: number, c0: number, r1: number, c1: n
     else if (id === MIST_ID) mists.push([c, r])
     else if (id === WATER_ID) waters.push([c, r])
     else if (walkable(grid, c, r)) floors.push([c, r])
-    else walls.push([c, r])
+    else {
+      // Neighbours are read off the whole grid, not the chunk rect, so a tile on a chunk seam is
+      // classified by the world around it rather than by where the chunk happens to end.
+      let buried = true
+      for (let dy = -1; dy <= 1 && buried; dy++) for (let dx = -1; dx <= 1; dx++) {
+        if (!dx && !dy) continue
+        if (!isWallAt(grid, c + dx, r + dy)) { buried = false; break }
+      }
+      ;(buried ? wallTops : walls).push([c, r])
+    }
   }
-  return { floors, walls, waters, voids, warps, mists }
+  return { floors, walls, waters, voids, warps, mists, wallTops }
 }
 
 // The world renders in CHUNK×CHUNK blocks, one instanced-mesh set each, so three.js frustum-
@@ -259,7 +290,7 @@ function chunkBuckets(grid: number[][]) {
   const out: { key: string; b: ReturnType<typeof bucketsRect> }[] = []
   for (let r0 = 0; r0 < rows; r0 += CHUNK) for (let c0 = 0; c0 < cols; c0 += CHUNK) {
     const b = bucketsRect(grid, r0, c0, Math.min(r0 + CHUNK, rows), Math.min(c0 + CHUNK, cols))
-    if (b.floors.length || b.walls.length || b.waters.length || b.voids.length || b.warps.length || b.mists.length)
+    if (b.floors.length || b.walls.length || b.wallTops.length || b.waters.length || b.voids.length || b.warps.length || b.mists.length)
       out.push({ key: `${r0}:${c0}`, b })
   }
   return out
@@ -725,6 +756,29 @@ function WarpBeacons({ warps, heights }: { warps: Cell[]; heights: number[][] })
   )
 }
 
+/** The buried interior of a wall mass — top faces only. No shadow (nothing under it to shade), no
+ *  paint handler (you cannot click what you cannot see; carving the shell re-exposes these). */
+function WallTops({ cells, y, color }: { cells: Cell[]; y: number; color: string }) {
+  const ref = useRef<THREE.InstancedMesh>(null)
+  useLayoutEffect(() => {
+    const mesh = ref.current!
+    const m = new THREE.Matrix4()
+    const flat = new THREE.Euler(-Math.PI / 2, 0, 0)
+    const q = new THREE.Quaternion().setFromEuler(flat)
+    const s = new THREE.Vector3(1, 1, 1)
+    cells.forEach(([c, r], i) => { m.compose(new THREE.Vector3(c, y, r), q, s); mesh.setMatrixAt(i, m) })
+    mesh.instanceMatrix.needsUpdate = true
+    mesh.computeBoundingSphere()
+  }, [cells, y])
+  if (!cells.length) return null
+  return (
+    <instancedMesh ref={ref} args={[undefined, undefined, cells.length]} receiveShadow>
+      <planeGeometry args={[1, 1]} />
+      <meshStandardMaterial color={color} />
+    </instancedMesh>
+  )
+}
+
 function Tiles({ cells, size, y, color, opacity = 1, paint, editing }: {
   cells: Cell[]; size: [number, number, number]; y: number; color: string; opacity?: number
   paint: (c: number, r: number, shift: boolean) => void; editing: boolean
@@ -770,11 +824,13 @@ const ZoneGeometry = memo(function ZoneGeometry({ gridRef, heights, version, pai
   const chunks = useMemo(() => chunkBuckets(gridRef.current), [version, gridRef])
   return (
     <>
-      {chunks.map(({ key, b: { floors, walls, waters, voids, warps, mists } }) => (
+      {chunks.map(({ key, b: { floors, walls, waters, voids, warps, mists, wallTops } }) => (
         <group key={key}>
           <FloorTerrain floors={floors} heights={heights} version={version} paint={paint} editing={editing} />
-          {/* solid clouds = the walls */}
+          {/* solid clouds = the walls. Only the SHELL is boxed; the buried interior is a top face —
+              see bucketsRect. Same silhouette, a sixth of the triangles, no shadow pass. */}
           <Tiles cells={walls} size={[1, 1.3, 1]} y={0.55} color="#e3e9f4" paint={paint} editing={editing} />
+          <WallTops cells={wallTops} y={1.2} color="#e3e9f4" />
           <Tiles cells={waters} size={[1, 0.3, 1]} y={-0.15} color="#3aa0d6" opacity={0.85} paint={paint} editing={editing} />
           {/* cloud mist = walkable encounter areas: land + a wispy translucent overlay */}
           <FloorTerrain floors={mists} heights={heights} version={version} paint={paint} editing={editing} />
