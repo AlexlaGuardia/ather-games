@@ -735,6 +735,55 @@ the Arcade frame.
 > level-up delta panel, retune the species floors (firefly/owl) and frog's ceiling — gating every
 > step on the oracle's before/after.
 
+## 🌱 Shimmer play3d — THE PARTY PANEL (P) (SHIPPED 2026-07-30, jin-cc) · *Last touched 2026-07-30*
+> **Alex:** *"a seed icon/button next to the bag that we can bind to P, here we can have the spirit line up..
+> so that the player can click each one to check out stats, moves, description."* Shipped, browser-verified live.
+>
+> **The gap it closed:** play3d had **NO spirit roster at all** — `hasStarter` is dead state (set, never read),
+> and everything the game knew about your party was visible only for the ~30s it stood on a battlefield. You
+> could raise a spirit for hours and never see a stat, a move, or a word about what it is.
+>
+> **Left off (2026-07-30, `85b3642`, committed + pushed + live :3200):**
+> - **Seed button (🌱) beside the bag** in the bottom bar — green against the bag's amber, same 52/46px shape.
+>   Carries a **wound-count badge**, so a hurt party nags from the bar without opening anything. `P` toggles;
+>   state lives in `Shimmer3D` like `bagOpen` so the key, the pointer-lock handoff (`openCursorUI`) and the
+>   button can never disagree about whether it's open.
+> - **LINEUP borrows the arena team-card language** — element accent border, element dot, banded HP, Lv, DOWN —
+>   so a spirit reads the *same* in the menu as it does mid-fight. Selected card takes the element glow.
+> - **DOSSIER:** portrait + stats (7, absolute-is-the-hero per the level-up card's rule) + the **4-move kit with
+>   descriptions** + XP toward next level + bond (with the *signature move at 50* note) + infusion lean + form
+>   stage + **Raven's field note** from `public/grimoire/spirits.json`. **No lore authored here** — the panel
+>   looks entries up, it never writes them.
+> - **"next move at Lv N" / "next form at Lv N"** — the kit is level-gated, so a spirit sitting one level under a
+>   new move is worth knowing about. Same function, asked about a later level.
+> - **MEND / REVIVE per spirit** — the deliberate target picker, against the hotbar's auto-pick (worst-off).
+>   **This answers the open question from the wounds session.** Reviving also mends with the same salve, or the
+>   item is spent putting something on its feet at a sliver. Disabled at 0 salves with a brew-one hint.
+> - **Make lead** — a wiped party recovers its **LEAD** (the anti-softlock valve in `spirit-health.ts`), so
+>   lineup order is mechanically real now, not cosmetic.
+>
+> **★ ONE HYPHEN BLANKED THE DEWBEAR AND NOTHING ELSE.** The grimoire manifest's `analog` is *almost* the
+> `Species` code — the game says `water-bear`, the manifest says `waterbear`. Portrait AND field note came back
+> empty for the Dewbear while all nine other species rendered perfectly: the worst possible shape for a bug, and
+> the Dewbear is the starter Alex actually plays. Both sides now normalise (`toLowerCase().replace(/[^a-z]/g,'')`)
+> rather than trusting two files to agree about punctuation forever. Verified 10/10 species resolve.
+> **Second polish catch, browser-only:** a starter named after its own species rendered *"Dewbear / Dewbear"*.
+> The species line now shows only when it says something the name doesn't.
+>
+> **Verified live** at `ather.games/shimmer/play3d` on the real save: opens by button and by `P`, closes by
+> `P`/`Esc`/scrim, portrait + field note render, MEND correctly disabled at 0 salves. Caught the wound feature
+> working end-to-end in passing — XP 523→600 and HP 65/71→37/71 **survived a page reload**, and the out-of-combat
+> trickle visibly ticked 52%→53%.
+>
+> **Next:** Alex eye-pass the layout (esp. **mobile** — the roster becomes a horizontal strip above the dossier
+> on touch, untested on a real phone) · a party of >1 has never been seen, so card stacking + the lineup column
+> at 4-5 spirits is unproven · **the bank has no UI here either** (spirits with `inParty:false` are invisible in
+> play3d — swapping party members is the natural next panel) · `Spirit.heldItem` exists in the type but
+> **`arena.ts` never reads it** (only the legacy 2D battle does) — a dead field the dossier deliberately does
+> not show; wire it or drop it.
+> **Files:** `play3d/PartyPanel.tsx` (new) · `play3d/HotBar.tsx` (`PartyBtn` + badge) · `play3d/Shimmer3D.tsx`
+> (`toggleParty`, the `P` handler, `mendSpirit`, `setPartyLead`, `partyTick`).
+
 ## 🩸 Shimmer play3d — WOUNDS PERSIST (the healing loop, SHIPPED 2026-07-30, jin-cc) · *Last touched 2026-07-30*
 > **Alex, 2026-07-30:** *"the level up looks good i can see the stats raise, but one thing we need is for the hp
 > to carry over so the player needs to heal the spirit .. kinda forcing the player to grind resources and craft
