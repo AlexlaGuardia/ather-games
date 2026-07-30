@@ -789,6 +789,67 @@ the Arcade frame.
 > rest/recall actions) · `play3d/Shimmer3D.tsx` (the conflation fix across 6 readers, bloom overflow,
 > load normalise, `setSpiritActiveIn`, `setPartyLead` now takes a Spirit not an index).
 
+## 🌗 Shimmer play3d — THE 64-MINUTE DAY (SHIPPED 2026-07-30, jin-cc) · *Last touched 2026-07-30*
+> **Alex:** *"we should have a day/night cycle last 64 real minutes."* Shipped. Step 1 of the living-spawners
+> arc (block below) — the clock lands first so the pacing can be judged before anything depends on it.
+>
+> **★ THE STARTING POINT WAS "THERE IS NO CYCLE".** play3d ran a **fixed sun** at `[18,26,12]` and flat
+> ambient — permanently noon. `engine/day-cycle.ts` existed but **nothing imported it**: a 30-minute-day
+> engine written for the archived 2D game (it returned *canvas overlay colours*), reachable only by the map
+> editor rewriting one of its constants. So this was a build, not a retune.
+>
+> **Left off (2026-07-30, `b83c4a1`, committed + pushed + live :3200):**
+> - **64 real minutes, and 2^6 is the point** — every subdivision a reset schedule might want (32/16/8/4) stays
+>   a whole number of minutes. **Progress 0 = midnight**, so midnight and noon land exactly on 0.0 and 0.5:
+>   the two moments the spawner layer will re-deal on. Verified — reset boundaries hit `00:00` / `12:00`.
+> - **Derived from the WALL CLOCK, not ticked into state.** The world advances while the tab is closed, two
+>   people in a party are in the same hour with nothing synced, there is nothing to persist or migrate, and
+>   `resetIndex()` falls straight out for the spawner work. Trade: time is global, not per-save — right for a
+>   shared garden (night should be night for everybody).
+> - **`?hour=19` pins the clock.** Wall-clock derivation otherwise makes an art pass a 64-minute round trip;
+>   this judges a whole day in a minute. HUD shows `PIN` so a pinned tab is never mistaken for a bug.
+> - **HUD clock chip** (glyph + HH:MM + phase), self-ticking on its own 4s interval so the clock moving never
+>   re-renders the walker.
+>
+> **★ CANON HAD ALREADY RULED THE LOOK, AND INSTINCT WOULD HAVE BROKEN IT.**
+> `design-briefs/shimmer-garden-atmosphere.md` §"Day / night arc" (**RULED 2026-07-21, Magii + Alex**):
+> **"night is NOT grey. It is a hue shift, not a drop toward grey."** Two axes that must stay **orthogonal** —
+> time-of-day rides **gold ⇄ SILVER** (both poles fully mana-alive and saturated); tended-ness rides
+> **colour ⇄ GREY** (alive vs drained). *If night desaturated, every evening would read as the greying and
+> destroy the one signal the whole system carries.* So night = **the Moonwell hour**: canon silver rises
+> garden-wide, gold banks to embers, **motes glow BRIGHTER against the dark** ("the world lighting its own
+> lamps"), register is rest and quiet wonder — never menace. **The greying is time-invariant** (grey at noon,
+> grey at midnight) which is exactly what keeps a *night* zone legible from a *drained* one.
+>   - Implemented as **authored day/night palettes lerped per zone** — never an HSL darken. A generic
+>     desaturate is the precise failure canon names, so this makes it **structurally impossible** rather than
+>     a thing to remember not to do. Colours are the ruling; intensities are build tuning (the brief
+>     explicitly leaves the **mechanism** to Jin).
+>   - One directional light is **both sun and moon** (mirrored at the horizon) — one shadow map, and no seam
+>     where a crossfade between two rigs would show.
+>
+> **Two things the browser caught that the maths could not:**
+> - **First night pass was unplayably dark** — benches and chests read as near-black silhouettes. Legible as
+>   "night", useless as a *place*, and against canon's cozy-safe register. The **hemisphere fill** is the real
+>   workhorse at night (it lights the faces a raking moon misses); moon + hemi + ambient floor all lifted.
+> - **★ THE PHASE LABEL DISAGREED WITH THE LIGHT.** Boundaries were declared as their own constants beside the
+>   curve and drifted immediately: the HUD said **DUSK at 19:00** while `daylight()` had already reached zero
+>   at **18:51**. Nothing crashed; the label was just a lie for an hour of every day. **Two constants
+>   describing one thing always come apart — the one that survives is the one the renderer uses.** `getPhase`
+>   now reads off the curve, and the oracle asserts agreement at **all 1440 game-minutes** (a few sampled
+>   hours would have missed it — the drift sat entirely between round hours).
+>
+> **Seams:** dawn 05:00→07:11, day →16:49, dusk →19:00, night →05:00. Twilight ≈5.8 real min each side —
+> the first band was ~1 game-hour, which is a light switch, not a seam.
+> **Verified:** oracle **41 asserts** green (`npx tsx src/app/shimmer/engine/day-cycle.test.ts`) · canon gate
+> 5/5 · browser-verified at noon / midnight / dusk on the live save.
+>
+> **Next:** **Alex feel-pass the pacing — is 64 minutes right?** (`CYCLE_MS`, and `TWILIGHT_LOW/HIGH` for seam
+> length). Then the art pass via `?hour=` on the night palettes in `world/atmosphere.tsx`. Unproven: the
+> **GREYING zone at night** (the Outfields — the time-invariance rule is implemented but never eyeballed) and
+> **Moonwell Glade at night**, which should be the brightest silver in the game. After that, the spawner layer.
+> **Files:** `engine/day-cycle.ts` (rewritten — clock only, no colour) + `.test.ts` · `world/atmosphere.tsx`
+> (night palettes + per-frame blend) · `play3d/Shimmer3D.tsx` (`SkyLight` rig, `DayClock` chip).
+
 ## ⏳ Shimmer play3d — LIVING SPAWNERS: hourly world reset (IDEA, PINNED 2026-07-30 — Alex, not yet designed)
 > **Parked deliberately, in Alex's own words, so it survives until we pick it up.** Raised right after the party
 > panel; he asked to finish the bank first and come back to this. **Nothing here is built or ruled.**
