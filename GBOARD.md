@@ -735,6 +735,60 @@ the Arcade frame.
 > level-up delta panel, retune the species floors (firefly/owl) and frog's ceiling — gating every
 > step on the oracle's before/after.
 
+## 🏡 Shimmer play3d — SPIRITS REST AT THE HOME PLOT (the "spirit bank", SHIPPED 2026-07-30, jin-cc) · *Last touched 2026-07-30*
+> **Alex:** *"so the spirit bank next."* Shipped — but see the naming note, which is the important part.
+>
+> **★ THE REAL WORK WAS UNPICKING A CONFLATION, NOT BUILDING STORAGE.** `partyRef.current` was *"every
+> spirit you own"* **and** *"your party"* at the same time. `Spirit.inParty` has been on the type since the
+> archived 2D game and play3d **never once wrote it or read it** — the party cap existed *only* at fight time
+> (`slice(0, MAX_PARTY)`). Everything that means "who fights" / "how strong are you" now reads
+> `activeSpirits()`; everything that means "what do I have" reads the whole ref.
+>
+> **Three real bugs fell out of that:**
+> - **A 5th spirit was silently permanent dead weight.** Bloom rewards appended unconditionally, so a spirit
+>   past the cap was owned, fed, levelled and **never fielded**, with nothing anywhere saying why. Overflow
+>   now rests at the Home Plot and the reward dialogue says which happened.
+> - **The anti-softlock valve was about to hand out free revives constantly.** It keyed on the *active party*
+>   being wiped — but with a healthy spirit on the bench there is no dead end to rescue anyone from, the
+>   player just swaps. A party wipe with reserves is the ordinary outcome of a hard fight, not an emergency.
+>   Keyed on **every spirit you own** now.
+> - **I re-introduced the `every(isDowned)` gate bug** while rewriting that valve — it goes false the instant
+>   the lead ticks off zero, stranding it a hair above nothing forever (the trickle skips the downed, and the
+>   valve would have switched itself off). **The oracle caught it a second time.** The assert now names the
+>   trap explicitly so the third person doesn't rediscover it.
+>
+> **Resting spirits mend `REST_REGEN_MULT`× faster** — that is what makes leaving a hurt spirit home a
+> *decision* rather than a shelf: you trade a body in the lineup for a quicker mend.
+>
+> **★ THE NAME IS NOT JIN'S TO MAKE, AND WASN'T MADE.** Canon has **no word** for where uncarried spirits
+> live — searched `glossary.md`, `game/shimmers.md`, `game/design.md`, `shimmer-storyline.md`,
+> `shimmer-mechanics.md`, `shimmer-battles.md`, `spirit-tales-bible.md`: zero hits for bank / box / PC /
+> stable / roost / storage. What canon **does** say points one way: spirits *"live in your garden"*
+> (`shimmers.md:8`), *"Your garden where Spirits live"* (`design.md:169`), *"think Sonic Adventure Chao
+> Gardens"* (`:19`), and the **Home Plot** grows as you free the holds with reformed Moglins joining it **as a
+> facility** (`shimmer-storyline.md:65,117`). The **Grimoire** is for *knowing* spirits, pointedly against the
+> collar's *owning* (`glossary.md:246`) — explicitly not a container. **A container word like "bank" reads as
+> storage of property and cuts against the bond-not-own thesis the whole storyline is built on.** So the UI is
+> **descriptive only** — `WITH YOU` / `AT THE HOME PLOT`, `Leave at home` / `Take along` — and **no proper noun
+> was coined.** Logged `[OPEN]` in `CANON_GAPS.md` (athernyx `0d25c96`) for Magii to rule, **including whether
+> 4 is the canon party size — that has never been ruled either.**
+>
+> **Legacy saves normalise on load** (`normalizeRoster`): everyone was flagged active however many there were,
+> so the first `MAX_PARTY` stay and the overflow rests. Idempotent.
+>
+> **Verified:** oracle **+26 asserts** (roster moves, cap, never-empty-the-lineup, rest recovery, the valve
+> correction) — all green. Canon gate 5/5. Browser-verified live on the real save: both columns render
+> (`WITH YOU 1/4` · `AT THE HOME PLOT —`) and the never-empty guard correctly **refuses** on a one-spirit save
+> without touching it.
+>
+> **Next:** **the two-spirit swap has never been exercised in a browser** — Alex has exactly one spirit, and I
+> would not mutate his save to fake a second. First bloom reward proves it for real. Also unproven: the
+> resting column with several spirits, and **mobile** (both columns become horizontal strips).
+> **Files:** `engine/spirit-health.ts` (`activeSpirits`/`restingSpirits`/`setSpiritActive`/`normalizeRoster`/
+> `REST_REGEN_MULT`, valve rewrite) · `engine/spirit-health.test.ts` · `play3d/PartyPanel.tsx` (two columns,
+> rest/recall actions) · `play3d/Shimmer3D.tsx` (the conflation fix across 6 readers, bloom overflow,
+> load normalise, `setSpiritActiveIn`, `setPartyLead` now takes a Spirit not an index).
+
 ## ⏳ Shimmer play3d — LIVING SPAWNERS: hourly world reset (IDEA, PINNED 2026-07-30 — Alex, not yet designed)
 > **Parked deliberately, in Alex's own words, so it survives until we pick it up.** Raised right after the party
 > panel; he asked to finish the bank first and come back to this. **Nothing here is built or ruled.**
