@@ -54,6 +54,7 @@ import { createGEState, buyFromGE, sellToGE, tickPriceDrift, GE_ITEM_IDS, geToSa
 import { CROP_DEFS, plantCrop, harvestCrop, plantedCropsToSave, plantedCropsFromSave, isCropReady, type PlantedCrop } from '../engine/farming'
 import type { AITier } from '../engine/battle-ai'
 import ArenaBattle from '../components/ArenaBattle'
+import PartyPanel from './PartyPanel'
 import HotBar from './HotBar'
 import { NPCS_3D, GREG_INTRO_LINES, GREG_NUDGE, GREG_RETURN, THISTLE_TAUNT_NO_SPIRIT, THISTLE_PREFIGHT, THISTLE_DEFEAT, FREED_SPIRIT_BEAT, SORREL_PREFIGHT, SORREL_DEFEAT, FREED_PAIR_BEAT, BRACK_PREFIGHT, BRACK_FINALE, type NPC3D } from './npcs3d'
 import { useCloudSave } from '@/lib/use-cloud-save'
@@ -3846,6 +3847,58 @@ export default function Shimmer3D() {
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [toggleBag])
+  // ── Party panel (P) — the lineup. Same ownership rule as the bag: state lives here so the key,
+  // the pointer-lock handoff and the HotBar button can never disagree about whether it's open.
+  // partyTick forces a re-render after a mend, since the party is a ref mutated in place.
+  const [partyOpen, setPartyOpen] = useState(false)
+  const partyOpenRef = useRef(false); partyOpenRef.current = partyOpen
+  const [partyTick, setPartyTick] = useState(0)
+  const toggleParty = useCallback((open: boolean) => {
+    setPartyOpen(open)
+    if (open) { setPartyTick(t => t + 1); openCursorUI() } else closeCursorUI()
+  }, [openCursorUI, closeCursorUI])
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key.toLowerCase() !== 'p') return
+      if (editRef.current || battleRef.current || curBattleRef.current || dialogueRef.current) return
+      e.preventDefault(); toggleParty(!partyOpenRef.current)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [toggleParty])
+
+  // Spend a salve on ONE named spirit — the deliberate counterpart to the hotbar's auto-pick
+  // (which takes the worst-off). Reviving a downed spirit also mends it with the same salve,
+  // or the item would be spent putting something on its feet at a sliver.
+  const mendSpirit = useCallback((spirit: Spirit) => {
+    const amount = SPIRIT_MEND_POTIONS[MEND_POTION_ID]
+    if (!amount) return
+    if (countItem(invRef.current, MEND_POTION_ID) < 1) { setHarvestToast('No Shimmer Salve in the satchel'); return }
+    const wasDowned = isDowned(spirit)
+    if (wasDowned) reviveSpirit(spirit)
+    const healed = healSpirit(spirit, amount)
+    if (!wasDowned && healed <= 0) { setHarvestToast(`${spirit.name} is unhurt`); return }
+    removeItems(invRef.current, MEND_POTION_ID, 1)
+    setInvSlots([...invRef.current.slots])
+    setPartyTick(t => t + 1)
+    setHarvestToast(wasDowned
+      ? `${spirit.name} is back on its feet · ${currentHpOf(spirit)}/${maxHpOf(spirit)}`
+      : `${spirit.name} mended · ${currentHpOf(spirit)}/${maxHpOf(spirit)}`)
+    persist()
+  }, [persist])
+
+  // Lead order is load-bearing, not cosmetic: a wiped party recovers its LEAD (spirit-health's
+  // anti-softlock valve), and the lineup is the order spirits take the field in.
+  const setPartyLead = useCallback((index: number) => {
+    const party = partyRef.current
+    if (!party || index <= 0 || index >= party.length) return
+    const [moved] = party.splice(index, 1)
+    party.unshift(moved)
+    setPartyTick(t => t + 1)
+    setHarvestToast(`${moved.name} leads the party`)
+    persist()
+  }, [persist])
+
   // ── Range console (T, weapon out only) — new-player controls for the firing range: target drift,
   // hostile ground hunter, stats reset. Same cursor dance as the satchel: open frees the pointer,
   // close re-locks. Settings live in a ref so FiringRange reads them at frame rate with no re-render.
@@ -4885,7 +4938,20 @@ export default function Shimmer3D() {
         </>
       )}
 
-      {!battle && !approach && !rewards && !editMode && !dialogue && !placing && <HotBar items={invSlots} bagOpen={bagOpen} onBagChange={toggleBag} onUse={useItem} onReorder={reorderSlots} onSelect={(i) => { selSlotRef.current = i }} usable={USE_HINTS}
+      {partyOpen && (
+        <PartyPanel
+          key={partyTick}
+          party={partyRef.current ?? []}
+          salves={countItem(invRef.current, MEND_POTION_ID)}
+          isTouch={isTouch}
+          onMend={mendSpirit}
+          onSetLead={setPartyLead}
+          onClose={() => toggleParty(false)}
+        />
+      )}
+
+      {!battle && !approach && !rewards && !editMode && !dialogue && !placing && <HotBar items={invSlots} bagOpen={bagOpen} onBagChange={toggleBag}
+        partyOpen={partyOpen} onPartyChange={toggleParty} partyHurt={(void partyTick, (partyRef.current ?? []).filter(sp => hpFracOf(sp) < 1).length)} onUse={useItem} onReorder={reorderSlots} onSelect={(i) => { selSlotRef.current = i }} usable={USE_HINTS}
         tools={(void toolTick, (['forestry', 'prospecting', 'rinning'] as const).map(skill => {
           const t = equippedToolsRef.current[skill]
           const def = t ? TOOL_DEFS[t.toolId] : null

@@ -57,7 +57,7 @@ function ItemTile({ item }: { item: ItemStack | null }) {
   )
 }
 
-export default function HotBar({ items: propItems, onUse, onReorder, onSelect, usable, tools: propTools, bagOpen: bagOpenProp, onBagChange }: { items?: (ItemStack | null)[]; onUse?: (itemId: string) => void; onReorder?: (from: number, to: number) => void; onSelect?: (idx: number) => void; usable?: Record<string, unknown>; tools?: ToolGauge[]; bagOpen?: boolean; onBagChange?: (open: boolean) => void } = {}) {
+export default function HotBar({ items: propItems, onUse, onReorder, onSelect, usable, tools: propTools, bagOpen: bagOpenProp, onBagChange, partyOpen, onPartyChange, partyHurt }: { items?: (ItemStack | null)[]; onUse?: (itemId: string) => void; onReorder?: (from: number, to: number) => void; onSelect?: (idx: number) => void; usable?: Record<string, unknown>; tools?: ToolGauge[]; bagOpen?: boolean; onBagChange?: (open: boolean) => void; partyOpen?: boolean; onPartyChange?: (open: boolean) => void; partyHurt?: number } = {}) {
   const [items, setItems] = useState<(ItemStack | null)[]>(propItems ?? PH_ITEMS)
   const itemsRef = useRef(items); itemsRef.current = items
   const onUseRef = useRef(onUse); onUseRef.current = onUse
@@ -206,6 +206,31 @@ export default function HotBar({ items: propItems, onUse, onReorder, onSelect, u
     }}>🎒</button>
   )
 
+  // PARTY — sits beside the bag because it is the same kind of thing: the other half of what you
+  // are carrying. Green accent (the growing/living side) against the bag's amber. The badge is a
+  // wound count, so a hurt party nags from the bar without opening anything.
+  const PartyBtn = ({ size }: { size: number }) => {
+    const hurt = partyHurt ?? 0
+    return (
+      <button onClick={() => onPartyChange?.(!partyOpen)} title="Party (P)" style={{
+        position: 'relative', width: size, height: size, flexShrink: 0, borderRadius: 12, cursor: 'pointer', touchAction: 'none',
+        border: `2px solid ${partyOpen ? '#4fbf87' : hurt > 0 ? '#f0a52688' : '#ffffff2a'}`,
+        background: partyOpen ? '#12261f' : '#0e1a17',
+        font: `${size * 0.5}px serif`, lineHeight: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
+        boxShadow: partyOpen ? '0 0 12px #4fbf8755' : 'inset 0 1px 0 #ffffff10',
+      }}>
+        🌱
+        {hurt > 0 && !partyOpen && (
+          <span style={{
+            position: 'absolute', top: -4, right: -4, minWidth: 15, height: 15, padding: '0 3px', borderRadius: 999,
+            background: '#e05a4d', color: '#0a0f0e', font: '800 9px ui-monospace, monospace',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 0 8px #e05a4d88',
+          }}>{hurt}</span>
+        )}
+      </button>
+    )
+  }
+
   const toolSize = isTouch ? 46 : 48
 
   return (
@@ -241,6 +266,7 @@ export default function HotBar({ items: propItems, onUse, onReorder, onSelect, u
             padding: '7px 8px calc(7px + env(safe-area-inset-bottom))', background: '#0b1513f2', borderTop: '1px solid #2f5c4f' }
         : { position: 'fixed', left: '50%', transform: 'translateX(-50%)', bottom: 20, zIndex: 35, display: 'flex', alignItems: 'center', gap: 9 }}>
         <BagBtn size={isTouch ? 46 : 52} />
+        <PartyBtn size={isTouch ? 46 : 52} />
         <div style={{ display: 'flex', gap: isTouch ? 5 : 6, flex: isTouch ? '1 1 0' : undefined }}>
           {Array.from({ length: SLOTS }, (_, i) => <Slot key={i} idx={i} flex={isTouch} />)}
         </div>
