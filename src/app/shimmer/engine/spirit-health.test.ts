@@ -19,7 +19,8 @@ import { spiritsToSave, spiritsFromSave } from '../spirits/spirit-save'
 import {
   hpFracOf, currentHpOf, maxHpOf, isDowned, canFight, fieldableSpirits, partyAllDowned,
   applyFightResult, healSpirit, healSpiritFrac, reviveSpirit, restoreParty, pickMendTarget,
-  tickRecovery, REGEN_FRAC_PER_MIN, WIPE_REVIVE_FRAC_PER_MIN, REVIVE_FRAC,
+  tickRecovery, REGEN_FRAC_PER_MIN, WIPE_REVIVE_FRAC_PER_MIN, REVIVE_FRAC, REST_REGEN_MULT,
+  activeSpirits, restingSpirits, setSpiritActive, normalizeRoster,
 } from './spirit-health'
 
 let failures = 0
@@ -251,6 +252,83 @@ console.log('\nsave round-trip')
   const corrupt = spiritsToSave(party); corrupt[0].hpFrac = 7; corrupt[1].hpFrac = -3
   const fixed = spiritsFromSave(corrupt)
   check('an out-of-range saved fraction clamps on load', hpFracOf(fixed[0]) === 1 && hpFracOf(fixed[1]) === 0)
+}
+
+// ── active vs resting: the seam the spirit bank rests on ────────────────────
+console.log('\nroster — active vs resting')
+{
+  const owned = [mk('A'), mk('B'), mk('C')]
+  check('a spirit with no inParty flag counts as active', activeSpirits(owned).length === 3)
+  check('...and nothing is resting', restingSpirits(owned).length === 0)
+
+  owned[2].inParty = false
+  check('an explicitly rested spirit leaves the active list', activeSpirits(owned).map(s => s.name).join() === 'A,B')
+  check('...and appears in the resting list', restingSpirits(owned).map(s => s.name).join() === 'C')
+
+  // The cap has to bind on the ROSTER, not just at fight time — a fifth spirit that is owned but
+  // permanently unfieldable, with nothing saying why, is the bug this replaces.
+  const full = [mk('1'), mk('2'), mk('3'), mk('4'), mk('5')]
+  full[4].inParty = false
+  check('calling one back into a full party is refused', setSpiritActive(full, full[4], true, 4) === 'Your party is full')
+  check('...and the spirit stays resting', full[4].inParty === false)
+
+  check('resting one from a full party works', setSpiritActive(full, full[0], false, 4) === null && full[0].inParty === false)
+  check('...which frees the slot', setSpiritActive(full, full[4], true, 4) === null && full[4].inParty !== false)
+
+  // Emptying the lineup entirely is legal as a state but a trap as an action: every encounter would
+  // silently refuse the player with no explanation.
+  const solo = [mk('Only')]
+  check('you cannot rest your last active spirit', setSpiritActive(solo, solo[0], false, 4) === 'Keep at least one spirit with you')
+  check('...and it stays active', solo[0].inParty !== false)
+
+  check('a no-op move is not an error', setSpiritActive(owned, owned[0], true, 4) === null)
+
+  // Legacy saves: everyone loaded active, however many there were.
+  const legacy = [mk('a'), mk('b'), mk('c'), mk('d'), mk('e'), mk('f')]
+  normalizeRoster(legacy, 4)
+  check('a legacy roster is capped to the party size', activeSpirits(legacy).length === 4)
+  check('...keeping the first four in order', activeSpirits(legacy).map(s => s.name).join() === 'a,b,c,d')
+  check('...and resting the overflow', restingSpirits(legacy).map(s => s.name).join() === 'e,f')
+  normalizeRoster(legacy, 4)
+  check('normalising twice changes nothing', activeSpirits(legacy).length === 4)
+}
+
+// ── resting recovers faster, and the valve knows the difference ─────────────
+console.log('\nrest recovery')
+{
+  const active = mk('Out'), resting = mk('Home')
+  active.hpFrac = 0.5; resting.hpFrac = 0.5; resting.inParty = false
+  tickRecovery([active, resting], 60)
+  check('a resting spirit mends faster than one in the field',
+    hpFracOf(resting) > hpFracOf(active), `${hpFracOf(resting)} vs ${hpFracOf(active)}`)
+  check('...by exactly the rest multiplier',
+    near(hpFracOf(resting) - 0.5, (hpFracOf(active) - 0.5) * REST_REGEN_MULT, 1e-9))
+
+  // ★ The valve must NOT fire while a healthy spirit sits on the bench — there is no dead end to
+  // rescue anyone from, and firing would hand a free revive out after every ordinary hard fight.
+  const benchHealthy = [mk('Front'), mk('Bench')]
+  applyFightResult(benchHealthy[0], 0, 200)      // active party wiped
+  benchHealthy[1].inParty = false                // but a fresh spirit is resting at home
+  tickRecovery(benchHealthy, 60 * 60)
+  check('a wiped party with a healthy reserve gets NO free revive', isDowned(benchHealthy[0]))
+  check('...because swapping the reserve in was always available', !isDowned(benchHealthy[1]))
+
+  // Genuinely stranded: everything you own is down. Now it fires.
+  const allDown = [mk('Front2'), mk('Bench2')]
+  allDown[1].inParty = false
+  for (const s of allDown) applyFightResult(s, 0, 200)
+  tickRecovery(allDown, 60)
+  check('with EVERY spirit down the valve fires', hpFracOf(allDown[0]) > 0, `${hpFracOf(allDown[0])}`)
+  check('...on the active lead, not the resting one', isDowned(allDown[1]))
+
+  // The re-introduction trap: the gate must not be `every(isDowned)`, which goes false the instant
+  // the lead ticks off zero — that would strand the lead at a hair above nothing forever, since the
+  // ordinary trickle skips the downed and the valve would have switched itself off. Walk the clock.
+  for (let i = 0; i < 60; i++) tickRecovery(allDown, 60)
+  check('...and lifts it clear of the sliver rather than stalling at a hair',
+    hpFracOf(allDown[0]) >= REVIVE_FRAC, `${hpFracOf(allDown[0])}`)
+  check('...while the resting one stays down — exactly ONE free comeback', isDowned(allDown[1]))
+  check('...so the player has a spirit to field again', fieldableSpirits(activeSpirits(allDown)).length === 1)
 }
 
 // ── the actual seam: a wound has to survive the trip through a real arena ──────

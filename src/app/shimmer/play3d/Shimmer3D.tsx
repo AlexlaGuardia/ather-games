@@ -26,6 +26,7 @@ import { type BattleResult } from '../engine/arena'
 import {
   applyFightResult, tickRecovery, fieldableSpirits, partyAllDowned,
   isDowned, hpFracOf, currentHpOf, maxHpOf, healSpirit, reviveSpirit, pickMendTarget,
+  activeSpirits, restingSpirits, setSpiritActive, normalizeRoster, canFight,
 } from '../engine/spirit-health'
 import { getMovesForSpirit } from '../engine/moves'
 import { createSpirit, addXP, xpForLevel, speciesDisplayName, ELEMENT_COLORS, type Spirit, type Species, type Element } from '../spirits/spirit'
@@ -2390,10 +2391,17 @@ export default function Shimmer3D() {
   const partyRef = useRef<Spirit[] | null>(null)
   if (!partyRef.current) partyRef.current = [] // empty until Greg's starter handoff; load() may replace it
   const hasPartyRef = useRef(false); hasPartyRef.current = (partyRef.current?.length ?? 0) > 0
+  // ★ partyRef holds every spirit you OWN — `inParty` decides which of them is your party. Those
+  // were the same list until the Home Plot landed (the flag shipped on the Spirit type long ago and
+  // was never once written or read here). Anything that means "who fights" or "how strong are you"
+  // reads the ACTIVE set; anything that means "what do I have" reads the whole ref.
   const partyLevelRef = useRef(0)
-  partyLevelRef.current = partyRef.current.length
-    ? Math.round(partyRef.current.reduce((s, x) => s + x.level, 0) / partyRef.current.length)
-    : 5
+  {
+    const active = activeSpirits(partyRef.current)
+    partyLevelRef.current = active.length
+      ? Math.round(active.reduce((s, x) => s + x.level, 0) / active.length)
+      : 5
+  }
   // Mana'mal companions — earned at skill 15 (canon Companion-tier bond). The overworld follower
   // renders (see `Follower`); its perk is granted in the harvest/brew loops. No CARE loop yet, so
   // happiness is pinned at full and the perk runs at full strength.
@@ -2676,6 +2684,10 @@ export default function Shimmer3D() {
       setCompanionTick(t => t + 1)
       if (data?.spirits?.length) {
         partyRef.current = spiritsFromSave(data.spirits)
+        // Every save written before the Home Plot existed has all its spirits flagged active,
+        // however many there were — the cap was only ever applied at fight time. Land them in a
+        // legal shape on load so the roster and the battlefield finally agree.
+        normalizeRoster(partyRef.current, MAX_PARTY)
         setHasStarter(true)
         if (typeof data.playerTileX === 'number' && typeof data.playerTileY === 'number') {
           posRef.current!.set(data.playerTileX, posRef.current!.y, data.playerTileY)
@@ -2752,7 +2764,9 @@ export default function Shimmer3D() {
       // write-back would overwrite this anyway.
       if (!battleRef.current && partyRef.current?.length) tickRecovery(partyRef.current, 0.5)
       setWoundHud(prev => {
-        const hurt = (partyRef.current ?? [])
+        // Active party only — a spirit resting at home is not a problem you need nagging about,
+        // and the chips are a "deal with this" surface, not a roster.
+        const hurt = activeSpirits(partyRef.current ?? [])
           .filter(sp => hpFracOf(sp) < 1)
           .map(sp => ({ name: sp.name, frac: hpFracOf(sp), downed: isDowned(sp) }))
         // The trickle moves every tick, so compare at display resolution or this re-renders at 2 Hz forever.
@@ -3369,7 +3383,7 @@ export default function Shimmer3D() {
     // party at all gets the throwaway trio (dev feel-testing, never persisted).
     if (real.length > 0 && !fieldParty()) return
     const allies = real.length > 0
-      ? fieldableSpirits(real).slice(0, MAX_PARTY)
+      ? fieldableSpirits(activeSpirits(real)).slice(0, MAX_PARTY)
       : (['fox', 'owl', 'water-bear'] as const).map((sp, i) => {
           const s = createSpirit(sp, ['Kit', 'Sage', 'Tor'][i], 0, 0)
           s.level = 12; s.bond = 60; s.happiness = 128
@@ -3393,12 +3407,17 @@ export default function Shimmer3D() {
   // The returned array holds the SAME Spirit objects as the party, so the post-fight wound
   // write-back (which indexes into it) lands on the real save.
   const fieldParty = useCallback((): Spirit[] | null => {
-    const party = partyRef.current ?? []
-    const ready = fieldableSpirits(party).slice(0, MAX_PARTY)
+    const active = activeSpirits(partyRef.current ?? [])
+    const ready = fieldableSpirits(active).slice(0, MAX_PARTY)
     if (ready.length === 0) {
-      setBanner(partyAllDowned(party)
-        ? '✦ Your whole party is down — mend them before you fight'
-        : '✦ You have no spirits to send in')
+      // "Everyone with you is down" is a different problem from "you have nobody with you", and a
+      // reserve resting at home makes it a third — the fix is a swap, so say so.
+      const resting = restingSpirits(partyRef.current ?? [])
+      setBanner(!partyAllDowned(active)
+        ? '✦ You have no spirits to send in'
+        : resting.some(canFight)
+          ? '✦ Your party is down — swap in one resting at home (P)'
+          : '✦ Your whole party is down — mend them before you fight')
       return null
     }
     return ready
@@ -3498,8 +3517,12 @@ export default function Shimmer3D() {
       const sp = LAUNCHED_SPECIES[Math.floor(Math.random() * LAUNCHED_SPECIES.length)]
       const bloom = createSpirit(sp, speciesDisplayName(sp), 0, 0)
       bloom.level = Math.max(5, partyLevelRef.current)
+      // A bloom into a FULL party used to append silently — the spirit was owned, fed and levelled
+      // forever, and never once fielded, because the cap only existed at fight time. It rests at
+      // the Home Plot now, and the dialogue below says which of the two happened.
+      bloom.inParty = activeSpirits(partyRef.current ?? []).length < MAX_PARTY
       partyRef.current = [...(partyRef.current ?? []), bloom]
-      setDialogue({ name: 'Sorrel', lines: [...SORREL_DEFEAT, FREED_PAIR_BEAT, `A Mana Seed sits where the leashes were. It blooms — a young ${speciesDisplayName(sp)} joins you.`], idx: 0, onDone: () => setBanner('✦ Hold 2 cleared — the Mana Springs are free') })
+      setDialogue({ name: 'Sorrel', lines: [...SORREL_DEFEAT, FREED_PAIR_BEAT, `A Mana Seed sits where the leashes were. It blooms — a young ${speciesDisplayName(sp)} ${bloom.inParty ? 'joins you' : 'joins you, and waits at the Home Plot — your party is full'}.`], idx: 0, onDone: () => setBanner('✦ Hold 2 cleared — the Mana Springs are free') })
     }
     // Hold 3 — the climax. Brack's stronghold falls; all three collars break at once and the three Moglins
     // deflate together (the four-voice finale). Mana Seed reward blooms a companion; the arc closes.
@@ -3509,8 +3532,12 @@ export default function Shimmer3D() {
       const sp = LAUNCHED_SPECIES[Math.floor(Math.random() * LAUNCHED_SPECIES.length)]
       const bloom = createSpirit(sp, speciesDisplayName(sp), 0, 0)
       bloom.level = Math.max(5, partyLevelRef.current)
+      // A bloom into a FULL party used to append silently — the spirit was owned, fed and levelled
+      // forever, and never once fielded, because the cap only existed at fight time. It rests at
+      // the Home Plot now, and the dialogue below says which of the two happened.
+      bloom.inParty = activeSpirits(partyRef.current ?? []).length < MAX_PARTY
       partyRef.current = [...(partyRef.current ?? []), bloom]
-      const finale = [...BRACK_FINALE, { speaker: '—', text: `A Mana Seed rests in the cracked-open grass. It blooms — a young ${speciesDisplayName(sp)} joins you.` }]
+      const finale = [...BRACK_FINALE, { speaker: '—', text: `A Mana Seed rests in the cracked-open grass. It blooms — a young ${speciesDisplayName(sp)} ${bloom.inParty ? 'joins you' : 'joins you, and waits at the Home Plot — your party is full'}.` }]
       setDialogue({
         name: 'Brack',
         lines: finale.map(l => l.text),
@@ -3889,13 +3916,30 @@ export default function Shimmer3D() {
 
   // Lead order is load-bearing, not cosmetic: a wiped party recovers its LEAD (spirit-health's
   // anti-softlock valve), and the lineup is the order spirits take the field in.
-  const setPartyLead = useCallback((index: number) => {
-    const party = partyRef.current
-    if (!party || index <= 0 || index >= party.length) return
-    const [moved] = party.splice(index, 1)
-    party.unshift(moved)
+  // Takes the SPIRIT, not an index: the panel shows two lists that reorder under it, so an index
+  // into "the active party" is not an index into `partyRef` and would move the wrong one.
+  const setPartyLead = useCallback((spirit: Spirit) => {
+    const owned = partyRef.current
+    if (!owned) return
+    const at = owned.indexOf(spirit)
+    if (at < 0) return
+    owned.splice(at, 1)
+    owned.unshift(spirit)
+    spirit.inParty = true
     setPartyTick(t => t + 1)
-    setHarvestToast(`${moved.name} leads the party`)
+    setHarvestToast(`${spirit.name} leads the party`)
+    persist()
+  }, [persist])
+
+  // Send a spirit to rest at the Home Plot, or call one back. The engine owns the rules (cap,
+  // never-empty-the-lineup) and hands back a reason string when it refuses.
+  const setSpiritActiveIn = useCallback((spirit: Spirit, active: boolean) => {
+    const owned = partyRef.current
+    if (!owned) return
+    const refused = setSpiritActive(owned, spirit, active, MAX_PARTY)
+    if (refused) { setHarvestToast(refused); return }
+    setPartyTick(t => t + 1)
+    setHarvestToast(active ? `${spirit.name} joins you` : `${spirit.name} stays at the Home Plot`)
     persist()
   }, [persist])
 
@@ -4941,17 +4985,19 @@ export default function Shimmer3D() {
       {partyOpen && (
         <PartyPanel
           key={partyTick}
-          party={partyRef.current ?? []}
+          owned={partyRef.current ?? []}
+          maxParty={MAX_PARTY}
           salves={countItem(invRef.current, MEND_POTION_ID)}
           isTouch={isTouch}
           onMend={mendSpirit}
           onSetLead={setPartyLead}
+          onSetActive={setSpiritActiveIn}
           onClose={() => toggleParty(false)}
         />
       )}
 
       {!battle && !approach && !rewards && !editMode && !dialogue && !placing && <HotBar items={invSlots} bagOpen={bagOpen} onBagChange={toggleBag}
-        partyOpen={partyOpen} onPartyChange={toggleParty} partyHurt={(void partyTick, (partyRef.current ?? []).filter(sp => hpFracOf(sp) < 1).length)} onUse={useItem} onReorder={reorderSlots} onSelect={(i) => { selSlotRef.current = i }} usable={USE_HINTS}
+        partyOpen={partyOpen} onPartyChange={toggleParty} partyHurt={(void partyTick, activeSpirits(partyRef.current ?? []).filter(sp => hpFracOf(sp) < 1).length)} onUse={useItem} onReorder={reorderSlots} onSelect={(i) => { selSlotRef.current = i }} usable={USE_HINTS}
         tools={(void toolTick, (['forestry', 'prospecting', 'rinning'] as const).map(skill => {
           const t = equippedToolsRef.current[skill]
           const def = t ? TOOL_DEFS[t.toolId] : null

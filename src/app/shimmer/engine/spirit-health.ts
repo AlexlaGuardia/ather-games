@@ -27,6 +27,10 @@ export const REGEN_FRAC_PER_MIN = 0.02   // wounded: 2% of a bar per minute out 
 // valve were scaled off it, that setting would make a total wipe UNRECOVERABLE. It must never be 0.
 export const WIPE_REVIVE_FRAC_PER_MIN = 0.01
 export const REVIVE_FRAC = 0.15          // how far the valve (and a salve's revive) lifts a downed spirit
+// A spirit left resting at the Home Plot is safe and tended, so it knits back faster than one
+// trudging around a zone with you. This is what makes leaving a hurt spirit home a real decision
+// rather than a shelf: you trade a body in the lineup for a quicker mend.
+export const REST_REGEN_MULT = 3
 
 /** hpFrac with the default applied. Old saves and any spirit built before this existed read as 1. */
 export function hpFracOf(spirit: Spirit): number {
@@ -55,6 +59,17 @@ export function isDowned(spirit: Spirit): boolean {
 /** Can this spirit be sent into a battle at all? */
 export function canFight(spirit: Spirit): boolean {
   return !isDowned(spirit)
+}
+
+// ── active party vs the ones resting at home ────────────────────────────────
+// `inParty` shipped on the Spirit type long ago and was never once written or read in play3d —
+// the walker treated "every spirit you own" and "your party" as the same list. These two helpers
+// are the seam that separates them; everything that means "who fights" goes through them.
+export function activeSpirits(owned: Spirit[]): Spirit[] {
+  return owned.filter(s => s.inParty !== false)
+}
+export function restingSpirits(owned: Spirit[]): Spirit[] {
+  return owned.filter(s => s.inParty === false)
 }
 
 /** The fieldable members of a party, in order. Empty = the player cannot start a fight. */
@@ -123,6 +138,37 @@ export function pickMendTarget(party: Spirit[]): Spirit | null {
   return worst
 }
 
+// ── roster moves ────────────────────────────────────────────────────────────
+/**
+ * Send a spirit to rest at the Home Plot, or call one back into the active party.
+ * Returns null on success, or a reason string the caller can surface.
+ *
+ * The cap has only ever been enforced at FIGHT time (`slice(0, MAX_PARTY)`), which meant a fifth
+ * spirit silently became a permanent non-combatant — owned, fed, levelled, and never fielded, with
+ * nothing anywhere saying why. Enforcing it on the roster is what makes that state impossible.
+ */
+export function setSpiritActive(owned: Spirit[], spirit: Spirit, active: boolean, maxParty: number): string | null {
+  if (active && spirit.inParty !== false) return null
+  if (!active && spirit.inParty === false) return null
+  if (active && activeSpirits(owned).length >= maxParty) return 'Your party is full'
+  // Refusing to empty the party outright: an empty lineup is a legal state (a new game has one),
+  // but walking into it by accident mid-run means every encounter refuses you with no clue why.
+  if (!active && activeSpirits(owned).length <= 1) return 'Keep at least one spirit with you'
+  spirit.inParty = active
+  return null
+}
+
+/** Existing saves predate the active/resting split — everyone loaded as active, however many.
+ *  Keep the first `maxParty` and rest the overflow, so a legacy roster lands in a legal shape. */
+export function normalizeRoster(owned: Spirit[], maxParty: number): void {
+  let active = 0
+  for (const s of owned) {
+    if (s.inParty === false) continue
+    active += 1
+    if (active > maxParty) s.inParty = false
+  }
+}
+
 /** Full party restore — the rest/sleep path, if one is ever wired to a bed or a healer. */
 export function restoreParty(party: Spirit[]): void {
   for (const s of party) s.hpFrac = 1
@@ -137,25 +183,34 @@ export function restoreParty(party: Spirit[]): void {
  * carve-out is the difference between "grinding is the fast path" and "grinding is the only path,
  * and if you can't, the game is over."
  */
-export function tickRecovery(party: Spirit[], dtSeconds: number): void {
-  if (dtSeconds <= 0 || party.length === 0) return
+export function tickRecovery(owned: Spirit[], dtSeconds: number): void {
+  if (dtSeconds <= 0 || owned.length === 0) return
   const perMin = dtSeconds / 60
 
-  // Anyone still standing knits back together on the ordinary clock.
-  for (const s of party) {
+  // Anyone still standing knits back together on the ordinary clock — faster if they're resting
+  // at home rather than out walking a zone with you.
+  for (const s of owned) {
     if (isDowned(s)) continue       // a downed spirit whose party still has legs stays down
     const f = hpFracOf(s)
     if (f >= 1) continue
-    s.hpFrac = clamp01(f + REGEN_FRAC_PER_MIN * perMin)
+    const rate = REGEN_FRAC_PER_MIN * (s.inParty === false ? REST_REGEN_MULT : 1)
+    s.hpFrac = clamp01(f + rate * perMin)
   }
 
-  // The valve. Gated on "every OTHER member is down and the lead is still under the sliver" rather
-  // than "the whole party is down" — the naive version stopped applying the moment the lead ticked
-  // off zero, which meant the cap below never actually held. Exactly one spirit ever comes back
-  // for free, and only far enough to walk; everyone else costs a salve.
-  const lead = party[0]
-  const restAllDown = party.slice(1).every(isDowned)
-  if (restAllDown && hpFracOf(lead) < REVIVE_FRAC) {
+  // ── the anti-softlock valve ──
+  // Keyed on EVERY SPIRIT YOU OWN, not on the active four. A healthy spirit resting at home means
+  // there was never a dead end: the player just swaps it in. Firing the valve then would hand out
+  // a free revive to someone who didn't need rescuing — and would do it constantly, since a party
+  // wipe with reserves on the bench is the ordinary outcome of a hard fight, not an emergency.
+  // Rescue the lead of the active party — the one the player actually fields — falling back to the
+  // first owned spirit if nothing is marked active.
+  const lead = activeSpirits(owned)[0] ?? owned[0]
+  // Gated on "everyone EXCEPT the lead is down, and the lead is still under the sliver", never on
+  // "everyone is down": the latter stops being true the instant the lead ticks off zero, so the cap
+  // would never hold and the lead would heal free to full. This is the same trap the oracle caught
+  // the first time the valve was written — it is easy to re-introduce, hence the assert.
+  const othersAllDown = owned.every(s => s === lead || isDowned(s))
+  if (othersAllDown && hpFracOf(lead) < REVIVE_FRAC) {
     lead.hpFrac = Math.min(REVIVE_FRAC, hpFracOf(lead) + WIPE_REVIVE_FRAC_PER_MIN * perMin)
   }
 }

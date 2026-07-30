@@ -25,7 +25,7 @@ import {
 import { EVOLUTION_THRESHOLDS } from '../spirits/evolution-config'
 import { derivePartyStats, type PartyStats } from '../engine/party-stats'
 import { getMovesForSpirit } from '../engine/moves'
-import { hpFracOf, currentHpOf, maxHpOf, isDowned } from '../engine/spirit-health'
+import { hpFracOf, currentHpOf, maxHpOf, isDowned, activeSpirits, restingSpirits, REST_REGEN_MULT } from '../engine/spirit-health'
 import { menuBtn } from './ui'
 
 // ── the grimoire manifest (flavor text + portraits) ─────────────────────────
@@ -91,8 +91,8 @@ function Meter({ frac, color, h = 6 }: { frac: number; color: string; h?: number
 }
 
 // ── one roster card ─────────────────────────────────────────────────────────
-function LineupCard({ spirit, index, selected, onClick }: {
-  spirit: Spirit; index: number; selected: boolean; onClick: () => void
+function LineupCard({ spirit, index, resting, selected, onClick }: {
+  spirit: Spirit; index: number; resting: boolean; selected: boolean; onClick: () => void
 }) {
   const col = ELEMENT_COLORS[spirit.element] ?? '#7fe3c8'
   const frac = hpFracOf(spirit)
@@ -116,8 +116,8 @@ function LineupCard({ spirit, index, selected, onClick }: {
         <Meter frac={frac} color={down ? '#e05a4d' : hpColor(frac)} />
       </div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginTop: 3 }}>
-        <span style={{ font: `700 8.5px ${mono}`, color: down ? '#e05a4d' : dim, letterSpacing: '0.1em' }}>
-          {down ? 'DOWN' : index === 0 ? 'LEAD' : speciesDisplayName(spirit.species).toUpperCase()}
+        <span style={{ font: `700 8.5px ${mono}`, color: down ? '#e05a4d' : resting ? '#8a9fd0' : dim, letterSpacing: '0.1em' }}>
+          {down ? 'DOWN' : resting ? 'RESTING' : index === 0 ? 'LEAD' : speciesDisplayName(spirit.species).toUpperCase()}
         </span>
         <span style={{ font: `700 9px ${mono}`, color: '#8fa8a0', fontVariantNumeric: 'tabular-nums' }}>
           {currentHpOf(spirit)}/{maxHpOf(spirit)}
@@ -128,9 +128,11 @@ function LineupCard({ spirit, index, selected, onClick }: {
 }
 
 // ── the dossier ─────────────────────────────────────────────────────────────
-function Detail({ spirit, index, salves, onMend, onSetLead }: {
-  spirit: Spirit; index: number; salves: number
-  onMend: (s: Spirit) => void; onSetLead: (i: number) => void
+function Detail({ spirit, index, resting, salves, onMend, onSetLead, onSetActive }: {
+  spirit: Spirit; index: number; resting: boolean; salves: number
+  onMend: (s: Spirit) => void
+  onSetLead: (s: Spirit) => void
+  onSetActive: (s: Spirit, active: boolean) => void
 }) {
   const [grim, setGrim] = useState<Record<string, GrimoireEntry> | null>(grimoireCache)
   useEffect(() => { let live = true; loadGrimoire().then(g => { if (live) setGrim(g) }); return () => { live = false } }, [])
@@ -315,29 +317,51 @@ function Detail({ spirit, index, salves, onMend, onSetLead }: {
         </div>
       </div>
 
-      {index !== 0 && (
-        <button onClick={() => onSetLead(index)} style={{ ...menuBtn, width: '100%', textAlign: 'center', padding: '7px 0' }}>
-          ⬆ Make lead
-        </button>
+      <div style={{ display: 'flex', gap: 6 }}>
+        {resting ? (
+          <button onClick={() => onSetActive(spirit, true)} style={{ ...menuBtn, flex: 1, textAlign: 'center', padding: '7px 0', border: '1px solid #4fbf8766', color: '#bff0d8' }}>
+            ↩ Take along
+          </button>
+        ) : (
+          <>
+            {index !== 0 && (
+              <button onClick={() => onSetLead(spirit)} style={{ ...menuBtn, flex: 1, textAlign: 'center', padding: '7px 0' }}>
+                ⬆ Make lead
+              </button>
+            )}
+            <button onClick={() => onSetActive(spirit, false)} style={{ ...menuBtn, flex: 1, textAlign: 'center', padding: '7px 0' }}>
+              🏡 Leave at home
+            </button>
+          </>
+        )}
+      </div>
+      {resting && (
+        <div style={{ font: `600 9px/1.5 ${mono}`, color: dim, textAlign: 'center' }}>
+          Resting spirits mend {REST_REGEN_MULT}× faster than ones out walking with you.
+        </div>
       )}
     </div>
   )
 }
 
 // ── the panel ───────────────────────────────────────────────────────────────
-export default function PartyPanel({ party, salves, isTouch, onMend, onSetLead, onClose }: {
-  party: Spirit[]
+export default function PartyPanel({ owned, maxParty, salves, isTouch, onMend, onSetLead, onSetActive, onClose }: {
+  owned: Spirit[]                 // every spirit you have; `inParty` splits party from resting
+  maxParty: number
   salves: number
   isTouch: boolean
   onMend: (s: Spirit) => void
-  onSetLead: (i: number) => void
+  onSetLead: (s: Spirit) => void
+  onSetActive: (s: Spirit, active: boolean) => void
   onClose: () => void
 }) {
-  const [selId, setSelId] = useState<string | null>(party[0]?.id ?? null)
-  // Follow the roster if the selected spirit leaves it (mended away is fine, but reordering by
-  // lead or a spirit going to the bank must not leave the detail pane pointing at nothing).
-  const selIndex = Math.max(0, party.findIndex(s => s.id === selId))
-  const selected = party[selIndex] ?? party[0] ?? null
+  const active = activeSpirits(owned)
+  const resting = restingSpirits(owned)
+
+  // Selection is by ID, not index, because both lists reorder under it — a swap moves a spirit
+  // between them and `Make lead` splices the active one. An index would silently retarget.
+  const [selId, setSelId] = useState<string | null>(active[0]?.id ?? owned[0]?.id ?? null)
+  const selected = owned.find(s => s.id === selId) ?? active[0] ?? owned[0] ?? null
   useEffect(() => { if (selected && selected.id !== selId) setSelId(selected.id) }, [selected, selId])
 
   useEffect(() => {
@@ -345,6 +369,32 @@ export default function PartyPanel({ party, salves, isTouch, onMend, onSetLead, 
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [onClose])
+
+  const isResting = !!selected && selected.inParty === false
+  const selIndex = selected ? (isResting ? resting : active).findIndex(s => s.id === selected.id) : 0
+
+  const Column = ({ title, list, sub }: { title: string; list: Spirit[]; sub?: string }) => (
+    <>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', margin: '2px 1px 5px' }}>
+        <span style={{ font: `800 8.5px ${mono}`, color: dim, letterSpacing: '0.14em' }}>{title}</span>
+        {sub && <span style={{ font: `700 8.5px ${mono}`, color: dim, fontVariantNumeric: 'tabular-nums' }}>{sub}</span>}
+      </div>
+      {list.length === 0
+        ? <div style={{ font: `600 9.5px ${mono}`, color: '#ffffff33', padding: '3px 2px 8px' }}>—</div>
+        : (
+          <div style={{
+            display: 'flex', gap: 6, marginBottom: 9,
+            ...(isTouch ? { flexDirection: 'row', overflowX: 'auto', paddingBottom: 2 } : { flexDirection: 'column' }),
+          }}>
+            {list.map((sp, i) => (
+              <div key={sp.id} style={{ flexShrink: 0, width: isTouch ? 160 : '100%' }}>
+                <LineupCard spirit={sp} index={i} resting={sp.inParty === false} selected={sp.id === selected?.id} onClick={() => setSelId(sp.id)} />
+              </div>
+            ))}
+          </div>
+        )}
+    </>
+  )
 
   return (
     <>
@@ -358,32 +408,23 @@ export default function PartyPanel({ party, salves, isTouch, onMend, onSetLead, 
       }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 11, flexShrink: 0 }}>
           <span style={{ font: `900 15px ${mono}`, color: '#8fd9c4', letterSpacing: '0.16em' }}>
-            🌱 PARTY <span style={{ color: dim, fontSize: 11 }}>({party.length})</span>
+            🌱 SPIRITS <span style={{ color: dim, fontSize: 11 }}>({owned.length})</span>
           </span>
           <button onClick={onClose} style={{ ...menuBtn, padding: '4px 10px' }}>✕</button>
         </div>
 
-        {party.length === 0 ? (
+        {owned.length === 0 ? (
           <div style={{ padding: '30px 10px', textAlign: 'center', color: dim, font: `600 12px/1.7 ${mono}` }}>
             No spirits yet.<br />Gregory has a starter for you.
           </div>
         ) : (
-          <div style={{
-            display: 'flex', gap: 13, minHeight: 0, flex: 1,
-            // Stack on a phone; the roster becomes a scrolling strip above the dossier.
-            flexDirection: isTouch ? 'column' : 'row',
-          }}>
-            <div style={{
-              display: 'flex', gap: 6, flexShrink: 0,
-              ...(isTouch
-                ? { flexDirection: 'row', overflowX: 'auto', paddingBottom: 2 }
-                : { flexDirection: 'column', width: 182, overflowY: 'auto' }),
-            }}>
-              {party.map((s, i) => (
-                <div key={s.id} style={{ flexShrink: 0, width: isTouch ? 160 : '100%' }}>
-                  <LineupCard spirit={s} index={i} selected={s.id === selected?.id} onClick={() => setSelId(s.id)} />
-                </div>
-              ))}
+          <div style={{ display: 'flex', gap: 13, minHeight: 0, flex: 1, flexDirection: isTouch ? 'column' : 'row' }}>
+            <div style={{ flexShrink: 0, ...(isTouch ? {} : { width: 182, overflowY: 'auto' }) }}>
+              <Column title="WITH YOU" list={active} sub={`${active.length}/${maxParty}`} />
+              {/* Canon has no name for where an uncarried spirit lives, and the closest thing it
+                  does say is that spirits live in your garden / Home Plot. So this says where they
+                  ARE rather than coining a container — no "bank", no "box", no PC. */}
+              <Column title="AT THE HOME PLOT" list={resting} />
             </div>
 
             <div style={{ flex: 1, minWidth: 0, overflowY: 'auto', paddingRight: 2 }}>
@@ -391,10 +432,12 @@ export default function PartyPanel({ party, salves, isTouch, onMend, onSetLead, 
                 <Detail
                   key={selected.id}
                   spirit={selected}
-                  index={selIndex}
+                  index={Math.max(0, selIndex)}
+                  resting={isResting}
                   salves={salves}
                   onMend={onMend}
                   onSetLead={onSetLead}
+                  onSetActive={onSetActive}
                 />
               )}
             </div>
