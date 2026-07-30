@@ -121,6 +121,24 @@ const pinnedWindow: number | null = (() => {
 export const isBoardPinned = pinnedWindow !== null
 
 /**
+ * `?fadetest=1` — drives every node through the leaving/arriving curve on a short loop, so the
+ * dissolve can be judged in seconds instead of by standing in a clearing at the right minute.
+ * Same reasoning as `?hour=`: a look that takes 32 minutes to come around does not get looked at.
+ * Purely a render-side override — the board itself is untouched, so nothing about what exists in
+ * the world changes while it is on.
+ */
+export const FADE_TEST_MS = 12_000
+export const isFadeTest: boolean = (() => {
+  if (typeof window === 'undefined') return false
+  return new URLSearchParams(window.location.search).get('fadetest') === '1'
+})()
+
+/** The sawtooth `?fadetest=1` runs on: a slow dim to nothing, then a snap back to full. */
+export function fadeTestAlpha(nowMs: number = Date.now()): number {
+  return 1 - ((nowMs % FADE_TEST_MS) / FADE_TEST_MS)
+}
+
+/**
  * Which deal window we are in, and when it opened/closes.
  *
  * ★ When `?hour=` pins the sky, the board pins with it. `day-cycle` promises that every consumer of
@@ -128,10 +146,23 @@ export const isBoardPinned = pinnedWindow !== null
  * break exactly that promise during the art pass it exists for. A pinned hour is a still frame, so
  * it gets one board — use `?window=` to step the deal.
  */
+/**
+ * ★ The pin fixes WHICH board is dealt, not WHEN we are — split out so the oracle can reach it.
+ *
+ * The first cut returned the pinned window's own start/end, which put those timestamps decades in
+ * the past, and everything that measures position INSIDE a window read off them: the HUD counted
+ * down from a boundary long gone and sat on RENEWING forever, and every leaving node computed a
+ * negative remainder and rendered at alpha 0 — invisible, in the one mode built for looking at
+ * them. Only the browser showed it, because outside one there is no pin to take. Hence this seam.
+ */
+export function windowAt(nowMs: number, pin: number | null): DealWindow {
+  const live = Math.floor(nowMs / WINDOW_MS)
+  const index = pin ?? live
+  return { index, startMs: live * WINDOW_MS, endMs: (live + 1) * WINDOW_MS }
+}
+
 export function currentWindow(nowMs: number = Date.now()): DealWindow {
-  if (pinnedWindow !== null) {
-    return { index: pinnedWindow, startMs: pinnedWindow * WINDOW_MS, endMs: (pinnedWindow + 1) * WINDOW_MS }
-  }
+  if (pinnedWindow !== null) return windowAt(nowMs, pinnedWindow)
   if (isTimePinned) {
     // The pinned hour's own window, held still: floor(progress * RESETS_PER_DAY) is which half of
     // the frozen day we are standing in.

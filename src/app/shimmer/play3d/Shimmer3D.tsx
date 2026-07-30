@@ -15,7 +15,7 @@ import { ZONES, getZone, checkWarp, type Zone, type Warp } from '../world/zones'
 import { getHeightGrid } from '../world/heightmaps'
 import { GardenAtmosphere } from '../world/atmosphere'
 import { dayProgress, sunElevation, sunAzimuth, daylight, getPhase, getDisplayTime, CYCLE_MS, isTimePinned } from '../engine/day-cycle'
-import { currentWindow, nodeAlpha, msUntilReset, isBoardPinned, FADE_OUT_MS, type DealtNode } from '../engine/spawn-board'
+import { currentWindow, nodeAlpha, msUntilReset, isBoardPinned, isFadeTest, fadeTestAlpha, FADE_OUT_MS, type DealtNode } from '../engine/spawn-board'
 import { FloraTree, FloraDressing } from '../world/flora'
 import { StationProp, GhostProp } from '../world/prop-models'
 import { RemotePlayers, useRoster } from './RemotePlayers'
@@ -419,8 +419,8 @@ function NodeFade({ node, children }: { node: ResourceNode; children: React.Reac
     // The overwhelmingly common case: a node that is simply standing there. One boolean per node
     // per frame, no traversal, no allocation — cheap enough that wrapping every node is free and
     // the call site does not need a conditional wrapper.
-    if (!g || (!node.leaving && !node.arriving)) return
-    const a = nodeAlpha(node as DealtNode, Date.now())
+    if (!g || (!isFadeTest && !node.leaving && !node.arriving)) return
+    const a = isFadeTest ? fadeTestAlpha() : nodeAlpha(node as DealtNode, Date.now())
     if (a === applied.current) return
     applied.current = a
     const dissolve = a < 0.34 ? a / 0.34 : 1
@@ -1984,8 +1984,10 @@ function DayClock() {
   // rather than permanent furniture — and it is what makes a dimming tree read as "the garden is
   // about to turn over" instead of as a graphical fault. The chip refreshes every 4s, so this
   // counts in whole minutes; a seconds readout would visibly jump and look broken.
+  // Never claimed while the board is pinned: with `?window=` the world is deliberately NOT going to
+  // turn over, so a countdown to a re-deal that will not happen is just a lie on the HUD.
   const toReset = msUntilReset()
-  const renewing = toReset < FADE_OUT_MS
+  const renewing = !isBoardPinned && toReset < FADE_OUT_MS
   return (
     <div title={`${phase} — a full day is ${Math.round(CYCLE_MS / 60000)} real minutes`} style={{
       display: 'flex', alignItems: 'center', gap: 6, padding: '5px 11px', borderRadius: 999,

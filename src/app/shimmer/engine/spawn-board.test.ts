@@ -11,7 +11,7 @@
 // up empty — the exact bug an eyeball pass cannot find and a player would hit within a week.
 
 import {
-  dealZone, currentWindow, nodeAlpha, tileKey, msUntilReset, entryLocations,
+  dealZone, currentWindow, windowAt, nodeAlpha, tileKey, msUntilReset, entryLocations,
   WINDOW_MS, FADE_OUT_MS, GROW_IN_MS, RESETS_PER_DAY, WORLD_SEED, isBoardPinned,
   type DealtNode,
 } from './spawn-board'
@@ -246,6 +246,18 @@ console.log('\nthe clock the HUD reads')
   check('...and is never longer than a window', [0, 1, WINDOW_MS - 1, WINDOW_MS * 7 + 3].every(x => msUntilReset(x) > 0 && msUntilReset(x) <= WINDOW_MS))
   check('the window index advances once per window', currentWindow(t).index + 1 === currentWindow(t + WINDOW_MS).index)
   check('a window contains its own instant', currentWindow(t).startMs <= t && t < currentWindow(t).endMs)
+
+  // ★ Regression guard for a bug only the browser could show. `?window=` pins which board is dealt;
+  // the first cut also moved the window's start/end back to that index's own epoch, decades ago —
+  // so the countdown sat on RENEWING forever and every leaving node was already at alpha 0, i.e.
+  // invisible, in the exact mode built for looking at it. The pin must never move the clock.
+  const pinned = windowAt(t, 1000)
+  check('a pinned board deals the window it was told to', pinned.index === 1000)
+  check('...but still sits inside the live window', pinned.startMs <= t && t < pinned.endMs)
+  check('...so the countdown stays sane', pinned.endMs - t > 0 && pinned.endMs - t <= WINDOW_MS)
+  check('...and a leaving node is not born already faded out',
+    nodeAlpha({ type: 'goldwood', tileX: 1, tileY: 1, leaving: true, arriving: false }, t, pinned) === 1)
+  check('an unpinned window is just the live one', windowAt(t, null).index === currentWindow(t).index)
 }
 
 console.log(`\n${failures === 0 ? 'PASS' : `FAIL — ${failures} failing`}\n`)
