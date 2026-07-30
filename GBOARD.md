@@ -735,6 +735,65 @@ the Arcade frame.
 > level-up delta panel, retune the species floors (firefly/owl) and frog's ceiling — gating every
 > step on the oracle's before/after.
 
+## 🩸 Shimmer play3d — WOUNDS PERSIST (the healing loop, SHIPPED 2026-07-30, jin-cc) · *Last touched 2026-07-30*
+> **Alex, 2026-07-30:** *"the level up looks good i can see the stats raise, but one thing we need is for the hp
+> to carry over so the player needs to heal the spirit .. kinda forcing the player to grind resources and craft
+> potions etc."* Before this, every fight built its fighters at full HP and threw the result away — a battle cost
+> nothing but time. Now damage sticks, which is what turns gathering + alchemy from a side loop into the thing
+> that funds the next fight.
+>
+> **Left off (2026-07-30, `9782119`, committed + pushed + live on :3200):**
+> - **`spirit.hpFrac` — a FRACTION, not an absolute, and that is the load-bearing decision.** maxHp is derived
+>   and grows with level, and the arena scales it AGAIN by `HP_MULT` — a live pacing knob that has already moved
+>   once (1.8 -> 2.4 when base spirits gained real kits). Storing "47 HP" would mean the next pacing retune
+>   silently wounds or heals every spirit in every existing save, and a level-up would quietly deepen the wound.
+>   Same reasoning as storing logical zone+tile instead of world px. Optional in `SpiritSave`: a pre-wound save
+>   loads at FULL, so the update that shipped this wounded nobody.
+> - **`engine/spirit-health.ts`** — one home for the whole concept: read/heal/revive/field, the write-back, the
+>   trickle. `engine/arena.ts` seeds `Fighter.hp` from the wound and returns a `BattleResult`; `Shimmer3D`'s
+>   settle writes it before `persist()` **on the win AND lose paths** — the loss path used to short-circuit the
+>   entire function, which would have made losing the cheapest way to fight.
+> - **Downed = hpFrac 0.** Can't be fielded; ONE gate (`fieldParty()`) in front of all five fight-start paths.
+>   A downed spirit also stops sharing the victory XP (rewards now iterate who actually fought, not the roster).
+> - **★ THE BAG WAS A FREE 40% HEAL AND WOULD HAVE CANCELLED THE WHOLE FEATURE.** 80s lockout, but fights
+>   resolve in ~20-35s — that is one free top-up per battle, forever. It now spends real Shimmer Salves out of
+>   the satchel. The engine stays pure and oracle-safe: `bagCharges` in, `bagUsed` out, caller does the
+>   inventory maths. **Unspecified = Infinity**, so the feel harness and every oracle are untouched by it.
+> - **Shimmer Salve mends a spirit inside the Ather** (it already mended the Keeper out in the Crucible, where
+>   that behaviour is unchanged). **Deliberately NOT a new revive item** — a bespoke revive potion means
+>   inventing a NAME and, worse, a death-vs-downed rule the world has never stated. Downed is knocked out, and a
+>   salve is what you give something knocked out. `CANON/game/alchemy.md` names only generic categories
+>   ("Health Pot"), so the 13 potion names are build-side — but a new one is close enough to the line to refuse.
+> - **Wounded-party HUD chips** — play3d had NO spirit roster at all (`hasStarter` is dead state), so wounds
+>   would have been invisible until you were blocked from fighting. Chips are absent while the party is whole.
+>
+> **★ THE ORACLE CAUGHT TWO REAL BUGS IN THE ANTI-SOFTLOCK VALVE, AND BOTH WERE DESIGN, NOT ARITHMETIC.**
+> The grind is only fun while a broke player can climb out, so wounded spirits trickle at 2%/min and a wiped
+> party's lead crawls back to a 15% sliver. (a) The naive gate was "if the whole party is down" — which stops
+> being true the instant the lead ticks off zero, so the sliver cap never actually held and the lead healed to
+> full for free. Now gated on *every OTHER member is down and the lead is under the sliver*. (b) The valve was
+> scaled off the general trickle, so `REGEN_FRAC_PER_MIN = 0` — a perfectly reasonable "wounds heal ONLY with
+> potions" setting — would have made a total wipe **unrecoverable**. The valve now runs on its own constant and
+> the oracle asserts it is independent and non-zero. **Exactly one spirit ever comes back free, and only far
+> enough to walk.**
+>
+> **★ ARENA.TEST.TS IS FAILING ON MASTER AND WAS BEFORE THIS WORK — verified by stashing.** Skill delta
+> **+5.0 pts** (block below claims +72.5), party passive baseline **13.5%** (claims 37%), skilled 47.5%.
+> Output is byte-identical with and without this branch, so the wound work is balance-neutral — but something
+> moved arena balance since 07-23 and nobody re-ran the oracle. Same family as every other "believe the
+> measurement, not the note" find. **Someone needs to bisect that; it is not this feature's bug.**
+>
+> **Next:** Alex feel-pass the dials — `REGEN_FRAC_PER_MIN` / `WIPE_REVIVE_FRAC_PER_MIN` / `REVIVE_FRAC` atop
+> `spirit-health.ts`, salve strength in `SPIRIT_MEND_POTIONS`. Open questions his call: should a wipe cost
+> something beyond time (marks? a walk back?) · does the salve want a target picker instead of auto-picking
+> most-wounded-then-downed · a rest/healer NPC as the sink for a full party restore (`restoreParty()` is built
+> and unused, waiting on that call).
+> **Files:** `engine/spirit-health.ts` (+ `.test.ts`, 61 asserts) · `engine/arena.ts` (`hpFracOf` seed,
+> `BattleResult`, `bagCharges`/`bagUsed`) · `engine/potion-effects.ts` (`SPIRIT_MEND_POTIONS`, `MEND_POTION_ID`)
+> · `spirits/spirit.ts` + `spirits/spirit-save.ts` (the field + round-trip) · `components/ArenaBattle.tsx`
+> (`onEnd` widened, BAG button reads charges) · `play3d/Shimmer3D.tsx` (`fieldParty`, the settle, the trickle
+> tick, the salve branch, HUD chips).
+
 ## ⏱️ Shimmer play3d — ARENA PACING (the battle slog, fixed 2026-07-23, jin-cc)
 > **Started from Alex playtesting: "TTK is more like 15-20 hits, I've been skipping since it's so
 > dragged out."** That contradicted the party-balance oracle (5-6 hits) and the contradiction was
