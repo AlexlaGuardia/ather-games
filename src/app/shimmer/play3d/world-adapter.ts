@@ -6,6 +6,7 @@
 import { WORLD_ZONE_ID, isStitched, getGardenWorld, fromWorld } from '../world/garden-world'
 import { NPCS_3D, type NPC3D } from './npcs3d'
 import { ZONE_NODES, type NodePlacement } from '../world/node-placements'
+import { dealZone, type DealtNode } from '../engine/spawn-board'
 import { ZONE_SPAWNERS, type SpawnerPlacement } from '../world/spawn-placements'
 import type { PlacedStruct } from './StationMenus'
 
@@ -42,6 +43,34 @@ export function nodePlacementsFor(zoneId: string): NodePlacement[] {
     }
   }
   return worldNodes.map(n => ({ ...n }))
+}
+
+/**
+ * The resource board actually standing in the world this window — the dealt subset of the authored
+ * placements, remapped for the mounted zone.
+ *
+ * ★ The deal runs per LOGICAL zone, BEFORE the world remap, and that ordering is the whole point.
+ * The board is keyed on zone-local coordinates, so nudging a district by a tile in the editor moves
+ * the nodes without re-rolling which ones exist. Dealing after the remap would have re-shuffled the
+ * entire continent every time the layout was touched — the same reasoning that keeps the moglin
+ * spawner cooldowns on logical keys.
+ *
+ * Reads `ZONE_NODES` rather than the caller's live editor state on purpose: the deal needs the
+ * authored set as its universe of possibilities. The cost is that an unsaved editor placement does
+ * not join the board until Save writes it back (which `applyLiveWorldData` then folds in) — fine,
+ * because edit mode renders the full authored layer and never looks at the board at all.
+ */
+export function dealtNodesFor(zoneId: string, windowIndex: number): DealtNode[] {
+  if (zoneId !== WORLD_ZONE_ID) return dealZone(zoneId, ZONE_NODES[zoneId] ?? [], windowIndex)
+  const out: DealtNode[] = []
+  for (const [zid, nodes] of Object.entries(ZONE_NODES)) {
+    if (!isStitched(zid)) continue
+    for (const n of dealZone(zid, nodes, windowIndex)) {
+      const p = toWorld(zid, n.tileX, n.tileY)
+      if (p) out.push({ ...n, tileX: p.x, tileY: p.y })
+    }
+  }
+  return out
 }
 
 // Moglin-patrol spawners aggregated across every stitched zone, in world coords (mirror of nodes).

@@ -72,6 +72,11 @@ export interface ResourceNode {
   harvestsRemaining: number // for fishing spots, decremented per catch
   animFrame: number         // current animation frame index (runtime only)
   animOffset: number        // stagger offset derived from position (runtime only)
+  // Spawn-board tags (runtime only, see engine/spawn-board.ts) — whether this node is on its way in
+  // or on its way out of the world at the next re-deal. Optional because the editor and the legacy
+  // 2D paths build nodes without a board; absent reads the same as "standing normally".
+  leaving?: boolean
+  arriving?: boolean
 }
 
 /** Create a new resource node at a given tile position */

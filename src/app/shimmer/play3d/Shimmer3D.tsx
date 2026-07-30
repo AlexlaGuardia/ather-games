@@ -15,6 +15,7 @@ import { ZONES, getZone, checkWarp, type Zone, type Warp } from '../world/zones'
 import { getHeightGrid } from '../world/heightmaps'
 import { GardenAtmosphere } from '../world/atmosphere'
 import { dayProgress, sunElevation, sunAzimuth, daylight, getPhase, getDisplayTime, CYCLE_MS, isTimePinned } from '../engine/day-cycle'
+import { currentWindow, nodeAlpha, msUntilReset, isBoardPinned, FADE_OUT_MS, type DealtNode } from '../engine/spawn-board'
 import { FloraTree, FloraDressing } from '../world/flora'
 import { StationProp, GhostProp } from '../world/prop-models'
 import { RemotePlayers, useRoster } from './RemotePlayers'
@@ -67,7 +68,7 @@ import { GfxPanel, FrameProbe, type FrameStats, type SaveStats } from './GfxPane
 import { loadGfx, storeGfx, gfxKey, dprCeiling, SHADOW_MAP_SIZE, DPR_FLOOR, type GfxSettings } from './gfx'
 import { WorldMap, MiniMap } from './WorldMap'
 import { WORLD_ZONE_ID, registerGardenWorld, getGardenWorld, isStitched, fromWorld } from '../world/garden-world'
-import { allNpcs, nodePlacementsFor, spawnerPlacementsFor, logicalZoneAt, structuresView, logicalStruct } from './world-adapter'
+import { allNpcs, nodePlacementsFor, dealtNodesFor, spawnerPlacementsFor, logicalZoneAt, structuresView, logicalStruct } from './world-adapter'
 import { ZONE_SPAWNERS, SPAWNER_COOLDOWN_MS, type SpawnerPlacement } from '../world/spawn-placements'
 
 // The composed continent registers as a zone before any getZone/save-load runs.
@@ -394,6 +395,57 @@ function SpawnerMarkers({ spawners, heights, editing, defeated, ready }: {
   )
 }
 
+/**
+ * The visible half of the spawn board — a node on its way out of the world, or on its way in.
+ *
+ * The fade is read live in `useFrame` from the clock rather than passed down as a prop, because a
+ * prop would mean re-rendering every node in the zone on a timer for three solid minutes. Nodes
+ * that are neither arriving nor leaving never enter this path at all: `NodeFade` is only mounted
+ * around the ones that are, so the common case costs exactly nothing.
+ *
+ * Two channels carry the fade, and they are deliberately not the same curve:
+ *   • the GLOW dims across the whole three minutes — the mana leaving is the telegraph, and it is
+ *     legible from across a clearing long before the shape goes
+ *   • the FORM only dissolves in the last third, so the node stays a solid, harvestable-looking
+ *     thing until it is genuinely nearly gone
+ * A single linear opacity ramp read as a bug — a tree sitting half-transparent for two minutes
+ * looks like a rendering fault, not like the world breathing.
+ */
+function NodeFade({ node, children }: { node: ResourceNode; children: React.ReactNode }) {
+  const ref = useRef<THREE.Group>(null)
+  const applied = useRef(-1)
+  useFrame(() => {
+    const g = ref.current
+    // The overwhelmingly common case: a node that is simply standing there. One boolean per node
+    // per frame, no traversal, no allocation — cheap enough that wrapping every node is free and
+    // the call site does not need a conditional wrapper.
+    if (!g || (!node.leaving && !node.arriving)) return
+    const a = nodeAlpha(node as DealtNode, Date.now())
+    if (a === applied.current) return
+    applied.current = a
+    const dissolve = a < 0.34 ? a / 0.34 : 1
+    g.scale.setScalar(0.9 + 0.1 * dissolve)
+    g.traverse((o) => {
+      const m = (o as THREE.Mesh).material as THREE.Material | THREE.Material[] | undefined
+      if (!m) return
+      for (const mat of Array.isArray(m) ? m : [m]) {
+        const store = mat.userData as { baseOpacity?: number; baseEmissive?: number; baseTransparent?: boolean }
+        if (store.baseOpacity === undefined) {
+          store.baseOpacity = mat.opacity
+          store.baseTransparent = mat.transparent
+          store.baseEmissive = (mat as THREE.MeshStandardMaterial).emissiveIntensity ?? 0
+        }
+        mat.transparent = store.baseTransparent || dissolve < 1
+        mat.opacity = (store.baseOpacity ?? 1) * dissolve
+        if ('emissiveIntensity' in mat) {
+          (mat as THREE.MeshStandardMaterial).emissiveIntensity = (store.baseEmissive ?? 0) * (0.15 + 0.85 * a)
+        }
+      }
+    })
+  })
+  return <group ref={ref}>{children}</group>
+}
+
 function NodeMarkers({ nodes, heights, editing, channel }: { nodes: ResourceNode[]; heights: number[][]; editing: boolean; channel?: { nodeId: string; hp: number } | null }) {
   return (
     <>
@@ -416,6 +468,7 @@ function NodeMarkers({ nodes, heights, editing, channel }: { nodes: ResourceNode
                 </div>
               </Html>
             )}
+            <NodeFade node={n}>
             {look.kind === 'tree' && <FloraTree look={look} depleted={depleted} />}
 
             {look.kind === 'crystal' && <>
@@ -455,6 +508,7 @@ function NodeMarkers({ nodes, heights, editing, channel }: { nodes: ResourceNode
               {/* bobber — a small float that marks an active spot; hidden when fished out */}
               {!depleted && <mesh position={[0.16 * s, 0.14, 0.1 * s]} castShadow><sphereGeometry args={[0.07 * s, 8, 8]} /><meshStandardMaterial color="#e0607a" emissive="#e0607a" emissiveIntensity={0.25} roughness={0.5} /></mesh>}
             </>}
+            </NodeFade>
             {editing && (
               <Html position={[0, s + 1.2, 0]} center distanceFactor={12} pointerEvents="none">
                 <div style={{ font: '700 10px ui-monospace, monospace', color: '#0d1a17', background: '#eafff6d0', border: '1px solid #2f5c4f', borderRadius: 5, padding: '1px 5px', whiteSpace: 'nowrap' }}>{n.type}</div>
@@ -1926,6 +1980,12 @@ function DayClock() {
   const p = dayProgress()
   const phase = getPhase(p)
   const look = PHASE_GLYPH[phase]
+  // The world-reset tell. Only shown once the re-deal is inside the fade window, so it is a warning
+  // rather than permanent furniture — and it is what makes a dimming tree read as "the garden is
+  // about to turn over" instead of as a graphical fault. The chip refreshes every 4s, so this
+  // counts in whole minutes; a seconds readout would visibly jump and look broken.
+  const toReset = msUntilReset()
+  const renewing = toReset < FADE_OUT_MS
   return (
     <div title={`${phase} — a full day is ${Math.round(CYCLE_MS / 60000)} real minutes`} style={{
       display: 'flex', alignItems: 'center', gap: 6, padding: '5px 11px', borderRadius: 999,
@@ -1935,6 +1995,12 @@ function DayClock() {
       <span style={{ font: '800 12px ui-monospace, monospace', color: '#eafff6', fontVariantNumeric: 'tabular-nums' }}>{getDisplayTime(p)}</span>
       <span style={{ font: '700 8.5px ui-monospace, monospace', color: look.c, letterSpacing: '0.12em' }}>{phase.toUpperCase()}</span>
       {isTimePinned && <span title="clock pinned by ?hour= — drop the param for live time" style={{ font: '700 8.5px ui-monospace, monospace', color: '#e0a0d0' }}>PIN</span>}
+      {isBoardPinned && <span title="spawn board pinned by ?window= — drop the param for the live board" style={{ font: '700 8.5px ui-monospace, monospace', color: '#9fe0c0' }}>BOARD</span>}
+      {renewing && (
+        <span title="the garden is re-dealing — fading resources are on their way out" style={{ font: '700 8.5px ui-monospace, monospace', color: '#9fe0c0', letterSpacing: '0.08em' }}>
+          🍃 {toReset < 60_000 ? 'RENEWING' : `${Math.ceil(toReset / 60_000)}m`}
+        </span>
+      )}
     </div>
   )
 }
@@ -2334,11 +2400,33 @@ export default function Shimmer3D() {
   const [zoneId, setZoneId] = useState(START_ZONE)
   const zone = getZone(ZONES, zoneId) ?? getZone(ZONES, START_ZONE)!
 
+  // Edit mode lives up here because the resource board below is gated on it — see the deal.
+  const [editMode, setEditMode] = useState(false)
+  const editRef = useRef(false); editRef.current = editMode
+
   // Resource nodes for this zone — seeded from the authored ZONE_NODES layer; the editor
   // adds/removes them and the Save button writes them back to node-placements.ts.
+  //
+  // ★ `nodes` stays the AUTHORED layer, always, complete. The spawn board is derived from it
+  // downstream and never replaces it. That separation is not tidiness: the editor's Save writes
+  // this array straight back to node-placements.ts, so if `nodes` ever held the dealt subset, one
+  // Save in play would permanently delete every authored location that happened not to be standing
+  // that window — silently, and looking exactly like a successful save.
   const [nodes, setNodes] = useState<NodePlacement[]>(() => nodePlacementsFor(zone.id))
   const nodesRef = useRef(nodes); nodesRef.current = nodes
   useEffect(() => { setNodes(nodePlacementsFor(zone.id)) }, [zone.id])
+
+  // ── The spawn board: which of those locations are actually standing this window. ──
+  // Re-dealt on the world-reset boundary (every 32 real min, on midnight/noon) by the coarse tick.
+  // In EDIT MODE the deal is bypassed entirely and the full authored layer renders, so you are
+  // always placing against the real set rather than against one window's hand.
+  const [boardWindow, setBoardWindow] = useState(() => currentWindow().index)
+  const boardWindowRef = useRef(boardWindow); boardWindowRef.current = boardWindow
+  const board = useMemo<DealtNode[]>(
+    () => (editMode ? nodes.map(n => ({ ...n, leaving: false, arriving: false })) : dealtNodesFor(zone.id, boardWindow)),
+    [editMode, nodes, zone.id, boardWindow],
+  )
+  const boardRef = useRef<DealtNode[]>(board); boardRef.current = board
 
   // Moglin-patrol spawners for this zone (world coords in world mode) — editor places/removes,
   // Save writes them to spawn-placements.ts, the runtime arms them while their hold stands.
@@ -2364,7 +2452,14 @@ export default function Shimmer3D() {
   // runtime nodes (with harvest state) rebuilt whenever the authored layer or zone changes
   const [runtimeNodes, setRuntimeNodes] = useState<ResourceNode[]>([])
   const runtimeNodesRef = useRef<ResourceNode[]>([]); runtimeNodesRef.current = runtimeNodes
-  useEffect(() => { setRuntimeNodes(nodes.map(n => createResourceNode(n.type, n.tileX, n.tileY, zone.id))) }, [nodes, zone.id])
+  // Built from the BOARD, not the authored layer — a location that did not come up this window has
+  // no runtime node at all, so it cannot be walked up to, harvested, or counted as near.
+  useEffect(() => {
+    setRuntimeNodes(board.map(n => ({
+      ...createResourceNode(n.type, n.tileX, n.tileY, zone.id),
+      leaving: n.leaving, arriving: n.arriving,
+    })))
+  }, [board, zone.id])
   const [nearNode, setNearNode] = useState<ResourceNode | null>(null)
   const nearNodeRef = useRef<ResourceNode | null>(null); nearNodeRef.current = nearNode
 
@@ -2870,6 +2965,10 @@ export default function Shimmer3D() {
       let respawned = false
       for (const n of runtimeNodesRef.current) if (tickNodeRespawn(n)) respawned = true
       if (respawned) setRuntimeNodes([...runtimeNodesRef.current])
+      // The world turns over. Everything else about the board is derived, so this is the only line
+      // that has to notice — bump the window and the deal re-runs.
+      const win = currentWindow(now).index
+      if (win !== boardWindowRef.current) { boardWindowRef.current = win; setBoardWindow(win) }
       tickPriceDrift(geRef.current) // Exchange prices drift toward base every 30s (no-op otherwise)
     }, 500)
     return () => clearInterval(id)
@@ -2886,6 +2985,26 @@ export default function Shimmer3D() {
   const channelRef = useRef<{ node: ResourceNode; progress: number; durSec: number; manaCost: number } | null>(null)
   const chopClockRef = useRef(0) // accumulates dt to space out the chop/mine tick sound
   const [channel, setChannel] = useState<{ nodeId: string; label: string; hp: number } | null>(null)
+
+  // ★ A re-deal replaces every runtime node object, and the harvest link holds one by REFERENCE.
+  // Left alone, a channel that spans a boundary would keep chopping an orphan: mana would drain,
+  // the bar would fill, and the drop would land on a tree that is no longer in the world. So on
+  // every board change the link is re-pointed to the new object of the same id (ids are stable —
+  // type + tile + zone), keeping the progress you had, or cut cleanly if the node did not survive.
+  // The 3-minute fade is what makes the second case fair rather than a snatch.
+  // Keyed on `runtimeNodes`, NOT on `board`: the rebuild is itself a state update, so an effect
+  // watching the board would still be reading the previous frame's node objects and re-point the
+  // link to the very orphans it is meant to catch.
+  useEffect(() => {
+    const ch = channelRef.current
+    if (!ch) return
+    const still = runtimeNodes.find(n => n.id === ch.node.id)
+    if (still) { ch.node = still; return }
+    channelRef.current = null
+    setChannel(null)
+    // Silent when the list changed because you left the zone — that is not the world moving on.
+    if (ch.node.zoneId === zoneIdRef.current) setHarvestToast('The shimmer moved on')
+  }, [runtimeNodes])
   // Rinning: casting LOCKS the walker to the node (reuse battleRef as the movement freeze); a `!`
   // pops over the mote's head at the bite — strike (E/tap) during it to hook, early/late = it slips.
   const fishRef = useRef<{ node: ResourceNode; manaCost: number; cast: RinCast; bitten: boolean } | null>(null)
@@ -3842,14 +3961,12 @@ export default function Shimmer3D() {
   }, [startThistleBattle, startSorrelBattle, startBrackBattle])
 
   const [version, setVersion] = useState(0)
-  const [editMode, setEditMode] = useState(false)
   const [confirmNew, setConfirmNew] = useState(false)
   // Birth Rune gate — New Game opens this before resetting; choosing a rune is the player's
   // one "who am I" moment (play3d is first-person, so birth IS the character moment).
   const [birthOpen, setBirthOpen] = useState(false)
   const [birthCancelable, setBirthCancelable] = useState(true) // New Game birth is escapable; first-entry birth is not
   const birthRuneRef = useRef<string | null>(null)  // chosen rune id; TODO(mechanics): fold into persist()/load() + grant a starting ability off it
-  const editRef = useRef(false); editRef.current = editMode
 
   // The walker is public; the terrain editor is owner-only. ather.games has no cloud auth, so owner
   // status comes from the httpOnly `ather_owner` cookie via /api/owner (set it at /owner?key=OWNER_KEY).
