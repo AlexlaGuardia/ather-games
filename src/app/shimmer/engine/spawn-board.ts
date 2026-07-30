@@ -53,28 +53,53 @@ export const GROW_IN_MS = 2_500
 /** Fixed, not per-save. The garden is shared: the board is the same for everyone, like the hour. */
 export const WORLD_SEED = 0x5EEDFA11
 
-/** The Home Plot never re-deals. It is the plot you tend — canon seeds it with a specific pond and
- *  crystal pair (`shimmer-skilling.md`, START home circle) and a starter watching their own garden
- *  empty out is the opposite of what the zone is for. Wild ground breathes; home stays put. */
+/**
+ * The Home Plot never re-deals — but not because it is protected. It is the opposite.
+ *
+ * The first cut exempted it as "always full", reasoning that canon seeds the START circle with a
+ * specific pond and crystal pair and a starter should not watch their own garden empty out. Alex
+ * reversed it, and the reversal is right: a home plot that refills itself is a farm you never have
+ * to leave, which quietly defeats a world that re-deals at all. So the plot keeps its canon starter
+ * nodes when you arrive and **you strip them permanently** — see `strippedKeys`. Canon says what is
+ * standing there at START, not that it grows back.
+ *
+ * The line this draws is the useful part: HOME is where you grow things (planting soil is exempt
+ * below and crops are yours), WILD is where you gather them.
+ */
 const STATIC_ZONES = new Set<string>(['garden'])
 
 /** Planting targets never re-deal — a soil plot vanishing under a growing crop would destroy state
  *  the player put there by hand. The board deals what you FIND, never what you PLANTED. */
 const STATIC_TYPES = new Set<NodeType>(['ather_soil'])
 
-/** Chance a given location is dealt in. Higher tiers are scarcer on purpose: the common wood and
- *  shards are nearly always up so a route still reads as a route, while an ather crystal being
- *  standing this window is a find. These are feel dials — expect them to move after Alex plays it. */
-const DEFAULT_SPAWN_CHANCE = 0.65
-const SPAWN_CHANCE: Partial<Record<NodeType, number>> = {
-  goldwood: 0.85, raw_mana_node: 0.85, small_pond: 0.8,
-  shimmeroak: 0.7, element_crystal_node: 0.7, stream: 0.7,
-  starwillow: 0.55, pure_core_node: 0.55, lake: 0.6,
-  dawnwood: 0.4, ather_crystal_node: 0.4,
-}
+// ── What fills a slot ───────────────────────────────────────────────────────
+// Alex, 2026-07-30: "what if each spawn is a category — a prospecting spawner has 40% chance for a
+// common, 20% uncommon, 15% rare, 5% epic, leaving 20% to not spawn."
+//
+// The first cut bound a TIER to a location forever: that clearing is a goldwood, and the only
+// question each window was whether it was up. This rolls what fills it instead, so the same clearing
+// is a goldwood this window and something better the next — which turns a re-deal from a change in
+// the count into a reason to walk back out and look.
+//
+// ★ THE BAND IS PER ZONE, AND IT IS INFERRED FROM WHAT THE ZONE AUTHORS.
+// A single global rarity table would let the starter garden roll an epic, and a level-1 player
+// standing in front of an ather crystal they cannot touch is the exact failure the entry-tier
+// guarantee exists to prevent — seeing the resource you are locked out of reads as a bug, not as
+// luck. So a slot rolls only among the tiers its own zone actually authored for that skill. Two
+// things fall out: progression stays geographic (a zone can never out-roll its own authoring), and
+// there is no second table to drift from the placements — the map editor stays the one control
+// surface. Want rares in a zone? Author one there, and the band widens.
+//
+// Weights apply to the zone's band from the bottom up, so rarity is RELATIVE to where you stand:
+// the Threshold's "common" is an element crystal, the garden's is a goldwood.
+const TIER_WEIGHTS = [40, 20, 15, 5]   // common · uncommon · rare · epic
+const NOTHING_WEIGHT = 20              // ...and the chance the slot simply stays empty this window
 
 /** A location that came up in this window, with how it relates to the windows either side. */
 export interface DealtNode extends NodePlacement {
+  /** Zone-local slot identity (`slotKey`), carried through the world remap so persistence — the
+   *  Home Plot strip set — never keys on a coordinate the layout is free to move. */
+  key: string
   /** dealt now, NOT dealt next window → spends its last FADE_OUT_MS going out. */
   leaving: boolean
   /** dealt now, NOT dealt last window → rises in over GROW_IN_MS at the boundary. */
@@ -173,14 +198,42 @@ export function currentWindow(nowMs: number = Date.now()): DealWindow {
   return { index, startMs: index * WINDOW_MS, endMs: (index + 1) * WINDOW_MS }
 }
 
+/**
+ * The tiers a zone authored for one skill, lowest first. This IS the zone's rarity band — see the
+ * note on TIER_WEIGHTS. Derived from the placements every time rather than cached, because the
+ * editor can rewrite them live and a stale band would deal nodes the zone no longer contains.
+ */
+function bandFor(placements: NodePlacement[], skill: SkillId): NodeType[] {
+  const tiers = new Map<NodeType, number>()
+  for (const p of placements) {
+    if (NODE_DEFS[p.type].skill !== skill) continue
+    tiers.set(p.type, NODE_DEFS[p.type].minLevel)
+  }
+  return [...tiers.entries()].sort((a, b) => a[1] - b[1] || (a[0] < b[0] ? -1 : 1)).map(([t]) => t)
+}
+
+/** Roll one slot: which tier from the band fills it, or null for "nothing this window". */
+function rollSlot(band: NodeType[], roll: number): NodeType | null {
+  const weights = band.map((_, i) => TIER_WEIGHTS[Math.min(i, TIER_WEIGHTS.length - 1)])
+  const total = weights.reduce((a, b) => a + b, 0) + NOTHING_WEIGHT
+  let acc = roll * total
+  for (let i = 0; i < band.length; i++) {
+    acc -= weights[i]
+    if (acc < 0) return band[i]
+  }
+  return null
+}
+
 /** The raw roll for one window — no neighbour comparison, no guarantee pass. Internal. */
 function rawDeal(zoneId: string, placements: NodePlacement[], windowIndex: number, seed: number): NodePlacement[] {
+  // The Home Plot does not re-deal at all: what is standing there is what you have not stripped yet.
   if (STATIC_ZONES.has(zoneId)) return placements.map(p => ({ ...p }))
   const out: NodePlacement[] = []
   for (const p of placements) {
     if (STATIC_TYPES.has(p.type)) { out.push({ ...p }); continue }
-    const chance = SPAWN_CHANCE[p.type] ?? DEFAULT_SPAWN_CHANCE
-    if (hash01(rollKey(seed, windowIndex, zoneId, p)) < chance) out.push({ ...p })
+    const filled = rollSlot(bandFor(placements, NODE_DEFS[p.type].skill), hash01(rollKey(seed, windowIndex, zoneId, p)))
+    // The slot keeps its authored identity (tile + skill); only WHAT grew there this window changes.
+    if (filled) out.push({ ...p, type: filled })
   }
   return withEntryGuarantee(zoneId, placements, out, windowIndex, seed)
 }
@@ -207,37 +260,35 @@ function withEntryGuarantee(
   zoneId: string, placements: NodePlacement[], dealt: NodePlacement[], windowIndex: number, seed: number,
 ): NodePlacement[] {
   const skillOf = (p: NodePlacement): SkillId => NODE_DEFS[p.type].skill
-  const levelOf = (p: NodePlacement) => NODE_DEFS[p.type].minLevel
   const out = [...dealt]
 
   for (const skill of new Set(placements.map(skillOf))) {
-    const candidates = placements.filter(p => skillOf(p) === skill)
-    const entryLevel = Math.min(...candidates.map(levelOf))
-    if (dealt.some(p => skillOf(p) === skill && levelOf(p) === entryLevel)) continue
+    const entryType = bandFor(placements, skill)[0]
+    if (!entryType || dealt.some(p => p.type === entryType)) continue
 
-    const entry = candidates.filter(p => levelOf(p) === entryLevel)
-    let best = entry[0], bestRoll = -1
-    for (const p of entry) {
+    // Any slot of that skill can hold the entry tier now, so the guarantee picks a SLOT and fills
+    // it with the entry type — rather than resurrecting one specific authored placement, which
+    // under a tier roll would have pinned the same tile every time the zone came up short.
+    const slots = placements.filter(p => skillOf(p) === skill)
+    let best = slots[0], bestRoll = -1
+    for (const p of slots) {
       const r = hash01(`guarantee|${rollKey(seed, windowIndex, zoneId, p)}`)
       if (r > bestRoll) { bestRoll = r; best = p }
     }
-    out.push({ ...best })
+    out.push({ ...best, type: entryType })
   }
   return out
 }
 
-/** The zone's entry-tier locations for each skill — the set the guarantee draws from. Exported so
+/** Every slot that could carry a skill's entry tier — the set the guarantee draws from. Exported so
  *  the oracle can tell a legitimately-always-standing entry node from a roll that is stuck. */
-export function entryLocations(placements: NodePlacement[]): NodePlacement[] {
-  const skillOf = (p: NodePlacement): SkillId => NODE_DEFS[p.type].skill
-  const levelOf = (p: NodePlacement) => NODE_DEFS[p.type].minLevel
-  const out: NodePlacement[] = []
-  for (const skill of new Set(placements.map(skillOf))) {
-    const candidates = placements.filter(p => skillOf(p) === skill)
-    const entryLevel = Math.min(...candidates.map(levelOf))
-    out.push(...candidates.filter(p => levelOf(p) === entryLevel))
-  }
-  return out
+export function entrySlots(placements: NodePlacement[], skill: SkillId): NodePlacement[] {
+  return placements.filter(p => NODE_DEFS[p.type].skill === skill)
+}
+
+/** The tiers a zone can deal for a skill, lowest first. Exported for the oracle's ceiling assert. */
+export function zoneBand(placements: NodePlacement[], skill: SkillId): NodeType[] {
+  return bandFor(placements, skill)
 }
 
 /**
@@ -249,27 +300,49 @@ export function entryLocations(placements: NodePlacement[]): NodePlacement[] {
  */
 export function dealZone(
   zoneId: string, placements: NodePlacement[], windowIndex: number, seed: number = WORLD_SEED,
+  strippedKeys?: ReadonlySet<string>,
 ): DealtNode[] {
-  const now = rawDeal(zoneId, placements, windowIndex, seed)
-  const prev = new Set(rawDeal(zoneId, placements, windowIndex - 1, seed).map(tileKey))
-  const next = new Set(rawDeal(zoneId, placements, windowIndex + 1, seed).map(tileKey))
+  // Zone-qualified, so a strip in the Home Plot can never take out a wild slot that happens to sit
+  // at the same skill and tile — in world mode every zone is dealt against the same strip set.
+  const live = strippedKeys?.size
+    ? placements.filter(p => !strippedKeys.has(slotKey(zoneId, p)))
+    : placements
+  const now = rawDeal(zoneId, live, windowIndex, seed)
+  const prev = new Set(rawDeal(zoneId, live, windowIndex - 1, seed).map(tileKey))
+  const next = new Set(rawDeal(zoneId, live, windowIndex + 1, seed).map(tileKey))
   return now.map(p => ({
     ...p,
+    key: slotKey(zoneId, p),
     leaving: !next.has(tileKey(p)),
     arriving: !prev.has(tileKey(p)),
   }))
 }
 
-/** Identity of a location within its zone. Type is part of it: two node types authored on one tile
- *  are two different possibilities, not one. */
+/**
+ * What is standing here, this window. TYPE is part of it on purpose: when a slot rolls a different
+ * tier than it held last window, the old node genuinely leaves (dimming out over its three minutes)
+ * and the new one rises in its place. Keying on the tile alone would have popped a goldwood into a
+ * shimmeroak at the boundary with no transition at all.
+ */
 export const tileKey = (p: NodePlacement) => `${p.type}@${p.tileX},${p.tileY}`
+
+/**
+ * WHERE a slot is, independent of what grew in it — the durable identity, and the one the Home
+ * Plot's strip set is keyed on. It has to survive both a re-roll (which changes the type) and a
+ * layout nudge in the editor (which is why the board deals in logical space before the world remap;
+ * a world-coord key would orphan every strip the moment a district moved a tile).
+ */
+export const slotKey = (zoneId: string, p: NodePlacement) => `${zoneId}|${NODE_DEFS[p.type].skill}@${p.tileX},${p.tileY}`
 
 /**
  * How present a node is, 0..1 — drives its render. 1 for anything standing normally.
  * Arriving nodes rise over GROW_IN_MS; leaving nodes go out over the window's last FADE_OUT_MS.
  * A node that is neither is 1 for the whole window and never touches the fade path at all.
  */
-export function nodeAlpha(node: DealtNode, nowMs: number, win: DealWindow = currentWindow(nowMs)): number {
+// Takes the two tags rather than a whole DealtNode: the renderer holds ResourceNodes (which carry
+// the tags but not the board's slot identity), and widening a cast to force them together would
+// have been a lie about what this function actually reads.
+export function nodeAlpha(node: { leaving?: boolean; arriving?: boolean }, nowMs: number, win: DealWindow = currentWindow(nowMs)): number {
   if (node.arriving) {
     const since = nowMs - win.startMs
     if (since < GROW_IN_MS) return clamp01(since / GROW_IN_MS)

@@ -11,7 +11,7 @@
 // up empty — the exact bug an eyeball pass cannot find and a player would hit within a week.
 
 import {
-  dealZone, currentWindow, windowAt, nodeAlpha, tileKey, msUntilReset, entryLocations,
+  dealZone, currentWindow, windowAt, nodeAlpha, tileKey, msUntilReset, entrySlots, zoneBand, slotKey,
   WINDOW_MS, FADE_OUT_MS, GROW_IN_MS, RESETS_PER_DAY, WORLD_SEED, isBoardPinned,
   type DealtNode,
 } from './spawn-board'
@@ -87,36 +87,96 @@ console.log('\nthe board actually breathes')
     check(`${zoneId} re-deals nearly every window`, churned > WINDOWS * 0.9, `${churned}/${WINDOWS - 1}`)
   }
 
-  // A location that never comes up is an authored placement pretending to be a possibility. One
-  // that ALWAYS comes up is the same thing, unless it is the zone's only entry-tier node for its
-  // skill — in which case the guarantee is holding it up on purpose, every window, by design.
+  // A slot that is never filled is an authored placement pretending to be a possibility. One that
+  // is ALWAYS filled is the same thing — unless it is the only slot its skill has in that zone, in
+  // which case the entry guarantee is holding it up every window, on purpose.
   const stuck: string[] = []
   for (const [zoneId, placements] of WILD) {
-    const entry = entryLocations(placements)
     for (const p of placements) {
+      const sole = entrySlots(placements, NODE_DEFS[p.type].skill).length === 1
       let hits = 0
       for (let w = 0; w < WINDOWS; w++) {
-        if (dealZone(zoneId, placements, w).some(n => tileKey(n) === tileKey(p))) hits++
+        if (dealZone(zoneId, placements, w).some(n => n.tileX === p.tileX && n.tileY === p.tileY)) hits++
       }
       const rate = hits / WINDOWS
-      const soleEntry = entry.length === 1 && tileKey(entry[0]) === tileKey(p)
-      const pinnedBySkill = entry.some(e => tileKey(e) === tileKey(p)) &&
-        entry.filter(e => NODE_DEFS[e.type].skill === NODE_DEFS[p.type].skill).length === 1
-      if (rate === 0) stuck.push(`${zoneId} ${tileKey(p)} never spawns`)
-      else if (rate === 1 && !soleEntry && !pinnedBySkill) stuck.push(`${zoneId} ${tileKey(p)} always spawns`)
+      if (rate === 0) stuck.push(`${zoneId} ${p.type}@${p.tileX},${p.tileY} never fills`)
+      else if (rate === 1 && !sole) stuck.push(`${zoneId} ${p.type}@${p.tileX},${p.tileY} always fills`)
     }
   }
-  check('no location is stuck, unless the guarantee is holding it up', stuck.length === 0, stuck.slice(0, 4).join(', '))
+  check('no slot is stuck, unless the guarantee is holding it up', stuck.length === 0, stuck.slice(0, 4).join(', '))
+}
 
-  // The roll should track the configured chance. Guarantees push the observed rate UP (never down),
-  // so this is a floor-and-ceiling check rather than an equality.
-  const [zoneId, placements] = WILD.find(([, ns]) => ns.length >= 8)!
-  for (const p of placements.slice(0, 3)) {
-    let hits = 0
-    for (let w = 0; w < WINDOWS; w++) if (dealZone(zoneId, placements, w).some(n => tileKey(n) === tileKey(p))) hits++
-    const rate = hits / WINDOWS
-    check(`${p.type} spawns at a plausible rate`, rate > 0.25 && rate < 0.98, rate.toFixed(2))
+console.log('\n★ the tier roll — a slot is a category, not a fixed node')
+{
+  // ★ THE LEVEL-GATING ASSERT. The band is inferred from what a zone authors precisely so a starter
+  // zone can never roll an epic — a level-1 player standing in front of a node they cannot touch is
+  // the same "seeing what you are locked out of" failure the entry guarantee exists to prevent.
+  // If anyone ever swaps the per-zone band for a global rarity table, this is what fails.
+  const overCeiling: string[] = []
+  for (const [zoneId, placements] of WILD) {
+    for (let w = 0; w < WINDOWS; w++) {
+      for (const n of dealZone(zoneId, placements, w)) {
+        const band = zoneBand(placements, NODE_DEFS[n.type].skill)
+        if (!band.includes(n.type)) overCeiling.push(`${zoneId} dealt ${n.type} @w${w} (band ${band.join('/')})`)
+      }
+    }
   }
+  check('★ a zone never deals a tier it did not author', overCeiling.length === 0,
+    `${overCeiling.length}, e.g. ${overCeiling.slice(0, 2).join(', ')}`)
+
+  // The payoff of the whole change: the same clearing holds different things on different visits.
+  const varied: string[] = []
+  for (const [zoneId, placements] of WILD) {
+    for (const p of placements) {
+      if (zoneBand(placements, NODE_DEFS[p.type].skill).length < 2) continue   // nothing to vary
+      const seen = new Set<string>()
+      for (let w = 0; w < WINDOWS; w++) {
+        for (const n of dealZone(zoneId, placements, w)) {
+          if (n.tileX === p.tileX && n.tileY === p.tileY) seen.add(n.type)
+        }
+      }
+      if (seen.size < 2) varied.push(`${zoneId} ${p.tileX},${p.tileY} only ever held ${[...seen]}`)
+    }
+  }
+  check('a slot in a multi-tier zone holds different things over time', varied.length === 0,
+    `${varied.length}, e.g. ${varied.slice(0, 2).join(', ')}`)
+
+  // The weights should be visible in the outcome: within a zone's band, commoner tiers come up more
+  // often than rarer ones. Checked as an ORDERING rather than exact frequencies — the guarantee
+  // lifts the entry tier further, and pinning exact numbers would just re-encode the constants.
+  const [zoneId, placements] = WILD.find(([, ns]) => zoneBand(ns, 'forestry').length >= 2)!
+  const band = zoneBand(placements, 'forestry')
+  const counts = band.map(t => {
+    let c = 0
+    for (let w = 0; w < WINDOWS; w++) c += dealZone(zoneId, placements, w).filter(n => n.type === t).length
+    return c
+  })
+  check(`commoner tiers outnumber rarer ones in ${zoneId}`,
+    counts.every((c, i) => i === 0 || c <= counts[i - 1]), band.map((t, i) => `${t}:${counts[i]}`).join(' '))
+  check('...and every tier in the band actually appears', counts.every(c => c > 0), counts.join('/'))
+}
+
+console.log('\nthe Home Plot strips, and stays stripped')
+{
+  const garden = ZONE_NODES.garden
+  const full = dealZone('garden', garden, 5)
+  check('the plot starts with everything canon authored', full.length === garden.length)
+
+  // Alex: "the home plot should clear the resource so the player has to go out for more."
+  const taken = new Set([slotKey('garden', garden[0]), slotKey('garden', garden[1])])
+  const after = dealZone('garden', garden, 5, undefined, taken)
+  check('a stripped slot is gone', after.length === garden.length - 2)
+  check('...and does not come back next window', dealZone('garden', garden, 6, undefined, taken).length === garden.length - 2)
+  check('...and is still gone 300 windows later', dealZone('garden', garden, 305, undefined, taken).length === garden.length - 2)
+  check('...while everything unstripped is untouched',
+    after.every(n => !taken.has(n.key)) && after.length > 0)
+
+  // The strip key must survive a tier re-roll AND a layout nudge, so it carries the zone + skill +
+  // logical tile and nothing about what happened to be growing there.
+  check('a strip is keyed on the slot, not on what grew in it',
+    slotKey('garden', { type: 'goldwood', tileX: 4, tileY: 9 }) === slotKey('garden', { type: 'dawnwood', tileX: 4, tileY: 9 }))
+  check('...and is zone-qualified, so a plot strip cannot take out a wild slot',
+    slotKey('garden', garden[0]) !== slotKey('mycelial-path', garden[0]))
 }
 
 console.log('\n★ a zone never loses a whole skill')
@@ -204,7 +264,7 @@ console.log('\nthe fade')
 {
   const win = currentWindow(WINDOW_MS * 10 + 1)
   const at = (ms: number) => win.startMs + ms
-  const stable: DealtNode = { type: 'goldwood', tileX: 1, tileY: 1, leaving: false, arriving: false }
+  const stable: DealtNode = { type: 'goldwood', tileX: 1, tileY: 1, key: 'z|forestry@1,1', leaving: false, arriving: false }
   const going: DealtNode = { ...stable, leaving: true }
   const coming: DealtNode = { ...stable, arriving: true }
 
@@ -256,7 +316,7 @@ console.log('\nthe clock the HUD reads')
   check('...but still sits inside the live window', pinned.startMs <= t && t < pinned.endMs)
   check('...so the countdown stays sane', pinned.endMs - t > 0 && pinned.endMs - t <= WINDOW_MS)
   check('...and a leaving node is not born already faded out',
-    nodeAlpha({ type: 'goldwood', tileX: 1, tileY: 1, leaving: true, arriving: false }, t, pinned) === 1)
+    nodeAlpha({ leaving: true, arriving: false }, t, pinned) === 1)
   check('an unpinned window is just the live one', windowAt(t, null).index === currentWindow(t).index)
 }
 

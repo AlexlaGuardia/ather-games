@@ -15,7 +15,7 @@ import { ZONES, getZone, checkWarp, type Zone, type Warp } from '../world/zones'
 import { getHeightGrid } from '../world/heightmaps'
 import { GardenAtmosphere } from '../world/atmosphere'
 import { dayProgress, sunElevation, sunAzimuth, daylight, getPhase, getDisplayTime, CYCLE_MS, isTimePinned } from '../engine/day-cycle'
-import { currentWindow, nodeAlpha, msUntilReset, isBoardPinned, isFadeTest, fadeTestAlpha, FADE_OUT_MS, type DealtNode } from '../engine/spawn-board'
+import { currentWindow, nodeAlpha, msUntilReset, isBoardPinned, isFadeTest, fadeTestAlpha, slotKey, FADE_OUT_MS, type DealtNode } from '../engine/spawn-board'
 import { FloraTree, FloraDressing } from '../world/flora'
 import { StationProp, GhostProp } from '../world/prop-models'
 import { RemotePlayers, useRoster } from './RemotePlayers'
@@ -395,6 +395,12 @@ function SpawnerMarkers({ spawners, heights, editing, defeated, ready }: {
   )
 }
 
+// The Home Plot's LOGICAL zone id. Board slot keys are zone-qualified, so this is how a runtime
+// node answers "am I on the plot?" no matter which zone is mounted — in world mode the whole
+// continent is one zone and the node's own zoneId cannot tell you.
+const HOME_PLOT_ZONE = 'garden'
+const isHomeSlot = (n: ResourceNode) => !!n.slotKey?.startsWith(`${HOME_PLOT_ZONE}|`)
+
 /**
  * The visible half of the spawn board — a node on its way out of the world, or on its way in.
  *
@@ -420,7 +426,7 @@ function NodeFade({ node, children }: { node: ResourceNode; children: React.Reac
     // per frame, no traversal, no allocation — cheap enough that wrapping every node is free and
     // the call site does not need a conditional wrapper.
     if (!g || (!isFadeTest && !node.leaving && !node.arriving)) return
-    const a = isFadeTest ? fadeTestAlpha() : nodeAlpha(node as DealtNode, Date.now())
+    const a = isFadeTest ? fadeTestAlpha() : nodeAlpha(node, Date.now())
     if (a === applied.current) return
     applied.current = a
     const dissolve = a < 0.34 ? a / 0.34 : 1
@@ -2429,9 +2435,21 @@ export default function Shimmer3D() {
   // always placing against the real set rather than against one window's hand.
   const [boardWindow, setBoardWindow] = useState(() => currentWindow().index)
   const boardWindowRef = useRef(boardWindow); boardWindowRef.current = boardWindow
+
+  // ── Stripped slots: the Home Plot's one-way door. ──
+  // The plot does not re-deal, so harvesting one of its nodes to depletion removes that slot for
+  // good and the player has to go out for more. This is the ONLY thing about the board that has to
+  // be remembered — the derived deal can reconstruct everything else from the clock, but it cannot
+  // know what you already took. Keyed on `slotKey` (zone + skill + logical tile) so it survives
+  // both a tier re-roll and a layout nudge in the editor. Loaded from the save alongside spawnerCds.
+  const [stripped, setStripped] = useState<ReadonlySet<string>>(() => new Set())
+  const strippedRef = useRef<ReadonlySet<string>>(stripped); strippedRef.current = stripped
+
   const board = useMemo<DealtNode[]>(
-    () => (editMode ? nodes.map(n => ({ ...n, leaving: false, arriving: false })) : dealtNodesFor(zone.id, boardWindow)),
-    [editMode, nodes, zone.id, boardWindow],
+    () => (editMode
+      ? nodes.map(n => ({ ...n, key: slotKey(zone.id, n), leaving: false, arriving: false }))
+      : dealtNodesFor(zone.id, boardWindow, stripped)),
+    [editMode, nodes, zone.id, boardWindow, stripped],
   )
   const boardRef = useRef<DealtNode[]>(board); boardRef.current = board
 
@@ -2464,7 +2482,7 @@ export default function Shimmer3D() {
   useEffect(() => {
     setRuntimeNodes(board.map(n => ({
       ...createResourceNode(n.type, n.tileX, n.tileY, zone.id),
-      leaving: n.leaving, arriving: n.arriving,
+      leaving: n.leaving, arriving: n.arriving, slotKey: n.key,
     })))
   }, [board, zone.id])
   const [nearNode, setNearNode] = useState<ResourceNode | null>(null)
@@ -2667,6 +2685,9 @@ export default function Shimmer3D() {
       tools: toolsToSave(equippedToolsRef.current),
       flags: opts?.replaceFlags ? { ...flagsRef.current } : { ...(prev.flags ?? {}), ...flagsRef.current },
       spawnerCds: { ...spawnerCdRef.current },
+      // The one part of the spawn board that cannot be derived: which Home Plot slots you have
+      // already stripped. Everything else about the board falls out of the clock.
+      strippedSlots: [...strippedRef.current],
       ...(() => {
         // World saves store the logical district + local tile, so LAYOUT_TWEAKS can move
         // districts without stranding saved players in the clouds. Corridor spots (no
@@ -2836,6 +2857,9 @@ export default function Shimmer3D() {
         setBuffHud(activeBuffList(buffsRef.current, Date.now()))
       }
       syncSkillHud()
+      // Loaded OUTSIDE the flags block on purpose — `spawnerCds` sits inside it and so silently
+      // fails to restore on any save that has no flags. Stripped slots are independent of flags.
+      if (Array.isArray(data?.strippedSlots)) setStripped(new Set(data.strippedSlots as string[]))
       if (data?.flags) {
         flagsRef.current = data.flags
         if (data.spawnerCds) spawnerCdRef.current = data.spawnerCds as Record<string, number>
@@ -3452,6 +3476,13 @@ export default function Shimmer3D() {
       setHarvestToast(`${TOOL_DEFS[tool.toolId]?.name} broke — back to your ${TOOL_DEFS[equippedToolsRef.current[skillId]!.toolId]?.name}`)
     }
     depleteNode(node)
+    // ★ The Home Plot's one-way door (Alex, 2026-07-30: "the home plot should clear the resource so
+    // the player has to go out for more"). Everywhere else a depleted node is on a respawn timer;
+    // here it is gone for good, so the plot trends empty and the world is where you gather. Only on
+    // FULL depletion — a pond with catches left is not stripped yet.
+    if (isHomeSlot(node) && node.state === 'depleted') {
+      setStripped(prev => prev.has(node.slotKey!) ? prev : new Set(prev).add(node.slotKey!))
+    }
     syncSkillHud(); setRuntimeNodes([...runtimeNodesRef.current]); setNearNode(null)
     setHarvestToast(`+ ${added.map(prettyItem).join(' · ') || 'nothing'}   ·   ${SKILL_META[skillId].name} +${xp} XP`)
     // the payoff: a resource glyph bursts off the node + a bright pop (parity with the rinning catch)
@@ -3800,6 +3831,11 @@ export default function Shimmer3D() {
     syncSkillHud()
     setHasStarter(false)
     setDefeated({})
+    // The Home Plot's strips are one-way and permanent, so a fresh save MUST clear them or the new
+    // player inherits a garden someone else already stripped bare — and, per the note above, the
+    // very next persist() would write the old set straight back into the "new" game.
+    setStripped(new Set())
+    strippedRef.current = new Set()
     const z = getZone(ZONES, START_ZONE)!
     const ps = z.playerStart ?? { tileX: 1, tileY: 1 }
     posRef.current!.set(ps.tileX, posRef.current!.y, ps.tileY)

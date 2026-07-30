@@ -60,12 +60,14 @@ export function nodePlacementsFor(zoneId: string): NodePlacement[] {
  * not join the board until Save writes it back (which `applyLiveWorldData` then folds in) — fine,
  * because edit mode renders the full authored layer and never looks at the board at all.
  */
-export function dealtNodesFor(zoneId: string, windowIndex: number): DealtNode[] {
-  if (zoneId !== WORLD_ZONE_ID) return dealZone(zoneId, ZONE_NODES[zoneId] ?? [], windowIndex)
+export function dealtNodesFor(zoneId: string, windowIndex: number, stripped?: ReadonlySet<string>): DealtNode[] {
+  if (zoneId !== WORLD_ZONE_ID) return dealZone(zoneId, ZONE_NODES[zoneId] ?? [], windowIndex, undefined, stripped)
   const out: DealtNode[] = []
   for (const [zid, nodes] of Object.entries(ZONE_NODES)) {
     if (!isStitched(zid)) continue
-    for (const n of dealZone(zid, nodes, windowIndex)) {
+    // `key` survives this remap untouched — it was computed in logical space, which is the whole
+    // point of dealing before the translation rather than after it.
+    for (const n of dealZone(zid, nodes, windowIndex, undefined, stripped)) {
       const p = toWorld(zid, n.tileX, n.tileY)
       if (p) out.push({ ...n, tileX: p.x, tileY: p.y })
     }

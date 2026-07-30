@@ -77,6 +77,9 @@ export interface ResourceNode {
   // 2D paths build nodes without a board; absent reads the same as "standing normally".
   leaving?: boolean
   arriving?: boolean
+  /** Zone-local slot identity from the board (`spawn-board.slotKey`) — what a permanent strip is
+   *  recorded against. Absent outside the play3d board path. */
+  slotKey?: string
 }
 
 /** Create a new resource node at a given tile position */
