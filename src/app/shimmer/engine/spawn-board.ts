@@ -92,8 +92,8 @@ const STATIC_TYPES = new Set<NodeType>(['ather_soil'])
 //
 // Weights apply to the zone's band from the bottom up, so rarity is RELATIVE to where you stand:
 // the Threshold's "common" is an element crystal, the garden's is a goldwood.
-const TIER_WEIGHTS = [40, 20, 15, 5]   // common · uncommon · rare · epic
-const NOTHING_WEIGHT = 20              // ...and the chance the slot simply stays empty this window
+export const TIER_WEIGHTS = [40, 20, 15, 5]   // common · uncommon · rare · epic
+export const NOTHING_WEIGHT = 20              // ...and the chance the slot simply stays empty this window
 
 /** A location that came up in this window, with how it relates to the windows either side. */
 export interface DealtNode extends NodePlacement {

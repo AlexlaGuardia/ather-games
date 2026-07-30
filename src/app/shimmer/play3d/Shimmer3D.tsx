@@ -15,7 +15,7 @@ import { ZONES, getZone, checkWarp, type Zone, type Warp } from '../world/zones'
 import { getHeightGrid } from '../world/heightmaps'
 import { GardenAtmosphere } from '../world/atmosphere'
 import { dayProgress, sunElevation, sunAzimuth, daylight, getPhase, getDisplayTime, CYCLE_MS, isTimePinned } from '../engine/day-cycle'
-import { currentWindow, nodeAlpha, msUntilReset, isBoardPinned, isFadeTest, fadeTestAlpha, slotKey, FADE_OUT_MS, type DealtNode } from '../engine/spawn-board'
+import { currentWindow, nodeAlpha, msUntilReset, isBoardPinned, isFadeTest, fadeTestAlpha, slotKey, zoneBand, TIER_WEIGHTS, NOTHING_WEIGHT, FADE_OUT_MS, type DealtNode } from '../engine/spawn-board'
 import { FloraTree, FloraDressing } from '../world/flora'
 import { StationProp, GhostProp } from '../world/prop-models'
 import { RemotePlayers, useRoster } from './RemotePlayers'
@@ -47,7 +47,7 @@ import { createSkillSet, skillSetToSave, skillSetFromSave, addSkillXP, xpForSkil
 import { createBeast, checkBeastUnlock, beastsToSave, beastsFromSave, BEAST_SPECIES, BEAST_DEFS, BEAST_PERKS, PERK_INFO, getBonusFindChance, getSpeedBonus, type ManaBeast, type BeastSpecies } from '../beasts/beast'
 import { createInventory, inventoryToSave, inventoryFromSave, addItems, removeItems, countItem, transferItem, createChestStorage, chestToSave, chestFromSave, type Inventory, type ItemStack, type ChestStorage, type ChestSave } from '../engine/inventory'
 import { createBank, bankFromSave, bankToSave, bankUsed, bankCapacity, bankDeposit, bankWithdraw, bankForceDeposit, bankReachable, isChestFurniture, migrateChestsToBank, CHEST_CAPACITY, type BankState, type BankSave } from '../engine/bank'
-import { ITEMS } from '../sprites/items'
+import { ITEMS, NODE_TYPE_LABELS } from '../sprites/items'
 import { startPerfLog, mark, logPerf } from './perflog'
 import { createManaPool, manaToSave, manaFromSave, getMaxPool, type ManaPool } from '../engine/mana'
 import { brewPotion, POTION_DEFS } from '../engine/alchemy'
@@ -392,6 +392,53 @@ function SpawnerMarkers({ spawners, heights, editing, defeated, ready }: {
         )
       })}
     </>
+  )
+}
+
+/**
+ * ★ What the editor could not show you: the RARITY BAND you are authoring.
+ *
+ * Under the tier roll, the node type you place does two jobs, and only the first is visible. It
+ * sets that slot's SKILL — and it widens the whole zone's band for that skill, because the band is
+ * inferred from what the zone authors. So dropping a single Dawnwood in a far corner does not add
+ * "a Dawnwood there"; it makes Dawnwood rollable in EVERY forestry slot in the zone. That is real
+ * leverage and it was completely invisible, which is how you end up with a starter zone quietly
+ * dealing rares and no idea which placement did it.
+ *
+ * So: band per skill, in rarity order, with the share of windows a slot of that skill comes up
+ * filled. Live off the working placements, so it moves as you paint.
+ */
+function BandReadout({ zoneId, nodes, tick }: { zoneId: string; nodes: NodePlacement[]; tick: number }) {
+  const rows = useMemo(() => {
+    // The editor works in world space; the band is a property of the LOGICAL zone, so read the
+    // authored source for the district under the player rather than the remapped working copy.
+    const src = ZONE_NODES[zoneId] ?? nodes
+    const skills = [...new Set(src.map(p => NODE_DEFS[p.type].skill))]
+    return skills.map(skill => {
+      const band = zoneBand(src, skill)
+      const slots = src.filter(p => NODE_DEFS[p.type].skill === skill).length
+      // Same weights the deal uses, so the number cannot drift from the roll it describes.
+      const weights = band.map((_, i) => TIER_WEIGHTS[Math.min(i, TIER_WEIGHTS.length - 1)])
+      const filled = weights.reduce((a, b) => a + b, 0)
+      return { skill, band, slots, fill: filled / (filled + NOTHING_WEIGHT) }
+    })
+  }, [zoneId, nodes, tick])
+  if (!rows.length) return null
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 2, alignItems: 'flex-end', maxWidth: 480 }}>
+      <span style={{ color: '#8fd9c4', font: '700 10px ui-monospace, monospace', letterSpacing: '0.06em', opacity: 0.75 }}>
+        BAND · {zoneId}
+      </span>
+      {rows.map(r => (
+        <div key={r.skill} style={{ font: '600 10px ui-monospace, monospace', color: '#cfe9df', whiteSpace: 'nowrap' }}>
+          <span style={{ color: '#8fd9c4' }}>{r.skill}</span>{' '}
+          {r.band.map((t, i) => (
+            <span key={t} style={{ opacity: 1 - i * 0.18 }}>{NODE_TYPE_LABELS[t]?.name ?? t}{i < r.band.length - 1 ? ' › ' : ''}</span>
+          ))}
+          <span style={{ color: '#9aa8a2' }}>{'  '}· {r.slots} slot{r.slots === 1 ? '' : 's'} · {Math.round(r.fill * 100)}% filled</span>
+        </div>
+      ))}
+    </div>
   )
 }
 
@@ -5001,6 +5048,7 @@ export default function Shimmer3D() {
             <span style={{ color: '#8fd9c4', font: '700 11px ui-monospace, monospace', letterSpacing: '0.06em' }}>NODES</span>
             {NODE_TOOLS.map((t) => <Btn key={t.id} active={tool === t.id} onClick={() => setTool(t.id)}>{t.label}</Btn>)}
           </div>
+          <BandReadout zoneId={districtZone} nodes={nodesRef.current} tick={nodes.length} />
           {/* moglin-patrol spawners — click places, shift-click erases; gate = the hold that retires it */}
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end', alignItems: 'center', maxWidth: 480 }}>
             <span style={{ color: '#e0987f', font: '700 11px ui-monospace, monospace', letterSpacing: '0.06em' }}>SPAWNERS</span>
