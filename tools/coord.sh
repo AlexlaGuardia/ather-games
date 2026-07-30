@@ -25,7 +25,11 @@ CLAIMS_DIR="$COORD_DIR/claims"
 LOCKDIR="$COORD_DIR/build.lock"        # mkdir is atomic -> our mutex
 STALE_LOCK_SECS="${STALE_LOCK_SECS:-900}"   # 15m: a build that outlives this is dead, steal it
 WAIT_SECS="${WAIT_SECS:-240}"               # how long `build` waits for the lock before giving up
-MCP_URL="https://mcp.guardiacontent.com/mcp/call?key=guardia-hq-72a1ee34e43d8b66a70a44c67d64bd0b"
+# Credentials come from the local untracked env file. This repo is public;
+# never inline a secret here.
+# shellcheck source=/dev/null
+[ -f /root/cortex/.env ] && . /root/cortex/.env
+MCP_URL="https://mcp.guardiacontent.com/mcp/call?key=${CORTEX_MCP_KEY:-}"
 
 WIN="${COORD_WIN:-$(hostname)-$$}"
 SESSION="${COORD_SESSION:-}"
