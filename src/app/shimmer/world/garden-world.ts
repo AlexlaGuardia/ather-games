@@ -14,6 +14,7 @@ import { ZONES, type Zone, type Warp } from './zones'
 import { getHeightGrid, setLiveHeights } from './heightmaps'
 import { ZONE_SPAWNERS, type SpawnerPlacement } from './spawn-placements'
 import { ZONE_NODES, type NodePlacement } from './node-placements'
+import { layoutFingerprint, paintOverlay, setLiveOverlay, type WorldOverlay } from './world-overlay'
 import { SOLID } from './tiles'
 
 // The Garden continent = the canon surface loop (shimmer-geography.md). Underground
@@ -137,6 +138,8 @@ export interface GardenWorld {
   doorWarps: (Warp & { worldX: number; worldY: number })[]
   playerStart: { tileX: number; tileY: number }
   issues: string[]
+  /** Layout identity — stamped onto overlay saves so a later resize cannot silently misplace them. */
+  fingerprint: string
   zoneAt(x: number, y: number): string | null
   toWorld(zoneId: string, x: number, y: number): { x: number; y: number } | null
 }
@@ -237,11 +240,39 @@ export function composeGardenWorld(): GardenWorld {
     return null
   }
 
+  // 4 — ★ CLOUD SUBSTRATE. Everything outside a zone that is still empty sky becomes cloud.
+  //
+  // Before this, the composed world was 72.5% VOID — 94,607 tiles that rendered as flat black on
+  // the map toggle and belonged to no zone, so nothing could author them and nothing could save
+  // them. That was not "the space between islands" (the cloud band is only 8.6%); it was the
+  // bounding-box remainder the layout solver left behind, and it read on the map as a handful of
+  // districts scattered in a void.
+  //
+  // Alex: the clouds are meant to DIVIDE the areas so it feels like a bit of a maze. So the default
+  // substrate is cloud, and routes are CARVED out of it — which is also what makes the space
+  // authorable in practice: cutting paths through solid is subtraction, where painting a maze into
+  // 94k tiles of nothing is not work anyone would finish.
+  //
+  // VOID inside a zone rect is left alone — that is the zone's own authored sky (holes in the
+  // island), which is a deliberate shape and not this function's business.
+  for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) {
+    if (grid[r][c] === VOID && zoneAtRaw(c, r) === null) grid[r][c] = WALL_ID
+  }
+
+  // 5 — the AUTHORED overlay wins over everything above. This is the out-of-zone terrain Alex
+  // paints in the editor: the corridors, the maze cut through the cloud, anything that is not
+  // inside a district. Applied last so a hand-carved tunnel survives the generated L-path that
+  // step 3 would otherwise keep re-drawing over it every single load — which is exactly why the
+  // Spirit Meadows → Route One tunnel kept reverting.
+  const fingerprint = layoutFingerprint(cols, rows, placements.values())
+  paintOverlay(grid, heights, rows, cols, fingerprint)
+
   const g = placements.get('garden')!
   const gs = g.zone.playerStart ?? { tileX: 1, tileY: 1 }
   return {
     grid, heights, rows, cols, placements, doorWarps, issues,
     playerStart: { tileX: g.ox + gs.tileX, tileY: g.oy + gs.tileY },
+    fingerprint,
     zoneAt: zoneAtRaw,
     toWorld: (zoneId, x, y) => {
       const p = placements.get(zoneId)
@@ -272,6 +303,7 @@ export function applyLiveWorldData(data: {
   nodes?: Record<string, { type: string; tileX: number; tileY: number }[]>
   heights?: Record<string, number[][]>
   spawners?: Record<string, { kind: string; gate: string; tileX: number; tileY: number }[]>
+  overlay?: WorldOverlay | null
 }) {
   for (const z of ZONES) {
     if (z.id === WORLD_ZONE_ID) continue
@@ -283,6 +315,9 @@ export function applyLiveWorldData(data: {
     if (Array.isArray(sp)) ZONE_SPAWNERS[z.id] = sp as SpawnerPlacement[]
   }
   if (data.heights) setLiveHeights(data.heights)
+  // The out-of-zone terrain. Undefined means "the payload did not carry one" (leave what we have);
+  // null means "there is none on disk" — both are safe, per the partial-payload rule above.
+  if (data.overlay !== undefined) setLiveOverlay(data.overlay)
   // recompose from the fresh data on next access; drop the stale synthetic zone
   cachedWorld = null
   const i = ZONES.findIndex(z => z.id === WORLD_ZONE_ID)

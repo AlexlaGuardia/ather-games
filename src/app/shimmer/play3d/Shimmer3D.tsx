@@ -4630,16 +4630,39 @@ export default function Shimmer3D() {
           if (nChanged) posts.push(fetch('/shimmer/save-map', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ nodes: zNodes, mapId: p.zone.id }) }))
           if (sChanged) posts.push(fetch('/shimmer/save-map', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ spawners: zSpawners, mapId: p.zone.id }) }))
         }
-        // Edits landing in the derived mortar/corridors (no owning zone) can't persist — detect
-        // grid/height/node changes out there so the save message says so instead of lying "saved".
-        let mortarEdits = nodesRef.current.some(nd => !w.zoneAt(nd.tileX, nd.tileY))
-        for (let r = 0; r < w.rows && !mortarEdits; r++) for (let c = 0; c < w.cols; c++)
-          if (!w.zoneAt(c, r) && (gridRef.current[r][c] !== w.grid[r][c] || heightsRef.current[r][c] !== w.heights[r][c])) { mortarEdits = true; break }
+        // ★ Everything OUTSIDE a district — the cloudscape and the routes cut through it. This
+        // used to be the branch that detected such edits only to report that they could not be
+        // saved; that message was the honest face of the bug, not a fix for it. They now go to the
+        // world overlay, which the composer paints on last so a hand-carved route survives the
+        // generated one.
+        //
+        // Diffed against `w` (the world as composed, overlay already included), so only what this
+        // session actually changed is sent and the server merges it. Sending the whole out-of-zone
+        // region instead would be ~100k entries per save and would make every save a full rewrite
+        // of everyone else's work.
+        const ovTiles: Record<string, number> = {}
+        const ovHeights: Record<string, number> = {}
+        for (let r = 0; r < w.rows; r++) for (let c = 0; c < w.cols; c++) {
+          if (w.zoneAt(c, r)) continue
+          if (gridRef.current[r][c] !== w.grid[r][c]) ovTiles[`${c},${r}`] = gridRef.current[r][c]
+          if (heightsRef.current[r][c] !== w.heights[r][c]) ovHeights[`${c},${r}`] = heightsRef.current[r][c]
+        }
+        const ovCount = Object.keys(ovTiles).length + Object.keys(ovHeights).length
+        if (ovCount) {
+          touched++
+          posts.push(fetch('/shimmer/save-map', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ overlay: { fingerprint: w.fingerprint, tiles: ovTiles, heights: ovHeights } }),
+          }))
+        }
+        // Resource nodes still cannot live out there — a node has no slot key without a zone, and
+        // the spawn board deals per district. Worth saying rather than dropping in silence.
+        const orphanNodes = nodesRef.current.some(nd => !w.zoneAt(nd.tileX, nd.tileY))
         const rs = await Promise.all(posts)
         const bad = rs.find(r => !r.ok)
         const detail = bad ? `save failed — ${bad.status}: ${(await bad.text()).slice(0, 140)}` : null
-        setSaveMsg(!touched ? 'no district changes to save'
-          : !detail ? `saved ${touched} district${touched > 1 ? 's' : ''} ✓ — live on next refresh${mortarEdits ? ' · mortar/corridor edits are derived — not saved' : ''}`
+        setSaveMsg(!touched ? 'no changes to save'
+          : !detail ? `saved ${touched} layer${touched > 1 ? 's' : ''} ✓${ovCount ? ` · ${Object.keys(ovTiles).length} cloud tiles` : ''} — live on next refresh${orphanNodes ? ' · nodes outside a district were NOT saved' : ''}`
           : detail)
         setTimeout(() => setSaveMsg(''), 4500)
         return

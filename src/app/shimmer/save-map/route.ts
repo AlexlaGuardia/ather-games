@@ -46,6 +46,7 @@ const FURNITURE_FILE = join(WORLD_DIR, 'furniture-placements.ts')
 const PICKUPS_FILE = join(WORLD_DIR, 'static-pickups.ts')
 const ZONE_CHESTS_FILE = join(WORLD_DIR, 'zone-chests.ts')
 const ZONES_FILE = join(WORLD_DIR, 'zones.ts')
+const OVERLAY_FILE = join(WORLD_DIR, 'world-overlay.json')
 const ENCOUNTERS_FILE = join(WORLD_DIR, '../engine/encounters.ts')
 const EXCHANGE_FILE = join(WORLD_DIR, '../engine/exchange.ts')
 const ALCHEMY_FILE = join(WORLD_DIR, '../engine/alchemy.ts')
@@ -551,6 +552,57 @@ export async function POST(req: NextRequest) {
           saved.push('nodes')
         }
       }
+    }
+
+    // ── The authored world overlay: terrain OUTSIDE the districts. ──
+    // Everything else in this route writes a per-ZONE slice, which is precisely why an edit made
+    // between districts had nowhere to go and silently reverted on the next load. This branch is
+    // that missing home. MERGE, never replace: the editor only sends the tiles that differ from
+    // what it composed, so a session that carves one tunnel must not wipe every path authored
+    // before it.
+    if (body.overlay && typeof body.overlay === 'object') {
+      const ov = body.overlay as { fingerprint?: unknown; tiles?: unknown; heights?: unknown }
+      const fingerprint = safeText(ov.fingerprint, 'overlay.fingerprint', 8000)
+
+      // A coordinate map, validated key by key. Keys reach a JSON file, so they are parsed as
+      // numbers rather than trusted as strings — "x,y" and nothing else.
+      const coordMap = (v: unknown, field: string, min: number, max: number): Record<string, number> => {
+        if (v == null) return {}
+        if (typeof v !== 'object' || Array.isArray(v)) throw new BadRequest(`Invalid ${field}: expected object`)
+        const entries = Object.entries(v as Record<string, unknown>)
+        if (entries.length > 200_000) throw new BadRequest(`Invalid ${field}: too many entries`)
+        const out: Record<string, number> = {}
+        for (const [k, val] of entries) {
+          const m = /^(\d{1,5}),(\d{1,5})$/.exec(k)
+          if (!m) throw new BadRequest(`Invalid ${field} key: ${k.slice(0, 24)}`)
+          out[`${+m[1]},${+m[2]}`] = safeInt(val, `${field}[${k}]`, min, max)
+        }
+        return out
+      }
+
+      const tiles = coordMap(ov.tiles, 'overlay.tiles', -1, 65_535)
+      const heights = coordMap(ov.heights, 'overlay.heights', 0, 64)
+
+      let prev: { fingerprint?: string; tiles?: Record<string, number>; heights?: Record<string, number> } = {}
+      try { prev = JSON.parse(await readFile(OVERLAY_FILE, 'utf-8')) } catch { /* first write */ }
+
+      // ★ A fingerprint change means the layout moved under the stored coordinates, so merging
+      // would mix two coordinate systems into one file and quietly corrupt both. Refuse, and say
+      // which — re-anchoring is a deliberate act, not something that happens mid-save.
+      if (prev.fingerprint && prev.fingerprint !== fingerprint) {
+        return NextResponse.json({
+          error: 'world layout changed since the overlay was authored — refusing to merge two coordinate systems. ' +
+                 'Re-anchor or clear src/app/shimmer/world/world-overlay.json first.',
+        }, { status: 409 })
+      }
+
+      const merged = {
+        fingerprint,
+        tiles: { ...(prev.tiles ?? {}), ...tiles },
+        heights: { ...(prev.heights ?? {}), ...heights },
+      }
+      await writeFile(OVERLAY_FILE, JSON.stringify(merged, null, 0), 'utf-8')
+      saved.push('overlay')
     }
 
     // Save moglin-patrol spawner placements for the current map (mirror of the nodes flow)

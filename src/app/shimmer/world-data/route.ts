@@ -65,11 +65,14 @@ function parseNodeBlocks(content: string): Record<string, { type: string; tileX:
 
 export async function GET() {
   try {
-    const [tilemap, nodesSrc, heightsRaw, spawnersSrc] = await Promise.all([
+    const [tilemap, nodesSrc, heightsRaw, spawnersSrc, overlayRaw] = await Promise.all([
       readFile(join(WORLD_DIR, 'tilemap.ts'), 'utf-8'),
       readFile(join(WORLD_DIR, 'node-placements.ts'), 'utf-8'),
       readFile(join(WORLD_DIR, 'heightmaps.json'), 'utf-8').catch(() => '{}'),
       readFile(join(WORLD_DIR, 'spawn-placements.ts'), 'utf-8').catch(() => ''),
+      // The out-of-zone terrain. Absent on a fresh checkout — null, not a throw, so the world
+      // still composes (as pure generated cloud + corridors) rather than failing to load.
+      readFile(join(WORLD_DIR, 'world-overlay.json'), 'utf-8').catch(() => 'null'),
     ])
     // every exported grid const in tilemap.ts, keyed by zone id
     const grids: Record<string, number[][]> = {}
@@ -80,7 +83,11 @@ export async function GET() {
       if (g && g.length > 1) grids[d[1].toLowerCase().replace(/_/g, '-')] = g
     }
     return NextResponse.json(
-      { grids, nodes: parseNodeBlocks(nodesSrc), heights: JSON.parse(heightsRaw), spawners: parseSpawnerBlocks(spawnersSrc) },
+      {
+        grids, nodes: parseNodeBlocks(nodesSrc), heights: JSON.parse(heightsRaw),
+        spawners: parseSpawnerBlocks(spawnersSrc),
+        overlay: (() => { try { return JSON.parse(overlayRaw) } catch { return null } })(),
+      },
       { headers: { 'Cache-Control': 'no-store' } },
     )
   } catch (e) {
