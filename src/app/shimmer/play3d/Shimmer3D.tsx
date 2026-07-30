@@ -761,18 +761,24 @@ function WarpBeacons({ warps, heights }: { warps: Cell[]; heights: number[][] })
 function WallTops({ cells, y, color }: { cells: Cell[]; y: number; color: string }) {
   const ref = useRef<THREE.InstancedMesh>(null)
   useLayoutEffect(() => {
-    const mesh = ref.current!
+    // ★ Guarded, and the component below never returns null. The first cut early-returned when a
+    // chunk had no buried tiles — which is most small zones — so the mesh was never created, the
+    // ref stayed null, and this effect (hooks run regardless of what render returned) crashed the
+    // canvas on the first frame. `Tiles` has always allocated `max(len, 1)` for the same reason:
+    // an InstancedMesh of count 0 is not a thing worth having either.
+    const mesh = ref.current
+    if (!mesh) return
     const m = new THREE.Matrix4()
-    const flat = new THREE.Euler(-Math.PI / 2, 0, 0)
-    const q = new THREE.Quaternion().setFromEuler(flat)
+    const q = new THREE.Quaternion().setFromEuler(new THREE.Euler(-Math.PI / 2, 0, 0))
     const s = new THREE.Vector3(1, 1, 1)
-    cells.forEach(([c, r], i) => { m.compose(new THREE.Vector3(c, y, r), q, s); mesh.setMatrixAt(i, m) })
+    const p = new THREE.Vector3()
+    cells.forEach(([c, r], i) => { m.compose(p.set(c, y, r), q, s); mesh.setMatrixAt(i, m) })
+    mesh.count = cells.length
     mesh.instanceMatrix.needsUpdate = true
     mesh.computeBoundingSphere()
   }, [cells, y])
-  if (!cells.length) return null
   return (
-    <instancedMesh ref={ref} args={[undefined, undefined, cells.length]} receiveShadow>
+    <instancedMesh ref={ref} args={[undefined, undefined, Math.max(cells.length, 1)]} receiveShadow visible={cells.length > 0}>
       <planeGeometry args={[1, 1]} />
       <meshStandardMaterial color={color} />
     </instancedMesh>
