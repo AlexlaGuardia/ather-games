@@ -735,6 +735,43 @@ the Arcade frame.
 > level-up delta panel, retune the species floors (firefly/owl) and frog's ceiling — gating every
 > step on the oracle's before/after.
 
+## ⏳ Shimmer play3d — LIVING SPAWNERS: hourly world reset (IDEA, PINNED 2026-07-30 — Alex, not yet designed)
+> **Parked deliberately, in Alex's own words, so it survives until we pick it up.** Raised right after the party
+> panel; he asked to finish the bank first and come back to this. **Nothing here is built or ruled.**
+>
+> **The idea:** resources and moglins both work more like **spawners** than like fixed placements.
+> - Each area gets authored **spawn LOCATIONS**, and each location has a **chance to spawn** — so a location is
+>   a possibility, not a guarantee. Two visits to the same clearing aren't the same clearing.
+> - **Every hour of live game time the world resets** — cleans the map and places a new set. The map breathes on
+>   a clock instead of being a static board you strip once and never return to.
+> - **Resources FADE OUT over their last ~3 minutes** before disappearing, so the despawn is telegraphed rather
+>   than a node vanishing out from under you.
+> - **Moglins get BURROWS they return to** — a home to patrol out from and retreat into, instead of existing
+>   only as an armed-spawner blockout.
+>
+> **Why it's a good fit (Jin's read, not a ruling):** the current node layer is authored placements
+> (`world/node-placements.ts`) that respawn on their own per-node timers, and the moglin layer is armed spawners
+> with a 10min persisted cooldown (see the 07-22/23 wrap). This idea unifies both under one clock and makes the
+> world feel *alive on its own schedule* rather than *reactive to the player's*. It also naturally solves
+> route-farming: you can't memorise one loop if the board is re-dealt hourly.
+>
+> **The questions it raises, to settle BEFORE building (do not guess these):**
+> - **What is "an hour of live game time"?** Wall-clock while the tab is open, accumulated playtime across
+>   sessions, or the in-game `day-cycle.ts` clock? These give three very different games. A wall-clock reset
+>   punishes a long session; an accumulated-playtime clock is the fairest and the hardest to persist.
+> - **Does the reset run while you're standing there?** Nodes vanishing/appearing in view needs the fade to
+>   cover it — and a moglin popping into existence 5m away is a jump-scare, not a spawn.
+> - **Does it wipe a node you're mid-channel on?** The harvest link would have to survive or cancel cleanly.
+> - **Offline/away:** does the world advance while the tab is closed (compute on load from a stored timestamp),
+>   or only tick live? The first is much better and needs the reset to be a pure function of (seed, hour).
+> - **Determinism:** if the layout is `f(seed, hourIndex)`, two players in a party see the SAME board — which
+>   the multiplayer layer needs. `Math.random()` at spawn time would fork the world per client.
+> - **Canon (Magii, not Jin):** do moglin **burrows** exist in the world's truth? A burrow is a place moglins
+>   live, which is a lore fact about a ruled faction, not a placement detail. Likely a `CANON_GAPS.md` entry.
+>
+> **Next:** pick this up after the spirit bank. Start by ruling the clock question with Alex — everything else
+> hangs off it.
+
 ## 🌱 Shimmer play3d — THE PARTY PANEL (P) (SHIPPED 2026-07-30, jin-cc) · *Last touched 2026-07-30*
 > **Alex:** *"a seed icon/button next to the bag that we can bind to P, here we can have the spirit line up..
 > so that the player can click each one to check out stats, moves, description."* Shipped, browser-verified live.
