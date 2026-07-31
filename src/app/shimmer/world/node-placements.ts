@@ -114,11 +114,14 @@ const MANA_SPRINGS_NODES: NodePlacement[] = [
 // Spirit Meadow — open grassland, forestry + fishing
 const SPIRIT_MEADOW_NODES: NodePlacement[] = [
   { type: 'goldwood' as NodeType, tileX: 8, tileY: 2 },
-  { type: 'goldwood' as NodeType, tileX: 5, tileY: 10 },
   { type: 'shimmeroak' as NodeType, tileX: 9, tileY: 3 },
   { type: 'shimmeroak' as NodeType, tileX: 8, tileY: 9 },
   { type: 'raw_mana_node' as NodeType, tileX: 9, tileY: 9 },
-  { type: 'raw_mana_node' as NodeType, tileX: 6, tileY: 10 },
+  { type: 'raw_mana_node' as NodeType, tileX: 25, tileY: 36 },
+  { type: 'raw_mana_node' as NodeType, tileX: 28, tileY: 37 },
+  { type: 'raw_mana_node' as NodeType, tileX: 32, tileY: 34 },
+  { type: 'raw_mana_node' as NodeType, tileX: 38, tileY: 38 },
+  { type: 'shimmeroak' as NodeType, tileX: 30, tileY: 15 },
 ]
 
 // The Threshold — end-zone, rare prospecting

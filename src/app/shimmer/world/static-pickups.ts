@@ -62,7 +62,6 @@ const MANA_SPRINGS_PICKUPS: StaticPickup[] = []
 const SPIRIT_MEADOW_PICKUPS: StaticPickup[] = []
 const THE_THRESHOLD_PICKUPS: StaticPickup[] = []
 
-
 const TEST_SANDBOX_PICKUPS: StaticPickup[] = []
 
 export const ZONE_PICKUPS: Record<string, StaticPickup[]> = {

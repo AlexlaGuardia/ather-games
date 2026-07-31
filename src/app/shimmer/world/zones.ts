@@ -51,8 +51,6 @@ export function getZone(zones: Zone[], id: string): Zone | null {
 // Moonwell Glade → east → Spore Hollow (post-tutorial)
 
 import { GARDEN, MYCELIAL_PATH, MOONWELL_GLADE, SPORE_HOLLOW, VORANYX_DEEP, TWILIGHT_THICKET, WOODED_TRAIL, THE_THRESHOLD, MANA_SPRINGS, ROUTE_2, ROUTE_3, THE_OUTFIELDS, GLOVIEW_VILLAGE, SPIRIT_MEADOW, MOONWELL_GLADE_GREGORY_S_HOME, SPIRIT_CORNER, CRUCIBLE, SORREL_HOLD, BRACK_HOLD, TEST_SANDBOX,
-  FLAT_TERRAIN_DEMO,
-  FP_GARDEN, FP_LARGE_1, FP_LARGE_2, FP_LARGE_3, FP_MED_1, FP_MED_2, FP_MED_3, FP_MED_4, FP_HUGE,
   ROUTE_GARDEN_MYCELIAL, ROUTE_MYCELIAL_SPIRIT, ROUTE_SPIRIT_MOONWELL, ROUTE_MOONWELL_GARDEN } from './tilemap'
 export const ZONES: Zone[] = [
   {
@@ -356,71 +354,7 @@ export const ZONES: Zone[] = [
     warps: [],
   },
   // --- Flat-terrain demo (throwaway) — reach via ?zone=flat-terrain-demo ---
-  {
-    id: 'flat-terrain-demo',
-    name: 'Flat Terrain Demo',
-    grid: FLAT_TERRAIN_DEMO,
-    playerStart: { tileX: 10, tileY: 7 },
-    warps: [],
-  },
-
   // --- F2P scale-test world (hub + 3 large + 4 medium) — reach via ?zone=fp-garden ---
-  {
-    id: 'fp-garden',
-    name: 'Garden (hub)',
-    grid: FP_GARDEN,
-    playerStart: { tileX: 24, tileY: 20 },
-    warps: [
-      { fromX: 12, fromY: 0,  toZone: 'fp-large-1', toX: 60, toY: 118, direction: 'up' },
-      { fromX: 35, fromY: 0,  toZone: 'fp-med-1',   toX: 40, toY: 78,  direction: 'up' },
-      { fromX: 47, fromY: 13, toZone: 'fp-large-2', toX: 1,  toY: 60,  direction: 'right' },
-      { fromX: 47, fromY: 26, toZone: 'fp-med-2',   toX: 1,  toY: 40,  direction: 'right' },
-      { fromX: 12, fromY: 39, toZone: 'fp-large-3', toX: 60, toY: 1,   direction: 'down' },
-      { fromX: 35, fromY: 39, toZone: 'fp-med-3',   toX: 40, toY: 1,   direction: 'down' },
-      { fromX: 0,  fromY: 20, toZone: 'fp-med-4',   toX: 78, toY: 40,  direction: 'left' },
-    ],
-  },
-  {
-    id: 'fp-large-1', name: 'Large I', grid: FP_LARGE_1,
-    playerStart: { tileX: 60, tileY: 60 },
-    warps: [{ fromX: 60, fromY: 119, toZone: 'fp-garden', toX: 12, toY: 1, direction: 'down' }],
-  },
-  {
-    id: 'fp-large-2', name: 'Large II', grid: FP_LARGE_2,
-    playerStart: { tileX: 60, tileY: 60 },
-    warps: [{ fromX: 0, fromY: 60, toZone: 'fp-garden', toX: 46, toY: 13, direction: 'left' }],
-  },
-  {
-    id: 'fp-large-3', name: 'Large III', grid: FP_LARGE_3,
-    playerStart: { tileX: 60, tileY: 60 },
-    warps: [{ fromX: 60, fromY: 0, toZone: 'fp-garden', toX: 12, toY: 38, direction: 'up' }],
-  },
-  {
-    id: 'fp-med-1', name: 'Medium I', grid: FP_MED_1,
-    playerStart: { tileX: 40, tileY: 40 },
-    warps: [{ fromX: 40, fromY: 79, toZone: 'fp-garden', toX: 35, toY: 1, direction: 'down' }],
-  },
-  {
-    id: 'fp-med-2', name: 'Medium II', grid: FP_MED_2,
-    playerStart: { tileX: 40, tileY: 40 },
-    warps: [{ fromX: 0, fromY: 40, toZone: 'fp-garden', toX: 46, toY: 26, direction: 'left' }],
-  },
-  {
-    id: 'fp-med-3', name: 'Medium III', grid: FP_MED_3,
-    playerStart: { tileX: 40, tileY: 40 },
-    warps: [{ fromX: 40, fromY: 0, toZone: 'fp-garden', toX: 35, toY: 38, direction: 'up' }],
-  },
-  {
-    id: 'fp-med-4', name: 'Medium IV', grid: FP_MED_4,
-    playerStart: { tileX: 40, tileY: 40 },
-    warps: [{ fromX: 79, fromY: 40, toZone: 'fp-garden', toX: 1, toY: 20, direction: 'right' }],
-  },
-  {
-    id: 'fp-huge', name: 'Huge (256² chunk-bake proof)', grid: FP_HUGE,
-    playerStart: { tileX: 128, tileY: 128 },
-    warps: [{ fromX: 128, fromY: 255, toZone: 'fp-garden', toX: 24, toY: 20, direction: 'down' }],
-  },
-
   // --- Garden-chain route zones (baked from garden-chain.ts, 2026-06-24) ---
   // Grids + warps + spawns are now static; edit here or via Map Editor (saves stick).
   {

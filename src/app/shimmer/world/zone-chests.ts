@@ -42,7 +42,6 @@ const MANA_SPRINGS_ZONE_CHESTS: ZoneChestPlacement[] = []
 const SPIRIT_MEADOW_ZONE_CHESTS: ZoneChestPlacement[] = []
 const THE_THRESHOLD_ZONE_CHESTS: ZoneChestPlacement[] = []
 
-
 const TEST_SANDBOX_ZONE_CHESTS: ZoneChestPlacement[] = []
 
 export const ZONE_CHESTS: Record<string, ZoneChestPlacement[]> = {
