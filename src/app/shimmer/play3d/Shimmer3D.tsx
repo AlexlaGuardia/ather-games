@@ -4667,9 +4667,19 @@ export default function Shimmer3D() {
         for (const p of w.placements.values()) {
           const gSlice = gridRef.current.slice(p.oy, p.oy + p.rows).map(row => row.slice(p.ox, p.ox + p.cols))
           const hSlice = heightsRef.current.slice(p.oy, p.oy + p.rows).map(row => row.slice(p.ox, p.ox + p.cols))
-          // The composer rewrites warp cells in the world view (stitched warps demote to floor,
-          // unpainted door mouths force to gold) — restore the authored values at every warp
-          // position so a save-back never writes composer artifacts into a zone's source.
+          // ★ The composer mutates cells INSIDE zone rects too, not just warp cells: the corridor
+          // carver writes its L-path floor into a zone's authored voids, and its cloud flanking
+          // turns authored sky at zone edges into WALL (the -1 → 34 bake-back). Restore the
+          // authored value at every cell this session did NOT touch — diffed against `w` (the
+          // world as composed), same convention as the overlay diff below — so a save-back
+          // records the player's edits and nothing the composer drew.
+          const zh = getHeightGrid(p.zone.id, p.rows, p.cols)
+          for (let r = 0; r < p.rows; r++) for (let c = 0; c < p.cols; c++) {
+            if (gridRef.current[p.oy + r][p.ox + c] === w.grid[p.oy + r][p.ox + c]) gSlice[r][c] = p.zone.grid[r][c]
+            if (heightsRef.current[p.oy + r][p.ox + c] === w.heights[p.oy + r][p.ox + c]) hSlice[r][c] = zh[r][c]
+          }
+          // Warp cells stay authored even when touched — stitched warps render demoted in world
+          // view, so a paint over one is an edit to a derived cell, not the source.
           for (let r = 0; r < p.rows; r++) for (let c = 0; c < p.cols; c++)
             if ((p.zone.grid[r][c] & 0xFF) === WARP_ID && gSlice[r][c] !== p.zone.grid[r][c]) gSlice[r][c] = p.zone.grid[r][c]
           for (const wz of p.zone.warps)
@@ -4682,7 +4692,7 @@ export default function Shimmer3D() {
             .filter(sp => w.zoneAt(sp.tileX, sp.tileY) === p.zone.id)
             .map(sp => ({ gate: sp.gate, x: sp.tileX - p.ox, y: sp.tileY - p.oy }))
           const gChanged = JSON.stringify(gSlice) !== JSON.stringify(p.zone.grid)
-          const hChanged = JSON.stringify(hSlice) !== JSON.stringify(getHeightGrid(p.zone.id, p.rows, p.cols))
+          const hChanged = JSON.stringify(hSlice) !== JSON.stringify(zh)
           const nChanged = JSON.stringify(zNodes) !== JSON.stringify((ZONE_NODES[p.zone.id] ?? []).map(nd => ({ nodeType: nd.type, x: nd.tileX, y: nd.tileY })))
           const sChanged = JSON.stringify(zSpawners) !== JSON.stringify((ZONE_SPAWNERS[p.zone.id] ?? []).map(sp => ({ gate: sp.gate, x: sp.tileX, y: sp.tileY })))
           if (!gChanged && !hChanged && !nChanged && !sChanged) continue
