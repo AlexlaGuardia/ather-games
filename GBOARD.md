@@ -1016,6 +1016,25 @@ the Arcade frame.
 > **Files:** `engine/burrows.ts` + `.test.ts` (new) · `world/spawn-placements.ts` (cooldown const gone) ·
 > `play3d/Shimmer3D.tsx` (`BurrowMarkers`/`BurrowWalker`, arming on the body, `patrolBeaten` save field).
 
+## 🏡 Shimmer — PER-KEEPER HOME PLOT (stage 1 SHIPPED 2026-07-31, jin-cc) · *Last touched 2026-07-31*
+> **Alex: "each player gets their own plot" — the plot is inherently different from the world zones.**
+> **The load-bearing realization: it already mostly IS per-keeper.** Saves are per-browser, so strips/crops/
+> placements diverge per keeper today — the seam is **template (authored source) + delta (the save)** and it
+> existed before we named it. Stage 1 closed the two leaks (`0107619`):
+> - **Presence: the plot is personal space** (canon: Greg's gate = *"a personal shimmer"*). No peer ever
+>   renders inside the plot rect / garden zone-room — a keeper standing there is in their OWN plot. Symmetric
+>   renderer-only rule (`RemotePlayers.hideAt`), no protocol change. Nameplate gates on React state because
+>   drei `<Html>` is a DOM portal and ignores three visibility.
+> - **Editor: garden = "Home Template (per-keeper)" optgroup** — authoring it is authoring the starting plot
+>   every new keeper receives. Burrow brush REFUSED on the template (canon: burrows are dug OUTSIDE a plot).
+>   Same commit-family: band readout ported to the 2D editor (`3ce1dcb`), burrow layer added (`e486ce0`).
+> **Canon gap [OPEN] filed** (CANON_GAPS.md): how the world *narrates* overlapping personal plots (what a
+> keeper sees at another's boundary) + whether visiting-by-invitation exists. Mechanics not blocked on it.
+> **Next (stage 2, when Alex calls it):** server-side plot persistence (saves are localStorage — a keeper's
+> plot dies with the browser) · visiting a friend's plot (needs the canon ruling for the register) · roster
+> panel could show "in their garden" instead of the peer just vanishing.
+> **Files:** `play3d/RemotePlayers.tsx` (hideAt) · `play3d/Shimmer3D.tsx` (plotHide) · `dev/editors/MapEditor.tsx`.
+
 ## ⏳ Shimmer play3d — LIVING SPAWNERS: hourly world reset (IDEA 2026-07-30 → ✅ FULLY BUILT 2026-07-31, both halves shipped — see the two blocks above)
 > **UPDATE 2026-07-30 — the resource half is BUILT (block above) and the questions below are settled.** The
 > clock question is answered by the day-cycle's design, not by a ruling: the reset keys on `resetIndex()`, so
