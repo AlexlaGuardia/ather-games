@@ -1030,10 +1030,22 @@ the Arcade frame.
 >   Same commit-family: band readout ported to the 2D editor (`3ce1dcb`), burrow layer added (`e486ce0`).
 > **Canon gap [OPEN] filed** (CANON_GAPS.md): how the world *narrates* overlapping personal plots (what a
 > keeper sees at another's boundary) + whether visiting-by-invitation exists. Mechanics not blocked on it.
-> **Next (stage 2, when Alex calls it):** server-side plot persistence (saves are localStorage — a keeper's
-> plot dies with the browser) · visiting a friend's plot (needs the canon ruling for the register) · roster
-> panel could show "in their garden" instead of the peer just vanishing.
-> **Files:** `play3d/RemotePlayers.tsx` (hideAt) · `play3d/Shimmer3D.tsx` (plotHide) · `dev/editors/MapEditor.tsx`.
+> **✅ STAGE 2 SHIPPED same day (`6d32d54`): the garden follows the account.** `saves` table in accounts.db
+> (upsert per account+game, deleted with the account) · session-authed `/api/saves` (512KB guard) · debounced
+> client push after every local save (session-gated; pagehide flush via sendBeacon) · **pull only ever fills a
+> BLANK device — local wins when present**, so a stale cloud copy can never clobber live play; a blank device
+> that turns out to be a returning keeper also closes the birth modal. Anonymous play untouched (localStorage
+> only, as ever). Two traps: `/api/saves` was pre-gated owner-only in proxy.ts from the old deferred plan
+> (would have 403'd every player — same lesson as /api/shimmerfile), and `_openAt` carried a trimmed schema
+> copy that lacked the new table (schema factored to ONE const, two doors). Accounts oracle extended, green.
+> **Same day: zone cleanup** (`a562e73`, Alex-approved): 10 fp/flat scale-test maps deleted via deleteZone
+> surgery; KEPT test-sandbox (Beast/Player editor preview arena) + the 2 orphan hand-authored corridors (raw
+> material for the (80,22) dog-leg fix — delete only once that's settled). Dropdown grouped: Home Template /
+> World Surface / Interiors & Holds / Dev & Legacy (`49188b3`).
+> **Next (stage 3, when Alex calls it):** visiting a friend's plot (needs the canon ruling for the register) ·
+> roster shows "in their garden" instead of the peer just vanishing · wallet/magii could ride the same sync.
+> **Files:** `play3d/RemotePlayers.tsx` (hideAt) · `play3d/Shimmer3D.tsx` (plotHide, cloud pull/push) ·
+> `lib/cloud-sync.ts` + `app/api/saves/route.ts` (new) · `lib/accounts/db.ts` · `dev/editors/MapEditor.tsx`.
 
 ## ⏳ Shimmer play3d — LIVING SPAWNERS: hourly world reset (IDEA 2026-07-30 → ✅ FULLY BUILT 2026-07-31, both halves shipped — see the two blocks above)
 > **UPDATE 2026-07-30 — the resource half is BUILT (block above) and the questions below are settled.** The
