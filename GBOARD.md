@@ -850,7 +850,7 @@ the Arcade frame.
 > **Files:** `engine/day-cycle.ts` (rewritten — clock only, no colour) + `.test.ts` · `world/atmosphere.tsx`
 > (night palettes + per-frame blend) · `play3d/Shimmer3D.tsx` (`SkyLight` rig, `DayClock` chip).
 
-## ☁️ Shimmer play3d — THE SPACE BETWEEN DISTRICTS IS TERRAIN (SHIPPED 2026-07-30, jin-cc) · *Last touched 2026-07-30*
+## ☁️ Shimmer play3d — THE SPACE BETWEEN DISTRICTS IS TERRAIN (SHIPPED 2026-07-30, jin-cc) · *Last touched 2026-07-31*
 > **Alex:** *"i edited the tunnel from spirit meadows to route 1 and it reverted back… the map toggle
 > has a lot of black empty space."* Both true, same root cause.
 >
@@ -902,11 +902,20 @@ the Arcade frame.
 > **Found (pre-existing):** loop mismatch `mycelial-path→spirit-meadow` off by **(80,22)** — which is
 > why the corridor he picked is a long generated dog-leg and felt like fighting the map.
 >
-> **Next:** re-test lag on the fixed build (running vs standing, editor open vs not — different costs)
-> · commit Alex's uncommitted `tilemap.ts` / `node-placements.ts` / `world-overlay.json` · investigate
-> whether world-mode save bakes neighbouring cloud bands into a zone's authored voids (the `-1`→`34`
-> edge changes in MYCELIAL_PATH) · resource nodes still cannot live outside a district (no slot key
-> without a zone).
+> **CLOSED OUT 2026-07-31 (jin-cc):** ✅ lag re-tested by Alex on the fixed build — gone (and serb ruled
+> the server out independently; the WallTops crash log is clean since midnight). ✅ Alex's map work
+> committed (`3b293d3`). ✅ **The `-1`→`34` suspicion was a REAL CORRUPTION BUG, root-caused + fixed +
+> repaired:** world-mode save split the composed grid back to zone sources, but the corridor carver
+> mutates zone interiors (L-path floor into authored voids, cloud flanking over edge-sky) and only warp
+> cells were being restored — so ONE world-mode save baked composer artifacts into every zone with an
+> edge corridor, zero edits needed. This was also the real story under the old "map save isn't
+> sticking" report. Fix `57a8417`: untouched cells revert to authored truth (diffed vs composed
+> baseline, same convention as the overlay diff). Repair `3409b78`: `scripts/repair-bakeback.mts`
+> re-ran the composer on the pre-split-save baseline (ced2e7d) to enumerate exact artifact cells —
+> 77 tiles reverted across 3 zones, 0 height contamination, all 358 human edits kept, connectivity
+> proof green. **Tripwire: any future `tilemap.ts` diff Alex didn't author = reopen this.**
+> **Next:** loop mismatch `mycelial-path→spirit-meadow` off by (80,22) (the generated dog-leg corridor)
+> · resource nodes still cannot live outside a district (no slot key without a zone).
 > **Files:** `world/world-overlay.ts` + `.test.ts` + `.json` (new) · `world/garden-world.ts`
 > (substrate + overlay paint + fingerprint) · `save-map/route.ts` (overlay branch, merge + 409) ·
 > `world-data/route.ts` (serves it) · `play3d/Shimmer3D.tsx` (overlay save, shell/buried split, WallTops).
@@ -1120,6 +1129,40 @@ the Arcade frame.
 > (`onEnd` widened, BAG button reads charges) · `play3d/Shimmer3D.tsx` (`fieldParty`, the settle, the trickle
 > tick, the salve branch, HUD chips).
 
+## 🎭 Shimmer play3d — ARENA ACTING + THE KEEPER LOOP REVIVED (SHIPPED 2026-07-31, jin-cc) · *Last touched 2026-07-31*
+> **Two passes in one night, both live on :3200 and Alex-approved ("the acting feels good… looks and
+> feels good").**
+> - **Pass 3 — THE BODIES ACT (`1c2961c`).** The mirroring complaint was never the AI; capsules
+>   couldn't act. Per-state execute body language wrapped around the sim's instant-execute (approach
+>   beat rides the windup's tail so contact syncs with the damage event; follow-through rides
+>   recover): solid=lunge-to-contact+snap-back · ignite=gather-up+slam-squash · compact=crouch ·
+>   expanding=wind+spin-release · scatter=ragged-rattle · flow=current-rise · bind=thrust-held-pinned.
+>   Hits SHOVE the body away from the blow, dodges ROLL into the sidestep, idle life on a seeded
+>   per-fighter clock (breath, step bob, wounded sag) — no two spirits share a metronome, same law as
+>   the personality fix. All on sim time (hit-stop freezes mid-lunge free). Renderer-only. Dials atop
+>   `ArenaBattle.tsx` (`APPROACH_S`/`RELEASE_S`/`LUNGE_MAX`/`KNOCK_DIST`). **Sprite rigs later swap in
+>   over the same state verbs.**
+> - **BALANCE — oracle green after EIGHT DAYS RED (`6e08611`).** The keeper-skill band had been failing
+>   since real kits (`86b2753`, 07-23) and nobody re-ran it. Three measured fixes:
+>   (1) **Signature heavies** — heavy was `power>=60` and no L20-24 move reaches 60, so the whole
+>   telegraph→react→interrupt loop *did not exist* at low-mid levels (flash never fired, no danger
+>   rings, no brace). Every kit now promotes its top damaging move to heavy (stretched windup). Duel
+>   skill delta **+5 → +75pts** (passive 2% / skilled 77%).
+>   (2) **Contact moves track** — rooted windups made slow melee whiff into vacated space (water-bear
+>   landed 1.6 of 9.2 casts, **0% vs the ENTIRE league** in a 1v1 round-robin); contact moves now
+>   close at 0.85× effSpeed through the windup (anchor/fortify still gate). Wall league avg 9%→38% —
+>   and the acting pass already renders the charge as the lunge.
+>   (3) **Stat trims inside identity** (`party-stats.ts`) — frog was apex on BOTH axes (85% league):
+>   60pwr/58agi → 56/52. Water-bear teeth for the short-fight regime: 34pwr/16agi → 46/22 (the
+>   axolotl precedent). Bands now: party passive 39.5% (30-68) · party skilled 100% · pacing green ·
+>   arena-moves 19/19.
+> - **Method notes:** side-swap run proved species imbalance (B-team won from EITHER side), not a side
+>   bug — and mirrors ≠ 50% there because the deterministic IV stream gives allies/enemies different
+>   fixed rolls, so don't read mirror deviation as asymmetry. Hit-economy probe (casts vs hits landed)
+>   found the whiff mechanism in one look.
+> **Next:** league spread round 2 when it bothers Alex in play — owl 26% / frog 79% avg (no band
+> asserts it) · sprite rigs over the acting verbs (Alex art, when battle sprites land).
+>
 ## ⏱️ Shimmer play3d — ARENA PACING (the battle slog, fixed 2026-07-23, jin-cc)
 > **Started from Alex playtesting: "TTK is more like 15-20 hits, I've been skipping since it's so
 > dragged out."** That contradicted the party-balance oracle (5-6 hits) and the contradiction was
