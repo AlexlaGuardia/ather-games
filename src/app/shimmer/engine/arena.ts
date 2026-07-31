@@ -459,7 +459,17 @@ export function tick(state: ArenaState, dt: number, commands: KeeperCommand[] = 
       a.t += dt
       if (a.phase === 'windup') {
         const tgt = state.fighters.find(g => g.id === a.targetId && alive(g))
-        if (tgt) f.facing = Math.atan2(tgt.y - f.y, tgt.x - f.x)   // track through the windup
+        if (tgt) {
+          f.facing = Math.atan2(tgt.y - f.y, tgt.x - f.x)   // track through the windup
+          // A CONTACT move tracks with its feet too — the charge. Rooted windups made every
+          // slow melee spirit whiff into the space its foe danced out of (water-bear landed
+          // 1.6 of 9.2 casts vs frog, 07-31 probe — 0% win vs the entire league). Ranged
+          // casts stay planted; anchor/fortify gate through effSpeed as everywhere else.
+          if (a.move.range > 0 && a.move.range <= 1.4 && a.move.power > 0) {
+            const need = a.move.range + f.radius + tgt.radius
+            if (dist(f, tgt) > need * 0.8) moveTowardSpd(f, tgt, dt, effSpeed(f) * 0.85)
+          }
+        }
         if (a.t >= a.dur) {
           executeMove(state, f, a)
           f.act = { ...a, phase: 'recover', t: 0, dur: a.move.recover }

@@ -107,7 +107,18 @@ export function toArenaMove(mv: Move): ArenaMove {
 
 /** A spirit's live arena kit — its canon 4-move pool as timed actions. */
 export function kitForSpirit(sp: Spirit): ArenaMove[] {
-  return getMovesForSpirit(sp.species, sp.element, sp.level, sp.bond).map(toArenaMove)
+  const kit = getMovesForSpirit(sp.species, sp.element, sp.level, sp.bond).map(toArenaMove)
+  // Every kit carries a telegraphed SIGNATURE swing. The absolute HEAVY_POWER bar only
+  // clears at higher levels — below it, no move in the whole matchup is heavy, and the
+  // telegraph→react→interrupt loop (the Keeper thesis, the danger rings, brace, flash)
+  // silently ceases to exist. Found 2026-07-31: the arena oracle's keeper-skill band had
+  // been red since real kits landed (86b2753) for exactly this reason. Promote the kit's
+  // strongest damaging move — strong + SLOW: the stretch is what makes it readable.
+  if (!kit.some(m => m.heavy)) {
+    const top = kit.filter(m => m.power > 0).sort((a, b) => b.power - a.power || b.windup - a.windup)[0]
+    if (top) { top.heavy = true; top.windup *= 1.2; top.recover *= 1.1 }
+  }
+  return kit
 }
 
 // ── canon status effects (shimmer-battles.md §5), real-time timers ───────────────

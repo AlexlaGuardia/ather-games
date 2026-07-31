@@ -32,10 +32,10 @@ export const SPECIES_STATS_V2: Record<Species, Omit<PartyStats, 'maxHp'>> = {
   fox:           { pwr: 54, grd: 40, foc: 36, res: 36, agi: 52, vig: 44 }, // balanced phys skirmisher
   axolotl:       { pwr: 30, grd: 46, foc: 52, res: 52, agi: 34, vig: 54 }, // spirit sustain wall — teeth bumped for the short-fight regime (was 25/44/30)
   owl:           { pwr: 30, grd: 38, foc: 50, res: 46, agi: 48, vig: 44 }, // spirit attacker / caster
-  frog:          { pwr: 60, grd: 36, foc: 28, res: 32, agi: 58, vig: 46 }, // physical sweeper
+  frog:          { pwr: 56, grd: 36, foc: 28, res: 32, agi: 52, vig: 46 }, // physical sweeper — trimmed from 60/58: it went 85% against the whole league (07-31 round-robin), apex on BOTH its axes
   firefly:       { pwr: 28, grd: 26, foc: 62, res: 30, agi: 70, vig: 38 }, // spirit glass cannon (alpha-striker)
   rabbit:        { pwr: 48, grd: 42, foc: 30, res: 44, agi: 50, vig: 50 }, // physical bruiser (bulk, not speed)
-  'water-bear':  { pwr: 34, grd: 70, foc: 26, res: 48, agi: 16, vig: 64 }, // physical wall
+  'water-bear':  { pwr: 46, grd: 70, foc: 26, res: 48, agi: 22, vig: 60 }, // physical wall — teeth for the short-fight regime (was 34/16/64: it went 0% vs EVERY species; a wall that can't threaten just delays the loss)
   hummingbird:   { pwr: 56, grd: 26, foc: 48, res: 30, agi: 72, vig: 38 }, // hyper-fast mixed evader
   turtle:        { pwr: 38, grd: 56, foc: 36, res: 64, agi: 16, vig: 60 }, // spirit wall / pivot
   bat:           { pwr: 44, grd: 34, foc: 50, res: 40, agi: 60, vig: 42 }, // fast spirit skirmisher
