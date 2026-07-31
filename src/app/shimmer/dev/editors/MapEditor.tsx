@@ -12,6 +12,8 @@ import { SURFACE_ZONES } from '../../world/garden-world'
 import { NODE_DEFS, type NodeType } from '../../world/resources'
 import { ZONE_PICKUPS } from '../../world/static-pickups'
 import { ZONES } from '../../world/zones'
+import { ALL_ZONES } from '../../world/all-zones'
+import { regionIdOf, regionNodesFor, regionSpawnersFor } from '../../world/region-maps'
 import type { TileGroup } from '../../world/structures'
 import { FURNITURE } from '../../sprites/furniture'
 import { ZONE_CHESTS } from '../../world/zone-chests'
@@ -58,7 +60,7 @@ const CATEGORIES = [
 ] as const
 
 // Derive zone list from ZONES import — stays in sync automatically
-const INITIAL_ZONE_MAPS = ZONES.map(z => ({ id: z.id, label: z.name }))
+const INITIAL_ZONE_MAPS = ALL_ZONES.map(z => ({ id: z.id, label: z.name }))
 // Dropdown grouping (the 07-31 cleanup: 10 fp/flat test maps deleted, survivors organized).
 const SURFACE_ZONE_SET = new Set(SURFACE_ZONES)
 // test-sandbox = the Beast/Player editor preview arena; the two orphan corridors are the
@@ -67,7 +69,7 @@ const SURFACE_ZONE_SET = new Set(SURFACE_ZONES)
 const DEV_ZONES = new Set(['test-sandbox', 'route-mycelial-spirit', 'route-spirit-moonwell'])
 
 const ZONE_DEFAULTS: Record<string, number[][]> = Object.fromEntries(
-  ZONES.map(z => [z.id, z.grid])
+  ALL_ZONES.map(z => [z.id, z.grid])
 )
 
 interface EditorTile {
@@ -181,7 +183,7 @@ function EditorBandReadout({ zoneId, placements }: { zoneId: string; placements:
   if (!rows.length) return null
   // The Home Plot never re-deals (strip-once, canon starter nodes) — a band there would
   // describe a roll that never happens.
-  if (zoneId === 'garden') {
+  if (zoneId === 'garden' || zoneId === 'r-home-plot') {
     return (
       <div className="mb-3 px-2 py-1.5 rounded border border-white/[0.06] bg-white/[0.02]">
         <p className="text-[9px] font-mono text-teal-300/70 uppercase tracking-wider">Band · garden</p>
@@ -216,7 +218,7 @@ interface WarpPlacement {
 }
 
 function hydrateWarps(mapId: string): WarpPlacement[] {
-  const zone = ZONES.find(z => z.id === mapId)
+  const zone = ALL_ZONES.find(z => z.id === mapId)
   return zone?.warps.map(w => ({
     fromX: w.fromX, fromY: w.fromY,
     toZone: w.toZone, toX: w.toX, toY: w.toY,
@@ -1036,7 +1038,7 @@ export default function MapEditor() {
   // so Alex lands on the zone he was standing in. Runs once on mount.
   useEffect(() => {
     const z = new URLSearchParams(window.location.search).get('zone')
-    if (z && ZONES.some(zo => zo.id === z)) setActiveMap(z)
+    if (z && ALL_ZONES.some(zo => zo.id === z)) setActiveMap(z)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
   const [showPreview, setShowPreview] = useState(false)
@@ -1472,7 +1474,7 @@ export default function MapEditor() {
     } else if (brushType === 'burrow') {
       // Canon (shimmer-geography.md): incursion burrows are dug OUTSIDE a plot, near its
       // edge — the Home Plot template can never author one. Refused here, hinted in the UI.
-      if (activeMap === 'garden') return
+      if (activeMap === 'garden' || activeMap === 'r-home-plot') return
       setSpawnerPlacements(prev => {
         const existing = prev.findIndex(p => p.x === tx && p.y === ty)
         if (existing >= 0) {
@@ -1777,7 +1779,7 @@ export default function MapEditor() {
     setShowIntGrid(false)
     // Restore persisted IntGrid for this zone if available, else zero-fill to grid size
     {
-      const zoneRef = ZONES.find(z => z.id === mapId)
+      const zoneRef = ALL_ZONES.find(z => z.id === mapId)
       const persisted = ZONE_INTGRIDS[mapId]
       if (persisted && persisted.length > 0) {
         setIntGrid(persisted.map(r => [...r]))
@@ -1793,12 +1795,20 @@ export default function MapEditor() {
     const defaultGrid = ZONE_DEFAULTS[mapId]?.map(r => [...r]) ?? GARDEN.map(r => [...r])
     setGrid(defaultGrid)
     setItemPlacements((ZONE_PICKUPS[mapId] ?? []).map(p => ({ itemId: p.itemId, x: p.tileX, y: p.tileY })))
-    setNodePlacements((ZONE_NODES[mapId] ?? []).map(n => ({ nodeType: n.type, x: n.tileX, y: n.tileY })))
-    setSpawnerPlacements((ZONE_SPAWNERS[mapId] ?? []).map(s => ({ gate: s.gate, x: s.tileX, y: s.tileY })))
+    setNodePlacements((regionNodesFor(mapId) ?? ZONE_NODES[mapId] ?? []).map(n => ({ nodeType: n.type, x: n.tileX, y: n.tileY })))
+    setSpawnerPlacements((regionSpawnersFor(mapId) ?? ZONE_SPAWNERS[mapId] ?? []).map(s => ({ gate: s.gate, x: s.tileX, y: s.tileY })))
     setWarpPlacements(hydrateWarps(mapId))
     setPlacedStructures((STRUCTURE_PLACEMENTS[mapId] ?? []).map(s => ({ structureId: s.structureId, x: s.tileX, y: s.tileY })))
     setPlacedFurniture([])
     setPlacedZoneChests((ZONE_CHESTS[mapId] ?? []).map(c => ({ chestType: c.chestType, x: c.tileX, y: c.tileY, claimable: c.claimable })))
+
+    // ── Region maps NEVER read the IndexedDB cache: server truth only. The cache layer is
+    // exactly the stale-clobber landmine (a months-old cached copy silently beating current
+    // source on load, then Save writing it back) — the new world opts out of it wholesale. ──
+    if (regionIdOf(mapId)) {
+      loadedRef.current = true
+      return
+    }
 
     // Load cached placements from IndexedDB (overrides defaults if present)
     const [cachedItems, cachedNodes, cachedWarps, cachedStructures, cachedFurniture, cachedZoneChests] = await Promise.all([
@@ -2348,18 +2358,26 @@ export default function MapEditor() {
         {/* The Home Plot is a per-keeper TEMPLATE, not a world zone: what you author here is
             the starting plot every new keeper receives; their copy then diverges via the save
             (strips, crops, placements). The world zones are shared, dealt, and live. */}
-        <optgroup label="🏡 Home Template (per-keeper)">
+        {/* The NEW WORLD (2026-07-31 pivot): one standalone cloud-canvas map per region.
+            These are the maps to sculpt; everything below them is the legacy stitched world,
+            kept alive until cutover. */}
+        <optgroup label="⛅ Regions — the new world (sculpt these)">
+          {zoneMaps.filter(z => z.id.startsWith('r-')).map(z => (
+            <option key={z.id} value={z.id} className="bg-[#1a1a2e] text-white">{z.label}</option>
+          ))}
+        </optgroup>
+        <optgroup label="🏡 Legacy Home Template">
           {zoneMaps.filter(z => z.id === 'garden').map(z => (
             <option key={z.id} value={z.id} className="bg-[#1a1a2e] text-white">{z.label}</option>
           ))}
         </optgroup>
-        <optgroup label="🌍 World Surface (stitched, shared)">
+        <optgroup label="🌍 Legacy World Surface (stitched)">
           {zoneMaps.filter(z => z.id !== 'garden' && SURFACE_ZONE_SET.has(z.id)).map(z => (
             <option key={z.id} value={z.id} className="bg-[#1a1a2e] text-white">{z.label}</option>
           ))}
         </optgroup>
         <optgroup label="🚪 Interiors & Holds">
-          {zoneMaps.filter(z => z.id !== 'garden' && !SURFACE_ZONE_SET.has(z.id) && !DEV_ZONES.has(z.id)).map(z => (
+          {zoneMaps.filter(z => !z.id.startsWith('r-') && z.id !== 'garden' && !SURFACE_ZONE_SET.has(z.id) && !DEV_ZONES.has(z.id)).map(z => (
             <option key={z.id} value={z.id} className="bg-[#1a1a2e] text-white">{z.label}</option>
           ))}
         </optgroup>
@@ -2589,8 +2607,8 @@ export default function MapEditor() {
               {brushType === 'tile' && tiles[brush]?.above && <span className="text-violet-400/60 mr-2">above</span>}
               {brushType === 'item' && <span className="text-amber-400/60">pickup — click to place/remove</span>}
               {brushType === 'node' && <span className="text-green-400/60">resource node — click to place/remove</span>}
-              {brushType === 'burrow' && activeMap !== 'garden' && <span className="text-orange-300/60">burrow mouth — click to place/remove, gate = the hold that quiets it</span>}
-              {brushType === 'burrow' && activeMap === 'garden' && <span className="text-red-400/70">burrows are dug OUTSIDE a plot (canon) — not placeable on the Home Template</span>}
+              {brushType === 'burrow' && activeMap !== 'garden' && activeMap !== 'r-home-plot' && <span className="text-orange-300/60">burrow mouth — click to place/remove, gate = the hold that quiets it</span>}
+              {brushType === 'burrow' && (activeMap === 'garden' || activeMap === 'r-home-plot') && <span className="text-red-400/70">burrows are dug OUTSIDE a plot (canon) — not placeable on the Home Template</span>}
               {brushType === 'eraser' && <span className="text-red-400/60">clears tiles, items, nodes, warps, structures, furniture + chests</span>}
               {brushType === 'furniture' && <span className="text-amber-400/60">furniture — click to place</span>}
               {brushType === 'zonechest' && <span className="text-purple-400/60">zone chest — <label className="cursor-pointer"><input type="checkbox" checked={brushChestClaimable} onChange={e => setBrushChestClaimable(e.target.checked)} className="mr-1 accent-purple-500" />claimable</label></span>}

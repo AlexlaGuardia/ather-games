@@ -1,0 +1,62 @@
+// Region maps — the 2026-07-31 world pivot (Alex): the stitched continent retires; each
+// region is ONE standalone map on a cloud canvas, authored by subtraction, owning its own
+// resource list + spawn dials. See region-codec.ts for the file format and
+// scripts/build-region-canvases.mts for the transplant that seeded them.
+//
+// WIP PREFIX: while Alex sculpts, regions are registered under `r-<id>` so they live
+// ALONGSIDE the legacy zones without colliding with the ids the live world still uses
+// (spirit-meadow etc.). At cutover the prefix drops, saves migrate via each file's
+// `sources` table, and the legacy zones + stitcher machinery get deleted.
+
+import type { Zone, Warp } from './zones'
+import type { NodePlacement } from './node-placements'
+import type { NodeType } from './resources'
+import type { SpawnerPlacement } from './spawn-placements'
+import { decodeRows, type RegionFile } from './region-codec'
+
+import homePlot from './region-maps/home-plot.json'
+import moonwellGlade from './region-maps/moonwell-glade.json'
+import spiritMeadow from './region-maps/spirit-meadow.json'
+import twilightThicket from './region-maps/twilight-thicket.json'
+import manaSprings from './region-maps/mana-springs.json'
+import voranyxCaverns from './region-maps/voranyx-caverns.json'
+import theOutfields from './region-maps/the-outfields.json'
+
+export const REGION_WIP_PREFIX = 'r-'
+
+const FILES = [homePlot, moonwellGlade, spiritMeadow, twilightThicket, manaSprings, voranyxCaverns, theOutfields] as unknown as RegionFile[]
+
+/** Region files by CANONICAL id (no prefix). */
+export const REGION_FILES: Record<string, RegionFile> = Object.fromEntries(FILES.map(f => [f.id, f]))
+
+/** The canonical region id behind a WIP zone id, or null if this isn't a region zone. */
+export function regionIdOf(zoneId: string): string | null {
+  if (!zoneId.startsWith(REGION_WIP_PREFIX)) return null
+  const id = zoneId.slice(REGION_WIP_PREFIX.length)
+  return REGION_FILES[id] ? id : null
+}
+
+/** Zone entries for the registry — decoded lazily once (a 400x400 decode is cheap, ~ms). */
+export const REGION_ZONES: Zone[] = FILES.map(f => ({
+  id: REGION_WIP_PREFIX + f.id,
+  name: `⛅ ${f.display}`,
+  grid: decodeRows(f.rle, f.cols),
+  warps: f.warps.map(w => ({ ...w, direction: (w.direction ?? 'down') as Warp['direction'] })),
+  playerStart: f.playerStart,
+  element: f.element as Zone['element'],
+  realm: f.realm,
+}))
+
+/** A region zone's authored nodes (its own resource list), or null for non-region zones. */
+export function regionNodesFor(zoneId: string): NodePlacement[] | null {
+  const id = regionIdOf(zoneId)
+  if (!id) return null
+  return REGION_FILES[id].nodes.map(n => ({ type: n.type as NodeType, tileX: n.tileX, tileY: n.tileY }))
+}
+
+/** A region zone's burrows, or null for non-region zones. */
+export function regionSpawnersFor(zoneId: string): SpawnerPlacement[] | null {
+  const id = regionIdOf(zoneId)
+  if (!id) return null
+  return REGION_FILES[id].spawners.map(s => ({ kind: 'moglin' as const, gate: s.gate as SpawnerPlacement['gate'], tileX: s.tileX, tileY: s.tileY }))
+}

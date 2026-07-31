@@ -8,6 +8,7 @@ import { NPCS_3D, type NPC3D } from './npcs3d'
 import { ZONE_NODES, type NodePlacement } from '../world/node-placements'
 import { dealZone, type DealtNode } from '../engine/spawn-board'
 import { ZONE_SPAWNERS, type SpawnerPlacement } from '../world/spawn-placements'
+import { regionNodesFor, regionSpawnersFor } from '../world/region-maps'
 import type { PlacedStruct } from './StationMenus'
 
 const toWorld = (zoneId: string, x: number, y: number) => getGardenWorld().toWorld(zoneId, x, y)
@@ -31,7 +32,7 @@ export function allNpcs(): NPC3D[] {
 // Resource nodes aggregated across every stitched zone, in world coords.
 let worldNodes: NodePlacement[] | null = null
 export function nodePlacementsFor(zoneId: string): NodePlacement[] {
-  if (zoneId !== WORLD_ZONE_ID) return (ZONE_NODES[zoneId] ?? []).map(n => ({ ...n }))
+  if (zoneId !== WORLD_ZONE_ID) return regionNodesFor(zoneId) ?? (ZONE_NODES[zoneId] ?? []).map(n => ({ ...n }))
   if (!worldNodes) {
     worldNodes = []
     for (const [zid, nodes] of Object.entries(ZONE_NODES)) {
@@ -61,7 +62,7 @@ export function nodePlacementsFor(zoneId: string): NodePlacement[] {
  * because edit mode renders the full authored layer and never looks at the board at all.
  */
 export function dealtNodesFor(zoneId: string, windowIndex: number, stripped?: ReadonlySet<string>): DealtNode[] {
-  if (zoneId !== WORLD_ZONE_ID) return dealZone(zoneId, ZONE_NODES[zoneId] ?? [], windowIndex, undefined, stripped)
+  if (zoneId !== WORLD_ZONE_ID) return dealZone(zoneId, regionNodesFor(zoneId) ?? ZONE_NODES[zoneId] ?? [], windowIndex, undefined, stripped)
   const out: DealtNode[] = []
   for (const [zid, nodes] of Object.entries(ZONE_NODES)) {
     if (!isStitched(zid)) continue
@@ -78,7 +79,7 @@ export function dealtNodesFor(zoneId: string, windowIndex: number, stripped?: Re
 // Moglin-patrol spawners aggregated across every stitched zone, in world coords (mirror of nodes).
 let worldSpawners: SpawnerPlacement[] | null = null
 export function spawnerPlacementsFor(zoneId: string): SpawnerPlacement[] {
-  if (zoneId !== WORLD_ZONE_ID) return (ZONE_SPAWNERS[zoneId] ?? []).map(n => ({ ...n }))
+  if (zoneId !== WORLD_ZONE_ID) return regionSpawnersFor(zoneId) ?? (ZONE_SPAWNERS[zoneId] ?? []).map(n => ({ ...n }))
   if (!worldSpawners) {
     worldSpawners = []
     for (const [zid, sps] of Object.entries(ZONE_SPAWNERS)) {

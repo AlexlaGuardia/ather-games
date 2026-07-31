@@ -11,7 +11,8 @@ import * as THREE from 'three'
 import { walkable } from '../engine/player'
 import { resolveStand, canStandAt, surfacesAt, EMPTY_SEGS, type CollisionCtx } from '../engine/segs-collision'
 import { SOLID } from '../world/tiles'
-import { ZONES, getZone, checkWarp, type Zone, type Warp } from '../world/zones'
+import { getZone, checkWarp, type Zone, type Warp } from '../world/zones'
+import { ALL_ZONES } from '../world/all-zones'
 import { getHeightGrid } from '../world/heightmaps'
 import { GardenAtmosphere } from '../world/atmosphere'
 import { dayProgress, sunElevation, sunAzimuth, daylight, getPhase, getDisplayTime, CYCLE_MS, isTimePinned } from '../engine/day-cycle'
@@ -1281,7 +1282,7 @@ function Player({ posRef, gridRef, heightsRef, zoneIdRef, editRef, onWarp, battl
       if (airborne.current && hasInput) prevMove.copy(move); else prevMove.set(0, 0, 0)
       if (warpCd.current > 0) warpCd.current -= dt
       else if (tileChanged) {
-        const w = checkWarp(ZONES, zoneIdRef.current, tx, tz)
+        const w = checkWarp(ALL_ZONES, zoneIdRef.current, tx, tz)
         if (w) { onWarp(w); warpCd.current = 0.4; encGrace.current = ENCOUNTER_GRACE }
         // No door — a fresh mist tile can draw a wild spirit, but only once you HAVE a spirit (Greg's
         // starter). Before that the mist is just scenery, so a fresh player is never stuck in a fight.
@@ -2605,7 +2606,7 @@ function PlayTogetherPanel({ name, onName, party, onParty, peers, account }: {
 
 export default function Shimmer3D() {
   const [zoneId, setZoneId] = useState(START_ZONE)
-  const zone = getZone(ZONES, zoneId) ?? getZone(ZONES, START_ZONE)!
+  const zone = getZone(ALL_ZONES, zoneId) ?? getZone(ALL_ZONES, START_ZONE)!
 
   // Edit mode lives up here because the resource board below is gated on it — see the deal.
   const [editMode, setEditMode] = useState(false)
@@ -3137,7 +3138,7 @@ export default function Shimmer3D() {
           const wp = getGardenWorld().toWorld(data.zoneId, data.playerTileX ?? 1, data.playerTileY ?? 1)
           if (wp) posRef.current!.set(wp.x, posRef.current!.y, wp.y)
           setZoneId(WORLD_ZONE_ID)
-        } else if (data.zoneId && getZone(ZONES, data.zoneId)) setZoneId(data.zoneId)
+        } else if (data.zoneId && getZone(ALL_ZONES, data.zoneId)) setZoneId(data.zoneId)
       }
       // One-time starter-kit grant — reaches fresh AND returning saves (older saves with a party
       // never got seeded stations/mats, so the Alchemy Station wasn't obtainable). Idempotent via flag.
@@ -4059,7 +4060,7 @@ export default function Shimmer3D() {
     // very next persist() would write the old set straight back into the "new" game.
     setStripped(new Set())
     strippedRef.current = new Set()
-    const z = getZone(ZONES, START_ZONE)!
+    const z = getZone(ALL_ZONES, START_ZONE)!
     const ps = z.playerStart ?? { tileX: 1, tileY: 1 }
     posRef.current!.set(ps.tileX, posRef.current!.y, ps.tileY)
     setZoneId(START_ZONE)
@@ -4768,7 +4769,7 @@ export default function Shimmer3D() {
   // Jump straight to a zone to edit it (no walking/warping). Resets the player + camera focus
   // to its spawn. NOTE: unsaved edits in the current zone are dropped — save before switching.
   const selectZone = useCallback((id: string) => {
-    const z = getZone(ZONES, id)
+    const z = getZone(ALL_ZONES, id)
     if (!z) return
     const ps = z.playerStart ?? { tileX: 1, tileY: 1 }
     posRef.current!.set(ps.tileX, 0, ps.tileY)
@@ -4950,7 +4951,7 @@ export default function Shimmer3D() {
           position: 'fixed', top: 12, left: 12, padding: '8px 12px', borderRadius: 8,
           background: 'rgba(10,8,20,0.66)', color: '#e9dfc8', font: '600 13px ui-monospace, monospace', lineHeight: 1.5,
         }}>
-          Shimmer 3D — {zone.id === WORLD_ZONE_ID ? (getZone(ZONES, districtZone)?.name ?? zone.name) : zone.name}  ·  EDIT<br />
+          Shimmer 3D — {zone.id === WORLD_ZONE_ID ? (getZone(ALL_ZONES, districtZone)?.name ?? zone.name) : zone.name}  ·  EDIT<br />
           <span style={{ opacity: 0.8 }}>left-drag paint · WASD fly · Q/E down·up · right-drag look · scroll zoom</span>
         </div>
       )}
@@ -5249,7 +5250,7 @@ export default function Shimmer3D() {
               color: '#e9dfc8', font: '700 13px ui-monospace, monospace', cursor: 'pointer', pointerEvents: 'auto', maxWidth: 260,
             }}
           >
-            {ZONES.map((z) => <option key={z.id} value={z.id}>{z.name}{z.id !== z.name ? ` (${z.id})` : ''}</option>)}
+            {ALL_ZONES.map((z) => <option key={z.id} value={z.id}>{z.name}{z.id !== z.name ? ` (${z.id})` : ''}</option>)}
           </select>
           <span style={{ color: '#e9dfc8', opacity: 0.55, font: '600 11px ui-monospace, monospace' }}>jump to a map · save before switching</span>
         </div>

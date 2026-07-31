@@ -3,6 +3,7 @@ import { readFile } from 'fs/promises'
 import { join } from 'path'
 import { safeWriteFile as writeFile } from '../lib/backup'
 import { BadRequest, safeId, safeIdOpt, safeInt, safeNum, safeText, safeColors, escText, gridMax, lookup } from '../lib/safe'
+import { encodeRows } from '../world/region-codec'
 
 /** Map a guard failure to 400, anything else to 500. */
 function errorResponse(e: unknown) {
@@ -269,6 +270,83 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
     const saved: string[] = []
+
+    // ── Region maps (`r-<id>`, the 2026-07-31 world pivot): grid/nodes/spawners/warps live
+    // in ONE JSON per region, not in the legacy source files — intercept those payload parts
+    // here and strip them so the surgery branches below never see them. Everything else
+    // (intgrid, pickups, structures…) flows through the legacy per-mapId file surgery keyed
+    // by the WIP id, and migrates into the region files at cutover. Any region write stamps
+    // `sculpted: true`, which makes the transplant script refuse to clobber the file.
+    {
+      const mapId = bodyMapId(body)
+      if (mapId.startsWith('r-')) {
+        const regionPath = join(WORLD_DIR, 'region-maps', `${mapId.slice(2)}.json`)
+        let region: Record<string, unknown>
+        try { region = JSON.parse(await readFile(regionPath, 'utf-8')) } catch {
+          return NextResponse.json({ error: `Unknown region map: ${mapId}` }, { status: 400 })
+        }
+        let touched = false
+        if (body.grid && Array.isArray(body.grid)) {
+          const grid = safeGrid(body.grid, 'grid')
+          region.cols = grid[0]?.length ?? 0
+          region.rows = grid.length
+          region.rle = encodeRows(grid)
+          if (body.playerStart) {
+            region.playerStart = {
+              tileX: safeInt(body.playerStart.tileX, 'playerStart.tileX', 0, 9999),
+              tileY: safeInt(body.playerStart.tileY, 'playerStart.tileY', 0, 9999),
+            }
+          }
+          delete body.grid
+          touched = true
+          saved.push('region-grid')
+        }
+        if (body.nodes && Array.isArray(body.nodes)) {
+          region.nodes = (body.nodes as unknown[]).map((n, i) => ({
+            type: safeId((n as { nodeType: unknown }).nodeType, `nodes[${i}].nodeType`),
+            tileX: safeInt((n as { x: unknown }).x, `nodes[${i}].x`, 0, 9999),
+            tileY: safeInt((n as { y: unknown }).y, `nodes[${i}].y`, 0, 9999),
+          }))
+          delete body.nodes
+          touched = true
+          saved.push('region-nodes')
+        }
+        if (body.spawners && Array.isArray(body.spawners)) {
+          const GATES = new Set(['thistle', 'sorrel', 'brack'])
+          region.spawners = (body.spawners as unknown[]).map((s, i) => {
+            const gate = safeId((s as { gate: unknown }).gate, `spawners[${i}].gate`)
+            if (!GATES.has(gate)) throw new BadRequest(`spawners[${i}].gate must be thistle|sorrel|brack`)
+            return {
+              kind: 'moglin',
+              gate,
+              tileX: safeInt((s as { x: unknown }).x, `spawners[${i}].x`, 0, 9999),
+              tileY: safeInt((s as { y: unknown }).y, `spawners[${i}].y`, 0, 9999),
+            }
+          })
+          delete body.spawners
+          touched = true
+          saved.push('region-spawners')
+        }
+        if (body.warps && Array.isArray(body.warps)) {
+          region.warps = (body.warps as unknown[]).map((w, i) => ({
+            fromX: safeInt((w as { fromX: unknown }).fromX, `warps[${i}].fromX`, 0, 9999),
+            fromY: safeInt((w as { fromY: unknown }).fromY, `warps[${i}].fromY`, 0, 9999),
+            toZone: safeId((w as { toZone: unknown }).toZone, `warps[${i}].toZone`),
+            toX: safeInt((w as { toX: unknown }).toX, `warps[${i}].toX`, 0, 9999),
+            toY: safeInt((w as { toY: unknown }).toY, `warps[${i}].toY`, 0, 9999),
+            direction: safeIdOpt((w as { direction?: unknown }).direction, `warps[${i}].direction`) ?? 'down',
+            ...((w as { requiredFlag?: unknown }).requiredFlag ? { requiredFlag: safeId((w as { requiredFlag: unknown }).requiredFlag, `warps[${i}].requiredFlag`) } : {}),
+          }))
+          delete body.warps
+          touched = true
+          saved.push('region-warps')
+        }
+        if (touched) {
+          region.sculpted = true
+          await writeFile(regionPath, JSON.stringify(region), 'utf-8')
+        }
+      }
+    }
 
     // Save tiles
     if (body.tiles && Array.isArray(body.tiles)) {
