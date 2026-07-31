@@ -920,7 +920,7 @@ the Arcade frame.
 > (substrate + overlay paint + fingerprint) · `save-map/route.ts` (overlay branch, merge + 409) ·
 > `world-data/route.ts` (serves it) · `play3d/Shimmer3D.tsx` (overlay save, shell/buried split, WallTops).
 
-## 🍃 Shimmer play3d — THE SPAWN BOARD: resources re-deal (SHIPPED 2026-07-30, jin-cc) · *Last touched 2026-07-30*
+## 🍃 Shimmer play3d — THE SPAWN BOARD: resources re-deal (SHIPPED 2026-07-30, jin-cc) · *Last touched 2026-07-31*
 > Step 2 of the living-spawners arc — the **resource half**. The moglin half is next and is now canon-unblocked
 > (see the burrow ruling below). Alex: *"each area gets authored spawn LOCATIONS, each location has a chance to
 > spawn, the world resets and places a new set, resources fade out over their last ~3 minutes."*
@@ -968,15 +968,55 @@ the Arcade frame.
 > driven from the automation harness (three approaches, pointer-lock and drag-look both refused). This is
 > Alex's eye-pass regardless, but nobody has looked at it yet.
 >
-> **Next:** **Alex eye-pass** — `?fadetest=1` for the dissolve look, then a wild zone (Mycelial Path / Spirit
-> Meadow) across two `?window=` values to feel the re-deal. Then the **feel dials**: `SPAWN_CHANCE` per type
-> (does a route still read as a route at 0.65-0.85?), `RESETS_PER_DAY` (is 32 min right?), `FADE_OUT_MS`.
-> Then the **moglin half** — burrows are canon-ruled as of today, see below.
+> **Next:** ✅ Alex playtested 07-31 — "looks great." Moglin half SHIPPED (burrows block below). Remaining:
+> **feel dials** only, when play surfaces them: `SPAWN_CHANCE` per type, `RESETS_PER_DAY` (is 32 min right?),
+> `FADE_OUT_MS`.
 > **Files:** `engine/spawn-board.ts` + `.test.ts` (new) · `play3d/world-adapter.ts` (`dealtNodesFor`) ·
 > `play3d/Shimmer3D.tsx` (board state, `NodeFade`, re-deal tick, channel re-point, HUD chips) ·
 > `world/resources.ts` (`leaving`/`arriving` runtime tags).
 
-## ⏳ Shimmer play3d — LIVING SPAWNERS: hourly world reset (IDEA, PINNED 2026-07-30 — Alex, not yet designed)
+## 🕳️ Shimmer play3d — BURROWS: the moglin half of living-spawners (SHIPPED 2026-07-31, jin-cc) · *Last touched 2026-07-31*
+> Step 3, closes the living-spawners arc. Canon (`game/shimmer-geography.md`, ruled 07-30): *"a burrow is a
+> mouth, a hold is the hand behind it"* — collared moglins press in through burrows while the hold stands;
+> free the hold and the tunnelling stops. Warrens/Gloview inviolate (they are simply never authored as
+> spawners). Rates/placement/cadence were left to Jin and this block records those calls.
+>
+> **Left off (2026-07-31, `96c572b`, committed + pushed + built + live :3200):**
+> - **The spawner placements ARE the burrows** — one authoring surface, same rule as the resource locations.
+>   The mouth (warm earth mound + dark opening) always renders; while the hold stands it flies the hold's
+>   gate-colored pennant.
+> - **The patrol is a BODY on a walk now, not an invisible radius.** A lesser moglin walks a derived loop
+>   around its mouth (`engine/burrows.ts`): waypoints ring the burrow at seeded angles, kept only if walkable
+>   AND straight-line reachable (a body gliding through a rock reads as a bug — the oracle asserts it), with
+>   look-around pauses and per-burrow phase offsets so neighbours never march in step. Boxed-in burrow →
+>   the patrol idles at the mouth, slowly turning. **The fight triggers on the patrol's position**, so you
+>   see it coming and choose the engagement; a half-emerged patrol is not fair game.
+> - **Position is a PURE FUNCTION of wall-clock time** — renderer and fight-trigger derive it independently
+>   and cannot disagree; two keepers watch the same moglin round the same corner with nothing synced. Same
+>   trade as the board and the hour, for the same multiplayer reason.
+> - **One clock: beaten = down for the rest of the current spawn-board window** (back at the next deal, avg
+>   ~16 min, max 32) — replaces the stored 10-min real-time cooldown. The save shrinks from a timestamp per
+>   spawner to `patrolBeaten: {key: windowIndex}`, self-expiring, pruned on write. Legacy `spawnerCds`
+>   dropped on load (worst case: one patrol back one window early, once, at deploy). `?window=` pins
+>   cooperate — beaten-under-a-pin holds within the pinned index, asserted.
+> - **Hold freed → pennant comes down, the mouth quiets but stays** (a stopped burrow is not a corpse).
+>   **After Brack falls, a reformed UNCOLLARED moglin sits by each quieted mouth** — "came to raid, stayed
+>   to be neighbours." Canon permits it; the collar was the sin, so the reformed body has no collar.
+> - **Render-caution violation FIXED:** the old armed-spawner blockout was a near-grey hunched lurker —
+>   exactly the vermin read canon bans. New bodies are warm earth tones (`#8a6a48`), child-scale, rounded
+>   ears; the hostile part is the gate-colored collar, nothing else.
+> **Verified:** oracle **30 asserts** green (`npx tsx src/app/shimmer/engine/burrows.test.ts` — determinism,
+> wall-clipping legs, teleport seams over a full lap, leash, beaten-record windows, pin) · spawn-board oracle
+> still green · `tsc` clean · build clean · live :3200.
+> **NOT verified:** nobody has SEEN a patrol walk in-world (same camera-harness limit as the spawn board).
+> **Next:** **Alex eye-pass** — the-outfields has all 3 burrows (thistle/sorrel/brack gates); watch a lap,
+> fight one, confirm it stays down and re-emerges next window (`?window=` to jump). Feel dials atop
+> `engine/burrows.ts`: `PATROL_RADIUS` 3.5 · `PATROL_SPEED` 1.1 · `PATROL_PAUSE_S` 1.6 · `EMERGE_MS` 2.5s.
+> Sprite rigs over the blockout when battle sprites land (Alex art). More burrows = map editor sp_* tools.
+> **Files:** `engine/burrows.ts` + `.test.ts` (new) · `world/spawn-placements.ts` (cooldown const gone) ·
+> `play3d/Shimmer3D.tsx` (`BurrowMarkers`/`BurrowWalker`, arming on the body, `patrolBeaten` save field).
+
+## ⏳ Shimmer play3d — LIVING SPAWNERS: hourly world reset (IDEA 2026-07-30 → ✅ FULLY BUILT 2026-07-31, both halves shipped — see the two blocks above)
 > **UPDATE 2026-07-30 — the resource half is BUILT (block above) and the questions below are settled.** The
 > clock question is answered by the day-cycle's design, not by a ruling: the reset keys on `resetIndex()`, so
 > it is the in-game clock, global, derived from wall time, and the board is `f(seed, hourIndex)` — which
@@ -984,7 +1024,8 @@ the Arcade frame.
 > 3-minute fade; mid-channel is re-pointed or cut cleanly. **Moglin burrows are RULED** (2026-07-30, /magii +
 > Alex, `CANON_GAPS.md` → `game/shimmer-geography.md`): burrow-folk anatomy and the collar-incursion were
 > already canon, a burrow is a mouth and the hold is the hand behind it, a free WARREN may never emit anything
-> hostile, and rates/placement/counts are Jin's. **What remains here is the moglin half only.**
+> hostile, and rates/placement/counts are Jin's. **UPDATE 2026-07-31: the moglin half is BUILT too**
+> (burrows block above) — nothing remains here; kept as the idea's record.
 > **Parked deliberately, in Alex's own words, so it survives until we pick it up.** Raised right after the party
 > panel; he asked to finish the bank first and come back to this. **Nothing here is built or ruled.**
 >
