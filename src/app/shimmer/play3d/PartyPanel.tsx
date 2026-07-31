@@ -345,7 +345,7 @@ function Detail({ spirit, index, resting, salves, onMend, onSetLead, onSetActive
 }
 
 // ── the panel ───────────────────────────────────────────────────────────────
-export default function PartyPanel({ owned, maxParty, salves, isTouch, onMend, onSetLead, onSetActive, onClose }: {
+export default function PartyPanel({ owned, maxParty, salves, isTouch, onMend, onSetLead, onSetActive, onClose, initialSelId }: {
   owned: Spirit[]                 // every spirit you have; `inParty` splits party from resting
   maxParty: number
   salves: number
@@ -354,13 +354,16 @@ export default function PartyPanel({ owned, maxParty, salves, isTouch, onMend, o
   onSetLead: (s: Spirit) => void
   onSetActive: (s: Spirit, active: boolean) => void
   onClose: () => void
+  /** Open focused on this spirit — how greeting a wandering plot spirit lands on ITS dossier. */
+  initialSelId?: string | null
 }) {
   const active = activeSpirits(owned)
   const resting = restingSpirits(owned)
 
   // Selection is by ID, not index, because both lists reorder under it — a swap moves a spirit
   // between them and `Make lead` splices the active one. An index would silently retarget.
-  const [selId, setSelId] = useState<string | null>(active[0]?.id ?? owned[0]?.id ?? null)
+  const [selId, setSelId] = useState<string | null>(
+    (initialSelId && owned.some(s => s.id === initialSelId) ? initialSelId : null) ?? active[0]?.id ?? owned[0]?.id ?? null)
   const selected = owned.find(s => s.id === selId) ?? active[0] ?? owned[0] ?? null
   useEffect(() => { if (selected && selected.id !== selId) setSelId(selected.id) }, [selected, selId])
 

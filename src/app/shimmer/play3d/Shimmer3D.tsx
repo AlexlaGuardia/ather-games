@@ -72,7 +72,8 @@ import { WorldMap, MiniMap } from './WorldMap'
 import { WORLD_ZONE_ID, registerGardenWorld, getGardenWorld, isStitched, fromWorld } from '../world/garden-world'
 import { allNpcs, nodePlacementsFor, dealtNodesFor, spawnerPlacementsFor, logicalZoneAt, structuresView, logicalStruct } from './world-adapter'
 import { ZONE_SPAWNERS, type SpawnerPlacement } from '../world/spawn-placements'
-import { patrolDown, markBeaten, pruneBeaten, patrolLoop, patrolPose, type BeatenRecord, type PatrolLoop } from '../engine/burrows'
+import { patrolDown, markBeaten, pruneBeaten, patrolLoop, patrolPose, type BeatenRecord, type PatrolLoop, type WanderDials } from '../engine/burrows'
+import type { DealWindow } from '../engine/spawn-board'
 import { regionIdOf, REGION_FILES, regionSpawnConfig } from '../world/region-maps'
 
 // The composed continent registers as a zone before any getZone/save-load runs.
@@ -494,6 +495,72 @@ function BurrowMarkers({ spawners, heights, editing, defeated, ready, gridRef, k
       })}
     </>
   )
+}
+
+
+// ── The Home Plot spirit ring — canon ruled 2026-07-30 ("where a keeper's spirits live"):
+// resting spirits are "about your own plot: visible, wandering, underfoot. This is the ring
+// the player feels, and it is why the garden reads as inhabited rather than as a menu."
+// Same derived-position law as the moglin patrols — position is a pure function of
+// wall-clock time, so every visitor to a plot would see the same spirit round the same
+// bush. The old "spirits are battle-only, no overworld" convention is superseded by the
+// ruling FOR THE PLOT RINGS ONLY: wild zones still never show overworld spirits.
+// Greeting one (E) opens the party panel ON that spirit — the swap surface canon allows
+// instead of a bank ("there is no bank, no box, no depot").
+const PLOT_DIALS: WanderDials = { radius: 4.5, speed: 0.7, pauseS: 3.4 }
+// Spirits LIVE here — no emerge beat at window boundaries, so hand patrolPose a window that
+// started long ago and never ends.
+const PLOT_WIN: DealWindow = { index: 0, startMs: 0, endMs: Number.MAX_SAFE_INTEGER }
+const PLOT_ZONES = new Set(['garden', 'r-home-plot'])
+
+/** Where a resting spirit hangs out: a seeded offset from the plot anchor, so each spirit
+ *  claims its own corner of the garden and keeps it across sessions. */
+function plotSpiritCenter(spiritId: string, ax: number, az: number): { x: number; z: number } {
+  let h = 2166136261 >>> 0
+  for (let i = 0; i < spiritId.length; i++) { h ^= spiritId.charCodeAt(i); h = Math.imul(h, 16777619) }
+  h ^= h >>> 16; h = Math.imul(h, 0x85ebca6b); h ^= h >>> 13
+  const a = ((h >>> 8) % 1024) / 1024 * Math.PI * 2
+  const r = 3 + ((h >>> 18) % 1024) / 1024 * 5
+  return { x: ax + Math.cos(a) * r, z: az + Math.sin(a) * r }
+}
+
+function plotSpiritLoop(sp: Spirit, ax: number, az: number, grid: number[][]): { c: { x: number; z: number }; loop: PatrolLoop } {
+  const c = plotSpiritCenter(sp.id, ax, az)
+  return { c, loop: patrolLoop(c.x, c.z, (x, y) => walkable(grid, x, y), `plot:${sp.id}`, PLOT_DIALS) }
+}
+
+function PlotSpiritBody({ sp, anchor, heights, gridRef }: {
+  sp: Spirit; anchor: { x: number; z: number }; heights: number[][]
+  gridRef: React.MutableRefObject<number[][]>
+}) {
+  const group = useRef<THREE.Group>(null)
+  const built = useMemo(() => plotSpiritLoop(sp, anchor.x, anchor.z, gridRef.current), [sp.id, anchor.x, anchor.z])  // eslint-disable-line react-hooks/exhaustive-deps
+  useFrame(() => {
+    const g = group.current
+    if (!g) return
+    const now = Date.now()
+    const pose = patrolPose(built.loop, built.c.x, built.c.z, now, PLOT_WIN)
+    const gy = (heights[Math.round(pose.y)]?.[Math.round(pose.x)] ?? 0) * STEP
+    // living things get the live glow + a gentle float — never a flat prop (the art-medium law)
+    const breathe = Math.sin(now / 1000 * 1.6 + built.loop.phaseS) * 0.05
+    g.position.set(pose.x, gy + 0.45 + breathe, pose.y)
+    g.rotation.y = Math.PI / 2 - pose.facing
+  })
+  const col = ELEMENT_COLORS[sp.element] ?? '#7fe3c8'
+  return (
+    <group ref={group}>
+      <mesh><sphereGeometry args={[0.3, 16, 16]} /><meshStandardMaterial color={col} emissive={col} emissiveIntensity={0.35} transparent opacity={0.42} /></mesh>
+      <mesh><sphereGeometry args={[0.16, 12, 12]} /><meshStandardMaterial color="#fdfbef" emissive={col} emissiveIntensity={0.9} /></mesh>
+      <mesh position={[0, -0.38, 0]} rotation={[-Math.PI / 2, 0, 0]}><ringGeometry args={[0.22, 0.34, 20]} /><meshBasicMaterial color={col} transparent opacity={0.22} side={THREE.DoubleSide} /></mesh>
+    </group>
+  )
+}
+
+function PlotSpirits({ spirits, anchor, heights, gridRef }: {
+  spirits: Spirit[]; anchor: { x: number; z: number }; heights: number[][]
+  gridRef: React.MutableRefObject<number[][]>
+}) {
+  return <>{spirits.map(sp => <PlotSpiritBody key={sp.id} sp={sp} anchor={anchor} heights={heights} gridRef={gridRef} />)}</>
 }
 
 /**
@@ -2315,6 +2382,7 @@ const Scene = memo(function Scene(props: {
   nodes: ResourceNode[]
   spawners: SpawnerPlacement[]; spawnerReady: (sp: SpawnerPlacement) => boolean
   spawnerKeyFor: (sp: SpawnerPlacement) => string
+  restingSpirits: Spirit[]
   harvestNodesRef: React.RefObject<ResourceNode[]>; onNearNode: (n: ResourceNode | null) => void
   channel: { nodeId: string; hp: number } | null
   structures: PlacedStruct[]; placing: { itemId: string; facing: number } | null
@@ -2376,6 +2444,10 @@ const Scene = memo(function Scene(props: {
       {props.zone.realm === 'outside' && <ExitMarkers warps={props.zone.warps} heights={props.heights} />}
       <NodeMarkers nodes={props.nodes} heights={props.heights} editing={props.editing} channel={props.channel} zoneId={props.zone.id} />
       <BurrowMarkers spawners={props.spawners} heights={props.heights} editing={props.editing} defeated={props.defeated} ready={props.spawnerReady} gridRef={props.gridRef} keyFor={props.spawnerKeyFor} />
+      {/* the plot ring: resting spirits wander the Home Plot, visible + greetable */}
+      {PLOT_ZONES.has(props.zone.id) && !props.editing && props.restingSpirits.length > 0 && (
+        <PlotSpirits spirits={props.restingSpirits} anchor={{ x: props.zone.playerStart?.tileX ?? 16, z: props.zone.playerStart?.tileY ?? 16 }} heights={props.heights} gridRef={props.gridRef} />
+      )}
       {props.zone.id === WORLD_ZONE_ID ? <WorldFlora heights={props.heights} /> : <FloraDressing zoneId={props.zone.id} heights={props.heights} />}
       <StructureMarkers structures={structuresInZone} heights={props.heights} />
       <PlacementGhost placing={props.placing} posRef={props.posRef} heights={props.heights} gridRef={props.gridRef} placeTargetRef={props.placeTargetRef} structuresRef={props.structuresRef} zoneIdRef={props.zoneIdRef} />
@@ -4395,12 +4467,46 @@ export default function Shimmer3D() {
   // the pointer-lock handoff and the HotBar button can never disagree about whether it's open.
   // partyTick forces a re-render after a mend, since the party is a ref mutated in place.
   const [partyOpen, setPartyOpen] = useState(false)
+  // The plot ring's interact target: nearest resting spirit within reach, derived on the
+  // same 400ms cadence and the same pure-position math the renderer uses.
+  const [nearPlotSpirit, setNearPlotSpirit] = useState<Spirit | null>(null)
+  const nearPlotSpiritRef = useRef<Spirit | null>(null); nearPlotSpiritRef.current = nearPlotSpirit
+  const partyInitialSelRef = useRef<string | null>(null)
+  useEffect(() => {
+    const iv = setInterval(() => {
+      const clear = () => setNearPlotSpirit(prev => (prev === null ? prev : null))
+      if (battleRef.current || editRef.current || dialogueRef.current) { clear(); return }
+      const zid = zoneIdRef.current
+      if (!PLOT_ZONES.has(zid)) { clear(); return }
+      const pos = posRef.current
+      if (!pos) { clear(); return }
+      const zone = getZone(ALL_ZONES, zid)
+      const ax = zone?.playerStart?.tileX ?? 16, az = zone?.playerStart?.tileY ?? 16
+      const now = Date.now()
+      let best: Spirit | null = null, bestD = 2.1 * 2.1
+      for (const sp of restingSpirits(partyRef.current ?? [])) {
+        const built = plotSpiritLoop(sp, ax, az, gridRef.current)
+        const pose = patrolPose(built.loop, built.c.x, built.c.z, now, PLOT_WIN)
+        const dx = pos.x - pose.x, dz = pos.z - pose.y
+        const d = dx * dx + dz * dz
+        if (d < bestD) { bestD = d; best = sp }
+      }
+      setNearPlotSpirit(prev => (prev?.id === best?.id ? prev : best))
+    }, 400)
+    return () => clearInterval(iv)
+  }, [])
+
   const partyOpenRef = useRef(false); partyOpenRef.current = partyOpen
   const [partyTick, setPartyTick] = useState(0)
   const toggleParty = useCallback((open: boolean) => {
     setPartyOpen(open)
     if (open) { setPartyTick(t => t + 1); openCursorUI() } else closeCursorUI()
   }, [openCursorUI, closeCursorUI])
+  // Greeting a wandering plot spirit = the party panel opening ON that spirit's dossier.
+  const greetPlotSpirit = useCallback((sp: Spirit) => {
+    partyInitialSelRef.current = sp.id
+    toggleParty(true)
+  }, [toggleParty])
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key.toLowerCase() !== 'p') return
@@ -4635,6 +4741,7 @@ export default function Shimmer3D() {
       if (k === ' ') return  // Space outside dialogue = jump only; E/Enter initiate interactions
       if (nearBenchRef.current) { e.preventDefault(); toggleBench(true) }  // at a gun bench → open the armory
       else if (nearNpc) { e.preventDefault(); talk(nearNpc) }
+      else if (nearPlotSpiritRef.current) { e.preventDefault(); greetPlotSpirit(nearPlotSpiritRef.current) }
       else if (fishRef.current || nearNodeRef.current || channelRef.current) { e.preventDefault(); toggleChannel() }
       else if (nearStationRef.current) { e.preventDefault(); openStation() }
     }
@@ -4668,6 +4775,7 @@ export default function Shimmer3D() {
         // interact — same priority ladder as the E key
         if (dialogueRef.current) advanceDialogue()
         else if (nearNpc) talk(nearNpc)
+        else if (nearPlotSpiritRef.current) greetPlotSpirit(nearPlotSpiritRef.current)
         else if (fishRef.current || nearNodeRef.current || channelRef.current) toggleChannel()
         else if (nearStationRef.current) openStation()  // openStation owns the cursor handoff for every entry path
       } else if (e.button === 1) {
@@ -4994,6 +5102,7 @@ export default function Shimmer3D() {
           defeatedRef={defeatedRef} defeated={defeated} flagsRef={flagsRef}
           nodes={runtimeNodes}
           spawners={spawners} spawnerReady={spawnerReady} spawnerKeyFor={spawnerKeyFor}
+          restingSpirits={(void partyTick, restingSpirits(partyRef.current ?? []))}
           companionColor={(() => { const b = beastsRef.current.find(x => x.id === activeBeastIdRef.current); void companionTick; return b ? (BEAST_COLOR[b.species] ?? '#9fd9c4') : null })()}
           fishing={!!fish} fishBite={!!fish?.bite}
           harvestPop={harvestPop}
@@ -5068,6 +5177,15 @@ export default function Shimmer3D() {
         }}>{fish.bite
           ? <>❗ HOOK IT! <span style={{ opacity: 0.7 }}>({isTouch ? 'tap' : 'E'})</span></>
           : <>🎣 rinning {fish.label} · watch the water… <span style={{ opacity: 0.6 }}>({isTouch ? 'tap' : 'E'})</span></>}</div>
+      )}
+
+      {/* greet prompt by a wandering plot spirit (NPCs win; nodes yield to the spirit) */}
+      {nearPlotSpirit && !nearNpc && !dialogue && !battle && !editMode && !partyOpen && (
+        <div style={{
+          position: 'fixed', left: '50%', bottom: 156, transform: 'translateX(-50%)', zIndex: 35,
+          padding: '7px 14px', borderRadius: 999, background: 'rgba(11,21,19,0.92)', border: `1px solid ${(ELEMENT_COLORS[nearPlotSpirit.element] ?? '#4fc79a')}66`,
+          color: '#cfeee2', font: '700 13px ui-monospace, monospace', whiteSpace: 'nowrap', pointerEvents: 'none',
+        }}>✨ Greet {nearPlotSpirit.name} <span style={{ opacity: 0.6 }}>({isTouch ? 'tap' : 'E'})</span></div>
       )}
 
       {/* harvest prompt when standing by a node (hidden once you link in or start fishing) */}
@@ -5589,7 +5707,8 @@ export default function Shimmer3D() {
           onMend={mendSpirit}
           onSetLead={setPartyLead}
           onSetActive={setSpiritActiveIn}
-          onClose={() => toggleParty(false)}
+          initialSelId={partyInitialSelRef.current}
+          onClose={() => { partyInitialSelRef.current = null; toggleParty(false) }}
         />
       )}
 

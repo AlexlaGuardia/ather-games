@@ -112,7 +112,7 @@ console.log('\nthe pose is continuous, on-loop, and shared')
     `${(pausedShare * 100).toFixed(1)}% vs expected ${(expectedShare * 100).toFixed(1)}%`)
 
   // The boxed idle still turns (so the mouth guard reads alive, not frozen).
-  const empty: PatrolLoop = { points: [], periodS: 1, phaseS: 0, legs: [] }
+  const empty: PatrolLoop = { points: [], periodS: 1, phaseS: 0, legs: [], speed: PATROL_SPEED, pauseS: PATROL_PAUSE_S }
   const i1 = patrolPose(empty, 5, 5, t0, win)
   const i2 = patrolPose(empty, 5, 5, t0 + 2000, win)
   check('an idle mouth-guard stands AT the mouth', i1.x === 5 && i1.y === 5)
@@ -142,6 +142,27 @@ console.log('\nthe pin cooperates (windowAt)')
   let rec: BeatenRecord = markBeaten({}, 'p:1,1', pinned)
   check('beaten under a pin stays down under that pin', patrolDown(rec, 'p:1,1', pinned))
   check('…and is up on the live window', !patrolDown(rec, 'p:1,1', windowAt(now, null)))
+}
+
+console.log('\nwander dials (the plot spirit ring reuses this machinery)')
+{
+  const open = () => true
+  const dials = { radius: 4.5, speed: 0.7, pauseS: 3.4 }
+  const l = patrolLoop(50, 50, open, 'plot:sp1', dials)
+  check('dialed radius leashes the points', l.points.every(p => Math.hypot(p.x - 50, p.y - 50) <= 4.5 + 0.01))
+  check('the loop carries its dials', l.speed === 0.7 && l.pauseS === 3.4)
+  const ld = patrolLoop(50, 50, open, 'plot:sp1')
+  check('no dials = the moglin constants (burrows unchanged)', ld.speed === PATROL_SPEED && ld.pauseS === PATROL_PAUSE_S)
+  // The pose honors the dialed amble: max per-frame step bounded by the slower speed.
+  const win = winAt(0)
+  const t0 = win.startMs + EMERGE_MS + 500
+  let prev = patrolPose(l, 50, 50, t0, win), maxJump = 0
+  for (let ms = t0 + 50; ms < t0 + l.periodS * 1000; ms += 50) {
+    const p = patrolPose(l, 50, 50, ms, win)
+    maxJump = Math.max(maxJump, Math.hypot(p.x - prev.x, p.y - prev.y))
+    prev = p
+  }
+  check('amble pace honored over a full lap', maxJump <= 0.7 * 0.05 * 1.5, `max ${maxJump.toFixed(3)}`)
 }
 
 console.log(failures === 0 ? '\nall green' : `\n${failures} FAILURES`)

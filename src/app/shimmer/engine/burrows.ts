@@ -92,7 +92,15 @@ export interface PatrolLoop {
   phaseS: number
   /** Leg lengths (tiles) between consecutive points, wrapping. */
   legs: number[]
+  /** Walk pace + pause beat this loop was built with — pose math reads THESE, so a loop
+   *  built with custom dials (plot spirits ambling vs moglins patrolling) stays coherent. */
+  speed: number
+  pauseS: number
 }
+
+/** Optional pacing dials for patrolLoop — defaults are the moglin constants, so existing
+ *  callers change nothing. The Home Plot spirit ring reuses this machinery at amble pace. */
+export interface WanderDials { radius?: number; speed?: number; pauseS?: number }
 
 /**
  * Build a burrow's patrol loop. Candidate waypoints ring the mouth at seeded angles and
@@ -104,7 +112,11 @@ export function patrolLoop(
   cx: number, cy: number,
   isWalkable: (x: number, y: number) => boolean,
   key: string,
+  dials?: WanderDials,
 ): PatrolLoop {
+  const radius = dials?.radius ?? PATROL_RADIUS
+  const speed = dials?.speed ?? PATROL_SPEED
+  const pauseS = dials?.pauseS ?? PATROL_PAUSE_S
   const rnd = mulberry(hashKey(key))
   const phaseS = rnd() * 40
   const CANDIDATES = 7
@@ -112,7 +124,7 @@ export function patrolLoop(
   const kept: { x: number; y: number }[] = []
   for (let i = 0; i < CANDIDATES; i++) {
     const a = start + (i / CANDIDATES) * Math.PI * 2 + (rnd() - 0.5) * 0.5
-    const r = PATROL_RADIUS * (0.6 + rnd() * 0.4)
+    const r = radius * (0.6 + rnd() * 0.4)
     const x = cx + Math.cos(a) * r
     const y = cy + Math.sin(a) * r
     if (!isWalkable(Math.round(x), Math.round(y))) continue
@@ -124,14 +136,14 @@ export function patrolLoop(
   while (kept.length >= 3 && !clearLine(kept[kept.length - 1].x, kept[kept.length - 1].y, kept[0].x, kept[0].y, isWalkable)) {
     kept.pop()
   }
-  if (kept.length < 3) return { points: [], periodS: 1, phaseS, legs: [] }
+  if (kept.length < 3) return { points: [], periodS: 1, phaseS, legs: [], speed, pauseS }
   const legs = kept.map((p, i) => {
     const q = kept[(i + 1) % kept.length]
     return Math.hypot(q.x - p.x, q.y - p.y)
   })
-  const walkS = legs.reduce((a, b) => a + b, 0) / PATROL_SPEED
-  const periodS = walkS + kept.length * PATROL_PAUSE_S
-  return { points: kept, periodS, phaseS, legs }
+  const walkS = legs.reduce((a, b) => a + b, 0) / speed
+  const periodS = walkS + kept.length * pauseS
+  return { points: kept, periodS, phaseS, legs, speed, pauseS }
 }
 
 /** Straight line between two points stays walkable, sampled every half tile. */
@@ -165,16 +177,16 @@ export function patrolPose(loop: PatrolLoop, cx: number, cy: number, nowMs: numb
   if (loop.points.length < 3) {
     return { x: cx, y: cy, facing: ((nowMs / 1000 + loop.phaseS) * 0.35) % (Math.PI * 2), paused: true, emerge }
   }
-  const legS = loop.legs.map(l => l / PATROL_SPEED)
+  const legS = loop.legs.map(l => l / loop.speed)
   let t = ((nowMs / 1000 + loop.phaseS) % loop.periodS + loop.periodS) % loop.periodS
   for (let i = 0; i < loop.points.length; i++) {
     const p = loop.points[i]
     const q = loop.points[(i + 1) % loop.points.length]
-    if (t < PATROL_PAUSE_S) {
+    if (t < loop.pauseS) {
       // Paused at p, facing where it will walk next.
       return { x: p.x, y: p.y, facing: Math.atan2(q.y - p.y, q.x - p.x), paused: true, emerge }
     }
-    t -= PATROL_PAUSE_S
+    t -= loop.pauseS
     if (t < legS[i]) {
       const f = t / legS[i]
       return {
