@@ -6,6 +6,7 @@
 import dynamic from 'next/dynamic'
 import { useEffect, useState } from 'react'
 import { applyLiveWorldData, registerGardenWorld } from '../world/garden-world'
+import { applyLiveRegionData } from '../world/region-maps'
 import { invalidateWorldCaches } from './world-adapter'
 
 // R3F Canvas is client/WebGL-only — never SSR it. The import is also deferred until `ready`
@@ -21,11 +22,18 @@ export default function Play3DPage() {
     window.addEventListener('error', onErr)
     window.addEventListener('unhandledrejection', onRej)
     let alive = true
-    fetch('/shimmer/world-data', { cache: 'no-store' })
-      .then(r => r.json())
-      .then(d => { if (!d.error) { applyLiveWorldData(d); invalidateWorldCaches() } })
-      .catch(() => { /* compiled fallback */ })
-      .finally(() => { if (alive) { registerGardenWorld(); setReady(true) } })
+    Promise.all([
+      fetch('/shimmer/world-data', { cache: 'no-store' })
+        .then(r => r.json())
+        .then(d => { if (!d.error) { applyLiveWorldData(d); invalidateWorldCaches() } })
+        .catch(() => { /* compiled fallback */ }),
+      // The region half: sculpt-fresh grids/nodes/burrows for the r-* maps, same contract —
+      // save → refresh live with no rebuild. Failure falls back to compiled region data.
+      fetch('/shimmer/region-data', { cache: 'no-store' })
+        .then(r => r.json())
+        .then(d => { if (!d.error) applyLiveRegionData(d.regions) })
+        .catch(() => { /* compiled fallback */ }),
+    ]).finally(() => { if (alive) { registerGardenWorld(); setReady(true) } })
     return () => { alive = false; window.removeEventListener('error', onErr); window.removeEventListener('unhandledrejection', onRej) }
   }, [])
   if (!ready) return (

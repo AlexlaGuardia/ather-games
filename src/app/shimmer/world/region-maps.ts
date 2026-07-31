@@ -47,6 +47,31 @@ export const REGION_ZONES: Zone[] = FILES.map(f => ({
   realm: f.realm,
 }))
 
+/**
+ * Patch the compiled region data with the LIVE on-disk copies (/shimmer/region-data) —
+ * the region half of applyLiveWorldData, called by the play3d boot gate before mount.
+ * Mutates the REGION_FILES entries and the REGION_ZONES Zone objects IN PLACE: ALL_ZONES
+ * holds references to these same objects, so everything downstream (getZone, the editors,
+ * the adapters) sees sculpt-fresh data with no further wiring. Partial payloads are safe —
+ * a region absent from the payload keeps its compiled state.
+ */
+export function applyLiveRegionData(regions: Record<string, RegionFile> | undefined | null): void {
+  if (!regions) return
+  for (const [id, live] of Object.entries(regions)) {
+    const compiled = REGION_FILES[id]
+    if (!compiled || !Array.isArray(live.rle) || !live.cols || !live.rows) continue
+    let grid: number[][]
+    try { grid = decodeRows(live.rle, live.cols) } catch { continue }  // a bad row must not take the boot down
+    Object.assign(compiled, live)
+    const zone = REGION_ZONES.find(z => z.id === REGION_WIP_PREFIX + id)
+    if (zone) {
+      zone.grid = grid
+      zone.warps = live.warps.map(w => ({ ...w, direction: (w.direction ?? 'down') as Warp['direction'] }))
+      zone.playerStart = live.playerStart
+    }
+  }
+}
+
 /** A region zone's authored nodes (its own resource list), or null for non-region zones. */
 export function regionNodesFor(zoneId: string): NodePlacement[] | null {
   const id = regionIdOf(zoneId)
