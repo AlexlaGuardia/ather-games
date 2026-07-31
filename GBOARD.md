@@ -1042,8 +1042,9 @@ the Arcade frame.
 > `?zone=r-<id>` with spawn board + burrows live. Canon 5 CLEAN, all oracles green, legacy world
 > untouched and still primary.
 > **Next:** ① Alex opens `r-mana-springs` in the 2D editor — first sculpt session, ALSO the 400×400
-> editor-canvas perf check (12,800px² canvas; dirty-rect optimization if it crawls). ② Phase B: region
-> exits + the loading-screen transition (fade → region title splash → spawn). ③ Per-map spawn dials
+> editor-canvas perf check (12,800px² canvas; dirty-rect optimization if it crawls). ② ✅ Phase B SHIPPED (`887c3e8`): arrival-at-region
+> cinematic (fade → title → land under cover → fade in); interior doors stay instant; warp brush already
+> targets regions, so exits = carve + drop a warp. ③ Per-map spawn dials
 > read from `region.spawn`. ④ Cutover: drop `r-` prefix, migrate saves via `sources`, delete stitcher +
 > legacy zones + world mode. ⑤ NPC/pickup/chest/structure transplant at cutover (kept keyed to legacy
 > ids until then).
