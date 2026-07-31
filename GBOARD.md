@@ -1044,8 +1044,9 @@ the Arcade frame.
 > **Next:** ① Alex opens `r-mana-springs` in the 2D editor — first sculpt session, ALSO the 400×400
 > editor-canvas perf check (12,800px² canvas; dirty-rect optimization if it crawls). ② ✅ Phase B SHIPPED (`887c3e8`): arrival-at-region
 > cinematic (fade → title → land under cover → fade in); interior doors stay instant; warp brush already
-> targets regions, so exits = carve + drop a warp. ③ Per-map spawn dials
-> read from `region.spawn`. ④ Cutover: drop `r-` prefix, migrate saves via `sources`, delete stitcher +
+> targets regions, so exits = carve + drop a warp. ③ ✅ Per-map spawn dials SHIPPED (`bbd19a6`): abundance (literal fill %) ·
+> richness (tier tilt) · re-deals/day {1,2,4,8} — SPAWN DIALS panel under the editor band readout, live
+> via region-data, +15 oracle asserts (empty config proven byte-identical to legacy). ④ Cutover: drop `r-` prefix, migrate saves via `sources`, delete stitcher +
 > legacy zones + world mode. ⑤ NPC/pickup/chest/structure transplant at cutover (kept keyed to legacy
 > ids until then).
 > **Files:** `world/region-codec.ts` + `world/region-maps.ts` + `world/region-maps/*.json` +
