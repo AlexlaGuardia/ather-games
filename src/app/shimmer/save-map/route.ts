@@ -155,6 +155,7 @@ export async function GET(req: NextRequest) {
           grid: decodeRows(region.rle, region.cols),
           nodes: region.nodes, spawners: region.spawners, warps: region.warps,
           playerStart: region.playerStart,
+          rev: (region as unknown as { rev?: number }).rev ?? 0,
         }, { headers: { 'cache-control': 'no-store' } })
       } catch {
         return NextResponse.json({ error: `Unknown region map: ${mapId}` }, { status: 404 })
@@ -305,6 +306,18 @@ export async function POST(req: NextRequest) {
         try { region = JSON.parse(await readFile(regionPath, 'utf-8')) } catch {
           return NextResponse.json({ error: `Unknown region map: ${mapId}` }, { status: 400 })
         }
+        // Optimistic concurrency: a client that loaded rev N may only save onto rev N. The
+        // 07-31 write race had TWO writers with different content 1ms apart — atomic rename
+        // (lib/backup) stops the corruption, this stops the quieter failure of a stale tab
+        // cleanly overwriting fresh sculpt work. Writers that don't send regionRev (play3d's
+        // in-world editor) skip the check — degrade-safely, same philosophy as session_id.
+        if (body.regionRev !== undefined) {
+          const clientRev = safeInt(body.regionRev, 'regionRev', 0, 1e9)
+          const serverRev = (region.rev as number | undefined) ?? 0
+          if (clientRev !== serverRev) {
+            return NextResponse.json({ error: `Stale copy: this region changed elsewhere (your rev ${clientRev}, server rev ${serverRev}). Reload the zone before saving.`, rev: serverRev }, { status: 409 })
+          }
+        }
         let touched = false
         if (body.grid && Array.isArray(body.grid)) {
           const grid = safeGrid(body.grid, 'grid')
@@ -363,6 +376,7 @@ export async function POST(req: NextRequest) {
         }
         if (touched) {
           region.sculpted = true
+          region.rev = ((region.rev as number | undefined) ?? 0) + 1
           await writeFile(regionPath, JSON.stringify(region), 'utf-8')
         }
       }

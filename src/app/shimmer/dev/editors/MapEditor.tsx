@@ -1030,7 +1030,10 @@ export default function MapEditor() {
   const [workshopOpen, setWorkshopOpen] = useState(false)
   const [editingTileIdx, setEditingTileIdx] = useState<number | null>(null)
   const [cloneSourceIdx, setCloneSourceIdx] = useState<number | null>(null)
-  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'building' | 'saved' | 'error'>('idle')
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'building' | 'saved' | 'error' | 'stale'>('idle')
+  // Region optimistic-concurrency: the rev this editor loaded; sent with region saves so a
+  // stale tab 409s instead of silently overwriting fresh sculpt work (the 07-31 race).
+  const regionRevRef = useRef(0)
   const [loadStatus, setLoadStatus] = useState<string>('')
   const [rotation, setRotation] = useSessionState('map:rotation', 0)
   const [activeMap, setActiveMap] = useSessionState('map:activeMap', 'garden')
@@ -1817,7 +1820,9 @@ export default function MapEditor() {
             nodes?: { type: string; tileX: number; tileY: number }[]
             spawners?: { gate: BurrowGate; tileX: number; tileY: number }[]
             warps?: { fromX: number; fromY: number; toZone: string; toX: number; toY: number; direction?: string; requiredFlag?: string }[]
+            rev?: number
           }
+          regionRevRef.current = data.rev ?? 0
           if (Array.isArray(data.grid) && data.grid.length) setGrid(data.grid.map(r => [...r]))
           if (Array.isArray(data.nodes)) setNodePlacements(data.nodes.map(n => ({ nodeType: n.type, x: n.tileX, y: n.tileY })))
           if (Array.isArray(data.spawners)) setSpawnerPlacements(data.spawners.map(s => ({ gate: s.gate, x: s.tileX, y: s.tileY })))
@@ -1966,9 +1971,10 @@ export default function MapEditor() {
           playerStart: { tileX: 14, tileY: 8 },
           mapId: activeMap,
           nodes: nodePlacements,
+          ...(regionIdOf(activeMap) ? { regionRev: regionRevRef.current } : {}),
           // Only send burrows when there's something to write (or a deletion to persist) —
           // an unconditional empty array would mint an empty const per zone in spawn-placements.ts.
-          ...(spawnerPlacements.length > 0 || (ZONE_SPAWNERS[activeMap] ?? []).length > 0
+          ...(spawnerPlacements.length > 0 || (ZONE_SPAWNERS[activeMap] ?? []).length > 0 || regionIdOf(activeMap)
             ? { spawners: spawnerPlacements } : {}),
           pickups: itemPlacements,
           warps: warpPlacements,
@@ -1979,7 +1985,15 @@ export default function MapEditor() {
         }),
       })
       const data = await res.json()
+      if (res.status === 409) {
+        // Region rev conflict: another tab/editor saved since this one loaded. Do NOT
+        // auto-reload (that would eat the working copy) — surface it and let Alex choose.
+        setSaveStatus('stale')
+        setTimeout(() => setSaveStatus('idle'), 8000)
+        return
+      }
       if (!data.success) { setSaveStatus('error'); return }
+      if (regionIdOf(activeMap)) regionRevRef.current += 1  // server bumped on write; stay in step
 
       // Saved to source (your "branch"). NO auto-build: Serberus/Jin builds + verifies
       // before it goes live, so a save can never break the game blind.
@@ -1996,7 +2010,9 @@ export default function MapEditor() {
       setSaveStatus('error')
     }
     setTimeout(() => setSaveStatus('idle'), 4000)
-  }, [tiles, grid, activeMap, nodePlacements, warpPlacements, intGrid])
+    // spawnerPlacements + item/structure/furniture/chest states were MISSING from this dep
+    // list — the callback captured stale copies, so those layers could save old state.
+  }, [tiles, grid, activeMap, nodePlacements, warpPlacements, intGrid, spawnerPlacements, itemPlacements, placedStructures, placedFurniture, placedZoneChests])
 
   const exportTiles = useCallback(() => {
     const lines: string[] = []
@@ -2585,7 +2601,7 @@ export default function MapEditor() {
               : 'bg-green-500/20 text-green-300 border-green-500/30 hover:bg-green-500/30'
           }`}
         >
-          {saveStatus === 'saving' ? 'Saving...' : saveStatus === 'saved' ? 'Saved ✓ (ping Serb to build)' : saveStatus === 'error' ? 'Failed' : gridDirty ? 'Save to branch *' : 'Save to branch'}
+          {saveStatus === 'saving' ? 'Saving...' : saveStatus === 'saved' ? 'Saved ✓ (ping Serb to build)' : saveStatus === 'error' ? 'Failed' : saveStatus === 'stale' ? '⚠ Changed elsewhere — reload zone first' : gridDirty ? 'Save to branch *' : 'Save to branch'}
         </button>
         <button onClick={exportTiles}
           className="px-3 py-1.5 rounded text-[10px] bg-white/5 text-text-faint hover:bg-white/10">
