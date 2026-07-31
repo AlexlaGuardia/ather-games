@@ -3,7 +3,7 @@ import { readFile } from 'fs/promises'
 import { join } from 'path'
 import { safeWriteFile as writeFile } from '../lib/backup'
 import { BadRequest, safeId, safeIdOpt, safeInt, safeNum, safeText, safeColors, escText, gridMax, lookup } from '../lib/safe'
-import { encodeRows } from '../world/region-codec'
+import { encodeRows, decodeRows } from '../world/region-codec'
 
 /** Map a guard failure to 400, anything else to 500. */
 function errorResponse(e: unknown) {
@@ -141,6 +141,26 @@ export async function GET(req: NextRequest) {
     const result: Record<string, unknown> = {}
 
     // Non-garden zones: parse grid from source
+    // Region maps (`r-<id>`): serve the region JSON from DISK, decoded — the build-baked copy
+    // in the client bundle goes stale the moment a sculpt saves, and an editor that loads the
+    // baked grid resurrects every edit made since the last deploy at exactly the spots touched.
+    if (type === 'map' && mapId.startsWith('r-')) {
+      const regionPath = join(WORLD_DIR, 'region-maps', `${mapId.slice(2)}.json`)
+      try {
+        const region = JSON.parse(await readFile(regionPath, 'utf-8')) as {
+          rle: [number, number][][]; cols: number; nodes: unknown[]; spawners: unknown[]
+          warps: unknown[]; playerStart: unknown
+        }
+        return NextResponse.json({
+          grid: decodeRows(region.rle, region.cols),
+          nodes: region.nodes, spawners: region.spawners, warps: region.warps,
+          playerStart: region.playerStart,
+        }, { headers: { 'cache-control': 'no-store' } })
+      } catch {
+        return NextResponse.json({ error: `Unknown region map: ${mapId}` }, { status: 404 })
+      }
+    }
+
     if (type === 'map' && mapId !== 'garden') {
       const constName = zoneConstName(mapId)
       const grid = await parseZoneGridFromSource(constName)

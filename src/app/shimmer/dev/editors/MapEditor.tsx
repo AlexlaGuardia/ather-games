@@ -1804,8 +1804,26 @@ export default function MapEditor() {
 
     // ── Region maps NEVER read the IndexedDB cache: server truth only. The cache layer is
     // exactly the stale-clobber landmine (a months-old cached copy silently beating current
-    // source on load, then Save writing it back) — the new world opts out of it wholesale. ──
+    // source on load, then Save writing it back) — the new world opts out of it wholesale.
+    // But "server truth" must mean the JSON on DISK, not the copy baked into this build:
+    // the baked grid goes stale on the first sculpt save, and loading it resurrects every
+    // edit made since the last deploy (the first sculpt session hit exactly that). ──
     if (regionIdOf(mapId)) {
+      try {
+        const res = await fetch(`/shimmer/save-map?type=map&map=${mapId}`, { cache: 'no-store' })
+        if (res.ok) {
+          const data = await res.json() as {
+            grid?: number[][]
+            nodes?: { type: string; tileX: number; tileY: number }[]
+            spawners?: { gate: BurrowGate; tileX: number; tileY: number }[]
+            warps?: { fromX: number; fromY: number; toZone: string; toX: number; toY: number; direction?: string; requiredFlag?: string }[]
+          }
+          if (Array.isArray(data.grid) && data.grid.length) setGrid(data.grid.map(r => [...r]))
+          if (Array.isArray(data.nodes)) setNodePlacements(data.nodes.map(n => ({ nodeType: n.type, x: n.tileX, y: n.tileY })))
+          if (Array.isArray(data.spawners)) setSpawnerPlacements(data.spawners.map(s => ({ gate: s.gate, x: s.tileX, y: s.tileY })))
+          if (Array.isArray(data.warps)) setWarpPlacements(data.warps.map(w => ({ fromX: w.fromX, fromY: w.fromY, toZone: w.toZone, toX: w.toX, toY: w.toY, direction: w.direction ?? 'down', requiredFlag: w.requiredFlag })))
+        }
+      } catch { /* offline dev — the baked copy stands until the next fetch succeeds */ }
       loadedRef.current = true
       return
     }
