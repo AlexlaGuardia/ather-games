@@ -6,6 +6,7 @@ import { GARDEN } from '../../world/tilemap'
 import { TileDef, Renderer } from '../../engine/renderer'
 import { ITEMS, ITEM_ICONS, ITEM_PALETTE, SEED_PALETTES, NODE_SPRITES, NODE_TYPE_LABELS, NODE_PALETTES } from '../../sprites/items'
 import { ZONE_NODES } from '../../world/node-placements'
+import { ZONE_SPAWNERS } from '../../world/spawn-placements'
 import { ZONE_PICKUPS } from '../../world/static-pickups'
 import { ZONES } from '../../world/zones'
 import type { TileGroup } from '../../world/structures'
@@ -122,7 +123,7 @@ function renderItemTo(ctx: CanvasRenderingContext2D, itemId: string, x: number, 
 }
 
 interface BrushEntry {
-  type: 'tile' | 'item' | 'node' | 'eraser' | 'structure' | 'stamp' | 'furniture' | 'zonechest'
+  type: 'tile' | 'item' | 'node' | 'eraser' | 'structure' | 'stamp' | 'furniture' | 'zonechest' | 'burrow'
   tileIdx?: number
   itemId?: string
   nodeType?: string
@@ -130,7 +131,18 @@ interface BrushEntry {
   stampId?: string
   furnitureId?: string
   chestType?: string
+  gate?: BurrowGate
 }
+
+// Moglin burrow mouths (canon: shimmer-geography.md) — the gate names the hold that quiets it.
+// Colors match play3d's GATE_COLORS so a burrow reads the same in both editors.
+type BurrowGate = 'thistle' | 'sorrel' | 'brack'
+const BURROW_GATES: { gate: BurrowGate; label: string; color: string }[] = [
+  { gate: 'thistle', label: 'Burrow · Thistle', color: '#8fd14f' },
+  { gate: 'sorrel', label: 'Burrow · Sorrel', color: '#f0a526' },
+  { gate: 'brack', label: 'Burrow · Brack', color: '#e05a4d' },
+]
+const BURROW_COLOR: Record<BurrowGate, string> = Object.fromEntries(BURROW_GATES.map(g => [g.gate, g.color])) as Record<BurrowGate, string>
 
 interface WarpPlacement {
   fromX: number
@@ -156,6 +168,7 @@ function brushKey(e: BrushEntry): string {
   if (e.type === 'eraser') return 'eraser'
   if (e.type === 'tile') return `tile:${e.tileIdx}`
   if (e.type === 'node') return `node:${e.nodeType}`
+  if (e.type === 'burrow') return `burrow:${e.gate}`
   if (e.type === 'structure') return `struct:${e.structureId}`
   if (e.type === 'stamp') return `stamp:${e.stampId}`
   if (e.type === 'furniture') return `furn:${e.furnitureId}`
@@ -215,6 +228,14 @@ function BrushPreview({ entry, tiles, structures, size = 32, selected, onClick }
             ctx.fillRect(i % TS, Math.floor(i / TS), 1, 1)
           }
         }
+      } else if (entry.type === 'burrow' && entry.gate) {
+        ctx.strokeStyle = BURROW_COLOR[entry.gate]
+        ctx.lineWidth = 2
+        ctx.strokeRect(1, 1, TS - 2, TS - 2)
+        ctx.fillStyle = '#6d5138'
+        ctx.beginPath(); ctx.ellipse(TS / 2, TS * 0.62, TS * 0.38, TS * 0.26, 0, 0, Math.PI * 2); ctx.fill()
+        ctx.fillStyle = '#1d1610'
+        ctx.beginPath(); ctx.ellipse(TS / 2, TS * 0.66, TS * 0.18, TS * 0.12, 0, 0, Math.PI * 2); ctx.fill()
       } else if (entry.type === 'eraser') {
         ctx.strokeStyle = '#ff4444'
         ctx.lineWidth = 2
@@ -229,6 +250,7 @@ function BrushPreview({ entry, tiles, structures, size = 32, selected, onClick }
   const label = entry.type === 'eraser' ? 'Eraser'
     : entry.type === 'tile' ? (tiles[entry.tileIdx!]?.name ?? `Tile ${entry.tileIdx}`)
     : entry.type === 'node' ? (NODE_TYPE_LABELS[entry.nodeType!]?.name ?? entry.nodeType)
+    : entry.type === 'burrow' ? (BURROW_GATES.find(g => g.gate === entry.gate)?.label ?? 'Burrow')
     : entry.type === 'structure' ? (structures?.find(s => s.id === entry.structureId)?.name ?? entry.structureId)
     : ITEMS.find(i => i.id === entry.itemId)?.name ?? entry.itemId
 
@@ -959,14 +981,15 @@ export default function MapEditor() {
   const [showPreview, setShowPreview] = useState(false)
   // Advanced drawer: furniture/item/node/structure/stamp/zonechest — hidden by default.
   // Auto-open if session restores an advanced brush type.
-  const [brushType, setBrushType] = useSessionState<'tile' | 'item' | 'node' | 'eraser' | 'structure' | 'stamp' | 'furniture' | 'zonechest'>('map:brushType', 'tile')
+  const [brushType, setBrushType] = useSessionState<'tile' | 'item' | 'node' | 'eraser' | 'structure' | 'stamp' | 'furniture' | 'zonechest' | 'burrow'>('map:brushType', 'tile')
   const [showAdvancedBrushes, setShowAdvancedBrushes] = useState(
-    () => (['item', 'node', 'structure', 'stamp', 'furniture', 'zonechest'] as const).includes(
+    () => (['item', 'node', 'structure', 'stamp', 'furniture', 'zonechest', 'burrow'] as const).includes(
       (typeof window !== 'undefined' ? sessionStorage.getItem('map:brushType') : null) as never
     )
   )
   const [brushItemId, setBrushItemId] = useSessionState<string | null>('map:brushItemId', null)
   const [brushNodeType, setBrushNodeType] = useSessionState<string | null>('map:brushNodeType', null)
+  const [brushGate, setBrushGate] = useSessionState<BurrowGate>('map:brushGate', 'thistle')
   const [brushStructureId, setBrushStructureId] = useSessionState<string | null>('map:brushStructureId', null)
   const [brushFurnitureId, setBrushFurnitureId] = useSessionState<string | null>('map:brushFurnitureId', null)
   const [brushChestType, setBrushChestType] = useSessionState<string>('map:brushChestType', 'chest')
@@ -1001,6 +1024,12 @@ export default function MapEditor() {
 
   const [nodePlacements, setNodePlacements] = useState<Array<{ nodeType: string, x: number, y: number }>>(
     () => (ZONE_NODES['garden'] ?? []).map(n => ({ nodeType: n.type, x: n.tileX, y: n.tileY }))
+  )
+
+  // Burrow mouths (moglin patrol spawners) — source of truth is spawn-placements.ts via
+  // Save to Source; no IndexedDB layer (same as play3d's spawner tools).
+  const [spawnerPlacements, setSpawnerPlacements] = useState<Array<{ gate: BurrowGate, x: number, y: number }>>(
+    () => (ZONE_SPAWNERS['garden'] ?? []).map(s => ({ gate: s.gate, x: s.tileX, y: s.tileY }))
   )
 
   const [warpPlacements, setWarpPlacements] = useState<WarpPlacement[]>(() => hydrateWarps('garden'))
@@ -1234,6 +1263,7 @@ export default function MapEditor() {
     if (entry.type === 'tile' && entry.tileIdx !== undefined) setBrush(entry.tileIdx)
     if (entry.type === 'item' && entry.itemId) setBrushItemId(entry.itemId)
     if (entry.type === 'node' && entry.nodeType) setBrushNodeType(entry.nodeType)
+    if (entry.type === 'burrow' && entry.gate) setBrushGate(entry.gate)
     if (entry.type === 'structure' && entry.structureId) setBrushStructureId(entry.structureId)
     if (entry.type === 'furniture' && entry.furnitureId) setBrushFurnitureId(entry.furnitureId)
     if (entry.type === 'zonechest' && entry.chestType) setBrushChestType(entry.chestType)
@@ -1248,6 +1278,7 @@ export default function MapEditor() {
   const dropdownValue = brushType === 'eraser' ? 'eraser'
     : brushType === 'item' ? `item:${brushItemId}`
     : brushType === 'node' ? `node:${brushNodeType}`
+    : brushType === 'burrow' ? `burrow:${brushGate}`
     : brushType === 'structure' ? `struct:${brushStructureId}`
     : brushType === 'furniture' ? `furn:${brushFurnitureId}`
     : brushType === 'zonechest' ? `zc:${brushChestType}`
@@ -1257,6 +1288,7 @@ export default function MapEditor() {
     if (val === 'eraser') selectBrush({ type: 'eraser' })
     else if (val.startsWith('item:')) selectBrush({ type: 'item', itemId: val.slice(5) })
     else if (val.startsWith('node:')) selectBrush({ type: 'node', nodeType: val.slice(5) })
+    else if (val.startsWith('burrow:')) selectBrush({ type: 'burrow', gate: val.slice(7) as BurrowGate })
     else if (val.startsWith('struct:')) selectBrush({ type: 'structure', structureId: val.slice(7) })
     else if (val.startsWith('furn:')) selectBrush({ type: 'furniture', furnitureId: val.slice(5) })
     else if (val.startsWith('zc:')) selectBrush({ type: 'zonechest', chestType: val.slice(3) })
@@ -1353,6 +1385,7 @@ export default function MapEditor() {
       }))
       setPlacedFurniture(prev => prev.filter(p => !(p.x === tx && p.y === ty)))
       setPlacedZoneChests(prev => prev.filter(p => !(p.x === tx && p.y === ty)))
+      setSpawnerPlacements(prev => prev.filter(p => !(p.x === tx && p.y === ty)))
     } else if (brushType === 'item' && brushItemId) {
       setItemPlacements(prev => {
         const existing = prev.findIndex(p => p.x === tx && p.y === ty)
@@ -1374,6 +1407,17 @@ export default function MapEditor() {
           return prev.map((p, i) => i === existing ? { ...p, nodeType: brushNodeType } : p)
         }
         return [...prev, { nodeType: brushNodeType, x: tx, y: ty }]
+      })
+    } else if (brushType === 'burrow') {
+      setSpawnerPlacements(prev => {
+        const existing = prev.findIndex(p => p.x === tx && p.y === ty)
+        if (existing >= 0) {
+          if (prev[existing].gate === brushGate) {
+            return prev.filter((_, i) => i !== existing)   // same gate again = toggle off
+          }
+          return prev.map((p, i) => i === existing ? { ...p, gate: brushGate } : p)  // swap gate
+        }
+        return [...prev, { gate: brushGate, x: tx, y: ty }]
       })
     } else if (brushType === 'stamp') {
       let stamp: Stamp | undefined
@@ -1686,6 +1730,7 @@ export default function MapEditor() {
     setGrid(defaultGrid)
     setItemPlacements((ZONE_PICKUPS[mapId] ?? []).map(p => ({ itemId: p.itemId, x: p.tileX, y: p.tileY })))
     setNodePlacements((ZONE_NODES[mapId] ?? []).map(n => ({ nodeType: n.type, x: n.tileX, y: n.tileY })))
+    setSpawnerPlacements((ZONE_SPAWNERS[mapId] ?? []).map(s => ({ gate: s.gate, x: s.tileX, y: s.tileY })))
     setWarpPlacements(hydrateWarps(mapId))
     setPlacedStructures((STRUCTURE_PLACEMENTS[mapId] ?? []).map(s => ({ structureId: s.structureId, x: s.tileX, y: s.tileY })))
     setPlacedFurniture([])
@@ -1759,6 +1804,7 @@ export default function MapEditor() {
       setGrid(data.grid.map((r: number[]) => [...r]))
       setItemPlacements([])
       setNodePlacements([])
+      setSpawnerPlacements([])
       setWarpPlacements([])
       setPlacedStructures([])
       setPlacedFurniture([])
@@ -1828,6 +1874,10 @@ export default function MapEditor() {
           playerStart: { tileX: 14, tileY: 8 },
           mapId: activeMap,
           nodes: nodePlacements,
+          // Only send burrows when there's something to write (or a deletion to persist) —
+          // an unconditional empty array would mint an empty const per zone in spawn-placements.ts.
+          ...(spawnerPlacements.length > 0 || (ZONE_SPAWNERS[activeMap] ?? []).length > 0
+            ? { spawners: spawnerPlacements } : {}),
           pickups: itemPlacements,
           warps: warpPlacements,
           structurePlacements: placedStructures,
@@ -1994,6 +2044,25 @@ export default function MapEditor() {
             ctx.fillRect(x * TS + (i % TS), y * TS + Math.floor(i / TS), 1, 1)
           }
         }
+      }
+    })
+
+    // Draw burrow mouths — no 2D sprite yet (blockout, like play3d): warm earth mound,
+    // dark opening, gate-colored ring so the hold that quiets it reads at a glance.
+    spawnerPlacements.forEach(({ gate, x, y }) => {
+      if (x >= 0 && x < cols && y >= 0 && y < rows) {
+        const px = x * TS, py = y * TS
+        ctx.strokeStyle = BURROW_COLOR[gate]
+        ctx.lineWidth = 2
+        ctx.strokeRect(px + 1, py + 1, TS - 2, TS - 2)
+        ctx.fillStyle = '#6d5138'
+        ctx.beginPath()
+        ctx.ellipse(px + TS / 2, py + TS * 0.62, TS * 0.38, TS * 0.26, 0, 0, Math.PI * 2)
+        ctx.fill()
+        ctx.fillStyle = '#1d1610'
+        ctx.beginPath()
+        ctx.ellipse(px + TS / 2, py + TS * 0.66, TS * 0.18, TS * 0.12, 0, 0, Math.PI * 2)
+        ctx.fill()
       }
     })
 
@@ -2191,7 +2260,7 @@ export default function MapEditor() {
       ctx.strokeRect(px + 0.5, py + 0.5, pw - 1, ph - 1)
       ctx.setLineDash([])
     }
-  }, [grid, tiles, cols, rows, showGrid, hoverTile, itemPlacements, nodePlacements, placedStructures, placedFurniture, placedZoneChests, warpPlacements, selection, editorTool, moveDrag, brushType, brushStructureId, structures, activeStampId, stamps, intGrid, showIntGrid])
+  }, [grid, tiles, cols, rows, showGrid, hoverTile, itemPlacements, nodePlacements, spawnerPlacements, placedStructures, placedFurniture, placedZoneChests, warpPlacements, selection, editorTool, moveDrag, brushType, brushStructureId, structures, activeStampId, stamps, intGrid, showIntGrid])
 
   const getTileFromEvent = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
     const rect = e.currentTarget.getBoundingClientRect()
@@ -2426,13 +2495,14 @@ export default function MapEditor() {
           />
           <div>
             <p className="text-[10px] text-text-faint mb-0.5">
-              {brushType === 'tile' ? (tiles[brush]?.name ?? `Tile ${brush}`) : brushType === 'eraser' ? 'Eraser' : brushType === 'item' ? (ITEMS.find(i => i.id === brushItemId)?.name ?? brushItemId ?? '—') : brushType === 'node' ? (NODE_TYPE_LABELS[brushNodeType!]?.name ?? brushNodeType ?? '—') : brushType === 'structure' ? (structures.find(s => s.id === brushStructureId)?.name ?? brushStructureId ?? '—') : brushType === 'furniture' ? brushFurnitureId ?? '—' : brushType === 'stamp' ? 'Stamp' : brushChestType}
+              {brushType === 'tile' ? (tiles[brush]?.name ?? `Tile ${brush}`) : brushType === 'eraser' ? 'Eraser' : brushType === 'item' ? (ITEMS.find(i => i.id === brushItemId)?.name ?? brushItemId ?? '—') : brushType === 'node' ? (NODE_TYPE_LABELS[brushNodeType!]?.name ?? brushNodeType ?? '—') : brushType === 'burrow' ? (BURROW_GATES.find(g => g.gate === brushGate)?.label ?? '—') : brushType === 'structure' ? (structures.find(s => s.id === brushStructureId)?.name ?? brushStructureId ?? '—') : brushType === 'furniture' ? brushFurnitureId ?? '—' : brushType === 'stamp' ? 'Stamp' : brushChestType}
             </p>
             <span className="text-[9px] text-text-faint">
               {brushType === 'tile' && tiles[brush]?.solid && <span className="text-red-400/60 mr-2">solid</span>}
               {brushType === 'tile' && tiles[brush]?.above && <span className="text-violet-400/60 mr-2">above</span>}
               {brushType === 'item' && <span className="text-amber-400/60">pickup — click to place/remove</span>}
               {brushType === 'node' && <span className="text-green-400/60">resource node — click to place/remove</span>}
+              {brushType === 'burrow' && <span className="text-orange-300/60">burrow mouth — click to place/remove, gate = the hold that quiets it</span>}
               {brushType === 'eraser' && <span className="text-red-400/60">clears tiles, items, nodes, warps, structures, furniture + chests</span>}
               {brushType === 'furniture' && <span className="text-amber-400/60">furniture — click to place</span>}
               {brushType === 'zonechest' && <span className="text-purple-400/60">zone chest — <label className="cursor-pointer"><input type="checkbox" checked={brushChestClaimable} onChange={e => setBrushChestClaimable(e.target.checked)} className="mr-1 accent-purple-500" />claimable</label></span>}
@@ -2559,8 +2629,9 @@ export default function MapEditor() {
               <div>
                 <p className="text-[9px] text-text-faint/60 uppercase tracking-wider mb-1">Other brush</p>
                 <select
-                  value={['eraser', 'item', 'node', 'structure', 'furniture', 'zonechest'].some(t =>
+                  value={['eraser', 'item', 'node', 'burrow', 'structure', 'furniture', 'zonechest'].some(t =>
                     dropdownValue === 'eraser' || dropdownValue.startsWith('item:') || dropdownValue.startsWith('node:') ||
+                    dropdownValue.startsWith('burrow:') ||
                     dropdownValue.startsWith('struct:') || dropdownValue.startsWith('furn:') || dropdownValue.startsWith('zc:')
                   ) ? dropdownValue : ''}
                   onChange={e => handleDropdownChange(e.target.value)}
@@ -2591,6 +2662,13 @@ export default function MapEditor() {
                       )
                     })
                   })()}
+                  <optgroup label="Burrows (moglin patrols)">
+                    {BURROW_GATES.map(g => (
+                      <option key={g.gate} value={`burrow:${g.gate}`} className="bg-[#1a1a2e] text-white">
+                        {g.label}
+                      </option>
+                    ))}
+                  </optgroup>
                   {structures.length > 0 && (
                     <optgroup label="Structures">
                       {structures.map(s => (
