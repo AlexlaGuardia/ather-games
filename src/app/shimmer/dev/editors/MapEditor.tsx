@@ -7,6 +7,8 @@ import { TileDef, Renderer } from '../../engine/renderer'
 import { ITEMS, ITEM_ICONS, ITEM_PALETTE, SEED_PALETTES, NODE_SPRITES, NODE_TYPE_LABELS, NODE_PALETTES } from '../../sprites/items'
 import { ZONE_NODES } from '../../world/node-placements'
 import { ZONE_SPAWNERS } from '../../world/spawn-placements'
+import { zoneBand, TIER_WEIGHTS, NOTHING_WEIGHT } from '../../engine/spawn-board'
+import { NODE_DEFS, type NodeType } from '../../world/resources'
 import { ZONE_PICKUPS } from '../../world/static-pickups'
 import { ZONES } from '../../world/zones'
 import type { TileGroup } from '../../world/structures'
@@ -143,6 +145,58 @@ const BURROW_GATES: { gate: BurrowGate; label: string; color: string }[] = [
   { gate: 'brack', label: 'Burrow · Brack', color: '#e05a4d' },
 ]
 const BURROW_COLOR: Record<BurrowGate, string> = Object.fromEntries(BURROW_GATES.map(g => [g.gate, g.color])) as Record<BurrowGate, string>
+
+/**
+ * ★ The RARITY BAND you are authoring (ported from play3d's BandReadout, 07-30).
+ *
+ * Under the spawn board's tier roll, a placed node does two jobs and only the first is
+ * visible: it sets that slot's SKILL — and it widens the whole zone's band for that skill,
+ * because the band is inferred from what the zone authors. Dropping one Dawnwood in a far
+ * corner makes Dawnwood rollable in EVERY forestry slot in the zone. This readout is the
+ * only place that leverage is visible. Live off the WORKING placements, so it moves as you
+ * paint — in the 2D editor that means it reflects unsaved edits too, which play3d's cannot.
+ * `ather_soil` is excluded: soil is a static planting target the board never rolls.
+ */
+function EditorBandReadout({ zoneId, placements }: { zoneId: string; placements: Array<{ nodeType: string, x: number, y: number }> }) {
+  const rows = useMemo(() => {
+    const src = placements
+      .filter(p => p.nodeType !== 'ather_soil' && NODE_DEFS[p.nodeType as NodeType])
+      .map(p => ({ type: p.nodeType as NodeType, tileX: p.x, tileY: p.y }))
+    const skills = [...new Set(src.map(p => NODE_DEFS[p.type].skill))]
+    return skills.map(skill => {
+      const band = zoneBand(src, skill)
+      const slots = src.filter(p => NODE_DEFS[p.type].skill === skill).length
+      const weights = band.map((_, i) => TIER_WEIGHTS[Math.min(i, TIER_WEIGHTS.length - 1)])
+      const filled = weights.reduce((a, b) => a + b, 0)
+      return { skill, band, slots, fill: filled / (filled + NOTHING_WEIGHT) }
+    })
+  }, [placements])
+  if (!rows.length) return null
+  // The Home Plot never re-deals (strip-once, canon starter nodes) — a band there would
+  // describe a roll that never happens.
+  if (zoneId === 'garden') {
+    return (
+      <div className="mb-3 px-2 py-1.5 rounded border border-white/[0.06] bg-white/[0.02]">
+        <p className="text-[9px] font-mono text-teal-300/70 uppercase tracking-wider">Band · garden</p>
+        <p className="text-[10px] font-mono text-text-faint">static zone — nodes here are literal, never re-dealt</p>
+      </div>
+    )
+  }
+  return (
+    <div className="mb-3 px-2 py-1.5 rounded border border-white/[0.06] bg-white/[0.02] space-y-0.5">
+      <p className="text-[9px] font-mono text-teal-300/70 uppercase tracking-wider">Band · {zoneId} <span className="normal-case text-text-faint/60">(what this zone can roll)</span></p>
+      {rows.map(r => (
+        <p key={r.skill} className="text-[10px] font-mono text-emerald-100/80 whitespace-nowrap overflow-x-auto">
+          <span className="text-teal-300/90">{r.skill}</span>{' '}
+          {r.band.map((t, i) => (
+            <span key={t} style={{ opacity: 1 - i * 0.18 }}>{NODE_TYPE_LABELS[t]?.name ?? t}{i < r.band.length - 1 ? ' › ' : ''}</span>
+          ))}
+          <span className="text-text-faint">{'  '}· {r.slots} slot{r.slots === 1 ? '' : 's'} · {Math.round(r.fill * 100)}% filled</span>
+        </p>
+      ))}
+    </div>
+  )
+}
 
 interface WarpPlacement {
   fromX: number
@@ -2483,12 +2537,15 @@ export default function MapEditor() {
         )}
       </div>
 
+      {/* Band readout — the zone's rollable rarity ceiling, live as you paint */}
+      <EditorBandReadout zoneId={activeMap} placements={nodePlacements} />
+
       {/* Brush Selector */}
       <div className="mb-4">
         {/* Current brush preview + status */}
         <div className="flex items-center gap-3 mb-3">
           <BrushPreview
-            entry={brushType === 'eraser' ? { type: 'eraser' } : brushType === 'item' ? { type: 'item', itemId: brushItemId! } : brushType === 'node' ? { type: 'node', nodeType: brushNodeType! } : brushType === 'structure' ? { type: 'structure', structureId: brushStructureId! } : brushType === 'furniture' ? { type: 'furniture', furnitureId: brushFurnitureId! } : brushType === 'zonechest' ? { type: 'zonechest', chestType: brushChestType } : { type: 'tile', tileIdx: brush }}
+            entry={brushType === 'eraser' ? { type: 'eraser' } : brushType === 'item' ? { type: 'item', itemId: brushItemId! } : brushType === 'node' ? { type: 'node', nodeType: brushNodeType! } : brushType === 'burrow' ? { type: 'burrow', gate: brushGate } : brushType === 'structure' ? { type: 'structure', structureId: brushStructureId! } : brushType === 'furniture' ? { type: 'furniture', furnitureId: brushFurnitureId! } : brushType === 'zonechest' ? { type: 'zonechest', chestType: brushChestType } : { type: 'tile', tileIdx: brush }}
             tiles={tiles}
             structures={structures}
             size={48}
