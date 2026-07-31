@@ -2426,7 +2426,7 @@ const Scene = memo(function Scene(props: {
   // you to others — which makes the plot per-player TODAY at the presence layer, ahead of any
   // server-side instancing. In the garden zone-room every peer is by definition in their own plot.
   const plotHide = useMemo(() => {
-    if (props.zone.id === HOME_PLOT_ZONE) return () => true
+    if (props.zone.id === HOME_PLOT_ZONE || props.zone.id === 'r-home-plot') return () => true
     if (props.zone.id === WORLD_ZONE_ID) {
       return (x: number, z: number) => fromWorld(Math.round(x), Math.round(z))?.zoneId === HOME_PLOT_ZONE
     }
@@ -2615,15 +2615,21 @@ function AccountBlock({ account, label }: { account: UseAccount; label: React.CS
 // A party is a shared code, not an account (see multiplayer.ts). This panel is the whole
 // social UI: sign in, name yourself, make/join/leave a party, copy the invite link, see the
 // roster.
-function PlayTogetherPanel({ name, onName, party, onParty, peers, account }: {
+function PlayTogetherPanel({ name, onName, party, onParty, peers, account, inPlot }: {
   name: string
   onName: (n: string) => void
   party: string | null
   onParty: (code: string | null) => void
   peers: React.RefObject<Map<string, RemotePlayer>>
   account: UseAccount
+  /** True at a position inside a Home Plot: those peers read 'in their garden', not vanished. */
+  inPlot?: (x: number, z: number) => boolean
 }) {
   const roster = useRoster(peers)
+  // The rows re-render on membership changes only; a peer stepping into their plot should
+  // flip the label without waiting for a join/leave, so tick the labels at a low rate.
+  const [, setLabelTick] = useState(0)
+  useEffect(() => { const t = setInterval(() => setLabelTick(v => v + 1), 2000); return () => clearInterval(t) }, [])
   const [nameDraft, setNameDraft] = useState(name)
   const [joinDraft, setJoinDraft] = useState('')
   const [copied, setCopied] = useState(false)
@@ -2700,7 +2706,9 @@ function PlayTogetherPanel({ name, onName, party, onParty, peers, account }: {
       <div style={{ ...label, margin: '12px 0 4px' }}>IN YOUR WORLD</div>
       <div style={{ font: '700 11px/1.7 ui-monospace, monospace', color: '#cfeee2' }}>
         <div style={{ color: '#eafff6' }}>{name} <span style={{ color: '#8fd9c4' }}>(you)</span></div>
-        {roster.map(p => <div key={p.id}>{p.name}</div>)}
+        {roster.map(p => (
+          <div key={p.id}>{p.name}{inPlot?.(p.tx, p.tz) && <span style={{ color: '#8fd9c4', opacity: 0.75 }}> · ⛅ in their garden</span>}</div>
+        ))}
         {roster.length === 0 && <div style={{ color: '#ffffff5e' }}>no one else yet</div>}
       </div>
     </div>
@@ -5378,6 +5386,7 @@ export default function Shimmer3D() {
             <PlayTogetherPanel
               name={mpName} onName={setMpName}
               party={mpParty} onParty={(code) => { if (code) joinParty(code); else leaveParty() }}
+              inPlot={zoneId === HOME_PLOT_ZONE || zoneId === 'r-home-plot' ? () => true : zoneId === WORLD_ZONE_ID ? (x: number, z: number) => fromWorld(Math.round(x), Math.round(z))?.zoneId === HOME_PLOT_ZONE : undefined}
               peers={mpPeers}
               account={account}
             />
