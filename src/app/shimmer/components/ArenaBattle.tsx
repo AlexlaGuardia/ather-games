@@ -6,6 +6,10 @@
 // choreography verb for every execute (strike/shield/wave/burst/current/disruption/
 // lock), damage + dodge floaters, hit-stop on big hits, KO slow-mo and fall, and
 // hold-to-skip (the sim is deterministic — skipping just fast-forwards it).
+// Pass 3 (2026-07-31): the BODIES act. Per-state execute body language (lunge-to-contact,
+// gather-and-slam, crouch, spin release, rattle, current-rise, the held lock), hit
+// knockback + dodge roll, and idle life on a seeded personal clock (breath, step bob,
+// wounded sag) — the capsules-can't-act fix. Sprite rigs later swap in over the same verbs.
 // No canon lore lives here — names arrive on the events; this file is pure build/play.
 
 import { Canvas, useFrame } from '@react-three/fiber'
@@ -39,6 +43,26 @@ const KO_SLOWMO_S = 1.15        // slow-motion window after a KO
 const KO_SLOWMO_SCALE = 0.22
 const KO_FALL_S = 0.9           // body tips over this long, then fades out
 const SKIP_HOLD_S = 0.55        // hold this long to skip
+
+// ── acting dials (pass 3: the per-state body language) ──
+// The sim executes a move at the INSTANT windup ends, so the acting wraps that instant:
+// the approach beat rides the windup's tail (contact syncs with the damage event exactly)
+// and the follow-through rides the head of recover. All of it runs on sim time, so
+// hit-stop freezes mid-lunge and KO slow-mo stretches the follow-through for free.
+const APPROACH_S = 0.16         // strike approach — the last beat of the windup
+const RELEASE_S = 0.26          // follow-through — the first beat of recover
+const LUNGE_MAX = 1.5           // furthest a body throws itself at a target (floor units)
+const KNOCK_S = 0.24            // a hit's shove is absorbed over this
+const KNOCK_DIST = 0.34
+const DODGE_ROLL_S = 0.3        // body roll riding the sim's sidestep
+
+// seeded idle body-clock per fighter — same law as the fight personalities: no two
+// spirits may share a metronome, or the field reads as mirrored puppets again.
+const bodySeed = (id: string) => {
+  let h = 0
+  for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) | 0
+  return { ph: (h >>> 16) % 628 / 100, fm: (h >>> 8) % 60 / 100 }
+}
 
 // ── transient FX + floaters (spawned from events, animated on sim time) ──
 interface Fx { id: number; kind: MoveState | 'impact'; x: number; y: number; color: string; born: number; life: number; big: boolean }
@@ -192,6 +216,10 @@ function Scene({ arenaRef, cmdQueue, skipRef, onSnap, onCallout }: {
   const hitStopT = useRef(0)        // realtime seconds of freeze left
   const slowT = useRef(0)           // realtime seconds of KO slow-mo left
   const koAt = useRef(new Map<string, number>())   // fighter id → sim time of KO (drives the fall)
+  // acting state — hit shoves, dodge rolls, last-known feet (drives the step bob)
+  const knocks = useRef(new Map<string, { dx: number; dy: number; at: number }>())
+  const rolls = useRef(new Map<string, { at: number }>())
+  const feet = useRef(new Map<string, { x: number; y: number }>())
   const fx = useRef<Fx[]>([])
   const floaters = useRef<Floater[]>([])
   const [, bump] = useState(0)
@@ -221,6 +249,12 @@ function Scene({ arenaRef, cmdQueue, skipRef, onSnap, onCallout }: {
         const to = byId(e.to); const from = byId(e.from)
         if (!to) continue
         const superHit = e.eff === 'super'
+        // the shove: body rocks away from the blow (direction from the attacker, or facing-back)
+        if (to.hp > 0) {
+          const dx = from ? to.x - from.x : -Math.cos(to.facing), dy = from ? to.y - from.y : -Math.sin(to.facing)
+          const len = Math.hypot(dx, dy) || 1
+          knocks.current.set(to.id, { dx: dx / len, dy: dy / len, at: s.t })
+        }
         spawnFx('impact', to.x, to.y, superHit ? '#ffd75e' : '#ffffff', superHit)
         // the state verb FX at the point of impact, colored by the move's element lane
         const st = from?.act?.move.state
@@ -232,6 +266,7 @@ function Scene({ arenaRef, cmdQueue, skipRef, onSnap, onCallout }: {
       } else if (e.type === 'dodge') {
         const who = byId(e.who)
         if (!who) continue
+        rolls.current.set(who.id, { at: s.t })   // body roll riding the sim's sidestep
         spawnFloat(who.x, who.y, who.radius * 2.2 + 0.8, 'DODGE', '#8fd0ff')
         changed = true
       } else if (e.type === 'miss') {
@@ -332,23 +367,84 @@ function Scene({ arenaRef, cmdQueue, skipRef, onSnap, onCallout }: {
       g.rotation.y = -f.facing + Math.PI / 2
       // flinch shiver
       if (f.flinch > 0) g.position.x += Math.sin(s.t * 60) * 0.04
-      // windup lean: the body coils back through the windup — the telegraph reads on the SILHOUETTE
+      // the shove: rocked away from the blow, absorbed over KNOCK_S
+      const kb = knocks.current.get(f.id)
+      if (kb) {
+        const kp = (s.t - kb.at) / KNOCK_S
+        if (kp >= 1) knocks.current.delete(f.id)
+        else {
+          const ke = (1 - kp) * (1 - kp)
+          g.position.x += kb.dx * KNOCK_DIST * ke
+          g.position.z += kb.dy * KNOCK_DIST * ke
+        }
+      }
+
+      // ── the acting (pass 3): per-state body language on the blockout ──
       const body = bodies.current.get(f.id)
       if (body) {
-        const a = f.act
-        if (a?.phase === 'windup') {
-          const p = a.t / a.dur
-          body.rotation.x = -0.28 * p * (a.move.heavy ? 1.6 : 1)
-          body.scale.setScalar(1 + f.hitFlash * 1.1 + p * 0.06)
-        } else if (a?.phase === 'recover') {
-          body.rotation.x = 0.14 * (1 - a.t / a.dur)
-          body.scale.setScalar(1 + f.hitFlash * 1.1)
-        } else {
-          body.rotation.x = 0
-          body.scale.setScalar(1 + f.hitFlash * 1.1)
+        const seed = bodySeed(f.id)
+        const hpFrac = f.hp / f.maxHp
+        // idle life: breathing on a personal clock; a wounded spirit sags and breathes shallow
+        let rotX = hpFrac < 0.25 ? 0.09 : 0
+        let sclY = 1 + Math.sin(s.t * (2.1 + seed.fm) + seed.ph) * (hpFrac < 0.25 ? 0.008 : 0.016)
+        let sclXZ = 1, spin = 0, offFwd = 0, offUp = 0
+        // step bob: feet moving → the body steps; standing → it just breathes
+        const prev = feet.current.get(f.id)
+        if (prev && dt > 1e-4) {
+          const moved = Math.hypot(f.x - prev.x, f.y - prev.y)
+          if (moved > 1e-4) offUp += Math.abs(Math.sin(s.t * 9 + seed.ph)) * Math.min(1, moved / dt / 3) * 0.05
         }
+        feet.current.set(f.id, { x: f.x, y: f.y })
+
+        const a = f.act
+        if (a) {
+          const st = a.move.state
+          const heavy = a.move.heavy ? 1.6 : 1
+          // how far this body throws itself: to contact with the target, capped
+          const tgt = s.fighters.find(g2 => g2.id === a.targetId)
+          const lunge = tgt ? Math.min(Math.max(Math.hypot(tgt.x - f.x, tgt.y - f.y) - (f.radius + tgt.radius) * 0.8, 0), LUNGE_MAX) : 0.6
+          if (a.phase === 'windup') {
+            const p = a.t / a.dur
+            const ap = a.dur > APPROACH_S ? Math.max(0, (a.t - (a.dur - APPROACH_S)) / APPROACH_S) : p
+            rotX += -0.28 * p * heavy                     // the coil — the telegraph on the silhouette
+            sclY *= 1 + p * 0.06
+            if (st === 'solid' || st === 'bind') { offFwd = ap * ap * lunge; rotX += ap * 0.55 }            // throw at the target
+            else if (st === 'ignite') { offUp += ap * 0.55; sclY *= 1 - ap * 0.12; sclXZ = 1 + ap * 0.1 }   // gather UP to slam
+            else if (st === 'compact') { sclY *= 1 - p * 0.22; sclXZ = 1 + p * 0.12; rotX += p * 0.14 }     // crouch behind the guard
+            else if (st === 'expanding') { spin = ap * 1.1; sclXZ = 1 + ap * 0.07 }                          // wind the spin
+            else if (st === 'scatter') { spin = Math.sin(a.t * 42 + seed.ph) * 0.14 * (0.3 + p) }            // ragged rattle
+            else if (st === 'flow') { offUp += Math.sin(p * Math.PI) * 0.22; rotX -= p * 0.1 }               // draw the current up
+          } else {
+            const rp = Math.min(1, a.t / Math.min(a.dur, RELEASE_S))
+            const re = (1 - rp) * (1 - rp)                // release energy, dying out
+            rotX += 0.14 * (1 - a.t / a.dur)              // ease back upright through recover
+            if (st === 'solid') { offFwd = lunge * re; rotX += 0.55 * re }                                   // contact → snap back
+            else if (st === 'bind') { offFwd = lunge * (1 - a.t / a.dur); rotX += 0.4 * (1 - a.t / a.dur) }  // the LOCK holds, pinned
+            else if (st === 'ignite') { sclY *= 1 - 0.18 * re; sclXZ = 1 + 0.14 * re }                       // the slam squash
+            else if (st === 'expanding') { spin = 1.1 + rp * Math.PI * 2 * (a.move.heavy ? 1 : 0.5) }        // release the spin
+            else if (st === 'scatter') { spin = Math.sin(a.t * 42 + seed.ph) * 0.14 * re }
+            else if (st === 'compact') { sclY *= 1 - 0.22 * re; sclXZ = 1 + 0.12 * re }                      // rise from the crouch
+            else if (st === 'flow') { offUp += 0.22 * re }
+          }
+        }
+
+        // dodge: a body roll riding the sim's sidestep
+        const rl = rolls.current.get(f.id)
+        if (rl) {
+          const rp = (s.t - rl.at) / DODGE_ROLL_S
+          if (rp >= 1) { rolls.current.delete(f.id); body.rotation.z = 0 }
+          else body.rotation.z = Math.sin(rp * Math.PI) * 0.35
+        } else body.rotation.z = 0
+
+        body.rotation.x = rotX
+        body.rotation.y = spin
+        const flash = 1 + f.hitFlash * 1.1
+        body.scale.set(sclXZ * flash, sclY * flash, sclXZ * flash)
         const mat = body.material as THREE.MeshStandardMaterial
         mat.emissiveIntensity = (f.side === 'ally' ? 0.35 : 0.12) + f.hitFlash * 6
+        // lunge + lift ride the GROUP so the collar and nameplate travel with the body
+        if (offFwd) { g.position.x += Math.cos(f.facing) * offFwd; g.position.z += Math.sin(f.facing) * offFwd }
+        g.position.y += offUp
       }
     }
 
