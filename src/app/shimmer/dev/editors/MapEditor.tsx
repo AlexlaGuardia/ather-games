@@ -8,6 +8,7 @@ import { ITEMS, ITEM_ICONS, ITEM_PALETTE, SEED_PALETTES, NODE_SPRITES, NODE_TYPE
 import { ZONE_NODES } from '../../world/node-placements'
 import { ZONE_SPAWNERS } from '../../world/spawn-placements'
 import { zoneBand, TIER_WEIGHTS, NOTHING_WEIGHT } from '../../engine/spawn-board'
+import { SURFACE_ZONES } from '../../world/garden-world'
 import { NODE_DEFS, type NodeType } from '../../world/resources'
 import { ZONE_PICKUPS } from '../../world/static-pickups'
 import { ZONES } from '../../world/zones'
@@ -58,6 +59,12 @@ const CATEGORIES = [
 
 // Derive zone list from ZONES import — stays in sync automatically
 const INITIAL_ZONE_MAPS = ZONES.map(z => ({ id: z.id, label: z.name }))
+// Dropdown grouping (the 07-31 cleanup: 10 fp/flat test maps deleted, survivors organized).
+const SURFACE_ZONE_SET = new Set(SURFACE_ZONES)
+// test-sandbox = the Beast/Player editor preview arena; the two orphan corridors are the
+// hand-authored raw material for the open mycelial→spirit (80,22) dog-leg fix — delete
+// them only once that's settled.
+const DEV_ZONES = new Set(['test-sandbox', 'route-mycelial-spirit', 'route-spirit-moonwell'])
 
 const ZONE_DEFAULTS: Record<string, number[][]> = Object.fromEntries(
   ZONES.map(z => [z.id, z.grid])
@@ -2346,8 +2353,18 @@ export default function MapEditor() {
             <option key={z.id} value={z.id} className="bg-[#1a1a2e] text-white">{z.label}</option>
           ))}
         </optgroup>
-        <optgroup label="World Zones (shared)">
-          {zoneMaps.filter(z => z.id !== 'garden').map(z => (
+        <optgroup label="🌍 World Surface (stitched, shared)">
+          {zoneMaps.filter(z => z.id !== 'garden' && SURFACE_ZONE_SET.has(z.id)).map(z => (
+            <option key={z.id} value={z.id} className="bg-[#1a1a2e] text-white">{z.label}</option>
+          ))}
+        </optgroup>
+        <optgroup label="🚪 Interiors & Holds">
+          {zoneMaps.filter(z => z.id !== 'garden' && !SURFACE_ZONE_SET.has(z.id) && !DEV_ZONES.has(z.id)).map(z => (
+            <option key={z.id} value={z.id} className="bg-[#1a1a2e] text-white">{z.label}</option>
+          ))}
+        </optgroup>
+        <optgroup label="🔧 Dev & Legacy">
+          {zoneMaps.filter(z => DEV_ZONES.has(z.id)).map(z => (
             <option key={z.id} value={z.id} className="bg-[#1a1a2e] text-white">{z.label}</option>
           ))}
         </optgroup>
