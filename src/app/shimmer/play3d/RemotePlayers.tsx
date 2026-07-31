@@ -30,9 +30,16 @@ const LERP = 9
 // removes clean disconnects instantly.
 const STALE_MS = 90_000
 
-function Avatar({ peer }: { peer: RemotePlayer }) {
+function Avatar({ peer, hideAt }: { peer: RemotePlayer; hideAt?: (x: number, z: number) => boolean }) {
   const grp = useRef<THREE.Group>(null)
   const inner = useRef<THREE.Group>(null)
+  // The Home Plot is PERSONAL space (canon: "a personal shimmer") — a peer standing in the
+  // plot rect is inside their OWN plot, not yours, so they must not render in your world.
+  // React state (not just group.visible) because the <Html> nameplate is a DOM portal that
+  // does not follow three visibility; flips are rare (a boundary crossing), so setState in
+  // useFrame is cheap here.
+  const [hidden, setHidden] = useState(false)
+  const hiddenRef = useRef(false)
   // one hue per player, stable across sessions — derived from the id so both clients agree
   const color = useMemo(() => {
     let h = 0
@@ -44,7 +51,9 @@ function Avatar({ peer }: { peer: RemotePlayer }) {
     const g = grp.current
     if (!g) return
     const stale = performance.now() - peer.lastSeen > STALE_MS
-    g.visible = !stale
+    const inPlot = hideAt ? hideAt(peer.tx, peer.tz) : false
+    if (inPlot !== hiddenRef.current) { hiddenRef.current = inPlot; setHidden(inPlot) }
+    g.visible = !stale && !inPlot
     if (stale) return
     const k = 1 - Math.exp(-LERP * dt)   // frame-rate independent ease
     peer.x += (peer.tx - peer.x) * k
@@ -76,14 +85,14 @@ function Avatar({ peer }: { peer: RemotePlayer }) {
           <meshStandardMaterial color="#0d1a17" />
         </mesh>
       </group>
-      <Html position={[0, 1.75, 0]} center distanceFactor={12} zIndexRange={[10, 0]}>
+      {!hidden && <Html position={[0, 1.75, 0]} center distanceFactor={12} zIndexRange={[10, 0]}>
         <div style={{
           font: '700 12px ui-monospace, monospace', color: '#eafff6',
           background: 'rgba(12,16,26,0.78)', border: '1px solid #ffffff22',
           padding: '2px 7px', borderRadius: 6, whiteSpace: 'nowrap',
           pointerEvents: 'none', transform: 'translateY(-4px)',
         }}>{peer.name}</div>
-      </Html>
+      </Html>}
     </group>
   )
 }
@@ -94,9 +103,13 @@ function Avatar({ peer }: { peer: RemotePlayer }) {
  * Re-renders only when the SET of players changes (join/leave), never on movement — movement is
  * applied straight to the object transforms in useFrame.
  */
-export function RemotePlayers({ peers }: { peers: React.RefObject<Map<string, RemotePlayer>> }) {
+export function RemotePlayers({ peers, hideAt }: {
+  peers: React.RefObject<Map<string, RemotePlayer>>
+  /** Personal-space filter: peers whose position satisfies this are not drawn (e.g. the Home Plot). */
+  hideAt?: (x: number, z: number) => boolean
+}) {
   const roster = useRoster(peers)
-  return <>{roster.map((p) => <Avatar key={p.id} peer={p} />)}</>
+  return <>{roster.map((p) => <Avatar key={p.id} peer={p} hideAt={hideAt} />)}</>
 }
 
 // The socket hook (useMultiplayer) lives in the PAGE component, not here — the Play Together

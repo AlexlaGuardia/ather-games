@@ -2348,6 +2348,18 @@ const Scene = memo(function Scene(props: {
     () => structuresView(props.structures, props.zone.id),
     [props.structures, props.zone.id],
   )
+  // The Home Plot is per-keeper personal space (canon: Greg's gate opens "a personal shimmer").
+  // A peer whose position lies in the plot rect is standing in their OWN plot, so they are not
+  // drawn in yours. Symmetric on every client — nobody is ever visible inside a plot, including
+  // you to others — which makes the plot per-player TODAY at the presence layer, ahead of any
+  // server-side instancing. In the garden zone-room every peer is by definition in their own plot.
+  const plotHide = useMemo(() => {
+    if (props.zone.id === HOME_PLOT_ZONE) return () => true
+    if (props.zone.id === WORLD_ZONE_ID) {
+      return (x: number, z: number) => fromWorld(Math.round(x), Math.round(z))?.zoneId === HOME_PLOT_ZONE
+    }
+    return undefined
+  }, [props.zone.id])
   return (
     <>
       <GardenAtmosphere zoneId={props.atmosZone} />
@@ -2365,7 +2377,7 @@ const Scene = memo(function Scene(props: {
       <PlacementGhost placing={props.placing} posRef={props.posRef} heights={props.heights} gridRef={props.gridRef} placeTargetRef={props.placeTargetRef} structuresRef={props.structuresRef} zoneIdRef={props.zoneIdRef} />
       <Player posRef={props.posRef} gridRef={props.gridRef} heightsRef={props.heightsRef} zoneIdRef={props.zoneIdRef} editRef={props.editRef} onWarp={props.onWarp} battleRef={props.battleRef} partyLevelRef={props.partyLevelRef} onEncounter={props.onEncounter} joyRef={props.joyRef} talkingRef={props.talkingRef} hasPartyRef={props.hasPartyRef} onNearChange={props.onNearChange} defeatedRef={props.defeatedRef} flagsRef={props.flagsRef} harvestNodesRef={props.harvestNodesRef} onNearNode={props.onNearNode} stationsRef={props.structuresRef} onNearStation={props.onNearStation} eyeRef={props.eyeRef} jumpRef={props.jumpRef} slideRef={props.slideRef} speedMultRef={props.speedMultRef} weaponMoveRef={props.weaponMoveRef} dreamwalkRef={props.dreamwalkRef} />
       {/* presence: other players in this zone (socket lives in the page comp — shared with the panel) */}
-      <RemotePlayers peers={props.mpPeers} />
+      <RemotePlayers peers={props.mpPeers} hideAt={plotHide} />
       {props.companionColor && !props.editing && <Follower posRef={props.posRef} heightsRef={props.heightsRef} color={props.companionColor} />}
       {props.fishing && <FishTell posRef={props.posRef} heightsRef={props.heightsRef} bite={props.fishBite} />}
       <HarvestPop pop={props.harvestPop} />

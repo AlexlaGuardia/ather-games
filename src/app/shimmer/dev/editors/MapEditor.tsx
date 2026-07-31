@@ -1463,6 +1463,9 @@ export default function MapEditor() {
         return [...prev, { nodeType: brushNodeType, x: tx, y: ty }]
       })
     } else if (brushType === 'burrow') {
+      // Canon (shimmer-geography.md): incursion burrows are dug OUTSIDE a plot, near its
+      // edge — the Home Plot template can never author one. Refused here, hinted in the UI.
+      if (activeMap === 'garden') return
       setSpawnerPlacements(prev => {
         const existing = prev.findIndex(p => p.x === tx && p.y === ty)
         if (existing >= 0) {
@@ -1550,7 +1553,7 @@ export default function MapEditor() {
         })
       }
     }
-  }, [brush, rotation, brushType, brushItemId, brushNodeType, brushStructureId, brushChestType, brushChestClaimable, structures, warpEnabled, warpConfig, activeStampId, randomVariant, stamps, showIntGrid, paintIntGrid])
+  }, [brush, rotation, brushType, brushItemId, brushNodeType, brushGate, brushStructureId, brushChestType, brushChestClaimable, structures, warpEnabled, warpConfig, activeStampId, randomVariant, stamps, showIntGrid, paintIntGrid, activeMap])
 
   const resize = useCallback((newCols: number, newRows: number) => {
     pushMapSnapshot()
@@ -2335,9 +2338,19 @@ export default function MapEditor() {
         onChange={e => switchMap(e.target.value)}
         className="bg-[#1a1a2e] border border-white/10 rounded px-3 py-1 text-[12px] text-white font-display focus:outline-none focus:border-gold/40"
       >
-        {zoneMaps.map(z => (
-          <option key={z.id} value={z.id} className="bg-[#1a1a2e] text-white">{z.label}</option>
-        ))}
+        {/* The Home Plot is a per-keeper TEMPLATE, not a world zone: what you author here is
+            the starting plot every new keeper receives; their copy then diverges via the save
+            (strips, crops, placements). The world zones are shared, dealt, and live. */}
+        <optgroup label="🏡 Home Template (per-keeper)">
+          {zoneMaps.filter(z => z.id === 'garden').map(z => (
+            <option key={z.id} value={z.id} className="bg-[#1a1a2e] text-white">{z.label}</option>
+          ))}
+        </optgroup>
+        <optgroup label="World Zones (shared)">
+          {zoneMaps.filter(z => z.id !== 'garden').map(z => (
+            <option key={z.id} value={z.id} className="bg-[#1a1a2e] text-white">{z.label}</option>
+          ))}
+        </optgroup>
       </select>
       <button
         onClick={() => setShowCreateZone(true)}
@@ -2559,7 +2572,8 @@ export default function MapEditor() {
               {brushType === 'tile' && tiles[brush]?.above && <span className="text-violet-400/60 mr-2">above</span>}
               {brushType === 'item' && <span className="text-amber-400/60">pickup — click to place/remove</span>}
               {brushType === 'node' && <span className="text-green-400/60">resource node — click to place/remove</span>}
-              {brushType === 'burrow' && <span className="text-orange-300/60">burrow mouth — click to place/remove, gate = the hold that quiets it</span>}
+              {brushType === 'burrow' && activeMap !== 'garden' && <span className="text-orange-300/60">burrow mouth — click to place/remove, gate = the hold that quiets it</span>}
+              {brushType === 'burrow' && activeMap === 'garden' && <span className="text-red-400/70">burrows are dug OUTSIDE a plot (canon) — not placeable on the Home Template</span>}
               {brushType === 'eraser' && <span className="text-red-400/60">clears tiles, items, nodes, warps, structures, furniture + chests</span>}
               {brushType === 'furniture' && <span className="text-amber-400/60">furniture — click to place</span>}
               {brushType === 'zonechest' && <span className="text-purple-400/60">zone chest — <label className="cursor-pointer"><input type="checkbox" checked={brushChestClaimable} onChange={e => setBrushChestClaimable(e.target.checked)} className="mr-1 accent-purple-500" />claimable</label></span>}
