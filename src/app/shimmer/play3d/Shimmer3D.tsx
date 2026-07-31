@@ -69,7 +69,8 @@ import { loadGfx, storeGfx, gfxKey, dprCeiling, SHADOW_MAP_SIZE, DPR_FLOOR, type
 import { WorldMap, MiniMap } from './WorldMap'
 import { WORLD_ZONE_ID, registerGardenWorld, getGardenWorld, isStitched, fromWorld } from '../world/garden-world'
 import { allNpcs, nodePlacementsFor, dealtNodesFor, spawnerPlacementsFor, logicalZoneAt, structuresView, logicalStruct } from './world-adapter'
-import { ZONE_SPAWNERS, SPAWNER_COOLDOWN_MS, type SpawnerPlacement } from '../world/spawn-placements'
+import { ZONE_SPAWNERS, type SpawnerPlacement } from '../world/spawn-placements'
+import { patrolDown, markBeaten, pruneBeaten, patrolLoop, patrolPose, type BeatenRecord, type PatrolLoop } from '../engine/burrows'
 
 // The composed continent registers as a zone before any getZone/save-load runs.
 registerGardenWorld()
@@ -385,40 +386,106 @@ function nodeShards(tx: number, ty: number, count: number): { a: number; tilt: n
     r: 0.14 + rnd() * 0.16,                        // distance from center
   }))
 }
-// Spawner markers: edit mode shows every spawner as a gate-colored floating diamond
-// (shift-click erases via the sp_* tools); play mode shows an ARMED spawner as a lurking
-// lesser moglin — a dark hunched blockout with an ember ring, idling until you close in.
-function SpawnerMarkers({ spawners, heights, editing, defeated, ready }: {
+// ── Burrows — the moglin half of living-spawners (canon: shimmer-geography.md, RULED 07-30). ──
+// "A burrow is a mouth, a hold is the hand behind it." Edit mode keeps the gate diamond
+// (shift-click erases via the sp_* tools). Play mode always shows the MOUTH — a warm earth
+// mound with a dark opening — and while its hold stands it flies the hold's pennant and a
+// lesser moglin PATROLS a derived loop around it (engine/burrows.ts): position is a pure
+// function of wall-clock time, so every client watches the same walk with nothing synced.
+// Render caution is canon law: the species is teddy-bear-soft, child-scale, WARM earth
+// tones, never grey — menace comes from the bearing and the collar-prop, not the anatomy.
+// The old blockout here was a dark hunched lurker; that read as vermin and is the exact
+// thing the caution bans. Hold freed → pennant comes down, the mouth quiets; after Brack
+// falls a REFORMED moglin (no collar) sits by it — "came to raid, stayed to be neighbours."
+
+const MOGLIN_FUR = '#8a6a48'      // drab-but-warm earth — never grey
+const MOGLIN_FUR_LIGHT = '#a3855e'
+
+function BurrowWalker({ sp, heights, gridRef, ready, keyFor }: {
+  sp: SpawnerPlacement; heights: number[][]; gridRef: React.MutableRefObject<number[][]>
+  ready: (sp: SpawnerPlacement) => boolean; keyFor: (sp: SpawnerPlacement) => string
+}) {
+  const group = useRef<THREE.Group>(null)
+  // The loop is deterministic per logical key; grid edits are an edit-mode concern and the
+  // walker is hidden there, so computing once per mount/zone is enough.
+  const loop = useMemo<PatrolLoop>(
+    () => patrolLoop(sp.tileX, sp.tileY, (x, y) => walkable(gridRef.current, x, y), keyFor(sp)),
+    [sp.tileX, sp.tileY, sp.gate],  // eslint-disable-line react-hooks/exhaustive-deps
+  )
+  useFrame(() => {
+    const g = group.current
+    if (!g) return
+    if (!ready(sp)) { g.visible = false; return }
+    const now = Date.now()
+    const pose = patrolPose(loop, sp.tileX, sp.tileY, now, currentWindow(now))
+    // Emerging = rising out of the mouth: scale up and walk out from the opening.
+    const px = sp.tileX + (pose.x - sp.tileX) * pose.emerge
+    const pz = sp.tileY + (pose.y - sp.tileY) * pose.emerge
+    const gy = (heights[Math.round(pz)]?.[Math.round(px)] ?? 0) * STEP
+    const bob = pose.paused ? 0 : Math.abs(Math.sin(now / 1000 * 6 + loop.phaseS)) * 0.05
+    g.visible = true
+    g.position.set(px, gy + bob + (pose.emerge - 1) * 0.5, pz)
+    g.rotation.y = Math.PI / 2 - pose.facing
+    const s = 0.25 + 0.75 * pose.emerge
+    g.scale.set(s, s, s)
+  })
+  const col = GATE_COLORS[sp.gate]
+  return (
+    <group ref={group}>
+      {/* child-scale round-soft body — warm fur, rounded ears; the COLLAR is the hostile part */}
+      <mesh position={[0, 0.44, 0]} castShadow><capsuleGeometry args={[0.24, 0.3, 6, 12]} /><meshStandardMaterial color={MOGLIN_FUR} roughness={0.95} /></mesh>
+      <mesh position={[0, 0.86, 0]} castShadow><sphereGeometry args={[0.22, 14, 14]} /><meshStandardMaterial color={MOGLIN_FUR_LIGHT} roughness={0.95} /></mesh>
+      <mesh position={[-0.13, 1.04, 0]}><sphereGeometry args={[0.08, 10, 10]} /><meshStandardMaterial color={MOGLIN_FUR} roughness={0.95} /></mesh>
+      <mesh position={[0.13, 1.04, 0]}><sphereGeometry args={[0.08, 10, 10]} /><meshStandardMaterial color={MOGLIN_FUR} roughness={0.95} /></mesh>
+      <mesh position={[0, 0.68, 0]} rotation={[Math.PI / 2, 0, 0]}><torusGeometry args={[0.17, 0.045, 8, 20]} /><meshStandardMaterial color={col} emissive={col} emissiveIntensity={0.55} roughness={0.4} /></mesh>
+    </group>
+  )
+}
+
+function BurrowMarkers({ spawners, heights, editing, defeated, ready, gridRef, keyFor }: {
   spawners: SpawnerPlacement[]; heights: number[][]; editing: boolean
   defeated: Record<string, boolean>; ready: (sp: SpawnerPlacement) => boolean
+  gridRef: React.MutableRefObject<number[][]>; keyFor: (sp: SpawnerPlacement) => string
 }) {
-  const [, setTick] = useState(0)
-  useEffect(() => { const iv = setInterval(() => setTick(t => t + 1), 2000); return () => clearInterval(iv) }, [])
+  const reformed = !!defeated['brack']
   return (
     <>
       {spawners.map((sp, i) => {
         const y = (heights[sp.tileY]?.[sp.tileX] ?? 0) * STEP
         const col = GATE_COLORS[sp.gate]
-        const retired = !!defeated[sp.gate]
+        const quiet = !!defeated[sp.gate]
         if (editing) {
           return (
             <group key={`sp-${i}`} position={[sp.tileX, y + 0.9, sp.tileY]}>
-              <mesh><octahedronGeometry args={[0.32, 0]} /><meshStandardMaterial color={col} emissive={col} emissiveIntensity={retired ? 0.1 : 0.7} transparent opacity={retired ? 0.4 : 0.95} /></mesh>
+              <mesh><octahedronGeometry args={[0.32, 0]} /><meshStandardMaterial color={col} emissive={col} emissiveIntensity={quiet ? 0.1 : 0.7} transparent opacity={quiet ? 0.4 : 0.95} /></mesh>
             </group>
           )
         }
-        if (retired || !ready(sp)) return null
         return (
-          <group key={`sp-${i}`} position={[sp.tileX, y, sp.tileY]}>
-            {/* the lurker — hunched dark blockout, ember collar-runner's ring at its feet */}
-            <mesh position={[0, 0.55, 0]} scale={[1, 0.82, 1]} castShadow>
-              <capsuleGeometry args={[0.34, 0.72, 6, 12]} />
-              <meshStandardMaterial color="#2c2733" emissive="#b04a30" emissiveIntensity={0.12} roughness={0.7} />
-            </mesh>
-            <mesh position={[0, 0.03, 0]} rotation={[-Math.PI / 2, 0, 0]}>
-              <ringGeometry args={[0.5, 0.62, 24]} />
-              <meshBasicMaterial color={col} transparent opacity={0.35} side={THREE.DoubleSide} />
-            </mesh>
+          <group key={`sp-${i}`}>
+            <group position={[sp.tileX, y, sp.tileY]}>
+              {/* the mouth: warm earth mound + dark opening on its south face */}
+              <mesh position={[0, 0.06, 0]} scale={[1, 0.38, 1]} castShadow><sphereGeometry args={[0.6, 16, 12]} /><meshStandardMaterial color="#6d5138" roughness={1} /></mesh>
+              <mesh position={[0, 0.12, 0.44]} rotation={[-0.5, 0, 0]}><circleGeometry args={[0.26, 18]} /><meshBasicMaterial color="#1d1610" side={THREE.DoubleSide} /></mesh>
+              {!quiet && (
+                <group position={[0.32, 0, -0.32]}>
+                  {/* the hold's claim, planted at the mouth — comes down when the hold falls */}
+                  <mesh position={[0, 0.7, 0]} castShadow><boxGeometry args={[0.05, 1.4, 0.05]} /><meshStandardMaterial color="#4a3826" roughness={0.9} /></mesh>
+                  <mesh position={[0.19, 1.24, 0]}><boxGeometry args={[0.33, 0.22, 0.02]} /><meshStandardMaterial color={col} emissive={col} emissiveIntensity={0.35} side={THREE.DoubleSide} /></mesh>
+                </group>
+              )}
+              {quiet && reformed && (
+                // The deflated folk who came to raid and stayed to be neighbours: a calm,
+                // UNCOLLARED moglin sitting by the quieted mouth. The collar was the sin.
+                <group position={[0.7, 0, 0.35]} rotation={[0, -0.6, 0]}>
+                  <mesh position={[0, 0.3, 0]} castShadow><capsuleGeometry args={[0.22, 0.2, 6, 12]} /><meshStandardMaterial color={MOGLIN_FUR} roughness={0.95} /></mesh>
+                  <mesh position={[0, 0.66, 0]} castShadow><sphereGeometry args={[0.2, 14, 14]} /><meshStandardMaterial color={MOGLIN_FUR_LIGHT} roughness={0.95} /></mesh>
+                  <mesh position={[-0.12, 0.82, 0]}><sphereGeometry args={[0.07, 10, 10]} /><meshStandardMaterial color={MOGLIN_FUR} roughness={0.95} /></mesh>
+                  <mesh position={[0.12, 0.82, 0]}><sphereGeometry args={[0.07, 10, 10]} /><meshStandardMaterial color={MOGLIN_FUR} roughness={0.95} /></mesh>
+                </group>
+              )}
+            </group>
+            {!quiet && <BurrowWalker sp={sp} heights={heights} gridRef={gridRef} ready={ready} keyFor={keyFor} />}
           </group>
         )
       })}
@@ -2243,6 +2310,7 @@ const Scene = memo(function Scene(props: {
   flagsRef: React.RefObject<Record<string, boolean>>
   nodes: ResourceNode[]
   spawners: SpawnerPlacement[]; spawnerReady: (sp: SpawnerPlacement) => boolean
+  spawnerKeyFor: (sp: SpawnerPlacement) => string
   harvestNodesRef: React.RefObject<ResourceNode[]>; onNearNode: (n: ResourceNode | null) => void
   channel: { nodeId: string; hp: number } | null
   structures: PlacedStruct[]; placing: { itemId: string; facing: number } | null
@@ -2291,7 +2359,7 @@ const Scene = memo(function Scene(props: {
       {props.zone.realm === 'outside' && <GunBenches />}
       {props.zone.realm === 'outside' && <ExitMarkers warps={props.zone.warps} heights={props.heights} />}
       <NodeMarkers nodes={props.nodes} heights={props.heights} editing={props.editing} channel={props.channel} />
-      <SpawnerMarkers spawners={props.spawners} heights={props.heights} editing={props.editing} defeated={props.defeated} ready={props.spawnerReady} />
+      <BurrowMarkers spawners={props.spawners} heights={props.heights} editing={props.editing} defeated={props.defeated} ready={props.spawnerReady} gridRef={props.gridRef} keyFor={props.spawnerKeyFor} />
       {props.zone.id === WORLD_ZONE_ID ? <WorldFlora heights={props.heights} /> : <FloraDressing zoneId={props.zone.id} heights={props.heights} />}
       <StructureMarkers structures={structuresInZone} heights={props.heights} />
       <PlacementGhost placing={props.placing} posRef={props.posRef} heights={props.heights} gridRef={props.gridRef} placeTargetRef={props.placeTargetRef} structuresRef={props.structuresRef} zoneIdRef={props.zoneIdRef} />
@@ -2550,7 +2618,7 @@ export default function Shimmer3D() {
   // good and the player has to go out for more. This is the ONLY thing about the board that has to
   // be remembered — the derived deal can reconstruct everything else from the clock, but it cannot
   // know what you already took. Keyed on `slotKey` (zone + skill + logical tile) so it survives
-  // both a tier re-roll and a layout nudge in the editor. Loaded from the save alongside spawnerCds.
+  // both a tier re-roll and a layout nudge in the editor. Loaded from the save alongside patrolBeaten.
   const [stripped, setStripped] = useState<ReadonlySet<string>>(() => new Set())
   const strippedRef = useRef<ReadonlySet<string>>(stripped); strippedRef.current = stripped
 
@@ -2741,9 +2809,11 @@ export default function Shimmer3D() {
   const [hasStarter, setHasStarter] = useState(false) // reactive mirror of "party has ≥1 spirit" for HUD
   const [defeated, setDefeated] = useState<Record<string, boolean>>({}) // NPCs cleared from the world (by id)
   const defeatedRef = useRef(defeated); defeatedRef.current = defeated
-  // Moglin-patrol spawner cooldowns — real-time timestamps keyed by LOGICAL zone:x,y (layout-proof),
-  // persisted in the save so a beaten patrol stays gone across sessions.
-  const spawnerCdRef = useRef<Record<string, number>>({})
+  // Moglin patrols beaten THIS WINDOW — { logicalKey: windowIndex }, persisted in the save.
+  // The window clock replaced the old 10-min real-time cooldown (engine/burrows.ts): a beaten
+  // patrol is down for the rest of the current spawn-board window and presses again at the
+  // next deal, same clock as every other living thing.
+  const patrolBeatenRef = useRef<BeatenRecord>({})
   const patrolKeyRef = useRef<string | null>(null)
   const [battle, setBattle] = useState<{ allies: Spirit[]; enemies: Spirit[]; aiTier: AITier; zoneId: string; kind?: 'wild' | 'thistle' | 'sorrel' | 'brack' | 'patrol'; title?: string; collared?: number[] } | null>(null)
   const curBattleRef = useRef(battle); curBattleRef.current = battle
@@ -2793,7 +2863,7 @@ export default function Shimmer3D() {
       activeBeastId: activeBeastIdRef.current,
       tools: toolsToSave(equippedToolsRef.current),
       flags: opts?.replaceFlags ? { ...flagsRef.current } : { ...(prev.flags ?? {}), ...flagsRef.current },
-      spawnerCds: { ...spawnerCdRef.current },
+      patrolBeaten: { ...patrolBeatenRef.current },
       // The one part of the spawn board that cannot be derived: which Home Plot slots you have
       // already stripped. Everything else about the board falls out of the clock.
       strippedSlots: [...strippedRef.current],
@@ -2966,12 +3036,14 @@ export default function Shimmer3D() {
         setBuffHud(activeBuffList(buffsRef.current, Date.now()))
       }
       syncSkillHud()
-      // Loaded OUTSIDE the flags block on purpose — `spawnerCds` sits inside it and so silently
-      // fails to restore on any save that has no flags. Stripped slots are independent of flags.
+      // Loaded OUTSIDE the flags block on purpose — the old `spawnerCds` sat inside it and so
+      // silently failed to restore on any save that had no flags. Both fields are independent
+      // of flags. (Legacy `spawnerCds` timestamps are simply dropped: worst case a patrol
+      // beaten just before deploy is back one window early, once.)
       if (Array.isArray(data?.strippedSlots)) setStripped(new Set(data.strippedSlots as string[]))
+      if (data?.patrolBeaten) patrolBeatenRef.current = data.patrolBeaten as BeatenRecord
       if (data?.flags) {
         flagsRef.current = data.flags
-        if (data.spawnerCds) spawnerCdRef.current = data.spawnerCds as Record<string, number>
         // re-hide any NPC whose defeated-flag is already set in the save (e.g. Thistle, once freed)
         const cleared: Record<string, boolean> = {}
         for (const n of NPCS_3D) if (n.defeatedFlag && data.flags[n.defeatedFlag]) cleared[n.id] = true
@@ -3855,7 +3927,10 @@ export default function Shimmer3D() {
     }
     // A beaten patrol's spawner sleeps on the long clock (win only — a loss leaves it prowling).
     if (bd?.kind === 'patrol' && patrolKeyRef.current) {
-      if (outcome === 'win') spawnerCdRef.current[patrolKeyRef.current] = Date.now() + SPAWNER_COOLDOWN_MS
+      if (outcome === 'win') {
+        const win = currentWindow()
+        patrolBeatenRef.current = markBeaten(pruneBeaten(patrolBeatenRef.current, win), patrolKeyRef.current, win)
+      }
       patrolKeyRef.current = null
     }
     setBattle(null)
@@ -3987,7 +4062,7 @@ export default function Shimmer3D() {
     return l ? `${l.zoneId}:${l.x},${l.y}` : `${zoneIdRef.current}:${sp.tileX},${sp.tileY}`
   }, [])
   const spawnerReady = useCallback((sp: SpawnerPlacement) =>
-    (spawnerCdRef.current[spawnerKeyFor(sp)] ?? 0) <= Date.now(), [spawnerKeyFor])
+    !patrolDown(patrolBeatenRef.current, spawnerKeyFor(sp), currentWindow()), [spawnerKeyFor])
 
   // Lesser-moglin patrol — the grind-ladder fight (Alex 07-22): a moglin handler's pair of
   // collared spirits at party level +1. Trained tier (they coordinate), collared render +
@@ -4010,7 +4085,11 @@ export default function Shimmer3D() {
     setBattle({ allies: fielded, enemies: [mkCaptive(), mkCaptive()], aiTier: 'trained', zoneId: logicalZoneAt(zoneIdRef.current, posRef.current!.x, posRef.current!.z), kind: 'patrol', collared: [0, 1] })
   }, [fieldParty])
 
-  // Arm the patrols: walk into an armed spawner's reach (its hold still standing) → the fight.
+  // Arm the patrols: you meet the BODY on its walk now, not an invisible radius around the
+  // burrow tile — the fight triggers on the patrol's derived position, so you can see it
+  // coming and choose the engagement. The pose is recomputed here independently of the
+  // renderer (both are pure functions of the same clock, so they cannot disagree), and the
+  // loop rebuild per tick is a few hundred ops — cheaper than caching it correctly.
   useEffect(() => {
     const iv = setInterval(() => {
       if (battleRef.current || editRef.current || dialogueRef.current) return
@@ -4018,12 +4097,16 @@ export default function Shimmer3D() {
       const pos = posRef.current
       if (!pos) return
       const now = Date.now()
+      const win = currentWindow(now)
       for (const sp of spawnersRef.current) {
         if (defeatedRef.current[sp.gate]) continue
         const key = spawnerKeyFor(sp)
-        if ((spawnerCdRef.current[key] ?? 0) > now) continue
-        const dx = pos.x - sp.tileX, dz = pos.z - sp.tileY
-        if (dx * dx + dz * dz > 4.4) continue
+        if (patrolDown(patrolBeatenRef.current, key, win)) continue
+        const loop = patrolLoop(sp.tileX, sp.tileY, (x, y) => walkable(gridRef.current, x, y), key)
+        const pose = patrolPose(loop, sp.tileX, sp.tileY, now, win)
+        if (pose.emerge < 1) continue  // still climbing out of the mouth — not fair game yet
+        const dx = pos.x - pose.x, dz = pos.z - pose.y
+        if (dx * dx + dz * dz > 2.6) continue
         startPatrolBattle(sp, key)
         break
       }
@@ -4796,7 +4879,7 @@ export default function Shimmer3D() {
           structures={structures} placing={placing} placeTargetRef={placeTargetRef} structuresRef={structuresViewRef} onNearStation={setNearStation}
           defeatedRef={defeatedRef} defeated={defeated} flagsRef={flagsRef}
           nodes={runtimeNodes}
-          spawners={spawners} spawnerReady={spawnerReady}
+          spawners={spawners} spawnerReady={spawnerReady} spawnerKeyFor={spawnerKeyFor}
           companionColor={(() => { const b = beastsRef.current.find(x => x.id === activeBeastIdRef.current); void companionTick; return b ? (BEAST_COLOR[b.species] ?? '#9fd9c4') : null })()}
           fishing={!!fish} fishBite={!!fish?.bite}
           harvestPop={harvestPop}

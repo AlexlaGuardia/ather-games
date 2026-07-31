@@ -1,12 +1,17 @@
-// Moglin patrol spawners per zone — the grind-ladder to the liberation holds.
+// Moglin incursion BURROWS per zone — the grind-ladder to the liberation holds.
 // Direction (Alex, 2026-07-22): until a hold's boss falls, LESSER MOGLINS patrol its
-// territory on long-cooldown spawners. They pay better XP and (unlike wild spirits,
-// who carry no purse) real MARKS — a moglin has pockets. Worth grinding until your
-// spirits can take the hold; the moment the hold is freed, its patrols stop.
+// territory. They pay better XP and (unlike wild spirits, who carry no purse) real
+// MARKS — a moglin has pockets. Worth grinding until your spirits can take the hold;
+// the moment the hold is freed, its patrols stop.
+//
+// Canon (RULED 2026-07-30, shimmer-geography.md): each placement is a BURROW MOUTH —
+// the collar-culture tunnels in and keeps pressing while the hold stands. The patrol
+// that walks it lives on the spawn-board window clock now (engine/burrows.ts), not a
+// stored cooldown: beaten = down for the rest of the window, back at the next deal.
 //
 // Placed via the play3d map editor (spawner tools) → saved back here by
 // /shimmer/save-map (`spawners` payload) → served live by /shimmer/world-data.
-// A spawner's GATE names the hold that retires it: freeing that boss ends its patrols.
+// A burrow's GATE names the hold that quiets it: freeing that boss ends its patrols.
 
 export interface SpawnerPlacement {
   kind: 'moglin'
@@ -14,8 +19,6 @@ export interface SpawnerPlacement {
   tileX: number
   tileY: number
 }
-
-export const SPAWNER_COOLDOWN_MS = 10 * 60_000   // long clock — a beaten patrol stays gone a while
 
 const THE_OUTFIELDS_SPAWNERS: SpawnerPlacement[] = [
   { kind: 'moglin', gate: 'thistle', tileX: 7, tileY: 16 },
