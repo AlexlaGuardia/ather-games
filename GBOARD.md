@@ -1080,7 +1080,11 @@ the Arcade frame.
 > material for the (80,22) dog-leg fix — delete only once that's settled). Dropdown grouped: Home Template /
 > World Surface / Interiors & Holds / Dev & Legacy (`49188b3`).
 > **Next (stage 3, when Alex calls it):** visiting a friend's plot (needs the canon ruling for the register) ·
-> roster shows "in their garden" instead of the peer just vanishing · wallet/magii could ride the same sync.
+> ✅ roster "⛅ in their garden" SHIPPED (`e03fda8`, + r-home-plot personal-space gap closed) · wallet/magii
+> could ride the same sync. **✅ THE PLOT SPIRIT RING SHIPPED (`d735e4e`):** resting spirits wander the plot
+> as element-glow orbs (canon 07-30 ruling made real — "the ring the player FEELS"), greet (E) opens the
+> party panel ON that spirit → the existing swap surface = the no-bank answer. Closes the old "bank play3d
+> UI" open item the canon way. Burrow wander machinery generalized (WanderDials), burrows proven unchanged.
 > **Files:** `play3d/RemotePlayers.tsx` (hideAt) · `play3d/Shimmer3D.tsx` (plotHide, cloud pull/push) ·
 > `lib/cloud-sync.ts` + `app/api/saves/route.ts` (new) · `lib/accounts/db.ts` · `dev/editors/MapEditor.tsx`.
 
