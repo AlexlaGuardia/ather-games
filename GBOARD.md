@@ -1016,6 +1016,41 @@ the Arcade frame.
 > **Files:** `engine/burrows.ts` + `.test.ts` (new) · `world/spawn-placements.ts` (cooldown const gone) ·
 > `play3d/Shimmer3D.tsx` (`BurrowMarkers`/`BurrowWalker`, arming on the body, `patrolBeaten` save field).
 
+## ⛅ Shimmer — THE WORLD PIVOT: regions as standalone maps (phase 1 SHIPPED 2026-07-31, jin-cc) · *Last touched 2026-07-31*
+> **Alex's call, and it retires the stitched continent:** *"we kill the bunch of plots… each map can have
+> its own spawn rate and available resource list… i can take my time and edit them."* Every stitching bug
+> of the last two days (bake-back, corridor reverts, the (80,22) dog-leg, fingerprint machinery, the 72%
+> void reveal) was a cost of the architecture this deletes.
+>
+> **Decisions (locked 2026-07-31, don't relitigate):**
+> - Seven regions, each ONE map on a cloud canvas: **Home Plot + Moonwell Glade at 150×150; Spirit
+>   Meadows, Twilight Thicket, Mana Springs, Voranyx Caverns, The Outfields at 400×400.** Authoring =
+>   subtraction (canvas is solid cloud tile 34, carve land into it).
+> - **Routes DIE**, folded into regions — minimap labels mark them later. **Gloview → Mana Springs.**
+>   Threshold → Outfields. Mycelial + Wooded Trail → Twilight Thicket. Spore-hollow + Voranyx Deep =
+>   Voranyx Caverns. **Travel = region transitions with a loading screen** (phase B).
+> - Regions are **JSON, not TS literals** (400×400 literal ≈ 600KB source): RLE rows → 8-17KB/region,
+>   plus the region's OWN nodes/burrows/warps/**spawn-dial slot** ("each map owns its resource list",
+>   literally) and a `sources` transplant table (= cutover save-migration table + label anchors).
+> - **WIP ids `r-<id>`** so regions live alongside the live world until cutover (5 of 7 canonical ids
+>   collide with legacy zones). zones.ts untouched — createZone's surgery targets the file's LAST `]`.
+>
+> **Shipped (`c1e77e6`):** transplant script (re-runnable; refuses `sculpted` regions) · loader +
+> all-zones aggregate · editors list regions FIRST ("sculpt these") · **regions never read the
+> IndexedDB cache** (the stale-clobber landmine — server truth only) · save-map intercepts region
+> grid/nodes/spawners/warps into the JSON (stamps `sculpted`) · play3d walks any region via
+> `?zone=r-<id>` with spawn board + burrows live. Canon 5 CLEAN, all oracles green, legacy world
+> untouched and still primary.
+> **Next:** ① Alex opens `r-mana-springs` in the 2D editor — first sculpt session, ALSO the 400×400
+> editor-canvas perf check (12,800px² canvas; dirty-rect optimization if it crawls). ② Phase B: region
+> exits + the loading-screen transition (fade → region title splash → spawn). ③ Per-map spawn dials
+> read from `region.spawn`. ④ Cutover: drop `r-` prefix, migrate saves via `sources`, delete stitcher +
+> legacy zones + world mode. ⑤ NPC/pickup/chest/structure transplant at cutover (kept keyed to legacy
+> ids until then).
+> **Files:** `world/region-codec.ts` + `world/region-maps.ts` + `world/region-maps/*.json` +
+> `world/all-zones.ts` (new) · `scripts/build-region-canvases.mts` (new) · `dev/editors/MapEditor.tsx` ·
+> `play3d/world-adapter.ts` · `save-map/route.ts`.
+
 ## 🏡 Shimmer — PER-KEEPER HOME PLOT (stage 1 SHIPPED 2026-07-31, jin-cc) · *Last touched 2026-07-31*
 > **Alex: "each player gets their own plot" — the plot is inherently different from the world zones.**
 > **The load-bearing realization: it already mostly IS per-keeper.** Saves are per-browser, so strips/crops/
