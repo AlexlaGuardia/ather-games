@@ -1,4 +1,4 @@
-import { readFile, writeFile, readdir, mkdir, unlink } from 'fs/promises'
+import { readFile, writeFile, readdir, mkdir, unlink, rename } from 'fs/promises'
 import { join, dirname, relative } from 'path'
 
 const BACKUP_DIR = join(process.cwd(), '.shimmer-backups')
@@ -32,8 +32,16 @@ async function backupFile(filePath: string): Promise<void> {
   }
 }
 
-/** Write file with automatic pre-write backup */
+/** Write file with automatic pre-write backup.
+ *
+ *  ATOMIC on purpose (tmp + rename): a plain writeFile truncates-then-streams, so two
+ *  overlapping saves interleave and the file ends up as the shorter write plus the longer
+ *  write's tail — exactly how spirit-meadow.json corrupted on 07-31 ("valid JSON + extra
+ *  data", which then 400'd every later save against it). rename() is atomic on the same
+ *  filesystem, so concurrent saves degrade to last-writer-wins instead of corruption. */
 export async function safeWriteFile(filePath: string, content: string, _encoding?: string): Promise<void> {
   await backupFile(filePath)
-  await writeFile(filePath, content, 'utf-8')
+  const tmp = `${filePath}.${process.pid}.${Date.now()}.tmp`
+  await writeFile(tmp, content, 'utf-8')
+  await rename(tmp, filePath)
 }
