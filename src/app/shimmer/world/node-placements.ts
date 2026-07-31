@@ -115,15 +115,8 @@ const MANA_SPRINGS_NODES: NodePlacement[] = [
 const SPIRIT_MEADOW_NODES: NodePlacement[] = [
   { type: 'goldwood' as NodeType, tileX: 8, tileY: 2 },
   { type: 'goldwood' as NodeType, tileX: 5, tileY: 10 },
-  { type: 'goldwood' as NodeType, tileX: 24, tileY: 14 },
-  { type: 'goldwood' as NodeType, tileX: 24, tileY: 16 },
   { type: 'shimmeroak' as NodeType, tileX: 9, tileY: 3 },
   { type: 'shimmeroak' as NodeType, tileX: 8, tileY: 9 },
-  { type: 'small_pond' as NodeType, tileX: 27, tileY: 7 },
-  { type: 'small_pond' as NodeType, tileX: 27, tileY: 9 },
-  { type: 'small_pond' as NodeType, tileX: 22, tileY: 10 },
-  // Round-out (cozy cluster): + prospecting so all 3 gathering skills live here. Placed beside the
-  // trees (harvest-stand tiles, walkable). NOTE: not eyeballed in-zone — Alex verify.
   { type: 'raw_mana_node' as NodeType, tileX: 9, tileY: 9 },
   { type: 'raw_mana_node' as NodeType, tileX: 6, tileY: 10 },
 ]
