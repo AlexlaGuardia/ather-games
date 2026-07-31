@@ -79,6 +79,15 @@ export function regionNodesFor(zoneId: string): NodePlacement[] | null {
   return REGION_FILES[id].nodes.map(n => ({ type: n.type as NodeType, tileX: n.tileX, tileY: n.tileY }))
 }
 
+/** A region zone's spawn dials (abundance/richness/resets), or undefined when absent /
+ *  not a region — undefined means "engine defaults", i.e. exactly the legacy behavior. */
+export function regionSpawnConfig(zoneId: string): { abundance?: number; richness?: number; resets?: number } | undefined {
+  const id = regionIdOf(zoneId)
+  if (!id) return undefined
+  const s = REGION_FILES[id].spawn
+  return s && Object.keys(s).length ? s : undefined
+}
+
 /** A region zone's burrows, or null for non-region zones. */
 export function regionSpawnersFor(zoneId: string): SpawnerPlacement[] | null {
   const id = regionIdOf(zoneId)

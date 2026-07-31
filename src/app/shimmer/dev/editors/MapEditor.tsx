@@ -7,7 +7,7 @@ import { TileDef, Renderer } from '../../engine/renderer'
 import { ITEMS, ITEM_ICONS, ITEM_PALETTE, SEED_PALETTES, NODE_SPRITES, NODE_TYPE_LABELS, NODE_PALETTES } from '../../sprites/items'
 import { ZONE_NODES } from '../../world/node-placements'
 import { ZONE_SPAWNERS } from '../../world/spawn-placements'
-import { zoneBand, TIER_WEIGHTS, NOTHING_WEIGHT } from '../../engine/spawn-board'
+import { zoneBand, bandFill, zoneResets, type ZoneSpawnConfig } from '../../engine/spawn-board'
 import { SURFACE_ZONES } from '../../world/garden-world'
 import { NODE_DEFS, type NodeType } from '../../world/resources'
 import { ZONE_PICKUPS } from '../../world/static-pickups'
@@ -166,7 +166,7 @@ const BURROW_COLOR: Record<BurrowGate, string> = Object.fromEntries(BURROW_GATES
  * paint — in the 2D editor that means it reflects unsaved edits too, which play3d's cannot.
  * `ather_soil` is excluded: soil is a static planting target the board never rolls.
  */
-function EditorBandReadout({ zoneId, placements }: { zoneId: string; placements: Array<{ nodeType: string, x: number, y: number }> }) {
+function EditorBandReadout({ zoneId, placements, dials }: { zoneId: string; placements: Array<{ nodeType: string, x: number, y: number }>; dials?: ZoneSpawnConfig }) {
   const rows = useMemo(() => {
     const src = placements
       .filter(p => p.nodeType !== 'ather_soil' && NODE_DEFS[p.nodeType as NodeType])
@@ -175,11 +175,10 @@ function EditorBandReadout({ zoneId, placements }: { zoneId: string; placements:
     return skills.map(skill => {
       const band = zoneBand(src, skill)
       const slots = src.filter(p => NODE_DEFS[p.type].skill === skill).length
-      const weights = band.map((_, i) => TIER_WEIGHTS[Math.min(i, TIER_WEIGHTS.length - 1)])
-      const filled = weights.reduce((a, b) => a + b, 0)
-      return { skill, band, slots, fill: filled / (filled + NOTHING_WEIGHT) }
+      // bandFill is the ENGINE's math (weights + dials) — the display cannot drift from the roll.
+      return { skill, band, slots, fill: bandFill(band, dials) }
     })
-  }, [placements])
+  }, [placements, dials])
   if (!rows.length) return null
   // The Home Plot never re-deals (strip-once, canon starter nodes) — a band there would
   // describe a roll that never happens.
@@ -1034,6 +1033,8 @@ export default function MapEditor() {
   // Region optimistic-concurrency: the rev this editor loaded; sent with region saves so a
   // stale tab 409s instead of silently overwriting fresh sculpt work (the 07-31 race).
   const regionRevRef = useRef(0)
+  // Per-map spawn dials (region maps only) — saved into the region JSON's `spawn` block.
+  const [spawnDials, setSpawnDials] = useState<ZoneSpawnConfig>({})
   const [loadStatus, setLoadStatus] = useState<string>('')
   const [rotation, setRotation] = useSessionState('map:rotation', 0)
   const [activeMap, setActiveMap] = useSessionState('map:activeMap', 'garden')
@@ -1811,6 +1812,7 @@ export default function MapEditor() {
     // But "server truth" must mean the JSON on DISK, not the copy baked into this build:
     // the baked grid goes stale on the first sculpt save, and loading it resurrects every
     // edit made since the last deploy (the first sculpt session hit exactly that). ──
+    if (!regionIdOf(mapId)) setSpawnDials({})
     if (regionIdOf(mapId)) {
       try {
         const res = await fetch(`/shimmer/save-map?type=map&map=${mapId}`, { cache: 'no-store' })
@@ -1821,8 +1823,10 @@ export default function MapEditor() {
             spawners?: { gate: BurrowGate; tileX: number; tileY: number }[]
             warps?: { fromX: number; fromY: number; toZone: string; toX: number; toY: number; direction?: string; requiredFlag?: string }[]
             rev?: number
+            spawn?: ZoneSpawnConfig
           }
           regionRevRef.current = data.rev ?? 0
+          setSpawnDials(data.spawn ?? {})
           if (Array.isArray(data.grid) && data.grid.length) setGrid(data.grid.map(r => [...r]))
           if (Array.isArray(data.nodes)) setNodePlacements(data.nodes.map(n => ({ nodeType: n.type, x: n.tileX, y: n.tileY })))
           if (Array.isArray(data.spawners)) setSpawnerPlacements(data.spawners.map(s => ({ gate: s.gate, x: s.tileX, y: s.tileY })))
@@ -1971,7 +1975,7 @@ export default function MapEditor() {
           playerStart: { tileX: 14, tileY: 8 },
           mapId: activeMap,
           nodes: nodePlacements,
-          ...(regionIdOf(activeMap) ? { regionRev: regionRevRef.current } : {}),
+          ...(regionIdOf(activeMap) ? { regionRev: regionRevRef.current, spawn: spawnDials } : {}),
           // Only send burrows when there's something to write (or a deletion to persist) —
           // an unconditional empty array would mint an empty const per zone in spawn-placements.ts.
           ...(spawnerPlacements.length > 0 || (ZONE_SPAWNERS[activeMap] ?? []).length > 0 || regionIdOf(activeMap)
@@ -2012,7 +2016,7 @@ export default function MapEditor() {
     setTimeout(() => setSaveStatus('idle'), 4000)
     // spawnerPlacements + item/structure/furniture/chest states were MISSING from this dep
     // list — the callback captured stale copies, so those layers could save old state.
-  }, [tiles, grid, activeMap, nodePlacements, warpPlacements, intGrid, spawnerPlacements, itemPlacements, placedStructures, placedFurniture, placedZoneChests])
+  }, [tiles, grid, activeMap, nodePlacements, warpPlacements, intGrid, spawnerPlacements, itemPlacements, placedStructures, placedFurniture, placedZoneChests, spawnDials])
 
   const exportTiles = useCallback(() => {
     const lines: string[] = []
@@ -2620,7 +2624,56 @@ export default function MapEditor() {
       </div>
 
       {/* Band readout — the zone's rollable rarity ceiling, live as you paint */}
-      <EditorBandReadout zoneId={activeMap} placements={nodePlacements} />
+      <EditorBandReadout zoneId={activeMap} placements={nodePlacements} dials={regionIdOf(activeMap) ? spawnDials : undefined} />
+
+      {/* Per-map spawn dials — region maps only (the Home Plot is static, dials would lie).
+          Sits under the band readout on purpose: the fill % above moves as you dial. */}
+      {regionIdOf(activeMap) && activeMap !== 'r-home-plot' && (
+        <div className="mb-3 px-2 py-1.5 rounded border border-orange-300/10 bg-white/[0.02] space-y-1.5">
+          <p className="text-[9px] font-mono text-orange-300/70 uppercase tracking-wider">Spawn Dials · this map <span className="normal-case text-text-faint/60">(saved with the region)</span></p>
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] font-mono text-text-faint w-20">abundance</span>
+            <select
+              value={spawnDials.abundance ?? ''}
+              onChange={e => setSpawnDials(prev => { const v = e.target.value; const n = { ...prev }; if (v === '') delete n.abundance; else n.abundance = Number(v); return n })}
+              className="bg-[#1a1a2e] border border-white/10 rounded px-1.5 py-0.5 text-[10px] text-white flex-1"
+            >
+              <option value="">default (~80%, varies by band)</option>
+              {[0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1].map(v => (
+                <option key={v} value={v}>{Math.round(v * 100)}% of windows filled</option>
+              ))}
+            </select>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] font-mono text-text-faint w-20">richness</span>
+            <select
+              value={spawnDials.richness ?? ''}
+              onChange={e => setSpawnDials(prev => { const v = e.target.value; const n = { ...prev }; if (v === '') delete n.richness; else n.richness = Number(v); return n })}
+              className="bg-[#1a1a2e] border border-white/10 rounded px-1.5 py-0.5 text-[10px] text-white flex-1"
+            >
+              <option value="">standard curve</option>
+              <option value="0.5">humble — rare tiers scarce</option>
+              <option value="0.75">modest</option>
+              <option value="1.5">rich — rare tiers common</option>
+              <option value="2">lavish</option>
+            </select>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] font-mono text-text-faint w-20">re-deals</span>
+            <select
+              value={spawnDials.resets ?? ''}
+              onChange={e => setSpawnDials(prev => { const v = e.target.value; const n = { ...prev }; if (v === '') delete n.resets; else n.resets = Number(v); return n })}
+              className="bg-[#1a1a2e] border border-white/10 rounded px-1.5 py-0.5 text-[10px] text-white flex-1"
+            >
+              <option value="">default — 2/day (every 32 min)</option>
+              <option value="1">1/day — stately (64 min)</option>
+              <option value="4">4/day — lively (16 min)</option>
+              <option value="8">8/day — feast or famine (8 min)</option>
+            </select>
+          </div>
+          <p className="text-[9px] font-mono text-text-faint/60">burrow patrols stay on the global clock by design · save to apply</p>
+        </div>
+      )}
 
       {/* Brush Selector */}
       <div className="mb-4">

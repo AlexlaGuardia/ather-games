@@ -13,6 +13,7 @@
 import {
   dealZone, currentWindow, windowAt, nodeAlpha, tileKey, msUntilReset, entrySlots, zoneBand, slotKey,
   WINDOW_MS, FADE_OUT_MS, GROW_IN_MS, RESETS_PER_DAY, WORLD_SEED, isBoardPinned,
+  bandFill, bandWeights, zoneResets, zoneWindow, msUntilZoneReset,
   type DealtNode,
 } from './spawn-board'
 import { CYCLE_MS, dayProgress, getDisplayTime } from './day-cycle'
@@ -318,6 +319,75 @@ console.log('\nthe clock the HUD reads')
   check('...and a leaving node is not born already faded out',
     nodeAlpha({ leaving: true, arriving: false }, t, pinned) === 1)
   check('an unpinned window is just the live one', windowAt(t, null).index === currentWindow(t).index)
+}
+
+console.log('\nper-map spawn dials (ZoneSpawnConfig)')
+{
+  // A dial-less config must be BYTE-IDENTICAL to the legacy roll — the dials ship into a
+  // live world, and "no dials set" silently changing any zone's board would be a regression
+  // wearing a feature's name.
+  const [zid, nodes] = WILD[0]
+  for (let w = 0; w < 50; w++) {
+    const a = dealZone(zid, nodes, w)
+    const b = dealZone(zid, nodes, w, WORLD_SEED, undefined, {})
+    if (JSON.stringify(a) !== JSON.stringify(b)) { check('empty config === legacy deal', false, `window ${w}`); break }
+    if (w === 49) check('empty config === legacy deal (50 windows)', true)
+  }
+
+  // Abundance is LITERAL: the dialed number is the measured fill share, regardless of band
+  // size — including a single-tier band, where the legacy fill is stuck at 40/60=67%.
+  const oneTier = [{ type: 'goldwood' as const, tileX: 1, tileY: 1 }, { type: 'goldwood' as const, tileX: 5, tileY: 5 },
+    { type: 'goldwood' as const, tileX: 9, tileY: 2 }, { type: 'goldwood' as const, tileX: 3, tileY: 8 }]
+  for (const target of [0.3, 0.6, 0.9]) {
+    let filled = 0, slots = 0
+    for (let w = 0; w < 600; w++) {
+      // raw fill, guarantee excluded: measure the ROLL by using a 2nd+ slot's presence
+      const dealt = dealZone('dial-zone', oneTier, w, WORLD_SEED, undefined, { abundance: target })
+      filled += dealt.length; slots += oneTier.length
+    }
+    const measured = filled / slots
+    // entry guarantee props one slot up in empty windows, biasing small targets upward — allow for it
+    check(`abundance ${target} measures ${measured.toFixed(2)}`, Math.abs(measured - target) < 0.08 + (target < 0.4 ? 0.06 : 0))
+  }
+  check('abundance is clamped, not trusted', bandFill(['goldwood'] as never, { abundance: 9 }) <= 1 && bandFill(['goldwood'] as never, { abundance: -1 }) > 0)
+
+  // Richness tilts the dealt tiers monotonically; band membership and entry tier are untouched.
+  const richZone = WILD.map(([z, ns]) => [z, ns] as const).find(([, ns]) => new Set(ns.map(n => skillOf(n.type))).size >= 1)!
+  const meanTier = (r: number) => {
+    let sum = 0, n = 0
+    for (let w = 0; w < 300; w++) {
+      for (const d of dealZone(richZone[0], richZone[1], w, WORLD_SEED, undefined, { richness: r })) {
+        const band = zoneBand(richZone[1], skillOf(d.type))
+        sum += band.indexOf(d.type as never); n++
+      }
+    }
+    return sum / n
+  }
+  const lo = meanTier(0.5), mid = meanTier(1), hi = meanTier(2)
+  check(`richness tilts tiers up (0.5:${lo.toFixed(2)} < 1:${mid.toFixed(2)} < 2:${hi.toFixed(2)})`, lo <= mid && mid < hi)
+  check('richness 1 === legacy weights', JSON.stringify(bandWeights(['goldwood', 'shimmeroak'] as never)) === JSON.stringify(bandWeights(['goldwood', 'shimmeroak'] as never, { richness: 1 })))
+
+  // Entry guarantee survives the stingiest dial: a level-1 player always has something to cash.
+  let guaranteed = true
+  for (let w = 0; w < 300 && guaranteed; w++) {
+    const dealt = dealZone('dial-zone', oneTier, w, WORLD_SEED, undefined, { abundance: 0.05 })
+    if (dealt.length === 0) guaranteed = false
+  }
+  check('entry guarantee holds at abundance 0.05', guaranteed)
+
+  // Per-map cadence: default resets === the global window exactly (pins included elsewhere);
+  // resets 4 halves the window and its boundaries nest inside the global ones.
+  const t = 100 * WINDOW_MS + 12345
+  check('zoneResets validates (3 → default)', zoneResets({ resets: 3 }) === RESETS_PER_DAY && zoneResets({ resets: 4 }) === 4)
+  const g = currentWindow(t), z2 = zoneWindow(t, { resets: 2 }), z4 = zoneWindow(t, { resets: 4 })
+  check('resets 2 === the global window', z2.index === g.index && z2.startMs === g.startMs && z2.endMs === g.endMs)
+  check('resets 4 window is half as long', (z4.endMs - z4.startMs) * 2 === g.endMs - g.startMs)
+  check('a 4x boundary nests in the 2x window', z4.startMs >= g.startMs && z4.endMs <= g.endMs)
+  check('msUntilZoneReset agrees with the window', msUntilZoneReset(t, { resets: 4 }) === z4.endMs - t)
+  // A map on 4x re-deals differently across a HALF-global window (that is the point of the dial).
+  const w4a = zoneWindow(g.startMs + 1, { resets: 4 }).index
+  const w4b = zoneWindow(g.startMs + WINDOW_MS / 2 + 1, { resets: 4 }).index
+  check('4x turns over mid-global-window', w4b === w4a + 1)
 }
 
 console.log(`\n${failures === 0 ? 'PASS' : `FAIL — ${failures} failing`}\n`)

@@ -156,6 +156,7 @@ export async function GET(req: NextRequest) {
           nodes: region.nodes, spawners: region.spawners, warps: region.warps,
           playerStart: region.playerStart,
           rev: (region as unknown as { rev?: number }).rev ?? 0,
+          spawn: (region as unknown as { spawn?: Record<string, number> }).spawn ?? {},
         }, { headers: { 'cache-control': 'no-store' } })
       } catch {
         return NextResponse.json({ error: `Unknown region map: ${mapId}` }, { status: 404 })
@@ -359,6 +360,21 @@ export async function POST(req: NextRequest) {
           delete body.spawners
           touched = true
           saved.push('region-spawners')
+        }
+        if (body.spawn && typeof body.spawn === 'object' && !Array.isArray(body.spawn)) {
+          const s = body.spawn as { abundance?: unknown; richness?: unknown; resets?: unknown }
+          const out: Record<string, number> = {}
+          if (s.abundance !== undefined) out.abundance = safeNum(s.abundance, 'spawn.abundance', 0.05, 1)
+          if (s.richness !== undefined) out.richness = safeNum(s.richness, 'spawn.richness', 0.25, 4)
+          if (s.resets !== undefined) {
+            const r = safeInt(s.resets, 'spawn.resets', 1, 8)
+            if (![1, 2, 4, 8].includes(r)) throw new BadRequest('spawn.resets must be 1, 2, 4 or 8')
+            out.resets = r
+          }
+          region.spawn = out
+          delete body.spawn
+          touched = true
+          saved.push('region-spawn')
         }
         if (body.warps && Array.isArray(body.warps)) {
           region.warps = (body.warps as unknown[]).map((w, i) => ({

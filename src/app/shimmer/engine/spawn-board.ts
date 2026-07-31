@@ -212,10 +212,70 @@ function bandFor(placements: NodePlacement[], skill: SkillId): NodeType[] {
   return [...tiers.entries()].sort((a, b) => a[1] - b[1] || (a[0] < b[0] ? -1 : 1)).map(([t]) => t)
 }
 
+// ── Per-map spawn dials (the world pivot: "each map can have its own spawn rate") ───────
+// Lives in each region file's `spawn` block; absent/empty = exactly today's behavior.
+//   abundance — LITERAL fill share per slot per window (0.05–1). The legacy fill secretly
+//               varies with band size (one-tier zone: 40/(40+20)=67%; full band: 80%); when
+//               this dial is set the engine solves the nothing-weight per band so the number
+//               you dialed is the number you get, regardless of what the zone authors.
+//   richness  — geometric tier tilt (0.25–4): weight[i] × richness^i. >1 favors rare tiers,
+//               <1 keeps a starter map humble. The entry-tier guarantee is untouched.
+//   resets    — re-deals per day for THIS map (1|2|4|8, all divide the 64-min day cleanly:
+//               64/32/16/8 real minutes). Burrows stay on the global clock on purpose —
+//               patrol pressure should not speed up because berries do.
+export interface ZoneSpawnConfig { abundance?: number; richness?: number; resets?: number }
+
+const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v))
+
+/** The tilted weights + nothing-weight a config produces for a band. ONE source of truth —
+ *  the editor's band readout imports this, so the display can never drift from the roll. */
+export function bandWeights(band: NodeType[], cfg?: ZoneSpawnConfig): { weights: number[]; nothing: number } {
+  const r = clamp(cfg?.richness ?? 1, 0.25, 4)
+  const weights = band.map((_, i) => TIER_WEIGHTS[Math.min(i, TIER_WEIGHTS.length - 1)] * Math.pow(r, i))
+  const W = weights.reduce((a, b) => a + b, 0)
+  const nothing = cfg?.abundance !== undefined
+    ? W * (1 - clamp(cfg.abundance, 0.05, 1)) / clamp(cfg.abundance, 0.05, 1)
+    : NOTHING_WEIGHT
+  return { weights, nothing }
+}
+
+/** The share of windows a slot of this band comes up filled under a config. */
+export function bandFill(band: NodeType[], cfg?: ZoneSpawnConfig): number {
+  const { weights, nothing } = bandWeights(band, cfg)
+  const W = weights.reduce((a, b) => a + b, 0)
+  return W / (W + nothing)
+}
+
+/** Re-deals per day for a zone under a config (validated; default = the global cadence). */
+export function zoneResets(cfg?: ZoneSpawnConfig): number {
+  return cfg?.resets !== undefined && [1, 2, 4, 8].includes(cfg.resets) ? cfg.resets : RESETS_PER_DAY
+}
+
+/** This zone's deal window NOW — currentWindow generalized to a per-map cadence. A zone on
+ *  the default cadence gets byte-identical windows to currentWindow, pins included. */
+export function zoneWindow(nowMs: number, cfg?: ZoneSpawnConfig): DealWindow {
+  const wm = CYCLE_MS / zoneResets(cfg)
+  if (pinnedWindow !== null) {
+    const live = Math.floor(nowMs / wm)
+    return { index: pinnedWindow, startMs: live * wm, endMs: (live + 1) * wm }
+  }
+  if (isTimePinned) {
+    const idx = Math.floor(dayProgress(nowMs) * zoneResets(cfg))
+    return { index: idx, startMs: idx * wm, endMs: (idx + 1) * wm }
+  }
+  const index = Math.floor(nowMs / wm)
+  return { index, startMs: index * wm, endMs: (index + 1) * wm }
+}
+
+/** Real ms until this zone's next re-deal. */
+export function msUntilZoneReset(nowMs: number, cfg?: ZoneSpawnConfig): number {
+  return zoneWindow(nowMs, cfg).endMs - nowMs
+}
+
 /** Roll one slot: which tier from the band fills it, or null for "nothing this window". */
-function rollSlot(band: NodeType[], roll: number): NodeType | null {
-  const weights = band.map((_, i) => TIER_WEIGHTS[Math.min(i, TIER_WEIGHTS.length - 1)])
-  const total = weights.reduce((a, b) => a + b, 0) + NOTHING_WEIGHT
+function rollSlot(band: NodeType[], roll: number, cfg?: ZoneSpawnConfig): NodeType | null {
+  const { weights, nothing } = bandWeights(band, cfg)
+  const total = weights.reduce((a, b) => a + b, 0) + nothing
   let acc = roll * total
   for (let i = 0; i < band.length; i++) {
     acc -= weights[i]
@@ -225,13 +285,13 @@ function rollSlot(band: NodeType[], roll: number): NodeType | null {
 }
 
 /** The raw roll for one window — no neighbour comparison, no guarantee pass. Internal. */
-function rawDeal(zoneId: string, placements: NodePlacement[], windowIndex: number, seed: number): NodePlacement[] {
+function rawDeal(zoneId: string, placements: NodePlacement[], windowIndex: number, seed: number, cfg?: ZoneSpawnConfig): NodePlacement[] {
   // The Home Plot does not re-deal at all: what is standing there is what you have not stripped yet.
   if (STATIC_ZONES.has(zoneId)) return placements.map(p => ({ ...p }))
   const out: NodePlacement[] = []
   for (const p of placements) {
     if (STATIC_TYPES.has(p.type)) { out.push({ ...p }); continue }
-    const filled = rollSlot(bandFor(placements, NODE_DEFS[p.type].skill), hash01(rollKey(seed, windowIndex, zoneId, p)))
+    const filled = rollSlot(bandFor(placements, NODE_DEFS[p.type].skill), hash01(rollKey(seed, windowIndex, zoneId, p)), cfg)
     // The slot keeps its authored identity (tile + skill); only WHAT grew there this window changes.
     if (filled) out.push({ ...p, type: filled })
   }
@@ -300,16 +360,16 @@ export function zoneBand(placements: NodePlacement[], skill: SkillId): NodeType[
  */
 export function dealZone(
   zoneId: string, placements: NodePlacement[], windowIndex: number, seed: number = WORLD_SEED,
-  strippedKeys?: ReadonlySet<string>,
+  strippedKeys?: ReadonlySet<string>, cfg?: ZoneSpawnConfig,
 ): DealtNode[] {
   // Zone-qualified, so a strip in the Home Plot can never take out a wild slot that happens to sit
   // at the same skill and tile — in world mode every zone is dealt against the same strip set.
   const live = strippedKeys?.size
     ? placements.filter(p => !strippedKeys.has(slotKey(zoneId, p)))
     : placements
-  const now = rawDeal(zoneId, live, windowIndex, seed)
-  const prev = new Set(rawDeal(zoneId, live, windowIndex - 1, seed).map(tileKey))
-  const next = new Set(rawDeal(zoneId, live, windowIndex + 1, seed).map(tileKey))
+  const now = rawDeal(zoneId, live, windowIndex, seed, cfg)
+  const prev = new Set(rawDeal(zoneId, live, windowIndex - 1, seed, cfg).map(tileKey))
+  const next = new Set(rawDeal(zoneId, live, windowIndex + 1, seed, cfg).map(tileKey))
   return now.map(p => ({
     ...p,
     key: slotKey(zoneId, p),

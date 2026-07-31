@@ -8,7 +8,7 @@ import { NPCS_3D, type NPC3D } from './npcs3d'
 import { ZONE_NODES, type NodePlacement } from '../world/node-placements'
 import { dealZone, type DealtNode } from '../engine/spawn-board'
 import { ZONE_SPAWNERS, type SpawnerPlacement } from '../world/spawn-placements'
-import { regionNodesFor, regionSpawnersFor } from '../world/region-maps'
+import { regionNodesFor, regionSpawnersFor, regionSpawnConfig } from '../world/region-maps'
 import type { PlacedStruct } from './StationMenus'
 
 const toWorld = (zoneId: string, x: number, y: number) => getGardenWorld().toWorld(zoneId, x, y)
@@ -62,7 +62,7 @@ export function nodePlacementsFor(zoneId: string): NodePlacement[] {
  * because edit mode renders the full authored layer and never looks at the board at all.
  */
 export function dealtNodesFor(zoneId: string, windowIndex: number, stripped?: ReadonlySet<string>): DealtNode[] {
-  if (zoneId !== WORLD_ZONE_ID) return dealZone(zoneId, regionNodesFor(zoneId) ?? ZONE_NODES[zoneId] ?? [], windowIndex, undefined, stripped)
+  if (zoneId !== WORLD_ZONE_ID) return dealZone(zoneId, regionNodesFor(zoneId) ?? ZONE_NODES[zoneId] ?? [], windowIndex, undefined, stripped, regionSpawnConfig(zoneId))
   const out: DealtNode[] = []
   for (const [zid, nodes] of Object.entries(ZONE_NODES)) {
     if (!isStitched(zid)) continue

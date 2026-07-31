@@ -16,7 +16,7 @@ import { ALL_ZONES } from '../world/all-zones'
 import { getHeightGrid } from '../world/heightmaps'
 import { GardenAtmosphere } from '../world/atmosphere'
 import { dayProgress, sunElevation, sunAzimuth, daylight, getPhase, getDisplayTime, CYCLE_MS, isTimePinned } from '../engine/day-cycle'
-import { currentWindow, nodeAlpha, msUntilReset, isBoardPinned, isFadeTest, fadeTestAlpha, slotKey, zoneBand, TIER_WEIGHTS, NOTHING_WEIGHT, FADE_OUT_MS, type DealtNode } from '../engine/spawn-board'
+import { currentWindow, nodeAlpha, zoneWindow, msUntilZoneReset, isBoardPinned, isFadeTest, fadeTestAlpha, slotKey, zoneBand, TIER_WEIGHTS, NOTHING_WEIGHT, FADE_OUT_MS, type DealtNode } from '../engine/spawn-board'
 import { FloraTree, FloraDressing } from '../world/flora'
 import { StationProp, GhostProp } from '../world/prop-models'
 import { RemotePlayers, useRoster } from './RemotePlayers'
@@ -73,7 +73,7 @@ import { WORLD_ZONE_ID, registerGardenWorld, getGardenWorld, isStitched, fromWor
 import { allNpcs, nodePlacementsFor, dealtNodesFor, spawnerPlacementsFor, logicalZoneAt, structuresView, logicalStruct } from './world-adapter'
 import { ZONE_SPAWNERS, type SpawnerPlacement } from '../world/spawn-placements'
 import { patrolDown, markBeaten, pruneBeaten, patrolLoop, patrolPose, type BeatenRecord, type PatrolLoop } from '../engine/burrows'
-import { regionIdOf, REGION_FILES } from '../world/region-maps'
+import { regionIdOf, REGION_FILES, regionSpawnConfig } from '../world/region-maps'
 
 // The composed continent registers as a zone before any getZone/save-load runs.
 registerGardenWorld()
@@ -565,7 +565,7 @@ const isHomeSlot = (n: ResourceNode) => !!n.slotKey?.startsWith(`${HOME_PLOT_ZON
  * A single linear opacity ramp read as a bug — a tree sitting half-transparent for two minutes
  * looks like a rendering fault, not like the world breathing.
  */
-function NodeFade({ node, children }: { node: ResourceNode; children: React.ReactNode }) {
+function NodeFade({ node, zoneId, children }: { node: ResourceNode; zoneId: string; children: React.ReactNode }) {
   const ref = useRef<THREE.Group>(null)
   const applied = useRef(-1)
   useFrame(() => {
@@ -574,7 +574,8 @@ function NodeFade({ node, children }: { node: ResourceNode; children: React.Reac
     // per frame, no traversal, no allocation — cheap enough that wrapping every node is free and
     // the call site does not need a conditional wrapper.
     if (!g || (!isFadeTest && !node.leaving && !node.arriving)) return
-    const a = isFadeTest ? fadeTestAlpha() : nodeAlpha(node, Date.now())
+    const now = Date.now()
+    const a = isFadeTest ? fadeTestAlpha() : nodeAlpha(node, now, zoneWindow(now, regionSpawnConfig(zoneId)))
     if (a === applied.current) return
     applied.current = a
     const dissolve = a < 0.34 ? a / 0.34 : 1
@@ -600,7 +601,7 @@ function NodeFade({ node, children }: { node: ResourceNode; children: React.Reac
   return <group ref={ref}>{children}</group>
 }
 
-function NodeMarkers({ nodes, heights, editing, channel }: { nodes: ResourceNode[]; heights: number[][]; editing: boolean; channel?: { nodeId: string; hp: number } | null }) {
+function NodeMarkers({ nodes, heights, editing, channel, zoneId }: { nodes: ResourceNode[]; heights: number[][]; editing: boolean; channel?: { nodeId: string; hp: number } | null; zoneId: string }) {
   return (
     <>
       {nodes.map((n) => {
@@ -622,7 +623,7 @@ function NodeMarkers({ nodes, heights, editing, channel }: { nodes: ResourceNode
                 </div>
               </Html>
             )}
-            <NodeFade node={n}>
+            <NodeFade node={n} zoneId={zoneId}>
             {look.kind === 'tree' && <FloraTree look={look} depleted={depleted} />}
 
             {look.kind === 'crystal' && <>
@@ -2159,7 +2160,7 @@ const PHASE_GLYPH: Record<string, { g: string; c: string }> = {
   night: { g: '☾', c: '#a9c8ff' },
 }
 
-function DayClock() {
+function DayClock({ zoneId }: { zoneId: string }) {
   const [, bump] = useState(0)
   useEffect(() => { const id = setInterval(() => bump(n => n + 1), 4000); return () => clearInterval(id) }, [])
   const p = dayProgress()
@@ -2171,7 +2172,7 @@ function DayClock() {
   // counts in whole minutes; a seconds readout would visibly jump and look broken.
   // Never claimed while the board is pinned: with `?window=` the world is deliberately NOT going to
   // turn over, so a countdown to a re-deal that will not happen is just a lie on the HUD.
-  const toReset = msUntilReset()
+  const toReset = msUntilZoneReset(Date.now(), regionSpawnConfig(zoneId))
   const renewing = !isBoardPinned && toReset < FADE_OUT_MS
   return (
     <div title={`${phase} — a full day is ${Math.round(CYCLE_MS / 60000)} real minutes`} style={{
@@ -2373,7 +2374,7 @@ const Scene = memo(function Scene(props: {
       {props.zone.realm === 'outside' && <FiringRange firingRef={props.firingRef} adsRef={props.adsRef} weaponIdxRef={props.weaponIdxRef} gridRef={props.gridRef} recoilRef={props.recoilRef} bloomRef={props.bloomRef} posRef={props.posRef} hpRef={props.hpRef} shieldRef={props.shieldRef} shieldMaxRef={props.shieldMaxRef} rangeCfgRef={props.rangeCfgRef} ammoRef={props.ammoRef} reloadingRef={props.reloadingRef} onNeedReload={props.onNeedReload} onHit={props.onRangeHit} onShot={props.onRangeShot} onPlayerDamage={props.onPlayerDamage} onPlayerDown={props.onPlayerDown} />}
       {props.zone.realm === 'outside' && <GunBenches />}
       {props.zone.realm === 'outside' && <ExitMarkers warps={props.zone.warps} heights={props.heights} />}
-      <NodeMarkers nodes={props.nodes} heights={props.heights} editing={props.editing} channel={props.channel} />
+      <NodeMarkers nodes={props.nodes} heights={props.heights} editing={props.editing} channel={props.channel} zoneId={props.zone.id} />
       <BurrowMarkers spawners={props.spawners} heights={props.heights} editing={props.editing} defeated={props.defeated} ready={props.spawnerReady} gridRef={props.gridRef} keyFor={props.spawnerKeyFor} />
       {props.zone.id === WORLD_ZONE_ID ? <WorldFlora heights={props.heights} /> : <FloraDressing zoneId={props.zone.id} heights={props.heights} />}
       <StructureMarkers structures={structuresInZone} heights={props.heights} />
@@ -2658,7 +2659,7 @@ export default function Shimmer3D() {
   // Re-dealt on the world-reset boundary (every 32 real min, on midnight/noon) by the coarse tick.
   // In EDIT MODE the deal is bypassed entirely and the full authored layer renders, so you are
   // always placing against the real set rather than against one window's hand.
-  const [boardWindow, setBoardWindow] = useState(() => currentWindow().index)
+  const [boardWindow, setBoardWindow] = useState(() => zoneWindow(Date.now(), regionSpawnConfig(zoneId)).index)
   const boardWindowRef = useRef(boardWindow); boardWindowRef.current = boardWindow
 
   // ── Stripped slots: the Home Plot's one-way door. ──
@@ -3249,7 +3250,7 @@ export default function Shimmer3D() {
       if (respawned) setRuntimeNodes([...runtimeNodesRef.current])
       // The world turns over. Everything else about the board is derived, so this is the only line
       // that has to notice — bump the window and the deal re-runs.
-      const win = currentWindow(now).index
+      const win = zoneWindow(now, regionSpawnConfig(zoneIdRef.current)).index
       if (win !== boardWindowRef.current) { boardWindowRef.current = win; setBoardWindow(win) }
       tickPriceDrift(geRef.current) // Exchange prices drift toward base every 30s (no-op otherwise)
     }, 500)
@@ -5127,7 +5128,7 @@ export default function Shimmer3D() {
       {/* ── TOP-RIGHT HUD: mana pie gauge · ☰ menu (edit/new game) · skills panel ── */}
       {!battle && !approach && !rewards && !editMode && !dialogue && (
         <div data-ct={companionTick} style={{ position: 'fixed', top: 12, right: 12, zIndex: 34, display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 9 }}>
-          <DayClock />
+          <DayClock zoneId={zoneId} />
           {/* marks wallet — moved here from the (now-removed) top-left box */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 11px', borderRadius: 999, background: 'rgba(20,20,14,0.82)', border: '1px solid #d4a84340' }}>
             <span style={{ font: '800 14px ui-monospace, monospace', color: '#ffe08a', lineHeight: 1 }}>✦ {wallet.marks}</span>
