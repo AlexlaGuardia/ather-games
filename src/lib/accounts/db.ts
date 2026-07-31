@@ -43,7 +43,12 @@ function db(): DatabaseSync {
   if (_db) return _db
   mkdirSync(DATA_DIR, { recursive: true })
   const d = new DatabaseSync(DB_PATH)
-  d.exec(`
+  d.exec(SCHEMA)
+  _db = d
+  return d
+}
+
+const SCHEMA = `
     PRAGMA journal_mode = WAL;
     PRAGMA foreign_keys = ON;
 
@@ -67,10 +72,18 @@ function db(): DatabaseSync {
       PRIMARY KEY (a_id, b_id)
     );
     CREATE INDEX IF NOT EXISTS idx_friends_b ON friends(b_id);
-  `)
-  _db = d
-  return d
-}
+
+    -- Cloud saves: one blob per (account, game). The client is authoritative while playing
+    -- (localStorage) — this is the copy that survives the browser, keyed to the account so a
+    -- keeper's garden follows them across devices. Stage 2 of per-keeper Home Plots (07-31).
+    CREATE TABLE IF NOT EXISTS saves (
+      user_id    TEXT NOT NULL,
+      game       TEXT NOT NULL,
+      data       TEXT NOT NULL,
+      updated_at INTEGER NOT NULL,
+      PRIMARY KEY (user_id, game)
+    );
+`
 
 /** Our own stable id — deliberately NOT the google sub, so a provider can change later. */
 export function newUserId(): string {
@@ -245,24 +258,34 @@ export function areFriends(a: string, b: string): boolean {
  * own browser and was never ours to delete, and any arcade score rows, which are keyed by a
  * derived id in a public daily board — those age out with the board.
  */
+export interface SaveRow { data: string; updated_at: number }
+
+export function getSave(user_id: string, game: string): SaveRow | null {
+  const row = db().prepare('SELECT data, updated_at FROM saves WHERE user_id = ? AND game = ?').get(user_id, game) as SaveRow | undefined
+  return row ?? null
+}
+
+export function putSave(user_id: string, game: string, data: string): void {
+  db().prepare(
+    'INSERT INTO saves (user_id, game, data, updated_at) VALUES (?, ?, ?, ?) ' +
+    'ON CONFLICT(user_id, game) DO UPDATE SET data = excluded.data, updated_at = excluded.updated_at',
+  ).run(user_id, game, data, Date.now())
+}
+
 export function deleteAccount(user_id: string): boolean {
   const d = db()
   d.prepare('DELETE FROM friends WHERE a_id = ? OR b_id = ?').run(user_id, user_id)
+  d.prepare('DELETE FROM saves WHERE user_id = ?').run(user_id)
   const res = d.prepare('DELETE FROM accounts WHERE user_id = ?').run(user_id)
   return Number(res.changes) > 0
 }
 
-/** Test/maintenance seam — lets an oracle point the module at a scratch file. */
+/** Test/maintenance seam — lets an oracle point the module at a scratch file.
+ *  Runs the SAME schema as db() — it used to carry its own trimmed copy, which silently
+ *  lacked the `saves` table the day that table was added. One schema, two doors. */
 export function _openAt(path: string): DatabaseSync {
   const d = new DatabaseSync(path)
   _db = d
-  d.exec(`
-    CREATE TABLE IF NOT EXISTS accounts (
-      user_id TEXT PRIMARY KEY, google_sub TEXT UNIQUE NOT NULL, email TEXT,
-      username TEXT COLLATE NOCASE UNIQUE, character_id TEXT, avatar TEXT, created_at INTEGER NOT NULL);
-    CREATE TABLE IF NOT EXISTS friends (
-      a_id TEXT NOT NULL, b_id TEXT NOT NULL, status TEXT NOT NULL, created_at INTEGER NOT NULL,
-      PRIMARY KEY (a_id, b_id));
-  `)
+  d.exec(SCHEMA)
   return d
 }

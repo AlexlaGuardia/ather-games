@@ -22,6 +22,7 @@ import { RemotePlayers, useRoster } from './RemotePlayers'
 import { useMultiplayer, storedName, storeName, type RemotePlayer } from './multiplayer'
 import { useParty, newPartyCode, sanitizePartyCode, inviteUrl } from '@/lib/party'
 import { useAccount, type UseAccount } from '@/lib/accounts/use-account'
+import { pushCloudSave, pullCloudSave } from '@/lib/cloud-sync'
 import { rollEncounter, HOLD_LEVELS, type WildEncounter } from '../engine/encounters'
 import { derivePartyStats, type PartyStats } from '../engine/party-stats'
 import { type BattleResult } from '../engine/arena'
@@ -2470,7 +2471,8 @@ function AccountBlock({ account, label }: { account: UseAccount; label: React.CS
         <>
           <button onClick={signIn} style={{ ...menuBtn, width: '100%', textAlign: 'center' }}>◆ Sign in with Google</button>
           <div style={hint}>
-            Optional. Claims a name only you can use, and puts your real name on the arcade board.{' '}
+            Optional. Claims a name only you can use, keeps your garden safe beyond this browser,
+            and puts your real name on the arcade board.{' '}
             <a href="/privacy" target="_blank" rel="noopener" style={{ color: '#8fd9c4', textDecoration: 'underline' }}>What we store</a>
           </div>
         </>
@@ -2492,10 +2494,13 @@ function AccountBlock({ account, label }: { account: UseAccount; label: React.CS
         </>
       )}
       {session?.username && (
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}>
-          <span style={{ font: '800 13px ui-monospace, monospace', color: '#ffe08a' }}>◆ {session.username}</span>
-          <button onClick={signOut} style={{ ...menuBtn, padding: '4px 8px' }}>Sign out</button>
-        </div>
+        <>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}>
+            <span style={{ font: '800 13px ui-monospace, monospace', color: '#ffe08a' }}>◆ {session.username}</span>
+            <button onClick={signOut} style={{ ...menuBtn, padding: '4px 8px' }}>Sign out</button>
+          </div>
+          <div style={hint}>☁ Your garden follows this account — sign in anywhere and it comes with you.</div>
+        </>
       )}
     </>
   )
@@ -2737,6 +2742,7 @@ export default function Shimmer3D() {
   // of the site (arcade board, friends, garden visits) already knows them by. Mirrored into
   // localStorage so the next boot shows it before the session fetch resolves.
   const account = useAccount()
+  const accountRef = useRef(account); accountRef.current = account
   const accountName = account.session?.username ?? null
   useEffect(() => {
     if (!accountName) return
@@ -2928,6 +2934,9 @@ export default function Shimmer3D() {
       lastWrittenRef.current = json
       s.writes++
       s.kb = json.length / 1024
+      // Cloud copy (stage 2 per-keeper plots): debounced, fire-and-forget, gated on a live
+      // session so anonymous play never spends a request. Signed out → local-only, as ever.
+      if (accountRef.current?.session) pushCloudSave('shimmer', json)
     }
     s.ms = performance.now() - t0
     logPerf('autosave', s.ms)   // surfaces in the lag log — a 30s save that lands mid-frame shows here
@@ -3020,7 +3029,25 @@ export default function Shimmer3D() {
     if (loadedRef.current) return
     loadedRef.current = true
     let alive = true
-    load().then((data) => {
+    // ── Cloud fallback (stage 2 per-keeper plots): a BLANK device asks the account for its
+    // garden before starting fresh. Local always wins when present — the cloud copy is only
+    // ever pulled into emptiness, so a stale server save can never clobber live play. The
+    // cookie does the auth; signed-out/offline just resolves null and play starts fresh.
+    const loadWithCloudFallback = async () => {
+      const local = await load()
+      if (local) return local
+      const cloud = await pullCloudSave('shimmer')
+      if (!cloud) return null
+      try {
+        const parsed = JSON.parse(cloud)
+        saveRaw(cloud)
+        // The birth modal opened on the blank-localStorage read at mount; this device just
+        // turned out to be a returning keeper, so let their garden stand instead.
+        setBirthOpen(false)
+        return parsed
+      } catch { return null }
+    }
+    loadWithCloudFallback().then((data) => {
       if (!alive) return
       if (data?.skills) skillsRef.current = skillSetFromSave(data.skills)
       if (data?.mana) manaRef.current = manaFromSave(data.mana, skillsRef.current.mana.level)

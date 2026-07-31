@@ -16,6 +16,7 @@ import { tmpdir } from 'node:os'
 import { signJwt, verifyJwt, SESSION_TTL_SEC } from './session'
 import {
   _openAt, upsertGoogleAccount, claimUsername, checkUsername, getAccountByUsername, getAccount, newUserId,
+  getSave, putSave, deleteAccount,
   listFriends, addFriend, acceptFriend, removeFriend, areFriends,
 } from './db'
 import { safeReturnPath } from './oauth'
@@ -175,6 +176,32 @@ console.log('friends')
   const ghost = upsertGoogleAccount('s-ghost', 'ghost@example.com', null)
   check('a nameless account cannot be added', !addFriend(alex, '').ok)
   check('a nameless account never appears in a list', !listFriends(ghost.user_id).length)
+
+  try { unlinkSync(path) } catch { /* leave it */ }
+}
+
+console.log('\ncloud saves')
+{
+  const path = join(tmpdir(), `ather-saves-oracle-${process.pid}.db`)
+  _openAt(path)
+  const keeper = upsertGoogleAccount('s-keeper', 'keeper@example.com', null).user_id
+  const other = upsertGoogleAccount('s-other', 'other@example.com', null).user_id
+
+  check('no save reads null', getSave(keeper, 'shimmer') === null)
+  putSave(keeper, 'shimmer', '{"v":1}')
+  check('a save round-trips', getSave(keeper, 'shimmer')?.data === '{"v":1}')
+  check('updated_at is stamped', (getSave(keeper, 'shimmer')?.updated_at ?? 0) > 0)
+  putSave(keeper, 'shimmer', '{"v":2}')
+  check('a push OVERWRITES (upsert, not insert)', getSave(keeper, 'shimmer')?.data === '{"v":2}')
+  putSave(keeper, 'wallet', '{"marks":5}')
+  check('games are separate slots', getSave(keeper, 'wallet')?.data === '{"marks":5}' && getSave(keeper, 'shimmer')?.data === '{"v":2}')
+  check("another account's slot is empty", getSave(other, 'shimmer') === null)
+
+  // Account deletion must take the garden with it — an orphaned save under a dead user_id
+  // is both a privacy leak and a landmine for a future id collision.
+  deleteAccount(keeper)
+  check('deleting the account deletes its saves', getSave(keeper, 'shimmer') === null && getSave(keeper, 'wallet') === null)
+  check("deletion left the other account's data alone", getAccount(other) !== null)
 
   try { unlinkSync(path) } catch { /* leave it */ }
 }
