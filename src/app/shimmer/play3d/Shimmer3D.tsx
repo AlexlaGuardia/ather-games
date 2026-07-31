@@ -73,6 +73,7 @@ import { WORLD_ZONE_ID, registerGardenWorld, getGardenWorld, isStitched, fromWor
 import { allNpcs, nodePlacementsFor, dealtNodesFor, spawnerPlacementsFor, logicalZoneAt, structuresView, logicalStruct } from './world-adapter'
 import { ZONE_SPAWNERS, type SpawnerPlacement } from '../world/spawn-placements'
 import { patrolDown, markBeaten, pruneBeaten, patrolLoop, patrolPose, type BeatenRecord, type PatrolLoop } from '../engine/burrows'
+import { regionIdOf, REGION_FILES } from '../world/region-maps'
 
 // The composed continent registers as a zone before any getZone/save-load runs.
 registerGardenWorld()
@@ -2443,6 +2444,35 @@ const TOOLS: { id: Tool; label: string }[] = [
 // account buys is a name nobody else can wear — the trusted arcade row today, friends and
 // garden visits next. So this block never blocks; it sits above the party controls and
 // offers.
+// ── Region transition — phase B of the world pivot (Alex: "a loading screen of sorts to
+// help the transition go smoother"). Plays when ARRIVING at a region map: fade to cloud,
+// region title, land under cover, fade back in. What it actually covers is the one-frame
+// hitch of mounting a 400x400 zone's instanced geometry — the grid itself is already in
+// memory, so this is presentation, not loading. Interior doors stay instant on purpose:
+// a title splash on Gregory's doorway would turn a door into a ceremony.
+export type TransitPhase = 'out' | 'hold' | 'in'
+const TRANSIT_OUT_MS = 320
+const TRANSIT_HOLD_MS = 900
+const TRANSIT_IN_MS = 650
+
+function RegionTransition({ label, phase }: { label: string; phase: TransitPhase }) {
+  return (
+    <div style={{
+      position: 'fixed', inset: 0, zIndex: 80, pointerEvents: 'none',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      background: 'radial-gradient(ellipse at 50% 42%, #eef7fb 0%, #cfe7f1 45%, #9dc4d6 100%)',
+      opacity: phase === 'in' ? 0 : 1,
+      transition: phase === 'in' ? `opacity ${TRANSIT_IN_MS}ms ease-in` : `opacity ${TRANSIT_OUT_MS}ms ease-out`,
+    }}>
+      <div style={{ textAlign: 'center', opacity: phase === 'out' ? 0 : 1, transition: 'opacity 380ms ease-out' }}>
+        <div style={{ font: '800 11px ui-monospace, monospace', letterSpacing: '0.34em', color: '#5f7f8d', marginBottom: 10 }}>ENTERING</div>
+        <div style={{ font: '800 30px ui-monospace, monospace', letterSpacing: '0.12em', color: '#2c4a58', textShadow: '0 2px 14px #ffffffcc' }}>{label.toUpperCase()}</div>
+        <div style={{ marginTop: 14, font: '700 15px ui-monospace, monospace', color: '#7da4b4', letterSpacing: '0.3em' }}>· ⛅ ·</div>
+      </div>
+    </div>
+  )
+}
+
 function AccountBlock({ account, label }: { account: UseAccount; label: React.CSSProperties }) {
   const { session, loading, signIn, signOut, claimName } = account
   const [draft, setDraft] = useState('')
@@ -4757,14 +4787,57 @@ export default function Shimmer3D() {
     setVersion((v) => v + 1)
   }, [])
 
-  const onWarp = useCallback((w: Warp) => {
-    if (w.ownerOnly && !isOwnerRef.current) return  // dev/test gate — silent no-op for players
+  // Region-transition state (phase B of the world pivot). `transitRef` guards double-fires:
+  // the warp tile keeps colliding while the fade runs, and a second timeline would strand
+  // the overlay opaque. Timers are cleared on unmount so a mid-fade tab close leaks nothing.
+  const [transit, setTransit] = useState<{ label: string; phase: TransitPhase } | null>(null)
+  const transitRef = useRef(false)
+  const transitTimers = useRef<ReturnType<typeof setTimeout>[]>([])
+  useEffect(() => () => { transitTimers.current.forEach(clearTimeout) }, [])
+
+  // Arriving DIRECTLY into a region (?zone=r-… deep link) gets the same beat, already at
+  // 'hold' — there is no old scene to fade out of, just the title over the mount hitch.
+  useEffect(() => {
+    const regionId = regionIdOf(zoneIdRef.current)
+    if (!regionId || transitRef.current) return
+    transitRef.current = true
+    setTransit({ label: REGION_FILES[regionId].display, phase: 'hold' })
+    const t = transitTimers.current
+    t.push(setTimeout(() => setTransit({ label: REGION_FILES[regionId].display, phase: 'in' }), TRANSIT_HOLD_MS))
+    t.push(setTimeout(() => { setTransit(null); transitRef.current = false }, TRANSIT_HOLD_MS + TRANSIT_IN_MS))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  const performWarp = useCallback((w: Warp) => {
     // Doors back onto the continent land at the zone's composed-world spot; interiors mount as before.
     const world = isStitched(w.toZone) ? getGardenWorld().toWorld(w.toZone, w.toX, w.toY) : null
     posRef.current!.set(world?.x ?? w.toX, posRef.current!.y, world?.y ?? w.toY)
     if (w.direction && DIR_YAW[w.direction] !== undefined) camYaw.current = DIR_YAW[w.direction]
     setZoneId(world ? WORLD_ZONE_ID : w.toZone)
   }, [])
+
+  const onWarp = useCallback((w: Warp) => {
+    if (w.ownerOnly && !isOwnerRef.current) return  // dev/test gate — silent no-op for players
+    if (transitRef.current) return  // mid-transition: the world is covered, nothing may warp
+    const regionId = regionIdOf(w.toZone)
+    // The cinematic plays only when ARRIVING at a region map (interior doors stay instant),
+    // and never re-fires for a warp inside the same region.
+    if (!regionId || w.toZone === zoneIdRef.current) { performWarp(w); return }
+    transitRef.current = true
+    talkingRef.current = true  // freeze movement under the cover (same gate dialogue uses)
+    setTransit({ label: REGION_FILES[regionId].display, phase: 'out' })
+    const t = transitTimers.current
+    t.push(setTimeout(() => {
+      performWarp(w)             // land under full cover — the geometry hitch hides here
+      setTransit({ label: REGION_FILES[regionId].display, phase: 'hold' })
+    }, TRANSIT_OUT_MS))
+    t.push(setTimeout(() => setTransit({ label: REGION_FILES[regionId].display, phase: 'in' }), TRANSIT_OUT_MS + TRANSIT_HOLD_MS))
+    t.push(setTimeout(() => {
+      setTransit(null)
+      transitRef.current = false
+      talkingRef.current = false
+    }, TRANSIT_OUT_MS + TRANSIT_HOLD_MS + TRANSIT_IN_MS))
+  }, [performWarp])
 
   // Jump straight to a zone to edit it (no walking/warping). Resets the player + camera focus
   // to its spawn. NOTE: unsaved edits in the current zone are dropped — save before switching.
@@ -5231,6 +5304,8 @@ export default function Shimmer3D() {
       )}
 
       {/* milestone toast (evolution-ready, new game) */}
+      {transit && <RegionTransition label={transit.label} phase={transit.phase} />}
+
       {banner && (
         <div style={{
           position: 'fixed', top: 84, left: '50%', transform: 'translateX(-50%)', zIndex: 40,
