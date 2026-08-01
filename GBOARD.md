@@ -1046,9 +1046,12 @@ the Arcade frame.
 > cinematic (fade → title → land under cover → fade in); interior doors stay instant; warp brush already
 > targets regions, so exits = carve + drop a warp. ③ ✅ Per-map spawn dials SHIPPED (`bbd19a6`): abundance (literal fill %) ·
 > richness (tier tilt) · re-deals/day {1,2,4,8} — SPAWN DIALS panel under the editor band readout, live
-> via region-data, +15 oracle asserts (empty config proven byte-identical to legacy). ④ Cutover: drop `r-` prefix, migrate saves via `sources`, delete stitcher +
-> legacy zones + world mode. ⑤ NPC/pickup/chest/structure transplant at cutover (kept keyed to legacy
-> ids until then).
+> via region-data, +15 oracle asserts (empty config proven byte-identical to legacy). ④ ✅ THE WALKABILITY PASS SHIPPED (`6e81a85`, 08-01): story layer
+> transplanted (NPC/pickup/chest/structure region copies via sources, one world truth - ids shared), 42
+> provisional exits derived from the legacy warp graph (Alex moves them when carving), save migration on
+> load (absorbed zone -> same spot in region; routes self-heal via legacy), START_ZONE = r-home-plot, and
+> the newWorldRef side-flag so interior exits land back in regions. Remaining cutover = deletions only:
+> drop r- prefixes, delete stitcher + legacy zones + world mode when sculpts are ready.
 > **Files:** `world/region-codec.ts` + `world/region-maps.ts` + `world/region-maps/*.json` +
 > `world/all-zones.ts` (new) · `scripts/build-region-canvases.mts` (new) · `dev/editors/MapEditor.tsx` ·
 > `play3d/world-adapter.ts` · `save-map/route.ts`.
