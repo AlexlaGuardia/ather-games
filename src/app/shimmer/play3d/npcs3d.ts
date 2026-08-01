@@ -32,6 +32,19 @@ export const NPCS_3D: NPC3D[] = [
   { id: 'brack', name: 'Brack', zone: 'mana-springs', tileX: 65, tileY: 92, color: '#5a4632', kind: 'moglin', requiredFlag: 'freedSorrel', defeatedFlag: 'freedBrack' },
 ]
 
+// ── Region clones (2026-08-01, the walkability pass): every NPC keyed to a legacy zone a
+// region absorbed gets a copy in that region at the same spot (source offset applied), so
+// the story stands in BOTH worlds until cutover. Derived, not hand-placed — the ids stay
+// identical on purpose: freeing Thistle in either world frees him in both, because there
+// is one world truth (`defeated`/flags key on the id).
+import { REGION_FILES, REGION_WIP_PREFIX } from '../world/region-maps'
+for (const f of Object.values(REGION_FILES)) {
+  for (const n of [...NPCS_3D]) {
+    const s = f.sources[n.zone]
+    if (s) NPCS_3D.push({ ...n, zone: REGION_WIP_PREFIX + f.id, tileX: n.tileX + s.ox, tileY: n.tileY + s.oy })
+  }
+}
+
 // ── Gregory's first-quest dialogue (raven-voiced, his deep/warm/measured keeper register). ──
 export const GREG_INTRO_LINES: string[] = [
   'You found the glade. Good. Most folk walk right past it.',

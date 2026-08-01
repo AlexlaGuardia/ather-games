@@ -74,13 +74,13 @@ import { allNpcs, nodePlacementsFor, dealtNodesFor, spawnerPlacementsFor, logica
 import { ZONE_SPAWNERS, type SpawnerPlacement } from '../world/spawn-placements'
 import { patrolDown, markBeaten, pruneBeaten, patrolLoop, patrolPose, type BeatenRecord, type PatrolLoop, type WanderDials } from '../engine/burrows'
 import type { DealWindow } from '../engine/spawn-board'
-import { regionIdOf, REGION_FILES, regionSpawnConfig } from '../world/region-maps'
+import { regionIdOf, REGION_FILES, regionSpawnConfig, migrateLegacyPosition } from '../world/region-maps'
 
 // The composed continent registers as a zone before any getZone/save-load runs.
 registerGardenWorld()
 const ALL_NPCS = allNpcs()
 
-const START_ZONE = WORLD_ZONE_ID // the continent IS the overworld; old zones stay editable via the dropdown
+const START_ZONE = 'r-home-plot' // the world pivot: players live in the region maps; the legacy continent stays reachable via ?zone= until cutover
 const WATER_ID = 8, FLOOR_ID = 97, WALL_ID = 34, WARP_ID = 14, MIST_ID = 31
 // Encounters: stepping onto a fresh MIST tile can draw a wild spirit. Per-zone odds live in
 // ENCOUNTER_TABLES (engine/encounters.ts → `rate`); these dials shape it for the 3D walker so a
@@ -3244,7 +3244,15 @@ export default function Shimmer3D() {
         if (typeof data.playerTileX === 'number' && typeof data.playerTileY === 'number') {
           posRef.current!.set(data.playerTileX, posRef.current!.y, data.playerTileY)
         }
-        if (data.zoneId && isStitched(data.zoneId)) {
+        // ── The world pivot's save migration: a save standing in an absorbed legacy zone
+        // lands at the SAME spot of its region canvas (sources table). One-way; the legacy
+        // world stays reachable via ?zone= until cutover. Unmapped spots (route saves,
+        // corridor world-coords) keep their legacy behavior below.
+        const mig = data.zoneId ? migrateLegacyPosition(data.zoneId, data.playerTileX ?? 1, data.playerTileY ?? 1) : null
+        if (mig) {
+          posRef.current!.set(mig.x, posRef.current!.y, mig.y)
+          setZoneId(mig.zoneId)
+        } else if (data.zoneId && isStitched(data.zoneId)) {
           // logical save (or a pre-continent save) → its composed-world spot
           const wp = getGardenWorld().toWorld(data.zoneId, data.playerTileX ?? 1, data.playerTileY ?? 1)
           if (wp) posRef.current!.set(wp.x, posRef.current!.y, wp.y)
@@ -4925,12 +4933,30 @@ export default function Shimmer3D() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  // Which side of the pivot the player is on. Entering a region sets it; explicitly
+  // entering a legacy zone (?zone=, editor jump) clears it. Interiors leave it alone —
+  // that is the whole point: an interior's exit warp still targets the LEGACY surface id,
+  // and this flag is how the exit knows to land in the region instead.
+  const newWorldRef = useRef(false)
+  // Kept honest by zone, not by call sites: any path into a region (deep link, migrated
+  // load, warp) flips it on; any explicit landing on the legacy surface flips it off.
+  // Interiors deliberately change nothing — they belong to the side you entered from.
+  useEffect(() => {
+    if (regionIdOf(zoneId)) newWorldRef.current = true
+    else if (zoneId === WORLD_ZONE_ID || isStitched(zoneId)) newWorldRef.current = false
+  }, [zoneId])
   const performWarp = useCallback((w: Warp) => {
+    let toZone = w.toZone, toX = w.toX, toY = w.toY
+    if (regionIdOf(toZone)) newWorldRef.current = true
+    else if (newWorldRef.current) {
+      const mig = migrateLegacyPosition(toZone, toX, toY)
+      if (mig) { toZone = mig.zoneId; toX = mig.x; toY = mig.y }
+    }
     // Doors back onto the continent land at the zone's composed-world spot; interiors mount as before.
-    const world = isStitched(w.toZone) ? getGardenWorld().toWorld(w.toZone, w.toX, w.toY) : null
-    posRef.current!.set(world?.x ?? w.toX, posRef.current!.y, world?.y ?? w.toY)
+    const world = !regionIdOf(toZone) && isStitched(toZone) ? getGardenWorld().toWorld(toZone, toX, toY) : null
+    posRef.current!.set(world?.x ?? toX, posRef.current!.y, world?.y ?? toY)
     if (w.direction && DIR_YAW[w.direction] !== undefined) camYaw.current = DIR_YAW[w.direction]
-    setZoneId(world ? WORLD_ZONE_ID : w.toZone)
+    setZoneId(world ? WORLD_ZONE_ID : toZone)
   }, [])
 
   const onWarp = useCallback((w: Warp) => {

@@ -13,6 +13,9 @@ import type { NodePlacement } from './node-placements'
 import type { NodeType } from './resources'
 import type { SpawnerPlacement } from './spawn-placements'
 import { decodeRows, type RegionFile } from './region-codec'
+import { ZONE_PICKUPS } from './static-pickups'
+import { ZONE_CHESTS } from './zone-chests'
+import { STRUCTURE_PLACEMENTS } from './structure-placements'
 
 import homePlot from './region-maps/home-plot.json'
 import moonwellGlade from './region-maps/moonwell-glade.json'
@@ -46,6 +49,40 @@ export const REGION_ZONES: Zone[] = FILES.map(f => ({
   element: f.element as Zone['element'],
   realm: f.realm,
 }))
+
+// ── Story-layer transplant (2026-08-01, the walkability pass) ───────────────────────────
+// Pickups, chests, and structure placements ride into the regions by DERIVATION: for every
+// record keyed to a legacy zone a region absorbed, a region copy is written under the WIP
+// id with the source offset applied. Pure remap at module load — the legacy entries stay
+// untouched, both worlds work, and at cutover the derived copies just become the copies.
+// (NPCs get the same treatment in play3d/npcs3d — their registry lives game-side.)
+function transplantTable<T extends { tileX: number; tileY: number }>(table: Record<string, T[]>): void {
+  for (const f of FILES) {
+    const out: T[] = []
+    for (const [zone, s] of Object.entries(f.sources)) {
+      for (const rec of table[zone] ?? []) out.push({ ...rec, tileX: rec.tileX + s.ox, tileY: rec.tileY + s.oy })
+    }
+    if (out.length) table[REGION_WIP_PREFIX + f.id] = out
+  }
+}
+transplantTable(ZONE_PICKUPS)
+transplantTable(ZONE_CHESTS)
+transplantTable(STRUCTURE_PLACEMENTS)
+
+/**
+ * Migrate a legacy save position into the new world: a save standing in an absorbed zone
+ * lands at the same spot of its region canvas (the `sources` table is the map). Routes
+ * died unmapped — those saves (and anything else unplaced) return null and the caller
+ * falls back to the Home Plot's start. One-way by design; the legacy world stays
+ * reachable via ?zone= until final cutover.
+ */
+export function migrateLegacyPosition(zoneId: string, x: number, y: number): { zoneId: string; x: number; y: number } | null {
+  for (const f of FILES) {
+    const s = f.sources[zoneId]
+    if (s) return { zoneId: REGION_WIP_PREFIX + f.id, x: x + s.ox, y: y + s.oy }
+  }
+  return null
+}
 
 /**
  * Patch the compiled region data with the LIVE on-disk copies (/shimmer/region-data) —
