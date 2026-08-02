@@ -565,9 +565,11 @@ the Arcade frame.
 > - **Archetypes (build few, not 20):** projectile = all 8 offense runes (Star/Magma/Freeze/Hydro/Lightning/Tempest/
 >   Dust/Static, per-rune color from `runes.data.ts`); ward = Barrier/Stone; restore = Life; surge = Breeze/Fluid;
 >   utility (7) stay passive for now.
-> - **Phases:** ① cast framework + projectile archetype (8 offense runes) hitting the real-time layer (range targets +
->   hunter), mana-costed, cooldown ← MVP, delivers the offense payoff · ② ward + restore · ③ surge + utility casts ·
->   ④ real-time casting vs overworld moglin patrols (today turn-based battle triggers — separate combat-model call).
+> - **Phases:** ① ✅ SHIPPED 2026-08-02 (`60436e7`, live :3200) — cast framework + projectile archetype (8 offense
+>   runes) hitting the real-time layer (range targets + hunter), mana-costed via `tryCast`, cooldown-gated, bolt
+>   coloured to the rune's glow. **G** casts; reuses the FiringRange engine (new `castPool` + collide + `cast.ts`
+>   rune→archetype routing). · ② ward + restore · ③ surge + utility casts · ④ real-time casting vs overworld moglin
+>   patrols (today turn-based battle triggers — separate combat-model call).
 > - **Decisions:** ▸ real-time keeper combat lives only in `'outside'` zones today (the range), so MVP casting is
 >   meaningful there first. ▸ offense runes' v1 +mana is the placeholder their v2 damage identity replaces. ▸ reuse,
 >   don't rebuild — the range's `pool`/`shotRef`/hit loop is the template.
