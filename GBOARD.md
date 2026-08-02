@@ -546,6 +546,34 @@ the Arcade frame.
 > **Research sources:** Apex movement tech (slide-hop, tap-strafe, wall-bounce, superglide, mantle input model) —
 > BoostRoom + ProGuides + Alegends movement guides, 07-22.
 
+## ✳️ Shimmer play3d — THE BIRTH RUNE (v1 SHIPPED 2026-08-02, v2 SCOPED, jin-cc) · *Last touched 2026-08-02*
+> **Canon:** `CANON/game/shimmer-birth-rune.md` — "your birth rune is you" (ruled /magii + Alex 08-02). The birth
+> ritual choice = the keeper's innate rune; first rung of birth→developed→mastery. Grant follows each rune's canon
+> essence (`runes.md`). Boundary: rune identity + essence + lean-category = canon (Magii); numbers + cast = build (Jin).
+>
+> **Left off (v1 SHIPPED — `0a97d01`, live :3200):** passive affinity per rune via `birth-affinity.ts` (all 20 runes →
+> {hp,shield,speed,gather,mana} from the essence→lean table). Defense (Barrier/Stone)→+shield cap (`hpMaxRef` mirrors
+> `shieldMaxRef`); vitality (Life)→+HP cap; mobility (Breeze/Fluid)→+move speed; utility (7)→+harvest find/yield;
+> offense (8)→+mana pool (v1 proxy — raw charge). Resolves on mount from `localStorage ather:shimmer:birthRune` +
+> on choose; banner names the lean. Also this arc: the fresh-player crash fix (`ddd03bd` — instanced-mesh guards +
+> Canvas error boundary) and the birth-owed-until-rune-chosen latch (`63233ff`).
+>
+> **Next — v2: THE CASTABLE WORD (scoped 08-02, Alex ruled the input model).** The birth rune becomes a real cast.
+> Build ON the firing-range engine (instanced projectile pool + hit detection + mana spend + recoil already exist).
+> - **Input (RULED): aim-and-fire on a cast key (e.g. F)** — hurl the rune where the reticle points, reusing the
+>   range's camera-forward aim + projectile pool. No lock-on. Aim is the skill.
+> - **Archetypes (build few, not 20):** projectile = all 8 offense runes (Star/Magma/Freeze/Hydro/Lightning/Tempest/
+>   Dust/Static, per-rune color from `runes.data.ts`); ward = Barrier/Stone; restore = Life; surge = Breeze/Fluid;
+>   utility (7) stay passive for now.
+> - **Phases:** ① cast framework + projectile archetype (8 offense runes) hitting the real-time layer (range targets +
+>   hunter), mana-costed, cooldown ← MVP, delivers the offense payoff · ② ward + restore · ③ surge + utility casts ·
+>   ④ real-time casting vs overworld moglin patrols (today turn-based battle triggers — separate combat-model call).
+> - **Decisions:** ▸ real-time keeper combat lives only in `'outside'` zones today (the range), so MVP casting is
+>   meaningful there first. ▸ offense runes' v1 +mana is the placeholder their v2 damage identity replaces. ▸ reuse,
+>   don't rebuild — the range's `pool`/`shotRef`/hit loop is the template.
+> - **Files (v2 target):** `play3d/Shimmer3D.tsx` (cast dispatch + input + FiringRange-shared projectile), a new
+>   `play3d/cast.ts` (rune→archetype routing), `play3d/birth-affinity.ts` (already maps the leans).
+
 ## 🔫 Shimmer play3d — CRUCIBLE COMBAT (weapon + damage + economy, 2026-07-22→24, jin-cc) · *Last touched 2026-07-24*
 > **The Crucible = BATTLE ROYALE lane (Alex ruled 07-22; Apex is the north star).** The firing range in Alex's
 > 50×50 is the combat lab. Three sessions in, the full loop + a two-weapon loadout + a movement ladder are live on :3200.
