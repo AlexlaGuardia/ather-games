@@ -3145,7 +3145,17 @@ export default function Shimmer3D() {
     if (bornCheckedRef.current) return
     bornCheckedRef.current = true
     try {
-      if (!localStorage.getItem('ather:save:shimmer')) {
+      const hasSave = !!localStorage.getItem('ather:save:shimmer')
+      const hasRune = !!localStorage.getItem('ather:shimmer:birthRune')
+      const pending = localStorage.getItem('ather:shimmer:birthPending') === '1'
+      // Birth is owed to a genuinely new keeper and stays owed until a rune is actually CHOSEN.
+      // Save-absence alone can't gate it: the starter-kit grant persist()s a save on the first
+      // mount, so a player who saw birth and backed out WITHOUT choosing then has a save and the
+      // old check skipped birth forever ("it did it for me"). The birthPending latch fixes that —
+      // set when birth opens, cleared only on choose (see onChoose) — so re-entry re-opens birth
+      // until a rune is picked. A legacy returning save (has save, no rune, no latch) is untouched.
+      if (!hasRune && (!hasSave || pending)) {
+        localStorage.setItem('ather:shimmer:birthPending', '1')
         setBirthCancelable(false)
         setBirthOpen(true)
       }
@@ -3169,8 +3179,10 @@ export default function Shimmer3D() {
         const parsed = JSON.parse(cloud)
         saveRaw(cloud)
         // The birth modal opened on the blank-localStorage read at mount; this device just
-        // turned out to be a returning keeper, so let their garden stand instead.
+        // turned out to be a returning keeper, so let their garden stand instead — and clear the
+        // birth latch so re-entry doesn't re-prompt a keeper who already has a garden.
         setBirthOpen(false)
+        try { localStorage.removeItem('ather:shimmer:birthPending') } catch { /* private mode */ }
         return parsed
       } catch { return null }
     }
@@ -5470,6 +5482,7 @@ export default function Shimmer3D() {
           onChoose={(id) => {
             setBirthOpen(false)
             birthRuneRef.current = id  // BirthScreen also stashes it in localStorage (ather:shimmer:birthRune)
+            try { localStorage.removeItem('ather:shimmer:birthPending') } catch { /* private mode */ }  // birth is done; stop re-prompting
             newGame()                  // fresh run — sets its own banner; we override below
             const rn = RUNES.find(r => r.id === id)?.name ?? 'your rune'
             setBanner(`Born of ${rn} — find Gregory in the glade`)
