@@ -3485,6 +3485,7 @@ export default function Shimmer3D() {
   const fishBiteRef = useRef(false); fishBiteRef.current = !!fish?.bite
   const hookFishRef = useRef<() => void>(() => {}) // set below (needs grantHarvest, defined later)
   const [menuOpen, setMenuOpen] = useState(false)     // ☰ — edit terrain / new game
+  const [runeDevOpen, setRuneDevOpen] = useState(false)  // owner-only: swap birth rune live to test all archetypes
   const [skillsOpen, setSkillsOpen] = useState(false) // skills panel
   const [mpOpen, setMpOpen] = useState(false)         // 👥 — play together (party / invite)
   const [gfxOpen, setGfxOpen] = useState(false)       // ⚙ — graphics quality + frame readout
@@ -4795,6 +4796,18 @@ export default function Shimmer3D() {
     setManaFrac(manaRef.current.current / (getMaxPool(skillsRef.current.mana.level) + affinityRef.current.manaBonus))
     return true
   }, [])
+  // Owner dev tool: swap the birth rune LIVE (affinity + cast both re-resolve) without a New Game wipe,
+  // so the whole cast/affinity system is testable from one save. Persists so a reload keeps the pick.
+  const setDevRune = useCallback((id: string) => {
+    birthRuneRef.current = id
+    try { localStorage.setItem('ather:shimmer:birthRune', id); localStorage.removeItem('ather:shimmer:birthPending') } catch { /* private mode */ }
+    applyAffinity()
+    hpRef.current = hpMaxRef.current; shieldRef.current = shieldMaxRef.current  // reflect the new caps at once
+    const rn = RUNES.find(r => r.id === id)?.name ?? id
+    const castable = castSpecRef.current.archetype === 'projectile'
+    setBanner(`⟳ dev · born of ${rn} — ${affinityRef.current.label}${castable ? ' · G casts' : ' · (no cast yet)'}`)
+    persist()
+  }, [applyAffinity, persist])
   // ── weapon-state → movement mult, and the swap / holster actions. syncWeaponMove is the single rule:
   // holstered or inside-Ather = full speed; drawn = the weapon's hip mult; aiming = its (lower) ADS mult.
   const syncWeaponMove = useCallback(() => {
@@ -5524,6 +5537,20 @@ export default function Shimmer3D() {
               <button onClick={() => { window.location.href = '/room?wall=0' }} style={menuBtn}>⌂ The Room</button>
               <button onClick={() => { window.location.href = '/arcade/all' }} style={menuBtn}>▦ All games</button>
               {isOwner && <button onClick={() => { setMenuOpen(false); setEditMode(true) }} style={menuBtn}>✎ Edit terrain</button>}
+              {isOwner && <button onClick={() => setRuneDevOpen(o => !o)} style={menuBtn}>✦ Rune (dev)</button>}
+              {isOwner && runeDevOpen && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginTop: 2, maxWidth: 268, borderTop: '1px solid #ffffff20', paddingTop: 6 }}>
+                  <span style={{ color: '#8fd9c4', font: '700 9px ui-monospace, monospace', letterSpacing: '.1em', textAlign: 'right' }}>BIRTH RUNE — swap live · G casts offense</span>
+                  {['mana', 'storm', 'earth', 'water'].map(el => (
+                    <div key={el} style={{ display: 'flex', flexWrap: 'wrap', gap: 3, justifyContent: 'flex-end' }}>
+                      {RUNES.filter(r => r.element === el).map(r => (
+                        <button key={r.id} onClick={() => setDevRune(r.id)} title={`${r.name} — ${r.essence}`}
+                          style={{ ...menuBtn, padding: '2px 6px', fontSize: 9, color: r.glow, border: birthRuneRef.current === r.id ? `1px solid ${r.glow}` : '1px solid #ffffff20' }}>{r.name}</button>
+                      ))}
+                    </div>
+                  ))}
+                </div>
+              )}
               {confirmNew ? (
                 <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
                   <span style={{ color: '#e9dfc8', font: '700 11px ui-monospace, monospace' }}>reset?</span>
