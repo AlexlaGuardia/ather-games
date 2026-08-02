@@ -6,7 +6,7 @@
 // (heights→/shimmer/save-heights, grid→/shimmer/save-map). Warps/collision reuse the 2D engine.
 import { Canvas, useFrame, type ThreeEvent } from '@react-three/fiber'
 import { Html, PerformanceMonitor } from '@react-three/drei'
-import { useRef, useEffect, useLayoutEffect, useMemo, useState, useCallback, memo } from 'react'
+import { useRef, useEffect, useLayoutEffect, useMemo, useState, useCallback, memo, Component, type ReactNode } from 'react'
 import * as THREE from 'three'
 import { walkable } from '../engine/player'
 import { resolveStand, canStandAt, surfacesAt, EMPTY_SEGS, type CollisionCtx } from '../engine/segs-collision'
@@ -830,13 +830,25 @@ function usePaint(cells: Cell[], paint: (c: number, r: number, shift: boolean) =
   }
 }
 
+// A render crash inside the R3F scene used to unmount the WHOLE Shimmer3D tree — the world went
+// blank AND the birth modal (a DOM sibling of the Canvas) died with it, so a fresh player saw
+// neither the garden nor the birth-rune screen. This boundary keeps a scene crash contained to the
+// Canvas: the world area shows a recoverable message, the HUD and birth modal keep rendering. R3F
+// propagates scene errors to the nearest outer boundary, which is what makes this catch them.
+class CanvasBoundary extends Component<{ fallback: ReactNode; children: ReactNode }, { failed: boolean }> {
+  state = { failed: false }
+  static getDerivedStateFromError() { return { failed: true } }
+  render() { return this.state.failed ? this.props.fallback : this.props.children }
+}
+
 function FloorTerrain({ floors, heights, version, paint, editing, color = '#7cc46a', emissive = '#000000' }: {
   floors: Cell[]; heights: number[][]; version: number
   paint: (c: number, r: number, shift: boolean) => void; editing: boolean; color?: string; emissive?: string
 }) {
   const ref = useRef<THREE.InstancedMesh>(null)
   useLayoutEffect(() => {
-    const mesh = ref.current!
+    const mesh = ref.current
+    if (!mesh) return  // see WallTops: an unmounted instance leaves the ref null and this effect crashes the canvas
     const m = new THREE.Matrix4(), q = new THREE.Quaternion()
     const pos = new THREE.Vector3(), scl = new THREE.Vector3()
     floors.forEach(([c, r], i) => {
@@ -862,7 +874,8 @@ function FloorTerrain({ floors, heights, version, paint, editing, color = '#7cc4
 function MistOverlay({ mists, heights }: { mists: Cell[]; heights: number[][] }) {
   const ref = useRef<THREE.InstancedMesh>(null)
   useLayoutEffect(() => {
-    const mesh = ref.current!
+    const mesh = ref.current
+    if (!mesh) return  // see WallTops: an unmounted instance leaves the ref null and this effect crashes the canvas
     const m = new THREE.Matrix4(), q = new THREE.Quaternion(), pos = new THREE.Vector3(), scl = new THREE.Vector3(0.98, 0.8, 0.98)
     mists.forEach(([c, r], i) => { pos.set(c, (heights[r]?.[c] ?? 0) * STEP + 0.55, r); m.compose(pos, q, scl); mesh.setMatrixAt(i, m) })
     mesh.instanceMatrix.needsUpdate = true
@@ -880,7 +893,8 @@ function MistOverlay({ mists, heights }: { mists: Cell[]; heights: number[][] })
 function WarpBeacons({ warps, heights }: { warps: Cell[]; heights: number[][] }) {
   const ref = useRef<THREE.InstancedMesh>(null)
   useLayoutEffect(() => {
-    const mesh = ref.current!
+    const mesh = ref.current
+    if (!mesh) return  // see WallTops: an unmounted instance leaves the ref null and this effect crashes the canvas
     const m = new THREE.Matrix4(), q = new THREE.Quaternion(), pos = new THREE.Vector3(), scl = new THREE.Vector3(1, 1, 1)
     warps.forEach(([c, r], i) => { pos.set(c, (heights[r]?.[c] ?? 0) * STEP + 1.5, r); m.compose(pos, q, scl); mesh.setMatrixAt(i, m) })
     mesh.instanceMatrix.needsUpdate = true
@@ -929,7 +943,8 @@ function Tiles({ cells, size, y, color, opacity = 1, paint, editing }: {
 }) {
   const ref = useRef<THREE.InstancedMesh>(null)
   useLayoutEffect(() => {
-    const mesh = ref.current!
+    const mesh = ref.current
+    if (!mesh) return  // see WallTops: an unmounted instance leaves the ref null and this effect crashes the canvas
     const m = new THREE.Matrix4()
     cells.forEach(([c, r], i) => { m.setPosition(c, y, r); mesh.setMatrixAt(i, m) })
     mesh.instanceMatrix.needsUpdate = true
@@ -5106,6 +5121,11 @@ export default function Shimmer3D() {
       {/* key: antialias is a WebGL CONTEXT flag and shadowMap.enabled needs every shader recompiled,
           so a quality change remounts the canvas rather than half-applying. Position/yaw survive —
           they live in this component's refs, not the scene graph. See gfx.ts gfxKey(). */}
+      <CanvasBoundary fallback={
+        <div style={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center', textAlign: 'center', color: '#1c2a33', font: '600 14px ui-monospace, monospace', padding: 24 }}>
+          <div>the garden hit a snag rendering.<br />reload the page to step back in.</div>
+        </div>
+      }>
       <Canvas key={gfxKey(gfx)}
         shadows={gfx.shadows !== 'off'}
         dpr={dpr}
@@ -5161,6 +5181,7 @@ export default function Shimmer3D() {
           shadowMap={SHADOW_MAP_SIZE[gfx.shadows]}
         />
       </Canvas>
+      </CanvasBoundary>
 
       {/* edit-mode keeps a minimal zone/controls strip; play HUD is clean (marks moved to the top-right stack) */}
       {editMode && (
