@@ -24,6 +24,7 @@ import { useMultiplayer, storedName, storeName, type RemotePlayer } from './mult
 import { useParty, newPartyCode, sanitizePartyCode, inviteUrl } from '@/lib/party'
 import { useAccount, type UseAccount } from '@/lib/accounts/use-account'
 import { pushCloudSave, pullCloudSave } from '@/lib/cloud-sync'
+import { birthAffinity, NEUTRAL_AFFINITY, type Affinity } from './birth-affinity'
 import { rollEncounter, HOLD_LEVELS, type WildEncounter } from '../engine/encounters'
 import { derivePartyStats, type PartyStats } from '../engine/party-stats'
 import { type BattleResult } from '../engine/arena'
@@ -1774,7 +1775,7 @@ function GunBenches() {
     </>
   )
 }
-function FiringRange({ firingRef, adsRef, weaponIdxRef, gridRef, recoilRef, bloomRef, posRef, hpRef, shieldRef, shieldMaxRef, rangeCfgRef, ammoRef, reloadingRef, onNeedReload, onHit, onShot, onPlayerDamage, onPlayerDown }: {
+function FiringRange({ firingRef, adsRef, weaponIdxRef, gridRef, recoilRef, bloomRef, posRef, hpRef, hpMaxRef, shieldRef, shieldMaxRef, rangeCfgRef, ammoRef, reloadingRef, onNeedReload, onHit, onShot, onPlayerDamage, onPlayerDown }: {
   firingRef: React.RefObject<boolean>   // held while left-click is down → full-auto (semi-auto weapons fire once per press)
   adsRef: React.RefObject<boolean>      // aiming → muzzle offset moves to center (ADS tracer runs flat)
   weaponIdxRef: React.RefObject<number> // which WEAPONS entry is live — drives fire stats + tracer look
@@ -1784,6 +1785,7 @@ function FiringRange({ firingRef, adsRef, weaponIdxRef, gridRef, recoilRef, bloo
   posRef: React.RefObject<THREE.Vector3>    // player position — hunter orbs aim at + collide with it
   hpRef: React.MutableRefObject<number>     // player HP; ResourceBars reads, this sim writes
   shieldRef: React.MutableRefObject<number> // player shield; drains first — mend potions refill it
+  hpMaxRef: React.RefObject<number>         // live HP cap (100, +bonus with the Life birth rune)
   shieldMaxRef: React.RefObject<number>     // live shield cap (100, +25 with the Barrier birth rune)
   rangeCfgRef: React.RefObject<{ moving: boolean; hostile: boolean }>  // range console (T) settings
   ammoRef: React.MutableRefObject<number>       // rounds left in the clip; this sim decrements
@@ -1975,7 +1977,7 @@ function FiringRange({ firingRef, adsRef, weaponIdxRef, gridRef, recoilRef, bloo
           shieldRef.current = Math.max(0, sh - DRONE_DMG)
           const spill = DRONE_DMG - (sh - shieldRef.current)
           if (spill > 0) hpRef.current = Math.max(0, hpRef.current - spill)
-          if (hpRef.current <= 0) { hpRef.current = MAX_HP; shieldRef.current = shieldMaxRef.current ?? MAX_SHIELD; onPlayerDown() }
+          if (hpRef.current <= 0) { hpRef.current = hpMaxRef.current ?? MAX_HP; shieldRef.current = shieldMaxRef.current ?? MAX_SHIELD; onPlayerDown() }
           else onPlayerDamage()
         }
       }
@@ -2126,8 +2128,9 @@ function WeaponReticle({ bloomRef, adsRef, weaponIdxRef }: {
 // menu stack above and the hotbar below, whatever either grows into). Combat mutates
 // hpRef/shieldRef at frame rate, so rAF reads the refs and writes fill-height + text directly — same
 // zero-React-churn pattern as WeaponReticle. Shield bar dims while cracked; HP tints red when low.
-function ResourceBars({ hpRef, shieldRef, shieldMaxRef }: {
+function ResourceBars({ hpRef, hpMaxRef, shieldRef, shieldMaxRef }: {
   hpRef: React.MutableRefObject<number>
+  hpMaxRef: React.RefObject<number>
   shieldRef: React.MutableRefObject<number>
   shieldMaxRef: React.RefObject<number>
 }) {
@@ -2137,7 +2140,7 @@ function ResourceBars({ hpRef, shieldRef, shieldMaxRef }: {
     let raf = 0
     const tick = () => {
       const sh = Math.max(0, Math.round((shieldRef.current / (shieldMaxRef.current || MAX_SHIELD)) * 100))
-      const hp = Math.max(0, Math.round((hpRef.current / MAX_HP) * 100))
+      const hp = Math.max(0, Math.round((hpRef.current / (hpMaxRef.current || MAX_HP)) * 100))
       if (shFill.current) { shFill.current.style.height = `${sh}%`; shFill.current.style.opacity = sh === 0 ? '0.25' : '1' }
       if (shTxt.current) shTxt.current.textContent = `${sh}`
       if (hpFill.current) { hpFill.current.style.height = `${hp}%`; hpFill.current.style.background = hp <= 30 ? '#ff7a5f' : '#86f2a2' }
@@ -2146,7 +2149,7 @@ function ResourceBars({ hpRef, shieldRef, shieldMaxRef }: {
     }
     raf = requestAnimationFrame(tick)
     return () => cancelAnimationFrame(raf)
-  }, [hpRef, shieldRef, shieldMaxRef])
+  }, [hpRef, hpMaxRef, shieldRef, shieldMaxRef])
   const barShell: React.CSSProperties = {
     width: 14, height: 118, borderRadius: 7, overflow: 'hidden', position: 'relative',
     background: 'rgba(10,16,26,0.72)', border: '1px solid #ffffff2e', display: 'flex', alignItems: 'flex-end',
@@ -2415,6 +2418,7 @@ const Scene = memo(function Scene(props: {
   recoilRef: React.MutableRefObject<{ p: number; y: number }>
   bloomRef: React.MutableRefObject<number>
   hpRef: React.MutableRefObject<number>
+  hpMaxRef: React.RefObject<number>
   shieldRef: React.MutableRefObject<number>
   shieldMaxRef: React.RefObject<number>
   rangeCfgRef: React.RefObject<{ moving: boolean; hostile: boolean }>
@@ -2454,7 +2458,7 @@ const Scene = memo(function Scene(props: {
       <ZoneGeometry key={`${props.zone.id}-${props.dims}`} gridRef={props.gridRef} heights={props.heights} version={props.version} paint={props.paint} editing={props.editing} />
       <NPCMarkers npcs={ALL_NPCS.filter((n) => n.zone === props.zone.id && npcInWorld(n, props.defeated, props.flagsRef.current))} heights={props.heights} />
       {props.isOwner && props.zone.id === 'moonwell-glade-gregory-s-home' && <HubGateMarkers heights={props.heights} />}
-      {props.zone.realm === 'outside' && <FiringRange firingRef={props.firingRef} adsRef={props.adsRef} weaponIdxRef={props.weaponIdxRef} gridRef={props.gridRef} recoilRef={props.recoilRef} bloomRef={props.bloomRef} posRef={props.posRef} hpRef={props.hpRef} shieldRef={props.shieldRef} shieldMaxRef={props.shieldMaxRef} rangeCfgRef={props.rangeCfgRef} ammoRef={props.ammoRef} reloadingRef={props.reloadingRef} onNeedReload={props.onNeedReload} onHit={props.onRangeHit} onShot={props.onRangeShot} onPlayerDamage={props.onPlayerDamage} onPlayerDown={props.onPlayerDown} />}
+      {props.zone.realm === 'outside' && <FiringRange firingRef={props.firingRef} adsRef={props.adsRef} weaponIdxRef={props.weaponIdxRef} gridRef={props.gridRef} recoilRef={props.recoilRef} bloomRef={props.bloomRef} posRef={props.posRef} hpRef={props.hpRef} hpMaxRef={props.hpMaxRef} shieldRef={props.shieldRef} shieldMaxRef={props.shieldMaxRef} rangeCfgRef={props.rangeCfgRef} ammoRef={props.ammoRef} reloadingRef={props.reloadingRef} onNeedReload={props.onNeedReload} onHit={props.onRangeHit} onShot={props.onRangeShot} onPlayerDamage={props.onPlayerDamage} onPlayerDown={props.onPlayerDown} />}
       {props.zone.realm === 'outside' && <GunBenches />}
       {props.zone.realm === 'outside' && <ExitMarkers warps={props.zone.warps} heights={props.heights} />}
       <NodeMarkers nodes={props.nodes} heights={props.heights} editing={props.editing} channel={props.channel} zoneId={props.zone.id} />
@@ -2793,7 +2797,7 @@ export default function Shimmer3D() {
     const f = skillsRef.current.forestry
     setForestry(p => ({ level: f.level, xp: f.xp, next: xpForSkillLevel(f.level), pulse: p.pulse + 1 }))
     setInvSlots([...invRef.current.slots])
-    setManaFrac(manaRef.current.current / getMaxPool(skillsRef.current.mana.level))
+    setManaFrac(manaRef.current.current / (getMaxPool(skillsRef.current.mana.level) + affinityRef.current.manaBonus))
   }, [])
   // runtime nodes (with harvest state) rebuilt whenever the authored layer or zone changes
   const [runtimeNodes, setRuntimeNodes] = useState<ResourceNode[]>([])
@@ -3330,14 +3334,14 @@ export default function Shimmer3D() {
   useEffect(() => {
     const id = setInterval(() => {
       const now = Date.now()
-      const max = getMaxPool(skillsRef.current.mana.level)
+      const max = (getMaxPool(skillsRef.current.mana.level) + affinityRef.current.manaBonus)
       if (manaRef.current.current < max) {
         // 0.5s tick; Ather Flow (ather_infusion) lifts the trickle
         manaRef.current.current = Math.min(max, manaRef.current.current + MANA_REGEN_PER_SEC * manaRegenMult(buffsRef.current, now) * 0.5)
         setManaFrac(manaRef.current.current / max)
       }
       // potion buffs — refresh the HUD chips + the frame-loop mirrors (speed/dreamwalk)
-      speedMultRef.current = speedMult(buffsRef.current, now)
+      speedMultRef.current = speedMult(buffsRef.current, now) * affinityRef.current.speedMult
       dreamwalkRef.current = suppressEncounters(buffsRef.current, now)
       setBuffHud(prev => {
         const next = activeBuffList(buffsRef.current, now)
@@ -3562,11 +3566,11 @@ export default function Shimmer3D() {
         persist()
         return
       }
-      const needHp = (heal.hp ?? 0) > 0 && hpRef.current < MAX_HP
+      const needHp = (heal.hp ?? 0) > 0 && hpRef.current < hpMaxRef.current
       const needSh = (heal.sh ?? 0) > 0 && shieldRef.current < shieldMaxRef.current
       if (!needHp && !needSh) { setHarvestToast(heal.hp ? 'HP already full' : 'Shield already full'); return }
       removeItems(invRef.current, itemId, 1)
-      if (heal.hp) hpRef.current = Math.min(MAX_HP, hpRef.current + heal.hp)
+      if (heal.hp) hpRef.current = Math.min(hpMaxRef.current, hpRef.current + heal.hp)
       if (heal.sh) shieldRef.current = Math.min(shieldMaxRef.current, shieldRef.current + heal.sh)
       setInvSlots([...invRef.current.slots])
       setHarvestToast(`${prettyItem(itemId)} · ${heal.hp ? `+${heal.hp} HP` : `+${heal.sh} shield`}`)
@@ -3599,7 +3603,7 @@ export default function Shimmer3D() {
     }
     const restore = MANA_POTIONS[itemId]
     if (restore == null || countItem(invRef.current, itemId) < 1) return   // not a drinkable mana potion / none held
-    const max = getMaxPool(skillsRef.current.mana.level)
+    const max = (getMaxPool(skillsRef.current.mana.level) + affinityRef.current.manaBonus)
     if (manaRef.current.current >= max - 0.5) { setHarvestToast('Mana already full'); return }
     removeItems(invRef.current, itemId, 1)
     manaRef.current.current = Math.min(max, manaRef.current.current + restore)
@@ -3833,7 +3837,7 @@ export default function Shimmer3D() {
     // Find chance = companion @15 perk (Grovekin/Gemsense/Truesight, ×2 under Kindred) + potion buffs
     const activeBeast = beastsRef.current.find(b => b.id === activeBeastIdRef.current) ?? null
     const find = getBonusFindChance(activeBeast, skillId) * kindredMult(buffsRef.current, now) + bonusFind(buffsRef.current, now)
-    const added = addHarvestItems(invRef.current, rollDrops(node.type, find))
+    const added = addHarvestItems(invRef.current, rollDrops(node.type, find * affinityRef.current.gatherMult))
     const xpr = addSkillXP(skillsRef.current[skillId], xp)
     // Wear the tool — basics never break; when an improved tool breaks, fall back to the basic.
     if (tool && !useTool(tool)) {
@@ -3872,7 +3876,7 @@ export default function Shimmer3D() {
     const f = fishRef.current; if (!f) return
     if (rinHook(f.cast, performance.now())) {
       manaRef.current.current = Math.max(0, manaRef.current.current - f.manaCost)
-      setManaFrac(manaRef.current.current / getMaxPool(skillsRef.current.mana.level))
+      setManaFrac(manaRef.current.current / (getMaxPool(skillsRef.current.mana.level) + affinityRef.current.manaBonus))
       rinCatch(); grantHarvest(f.node)
     } else {
       rinMiss(); setHarvestToast('…it slipped the line')
@@ -3904,7 +3908,7 @@ export default function Shimmer3D() {
       if (dist > CHANNEL_RANGE || ch.node.state !== 'harvestable') { channelRef.current = null; setChannel(null); return }
       if (manaRef.current.current < drain) { channelRef.current = null; setChannel(null); setHarvestToast('Out of mana'); return }
       manaRef.current.current -= drain
-      setManaFrac(manaRef.current.current / getMaxPool(skillsRef.current.mana.level))
+      setManaFrac(manaRef.current.current / (getMaxPool(skillsRef.current.mana.level) + affinityRef.current.manaBonus))
       chopClockRef.current += dt
       if (chopClockRef.current >= 0.42) { chopClockRef.current = 0; gatherTick(getNodeSkill(ch.node.type)) } // working rhythm
       ch.progress += dt / ch.durSec
@@ -4387,7 +4391,10 @@ export default function Shimmer3D() {
   // one "who am I" moment (play3d is first-person, so birth IS the character moment).
   const [birthOpen, setBirthOpen] = useState(false)
   const [birthCancelable, setBirthCancelable] = useState(true) // New Game birth is escapable; first-entry birth is not
-  const birthRuneRef = useRef<string | null>(null)  // chosen rune id; TODO(mechanics): fold into persist()/load() + grant a starting ability off it
+  const birthRuneRef = useRef<string | null>(null)  // chosen rune id (also in localStorage ather:shimmer:birthRune)
+  // v1 passive affinity granted by the birth rune (CANON/game/shimmer-birth-rune.md). Resolved on
+  // load/birth by applyAffinity(); read by the stat hooks (shield/hp caps, speed, mana, gather).
+  const affinityRef = useRef<Affinity>(NEUTRAL_AFFINITY)
 
   // The walker is public; the terrain editor is owner-only. ather.games has no cloud auth, so owner
   // status comes from the httpOnly `ather_owner` cookie via /api/owner (set it at /owner?key=OWNER_KEY).
@@ -4408,7 +4415,20 @@ export default function Shimmer3D() {
   const bloomRef = useRef(0)  // current spread bloom (deg); FiringRange writes, WeaponReticle reads
   const hpRef = useRef(MAX_HP)        // player HP/shield — combat sim writes, ResourceBars reads
   const shieldRef = useRef(MAX_SHIELD)
-  const shieldMaxRef = useRef(MAX_SHIELD)  // birth-rune hook: Barrier rune sets MAX_SHIELD + BARRIER_SHIELD_BONUS
+  const shieldMaxRef = useRef(MAX_SHIELD)  // birth-rune hook: Barrier/Stone (defense) sets MAX_SHIELD + shieldBonus
+  const hpMaxRef = useRef(MAX_HP)          // birth-rune hook: Life (vitality) sets MAX_HP + hpBonus. Mirrors shieldMaxRef.
+  // Resolve the birth rune → its v1 affinity and push the flat caps (hp/shield). speed/mana/gather
+  // read affinityRef live at their own hooks. Called on mount (returning keeper) and on choose.
+  const applyAffinity = useCallback(() => {
+    const a = birthAffinity(birthRuneRef.current)
+    affinityRef.current = a
+    shieldMaxRef.current = MAX_SHIELD + a.shieldBonus
+    hpMaxRef.current = MAX_HP + a.hpBonus
+  }, [])
+  useEffect(() => {
+    try { const rune = localStorage.getItem('ather:shimmer:birthRune'); if (rune) birthRuneRef.current = rune } catch { /* private mode */ }
+    applyAffinity()
+  }, [applyAffinity])
   const ammoRef = useRef<number>(WEAPONS[0].clip)   // the LIVE weapon's clip; FiringRange decrements, AmmoCounter reads
   const reloadingRef = useRef(0)      // >0 while the recharge channel runs
   const reloadTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -4452,7 +4472,7 @@ export default function Shimmer3D() {
   useEffect(() => {
     if (!weaponDrawn) {
       shotsRef.current = 0; hitsRef.current = 0; setHudStats({ shots: 0, hits: 0 }); firingRef.current = false; adsRef.current = false; setAds(false)
-      recoilRef.current.p = 0; recoilRef.current.y = 0; bloomRef.current = 0; hpRef.current = MAX_HP; shieldRef.current = shieldMaxRef.current
+      recoilRef.current.p = 0; recoilRef.current.y = 0; bloomRef.current = 0; hpRef.current = hpMaxRef.current; shieldRef.current = shieldMaxRef.current
       // Leaving the outside realm: reset combat state to slot 0 with full mags, drop the movement
       // penalty to 1 (inside-Ather walking is never slowed by a stale weapon state). The bench-built
       // LOADOUT is PRESERVED (loadoutRef survives) so a configured loadout carries across Crucible visits.
@@ -4684,7 +4704,7 @@ export default function Shimmer3D() {
       reloadingRef.current = 0
       ammoRef.current = Math.min(W.clip, ammoRef.current + rounds)
       manaRef.current.current = Math.max(0, manaRef.current.current - (W.reloadMana * rounds) / W.clip)
-      setManaFrac(manaRef.current.current / getMaxPool(skillsRef.current.mana.level))
+      setManaFrac(manaRef.current.current / (getMaxPool(skillsRef.current.mana.level) + affinityRef.current.manaBonus))
     }, W.reloadTime * 1000)
   }, [])
   // ── weapon-state → movement mult, and the swap / holster actions. syncWeaponMove is the single rule:
@@ -5182,6 +5202,7 @@ export default function Shimmer3D() {
           bloomRef={bloomRef}
           hpRef={hpRef}
           shieldRef={shieldRef}
+          hpMaxRef={hpMaxRef}
           shieldMaxRef={shieldMaxRef}
           rangeCfgRef={rangeCfgRef}
           ammoRef={ammoRef}
@@ -5484,8 +5505,10 @@ export default function Shimmer3D() {
             birthRuneRef.current = id  // BirthScreen also stashes it in localStorage (ather:shimmer:birthRune)
             try { localStorage.removeItem('ather:shimmer:birthPending') } catch { /* private mode */ }  // birth is done; stop re-prompting
             newGame()                  // fresh run — sets its own banner; we override below
+            applyAffinity()            // grant this rune's v1 passive affinity (caps + affinityRef)
+            hpRef.current = hpMaxRef.current; shieldRef.current = shieldMaxRef.current  // start the new run at full, bonuses included
             const rn = RUNES.find(r => r.id === id)?.name ?? 'your rune'
-            setBanner(`Born of ${rn} — find Gregory in the glade`)
+            setBanner(`Born of ${rn} — ${affinityRef.current.label || 'find Gregory in the glade'}`)
           }}
           onCancel={birthCancelable ? () => setBirthOpen(false) : undefined}
         />
@@ -5648,7 +5671,7 @@ export default function Shimmer3D() {
             </>
           )}
           {!weaponUi.holstered && <WeaponReticle bloomRef={bloomRef} adsRef={adsRef} weaponIdxRef={weaponIdxRef} />}
-          <ResourceBars hpRef={hpRef} shieldRef={shieldRef} shieldMaxRef={shieldMaxRef} />
+          <ResourceBars hpRef={hpRef} hpMaxRef={hpMaxRef} shieldRef={shieldRef} shieldMaxRef={shieldMaxRef} />
           <AmmoCounter ammoRef={ammoRef} reloadingRef={reloadingRef} weaponIdxRef={weaponIdxRef} />
           <style>{`@keyframes hitFlash{0%{opacity:1}100%{opacity:0}}@keyframes dmgFlash{0%{opacity:1}100%{opacity:0}}@keyframes downFlash{0%{opacity:1}55%{opacity:0.85}100%{opacity:0}}`}</style>
           {/* hitmarker — four outward diagonal ticks around the reticle, flashed per landed round */}
