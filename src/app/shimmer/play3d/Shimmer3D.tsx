@@ -25,6 +25,7 @@ import { useParty, newPartyCode, sanitizePartyCode, inviteUrl } from '@/lib/part
 import { useAccount, type UseAccount } from '@/lib/accounts/use-account'
 import { pushCloudSave, pullCloudSave } from '@/lib/cloud-sync'
 import { birthAffinity, NEUTRAL_AFFINITY, type Affinity } from './birth-affinity'
+import { runeCast, type CastSpec } from './cast'
 import { rollEncounter, HOLD_LEVELS, type WildEncounter } from '../engine/encounters'
 import { derivePartyStats, type PartyStats } from '../engine/party-stats'
 import { type BattleResult } from '../engine/arena'
@@ -1775,7 +1776,7 @@ function GunBenches() {
     </>
   )
 }
-function FiringRange({ firingRef, adsRef, weaponIdxRef, gridRef, recoilRef, bloomRef, posRef, hpRef, hpMaxRef, shieldRef, shieldMaxRef, rangeCfgRef, ammoRef, reloadingRef, onNeedReload, onHit, onShot, onPlayerDamage, onPlayerDown }: {
+function FiringRange({ firingRef, adsRef, weaponIdxRef, gridRef, recoilRef, bloomRef, posRef, hpRef, hpMaxRef, shieldRef, shieldMaxRef, rangeCfgRef, ammoRef, reloadingRef, castReqRef, castSpecRef, tryCast, onNeedReload, onHit, onShot, onPlayerDamage, onPlayerDown }: {
   firingRef: React.RefObject<boolean>   // held while left-click is down → full-auto (semi-auto weapons fire once per press)
   adsRef: React.RefObject<boolean>      // aiming → muzzle offset moves to center (ADS tracer runs flat)
   weaponIdxRef: React.RefObject<number> // which WEAPONS entry is live — drives fire stats + tracer look
@@ -1790,6 +1791,9 @@ function FiringRange({ firingRef, adsRef, weaponIdxRef, gridRef, recoilRef, bloo
   rangeCfgRef: React.RefObject<{ moving: boolean; hostile: boolean }>  // range console (T) settings
   ammoRef: React.MutableRefObject<number>       // rounds left in the clip; this sim decrements
   reloadingRef: React.MutableRefObject<number>  // >0 while the recharge channel runs — fire is blocked
+  castReqRef: React.RefObject<boolean>       // v2: one-shot cast request (G key); consumed here
+  castSpecRef: React.RefObject<CastSpec>     // v2: the birth rune's cast spec (archetype + numbers + look)
+  tryCast: (cost: number) => boolean         // v2: spend mana for one cast, or refuse
   onNeedReload: () => void  // dry trigger on an empty clip → parent starts the recharge
   onHit: (crit: boolean) => void  // landed round; crit = head-zone hit (gold hitmarker)
   onShot: () => void
@@ -1804,6 +1808,8 @@ function FiringRange({ firingRef, adsRef, weaponIdxRef, gridRef, recoilRef, bloo
   })), [])
   const EMAX = 16  // enemy orb pool (fired by the hunter)
   const orbs = useMemo(() => Array.from({ length: EMAX }, () => ({ pos: new THREE.Vector3(), vel: new THREE.Vector3(), life: 0 })), [])
+  const CMAX = 12  // cast-projectile pool (birth-rune v2 — the castable "word")
+  const castPool = useMemo(() => Array.from({ length: CMAX }, () => ({ pos: new THREE.Vector3(), vel: new THREE.Vector3(), life: 0 })), [])
   const targets = useMemo(() => RANGE_TARGETS.map(([x, y, z], i) => ({
     pos: new THREE.Vector3(x, y, z), ax: x, az: z,  // anchor — drift mode oscillates around it
     phase: i * 1.7, spd: 0.55 + (i % 3) * 0.25,     // varied phase/speed so the wall doesn't move in lockstep
@@ -1813,6 +1819,8 @@ function FiringRange({ firingRef, adsRef, weaponIdxRef, gridRef, recoilRef, bloo
   const hunter = useRef({ pos: new THREE.Vector3(), hp: 0, alive: false, respawn: 0, fireCd: 0, strafe: 0 })
   const shotRef = useRef<THREE.InstancedMesh>(null)
   const orbRef = useRef<THREE.InstancedMesh>(null)
+  const castMeshRef = useRef<THREE.InstancedMesh>(null)  // v2 cast bolts
+  const castCd = useRef(0)                                // v2 cast cooldown timer (s)
   const boardRef = useRef<THREE.InstancedMesh>(null)  // target-board layers: white disc / red ring / gold core
   const ringRef = useRef<THREE.InstancedMesh>(null)
   const coreRef = useRef<THREE.InstancedMesh>(null)
@@ -1881,6 +1889,29 @@ function FiringRange({ firingRef, adsRef, weaponIdxRef, gridRef, recoilRef, bloo
       }
       }
     }
+    // ── v2 cast: the birth rune as a projectile "word". One-shot G request, gated by cooldown +
+    // a free pool slot + mana. Same camera-forward aim as the weapon; no spread (a placed bolt).
+    castCd.current -= dt
+    if (castReqRef.current) {
+      castReqRef.current = false
+      const spec = castSpecRef.current
+      if (spec && spec.archetype === 'projectile' && castCd.current <= 0) {
+        const cp = castPool.find((pr) => pr.life <= 0)
+        if (cp && tryCast(spec.manaCost)) {
+          state.camera.getWorldDirection(dir)
+          camRight.setFromMatrixColumn(state.camera.matrixWorld, 0)
+          camUp.setFromMatrixColumn(state.camera.matrixWorld, 1)
+          const [mr, md, mf] = adsRef.current ? MUZZLE_ADS : MUZZLE_HIP
+          cp.pos.copy(state.camera.position).addScaledVector(camRight, mr).addScaledVector(camUp, -md).addScaledVector(dir, mf)
+          aim.copy(state.camera.position).addScaledVector(dir, 40)  // converge point ~40u down the reticle
+          cp.vel.copy(aim).sub(cp.pos).normalize().multiplyScalar(spec.projSpeed)
+          cp.life = spec.projLife
+          castCd.current = spec.cooldownMs / 1000
+          recoilRef.current.p += 0.008  // a little heft on release
+          onShot()
+        }
+      }
+    }
     // advance + trail + collide
     for (const p of pool) {
       if (p.life <= 0) continue
@@ -1909,6 +1940,31 @@ function FiringRange({ firingRef, adsRef, weaponIdxRef, gridRef, recoilRef, bloo
         const crit = p.pos.y > h.pos.y + CRIT_Y
         h.hp -= crit ? W.crit : W.damage; p.life = 0; onHit(crit)
         if (h.hp <= 0) { h.alive = false; h.respawn = HUNTER_RESPAWN }
+      }
+    }
+    // v2 cast bolts: same collide as the weapon rounds (wall / target / hunter), flat archetype damage.
+    for (const p of castPool) {
+      if (p.life <= 0) continue
+      p.life -= dt
+      p.pos.addScaledVector(p.vel, dt)
+      const cx = Math.round(p.pos.x), cz = Math.round(p.pos.z)
+      const cell = gridRef.current?.[cz]?.[cx]
+      if (cell === undefined || (cell & 0xFF) === WALL_ID) { p.life = 0; continue }
+      const dmg = castSpecRef.current?.damage ?? 0
+      let hit = false
+      for (const t of targets) {
+        if (t.alive && p.pos.distanceToSquared(t.pos) < TARGET_HIT_R2) {
+          t.hp -= dmg; p.life = 0; hit = true; onHit(true)  // gold hitmarker — a cast reads as a heavy hit
+          if (t.hp <= 0) { t.alive = false; t.down = TARGET_RESPAWN }
+          break
+        }
+      }
+      if (!hit && p.life > 0) {
+        const h = hunter.current
+        if (h.alive && p.pos.distanceToSquared(h.pos) < HUNTER_HIT_R2) {
+          h.hp -= dmg; p.life = 0; onHit(true)
+          if (h.hp <= 0) { h.alive = false; h.respawn = HUNTER_RESPAWN }
+        }
       }
     }
     for (const t of targets) {
@@ -2034,6 +2090,13 @@ function FiringRange({ firingRef, adsRef, weaponIdxRef, gridRef, recoilRef, bloo
       orbs.forEach((o, i) => { m.compose(o.life > 0 ? o.pos : zero, q, o.life > 0 ? one : zero); orbRef.current!.setMatrixAt(i, m) })
       orbRef.current.instanceMatrix.needsUpdate = true
     }
+    if (castMeshRef.current) {
+      castPool.forEach((p, i) => { m.compose(p.life > 0 ? p.pos : zero, q, p.life > 0 ? one : zero); castMeshRef.current!.setMatrixAt(i, m) })
+      castMeshRef.current.instanceMatrix.needsUpdate = true
+      // colour the bolt to the live rune (glow from runes.data.ts). Cheap per-frame set; one material.
+      const mat = castMeshRef.current.material as THREE.MeshBasicMaterial
+      if (mat && castSpecRef.current) mat.color.set(castSpecRef.current.glow)
+    }
     if (huntRef.current) {
       const h = hunter.current
       huntRef.current.visible = h.alive
@@ -2071,6 +2134,11 @@ function FiringRange({ firingRef, adsRef, weaponIdxRef, gridRef, recoilRef, bloo
       <instancedMesh ref={orbRef} args={[undefined, undefined, EMAX]} frustumCulled={false}>
         <sphereGeometry args={[0.16, 10, 10]} />
         <meshBasicMaterial color="#ffb35c" transparent opacity={0.95} blending={THREE.AdditiveBlending} depthWrite={false} toneMapped={false} />
+      </instancedMesh>
+      {/* v2 cast bolts — a glowing sphere in the birth rune's colour (set per-frame from castSpecRef) */}
+      <instancedMesh ref={castMeshRef} args={[undefined, undefined, CMAX]} frustumCulled={false}>
+        <sphereGeometry args={[0.24, 12, 12]} />
+        <meshBasicMaterial color="#a9d0f5" transparent opacity={0.96} blending={THREE.AdditiveBlending} depthWrite={false} toneMapped={false} />
       </instancedMesh>
       {/* the ground hunter — magenta spinning octahedron, unmistakably NOT a range target */}
       <mesh ref={huntRef} visible={false} frustumCulled={false}>
@@ -2424,6 +2492,9 @@ const Scene = memo(function Scene(props: {
   rangeCfgRef: React.RefObject<{ moving: boolean; hostile: boolean }>
   ammoRef: React.MutableRefObject<number>
   reloadingRef: React.MutableRefObject<number>
+  castReqRef: React.RefObject<boolean>
+  castSpecRef: React.RefObject<CastSpec>
+  tryCast: (cost: number) => boolean
   onNeedReload: () => void
   onPlayerDamage: () => void
   onPlayerDown: () => void
@@ -2458,7 +2529,7 @@ const Scene = memo(function Scene(props: {
       <ZoneGeometry key={`${props.zone.id}-${props.dims}`} gridRef={props.gridRef} heights={props.heights} version={props.version} paint={props.paint} editing={props.editing} />
       <NPCMarkers npcs={ALL_NPCS.filter((n) => n.zone === props.zone.id && npcInWorld(n, props.defeated, props.flagsRef.current))} heights={props.heights} />
       {props.isOwner && props.zone.id === 'moonwell-glade-gregory-s-home' && <HubGateMarkers heights={props.heights} />}
-      {props.zone.realm === 'outside' && <FiringRange firingRef={props.firingRef} adsRef={props.adsRef} weaponIdxRef={props.weaponIdxRef} gridRef={props.gridRef} recoilRef={props.recoilRef} bloomRef={props.bloomRef} posRef={props.posRef} hpRef={props.hpRef} hpMaxRef={props.hpMaxRef} shieldRef={props.shieldRef} shieldMaxRef={props.shieldMaxRef} rangeCfgRef={props.rangeCfgRef} ammoRef={props.ammoRef} reloadingRef={props.reloadingRef} onNeedReload={props.onNeedReload} onHit={props.onRangeHit} onShot={props.onRangeShot} onPlayerDamage={props.onPlayerDamage} onPlayerDown={props.onPlayerDown} />}
+      {props.zone.realm === 'outside' && <FiringRange firingRef={props.firingRef} adsRef={props.adsRef} weaponIdxRef={props.weaponIdxRef} gridRef={props.gridRef} recoilRef={props.recoilRef} bloomRef={props.bloomRef} posRef={props.posRef} hpRef={props.hpRef} hpMaxRef={props.hpMaxRef} shieldRef={props.shieldRef} shieldMaxRef={props.shieldMaxRef} rangeCfgRef={props.rangeCfgRef} ammoRef={props.ammoRef} reloadingRef={props.reloadingRef} castReqRef={props.castReqRef} castSpecRef={props.castSpecRef} tryCast={props.tryCast} onNeedReload={props.onNeedReload} onHit={props.onRangeHit} onShot={props.onRangeShot} onPlayerDamage={props.onPlayerDamage} onPlayerDown={props.onPlayerDown} />}
       {props.zone.realm === 'outside' && <GunBenches />}
       {props.zone.realm === 'outside' && <ExitMarkers warps={props.zone.warps} heights={props.heights} />}
       <NodeMarkers nodes={props.nodes} heights={props.heights} editing={props.editing} channel={props.channel} zoneId={props.zone.id} />
@@ -4395,6 +4466,10 @@ export default function Shimmer3D() {
   // v1 passive affinity granted by the birth rune (CANON/game/shimmer-birth-rune.md). Resolved on
   // load/birth by applyAffinity(); read by the stat hooks (shield/hp caps, speed, mana, gather).
   const affinityRef = useRef<Affinity>(NEUTRAL_AFFINITY)
+  // v2 the castable "word": the birth rune's cast spec, resolved alongside the affinity. FiringRange
+  // reads it on the cast key (G). Phase 1 = projectile archetype (offense runes); others are no-ops.
+  const castSpecRef = useRef<CastSpec>(runeCast(null))
+  const castReqRef = useRef(false)  // one-shot: G keydown sets it, FiringRange consumes + clears it
 
   // The walker is public; the terrain editor is owner-only. ather.games has no cloud auth, so owner
   // status comes from the httpOnly `ather_owner` cookie via /api/owner (set it at /owner?key=OWNER_KEY).
@@ -4424,6 +4499,7 @@ export default function Shimmer3D() {
     affinityRef.current = a
     shieldMaxRef.current = MAX_SHIELD + a.shieldBonus
     hpMaxRef.current = MAX_HP + a.hpBonus
+    castSpecRef.current = runeCast(birthRuneRef.current)  // v2: resolve the cast alongside the affinity
   }, [])
   useEffect(() => {
     try { const rune = localStorage.getItem('ather:shimmer:birthRune'); if (rune) birthRuneRef.current = rune } catch { /* private mode */ }
@@ -4707,6 +4783,18 @@ export default function Shimmer3D() {
       setManaFrac(manaRef.current.current / (getMaxPool(skillsRef.current.mana.level) + affinityRef.current.manaBonus))
     }, W.reloadTime * 1000)
   }, [])
+  // v2 cast: spend mana for one cast, or refuse. FiringRange calls this before spawning a cast bolt.
+  const dryCastToastAt = useRef(0)
+  const tryCast = useCallback((cost: number): boolean => {
+    if (manaRef.current.current < cost) {
+      const t = performance.now()  // don't toast-spam a mashed cast key
+      if (t - dryCastToastAt.current > 1500) { dryCastToastAt.current = t; setHarvestToast('Not enough mana to cast') }
+      return false
+    }
+    manaRef.current.current = Math.max(0, manaRef.current.current - cost)
+    setManaFrac(manaRef.current.current / (getMaxPool(skillsRef.current.mana.level) + affinityRef.current.manaBonus))
+    return true
+  }, [])
   // ── weapon-state → movement mult, and the swap / holster actions. syncWeaponMove is the single rule:
   // holstered or inside-Ather = full speed; drawn = the weapon's hip mult; aiming = its (lower) ADS mult.
   const syncWeaponMove = useCallback(() => {
@@ -4775,6 +4863,18 @@ export default function Shimmer3D() {
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [swapWeapon, toggleHolster])
+  // G = cast the birth rune (v2). One-shot request; FiringRange gates it on archetype + cooldown +
+  // mana. Same input-ownership guard as the weapon keys. Holstered is fine — casting is your magic,
+  // not the weapon. Inert for a rune with no projectile cast yet (utility/ward/restore/surge).
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (!weaponDrawnRef.current || editRef.current || battleRef.current || curBattleRef.current || dialogueRef.current || openMenuRef.current || placingRef.current || benchOpenRef.current || bagOpenRef.current) return
+      if (e.key.toLowerCase() !== 'g') return
+      e.preventDefault(); castReqRef.current = true
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
   // If a blocking mode takes over while the bag is open (battle/dialogue/edit/placing/reward), drop the
   // bag — those own the cursor themselves, so no re-lock (plain setBagOpen, not toggleBag).
   useEffect(() => { if (bagOpen && (battle || editMode || dialogue || placing || approach || rewards || openMenu)) setBagOpen(false) }, [bagOpen, battle, editMode, dialogue, placing, approach, rewards, openMenu])
@@ -5207,6 +5307,9 @@ export default function Shimmer3D() {
           rangeCfgRef={rangeCfgRef}
           ammoRef={ammoRef}
           reloadingRef={reloadingRef}
+          castReqRef={castReqRef}
+          castSpecRef={castSpecRef}
+          tryCast={tryCast}
           onNeedReload={startReload}
           onPlayerDamage={onPlayerDamage}
           onPlayerDown={onPlayerDown}
@@ -5508,7 +5611,8 @@ export default function Shimmer3D() {
             applyAffinity()            // grant this rune's v1 passive affinity (caps + affinityRef)
             hpRef.current = hpMaxRef.current; shieldRef.current = shieldMaxRef.current  // start the new run at full, bonuses included
             const rn = RUNES.find(r => r.id === id)?.name ?? 'your rune'
-            setBanner(`Born of ${rn} — ${affinityRef.current.label || 'find Gregory in the glade'}`)
+            const castHint = castSpecRef.current.archetype === 'projectile' ? ' · press G to cast it' : ''
+            setBanner(`Born of ${rn} — ${affinityRef.current.label || 'find Gregory in the glade'}${castHint}`)
           }}
           onCancel={birthCancelable ? () => setBirthOpen(false) : undefined}
         />
