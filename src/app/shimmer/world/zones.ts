@@ -27,6 +27,18 @@ export interface Zone {
   // battles work, weapons are holstered. 'outside' = the physical world (the Crucible battle-royale
   // + its firing range): weapons work, spirits are put away. This one flag drives both combat modes.
   realm?: 'ather' | 'outside'
+  /**
+   * Outside-the-Ather but NOT a combat zone (a town, a station concourse).
+   *
+   * `realm: 'outside'` was doing two jobs at once: "the Lucernyx's aegis doesn't reach here"
+   * (so spirits don't work) AND "draw your weapon" (so the firing range + gun benches mount).
+   * Those came apart the moment the mortal side grew a TOWN — Rune Hold is outside the Ather,
+   * so spirits stay dormant, but nobody walks into a market with a manabox drawn.
+   *
+   * `peaceful` splits the second job off: the realm still governs spirits/banking, this governs
+   * whether the place is armed. Weapons stay holstered and the Crucible props don't mount.
+   */
+  peaceful?: boolean
 }
 
 // Check if player is standing on a warp tile (respects flag requirements)
@@ -50,7 +62,7 @@ export function getZone(zones: Zone[], id: string): Zone | null {
 // Garden → east → Moonwell Glade (shortcut, blocked until tutorialComplete)
 // Moonwell Glade → east → Spore Hollow (post-tutorial)
 
-import { GARDEN, MYCELIAL_PATH, MOONWELL_GLADE, SPORE_HOLLOW, VORANYX_DEEP, TWILIGHT_THICKET, WOODED_TRAIL, THE_THRESHOLD, MANA_SPRINGS, ROUTE_2, ROUTE_3, THE_OUTFIELDS, GLOVIEW_VILLAGE, SPIRIT_MEADOW, MOONWELL_GLADE_GREGORY_S_HOME, SPIRIT_CORNER, CRUCIBLE, SORREL_HOLD, BRACK_HOLD, TEST_SANDBOX,
+import { GARDEN, MYCELIAL_PATH, MOONWELL_GLADE, SPORE_HOLLOW, VORANYX_DEEP, TWILIGHT_THICKET, WOODED_TRAIL, THE_THRESHOLD, MANA_SPRINGS, ROUTE_2, ROUTE_3, THE_OUTFIELDS, GLOVIEW_VILLAGE, SPIRIT_MEADOW, MOONWELL_GLADE_GREGORY_S_HOME, SPIRIT_CORNER, CRUCIBLE, RUNE_HOLD, SORREL_HOLD, BRACK_HOLD, TEST_SANDBOX,
   ROUTE_GARDEN_MYCELIAL, ROUTE_MYCELIAL_SPIRIT, ROUTE_SPIRIT_MOONWELL, ROUTE_MOONWELL_GARDEN } from './tilemap'
 export const ZONES: Zone[] = [
   {
@@ -312,6 +324,48 @@ export const ZONES: Zone[] = [
       // Rune Hold gate tile (16,7) so you don't instantly re-warp.
       { fromX: 7, fromY: 11, toZone: 'moonwell-glade-gregory-s-home', toX: 16, toY: 9, direction: 'down' },
       { fromX: 8, fromY: 11, toZone: 'moonwell-glade-gregory-s-home', toX: 17, toY: 9, direction: 'down' },
+      // ── THE OUTWARD CROSSING — OWNER-ONLY, and that is a CANON constraint, not a dev shortcut.
+      // `two-lines-two-games.md`'s realm map calls this street door "the outward crossing", but
+      // `shimmer-storyline.md` + `shimmer-geography.md` both still read: "V1 scope = the shop room
+      // ONLY; its street door to Rune Hold stays SEALED pending the era/Lucernyx/tonal-wall
+      // rulings." Those rulings LANDED 2026-07-22 (the crossing lets out into Year 1672), so the
+      // seal's condition looks satisfied — but whether that unseals the door is Magii's call and
+      // the two geography files were never flipped. Filed as a canon gap 2026-08-03.
+      // Owner-gated = Alex can walk the mortal side; players still meet a sealed door, exactly as
+      // both files describe. WHEN RULED: drop `ownerOnly` here and the door simply opens.
+      { fromX: 7, fromY: 1, toZone: 'rune-hold', toX: 12, toY: 16, direction: 'up', ownerOnly: true },
+      { fromX: 8, fromY: 1, toZone: 'rune-hold', toX: 13, toY: 16, direction: 'up', ownerOnly: true },
+    ],
+  },
+  {
+    // ── RUNE HOLD — the crossroads square, mortal side, Year 1672 ──────────────────────────
+    // Canon: `world/rune-hold.md` § The Hub (ruled 2026-07-12) — the town IS the front door, an
+    // outdoor square whose destinations are storefronts: 🍺 Kindled Mug (the games) · ✧ Spirit
+    // Corner (Greg's gate back into Shimmer) · 📖 Eyuun's Bookstore (the tales) · 🏪 The Passage
+    // (the underground market, where Marks are spent) · 📌 Notice Board (news). Register = the
+    // warm "became a hub" form, NOT the Year-600 occupation (that stays the novel's story).
+    //
+    // `realm: 'outside'` because it is off the Ather (spirits dormant); `peaceful` because it is a
+    // town, not an arena — see the flag's note above.
+    //
+    // ⚠ TODO(rune-hold-layout): the SQUARE IS ALEX'S TO AUTHOR (2D MapEditor). The grid here is a
+    // functional shell so the crossing and the Crucible route can be walked. Canon fixes WHICH
+    // destinations exist; where each building sits is a map call.
+    id: 'rune-hold',
+    name: 'Rune Hold',
+    grid: RUNE_HOLD,
+    realm: 'outside',
+    peaceful: true,
+    playerStart: { tileX: 12, tileY: 16 },
+    warps: [
+      // back through the café door into the Ather (the inward crossing)
+      { fromX: 12, fromY: 17, toZone: 'spirit-corner', toX: 7, toY: 2, direction: 'down' },
+      { fromX: 13, fromY: 17, toZone: 'spirit-corner', toX: 8, toY: 2, direction: 'down' },
+      // ── THE CRUCIBLE, re-parented (owner-only while it's a bare firing range) ──────────────
+      // Canon puts the Pyramid-Zero Crucible on the MORTAL side, reached with a ship — not
+      // hanging off Greg's living room in the Ather. Routing it through Rune Hold is the first
+      // step of that fix; the Travelers Station goes between these two once Magii rules it.
+      { fromX: 3, fromY: 2, toZone: 'crucible', toX: 7, toY: 13, direction: 'up', ownerOnly: true },
     ],
   },
   {

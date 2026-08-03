@@ -2530,8 +2530,8 @@ const Scene = memo(function Scene(props: {
       <ZoneGeometry key={`${props.zone.id}-${props.dims}`} gridRef={props.gridRef} heights={props.heights} version={props.version} paint={props.paint} editing={props.editing} />
       <NPCMarkers npcs={ALL_NPCS.filter((n) => n.zone === props.zone.id && npcInWorld(n, props.defeated, props.flagsRef.current))} heights={props.heights} />
       {props.isOwner && props.zone.id === 'moonwell-glade-gregory-s-home' && <HubGateMarkers heights={props.heights} />}
-      {props.zone.realm === 'outside' && <FiringRange firingRef={props.firingRef} adsRef={props.adsRef} weaponIdxRef={props.weaponIdxRef} gridRef={props.gridRef} recoilRef={props.recoilRef} bloomRef={props.bloomRef} posRef={props.posRef} hpRef={props.hpRef} hpMaxRef={props.hpMaxRef} shieldRef={props.shieldRef} shieldMaxRef={props.shieldMaxRef} rangeCfgRef={props.rangeCfgRef} ammoRef={props.ammoRef} reloadingRef={props.reloadingRef} castReqRef={props.castReqRef} castSpecRef={props.castSpecRef} tryCast={props.tryCast} onNeedReload={props.onNeedReload} onHit={props.onRangeHit} onShot={props.onRangeShot} onPlayerDamage={props.onPlayerDamage} onPlayerDown={props.onPlayerDown} />}
-      {props.zone.realm === 'outside' && <GunBenches />}
+      {props.zone.realm === 'outside' && !props.zone.peaceful && <FiringRange firingRef={props.firingRef} adsRef={props.adsRef} weaponIdxRef={props.weaponIdxRef} gridRef={props.gridRef} recoilRef={props.recoilRef} bloomRef={props.bloomRef} posRef={props.posRef} hpRef={props.hpRef} hpMaxRef={props.hpMaxRef} shieldRef={props.shieldRef} shieldMaxRef={props.shieldMaxRef} rangeCfgRef={props.rangeCfgRef} ammoRef={props.ammoRef} reloadingRef={props.reloadingRef} castReqRef={props.castReqRef} castSpecRef={props.castSpecRef} tryCast={props.tryCast} onNeedReload={props.onNeedReload} onHit={props.onRangeHit} onShot={props.onRangeShot} onPlayerDamage={props.onPlayerDamage} onPlayerDown={props.onPlayerDown} />}
+      {props.zone.realm === 'outside' && !props.zone.peaceful && <GunBenches />}
       {props.zone.realm === 'outside' && <ExitMarkers warps={props.zone.warps} heights={props.heights} />}
       <NodeMarkers nodes={props.nodes} heights={props.heights} editing={props.editing} channel={props.channel} zoneId={props.zone.id} />
       <BurrowMarkers spawners={props.spawners} heights={props.heights} editing={props.editing} defeated={props.defeated} ready={props.spawnerReady} gridRef={props.gridRef} keyFor={props.spawnerKeyFor} />
@@ -4480,7 +4480,9 @@ export default function Shimmer3D() {
   const isOwnerRef = useRef(isOwner); isOwnerRef.current = isOwner  // stable read for onWarp's owner-only gate
   // Weapon (outside-Ather only): drawn when the current zone's realm is 'outside'. firingRef bridges
   // the DOM click → the FiringRange useFrame (which spawns from the live camera). Spirits stay holstered.
-  const weaponDrawn = zone.realm === 'outside'
+  // Armed only where the realm is outside the Ather AND the zone isn't a town — Rune Hold is
+  // outside (spirits dormant) but peaceful, so the manabox stays holstered in the square.
+  const weaponDrawn = zone.realm === 'outside' && !zone.peaceful
   const weaponDrawnRef = useRef(weaponDrawn); weaponDrawnRef.current = weaponDrawn
   const firingRef = useRef(false)  // held while left-click is down → FiringRange auto-fires at the cadence
   const shotsRef = useRef(0)   // hot-path counters live in refs — NO per-shot/per-hit React re-render

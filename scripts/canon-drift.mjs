@@ -173,6 +173,12 @@ const CANON_V1_ZONES = [
   // permanent gate — shimmer-storyline.md + shimmer-geography.md; street door stays sealed.
   'The Spirit Corner',
 ]
+// MORTAL-SIDE canon locations (Athernyx, Year 1672 — the far side of Greg's street door).
+// The list above is the ATHER-side v1 geography from shimmer-storyline.md; it has no opinion on
+// the mortal continent, so a mortal-side zone read as "off-canon" purely because the check was
+// looking in the wrong file. These are ruled in `world/rune-hold.md` and named in the realm map
+// (`game/two-lines-two-games.md`: "Rune Hold, the Citadel, the Pyramid-Zero Crucible").
+const CANON_MORTAL_ZONES = ['Rune Hold', 'The Crucible', 'Pyramid Zero', 'The Citadel', 'The Passage']
 // dev/benchmark zones that are intentionally non-canon — excluded from the check.
 const ZONE_IGNORE = /sandbox|demo|terrain|hub|^fp-|garden \(hub\)|large |medium |huge|chunk|bake|proof|test|[–—]/i
 
@@ -256,11 +262,11 @@ function run() {
   const zones = gameZones().filter((z) => !ZONE_IGNORE.test(z))
   const uniqZones = [...new Set(zones)]
   const offCanon = uniqZones.filter((z) =>
-    !CANON_V1_ZONES.some((c) => c.toLowerCase() === z.toLowerCase() || z.toLowerCase().startsWith(c.toLowerCase())))
+    ![...CANON_V1_ZONES, ...CANON_MORTAL_ZONES].some((c) => c.toLowerCase() === z.toLowerCase() || z.toLowerCase().startsWith(c.toLowerCase())))
   if (offCanon.length) {
     add('GAP', 'zones',
       `${offCanon.length} shipped zones are not in the ruled v1 geography: ${offCanon.join(', ')}`,
-      `Ruled v1 map (shimmer-storyline.md): ${CANON_V1_ZONES.join(', ')}. Off-canon zones are either expansion (rule them) or accidental canon (cut/rename).`)
+      `Ruled v1 map (shimmer-storyline.md): ${CANON_V1_ZONES.join(', ')}. Mortal side (world/rune-hold.md + the realm map): ${CANON_MORTAL_ZONES.join(', ')}. Off-canon zones are either expansion (rule them) or accidental canon (cut/rename).`)
   } else {
     add('CLEAN', 'zones', `all shipped zones map to ruled canon geography`)
   }
