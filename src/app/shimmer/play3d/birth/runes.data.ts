@@ -32,6 +32,19 @@ export interface Rune {
   feel: string
   /** one-line Core essence */
   essence: string
+  /**
+   * Scatter — THE LOST STATE. Canon (`game/runes.md` § "Scatter (Tt'r) — The Lost State"):
+   * the Schools don't teach it, scholars don't recognise it, and Scatter-born mages
+   * "manifest, but no one can name or train them." Ruled 2026-08-03 (/magii + Alex): the
+   * move registry's spirit shelf is spirits-only, so a Scatter rune has NO trainable keeper
+   * move at all — that emptiness IS the canon, not a hole to fill.
+   *
+   * These runes stay in RUNES (they are real, Kael is Static-born, the MoveBook lane grid
+   * and the drift gate both need all 20) but are NOT offered on the birth carousel: three of
+   * twenty birth runes being Scatter would make the lost state ordinary, which is drift in
+   * the other direction. The lost lineage is a story position (Kael, Benji), not a player build.
+   */
+  lostState?: boolean
 }
 
 export const ELEMENTS: Element[] = [
@@ -78,7 +91,7 @@ export const RUNES: Rune[] = [
     glow: '#cfeede', core: '#f2fff8',
     feel: 'Weightlessness. The air an extension of your lungs.',
     essence: 'Wind in motion under your direction — the thinking mage’s storm.' },
-  { id: 'static', name: 'Static', element: 'storm', state: 'Scatter',
+  { id: 'static', name: 'Static', element: 'storm', state: 'Scatter', lostState: true,
     glow: '#d9c7ff', core: '#ffffff',
     feel: 'Hair stands on end. Patience becomes power.',
     essence: 'Scattered charge that accumulates — the longer you wait, the bigger the payoff.' },
@@ -100,7 +113,7 @@ export const RUNES: Rune[] = [
     glow: '#ff7a3c', core: '#ffd8a0',
     feel: 'Fever heat radiating from your core. Blood thick and glowing.',
     essence: 'Molten earth given purpose — slow but unstoppable, melts through anything.' },
-  { id: 'dust', name: 'Dust', element: 'earth', state: 'Scatter',
+  { id: 'dust', name: 'Dust', element: 'earth', state: 'Scatter', lostState: true,
     glow: '#d8c9a8', core: '#f2ead6',
     feel: 'Grit between your teeth. An itch beneath the skin.',
     essence: 'Erosion as a weapon — relentless, death by a thousand cuts.' },
@@ -126,10 +139,23 @@ export const RUNES: Rune[] = [
     glow: '#58c4e0', core: '#dbf6ff',
     feel: 'Loose. Adaptive. You move like a dancer standing still.',
     essence: 'Water in motion, answering to you — the most versatile water rune.' },
-  { id: 'vapor', name: 'Vapor', element: 'water', state: 'Scatter',
+  { id: 'vapor', name: 'Vapor', element: 'water', state: 'Scatter', lostState: true,
     glow: '#b8d4d8', core: '#eef7f8',
     feel: 'Damp skin. Heavy air. A presence you sense before you see.',
     essence: 'Moisture scattered at the edge of perception — the support rune.' },
 ]
 
-export const runesOf = (el: ElementId): Rune[] => RUNES.filter((r) => r.element === el)
+/**
+ * The birth carousel's wheel for an element — **excludes the lost state** (see `lostState`).
+ * This is the ONLY reader that filters; everything that reasons about the full 20-rune matrix
+ * (the MoveBook lane grid, `keeper-moves.ts` lane derivation, the canon drift gate) reads
+ * `RUNES` directly and still sees Static / Dust / Vapor, as it must.
+ *
+ * A save that already carries a Scatter birth rune is left alone — that keeper is simply
+ * lost-lineage, their book renders hollow, and nothing here migrates them.
+ */
+export const runesOf = (el: ElementId): Rune[] =>
+  RUNES.filter((r) => r.element === el && !r.lostState)
+
+/** Every rune of an element, lost state included — for the matrix/lane readers, not the carousel. */
+export const allRunesOf = (el: ElementId): Rune[] => RUNES.filter((r) => r.element === el)

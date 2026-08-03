@@ -324,17 +324,17 @@ export const ZONES: Zone[] = [
       // Rune Hold gate tile (16,7) so you don't instantly re-warp.
       { fromX: 7, fromY: 11, toZone: 'moonwell-glade-gregory-s-home', toX: 16, toY: 9, direction: 'down' },
       { fromX: 8, fromY: 11, toZone: 'moonwell-glade-gregory-s-home', toX: 17, toY: 9, direction: 'down' },
-      // ── THE OUTWARD CROSSING — OWNER-ONLY, and that is a CANON constraint, not a dev shortcut.
-      // `two-lines-two-games.md`'s realm map calls this street door "the outward crossing", but
-      // `shimmer-storyline.md` + `shimmer-geography.md` both still read: "V1 scope = the shop room
-      // ONLY; its street door to Rune Hold stays SEALED pending the era/Lucernyx/tonal-wall
-      // rulings." Those rulings LANDED 2026-07-22 (the crossing lets out into Year 1672), so the
-      // seal's condition looks satisfied — but whether that unseals the door is Magii's call and
-      // the two geography files were never flipped. Filed as a canon gap 2026-08-03.
-      // Owner-gated = Alex can walk the mortal side; players still meet a sealed door, exactly as
-      // both files describe. WHEN RULED: drop `ownerOnly` here and the door simply opens.
-      { fromX: 7, fromY: 1, toZone: 'rune-hold', toX: 12, toY: 16, direction: 'up', ownerOnly: true },
-      { fromX: 8, fromY: 1, toZone: 'rune-hold', toX: 13, toY: 16, direction: 'up', ownerOnly: true },
+      // ── THE OUTWARD CROSSING — OPEN (canon gap RULED 2026-08-03, /magii + Alex).
+      // The seal was always conditional ("pending the era/Lucernyx/tonal-wall rulings") and all
+      // three of those closed 2026-07-22: Lucernyx = the aegis, era = Year 1672, tonal wall =
+      // one game / two sides. `two-lines-two-games.md`'s realm map had described this door in the
+      // present tense as "the outward crossing" ever since; `shimmer-storyline.md` +
+      // `shimmer-geography.md` have now been flipped to match. Nothing was outstanding — the
+      // ownerOnly hold was correct while it was unruled, and it comes off here.
+      // Through it: the MORTAL side, Year 1672 (Rune Hold, and the Crucible beyond it). The
+      // guns-at-the-door prompt is Greg's, human-scale — never a Lucernyx manifestation.
+      { fromX: 7, fromY: 1, toZone: 'rune-hold', toX: 12, toY: 16, direction: 'up' },
+      { fromX: 8, fromY: 1, toZone: 'rune-hold', toX: 13, toY: 16, direction: 'up' },
     ],
   },
   {
@@ -396,6 +396,14 @@ export const ZONES: Zone[] = [
       // ── TEST HUB (owner-only, invisible to players; markers render only for the owner) ──
       // Crucible gate (left) → the practice arena; Rune Hold gate (right) → The Spirit Corner.
       // The Folds gate goes here later. Both land back near these tiles (2 south) on return.
+      //
+      // ⚠ REACHABILITY (noted 2026-08-03): this owner-only warp is currently the ONLY route into
+      // `spirit-corner`, so unsealing the street door beyond it (per the 08-03 canon ruling) does
+      // not yet put a player on the mortal side — they still cannot reach the shop to walk out of
+      // it. That is a BUILD gap, not a canon one: canon's route in is the Home Plot's permanent
+      // gate (`world/rune-hold.md` — "reached through a permanent gate"), and neither
+      // `spirit-corner` nor `rune-hold` exists region-side yet, so the whole mortal-side arc still
+      // lives in the legacy zone graph. Porting it is the next step; the door itself is now open.
       { fromX: 10, fromY: 7, toZone: 'crucible', toX: 7, toY: 13, direction: 'up', ownerOnly: true },
       { fromX: 16, fromY: 7, toZone: 'spirit-corner', toX: 7, toY: 9, direction: 'up', ownerOnly: true },
     ],
