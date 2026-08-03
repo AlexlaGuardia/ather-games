@@ -580,8 +580,16 @@ the Arcade frame.
 > Kael (Static→Lightning, Storm). **Breaks on Veyra** (Star→Breeze) and **Lazerin** (Life→Illuminate), both
 > *purpose-driven* acquisitions rather than natural growth. Do NOT wire progression to the lanes until ruled.
 >
-> **Next:** ① the **book UI** (open your rune, see its page: known / reachable / locked) — buildable now against
-> the runes that have moves. ② repoint `cast.ts` from `birthRune → archetype` to **`loadout slot → move →
+> **① THE BOOK UI — SHIPPED 2026-08-03 (`a5ac480`, live :3200 via coord).** `play3d/MoveBook.tsx`, ✦ in the
+> HUD column. Opens on **your rune's page**, not a moveset. Two honesty rules held deliberately, both tied to
+> open gaps: **(a) nothing is claimed as KNOWN** — acquisition is unruled, so the book is a *catalogue* and
+> every entry reads `NOT YET LEARNED`; claiming otherwise would invent the scroll system in the UI.
+> **(b) the lane grid is OWNER-ONLY** — showing element-row/state-column to a player asserts unruled canon
+> on screen. The 4×5 grid draws the canon matrix with your row+column lit and **every move-less rune hollow**,
+> so the coverage gap is visible in-game instead of buried in a table; empty pages say so plainly.
+> *When Magii rules: drop the `isOwner` guard on the lane block, and swap `NOT YET LEARNED` for real state.*
+>
+> **Next:** ② repoint `cast.ts` from `birthRune → archetype` to **`loadout slot → move →
 > archetype`** + a rune inventory where the birth rune is simply rune #1; the v2 cast *framework* (projectile
 > pool, camera-forward aim, `tryCast` mana spend, cooldowns) is the correct delivery layer and stays.
 > ③ still blocked on the same thing as last session: **the world has no real-time enemies** (moglin patrols are
