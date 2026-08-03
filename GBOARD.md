@@ -546,7 +546,55 @@ the Arcade frame.
 > **Research sources:** Apex movement tech (slide-hop, tap-strafe, wall-bounce, superglide, mantle input model) —
 > BoostRoom + ProGuides + Alegends movement guides, 07-22.
 
-## ✳️ Shimmer play3d — THE BIRTH RUNE (v1 SHIPPED 2026-08-02, v2 SCOPED, jin-cc) · *Last touched 2026-08-02*
+## ✳️ Shimmer play3d — THE BIRTH RUNE (v1 SHIPPED, v2 CORRECTED → the MOVE BOOK, jin-cc) · *Last touched 2026-08-03*
+
+> ### ★ COURSE CORRECTION 2026-08-03 (Alex) — the birth rune does NOT decide your moveset.
+> **"The birth rune sets the tone — the innate passive. It doesn't decide the tactical or the special."**
+> v2 shipped `cast.ts` mapping `birthRune → bolt archetype`, which collapses identity into an attack: every
+> keeper of the same rune fights identically and the rest of the rune system has nothing to do. It also
+> explains the redundancy Alex felt next to the guns (a coloured bolt is a worse gun; Stonewall/Shackle/
+> Cordon are things a gun *cannot* do). **v1 affinity was right and is untouched.**
+>
+> **The corrected model — a move list under each RUNE (Alex, 08-02/03):**
+> - Birth rune = identity + passive lean, and it decides **which runes you can reach**, not which moves you get.
+> - **Two lanes per rune** (a rune is Element × State): across your **element row** (5 runes, breadth ⇒ tacticals)
+>   and down your **state column** (2-3 runes, scarcity ⇒ your signature). A 2nd rune opens a cross-hatch.
+> - Moves come from `CANON/game/moves.md` — **already written**, ~24 of them, each with a rune requirement.
+>   The book is **derived** by inverting that requirement; a two-rune move sits under both and unlocks only
+>   when you own both = canon's runeword compatibility rule, free.
+> - **Why it beat the flat registry:** indexing by rune exposed that 8 of 20 runes have ZERO registered moves.
+>   The lane model absorbs it — no birth rune opens an empty book (worst case 3 reachable moves).
+>
+> **Shipped 08-03 (`f53084c`, build clean, gate 6 CLEAN, oracle 166 asserts):**
+> - `play3d/keeper-moves.ts` — the 24-move registry transcribed from canon (name + runes + tier + effect,
+>   **no numbers** — catalogue, not sim), `MOVES_BY_RUNE` derived index, `lanesFor`/`reachableRunes`/
+>   `knownMoves`/`learnableMoves`, and `RUNES_WITHOUT_MOVES` surfacing the coverage hole instead of hiding it.
+> - `canon-drift.mjs` **check 6**: an unregistered move = COLLISION, a rune-requirement mismatch = CONFLICT.
+>   Negative-tested both (injected a fake move + a wrong rune, gate caught both, reverted).
+> - `keeper-moves.test.ts` pins the canon mages against the lane model and **pins the two known breaks**.
+>
+> **⚠ The lanes are PROVISIONAL and gate nothing yet — [OPEN] canon gap (athernyx `f9afe2d`).** Canon rules
+> *that* compatibility matters (`runes.md` §Developed Runes) but never *which* runes are compatible. Tested
+> against the canon mages: holds for **5 of 7** developed runes — Eyuun (all three **Bind** runes, canon calls
+> it his defining trick), Samantha (Fluid→Life = Flow state, →Freeze = Water element — both lanes in one mage),
+> Kael (Static→Lightning, Storm). **Breaks on Veyra** (Star→Breeze) and **Lazerin** (Life→Illuminate), both
+> *purpose-driven* acquisitions rather than natural growth. Do NOT wire progression to the lanes until ruled.
+>
+> **Next:** ① the **book UI** (open your rune, see its page: known / reachable / locked) — buildable now against
+> the runes that have moves. ② repoint `cast.ts` from `birthRune → archetype` to **`loadout slot → move →
+> archetype`** + a rune inventory where the birth rune is simply rune #1; the v2 cast *framework* (projectile
+> pool, camera-forward aim, `tryCast` mana spend, cooldowns) is the correct delivery layer and stays.
+> ③ still blocked on the same thing as last session: **the world has no real-time enemies** (moglin patrols are
+> turn-based), so there is nothing in the regions to cast at — that layer is the real unlock (`#294`, P1).
+>
+> **Gap filed for Magii (athernyx `f9afe2d`, 2 `[OPEN]` blocks):** (a) is element-row + state-column the
+> compatibility law, and is off-lane possible-but-costly? (b) keeper move coverage — **Water is starving**
+> (Freeze 1, Fluid 2, Hydro/Mist/Vapor 0) and **Freeze/Fluid/Vapor reach no ultimate on any lane**; Lightning's
+> only move is an ultimate; two of three **Scatter** runes are empty (Kael's lineage — deliberate or unwritten?).
+> Proposed target shape per rune: ≥1 passive, 2 tacticals, 1 ultimate. **Jin does not write these** — a move
+> registers in `moves.md` first (`engine/moves.ts` header law).
+
+### v2 as originally scoped (superseded above — kept for the record)
 > **Canon:** `CANON/game/shimmer-birth-rune.md` — "your birth rune is you" (ruled /magii + Alex 08-02). The birth
 > ritual choice = the keeper's innate rune; first rung of birth→developed→mastery. Grant follows each rune's canon
 > essence (`runes.md`). Boundary: rune identity + essence + lean-category = canon (Magii); numbers + cast = build (Jin).
