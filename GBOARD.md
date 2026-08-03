@@ -1147,7 +1147,7 @@ the Arcade frame.
 > **Files:** `engine/burrows.ts` + `.test.ts` (new) · `world/spawn-placements.ts` (cooldown const gone) ·
 > `play3d/Shimmer3D.tsx` (`BurrowMarkers`/`BurrowWalker`, arming on the body, `patrolBeaten` save field).
 
-## ⛅ Shimmer — THE WORLD PIVOT: regions as standalone maps (phase 1 SHIPPED 2026-07-31, jin-cc) · *Last touched 2026-07-31*
+## ⛅ Shimmer — THE WORLD PIVOT: regions as standalone maps (phase 1 SHIPPED 2026-07-31, jin-cc) · *Last touched 2026-08-03*
 > **Alex's call, and it retires the stitched continent:** *"we kill the bunch of plots… each map can have
 > its own spawn rate and available resource list… i can take my time and edit them."* Every stitching bug
 > of the last two days (bake-back, corridor reverts, the (80,22) dog-leg, fingerprint machinery, the 72%
@@ -1183,9 +1183,29 @@ the Arcade frame.
 > load (absorbed zone -> same spot in region; routes self-heal via legacy), START_ZONE = r-home-plot, and
 > the newWorldRef side-flag so interior exits land back in regions. Remaining cutover = deletions only:
 > drop r- prefixes, delete stitcher + legacy zones + world mode when sculpts are ready.
+> ⑤ ✅ **THE MORTAL SIDE IS PLAYER-REACHABLE (`d7050de` + `85203c8`, 08-03).** The 5 open canon gaps
+> ruled at the /magii seat (athernyx `4a37038`) unsealed the Spirit Corner's street door — and opening it
+> exposed that it led out of a room no player could enter. **NOT a region port, and that was the finding:**
+> `spirit-corner`/`rune-hold` are INTERIORS and `build-region-canvases.mts` already holds them in
+> `KEPT_INTERIORS` by design (regions warp *into* interiors, never absorb them). The real cause was a
+> missing edge the code named itself at `zones.ts:74` — the Home Plot's north gate had been RELOCATED into
+> Greg's owner-only test hub by `0e1e31b` while the crossing beyond it was an unruled gap. Right call then;
+> the gap ruled, so the player half came back. Restored to its **original** tiles recovered from `e59a20c`
+> (garden 14-15,1 → spirit-corner 7-8,10), `TODO(gate-placement)` kept — not a new placement call.
+> **★ The interior-exit contract, don't "fix" it:** `spirit-corner`'s return warp names the **LEGACY**
+> `garden` id ON PURPOSE. `newWorldRef`/`performWarp` migrate a region-world player to `r-home-plot`, while
+> a `?zone=` player still lands in the legacy garden. Naming the region id directly strands legacy walkers.
+> The region copy of the gate sits at the **derived** offset (ox/oy 59), computed exactly as the build
+> script does for a kept interior, so a rebuild reproduces it instead of clobbering it.
+> Verified by walking the warp graph from START_ZONE as a non-owner: **spirit-corner + rune-hold
+> REACHABLE**; crucible stays owner-only (the firing-range gate — a build call, not canon).
+> **⚠ Open for Alex:** the gate tile is **not painted** as a warp tile, so the door works (`checkWarp`
+> matches coordinates) but shows **no gold marker** — unlike the old composed continent, the region path
+> does not force-paint doors. Paint it with the MapEditor warp brush at region **(73-74,60)**, or move the
+> gate; the tiles are the original *provisional* spot, not a considered one.
 > **Files:** `world/region-codec.ts` + `world/region-maps.ts` + `world/region-maps/*.json` +
 > `world/all-zones.ts` (new) · `scripts/build-region-canvases.mts` (new) · `dev/editors/MapEditor.tsx` ·
-> `play3d/world-adapter.ts` · `save-map/route.ts`.
+> `play3d/world-adapter.ts` · `save-map/route.ts` · `world/zones.ts` (the crossing + the restored gate).
 
 ## 🏡 Shimmer — PER-KEEPER HOME PLOT (stage 1 SHIPPED 2026-07-31, jin-cc) · *Last touched 2026-07-31*
 > **Alex: "each player gets their own plot" — the plot is inherently different from the world zones.**
