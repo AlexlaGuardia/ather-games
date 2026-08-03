@@ -69,6 +69,7 @@ import { useWallet } from '@/lib/use-wallet'
 import { StationMenus, type PlacedStruct, type StationKind } from './StationMenus'
 import { prettyItem, menuBtn, TOOL_HUD } from './ui'
 import { GfxPanel, FrameProbe, type FrameStats, type SaveStats } from './GfxPanel'
+import MoveBook from './MoveBook'
 import { loadGfx, storeGfx, gfxKey, dprCeiling, SHADOW_MAP_SIZE, DPR_FLOOR, type GfxSettings } from './gfx'
 import { WorldMap, MiniMap } from './WorldMap'
 import { WORLD_ZONE_ID, registerGardenWorld, getGardenWorld, isStitched, fromWorld } from '../world/garden-world'
@@ -3489,6 +3490,7 @@ export default function Shimmer3D() {
   const [skillsOpen, setSkillsOpen] = useState(false) // skills panel
   const [mpOpen, setMpOpen] = useState(false)         // 👥 — play together (party / invite)
   const [gfxOpen, setGfxOpen] = useState(false)       // ⚙ — graphics quality + frame readout
+  const [bookOpen, setBookOpen] = useState(false)     // ✦ — the move book (moves indexed by your rune)
 
   // ── Graphics quality. Read once from localStorage (lazy init, so SSR never touches it), and
   // every change is persisted so the player rules once, not every session.
@@ -5608,6 +5610,14 @@ export default function Shimmer3D() {
             background: gfxOpen ? '#12352c' : 'rgba(16,20,32,0.86)', color: '#bfe0ff', font: '800 15px ui-monospace, monospace', cursor: 'pointer',
           }} title="Graphics">⚙</button>
           {gfxOpen && <GfxPanel gfx={gfx} onGfx={setGfx} statsRef={frameStats} saveRef={saveStatsRef} />}
+
+          {/* ✦ the book — the moves written for YOUR rune. Catalogue only: acquisition is an open
+              canon gap, so nothing here claims to be learned, and the lane grid is owner-only. */}
+          <button onClick={() => { setBookOpen(o => !o); setMenuOpen(false); setSkillsOpen(false); setMpOpen(false); setGfxOpen(false) }} style={{
+            width: 40, height: 40, borderRadius: 10, border: `1px solid ${bookOpen ? '#e8c46a' : '#ffffff33'}`,
+            background: bookOpen ? '#2a2312' : 'rgba(16,20,32,0.86)', color: '#f0dda6', font: '800 15px ui-monospace, monospace', cursor: 'pointer',
+          }} title="The book — your rune's moves">✦</button>
+          {bookOpen && <MoveBook runeId={birthRuneRef.current} isOwner={isOwner} />}
         </div>
       )}
 
