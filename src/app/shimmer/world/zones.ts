@@ -71,8 +71,21 @@ export const ZONES: Zone[] = [
     grid: GARDEN, // 32x32, redesigned in the editor by Alex
     playerStart: { tileX: 30, tileY: 9 },
     warps: [
-      // NORTH GATE to The Spirit Corner (Rune Hold) RELOCATED into Greg's home (the test hub) —
-      // it's now an owner-gated gate inside moonwell-glade-gregory-s-home, not off the home plot.
+      // ── NORTH GATE (14-15,1) → The Spirit Corner — RESTORED 2026-08-03 to its original tiles.
+      // This is the CANON route across: `world/rune-hold.md` has Shimmer reached "through a
+      // permanent gate", and the 07-22 build note built it as Home Plot north gate ⇄ Spirit
+      // Corner interior. It was relocated into Greg's owner-only test hub by 0e1e31b while the
+      // crossing beyond it was an unruled canon gap — which left the whole mortal-side arc
+      // reachable only by the owner. The gap RULED 2026-08-03 and the street door opened, so the
+      // player-facing half has to come back or the open door leads out of a room no one can enter.
+      // The test-hub gate stays as well; it is dev scaffolding and costs nothing.
+      // The return side lives on `spirit-corner` and targets this zone; when the player crossed
+      // from the region world, performWarp migrates that landing to r-home-plot automatically.
+      // ⚠ TODO(gate-placement): these are the ORIGINAL provisional tiles, not a new call — the
+      // spot is Alex's eye (2D MapEditor). The tile is NOT painted as a warp tile, so the door
+      // works but shows no gold marker yet; the editor's warp brush paints it.
+      { fromX: 14, fromY: 1, toZone: 'spirit-corner', toX: 7, toY: 10, direction: 'up' },
+      { fromX: 15, fromY: 1, toZone: 'spirit-corner', toX: 8, toY: 10, direction: 'up' },
       // LEFT door (0,11-12, placed in the editor) → Route 1 (leads to Mycelial Path)
       { fromX: 0, fromY: 11, toZone: 'route-garden-mycelial', toX: 58, toY: 7, direction: 'left' }, // arrive at Route 1's E door
       { fromX: 0, fromY: 12, toZone: 'route-garden-mycelial', toX: 58, toY: 8, direction: 'left' },
@@ -320,10 +333,17 @@ export const ZONES: Zone[] = [
     grid: SPIRIT_CORNER,
     playerStart: { tileX: 7, tileY: 9 },
     warps: [
-      // gate home — south opening back to the test hub (Greg's home), landing 2 tiles below the
-      // Rune Hold gate tile (16,7) so you don't instantly re-warp.
-      { fromX: 7, fromY: 11, toZone: 'moonwell-glade-gregory-s-home', toX: 16, toY: 9, direction: 'down' },
-      { fromX: 8, fromY: 11, toZone: 'moonwell-glade-gregory-s-home', toX: 17, toY: 9, direction: 'down' },
+      // ── THE PERMANENT GATE HOME — south opening back to the Home Plot (restored 2026-08-03).
+      // Targets the LEGACY `garden` id ON PURPOSE: that is the interior-exit contract
+      // (Shimmer3D `newWorldRef`). An interior belongs to whichever side you entered from, so
+      // its exit names the legacy surface and `performWarp` runs `migrateLegacyPosition` to land
+      // a region-world player at r-home-plot (73,61) instead. Naming the region id directly here
+      // would strand anyone who walked in from the legacy world via ?zone=.
+      // Landing is (14-15,2), one tile south of the gate, so you don't instantly re-warp.
+      // (Was pointed at Greg's test hub while the north gate was relocated there; the owner can
+      // still reach this room from the hub, and now exits to the plot like everyone else.)
+      { fromX: 7, fromY: 11, toZone: 'garden', toX: 14, toY: 2, direction: 'down' },
+      { fromX: 8, fromY: 11, toZone: 'garden', toX: 15, toY: 2, direction: 'down' },
       // ── THE OUTWARD CROSSING — OPEN (canon gap RULED 2026-08-03, /magii + Alex).
       // The seal was always conditional ("pending the era/Lucernyx/tonal-wall rulings") and all
       // three of those closed 2026-07-22: Lucernyx = the aegis, era = Year 1672, tonal wall =
