@@ -632,6 +632,51 @@ the Arcade frame.
 > - **Files (v2 target):** `play3d/Shimmer3D.tsx` (cast dispatch + input + FiringRange-shared projectile), a new
 >   `play3d/cast.ts` (rune→archetype routing), `play3d/birth-affinity.ts` (already maps the leans).
 
+## 🔺 Shimmer — THE CRUCIBLE AS A BATTLE ROYALE (match clock + bots + the Puppet Guards, jin-cc) · *Last touched 2026-08-03*
+> **Alex sketched the mode; canon already had it.** `pyramid-zero.md` § Tournament Flow + `characters/elite-guards.md`
+> specify the format, the floors, the hazard and the boss encounter. Almost nothing here was designed — it was transcribed.
+>
+> **The format is RULED, not chosen:** four sides × five entry points = **20 entrances**, **3 challengers each = 60**,
+> teams of three, and the pyramid does not open until every slot is filled (*"Not enough"* is all it says when short).
+> Floors: **L1 The City** (four chambers, ruined city, a glyph is the only light until the mana bell) → **L2 The Dawn**
+> (one open area, permanent almost-daybreak) → **L3 The Throne** (the Puppet Guards; second bell = final five) →
+> **The Vault** (Lazerin, the prizes — *not* a combat floor). Hazard = **airlocks close, pressure drops**. 5 min a floor.
+>
+> **Shipped 2026-08-03 (`614a587` + `bc6833a`, live :3200, pushed):**
+> - **`crucible-phases.ts`** — the match clock as a **pure function of elapsed seconds**. No ticking state: renderer,
+>   HUD countdown and pressure damage each derive independently, so they cannot disagree and a reconnecting client is
+>   instantly right (same discipline as the burrow patrols). Every timing in one `TUNING` block, starting at canon's 5 min.
+>   **Sealing is a warning carved OUT of the window, not extra time** — the floor still lasts exactly 300s; ascent stays
+>   legal while cycling shut and dies the instant pressure starts, ramped so being caught is a scramble not a death.
+> - **`crucible-bots.ts`** — fills to 60. Pure + deterministic (xorshift seed, **zero `Math.random`**: a lobby that
+>   shuffles per-client is a desync waiting to happen, and a seeded roster is rebuildable instead of syncable).
+>   **Parties are never split** (tested hardest — it'd be the mode's most infuriating bug); solo humans backfill squads
+>   that already hold a human. Bot names are **built from syllables, never a canon list** — a bot wearing a real
+>   character's name is accidental canon that detonates when that character ships.
+> - **`puppet-guards.ts`** — **Seren** (holds the line, barriers that CLAIM ground) · **Cade** (flanks + traps, options
+>   stripped) · **Wren** (counters, turns attacks back). Loop **squeeze → trap → counter**, box tightens each cycle.
+>   Personality encoded as numbers: Seren's `guardThreshold` is lowest because canon says she won't raise a barrier
+>   until the last possible moment. The **puppet tells ship as DATA** (empty pouches, pride with nothing behind it,
+>   *"they don't bleed right"*) because canon makes that the payoff of a thousand-year foreshadow — it has to be
+>   playable, not a comment. Pure step fn, provable headless.
+> - **Wired into the FiringRange** behind the **T console → THE PUPPET GUARDS** toggle — the range is the combat lab and
+>   the pyramid's floors don't exist yet. Bodies placed by ROLE, not by a chase heuristic; player rounds route through
+>   `damageGuard()` so barriers blunt and Wren's counter returns **real** damage to the shooter.
+> - 84 asserts across the two oracles. Build clean, canon gate 6 CLEAN.
+>
+> **⚠ MATCH SHAPE IS GAP-BLOCKED** (athernyx, `[OPEN]` 2026-08-03). L1's voice says *"only the last team standing may
+> proceed"* — literally, ONE squad of 20 leaves the ground floor and there is no PvP above it, contradicting L2 and L3
+> which both say *players* plural. Built the **timed-ascent** reading and the file says so; if the literal one is ruled,
+> **`canAscendFrom` is the single function that changes.** Same gap also queues: level count (canon has 3 + the Vault,
+> Alex sketched 4+a 5th phase), the finale (canon's three Puppet Guards vs Alex's swarm), and whether **anti-gravity**
+> is real (canon only ever says *pressure drops* — and it's far cheaper than reworking physics).
+>
+> **Next:** ① **Alex playtests the guards** and calls the feel — phase length 7s, box shrink, Wren's 1.1s counter window
+> are all first guesses in `GUARD_TUNING`. ② **`TODO(puppet-guard-art)`** — blockout capsules in dead grey ship today;
+> the real look is Alex's (canon gives stances: armor that fits like it grew there for Seren, quality leather + hidden
+> pockets for Cade, forgettable-by-design for Wren). ③ the guards need the **L3 floor** to actually live in — range-only
+> today. ④ bots currently fill the roster but do not yet *play*; squad AI on the floors is its own build.
+
 ## 🔫 Shimmer play3d — CRUCIBLE COMBAT (weapon + damage + economy, 2026-07-22→24, jin-cc) · *Last touched 2026-07-24*
 > **The Crucible = BATTLE ROYALE lane (Alex ruled 07-22; Apex is the north star).** The firing range in Alex's
 > 50×50 is the combat lab. Three sessions in, the full loop + a two-weapon loadout + a movement ladder are live on :3200.
