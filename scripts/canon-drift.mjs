@@ -264,6 +264,74 @@ function run() {
   } else {
     add('CLEAN', 'zones', `all shipped zones map to ruled canon geography`)
   }
+
+  // 6. KEEPER MOVES — play3d/keeper-moves.ts vs CANON/game/moves.md (the ONE registry)
+  // Law (moves.md, ruled 2026-07-22): a move is registered ONCE in canon, then shipped. A move
+  // in the build that canon doesn't carry is ACCIDENTAL CANON — the exact thing this gate exists
+  // to catch. A rune-requirement mismatch is a CONFLICT: it changes who can learn the move.
+  const canonMoves = canonKeeperMoves()
+  const builtMoves = gameKeeperMoves()
+  if (!canonMoves.size || !builtMoves.length) {
+    add('NOTE', 'keeper-moves', `could not read one side (canon ${canonMoves.size}, build ${builtMoves.length}) — check skipped`)
+  } else {
+    let moveDrift = 0
+    for (const m of builtMoves) {
+      const c = canonMoves.get(m.name)
+      if (!c) {
+        moveDrift++
+        add('COLLISION', 'keeper-moves',
+          `'${m.name}' ships in keeper-moves.ts but is NOT registered in CANON/game/moves.md`,
+          `Register it in moves.md first (one registry, ruled 2026-07-22) or cut it — a shipped unregistered move is accidental canon.`)
+        continue
+      }
+      const a = [...m.runes].sort().join('+'), b = [...c.runes].sort().join('+')
+      if (a !== b) {
+        moveDrift++
+        add('CONFLICT', 'keeper-moves',
+          `'${m.name}' rune requirement differs — build [${a || 'none'}] vs canon [${b || 'none'}]`,
+          `The requirement decides which keepers can learn it. Re-wire the build, or rule the change in moves.md.`)
+      }
+    }
+    // canon moves not yet shipped: informational, not drift — the build lags canon by design
+    const unshipped = [...canonMoves.keys()].filter((n) => !builtMoves.some((m) => m.name === n))
+    if (unshipped.length) {
+      add('NOTE', 'keeper-moves', `${unshipped.length} registered keeper moves not yet in the build: ${unshipped.join(', ')}`)
+    }
+    if (!moveDrift) add('CLEAN', 'keeper-moves', `all ${builtMoves.length} shipped keeper moves match the canon registry`)
+  }
+}
+
+// ── keeper-move helpers ────────────────────────────────
+const RUNE_NAMES = ['Manalic','Barrier','Star','Life','Enchant','Lightning','Tempest','Breeze','Static',
+  'Illuminate','Stone','Gem','Magma','Dust','Metalergy','Freeze','Hydro','Mist','Fluid','Vapor']
+
+/** Keeper moves registered in CANON/game/moves.md (the section ABOVE the spirit kits). */
+function canonKeeperMoves() {
+  const out = new Map()
+  const p = join(CANON, 'game', 'moves.md')
+  if (!existsSync(p)) return out
+  const txt = read(p).split('# Spirit Kits')[0]
+  for (const line of txt.split('\n')) {
+    const m = line.match(/^\|\s*\*\*(.+?)\*\*\s*\|\s*(.*?)\s*\|/)
+    if (!m) continue
+    const runes = RUNE_NAMES.filter((r) => new RegExp(`\\b${r}\\b`).test(m[2])).map((r) => r.toLowerCase())
+    out.set(norm(m[1]), { runes })
+  }
+  return out
+}
+
+/** Keeper moves shipped in the build's registry. */
+function gameKeeperMoves() {
+  const p = join(GAME, 'play3d', 'keeper-moves.ts')
+  if (!existsSync(p)) return []
+  const txt = read(p)
+  const body = txt.split('export const KEEPER_MOVES')[1] ?? ''
+  const out = []
+  for (const m of body.matchAll(/name:\s*'([^']+)'[\s\S]{0,80}?runes:\s*\[([^\]]*)\]/g)) {
+    const runes = [...m[2].matchAll(/'([^']+)'/g)].map((r) => r[1])
+    out.push({ name: m[1], runes })
+  }
+  return out
 }
 
 // ── REPORT ─────────────────────────────────────────────
