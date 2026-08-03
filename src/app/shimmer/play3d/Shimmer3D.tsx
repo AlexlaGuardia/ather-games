@@ -70,6 +70,7 @@ import { StationMenus, type PlacedStruct, type StationKind } from './StationMenu
 import { prettyItem, menuBtn, TOOL_HUD } from './ui'
 import { GfxPanel, FrameProbe, type FrameStats, type SaveStats } from './GfxPanel'
 import MoveBook from './MoveBook'
+import { GUARDS, initEncounter, stepEncounter, damageGuard, specOf } from './puppet-guards'
 import { loadGfx, storeGfx, gfxKey, dprCeiling, SHADOW_MAP_SIZE, DPR_FLOOR, type GfxSettings } from './gfx'
 import { WorldMap, MiniMap } from './WorldMap'
 import { WORLD_ZONE_ID, registerGardenWorld, getGardenWorld, isStitched, fromWorld } from '../world/garden-world'
@@ -1789,7 +1790,7 @@ function FiringRange({ firingRef, adsRef, weaponIdxRef, gridRef, recoilRef, bloo
   shieldRef: React.MutableRefObject<number> // player shield; drains first — mend potions refill it
   hpMaxRef: React.RefObject<number>         // live HP cap (100, +bonus with the Life birth rune)
   shieldMaxRef: React.RefObject<number>     // live shield cap (100, +25 with the Barrier birth rune)
-  rangeCfgRef: React.RefObject<{ moving: boolean; hostile: boolean }>  // range console (T) settings
+  rangeCfgRef: React.RefObject<{ moving: boolean; hostile: boolean; guards: boolean }>  // range console (T) settings
   ammoRef: React.MutableRefObject<number>       // rounds left in the clip; this sim decrements
   reloadingRef: React.MutableRefObject<number>  // >0 while the recharge channel runs — fire is blocked
   castReqRef: React.RefObject<boolean>       // v2: one-shot cast request (G key); consumed here
@@ -1818,6 +1819,14 @@ function FiringRange({ firingRef, adsRef, weaponIdxRef, gridRef, recoilRef, bloo
   })), [])
   // the ground hunter — spawned by the console's HOSTILE toggle; chases, strafes, returns fire
   const hunter = useRef({ pos: new THREE.Vector3(), hp: 0, alive: false, respawn: 0, fireCd: 0, strafe: 0 })
+  // ── THE THREE PUPPET GUARDS (console toggle) ────────────────────────────────────────────────
+  // Canon's Level 3 encounter, fought here because the range IS the combat lab and the pyramid's
+  // floors do not exist yet. BEHAVIOUR LIVES IN puppet-guards.ts — this ref holds only bodies.
+  // The sim decides who leads, who claims ground and who counters; the frame just moves meshes and
+  // fires orbs, so the encounter stays provable headless.
+  const guardSim = useRef({ enc: initEncounter(), spawned: false, orbit: 0, fireCd: [0, 0, 0] })
+  const guardBodies = useMemo(() => GUARDS.map((g) => ({ id: g.id, pos: new THREE.Vector3() })), [])
+  const guardMeshRef = useRef<THREE.InstancedMesh>(null)
   const shotRef = useRef<THREE.InstancedMesh>(null)
   const orbRef = useRef<THREE.InstancedMesh>(null)
   const castMeshRef = useRef<THREE.InstancedMesh>(null)  // v2 cast bolts
@@ -1942,6 +1951,28 @@ function FiringRange({ firingRef, adsRef, weaponIdxRef, gridRef, recoilRef, bloo
         h.hp -= crit ? W.crit : W.damage; p.life = 0; onHit(crit)
         if (h.hp <= 0) { h.alive = false; h.respawn = HUNTER_RESPAWN }
       }
+      // rounds vs the Puppet Guards. Damage goes through damageGuard() so a raised barrier blunts
+      // it and Wren's counter can turn it back — the canon behaviours live in the sim, not here.
+      if (p.life > 0 && guardSim.current.spawned) {
+        for (let gi = 0; gi < guardBodies.length; gi++) {
+          const b = guardBodies[gi]
+          const st = guardSim.current.enc.guards[gi]
+          if (!st?.alive || p.pos.distanceToSquared(b.pos) >= HUNTER_HIT_R2) continue
+          const crit = p.pos.y > b.pos.y + CRIT_Y
+          const r = damageGuard(guardSim.current.enc, st.id, crit ? W.crit : W.damage)
+          guardSim.current.enc = r.state
+          p.life = 0; onHit(crit)
+          // Wren turning a hit back is real damage to the shooter, not a miss.
+          if (r.returned > 0) {
+            const sh = shieldRef.current
+            shieldRef.current = Math.max(0, sh - r.returned)
+            const spill = r.returned - (sh - shieldRef.current)
+            if (spill > 0) hpRef.current = Math.max(0, hpRef.current - spill)
+            onPlayerDamage()
+          }
+          break
+        }
+      }
     }
     // v2 cast bolts: same collide as the weapon rounds (wall / target / hunter), flat archetype damage.
     for (const p of castPool) {
@@ -2020,6 +2051,52 @@ function FiringRange({ firingRef, adsRef, weaponIdxRef, gridRef, recoilRef, bloo
           }
         }
       } else if (h.alive || h.respawn > 0) { h.alive = false; h.respawn = 0 }  // toggle off = despawn now
+
+      // ── the Three Puppet Guards ────────────────────────────────────────────────────────────
+      // The formation is canon: Seren holds the line, Cade flanks and traps, Wren hangs back and
+      // counters. So the bodies are placed by ROLE around the player, not by a chase heuristic —
+      // Seren dead ahead, Cade and Wren on the shoulders. The sim owns the loop; this owns motion.
+      const gs = guardSim.current
+      if (cfg?.guards) {
+        if (!gs.spawned) {
+          gs.enc = initEncounter(); gs.spawned = true; gs.orbit = 0; gs.fireCd = [1.0, 1.6, 2.2]
+          const base = (posRef.current?.y ?? 0) + 0.55
+          guardBodies.forEach((b, i) => {
+            const a = -Math.PI / 2 + (i - 1) * 0.7
+            b.pos.set(pEye.x + Math.cos(a) * 11, base, pEye.z + Math.sin(a) * 11)
+          })
+        }
+        const hpFrac = (hpRef.current ?? 1) / (hpMaxRef.current || 1)
+        gs.enc = stepEncounter(gs.enc, dt, hpFrac)
+        gs.orbit += dt * 0.5
+        guardBodies.forEach((b, i) => {
+          const st = gs.enc.guards[i]
+          if (!st?.alive) return
+          // each guard holds its own standoff on its own bearing — the box the sim is tightening
+          const bearing = gs.orbit + (i - 1) * 1.15
+          const want = Math.min(st.standoff, gs.enc.boxRadius)
+          const tx = pEye.x + Math.cos(bearing) * want
+          const tz = pEye.z + Math.sin(bearing) * want
+          const spd = specOf(st.id).speed * (st.staggerFor > 0 ? 0 : 1) * dt
+          const dx = tx - b.pos.x, dz = tz - b.pos.z
+          const d = Math.hypot(dx, dz) || 1
+          const nx = b.pos.x + (dx / d) * Math.min(spd, d)
+          const nz = b.pos.z + (dz / d) * Math.min(spd, d)
+          const cell = gridRef.current?.[Math.round(nz)]?.[Math.round(nx)]
+          if (cell !== undefined && (cell & 0xFF) !== WALL_ID) { b.pos.x = nx; b.pos.z = nz }
+          // the leading guard presses; the supports fire slower. Wren, least aggressive, slowest.
+          gs.fireCd[i] -= dt
+          if (gs.fireCd[i] <= 0 && st.staggerFor <= 0) {
+            gs.fireCd[i] = st.leading ? 1.5 : 2.8
+            const o = orbs.find((or) => or.life <= 0)
+            if (o) {
+              o.pos.copy(b.pos); o.pos.y += 0.4
+              o.vel.copy(pEye).sub(o.pos).normalize().multiplyScalar(DRONE_SPEED)
+              o.life = DRONE_LIFE
+            }
+          }
+        })
+      } else if (gs.spawned) { gs.spawned = false; gs.enc = initEncounter() }  // toggle off = gone
       for (const o of orbs) {
         if (o.life <= 0) continue
         o.life -= dt
@@ -2098,6 +2175,21 @@ function FiringRange({ firingRef, adsRef, weaponIdxRef, gridRef, recoilRef, bloo
       const mat = castMeshRef.current.material as THREE.MeshBasicMaterial
       if (mat && castSpecRef.current) mat.color.set(castSpecRef.current.glow)
     }
+    // the guards' bodies. Scale carries HP the same way the targets and the hunter read, and a
+    // staggered guard sits lower — the posture breaking is the tell that it is a puppet.
+    if (guardMeshRef.current) {
+      const gs = guardSim.current
+      guardBodies.forEach((b, i) => {
+        const st = gs.enc.guards[i]
+        const live = gs.spawned && !!st?.alive
+        const spec = GUARDS[i]
+        const hpFrac = live ? st.hp / spec.hp : 0
+        const s = live ? 0.85 + 0.35 * hpFrac - (st.staggerFor > 0 ? 0.15 : 0) : 0
+        m.compose(live ? b.pos : zero, q, one.clone().setScalar(s))
+        guardMeshRef.current!.setMatrixAt(i, m)
+      })
+      guardMeshRef.current.instanceMatrix.needsUpdate = true
+    }
     if (huntRef.current) {
       const h = hunter.current
       huntRef.current.visible = h.alive
@@ -2116,6 +2208,14 @@ function FiringRange({ firingRef, adsRef, weaponIdxRef, gridRef, recoilRef, bloo
       <instancedMesh ref={shotRef} args={[undefined, undefined, MAX * SEG]} frustumCulled={false}>
         <sphereGeometry args={[1, 8, 8]} />
         <meshBasicMaterial color="#aef2ff" transparent opacity={0.9} blending={THREE.AdditiveBlending} depthWrite={false} toneMapped={false} />
+      </instancedMesh>
+      {/* the Three Puppet Guards — blockout bodies. Dead grey CAST metal per the colour law: they
+          are constructs, and no colour of their own is exactly the point. Alex's call on the real
+          look (TODO(puppet-guard-art) — canon gives stances + "armor that fits like it grew there"
+          for Seren, quality leather for Cade, forgettable-by-design for Wren). */}
+      <instancedMesh ref={guardMeshRef} args={[undefined, undefined, GUARDS.length]} frustumCulled={false}>
+        <capsuleGeometry args={[0.42, 0.9, 4, 10]} />
+        <meshStandardMaterial color="#8d9199" metalness={0.55} roughness={0.62} />
       </instancedMesh>
       {/* target boards — cylinder axis aligns to the billboard facing, so each reads as a bullseye
           disc squared up on the player. Layer heights differ slightly so the rings never z-fight. */}
@@ -2490,7 +2590,7 @@ const Scene = memo(function Scene(props: {
   hpMaxRef: React.RefObject<number>
   shieldRef: React.MutableRefObject<number>
   shieldMaxRef: React.RefObject<number>
-  rangeCfgRef: React.RefObject<{ moving: boolean; hostile: boolean }>
+  rangeCfgRef: React.RefObject<{ moving: boolean; hostile: boolean; guards: boolean }>
   ammoRef: React.MutableRefObject<number>
   reloadingRef: React.MutableRefObject<number>
   castReqRef: React.RefObject<boolean>
@@ -4715,7 +4815,7 @@ export default function Shimmer3D() {
   // close re-locks. Settings live in a ref so FiringRange reads them at frame rate with no re-render.
   const [rangeOpen, setRangeOpen] = useState(false)
   const rangeOpenRef = useRef(false); rangeOpenRef.current = rangeOpen
-  const [rangeCfg, setRangeCfg] = useState({ moving: false, hostile: false })
+  const [rangeCfg, setRangeCfg] = useState({ moving: false, hostile: false, guards: false })
   const rangeCfgRef = useRef(rangeCfg); rangeCfgRef.current = rangeCfg
   const toggleRange = useCallback((open: boolean) => {
     setRangeOpen(open)
@@ -4733,7 +4833,7 @@ export default function Shimmer3D() {
     return () => window.removeEventListener('keydown', onKey)
   }, [toggleRange])
   // holstering (leaving the outside realm) closes the console and resets the range to peaceful defaults
-  useEffect(() => { if (!weaponDrawn) { setRangeOpen(false); setRangeCfg({ moving: false, hostile: false }) } }, [weaponDrawn])
+  useEffect(() => { if (!weaponDrawn) { setRangeOpen(false); setRangeCfg({ moving: false, hostile: false, guards: false }) } }, [weaponDrawn])
   // ── Gun bench (the armory) — walk up to a GUN_BENCH (E) to open the loadout editor. Proximity is
   // polled off posRef (benches are static; a 200ms tick is plenty). Opening releases the cursor via the
   // shared handoff, same as the range console / stations.
@@ -5792,6 +5892,7 @@ export default function Shimmer3D() {
                 {([
                   ['TARGET DRIFT', 'floating targets strafe side to side', 'moving'],
                   ['HOSTILE HUNTER', 'ground drone hunts you + returns fire', 'hostile'],
+                  ['THE PUPPET GUARDS', 'Seren · Cade · Wren — squeeze, trap, counter', 'guards'],
                 ] as const).map(([label, desc, key]) => (
                   <button key={key} onClick={() => setRangeCfg((c) => ({ ...c, [key]: !c[key] }))} style={{
                     display: 'flex', width: '100%', alignItems: 'center', justifyContent: 'space-between', gap: 10,
