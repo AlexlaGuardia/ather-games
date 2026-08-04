@@ -25,7 +25,8 @@ import { useParty, newPartyCode, sanitizePartyCode, inviteUrl } from '@/lib/part
 import { useAccount, type UseAccount } from '@/lib/accounts/use-account'
 import { pushCloudSave, pullCloudSave } from '@/lib/cloud-sync'
 import { birthAffinity, NEUTRAL_AFFINITY, type Affinity } from './birth-affinity'
-import { runeCast, type CastSpec } from './cast'
+import { castForMove, isBuilt, defaultLoadout, CAST_SLOTS, SLOT_KEYS, type CastSpec } from './cast'
+import { loadRuneInventory, saveRuneInventory, setBirthRune, grantRune, revokeRune, EMPTY_INVENTORY, type RuneInventory } from './rune-inventory'
 import { rollEncounter, HOLD_LEVELS, type WildEncounter } from '../engine/encounters'
 import { derivePartyStats, type PartyStats } from '../engine/party-stats'
 import { type BattleResult } from '../engine/arena'
@@ -1778,7 +1779,7 @@ function GunBenches() {
     </>
   )
 }
-function FiringRange({ firingRef, adsRef, weaponIdxRef, gridRef, recoilRef, bloomRef, posRef, hpRef, hpMaxRef, shieldRef, shieldMaxRef, rangeCfgRef, ammoRef, reloadingRef, castReqRef, castSpecRef, tryCast, onNeedReload, onHit, onShot, onPlayerDamage, onPlayerDown }: {
+function FiringRange({ firingRef, adsRef, weaponIdxRef, gridRef, recoilRef, bloomRef, posRef, hpRef, hpMaxRef, shieldRef, shieldMaxRef, rangeCfgRef, ammoRef, reloadingRef, pendingCastRef, castMultRef, resistRef, onNeedReload, onHit, onShot, onPlayerDamage, onPlayerDown }: {
   firingRef: React.RefObject<boolean>   // held while left-click is down → full-auto (semi-auto weapons fire once per press)
   adsRef: React.RefObject<boolean>      // aiming → muzzle offset moves to center (ADS tracer runs flat)
   weaponIdxRef: React.RefObject<number> // which WEAPONS entry is live — drives fire stats + tracer look
@@ -1793,9 +1794,11 @@ function FiringRange({ firingRef, adsRef, weaponIdxRef, gridRef, recoilRef, bloo
   rangeCfgRef: React.RefObject<{ moving: boolean; hostile: boolean; guards: boolean }>  // range console (T) settings
   ammoRef: React.MutableRefObject<number>       // rounds left in the clip; this sim decrements
   reloadingRef: React.MutableRefObject<number>  // >0 while the recharge channel runs — fire is blocked
-  castReqRef: React.RefObject<boolean>       // v2: one-shot cast request (G key); consumed here
-  castSpecRef: React.RefObject<CastSpec>     // v2: the birth rune's cast spec (archetype + numbers + look)
-  tryCast: (cost: number) => boolean         // v2: spend mana for one cast, or refuse
+  // The cast layer resolves slot → move → spec in the PARENT (where mana/hp/stance live) and hands
+  // this sim only the projectile it should spawn. Non-projectile archetypes never reach here.
+  pendingCastRef: React.MutableRefObject<CastSpec | null>
+  castMultRef: React.RefObject<number>   // held-stance multiplier on cast damage (Flame Manipulation)
+  resistRef: React.RefObject<number>     // held-stance fraction of incoming damage absorbed (Barrier/Iron Skin)
   onNeedReload: () => void  // dry trigger on an empty clip → parent starts the recharge
   onHit: (crit: boolean) => void  // landed round; crit = head-zone hit (gold hitmarker)
   onShot: () => void
@@ -1810,8 +1813,12 @@ function FiringRange({ firingRef, adsRef, weaponIdxRef, gridRef, recoilRef, bloo
   })), [])
   const EMAX = 16  // enemy orb pool (fired by the hunter)
   const orbs = useMemo(() => Array.from({ length: EMAX }, () => ({ pos: new THREE.Vector3(), vel: new THREE.Vector3(), life: 0 })), [])
-  const CMAX = 12  // cast-projectile pool (birth-rune v2 — the castable "word")
-  const castPool = useMemo(() => Array.from({ length: CMAX }, () => ({ pos: new THREE.Vector3(), vel: new THREE.Vector3(), life: 0 })), [])
+  // cast-projectile pool. Each bolt carries the damage + chain of the MOVE that fired it — two
+  // different projectile moves can be in flight at once, so damage can't come from a global spec.
+  const CMAX = 12
+  const castPool = useMemo(() => Array.from({ length: CMAX }, () => ({
+    pos: new THREE.Vector3(), vel: new THREE.Vector3(), life: 0, dmg: 0, chain: 0, chainRange: 0,
+  })), [])
   const targets = useMemo(() => RANGE_TARGETS.map(([x, y, z], i) => ({
     pos: new THREE.Vector3(x, y, z), ax: x, az: z,  // anchor — drift mode oscillates around it
     phase: i * 1.7, spd: 0.55 + (i % 3) * 0.25,     // varied phase/speed so the wall doesn't move in lockstep
@@ -1857,6 +1864,20 @@ function FiringRange({ firingRef, adsRef, weaponIdxRef, gridRef, recoilRef, bloo
   const vhat = useMemo(() => new THREE.Vector3(), [])  // projectile flight direction, normalized
   const qT = useMemo(() => new THREE.Quaternion(), []) // per-board billboard rotation (face the player)
   const AXIS_Y = useMemo(() => new THREE.Vector3(0, 1, 0), [])
+  // ── the ONE place the player takes damage ────────────────────────────────────────────────────
+  // A held stance (Barrier / Bulwark / Iron Skin) absorbs its fraction FIRST, then the shield soaks,
+  // then the spill hits HP. Both damage sources (drone/guard orbs, Wren's returned hit) route here so
+  // the stance can never apply to one and not the other. Side effect of unifying them: Wren's counter
+  // now triggers the down/reset like every other hit — it used to leave HP at 0 with the run still live.
+  const hurtPlayer = useCallback((raw: number) => {
+    const dmg = raw * (1 - (resistRef.current ?? 0))
+    const sh = shieldRef.current
+    shieldRef.current = Math.max(0, sh - dmg)
+    const spill = dmg - (sh - shieldRef.current)
+    if (spill > 0) hpRef.current = Math.max(0, hpRef.current - spill)
+    if (hpRef.current <= 0) { hpRef.current = hpMaxRef.current ?? MAX_HP; shieldRef.current = shieldMaxRef.current ?? MAX_SHIELD; onPlayerDown() }
+    else onPlayerDamage()
+  }, [resistRef, shieldRef, hpRef, hpMaxRef, shieldMaxRef, onPlayerDamage, onPlayerDown])
   useFrame((state, dt) => {
     const W = WEAPONS[weaponIdxRef.current] ?? WEAPONS[0]   // live weapon — stats + tracer look
     cd.current -= dt
@@ -1899,27 +1920,25 @@ function FiringRange({ firingRef, adsRef, weaponIdxRef, gridRef, recoilRef, bloo
       }
       }
     }
-    // ── v2 cast: the birth rune as a projectile "word". One-shot G request, gated by cooldown +
-    // a free pool slot + mana. Same camera-forward aim as the weapon; no spread (a placed bolt).
-    castCd.current -= dt
-    if (castReqRef.current) {
-      castReqRef.current = false
-      const spec = castSpecRef.current
-      if (spec && spec.archetype === 'projectile' && castCd.current <= 0) {
-        const cp = castPool.find((pr) => pr.life <= 0)
-        if (cp && tryCast(spec.manaCost)) {
-          state.camera.getWorldDirection(dir)
-          camRight.setFromMatrixColumn(state.camera.matrixWorld, 0)
-          camUp.setFromMatrixColumn(state.camera.matrixWorld, 1)
-          const [mr, md, mf] = adsRef.current ? MUZZLE_ADS : MUZZLE_HIP
-          cp.pos.copy(state.camera.position).addScaledVector(camRight, mr).addScaledVector(camUp, -md).addScaledVector(dir, mf)
-          aim.copy(state.camera.position).addScaledVector(dir, 40)  // converge point ~40u down the reticle
-          cp.vel.copy(aim).sub(cp.pos).normalize().multiplyScalar(spec.projSpeed)
-          cp.life = spec.projLife
-          castCd.current = spec.cooldownMs / 1000
-          recoilRef.current.p += 0.008  // a little heft on release
-          onShot()
-        }
+    // ── the cast: spawn a projectile MOVE. The parent already resolved slot → move → spec and paid
+    // the mana + cooldown, so all that lands here is "a bolt of this shape, now". Same camera-forward
+    // aim as the weapon; no spread (a placed bolt).
+    const pending = pendingCastRef.current
+    if (pending) {
+      pendingCastRef.current = null
+      const cp = castPool.find((pr) => pr.life <= 0)
+      if (cp) {
+        state.camera.getWorldDirection(dir)
+        camRight.setFromMatrixColumn(state.camera.matrixWorld, 0)
+        camUp.setFromMatrixColumn(state.camera.matrixWorld, 1)
+        const [mr, md, mf] = adsRef.current ? MUZZLE_ADS : MUZZLE_HIP
+        cp.pos.copy(state.camera.position).addScaledVector(camRight, mr).addScaledVector(camUp, -md).addScaledVector(dir, mf)
+        aim.copy(state.camera.position).addScaledVector(dir, 40)  // converge point ~40u down the reticle
+        cp.vel.copy(aim).sub(cp.pos).normalize().multiplyScalar(pending.projSpeed)
+        cp.life = pending.projLife
+        cp.dmg = pending.damage; cp.chain = pending.chain; cp.chainRange = pending.chainRange
+        recoilRef.current.p += 0.008  // a little heft on release
+        onShot()
       }
     }
     // advance + trail + collide
@@ -1963,18 +1982,13 @@ function FiringRange({ firingRef, adsRef, weaponIdxRef, gridRef, recoilRef, bloo
           guardSim.current.enc = r.state
           p.life = 0; onHit(crit)
           // Wren turning a hit back is real damage to the shooter, not a miss.
-          if (r.returned > 0) {
-            const sh = shieldRef.current
-            shieldRef.current = Math.max(0, sh - r.returned)
-            const spill = r.returned - (sh - shieldRef.current)
-            if (spill > 0) hpRef.current = Math.max(0, hpRef.current - spill)
-            onPlayerDamage()
-          }
+          if (r.returned > 0) hurtPlayer(r.returned)
           break
         }
       }
     }
-    // v2 cast bolts: same collide as the weapon rounds (wall / target / hunter), flat archetype damage.
+    // cast bolts: same collide as the weapon rounds (wall / target / hunter), but damage comes off the
+    // BOLT (the move that fired it), and a chaining move jumps to nearby targets on impact.
     for (const p of castPool) {
       if (p.life <= 0) continue
       p.life -= dt
@@ -1982,12 +1996,26 @@ function FiringRange({ firingRef, adsRef, weaponIdxRef, gridRef, recoilRef, bloo
       const cx = Math.round(p.pos.x), cz = Math.round(p.pos.z)
       const cell = gridRef.current?.[cz]?.[cx]
       if (cell === undefined || (cell & 0xFF) === WALL_ID) { p.life = 0; continue }
-      const dmg = castSpecRef.current?.damage ?? 0
+      const dmg = p.dmg * castMultRef.current  // a held stance (Flame Manipulation) shapes what you throw
       let hit = false
       for (const t of targets) {
         if (t.alive && p.pos.distanceToSquared(t.pos) < TARGET_HIT_R2) {
           t.hp -= dmg; p.life = 0; hit = true; onHit(true)  // gold hitmarker — a cast reads as a heavy hit
           if (t.hp <= 0) { t.alive = false; t.down = TARGET_RESPAWN }
+          // Chain Lightning: arc to the nearest live targets in range, half damage per jump. Canon's
+          // "arcs between every target and conductor in range" — bounded so an ultimate stays an ultimate.
+          if (p.chain > 0) {
+            const r2 = p.chainRange * p.chainRange
+            const struck = t
+            const near = targets
+              .filter((o) => o !== struck && o.alive && o.pos.distanceToSquared(struck.pos) < r2)
+              .sort((a, b) => a.pos.distanceToSquared(struck.pos) - b.pos.distanceToSquared(struck.pos))
+              .slice(0, p.chain)
+            for (const o of near) {
+              o.hp -= dmg * 0.5
+              if (o.hp <= 0) { o.alive = false; o.down = TARGET_RESPAWN }
+            }
+          }
           break
         }
       }
@@ -2106,13 +2134,7 @@ function FiringRange({ firingRef, adsRef, weaponIdxRef, gridRef, recoilRef, bloo
         if (cell === undefined || (cell & 0xFF) === WALL_ID) { o.life = 0; continue }
         if (o.pos.distanceToSquared(pEye) < PLAYER_HIT_R2) {
           o.life = 0
-          // shield soaks first; overflow spills into HP
-          const sh = shieldRef.current
-          shieldRef.current = Math.max(0, sh - DRONE_DMG)
-          const spill = DRONE_DMG - (sh - shieldRef.current)
-          if (spill > 0) hpRef.current = Math.max(0, hpRef.current - spill)
-          if (hpRef.current <= 0) { hpRef.current = hpMaxRef.current ?? MAX_HP; shieldRef.current = shieldMaxRef.current ?? MAX_SHIELD; onPlayerDown() }
-          else onPlayerDamage()
+          hurtPlayer(DRONE_DMG)
         }
       }
     }
@@ -2171,9 +2193,6 @@ function FiringRange({ firingRef, adsRef, weaponIdxRef, gridRef, recoilRef, bloo
     if (castMeshRef.current) {
       castPool.forEach((p, i) => { m.compose(p.life > 0 ? p.pos : zero, q, p.life > 0 ? one : zero); castMeshRef.current!.setMatrixAt(i, m) })
       castMeshRef.current.instanceMatrix.needsUpdate = true
-      // colour the bolt to the live rune (glow from runes.data.ts). Cheap per-frame set; one material.
-      const mat = castMeshRef.current.material as THREE.MeshBasicMaterial
-      if (mat && castSpecRef.current) mat.color.set(castSpecRef.current.glow)
     }
     // the guards' bodies. Scale carries HP the same way the targets and the hunter read, and a
     // staggered guard sits lower — the posture breaking is the tell that it is a puppet.
@@ -2236,10 +2255,12 @@ function FiringRange({ firingRef, adsRef, weaponIdxRef, gridRef, recoilRef, bloo
         <sphereGeometry args={[0.16, 10, 10]} />
         <meshBasicMaterial color="#ffb35c" transparent opacity={0.95} blending={THREE.AdditiveBlending} depthWrite={false} toneMapped={false} />
       </instancedMesh>
-      {/* v2 cast bolts — a glowing sphere in the birth rune's colour (set per-frame from castSpecRef) */}
+      {/* cast bolts. ★ COLOUR LAW (moves.md:5): a move has no colour — colour is the MAGE's own
+          soul-frequency. So the bolt is SOUL_COLOR, the same as the tracers, and it never re-tints
+          per rune. It reads as a heavier, slower version of your own light, which is the point. */}
       <instancedMesh ref={castMeshRef} args={[undefined, undefined, CMAX]} frustumCulled={false}>
         <sphereGeometry args={[0.24, 12, 12]} />
-        <meshBasicMaterial color="#a9d0f5" transparent opacity={0.96} blending={THREE.AdditiveBlending} depthWrite={false} toneMapped={false} />
+        <meshBasicMaterial color={SOUL_COLOR} transparent opacity={0.96} blending={THREE.AdditiveBlending} depthWrite={false} toneMapped={false} />
       </instancedMesh>
       {/* the ground hunter — magenta spinning octahedron, unmistakably NOT a range target */}
       <mesh ref={huntRef} visible={false} frustumCulled={false}>
@@ -2373,6 +2394,68 @@ function AmmoCounter({ ammoRef, reloadingRef, weaponIdxRef }: {
     <div style={{ position: 'fixed', right: 18, bottom: 16, zIndex: 35, pointerEvents: 'none', textAlign: 'right' }}>
       <div ref={num} style={{ font: '800 30px ui-monospace, monospace', color: '#eafff6', textShadow: '0 2px 4px rgba(0,0,0,0.8)', lineHeight: 1 }}>{CLIP_SIZE}</div>
       <div ref={sub} style={{ font: '700 10px ui-monospace, monospace', color: '#ffffff66', letterSpacing: '0.12em', marginTop: 3 }}>/ {CLIP_SIZE}</div>
+    </div>
+  )
+}
+
+// ── THE CAST BAR: what your hands actually hold ────────────────────────────────────────────────
+// Four slots, typed by canon tier (1 passive · 2 tacticals · 1 ultimate) and bound G/Z/X/C. The bar
+// is the loadout made visible — the answer to "the birth rune sets the tone, it doesn't decide the
+// tactical or the special": what you throw is a MOVE off your book, and the bar says which.
+//
+// It is honest about three things, deliberately:
+//   · an EMPTY slot reads "—" with its tier name. Your book has no move of that tier for the runes
+//     you hold — the coverage gap in moves.md, rendered where the player meets it.
+//   · an UNBUILT move is dimmed and struck. Canon has written it; the sim can't run it yet. Better
+//     a visible "not built" than a key that silently does nothing.
+//   · the HELD stance lights up and stays lit, because mana recovery is paused the whole time.
+// Cooldowns sweep on a rAF off the ref — no per-frame React render.
+function CastBar({ slots, stance, cdRef }: {
+  slots: (string | null)[]
+  stance: string | null
+  cdRef: React.RefObject<number[]>
+}) {
+  const cells = useRef<(HTMLDivElement | null)[]>([])
+  useEffect(() => {
+    let raf = 0
+    const tick = () => {
+      const now = performance.now()
+      cells.current.forEach((el, i) => {
+        if (!el) return
+        const until = cdRef.current?.[i] ?? 0
+        el.style.opacity = now < until ? '0.4' : '1'
+      })
+      raf = requestAnimationFrame(tick)
+    }
+    raf = requestAnimationFrame(tick)
+    return () => cancelAnimationFrame(raf)
+  }, [cdRef])
+  return (
+    <div style={{ position: 'fixed', left: 18, bottom: 16, zIndex: 35, pointerEvents: 'none', display: 'flex', gap: 6 }}>
+      {CAST_SLOTS.map((kind, i) => {
+        const moveId = slots[i]
+        const spec = castForMove(moveId)
+        const held = !!moveId && stance === moveId
+        const built = !!moveId && spec.archetype !== 'unbuilt'
+        const tint = held ? '#ffd98a' : built ? '#aef2ff' : '#ffffff55'
+        return (
+          <div key={i} ref={(el) => { cells.current[i] = el }} style={{
+            minWidth: 92, padding: '6px 9px', borderRadius: 8,
+            background: held ? 'rgba(60,44,12,0.88)' : 'rgba(10,14,22,0.78)',
+            border: `1px solid ${held ? '#ffd98a88' : '#ffffff22'}`,
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'baseline' }}>
+              <span style={{ font: '800 10px ui-monospace, monospace', color: tint, letterSpacing: '0.14em' }}>{SLOT_KEYS[i].toUpperCase()}</span>
+              <span style={{ font: '700 8px ui-monospace, monospace', color: '#ffffff4d', letterSpacing: '0.12em' }}>{kind.toUpperCase()}</span>
+            </div>
+            <div style={{
+              font: '700 11px ui-monospace, monospace', color: moveId ? (built ? '#eafff6' : '#ffffff66') : '#ffffff3a',
+              marginTop: 3, textDecoration: moveId && !built ? 'line-through' : 'none', whiteSpace: 'nowrap',
+              overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 118,
+            }}>{spec.label || '—'}</div>
+          </div>
+        )
+      })}
     </div>
   )
 }
@@ -2593,9 +2676,9 @@ const Scene = memo(function Scene(props: {
   rangeCfgRef: React.RefObject<{ moving: boolean; hostile: boolean; guards: boolean }>
   ammoRef: React.MutableRefObject<number>
   reloadingRef: React.MutableRefObject<number>
-  castReqRef: React.RefObject<boolean>
-  castSpecRef: React.RefObject<CastSpec>
-  tryCast: (cost: number) => boolean
+  pendingCastRef: React.MutableRefObject<CastSpec | null>
+  castMultRef: React.RefObject<number>
+  resistRef: React.RefObject<number>
   onNeedReload: () => void
   onPlayerDamage: () => void
   onPlayerDown: () => void
@@ -2630,7 +2713,7 @@ const Scene = memo(function Scene(props: {
       <ZoneGeometry key={`${props.zone.id}-${props.dims}`} gridRef={props.gridRef} heights={props.heights} version={props.version} paint={props.paint} editing={props.editing} />
       <NPCMarkers npcs={ALL_NPCS.filter((n) => n.zone === props.zone.id && npcInWorld(n, props.defeated, props.flagsRef.current))} heights={props.heights} />
       {props.isOwner && props.zone.id === 'moonwell-glade-gregory-s-home' && <HubGateMarkers heights={props.heights} />}
-      {props.zone.realm === 'outside' && !props.zone.peaceful && <FiringRange firingRef={props.firingRef} adsRef={props.adsRef} weaponIdxRef={props.weaponIdxRef} gridRef={props.gridRef} recoilRef={props.recoilRef} bloomRef={props.bloomRef} posRef={props.posRef} hpRef={props.hpRef} hpMaxRef={props.hpMaxRef} shieldRef={props.shieldRef} shieldMaxRef={props.shieldMaxRef} rangeCfgRef={props.rangeCfgRef} ammoRef={props.ammoRef} reloadingRef={props.reloadingRef} castReqRef={props.castReqRef} castSpecRef={props.castSpecRef} tryCast={props.tryCast} onNeedReload={props.onNeedReload} onHit={props.onRangeHit} onShot={props.onRangeShot} onPlayerDamage={props.onPlayerDamage} onPlayerDown={props.onPlayerDown} />}
+      {props.zone.realm === 'outside' && !props.zone.peaceful && <FiringRange firingRef={props.firingRef} adsRef={props.adsRef} weaponIdxRef={props.weaponIdxRef} gridRef={props.gridRef} recoilRef={props.recoilRef} bloomRef={props.bloomRef} posRef={props.posRef} hpRef={props.hpRef} hpMaxRef={props.hpMaxRef} shieldRef={props.shieldRef} shieldMaxRef={props.shieldMaxRef} rangeCfgRef={props.rangeCfgRef} ammoRef={props.ammoRef} reloadingRef={props.reloadingRef} pendingCastRef={props.pendingCastRef} castMultRef={props.castMultRef} resistRef={props.resistRef} onNeedReload={props.onNeedReload} onHit={props.onRangeHit} onShot={props.onRangeShot} onPlayerDamage={props.onPlayerDamage} onPlayerDown={props.onPlayerDown} />}
       {props.zone.realm === 'outside' && !props.zone.peaceful && <GunBenches />}
       {props.zone.realm === 'outside' && <ExitMarkers warps={props.zone.warps} heights={props.heights} />}
       <NodeMarkers nodes={props.nodes} heights={props.heights} editing={props.editing} channel={props.channel} zoneId={props.zone.id} />
@@ -3508,12 +3591,24 @@ export default function Shimmer3D() {
       const now = Date.now()
       const max = (getMaxPool(skillsRef.current.mana.level) + affinityRef.current.manaBonus)
       if (manaRef.current.current < max) {
-        // 0.5s tick; Ather Flow (ather_infusion) lifts the trickle
-        manaRef.current.current = Math.min(max, manaRef.current.current + MANA_REGEN_PER_SEC * manaRegenMult(buffsRef.current, now) * 0.5)
-        setManaFrac(manaRef.current.current / max)
+        // ★ A HELD STANCE PAUSES MANA RECOVERY (runes.md, the mana economy) — the double edge that
+        // makes a passive a stance rather than a free permanent buff. Moisture Gathering is the one
+        // exception canon writes: it draws water from the air, so it produces its own slower trickle
+        // instead of the normal regen. Both lines are true at once, and it is still a net downgrade.
+        const stance = stanceRef.current
+        const perSec = stance?.pausesRecovery
+          ? stance.manaPerSec
+          : MANA_REGEN_PER_SEC * manaRegenMult(buffsRef.current, now)
+        if (perSec > 0) {
+          manaRef.current.current = Math.min(max, manaRef.current.current + perSec * 0.5)  // 0.5s tick
+          setManaFrac(manaRef.current.current / max)
+        }
       }
-      // potion buffs — refresh the HUD chips + the frame-loop mirrors (speed/dreamwalk)
-      speedMultRef.current = speedMult(buffsRef.current, now) * affinityRef.current.speedMult
+      // potion buffs — refresh the HUD chips + the frame-loop mirrors (speed/dreamwalk). A live Static
+      // Burst surge and a held stance both fold in here, so speed has ONE derivation.
+      const surge = surgeRef.current
+      const surgeMult = performance.now() < surge.until ? surge.mult : 1
+      speedMultRef.current = speedMult(buffsRef.current, now) * affinityRef.current.speedMult * surgeMult * stanceMoveRef.current
       dreamwalkRef.current = suppressEncounters(buffsRef.current, now)
       setBuffHud(prev => {
         const next = activeBuffList(buffsRef.current, now)
@@ -4569,10 +4664,21 @@ export default function Shimmer3D() {
   // v1 passive affinity granted by the birth rune (CANON/game/shimmer-birth-rune.md). Resolved on
   // load/birth by applyAffinity(); read by the stat hooks (shield/hp caps, speed, mana, gather).
   const affinityRef = useRef<Affinity>(NEUTRAL_AFFINITY)
-  // v2 the castable "word": the birth rune's cast spec, resolved alongside the affinity. FiringRange
-  // reads it on the cast key (G). Phase 1 = projectile archetype (offense runes); others are no-ops.
-  const castSpecRef = useRef<CastSpec>(runeCast(null))
-  const castReqRef = useRef(false)  // one-shot: G keydown sets it, FiringRange consumes + clears it
+  // ── THE CAST LAYER: rune inventory → known moves → a typed loadout slot → an archetype ────────
+  // v2 mapped birthRune → bolt, which Alex corrected: the birth rune is the innate PASSIVE, not the
+  // moveset. So the rune only decides which moves your book contains; the loadout decides what your
+  // hands do. Slots are typed by canon tier (1 passive · 2 tacticals · 1 ultimate) and bound G/Z/X/C.
+  const runeInvRef = useRef<RuneInventory>(EMPTY_INVENTORY)
+  const castLoadoutRef = useRef<(string | null)[]>(CAST_SLOTS.map(() => null))  // move id per slot
+  const castCdRef = useRef<number[]>(CAST_SLOTS.map(() => 0))   // per-slot ready-at wall clock (ms)
+  const pendingCastRef = useRef<CastSpec | null>(null)  // a projectile waiting for FiringRange to spawn it
+  // the HELD stance (slot 0). Its effects are read live by the sim; holding it pauses mana recovery.
+  const stanceRef = useRef<CastSpec | null>(null)
+  const resistRef = useRef(0)     // incoming damage absorbed by the stance
+  const castMultRef = useRef(1)   // stance multiplier on cast damage
+  const stanceMoveRef = useRef(1) // stance multiplier on move speed
+  const surgeRef = useRef({ until: 0, mult: 1 })  // Static Burst — a short self-buff window
+  const [castHud, setCastHud] = useState<{ slots: (string | null)[]; stance: string | null }>({ slots: CAST_SLOTS.map(() => null), stance: null })
 
   // The walker is public; the terrain editor is owner-only. ather.games has no cloud auth, so owner
   // status comes from the httpOnly `ather_owner` cookie via /api/owner (set it at /owner?key=OWNER_KEY).
@@ -4604,12 +4710,22 @@ export default function Shimmer3D() {
     affinityRef.current = a
     shieldMaxRef.current = MAX_SHIELD + a.shieldBonus
     hpMaxRef.current = MAX_HP + a.hpBonus
-    castSpecRef.current = runeCast(birthRuneRef.current)  // v2: resolve the cast alongside the affinity
+  }, [])
+  // Re-derive the loadout from the runes held. Called on load and whenever the inventory changes.
+  // Any stance held through the change is dropped — you cannot keep holding a move you no longer own.
+  const applyLoadout = useCallback(() => {
+    castLoadoutRef.current = defaultLoadout(runeInvRef.current.owned)
+    castCdRef.current = CAST_SLOTS.map(() => 0)
+    stanceRef.current = null; resistRef.current = 0; castMultRef.current = 1; stanceMoveRef.current = 1
+    setCastHud({ slots: castLoadoutRef.current, stance: null })
   }, [])
   useEffect(() => {
-    try { const rune = localStorage.getItem('ather:shimmer:birthRune'); if (rune) birthRuneRef.current = rune } catch { /* private mode */ }
+    const inv = loadRuneInventory()
+    runeInvRef.current = inv
+    birthRuneRef.current = inv.birth
     applyAffinity()
-  }, [applyAffinity])
+    applyLoadout()
+  }, [applyAffinity, applyLoadout])
   const ammoRef = useRef<number>(WEAPONS[0].clip)   // the LIVE weapon's clip; FiringRange decrements, AmmoCounter reads
   const reloadingRef = useRef(0)      // >0 while the recharge channel runs
   const reloadTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -4888,7 +5004,7 @@ export default function Shimmer3D() {
       setManaFrac(manaRef.current.current / (getMaxPool(skillsRef.current.mana.level) + affinityRef.current.manaBonus))
     }, W.reloadTime * 1000)
   }, [])
-  // v2 cast: spend mana for one cast, or refuse. FiringRange calls this before spawning a cast bolt.
+  // Spend mana for one cast, or refuse.
   const dryCastToastAt = useRef(0)
   const tryCast = useCallback((cost: number): boolean => {
     if (manaRef.current.current < cost) {
@@ -4900,18 +5016,6 @@ export default function Shimmer3D() {
     setManaFrac(manaRef.current.current / (getMaxPool(skillsRef.current.mana.level) + affinityRef.current.manaBonus))
     return true
   }, [])
-  // Owner dev tool: swap the birth rune LIVE (affinity + cast both re-resolve) without a New Game wipe,
-  // so the whole cast/affinity system is testable from one save. Persists so a reload keeps the pick.
-  const setDevRune = useCallback((id: string) => {
-    birthRuneRef.current = id
-    try { localStorage.setItem('ather:shimmer:birthRune', id); localStorage.removeItem('ather:shimmer:birthPending') } catch { /* private mode */ }
-    applyAffinity()
-    hpRef.current = hpMaxRef.current; shieldRef.current = shieldMaxRef.current  // reflect the new caps at once
-    const rn = RUNES.find(r => r.id === id)?.name ?? id
-    const castable = castSpecRef.current.archetype === 'projectile'
-    setBanner(`⟳ dev · born of ${rn} — ${affinityRef.current.label}${castable ? ' · G casts' : ' · (no cast yet)'}`)
-    persist()
-  }, [applyAffinity, persist])
   // ── weapon-state → movement mult, and the swap / holster actions. syncWeaponMove is the single rule:
   // holstered or inside-Ather = full speed; drawn = the weapon's hip mult; aiming = its (lower) ADS mult.
   const syncWeaponMove = useCallback(() => {
@@ -4919,6 +5023,94 @@ export default function Shimmer3D() {
       : adsRef.current ? WEAPONS[weaponIdxRef.current].adsMove
       : WEAPONS[weaponIdxRef.current].hipMove
   }, [])
+  // ── THE CAST DISPATCH: slot → move → archetype ────────────────────────────────────────────────
+  // One entry point for every bound key. It resolves the slot's move, gates on cooldown + mana, then
+  // runs the archetype. Non-projectile archetypes complete right here (they touch hp/mana/speed, all
+  // of which live in this component); only a projectile is handed down to the sim.
+  //
+  // An 'unbuilt' move SAYS SO. Canon has 24 registered moves and the sim can run 9 of them; a silent
+  // no-op on the other 15 reads as a broken cast, so the toast names the move and the reason.
+  const castSlot = useCallback((slot: number) => {
+    const moveId = castLoadoutRef.current[slot]
+    if (!moveId) { setHarvestToast(`No ${CAST_SLOTS[slot]} bound — your book has none for your runes`); return }
+    const spec = castForMove(moveId)
+    if (spec.archetype === 'unbuilt') { setHarvestToast(`${spec.label} — not built yet (${spec.why})`); return }
+
+    // A held stance toggles OFF for free and instantly; everything else waits out its cooldown.
+    const now = performance.now()
+    const isDroppingStance = spec.archetype === 'stance' && stanceRef.current?.moveId === moveId
+    if (!isDroppingStance && now < castCdRef.current[slot]) return
+
+    const syncStance = (s: CastSpec | null) => {
+      stanceRef.current = s
+      resistRef.current = s?.resist ?? 0
+      castMultRef.current = s?.castMult ?? 1
+      stanceMoveRef.current = s?.moveMult ?? 1
+      syncWeaponMove()
+      setCastHud((h) => ({ ...h, stance: s?.moveId ?? null }))
+    }
+
+    switch (spec.archetype) {
+      case 'stance': {
+        // Canon (runes.md, the mana economy): holding a passive PAUSES mana recovery. That pause is
+        // the cost — a stance is a stance, not a permanent state, and dropping it is always allowed.
+        if (isDroppingStance) { syncStance(null); setHarvestToast(`${spec.label} released`); break }
+        syncStance(spec)
+        castCdRef.current[slot] = now + spec.cooldownMs
+        setHarvestToast(`${spec.label} held — mana recovery paused`)
+        break
+      }
+      case 'projectile': {
+        if (!tryCast(spec.manaCost)) return
+        pendingCastRef.current = spec   // FiringRange spawns it next frame, from the live camera
+        castCdRef.current[slot] = now + spec.cooldownMs
+        break
+      }
+      case 'restore': {
+        if (hpRef.current >= (hpMaxRef.current ?? MAX_HP)) { setHarvestToast('Already whole'); return }
+        if (!tryCast(spec.manaCost)) return
+        hpRef.current = Math.min(hpMaxRef.current ?? MAX_HP, hpRef.current + spec.heal)
+        castCdRef.current[slot] = now + spec.cooldownMs
+        setHarvestToast(`${spec.label} — mended`)
+        break
+      }
+      case 'surge': {
+        if (!tryCast(spec.manaCost)) return
+        surgeRef.current = { until: now + spec.surgeSecs * 1000, mult: spec.surgeMult }
+        speedMultRef.current *= spec.surgeMult   // apply NOW; the 2 Hz tick re-derives it from surgeRef
+        castCdRef.current[slot] = now + spec.cooldownMs
+        setHarvestToast(spec.label)
+        break
+      }
+    }
+  }, [tryCast, syncWeaponMove])
+  // Owner dev tool: swap the birth rune LIVE (affinity + book + loadout all re-resolve) without a New
+  // Game wipe, so the whole cast system is testable from one save. Persists so a reload keeps the pick.
+  const setDevRune = useCallback((id: string) => {
+    const inv = setBirthRune(runeInvRef.current, id)
+    runeInvRef.current = inv
+    birthRuneRef.current = id
+    saveRuneInventory(inv)
+    try { localStorage.removeItem('ather:shimmer:birthPending') } catch { /* private mode */ }
+    applyAffinity()
+    applyLoadout()
+    hpRef.current = hpMaxRef.current; shieldRef.current = shieldMaxRef.current  // reflect the new caps at once
+    const rn = RUNES.find(r => r.id === id)?.name ?? id
+    const bound = castLoadoutRef.current.filter((m) => m && isBuilt(m)).length
+    setBanner(`⟳ dev · born of ${rn} — ${affinityRef.current.label} · ${bound} castable`)
+    persist()
+  }, [applyAffinity, applyLoadout, persist])
+  // Owner dev tool: grant/drop a SECOND rune. Rune acquisition is an [OPEN] canon gap, so nothing in
+  // the game does this — but the cross-hatch (a 2nd rune opening two-rune moves) is only testable here.
+  const toggleDevRune = useCallback((id: string) => {
+    const held = runeInvRef.current.owned.includes(id)
+    const inv = held ? revokeRune(runeInvRef.current, id) : grantRune(runeInvRef.current, id)
+    if (inv === runeInvRef.current) return  // refused (the birth rune can't be dropped)
+    runeInvRef.current = inv
+    saveRuneInventory(inv)
+    applyLoadout()
+    setBanner(`⟳ dev · ${held ? 'dropped' : 'developed'} ${RUNES.find(r => r.id === id)?.name ?? id} · ${inv.owned.length} runes held`)
+  }, [applyLoadout])
   // Q — swap the ACTIVE loadout slot (0↔1); each slot keeps its own weapon + magazine.
   const swapWeapon = useCallback(() => {
     if (!weaponDrawnRef.current) return
@@ -4980,18 +5172,20 @@ export default function Shimmer3D() {
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [swapWeapon, toggleHolster])
-  // G = cast the birth rune (v2). One-shot request; FiringRange gates it on archetype + cooldown +
-  // mana. Same input-ownership guard as the weapon keys. Holstered is fine — casting is your magic,
-  // not the weapon. Inert for a rune with no projectile cast yet (utility/ward/restore/surge).
+  // ── the cast binds: G holds the stance · Z/X throw the tacticals · C is the signature ─────────
+  // One key per loadout slot, in canon-tier order (SLOT_KEYS). Digits are NOT usable here — the
+  // HotBar owns 1-6 for item quick-slots and its listener is global. Same input-ownership guard as
+  // the weapon keys. Holstered is fine: casting is your magic, not the weapon.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (!weaponDrawnRef.current || editRef.current || battleRef.current || curBattleRef.current || dialogueRef.current || openMenuRef.current || placingRef.current || benchOpenRef.current || bagOpenRef.current) return
-      if (e.key.toLowerCase() !== 'g') return
-      e.preventDefault(); castReqRef.current = true
+      const slot = SLOT_KEYS.indexOf(e.key.toLowerCase())
+      if (slot < 0) return
+      e.preventDefault(); castSlot(slot)
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [])
+  }, [castSlot])
   // If a blocking mode takes over while the bag is open (battle/dialogue/edit/placing/reward), drop the
   // bag — those own the cursor themselves, so no re-lock (plain setBagOpen, not toggleBag).
   useEffect(() => { if (bagOpen && (battle || editMode || dialogue || placing || approach || rewards || openMenu)) setBagOpen(false) }, [bagOpen, battle, editMode, dialogue, placing, approach, rewards, openMenu])
@@ -5424,9 +5618,9 @@ export default function Shimmer3D() {
           rangeCfgRef={rangeCfgRef}
           ammoRef={ammoRef}
           reloadingRef={reloadingRef}
-          castReqRef={castReqRef}
-          castSpecRef={castSpecRef}
-          tryCast={tryCast}
+          pendingCastRef={pendingCastRef}
+          castMultRef={castMultRef}
+          resistRef={resistRef}
           onNeedReload={startReload}
           onPlayerDamage={onPlayerDamage}
           onPlayerDown={onPlayerDown}
@@ -5644,13 +5838,33 @@ export default function Shimmer3D() {
               {isOwner && <button onClick={() => setRuneDevOpen(o => !o)} style={menuBtn}>✦ Rune (dev)</button>}
               {isOwner && runeDevOpen && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginTop: 2, maxWidth: 268, borderTop: '1px solid #ffffff20', paddingTop: 6 }}>
-                  <span style={{ color: '#8fd9c4', font: '700 9px ui-monospace, monospace', letterSpacing: '.1em', textAlign: 'right' }}>BIRTH RUNE — swap live · G casts offense</span>
+                  <span style={{ color: '#8fd9c4', font: '700 9px ui-monospace, monospace', letterSpacing: '.1em', textAlign: 'right' }}>BIRTH RUNE — click to be born of it</span>
                   {['mana', 'storm', 'earth', 'water'].map(el => (
                     <div key={el} style={{ display: 'flex', flexWrap: 'wrap', gap: 3, justifyContent: 'flex-end' }}>
                       {RUNES.filter(r => r.element === el).map(r => (
                         <button key={r.id} onClick={() => setDevRune(r.id)} title={`${r.name} — ${r.essence}`}
                           style={{ ...menuBtn, padding: '2px 6px', fontSize: 9, color: r.glow, border: birthRuneRef.current === r.id ? `1px solid ${r.glow}` : '1px solid #ffffff20' }}>{r.name}</button>
                       ))}
+                    </div>
+                  ))}
+                  {/* ⚠ Rune ACQUISITION is an [OPEN] canon gap — nothing in the game grants a second
+                      rune. This grants one anyway so the cross-hatch (two-rune moves like Healing
+                      Grove, Cordon, Flame Barrage) is playable before the ruling lands. Owner-only. */}
+                  <span style={{ color: '#e0a34a', font: '700 9px ui-monospace, monospace', letterSpacing: '.1em', textAlign: 'right', marginTop: 4 }}>+ DEVELOPED RUNES — unruled, dev-only</span>
+                  {['mana', 'storm', 'earth', 'water'].map(el => (
+                    <div key={`dev-${el}`} style={{ display: 'flex', flexWrap: 'wrap', gap: 3, justifyContent: 'flex-end' }}>
+                      {RUNES.filter(r => r.element === el).map(r => {
+                        const held = runeInvRef.current.owned.includes(r.id)
+                        const isBirth = birthRuneRef.current === r.id
+                        return (
+                          <button key={r.id} onClick={() => toggleDevRune(r.id)} disabled={isBirth}
+                            title={isBirth ? `${r.name} — your birth rune` : `${held ? 'drop' : 'develop'} ${r.name}`}
+                            style={{ ...menuBtn, padding: '2px 6px', fontSize: 9, opacity: isBirth ? 0.35 : 1,
+                              color: held ? r.glow : '#ffffff66', border: held ? `1px solid ${r.glow}` : '1px solid #ffffff14' }}>
+                            {held ? '✦' : '+'}{r.name}
+                          </button>
+                        )
+                      })}
                     </div>
                   ))}
                 </div>
@@ -5744,13 +5958,21 @@ export default function Shimmer3D() {
         <BirthScreen
           onChoose={(id) => {
             setBirthOpen(false)
-            birthRuneRef.current = id  // BirthScreen also stashes it in localStorage (ather:shimmer:birthRune)
+            // Birth is rune #1 of the inventory, not the whole character — the moves come from the book.
+            const inv = setBirthRune(EMPTY_INVENTORY, id)  // a fresh run starts with exactly one rune
+            runeInvRef.current = inv
+            birthRuneRef.current = id
+            saveRuneInventory(inv)
             try { localStorage.removeItem('ather:shimmer:birthPending') } catch { /* private mode */ }  // birth is done; stop re-prompting
             newGame()                  // fresh run — sets its own banner; we override below
             applyAffinity()            // grant this rune's v1 passive affinity (caps + affinityRef)
+            applyLoadout()             // derive the cast slots from the book this rune opens
             hpRef.current = hpMaxRef.current; shieldRef.current = shieldMaxRef.current  // start the new run at full, bonuses included
             const rn = RUNES.find(r => r.id === id)?.name ?? 'your rune'
-            const castHint = castSpecRef.current.archetype === 'projectile' ? ' · press G to cast it' : ''
+            // Half the carousel currently opens a book with no move the sim can run — that is the real
+            // authoring gap (moves.md), so the banner tells the truth instead of promising a cast.
+            const bound = defaultLoadout(inv.owned).filter((m) => m && isBuilt(m)).length
+            const castHint = bound > 0 ? ` · ${bound} move${bound > 1 ? 's' : ''} in hand (G/Z/X/C)` : ''
             setBanner(`Born of ${rn} — ${affinityRef.current.label || 'find Gregory in the glade'}${castHint}`)
           }}
           onCancel={birthCancelable ? () => setBirthOpen(false) : undefined}
@@ -5917,6 +6139,7 @@ export default function Shimmer3D() {
           {!weaponUi.holstered && <WeaponReticle bloomRef={bloomRef} adsRef={adsRef} weaponIdxRef={weaponIdxRef} />}
           <ResourceBars hpRef={hpRef} hpMaxRef={hpMaxRef} shieldRef={shieldRef} shieldMaxRef={shieldMaxRef} />
           <AmmoCounter ammoRef={ammoRef} reloadingRef={reloadingRef} weaponIdxRef={weaponIdxRef} />
+          <CastBar slots={castHud.slots} stance={castHud.stance} cdRef={castCdRef} />
           <style>{`@keyframes hitFlash{0%{opacity:1}100%{opacity:0}}@keyframes dmgFlash{0%{opacity:1}100%{opacity:0}}@keyframes downFlash{0%{opacity:1}55%{opacity:0.85}100%{opacity:0}}`}</style>
           {/* hitmarker — four outward diagonal ticks around the reticle, flashed per landed round */}
           <div ref={hitmarkRef} style={{ position: 'fixed', left: '50%', top: '50%', zIndex: 31, pointerEvents: 'none', opacity: 0 }}>

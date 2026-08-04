@@ -20,6 +20,7 @@
 import React from 'react'
 import { RUNES, ELEMENTS } from './birth/runes.data'
 import { MOVES_BY_RUNE, lanesFor, learnableMoves, type KeeperMove, type MoveTier } from './keeper-moves'
+import { isBuilt } from './cast'
 
 const MONO = 'ui-monospace, monospace'
 
@@ -51,7 +52,12 @@ function MoveRow({ m, glow, ownedRune }: { m: KeeperMove; glow: string; ownedRun
           {m.needs ? m.needs.toUpperCase() : ''}
         </div>
       )}
-      <div style={{ font: `700 8px ${MONO}`, color: glow, opacity: 0.55, marginTop: 3, letterSpacing: '.1em' }}>NOT YET LEARNED</div>
+      {/* Two different absences, and conflating them is how "my key does nothing" happens.
+          NOT YET LEARNED = canon acquisition is unruled (an [OPEN] gap).
+          NOT BUILT YET   = canon HAS written this move; the sim can't run it. A build debt, ours. */}
+      <div style={{ font: `700 8px ${MONO}`, color: glow, opacity: 0.55, marginTop: 3, letterSpacing: '.1em' }}>
+        NOT YET LEARNED{!isBuilt(m.id) ? ' · NOT BUILT YET' : ''}
+      </div>
     </div>
   )
 }
