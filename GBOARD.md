@@ -548,7 +548,7 @@ the Arcade frame.
 
 ## ✳️ Shimmer play3d — THE BIRTH RUNE → THE MOVE BOOK → THE CAST LAYER (v3 SHIPPED 2026-08-04, jin-cc) · *Last touched 2026-08-04*
 
-> ### ✅ THE THREE SYSTEMS SHIPPED 2026-08-04 (`e7fd57e`+, live :3200) — **9 → 17 of 24 moves.**
+> ### ✅ THE THREE SYSTEMS SHIPPED 2026-08-04 (`54eed46`+`83142ee`, live :3200) — **9 → 17 of 24 moves.**
 > The 15 unbuilt moves did not want 15 one-off implementations; they wanted **three engines**. Each is
 > a pure module (no THREE, no game refs) in the `puppet-guards.ts` / `crucible-phases.ts` mould, so the
 > rules are provable headless — `cast.test.ts` is now **63 assertions**.
