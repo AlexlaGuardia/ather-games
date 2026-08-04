@@ -548,6 +548,51 @@ the Arcade frame.
 
 ## ✳️ Shimmer play3d — THE BIRTH RUNE → THE MOVE BOOK → THE CAST LAYER (v3 SHIPPED 2026-08-04, jin-cc) · *Last touched 2026-08-04*
 
+> ### ✅ THE THREE SYSTEMS SHIPPED 2026-08-04 (`e7fd57e`+, live :3200) — **9 → 17 of 24 moves.**
+> The 15 unbuilt moves did not want 15 one-off implementations; they wanted **three engines**. Each is
+> a pure module (no THREE, no game refs) in the `puppet-guards.ts` / `crucible-phases.ts` mould, so the
+> rules are provable headless — `cast.test.ts` is now **63 assertions**.
+> - **SYSTEM 1 · `field-effects.ts` — a volume that keeps being true.** Firewall, Healing Grove.
+>   Effects fire on a **1s clock, not per frame**, and a backgrounded tab **resyncs instead of
+>   burst-applying** the ticks it missed (a stack of retroactive damage on unpause is a bug wearing a
+>   feature's clothes). At the pool cap it drops the **oldest** — a cast you just paid mana for must
+>   always appear.
+> - **SYSTEM 2 · `conjured-terrain.ts` — terrain as CELLS, not meshes.** Stonewall, Living
+>   Architecture, Cordon. ★ **The design call that made it cheap:** Shimmer's collision is already
+>   grid-tile based, so conjured terrain is a set of tile cells + one predicate (`blockedAt`) dropped
+>   next to every existing `WALL_ID` check. One rule ⇒ a slab blocks **the walker, the hunter, the
+>   guards and every projectile**, with no second collision path to drift, and the zone's **authored
+>   tilemap is never mutated**. A wall lays **perpendicular** to your aim (along it would be a corridor
+>   you shot down); Cordon's ring is **asserted sealed on every bearing** and traps you too if you
+>   stand in it — which is what makes casting it a decision.
+> - **SYSTEM 3 · `statuses.ts` — removes an OPTION, never HP.** Shackle (root + disarm — canon names
+>   both), Enlighten (blind). Re-applying **extends rather than stacks** (stacking is how CC becomes a
+>   stun-lock) and a **shorter** re-apply can't truncate a longer one; a death **clears its target** so
+>   a root can't survive a respawn. Blinded enemies still fire, just not at you — a flash-bang buys you
+>   the fight, it doesn't end it.
+> - **+ Flame Infusion** (`infusion`): the one cast that makes the **gun better** instead of doing what
+>   a gun cannot. Resolved once per frame so every damage site reads the same number.
+> - **Cordon is BOTH systems in one cast** — canon writes *"stone rises on every side AND all metal
+>   locks to the caster"* in one sentence, so a `terrain` cast also applies its `statuses`. That's why
+>   the dispatcher doesn't `else if` there.
+> - **Every placed cast shares ONE aim resolution**: camera-forward **flattened to the ground plane**,
+>   walked `castRange` from your feet. Flattening is deliberate — looking at the sky must not put your
+>   Stonewall in orbit. A bolt, a firewall, a wall and a shackle all land by the same rule.
+> - **★ THE BUG WORTH REMEMBERING (caught before Alex ever saw it):** fields/terrain/statuses are keyed
+>   by **world coordinates with no zone on them**, and FiringRange only renders in an armed zone. So a
+>   Stonewall raised in the range still occupied those tiles after a warp — an **invisible wall in
+>   town**. All three now clear on `zoneId` change. *Anything keyed by world position needs a zone
+>   lifetime, or it haunts the next map.*
+> - **Canon reads pinned by the oracle** so a tuning pass can't quietly break them: Firewall **is**
+>   cover / a grove is **not** · Enlighten takes aim and **never** HP · Shackle roots **and** disarms ·
+>   **Grey Arena stays unbuilt for a CANON reason (manatech), not a build one.**
+> - **Still unbuilt (7):** flame-barrage (homing volley) · gate (two-point bind + warp) · grey-arena
+>   (canon-gated) · counterpoint + vaporscreen (need a 2nd mage) · bind-mastery + herbal-knowledge (no
+>   combat behaviour). **None of them is blocked on a missing system any more** — they're each their
+>   own feature, and two are canon-gated rather than ours.
+> - **Files:** `play3d/field-effects.ts`, `play3d/conjured-terrain.ts`, `play3d/statuses.ts` (all new),
+>   `play3d/cast.ts` (+4 archetypes), `play3d/cast.test.ts` (63), `play3d/Shimmer3D.tsx`.
+
 > ### ✅ v3 SHIPPED 2026-08-04 (`7fd0ba3`, live :3200) — the correction is now IN THE CODE.
 > The 08-03 course correction below described the model; `cast.ts` still shipped `birthRune → bolt`. This
 > repoints the whole chain: **rune inventory → the book → a LOADOUT SLOT → an archetype.**
