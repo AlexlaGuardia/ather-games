@@ -5602,6 +5602,16 @@ export default function Shimmer3D() {
     if (regionIdOf(zoneId)) newWorldRef.current = true
     else if (zoneId === WORLD_ZONE_ID || isStitched(zoneId)) newWorldRef.current = false
   }, [zoneId])
+  // ★ CHANGING ZONE CLEARS THE THREE SYSTEMS. Fields, conjured terrain and statuses are all keyed by
+  // WORLD coordinates with no zone on them, so a Stonewall raised in the range would still occupy
+  // those tiles after a warp — and FiringRange only renders in an armed zone, so in town it would be
+  // an INVISIBLE wall you walk into. Enemy statuses are per-encounter and must not ride along either.
+  // Cheap and total: nothing conjured survives leaving the place you conjured it.
+  useEffect(() => {
+    fieldsRef.current = []
+    conjuredRef.current = []
+    statusRef.current = emptyBag()
+  }, [zoneId])
   const performWarp = useCallback((w: Warp) => {
     let toZone = w.toZone, toX = w.toX, toY = w.toY
     if (regionIdOf(toZone)) newWorldRef.current = true
