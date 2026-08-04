@@ -546,7 +546,54 @@ the Arcade frame.
 > **Research sources:** Apex movement tech (slide-hop, tap-strafe, wall-bounce, superglide, mantle input model) —
 > BoostRoom + ProGuides + Alegends movement guides, 07-22.
 
-## ✳️ Shimmer play3d — THE BIRTH RUNE (v1 SHIPPED, v2 CORRECTED → the MOVE BOOK, jin-cc) · *Last touched 2026-08-03*
+## ✳️ Shimmer play3d — THE BIRTH RUNE → THE MOVE BOOK → THE CAST LAYER (v3 SHIPPED 2026-08-04, jin-cc) · *Last touched 2026-08-04*
+
+> ### ✅ v3 SHIPPED 2026-08-04 (`7fd0ba3`, live :3200) — the correction is now IN THE CODE.
+> The 08-03 course correction below described the model; `cast.ts` still shipped `birthRune → bolt`. This
+> repoints the whole chain: **rune inventory → the book → a LOADOUT SLOT → an archetype.**
+> - **`rune-inventory.ts`** — runes are an inventory. Birth rune is **#1 and unrevokable** ("you cannot
+>   un-be born"); a returning keeper migrates off the legacy `ather:shimmer:birthRune` key with no rewrite.
+>   Ships **no acquisition rules** — how you get a 2nd rune is still an [OPEN] canon gap.
+> - **The loadout is TYPED BY CANON TIER** — `1 passive · 2 tacticals · 1 ultimate`, which is exactly the
+>   authoring target the Magii pass is aimed at. Not four interchangeable holes: a held stance behaves
+>   nothing like a signature, so the input says so. Bound **G / Z / X / C**.
+>   ▸ **Digits are unusable here** — `HotBar` owns 1-6 for item quick-slots on a global listener.
+>   ▸ `combo` is not a slot kind: canon needs a second mage in sync, so it can never be a solo bind.
+> - **Archetypes built (4):** `projectile` (chains — Chain Lightning arcs to the 3 nearest in range at half
+>   damage), `restore` (Mend), `surge` (Static Burst — a 2.5s speed window), `stance` (a held passive
+>   **pauses mana recovery**, which is canon's mana economy and the whole reason a passive is a stance).
+>   **Moisture Gathering is the written exception** — canon has it drawing water from the air, so it
+>   produces its own slower trickle instead of the normal regen. Both lines true at once, still a downgrade.
+> - **★ THE COLOUR LAW — v2 was drifting and nobody caught it.** `moves.md:5`: *"Colour is never part of a
+>   move. Colour is the mage's own — their soul-frequency — applied when they cast it."* v2's CastSpec
+>   carried the RUNE's glow, so two Storm-mages would run the same Chain Lightning in two colours because
+>   of their rune rather than their soul. **CastSpec now has no colour field at all** (the oracle asserts
+>   its absence) and bolts render `SOUL_COLOR`, same as the tracers.
+> - **★ 9 of 24 — and the build SAYS SO.** Canon has 24 registered keeper moves; the sim can run 9. The
+>   other 15 are `archetype: 'unbuilt'` **with a reason**, surfaced three ways: the cast bar dims + strikes
+>   them, the key press toasts *"Firewall — not built yet (needs a persistent area entity)"*, and MoveBook
+>   now separates **NOT YET LEARNED** (canon acquisition unruled — theirs) from **NOT BUILT YET** (ours).
+>   A silent no-op is what makes a player think the game is broken.
+> - **The playability consequence, deliberate:** roughly half the birth carousel now opens a book with
+>   **nothing castable**. That is not a regression to paper over — it is the `moves.md` coverage gap made
+>   visible at the exact moment a player meets it, and it is the argument for the P1 Water row pass.
+> - **One `hurtPlayer()`** so a stance can't absorb one damage source and not another. Side effect: Wren's
+>   returned hit now triggers the down/reset like every other hit (it used to leave HP at 0, run still live).
+> - **Owner dev tool grants a SECOND rune** (menu ☰ → ✦ Rune (dev)) so the cross-hatch — Healing Grove,
+>   Cordon, Flame Barrage — is playable before acquisition is ruled. Nothing in the game grants one.
+> - **Gates:** `cast.test.ts` oracle **27/27** (written as a `tsx` oracle — this repo has no vitest, the
+>   convention is `npx tsx <file>.test.ts`), keeper-moves **166/166**, canon-drift **6 CLEAN**, build clean.
+>   The coverage assertion is the load-bearing one: **a newly authored canon move must be classified here
+>   or the oracle fails**, so it can never fall through to a silent no-op.
+> - **Files:** `play3d/cast.ts` (rewritten), `play3d/rune-inventory.ts` (new), `play3d/cast.test.ts` (new),
+>   `play3d/Shimmer3D.tsx` (dispatch + binds + CastBar + stance plumbing), `play3d/MoveBook.tsx`.
+> - **Next:** ▸ **Alex playtest** — do typed slots feel right, or should tacticals be interchangeable?
+>   ▸ the 15 unbuilt moves want 3 systems, not 15 one-offs: a **persistent area entity** (Firewall,
+>   Healing Grove, Grey Arena), **runtime terrain** (Stonewall, Cordon), and **AI status effects** (Shackle,
+>   Enlighten, Flame Infusion). Building those three unlocks 8 of the 15. ▸ #294 real-time world enemies —
+>   now unblocked, and the design warning stands: relocating PvE to the gun-legal side re-creates the
+>   rune-vs-gun redundancy, so enemies need to be things a gun can't answer.
+
 
 > ### ★ COURSE CORRECTION 2026-08-03 (Alex) — the birth rune does NOT decide your moveset.
 > **"The birth rune sets the tone — the innate passive. It doesn't decide the tactical or the special."**
