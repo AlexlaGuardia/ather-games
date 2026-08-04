@@ -27,6 +27,8 @@
 // asserts full coverage, so a newly authored canon move cannot slip through unclassified.
 
 import { KEEPER_MOVES, type KeeperMove, type MoveTier, knownMoves } from './keeper-moves'
+import type { ConjureShape } from './conjured-terrain'
+import type { StatusKind } from './statuses'
 
 /** The archetypes the sim can actually run today, plus the honest 'unbuilt' tag. */
 export type CastArchetype =
@@ -34,6 +36,10 @@ export type CastArchetype =
   | 'restore'     // instant self-heal
   | 'stance'      // a HELD passive — toggled on, pauses mana recovery while up (runes.md economy)
   | 'surge'       // a short self-buff burst (speed / evasion)
+  | 'field'       // SYSTEM 1 — a persistent area entity placed at the aim point (field-effects.ts)
+  | 'terrain'     // SYSTEM 2 — runtime terrain raised at the aim point (conjured-terrain.ts)
+  | 'status'      // SYSTEM 3 — removes an OPTION from every enemy near the aim point (statuses.ts)
+  | 'infusion'    // a timed multiplier on the WEAPON, not the cast (Flame Infusion)
   | 'unbuilt'     // registered in canon, no sim behaviour yet — labelled, never a silent no-op
 
 export interface CastSpec {
@@ -66,11 +72,30 @@ export interface CastSpec {
   manaPerSec: number
   /** canon: holding a passive PAUSES mana recovery. The double edge that makes it a stance. */
   pausesRecovery: boolean
-  // surge
-  /** seconds the surge lasts */
+  // surge / infusion — both are a timed multiplier on the caster
+  /** seconds the surge (or weapon infusion) lasts */
   surgeSecs: number
-  /** speed multiplier during the surge */
+  /** speed multiplier during a surge; weapon-damage multiplier during an infusion */
   surgeMult: number
+  // ── placed casts (field / terrain / status) ────────────────────────────────
+  /** how far down the reticle the cast lands, in world units */
+  castRange: number
+  /** field/status: effect radius. terrain: wall length, ring radius or block side. */
+  areaSize: number
+  /** seconds the placed thing persists */
+  areaSecs: number
+  /** field: damage per tick to enemies inside */
+  fieldDps: number
+  /** field: healing per tick to the player inside */
+  fieldHps: number
+  /** field: does it eat projectiles crossing it? (Firewall is cover; a grove is not) */
+  fieldStopsShots: boolean
+  /** terrain: which shape is raised */
+  shape: ConjureShape
+  /** terrain: tiers of visible height (render only — collision is binary) */
+  shapeHeight: number
+  /** status: which options this cast removes from enemies in the area */
+  statuses: readonly StatusKind[]
   /** why this move has no sim behaviour yet — only set on 'unbuilt' */
   why?: string
 }
@@ -81,6 +106,9 @@ const BASE: Omit<CastSpec, 'moveId' | 'label' | 'tier' | 'archetype'> = {
   heal: 0,
   resist: 0, moveMult: 1, castMult: 1, manaPerSec: 0, pausesRecovery: false,
   surgeSecs: 0, surgeMult: 1,
+  castRange: 0, areaSize: 0, areaSecs: 0,
+  fieldDps: 0, fieldHps: 0, fieldStopsShots: false,
+  shape: 'wall', shapeHeight: 1, statuses: [],
 }
 
 /** per-move build spec, keyed by keeper-moves id. Numbers are Jin's and free to tune. */
@@ -101,21 +129,36 @@ const BUILDS: Record<string, Build> = {
 
   // ── Tacticals ────────────────────────────────────────────────────────────────────────────────
   'static-burst': { archetype: 'surge', manaCost: 10, cooldownMs: 4500, surgeSecs: 2.5, surgeMult: 1.7 },
-  firewall:       { archetype: 'unbuilt', why: 'needs a persistent area entity (area-denial volume)' },
-  'flame-infusion': { archetype: 'unbuilt', why: 'needs a weapon-damage infusion hook' },
+  // "A wall of flame thrown BETWEEN you and a threat — escape, area-denial, cover." All three verbs
+  // are in the canon line, so it burns what stands in it AND eats shots crossing it.
+  firewall:  { archetype: 'field', manaCost: 18, cooldownMs: 7000, castRange: 9, areaSize: 3.2, areaSecs: 6, fieldDps: 12, fieldStopsShots: true },
+  // "Sheathes a weapon or strike in fire — melee ENHANCEMENT." The only cast that makes the gun
+  // better rather than doing something the gun can't: an infusion window, not a new attack.
+  'flame-infusion': { archetype: 'infusion', manaCost: 14, cooldownMs: 8000, surgeSecs: 6, surgeMult: 1.5 },
   mend:      { archetype: 'restore', manaCost: 22, cooldownMs: 6000, heal: 35 },
   'ice-dart': { archetype: 'projectile', manaCost: 7, cooldownMs: 650, damage: 18, projSpeed: 52, projLife: 1.4 },
-  enlighten: { archetype: 'unbuilt', why: 'needs a blind/disorient status on the AI' },
-  stonewall: { archetype: 'unbuilt', why: 'needs runtime terrain (a raised collidable volume)' },
-  shackle:   { archetype: 'unbuilt', why: 'needs a root/disarm status on the AI' },
-  'living-architecture': { archetype: 'unbuilt', why: 'needs runtime structures' },
+  // "A flash-bang, not a blade" — it takes aim away, never HP. Wide radius, short, no damage.
+  enlighten: { archetype: 'status', manaCost: 12, cooldownMs: 9000, castRange: 11, areaSize: 6, areaSecs: 3.5, statuses: ['blinded'] },
+  // "Terrain you impose. Close the gap, do not chase." A short-lived barricade across your sightline.
+  stonewall: { archetype: 'terrain', manaCost: 16, cooldownMs: 8000, castRange: 7, areaSize: 5, areaSecs: 10, shape: 'wall', shapeHeight: 2 },
+  // "Clamp a foe in iron, OR jam a manalic weapon mid-draw" — canon names both, so it does both.
+  shackle:   { archetype: 'status', manaCost: 15, cooldownMs: 10000, castRange: 10, areaSize: 3, areaSecs: 3, statuses: ['rooted', 'disarmed'] },
+  // "Grow living wood into structure — Barrier used to SHAPE, not to defend." Small, and the one
+  // that LASTS: it is architecture, not a barricade.
+  'living-architecture': { archetype: 'terrain', manaCost: 20, cooldownMs: 12000, castRange: 6, areaSize: 3, areaSecs: 45, shape: 'block', shapeHeight: 3 },
 
   // ── Ultimates ────────────────────────────────────────────────────────────────────────────────
   'chain-lightning': { archetype: 'projectile', manaCost: 34, cooldownMs: 9000, damage: 26, projSpeed: 70, projLife: 1.2, chain: 3, chainRange: 9 },
   'flame-barrage': { archetype: 'unbuilt', why: 'needs independently tracking projectiles' },
   gate:      { archetype: 'unbuilt', why: 'needs a two-point bind + warp on a placed anchor' },
-  'healing-grove': { archetype: 'unbuilt', why: 'needs a persistent area entity (heal-over-time volume)' },
-  cordon:    { archetype: 'unbuilt', why: 'needs runtime terrain + a metal-lock status' },
+  // "A living sanctuary grown and tended — everyone within is steadily restored." Wide, long, and
+  // NOT cover: a grove you can shoot through is a place you choose to stand, not a place to hide.
+  'healing-grove': { archetype: 'field', manaCost: 40, cooldownMs: 22000, castRange: 7, areaSize: 5.5, areaSecs: 14, fieldHps: 14, fieldStopsShots: false },
+  // "Stone rises on EVERY side and all metal locks to the caster. Containment, not a kill." A sealed
+  // ring — it traps you too if you stand in it, which is what makes casting it a real decision.
+  // Cordon is the one move that is BOTH systems at once — canon writes stone AND the metal lock in a
+  // single sentence, so the dispatcher applies a terrain cast's `statuses` too when it carries any.
+  cordon:    { archetype: 'terrain', manaCost: 45, cooldownMs: 25000, castRange: 10, areaSize: 4, areaSecs: 8, shape: 'ring', shapeHeight: 3, statuses: ['disarmed'] },
   'grey-arena': { archetype: 'unbuilt', why: 'canon requires manatech (a drain-engine) the player has no access to' },
 
   // ── Combos — never solo-castable. Canon requires a second mage in sync. ──────────────────────

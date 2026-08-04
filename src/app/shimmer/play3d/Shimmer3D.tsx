@@ -27,6 +27,9 @@ import { pushCloudSave, pullCloudSave } from '@/lib/cloud-sync'
 import { birthAffinity, NEUTRAL_AFFINITY, type Affinity } from './birth-affinity'
 import { castForMove, isBuilt, defaultLoadout, CAST_SLOTS, SLOT_KEYS, type CastSpec } from './cast'
 import { loadRuneInventory, saveRuneInventory, setBirthRune, grantRune, revokeRune, EMPTY_INVENTORY, type RuneInventory } from './rune-inventory'
+import { spawnField, tickFields, fieldsAt, blocksShotAt, type Field } from './field-effects'
+import { conjure, shapeCells, blockedAt as conjuredBlockedAt, expireConjured, liveCells, type Conjured } from './conjured-terrain'
+import { emptyBag, applyStatuses, hasStatus, pruneStatuses, clearTarget, type StatusBag } from './statuses'
 import { rollEncounter, HOLD_LEVELS, type WildEncounter } from '../engine/encounters'
 import { derivePartyStats, type PartyStats } from '../engine/party-stats'
 import { type BattleResult } from '../engine/arena'
@@ -1018,7 +1021,7 @@ function npcInWorld(n: NPC3D, defeated: Record<string, boolean>, flags: Record<s
   return true
 }
 
-function Player({ posRef, gridRef, heightsRef, zoneIdRef, editRef, onWarp, battleRef, partyLevelRef, onEncounter, joyRef, talkingRef, hasPartyRef, onNearChange, defeatedRef, flagsRef, harvestNodesRef, onNearNode, stationsRef, onNearStation, eyeRef, jumpRef, slideRef, speedMultRef, weaponMoveRef, dreamwalkRef }: {
+function Player({ posRef, gridRef, heightsRef, zoneIdRef, editRef, onWarp, battleRef, partyLevelRef, onEncounter, joyRef, talkingRef, hasPartyRef, onNearChange, defeatedRef, flagsRef, harvestNodesRef, onNearNode, stationsRef, onNearStation, eyeRef, jumpRef, slideRef, speedMultRef, weaponMoveRef, dreamwalkRef, conjuredRef }: {
   posRef: React.RefObject<THREE.Vector3>; gridRef: React.RefObject<number[][]>
   heightsRef: React.RefObject<number[][]>; zoneIdRef: React.RefObject<string>
   editRef: React.RefObject<boolean>; onWarp: (w: Warp) => void
@@ -1035,6 +1038,7 @@ function Player({ posRef, gridRef, heightsRef, zoneIdRef, editRef, onWarp, battl
   jumpRef: React.RefObject<boolean>; slideRef: React.RefObject<boolean>
   // potion-buff mirrors (walker updates on its coarse tick): ground-speed mult + calm-mist flag
   speedMultRef: React.RefObject<number>; dreamwalkRef: React.RefObject<boolean>
+  conjuredRef: React.MutableRefObject<Conjured[]>  // SYSTEM 2 — a conjured slab is solid to the walker
   weaponMoveRef: React.RefObject<number>  // weapon-state ground-speed mult: 1 holstered, <1 drawn, less ADS
 }) {
   const group = useRef<THREE.Group>(null)
@@ -1108,6 +1112,12 @@ function Player({ posRef, gridRef, heightsRef, zoneIdRef, editRef, onWarp, battl
       if (structs) for (const s of structs) if (s.zoneId === zoneNow && s.tileX === cx && s.tileY === cz) return true
       const nodes = harvestNodesRef.current
       if (nodes) for (const n of nodes) if (n.zoneId === zoneNow && n.tileX === cx && n.tileY === cz && (NODE_LOOK[n.type]?.kind ?? 'tree') !== 'water') return true
+      // ── SYSTEM 2: conjured terrain is solid to the WALKER as well. Feeding it through the same
+      // predicate as stations/nodes means the body-radius buffer, the ledge logic and the axis-
+      // separated slide all treat a Stonewall exactly like a wall — no separate collision path to
+      // drift. It also means Cordon genuinely traps you if you cast it around yourself, which is
+      // the decision the move is supposed to be.
+      if (conjuredRef.current && conjuredBlockedAt(conjuredRef.current, cx, cz, performance.now())) return true
       return false
     }
     const canStep = (cx: number, cz: number) =>
@@ -1779,7 +1789,7 @@ function GunBenches() {
     </>
   )
 }
-function FiringRange({ firingRef, adsRef, weaponIdxRef, gridRef, recoilRef, bloomRef, posRef, hpRef, hpMaxRef, shieldRef, shieldMaxRef, rangeCfgRef, ammoRef, reloadingRef, pendingCastRef, castMultRef, resistRef, onNeedReload, onHit, onShot, onPlayerDamage, onPlayerDown }: {
+function FiringRange({ firingRef, adsRef, weaponIdxRef, gridRef, recoilRef, bloomRef, posRef, hpRef, hpMaxRef, shieldRef, shieldMaxRef, rangeCfgRef, ammoRef, reloadingRef, pendingCastRef, castMultRef, resistRef, infusionRef, fieldsRef, conjuredRef, statusRef, onHeal, onNeedReload, onHit, onShot, onPlayerDamage, onPlayerDown }: {
   firingRef: React.RefObject<boolean>   // held while left-click is down → full-auto (semi-auto weapons fire once per press)
   adsRef: React.RefObject<boolean>      // aiming → muzzle offset moves to center (ADS tracer runs flat)
   weaponIdxRef: React.RefObject<number> // which WEAPONS entry is live — drives fire stats + tracer look
@@ -1799,6 +1809,11 @@ function FiringRange({ firingRef, adsRef, weaponIdxRef, gridRef, recoilRef, bloo
   pendingCastRef: React.MutableRefObject<CastSpec | null>
   castMultRef: React.RefObject<number>   // held-stance multiplier on cast damage (Flame Manipulation)
   resistRef: React.RefObject<number>     // held-stance fraction of incoming damage absorbed (Barrier/Iron Skin)
+  infusionRef: React.RefObject<{ until: number; mult: number }>  // Flame Infusion — a WEAPON-damage window
+  fieldsRef: React.MutableRefObject<Field[]>       // SYSTEM 1 — area entities (this sim ticks them)
+  conjuredRef: React.MutableRefObject<Conjured[]>  // SYSTEM 2 — runtime terrain (blocks everything)
+  statusRef: React.MutableRefObject<StatusBag>     // SYSTEM 3 — options removed from enemies
+  onHeal: (amount: number) => void   // a healing field restores the player; HP lives in the parent
   onNeedReload: () => void  // dry trigger on an empty clip → parent starts the recharge
   onHit: (crit: boolean) => void  // landed round; crit = head-zone hit (gold hitmarker)
   onShot: () => void
@@ -1836,7 +1851,10 @@ function FiringRange({ firingRef, adsRef, weaponIdxRef, gridRef, recoilRef, bloo
   const guardMeshRef = useRef<THREE.InstancedMesh>(null)
   const shotRef = useRef<THREE.InstancedMesh>(null)
   const orbRef = useRef<THREE.InstancedMesh>(null)
-  const castMeshRef = useRef<THREE.InstancedMesh>(null)  // v2 cast bolts
+  const castMeshRef = useRef<THREE.InstancedMesh>(null)  // cast bolts
+  const fieldMeshRef = useRef<THREE.InstancedMesh>(null)     // SYSTEM 1 — area entities (flat discs)
+  const conjuredMeshRef = useRef<THREE.InstancedMesh>(null)  // SYSTEM 2 — conjured terrain slabs
+  const FIELD_MAX = 8, CONJ_MAX = 220  // a Cordon ring at radius 4 is ~28 cells; 220 covers the cap
   const castCd = useRef(0)                                // v2 cast cooldown timer (s)
   const boardRef = useRef<THREE.InstancedMesh>(null)  // target-board layers: white disc / red ring / gold core
   const ringRef = useRef<THREE.InstancedMesh>(null)
@@ -1880,6 +1898,12 @@ function FiringRange({ firingRef, adsRef, weaponIdxRef, gridRef, recoilRef, bloo
   }, [resistRef, shieldRef, hpRef, hpMaxRef, shieldMaxRef, onPlayerDamage, onPlayerDown])
   useFrame((state, dt) => {
     const W = WEAPONS[weaponIdxRef.current] ?? WEAPONS[0]   // live weapon — stats + tracer look
+    const nowFrame = performance.now()  // ONE clock per frame — fields, terrain and statuses all read it
+    // Flame Infusion sheathes the weapon in fire: the only cast that makes the GUN better rather than
+    // doing what a gun cannot. Resolved once so every damage site downstream reads the same number.
+    const inf = infusionRef.current
+    const wMult = nowFrame < inf.until ? inf.mult : 1
+    const wDmg = W.damage * wMult, wCrit = W.crit * wMult
     cd.current -= dt
     if (!firingRef.current) firedThisPress.current = false   // trigger released → re-arm a semi-auto
     bloomRef.current = Math.max(0, bloomRef.current - W.bloomDecay * dt)  // cone recovers while not firing
@@ -1920,26 +1944,98 @@ function FiringRange({ firingRef, adsRef, weaponIdxRef, gridRef, recoilRef, bloo
       }
       }
     }
-    // ── the cast: spawn a projectile MOVE. The parent already resolved slot → move → spec and paid
-    // the mana + cooldown, so all that lands here is "a bolt of this shape, now". Same camera-forward
-    // aim as the weapon; no spread (a placed bolt).
+    // ── the cast lands. The parent resolved slot → move → spec and already paid mana + cooldown, so
+    // what arrives here is "this shape, now". Every PLACED archetype shares one aim resolution:
+    // camera-forward, flattened to the ground plane, at the move's own range. One rule, four shapes.
     const pending = pendingCastRef.current
     if (pending) {
       pendingCastRef.current = null
-      const cp = castPool.find((pr) => pr.life <= 0)
-      if (cp) {
-        state.camera.getWorldDirection(dir)
-        camRight.setFromMatrixColumn(state.camera.matrixWorld, 0)
-        camUp.setFromMatrixColumn(state.camera.matrixWorld, 1)
-        const [mr, md, mf] = adsRef.current ? MUZZLE_ADS : MUZZLE_HIP
-        cp.pos.copy(state.camera.position).addScaledVector(camRight, mr).addScaledVector(camUp, -md).addScaledVector(dir, mf)
-        aim.copy(state.camera.position).addScaledVector(dir, 40)  // converge point ~40u down the reticle
-        cp.vel.copy(aim).sub(cp.pos).normalize().multiplyScalar(pending.projSpeed)
-        cp.life = pending.projLife
-        cp.dmg = pending.damage; cp.chain = pending.chain; cp.chainRange = pending.chainRange
-        recoilRef.current.p += 0.008  // a little heft on release
-        onShot()
+      state.camera.getWorldDirection(dir)
+      const nowMs = performance.now()
+      if (pending.archetype === 'projectile') {
+        const cp = castPool.find((pr) => pr.life <= 0)
+        if (cp) {
+          camRight.setFromMatrixColumn(state.camera.matrixWorld, 0)
+          camUp.setFromMatrixColumn(state.camera.matrixWorld, 1)
+          const [mr, md, mf] = adsRef.current ? MUZZLE_ADS : MUZZLE_HIP
+          cp.pos.copy(state.camera.position).addScaledVector(camRight, mr).addScaledVector(camUp, -md).addScaledVector(dir, mf)
+          aim.copy(state.camera.position).addScaledVector(dir, 40)  // converge point ~40u down the reticle
+          cp.vel.copy(aim).sub(cp.pos).normalize().multiplyScalar(pending.projSpeed)
+          cp.life = pending.projLife
+          cp.dmg = pending.damage; cp.chain = pending.chain; cp.chainRange = pending.chainRange
+          recoilRef.current.p += 0.008  // a little heft on release
+          onShot()
+        }
+      } else {
+        // THE AIM POINT for every placed cast: flatten the camera forward, walk `castRange` along it
+        // from the player's feet. Flattening is deliberate — looking at the sky must not put your
+        // Stonewall in orbit. Falls back to straight ahead when you're staring at your own boots.
+        const flatX = dir.x, flatZ = dir.z
+        const flatLen = Math.hypot(flatX, flatZ) || 1
+        const px = posRef.current?.x ?? 0, pz = posRef.current?.z ?? 0
+        const ax = px + (flatX / flatLen) * pending.castRange
+        const az = pz + (flatZ / flatLen) * pending.castRange
+        if (pending.archetype === 'field') {
+          fieldsRef.current = spawnField(fieldsRef.current, {
+            moveId: pending.moveId, x: ax, z: az, radius: pending.areaSize, secs: pending.areaSecs,
+            dps: pending.fieldDps, hps: pending.fieldHps, stopsShots: pending.fieldStopsShots,
+          }, nowMs)
+        } else if (pending.archetype === 'terrain') {
+          const cells = shapeCells(pending.shape, ax, az, flatX / flatLen, flatZ / flatLen, pending.areaSize)
+          conjuredRef.current = conjure(conjuredRef.current, pending.moveId, cells, pending.areaSecs, pending.shapeHeight, nowMs)
+        }
+        // A terrain cast that ALSO carries statuses applies them (Cordon: stone rises AND all metal
+        // locks). That is why this is not an `else if` — canon writes both halves in one sentence.
+        if (pending.statuses.length > 0) {
+          const r2 = pending.areaSize * pending.areaSize
+          let bag = statusRef.current
+          const h = hunter.current
+          if (h.alive && (h.pos.x - ax) ** 2 + (h.pos.z - az) ** 2 <= r2) bag = applyStatuses(bag, 'hunter', pending.statuses, pending.areaSecs, nowMs)
+          if (guardSim.current.spawned) {
+            for (let gi = 0; gi < guardBodies.length; gi++) {
+              const b = guardBodies[gi], st = guardSim.current.enc.guards[gi]
+              if (!st?.alive) continue
+              if ((b.pos.x - ax) ** 2 + (b.pos.z - az) ** 2 <= r2) bag = applyStatuses(bag, `guard:${st.id}`, pending.statuses, pending.areaSecs, nowMs)
+            }
+          }
+          statusRef.current = bag
+        }
       }
+    }
+    // ── SYSTEM 1 tick: fields apply their effect on their own clock, not per frame ────────────────
+    {
+      const nowMs = performance.now()
+      const res = tickFields(fieldsRef.current, nowMs)
+      fieldsRef.current = res.fields
+      for (const f of res.fired) {
+        if (f.dps > 0) {
+          // burn everything standing in it — range targets, the hunter, the guards
+          for (const t of targets) {
+            if (t.alive && (t.pos.x - f.x) ** 2 + (t.pos.z - f.z) ** 2 <= f.radius * f.radius) {
+              t.hp -= f.dps
+              if (t.hp <= 0) { t.alive = false; t.down = TARGET_RESPAWN }
+            }
+          }
+          const h = hunter.current
+          if (h.alive && (h.pos.x - f.x) ** 2 + (h.pos.z - f.z) ** 2 <= f.radius * f.radius) {
+            h.hp -= f.dps
+            if (h.hp <= 0) { h.alive = false; h.respawn = HUNTER_RESPAWN; statusRef.current = clearTarget(statusRef.current, 'hunter') }
+          }
+          if (guardSim.current.spawned) {
+            for (let gi = 0; gi < guardBodies.length; gi++) {
+              const b = guardBodies[gi], st = guardSim.current.enc.guards[gi]
+              if (!st?.alive || (b.pos.x - f.x) ** 2 + (b.pos.z - f.z) ** 2 > f.radius * f.radius) continue
+              guardSim.current.enc = damageGuard(guardSim.current.enc, st.id, f.dps).state
+            }
+          }
+        }
+        if (f.hps > 0 && posRef.current) {
+          const dx = posRef.current.x - f.x, dz = posRef.current.z - f.z
+          if (dx * dx + dz * dz <= f.radius * f.radius) onHeal(f.hps)
+        }
+      }
+      conjuredRef.current = expireConjured(conjuredRef.current, nowMs)
+      statusRef.current = pruneStatuses(statusRef.current, nowMs)
     }
     // advance + trail + collide
     for (const p of pool) {
@@ -1950,7 +2046,11 @@ function FiringRange({ firingRef, adsRef, weaponIdxRef, gridRef, recoilRef, bloo
       p.pos.addScaledVector(p.vel, dt)
       const cx = Math.round(p.pos.x), cz = Math.round(p.pos.z)
       const cell = gridRef.current?.[cz]?.[cx]
-      if (cell === undefined || (cell & 0xFF) === WALL_ID) { p.life = 0; continue }  // wall/OOB stops it
+      // wall / OOB / a conjured slab stops it — Stonewall is cover for BOTH sides, or it isn't cover.
+      // A Firewall eats what crosses it, which is the "cover" half of its canon line.
+      if (cell === undefined || (cell & 0xFF) === WALL_ID) { p.life = 0; continue }
+      if (conjuredBlockedAt(conjuredRef.current, p.pos.x, p.pos.z, nowFrame)) { p.life = 0; continue }
+      if (blocksShotAt(fieldsRef.current, p.pos.x, p.pos.z)) { p.life = 0; continue }
       for (const t of targets) {
         if (t.alive && p.pos.distanceToSquared(t.pos) < TARGET_HIT_R2) {
           // bullseye: radial miss-distance of the flight line from the board center. Inside the gold
@@ -1959,7 +2059,7 @@ function FiringRange({ firingRef, adsRef, weaponIdxRef, gridRef, recoilRef, bloo
           rel.copy(p.pos).sub(t.pos)
           rel.addScaledVector(vhat, -rel.dot(vhat))  // strip the along-flight component → radial offset
           const crit = rel.lengthSq() < TARGET_CRIT_R * TARGET_CRIT_R
-          t.hp -= crit ? W.crit : W.damage; p.life = 0; onHit(crit)  // hitmarker on every landed round
+          t.hp -= crit ? wCrit : wDmg; p.life = 0; onHit(crit)  // hitmarker on every landed round
           if (t.hp <= 0) { t.alive = false; t.down = TARGET_RESPAWN }
           break
         }
@@ -1967,8 +2067,8 @@ function FiringRange({ firingRef, adsRef, weaponIdxRef, gridRef, recoilRef, bloo
       const h = hunter.current
       if (p.life > 0 && h.alive && p.pos.distanceToSquared(h.pos) < HUNTER_HIT_R2) {
         const crit = p.pos.y > h.pos.y + CRIT_Y
-        h.hp -= crit ? W.crit : W.damage; p.life = 0; onHit(crit)
-        if (h.hp <= 0) { h.alive = false; h.respawn = HUNTER_RESPAWN }
+        h.hp -= crit ? wCrit : wDmg; p.life = 0; onHit(crit)
+        if (h.hp <= 0) { h.alive = false; h.respawn = HUNTER_RESPAWN; statusRef.current = clearTarget(statusRef.current, 'hunter') }
       }
       // rounds vs the Puppet Guards. Damage goes through damageGuard() so a raised barrier blunts
       // it and Wren's counter can turn it back — the canon behaviours live in the sim, not here.
@@ -1978,7 +2078,7 @@ function FiringRange({ firingRef, adsRef, weaponIdxRef, gridRef, recoilRef, bloo
           const st = guardSim.current.enc.guards[gi]
           if (!st?.alive || p.pos.distanceToSquared(b.pos) >= HUNTER_HIT_R2) continue
           const crit = p.pos.y > b.pos.y + CRIT_Y
-          const r = damageGuard(guardSim.current.enc, st.id, crit ? W.crit : W.damage)
+          const r = damageGuard(guardSim.current.enc, st.id, crit ? wCrit : wDmg)
           guardSim.current.enc = r.state
           p.life = 0; onHit(crit)
           // Wren turning a hit back is real damage to the shooter, not a miss.
@@ -1996,6 +2096,7 @@ function FiringRange({ firingRef, adsRef, weaponIdxRef, gridRef, recoilRef, bloo
       const cx = Math.round(p.pos.x), cz = Math.round(p.pos.z)
       const cell = gridRef.current?.[cz]?.[cx]
       if (cell === undefined || (cell & 0xFF) === WALL_ID) { p.life = 0; continue }
+      if (conjuredBlockedAt(conjuredRef.current, p.pos.x, p.pos.z, nowFrame)) { p.life = 0; continue }
       const dmg = p.dmg * castMultRef.current  // a held stance (Flame Manipulation) shapes what you throw
       let hit = false
       for (const t of targets) {
@@ -2023,7 +2124,7 @@ function FiringRange({ firingRef, adsRef, weaponIdxRef, gridRef, recoilRef, bloo
         const h = hunter.current
         if (h.alive && p.pos.distanceToSquared(h.pos) < HUNTER_HIT_R2) {
           h.hp -= dmg; p.life = 0; onHit(true)
-          if (h.hp <= 0) { h.alive = false; h.respawn = HUNTER_RESPAWN }
+          if (h.hp <= 0) { h.alive = false; h.respawn = HUNTER_RESPAWN; statusRef.current = clearTarget(statusRef.current, 'hunter') }
         }
       }
     }
@@ -2064,16 +2165,27 @@ function FiringRange({ firingRef, adsRef, weaponIdxRef, gridRef, recoilRef, bloo
           if (dist > 9.5) step.addScaledVector(toPlayer, HUNTER_SPEED * dt)
           step.x += -toPlayer.z * Math.sin(h.strafe) * HUNTER_SPEED * 0.6 * dt
           step.z += toPlayer.x * Math.sin(h.strafe) * HUNTER_SPEED * 0.6 * dt
-          const nx = h.pos.x + step.x, nz = h.pos.z + step.z
-          const cell = gridRef.current?.[Math.round(nz)]?.[Math.round(nx)]
-          if (cell !== undefined && (cell & 0xFF) !== WALL_ID) { h.pos.x = nx; h.pos.z = nz }
+          // ── SYSTEM 3 reads here. A status removes an OPTION, never HP: rooted can't step,
+          // disarmed can't fire, blinded fires at where it *thinks* you are. ──
+          const rooted = hasStatus(statusRef.current, 'hunter', 'rooted', nowFrame)
+          const disarmed = hasStatus(statusRef.current, 'hunter', 'disarmed', nowFrame)
+          const blinded = hasStatus(statusRef.current, 'hunter', 'blinded', nowFrame)
+          if (!rooted) {
+            const nx = h.pos.x + step.x, nz = h.pos.z + step.z
+            const cell = gridRef.current?.[Math.round(nz)]?.[Math.round(nx)]
+            if (cell !== undefined && (cell & 0xFF) !== WALL_ID && !conjuredBlockedAt(conjuredRef.current, nx, nz, nowFrame)) { h.pos.x = nx; h.pos.z = nz }
+          }
           h.fireCd -= dt
-          if (h.fireCd <= 0) {
+          if (h.fireCd <= 0 && !disarmed) {
             h.fireCd = HUNTER_FIRE_CD
             const o = orbs.find((or) => or.life <= 0)
             if (o) {
               o.pos.copy(h.pos); o.pos.y += 0.4
-              o.vel.copy(pEye).sub(o.pos).normalize().multiplyScalar(DRONE_SPEED)
+              o.vel.copy(pEye).sub(o.pos).normalize()
+              // blinded: it still shoots, it just doesn't know where you are. A flash-bang buys you
+              // the fight, it doesn't end it — deliberately not a hard silence.
+              if (blinded) { o.vel.x += Math.sin(h.strafe * 7.3) * 0.85; o.vel.z += Math.cos(h.strafe * 5.1) * 0.85; o.vel.normalize() }
+              o.vel.multiplyScalar(DRONE_SPEED)
               o.life = DRONE_LIFE
             }
           }
@@ -2111,15 +2223,23 @@ function FiringRange({ firingRef, adsRef, weaponIdxRef, gridRef, recoilRef, bloo
           const nx = b.pos.x + (dx / d) * Math.min(spd, d)
           const nz = b.pos.z + (dz / d) * Math.min(spd, d)
           const cell = gridRef.current?.[Math.round(nz)]?.[Math.round(nx)]
-          if (cell !== undefined && (cell & 0xFF) !== WALL_ID) { b.pos.x = nx; b.pos.z = nz }
+          // A puppet obeys the same three statuses. Shackling Seren mid-squeeze is the whole point:
+          // her formation is canon, and taking her ability to hold the line is a keeper's answer to it.
+          const gKey = `guard:${st.id}`
+          const gRooted = hasStatus(statusRef.current, gKey, 'rooted', nowFrame)
+          const gDisarmed = hasStatus(statusRef.current, gKey, 'disarmed', nowFrame)
+          const gBlinded = hasStatus(statusRef.current, gKey, 'blinded', nowFrame)
+          if (cell !== undefined && (cell & 0xFF) !== WALL_ID && !gRooted && !conjuredBlockedAt(conjuredRef.current, nx, nz, nowFrame)) { b.pos.x = nx; b.pos.z = nz }
           // the leading guard presses; the supports fire slower. Wren, least aggressive, slowest.
           gs.fireCd[i] -= dt
-          if (gs.fireCd[i] <= 0 && st.staggerFor <= 0) {
+          if (gs.fireCd[i] <= 0 && st.staggerFor <= 0 && !gDisarmed) {
             gs.fireCd[i] = st.leading ? 1.5 : 2.8
             const o = orbs.find((or) => or.life <= 0)
             if (o) {
               o.pos.copy(b.pos); o.pos.y += 0.4
-              o.vel.copy(pEye).sub(o.pos).normalize().multiplyScalar(DRONE_SPEED)
+              o.vel.copy(pEye).sub(o.pos).normalize()
+              if (gBlinded) { o.vel.x += Math.sin(gs.orbit * 6.1 + i) * 0.85; o.vel.z += Math.cos(gs.orbit * 4.7 + i) * 0.85; o.vel.normalize() }
+              o.vel.multiplyScalar(DRONE_SPEED)
               o.life = DRONE_LIFE
             }
           }
@@ -2132,6 +2252,9 @@ function FiringRange({ firingRef, adsRef, weaponIdxRef, gridRef, recoilRef, bloo
         const cx = Math.round(o.pos.x), cz = Math.round(o.pos.z)
         const cell = gridRef.current?.[cz]?.[cx]
         if (cell === undefined || (cell & 0xFF) === WALL_ID) { o.life = 0; continue }
+        // incoming fire is stopped by your own terrain + firewall. That symmetry IS the move.
+        if (conjuredBlockedAt(conjuredRef.current, o.pos.x, o.pos.z, nowFrame)) { o.life = 0; continue }
+        if (blocksShotAt(fieldsRef.current, o.pos.x, o.pos.z)) { o.life = 0; continue }
         if (o.pos.distanceToSquared(pEye) < PLAYER_HIT_R2) {
           o.life = 0
           hurtPlayer(DRONE_DMG)
@@ -2193,6 +2316,36 @@ function FiringRange({ firingRef, adsRef, weaponIdxRef, gridRef, recoilRef, bloo
     if (castMeshRef.current) {
       castPool.forEach((p, i) => { m.compose(p.life > 0 ? p.pos : zero, q, p.life > 0 ? one : zero); castMeshRef.current!.setMatrixAt(i, m) })
       castMeshRef.current.instanceMatrix.needsUpdate = true
+    }
+    // ── SYSTEM 1 render: a field is a flat disc on the ground, scaled to its own radius. Unused
+    // instances collapse to zero scale (the pool pattern used by every other instanced mesh here). ──
+    if (fieldMeshRef.current) {
+      const fl = fieldsRef.current
+      const py = posRef.current?.y ?? 0
+      for (let i = 0; i < FIELD_MAX; i++) {
+        const f = fl[i]
+        if (!f) { m.compose(zero, q, zero); fieldMeshRef.current.setMatrixAt(i, m); continue }
+        scl.set(f.radius, 1, f.radius)
+        seg.set(f.x, py + 0.06, f.z)
+        m.compose(seg, q, scl)
+        fieldMeshRef.current.setMatrixAt(i, m)
+      }
+      fieldMeshRef.current.instanceMatrix.needsUpdate = true
+    }
+    // ── SYSTEM 2 render: one box per conjured CELL, so what you see is exactly what blocks you.
+    // Drawing the collision set itself means the wall can never look different from where it is. ──
+    if (conjuredMeshRef.current) {
+      const cells = liveCells(conjuredRef.current, nowFrame)
+      const py = posRef.current?.y ?? 0
+      for (let i = 0; i < CONJ_MAX; i++) {
+        const c = cells[i]
+        if (!c) { m.compose(zero, q, zero); conjuredMeshRef.current.setMatrixAt(i, m); continue }
+        scl.set(1, c.height, 1)
+        seg.set(c.x, py + c.height / 2, c.z)
+        m.compose(seg, q, scl)
+        conjuredMeshRef.current.setMatrixAt(i, m)
+      }
+      conjuredMeshRef.current.instanceMatrix.needsUpdate = true
     }
     // the guards' bodies. Scale carries HP the same way the targets and the hunter read, and a
     // staggered guard sits lower — the posture breaking is the tell that it is a puppet.
@@ -2261,6 +2414,19 @@ function FiringRange({ firingRef, adsRef, weaponIdxRef, gridRef, recoilRef, bloo
       <instancedMesh ref={castMeshRef} args={[undefined, undefined, CMAX]} frustumCulled={false}>
         <sphereGeometry args={[0.24, 12, 12]} />
         <meshBasicMaterial color={SOUL_COLOR} transparent opacity={0.96} blending={THREE.AdditiveBlending} depthWrite={false} toneMapped={false} />
+      </instancedMesh>
+      {/* SYSTEM 1 — field discs. Amber + additive so a Firewall reads as heat on the floor; a
+          Healing Grove uses the same disc (one material) and is told apart by where it sits and
+          what it does. Per-field tinting is a follow-on once there is more than one field colour. */}
+      <instancedMesh ref={fieldMeshRef} args={[undefined, undefined, FIELD_MAX]} frustumCulled={false}>
+        <cylinderGeometry args={[1, 1, 0.08, 28]} />
+        <meshBasicMaterial color="#ff9a4c" transparent opacity={0.34} blending={THREE.AdditiveBlending} depthWrite={false} toneMapped={false} />
+      </instancedMesh>
+      {/* SYSTEM 2 — conjured terrain. Dead grey stone with a faint soul-tinted rim: it is MADE, not
+          native, and the art-medium law keeps conjured rock grey rather than glowing. */}
+      <instancedMesh ref={conjuredMeshRef} args={[undefined, undefined, CONJ_MAX]} frustumCulled={false}>
+        <boxGeometry args={[1, 1, 1]} />
+        <meshStandardMaterial color="#6f7580" emissive={SOUL_COLOR} emissiveIntensity={0.12} metalness={0.15} roughness={0.85} />
       </instancedMesh>
       {/* the ground hunter — magenta spinning octahedron, unmistakably NOT a range target */}
       <mesh ref={huntRef} visible={false} frustumCulled={false}>
@@ -2679,6 +2845,11 @@ const Scene = memo(function Scene(props: {
   pendingCastRef: React.MutableRefObject<CastSpec | null>
   castMultRef: React.RefObject<number>
   resistRef: React.RefObject<number>
+  infusionRef: React.RefObject<{ until: number; mult: number }>
+  fieldsRef: React.MutableRefObject<Field[]>
+  conjuredRef: React.MutableRefObject<Conjured[]>
+  statusRef: React.MutableRefObject<StatusBag>
+  onHeal: (amount: number) => void
   onNeedReload: () => void
   onPlayerDamage: () => void
   onPlayerDown: () => void
@@ -2713,7 +2884,7 @@ const Scene = memo(function Scene(props: {
       <ZoneGeometry key={`${props.zone.id}-${props.dims}`} gridRef={props.gridRef} heights={props.heights} version={props.version} paint={props.paint} editing={props.editing} />
       <NPCMarkers npcs={ALL_NPCS.filter((n) => n.zone === props.zone.id && npcInWorld(n, props.defeated, props.flagsRef.current))} heights={props.heights} />
       {props.isOwner && props.zone.id === 'moonwell-glade-gregory-s-home' && <HubGateMarkers heights={props.heights} />}
-      {props.zone.realm === 'outside' && !props.zone.peaceful && <FiringRange firingRef={props.firingRef} adsRef={props.adsRef} weaponIdxRef={props.weaponIdxRef} gridRef={props.gridRef} recoilRef={props.recoilRef} bloomRef={props.bloomRef} posRef={props.posRef} hpRef={props.hpRef} hpMaxRef={props.hpMaxRef} shieldRef={props.shieldRef} shieldMaxRef={props.shieldMaxRef} rangeCfgRef={props.rangeCfgRef} ammoRef={props.ammoRef} reloadingRef={props.reloadingRef} pendingCastRef={props.pendingCastRef} castMultRef={props.castMultRef} resistRef={props.resistRef} onNeedReload={props.onNeedReload} onHit={props.onRangeHit} onShot={props.onRangeShot} onPlayerDamage={props.onPlayerDamage} onPlayerDown={props.onPlayerDown} />}
+      {props.zone.realm === 'outside' && !props.zone.peaceful && <FiringRange firingRef={props.firingRef} adsRef={props.adsRef} weaponIdxRef={props.weaponIdxRef} gridRef={props.gridRef} recoilRef={props.recoilRef} bloomRef={props.bloomRef} posRef={props.posRef} hpRef={props.hpRef} hpMaxRef={props.hpMaxRef} shieldRef={props.shieldRef} shieldMaxRef={props.shieldMaxRef} rangeCfgRef={props.rangeCfgRef} ammoRef={props.ammoRef} reloadingRef={props.reloadingRef} pendingCastRef={props.pendingCastRef} castMultRef={props.castMultRef} resistRef={props.resistRef} infusionRef={props.infusionRef} fieldsRef={props.fieldsRef} conjuredRef={props.conjuredRef} statusRef={props.statusRef} onHeal={props.onHeal} onNeedReload={props.onNeedReload} onHit={props.onRangeHit} onShot={props.onRangeShot} onPlayerDamage={props.onPlayerDamage} onPlayerDown={props.onPlayerDown} />}
       {props.zone.realm === 'outside' && !props.zone.peaceful && <GunBenches />}
       {props.zone.realm === 'outside' && <ExitMarkers warps={props.zone.warps} heights={props.heights} />}
       <NodeMarkers nodes={props.nodes} heights={props.heights} editing={props.editing} channel={props.channel} zoneId={props.zone.id} />
@@ -2725,7 +2896,7 @@ const Scene = memo(function Scene(props: {
       {props.zone.id === WORLD_ZONE_ID ? <WorldFlora heights={props.heights} /> : <FloraDressing zoneId={props.zone.id} heights={props.heights} />}
       <StructureMarkers structures={structuresInZone} heights={props.heights} />
       <PlacementGhost placing={props.placing} posRef={props.posRef} heights={props.heights} gridRef={props.gridRef} placeTargetRef={props.placeTargetRef} structuresRef={props.structuresRef} zoneIdRef={props.zoneIdRef} />
-      <Player posRef={props.posRef} gridRef={props.gridRef} heightsRef={props.heightsRef} zoneIdRef={props.zoneIdRef} editRef={props.editRef} onWarp={props.onWarp} battleRef={props.battleRef} partyLevelRef={props.partyLevelRef} onEncounter={props.onEncounter} joyRef={props.joyRef} talkingRef={props.talkingRef} hasPartyRef={props.hasPartyRef} onNearChange={props.onNearChange} defeatedRef={props.defeatedRef} flagsRef={props.flagsRef} harvestNodesRef={props.harvestNodesRef} onNearNode={props.onNearNode} stationsRef={props.structuresRef} onNearStation={props.onNearStation} eyeRef={props.eyeRef} jumpRef={props.jumpRef} slideRef={props.slideRef} speedMultRef={props.speedMultRef} weaponMoveRef={props.weaponMoveRef} dreamwalkRef={props.dreamwalkRef} />
+      <Player posRef={props.posRef} gridRef={props.gridRef} heightsRef={props.heightsRef} zoneIdRef={props.zoneIdRef} editRef={props.editRef} onWarp={props.onWarp} battleRef={props.battleRef} partyLevelRef={props.partyLevelRef} onEncounter={props.onEncounter} joyRef={props.joyRef} talkingRef={props.talkingRef} hasPartyRef={props.hasPartyRef} onNearChange={props.onNearChange} defeatedRef={props.defeatedRef} flagsRef={props.flagsRef} harvestNodesRef={props.harvestNodesRef} onNearNode={props.onNearNode} stationsRef={props.structuresRef} onNearStation={props.onNearStation} eyeRef={props.eyeRef} jumpRef={props.jumpRef} slideRef={props.slideRef} speedMultRef={props.speedMultRef} weaponMoveRef={props.weaponMoveRef} dreamwalkRef={props.dreamwalkRef} conjuredRef={props.conjuredRef} />
       {/* presence: other players in this zone (socket lives in the page comp — shared with the panel) */}
       <RemotePlayers peers={props.mpPeers} hideAt={plotHide} />
       {props.companionColor && !props.editing && <Follower posRef={props.posRef} heightsRef={props.heightsRef} color={props.companionColor} />}
@@ -4678,6 +4849,12 @@ export default function Shimmer3D() {
   const castMultRef = useRef(1)   // stance multiplier on cast damage
   const stanceMoveRef = useRef(1) // stance multiplier on move speed
   const surgeRef = useRef({ until: 0, mult: 1 })  // Static Burst — a short self-buff window
+  const infusionRef = useRef({ until: 0, mult: 1 })  // Flame Infusion — a WEAPON-damage window
+  // ── the three systems. All three live as refs on the parent so the walker (collision) and the
+  // sim (effects + render) read ONE source; neither owns them. ──
+  const fieldsRef = useRef<Field[]>([])          // SYSTEM 1 — persistent area entities
+  const conjuredRef = useRef<Conjured[]>([])     // SYSTEM 2 — runtime terrain
+  const statusRef = useRef<StatusBag>(emptyBag())  // SYSTEM 3 — options removed from enemies
   const [castHud, setCastHud] = useState<{ slots: (string | null)[]; stance: string | null }>({ slots: CAST_SLOTS.map(() => null), stance: null })
 
   // The walker is public; the terrain editor is owner-only. ather.games has no cloud auth, so owner
@@ -4717,6 +4894,8 @@ export default function Shimmer3D() {
     castLoadoutRef.current = defaultLoadout(runeInvRef.current.owned)
     castCdRef.current = CAST_SLOTS.map(() => 0)
     stanceRef.current = null; resistRef.current = 0; castMultRef.current = 1; stanceMoveRef.current = 1
+    surgeRef.current = { until: 0, mult: 1 }; infusionRef.current = { until: 0, mult: 1 }
+    fieldsRef.current = []; conjuredRef.current = []; statusRef.current = emptyBag()
     setCastHud({ slots: castLoadoutRef.current, stance: null })
   }, [])
   useEffect(() => {
@@ -5004,6 +5183,10 @@ export default function Shimmer3D() {
       setManaFrac(manaRef.current.current / (getMaxPool(skillsRef.current.mana.level) + affinityRef.current.manaBonus))
     }, W.reloadTime * 1000)
   }, [])
+  // A healing field restores the player from inside the sim; HP + its cap live out here.
+  const healPlayer = useCallback((amount: number) => {
+    hpRef.current = Math.min(hpMaxRef.current, hpRef.current + amount)
+  }, [])
   // Spend mana for one cast, or refuse.
   const dryCastToastAt = useRef(0)
   const tryCast = useCallback((cost: number): boolean => {
@@ -5025,8 +5208,10 @@ export default function Shimmer3D() {
   }, [])
   // ── THE CAST DISPATCH: slot → move → archetype ────────────────────────────────────────────────
   // One entry point for every bound key. It resolves the slot's move, gates on cooldown + mana, then
-  // runs the archetype. Non-projectile archetypes complete right here (they touch hp/mana/speed, all
-  // of which live in this component); only a projectile is handed down to the sim.
+  // runs the archetype. SELF archetypes (stance/restore/surge/infusion) complete right here — they
+  // touch hp/mana/speed, which live in this component. PLACED archetypes (projectile/field/terrain/
+  // status) are handed to the sim via pendingCastRef, because only the frame loop has the live
+  // camera, and every one of them needs an aim point.
   //
   // An 'unbuilt' move SAYS SO. Canon has 24 registered moves and the sim can run 9 of them; a silent
   // no-op on the other 15 reads as a broken cast, so the toast names the move and the reason.
@@ -5060,10 +5245,24 @@ export default function Shimmer3D() {
         setHarvestToast(`${spec.label} held — mana recovery paused`)
         break
       }
-      case 'projectile': {
+      // Everything PLACED goes down the same wire: pay, hand the spec to the sim, start the cooldown.
+      // The sim resolves the aim point once, so a bolt, a firewall, a stonewall and a shackle all
+      // land where you were looking by ONE rule instead of four.
+      case 'projectile':
+      case 'field':
+      case 'terrain':
+      case 'status': {
         if (!tryCast(spec.manaCost)) return
-        pendingCastRef.current = spec   // FiringRange spawns it next frame, from the live camera
+        pendingCastRef.current = spec
         castCdRef.current[slot] = now + spec.cooldownMs
+        if (spec.archetype !== 'projectile') setHarvestToast(spec.label)
+        break
+      }
+      case 'infusion': {
+        if (!tryCast(spec.manaCost)) return
+        infusionRef.current = { until: now + spec.surgeSecs * 1000, mult: spec.surgeMult }
+        castCdRef.current[slot] = now + spec.cooldownMs
+        setHarvestToast(`${spec.label} — your shots burn`)
         break
       }
       case 'restore': {
@@ -5621,6 +5820,11 @@ export default function Shimmer3D() {
           pendingCastRef={pendingCastRef}
           castMultRef={castMultRef}
           resistRef={resistRef}
+          infusionRef={infusionRef}
+          fieldsRef={fieldsRef}
+          conjuredRef={conjuredRef}
+          statusRef={statusRef}
+          onHeal={healPlayer}
           onNeedReload={startReload}
           onPlayerDamage={onPlayerDamage}
           onPlayerDown={onPlayerDown}
