@@ -178,7 +178,11 @@ const CANON_V1_ZONES = [
 // the mortal continent, so a mortal-side zone read as "off-canon" purely because the check was
 // looking in the wrong file. These are ruled in `world/rune-hold.md` and named in the realm map
 // (`game/two-lines-two-games.md`: "Rune Hold, the Citadel, the Pyramid-Zero Crucible").
-const CANON_MORTAL_ZONES = ['Rune Hold', 'The Crucible', 'Pyramid Zero', 'The Citadel', 'The Passage']
+// 'The Travelers Station' + 'The Firing Range' ruled into geography 2026-08-05 (/magii + Alex,
+// `world/rune-hold.md` › The Travelers Station): the way out of Rune Hold is a SKY-PORT the town
+// calls the Travelers Station, and the practice range sits with it rather than on the square.
+const CANON_MORTAL_ZONES = ['Rune Hold', 'The Crucible', 'Pyramid Zero', 'The Citadel', 'The Passage',
+  'The Travelers Station', 'The Firing Range']
 // dev/benchmark zones that are intentionally non-canon — excluded from the check.
 const ZONE_IGNORE = /sandbox|demo|terrain|hub|^fp-|garden \(hub\)|large |medium |huge|chunk|bake|proof|test|[–—]/i
 
