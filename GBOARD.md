@@ -386,6 +386,46 @@ the Arcade frame.
 > **Files:** pipeline `/opt/blender` (4.2.9 LTS, not in git) · render scripts `tools/render/*.py` · assets `public/<game>/*.png`
 > · wiring per-cabinet render fn (Vault: `page.tsx` `drawFoe`, sprite-blit + procedural fallback).
 
+## 🚪 Shimmer — THE MORTAL SIDE: gates, the town, the station chain (SHIPPED 2026-08-05, jin-cc) · *Last touched 2026-08-05*
+
+> **Left off:** the whole chain is walkable by a player — **Home Plot → Rune Hold → {The Passage · Travelers Station → Firing Range}** — with the Crucible stub owner-held off the station. Three stub interiors are authored-shell-only and waiting on Alex's eye.
+>
+> ### What shipped
+> - **The Spirit Corner folded into Rune Hold** (`e1c6c11`). Alex's 100x100 town map saved under `SPIRIT_CORNER`; canon (`rune-hold.md` § The Hub) rules the Spirit Corner a **storefront on the square**, so the separate zone was the build approximating. Coordinates survived the fold (he painted outward from the old room), so `LEGACY_ZONE_ALIASES` migrates an old save by swapping the id alone.
+> - **Gates** (`f01feca`) — a `Warp` is one tile, so a door was always "warps sitting next to each other". `Gate` = one anchor, one footprint, one name; `expandGate` makes size² warps at load. **Label is data** so a canon rename is a one-field edit. 2x2 default, big nametag, editor Gate brush.
+> - **Tile 103 Building Block** (brown, SOLID). Clouds + mist are **Ather-only**; a town of cloud reads as sky. 1.8 tall vs cloud 1.3 → towns get a skyline.
+> - **The split** (`0767f9b`) — one zone was doing two jobs (name said Firing Range, id said `crucible`, BR clock ran against it). Now `travelers-station` (peaceful concourse) and `firing-range` (weapons live). **No new machinery**: `outside && !peaceful` already mounted the range.
+> - **Crucible stub** (`8555452`) off the station, owner-held while there's no match.
+>
+> ### Decisions (don't relitigate)
+> - **Gates render from DATA, not painted tiles** — so erasing tiles does NOT delete a door. The 2D editor's eraser takes the WHOLE gate; the play3d editor **cannot** delete wiring (its save posts grid/heights/nodes/spawners and deliberately not warps — an unconditional `warps: []` there would wipe every door in the zone) and now says so instead of failing silently.
+> - **An alias cannot survive a reissue.** `crucible` briefly meant the range; the tournament map reclaimed it, so the alias was **deleted**. `getZone` prefers a live id over an alias — that is what made the reclaim safe.
+> - **Practice is the ungated door.** The Crucible is owner-held for a build reason (no match yet), never a canon one.
+> - **Unwired warp tiles are not painted.** A door to nowhere fails the oracle's orphan check on purpose.
+>
+> ### Next
+> - **Alex:** `TODO(station-layout)` · `TODO(passage-layout)` · `TODO(crucible-layout)` · paint Rune Hold's buildings with tile 103.
+> - **Blocked on Magii:** canon-drift is **RED** — `[zones] The Travelers Station, The Firing Range` are not in the ruled geography. Deliberately **not** allowlisted; the gate's job is catching places that became canon by being built.
+> - **Jin:** the multi-level engine work (see the Crucible block), then #294 enemies.
+>
+> ### Files
+> `world/zones.ts` (Gate + expandGate + LEGACY_ZONE_ALIASES + all five zones) · `world/tilemap.ts` (RUNE_HOLD, THE_PASSAGE, TRAVELERS_STATION, CRUCIBLE, FIRING_RANGE, tile 103) · `world/tiles.ts` · `play3d/Shimmer3D.tsx` (GateMarkers, building walls, instance clamps) · `dev/editors/MapEditor.tsx` (Gate brush, whole-gate eraser) · `save-map/route.ts` (gates + `ownerOnly`) · `world/rune-hold-fold.test.ts` (475) · `play3d/phantom-instance.test.mjs`
+
+## 🔺 Shimmer — THE CRUCIBLE: multi-level, and why the engine can't do it yet (2026-08-05, jin-cc) · *Last touched 2026-08-05*
+
+> **Left off:** stub zone exists and is walkable (owner-held). The real build is blocked on an engine limit, and canon is what forces the hard version.
+>
+> - ★ **Canon requires the whole pyramid loaded at once.** `pyramid-zero.md` › Level 3: *"No load screens — seamless ascent."* So the Crucible **cannot** be four zones with a warp between floors like every other interior.
+> - ★ **The cheap fake is also out.** Floors are stacked interiors sealed behind **airlocks under falling pressure** — an open-air stepped ziggurat can't hold pressure, so the terraced-heightmap version contradicts the hazard.
+> - **The wall:** `heights[y][x]` is a **heightmap — one surface per column, `MAX_TIER` 8.** You can never stand *under* another floor. Not a tuning problem; a data-model one.
+> - **The path (recommended, not yet built):** `garden-world.ts` already composes several zone grids into one scene via `Placement { zone, ox, oy }`. **Add a vertical offset to that same struct.** Floors stack with almost no new machinery, each floor stays an authorable MapEditor map, collision picks a floor by player Y, and the airlocks are the gate between them.
+> - **Do NOT re-derive timing in a map.** `crucible-phases.ts` already derives floors, windows and the seal from elapsed seconds alone, and is tested. Wire maps TO it.
+> - **Meshy props** — brief compiled (`athernyx design-briefs/pyramid-zero.md`, DRAFT). 950 credits, ~60 props, **one month of subscription**. Priority: airlock door > wooden Vault door > the glyph > Wonder pedestal+orbs > throne > ruined-city modules > mana bell > guard plinths. **Props, never level geometry.** Never skip `glb_optimize` (raw Meshy ~440k tris/15MB vs a world rendering ~46k total); judge in-WORLD, not preview.
+> - **Blocked on Magii:** 5 look questions every prop inherits — material, the Citadel crest's direction, lit-room colour, weathered vs pristine, the Dawn's sky.
+>
+> ### Files
+> `world/tilemap.ts` › `CRUCIBLE` (TODO(crucible-floors), TODO(crucible-layout)) · `world/zones.ts` › `crucible` · `play3d/crucible-phases.ts` · `play3d/puppet-guards.ts` · `play3d/crucible-bots.ts`
+
 ## 🎯 Shimmer play3d — THE GOAL IS APEX (art-direction north star, Alex, 2026-07-22)
 > **"Apex Legends — that's the goal in a nutshell."** Ruled during the meshy.ai/character-pipeline talk. The blockout
 > world is SCAFFOLDING, not the aesthetic — the destination is Apex-tier presentation: real meshes, materials,
