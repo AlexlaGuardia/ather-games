@@ -386,6 +386,39 @@ the Arcade frame.
 > **Files:** pipeline `/opt/blender` (4.2.9 LTS, not in git) · render scripts `tools/render/*.py` · assets `public/<game>/*.png`
 > · wiring per-cabinet render fn (Vault: `page.tsx` `drawFoe`, sprite-blit + procedural fallback).
 
+## ⚔️ Shimmer play3d — #294 REAL-TIME ENEMIES: THE COLLAR RAID (sim shipped 2026-08-05, jin-cc) · *Last touched 2026-08-05*
+
+> **Left off:** the sim is built, tested (35 asserts) and deployed but **NOT WIRED** — one decision blocks the wiring, and it is Alex's (see *Next*).
+>
+> ### The design, and why it dissolves the rune-vs-gun problem
+> The rune kit has read as a worse gun for as long as the only PvE was turn-based. The fix was **not** to put enemies on the gun side — that re-creates the redundancy. It is to put them **where guns cannot go**: `realm: 'ather'` holsters weapons by construction, so in a region the rune kit isn't *an* answer, it's the only one.
+>
+> ### ★ Canon had the whole design written — `design-briefs/moglins.md`
+> *"The species is not the sin, the collar is."* · *"the swagger drains the moment the spirit is freed"* · the collared spirit looms beside them **as the borrowed power** · a collar binds **spirits only** · moglins take spirits as **stock**.
+>
+> **The mechanical consequence: a raider has NO `hp` FIELD AND CANNOT BE KILLED.** The collar is the only resource in the module. That single omission is the cozy line's moral engine expressed as a data structure — you cannot shoot a teddy bear, and the game should not let you try. **The stake is theft, not death:** a raider comes for a spirit, and losing means it walks away with one. You cannot shoot an abduction.
+>
+> ### Decisions (don't relitigate)
+> - **Disarm is a WINDOW, not a win.** Shackle jams the collar-hand: no borrowed power, no fitting a new collar — but the raider keeps its collar and its nerve. Making disarm a kill would collapse the whole fight into one button.
+> - **Interrupt by PRESENCE.** Looming outranks collaring, so walking at a raider pulls it off a spirit before a single cast — a rescue you can perform by existing. Also makes the poser read as a poser.
+> - **The collar is never half-on** — any interrupt resets the work.
+> - **Rooted still lets it work** (canon's clamp is on the feet, its hands are free); **disarmed does not** (you cannot fit a collar you cannot hold).
+> - **★ Blinding is NOT a safe answer, and that is emergent, not designed.** A blinded raider forgets the player and *resumes collaring* — Enlighten buys a disengage but accelerates the theft. Exactly the "removes an option, not HP" texture; keeps Enlighten situational instead of universal. **Keep this.**
+> - **No wounded state, no second phase** — canon doesn't describe one. Break the collar and he is simply the sweet creature again, permanently.
+>
+> ### ⚠ Next — ONE DECISION BLOCKS WIRING (Alex's, it's game design not canon)
+> **What is a "quarry"?** The sim takes an opaque `{id,x,y}` list and deliberately never learns what a spirit is — so the caller decides. But Shimmer's convention says **spirits are battle-only, no overworld**, so there is nothing in a region for a raider to steal yet. Options:
+> - **(a) The Home Plot spirit bank** (shipped 07-30) — real overworld spirits already exist there, and moglin burrows raiding a garden is exactly canon. But the stake becomes *losing your own*, which is harsh for the cozy line.
+> - **(b) A wild spirit that only exists during a raid** — spawns with the raid, is the thing you're rescuing, leaves when freed. Keeps the stake at "did you save it", never "did you lose yours". Costs a new transient entity.
+> - **(c) Abstract** — the raider is heading somewhere offscreen; interrupting is the whole fight. Cheapest, least legible.
+>
+> Then: renderer bodies (deflate pose is the payoff and must be legible at a glance, per the brief), routing a cast's damage into `strikeCollar`, and the freed-spirit payoff — **grey draining back to colour**, which is the same cosmic fact ruled on the Pyramid today, at cozy scale.
+>
+> **The turn-based patrol battle is untouched and still shipping** — this is additive, not a replacement, so nothing regresses while it's unwired.
+>
+> ### Files
+> `play3d/collar-raid.ts` (the sim — pure, no THREE, no React, same mould as `puppet-guards.ts`) · `play3d/collar-raid.test.ts` (35 asserts) · consumes `play3d/statuses.ts` via opaque `raid:<id>` targets.
+
 ## 🚪 Shimmer — THE MORTAL SIDE: gates, the town, the station chain (SHIPPED 2026-08-05, jin-cc) · *Last touched 2026-08-05*
 
 > **Left off:** the whole chain is walkable by a player — **Home Plot → Rune Hold → {The Passage · Travelers Station → Firing Range}** — with the Crucible stub owner-held off the station. Three stub interiors are authored-shell-only and waiting on Alex's eye.
