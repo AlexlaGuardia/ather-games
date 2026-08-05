@@ -408,6 +408,33 @@ the Arcade frame.
 > ### Files
 > `play3d/collar-raid.ts` (Ather) · `play3d/puppet-guards.ts` + `play3d/crucible-bots.ts` + `play3d/crucible-phases.ts` (Crucible) · `src/app/nolmir/` (Expeditions)
 
+## 🌍 Shimmer — THE DEPENDENCY ORDER: Wilds → Strongholds · Folds → Raids (Alex, 2026-08-05)
+
+> **Why this block exists:** the collar-raid sim shipped before the layer it belongs in. Alex named the real order, and canon backs every step — so this is the ordering of record, not a preference.
+>
+> ### 1️⃣ THE WILDS — the missing layer, and the blocker for everything below
+> Canon (`spirit-tales-bible.md`, ruled 2026-06-22): the Wilds are *"the persistent, walkable, open-world **overland** — the wide common country where the populace and **wild spirits** live… **the layer the GAME explores**."* Keeper-gardens are **tended sections OF the Wilds** (2026-06-23) — a fence-line is the border to untamed wild beyond, not a separate map.
+>
+> **★ The Wilds also dissolves the open quarry question.** #294 stalled on "what does a raider steal, when spirits are battle-only with no overworld?" Canon's answer is that wild spirits *live in the Wilds*. Build the layer and quarries stop being a design decision — they are simply what is standing in the field. **Do not answer the quarry question separately; it is a symptom of the missing layer.**
+>
+> ### 2️⃣ STRONGHOLDS — need the Wilds first (canon says so literally)
+> Canon (`glossary.md` + bible, ruled 2026-06-03): a stronghold is *"an Outland Moglin hold that **runs on collars** — the macro version of what three weeds did to three garden plots. The Series 2 threat: **the gardens were practice; the strongholds are real**."* Hemlock **runs one**. Jimbo closes Bk5 by *"forewarning her of the nearest stronghold, and that there are others."*
+> **And the dependency is canon, not just practical:** *"Strongholds sit in the Wilds and are reachable overland — a collar-sweep walks its captives along the trails — as well as by fold back-door."* A stronghold with no Wilds around it has no trails to walk captives along.
+>
+> **Alex's structure (2026-08-05):** each stronghold = a **group + a leader**, and each **favours one of the ten base lines**, each having *"gone in a different direction with how they train theirs."* Ten holds, ten philosophies. ⚠ Filed for Magii — a themed hold is world-structure that Series 2 books will use, so it is not a pure build call.
+> *Build note:* the three existing holds (`thistle` / `sorrel` / `brack`) are already zone ids and defeat-flags — they are the first three of the ten, not throwaways.
+>
+> ### 3️⃣ THE FOLDS — where the RAIDS live
+> Canon (ruled, `game/shimmer-geography.md`): the Folds are *"the churning wild between fixed gardens, never the same twice"* → **procedurally-generated dungeons**, entered at Moonwell Glade, and *"deep fold-runs carry to the Ather Wilds."* The Wilds are walked; the folds are **back-doors that open and close**.
+>
+> **★ Raids ARE fold content, and that is not a reframe — it is what a fold already is.** A raid is a transient generated encounter; a fold is a run that is never the same twice. The collar-raid sim already spawns its quarries with the encounter and retires when settled, so it drops into a generated fold run with no changes. **A stronghold is the opposite shape:** fixed place, fixed leader, persistent — the same mechanic, deployed as a siege rather than an ambush.
+>
+> ### ⏸ PARKED (Alex 2026-08-05) — "pin the idea for later"
+> `collar-raid.ts` is **built, tiered, 44-assert tested, deployed, unwired** — and correctly so: it has nowhere to live until the Wilds or the Folds exist. It is not debt; it is the mechanic waiting for its layer. **Nothing further on raids until the folds front opens.**
+>
+> ### The order
+> **Wilds → (quarries free, strongholds possible) → Strongholds** · and in parallel **Folds → Raids.** The Wilds unblock two of the three, which makes them the highest-leverage thing on this board.
+
 ## ⚔️ Shimmer play3d — #294 REAL-TIME ENEMIES: THE COLLAR RAID (sim shipped 2026-08-05, jin-cc) · *Last touched 2026-08-05*
 
 > **Left off:** the sim is built, tested (35 asserts) and deployed but **NOT WIRED** — one decision blocks the wiring, and it is Alex's (see *Next*).
@@ -444,7 +471,10 @@ the Arcade frame.
 >
 > Canon hands us the tier anyway: *"This is what Hemlock's great empty cage was built for… the cage is empty because he has hunted one for years and **never caught it**."* So an awakened raid that ends in a capture would contradict a fact already printed in Benji's books. `TIER_DIALS.awakened.canTake = false` — the collar bar fills and **resets**. You can still lose the *chance*; you can never lose the *fact*. The oracle runs a 60-second undisturbed raid to prove it, and separately proves the lower tiers DO capture so the rule isn't a global no-op.
 >
-> ### ⚠ Next — ONE DECISION BLOCKS WIRING (Alex's, it's game design not canon)
+> ### ✅ The quarry question is CLOSED by the dependency order (2026-08-05) — see the Wilds block above
+> It was never a design decision: canon puts **wild spirits in the Wilds**, so building that layer supplies quarries for free. The options below are kept only as the reasoning that led there.
+>
+> ### ~~Next — one decision blocks wiring~~ (superseded)
 > **What is a "quarry"?** The sim takes an opaque `{id,x,y}` list and deliberately never learns what a spirit is — so the caller decides. But Shimmer's convention says **spirits are battle-only, no overworld**, so there is nothing in a region for a raider to steal yet. Options:
 > - **(a) The Home Plot spirit bank** (shipped 07-30) — real overworld spirits already exist there, and moglin burrows raiding a garden is exactly canon. But the stake becomes *losing your own*, which is harsh for the cozy line.
 > - **(b) A wild spirit that only exists during a raid** — spawns with the raid, is the thing you're rescuing, leaves when freed. Keeps the stake at "did you save it", never "did you lose yours". Costs a new transient entity.
