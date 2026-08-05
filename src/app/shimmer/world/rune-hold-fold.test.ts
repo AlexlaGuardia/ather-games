@@ -10,7 +10,8 @@
  * So the wiring gets an oracle rather than a walkthrough. Run: `npx tsx <this file>`
  * (the repo convention — there is no vitest here).
  */
-import { ZONES, getZone, resolveZoneId, checkWarp, START_ZONE, type Zone } from './zones'
+import { ZONES, getZone, resolveZoneId, checkWarp, expandGate, START_ZONE, type Zone } from './zones'
+import { SOLID } from './tiles'
 
 /**
  * Broken doors in the LEGACY continent that predate this change — surfaced by the sweep in
@@ -43,10 +44,14 @@ function ok(cond: boolean, label: string) {
   else fails.push(label)
 }
 
-const WALL = 34
 const WARP_TILE = 14
-const walkable = (z: Zone, x: number, y: number) =>
-  y >= 0 && y < z.grid.length && x >= 0 && x < z.grid[y].length && z.grid[y][x] !== WALL
+// Walkability reads the SOLID registry, not a hardcoded wall id. Hardcoding 34 was fine when
+// clouds were the only wall; the moment the mortal side got brown building blocks (103) every
+// check would have called a solid building "walkable" and passed a door built inside a wall.
+const walkable = (z: Zone, x: number, y: number) => {
+  if (y < 0 || y >= z.grid.length || x < 0 || x >= z.grid[y].length) return false
+  return !SOLID[z.grid[y][x] & 0xFF]
+}
 
 // ── 1. the fold happened ───────────────────────────────────────────────────────────────────
 const runeHold = getZone(ZONES, 'rune-hold')
@@ -75,27 +80,55 @@ for (const z of ZONES) {
   }
 }
 
-// ── 4. the two gates the fold is actually about ────────────────────────────────────────────
-// Greg's gate: painted on the map (tile id 14), inside the shop, exits to the Home Plot.
-const gregGate = runeHold!.warps.filter(w => w.fromY === 11 && (w.fromX === 7 || w.fromX === 8))
-ok(gregGate.length === 2, "Greg's gate is a 2-tile door")
-ok(gregGate.every(w => w.toZone === 'garden'), "Greg's gate exits to the Home Plot (legacy id — the interior-exit contract)")
-ok(gregGate.every(w => runeHold!.grid[w.fromY][w.fromX] === WARP_TILE), "Greg's gate tiles are painted as warps (gold marker shows)")
-ok(gregGate.every(w => !w.ownerOnly), "Greg's gate is open to players (the 08-03 ruling)")
+// ── 4. GATES — the 2x2 doors ───────────────────────────────────────────────────────────────
+// expandGate is the whole contract between authoring and runtime, so test it directly first.
+const sample = expandGate({ x: 10, y: 20, toZone: 'garden', toX: 1, toY: 2, label: 'TEST' })
+ok(sample.length === 4, 'a default gate expands to 4 warps (2x2)')
+ok(sample.every(w => w.toX === 1 && w.toY === 2), 'every tile of a gate lands on the SAME square')
+ok(sample.every(w => w.gate === 'TEST'), 'expanded warps carry their gate label')
+ok(new Set(sample.map(w => `${w.fromX},${w.fromY}`)).size === 4, 'a gate covers 4 distinct tiles')
+ok(expandGate({ x: 0, y: 0, size: 3, toZone: 'garden', toX: 1, toY: 1, label: 'T' }).length === 9, 'size:3 expands to 9')
+// ownerOnly must reach EVERY tile — a door half of which players can walk through is worse
+// than no gate at all, and it is exactly what hand-written warp pairs used to risk.
+const ownerSample = expandGate({ x: 0, y: 0, toZone: 'garden', toX: 1, toY: 1, label: 'T', ownerOnly: true })
+ok(ownerSample.every(w => w.ownerOnly === true), 'ownerOnly propagates to every tile of a gate')
 
-// the station gate: Alex's painted door, wired to the Crucible, owner-gated for BUILD reasons
-const station = runeHold!.warps.filter(w => w.fromY === 81 && (w.fromX === 49 || w.fromX === 50))
-ok(station.length === 2, 'the station gate is a 2-tile door')
-ok(station.every(w => w.toZone === 'crucible'), 'the station gate leads to the Crucible')
-ok(station.every(w => runeHold!.grid[w.fromY][w.fromX] === WARP_TILE), 'the station gate tiles are painted as warps')
-ok(station.every(w => w.ownerOnly === true), 'the station gate stays owner-only while the Crucible is a bare range')
-// you must be able to WALK to it: open ground on the approach side
-ok(walkable(runeHold!, 49, 80) && walkable(runeHold!, 50, 80), 'the station gate is approachable from the north')
+const gates = runeHold!.gates ?? []
+ok(gates.length === 2, 'Rune Hold has two gates')
+ok(gates.every(g => (g.size ?? 2) === 2), 'both town gates are 2x2')
+ok(gates.every(g => !!g.label.trim()), 'every gate carries a nametag')
+
+// each gate's whole footprint must be walkable — a gate tile inside a wall is a door you can
+// see, name, and never reach.
+for (const g of gates) {
+  const size = g.size ?? 2
+  for (let dy = 0; dy < size; dy++) for (let dx = 0; dx < size; dx++) {
+    ok(walkable(runeHold!, g.x + dx, g.y + dy), `gate ${g.label} footprint (${g.x + dx},${g.y + dy}) is walkable`)
+  }
+  // and its landing must not sit inside ANY gate, or you bounce straight back
+  const target = getZone(ZONES, g.toZone)
+  if (target) ok(!checkWarp(ZONES, target.id, g.toX, g.toY), `gate ${g.label} lands clear of any warp tile`)
+}
+
+const gregGate = gates.find(g => g.toZone === 'garden')
+ok(!!gregGate, "Greg's gate exits to the Home Plot (legacy id — the interior-exit contract)")
+ok(gregGate?.ownerOnly !== true, "Greg's gate is open to players (the 08-03 ruling)")
+ok(runeHold!.grid[11][7] === WARP_TILE, "Greg's gate covers the tiles Alex painted as warps")
+
+const station = gates.find(g => g.toZone === 'crucible')
+ok(!!station, 'the station gate leads to the Crucible')
+ok(station?.ownerOnly === true, 'the station gate stays owner-only while the Crucible is a bare range')
+ok(runeHold!.grid[81][49] === WARP_TILE, 'the station gate covers the tiles Alex painted as warps')
+// you must be able to WALK to it: open ground north of the footprint
+ok(walkable(runeHold!, 49, 79) && walkable(runeHold!, 50, 79), 'the station gate is approachable from the north')
+
+// the gates actually reached `warps` — the expansion pass ran
+ok(runeHold!.warps.filter(w => w.gate).length === 8, 'both gates expanded into the zone warps (4 tiles each)')
 
 // and the Crucible comes back to the town, not to its old pre-town parent
 const crucible = getZone(ZONES, 'crucible')!
 ok(crucible.warps.every(w => w.toZone === 'rune-hold'), 'the Crucible exits to Rune Hold')
-ok(crucible.warps.every(w => w.toY === 80), 'the Crucible exit lands NORTH of the gate (no instant re-warp)')
+ok(crucible.warps.every(w => w.toY === 79), 'the Crucible exit lands NORTH of the 2x2 gate footprint')
 // the instant-re-warp check, stated as the rule rather than the coordinate
 for (const w of crucible.warps) {
   ok(!checkWarp(ZONES, 'rune-hold', w.toX, w.toY), `Crucible exit landing (${w.toX},${w.toY}) is not itself a warp tile`)

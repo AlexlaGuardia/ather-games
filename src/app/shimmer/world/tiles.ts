@@ -4027,16 +4027,55 @@ const T102 = t32(['#2d9c16', '#288014', '#937c39', '#625232', '#1a1a2e', '#88888
   11111111111111111111111111111111
 `)
 
-export const TILES: TileDef[] = [T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17, T18, T19, T20, T21, T22, T23, T24, T25, T26, T27, T28, T29, T30, T31, T32, T33, T34, T35, T36, T37, T38, T39, T40, T41, T42, T43, T44, T45, T46, T47, T48, T49, T50, T51, T52, T53, T54, T55, T56, T57, T58, T59, T60, T61, T62, T63, T64, T65, T66, T67, T68, T69, T70, T71, T72, T73, T74, T75, T76, T77, T78, T79, T80, T81, T82, T83, T84, T85, T86, T87, T88, T89, T90, T91, T92, T93, T94, T95, T96, T97, T98, T99, T100, T101, T102]
+// 103: Building Block (brown) [structure] (SOLID)
+// The mortal side's wall. Clouds (34) and mist (31) are ATHER-only — a town built out of
+// cloud reads as sky, which is exactly the tonal wall the canon splits on. Rune Hold and
+// everything past the outward crossing builds with this.
+const T103 = t32(['#c9a227', '#8a5a2b', '#6f4520', '#4a2c14', '#2a180b'], `
+  11111111111111111111111111111111
+  52222222222222224222222222222225
+  52222222222222224233322222222225
+  52222222222222224233322222222225
+  53333333333333334333333333333335
+  54444444444444444444444444444445
+  52222222422222222222222242222225
+  52222222422233322222222242222225
+  52222222433322222222222242222235
+  53333333433333333333333343333335
+  54444444444444444444444444444445
+  52222222222222224222222222222225
+  52233322222222224222222233322225
+  52233322222222224222222233322225
+  53333333333333334333333333333335
+  54444444444444444444444444444445
+  52222222422222222222222242222225
+  52222222422222222233322242222225
+  52222222422222233322222242222225
+  53333333433333333333333343333335
+  54444444444444444444444444444445
+  52222222222222224222222222222225
+  52222222233322224222222222222235
+  52222222233322224222222222222235
+  53333333333333334333333333333335
+  54444444444444444444444444444445
+  52222222422222222222222242222225
+  52233322422222222222222243322225
+  53322222422222222222233342222225
+  53333333433333333333333343333335
+  54444444444444444444444444444445
+  55555555555555555555555555555555
+`)
+
+export const TILES: TileDef[] = [T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17, T18, T19, T20, T21, T22, T23, T24, T25, T26, T27, T28, T29, T30, T31, T32, T33, T34, T35, T36, T37, T38, T39, T40, T41, T42, T43, T44, T45, T46, T47, T48, T49, T50, T51, T52, T53, T54, T55, T56, T57, T58, T59, T60, T61, T62, T63, T64, T65, T66, T67, T68, T69, T70, T71, T72, T73, T74, T75, T76, T77, T78, T79, T80, T81, T82, T83, T84, T85, T86, T87, T88, T89, T90, T91, T92, T93, T94, T95, T96, T97, T98, T99, T100, T101, T102, T103]
 
 // Collision: true = solid, spirits can't walk here
-export const SOLID: boolean[] = [false, false, false, false, false, false, true, true, true, true, true, true, true, false, false, true, true, true, true, false, false, false, false, false, true, true, true, true, true, true, false, false, false, false, true, true, false, true, true, true, true, true, true, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, true, false, false, true, true, true, true, true, true, true, true, true, true, true, true, true, false, false, false, false, false, true, true, false, false, false, false, true, true]
+export const SOLID: boolean[] = [false, false, false, false, false, false, true, true, true, true, true, true, true, false, false, true, true, true, true, false, false, false, false, false, true, true, true, true, true, true, false, false, false, false, true, true, false, true, true, true, true, true, true, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, true, false, false, true, true, true, true, true, true, true, true, true, true, true, true, true, false, false, false, false, false, true, true, false, false, false, false, true, true, true]
 
 // Above-player layer: true = renders on top of entities (walk-under effect)
-export const ABOVE: boolean[] = [false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, true, false, false, false, false, false, false, false, false, false, false, false, false, false, true, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false]
+export const ABOVE: boolean[] = [false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, true, false, false, false, false, false, false, false, false, false, false, false, false, false, true, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false]
 
 // Veil tiles: true = Ather mist zone where wild encounters can roll
-export const VEIL: boolean[] = [false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false]
+export const VEIL: boolean[] = [false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false]
 
 // Dense veil: true = higher encounter rate
-export const VEIL_DENSE: boolean[] = [false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false]
+export const VEIL_DENSE: boolean[] = [false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false]

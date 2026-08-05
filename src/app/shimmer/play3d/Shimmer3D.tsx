@@ -11,7 +11,7 @@ import * as THREE from 'three'
 import { walkable } from '../engine/player'
 import { resolveStand, canStandAt, surfacesAt, EMPTY_SEGS, type CollisionCtx } from '../engine/segs-collision'
 import { SOLID } from '../world/tiles'
-import { getZone, checkWarp, type Zone, type Warp } from '../world/zones'
+import { getZone, checkWarp, type Zone, type Warp, type Gate } from '../world/zones'
 import { ALL_ZONES } from '../world/all-zones'
 import { getHeightGrid } from '../world/heightmaps'
 import { GardenAtmosphere } from '../world/atmosphere'
@@ -90,6 +90,9 @@ const ALL_NPCS = allNpcs()
 
 const START_ZONE = 'r-home-plot' // the world pivot: players live in the region maps; the legacy continent stays reachable via ?zone= until cutover
 const WATER_ID = 8, FLOOR_ID = 97, WALL_ID = 34, WARP_ID = 14, MIST_ID = 31
+// The mortal side's wall. Clouds and mist are ATHER-only — a town built out of cloud reads as
+// sky, which is the tonal wall canon splits on. Solid like a cloud, drawn brown.
+const BUILDING_ID = 103
 // Encounters: stepping onto a fresh MIST tile can draw a wild spirit. Per-zone odds live in
 // ENCOUNTER_TABLES (engine/encounters.ts → `rate`); these dials shape it for the 3D walker so a
 // 888-mist zone isn't wall-to-wall battles.
@@ -271,6 +274,9 @@ const isWallAt = (grid: number[][], x: number, y: number) => {
 function bucketsRect(grid: number[][], r0: number, c0: number, r1: number, c1: number) {
   const floors: Cell[] = [], walls: Cell[] = [], waters: Cell[] = [], voids: Cell[] = [], warps: Cell[] = [], mists: Cell[] = []
   const wallTops: Cell[] = []
+  // Buildings are walls that are not clouds. Same collision, same shell/top split, different
+  // colour — so they ride the identical geometry path and only branch at the material.
+  const buildings: Cell[] = [], buildingTops: Cell[] = []
   for (let r = r0; r < r1; r++) for (let c = c0; c < c1; c++) {
     const v = grid[r][c]
     if (v === VOID) { voids.push([c, r]); continue }
@@ -287,10 +293,11 @@ function bucketsRect(grid: number[][], r0: number, c0: number, r1: number, c1: n
         if (!dx && !dy) continue
         if (!isWallAt(grid, c + dx, r + dy)) { buried = false; break }
       }
-      ;(buried ? wallTops : walls).push([c, r])
+      if (id === BUILDING_ID) (buried ? buildingTops : buildings).push([c, r])
+      else (buried ? wallTops : walls).push([c, r])
     }
   }
-  return { floors, walls, waters, voids, warps, mists, wallTops }
+  return { floors, walls, waters, voids, warps, mists, wallTops, buildings, buildingTops }
 }
 
 // The world renders in CHUNK×CHUNK blocks, one instanced-mesh set each, so three.js frustum-
@@ -303,7 +310,11 @@ function chunkBuckets(grid: number[][]) {
   const out: { key: string; b: ReturnType<typeof bucketsRect> }[] = []
   for (let r0 = 0; r0 < rows; r0 += CHUNK) for (let c0 = 0; c0 < cols; c0 += CHUNK) {
     const b = bucketsRect(grid, r0, c0, Math.min(r0 + CHUNK, rows), Math.min(c0 + CHUNK, cols))
-    if (b.floors.length || b.walls.length || b.wallTops.length || b.waters.length || b.voids.length || b.warps.length || b.mists.length)
+    // Every bucket must be listed here. A chunk made ENTIRELY of one omitted kind gets dropped as
+    // "empty" and that content silently never renders — which is what would have happened to a
+    // solid block of buildings in the middle of a town.
+    if (b.floors.length || b.walls.length || b.wallTops.length || b.waters.length || b.voids.length
+      || b.warps.length || b.mists.length || b.buildings.length || b.buildingTops.length)
       out.push({ key: `${r0}:${c0}`, b })
   }
   return out
@@ -991,13 +1002,17 @@ const ZoneGeometry = memo(function ZoneGeometry({ gridRef, heights, version, pai
   const chunks = useMemo(() => chunkBuckets(gridRef.current), [version, gridRef])
   return (
     <>
-      {chunks.map(({ key, b: { floors, walls, waters, voids, warps, mists, wallTops } }) => (
+      {chunks.map(({ key, b: { floors, walls, waters, voids, warps, mists, wallTops, buildings, buildingTops } }) => (
         <group key={key}>
           <FloorTerrain floors={floors} heights={heights} version={version} paint={paint} editing={editing} />
           {/* solid clouds = the walls. Only the SHELL is boxed; the buried interior is a top face —
               see bucketsRect. Same silhouette, a sixth of the triangles, no shadow pass. */}
           <Tiles cells={walls} size={[1, 1.3, 1]} y={0.55} color="#e3e9f4" paint={paint} editing={editing} />
           <WallTops cells={wallTops} y={1.2} color="#e3e9f4" />
+          {/* brown building blocks — the mortal side's masonry. Taller than a cloud wall (1.8 vs
+              1.3) so a town has a skyline instead of a hedge maze. */}
+          <Tiles cells={buildings} size={[1, 1.8, 1]} y={0.8} color="#8a5a2b" paint={paint} editing={editing} />
+          <WallTops cells={buildingTops} y={1.7} color="#9c6733" />
           <Tiles cells={waters} size={[1, 0.3, 1]} y={-0.15} color="#3aa0d6" opacity={0.85} paint={paint} editing={editing} />
           {/* cloud mist = walkable encounter areas: land + a wispy translucent overlay */}
           <FloorTerrain floors={mists} heights={heights} version={version} paint={paint} editing={editing} />
@@ -2628,10 +2643,14 @@ function CastBar({ slots, stance, cdRef }: {
 
 // Visible EXIT markers at a zone's warp tiles — for outside-Ather zones, where warps aren't painted
 // into the grid (no gold beacon), so the way back stays obvious. Green pillar + floating EXIT label.
+//
+// Gate-derived warps are SKIPPED here (`w.gate` is set): a gate draws its own single marker below.
+// Without that filter a 2x2 gate would stack four identical pillars and four EXIT signs on one
+// door — which is exactly the mess that made gates worth having.
 function ExitMarkers({ warps, heights }: { warps: Warp[]; heights: number[][] }) {
   return (
     <>
-      {warps.map((w, i) => {
+      {warps.filter(w => !w.gate).map((w, i) => {
         const y = (heights[w.fromY]?.[w.fromX] ?? 0) * STEP
         return (
           <group key={i} position={[w.fromX, y, w.fromY]}>
@@ -2641,6 +2660,65 @@ function ExitMarkers({ warps, heights }: { warps: Warp[]; heights: number[][] })
             </mesh>
             <Html position={[0, 3.2, 0]} center distanceFactor={14} style={{ pointerEvents: 'none' }}>
               <div style={{ font: '800 11px ui-monospace, monospace', color: '#7fffc0', background: 'rgba(8,14,10,0.7)', padding: '2px 7px', borderRadius: 6, whiteSpace: 'nowrap', border: '1px solid #5fe0a066' }}>EXIT</div>
+            </Html>
+          </group>
+        )
+      })}
+    </>
+  )
+}
+
+/**
+ * A GATE — one 2x2 (or NxN) door, drawn once, with its name over it.
+ *
+ * Deliberately louder than `ExitMarkers`: a gate is a destination you decide to walk to from
+ * across a square, an EXIT is a way out you look for once you want to leave. So the gate gets a
+ * lit threshold pad the size of its whole footprint, a post at each corner rather than one in the
+ * middle (a centre post would stand exactly where you walk), and a nametag at ~2.4x the EXIT
+ * label's size, hung high enough to clear the posts.
+ *
+ * Everything comes from the Gate data — including the text — so renaming a door is a one-field
+ * edit in `zones.ts` and never a change in here. Owner-only gates are dimmed and tagged rather
+ * than hidden: the owner should be able to see at a glance which doors the players cannot use.
+ */
+function GateMarkers({ gates, heights, isOwner }: { gates: Gate[]; heights: number[][]; isOwner: boolean }) {
+  return (
+    <>
+      {gates.map((g, i) => {
+        if (g.ownerOnly && !isOwner) return null
+        const size = g.size ?? 2
+        // Anchor is the footprint's top-left TILE; the visual centre is half a footprint in, minus
+        // the half-tile that separates a tile's corner from its middle.
+        const cx = g.x + size / 2 - 0.5
+        const cz = g.y + size / 2 - 0.5
+        const y = (heights[g.y]?.[g.x] ?? 0) * STEP
+        const tint = g.ownerOnly ? '#d8a24a' : '#5fe0a0'
+        const glow = g.ownerOnly ? '#ffcf7a' : '#7fffc0'
+        // corner posts sit on the footprint's outline, offset from the centre we're grouped at
+        const half = size / 2
+        const corners: Array<[number, number]> = [[-half, -half], [-half, half], [half, -half], [half, half]]
+        return (
+          <group key={`gate-${i}`} position={[cx, y, cz]}>
+            {/* the threshold — a lit pad covering the whole footprint, so the door reads as one thing */}
+            <mesh position={[0, 0.04, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+              <planeGeometry args={[size, size]} />
+              <meshStandardMaterial color={tint} emissive={glow} emissiveIntensity={0.5} transparent opacity={0.4} />
+            </mesh>
+            {corners.map(([dx, dz], k) => (
+              <mesh key={k} position={[dx, 1.6, dz]}>
+                <cylinderGeometry args={[0.16, 0.24, 3.2, 6]} />
+                <meshStandardMaterial color={tint} emissive={glow} emissiveIntensity={0.9} transparent opacity={0.65} />
+              </mesh>
+            ))}
+            <Html position={[0, 4.1, 0]} center distanceFactor={14} style={{ pointerEvents: 'none' }}>
+              <div style={{
+                font: '800 26px ui-monospace, monospace', color: glow, letterSpacing: '0.08em',
+                background: 'rgba(8,14,10,0.78)', padding: '7px 18px', borderRadius: 10,
+                whiteSpace: 'nowrap', border: `2px solid ${tint}88`, textShadow: `0 0 12px ${glow}66`,
+              }}>
+                {g.label}
+                {g.ownerOnly && <div style={{ font: '700 11px ui-monospace, monospace', color: '#ffcf7a', opacity: 0.8, letterSpacing: '0.14em', marginTop: 2 }}>OWNER ONLY</div>}
+              </div>
             </Html>
           </group>
         )
@@ -2887,6 +2965,10 @@ const Scene = memo(function Scene(props: {
       {props.zone.realm === 'outside' && !props.zone.peaceful && <FiringRange firingRef={props.firingRef} adsRef={props.adsRef} weaponIdxRef={props.weaponIdxRef} gridRef={props.gridRef} recoilRef={props.recoilRef} bloomRef={props.bloomRef} posRef={props.posRef} hpRef={props.hpRef} hpMaxRef={props.hpMaxRef} shieldRef={props.shieldRef} shieldMaxRef={props.shieldMaxRef} rangeCfgRef={props.rangeCfgRef} ammoRef={props.ammoRef} reloadingRef={props.reloadingRef} pendingCastRef={props.pendingCastRef} castMultRef={props.castMultRef} resistRef={props.resistRef} infusionRef={props.infusionRef} fieldsRef={props.fieldsRef} conjuredRef={props.conjuredRef} statusRef={props.statusRef} onHeal={props.onHeal} onNeedReload={props.onNeedReload} onHit={props.onRangeHit} onShot={props.onRangeShot} onPlayerDamage={props.onPlayerDamage} onPlayerDown={props.onPlayerDown} />}
       {props.zone.realm === 'outside' && !props.zone.peaceful && <GunBenches />}
       {props.zone.realm === 'outside' && <ExitMarkers warps={props.zone.warps} heights={props.heights} />}
+      {/* gates render in EVERY realm, not just outside: a gate is a named destination, and the
+          Ather has doors worth naming too. ExitMarkers stays outside-only — it is a fallback for
+          zones whose warps were never painted into the grid. */}
+      {!!props.zone.gates?.length && <GateMarkers gates={props.zone.gates} heights={props.heights} isOwner={props.isOwner} />}
       <NodeMarkers nodes={props.nodes} heights={props.heights} editing={props.editing} channel={props.channel} zoneId={props.zone.id} />
       <BurrowMarkers spawners={props.spawners} heights={props.heights} editing={props.editing} defeated={props.defeated} ready={props.spawnerReady} gridRef={props.gridRef} keyFor={props.spawnerKeyFor} />
       {/* the plot ring: resting spirits wander the Home Plot, visible + greetable */}

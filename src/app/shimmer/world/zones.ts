@@ -10,6 +10,60 @@ export interface Warp {
   direction?: 'up' | 'down' | 'left' | 'right' // player faces this direction on arrival
   requiredFlag?: string // warp only works when this flag is set (e.g., 'tutorialComplete')
   ownerOnly?: boolean // dev/test gate — only fires for the site owner (onWarp gates it), invisible to players
+  gate?: string       // set by expandGate: the label of the Gate this warp was derived from
+}
+
+/**
+ * A GATE — a named, multi-tile door (2026-08-05).
+ *
+ * A `Warp` is one tile. Everything real is wider than one tile, so a door has always been
+ * "some warps that happen to sit next to each other" — a convention held together by whoever
+ * edited them last. That cost us: the pair could drift apart, half a door could keep an
+ * `ownerOnly` the other half lost, and the 3D world drew one green EXIT pillar PER TILE, so a
+ * two-tile door rendered as two identical signs shouting the same word.
+ *
+ * A Gate is the door itself: one anchor, one footprint, ONE name. It expands into `size*size`
+ * warps at module load (`expandGate`), so every consumer downstream — `checkWarp`, `performWarp`,
+ * the editors, the oracle — keeps working on warps and knows nothing about this. The gate is the
+ * authoring unit; warps stay the runtime unit.
+ *
+ * `label` is what the player reads over the door, and it is DATA on purpose: a name is the part
+ * most likely to be canon-sensitive, and a name in a data field is a one-line edit rather than a
+ * hunt through render code.
+ */
+export interface Gate {
+  x: number           // top-left tile of the footprint
+  y: number
+  size?: number       // footprint is size x size. Default 2 — the standard 2x2 door.
+  toZone: string
+  toX: number         // where you land. MUST NOT be inside another gate's footprint, or you
+  toY: number         // bounce straight back — see the oracle's instant-re-warp check.
+  label: string       // the big nametag over the door
+  direction?: 'up' | 'down' | 'left' | 'right'
+  requiredFlag?: string
+  ownerOnly?: boolean
+}
+
+/** Expand a gate into the warps its footprint covers. One gate in, size² warps out. */
+export function expandGate(g: Gate): Warp[] {
+  const size = g.size ?? 2
+  const out: Warp[] = []
+  for (let dy = 0; dy < size; dy++) {
+    for (let dx = 0; dx < size; dx++) {
+      out.push({
+        fromX: g.x + dx, fromY: g.y + dy,
+        // Every tile of the door lands you on the SAME square. Offsetting the landing per tile
+        // (the obvious-looking alternative) would make which corner you touched decide where you
+        // come out, and one of those corners is usually a wall on the far side.
+        toZone: g.toZone, toX: g.toX, toY: g.toY,
+        direction: g.direction,
+        requiredFlag: g.requiredFlag,
+        ownerOnly: g.ownerOnly,
+        gate: g.label,
+      })
+    }
+  }
+  return out
 }
 
 // Elemental theme of a zone — drives spirit-condensation affinity (see SPIRIT_CONDENSE.md).
@@ -20,6 +74,12 @@ export interface Zone {
   id: string
   name: string
   grid: number[][]
+  /**
+   * Named multi-tile doors. Authored here; EXPANDED into `warps` at module load, so `warps` is
+   * still the single runtime truth and nothing downstream has to learn a second concept.
+   * Prefer a gate over hand-written warp pairs for anything a player is meant to see and name.
+   */
+  gates?: Gate[]
   warps: Warp[]
   playerStart?: { tileX: number; tileY: number } // default spawn point for this zone
   element?: ZoneElement // cultivation element (undefined = dev/throwaway zone, no affinity)
@@ -390,36 +450,50 @@ export const ZONES: Zone[] = [
     realm: 'outside',
     peaceful: true,
     playerStart: { tileX: 7, tileY: 9 },
-    warps: [
-      // ── GREG'S GATE (7-8,11) — the crossing home, inside the Spirit Corner shop ────────────
-      // Targets the LEGACY `garden` id ON PURPOSE: that is the interior-exit contract
-      // (Shimmer3D `newWorldRef`). The town belongs to whichever side you entered from, so its
-      // exit names the legacy surface and `performWarp` runs `migrateLegacyPosition` to land a
-      // region-world player at r-home-plot (73,61) instead. Naming the region id directly here
-      // would strand anyone who walked in from the legacy world via ?zone=.
-      // Landing is (14-15,2), one tile south of the Home Plot gate, so you don't instantly re-warp.
-      // These are the tiles Alex PAINTED as warp tiles (id 14) — the gold marker is on the map.
-      { fromX: 7, fromY: 11, toZone: 'garden', toX: 14, toY: 2, direction: 'down' },
-      { fromX: 8, fromY: 11, toZone: 'garden', toX: 15, toY: 2, direction: 'down' },
-      // ── THE STATION GATE (49-50,81) → THE CRUCIBLE — Alex's painted door, wired 2026-08-05 ──
-      // Canon puts the Pyramid-Zero Crucible on the MORTAL side, reached with a ship — not
-      // hanging off Greg's living room in the Ather. Routing it through the town is that fix.
-      // You walk SOUTH into the doorway off the open ground at row 80; the building south of the
-      // wall line is the departure hall.
-      //
-      // ⚠ TODO(station-canon): the building this door belongs to is UNRULED. "Travelers Station"
-      // is a BUILD working name — it appears nowhere in `CANON/`, and `rune-hold.md` § The Hub
-      // rules exactly five doors (Mug · Spirit Corner · Bookstore · Passage · Notice Board), none
-      // of them a station. So the WARP ships (that is a build call) but the NAME does not go on
-      // screen anywhere, and nothing here asserts what the building is. Filed in CANON_GAPS;
-      // when Magii rules it, this comment and the label are the only things that change.
-      //
-      // Stays `ownerOnly` — NOT for a canon reason (the crossing itself is ruled open) but a build
-      // one: the Crucible is still a bare firing range with a BR skeleton on top. It comes off when
-      // there is a match to walk into. The owner walks it today.
-      { fromX: 49, fromY: 81, toZone: 'crucible', toX: 7, toY: 13, direction: 'up', ownerOnly: true },
-      { fromX: 50, fromY: 81, toZone: 'crucible', toX: 8, toY: 13, direction: 'up', ownerOnly: true },
+    // ── THE TOWN'S DOORS, as 2x2 GATES (2026-08-05) ────────────────────────────────────────
+    // Both were 2x1 warp pairs. A pair is not a door, it is two doors that agree — and the 3D
+    // world proved it by drawing a green "EXIT" sign over each tile. These are gates now: one
+    // anchor, one footprint, one name over the top. `expandGate` turns each into its 4 warps.
+    //
+    // Footprints grow NORTH from the tiles Alex painted, never south, and that is deliberate:
+    // north of both doors is open approach ground, south of both is authored wall. A gate that
+    // grew the other way would carve a hole through the back of his buildings.
+    gates: [
+      {
+        // ── GREG'S GATE — the crossing home, inside the Spirit Corner shop ──────────────────
+        // Targets the LEGACY `garden` id ON PURPOSE: that is the interior-exit contract
+        // (Shimmer3D `newWorldRef`). The town belongs to whichever side you entered from, so its
+        // exit names the legacy surface and `performWarp` runs `migrateLegacyPosition` to land a
+        // region-world player at r-home-plot (73,61) instead. Naming the region id directly here
+        // would strand anyone who walked in from the legacy world via ?zone=.
+        // Landing is (14,2), one tile south of the Home Plot gate, so you don't instantly re-warp.
+        // Row 11 is what Alex painted as warp tiles; row 10 is the grass in front of it.
+        x: 7, y: 10, toZone: 'garden', toX: 14, toY: 2, direction: 'down',
+        label: 'THE SPIRIT CORNER',
+      },
+      {
+        // ── THE STATION GATE → THE CRUCIBLE — Alex's painted door, wired 2026-08-05 ─────────
+        // Canon puts the Pyramid-Zero Crucible on the MORTAL side, reached with a ship — not
+        // hanging off Greg's living room in the Ather. Routing it through the town is that fix.
+        // You walk SOUTH into the doorway off the open ground at row 79-80; the building south
+        // of the wall line is the departure hall.
+        //
+        // ⚠ TODO(station-canon): the building is UNRULED and this label is a BUILD working name —
+        // it appears nowhere in `CANON/`, and `rune-hold.md` § The Hub rules exactly five doors
+        // (Mug · Spirit Corner · Bookstore · Passage · Notice Board), none of them a way OUT of
+        // town. Alex named it and asked for it on the door, so it ships on the door; the gap is
+        // filed (CANON_GAPS 2026-08-05) and asks the question that actually decides the name —
+        // canon's route to Pyramid Zero is a SHIP, and this map has coastline, so "dock" may beat
+        // "station". Because the name is DATA, that ruling is a one-field edit, not a code change.
+        //
+        // Stays `ownerOnly` — NOT for a canon reason (the crossing itself is ruled open) but a
+        // build one: the Crucible is still a bare firing range with a BR skeleton on top. It comes
+        // off when there is a match to walk into. The owner walks it today.
+        x: 49, y: 80, toZone: 'crucible', toX: 7, toY: 13, direction: 'up',
+        label: 'TRAVELERS STATION', ownerOnly: true,
+      },
     ],
+    warps: [],
   },
   {
     // The Crucible (battle-royale) — OUTSIDE the Ather, so weapons work here and spirits don't.
@@ -437,7 +511,10 @@ export const ZONES: Zone[] = [
       // shortcut into here from the test hub still works; it just returns you to the town now,
       // which is where the Crucible actually hangs.
       // (single tile — the range's doorway is one tile wide at (7,14); (8,14) is wall.)
-      { fromX: 7, fromY: 14, toZone: 'rune-hold', toX: 49, toY: 80, direction: 'up' },
+      // Lands at (49,79): one tile NORTH of the station gate's 2x2 footprint (49-50, 80-81).
+      // (79, not 80 — 80 became part of the gate when it went 2x2, and landing inside a gate is
+      // an instant re-warp. The oracle asserts this rather than trusting the comment.)
+      { fromX: 7, fromY: 14, toZone: 'rune-hold', toX: 49, toY: 79, direction: 'up' },
     ],
   },
   {
@@ -533,5 +610,21 @@ export const ZONES: Zone[] = [
     ],
   },
 ]
+
+/**
+ * Expand every zone's gates into its warps, ONCE, at module load.
+ *
+ * This is why nothing downstream had to change when gates arrived: `checkWarp`, `performWarp`,
+ * the 2D editor's warp list, the region build script and the oracle all still read `warps`, and
+ * they cannot tell a gate-derived warp from a hand-written one except by the `gate` field they
+ * are free to ignore.
+ *
+ * Mutating in place (rather than building a new array) is deliberate: `ALL_ZONES` and the region
+ * tables hold references to these same objects, so an expansion that returned copies would leave
+ * half the app reading un-expanded zones — a door that works in one screen and not the next.
+ */
+for (const z of ZONES) {
+  if (z.gates?.length) z.warps.push(...z.gates.flatMap(expandGate))
+}
 
 export const START_ZONE = 'garden'

@@ -908,6 +908,11 @@ export async function POST(req: NextRequest) {
           toY: safeInt(raw.toY, `warps[${i}].toY`, 0, 9999),
           direction: safeIdOpt(raw.direction, `warps[${i}].direction`),
           requiredFlag: safeIdOpt(raw.requiredFlag, `warps[${i}].requiredFlag`),
+          // A gate's label is free text (it is a sign a player reads), so it goes through escText,
+          // not safeId — spaces and apostrophes are legitimate in a door name.
+          gate: raw.gate === undefined || raw.gate === null || raw.gate === ''
+            ? undefined : escText(raw.gate, `warps[${i}].gate`, 64),
+          ownerOnly: raw.ownerOnly === true || raw.gateOwnerOnly === true,
         }
       })
 
@@ -931,11 +936,53 @@ export async function POST(req: NextRequest) {
           }
           const warpsEnd = pos // position after the closing ]
 
-          // Build new warps array
-          const warpLines = warps.map(w => {
+          // ── Regroup gate tiles back into `gates:` ────────────────────────────────────────
+          // The editor paints a gate as N*N warp tiles that all carry the same label. Writing
+          // them out as loose warps would work but would DEMOTE the door: the label is lost, the
+          // 3D world falls back to N green EXIT signs, and the next editor session sees no gate.
+          // So tiles sharing a label + destination collapse back into one Gate record.
+          //
+          // ★ `ownerOnly` is written out now (it never used to be). This route rewrites a zone's
+          // whole warps array from the editor payload, so any field it doesn't serialise is
+          // DELETED from zones.ts on the next save. `ownerOnly` was missing — meaning one save of
+          // Rune Hold or Greg's home would silently have opened the owner-gated Crucible doors to
+          // every player. A serializer that round-trips fewer fields than the type has is a data
+          // loss bug wearing a formatting bug's clothes.
+          const gateGroups = new Map<string, typeof warps>()
+          const looseWarps: typeof warps = []
+          for (const w of warps) {
+            if (!w.gate) { looseWarps.push(w); continue }
+            const key = `${w.gate}|${w.toZone}|${w.toX}|${w.toY}|${w.direction ?? ''}|${w.requiredFlag ?? ''}|${w.ownerOnly}`
+            const g = gateGroups.get(key)
+            if (g) g.push(w); else gateGroups.set(key, [w])
+          }
+
+          const gateLines: string[] = []
+          for (const tiles of gateGroups.values()) {
+            const x = Math.min(...tiles.map(t => t.fromX))
+            const y = Math.min(...tiles.map(t => t.fromY))
+            const w = Math.max(...tiles.map(t => t.fromX)) - x + 1
+            const h = Math.max(...tiles.map(t => t.fromY)) - y + 1
+            // A Gate is square by definition. If the painted tiles aren't (someone erased a
+            // corner, or two doors share a name), keep every tile as a loose warp rather than
+            // writing a gate whose footprint lies about which tiles actually warp.
+            if (w !== h || tiles.length !== w * h) { looseWarps.push(...tiles); continue }
+            const t = tiles[0]
+            const parts = [`x: ${x}`, `y: ${y}`]
+            if (w !== 2) parts.push(`size: ${w}`)
+            parts.push(`toZone: '${t.toZone}'`, `toX: ${t.toX}`, `toY: ${t.toY}`)
+            if (t.direction) parts.push(`direction: '${t.direction}'`)
+            parts.push(`label: '${t.gate}'`)
+            if (t.requiredFlag) parts.push(`requiredFlag: '${t.requiredFlag}'`)
+            if (t.ownerOnly) parts.push('ownerOnly: true')
+            gateLines.push(`      { ${parts.join(', ')} },`)
+          }
+
+          const warpLines = looseWarps.map(w => {
             const parts = [`fromX: ${w.fromX}`, `fromY: ${w.fromY}`, `toZone: '${w.toZone}'`, `toX: ${w.toX}`, `toY: ${w.toY}`]
             if (w.direction) parts.push(`direction: '${w.direction}'`)
             if (w.requiredFlag) parts.push(`requiredFlag: '${w.requiredFlag}'`)
+            if (w.ownerOnly) parts.push('ownerOnly: true')
             return `      { ${parts.join(', ')} },`
           })
 
@@ -943,9 +990,30 @@ export async function POST(req: NextRequest) {
             ? `warps: [\n${warpLines.join('\n')}\n    ]`
             : 'warps: []'
 
-          const updated = existing.substring(0, warpsStart) + newWarps + existing.substring(warpsEnd)
+          let updated = existing.substring(0, warpsStart) + newWarps + existing.substring(warpsEnd)
+
+          // Replace (or insert) the zone's `gates:` block, immediately before its `warps:`.
+          const gatesBlock = gateLines.length > 0 ? `gates: [\n${gateLines.join('\n')}\n    ],\n    ` : ''
+          const idIdx2 = updated.indexOf(idPattern)
+          const warpsStart2 = updated.indexOf('warps: [', idIdx2) === -1
+            ? updated.indexOf('warps: []', idIdx2) : updated.indexOf('warps: [', idIdx2)
+          const gatesStart = updated.lastIndexOf('gates: [', warpsStart2)
+          if (gatesStart > idIdx2) {
+            // an existing gates array — find its close and swap the whole thing out
+            let d = 1, q = updated.indexOf('[', gatesStart) + 1
+            while (q < updated.length && d > 0) {
+              if (updated[q] === '[') d++
+              else if (updated[q] === ']') d--
+              q++
+            }
+            while (q < updated.length && (updated[q] === ',' || updated[q] === '\n' || updated[q] === ' ')) q++
+            updated = updated.substring(0, gatesStart) + gatesBlock + updated.substring(q)
+          } else if (gatesBlock) {
+            updated = updated.substring(0, warpsStart2) + gatesBlock + updated.substring(warpsStart2)
+          }
+
           await writeFile(ZONES_FILE, updated, 'utf-8')
-          saved.push('warps')
+          saved.push(gateLines.length > 0 ? 'warps+gates' : 'warps')
         }
       }
     }

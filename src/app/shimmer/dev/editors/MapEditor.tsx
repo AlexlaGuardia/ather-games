@@ -45,7 +45,10 @@ const CLOUD_TILE_INDICES: readonly number[] = [
   95, 96,                               // Cloud B L in Corner, Cloud Border B Exit
 ]
 // Flat tile indices (new design system)
-const FLAT_TILE_INDICES: readonly number[] = [97, 98, 99, 100, 101, 102] // placeholder/gray-box tiles (103-109 removed in the pixel-art switch)
+const FLAT_TILE_INDICES: readonly number[] = [97, 98, 99, 100, 101, 102, 103] // placeholder/gray-box tiles (104-109 removed in the pixel-art switch)
+// 103 = Building Block. The mortal side's wall: clouds + mist are ATHER-only, so a town on the
+// far side of the outward crossing builds with this instead. Solid, and rendered brown + taller
+// than a cloud wall in play3d.
 // Combined allowlist for the curated palette — union of flat + cloud
 const CURATED_TILE_ALLOWLIST = new Set<number>([...FLAT_TILE_INDICES, ...CLOUD_TILE_INDICES])
 
@@ -98,13 +101,17 @@ const BUILT_IN_CATS = [
   'structure','structure','structure','path',
   'veil','veil',
 ]
+// Tiles past the hand-named block fall back to `Tile{i}` / no category, so name the ones that
+// matter. Keyed by index rather than appended to the arrays above, which stop at 32.
+const EXTRA_NAMES: Record<number, string> = { 103: 'Building Block' }
+const EXTRA_CATS: Record<number, string> = { 103: 'structure' }
 function builtInTiles(): EditorTile[] {
   return TILES.map((t, i) => ({
-    name: BUILT_IN_NAMES[i] ?? `Tile${i}`,
+    name: BUILT_IN_NAMES[i] ?? EXTRA_NAMES[i] ?? `Tile${i}`,
     tile: { pixels: new Uint8Array(t.pixels), palette: [...t.palette] },
     solid: SOLID[i] ?? false,
     above: ABOVE[i] ?? false,
-    category: BUILT_IN_CATS[i] ?? '',
+    category: BUILT_IN_CATS[i] ?? EXTRA_CATS[i] ?? '',
   }))
 }
 
@@ -214,15 +221,22 @@ interface WarpPlacement {
   toY: number
   direction: string
   requiredFlag?: string
+  /** Set on every tile of a GATE — the door's label. Tiles sharing one are one door. */
+  gate?: string
+  gateOwnerOnly?: boolean
 }
 
 function hydrateWarps(mapId: string): WarpPlacement[] {
   const zone = ALL_ZONES.find(z => z.id === mapId)
+  // Gate-derived warps hydrate with their label attached, so opening a zone that already has
+  // gates and saving it back cannot silently demote them to loose one-tile warps.
   return zone?.warps.map(w => ({
     fromX: w.fromX, fromY: w.fromY,
     toZone: w.toZone, toX: w.toX, toY: w.toY,
     direction: w.direction ?? 'down',
     requiredFlag: w.requiredFlag,
+    gate: w.gate,
+    gateOwnerOnly: w.ownerOnly || undefined,
   })) ?? []
 }
 
@@ -1128,6 +1142,18 @@ export default function MapEditor() {
     direction: 'down',
     requiredFlag: '',
   })
+  // ── GATE MODE (2026-08-05) ─────────────────────────────────────────────────────────────
+  // With warp mode on, painting a tile attaches a ONE-TILE warp. Gate mode makes the same
+  // click lay a whole named door: a `gateSize` x `gateSize` block of warp tiles, all sharing
+  // one destination and one label, anchored at the tile you clicked (its top-left).
+  //
+  // It writes the same `warpPlacements` the single-tile path does — a gate is not a second
+  // kind of record, it is a stamp that lays several. `gateLabel` rides along on each tile so
+  // the save route can group them back into one `Gate` in zones.ts.
+  const [gateEnabled, setGateEnabled] = useSessionState('map:gateEnabled', false)
+  const [gateSize, setGateSize] = useSessionState('map:gateSize', 2)
+  const [gateLabel, setGateLabel] = useState('')
+  const [gateOwnerOnly, setGateOwnerOnly] = useState(false)
 
   // Keep warpConfig.toZone in sync with the dropdown's available options.
   // The dropdown filters out activeMap; if state still holds activeMap (or any zone
@@ -1553,20 +1579,40 @@ export default function MapEditor() {
         return next
       })
       if (warpEnabled) {
+        // Gate mode stamps a size x size footprint from the clicked tile; plain warp mode is the
+        // same code with a 1x1 footprint, so there is one path and no drift between them.
+        const span = gateEnabled ? Math.max(1, gateSize) : 1
+        const label = gateEnabled ? (gateLabel.trim() || 'GATE') : undefined
+        const cells: Array<[number, number]> = []
+        for (let dy = 0; dy < span; dy++) for (let dx = 0; dx < span; dx++) cells.push([tx + dx, ty + dy])
+        if (span > 1) {
+          // The footprint's other tiles need painting too — the click only painted the anchor.
+          setGrid(prev => {
+            const next = prev.map(r => [...r])
+            for (const [cx, cy] of cells) {
+              if (cy >= 0 && cy < next.length && cx >= 0 && cx < (next[0]?.length ?? 0)) next[cy][cx] = brush | (rotation << 8)
+            }
+            return next
+          })
+        }
         setWarpPlacements(prev => {
-          const filtered = prev.filter(p => !(p.fromX === tx && p.fromY === ty))
-          return [...filtered, {
-            fromX: tx, fromY: ty,
+          const taken = new Set(cells.map(([cx, cy]) => `${cx},${cy}`))
+          const filtered = prev.filter(p => !taken.has(`${p.fromX},${p.fromY}`))
+          return [...filtered, ...cells.map(([cx, cy]) => ({
+            fromX: cx, fromY: cy,
             toZone: warpConfig.toZone,
+            // Every tile of a gate lands on the SAME square — see expandGate in zones.ts.
             toX: warpConfig.toX,
             toY: warpConfig.toY,
             direction: warpConfig.direction,
             requiredFlag: warpConfig.requiredFlag || undefined,
-          }]
+            gate: label,
+            gateOwnerOnly: gateEnabled && gateOwnerOnly ? true : undefined,
+          }))]
         })
       }
     }
-  }, [brush, rotation, brushType, brushItemId, brushNodeType, brushGate, brushStructureId, brushChestType, brushChestClaimable, structures, warpEnabled, warpConfig, activeStampId, randomVariant, stamps, showIntGrid, paintIntGrid, activeMap])
+  }, [brush, rotation, brushType, brushItemId, brushNodeType, brushGate, brushStructureId, brushChestType, brushChestClaimable, structures, warpEnabled, warpConfig, gateEnabled, gateSize, gateLabel, gateOwnerOnly, activeStampId, randomVariant, stamps, showIntGrid, paintIntGrid, activeMap])
 
   const resize = useCallback((newCols: number, newRows: number) => {
     pushMapSnapshot()
@@ -1821,7 +1867,7 @@ export default function MapEditor() {
             grid?: number[][]
             nodes?: { type: string; tileX: number; tileY: number }[]
             spawners?: { gate: BurrowGate; tileX: number; tileY: number }[]
-            warps?: { fromX: number; fromY: number; toZone: string; toX: number; toY: number; direction?: string; requiredFlag?: string }[]
+            warps?: { fromX: number; fromY: number; toZone: string; toX: number; toY: number; direction?: string; requiredFlag?: string; gate?: string; ownerOnly?: boolean; gateOwnerOnly?: boolean }[]
             rev?: number
             spawn?: ZoneSpawnConfig
           }
@@ -1830,7 +1876,7 @@ export default function MapEditor() {
           if (Array.isArray(data.grid) && data.grid.length) setGrid(data.grid.map(r => [...r]))
           if (Array.isArray(data.nodes)) setNodePlacements(data.nodes.map(n => ({ nodeType: n.type, x: n.tileX, y: n.tileY })))
           if (Array.isArray(data.spawners)) setSpawnerPlacements(data.spawners.map(s => ({ gate: s.gate, x: s.tileX, y: s.tileY })))
-          if (Array.isArray(data.warps)) setWarpPlacements(data.warps.map(w => ({ fromX: w.fromX, fromY: w.fromY, toZone: w.toZone, toX: w.toX, toY: w.toY, direction: w.direction ?? 'down', requiredFlag: w.requiredFlag })))
+          if (Array.isArray(data.warps)) setWarpPlacements(data.warps.map(w => ({ fromX: w.fromX, fromY: w.fromY, toZone: w.toZone, toX: w.toX, toY: w.toY, direction: w.direction ?? 'down', requiredFlag: w.requiredFlag, gate: w.gate, gateOwnerOnly: (w.ownerOnly || w.gateOwnerOnly) || undefined })))
         }
       } catch { /* offline dev — the baked copy stands until the next fetch succeeds */ }
       loadedRef.current = true
@@ -2955,8 +3001,50 @@ export default function MapEditor() {
                   className="bg-[#1a1a2e] border border-white/10 rounded px-1.5 py-1 text-[11px] text-white w-28 focus:outline-none focus:border-amber-500/40 placeholder:text-white/20"
                 />
               </div>
+              {/* ── GATE: paint a whole named door instead of one tile ── */}
+              <label className="flex items-center gap-1 cursor-pointer pl-2 border-l border-white/10">
+                <input
+                  type="checkbox"
+                  checked={gateEnabled}
+                  onChange={e => setGateEnabled(e.target.checked)}
+                  className="accent-emerald-500 w-3 h-3"
+                />
+                <span className={`text-[11px] font-display ${gateEnabled ? 'text-emerald-300' : 'text-text-faint'}`}>Gate</span>
+              </label>
+              {gateEnabled && (
+                <>
+                  <select
+                    value={gateSize}
+                    onChange={e => setGateSize(Number(e.target.value))}
+                    className="bg-[#1a1a2e] border border-white/10 rounded px-1.5 py-1 text-[11px] text-white focus:outline-none focus:border-emerald-500/40"
+                  >
+                    <option value={2}>2x2</option>
+                    <option value={3}>3x3</option>
+                    <option value={4}>4x4</option>
+                  </select>
+                  <input
+                    type="text"
+                    value={gateLabel}
+                    onChange={e => setGateLabel(e.target.value.toUpperCase())}
+                    placeholder="GATE NAME"
+                    title="The big nametag over the door. Shows in play3d."
+                    className="bg-[#1a1a2e] border border-white/10 rounded px-1.5 py-1 text-[11px] text-white w-40 focus:outline-none focus:border-emerald-500/40 placeholder:text-white/20"
+                  />
+                  <label className="flex items-center gap-1 cursor-pointer" title="Only the site owner can use this door (invisible to players)">
+                    <input
+                      type="checkbox"
+                      checked={gateOwnerOnly}
+                      onChange={e => setGateOwnerOnly(e.target.checked)}
+                      className="accent-amber-500 w-3 h-3"
+                    />
+                    <span className={`text-[10px] font-display ${gateOwnerOnly ? 'text-amber-300' : 'text-text-faint'}`}>owner</span>
+                  </label>
+                </>
+              )}
               <span className="text-[9px] text-amber-400/60 ml-auto">
-                paint tiles to attach warps ({warpPlacements.length})
+                {gateEnabled
+                  ? `click lays a ${gateSize}x${gateSize} door (${warpPlacements.length} warp tiles)`
+                  : `paint tiles to attach warps (${warpPlacements.length})`}
               </span>
             </>
           )}
