@@ -145,7 +145,7 @@ export function getZone(zones: Zone[], id: string): Zone | null {
 // Garden → east → Moonwell Glade (shortcut, blocked until tutorialComplete)
 // Moonwell Glade → east → Spore Hollow (post-tutorial)
 
-import { GARDEN, MYCELIAL_PATH, MOONWELL_GLADE, SPORE_HOLLOW, VORANYX_DEEP, TWILIGHT_THICKET, WOODED_TRAIL, THE_THRESHOLD, MANA_SPRINGS, ROUTE_2, ROUTE_3, THE_OUTFIELDS, GLOVIEW_VILLAGE, SPIRIT_MEADOW, MOONWELL_GLADE_GREGORY_S_HOME, CRUCIBLE, RUNE_HOLD, SORREL_HOLD, BRACK_HOLD, TEST_SANDBOX,
+import { GARDEN, MYCELIAL_PATH, MOONWELL_GLADE, SPORE_HOLLOW, VORANYX_DEEP, TWILIGHT_THICKET, WOODED_TRAIL, THE_THRESHOLD, MANA_SPRINGS, ROUTE_2, ROUTE_3, THE_OUTFIELDS, GLOVIEW_VILLAGE, SPIRIT_MEADOW, MOONWELL_GLADE_GREGORY_S_HOME, CRUCIBLE, RUNE_HOLD, THE_PASSAGE, SORREL_HOLD, BRACK_HOLD, TEST_SANDBOX,
   ROUTE_GARDEN_MYCELIAL, ROUTE_MYCELIAL_SPIRIT, ROUTE_SPIRIT_MOONWELL, ROUTE_MOONWELL_GARDEN } from './tilemap'
 export const ZONES: Zone[] = [
   {
@@ -172,14 +172,11 @@ export const ZONES: Zone[] = [
       // spot is Alex's eye (2D MapEditor). The tile is NOT painted as a warp tile, so the door
       // works but shows no gold marker yet; the editor's warp brush paints it.
       //
-      // ⚠ TEMPORARILY `ownerOnly` (2026-08-05) — a BUILD hold, not a canon one. The 08-03 ruling
-      // opened this door and nothing has changed that. But Rune Hold's gates are being
-      // repositioned and its `gates` array is empty right now, so the town has no way out: a
-      // player walking through would be stuck in a place with no door. Better a door that is
-      // briefly shut than a room you cannot leave. Take this off the moment Greg's gate is
-      // placed — the oracle's dead-end check fails until then and passes the instant it is safe.
-      { fromX: 14, fromY: 1, toZone: 'rune-hold', toX: 7, toY: 10, direction: 'up', ownerOnly: true },
-      { fromX: 15, fromY: 1, toZone: 'rune-hold', toX: 8, toY: 10, direction: 'up', ownerOnly: true },
+      // ✅ The temporary ownerOnly hold came OFF 2026-08-05 — Alex placed Greg's gate, so the town
+      // has a way out again and the oracle's dead-end check passes. Landing moved to (12-13,28),
+      // the open ground directly north of where he put that gate.
+      { fromX: 14, fromY: 1, toZone: 'rune-hold', toX: 12, toY: 28, direction: 'up' },
+      { fromX: 15, fromY: 1, toZone: 'rune-hold', toX: 13, toY: 28, direction: 'up' },
       // LEFT door (0,11-12, placed in the editor) → Route 1 (leads to Mycelial Path)
       { fromX: 0, fromY: 11, toZone: 'route-garden-mycelial', toX: 58, toY: 7, direction: 'left' }, // arrive at Route 1's E door
       { fromX: 0, fromY: 12, toZone: 'route-garden-mycelial', toX: 58, toY: 8, direction: 'left' },
@@ -468,7 +465,63 @@ export const ZONES: Zone[] = [
     // — it is the return leg and the canon "permanent gate" — then take that flag off. The oracle
     // fails loudly on any reachable zone with no player-usable exit, so it will tell you the
     // moment the town is safe to open again rather than leaving it to memory.
-    gates: [],
+    // Wired 2026-08-05 to the three 2x2 footprints Alex painted. Anchors are read off the map,
+    // not guessed — each is the top-left tile of a block of warp tiles (id 14) on RUNE_HOLD.
+    gates: [
+      {
+        // ── GREG'S GATE (12-13, 29-30) — the crossing home, in the Spirit Corner ─────────────
+        // Targets the LEGACY `garden` id ON PURPOSE: the interior-exit contract (Shimmer3D
+        // `newWorldRef`). The town belongs to whichever side you entered from, so its exit names
+        // the legacy surface and `performWarp` runs `migrateLegacyPosition` to land a region-world
+        // player at r-home-plot instead. Naming the region id here would strand anyone who walked
+        // in from the legacy world via ?zone=. Lands at (14,2), one south of the Home Plot's gate.
+        x: 12, y: 29, toZone: 'garden', toX: 14, toY: 2, direction: 'down',
+        label: 'THE SPIRIT CORNER',
+      },
+      {
+        // ── THE PASSAGE (79-80, 16-17) — the door through the mountain wall ─────────────────
+        // Canon: `world/rune-hold.md` § The Passage. Alex cut this through the long wall that
+        // runs down the map's east side, which is the mountain the tunnels run through — so the
+        // door is on the right feature, not just a convenient gap.
+        x: 79, y: 16, toZone: 'the-passage', toX: 6, toY: 9, direction: 'right',
+        label: 'THE PASSAGE',
+      },
+      {
+        // ── TRAVELERS STATION (49-50, 81-82) → THE CRUCIBLE ─────────────────────────────────
+        // ⚠ TODO(station-canon): the building is UNRULED and this label is a BUILD working name —
+        // it is in no `CANON/` file, and § The Hub rules five doors, none of them a way OUT of
+        // town. Alex named it and asked for it on the door, so it ships there; the gap is filed
+        // and asks the question that decides it — canon's route to Pyramid Zero is a SHIP and
+        // this map has coastline, so "dock" may beat "station". The name is data: a one-field fix.
+        //
+        // `ownerOnly` for a BUILD reason, not a canon one: the Crucible is still a bare firing
+        // range with a BR skeleton on top. It comes off when there is a match to walk into.
+        x: 49, y: 81, toZone: 'crucible', toX: 7, toY: 13, direction: 'up',
+        label: 'TRAVELERS STATION', ownerOnly: true,
+      },
+    ],
+    warps: [],
+  },
+  {
+    // ── THE PASSAGE — the underground market (stub, 2026-08-05) ────────────────────────────
+    // Canon: `world/rune-hold.md` § The Passage — the hidden tunnel system through the mountain,
+    // the town's underground economy, where Marks are spent and Knowledge Scrolls change hands.
+    // Built as a shell so the door Alex painted leads somewhere real; TODO(passage-layout) in
+    // tilemap.ts marks the interior as his to author, the same way Rune Hold shipped before he
+    // authored it.
+    //
+    // `realm: 'outside'` — it is under the mortal side, so spirits stay dormant. `peaceful`
+    // because a market is not an arena: nobody browses a scroll rack with a manabox drawn.
+    id: 'the-passage',
+    name: 'The Passage',
+    grid: THE_PASSAGE,
+    realm: 'outside',
+    peaceful: true,
+    playerStart: { tileX: 6, tileY: 9 },
+    gates: [
+      // back up into the town, landing on the town side of the mountain wall
+      { x: 1, y: 9, toZone: 'rune-hold', toX: 78, toY: 16, direction: 'left', label: 'RUNE HOLD' },
+    ],
     warps: [],
   },
   {
@@ -490,7 +543,7 @@ export const ZONES: Zone[] = [
       // Lands at (49,79): one tile NORTH of the station gate's 2x2 footprint (49-50, 80-81).
       // (79, not 80 — 80 became part of the gate when it went 2x2, and landing inside a gate is
       // an instant re-warp. The oracle asserts this rather than trusting the comment.)
-      { fromX: 7, fromY: 14, toZone: 'rune-hold', toX: 49, toY: 79, direction: 'up' },
+      { fromX: 7, fromY: 14, toZone: 'rune-hold', toX: 49, toY: 80, direction: 'up' },
     ],
   },
   {

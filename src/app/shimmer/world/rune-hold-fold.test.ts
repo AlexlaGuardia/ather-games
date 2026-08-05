@@ -94,8 +94,30 @@ const ownerSample = expandGate({ x: 0, y: 0, toZone: 'garden', toX: 1, toY: 1, l
 ok(ownerSample.every(w => w.ownerOnly === true), 'ownerOnly propagates to every tile of a gate')
 
 const gates = runeHold!.gates ?? []
-// Rune Hold's gates are EMPTY while Alex repositions them (see the note in zones.ts). Assert the
-// invariants that must hold for whatever he places, not a count that would just fight his editing.
+ok(gates.length === 3, 'Rune Hold has three gates (Spirit Corner, Passage, Travelers Station)')
+// ★ A gate must sit ON the warp tiles Alex painted. This is the check that ties CODE to MAP: he
+// positions doors by painting 2x2 blocks of tile 14, and the anchor here is read off that. If he
+// moves a door and the anchor isn't updated, the gate keeps firing on bare grass at the old spot
+// while the new tiles do nothing — a door in two places, neither of them right.
+for (const g of gates) {
+  const size = g.size ?? 2
+  for (let dy = 0; dy < size; dy++) for (let dx = 0; dx < size; dx++) {
+    ok((runeHold!.grid[g.y + dy]?.[g.x + dx] & 0xFF) === WARP_TILE,
+      `gate ${g.label} sits on a painted warp tile at (${g.x + dx},${g.y + dy})`)
+  }
+}
+// and no painted warp tile is orphaned — a door on the map that nothing wired up
+const painted: string[] = []
+runeHold!.grid.forEach((row, y) => row.forEach((v, x) => { if ((v & 0xFF) === WARP_TILE) painted.push(`${x},${y}`) }))
+const covered = new Set(gates.flatMap(g => {
+  const size = g.size ?? 2
+  const out: string[] = []
+  for (let dy = 0; dy < size; dy++) for (let dx = 0; dx < size; dx++) out.push(`${g.x + dx},${g.y + dy}`)
+  return out
+}).concat(runeHold!.warps.filter(w => !w.gate).map(w => `${w.fromX},${w.fromY}`)))
+for (const p of painted) ok(covered.has(p), `painted warp tile (${p}) is wired to a gate or warp`)
+
+// invariants that must hold for whatever he places
 for (const g of gates) {
   ok(!!g.label.trim(), `gate at (${g.x},${g.y}) carries a nametag`)
   const size = g.size ?? 2
@@ -111,7 +133,7 @@ ok(runeHold!.warps.filter(w => w.gate).length === gates.reduce((n, g) => n + (g.
 // and the Crucible comes back to the town, not to its old pre-town parent
 const crucible = getZone(ZONES, 'crucible')!
 ok(crucible.warps.every(w => w.toZone === 'rune-hold'), 'the Crucible exits to Rune Hold')
-ok(crucible.warps.every(w => w.toY === 79), 'the Crucible exit lands NORTH of the 2x2 gate footprint')
+ok(crucible.warps.every(w => w.toY === 80), 'the Crucible exit lands NORTH of the 2x2 gate footprint')
 // the instant-re-warp check, stated as the rule rather than the coordinate
 for (const w of crucible.warps) {
   ok(!checkWarp(ZONES, 'rune-hold', w.toX, w.toY), `Crucible exit landing (${w.toX},${w.toY}) is not itself a warp tile`)
@@ -131,6 +153,8 @@ while (queue.length) {
     if (!seen.has(id)) { seen.add(id); queue.push(id) }
   }
 }
+ok(seen.has('rune-hold'), 'a player can reach Rune Hold from the start zone without owner rights')
+ok(seen.has('the-passage'), 'a player can reach The Passage through the town')
 ok(!seen.has('crucible'), 'a player still cannot reach the Crucible (owner-gated by build state)')
 
 // ── 6. NO ONE-WAY TRAPS ────────────────────────────────────────────────────────────────────
