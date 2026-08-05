@@ -448,6 +448,20 @@ the Arcade frame.
 >
 > **Net: ~2 paid assets (~30 credits), not 60.** That is the honest read, and it is a *course-correct on the 08-05 morning list* which had the airlock door as the top Meshy buy — the material ruling landed after that list was written and moved it to the free lane. Remaining credits should go to props for OTHER lanes (arcade, Shimmer dead-grey props), not spent on the Crucible for the sake of spending.
 >
+> ### ⏸ ART LANE PARKED 2026-08-05 (Alex: "not worth holding us up") — resumable, nothing lost
+> Concept refs are **locked in canon** (`athernyx CANON/design-briefs/refs/pyramid-*.png`, approved) and the door is **built and on disk**: `public/models/props/vault_door.glb`, 10k tris / 180KB, **unwired** (no Crucible props are placed yet, so nothing references it).
+>
+> **★ THE PIPELINE DEBT — `glb_optimize.py` HAS NO NORMAL-MAP BAKE, and that is why Meshy props read generic.** Measured on the door, not guessed:
+> - The raw Meshy mesh (336k tris) has heavy iron straps with studs and real plank definition.
+> - **The detail is GEOMETRIC, not textural** — proven by isolating the variable: 2048 texture at 10k tris is *identical* to 1024 at 10k, so texture resolution was never the problem. At **40k** tris the studs come straight back.
+> - So the shippable build (10k/180KB) reads like a stock door, and the good build (40k/3.1MB) is unshippable — 40k alone is roughly the whole world's ~46k budget.
+> - **The fix is the standard workflow the optimizer skips:** bake the high-poly's detail into a **normal map**, *then* decimate to ~6-10k. Free (Blender only), and it improves **every** asset through this pipeline, not just this door.
+> - **Do this BEFORE spending more credits.** Every Meshy asset made without it throws away most of what was paid for.
+>
+> **💸 Credit correction (measured, supersedes the 08-05 morning claim):** image-to-3d cost **30 credits** (950 → 920). The earlier "image-to-3d is cheaper than text" was inferred from the code's one-task-vs-two structure and **never measured** — it does not survive the meter. The *accuracy* argument for image-to-3d still stands and is the better reason anyway: it locks the silhouette instead of paying Meshy to guess one from words.
+>
+> **Replicate:** ~$0.32 spent across 8 concept images; balance is **under $5** (that is what throttles it to 6/min, burst 1).
+>
 > **⚠ Still open before any Meshy spend:** do the Puppet Guards get physical constructs? They are "dead grey" and non-living, so the art-medium law puts them in the pre-render lane — but they are also *characters*, and character art is Alex's call, not a pipeline default.
 >
 > ### Files
