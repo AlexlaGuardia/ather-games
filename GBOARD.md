@@ -425,6 +425,26 @@ the Arcade frame.
 >
 > **Not committed: the generated regions themselves.** Nothing streams them yet, so 30 files of unused world is dead weight. Run the script when phase 2 lands.
 >
+> ### ✅ PHASE 2 SHIPPED 2026-08-05 — radius streaming (`world/chunk-stream.ts`, 33 asserts)
+> The engine's own chunk comment had promised this since the streaming core landed: *"preload mounts every chunk… a streaming realm later just mounts a radius instead."* The Wilds is the realm that forced it.
+>
+> | Map | chunks mounted before | after |
+> |---|---|---|
+> | Rune Hold 100×100 | 4 | **4** |
+> | a 400×400 region | 49 | **49** |
+> | a 30-region Wilds | 1,216 | **49** |
+>
+> **The property that matters: mounted chunks are bounded by the RADIUS, not the world.** A 7×7 window is 49 chunks whether the world is one region or a hundred thousand tiles across — asserted against a 100,000×100,000 map so a regression can't hide behind a small test fixture. **Today's maps are completely unaffected** (a 400×400 *is* 7×7 chunks), so this is future headroom bought at zero cost to current content.
+> - **Keyed on the player's CHUNK, not position.** `ZoneGeometry` is memoized so a walking player doesn't rebuild the scene tree; the centre setter returns the previous object when the chunk is unchanged, so this re-renders **once per 64 tiles walked**, not 60×/sec. Keying on position would have cost more than streaming saved.
+> - **Far chunks are skipped BEFORE bucketing**, so the per-cell sweep is saved too, not just draw calls.
+> - **`editing` mounts everything** — the map editor must see and click what it draws, and an editor isn't walking anywhere.
+> - **Square window, not circular** — a round one unmounts the diagonal corners you can plainly see across a screen corner.
+>
+> ### ★ Streaming and view distance are the same setting — and the fog never existed
+> Unmounting a chunk the player can still see just shows them the world ending in mid-air. The chunk comment had claimed *"the fog hides the far edge"* since the streaming core landed — **there was no `scene.fog` anywhere in the file**, and the camera drew to 500. So sight is now *derived* from the radius rather than chosen: `viewFar()` = 182 (inside the last mounted chunk), `fogNear()` = 82, fog colour matched to the page background so geometry fades into sky instead of popping.
+>
+> ⚠ **This is a visible change and wants Alex's eye.** On a 400×400 region the far corners (283 tiles out) used to draw and now sit beyond the fog. That's the intended trade — you cannot see 283 tiles in a cozy third-person game — but it is a *feel* call, and `DEFAULT_RADIUS` is a one-line tune that moves both the window and the sight together.
+>
 > ### 1️⃣ THE WILDS — the missing layer, and the blocker for everything below
 > Canon (`spirit-tales-bible.md`, ruled 2026-06-22): the Wilds are *"the persistent, walkable, open-world **overland** — the wide common country where the populace and **wild spirits** live… **the layer the GAME explores**."* Keeper-gardens are **tended sections OF the Wilds** (2026-06-23) — a fence-line is the border to untamed wild beyond, not a separate map.
 >

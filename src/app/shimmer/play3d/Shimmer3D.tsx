@@ -12,6 +12,7 @@ import { walkable } from '../engine/player'
 import { resolveStand, canStandAt, surfacesAt, EMPTY_SEGS, type CollisionCtx } from '../engine/segs-collision'
 import { SOLID } from '../world/tiles'
 import { getZone, checkWarp, type Zone, type Warp, type Gate } from '../world/zones'
+import { CHUNK, DEFAULT_RADIUS, chunkOf, sameChunk, chunkVisible, viewFar, fogNear, type ChunkCoord } from '../world/chunk-stream'
 import { ALL_ZONES } from '../world/all-zones'
 import { getHeightGrid } from '../world/heightmaps'
 import { GardenAtmosphere } from '../world/atmosphere'
@@ -301,14 +302,22 @@ function bucketsRect(grid: number[][], r0: number, c0: number, r1: number, c1: n
 }
 
 // The world renders in CHUNK×CHUNK blocks, one instanced-mesh set each, so three.js frustum-
-// culls what's behind the camera and the fog hides the far edge. This is the streaming core's
-// render layer: preload mounts every chunk (fine — the data is tiny); a streaming realm later
-// just mounts a radius instead. Small zones land in 1-2 chunks ≈ the old single-bucket path.
-const CHUNK = 64
-function chunkBuckets(grid: number[][]) {
+// culls what's behind the camera and the fog hides the far edge. Small zones land in 1-2 chunks
+// ≈ the old single-bucket path.
+//
+// ✅ 2026-08-05: the "streaming realm later just mounts a radius instead" that this comment
+// promised is now real (`world/chunk-stream.ts`) — and so is the fog it also promised, which had
+// never actually been configured. Mounted chunks are bounded by the radius, not the world size.
+// CHUNK + the streaming window live in world/chunk-stream.ts (pure, tested) so the rules can be
+// proved headless. `center` = the player's CHUNK, not their position: keying on position would
+// re-render this memo every frame and cost more than streaming saves.
+function chunkBuckets(grid: number[][], center?: ChunkCoord | null, radius = DEFAULT_RADIUS) {
   const rows = grid.length, cols = grid[0].length
   const out: { key: string; b: ReturnType<typeof bucketsRect> }[] = []
   for (let r0 = 0; r0 < rows; r0 += CHUNK) for (let c0 = 0; c0 < cols; c0 += CHUNK) {
+    // Skip far chunks BEFORE bucketing them — this saves the per-cell sweep too, not just the
+    // draw calls. Without a center (editors, first frame) everything mounts, exactly as before.
+    if (center && !chunkVisible({ cx: c0 / CHUNK, cy: r0 / CHUNK }, center, radius)) continue
     const b = bucketsRect(grid, r0, c0, Math.min(r0 + CHUNK, rows), Math.min(c0 + CHUNK, cols))
     // Every bucket must be listed here. A chunk made ENTIRELY of one omitted kind gets dropped as
     // "empty" and that content silently never renders — which is what would have happened to a
@@ -1019,11 +1028,16 @@ const WorldFlora = memo(function WorldFlora({ heights }: { heights: number[][] }
 // memo: the terrain is the heaviest node in the scene and depends on nothing that ticks. Without it,
 // every channel tick (~11 Hz) rebuilt the whole floor/wall/water/mist JSX tree. All five props are
 // stable (a ref, a ref's array, a version int, a useCallback, a bool), so this skips cleanly.
-const ZoneGeometry = memo(function ZoneGeometry({ gridRef, heights, version, paint, editing }: {
+const ZoneGeometry = memo(function ZoneGeometry({ gridRef, heights, version, paint, editing, center }: {
   gridRef: React.RefObject<number[][]>; heights: number[][]; version: number
   paint: (c: number, r: number, shift: boolean) => void; editing: boolean
+  /** the player's CHUNK — changes once per 64 tiles walked, so the memo still holds */
+  center?: ChunkCoord | null
 }) {
-  const chunks = useMemo(() => chunkBuckets(gridRef.current), [version, gridRef])
+  // `editing` mounts the whole map: the map editor needs to see and click what it is drawing,
+  // and an editor is not walking anywhere, so the streaming window would only get in the way.
+  const chunks = useMemo(() => chunkBuckets(gridRef.current, editing ? null : center),
+    [version, gridRef, center?.cx, center?.cy, editing])
   return (
     <>
       {chunks.map(({ key, b: { floors, walls, waters, voids, warps, mists, wallTops, buildings, buildingTops } }) => (
@@ -2972,6 +2986,19 @@ const Scene = memo(function Scene(props: {
   // drawn in yours. Symmetric on every client — nobody is ever visible inside a plot, including
   // you to others — which makes the plot per-player TODAY at the presence layer, ahead of any
   // server-side instancing. In the garden zone-room every peer is by definition in their own plot.
+  // ── STREAMING CENTRE ──────────────────────────────────────────────────────────────────
+  // Sampled every frame but stored as a CHUNK, and the setter returns the previous object when
+  // the chunk is unchanged — so this re-renders once per 64 tiles walked, not 60 times a second.
+  // That identity check is the whole reason streaming can key off the player without costing
+  // more than it saves.
+  const [center, setCenter] = useState<ChunkCoord | null>(null)
+  useFrame(() => {
+    const p = props.posRef.current
+    if (!p) return
+    const c = chunkOf(Math.round(p.x), Math.round(p.z))
+    setCenter((prev) => (sameChunk(prev, c) ? prev : c))
+  })
+
   const plotHide = useMemo(() => {
     if (props.zone.id === HOME_PLOT_ZONE || props.zone.id === 'r-home-plot') return () => true
     if (props.zone.id === WORLD_ZONE_ID) {
@@ -2983,7 +3010,7 @@ const Scene = memo(function Scene(props: {
     <>
       <GardenAtmosphere zoneId={props.atmosZone} />
       <SkyLight shadowMap={props.shadowMap} />
-      <ZoneGeometry key={`${props.zone.id}-${props.dims}`} gridRef={props.gridRef} heights={props.heights} version={props.version} paint={props.paint} editing={props.editing} />
+      <ZoneGeometry key={`${props.zone.id}-${props.dims}`} gridRef={props.gridRef} heights={props.heights} version={props.version} paint={props.paint} editing={props.editing} center={center} />
       <NPCMarkers npcs={ALL_NPCS.filter((n) => n.zone === props.zone.id && npcInWorld(n, props.defeated, props.flagsRef.current))} heights={props.heights} />
       {props.isOwner && props.zone.id === 'moonwell-glade-gregory-s-home' && <HubGateMarkers heights={props.heights} />}
       {props.zone.realm === 'outside' && !props.zone.peaceful && <FiringRange firingRef={props.firingRef} adsRef={props.adsRef} weaponIdxRef={props.weaponIdxRef} gridRef={props.gridRef} recoilRef={props.recoilRef} bloomRef={props.bloomRef} posRef={props.posRef} hpRef={props.hpRef} hpMaxRef={props.hpMaxRef} shieldRef={props.shieldRef} shieldMaxRef={props.shieldMaxRef} rangeCfgRef={props.rangeCfgRef} ammoRef={props.ammoRef} reloadingRef={props.reloadingRef} pendingCastRef={props.pendingCastRef} castMultRef={props.castMultRef} resistRef={props.resistRef} infusionRef={props.infusionRef} fieldsRef={props.fieldsRef} conjuredRef={props.conjuredRef} statusRef={props.statusRef} onHeal={props.onHeal} onNeedReload={props.onNeedReload} onHit={props.onRangeHit} onShot={props.onRangeShot} onPlayerDamage={props.onPlayerDamage} onPlayerDown={props.onPlayerDown} />}
@@ -5900,9 +5927,16 @@ export default function Shimmer3D() {
       <Canvas key={gfxKey(gfx)}
         shadows={gfx.shadows !== 'off'}
         dpr={dpr}
-        camera={{ fov: 45, position: [1, 6, 14], near: 0.1, far: 500 }}
+        // ★ far plane is derived from the streaming radius, not chosen: drawing past the last
+        // mounted chunk shows the player the world ending in mid-air. See world/chunk-stream.ts.
+        camera={{ fov: 45, position: [1, 6, 14], near: 0.1, far: viewFar() }}
         gl={{ antialias: gfx.antialias }}
         onCreated={(state) => { canvasElRef.current = state.gl.domElement }}>
+        {/* ★ The fog this file's chunk comment has claimed since the streaming core landed, and
+            which was never actually configured. It is not decoration: the streaming window
+            unmounts chunks past `viewFar()`, so without haze the player watches the world end at
+            a hard line. Colour matches the page background so geometry fades into sky. */}
+        <fog attach="fog" args={['#bfe3ef', fogNear(), viewFar()]} />
         <FrameProbe statsRef={frameStats} />
         {gfx.adaptiveDpr && (
           <PerformanceMonitor
