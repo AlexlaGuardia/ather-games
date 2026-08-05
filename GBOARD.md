@@ -420,8 +420,35 @@ the Arcade frame.
 > - **The wall:** `heights[y][x]` is a **heightmap — one surface per column, `MAX_TIER` 8.** You can never stand *under* another floor. Not a tuning problem; a data-model one.
 > - **The path (recommended, not yet built):** `garden-world.ts` already composes several zone grids into one scene via `Placement { zone, ox, oy }`. **Add a vertical offset to that same struct.** Floors stack with almost no new machinery, each floor stays an authorable MapEditor map, collision picks a floor by player Y, and the airlocks are the gate between them.
 > - **Do NOT re-derive timing in a map.** `crucible-phases.ts` already derives floors, windows and the seal from elapsed seconds alone, and is tested. Wire maps TO it.
-> - **Meshy props** — brief compiled (`athernyx design-briefs/pyramid-zero.md`, DRAFT). 950 credits, ~60 props, **one month of subscription**. Priority: airlock door > wooden Vault door > the glyph > Wonder pedestal+orbs > throne > ruined-city modules > mana bell > guard plinths. **Props, never level geometry.** Never skip `glb_optimize` (raw Meshy ~440k tris/15MB vs a world rendering ~46k total); judge in-WORLD, not preview.
-> - **Blocked on Magii:** 5 look questions every prop inherits — material, the Citadel crest's direction, lit-room colour, weathered vs pristine, the Dawn's sky.
+> - **Art brief ✅ RULED 2026-08-05** (`athernyx design-briefs/pyramid-zero.md` + `game/pyramid-zero.md` › ★ The Look). Material = seamless/jointless/mana-veined; the relic is **greying, not decaying**; crest is Lazerin's, applied later; light is gold and doesn't reach everywhere.
+>
+> ### 🎨 THE TWO ART LANES — split 2026-08-05 (the canon ruling did most of the sorting)
+> **The governing principle: spend the PERISHABLE resource on what only it can do.** Meshy credits expire with the subscription (**950 left, ~1 month**); bpy authoring time does not, and `coin.py` / `voidspawn.py` / `flora_tree.py` / `blightthorns.py` are a proven free lane. So Meshy gets *only* the assets that are hard-to-impossible in code, and everything else waits and costs nothing.
+>
+> **Two canon facts do most of the sorting, and they both point AWAY from Meshy:**
+> 1. **Seamless, jointless, never bricked or riveted.** Meshy is trained on human-made-looking objects — ask it for an ancient door and it returns panel lines, bolts and plank seams. For the Pyramid's OWN architecture it fights the brief on every generation.
+> 2. **The greying is a MATERIAL SYSTEM, not a per-asset paint job.** Every surface wants one shared gold-in-veins / grey-between treatment with a "how far gone" dial. A baked Meshy asset freezes its own wear; a bpy asset inherits the shader. One material, N props.
+>
+> **💸 MESHY (paid) — only what code can't do:**
+> | Prop | Why it earns credits |
+> |---|---|
+> | **The Vault's wooden door** | ★ **The single best credit spend in the list.** It is the ONE object in the Pyramid that is *not* the Pyramid's material — canon says wood, and wood grain / plank irregularity / age / hardware is exactly Meshy's strength and exactly what bpy is slow at. It is also the door players remember. |
+> | **The throne** | A *made* object: ornate, irregular, character-carrying, and Lazerin-inflected rather than relic-material. Meshy's home ground. |
+> | *(maybe)* **hero rubble chunks** | Irregular fracture is genuinely hard to author. But a broken piece exposes the material's interior, which the brief doesn't rule — settle that before spending. |
+>
+> **🆓 BPY (free) — everything else, and it's most of the list:**
+> | Prop | Why code wins |
+> |---|---|
+> | **The airlock door** | Pyramid architecture (seamless — Meshy would rivet it) **and it must ANIMATE**: it closes, that IS the hazard. An animating door needs known geometry and a known pivot; a generated blob gives neither. A smooth veined aperture is also more alien than a sci-fi blast door. |
+> | **The glyph** | It is *light*. Geometry is trivial, the emissive material is the whole asset, and it must be the only light source before the bell. |
+> | **Wonder pedestal + 3 orbs** | Orbs are spheres; the pedestal is symmetrical. Straight **coin-family precedent** — ONE model, three finishes for the three Wonder categories (Mana Seeds / Gems / Knowledge Scrolls). That pattern already shipped once. |
+> | **Ruined-city set pieces** | They must be **modular and repeat**. Meshy gives 6 bespoke unrelated chunks with forbidden seams baked in; bpy gives a kit off one material with the greying dial per piece. |
+> | **The mana bell** | A surface of revolution — parametric in minutes — and it wants the relic's seamless material. |
+> | **Guard plinths** | Repeated, symmetrical, three of them. |
+>
+> **Net: ~2 paid assets (~30 credits), not 60.** That is the honest read, and it is a *course-correct on the 08-05 morning list* which had the airlock door as the top Meshy buy — the material ruling landed after that list was written and moved it to the free lane. Remaining credits should go to props for OTHER lanes (arcade, Shimmer dead-grey props), not spent on the Crucible for the sake of spending.
+>
+> **⚠ Still open before any Meshy spend:** do the Puppet Guards get physical constructs? They are "dead grey" and non-living, so the art-medium law puts them in the pre-render lane — but they are also *characters*, and character art is Alex's call, not a pipeline default.
 >
 > ### Files
 > `world/tilemap.ts` › `CRUCIBLE` (TODO(crucible-floors), TODO(crucible-layout)) · `world/zones.ts` › `crucible` · `play3d/crucible-phases.ts` · `play3d/puppet-guards.ts` · `play3d/crucible-bots.ts`
