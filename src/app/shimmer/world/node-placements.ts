@@ -142,7 +142,12 @@ const CRUCIBLE_NODES: NodePlacement[] = [
 
 ]
 
+const RUNE_HOLD_NODES: NodePlacement[] = [
+
+]
+
 export const ZONE_NODES: Record<string, NodePlacement[]> = {
+  'rune-hold': RUNE_HOLD_NODES,
   'crucible': CRUCIBLE_NODES,
   garden: GARDEN_NODES,
   'mycelial-path': MYCELIAL_PATH_NODES,

@@ -26,7 +26,12 @@ const THE_OUTFIELDS_SPAWNERS: SpawnerPlacement[] = [
   { kind: 'moglin', gate: 'brack', tileX: 27, tileY: 14 },
 ]
 
+const RUNE_HOLD_SPAWNERS: SpawnerPlacement[] = [
+
+]
+
 export const ZONE_SPAWNERS: Record<string, SpawnerPlacement[]> = {
+  'rune-hold': RUNE_HOLD_SPAWNERS,
   'the-outfields': THE_OUTFIELDS_SPAWNERS,
 }
 

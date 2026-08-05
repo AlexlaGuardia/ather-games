@@ -52,9 +52,32 @@ export function checkWarp(zones: Zone[], currentZoneId: string, tileX: number, t
   }) ?? null
 }
 
+/**
+ * Zone ids that no longer exist, and what they became.
+ *
+ * `spirit-corner` (2026-08-05): the shop was folded into the Rune Hold map as a storefront, per
+ * `world/rune-hold.md` § The Hub. Alex authored the town outward FROM the old room, so its tiles
+ * sit unmoved in the new map's north-west corner — an old (x,y) means the same square it always
+ * did and only the id changes. That is why this table carries no offset: add one the day a fold
+ * moves tiles, and until then a bare rename is the honest migration.
+ *
+ * Kept because a saved position, a bookmarked `?zone=`, or a party member's broadcast can still
+ * name the dead id. Resolving it costs one lookup; NOT resolving it hands `getZone` a null and
+ * strands the player on a black screen.
+ */
+export const LEGACY_ZONE_ALIASES: Record<string, string> = {
+  'spirit-corner': 'rune-hold',
+}
+
+/** Resolve a possibly-retired zone id to the live one. Unknown ids pass through untouched. */
+export function resolveZoneId(id: string): string {
+  return LEGACY_ZONE_ALIASES[id] ?? id
+}
+
 // Get zone by id
 export function getZone(zones: Zone[], id: string): Zone | null {
-  return zones.find(z => z.id === id) ?? null
+  const wanted = resolveZoneId(id)
+  return zones.find(z => z.id === wanted) ?? null
 }
 
 // ---- Shimmer zones ----
@@ -62,7 +85,7 @@ export function getZone(zones: Zone[], id: string): Zone | null {
 // Garden → east → Moonwell Glade (shortcut, blocked until tutorialComplete)
 // Moonwell Glade → east → Spore Hollow (post-tutorial)
 
-import { GARDEN, MYCELIAL_PATH, MOONWELL_GLADE, SPORE_HOLLOW, VORANYX_DEEP, TWILIGHT_THICKET, WOODED_TRAIL, THE_THRESHOLD, MANA_SPRINGS, ROUTE_2, ROUTE_3, THE_OUTFIELDS, GLOVIEW_VILLAGE, SPIRIT_MEADOW, MOONWELL_GLADE_GREGORY_S_HOME, SPIRIT_CORNER, CRUCIBLE, RUNE_HOLD, SORREL_HOLD, BRACK_HOLD, TEST_SANDBOX,
+import { GARDEN, MYCELIAL_PATH, MOONWELL_GLADE, SPORE_HOLLOW, VORANYX_DEEP, TWILIGHT_THICKET, WOODED_TRAIL, THE_THRESHOLD, MANA_SPRINGS, ROUTE_2, ROUTE_3, THE_OUTFIELDS, GLOVIEW_VILLAGE, SPIRIT_MEADOW, MOONWELL_GLADE_GREGORY_S_HOME, CRUCIBLE, RUNE_HOLD, SORREL_HOLD, BRACK_HOLD, TEST_SANDBOX,
   ROUTE_GARDEN_MYCELIAL, ROUTE_MYCELIAL_SPIRIT, ROUTE_SPIRIT_MOONWELL, ROUTE_MOONWELL_GARDEN } from './tilemap'
 export const ZONES: Zone[] = [
   {
@@ -71,7 +94,8 @@ export const ZONES: Zone[] = [
     grid: GARDEN, // 32x32, redesigned in the editor by Alex
     playerStart: { tileX: 30, tileY: 9 },
     warps: [
-      // ── NORTH GATE (14-15,1) → The Spirit Corner — RESTORED 2026-08-03 to its original tiles.
+      // ── NORTH GATE (14-15,1) → OUT of the Ather, into Rune Hold — RESTORED 2026-08-03 to its
+      // original tiles, re-pointed 2026-08-05 when the Spirit Corner folded into the town.
       // This is the CANON route across: `world/rune-hold.md` has Shimmer reached "through a
       // permanent gate", and the 07-22 build note built it as Home Plot north gate ⇄ Spirit
       // Corner interior. It was relocated into Greg's owner-only test hub by 0e1e31b while the
@@ -79,13 +103,16 @@ export const ZONES: Zone[] = [
       // reachable only by the owner. The gap RULED 2026-08-03 and the street door opened, so the
       // player-facing half has to come back or the open door leads out of a room no one can enter.
       // The test-hub gate stays as well; it is dev scaffolding and costs nothing.
-      // The return side lives on `spirit-corner` and targets this zone; when the player crossed
-      // from the region world, performWarp migrates that landing to r-home-plot automatically.
+      // The LANDING TILES ARE UNCHANGED (7-8,10): the Spirit Corner's old room is now the
+      // shop-floor in Rune Hold's north-west corner, at the same coordinates it always had, so
+      // this gate still opens onto Greg's floor — it just no longer crosses a zone boundary to
+      // get there. The return side lives on `rune-hold` and targets this zone; when the player
+      // crossed from the region world, performWarp migrates that landing to r-home-plot.
       // ⚠ TODO(gate-placement): these are the ORIGINAL provisional tiles, not a new call — the
       // spot is Alex's eye (2D MapEditor). The tile is NOT painted as a warp tile, so the door
       // works but shows no gold marker yet; the editor's warp brush paints it.
-      { fromX: 14, fromY: 1, toZone: 'spirit-corner', toX: 7, toY: 10, direction: 'up' },
-      { fromX: 15, fromY: 1, toZone: 'spirit-corner', toX: 8, toY: 10, direction: 'up' },
+      { fromX: 14, fromY: 1, toZone: 'rune-hold', toX: 7, toY: 10, direction: 'up' },
+      { fromX: 15, fromY: 1, toZone: 'rune-hold', toX: 8, toY: 10, direction: 'up' },
       // LEFT door (0,11-12, placed in the editor) → Route 1 (leads to Mycelial Path)
       { fromX: 0, fromY: 11, toZone: 'route-garden-mycelial', toX: 58, toY: 7, direction: 'left' }, // arrive at Route 1's E door
       { fromX: 0, fromY: 12, toZone: 'route-garden-mycelial', toX: 58, toY: 8, direction: 'left' },
@@ -328,78 +355,89 @@ export const ZONES: Zone[] = [
     ],
   },
   {
-    id: 'spirit-corner',
-    name: 'The Spirit Corner',
-    grid: SPIRIT_CORNER,
-    playerStart: { tileX: 7, tileY: 9 },
-    warps: [
-      // ── THE PERMANENT GATE HOME — south opening back to the Home Plot (restored 2026-08-03).
-      // Targets the LEGACY `garden` id ON PURPOSE: that is the interior-exit contract
-      // (Shimmer3D `newWorldRef`). An interior belongs to whichever side you entered from, so
-      // its exit names the legacy surface and `performWarp` runs `migrateLegacyPosition` to land
-      // a region-world player at r-home-plot (73,61) instead. Naming the region id directly here
-      // would strand anyone who walked in from the legacy world via ?zone=.
-      // Landing is (14-15,2), one tile south of the gate, so you don't instantly re-warp.
-      // (Was pointed at Greg's test hub while the north gate was relocated there; the owner can
-      // still reach this room from the hub, and now exits to the plot like everyone else.)
-      { fromX: 7, fromY: 11, toZone: 'garden', toX: 14, toY: 2, direction: 'down' },
-      { fromX: 8, fromY: 11, toZone: 'garden', toX: 15, toY: 2, direction: 'down' },
-      // ── THE OUTWARD CROSSING — OPEN (canon gap RULED 2026-08-03, /magii + Alex).
-      // The seal was always conditional ("pending the era/Lucernyx/tonal-wall rulings") and all
-      // three of those closed 2026-07-22: Lucernyx = the aegis, era = Year 1672, tonal wall =
-      // one game / two sides. `two-lines-two-games.md`'s realm map had described this door in the
-      // present tense as "the outward crossing" ever since; `shimmer-storyline.md` +
-      // `shimmer-geography.md` have now been flipped to match. Nothing was outstanding — the
-      // ownerOnly hold was correct while it was unruled, and it comes off here.
-      // Through it: the MORTAL side, Year 1672 (Rune Hold, and the Crucible beyond it). The
-      // guns-at-the-door prompt is Greg's, human-scale — never a Lucernyx manifestation.
-      { fromX: 7, fromY: 1, toZone: 'rune-hold', toX: 12, toY: 16, direction: 'up' },
-      { fromX: 8, fromY: 1, toZone: 'rune-hold', toX: 13, toY: 16, direction: 'up' },
-    ],
-  },
-  {
-    // ── RUNE HOLD — the crossroads square, mortal side, Year 1672 ──────────────────────────
+    // ── RUNE HOLD — the town, mortal side, Year 1672 ───────────────────────────────────────
     // Canon: `world/rune-hold.md` § The Hub (ruled 2026-07-12) — the town IS the front door, an
-    // outdoor square whose destinations are storefronts: 🍺 Kindled Mug (the games) · ✧ Spirit
+    // outdoor town whose destinations are storefronts: 🍺 Kindled Mug (the games) · ✧ Spirit
     // Corner (Greg's gate back into Shimmer) · 📖 Eyuun's Bookstore (the tales) · 🏪 The Passage
     // (the underground market, where Marks are spent) · 📌 Notice Board (news). Register = the
     // warm "became a hub" form, NOT the Year-600 occupation (that stays the novel's story).
     //
-    // `realm: 'outside'` because it is off the Ather (spirits dormant); `peaceful` because it is a
-    // town, not an arena — see the flag's note above.
+    // ── THE SPIRIT CORNER FOLDED IN (2026-08-05, Alex's map + call) ────────────────────────
+    // It used to be its own 16x12 zone with a "street door" warp out to a separate Rune Hold.
+    // That was an approximation of canon, and canon is plainer than the build was: the Hub table
+    // rules the Spirit Corner as a STOREFRONT ON THE SQUARE — "Gregory's gate — the Ather Bubble"
+    // — not a room you load into on the way. So the town is now ONE seamless 100x100 map that
+    // CONTAINS the shop floor, and only the things canon calls a crossing keep a load screen:
+    //   · Greg's gate (7-8,11), inside the shop → back into the Ather. Canon: "a permanent gate."
+    //   · the station gate (49-50,81) → the Crucible.
+    //   · [later] The Passage — the underground market. Its stairs are a crossing too.
+    // Shops that are just shops (the Mug, the Bookstore, the Notice Board) are WALKED INTO on
+    // this grid. No warp, no zone, no loading screen — that is the whole point of the fold.
     //
-    // ⚠ TODO(rune-hold-layout): the SQUARE IS ALEX'S TO AUTHOR (2D MapEditor). The grid here is a
-    // functional shell so the crossing and the Crucible route can be walked. Canon fixes WHICH
-    // destinations exist; where each building sits is a map call.
+    // ★ THE OLD SPIRIT-CORNER COORDINATES SURVIVED THE FOLD. Alex authored outward from the old
+    // room, so its tiles sit unmoved in this map's north-west corner and every landing that used
+    // to name `spirit-corner` still lands on the same square — the gate home is still (7-8,11),
+    // Greg's floor is still (7,9). That is why this is a re-point and not a re-placement, and why
+    // `LEGACY_ZONE_ALIASES` can carry an old save across by swapping the id alone.
+    //
+    // `realm: 'outside'` because it is off the Ather (spirits dormant); `peaceful` because it is a
+    // town, not an arena — see the flag's note above. Both now also cover the shop floor, which is
+    // correct and is the fold's one real behaviour change: the aegis boundary is the GATE, so
+    // spirits go dormant when you step into the town, not when you step out of the building.
     id: 'rune-hold',
     name: 'Rune Hold',
     grid: RUNE_HOLD,
     realm: 'outside',
     peaceful: true,
-    playerStart: { tileX: 12, tileY: 16 },
+    playerStart: { tileX: 7, tileY: 9 },
     warps: [
-      // back through the café door into the Ather (the inward crossing)
-      { fromX: 12, fromY: 17, toZone: 'spirit-corner', toX: 7, toY: 2, direction: 'down' },
-      { fromX: 13, fromY: 17, toZone: 'spirit-corner', toX: 8, toY: 2, direction: 'down' },
-      // ── THE CRUCIBLE, re-parented (owner-only while it's a bare firing range) ──────────────
+      // ── GREG'S GATE (7-8,11) — the crossing home, inside the Spirit Corner shop ────────────
+      // Targets the LEGACY `garden` id ON PURPOSE: that is the interior-exit contract
+      // (Shimmer3D `newWorldRef`). The town belongs to whichever side you entered from, so its
+      // exit names the legacy surface and `performWarp` runs `migrateLegacyPosition` to land a
+      // region-world player at r-home-plot (73,61) instead. Naming the region id directly here
+      // would strand anyone who walked in from the legacy world via ?zone=.
+      // Landing is (14-15,2), one tile south of the Home Plot gate, so you don't instantly re-warp.
+      // These are the tiles Alex PAINTED as warp tiles (id 14) — the gold marker is on the map.
+      { fromX: 7, fromY: 11, toZone: 'garden', toX: 14, toY: 2, direction: 'down' },
+      { fromX: 8, fromY: 11, toZone: 'garden', toX: 15, toY: 2, direction: 'down' },
+      // ── THE STATION GATE (49-50,81) → THE CRUCIBLE — Alex's painted door, wired 2026-08-05 ──
       // Canon puts the Pyramid-Zero Crucible on the MORTAL side, reached with a ship — not
-      // hanging off Greg's living room in the Ather. Routing it through Rune Hold is the first
-      // step of that fix; the Travelers Station goes between these two once Magii rules it.
-      { fromX: 3, fromY: 2, toZone: 'crucible', toX: 7, toY: 13, direction: 'up', ownerOnly: true },
+      // hanging off Greg's living room in the Ather. Routing it through the town is that fix.
+      // You walk SOUTH into the doorway off the open ground at row 80; the building south of the
+      // wall line is the departure hall.
+      //
+      // ⚠ TODO(station-canon): the building this door belongs to is UNRULED. "Travelers Station"
+      // is a BUILD working name — it appears nowhere in `CANON/`, and `rune-hold.md` § The Hub
+      // rules exactly five doors (Mug · Spirit Corner · Bookstore · Passage · Notice Board), none
+      // of them a station. So the WARP ships (that is a build call) but the NAME does not go on
+      // screen anywhere, and nothing here asserts what the building is. Filed in CANON_GAPS;
+      // when Magii rules it, this comment and the label are the only things that change.
+      //
+      // Stays `ownerOnly` — NOT for a canon reason (the crossing itself is ruled open) but a build
+      // one: the Crucible is still a bare firing range with a BR skeleton on top. It comes off when
+      // there is a match to walk into. The owner walks it today.
+      { fromX: 49, fromY: 81, toZone: 'crucible', toX: 7, toY: 13, direction: 'up', ownerOnly: true },
+      { fromX: 50, fromY: 81, toZone: 'crucible', toX: 8, toY: 13, direction: 'up', ownerOnly: true },
     ],
   },
   {
     // The Crucible (battle-royale) — OUTSIDE the Ather, so weapons work here and spirits don't.
-    // We start with a firing range: open space to feel the first weapon. Reached only from the
-    // owner-gated Crucible gate in Greg's home.
+    // We start with a firing range: open space to feel the first weapon. Reached from the station
+    // gate in Rune Hold (canon: the mortal side, by ship), plus an owner-only shortcut in Greg's
+    // test hub.
     id: 'crucible',
     name: 'The Crucible — Firing Range',
     grid: CRUCIBLE,
     realm: 'outside',
     playerStart: { tileX: 7, tileY: 13 },
     warps: [
-      // exit → back to the hub, 2 tiles below the Crucible gate (10,7)
-      { fromX: 7, fromY: 14, toZone: 'moonwell-glade-gregory-s-home', toX: 10, toY: 9, direction: 'down' },
+      // exit → back out to Rune Hold, one tile north of the station gate so you don't re-warp.
+      // Re-pointed 2026-08-05 (was Greg's living room, the pre-town parent). The owner-only
+      // shortcut into here from the test hub still works; it just returns you to the town now,
+      // which is where the Crucible actually hangs.
+      // (single tile — the range's doorway is one tile wide at (7,14); (8,14) is wall.)
+      { fromX: 7, fromY: 14, toZone: 'rune-hold', toX: 49, toY: 80, direction: 'up' },
     ],
   },
   {
@@ -414,18 +452,18 @@ export const ZONES: Zone[] = [
       { fromX: 14, fromY: 22, toZone: 'moonwell-glade', toX: 22, toY: 18, direction: 'down' },
       { fromX: 15, fromY: 22, toZone: 'moonwell-glade', toX: 23, toY: 18, direction: 'down' },
       // ── TEST HUB (owner-only, invisible to players; markers render only for the owner) ──
-      // Crucible gate (left) → the practice arena; Rune Hold gate (right) → The Spirit Corner.
-      // The Folds gate goes here later. Both land back near these tiles (2 south) on return.
+      // Crucible gate (left) → the practice arena; Rune Hold gate (right) → the town, landing on
+      // Greg's shop floor. The Folds gate goes here later. Both are SHORTCUTS IN only — each
+      // returns you through the canon route (the Crucible now exits to Rune Hold's station gate,
+      // the town exits through Greg's gate to the Home Plot), which is correct: a dev door should
+      // drop you into the real graph, not build a private loop back to itself.
       //
-      // ⚠ REACHABILITY (noted 2026-08-03): this owner-only warp is currently the ONLY route into
-      // `spirit-corner`, so unsealing the street door beyond it (per the 08-03 canon ruling) does
-      // not yet put a player on the mortal side — they still cannot reach the shop to walk out of
-      // it. That is a BUILD gap, not a canon one: canon's route in is the Home Plot's permanent
-      // gate (`world/rune-hold.md` — "reached through a permanent gate"), and neither
-      // `spirit-corner` nor `rune-hold` exists region-side yet, so the whole mortal-side arc still
-      // lives in the legacy zone graph. Porting it is the next step; the door itself is now open.
+      // ✅ REACHABILITY, closed 2026-08-05 (was: this owner-only warp is the ONLY route to the
+      // mortal side). The Home Plot's north gate (14-15,1) is restored and player-facing, and the
+      // Spirit Corner is no longer a separate room to be stranded behind — it is the north-west
+      // corner of the Rune Hold map. A player walks: Home Plot → Greg's gate → the town.
       { fromX: 10, fromY: 7, toZone: 'crucible', toX: 7, toY: 13, direction: 'up', ownerOnly: true },
-      { fromX: 16, fromY: 7, toZone: 'spirit-corner', toX: 7, toY: 9, direction: 'up', ownerOnly: true },
+      { fromX: 16, fromY: 7, toZone: 'rune-hold', toX: 7, toY: 9, direction: 'up', ownerOnly: true },
     ],
   },
   {
