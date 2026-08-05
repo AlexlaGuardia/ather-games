@@ -44,6 +44,45 @@ export type RaidMode =
   | 'loom'      // aware of the player, using borrowed power to keep them off
   | 'deflated'  // collar broken. Harmless, permanently. Canon's payoff.
 
+/**
+ * What a raid is ABOUT — the tier of the spirit at stake. Alex's call 2026-08-05, and it costs
+ * almost nothing because every point of pressure in this module already comes from the bound
+ * spirit: raise the tier of the thing collared and the whole fight scales with it.
+ *
+ * Canon tiers the MOGLINS to match, so difficulty reads twice — once off the spirit, once off who
+ * came for it (`design-briefs/moglins.md`): **Thornlords** are *"the small end of the collar-
+ * culture… one collared spirit each"*; **Hemlock** is *"bigger, colder, better-kept… multiple
+ * collars."* The middle class has no canon name, so this enum tiers by the SPIRIT (canon-neutral)
+ * and leaves naming the moglin class to Magii.
+ *
+ * ★ 'awakened' IS DELIBERATELY NOT A REPEATABLE RAID. Only ONE awakened form is named in canon —
+ * **Hibernyx**, the awakened Dewbear — and canon says outright that Hemlock's *"great empty cage
+ * was built for"* one and *"the cage is empty because he has hunted one for years and never caught
+ * it."* So an awakened raid MUST NOT be losable into a capture: a raid that ends with Hemlock
+ * collaring a Hibernyx contradicts a fact already printed in Benji's books. See `canTake` below —
+ * that rule is enforced in code, not left to a designer's memory.
+ */
+export type RaidTier = 'base' | 'second' | 'awakened'
+
+export const TIER_DIALS: Record<RaidTier, {
+  /** how many spirits are at stake — groups at the low tier, a single prize at the top */
+  quarries: number
+  /** collar integrity: how long the fight lasts */
+  integrity: number
+  /** borrowed-power pressure while looming */
+  loomDps: number
+  /** seconds to fit a collar — a bigger spirit does not go quietly */
+  collarSecs: number
+  /** ★ can this raid END with the spirit taken? Canon says no at the top. */
+  canTake: boolean
+}> = {
+  base:     { quarries: 3, integrity: 70,  loomDps: 5,  collarSecs: 3.0, canTake: true },
+  second:   { quarries: 1, integrity: 120, loomDps: 9,  collarSecs: 5.0, canTake: true },
+  // Hemlock-class. It cannot be won BY him — you are always racing to stop something that,
+  // in the books, never actually happened.
+  awakened: { quarries: 1, integrity: 200, loomDps: 14, collarSecs: 8.0, canTake: false },
+}
+
 export const RAID_TUNING = {
   /** how close a raider must be to notice the player at all */
   noticeRange: 7,
@@ -55,14 +94,11 @@ export const RAID_TUNING = {
   loomSpeed: 0.9,
   /** how close it needs to be to start working a collar on */
   collarRange: 1.2,
-  /** seconds of uninterrupted work to land a collar. The interrupt window. */
-  collarSecs: 4.0,
-  /** collar integrity — the only "health" in this file */
-  collarIntegrity: 100,
-  /** a raider with no bound spirit has no borrowed power, so it cannot pressure the player */
-  loomDps: 6,
   /** seconds between borrowed-power pushes while looming */
   loomCadence: 1.4,
+  // NOTE: collar integrity, collar time and loom damage moved to TIER_DIALS when difficulty
+  // tiers landed (2026-08-05). They are NOT duplicated here on purpose — a second copy of a
+  // tuning value is a lie waiting to be read by whoever edits the wrong one.
 } as const
 
 export interface RaiderSpec {
@@ -74,6 +110,7 @@ export interface RaiderSpec {
 
 export interface Raider {
   id: string
+  tier: RaidTier
   x: number
   y: number
   mode: RaidMode
@@ -126,13 +163,15 @@ const dist = (ax: number, ay: number, bx: number, by: number) => Math.hypot(ax -
 /** status target id for a raider — matches the opaque-id contract in statuses.ts */
 export const raidTarget = (id: string) => `raid:${id}`
 
-export function spawnRaider(spec: RaiderSpec, collared = true): Raider {
+export function spawnRaider(spec: RaiderSpec, collared = true, tier: RaidTier = 'base'): Raider {
+  const dial = TIER_DIALS[tier]
   return {
     id: spec.id,
+    tier,
     x: spec.homeX,
     y: spec.homeY,
     mode: 'patrol',
-    collar: collared ? { integrity: RAID_TUNING.collarIntegrity, max: RAID_TUNING.collarIntegrity } : null,
+    collar: collared ? { integrity: dial.integrity, max: dial.integrity } : null,
     bound: null,
     quarryId: null,
     collarProgress: 0,
@@ -226,7 +265,7 @@ export function stepRaid(raiders: readonly Raider[], dt: number, ctx: RaidContex
         }
       }
       if (hasPower && r.pushCd <= 0) {
-        playerDamage += RAID_TUNING.loomDps
+        playerDamage += TIER_DIALS[r.tier].loomDps
         r.pushCd = RAID_TUNING.loomCadence
       }
     } else if (r.mode === 'stalk' && quarry && !rooted) {
@@ -241,7 +280,14 @@ export function stepRaid(raiders: readonly Raider[], dt: number, ctx: RaidContex
       // does not: you cannot fit a collar you cannot hold.
       if (!disarmed) {
         r.collarProgress += dt
-        if (r.collarProgress >= RAID_TUNING.collarSecs) {
+        // ★ At the top tier the bar fills and then simply RESETS: canon has Hemlock hunting one
+        // for years and never catching it, so the pressure is real and the capture never lands.
+        // Enforced here rather than trusted to a level designer — the failure state at this tier
+        // is that you lose the CHANCE, never that the books get contradicted.
+        if (r.collarProgress >= TIER_DIALS[r.tier].collarSecs && !TIER_DIALS[r.tier].canTake) {
+          r.collarProgress = 0
+          r.quarryId = null
+        } else if (r.collarProgress >= TIER_DIALS[r.tier].collarSecs) {
           // It landed one. The loss state — and note it is a LOSS OF RESCUE, not of your own
           // party: cozy stakes are "did you save it", never "did you lose yours".
           taken.push(quarry.id)

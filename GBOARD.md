@@ -428,6 +428,22 @@ the Arcade frame.
 > - **★ Blinding is NOT a safe answer, and that is emergent, not designed.** A blinded raider forgets the player and *resumes collaring* — Enlighten buys a disengage but accelerates the theft. Exactly the "removes an option, not HP" texture; keeps Enlighten situational instead of universal. **Keep this.**
 > - **No wounded state, no second phase** — canon doesn't describe one. Break the collar and he is simply the sweet creature again, permanently.
 >
+> ### 🎚 DIFFICULTY TIERS (Alex 2026-08-05) — tier the SPIRIT at stake, and the moglin follows
+> Nearly free, because every point of pressure already comes from the bound spirit: raise the tier of what's collared and the fight scales with no new combat code.
+>
+> | Tier | At stake | Feel |
+> |---|---|---|
+> | **base** | a **group** of 3 | triage — you cannot stand over all of them |
+> | **second** | 1 | a straight duel over one spirit |
+> | **awakened** | 1 | the prize. Longest collar work, hardest collar, hardest hitter. |
+>
+> Canon tiers the *moglins* to match, so difficulty reads twice — **Thornlords** are *"the small end of the collar-culture, one collared spirit each"*, **Hemlock** is *"bigger, colder, better-kept… multiple collars."* The middle class has **no canon name**, so the enum tiers by the SPIRIT (canon-neutral) and leaves naming the moglin class to Magii.
+>
+> ### ★ The awakened tier CANNOT be lost into a capture — and that is enforced in code
+> Only **one** awakened form is named in all of canon: **Hibernyx**, the awakened Dewbear. The other 159 stay just-in-time (named the moment one evolves *on the page*), so a hard tier full of awakened forms would mean the BUILD naming them = accidental canon.
+>
+> Canon hands us the tier anyway: *"This is what Hemlock's great empty cage was built for… the cage is empty because he has hunted one for years and **never caught it**."* So an awakened raid that ends in a capture would contradict a fact already printed in Benji's books. `TIER_DIALS.awakened.canTake = false` — the collar bar fills and **resets**. You can still lose the *chance*; you can never lose the *fact*. The oracle runs a 60-second undisturbed raid to prove it, and separately proves the lower tiers DO capture so the rule isn't a global no-op.
+>
 > ### ⚠ Next — ONE DECISION BLOCKS WIRING (Alex's, it's game design not canon)
 > **What is a "quarry"?** The sim takes an opaque `{id,x,y}` list and deliberately never learns what a spirit is — so the caller decides. But Shimmer's convention says **spirits are battle-only, no overworld**, so there is nothing in a region for a raider to steal yet. Options:
 > - **(a) The Home Plot spirit bank** (shipped 07-30) — real overworld spirits already exist there, and moglin burrows raiding a garden is exactly canon. But the stake becomes *losing your own*, which is harsh for the cozy line.

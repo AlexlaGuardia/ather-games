@@ -7,8 +7,8 @@
  * resource; the swagger drains the moment the spirit is freed; disarm is a window, not a win.
  */
 import {
-  RAID_TUNING, spawnRaider, stepRaid, strikeRaider, strikeCollar, raidTarget, raidSettled,
-  type Raider, type RaidContext,
+  RAID_TUNING, TIER_DIALS, spawnRaider, stepRaid, strikeRaider, strikeCollar, raidTarget, raidSettled,
+  type Raider, type RaidContext, type RaidTier,
 } from './collar-raid'
 import { emptyBag, applyStatus, applyStatuses } from './statuses'
 
@@ -24,7 +24,7 @@ const ctx = (over: Partial<RaidContext> = {}): RaidContext => ({
 // ── 1. the moral engine, as a data structure ───────────────────────────────────────────────
 const r0 = spawnRaider({ id: 'a', homeX: 0, homeY: 0 })
 ok(!('hp' in r0), 'a raider has NO hp field — it cannot be killed, only disarmed of its collar')
-ok(r0.collar !== null && r0.collar.integrity === RAID_TUNING.collarIntegrity, 'the collar is the only resource')
+ok(r0.collar !== null && r0.collar.integrity === TIER_DIALS.base.integrity, 'the collar is the only resource')
 const free = spawnRaider({ id: 'b', homeX: 0, homeY: 0 }, false)
 ok(free.collar === null, 'a free moglin spawns with no collar (Jimbo / the warren)')
 ok(raidSettled([free]), 'a free moglin is never a fight')
@@ -32,9 +32,9 @@ ok(raidSettled([free]), 'a free moglin is never a fight')
 // ── 2. breaking the collar: canon's deflate is IMMEDIATE and TOTAL ─────────────────────────
 const bound: Raider = { ...r0, bound: { quarryId: 'q1', greyed: true }, mode: 'loom', collarProgress: 2 }
 const half = strikeCollar(bound, 40)
-ok(!half.broke && half.raider.collar?.integrity === 60, 'a partial strike leaves the collar intact')
+ok(!half.broke && half.raider.collar?.integrity === TIER_DIALS.base.integrity - 40, 'a partial strike leaves the collar intact')
 ok(half.raider.mode === 'loom', '...and does not deflate him — there is no wounded state')
-const done = strikeCollar(half.raider, 60)
+const done = strikeCollar(half.raider, TIER_DIALS.base.integrity)
 ok(done.broke, 'integrity 0 breaks the collar')
 ok(done.raider.mode === 'deflated', 'the swagger drains the MOMENT the spirit is freed')
 ok(done.raider.collar === null && done.raider.bound === null, '...collar and bound spirit both gone at once')
@@ -104,7 +104,7 @@ ok(blind.playerDamage === 0, '...so it stops applying pressure')
 const pair = [spawnRaider({ id: 'x', homeX: 0, homeY: 0 }), spawnRaider({ id: 'y', homeX: 5, homeY: 5 })]
 const struck = strikeRaider(pair, 'x', 100)
 ok(struck.raiders[0].mode === 'deflated', 'the struck raider deflates')
-ok(struck.raiders[1].collar?.integrity === RAID_TUNING.collarIntegrity, 'the other is untouched')
+ok(struck.raiders[1].collar?.integrity === TIER_DIALS.base.integrity, 'the other is untouched')
 ok(!raidSettled(struck.raiders), 'the raid is not settled while one collar stands')
 ok(raidSettled(strikeRaider(struck.raiders, 'y', 100).raiders), 'breaking the last collar settles the raid')
 
@@ -113,6 +113,45 @@ const inA = [{ ...armedR }]
 const c = ctx({ playerX: 3, playerY: 0 })
 ok(JSON.stringify(stepRaid(inA, 0.5, c)) === JSON.stringify(stepRaid(inA, 0.5, c)), 'stepRaid is pure')
 ok(inA[0].x === armedR.x && inA[0].pushCd === armedR.pushCd, 'stepRaid does not mutate its input')
+
+// ── 9. DIFFICULTY TIERS (Alex 2026-08-05) ─────────────────────────────────────────────────
+const tiers: RaidTier[] = ['base', 'second', 'awakened']
+ok(tiers.every((t) => !!TIER_DIALS[t]), 'every tier has dials')
+ok(TIER_DIALS.base.quarries > TIER_DIALS.awakened.quarries,
+  'the low tier is a GROUP to triage; the top tier is one prize')
+ok(TIER_DIALS.base.integrity < TIER_DIALS.second.integrity
+  && TIER_DIALS.second.integrity < TIER_DIALS.awakened.integrity, 'collars get harder to break by tier')
+ok(TIER_DIALS.base.loomDps < TIER_DIALS.awakened.loomDps, 'borrowed power scales with the spirit bound')
+
+// the tier really drives pressure — not just a number sitting in a table
+const armedAt = (t: RaidTier) => stepRaid(
+  [{ ...spawnRaider({ id: 'z', homeX: 0, homeY: 0 }, true, t), bound: { quarryId: 'q', greyed: true } }],
+  2, ctx({ playerX: 3, playerY: 0 })).playerDamage
+ok(armedAt('awakened') > armedAt('base'), 'an awakened-tier raider hits harder in the sim, not just on paper')
+ok(spawnRaider({ id: 'z', homeX: 0, homeY: 0 }, true, 'awakened').collar?.integrity === TIER_DIALS.awakened.integrity,
+  'spawn honours the tier\'s collar integrity')
+
+// ── ★ 10. THE CANON RULE, ENFORCED IN CODE ────────────────────────────────────────────────
+// Hemlock's cage is empty in the books because he has hunted one for years and never caught it.
+// So an awakened raid must never resolve as a capture, no matter how long it is left alone.
+let hard = [spawnRaider({ id: 'hem', homeX: 0, homeY: 0 }, true, 'awakened')]
+const wild = [{ id: 'hibernyx', x: 0.5, y: 0 }]
+let everTaken: string[] = []
+for (let t = 0; t < 120; t++) {                      // ~60s undisturbed — far past its 8s collar time
+  const s2 = stepRaid(hard, 0.5, ctx({ quarries: wild }))
+  hard = s2.raiders
+  everTaken = everTaken.concat(s2.taken)
+}
+ok(everTaken.length === 0, '★ an awakened raid NEVER ends in a capture — the cage stays empty (canon)')
+ok(hard[0].bound === null, '...and Hemlock never gains an awakened spirit as borrowed power')
+// but the pressure must still be real — this is a race you can lose, just not THAT way
+let soft = [spawnRaider({ id: 'thorn', homeX: 0, homeY: 0 }, true, 'base')]
+let softTook: string[] = []
+for (let t = 0; t < 30 && !softTook.length; t++) {
+  const s3 = stepRaid(soft, 0.5, ctx({ quarries: wild }))
+  soft = s3.raiders; softTook = s3.taken
+}
+ok(softTook.includes('hibernyx'), 'the lower tiers DO capture — the rule is specific to awakened, not a global no-op')
 
 console.log(`\ncollar-raid: ${pass} passed, ${fails.length} failed`)
 if (fails.length) { for (const f of fails) console.log('  ✗ ' + f); process.exit(1) }
