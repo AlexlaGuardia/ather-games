@@ -10,7 +10,7 @@
  * So the wiring gets an oracle rather than a walkthrough. Run: `npx tsx <this file>`
  * (the repo convention — there is no vitest here).
  */
-import { ZONES, getZone, resolveZoneId, checkWarp, expandGate, START_ZONE, type Zone } from './zones'
+import { ZONES, getZone, resolveZoneId, checkWarp, expandGate, LEGACY_ZONE_ALIASES, START_ZONE, type Zone } from './zones'
 import { SOLID } from './tiles'
 
 /**
@@ -137,12 +137,21 @@ ok(!!station && !!range, 'the station and the range are separate zones')
 ok(range.peaceful !== true, 'the range is NOT peaceful — that flag is what mounts the targets and lets you draw')
 ok(station.peaceful === true, 'the station IS peaceful — a concourse, not an arena')
 ok(range.realm === 'outside' && station.realm === 'outside', 'both sit outside the Ather (spirits dormant)')
-ok(station.gates?.some(g => g.toZone === 'firing-range'), 'the station has a door to the range')
-ok(station.gates?.some(g => g.toZone === 'rune-hold'), 'the station has a door back to the town')
+ok(!!station.gates?.some(g => g.toZone === 'firing-range'), 'the station has a door to the range')
+ok(!!station.gates?.some(g => g.toZone === 'rune-hold'), 'the station has a door back to the town')
 ok(range.warps.every(w => w.toZone === 'travelers-station'), 'the range returns to the station, not the town')
-// the id `crucible` is retired but must still resolve, and a LIVE id must always win over the alias
-ok(getZone(ZONES, 'crucible')?.id === 'firing-range', 'a save standing in the old `crucible` lands in the range')
-ok(ZONES.every(z => z.id !== 'crucible'), 'no live zone claims `crucible` yet (the tournament map is unbuilt)')
+// ── the Crucible reclaimed its id ──────────────────────────────────────────────────────────
+const crucible = getZone(ZONES, 'crucible')!
+ok(!!crucible && crucible.name === 'The Crucible', 'the Crucible is its own zone again')
+ok(crucible.id === 'crucible', 'and it holds the `crucible` id — a LIVE id beats any alias')
+ok(!LEGACY_ZONE_ALIASES['crucible'], 'the stale `crucible` alias was deleted, not left to rot on a reissued id')
+ok(crucible.peaceful !== true, 'the Crucible is not peaceful — it is the match')
+ok(crucible.realm === 'outside', 'the Crucible sits outside the Ather')
+ok(!!crucible.gates?.some(g => g.toZone === 'travelers-station'), 'the Crucible leads back to the concourse')
+const crucibleDoor = station.gates?.find(g => g.toZone === 'crucible')
+ok(!!crucibleDoor, 'the station has a door to the Crucible')
+ok(crucibleDoor?.ownerOnly === true, 'the Crucible door is owner-held while there is no match to walk into')
+ok(!station.gates?.find(g => g.toZone === 'firing-range')?.ownerOnly, 'but practice is NOT gated — that was the point of the split')
 
 // ── 5. reachability: a NON-OWNER can walk from the start of the game to the town ───────────
 // This is the check the 08-03 session had to add by hand after shipping a door into an
@@ -162,6 +171,7 @@ ok(seen.has('rune-hold'), 'a player can reach Rune Hold from the start zone with
 ok(seen.has('the-passage'), 'a player can reach The Passage through the town')
 ok(seen.has('travelers-station'), 'a player can reach the Travelers Station from the town')
 ok(seen.has('firing-range'), 'a player can reach the range to practice before a match matters')
+ok(!seen.has('crucible'), 'a player cannot yet reach the Crucible (owner-held: no match to walk into)')
 
 // ── 6. NO ONE-WAY TRAPS ────────────────────────────────────────────────────────────────────
 // Any zone a player can WALK INTO must have at least one way back out that a player can use.

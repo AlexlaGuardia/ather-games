@@ -127,11 +127,12 @@ export function checkWarp(zones: Zone[], currentZoneId: string, tileX: number, t
  */
 export const LEGACY_ZONE_ALIASES: Record<string, string> = {
   'spirit-corner': 'rune-hold',
-  // `crucible` was the practice range wearing the tournament's name until the 2026-08-05 split.
-  // A save standing in it means the range, so that is where it resolves. ★ When the real Crucible
-  // zone is built it will claim the id `crucible` back — and `getZone` tries a LIVE id before it
-  // consults this table precisely so that day is a no-op here instead of a silent misroute.
-  'crucible': 'firing-range',
+  // ★ `crucible` IS NOT ALIASED, and that is the point. It briefly meant the practice range
+  // (2026-08-05, before the split), and the real tournament map RECLAIMED the id the same day.
+  // An alias cannot survive a reissue: once two eras of save both say `crucible`, no table can
+  // tell them apart, and a stale tombstone would quietly route new players into the wrong room.
+  // So the id simply means what it means now. `getZone` preferring a live id over an alias is
+  // what made the reclaim safe; deleting the entry is what keeps it honest.
 }
 
 /** Resolve a possibly-retired zone id to the live one. Unknown ids pass through untouched. */
@@ -153,7 +154,7 @@ export function getZone(zones: Zone[], id: string): Zone | null {
 // Garden → east → Moonwell Glade (shortcut, blocked until tutorialComplete)
 // Moonwell Glade → east → Spore Hollow (post-tutorial)
 
-import { GARDEN, MYCELIAL_PATH, MOONWELL_GLADE, SPORE_HOLLOW, VORANYX_DEEP, TWILIGHT_THICKET, WOODED_TRAIL, THE_THRESHOLD, MANA_SPRINGS, ROUTE_2, ROUTE_3, THE_OUTFIELDS, GLOVIEW_VILLAGE, SPIRIT_MEADOW, MOONWELL_GLADE_GREGORY_S_HOME, FIRING_RANGE, TRAVELERS_STATION, RUNE_HOLD, THE_PASSAGE, SORREL_HOLD, BRACK_HOLD, TEST_SANDBOX,
+import { GARDEN, MYCELIAL_PATH, MOONWELL_GLADE, SPORE_HOLLOW, VORANYX_DEEP, TWILIGHT_THICKET, WOODED_TRAIL, THE_THRESHOLD, MANA_SPRINGS, ROUTE_2, ROUTE_3, THE_OUTFIELDS, GLOVIEW_VILLAGE, SPIRIT_MEADOW, MOONWELL_GLADE_GREGORY_S_HOME, FIRING_RANGE, TRAVELERS_STATION, CRUCIBLE, RUNE_HOLD, THE_PASSAGE, SORREL_HOLD, BRACK_HOLD, TEST_SANDBOX,
   ROUTE_GARDEN_MYCELIAL, ROUTE_MYCELIAL_SPIRIT, ROUTE_SPIRIT_MOONWELL, ROUTE_MOONWELL_GARDEN } from './tilemap'
 export const ZONES: Zone[] = [
   {
@@ -555,6 +556,36 @@ export const ZONES: Zone[] = [
       { x: 1, y: 7, toZone: 'rune-hold', toX: 49, toY: 80, direction: 'down', label: 'RUNE HOLD' },
       // east door — out to the practice range
       { x: 21, y: 7, toZone: 'firing-range', toX: 7, toY: 13, direction: 'up', label: 'FIRING RANGE' },
+      // south door — the Crucible itself. `ownerOnly` for a BUILD reason: the tournament map is a
+      // ground-floor shell and there is no match to walk into yet. The flag comes off when there
+      // is — canon has no objection to a keeper entering, that is what the pyramid is FOR.
+      // Practice is deliberately the door with no gate on it: the point of the split was that a
+      // player can warm up before anything is at stake.
+      { x: 11, y: 13, toZone: 'crucible', toX: 19, toY: 25, direction: 'up', label: 'THE CRUCIBLE', ownerOnly: true },
+    ],
+    warps: [],
+  },
+  {
+    // ── THE CRUCIBLE — Pyramid Zero, the tournament (stub) ──────────────────────────────────
+    // Canon: `game/pyramid-zero.md`. 60 keepers, teams of three, three combat floors (The City,
+    // The Dawn, The Throne) and then The Vault, which is not a combat floor. Five minutes a
+    // floor; the airlocks shut and the pressure drops. The Puppet Guards hold the Throne.
+    //
+    // `realm: 'outside'` and NOT peaceful — weapons live, spirits dormant. Same pair of flags as
+    // the range, for the opposite reason: there it is practice, here it is the match.
+    //
+    // ⚠ TODO(crucible-floors): ground floor only. The floors are stacked and airlock-gated in
+    // canon, so each wants its own map with an ascent gate between them. The clock that governs
+    // all of it already exists and is tested — `crucible-phases.ts` derives floors, windows and
+    // the seal from elapsed seconds alone. Wire maps TO that; never re-derive the timing here.
+    id: 'crucible',
+    name: 'The Crucible',
+    grid: CRUCIBLE,
+    realm: 'outside',
+    playerStart: { tileX: 19, tileY: 25 },
+    gates: [
+      // out — back to the concourse you entered from
+      { x: 19, y: 27, toZone: 'travelers-station', toX: 11, toY: 12, direction: 'down', label: 'LEAVE THE CRUCIBLE' },
     ],
     warps: [],
   },
