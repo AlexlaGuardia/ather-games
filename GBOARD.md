@@ -386,6 +386,28 @@ the Arcade frame.
 > **Files:** pipeline `/opt/blender` (4.2.9 LTS, not in git) · render scripts `tools/render/*.py` · assets `public/<game>/*.png`
 > · wiring per-cabinet render fn (Vault: `page.tsx` `drawFoe`, sprite-blit + procedural fallback).
 
+## 👹 Cross-cutting — THE ENEMY TAXONOMY: three lanes, three enemy families (Alex, 2026-08-05)
+
+> **Written down so it stops being re-decided.** Each lane has its own enemy family, its own combat verb, and its own reason a different toolkit is the answer. This is the map; the per-lane blocks carry the builds.
+>
+> | Lane | Realm | Who fights | The enemy | Why THIS toolkit |
+> |---|---|---|---|---|
+> | **Ather** (regions) | `ather` — weapons holstered by construction | your **spirits**, and your runes | **Moglins** — the collar-raiders | Guns cannot go here at all, so runes aren't *an* answer, they're the only one. And the enemy has **no HP**: the collar is the fight. |
+> | **The Crucible** | `outside` — weapons live | you, with manabox + runes | 60 challengers in squads of three · the **Three Puppet Guards** on the Throne · *(⚠ a rank-and-file class is UNRULED — see below)* | Both toolkits legal, so the rune kit has to earn its place on things a gun can't answer: terrain, fields, statuses. |
+> | **Expeditions** | — | your guards | the **Nolmir** and other alien species | Canon already frames Expeditions as guard-survival against *"the nameless thing that took the Nolmir"* (`game/nolmir.md` Mode 3). |
+>
+> ### ★ The Nolmir connection nobody had written down
+> `game/nolmir.md` makes the Nolmir a **Crucible-hosting species** who *"tap a planet's core through your Starforge… design your own Crucible — a gauntlet challengers answer, fight, and mostly die in… and when this location runs too hot, you warp on — **leaving the Starforge behind, still running**."*
+>
+> Read that next to Pyramid Zero — *"the original receiver for the Starforge network"*, a moon-sized pyramid that **warped in** — and the Crucible stops being Lazerin's idea at all. **He is squatting in a left-behind Nolmir machine, running a Nolmir game, and canon already calls him the landlord, not the architect.** It also names the makers behind the 08-05 material ruling ("Alkin manatech is a clumsy copy of THIS"): the copy runs Nolmir → Starforge → Eyuun's Aeterna → Citadel manatech.
+> ⚠ **Not asserted as canon by jin** — `world/mother.md` explicitly keeps the Ather/Starforge bridge *"FLAGGED, not bridged… For Sable."* Recorded as a connection to rule, not a fact to build on.
+>
+> ### ⚠ UNRULED — filed 2026-08-05 (`athernyx CANON_GAPS.md`)
+> Alex described the Crucible's enemies as *"the Alkin enemies Laz **resurrects** as **grey guards**"*. Canon says **rebuilt**, repeatedly and pointedly — *"Puppets wearing the shapes of the only company he ever had."* The reveal ("they don't bleed right") only lands if there was **never anyone inside**, so rebuilt-vs-resurrected is a genre change, not a synonym. And "grey" is no longer free: the 08-05 greying ruling makes grey mean **drained**. **Do not populate the Crucible until this is ruled.**
+>
+> ### Files
+> `play3d/collar-raid.ts` (Ather) · `play3d/puppet-guards.ts` + `play3d/crucible-bots.ts` + `play3d/crucible-phases.ts` (Crucible) · `src/app/nolmir/` (Expeditions)
+
 ## ⚔️ Shimmer play3d — #294 REAL-TIME ENEMIES: THE COLLAR RAID (sim shipped 2026-08-05, jin-cc) · *Last touched 2026-08-05*
 
 > **Left off:** the sim is built, tested (35 asserts) and deployed but **NOT WIRED** — one decision blocks the wiring, and it is Alex's (see *Next*).
