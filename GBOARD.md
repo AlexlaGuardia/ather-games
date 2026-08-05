@@ -445,6 +445,17 @@ the Arcade frame.
 >
 > ⚠ **This is a visible change and wants Alex's eye.** On a 400×400 region the far corners (283 tiles out) used to draw and now sit beyond the fog. That's the intended trade — you cannot see 283 tiles in a cozy third-person game — but it is a *feel* call, and `DEFAULT_RADIUS` is a one-line tune that moves both the window and the sight together.
 >
+> ### ✅ THE FIRST SEAM SHIPPED 2026-08-05 — The Outfields fray into the Wilds
+> **Canon picked the doorway, not me.** `game/shimmer-storyline.md:76` calls The Outfields *"the earth-affinity **wild-edge** south of Gloview, where the village's tended ground **frays into untamed country**… where the cultivated middle layer starts giving way… **a soft foreshadow of the Wilds proper**."* It was already the threshold; it just had no wild to open onto.
+> - **`r-wilds-0-0` is live** — the first generated region, registered in `region-maps.ts`, `realm: 'ather'`, 400×400, 46% walkable, 39.7KB.
+> - **The gate sits on the canonical frontier.** Found by search, not by eye: (184,196) is the **southernmost walkable 2×2** in the Outfields' tended patch, and the ground directly below it is cloud. You walk to the far edge of the tended ground and step off it.
+> - **Region files can carry `gates` now** — same concept as `Zone.gates`, expanded into warps by `REGION_ZONES`. A region door is the same object a town door is, so nothing downstream learns a second thing.
+> - **★ `wilds-0-0.json` had its `generated` marker REMOVED when the seam was hand-wired.** That is the intended lifecycle — generate → author → protected — and it means `gen-wilds.mts` now refuses to regenerate over the seam. The guard is doing its job on the very first file that earned it.
+>
+> **The bug worth recording:** the return landing was first set to (184,197), which sits **inside the outbound gate's own 2×2 footprint** — an instant re-warp loop, the exact failure the Rune Hold oracle exists to catch. Caught pre-deploy by checking `checkWarp` on both landings rather than assuming. Moved to (184,195). **Any hand-wired seam gets both landings checked against `checkWarp`, both directions.**
+>
+> Verified: a player walks **r-home-plot → … → r-the-outfields → r-wilds-0-0** with no owner rights.
+>
 > ### 1️⃣ THE WILDS — the missing layer, and the blocker for everything below
 > Canon (`spirit-tales-bible.md`, ruled 2026-06-22): the Wilds are *"the persistent, walkable, open-world **overland** — the wide common country where the populace and **wild spirits** live… **the layer the GAME explores**."* Keeper-gardens are **tended sections OF the Wilds** (2026-06-23) — a fence-line is the border to untamed wild beyond, not a separate map.
 >

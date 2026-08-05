@@ -8,7 +8,7 @@
 // (spirit-meadow etc.). At cutover the prefix drops, saves migrate via each file's
 // `sources` table, and the legacy zones + stitcher machinery get deleted.
 
-import type { Zone, Warp } from './zones'
+import { expandGate, type Zone, type Warp, type Gate } from './zones'
 import type { NodePlacement } from './node-placements'
 import type { NodeType } from './resources'
 import type { SpawnerPlacement } from './spawn-placements'
@@ -24,10 +24,11 @@ import twilightThicket from './region-maps/twilight-thicket.json'
 import manaSprings from './region-maps/mana-springs.json'
 import voranyxCaverns from './region-maps/voranyx-caverns.json'
 import theOutfields from './region-maps/the-outfields.json'
+import wilds00 from './region-maps/wilds-0-0.json'
 
 export const REGION_WIP_PREFIX = 'r-'
 
-const FILES = [homePlot, moonwellGlade, spiritMeadow, twilightThicket, manaSprings, voranyxCaverns, theOutfields] as unknown as RegionFile[]
+const FILES = [homePlot, moonwellGlade, spiritMeadow, twilightThicket, manaSprings, voranyxCaverns, theOutfields, wilds00] as unknown as RegionFile[]
 
 /** Region files by CANONICAL id (no prefix). */
 export const REGION_FILES: Record<string, RegionFile> = Object.fromEntries(FILES.map(f => [f.id, f]))
@@ -44,7 +45,13 @@ export const REGION_ZONES: Zone[] = FILES.map(f => ({
   id: REGION_WIP_PREFIX + f.id,
   name: `⛅ ${f.display}`,
   grid: decodeRows(f.rle, f.cols),
-  warps: f.warps.map(w => ({ ...w, direction: (w.direction ?? 'down') as Warp['direction'] })),
+  // Gates expand into warps here, exactly as `zones.ts` does for hand-authored zones — so a
+  // region door is the same thing a town door is, and everything downstream still sees warps.
+  gates: (f.gates ?? []).map(g => ({ ...g, direction: g.direction as Gate['direction'] })),
+  warps: [
+    ...f.warps.map(w => ({ ...w, direction: (w.direction ?? 'down') as Warp['direction'] })),
+    ...(f.gates ?? []).flatMap(g => expandGate({ ...g, direction: g.direction as Gate['direction'] })),
+  ],
   playerStart: f.playerStart,
   element: f.element as Zone['element'],
   realm: f.realm,

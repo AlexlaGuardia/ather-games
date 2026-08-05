@@ -28,6 +28,12 @@ export interface RegionFile {
   nodes: { type: string; tileX: number; tileY: number }[]
   spawners: { kind: 'moglin'; gate: string; tileX: number; tileY: number }[]
   warps: { fromX: number; fromY: number; toZone: string; toX: number; toY: number; direction?: string; requiredFlag?: string }[]
+  /**
+   * Named multi-tile doors, same concept as `Zone.gates` — one anchor, one footprint, one name.
+   * Expanded into warps by REGION_ZONES, so a region file can carry a door a player reads rather
+   * than four loose warps that only agree by convention.
+   */
+  gates?: { x: number; y: number; size?: number; toZone: string; toX: number; toY: number; label: string; direction?: string; requiredFlag?: string; ownerOnly?: boolean }[]
   /** Per-map living-world dials (spawn board overrides land here). Empty = engine defaults. */
   spawn: Record<string, number>
   sources: Record<string, RegionSource>
