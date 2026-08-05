@@ -412,6 +412,19 @@ the Arcade frame.
 
 > **Why this block exists:** the collar-raid sim shipped before the layer it belongs in. Alex named the real order, and canon backs every step — so this is the ordering of record, not a preference.
 >
+> ### ✅ PHASE 1 SHIPPED 2026-08-05 — the seeded generator (`world/wilds-gen.ts`, 27 asserts)
+> **Measured first, then built.** A RuneScape-ish surface (~4.79M cells) is **~30 regions** of the existing 400×400 unit: **~34MB** as `number[][]`, **~9MB** as typed arrays, **~35KB each on disk** after RLE. Storage was never the blocker — **authoring** was, and generation is the answer to authoring.
+> - **Generation: 86ms per 400×400 → a 30-region world in ~2.6s.**
+> - **Deterministic, no `Math.random`, no clock.** Canon calls the Wilds *persistent*, so a generator that drifts between runs would change the world under saved positions. That makes determinism a correctness property, not tidiness.
+> - **Authored by subtraction** — starts as solid cloud and carves, same idiom as every region before it, which also keeps the RLE codec's compression assumption true.
+> - **★ SEAMS AGREE WITH NO GLOBAL PASS.** An edge gate is hashed from the **shared border** (the unordered region pair), not from either region — so neighbours independently compute the same opening. Verified at full size: all **12 shared borders in a 3×3 matched**, from regions generated separately in any order. This is what lets the world be built one file at a time, forever, without ever holding it all in memory.
+> - **The walkability contract:** every edge gate reaches every other gate (corridors carve to the heart first), and a flood fill **prunes anything unreachable** — a pocket you can see and never stand in is a bug, not content.
+> - **`scripts/gen-wilds.mts`** writes region JSON. `--dry` for stats, and it **refuses to overwrite a file not marked `generated`** — the workflow is generate-the-bulk-then-hand-author, and a generator that silently eats hand-authored work would eat exactly the work worth keeping.
+>
+> **★ THE LESSON WORTH KEEPING: the tests passed and the map was wrong.** The first carver only ever stepped *toward* its target, so every path it could draw was a monotone staircase — the region came out with ruler-straight 5-wide highways and smooth blobby coastlines. All 27 asserts were green, because "connected" and "crossable" were true. **Looking at the output is what caught it.** Fixed with a parametric meander (noise-offset perpendicular to the line, tapered at both ends so it still meets its gate) plus domain-warped noise for bays and peninsulas. Generated output gets *rendered and eyeballed*, never trusted to green.
+>
+> **Not committed: the generated regions themselves.** Nothing streams them yet, so 30 files of unused world is dead weight. Run the script when phase 2 lands.
+>
 > ### 1️⃣ THE WILDS — the missing layer, and the blocker for everything below
 > Canon (`spirit-tales-bible.md`, ruled 2026-06-22): the Wilds are *"the persistent, walkable, open-world **overland** — the wide common country where the populace and **wild spirits** live… **the layer the GAME explores**."* Keeper-gardens are **tended sections OF the Wilds** (2026-06-23) — a fence-line is the border to untamed wild beyond, not a separate map.
 >
