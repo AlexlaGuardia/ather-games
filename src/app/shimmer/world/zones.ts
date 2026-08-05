@@ -127,6 +127,11 @@ export function checkWarp(zones: Zone[], currentZoneId: string, tileX: number, t
  */
 export const LEGACY_ZONE_ALIASES: Record<string, string> = {
   'spirit-corner': 'rune-hold',
+  // `crucible` was the practice range wearing the tournament's name until the 2026-08-05 split.
+  // A save standing in it means the range, so that is where it resolves. ★ When the real Crucible
+  // zone is built it will claim the id `crucible` back — and `getZone` tries a LIVE id before it
+  // consults this table precisely so that day is a no-op here instead of a silent misroute.
+  'crucible': 'firing-range',
 }
 
 /** Resolve a possibly-retired zone id to the live one. Unknown ids pass through untouched. */
@@ -134,10 +139,13 @@ export function resolveZoneId(id: string): string {
   return LEGACY_ZONE_ALIASES[id] ?? id
 }
 
-// Get zone by id
+// Get zone by id. A LIVE id always wins over an alias — see the `crucible` note above: an id
+// can be retired and later reissued to a different place, and when that happens the live zone
+// must answer, not the tombstone.
 export function getZone(zones: Zone[], id: string): Zone | null {
-  const wanted = resolveZoneId(id)
-  return zones.find(z => z.id === wanted) ?? null
+  return zones.find(z => z.id === id)
+    ?? zones.find(z => z.id === resolveZoneId(id))
+    ?? null
 }
 
 // ---- Shimmer zones ----
@@ -145,7 +153,7 @@ export function getZone(zones: Zone[], id: string): Zone | null {
 // Garden → east → Moonwell Glade (shortcut, blocked until tutorialComplete)
 // Moonwell Glade → east → Spore Hollow (post-tutorial)
 
-import { GARDEN, MYCELIAL_PATH, MOONWELL_GLADE, SPORE_HOLLOW, VORANYX_DEEP, TWILIGHT_THICKET, WOODED_TRAIL, THE_THRESHOLD, MANA_SPRINGS, ROUTE_2, ROUTE_3, THE_OUTFIELDS, GLOVIEW_VILLAGE, SPIRIT_MEADOW, MOONWELL_GLADE_GREGORY_S_HOME, CRUCIBLE, RUNE_HOLD, THE_PASSAGE, SORREL_HOLD, BRACK_HOLD, TEST_SANDBOX,
+import { GARDEN, MYCELIAL_PATH, MOONWELL_GLADE, SPORE_HOLLOW, VORANYX_DEEP, TWILIGHT_THICKET, WOODED_TRAIL, THE_THRESHOLD, MANA_SPRINGS, ROUTE_2, ROUTE_3, THE_OUTFIELDS, GLOVIEW_VILLAGE, SPIRIT_MEADOW, MOONWELL_GLADE_GREGORY_S_HOME, FIRING_RANGE, TRAVELERS_STATION, RUNE_HOLD, THE_PASSAGE, SORREL_HOLD, BRACK_HOLD, TEST_SANDBOX,
   ROUTE_GARDEN_MYCELIAL, ROUTE_MYCELIAL_SPIRIT, ROUTE_SPIRIT_MOONWELL, ROUTE_MOONWELL_GARDEN } from './tilemap'
 export const ZONES: Zone[] = [
   {
@@ -487,17 +495,21 @@ export const ZONES: Zone[] = [
         label: 'THE PASSAGE',
       },
       {
-        // ── TRAVELERS STATION (49-50, 81-82) → THE CRUCIBLE ─────────────────────────────────
+        // ── TRAVELERS STATION (49-50, 81-82) → the departure hall ───────────────────────────
+        // Now opens on a REAL PLACE rather than dropping you straight into the tournament map.
+        // The station is the town's way out; what you leave for is chosen inside it.
+        //
+        // ★ PLAYER-FACING as of 2026-08-05. It was ownerOnly because this door used to open
+        // directly onto the Crucible, and the Crucible is not ready. That reason died with the
+        // split: a concourse and a practice range are both things a player should walk into.
+        //
         // ⚠ TODO(station-canon): the building is UNRULED and this label is a BUILD working name —
         // it is in no `CANON/` file, and § The Hub rules five doors, none of them a way OUT of
         // town. Alex named it and asked for it on the door, so it ships there; the gap is filed
         // and asks the question that decides it — canon's route to Pyramid Zero is a SHIP and
         // this map has coastline, so "dock" may beat "station". The name is data: a one-field fix.
-        //
-        // `ownerOnly` for a BUILD reason, not a canon one: the Crucible is still a bare firing
-        // range with a BR skeleton on top. It comes off when there is a match to walk into.
-        x: 49, y: 81, toZone: 'crucible', toX: 7, toY: 13, direction: 'up',
-        label: 'TRAVELERS STATION', ownerOnly: true,
+        x: 49, y: 81, toZone: 'travelers-station', toX: 4, toY: 7, direction: 'up',
+        label: 'TRAVELERS STATION',
       },
     ],
     warps: [],
@@ -525,25 +537,51 @@ export const ZONES: Zone[] = [
     warps: [],
   },
   {
-    // The Crucible (battle-royale) — OUTSIDE the Ather, so weapons work here and spirits don't.
-    // We start with a firing range: open space to feel the first weapon. Reached from the station
-    // gate in Rune Hold (canon: the mortal side, by ship), plus an owner-only shortcut in Greg's
-    // test hub.
-    id: 'crucible',
-    name: 'The Crucible — Firing Range',
-    grid: CRUCIBLE,
+    // ── THE TRAVELERS STATION — the departure hall ─────────────────────────────────────────
+    // `realm: 'outside'` (it is on the mortal side, so spirits stay dormant) + `peaceful` — and
+    // the peaceful flag's own doc note already named this exact case: "a town, a station
+    // concourse". Weapons stay holstered until you are through the door to the range.
+    //
+    // ⚠ TODO(station-layout): the hall is Alex's to author. The Crucible and expeditions doors
+    // go here when there is something behind them — not painted yet, deliberately.
+    id: 'travelers-station',
+    name: 'The Travelers Station',
+    grid: TRAVELERS_STATION,
+    realm: 'outside',
+    peaceful: true,
+    playerStart: { tileX: 4, tileY: 7 },
+    gates: [
+      // west door — back out to the town, landing north of the station gate's footprint
+      { x: 1, y: 7, toZone: 'rune-hold', toX: 49, toY: 80, direction: 'down', label: 'RUNE HOLD' },
+      // east door — out to the practice range
+      { x: 21, y: 7, toZone: 'firing-range', toX: 7, toY: 13, direction: 'up', label: 'FIRING RANGE' },
+    ],
+    warps: [],
+  },
+  {
+    // ── THE FIRING RANGE — practice, OUTSIDE the Ather: weapons work, spirits don't ─────────
+    // Split off `crucible` 2026-08-05 (Alex's call). One zone was doing two jobs: the display
+    // name said "Firing Range" while the id claimed the canon tournament, and the BR match
+    // clock, bots and Puppet Guards all ran against it. So the station gate opened onto a range
+    // pretending to be Pyramid Zero. Now this is only what it is — open space to feel a weapon
+    // in before a match matters.
+    //
+    // The Crucible proper (3 floors + the Vault) gets its own zone when it is built. The
+    // `crucible-*` MODULES keep their names: they simulate that tournament, not this room.
+    //
+    // No `peaceful` flag — that is the whole point. `realm: 'outside' && !peaceful` is what
+    // mounts the range targets and the gun benches and lets you draw.
+    id: 'firing-range',
+    name: 'The Firing Range',
+    grid: FIRING_RANGE,
     realm: 'outside',
     playerStart: { tileX: 7, tileY: 13 },
     warps: [
-      // exit → back out to Rune Hold, one tile north of the station gate so you don't re-warp.
-      // Re-pointed 2026-08-05 (was Greg's living room, the pre-town parent). The owner-only
-      // shortcut into here from the test hub still works; it just returns you to the town now,
-      // which is where the Crucible actually hangs.
+      // exit → back into the STATION, not out to the town. The station is this room's parent
+      // now, so leaving the range puts you in the concourse you chose it from — which is also
+      // where the Crucible and expedition doors will be, so "go again / go on" is one screen.
       // (single tile — the range's doorway is one tile wide at (7,14); (8,14) is wall.)
-      // Lands at (49,79): one tile NORTH of the station gate's 2x2 footprint (49-50, 80-81).
-      // (79, not 80 — 80 became part of the gate when it went 2x2, and landing inside a gate is
-      // an instant re-warp. The oracle asserts this rather than trusting the comment.)
-      { fromX: 7, fromY: 14, toZone: 'rune-hold', toX: 49, toY: 80, direction: 'up' },
+      { fromX: 7, fromY: 14, toZone: 'travelers-station', toX: 19, toY: 7, direction: 'left' },
     ],
   },
   {
@@ -568,7 +606,7 @@ export const ZONES: Zone[] = [
       // mortal side). The Home Plot's north gate (14-15,1) is restored and player-facing, and the
       // Spirit Corner is no longer a separate room to be stranded behind — it is the north-west
       // corner of the Rune Hold map. A player walks: Home Plot → Greg's gate → the town.
-      { fromX: 10, fromY: 7, toZone: 'crucible', toX: 7, toY: 13, direction: 'up', ownerOnly: true },
+      { fromX: 10, fromY: 7, toZone: 'firing-range', toX: 7, toY: 13, direction: 'up', ownerOnly: true },
       { fromX: 16, fromY: 7, toZone: 'rune-hold', toX: 7, toY: 9, direction: 'up', ownerOnly: true },
     ],
   },

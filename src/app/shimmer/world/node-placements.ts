@@ -138,7 +138,7 @@ const ROUTE_MOONWELL_GARDEN_NODES: NodePlacement[] = [
   { type: 'small_pond' as NodeType, tileX: 16, tileY: 21 },
 ]
 
-const CRUCIBLE_NODES: NodePlacement[] = [
+const FIRING_RANGE_NODES: NodePlacement[] = [
 
 ]
 
@@ -148,7 +148,7 @@ const RUNE_HOLD_NODES: NodePlacement[] = [
 
 export const ZONE_NODES: Record<string, NodePlacement[]> = {
   'rune-hold': RUNE_HOLD_NODES,
-  'crucible': CRUCIBLE_NODES,
+  'firing-range': FIRING_RANGE_NODES,
   garden: GARDEN_NODES,
   'mycelial-path': MYCELIAL_PATH_NODES,
   'moonwell-glade': MOONWELL_GLADE_NODES,

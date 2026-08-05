@@ -130,14 +130,19 @@ for (const g of gates) {
 ok(runeHold!.warps.filter(w => w.gate).length === gates.reduce((n, g) => n + (g.size ?? 2) ** 2, 0),
   'every declared gate expanded into the zone warps')
 
-// and the Crucible comes back to the town, not to its old pre-town parent
-const crucible = getZone(ZONES, 'crucible')!
-ok(crucible.warps.every(w => w.toZone === 'rune-hold'), 'the Crucible exits to Rune Hold')
-ok(crucible.warps.every(w => w.toY === 80), 'the Crucible exit lands NORTH of the 2x2 gate footprint')
-// the instant-re-warp check, stated as the rule rather than the coordinate
-for (const w of crucible.warps) {
-  ok(!checkWarp(ZONES, 'rune-hold', w.toX, w.toY), `Crucible exit landing (${w.toX},${w.toY}) is not itself a warp tile`)
-}
+// ── the town -> station -> range chain (the 2026-08-05 split) ──────────────────────────────
+const station = getZone(ZONES, 'travelers-station')!
+const range = getZone(ZONES, 'firing-range')!
+ok(!!station && !!range, 'the station and the range are separate zones')
+ok(range.peaceful !== true, 'the range is NOT peaceful — that flag is what mounts the targets and lets you draw')
+ok(station.peaceful === true, 'the station IS peaceful — a concourse, not an arena')
+ok(range.realm === 'outside' && station.realm === 'outside', 'both sit outside the Ather (spirits dormant)')
+ok(station.gates?.some(g => g.toZone === 'firing-range'), 'the station has a door to the range')
+ok(station.gates?.some(g => g.toZone === 'rune-hold'), 'the station has a door back to the town')
+ok(range.warps.every(w => w.toZone === 'travelers-station'), 'the range returns to the station, not the town')
+// the id `crucible` is retired but must still resolve, and a LIVE id must always win over the alias
+ok(getZone(ZONES, 'crucible')?.id === 'firing-range', 'a save standing in the old `crucible` lands in the range')
+ok(ZONES.every(z => z.id !== 'crucible'), 'no live zone claims `crucible` yet (the tournament map is unbuilt)')
 
 // ── 5. reachability: a NON-OWNER can walk from the start of the game to the town ───────────
 // This is the check the 08-03 session had to add by hand after shipping a door into an
@@ -155,7 +160,8 @@ while (queue.length) {
 }
 ok(seen.has('rune-hold'), 'a player can reach Rune Hold from the start zone without owner rights')
 ok(seen.has('the-passage'), 'a player can reach The Passage through the town')
-ok(!seen.has('crucible'), 'a player still cannot reach the Crucible (owner-gated by build state)')
+ok(seen.has('travelers-station'), 'a player can reach the Travelers Station from the town')
+ok(seen.has('firing-range'), 'a player can reach the range to practice before a match matters')
 
 // ── 6. NO ONE-WAY TRAPS ────────────────────────────────────────────────────────────────────
 // Any zone a player can WALK INTO must have at least one way back out that a player can use.

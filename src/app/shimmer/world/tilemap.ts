@@ -649,7 +649,15 @@ export const BRACK_HOLD: number[][] = createStubMap(40, 30, [
 // The Crucible (practice) — a blockout combat arena reached from the Greg's-home test hub.
 // Walled ring, a central MIST(31) field that draws wild encounters for feel-testing, and a single
 // exit warp(14) at (7,14) back to the hub. Flat (no heightmap entry → getHeightGrid returns level 0).
-export const CRUCIBLE: number[][] = [
+// THE FIRING RANGE — the practice space, reached from the Travelers Station.
+// Renamed from CRUCIBLE 2026-08-05: this map was doing two jobs, calling itself the canon
+// tournament while actually being a range to feel a weapon in. The Crucible proper (Pyramid
+// Zero, 3 floors + the Vault) is its own map when it is built; the BR modules keep the
+// crucible name because they simulate that tournament, not this room.
+// NOTE: the const name is load-bearing — save-map derives it from the zone id
+// ('firing-range' -> FIRING_RANGE), so id and const must stay in step or the editor
+// cannot write this map.
+export const FIRING_RANGE: number[][] = [
   [34,34,34,34,34,34,34,34,34,34,34,34,34,34,34,34,34,34,34,34,34,34,34,34,34,34,34,34,34,34,34,34,34,34,34,34,34,34,34,34,34,34,34,34,34,34,34,34,34,34],  // 0
   [34,97,97,97,97,97,97,97,97,97,97,97,97,97,97,97,97,97,97,97,97,97,97,97,97,97,97,97,97,97,97,97,97,97,97,97,97,97,97,97,97,97,97,34,34,34,97,97,97,34],  // 1
   [34,97,97,97,97,97,97,97,97,97,97,97,97,97,97,97,97,97,97,97,97,97,97,97,97,97,97,97,97,97,97,97,97,97,97,97,97,97,97,97,97,97,97,34,34,97,97,97,97,34],  // 2
@@ -803,6 +811,37 @@ export const RUNE_HOLD: number[][] = [
   [97,97,97,97,97,97,97,97,97,97,97,97,97,97,97,97,97,97,97,97,97,34,34,97,97,97,97,97,97,97,97,97,97,97,97,97,97,97,97,97,97,97,97,97,97,97,97,97,97,97,97,97,97,97,97,97,97,97,97,97,97,97,97,34,97,97,97,97,97,97,97,97,97,97,97,97,97,97,97,97,97,97,97,97,97,97,97,97,97,97,97,97,97,97,97,97,97,97,97,97],  // 98
   [97,97,97,97,97,97,97,97,97,97,97,97,97,97,97,97,97,97,97,97,97,34,34,97,97,97,97,97,97,97,97,97,97,97,97,97,97,97,97,97,97,97,97,97,97,97,97,97,97,97,97,97,97,97,97,97,97,97,97,97,97,97,97,34,97,97,97,97,97,97,97,97,97,97,97,97,97,97,97,97,97,97,97,97,97,97,97,97,97,97,97,97,97,97,97,97,97,97,97,97],  // 99
 ]
+// THE TRAVELERS STATION — the departure hall on Rune Hold's south side (stub, 2026-08-05).
+// The town's way OUT: practice first at the Firing Range (west door back to the square, east
+// door to the range), and later the Crucible proper and expeditions leave from here too.
+//
+// ⚠ TODO(station-layout): THE LAYOUT IS ALEX'S TO AUTHOR (2D MapEditor). This is a functional
+// shell so the door he painted in the town leads somewhere real. The two future doors
+// (Crucible, expeditions) are deliberately NOT painted — an unwired warp tile is a door that
+// goes nowhere, and the oracle fails on orphaned warp tiles for exactly that reason. Paint them
+// when there is something behind them.
+//
+// ⚠ TODO(station-canon): the building itself is unruled — see CANON_GAPS 2026-08-05. Canon's
+// route to Pyramid Zero is a SHIP, so this may end up a dock. Nothing here asserts otherwise.
+export const TRAVELERS_STATION: number[][] = [
+  [103,103,103,103,103,103,103,103,103,103,103,103,103,103,103,103,103,103,103,103,103,103,103,103],  // 0
+  [103,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,103],  // 1
+  [103,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,103],  // 2
+  [103,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,103],  // 3
+  [103,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,103],  // 4
+  [103,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,103],  // 5
+  [103,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,103],  // 6
+  [103,14,14,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,14,14,103],  // 7
+  [103,14,14,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,14,14,103],  // 8
+  [103,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,103],  // 9
+  [103,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,103],  // 10
+  [103,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,103],  // 11
+  [103,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,103],  // 12
+  [103,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,103],  // 13
+  [103,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,103],  // 14
+  [103,103,103,103,103,103,103,103,103,103,103,103,103,103,103,103,103,103,103,103,103,103,103,103],  // 15
+]
+
 // THE PASSAGE — the underground market beneath Rune Hold (stub, 2026-08-05).
 // Canon: `world/rune-hold.md` § The Passage — a hidden tunnel system running through the
 // mountain, the town's underground economy, where Marks are spent and Knowledge Scrolls

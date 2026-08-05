@@ -2877,7 +2877,7 @@ function SkyLight({ shadowMap }: { shadowMap: number | null }) {
 
 function HubGateMarkers({ heights }: { heights: number[][] }) {
   const gates = [
-    { c: 10, r: 7, color: '#ff7a4a', label: 'CRUCIBLE' },
+    { c: 10, r: 7, color: '#ff7a4a', label: 'RANGE' },
     { c: 16, r: 7, color: '#b07aff', label: 'RUNE HOLD' },
   ]
   return (

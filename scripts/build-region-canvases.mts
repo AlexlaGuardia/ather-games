@@ -28,7 +28,8 @@ const CLOUD = 34 // Cloud 1 — solid, carvable; the canvas is authored by subtr
 // Everything else a source zone warps to is a surface/route sibling and is dropped: region
 // exits are Phase B (the loading-screen transition), not stamped legacy doors.
 const KEPT_INTERIORS = new Set([
-  'moonwell-glade-gregory-s-home', 'rune-hold', 'crucible', 'sorrel-hold', 'brack-hold',
+  'moonwell-glade-gregory-s-home', 'rune-hold', 'firing-range', 'travelers-station',
+  'the-passage', 'sorrel-hold', 'brack-hold',
 ])
 
 interface Placement { zone: string; ox: number; oy: number }
