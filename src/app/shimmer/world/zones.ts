@@ -171,8 +171,15 @@ export const ZONES: Zone[] = [
       // ⚠ TODO(gate-placement): these are the ORIGINAL provisional tiles, not a new call — the
       // spot is Alex's eye (2D MapEditor). The tile is NOT painted as a warp tile, so the door
       // works but shows no gold marker yet; the editor's warp brush paints it.
-      { fromX: 14, fromY: 1, toZone: 'rune-hold', toX: 7, toY: 10, direction: 'up' },
-      { fromX: 15, fromY: 1, toZone: 'rune-hold', toX: 8, toY: 10, direction: 'up' },
+      //
+      // ⚠ TEMPORARILY `ownerOnly` (2026-08-05) — a BUILD hold, not a canon one. The 08-03 ruling
+      // opened this door and nothing has changed that. But Rune Hold's gates are being
+      // repositioned and its `gates` array is empty right now, so the town has no way out: a
+      // player walking through would be stuck in a place with no door. Better a door that is
+      // briefly shut than a room you cannot leave. Take this off the moment Greg's gate is
+      // placed — the oracle's dead-end check fails until then and passes the instant it is safe.
+      { fromX: 14, fromY: 1, toZone: 'rune-hold', toX: 7, toY: 10, direction: 'up', ownerOnly: true },
+      { fromX: 15, fromY: 1, toZone: 'rune-hold', toX: 8, toY: 10, direction: 'up', ownerOnly: true },
       // LEFT door (0,11-12, placed in the editor) → Route 1 (leads to Mycelial Path)
       { fromX: 0, fromY: 11, toZone: 'route-garden-mycelial', toX: 58, toY: 7, direction: 'left' }, // arrive at Route 1's E door
       { fromX: 0, fromY: 12, toZone: 'route-garden-mycelial', toX: 58, toY: 8, direction: 'left' },
@@ -450,49 +457,18 @@ export const ZONES: Zone[] = [
     realm: 'outside',
     peaceful: true,
     playerStart: { tileX: 7, tileY: 9 },
-    // ── THE TOWN'S DOORS, as 2x2 GATES (2026-08-05) ────────────────────────────────────────
-    // Both were 2x1 warp pairs. A pair is not a door, it is two doors that agree — and the 3D
-    // world proved it by drawing a green "EXIT" sign over each tile. These are gates now: one
-    // anchor, one footprint, one name over the top. `expandGate` turns each into its 4 warps.
+    // ── THE TOWN'S DOORS ────────────────────────────────────────────────────────────────────
+    // Empty ON PURPOSE (2026-08-05). Alex erased both gates' tiles in the editor to reposition
+    // them, and gate DATA follows the map: a door he deleted must not keep firing just because a
+    // code array still remembers it. That was the whole "it won't let me remove the old gates"
+    // report — gates render from data, so the tiles went and the doors stayed.
     //
-    // Footprints grow NORTH from the tiles Alex painted, never south, and that is deliberate:
-    // north of both doors is open approach ground, south of both is authored wall. A gate that
-    // grew the other way would carve a hole through the back of his buildings.
-    gates: [
-      {
-        // ── GREG'S GATE — the crossing home, inside the Spirit Corner shop ──────────────────
-        // Targets the LEGACY `garden` id ON PURPOSE: that is the interior-exit contract
-        // (Shimmer3D `newWorldRef`). The town belongs to whichever side you entered from, so its
-        // exit names the legacy surface and `performWarp` runs `migrateLegacyPosition` to land a
-        // region-world player at r-home-plot (73,61) instead. Naming the region id directly here
-        // would strand anyone who walked in from the legacy world via ?zone=.
-        // Landing is (14,2), one tile south of the Home Plot gate, so you don't instantly re-warp.
-        // Row 11 is what Alex painted as warp tiles; row 10 is the grass in front of it.
-        x: 7, y: 10, toZone: 'garden', toX: 14, toY: 2, direction: 'down',
-        label: 'THE SPIRIT CORNER',
-      },
-      {
-        // ── THE STATION GATE → THE CRUCIBLE — Alex's painted door, wired 2026-08-05 ─────────
-        // Canon puts the Pyramid-Zero Crucible on the MORTAL side, reached with a ship — not
-        // hanging off Greg's living room in the Ather. Routing it through the town is that fix.
-        // You walk SOUTH into the doorway off the open ground at row 79-80; the building south
-        // of the wall line is the departure hall.
-        //
-        // ⚠ TODO(station-canon): the building is UNRULED and this label is a BUILD working name —
-        // it appears nowhere in `CANON/`, and `rune-hold.md` § The Hub rules exactly five doors
-        // (Mug · Spirit Corner · Bookstore · Passage · Notice Board), none of them a way OUT of
-        // town. Alex named it and asked for it on the door, so it ships on the door; the gap is
-        // filed (CANON_GAPS 2026-08-05) and asks the question that actually decides the name —
-        // canon's route to Pyramid Zero is a SHIP, and this map has coastline, so "dock" may beat
-        // "station". Because the name is DATA, that ruling is a one-field edit, not a code change.
-        //
-        // Stays `ownerOnly` — NOT for a canon reason (the crossing itself is ruled open) but a
-        // build one: the Crucible is still a bare firing range with a BR skeleton on top. It comes
-        // off when there is a match to walk into. The owner walks it today.
-        x: 49, y: 80, toZone: 'crucible', toX: 7, toY: 13, direction: 'up',
-        label: 'TRAVELERS STATION', ownerOnly: true,
-      },
-    ],
+    // ⚠ WHILE THIS IS EMPTY THE TOWN HAS NO WAY OUT, which is why the Home Plot's north gate is
+    // owner-gated just above (see its note). Place Greg's gate first with the editor's Gate brush
+    // — it is the return leg and the canon "permanent gate" — then take that flag off. The oracle
+    // fails loudly on any reachable zone with no player-usable exit, so it will tell you the
+    // moment the town is safe to open again rather than leaving it to memory.
+    gates: [],
     warps: [],
   },
   {

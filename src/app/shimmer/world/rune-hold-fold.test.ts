@@ -94,36 +94,19 @@ const ownerSample = expandGate({ x: 0, y: 0, toZone: 'garden', toX: 1, toY: 1, l
 ok(ownerSample.every(w => w.ownerOnly === true), 'ownerOnly propagates to every tile of a gate')
 
 const gates = runeHold!.gates ?? []
-ok(gates.length === 2, 'Rune Hold has two gates')
-ok(gates.every(g => (g.size ?? 2) === 2), 'both town gates are 2x2')
-ok(gates.every(g => !!g.label.trim()), 'every gate carries a nametag')
-
-// each gate's whole footprint must be walkable — a gate tile inside a wall is a door you can
-// see, name, and never reach.
+// Rune Hold's gates are EMPTY while Alex repositions them (see the note in zones.ts). Assert the
+// invariants that must hold for whatever he places, not a count that would just fight his editing.
 for (const g of gates) {
+  ok(!!g.label.trim(), `gate at (${g.x},${g.y}) carries a nametag`)
   const size = g.size ?? 2
   for (let dy = 0; dy < size; dy++) for (let dx = 0; dx < size; dx++) {
     ok(walkable(runeHold!, g.x + dx, g.y + dy), `gate ${g.label} footprint (${g.x + dx},${g.y + dy}) is walkable`)
   }
-  // and its landing must not sit inside ANY gate, or you bounce straight back
   const target = getZone(ZONES, g.toZone)
   if (target) ok(!checkWarp(ZONES, target.id, g.toX, g.toY), `gate ${g.label} lands clear of any warp tile`)
 }
-
-const gregGate = gates.find(g => g.toZone === 'garden')
-ok(!!gregGate, "Greg's gate exits to the Home Plot (legacy id — the interior-exit contract)")
-ok(gregGate?.ownerOnly !== true, "Greg's gate is open to players (the 08-03 ruling)")
-ok(runeHold!.grid[11][7] === WARP_TILE, "Greg's gate covers the tiles Alex painted as warps")
-
-const station = gates.find(g => g.toZone === 'crucible')
-ok(!!station, 'the station gate leads to the Crucible')
-ok(station?.ownerOnly === true, 'the station gate stays owner-only while the Crucible is a bare range')
-ok(runeHold!.grid[81][49] === WARP_TILE, 'the station gate covers the tiles Alex painted as warps')
-// you must be able to WALK to it: open ground north of the footprint
-ok(walkable(runeHold!, 49, 79) && walkable(runeHold!, 50, 79), 'the station gate is approachable from the north')
-
-// the gates actually reached `warps` — the expansion pass ran
-ok(runeHold!.warps.filter(w => w.gate).length === 8, 'both gates expanded into the zone warps (4 tiles each)')
+ok(runeHold!.warps.filter(w => w.gate).length === gates.reduce((n, g) => n + (g.size ?? 2) ** 2, 0),
+  'every declared gate expanded into the zone warps')
 
 // and the Crucible comes back to the town, not to its old pre-town parent
 const crucible = getZone(ZONES, 'crucible')!
@@ -148,8 +131,20 @@ while (queue.length) {
     if (!seen.has(id)) { seen.add(id); queue.push(id) }
   }
 }
-ok(seen.has('rune-hold'), 'a player can reach Rune Hold from the start zone without owner rights')
 ok(!seen.has('crucible'), 'a player still cannot reach the Crucible (owner-gated by build state)')
+
+// ── 6. NO ONE-WAY TRAPS ────────────────────────────────────────────────────────────────────
+// Any zone a player can WALK INTO must have at least one way back out that a player can use.
+// This is the check that was missing: a zone can be perfectly wired, every warp landing valid,
+// and still be a room with no door — which is exactly what Rune Hold becomes while its gates are
+// being repositioned. Cheap to state, and it fails at the moment the trap is created rather than
+// when someone walks into it.
+for (const id of seen) {
+  const z = getZone(ZONES, id)
+  if (!z) continue
+  const exits = z.warps.filter(w => !w.ownerOnly)
+  ok(exits.length > 0, `${id} has at least one player-usable exit (not a one-way trap)`)
+}
 
 console.log(`\nrune-hold fold: ${pass} passed, ${fails.length} failed`)
 if (known.length) {

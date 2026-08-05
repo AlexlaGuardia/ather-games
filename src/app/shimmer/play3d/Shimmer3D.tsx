@@ -877,12 +877,18 @@ function FloorTerrain({ floors, heights, version, paint, editing, color = '#7cc4
       m.compose(pos, q, scl)
       mesh.setMatrixAt(i, m)
     })
+    // ★ COUNT, not just allocation. `args` below allocates max(len, 1) because an InstancedMesh of
+    // count 0 is not a thing worth having — but an allocated instance whose matrix is never written
+    // keeps the IDENTITY matrix and draws at world origin (0,0,0). With zero cells that is one
+    // phantom block sitting in the map's corner, per kind, stacked: a ghost warp, a ghost mist, a
+    // ghost floor. It also makes a deleted last-of-its-kind look undeletable. Clamp the draw count.
+    mesh.count = floors.length
     mesh.instanceMatrix.needsUpdate = true
     mesh.computeBoundingSphere() // instances sit at absolute tile coords — per-chunk culling needs real bounds
   }, [floors, heights, version])
   const h = usePaint(floors, paint, editing)
   return (
-    <instancedMesh ref={ref} args={[undefined, undefined, Math.max(floors.length, 1)]} receiveShadow castShadow {...h}>
+    <instancedMesh ref={ref} args={[undefined, undefined, Math.max(floors.length, 1)]} receiveShadow castShadow visible={floors.length > 0} {...h}>
       <boxGeometry args={[1, 1, 1]} />
       <meshStandardMaterial color={color} emissive={emissive} emissiveIntensity={0.6} />
     </instancedMesh>
@@ -897,11 +903,17 @@ function MistOverlay({ mists, heights }: { mists: Cell[]; heights: number[][] })
     if (!mesh) return  // see WallTops: an unmounted instance leaves the ref null and this effect crashes the canvas
     const m = new THREE.Matrix4(), q = new THREE.Quaternion(), pos = new THREE.Vector3(), scl = new THREE.Vector3(0.98, 0.8, 0.98)
     mists.forEach(([c, r], i) => { pos.set(c, (heights[r]?.[c] ?? 0) * STEP + 0.55, r); m.compose(pos, q, scl); mesh.setMatrixAt(i, m) })
+    // ★ COUNT, not just allocation. `args` below allocates max(len, 1) because an InstancedMesh of
+    // count 0 is not a thing worth having — but an allocated instance whose matrix is never written
+    // keeps the IDENTITY matrix and draws at world origin (0,0,0). With zero cells that is one
+    // phantom block sitting in the map's corner, per kind, stacked: a ghost warp, a ghost mist, a
+    // ghost floor. It also makes a deleted last-of-its-kind look undeletable. Clamp the draw count.
+    mesh.count = mists.length
     mesh.instanceMatrix.needsUpdate = true
     mesh.computeBoundingSphere()
   }, [mists, heights])
   return (
-    <instancedMesh ref={ref} args={[undefined, undefined, Math.max(mists.length, 1)]}>
+    <instancedMesh ref={ref} args={[undefined, undefined, Math.max(mists.length, 1)]} visible={mists.length > 0}>
       <boxGeometry args={[1, 1, 1]} />
       <meshStandardMaterial color="#eef4ff" transparent opacity={0.42} emissive="#ffffff" emissiveIntensity={0.12} depthWrite={false} />
     </instancedMesh>
@@ -916,11 +928,17 @@ function WarpBeacons({ warps, heights }: { warps: Cell[]; heights: number[][] })
     if (!mesh) return  // see WallTops: an unmounted instance leaves the ref null and this effect crashes the canvas
     const m = new THREE.Matrix4(), q = new THREE.Quaternion(), pos = new THREE.Vector3(), scl = new THREE.Vector3(1, 1, 1)
     warps.forEach(([c, r], i) => { pos.set(c, (heights[r]?.[c] ?? 0) * STEP + 1.5, r); m.compose(pos, q, scl); mesh.setMatrixAt(i, m) })
+    // ★ COUNT, not just allocation. `args` below allocates max(len, 1) because an InstancedMesh of
+    // count 0 is not a thing worth having — but an allocated instance whose matrix is never written
+    // keeps the IDENTITY matrix and draws at world origin (0,0,0). With zero cells that is one
+    // phantom block sitting in the map's corner, per kind, stacked: a ghost warp, a ghost mist, a
+    // ghost floor. It also makes a deleted last-of-its-kind look undeletable. Clamp the draw count.
+    mesh.count = warps.length
     mesh.instanceMatrix.needsUpdate = true
     mesh.computeBoundingSphere()
   }, [warps, heights])
   return (
-    <instancedMesh ref={ref} args={[undefined, undefined, Math.max(warps.length, 1)]}>
+    <instancedMesh ref={ref} args={[undefined, undefined, Math.max(warps.length, 1)]} visible={warps.length > 0}>
       <boxGeometry args={[0.18, 3, 0.18]} />
       <meshStandardMaterial color="#ffe08a" emissive="#ffcf4d" emissiveIntensity={0.9} />
     </instancedMesh>
@@ -966,12 +984,18 @@ function Tiles({ cells, size, y, color, opacity = 1, paint, editing }: {
     if (!mesh) return  // see WallTops: an unmounted instance leaves the ref null and this effect crashes the canvas
     const m = new THREE.Matrix4()
     cells.forEach(([c, r], i) => { m.setPosition(c, y, r); mesh.setMatrixAt(i, m) })
+    // ★ COUNT, not just allocation. `args` below allocates max(len, 1) because an InstancedMesh of
+    // count 0 is not a thing worth having — but an allocated instance whose matrix is never written
+    // keeps the IDENTITY matrix and draws at world origin (0,0,0). With zero cells that is one
+    // phantom block sitting in the map's corner, per kind, stacked: a ghost warp, a ghost mist, a
+    // ghost floor. It also makes a deleted last-of-its-kind look undeletable. Clamp the draw count.
+    mesh.count = cells.length
     mesh.instanceMatrix.needsUpdate = true
     mesh.computeBoundingSphere()
   }, [cells, y])
   const h = usePaint(cells, paint, editing)
   return (
-    <instancedMesh ref={ref} args={[undefined, undefined, Math.max(cells.length, 1)]} receiveShadow castShadow {...h}>
+    <instancedMesh ref={ref} args={[undefined, undefined, Math.max(cells.length, 1)]} receiveShadow castShadow visible={cells.length > 0} {...h}>
       <boxGeometry args={size} />
       <meshStandardMaterial color={color} transparent={opacity < 1} opacity={opacity} />
     </instancedMesh>
@@ -5568,6 +5592,9 @@ export default function Shimmer3D() {
   const [brush, setBrush] = useState(1)
   const brushRef = useRef(1); brushRef.current = brush
   const [saveMsg, setSaveMsg] = useState('')
+  // `paint` has empty deps (it is called from render-hot handlers), so it reads the zone's wiring
+  // through a ref rather than closing over a value that would go stale on the first zone change.
+  const zoneWarpsRef = useRef<Warp[]>(zone.warps); zoneWarpsRef.current = zone.warps
   // recomputed each render; resize bumps version → re-render → fresh dims (drives the geometry key)
   const dims = `${gridRef.current[0]?.length ?? 0}x${gridRef.current.length}`
 
@@ -5617,6 +5644,16 @@ export default function Shimmer3D() {
       const inBrush = (x: number, y: number) => Math.abs(x - c) <= b && Math.abs(y - r) <= b
       setNodes(prev => prev.some(n => inBrush(n.tileX, n.tileY)) ? prev.filter(n => !inBrush(n.tileX, n.tileY)) : prev)
       setSpawners(prev => prev.some(sp => inBrush(sp.tileX, sp.tileY)) ? prev.filter(sp => !inBrush(sp.tileX, sp.tileY)) : prev)
+      // ★ SAY SO WHEN THE ERASE CANNOT STICK. This editor's save posts grid/heights/nodes/spawners
+      // and deliberately NOT warps — it has no destination UI, so an unconditional `warps: []` here
+      // would wipe every door in the zone. The consequence is that erasing a gate/warp TILE clears
+      // the paint but not the wiring: the door still fires, and a gate still draws its nametag
+      // (gates render from data, not tiles). That used to fail silently and read as "it won't let
+      // me delete this". Now it points at the editor that owns them.
+      const hitWarp = zoneWarpsRef.current.find(w => inBrush(w.fromX, w.fromY))
+      if (hitWarp) setSaveMsg(hitWarp.gate
+        ? `"${hitWarp.gate}" is a GATE — erase it in the 2D map editor (/shimmer/dev?mode=map). The tiles cleared; the door did not.`
+        : 'that tile carries a WARP — wiring lives in the 2D map editor (/shimmer/dev?mode=map). The tile cleared; the door did not.')
     }
     setVersion((v) => v + 1)
   }, [])

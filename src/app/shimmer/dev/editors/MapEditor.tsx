@@ -1469,7 +1469,28 @@ export default function MapEditor() {
       })
       setItemPlacements(prev => prev.filter(p => !(p.x === tx && p.y === ty)))
       setNodePlacements(prev => prev.filter(p => !(p.x === tx && p.y === ty)))
-      setWarpPlacements(prev => prev.filter(p => !(p.fromX === tx && p.fromY === ty)))
+      // ── Erasing ANY tile of a gate removes the WHOLE gate ────────────────────────────────
+      // A gate is one door, so half a door is not a smaller door — it is a broken one. Erasing
+      // tile-by-tile would leave a non-square remnant that the save route can no longer write as
+      // a Gate, so it would silently demote it to loose warps: the label vanishes, the big
+      // nametag reverts to green EXIT signs, and the tiles STILL warp. Take the whole door.
+      setWarpPlacements(prev => {
+        const hit = prev.find(p => p.fromX === tx && p.fromY === ty)
+        if (hit?.gate) {
+          // same label + same destination = same door (two doors may share a name but not a target)
+          const key = `${hit.gate}|${hit.toZone}|${hit.toX}|${hit.toY}`
+          const doomed = prev.filter(p => p.gate && `${p.gate}|${p.toZone}|${p.toX}|${p.toY}` === key)
+          setGrid(gPrev => {
+            const gNext = gPrev.map(r => [...r])
+            for (const d of doomed) {
+              if (d.fromY >= 0 && d.fromY < gNext.length && d.fromX >= 0 && d.fromX < (gNext[0]?.length ?? 0)) gNext[d.fromY][d.fromX] = 0
+            }
+            return gNext
+          })
+          return prev.filter(p => !(p.gate && `${p.gate}|${p.toZone}|${p.toX}|${p.toY}` === key))
+        }
+        return prev.filter(p => !(p.fromX === tx && p.fromY === ty))
+      })
       // Remove placed structures whose footprint covers this tile
       setPlacedStructures(prev => prev.filter(ps => {
         const s = structures.find(st => st.id === ps.structureId)
