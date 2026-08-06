@@ -490,6 +490,11 @@ the Arcade frame.
 >
 > **★ The pattern across all three of today's failures:** every one lived in the wiring, not the logic — the live-data overlay, the warp frame ordering, the memo's dependency list. The pure layer was correct and fully tested the whole time. **A component with no key is a component whose refs belong to the previous zone.**
 >
+> ### 🐛 THE BOOT CARD ALWAYS SAID "HOME PLOT" (found by Alex, fixed 2026-08-06, `5e2656e`)
+> The arrival title card named **Home Plot on every boot**, wherever you actually loaded in. It ran on mount with `[]` deps reading `zoneIdRef.current` — which at that moment is still `START_ZONE`, because the save is read *afterwards* and then calls `setZoneId`. **It was naming the placeholder.** Now it fires on the **resolved** boot zone: the save loader reports where the player actually landed on every branch it can take, defaulting to `START_ZONE` for a fresh save (where the boot really is the Home Plot).
+> - **★ Same round, the same mistake wearing a different hat: `regionIdOf` answers "which region FILE backs this zone", and the Wilds have none.** Every check written as `regionIdOf(id)` therefore said *"not a region"* for the entire overland — so walking into the Wilds was the one arrival that got **no title card at all**, and `newWorldRef` stayed false there. Split into **`isRegionZone`** (behaviour: am I in the new world?) and **`regionDisplayName`** (the card); `regionIdOf` now only answers the question it is actually about.
+> - **Neither is from phase 3** — the card has named the wrong place since regions shipped. Worth stating because three separate reports in one morning all *looked* like the new work and none of them were.
+>
 > ### 1️⃣ THE WILDS — the missing layer, and the blocker for everything below
 > Canon (`spirit-tales-bible.md`, ruled 2026-06-22): the Wilds are *"the persistent, walkable, open-world **overland** — the wide common country where the populace and **wild spirits** live… **the layer the GAME explores**."* Keeper-gardens are **tended sections OF the Wilds** (2026-06-23) — a fence-line is the border to untamed wild beyond, not a separate map.
 >
