@@ -23,6 +23,7 @@ import { columnHeight } from '../voxel/height'
 import { AIR } from '../voxel/section'
 import { MAT } from '../voxel/depth'
 import { raycast, tickBreak, dropsFor, type BreakState } from '../voxel/mine'
+import { spawnDrop, tickDrops, type Drop } from '../voxel/drops'
 import { blockDef, materialForItem, type BlockSkill } from '../voxel/registry'
 import { toGeometry, createVoxelMaterial } from './mesh-bridge'
 import { buildAttrs, MATERIAL_COLOR } from './attrs'
@@ -168,6 +169,9 @@ function World({ inv, toolTier, toolSkill, selItem, onStats, onPos, onLook, onIn
   const cols = useRef(new Map<string, Column>())
   const drawn = useRef(new Map<string, THREE.Mesh>())
   const breaking = useRef<BreakState | null>(null)
+  const drops = useRef<Drop[]>([])
+  const dropMeshes = useRef(new Map<number, THREE.Mesh>())
+  const dropGroup = useRef<THREE.Group>(null)
   const mouse = useRef({ left: false, right: false })
   const frame = useRef(0)
   const settled = useRef(false)
@@ -334,9 +338,11 @@ function World({ inv, toolTier, toolSkill, selItem, onStats, onPos, onLook, onIn
       const r = tickBreak(breaking.current, hit, dt, toolTier.current!, toolSkill.current!)
       breaking.current = r.state
       if (r.broken) {
-        for (const d of dropsFor(hit.material)) addItems(inv.current!, d.itemId, d.count)
+        // ★ The block bursts into an ENTITY on the floor, it does not teleport into the satchel.
+        // Straight-to-inventory works and feels like nothing happened; seeing the shard fall is
+        // what tells the player the swing landed and what the vein actually yielded.
+        for (const d of dropsFor(hit.material)) drops.current.push(spawnDrop(d.itemId, d.count, hit.x, hit.y, hit.z))
         setVoxel(hit.x, hit.y, hit.z, AIR)
-        onInvChange()
         breaking.current = null
       }
     } else if (!mouse.current.left) {
@@ -357,6 +363,44 @@ function World({ inv, toolTier, toolSkill, selItem, onStats, onPos, onLook, onIn
       }
     }
 
+    // ── dropped items ────────────────────────────────────────────────────────────────────────
+    // Physics resolves against the voxel grid (not a heightfield), so a shard mined in a cave rests
+    // on the cave floor rather than on the surface hundreds of blocks above it.
+    if (drops.current.length) {
+      const res = tickDrops(drops.current, dt, p.x, p.y - 0.8, p.z,
+        (x, y, z) => isSolid(voxel(x, y, z)))
+      if (res.picked.length) {
+        for (const it of res.picked) addItems(inv.current!, it.itemId, it.count)
+        onInvChange()
+      }
+    }
+    const dg = dropGroup.current
+    if (dg) {
+      const live = new Set<number>()
+      for (const d of drops.current) {
+        live.add(d.id)
+        let m = dropMeshes.current.get(d.id)
+        if (!m) {
+          const mat = materialForItem(d.itemId)
+          const colour = mat !== undefined ? (MATERIAL_COLOR[mat] ?? 0xcccccc) : 0xffd479
+          m = new THREE.Mesh(
+            new THREE.BoxGeometry(0.28, 0.28, 0.28),
+            new THREE.MeshLambertMaterial({ color: colour, emissive: colour, emissiveIntensity: 0.25 }),
+          )
+          dg.add(m)
+          dropMeshes.current.set(d.id, m)
+        }
+        // Bob and spin so a shard on a grey cave floor is findable rather than camouflaged.
+        m.position.set(d.x, d.y + (d.resting ? 0.06 * Math.sin(d.age * 3) : 0), d.z)
+        m.rotation.y = d.age * 1.6
+      }
+      for (const [id, m] of dropMeshes.current) {
+        if (live.has(id)) continue
+        dg.remove(m); m.geometry.dispose(); (m.material as THREE.Material).dispose()
+        dropMeshes.current.delete(id)
+      }
+    }
+
     // ── HUD ──────────────────────────────────────────────────────────────────────────────────
     const def = hit ? blockDef(hit.material) : undefined
     onLook(hit && def
@@ -367,7 +411,7 @@ function World({ inv, toolTier, toolSkill, selItem, onStats, onPos, onLook, onIn
         }
       : null)
     onPos(p)
-    if (++frame.current % 10 === 0) onStats(`${cols.current.size} columns · ${drawn.current.size} meshes · main thread`)
+    if (++frame.current % 10 === 0) onStats(`${cols.current.size} columns · ${drawn.current.size} meshes · ${drops.current.length} drops`)
 
     // ── evict ────────────────────────────────────────────────────────────────────────────────
     if (frame.current % 120 === 0) {
@@ -384,6 +428,7 @@ function World({ inv, toolTier, toolSkill, selItem, onStats, onPos, onLook, onIn
   return (
     <>
       <group ref={group} />
+      <group ref={dropGroup} />
       <lineSegments ref={highlight} visible={false}>
         <edgesGeometry args={[new THREE.BoxGeometry(1.002, 1.002, 1.002)]} />
         <lineBasicMaterial color="#000000" transparent opacity={0.55} />
