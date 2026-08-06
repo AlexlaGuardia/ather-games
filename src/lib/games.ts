@@ -139,7 +139,11 @@ export const GAMES: GameEntry[] = [
     title: "Shimmer",
     href: "/shimmer",
     glyph: "❈",
-    tier: "coming-soon",
+    // LIVE 2026-08-06 (Alex): the only people who visit are testers he invited, so owner-gating
+    // the game defeats the point. `coming-soon` made the arcade's Shimmer card a DEAD END —
+    // the proxy bounced it to /room before `/shimmer`'s redirect to the walker could run, even
+    // though /shimmer/play3d itself was public. Dev tooling stays gated (see proxy.ts).
+    tier: "live",
     kind: "play",
     tagline: "a sandbox of discovery — wild spirits bond through trust, not capture",
   },
