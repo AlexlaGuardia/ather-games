@@ -96,7 +96,28 @@ field**, so material and biome are siblings read from one source rather than one
 other. Supra's `crafting.rs` gets this wrong today (`biome_resources()` maps biome → materials) and
 we should not copy that half.
 
-## 5. Heightfield → voxels
+## 4b. ✅ The shape of the game (Alex, 2026-08-06)
+
+**One world.** Choose a birth rune → dropped in **Moonwell Glade** (the tutorial biome; canon-clean,
+Greg's home *is* `moonwell-glade-gregory-s-home`) → **everything else generated**, a whole world to
+explore. Structures come in two classes (see `WORLDGEN-RESEARCH.md` § Strongholds): the 8 canon
+holds + Gloview + the tutorial glade are **authored and guaranteed**; holds, ruins, camps and
+Moglin burrow-villages beyond that are **unbounded procedural**. Voranyx is no longer a place on the
+map — it is generated mineshafts opening into large caverns.
+
+**A gate leads out to Athernyx — the hub.** Not a continent you walk to: the waking world as a
+front door holding the other game modes (expeditions, the Crucible) and the canon storefronts (the
+Kindled Mug, the Passage, Eyuun's Bookstore, the Notice Board). **This half is already ruled** —
+`world/arcade.md:13` (2026-07-12) describes exactly this hub, so Shimmer's mortal side stops being
+a second continent and becomes what canon already said it was.
+
+> ⛔ **The gate itself is a CANON GAP — do not build it.** Alex wants it craftable. `glossary.md`
+> says gates between the waking world and the Ather are **rare Eyuun gatecraft**, so a workbench
+> recipe would rewrite cosmology from a mechanic — the named failure mode. Filed as `[OPEN]` in
+> `CANON_GAPS.md` with the reconciliation Jin argues for: **crafting the means to *open/attune to*
+> an existing crossing ≠ crafting the crossing.** Everything else above is unblocked and proceeding.
+
+## 5. Heightfield → voxels *(SUPERSEDED — see § 8(c); kept for the reasoning)*
 
 Alex's 233,380 sculpted cells extrude:
 
@@ -145,12 +166,25 @@ ready and the mesher is a renderer concern on both sides.
     format; *where y=0 sits relative to sea level* is a tuning constant. The sketch was ~96 above /
     ~32 below, but 32 is shallow for a mining game (Minecraft ships ~64 below and later −64). **Move
     the datum freely during the mesher spike — it costs nothing.** Only the 128 is locked.
-- **(c) The seven painted canvases survive**, extruded per § 5. They are the only hand-authored land
-  in the game and keeping them costs nothing under ruling (a).
+- **(c) ⛔ REVERSED 2026-08-06, same day, by Alex — the canvases do NOT survive.** The original
+  ruling kept them as *"the only hand-authored land in the game."* **That claim was false and the
+  measurement killed it:** home-plot is **96.1% void** (868 real cells in 150×150, 764 of them one
+  grass tile); the-outfields **99.3% void** (1,120 cells); twilight-thicket has **3 cells of path in
+  a 400×400**; and the best of them, spirit-meadow, is **74,712 cells of a single grass tile**. The
+  four Wilds regions were never painted at all — `gen-wilds.mts` generated them. These are *shapes*,
+  two to five tiles each, with no path network and no composition. **The heightmaps go with them** —
+  a sculpt of a canvas that no longer exists is equally stale.
+  - **What actually survives, and it is not the land:** `tiles.ts` (the pixel art itself — untouched,
+    it becomes the material skin, and it is where the drawing hours went), the sprites, and the
+    **placements** (NPCs, chests, structures, pickups, nodes, spawners). Placements are coordinates
+    *into* dying canvases, so they need **re-homing into the class-1 authored pieces** — that is the
+    one piece of real migration work in the whole retirement.
+  - **⚠ Do not let this sweep up the mortal side.** Rune Hold / the holds / station / Crucible run
+    **0–14% void**, not 45–99% — real interior maps (though even Rune Hold is 100×100 of *four*
+    distinct tiles). Different continent, different year, outside the voxel Ather. Leave them alone.
 
-**Consequence of (a) + (c) together:** the existing 0–6 sculpt uses 7 of 128 levels as *relief on
-top of the datum*, not as the world's full vertical range. Nothing about the sculpt is rescaled;
-it is lifted onto the datum as-is.
+**Consequence for the sculpt:** with (c) reversed there is nothing to lift onto the datum. Terrain
+comes from the generator, and the datum is a tuning constant per (b).
 
 ## 9. What we take from Supra, and what we leave
 
