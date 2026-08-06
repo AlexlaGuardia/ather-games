@@ -110,6 +110,10 @@ const put = (dst: Layer, size: number, x: number, y: number, c: [number, number,
 // Blotches are the exception — they are fixed at 8 lattice cells so the large-scale shape of a
 // material is the same at both sizes, and only its detail changes.
 
+/** Clear band of host rock kept around the tile edge, in TEXELS — so it holds at every tile size
+ *  rather than scaling up into a fat empty border at 64px. */
+const EDGE_CLEAR = 1.5
+
 interface RockOpts { speckle: number; blotch: number; vein: number; seed: number }
 
 function paintRock(dst: Layer, size: number, base: [number, number, number], o: RockOpts) {
@@ -246,20 +250,39 @@ function writeOre(dst: Layer, size: number, material: number, seed: number) {
   //      what makes a shape look inflated; hard facets are what make it look cut. Pixel art gets its
   //      solidity from tone STEPS, and a soft glow on top of a soft ramp compounds the error.
   // A dark rim seats each shard into the rock so it reads as embedded rather than stuck on.
-  const shards = 7
+  // ★ SHARDS ARE FULLY CONTAINED — NOTHING TOUCHES THE TILE EDGE, AND THE OBVIOUS ARGUMENT AGAINST
+  // THAT IS WRONG. The instinct is to wrap them toroidally so the tile is seamless, and that does
+  // work: UVs are aligned to block boundaries, so a shard leaving the right edge meets its other
+  // half on the left edge of the block next door and completes across the seam.
+  //
+  // But that only pays when two ore blocks are ADJACENT, and ore is mostly scattered singles. The
+  // common case is one isolated block showing two clipped half-shards against plain stone on both
+  // sides — which does not read as seamless, it reads as broken. Containing them costs the rare
+  // continuous-vein case and buys a clean read on every block, which is the case that actually
+  // occurs. The host rock still wraps (its blotch noise is lattice-periodic), so the tile has no
+  // seam regardless.
+  //
+  // ⚠ KNOWN CONSEQUENCE: every ore block now shows the IDENTICAL cluster, so a large vein will read
+  // as a stamped repeat. The fix when that bites is variant layers — 2-3 ore tiles per material,
+  // selected per-block by the same `hashBlock` the jitter already uses, which costs no extra
+  // geometry and no meshing. Not built yet; it is not worth the layers until a vein looks wrong.
+  const shards = 6
   for (let i = 0; i < shards; i++) {
-    const cx = h2(i, 1, seed + 200) * size
-    const cy = h2(i, 2, seed + 200) * size
     // Slight anisotropy per shard so a cluster does not look stamped from one die.
     const r = size * (0.09 + h2(i, 3, seed + 200) * 0.07)
     const sx = 0.75 + h2(i, 4, seed + 200) * 0.6
     const sy = 0.75 + h2(i, 5, seed + 200) * 0.6
+    // Inset by the shard's own reach on each axis, so no part of it can cross an edge. The extent of
+    // a Manhattan diamond along x is r*sx (and r*sy along y) — using r alone would let the wider
+    // shards clip out again, which is the exact bug being fixed.
+    const padX = r * sx + EDGE_CLEAR
+    const padY = r * sy + EDGE_CLEAR
+    const cx = padX + h2(i, 1, seed + 200) * Math.max(0, size - 2 * padX)
+    const cy = padY + h2(i, 2, seed + 200) * Math.max(0, size - 2 * padY)
     for (let y = 0; y < size; y++) {
       for (let x = 0; x < size; x++) {
-        // Toroidal — a shard that runs off one edge must come back on the other, or the seam shows
-        // on every merged quad.
-        const dx = Math.min(Math.abs(x - cx), size - Math.abs(x - cx)) * (x - cx < 0 ? -1 : 1)
-        const dy = Math.min(Math.abs(y - cy), size - Math.abs(y - cy)) * (y - cy < 0 ? -1 : 1)
+        const dx = x - cx
+        const dy = y - cy
         const d = Math.abs(dx / sx) + Math.abs(dy / sy)
         if (d > r) continue
 
@@ -281,10 +304,13 @@ function writeOre(dst: Layer, size: number, material: number, seed: number) {
 
   // A scatter of single-texel flecks. Cheap, and it keeps the host rock from looking like clean
   // stone with objects placed on it — real ore bleeds into its matrix.
+  // Inset for the same reason as the shards: a fleck bisected by the block boundary is the same
+  // dirty edge in miniature, and there are a lot more of them.
   const flecks = Math.round(size * 0.9)
+  const span = size - 2 * EDGE_CLEAR
   for (let i = 0; i < flecks; i++) {
-    const x = Math.floor(h2(i, 11, seed + 300) * size)
-    const y = Math.floor(h2(i, 12, seed + 300) * size)
+    const x = Math.floor(EDGE_CLEAR + h2(i, 11, seed + 300) * span)
+    const y = Math.floor(EDGE_CLEAR + h2(i, 12, seed + 300) * span)
     const o = (y * size + x) * 4
     if (dst[o + 3] > 0) continue                               // already crystal, leave it alone
     put(dst, size, x, y, shade(ore, -34), 90)
