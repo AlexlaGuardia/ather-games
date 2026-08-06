@@ -9,6 +9,9 @@
 // `sources` table, and the legacy zones + stitcher machinery get deleted.
 
 import { expandGate, type Zone, type Warp, type Gate } from './zones'
+import {
+  WILDS_ZONE_ID, WILDS_CLOUD, wildsGeometry, parseWildsId, wildsIdOf, regionOrigin, sparseGrid,
+} from './wilds-world'
 import type { NodePlacement } from './node-placements'
 import type { NodeType } from './resources'
 import type { SpawnerPlacement } from './spawn-placements'
@@ -25,13 +28,83 @@ import manaSprings from './region-maps/mana-springs.json'
 import voranyxCaverns from './region-maps/voranyx-caverns.json'
 import theOutfields from './region-maps/the-outfields.json'
 import wilds00 from './region-maps/wilds-0-0.json'
+import wilds10 from './region-maps/wilds-1-0.json'
+import wilds01 from './region-maps/wilds-0-1.json'
+import wilds11 from './region-maps/wilds-1-1.json'
 
 export const REGION_WIP_PREFIX = 'r-'
 
-const FILES = [homePlot, moonwellGlade, spiritMeadow, twilightThicket, manaSprings, voranyxCaverns, theOutfields, wilds00] as unknown as RegionFile[]
+/**
+ * ── THE WILDS ARE ONE ZONE (phase 3, 2026-08-06) ─────────────────────────────────────────
+ * Every other region file is its own zone. The Wilds regions are not: they are tiles of ONE
+ * overland, and a border between two patches of open grass is not a door. So they are held out
+ * of `FILES` (the one-file-one-zone list) and composed into a single `r-wilds` zone below, in
+ * world coordinates. The files are unchanged and still authored one at a time in the MapEditor
+ * — 400x400 stays the authoring unit, it just stops being a runtime unit.
+ */
+const WILDS_FILES = [wilds00, wilds10, wilds01, wilds11] as unknown as RegionFile[]
 
-/** Region files by CANONICAL id (no prefix). */
-export const REGION_FILES: Record<string, RegionFile> = Object.fromEntries(FILES.map(f => [f.id, f]))
+const FILES = [homePlot, moonwellGlade, spiritMeadow, twilightThicket, manaSprings, voranyxCaverns, theOutfields] as unknown as RegionFile[]
+
+/** Region files by CANONICAL id (no prefix). Wilds tiles are addressable here too. */
+export const REGION_FILES: Record<string, RegionFile> = Object.fromEntries([...FILES, ...WILDS_FILES].map(f => [f.id, f]))
+
+// ── the Wilds composite ────────────────────────────────────────────────────────────────────
+export const WILDS_ZONE = REGION_WIP_PREFIX + WILDS_ZONE_ID
+export const WILDS_GEO = wildsGeometry(WILDS_FILES.map(f => f.id))
+
+/** A Wilds region's tiles, decoded on demand — the `load` callback `syncWilds` pulls through. */
+export function loadWildsRegion(id: string): number[][] | null {
+  const f = REGION_FILES[id]
+  if (!f) return null
+  try { return decodeRows(f.rle, f.cols) } catch { return null }   // a bad row must not take the world down
+}
+
+/**
+ * The Wilds as one zone.
+ *
+ * The grid is SPARSE: world-sized to read, holding no tiles until the player's load window
+ * reaches a region (`syncWilds`, driven from the play view). Everything else — gates, warps,
+ * nodes, burrows — is collected from the region files and offset into world coordinates here,
+ * so a region file keeps carrying its own contents in its own local coordinates and nothing
+ * downstream learns that regions exist.
+ */
+function buildWildsZone(): Zone {
+  const gates: Gate[] = []
+  const warps: Warp[] = []
+  for (const f of WILDS_FILES) {
+    const rc = parseWildsId(f.id)
+    if (!rc) continue
+    const o = regionOrigin(WILDS_GEO, rc.rx, rc.ry)
+    for (const g of f.gates ?? []) {
+      const gate: Gate = { ...g, x: g.x + o.x, y: g.y + o.y, direction: g.direction as Gate['direction'] }
+      gates.push(gate)
+      warps.push(...expandGate(gate))
+    }
+    for (const w of f.warps) {
+      warps.push({ ...w, fromX: w.fromX + o.x, fromY: w.fromY + o.y, direction: (w.direction ?? 'down') as Warp['direction'] })
+    }
+  }
+  // Start at the heart of the north-west region — the one the Outfields seam opens onto.
+  const first = WILDS_FILES.find(f => f.id === wildsIdOf(WILDS_GEO.originRx, WILDS_GEO.originRy)) ?? WILDS_FILES[0]
+  const fo = parseWildsId(first.id)!
+  const start = regionOrigin(WILDS_GEO, fo.rx, fo.ry)
+  return {
+    id: WILDS_ZONE,
+    name: '⛅ The Wilds',
+    grid: sparseGrid(WILDS_GEO.rows, WILDS_GEO.cols, first.fill ?? WILDS_CLOUD),
+    gates,
+    warps,
+    playerStart: { tileX: start.x + first.playerStart.tileX, tileY: start.y + first.playerStart.tileY },
+    realm: (first.realm ?? 'ather') as Zone['realm'],
+  }
+}
+
+/** Where a Wilds region's own records (nodes, burrows) land in world space. */
+function wildsOffset(id: string): { x: number; y: number } | null {
+  const rc = parseWildsId(id)
+  return rc ? regionOrigin(WILDS_GEO, rc.rx, rc.ry) : null
+}
 
 /** The canonical region id behind a WIP zone id, or null if this isn't a region zone. */
 export function regionIdOf(zoneId: string): string | null {
@@ -41,7 +114,7 @@ export function regionIdOf(zoneId: string): string | null {
 }
 
 /** Zone entries for the registry — decoded lazily once (a 400x400 decode is cheap, ~ms). */
-export const REGION_ZONES: Zone[] = FILES.map(f => ({
+export const REGION_ZONES: Zone[] = FILES.map((f): Zone => ({
   id: REGION_WIP_PREFIX + f.id,
   name: `⛅ ${f.display}`,
   grid: decodeRows(f.rle, f.cols),
@@ -55,7 +128,7 @@ export const REGION_ZONES: Zone[] = FILES.map(f => ({
   playerStart: f.playerStart,
   element: f.element as Zone['element'],
   realm: f.realm,
-}))
+})).concat(buildWildsZone())
 
 // ── Story-layer transplant (2026-08-01, the walkability pass) ───────────────────────────
 // Pickups, chests, and structure placements ride into the regions by DERIVATION: for every
@@ -116,8 +189,18 @@ export function applyLiveRegionData(regions: Record<string, RegionFile> | undefi
   }
 }
 
-/** A region zone's authored nodes (its own resource list), or null for non-region zones. */
+/**
+ * A region zone's authored nodes (its own resource list), or null for non-region zones.
+ * For the Wilds this is every tile-region's list at once, offset into world space — a resource
+ * still belongs to the region file that authored it, the player just never sees the join.
+ */
 export function regionNodesFor(zoneId: string): NodePlacement[] | null {
+  if (zoneId === WILDS_ZONE) {
+    return WILDS_FILES.flatMap(f => {
+      const o = wildsOffset(f.id)
+      return o ? f.nodes.map(n => ({ type: n.type as NodeType, tileX: n.tileX + o.x, tileY: n.tileY + o.y })) : []
+    })
+  }
   const id = regionIdOf(zoneId)
   if (!id) return null
   return REGION_FILES[id].nodes.map(n => ({ type: n.type as NodeType, tileX: n.tileX, tileY: n.tileY }))
@@ -132,8 +215,14 @@ export function regionSpawnConfig(zoneId: string): { abundance?: number; richnes
   return s && Object.keys(s).length ? s : undefined
 }
 
-/** A region zone's burrows, or null for non-region zones. */
+/** A region zone's burrows, or null for non-region zones. Wilds burrows offset into world space. */
 export function regionSpawnersFor(zoneId: string): SpawnerPlacement[] | null {
+  if (zoneId === WILDS_ZONE) {
+    return WILDS_FILES.flatMap(f => {
+      const o = wildsOffset(f.id)
+      return o ? f.spawners.map(s => ({ kind: 'moglin' as const, gate: s.gate as SpawnerPlacement['gate'], tileX: s.tileX + o.x, tileY: s.tileY + o.y })) : []
+    })
+  }
   const id = regionIdOf(zoneId)
   if (!id) return null
   return REGION_FILES[id].spawners.map(s => ({ kind: 'moglin' as const, gate: s.gate as SpawnerPlacement['gate'], tileX: s.tileX, tileY: s.tileY }))

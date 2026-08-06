@@ -83,7 +83,8 @@ import { allNpcs, nodePlacementsFor, dealtNodesFor, spawnerPlacementsFor, logica
 import { ZONE_SPAWNERS, type SpawnerPlacement } from '../world/spawn-placements'
 import { patrolDown, markBeaten, pruneBeaten, patrolLoop, patrolPose, type BeatenRecord, type PatrolLoop, type WanderDials } from '../engine/burrows'
 import type { DealWindow } from '../engine/spawn-board'
-import { regionIdOf, REGION_FILES, regionSpawnConfig, migrateLegacyPosition } from '../world/region-maps'
+import { regionIdOf, REGION_FILES, regionSpawnConfig, migrateLegacyPosition, WILDS_ZONE, WILDS_GEO, loadWildsRegion } from '../world/region-maps'
+import { cloneSparseGrid, materializeRows, newMount, syncWilds, type WildsMount } from '../world/wilds-world'
 
 // The composed continent registers as a zone before any getZone/save-load runs.
 registerGardenWorld()
@@ -2991,12 +2992,43 @@ const Scene = memo(function Scene(props: {
   // the chunk is unchanged — so this re-renders once per 64 tiles walked, not 60 times a second.
   // That identity check is the whole reason streaming can key off the player without costing
   // more than it saves.
-  const [center, setCenter] = useState<ChunkCoord | null>(null)
+  // ── THE WILDS MOUNT ───────────────────────────────────────────────────────────────────
+  // The Wilds are ONE zone spanning many region files, and its grid arrives holding nothing.
+  // Regions are blitted in as the player's load window reaches them, and handed back when it
+  // does not — which is why the overland can grow without the client growing with it.
+  //
+  // It runs off the same chunk-crossing signal as streaming, and deliberately BEFORE
+  // `setCenter`: the geometry memo rebuilds on the new centre, so the tiles have to already be
+  // there when it does, or the player gets one frame of cloud where the next region should be.
+  const wildsMount = useRef<WildsMount | null>(null)
+  const mountWilds = (tx: number, tz: number) => {
+    if (props.zone.id !== WILDS_ZONE || !props.gridRef.current) return
+    wildsMount.current ??= newMount(WILDS_GEO)
+    syncWilds(wildsMount.current, props.gridRef.current, tx, tz, loadWildsRegion)
+  }
+  // ★ The centre is seeded on the FIRST RENDER, never left null, and the first mount happens
+  // right here with it. A null centre means "mount every chunk" — correct for a small zone and
+  // ruinous for a world-sized one, where it would bucket the entire overland (as solid cloud,
+  // no less) before the player has taken a step. Seeding it also means the region under their
+  // feet is already blitted in when the geometry memo runs for the first time.
+  const [center, setCenter] = useState<ChunkCoord | null>(() => {
+    const p = props.posRef.current
+    const tx = p ? Math.round(p.x) : (props.zone.playerStart?.tileX ?? 0)
+    const tz = p ? Math.round(p.z) : (props.zone.playerStart?.tileY ?? 0)
+    mountWilds(tx, tz)
+    return chunkOf(tx, tz)
+  })
+  const centerRef = useRef<ChunkCoord | null>(center)
   useFrame(() => {
     const p = props.posRef.current
     if (!p) return
     const c = chunkOf(Math.round(p.x), Math.round(p.z))
-    setCenter((prev) => (sameChunk(prev, c) ? prev : c))
+    if (sameChunk(centerRef.current, c)) return
+    centerRef.current = c
+    // BEFORE setCenter: the memo rebuilds on the new centre, so the tiles must already be there
+    // or the player gets a frame of cloud where the next region should be.
+    mountWilds(Math.round(p.x), Math.round(p.z))
+    setCenter(c)
   })
 
   const plotHide = useMemo(() => {
@@ -3378,7 +3410,11 @@ export default function Shimmer3D() {
   const initedZone = useRef('')
   if (initedZone.current !== zone.id) {
     initedZone.current = zone.id
-    gridRef.current = zone.grid.map((row) => [...row])
+    // ★ cloneSparseGrid, not `.map(row => [...row])`. In the Wilds the zone grid is world-sized
+    // but holds only the rows near the player (world/wilds-world.ts); a naive deep copy would
+    // materialize the entire overland on the first frame and hand back exactly the memory
+    // streaming exists to save. For every ordinary zone this IS the old deep copy.
+    gridRef.current = cloneSparseGrid(zone.grid)
     heightsRef.current = zone.id === WORLD_ZONE_ID
       ? getGardenWorld().heights.map((row) => [...row]) // composed terrain — per-zone sculpts already blitted in
       : getHeightGrid(zone.id, zone.grid.length, zone.grid[0].length)
@@ -5652,6 +5688,12 @@ export default function Shimmer3D() {
     }
     const H = heightsRef.current, G = gridRef.current
     const rows = G.length, cols = G[0].length
+    // A streaming zone's untouched rows are ONE shared frozen row (world/wilds-world.ts), so
+    // painting into them would either throw or — without the freeze — smear one tile across
+    // every unloaded row in the world. Give the brush's rows their own storage first. No-op on
+    // rows that are already real, which is every row of every ordinary zone.
+    materializeRows(G, r - b, r + b)
+    materializeRows(H, r - b, r + b)
     for (let dr = -b; dr <= b; dr++) for (let dc = -b; dc <= b; dc++) {
       const rr = r + dr, cc = c + dc
       if (rr < 0 || rr >= rows || cc < 0 || cc >= cols) continue
@@ -5688,6 +5730,7 @@ export default function Shimmer3D() {
   // Empty the whole zone to a blank grid — then draw the land's shape onto it.
   const clearZone = useCallback(() => {
     const G = gridRef.current, H = heightsRef.current
+    materializeRows(G, 0, G.length - 1); materializeRows(H, 0, H.length - 1)  // see the note in `paint`
     for (let r = 0; r < G.length; r++) for (let c = 0; c < G[0].length; c++) { G[r][c] = VOID; H[r][c] = 0 }
     setVersion((v) => v + 1)
   }, [])

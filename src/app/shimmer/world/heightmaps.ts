@@ -2,6 +2,7 @@
 // SAVED heights (sculpted in the 3D view → /shimmer/save-heights) live in heightmaps.json.
 // A small DEMO fallback shows until a zone is sculpted + saved. Default = flat (all 0).
 import SAVED from './heightmaps.json'
+import { sparseGrid } from './wilds-world'
 
 const SAVED_HEIGHTS = SAVED as Record<string, number[][]>
 
@@ -25,8 +26,14 @@ DEMO['moonwell-glade'] = (() => {
 })()
 
 // Returns a fresh COPY (the 3D sculpt brush mutates it in place; never touch the import).
+//
+// The unsculpted fallback is a SPARSE flat grid — every row is one shared frozen zero row until
+// something writes to it. Flat terrain is by far the common case and this is what keeps a
+// world-sized zone (the Wilds: 2400x2400 = 5.76M cells) from costing 45MB of zeroes to say
+// "flat". The sculpt brush calls `materializeRows` before writing, which is what makes it safe;
+// the freeze turns a forgotten call into a throw instead of a world-wide smear.
 export function getHeightGrid(zoneId: string, rows: number, cols: number): number[][] {
   const h = LIVE_HEIGHTS?.[zoneId] ?? SAVED_HEIGHTS[zoneId] ?? DEMO[zoneId]
   if (h && h.length === rows && h[0]?.length === cols) return h.map((row) => [...row])
-  return Array.from({ length: rows }, () => new Array(cols).fill(0))
+  return sparseGrid(rows, cols, 0)
 }
