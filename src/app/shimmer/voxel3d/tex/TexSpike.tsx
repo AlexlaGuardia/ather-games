@@ -136,7 +136,8 @@ export default function TexSpike() {
         </div>
         <div className="mt-1.5 text-white/45">
           click to look · WASD · space up · ctrl down · shift fast<br />
-          1 flat · 2 textured · M mipmaps
+          1 flat · 2 textured · M mipmaps<br />
+          <span className="text-white/30">?cam=x,y,z&amp;look=x,y,z pins the shot</span>
         </div>
         <div className="mt-1.5 text-white/35 leading-snug">
           Fly back until the two look the same. That distance is where 64px stops paying.
@@ -237,7 +238,26 @@ function FlyCam() {
   // ⚠ The midpoint is NOT `OFFSET / 2`. The left patch spans x 0..SPAN and the right spans
   // OFFSET..OFFSET+SPAN, so the pair is centred at `(OFFSET + SPAN) / 2` — got this wrong first
   // time and it opened looking at the left patch with the right one off-screen entirely.
+  //
+  // ★ `?cam=x,y,z&look=x,y,z` OVERRIDES THE OPENING SHOT, and it earns its keep twice. Comparing two
+  // renders is only honest from the SAME viewpoint, and eyeballing your way back to the same spot
+  // twice does not happen. It is also the only way to capture a specific view from a backgrounded
+  // tab, where the render loop only advances during a screenshot and flying is therefore impossible.
   useEffect(() => {
+    const q = new URLSearchParams(window.location.search)
+    const vec = (k: string) => {
+      const p = (q.get(k) ?? '').split(',').map(Number)
+      return p.length === 3 && p.every(Number.isFinite) ? p : null
+    }
+    const cam = vec('cam')
+    const look = vec('look')
+    if (cam) {
+      camera.position.set(cam[0], cam[1], cam[2])
+      const l = look ?? [cam[0], cam[1], cam[2] - 1]
+      camera.lookAt(l[0], l[1], l[2])
+      return
+    }
+
     const midX = (OFFSET + SPAN) / 2
     const h = columnHeight(SPAN / 2, SPAN / 2, SEED)
     // Back off far enough that the full pair fits the narrower of the two FOV axes. Vertical FOV is
