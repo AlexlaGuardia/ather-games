@@ -234,26 +234,60 @@ function writeOre(dst: Layer, size: number, material: number, seed: number) {
   const host = rgbOf(MATERIAL_COLOR[MAT.DEEP_STONE])
   paintRock(dst, size, host, { speckle: 9, blotch: 12, vein: 0, seed })
   const ore = rgbOf(MATERIAL_COLOR[material] ?? 0xff00ff)
-  const core = shade(ore, 60)
-  const blobs = 5
-  const r = size * 0.15
-  for (let i = 0; i < blobs; i++) {
+  const lit = shade(ore, 62)
+  const dim = shade(ore, -46)
+  const rim = shade(ore, -96)
+
+  // ★ ANGULAR AND HARD-STEPPED, NOT ROUND AND SMOOTH — the first pass got both wrong and it read as
+  // gumballs. Two rules do the work:
+  //   1. MANHATTAN distance, not Euclidean. |dx|+|dy| draws a DIAMOND, and a diamond reads as a cut
+  //      stone at 32px where a circle reads as a bubble. Shape language beats detail at this size.
+  //   2. Three flat tones split along a diagonal, with NO gradient between them. A smooth ramp is
+  //      what makes a shape look inflated; hard facets are what make it look cut. Pixel art gets its
+  //      solidity from tone STEPS, and a soft glow on top of a soft ramp compounds the error.
+  // A dark rim seats each shard into the rock so it reads as embedded rather than stuck on.
+  const shards = 7
+  for (let i = 0; i < shards; i++) {
     const cx = h2(i, 1, seed + 200) * size
     const cy = h2(i, 2, seed + 200) * size
-    const rr = r * (0.65 + h2(i, 3, seed + 200) * 0.7)
+    // Slight anisotropy per shard so a cluster does not look stamped from one die.
+    const r = size * (0.09 + h2(i, 3, seed + 200) * 0.07)
+    const sx = 0.75 + h2(i, 4, seed + 200) * 0.6
+    const sy = 0.75 + h2(i, 5, seed + 200) * 0.6
     for (let y = 0; y < size; y++) {
       for (let x = 0; x < size; x++) {
-        // Toroidal distance — a blob that runs off one edge must come back on the other, or the
-        // seam shows on every merged quad.
-        const dx = Math.min(Math.abs(x - cx), size - Math.abs(x - cx))
-        const dy = Math.min(Math.abs(y - cy), size - Math.abs(y - cy))
-        const d = Math.hypot(dx, dy) / rr
-        if (d > 1) continue
-        const t = 1 - d
-        const c = mix(ore, core, clamp01(t * 1.4 - 0.25))
-        put(dst, size, x, y, shade(c, (h2(x, y, seed + 7) - 0.5) * 12), clamp8(255 * clamp01(t * 1.8)))
+        // Toroidal — a shard that runs off one edge must come back on the other, or the seam shows
+        // on every merged quad.
+        const dx = Math.min(Math.abs(x - cx), size - Math.abs(x - cx)) * (x - cx < 0 ? -1 : 1)
+        const dy = Math.min(Math.abs(y - cy), size - Math.abs(y - cy)) * (y - cy < 0 ? -1 : 1)
+        const d = Math.abs(dx / sx) + Math.abs(dy / sy)
+        if (d > r) continue
+
+        let c: [number, number, number]
+        let glow: number
+        if (d > r - Math.max(1, size / 32)) {
+          c = rim; glow = 30                                   // seated edge against the rock
+        } else if (dx - dy < -r * 0.12) {
+          c = lit; glow = 255                                  // facet catching the light
+        } else if (dx - dy > r * 0.34) {
+          c = dim; glow = 120                                  // facet turned away
+        } else {
+          c = ore; glow = 205
+        }
+        put(dst, size, x, y, c, glow)
       }
     }
+  }
+
+  // A scatter of single-texel flecks. Cheap, and it keeps the host rock from looking like clean
+  // stone with objects placed on it — real ore bleeds into its matrix.
+  const flecks = Math.round(size * 0.9)
+  for (let i = 0; i < flecks; i++) {
+    const x = Math.floor(h2(i, 11, seed + 300) * size)
+    const y = Math.floor(h2(i, 12, seed + 300) * size)
+    const o = (y * size + x) * 4
+    if (dst[o + 3] > 0) continue                               // already crystal, leave it alone
+    put(dst, size, x, y, shade(ore, -34), 90)
   }
 }
 
