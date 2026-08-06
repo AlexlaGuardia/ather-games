@@ -277,14 +277,22 @@ function FlyCam() {
     camera.lookAt(midX, h, SPAN / 2)
   }, [camera])
 
+  const vFwd = useRef(new THREE.Vector3())
+  const vRight = useRef(new THREE.Vector3())
+  const vWish = useRef(new THREE.Vector3())
+  const UP = useMemo(() => new THREE.Vector3(0, 1, 0), [])
+
   useFrame((_, dtRaw) => {
     const dt = Math.min(dtRaw, 0.05)
     const k = keys.current
     const speed = (k.ShiftLeft ? 60 : 18)
-    const fwd = new THREE.Vector3()
+    // ⚠ Scratch vectors, allocated once (see the refs above). Four throwaway Vector3 per frame is
+    // ~240 objects/sec of garbage — the same GC pressure the mesher and carver were both rewritten
+    // to avoid, and the same fix applied in VoxelWorld. Flagged by render-audit.test.ts.
+    const fwd = vFwd.current
     camera.getWorldDirection(fwd)
-    const right = new THREE.Vector3().crossVectors(fwd, new THREE.Vector3(0, 1, 0)).normalize()
-    const wish = new THREE.Vector3()
+    const right = vRight.current.crossVectors(fwd, UP).normalize()
+    const wish = vWish.current.set(0, 0, 0)
     if (k.KeyW) wish.add(fwd)
     if (k.KeyS) wish.sub(fwd)
     if (k.KeyD) wish.add(right)

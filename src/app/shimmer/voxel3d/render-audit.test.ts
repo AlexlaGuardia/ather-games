@@ -12,10 +12,25 @@
 //
 // ⚠ If this fails, do NOT widen the allowlist to make it pass. Share the resource or cache it.
 
-import { readFileSync, readdirSync } from 'fs'
-import { join } from 'path'
+import { readFileSync, readdirSync, statSync } from 'fs'
+import { join, relative } from 'path'
 
 const DIR = join(process.cwd(), 'src/app/shimmer/voxel3d')
+
+/**
+ * ⚠ RECURSIVE, AND THAT WAS A REAL GAP. The first version used a flat `readdirSync`, so it never
+ * looked at `tex/` — the texture-array work from the parallel window, which is precisely the kind
+ * of code that allocates GPU resources. An audit that silently skips a subdirectory is worse than
+ * no audit, because it reports green over unexamined code.
+ */
+function walk(dir: string, out: string[] = []): string[] {
+  for (const e of readdirSync(dir)) {
+    const full = join(dir, e)
+    if (statSync(full).isDirectory()) walk(full, out)
+    else if ((e.endsWith('.ts') || e.endsWith('.tsx')) && !e.endsWith('.test.ts')) out.push(full)
+  }
+  return out
+}
 
 /** Things that own GPU memory or a shader program. Constructing these per-object is the bug. */
 const GPU_RESOURCE = /new\s+THREE\.(\w*(?:Geometry|Material|Texture|RenderTarget))\b/g
@@ -27,13 +42,19 @@ let pass = 0
 const fails: string[] = []
 const ok = (c: boolean, m: string) => { if (c) pass++; else fails.push(m) }
 
-const files = readdirSync(DIR).filter(f => (f.endsWith('.ts') || f.endsWith('.tsx')) && !f.endsWith('.test.ts'))
+const files = walk(DIR).map(f => relative(DIR, f))
 ok(files.length > 0, 'found render-path files to audit')
+ok(files.some(f => f.includes('tex')), 'the audit reaches the texture lane (it did not, at first)')
 
 for (const file of files) {
   const raw = readFileSync(join(DIR, file), 'utf-8')
-  // Strip comments — this file's own prose names the very constructors it bans.
-  const src = raw.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')
+  // ⚠ BLANK comments rather than DELETING them. The first version stripped them outright, which
+  // shifted every offset — so the audit reported line 270 for a problem on line 284. A tool that
+  // points at the wrong line is worse than no tool. Replacing comment bodies with spaces of equal
+  // length keeps every offset identical to the real file while still hiding prose from the scan
+  // (this file's own header names the very constructors it bans).
+  const blank = (m: string) => m.replace(/[^\n]/g, ' ')
+  const src = raw.replace(/\/\*[\s\S]*?\*\//g, blank).replace(/\/\/[^\n]*/g, blank)
   const lines = src.split('\n')
 
   // ── 1. every GPU resource must be constructed somewhere that runs once ──────────────────────
@@ -52,7 +73,9 @@ for (const file of files) {
     // `createVoxelMaterial()` and `toGeometry()` must construct a resource; that is their job. What
     // matters is that a factory is not CALLED per object. So: allow the construction here, and
     // separately assert every call site is one-shot (see § 1b).
-    const inFactory = /export\s+function\s+(create|to)[A-Z]/.test(
+    // `make`, `create`, `build`, `to` — the verb is not the point, the shape is. Missing `make`
+    // made this flag `makeTileArray` in the texture lane, which is a perfectly good factory.
+    const inFactory = /export\s+function\s+(create|make|build|to)[A-Z]/.test(
       src.slice(Math.max(0, idx - 600), idx))
 
     ok(memoised || cached || inFactory,
@@ -63,10 +86,13 @@ for (const file of files) {
   // Geometry factories are called per mesh by necessity (each chunk has its own vertices, and the
   // caller disposes them). Material factories must not be: a material is a shader program, and one
   // per object is precisely what got the page blocked from WebGL.
-  for (const m of src.matchAll(/\b(create\w*Material)\s*\(/g)) {
+  // Materials AND textures: both are expensive GPU objects whose factories must be called once.
+  // (Geometry factories are exempt — each chunk genuinely owns its vertices and the caller disposes.)
+  for (const m of src.matchAll(/\b((?:create|make|build)\w*(?:Material|Texture|Array))\s*\(/g)) {
     const lineNo = src.slice(0, m.index ?? 0).split('\n').length
     const context = lines.slice(Math.max(0, lineNo - 3), lineNo).join('\n')
-    const oneShot = /useMemo\(/.test(context) || /^\s*(export\s+)?(const|function)\s/.test(lines[lineNo - 1] ?? '')
+    const near = lines.slice(Math.max(0, lineNo - 6), lineNo + 1).join('\n')
+    const oneShot = /useMemo\(/.test(near) || /^\s*(export\s+)?(const|function)\s/.test(lines[lineNo - 1] ?? '')
     ok(oneShot, `${file}:${lineNo} calls ${m[1]}() outside a useMemo — one shader program per object is the context-loss bug`)
   }
 
