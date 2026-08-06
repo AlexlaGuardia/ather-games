@@ -161,7 +161,11 @@ export const GAMES: GameEntry[] = [
     title: "Nolmir",
     href: "/nolmir",
     glyph: "◈",
-    tier: "live",
+    // SHELVED 2026-08-06 (Alex). `back-room`, not `coming-soon`: it is not a teaser for
+    // something arriving, it is a finished-enough game parked pending a proper home — which is
+    // exactly what this tier is for, and what GBOARD has said since 2026-07-16. A dimmed SOON
+    // card would advertise a release that is not coming.
+    tier: "back-room",
     kind: "play",
     tagline: "hold the breach · forge the core — an idle Athernyx story",
   },

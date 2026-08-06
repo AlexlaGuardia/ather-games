@@ -2169,7 +2169,7 @@ the Arcade frame.
 |------|--------|--------------|------------|
 | The Room | 🟢 live | 2026-07-04 | the hub — arcade hall, Desk wall, Grimoire/AtherPages, Momo→Bookstore, nav spine |
 | Eyuun's Bookstore | 🟢 live | 2026-07-04 | public audiobook player — Athernyx narrations off the Desk (Secrets hero + 15 Spirit Tales) |
-| Nolmir | 📦 shelved (live) | 2026-07-16 | idle Athernyx defense/arena — parked pending a proper home; see its block |
+| Nolmir | 📦 shelved (back-room) | 2026-08-06 | idle Athernyx defense/arena — parked pending a proper home; UNLISTED + owner-only since 2026-08-06 (Alex), see its block |
 | Magii | 🟢 live | 2026-07-29 | the tavern card game — sets-and-calls rummy, the Marks FAUCET, now playable WITH your party |
 | Mana'nana | 🟢 live | 2026-06-22 | match-3, blooming specials |
 | Rekindle #3 | 🟢 live | 2026-06-22 | conduit puzzle + Aeterna node-map |
@@ -2185,6 +2185,12 @@ the Arcade frame.
 | Dewdrop #13 | 🟢 live | 2026-06-26 | Pac-Man riff — Dewbear vs collar-Moglins, wildbloom snaps the collar |
 | Vault #14 | 🟢 live | 2026-06-29 | auto-runner — mote of light crosses the greying, leaps the void's tears (render shipped, pending Alex feel-test) |
 | Anima | 🔬 tech demo | 2026-06-21 | procedural character (IK rig + verlet cloak), ZERO art files — linked in Room |
+
+> **Public lineup changed 2026-08-06 (Alex).** Testers are the only visitors, so owner-gating the game defeats the point.
+> - **Shimmer → `live`.** It was `coming-soon`, which put `/shimmer` in the proxy's gated set. `/shimmer` is only a redirect to `/shimmer/play3d` and the walker was already public — so the gate bounced testers to `/room` **one hop before the redirect could run**. Reachable only if you knew the deeper URL. (Shimmer is a `ROOM_WALL_ID`, so this was its Room-hub threshold, not an arcade card.)
+> - **Nolmir → `back-room`.** Unlisted + owner-only. `back-room` not `coming-soon`: it is a parked game, not a teaser for a release that is coming.
+> - **Dev tooling untouched and still hard-403** — the `tool` check in `proxy.ts` runs BEFORE the game-tier check and does not depend on any tier, which is why changing a game's tier can never leak an editor. Verified with no owner cookie both ways.
+> - Left gated on purpose: **THE CRUCIBLE** door (gated for a BUILD reason — shell with no match to walk into), the two **dev-shortcut warps in Greg's home** (both destinations already have public doors), and **Lucernyx/Gravitar** (deliberately cut/shelved).
 
 ---
 
