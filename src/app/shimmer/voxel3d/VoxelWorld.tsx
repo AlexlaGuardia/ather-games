@@ -190,7 +190,7 @@ function World({ inv, toolTier, toolSkill, selItem, onStats, onPos, onLook, onIn
   incoming: React.RefObject<{ cx: number; cz: number; voxels: Uint16Array }[]>
   inflight: React.RefObject<number>
 }) {
-  const { camera } = useThree()
+  const { camera, gl } = useThree()
   const group = useRef<THREE.Group>(null)
   const highlight = useRef<THREE.LineSegments>(null)
   const material = useMemo(() => createVoxelMaterial(), [])
@@ -200,6 +200,24 @@ function World({ inv, toolTier, toolSkill, selItem, onStats, onPos, onLook, onIn
   const breaking = useRef<BreakState | null>(null)
   const drops = useRef<Drop[]>([])
   const dropMeshes = useRef(new Map<number, THREE.Mesh>())
+  /**
+   * ★ ONE GEOMETRY AND A MATERIAL CACHE FOR EVERY DROP — NOT ONE EACH.
+   *
+   * The first version built `new THREE.BoxGeometry` AND `new THREE.MeshLambertMaterial` per dropped
+   * item. A material is a SHADER PROGRAM; a few hundred drops is a few hundred programs plus a few
+   * hundred buffers, and Chrome responds by losing the WebGL context and then BLOCKING the page
+   * from creating another one: "Web page caused context loss and was blocked", after which the
+   * whole canvas is black and no amount of reloading helps until the tab is closed.
+   *
+   * This is the exact failure `mesh-bridge.ts` warns about for chunk meshes — "a material per chunk
+   * is a shader program per chunk, and that is how a voxel renderer dies" — and I wrote that
+   * warning and then did it anyway in the drop path. Geometry is shared outright; materials are
+   * cached by colour, so the ceiling is the number of distinct block colours, not the number of
+   * items on the floor.
+   */
+  const dropGeo = useMemo(() => new THREE.BoxGeometry(0.28, 0.28, 0.28), [])
+  const dropMats = useRef(new Map<number, THREE.Material>())
+  const highlightGeo = useMemo(() => new THREE.EdgesGeometry(new THREE.BoxGeometry(1.002, 1.002, 1.002)), [])
   const dropGroup = useRef<THREE.Group>(null)
   const mouse = useRef({ left: false, right: false })
   const frame = useRef(0)
@@ -466,10 +484,12 @@ function World({ inv, toolTier, toolSkill, selItem, onStats, onPos, onLook, onIn
         if (!m) {
           const mat = materialForItem(d.itemId)
           const colour = mat !== undefined ? (MATERIAL_COLOR[mat] ?? 0xcccccc) : 0xffd479
-          m = new THREE.Mesh(
-            new THREE.BoxGeometry(0.28, 0.28, 0.28),
-            new THREE.MeshLambertMaterial({ color: colour, emissive: colour, emissiveIntensity: 0.25 }),
-          )
+          let dm = dropMats.current.get(colour)
+          if (!dm) {
+            dm = new THREE.MeshLambertMaterial({ color: colour, emissive: colour, emissiveIntensity: 0.25 })
+            dropMats.current.set(colour, dm)
+          }
+          m = new THREE.Mesh(dropGeo, dm)
           dg.add(m)
           dropMeshes.current.set(d.id, m)
         }
@@ -479,7 +499,9 @@ function World({ inv, toolTier, toolSkill, selItem, onStats, onPos, onLook, onIn
       }
       for (const [id, m] of dropMeshes.current) {
         if (live.has(id)) continue
-        dg.remove(m); m.geometry.dispose(); (m.material as THREE.Material).dispose()
+        // Geometry and material are SHARED — disposing them here would destroy every other drop's
+        // rendering. Only the Mesh wrapper is thrown away.
+        dg.remove(m)
         dropMeshes.current.delete(id)
       }
     }
@@ -513,8 +535,10 @@ function World({ inv, toolTier, toolSkill, selItem, onStats, onPos, onLook, onIn
     <>
       <group ref={group} />
       <group ref={dropGroup} />
-      <lineSegments ref={highlight} visible={false}>
-        <edgesGeometry args={[new THREE.BoxGeometry(1.002, 1.002, 1.002)]} />
+      {/* ⚠ Memoised. Inline `args={[new THREE.BoxGeometry(...)]}` builds a fresh geometry on EVERY
+          React render and leaks the previous one — same family as the per-drop material that got
+          the page's WebGL context blocked. */}
+      <lineSegments ref={highlight} visible={false} geometry={highlightGeo}>
         <lineBasicMaterial color="#000000" transparent opacity={0.55} />
       </lineSegments>
     </>
