@@ -198,10 +198,23 @@ re-checked against it. Dropped deliberately, not forgotten.
     the ceiling.** At 256 with the surface datum around y=160 there are ~160 blocks below the player —
     already deeper than Minecraft's ~126 below sea level. Going to 512 without moving the datum buys
     *sky*, not depth. If more mining depth is wanted, raise the datum first; it is free.
-  - **Remaining headroom, not yet taken:** a uniform section whose neighbours are all uniform-equal
-    could be skipped entirely rather than sweeping 6 planes (floor is ~10.6ms/column at any height).
-    That needs neighbour *sections*, not a per-voxel callback, so it belongs to the chunk layer that
-    does not exist yet. Do it there, not in the mesher.
+  - **⛔ THE REMAINING HEADROOM WAS TAKEN AND IT DOES NOT PAY — corrected 2026-08-06.** This said a
+    uniform section whose neighbours are all uniform-equal could be skipped entirely, for a
+    ~10.6ms/column floor at any height. Built it in `column.ts` and **measured ~0% saving on the real
+    generated world.** The 10.6ms figure came from *synthetic* uniform sections; once ore spans
+    y16..156 at 26 attempts per chunk and carvers cut through, only **14% of sections are uniformly
+    solid**, and those still need all six neighbours to agree. **The ore density that makes the game
+    good is what kills the optimisation.** Kept (correct, free, asserted output-identical, and it
+    would pay in a sparser world) but do not budget for it.
+  - **★ The mesher's OWN uniform fast path is the one that pays** — 6 boundary planes instead of 51,
+    in `greedy.ts`. 45% of sections are uniform (31% sky, 14% solid) even when their neighbours are
+    not, so that one fires constantly. Two different optimisations; only conflate them at the cost of
+    re-deriving this.
+  - **★ REAL measured cost per 64-wide streaming chunk (16 columns), on generated content:**
+    **generation ~109ms, meshing ~47ms.** The earlier ~23ms meshing estimate was taken on synthetic
+    uniform sections and is roughly 2x optimistic against a world with ore and caves in it. ~156ms
+    per chunk arrival is ~9 frames, so streaming MUST spread this — which is exactly what `Stage`
+    exists for (resume at the last completed stage), plus a Worker.
   - ⚠ **The datum split is NOT part of this ruling and must not be treated as format.** 128 is the
     format; *where y=0 sits relative to sea level* is a tuning constant. The sketch was ~96 above /
     ~32 below, but 32 is shallow for a mining game (Minecraft ships ~64 below and later −64). **Move
