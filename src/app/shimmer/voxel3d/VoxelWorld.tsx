@@ -224,6 +224,14 @@ function World({ inv, toolTier, toolSkill, selItem, onStats, onPos, onLook, onIn
   const requested = useRef(new Set<string>())
   const settled = useRef(false)
   const vel = useRef(new THREE.Vector3())
+  // ★ Scratch vectors, allocated ONCE. Four `new THREE.Vector3()` per frame is 240 objects/sec of
+  // pure garbage — not a GPU leak, but exactly the GC pressure the mesher and carver were both
+  // rewritten to avoid. Same rule, applied to the frame loop instead of the hot inner loop.
+  const vAim = useRef(new THREE.Vector3())
+  const vFwd = useRef(new THREE.Vector3())
+  const vRight = useRef(new THREE.Vector3())
+  const vWish = useRef(new THREE.Vector3())
+  const UP = useMemo(() => new THREE.Vector3(0, 1, 0), [])
   const keys = useRef<Record<string, boolean>>({})
   const fly = useRef(false)
   const onGround = useRef(false)
@@ -248,6 +256,35 @@ function World({ inv, toolTier, toolSkill, selItem, onStats, onPos, onLook, onIn
 
   /** What is actually there. Unloaded reads as AIR — used for the raycast, so you can never target
    *  or mine a block that has not been generated. */
+  // ★ EVERYTHING THIS COMPONENT ALLOCATES ON THE GPU IS RELEASED ON UNMOUNT. Without this, a
+  // navigation away leaks every chunk geometry plus the shared material and drop resources — and a
+  // page that leaks a full render's worth of buffers per visit is how the context gets lost in the
+  // first place. The shared resources are disposed here and ONLY here, because disposing them
+  // anywhere else would break every object still using them.
+  useEffect(() => () => {
+    for (const m of drawn.current.values()) m.geometry.dispose()
+    drawn.current.clear()
+    dropMeshes.current.clear()
+    for (const m of dropMats.current.values()) m.dispose()
+    dropMats.current.clear()
+    dropGeo.dispose()
+    highlightGeo.dispose()
+    material.dispose()
+  }, [dropGeo, highlightGeo, material])
+
+  // ★ A LOST WEBGL CONTEXT MUST SAY SO. Chrome blocks a page that loses its context repeatedly, and
+  // the result is a black canvas with the HUD still drawn on top — indistinguishable from a
+  // generation failure, which is exactly why I hunted the mesher first when it happened. The block
+  // is sticky for the life of the tab: reloading does not clear it, closing the tab does.
+  useEffect(() => {
+    const cv = gl.domElement
+    const lost = (e: Event) => { e.preventDefault(); onStats('WEBGL CONTEXT LOST — close this tab and open a new one') }
+    const restored = () => onStats('webgl context restored')
+    cv.addEventListener('webglcontextlost', lost)
+    cv.addEventListener('webglcontextrestored', restored)
+    return () => { cv.removeEventListener('webglcontextlost', lost); cv.removeEventListener('webglcontextrestored', restored) }
+  }, [gl, onStats])
+
   const voxel = useCallback((wx: number, wy: number, wz: number): number => {
     if (wy < 0 || wy >= H) return AIR
     const cx = Math.floor(wx / SECTION), cz = Math.floor(wz / SECTION)
@@ -397,11 +434,11 @@ function World({ inv, toolTier, toolSkill, selItem, onStats, onPos, onLook, onIn
     // ── movement ─────────────────────────────────────────────────────────────────────────────
     const k = keys.current
     const speed = (k.ShiftLeft ? 22 : 9) * (fly.current ? 2.2 : 1)
-    const aim = new THREE.Vector3()
+    const aim = vAim.current
     camera.getWorldDirection(aim)
-    const fwd = aim.clone(); fwd.y = 0; fwd.normalize()
-    const right = new THREE.Vector3().crossVectors(fwd, new THREE.Vector3(0, 1, 0))
-    const wish = new THREE.Vector3()
+    const fwd = vFwd.current.copy(aim); fwd.y = 0; fwd.normalize()
+    const right = vRight.current.crossVectors(fwd, UP)
+    const wish = vWish.current.set(0, 0, 0)
     if (k.KeyW) wish.add(fwd)
     if (k.KeyS) wish.sub(fwd)
     if (k.KeyD) wish.add(right)
@@ -516,7 +553,15 @@ function World({ inv, toolTier, toolSkill, selItem, onStats, onPos, onLook, onIn
         }
       : null)
     onPos(p)
-    if (++frame.current % 10 === 0) onStats(`${cols.current.size} columns · ${drawn.current.size} meshes · ${drops.current.length} drops · ${worker.current ? 'worker' : 'main thread'}`)
+    if (++frame.current % 10 === 0) {
+      // ★ GPU RESOURCE COUNTS IN THE HUD. A leak used to announce itself by Chrome blocking the
+      // context and the screen going black with no explanation. `programs` is the number that
+      // matters — it should be a small constant (one shared chunk material plus one per distinct
+      // drop colour). If it climbs while you play, something is allocating materials per object.
+      const info = gl.info
+      onStats(`${cols.current.size} col · ${drawn.current.size} mesh · ${drops.current.length} drops · `
+        + `geo ${info.memory.geometries} prog ${info.programs?.length ?? 0} · ${worker.current ? 'worker' : 'main'}`)
+    }
 
     // ── evict ────────────────────────────────────────────────────────────────────────────────
     if (frame.current % 120 === 0) {
