@@ -134,18 +134,23 @@ tuned so one rebuild fits a frame budget. Supra would need a chunk mesher it doe
 (its renderer is 492 lines — flat-shaded meshes and a floor primitive), but the **model** arrives
 ready and the mesher is a renderer concern on both sides.
 
-## 8. ⛔ Three calls that are Alex's
+## 8. ✅ RULED 2026-08-06 (Alex) — all three, as recommended
 
-- **(a) Voxel scale vs the art.** Tiles are 32px and the player is ~1 tile wide. **One voxel = one
-  tile** makes a block player-sized, the Minecraft read. Larger voxels read chunkier and cost less.
-  *Recommendation: 1 voxel = 1 tile*, because it keeps every existing sprite, sculpt and placement
-  coordinate valid — the transition costs nothing in re-authoring.
-- **(b) World height / how deep mining goes.** Currently 0–6. Minecraft is 384. This is the biggest
-  memory lever, though § 2 shows even 128 is affordable. *Recommendation: 128*, split as ~96 above
-  the surface datum and ~32 below — deep enough for real mining, cheap enough for a phone.
-- **(c) Do the seven painted canvases survive** as extruded surface (§ 5), or does the whole Ather
-  become generated country? *Recommendation: survive.* They are the only hand-authored land in the
-  game and § 5 costs nothing to keep them.
+- **(a) 1 voxel = 1 tile.** A block is player-sized, the Minecraft read. Chosen because it keeps
+  every existing sprite, sculpt and placement coordinate **valid unchanged** — the transition costs
+  nothing in re-authoring, which is the whole reason the sculpt and the canvases survive.
+- **(b) World height = 128.** Deep enough for real mining, and § 2 shows it lands ~3.9MB packed
+  against the 23MB the flat 2.5D world already spends.
+  - ⚠ **The datum split is NOT part of this ruling and must not be treated as format.** 128 is the
+    format; *where y=0 sits relative to sea level* is a tuning constant. The sketch was ~96 above /
+    ~32 below, but 32 is shallow for a mining game (Minecraft ships ~64 below and later −64). **Move
+    the datum freely during the mesher spike — it costs nothing.** Only the 128 is locked.
+- **(c) The seven painted canvases survive**, extruded per § 5. They are the only hand-authored land
+  in the game and keeping them costs nothing under ruling (a).
+
+**Consequence of (a) + (c) together:** the existing 0–6 sculpt uses 7 of 128 levels as *relief on
+top of the datum*, not as the world's full vertical range. Nothing about the sculpt is rescaled;
+it is lifted onto the datum as-is.
 
 ## 9. What we take from Supra, and what we leave
 

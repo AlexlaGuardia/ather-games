@@ -414,9 +414,10 @@ the Arcade frame.
 >
 > **Left off:** design doc committed and ruled-ready. Nothing implemented. The zone cutover + 7-canvas composition are still the work in front of it.
 >
-> **Next:** ① Alex rules the three calls in § 8 (voxel scale · world height · do the painted canvases survive) ② compose the 7 Ather canvases into ONE zone so the voxel layer lands on a continuous surface ③ spike the mesher — time a greedy mesh of one section in a Worker **on the phone**, which is what picks section size.
+> **Next:** ① compose the 7 Ather canvases into ONE zone so the voxel layer lands on a continuous surface ② spike the mesher — time a greedy mesh of one section in a Worker **on the phone**, which is what picks section size ③ then build.
 >
 > ### Decisions
+> - **✅ RULED 2026-08-06 (Alex) — all three § 8 calls, as recommended.** **1 voxel = 1 tile** (every sprite/sculpt/coordinate stays valid unchanged — this is *why* the canvases and the sculpt survive) · **world height 128** · **the seven painted canvases survive**, extruded per § 5. ⚠ **The datum split is NOT part of the ruling** — 128 is the format, where y=0 sits vs sea level is a tuning constant; the ~96/~32 sketch is shallow for mining and should be moved freely during the mesher spike.
 > - **★ Chunk width is a RE-MESH decision, not a memory decision.** For a fixed footprint the totals are identical at 16/32/64 wide; what changes is how much rebuilds when one block breaks (524k voxels at 64×64×128 vs 4k at 16³ sections). Pick width from re-mesh cost, memory follows.
 > - **★ Typed arrays are a 4× win before voxels enter the picture.** Today's 2.5D world spends **~8 bytes/cell** because it's JS `number[][]` (23MB for ~2.9M cells). At 2 bytes + palette packing a **128-deep voxel world is cheaper than the flat grid we ship now.**
 > - **We are not starting from zero on z.** `heightmaps.ts` already says *"Minecraft-style BLOCKY terrain"*; Alex has sculpted **17 zones / 233,380 cells / heights 0–6**. That sculpt becomes the world's **surface layer**, not reference art.
