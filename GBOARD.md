@@ -425,8 +425,22 @@ the Arcade frame.
 > - **★ THE V AXIS IS NEGATED ON SIDE FACES — this is the art contract, not a hack.** Texture row 0 is the TOP of an image file, but `v` grows with world Y, so without the flip **every hand-painted tile imports upside down.**
 > - **★ ALPHA IS AN EMISSIVE MASK, NOT OPACITY** — only the crystal inside an ore block glows, not the whole block. The HUD swatch must force alpha opaque or every non-glowing tile blits transparent. One byte, two consumers, two meanings.
 > - **Ore, art-directed by Alex over two passes:** soft radial blobs read as **gumballs** → **Manhattan distance = a DIAMOND silhouette** (at 32px the silhouette does the work: circle = bubble, diamond = cut stone) + **three FLAT tones on a diagonal, no gradient** (a smooth ramp is what makes a shape look inflated) + dark rim seating it in rock + single-texel flecks. Then: shards **clipped at the tile edge** → contained, inset per-axis by `r*sx`/`r*sy` (inset by `r` alone lets the wider ones clip out = the same bug disguised). The toroidal wrap I started with was only half-right — halves DO complete across *adjacent* ore blocks, but ore is scattered singles, so the common case was one isolated block showing two clipped halves.
-> - **Tile size: 32 recommended, not yet ruled.** At fov75/1080p a block covers ~`704/d` screen px, so 1 texel = 1 screen px out to **~22 blocks @32px · ~11 @64 · ~5.5 @128** — past that the GPU shows a mip level and the extra resolution is *not on screen*. **128 rejected:** 16× the pixels to hand-paint per tile and it stops reading as pixel art. **Memory is not the constraint** (43 layers @64px = 688KB).
+> - **✅ TILE SIZE RULED 2026-08-06 (Alex): 64.** Overrides the 32 recommendation below, which stands as the reasoning rather than the answer. **Consequence to accept, stated once:** 1 texel = 1 screen px only out to **~11 blocks** (vs ~22 at 32px), so past that the GPU is showing a mip and the extra resolution is not on screen — and each tile is **4× the pixels to hand-paint**. Alex's call; look is his. **There is no TILE_SIZE constant yet** — the spike hard-codes `makeTileArray(32)`/`(64)` for the A/B, so the wiring job must introduce one rather than inherit 32 by accident.
+> - **Tile size: 32 recommended, not yet ruled — SUPERSEDED, kept for the reasoning.** At fov75/1080p a block covers ~`704/d` screen px, so 1 texel = 1 screen px out to **~22 blocks @32px · ~11 @64 · ~5.5 @128** — past that the GPU shows a mip level and the extra resolution is *not on screen*. **128 rejected:** 16× the pixels to hand-paint per tile and it stops reading as pixel art. **Memory is not the constraint** (43 layers @64px = 688KB).
 > - **⚠ KNOWN, DELIBERATELY UNFIXED:** every ore block shows the identical cluster, so a large vein reads as a stamped repeat. Fix is variant layers selected per-block by the same `hashBlock` the jitter uses — no geometry, no meshing cost. Not worth the layers until a real vein looks wrong.
+> - **⛔ MESHY IS NOT FOR VOXEL FLORA (ruled 2026-08-06, jin).** Asked directly whether flowers and
+>   similar should come from Meshy. **No, and it would fight the aesthetic three ways.** (1) Meshy
+>   makes *organic* meshes — smooth geometry in a blocky, 64px pixel-art world reads as an import
+>   from another game. (2) Every generated mesh is its own geometry **and material**, which is
+>   precisely the per-object allocation that got this page BLOCKED from WebGL today; thousands of
+>   flowers as individual meshes is that bug at scale. (3) It costs credits, against a free-first
+>   standing preference. **Flora is a CROSS-PLANE: two intersecting quads with a cutout texture,
+>   drawn from the same tile array that already exists** — near-zero cost, matches Minecraft, and
+>   reuses the texture work rather than opening a second pipeline. ⚠ One real gotcha: alpha in this
+>   shader is an **emissive mask, not opacity**, so cutout flora needs its own material or an
+>   explicit flag — do not assume the ore alpha channel means transparency.
+>   **Meshy keeps its existing lane** (the arcade / pre-render prop path, per the art-medium law:
+>   living things stay live-glow, only dead grey things get pre-rendered). Voxel flora is not that.
 > - **Tiles are generated from code** off the placeholder palette so the render path could be judged before anything is painted. **They are not a look call.**
 >
 > ### ✅ MESHER SPIKE DONE 2026-08-06 (`d018c68`) — **section size = 16**
