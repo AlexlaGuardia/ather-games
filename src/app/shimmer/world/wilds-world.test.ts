@@ -20,9 +20,10 @@ import {
 } from './wilds-world'
 import { generateWildsRegion, edgeGate, WILDS_FILL } from './wilds-gen'
 import { CHUNK, DEFAULT_RADIUS } from './chunk-stream'
-import { WILDS_ZONE, WILDS_GEO, loadWildsRegion } from './region-maps'
+import { WILDS_ZONE, WILDS_GEO, loadWildsRegion, REGION_FILES, applyLiveRegionData } from './region-maps'
 import { ALL_ZONES } from './all-zones'
 import { checkWarp } from './zones'
+import type { RegionFile } from './region-codec'
 
 let pass = 0
 const fails: string[] = []
@@ -272,6 +273,38 @@ ok(wildsLoadRadius() > DEFAULT_RADIUS * CHUNK,
     ok(!wilds.warps.some(w => parseWildsId(`wilds-1-0`) && w.toZone.startsWith('r-wilds')),
       'no Wilds warp points at another Wilds region — the seams are walked, not warped')
   }
+}
+
+// ── 10. ★ THE LIVE-DATA PATH — where the seam actually died ───────────────────────────────
+// Everything above passed while the game was broken. `applyLiveRegionData` overlays the live
+// on-disk region files at every boot, and it used to rebuild `zone.warps` from `live.warps`
+// ALONE — silently destroying every gate-derived warp. The gate kept its nametag (that renders
+// from `zone.gates`, which was untouched), so a dead door looked like a healthy one.
+//
+// The compiled data was right, the headless checks were right, and the door did nothing. So the
+// oracle now asserts the doors SURVIVE the overlay, which is the state the game actually runs in.
+{
+  const doorTile = (): string | null => {
+    const w = checkWarp(ALL_ZONES, 'r-the-outfields', 184, 196)
+    return w ? w.toZone : null
+  }
+  ok(doorTile() === WILDS_ZONE, 'compiled: the Outfields door leads to the Wilds')
+
+  // Rebuild the live payload from the region files themselves — the same shape /shimmer/region-data
+  // serves — so this runs with no server and still exercises the real overlay.
+  const live: Record<string, RegionFile> = {}
+  for (const id of ['the-outfields', 'wilds-0-0']) live[id] = REGION_FILES[id]
+  applyLiveRegionData(live)
+
+  ok(doorTile() === WILDS_ZONE,
+    '★★ AND IT STILL LEADS THERE AFTER THE LIVE OVERLAY — the bug that made the gate do nothing')
+  const of = ALL_ZONES.find(z => z.id === 'r-the-outfields')!
+  ok(of.warps.filter(w => w.toZone === WILDS_ZONE).length === 4,
+    'the full 2x2 door footprint survives, not just one corner tile')
+  ok((of.gates ?? []).some(g => g.label === 'THE WILDS'), 'and the nametag is still on it')
+  const back = ALL_ZONES.find(z => z.id === WILDS_ZONE)!
+  ok(back.warps.some(w => w.toZone === 'r-the-outfields'),
+    'the Wilds keep their way back out through the overlay too')
 }
 
 console.log(`\nwilds-world: ${pass} passed, ${fails.length} failed`)

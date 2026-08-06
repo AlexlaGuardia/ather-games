@@ -69,7 +69,8 @@ export function loadWildsRegion(id: string): number[][] | null {
  * so a region file keeps carrying its own contents in its own local coordinates and nothing
  * downstream learns that regions exist.
  */
-function buildWildsZone(): Zone {
+/** Every Wilds door, collected from the region files and offset into world space. */
+function collectWildsDoors(): { gates: Gate[]; warps: Warp[] } {
   const gates: Gate[] = []
   const warps: Warp[] = []
   for (const f of WILDS_FILES) {
@@ -85,6 +86,11 @@ function buildWildsZone(): Zone {
       warps.push({ ...w, fromX: w.fromX + o.x, fromY: w.fromY + o.y, direction: (w.direction ?? 'down') as Warp['direction'] })
     }
   }
+  return { gates, warps }
+}
+
+function buildWildsZone(): Zone {
+  const { gates, warps } = collectWildsDoors()
   // Start at the heart of the north-west region — the one the Outfields seam opens onto.
   const first = WILDS_FILES.find(f => f.id === wildsIdOf(WILDS_GEO.originRx, WILDS_GEO.originRy)) ?? WILDS_FILES[0]
   const fo = parseWildsId(first.id)!
@@ -174,6 +180,7 @@ export function migrateLegacyPosition(zoneId: string, x: number, y: number): { z
  */
 export function applyLiveRegionData(regions: Record<string, RegionFile> | undefined | null): void {
   if (!regions) return
+  let touchedWilds = false
   for (const [id, live] of Object.entries(regions)) {
     const compiled = REGION_FILES[id]
     if (!compiled || !Array.isArray(live.rle) || !live.cols || !live.rows) continue
@@ -183,8 +190,36 @@ export function applyLiveRegionData(regions: Record<string, RegionFile> | undefi
     const zone = REGION_ZONES.find(z => z.id === REGION_WIP_PREFIX + id)
     if (zone) {
       zone.grid = grid
-      zone.warps = live.warps.map(w => ({ ...w, direction: (w.direction ?? 'down') as Warp['direction'] }))
+      // ★ GATES MUST BE RE-EXPANDED HERE, NOT JUST COPIED (fixed 2026-08-06).
+      // This used to be `zone.warps = live.warps.map(...)`, which silently DESTROYED every
+      // gate-derived warp the moment live data loaded — and live data loads on every boot, so
+      // in the browser it always won. A gate then looked perfectly healthy (its nametag renders
+      // from `zone.gates`, which nothing here touched) while walking into it did nothing at all.
+      // That is the shape the Outfields→Wilds seam failed in: correct in the compiled data,
+      // correct in every headless test, dead in the actual game.
+      // `REGION_ZONES` builds warps as authored-warps + expanded-gates; this must agree with it
+      // exactly, or the live path keeps meaning something different from the compiled one.
+      const liveGates = (live.gates ?? []).map(g => ({ ...g, direction: g.direction as Gate['direction'] }))
+      zone.gates = liveGates
+      zone.warps = [
+        ...live.warps.map(w => ({ ...w, direction: (w.direction ?? 'down') as Warp['direction'] })),
+        ...liveGates.flatMap(expandGate),
+      ]
       zone.playerStart = live.playerStart
+    }
+    // A Wilds tile has no zone of its own — its doors live on the composite, which is rebuilt
+    // below once, after every region's live data has landed.
+    if (parseWildsId(id)) touchedWilds = true
+  }
+  if (touchedWilds) {
+    const wilds = REGION_ZONES.find(z => z.id === WILDS_ZONE)
+    if (wilds) {
+      const { gates, warps } = collectWildsDoors()
+      wilds.gates = gates
+      wilds.warps = warps
+      // The grid stays SPARSE on purpose — `loadWildsRegion` reads the (now live) REGION_FILES
+      // entry when the player's load window reaches that region, so sculpt-fresh tiles arrive
+      // through the normal mount path rather than by materializing the overland here.
     }
   }
 }
