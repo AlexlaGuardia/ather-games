@@ -90,6 +90,21 @@ export function greedyMesh(sec: Section, neighbour: NeighbourFn = OUTSIDE_IS_AIR
   const sample = (a: number, b: number, c: number): number =>
     a >= 0 && a < S && b >= 0 && b < S && c >= 0 && c < S ? sec.get(a, b, c) : neighbour(a, b, c)
 
+  // ★ THE UNIFORM FAST PATH — this is what makes world height nearly free.
+  //
+  // A section holding one value has NO interior faces by definition: every interior plane has the
+  // same value on both sides, so the mask is all zeros and the sweep does S-1 planes of work per
+  // axis to emit nothing. In a tall world that is most of the column — everything above the surface
+  // is all-air, everything well below it is all-stone — so without this, column mesh cost scales
+  // LINEARLY with world height purely from wasted sweeping (measured: 28.6ms at H=128 rising to
+  // 115.3ms at H=512, against a floor of 10.6ms if uniform sections cost nothing).
+  //
+  // Only the two BOUNDARY planes per axis can carry a face, and only where a neighbour differs.
+  // So: 6 planes instead of 3*(S+1) = 51. The result is bit-identical, which is why the existing
+  // "solid section merges to 6 quads" and "solid inside solid emits nothing" asserts still hold —
+  // they are exactly this case, and they were written before the fast path existed.
+  const uniform = sec.uniformValue() !== null
+
   for (let d = 0; d < 3; d++) {
     const u = (d + 1) % 3
     const v = (d + 2) % 3
@@ -97,7 +112,10 @@ export function greedyMesh(sec: Section, neighbour: NeighbourFn = OUTSIDE_IS_AIR
     q[0] = q[1] = q[2] = 0
     q[d] = 1
 
-    for (x[d] = -1; x[d] < S; ) {
+    const planes = uniform ? [-1, S - 1] : null
+    let planeIdx = 0
+
+    for (x[d] = planes ? planes[0] : -1; x[d] < S; ) {
       // ── build the visibility mask for this plane ──────────────────────────────────────────
       let n = 0
       for (x[v] = 0; x[v] < S; x[v]++) {
@@ -181,6 +199,13 @@ export function greedyMesh(sec: Section, neighbour: NeighbourFn = OUTSIDE_IS_AIR
           i += w
           n += w
         }
+      }
+
+      // Uniform sections jump straight from the low boundary plane to the high one; everything
+      // between is provably faceless. Non-uniform sections just continue, already advanced above.
+      if (planes) {
+        planeIdx++
+        x[d] = planeIdx < planes.length ? planes[planeIdx] : S
       }
     }
   }

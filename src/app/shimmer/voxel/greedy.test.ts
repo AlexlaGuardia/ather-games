@@ -103,6 +103,33 @@ for (const S of [4, 16, 32]) {
   eq(r.quads, 0, 'a solid section inside solid neighbours emits nothing')
 }
 
+// ── 9. the uniform fast path must be EQUIVALENT, not merely fast ────────────────────────────
+// A uniform section skips every interior plane on the proof that they carry no faces. That proof
+// holds — but only the boundary planes are still swept, so a bug here shows up as a MISSING WALL
+// on one side of a solid region, which is the hardest kind of hole to notice by eye. Test it
+// against mixed neighbours, where some sides are exposed and others are not.
+{
+  const S = 16
+  const sec = solid(S, () => true)   // uniform: takes the fast path
+  // Solid only on -x and +y; every other side is open. Expect exactly the 4 open faces.
+  const mixed = (x: number, y: number, _z: number) => (x < 0 ? 1 : y >= S ? 1 : AIR)
+  const r = greedyMesh(sec, mixed)
+  eq(r.quads, 4, 'uniform section with 2 of 6 sides occluded emits exactly 4 quads')
+
+  // And the faces it does emit must be on the right sides: no quad may lie on an occluded plane.
+  let wrong = 0
+  for (let i = 0; i < r.quads; i++) {
+    const nx = r.normals[i * 12], ny = r.normals[i * 12 + 1]
+    if (nx === -1) wrong++          // -x is occluded
+    if (ny === 1) wrong++           // +y is occluded
+  }
+  eq(wrong, 0, 'no quad faces an occluded side')
+
+  // Per-axis: a uniform section occluded on ONE side of an axis still emits the opposite side.
+  const oneSide = greedyMesh(sec, (x) => (x < 0 ? 1 : AIR))
+  eq(oneSide.quads, 5, 'occluding a single side leaves the other five')
+}
+
 console.log(`\ngreedy mesher: ${pass} passed, ${fails.length} failed`)
 for (const f of fails) console.log('  ✗ ' + f)
 if (fails.length) process.exit(1)

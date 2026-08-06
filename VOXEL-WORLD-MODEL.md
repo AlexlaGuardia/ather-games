@@ -185,8 +185,23 @@ re-checked against it. Dropped deliberately, not forgotten.
 - **(a) 1 voxel = 1 tile.** A block is player-sized, the Minecraft read. Chosen because it keeps
   every existing sprite, sculpt and placement coordinate **valid unchanged** — the transition costs
   nothing in re-authoring, which is the whole reason the sculpt and the canvases survive.
-- **(b) World height = 128.** Deep enough for real mining, and § 2 shows it lands ~3.9MB packed
-  against the 23MB the flat 2.5D world already spends.
+- **(b) ✅ REVISED 2026-08-06 → world height = 256** (was 128; the phone drop removed the reason for
+  the lower number). Costs ~7.8MB packed — nothing on a desktop.
+  - **★ The cost of height was never memory, it was WASTED SWEEPING, and that is now fixed.** A
+    uniform section (all air above the surface, all stone well below it) emits **zero quads** but the
+    mesher still swept all 3(S+1)=51 planes to discover that. In a tall world most of a column is
+    uniform, so column cost scaled *linearly with height* for no geometry: 28.6ms at 128 rising to
+    115.3ms at 512. `greedy.ts` now takes a **uniform fast path** — only the 2 boundary planes per
+    axis can carry a face, so 6 planes instead of 51 — and the curve flattens: **15.5 / 23.4 / 31.3 /
+    39.3 ms** at 128 / 256 / 384 / 512. **256 costs 50% more than 128, not 100%.**
+  - **⛔ Why not 512, given it is affordable at 39ms?** Because **the datum decides mining depth, not
+    the ceiling.** At 256 with the surface datum around y=160 there are ~160 blocks below the player —
+    already deeper than Minecraft's ~126 below sea level. Going to 512 without moving the datum buys
+    *sky*, not depth. If more mining depth is wanted, raise the datum first; it is free.
+  - **Remaining headroom, not yet taken:** a uniform section whose neighbours are all uniform-equal
+    could be skipped entirely rather than sweeping 6 planes (floor is ~10.6ms/column at any height).
+    That needs neighbour *sections*, not a per-voxel callback, so it belongs to the chunk layer that
+    does not exist yet. Do it there, not in the mesher.
   - ⚠ **The datum split is NOT part of this ruling and must not be treated as format.** 128 is the
     format; *where y=0 sits relative to sea level* is a tuning constant. The sketch was ~96 above /
     ~32 below, but 32 is shallow for a mining game (Minecraft ships ~64 below and later −64). **Move
