@@ -6,6 +6,12 @@
 > Minecraft's worldgen was rewritten wholesale in 1.18, so every claim below carries a version label.
 > An unlabelled Minecraft claim is usually three different systems mashed together.
 >
+> ⚠ **AMENDED 2026-08-06 — three changes, read before citing this file.** ① The stronghold section
+> said **ten**; canon had already ruled **8, Acts 2–9, banded 3/4/1** on 2026-07-24 and this doc never
+> checked. Rewritten as **two classes** (8 authored + unbounded procedural). ② **Carvers are
+> un-skipped** — they were skipped for lack of a z-column, and the voxel ruling (height 128) expired
+> that reason. ③ Steal #3 is **load-bearing from day one**, not a later optimisation.
+>
 > ⚠ **We copy DECISIONS, not CONSTANTS.** Their tuning assumes voxels, a 16-block chunk, Java, and
 > twenty years of iteration. Ours is a 2.5D tile grid + height tiers, 64-tile chunks, in a browser,
 > on a phone. Anything version-specific or voxel-only is called out as such.
@@ -33,7 +39,7 @@
 
 **★ 2. An explicit per-chunk status enum with a generation margin.** Something like `NOISE → POI_STARTS → POI_REFS → DECORATED → READY`, plus a rule that a stage may only run when its declared neighbour ring is already at the prior stage. `wildsLoadRadius()` already does the right thing in miniature (`radius * CHUNK + WILDS_LOAD_MARGIN`); generalise it so the margin is sized by the largest POI footprint, not one chunk. **Never let a stage synchronously generate a missing neighbour: that is precisely the pre-1.13 cascading bug, and in a browser it is a frame-time cliff, not a lag spike.** Cost: ~1 day, mostly in `syncWilds` and `chunk-stream`.
 
-**★ 3. Grid + jitter + salt placement for the *many* case.** `spacing`/`separation`/`salt`, triangular jitter for even-looking spread. Not for the ten strongholds (see below), but this is the correct machine for procedural camps, ruins, rune caches, patrol posts, and it is the same trick `edgeGate()` already uses, one level up: hash of (seed, cell coords, salt) instead of hash of the shared edge. Cost: ~3 hours, it is one function and a table of `{spacing, separation, salt}` per POI type.
+**★ 3. Grid + jitter + salt placement for the *many* case.** `spacing`/`separation`/`salt`, triangular jitter for even-looking spread. Not for the 8 canon strongholds (see below — those are authored and guaranteed), but this is the correct machine for **every class-2 structure**: procedural holds, camps, ruins, rune caches, patrol posts, Moglin burrow-villages. Same trick `edgeGate()` already uses, one level up: hash of (seed, cell coords, salt) instead of hash of the shared edge. Cost: ~3 hours, one function and a table of `{spacing, separation, salt}` per POI type. **Load-bearing from day one, not a later optimisation** — since 2026-08-06 it is what makes the world unbounded past the eighth hold.
 
 **★ 4. Height and biome as two separate reads of the same noise fields.** Pick 3-5 axes (elevation-bias, roughness, temperature, moisture, plus layer-index as a discrete axis), sample them per tile off the existing `terrainNoise()` domain-warp, then: height-tier = spline over elevation-bias/roughness; biome = nearest-match in axis-space. **Never derive the height tier from the biome id, or we rebuild the pre-1.18 mistake and get stepped cliffs at every biome edge.** Nearest-match over ~15 biome points is a brute-force loop, no kd-tree needed at our count. Cost: ~1-2 days in `wilds-gen.ts`, and it lands *before* the infinite migration, independent of it.
 
@@ -43,7 +49,7 @@
 
 ## ⛔ What we SKIP
 
-- **Carvers.** They tunnel through a solid 3D volume. We have a tile grid plus a height tier and no z-column, so there is nothing to tunnel. A cave mouth is a POI with a layer tag, routed through mechanism #1.
+- ~~**Carvers.**~~ **★ UN-SKIPPED 2026-08-06.** This said *"we have a tile grid plus a height tier and no z-column, so there is nothing to tunnel."* **That reason expired the same day** — Alex ruled the world voxel at height 128 (`VOXEL-WORLD-MODEL.md` § 8), so there is now a column to carve. Voranyx Caverns becomes generated mineshafts opening into large caverns rather than an authored region. **The cost to respect:** carvers are among the most expensive stages, so this must run as a chunk stage with a declared neighbour margin and **never synchronously generate a missing neighbour** — steal #2's rule, and in a browser that failure is a frame-time cliff, not a lag spike.
 - **Light propagation as a generation stage.** It is a stage at all only because illumination has to flood through a voxel volume across a chunk border. Our lighting is a shader concern, not a worldgen dependency, and porting it would drag in a neighbour-margin we do not otherwise need.
 - **The `depth` biome axis.** It is derived by measuring down a real vertical column. We have no such quantity. Feed layer-index (surface/mid/floor) in as a discrete axis instead and stop there.
 - **Surface rules as a per-column cascade.** The cascade shape exists to walk downward through blocks. Keep the *intent* (an ordered predicate list deciding a tile's variant) keyed on `(biome, local noise, neighbour tile)`, drop the column walk.
@@ -66,17 +72,47 @@ Smallest thing that gets the same property:
 
 No storage, no pointers, no statuses in v1. The pointer table and the status enum are the optimisation you add when the footprint math gets expensive enough that recomputing it 25 times per chunk shows up in a profile. The property that matters, one author per feature and zero global coordination, arrives on day one from the purity of step 1 alone.
 
-## Ten strongholds: rings or jittered grid?
+## Strongholds: TWO CLASSES, not one ring table
 
-**Rings, computed once offline, baked into a static table. Do not implement Minecraft's lazy per-chunk ring algorithm.**
+> ⚠ **CORRECTED 2026-08-06.** This section originally said **ten** strongholds in three rings split
+> 3/3/4, and built its whole argument on that number. **It was wrong against a canon ruling that
+> predated it by two weeks:** `game/shimmer-storyline.md:131` — *"Wilds stronghold count — RULED
+> 2026-07-24 (Alex): **8 strongholds, Acts 2–9, banded 3/4/1**,"* superseding the four-element anchor
+> **as the campaign spine** (one hold per Act). The research never checked canon for a number canon
+> had already fixed. Same family as the Faro / Groq / handoff-sort lies: **a doc asserting a settled
+> number is worse than no doc, because nobody re-checks a box already ticked.** Verify against
+> `CANON/game/`, not against this file.
 
-That machinery exists because Mojang does not know how many strongholds a player will ever need, so ring membership must be derivable from a chunk coordinate alone. We know the answer is ten, forever. Use the ring *math* as an authoring heuristic, then bake the result next to the garden in the authored-POI table the infinite generator needs regardless.
+**Alex's 2026-08-06 call — strongholds are no longer a fixed set of N.** Reconciled with the ruling
+above by splitting them into two classes, which is Mojang's own answer and costs nothing:
 
-Concretely: three rings, split 3/3/4. Angles are wedge-centre plus a small deterministic jitter from a per-stronghold salt (Mojang's own equal-wedge-plus-jitter, proven by the 36°-not-40° outer-ring anomaly). Radius is a seeded uniform draw inside each ring's band. Suggested bands in our tiles, to be felt out in play rather than argued: ~350-700, ~1400-2200, ~3000-4500. Ring 1 lands inside the first couple of 400-tile regions' worth of walking in whichever direction the player picks.
+**Class 1 — the 8 canon strongholds.** Authored, guaranteed, one per Act (2–9), banded **3/4/1**.
+These carry the campaign, so their placement must be *guaranteed*, not probabilistic. Bake them
+offline into the authored-POI table the infinite generator needs regardless, using the ring math
+only as an authoring heuristic: wedge-centre angles plus a small deterministic per-stronghold salt
+jitter (Mojang's equal-wedge-plus-jitter, proven by the outer ring's 36°-not-40° anomaly), radius a
+seeded uniform draw inside each band. **Do not implement Minecraft's lazy per-chunk ring algorithm** —
+that machinery exists only because Mojang cannot know how many a player will need, and we do.
+The wedge split buys the property that actually matters: **a hold lies ahead whichever heading the
+player commits to at spawn**, which a jittered grid gives only in expectation. Band radii in tiles
+are a playtest call, same class as `GUARD_TUNING`.
 
-What it does to the early game: the wedge split guarantees a stronghold ahead no matter which heading the player commits to at spawn, which is the actual property you want and which a jittered grid gives you only in expectation. Density falling off outward means "keep walking" always has an unfound named thing in front of it, for ten discoveries.
+**Class 2 — unbounded procedural holds, ruins, camps, rune caches, patrol posts.** Grid + jitter +
+salt (steal #3), infinite, no story weight. This is what makes "keep walking and there is always
+another" true past the eighth.
 
-Two consequences to accept up front. **The world becomes origin-centric**: spawn must stay near (0,0) or the pacing curve inverts. And **after the tenth, outward exploration is pure procedural filler**, so the grid+jitter machine from steal #3 stops being optional the moment someone walks past ring 3, which is an argument for building it in the same week, not later.
+**★ The split retires both consequences the ten-stronghold design had to accept.** The world stops
+being hard origin-centric (only the 8 canon holds are origin-banded; procedural ones are everywhere),
+and "after the last one it is pure filler" stops being true, because filler was always the plan for
+class 2. Steal #3 is no longer a thing to build *later when someone walks past ring 3* — it is
+load-bearing from the first session.
+
+**The same two-class shape applies to settlements**, and canon forces it there too: **Gloview
+Village is canon** (`shimmer-storyline.md:75` — *"a settlement of free, uncollared Moglins… the
+counter-image to the holds"*), so it is class 1 — authored and guaranteed. Generic Moglin burrow-
+villages are class 2, procedural, Minecraft-village style. **And the tutorial is class 1 with an
+extra constraint:** Moonwell Glade (Greg's home, per `moonwell-glade-gregory-s-home`) must be
+*guaranteed near origin with spawn inside it*, or the tutorial is missable.
 
 ## Open questions
 
