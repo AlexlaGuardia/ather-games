@@ -481,6 +481,15 @@ the Arcade frame.
 >
 > **⚠ Debugging note, so the next person doesn't lose the time I did:** a **backgrounded tab reports `document.visibilityState === 'hidden'`, never sizes the R3F canvas (it stays at the HTML default 300×150), and therefore never renders `Scene` at all.** That looks exactly like a catastrophic render bug — blank sky, no console errors, no geometry — and it is purely an artifact of the tab not being foregrounded. **Check `visibilityState` before believing an empty world.**
 >
+> ### 🐛 THE VAST EMPTY MAP (found+fixed 2026-08-06, `2707c41`) — walked the gate, arrived nowhere
+> The door fired and the Wilds were empty country. **The mount logic was correct; it was never called.**
+> - **★ ROOT CAUSE: `Scene` renders without a key, so it never remounts on a warp and every streaming ref outlives the zone.** `performWarp` sets `posRef` **synchronously** but *queues* `setZoneId`. So for one frame the callback sees the **new position under the old zone id**: it correctly skips the mount (not the Wilds yet) and writes the destination chunk into `centerRef` anyway. Next frame the zone is right, the chunk guard says "nothing changed", and the arrival mount is suppressed **permanently** — the overland stays empty until you happen to walk a full 64-tile chunk.
+> - **Same root, second bug:** a stale `loaded` set claimed regions were present in a grid that had just been rebuilt empty, so leaving the Wilds and coming back landed in the same nothing. **Streaming state is per-ZONE; it is now keyed on the zone.**
+> - **Third, and it would have hidden the fix:** the geometry memo keys on the CENTRE, and an arrival mount happens at a centre it has already rendered. Tiles landed in the grid and nothing redrew them. `syncWilds` reports whether it moved anything; that bumps a `mountTick` the memo watches.
+> - **The oracle now models the warp FRAME BY FRAME** rather than testing `syncWilds` in the abstract. None of this is visible in a pure test because none of it is about what `syncWilds` does — it is about *when it is called*. Verified the new test goes **red on the old chunk-only guard**, so it reproduces the bug rather than describing the fix.
+>
+> **★ The pattern across all three of today's failures:** every one lived in the wiring, not the logic — the live-data overlay, the warp frame ordering, the memo's dependency list. The pure layer was correct and fully tested the whole time. **A component with no key is a component whose refs belong to the previous zone.**
+>
 > ### 1️⃣ THE WILDS — the missing layer, and the blocker for everything below
 > Canon (`spirit-tales-bible.md`, ruled 2026-06-22): the Wilds are *"the persistent, walkable, open-world **overland** — the wide common country where the populace and **wild spirits** live… **the layer the GAME explores**."* Keeper-gardens are **tended sections OF the Wilds** (2026-06-23) — a fence-line is the border to untamed wild beyond, not a separate map.
 >
