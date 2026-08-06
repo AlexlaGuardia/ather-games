@@ -408,6 +408,27 @@ the Arcade frame.
 > ### Files
 > `play3d/collar-raid.ts` (Ather) · `play3d/puppet-guards.ts` + `play3d/crucible-bots.ts` + `play3d/crucible-phases.ts` (Crucible) · `src/app/nolmir/` (Expeditions)
 
+## 🧱 Shimmer — GOES VOXEL, STAYS ON WEB (Alex, 2026-08-06, jin-cc) · *Last touched 2026-08-06*
+
+> **The direction call.** Minecraft model: spawn → pick a birth rune → the Greg tutorial → open country, **every block mineable and craftable**. Built on the web now; the **Supra** port is designed in from day one rather than hoped for. Full design: **`VOXEL-WORLD-MODEL.md`** (`4c54686`) — read it before touching materials or chunk storage.
+>
+> **Left off:** design doc committed and ruled-ready. Nothing implemented. The zone cutover + 7-canvas composition are still the work in front of it.
+>
+> **Next:** ① Alex rules the three calls in § 8 (voxel scale · world height · do the painted canvases survive) ② compose the 7 Ather canvases into ONE zone so the voxel layer lands on a continuous surface ③ spike the mesher — time a greedy mesh of one section in a Worker **on the phone**, which is what picks section size.
+>
+> ### Decisions
+> - **★ Chunk width is a RE-MESH decision, not a memory decision.** For a fixed footprint the totals are identical at 16/32/64 wide; what changes is how much rebuilds when one block breaks (524k voxels at 64×64×128 vs 4k at 16³ sections). Pick width from re-mesh cost, memory follows.
+> - **★ Typed arrays are a 4× win before voxels enter the picture.** Today's 2.5D world spends **~8 bytes/cell** because it's JS `number[][]` (23MB for ~2.9M cells). At 2 bytes + palette packing a **128-deep voxel world is cheaper than the flat grid we ship now.**
+> - **We are not starting from zero on z.** `heightmaps.ts` already says *"Minecraft-style BLOCKY terrain"*; Alex has sculpted **17 zones / 233,380 cells / heights 0–6**. That sculpt becomes the world's **surface layer**, not reference art.
+> - **The block vocabulary barely exists — that's the finding, not "it's a lot."** Across all 11 canvases (1,485,000 cells) **six tiles carry 99.97%** (Cloud/void alone 76.1%) and **88 of 104 defined tiles have never been painted**. `tiles.ts` is a *look* library (art + `SOLID`), not a material system. `resources.ts`'s 12 nodes / 4 skills is the spine — they're props *on* terrain, and the move is making terrain *be* the resource.
+> - **Port boundary = 4 rules, and rule 4 decides it:** data-not-code registry · pure `fn(seed,coords)` generation (⇒ same seed diffed across engines is a real *test*) · typed arrays everywhere · **voxel core in a folder with ZERO react/three/DOM imports, enforced by a grep test.** "We'll port it later" dies the day the model grows a `useState`.
+> - **Engine choice was never the question — voxels were.** Supra's `terrain.rs` is a **heightmap** (FBM, 32×32 @1m, Whittaker biomes) = the same 2.5D model in Rust. Switching engines never bought mining. **Take** its `crafting.rs` (990 loc, `build_canon_recipes()`) + `inventory.rs`; **leave** `terrain.rs` and `biome_resources()` (it derives material from biome id — the pre-1.18 mistake our own research just warned off).
+> - **Supra's parking reason has expired** — `SPRINT.md` is a *"Server-Side Sprint, what we can build without GPU"* because the 2GB laptop couldn't compile wgpu. The elitedesk does it in 70s. Still 5mo cold (last commit 2026-03-14); reviving it as the main engine remains a real detour, Alex's call.
+> - **Retracted same session:** *"the entire Ather is the home plot."* Would have broken the 07-31 per-keeper-fold ruling and the wild-zones-stay-shared multiplayer ruling. Alex pulled it himself — **no canon gap was filed.**
+> - **Canon boundary:** material *names and what they are* = Magii's. Recipes/yields/hardness/tool tiers = Jin's. Build only with ruled names (goldwood, shimmeroak, starwillow, dawnwood, ather crystal, the 4 skills); mark new ones `TBD-CANON` and send **one batched question**. Inventing forty rocks in a design doc is the arcade-draughts failure mode.
+>
+> **Files:** `VOXEL-WORLD-MODEL.md` (design) · `WORLDGEN-RESEARCH.md` (generation rules, still binding) · `world/heightmaps.ts` (the sculpt that becomes the surface) · `world/resources.ts` (the 12-node spine) · `world/tiles.ts` (look library) · `world/chunk-stream.ts` (`CHUNK=64`, radius 3) · `/root/supra/supra-engine/src/{crafting,inventory,terrain}.rs`.
+
 ## 🌍 Shimmer — THE DEPENDENCY ORDER: Wilds → Strongholds · Folds → Raids (Alex, 2026-08-05) · *Last touched 2026-08-06*
 
 > **Why this block exists:** the collar-raid sim shipped before the layer it belongs in. Alex named the real order, and canon backs every step — so this is the ordering of record, not a preference.
