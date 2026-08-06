@@ -1,11 +1,14 @@
 'use client'
 
-// Mesher spike, on the device that actually matters.
+// Mesher spike — the browser-side reading.
 //
 // VOXEL-WORLD-MODEL.md § 2 established that section size is a RE-MESH cost decision, not a memory
-// one. The server bench (src/app/shimmer/voxel/bench.ts) answers it at 16 — but the ruling target is
-// a phone, and a phone is not a slower server: it thermal-throttles, has a smaller cache, and
-// Safari's JIT warms differently. This page exists so the decision rests on Alex's actual device.
+// one, and the headless bench (src/app/shimmer/voxel/bench.ts) answers it at 16.
+//
+// This page was built to take that reading on a phone. The phone was dropped as a hard target on
+// 2026-08-06, so it is no longer load-bearing — kept because a second reading in a real browser
+// engine (rather than node) is worth having, and because it re-answers the question for free
+// whenever the mesher changes.
 //
 // ★ THIS FILE IS HOST SIDE, ON PURPOSE. It imports React. The mesher it measures does not, and
 // purity.test.ts enforces that. The whole portability strategy is that the boundary runs right
@@ -118,7 +121,8 @@ export default function MeshBench() {
       <p className="text-xs text-slate-400 mt-1 leading-relaxed">
         Section size is a <strong className="text-slate-200">re-mesh cost</strong> decision, not a memory one — memory
         totals are identical at every width. What changes is how much geometry rebuilds when you break one block.
-        The server says <strong className="text-slate-200">16</strong>. This says what your phone thinks.
+        The headless bench says <strong className="text-slate-200">16</strong>. This is the same measurement
+        inside a real browser engine.
       </p>
 
       <div className="flex gap-2 mt-4">

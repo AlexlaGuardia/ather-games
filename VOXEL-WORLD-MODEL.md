@@ -155,6 +155,31 @@ tuned so one rebuild fits a frame budget. Supra would need a chunk mesher it doe
 (its renderer is 492 lines — flat-shaded meshes and a floor primitive), but the **model** arrives
 ready and the mesher is a renderer concern on both sides.
 
+### ✅ THE PHONE IS NO LONGER A HARD TARGET (Alex, 2026-08-06)
+
+Carried in from 2.5D cozy Shimmer, where phase 3 sized the whole streaming budget around not
+killing a phone tab (~23MB). The voxel rework is a different game and the assumption was never
+re-checked against it. Dropped deliberately, not forgotten.
+
+**What does NOT change, and it is most of the design:**
+- **Section size stays 16.** The 13.4ms worst case at 32 was measured on a *desktop-class server*
+  and already fails a 16.7ms frame. The phone never entered that argument.
+- **Typed arrays, no object-per-voxel.** That is GC and the Rust port path, not device class.
+- **All four port rules, greedy meshing, the palette/packing scheme.** Unaffected.
+- **The Worker.** Still wanted — it moves from *required* to *headroom*, which is a scheduling
+  change, not an architectural one.
+
+**What genuinely relaxes:**
+- **★ World height.** 128 was partly a phone-memory number, and § 8(b) already flagged that the
+  datum sketch left only ~32 blocks below the surface — shallow for a game whose loop is mining
+  down. § 2 puts **256 at ~7.8MB packed vs ~3.9MB at 128**: nothing on a desktop, and it doubles
+  the depth available for ore tiers, mineshafts and large caverns. **Recommend revisiting 128 → 256
+  now that caverns are a headline feature.** Still only a format number; the datum stays tunable.
+- **The memory ceiling** stops being the binding constraint it was in phase 3. Not unlimited — a
+  tab that eats 500MB is still bad — but it stops driving decisions.
+- **View radius.** `DEFAULT_RADIUS = 3` (182 units + fog) was already flagged as possibly too close
+  and needing Alex's eye. There is now room to open it.
+
 ## 8. ✅ RULED 2026-08-06 (Alex) — all three, as recommended
 
 - **(a) 1 voxel = 1 tile.** A block is player-sized, the Minecraft read. Chosen because it keeps

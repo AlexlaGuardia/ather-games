@@ -414,7 +414,21 @@ the Arcade frame.
 >
 > **Left off:** design doc committed and ruled-ready. Nothing implemented. The zone cutover + 7-canvas composition are still the work in front of it.
 >
-> **Next:** ① spike the mesher — time a greedy mesh of one section in a Worker **on the phone**, which is what picks section size ② build the class-1/class-2 structure placement ③ carvers for Voranyx. *(The 7-canvas composition is RETIRED — see the 08-06 biome ruling below.)*
+> **Next:** ① Alex re-rules world height **128 → 256** now the phone is gone (see below) ② build the class-1/class-2 structure placement ③ carvers for Voranyx. *(Mesher spike DONE — `d018c68`, answer is 16. The 7-canvas composition is RETIRED — see the 08-06 biome ruling below.)*
+>
+> ### ✅ MESHER SPIKE DONE 2026-08-06 (`d018c68`) — **section size = 16**
+> Voxel core's first files, pure from the start: `voxel/section.ts` (flat `Uint16Array`, never object-per-voxel, + the single-value-section check), `voxel/greedy.ts` (3-axis slice sweep), `voxel/greedy.test.ts` (**100 asserts**), `voxel/purity.test.ts` (**walks the import graph, fails on any react/three/DOM dep — port rule 4, the only one of the four that can rot**). Browser reading at `/shimmer/dev?mode=meshbench` (owner-gated).
+> - **The deciding number is the WORST case, not the average:** a block broken on a section *corner* dirties its own section + up to 7 neighbours. **16³ = 2.0ms · 32³ = 13.4ms · 64³ = 106ms** (8³ = 0.87ms but **57.8% of blocks land on a boundary** vs 33% at 16, and column cost nearly doubles). 32 already eats most of a 16.7ms frame on a desktop-class box.
+> - **Column cost is FLAT above 16** (28.9 / 27.6 / 26.8ms) — kills the last argument for going bigger.
+> - **★ The first run was measuring my own waste.** Sizing output buffers for the checkerboard worst case = **~626KB of typed arrays allocated and thrown away EVERY call** — precisely the GC pressure that kills browser voxel games. Reusable scratch → **2.5–5× faster**. All figures post-fix.
+> - **Greedy earns its place on OUR world shape specifically:** 20–31× fewer quads on surface/underground, 5.3× in caves, 1.0× on checkerboard. Flat ground over solid rock is its best case and that's most of the world.
+> - **We derived Minecraft's 16 rather than copying it.**
+>
+> ### ✅ PHONE DROPPED AS A HARD TARGET 2026-08-06 (Alex)
+> Carried in from 2.5D cozy Shimmer (phase 3 sized the whole streaming budget around not killing a phone tab, ~23MB) and never re-checked against the voxel rework. **It never decided the section size anyway** — 32³ fails a frame on a desktop-class box with no phone in the argument.
+> - **Unchanged:** section size 16, typed arrays / no object-per-voxel (that's GC + the Rust port path), all 4 port rules, greedy meshing, palette packing. The **Worker** moves from *required* to *headroom* — scheduling, not architecture.
+> - **★ RELAXES — worth acting on: world height.** 128 was partly a phone-memory number, and § 8(b) already flagged the datum sketch left only ~32 blocks below surface, shallow for a mining loop. **256 = ~7.8MB packed vs ~3.9MB at 128** — nothing on desktop, doubles the depth for ore tiers / mineshafts / big caverns. **Recommend 128 → 256 now caverns are a headline feature.**
+> - Also relaxes: the memory ceiling stops driving decisions (not unlimited — a 500MB tab is still bad), and `DEFAULT_RADIUS = 3` (182 units + fog, already flagged as maybe too close) has room to open.
 >
 > ### ✅ RULED 2026-08-06 (Alex) — regions become BIOMES, and it dissolved the layout blocker
 > - **The composition was BLOCKED and is now MOOT.** *"Same layout as before"* turned out unfulfillable: derived from the stitcher, 3 of 7 regions disagree **with themselves** (twilight-thicket implies 3 origins **216 tiles apart**); derived from the region warp graph it solves but **27 of 28 pairs overlap at 70–100%**, because doors were authored between *separate maps* with no adjacency constraint. Root cause: **the canvases are 4–12× larger than the legacy zones they absorbed** (the-outfields = a 400×400 canvas holding a 34×24 zone). **The 7 canvases have never had positions relative to each other.** Alex's answer: stop placing them — generate biomes instead. No placement table to author.

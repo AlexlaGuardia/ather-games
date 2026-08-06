@@ -6,9 +6,10 @@
 // geometry rebuilds when the player breaks ONE block. So the number that decides it is: milliseconds
 // to re-mesh one section. Everything else here is context for that column.
 //
-// ⚠ THESE ARE SERVER NUMBERS. The ruling target is a phone, and a phone is not a slower server —
-// it throttles, it has a smaller cache, and Safari's JIT warms differently. Treat this as an upper
-// bound on quality and a lower bound on time; the real number comes off Alex's device.
+// ⚠ SERVER NUMBERS, AND THAT IS NOW THE RIGHT TARGET. The phone was dropped as a hard target
+// 2026-08-06 — it was carried in from 2.5D cozy Shimmer and never re-checked against the voxel
+// rework. It never decided this anyway: 32^3's 13.4ms worst case already fails a 16.7ms frame on
+// this desktop-class box, with no phone in the argument.
 //
 // Fill patterns are deliberately NOT random. Random fill is the worst case for merging and would
 // make greedy meshing look far worse than our actual world, which is mostly flat ground over mostly
@@ -133,4 +134,5 @@ for (const S of [8, 16, 32, 64]) {
   console.log(`  ${String(S).padStart(4)}   ${share.toFixed(1).padStart(13)}%   ${(results[S].surface * 8).toFixed(2).padStart(22)} ms`)
 }
 
-console.log('\n⚠ Server numbers. The ruling target is a phone — run /shimmer/dev?mode=meshbench there.')
+console.log('\n⚠ Desktop-class numbers, which is the target since 2026-08-06 (phone dropped).')
+console.log('  /shimmer/dev?mode=meshbench runs the same bench in a browser if you want a second reading.')
