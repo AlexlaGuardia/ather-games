@@ -1029,16 +1029,19 @@ const WorldFlora = memo(function WorldFlora({ heights }: { heights: number[][] }
 // memo: the terrain is the heaviest node in the scene and depends on nothing that ticks. Without it,
 // every channel tick (~11 Hz) rebuilt the whole floor/wall/water/mist JSX tree. All five props are
 // stable (a ref, a ref's array, a version int, a useCallback, a bool), so this skips cleanly.
-const ZoneGeometry = memo(function ZoneGeometry({ gridRef, heights, version, paint, editing, center }: {
+const ZoneGeometry = memo(function ZoneGeometry({ gridRef, heights, version, paint, editing, center, mountTick }: {
   gridRef: React.RefObject<number[][]>; heights: number[][]; version: number
   paint: (c: number, r: number, shift: boolean) => void; editing: boolean
   /** the player's CHUNK — changes once per 64 tiles walked, so the memo still holds */
   center?: ChunkCoord | null
+  /** bumped when streaming blits a region IN or OUT — an arrival mount happens at a centre
+   *  this memo has already rendered, so the centre alone cannot tell it the grid changed */
+  mountTick?: number
 }) {
   // `editing` mounts the whole map: the map editor needs to see and click what it is drawing,
   // and an editor is not walking anywhere, so the streaming window would only get in the way.
   const chunks = useMemo(() => chunkBuckets(gridRef.current, editing ? null : center),
-    [version, gridRef, center?.cx, center?.cy, editing])
+    [version, gridRef, center?.cx, center?.cy, editing, mountTick])
   return (
     <>
       {chunks.map(({ key, b: { floors, walls, waters, voids, warps, mists, wallTops, buildings, buildingTops } }) => (
@@ -3000,11 +3003,31 @@ const Scene = memo(function Scene(props: {
   // It runs off the same chunk-crossing signal as streaming, and deliberately BEFORE
   // `setCenter`: the geometry memo rebuilds on the new centre, so the tiles have to already be
   // there when it does, or the player gets one frame of cloud where the next region should be.
+  //
+  // ★ EVERY REF IN HERE OUTLIVES THE ZONE. `Scene` is rendered without a key, so it does NOT
+  // remount when the player warps — which broke this twice:
+  //   1. `performWarp` sets `posRef` SYNCHRONOUSLY but queues `setZoneId`. So for one frame this
+  //      callback sees the NEW position with the OLD zone id: it correctly skips the mount (not
+  //      the Wilds yet) and then writes the destination chunk into `centerRef` anyway. Next frame
+  //      the zone is right, the chunk guard says "nothing changed", and the mount never runs —
+  //      the player stands in an overland that holds nothing until they walk 64 tiles.
+  //   2. A stale `loaded` set would claim regions are present in a grid that was just rebuilt
+  //      empty, so leaving the Wilds and coming back would land in the same nothing.
+  // Both are the same root: streaming state is per-ZONE, so it has to be keyed on the zone.
   const wildsMount = useRef<WildsMount | null>(null)
+  const mountedZone = useRef<string | null>(null)
+  const [mountTick, setMountTick] = useState(0)
   const mountWilds = (tx: number, tz: number) => {
+    if (mountedZone.current !== props.zone.id) {
+      mountedZone.current = props.zone.id
+      wildsMount.current = null       // the grid is new; what was loaded into the old one is gone
+    }
     if (props.zone.id !== WILDS_ZONE || !props.gridRef.current) return
     wildsMount.current ??= newMount(WILDS_GEO)
-    syncWilds(wildsMount.current, props.gridRef.current, tx, tz, loadWildsRegion)
+    const r = syncWilds(wildsMount.current, props.gridRef.current, tx, tz, loadWildsRegion)
+    // The geometry memo keys on the CENTRE, and an arrival mount happens at a centre it has
+    // already rendered — so without this the tiles land in the grid and nothing redraws them.
+    if (r.mounted.length || r.released.length) setMountTick(t => t + 1)
   }
   // ★ The centre is seeded on the FIRST RENDER, never left null, and the first mount happens
   // right here with it. A null centre means "mount every chunk" — correct for a small zone and
@@ -3023,7 +3046,10 @@ const Scene = memo(function Scene(props: {
     const p = props.posRef.current
     if (!p) return
     const c = chunkOf(Math.round(p.x), Math.round(p.z))
-    if (sameChunk(centerRef.current, c)) return
+    // The zone half of this guard is NOT redundant with the chunk half — see the note above.
+    // A warp can leave `centerRef` already holding the destination chunk, so chunk-equality
+    // alone would suppress the arrival mount entirely.
+    if (mountedZone.current === props.zone.id && sameChunk(centerRef.current, c)) return
     centerRef.current = c
     // BEFORE setCenter: the memo rebuilds on the new centre, so the tiles must already be there
     // or the player gets a frame of cloud where the next region should be.
@@ -3042,7 +3068,7 @@ const Scene = memo(function Scene(props: {
     <>
       <GardenAtmosphere zoneId={props.atmosZone} />
       <SkyLight shadowMap={props.shadowMap} />
-      <ZoneGeometry key={`${props.zone.id}-${props.dims}`} gridRef={props.gridRef} heights={props.heights} version={props.version} paint={props.paint} editing={props.editing} center={center} />
+      <ZoneGeometry key={`${props.zone.id}-${props.dims}`} gridRef={props.gridRef} heights={props.heights} version={props.version} paint={props.paint} editing={props.editing} center={center} mountTick={mountTick} />
       <NPCMarkers npcs={ALL_NPCS.filter((n) => n.zone === props.zone.id && npcInWorld(n, props.defeated, props.flagsRef.current))} heights={props.heights} />
       {props.isOwner && props.zone.id === 'moonwell-glade-gregory-s-home' && <HubGateMarkers heights={props.heights} />}
       {props.zone.realm === 'outside' && !props.zone.peaceful && <FiringRange firingRef={props.firingRef} adsRef={props.adsRef} weaponIdxRef={props.weaponIdxRef} gridRef={props.gridRef} recoilRef={props.recoilRef} bloomRef={props.bloomRef} posRef={props.posRef} hpRef={props.hpRef} hpMaxRef={props.hpMaxRef} shieldRef={props.shieldRef} shieldMaxRef={props.shieldMaxRef} rangeCfgRef={props.rangeCfgRef} ammoRef={props.ammoRef} reloadingRef={props.reloadingRef} pendingCastRef={props.pendingCastRef} castMultRef={props.castMultRef} resistRef={props.resistRef} infusionRef={props.infusionRef} fieldsRef={props.fieldsRef} conjuredRef={props.conjuredRef} statusRef={props.statusRef} onHeal={props.onHeal} onNeedReload={props.onNeedReload} onHit={props.onRangeHit} onShot={props.onRangeShot} onPlayerDamage={props.onPlayerDamage} onPlayerDown={props.onPlayerDown} />}

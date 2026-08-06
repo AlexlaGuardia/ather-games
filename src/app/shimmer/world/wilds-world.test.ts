@@ -307,6 +307,58 @@ ok(wildsLoadRadius() > DEFAULT_RADIUS * CHUNK,
     'the Wilds keep their way back out through the overlay too')
 }
 
+// ── 11. ★ ARRIVAL — the state machine that left Alex in an empty overland ─────────────────
+// `Scene` renders without a key, so it never remounts on a warp and every streaming ref
+// outlives the zone. Two failures came out of that, and neither is visible in any pure test of
+// syncWilds — they are about WHEN it gets called. Modelled here as the engine sequences it.
+{
+  const zone = ALL_ZONES.find(z => z.id === WILDS_ZONE)!
+
+  // A tiny stand-in for Scene's streaming refs, with the same guard the component uses.
+  const scene = { mountedZone: null as string | null, center: null as { cx: number; cy: number } | null, mount: null as ReturnType<typeof newMount> | null }
+  let grid: number[][] = []
+  const enterZone = (id: string, g: number[][]) => { grid = g }          // parent rebuilds gridRef
+  const frame = (zoneId: string, tx: number, ty: number): boolean => {
+    const c = { cx: Math.floor(tx / CHUNK), cy: Math.floor(ty / CHUNK) }
+    if (scene.mountedZone === zoneId && scene.center && scene.center.cx === c.cx && scene.center.cy === c.cy) return false
+    scene.center = c
+    if (scene.mountedZone !== zoneId) { scene.mountedZone = zoneId; scene.mount = null }
+    if (zoneId !== WILDS_ZONE) return true
+    scene.mount ??= newMount(WILDS_GEO)
+    syncWilds(scene.mount, grid, tx, ty, loadWildsRegion)
+    return true
+  }
+
+  // ── the exact sequence that failed ──
+  // Standing in the Outfields at the gate tile: chunk (2,3).
+  enterZone('r-the-outfields', [])
+  frame('r-the-outfields', 184, 196)
+  ok(scene.center!.cx === 2 && scene.center!.cy === 3, 'walking the Outfields sets the centre as usual')
+
+  // The warp frame: performWarp sets posRef SYNCHRONOUSLY, setZoneId is still queued — so this
+  // frame sees the destination position under the OLD zone id.
+  frame('r-the-outfields', 250, 3)
+  ok(scene.center!.cx === 3 && scene.center!.cy === 0,
+    '★ the warp frame poisons the centre with the destination chunk under the old zone id')
+
+  // Next frame the zone has switched. Chunk-equality alone would bail here — that was the bug.
+  enterZone(WILDS_ZONE, cloneSparseGrid(zone.grid))
+  const ran = frame(WILDS_ZONE, 250, 3)
+  ok(ran, '★★ the arrival frame still runs, because the guard also keys on the ZONE')
+  ok(scene.mount !== null && scene.mount.loaded.has('wilds-0-0'), 'and the region under the player mounts')
+  ok(grid[3][250] !== WILDS_CLOUD,
+    '★★ THE PLAYER LANDS ON GROUND, NOT IN A VAST EMPTY MAP — the bug Alex hit')
+  ok(materializedRows(grid) > 0, 'the overland actually holds tiles now')
+
+  // ── leave and come back: a stale loaded-set must not claim a fresh grid is already filled ──
+  enterZone('r-the-outfields', [])
+  frame('r-the-outfields', 184, 196)
+  enterZone(WILDS_ZONE, cloneSparseGrid(zone.grid))
+  frame(WILDS_ZONE, 250, 3)
+  ok(grid[3][250] !== WILDS_CLOUD,
+    '★ re-entering the Wilds mounts again — the loaded-set resets with the zone')
+}
+
 console.log(`\nwilds-world: ${pass} passed, ${fails.length} failed`)
 for (const f of fails) console.log('  ✗ ' + f)
 process.exit(fails.length ? 1 : 0)
