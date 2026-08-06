@@ -36,9 +36,10 @@ const ManaEditor = dynamic(() => import('./editors/ManaEditor'))
 const PuppetEditor = dynamic(() => import('./editors/PuppetEditor'))
 const GrimoireEditor = dynamic(() => import('./editors/GrimoireEditor'))
 const WeatherEditor = dynamic(() => import('./editors/WeatherEditor'))
+const MeshBench = dynamic(() => import('./editors/MeshBench'))
 const DoctorPanel = dynamic(() => import('./editors/DoctorPanel'))
 
-type EditorMode = 'sprites' | 'player' | 'map' | 'battle' | 'items' | 'nodes' | 'beasts' | 'banner' | 'furniture' | 'structures' | 'farming' | 'exchange' | 'encounters' | 'alchemy' | 'quests' | 'spinner' | 'evolution' | 'resources' | 'tools' | 'skills' | 'moves' | 'voices' | 'npcs' | 'daycycle' | 'mana' | 'puppet' | 'grimoire' | 'weather' | 'doctor'
+type EditorMode = 'sprites' | 'player' | 'map' | 'battle' | 'items' | 'nodes' | 'beasts' | 'banner' | 'furniture' | 'structures' | 'farming' | 'exchange' | 'encounters' | 'alchemy' | 'quests' | 'spinner' | 'evolution' | 'resources' | 'tools' | 'skills' | 'moves' | 'voices' | 'npcs' | 'daycycle' | 'mana' | 'puppet' | 'grimoire' | 'weather' | 'doctor' | 'meshbench'
 
 // Component map — replaces 25 conditional renders
 const EDITOR_MAP: Record<EditorMode, { component: ComponentType<any>; deployable: boolean }> = {
@@ -71,6 +72,7 @@ const EDITOR_MAP: Record<EditorMode, { component: ComponentType<any>; deployable
   grimoire:   { component: GrimoireEditor,      deployable: false },
   weather:    { component: WeatherEditor,       deployable: true },
   doctor:     { component: DoctorPanel,         deployable: false },
+  meshbench:  { component: MeshBench,           deployable: false },
 }
 
 const TAB_GROUPS: { label: string; tabs: { id: EditorMode; label: string }[]; links?: { href: string; label: string }[] }[] = [
@@ -134,6 +136,7 @@ const TAB_GROUPS: { label: string; tabs: { id: EditorMode; label: string }[]; li
       { id: 'spinner', label: 'Spinner' },
       { id: 'voices', label: 'Voices' },
       { id: 'doctor', label: 'Doctor' },
+      { id: 'meshbench', label: 'Mesh Bench' },
     ],
   },
 ]
