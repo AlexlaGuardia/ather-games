@@ -95,12 +95,12 @@ self.onmessage = (e: MessageEvent) => {
       const voxels = packVoxels(cols.get(k)!)
       ;(self as unknown as Worker).postMessage({ type: 'column', cx, cz, voxels }, [voxels.buffer])
     }
-    emitMesh(cx, cz)
-    // A new column changes what its neighbours' edge faces look like. Re-mesh any that were already
-    // meshed, or every column keeps the wall it drew before this one existed.
-    for (const [dx, dz] of [[-1, 0], [1, 0], [0, -1], [0, 1]] as const) {
-      if (meshed.has(key(cx + dx, cz + dz))) emitMesh(cx + dx, cz + dz)
-    }
+    // ★ GENERATION ONLY — meshing stays on the main thread, deliberately.
+    // The main thread must own Columns anyway: mining edits a voxel and immediately re-meshes, and
+    // shipping a column across the boundary per edit would cost more than it saves. So the worker
+    // does the expensive, order-independent half (~109ms/chunk of noise, carving and ore) and hands
+    // back packed voxels; the main thread wraps them and meshes (~47ms). Splitting it the other way
+    // would put the edit path on the wrong side of the boundary.
     ;(self as unknown as Worker).postMessage({ type: 'done', cx, cz })
     return
   }
