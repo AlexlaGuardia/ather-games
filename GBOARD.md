@@ -408,7 +408,7 @@ the Arcade frame.
 > ### Files
 > `play3d/collar-raid.ts` (Ather) · `play3d/puppet-guards.ts` + `play3d/crucible-bots.ts` + `play3d/crucible-phases.ts` (Crucible) · `src/app/nolmir/` (Expeditions)
 
-## 🌍 Shimmer — THE DEPENDENCY ORDER: Wilds → Strongholds · Folds → Raids (Alex, 2026-08-05)
+## 🌍 Shimmer — THE DEPENDENCY ORDER: Wilds → Strongholds · Folds → Raids (Alex, 2026-08-05) · *Last touched 2026-08-06*
 
 > **Why this block exists:** the collar-raid sim shipped before the layer it belongs in. Alex named the real order, and canon backs every step — so this is the ordering of record, not a preference.
 >
@@ -455,6 +455,22 @@ the Arcade frame.
 > **The bug worth recording:** the return landing was first set to (184,197), which sits **inside the outbound gate's own 2×2 footprint** — an instant re-warp loop, the exact failure the Rune Hold oracle exists to catch. Caught pre-deploy by checking `checkWarp` on both landings rather than assuming. Moved to (184,195). **Any hand-wired seam gets both landings checked against `checkWarp`, both directions.**
 >
 > Verified: a player walks **r-home-plot → … → r-the-outfields → r-wilds-0-0** with no owner rights.
+>
+> ### ✅ PHASE 3 SHIPPED 2026-08-06 — the Wilds become ONE place (`7030ab1`)
+> The Outfields seam is a **door**, and it should be: leaving the tended world is an event. A border between two patches of open grassland is not, and that is what every Wilds region border was. Canon calls the Wilds *"the persistent, walkable, open-world overland"* — **an overland you warp across is not one.**
+> - **The move: a region file is an AUTHORING unit, not a runtime unit.** 400×400 is the size Alex can hold in the MapEditor. The files are untouched — own nodes, own burrows, own gates, all in local coordinates — and `world/wilds-world.ts` composes them into a single **`r-wilds`** zone in world coordinates. Collision, warps, chunking and the camera keep working on one flat grid and never learn regions exist. `wilds-1-0` / `0-1` / `1-1` generated, so there is a real 2×2 to walk. The Outfields gate now lands in `r-wilds` at the **same tile numbers** (region 0,0 is the world origin).
+> - **The grid is world-sized to READ and holds nothing until you walk into it.** Regions blit in as the load window reaches them and are handed back when it doesn't; one **shared frozen** cloud row stands in for the rest. Phase 2 bounded mounted chunks by radius — this repeats that one layer down. Unloaded country reading as solid cloud is the honest answer, not a placeholder: you can never walk into country that hasn't arrived, and the load window is deliberately wider than sight so that wall is always past the fog.
+> - **Frozen on purpose.** One row object is shared by thousands of rows; a stray write would paint one tile world-wide, invisibly. Frozen, it throws on the line that did it. Write paths (`paint`, `clearZone`) call `materializeRows` first.
+> - **★ MEASURED FIRST, AND THE CEILING IS STATED RATHER THAN LEFT TO BE FOUND.** Naive full materialization at the 36-region target = 5.76M cells ≈ **132MB** holding the grid plus the engine's working copy: survives a desktop, kills a phone tab, and the phone is a primary device. Sparsity here is per-**ROW**, and a row costs the world's **WIDTH** — so at most 3 row bands are live, which at the 30-region target (2400 wide) is **~2.9M cells ≈ 23MB, flat however far you walk**. It stops paying past **~10 regions wide**, where rows would need column banding or a typed-array backing. **The oracle asserts the 30-region number, so a future widening trips a test instead of a phone.**
+>
+> **Three bugs, all caught by the tests, all mine:**
+> 1. **Releasing a region blanked its row-band NEIGHBOUR.** Regions sharing a `ry` share row objects, so collapsing one back to the shared row wiped the one beside it — which would have read in-game as *the world falling away behind you as you walk*. Release now only collapses a band nobody is left standing in.
+> 2. **The load window caps at 3×3, not 2×2.** I asserted 2×2 from "512 < 2×400". An unaligned span S over stride R touches `floor(S/R)+2`, so a 512-tile window straddles **two** 400-tile borders. And the margin can't be shaved to fix it: **sync only runs on a CHUNK crossing, so the buffer beyond sight must be ≥64 tiles** or you outwalk the loader between syncs.
+> 3. **A null streaming centre means "mount EVERY chunk"** — correct for a small zone, ruinous for a world-sized one (it would bucket the whole overland, as solid cloud, before the player moved). The centre is seeded on first render and the first mount happens with it.
+>
+> **★ The seam proof is a FLOOD FILL from region A's heart to region B's heart on real generated terrain — not gate-number equality.** The gates agree by construction (hashed from the shared border), and *that is exactly what the phase-1 staircase bug also had*: 27 green asserts over a map full of ruler-straight highways. Numbers agreeing is not country connecting.
+>
+> ⚠ **Still wants Alex's eye** (unchanged from phase 2, now with more to look at): walk Home Plot → Outfields → the Wilds → **across the wilds-0-0/1-0 border**. Does the generated country read right at ground level, and is `DEFAULT_RADIUS` 3 (182 units + fog) too close? Both are one-line tunes.
 >
 > ### 1️⃣ THE WILDS — the missing layer, and the blocker for everything below
 > Canon (`spirit-tales-bible.md`, ruled 2026-06-22): the Wilds are *"the persistent, walkable, open-world **overland** — the wide common country where the populace and **wild spirits** live… **the layer the GAME explores**."* Keeper-gardens are **tended sections OF the Wilds** (2026-06-23) — a fence-line is the border to untamed wild beyond, not a separate map.
