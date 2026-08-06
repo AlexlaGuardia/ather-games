@@ -47,6 +47,16 @@ export interface CarveConfig {
   yMax: number
   /** Never carve below this — the world needs a floor you cannot fall through. */
   floorGuard: number
+  /**
+   * Voxels of ground left intact beneath the surface.
+   *
+   * ★ WITHOUT THIS, CARVERS PUNCH ONE-VOXEL PIT TRAPS. Measured over 40,960 columns: 1% had AIR at
+   * the surface voxel and a handful opened shafts 40+ deep. A cave mouth is a fine thing to have,
+   * but an invisible single-voxel hole you drop 40 blocks down is not a cave mouth — it is a bug
+   * that reads as one. Cave entrances should be a deliberate feature (a widened, visible mouth),
+   * not a side effect of a tunnel happening to graze the surface.
+   */
+  surfaceClearance: number
 }
 
 export const DEFAULT_CARVE: CarveConfig = {
@@ -70,6 +80,7 @@ export const DEFAULT_CARVE: CarveConfig = {
   yMin: 6,
   yMax: 150,
   floorGuard: 4,
+  surfaceClearance: 3,
 }
 
 /** Deterministic per-carver stream. xorshift32 — same sequence in TS and Rust, which is the point. */
@@ -203,6 +214,9 @@ export function carveOne(
           if (!carvable(sec.data[li])) continue
           if (surfaceAt) {
             const h = surfaceAt(wx, wz)
+            // Leave the ground intact: no surface breach, and never open the floor under standing
+            // water (which drains a lake through a hole nobody can see).
+            if (wy > h - cfg.surfaceClearance) continue
             if (h <= seaLevel && wy > h - 3) continue
           }
           sec.data[li] = AIR

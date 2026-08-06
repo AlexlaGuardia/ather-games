@@ -158,6 +158,28 @@ const at = (st: Section[], x: number, y: number, z: number) => st[(y / S) | 0].g
   ok(frac < 0.25, `the underground is not swiss cheese (${(frac * 100).toFixed(2)}%)`)
 }
 
+// ── 8. ★ NO SURFACE BREACH — carvers must not punch pit traps ────────────────────────────────
+// Found by Alex PLAYING it: "there's a gap where the character can fall right off the map."
+// Measured over 40,960 columns, 1% had AIR at the surface voxel and a handful opened shafts 40+
+// deep. A cave mouth is a fine thing to want; an invisible one-voxel hole with a 40-block drop is
+// not a mouth, it is this bug wearing one. Entrances should be a deliberate widened feature later.
+{
+  let breached = 0, checked = 0
+  for (const [ox, oz] of [[512, 768], [1024, 256], [-320, 640], [64, 64], [4096, -2048], [-1408, -1024]] as const) {
+    const st = stackAt(ox, oz)
+    for (let z = 0; z < S; z++) for (let x = 0; x < S; x++) {
+      const h = surf(ox + x, oz + z)
+      if (h < 1 || h >= H - 1) continue
+      checked++
+      if (at(st, x, h, z) === AIR) breached++
+      // and the clearance band below it must be intact too, or you fall in one step later
+      for (let d = 1; d < CV.surfaceClearance; d++) if (at(st, x, h - d, z) === AIR) breached++
+    }
+  }
+  ok(checked > 1000, 'the surface-breach check sampled real columns')
+  ok(breached === 0, `★ carvers never open the surface or its clearance band (${breached} breaches)`)
+}
+
 console.log(`\ncarvers: ${pass} passed, ${fails.length} failed`)
 for (const f of fails) console.log('  ✗ ' + f)
 if (fails.length) process.exit(1)

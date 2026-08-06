@@ -228,11 +228,33 @@ function World({ inv, toolTier, toolSkill, selItem, onStats, onPos, onLook, onIn
 
   useEffect(() => { camera.position.set(0.5, columnHeight(0, 0, SEED) + 2.6, 0.5) }, [camera])
 
+  /** What is actually there. Unloaded reads as AIR — used for the raycast, so you can never target
+   *  or mine a block that has not been generated. */
   const voxel = useCallback((wx: number, wy: number, wz: number): number => {
     if (wy < 0 || wy >= H) return AIR
     const cx = Math.floor(wx / SECTION), cz = Math.floor(wz / SECTION)
     const c = cols.current.get(key(cx, cz))
     if (!c) return AIR
+    return c.get(wx - cx * SECTION, wy, wz - cz * SECTION)
+  }, [])
+
+  /**
+   * ★ COLLISION TREATS UNGENERATED SPACE AS SOLID, AND THAT IS THE WHOLE FIX FOR FALLING OFF THE
+   * MAP. Sprinting is 22 units/s and generation is bounded, so a player outruns the load radius
+   * routinely. With unloaded reading as AIR the floor simply is not there yet and you drop through
+   * the world — which is what "I found a gap and fell off the map" actually was.
+   *
+   * Unknown terrain must BLOCK, never swallow. The worst case is standing still for a moment at the
+   * edge of the world; the alternative is falling out of it. Note this deliberately differs from
+   * `voxel` above: the raycast must NOT see phantom solids, or you would mine invisible blocks at
+   * the frontier.
+   */
+  const voxelSolid = useCallback((wx: number, wy: number, wz: number): number => {
+    if (wy < 0) return MAT.BEDROCK
+    if (wy >= H) return AIR
+    const cx = Math.floor(wx / SECTION), cz = Math.floor(wz / SECTION)
+    const c = cols.current.get(key(cx, cz))
+    if (!c) return MAT.BEDROCK          // not generated yet ⇒ stand on it, do not fall through it
     return c.get(wx - cx * SECTION, wy, wz - cz * SECTION)
   }, [])
 
@@ -288,9 +310,9 @@ function World({ inv, toolTier, toolSkill, selItem, onStats, onPos, onLook, onIn
     const y0 = Math.floor(y - 1.62), y1 = Math.floor(y - 1.62 + 1.75)
     for (let vy = y0; vy <= y1; vy++)
       for (const dx of [-0.3, 0.3]) for (const dz of [-0.3, 0.3])
-        if (isSolid(voxel(Math.floor(x + dx), vy, Math.floor(z + dz)))) return true
+        if (isSolid(voxelSolid(Math.floor(x + dx), vy, Math.floor(z + dz)))) return true
     return false
-  }, [voxel])
+  }, [voxelSolid])
 
   useFrame((_, dtRaw) => {
     const dt = Math.min(dtRaw, 0.05)
@@ -350,7 +372,7 @@ function World({ inv, toolTier, toolSkill, selItem, onStats, onPos, onLook, onIn
     // Until the spawn column exists every lookup returns AIR, so gravity would drop the player
     // through a world that has not generated yet. Hold until there is ground beneath.
     if (!settled.current) {
-      if (isSolid(voxel(0, Math.floor(p.y) - 3, 0))) settled.current = true
+      if (isSolid(voxel(0, Math.floor(p.y) - 3, 0))) settled.current = true   // real ground, not the phantom floor
       else { onPos(p); onStats(`${cols.current.size} columns · generating…`); return }
     }
 
@@ -429,7 +451,7 @@ function World({ inv, toolTier, toolSkill, selItem, onStats, onPos, onLook, onIn
     // on the cave floor rather than on the surface hundreds of blocks above it.
     if (drops.current.length) {
       const res = tickDrops(drops.current, dt, p.x, p.y - 0.8, p.z,
-        (x, y, z) => isSolid(voxel(x, y, z)))
+        (x, y, z) => isSolid(voxelSolid(x, y, z)))
       if (res.picked.length) {
         for (const it of res.picked) addItems(inv.current!, it.itemId, it.count)
         onInvChange()
