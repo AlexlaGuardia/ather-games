@@ -472,6 +472,15 @@ the Arcade frame.
 >
 > ⚠ **Still wants Alex's eye** (unchanged from phase 2, now with more to look at): walk Home Plot → Outfields → the Wilds → **across the wilds-0-0/1-0 border**. Does the generated country read right at ground level, and is `DEFAULT_RADIUS` 3 (182 units + fog) too close? Both are one-line tunes.
 >
+> ### 🐛 THE GATE THAT RENDERED AND DID NOTHING (found+fixed 2026-08-06, `d23a7ab`)
+> Alex walked into the Outfields' WILDS door and nothing happened. **Not the seam, not phase 3 — and not new.** `applyLiveRegionData` rebuilt `zone.warps` from **`live.warps` alone** and never re-expanded `live.gates`. Live region data is fetched on **every boot** and overlays the compiled data, so in the browser it always won: the compiled world was right, every headless assertion was right, and the door was dead in the running game.
+> - **★ IT FAILED IN THE WORST SHAPE AVAILABLE.** Gate nametags render from `zone.gates`, which that path never touched — so a stripped door is pixel-identical to a working one. There is nothing to see. The only way to catch it is to check the warp, through the overlay.
+> - **★ THE REAL LESSON: THE GAME NEVER RUNS ON THE COMPILED DATA.** Every check written for the seam tested `REGION_ZONES` as built at module load. The browser boots, fetches `/shimmer/region-data`, overlays it, and runs on *that*. A whole test suite can be green against a world the player never enters. **Any assertion about doors, warps or region tiles must run AFTER `applyLiveRegionData`** — the oracle does now.
+> - Fixed to build warps exactly as `REGION_ZONES` does (authored warps + expanded gates); the live path meaning something different from the compiled path *was* the bug. The Wilds composite re-collects its doors after the overlay, grid stays sparse so sculpt-fresh tiles still arrive through the normal mount.
+> - **Blast radius: both region gates on the board** — `THE WILDS` (Outfields→Wilds) and `THE OUTFIELDS` (the way back). Every region gate authored from here on was going to land dead the same way.
+>
+> **⚠ Debugging note, so the next person doesn't lose the time I did:** a **backgrounded tab reports `document.visibilityState === 'hidden'`, never sizes the R3F canvas (it stays at the HTML default 300×150), and therefore never renders `Scene` at all.** That looks exactly like a catastrophic render bug — blank sky, no console errors, no geometry — and it is purely an artifact of the tab not being foregrounded. **Check `visibilityState` before believing an empty world.**
+>
 > ### 1️⃣ THE WILDS — the missing layer, and the blocker for everything below
 > Canon (`spirit-tales-bible.md`, ruled 2026-06-22): the Wilds are *"the persistent, walkable, open-world **overland** — the wide common country where the populace and **wild spirits** live… **the layer the GAME explores**."* Keeper-gardens are **tended sections OF the Wilds** (2026-06-23) — a fence-line is the border to untamed wild beyond, not a separate map.
 >
