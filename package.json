@@ -7,7 +7,9 @@
     "build": "next build",
     "start": "next start -p 3200",
     "canon": "node scripts/canon-drift.mjs",
-    "canon:report": "node scripts/canon-drift.mjs --report"
+    "canon:report": "node scripts/canon-drift.mjs --report",
+    "build:worker": "node scripts/build-worker.mjs",
+    "prebuild": "node scripts/build-worker.mjs"
   },
   "dependencies": {
     "@react-three/drei": "^10.7.7",
@@ -24,6 +26,7 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "@types/three": "^0.183.1",
+    "esbuild": "^0.28.1",
     "tailwindcss": "^4",
     "typescript": "^5"
   }

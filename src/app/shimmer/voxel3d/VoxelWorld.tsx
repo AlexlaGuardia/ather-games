@@ -23,7 +23,7 @@ import { columnHeight } from '../voxel/height'
 import { AIR } from '../voxel/section'
 import { MAT } from '../voxel/depth'
 import { toGeometry, createVoxelMaterial } from './mesh-bridge'
-import type { SectionPayload } from './gen.worker'
+import type { SectionPayload } from '../../../workers/voxel-gen.worker'
 
 const SEED = 1337
 const H = DEFAULT_COLUMN.worldHeight
@@ -54,12 +54,14 @@ export default function VoxelWorld() {
   useEffect(() => {
     let w: Worker
     try {
-      // ⚠ `type: 'module'` IS REQUIRED, and omitting it fails in the worst possible way. The worker
-      // is bundled as an ES module (it imports the voxel core), and a CLASSIC worker cannot parse
-      // `import`. The Worker object still constructs, still accepts postMessage, and never fires
-      // onerror — it simply never replies. Symptom: "0 columns · 0 meshes · N in flight", forever,
-      // with an empty console. Diagnosed exactly that way.
-      w = new Worker(new URL('./gen.worker.ts', import.meta.url), { type: 'module' })
+      // ★ LOADED FROM /public AS A PLAIN URL, NOT VIA `new URL(..., import.meta.url)`.
+      // Turbopack resolves that form as a STATIC ASSET and copies the entry verbatim to
+      // `.next/static/media/<name>.<hash>.ts` — raw TypeScript the browser cannot parse. The Worker
+      // then constructs, accepts postMessage and never replies, with nothing in the console.
+      // Verified by inspecting the emitted asset; moving the file out of `src/app/` did not change
+      // it. `scripts/build-worker.mjs` bundles it explicitly instead (IIFE, so no module type to
+      // get wrong), wired into `npm run build` via prebuild.
+      w = new Worker('/voxel-gen.worker.js')
     } catch (err) {
       setStats(`WORKER FAILED TO START: ${String(err)}`)
       setFatal(true)
@@ -72,21 +74,28 @@ export default function VoxelWorld() {
       worker.current = null
     }
     w.onmessageerror = () => setStats('WORKER: message could not be deserialised')
-    w.postMessage({ type: 'init', seed: SEED })
+    // ⚠ HANDLER BEFORE POST. Assigning `onmessage` after `postMessage` is a race against the
+    // worker's first reply — and it reads as "the worker never answered", which is the same symptom
+    // as a worker that genuinely did not start. Attach first, then talk.
     w.onmessage = (e: MessageEvent) => {
       alive.current = true
       const m = e.data
-      if (m.type === 'column') voxels.current.set(key(m.cx, m.cz), m.voxels as Uint16Array)
+      if (m.type === 'ready') setStats('worker ready')
+      else if (m.type === 'column') voxels.current.set(key(m.cx, m.cz), m.voxels as Uint16Array)
       else if (m.type === 'mesh') pending.current.set(key(m.cx, m.cz), m.sections as SectionPayload[])
       else if (m.type === 'done') inflight.current = Math.max(0, inflight.current - 1)
     }
+    w.postMessage({ type: 'init', seed: SEED })
 
     // ★ THE WORKER IS AN OPTIMISATION, SO IT MUST NEVER BE A SINGLE POINT OF FAILURE.
     // A worker can construct, accept postMessage, and never reply — no error, no console output,
-    // just an empty world (that is exactly what a CLASSIC worker does when handed ES module code).
-    // An optimisation that can silently blank the page is worse than no optimisation, so if nothing
-    // has come back by the time this fires, tear it down and generate on the main thread. Slower,
-    // hitchier, and definitely working.
+    // just an empty world. If nothing has come back by the time this fires, tear it down and
+    // generate on the main thread: slower, hitchier, definitely working.
+    //
+    // ⚠ It waits for the `ready` ACK, not for terrain. An earlier version waited for the first
+    // column and fired against a healthy worker — because requests are only sent from `useFrame`,
+    // and a backgrounded tab never runs it. The probe was measuring the render loop, not the
+    // worker. Test the thing you mean to test.
     const probe = setTimeout(() => {
       if (alive.current) return
       w.terminate()

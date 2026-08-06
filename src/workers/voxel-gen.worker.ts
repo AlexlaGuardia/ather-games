@@ -12,12 +12,20 @@
 //
 // ⚠ The worker imports the voxel core, which is why the core may not import react/three/DOM. That
 // rule is not abstract portability hygiene — it is what lets this file exist at all.
+//
+// ⚠ AND IT LIVES OUTSIDE `src/app/` FOR A CONCRETE REASON. Inside the App Router directory,
+// Turbopack resolved `new Worker(new URL('./gen.worker.ts', import.meta.url))` as a STATIC ASSET
+// and copied the file to `.next/static/media/gen.worker.<hash>.ts` — raw, uncompiled TypeScript
+// with bare `import` statements. The browser fetched it, could not parse it, and the worker
+// constructed, accepted postMessage and never replied, with nothing in the console. Moving the
+// entry out of `app/` makes it a normal module in the graph and it gets compiled.
+// **Do not move this back under `src/app/`.**
 
 import {
   Column, SECTION, makeColumn, meshColumn, DEFAULT_COLUMN,
-} from '../voxel/column'
-import { createMeshScratch } from '../voxel/greedy'
-import { buildAttrs, attrBuffers, type MeshAttrs } from './attrs'
+} from '../app/shimmer/voxel/column'
+import { createMeshScratch } from '../app/shimmer/voxel/greedy'
+import { buildAttrs, attrBuffers, type MeshAttrs } from '../app/shimmer/voxel3d/attrs'
 
 const H = DEFAULT_COLUMN.worldHeight
 const scratch = createMeshScratch(SECTION)
@@ -70,6 +78,11 @@ self.onmessage = (e: MessageEvent) => {
   if (msg.type === 'init') {
     seed = msg.seed ?? seed
     cols.clear(); meshed.clear()
+    // ★ ACK ON BOOT. The main thread's liveness probe must test whether the WORKER is alive, not
+    // whether the app happened to ask it for something — the render loop is what sends requests,
+    // and a throttled tab does not run it. Without this ack the probe fired against a perfectly
+    // healthy worker and fell back to main-thread generation for no reason.
+    ;(self as unknown as Worker).postMessage({ type: 'ready' })
     return
   }
 
