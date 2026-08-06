@@ -408,6 +408,26 @@ the Arcade frame.
 > ### Files
 > `play3d/collar-raid.ts` (Ather) · `play3d/puppet-guards.ts` + `play3d/crucible-bots.ts` + `play3d/crucible-phases.ts` (Crucible) · `src/app/nolmir/` (Expeditions)
 
+## 🏛️ Shimmer — **BUILDING IS THE DIFFERENTIATOR: voxel cost, Sims look** (Alex, 2026-08-06) · *Last touched 2026-08-06*
+
+> **The call, in Alex's words:** *"here's the thing that sets our game apart from minecraft.. the building.. the material cost comes from blocks but the look will be more like Sims so we don't have to have blocky buildings."* Full spec: **`STRUCTURE-LAYER.md`**.
+>
+> **Left off:** direction recorded + spec written. Nothing implemented. Persistence and trees are still ahead of it.
+>
+> **Next:** ① persistence (a structure layer with no save is a demo) ② six-piece catalogue — floor, wall, doorway, window, roof, stair — and prove the *placement loop* before anything else is modelled ③ then the rest of the catalogue.
+>
+> ### Decisions
+> - **★ TWO REPRESENTATIONS, ONE GRID.** Voxels = terrain, mining, the material economy. Structures = placed **GLTF pieces**, snapped to the same 1-block grid so the two worlds agree about space. Mined blocks are the *currency*; they are not what a building is *made of*.
+> - **★ THE TRICK THAT KEEPS IT CHEAP: a placed piece writes OCCUPANCY into the voxel grid while rendering as a mesh.** Collision stays the cheap voxel lookup already built (`voxelSolid`, the capsule check) — Sims-looking buildings with **no second collision system**. This is the whole reason the idea is affordable.
+> - **★ `InstancedMesh` PER PIECE TYPE, NON-NEGOTIABLE.** One geometry + one material, thousands of copies. A mesh-and-material per placed wall is exactly the allocation that got this page BLOCKED from WebGL on 08-06; `render-audit.test.ts` would catch it, but it should never be written.
+> - **Storage is nearly free** — a placement list (id, position, rotation), not voxels. Composes directly with the ruled persistence rule (a chunk is stored only if it holds player edits).
+> - **★ THIS MAKES THE CARTOON DIRECTION LOAD-BEARING, NOT DECORATIVE.** Blocky terrain beside clean architecture is jarring under realistic shading; under flat-toned, outlined, stylised shading they reconcile, because everything reads as *drawn* rather than *simulated*. The two 08-06 calls reinforce each other more than either does alone.
+> - **The 3D pipeline already exists** — `world/prop-models.tsx` loads GLTF with DRACO + preload. Building pieces use that path, not the voxel one. The old `world/structures.ts` (2D tile stamps) retires with the tile world.
+> - **⛔ MESHY IS STILL NOT THE ANSWER, for a different reason than flora.** Building pieces ARE a bounded, hand-designed set of dead-grey architectural props — the pre-render lane the art-medium law already scopes, so the *pipeline* is right. But modular snap-together pieces need **clean, precise, dimension-exact** geometry, and Meshy makes *organic* meshes. This is the **picaso / headless-Blender** path. (Correcting the earlier flora answer only in scope: the lane fits, the tool still does not.)
+> - **Honest cost:** a piece catalogue is real art work. **Six pieces first**, prove placement/snapping/rotation/cost, then commission the rest. Do not model forty pieces against an unproven loop.
+>
+> **Files:** `STRUCTURE-LAYER.md` (spec) · `world/prop-models.tsx` (the GLTF path) · `voxel/registry.ts` (material costs) · `voxel3d/` (host) · ⛔ `world/structures.ts` (retires).
+
 ## 🧱 Shimmer — GOES VOXEL, STAYS ON WEB (Alex, 2026-08-06, jin-cc) · *Last touched 2026-08-06*
 
 > **The direction call.** Minecraft model: spawn → pick a birth rune → the Greg tutorial → open country, **every block mineable and craftable**. Built on the web now; the **Supra** port is designed in from day one rather than hoped for. Full design: **`VOXEL-WORLD-MODEL.md`** (`4c54686`) — read it before touching materials or chunk storage.
