@@ -74,7 +74,13 @@ export interface VoxelTexMaterial {
   material: THREE.Material
   /** Swap min filtering between mipmapped and raw nearest, live, for the aliasing A/B. */
   setMipmapped: (on: boolean) => void
+  /** Per-block value jitter, 0 = off. See the shader note on why this is not a vertex attribute. */
+  setJitter: (amount: number) => void
 }
+
+/** How much a block's brightness may drift from its neighbours. Small on purpose — this is meant to
+ *  read as "stone is not uniform", not as a checkerboard. */
+export const DEFAULT_JITTER = 0.07
 
 /**
  * Lambert + a texture array, injected rather than written from scratch.
@@ -91,8 +97,15 @@ export interface VoxelTexMaterial {
 export function createTexturedVoxelMaterial(tiles: TileArray): VoxelTexMaterial {
   const mat = new THREE.MeshLambertMaterial({ vertexColors: false })
 
+  // `onBeforeCompile` does not run until the first render, so a setter called before that would be
+  // writing to a uniform object that does not exist yet. Hold the wanted value and apply on compile.
+  let live: { uJitter: { value: number } } | null = null
+  let jitter = DEFAULT_JITTER
+
   mat.onBeforeCompile = (shader) => {
     shader.uniforms.uTiles = { value: tiles.texture }
+    shader.uniforms.uJitter = { value: jitter }
+    live = shader.uniforms as { uJitter: { value: number } }
 
     shader.vertexShader = mustReplace(
       shader.vertexShader,
@@ -103,7 +116,8 @@ attribute float aEmissive;
 varying float vLayer;
 varying float vEmissive;
 varying vec3 vVoxPos;
-varying vec3 vVoxNormal;`,
+varying vec3 vVoxNormal;
+varying vec3 vWorldPos;`,
       'vertex shader',
     )
     shader.vertexShader = mustReplace(
@@ -113,7 +127,13 @@ varying vec3 vVoxNormal;`,
 vLayer = aLayer;
 vEmissive = aEmissive;
 vVoxPos = position;
-vVoxNormal = normal;`,
+vVoxNormal = normal;
+// ⚠ WORLD position, separately from the object-space one above, and both are needed.
+// UVs stay in object space (small numbers, so texel alignment cannot drift at the far edge of the
+// world). The per-block hash MUST be world-space: object space restarts at every section origin, so
+// hashing it would stamp the identical 16-block pattern into every section — trading a 1-block
+// repeat for a 16-block one, which is more visible, not less.
+vWorldPos = (modelMatrix * vec4(position, 1.0)).xyz;`,
       'vertex shader',
     )
 
@@ -122,10 +142,37 @@ vVoxNormal = normal;`,
       '#include <common>',
       `#include <common>
 uniform sampler2DArray uTiles;
+uniform float uJitter;
 varying float vLayer;
 varying float vEmissive;
 varying vec3 vVoxPos;
 varying vec3 vVoxNormal;
+varying vec3 vWorldPos;
+
+// ★ PER-BLOCK VARIATION WITHOUT COSTING THE GREEDY MESHER A SINGLE QUAD.
+//
+// The obvious way to stop a tiled texture reading as wallpaper is to vary each block. The obvious
+// IMPLEMENTATION is a per-vertex attribute — and that quietly destroys the mesher, because two
+// adjacent blocks that differ can no longer merge. A flat 32x32 floor would go from one quad back to
+// 1024. It is the atlas mistake wearing a different hat.
+//
+// Instead the block coordinate is RECOVERED PER-FRAGMENT from world position. A fragment on a face
+// sits exactly on the block boundary along the normal axis, so stepping half a block back along the
+// normal and flooring lands inside the owning block. Variation therefore happens INSIDE a merged
+// quad and the mesher never learns anything happened.
+//
+// ★ AND IT WORKS WHERE DECORATION CANNOT — stone walls, cave ceilings, the inside of a mine. Grass
+// tufts and flowers break up a surface; nothing scatters flowers 60 blocks underground, which is
+// where a big share of this game is about to be spent.
+vec3 blockCoord() {
+  return floor(vWorldPos - vVoxNormal * 0.5);
+}
+
+float hashBlock(vec3 p) {
+  vec3 q = fract(p * 0.1031);
+  q += dot(q, q.yzx + 33.33);
+  return fract((q.x + q.y) * q.z);
+}
 // Alpha of the sampled tile — the emissive MASK (see writeOre), so only the crystal inside an ore
 // block glows and not the host rock around it. Global rather than a varying: it is produced and
 // consumed within one fragment, two chunks apart.
@@ -155,6 +202,12 @@ float gTileEmissive = 0.0;`,
   vec4 tile = texture(uTiles, vec3(tileUv, vLayer));
   diffuseColor.rgb *= tile.rgb;
   gTileEmissive = tile.a;
+  // Value-only jitter, deliberately not hue: shifting hue per block would fight the palette and read
+  // as noise. Ore is exempt — a crystal that varies block to block reads as inconsistent material
+  // rather than as natural variation, and its whole job is to be recognisable at a glance.
+  if (uJitter > 0.0 && tile.a < 0.5) {
+    diffuseColor.rgb *= 1.0 + (hashBlock(blockCoord()) - 0.5) * 2.0 * uJitter;
+  }
 }`,
       'fragment shader',
     )
@@ -173,6 +226,12 @@ float gTileEmissive = 0.0;`,
       tiles.texture.minFilter = on ? THREE.NearestMipmapLinearFilter : THREE.NearestFilter
       tiles.texture.needsUpdate = true
       mat.needsUpdate = true
+    },
+    setJitter: (amount: number) => {
+      jitter = amount
+      // No `needsUpdate` — this is a uniform value, not a shader recompile. Setting needsUpdate here
+      // would rebuild the program on every keypress for nothing.
+      if (live) live.uJitter.value = amount
     },
   }
 }

@@ -24,7 +24,7 @@ import { createMeshScratch } from '../../voxel/greedy'
 import { columnHeight } from '../../voxel/height'
 import { buildAttrs } from '../attrs'
 import { toGeometry, createVoxelMaterial } from '../mesh-bridge'
-import { makeTileArray, createTexturedVoxelMaterial, type TileArray } from './atlas'
+import { makeTileArray, createTexturedVoxelMaterial, DEFAULT_JITTER, type TileArray } from './atlas'
 import { layerOf, faceOfNormal } from './tiles'
 import { TileStrip } from './TileStrip'
 
@@ -44,6 +44,7 @@ export default function TexSpike() {
   const [note, setNote] = useState('generating a 128-block patch…')
   const [textured, setTextured] = useState(true)
   const [mips, setMips] = useState(true)
+  const [jitter, setJitter] = useState(true)
   const [err, setErr] = useState<string | null>(null)
 
   // ── generate once, off the first paint so the HUD message is actually seen ──────────────────────
@@ -104,6 +105,7 @@ export default function TexSpike() {
       if (e.code === 'Digit1') setTextured(false)
       if (e.code === 'Digit2') setTextured(true)
       if (e.code === 'KeyM') setMips(m => !m)
+      if (e.code === 'KeyV') setJitter(v => !v)
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
@@ -117,7 +119,7 @@ export default function TexSpike() {
         <hemisphereLight args={['#cfe6ff', '#3b3a4a', 1.5]} />
         <directionalLight position={[80, 200, 40]} intensity={1.5} />
         <ambientLight intensity={0.35} />
-        {built && <Patches built={built} textured={textured} mips={mips} onError={setErr} />}
+        {built && <Patches built={built} textured={textured} mips={mips} jitter={jitter} onError={setErr} />}
         <FlyCam />
         <PointerLockControls />
       </Canvas>
@@ -133,10 +135,11 @@ export default function TexSpike() {
         <div className="text-white/55 mt-1">{note}</div>
         <div className="text-white/70 mt-1">
           mode: {textured ? 'TEXTURED' : 'FLAT COLOUR (control)'} · mipmaps: {mips ? 'on' : 'OFF'}
+          <br />per-block variation: {jitter ? 'on' : 'OFF'}
         </div>
         <div className="mt-1.5 text-white/45">
           click to look · WASD · space up · ctrl down · shift fast<br />
-          1 flat · 2 textured · M mipmaps<br />
+          1 flat · 2 textured · M mipmaps · V per-block variation<br />
           <span className="text-white/30">?cam=x,y,z&amp;look=x,y,z pins the shot</span>
         </div>
         <div className="mt-1.5 text-white/35 leading-snug">
@@ -171,10 +174,11 @@ function layerAttr(materials: Uint16Array, normals: Float32Array): Float32Array 
   return out
 }
 
-function Patches({ built, textured, mips, onError }: {
+function Patches({ built, textured, mips, jitter, onError }: {
   built: Built[]
   textured: boolean
   mips: boolean
+  jitter: boolean
   onError: (s: string) => void
 }) {
   const { gl } = useThree()
@@ -192,6 +196,10 @@ function Patches({ built, textured, mips, onError }: {
   const flat = useMemo(() => createVoxelMaterial(), [])
 
   useEffect(() => { m32.setMipmapped(mips); m64.setMipmapped(mips) }, [m32, m64, mips])
+  useEffect(() => {
+    const a = jitter ? DEFAULT_JITTER : 0
+    m32.setJitter(a); m64.setJitter(a)
+  }, [m32, m64, jitter])
 
   // ⚠ Dispose on unmount. Two array textures at 43 layers are ~860KB of VRAM; a hot-reload loop that
   // leaks them is how a dev session ends in a context loss with no obvious cause.
