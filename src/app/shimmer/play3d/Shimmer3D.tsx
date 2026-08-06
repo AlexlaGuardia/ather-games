@@ -83,7 +83,7 @@ import { allNpcs, nodePlacementsFor, dealtNodesFor, spawnerPlacementsFor, logica
 import { ZONE_SPAWNERS, type SpawnerPlacement } from '../world/spawn-placements'
 import { patrolDown, markBeaten, pruneBeaten, patrolLoop, patrolPose, type BeatenRecord, type PatrolLoop, type WanderDials } from '../engine/burrows'
 import type { DealWindow } from '../engine/spawn-board'
-import { regionIdOf, REGION_FILES, regionSpawnConfig, migrateLegacyPosition, WILDS_ZONE, WILDS_GEO, loadWildsRegion } from '../world/region-maps'
+import { regionIdOf, REGION_FILES, regionSpawnConfig, migrateLegacyPosition, WILDS_ZONE, WILDS_GEO, loadWildsRegion, isRegionZone, regionDisplayName } from '../world/region-maps'
 import { cloneSparseGrid, materializeRows, newMount, syncWilds, type WildsMount } from '../world/wilds-world'
 
 // The composed continent registers as a zone before any getZone/save-load runs.
@@ -3353,6 +3353,10 @@ function PlayTogetherPanel({ name, onName, party, onParty, peers, account, inPlo
 
 export default function Shimmer3D() {
   const [zoneId, setZoneId] = useState(START_ZONE)
+  // Where the player ACTUALLY loaded in, once the save has been read and migrated — which is not
+  // known at mount, because `zoneId` starts at START_ZONE and the save resolves afterwards.
+  // Anything that wants to announce the boot zone must wait for this, not for mount.
+  const [bootZone, setBootZone] = useState<string | null>(null)
   const zone = getZone(ALL_ZONES, zoneId) ?? getZone(ALL_ZONES, START_ZONE)!
 
   // Edit mode lives up here because the resource board below is gated on it — see the deal.
@@ -3791,6 +3795,7 @@ export default function Shimmer3D() {
     if (loadedRef.current) return
     loadedRef.current = true
     let alive = true
+    let landed: string = START_ZONE   // overwritten by whichever save branch places the player
     // ── Cloud fallback (stage 2 per-keeper plots): a BLANK device asks the account for its
     // garden before starting fresh. Local always wins when present — the cloud copy is only
     // ever pulled into emptiness, so a stale server save can never clobber live play. The
@@ -3903,13 +3908,13 @@ export default function Shimmer3D() {
         const mig = data.zoneId ? migrateLegacyPosition(data.zoneId, data.playerTileX ?? 1, data.playerTileY ?? 1) : null
         if (mig) {
           posRef.current!.set(mig.x, posRef.current!.y, mig.y)
-          setZoneId(mig.zoneId)
+          setZoneId(mig.zoneId); landed = mig.zoneId
         } else if (data.zoneId && isStitched(data.zoneId)) {
           // logical save (or a pre-continent save) → its composed-world spot
           const wp = getGardenWorld().toWorld(data.zoneId, data.playerTileX ?? 1, data.playerTileY ?? 1)
           if (wp) posRef.current!.set(wp.x, posRef.current!.y, wp.y)
-          setZoneId(WORLD_ZONE_ID)
-        } else if (data.zoneId && getZone(ALL_ZONES, data.zoneId)) setZoneId(data.zoneId)
+          setZoneId(WORLD_ZONE_ID); landed = WORLD_ZONE_ID
+        } else if (data.zoneId && getZone(ALL_ZONES, data.zoneId)) { setZoneId(data.zoneId); landed = data.zoneId }
       }
       // One-time starter-kit grant — reaches fresh AND returning saves (older saves with a party
       // never got seeded stations/mats, so the Alchemy Station wasn't obtainable). Idempotent via flag.
@@ -3927,7 +3932,10 @@ export default function Shimmer3D() {
         setInvSlots([...invRef.current.slots])
         persist()
       }
-    }).catch(() => {})
+      // Announce the zone the player actually landed in. Defaulting to START_ZONE covers the
+      // fresh-save path, where no branch above runs and the boot really is the Home Plot.
+      if (alive) setBootZone(landed)
+    }).catch(() => { if (alive) setBootZone(START_ZONE) })
     return () => { alive = false }
   }, [load, persist])
 
@@ -5794,16 +5802,22 @@ export default function Shimmer3D() {
 
   // Arriving DIRECTLY into a region (?zone=r-… deep link) gets the same beat, already at
   // 'hold' — there is no old scene to fade out of, just the title over the mount hitch.
+  //
+  // ★ THIS FIRES ON THE RESOLVED BOOT ZONE, NOT ON MOUNT. It used to run with `[]` deps and read
+  // `zoneIdRef.current`, which at mount is still START_ZONE — the save loads afterwards and
+  // calls setZoneId. So the card announced "Home Plot" no matter where you actually loaded in,
+  // every single boot, while the world behind it was somewhere else entirely.
   useEffect(() => {
-    const regionId = regionIdOf(zoneIdRef.current)
-    if (!regionId || transitRef.current) return
+    if (!bootZone) return
+    const label = regionDisplayName(bootZone)
+    if (!label || transitRef.current) return
     transitRef.current = true
-    setTransit({ label: REGION_FILES[regionId].display, phase: 'hold' })
+    setTransit({ label, phase: 'hold' })
     const t = transitTimers.current
-    t.push(setTimeout(() => setTransit({ label: REGION_FILES[regionId].display, phase: 'in' }), TRANSIT_HOLD_MS))
+    t.push(setTimeout(() => setTransit({ label, phase: 'in' }), TRANSIT_HOLD_MS))
     t.push(setTimeout(() => { setTransit(null); transitRef.current = false }, TRANSIT_HOLD_MS + TRANSIT_IN_MS))
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [bootZone])
 
   // Which side of the pivot the player is on. Entering a region sets it; explicitly
   // entering a legacy zone (?zone=, editor jump) clears it. Interiors leave it alone —
@@ -5814,7 +5828,7 @@ export default function Shimmer3D() {
   // load, warp) flips it on; any explicit landing on the legacy surface flips it off.
   // Interiors deliberately change nothing — they belong to the side you entered from.
   useEffect(() => {
-    if (regionIdOf(zoneId)) newWorldRef.current = true
+    if (isRegionZone(zoneId)) newWorldRef.current = true
     else if (zoneId === WORLD_ZONE_ID || isStitched(zoneId)) newWorldRef.current = false
   }, [zoneId])
   // ★ CHANGING ZONE CLEARS THE THREE SYSTEMS. Fields, conjured terrain and statuses are all keyed by
@@ -5829,13 +5843,13 @@ export default function Shimmer3D() {
   }, [zoneId])
   const performWarp = useCallback((w: Warp) => {
     let toZone = w.toZone, toX = w.toX, toY = w.toY
-    if (regionIdOf(toZone)) newWorldRef.current = true
+    if (isRegionZone(toZone)) newWorldRef.current = true
     else if (newWorldRef.current) {
       const mig = migrateLegacyPosition(toZone, toX, toY)
       if (mig) { toZone = mig.zoneId; toX = mig.x; toY = mig.y }
     }
     // Doors back onto the continent land at the zone's composed-world spot; interiors mount as before.
-    const world = !regionIdOf(toZone) && isStitched(toZone) ? getGardenWorld().toWorld(toZone, toX, toY) : null
+    const world = !isRegionZone(toZone) && isStitched(toZone) ? getGardenWorld().toWorld(toZone, toX, toY) : null
     posRef.current!.set(world?.x ?? toX, posRef.current!.y, world?.y ?? toY)
     if (w.direction && DIR_YAW[w.direction] !== undefined) camYaw.current = DIR_YAW[w.direction]
     setZoneId(world ? WORLD_ZONE_ID : toZone)
@@ -5844,19 +5858,21 @@ export default function Shimmer3D() {
   const onWarp = useCallback((w: Warp) => {
     if (w.ownerOnly && !isOwnerRef.current) return  // dev/test gate — silent no-op for players
     if (transitRef.current) return  // mid-transition: the world is covered, nothing may warp
-    const regionId = regionIdOf(w.toZone)
+    const label = regionDisplayName(w.toZone)
     // The cinematic plays only when ARRIVING at a region map (interior doors stay instant),
-    // and never re-fires for a warp inside the same region.
-    if (!regionId || w.toZone === zoneIdRef.current) { performWarp(w); return }
+    // and never re-fires for a warp inside the same region. Keyed on the DISPLAY NAME, not on a
+    // backing file — the Wilds are one zone over many files and had no name to show, so stepping
+    // into the overland was the one arrival that got no title card at all.
+    if (!label || w.toZone === zoneIdRef.current) { performWarp(w); return }
     transitRef.current = true
     talkingRef.current = true  // freeze movement under the cover (same gate dialogue uses)
-    setTransit({ label: REGION_FILES[regionId].display, phase: 'out' })
+    setTransit({ label, phase: 'out' })
     const t = transitTimers.current
     t.push(setTimeout(() => {
       performWarp(w)             // land under full cover — the geometry hitch hides here
-      setTransit({ label: REGION_FILES[regionId].display, phase: 'hold' })
+      setTransit({ label, phase: 'hold' })
     }, TRANSIT_OUT_MS))
-    t.push(setTimeout(() => setTransit({ label: REGION_FILES[regionId].display, phase: 'in' }), TRANSIT_OUT_MS + TRANSIT_HOLD_MS))
+    t.push(setTimeout(() => setTransit({ label, phase: 'in' }), TRANSIT_OUT_MS + TRANSIT_HOLD_MS))
     t.push(setTimeout(() => {
       setTransit(null)
       transitRef.current = false

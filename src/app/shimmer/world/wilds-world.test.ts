@@ -20,7 +20,7 @@ import {
 } from './wilds-world'
 import { generateWildsRegion, edgeGate, WILDS_FILL } from './wilds-gen'
 import { CHUNK, DEFAULT_RADIUS } from './chunk-stream'
-import { WILDS_ZONE, WILDS_GEO, loadWildsRegion, REGION_FILES, applyLiveRegionData } from './region-maps'
+import { WILDS_ZONE, WILDS_GEO, loadWildsRegion, REGION_FILES, applyLiveRegionData, regionDisplayName, isRegionZone } from './region-maps'
 import { ALL_ZONES } from './all-zones'
 import { checkWarp } from './zones'
 import type { RegionFile } from './region-codec'
@@ -357,6 +357,18 @@ ok(wildsLoadRadius() > DEFAULT_RADIUS * CHUNK,
   frame(WILDS_ZONE, 250, 3)
   ok(grid[3][250] !== WILDS_CLOUD,
     '★ re-entering the Wilds mounts again — the loaded-set resets with the zone')
+}
+
+// ── 12. the arrival title card ────────────────────────────────────────────────────────────
+// `regionIdOf` answers "which region FILE backs this zone", and the Wilds have none — so every
+// check written as `regionIdOf(id)` silently said "not a region" for the entire overland, and
+// walking into it was the one arrival that got no card at all.
+{
+  ok(regionDisplayName(WILDS_ZONE) === 'The Wilds', 'the Wilds have a name to show on arrival')
+  ok(regionDisplayName('r-the-outfields') === 'The Outfields', 'a region zone still names itself')
+  ok(regionDisplayName('brack-hold') === null, 'an interior gets no card, as before')
+  ok(isRegionZone(WILDS_ZONE) && isRegionZone('r-home-plot'), 'both kinds of region zone count as the new world')
+  ok(!isRegionZone('moonwell-glade'), '...and a legacy zone does not')
 }
 
 console.log(`\nwilds-world: ${pass} passed, ${fails.length} failed`)

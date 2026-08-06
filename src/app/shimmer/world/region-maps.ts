@@ -106,6 +106,28 @@ function buildWildsZone(): Zone {
   }
 }
 
+/** What the Wilds are called on an arrival title card. Not per-tile: you arrive in the Wilds. */
+export const WILDS_DISPLAY = 'The Wilds'
+
+/**
+ * True for any zone belonging to the new region world.
+ *
+ * `regionIdOf` answers "which region FILE is this zone", and the Wilds have no single file
+ * behind them — so every check written as `regionIdOf(id)` quietly said "not a region" for the
+ * whole overland. Use this for behaviour ("am I in the new world?"); use `regionIdOf` only when
+ * you actually need the backing file.
+ */
+export function isRegionZone(zoneId: string): boolean {
+  return zoneId === WILDS_ZONE || regionIdOf(zoneId) !== null
+}
+
+/** The name for this zone's arrival title card, or null if it does not get one. */
+export function regionDisplayName(zoneId: string): string | null {
+  if (zoneId === WILDS_ZONE) return WILDS_DISPLAY
+  const id = regionIdOf(zoneId)
+  return id ? REGION_FILES[id].display : null
+}
+
 /** Where a Wilds region's own records (nodes, burrows) land in world space. */
 function wildsOffset(id: string): { x: number; y: number } | null {
   const rc = parseWildsId(id)
