@@ -30,7 +30,8 @@ import { MAT } from '../voxel/depth'
 import { raycast, tickBreak, dropsFor, type BreakState } from '../voxel/mine'
 import { spawnDrop, tickDrops, type Drop } from '../voxel/drops'
 import { blockDef, materialForItem, type BlockSkill } from '../voxel/registry'
-import { toGeometry, createVoxelMaterial } from './mesh-bridge'
+import { toGeometry, createVoxelMaterial, applySettings } from './mesh-bridge'
+import { loadSettings, saveSettings, withStyle, type VoxelSettings, type RenderStyle } from './settings'
 import { buildAttrs, MATERIAL_COLOR } from './attrs'
 import { createInventory, addItems, removeItems, countItem, type Inventory } from '../engine/inventory'
 
@@ -49,6 +50,11 @@ export default function VoxelWorld() {
   const [sel, setSel] = useState(0)
   const [tier, setTier] = useState(1)
   const [look, setLook] = useState<{ name: string; progress: number; refused: boolean } | null>(null)
+  const [settings, setSettings] = useState<VoxelSettings>(() => loadSettings())
+  const [showSettings, setShowSettings] = useState(false)
+  const update = useCallback((patch: Partial<VoxelSettings>) => {
+    setSettings(prev => { const next = { ...prev, ...patch }; saveSettings(next); return next })
+  }, [])
   const worker = useRef<Worker | null>(null)
   const incoming = useRef<{ cx: number; cz: number; voxels: Uint16Array }[]>([])
   const inflight = useRef(0)
@@ -87,6 +93,8 @@ export default function VoxelWorld() {
     const onKey = (e: KeyboardEvent) => {
       const n = Number(e.key)
       if (n >= 1 && n <= 8) setSel(n - 1)
+      // Esc exits pointer lock anyway, so O is the settings key — it must not fight the browser.
+      if (e.code === 'KeyO') setShowSettings(v => !v)
       // Tool tier is a debug lever so the tier GATE can be felt in ten seconds: a tier-1 spike
       // REFUSES pure core, and that should be provable without crafting your way up first.
       if (e.code === 'BracketRight') { toolTier.current = Math.min(3, toolTier.current + 1); setTier(toolTier.current) }
@@ -109,11 +117,12 @@ export default function VoxelWorld() {
           selItem={hotbar[sel]?.itemId ?? null}
           onStats={setStats} onPos={p => setPos(`x ${p.x.toFixed(0)}  y ${p.y.toFixed(0)}  z ${p.z.toFixed(0)}`)}
           onLook={setLook} onInvChange={refreshHotbar}
-          worker={worker} incoming={incoming} inflight={inflight}
+          worker={worker} incoming={incoming} inflight={inflight} settings={settings}
         />
         <PointerLockControls />
       </Canvas>
       <Hud stats={stats} pos={pos} look={look} hotbar={hotbar} sel={sel} tier={tier} />
+      {showSettings && <SettingsPanel s={settings} update={update} onClose={() => setShowSettings(false)} />}
     </div>
   )
 }
@@ -177,7 +186,7 @@ function Hud({ stats, pos, look, hotbar, sel, tier }: {
 const SOLID_EXCEPT = new Set<number>([AIR, MAT.WATER])
 const isSolid = (m: number) => !SOLID_EXCEPT.has(m)
 
-function World({ inv, toolTier, toolSkill, selItem, onStats, onPos, onLook, onInvChange, worker, incoming, inflight }: {
+function World({ inv, toolTier, toolSkill, selItem, onStats, onPos, onLook, onInvChange, worker, incoming, inflight, settings }: {
   inv: React.RefObject<Inventory>
   toolTier: React.RefObject<number>
   toolSkill: React.RefObject<BlockSkill>
@@ -189,11 +198,15 @@ function World({ inv, toolTier, toolSkill, selItem, onStats, onPos, onLook, onIn
   worker: React.RefObject<Worker | null>
   incoming: React.RefObject<{ cx: number; cz: number; voxels: Uint16Array }[]>
   inflight: React.RefObject<number>
+  settings: VoxelSettings
 }) {
   const { camera, gl } = useThree()
   const group = useRef<THREE.Group>(null)
   const highlight = useRef<THREE.LineSegments>(null)
   const material = useMemo(() => createVoxelMaterial(), [])
+  // ★ A VALUE WRITE, NOT A REBUILD. Both shading paths are in the one compiled program and selected
+  // by a uniform, so changing style costs nothing and creates no second shader program.
+  useEffect(() => { applySettings(material, settings) }, [material, settings])
   const scratch = useMemo(() => createMeshScratch(SECTION), [])
   const cols = useRef(new Map<string, Column>())
   const drawn = useRef(new Map<string, THREE.Mesh>())
@@ -587,5 +600,55 @@ function World({ inv, toolTier, toolSkill, selItem, onStats, onPos, onLook, onIn
         <lineBasicMaterial color="#000000" transparent opacity={0.55} />
       </lineSegments>
     </>
+  )
+}
+
+function SettingsPanel({ s, update, onClose }: {
+  s: VoxelSettings
+  update: (p: Partial<VoxelSettings>) => void
+  onClose: () => void
+}) {
+  const Slider = ({ label, k }: { label: string; k: 'toon' | 'outline' | 'faceShading' | 'shadowLift' }) => (
+    <label className="flex items-center gap-2 text-[11px] font-mono text-white/70">
+      <span className="w-24 shrink-0">{label}</span>
+      <input
+        type="range" min={0} max={1} step={0.05} value={s[k]}
+        onChange={e => update({ [k]: Number(e.target.value) } as Partial<VoxelSettings>)}
+        className="flex-1 accent-amber-300"
+      />
+      <span className="w-8 text-right tabular-nums text-white/50">{s[k].toFixed(2)}</span>
+    </label>
+  )
+
+  return (
+    <div className="absolute top-3 right-3 w-72 bg-black/80 border border-white/15 rounded p-3 space-y-2.5">
+      <div className="flex items-center justify-between">
+        <span className="text-[11px] font-mono font-semibold tracking-wider text-white/90 uppercase">Render</span>
+        <button onClick={onClose} className="text-white/40 hover:text-white/80 text-xs font-mono">esc / O</button>
+      </div>
+
+      <div className="flex gap-1.5">
+        {(['natural', 'cartoon'] as RenderStyle[]).map(v => (
+          <button
+            key={v}
+            onClick={() => update(withStyle(s, v))}
+            className={`flex-1 py-1.5 rounded text-[11px] font-mono uppercase tracking-wider border
+              ${s.style === v ? 'border-amber-300 text-amber-200 bg-amber-300/10' : 'border-white/15 text-white/50'}`}
+          >{v}</button>
+        ))}
+      </div>
+
+      {/* Each lever is exposed so the look can be judged by moving ONE at a time on the real world.
+          A preset is a starting point; the call is Alex's. */}
+      <Slider label="banding" k="toon" />
+      <Slider label="outline" k="outline" />
+      <Slider label="face light" k="faceShading" />
+      <Slider label="shadow lift" k="shadowLift" />
+
+      <p className="text-[10px] leading-relaxed text-white/35 font-mono pt-1">
+        Both shading paths live in one shader program and are picked by a uniform, so switching
+        costs nothing. Settings persist.
+      </p>
+    </div>
   )
 }
