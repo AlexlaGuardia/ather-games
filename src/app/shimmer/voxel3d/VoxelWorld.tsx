@@ -1,343 +1,301 @@
 'use client'
 
-// The voxel world you can walk. A test bed, on its own route, on purpose.
+// The voxel world you can walk, mine and build in. A test bed, on its own route, on purpose.
 //
 // ⚠ NOT WIRED INTO Shimmer3D, DELIBERATELY. That file is ~5,900 lines of the live game (mortal
 // side, holds, Crucible, and the warp/mount path that produced four bugs on 08-06) while this walks
-// a DIFFERENT WORLD MODEL — no zones, no tiles, no warps. Grafting one into the other means
-// threading two incompatible worlds through one mount path. Integration is a later decision.
+// a DIFFERENT WORLD MODEL — no zones, no tiles, no warps. Integration is a later decision.
 //
-// ★ GENERATION AND MESHING RUN IN A WORKER (`gen.worker.ts`). Measured on the main thread they were
-// ~109ms + ~47ms per 64-wide chunk — nine frames of hitch every time you walk into new country.
-// The worker owns the Columns (meshing needs a column's four neighbours, so whoever meshes must
-// hold them); this file only ever sees finished vertex buffers plus a voxel copy for collision.
+// ⚠ GENERATION RUNS ON THE MAIN THREAD RIGHT NOW, ON PURPOSE. The Worker is written
+// (`src/workers/voxel-gen.worker.ts`, bundled by `scripts/build-worker.mjs`) and its BUNDLING is
+// solved, but it does not deliver — no `ready` ack, no error. Rather than carry two code paths when
+// the second cannot be exercised, there is ONE path. Block edits, re-meshing and collision all read
+// the same column cache, which is what makes mining tractable at all. Restore the worker by
+// forwarding edits to it; the edit path is the piece that has to change.
 
 import { useRef, useMemo, useState, useEffect, useCallback } from 'react'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { PointerLockControls } from '@react-three/drei'
 import * as THREE from 'three'
-import { SECTION, DEFAULT_COLUMN, makeColumn, meshColumn, type Column } from '../voxel/column'
+import { SECTION, DEFAULT_COLUMN, makeColumn, meshColumn, refreshUniform, type Column } from '../voxel/column'
 import { createMeshScratch } from '../voxel/greedy'
-import { buildAttrs } from './attrs'
 import { columnHeight } from '../voxel/height'
 import { AIR } from '../voxel/section'
 import { MAT } from '../voxel/depth'
+import { raycast, tickBreak, dropsFor, type BreakState } from '../voxel/mine'
+import { blockDef, materialForItem, type BlockSkill } from '../voxel/registry'
 import { toGeometry, createVoxelMaterial } from './mesh-bridge'
-import type { SectionPayload } from '../../../workers/voxel-gen.worker'
+import { buildAttrs, MATERIAL_COLOR } from './attrs'
+import { createInventory, addItems, removeItems, countItem, type Inventory } from '../engine/inventory'
 
 const SEED = 1337
 const H = DEFAULT_COLUMN.worldHeight
-/** Columns are 16 wide; radius 7 gives a 15x15 window ≈ 240 units of view. */
-const RADIUS = 7
-/** Requests in flight. The worker is fast but not free — flooding it just builds a queue that
- *  ignores the player walking somewhere else, so the window is small and refilled nearest-first. */
-const MAX_INFLIGHT = 3
-
+const RADIUS = 6
+const REACH = 6            // how far you can mine or place, in voxels
 const key = (cx: number, cz: number) => `${cx},${cz}`
 
+interface Slot { itemId: string; count: number }
+
 export default function VoxelWorld() {
-  const [stats, setStats] = useState('booting worker…')
-  const [fatal, setFatal] = useState(false)
+  const [stats, setStats] = useState('generating…')
   const [pos, setPos] = useState('')
-  const voxels = useRef(new Map<string, Uint16Array>())
-  const pending = useRef(new Map<string, SectionPayload[]>())
-  const requested = useRef(new Set<string>())
-  const inflight = useRef(0)
-  const worker = useRef<Worker | null>(null)
-  const alive = useRef(false)
-  const [fallback, setFallback] = useState(false)
+  const [hotbar, setHotbar] = useState<Slot[]>([])
+  const [sel, setSel] = useState(0)
+  const [tier, setTier] = useState(1)
+  const [look, setLook] = useState<{ name: string; progress: number; refused: boolean } | null>(null)
 
-  // ★ A WORKER THAT FAILS TO CONSTRUCT MUST NOT FAIL SILENTLY. Bundlers disagree about
-  // `new Worker(new URL(...))`, and the failure mode is a page that renders nothing, logs nothing,
-  // and looks exactly like a throttled tab. Every path here reports to the HUD, and the constructor
-  // is wrapped so a bundling failure cannot take the React tree down with it.
-  useEffect(() => {
-    let w: Worker
-    try {
-      // ★ LOADED FROM /public AS A PLAIN URL, NOT VIA `new URL(..., import.meta.url)`.
-      // Turbopack resolves that form as a STATIC ASSET and copies the entry verbatim to
-      // `.next/static/media/<name>.<hash>.ts` — raw TypeScript the browser cannot parse. The Worker
-      // then constructs, accepts postMessage and never replies, with nothing in the console.
-      // Verified by inspecting the emitted asset; moving the file out of `src/app/` did not change
-      // it. `scripts/build-worker.mjs` bundles it explicitly instead (IIFE, so no module type to
-      // get wrong), wired into `npm run build` via prebuild.
-      w = new Worker('/voxel-gen.worker.js')
-    } catch (err) {
-      setStats(`WORKER FAILED TO START: ${String(err)}`)
-      setFatal(true)
-      return
-    }
-    worker.current = w
-    w.onerror = (ev) => {
-      setStats(`WORKER ERROR: ${ev.message || 'unknown'} @ ${ev.filename ?? '?'}:${ev.lineno ?? '?'}`)
-      setFatal(true)
-      worker.current = null
-    }
-    w.onmessageerror = () => setStats('WORKER: message could not be deserialised')
-    // ⚠ HANDLER BEFORE POST. Assigning `onmessage` after `postMessage` is a race against the
-    // worker's first reply — and it reads as "the worker never answered", which is the same symptom
-    // as a worker that genuinely did not start. Attach first, then talk.
-    w.onmessage = (e: MessageEvent) => {
-      alive.current = true
-      const m = e.data
-      if (m.type === 'ready') setStats('worker ready')
-      else if (m.type === 'column') voxels.current.set(key(m.cx, m.cz), m.voxels as Uint16Array)
-      else if (m.type === 'mesh') pending.current.set(key(m.cx, m.cz), m.sections as SectionPayload[])
-      else if (m.type === 'done') inflight.current = Math.max(0, inflight.current - 1)
-    }
-    w.postMessage({ type: 'init', seed: SEED })
+  // ★ THE SPIKE IS CANON, NOT INVENTED. `engine/tools.ts` rules blades→forestry,
+  // spikes→prospecting, rinsticks→rinning, with a basic Greg-given tool that never breaks. So
+  // "what do I mine rock with" already had an answer and nothing here needed naming.
+  const toolTier = useRef(1)
+  const toolSkill = useRef<BlockSkill>('prospecting')
+  const inv = useRef<Inventory>(createInventory())
 
-    // ★ THE WORKER IS AN OPTIMISATION, SO IT MUST NEVER BE A SINGLE POINT OF FAILURE.
-    // A worker can construct, accept postMessage, and never reply — no error, no console output,
-    // just an empty world. If nothing has come back by the time this fires, tear it down and
-    // generate on the main thread: slower, hitchier, definitely working.
-    //
-    // ⚠ It waits for the `ready` ACK, not for terrain. An earlier version waited for the first
-    // column and fired against a healthy worker — because requests are only sent from `useFrame`,
-    // and a backgrounded tab never runs it. The probe was measuring the render loop, not the
-    // worker. Test the thing you mean to test.
-    const probe = setTimeout(() => {
-      if (alive.current) return
-      w.terminate()
-      worker.current = null
-      setFallback(true)
-      setStats('worker never replied — generating on the main thread (slower)')
-    }, 4000)
-
-    return () => { clearTimeout(probe); w.terminate(); worker.current = null }
+  const refreshHotbar = useCallback(() => {
+    const counts = new Map<string, number>()
+    for (const s of inv.current.slots) if (s) counts.set(s.itemId, (counts.get(s.itemId) ?? 0) + s.count)
+    setHotbar([...counts].map(([itemId, count]) => ({ itemId, count })).slice(0, 8))
   }, [])
 
-  /** Voxel lookup in world space for collision. AIR outside loaded columns. */
-  const voxel = useCallback((wx: number, wy: number, wz: number): number => {
-    if (wy < 0 || wy >= H) return AIR
-    const cx = Math.floor(wx / SECTION), cz = Math.floor(wz / SECTION)
-    const v = voxels.current.get(key(cx, cz))
-    if (!v) return AIR
-    const lx = wx - cx * SECTION, lz = wz - cz * SECTION
-    const s = (wy / SECTION) | 0
-    const ly = wy - s * SECTION
-    return v[s * SECTION * SECTION * SECTION + (ly * SECTION + lz) * SECTION + lx]
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const n = Number(e.key)
+      if (n >= 1 && n <= 8) setSel(n - 1)
+      // Tool tier is a debug lever so the tier GATE can be felt in ten seconds: a tier-1 spike
+      // REFUSES pure core, and that should be provable without crafting your way up first.
+      if (e.code === 'BracketRight') { toolTier.current = Math.min(3, toolTier.current + 1); setTier(toolTier.current) }
+      if (e.code === 'BracketLeft') { toolTier.current = Math.max(1, toolTier.current - 1); setTier(toolTier.current) }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
   }, [])
 
   return (
     <div className="fixed inset-0 bg-[#0b0d14]">
       <Canvas camera={{ fov: 75, near: 0.1, far: 600 }} shadows={false}>
         <color attach="background" args={['#8fb7d9']} />
-        <fog attach="fog" args={['#8fb7d9', 90, 240]} />
+        <fog attach="fog" args={['#8fb7d9', 80, 200]} />
         <hemisphereLight args={['#cfe6ff', '#3b3a4a', 1.5]} />
         <directionalLight position={[80, 200, 40]} intensity={1.5} />
-        <ambientLight intensity={0.35} />
-        <Terrain
-          worker={worker} pending={pending} requested={requested} inflight={inflight}
-          voxels={voxels} onStats={setStats} fallback={fallback}
+        <ambientLight intensity={0.4} />
+        <World
+          inv={inv} toolTier={toolTier} toolSkill={toolSkill}
+          selItem={hotbar[sel]?.itemId ?? null}
+          onStats={setStats} onPos={p => setPos(`x ${p.x.toFixed(0)}  y ${p.y.toFixed(0)}  z ${p.z.toFixed(0)}`)}
+          onLook={setLook} onInvChange={refreshHotbar}
         />
-        <Player voxel={voxel} onPos={p => setPos(`x ${p.x.toFixed(0)}  y ${p.y.toFixed(0)}  z ${p.z.toFixed(0)}`)} />
         <PointerLockControls />
       </Canvas>
-
-      <div className="absolute top-3 left-3 text-[11px] font-mono text-white/80 bg-black/45 rounded px-2.5 py-1.5 leading-relaxed pointer-events-none">
-        <div className="text-white/95 font-semibold tracking-wide">SHIMMER · VOXEL TEST BED</div>
-        <div>{pos}</div>
-        <div className="text-white/55">{stats}</div>
-        <div className="mt-1 text-white/45">click to look · WASD · space jump · shift run · F fly</div>
-      </div>
-      <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-1 h-1 rounded-full bg-white/70 pointer-events-none" />
-      {fatal && (
-        <div className="absolute inset-x-0 bottom-0 bg-red-950/90 text-red-200 text-[11px] font-mono px-3 py-2 leading-relaxed">
-          The generation worker is not running, so no terrain will ever appear. The message above is
-          the reason. This is reported rather than left blank because a dead worker and a throttled
-          tab look identical — both are a black screen with an empty console.
-        </div>
-      )}
+      <Hud stats={stats} pos={pos} look={look} hotbar={hotbar} sel={sel} tier={tier} />
     </div>
   )
 }
 
-function Terrain({ worker, pending, requested, inflight, voxels, onStats, fallback }: {
-  worker: React.RefObject<Worker | null>
-  pending: React.RefObject<Map<string, SectionPayload[]>>
-  requested: React.RefObject<Set<string>>
-  inflight: React.RefObject<number>
-  voxels: React.RefObject<Map<string, Uint16Array>>
-  onStats: (s: string) => void
-  fallback: boolean
+function Hud({ stats, pos, look, hotbar, sel, tier }: {
+  stats: string; pos: string
+  look: { name: string; progress: number; refused: boolean } | null
+  hotbar: Slot[]; sel: number; tier: number
 }) {
-  const group = useRef<THREE.Group>(null)
-  const material = useMemo(() => createVoxelMaterial(), [])
-  const drawn = useRef(new Map<string, THREE.Mesh>())
-  const frame = useRef(0)
-  // Main-thread fallback state. Only touched when the worker failed to answer.
-  const localCols = useRef(new Map<string, Column>())
-  const scratch = useMemo(() => createMeshScratch(SECTION), [])
+  return (
+    <>
+      <div className="absolute top-3 left-3 text-[11px] font-mono text-white/80 bg-black/45 rounded px-2.5 py-1.5 leading-relaxed pointer-events-none">
+        <div className="text-white/95 font-semibold tracking-wide">SHIMMER · VOXEL TEST BED</div>
+        <div>{pos}</div>
+        <div className="text-white/55">{stats}</div>
+        <div className="mt-1 text-white/45">click to look · WASD · space · shift run · F fly</div>
+        <div className="text-white/45">hold LMB mine · RMB place · 1-8 slot · [ ] spike tier</div>
+      </div>
 
-  /** Fallback generator: same pipeline, wrong thread. Budgeted so the tab stays responsive. */
-  const localStep = useCallback((cx: number, cz: number, g: THREE.Group) => {
-    const k = key(cx, cz)
-    if (localCols.current.has(k)) return
-    const col = makeColumn(cx * SECTION, cz * SECTION, SEED)
-    localCols.current.set(k, col)
-    const packed = new Uint16Array(SECTION * SECTION * H)
-    for (let i = 0; i < col.sections.length; i++) packed.set(col.sections[i].data, i * SECTION * SECTION * SECTION)
-    voxels.current!.set(k, packed)
-    for (const [dx, dz] of [[0, 0], [-1, 0], [1, 0], [0, -1], [0, 1]] as const) {
-      const nk = key(cx + dx, cz + dz)
-      const nc = localCols.current.get(nk)
-      if (!nc) continue
-      for (const [mk, m] of drawn.current) {
-        if (!mk.startsWith(nk + ':')) continue
-        g.remove(m); m.geometry.dispose(); drawn.current.delete(mk)
-      }
-      for (const sm of meshColumn(nc, {
-        negX: localCols.current.get(key(cx + dx - 1, cz + dz)) ?? null,
-        posX: localCols.current.get(key(cx + dx + 1, cz + dz)) ?? null,
-        negZ: localCols.current.get(key(cx + dx, cz + dz - 1)) ?? null,
-        posZ: localCols.current.get(key(cx + dx, cz + dz + 1)) ?? null,
-      }, scratch)) {
-        const mesh = new THREE.Mesh(toGeometry(buildAttrs(sm.mesh)), material)
-        mesh.position.set(sm.wx, sm.wy, sm.wz)
-        g.add(mesh)
-        drawn.current.set(`${nk}:${sm.index}`, mesh)
-      }
-    }
-  }, [material, scratch, voxels])
+      {look && (
+        <div className="absolute left-1/2 top-[56%] -translate-x-1/2 text-center pointer-events-none">
+          <div className={`text-[11px] font-mono tracking-wide ${look.refused ? 'text-red-300' : 'text-white/85'}`}>
+            {look.name}{look.refused && ' — spike too weak'}
+          </div>
+          {look.progress > 0 && (
+            <div className="mt-1 w-28 h-1 bg-black/50 rounded overflow-hidden mx-auto">
+              <div className="h-full bg-amber-300" style={{ width: `${Math.min(100, look.progress * 100)}%` }} />
+            </div>
+          )}
+        </div>
+      )}
 
-  useFrame(({ camera }) => {
-    const w = worker.current
-    const g = group.current
-    if (!g) return
+      <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-1 h-1 rounded-full bg-white/80 pointer-events-none" />
 
-    if (fallback) {
-      const cx = Math.floor(camera.position.x / SECTION)
-      const cz = Math.floor(camera.position.z / SECTION)
-      const want: [number, number, number][] = []
-      for (let dz = -RADIUS; dz <= RADIUS; dz++) for (let dx = -RADIUS; dx <= RADIUS; dx++) {
-        const d = dx * dx + dz * dz
-        if (d > RADIUS * RADIUS) continue
-        if (!localCols.current.has(key(cx + dx, cz + dz))) want.push([d, cx + dx, cz + dz])
-      }
-      want.sort((a, b) => a[0] - b[0])
-      const t0 = performance.now()
-      for (const [, gx, gz] of want) {
-        if (performance.now() - t0 > 8) break
-        localStep(gx, gz, g)
-      }
-      onStats(`${localCols.current.size} columns · ${drawn.current.size} meshes · MAIN THREAD`)
-      return
-    }
-
-    if (!w) return
-    const cx = Math.floor(camera.position.x / SECTION)
-    const cz = Math.floor(camera.position.z / SECTION)
-
-    // ── ask for what is missing, nearest first ───────────────────────────────────────────────
-    if (inflight.current < MAX_INFLIGHT) {
-      const want: [number, number, number][] = []
-      for (let dz = -RADIUS; dz <= RADIUS; dz++) for (let dx = -RADIUS; dx <= RADIUS; dx++) {
-        const d = dx * dx + dz * dz
-        if (d > RADIUS * RADIUS) continue
-        const k = key(cx + dx, cz + dz)
-        if (!requested.current.has(k)) want.push([d, cx + dx, cz + dz])
-      }
-      want.sort((a, b) => a[0] - b[0])
-      for (const [, gx, gz] of want) {
-        if (inflight.current >= MAX_INFLIGHT) break
-        requested.current.add(key(gx, gz))
-        inflight.current++
-        w.postMessage({ type: 'request', cx: gx, cz: gz })
-      }
-    }
-
-    // ── upload finished meshes — the ONLY per-chunk work left on this thread ─────────────────
-    // Bounded per frame: a burst of worker replies must not turn into one long GPU upload stall.
-    let uploads = 0
-    for (const [k, sections] of pending.current) {
-      if (uploads >= 2) break
-      pending.current.delete(k)
-      uploads++
-      // Replace, don't append: a re-mesh (a neighbour appeared) supersedes what was drawn before.
-      for (const [mk, m] of drawn.current) {
-        if (!mk.startsWith(k + ':')) continue
-        g.remove(m); m.geometry.dispose(); drawn.current.delete(mk)
-      }
-      for (const sm of sections) {
-        const mesh = new THREE.Mesh(toGeometry(sm.attrs), material)
-        mesh.position.set(sm.wx, sm.wy, sm.wz)
-        g.add(mesh)
-        drawn.current.set(`${k}:${sm.index}`, mesh)
-      }
-    }
-
-    // ── evict what left the window ───────────────────────────────────────────────────────────
-    // Every 60 frames, not every frame: this walks every loaded column and the answer changes only
-    // when the player crosses a column border.
-    if (++frame.current % 60 === 0) {
-      const keep = new Set<string>()
-      for (let dz = -RADIUS; dz <= RADIUS; dz++) for (let dx = -RADIUS; dx <= RADIUS; dx++)
-        keep.add(key(cx + dx, cz + dz))
-      for (const [mk, m] of drawn.current) {
-        if (keep.has(mk.slice(0, mk.lastIndexOf(':')))) continue
-        g.remove(m); m.geometry.dispose(); drawn.current.delete(mk)
-      }
-      for (const k of [...voxels.current.keys()]) if (!keep.has(k)) voxels.current.delete(k)
-      for (const k of [...requested.current]) if (!keep.has(k)) requested.current.delete(k)
-      w.postMessage({ type: 'evict', keep: [...keep] })
-    }
-
-    onStats(`${voxels.current.size} columns · ${drawn.current.size} meshes · ${inflight.current} in flight`)
-  })
-
-  return <group ref={group} />
+      {/* Colour swatches stand in for item art — the registry maps materials to tiles.ts later. */}
+      <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-1.5 pointer-events-none">
+        {Array.from({ length: 8 }, (_, i) => {
+          const s = hotbar[i]
+          const mat = s ? materialForItem(s.itemId) : undefined
+          const swatch = mat !== undefined ? `#${(MATERIAL_COLOR[mat] ?? 0x888888).toString(16).padStart(6, '0')}` : undefined
+          return (
+            <div key={i} className={`w-12 h-12 rounded border-2 flex flex-col items-center justify-center text-[9px] font-mono
+              ${i === sel ? 'border-amber-300 bg-black/60' : 'border-white/20 bg-black/40'}`}>
+              {s ? (
+                <>
+                  <div className="w-5 h-5 rounded-sm border border-white/25" style={{ background: swatch ?? '#6b7280' }} />
+                  <div className="text-white/80 mt-0.5">{s.count}</div>
+                </>
+              ) : <span className="text-white/25">{i + 1}</span>}
+            </div>
+          )
+        })}
+      </div>
+      <div className="absolute bottom-[4.6rem] left-1/2 -translate-x-1/2 text-[10px] font-mono text-white/50 pointer-events-none">
+        spike tier {tier}
+      </div>
+    </>
+  )
 }
 
 const SOLID_EXCEPT = new Set<number>([AIR, MAT.WATER])
 const isSolid = (m: number) => !SOLID_EXCEPT.has(m)
 
-function Player({ voxel, onPos }: { voxel: (x: number, y: number, z: number) => number; onPos: (p: THREE.Vector3) => void }) {
+function World({ inv, toolTier, toolSkill, selItem, onStats, onPos, onLook, onInvChange }: {
+  inv: React.RefObject<Inventory>
+  toolTier: React.RefObject<number>
+  toolSkill: React.RefObject<BlockSkill>
+  selItem: string | null
+  onStats: (s: string) => void
+  onPos: (p: THREE.Vector3) => void
+  onLook: (l: { name: string; progress: number; refused: boolean } | null) => void
+  onInvChange: () => void
+}) {
   const { camera } = useThree()
+  const group = useRef<THREE.Group>(null)
+  const highlight = useRef<THREE.LineSegments>(null)
+  const material = useMemo(() => createVoxelMaterial(), [])
+  const scratch = useMemo(() => createMeshScratch(SECTION), [])
+  const cols = useRef(new Map<string, Column>())
+  const drawn = useRef(new Map<string, THREE.Mesh>())
+  const breaking = useRef<BreakState | null>(null)
+  const mouse = useRef({ left: false, right: false })
+  const frame = useRef(0)
+  const settled = useRef(false)
   const vel = useRef(new THREE.Vector3())
   const keys = useRef<Record<string, boolean>>({})
   const fly = useRef(false)
   const onGround = useRef(false)
-  const settled = useRef(false)
 
   useEffect(() => {
-    const d = (e: KeyboardEvent) => { keys.current[e.code] = true; if (e.code === 'KeyF') fly.current = !fly.current }
-    const u = (e: KeyboardEvent) => { keys.current[e.code] = false }
-    window.addEventListener('keydown', d); window.addEventListener('keyup', u)
-    return () => { window.removeEventListener('keydown', d); window.removeEventListener('keyup', u) }
+    const kd = (e: KeyboardEvent) => { keys.current[e.code] = true; if (e.code === 'KeyF') fly.current = !fly.current }
+    const ku = (e: KeyboardEvent) => { keys.current[e.code] = false }
+    const md = (e: MouseEvent) => { if (e.button === 0) mouse.current.left = true; if (e.button === 2) mouse.current.right = true }
+    const mu = (e: MouseEvent) => { if (e.button === 0) mouse.current.left = false; if (e.button === 2) mouse.current.right = false }
+    const ctx = (e: Event) => e.preventDefault()
+    window.addEventListener('keydown', kd); window.addEventListener('keyup', ku)
+    window.addEventListener('mousedown', md); window.addEventListener('mouseup', mu)
+    window.addEventListener('contextmenu', ctx)
+    return () => {
+      window.removeEventListener('keydown', kd); window.removeEventListener('keyup', ku)
+      window.removeEventListener('mousedown', md); window.removeEventListener('mouseup', mu)
+      window.removeEventListener('contextmenu', ctx)
+    }
   }, [])
 
-  // Spawn on the surface. columnHeight is pure, so the spawn point is known before a single voxel
-  // exists — which is also why the camera never starts inside rock while the worker is still busy.
   useEffect(() => { camera.position.set(0.5, columnHeight(0, 0, SEED) + 2.6, 0.5) }, [camera])
 
-  const EYE = 1.62, HALF = 0.3
+  const voxel = useCallback((wx: number, wy: number, wz: number): number => {
+    if (wy < 0 || wy >= H) return AIR
+    const cx = Math.floor(wx / SECTION), cz = Math.floor(wz / SECTION)
+    const c = cols.current.get(key(cx, cz))
+    if (!c) return AIR
+    return c.get(wx - cx * SECTION, wy, wz - cz * SECTION)
+  }, [])
+
+  const remesh = useCallback((cx: number, cz: number) => {
+    const g = group.current
+    const c = cols.current.get(key(cx, cz))
+    if (!g || !c) return
+    const k = key(cx, cz)
+    for (const [mk, m] of drawn.current) {
+      if (!mk.startsWith(k + ':')) continue
+      g.remove(m); m.geometry.dispose(); drawn.current.delete(mk)
+    }
+    for (const sm of meshColumn(c, {
+      negX: cols.current.get(key(cx - 1, cz)) ?? null,
+      posX: cols.current.get(key(cx + 1, cz)) ?? null,
+      negZ: cols.current.get(key(cx, cz - 1)) ?? null,
+      posZ: cols.current.get(key(cx, cz + 1)) ?? null,
+    }, scratch)) {
+      const mesh = new THREE.Mesh(toGeometry(buildAttrs(sm.mesh)), material)
+      mesh.position.set(sm.wx, sm.wy, sm.wz)
+      g.add(mesh)
+      drawn.current.set(`${k}:${sm.index}`, mesh)
+    }
+  }, [material, scratch])
+
+  /**
+   * Write one voxel and repair the geometry.
+   *
+   * ★ THE NEIGHBOUR RE-MESH IS NOT OPTIONAL. Editing a voxel on a column's edge changes which faces
+   * the NEIGHBOUR should draw — mine the last block of a column and, without this, the neighbour
+   * keeps the wall it drew while that block still existed. It reads as an invisible pane you cannot
+   * mine, sitting at exactly the seams a player walks along.
+   *
+   * `refreshUniform` matters for the same class of reason: the mesher's skip reads that table, and
+   * a stale entry means dropped faces.
+   */
+  const setVoxel = useCallback((wx: number, wy: number, wz: number, mat: number) => {
+    const cx = Math.floor(wx / SECTION), cz = Math.floor(wz / SECTION)
+    const c = cols.current.get(key(cx, cz))
+    if (!c) return
+    const lx = wx - cx * SECTION, lz = wz - cz * SECTION
+    const s = (wy / SECTION) | 0
+    c.sections[s].set(lx, wy - s * SECTION, lz, mat)
+    refreshUniform(c)
+    remesh(cx, cz)
+    if (lx === 0) remesh(cx - 1, cz)
+    if (lx === SECTION - 1) remesh(cx + 1, cz)
+    if (lz === 0) remesh(cx, cz - 1)
+    if (lz === SECTION - 1) remesh(cx, cz + 1)
+  }, [remesh])
 
   const blocked = useCallback((x: number, y: number, z: number) => {
-    const y0 = Math.floor(y - EYE), y1 = Math.floor(y - EYE + 1.75)
+    const y0 = Math.floor(y - 1.62), y1 = Math.floor(y - 1.62 + 1.75)
     for (let vy = y0; vy <= y1; vy++)
-      for (const dx of [-HALF, HALF]) for (const dz of [-HALF, HALF])
+      for (const dx of [-0.3, 0.3]) for (const dz of [-0.3, 0.3])
         if (isSolid(voxel(Math.floor(x + dx), vy, Math.floor(z + dz)))) return true
     return false
   }, [voxel])
 
   useFrame((_, dtRaw) => {
-    const dt = Math.min(dtRaw, 0.05)   // a stalled frame must not teleport the player through rock
+    const dt = Math.min(dtRaw, 0.05)
+    const g = group.current
+    if (!g) return
     const p = camera.position
-    const k = keys.current
+    const cx = Math.floor(p.x / SECTION), cz = Math.floor(p.z / SECTION)
 
-    // ⚠ Until the spawn column arrives from the worker, EVERY lookup returns AIR — so gravity would
-    // drop the player through a world that has not loaded yet. Hold position until there is ground.
-    if (!settled.current) {
-      if (isSolid(voxel(0, Math.floor(p.y) - 3, 0))) settled.current = true
-      else { onPos(p); return }
+    // ── budgeted generation, nearest first ───────────────────────────────────────────────────
+    const t0 = performance.now()
+    const want: [number, number, number][] = []
+    for (let dz = -RADIUS; dz <= RADIUS; dz++) for (let dx = -RADIUS; dx <= RADIUS; dx++) {
+      const d = dx * dx + dz * dz
+      if (d > RADIUS * RADIUS) continue
+      if (!cols.current.has(key(cx + dx, cz + dz))) want.push([d, cx + dx, cz + dz])
+    }
+    want.sort((a, b) => a[0] - b[0])
+    for (const [, gx, gz] of want) {
+      if (performance.now() - t0 > 10) break
+      cols.current.set(key(gx, gz), makeColumn(gx * SECTION, gz * SECTION, SEED))
+      remesh(gx, gz)
+      for (const [ddx, ddz] of [[-1, 0], [1, 0], [0, -1], [0, 1]] as const)
+        if (cols.current.has(key(gx + ddx, gz + ddz))) remesh(gx + ddx, gz + ddz)
     }
 
-    const speed = (k.ShiftLeft ? 22 : 9) * (fly.current ? 2.2 : 1)
-    const fwd = new THREE.Vector3()
-    camera.getWorldDirection(fwd); fwd.y = 0; fwd.normalize()
-    const right = new THREE.Vector3().crossVectors(fwd, new THREE.Vector3(0, 1, 0))
+    // Until the spawn column exists every lookup returns AIR, so gravity would drop the player
+    // through a world that has not generated yet. Hold until there is ground beneath.
+    if (!settled.current) {
+      if (isSolid(voxel(0, Math.floor(p.y) - 3, 0))) settled.current = true
+      else { onPos(p); onStats(`${cols.current.size} columns · generating…`); return }
+    }
 
+    // ── movement ─────────────────────────────────────────────────────────────────────────────
+    const k = keys.current
+    const speed = (k.ShiftLeft ? 22 : 9) * (fly.current ? 2.2 : 1)
+    const aim = new THREE.Vector3()
+    camera.getWorldDirection(aim)
+    const fwd = aim.clone(); fwd.y = 0; fwd.normalize()
+    const right = new THREE.Vector3().crossVectors(fwd, new THREE.Vector3(0, 1, 0))
     const wish = new THREE.Vector3()
     if (k.KeyW) wish.add(fwd)
     if (k.KeyS) wish.sub(fwd)
@@ -349,26 +307,87 @@ function Player({ voxel, onPos }: { voxel: (x: number, y: number, z: number) => 
       if (k.Space) wish.y += speed
       if (k.ControlLeft) wish.y -= speed
       p.addScaledVector(wish, dt)
-      onPos(p)
-      return
+    } else {
+      vel.current.x = wish.x; vel.current.z = wish.z
+      vel.current.y -= 28 * dt
+      if (onGround.current && k.Space) vel.current.y = 9.2
+      const nx = p.x + vel.current.x * dt
+      if (!blocked(nx, p.y, p.z)) p.x = nx
+      const nz = p.z + vel.current.z * dt
+      if (!blocked(p.x, p.y, nz)) p.z = nz
+      const ny = p.y + vel.current.y * dt
+      if (!blocked(p.x, ny, p.z)) { p.y = ny; onGround.current = false }
+      else { if (vel.current.y < 0) onGround.current = true; vel.current.y = 0 }
+      if (p.y < -20) { p.set(0.5, columnHeight(0, 0, SEED) + 2.6, 0.5); settled.current = false }
     }
 
-    vel.current.x = wish.x; vel.current.z = wish.z
-    vel.current.y -= 28 * dt
-    if (onGround.current && k.Space) vel.current.y = 9.2
+    // ── what are we looking at ───────────────────────────────────────────────────────────────
+    const hit = raycast(p.x, p.y, p.z, aim.x, aim.y, aim.z, REACH, voxel)
+    const hl = highlight.current
+    if (hl) {
+      hl.visible = !!hit
+      if (hit) hl.position.set(hit.x + 0.5, hit.y + 0.5, hit.z + 0.5)
+    }
 
-    // Axis-separated so sliding along a wall works instead of stopping dead in a corner.
-    const nx = p.x + vel.current.x * dt
-    if (!blocked(nx, p.y, p.z)) p.x = nx
-    const nz = p.z + vel.current.z * dt
-    if (!blocked(p.x, p.y, nz)) p.z = nz
-    const ny = p.y + vel.current.y * dt
-    if (!blocked(p.x, ny, p.z)) { p.y = ny; onGround.current = false }
-    else { if (vel.current.y < 0) onGround.current = true; vel.current.y = 0 }
+    // ── mine ─────────────────────────────────────────────────────────────────────────────────
+    if (hit && mouse.current.left) {
+      const r = tickBreak(breaking.current, hit, dt, toolTier.current!, toolSkill.current!)
+      breaking.current = r.state
+      if (r.broken) {
+        for (const d of dropsFor(hit.material)) addItems(inv.current!, d.itemId, d.count)
+        setVoxel(hit.x, hit.y, hit.z, AIR)
+        onInvChange()
+        breaking.current = null
+      }
+    } else if (!mouse.current.left) {
+      breaking.current = null
+    }
 
-    if (p.y < -20) { p.set(0.5, columnHeight(0, 0, SEED) + 2.6, 0.5); settled.current = false }
+    // ── place ────────────────────────────────────────────────────────────────────────────────
+    if (hit && mouse.current.right && selItem) {
+      const mat = materialForItem(selItem)
+      // Refuse to place inside your own body — the classic way to entomb yourself.
+      const inPlayer = Math.floor(p.x) === hit.px && Math.floor(p.z) === hit.pz
+        && (Math.floor(p.y) === hit.py || Math.floor(p.y - 1.62) === hit.py)
+      if (mat !== undefined && !inPlayer && countItem(inv.current!, selItem) > 0 && voxel(hit.px, hit.py, hit.pz) === AIR) {
+        removeItems(inv.current!, selItem, 1)
+        setVoxel(hit.px, hit.py, hit.pz, mat)
+        onInvChange()
+        mouse.current.right = false   // one block per click, not a firehose
+      }
+    }
+
+    // ── HUD ──────────────────────────────────────────────────────────────────────────────────
+    const def = hit ? blockDef(hit.material) : undefined
+    onLook(hit && def
+      ? {
+          name: def.name,
+          progress: breaking.current ? breaking.current.progress / breaking.current.required : 0,
+          refused: mouse.current.left && !breaking.current && def.hardness !== Infinity,
+        }
+      : null)
     onPos(p)
+    if (++frame.current % 10 === 0) onStats(`${cols.current.size} columns · ${drawn.current.size} meshes · main thread`)
+
+    // ── evict ────────────────────────────────────────────────────────────────────────────────
+    if (frame.current % 120 === 0) {
+      const keep = new Set<string>()
+      for (let dz = -RADIUS; dz <= RADIUS; dz++) for (let dx = -RADIUS; dx <= RADIUS; dx++) keep.add(key(cx + dx, cz + dz))
+      for (const [mk, m] of drawn.current) {
+        if (keep.has(mk.slice(0, mk.lastIndexOf(':')))) continue
+        g.remove(m); m.geometry.dispose(); drawn.current.delete(mk)
+      }
+      for (const kk of [...cols.current.keys()]) if (!keep.has(kk)) cols.current.delete(kk)
+    }
   })
 
-  return null
+  return (
+    <>
+      <group ref={group} />
+      <lineSegments ref={highlight} visible={false}>
+        <edgesGeometry args={[new THREE.BoxGeometry(1.002, 1.002, 1.002)]} />
+        <lineBasicMaterial color="#000000" transparent opacity={0.55} />
+      </lineSegments>
+    </>
+  )
 }
