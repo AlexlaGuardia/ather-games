@@ -20,6 +20,8 @@ export function toGeometry(a: MeshAttrs): THREE.BufferGeometry {
   g.setAttribute('normal', new THREE.BufferAttribute(a.normals, 3))
   g.setAttribute('color', new THREE.BufferAttribute(a.colors, 3))
   g.setAttribute('aEmissive', new THREE.BufferAttribute(a.emissive, 1))
+  // One float per vertex is the entire cost of texturing — UVs are derived in-shader.
+  g.setAttribute('aLayer', new THREE.BufferAttribute(a.layers, 1))
   g.setIndex(new THREE.BufferAttribute(a.indices, 1))
   g.computeBoundingSphere()
   return g

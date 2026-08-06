@@ -31,6 +31,8 @@ import { raycast, tickBreak, dropsFor, type BreakState } from '../voxel/mine'
 import { spawnDrop, tickDrops, type Drop } from '../voxel/drops'
 import { blockDef, materialForItem, type BlockSkill } from '../voxel/registry'
 import { toGeometry, createVoxelMaterial, applySettings } from './mesh-bridge'
+import { makeTileArray } from './tex/atlas'
+import { createTexturedVoxelMaterial } from './tex/atlas'
 import { loadSettings, saveSettings, withStyle, type VoxelSettings, type RenderStyle } from './settings'
 import { buildAttrs, MATERIAL_COLOR } from './attrs'
 import { createInventory, addItems, removeItems, countItem, type Inventory } from '../engine/inventory'
@@ -200,13 +202,39 @@ function World({ inv, toolTier, toolSkill, selItem, onStats, onPos, onLook, onIn
   inflight: React.RefObject<number>
   settings: VoxelSettings
 }) {
-  const { camera, gl } = useThree()
+  const { camera } = useThree()
   const group = useRef<THREE.Group>(null)
   const highlight = useRef<THREE.LineSegments>(null)
-  const material = useMemo(() => createVoxelMaterial(), [])
-  // ★ A VALUE WRITE, NOT A REBUILD. Both shading paths are in the one compiled program and selected
-  // by a uniform, so changing style costs nothing and creates no second shader program.
-  useEffect(() => { applySettings(material, settings) }, [material, settings])
+  // ★ THE TEXTURE ARRAY, WIRED INTO THE MAIN WORLD (texture lane handoff, 406d492).
+  //
+  // One material for the whole world and ONE tile array — both keyed to `tileSize` so changing it
+  // rebuilds exactly one texture rather than one per chunk. `sampler2DArray` is what makes this free
+  // for the mesher: each material is its own LAYER, so RepeatWrapping tiles across a merged quad
+  // with no bleed. An atlas cannot, and its usual escape (one quad per block) throws away the entire
+  // greedy win — 67,629 quads would go back to 244,685.
+  //
+  // The flat vertex-colour material stays available and is NOT dead code: it is the control in the
+  // A/B, and it is the fallback if tile generation ever throws.
+  const { gl } = useThree()
+  const tiles = useMemo(() => {
+    try { return makeTileArray(settings.tileSize, gl) } catch { return null }
+  }, [settings.tileSize, gl])
+  const flatMaterial = useMemo(() => createVoxelMaterial(), [])
+  const textured = useMemo(() => (tiles ? createTexturedVoxelMaterial(tiles) : null), [tiles])
+  const material = textured?.material ?? flatMaterial
+
+  // ★ A VALUE WRITE, NOT A REBUILD. Both shading paths live in the one compiled program and are
+  // selected by a uniform, so changing style costs nothing and creates no second shader program.
+  useEffect(() => {
+    applySettings(flatMaterial, settings)
+    textured?.setCartoon({
+      uCartoon: settings.style === 'cartoon' ? 1 : 0,
+      uToon: settings.toon,
+      uOutline: settings.outline,
+      uFaceShading: settings.faceShading,
+      uShadowLift: settings.shadowLift,
+    })
+  }, [flatMaterial, textured, settings])
   const scratch = useMemo(() => createMeshScratch(SECTION), [])
   const cols = useRef(new Map<string, Column>())
   const drawn = useRef(new Map<string, THREE.Mesh>())
@@ -282,8 +310,10 @@ function World({ inv, toolTier, toolSkill, selItem, onStats, onPos, onLook, onIn
     dropMats.current.clear()
     dropGeo.dispose()
     highlightGeo.dispose()
-    material.dispose()
-  }, [dropGeo, highlightGeo, material])
+    flatMaterial.dispose()
+    textured?.material.dispose()
+    tiles?.texture.dispose()
+  }, [dropGeo, highlightGeo, flatMaterial, textured, tiles])
 
   // ★ A LOST WEBGL CONTEXT MUST SAY SO. Chrome blocks a page that loses its context repeatedly, and
   // the result is a black canvas with the HUD still drawn on top — indistinguishable from a

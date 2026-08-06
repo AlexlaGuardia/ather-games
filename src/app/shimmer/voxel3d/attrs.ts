@@ -9,6 +9,7 @@
 import { MAT } from '../voxel/depth'
 import { ORE } from '../voxel/ore'
 import type { MeshResult } from '../voxel/greedy'
+import { layerOf, faceOfNormal } from './tex/tiles'
 
 /**
  * Palette — one colour per material index.
@@ -53,13 +54,27 @@ export interface MeshAttrs {
   normals: Float32Array
   colors: Float32Array
   emissive: Float32Array
+  /**
+   * Texture-array layer per vertex.
+   *
+   * ★ BUILT HERE, WHICH MEANS BUILT IN THE WORKER. The texture spike computed this host-side from
+   * `mesh.materials` + `mesh.normals` on every mesh upload; moving it into `attrs.ts` puts it on the
+   * generation thread with the rest of the per-vertex expansion, so the main thread's share of a
+   * chunk arrival stays four `setAttribute` calls. One float per vertex is the entire cost of
+   * texturing — UVs are derived in-shader from position and normal, so there is no UV buffer.
+   *
+   * ⚠ Face comes from the NORMAL, which is exact for axis-aligned quads, so `voxel/` never had to
+   * learn about textures. That is why the pure core is still untouched by any of this.
+   */
+  layers: Float32Array
   indices: Uint32Array
   quads: number
 }
 
 /** Every buffer in a MeshAttrs, for structuredClone transfer. Zero-copy across the worker boundary. */
 export const attrBuffers = (a: MeshAttrs): ArrayBuffer[] =>
-  [a.positions.buffer, a.normals.buffer, a.colors.buffer, a.emissive.buffer, a.indices.buffer] as ArrayBuffer[]
+  [a.positions.buffer, a.normals.buffer, a.colors.buffer, a.emissive.buffer,
+   a.layers.buffer, a.indices.buffer] as ArrayBuffer[]
 
 /**
  * Expand a core mesh into render-ready attributes. Copies positions/normals/indices out of the
@@ -70,20 +85,26 @@ export function buildAttrs(mesh: MeshResult): MeshAttrs {
   const n = mesh.materials.length
   const colors = new Float32Array(n * 3)
   const emissive = new Float32Array(n)
+  const layers = new Float32Array(n)
   for (let i = 0; i < n; i++) {
-    const hex = MATERIAL_COLOR[mesh.materials[i]] ?? FALLBACK
+    const m = mesh.materials[i]
+    // Face from the vertex NORMAL — exact for axis-aligned quads, which is why `voxel/` never had
+    // to learn that textures exist. normals are 3 floats per vertex; y decides top/side/bottom.
+    layers[i] = layerOf(m, faceOfNormal(mesh.normals[i * 3 + 1]))
+    const hex = MATERIAL_COLOR[m] ?? FALLBACK
     // Inline hex→linear-ish float rather than THREE.Color, which is the whole reason this file has
     // no three import. Three's default is sRGB-in, and Lambert with vertexColors expects that.
     colors[i * 3] = ((hex >> 16) & 255) / 255
     colors[i * 3 + 1] = ((hex >> 8) & 255) / 255
     colors[i * 3 + 2] = (hex & 255) / 255
-    emissive[i] = EMISSIVE[mesh.materials[i]] ?? 0
+    emissive[i] = EMISSIVE[m] ?? 0
   }
   return {
     positions: mesh.positions.slice(),
     normals: mesh.normals.slice(),
     colors,
     emissive,
+    layers,
     indices: mesh.indices.slice(),
     quads: mesh.quads,
   }

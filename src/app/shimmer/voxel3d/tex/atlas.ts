@@ -76,6 +76,8 @@ export interface VoxelTexMaterial {
   setMipmapped: (on: boolean) => void
   /** Per-block value jitter, 0 = off. See the shader note on why this is not a vertex attribute. */
   setJitter: (amount: number) => void
+  /** Cartoon levers — uniform writes, never a recompile. See settings.ts. */
+  setCartoon: (v: Record<string, number>) => void
 }
 
 /** How much a block's brightness may drift from its neighbours. Small on purpose — this is meant to
@@ -100,11 +102,25 @@ export function createTexturedVoxelMaterial(tiles: TileArray): VoxelTexMaterial 
   // `onBeforeCompile` does not run until the first render, so a setter called before that would be
   // writing to a uniform object that does not exist yet. Hold the wanted value and apply on compile.
   let live: { uJitter: { value: number } } | null = null
+  let liveCartoon: Record<string, { value: number }> | null = null
   let jitter = DEFAULT_JITTER
+  let pendingCartoon: Record<string, number> | null = null
 
   mat.onBeforeCompile = (shader) => {
     shader.uniforms.uTiles = { value: tiles.texture }
     shader.uniforms.uJitter = { value: jitter }
+    // ★ CARTOON LEVERS LIVE HERE TOO, AS UNIFORMS ON THIS SAME PROGRAM. Switching the world to
+    // textures must not lose the look, and a second material per style would be one shader program
+    // per style — the allocation shape that got this page blocked from WebGL. See settings.ts.
+    shader.uniforms.uCartoon = { value: 0 }
+    shader.uniforms.uToon = { value: 0 }
+    shader.uniforms.uOutline = { value: 0 }
+    shader.uniforms.uFaceShading = { value: 0.35 }
+    shader.uniforms.uShadowLift = { value: 0.15 }
+    liveCartoon = shader.uniforms as Record<string, { value: number }>
+    if (pendingCartoon) for (const [k, val] of Object.entries(pendingCartoon)) {
+      if (liveCartoon[k]) liveCartoon[k].value = val
+    }
     live = shader.uniforms as { uJitter: { value: number } }
 
     shader.vertexShader = mustReplace(
@@ -140,7 +156,12 @@ vWorldPos = (modelMatrix * vec4(position, 1.0)).xyz;`,
     shader.fragmentShader = mustReplace(
       shader.fragmentShader,
       '#include <common>',
-      `#include <common>
+      `uniform float uCartoon;
+uniform float uToon;
+uniform float uOutline;
+uniform float uFaceShading;
+uniform float uShadowLift;
+#include <common>
 uniform sampler2DArray uTiles;
 uniform float uJitter;
 varying float vLayer;
@@ -212,10 +233,30 @@ float gTileEmissive = 0.0;`,
       'fragment shader',
     )
 
+    // ★ THE CARTOON STACK, ON THE TEXTURED PATH. Same four levers as the flat material, so the look
+    // survives the swap to textures. Face brightness uses the exact axis-aligned normal; banding
+    // makes lighting read as drawn rather than lit; the shadow lift stops caves reading as murk; and
+    // the outline is free here because world position is already a varying for the block jitter.
     shader.fragmentShader = mustReplace(
       shader.fragmentShader,
       '#include <opaque_fragment>',
-      'gl_FragColor = vec4( outgoingLight + diffuseColor.rgb * vEmissive * gTileEmissive, diffuseColor.a );',
+      `vec3 cnrm = normalize(vVoxNormal);
+       float faceLum = cnrm.y > 0.5 ? 1.0 : (cnrm.y < -0.5 ? 0.52 : 0.76 + 0.05 * abs(cnrm.x));
+       float face = mix(1.0, faceLum, uFaceShading);
+       float clum = dot(outgoingLight, vec3(0.2126, 0.7152, 0.0722));
+       float stepped = floor(clum * 3.0 + 0.5) / 3.0;
+       float shaped = mix(clum, stepped, uToon);
+       vec3 shade = mix(vec3(0.0), vec3(0.22, 0.26, 0.38), uShadowLift);
+       vec3 toonCol = diffuseColor.rgb * face * (0.35 + 0.95 * shaped) + shade * (1.0 - shaped);
+       vec3 fr = fract(vWorldPos - cnrm * 0.002);
+       vec3 dEdge = min(fr, 1.0 - fr);
+       vec3 planar = 1.0 - abs(cnrm);
+       float edge = min(mix(1.0, dEdge.x, planar.x),
+                    min(mix(1.0, dEdge.y, planar.y), mix(1.0, dEdge.z, planar.z)));
+       float line = 1.0 - smoothstep(0.0, 0.035, edge);
+       toonCol *= mix(1.0, 0.62, line * uOutline);
+       vec3 finalCol = mix(outgoingLight, toonCol, uCartoon);
+       gl_FragColor = vec4( finalCol + diffuseColor.rgb * vEmissive * gTileEmissive, diffuseColor.a );`,
       'fragment shader',
     )
   }
@@ -232,6 +273,15 @@ float gTileEmissive = 0.0;`,
       // No `needsUpdate` — this is a uniform value, not a shader recompile. Setting needsUpdate here
       // would rebuild the program on every keypress for nothing.
       if (live) live.uJitter.value = amount
+    },
+    setCartoon: (v: Record<string, number>) => {
+      // Held until compile for the same reason as the jitter: `onBeforeCompile` has not run before
+      // the first render, so a setter called earlier would write into uniforms that do not exist.
+      pendingCartoon = { ...(pendingCartoon ?? {}), ...v }
+      if (!liveCartoon) return
+      for (const [k, val] of Object.entries(pendingCartoon)) {
+        if (liveCartoon[k]) liveCartoon[k].value = val
+      }
     },
   }
 }
