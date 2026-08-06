@@ -11,6 +11,7 @@
  * (the repo convention — there is no vitest here).
  */
 import { ZONES, getZone, resolveZoneId, checkWarp, expandGate, LEGACY_ZONE_ALIASES, START_ZONE, type Zone } from './zones'
+import { ALL_ZONES } from './all-zones'
 import { SOLID } from './tiles'
 
 /**
@@ -70,9 +71,13 @@ ok(walkable(runeHold!, 7, 9), 'the old Spirit Corner floor (7,9) is still walkab
 ok(walkable(runeHold!, 7, 10) && walkable(runeHold!, 8, 10), 'the old crossing landing (7-8,10) is still walkable')
 
 // ── 3. every warp in the game points somewhere real, and lands on a walkable tile ──────────
+// Resolves against ALL_ZONES, not ZONES (2026-08-06 cutover step 1): the four holds' doors now
+// name region ids directly, so the door graph spans both registries. Scoping this to ZONES made
+// a repoint to a perfectly good region read as "target does not exist" — the check has to see
+// every zone a door can name, or it grades the registry instead of the graph.
 for (const z of ZONES) {
   for (const w of z.warps) {
-    const target = getZone(ZONES, w.toZone)
+    const target = getZone(ALL_ZONES, w.toZone)
     ok(!!target, `${z.id} (${w.fromX},${w.fromY}) -> ${w.toZone} exists`)
     if (!target) continue
     ok(walkable(target, w.toX, w.toY), `${z.id} -> ${w.toZone} lands walkable at (${w.toX},${w.toY})`)

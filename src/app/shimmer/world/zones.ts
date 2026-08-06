@@ -404,9 +404,11 @@ export const ZONES: Zone[] = [
     grid: SORREL_HOLD,
     playerStart: { tileX: 2, tileY: 14 },
     warps: [
-      // Return west to Gloview Village (back to the Sorrel compound door)
-      { fromX: 0, fromY: 14, toZone: 'gloview-village', toX: 19, toY: 6, direction: 'left' },
-      { fromX: 0, fromY: 15, toZone: 'gloview-village', toX: 19, toY: 7, direction: 'left' },
+      // Return west to Gloview Village (back to the Sorrel compound door). Gloview was absorbed
+      // by the Mana Springs canvas at +183/+110, so the door names the region directly now —
+      // (19,6) there is (202,116) here. See the cutover note at the head of REGION_ZONES.
+      { fromX: 0, fromY: 14, toZone: 'r-mana-springs', toX: 202, toY: 116, direction: 'left' },
+      { fromX: 0, fromY: 15, toZone: 'r-mana-springs', toX: 202, toY: 117, direction: 'left' },
       // Forward east to Brack Hold (gated: need defeated_sorrel)
       { fromX: 39, fromY: 14, toZone: 'brack-hold', toX: 1, toY: 14, direction: 'right', requiredFlag: 'defeated_sorrel' },
       { fromX: 39, fromY: 15, toZone: 'brack-hold', toX: 1, toY: 15, direction: 'right', requiredFlag: 'defeated_sorrel' },
@@ -422,9 +424,10 @@ export const ZONES: Zone[] = [
       // Return west to Sorrel Hold (open)
       { fromX: 0, fromY: 14, toZone: 'sorrel-hold', toX: 38, toY: 14, direction: 'left' },
       { fromX: 0, fromY: 15, toZone: 'sorrel-hold', toX: 38, toY: 15, direction: 'left' },
-      // Forward south to Ather Winds (gated: need defeated_brack)
-      { fromX: 19, fromY: 29, toZone: 'the-threshold', toX: 9, toY: 1, direction: 'down', requiredFlag: 'defeated_brack' },
-      { fromX: 20, fromY: 29, toZone: 'the-threshold', toX: 10, toY: 1, direction: 'down', requiredFlag: 'defeated_brack' },
+      // Forward south to Ather Winds (gated: need defeated_brack). The Threshold was absorbed by
+      // the Outfields canvas at +190/+230 — (9,1) there is (199,231) here.
+      { fromX: 19, fromY: 29, toZone: 'r-the-outfields', toX: 199, toY: 231, direction: 'down', requiredFlag: 'defeated_brack' },
+      { fromX: 20, fromY: 29, toZone: 'r-the-outfields', toX: 200, toY: 231, direction: 'down', requiredFlag: 'defeated_brack' },
     ],
   },
   {
@@ -479,12 +482,13 @@ export const ZONES: Zone[] = [
     gates: [
       {
         // ── GREG'S GATE (12-13, 29-30) — the crossing home, in the Spirit Corner ─────────────
-        // Targets the LEGACY `garden` id ON PURPOSE: the interior-exit contract (Shimmer3D
-        // `newWorldRef`). The town belongs to whichever side you entered from, so its exit names
-        // the legacy surface and `performWarp` runs `migrateLegacyPosition` to land a region-world
-        // player at r-home-plot instead. Naming the region id here would strand anyone who walked
-        // in from the legacy world via ?zone=. Lands at (14,2), one south of the Home Plot's gate.
-        x: 12, y: 29, toZone: 'garden', toX: 14, toY: 2, direction: 'down',
+        // Named the LEGACY `garden` id until the 2026-08-06 cutover, so that a player who walked
+        // in from the legacy world via ?zone= wasn't stranded; `performWarp`'s `newWorldRef` shim
+        // migrated region-world players to r-home-plot at warp time. There is no legacy world to
+        // come from now, so the door names its real destination and the shim is dead weight on
+        // this path. Garden was absorbed by the Home Plot canvas at +59/+59 — the old (14,2),
+        // one south of the Home Plot's gate, is (73,61) here.
+        x: 12, y: 29, toZone: 'r-home-plot', toX: 73, toY: 61, direction: 'down',
         label: 'THE SPIRIT CORNER',
       },
       {
@@ -623,9 +627,10 @@ export const ZONES: Zone[] = [
     playerStart: { tileX: 14, tileY: 21 },
     warps: [
       // Exit = the bottom vestibule door tiles (14-15,22) → back out to the Glade, just south of
-      // Greg's house door (22-23,17).
-      { fromX: 14, fromY: 22, toZone: 'moonwell-glade', toX: 22, toY: 18, direction: 'down' },
-      { fromX: 15, fromY: 22, toZone: 'moonwell-glade', toX: 23, toY: 18, direction: 'down' },
+      // Greg's house door (22-23,17). The Glade kept its name as a region but not its origin:
+      // absorbed at +55/+50, so the old (22,18) is (77,68) here.
+      { fromX: 14, fromY: 22, toZone: 'r-moonwell-glade', toX: 77, toY: 68, direction: 'down' },
+      { fromX: 15, fromY: 22, toZone: 'r-moonwell-glade', toX: 78, toY: 68, direction: 'down' },
       // ── TEST HUB (owner-only, invisible to players; markers render only for the owner) ──
       // Crucible gate (left) → the practice arena; Rune Hold gate (right) → the town, landing on
       // Greg's shop floor. The Folds gate goes here later. Both are SHORTCUTS IN only — each
