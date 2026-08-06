@@ -108,17 +108,31 @@ const scratch = createMeshScratch(SECTION)
   const negZ = makeColumn(512, 768 - SECTION, SEED)
   const posZ = makeColumn(512, 768 + SECTION, SEED)
 
+  // ★ ABSENT NEIGHBOUR = OPAQUE, so meshing ALONE draws NO frontier walls. The relationship is the
+  // reverse of what it was: supplying neighbours can only ADD the genuine faces at a real cliff
+  // edge, never remove a wall — because the wall is no longer drawn in the first place.
   const alone = meshColumn(mid, {}, scratch).reduce((a, m) => a + m.mesh.quads, 0)
   const joined = meshColumn(mid, { negX, posX, negZ, posZ }, scratch).reduce((a, m) => a + m.mesh.quads, 0)
-  ok(joined < alone, `★ supplying neighbours removes the edge walls (${alone} → ${joined} quads)`)
-  ok(joined > 0, 'the column still has geometry once seams are closed')
+  ok(alone > 0, 'a lone column still has its own surface geometry')
+  ok(joined >= alone, `★ neighbours never ADD a frontier wall (alone ${alone} ≤ joined ${joined})`)
 
-  // And the reduction must come from the SIDES, not from dropped interior faces.
-  const sideQuads = (nb: Parameters<typeof meshColumn>[1]) => meshColumn(mid, nb, scratch)
+  // The decisive one, and the first version of it was WRONG: counting every deep vertical face
+  // counts CAVE walls, which are legitimate geometry. A frontier wall is specifically a face lying
+  // ON the column's outer boundary plane — local x=0/16 or z=0/16. That is the grey cliff.
+  const frontierFaces = (nb: Parameters<typeof meshColumn>[1]) => meshColumn(mid, nb, scratch)
     .reduce((a, m) => { let c = 0
-      for (let q = 0; q < m.mesh.quads; q++) if (m.mesh.normals[q * 12 + 1] === 0) c++
+      for (let q = 0; q < m.mesh.quads; q++) {
+        const o = q * 12
+        if (m.mesh.normals[o + 1] !== 0) continue                    // horizontal face, not a wall
+        if (m.mesh.positions[o + 1] + m.wy > 140) continue           // near the surface, may be real
+        const xs = [m.mesh.positions[o], m.mesh.positions[o + 3], m.mesh.positions[o + 6], m.mesh.positions[o + 9]]
+        const zs = [m.mesh.positions[o + 2], m.mesh.positions[o + 5], m.mesh.positions[o + 8], m.mesh.positions[o + 11]]
+        const onX = xs.every(v => v === 0) || xs.every(v => v === SECTION)
+        const onZ = zs.every(v => v === 0) || zs.every(v => v === SECTION)
+        if (onX || onZ) c++
+      }
       return a + c }, 0)
-  ok(sideQuads({ negX, posX, negZ, posZ }) < sideQuads({}), 'the removed faces are side faces')
+  ok(frontierFaces({}) === 0, `★ a lone column draws NO wall on its outer boundary (${frontierFaces({})} faces) — this is the grey-cliff bug`)
 }
 
 // ── 6. the uniform skip must not eat real geometry ───────────────────────────────────────────

@@ -178,11 +178,20 @@ export interface SectionMesh {
  *    pair of sections — sixteen glass panes through every column. The mesher's own oracle already
  *    warns about this shape ("a solid section inside solid neighbours emits nothing"); this is where
  *    that promise gets kept.
- * 2. **Horizontal neighbours likewise.** A missing neighbour column is meshed as air, which draws a
- *    wall at the column edge. Passing `neigh` closes it. A neighbour that is absent is treated as
- *    air deliberately — that is the correct render for the edge of loaded world, and it is why this
- *    takes columns rather than generating them (generating a neighbour here would be exactly the
- *    synchronous-neighbour dependency the whole pipeline refuses).
+ * 2. **★ AN ABSENT NEIGHBOUR MEANS "DRAW NO FACE", NOT "DRAW A WALL".** This originally treated a
+ *    missing neighbour as AIR, on the reasoning that it is the honest render for the edge of the
+ *    loaded world. In play it is catastrophic: a column meshed before its neighbour arrives draws
+ *    its entire side — 16 wide by ~185 tall, bedrock to surface — and a few of those read as sheer
+ *    grey cliffs with a chasm between them. Alex hit exactly that and reported terrain holes; the
+ *    height field there was gentle (steepest adjacent step: 3 voxels). It was the frontier, drawn.
+ *
+ *    Absent is now OPAQUE, so the frontier simply draws nothing and fades into fog. The trade is
+ *    transient UNDER-draw instead of transient OVER-draw, and under-draw at the fog line is
+ *    invisible while over-draw is a wall across the sky. Faces appear correctly the moment the
+ *    neighbour loads and both columns re-mesh.
+ *
+ *    ⚠ This is why the function takes columns rather than generating them — generating a missing
+ *    neighbour here would be the synchronous-neighbour dependency the whole pipeline refuses.
  *
  * ⚠ THE UNIFORM SKIP CURRENTLY BUYS ABOUT NOTHING, AND THAT IS WORTH RECORDING RATHER THAN
  * REDISCOVERING. The theory: a section whose value matches every neighbour it touches cannot produce
@@ -213,9 +222,10 @@ export function meshColumn(
       let allAgree = below === u && above === u
       if (allAgree) {
         for (const s of sides) {
-          // An ABSENT neighbour is the edge of loaded world and must be meshed as air — so a solid
-          // section beside one is NOT skippable, or the world ends in an invisible wall of nothing.
-          if (!s) { allAgree = u === AIR; break }
+          // An ABSENT neighbour is opaque (see above), so a uniform section beside one has no face
+          // to draw there and stays skippable. Treating absent as air here is what produced
+          // full-height frontier walls.
+          if (!s) continue
           if (s.uniform[i] !== u) { allAgree = false; break }
         }
       }
@@ -228,11 +238,14 @@ export function meshColumn(
       // Vertical: walk into the section above or below within this column.
       if (y < 0) return i > 0 ? col.sections[i - 1].get(x, SECTION - 1, z) : AIR
       if (y >= SECTION) return i < n - 1 ? col.sections[i + 1].get(x, 0, z) : AIR
-      // Horizontal: walk into the neighbouring column, or treat absence as air (world edge).
-      if (x < 0) return neigh.negX ? neigh.negX.sections[i].get(SECTION - 1, y, z) : AIR
-      if (x >= SECTION) return neigh.posX ? neigh.posX.sections[i].get(0, y, z) : AIR
-      if (z < 0) return neigh.negZ ? neigh.negZ.sections[i].get(x, y, SECTION - 1) : AIR
-      if (z >= SECTION) return neigh.posZ ? neigh.posZ.sections[i].get(x, y, 0) : AIR
+      // Horizontal: walk into the neighbouring column. ABSENT = OPAQUE, so no face is drawn at the
+      // frontier — `sec.get(...)` mirrors our own voxel, which can never differ from itself and so
+      // can never produce a face. Returning AIR here is what drew full-height walls at the edge of
+      // the loaded world and read as terrain holes.
+      if (x < 0) return neigh.negX ? neigh.negX.sections[i].get(SECTION - 1, y, z) : sec.get(0, y, z)
+      if (x >= SECTION) return neigh.posX ? neigh.posX.sections[i].get(0, y, z) : sec.get(SECTION - 1, y, z)
+      if (z < 0) return neigh.negZ ? neigh.negZ.sections[i].get(x, y, SECTION - 1) : sec.get(x, y, 0)
+      if (z >= SECTION) return neigh.posZ ? neigh.posZ.sections[i].get(x, y, 0) : sec.get(x, y, SECTION - 1)
       return sec.get(x, y, z)
     }
 
