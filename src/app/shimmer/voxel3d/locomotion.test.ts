@@ -51,7 +51,12 @@ const settle = (s: ReturnType<typeof createLoco>, solid: any, frames = 30) => {
   for (let i = 0; i < 30; i++) tickLocomotion(s, input({ mvX: 1 }), solid)
   tickLocomotion(s, input({ mvX: 1, jumpKey: true }), solid)
   ok(s.mantleT > 0 && s.vaulting, '★ jump at the step starts a vault, not a ballistic jump')
-  let frames = 0
+  tickLocomotion(s, input({ mvX: 1 }), solid)
+  // The blink regression: the lerp divided by MANTLE_TIME while the vault set VAULT_TIME, so the
+  // ease began ~47% complete and ~70% of the height landed on frame one (Alex: "it just blinks
+  // up"). One frame in, the rise must still be a beginning, not most of the climb.
+  ok(s.py - 10 < 0.2, `★ the first vault frame is a beginning, not a blink (rose ${(s.py - 10).toFixed(2)})`)
+  let frames = 1
   while (s.mantleT > 0 && frames < 60) { tickLocomotion(s, input({ mvX: 1 }), solid); frames++ }
   ok(frames > 3, `the vault is eased over real frames (${frames}), not a snap`)
   ok(Math.abs(s.py - 11) < 0.01 && !s.airborne, `and lands standing on the step (feet ${s.py.toFixed(2)})`)

@@ -91,7 +91,8 @@ export interface LocoState {
   wallStick: number; wallLock: number
   hanging: boolean; hangT: number; hangLock: number
   hangLipX: number; hangLipY: number; hangLipZ: number; hangCX: number; hangCZ: number
-  mantleT: number; mFromX: number; mFromY: number; mFromZ: number; mToX: number; mToY: number; mToZ: number
+  mantleT: number; mantleDur: number
+  mFromX: number; mFromY: number; mFromZ: number; mToX: number; mToY: number; mToZ: number
   /** True while the mantle lerp is a VAULT — speed is carried through instead of the ledge settle. */
   vaulting: boolean; carryVX: number; carryVZ: number
   /** Set for one tick when a verb fires — the host reads these for HUD/FX and they self-clear. */
@@ -106,7 +107,7 @@ export function createLoco(px: number, feetY: number, pz: number): LocoState {
     landGrace: 0, landSpeed: 0, jumpHeld: false, spaceHeldT: 0, climbRise: 0,
     onWall: false, wallNX: 0, wallNZ: 0, wallCX: 0, wallCZ: 0, wallStick: 0, wallLock: 0,
     hanging: false, hangT: 0, hangLock: 0, hangLipX: 0, hangLipY: 0, hangLipZ: 0, hangCX: 0, hangCZ: 0,
-    mantleT: 0, mFromX: 0, mFromY: 0, mFromZ: 0, mToX: 0, mToY: 0, mToZ: 0,
+    mantleT: 0, mantleDur: MANTLE_TIME, mFromX: 0, mFromY: 0, mFromZ: 0, mToX: 0, mToY: 0, mToZ: 0,
     vaulting: false, carryVX: 0, carryVZ: 0,
     justWallJumped: false, justHopped: false, sliding: false, crouching: false, climbing: false,
   }
@@ -308,8 +309,12 @@ export function tickLocomotion(s: LocoState, input: LocoInput, solid: Solid): vo
 
   if (s.mantleT > 0) {
     // Commit pull-up: eased, up-biased so it reads up-then-forward. Never a snap.
+    // ⚠ Divide by the duration THIS lerp was started with. The vault sets a shorter timer than the
+    // climb-mantle, and dividing by the constant meant a vault began its ease ~47% complete — ~70%
+    // of the height applied on frame one. That was the "sometimes it just blinks up": the full
+    // mantle (0.30s) divided correctly and read as a hop; every vault (0.16s) snapped.
     s.mantleT -= dt
-    const t = 1 - Math.max(0, s.mantleT) / MANTLE_TIME
+    const t = 1 - Math.max(0, s.mantleT) / s.mantleDur
     const e = t * t * (3 - 2 * t)
     const eUp = Math.min(1, e * 1.5)
     s.px = s.mFromX + (s.mToX - s.mFromX) * e
@@ -335,7 +340,7 @@ export function tickLocomotion(s: LocoState, input: LocoInput, solid: Solid): vo
     if (s.hangT >= HANG_MIN && intoLedge > HANG_COMMIT) {
       s.mFromX = s.px; s.mFromY = s.py; s.mFromZ = s.pz
       s.mToX = s.hangLipX; s.mToY = s.hangLipY; s.mToZ = s.hangLipZ
-      s.mantleT = MANTLE_TIME; s.hanging = false
+      s.mantleT = MANTLE_TIME; s.mantleDur = MANTLE_TIME; s.hanging = false
     } else if (s.hangT >= HANG_MIN && intoLedge < -HANG_COMMIT) {
       s.hanging = false; s.hangLock = 0.35
       s.airborne = true; s.vy = 0
@@ -363,7 +368,7 @@ export function tickLocomotion(s: LocoState, input: LocoInput, solid: Solid): vo
     if (vt) {
       s.mFromX = s.px; s.mFromY = s.py; s.mFromZ = s.pz
       s.mToX = vt.x; s.mToY = vt.y; s.mToZ = vt.z
-      s.mantleT = VAULT_TIME; s.vaulting = true
+      s.mantleT = VAULT_TIME; s.mantleDur = VAULT_TIME; s.vaulting = true
       // Carry along the INPUT direction, floored at a brisk walk: by the time you vault you are
       // usually pressed against the face and the wall has already zeroed hvel — carrying THAT
       // would end every stair at a dead stop, which un-does the rhythm the vault exists for.
