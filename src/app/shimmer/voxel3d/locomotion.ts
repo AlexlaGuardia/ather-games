@@ -20,8 +20,10 @@
 //   slide-hop  jump mid-slide pops takeoff speed ×1.12 (capped)
 //   bhop       jump within 0.15s of landing chains the landing speed (×0.97 fatigue)
 //   lurch      a sharp new air-input snaps momentum toward it once, at a small speed cost
-//   step-up    1-block rises are FLOOR, not wall — grounded movement walks over them (NEW here;
-//              play3d's canStep did this for tiles, the placeholder walker never had it)
+//   vault      jump next to a 1-block rise = a quick eased mantle onto it, speed carried through
+//              (Alex, playtest 2026-08-07: the AUTOMATIC step-up "was breaking the movement" —
+//              climbing a block is a deliberate press now, one press per block, so a staircase
+//              ladders under repeated jumps. A 2-high face never vaults; that is climb country.)
 //   climb      airborne + push into a 2-high face + HOLD Space ≥0.18s = scramble up; grip is a
 //              distance budget (2.5) refilled on landing
 //   mantle     a lip in reach during a held climb = GRAB and HANG; push in to pull up (eased,
@@ -61,12 +63,17 @@ export const HANG_DROP = 0.9
 export const MANTLE_TIME = 0.30
 export const HANG_MIN = 0.22
 export const HANG_COMMIT = 0.35
+export const VAULT_TIME = 0.16      // quick — a vault is a step with intent, not a climb animation
+export const VAULT_REACH = 0.55     // how close the face must be (beyond the body radius) to vault
 
 export const BODY_R = 0.3           // the old walker's half-width, kept — the world was built around it
 export const BODY_H = 1.75
 export const EYE_STAND = 1.62       // camera sits this far above the feet (the old walker's eye)
 export const EYE_SLIDE = 1.02       // eye height mid-slide/crouch
-const STEP_UP = 1.05                // grounded movement treats solids up to this above the feet as floor
+// How far above the feet the floor probe may CAPTURE a surface. Small on purpose: at 1.05 this was
+// the automatic step-up (and it also popped a falling player up onto lips they fell past), which
+// playtest ruled out — going up a block is the vault now, always a deliberate press.
+const FLOOR_CAPTURE = 0.1
 
 export type Solid = (x: number, y: number, z: number) => boolean
 
@@ -85,6 +92,8 @@ export interface LocoState {
   hanging: boolean; hangT: number; hangLock: number
   hangLipX: number; hangLipY: number; hangLipZ: number; hangCX: number; hangCZ: number
   mantleT: number; mFromX: number; mFromY: number; mFromZ: number; mToX: number; mToY: number; mToZ: number
+  /** True while the mantle lerp is a VAULT — speed is carried through instead of the ledge settle. */
+  vaulting: boolean; carryVX: number; carryVZ: number
   /** Set for one tick when a verb fires — the host reads these for HUD/FX and they self-clear. */
   justWallJumped: boolean; justHopped: boolean
   sliding: boolean; crouching: boolean; climbing: boolean
@@ -98,6 +107,7 @@ export function createLoco(px: number, feetY: number, pz: number): LocoState {
     onWall: false, wallNX: 0, wallNZ: 0, wallCX: 0, wallCZ: 0, wallStick: 0, wallLock: 0,
     hanging: false, hangT: 0, hangLock: 0, hangLipX: 0, hangLipY: 0, hangLipZ: 0, hangCX: 0, hangCZ: 0,
     mantleT: 0, mFromX: 0, mFromY: 0, mFromZ: 0, mToX: 0, mToY: 0, mToZ: 0,
+    vaulting: false, carryVX: 0, carryVZ: 0,
     justWallJumped: false, justHopped: false, sliding: false, crouching: false, climbing: false,
   }
 }
@@ -112,10 +122,9 @@ export interface LocoInput {
   dt: number
 }
 
-/** True when the body (feet at feetY) fits at (x, z). `stepAllow` lifts the tested bottom so
- *  grounded movement reads a low rise as floor rather than wall. */
-export function bodyFree(solid: Solid, x: number, z: number, feetY: number, stepAllow = 0): boolean {
-  const y0 = Math.floor(feetY + 0.01 + stepAllow)
+/** True when the body (feet at feetY) fits at (x, z). */
+export function bodyFree(solid: Solid, x: number, z: number, feetY: number): boolean {
+  const y0 = Math.floor(feetY + 0.01)
   const y1 = Math.floor(feetY + BODY_H - 0.01)
   for (let vy = y0; vy <= y1; vy++)
     for (const dx of [-BODY_R, BODY_R]) for (const dz of [-BODY_R, BODY_R])
@@ -123,9 +132,10 @@ export function bodyFree(solid: Solid, x: number, z: number, feetY: number, step
   return true
 }
 
-/** Highest supporting surface under the footprint within step range of the feet, or null. */
+/** Highest supporting surface under the footprint at or just below the feet, or null. The capture
+ *  band above the feet is deliberately tiny — see FLOOR_CAPTURE. */
 export function floorProbe(solid: Solid, x: number, z: number, feetY: number): number | null {
-  const top = Math.floor(feetY + STEP_UP)
+  const top = Math.floor(feetY + FLOOR_CAPTURE)
   const bottom = Math.floor(feetY - 1.4)
   for (let vy = top; vy >= bottom; vy--) {
     let support = false
@@ -133,9 +143,26 @@ export function floorProbe(solid: Solid, x: number, z: number, feetY: number): n
       if (solid(Math.floor(x + dx), vy, Math.floor(z + dz))) { support = true; break }
     if (!support) continue
     const floorTop = vy + 1
-    if (floorTop <= feetY + STEP_UP) return floorTop
+    if (floorTop <= feetY + FLOOR_CAPTURE) return floorTop
   }
   return null
+}
+
+/**
+ * A vaultable 1-block step directly ahead: its face within reach, its top standable, and NOT a
+ * taller wall (a 2-high face is climb country, never a vault). Returns the landing, or null.
+ */
+function vaultTarget(solid: Solid, px: number, pz: number, feetY: number, cardX: number, cardZ: number):
+  { x: number; y: number; z: number } | null {
+  if (cardX === 0 && cardZ === 0) return null
+  const bx = Math.floor(px + cardX * (BODY_R + VAULT_REACH))
+  const bz = Math.floor(pz + cardZ * (BODY_R + VAULT_REACH))
+  if (bx === Math.floor(px) && bz === Math.floor(pz)) return null   // no new column in reach
+  const fy = Math.floor(feetY + 0.01)
+  if (!solid(bx, fy, bz)) return null                               // nothing to step onto
+  if (solid(bx, fy + 1, bz) || solid(bx, fy + 2, bz)) return null   // taller than one block
+  const to = { x: px + cardX * 0.85, y: fy + 1, z: pz + cardZ * 0.85 }
+  return bodyFree(solid, to.x, to.z, to.y) ? to : null
 }
 
 /** A standable lip on the column (bx, bz): solid below, two clear above, within grab reach. */
@@ -239,17 +266,12 @@ export function tickLocomotion(s: LocoState, input: LocoInput, solid: Solid): vo
     s.hvz += ((hasInput ? mvZ * target : 0) - s.hvz) * rate
   }
 
-  // ── horizontal apply, axis-separated; grounded movement steps over 1-block rises ────────────
+  // ── horizontal apply, axis-separated. A 1-block rise BLOCKS — going up it is the vault. ─────
   if ((s.hvx !== 0 || s.hvz !== 0) && s.mantleT <= 0 && !s.hanging) {
-    const stepAllow = !s.airborne && !s.crouching ? STEP_UP : 0
     const nx = s.px + s.hvx * dt
-    if (bodyFree(solid, nx, s.pz, s.py)) s.px = nx
-    else if (stepAllow && bodyFree(solid, nx, s.pz, s.py, stepAllow)) s.px = nx   // floor-follow lifts us
-    else s.hvx = 0
+    if (bodyFree(solid, nx, s.pz, s.py)) s.px = nx; else s.hvx = 0
     const nz = s.pz + s.hvz * dt
-    if (bodyFree(solid, s.px, nz, s.py)) s.pz = nz
-    else if (stepAllow && bodyFree(solid, s.px, nz, s.py, stepAllow)) s.pz = nz
-    else s.hvz = 0
+    if (bodyFree(solid, s.px, nz, s.py)) s.pz = nz; else s.hvz = 0
   }
 
   // ── vertical ────────────────────────────────────────────────────────────────────────────────
@@ -297,8 +319,13 @@ export function tickLocomotion(s: LocoState, input: LocoInput, solid: Solid): vo
     if (s.mantleT <= 0) {
       s.px = s.mToX; s.py = s.mToY; s.pz = s.mToZ
       s.airborne = false; s.climbRise = 0
-      const settle = RUN_SPEED * 0.4
-      s.hvx = s.hangCX * settle; s.hvz = s.hangCZ * settle
+      if (s.vaulting) {
+        // A vault is part of the RUN — the speed you brought to the step leaves with you.
+        s.hvx = s.carryVX; s.hvz = s.carryVZ; s.vaulting = false
+      } else {
+        const settle = RUN_SPEED * 0.4
+        s.hvx = s.hangCX * settle; s.hvz = s.hangCZ * settle
+      }
     }
   } else if (s.hanging) {
     // Hang: gripped at the lip. A guaranteed beat, THEN input decides — in = pull up, away = drop.
@@ -328,12 +355,29 @@ export function tickLocomotion(s: LocoState, input: LocoInput, solid: Solid): vo
       s.landGrace = BHOP_WINDOW; s.landSpeed = Math.hypot(s.hvx, s.hvz)
     }
   } else if (jumpEdge) {
-    s.airborne = true; s.vy = JUMP_V0
-    let takeoff = Math.max(Math.hypot(s.hvx, s.hvz), hasInput ? RUN_SPEED : 0)
-    if (s.sliding) { takeoff = Math.min(SPEED_CAP, Math.hypot(s.hvx, s.hvz) * SLIDEHOP_BOOST); s.justHopped = true }
-    else if (s.landGrace > 0) takeoff = Math.min(SPEED_CAP, Math.max(takeoff, s.landSpeed * BHOP_KEEP))
-    s.airSpeed = takeoff
-    if (s.sliding) s.slideT = 0
+    // ★ THE VAULT COMES FIRST (Alex, playtest 2026-08-07: "if you have a 1 block, the jump does a
+    // mantle"). Pressing jump INTO a 1-block step climbs it — one press per block, so a staircase
+    // ladders and a slope of steps is a rhythm, not a pogo. No step in reach (or moving away from
+    // it, or sliding — a slide-hop must stay a hop) = the ballistic jump, unchanged.
+    const vt = !s.sliding && hasInput ? vaultTarget(solid, s.px, s.pz, s.py, cardX, cardZ) : null
+    if (vt) {
+      s.mFromX = s.px; s.mFromY = s.py; s.mFromZ = s.pz
+      s.mToX = vt.x; s.mToY = vt.y; s.mToZ = vt.z
+      s.mantleT = VAULT_TIME; s.vaulting = true
+      // Carry along the INPUT direction, floored at a brisk walk: by the time you vault you are
+      // usually pressed against the face and the wall has already zeroed hvel — carrying THAT
+      // would end every stair at a dead stop, which un-does the rhythm the vault exists for.
+      const carry = Math.max(Math.hypot(s.hvx, s.hvz), RUN_SPEED * 0.6)
+      s.carryVX = mvX * carry; s.carryVZ = mvZ * carry
+      s.hangCX = cardX; s.hangCZ = cardZ         // mantle lerp reads these on completion
+    } else {
+      s.airborne = true; s.vy = JUMP_V0
+      let takeoff = Math.max(Math.hypot(s.hvx, s.hvz), hasInput ? RUN_SPEED : 0)
+      if (s.sliding) { takeoff = Math.min(SPEED_CAP, Math.hypot(s.hvx, s.hvz) * SLIDEHOP_BOOST); s.justHopped = true }
+      else if (s.landGrace > 0) takeoff = Math.min(SPEED_CAP, Math.max(takeoff, s.landSpeed * BHOP_KEEP))
+      s.airSpeed = takeoff
+      if (s.sliding) s.slideT = 0
+    }
   } else if (floorTop === null || floorTop < s.py - FALL_OFF) {
     s.airborne = true; s.vy = 0; s.airSpeed = Math.hypot(s.hvx, s.hvz)   // walked off a ledge
   } else {

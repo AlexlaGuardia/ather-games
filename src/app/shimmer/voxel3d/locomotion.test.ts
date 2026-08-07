@@ -41,15 +41,43 @@ const settle = (s: ReturnType<typeof createLoco>, solid: any, frames = 30) => {
   ok(Math.hypot(s.hvx, s.hvz) < 0.05, 'release coasts to a stop')
 }
 
-// ── ★ auto step-up: a 1-block rise is floor; a 2-block rise is a wall ────────────────────────
+// ── ★ the vault: a 1-block rise blocks the run; JUMP into it mantles up (Alex, 07-08-07) ─────
 {
-  // Terrace at x≥3 (1 above the floor), wall at x≥6 rising 2 above the TERRACE — heights are
-  // relative to where you stand, so the wall must clear the step you arrive on.
-  const solid = world((x, y) => (x >= 3 && y < 11) || (x >= 6 && y < 13))
+  const solid = world((x, y) => x >= 3 && y < 11)     // a 1-block terrace at x=3
   const s = createLoco(0.5, 10, 0.5); settle(s, solid)
   for (let i = 0; i < 150; i++) tickLocomotion(s, input({ mvX: 1 }), solid)
-  ok(s.px > 3.5 && Math.abs(s.py - 11) < 0.05, `★ walked up the 1-block step without jumping (x ${s.px.toFixed(1)}, feet ${s.py.toFixed(2)})`)
-  ok(s.px < 6 - 0.29, `★ the 2-block wall stops grounded movement (x ${s.px.toFixed(2)})`)
+  ok(s.px < 3 - 0.29 && s.py === 10, `★ walking into a 1-block rise STOPS — no auto-climb (x ${s.px.toFixed(2)})`)
+  const speedBefore = RUN_SPEED  // was at full run when the wall killed hvx; rebuild a step of speed
+  for (let i = 0; i < 30; i++) tickLocomotion(s, input({ mvX: 1 }), solid)
+  tickLocomotion(s, input({ mvX: 1, jumpKey: true }), solid)
+  ok(s.mantleT > 0 && s.vaulting, '★ jump at the step starts a vault, not a ballistic jump')
+  let frames = 0
+  while (s.mantleT > 0 && frames < 60) { tickLocomotion(s, input({ mvX: 1 }), solid); frames++ }
+  ok(frames > 3, `the vault is eased over real frames (${frames}), not a snap`)
+  ok(Math.abs(s.py - 11) < 0.01 && !s.airborne, `and lands standing on the step (feet ${s.py.toFixed(2)})`)
+  ok(Math.hypot(s.hvx, s.hvz) > speedBefore * 0.5, `★ speed carries through the vault (${Math.hypot(s.hvx, s.hvz).toFixed(2)})`)
+}
+
+// ── ★ a staircase ladders under repeated jump presses ────────────────────────────────────────
+{
+  const stair = (x: number, y: number, _z: number) => x >= 3 && y < 10 + Math.min(4, Math.floor((x - 3) / 2) + 1)
+  const solid = world(stair)
+  const s = createLoco(0.5, 10, 0.5); settle(s, solid)
+  for (let step = 0; step < 4; step++) {
+    for (let i = 0; i < 40; i++) tickLocomotion(s, input({ mvX: 1 }), solid)          // run to the face
+    tickLocomotion(s, input({ mvX: 1, jumpKey: true }), solid)                        // press
+    for (let i = 0; i < 30; i++) tickLocomotion(s, input({ mvX: 1 }), solid)          // ride it out
+  }
+  ok(Math.abs(s.py - 14) < 0.05, `★ four presses climb four stairs (feet ${s.py.toFixed(2)})`)
+}
+
+// ── a 2-high face never vaults — that is climb country ───────────────────────────────────────
+{
+  const solid = world((x, y) => x >= 3 && y < 12)
+  const s = createLoco(1.5, 10, 0.5); settle(s, solid)
+  for (let i = 0; i < 60; i++) tickLocomotion(s, input({ mvX: 1 }), solid)
+  tickLocomotion(s, input({ mvX: 1, jumpKey: true }), solid)
+  ok(!s.vaulting && s.airborne && s.vy > 0, '★ jump at a 2-high wall is a real jump, never a vault')
 }
 
 // ── slide is a burst that bleeds back; slide-hop pops it ─────────────────────────────────────
