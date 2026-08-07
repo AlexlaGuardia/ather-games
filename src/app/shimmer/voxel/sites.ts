@@ -42,10 +42,11 @@ export interface SiteConfig {
 }
 
 export const DEFAULT_SITES: SiteConfig = {
-  // Tuned on the rendered map + a density sweep: ~0.9 sites per 1000² of country (spacing 12
-  // measured 0.56 — too rare to FIND on a playtest walk; 7 measured 1.44 — a subdivision).
-  // Walking a greyfield should risk a ruin, not tour a suburb.
-  spacing: 9,
+  // Tuned on the rendered map + a density sweep, and RE-tuned after the un-slice warp fix made
+  // pads ~4× more common (the pad filter passes more cells, so the same spacing means more
+  // ruins): spacing 14 ≈ 1.1 sites per 1000² of country. Walking a greyfield should risk a ruin,
+  // not tour a suburb. ⚠ Any retune that moves pad share re-tunes THIS by side effect — re-sweep.
+  spacing: 14,
   separation: 3,
   salt: 0x51735,
   footprint: 11,

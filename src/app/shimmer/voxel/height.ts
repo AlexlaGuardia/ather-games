@@ -225,8 +225,16 @@ export function riverCarve(x: number, z: number, seed: number, cfg: HeightConfig
 
 /** The three fields at a column. Exposed so biome selection can read the SAME values, not re-roll them. */
 export function heightFields(x: number, z: number, seed: number, cfg: HeightConfig = DEFAULT_HEIGHT) {
-  const continentalness = warped2(x / cfg.continentScale, z / cfg.continentScale, seed ^ 0x9e3779b9, 4)
-  const erosion = warped2(x / cfg.erosionScale, z / cfg.erosionScale, seed ^ 0x85ebca6b, 3)
+  // ★ Warp 4 → 1.2 on continentalness, 3 → 1.2 on erosion (2026-08-07 late, Alex: "the further
+  // out you go the sharper the terrain gets, turning into slices"). Heavy domain warp FOLDS a
+  // field's level-sets into thin parallel bands, and the continental base — which erosion never
+  // damps, by design — cliffed along every fold line: measured, warp 4 put a ≥1.5-voxel base
+  // cliff on 2.9% of single-block steps (one wall every ~35 blocks of walking); warp 1.2 → 0.05%.
+  // The erosion field had the same disease: its low tail (= full relief) ran in warp filaments,
+  // so mountain country came out as thin slice-walls instead of masses. Third appearance of the
+  // same lesson (greyfield smear, river tangle): a field's SHAPE at its scale is a design input.
+  const continentalness = warped2(x / cfg.continentScale, z / cfg.continentScale, seed ^ 0x9e3779b9, 1.2)
+  const erosion = warped2(x / cfg.erosionScale, z / cfg.erosionScale, seed ^ 0x85ebca6b, 1.2)
   const weirdness = signed2(x / cfg.weirdnessScale, z / cfg.weirdnessScale, seed ^ 0xc2b2ae35, 3)
   // Gently warped ON PURPOSE (0.6, vs continentalness's 4): a plain must be a blobby REGION. A
   // heavily warped field's level-sets are ribbons, and ribbon plains have no interior for pads.

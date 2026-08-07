@@ -100,9 +100,15 @@ const at = (st: Section[], x: number, y: number, z: number) => st[(y / S) | 0].g
 // ── 4. lakes are not drained ─────────────────────────────────────────────────────────────────
 {
   let drained = 0, wet = 0
-  // Sites re-picked 2026-08-07: the valley-floor shaping (height.ts shapedPV) raised the originals
-  // above sea level, and a drain test over dry land proves nothing — its own guard assert said so.
-  for (const [ox, oz] of [[-320, -1600], [1600, -1600], [-1600, -1280], [-1440, -1120]] as const) {
+  // Sites are SEARCHED, not hardcoded: fixed coordinates died on the valley-floor retune, were
+  // re-picked, then died again on the un-slice warp retune. Any terrain change moves coastlines;
+  // a search over the same pure surface tracks them for free (same fix as trees.test's SITES).
+  const SUBMERGED: [number, number][] = []
+  for (let i = 0; SUBMERGED.length < 4 && i < 8000; i++) {
+    const ox = ((i * 331) % 6000 - 3000) & ~(S - 1), oz = ((i * 887) % 6000 - 3000) & ~(S - 1)
+    if (surf(ox + S / 2, oz + S / 2) <= D.seaLevel - 2) SUBMERGED.push([ox, oz])
+  }
+  for (const [ox, oz] of SUBMERGED) {
     const st = stackAt(ox, oz)
     for (let z = 0; z < S; z++) for (let x = 0; x < S; x++) {
       const h = surf(ox + x, oz + z)

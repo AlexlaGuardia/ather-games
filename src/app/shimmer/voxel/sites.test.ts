@@ -60,11 +60,14 @@ const CFG = DEFAULT_SITES
     ok(mn === s.floor, `site floor is the pad's lowest surface`)
     ok(mn > DEFAULT_DEPTH.seaLevel + DEFAULT_DEPTH.beachHeight, 'site is on dry land')
   }
-  // Density: a scatter, not a subdivision and not a myth. 121×121 cells at spacing 12 ≈ a
-  // 23k-block square of country; grey country is ~9% of it and pads are the exception inside that.
+  // Density: a scatter, not a subdivision and not a myth — asserted PER AREA, not per cell (a
+  // per-cell bound silently retunes itself whenever `spacing` changes the denominator). The band
+  // is wide because terrain retunes legitimately move pad share; the point is the ORDER of
+  // magnitude: roughly one ruin per 1000² of country, never ten, never none.
+  const per1k = sites / ((Math.sqrt(cells) * CFG.spacing * 16 / 1000) ** 2)
   ok(sites > 3, `sites actually occur (${sites} in ${cells} cells)`)
-  ok(sites < cells * 0.02, `sites stay rare (${sites} in ${cells} cells)`)
-  console.log(`  (density: ${sites} sites in ${cells} cells)`)
+  ok(per1k > 0.3 && per1k < 3, `sites stay a scatter (${per1k.toFixed(2)} per 1000² of country)`)
+  console.log(`  (density: ${sites} sites ≈ ${per1k.toFixed(2)} per 1000²)`)
 }
 
 // ── 4. the ruin generates INTO columns, identically from every side of a seam ───────────────────
