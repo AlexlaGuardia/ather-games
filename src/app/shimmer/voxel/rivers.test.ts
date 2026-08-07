@@ -5,7 +5,7 @@
 // the world's consumers respect it (sand bed, no trees standing in the water, wadeable collision
 // is the walker's side). Each is checkable against the pure functions; the look is the map's job.
 
-import { riverness, riverCarve, riverField, RIVER_FULL, RIVER_EDGE, RIVER_DEPTH, columnHeight } from './height'
+import { riverness, riverCarve, riverField, waterLevelAt, RIVER_FULL, RIVER_EDGE, RIVER_DEPTH, columnHeight } from './height'
 import { materialAt, MAT, DEFAULT_DEPTH } from './depth'
 import { makeColumn, SECTION } from './column'
 
@@ -29,9 +29,9 @@ const SEED = 1337
   ok(mono, 'the bank profile fades monotonically')
 }
 
-// ── 2. carve and fill agree, everywhere a river exists ──────────────────────────────────────────
+// ── 2. carve and fill agree with the WATER TABLE, everywhere a river exists ─────────────────────
 {
-  let rivers = 0, wet = 0, dryDitch = 0, overBank = 0, sandBed = 0, bedChecked = 0
+  let rivers = 0, wet = 0, dryDitch = 0, overTable = 0, sandBed = 0, bedChecked = 0, bars = 0
   for (let i = 0; i < 60000 && rivers < 400; i++) {
     const x = (i * 337) % 9000 - 4500, z = (i * 811) % 9000 - 4500
     const carve = riverCarve(x, z, SEED)
@@ -39,17 +39,52 @@ const SEED = 1337
     rivers++
     const h = columnHeight(x, z, SEED)
     if (h <= DEFAULT_DEPTH.seaLevel + DEFAULT_DEPTH.beachHeight) continue   // sea swallows the river
-    const surface = h + carve - 1
-    if (materialAt(x, h + 1, z, SEED, h) === MAT.WATER) wet++
-    else dryDitch++
-    if (materialAt(x, surface + 1, z, SEED, h) === MAT.WATER) overBank++
+    const table = waterLevelAt(x, z, SEED)
+    if (table >= h + 1) {
+      // Bed below the table: MUST hold water at the bed and MUST NOT above the table.
+      if (materialAt(x, h + 1, z, SEED, h) === MAT.WATER) wet++
+      else dryDitch++
+      if (materialAt(x, table + 1, z, SEED, h) === MAT.WATER) overTable++
+    } else {
+      bars++    // a high spot inside the band — a sandbar, legal and wanted; bounded below
+    }
     bedChecked++
     if (materialAt(x, h, z, SEED, h) === MAT.SAND) sandBed++
   }
   ok(rivers >= 400, `rivers occur (${rivers} carved columns found)`)
-  ok(dryDitch === 0, `every full channel above the sea holds water (${dryDitch} dry ditches)`)
-  ok(overBank === 0, `water never rises over the banks (${overBank})`)
+  ok(wet > 0 && dryDitch === 0, `every below-table channel holds water (${wet} wet, ${dryDitch} dry)`)
+  ok(overTable === 0, `water never rises over the table (${overTable})`)
   ok(bedChecked > 0 && sandBed === bedChecked, `the bed is sand (${sandBed}/${bedChecked})`)
+  ok(bars < bedChecked * 0.5, `sandbars are the exception, not the river (${bars}/${bedChecked})`)
+}
+
+// ── 2b. ★ PONDS ARE FLAT — the water table's whole claim ────────────────────────────────────────
+{
+  // Find wide full-channel pools and check the WATER SURFACE span across each: the old per-column
+  // fill (banks − 1) undulated with the ground ("highs and lows in a pond"); the table may drift
+  // at most ~a voxel across a pond's width.
+  let pools = 0, flat = 0
+  for (let i = 0; i < 60000 && pools < 25; i++) {
+    const x = (i * 733) % 8000 - 4000, z = (i * 389) % 8000 - 4000
+    if (riverCarve(x, z, SEED) < RIVER_DEPTH) continue
+    // A pool: full carve across a 16-block square (skinny channel segments don't qualify).
+    let wide = true
+    for (const [dx, dz] of [[8, 0], [-8, 0], [0, 8], [0, -8]] as const)
+      if (riverCarve(x + dx, z + dz, SEED) < RIVER_DEPTH) { wide = false; break }
+    if (!wide) continue
+    const h0 = columnHeight(x, z, SEED)
+    if (h0 <= DEFAULT_DEPTH.seaLevel + DEFAULT_DEPTH.beachHeight) continue
+    pools++
+    let mn = Infinity, mx = -Infinity
+    for (let dz = -8; dz <= 8; dz += 2) for (let dx = -8; dx <= 8; dx += 2) {
+      const t = waterLevelAt(x + dx, z + dz, SEED)
+      if (t < mn) mn = t
+      if (t > mx) mx = t
+    }
+    if (mx - mn <= 1) flat++
+  }
+  ok(pools >= 10, `found pools to check (${pools})`)
+  ok(flat === pools, `every pond surface is flat to within one voxel (${flat}/${pools})`)
 }
 
 // ── 3. the channel is genuinely lower than its banks ────────────────────────────────────────────

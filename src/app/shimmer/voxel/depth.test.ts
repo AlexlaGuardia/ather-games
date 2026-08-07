@@ -6,7 +6,7 @@
 // exactly like a cave the carvers did not generate. All three are cheap to assert and expensive
 // to notice.
 
-import { columnHeight, riverCarve, DEFAULT_HEIGHT } from './height'
+import { columnHeight, riverCarve, waterLevelAt, DEFAULT_HEIGHT } from './height'
 import { materialAt, fillColumn, slopeAt, MAT, DEFAULT_DEPTH } from './depth'
 
 let pass = 0
@@ -49,12 +49,11 @@ for (let i = 0; i < 600; i++) COLS.push([(i * 977) % 4000 - 2000, (i * 1583) % 4
       if (y >= H.worldHeight) continue
       const m = materialAt(x, y, z, SEED, h)
       if (m !== MAT.AIR && m !== MAT.WATER) bad++
-      // Water above sea level is legal in exactly one place: a river channel, filled to one below
-      // its banks (h is the carved bed; h + carve is the original ground the river cut through).
+      // Water above sea level is legal in exactly one place: a river channel or pond, filled to
+      // the water table (height.ts waterLevelAt — a body of water has ONE level).
       if (m === MAT.WATER) {
         wet++
-        const carve = riverCarve(x, z, SEED)
-        const riverTop = carve >= 2 ? h + carve - 1 : -1
+        const riverTop = riverCarve(x, z, SEED) >= 1 ? waterLevelAt(x, z, SEED) : -1
         if (y > D.seaLevel && y > riverTop) bad++
       }
     }

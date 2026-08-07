@@ -251,27 +251,81 @@ export function heightFields(x: number, z: number, seed: number, cfg: HeightConf
  * whole chunk pipeline rests on (research steal #2: never let a stage synchronously generate a
  * missing neighbour).
  */
-export function columnHeight(x: number, z: number, seed: number, cfg: HeightConfig = DEFAULT_HEIGHT): number {
+/** The UNCARVED, unrounded terrain — what the ground would be if no river cut it. Internal to the
+ *  height stack; exists so the water table can ask "what does the land around here sit at" without
+ *  the river's own channel biasing the answer downward. */
+function rawTerrain(x: number, z: number, seed: number, cfg: HeightConfig = DEFAULT_HEIGHT): number {
   const { continentalness, erosion, weirdness, flatness } = heightFields(x, z, seed, cfg)
-
   const base = spline(CONTINENT_SPLINE, continentalness)
   const relief = spline(EROSION_SPLINE, erosion)
   const pv = shapedPV(weirdness)
   const flat = flatnessF(flatness)
-
   // Erosion damps the RIDGES, not the continental base: a worn upland is still an upland, it just
   // stops being jagged. Damping the base instead would sink mountains into the sea as they erode,
   // which is geologically silly and reads as the terrain melting. The plains band follows the same
   // law from the other side: it BENCHES the base (altitude preserved, interiors level) and kills
   // the ridge term — see the PLAINS block above for why both must happen together.
   const shaped = base + (benched(base) - base) * flat
-  // Rounded HERE, identically to riverCarve(): the water fill computes the bank line as
-  // carved-h + carve − 1, and a half-voxel disagreement between the two would put every river's
-  // surface one block over or under its banks.
-  const carve = Math.round(RIVER_DEPTH * riverness(riverField(x, z, seed, cfg)))
-  const h = cfg.datum + DATUM_CALIBRATION + shaped + pv * cfg.ridgeAmplitude * relief * (1 - flat) - carve
+  return cfg.datum + DATUM_CALIBRATION + shaped + pv * cfg.ridgeAmplitude * relief * (1 - flat)
+}
 
+export function columnHeight(x: number, z: number, seed: number, cfg: HeightConfig = DEFAULT_HEIGHT): number {
+  const carve = Math.round(RIVER_DEPTH * riverness(riverField(x, z, seed, cfg)))
+  const h = rawTerrain(x, z, seed, cfg) - carve
   const min = 1
   const max = cfg.worldHeight - 2
   return h < min ? min : h > max ? max : Math.round(h)
+}
+
+/**
+ * ── ★ THE WATER TABLE — a body of water has ONE level (2026-08-07 late, Alex: "there shouldn't
+ * be highs and lows in a pond") ────────────────────────────────────────────────────────────────
+ * The first water fill set each column's surface at its OWN banks − 1, so a pond lying across
+ * undulating ground undulated with it — per-column water is what "highs and lows in a pond" IS.
+ * A body of water needs a level that is a property of the PLACE, not of the column. With no
+ * connectivity analysis available to a pure per-column generator, the level comes from a coarse
+ * WATER TABLE instead: the uncarved terrain, sampled on a 96-block lattice and bilinearly
+ * interpolated. Across any one pond (a few dozen blocks) the table moves at most a voxel, so
+ * ponds sit flat; down a long river the table follows the country gently instead of stepping at
+ * every bench. Water then FILLS ITS BASIN: everywhere inside the river band below the table is
+ * water — low ground floods to the shoreline, high spots poke out as sandbars, which is how a
+ * pond actually meets terrain.
+ *
+ * ⚠ EXPENSIVE-ISH (four rawTerrain evaluations) — callers must gate it behind `riverCarve > 0`,
+ * which kills ~97% of columns with one cheap field read.
+ */
+export const WATER_LATTICE = 96
+
+/**
+ * One lattice corner of the table: the MEAN of rawTerrain over the corner's 5×5 lattice
+ * neighbourhood. The smoothing is load-bearing, not cosmetic — a raw corner near a range gives the
+ * bilerp a gradient steep enough to put a visible shelf across a pond (measured: 11/25 pools flat
+ * raw, 18/25 at 3×3, 25/25 at 5×5). Cached per (seed, corner): the 25 rawTerrain evaluations run
+ * once per cell ever, so per-voxel fills pay a Map hit. The cache is a pure memo of a pure
+ * function — determinism is untouched — and it is capped so a long walk cannot grow it forever.
+ * ⚠ Keyed on (seed, corner) only: a non-default HeightConfig would read stale values. Every live
+ * caller uses the default config; revisit the key if that ever changes.
+ */
+const tableCache = new Map<string, number>()
+
+function tableCorner(gx: number, gz: number, seed: number, cfg: HeightConfig): number {
+  const k = `${seed}:${gx},${gz}`
+  const hit = tableCache.get(k)
+  if (hit !== undefined) return hit
+  let sum = 0
+  for (let dz = -2; dz <= 2; dz++) for (let dx = -2; dx <= 2; dx++)
+    sum += rawTerrain((gx + dx) * WATER_LATTICE + WATER_LATTICE / 2, (gz + dz) * WATER_LATTICE + WATER_LATTICE / 2, seed, cfg)
+  const v = sum / 25
+  if (tableCache.size > 4096) tableCache.clear()
+  tableCache.set(k, v)
+  return v
+}
+
+export function waterLevelAt(x: number, z: number, seed: number, cfg: HeightConfig = DEFAULT_HEIGHT): number {
+  const gx = Math.floor(x / WATER_LATTICE), gz = Math.floor(z / WATER_LATTICE)
+  const fx = x / WATER_LATTICE - gx, fz = z / WATER_LATTICE - gz
+  const a = tableCorner(gx, gz, seed, cfg), b = tableCorner(gx + 1, gz, seed, cfg)
+  const c = tableCorner(gx, gz + 1, seed, cfg), d = tableCorner(gx + 1, gz + 1, seed, cfg)
+  const level = (a + (b - a) * fx) + ((c + (d - c) * fx) - (a + (b - a) * fx)) * fz
+  return Math.floor(level - 1)
 }

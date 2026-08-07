@@ -15,7 +15,7 @@
 // is the single decision that makes ore appear in cave walls or stay buried.
 
 import { fbm2, value2 } from './noise'
-import { columnHeight, riverCarve, RIVER_DEPTH, type HeightConfig, DEFAULT_HEIGHT } from './height'
+import { columnHeight, riverCarve, waterLevelAt, RIVER_DEPTH, type HeightConfig, DEFAULT_HEIGHT } from './height'
 import { greySurfaceAt } from './biome'
 import { AIR } from './section'
 
@@ -104,15 +104,17 @@ export function materialAt(
   if (y <= 0) return MAT.BEDROCK
   if (y < cfg.bedrockTop && value2(x * 0.7, z * 0.7, seed ^ 0xbed0) > y / cfg.bedrockTop) return MAT.BEDROCK
 
-  // 2. Above the surface: water if we are in a basin — or in a river channel. The river check is
-  //    GUARDED to the ≤RIVER_DEPTH voxels just above the surface: everything higher is sky on the
-  //    fast path, because an unguarded field read here would run once per AIR voxel per column.
+  // 2. Above the surface: water if we are in a basin — or in a river channel, filled to the WATER
+  //    TABLE (height.ts waterLevelAt: a body of water has ONE level; per-column banks−1 was "highs
+  //    and lows in a pond"). Guarded twice: only the few voxels just above the surface run the
+  //    cheap riverCarve read, and only carved columns pay for the four-sample table.
   if (y > h) {
     if (y <= cfg.seaLevel) return MAT.WATER
-    if (y - h < RIVER_DEPTH) {
+    // +9 headroom over the carve: a local pit inside the band floods to the table, and truncating
+    // the fill at the old carve bound would put an air gap above pond water in exactly those pits.
+    if (y - h <= RIVER_DEPTH + 9) {
       const carve = riverCarve(x, z, seed, hcfg)
-      // Fill to one below the banks (h is the CARVED bed, h + carve the original ground).
-      if (carve > 1 && y <= h + carve - 1) return MAT.WATER
+      if (carve >= 1 && y <= waterLevelAt(x, z, seed, hcfg)) return MAT.WATER
     }
     return MAT.AIR
   }

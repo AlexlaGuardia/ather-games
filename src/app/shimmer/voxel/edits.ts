@@ -46,7 +46,9 @@ import { Column, SECTION } from './column'
 // most hills moved, so v7 edits on any slope are likely mid-air or buried now.
 // v9: un-slice (2026-08-07 late) — base-field warps 4/3 → 1.2; coastlines and uplands moved.
 // v8 shipped and was WALKED before this landed, so it gets its own number.
-export const GENERATOR_VERSION = 9
+// v10: the water table (2026-08-07 late) — river/pond water fills to a coarse lattice level
+// instead of per-column banks−1, so water blocks moved anywhere a channel or pool exists.
+export const GENERATOR_VERSION = 10
 
 /**
  * One column's edits: packed local index → material.
