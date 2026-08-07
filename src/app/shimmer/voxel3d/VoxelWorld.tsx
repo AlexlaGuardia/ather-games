@@ -32,6 +32,8 @@ import { spawnDrop, tickDrops, type Drop } from '../voxel/drops'
 import { blockDef, materialForItem, type BlockSkill } from '../voxel/registry'
 import { editIndex, recordEdit, applyEdits, packEdits, unpackEdits, isStale, type ColumnEdits } from '../voxel/edits'
 import { loadColumnEdits, saveColumnEdits, editedColumnCount } from './save'
+import { PIECES, STRUCTURE, pieceDef, cellsOf, canPlace, canAfford, placementAt, type Placement, type Rotation } from '../voxel/pieces'
+import { createPieceRenderer } from './piece-mesh'
 import { toGeometry, createVoxelMaterial, applySettings } from './mesh-bridge'
 import { makeTileArray } from './tex/atlas'
 import { createTexturedVoxelMaterial } from './tex/atlas'
@@ -53,6 +55,11 @@ export default function VoxelWorld() {
   const [hotbar, setHotbar] = useState<Slot[]>([])
   const [sel, setSel] = useState(0)
   const [tier, setTier] = useState(1)
+  // ★ BUILD MODE. Blocks build the shell (mine/place, already there); pieces dress it. Tab switches
+  // which verb the mouse means, so the two halves never fight over a click.
+  const [build, setBuild] = useState(false)
+  const [pieceIdx, setPieceIdx] = useState(0)
+  const [rot, setRot] = useState<Rotation>(0)
   const [look, setLook] = useState<{ name: string; progress: number; refused: boolean } | null>(null)
   const [settings, setSettings] = useState<VoxelSettings>(() => loadSettings())
   const [showSettings, setShowSettings] = useState(false)
@@ -96,9 +103,14 @@ export default function VoxelWorld() {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const n = Number(e.key)
-      if (n >= 1 && n <= 8) setSel(n - 1)
+      // In build mode the number row picks a PIECE; otherwise it picks a hotbar slot. One key, two
+      // meanings, disambiguated by the mode rather than by a second row of keys.
+      if (n >= 1 && n <= 8) { if (build) setPieceIdx(Math.min(PIECES.length - 1, n - 1)); else setSel(n - 1) }
       // Esc exits pointer lock anyway, so O is the settings key — it must not fight the browser.
       if (e.code === 'KeyO') setShowSettings(v => !v)
+      if (e.code === 'Tab') { e.preventDefault(); setBuild(v => !v) }
+      if (e.code === 'KeyR') setRot(r => ((r + 1) % 4) as Rotation)
+      if (e.code === 'BracketLeft' || e.code === 'BracketRight') { /* spike tier, handled below */ }
       // Tool tier is a debug lever so the tier GATE can be felt in ten seconds: a tier-1 spike
       // REFUSES pure core, and that should be provable without crafting your way up first.
       if (e.code === 'BracketRight') { toolTier.current = Math.min(3, toolTier.current + 1); setTier(toolTier.current) }
@@ -106,7 +118,7 @@ export default function VoxelWorld() {
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [])
+  }, [build])
 
   return (
     <div className="fixed inset-0 bg-[#0b0d14]">
@@ -122,19 +134,23 @@ export default function VoxelWorld() {
           onStats={setStats} onPos={p => setPos(`x ${p.x.toFixed(0)}  y ${p.y.toFixed(0)}  z ${p.z.toFixed(0)}`)}
           onLook={setLook} onInvChange={refreshHotbar}
           worker={worker} incoming={incoming} inflight={inflight} settings={settings}
+          build={build} pieceIdx={pieceIdx} rot={rot}
         />
         <PointerLockControls />
       </Canvas>
-      <Hud stats={stats} pos={pos} look={look} hotbar={hotbar} sel={sel} tier={tier} />
+      <Hud stats={stats} pos={pos} look={look} hotbar={hotbar} sel={sel} tier={tier}
+           build={build} pieceIdx={pieceIdx} rot={rot} inv={inv} />
       {showSettings && <SettingsPanel s={settings} update={update} onClose={() => setShowSettings(false)} />}
     </div>
   )
 }
 
-function Hud({ stats, pos, look, hotbar, sel, tier }: {
+function Hud({ stats, pos, look, hotbar, sel, tier, build, pieceIdx, rot, inv }: {
   stats: string; pos: string
   look: { name: string; progress: number; refused: boolean } | null
   hotbar: Slot[]; sel: number; tier: number
+  build: boolean; pieceIdx: number; rot: Rotation
+  inv: React.RefObject<Inventory>
 }) {
   return (
     <>
@@ -143,7 +159,9 @@ function Hud({ stats, pos, look, hotbar, sel, tier }: {
         <div>{pos}</div>
         <div className="text-white/55">{stats}</div>
         <div className="mt-1 text-white/45">click to look · WASD · space · shift run · F fly</div>
-        <div className="text-white/45">hold LMB mine · RMB place · 1-8 slot · [ ] spike tier</div>
+        {build
+          ? <div className="text-amber-200/80">BUILD · RMB place · LMB deconstruct · R rotate · 1-6 piece · Tab exit</div>
+          : <div className="text-white/45">hold LMB mine · RMB place · 1-8 slot · [ ] spike tier · Tab build</div>}
       </div>
 
       {look && (
@@ -161,8 +179,32 @@ function Hud({ stats, pos, look, hotbar, sel, tier }: {
 
       <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-1 h-1 rounded-full bg-white/80 pointer-events-none" />
 
+      {/* ★ The build palette REPLACES the hotbar rather than sitting beside it. One bar, whose meaning
+          follows the mode, so there is never a question about which row a number key is talking to. */}
+      {build && (
+        <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-1.5 pointer-events-none">
+          {PIECES.map((pc, i) => {
+            const affordable = pc.cost.every(c => countItem(inv.current!, c.itemId) >= c.count)
+            return (
+              <div key={pc.id} className={`w-20 h-14 rounded border-2 px-1 flex flex-col items-center justify-center text-[9px] font-mono
+                ${i === pieceIdx ? 'border-amber-300 bg-black/70' : 'border-white/20 bg-black/45'}`}>
+                <div className={i === pieceIdx ? 'text-amber-200' : 'text-white/70'}>{pc.name}</div>
+                <div className={affordable ? 'text-white/45' : 'text-red-300/80'}>
+                  {pc.cost.map(c => `${c.count}×${c.itemId.replace(/^block_|_plank$/g, '')}`).join(' ')}
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      )}
+      {build && (
+        <div className="absolute bottom-[4.6rem] left-1/2 -translate-x-1/2 text-[10px] font-mono text-white/50 pointer-events-none">
+          rotation {rot * 90}°
+        </div>
+      )}
+
       {/* Colour swatches stand in for item art — the registry maps materials to tiles.ts later. */}
-      <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-1.5 pointer-events-none">
+      {!build && <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-1.5 pointer-events-none">
         {Array.from({ length: 8 }, (_, i) => {
           const s = hotbar[i]
           const mat = s ? materialForItem(s.itemId) : undefined
@@ -179,10 +221,10 @@ function Hud({ stats, pos, look, hotbar, sel, tier }: {
             </div>
           )
         })}
-      </div>
-      <div className="absolute bottom-[4.6rem] left-1/2 -translate-x-1/2 text-[10px] font-mono text-white/50 pointer-events-none">
+      </div>}
+      {!build && <div className="absolute bottom-[4.6rem] left-1/2 -translate-x-1/2 text-[10px] font-mono text-white/50 pointer-events-none">
         spike tier {tier}
-      </div>
+      </div>}
     </>
   )
 }
@@ -190,7 +232,7 @@ function Hud({ stats, pos, look, hotbar, sel, tier }: {
 const SOLID_EXCEPT = new Set<number>([AIR, MAT.WATER])
 const isSolid = (m: number) => !SOLID_EXCEPT.has(m)
 
-function World({ inv, toolTier, toolSkill, selItem, onStats, onPos, onLook, onInvChange, worker, incoming, inflight, settings }: {
+function World({ inv, toolTier, toolSkill, selItem, onStats, onPos, onLook, onInvChange, worker, incoming, inflight, settings, build, pieceIdx, rot }: {
   inv: React.RefObject<Inventory>
   toolTier: React.RefObject<number>
   toolSkill: React.RefObject<BlockSkill>
@@ -203,6 +245,9 @@ function World({ inv, toolTier, toolSkill, selItem, onStats, onPos, onLook, onIn
   incoming: React.RefObject<{ cx: number; cz: number; voxels: Uint16Array }[]>
   inflight: React.RefObject<number>
   settings: VoxelSettings
+  build: boolean
+  pieceIdx: number
+  rot: Rotation
 }) {
   const { camera } = useThree()
   const group = useRef<THREE.Group>(null)
@@ -261,6 +306,8 @@ function World({ inv, toolTier, toolSkill, selItem, onStats, onPos, onLook, onIn
   const dropGeo = useMemo(() => new THREE.BoxGeometry(0.28, 0.28, 0.28), [])
   const dropMats = useRef(new Map<number, THREE.Material>())
   const highlightGeo = useMemo(() => new THREE.EdgesGeometry(new THREE.BoxGeometry(1.002, 1.002, 1.002)), [])
+  const pieces = useMemo(() => createPieceRenderer(), [])
+  const placements = useRef<Placement[]>([])
   const dropGroup = useRef<THREE.Group>(null)
   const mouse = useRef({ left: false, right: false })
   const frame = useRef(0)
@@ -339,10 +386,11 @@ function World({ inv, toolTier, toolSkill, selItem, onStats, onPos, onLook, onIn
     dropMats.current.clear()
     dropGeo.dispose()
     highlightGeo.dispose()
+    pieces.dispose()
     flatMaterial.dispose()
     textured?.material.dispose()
     tiles?.texture.dispose()
-  }, [dropGeo, highlightGeo, flatMaterial, textured, tiles])
+  }, [dropGeo, highlightGeo, flatMaterial, textured, tiles, pieces])
 
   // ★ A LOST WEBGL CONTEXT MUST SAY SO. Chrome blocks a page that loses its context repeatedly, and
   // the result is a black canvas with the HUD still drawn on top — indistinguishable from a
@@ -574,6 +622,54 @@ function World({ inv, toolTier, toolSkill, selItem, onStats, onPos, onLook, onIn
       if (hit) hl.position.set(hit.x + 0.5, hit.y + 0.5, hit.z + 0.5)
     }
 
+    // ── build mode: ghost, place, deconstruct ────────────────────────────────────────────────
+    if (build) {
+      const def = pieceDef(PIECES[pieceIdx].id)!
+      // The ghost sits in the EMPTY cell before what you are looking at — the same `px,py,pz` that
+      // block placement uses, so both verbs agree about where "in front of" is.
+      const target: Placement | null = hit ? { pieceId: def.id, x: hit.px, y: hit.py, z: hit.pz, rot } : null
+      const fits = !!target && canPlace(target, def, (x, y, z) => voxel(x, y, z))
+      const afford = canAfford(def, id => countItem(inv.current!, id))
+      if (target) pieces.setGhost(def.id, target.x, target.y, target.z, rot, fits && afford)
+      else pieces.hideGhost()
+
+      if (target && mouse.current.right && fits && afford) {
+        for (const c of def.cost) removeItems(inv.current!, c.itemId, c.count)
+        // ★ OCCUPANCY INTO THE VOXEL GRID — this is what makes collision free. Only the SOLID cells
+        // are written, so a doorway stays walkable and a stair can be climbed.
+        for (const c of cellsOf(target, def)) if (c.solid) setVoxel(c.x, c.y, c.z, STRUCTURE)
+        placements.current.push(target)
+        pieces.sync(placements.current)
+        onInvChange()
+        mouse.current.right = false
+      }
+
+      // Deconstruct: aim at ANY cell the piece occupies, not just its origin.
+      if (hit && mouse.current.left) {
+        const found = placementAt(placements.current, hit.x, hit.y, hit.z)
+        if (found) {
+          const fdef = pieceDef(found.pieceId)!
+          for (const c of cellsOf(found, fdef)) if (c.solid) setVoxel(c.x, c.y, c.z, AIR)
+          // Full refund while the loop is unproven — consequence-free experimenting is what you want
+          // while judging feel. A dial, not a ruling.
+          for (const c of fdef.cost) addItems(inv.current!, c.itemId, c.count)
+          placements.current = placements.current.filter(p => p !== found)
+          pieces.sync(placements.current)
+          onInvChange()
+          mouse.current.left = false
+        }
+      }
+
+      onLook(hit ? { name: `${def.name}${!afford ? ' — need materials' : fits ? '' : ' — blocked'}`, progress: 0, refused: !fits || !afford } : null)
+      onPos(p)
+      if (++frame.current % 10 === 0) {
+        const info = gl.info
+        onStats(`${cols.current.size} col · ${placements.current.length} pieces · geo ${info.memory.geometries} prog ${info.programs?.length ?? 0} · BUILD`)
+      }
+      return
+    }
+    pieces.hideGhost()
+
     // ── mine ─────────────────────────────────────────────────────────────────────────────────
     if (hit && mouse.current.left) {
       const r = tickBreak(breaking.current, hit, dt, toolTier.current!, toolSkill.current!)
@@ -709,6 +805,7 @@ function World({ inv, toolTier, toolSkill, selItem, onStats, onPos, onLook, onIn
     <>
       <group ref={group} />
       <group ref={dropGroup} />
+      <primitive object={pieces.group} />
       {/* ⚠ Memoised. Inline `args={[new THREE.BoxGeometry(...)]}` builds a fresh geometry on EVERY
           React render and leaks the previous one — same family as the per-drop material that got
           the page's WebGL context blocked. */}

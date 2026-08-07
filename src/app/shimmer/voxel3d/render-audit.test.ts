@@ -73,10 +73,19 @@ for (const file of files) {
     // `createVoxelMaterial()` and `toGeometry()` must construct a resource; that is their job. What
     // matters is that a factory is not CALLED per object. So: allow the construction here, and
     // separately assert every call site is one-shot (see § 1b).
-    // `make`, `create`, `build`, `to` — the verb is not the point, the shape is. Missing `make`
-    // made this flag `makeTileArray` in the texture lane, which is a perfectly good factory.
-    const inFactory = /export\s+function\s+(create|make|build|to)[A-Z]/.test(
-      src.slice(Math.max(0, idx - 600), idx))
+    //
+    // ⚠ Find the ENCLOSING function rather than scanning a fixed window. The first version looked
+    // back 600 characters, which flagged `createPieceRenderer`'s ghost material simply because that
+    // factory is long. Widening the window would have been guessing; taking the nearest preceding
+    // `export function` is actually asking which function we are inside. `make`/`create`/`build`/`to`
+    // are all the same shape — the verb is not the point.
+    // Export is NOT part of what makes something a factory — a local helper that builds and returns
+    // a resource is if anything MORE bounded than an exported one. What matters is the shape: a
+    // function whose job is to construct and hand back.
+    const before = src.slice(0, idx)
+    const lastFn = Math.max(before.lastIndexOf('\nexport function '), before.lastIndexOf('\nfunction '))
+    const enclosing = lastFn < 0 ? '' : before.slice(lastFn, lastFn + 120)
+    const inFactory = /function\s+(create|make|build|to)[A-Z]/.test(enclosing)
 
     ok(memoised || cached || inFactory,
       `${file}:${lineNo} constructs THREE.${m[1]} outside a useMemo/cache/factory — a GPU resource per object is the context-loss bug (${line.trim().slice(0, 80)})`)
