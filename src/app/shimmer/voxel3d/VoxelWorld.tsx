@@ -95,15 +95,17 @@ const LIGHT_PASSES = new Set<number>([
 interface Slot { itemId: string; count: number }
 
 /**
- * ★ TOOLS LEFT THE HOTBAR AND BECAME GAUGES (Alex, 2026-08-07, late — overturns the same-day
+ * ★ TOOLS LEFT THE HOTBAR AND BECAME SOCKETS (Alex, 2026-08-07, late — overturns the same-day
  * "hotbar carries the tools" ruling above the mining block): *there is no manual tool selection —
  * the block auto-picks the tool.* Scrolling to "the tool you need" was a step nobody wanted to take
  * mid-swing, and it fought the block-picks-the-tool model this port started with.
  *
- * The hotbar is ITEMS ONLY now — up to 8 mined-item stacks, slots 0-7, numbered 1-8. The four
- * gathering families (still canon order: forestry, prospecting, rinning, farming) render as
- * read-only GAUGES docked beside the hotbar — level, equipped tier, XP — driven by `activeTool`
- * (see the mining block) rather than by anything the player selects.
+ * The hotbar is ITEMS ONLY now — 8 FIXED slots, numbered 1-8, always rendered whether occupied or
+ * not. The four gathering families (still canon order: forestry, prospecting, rinning, farming)
+ * render as read-only ROUND SOCKETS in a quarter-arc off the hotbar's right end (Alex's whiteboard,
+ * 2026-08-07 — the rectangular gauge cards this section shipped with hours earlier were rejected as
+ * "three steps backwards") — level, equipped tier, XP-ring, driven by `activeTool` (see the mining
+ * block) rather than by anything the player selects.
  */
 const TOOL_FAMILIES = ['forestry', 'prospecting', 'rinning', 'farming'] as const
 type HotbarEntry = { itemId: string; count: number }
@@ -318,10 +320,16 @@ export default function VoxelWorld() {
 }
 
 /**
- * The clock readout. Self-contained state on a 1s interval so the tick re-renders THIS chip and
- * nothing else — the sky reads the clock per-frame off in the Canvas; the HUD only needs minutes.
- * `PINNED` renders whenever `?hour=` froze the module clock, so a pinned art-pass tab can never be
- * mistaken for a broken cycle (the exact confusion the flag exists for — see day-cycle.ts).
+ * The clock — top-right round DIAL (Alex's whiteboard, 2026-08-07). Self-contained state on a 1s
+ * interval so the tick re-renders THIS chip and nothing else — the sky reads the clock per-frame
+ * off in the Canvas; the HUD only needs minutes.
+ *
+ * A sun/moon marker rides the rim at the angle of `dayProgress()`: 0 (midnight) sits at the bottom,
+ * 0.5 (noon) sits at the top, sweeping clockwise through the right side for the first half-day (an
+ * eyeballed direction, not canon — Alex can flip it). The time renders small, centered. The phase
+ * name + `PINNED` flag (the same content the old inline chip showed — see day-cycle.ts for why a
+ * pinned tab must never read as a broken cycle) move to the small rectangle directly below the
+ * dial, matching the board.
  */
 function Clock() {
   const [now, setNow] = useState(() => dayProgress())
@@ -331,10 +339,23 @@ function Clock() {
   }, [])
   const phase = getPhase(now)
   const glyph = phase === 'night' ? '☾' : phase === 'day' ? '☀' : phase === 'dawn' ? '🌅' : '🌇'
+  const DIAL = 60             // dial diameter, px
+  const R = DIAL / 2 - 9      // marker orbit radius — kept inside the rim
+  const theta = now * 2 * Math.PI
+  const markerTop = DIAL / 2 + R * Math.cos(theta) - 7   // -7 centers the ~14px glyph
+  const markerLeft = DIAL / 2 + R * Math.sin(theta) - 7
   return (
-    <div className="text-white/60 tabular-nums">
-      {glyph} {getDisplayTime(now)} · {phase}
-      {isTimePinned && <span className="ml-2 text-amber-300/90">PINNED</span>}
+    <div className="absolute top-3 right-3 flex flex-col items-center pointer-events-none">
+      <div className="relative rounded-full border border-white/20 bg-black/45" style={{ width: DIAL, height: DIAL }}>
+        <span className="absolute text-[13px] leading-none" style={{ top: markerTop, left: markerLeft }}>{glyph}</span>
+        <div className="absolute inset-0 flex items-center justify-center text-[10px] font-mono tabular-nums text-white/85">
+          {getDisplayTime(now)}
+        </div>
+      </div>
+      <div className="mt-1 px-1.5 py-0.5 rounded border border-white/15 bg-black/45 text-[9px] font-mono text-white/60 whitespace-nowrap">
+        {phase}
+        {isTimePinned && <span className="ml-1.5 text-amber-300/90">PINNED</span>}
+      </div>
     </div>
   )
 }
@@ -376,7 +397,6 @@ function Hud({ stats, pos, look, hotbar, sel, tier, build, pieceIdx, rot, inv, s
           {isOwner && <a href="/shimmer/play3d" className="hover:text-white/85 underline decoration-white/20">❈ play3d (legacy)</a>}
         </div>
         <div>{pos}</div>
-        <Clock />
         <div className="text-white/55">{stats}</div>
         {/* Shift is slide now, not sprint — run is automatic (play3d locomotion, port step 5). */}
         <div className="mt-1 text-white/45">click to look · WASD · space jump · shift slide · hold space climb · V fly</div>
@@ -392,6 +412,8 @@ function Hud({ stats, pos, look, hotbar, sel, tier, build, pieceIdx, rot, inv, s
           })}
         </div>
       </div>
+
+      <Clock />
 
       {/* Skill progress — only while it is moving, so it is information rather than furniture. */}
       {skill && (
@@ -459,36 +481,33 @@ function Hud({ stats, pos, look, hotbar, sel, tier, build, pieceIdx, rot, inv, s
       )}
 
       {/* Colour swatches stand in for item art — the registry maps materials to tiles.ts later.
-          ★ The hotbar is ITEMS ONLY (2026-08-07, late) — the four tool families moved out into
-          gauges docked to the right, same row, same plate system, so it still reads as one bar.
+          ★ The hotbar is 8 FIXED slots, ITEMS ONLY (2026-08-07) — always all 8, occupied or not, so
+          number keys 1-8 always mean the same physical position. The four tool families live in the
+          round arc off its right end (`ToolArc`, below), not in this row.
           ★ DRAWN dims the whole row rather than hiding it: you keep seeing what you will be holding
-          again when you stow, so drawing reads as "hands full", not "inventory gone". */}
-      {!build && <div className={`absolute bottom-4 left-1/2 -translate-x-1/2 flex items-end gap-1.5 flex-wrap justify-center pointer-events-none transition-opacity ${drawn ? 'opacity-35' : 'opacity-100'}`}>
-        {Array.from({ length: 8 }, (_, i) => {
-          const e = hotbar[i]
-          const mat = e ? materialForItem(e.itemId) : undefined
-          const swatch = mat !== undefined ? `#${(MATERIAL_COLOR[mat] ?? 0x888888).toString(16).padStart(6, '0')}` : undefined
-          const selected = i === sel && !drawn
-          return (
-            <div key={i} className={`w-12 h-12 rounded border-2 flex flex-col items-center justify-center text-[9px] font-mono
-              ${selected ? 'border-amber-300 bg-black/60' : 'border-white/20 bg-black/40'}`}>
-              {e ? (
-                <>
-                  <div className="w-5 h-5 rounded-sm border border-white/25" style={{ background: swatch ?? '#6b7280' }} />
-                  <div className="text-white/80 mt-0.5">{e.count}</div>
-                </>
-              ) : <span className="text-white/25">{i + 1}</span>}
-            </div>
-          )
-        })}
-        {/* ★ THE TOOL GAUGES (Alex, 2026-08-07, late). No manual tool selection any more — the block
-            auto-picks, and these four read-only dials are the only place the player sees which
-            family is working and how far it's climbed. Fixed canon order, fixed count; unlike the
-            item slots they never renumber because nothing here is inventory. */}
-        <div className="flex gap-1.5 ml-2">
-          {TOOL_FAMILIES.map((family) => (
-            <ToolGauge key={family} family={family} active={activeTool === family} tools={tools} skills={skills} />
-          ))}
+          again when you stow, so drawing reads as "hands full", not "inventory gone".
+          The inner div is `relative` so `ToolArc` can anchor itself to this bar's right edge with
+          `left-full`, regardless of how much of the row is actually occupied. */}
+      {!build && <div className={`absolute bottom-4 left-1/2 -translate-x-1/2 pointer-events-none transition-opacity ${drawn ? 'opacity-35' : 'opacity-100'}`}>
+        <div className="relative inline-flex items-end gap-1.5">
+          {Array.from({ length: 8 }, (_, i) => {
+            const e = hotbar[i]
+            const mat = e ? materialForItem(e.itemId) : undefined
+            const swatch = mat !== undefined ? `#${(MATERIAL_COLOR[mat] ?? 0x888888).toString(16).padStart(6, '0')}` : undefined
+            const selected = i === sel && !drawn
+            return (
+              <div key={i} className={`w-12 h-12 rounded border-2 flex flex-col items-center justify-center text-[9px] font-mono
+                ${selected ? 'border-amber-300 bg-black/60' : 'border-white/20 bg-black/40'}`}>
+                {e ? (
+                  <>
+                    <div className="w-5 h-5 rounded-sm border border-white/25" style={{ background: swatch ?? '#6b7280' }} />
+                    <div className="text-white/80 mt-0.5">{e.count}</div>
+                  </>
+                ) : <span className="text-white/25">{i + 1}</span>}
+              </div>
+            )
+          })}
+          <ToolArc activeTool={activeTool} tools={tools} skills={skills} />
         </div>
       </div>}
       {/* The one piece of state the dimmed row cannot show by itself. */}
@@ -508,13 +527,46 @@ function Hud({ stats, pos, look, hotbar, sel, tier, build, pieceIdx, rot, inv, s
 }
 
 /**
- * A single gauge: family label, skill level, equipped-tier dots, XP bar. Read-only — nothing here
- * is clickable or selectable, which is the point (see the TOOL GAUGES comment at the call site).
- * Compact by design (~64-72px, shrinkable to ~52px) so four of them dock beside the hotbar without
- * blowing out a phone screen.
+ * The tool arc — four round sockets curving up-right off the hotbar's right end (Alex's whiteboard,
+ * 2026-08-07; replaces the rectangular `ToolGauge` cards shipped hours earlier and rejected as
+ * "three steps backwards"). Zero-size and `absolute` so it never affects the hotbar's own layout;
+ * `left-full` anchors it to the `relative` hotbar wrapper's right edge regardless of bar width.
+ *
+ * The radius is a CSS custom property (`--tool-arc-r`, `clamp()`) rather than a JS media-query
+ * state, so it shrinks continuously on narrow screens with no resize listener — `ToolSocket` reads
+ * it back through `calc(var(--tool-arc-r) * <cos|sin>)`, where cos/sin are real `Math` output baked
+ * in at render, not hand-eyeballed numbers.
  */
-function ToolGauge({ family, active, tools, skills }: {
+function ToolArc({ activeTool, tools, skills }: {
+  activeTool: string | null
+  tools: React.RefObject<EquippedTools>
+  skills: React.RefObject<SkillSet>
+}) {
+  // Degrees off the horizontal, first socket near-level with the bar, last near-vertical — an
+  // eyeballed quarter-arc match to the board, not canon geometry.
+  const ANGLES = [8, 32, 56, 78]
+  return (
+    <div
+      className="absolute left-full bottom-0 ml-3 h-0 w-0 pointer-events-none"
+      style={{ '--tool-arc-r': 'clamp(48px, 13vw, 84px)' } as React.CSSProperties}
+    >
+      {TOOL_FAMILIES.map((family, i) => (
+        <ToolSocket key={family} family={family} angleDeg={ANGLES[i]}
+          active={activeTool === family} tools={tools} skills={skills} />
+      ))}
+    </div>
+  )
+}
+
+/**
+ * A single round socket: family glyph, XP progress ring around the rim, level badge, 1-3 tier dots.
+ * Read-only — nothing here is clickable, which is the point (see the TOOL ARC comment). Sized
+ * 44px, shrinking to 38px under 640px (`max-[639px]:`) alongside the arc's own radius shrink, so
+ * the whole cluster stays on-screen on a phone instead of clipping off the right edge.
+ */
+function ToolSocket({ family, angleDeg, active, tools, skills }: {
   family: 'forestry' | 'prospecting' | 'rinning' | 'farming'
+  angleDeg: number
   active: boolean
   tools: React.RefObject<EquippedTools>
   skills: React.RefObject<SkillSet>
@@ -524,29 +576,84 @@ function ToolGauge({ family, active, tools, skills }: {
   const tier = def?.tier ?? 0
   const basic = def?.basic ?? false
   const sk = skills.current![family]
-  const xpPct = Math.min(100, (sk.xp / Math.max(1, xpForSkillLevel(sk.level))) * 100)
+  const xpPct = Math.min(1, sk.xp / Math.max(1, xpForSkillLevel(sk.level)))
+  const rad = (angleDeg * Math.PI) / 180
+  const cos = Math.cos(rad).toFixed(4)
+  const sin = Math.sin(rad).toFixed(4)
+  const RING_R = 21
+  const RING_C = 2 * Math.PI * RING_R
   return (
-    <div className={`min-w-[52px] w-16 flex-shrink rounded border px-1 py-1 flex flex-col items-center justify-center transition-opacity
-      ${active ? 'opacity-100 border-amber-300/70 bg-black/60 shadow-[0_0_6px_2px_rgba(252,211,77,0.35)]' : 'opacity-40 border-white/20 bg-black/40'}`}>
-      <div className="text-[9px] tracking-[0.15em] uppercase text-white/70">{family.slice(0, 4)}</div>
-      <div className="text-[15px] font-mono tabular-nums leading-none mt-0.5 text-white/90">{sk.level}</div>
-      {/* Equipped tier as 1-3 filled dots; the never-breaking basic tool reads as ONE HOLLOW dot —
-          it works, but it is not an upgrade. No tool at all (farming has no basic) is all hollow. */}
-      <div className="flex gap-0.5 justify-center mt-0.5">
-        {[0, 1, 2].map((i) => {
-          const filled = !basic && i < tier
-          const hollowBasic = basic && i === 0
-          return (
-            <span key={i} className={`w-1.5 h-1.5 rounded-full border ${
-              filled ? 'bg-amber-200 border-amber-200' : hollowBasic ? 'border-white/60' : 'border-white/15'}`} />
-          )
-        })}
-      </div>
-      <div className="w-full h-[3px] bg-black/55 rounded overflow-hidden mt-1">
-        <div className="h-full bg-emerald-300" style={{ width: `${xpPct}%` }} />
+    <div
+      className="absolute w-11 h-11 max-[639px]:w-[38px] max-[639px]:h-[38px] transition-opacity"
+      style={{
+        left: `calc(var(--tool-arc-r) * ${cos})`,
+        bottom: `calc(var(--tool-arc-r) * ${sin})`,
+        opacity: active ? 1 : 0.4,
+      }}
+    >
+      <div className={`relative w-full h-full rounded-full border
+        ${active ? 'border-amber-300/70 bg-black/60 shadow-[0_0_8px_2px_rgba(252,211,77,0.4)]' : 'border-white/20 bg-black/45'}`}>
+        {/* XP ring, rotated so 0% starts at 12 o'clock */}
+        <svg viewBox="0 0 48 48" className="absolute inset-0 w-full h-full -rotate-90">
+          <circle cx="24" cy="24" r={RING_R} fill="none" stroke="rgba(255,255,255,0.12)" strokeWidth="2" />
+          <circle cx="24" cy="24" r={RING_R} fill="none" stroke={active ? '#6ee7b7' : 'rgba(110,231,183,0.55)'}
+            strokeWidth="2" strokeLinecap="round" strokeDasharray={RING_C}
+            strokeDashoffset={RING_C * (1 - xpPct)} />
+        </svg>
+        {/* Family glyph — placeholder line art, Alex repaints later. */}
+        <svg viewBox="0 0 24 24" className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-[60%] w-4 h-4 text-white/85"
+          fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+          <ToolGlyph family={family} />
+        </svg>
+        {/* Equipped tier as 1-3 filled dots; the never-breaking basic tool reads as ONE HOLLOW dot —
+            it works, but it is not an upgrade. No tool at all (farming has no basic) is all hollow. */}
+        <div className="absolute bottom-1 left-1/2 -translate-x-1/2 flex gap-0.5">
+          {[0, 1, 2].map((i) => {
+            const filled = !basic && i < tier
+            const hollowBasic = basic && i === 0
+            return (
+              <span key={i} className={`w-1 h-1 rounded-full border ${
+                filled ? 'bg-amber-200 border-amber-200' : hollowBasic ? 'border-white/60' : 'border-white/15'}`} />
+            )
+          })}
+        </div>
+        {/* Level badge, tabular-nums so it doesn't jitter as it climbs. */}
+        <div className="absolute -bottom-1 -right-1 min-w-[15px] h-[15px] px-[3px] rounded-full bg-black/80 border border-white/25
+          text-[9px] leading-[14px] text-center text-white/90 font-mono tabular-nums">
+          {sk.level}
+        </div>
       </div>
     </div>
   )
+}
+
+/** Placeholder line-glyph per family — canon mapping (blades→forestry, spikes→prospecting,
+ *  rinsticks→rinning, spades→farming) from `engine/tools.ts`, drawn as a simple angled stroke. */
+function ToolGlyph({ family }: { family: 'forestry' | 'prospecting' | 'rinning' | 'farming' }) {
+  switch (family) {
+    case 'forestry': // blade — angled machete stroke
+      return <>
+        <path d="M5 19 L16 8" />
+        <path d="M16 8 L20 4" />
+        <path d="M5 19 L8.5 19" />
+      </>
+    case 'prospecting': // spike — pick shape
+      return <>
+        <path d="M12 3c-3.3 0-5.5 2.2-5.5 5 0 2 1.6 3.3 3 3.3" />
+        <path d="M9.5 11.3 15 20" />
+      </>
+    case 'rinning': // rinstick — rod + line
+      return <>
+        <path d="M6 21 14 4" />
+        <path d="M14 4c3.5 2 3.8 7.5 1.6 12" />
+        <circle cx="15.6" cy="16" r="1" fill="currentColor" stroke="none" />
+      </>
+    case 'farming': // spade — handle + shovel
+      return <>
+        <path d="M12 3v11" />
+        <path d="M8 14h8l-2 7h-4l-2-7Z" />
+      </>
+  }
 }
 
 const SOLID_EXCEPT = new Set<number>([AIR, MAT.WATER])
