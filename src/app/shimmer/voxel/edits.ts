@@ -44,7 +44,9 @@ import { Column, SECTION } from './column'
 // centres can now sit in the water or above the carved bed.
 // v8: open country (2026-08-07 late) — ridge wavelength 150→340, relief gathered into ranges;
 // most hills moved, so v7 edits on any slope are likely mid-air or buried now.
-export const GENERATOR_VERSION = 8
+// v9: un-slice (2026-08-07 late) — base-field warps 4/3 → 1.2; coastlines and uplands moved.
+// v8 shipped and was WALKED before this landed, so it gets its own number.
+export const GENERATOR_VERSION = 9
 
 /**
  * One column's edits: packed local index → material.
