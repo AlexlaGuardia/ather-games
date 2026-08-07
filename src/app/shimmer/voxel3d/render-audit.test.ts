@@ -128,8 +128,15 @@ for (const file of files) {
   ok(/material\.dispose\(\)/.test(vw), 'the shared chunk material is released on unmount')
   ok(/webglcontextlost/.test(vw), 'a lost WebGL context is surfaced rather than left as a black screen')
   const bridge = readFileSync(join(DIR, 'mesh-bridge.ts'), 'utf-8')
-  ok((bridge.match(/new THREE\.MeshLambertMaterial/g) ?? []).length === 1,
-     'the chunk material is constructed in exactly one place')
+  // Two constructions since tier-1 water: the opaque chunk material and the ONE shared water
+  // material (the world's single transparent pass). Both live in exported factories; the checks
+  // below pin that VoxelWorld holds each as a shared instance (useMemo) and releases both. What
+  // this bound still catches is the real killer: a third construction sneaking in per-chunk or
+  // per-object.
+  ok((bridge.match(/new THREE\.MeshLambertMaterial/g) ?? []).length === 2,
+     'materials are constructed in exactly two places: the chunk pass and the water pass')
+  ok(/const waterMaterial = useMemo\(/.test(vw), 'the water material is a shared instance, not per-mesh')
+  ok(/waterMaterial\.dispose\(\)/.test(vw), 'the shared water material is released on unmount')
 }
 
 console.log(`\nrender-path audit: ${pass} checks passed, ${fails.length} failed`)

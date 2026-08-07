@@ -87,6 +87,51 @@ export const attrBuffers = (a: MeshAttrs): ArrayBuffer[] =>
    a.layers.buffer, a.indices.buffer] as ArrayBuffer[]
 
 /**
+ * ── ★ WATER IS ITS OWN DRAW, AND THIS IS WHERE IT SPLITS (2026-08-07 late) ─────────────────────
+ * Transparent water cannot live in the section's opaque geometry: triangles inside one draw render
+ * in INDEX order, so a water quad that happens to sit before its own river bed in the buffer
+ * blends against the sky, writes depth, and the bed behind it is discarded — see-through water
+ * that shows nothing is under it. The fix is the standard one: opaque pass first, water after, so
+ * water always blends over a finished scene. That means water quads leave this geometry entirely
+ * and come back as a second mesh with the shared water material (ONE extra program total — the
+ * per-chunk-material rule bans a program per chunk, not a second pass).
+ *
+ * Partition is per QUAD (4 vertices, 6 indices, one material) and reindexes both halves densely.
+ * Either half can be null — most sections have no water at all, and a null skips the mesh, the
+ * geometry, and the draw, so dry country pays nothing.
+ */
+export function buildAttrsSplit(mesh: MeshResult, isWater: (m: number) => boolean):
+  { solid: MeshAttrs | null; water: MeshAttrs | null } {
+  let waterQuads = 0
+  for (let q = 0; q < mesh.quads; q++) if (isWater(mesh.materials[q * 4])) waterQuads++
+  if (waterQuads === 0) return { solid: buildAttrs(mesh), water: null }
+
+  const pick = (want: boolean, quads: number): MeshAttrs => {
+    const positions = new Float32Array(quads * 12)
+    const normals = new Float32Array(quads * 12)
+    const materials = new Uint16Array(quads * 4)
+    const indices = new Uint32Array(quads * 6)
+    let outQ = 0
+    for (let q = 0; q < mesh.quads; q++) {
+      if (isWater(mesh.materials[q * 4]) !== want) continue
+      positions.set(mesh.positions.subarray(q * 12, q * 12 + 12), outQ * 12)
+      normals.set(mesh.normals.subarray(q * 12, q * 12 + 12), outQ * 12)
+      materials.set(mesh.materials.subarray(q * 4, q * 4 + 4), outQ * 4)
+      // Remap the quad's OWN indices rather than assuming a triangulation: winding is what makes a
+      // face face outward, and the mesher owns that decision, not this split.
+      for (let i = 0; i < 6; i++) indices[outQ * 6 + i] = mesh.indices[q * 6 + i] - q * 4 + outQ * 4
+      outQ++
+    }
+    return buildAttrs({ positions, normals, materials, indices, quads, faces: quads })
+  }
+  const solidQuads = mesh.quads - waterQuads
+  return {
+    solid: solidQuads > 0 ? pick(false, solidQuads) : null,
+    water: pick(true, waterQuads),
+  }
+}
+
+/**
  * Expand a core mesh into render-ready attributes. Copies positions/normals/indices out of the
  * mesher's reusable scratch — they are views that the next section would overwrite, so a copy here
  * is not waste, it is the thing that makes the result safe to hand across a thread boundary.

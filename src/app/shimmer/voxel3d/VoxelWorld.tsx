@@ -35,11 +35,12 @@ import { editIndex, recordEdit, applyEdits, packEdits, unpackEdits, isStale, typ
 import { loadColumn, saveColumn, editedColumnCount } from './save'
 import { PIECES, STRUCTURE, pieceDef, cellsOf, canPlace, canAfford, placementAt, type Placement, type Rotation } from '../voxel/pieces'
 import { createPieceRenderer } from './piece-mesh'
-import { toGeometry, createVoxelMaterial, applySettings } from './mesh-bridge'
+import { toGeometry, createVoxelMaterial, createWaterMaterial, applySettings } from './mesh-bridge'
+import { layerOf } from './tex/tiles'
 import { makeTileArray } from './tex/atlas'
 import { createTexturedVoxelMaterial } from './tex/atlas'
 import { loadSettings, saveSettings, withStyle, type VoxelSettings, type RenderStyle } from './settings'
-import { buildAttrs, MATERIAL_COLOR } from './attrs'
+import { buildAttrsSplit, MATERIAL_COLOR } from './attrs'
 import { createInventory, addItems, removeItems, countItem, type Inventory } from '../engine/inventory'
 // ★ PORT STEP 1 — the zero-coupling systems, wired unchanged.
 // PLAY3D-MIGRATION measured 16 of 23 engine systems as having NO reference to zones, tiles or world
@@ -552,6 +553,8 @@ function World({ inv, toolTier, toolSkill, selItem, heldTool, weaponDrawn, weapo
   const flatMaterial = useMemo(() => createVoxelMaterial(), [])
   const textured = useMemo(() => (tiles ? createTexturedVoxelMaterial(tiles) : null), [tiles])
   const material = textured?.material ?? flatMaterial
+  // The world's ONE transparent pass — see mesh-bridge.ts. Shared instance, same rule as above.
+  const waterMaterial = useMemo(() => createWaterMaterial(tiles, layerOf(MAT.WATER, 0)), [tiles])
 
   // ★ A VALUE WRITE, NOT A REBUILD. Both shading paths live in the one compiled program and are
   // selected by a uniform, so changing style costs nothing and creates no second shader program.
@@ -689,6 +692,7 @@ function World({ inv, toolTier, toolSkill, selItem, heldTool, weaponDrawn, weapo
     pieces.dispose()
     flatMaterial.dispose()
     textured?.material.dispose()
+    waterMaterial.dispose()
     tiles?.texture.dispose()
   }, [dropGeo, highlightGeo, flatMaterial, textured, tiles, pieces])
 
@@ -748,12 +752,23 @@ function World({ inv, toolTier, toolSkill, selItem, heldTool, weaponDrawn, weapo
       negZ: cols.current.get(key(cx, cz - 1)) ?? null,
       posZ: cols.current.get(key(cx, cz + 1)) ?? null,
     }, scratch)) {
-      const mesh = new THREE.Mesh(toGeometry(buildAttrs(sm.mesh)), material)
-      mesh.position.set(sm.wx, sm.wy, sm.wz)
-      g.add(mesh)
-      drawn.current.set(`${k}:${sm.index}`, mesh)
+      // Water splits into its own mesh so it can blend AFTER the opaque pass — see attrs.ts.
+      const { solid, water } = buildAttrsSplit(sm.mesh, m => m === MAT.WATER)
+      if (solid) {
+        const mesh = new THREE.Mesh(toGeometry(solid), material)
+        mesh.position.set(sm.wx, sm.wy, sm.wz)
+        g.add(mesh)
+        drawn.current.set(`${k}:${sm.index}`, mesh)
+      }
+      if (water) {
+        const mesh = new THREE.Mesh(toGeometry(water), waterMaterial)
+        mesh.position.set(sm.wx, sm.wy, sm.wz)
+        mesh.renderOrder = 1
+        g.add(mesh)
+        drawn.current.set(`${k}:${sm.index}:w`, mesh)
+      }
     }
-  }, [material, scratch])
+  }, [material, waterMaterial, scratch])
 
   /**
    * ── ★ STREAMING MESHES THROUGH A BUDGETED QUEUE, NOT SYNCHRONOUSLY (2026-08-07) ────────────
@@ -892,8 +907,9 @@ function World({ inv, toolTier, toolSkill, selItem, heldTool, weaponDrawn, weapo
     onAmmo(ammo.current)
   }, [camera, tracerGeo, tracerMat, onAmmo])
 
-  useFrame((_, dtRaw) => {
+  useFrame((state, dtRaw) => {
     const dt = Math.min(dtRaw, 0.05)
+    waterMaterial.tick(state.clock.elapsedTime)
     const g = group.current
     if (!g) return
     const p = camera.position
@@ -1303,7 +1319,9 @@ function World({ inv, toolTier, toolSkill, selItem, heldTool, weaponDrawn, weapo
       const keep = new Set<string>()
       for (let dz = -RADIUS; dz <= RADIUS; dz++) for (let dx = -RADIUS; dx <= RADIUS; dx++) keep.add(key(cx + dx, cz + dz))
       for (const [mk, m] of drawn.current) {
-        if (keep.has(mk.slice(0, mk.lastIndexOf(':')))) continue
+        // FIRST ':', not last — water meshes key as `cx,cz:sec:w`, and lastIndexOf would strip
+        // only the `:w`, miss the keep-set, and silently evict every water mesh each sweep.
+        if (keep.has(mk.slice(0, mk.indexOf(':')))) continue
         g.remove(m); m.geometry.dispose(); drawn.current.delete(mk)
       }
       for (const kk of [...cols.current.keys()]) if (!keep.has(kk)) cols.current.delete(kk)

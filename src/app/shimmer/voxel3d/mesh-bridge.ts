@@ -116,6 +116,77 @@ export function createVoxelMaterial(): VoxelMaterial {
   return mat
 }
 
+/**
+ * ── ★ THE WATER MATERIAL — one shared instance, the world's ONE transparent pass ───────────────
+ * Water quads are split out of the section geometry (attrs.ts buildAttrsSplit) and drawn here,
+ * after the opaque pass, so blending always lands on a finished scene. Tier-1 water (Alex,
+ * 2026-08-07: "it looks like it's just a block"): the surface is RECESSED ~a tenth of a block so
+ * it sits IN its channel instead of flush like pavement, it ripples (vertex sine, two phases so
+ * it never reads as a marching pattern), and it is translucent so the bed shows through the
+ * shallows. No simulation — nothing updates when blocks change; that is the tier-2 feature and
+ * it is parked on GBOARD until mining near water matters.
+ *
+ * depthWrite OFF (standard for one transparent layer: depth TEST still hides water behind hills,
+ * and water-over-water double-blend is invisible at our depths). depthTest stays ON. The tile
+ * texture is sampled with a slowly SCROLLED uv, which is what makes still water read as moving
+ * without a single geometry update.
+ */
+export interface WaterMaterial extends THREE.Material {
+  /** Call once per frame with the clock — drives ripple and scroll. Safe before compile. */
+  tick: (seconds: number) => void
+}
+
+export function createWaterMaterial(tiles: { texture: THREE.DataArrayTexture } | null, waterLayer: number): WaterMaterial {
+  const mat = new THREE.MeshLambertMaterial({
+    vertexColors: !tiles, transparent: true, opacity: 0.78, depthWrite: false,
+  }) as unknown as WaterMaterial
+  let live: { uTime: { value: number } } | null = null
+  let now = 0
+  mat.tick = (s: number) => { now = s; if (live) live.uTime.value = s }
+
+  mat.onBeforeCompile = (shader) => {
+    shader.uniforms.uTime = { value: now }
+    if (tiles) shader.uniforms.uTiles = { value: tiles.texture }
+    live = shader.uniforms as { uTime: { value: number } }
+
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>',
+        '#include <common>\nuniform float uTime;\nvarying vec3 vVoxPos;\nvarying vec3 vVoxNormal;')
+      .replace('#include <begin_vertex>',
+        `#include <begin_vertex>
+vVoxPos = position;
+vVoxNormal = normal;
+if (normal.y > 0.5) {
+  vec3 wp = (modelMatrix * vec4(position, 1.0)).xyz;
+  // Recess + ripple, top faces only. Two phases at unrelated wavelengths so the surface never
+  // reads as a marching grid; amplitude is small because the tide is a read, not a mechanic.
+  transformed.y -= 0.1;
+  transformed.y += sin(wp.x * 0.9 + uTime * 1.4) * cos(wp.z * 0.7 + uTime * 1.1) * 0.05;
+}`)
+
+    if (tiles) {
+      shader.fragmentShader = shader.fragmentShader
+        .replace('#include <common>',
+          '#include <common>\nuniform sampler2DArray uTiles;\nuniform float uTime;\n'
+          + 'varying vec3 vVoxPos;\nvarying vec3 vVoxNormal;')
+        .replace('#include <color_fragment>',
+          `#include <color_fragment>
+{
+  vec3 an = abs(vVoxNormal);
+  vec2 tileUv = an.y > 0.5
+    ? vVoxPos.xz
+    : (an.x > 0.5 ? vec2(vVoxPos.z, -vVoxPos.y) : vec2(vVoxPos.x, -vVoxPos.y));
+  // The scroll IS the flow. Two samples drifting on unrelated headings, blended — one scrolling
+  // texture reads as a conveyor belt; two read as water.
+  vec4 a = texture(uTiles, vec3(tileUv + vec2(uTime * 0.021, uTime * 0.013), ${waterLayer.toFixed(1)}));
+  vec4 b = texture(uTiles, vec3(tileUv * 1.31 + vec2(-uTime * 0.017, uTime * 0.024), ${waterLayer.toFixed(1)}));
+  diffuseColor.rgb *= mix(a.rgb, b.rgb, 0.5) * 1.25;
+}`)
+    }
+  }
+  return mat
+}
+
 /** Push settings into the shared material. A value write — no recompile, no new program. */
 export function applySettings(mat: VoxelMaterial, s: VoxelSettings): void {
   if (!mat.uniforms) return
