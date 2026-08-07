@@ -3774,6 +3774,10 @@ export default function Shimmer3D() {
     if (bornCheckedRef.current) return
     bornCheckedRef.current = true
     try {
+      // ⚠ A world reset (ather-epoch.ts) has ALREADY run by the time this mounts — page.tsx does it
+      // in the boot gate, before this component exists. It cannot be done here: this component reads
+      // the save during render, so a reset at this point clears storage that the game is already
+      // holding in memory, and the next autosave restores it. Read the keys; do not reset them.
       const hasSave = !!localStorage.getItem('ather:save:shimmer')
       const hasRune = !!localStorage.getItem('ather:shimmer:birthRune')
       const pending = localStorage.getItem('ather:shimmer:birthPending') === '1'
@@ -3783,6 +3787,9 @@ export default function Shimmer3D() {
       // old check skipped birth forever ("it did it for me"). The birthPending latch fixes that —
       // set when birth opens, cleared only on choose (see onChoose) — so re-entry re-opens birth
       // until a rune is picked. A legacy returning save (has save, no rune, no latch) is untouched.
+      // A world reset arms `birthPending` directly (ather-epoch.ts), so the `pending` arm is what
+      // carries a reset keeper into the ritual — save-absence cannot, because the starter kit may
+      // already have persisted a save by the time this runs.
       if (!hasRune && (!hasSave || pending)) {
         localStorage.setItem('ather:shimmer:birthPending', '1')
         setBirthCancelable(false)
