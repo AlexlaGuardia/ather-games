@@ -76,6 +76,24 @@ const settle = (s: ReturnType<typeof createLoco>, solid: any, frames = 30) => {
   ok(Math.abs(s.py - 14) < 0.05, `★ four presses climb four stairs (feet ${s.py.toFixed(2)})`)
 }
 
+// ── ★ the combo: HELD jump chains vault into vault up a tight staircase ──────────────────────
+{
+  // 1-block steps every single column — too tight to rebuild a run between presses, exactly the
+  // shape the chain exists for. One held press must flow all the way up.
+  const stair = (x: number, y: number, _z: number) => x >= 3 && y < 10 + Math.min(4, x - 2)
+  const solid = world(stair)
+  const s = createLoco(0.5, 10, 0.5); settle(s, solid)
+  for (let i = 0; i < 60; i++) tickLocomotion(s, input({ mvX: 1 }), solid)            // run to the face
+  for (let i = 0; i < 150; i++) tickLocomotion(s, input({ mvX: 1, jumpKey: true }), solid)  // HOLD
+  ok(Math.abs(s.py - 14) < 0.05, `★ one held jump chains up all four stairs (feet ${s.py.toFixed(2)})`)
+  // ...and a TAP still climbs exactly one
+  const s2 = createLoco(0.5, 10, 0.5); settle(s2, solid)
+  for (let i = 0; i < 60; i++) tickLocomotion(s2, input({ mvX: 1 }), solid)
+  tickLocomotion(s2, input({ mvX: 1, jumpKey: true }), solid)                         // tap
+  for (let i = 0; i < 12; i++) tickLocomotion(s2, input({ mvX: 0 }), solid)           // release both
+  ok(Math.abs(s2.py - 11) < 0.05, `a tap climbs exactly one (feet ${s2.py.toFixed(2)})`)
+}
+
 // ── ★ the vault is an interaction: it needs the ledge FACED, not just leaned into ────────────
 {
   const solid = world((x, y) => x >= 3 && y < 11)

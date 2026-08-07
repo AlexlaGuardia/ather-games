@@ -359,6 +359,21 @@ export function tickLocomotion(s: LocoState, input: LocoInput, solid: Solid): vo
       if (s.vaulting) {
         // A vault is part of the RUN — the speed you brought to the step leaves with you.
         s.hvx = s.carryVX; s.hvz = s.carryVZ; s.vaulting = false
+        // ★ THE COMBO (Alex, 07-08-07): jump still HELD + another faced single directly ahead =
+        // chain straight into the next vault, so a staircase is one held flow instead of a press
+        // per block. Tap still climbs exactly one; releasing the key ends the chain wherever it
+        // is. Terminates by construction — every link needs its own 1-block step to exist.
+        if (jumpKey && hasInput && (input.fwdX * cardX + input.fwdZ * cardZ) > VAULT_FACING) {
+          const next = vaultTarget(solid, s.px, s.pz, s.py, cardX, cardZ)
+          if (next) {
+            s.mFromX = s.px; s.mFromY = s.py; s.mFromZ = s.pz
+            s.mToX = next.x; s.mToY = next.y; s.mToZ = next.z
+            s.mantleT = VAULT_TIME; s.mantleDur = VAULT_TIME; s.vaulting = true
+            const carry = Math.max(Math.hypot(s.carryVX, s.carryVZ), RUN_SPEED * 0.6)
+            s.carryVX = mvX * carry; s.carryVZ = mvZ * carry
+            s.hangCX = cardX; s.hangCZ = cardZ
+          }
+        }
       } else {
         const settle = RUN_SPEED * 0.4
         s.hvx = s.hangCX * settle; s.hvz = s.hangCZ * settle
