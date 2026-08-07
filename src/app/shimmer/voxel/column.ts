@@ -31,6 +31,7 @@ import { materialAt, type DepthConfig, DEFAULT_DEPTH } from './depth'
 import { carveStack, type CarveConfig, DEFAULT_CARVE } from './carve'
 import { placeOre, type OreBatch, ORE_BATCHES } from './ore'
 import { plantTrees, type TreeConfig, DEFAULT_TREES } from './trees'
+import { placeSites } from './sites'
 import { greedyMesh, createMeshScratch, type MeshScratch, type MeshResult } from './greedy'
 
 export const SECTION = 16
@@ -151,6 +152,8 @@ export function generateColumn(
     // trunk is never planted on a block that later becomes a cave mouth.
     plantTrees(col.sections, wx, 0, wz, SECTION, seed, surfaceAt,
       (x, z, h) => materialAt(x, h, z, seed, h, cfg.depth, cfg.height), cfg.trees)
+    // Sites go LAST: a ruin wall punches through whatever the fringe planted, never the reverse.
+    placeSites(col.sections, wx, 0, wz, SECTION, seed)
     col.stage = Stage.Vegetation
   }
 

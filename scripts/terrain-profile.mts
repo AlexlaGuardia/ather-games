@@ -15,6 +15,7 @@ import sharp from 'sharp'
 import { columnHeight } from '../src/app/shimmer/voxel/height.ts'
 import { biomeAt, greySurfaceAt, forestness, type BiomeId } from '../src/app/shimmer/voxel/biome.ts'
 import { DEFAULT_DEPTH } from '../src/app/shimmer/voxel/depth.ts'
+import { DEFAULT_SITES, siteAt } from '../src/app/shimmer/voxel/sites.ts'
 
 const arg = (name: string, dflt: number): number => {
   const i = process.argv.indexOf(`--${name}`)
@@ -102,9 +103,29 @@ for (let iz = 0; iz < px; iz++) {
 }
 for (let iz = 0; iz < H; iz++) for (let d = 0; d < 8; d++) put(px + d, iz, 20, 20, 24)
 
+// ── structure sites, marked on BOTH panels so pad-vs-relief can be judged at a glance ────────────
+let siteCount = 0
+{
+  const cellSpan = DEFAULT_SITES.spacing * 16
+  const c0 = Math.floor(-SIZE / 2 / cellSpan) - 1, c1 = Math.ceil(SIZE / 2 / cellSpan) + 1
+  for (let cz = c0; cz <= c1; cz++) for (let cx = c0; cx <= c1; cx++) {
+    const s = siteAt(SEED, cx, cz)
+    if (!s) continue
+    const ix = Math.round((s.x + SIZE / 2) / STRIDE), iz = Math.round((s.z + SIZE / 2) / STRIDE)
+    if (ix < 3 || ix >= px - 3 || iz < 3 || iz >= px - 3) continue
+    siteCount++
+    for (let d = -3; d <= 3; d++) {                       // a diamond reads at map scale; a dot vanishes
+      for (const [mx, mz] of [[d, 3 - Math.abs(d)], [d, Math.abs(d) - 3]]) {
+        put(ix + mx, iz + mz, 255, 40, 40)
+        put(px + 8 + ix + mx, iz + mz, 255, 40, 40)
+      }
+    }
+  }
+}
+
 await sharp(Buffer.from(img), { raw: { width: W, height: H, channels: 3 } }).png().toFile(OUT)
 
 const total = px * px
-console.log(`${OUT} — ${SIZE}×${SIZE} world units at stride ${STRIDE}, seed ${SEED}, height ${min}..${max}`)
+console.log(`${OUT} — ${SIZE}×${SIZE} world units at stride ${STRIDE}, seed ${SEED}, height ${min}..${max}, ${siteCount} sites in frame`)
 for (const [b, n] of [...counts.entries()].sort((a, c) => c[1] - a[1]))
   console.log(`  ${b.padEnd(10)} ${((n / total) * 100).toFixed(1)}%`)

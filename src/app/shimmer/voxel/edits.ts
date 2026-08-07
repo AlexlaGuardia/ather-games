@@ -38,7 +38,9 @@ import { Column, SECTION } from './column'
 // edit's recorded "generated" baseline can disagree with what now generates there.
 // v5: the plains pass (2026-08-07 eve) — a flatness field benches the base and kills ridges over
 // ~a third of the country, so v4 edits can sit metres above or below the new ground.
-export const GENERATOR_VERSION = 5
+// v6: ruin sites (2026-08-07 late) — structures generate on greyfield pads; a v5 edit could sit
+// inside ground a ruin now occupies.
+export const GENERATOR_VERSION = 6
 
 /**
  * One column's edits: packed local index → material.
