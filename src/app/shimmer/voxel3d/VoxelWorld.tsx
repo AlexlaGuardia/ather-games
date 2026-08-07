@@ -68,7 +68,10 @@ import { WEAPONS, weaponAt, ADS_FOV, spreadDeg, bloomAfterShot, bloomAfterRest,
 // unchanged; the rig in day-night.tsx turns it into sky. This was the last shipped system reading
 // as permanent noon: the light field's `dayFactor` finally has a day to factor.
 import { VoxelDayNight } from './day-night'
-import { dayProgress, getPhase, getDisplayTime, isTimePinned } from '../engine/day-cycle'
+import { dayProgress, getPhase, getDisplayTime, isTimePinned, daylight } from '../engine/day-cycle'
+import { hollowEligible, hollowStep, segmentDist, type HollowState,
+         HOLLOW_HP, HOLLOW_CAP, HOLLOW_HOVER, HOLLOW_RADIUS,
+         SPAWN_NEAR, SPAWN_FAR, DESPAWN_DIST, NIGHT_BELOW, GUTTER_AT } from './hollows'
 // ── PORT STEP 5 — the movement (2026-08-07, Alex: "slide jump became a dash, climbing and wall
 // jumping are non-existent"). play3d's Apex-lineage locomotion, extracted pure and re-grounded on
 // voxel collision. See locomotion.ts for provenance; its test file is the feel contract.
@@ -693,6 +696,8 @@ function World({ inv, toolTier, toolSkill, selItem, heldTool, weaponDrawn, weapo
     flatMaterial.dispose()
     textured?.material.dispose()
     waterMaterial.dispose()
+    hollowGeo.dispose()
+    hollowMat.dispose()
     tiles?.texture.dispose()
   }, [dropGeo, highlightGeo, flatMaterial, textured, tiles, pieces])
 
@@ -868,6 +873,17 @@ function World({ inv, toolTier, toolSkill, selItem, heldTool, weaponDrawn, weapo
   const tracerGeo = useMemo(() => new THREE.SphereGeometry(1, 6, 4), [])
   const tracerMat = useMemo(() => new THREE.MeshBasicMaterial({ color: 0xffd88a, toneMapped: false }), [])
   const impacts = useRef<{ mesh: THREE.Mesh; life: number }[]>([])
+
+  // ── the Hollows (blockout — see hollows.ts for the canon) ─────────────────────────────────────
+  // ONE shared geometry and material for every Hollow that will ever body (render-audit rule).
+  // Guttering is expressed through per-mesh SCALE and a sink, never per-mesh material state.
+  const hollows = useRef<{ st: HollowState; mesh: THREE.Mesh }[]>([])
+  const hollowClock = useRef(0)
+  const hollowGeo = useMemo(() => new THREE.IcosahedronGeometry(0.55, 1), [])
+  const hollowMat = useMemo(() => new THREE.MeshLambertMaterial({
+    // A smear of grey that holds a silhouette: darker than any ground grey, never a face.
+    color: 0x4a4d47, transparent: true, opacity: 0.85,
+  }), [])
   const lastShot = useRef(0)
   const bloom = useRef(0)
   const semiLatch = useRef(false)   // semi-auto: one round per PRESS, not per frame held
@@ -960,6 +976,29 @@ function World({ inv, toolTier, toolSkill, selItem, heldTool, weaponDrawn, weapo
       for (let i = shots.current.length - 1; i >= 0; i--) {
         const sh = shots.current[i]
         const step = sh.speed * dt
+        // ── Hollows absorb rounds FIRST: a Hollow between the muzzle and a wall takes the hit.
+        // Same segment the block raycast walks, so nothing can tunnel through a body either.
+        let absorbed = false
+        for (const hw of hollows.current) {
+          const st = hw.st
+          if (st.hp <= 0 || st.gutter >= 1) continue
+          if (segmentDist(sh.x, sh.y, sh.z, sh.dx, sh.dy, sh.dz, step, st.x, st.y, st.z) < HOLLOW_RADIUS) {
+            st.hp -= weaponAt(weaponIdx).damage
+            const m = new THREE.Mesh(tracerGeo, tracerMat)
+            m.scale.setScalar(0.16)
+            m.position.set(st.x, st.y, st.z)
+            g.add(m); impacts.current.push({ mesh: m, life: 0.25 })
+            if (st.hp <= 0) {
+              // Dispersed — frequency returns to a place that had none, and a little of it
+              // condenses. Compacted mana in, mana shard out: the loop closes.
+              drops.current.push(spawnDrop('raw_mana_shard', 1, Math.floor(st.x), Math.floor(st.y), Math.floor(st.z)))
+            }
+            g.remove(sh.mesh); shots.current.splice(i, 1)
+            absorbed = true
+            break
+          }
+        }
+        if (absorbed) continue
         const hit = raycast(sh.x, sh.y, sh.z, sh.dx, sh.dy, sh.dz, step, voxelSolid)
         sh.life -= dt
         if (hit) {
@@ -980,6 +1019,49 @@ function World({ inv, toolTier, toolSkill, selItem, heldTool, weaponDrawn, weapo
         im.life -= dt
         im.mesh.scale.setScalar(0.12 * Math.max(0, im.life / 0.25))
         if (im.life <= 0) { g.remove(im.mesh); impacts.current.splice(i, 1) }
+      }
+    }
+
+    // ── ★ THE NIGHT TIDE'S PAYOFF — Hollows body on drained ground after dark ────────────────
+    // Eligibility is the ruling as code (hollows.ts): drained + dark + dry. Spawn rolls are
+    // paced, capped, and ringed around the player; dawn gutters every bodied Hollow out. The
+    // whole system is spatially opt-in — living country at night stays as cozy as it ever was.
+    {
+      const now = state.clock.elapsedTime
+      const dl = daylight(dayProgress())
+      hollowClock.current -= dt
+      if (dl < NIGHT_BELOW && hollows.current.length < HOLLOW_CAP && hollowClock.current <= 0) {
+        hollowClock.current = 1.6
+        const a = Math.random() * Math.PI * 2
+        const r = SPAWN_NEAR + Math.random() * (SPAWN_FAR - SPAWN_NEAR)
+        const sx = p.x + Math.cos(a) * r, sz = p.z + Math.sin(a) * r
+        const sh = columnHeight(Math.floor(sx), Math.floor(sz), SEED)
+        if (hollowEligible(sx, sz, SEED, dl, sh, DEFAULT_DEPTH.seaLevel)) {
+          const mesh = new THREE.Mesh(hollowGeo, hollowMat)
+          mesh.scale.set(0.01, 0.01, 0.01)          // rises from nothing — the forming IS the tell
+          mesh.position.set(sx, sh + 1 + HOLLOW_HOVER, sz)
+          g.add(mesh)
+          hollows.current.push({
+            st: { x: sx, y: sh + 1 + HOLLOW_HOVER, z: sz, hp: HOLLOW_HP, gutter: 0, phase: Math.random() * 6.28 },
+            mesh,
+          })
+        }
+      }
+      for (let i = hollows.current.length - 1; i >= 0; i--) {
+        const hw = hollows.current[i]
+        const st = hw.st
+        if (dl >= GUTTER_AT || st.hp <= 0) st.gutter = Math.min(1, st.gutter + dt * (st.hp <= 0 ? 2.2 : 0.7))
+        hollowStep(st, dt, p.x, p.z, (x, z) => columnHeight(Math.floor(x), Math.floor(z), SEED), now)
+        const s = Math.max(0.01, (1 - st.gutter))
+        const pulse = 1 + Math.sin(now * 2.3 + st.phase) * 0.07
+        hw.mesh.scale.x += (s * pulse - hw.mesh.scale.x) * Math.min(1, dt * 4)
+        hw.mesh.scale.z += (s * pulse - hw.mesh.scale.z) * Math.min(1, dt * 4)
+        hw.mesh.scale.y += (1.55 * s * (1 + Math.sin(now * 1.9 + st.phase) * 0.05) - hw.mesh.scale.y) * Math.min(1, dt * 4)
+        hw.mesh.position.set(st.x, st.y - st.gutter * 0.9, st.z)
+        const ddx = st.x - p.x, ddz = st.z - p.z
+        if (st.gutter >= 1 || ddx * ddx + ddz * ddz > DESPAWN_DIST * DESPAWN_DIST) {
+          g.remove(hw.mesh); hollows.current.splice(i, 1)
+        }
       }
     }
 
