@@ -67,6 +67,10 @@ import { WEAPONS, weaponAt, ADS_FOV, spreadDeg, bloomAfterShot, bloomAfterRest,
 // as permanent noon: the light field's `dayFactor` finally has a day to factor.
 import { VoxelDayNight } from './day-night'
 import { dayProgress, getPhase, getDisplayTime, isTimePinned } from '../engine/day-cycle'
+// ── PORT STEP 5 — the movement (2026-08-07, Alex: "slide jump became a dash, climbing and wall
+// jumping are non-existent"). play3d's Apex-lineage locomotion, extracted pure and re-grounded on
+// voxel collision. See locomotion.ts for provenance; its test file is the feel contract.
+import { createLoco, tickLocomotion } from './locomotion'
 
 const SEED = 1337
 const H = DEFAULT_COLUMN.worldHeight
@@ -363,7 +367,8 @@ function Hud({ stats, pos, look, hotbar, sel, tier, build, pieceIdx, rot, inv, s
         <div>{pos}</div>
         <Clock />
         <div className="text-white/55">{stats}</div>
-        <div className="mt-1 text-white/45">click to look · WASD · space · shift run · V fly</div>
+        {/* Shift is slide now, not sprint — run is automatic (play3d locomotion, port step 5). */}
+        <div className="mt-1 text-white/45">click to look · WASD · space jump · shift slide · hold space climb · V fly</div>
         {build
           ? <div className="text-amber-200/80">BUILD · RMB place · LMB deconstruct · R rotate · 1-6 piece · Tab exit</div>
           : <div className="text-white/45">hold LMB mine · RMB place · scroll/1-8 slot · F draw · C craft · Tab build</div>}
@@ -605,7 +610,8 @@ function World({ inv, toolTier, toolSkill, selItem, heldTool, weaponDrawn, weapo
   const dirtySaves = useRef(new Set<string>())
   const staleWarned = useRef(false)
   const settled = useRef(false)
-  const vel = useRef(new THREE.Vector3())
+  // The walker. Feet-based; the camera is derived from it every frame (feet + eased eye).
+  const loco = useRef(createLoco(0.5, columnHeight(0, 0, SEED) + 1, 0.5))
   // ★ Scratch vectors, allocated ONCE. Four `new THREE.Vector3()` per frame is 240 objects/sec of
   // pure garbage — not a GPU leak, but exactly the GC pressure the mesher and carver were both
   // rewritten to avoid. Same rule, applied to the frame loop instead of the hot inner loop.
@@ -616,7 +622,6 @@ function World({ inv, toolTier, toolSkill, selItem, heldTool, weaponDrawn, weapo
   const UP = useMemo(() => new THREE.Vector3(0, 1, 0), [])
   const keys = useRef<Record<string, boolean>>({})
   const fly = useRef(false)
-  const onGround = useRef(false)
 
   useEffect(() => {
     // ⚠ FLY MOVED F → V (2026-08-07). F is now draw/stow, matching play3d's holster key so the two
@@ -827,13 +832,10 @@ function World({ inv, toolTier, toolSkill, selItem, heldTool, weaponDrawn, weapo
     if (lz === SECTION - 1) remesh(cx, cz + 1)
   }, [remesh])
 
-  const blocked = useCallback((x: number, y: number, z: number) => {
-    const y0 = Math.floor(y - 1.62), y1 = Math.floor(y - 1.62 + 1.75)
-    for (let vy = y0; vy <= y1; vy++)
-      for (const dx of [-0.3, 0.3]) for (const dz of [-0.3, 0.3])
-        if (isSolid(voxelSolid(Math.floor(x + dx), vy, Math.floor(z + dz)))) return true
-    return false
-  }, [voxelSolid])
+  /** The locomotion core's world probe. Ungenerated space reads as solid via voxelSolid — the
+   *  same stand-on-it-don't-fall-through-it rule the old walker had. */
+  const solidProbe = useCallback((x: number, y: number, z: number) =>
+    isSolid(voxelSolid(x, y, z)), [voxelSolid])
 
   // ── ★ THE FIRING RIG ─────────────────────────────────────────────────────────────────────────
   // Real travelling projectiles, not hitscan. The table already defines projSpeed/projLife per
@@ -1050,9 +1052,10 @@ function World({ inv, toolTier, toolSkill, selItem, heldTool, weaponDrawn, weapo
       else { onPos(p); onStats(`${cols.current.size} columns · generating…`); return }
     }
 
-    // ── movement ─────────────────────────────────────────────────────────────────────────────
+    // ── movement — play3d's locomotion on voxel collision (see locomotion.ts) ────────────────
+    // The camera is DERIVED (feet + eased eye), never the physics primitive: the eye dips through
+    // a slide without the collision box following it into the floor.
     const k = keys.current
-    const speed = (k.ShiftLeft ? 22 : 9) * (fly.current ? 2.2 : 1)
     const aim = vAim.current
     camera.getWorldDirection(aim)
     const fwd = vFwd.current.copy(aim); fwd.y = 0; fwd.normalize()
@@ -1062,24 +1065,35 @@ function World({ inv, toolTier, toolSkill, selItem, heldTool, weaponDrawn, weapo
     if (k.KeyS) wish.sub(fwd)
     if (k.KeyD) wish.add(right)
     if (k.KeyA) wish.sub(right)
-    if (wish.lengthSq() > 0) wish.normalize().multiplyScalar(speed)
+    if (wish.lengthSq() > 0) wish.normalize()
 
+    const lc = loco.current
     if (fly.current) {
+      const speed = (k.ShiftLeft ? 44 : 20)
+      wish.multiplyScalar(speed)
       if (k.Space) wish.y += speed
       if (k.ControlLeft) wish.y -= speed
       p.addScaledVector(wish, dt)
+      // Keep the walker under the camera so dropping out of fly resumes physics where you are.
+      lc.px = p.x; lc.py = p.y - lc.eye; lc.pz = p.z
+      lc.vy = 0; lc.airborne = true; lc.hvx = 0; lc.hvz = 0
     } else {
-      vel.current.x = wish.x; vel.current.z = wish.z
-      vel.current.y -= 28 * dt
-      if (onGround.current && k.Space) vel.current.y = 9.2
-      const nx = p.x + vel.current.x * dt
-      if (!blocked(nx, p.y, p.z)) p.x = nx
-      const nz = p.z + vel.current.z * dt
-      if (!blocked(p.x, p.y, nz)) p.z = nz
-      const ny = p.y + vel.current.y * dt
-      if (!blocked(p.x, ny, p.z)) { p.y = ny; onGround.current = false }
-      else { if (vel.current.y < 0) onGround.current = true; vel.current.y = 0 }
-      if (p.y < -20) { p.set(0.5, columnHeight(0, 0, SEED) + 2.6, 0.5); settled.current = false }
+      tickLocomotion(lc, {
+        mvX: wish.x, mvZ: wish.z,
+        fwdX: fwd.x, fwdZ: fwd.z, rightX: right.x, rightZ: right.z,
+        jumpKey: !!k.Space,
+        // Shift is CROUCH/SLIDE now, exactly as in play3d — its life as a sprint key here is what
+        // made the slide-jump muscle memory read as "a dash of some sort". Run speed is automatic.
+        crouchKey: !!k.ShiftLeft || !!k.ShiftRight,
+        dt,
+      }, solidProbe)
+      p.set(lc.px, lc.py + lc.eye, lc.pz)
+      if (lc.py < -20) {
+        const feet = columnHeight(0, 0, SEED) + 1
+        lc.px = 0.5; lc.py = feet; lc.pz = 0.5; lc.vy = 0; lc.hvx = 0; lc.hvz = 0
+        p.set(0.5, feet + lc.eye, 0.5)
+        settled.current = false
+      }
     }
 
     // ── what are we looking at ───────────────────────────────────────────────────────────────
