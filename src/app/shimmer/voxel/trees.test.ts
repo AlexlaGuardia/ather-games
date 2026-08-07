@@ -146,7 +146,14 @@ for (let i = 0; i < 40; i++) SITES.push([(i * 197) % 3000, (i * 331) % 3000])
     const got = (count.get(sp.id) ?? 0) / total
     worst = Math.max(worst, Math.abs(got - sp.weight / wTotal))
   }
-  ok(worst < 0.06, `species appear in roughly their intended weights (worst deviation ${(worst * 100).toFixed(1)}pp)`)
+  // ★ Weights are modulated BY PLACE since the biome layer (biome.ts speciesFactor): starwillow
+  // crowds low ground, goldwood the hills, dawnwood the forest cores. So a GLOBAL census drifts
+  // from the flat table by design — the tolerance is loose on purpose, and what it still pins is
+  // the ORDER (common stays common, rare stays rare). Place-level leanings are biome.test.ts's.
+  ok(worst < 0.15, `species stay near their base weights globally (worst deviation ${(worst * 100).toFixed(1)}pp)`)
+  const shares = CFG.species.map(sp => (count.get(sp.id) ?? 0) / total)
+  ok(shares[0] > shares[2] && shares[0] > shares[3], 'goldwood stays the common tree')
+  ok(shares[3] < 0.15, 'dawnwood stays rare in a global census')
   ok((count.get('dawnwood') ?? 0) > 0, 'the rarest species still appears — rarity is a weight, not an absence')
 }
 

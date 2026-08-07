@@ -34,7 +34,9 @@ import { Column, SECTION } from './column'
 // constant exists for. A v1 save's edits were diffed against a world that no longer exists.
 // v3: valley-floor shaping + woodland mask (2026-08-07) — the surface moved, so v2 edits may sit
 // above or below the ground they were made on. The warning is honest; the edits still apply.
-export const GENERATOR_VERSION = 3
+// v4: the biome layer (2026-08-07) — grey surfaces appear and species weights shifted, so a v3
+// edit's recorded "generated" baseline can disagree with what now generates there.
+export const GENERATOR_VERSION = 4
 
 /**
  * One column's edits: packed local index → material.

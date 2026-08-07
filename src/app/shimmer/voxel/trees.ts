@@ -24,7 +24,8 @@
 
 import { Section, AIR } from './section'
 import { MAT } from './depth'
-import { hash2, mixSeed, value2 } from './noise'
+import { hash2, mixSeed } from './noise'
+import { forestness, speciesFactor } from './biome'
 
 /** Wood materials. Continue past ORE (which ends at 22) with room to spare. */
 export const WOOD = {
@@ -80,20 +81,6 @@ export interface TreeConfig {
   perColumn: number
   /** Expected trunks per column in open country — the lone meadow tree, not a thinner forest. */
   meadowPerColumn: number
-  /**
-   * ── ★ THE WOODLAND MASK (2026-08-07, Alex: "a forest is okay but a forest everywhere is
-   * overkill") ──────────────────────────────────────────────────────────────────────────────
-   * `perColumn` alone is a UNIFORM density: at 1.7 every topsoil column on the map rolled trees,
-   * which is not "a world with forests", it is one endless forest with a treeline. Woodland has to
-   * be a PLACE you enter and leave, so density is now gated by low-frequency value noise sampled
-   * per column: below `forestThreshold` is open meadow (lone trees only), above `forestFull` is
-   * forest core at full density, and the band between is the forest EDGE, thinning smoothly.
-   * The clearings this carves are not just look — they are where the spawn layer gets its open
-   * night ground, and later where anything built wants to stand.
-   */
-  forestScale: number      // noise frequency per column — smaller = larger forests and clearings
-  forestThreshold: number  // mask below this = meadow
-  forestFull: number       // mask above this = forest core; between the two is the thinning edge
   /** Largest canopy radius across all species — the scan margin. Declared, not derived at runtime. */
   maxSpread: number
   /** Trees refuse ground above this; the treeline. */
@@ -104,25 +91,16 @@ export interface TreeConfig {
 export const DEFAULT_TREES: TreeConfig = {
   perColumn: 1.7,          // unchanged — this was always a fine density FOR A FOREST
   meadowPerColumn: 0.05,   // ~one lone tree per 20 open columns; a meadow is not a void
-  forestScale: 0.14,       // features span ~7 columns ≈ 110 blocks — a forest you can walk out of
-  forestThreshold: 0.52,
-  forestFull: 0.68,
   maxSpread: 6,
   maxAltitude: 205,
   species: SPECIES,
 }
 
-/**
- * How wooded is this column, 0 (meadow) .. 1 (forest core)? Pure and per-column, so every consumer
- * — the planter here, and any later system that wants "am I in a forest" (ambience, spawns) — reads
- * the SAME boundary rather than each inventing one.
- */
-export function forestness(seed: number, cx: number, cz: number, cfg: TreeConfig = DEFAULT_TREES): number {
-  const f = value2(cx * cfg.forestScale, cz * cfg.forestScale, seed ^ 0xf07e57)
-  const t = (f - cfg.forestThreshold) / (cfg.forestFull - cfg.forestThreshold)
-  const c = t < 0 ? 0 : t > 1 ? 1 : t
-  return c * c * (3 - 2 * c)
-}
+// ★ THE WOODLAND MASK MOVED TO biome.ts (2026-08-07). "Am I in a forest" is a biome question and
+// the planter is one consumer of it, alongside the labeler and the later ambience/spawn layers —
+// they all read `forestness` from there, so no two systems can disagree about where a forest is.
+// The mask's tuning (forestScale/forestThreshold/forestFull) lives in BiomeConfig for the same
+// reason. Alex's rule is unchanged: a forest is a PLACE you enter and leave, not a global density.
 
 /** Deterministic per-tree stream. xorshift32 — identical sequence in TS and Rust. */
 function rng(seed: number) {
@@ -151,11 +129,16 @@ export function treeStartsAt(seed: number, cx: number, cz: number, size: number,
   const g0 = rng(base)
   // The mask scales EXPECTED count, not a per-tree veto — so the forest edge thins gradually and a
   // meadow still rolls its occasional lone tree from the same stream (determinism untouched).
-  const expected = cfg.meadowPerColumn + forestness(seed, cx, cz, cfg) * (cfg.perColumn - cfg.meadowPerColumn)
+  const expected = cfg.meadowPerColumn + forestness(seed, cx, cz) * (cfg.perColumn - cfg.meadowPerColumn)
   const whole = Math.floor(expected)
   const n = whole + (g0() < expected - whole ? 1 : 0)
 
-  const total = cfg.species.reduce((a, s) => a + s.weight, 0)
+  // ★ Weights are modulated BY PLACE (biome.ts speciesFactor) before the pick: starwillow crowds
+  // the low ground, goldwood the hills, dawnwood the deep forest cores. Computed once per column —
+  // every trunk this column rolls faces the same woods — and the multiplier keeps rarity a weight,
+  // never a separate placement pass.
+  const w = cfg.species.map(sp => sp.weight * speciesFactor(sp.id, seed, cx, cz))
+  const total = w.reduce((a, b) => a + b, 0)
   for (let i = 0; i < n; i++) {
     const s = mixSeed(base, i)
     const g = rng(s)
@@ -164,7 +147,7 @@ export function treeStartsAt(seed: number, cx: number, cz: number, size: number,
     // unverified one.
     let roll = g() * total
     let species = cfg.species[cfg.species.length - 1]
-    for (const sp of cfg.species) { roll -= sp.weight; if (roll <= 0) { species = sp; break } }
+    for (let j = 0; j < cfg.species.length; j++) { roll -= w[j]; if (roll <= 0) { species = cfg.species[j]; break } }
     out.push({
       x: cx * size + Math.floor(g() * size),
       z: cz * size + Math.floor(g() * size),

@@ -34,6 +34,8 @@ export const TILE_MATERIALS: number[] = [
   WOOD.SHIMMEROAK_LOG, WOOD.SHIMMEROAK_LEAVES,
   WOOD.STARWILLOW_LOG, WOOD.STARWILLOW_LEAVES,
   WOOD.DAWNWOOD_LOG, WOOD.DAWNWOOD_LEAVES,
+  // Grey soil added 2026-08-07 with the biome layer.
+  MAT.GREY_SOIL,
 ]
 
 /** One spare layer past the end: an unmapped material samples magenta rather than layer 0's stone. */
@@ -165,16 +167,19 @@ function paintGrit(dst: Layer, size: number, base: [number, number, number], amp
   }
 }
 
-/** Grass crown — the face you spend the whole game looking down at. */
-function paintGrassTop(dst: Layer, size: number, seed: number) {
-  const base = rgbOf(MATERIAL_COLOR[MAT.TOPSOIL])
-  const dark = shade(base, -34)
+/** Grass crown — the face you spend the whole game looking down at. `crown` defaults to living
+ *  turf; GREY_SOIL passes its own desaturated base and a flatter contrast (drained ground gutters,
+ *  it does not sparkle — the bright blade-catch is halved so nothing glints). */
+function paintGrassTop(dst: Layer, size: number, seed: number,
+  crown: number = MATERIAL_COLOR[MAT.TOPSOIL], contrast = 1) {
+  const base = rgbOf(crown)
+  const dark = shade(base, -34 * contrast)
   for (let y = 0; y < size; y++) {
     for (let x = 0; x < size; x++) {
       const clump = vnoise(x, y, size, 8, seed)
       const blade = h2(x, y, seed + 12)
-      let c = mix(dark, shade(base, 16), clamp01(clump * 0.8 + blade * 0.45))
-      if (blade > 0.94) c = shade(c, 26)
+      let c = mix(dark, shade(base, 16 * contrast), clamp01(clump * 0.8 + blade * 0.45))
+      if (blade > 0.94) c = shade(c, 26 * contrast)
       put(dst, size, x, y, c)
     }
   }
@@ -190,9 +195,10 @@ function paintGrassTop(dst: Layer, size: number, seed: number) {
  * lives in the shader precisely so this file, and any hand-painted tile that replaces it, can be
  * authored the obvious way round.
  */
-function paintGrassSide(dst: Layer, size: number, seed: number) {
+function paintGrassSide(dst: Layer, size: number, seed: number,
+  crownColor: number = MATERIAL_COLOR[MAT.TOPSOIL]) {
   const dirt = rgbOf(MATERIAL_COLOR[MAT.SUBSOIL])
-  const grass = rgbOf(MATERIAL_COLOR[MAT.TOPSOIL])
+  const grass = rgbOf(crownColor)
   const crown = Math.max(2, Math.round(size * 0.28))
   for (let x = 0; x < size; x++) {
     // Wrapping 1D fringe: the ragged boundary has to meet itself across the tile seam.
@@ -397,6 +403,11 @@ function paintFor(material: number, face: number, size: number): Layer {
     case MAT.TOPSOIL:
       if (face === TOP) paintGrassTop(dst, size, seed)
       else if (face === SIDE) paintGrassSide(dst, size, seed)
+      else paintGrit(dst, size, rgbOf(MATERIAL_COLOR[MAT.SUBSOIL]), 18, 22, seed)
+      break
+    case MAT.GREY_SOIL:
+      if (face === TOP) paintGrassTop(dst, size, seed, MATERIAL_COLOR[MAT.GREY_SOIL], 0.55)
+      else if (face === SIDE) paintGrassSide(dst, size, seed, MATERIAL_COLOR[MAT.GREY_SOIL])
       else paintGrit(dst, size, rgbOf(MATERIAL_COLOR[MAT.SUBSOIL]), 18, 22, seed)
       break
     default:

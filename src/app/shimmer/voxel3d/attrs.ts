@@ -27,6 +27,9 @@ export const MATERIAL_COLOR: Record<number, number> = {
   [MAT.TOPSOIL]: 0x4f9c3a,
   [MAT.SAND]: 0xd8c691,
   [MAT.WATER]: 0x2f6f9e,
+  // Desaturated on purpose — the greying IS desaturation (canon: grey is drained mana, and the
+  // frayed edges gutter grey). An ashen green-grey, not a stone grey, so it still reads as ground.
+  [MAT.GREY_SOIL]: 0x83887b,
   [ORE.RAW_MANA]: 0x7fd4ff,
   [ORE.ELEMENT_VIOLET]: 0xa974ff,
   [ORE.ELEMENT_STORM]: 0xe8e46a,

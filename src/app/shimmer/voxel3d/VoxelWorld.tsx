@@ -25,8 +25,9 @@ import { SECTION, DEFAULT_COLUMN, Column, Stage, makeColumn, meshColumn, refresh
 import { VOXEL_WORKER_URL } from '../../../workers/worker-url'
 import { createMeshScratch } from '../voxel/greedy'
 import { columnHeight } from '../voxel/height'
+import { biomeAt } from '../voxel/biome'
 import { AIR } from '../voxel/section'
-import { materialAt, MAT } from '../voxel/depth'
+import { materialAt, MAT, DEFAULT_DEPTH } from '../voxel/depth'
 import { raycast, tickBreak, dropsFor, type BreakState } from '../voxel/mine'
 import { spawnDrop, tickDrops, type Drop } from '../voxel/drops'
 import { blockDef, materialForItem, type BlockSkill } from '../voxel/registry'
@@ -1280,7 +1281,11 @@ function World({ inv, toolTier, toolSkill, selItem, heldTool, weaponDrawn, weapo
       const info = gl.info
       let built = 0
       for (const e of edits.current.values()) built += e.size
-      onStats(`${cols.current.size} col · ${drawn.current.size} mesh · ${drops.current.length} drops · `
+      // The place label leads — it is the line's one piece of GAME, the rest is plumbing. Pure
+      // function of position, so reading it costs a couple of noise samples every 10th frame.
+      const bh = columnHeight(Math.floor(p.x), Math.floor(p.z), SEED)
+      onStats(`${biomeAt(Math.floor(p.x), Math.floor(p.z), SEED, bh, DEFAULT_DEPTH.seaLevel)} · `
+        + `${cols.current.size} col · ${drawn.current.size} mesh · ${drops.current.length} drops · `
         + `geo ${info.memory.geometries} prog ${info.programs?.length ?? 0} · `
         + `${built} edits saved · ${worker.current ? 'worker' : 'main'}`)
     }

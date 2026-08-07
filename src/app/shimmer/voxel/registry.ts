@@ -73,6 +73,9 @@ export const BLOCKS: BlockDef[] = [
   { material: MAT.SUBSOIL, name: 'Subsoil', hardness: 0.5, skill: null, minTier: 0, drops: [{ itemId: 'block_subsoil', count: 1 }], fastSkill: 'farming', placeable: true },
   { material: MAT.TOPSOIL, name: 'Topsoil', hardness: 0.55, skill: null, minTier: 0, drops: [{ itemId: 'block_topsoil', count: 1 }], fastSkill: 'farming', placeable: true },
   { material: MAT.SAND, name: 'Sand', hardness: 0.45, skill: null, minTier: 0, drops: [{ itemId: 'block_sand', count: 1 }], fastSkill: 'farming', placeable: true },
+  // Drained ground digs like soil and drops SUBSOIL: the mana is gone, not the dirt — carrying a
+  // "grey block" home to build with would make the greying a decoration, which it must never be.
+  { material: MAT.GREY_SOIL, name: 'Greyed Soil', hardness: 0.55, skill: null, minTier: 0, drops: [{ itemId: 'block_subsoil', count: 1 }], fastSkill: 'farming', placeable: false },
   { material: MAT.WATER, name: 'Water', hardness: Infinity, skill: null, minTier: 0, drops: [], placeable: false },
 
   // ── the Prospecting ladder — hardness AND tier both climb, so depth gates twice over ────────
