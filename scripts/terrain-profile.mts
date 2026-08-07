@@ -38,6 +38,7 @@ const H = px
 
 const LEGEND: Record<BiomeId, [number, number, number]> = {
   basin: [47, 111, 158],
+  river: [92, 164, 214],
   shore: [216, 198, 145],
   greyfield: [131, 136, 123],
   crag: [235, 235, 240],

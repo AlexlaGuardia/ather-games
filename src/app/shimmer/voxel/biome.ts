@@ -24,7 +24,7 @@
 // same TBD-CANON discipline as the material names in depth.ts.
 
 import { value2, warped2 } from './noise'
-import { heightFields, type HeightConfig, DEFAULT_HEIGHT } from './height'
+import { heightFields, riverness, riverField, type HeightConfig, DEFAULT_HEIGHT } from './height'
 
 export interface BiomeConfig {
   /**
@@ -114,7 +114,7 @@ export function greySurfaceAt(x: number, z: number, seed: number, cfg: BiomeConf
 }
 
 /** The label vocabulary. Order is meaningless; the classifier's precedence is what rules. */
-export type BiomeId = 'basin' | 'shore' | 'greyfield' | 'crag' | 'highland' | 'woodland' | 'meadow'
+export type BiomeId = 'basin' | 'shore' | 'river' | 'greyfield' | 'crag' | 'highland' | 'woodland' | 'meadow'
 
 /**
  * Name the place at (x, z). `h` and `seaLevel` are passed in rather than imported — depth.ts owns
@@ -128,6 +128,7 @@ export function biomeAt(
 ): BiomeId {
   if (h <= seaLevel) return 'basin'
   if (h <= seaLevel + 2) return 'shore'
+  if (riverness(riverField(x, z, seed, hcfg)) >= 0.5) return 'river'
   if (greyness(x, z, seed, cfg) >= 0.5) return 'greyfield'
   const { continentalness } = heightFields(x, z, seed, hcfg)
   if (continentalness >= cfg.cragC) return 'crag'

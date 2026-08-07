@@ -15,7 +15,7 @@
 // is the single decision that makes ore appear in cave walls or stay buried.
 
 import { fbm2, value2 } from './noise'
-import { columnHeight, type HeightConfig, DEFAULT_HEIGHT } from './height'
+import { columnHeight, riverCarve, RIVER_DEPTH, type HeightConfig, DEFAULT_HEIGHT } from './height'
 import { greySurfaceAt } from './biome'
 import { AIR } from './section'
 
@@ -104,8 +104,18 @@ export function materialAt(
   if (y <= 0) return MAT.BEDROCK
   if (y < cfg.bedrockTop && value2(x * 0.7, z * 0.7, seed ^ 0xbed0) > y / cfg.bedrockTop) return MAT.BEDROCK
 
-  // 2. Above the surface: water if we are in a basin, otherwise sky.
-  if (y > h) return y <= cfg.seaLevel ? MAT.WATER : MAT.AIR
+  // 2. Above the surface: water if we are in a basin — or in a river channel. The river check is
+  //    GUARDED to the ≤RIVER_DEPTH voxels just above the surface: everything higher is sky on the
+  //    fast path, because an unguarded field read here would run once per AIR voxel per column.
+  if (y > h) {
+    if (y <= cfg.seaLevel) return MAT.WATER
+    if (y - h < RIVER_DEPTH) {
+      const carve = riverCarve(x, z, seed, hcfg)
+      // Fill to one below the banks (h is the CARVED bed, h + carve the original ground).
+      if (carve > 1 && y <= h + carve - 1) return MAT.WATER
+    }
+    return MAT.AIR
+  }
 
   const depth = h - y
 
@@ -113,6 +123,7 @@ export function materialAt(
   if (depth === 0) {
     if (h <= cfg.seaLevel) return MAT.SAND                              // lake / sea bed
     if (h <= cfg.seaLevel + cfg.beachHeight) return MAT.SAND            // beach band
+    if (riverCarve(x, z, seed, hcfg) >= 1) return MAT.SAND              // river bed and its shoulders
     if (slopeAt(x, z, seed, hcfg) >= cfg.cliffSlope) return MAT.STONE   // cliff faces show rock
     if (greySurfaceAt(x, z, seed)) return MAT.GREY_SOIL                 // drained ground wears grey
     return MAT.TOPSOIL

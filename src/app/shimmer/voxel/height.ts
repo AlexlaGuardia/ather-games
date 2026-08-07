@@ -27,6 +27,8 @@ export interface HeightConfig {
   weirdnessScale: number
   /** The plains field's scale — largest of all, because a plain is a REGION, not a clearing. */
   flatScale: number
+  /** The river field's scale — large, because a river is RARE; see the rivers block below. */
+  riverScale: number
   /** Ceiling on ridge relief before erosion damping. */
   ridgeAmplitude: number
 }
@@ -43,6 +45,7 @@ export const DEFAULT_HEIGHT: HeightConfig = {
   erosionScale: 420,
   weirdnessScale: 150,
   flatScale: 900,
+  riverScale: 650,
   ridgeAmplitude: 62,
 }
 
@@ -163,6 +166,50 @@ export function benched(base: number): number {
   return (Math.floor(t) + (s < 1 - BENCH_RISER ? 0 : sstep((s - (1 - BENCH_RISER)) / BENCH_RISER))) * BENCH_STEP
 }
 
+/**
+ * ── ★ RIVERS ARE A ZERO-LINE, AND THE FIELD MUST BE ITS OWN (2026-08-07 late) ────────────────
+ * A river is the zero-line of a signed field (Minecraft 1.18's trick: rivers live where their
+ * noise ≈ 0 — a line is exactly what a signed field's zero-set is). The FIRST version reused the
+ * weirdness field for this, which sounds elegant — the zero-line is the valley centre, water in
+ * the valleys for free — and the rendered map killed it on sight: at ridge scale (150) the
+ * zero-set is a DENSE CAPILLARY TANGLE, loops every couple hundred blocks, the whole country
+ * marbled with water. A ridge field's job is to oscillate often; a river's job is to be RARE.
+ * Same class of lesson as the greyfield smear and the 420-unit sample: the field's SHAPE at its
+ * scale is a design input, and the map is where it shows. So rivers get their own large-scale,
+ * gently-meandering signed field, and the zero-line count drops from everywhere to a few real
+ * rivers per rendered frame. (What was lost: automatic valley alignment. A river can now cross a
+ * ridge — it notches a 3-deep water gap through the saddle, which reads as a gorge stream, fine.)
+ *
+ * Water steps where the line crosses a bench edge: a small waterfall, and it reads as one.
+ * Consumers get rivers for free through the carved surface: trees refuse the bed (sand is not
+ * PLANTABLE), site pads reject channels (the span check reads carved heights), collision wades
+ * (water is non-solid). The only deliberate hook is depth.ts filling the water.
+ */
+export const RIVER_FULL = 0.012   // |river field| below this = full channel depth
+export const RIVER_EDGE = 0.035   // channel fades to nothing here — the banks
+export const RIVER_DEPTH = 3      // voxels carved at full riverness
+
+/** The river field, signed. Its own scale (HeightConfig.riverScale) and salt — see the block above. */
+export function riverField(x: number, z: number, seed: number, cfg: HeightConfig = DEFAULT_HEIGHT): number {
+  return signed2(x / cfg.riverScale, z / cfg.riverScale, seed ^ 0x11f3a7, 3)
+}
+
+/** How much river is at this field value, 0 (dry land) .. 1 (mid-channel). */
+export function riverness(w: number): number {
+  const t = (RIVER_EDGE - Math.abs(w)) / (RIVER_EDGE - RIVER_FULL)
+  const c = t < 0 ? 0 : t > 1 ? 1 : t
+  return c * c * (3 - 2 * c)
+}
+
+/**
+ * Voxels the river carves out of the surface at (x, z) — 0 almost everywhere. Pure; one field
+ * read. depth.ts calls this per column (and for the ≤3 voxels above a carved surface), never per
+ * arbitrary voxel: guard any new caller the same way or generation pays a noise eval per air block.
+ */
+export function riverCarve(x: number, z: number, seed: number, cfg: HeightConfig = DEFAULT_HEIGHT): number {
+  return Math.round(RIVER_DEPTH * riverness(riverField(x, z, seed, cfg)))
+}
+
 /** The three fields at a column. Exposed so biome selection can read the SAME values, not re-roll them. */
 export function heightFields(x: number, z: number, seed: number, cfg: HeightConfig = DEFAULT_HEIGHT) {
   const continentalness = warped2(x / cfg.continentScale, z / cfg.continentScale, seed ^ 0x9e3779b9, 4)
@@ -197,7 +244,11 @@ export function columnHeight(x: number, z: number, seed: number, cfg: HeightConf
   // law from the other side: it BENCHES the base (altitude preserved, interiors level) and kills
   // the ridge term — see the PLAINS block above for why both must happen together.
   const shaped = base + (benched(base) - base) * flat
-  const h = cfg.datum + DATUM_CALIBRATION + shaped + pv * cfg.ridgeAmplitude * relief * (1 - flat)
+  // Rounded HERE, identically to riverCarve(): the water fill computes the bank line as
+  // carved-h + carve − 1, and a half-voxel disagreement between the two would put every river's
+  // surface one block over or under its banks.
+  const carve = Math.round(RIVER_DEPTH * riverness(riverField(x, z, seed, cfg)))
+  const h = cfg.datum + DATUM_CALIBRATION + shaped + pv * cfg.ridgeAmplitude * relief * (1 - flat) - carve
 
   const min = 1
   const max = cfg.worldHeight - 2

@@ -53,7 +53,7 @@ const SEA = DEFAULT_DEPTH.seaLevel
   }
   const greyShare = grey / land
   ok(greyShare > 0.02 && greyShare < 0.16, `grey surface share ${(greyShare * 100).toFixed(1)}% is a presence, not a plague (2–16%)`)
-  for (const id of ['basin', 'shore', 'greyfield', 'crag', 'highland', 'woodland', 'meadow'] as BiomeId[])
+  for (const id of ['basin', 'shore', 'river', 'greyfield', 'crag', 'highland', 'woodland', 'meadow'] as BiomeId[])
     ok((seen.get(id) ?? 0) > 0, `${id} exists somewhere in a 1792-block country`)
   const alive = (seen.get('meadow') ?? 0) + (seen.get('woodland') ?? 0)
   ok(alive > (seen.get('greyfield') ?? 0) * 3, 'living country dwarfs the drained country')

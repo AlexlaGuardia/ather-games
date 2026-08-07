@@ -40,7 +40,9 @@ import { Column, SECTION } from './column'
 // ~a third of the country, so v4 edits can sit metres above or below the new ground.
 // v6: ruin sites (2026-08-07 late) — structures generate on greyfield pads; a v5 edit could sit
 // inside ground a ruin now occupies.
-export const GENERATOR_VERSION = 6
+// v7: rivers (2026-08-07 late) — the weirdness zero-line carves a channel; v6 edits along valley
+// centres can now sit in the water or above the carved bed.
+export const GENERATOR_VERSION = 7
 
 /**
  * One column's edits: packed local index → material.

@@ -6,7 +6,7 @@
 // exactly like a cave the carvers did not generate. All three are cheap to assert and expensive
 // to notice.
 
-import { columnHeight, DEFAULT_HEIGHT } from './height'
+import { columnHeight, riverCarve, DEFAULT_HEIGHT } from './height'
 import { materialAt, fillColumn, slopeAt, MAT, DEFAULT_DEPTH } from './depth'
 
 let pass = 0
@@ -49,10 +49,17 @@ for (let i = 0; i < 600; i++) COLS.push([(i * 977) % 4000 - 2000, (i * 1583) % 4
       if (y >= H.worldHeight) continue
       const m = materialAt(x, y, z, SEED, h)
       if (m !== MAT.AIR && m !== MAT.WATER) bad++
-      if (m === MAT.WATER) { wet++; if (y > D.seaLevel) bad++ }
+      // Water above sea level is legal in exactly one place: a river channel, filled to one below
+      // its banks (h is the carved bed; h + carve is the original ground the river cut through).
+      if (m === MAT.WATER) {
+        wet++
+        const carve = riverCarve(x, z, SEED)
+        const riverTop = carve >= 2 ? h + carve - 1 : -1
+        if (y > D.seaLevel && y > riverTop) bad++
+      }
     }
   }
-  ok(bad === 0, `above the surface is only air or water, and water never exceeds sea level (${bad} violations)`)
+  ok(bad === 0, `above the surface is only air or water, and water stays under sea level or inside a river (${bad} violations)`)
   ok(wet > 0, 'some basins actually hold water')
 }
 
