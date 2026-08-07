@@ -3,26 +3,90 @@
 // (/shimmer/world-data parses tilemap.ts / heightmaps.json / node-placements.ts at request
 // time) and overlay it on the compiled sources. This is what makes edit → Save → refresh
 // live with no rebuild. Fetch failure falls back to compiled data — the game always mounts.
+//
+// ── ★ THE GATE ALSO OWNS BIRTH (2026-08-07) ──────────────────────────────────────────────────
+// It used to own only the reset, and Shimmer3D decided birth for itself at mount. That decision
+// raced its own cloud pull: the mount effect opened the ritual off the `birthPending` latch, then
+// `loadWithCloudFallback` resolved a few hundred ms later and called `setBirthOpen(false)` +
+// cleared the latch — leaving a save, no rune and no latch, which is exactly the "legacy returning
+// keeper" shape that never re-opens birth. The keeper landed in the world unborn, and because it
+// hung on a fetch it flapped between otherwise identical runs.
+//
+// The fix is not to reorder that race but to delete it. Two questions were tangled in one branch:
+//   • does this character's SAVE survive?  — answered by the epoch, inside `pullCloudSave`
+//   • is this keeper owed a BIRTH?         — answered by the rune keys, and by nothing else
+// A cloud save is not evidence of a birth rune (the rune is a localStorage key, it never rode in
+// the save blob), so the pull must not be allowed to answer the second question. Hydration now
+// happens HERE, before the decision, and the decision is made once against settled storage. Same
+// shape as voxel3d/page.tsx: born first, world second.
 import dynamic from 'next/dynamic'
 import { useEffect, useState } from 'react'
 import { applyLiveWorldData, registerGardenWorld } from '../world/garden-world'
 import { applyLiveRegionData } from '../world/region-maps'
 import { invalidateWorldCaches } from './world-adapter'
 import { resetIfStale } from '@/lib/ather-epoch'
+import { pullCloudSave } from '@/lib/cloud-sync'
+import BirthScreen from './birth/BirthScreen'
+import { loadRuneInventory, saveRuneInventory, setBirthRune, EMPTY_INVENTORY } from './rune-inventory'
 
 // R3F Canvas is client/WebGL-only — never SSR it. The import is also deferred until `ready`
 // so Shimmer3D's module init (world registration, NPC remaps) sees the live data.
 const Shimmer3D = dynamic(() => import('./Shimmer3D'), { ssr: false })
 
+const SAVE_KEY = 'ather:save:shimmer'
+const PENDING_KEY = 'ather:shimmer:birthPending'
+/** One-shot handoff so the game can greet a keeper it did not watch being born. Read+cleared once. */
+const JUST_BORN_KEY = 'ather:shimmer:justBorn'
+
+/**
+ * Pull this account's garden into a BLANK device. Local always wins when present — the cloud copy
+ * is only ever read into emptiness, so a stale server save can never clobber live play. Refusal on
+ * the epoch happens inside `pullCloudSave`; a save from a previous world resolves null here.
+ *
+ * Moved up from Shimmer3D so that by the time the game mounts, localStorage is the whole truth and
+ * nothing it does later can revise who the player is.
+ */
+async function hydrateFromCloud(): Promise<void> {
+  try {
+    if (localStorage.getItem(SAVE_KEY)) return   // local wins, never overwrite live play
+  } catch { return }                             // private mode — nothing to hydrate into
+  const cloud = await pullCloudSave('shimmer')
+  if (!cloud) return
+  try {
+    JSON.parse(cloud)                            // don't persist a blob the game can't read
+    localStorage.setItem(SAVE_KEY, cloud)
+  } catch { /* unparseable / quota — start fresh rather than half-load */ }
+}
+
+/** Is this keeper still owed the ritual? Read AFTER reset + hydration, never before. */
+function birthOwed(): boolean {
+  try {
+    const hasRune = !!loadRuneInventory().birth
+    const hasSave = !!localStorage.getItem(SAVE_KEY)
+    const pending = localStorage.getItem(PENDING_KEY) === '1'
+    // Save-absence alone cannot gate it: the starter-kit grant persists a save on the first mount,
+    // so a player who opened birth and backed out without choosing has a save and would skip the
+    // ritual forever. The latch closes that, and a world reset arms it directly (ather-epoch.ts).
+    // A legacy returning save (save, no rune, no latch) is deliberately left alone.
+    return !hasRune && (!hasSave || pending)
+  } catch {
+    return false   // private mode — just spawn rather than trap them in a ritual that can't persist
+  }
+}
+
+type Phase = 'loading' | 'birth' | 'world'
+
 export default function Play3DPage() {
-  const [ready, setReady] = useState(false)
+  // Starts at 'loading', never at 'birth': localStorage is unreadable during SSR and the first
+  // paint, so guessing would flash the ritual at an already-born keeper on every load.
+  const [phase, setPhase] = useState<Phase>('loading')
   useEffect(() => {
     // ★ THE WORLD RESET HAS TO LAND HERE, NOT INSIDE THE GAME. Shimmer3D reads the save while it
     // renders, so a reset that runs in one of its own effects clears localStorage AFTER the old
     // character is already in memory — and the next autosave writes it straight back, then pushes
     // it to the cloud. Measured on 2026-08-07: a save marked PRE-RESET survived the wipe and
-    // reappeared in `accounts.db` fifteen seconds later. Shimmer3D does not mount until `ready`,
-    // so clearing here happens strictly before its first read.
+    // reappeared in `accounts.db` fifteen seconds later. Shimmer3D does not mount until the world
+    // phase, so clearing here happens strictly before its first read.
     resetIfStale()
     const report = (m: string) => { try { navigator.sendBeacon('/shimmer/client-log', m) } catch { /* noop */ } }
     const onErr = (e: ErrorEvent) => report(`${e.message}\n${e.error?.stack ?? ''}`)
@@ -41,13 +105,38 @@ export default function Play3DPage() {
         .then(r => r.json())
         .then(d => { if (!d.error) applyLiveRegionData(d.regions) })
         .catch(() => { /* compiled fallback */ }),
-    ]).finally(() => { if (alive) { registerGardenWorld(); setReady(true) } })
+      // Third leg, and the ordering that matters: birth is decided only once this has settled.
+      hydrateFromCloud(),
+    ]).finally(() => {
+      if (!alive) return
+      registerGardenWorld()
+      setPhase(birthOwed() ? 'birth' : 'world')
+    })
     return () => { alive = false; window.removeEventListener('error', onErr); window.removeEventListener('unhandledrejection', onRej) }
   }, [])
-  if (!ready) return (
+
+  if (phase === 'loading') return (
     <div style={{ position: 'fixed', inset: 0, display: 'grid', placeItems: 'center', background: '#0e0c1c', color: '#e9dfc8', font: '700 15px ui-monospace, monospace' }}>
       ✦ composing the garden…
     </div>
   )
+
+  if (phase === 'birth') return (
+    // No `onCancel`: first-entry birth is not escapable, and here there is nothing to escape TO —
+    // the game is not mounted behind it. (Shimmer3D keeps its own escapable BirthScreen for the
+    // in-game New Game flow, which genuinely does sit over a running world.)
+    <BirthScreen
+      onChoose={(id) => {
+        // Birth is rune #1 of the inventory, not the whole character — the moves come from the book.
+        saveRuneInventory(setBirthRune(EMPTY_INVENTORY, id))
+        try {
+          localStorage.removeItem(PENDING_KEY)   // birth is done; stop re-prompting
+          localStorage.setItem(JUST_BORN_KEY, id)
+        } catch { /* private mode */ }
+        setPhase('world')
+      }}
+    />
+  )
+
   return <Shimmer3D />
 }

@@ -24,7 +24,7 @@ import { RemotePlayers, useRoster } from './RemotePlayers'
 import { useMultiplayer, storedName, storeName, type RemotePlayer } from './multiplayer'
 import { useParty, newPartyCode, sanitizePartyCode, inviteUrl } from '@/lib/party'
 import { useAccount, type UseAccount } from '@/lib/accounts/use-account'
-import { pushCloudSave, pullCloudSave } from '@/lib/cloud-sync'
+import { pushCloudSave } from '@/lib/cloud-sync'
 import { birthAffinity, NEUTRAL_AFFINITY, type Affinity } from './birth-affinity'
 import { castForMove, isBuilt, defaultLoadout, CAST_SLOTS, SLOT_KEYS, type CastSpec } from './cast'
 import { loadRuneInventory, saveRuneInventory, setBirthRune, grantRune, revokeRune, EMPTY_INVENTORY, type RuneInventory } from './rune-inventory'
@@ -3771,67 +3771,30 @@ export default function Shimmer3D() {
 
   // Load once on mount: restore party + zone + position, or bank the starter party on first visit.
   const loadedRef = useRef(false)
-  // Birth on first entry — no save yet ⇒ born before spawn. Reads localStorage synchronously
-  // at mount (BEFORE load()'s async .then persist() writes), so a genuinely fresh player reads
-  // as fresh. Non-cancelable: a new player must choose a rune. Returning players skip it.
   // Start the lag log's long-task observer once, on mount. Cheap and idempotent (see perflog.ts).
   useEffect(() => { startPerfLog() }, [])
 
-  const bornCheckedRef = useRef(false)
-  useEffect(() => {
-    if (bornCheckedRef.current) return
-    bornCheckedRef.current = true
-    try {
-      // ⚠ A world reset (ather-epoch.ts) has ALREADY run by the time this mounts — page.tsx does it
-      // in the boot gate, before this component exists. It cannot be done here: this component reads
-      // the save during render, so a reset at this point clears storage that the game is already
-      // holding in memory, and the next autosave restores it. Read the keys; do not reset them.
-      const hasSave = !!localStorage.getItem('ather:save:shimmer')
-      const hasRune = !!localStorage.getItem('ather:shimmer:birthRune')
-      const pending = localStorage.getItem('ather:shimmer:birthPending') === '1'
-      // Birth is owed to a genuinely new keeper and stays owed until a rune is actually CHOSEN.
-      // Save-absence alone can't gate it: the starter-kit grant persist()s a save on the first
-      // mount, so a player who saw birth and backed out WITHOUT choosing then has a save and the
-      // old check skipped birth forever ("it did it for me"). The birthPending latch fixes that —
-      // set when birth opens, cleared only on choose (see onChoose) — so re-entry re-opens birth
-      // until a rune is picked. A legacy returning save (has save, no rune, no latch) is untouched.
-      // A world reset arms `birthPending` directly (ather-epoch.ts), so the `pending` arm is what
-      // carries a reset keeper into the ritual — save-absence cannot, because the starter kit may
-      // already have persisted a save by the time this runs.
-      if (!hasRune && (!hasSave || pending)) {
-        localStorage.setItem('ather:shimmer:birthPending', '1')
-        setBirthCancelable(false)
-        setBirthOpen(true)
-      }
-    } catch { /* private mode — skip, just spawn */ }
-  }, [])
+  // ── ★ BIRTH IS NOT DECIDED HERE ANY MORE (2026-08-07) ──────────────────────────────────────
+  // This component used to open the ritual itself, off a synchronous localStorage read at mount.
+  // The read was correct; what broke it was the async cloud fallback below RE-deciding a few
+  // hundred ms later — a pulled save closed the modal and cleared the `birthPending` latch, so a
+  // reset keeper ended up with a save, no rune and no latch, the one shape that never re-prompts.
+  // It landed them in the world unborn, and because it hung on a fetch it flapped run to run.
+  //
+  // Both halves now live in `page.tsx`'s boot gate, which hydrates from the cloud FIRST and then
+  // decides once against settled storage — so this component mounts only for a keeper who is
+  // already born, and cannot revise that. The `birthOpen` state below is still real: it serves the
+  // in-game New Game flow, which genuinely is a ritual over a running world.
 
   useEffect(() => {
     if (loadedRef.current) return
     loadedRef.current = true
     let alive = true
     let landed: string = START_ZONE   // overwritten by whichever save branch places the player
-    // ── Cloud fallback (stage 2 per-keeper plots): a BLANK device asks the account for its
-    // garden before starting fresh. Local always wins when present — the cloud copy is only
-    // ever pulled into emptiness, so a stale server save can never clobber live play. The
-    // cookie does the auth; signed-out/offline just resolves null and play starts fresh.
-    const loadWithCloudFallback = async () => {
-      const local = await load()
-      if (local) return local
-      const cloud = await pullCloudSave('shimmer')
-      if (!cloud) return null
-      try {
-        const parsed = JSON.parse(cloud)
-        saveRaw(cloud)
-        // The birth modal opened on the blank-localStorage read at mount; this device just
-        // turned out to be a returning keeper, so let their garden stand instead — and clear the
-        // birth latch so re-entry doesn't re-prompt a keeper who already has a garden.
-        setBirthOpen(false)
-        try { localStorage.removeItem('ather:shimmer:birthPending') } catch { /* private mode */ }
-        return parsed
-      } catch { return null }
-    }
-    loadWithCloudFallback().then((data) => {
+    // Cloud fallback for a blank device is the boot gate's job now (hydrateFromCloud in page.tsx),
+    // precisely so nothing down here can answer a question about identity. By this point
+    // localStorage is the whole truth: a plain local read.
+    load().then((data) => {
       if (!alive) return
       if (data?.skills) skillsRef.current = skillSetFromSave(data.skills)
       if (data?.mana) manaRef.current = manaFromSave(data.mana, skillsRef.current.mana.level)
@@ -5132,6 +5095,23 @@ export default function Shimmer3D() {
     birthRuneRef.current = inv.birth
     applyAffinity()
     applyLoadout()
+    // The boot gate births first-entry keepers now, so the "Born of X" greeting would be lost with
+    // the modal that used to set it. It hands the rune over in a one-shot key instead — read and
+    // cleared here, after the affinity resolves, so the banner can quote it. Storage rather than a
+    // module flag on purpose: page.tsx and this component are separate code-split chunks and do not
+    // share module state (measured 2026-08-07 — a `wasJustReset` flag never arrived).
+    try {
+      const bornWith = localStorage.getItem('ather:shimmer:justBorn')
+      if (bornWith) {
+        localStorage.removeItem('ather:shimmer:justBorn')
+        const rn = RUNES.find(r => r.id === bornWith)?.name ?? 'your rune'
+        // Half the carousel currently opens a book with no move the sim can run — that is the real
+        // authoring gap (moves.md), so the banner tells the truth instead of promising a cast.
+        const bound = defaultLoadout(inv.owned).filter((m) => m && isBuilt(m)).length
+        const castHint = bound > 0 ? ` · ${bound} move${bound > 1 ? 's' : ''} in hand (G/Z/X/C)` : ''
+        setBanner(`Born of ${rn} — ${affinityRef.current.label || 'find Gregory in the glade'}${castHint}`)
+      }
+    } catch { /* private mode — no greeting, but the keeper still plays */ }
   }, [applyAffinity, applyLoadout])
   const ammoRef = useRef<number>(WEAPONS[0].clip)   // the LIVE weapon's clip; FiringRange decrements, AmmoCounter reads
   const reloadingRef = useRef(0)      // >0 while the recharge channel runs
