@@ -34,45 +34,72 @@ export const HOLLOW_HOVER = 1.15     // metres above the ground line
 export const HOLLOW_SPEED = 3.4      // < run speed: running away always works
 export const HOLLOW_RADIUS = 0.85    // hit sphere for projectiles
 /**
- * ★ THE SPAWN CYCLE (2026-08-07) — chunk scan, not a ring roll. Each cycle picks one loaded
- * column, samples spots in it, and bodies a PACK at the first eligible spot. The old blockout
- * rolled a ring around the player, which meant the tide followed the keeper like a spotlight;
- * scanning columns makes the dark belong to the GROUND — walk toward drained country and it is
- * simply already dangerous there.
+ * ★ THE SPAWN CYCLE, MINECRAFT'S SHAPE (researched + reworked 2026-08-07 eve).
+ *
+ * The first cut scanned ONE random column every 1.6s and Alex play-tested a night without meeting
+ * a single Hollow. Minecraft's machine, verbatim from the wiki: EVERY eligible chunk gets a pack
+ * attempt EVERY tick (20Hz) — coverage ~3,600× ours. The night fills in seconds and then the CAP
+ * is the governor, not scan luck. Ported here with the numbers marked as kept or deliberately bent:
+ *
+ *   · sweep every loaded column per cycle (kept; our cycle is 0.4s, not 50ms — the cap fills
+ *     within a tick or two anyway, and 20Hz would only burn frame budget re-proving it)
+ *   · one anchor attempt per column per sweep, random x,z (kept — MC's exact structure)
+ *   · pack of up to 4, per-mob ±5 TRIANGULAR random walk from the anchor (kept: ~85% land
+ *     within 5 of the anchor, occasional stragglers — a smear, not a circle)
+ *   · spawn window 24..(load edge); MC is 24..128 with instant despawn past 128 — our load
+ *     radius is 96, so the despawn line sits there and the whole loaded night is spawn ground
+ *   · cap = 0.1/column (MC: 70/289 ≈ 0.24/column — halved-and-some, because the ruling's read
+ *     is a MENACE; MC density in open grey country read as a horde in the sim)
+ *   · light: block light 0 absolute + internal sky ≤ 7 (MC 1.18+ verbatim — see NIGHT_SKY_MAX)
  */
-export const SPAWN_CYCLE_S = 1.6     // one column scanned per cycle — the tide seeps, it does not burst
-export const SPAWN_TRIES = 12        // spot samples per scanned column
-export const PACK_MAX = 4            // 1–4 body together; a pack is a mood, not an army
-export const PACK_SPREAD = 5         // pack mates scatter within this of the anchor
-export const PLAYER_EXCLUSION = 24   // never bodies this close to the keeper — it forms out of sight
-export const DESPAWN_DIST = 70
-/** daylight() above this, any bodied Hollow gutters out — dawn always wins. */
-export const GUTTER_AT = 0.30
+export const SPAWN_CYCLE_S = 0.4     // full-coverage sweep cadence (MC: every tick; see above)
+export const PACK_MAX = 4            // MC hostile pack max, kept — a pack is a mood, not an army
+export const PACK_STEP = 5           // ±5 triangular per-mob walk step, MC verbatim
+export const PLAYER_EXCLUSION = 24   // MC verbatim — it forms out of sight, never in your lap
+export const DESPAWN_DIST = 96       // our load edge (MC uses 128 = its own spawn horizon)
+
+/**
+ * ★ MC 1.18+'s light rule, both halves (minecraft.wiki/w/Light, confirmed 2026-08-07):
+ * block light MUST be 0, and INTERNAL sky light must be ≤ 7. Internal sky at MC midnight is 4,
+ * not 0 — which means the tide comes in at DEEP DUSK, not only at pitch black. Our equivalent of
+ * "internal sky" is skyOf(packed) · dayFactor; ≤ 7 opens the window at dayFactor ≤ 0.467 and the
+ * first cut's `day === 0` gate was the strictest possible misreading of the same rule.
+ */
+export const NIGHT_SKY_MAX = 7
+/** The window, from a day factor: could a fully open-sky spot spawn? (15 · day ≤ 7) */
+export const hollowNight = (day: number): boolean => 15 * day <= NIGHT_SKY_MAX
+/** Dawn wins: bodied Hollows gutter once effective sky climbs past this. Sits above
+ *  NIGHT_SKY_MAX so the boundary has hysteresis — no spawn-and-gutter flap at the dusk line. */
+export const GUTTER_SKY = 9
 
 /**
  * At most this many bodied at once, scaled by how much world is loaded — a fixed cap on a
- * variable radius would make view distance change the danger. ~5% of loaded columns: a full
- * load radius (~113 columns) carries 6; never fewer than 2, never a horde.
+ * variable radius would make view distance change the danger. MC's constant is 70·chunks/289
+ * ≈ 0.24/column; ours is 0.1 (full load ≈ 11) because the ruling reads menace, not horde.
  */
 export const hollowCap = (loadedCols: number): number =>
-  Math.min(10, Math.max(2, Math.round(loadedCols * 0.05)))
+  Math.min(12, Math.max(2, Math.round(loadedCols * 0.1)))
 
 /** Pack size from one roll — flat 1..PACK_MAX. */
 export const packSize = (roll: number): number =>
   1 + Math.min(PACK_MAX - 1, Math.floor(Math.max(0, Math.min(0.999, roll)) * PACK_MAX))
 
 /**
- * Where the rest of a pack tries to stand: `k-1` offsets around the anchor, spread but never on
- * top of it. Offsets only — the caller re-validates each spot with `hollowEligible`, because a
- * pack mate is not exempt from the ruling (an anchor at a greyfield's lit edge must not smear
- * its pack onto tended ground).
+ * The pack's ground: a RANDOM WALK from the anchor, one ±PACK_STEP triangular step per mate —
+ * MC's exact scatter ("before each mob in the pack, the position is offset by ±5, triangular
+ * distribution"). Triangular = sum of two uniforms, so most mates huddle near the anchor and the
+ * odd one strays; offsets ACCUMULATE, so a pack can smear downhill like something pouring.
+ * Positions only — the caller re-validates every one with `hollowEligible`, because a pack mate
+ * is not exempt from the ruling (an anchor at a lit greyfield edge must not smear its pack onto
+ * tended ground).
  */
-export function packOffsets(k: number, rand: () => number): { dx: number; dz: number }[] {
+export function packWalk(k: number, rand: () => number): { dx: number; dz: number }[] {
   const out: { dx: number; dz: number }[] = []
+  let dx = 0, dz = 0
   for (let i = 1; i < k; i++) {
-    const a = rand() * Math.PI * 2
-    const r = 1.5 + rand() * (PACK_SPREAD - 1.5)
-    out.push({ dx: Math.cos(a) * r, dz: Math.sin(a) * r })
+    dx += (rand() - rand()) * PACK_STEP
+    dz += (rand() - rand()) * PACK_STEP
+    out.push({ dx, dz })
   }
   return out
 }
@@ -82,18 +109,17 @@ export function packOffsets(k: number, rand: () => number): { dx: number; dz: nu
  *   drained ground (the cause happened long ago) + dark (the condition) + dry land (a Hollow is
  *   a shape in the air over ground, not a thing in the water).
  *
- * ★ "Dark" is now the LIGHT FIELD's word, not the clock's (2026-08-07). `packedLight` is
- * `light.ts`'s two-channel byte at the spot the body would form; `day` is `dayFactor`'s 0..1.
- * `spawnDark` makes block light an absolute veto — which is the entire strategy layer: a keeper
- * who lanterns their ground has bought it back from the night, at any hour, per the canon line
- * *tended light holds grey off*. The clock still matters (sky light scales with it); it just
- * stopped being the only voice.
+ * ★ "Dark" is the LIGHT FIELD's word (2026-08-07). `packedLight` is light.ts's two-channel byte
+ * at the spot the body would form; `day` is `dayFactor`'s 0..1. `spawnDark` keeps block light an
+ * ABSOLUTE veto — the entire strategy layer: a keeper who lanterns their ground has bought it
+ * back from the night, at any hour (*tended light holds grey off*). Sky passes at ≤ NIGHT_SKY_MAX
+ * per MC 1.18+'s internal-light rule, so the tide starts at deep dusk, not pitch black.
  */
 export function hollowEligible(
   x: number, z: number, seed: number,
   packedLight: number, day: number, surfaceH: number, seaLevel: number,
 ): boolean {
-  if (!spawnDark(packedLight, day)) return false
+  if (!spawnDark(packedLight, day, NIGHT_SKY_MAX)) return false
   if (surfaceH <= seaLevel + 1) return false
   return greyness(x, z, seed) >= 0.5
 }

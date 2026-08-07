@@ -68,10 +68,10 @@ import { WEAPONS, weaponAt, ADS_FOV, spreadDeg, bloomAfterShot, bloomAfterRest,
 // unchanged; the rig in day-night.tsx turns it into sky. This was the last shipped system reading
 // as permanent noon: the light field's `dayFactor` finally has a day to factor.
 import { VoxelDayNight } from './day-night'
-import { dayProgress, getPhase, getDisplayTime, isTimePinned, daylight } from '../engine/day-cycle'
-import { hollowEligible, hollowStep, segmentDist, hollowCap, packSize, packOffsets,
+import { dayProgress, getPhase, getDisplayTime, isTimePinned } from '../engine/day-cycle'
+import { hollowEligible, hollowStep, segmentDist, hollowCap, packSize, packWalk, hollowNight,
          type HollowState, HOLLOW_HP, HOLLOW_HOVER, HOLLOW_RADIUS,
-         SPAWN_CYCLE_S, SPAWN_TRIES, PLAYER_EXCLUSION, DESPAWN_DIST, GUTTER_AT } from './hollows'
+         SPAWN_CYCLE_S, PLAYER_EXCLUSION, DESPAWN_DIST, GUTTER_SKY } from './hollows'
 // The light field (port step 4's other half) — computed here, consumed by the spawn cycle only.
 // Per light.ts's header this deliberately never touches a mesh.
 import { computeLight, dayFactor, type LightField } from '../voxel/light'
@@ -1078,17 +1078,16 @@ function World({ inv, toolTier, toolSkill, selItem, heldTool, weaponDrawn, weapo
       }
     }
 
-    // ── ★ THE NIGHT TIDE'S PAYOFF — the Hollows' SPAWN CYCLE ─────────────────────────────────
-    // Real cycle as of 2026-08-07: chunk scan → light-field dark test → 24-block player
-    // exclusion → pack spawn 1–4 → cap scaled by loaded world. Eligibility is the ruling as code
-    // (hollows.ts): drained + dark + dry, where "dark" is now the two-channel light field — a
-    // lantern-lit yard on grey ground stays safe at midnight (*tended light holds grey off*),
-    // and dawn still gutters every bodied Hollow out. The old blockout rolled a ring around the
-    // player, which made the tide follow the keeper; scanning loaded columns gives the danger to
-    // the GROUND. Living country at night stays as cozy as it ever was.
+    // ── ★ THE NIGHT TIDE'S PAYOFF — the Hollows' SPAWN CYCLE, MINECRAFT'S SHAPE ──────────────
+    // Reworked 2026-08-07 eve after Alex night-walked without meeting one: the first cut scanned
+    // ONE random column per 1.6s (a trickle); MC attempts EVERY eligible chunk every tick, and
+    // the CAP is the governor, not scan luck (see hollows.ts for the ported numbers). Each sweep
+    // walks all loaded columns — one random anchor each, pack of 1–4 on a triangular walk — and
+    // the whole thing stays spatially opt-in: eligibility is the ruling as code (drained + dark
+    // + dry), block light is an absolute veto (*tended light holds grey off*), and the tide now
+    // comes in at DEEP DUSK per MC 1.18's internal-sky rule, not only at pitch black.
     {
       const now = state.clock.elapsedTime
-      const dl = daylight(dayProgress())
       const day = dayFactor(dayProgress())
       hollowClock.current -= dt
       const cap = hollowCap(cols.current.size)
@@ -1102,47 +1101,54 @@ function World({ inv, toolTier, toolSkill, selItem, heldTool, weaponDrawn, weapo
           mesh,
         })
       }
-      // day === 0 is a cheap pre-gate, not the rule: a surface spot's sky channel is 15, so
-      // spawnDark can only pass in full night anyway. The scan is skipped, never the ruling.
-      if (day === 0 && hollows.current.length < cap && hollowClock.current <= 0) {
+      // hollowNight is a cheap pre-gate, not the rule: an open surface spot's sky is 15, so
+      // spawnDark can only pass once 15·day ≤ 7 anyway. The sweep is skipped, never the ruling.
+      if (hollowNight(day) && hollows.current.length < cap && hollowClock.current <= 0) {
         hollowClock.current = SPAWN_CYCLE_S
         const keys = [...cols.current.keys()]
-        const pick = keys.length ? keys[Math.floor(Math.random() * keys.length)] : undefined
-        if (pick) {
-          const [scx, scz] = pick.split(',').map(Number)
+        // Light fields are computed lazily, at most 2 per sweep — a column whose field is not
+        // ready yet is SKIPPED, not guessed at (no-spawn is the safe direction; the lantern's
+        // veto must never be bypassed by a cache miss). The whole load fills within seconds.
+        let lightBudget = 2
+        // Random start offset so the same early-loaded columns do not win every night.
+        const start = Math.floor(Math.random() * Math.max(1, keys.length))
+        for (let i = 0; i < keys.length && hollows.current.length < cap; i++) {
+          const [scx, scz] = keys[(start + i) % keys.length].split(',').map(Number)
           const ccx = scx * SECTION + SECTION / 2, ccz = scz * SECTION + SECTION / 2
-          // A column entirely beyond despawn range would breed instant despawns — skip the cycle.
-          if (Math.hypot(ccx - p.x, ccz - p.z) <= DESPAWN_DIST + SECTION / 2) {
-            const lf = lightFor(scx, scz)
-            for (let t = 0; t < SPAWN_TRIES; t++) {
-              const wx = scx * SECTION + Math.floor(Math.random() * SECTION)
-              const wz = scz * SECTION + Math.floor(Math.random() * SECTION)
-              const sh = columnHeight(wx, wz, SEED)
-              const dp = Math.hypot(wx + 0.5 - p.x, wz + 0.5 - p.z)
-              if (dp < PLAYER_EXCLUSION || dp > DESPAWN_DIST) continue
-              if (!hollowEligible(wx + 0.5, wz + 0.5, SEED, lf.get(wx, sh + 1, wz), day, sh, DEFAULT_DEPTH.seaLevel)) continue
-              // The pack: the anchor bodies, then up to 3 mates — each on its OWN re-validated
-              // ground, because a pack mate is not exempt from the ruling (an anchor at a lit
-              // greyfield edge must not smear its pack onto tended ground).
-              const k = Math.min(packSize(Math.random()), cap - hollows.current.length)
-              spawnHollow(wx + 0.5, sh, wz + 0.5)
-              for (const off of packOffsets(k, Math.random)) {
-                const mx = wx + 0.5 + off.dx, mz = wz + 0.5 + off.dz
-                const mh = columnHeight(Math.floor(mx), Math.floor(mz), SEED)
-                const mdp = Math.hypot(mx - p.x, mz - p.z)
-                if (mdp < PLAYER_EXCLUSION || mdp > DESPAWN_DIST) continue
-                if (!hollowEligible(mx, mz, SEED, lf.get(Math.floor(mx), mh + 1, Math.floor(mz)), day, mh, DEFAULT_DEPTH.seaLevel)) continue
-                spawnHollow(mx, mh, mz)
-              }
-              break
-            }
+          // A column entirely beyond despawn range would breed instant despawns — skip it.
+          if (Math.hypot(ccx - p.x, ccz - p.z) > DESPAWN_DIST + SECTION / 2) continue
+          const kk = key(scx, scz)
+          if (!lightCache.current.has(kk)) { if (lightBudget <= 0) continue; lightBudget-- }
+          const lf = lightFor(scx, scz)
+          // MC's structure: ONE random anchor per column per sweep. Coverage comes from sweeping
+          // every column, not from hammering one.
+          const wx = scx * SECTION + Math.floor(Math.random() * SECTION)
+          const wz = scz * SECTION + Math.floor(Math.random() * SECTION)
+          const sh = columnHeight(wx, wz, SEED)
+          const dp = Math.hypot(wx + 0.5 - p.x, wz + 0.5 - p.z)
+          if (dp < PLAYER_EXCLUSION || dp > DESPAWN_DIST) continue
+          if (!hollowEligible(wx + 0.5, wz + 0.5, SEED, lf.get(wx, sh + 1, wz), day, sh, DEFAULT_DEPTH.seaLevel)) continue
+          // The pack: the anchor bodies, then up to 3 mates on a triangular walk — each on its
+          // OWN re-validated ground, because a pack mate is not exempt from the ruling (an
+          // anchor at a lit greyfield edge must not smear its pack onto tended ground).
+          const k = Math.min(packSize(Math.random()), cap - hollows.current.length)
+          spawnHollow(wx + 0.5, sh, wz + 0.5)
+          for (const off of packWalk(k, Math.random)) {
+            const mx = wx + 0.5 + off.dx, mz = wz + 0.5 + off.dz
+            const mh = columnHeight(Math.floor(mx), Math.floor(mz), SEED)
+            const mdp = Math.hypot(mx - p.x, mz - p.z)
+            if (mdp < PLAYER_EXCLUSION || mdp > DESPAWN_DIST) continue
+            if (!hollowEligible(mx, mz, SEED, lf.get(Math.floor(mx), mh + 1, Math.floor(mz)), day, mh, DEFAULT_DEPTH.seaLevel)) continue
+            spawnHollow(mx, mh, mz)
           }
         }
       }
       for (let i = hollows.current.length - 1; i >= 0; i--) {
         const hw = hollows.current[i]
         const st = hw.st
-        if (dl >= GUTTER_AT || st.hp <= 0) st.gutter = Math.min(1, st.gutter + dt * (st.hp <= 0 ? 2.2 : 0.7))
+        // Dawn wins on the SAME clock the spawn gate reads (15·day = effective open-sky light);
+        // GUTTER_SKY > NIGHT_SKY_MAX gives the dusk boundary hysteresis instead of a flap.
+        if (15 * day >= GUTTER_SKY || st.hp <= 0) st.gutter = Math.min(1, st.gutter + dt * (st.hp <= 0 ? 2.2 : 0.7))
         hollowStep(st, dt, p.x, p.z, (x, z) => columnHeight(Math.floor(x), Math.floor(z), SEED), now)
         const s = Math.max(0.01, (1 - st.gutter))
         const pulse = 1 + Math.sin(now * 2.3 + st.phase) * 0.07
