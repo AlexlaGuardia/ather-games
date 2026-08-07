@@ -32,7 +32,9 @@ import { Column, SECTION } from './column'
 // v2 (2026-08-07): per-item seeds now go through `mixSeed`. That fixed a real distribution bug
 // (see noise.ts) but it also MOVES EVERY CARVE, ORE VEIN AND TREE — which is exactly the case this
 // constant exists for. A v1 save's edits were diffed against a world that no longer exists.
-export const GENERATOR_VERSION = 2
+// v3: valley-floor shaping + woodland mask (2026-08-07) — the surface moved, so v2 edits may sit
+// above or below the ground they were made on. The warning is honest; the edits still apply.
+export const GENERATOR_VERSION = 3
 
 /**
  * One column's edits: packed local index → material.

@@ -49,8 +49,10 @@ export const DEFAULT_HEIGHT: HeightConfig = {
  * continent spline is deliberately gentle there). Measured once over 40k columns and applied as a
  * constant — it is a property of the splines, not of the seed, so it does not need re-deriving.
  * ⚠ Re-measure this if CONTINENT_SPLINE or ridgeAmplitude changes, or the datum quietly lies again.
+ * Re-measured 2026-08-07 after the valley-floor shaping (shallower valleys raised the median 6.5):
+ * was 10.
  */
-export const DATUM_CALIBRATION = 10
+export const DATUM_CALIBRATION = 3.5
 
 /**
  * Continentalness → elevation offset from the datum.
@@ -91,6 +93,28 @@ export function peaksValleys(weirdness: number): number {
   return 1 - Math.abs(3 * Math.abs(weirdness) - 2)
 }
 
+/**
+ * ── ★ VALLEY FLOORS ARE FLAT (2026-08-07, Alex: "more flat areas to travel, like paths") ─────
+ * Raw PV runs linearly down to −1, so a valley is a V: it has a lowest LINE, not a floor, and
+ * walking anywhere in this world meant stairs (measured before this change: 19.6% of columns flat,
+ * mean |dh| per step 1.13 — you were climbing on more than half of all steps).
+ *
+ * Everything below `VALLEY_FLOOR` is compressed nearly flat instead. That turns the trough of every
+ * valley into a broad LEVEL corridor that follows the valley's own winding line — travel paths the
+ * terrain already owns, not paths drawn on top of it. The corridor still drifts gently with
+ * continentalness (a valley floor is flat ACROSS, not pool-table dead), and ridges are untouched:
+ * the flat share of the world comes out of the bottom of the V, never out of the mountains.
+ * `VALLEY_SQUASH` is deliberately not 0 — a mathematically perfect plane reads as a render bug the
+ * moment it meets un-flat light, and the residual keeps the floor from banding at spline knees.
+ */
+export const VALLEY_FLOOR = -0.35
+export const VALLEY_SQUASH = 0.06
+
+export function shapedPV(weirdness: number): number {
+  const pv = peaksValleys(weirdness)
+  return pv > VALLEY_FLOOR ? pv : VALLEY_FLOOR + (pv - VALLEY_FLOOR) * VALLEY_SQUASH
+}
+
 /** The three fields at a column. Exposed so biome selection can read the SAME values, not re-roll them. */
 export function heightFields(x: number, z: number, seed: number, cfg: HeightConfig = DEFAULT_HEIGHT) {
   const continentalness = warped2(x / cfg.continentScale, z / cfg.continentScale, seed ^ 0x9e3779b9, 4)
@@ -113,7 +137,7 @@ export function columnHeight(x: number, z: number, seed: number, cfg: HeightConf
 
   const base = spline(CONTINENT_SPLINE, continentalness)
   const relief = spline(EROSION_SPLINE, erosion)
-  const pv = peaksValleys(weirdness)
+  const pv = shapedPV(weirdness)
 
   // Erosion damps the RIDGES, not the continental base: a worn upland is still an upland, it just
   // stops being jagged. Damping the base instead would sink mountains into the sea as they erode,

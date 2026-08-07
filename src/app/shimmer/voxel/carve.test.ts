@@ -100,7 +100,9 @@ const at = (st: Section[], x: number, y: number, z: number) => st[(y / S) | 0].g
 // ── 4. lakes are not drained ─────────────────────────────────────────────────────────────────
 {
   let drained = 0, wet = 0
-  for (const [ox, oz] of [[512, 768], [1600, 900], [-800, -400], [220, 1180]] as const) {
+  // Sites re-picked 2026-08-07: the valley-floor shaping (height.ts shapedPV) raised the originals
+  // above sea level, and a drain test over dry land proves nothing — its own guard assert said so.
+  for (const [ox, oz] of [[-320, -1600], [1600, -1600], [-1600, -1280], [-1440, -1120]] as const) {
     const st = stackAt(ox, oz)
     for (let z = 0; z < S; z++) for (let x = 0; x < S; x++) {
       const h = surf(ox + x, oz + z)
