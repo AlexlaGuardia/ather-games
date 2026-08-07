@@ -190,6 +190,22 @@ const settle = (s: ReturnType<typeof createLoco>, solid: any, frames = 30) => {
   ok(stoodOnTop, 'and lands standing on the ledge')
 }
 
+// ── ★ a hang belongs to the wall you face — side blocks never snatch the grab ────────────────
+{
+  // A 2-high block BESIDE the jump (at +z). Push into it while LOOKING forward (+x), held Space:
+  // this is exactly the "keeps grabbing adjacent blocks that happen to be 2 high" repro — the old
+  // input-axis probe grabbed it; the contact+facing gate must not.
+  const solid = world((x, y, z) => x >= 3 && x < 5 && z >= 2 && y < 12)
+  const s = createLoco(3.5, 10, 0.5); settle(s, solid)
+  let hung = false
+  tickLocomotion(s, input({ mvZ: 1, jumpKey: true }), solid)     // jump with sideways push
+  for (let i = 0; i < 60; i++) {
+    tickLocomotion(s, input({ mvZ: 1, jumpKey: true }), solid)   // held Space, still looking +x
+    if (s.hanging) hung = true
+  }
+  ok(!hung, '★ a 2-high block beside the jump is never grabbed — the hang needs the faced wall')
+}
+
 // ── tap-jump near a wall is a pure jump — the Apex tap/hold line ─────────────────────────────
 {
   const solid = world((x, y) => x >= 4 && y < 12)

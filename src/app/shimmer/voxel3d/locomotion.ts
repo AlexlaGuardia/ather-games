@@ -63,6 +63,9 @@ export const HANG_DROP = 0.9
 export const MANTLE_TIME = 0.30
 export const HANG_MIN = 0.22
 export const HANG_COMMIT = 0.35
+export const HANG_FACING = 0.5      // camera-forward · wall-cardinal for a grab — a hang belongs to
+                                    // the wall you are CLIMBING, directly ahead, never a block that
+                                    // happens to sit 2-high beside your jump (Alex, 07-08-07)
 export const VAULT_TIME = 0.16      // quick — a vault is a step with intent, not a climb animation
 export const VAULT_REACH = 0.55     // how close the face must be (beyond the body radius) to vault
 export const VAULT_FACING = 0.4     // camera-forward · step-direction must exceed this — the vault
@@ -295,14 +298,23 @@ export function tickLocomotion(s: LocoState, input: LocoInput, solid: Solid): vo
   const cardZ = useWallCard ? s.wallCZ : Math.abs(gx) >= Math.abs(gz) ? 0 : (Math.sign(gz) || 1)
 
   if (s.hangLock > 0) s.hangLock -= dt
+  // ★ A GRAB NEEDS THE WALL, NOT A DIRECTION. The first cut probed whatever column the input's
+  // dominant axis (or the camera, with no input) pointed at — so a jump beside any block that
+  // happened to be 2-high could snatch a hang out of the air. Now a hang can only target the wall
+  // being CLIMBED: real contact (or the breath of coyote after it), that wall's own cardinal, and
+  // the camera facing it. Off-wall jumps never grab; that is what the vault and the jump are for.
   if (!s.hanging && s.mantleT <= 0 && s.hangLock <= 0 && climbActive && s.airborne) {
-    const bx = Math.floor(s.px) + cardX, bz = Math.floor(s.pz) + cardZ
-    const lip = lipAt(solid, bx, bz, s.py)
-    if (lip !== null) {
-      s.hanging = true; s.hangT = 0
-      s.hangLipX = bx + 0.5; s.hangLipY = lip; s.hangLipZ = bz + 0.5
-      s.hangCX = cardX; s.hangCZ = cardZ
-      s.climbRise = 0
+    const hasCard = (s.onWall || s.wallStick > 0) && (s.wallCX !== 0 || s.wallCZ !== 0)
+    const faced = hasCard && (input.fwdX * s.wallCX + input.fwdZ * s.wallCZ) > HANG_FACING
+    if (faced) {
+      const bx = Math.floor(s.px) + s.wallCX, bz = Math.floor(s.pz) + s.wallCZ
+      const lip = lipAt(solid, bx, bz, s.py)
+      if (lip !== null) {
+        s.hanging = true; s.hangT = 0
+        s.hangLipX = bx + 0.5; s.hangLipY = lip; s.hangLipZ = bz + 0.5
+        s.hangCX = s.wallCX; s.hangCZ = s.wallCZ
+        s.climbRise = 0
+      }
     }
   }
   const intoLedge = hasInput ? (mvX * s.hangCX + mvZ * s.hangCZ) : 0
