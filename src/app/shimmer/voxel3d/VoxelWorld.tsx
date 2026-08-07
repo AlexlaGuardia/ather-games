@@ -750,6 +750,46 @@ function World({ inv, toolTier, toolSkill, selItem, heldTool, weaponDrawn, weapo
   }, [material, scratch])
 
   /**
+   * ── ★ STREAMING MESHES THROUGH A BUDGETED QUEUE, NOT SYNCHRONOUSLY (2026-08-07) ────────────
+   * The lag Alex hit was not framerate, it was the main thread WEDGED — reproduced as a ~45s
+   * unresponsive renderer on a fresh load. The adopt path called `remesh` inline for every arriving
+   * column PLUS its four neighbours: at ~47ms per meshColumn that is ~470ms per frame while
+   * streaming, and the same stall re-fires in a row of columns every time you walk into new ground.
+   * Worse, each column got meshed up to five times as its neighbours arrived one by one.
+   *
+   * The queue fixes both at once: entries dedup in the Set (a column queued by five neighbours
+   * meshes ONCE, with more neighbours present — better output for a fifth of the work), and the
+   * drain is time-budgeted per frame, nearest first, so streaming costs a bounded slice of each
+   * frame instead of the whole frame. Mining does NOT go through here — `setVoxel` keeps its
+   * synchronous remesh, because a swing that repairs the hole two frames later reads as broken.
+   */
+  const remeshQueue = useRef(new Set<string>())
+  const queueRemesh = useCallback((cx: number, cz: number) => {
+    if (cols.current.has(key(cx, cz))) remeshQueue.current.add(key(cx, cz))
+  }, [])
+  /** Mesh queued columns until the frame budget runs out. Always does at least one so the queue
+   *  cannot starve on a slow machine whose every mesh overruns the budget. */
+  const drainRemeshQueue = useCallback((pcx: number, pcz: number, budgetMs: number) => {
+    const q = remeshQueue.current
+    if (!q.size) return
+    const keys = [...q]
+    // Nearest to the player first — the far edge of the load radius can wait; the ground at your
+    // feet cannot.
+    keys.sort((a, b) => {
+      const [ax, az] = a.split(',').map(Number)
+      const [bx, bz] = b.split(',').map(Number)
+      return ((ax - pcx) ** 2 + (az - pcz) ** 2) - ((bx - pcx) ** 2 + (bz - pcz) ** 2)
+    })
+    const end = performance.now() + budgetMs
+    for (const k of keys) {
+      q.delete(k)
+      const [gx, gz] = k.split(',').map(Number)
+      remesh(gx, gz)
+      if (performance.now() > end) break
+    }
+  }, [remesh])
+
+  /**
    * Write one voxel and repair the geometry.
    *
    * ★ THE NEIGHBOUR RE-MESH IS NOT OPTIONAL. Editing a voxel on a column's edge changes which faces
@@ -945,7 +985,7 @@ function World({ inv, toolTier, toolSkill, selItem, heldTool, weaponDrawn, weapo
       refreshUniform(col)
       col.stage = Stage.Ready
       cols.current.set(ek, col)
-      remesh(gx, gz)
+      queueRemesh(gx, gz)
       if (!edits.current.has(ek)) {
         loadColumn(SEED, gx, gz).then(saved => {
           if (!saved) { edits.current.set(ek, new Map()); return }
@@ -956,7 +996,7 @@ function World({ inv, toolTier, toolSkill, selItem, heldTool, weaponDrawn, weapo
           const m = unpackEdits(saved.edits)
           edits.current.set(ek, m)
           const c = cols.current.get(ek)
-          if (c && m.size) { applyEdits(c, m); refreshUniform(c); remesh(gx, gz) }
+          if (c && m.size) { applyEdits(c, m); refreshUniform(c); queueRemesh(gx, gz) }
           // Pieces come back with their blocks. Occupancy is NOT re-written here — it is already in
           // the block diff, because placing a piece wrote STRUCTURE through `setVoxel`, which is a
           // recorded edit. Writing it twice would be harmless but would double the save.
@@ -968,7 +1008,7 @@ function World({ inv, toolTier, toolSkill, selItem, heldTool, weaponDrawn, weapo
         })
       }
       for (const [ddx, ddz] of [[-1, 0], [1, 0], [0, -1], [0, 1]] as const)
-        if (cols.current.has(key(gx + ddx, gz + ddz))) remesh(gx + ddx, gz + ddz)
+        queueRemesh(gx + ddx, gz + ddz)
       adopted++
     }
 
@@ -993,11 +1033,15 @@ function World({ inv, toolTier, toolSkill, selItem, heldTool, weaponDrawn, weapo
         if (performance.now() - t0 > 10) break
         requested.current.add(key(gx, gz))
         cols.current.set(key(gx, gz), makeColumn(gx * SECTION, gz * SECTION, SEED))
-        remesh(gx, gz)
+        queueRemesh(gx, gz)
         for (const [ddx, ddz] of [[-1, 0], [1, 0], [0, -1], [0, 1]] as const)
-          if (cols.current.has(key(gx + ddx, gz + ddz))) remesh(gx + ddx, gz + ddz)
+          queueRemesh(gx + ddx, gz + ddz)
       }
     }
+
+    // Mesh what arrived, nearest first, inside a frame budget. 12ms leaves a 60Hz frame most of its
+    // time for everything else while still filling a fresh load radius in a few seconds.
+    drainRemeshQueue(cx, cz, 12)
 
     // Until the spawn column exists every lookup returns AIR, so gravity would drop the player
     // through a world that has not generated yet. Hold until there is ground beneath.

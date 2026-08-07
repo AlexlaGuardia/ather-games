@@ -57,7 +57,10 @@ for (let i = 0; i < 40; i++) SITES.push([(i * 197) % 3000, (i * 331) % 3000])
 // be invisible in the result. Columns at ox and ox+SECTION-1 overlap in exactly one world column.
 {
   let mismatch = 0, wood = 0, checked = 0
-  for (const [bx, bz] of [[512, 768], [1024, 256], [-320, 640], [64, 64]] as const) {
+  // Sites picked to sit INSIDE the woodland mask (forestness ≥ 0.9) with wood actually crossing the
+  // shared column — the originals went bare when forests became patchy (2026-08-07) and a seam test
+  // over bare ground proves nothing, which is exactly what its own guard assert said.
+  for (const [bx, bz] of [[384, 192], [1728, 192], [960, 384], [2688, 0]] as const) {
     const a = makeColumn(bx, bz, SEED)
     const b = makeColumn(bx + SECTION - 1, bz, SEED)
     for (let y = 1; y < 250; y++) for (let z = 0; z < SECTION; z++) {
@@ -185,9 +188,11 @@ for (let i = 0; i < 40; i++) SITES.push([(i * 197) % 3000, (i * 331) % 3000])
   // Every generated wood material must have a definition, or it is an unnamed unbreakable block.
   const missing = [...LOGS, ...LEAVES].filter(m => !blockDef(m))
   ok(missing.length === 0, `every wood material has a BlockDef (missing ${missing.join(',')})`)
-  // And the drops are the RULED ids from resources.ts.
-  ok(blockDef(WOOD.GOLDWOOD_LOG)?.drops[0]?.itemId === 'goldwood_plank', 'goldwood drops the ruled plank id')
-  ok(blockDef(WOOD.STARWILLOW_LOG)?.drops[0]?.itemId === 'starwillow_branch', 'starwillow drops the ruled branch id')
+  // A log drops a LOG since the refine layer (859aebb) — planks/branches are CRAFTED from it now.
+  // (These two asserts said `goldwood_plank`/`starwillow_branch` until 2026-08-07: the refine
+  // commit updated the registry + recipes tests but missed this file, so they were failing stale.)
+  ok(blockDef(WOOD.GOLDWOOD_LOG)?.drops[0]?.itemId === 'goldwood_log', 'goldwood drops its raw log')
+  ok(blockDef(WOOD.STARWILLOW_LOG)?.drops[0]?.itemId === 'starwillow_log', 'starwillow drops its raw log')
 }
 
 console.log(`\ntrees: ${pass} passed, ${fails.length} failed`)

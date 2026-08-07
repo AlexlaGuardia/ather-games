@@ -323,6 +323,65 @@ function writeOre(dst: Layer, size: number, material: number, seed: number) {
   }
 }
 
+// ── wood ─────────────────────────────────────────────────────────────────────────────────────────
+// These exist because they were MISSING: TILE_MATERIALS listed the wood ids (so layerOf mapped them
+// to real slots) but paintFor had no cases for them, and the switch's `default` is the ORE painter.
+// Every log and every leaf block rendered as crystal shards in deep-stone host rock — Alex's "the
+// trees are made out of stone ore blocks", 2026-08-07. The fallback checker never fired because the
+// materials WERE mapped; the hole was between the slot table and the painter. When you append to
+// TILE_MATERIALS, the switch below needs a case, or the default hands your block to the ore artist.
+
+/** Bark — vertical striation. Tone is per-COLUMN (1D wrapped noise) so the grain runs up the trunk,
+ *  with a fine groove line where the stripe noise crosses a band. */
+function paintBark(dst: Layer, size: number, base: [number, number, number], seed: number) {
+  for (let x = 0; x < size; x++) {
+    const stripe = (vnoise(x, 0, size, 8, seed) - 0.5) * 2 * 16
+    const groove = vnoise(x, 0, size, 16, seed + 7)
+    const isGroove = Math.abs(groove - 0.5) < 0.06
+    for (let y = 0; y < size; y++) {
+      const grit = (h2(x, y, seed + 21) - 0.5) * 2 * 8
+      // Sparse horizontal nicks so the bark is not perfect verticals — real bark breaks its grain.
+      const nick = h2(x >> 1, y, seed + 53) > 0.93 ? -14 : 0
+      put(dst, size, x, y, shade(base, stripe + grit + nick + (isGroove ? -26 : 0)))
+    }
+  }
+}
+
+/** End grain — concentric SQUARE rings. Square, not round: at tile size a circle reads as a target;
+ *  square rings read as cut wood, the same shape-language call as the ore's Manhattan diamonds. */
+function paintRings(dst: Layer, size: number, base: [number, number, number], seed: number) {
+  const c = (size - 1) / 2
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const d = Math.max(Math.abs(x - c), Math.abs(y - c))
+      const ring = ((d + (h2(x, y, seed + 3) > 0.85 ? 1 : 0)) % 3) === 0 ? -18 : 6
+      const heart = d < size * 0.14 ? 10 : 0
+      const grit = (h2(x, y, seed + 11) - 0.5) * 2 * 6
+      put(dst, size, x, y, shade(base, ring + heart + grit))
+    }
+  }
+}
+
+/** Foliage — clump noise cut into three hard tones (pixel solidity comes from tone STEPS, same rule
+ *  as the ore facets), with sparse dark holes so a canopy reads as leaves, not as a green block. */
+function paintLeaves(dst: Layer, size: number, base: [number, number, number], seed: number) {
+  const dark = shade(base, -30)
+  const lit = shade(base, 20)
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const clump = vnoise(x, y, size, 8, seed)
+      let c = clump < 0.42 ? dark : clump > 0.62 ? lit : base
+      const blade = h2(x, y, seed + 31)
+      if (blade > 0.94) c = shade(c, 24)        // leaf catching light
+      else if (blade < 0.05) c = shade(c, -38)  // hole into the canopy's dark
+      put(dst, size, x, y, c)
+    }
+  }
+}
+
+const LOG_SET = new Set<number>([WOOD.GOLDWOOD_LOG, WOOD.SHIMMEROAK_LOG, WOOD.STARWILLOW_LOG, WOOD.DAWNWOOD_LOG])
+const LEAF_SET = new Set<number>([WOOD.GOLDWOOD_LEAVES, WOOD.SHIMMEROAK_LEAVES, WOOD.STARWILLOW_LEAVES, WOOD.DAWNWOOD_LEAVES])
+
 // ── assembly ─────────────────────────────────────────────────────────────────────────────────────
 
 function paintFor(material: number, face: number, size: number): Layer {
@@ -340,7 +399,14 @@ function paintFor(material: number, face: number, size: number): Layer {
       else if (face === SIDE) paintGrassSide(dst, size, seed)
       else paintGrit(dst, size, rgbOf(MATERIAL_COLOR[MAT.SUBSOIL]), 18, 22, seed)
       break
-    default: writeOre(dst, size, material, seed)
+    default:
+      if (LOG_SET.has(material)) {
+        const c = rgbOf(MATERIAL_COLOR[material])
+        if (face === SIDE) paintBark(dst, size, c, seed)
+        else paintRings(dst, size, c, seed)
+      }
+      else if (LEAF_SET.has(material)) paintLeaves(dst, size, rgbOf(MATERIAL_COLOR[material]), seed)
+      else writeOre(dst, size, material, seed)
   }
   return dst
 }

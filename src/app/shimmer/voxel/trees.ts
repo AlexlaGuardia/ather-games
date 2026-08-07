@@ -24,7 +24,7 @@
 
 import { Section, AIR } from './section'
 import { MAT } from './depth'
-import { hash2, mixSeed } from './noise'
+import { hash2, mixSeed, value2 } from './noise'
 
 /** Wood materials. Continue past ORE (which ends at 22) with room to spare. */
 export const WOOD = {
@@ -76,8 +76,24 @@ export const SPECIES: TreeSpecies[] = [
 ]
 
 export interface TreeConfig {
-  /** Expected trunks per column (16x16). Fractional; the remainder is a probability. */
+  /** Expected trunks per column (16x16) INSIDE woodland. Fractional; the remainder is a probability. */
   perColumn: number
+  /** Expected trunks per column in open country — the lone meadow tree, not a thinner forest. */
+  meadowPerColumn: number
+  /**
+   * ── ★ THE WOODLAND MASK (2026-08-07, Alex: "a forest is okay but a forest everywhere is
+   * overkill") ──────────────────────────────────────────────────────────────────────────────
+   * `perColumn` alone is a UNIFORM density: at 1.7 every topsoil column on the map rolled trees,
+   * which is not "a world with forests", it is one endless forest with a treeline. Woodland has to
+   * be a PLACE you enter and leave, so density is now gated by low-frequency value noise sampled
+   * per column: below `forestThreshold` is open meadow (lone trees only), above `forestFull` is
+   * forest core at full density, and the band between is the forest EDGE, thinning smoothly.
+   * The clearings this carves are not just look — they are where the spawn layer gets its open
+   * night ground, and later where anything built wants to stand.
+   */
+  forestScale: number      // noise frequency per column — smaller = larger forests and clearings
+  forestThreshold: number  // mask below this = meadow
+  forestFull: number       // mask above this = forest core; between the two is the thinning edge
   /** Largest canopy radius across all species — the scan margin. Declared, not derived at runtime. */
   maxSpread: number
   /** Trees refuse ground above this; the treeline. */
@@ -86,10 +102,26 @@ export interface TreeConfig {
 }
 
 export const DEFAULT_TREES: TreeConfig = {
-  perColumn: 1.7,
+  perColumn: 1.7,          // unchanged — this was always a fine density FOR A FOREST
+  meadowPerColumn: 0.05,   // ~one lone tree per 20 open columns; a meadow is not a void
+  forestScale: 0.14,       // features span ~7 columns ≈ 110 blocks — a forest you can walk out of
+  forestThreshold: 0.52,
+  forestFull: 0.68,
   maxSpread: 6,
   maxAltitude: 205,
   species: SPECIES,
+}
+
+/**
+ * How wooded is this column, 0 (meadow) .. 1 (forest core)? Pure and per-column, so every consumer
+ * — the planter here, and any later system that wants "am I in a forest" (ambience, spawns) — reads
+ * the SAME boundary rather than each inventing one.
+ */
+export function forestness(seed: number, cx: number, cz: number, cfg: TreeConfig = DEFAULT_TREES): number {
+  const f = value2(cx * cfg.forestScale, cz * cfg.forestScale, seed ^ 0xf07e57)
+  const t = (f - cfg.forestThreshold) / (cfg.forestFull - cfg.forestThreshold)
+  const c = t < 0 ? 0 : t > 1 ? 1 : t
+  return c * c * (3 - 2 * c)
 }
 
 /** Deterministic per-tree stream. xorshift32 — identical sequence in TS and Rust. */
@@ -117,8 +149,11 @@ export function treeStartsAt(seed: number, cx: number, cz: number, size: number,
   const out: TreeStart[] = []
   const base = (hash2(cx, cz, seed ^ 0x7ee5) * 4294967296) | 0
   const g0 = rng(base)
-  const whole = Math.floor(cfg.perColumn)
-  const n = whole + (g0() < cfg.perColumn - whole ? 1 : 0)
+  // The mask scales EXPECTED count, not a per-tree veto — so the forest edge thins gradually and a
+  // meadow still rolls its occasional lone tree from the same stream (determinism untouched).
+  const expected = cfg.meadowPerColumn + forestness(seed, cx, cz, cfg) * (cfg.perColumn - cfg.meadowPerColumn)
+  const whole = Math.floor(expected)
+  const n = whole + (g0() < expected - whole ? 1 : 0)
 
   const total = cfg.species.reduce((a, s) => a + s.weight, 0)
   for (let i = 0; i < n; i++) {
