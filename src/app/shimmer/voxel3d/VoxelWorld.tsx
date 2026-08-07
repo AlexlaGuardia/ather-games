@@ -62,6 +62,11 @@ import { RECIPES, canCraft as canCraftRecipe, craftPlan, type RecipeDef } from '
 // exact than what the tile version could do.
 import { WEAPONS, weaponAt, ADS_FOV, spreadDeg, bloomAfterShot, bloomAfterRest,
          canFire, coneDirection, recoilKick, type WeaponDef } from '../engine/weapons'
+// ── PORT STEP 4 — the clock (2026-08-07). `engine/day-cycle.ts` is pure wall-time maths, imported
+// unchanged; the rig in day-night.tsx turns it into sky. This was the last shipped system reading
+// as permanent noon: the light field's `dayFactor` finally has a day to factor.
+import { VoxelDayNight } from './day-night'
+import { dayProgress, getPhase, getDisplayTime, isTimePinned } from '../engine/day-cycle'
 
 const SEED = 1337
 const H = DEFAULT_COLUMN.worldHeight
@@ -270,11 +275,9 @@ export default function VoxelWorld() {
   return (
     <div className="fixed inset-0 bg-[#0b0d14]">
       <Canvas camera={{ fov: 75, near: 0.1, far: 600 }} shadows={false}>
-        <color attach="background" args={['#8fb7d9']} />
-        <fog attach="fog" args={['#8fb7d9', 80, 200]} />
-        <hemisphereLight args={['#cfe6ff', '#3b3a4a', 1.5]} />
-        <directionalLight position={[80, 200, 40]} intensity={1.5} />
-        <ambientLight intensity={0.4} />
+        {/* Sky, fog and all scene lights live in the rig now — the clock drives them. The old
+            static five-liner IS the rig's DAY palette, so noon looks identical. */}
+        <VoxelDayNight />
         <World
           inv={inv} toolTier={toolTier} toolSkill={toolSkill}
           /* A tool in hand is not a block in hand — RMB must not place while you hold a spade.
@@ -300,6 +303,28 @@ export default function VoxelWorld() {
         <CraftPanel have={have} tools={tools} tick={craftTick}
                     onCraft={doCraft} onCraftTool={doCraftTool} onClose={() => setCraftOpen(false)} />
       )}
+    </div>
+  )
+}
+
+/**
+ * The clock readout. Self-contained state on a 1s interval so the tick re-renders THIS chip and
+ * nothing else — the sky reads the clock per-frame off in the Canvas; the HUD only needs minutes.
+ * `PINNED` renders whenever `?hour=` froze the module clock, so a pinned art-pass tab can never be
+ * mistaken for a broken cycle (the exact confusion the flag exists for — see day-cycle.ts).
+ */
+function Clock() {
+  const [now, setNow] = useState(() => dayProgress())
+  useEffect(() => {
+    const t = setInterval(() => setNow(dayProgress()), 1000)
+    return () => clearInterval(t)
+  }, [])
+  const phase = getPhase(now)
+  const glyph = phase === 'night' ? '☾' : phase === 'day' ? '☀' : phase === 'dawn' ? '🌅' : '🌇'
+  return (
+    <div className="text-white/60 tabular-nums">
+      {glyph} {getDisplayTime(now)} · {phase}
+      {isTimePinned && <span className="ml-2 text-amber-300/90">PINNED</span>}
     </div>
   )
 }
@@ -336,6 +361,7 @@ function Hud({ stats, pos, look, hotbar, sel, tier, build, pieceIdx, rot, inv, s
           {isOwner && <a href="/shimmer/play3d" className="hover:text-white/85 underline decoration-white/20">❈ play3d (legacy)</a>}
         </div>
         <div>{pos}</div>
+        <Clock />
         <div className="text-white/55">{stats}</div>
         <div className="mt-1 text-white/45">click to look · WASD · space · shift run · V fly</div>
         {build
