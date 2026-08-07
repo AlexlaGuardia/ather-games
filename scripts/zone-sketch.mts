@@ -27,9 +27,9 @@ const ZONES: Zone[] = [
   { id: 'garden', name: 'HOME PLOT', role: 'spawn · build mode · reformed Moglins dock', x: 0, z: 0, rx: 380, rz: 340, fill: '#d9b64a33', stroke: '#d9b64a' },
   { id: 'moonwell-glade', name: 'MOONWELL GLADE', role: 'Gregory · tended heart · fold-gate', x: -150, z: -640, rx: 340, rz: 300, fill: '#bcd0e833', stroke: '#bcd0e8' },
   { id: 'mycelial-path', name: 'MYCELIAL PATH', role: 'west corridor · forks to both arms', x: -1250, z: -120, rx: 620, rz: 260, fill: '#b8a06433', stroke: '#b8a064' },
-  { id: 'spirit-meadow', name: 'SPIRIT MEADOWS', role: 'HOLD 1 · first liberation · gentle open terrain', x: -2150, z: 700, rx: 950, rz: 780, fill: '#7fc46a33', stroke: '#7fc46a' },
-  { id: 'twilight-thicket', name: 'TWILIGHT THICKET', role: 'cozy pocket · closed dim woodland', x: -2000, z: -1150, rx: 800, rz: 650, fill: '#7a6b9e33', stroke: '#9a8bc4' },
-  { id: 'mana-springs', name: 'MANA SPRINGS', role: 'eastern hub · broken spring-pocked uplands · ascent', x: 2100, z: -300, rx: 900, rz: 750, fill: '#5fd0c433', stroke: '#5fd0c4' },
+  { id: 'spirit-meadow', name: 'SPIRIT MEADOWS', role: 'HOLD 1 · ROLLING HILLS, sparse lone trees · open sightlines', x: -2150, z: 700, rx: 950, rz: 780, fill: '#7fc46a33', stroke: '#7fc46a' },
+  { id: 'twilight-thicket', name: 'TWILIGHT THICKET', role: 'DENSE FOREST · closed canopy, dim floor · cozy pocket', x: -2000, z: -1150, rx: 800, rz: 650, fill: '#7a6b9e33', stroke: '#9a8bc4' },
+  { id: 'mana-springs', name: 'MANA SPRINGS', role: 'HOT SPRINGS · steaming pools + terraces · eastern hub', x: 2100, z: -300, rx: 900, rz: 750, fill: '#5fd0c433', stroke: '#5fd0c4' },
   { id: 'gloview-village', name: 'GLOVIEW VILLAGE', role: 'free Moglin village · nothing hostile ever', x: 3450, z: -1500, rx: 520, rz: 430, fill: '#e0955633', stroke: '#e09556' },
   { id: 'the-outfields', name: 'THE OUTFIELDS', role: 'frayed edge · retreat pens · still garden', x: 3700, z: 1000, rx: 900, rz: 750, fill: '#a8a28c33', stroke: '#a8a28c' },
 ]
@@ -56,6 +56,18 @@ const zoneEls = ZONES.map(zo => `
     fill="#cfc9bd">${zo.role}</text>
   <text x="${px(zo.x)}" y="${pz(zo.z) + 30}" text-anchor="middle" font-family="monospace" font-size="10"
     fill="#8f897d">~${Math.round(zo.rx * 2 / 100) * 100}×${Math.round(zo.rz * 2 / 100) * 100}</text>`).join('')
+
+// ★ MIST PATCHES (Alex, at blessing): 2-3 per zone — dense-mana mist where spirits manifest to
+// spar; roster EXCLUSIVE to the zone (species-per-region flagged to Magii, mechanic is build).
+const MISTS: [number, number][] = [
+  [-2450, 300], [-1850, 1100], [-2700, 900],      // Spirit Meadows
+  [-2250, -900], [-1700, -1400],                  // Twilight Thicket
+  [1800, -700], [2500, 100], [2200, -100],        // Mana Springs
+  [3600, 600], [3950, 1400],                      // Outfields (frayed-mist variants)
+]
+const mistEls = MISTS.map(([x, z]) => `
+  <circle cx="${px(x)}" cy="${pz(z)}" r="10" fill="none" stroke="#e8e2d4" stroke-width="1.5" opacity="0.8" stroke-dasharray="2 3"/>
+  <circle cx="${px(x)}" cy="${pz(z)}" r="4" fill="#e8e2d4" opacity="0.55"/>`).join('')
 
 const markerEls = MARKERS.map(m => `
   <g>
@@ -97,9 +109,14 @@ const rim = `
 
 const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}">
   <rect width="${W}" height="${H}" fill="#1b1d1a"/>
-  <text x="30" y="42" font-family="monospace" font-size="24" font-weight="bold" fill="#e8e2d4">THE GARDEN AT WORLD SCALE — zone layout proposal v1</text>
+  <text x="30" y="42" font-family="monospace" font-size="24" font-weight="bold" fill="#e8e2d4">THE GARDEN AT WORLD SCALE — zone layout v2 — BLESSED 2026-08-07, with Alex's zone characters</text>
   <text x="30" y="64" font-family="monospace" font-size="12" fill="#8f897d">the ruled loop (shimmer-geography.md) as anchored regions · wild country between zones carries the generic biomes (woodland / meadow / greyfield / rivers)</text>
-  ${rim}${routeEls}${zoneEls}${markerEls}
+  ${rim}${routeEls}${zoneEls}${mistEls}${markerEls}
+  <g font-family="monospace" font-size="11" fill="#cfc9bd">
+    <circle cx="46" cy="92" r="8" fill="none" stroke="#e8e2d4" stroke-width="1.5" stroke-dasharray="2 3"/>
+    <circle cx="46" cy="92" r="3.5" fill="#e8e2d4" opacity="0.55"/>
+    <text x="62" y="96">mist patch — spar wild-manifest spirits, roster exclusive to the zone (2-3 per zone)</text>
+  </g>
   <g transform="translate(${W - 260}, ${H - 70})">
     <line x1="0" y1="0" x2="${1000 * SCALE}" y2="0" stroke="#e8e2d4" stroke-width="3"/>
     <text x="${500 * SCALE}" y="-8" text-anchor="middle" font-family="monospace" font-size="12" fill="#e8e2d4">1000 blocks</text>
