@@ -36,6 +36,8 @@ export const TILE_MATERIALS: number[] = [
   WOOD.DAWNWOOD_LOG, WOOD.DAWNWOOD_LEAVES,
   // Grey soil added 2026-08-07 with the biome layer.
   MAT.GREY_SOIL,
+  // The lantern added 2026-08-07 with the Hollows spawn cycle — the first emitter.
+  MAT.MANA_LANTERN,
 ]
 
 /** One spare layer past the end: an unmapped material samples magenta rather than layer 0's stone. */
@@ -388,6 +390,35 @@ function paintLeaves(dst: Layer, size: number, base: [number, number, number], s
 const LOG_SET = new Set<number>([WOOD.GOLDWOOD_LOG, WOOD.SHIMMEROAK_LOG, WOOD.STARWILLOW_LOG, WOOD.DAWNWOOD_LOG])
 const LEAF_SET = new Set<number>([WOOD.GOLDWOOD_LEAVES, WOOD.SHIMMEROAK_LEAVES, WOOD.STARWILLOW_LEAVES, WOOD.DAWNWOOD_LEAVES])
 
+// ── the lantern ──────────────────────────────────────────────────────────────────────────────────
+
+/**
+ * A plank frame around warm mana glass. The GLASS carries the emissive alpha and the frame stays
+ * dead wood — a lit block must read as light held in a thing, not as a cube that glows. Core is a
+ * hard-stepped Manhattan diamond, the ore shards' shape language: facets, not gradients.
+ */
+function paintLantern(dst: Layer, size: number, seed: number) {
+  const frame = rgbOf(MATERIAL_COLOR[WOOD.GOLDWOOD_LOG])
+  const glass = rgbOf(MATERIAL_COLOR[MAT.MANA_LANTERN])
+  const hot = shade(glass, 56)
+  const dim = shade(glass, -44)
+  const b = Math.max(2, Math.round(size / 8))
+  const c = (size - 1) / 2
+  const r = size / 2 - b
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      if (x < b || y < b || x >= size - b || y >= size - b) {
+        put(dst, size, x, y, shade(frame, (h2(x, y, seed) - 0.5) * 26), 0)
+        continue
+      }
+      const d = Math.abs(x - c) + Math.abs(y - c)
+      if (d < r * 0.5) put(dst, size, x, y, hot, 255)
+      else if (d < r * 0.85) put(dst, size, x, y, glass, 205)
+      else put(dst, size, x, y, dim, 140)
+    }
+  }
+}
+
 // ── assembly ─────────────────────────────────────────────────────────────────────────────────────
 
 function paintFor(material: number, face: number, size: number): Layer {
@@ -410,6 +441,7 @@ function paintFor(material: number, face: number, size: number): Layer {
       else if (face === SIDE) paintGrassSide(dst, size, seed, MATERIAL_COLOR[MAT.GREY_SOIL])
       else paintGrit(dst, size, rgbOf(MATERIAL_COLOR[MAT.SUBSOIL]), 18, 22, seed)
       break
+    case MAT.MANA_LANTERN: paintLantern(dst, size, seed); break
     default:
       if (LOG_SET.has(material)) {
         const c = rgbOf(MATERIAL_COLOR[material])

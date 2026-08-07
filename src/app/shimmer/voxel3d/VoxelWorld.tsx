@@ -30,7 +30,7 @@ import { AIR } from '../voxel/section'
 import { materialAt, MAT, DEFAULT_DEPTH } from '../voxel/depth'
 import { raycast, tickBreak, dropsFor, type BreakState } from '../voxel/mine'
 import { spawnDrop, tickDrops, type Drop } from '../voxel/drops'
-import { blockDef, materialForItem, type BlockSkill } from '../voxel/registry'
+import { blockDef, materialForItem, emitOf, type BlockSkill } from '../voxel/registry'
 import { editIndex, recordEdit, applyEdits, packEdits, unpackEdits, isStale, type ColumnEdits } from '../voxel/edits'
 import { loadColumn, saveColumn, editedColumnCount } from './save'
 import { PIECES, STRUCTURE, pieceDef, cellsOf, canPlace, canAfford, placementAt, type Placement, type Rotation } from '../voxel/pieces'
@@ -69,9 +69,13 @@ import { WEAPONS, weaponAt, ADS_FOV, spreadDeg, bloomAfterShot, bloomAfterRest,
 // as permanent noon: the light field's `dayFactor` finally has a day to factor.
 import { VoxelDayNight } from './day-night'
 import { dayProgress, getPhase, getDisplayTime, isTimePinned, daylight } from '../engine/day-cycle'
-import { hollowEligible, hollowStep, segmentDist, type HollowState,
-         HOLLOW_HP, HOLLOW_CAP, HOLLOW_HOVER, HOLLOW_RADIUS,
-         SPAWN_NEAR, SPAWN_FAR, DESPAWN_DIST, NIGHT_BELOW, GUTTER_AT } from './hollows'
+import { hollowEligible, hollowStep, segmentDist, hollowCap, packSize, packOffsets,
+         type HollowState, HOLLOW_HP, HOLLOW_HOVER, HOLLOW_RADIUS,
+         SPAWN_CYCLE_S, SPAWN_TRIES, PLAYER_EXCLUSION, DESPAWN_DIST, GUTTER_AT } from './hollows'
+// The light field (port step 4's other half) — computed here, consumed by the spawn cycle only.
+// Per light.ts's header this deliberately never touches a mesh.
+import { computeLight, dayFactor, type LightField } from '../voxel/light'
+import { WOOD } from '../voxel/trees'
 // ── PORT STEP 5 — the movement (2026-08-07, Alex: "slide jump became a dash, climbing and wall
 // jumping are non-existent"). play3d's Apex-lineage locomotion, extracted pure and re-grounded on
 // voxel collision. See locomotion.ts for provenance; its test file is the feel contract.
@@ -82,6 +86,11 @@ const H = DEFAULT_COLUMN.worldHeight
 const RADIUS = 6
 const REACH = 6            // how far you can mine or place, in voxels
 const key = (cx: number, cz: number) => `${cx},${cz}`
+/** Non-air materials light still passes through — light.ts's "air, water and foliage" contract.
+ *  (Water is handled by id in the opaque callback; foliage is enumerated here.) */
+const LIGHT_PASSES = new Set<number>([
+  WOOD.GOLDWOOD_LEAVES, WOOD.SHIMMEROAK_LEAVES, WOOD.STARWILLOW_LEAVES, WOOD.DAWNWOOD_LEAVES,
+])
 
 interface Slot { itemId: string; count: number }
 
@@ -851,6 +860,10 @@ function World({ inv, toolTier, toolSkill, selItem, heldTool, weaponDrawn, weapo
     if (lx === SECTION - 1) remesh(cx + 1, cz)
     if (lz === 0) remesh(cx, cz - 1)
     if (lz === SECTION - 1) remesh(cx, cz + 1)
+    // Any cached light field whose 3×3 box can see this column is stale now — placing a lantern
+    // (or roofing a room) must change what the NEXT spawn scan reads, not what the last one read.
+    for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++)
+      lightCache.current.delete(key(cx + dx, cz + dz))
   }, [remesh])
 
   /** The locomotion core's world probe. Ungenerated space reads as solid via voxelSolid — the
@@ -874,11 +887,54 @@ function World({ inv, toolTier, toolSkill, selItem, heldTool, weaponDrawn, weapo
   const tracerMat = useMemo(() => new THREE.MeshBasicMaterial({ color: 0xffd88a, toneMapped: false }), [])
   const impacts = useRef<{ mesh: THREE.Mesh; life: number }[]>([])
 
-  // ── the Hollows (blockout — see hollows.ts for the canon) ─────────────────────────────────────
+  // ── the Hollows (body blockout — see hollows.ts for the canon) ────────────────────────────────
   // ONE shared geometry and material for every Hollow that will ever body (render-audit rule).
   // Guttering is expressed through per-mesh SCALE and a sink, never per-mesh material state.
   const hollows = useRef<{ st: HollowState; mesh: THREE.Mesh }[]>([])
   const hollowClock = useRef(0)
+
+  // ── the light field, cached per column ────────────────────────────────────────────────────────
+  // `light.ts` produces DATA and this is its one consumer: the spawn scan. Each cached field
+  // covers its column plus a 16-block apron (a lantern at a column edge must protect the ground
+  // next door — computeLight treats out-of-box as dark, so a bare column-sized box would let the
+  // grey body one block across a border from a light). Fields are computed lazily when the cycle
+  // scans a column, evicted with the column, and invalidated by any edit their box can see.
+  const lightCache = useRef(new Map<string, LightField>())
+  const lightFor = useCallback((cx: number, cz: number): LightField => {
+    const k = key(cx, cz)
+    const hit = lightCache.current.get(k)
+    if (hit) return hit
+    // Vertical slice: the column's own surface span, padded down for pockets and up past a
+    // lantern's reach. Full-height would be 9× the cells for air that cannot matter — block
+    // light decays 1/step, so nothing >15 above the highest surface can touch the ground.
+    const col = cols.current.get(k)
+    let lo = H - 1, hi = 0
+    if (col) {
+      for (let i = 0; i < SECTION * SECTION; i++) {
+        const s = col.surface[i]
+        if (s < lo) lo = s
+        if (s > hi) hi = s
+      }
+    } else { lo = 0; hi = H - 1 }
+    const y0 = Math.max(0, lo - 10)
+    const bounds = { x0: cx * SECTION - SECTION, y0, z0: cz * SECTION - SECTION,
+                     sx: SECTION * 3, sy: Math.min(H, hi + 16) - y0, sz: SECTION * 3 }
+    const field = computeLight(bounds, {
+      // Air, water and foliage pass light; everything else stops it. Matches light.ts's contract.
+      opaque: (x, y, z) => {
+        const m = voxel(x, y, z)
+        return m !== AIR && m !== MAT.WATER && !LIGHT_PASSES.has(m)
+      },
+      emit: (x, y, z) => emitOf(voxel(x, y, z)),
+      // ⚠ Generated surface, not live voxels: a player-built roof does not register as closing
+      // the sky. That only mis-lights covered ground DURING THE DAY (at night the sky channel is
+      // worth 0 regardless), and surface Hollows only body at night — so the approximation is
+      // free until daytime interior spawning exists.
+      openToSky: (x, z, y) => y > columnHeight(x, z, SEED),
+    })
+    lightCache.current.set(k, field)
+    return field
+  }, [voxel])
   const hollowGeo = useMemo(() => new THREE.IcosahedronGeometry(0.55, 1), [])
   const hollowMat = useMemo(() => new THREE.MeshLambertMaterial({
     // A smear of grey that holds a silhouette: darker than any ground grey, never a face.
@@ -1022,29 +1078,65 @@ function World({ inv, toolTier, toolSkill, selItem, heldTool, weaponDrawn, weapo
       }
     }
 
-    // ── ★ THE NIGHT TIDE'S PAYOFF — Hollows body on drained ground after dark ────────────────
-    // Eligibility is the ruling as code (hollows.ts): drained + dark + dry. Spawn rolls are
-    // paced, capped, and ringed around the player; dawn gutters every bodied Hollow out. The
-    // whole system is spatially opt-in — living country at night stays as cozy as it ever was.
+    // ── ★ THE NIGHT TIDE'S PAYOFF — the Hollows' SPAWN CYCLE ─────────────────────────────────
+    // Real cycle as of 2026-08-07: chunk scan → light-field dark test → 24-block player
+    // exclusion → pack spawn 1–4 → cap scaled by loaded world. Eligibility is the ruling as code
+    // (hollows.ts): drained + dark + dry, where "dark" is now the two-channel light field — a
+    // lantern-lit yard on grey ground stays safe at midnight (*tended light holds grey off*),
+    // and dawn still gutters every bodied Hollow out. The old blockout rolled a ring around the
+    // player, which made the tide follow the keeper; scanning loaded columns gives the danger to
+    // the GROUND. Living country at night stays as cozy as it ever was.
     {
       const now = state.clock.elapsedTime
       const dl = daylight(dayProgress())
+      const day = dayFactor(dayProgress())
       hollowClock.current -= dt
-      if (dl < NIGHT_BELOW && hollows.current.length < HOLLOW_CAP && hollowClock.current <= 0) {
-        hollowClock.current = 1.6
-        const a = Math.random() * Math.PI * 2
-        const r = SPAWN_NEAR + Math.random() * (SPAWN_FAR - SPAWN_NEAR)
-        const sx = p.x + Math.cos(a) * r, sz = p.z + Math.sin(a) * r
-        const sh = columnHeight(Math.floor(sx), Math.floor(sz), SEED)
-        if (hollowEligible(sx, sz, SEED, dl, sh, DEFAULT_DEPTH.seaLevel)) {
-          const mesh = new THREE.Mesh(hollowGeo, hollowMat)
-          mesh.scale.set(0.01, 0.01, 0.01)          // rises from nothing — the forming IS the tell
-          mesh.position.set(sx, sh + 1 + HOLLOW_HOVER, sz)
-          g.add(mesh)
-          hollows.current.push({
-            st: { x: sx, y: sh + 1 + HOLLOW_HOVER, z: sz, hp: HOLLOW_HP, gutter: 0, phase: Math.random() * 6.28 },
-            mesh,
-          })
+      const cap = hollowCap(cols.current.size)
+      const spawnHollow = (sx: number, sh: number, sz: number) => {
+        const mesh = new THREE.Mesh(hollowGeo, hollowMat)
+        mesh.scale.set(0.01, 0.01, 0.01)          // rises from nothing — the forming IS the tell
+        mesh.position.set(sx, sh + 1 + HOLLOW_HOVER, sz)
+        g.add(mesh)
+        hollows.current.push({
+          st: { x: sx, y: sh + 1 + HOLLOW_HOVER, z: sz, hp: HOLLOW_HP, gutter: 0, phase: Math.random() * 6.28 },
+          mesh,
+        })
+      }
+      // day === 0 is a cheap pre-gate, not the rule: a surface spot's sky channel is 15, so
+      // spawnDark can only pass in full night anyway. The scan is skipped, never the ruling.
+      if (day === 0 && hollows.current.length < cap && hollowClock.current <= 0) {
+        hollowClock.current = SPAWN_CYCLE_S
+        const keys = [...cols.current.keys()]
+        const pick = keys.length ? keys[Math.floor(Math.random() * keys.length)] : undefined
+        if (pick) {
+          const [scx, scz] = pick.split(',').map(Number)
+          const ccx = scx * SECTION + SECTION / 2, ccz = scz * SECTION + SECTION / 2
+          // A column entirely beyond despawn range would breed instant despawns — skip the cycle.
+          if (Math.hypot(ccx - p.x, ccz - p.z) <= DESPAWN_DIST + SECTION / 2) {
+            const lf = lightFor(scx, scz)
+            for (let t = 0; t < SPAWN_TRIES; t++) {
+              const wx = scx * SECTION + Math.floor(Math.random() * SECTION)
+              const wz = scz * SECTION + Math.floor(Math.random() * SECTION)
+              const sh = columnHeight(wx, wz, SEED)
+              const dp = Math.hypot(wx + 0.5 - p.x, wz + 0.5 - p.z)
+              if (dp < PLAYER_EXCLUSION || dp > DESPAWN_DIST) continue
+              if (!hollowEligible(wx + 0.5, wz + 0.5, SEED, lf.get(wx, sh + 1, wz), day, sh, DEFAULT_DEPTH.seaLevel)) continue
+              // The pack: the anchor bodies, then up to 3 mates — each on its OWN re-validated
+              // ground, because a pack mate is not exempt from the ruling (an anchor at a lit
+              // greyfield edge must not smear its pack onto tended ground).
+              const k = Math.min(packSize(Math.random()), cap - hollows.current.length)
+              spawnHollow(wx + 0.5, sh, wz + 0.5)
+              for (const off of packOffsets(k, Math.random)) {
+                const mx = wx + 0.5 + off.dx, mz = wz + 0.5 + off.dz
+                const mh = columnHeight(Math.floor(mx), Math.floor(mz), SEED)
+                const mdp = Math.hypot(mx - p.x, mz - p.z)
+                if (mdp < PLAYER_EXCLUSION || mdp > DESPAWN_DIST) continue
+                if (!hollowEligible(mx, mz, SEED, lf.get(Math.floor(mx), mh + 1, Math.floor(mz)), day, mh, DEFAULT_DEPTH.seaLevel)) continue
+                spawnHollow(mx, mh, mz)
+              }
+              break
+            }
+          }
         }
       }
       for (let i = hollows.current.length - 1; i >= 0; i--) {
@@ -1408,6 +1500,7 @@ function World({ inv, toolTier, toolSkill, selItem, heldTool, weaponDrawn, weapo
       }
       for (const kk of [...cols.current.keys()]) if (!keep.has(kk)) cols.current.delete(kk)
       for (const kk of [...requested.current]) if (!keep.has(kk)) requested.current.delete(kk)
+      for (const kk of [...lightCache.current.keys()]) if (!keep.has(kk)) lightCache.current.delete(kk)
       // The worker mirrors this eviction, or its column cache grows by every chunk ever visited.
       worker.current?.postMessage({ type: 'evict', keep: [...keep] })
       // ⚠ EDITS ARE NOT EVICTED WITH THEIR COLUMN. Walking away from a house and back must not lose

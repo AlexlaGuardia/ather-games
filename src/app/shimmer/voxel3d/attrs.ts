@@ -43,6 +43,9 @@ export const MATERIAL_COLOR: Record<number, number> = {
   [WOOD.SHIMMEROAK_LOG]: 0x6f5a3f, [WOOD.SHIMMEROAK_LEAVES]: 0x49913f,
   [WOOD.STARWILLOW_LOG]: 0x7d7291, [WOOD.STARWILLOW_LEAVES]: 0x7fc0a8,
   [WOOD.DAWNWOOD_LOG]: 0x9a5f4a, [WOOD.DAWNWOOD_LEAVES]: 0xd9a05e,
+  // Warm mana-light in a plank frame — the raw-mana blue warmed toward candle, so a lit yard
+  // reads as TENDED against the cold ore glow of a cave.
+  [MAT.MANA_LANTERN]: 0xffd98a,
 }
 
 /** Materials that glow, so ore reads in an unlit cave instead of being a slightly different grey. */
@@ -54,6 +57,9 @@ export const EMISSIVE: Record<number, number> = {
   [ORE.ELEMENT_WATER]: 0.5,
   [ORE.PURE_CORE]: 0.8,
   [ORE.ATHER_CRYSTAL]: 1.0,
+  // The lantern out-glows every seam — it is the one block whose JOB is light. (Render-side only;
+  // the spawn-side truth is registry `emit`, flooded by light.ts. Two systems, one story.)
+  [MAT.MANA_LANTERN]: 1.0,
 }
 
 /** An unmapped material must be LOUD, not invisible — magenta says "the registry missed one". */

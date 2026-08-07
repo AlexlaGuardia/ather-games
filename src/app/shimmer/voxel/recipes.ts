@@ -96,6 +96,14 @@ export const RECIPES: RecipeDef[] = [
   // (`shimmer-quests-mainmap.md`), so this is the REPLACEMENT path, not the only one.
   { id: 'crafting_table', name: 'Crafting Table', station: 'hand', mana: 0,
     input: [{ itemId: 'goldwood_plank', count: 4 }], output: { itemId: 'crafting_table', count: 1 } },
+
+  // ── LIGHT ───────────────────────────────────────────────────────────────────────────────────
+  // One shard, four lanterns: night safety is meant to be a first-session purchase, not a grind —
+  // the Hollows' pressure is "light your ground", and a mechanic you cannot afford is a mechanic
+  // that does not exist. mana: 0 because the shard IS the mana; the crafting only frames it.
+  { id: 'mana_lantern', name: 'Mana Lantern', station: 'hand', mana: 0,
+    input: [{ itemId: 'raw_mana_shard', count: 1 }, { itemId: 'goldwood_plank', count: 2 }],
+    output: { itemId: 'mana_lantern', count: 4 } },
 ]
 
 const BY_ID = new Map(RECIPES.map(r => [r.id, r]))

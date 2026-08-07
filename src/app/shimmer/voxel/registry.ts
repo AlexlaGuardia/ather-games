@@ -59,6 +59,11 @@ export interface BlockDef {
   drops: { itemId: string; count: number }[]
   /** Can a player place this back down? */
   placeable: boolean
+  /**
+   * Block light emitted, 0–15 (`light.ts`'s block channel BFSes from these). Absent = 0. Data,
+   * not behaviour — the Rust side reads the same number.
+   */
+  emit?: number
 }
 
 /**
@@ -77,6 +82,13 @@ export const BLOCKS: BlockDef[] = [
   // "grey block" home to build with would make the greying a decoration, which it must never be.
   { material: MAT.GREY_SOIL, name: 'Greyed Soil', hardness: 0.55, skill: null, minTier: 0, drops: [{ itemId: 'block_subsoil', count: 1 }], fastSkill: 'farming', placeable: false },
   { material: MAT.WATER, name: 'Water', hardness: Infinity, skill: null, minTier: 0, drops: [], placeable: false },
+
+  // ── The lantern — the first emitter ────────────────────────────────────────────────────────
+  // emit 14, not 15: a placed light should never quite match full daylight, so noon stays the
+  // brightest thing in the world. Breaks by hand into itself — lighting your ground is meant to
+  // be cheap to do and free to rearrange. The canon line it serves ("tended light holds grey
+  // off") lives in light.ts; this row only makes the tending possible.
+  { material: MAT.MANA_LANTERN, name: 'Mana Lantern', hardness: 0.6, skill: null, minTier: 0, drops: [{ itemId: 'mana_lantern', count: 1 }], placeable: true, emit: 14 },
 
   // ── the Prospecting ladder — hardness AND tier both climb, so depth gates twice over ────────
   { material: ORE.RAW_MANA, name: 'Raw Mana Seam', hardness: 2.2, skill: 'prospecting', minTier: 1, drops: [{ itemId: 'raw_mana_shard', count: 1 }], placeable: false },
@@ -123,6 +135,8 @@ const BY_ITEM = new Map<string, number>(
 
 export const blockDef = (material: number): BlockDef | undefined => BY_MATERIAL.get(material)
 export const materialForItem = (itemId: string): number | undefined => BY_ITEM.get(itemId)
+/** Block light emitted by a material — `light.ts`'s `emit` callback in one lookup. */
+export const emitOf = (material: number): number => blockDef(material)?.emit ?? 0
 export const isBreakable = (material: number): boolean =>
   material !== AIR && (blockDef(material)?.hardness ?? Infinity) !== Infinity
 

@@ -38,6 +38,13 @@ export const MAT = {
   WATER: 7,
   /** Drained ground's surface — TOPSOIL with the mana gone. See biome.ts's richness field. */
   GREY_SOIL: 8,
+  /**
+   * The first emitter — a shard of raw mana in a plank frame. Exists so `light.ts`'s block
+   * channel has a source and "tended light holds grey off" is a thing a keeper can DO, not just
+   * a line the spawn code honours. Never generated; only ever placed. ⚠ TBD-CANON on the name,
+   * same as everything else in this enum.
+   */
+  MANA_LANTERN: 9,
 } as const
 
 export interface DepthConfig {
