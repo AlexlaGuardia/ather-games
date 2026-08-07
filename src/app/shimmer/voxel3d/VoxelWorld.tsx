@@ -1303,6 +1303,8 @@ function World({ inv, toolTier, toolSkill, selItem, heldTool, weaponDrawn, weapo
       }
       for (const kk of [...cols.current.keys()]) if (!keep.has(kk)) cols.current.delete(kk)
       for (const kk of [...requested.current]) if (!keep.has(kk)) requested.current.delete(kk)
+      // The worker mirrors this eviction, or its column cache grows by every chunk ever visited.
+      worker.current?.postMessage({ type: 'evict', keep: [...keep] })
       // ⚠ EDITS ARE NOT EVICTED WITH THEIR COLUMN. Walking away from a house and back must not lose
       // it — the column is regenerable, the edits are not. Any still-unsaved ones are flushed first,
       // because dropping the column while its diff sits in `dirtySaves` is exactly how a build

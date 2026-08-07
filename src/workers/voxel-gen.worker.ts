@@ -89,12 +89,13 @@ self.onmessage = (e: MessageEvent) => {
   if (msg.type === 'request') {
     const cx = msg.cx!, cz = msg.cz!
     const k = key(cx, cz)
-    if (!cols.has(k)) {
-      cols.set(k, makeColumn(cx * SECTION, cz * SECTION, seed))
-      // Collision data goes over once, on generation. Transferred, so the copy is free.
-      const voxels = packVoxels(cols.get(k)!)
-      ;(self as unknown as Worker).postMessage({ type: 'column', cx, cz, voxels }, [voxels.buffer])
-    }
+    if (!cols.has(k)) cols.set(k, makeColumn(cx * SECTION, cz * SECTION, seed))
+    // ★ ALWAYS answer with the voxels, cached or fresh. The main thread evicts columns it walks
+    // away from and re-requests them on return; a request answered with a bare `done` (the old
+    // cached-column path) left that chunk a PERMANENT hole — re-request was blocked by the
+    // `requested` set, so nothing ever asked again. Repacking a cached column is ~64KB, trivial.
+    const voxels = packVoxels(cols.get(k)!)
+    ;(self as unknown as Worker).postMessage({ type: 'column', cx, cz, voxels }, [voxels.buffer])
     // ★ GENERATION ONLY — meshing stays on the main thread, deliberately.
     // The main thread must own Columns anyway: mining edits a voxel and immediately re-meshes, and
     // shipping a column across the boundary per edit would cost more than it saves. So the worker
