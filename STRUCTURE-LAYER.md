@@ -1,128 +1,148 @@
-# The structure layer — voxel cost, Sims look
+# The structure layer — blocks build the shell, pieces dress it
 > Spec'd 2026-08-06 (jin-cc) off Alex's direction call: *"the material cost comes from blocks but the
 > look will be more like Sims so we don't have to have blocky buildings."*
 >
-> Companion to `VOXEL-WORLD-MODEL.md`. That doc settles what the ground is made of; this one settles
-> what you can put **on** it. ⚠ A spec to rule on, not a spec to implement — § 8 lists the calls.
+> **★ REVISED THE SAME DAY, and the revision is the useful part.** The first version specced
+> Sims-style room-scale placement. Alex pushed back — *"the more I think about it this Sims building
+> is going to look off"* — and he was right for a reason worth writing down. See § 1.
+>
+> Companion to `VOXEL-WORLD-MODEL.md`: that settles what the ground is made of, this settles what you
+> put on it. ⚠ A spec to rule on, not to implement. § 9 lists the open calls.
 
-## 1. Why this is the differentiator, stated plainly
+## 1. ★ Why the first version was wrong: foundations
 
-Minecraft's building *is* its terrain: you place the same cubes you mined, so a house is a pile of
-world. Ours splits the two. **Blocks are the economy; architecture is the product.** You mine stone
-to *pay* for a wall, but the wall is a designed piece, not a stack of cubes.
+The Sims looks clean because **lots are flat**. Every wall meets the ground at the same height.
 
-That single split is the thing a player would describe to a friend, and it is worth protecting from
-the obvious simplification (let people place raw blocks too, "for flexibility"), which would collapse
-it straight back into Minecraft with extra steps. See § 8.
+Our terrain is a heightfield whose adjacent columns step by up to 3 voxels. A rigid room-scale wall
+on that either floats at one end, sinks at the other, or clips through the slope. The fix is
+flattening terrain before every build — which I had casually deferred as "not in v1" and which is in
+fact **load-bearing**. And once flattening is mandatory, the differentiator has been spent on a
+chore: the player's memory of building is levelling dirt, not making something.
 
-## 2. Two representations, one grid
+**The idea was right and the SCALE was wrong.** The reference is not The Sims. It is **Valheim**:
+not voxel, not blocky, and its buildings read beautifully — because its pieces are grid-aligned and
+roughly block-thick, so they sit *with* the terrain instead of fighting it, while still being real
+geometry rather than cubes.
 
-| | voxel world | structure layer |
+## 2. The model: blocks build the shell, pieces dress it
+
+**One stack, not two competing systems.**
+
+- **Blocks are structure.** Walls, floors, foundations — the flat surfaces nobody looks at. They are
+  voxels, so they meet uneven ground the way terrain does: naturally, at any height, no flattening.
+- **Pieces are the look.** Door, window, roof, stair, beam, trim, railing, awning. Exactly the
+  elements that are *ugly as cubes* and carry the whole visual identity.
+
+A house is block walls plus a real door, a real window, and a proper pitched roof. The parts that
+would look bad blocky are pieces; the parts nobody notices stay blocks.
+
+★ This also settles the raw-block question the previous version left open, and settles it *better*:
+blocks are not a loophole that collapses the design into Minecraft, they are **half of it**. What
+makes this not-Minecraft is that the elements carrying the look are designed geometry, not cubes.
+
+## 3. Two representations, one grid
+
+| | voxel world | piece layer |
 |---|---|---|
-| stores | `Uint16Array` per section | a **placement list** — id, position, rotation |
-| unit | 1 block | a piece occupying 1+ blocks |
-| built by | the generator | the player |
+| stores | `Uint16Array` per section | placement list — id, position, rotation |
+| unit | 1 block | 1–3 blocks, block-aligned |
+| built by | generator + player | player + generator |
 | rendered as | greedy-meshed quads | `InstancedMesh` per piece type |
-| costs | nothing to place | materials from the inventory |
 
-Both live on the **same 1-block grid**. Not a finer one: a half-grid buys Sims-ish wall placement
-and costs the ability to reason about "is this block occupied" in a single integer lookup, which is
-the property § 3 is built on. Rotation is 4-way (90°), which is enough for architecture and keeps
-occupancy a lookup rather than a polygon test.
+Both on the **same 1-block grid**, 4-way rotation. Not a finer grid: a half-grid buys nothing once
+pieces are block-thick, and costs the single-integer "is this occupied" lookup § 4 rests on.
 
-## 3. ★ The trick that makes it affordable: occupancy in the voxel grid
+## 4. ★ Occupancy in the voxel grid — the trick that keeps it cheap
 
-**A placed piece writes into the voxel grid even though it renders as a mesh.**
+**A placed piece writes occupancy into the voxel grid even though it renders as a mesh.**
 
-A `wall` at (x,y,z) marks its blocks with a reserved material (`MAT.STRUCTURE`), so:
+A door at (x,y,z) marks its blocks with a reserved material, so:
 
-- **Collision is unchanged.** `voxelSolid` already treats non-air as solid, so the capsule check,
-  the phantom-floor-at-the-frontier rule and the drop physics all work on buildings for free. There
-  is no second collision system, no mesh colliders, no AABB tree.
-- **Mining refuses it.** `registry.ts` gives `MAT.STRUCTURE` hardness `Infinity` for the spike, so a
-  pick cannot chew a wall. Deconstruction is its own verb (§ 6), which is what a build game wants.
-- **The mesher skips it.** A structure block is never drawn as a quad — the piece's own mesh is the
-  visual. It participates in occlusion (blocks behind a wall are correctly hidden) which is a real
-  performance win, not just correctness.
+- **Collision is unchanged.** `voxelSolid`, the capsule check, the frontier rule and drop physics all
+  work on buildings for free. No mesh colliders, no AABB tree, no second collision system.
+- **Mining refuses it** — `registry.ts` gives the structure material infinite hardness for a spike,
+  so a pick cannot chew a door. Deconstruct is its own verb (§ 7).
+- **The mesher skips it** but it still occludes what is behind, which is a real performance win.
 
-**This is the whole reason the idea is cheap.** The expensive-sounding half (physics for arbitrary
-architecture) reduces to a value already in an array.
+The expensive-sounding half of the whole idea — physics for arbitrary architecture — reduces to a
+value already sitting in an array.
 
-⚠ The corollary: **a piece's occupancy footprint is not its visual bounds.** A decorative roof
-overhang should not block a player standing under it. Footprint is declared per piece, deliberately,
-and is usually smaller than the model.
+⚠ **Footprint ≠ visual bounds.** A roof overhang must not block someone standing under it. Footprint
+is declared per piece and is usually *smaller* than the model. A doorway's footprint is its frame,
+not its opening — you walk through it.
 
-## 4. Rendering — `InstancedMesh`, and this one is non-negotiable
+## 5. Rendering — `InstancedMesh`, non-negotiable
 
-One geometry and one material **per piece type**, with every placed copy an instance.
+One geometry, one material, per piece **type**; every placed copy an instance.
 
-★ A mesh-and-material per placed wall is precisely the allocation that got this page **blocked from
-creating a WebGL context** on 2026-08-06 (a material per dropped item). `render-audit.test.ts` fails
-the build on it now, but it should never be written in the first place. A hundred houses is tens of
-thousands of pieces; instancing is the difference between that working and the tab dying.
+★ A mesh-and-material per placed piece is precisely the allocation that got this page **blocked from
+creating a WebGL context** on 2026-08-06. `render-audit.test.ts` fails the build on it now, but it
+should never be written: a village is thousands of pieces. Models load through the existing
+`world/prop-models.tsx` path — GLTF, DRACO, preload, and it already exports `GhostProp` for previews.
 
-Per-instance data is a transform plus a small attribute for tint/variant. Piece models load through
-the **existing** `world/prop-models.tsx` path — GLTF, DRACO, preloaded — which already exists and is
-already used for props.
+## 6. ★ Generation: hand-built templates, and they are the same pieces
 
-## 5. Cost, and where it comes from
+**Yes, buildings are pre-built — that is the standard answer, not a compromise.** It is how Minecraft
+villages work: hand-authored segments assembled procedurally under placement rules, with the machinery
+`WORLDGEN-RESEARCH` already specifies (one chunk owns the structure, generates the whole piece layout
+once, neighbours clip in what crosses their border).
 
-Costs are **data**, in the same registry style as blocks (`VOXEL-WORLD-MODEL` § 4) so they lift to
-JSON and Rust reads them later:
+**And the payoff is the reason to do it this way:** the player and the generator use the *same* piece
+system, so **anything Alex builds by hand becomes a template the generator can place.**
+
+- Build one Gloview cottage in-game → save it → the world scatters variations of it.
+- The 8 canon holds, Gloview, and the tutorial glade get authored **by playing**, not by writing data.
+- A template is a placement list plus its block shell: small, diffable, and seed-independent.
+
+Variation comes from a small template set plus rules (rotation, palette swap, optional wings), not
+from generating architecture from nothing — which is the thing that always looks generated.
+
+## 7. Verbs
+
+- **Place** — ghost at the aimed cell, red when blocked or unaffordable, 4-way rotate, click to commit.
+- **Deconstruct** — its own verb, not mining. Refunds a fraction (a dial, not a ruling) and clears
+  occupancy.
+- **Save template** — select a region, store the block shell + piece list as a named template. This is
+  the authoring tool and the generator's input, and it is *the same verb for both*.
+- **⛔ Not v1:** piece-to-piece snapping (corners resolving into each other), interiors as rooms,
+  structural integrity, terrain flattening. Flattening is explicitly no longer *needed* — that is the
+  whole point of § 2.
+
+## 8. Cost — data, in the registry style
 
 ```jsonc
 {
-  "id": "wall_stone",
-  "name": "Stone Wall",
+  "id": "door_oak",
+  "name": "Oak Door",
   "footprint": { "w": 1, "h": 3, "d": 1 },   // occupancy, NOT visual bounds
-  "cost": [{ "itemId": "block_stone", "count": 4 }],
-  "model": "wall_stone.glb",
-  "category": "structure"
+  "cost": [{ "itemId": "goldwood_plank", "count": 6 }],
+  "model": "door_oak.glb",
+  "category": "piece"
 }
 ```
 
-Item ids are the ones the block registry already drops. **No new material names** — the mined
-economy feeds the built one directly, which is the point of the design.
+Item ids are the ones the block registry already drops, and `goldwood_plank` is a **ruled canon name**
+already shipping in `resources.ts`. The mined economy feeds the built one directly. **No new material
+names.** ⚠ Piece names themselves (anything more evocative than "door") are canon-adjacent — mark
+`TBD-CANON` and batch them to Magii rather than inventing.
 
-## 6. Verbs
+## 9. ⛔ Calls that are Alex's
 
-- **Place** — ghost preview at the aimed grid cell, red when blocked or unaffordable, 4-way rotate,
-  commit on click. The ghost already has a precedent: `prop-models.tsx` exports `GhostProp`.
-- **Deconstruct** — its own verb, not mining. Returns a **fraction** of the cost (a dial, not a
-  ruling) so building is not a free undo, and clears the occupancy.
-- **⛔ Not in v1:** interiors as rooms, floors above floors, terrain flattening, wall-segment
-  half-grid placement. All are Sims features that want the loop proven first.
+- **The piece catalogue, and how small v1 is.** Recommendation: **six** — door, window, roof slope,
+  roof cap, stair, beam/trim. Enough to make a block shed read as a building, which is the only thing
+  that needs proving. Do not model forty against an unproven loop.
+- **Deconstruct refund.** *Recommendation: 100% while the loop is unproven.* Consequence-free
+  experimenting is what you want while judging feel.
+- **Does the mortal side become pieces too?** Alex has already said Rune Hold will be smaller.
+  Open, blocking nothing.
 
-## 7. Order of work
+## 10. What this does NOT settle
 
-1. **Persistence first.** A structure layer with no save is a demo. Placements are trivial to
-   store — the point is that the rule is already ruled.
-2. **Six pieces:** floor, wall, doorway, window, roof, stair. Enough to build a shed, which is
-   enough to judge the loop.
-3. **The placement loop** — ghost, snap, rotate, cost, commit, deconstruct.
-4. **Occupancy + collision**, which should be nearly free per § 3, and is the assertion that proves it.
-5. **Only then** commission the rest of the catalogue. Do not model forty pieces against an
-   unproven loop.
-
-## 8. ⛔ Calls that are Alex's
-
-- **★ Can players place raw blocks at all?** The strong version of this design says **no** — blocks
-  are currency, architecture is product, and allowing raw placement collapses it back into
-  Minecraft. The soft version allows raw blocks for terrain shaping (bridging a gap, filling a hole)
-  but not for buildings. *Recommendation: soft version.* Terrain edits are a mining-game need; let
-  them exist, and keep pieces as the only way to build.
-- **Deconstruct refund fraction.** 100% makes building consequence-free; 0% punishes experimenting.
-  *Recommendation: 100% while the loop is unproven, tuned down later if it matters.*
-- **Does the mortal side (Rune Hold, the holds) become structures too**, or stay authored interiors?
-  Alex has already said Rune Hold will be smaller. Open, and blocking nothing.
-
-## 9. What this spec does NOT settle
-
-- **The art.** Six pieces is a real modelling job and the look of them is the game's face. This is
-  the picaso / headless-Blender lane; **Meshy is the wrong tool** — modular pieces need clean,
-  dimension-exact geometry and Meshy makes organic meshes.
-- **Whether pieces snap to each other** (a wall knowing it meets another wall, so corners resolve).
-  Sims does this and it is a large part of why its buildings read as built rather than assembled.
-  Genuinely hard; deliberately out of v1.
-- **Multi-block pieces crossing a column border.** The same class as a tree canopy spilling into a
-  neighbour, and it gets the same answer: the piece is owned by the column containing its origin.
+- **The art.** Six pieces is a real modelling job and their look is the game's face. This is the
+  **picaso / headless-Blender** lane. ⛔ **Meshy is the wrong tool** — modular pieces need clean,
+  dimension-exact geometry that tiles against a grid, and Meshy makes organic meshes. The lane fits;
+  the tool does not.
+- **Piece-to-piece snapping.** Sims and Valheim both do it and it is a large part of why their
+  buildings read as *built* rather than *assembled*. Genuinely hard, deliberately deferred.
+- **Multi-block pieces crossing a column border** — same class as a tree canopy spilling into a
+  neighbour, and it gets the same answer: owned by the column containing its origin.
