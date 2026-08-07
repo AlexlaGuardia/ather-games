@@ -110,6 +110,19 @@ export default function VoxelWorld() {
   const [skillHud, setSkillHud] = useState<{ id: string; level: number; xp: number; next: number } | null>(null)
   const [levelUp, setLevelUp] = useState<string | null>(null)
   const [crafted, setCrafted] = useState<string | null>(null)
+  // Owner status, for the legacy play3d door in the HUD only. ather.games has no cloud auth — it
+  // comes from the httpOnly `ather_owner` cookie via /api/owner (set at /owner?key=OWNER_KEY).
+  // Same pattern as Shimmer3D. It gates a LINK, not the route: /shimmer/play3d enforces its own
+  // gate in proxy.ts, because a hidden link is not a permission.
+  const [isOwner, setIsOwner] = useState(false)
+  useEffect(() => {
+    let alive = true
+    fetch('/api/owner', { cache: 'no-store' })
+      .then((r) => (r.ok ? r.json() : { owner: false }))
+      .then((d) => { if (alive && d.owner) setIsOwner(true) })
+      .catch(() => {})
+    return () => { alive = false }
+  }, [])
   // Toasts clear themselves. A level-up banner that never leaves stops being a level-up banner.
   useEffect(() => { if (!levelUp) return; const t = setTimeout(() => setLevelUp(null), 2600); return () => clearTimeout(t) }, [levelUp])
   useEffect(() => { if (!crafted) return; const t = setTimeout(() => setCrafted(null), 2600); return () => clearTimeout(t) }, [crafted])
@@ -174,13 +187,13 @@ export default function VoxelWorld() {
       </Canvas>
       <Hud stats={stats} pos={pos} look={look} hotbar={hotbar} sel={sel} tier={tier}
            build={build} pieceIdx={pieceIdx} rot={rot} inv={inv}
-           skill={skillHud} levelUp={levelUp} crafted={crafted} tools={tools} />
+           skill={skillHud} levelUp={levelUp} crafted={crafted} tools={tools} isOwner={isOwner} />
       {showSettings && <SettingsPanel s={settings} update={update} onClose={() => setShowSettings(false)} />}
     </div>
   )
 }
 
-function Hud({ stats, pos, look, hotbar, sel, tier, build, pieceIdx, rot, inv, skill, levelUp, crafted, tools }: {
+function Hud({ stats, pos, look, hotbar, sel, tier, build, pieceIdx, rot, inv, skill, levelUp, crafted, tools, isOwner }: {
   stats: string; pos: string
   look: { name: string; progress: number; refused: boolean } | null
   hotbar: Slot[]; sel: number; tier: number
@@ -190,17 +203,23 @@ function Hud({ stats, pos, look, hotbar, sel, tier, build, pieceIdx, rot, inv, s
   levelUp: string | null
   crafted: string | null
   tools: React.RefObject<EquippedTools>
+  isOwner: boolean
 }) {
   return (
     <>
       <div className="absolute top-3 left-3 text-[11px] font-mono text-white/80 bg-black/45 rounded px-2.5 py-1.5 leading-relaxed pointer-events-none">
-        <div className="text-white/95 font-semibold tracking-wide">SHIMMER · VOXEL TEST BED</div>
-        {/* A way OUT. The bed had no exit and no entrance — you could only arrive by typing the URL
-            and only leave with the back button. The parent block is pointer-events-none so the
-            canvas keeps the mouse; these two opt back in. */}
+        {/* Not a test bed since 2026-08-07 — the room wall and /shimmer both land here now, so this
+            is Shimmer. The label said TEST BED while it was reachable only by URL. */}
+        <div className="text-white/95 font-semibold tracking-wide">SHIMMER</div>
+        {/* A way OUT. This world had no exit and no entrance — you could only arrive by typing the
+            URL and only leave with the back button. The parent block is pointer-events-none so the
+            canvas keeps the mouse; these opt back in.
+            The play3d link is the LEGACY door and is owner-only, the exact inverse of yesterday
+            (play3d's ☰ menu held the owner-only door to here). play3d still holds the systems being
+            ported across, so it stays reachable — just not to anyone who wandered in. */}
         <div className="flex gap-2 text-white/45 pointer-events-auto">
           <a href="/room?wall=0" className="hover:text-white/85 underline decoration-white/20">⌂ room</a>
-          <a href="/shimmer/play3d" className="hover:text-white/85 underline decoration-white/20">❈ play3d</a>
+          {isOwner && <a href="/shimmer/play3d" className="hover:text-white/85 underline decoration-white/20">❈ play3d (legacy)</a>}
         </div>
         <div>{pos}</div>
         <div className="text-white/55">{stats}</div>

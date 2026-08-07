@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from 'next/server'
 import { timingSafeEqual } from 'node:crypto'
 import { upsertGoogleAccount } from '@/lib/accounts/db'
 import { mintSession, sessionSecret, SESSION_COOKIE, sessionCookieOptions } from '@/lib/accounts/session'
-import { OAUTH_STATE_COOKIE, OAUTH_NEXT_COOKIE, safeReturnPath } from '@/lib/accounts/oauth'
+import { OAUTH_STATE_COOKIE, OAUTH_NEXT_COOKIE, safeReturnPath, DEFAULT_RETURN } from '@/lib/accounts/oauth'
 import { siteOrigin } from '@/lib/site-origin'
 
 // Step 2: Google hands back a code, we trade it for an id_token, and that becomes an
@@ -36,7 +36,9 @@ function decodeSegment(seg: string): Record<string, unknown> | null {
   }
 }
 
-function fail(req: NextRequest, reason: string, back = '/shimmer/play3d') {
+// Default lands on DEFAULT_RETURN rather than a third hardcoded copy of the route — a failed
+// sign-in that dumps you on an owner-gated page reads as a second, unrelated failure.
+function fail(req: NextRequest, reason: string, back = DEFAULT_RETURN) {
   const url = new URL(back, siteOrigin(req))
   url.searchParams.set('auth', reason)
   const res = NextResponse.redirect(url.toString())

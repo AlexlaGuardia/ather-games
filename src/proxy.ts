@@ -41,7 +41,19 @@ function classify(path: string): "tool" | "gated-game" | null {
   // back to `coming-soon` for a rework, the thing testers actually play should not silently go dark
   // with it. Everything that MUTATES SOURCE is caught by the tool check above, which runs first —
   // that is the gate that matters, and it is independent of any game's tier.
+  //
+  // ── ★ FLIPPED 2026-08-07 (Alex): play3d is the LEGACY route, voxel3d is Shimmer ──────────────
+  // `/shimmer` and the room's Shimmer wall both land on `/shimmer/voxel3d` now. play3d keeps the
+  // systems being ported across (PLAY3D-MIGRATION.md: 16 of 23 port untouched), so it stays
+  // REACHABLE — but owner-only, so nothing wanders back onto the world model we are leaving.
+  // Gated here and not merely unlinked: the voxel HUD hides its play3d link for non-owners, and a
+  // hidden link is not a permission.
   if (path === "/shimmer/play3d" || path.startsWith("/shimmer/play3d/")) {
+    return "gated-game";
+  }
+  // The voxel world is PUBLIC — it is the game now. Its in-page editors and the save-* endpoints
+  // stay owner-only via the tool check above, which runs first.
+  if (path === "/shimmer/voxel3d" || path.startsWith("/shimmer/voxel3d/")) {
     return null;
   }
   // Live world data — read-only map payload (tile/height/node numbers) the public 3D walker

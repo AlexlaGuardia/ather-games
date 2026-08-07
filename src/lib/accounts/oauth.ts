@@ -22,7 +22,14 @@ export const OAUTH_NEXT_COOKIE = 'ather_oauth_next'
 /** Short-lived cookies that only have to survive the round trip to Google. */
 export const OAUTH_COOKIE_OPTS = { httpOnly: true, secure: true, sameSite: 'lax' as const, path: '/', maxAge: 600 }
 
-export const DEFAULT_RETURN = '/shimmer/play3d'
+/**
+ * Where sign-in lands when there is no explicit `next`. Followed play3d → voxel3d on 2026-08-07.
+ *
+ * ⚠ This is not cosmetic: play3d became owner-gated in the same change, so leaving it here would
+ * have bounced every non-owner who signed in straight to /room — a sign-in that silently fails to
+ * return you to the game. A gated route can never be a default landing.
+ */
+export const DEFAULT_RETURN = '/shimmer/voxel3d'
 
 /** Only ever return to a path on this site — an absolute or protocol-relative URL is an open redirect. */
 export function safeReturnPath(raw: string | null | undefined): string {

@@ -19,7 +19,7 @@ import {
   getSave, putSave, deleteAccount,
   listFriends, addFriend, acceptFriend, removeFriend, areFriends,
 } from './db'
-import { safeReturnPath } from './oauth'
+import { safeReturnPath, DEFAULT_RETURN } from './oauth'
 
 let failures = 0
 function check(label: string, ok: boolean, detail = '') {
@@ -68,9 +68,12 @@ console.log('session tokens')
 console.log('return-path guard')
 {
   check('keeps a site-relative path', safeReturnPath('/arcade') === '/arcade')
-  check('rejects absolute url', safeReturnPath('https://evil.example/x') === '/shimmer/play3d')
-  check('rejects protocol-relative', safeReturnPath('//evil.example') === '/shimmer/play3d')
-  check('rejects empty/null', safeReturnPath(null) === '/shimmer/play3d' && safeReturnPath('') === '/shimmer/play3d')
+  // Asserted against DEFAULT_RETURN, not a literal: the landing route moved play3d → voxel3d on
+  // 2026-08-07 and three hardcoded copies had to move with it. What this test is actually about is
+  // that a hostile `next` is REFUSED, not which page we fall back to.
+  check('rejects absolute url', safeReturnPath('https://evil.example/x') === DEFAULT_RETURN)
+  check('rejects protocol-relative', safeReturnPath('//evil.example') === DEFAULT_RETURN)
+  check('rejects empty/null', safeReturnPath(null) === DEFAULT_RETURN && safeReturnPath('') === DEFAULT_RETURN)
 }
 
 // ── accounts + usernames (real sqlite) ────────────────────────────────────────

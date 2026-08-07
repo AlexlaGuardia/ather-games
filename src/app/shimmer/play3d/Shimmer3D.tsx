@@ -6292,10 +6292,12 @@ export default function Shimmer3D() {
               <button onClick={() => { window.location.href = '/room?wall=0' }} style={menuBtn}>⌂ The Room</button>
               <button onClick={() => { window.location.href = '/arcade/all' }} style={menuBtn}>▦ All games</button>
               {isOwner && <button onClick={() => { setMenuOpen(false); setEditMode(true) }} style={menuBtn}>✎ Edit terrain</button>}
-              {/* The voxel world — play3d's successor, still a test bed. Owner-only because it is not
-                  a game yet, but it needs a DOOR: it was reachable only by typing the URL, which is
-                  the same as not shipping it. Delete this line the day the voxel world IS Shimmer. */}
-              {isOwner && <button onClick={() => { window.location.href = '/shimmer/voxel3d' }} style={menuBtn}>◈ Voxel world (test bed)</button>}
+              {/* ★ The day arrived 2026-08-07: the voxel world IS Shimmer, and this route is the
+                  legacy one. The old comment here said to delete this line when that happened —
+                  the opposite is right. This is now the way BACK to the game, so it is no longer
+                  owner-gated and no longer reads as a side trip. What became owner-only is play3d
+                  itself (proxy.ts), which is how anyone gets to this menu at all. */}
+              <button onClick={() => { window.location.href = '/shimmer/voxel3d' }} style={menuBtn}>◈ Shimmer (the world)</button>
               {isOwner && <button onClick={() => setRuneDevOpen(o => !o)} style={menuBtn}>✦ Rune (dev)</button>}
               {isOwner && runeDevOpen && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginTop: 2, maxWidth: 268, borderTop: '1px solid #ffffff20', paddingTop: 6 }}>

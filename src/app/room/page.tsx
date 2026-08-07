@@ -18,7 +18,10 @@ import { getHubAudio } from "@/lib/hub-audio";
 type Wall = { id: string; label: string; glyph: string; tagline: string; href?: string; accent: string };
 
 const WALLS: Wall[] = [
-  { id: "shimmer", label: "Shimmer", glyph: "❈", tagline: "the world", href: "/shimmer/play3d", accent: "#8b5cf6" },
+  // → the VOXEL world since 2026-08-07 (Alex). This wall pointed at play3d, which is why the voxel
+  // rework went almost unplayed: it was reachable only by URL or an owner-only menu item. `/shimmer`
+  // redirects to the same place — both doors move together or the flip only half-lands.
+  { id: "shimmer", label: "Shimmer", glyph: "❈", tagline: "the world", href: "/shimmer/voxel3d", accent: "#8b5cf6" },
   { id: "arcade", label: "The Arcade", glyph: "▦", tagline: "the cabinet", href: "/arcade/all", accent: "#d4a843" },
   { id: "desk", label: "Front Desk", glyph: "✦", tagline: "who you are", accent: "#00cccc" },
   { id: "magii", label: "Kindled Mug", glyph: "❖", tagline: "the tavern", href: "/magii", accent: "#d4a843" },
