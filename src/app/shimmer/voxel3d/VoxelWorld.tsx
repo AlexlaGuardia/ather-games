@@ -195,6 +195,13 @@ function Hud({ stats, pos, look, hotbar, sel, tier, build, pieceIdx, rot, inv, s
     <>
       <div className="absolute top-3 left-3 text-[11px] font-mono text-white/80 bg-black/45 rounded px-2.5 py-1.5 leading-relaxed pointer-events-none">
         <div className="text-white/95 font-semibold tracking-wide">SHIMMER · VOXEL TEST BED</div>
+        {/* A way OUT. The bed had no exit and no entrance — you could only arrive by typing the URL
+            and only leave with the back button. The parent block is pointer-events-none so the
+            canvas keeps the mouse; these two opt back in. */}
+        <div className="flex gap-2 text-white/45 pointer-events-auto">
+          <a href="/room?wall=0" className="hover:text-white/85 underline decoration-white/20">⌂ room</a>
+          <a href="/shimmer/play3d" className="hover:text-white/85 underline decoration-white/20">❈ play3d</a>
+        </div>
         <div>{pos}</div>
         <div className="text-white/55">{stats}</div>
         <div className="mt-1 text-white/45">click to look · WASD · space · shift run · F fly</div>
