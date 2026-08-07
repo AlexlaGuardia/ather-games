@@ -47,6 +47,12 @@ import { createInventory, addItems, removeItems, countItem, type Inventory } fro
 import { createSkillSet, addSkillXP, getMilestone, xpForSkillLevel, type SkillSet } from '../engine/skills'
 import { ensureBasicTools, getEquippedTool, getToolDef, craftTool, canCraft as canCraftTool,
          TOOL_DEFS, type EquippedTools } from '../engine/tools'
+// ── PORT STEP 2 — crafting, and it is NOT the engine/crafting.ts table ────────────────────────
+// That table is a station catalogue (5 recipes, all "place a station"), it charges mana on
+// everything, and it counts materials across a `BankState` the voxel world does not have. What a
+// block world needs first is the layer the tile world never had: material → material. See the
+// header of `voxel/recipes.ts` for why, including the bug it was already causing.
+import { RECIPES, canCraft as canCraftRecipe, craftPlan, type RecipeDef } from '../voxel/recipes'
 
 const SEED = 1337
 const H = DEFAULT_COLUMN.worldHeight
@@ -133,6 +139,41 @@ export default function VoxelWorld() {
     setHotbar([...counts].map(([itemId, count]) => ({ itemId, count })).slice(0, 8))
   }, [])
 
+  // ── The crafting surface ────────────────────────────────────────────────────────────────────
+  // `craftTick` exists because the inventory is a REF, not state — crafting mutates it in place and
+  // React has no way to know. Bumping a counter is what re-renders the panel with new counts. The
+  // alternative (inventory in state) would re-render the whole world on every mined block.
+  const [craftOpen, setCraftOpen] = useState(false)
+  const [craftTick, setCraftTick] = useState(0)
+  const have = useCallback((itemId: string) => countItem(inv.current!, itemId), [])
+
+  /** Refine/build a recipe. The core hands back a plan; the host applies it. */
+  const doCraft = useCallback((id: string) => {
+    const plan = craftPlan(id)
+    if (!plan || !canCraftRecipe(id, have)) return
+    // Take everything BEFORE giving, and only give if every take succeeded — a partial spend that
+    // still yields the output is a duplication bug, which is the one economy bug you cannot undo.
+    if (!plan.take.every(t => countItem(inv.current!, t.itemId) >= t.count)) return
+    for (const t of plan.take) removeItems(inv.current!, t.itemId, t.count)
+    addItems(inv.current!, plan.give.itemId, plan.give.count)
+    setCrafted(`${plan.give.count}× ${plan.give.itemId.replace(/_/g, ' ')}`)
+    setCraftTick(t => t + 1)
+    refreshHotbar()
+  }, [have, refreshHotbar])
+
+  /** Craft a tool and equip it. Tools keep their own table; this is the one surface that shows it. */
+  const doCraftTool = useCallback((id: string) => {
+    const def = TOOL_DEFS[id]
+    if (!def || !canCraftTool(id, inv.current!)) return
+    const made = craftTool(id, inv.current!)
+    if (!made) return
+    tools.current![def.skillId] = made
+    setCrafted(def.name)
+    setCraftTick(t => t + 1)
+    refreshHotbar()
+  }, [refreshHotbar])
+
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const n = Number(e.key)
@@ -149,18 +190,12 @@ export default function VoxelWorld() {
       // ★ THE TIER LEVER IS GONE. Tier comes from the equipped tool now, and a better tool is
       // CRAFTED from what you mined — which is the loop this port exists to close. C crafts the
       // next spike or blade you can afford.
-      if (e.code === 'KeyC') {
-        for (const id of Object.keys(TOOL_DEFS)) {
-          const def = TOOL_DEFS[id]
-          if (def.basic) continue
-          const held = getEquippedTool(tools.current, def.skillId)
-          const heldTier = held ? (getToolDef(held)?.tier ?? 0) : 0
-          if (def.tier <= heldTier) continue
-          if (!canCraftTool(id, inv.current)) continue
-          const made = craftTool(id, inv.current)
-          if (made) { tools.current[def.skillId] = made; setCrafted(def.name); refreshHotbar(); break }
-        }
-      }
+      // C opens the crafting surface. It used to auto-craft the next affordable tool with no UI at
+      // all, which hid the fact that the whole forestry ladder was uncraftable — you pressed C,
+      // nothing happened, and nothing told you why. A list that shows what you CANNOT afford yet is
+      // the difference between a broken key and a goal.
+      if (e.code === 'KeyC') setCraftOpen(o => !o)
+      if (e.code === 'Escape') setCraftOpen(false)
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
@@ -189,6 +224,10 @@ export default function VoxelWorld() {
            build={build} pieceIdx={pieceIdx} rot={rot} inv={inv}
            skill={skillHud} levelUp={levelUp} crafted={crafted} tools={tools} isOwner={isOwner} />
       {showSettings && <SettingsPanel s={settings} update={update} onClose={() => setShowSettings(false)} />}
+      {craftOpen && (
+        <CraftPanel have={have} tools={tools} tick={craftTick}
+                    onCraft={doCraft} onCraftTool={doCraftTool} onClose={() => setCraftOpen(false)} />
+      )}
     </div>
   )
 }
@@ -226,7 +265,7 @@ function Hud({ stats, pos, look, hotbar, sel, tier, build, pieceIdx, rot, inv, s
         <div className="mt-1 text-white/45">click to look · WASD · space · shift run · F fly</div>
         {build
           ? <div className="text-amber-200/80">BUILD · RMB place · LMB deconstruct · R rotate · 1-6 piece · Tab exit</div>
-          : <div className="text-white/45">hold LMB mine · RMB place · 1-8 slot · C craft tool · Tab build</div>}
+          : <div className="text-white/45">hold LMB mine · RMB place · 1-8 slot · C craft · Tab build</div>}
         {/* ★ The tools are Greg's, from engine/tools.ts, unchanged. Tier is what you HOLD now. */}
         <div className="text-white/40 mt-1">
           {(['forestry', 'prospecting'] as const).map(sk => {
@@ -950,6 +989,108 @@ function World({ inv, toolTier, toolSkill, selItem, onStats, onPos, onLook, onIn
         <lineBasicMaterial color="#000000" transparent opacity={0.55} />
       </lineSegments>
     </>
+  )
+}
+
+/**
+ * The crafting surface (C).
+ *
+ * ★ IT LISTS WHAT YOU CANNOT AFFORD, AND THAT IS THE POINT. C used to silently auto-craft the best
+ * tool you could pay for, which is why nobody noticed the entire forestry ladder was uncraftable:
+ * you pressed a key, nothing happened, and the game never said whether that meant "no materials",
+ * "already have it", or "this is impossible". A greyed row with its costs showing turns a dead key
+ * into a goal.
+ *
+ * Two sections, one surface. Refining comes from the pure-core table (`voxel/recipes.ts`); tools
+ * keep their own canon table (`engine/tools.ts`, blades→forestry / spikes→prospecting) and are
+ * shown here rather than given a second window.
+ *
+ * `tick` is the re-render handle: the inventory is a ref that crafting mutates in place, so this
+ * panel has no other way to know its counts changed.
+ */
+function CraftPanel({ have, tools, tick, onCraft, onCraftTool, onClose }: {
+  have: (itemId: string) => number
+  tools: React.RefObject<EquippedTools>
+  tick: number
+  onCraft: (id: string) => void
+  onCraftTool: (id: string) => void
+  onClose: () => void
+}) {
+  const label = (id: string) => id.replace(/_/g, ' ')
+  const Cost = ({ items }: { items: { itemId: string; count: number }[] }) => (
+    <span className="text-white/45">
+      {items.map((c, i) => (
+        <span key={c.itemId} className={have(c.itemId) >= c.count ? 'text-emerald-300/70' : 'text-rose-300/60'}>
+          {i > 0 && <span className="text-white/25"> · </span>}
+          {label(c.itemId)} {have(c.itemId)}/{c.count}
+        </span>
+      ))}
+    </span>
+  )
+
+  // The next unearned tier per skill. Showing all nine at once buries the one you are working
+  // toward; showing only what you can afford is what hid the bug in the first place.
+  const nextTools = (['forestry', 'prospecting'] as const).flatMap((skillId) => {
+    const held = getEquippedTool(tools.current!, skillId)
+    const heldTier = held ? (getToolDef(held)?.tier ?? 0) : 0
+    const next = Object.values(TOOL_DEFS)
+      .filter(d => !d.basic && d.skillId === skillId && d.tier > heldTier)
+      .sort((a, b) => a.tier - b.tier)[0]
+    return next ? [next] : []
+  })
+
+  const rows = RECIPES.filter(r => r.input.every(i => have(i.itemId) > 0 || canCraftRecipe(r.id, have)))
+
+  return (
+    <div className="absolute inset-0 grid place-items-center bg-black/50 pointer-events-auto" onClick={onClose}>
+      <div className="w-[440px] max-h-[80vh] overflow-y-auto bg-[#0e1018]/95 border border-white/12 rounded-lg p-4 font-mono text-[11px]"
+           onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-baseline justify-between mb-3">
+          <span className="text-white/95 font-semibold tracking-[.18em] uppercase">Crafting</span>
+          <button onClick={onClose} className="text-white/40 hover:text-white/80">esc</button>
+        </div>
+
+        <div className="text-white/40 tracking-[.14em] uppercase text-[9px] mb-1.5">Refine</div>
+        {rows.length === 0 && <div className="text-white/35 mb-3">nothing to refine — go cut a tree</div>}
+        {rows.map((r: RecipeDef) => {
+          const can = canCraftRecipe(r.id, have)
+          return (
+            <button key={r.id} disabled={!can} onClick={() => onCraft(r.id)}
+                    className={`w-full text-left mb-1 px-2 py-1.5 rounded border transition-colors ${
+                      can ? 'border-white/15 hover:border-amber-200/50 hover:bg-white/5 text-white/90'
+                          : 'border-white/5 text-white/30 cursor-not-allowed'}`}>
+              <div className="flex justify-between gap-3">
+                <span>{r.name}</span>
+                <span className="text-amber-200/70 tabular-nums">{r.output.count}× {label(r.output.itemId)}</span>
+              </div>
+              <div className="mt-0.5 text-[10px]"><Cost items={r.input} /></div>
+            </button>
+          )
+        })}
+
+        <div className="text-white/40 tracking-[.14em] uppercase text-[9px] mt-4 mb-1.5">Tools</div>
+        {nextTools.length === 0 && <div className="text-white/35">every tier earned</div>}
+        {nextTools.map((d) => {
+          // Counted through `have` rather than `canCraftTool`, which wants a whole Inventory (and a
+          // BankState) — the panel only ever needs counts, and faking an Inventory to ask a
+          // yes/no question is how a display drifts from the thing that actually spends.
+          // `onCraftTool` still calls the real `canCraftTool` before spending; this only greys a row.
+          const can = d.recipe.every(i => have(i.itemId) >= i.count)
+          return (
+            <button key={d.id} disabled={!can} onClick={() => onCraftTool(d.id)}
+                    className={`w-full text-left mb-1 px-2 py-1.5 rounded border transition-colors ${
+                      can ? 'border-white/15 hover:border-amber-200/50 hover:bg-white/5 text-white/90'
+                          : 'border-white/5 text-white/30 cursor-not-allowed'}`}>
+              <div className="flex justify-between gap-3">
+                <span>{d.name}</span>
+                <span className="text-white/45">tier {d.tier} {d.skillId}</span>
+              </div>
+              <div className="mt-0.5 text-[10px]"><Cost items={d.recipe} /></div>
+            </button>
+          )
+        })}
+      </div>
+    </div>
   )
 }
 

@@ -70,12 +70,22 @@ export const BLOCKS: BlockDef[] = [
   // ── Forestry — the four ruled woods ────────────────────────────────────────────────────────
   // ★ skill: 'forestry' means a SPIKE WILL NOT CUT A TREE and a BLADE will not break stone. The
   // tool families are canon (`engine/tools.ts`: blades→forestry, spikes→prospecting) and the
-  // registry enforces the split rather than restating it. Drop ids are the ruled ones from
-  // `world/resources.ts`; hardness climbs with the same 1/4/7/10 ladder the node minLevels use.
-  { material: WOOD.GOLDWOOD_LOG, name: 'Goldwood', hardness: 1.4, skill: 'forestry', minTier: 1, drops: [{ itemId: 'goldwood_plank', count: 1 }], placeable: true },
-  { material: WOOD.SHIMMEROAK_LOG, name: 'Shimmeroak', hardness: 1.9, skill: 'forestry', minTier: 1, drops: [{ itemId: 'shimmeroak_plank', count: 1 }], placeable: true },
-  { material: WOOD.STARWILLOW_LOG, name: 'Starwillow', hardness: 2.6, skill: 'forestry', minTier: 2, drops: [{ itemId: 'starwillow_branch', count: 1 }], placeable: true },
-  { material: WOOD.DAWNWOOD_LOG, name: 'Dawnwood', hardness: 3.4, skill: 'forestry', minTier: 3, drops: [{ itemId: 'dawnwood_plank', count: 1 }], placeable: true },
+  // registry enforces the split rather than restating it. Hardness climbs with the same 1/4/7/10
+  // ladder the old node minLevels used.
+  //
+  // ── ★ A LOG DROPS A LOG (2026-08-07) ────────────────────────────────────────────────────────
+  // These rows used to drop finished `goldwood_plank` / `starwillow_branch`, inherited verbatim
+  // from `world/resources.ts` where a *node* handed over milled timber because the tile world had
+  // no tree to cut. Carried into a voxel world it meant chopping a trunk yielded lumber, and it
+  // silently broke the game: the blades cost bark and sap, those were secondary NODE drops, no
+  // block produced them, so all three forestry tiers were uncraftable — which left the basic Worn
+  // Blade (tier 1) as the ceiling and made STARWILLOW (minTier 2) and DAWNWOOD (minTier 3) trees
+  // permanently unharvestable. The generator was placing wood nobody could ever cut.
+  // `recipes.ts` is the missing layer; `recipes.test.ts` asserts nothing is unreachable again.
+  { material: WOOD.GOLDWOOD_LOG, name: 'Goldwood', hardness: 1.4, skill: 'forestry', minTier: 1, drops: [{ itemId: 'goldwood_log', count: 1 }], placeable: true },
+  { material: WOOD.SHIMMEROAK_LOG, name: 'Shimmeroak', hardness: 1.9, skill: 'forestry', minTier: 1, drops: [{ itemId: 'shimmeroak_log', count: 1 }], placeable: true },
+  { material: WOOD.STARWILLOW_LOG, name: 'Starwillow', hardness: 2.6, skill: 'forestry', minTier: 2, drops: [{ itemId: 'starwillow_log', count: 1 }], placeable: true },
+  { material: WOOD.DAWNWOOD_LOG, name: 'Dawnwood', hardness: 3.4, skill: 'forestry', minTier: 3, drops: [{ itemId: 'dawnwood_log', count: 1 }], placeable: true },
 
   // Leaves come away by hand — soft, fast, and they drop nothing in v1. Sapling drops are a
   // regrowth mechanic and regrowth is not built, so promising one here would be a lie.

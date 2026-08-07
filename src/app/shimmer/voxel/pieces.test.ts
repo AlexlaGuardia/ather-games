@@ -11,6 +11,7 @@ import {
   type Placement, type Rotation,
 } from './pieces'
 import { blockDef, materialForItem } from './registry'
+import { RECIPE_OUTPUTS } from './recipes'
 
 let pass = 0
 const fails: string[] = []
@@ -29,14 +30,22 @@ const solid = () => MAT.STONE
   ok(PIECES.every(p => p.cost.length > 0), 'every piece costs something')
 }
 
-// ── 2. costs use ids the block registry actually drops ───────────────────────────────────────
+// ── 2. costs use ids the player can actually OBTAIN ──────────────────────────────────────────
 // A cost naming an item nothing yields is a piece nobody can ever build.
+//
+// ⚠ WIDENED 2026-08-07: this used to check block drops alone, which was right while every material
+// came straight off a block. Logs now drop LOGS and planks are refined (`recipes.ts`), so raw drops
+// are no longer the whole vocabulary — obtainable = what you mine, plus what you can make from it.
+// The narrow version failed the moment refining landed, which is the test doing its job; widening
+// it to "obtainable" rather than deleting it keeps the invariant that matters. The same sweep lives
+// in recipes.test.ts and covers the tool ladder too.
 {
   const droppable = new Set<string>()
   for (const b of [...Array(64).keys()].map(blockDef).filter(Boolean))
     for (const d of b!.drops) droppable.add(d.itemId)
-  const missing = PIECES.flatMap(p => p.cost.map(c => c.itemId)).filter(i => !droppable.has(i))
-  ok(missing.length === 0, `every piece cost is an item the world actually drops (missing: ${[...new Set(missing)].join(',')})`)
+  const obtainable = new Set([...droppable, ...RECIPE_OUTPUTS])
+  const missing = PIECES.flatMap(p => p.cost.map(c => c.itemId)).filter(i => !obtainable.has(i))
+  ok(missing.length === 0, `every piece cost is obtainable (missing: ${[...new Set(missing)].join(',')})`)
 }
 
 // ── 3. ★ rotation must not drift the origin ──────────────────────────────────────────────────

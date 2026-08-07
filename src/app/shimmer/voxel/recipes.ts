@@ -1,0 +1,147 @@
+// The recipe table — turning what you mined into what you use.
+//
+// ★ PURE CORE. No react/three/DOM, no imports from outside this folder.
+//
+// ★ SHAPED AS DATA, NOT CODE, exactly like `registry.ts`. Every field is a plain value, so this
+// table lifts into `data/recipes/*.json` unchanged the day the loader exists, and Rust reads the
+// identical file. Behaviour must never creep in here.
+//
+// ── ★ WHY THIS EXISTS: THE TILE WORLD NEVER HAD A LOG ────────────────────────────────────────
+// `world/resources.ts` is a table of *nodes* — you walked up to a goldwood node, channelled mana,
+// and finished planks appeared in your satchel. There was no tree and no timber, because a node is
+// a prop on terrain rather than terrain itself. The voxel world inverted that: terrain IS the
+// resource, so there is now a goldwood LOG standing in the ground, and the step from log to plank
+// is a thing the player should do.
+//
+// `registry.ts` originally had log blocks dropping `goldwood_plank` directly, inherited verbatim
+// from the node table. That short-circuit is what this file removes.
+//
+// ── ★ AND IT WAS ALREADY A LIVE BUG, NOT A TIDY-UP ───────────────────────────────────────────
+// The forestry tool ladder was DEAD in the voxel world and nothing said so. `goldwood_blade` costs
+// `goldwood_bark`, `shimmeroak_blade` costs `amber_sap`, `starwillow_blade` costs `starwillow_sap`
+// — and every one of those was a *secondary node drop* (`resources.ts` rolled them at 0.3–0.4
+// chance). Log blocks drop no such thing, so all three blades were uncraftable, which meant the
+// forestry tier never rose above the basic Worn Blade, which meant `STARWILLOW_LOG` (minTier 2) and
+// `DAWNWOOD_LOG` (minTier 3) could never be cut at all. **The generator was placing two tree
+// species the player was permanently unable to harvest.** Refining is what puts those materials
+// back in reach — from the log, where they belong.
+//
+// `recipes.test.ts` closes the class with a REACHABILITY assert: every recipe and tool input must
+// trace back to a block drop. That is the test that would have caught this on the day it appeared.
+//
+// ── BOUNDARY ─────────────────────────────────────────────────────────────────────────────────
+// Yields, station gating and tiers are Jin's (build). Material NAMES are Magii's (canon) — every id
+// below is already ruled in `resources.ts`, and `log` is generic English exactly like the `plank`
+// and `sap` that already ship. Nothing here invents an Athernyx word, so no canon gap is owed.
+
+/** Where you have to be to make a thing. `hand` = anywhere, no station. */
+export type Station = 'hand' | 'crafting_table'
+
+export interface RecipeDef {
+  id: string
+  name: string
+  /** Consumed. Every id must be reachable from a block drop — enforced in recipes.test.ts. */
+  input: { itemId: string; count: number }[]
+  /** Produced. One stack out per recipe; a recipe wanting two outputs is two recipes. */
+  output: { itemId: string; count: number }
+  station: Station
+  /**
+   * ★ MANA IS CHARGED ONLY WHERE MANA IS ACTUALLY CHANNELLED.
+   *
+   * The tile world put a mana cost on everything because *gathering* was the mana verb — you stood
+   * at a node and channelled. Mining is the verb now, and it costs durability and time instead. A
+   * toll on "split a log into planks" would be friction with no fiction under it, charged against
+   * the loop the player is in constantly. Recipes that genuinely seat mana (crystal work, the
+   * stations that hold a connection open) keep it; carpentry does not.
+   */
+  mana: number
+}
+
+/**
+ * ── REFINING ──────────────────────────────────────────────────────────────────────────────────
+ * One log, two ways to take it apart. That fork is deliberate: planks and bark/sap both feed the
+ * same blade, so the ladder costs real logs rather than one lucky roll, and the player decides
+ * which half of the tree they need today. The tile world made that decision with a 0.3 dice roll.
+ *
+ * Yields are set so a tier-1 blade (5 plank + 3 bark) costs 2 goldwood logs of planks and 2 of
+ * bark — four trees' worth of trunk for your first real axe. Cheap enough to reach in one session,
+ * expensive enough that the basic tool has a job.
+ */
+export const RECIPES: RecipeDef[] = [
+  // Goldwood — the day-one tree. Tier-1 forestry.
+  { id: 'goldwood_planks', name: 'Goldwood Planks', station: 'hand', mana: 0,
+    input: [{ itemId: 'goldwood_log', count: 1 }], output: { itemId: 'goldwood_plank', count: 4 } },
+  { id: 'goldwood_bark', name: 'Strip Goldwood Bark', station: 'hand', mana: 0,
+    input: [{ itemId: 'goldwood_log', count: 1 }], output: { itemId: 'goldwood_bark', count: 2 } },
+
+  // Shimmeroak — tier-2 forestry. Sap is tapped from the log, not rolled off a node.
+  { id: 'shimmeroak_planks', name: 'Shimmeroak Planks', station: 'hand', mana: 0,
+    input: [{ itemId: 'shimmeroak_log', count: 1 }], output: { itemId: 'shimmeroak_plank', count: 4 } },
+  { id: 'amber_sap', name: 'Tap Amber Sap', station: 'hand', mana: 0,
+    input: [{ itemId: 'shimmeroak_log', count: 1 }], output: { itemId: 'amber_sap', count: 2 } },
+
+  // Starwillow — tier-3 forestry. The branch is the structural piece here, not a plank.
+  { id: 'starwillow_branches', name: 'Starwillow Branches', station: 'hand', mana: 0,
+    input: [{ itemId: 'starwillow_log', count: 1 }], output: { itemId: 'starwillow_branch', count: 4 } },
+  { id: 'starwillow_sap', name: 'Tap Starwillow Sap', station: 'hand', mana: 0,
+    input: [{ itemId: 'starwillow_log', count: 1 }], output: { itemId: 'starwillow_sap', count: 2 } },
+
+  // Dawnwood — the deep-forest tree. No tool tier claims it yet; it is building timber.
+  { id: 'dawnwood_planks', name: 'Dawnwood Planks', station: 'hand', mana: 0,
+    input: [{ itemId: 'dawnwood_log', count: 1 }], output: { itemId: 'dawnwood_plank', count: 4 } },
+
+  // ── THE STATION ITSELF ──────────────────────────────────────────────────────────────────────
+  // Craftable by hand, and it must stay that way: a crafting table gated behind a crafting table is
+  // the bootstrap that cannot start. Canon has Greg gift one in the starter bag
+  // (`shimmer-quests-mainmap.md`), so this is the REPLACEMENT path, not the only one.
+  { id: 'crafting_table', name: 'Crafting Table', station: 'hand', mana: 0,
+    input: [{ itemId: 'goldwood_plank', count: 4 }], output: { itemId: 'crafting_table', count: 1 } },
+]
+
+const BY_ID = new Map(RECIPES.map(r => [r.id, r]))
+export const recipeDef = (id: string): RecipeDef | undefined => BY_ID.get(id)
+
+/** Every item id this table can PRODUCE. Used by the reachability test and the crafting UI. */
+export const RECIPE_OUTPUTS: ReadonlySet<string> = new Set(RECIPES.map(r => r.output.itemId))
+
+/**
+ * Can this be made right now?
+ *
+ * `have` is a callback rather than an Inventory, on purpose: `Inventory` lives in `engine/`, and the
+ * pure core must not reach across the boundary to read a host-side type. The caller counts; this
+ * decides. Same inversion `pieces.ts` uses for its costs.
+ */
+export function canCraft(
+  id: string,
+  have: (itemId: string) => number,
+  station: Station = 'hand',
+  mana = Infinity,
+): boolean {
+  const def = BY_ID.get(id)
+  if (!def) return false
+  if (def.station !== 'hand' && def.station !== station) return false
+  if (mana < def.mana) return false
+  return def.input.every(i => have(i.itemId) >= i.count)
+}
+
+/**
+ * What a craft would consume and produce — a plan, not a mutation.
+ *
+ * The core never edits an inventory (it cannot see one). It returns the deltas and the host applies
+ * them, which is what keeps this file portable and what makes the whole table testable without an
+ * inventory implementation existing at all.
+ */
+export function craftPlan(id: string): { take: { itemId: string; count: number }[]; give: { itemId: string; count: number } } | null {
+  const def = BY_ID.get(id)
+  if (!def) return null
+  return { take: def.input.map(i => ({ ...i })), give: { ...def.output } }
+}
+
+/** Every recipe currently makeable, in table order. The UI renders this; it does not filter itself. */
+export function availableRecipes(
+  have: (itemId: string) => number,
+  station: Station = 'hand',
+  mana = Infinity,
+): RecipeDef[] {
+  return RECIPES.filter(r => canCraft(r.id, have, station, mana))
+}
