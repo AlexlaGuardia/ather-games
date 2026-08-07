@@ -34,6 +34,11 @@ import { loadRuneInventory, saveRuneInventory, setBirthRune, EMPTY_INVENTORY } f
 const Shimmer3D = dynamic(() => import('./Shimmer3D'), { ssr: false })
 
 const SAVE_KEY = 'ather:save:shimmer'
+/**
+ * Vestigial: `birthOwed()` reads the rune directly now, so nothing consults this any more. Still
+ * cleared on choose so an old latch left in a browser by a previous build doesn't sit there
+ * forever looking meaningful to whoever greps for it next.
+ */
 const PENDING_KEY = 'ather:shimmer:birthPending'
 /** One-shot handoff so the game can greet a keeper it did not watch being born. Read+cleared once. */
 const JUST_BORN_KEY = 'ather:shimmer:justBorn'
@@ -58,17 +63,30 @@ async function hydrateFromCloud(): Promise<void> {
   } catch { /* unparseable / quota — start fresh rather than half-load */ }
 }
 
-/** Is this keeper still owed the ritual? Read AFTER reset + hydration, never before. */
+/**
+ * Is this keeper still owed the ritual? Read AFTER reset + hydration, never before.
+ *
+ * ── ★ THE RUNE IS THE WHOLE ANSWER, AND THE EPOCH IS WHY (2026-08-07) ──────────────────────
+ * This used to be `!hasRune && (!hasSave || pending)` — save-absence as the proxy for "new keeper",
+ * with a `birthPending` latch patching the case the proxy got wrong (the starter kit persists a
+ * save on first mount, so someone who backed out of the ritual already had one). Both the proxy and
+ * its patch are gone, because within an epoch a save and a rune CANNOT legitimately disagree:
+ * `ather-epoch.ts` clears `ather:save:shimmer` and `ather:shimmer:birthRune` together, so any save
+ * present was written after the reset, and a keeper holding one with no rune was never born in this
+ * world. The old third arm read that as a legacy returning keeper and waved them through.
+ *
+ * Measured on Alex's browser before this landed: an epoch-2 save with a level-8 party, no rune and
+ * no latch — the exact shape, playing with a null birth rune (NEUTRAL affinity, empty cast book).
+ * The race fixed above stops new keepers reaching that state; dropping this arm is what lets an
+ * already-broken browser heal on its next load.
+ *
+ * The cross-device case comes out right too: a blank phone hydrates the garden from the cloud but
+ * the rune never rode in the save blob, so it asks for one and keeps the garden. Being asked beats
+ * spawning runeless, which is what the old rule did there.
+ */
 function birthOwed(): boolean {
   try {
-    const hasRune = !!loadRuneInventory().birth
-    const hasSave = !!localStorage.getItem(SAVE_KEY)
-    const pending = localStorage.getItem(PENDING_KEY) === '1'
-    // Save-absence alone cannot gate it: the starter-kit grant persists a save on the first mount,
-    // so a player who opened birth and backed out without choosing has a save and would skip the
-    // ritual forever. The latch closes that, and a world reset arms it directly (ather-epoch.ts).
-    // A legacy returning save (save, no rune, no latch) is deliberately left alone.
-    return !hasRune && (!hasSave || pending)
+    return !loadRuneInventory().birth
   } catch {
     return false   // private mode — just spawn rather than trap them in a ritual that can't persist
   }
