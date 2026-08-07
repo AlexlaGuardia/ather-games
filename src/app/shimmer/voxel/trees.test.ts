@@ -54,7 +54,9 @@ for (let i = 0; SITES.length < 40 && i < 4000; i++) {
 // is no cross-column "already placed?" lookup to get wrong.
 {
   let escaped = 0, total = 0
-  for (let cx = 0; cx < 30; cx++) for (let cz = 0; cz < 30; cz++) {
+  // Sampled in WILD country (east of spawn, short of Mana Springs): the calmed spawn zones now
+  // deliberately carry few trees, and this check needs volume, not any particular place.
+  for (let cx = 40; cx < 70; cx++) for (let cz = 0; cz < 30; cz++) {
     for (const st of treeStartsAt(SEED, cx, cz, SECTION, CFG)) {
       total++
       if (st.x < cx * SECTION || st.x >= (cx + 1) * SECTION) escaped++

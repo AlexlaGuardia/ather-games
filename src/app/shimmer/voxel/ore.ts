@@ -83,13 +83,14 @@ const ROCK = [MAT.STONE, MAT.DEEP_STONE] as const
  */
 export const ORE_BATCHES: OreBatch[] = [
   // ── tier 1 · raw mana (minLevel 1) — the ore you see in every cave wall ────────────────────
-  { id: 'raw_mana', material: ORE.RAW_MANA, phase: 'post', perChunk: 26,
-    band: { min: 16, max: 156, plateau: 140 },      // effectively uniform: it is everywhere
+  { id: 'raw_mana', material: ORE.RAW_MANA, phase: 'post', perChunk: 18,   // scaled with the band: the rebalance shrank the rock, and unshrunk counts doubled the density
+    band: { min: 16, max: 112, plateau: 96 },       // effectively uniform: it is everywhere
+    // (bands rode the datum down 40 in the vertical rebalance — mass above the surface is discarded)
     size: 9, discardOnAirExposure: 0, targets: ROCK },
 
   // ── tier 2 · element crystal (minLevel 4) — four states, resolved at placement ─────────────
-  { id: 'element_crystal', material: null, phase: 'post', perChunk: 9,
-    band: { min: 10, max: 118, plateau: 30 },
+  { id: 'element_crystal', material: null, phase: 'post', perChunk: 6,
+    band: { min: 10, max: 80, plateau: 30 },
     size: 6, discardOnAirExposure: 0.25, targets: ROCK },
   { id: 'element_crystal_deep', material: null, phase: 'post', perChunk: 4,
     band: { min: 8, max: 62, plateau: 54 },         // uniform deep bonus
@@ -97,7 +98,7 @@ export const ORE_BATCHES: OreBatch[] = [
 
   // ── tier 3 · pure core (minLevel 7) — buried by design, rewards tunnelling ─────────────────
   { id: 'pure_core', material: ORE.PURE_CORE, phase: 'post', perChunk: 5,
-    band: { min: 6, max: 84, plateau: 0 },          // triangle peaked at y=45
+    band: { min: 6, max: 76, plateau: 0 },          // triangle peaked at y=41
     size: 5, discardOnAirExposure: 0.7, targets: ROCK },
   { id: 'pure_core_deep', material: ORE.PURE_CORE, phase: 'post', perChunk: 3,
     band: { min: 5, max: 40, plateau: 35 },

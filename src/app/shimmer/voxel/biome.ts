@@ -25,6 +25,7 @@
 
 import { value2, warped2 } from './noise'
 import { heightFields, riverness, riverField, type HeightConfig, DEFAULT_HEIGHT } from './height'
+import { zoneAt, greyAllowance, type ZoneAnchor } from './zones'
 
 export interface BiomeConfig {
   /**
@@ -75,7 +76,12 @@ export function forestness(seed: number, cx: number, cz: number, cfg: BiomeConfi
   const f = value2(cx * cfg.forestScale, cz * cfg.forestScale, seed ^ 0xf07e57)
   const t = (f - cfg.forestThreshold) / (cfg.forestFull - cfg.forestThreshold)
   const c = t < 0 ? 0 : t > 1 ? 1 : t
-  return c * c * (3 - 2 * c)
+  const wild = c * c * (3 - 2 * c)
+  // Zone character (worldgen v2): each zone blends the mask toward its ruled canopy — the
+  // Thicket's closed forest IS its character, the Meadows' sparse lone trees are Alex's ruling.
+  const zn = zoneAt(cx * 16, cz * 16, seed)
+  if (!zn.zone || zn.t <= 0) return wild
+  return wild + (zn.zone.forest - wild) * zn.t
 }
 
 /**
@@ -97,7 +103,11 @@ export function greyness(x: number, z: number, seed: number, cfg: BiomeConfig = 
   const r = richness(x, z, seed, cfg)
   const t = (cfg.greyEdge - r) / (cfg.greyEdge - cfg.greyCore)
   const c = t < 0 ? 0 : t > 1 ? 1 : t
-  return c * c * (3 - 2 * c)
+  const g = c * c * (3 - 2 * c)
+  if (g <= 0) return 0
+  // The greying rim (zones.ts): tended zones suppress the grey, the world's frayed edge amplifies
+  // it. Ruins and Hollows read THIS value, so distance from home is the difficulty axis for free.
+  return Math.min(1, g * greyAllowance(x, z, seed))
 }
 
 /**
@@ -113,8 +123,10 @@ export function greySurfaceAt(x: number, z: number, seed: number, cfg: BiomeConf
   return value2(x * 0.31, z * 0.31, seed ^ 0x9e447) < gy
 }
 
-/** The label vocabulary. Order is meaningless; the classifier's precedence is what rules. */
+/** The label vocabulary: generic biomes plus the eight anchored zone ids (worldgen v2). Order is
+ *  meaningless; the classifier's precedence is what rules. */
 export type BiomeId = 'basin' | 'shore' | 'river' | 'greyfield' | 'crag' | 'highland' | 'woodland' | 'meadow'
+  | ZoneAnchor['id']
 
 /**
  * Name the place at (x, z). `h` and `seaLevel` are passed in rather than imported — depth.ts owns
@@ -129,6 +141,11 @@ export function biomeAt(
   if (h <= seaLevel) return 'basin'
   if (h <= seaLevel + 2) return 'shore'
   if (riverness(riverField(x, z, seed, hcfg)) >= 0.5) return 'river'
+  // A ruled place outranks every generic label once you are properly inside it — water beats it
+  // (a pond in the Meadows is still a pond), the grey does not (zones are tended; only the
+  // Outfields lets grey through, and there the grey label speaks for itself below).
+  const zn = zoneAt(x, z, seed)
+  if (zn.zone && zn.t >= 0.5 && greyness(x, z, seed, cfg) < 0.5) return zn.zone.id
   if (greyness(x, z, seed, cfg) >= 0.5) return 'greyfield'
   const { continentalness } = heightFields(x, z, seed, hcfg)
   if (continentalness >= cfg.cragC) return 'crag'

@@ -92,7 +92,7 @@ export const DEFAULT_TREES: TreeConfig = {
   perColumn: 1.7,          // unchanged — this was always a fine density FOR A FOREST
   meadowPerColumn: 0.05,   // ~one lone tree per 20 open columns; a meadow is not a void
   maxSpread: 6,
-  maxAltitude: 205,
+  maxAltitude: 165,     // datum+45, rebalanced with it
   species: SPECIES,
 }
 

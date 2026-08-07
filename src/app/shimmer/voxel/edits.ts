@@ -52,7 +52,9 @@ import { Column, SECTION } from './column'
 // standing walls v10 could build are gone, and water near shorelines moved down.
 // v12: land-around-water (2026-08-07 late) — inside the river band the TERRAIN anchors to the
 // water table (banks/levees/gorges); every riverside surface moved.
-export const GENERATOR_VERSION = 12
+// v13: vertical rebalance (2026-08-08) — sea 140→100, datum 160→120; the whole surface moved
+// down 40 and every shoreline redrew.
+export const GENERATOR_VERSION = 13
 
 /**
  * One column's edits: packed local index → material.

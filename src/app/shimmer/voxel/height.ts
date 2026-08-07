@@ -14,7 +14,8 @@
 //   erosion         — how WORN this country is. High erosion flattens whatever the others propose.
 //   weirdness       — signed; drives peaks-and-valleys, so ridges and troughs come from one field.
 
-import { signed2, spline, warped2, type SplinePoint } from './noise'
+import { signed2, spline, value2, warped2, type SplinePoint } from './noise'
+import { zoneAt } from './zones'
 
 export interface HeightConfig {
   /** Total world height in voxels. Ruled 2026-08-06: 256. */
@@ -35,7 +36,10 @@ export interface HeightConfig {
 
 export const DEFAULT_HEIGHT: HeightConfig = {
   worldHeight: 256,
-  datum: 160,
+  // ★ 160 → 120 (2026-08-08 night, Alex ruled the split): sea 100 / datum 120 trades 40 blocks of
+  // underground for 40 of sky and mountain headroom — peaks stop clipping the world ceiling and
+  // land towers over water. 120 of mine depth still beats Minecraft's entire pre-deepslate budget.
+  datum: 120,
   // ★ Tuned by rendering, not by argument (WORLDGEN-RESEARCH's own lesson: the 2D generator's 27
   // asserts were green over a map of ruler-straight highways, and looking at it is what caught it).
   // A first pass at continentScale 900 / ridge 46 measured 17.3 voxels of relief across one view
@@ -270,7 +274,24 @@ function rawTerrain(x: number, z: number, seed: number, cfg: HeightConfig = DEFA
   // law from the other side: it BENCHES the base (altitude preserved, interiors level) and kills
   // the ridge term — see the PLAINS block above for why both must happen together.
   const shaped = base + (benched(base) - base) * flat
-  return cfg.datum + DATUM_CALIBRATION + shaped + pv * cfg.ridgeAmplitude * relief * (1 - flat)
+  const wild = cfg.datum + DATUM_CALIBRATION + shaped + pv * cfg.ridgeAmplitude * relief * (1 - flat)
+
+  // ── zone character (worldgen v2) — the SAME membership value biome/trees read, blended here so
+  // a zone can never disagree with its own label. Each zone recomposes the same ingredients:
+  // Spirit Meadows drops benches and ridges for a long-wave swell (rolling hills you walk over),
+  // Mana Springs forces the benches (the terraces its pools sit in), settlements calm the relief.
+  const zn = zoneAt(x, z, seed)
+  if (!zn.zone || zn.t <= 0) return wild
+  const za = zn.zone
+  const zBase = za.benchK >= 1
+    ? base + (benched(base) - base) * Math.min(1, flat + (za.benchK - 1))
+    : base + (benched(base) - base) * flat * za.benchK
+  const swell = za.swellAmp > 0
+    ? (value2(x / 230, z / 230, seed ^ 0x50e11) - 0.5) * 2 * za.swellAmp
+    : 0
+  const zoneH = cfg.datum + DATUM_CALIBRATION + zBase + swell
+    + pv * cfg.ridgeAmplitude * relief * (1 - flat) * za.reliefK
+  return wild + (zoneH - wild) * zn.t
 }
 
 export function columnHeight(x: number, z: number, seed: number, cfg: HeightConfig = DEFAULT_HEIGHT): number {

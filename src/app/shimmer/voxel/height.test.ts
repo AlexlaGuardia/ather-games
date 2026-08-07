@@ -77,7 +77,9 @@ const C = DEFAULT_HEIGHT
   // toward benches concentrates ground near the datum BY DESIGN (Alex asked for it). What the
   // bound still catches is a world with no vertical life at all — see also the range assert below.
   const within = hs.filter(h => Math.abs(h - C.datum) <= 25).length / hs.length
-  ok(within > 0.55 && within < 0.98, `most country is near the datum but not all of it (${(within * 100).toFixed(0)}%)`)
+  // 0.98 → 0.995 with worldgen v2: the tended zones concentrate MORE country near the datum by
+  // design. The range assert below still requires real mountains somewhere.
+  ok(within > 0.55 && within < 0.995, `most country is near the datum but not all of it (${(within * 100).toFixed(0)}%)`)
   ok(hs[hs.length - 1] - hs[0] > 80, `the world has real vertical range (${hs[hs.length - 1] - hs[0]} voxels)`)
 }
 

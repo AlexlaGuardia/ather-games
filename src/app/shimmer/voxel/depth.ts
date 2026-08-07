@@ -58,12 +58,12 @@ export interface DepthConfig {
 
 export const DEFAULT_DEPTH: DepthConfig = {
   // ★ Sea level sits 20 below the datum, not on it. On it, HALF the world would be underwater by
-  // definition (the datum is the median ground height). Measured: 140 puts ~12% of columns under
-  // water — lakes and coasts, not an ocean planet.
-  seaLevel: 140,
+  // definition (the datum is the median ground height). 140/160 → 100/120 with the vertical
+  // rebalance (Alex ruled the split 2026-08-08) — same 20-gap, so the wet share is unchanged.
+  seaLevel: 100,
   soilDepth: 4,
   soilVariance: 2,
-  deepStoneLevel: 96,
+  deepStoneLevel: 56,   // keeps its 64-under-datum offset through the rebalance
   bedrockTop: 4,
   cliffSlope: 2.2,
   beachHeight: 2,
