@@ -10,6 +10,19 @@
 // string quota.
 
 import type { PackedEdits } from '../voxel/edits'
+import type { Placement } from '../voxel/pieces'
+
+/**
+ * What one column stores. Blocks are a packed diff; pieces are a plain list.
+ *
+ * ★ They share a record deliberately. A shed is block shell PLUS pieces, and splitting them across
+ * two stores means two writes, two loads, and a window where a refresh lands between them and
+ * leaves you a doorway with no wall. One record, one transaction, one truth.
+ */
+export interface ColumnSave {
+  edits: PackedEdits
+  pieces: Placement[]
+}
 
 const DB = 'shimmer-voxel'
 const STORE = 'edits'
@@ -40,13 +53,13 @@ const key = (seed: number, cx: number, cz: number) => `${seed}:${cx},${cz}`
  * ⚠ Every failure path returns null rather than throwing. A browser in private mode, a corrupt
  * store, a quota error — none of those should cost the player the world, only the edits.
  */
-export async function loadColumnEdits(seed: number, cx: number, cz: number): Promise<PackedEdits | null> {
+export async function loadColumn(seed: number, cx: number, cz: number): Promise<ColumnSave | null> {
   try {
     const db = await open()
     return await new Promise((res) => {
       const tx = db.transaction(STORE, 'readonly')
       const req = tx.objectStore(STORE).get(key(seed, cx, cz))
-      req.onsuccess = () => res((req.result as PackedEdits) ?? null)
+      req.onsuccess = () => res((req.result as ColumnSave) ?? null)
       req.onerror = () => res(null)
     })
   } catch { return null }
@@ -59,14 +72,16 @@ export async function loadColumnEdits(seed: number, cx: number, cz: number): Pro
  * "you only pay for what you build" property quietly becomes "you pay for everywhere you have ever
  * swung a pick". `recordEdit` already drops no-op edits; this is the same rule at the file level.
  */
-export async function saveColumnEdits(seed: number, cx: number, cz: number, p: PackedEdits): Promise<void> {
+export async function saveColumn(seed: number, cx: number, cz: number, save: ColumnSave): Promise<void> {
   try {
     const db = await open()
     await new Promise<void>((res) => {
       const tx = db.transaction(STORE, 'readwrite')
       const store = tx.objectStore(STORE)
-      if (p.idx.length === 0) store.delete(key(seed, cx, cz))
-      else store.put(p, key(seed, cx, cz))
+      // Empty means EMPTY on both halves — a column whose blocks were restored AND whose pieces
+      // were all deconstructed stops costing storage, same rule as `recordEdit` one level down.
+      if (save.edits.idx.length === 0 && save.pieces.length === 0) store.delete(key(seed, cx, cz))
+      else store.put(save, key(seed, cx, cz))
       tx.oncomplete = () => res()
       tx.onerror = () => res()
       tx.onabort = () => res()

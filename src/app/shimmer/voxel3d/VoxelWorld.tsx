@@ -31,7 +31,7 @@ import { raycast, tickBreak, dropsFor, type BreakState } from '../voxel/mine'
 import { spawnDrop, tickDrops, type Drop } from '../voxel/drops'
 import { blockDef, materialForItem, type BlockSkill } from '../voxel/registry'
 import { editIndex, recordEdit, applyEdits, packEdits, unpackEdits, isStale, type ColumnEdits } from '../voxel/edits'
-import { loadColumnEdits, saveColumnEdits, editedColumnCount } from './save'
+import { loadColumn, saveColumn, editedColumnCount } from './save'
 import { PIECES, STRUCTURE, pieceDef, cellsOf, canPlace, canAfford, placementAt, type Placement, type Rotation } from '../voxel/pieces'
 import { createPieceRenderer } from './piece-mesh'
 import { toGeometry, createVoxelMaterial, applySettings } from './mesh-bridge'
@@ -40,6 +40,13 @@ import { createTexturedVoxelMaterial } from './tex/atlas'
 import { loadSettings, saveSettings, withStyle, type VoxelSettings, type RenderStyle } from './settings'
 import { buildAttrs, MATERIAL_COLOR } from './attrs'
 import { createInventory, addItems, removeItems, countItem, type Inventory } from '../engine/inventory'
+// ★ PORT STEP 1 — the zero-coupling systems, wired unchanged.
+// PLAY3D-MIGRATION measured 16 of 23 engine systems as having NO reference to zones, tiles or world
+// grids. These are three of them, imported exactly as `Shimmer3D` imports them: they do not know
+// what the ground is made of, so moving the world out from under them costs nothing.
+import { createSkillSet, addSkillXP, getMilestone, xpForSkillLevel, type SkillSet } from '../engine/skills'
+import { ensureBasicTools, getEquippedTool, getToolDef, craftTool, canCraft as canCraftTool,
+         TOOL_DEFS, type EquippedTools } from '../engine/tools'
 
 const SEED = 1337
 const H = DEFAULT_COLUMN.worldHeight
@@ -90,9 +97,22 @@ export default function VoxelWorld() {
   // ★ THE SPIKE IS CANON, NOT INVENTED. `engine/tools.ts` rules blades→forestry,
   // spikes→prospecting, rinsticks→rinning, with a basic Greg-given tool that never breaks. So
   // "what do I mine rock with" already had an answer and nothing here needed naming.
+  // Kept as refs so `World` reads them per-frame without re-rendering, but they are now DERIVED
+  // from the equipped tool rather than set by a debug key.
   const toolTier = useRef(1)
   const toolSkill = useRef<BlockSkill>('prospecting')
   const inv = useRef<Inventory>(createInventory())
+  // ★ Greg's basic tools, exactly as the tile game hands them out — `ensureBasicTools` fills any
+  // missing skill with its never-breaking starter (worn_spike, worn_blade, worn_rinstick). The
+  // debug tier lever is gone: tier now comes from what you are actually holding.
+  const tools = useRef<EquippedTools>(ensureBasicTools({}))
+  const skills = useRef<SkillSet>(createSkillSet())
+  const [skillHud, setSkillHud] = useState<{ id: string; level: number; xp: number; next: number } | null>(null)
+  const [levelUp, setLevelUp] = useState<string | null>(null)
+  const [crafted, setCrafted] = useState<string | null>(null)
+  // Toasts clear themselves. A level-up banner that never leaves stops being a level-up banner.
+  useEffect(() => { if (!levelUp) return; const t = setTimeout(() => setLevelUp(null), 2600); return () => clearTimeout(t) }, [levelUp])
+  useEffect(() => { if (!crafted) return; const t = setTimeout(() => setCrafted(null), 2600); return () => clearTimeout(t) }, [crafted])
 
   const refreshHotbar = useCallback(() => {
     const counts = new Map<string, number>()
@@ -113,8 +133,21 @@ export default function VoxelWorld() {
       if (e.code === 'BracketLeft' || e.code === 'BracketRight') { /* spike tier, handled below */ }
       // Tool tier is a debug lever so the tier GATE can be felt in ten seconds: a tier-1 spike
       // REFUSES pure core, and that should be provable without crafting your way up first.
-      if (e.code === 'BracketRight') { toolTier.current = Math.min(3, toolTier.current + 1); setTier(toolTier.current) }
-      if (e.code === 'BracketLeft') { toolTier.current = Math.max(1, toolTier.current - 1); setTier(toolTier.current) }
+      // ★ THE TIER LEVER IS GONE. Tier comes from the equipped tool now, and a better tool is
+      // CRAFTED from what you mined — which is the loop this port exists to close. C crafts the
+      // next spike or blade you can afford.
+      if (e.code === 'KeyC') {
+        for (const id of Object.keys(TOOL_DEFS)) {
+          const def = TOOL_DEFS[id]
+          if (def.basic) continue
+          const held = getEquippedTool(tools.current, def.skillId)
+          const heldTier = held ? (getToolDef(held)?.tier ?? 0) : 0
+          if (def.tier <= heldTier) continue
+          if (!canCraftTool(id, inv.current)) continue
+          const made = craftTool(id, inv.current)
+          if (made) { tools.current[def.skillId] = made; setCrafted(def.name); refreshHotbar(); break }
+        }
+      }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
@@ -135,22 +168,28 @@ export default function VoxelWorld() {
           onLook={setLook} onInvChange={refreshHotbar}
           worker={worker} incoming={incoming} inflight={inflight} settings={settings}
           build={build} pieceIdx={pieceIdx} rot={rot}
+          tools={tools} skills={skills} onSkill={setSkillHud} onLevel={setLevelUp}
         />
         <PointerLockControls />
       </Canvas>
       <Hud stats={stats} pos={pos} look={look} hotbar={hotbar} sel={sel} tier={tier}
-           build={build} pieceIdx={pieceIdx} rot={rot} inv={inv} />
+           build={build} pieceIdx={pieceIdx} rot={rot} inv={inv}
+           skill={skillHud} levelUp={levelUp} crafted={crafted} tools={tools} />
       {showSettings && <SettingsPanel s={settings} update={update} onClose={() => setShowSettings(false)} />}
     </div>
   )
 }
 
-function Hud({ stats, pos, look, hotbar, sel, tier, build, pieceIdx, rot, inv }: {
+function Hud({ stats, pos, look, hotbar, sel, tier, build, pieceIdx, rot, inv, skill, levelUp, crafted, tools }: {
   stats: string; pos: string
   look: { name: string; progress: number; refused: boolean } | null
   hotbar: Slot[]; sel: number; tier: number
   build: boolean; pieceIdx: number; rot: Rotation
   inv: React.RefObject<Inventory>
+  skill: { id: string; level: number; xp: number; next: number } | null
+  levelUp: string | null
+  crafted: string | null
+  tools: React.RefObject<EquippedTools>
 }) {
   return (
     <>
@@ -161,7 +200,41 @@ function Hud({ stats, pos, look, hotbar, sel, tier, build, pieceIdx, rot, inv }:
         <div className="mt-1 text-white/45">click to look · WASD · space · shift run · F fly</div>
         {build
           ? <div className="text-amber-200/80">BUILD · RMB place · LMB deconstruct · R rotate · 1-6 piece · Tab exit</div>
-          : <div className="text-white/45">hold LMB mine · RMB place · 1-8 slot · [ ] spike tier · Tab build</div>}
+          : <div className="text-white/45">hold LMB mine · RMB place · 1-8 slot · C craft tool · Tab build</div>}
+        {/* ★ The tools are Greg's, from engine/tools.ts, unchanged. Tier is what you HOLD now. */}
+        <div className="text-white/40 mt-1">
+          {(['forestry', 'prospecting'] as const).map(sk => {
+            const t = getEquippedTool(tools.current!, sk)
+            const d = t ? getToolDef(t) : undefined
+            return <span key={sk} className="mr-3">{sk.slice(0, 4)}: {d?.name ?? '—'}</span>
+          })}
+        </div>
+      </div>
+
+      {/* Skill progress — only while it is moving, so it is information rather than furniture. */}
+      {skill && (
+        <div className="absolute bottom-24 left-1/2 -translate-x-1/2 w-56 pointer-events-none">
+          <div className="flex justify-between text-[10px] font-mono text-white/70 mb-0.5">
+            <span className="uppercase tracking-wider">{skill.id}</span>
+            <span className="tabular-nums">lv {skill.level}</span>
+          </div>
+          <div className="h-1 bg-black/55 rounded overflow-hidden">
+            <div className="h-full bg-emerald-300" style={{ width: `${Math.min(100, (skill.xp / Math.max(1, skill.next)) * 100)}%` }} />
+          </div>
+        </div>
+      )}
+
+      {levelUp && (
+        <div className="absolute top-1/3 left-1/2 -translate-x-1/2 text-center pointer-events-none">
+          <div className="text-emerald-300 font-mono text-sm tracking-widest uppercase">{levelUp}</div>
+        </div>
+      )}
+      {crafted && (
+        <div className="absolute top-[38%] left-1/2 -translate-x-1/2 text-center pointer-events-none">
+          <div className="text-amber-200 font-mono text-xs tracking-wider">crafted {crafted}</div>
+        </div>
+      )}
+      <div className="hidden">
       </div>
 
       {look && (
@@ -232,7 +305,7 @@ function Hud({ stats, pos, look, hotbar, sel, tier, build, pieceIdx, rot, inv }:
 const SOLID_EXCEPT = new Set<number>([AIR, MAT.WATER])
 const isSolid = (m: number) => !SOLID_EXCEPT.has(m)
 
-function World({ inv, toolTier, toolSkill, selItem, onStats, onPos, onLook, onInvChange, worker, incoming, inflight, settings, build, pieceIdx, rot }: {
+function World({ inv, toolTier, toolSkill, selItem, onStats, onPos, onLook, onInvChange, worker, incoming, inflight, settings, build, pieceIdx, rot, tools, skills, onSkill, onLevel }: {
   inv: React.RefObject<Inventory>
   toolTier: React.RefObject<number>
   toolSkill: React.RefObject<BlockSkill>
@@ -248,6 +321,10 @@ function World({ inv, toolTier, toolSkill, selItem, onStats, onPos, onLook, onIn
   build: boolean
   pieceIdx: number
   rot: Rotation
+  tools: React.RefObject<EquippedTools>
+  skills: React.RefObject<SkillSet>
+  onSkill: (s: { id: string; level: number; xp: number; next: number } | null) => void
+  onLevel: (s: string | null) => void
 }) {
   const { camera } = useThree()
   const group = useRef<THREE.Group>(null)
@@ -307,7 +384,11 @@ function World({ inv, toolTier, toolSkill, selItem, onStats, onPos, onLook, onIn
   const dropMats = useRef(new Map<number, THREE.Material>())
   const highlightGeo = useMemo(() => new THREE.EdgesGeometry(new THREE.BoxGeometry(1.002, 1.002, 1.002)), [])
   const pieces = useMemo(() => createPieceRenderer(), [])
+  // Placements are grouped by the column that OWNS them (the one containing the piece origin) —
+  // the same ownership rule trees and carvers use, so a piece straddling a border saves once.
   const placements = useRef<Placement[]>([])
+  const piecesByCol = useRef(new Map<string, Placement[]>())
+  const colOf = useCallback((x: number, z: number) => key(Math.floor(x / SECTION), Math.floor(z / SECTION)), [])
   const dropGroup = useRef<THREE.Group>(null)
   const mouse = useRef({ left: false, right: false })
   const frame = useRef(0)
@@ -356,17 +437,20 @@ function World({ inv, toolTier, toolSkill, selItem, onStats, onPos, onLook, onIn
   // page that leaks a full render's worth of buffers per visit is how the context gets lost in the
   // first place. The shared resources are disposed here and ONLY here, because disposing them
   // anywhere else would break every object still using them.
+  /** Write every dirty column's blocks AND pieces in one record each. */
+  const flushSaves = useCallback(() => {
+    for (const k of dirtySaves.current) {
+      const [gx, gz] = k.split(',').map(Number)
+      const e = edits.current.get(k) ?? new Map()
+      void saveColumn(SEED, gx, gz, { edits: packEdits(e), pieces: piecesByCol.current.get(k) ?? [] })
+    }
+    dirtySaves.current.clear()
+  }, [])
+
   // ★ THE LAST SWING BEFORE A REFRESH MUST SURVIVE. A once-a-second flush loses up to a second of
   // building on a close, which is precisely the moment a player remembers.
   useEffect(() => {
-    const flush = () => {
-      for (const k of dirtySaves.current) {
-        const [gx, gz] = k.split(',').map(Number)
-        const e = edits.current.get(k)
-        if (e) void saveColumnEdits(SEED, gx, gz, packEdits(e))
-      }
-      dirtySaves.current.clear()
-    }
+    const flush = () => flushSaves()
     // `visibilitychange` rather than `beforeunload`: mobile and modern Chrome may never fire the
     // latter, and this is the event that is actually guaranteed before a tab goes away.
     document.addEventListener('visibilitychange', flush)
@@ -376,7 +460,7 @@ function World({ inv, toolTier, toolSkill, selItem, onStats, onPos, onLook, onIn
       document.removeEventListener('visibilitychange', flush)
       window.removeEventListener('pagehide', flush)
     }
-  }, [])
+  }, [flushSaves])
 
   useEffect(() => () => {
     for (const m of drawn.current.values()) m.geometry.dispose()
@@ -531,16 +615,24 @@ function World({ inv, toolTier, toolSkill, selItem, onStats, onPos, onLook, onIn
       cols.current.set(ek, col)
       remesh(gx, gz)
       if (!edits.current.has(ek)) {
-        loadColumnEdits(SEED, gx, gz).then(p => {
-          if (!p) { edits.current.set(ek, new Map()); return }
-          if (isStale(p) && !staleWarned.current) {
+        loadColumn(SEED, gx, gz).then(saved => {
+          if (!saved) { edits.current.set(ek, new Map()); return }
+          if (isStale(saved.edits) && !staleWarned.current) {
             staleWarned.current = true
             onStats('⚠ saved edits are from a different generator version — they may not line up')
           }
-          const m = unpackEdits(p)
+          const m = unpackEdits(saved.edits)
           edits.current.set(ek, m)
           const c = cols.current.get(ek)
           if (c && m.size) { applyEdits(c, m); refreshUniform(c); remesh(gx, gz) }
+          // Pieces come back with their blocks. Occupancy is NOT re-written here — it is already in
+          // the block diff, because placing a piece wrote STRUCTURE through `setVoxel`, which is a
+          // recorded edit. Writing it twice would be harmless but would double the save.
+          if (saved.pieces?.length) {
+            piecesByCol.current.set(ek, saved.pieces)
+            placements.current = [...placements.current, ...saved.pieces]
+            pieces.sync(placements.current)
+          }
         })
       }
       for (const [ddx, ddz] of [[-1, 0], [1, 0], [0, -1], [0, 1]] as const)
@@ -639,6 +731,9 @@ function World({ inv, toolTier, toolSkill, selItem, onStats, onPos, onLook, onIn
         // are written, so a doorway stays walkable and a stair can be climbed.
         for (const c of cellsOf(target, def)) if (c.solid) setVoxel(c.x, c.y, c.z, STRUCTURE)
         placements.current.push(target)
+        const ok = colOf(target.x, target.z)
+        piecesByCol.current.set(ok, [...(piecesByCol.current.get(ok) ?? []), target])
+        dirtySaves.current.add(ok)
         pieces.sync(placements.current)
         onInvChange()
         mouse.current.right = false
@@ -654,6 +749,9 @@ function World({ inv, toolTier, toolSkill, selItem, onStats, onPos, onLook, onIn
           // while judging feel. A dial, not a ruling.
           for (const c of fdef.cost) addItems(inv.current!, c.itemId, c.count)
           placements.current = placements.current.filter(p => p !== found)
+          const fk = colOf(found.x, found.z)
+          piecesByCol.current.set(fk, (piecesByCol.current.get(fk) ?? []).filter(p => p !== found))
+          dirtySaves.current.add(fk)
           pieces.sync(placements.current)
           onInvChange()
           mouse.current.left = false
@@ -671,10 +769,33 @@ function World({ inv, toolTier, toolSkill, selItem, onStats, onPos, onLook, onIn
     pieces.hideGhost()
 
     // ── mine ─────────────────────────────────────────────────────────────────────────────────
+    // ★ THE TOOL IS CHOSEN BY THE BLOCK, NOT BY A HOTKEY. Every block declares its skill, and the
+    // matching equipped tool supplies the tier and speed — so a spike cuts rock and a blade cuts
+    // wood without the player switching anything. That is the tile game's model, unchanged; it just
+    // never had a world where both mattered on the same swing.
     if (hit && mouse.current.left) {
-      const r = tickBreak(breaking.current, hit, dt, toolTier.current!, toolSkill.current!)
+      const hitDef = blockDef(hit.material)
+      const wantSkill = hitDef?.skill ?? null
+      const equipped = wantSkill ? getEquippedTool(tools.current!, wantSkill as never) : undefined
+      const eDef = equipped ? getToolDef(equipped) : undefined
+      toolSkill.current = wantSkill
+      toolTier.current = eDef?.tier ?? 0
+      const r = tickBreak(breaking.current, hit, dt, toolTier.current!, toolSkill.current!, eDef?.speedBonus ?? 1)
       breaking.current = r.state
       if (r.broken) {
+        // ★ XP GOES TO THE BLOCK'S SKILL. Mining ore trains Prospecting, felling a tree trains
+        // Forestry — the two halves of gathering finally exist in the same world, which is the whole
+        // reason this port was worth doing before combat or NPCs.
+        if (wantSkill && skills.current![wantSkill as keyof SkillSet]) {
+          const sk = skills.current![wantSkill as keyof SkillSet]
+          // XP scales with hardness, so the deep tiers train faster than topsoil — the ladder the
+          // registry already encodes, reused rather than restated.
+          const res = addSkillXP(sk, Math.max(4, Math.round((hitDef?.hardness ?? 1) * 12)))
+          if (res.leveled) {
+            onLevel(`${wantSkill} ${res.newLevel}${getMilestone(res.newLevel) ? ' — ' + getMilestone(res.newLevel) : ''}`)
+          }
+          onSkill({ id: wantSkill, level: sk.level, xp: sk.xp, next: xpForSkillLevel(sk.level) })
+        }
         // ★ The block bursts into an ENTITY on the floor, it does not teleport into the satchel.
         // Straight-to-inventory works and feels like nothing happened; seeing the shard fall is
         // what tells the player the swing landed and what the vein actually yielded.
@@ -770,12 +891,7 @@ function World({ inv, toolTier, toolSkill, selItem, onStats, onPos, onLook, onIn
     // block would put a transaction on every swing. Once a second is imperceptible to a player and
     // invisible to the frame budget.
     if (frame.current % 60 === 0 && dirtySaves.current.size) {
-      for (const k of dirtySaves.current) {
-        const [gx, gz] = k.split(',').map(Number)
-        const e = edits.current.get(k)
-        if (e) void saveColumnEdits(SEED, gx, gz, packEdits(e))
-      }
-      dirtySaves.current.clear()
+      flushSaves()
     }
 
     // ── evict ────────────────────────────────────────────────────────────────────────────────
@@ -792,12 +908,7 @@ function World({ inv, toolTier, toolSkill, selItem, onStats, onPos, onLook, onIn
       // it — the column is regenerable, the edits are not. Any still-unsaved ones are flushed first,
       // because dropping the column while its diff sits in `dirtySaves` is exactly how a build
       // vanishes on a walk.
-      for (const kk of [...dirtySaves.current]) {
-        const [gx, gz] = kk.split(',').map(Number)
-        const e = edits.current.get(kk)
-        if (e) void saveColumnEdits(SEED, gx, gz, packEdits(e))
-      }
-      dirtySaves.current.clear()
+      flushSaves()
     }
   })
 
