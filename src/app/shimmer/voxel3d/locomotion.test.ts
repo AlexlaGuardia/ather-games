@@ -76,6 +76,38 @@ const settle = (s: ReturnType<typeof createLoco>, solid: any, frames = 30) => {
   ok(Math.abs(s.py - 14) < 0.05, `★ four presses climb four stairs (feet ${s.py.toFixed(2)})`)
 }
 
+// ── ★ the vault is an interaction: it needs the ledge FACED, not just leaned into ────────────
+{
+  const solid = world((x, y) => x >= 3 && y < 11)
+  const s = createLoco(2.5, 10, 0.5); settle(s, solid)
+  for (let i = 0; i < 30; i++) tickLocomotion(s, input({ mvX: 1 }), solid)
+  // pushing INTO the step but LOOKING away from it (backpedaling toward it): jump must stay a jump
+  tickLocomotion(s, input({ mvX: 1, fwdX: -1, jumpKey: true }), solid)
+  ok(!s.vaulting && s.airborne && s.vy > 0, '★ jump only vaults when the ledge is faced — otherwise it jumps')
+}
+
+// ── ★ coyote: a jump pressed during a downhill micro-fall still fires ────────────────────────
+{
+  // Running down stepped terrain is a chain of walk-offs; the press between two descents used to
+  // vanish entirely (Alex: "i tried jumping as i ran down a hill and nothing would happen").
+  const solid = world((x, y) => x < 3 && y < 11)      // a 1-block drop at x=3
+  const s = createLoco(1.5, 11, 0.5); settle(s, solid)
+  for (let i = 0; i < 60 && !s.airborne; i++) tickLocomotion(s, input({ mvX: 1 }), solid)  // run off the edge
+  ok(s.airborne, 'walked off the drop into a micro-fall')
+  tickLocomotion(s, input({ mvX: 1, jumpKey: true }), solid)   // press a hair late
+  ok(s.vy > JUMP_V0 * 0.8, `★ the late press still jumps — coyote honours it (vy ${s.vy.toFixed(2)})`)
+  // ...but a genuinely airborne press, past the grace, stays dead. A deep shaft this time — the
+  // 1-block drop above LANDS within the wait, and a grounded press is a legitimate jump.
+  const deep = (x: number, y: number, _z: number) => x < 3 ? y < 11 : y < 2
+  const s2 = createLoco(1.5, 11, 0.5); settle(s2, deep)
+  for (let i = 0; i < 60 && !s2.airborne; i++) tickLocomotion(s2, input({ mvX: 1 }), deep)
+  for (let i = 0; i < 20; i++) tickLocomotion(s2, input({ mvX: 1 }), deep)  // 0.33s of falling
+  ok(s2.airborne, 'still falling past the grace window')
+  const vyBefore = s2.vy
+  tickLocomotion(s2, input({ mvX: 1, jumpKey: true }), deep)
+  ok(s2.vy < vyBefore + 1, 'past the grace window the air press does nothing — no double jump')
+}
+
 // ── a 2-high face never vaults — that is climb country ───────────────────────────────────────
 {
   const solid = world((x, y) => x >= 3 && y < 12)

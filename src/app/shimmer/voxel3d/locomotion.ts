@@ -65,6 +65,14 @@ export const HANG_MIN = 0.22
 export const HANG_COMMIT = 0.35
 export const VAULT_TIME = 0.16      // quick — a vault is a step with intent, not a climb animation
 export const VAULT_REACH = 0.55     // how close the face must be (beyond the body radius) to vault
+export const VAULT_FACING = 0.4     // camera-forward · step-direction must exceed this — the vault
+                                    // is an INTERACTION with a ledge you are LOOKING AT (Alex,
+                                    // 07-08-07), never a side effect of brushing one sideways
+export const COYOTE_TIME = 0.12     // jump grace after the ground drops away. Stepped terrain makes
+                                    // every downhill run a chain of micro-falls, and without this a
+                                    // jump pressed between two 1-block descents simply vanished —
+                                    // Alex: "i tried jumping as i ran down a hill and nothing
+                                    // would happen"
 
 export const BODY_R = 0.3           // the old walker's half-width, kept — the world was built around it
 export const BODY_H = 1.75
@@ -82,6 +90,7 @@ export interface LocoState {
   hvx: number; hvz: number; vy: number
   eye: number
   airborne: boolean
+  coyoteT: number
   slideT: number; crouchHeld: boolean
   airSpeed: number; prevMvX: number; prevMvZ: number
   landGrace: number; landSpeed: number
@@ -103,7 +112,7 @@ export interface LocoState {
 export function createLoco(px: number, feetY: number, pz: number): LocoState {
   return {
     px, py: feetY, pz, hvx: 0, hvz: 0, vy: 0, eye: EYE_STAND,
-    airborne: true, slideT: 0, crouchHeld: false, airSpeed: 0, prevMvX: 0, prevMvZ: 0,
+    airborne: true, coyoteT: 0, slideT: 0, crouchHeld: false, airSpeed: 0, prevMvX: 0, prevMvZ: 0,
     landGrace: 0, landSpeed: 0, jumpHeld: false, spaceHeldT: 0, climbRise: 0,
     onWall: false, wallNX: 0, wallNZ: 0, wallCX: 0, wallCZ: 0, wallStick: 0, wallLock: 0,
     hanging: false, hangT: 0, hangLock: 0, hangLipX: 0, hangLipY: 0, hangLipZ: 0, hangCX: 0, hangCZ: 0,
@@ -305,7 +314,14 @@ export function tickLocomotion(s: LocoState, input: LocoInput, solid: Solid): vo
     s.airSpeed = WALLJUMP_PUSH
     s.wallStick = 0; s.wallLock = WALLJUMP_LOCK
     s.justWallJumped = true
+  } else if (s.airborne && jumpEdge && s.coyoteT > 0 && !s.hanging && s.mantleT <= 0 && !s.climbing) {
+    // Coyote jump: the ground JUST left (a downhill micro-fall, a ledge a frame ago) — honour the
+    // press as the ground jump it was meant to be. The wall jump wins when both are live.
+    s.vy = JUMP_V0
+    s.airSpeed = Math.max(Math.hypot(s.hvx, s.hvz), hasInput ? RUN_SPEED : 0)
+    s.coyoteT = 0
   }
+  if (s.coyoteT > 0) s.coyoteT -= dt
 
   if (s.mantleT > 0) {
     // Commit pull-up: eased, up-biased so it reads up-then-forward. Never a snap.
@@ -364,7 +380,8 @@ export function tickLocomotion(s: LocoState, input: LocoInput, solid: Solid): vo
     // mantle"). Pressing jump INTO a 1-block step climbs it — one press per block, so a staircase
     // ladders and a slope of steps is a rhythm, not a pogo. No step in reach (or moving away from
     // it, or sliding — a slide-hop must stay a hop) = the ballistic jump, unchanged.
-    const vt = !s.sliding && hasInput ? vaultTarget(solid, s.px, s.pz, s.py, cardX, cardZ) : null
+    const facing = input.fwdX * cardX + input.fwdZ * cardZ > VAULT_FACING
+    const vt = !s.sliding && hasInput && facing ? vaultTarget(solid, s.px, s.pz, s.py, cardX, cardZ) : null
     if (vt) {
       s.mFromX = s.px; s.mFromY = s.py; s.mFromZ = s.pz
       s.mToX = vt.x; s.mToY = vt.y; s.mToZ = vt.z
@@ -385,6 +402,7 @@ export function tickLocomotion(s: LocoState, input: LocoInput, solid: Solid): vo
     }
   } else if (floorTop === null || floorTop < s.py - FALL_OFF) {
     s.airborne = true; s.vy = 0; s.airSpeed = Math.hypot(s.hvx, s.hvz)   // walked off a ledge
+    s.coyoteT = COYOTE_TIME     // ...and the jump you press a hair late still belongs to the ground
   } else {
     s.py += (floorTop - s.py) * 0.25     // grounded: ease onto the floor — smooth step-up AND -down
     s.climbRise = 0
