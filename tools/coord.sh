@@ -114,6 +114,12 @@ cmd_build() {
   cd "$REPO"
   if npm run build && pm2 restart ather-games >/dev/null; then
     echo ">> build + restart OK"
+    # Breadcrumb for the health monitor. The lock dies on the next line, but the
+    # process we just restarted needs ~5min to look stable — without a marker that
+    # outlives the deploy, a monitor tick in that window reads intentional deploy
+    # restarts as a crash loop and pages. Written only on SUCCESS: a failed build
+    # deploys nothing, so it must not buy suppression.
+    date +%s > "$REPO/.coord/last-deploy" 2>/dev/null || true
     signal "$WIN deployed OK: $msg"
   else
     echo ">> BUILD FAILED — nothing deployed"
