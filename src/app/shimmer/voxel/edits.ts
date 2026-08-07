@@ -48,7 +48,9 @@ import { Column, SECTION } from './column'
 // v8 shipped and was WALKED before this landed, so it gets its own number.
 // v10: the water table (2026-08-07 late) — river/pond water fills to a coarse lattice level
 // instead of per-column banks−1, so water blocks moved anywhere a channel or pool exists.
-export const GENERATOR_VERSION = 10
+// v11: the rim clamp (2026-08-07 late) — water may not stand above adjacent dry ground; the
+// standing walls v10 could build are gone, and water near shorelines moved down.
+export const GENERATOR_VERSION = 11
 
 /**
  * One column's edits: packed local index → material.

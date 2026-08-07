@@ -5,7 +5,7 @@
 // the world's consumers respect it (sand bed, no trees standing in the water, wadeable collision
 // is the walker's side). Each is checkable against the pure functions; the look is the map's job.
 
-import { riverness, riverCarve, riverField, waterLevelAt, RIVER_FULL, RIVER_EDGE, RIVER_DEPTH, columnHeight } from './height'
+import { riverness, riverCarve, riverField, waterSurfaceAt, waterLevelAt, RIVER_FULL, RIVER_EDGE, RIVER_DEPTH, columnHeight } from './height'
 import { materialAt, MAT, DEFAULT_DEPTH } from './depth'
 import { makeColumn, SECTION } from './column'
 
@@ -39,7 +39,7 @@ const SEED = 1337
     rivers++
     const h = columnHeight(x, z, SEED)
     if (h <= DEFAULT_DEPTH.seaLevel + DEFAULT_DEPTH.beachHeight) continue   // sea swallows the river
-    const table = waterLevelAt(x, z, SEED)
+    const table = waterSurfaceAt(x, z, SEED)
     if (table >= h + 1) {
       // Bed below the table: MUST hold water at the bed and MUST NOT above the table.
       if (materialAt(x, h + 1, z, SEED, h) === MAT.WATER) wet++
@@ -74,17 +74,50 @@ const SEED = 1337
     if (!wide) continue
     const h0 = columnHeight(x, z, SEED)
     if (h0 <= DEFAULT_DEPTH.seaLevel + DEFAULT_DEPTH.beachHeight) continue
-    pools++
-    let mn = Infinity, mx = -Infinity
-    for (let dz = -8; dz <= 8; dz += 2) for (let dx = -8; dx <= 8; dx += 2) {
-      const t = waterLevelAt(x + dx, z + dz, SEED)
+    // Flatness is an INTERIOR claim: since the rim clamp, the shoreline strip legitimately steps
+    // down to meet the country (the meniscus). Interior = samples the clamp did not touch (their
+    // surface equals the raw table); a pool whose window is all shoreline is skipped, not failed.
+    let mn = Infinity, mx = -Infinity, interior = 0
+    for (let dz = -6; dz <= 6; dz += 2) for (let dx = -6; dx <= 6; dx += 2) {
+      const t = waterSurfaceAt(x + dx, z + dz, SEED)
+      if (t !== waterLevelAt(x + dx, z + dz, SEED)) continue     // clamped — shoreline, not interior
+      interior++
       if (t < mn) mn = t
       if (t > mx) mx = t
     }
+    if (interior < 8) continue
+    pools++
     if (mx - mn <= 1) flat++
   }
   ok(pools >= 10, `found pools to check (${pools})`)
   ok(flat === pools, `every pond surface is flat to within one voxel (${flat}/${pools})`)
+}
+
+// ── 2c. ★ NO WALLS OF WATER — the rim clamp's whole claim ───────────────────────────────────────
+{
+  // Alex walked into a standing wall of water ~10 voxels above its surroundings: the smoothed
+  // table, dragged up by nearby ranges, towered over a local low and the fill obeyed it. The rim
+  // clamp forbids the shape: a water surface may not stand more than ~1 voxel above any DRY
+  // ground adjacent to it — that ground is the rim it would pour over.
+  let waterCols = 0, walls = 0, worst = 0
+  for (let i = 0; i < 80000 && waterCols < 500; i++) {
+    const x = (i * 337) % 9000 - 4500, z = (i * 811) % 9000 - 4500
+    if (riverCarve(x, z, SEED) < 1) continue
+    const h = columnHeight(x, z, SEED)
+    if (h <= DEFAULT_DEPTH.seaLevel + DEFAULT_DEPTH.beachHeight) continue
+    const surf = waterSurfaceAt(x, z, SEED)
+    if (surf < h + 1) continue                                 // dry — nothing to wall
+    waterCols++
+    for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
+      if (riverCarve(x + dx, z + dz, SEED) !== 0) continue     // wet neighbour — no exposed face
+      const ground = columnHeight(x + dx, z + dz, SEED)
+      const exposure = surf - ground
+      if (exposure > worst) worst = exposure
+      if (exposure > 2) walls++
+    }
+  }
+  ok(waterCols > 100, `found watered edge columns to check (${waterCols})`)
+  ok(walls === 0, `★ no wall of water anywhere (worst exposed face ${worst} voxels)`)
 }
 
 // ── 3. the channel is genuinely lower than its banks ────────────────────────────────────────────

@@ -6,7 +6,7 @@
 // exactly like a cave the carvers did not generate. All three are cheap to assert and expensive
 // to notice.
 
-import { columnHeight, riverCarve, waterLevelAt, DEFAULT_HEIGHT } from './height'
+import { columnHeight, riverCarve, waterSurfaceAt, DEFAULT_HEIGHT } from './height'
 import { materialAt, fillColumn, slopeAt, MAT, DEFAULT_DEPTH } from './depth'
 
 let pass = 0
@@ -53,7 +53,7 @@ for (let i = 0; i < 600; i++) COLS.push([(i * 977) % 4000 - 2000, (i * 1583) % 4
       // the water table (height.ts waterLevelAt — a body of water has ONE level).
       if (m === MAT.WATER) {
         wet++
-        const riverTop = riverCarve(x, z, SEED) >= 1 ? waterLevelAt(x, z, SEED) : -1
+        const riverTop = riverCarve(x, z, SEED) >= 1 ? waterSurfaceAt(x, z, SEED) : -1
         if (y > D.seaLevel && y > riverTop) bad++
       }
     }

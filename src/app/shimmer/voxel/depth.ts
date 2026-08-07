@@ -15,7 +15,7 @@
 // is the single decision that makes ore appear in cave walls or stay buried.
 
 import { fbm2, value2 } from './noise'
-import { columnHeight, riverCarve, waterLevelAt, RIVER_DEPTH, type HeightConfig, DEFAULT_HEIGHT } from './height'
+import { columnHeight, riverCarve, waterSurfaceAt, RIVER_DEPTH, type HeightConfig, DEFAULT_HEIGHT } from './height'
 import { greySurfaceAt } from './biome'
 import { AIR } from './section'
 
@@ -114,7 +114,7 @@ export function materialAt(
     // the fill at the old carve bound would put an air gap above pond water in exactly those pits.
     if (y - h <= RIVER_DEPTH + 9) {
       const carve = riverCarve(x, z, seed, hcfg)
-      if (carve >= 1 && y <= waterLevelAt(x, z, seed, hcfg)) return MAT.WATER
+      if (carve >= 1 && y <= waterSurfaceAt(x, z, seed, hcfg)) return MAT.WATER
     }
     return MAT.AIR
   }

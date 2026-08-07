@@ -329,3 +329,50 @@ export function waterLevelAt(x: number, z: number, seed: number, cfg: HeightConf
   const level = (a + (b - a) * fx) + ((c + (d - c) * fx) - (a + (b - a) * fx)) * fz
   return Math.floor(level - 1)
 }
+
+/**
+ * ── ★ THE RIM CLAMP — water cannot stand above the ground that would let it spill ──────────────
+ * (2026-08-07 late, Alex: "a whole wall of water, like 10 blocks higher than its surroundings.")
+ * The table is SMOOTHED-AVERAGE terrain, and an average near a range is dragged up by the
+ * mountains in it — so over a local low the table could sit ten voxels above the country, and the
+ * fill stacked water to it with nothing alongside to hold it: a standing wall. The physical rule
+ * that forbids this is containment: a column of water may rise no higher than one below the
+ * LOWEST DRY GROUND within reach, because that is the rim it would pour over.
+ *
+ * Sampled on rings (8 directions × radii 1,2,4,7) rather than flood-filled, which lands exactly
+ * where the two water behaviours should meet:
+ *   - a NARROW channel has dry ground on its ring-1, so it hugs its local banks again — bench
+ *     crossings go back to being small waterfalls, which they always read well as;
+ *   - a WIDE pond's interior sees no dry ground within reach, so the flat table rules it, and
+ *     only the shoreline strip steps down to meet the country — a meniscus, not a wall.
+ * An exposed water face can never exceed ~1 voxel against ring-1 ground, by construction.
+ *
+ * Memoised per column (pure memo, capped): the fill asks per voxel, the rings cost real field
+ * reads, and a column's answer never changes.
+ */
+const surfaceCache = new Map<string, number>()
+
+export function waterSurfaceAt(x: number, z: number, seed: number, cfg: HeightConfig = DEFAULT_HEIGHT): number {
+  const k = `${seed}:${x},${z}`
+  const hit = surfaceCache.get(k)
+  if (hit !== undefined) return hit
+  let lvl = waterLevelAt(x, z, seed, cfg)
+  // The clamp is SLOPED, not rigid: dry ground r blocks away caps the surface at (its height − 1
+  // + 0.8·r), so a distant low rim tilts the water toward it instead of drying the channel. A
+  // rigid clamp was measured drying 56% of full channels on hillsides and stepping pond
+  // shorelines; the allowance keeps walls impossible (ring-1 still caps exposure at ~1.8) while
+  // water in sloped country survives.
+  for (const r of [1, 2, 4, 7]) {
+    for (let d = 0; d < 8; d++) {
+      const dx = Math.round(Math.cos(d * Math.PI / 4) * r), dz = Math.round(Math.sin(d * Math.PI / 4) * r)
+      if (riverCarve(x + dx, z + dz, seed, cfg) === 0) {
+        const rim = Math.floor(rawTerrain(x + dx, z + dz, seed, cfg)) - 1 + 0.8 * r
+        if (rim < lvl) lvl = rim
+      }
+    }
+  }
+  lvl = Math.floor(lvl)
+  if (surfaceCache.size > 16384) surfaceCache.clear()
+  surfaceCache.set(k, lvl)
+  return lvl
+}
