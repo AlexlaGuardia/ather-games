@@ -542,13 +542,13 @@ function ToolArc({ activeTool, tools, skills }: {
   tools: React.RefObject<EquippedTools>
   skills: React.RefObject<SkillSet>
 }) {
-  // Degrees off the horizontal, first socket near-level with the bar, last near-vertical — an
-  // eyeballed quarter-arc match to the board, not canon geometry.
-  const ANGLES = [8, 32, 56, 78]
+  // Degrees off the horizontal. Alex's taste pass 2026-08-07: arc MIRRORED (fan opens up-and-
+  // RIGHT, away from the bar, instead of curling back over it), gaps widened, whole cluster +25%.
+  const ANGLES = [6, 34, 62, 90]
   return (
     <div
       className="absolute left-full bottom-0 ml-3 h-0 w-0 pointer-events-none"
-      style={{ '--tool-arc-r': 'clamp(48px, 13vw, 84px)' } as React.CSSProperties}
+      style={{ '--tool-arc-r': 'clamp(60px, 16vw, 105px)' } as React.CSSProperties}
     >
       {TOOL_FAMILIES.map((family, i) => (
         <ToolSocket key={family} family={family} angleDeg={ANGLES[i]}
@@ -578,15 +578,17 @@ function ToolSocket({ family, angleDeg, active, tools, skills }: {
   const sk = skills.current![family]
   const xpPct = Math.min(1, sk.xp / Math.max(1, xpForSkillLevel(sk.level)))
   const rad = (angleDeg * Math.PI) / 180
-  const cos = Math.cos(rad).toFixed(4)
+  // Mirrored sweep: x = r·(1 − cos θ), so the fan steps RIGHT as it rises instead of curling
+  // back over the bar (Alex taste pass 2026-08-07).
+  const cosm = (1 - Math.cos(rad)).toFixed(4)
   const sin = Math.sin(rad).toFixed(4)
   const RING_R = 21
   const RING_C = 2 * Math.PI * RING_R
   return (
     <div
-      className="absolute w-11 h-11 max-[639px]:w-[38px] max-[639px]:h-[38px] transition-opacity"
+      className="absolute w-14 h-14 max-[639px]:w-[48px] max-[639px]:h-[48px] transition-opacity"
       style={{
-        left: `calc(var(--tool-arc-r) * ${cos})`,
+        left: `calc(var(--tool-arc-r) * ${cosm})`,
         bottom: `calc(var(--tool-arc-r) * ${sin})`,
         opacity: active ? 1 : 0.4,
       }}
