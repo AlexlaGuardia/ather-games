@@ -97,7 +97,10 @@ const C = DEFAULT_HEIGHT
     }
   }
   ok(big / tot < 0.10, `adjacent columns rarely jump more than 2 (${(100 * big / tot).toFixed(2)}%)`)
-  ok(maxStep <= 12, `no adjacent column is a sheer cliff (max step ${maxStep})`)
+  // 18, was 12: the land-around-water model cuts GORGES where a river crosses high country, and a
+  // gorge wall is a legitimate sheer face (it shows cliff stone). What this still catches is a
+  // spike field — noise-scale garbage, not landform-scale drama.
+  ok(maxStep <= 18, `no adjacent column is a sheer cliff (max step ${maxStep})`)
 }
 
 // ── 6. ★ height must not be a function of a biome id ─────────────────────────────────────────

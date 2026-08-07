@@ -105,14 +105,12 @@ export function materialAt(
   if (y < cfg.bedrockTop && value2(x * 0.7, z * 0.7, seed ^ 0xbed0) > y / cfg.bedrockTop) return MAT.BEDROCK
 
   // 2. Above the surface: water if we are in a basin — or in a river channel, filled to the WATER
-  //    TABLE (height.ts waterLevelAt: a body of water has ONE level; per-column banks−1 was "highs
-  //    and lows in a pond"). Guarded twice: only the few voxels just above the surface run the
-  //    cheap riverCarve read, and only carved columns pay for the four-sample table.
+  //    TABLE (height.ts: the land generates around the water, so the bed hangs ≤RIVER_DEPTH under
+  //    the table and the fill is flat and contained by construction). Guarded: only the voxels
+  //    just above a surface run the cheap band read; sky stays on the fast path.
   if (y > h) {
     if (y <= cfg.seaLevel) return MAT.WATER
-    // +9 headroom over the carve: a local pit inside the band floods to the table, and truncating
-    // the fill at the old carve bound would put an air gap above pond water in exactly those pits.
-    if (y - h <= RIVER_DEPTH + 9) {
+    if (y - h <= RIVER_DEPTH + 1) {
       const carve = riverCarve(x, z, seed, hcfg)
       if (carve >= 1 && y <= waterSurfaceAt(x, z, seed, hcfg)) return MAT.WATER
     }

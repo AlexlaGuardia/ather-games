@@ -215,12 +215,16 @@ export function riverness(w: number): number {
 }
 
 /**
- * Voxels the river carves out of the surface at (x, z) — 0 almost everywhere. Pure; one field
- * read. depth.ts calls this per column (and for the ≤3 voxels above a carved surface), never per
- * arbitrary voxel: guard any new caller the same way or generation pays a noise eval per air block.
+ * The channel's depth below the WATER TABLE at (x, z) — 0 outside the water region. Pure; one
+ * field read on the fast path. Consumers use it as "is there channel here" (sand beds, site-pad
+ * rejection, tests); the depth itself is anchored to the table, not the local surface — see the
+ * land-generates-around-the-water block below.
  */
 export function riverCarve(x: number, z: number, seed: number, cfg: HeightConfig = DEFAULT_HEIGHT): number {
-  return Math.round(RIVER_DEPTH * riverness(riverField(x, z, seed, cfg)))
+  const rn = riverness(riverField(x, z, seed, cfg))
+  if (rn < 0.35) return 0   // SHORE_RN — literal here because the const is declared below
+  const t = (rn - 0.35) / (1 - 0.35)
+  return Math.max(1, Math.round(RIVER_DEPTH * t * t * (3 - 2 * t)))
 }
 
 /** The three fields at a column. Exposed so biome selection can read the SAME values, not re-roll them. */
@@ -270,8 +274,27 @@ function rawTerrain(x: number, z: number, seed: number, cfg: HeightConfig = DEFA
 }
 
 export function columnHeight(x: number, z: number, seed: number, cfg: HeightConfig = DEFAULT_HEIGHT): number {
-  const carve = Math.round(RIVER_DEPTH * riverness(riverField(x, z, seed, cfg)))
-  const h = rawTerrain(x, z, seed, cfg) - carve
+  const rn = riverness(riverField(x, z, seed, cfg))
+  let h: number
+  if (rn <= 0) {
+    h = rawTerrain(x, z, seed, cfg)
+  } else {
+    // Inside the river band the terrain anchors to the WATER TABLE (see the model-3 block above):
+    // the approach fringe blends the countryside to the waterline — building levees through low
+    // country, cutting gorges through high — and the channel hangs below it. Water then fills to
+    // the table and is flat and contained by construction.
+    const table = waterLevelAt(x, z, seed, cfg)
+    if (rn >= 0.35) {                                     // SHORE_RN — the channel
+      // Identical formula to riverCarve, so bed and depth can never drift apart.
+      const t = (rn - 0.35) / (1 - 0.35)
+      h = table - Math.max(1, Math.round(RIVER_DEPTH * (t * t * (3 - 2 * t))))
+    } else {                                              // the approach — banks, levees, gorges
+      // Ends exactly at table+1 so the bank meets the waterline as ground, never as a lip or a
+      // face. sm01 is declared below; only evaluated at call time, never during module init.
+      const raw = rawTerrain(x, z, seed, cfg)
+      h = raw + ((table + 1) - raw) * sm01(rn / 0.35)
+    }
+  }
   const min = 1
   const max = cfg.worldHeight - 2
   return h < min ? min : h > max ? max : Math.round(h)
@@ -331,48 +354,58 @@ export function waterLevelAt(x: number, z: number, seed: number, cfg: HeightConf
 }
 
 /**
- * ── ★ THE RIM CLAMP — water cannot stand above the ground that would let it spill ──────────────
- * (2026-08-07 late, Alex: "a whole wall of water, like 10 blocks higher than its surroundings.")
- * The table is SMOOTHED-AVERAGE terrain, and an average near a range is dragged up by the
- * mountains in it — so over a local low the table could sit ten voxels above the country, and the
- * fill stacked water to it with nothing alongside to hold it: a standing wall. The physical rule
- * that forbids this is containment: a column of water may rise no higher than one below the
- * LOWEST DRY GROUND within reach, because that is the rim it would pour over.
+ * ── ★ THE LAND GENERATES AROUND THE WATER (2026-08-07 late — the third water model, and the one
+ * that holds) ──────────────────────────────────────────────────────────────────────────────────
+ * History, because each model failed for a reason worth keeping:
+ *   1. banks−1 per column → "highs and lows in a pond" (water copied the ground's undulation).
+ *   2. fill to the smoothed table → flat ponds, but a 10-voxel WALL where the table towered over
+ *      low country; then a rim clamp → no walls, but the clamp RAMPED the surface toward shores:
+ *      "a hill of blue jello". Clamping water to terrain and keeping it flat are irreconcilable.
+ *   3. THIS: invert the dependency — Alex's own read ("maybe it has something to do with the
+ *      surrounding land that generates around it"). Inside the river band the TERRAIN anchors to
+ *      the water table: the approach fringe blends the countryside to the waterline, the bed
+ *      hangs below it, and water just fills to the table — dead flat, contained by construction.
+ *      Where the band crosses low country the blend BUILDS the banks (natural levees); where it
+ *      crosses a ridge it cuts a gorge. Rivers shape their valleys; that is what rivers do.
  *
- * Sampled on rings (8 directions × radii 1,2,4,7) rather than flood-filled, which lands exactly
- * where the two water behaviours should meet:
- *   - a NARROW channel has dry ground on its ring-1, so it hugs its local banks again — bench
- *     crossings go back to being small waterfalls, which they always read well as;
- *   - a WIDE pond's interior sees no dry ground within reach, so the flat table rules it, and
- *     only the shoreline strip steps down to meet the country — a meniscus, not a wall.
- * An exposed water face can never exceed ~1 voxel against ring-1 ground, by construction.
- *
- * Memoised per column (pure memo, capped): the fill asks per voxel, the rings cost real field
- * reads, and a column's answer never changes.
+ * SHORE_RN splits the band: outside it the ground blends raw→table (the banks), inside it the
+ * bed drops table→table−RIVER_DEPTH (the channel). Water exists exactly where rn ≥ SHORE_RN,
+ * at depth 0 at the shoreline — so the water's edge is always ground-at-waterline, never a face.
  */
-const surfaceCache = new Map<string, number>()
+export const SHORE_RN = 0.35
+
+const sm01 = (t: number): number => { const c = t < 0 ? 0 : t > 1 ? 1 : t; return c * c * (3 - 2 * c) }
+
+/**
+ * The water surface at (x, z): the table where there is water, -Infinity where there is none.
+ *
+ * ★ ONE EDGE RULE remains: a PERIMETER water column (one with a dry 4-neighbour) clamps to that
+ * neighbour's ground. The approach blend pins most banks at table+1, but where the band's own
+ * gradient is locally steep the blend gets squeezed and a dry neighbour can sit below the table —
+ * without this clamp that is a standing water face (measured up to 6 voxels). The clamp is one
+ * column wide, so it reads as a shoreline step, never as the rim-clamp's jello dome. Memoised —
+ * it can cost four neighbour columnHeights.
+ */
+const wsCache = new Map<string, number>()
 
 export function waterSurfaceAt(x: number, z: number, seed: number, cfg: HeightConfig = DEFAULT_HEIGHT): number {
   const k = `${seed}:${x},${z}`
-  const hit = surfaceCache.get(k)
+  const hit = wsCache.get(k)
   if (hit !== undefined) return hit
-  let lvl = waterLevelAt(x, z, seed, cfg)
-  // The clamp is SLOPED, not rigid: dry ground r blocks away caps the surface at (its height − 1
-  // + 0.8·r), so a distant low rim tilts the water toward it instead of drying the channel. A
-  // rigid clamp was measured drying 56% of full channels on hillsides and stepping pond
-  // shorelines; the allowance keeps walls impossible (ring-1 still caps exposure at ~1.8) while
-  // water in sloped country survives.
-  for (const r of [1, 2, 4, 7]) {
-    for (let d = 0; d < 8; d++) {
-      const dx = Math.round(Math.cos(d * Math.PI / 4) * r), dz = Math.round(Math.sin(d * Math.PI / 4) * r)
-      if (riverCarve(x + dx, z + dz, seed, cfg) === 0) {
-        const rim = Math.floor(rawTerrain(x + dx, z + dz, seed, cfg)) - 1 + 0.8 * r
-        if (rim < lvl) lvl = rim
+  const rn = riverness(riverField(x, z, seed, cfg))
+  let lvl: number
+  if (rn < SHORE_RN) {
+    lvl = -Infinity
+  } else {
+    lvl = waterLevelAt(x, z, seed, cfg)
+    for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
+      if (riverness(riverField(x + dx, z + dz, seed, cfg)) < SHORE_RN) {
+        const g = columnHeight(x + dx, z + dz, seed, cfg)
+        if (g < lvl) lvl = g
       }
     }
   }
-  lvl = Math.floor(lvl)
-  if (surfaceCache.size > 16384) surfaceCache.clear()
-  surfaceCache.set(k, lvl)
+  if (wsCache.size > 16384) wsCache.clear()
+  wsCache.set(k, lvl)
   return lvl
 }

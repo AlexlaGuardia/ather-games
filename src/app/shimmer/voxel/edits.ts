@@ -50,7 +50,9 @@ import { Column, SECTION } from './column'
 // instead of per-column banks−1, so water blocks moved anywhere a channel or pool exists.
 // v11: the rim clamp (2026-08-07 late) — water may not stand above adjacent dry ground; the
 // standing walls v10 could build are gone, and water near shorelines moved down.
-export const GENERATOR_VERSION = 11
+// v12: land-around-water (2026-08-07 late) — inside the river band the TERRAIN anchors to the
+// water table (banks/levees/gorges); every riverside surface moved.
+export const GENERATOR_VERSION = 12
 
 /**
  * One column's edits: packed local index → material.

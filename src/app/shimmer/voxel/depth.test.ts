@@ -129,7 +129,10 @@ for (let i = 0; i < 600; i++) COLS.push([(i * 977) % 4000 - 2000, (i * 1583) % 4
   let wet = 0
   for (const [x, z] of COLS) if (columnHeight(x, z, SEED) <= D.seaLevel) wet++
   const frac = wet / COLS.length
-  ok(frac > 0.02 && frac < 0.35, `water covers a plausible share of the world (${(frac * 100).toFixed(1)}%)`)
+  // Lower bound eased 2% → 1.5%: the land-around-water model builds levees, and coastal band
+  // columns that used to drown now stand at the waterline. Sea + rivers + ponds together are the
+  // world's water; this bound only guards against a world with essentially none.
+  ok(frac > 0.015 && frac < 0.35, `water covers a plausible share of the world (${(frac * 100).toFixed(1)}%)`)
 }
 
 // ── 9. slope reads neighbouring COLUMNS, never neighbouring chunk state ──────────────────────
