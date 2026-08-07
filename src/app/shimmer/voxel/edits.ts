@@ -1,0 +1,110 @@
+// Player edits — the only thing the world actually stores.
+//
+// ★ PURE CORE. No react/three/DOM, no imports from outside this folder. Where the bytes physically
+// live (IndexedDB, a file, a server) is the host's problem; what an edit IS belongs here.
+//
+// ── ★ THE DELIBERATE DIVERGENCE FROM MOJANG ─────────────────────────────────────────────────
+// Minecraft writes every generated chunk to disk in full, forever, touched or not. We do the
+// opposite, and it was ruled in WORLDGEN-RESEARCH before any of this existed: **a column is stored
+// only if it holds a player edit, and absence means "pure procedural, regenerate."**
+//
+// That is affordable for us and not for them because our generator is cheap, deterministic and
+// order-independent — the same seed and coordinate always rebuild the same column, so the world
+// itself needs no storage at all. Only the difference between what the generator said and what the
+// player did has to survive.
+//
+// The practical consequence is worth stating: walking a thousand columns costs ZERO bytes. A save
+// grows with what you BUILD, not with where you have been.
+
+import { Column, SECTION } from './column'
+
+/**
+ * ★ BUMP THIS WHENEVER GENERATION CHANGES THE WORLD.
+ *
+ * An edit is a diff against generated terrain, so it is only meaningful against the generator that
+ * produced that terrain. Retune the height spline and a saved "I removed this block" may now point
+ * at a block that was never there — a hole in mid-air, or a door opening into rock.
+ *
+ * Storing the version does not FIX that (nothing can, in general — the research flagged it as ours
+ * to solve and left it open). What it does is make the mismatch DETECTABLE instead of silent, so a
+ * loader can warn, migrate, or refuse rather than quietly producing a broken world.
+ */
+export const GENERATOR_VERSION = 1
+
+/**
+ * One column's edits: packed local index → material.
+ *
+ * A Map rather than a list, because editing the same voxel twice must collapse to one entry. A list
+ * would grow forever while a player fiddles with the same doorway.
+ */
+export type ColumnEdits = Map<number, number>
+
+/** Packed local index within a full-height column. Mirrors `Section.idx` extended across sections. */
+export const editIndex = (x: number, y: number, z: number): number =>
+  (y * SECTION + z) * SECTION + x
+
+export const unpackIndex = (i: number): { x: number; y: number; z: number } => ({
+  x: i % SECTION,
+  z: Math.floor(i / SECTION) % SECTION,
+  y: Math.floor(i / (SECTION * SECTION)),
+})
+
+/**
+ * Record an edit, given what the GENERATOR would have put there.
+ *
+ * ★ AN EDIT THAT RESTORES THE ORIGINAL IS DELETED, NOT STORED. Mine a block and put it back and the
+ * save returns to empty — because the diff is against generated terrain, and "same as generated" is
+ * not a difference. Without this a player who tidies up leaves a file full of no-ops, and a column
+ * that is byte-identical to procedural output still costs storage forever.
+ */
+export function recordEdit(edits: ColumnEdits, index: number, material: number, generated: number): void {
+  if (material === generated) edits.delete(index)
+  else edits.set(index, material)
+}
+
+/** Apply a column's edits over freshly generated terrain. Idempotent: applying twice changes nothing. */
+export function applyEdits(col: Column, edits: ColumnEdits | undefined): void {
+  if (!edits || edits.size === 0) return
+  for (const [i, mat] of edits) {
+    const { x, y, z } = unpackIndex(i)
+    if (y < 0 || y >= col.sections.length * SECTION) continue   // a stale save must not throw
+    const s = (y / SECTION) | 0
+    col.sections[s].set(x, y - s * SECTION, z, mat)
+  }
+}
+
+// ── serialisation ────────────────────────────────────────────────────────────────────────────
+// Two parallel typed arrays rather than JSON: they survive structuredClone into IndexedDB with no
+// parse step, and an edit is 6 bytes instead of ~20 characters.
+
+export interface PackedEdits {
+  version: number
+  idx: Uint32Array
+  mat: Uint16Array
+}
+
+export function packEdits(edits: ColumnEdits): PackedEdits {
+  const n = edits.size
+  const idx = new Uint32Array(n)
+  const mat = new Uint16Array(n)
+  let i = 0
+  for (const [k, v] of edits) { idx[i] = k; mat[i] = v; i++ }
+  return { version: GENERATOR_VERSION, idx, mat }
+}
+
+export function unpackEdits(p: PackedEdits | undefined | null): ColumnEdits {
+  const out: ColumnEdits = new Map()
+  if (!p || !p.idx || !p.mat) return out
+  const n = Math.min(p.idx.length, p.mat.length)
+  for (let i = 0; i < n; i++) out.set(p.idx[i], p.mat[i])
+  return out
+}
+
+/**
+ * Is this save from a different generator than the one running?
+ *
+ * Deliberately a QUESTION, not an action. Whether a mismatch means warn, migrate or discard is a
+ * product decision, and burying it in a loader is how a player silently loses a house.
+ */
+export const isStale = (p: PackedEdits | undefined | null): boolean =>
+  !!p && p.version !== GENERATOR_VERSION

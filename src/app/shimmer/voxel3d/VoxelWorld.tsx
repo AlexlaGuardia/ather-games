@@ -26,10 +26,12 @@ import { VOXEL_WORKER_URL } from '../../../workers/worker-url'
 import { createMeshScratch } from '../voxel/greedy'
 import { columnHeight } from '../voxel/height'
 import { AIR } from '../voxel/section'
-import { MAT } from '../voxel/depth'
+import { materialAt, MAT } from '../voxel/depth'
 import { raycast, tickBreak, dropsFor, type BreakState } from '../voxel/mine'
 import { spawnDrop, tickDrops, type Drop } from '../voxel/drops'
 import { blockDef, materialForItem, type BlockSkill } from '../voxel/registry'
+import { editIndex, recordEdit, applyEdits, packEdits, unpackEdits, isStale, type ColumnEdits } from '../voxel/edits'
+import { loadColumnEdits, saveColumnEdits, editedColumnCount } from './save'
 import { toGeometry, createVoxelMaterial, applySettings } from './mesh-bridge'
 import { makeTileArray } from './tex/atlas'
 import { createTexturedVoxelMaterial } from './tex/atlas'
@@ -263,6 +265,11 @@ function World({ inv, toolTier, toolSkill, selItem, onStats, onPos, onLook, onIn
   const mouse = useRef({ left: false, right: false })
   const frame = useRef(0)
   const requested = useRef(new Set<string>())
+  // ★ Edits live here, keyed by column, and are the ONLY thing the world stores. Walking a thousand
+  // columns costs zero bytes; a save grows with what you BUILD.
+  const edits = useRef(new Map<string, ColumnEdits>())
+  const dirtySaves = useRef(new Set<string>())
+  const staleWarned = useRef(false)
   const settled = useRef(false)
   const vel = useRef(new THREE.Vector3())
   // ★ Scratch vectors, allocated ONCE. Four `new THREE.Vector3()` per frame is 240 objects/sec of
@@ -302,6 +309,28 @@ function World({ inv, toolTier, toolSkill, selItem, onStats, onPos, onLook, onIn
   // page that leaks a full render's worth of buffers per visit is how the context gets lost in the
   // first place. The shared resources are disposed here and ONLY here, because disposing them
   // anywhere else would break every object still using them.
+  // ★ THE LAST SWING BEFORE A REFRESH MUST SURVIVE. A once-a-second flush loses up to a second of
+  // building on a close, which is precisely the moment a player remembers.
+  useEffect(() => {
+    const flush = () => {
+      for (const k of dirtySaves.current) {
+        const [gx, gz] = k.split(',').map(Number)
+        const e = edits.current.get(k)
+        if (e) void saveColumnEdits(SEED, gx, gz, packEdits(e))
+      }
+      dirtySaves.current.clear()
+    }
+    // `visibilitychange` rather than `beforeunload`: mobile and modern Chrome may never fire the
+    // latter, and this is the event that is actually guaranteed before a tab goes away.
+    document.addEventListener('visibilitychange', flush)
+    window.addEventListener('pagehide', flush)
+    return () => {
+      flush()
+      document.removeEventListener('visibilitychange', flush)
+      window.removeEventListener('pagehide', flush)
+    }
+  }, [])
+
   useEffect(() => () => {
     for (const m of drawn.current.values()) m.geometry.dispose()
     drawn.current.clear()
@@ -391,10 +420,22 @@ function World({ inv, toolTier, toolSkill, selItem, onStats, onPos, onLook, onIn
    */
   const setVoxel = useCallback((wx: number, wy: number, wz: number, mat: number) => {
     const cx = Math.floor(wx / SECTION), cz = Math.floor(wz / SECTION)
-    const c = cols.current.get(key(cx, cz))
+    const k = key(cx, cz)
+    const c = cols.current.get(k)
     if (!c) return
     const lx = wx - cx * SECTION, lz = wz - cz * SECTION
     const s = (wy / SECTION) | 0
+
+    // ★ Diff against what the GENERATOR would have put here, not against the current value — that
+    // is what lets mining a block and putting it back return the save to empty instead of storing
+    // a no-op forever. `materialAt` is pure, so the original is always recoverable without having
+    // kept a pristine copy of the column around.
+    const generated = materialAt(wx, wy, wz, SEED, c.heightAt(lx, lz))
+    let e = edits.current.get(k)
+    if (!e) { e = new Map(); edits.current.set(k, e) }
+    recordEdit(e, editIndex(lx, wy, lz), mat, generated)
+    dirtySaves.current.add(k)
+
     c.sections[s].set(lx, wy - s * SECTION, lz, mat)
     refreshUniform(c)
     remesh(cx, cz)
@@ -431,10 +472,29 @@ function World({ inv, toolTier, toolSkill, selItem, onStats, onPos, onLook, onIn
       for (let i = 0; i < col.sections.length; i++) col.sections[i].data.set(voxels.subarray(i * per, (i + 1) * per))
       for (let z = 0; z < SECTION; z++) for (let x = 0; x < SECTION; x++)
         col.surface[z * SECTION + x] = columnHeight(gx * SECTION + x, gz * SECTION + z, SEED)
+      // ★ Apply any stored edits OVER freshly generated terrain — the diff is the save.
+      // Edits arrive asynchronously from IndexedDB, so a column may mesh once procedurally and then
+      // again once its edits land. That is deliberate: blocking the world on a database read would
+      // stall streaming for the common case, which is a column with no edits at all.
+      const ek = key(gx, gz)
+      applyEdits(col, edits.current.get(ek))
       refreshUniform(col)
       col.stage = Stage.Ready
-      cols.current.set(key(gx, gz), col)
+      cols.current.set(ek, col)
       remesh(gx, gz)
+      if (!edits.current.has(ek)) {
+        loadColumnEdits(SEED, gx, gz).then(p => {
+          if (!p) { edits.current.set(ek, new Map()); return }
+          if (isStale(p) && !staleWarned.current) {
+            staleWarned.current = true
+            onStats('⚠ saved edits are from a different generator version — they may not line up')
+          }
+          const m = unpackEdits(p)
+          edits.current.set(ek, m)
+          const c = cols.current.get(ek)
+          if (c && m.size) { applyEdits(c, m); refreshUniform(c); remesh(gx, gz) }
+        })
+      }
       for (const [ddx, ddz] of [[-1, 0], [1, 0], [0, -1], [0, 1]] as const)
         if (cols.current.has(key(gx + ddx, gz + ddz))) remesh(gx + ddx, gz + ddz)
       adopted++
@@ -602,8 +662,24 @@ function World({ inv, toolTier, toolSkill, selItem, onStats, onPos, onLook, onIn
       // matters — it should be a small constant (one shared chunk material plus one per distinct
       // drop colour). If it climbs while you play, something is allocating materials per object.
       const info = gl.info
+      let built = 0
+      for (const e of edits.current.values()) built += e.size
       onStats(`${cols.current.size} col · ${drawn.current.size} mesh · ${drops.current.length} drops · `
-        + `geo ${info.memory.geometries} prog ${info.programs?.length ?? 0} · ${worker.current ? 'worker' : 'main'}`)
+        + `geo ${info.memory.geometries} prog ${info.programs?.length ?? 0} · `
+        + `${built} edits saved · ${worker.current ? 'worker' : 'main'}`)
+    }
+
+    // ── flush edits ──────────────────────────────────────────────────────────────────────────
+    // ★ Debounced, not per-block. Mining is a stream of edits and an IndexedDB write per broken
+    // block would put a transaction on every swing. Once a second is imperceptible to a player and
+    // invisible to the frame budget.
+    if (frame.current % 60 === 0 && dirtySaves.current.size) {
+      for (const k of dirtySaves.current) {
+        const [gx, gz] = k.split(',').map(Number)
+        const e = edits.current.get(k)
+        if (e) void saveColumnEdits(SEED, gx, gz, packEdits(e))
+      }
+      dirtySaves.current.clear()
     }
 
     // ── evict ────────────────────────────────────────────────────────────────────────────────
@@ -616,6 +692,16 @@ function World({ inv, toolTier, toolSkill, selItem, onStats, onPos, onLook, onIn
       }
       for (const kk of [...cols.current.keys()]) if (!keep.has(kk)) cols.current.delete(kk)
       for (const kk of [...requested.current]) if (!keep.has(kk)) requested.current.delete(kk)
+      // ⚠ EDITS ARE NOT EVICTED WITH THEIR COLUMN. Walking away from a house and back must not lose
+      // it — the column is regenerable, the edits are not. Any still-unsaved ones are flushed first,
+      // because dropping the column while its diff sits in `dirtySaves` is exactly how a build
+      // vanishes on a walk.
+      for (const kk of [...dirtySaves.current]) {
+        const [gx, gz] = kk.split(',').map(Number)
+        const e = edits.current.get(kk)
+        if (e) void saveColumnEdits(SEED, gx, gz, packEdits(e))
+      }
+      dirtySaves.current.clear()
     }
   })
 
