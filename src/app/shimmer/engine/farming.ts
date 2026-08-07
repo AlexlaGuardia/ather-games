@@ -21,6 +21,14 @@ export interface CropDef {
   seedItemId: string      // crop seed item ID
   yields: { itemId: string; count: number; chance: number }[]
   yieldBonusPerLevel: number  // extra yield % per level above min (0.02 = 2%)
+  /**
+   * This crop blooms a SPIRIT rather than items. Only the Mana Seed does.
+   *
+   * A flag rather than a separate system because everything else about it is farming: it is planted
+   * in a pot, it takes time, it is tended, it is read off `plantedCrops`. Only the payout differs,
+   * so only the payout branches.
+   */
+  bloomsSpirit?: boolean
 }
 
 export interface PlantedCrop {
@@ -39,7 +47,45 @@ export type CropGrowthPhase = 0 | 1 | 2 | 3  // seed | sprout | growth | ready
 // Crop definitions — 10 crops across 4 tiers
 // ============================================
 
+/**
+ * The ten species a Mana Seed can bloom into, at 1/10 each.
+ *
+ * ⚠ CANON, NOT A BALANCE KNOB (`CANON/game/shimmer-quests-mainmap.md`): *"Greg gifts a single Mana
+ * Seed; it blooms into one of the 10 species at random (1/10 each). The player does not choose."*
+ * The flatness is the point — "the spirit chooses you" runs all the way down, so weighting these,
+ * or letting the player pick, contradicts the world rather than tuning it. All bloom dialogue is
+ * species-neutral for the same reason.
+ */
+export const BLOOM_SPECIES = [
+  'fox', 'axolotl', 'owl', 'frog', 'bat', 'rabbit', 'turtle', 'firefly', 'hummingbird', 'water-bear',
+] as const
+
+export type BloomSpecies = (typeof BLOOM_SPECIES)[number]
+
+/** Roll what grows. `rng` is injectable so a test can pin the species. */
+export const rollBloomSpecies = (rng: () => number = Math.random): BloomSpecies =>
+  BLOOM_SPECIES[Math.min(BLOOM_SPECIES.length - 1, Math.floor(rng() * BLOOM_SPECIES.length))]
+
+/** The seed item Greg gifts, and the id of what it grows. */
+export const MANA_SEED_ITEM = 'mana_seed'
+export const MANA_BLOOM_CROP = 'manabloom'
+
 export const CROP_DEFS: Record<string, CropDef> = {
+  // ── The Mana Seed — the start of the whole game ────────────────────────────────────────────
+  // "A Mana Seed. It rode the wind in from far off, the way they all do. Plant it, tend it, and
+  // something will choose to grow." (Greg, CANON/game/shimmer-quests-mainmap.md)
+  //
+  // manaCost 0 and minFarmingLevel 1 deliberately: this is a GIFT to someone who has never played,
+  // and a first spirit gated behind a resource they do not have yet would strand them at the exact
+  // moment the game is supposed to open up. It costs patience, nothing else.
+  manabloom: {
+    id: MANA_BLOOM_CROP, name: 'Mana Seed', tier: 1,
+    minFarmingLevel: 1, manaCost: 0, plantXp: 5, xpGrant: 20, growthMs: 5 * 60 * 1000,
+    seedItemId: MANA_SEED_ITEM, yieldBonusPerLevel: 0,
+    yields: [],            // it pays out a spirit, not items — see `bloomsSpirit`
+    bloomsSpirit: true,
+  },
+
   // Tier 1 — Beginner
   shimmerwheat: {
     id: 'shimmerwheat', name: 'Shimmerwheat', tier: 1,
@@ -172,6 +218,13 @@ export function plantCrop(
 export interface HarvestCropResult {
   items: { itemId: string; count: number }[]
   xpGained: number
+  /**
+   * Set when a Mana Seed bloomed — the species that chose the keeper.
+   *
+   * The engine decides WHAT grew and stops there; adding it to the party is the caller's job,
+   * because a party is game state and this module is pure. Same boundary as everything else here.
+   */
+  bloomed?: BloomSpecies
 }
 
 /**
@@ -181,6 +234,14 @@ export interface HarvestCropResult {
 export function harvestCrop(crop: PlantedCrop, inv: Inventory, skills: SkillSet, bonusFindChance = 0, xpMult = 1): HarvestCropResult {
   const def = CROP_DEFS[crop.cropId]
   if (!def) return { items: [], xpGained: 0 }
+
+  // A Mana Seed pays out a spirit. It takes the same farming XP as any tier-1 crop — tending it was
+  // still tending — but yields nothing to a satchel, so it returns before the roll loop.
+  if (def.bloomsSpirit) {
+    const xpBloom = Math.round(def.xpGrant * xpMult)
+    addSkillXP(skills.farming, xpBloom)
+    return { items: [], xpGained: xpBloom, bloomed: rollBloomSpecies() }
+  }
 
   const levelAboveMin = Math.max(0, skills.farming.level - def.minFarmingLevel)
   const yieldMult = 1 + levelAboveMin * def.yieldBonusPerLevel

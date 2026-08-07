@@ -63,7 +63,7 @@ import { brewPotion, POTION_DEFS } from '../engine/alchemy'
 import { MANA_POTIONS, HEAL_POTIONS, SPIRIT_MEND_POTIONS, MEND_POTION_ID, POTION_BUFFS, BUFF_DEFS, HARVEST_BREW_ADVANCE_MS, drinkBuff, activeBuffList, pruneBuffs, gatherXpMult, bonusFind, kindredMult, speedMult, manaRegenMult, rinTune, suppressEncounters, potionEffectLine, type ActiveBuffs } from '../engine/potion-effects'
 import { canCraft, craftItem, RECIPE_DEFS } from '../engine/crafting'
 import { createGEState, buyFromGE, sellToGE, tickPriceDrift, GE_ITEM_IDS, geToSave, geFromSave, type GEMarketState, type GESave } from '../engine/exchange'
-import { CROP_DEFS, plantCrop, harvestCrop, plantedCropsToSave, plantedCropsFromSave, isCropReady, type PlantedCrop } from '../engine/farming'
+import { CROP_DEFS, plantCrop, harvestCrop, plantedCropsToSave, plantedCropsFromSave, isCropReady, MANA_SEED_ITEM, type PlantedCrop } from '../engine/farming'
 import type { AITier } from '../engine/battle-ai'
 import ArenaBattle from '../components/ArenaBattle'
 import PartyPanel from './PartyPanel'
@@ -237,13 +237,18 @@ const stationInstanceId = (s: PlacedStruct) => `${s.srcZoneId ?? s.zoneId}:${s.s
 // Starter build-kit — the placeable stations + enough gathered mats to build/brew day one.
 // Granted ONCE per save via the `starterKitV2` flag so it reaches returning players too (older
 // saves with a party skipped the first-visit seed and were stranded with no stations/mats).
-const STARTER_KIT_FLAG = 'starterKitV2'
+// ★ THE BAG IS CANON, AND IT IS DELIBERATELY SMALL (`CANON/game/shimmer-quests-mainmap.md`):
+// "He gifts your first Mana Seed + the starter bag (crafting table, pot, grimoire, tools)."
+// Greg's own line sets the ceiling — "Everything a new keeper needs and nothing a new keeper does
+// not." The old kit (3 potions, 2 salves, an elixir, an alchemy station and 27 assorted materials)
+// broke that: it handed a new keeper the mid-game before they had planted anything, and it is the
+// reason the "fresh" starter looked like a played save. Adding to this list is a canon change.
+const STARTER_KIT_FLAG = 'starterKitV3'
 function grantStarterKit(inv: Inventory) {
-  addItems(inv, 'mana_draught', 3)                                              // refill potions
-  addItems(inv, 'shimmer_salve', 2); addItems(inv, 'crystal_elixir', 1)         // combat mend potions
-  addItems(inv, 'alchemy_station', 1); addItems(inv, 'crafting_table', 1)       // the two seed stations
-  addItems(inv, 'raw_mana_shard', 12)                                           // brew fuel + station mats
-  addItems(inv, 'goldwood_plank', 6); addItems(inv, 'goldwood_bark', 3); addItems(inv, 'shimmeroak_plank', 6) // build mats
+  addItems(inv, MANA_SEED_ITEM, 1)      // the gift itself — everything else exists to serve it
+  addItems(inv, 'farm_planter', 1)      // "a pot" — what you plant the seed in
+  addItems(inv, 'crafting_table', 1)    // "a table to work at"
+  addItems(inv, 'goldwood_plank', 3)    // enough to seat the table, and nothing spare
 }
 // hotbar double-tap hints (drinkable potions + placeable stations)
 const USE_HINTS: Record<string, string> = {
@@ -334,10 +339,13 @@ function lerpAngle(a: number, b: number, t: number) {
   return a + Math.atan2(Math.sin(b - a), Math.cos(b - a)) * t
 }
 
-// Gregory's gift — ONE young spirit, RNG from the launched roster (the canon starter mechanic). The new
-// player gets this from Greg's first-quest handoff, not at spawn, so they have a reason to meet him.
-function makeStarterSpirit(): Spirit {
-  const sp = LAUNCHED_SPECIES[Math.floor(Math.random() * LAUNCHED_SPECIES.length)]
+// What grows out of a bloomed Mana Seed — ONE young spirit of the species the seed chose.
+//
+// ★ Greg no longer hands this over. Canon has him gift a SEED ("Plant it, tend it, and something
+// will choose to grow"), so the spirit arrives from the pot, minutes later, as the payoff for
+// having tended it. The species is picked by `rollBloomSpecies` in the engine, not here — this
+// only dresses it into a young spirit.
+function makeSpiritOfSpecies(sp: Species): Spirit {
   const s = createSpirit(sp, speciesDisplayName(sp), 0, 0)
   s.level = 5
   s.seeds = Array.from({ length: 6 }, () => 16 + Math.floor(Math.random() * 16)) // decent IVs
@@ -3923,14 +3931,12 @@ export default function Shimmer3D() {
           setZoneId(WORLD_ZONE_ID); landed = WORLD_ZONE_ID
         } else if (data.zoneId && getZone(ALL_ZONES, data.zoneId)) { setZoneId(data.zoneId); landed = data.zoneId }
       }
-      // One-time starter-kit grant — reaches fresh AND returning saves (older saves with a party
-      // never got seeded stations/mats, so the Alchemy Station wasn't obtainable). Idempotent via flag.
-      if (!flagsRef.current[STARTER_KIT_FLAG]) {
-        grantStarterKit(invRef.current)
-        flagsRef.current[STARTER_KIT_FLAG] = true
-        setInvSlots([...invRef.current.slots])
-        persist()
-      }
+      // ★ THE LOAD-PATH STARTER GRANT IS GONE, ON PURPOSE. It used to backfill stations and mats
+      // into any save missing the flag. That made sense when the kit was a pile of materials; it
+      // does not now that the bag is Greg's gift and its centrepiece is a Mana Seed. Left in place
+      // across the V2→V3 rename it would have posted a seed into EVERY existing save on load —
+      // handing a first spirit to keepers who already have one, without Greg ever speaking.
+      // There is exactly one way to receive the bag now, and it is meeting him.
       // One-time mend-potion grant for saves that predate HP/shield (starter kit already has them,
       // but its flag is burned on returning saves) — same idempotent-flag pattern.
       if (!flagsRef.current.mendKitV1) {
@@ -4468,6 +4474,16 @@ export default function Shimmer3D() {
     setCropsTick(t => t + 1)
     syncSkillHud()
     setInvSlots([...invRef.current.slots])
+    // ★ A Mana Seed pays out a SPIRIT. This is the moment the game actually starts — canon has the
+    // seed choose you, so there is no prompt and no pick here, only an announcement.
+    if (result.bloomed) {
+      const born = makeSpiritOfSpecies(result.bloomed)
+      partyRef.current = [...(partyRef.current ?? []), born]
+      flagsRef.current.gotStarter = true
+      setHasStarter(true)
+      setHarvestToast(`✦ your Mana Seed bloomed   ·   Farming +${result.xpGained} XP`)
+      setBanner(`✦ a young ${speciesDisplayName(born.species)} chose you!`)
+    } else
     setHarvestToast(`+ ${result.items.map(i => prettyItem(i.itemId)).join(' · ') || 'nothing'}   ·   Farming +${result.xpGained} XP`)
     if (skillsRef.current.farming.level > before) {
       setBanner(`✦ Farming Lv ${skillsRef.current.farming.level}!`)
@@ -4868,21 +4884,23 @@ export default function Shimmer3D() {
     persist({ replaceFlags: true })
   }, [persist, syncSkillHud])
 
-  // Gregory's gift — the player's first spirit (the kit). One RNG starter → party, flag set, saved.
+  // Gregory's gift — a Mana Seed and the bag to work it. NOT a spirit.
+  //
+  // ★ `gotStarter` is deliberately NOT set here any more. It means "this keeper has a spirit", and
+  // they do not yet — it is set when the seed blooms (see harvestAt). Setting it on the handoff
+  // would tell the HUD a keeper with an empty party is fully equipped.
   const grantStarter = useCallback(() => {
-    const s = makeStarterSpirit()
-    partyRef.current = [s]
-    flagsRef.current.gotStarter = true
-    setHasStarter(true)
-    // Gregory also sets you up with the builder kit (stations + mats) — the moment the crafting loop opens.
-    // Granted unconditionally: this fires exactly once per save (gated by gotStarter, so Gregory's gift can't
-    // repeat), and newGame sets STARTER_KIT_FLAG=true purely to suppress the load-path migration, not to record
-    // an actual grant — so guarding on that flag here would wrongly skip Gregory's kit.
+    // ⚠ The repeat guard MOVED to this flag. It used to lean on `gotStarter`, which no longer gets
+    // set here — without this check, re-running Greg's dialogue would hand out seed after seed.
+    if (flagsRef.current[STARTER_KIT_FLAG]) return
     grantStarterKit(invRef.current)
     flagsRef.current[STARTER_KIT_FLAG] = true
-    flagsRef.current.mendKitV1 = true  // Gregory's kit includes the mend potions — don't re-grant on load
+    // The bag carries no potions (canon: "nothing a new keeper does not"), and this flag suppresses
+    // the load-path mend-kit migration — so a new keeper is not quietly handed the potions the bag
+    // deliberately leaves out.
+    flagsRef.current.mendKitV1 = true
     setInvSlots([...invRef.current.slots])
-    setBanner(`✦ a young ${speciesDisplayName(s.species)} joined you!`)
+    setBanner('✦ a Mana Seed — plant it in the pot and tend it')
     persist()
   }, [persist])
 
