@@ -73,8 +73,11 @@ const C = DEFAULT_HEIGHT
 
   // Character checks — loose bounds, because this is taste, not correctness. They exist to catch a
   // retune that accidentally flattens the world or turns it into spikes, not to pin the look.
+  // Upper bound loosened 0.92 → 0.98 with the plains pass: flattening a third of the country
+  // toward benches concentrates ground near the datum BY DESIGN (Alex asked for it). What the
+  // bound still catches is a world with no vertical life at all — see also the range assert below.
   const within = hs.filter(h => Math.abs(h - C.datum) <= 25).length / hs.length
-  ok(within > 0.55 && within < 0.92, `most country is near the datum but not all of it (${(within * 100).toFixed(0)}%)`)
+  ok(within > 0.55 && within < 0.98, `most country is near the datum but not all of it (${(within * 100).toFixed(0)}%)`)
   ok(hs[hs.length - 1] - hs[0] > 80, `the world has real vertical range (${hs[hs.length - 1] - hs[0]} voxels)`)
 }
 
@@ -148,6 +151,31 @@ const C = DEFAULT_HEIGHT
   for (let i = 0; i < 300; i++) { const x = i * 0.3, z = i * 0.7
     if (Math.abs(warped2(x, z, SEED) - fbm2(x, z, SEED)) > 1e-6) diff++ }
   ok(diff > 250, 'domain warping actually displaces the field')
+}
+
+// ── 10. ★ structure pads exist — the plains pass's whole claim ───────────────────────────────
+// A pad = a 12×12 window spanning ≤1 voxel: ground a building sits on without looking sloppy and
+// fragmented (Alex, 2026-08-07). Before the plains field this measured 1.0%. The window lesson
+// applies: measure over ≥1200 units of country or the sample fits inside one flatness feature and
+// the number is noise about a single blob.
+{
+  const N = 1200, S = 3
+  const hs = new Int16Array((N / S) * (N / S))
+  const W = N / S
+  for (let z = 0; z < W; z++) for (let x = 0; x < W; x++) hs[z * W + x] = columnHeight(x * S - N / 2, z * S - N / 2, SEED)
+  // Sampled at stride 3, a 4×4 sample block covers a 12×12 window: span ≤1 on the samples is a
+  // slightly loose read of the true pad, fine for a share-level assert.
+  let hit = 0, tot = 0
+  for (let z = 0; z + 4 < W; z += 2) for (let x = 0; x + 4 < W; x += 2) {
+    let mn = 32767, mx = -32768
+    for (let dz = 0; dz < 4; dz++) for (let dx = 0; dx < 4; dx++) {
+      const v = hs[(z + dz) * W + x + dx]; if (v < mn) mn = v; if (v > mx) mx = v
+    }
+    tot++; if (mx - mn <= 1) hit++
+  }
+  const share = hit / tot
+  ok(share > 0.04, `structure pads are a real feature of the country (${(share * 100).toFixed(1)}% of 12×12 windows ≈ level)`)
+  ok(share < 0.5, `...but the world is not a parking lot (${(share * 100).toFixed(1)}%)`)
 }
 
 console.log(`\nterrain height: ${pass} passed, ${fails.length} failed`)

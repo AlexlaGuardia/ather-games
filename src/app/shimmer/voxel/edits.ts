@@ -36,7 +36,9 @@ import { Column, SECTION } from './column'
 // above or below the ground they were made on. The warning is honest; the edits still apply.
 // v4: the biome layer (2026-08-07) — grey surfaces appear and species weights shifted, so a v3
 // edit's recorded "generated" baseline can disagree with what now generates there.
-export const GENERATOR_VERSION = 4
+// v5: the plains pass (2026-08-07 eve) — a flatness field benches the base and kills ridges over
+// ~a third of the country, so v4 edits can sit metres above or below the new ground.
+export const GENERATOR_VERSION = 5
 
 /**
  * One column's edits: packed local index → material.

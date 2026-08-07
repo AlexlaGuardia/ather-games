@@ -21,8 +21,22 @@ const LOGS = new Set<number>(SPECIES.map(s => s.log))
 const LEAVES = new Set<number>(SPECIES.map(s => s.leaves))
 const isWood = (m: number) => LOGS.has(m) || LEAVES.has(m)
 
+// Sites are FILTERED to wooded, dry, tree-friendly ground (mask ≥ 0.6, surface above the beach,
+// not drained) rather than taken blind: the biome layer and the plains pass both move where trees
+// live, and a blind pseudo-random sample kept starving the trunk asserts below their minimums
+// every time the terrain was retuned. The filter reads the same pure fields the planter reads, so
+// it tracks any future retune for free.
+import { forestness, greyness } from './biome'
+import { DEFAULT_DEPTH } from './depth'
 const SITES: [number, number][] = []
-for (let i = 0; i < 40; i++) SITES.push([(i * 197) % 3000, (i * 331) % 3000])
+for (let i = 0; SITES.length < 40 && i < 4000; i++) {
+  const ox = (i * 197) % 6000, oz = (i * 331) % 6000
+  const cx = ox / SECTION, cz = oz / SECTION
+  if (forestness(SEED, cx, cz) < 0.6) continue
+  if (greyness(ox + 8, oz + 8, SEED) > 0) continue
+  if (columnHeight(ox + 8, oz + 8, SEED) <= DEFAULT_DEPTH.seaLevel + DEFAULT_DEPTH.beachHeight + 1) continue
+  SITES.push([ox, oz])
+}
 
 // ── 1. determinism and order-independence ────────────────────────────────────────────────────
 {
