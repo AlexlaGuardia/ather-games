@@ -431,7 +431,7 @@ the Arcade frame.
 >
 > **Files:** `STRUCTURE-LAYER.md` (spec) · `world/prop-models.tsx` (the GLTF path) · `voxel/registry.ts` (material costs) · `voxel3d/` (host) · ⛔ `world/structures.ts` (retires).
 
-## 🧱 Shimmer — GOES VOXEL, STAYS ON WEB (Alex, 2026-08-06, jin-cc) · *Last touched 2026-08-06*
+## 🧱 Shimmer — GOES VOXEL, STAYS ON WEB (Alex, 2026-08-06, jin-cc) · *Last touched 2026-08-07*
 
 > **The direction call.** Minecraft model: spawn → pick a birth rune → the Greg tutorial → open country, **every block mineable and craftable**. Built on the web now; the **Supra** port is designed in from day one rather than hoped for. Full design: **`VOXEL-WORLD-MODEL.md`** (`4c54686`) — read it before touching materials or chunk storage.
 >
