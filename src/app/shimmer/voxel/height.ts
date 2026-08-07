@@ -43,10 +43,18 @@ export const DEFAULT_HEIGHT: HeightConfig = {
   // through a 182-unit view is just a slope. Tightening the scales put a visible peak in frame.
   continentScale: 480,
   erosionScale: 420,
-  weirdnessScale: 150,
+  // ★ 150 → 340 (2026-08-07 late, Alex: "still feeling like we are compressing the map into
+  // hills and valleys... this water is at the base of surrounding hills"). The diagnosis was
+  // WAVELENGTH vs VIEW: ridges every ~150 blocks against a ~96-block view radius means the player
+  // is always standing INSIDE one fold — everywhere reads as a bowl ringed by hills, and every
+  // water line ends up hill-rimmed. At 340 a hill is a landform you approach and walk around.
+  // Measured with a bowl metric (ringed >8 voxels in all 4 directions within 96): 12.5% → 7.7%.
+  weirdnessScale: 340,
   flatScale: 900,
   riverScale: 650,
-  ridgeAmplitude: 62,
+  // Raised with the stretch: fewer ridges deserve more presence, and the worn erosion spline
+  // keeps them gathered into ranges. Vertical range measured 98 → 121.
+  ridgeAmplitude: 84,
 }
 
 /**
@@ -57,7 +65,8 @@ export const DEFAULT_HEIGHT: HeightConfig = {
  * ⚠ Re-measure this if CONTINENT_SPLINE or ridgeAmplitude changes, or the datum quietly lies again.
  * Re-measured 2026-08-07 after the valley-floor shaping (shallower valleys raised the median 6.5):
  * was 10. Re-measured 2026-08-07 eve after the plains pass (benching + the wider valley floor
- * raised the median another 3): was 3.5.
+ * raised the median another 3): was 3.5. Re-measured after the open-country retune (weirdness
+ * 340 / amp 84 / worn erosion): median landed dead on the datum — unchanged.
  */
 export const DATUM_CALIBRATION = 0.5
 
@@ -80,13 +89,17 @@ export const CONTINENT_SPLINE: SplinePoint[] = [
   { at: 1.00, val: 70 },    // peaks — rare by construction
 ]
 
-/** Erosion → relief multiplier. Worn country is flat country; young country keeps its edges. */
+/** Erosion → relief multiplier. Worn country is flat country; young country keeps its edges.
+ *  Steepened 2026-08-07 late with the weirdness stretch: ordinary (mid-erosion) country calms to
+ *  a quarter-relief so hills GATHER into low-erosion ranges instead of being sprinkled — the
+ *  other half of the "everything is hills and valleys" fix. */
 export const EROSION_SPLINE: SplinePoint[] = [
   { at: 0.00, val: 1.00 },
-  { at: 0.35, val: 0.78 },
-  { at: 0.60, val: 0.44 },
-  { at: 0.82, val: 0.20 },
-  { at: 1.00, val: 0.10 },
+  { at: 0.30, val: 0.62 },
+  { at: 0.50, val: 0.30 },
+  { at: 0.68, val: 0.14 },
+  { at: 0.85, val: 0.07 },
+  { at: 1.00, val: 0.04 },
 ]
 
 /**

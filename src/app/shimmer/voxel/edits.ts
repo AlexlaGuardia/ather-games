@@ -42,7 +42,9 @@ import { Column, SECTION } from './column'
 // inside ground a ruin now occupies.
 // v7: rivers (2026-08-07 late) — the weirdness zero-line carves a channel; v6 edits along valley
 // centres can now sit in the water or above the carved bed.
-export const GENERATOR_VERSION = 7
+// v8: open country (2026-08-07 late) — ridge wavelength 150→340, relief gathered into ranges;
+// most hills moved, so v7 edits on any slope are likely mid-air or buried now.
+export const GENERATOR_VERSION = 8
 
 /**
  * One column's edits: packed local index → material.
