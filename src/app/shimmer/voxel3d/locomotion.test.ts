@@ -197,13 +197,15 @@ const settle = (s: ReturnType<typeof createLoco>, solid: any, frames = 30) => {
   // input-axis probe grabbed it; the contact+facing gate must not.
   const solid = world((x, y, z) => x >= 3 && x < 5 && z >= 2 && y < 12)
   const s = createLoco(3.5, 10, 0.5); settle(s, solid)
-  let hung = false
+  let hung = false, climbed = false
   tickLocomotion(s, input({ mvZ: 1, jumpKey: true }), solid)     // jump with sideways push
   for (let i = 0; i < 60; i++) {
     tickLocomotion(s, input({ mvZ: 1, jumpKey: true }), solid)   // held Space, still looking +x
     if (s.hanging) hung = true
+    if (s.climbing) climbed = true
   }
   ok(!hung, '★ a 2-high block beside the jump is never grabbed — the hang needs the faced wall')
+  ok(!climbed, '★ nor climbed — a strafe-pressed wall is collision, not a ladder')
 }
 
 // ── tap-jump near a wall is a pure jump — the Apex tap/hold line ─────────────────────────────

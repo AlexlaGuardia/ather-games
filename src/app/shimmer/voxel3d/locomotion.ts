@@ -63,9 +63,10 @@ export const HANG_DROP = 0.9
 export const MANTLE_TIME = 0.30
 export const HANG_MIN = 0.22
 export const HANG_COMMIT = 0.35
-export const HANG_FACING = 0.5      // camera-forward · wall-cardinal for a grab — a hang belongs to
-                                    // the wall you are CLIMBING, directly ahead, never a block that
-                                    // happens to sit 2-high beside your jump (Alex, 07-08-07)
+export const WALL_FACING = 0.5      // camera-forward · wall-cardinal for a CLIMB or a GRAB — both
+                                    // belong to the wall directly ahead of your eyes, never a face
+                                    // you happen to be strafing into or a 2-high block beside your
+                                    // jump (Alex, 07-08-07, both rulings)
 export const VAULT_TIME = 0.16      // quick — a vault is a step with intent, not a climb animation
 export const VAULT_REACH = 0.55     // how close the face must be (beyond the body radius) to vault
 export const VAULT_FACING = 0.4     // camera-forward · step-direction must exceed this — the vault
@@ -231,7 +232,10 @@ export function tickLocomotion(s: LocoState, input: LocoInput, solid: Solid): vo
   // Tap vs hold: a jump tap never climbs and never mantles; a held Space does both.
   if (jumpKey) s.spaceHeldT += dt; else s.spaceHeldT = 0
   const climbActive = s.spaceHeldT >= CLIMB_HOLD_MIN
-  s.climbing = s.airborne && s.onWall && climbActive && s.climbRise < CLIMB_MAX_RISE
+  // Facing gates the climb exactly as it gates the grab: you scramble up what you LOOK at. A wall
+  // you are merely strafe-pressed against is collision, not a ladder.
+  const wallFaced = s.onWall && (input.fwdX * s.wallCX + input.fwdZ * s.wallCZ) > WALL_FACING
+  s.climbing = s.airborne && wallFaced && climbActive && s.climbRise < CLIMB_MAX_RISE
 
   // ── horizontal velocity ─────────────────────────────────────────────────────────────────────
   if (s.hanging || s.mantleT > 0) {
@@ -305,7 +309,7 @@ export function tickLocomotion(s: LocoState, input: LocoInput, solid: Solid): vo
   // the camera facing it. Off-wall jumps never grab; that is what the vault and the jump are for.
   if (!s.hanging && s.mantleT <= 0 && s.hangLock <= 0 && climbActive && s.airborne) {
     const hasCard = (s.onWall || s.wallStick > 0) && (s.wallCX !== 0 || s.wallCZ !== 0)
-    const faced = hasCard && (input.fwdX * s.wallCX + input.fwdZ * s.wallCZ) > HANG_FACING
+    const faced = hasCard && (input.fwdX * s.wallCX + input.fwdZ * s.wallCZ) > WALL_FACING
     if (faced) {
       const bx = Math.floor(s.px) + s.wallCX, bz = Math.floor(s.pz) + s.wallCZ
       const lip = lipAt(solid, bx, bz, s.py)
