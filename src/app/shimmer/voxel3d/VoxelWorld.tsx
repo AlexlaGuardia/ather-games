@@ -53,6 +53,15 @@ import { ensureBasicTools, getEquippedTool, getToolDef, craftTool, canCraft as c
 // block world needs first is the layer the tile world never had: material → material. See the
 // header of `voxel/recipes.ts` for why, including the bug it was already causing.
 import { RECIPES, canCraft as canCraftRecipe, craftPlan, type RecipeDef } from '../voxel/recipes'
+// ── PORT STEP 3 — the guns (2026-08-07, Alex ruled they cross into the Ather) ─────────────────
+// `engine/weapons.ts` is the shared half: the table, the tuning, the pure ballistics. It was
+// EXTRACTED from Shimmer3D rather than copied, because the thing that could not come across is
+// collision — play3d's FiringRange resolves every hit against `gridRef.current[cz][cx]`, a tile
+// grid this world does not have. So each walker owns its hit detection and shares the maths.
+// Here that means voxel DDA (`raycast`, already used for mining), which is both simpler and more
+// exact than what the tile version could do.
+import { WEAPONS, weaponAt, ADS_FOV, spreadDeg, bloomAfterShot, bloomAfterRest,
+         canFire, coneDirection, recoilKick, type WeaponDef } from '../engine/weapons'
 
 const SEED = 1337
 const H = DEFAULT_COLUMN.worldHeight
@@ -87,6 +96,8 @@ export default function VoxelWorld() {
   const [hotbar, setHotbar] = useState<HotbarEntry[]>([])
   // Stowed vs drawn. F toggles. See the DRAW LOCK note on the keydown handler.
   const [drawn, setDrawn] = useState(false)
+  const [weaponIdx, setWeaponIdx] = useState(0)
+  const [ammoUi, setAmmoUi] = useState(WEAPONS[0].clip)
   const [sel, setSel] = useState(0)
   const [tier, setTier] = useState(1)
   // ★ BUILD MODE. Blocks build the shell (mine/place, already there); pieces dress it. Tab switches
@@ -224,6 +235,9 @@ export default function VoxelWorld() {
       // the Ather (2026-08-07), overturning the 07-22 aegis; that ruling still needs authoring into
       // world/lucernyx.md — see CANON_GAPS.md.
       if (e.code === 'KeyF') { setDrawn(d => !d); return }
+      // Q swaps the model, and ONLY while drawn — with the weapon stowed Q would be a key that
+      // silently changes something you cannot see, which is how a player learns not to trust a HUD.
+      if (e.code === 'KeyQ' && drawn) { setWeaponIdx(i => { const n = (i + 1) % WEAPONS.length; setAmmoUi(WEAPONS[n].clip); return n }); return }
       if (drawn) return   // every verb below is locked while the weapon is out
       if (n >= 1 && n <= 8) { if (build) setPieceIdx(Math.min(PIECES.length - 1, n - 1)); else setSel(n - 1) }
       // Esc exits pointer lock anyway, so O is the settings key — it must not fight the browser.
@@ -268,6 +282,8 @@ export default function VoxelWorld() {
           selItem={(() => { const e = hotbar[sel]; return !drawn && e?.kind === 'item' ? e.itemId : null })()}
           heldTool={(() => { const e = hotbar[sel]; return !drawn && e?.kind === 'tool' ? e.skillId : null })()}
           weaponDrawn={drawn}
+          weaponIdx={weaponIdx}
+          onAmmo={setAmmoUi}
           onStats={setStats} onPos={p => setPos(`x ${p.x.toFixed(0)}  y ${p.y.toFixed(0)}  z ${p.z.toFixed(0)}`)}
           onLook={setLook} onInvChange={refreshHotbar}
           worker={worker} incoming={incoming} inflight={inflight} settings={settings}
@@ -278,7 +294,7 @@ export default function VoxelWorld() {
       </Canvas>
       <Hud stats={stats} pos={pos} look={look} hotbar={hotbar} sel={sel} tier={tier}
            build={build} pieceIdx={pieceIdx} rot={rot} inv={inv}
-           skill={skillHud} levelUp={levelUp} crafted={crafted} tools={tools} isOwner={isOwner} drawn={drawn} />
+           skill={skillHud} levelUp={levelUp} crafted={crafted} tools={tools} isOwner={isOwner} drawn={drawn} weaponIdx={weaponIdx} ammoUi={ammoUi} />
       {showSettings && <SettingsPanel s={settings} update={update} onClose={() => setShowSettings(false)} />}
       {craftOpen && (
         <CraftPanel have={have} tools={tools} tick={craftTick}
@@ -288,7 +304,7 @@ export default function VoxelWorld() {
   )
 }
 
-function Hud({ stats, pos, look, hotbar, sel, tier, build, pieceIdx, rot, inv, skill, levelUp, crafted, tools, isOwner, drawn }: {
+function Hud({ stats, pos, look, hotbar, sel, tier, build, pieceIdx, rot, inv, skill, levelUp, crafted, tools, isOwner, drawn, weaponIdx, ammoUi }: {
   stats: string; pos: string
   look: { name: string; progress: number; refused: boolean } | null
   hotbar: HotbarEntry[]; sel: number; tier: number
@@ -300,6 +316,8 @@ function Hud({ stats, pos, look, hotbar, sel, tier, build, pieceIdx, rot, inv, s
   tools: React.RefObject<EquippedTools>
   isOwner: boolean
   drawn: boolean
+  weaponIdx: number
+  ammoUi: number
 }) {
   return (
     <>
@@ -435,8 +453,11 @@ function Hud({ stats, pos, look, hotbar, sel, tier, build, pieceIdx, rot, inv, s
       </div>}
       {/* The one piece of state the dimmed row cannot show by itself. */}
       {drawn && !build && (
-        <div className="absolute bottom-[4.75rem] left-1/2 -translate-x-1/2 text-[10px] font-mono tracking-[.2em] uppercase text-rose-200/70 pointer-events-none">
-          weapon drawn · F to stow
+        <div className="absolute bottom-[4.75rem] left-1/2 -translate-x-1/2 flex items-baseline gap-3 font-mono pointer-events-none">
+          <span className="text-[11px] tracking-[.2em] uppercase text-amber-200/85">{WEAPONS[weaponIdx].name}</span>
+          {/* tabular-nums so the count does not jitter the layout as it ticks down */}
+          <span className="text-[13px] tabular-nums text-white/90">{ammoUi}<span className="text-white/35">/{WEAPONS[weaponIdx].clip}</span></span>
+          <span className="text-[9px] tracking-[.18em] uppercase text-white/35">RMB aim · Q swap · F stow</span>
         </div>
       )}
       {!build && <div className="absolute bottom-[4.6rem] left-1/2 -translate-x-1/2 text-[10px] font-mono text-white/50 pointer-events-none">
@@ -449,7 +470,7 @@ function Hud({ stats, pos, look, hotbar, sel, tier, build, pieceIdx, rot, inv, s
 const SOLID_EXCEPT = new Set<number>([AIR, MAT.WATER])
 const isSolid = (m: number) => !SOLID_EXCEPT.has(m)
 
-function World({ inv, toolTier, toolSkill, selItem, heldTool, weaponDrawn, onStats, onPos, onLook, onInvChange, worker, incoming, inflight, settings, build, pieceIdx, rot, tools, skills, onSkill, onLevel }: {
+function World({ inv, toolTier, toolSkill, selItem, heldTool, weaponDrawn, weaponIdx, onAmmo, onStats, onPos, onLook, onInvChange, worker, incoming, inflight, settings, build, pieceIdx, rot, tools, skills, onSkill, onLevel }: {
   inv: React.RefObject<Inventory>
   toolTier: React.RefObject<number>
   toolSkill: React.RefObject<BlockSkill>
@@ -459,6 +480,10 @@ function World({ inv, toolTier, toolSkill, selItem, heldTool, weaponDrawn, onSta
   /** Weapon out. Mining and placing are locked while true. Named `weaponDrawn`, not
    *  `drawn`: this component already has a `drawn` ref holding the rendered mesh map. */
   weaponDrawn: boolean
+  /** Index into WEAPONS. Q cycles it; the parent owns it so the HUD can name the gun. */
+  weaponIdx: number
+  /** Rounds left, pushed up for the HUD. Called on fire and on reload completion. */
+  onAmmo: (n: number) => void
   onStats: (s: string) => void
   onPos: (p: THREE.Vector3) => void
   onLook: (l: { name: string; progress: number; refused: boolean } | null) => void
@@ -540,6 +565,12 @@ function World({ inv, toolTier, toolSkill, selItem, heldTool, weaponDrawn, onSta
   const colOf = useCallback((x: number, z: number) => key(Math.floor(x / SECTION), Math.floor(z / SECTION)), [])
   const dropGroup = useRef<THREE.Group>(null)
   const mouse = useRef({ left: false, right: false })
+  // Weapon state. Refs, not state: these change per-frame and per-shot, and a re-render per round
+  // fired would be a re-render of the whole world at 9 rounds/sec.
+  const ammo = useRef(weaponAt(0).clip)
+  const reloading = useRef(0)
+  const ads = useRef(false)
+  const recoil = useRef({ p: 0, y: 0 })
   const frame = useRef(0)
   const requested = useRef(new Set<string>())
   // ★ Edits live here, keyed by column, and are the ONLY thing the world stores. Walking a thousand
@@ -738,12 +769,134 @@ function World({ inv, toolTier, toolSkill, selItem, heldTool, weaponDrawn, onSta
     return false
   }, [voxelSolid])
 
+  // ── ★ THE FIRING RIG ─────────────────────────────────────────────────────────────────────────
+  // Real travelling projectiles, not hitscan. The table already defines projSpeed/projLife per
+  // model (a Lance round is a fast fat bolt, a Spitter round is not), and throwing that away for
+  // hitscan would flatten the three feels the tuning exists to separate. It also matters the moment
+  // mobs land: a projectile can be led and dodged, a hitscan cannot.
+  //
+  // ★ ONE SHARED MATERIAL FOR ALL TRACERS. A material per projectile is a shader program per
+  // projectile, which is precisely what got this page BLOCKED from WebGL on 08-06 (black screen,
+  // HUD alive, no console error) and why render-audit.test.ts exists. Full-auto would have hit that
+  // within a second of holding the trigger.
+  const shots = useRef<{ x: number; y: number; z: number; dx: number; dy: number; dz: number
+                         speed: number; life: number; mesh: THREE.Mesh }[]>([])
+  const tracerGeo = useMemo(() => new THREE.SphereGeometry(1, 6, 4), [])
+  const tracerMat = useMemo(() => new THREE.MeshBasicMaterial({ color: 0xffd88a, toneMapped: false }), [])
+  const impacts = useRef<{ mesh: THREE.Mesh; life: number }[]>([])
+  const lastShot = useRef(0)
+  const bloom = useRef(0)
+  const semiLatch = useRef(false)   // semi-auto: one round per PRESS, not per frame held
+
+  useEffect(() => () => {
+    // Disposed together — the geometry and material are shared, so a leak here leaks once, but a
+    // route change that leaves them alive leaks a GPU buffer per visit.
+    tracerGeo.dispose(); tracerMat.dispose()
+  }, [tracerGeo, tracerMat])
+
+  // Swapping models refills to that model's clip. Carrying rounds across a swap would let a
+  // Repeater's 12 become a Lance's 12 against a clip of 8, and the HUD would disagree with the sim.
+  useEffect(() => {
+    ammo.current = weaponAt(weaponIdx).clip
+    reloading.current = 0
+    bloom.current = 0
+    onAmmo(ammo.current)
+  }, [weaponIdx, onAmmo])
+
+  const fire = useCallback((w: WeaponDef, g: THREE.Group) => {
+    const f = new THREE.Vector3()
+    camera.getWorldDirection(f)
+    const [dx, dy, dz] = coneDirection(f.x, f.y, f.z, spreadDeg(w, bloom.current, ads.current), Math.random(), Math.random())
+    const mesh = new THREE.Mesh(tracerGeo, tracerMat)
+    mesh.scale.setScalar(w.headR)
+    // Spawned at the camera, not at a muzzle offset: this world has no viewmodel yet, and a
+    // convergence fudge with nothing to converge FROM would just put rounds where the eye is not.
+    mesh.position.copy(camera.position)
+    g.add(mesh)
+    shots.current.push({ x: camera.position.x, y: camera.position.y, z: camera.position.z,
+                         dx, dy, dz, speed: w.projSpeed, life: w.projLife, mesh })
+    ammo.current = Math.max(0, ammo.current - 1)
+    bloom.current = bloomAfterShot(w, bloom.current)
+    const kick = recoilKick(w, Math.random)
+    recoil.current.p += kick.pitch; recoil.current.y += kick.yaw
+    lastShot.current = 0
+    onAmmo(ammo.current)
+  }, [camera, tracerGeo, tracerMat, onAmmo])
+
   useFrame((_, dtRaw) => {
     const dt = Math.min(dtRaw, 0.05)
     const g = group.current
     if (!g) return
     const p = camera.position
     const cx = Math.floor(p.x / SECTION), cz = Math.floor(p.z / SECTION)
+
+    // ── ★ WEAPON TICK ────────────────────────────────────────────────────────────────────────
+    // Runs before the mine/place block below, and that block is already gated on !weaponDrawn — so
+    // the two verbs can never both consume the same click. That is the whole draw lock in one line.
+    {
+      const w = weaponAt(weaponIdx)
+      lastShot.current += dt
+      ads.current = weaponDrawn && mouse.current.right
+      // ADS zoom is lerped, never snapped: an instant FOV change reads as a teleport.
+      const wantFov = ads.current ? ADS_FOV : 75
+      const cam = camera as THREE.PerspectiveCamera
+      if (Math.abs(cam.fov - wantFov) > 0.01) { cam.fov += (wantFov - cam.fov) * Math.min(1, dt * 12); cam.updateProjectionMatrix() }
+
+      if (reloading.current > 0) {
+        reloading.current -= dt
+        if (reloading.current <= 0) { ammo.current = w.clip; onAmmo(ammo.current) }
+      }
+      if (!weaponDrawn) { bloom.current = bloomAfterRest(w, bloom.current, dt); semiLatch.current = false }
+      else {
+        if (mouse.current.left) {
+          // Full-auto keeps firing while held; semi-auto needs the button to come back up first.
+          const mayPress = w.auto || !semiLatch.current
+          if (mayPress && canFire(w, lastShot.current, ammo.current, reloading.current)) { fire(w, g); semiLatch.current = true }
+          else if (ammo.current <= 0 && reloading.current <= 0) reloading.current = w.reloadTime
+        } else {
+          semiLatch.current = false
+          bloom.current = bloomAfterRest(w, bloom.current, dt)
+        }
+      }
+
+      // Recoil is DRAINED into the camera here rather than written at fire time, so a burst climbs
+      // smoothly instead of snapping once per round.
+      if (recoil.current.p !== 0 || recoil.current.y !== 0) {
+        camera.rotation.x += recoil.current.p * Math.min(1, dt * 18)
+        camera.rotation.y += recoil.current.y * Math.min(1, dt * 18)
+        const k = 1 - Math.min(1, dt * 18)
+        recoil.current.p *= k; recoil.current.y *= k
+      }
+
+      // ── projectiles ────────────────────────────────────────────────────────────────────────
+      // Each round raycasts the SEGMENT it travelled this frame, never just its endpoint. At 54
+      // units/sec a Lance round covers ~0.9 units per frame, so endpoint sampling would tunnel
+      // straight through any wall thinner than that — the classic fast-projectile bug.
+      for (let i = shots.current.length - 1; i >= 0; i--) {
+        const sh = shots.current[i]
+        const step = sh.speed * dt
+        const hit = raycast(sh.x, sh.y, sh.z, sh.dx, sh.dy, sh.dz, step, voxelSolid)
+        sh.life -= dt
+        if (hit) {
+          // Impact marker at the face, small and short-lived — the read is "I hit that block".
+          const m = new THREE.Mesh(tracerGeo, tracerMat)
+          m.scale.setScalar(0.12)
+          m.position.set(hit.x + 0.5, hit.y + 0.5, hit.z + 0.5)
+          g.add(m); impacts.current.push({ mesh: m, life: 0.25 })
+          g.remove(sh.mesh); shots.current.splice(i, 1)
+          continue
+        }
+        sh.x += sh.dx * step; sh.y += sh.dy * step; sh.z += sh.dz * step
+        sh.mesh.position.set(sh.x, sh.y, sh.z)
+        if (sh.life <= 0) { g.remove(sh.mesh); shots.current.splice(i, 1) }
+      }
+      for (let i = impacts.current.length - 1; i >= 0; i--) {
+        const im = impacts.current[i]
+        im.life -= dt
+        im.mesh.scale.setScalar(0.12 * Math.max(0, im.life / 0.25))
+        if (im.life <= 0) { g.remove(im.mesh); impacts.current.splice(i, 1) }
+      }
+    }
 
     // ── adopt whatever the worker finished ───────────────────────────────────────────────────
     // Wrapping packed voxels into a Column is a view, not a copy: the sections point straight into

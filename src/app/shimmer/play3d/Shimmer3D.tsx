@@ -53,6 +53,7 @@ import { gatherTick, gatherPop } from './gather-fx'
 import BirthScreen from './birth/BirthScreen'
 import { RUNES } from './birth/runes.data'
 import { createSkillSet, skillSetToSave, skillSetFromSave, addSkillXP, xpForSkillLevel, SKILL_META, type SkillSet, type SkillId } from '../engine/skills'
+import { WEAPONS } from '../engine/weapons'
 import { createBeast, checkBeastUnlock, beastsToSave, beastsFromSave, BEAST_SPECIES, BEAST_DEFS, BEAST_PERKS, PERK_INFO, getBonusFindChance, getSpeedBonus, type ManaBeast, type BeastSpecies } from '../beasts/beast'
 import { createInventory, inventoryToSave, inventoryFromSave, addItems, removeItems, countItem, transferItem, createChestStorage, chestToSave, chestFromSave, type Inventory, type ItemStack, type ChestStorage, type ChestSave } from '../engine/inventory'
 import { createBank, bankFromSave, bankToSave, bankUsed, bankCapacity, bankDeposit, bankWithdraw, bankForceDeposit, bankReachable, isChestFurniture, migrateChestsToBank, CHEST_CAPACITY, type BankState, type BankSave } from '../engine/bank'
@@ -1801,32 +1802,15 @@ const SOUL_COLOR = '#aef2ff'
 // never part of a weapon — the gun is dead grey metal and the round trails the WIELDER's soul-colour
 // (SOUL_COLOR below), ONE colour across both guns. Weapons read distinct by silhouette + round shape
 // (headR/trailR) + fire behaviour, NEVER by tracer colour. So no per-weapon `color` field exists.
-const WEAPONS = [
-  { id: 'spitter', name: 'SPITTER', slot: 'SHORTBARREL', auto: true,
-    fireCd: FIRE_COOLDOWN, projSpeed: PROJECTILE_SPEED, projLife: PROJECTILE_LIFE,
-    damage: AM_DAMAGE, crit: AM_CRIT, clip: CLIP_SIZE, reloadTime: RELOAD_TIME, reloadMana: RELOAD_MANA,
-    hipSpread: HIP_SPREAD, adsSpread: ADS_SPREAD, bloomPerShot: BLOOM_PER_SHOT, bloomMax: BLOOM_MAX,
-    bloomDecay: BLOOM_DECAY, adsBloomScale: ADS_BLOOM_SCALE, kickPitch: KICK_PITCH, kickYaw: KICK_YAW,
-    converge: CONVERGE_DIST, headR: HEAD_R, trailR: TRAIL_R, hipMove: 0.85, adsMove: 0.55 },
-  // LANCE (reacher) — slow heavy single-shot marksman. Semi-auto (one deliberate bolt per click, no
-  // spray), a fast FAT round that punches, a laser when aimed but loose from the hip (rewards ADS),
-  // small clip, heavy kick, and it slows you the most. The counterweight to the Spitter's run-and-gun.
-  { id: 'lance', name: 'LANCE', slot: 'REACHER', auto: false,
-    fireCd: 0.5, projSpeed: 54, projLife: 2.4,
-    damage: 22, crit: 34, clip: 8, reloadTime: 2.0, reloadMana: 12,
-    hipSpread: 3.4, adsSpread: 0.14, bloomPerShot: 0.9, bloomMax: 3.6,
-    bloomDecay: 6, adsBloomScale: 0.3, kickPitch: 0.021, kickYaw: 0.006,
-    converge: 46, headR: 0.12, trailR: 0.085, hipMove: 0.70, adsMove: 0.42 },
-  // REPEATER (sidearm) — the everyman backup: semi-auto, fast follow-ups, tight, low heat, 12-shot clip
-  // (canon "12 shots before overheat"). Light — the LEAST movement penalty, a gun you keep up while
-  // running. Low damage; it's the finisher/holdout, not the punch. The third distinct feel at the bench.
-  { id: 'repeater', name: 'REPEATER', slot: 'SIDEARM', auto: false,
-    fireCd: 0.16, projSpeed: 40, projLife: 1.8,
-    damage: 10, crit: 16, clip: 12, reloadTime: 1.1, reloadMana: 8,
-    hipSpread: 1.6, adsSpread: 0.2, bloomPerShot: 0.35, bloomMax: 2.0,
-    bloomDecay: 6, adsBloomScale: 0.35, kickPitch: 0.011, kickYaw: 0.004,
-    converge: 34, headR: 0.07, trailR: 0.05, hipMove: 0.88, adsMove: 0.6 },
-] as const
+// ★ THE TABLE MOVED OUT 2026-08-07 → `engine/weapons.ts`, so voxel3d and play3d share one
+// definition of what a Lance is. It was extracted, not copied: two tables would have drifted the
+// first time either was tuned, and a gun that behaves differently depending on which walker you
+// are in is the kind of bug nobody files because it just feels wrong. Values are unchanged —
+// `engine/weapons.test.ts` asserts the three feels stay distinct so a future tune cannot flatten
+// them silently.
+//
+// The FiringRange rig below stays here. It resolves collision against `gridRef` (a tile grid) and
+// carries four other systems besides gunplay; voxel3d owns its own, voxel-DDA hit detection.
 // Downrange targets for the range — floating orbs at varied spots/heights in Alex's 50×50.
 const RANGE_TARGETS: [number, number, number][] = [
   [15, 1.8, 26], [20, 2.5, 31], [25, 1.6, 23], [30, 2.9, 33],
