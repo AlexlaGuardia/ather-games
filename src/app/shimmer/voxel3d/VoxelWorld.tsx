@@ -95,23 +95,18 @@ const LIGHT_PASSES = new Set<number>([
 interface Slot { itemId: string; count: number }
 
 /**
- * ★ THE HOTBAR CARRIES THE TOOLS (Alex, 2026-08-07): *"the hotbar uses the four tools as an
- * extension so the player can scroll over to the tool they need."*
+ * ★ TOOLS LEFT THE HOTBAR AND BECAME GAUGES (Alex, 2026-08-07, late — overturns the same-day
+ * "hotbar carries the tools" ruling above the mining block): *there is no manual tool selection —
+ * the block auto-picks the tool.* Scrolling to "the tool you need" was a step nobody wanted to take
+ * mid-swing, and it fought the block-picks-the-tool model this port started with.
  *
- * Slots 0-3 are the four gathering families in canon order, 4-7 are what you mined. The tools are
- * FIXED slots, not items — a tool is a thing you hold, not a stack you carry, and letting them
- * shuffle with inventory churn would move the spike out from under muscle memory mid-session.
- *
- * ⚠ FARMING IS THE FOURTH AND IT ONLY EXISTS AS OF TODAY. blades→forestry, spikes→prospecting,
- * rinsticks→rinning covered three; farming had no tool at all, which is why the spade was added
- * (engine/tools.ts). Four families, four slots — the row is not padded to look tidy.
+ * The hotbar is ITEMS ONLY now — up to 8 mined-item stacks, slots 0-7, numbered 1-8. The four
+ * gathering families (still canon order: forestry, prospecting, rinning, farming) render as
+ * read-only GAUGES docked beside the hotbar — level, equipped tier, XP — driven by `activeTool`
+ * (see the mining block) rather than by anything the player selects.
  */
-const TOOL_SLOTS = ['forestry', 'prospecting', 'rinning', 'farming'] as const
-type ToolSkill = typeof TOOL_SLOTS[number]
-type HotbarEntry =
-  | { kind: 'tool'; skillId: ToolSkill; toolId: string | null; name: string; tier: number }
-  | { kind: 'item'; itemId: string; count: number }
-const ITEM_SLOT_0 = TOOL_SLOTS.length      // where the mined half of the row starts
+const TOOL_FAMILIES = ['forestry', 'prospecting', 'rinning', 'farming'] as const
+type HotbarEntry = { itemId: string; count: number }
 
 export default function VoxelWorld() {
   const [stats, setStats] = useState('generating…')
@@ -169,6 +164,9 @@ export default function VoxelWorld() {
   const tools = useRef<EquippedTools>(ensureBasicTools({}))
   const skills = useRef<SkillSet>(createSkillSet())
   const [skillHud, setSkillHud] = useState<{ id: string; level: number; xp: number; next: number } | null>(null)
+  // ★ THE GAUGE SIGNAL. Which family is mining RIGHT NOW, for the tool gauges to light up — set
+  // from inside the mining block only on change (see the ref there), never per-frame.
+  const [activeTool, setActiveTool] = useState<string | null>(null)
   const [levelUp, setLevelUp] = useState<string | null>(null)
   const [crafted, setCrafted] = useState<string | null>(null)
   // Owner status, for the legacy play3d door in the HUD only. ather.games has no cloud auth — it
@@ -192,16 +190,9 @@ export default function VoxelWorld() {
     const counts = new Map<string, number>()
     for (const s of inv.current.slots) if (s) counts.set(s.itemId, (counts.get(s.itemId) ?? 0) + s.count)
     const items: HotbarEntry[] = [...counts]
-      .map(([itemId, count]) => ({ kind: 'item' as const, itemId, count }))
-      .slice(0, 8 - ITEM_SLOT_0)
-    const toolRow: HotbarEntry[] = TOOL_SLOTS.map((skillId) => {
-      const held = getEquippedTool(tools.current!, skillId)
-      const def = held ? getToolDef(held) : undefined
-      // A family with nothing equipped still gets its slot, shown empty. Hiding it would renumber
-      // the row the moment a tool broke, which is the same muscle-memory problem as reordering.
-      return { kind: 'tool', skillId, toolId: held?.toolId ?? null, name: def?.name ?? '—', tier: def?.tier ?? 0 }
-    })
-    setHotbar([...toolRow, ...items])
+      .map(([itemId, count]) => ({ itemId, count }))
+      .slice(0, 8)
+    setHotbar(items)
   }, [])
 
   // ── The crafting surface ────────────────────────────────────────────────────────────────────
@@ -300,8 +291,7 @@ export default function VoxelWorld() {
           inv={inv} toolTier={toolTier} toolSkill={toolSkill}
           /* A tool in hand is not a block in hand — RMB must not place while you hold a spade.
              `drawn` blanks it too: a weapon out means neither hand is free. */
-          selItem={(() => { const e = hotbar[sel]; return !drawn && e?.kind === 'item' ? e.itemId : null })()}
-          heldTool={(() => { const e = hotbar[sel]; return !drawn && e?.kind === 'tool' ? e.skillId : null })()}
+          selItem={(() => { const e = hotbar[sel]; return !drawn && e ? e.itemId : null })()}
           weaponDrawn={drawn}
           weaponIdx={weaponIdx}
           onAmmo={setAmmoUi}
@@ -309,13 +299,15 @@ export default function VoxelWorld() {
           onLook={setLook} onInvChange={refreshHotbar}
           worker={worker} incoming={incoming} inflight={inflight} settings={settings}
           build={build} pieceIdx={pieceIdx} rot={rot}
-          tools={tools} skills={skills} onSkill={setSkillHud} onLevel={setLevelUp}
+          tools={tools} skills={skills} onSkill={setSkillHud} onLevel={setLevelUp} onTool={setActiveTool}
         />
         <PointerLockControls />
       </Canvas>
       <Hud stats={stats} pos={pos} look={look} hotbar={hotbar} sel={sel} tier={tier}
            build={build} pieceIdx={pieceIdx} rot={rot} inv={inv}
-           skill={skillHud} levelUp={levelUp} crafted={crafted} tools={tools} isOwner={isOwner} drawn={drawn} weaponIdx={weaponIdx} ammoUi={ammoUi} />
+           skill={skillHud} levelUp={levelUp} crafted={crafted} tools={tools} skills={skills}
+           activeTool={activeTool}
+           isOwner={isOwner} drawn={drawn} weaponIdx={weaponIdx} ammoUi={ammoUi} />
       {showSettings && <SettingsPanel s={settings} update={update} onClose={() => setShowSettings(false)} />}
       {craftOpen && (
         <CraftPanel have={have} tools={tools} tick={craftTick}
@@ -347,7 +339,7 @@ function Clock() {
   )
 }
 
-function Hud({ stats, pos, look, hotbar, sel, tier, build, pieceIdx, rot, inv, skill, levelUp, crafted, tools, isOwner, drawn, weaponIdx, ammoUi }: {
+function Hud({ stats, pos, look, hotbar, sel, tier, build, pieceIdx, rot, inv, skill, levelUp, crafted, tools, skills, activeTool, isOwner, drawn, weaponIdx, ammoUi }: {
   stats: string; pos: string
   look: { name: string; progress: number; refused: boolean } | null
   hotbar: HotbarEntry[]; sel: number; tier: number
@@ -357,6 +349,11 @@ function Hud({ stats, pos, look, hotbar, sel, tier, build, pieceIdx, rot, inv, s
   levelUp: string | null
   crafted: string | null
   tools: React.RefObject<EquippedTools>
+  /** Full skill set (all 6, level+xp), for the tool gauges — `skill` above is only the last-trained
+   *  one and can't drive four gauges at once. */
+  skills: React.RefObject<SkillSet>
+  /** Which family is mining right now, from the mining block's onTool signal. Drives gauge glow. */
+  activeTool: string | null
   isOwner: boolean
   drawn: boolean
   weaponIdx: number
@@ -462,31 +459,20 @@ function Hud({ stats, pos, look, hotbar, sel, tier, build, pieceIdx, rot, inv, s
       )}
 
       {/* Colour swatches stand in for item art — the registry maps materials to tiles.ts later.
-          Slots 0-3 are the four tool families, 4-7 what you mined. The divider after slot 3 is the
-          only thing telling the player the row has two halves, so it is not decoration.
+          ★ The hotbar is ITEMS ONLY (2026-08-07, late) — the four tool families moved out into
+          gauges docked to the right, same row, same plate system, so it still reads as one bar.
           ★ DRAWN dims the whole row rather than hiding it: you keep seeing what you will be holding
           again when you stow, so drawing reads as "hands full", not "inventory gone". */}
-      {!build && <div className={`absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-1.5 pointer-events-none transition-opacity ${drawn ? 'opacity-35' : 'opacity-100'}`}>
+      {!build && <div className={`absolute bottom-4 left-1/2 -translate-x-1/2 flex items-end gap-1.5 flex-wrap justify-center pointer-events-none transition-opacity ${drawn ? 'opacity-35' : 'opacity-100'}`}>
         {Array.from({ length: 8 }, (_, i) => {
           const e = hotbar[i]
-          const isTool = e?.kind === 'tool'
-          const mat = e?.kind === 'item' ? materialForItem(e.itemId) : undefined
+          const mat = e ? materialForItem(e.itemId) : undefined
           const swatch = mat !== undefined ? `#${(MATERIAL_COLOR[mat] ?? 0x888888).toString(16).padStart(6, '0')}` : undefined
           const selected = i === sel && !drawn
           return (
             <div key={i} className={`w-12 h-12 rounded border-2 flex flex-col items-center justify-center text-[9px] font-mono
-              ${i === ITEM_SLOT_0 ? 'ml-3' : ''}
               ${selected ? 'border-amber-300 bg-black/60' : 'border-white/20 bg-black/40'}`}>
-              {isTool ? (
-                <>
-                  {/* An unequipped family shows its slot greyed rather than empty — the row must not
-                      renumber itself when a tool breaks. */}
-                  <div className={`w-5 h-5 rounded-sm border ${e.toolId ? 'border-amber-200/50 bg-amber-200/15' : 'border-white/15 bg-white/5'}`} />
-                  <div className={`mt-0.5 leading-none ${e.toolId ? 'text-white/70' : 'text-white/25'}`}>
-                    {e.skillId.slice(0, 4)}{e.tier > 0 ? ` ${e.tier}` : ''}
-                  </div>
-                </>
-              ) : e ? (
+              {e ? (
                 <>
                   <div className="w-5 h-5 rounded-sm border border-white/25" style={{ background: swatch ?? '#6b7280' }} />
                   <div className="text-white/80 mt-0.5">{e.count}</div>
@@ -495,6 +481,15 @@ function Hud({ stats, pos, look, hotbar, sel, tier, build, pieceIdx, rot, inv, s
             </div>
           )
         })}
+        {/* ★ THE TOOL GAUGES (Alex, 2026-08-07, late). No manual tool selection any more — the block
+            auto-picks, and these four read-only dials are the only place the player sees which
+            family is working and how far it's climbed. Fixed canon order, fixed count; unlike the
+            item slots they never renumber because nothing here is inventory. */}
+        <div className="flex gap-1.5 ml-2">
+          {TOOL_FAMILIES.map((family) => (
+            <ToolGauge key={family} family={family} active={activeTool === family} tools={tools} skills={skills} />
+          ))}
+        </div>
       </div>}
       {/* The one piece of state the dimmed row cannot show by itself. */}
       {drawn && !build && (
@@ -512,16 +507,56 @@ function Hud({ stats, pos, look, hotbar, sel, tier, build, pieceIdx, rot, inv, s
   )
 }
 
+/**
+ * A single gauge: family label, skill level, equipped-tier dots, XP bar. Read-only — nothing here
+ * is clickable or selectable, which is the point (see the TOOL GAUGES comment at the call site).
+ * Compact by design (~64-72px, shrinkable to ~52px) so four of them dock beside the hotbar without
+ * blowing out a phone screen.
+ */
+function ToolGauge({ family, active, tools, skills }: {
+  family: 'forestry' | 'prospecting' | 'rinning' | 'farming'
+  active: boolean
+  tools: React.RefObject<EquippedTools>
+  skills: React.RefObject<SkillSet>
+}) {
+  const held = getEquippedTool(tools.current!, family)
+  const def = held ? getToolDef(held) : undefined
+  const tier = def?.tier ?? 0
+  const basic = def?.basic ?? false
+  const sk = skills.current![family]
+  const xpPct = Math.min(100, (sk.xp / Math.max(1, xpForSkillLevel(sk.level))) * 100)
+  return (
+    <div className={`min-w-[52px] w-16 flex-shrink rounded border px-1 py-1 flex flex-col items-center justify-center transition-opacity
+      ${active ? 'opacity-100 border-amber-300/70 bg-black/60 shadow-[0_0_6px_2px_rgba(252,211,77,0.35)]' : 'opacity-40 border-white/20 bg-black/40'}`}>
+      <div className="text-[9px] tracking-[0.15em] uppercase text-white/70">{family.slice(0, 4)}</div>
+      <div className="text-[15px] font-mono tabular-nums leading-none mt-0.5 text-white/90">{sk.level}</div>
+      {/* Equipped tier as 1-3 filled dots; the never-breaking basic tool reads as ONE HOLLOW dot —
+          it works, but it is not an upgrade. No tool at all (farming has no basic) is all hollow. */}
+      <div className="flex gap-0.5 justify-center mt-0.5">
+        {[0, 1, 2].map((i) => {
+          const filled = !basic && i < tier
+          const hollowBasic = basic && i === 0
+          return (
+            <span key={i} className={`w-1.5 h-1.5 rounded-full border ${
+              filled ? 'bg-amber-200 border-amber-200' : hollowBasic ? 'border-white/60' : 'border-white/15'}`} />
+          )
+        })}
+      </div>
+      <div className="w-full h-[3px] bg-black/55 rounded overflow-hidden mt-1">
+        <div className="h-full bg-emerald-300" style={{ width: `${xpPct}%` }} />
+      </div>
+    </div>
+  )
+}
+
 const SOLID_EXCEPT = new Set<number>([AIR, MAT.WATER])
 const isSolid = (m: number) => !SOLID_EXCEPT.has(m)
 
-function World({ inv, toolTier, toolSkill, selItem, heldTool, weaponDrawn, weaponIdx, onAmmo, onStats, onPos, onLook, onInvChange, worker, incoming, inflight, settings, build, pieceIdx, rot, tools, skills, onSkill, onLevel }: {
+function World({ inv, toolTier, toolSkill, selItem, weaponDrawn, weaponIdx, onAmmo, onStats, onPos, onLook, onInvChange, worker, incoming, inflight, settings, build, pieceIdx, rot, tools, skills, onSkill, onLevel, onTool }: {
   inv: React.RefObject<Inventory>
   toolTier: React.RefObject<number>
   toolSkill: React.RefObject<BlockSkill>
   selItem: string | null
-  /** The tool family the player has SELECTED, or null when holding a block/nothing. */
-  heldTool: 'forestry' | 'prospecting' | 'rinning' | 'farming' | null
   /** Weapon out. Mining and placing are locked while true. Named `weaponDrawn`, not
    *  `drawn`: this component already has a `drawn` ref holding the rendered mesh map. */
   weaponDrawn: boolean
@@ -544,6 +579,9 @@ function World({ inv, toolTier, toolSkill, selItem, heldTool, weaponDrawn, weapo
   skills: React.RefObject<SkillSet>
   onSkill: (s: { id: string; level: number; xp: number; next: number } | null) => void
   onLevel: (s: string | null) => void
+  /** Which family is actively mining, or null — fires only on change (see the ref beside the
+   *  mining block), so the gauges can glow without a per-frame re-render. */
+  onTool: (family: string | null) => void
 }) {
   const { camera } = useThree()
   const group = useRef<THREE.Group>(null)
@@ -584,6 +622,10 @@ function World({ inv, toolTier, toolSkill, selItem, heldTool, weaponDrawn, weapo
   const cols = useRef(new Map<string, Column>())
   const drawn = useRef(new Map<string, THREE.Mesh>())
   const breaking = useRef<BreakState | null>(null)
+  // ★ THE GAUGE SIGNAL, DEDUPED. `onTool` is a `setState` on the parent — calling it every frame
+  // while a swing lands would re-render the HUD 60x/sec for a value that changed once. This ref
+  // holds the last value SENT (not the last value computed), so the callback only fires on change.
+  const lastTool = useRef<string | null>(null)
   const drops = useRef<Drop[]>([])
   const dropMeshes = useRef(new Map<number, THREE.Mesh>())
   /**
@@ -1362,20 +1404,20 @@ function World({ inv, toolTier, toolSkill, selItem, heldTool, weaponDrawn, weapo
     // never had a world where both mattered on the same swing.
     if (hit && mouse.current.left && !weaponDrawn) {
       const hitDef = blockDef(hit.material)
-      // ★ THE HELD TOOL WINS, AND AUTO-PICK IS THE FALLBACK (changed 2026-08-07).
-      // This used to be pure auto-pick — the block chose the tool and the player never switched.
-      // Alex wants the tool in hand to be a thing you choose, so a selected tool is now used as-is:
-      // hold the spade on dirt and you dig fast, hold it on stone and stone refuses you, which is
-      // what makes choosing mean anything.
-      //
-      // But a player holding a BLOCK (or an empty slot) must not be unable to mine — that would
-      // make the row a trap rather than a choice. In that case the old behaviour stands and the
-      // block picks its own tool. So: choosing is meaningful, forgetting is survivable.
-      const wantSkill: BlockSkill = (heldTool as BlockSkill | null) ?? hitDef?.skill ?? null
+      // ★ TOOLS ARE NOT SOMETHING YOU SELECT — THE BLOCK CHOOSES (Alex, 2026-08-07, late).
+      // This briefly went the other way ("the tool in hand wins, auto-pick is the fallback") the
+      // same day, on the theory that a selected tool should mean something. Playtest reversed it:
+      // tools left the hotbar entirely and became GAUGES, so there is no hand left to hold one in.
+      // Back to pure auto-pick, now honouring `fastSkill` too — a spade auto-raises on soil the
+      // same way a spike auto-raises on stone, instead of fastSkill only mattering when held.
+      // The registry's gate semantics (`breakSeconds`, `canBreak`) are untouched: this only decides
+      // WHICH family gets asked, never whether the ask succeeds.
+      const wantSkill: BlockSkill = hitDef?.skill ?? hitDef?.fastSkill ?? null
       const equipped = wantSkill ? getEquippedTool(tools.current!, wantSkill as never) : undefined
       const eDef = equipped ? getToolDef(equipped) : undefined
       toolSkill.current = wantSkill
       toolTier.current = eDef?.tier ?? 0
+      if (lastTool.current !== wantSkill) { lastTool.current = wantSkill; onTool(wantSkill) }
       const r = tickBreak(breaking.current, hit, dt, toolTier.current!, toolSkill.current!, eDef?.speedBonus ?? 1)
       breaking.current = r.state
       if (r.broken) {
@@ -1399,8 +1441,11 @@ function World({ inv, toolTier, toolSkill, selItem, heldTool, weaponDrawn, weapo
         setVoxel(hit.x, hit.y, hit.z, AIR)
         breaking.current = null
       }
-    } else if (!mouse.current.left) {
-      breaking.current = null
+    } else {
+      if (!mouse.current.left) breaking.current = null
+      // Not mining this frame (nothing under the reticle, LMB up, or weapon drawn) — clear the
+      // gauge glow. Same dedup guard as above, so releasing LMB repeatedly does not spam `onTool`.
+      if (lastTool.current !== null) { lastTool.current = null; onTool(null) }
     }
 
     // ── place ────────────────────────────────────────────────────────────────────────────────
