@@ -24,7 +24,7 @@
 // coordination — and critically, **no stage ever synchronously generates a missing neighbour**,
 // which is the pre-1.13 cascading bug and, in a browser, a frame-time cliff rather than a lag spike.
 
-import { hash2 } from './noise'
+import { hash2, mixSeed } from './noise'
 import { MAT } from './depth'
 import { Section, AIR } from './section'
 
@@ -114,7 +114,7 @@ export function carveStartsAt(seed: number, cx: number, cz: number, chunk: numbe
   const whole = Math.floor(cfg.tunnelsPerChunk)
   const n = whole + (r() < cfg.tunnelsPerChunk - whole ? 1 : 0)
   for (let i = 0; i < n; i++) {
-    const s = (base ^ Math.imul(i + 1, 0x9e3779b9)) | 0
+    const s = mixSeed(base, i)
     const g = rng(s)
     out.push({
       x: cx * chunk + Math.floor(g() * chunk),

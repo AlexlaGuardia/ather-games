@@ -18,6 +18,26 @@ export function hash2(x: number, y: number, seed: number): number {
   return (h >>> 0) / 4294967296
 }
 
+/**
+ * ★ DERIVE A PER-ITEM SEED. Use this instead of `base ^ i` or `base ^ imul(i, K)`.
+ *
+ * Those look fine and are not. Measured 2026-08-07: with `base ^ imul(i+1, K)`, the FIRST draw of
+ * the resulting stream is uniform for i=0 and badly skewed for i=1 — tree species came out
+ * 39% / 36% / 18% / 6% against intended weights of 58 / 26 / 12 / 4, and the second tree in every
+ * column was the one that was wrong. An average across indices HIDES it, which is how it survived a
+ * first look. XOR changes bits without mixing them, so two seeds that differ in a few bits produce
+ * first outputs that still differ in only a few bits.
+ *
+ * This runs the pair through a real avalanche step so every input bit affects every output bit.
+ * Cheap, and it is the difference between a weight table meaning what it says and not.
+ */
+export function mixSeed(base: number, i: number): number {
+  let h = (base ^ Math.imul(i + 0x9e3779b9, 0x85ebca6b)) | 0
+  h = Math.imul(h ^ (h >>> 16), 0x7feb352d)
+  h = Math.imul(h ^ (h >>> 15), 0x846ca68b)
+  return (h ^ (h >>> 16)) | 0
+}
+
 /** Smoothstep — the interpolant, kept separate so the spline can reuse it. */
 const smooth = (t: number): number => t * t * (3 - 2 * t)
 

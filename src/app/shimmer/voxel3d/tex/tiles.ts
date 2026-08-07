@@ -17,6 +17,7 @@
 
 import { MAT } from '../../voxel/depth'
 import { ORE } from '../../voxel/ore'
+import { WOOD } from '../../voxel/trees'
 import { MATERIAL_COLOR } from '../attrs'
 
 export const TOP = 0
@@ -28,6 +29,11 @@ export const TILE_MATERIALS: number[] = [
   MAT.BEDROCK, MAT.DEEP_STONE, MAT.STONE, MAT.SUBSOIL, MAT.TOPSOIL, MAT.SAND, MAT.WATER,
   ORE.RAW_MANA, ORE.ELEMENT_VIOLET, ORE.ELEMENT_STORM, ORE.ELEMENT_EARTH, ORE.ELEMENT_WATER,
   ORE.PURE_CORE, ORE.ATHER_CRYSTAL,
+  // ⚠ APPEND ONLY — a material's position here IS its layer slot. Wood added 2026-08-07 with trees.
+  WOOD.GOLDWOOD_LOG, WOOD.GOLDWOOD_LEAVES,
+  WOOD.SHIMMEROAK_LOG, WOOD.SHIMMEROAK_LEAVES,
+  WOOD.STARWILLOW_LOG, WOOD.STARWILLOW_LEAVES,
+  WOOD.DAWNWOOD_LOG, WOOD.DAWNWOOD_LEAVES,
 ]
 
 /** One spare layer past the end: an unmapped material samples magenta rather than layer 0's stone. */

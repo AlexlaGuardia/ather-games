@@ -20,6 +20,7 @@
 
 import { MAT } from './depth'
 import { ORE } from './ore'
+import { WOOD } from './trees'
 import { AIR } from './section'
 
 /** Which gathering skill a block answers to. `null` = bare hands, no tool, no skill gate. */
@@ -65,6 +66,23 @@ export const BLOCKS: BlockDef[] = [
   { material: ORE.ELEMENT_WATER, name: 'Water Crystal Seam', hardness: 3.0, skill: 'prospecting', minTier: 1, drops: [{ itemId: 'water_crystal', count: 1 }], placeable: false },
   { material: ORE.PURE_CORE, name: 'Pure Core Seam', hardness: 4.5, skill: 'prospecting', minTier: 2, drops: [{ itemId: 'pure_mana_core', count: 1 }], placeable: false },
   { material: ORE.ATHER_CRYSTAL, name: 'Ather Crystal Seam', hardness: 6.5, skill: 'prospecting', minTier: 3, drops: [{ itemId: 'ather_crystal', count: 1 }], placeable: false },
+
+  // ── Forestry — the four ruled woods ────────────────────────────────────────────────────────
+  // ★ skill: 'forestry' means a SPIKE WILL NOT CUT A TREE and a BLADE will not break stone. The
+  // tool families are canon (`engine/tools.ts`: blades→forestry, spikes→prospecting) and the
+  // registry enforces the split rather than restating it. Drop ids are the ruled ones from
+  // `world/resources.ts`; hardness climbs with the same 1/4/7/10 ladder the node minLevels use.
+  { material: WOOD.GOLDWOOD_LOG, name: 'Goldwood', hardness: 1.4, skill: 'forestry', minTier: 1, drops: [{ itemId: 'goldwood_plank', count: 1 }], placeable: true },
+  { material: WOOD.SHIMMEROAK_LOG, name: 'Shimmeroak', hardness: 1.9, skill: 'forestry', minTier: 1, drops: [{ itemId: 'shimmeroak_plank', count: 1 }], placeable: true },
+  { material: WOOD.STARWILLOW_LOG, name: 'Starwillow', hardness: 2.6, skill: 'forestry', minTier: 2, drops: [{ itemId: 'starwillow_branch', count: 1 }], placeable: true },
+  { material: WOOD.DAWNWOOD_LOG, name: 'Dawnwood', hardness: 3.4, skill: 'forestry', minTier: 3, drops: [{ itemId: 'dawnwood_plank', count: 1 }], placeable: true },
+
+  // Leaves come away by hand — soft, fast, and they drop nothing in v1. Sapling drops are a
+  // regrowth mechanic and regrowth is not built, so promising one here would be a lie.
+  { material: WOOD.GOLDWOOD_LEAVES, name: 'Goldwood Leaves', hardness: 0.25, skill: null, minTier: 0, drops: [], placeable: false },
+  { material: WOOD.SHIMMEROAK_LEAVES, name: 'Shimmeroak Leaves', hardness: 0.25, skill: null, minTier: 0, drops: [], placeable: false },
+  { material: WOOD.STARWILLOW_LEAVES, name: 'Starwillow Leaves', hardness: 0.25, skill: null, minTier: 0, drops: [], placeable: false },
+  { material: WOOD.DAWNWOOD_LEAVES, name: 'Dawnwood Leaves', hardness: 0.25, skill: null, minTier: 0, drops: [], placeable: false },
 ]
 
 const BY_MATERIAL = new Map<number, BlockDef>(BLOCKS.map(b => [b.material, b]))

@@ -25,7 +25,7 @@
 // element crystals, pure_mana_core, ather_crystal. Nothing here invents a material name. Any NEW
 // material needs Magii and goes over as part of the one batched naming question.
 
-import { hash2 } from './noise'
+import { hash2, mixSeed } from './noise'
 import { MAT } from './depth'
 import { Section, AIR } from './section'
 
@@ -175,7 +175,7 @@ export function placeOre(
         const n = whole + (g0() < b.perChunk - whole ? 1 : 0)
 
         for (let a = 0; a < n; a++) {
-          const g = rng((base ^ Math.imul(a + 1, 0x85ebca6b)) | 0)
+          const g = rng(mixSeed(base, a))
           const vx = cx * chunk + g() * chunk
           const vz = cz * chunk + g() * chunk
           const vy = sampleBand(b.band, g)

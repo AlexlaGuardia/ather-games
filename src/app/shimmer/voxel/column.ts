@@ -30,6 +30,7 @@ import { columnHeight, type HeightConfig, DEFAULT_HEIGHT } from './height'
 import { materialAt, type DepthConfig, DEFAULT_DEPTH } from './depth'
 import { carveStack, type CarveConfig, DEFAULT_CARVE } from './carve'
 import { placeOre, type OreBatch, ORE_BATCHES } from './ore'
+import { plantTrees, type TreeConfig, DEFAULT_TREES } from './trees'
 import { greedyMesh, createMeshScratch, type MeshScratch, type MeshResult } from './greedy'
 
 export const SECTION = 16
@@ -46,7 +47,8 @@ export enum Stage {
   PreOre = 2,    // tier-4 pockets, before anything cuts through them
   Carved = 3,    // tunnels and caverns
   PostOre = 4,   // tiers 1-3, so they land in cave walls
-  Ready = 5,     // nothing further to generate (vegetation lands here later)
+  Vegetation = 5, // trees — last, because they stand on finished ground
+  Ready = 6,
 }
 
 export interface ColumnConfig {
@@ -57,6 +59,7 @@ export interface ColumnConfig {
   depth: DepthConfig
   carve: CarveConfig
   ore: OreBatch[]
+  trees: TreeConfig
 }
 
 export const DEFAULT_COLUMN: ColumnConfig = {
@@ -66,6 +69,7 @@ export const DEFAULT_COLUMN: ColumnConfig = {
   depth: DEFAULT_DEPTH,
   carve: DEFAULT_CARVE,
   ore: ORE_BATCHES,
+  trees: DEFAULT_TREES,
 }
 
 export class Column {
@@ -140,6 +144,14 @@ export function generateColumn(
   if (col.stage < Stage.PostOre && upTo >= Stage.PostOre) {
     placeOre(col.sections, wx, 0, wz, cfg.chunk, seed, 'post', cfg.ore)
     col.stage = Stage.PostOre
+  }
+
+  if (col.stage < Stage.Vegetation && upTo >= Stage.Vegetation) {
+    // Trees stand on FINISHED ground: after carvers stopped moving the surface and after ore, so a
+    // trunk is never planted on a block that later becomes a cave mouth.
+    plantTrees(col.sections, wx, 0, wz, SECTION, seed, surfaceAt,
+      (x, z, h) => materialAt(x, h, z, seed, h, cfg.depth, cfg.height), cfg.trees)
+    col.stage = Stage.Vegetation
   }
 
   if (col.stage < Stage.Ready && upTo >= Stage.Ready) {

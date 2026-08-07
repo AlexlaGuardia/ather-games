@@ -29,7 +29,10 @@ import { Column, SECTION } from './column'
  * to solve and left it open). What it does is make the mismatch DETECTABLE instead of silent, so a
  * loader can warn, migrate, or refuse rather than quietly producing a broken world.
  */
-export const GENERATOR_VERSION = 1
+// v2 (2026-08-07): per-item seeds now go through `mixSeed`. That fixed a real distribution bug
+// (see noise.ts) but it also MOVES EVERY CARVE, ORE VEIN AND TREE — which is exactly the case this
+// constant exists for. A v1 save's edits were diffed against a world that no longer exists.
+export const GENERATOR_VERSION = 2
 
 /**
  * One column's edits: packed local index → material.

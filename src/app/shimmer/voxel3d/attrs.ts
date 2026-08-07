@@ -8,6 +8,7 @@
 
 import { MAT } from '../voxel/depth'
 import { ORE } from '../voxel/ore'
+import { WOOD } from '../voxel/trees'
 import type { MeshResult } from '../voxel/greedy'
 import { layerOf, faceOfNormal } from './tex/tiles'
 
@@ -33,6 +34,12 @@ export const MATERIAL_COLOR: Record<number, number> = {
   [ORE.ELEMENT_WATER]: 0x53b7d8,
   [ORE.PURE_CORE]: 0xfff2c4,
   [ORE.ATHER_CRYSTAL]: 0xff6fd0,
+  // Wood — placeholders like everything else here. Each species gets a distinguishable bark/leaf
+  // pair so four species read as four species before a single tile is hand-painted.
+  [WOOD.GOLDWOOD_LOG]: 0x8a6a34, [WOOD.GOLDWOOD_LEAVES]: 0x5aa845,
+  [WOOD.SHIMMEROAK_LOG]: 0x6f5a3f, [WOOD.SHIMMEROAK_LEAVES]: 0x49913f,
+  [WOOD.STARWILLOW_LOG]: 0x7d7291, [WOOD.STARWILLOW_LEAVES]: 0x7fc0a8,
+  [WOOD.DAWNWOOD_LOG]: 0x9a5f4a, [WOOD.DAWNWOOD_LEAVES]: 0xd9a05e,
 }
 
 /** Materials that glow, so ore reads in an unlit cave instead of being a slightly different grey. */
