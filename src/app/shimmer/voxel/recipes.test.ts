@@ -120,12 +120,27 @@ console.log('reachability')
   const RINNING_PENDING = new Set(['shimmerscale', 'clickclaw', 'glowfin_scale', 'moonkoi_scale'])
   const toolGaps: string[] = []
   for (const [id, def] of Object.entries(TOOL_DEFS)) {
-    if (def.basic || def.skillId === 'rinning') continue
+    if (def.basic || def.skillId === 'rinning') continue   // farming (spades) IS swept — see below
     for (const i of def.recipe) {
       if (!obtainable.has(i.itemId) && !RINNING_PENDING.has(i.itemId)) toolGaps.push(`${id} needs ${i.itemId}`)
     }
   }
-  check('every forestry + prospecting tool is craftable from mined material', toolGaps.length === 0, toolGaps.join(' · '))
+  check('every forestry + prospecting + farming tool is craftable from mined material', toolGaps.length === 0, toolGaps.join(' · '))
+
+  // ── the spade must never become a KEY ────────────────────────────────────────────────────────
+  // Farming's tool was added 2026-08-07 with no basic tier on purpose: soil and sand stay
+  // `skill: null` so bare hands dig them, and the spade is a speed step via `fastSkill`. If someone
+  // later "tidies" soil to `skill: 'farming'`, a fresh keeper with no spade can no longer dig dirt
+  // — and there is no starter spade to save them. This asserts the capability, not the table.
+  {
+    const soil = BLOCKS.filter(b => b.fastSkill === 'farming')
+    check('soil/sand are marked as spade work', soil.length >= 3)
+    check('...and every one of them is still diggable BARE-HANDED',
+      soil.every(b => b.skill === null && b.minTier === 0),
+      'a fresh keeper has no spade — gating soil strands them at spawn')
+    check('there is no basic spade to rescue that', !Object.values(TOOL_DEFS).some(d => d.basic && d.skillId === 'farming'),
+      'if one is ever added, the assert above can be relaxed — not before')
+  }
 
   // Nail the specific three that were dead, by name, so a regression names itself.
   for (const id of ['goldwood_blade', 'shimmeroak_blade', 'starwillow_blade']) {

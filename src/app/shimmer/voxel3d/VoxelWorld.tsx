@@ -62,10 +62,31 @@ const key = (cx: number, cz: number) => `${cx},${cz}`
 
 interface Slot { itemId: string; count: number }
 
+/**
+ * ★ THE HOTBAR CARRIES THE TOOLS (Alex, 2026-08-07): *"the hotbar uses the four tools as an
+ * extension so the player can scroll over to the tool they need."*
+ *
+ * Slots 0-3 are the four gathering families in canon order, 4-7 are what you mined. The tools are
+ * FIXED slots, not items — a tool is a thing you hold, not a stack you carry, and letting them
+ * shuffle with inventory churn would move the spike out from under muscle memory mid-session.
+ *
+ * ⚠ FARMING IS THE FOURTH AND IT ONLY EXISTS AS OF TODAY. blades→forestry, spikes→prospecting,
+ * rinsticks→rinning covered three; farming had no tool at all, which is why the spade was added
+ * (engine/tools.ts). Four families, four slots — the row is not padded to look tidy.
+ */
+const TOOL_SLOTS = ['forestry', 'prospecting', 'rinning', 'farming'] as const
+type ToolSkill = typeof TOOL_SLOTS[number]
+type HotbarEntry =
+  | { kind: 'tool'; skillId: ToolSkill; toolId: string | null; name: string; tier: number }
+  | { kind: 'item'; itemId: string; count: number }
+const ITEM_SLOT_0 = TOOL_SLOTS.length      // where the mined half of the row starts
+
 export default function VoxelWorld() {
   const [stats, setStats] = useState('generating…')
   const [pos, setPos] = useState('')
-  const [hotbar, setHotbar] = useState<Slot[]>([])
+  const [hotbar, setHotbar] = useState<HotbarEntry[]>([])
+  // Stowed vs drawn. F toggles. See the DRAW LOCK note on the keydown handler.
+  const [drawn, setDrawn] = useState(false)
   const [sel, setSel] = useState(0)
   const [tier, setTier] = useState(1)
   // ★ BUILD MODE. Blocks build the shell (mine/place, already there); pieces dress it. Tab switches
@@ -136,7 +157,17 @@ export default function VoxelWorld() {
   const refreshHotbar = useCallback(() => {
     const counts = new Map<string, number>()
     for (const s of inv.current.slots) if (s) counts.set(s.itemId, (counts.get(s.itemId) ?? 0) + s.count)
-    setHotbar([...counts].map(([itemId, count]) => ({ itemId, count })).slice(0, 8))
+    const items: HotbarEntry[] = [...counts]
+      .map(([itemId, count]) => ({ kind: 'item' as const, itemId, count }))
+      .slice(0, 8 - ITEM_SLOT_0)
+    const toolRow: HotbarEntry[] = TOOL_SLOTS.map((skillId) => {
+      const held = getEquippedTool(tools.current!, skillId)
+      const def = held ? getToolDef(held) : undefined
+      // A family with nothing equipped still gets its slot, shown empty. Hiding it would renumber
+      // the row the moment a tool broke, which is the same muscle-memory problem as reordering.
+      return { kind: 'tool', skillId, toolId: held?.toolId ?? null, name: def?.name ?? '—', tier: def?.tier ?? 0 }
+    })
+    setHotbar([...toolRow, ...items])
   }, [])
 
   // ── The crafting surface ────────────────────────────────────────────────────────────────────
@@ -177,8 +208,23 @@ export default function VoxelWorld() {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const n = Number(e.key)
-      // In build mode the number row picks a PIECE; otherwise it picks a hotbar slot. One key, two
-      // meanings, disambiguated by the mode rather than by a second row of keys.
+      // ── ★ THE DRAW LOCK (Alex, 2026-08-07) ────────────────────────────────────────────────
+      // "when the player has a weapon stowed the hotbar kicks in and when they draw their weapon
+      // the hotbar and tools lock up." F is the toggle, matching play3d's holster key so the two
+      // walkers do not disagree about what F means.
+      //
+      // The lock is a MODE, not a disable: it blocks the verbs (mine, place, switch slot, build)
+      // rather than hiding the row, so you can still see what you were holding and what you will
+      // be holding again the moment you stow. A hotbar that vanished would make drawing feel like
+      // losing your inventory.
+      //
+      // ⚠ The weapon itself is NOT here yet. Guns live inside Shimmer3D (a 3-entry WEAPONS table
+      // plus the FiringRange rig) and porting them is its own step — this ships the mode and the
+      // lock, which is the half that decides how the hotbar behaves. Alex ruled guns DO cross into
+      // the Ather (2026-08-07), overturning the 07-22 aegis; that ruling still needs authoring into
+      // world/lucernyx.md — see CANON_GAPS.md.
+      if (e.code === 'KeyF') { setDrawn(d => !d); return }
+      if (drawn) return   // every verb below is locked while the weapon is out
       if (n >= 1 && n <= 8) { if (build) setPieceIdx(Math.min(PIECES.length - 1, n - 1)); else setSel(n - 1) }
       // Esc exits pointer lock anyway, so O is the settings key — it must not fight the browser.
       if (e.code === 'KeyO') setShowSettings(v => !v)
@@ -197,9 +243,15 @@ export default function VoxelWorld() {
       if (e.code === 'KeyC') setCraftOpen(o => !o)
       if (e.code === 'Escape') setCraftOpen(false)
     }
+    // Scroll to change slot — the reason tools are IN the row rather than on their own keys.
+    const onWheel = (e: WheelEvent) => {
+      if (build || drawn) return
+      setSel(v => (v + (e.deltaY > 0 ? 1 : -1) + 8) % 8)
+    }
     window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [build])
+    window.addEventListener('wheel', onWheel, { passive: true })
+    return () => { window.removeEventListener('keydown', onKey); window.removeEventListener('wheel', onWheel) }
+  }, [build, drawn])
 
   return (
     <div className="fixed inset-0 bg-[#0b0d14]">
@@ -211,7 +263,11 @@ export default function VoxelWorld() {
         <ambientLight intensity={0.4} />
         <World
           inv={inv} toolTier={toolTier} toolSkill={toolSkill}
-          selItem={hotbar[sel]?.itemId ?? null}
+          /* A tool in hand is not a block in hand — RMB must not place while you hold a spade.
+             `drawn` blanks it too: a weapon out means neither hand is free. */
+          selItem={(() => { const e = hotbar[sel]; return !drawn && e?.kind === 'item' ? e.itemId : null })()}
+          heldTool={(() => { const e = hotbar[sel]; return !drawn && e?.kind === 'tool' ? e.skillId : null })()}
+          weaponDrawn={drawn}
           onStats={setStats} onPos={p => setPos(`x ${p.x.toFixed(0)}  y ${p.y.toFixed(0)}  z ${p.z.toFixed(0)}`)}
           onLook={setLook} onInvChange={refreshHotbar}
           worker={worker} incoming={incoming} inflight={inflight} settings={settings}
@@ -222,7 +278,7 @@ export default function VoxelWorld() {
       </Canvas>
       <Hud stats={stats} pos={pos} look={look} hotbar={hotbar} sel={sel} tier={tier}
            build={build} pieceIdx={pieceIdx} rot={rot} inv={inv}
-           skill={skillHud} levelUp={levelUp} crafted={crafted} tools={tools} isOwner={isOwner} />
+           skill={skillHud} levelUp={levelUp} crafted={crafted} tools={tools} isOwner={isOwner} drawn={drawn} />
       {showSettings && <SettingsPanel s={settings} update={update} onClose={() => setShowSettings(false)} />}
       {craftOpen && (
         <CraftPanel have={have} tools={tools} tick={craftTick}
@@ -232,10 +288,10 @@ export default function VoxelWorld() {
   )
 }
 
-function Hud({ stats, pos, look, hotbar, sel, tier, build, pieceIdx, rot, inv, skill, levelUp, crafted, tools, isOwner }: {
+function Hud({ stats, pos, look, hotbar, sel, tier, build, pieceIdx, rot, inv, skill, levelUp, crafted, tools, isOwner, drawn }: {
   stats: string; pos: string
   look: { name: string; progress: number; refused: boolean } | null
-  hotbar: Slot[]; sel: number; tier: number
+  hotbar: HotbarEntry[]; sel: number; tier: number
   build: boolean; pieceIdx: number; rot: Rotation
   inv: React.RefObject<Inventory>
   skill: { id: string; level: number; xp: number; next: number } | null
@@ -243,6 +299,7 @@ function Hud({ stats, pos, look, hotbar, sel, tier, build, pieceIdx, rot, inv, s
   crafted: string | null
   tools: React.RefObject<EquippedTools>
   isOwner: boolean
+  drawn: boolean
 }) {
   return (
     <>
@@ -262,10 +319,10 @@ function Hud({ stats, pos, look, hotbar, sel, tier, build, pieceIdx, rot, inv, s
         </div>
         <div>{pos}</div>
         <div className="text-white/55">{stats}</div>
-        <div className="mt-1 text-white/45">click to look · WASD · space · shift run · F fly</div>
+        <div className="mt-1 text-white/45">click to look · WASD · space · shift run · V fly</div>
         {build
           ? <div className="text-amber-200/80">BUILD · RMB place · LMB deconstruct · R rotate · 1-6 piece · Tab exit</div>
-          : <div className="text-white/45">hold LMB mine · RMB place · 1-8 slot · C craft · Tab build</div>}
+          : <div className="text-white/45">hold LMB mine · RMB place · scroll/1-8 slot · F draw · C craft · Tab build</div>}
         {/* ★ The tools are Greg's, from engine/tools.ts, unchanged. Tier is what you HOLD now. */}
         <div className="text-white/40 mt-1">
           {(['forestry', 'prospecting'] as const).map(sk => {
@@ -341,25 +398,47 @@ function Hud({ stats, pos, look, hotbar, sel, tier, build, pieceIdx, rot, inv, s
         </div>
       )}
 
-      {/* Colour swatches stand in for item art — the registry maps materials to tiles.ts later. */}
-      {!build && <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-1.5 pointer-events-none">
+      {/* Colour swatches stand in for item art — the registry maps materials to tiles.ts later.
+          Slots 0-3 are the four tool families, 4-7 what you mined. The divider after slot 3 is the
+          only thing telling the player the row has two halves, so it is not decoration.
+          ★ DRAWN dims the whole row rather than hiding it: you keep seeing what you will be holding
+          again when you stow, so drawing reads as "hands full", not "inventory gone". */}
+      {!build && <div className={`absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-1.5 pointer-events-none transition-opacity ${drawn ? 'opacity-35' : 'opacity-100'}`}>
         {Array.from({ length: 8 }, (_, i) => {
-          const s = hotbar[i]
-          const mat = s ? materialForItem(s.itemId) : undefined
+          const e = hotbar[i]
+          const isTool = e?.kind === 'tool'
+          const mat = e?.kind === 'item' ? materialForItem(e.itemId) : undefined
           const swatch = mat !== undefined ? `#${(MATERIAL_COLOR[mat] ?? 0x888888).toString(16).padStart(6, '0')}` : undefined
+          const selected = i === sel && !drawn
           return (
             <div key={i} className={`w-12 h-12 rounded border-2 flex flex-col items-center justify-center text-[9px] font-mono
-              ${i === sel ? 'border-amber-300 bg-black/60' : 'border-white/20 bg-black/40'}`}>
-              {s ? (
+              ${i === ITEM_SLOT_0 ? 'ml-3' : ''}
+              ${selected ? 'border-amber-300 bg-black/60' : 'border-white/20 bg-black/40'}`}>
+              {isTool ? (
+                <>
+                  {/* An unequipped family shows its slot greyed rather than empty — the row must not
+                      renumber itself when a tool breaks. */}
+                  <div className={`w-5 h-5 rounded-sm border ${e.toolId ? 'border-amber-200/50 bg-amber-200/15' : 'border-white/15 bg-white/5'}`} />
+                  <div className={`mt-0.5 leading-none ${e.toolId ? 'text-white/70' : 'text-white/25'}`}>
+                    {e.skillId.slice(0, 4)}{e.tier > 0 ? ` ${e.tier}` : ''}
+                  </div>
+                </>
+              ) : e ? (
                 <>
                   <div className="w-5 h-5 rounded-sm border border-white/25" style={{ background: swatch ?? '#6b7280' }} />
-                  <div className="text-white/80 mt-0.5">{s.count}</div>
+                  <div className="text-white/80 mt-0.5">{e.count}</div>
                 </>
               ) : <span className="text-white/25">{i + 1}</span>}
             </div>
           )
         })}
       </div>}
+      {/* The one piece of state the dimmed row cannot show by itself. */}
+      {drawn && !build && (
+        <div className="absolute bottom-[4.75rem] left-1/2 -translate-x-1/2 text-[10px] font-mono tracking-[.2em] uppercase text-rose-200/70 pointer-events-none">
+          weapon drawn · F to stow
+        </div>
+      )}
       {!build && <div className="absolute bottom-[4.6rem] left-1/2 -translate-x-1/2 text-[10px] font-mono text-white/50 pointer-events-none">
         spike tier {tier}
       </div>}
@@ -370,11 +449,16 @@ function Hud({ stats, pos, look, hotbar, sel, tier, build, pieceIdx, rot, inv, s
 const SOLID_EXCEPT = new Set<number>([AIR, MAT.WATER])
 const isSolid = (m: number) => !SOLID_EXCEPT.has(m)
 
-function World({ inv, toolTier, toolSkill, selItem, onStats, onPos, onLook, onInvChange, worker, incoming, inflight, settings, build, pieceIdx, rot, tools, skills, onSkill, onLevel }: {
+function World({ inv, toolTier, toolSkill, selItem, heldTool, weaponDrawn, onStats, onPos, onLook, onInvChange, worker, incoming, inflight, settings, build, pieceIdx, rot, tools, skills, onSkill, onLevel }: {
   inv: React.RefObject<Inventory>
   toolTier: React.RefObject<number>
   toolSkill: React.RefObject<BlockSkill>
   selItem: string | null
+  /** The tool family the player has SELECTED, or null when holding a block/nothing. */
+  heldTool: 'forestry' | 'prospecting' | 'rinning' | 'farming' | null
+  /** Weapon out. Mining and placing are locked while true. Named `weaponDrawn`, not
+   *  `drawn`: this component already has a `drawn` ref holding the rendered mesh map. */
+  weaponDrawn: boolean
   onStats: (s: string) => void
   onPos: (p: THREE.Vector3) => void
   onLook: (l: { name: string; progress: number; refused: boolean } | null) => void
@@ -478,7 +562,11 @@ function World({ inv, toolTier, toolSkill, selItem, onStats, onPos, onLook, onIn
   const onGround = useRef(false)
 
   useEffect(() => {
-    const kd = (e: KeyboardEvent) => { keys.current[e.code] = true; if (e.code === 'KeyF') fly.current = !fly.current }
+    // ⚠ FLY MOVED F → V (2026-08-07). F is now draw/stow, matching play3d's holster key so the two
+    // walkers do not disagree about what F means — and draw/stow is a player verb while fly is a
+    // debug convenience, so the player verb wins the good key. Caught only because the new binding
+    // would have silently toggled BOTH: pressing F would have drawn your weapon and launched you.
+    const kd = (e: KeyboardEvent) => { keys.current[e.code] = true; if (e.code === 'KeyV') fly.current = !fly.current }
     const ku = (e: KeyboardEvent) => { keys.current[e.code] = false }
     const md = (e: MouseEvent) => { if (e.button === 0) mouse.current.left = true; if (e.button === 2) mouse.current.right = true }
     const mu = (e: MouseEvent) => { if (e.button === 0) mouse.current.left = false; if (e.button === 2) mouse.current.right = false }
@@ -838,9 +926,18 @@ function World({ inv, toolTier, toolSkill, selItem, onStats, onPos, onLook, onIn
     // matching equipped tool supplies the tier and speed — so a spike cuts rock and a blade cuts
     // wood without the player switching anything. That is the tile game's model, unchanged; it just
     // never had a world where both mattered on the same swing.
-    if (hit && mouse.current.left) {
+    if (hit && mouse.current.left && !weaponDrawn) {
       const hitDef = blockDef(hit.material)
-      const wantSkill = hitDef?.skill ?? null
+      // ★ THE HELD TOOL WINS, AND AUTO-PICK IS THE FALLBACK (changed 2026-08-07).
+      // This used to be pure auto-pick — the block chose the tool and the player never switched.
+      // Alex wants the tool in hand to be a thing you choose, so a selected tool is now used as-is:
+      // hold the spade on dirt and you dig fast, hold it on stone and stone refuses you, which is
+      // what makes choosing mean anything.
+      //
+      // But a player holding a BLOCK (or an empty slot) must not be unable to mine — that would
+      // make the row a trap rather than a choice. In that case the old behaviour stands and the
+      // block picks its own tool. So: choosing is meaningful, forgetting is survivable.
+      const wantSkill: BlockSkill = (heldTool as BlockSkill | null) ?? hitDef?.skill ?? null
       const equipped = wantSkill ? getEquippedTool(tools.current!, wantSkill as never) : undefined
       const eDef = equipped ? getToolDef(equipped) : undefined
       toolSkill.current = wantSkill
@@ -873,7 +970,7 @@ function World({ inv, toolTier, toolSkill, selItem, onStats, onPos, onLook, onIn
     }
 
     // ── place ────────────────────────────────────────────────────────────────────────────────
-    if (hit && mouse.current.right && selItem) {
+    if (hit && mouse.current.right && selItem && !weaponDrawn) {
       const mat = materialForItem(selItem)
       // Refuse to place inside your own body — the classic way to entomb yourself.
       const inPlayer = Math.floor(p.x) === hit.px && Math.floor(p.z) === hit.pz

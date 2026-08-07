@@ -77,6 +77,36 @@ export const TOOL_DEFS: Record<string, ToolDef> = {
     durability: 200, xpBonus: 1.35, speedBonus: 0.8,
     recipe: [{ itemId: 'moonkoi', count: 6 }, { itemId: 'pearlshell', count: 4 }, { itemId: 'crystal_rinn', count: 2 }],
   },
+
+  // ── Farming — Spades (added 2026-08-07, Alex: the hotbar carries the four tools) ─────────────
+  // ★ FARMING WAS THE ONE CANON SKILL WITH NO TOOL. blades→forestry, spikes→prospecting,
+  // rinsticks→rinning covered three of the four; farming had nothing to hold. So this is not a
+  // fifth invented family, it is the missing fourth — which is also why it needed no canon ruling:
+  // `farming` is already a ruled skill and `spade` is generic English exactly like `plank`.
+  //
+  // ⚠ NO `basic_spade`. Greg's starter set (ensureBasicTools) hands out worn_blade / worn_spike /
+  // worn_rinstick, and adding a fourth would silently change what canon says is in the starter bag
+  // (`shimmer-quests-mainmap.md` — Magii's). It is not needed either: soil and sand are
+  // `skill: null`, so bare hands already dig them and the spade is a SPEED tier on top
+  // (registry.ts `fastSkill`). The tool is an upgrade, never a key.
+  //
+  // Costs sit below the blades of the same tier — dirt is soft, and this is the tool a new keeper
+  // should reach first.
+  goldwood_spade: {
+    id: 'goldwood_spade', name: 'Goldwood Spade', skillId: 'farming', tier: 1,
+    durability: 50, xpBonus: 1.1, speedBonus: 0.9,
+    recipe: [{ itemId: 'goldwood_plank', count: 4 }, { itemId: 'goldwood_bark', count: 2 }],
+  },
+  shimmeroak_spade: {
+    id: 'shimmeroak_spade', name: 'Shimmeroak Spade', skillId: 'farming', tier: 2,
+    durability: 100, xpBonus: 1.2, speedBonus: 0.85,
+    recipe: [{ itemId: 'shimmeroak_plank', count: 6 }, { itemId: 'amber_sap', count: 3 }],
+  },
+  starwillow_spade: {
+    id: 'starwillow_spade', name: 'Starwillow Spade', skillId: 'farming', tier: 3,
+    durability: 200, xpBonus: 1.35, speedBonus: 0.8,
+    recipe: [{ itemId: 'starwillow_branch', count: 8 }, { itemId: 'starwillow_sap', count: 4 }],
+  },
 }
 
 // ============================================

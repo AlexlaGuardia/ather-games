@@ -38,6 +38,23 @@ export interface BlockDef {
   skill: BlockSkill
   /** Minimum tool tier that can break it at all. 0 = hands work. */
   minTier: 0 | 1 | 2 | 3
+  /**
+   * ★ THE SHOVEL PROBLEM, AND WHY THIS IS NOT JUST `skill` (2026-08-07).
+   *
+   * `skill` is a GATE: `breakSeconds` refuses outright when the held tool's family does not match,
+   * which is what makes "a spike will not cut a tree" true. Soil and sand have always been
+   * `skill: null` so that bare hands work — and they must keep working, or a fresh keeper spawns
+   * unable to dig dirt.
+   *
+   * So a shovel cannot be expressed by moving soil to `skill: 'farming'`; that would refuse hands
+   * AND refuse every other tool. `fastSkill` is the other half: on an ungated block it names the
+   * tool family that does the job *properly*. Hands still work, the right tool is faster and pays
+   * XP. That is Minecraft's model exactly, and it is the only shape that adds a tool without
+   * taking away a starting capability.
+   *
+   * Only meaningful when `skill === null`. On a gated block the gate already names the family.
+   */
+  fastSkill?: BlockSkill
   /** What lands in the inventory. Empty = breaks into nothing. */
   drops: { itemId: string; count: number }[]
   /** Can a player place this back down? */
@@ -53,9 +70,9 @@ export const BLOCKS: BlockDef[] = [
   { material: MAT.BEDROCK, name: 'Bedrock', hardness: Infinity, skill: null, minTier: 0, drops: [], placeable: false },
   { material: MAT.DEEP_STONE, name: 'Deep Stone', hardness: 2.4, skill: 'prospecting', minTier: 1, drops: [{ itemId: 'block_deep_stone', count: 1 }], placeable: true },
   { material: MAT.STONE, name: 'Stone', hardness: 1.6, skill: 'prospecting', minTier: 1, drops: [{ itemId: 'block_stone', count: 1 }], placeable: true },
-  { material: MAT.SUBSOIL, name: 'Subsoil', hardness: 0.5, skill: null, minTier: 0, drops: [{ itemId: 'block_subsoil', count: 1 }], placeable: true },
-  { material: MAT.TOPSOIL, name: 'Topsoil', hardness: 0.55, skill: null, minTier: 0, drops: [{ itemId: 'block_topsoil', count: 1 }], placeable: true },
-  { material: MAT.SAND, name: 'Sand', hardness: 0.45, skill: null, minTier: 0, drops: [{ itemId: 'block_sand', count: 1 }], placeable: true },
+  { material: MAT.SUBSOIL, name: 'Subsoil', hardness: 0.5, skill: null, minTier: 0, drops: [{ itemId: 'block_subsoil', count: 1 }], fastSkill: 'farming', placeable: true },
+  { material: MAT.TOPSOIL, name: 'Topsoil', hardness: 0.55, skill: null, minTier: 0, drops: [{ itemId: 'block_topsoil', count: 1 }], fastSkill: 'farming', placeable: true },
+  { material: MAT.SAND, name: 'Sand', hardness: 0.45, skill: null, minTier: 0, drops: [{ itemId: 'block_sand', count: 1 }], fastSkill: 'farming', placeable: true },
   { material: MAT.WATER, name: 'Water', hardness: Infinity, skill: null, minTier: 0, drops: [], placeable: false },
 
   // ── the Prospecting ladder — hardness AND tier both climb, so depth gates twice over ────────
@@ -119,7 +136,14 @@ export const isBreakable = (material: number): boolean =>
 export function breakSeconds(material: number, toolTier: number, toolSkill: BlockSkill, toolSpeed = 1): number {
   const def = blockDef(material)
   if (!def || def.hardness === Infinity) return Infinity
-  if (def.skill === null) return def.hardness * (toolSkill === null ? 1 : 0.85)
+  // Ungated block (soil, sand): hands always work. Holding the RIGHT family (fastSkill — a shovel
+  // on dirt) is a real speed step and carries the tool's own speedBonus; any other tool is the old
+  // flat 0.85 for "at least you're holding something". Never Infinity here — an ungated block that
+  // could refuse you would strand a fresh keeper who has no tools at all.
+  if (def.skill === null) {
+    if (def.fastSkill && toolSkill === def.fastSkill) return def.hardness * 0.55 * toolSpeed
+    return def.hardness * (toolSkill === null ? 1 : 0.85)
+  }
   if (toolSkill !== def.skill) return Infinity   // wrong tool family entirely
   if (toolTier < def.minTier) return Infinity    // too weak — refused, not slowed
   // Each tier above the minimum is a real speed step, so upgrading a spike is felt immediately.
