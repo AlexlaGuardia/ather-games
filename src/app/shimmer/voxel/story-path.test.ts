@@ -3,6 +3,8 @@
 
 import { STORY_NODES, distToPath, roadAt, WAYSTONE_CELLS, plantWaystones } from './story-path'
 import { Section } from './section'
+import { columnHeight, waterSurfaceAt, riverCarve } from './height'
+import { materialAt, MAT } from './depth'
 
 let pass = 0
 const fails: string[] = []
@@ -56,6 +58,32 @@ check('waystones were placed', WAYSTONE_CELLS.size > 40)
   check('post cap is a lantern', at(H + 3) === 9)
   const drowned = plantWaystones(sections, ox, oz, size, () => 10, 12, 3, 9)
   check('no drowned posts', drowned === 0)
+}
+
+// ── bridges: wherever the road runs over water, a deck lies flush with the banks ──────────────
+{
+  let deckCells = 0, checkedEnds = 0
+  outer: for (let i = 0; i < STORY_NODES.length - 1; i++) {
+    const a = STORY_NODES[i], b = STORY_NODES[i + 1]
+    const len = Math.hypot(b.x - a.x, b.z - a.z)
+    const ux = (b.x - a.x) / len, uz = (b.z - a.z) / len
+    for (let t = 0; t < len; t++) {
+      const x = Math.round(a.x + ux * t), z = Math.round(a.z + uz * t)
+      if (!roadAt(x, z, SEED) || riverCarve(x, z, SEED) < 1) continue
+      const h = columnHeight(x, z, SEED)
+      const table = Math.floor(waterSurfaceAt(x, z, SEED))
+      if (h > table) continue
+      const deck = materialAt(x, table + 1, z, SEED, h)
+      if (deck === MAT.PLANKS) deckCells++
+      if (deckCells === 1 && checkedEnds === 0) {
+        checkedEnds = 1
+        check('deck sits in otherwise-open air', materialAt(x, table + 3, z, SEED, h) === MAT.AIR)
+        check('water still lies under the deck', materialAt(x, table, z, SEED, h) === MAT.WATER || materialAt(x, table, z, SEED, h) === MAT.STONE)
+      }
+      if (deckCells > 30) break outer
+    }
+  }
+  check('the road bridges its crossings (found deck cells)', deckCells > 10)
 }
 
 console.log(`\nstory path: ${pass} passed, ${fails.length} failed`)

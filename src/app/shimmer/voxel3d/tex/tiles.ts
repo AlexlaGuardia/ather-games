@@ -42,6 +42,8 @@ export const TILE_MATERIALS: number[] = [
   MAT.CRAFT_TABLE,
   // The story road added 2026-08-08 with the quest-spine worldgen.
   MAT.PATH,
+  // Plank block added 2026-08-08 with the road's bridges.
+  MAT.PLANKS,
 ]
 
 /** One spare layer past the end: an unmapped material samples magenta rather than layer 0's stone. */
@@ -492,6 +494,16 @@ function paintFor(material: number, face: number, size: number): Layer {
         }
       } else paintGrit(dst, size, rgbOf(MATERIAL_COLOR[MAT.SUBSOIL]), 18, 22, seed)
       break
+    case MAT.PLANKS: {
+      // Plain milled strips — the craft table's surface without the etched work-square.
+      const milled = rgbOf(MATERIAL_COLOR[MAT.PLANKS])
+      const strip = Math.max(2, Math.round(size / 4))
+      for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {
+        const seam = (face === SIDE ? x : y) % strip === 0
+        put(dst, size, x, y, seam ? shade(milled, -48) : shade(milled, (h2(x, y, seed) - 0.5) * 22), 0)
+      }
+      break
+    }
     default:
       if (LOG_SET.has(material)) {
         const c = rgbOf(MATERIAL_COLOR[material])

@@ -57,6 +57,12 @@ export const MAT = {
    * never placed; digging it yields plain dirt, because a road is wear, not a thing you pocket.
    */
   PATH: 11,
+  /**
+   * Milled goldwood as a BLOCK. Generated in the road's bridges, and placeable by players — the
+   * `goldwood_plank` item finally has a block form, so a crafter's planks can floor a house as
+   * well as pay for pieces. One item per block, both directions.
+   */
+  PLANKS: 12,
 } as const
 
 export interface DepthConfig {
@@ -128,6 +134,26 @@ export function materialAt(
   //    the table and the fill is flat and contained by construction). Guarded: only the voxels
   //    just above a surface run the cheap band read; sky stays on the fast path.
   if (y > h) {
+    // ── the story road BRIDGES water (2026-08-08, Alex: "the fords are fine… lets do the
+    // bridges anyway") ── Wherever the road corridor runs over a submerged bed, a plank deck
+    // lies at table+1 — which is EXACTLY where the approach band parks the banks, so deck and
+    // bank meet flush by construction, no ramp logic. Stone piers drop to the bed on a sparse
+    // lattice; plank rails stand on the deck's sides only (an end cell's along-road neighbour
+    // is road, so the edge test can never wall the roadway). Gated behind the same cheap band
+    // read as the water fill — sky never pays for bridges.
+    if (y - h <= RIVER_DEPTH + 4 && roadAt(x, z, seed)) {
+      const carve = riverCarve(x, z, seed, hcfg)
+      if (carve >= 1) {
+        const table = Math.floor(waterSurfaceAt(x, z, seed, hcfg))
+        if (h <= table) {
+          if (y === table + 1) return MAT.PLANKS
+          if (y <= table && ((x % 4) + 4) % 4 === 0 && ((z % 4) + 4) % 4 === 0) return MAT.STONE
+          if (y === table + 2 &&
+              (!roadAt(x + 1, z, seed) || !roadAt(x - 1, z, seed) ||
+               !roadAt(x, z + 1, seed) || !roadAt(x, z - 1, seed))) return MAT.PLANKS
+        }
+      }
+    }
     if (y <= cfg.seaLevel) return MAT.WATER
     if (y - h <= RIVER_DEPTH + 1) {
       const carve = riverCarve(x, z, seed, hcfg)

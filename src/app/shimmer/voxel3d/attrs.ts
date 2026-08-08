@@ -50,6 +50,8 @@ export const MATERIAL_COLOR: Record<number, number> = {
   [MAT.CRAFT_TABLE]: 0xb08a4e,
   // Packed earth, drier than subsoil, tanner than sand — the story road.
   [MAT.PATH]: 0xa8916b,
+  // Milled goldwood strips — the bridge deck and the builder's floor.
+  [MAT.PLANKS]: 0xa8834d,
 }
 
 /** Materials that glow, so ore reads in an unlit cave instead of being a slightly different grey. */

@@ -100,6 +100,10 @@ export const BLOCKS: BlockDef[] = [
   // road is a CONDITION of the ground, not a block you carry home and lay somewhere else.
   { material: MAT.PATH, name: 'Worn Path', hardness: 0.5, skill: null, minTier: 0, drops: [{ itemId: 'block_subsoil', count: 1 }], fastSkill: 'farming', placeable: false },
 
+  // Planks as a block: bridges generate from it, players place it — the plank ITEM is the block
+  // in hand, one per block both ways, so a bridge mined is a bridge's worth of planks pocketed.
+  { material: MAT.PLANKS, name: 'Goldwood Planks', hardness: 0.7, skill: null, minTier: 0, drops: [{ itemId: 'goldwood_plank', count: 1 }], placeable: true },
+
   // ── the Prospecting ladder — hardness AND tier both climb, so depth gates twice over ────────
   { material: ORE.RAW_MANA, name: 'Raw Mana Seam', hardness: 2.2, skill: 'prospecting', minTier: 1, drops: [{ itemId: 'raw_mana_shard', count: 1 }], placeable: false },
   { material: ORE.ELEMENT_VIOLET, name: 'Violet Crystal Seam', hardness: 3.0, skill: 'prospecting', minTier: 1, drops: [{ itemId: 'violet_crystal', count: 1 }], placeable: false },
