@@ -2,7 +2,7 @@
 // (never through stone), the courtyard wears bare, and the gates are lit.
 // Run: npx tsx src/app/shimmer/voxel/holds.test.ts
 
-import { HOLDS, holdIndexAt, holdCourtyardAt, holdVoxelAt } from './holds'
+import { HOLDS, holdIndexAt, holdCourtyardAt, holdVoxelAt, holdGenPieces, holdGenPiecesForCol } from './holds'
 import { columnHeight, holdPadLevel } from './height'
 import { materialAt, MAT } from './depth'
 import { STORY_NODES, roadAt } from './story-path'
@@ -61,6 +61,39 @@ for (const [i, s] of HOLDS.entries()) {
 }
 
 check('holdIndexAt rejects open country', holdIndexAt(0, 0) === -1 && holdIndexAt(-150, -640) === -1)
+
+// ── the generated dressing: parapets on the walls, a roof on the keep, tombstonable ids ────────
+for (const [i, s] of HOLDS.entries()) {
+  const pad = holdPadLevel(i, SEED)
+  const dressing = holdGenPieces(i, pad)
+  const parapets = dressing.filter(g => g.pieceId === 'fence')
+  const roof = dressing.filter(g => g.pieceId.startsWith('roof_'))
+  check(`${s.id}: parapets exist`, parapets.length > 10)
+  check(`${s.id}: every parapet stands ON the wall top`, parapets.every(g =>
+    g.y === pad + 5 && (Math.abs(g.x - s.x) === s.half || Math.abs(g.z - s.z) === s.half)))
+  check(`${s.id}: no parapet in a gate span`, parapets.every(g => {
+    for (const gt of s.gates) {
+      const along = gt.wall <= 1 ? g.z - s.z : g.x - s.x
+      const onThatWall = gt.wall === 0 ? g.x - s.x === s.half : gt.wall === 1 ? g.x - s.x === -s.half
+        : gt.wall === 2 ? g.z - s.z === s.half : g.z - s.z === -s.half
+      if (onThatWall && Math.abs(along - gt.at) <= 2) return false
+    }
+    return true
+  }))
+  const keepArea = (2 * s.keepHalf + 1) ** 2 - 4    // minus the four lantern corners
+  check(`${s.id}: the keep roof covers the keep`, roof.length === keepArea)
+  check(`${s.id}: gen ids are unique`, new Set(dressing.map(g => g.gen)).size === dressing.length)
+  check(`${s.id}: determinism`, JSON.stringify(holdGenPieces(i, pad)) === JSON.stringify(dressing))
+
+  // Column partition: collecting per-column over the bbox reproduces the whole set exactly.
+  const got = new Set<string>()
+  const c0x = Math.floor((s.x - s.half - 2) / 16), c1x = Math.floor((s.x + s.half + 2) / 16)
+  const c0z = Math.floor((s.z - s.half - 2) / 16), c1z = Math.floor((s.z + s.half + 2) / 16)
+  for (let cz = c0z; cz <= c1z; cz++) for (let cx = c0x; cx <= c1x; cx++)
+    for (const g of holdGenPiecesForCol(cx, cz, 16, j => holdPadLevel(j, SEED))) got.add(g.gen)
+  check(`${s.id}: per-column partition covers the dressing exactly`,
+    got.size === dressing.length && dressing.every(g => got.has(g.gen)))
+}
 
 console.log(`\nholds: ${pass} passed, ${fails.length} failed`)
 if (fails.length) { for (const f of fails) console.log(`  ✗ ${f}`); process.exit(1) }

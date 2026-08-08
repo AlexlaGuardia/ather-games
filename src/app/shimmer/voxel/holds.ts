@@ -69,6 +69,81 @@ export const HOLDS: HoldSpec[] = [2, 3, 4].map((n, i) => {
   }
 })
 
+// ── ★ GENERATED PIECE DRESSING (2026-08-08, the pieces pass) ─────────────────────────────────
+// The holds dress themselves in the PLAYER'S building vocabulary: fence pieces as parapets along
+// the wall tops, roof slopes and caps over the keep. One vocabulary everywhere — a hold reads as
+// something a builder could have made, because it literally is made of the same catalogue.
+// These are recomputed from the map on every load (never saved); what persists is their ABSENCE
+// (the host's tombstone list, ColumnSave.genRemoved). Ids are deterministic for exactly that.
+
+export interface GenPiece {
+  /** Deterministic identity — the tombstone key. */
+  gen: string
+  pieceId: string
+  x: number; y: number; z: number
+  rot: 0 | 1 | 2 | 3
+}
+
+const WALL_TOP = WALL_H       // parapet feet sit ON the wall (y = pad + WALL_H + 1)
+
+/** Every dressing piece of one hold, given its pad level. Deterministic, whole-hold. */
+export function holdGenPieces(i: number, pad: number): GenPiece[] {
+  const s = HOLDS[i]
+  const out: GenPiece[] = []
+  const gateSpan = (wall: number, along: number): boolean =>
+    s.gates.some(g => g.wall === wall && Math.abs(along - g.at) <= GATE_HALF + 1)
+
+  // Parapet: alternating fence posts along the wall top, skipping corners (stone posts rise
+  // there) and gate spans (the lantern hangs there).
+  for (let t = -s.half + 1; t <= s.half - 1; t++) {
+    if ((t & 1) !== 0) continue
+    const spots: [number, number, number][] = [
+      [s.x + s.half, s.z + t, 0], [s.x - s.half, s.z + t, 1],
+      [s.x + t, s.z + s.half, 2], [s.x + t, s.z - s.half, 3],
+    ]
+    for (const [wx, wz, wall] of spots) {
+      if (gateSpan(wall, t)) continue
+      out.push({ gen: `${s.id}:p:${wx},${wz}`, pieceId: 'fence', x: wx, y: pad + WALL_TOP + 1, z: wz,
+                 rot: wall <= 1 ? 1 : 0 })   // rails run ALONG the wall, not across it
+    }
+  }
+
+  // Keep roof: slopes on the perimeter facing outward, caps inside; the four corners stay clear
+  // (the blockout's voxel lanterns stand there — the dressing defers to the light).
+  const ky = pad + KEEP_H + 1
+  for (let kz = -s.keepHalf; kz <= s.keepHalf; kz++) {
+    for (let kx = -s.keepHalf; kx <= s.keepHalf; kx++) {
+      if (Math.abs(kx) === s.keepHalf && Math.abs(kz) === s.keepHalf) continue
+      const wx = s.x + s.keepOx + kx, wz = s.z + s.keepOz + kz
+      const edge = Math.abs(kx) === s.keepHalf || Math.abs(kz) === s.keepHalf
+      const rot: 0 | 1 | 2 | 3 = !edge ? 0
+        : Math.abs(kx) === s.keepHalf ? (kx > 0 ? 3 : 1)
+        : (kz > 0 ? 0 : 2)
+      out.push({ gen: `${s.id}:r:${wx},${wz}`, pieceId: edge ? 'roof_slope' : 'roof_cap', x: wx, y: ky, z: wz, rot })
+    }
+  }
+  return out
+}
+
+/**
+ * The dressing pieces whose ORIGIN column is (cx, cz) — what the host applies when that column
+ * is adopted. `padOf` is injected (height.ts owns pad levels; this file stays height-free).
+ */
+export function holdGenPiecesForCol(
+  cx: number, cz: number, size: number, padOf: (i: number) => number,
+): GenPiece[] {
+  const x0 = cx * size, z0 = cz * size
+  const out: GenPiece[] = []
+  for (let i = 0; i < HOLDS.length; i++) {
+    const s = HOLDS[i]
+    if (x0 + size <= s.x - s.half - 1 || x0 > s.x + s.half + 1 ||
+        z0 + size <= s.z - s.half - 1 || z0 > s.z + s.half + 1) continue
+    for (const g of holdGenPieces(i, padOf(i)))
+      if (g.x >= x0 && g.x < x0 + size && g.z >= z0 && g.z < z0 + size) out.push(g)
+  }
+  return out
+}
+
 /** Which hold's build zone contains this column — -1 if none. Cheap bbox, callers gate on it. */
 export function holdIndexAt(x: number, z: number): number {
   for (let i = 0; i < HOLDS.length; i++) {

@@ -73,6 +73,13 @@ export const PIECES: PieceDef[] = [
 
   { id: 'beam', name: 'Beam', w: 1, h: 1, d: 1,
     cost: [{ itemId: 'goldwood_plank', count: 2 }] },
+
+  // Seventh, added 2026-08-08 with the pieces pass (v1's "six, deliberately" earned its keep —
+  // the loop is proven, the catalogue may grow). A fence occupies its full cell ON PURPOSE: its
+  // job is to stop things; the thin look is the model's business. Cheap because a yard takes
+  // dozens. Also the holds' parapet — the first GENERATED piece.
+  { id: 'fence', name: 'Fence', w: 1, h: 1, d: 1,
+    cost: [{ itemId: 'goldwood_plank', count: 1 }] },
 ]
 
 const BY_ID = new Map(PIECES.map(p => [p.id, p]))

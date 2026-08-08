@@ -24,7 +24,8 @@ import * as THREE from 'three'
 import { SECTION, DEFAULT_COLUMN, Column, Stage, makeColumn, meshColumn, refreshUniform } from '../voxel/column'
 import { VOXEL_WORKER_URL } from '../../../workers/worker-url'
 import { createMeshScratch } from '../voxel/greedy'
-import { columnHeight } from '../voxel/height'
+import { columnHeight, holdPadLevel } from '../voxel/height'
+import { holdGenPiecesForCol, type GenPiece } from '../voxel/holds'
 import { biomeAt } from '../voxel/biome'
 import { ZONE_ANCHORS } from '../voxel/zones'
 import { AIR } from '../voxel/section'
@@ -758,7 +759,7 @@ function Hud({ stats, pos, look, hotbar, sel, tier, build, pieceIdx, rot, inv, s
         {/* Shift is slide now, not sprint — run is automatic (play3d locomotion, port step 5). */}
         <div className="mt-1 text-white/45">click to look · WASD · space jump · shift slide · hold space climb · V fly</div>
         {build
-          ? <div className="text-amber-200/80">BUILD · RMB place · LMB deconstruct · R rotate · 1-6 piece · Tab exit</div>
+          ? <div className="text-amber-200/80">BUILD · RMB place · LMB deconstruct · R rotate · 1-7 piece · Tab exit</div>
           : <div className="text-white/45">hold LMB mine · RMB place · scroll/1-8 slot · F draw · C craft · Tab build · T chat, / commands</div>}
         {/* ★ The tools are Greg's, from engine/tools.ts, unchanged. Tier is what you HOLD now. */}
         <div className="text-white/40 mt-1">
@@ -1166,7 +1167,9 @@ function World({ inv, toolTier, toolSkill, selItem, weaponDrawn, weaponIdx, onAm
   const gateOpened = useRef(false)
   // Placements are grouped by the column that OWNS them (the one containing the piece origin) —
   // the same ownership rule trees and carvers use, so a piece straddling a border saves once.
-  const placements = useRef<Placement[]>([])
+  const placements = useRef<(Placement & { gen?: string })[]>([])
+  /** Tombstones per column: gen-ids of generated pieces the player deconstructed. Saved. */
+  const genRemovedByCol = useRef(new Map<string, string[]>())
   const piecesByCol = useRef(new Map<string, Placement[]>())
   const colOf = useCallback((x: number, z: number) => key(Math.floor(x / SECTION), Math.floor(z / SECTION)), [])
   const dropGroup = useRef<THREE.Group>(null)
@@ -1256,7 +1259,7 @@ function World({ inv, toolTier, toolSkill, selItem, weaponDrawn, weaponIdx, onAm
     for (const k of dirtySaves.current) {
       const [gx, gz] = k.split(',').map(Number)
       const e = edits.current.get(k) ?? new Map()
-      void saveColumn(SEED, gx, gz, { edits: packEdits(e), pieces: piecesByCol.current.get(k) ?? [] })
+      void saveColumn(SEED, gx, gz, { edits: packEdits(e), pieces: piecesByCol.current.get(k) ?? [], genRemoved: genRemovedByCol.current.get(k) })
     }
     dirtySaves.current.clear()
   }, [])
@@ -1407,6 +1410,40 @@ function World({ inv, toolTier, toolSkill, selItem, weaponDrawn, weaponIdx, onAm
       if (performance.now() > end) break
     }
   }, [remesh])
+
+  /**
+   * ── ★ GENERATED PIECES (the pieces pass, 2026-08-08) ─────────────────────────────────────────
+   * Apply a column's hold dressing on adopt: recompute from the map, drop what the player's
+   * tombstones killed, write the occupancy DIRECTLY into sections — never through `setVoxel`,
+   * because regenerable content must not enter the save (the exact mirror of why player pieces
+   * DO go through it). Re-adoption after an evict replaces this column's old gen entries, so a
+   * walk-away-and-back can't double the parapets.
+   */
+  const applyGenPieces = useCallback((gx: number, gz: number, removed: string[]) => {
+    const gen = holdGenPiecesForCol(gx, gz, SECTION, i => holdPadLevel(i, SEED))
+    if (!gen.length) return
+    const k = key(gx, gz)
+    const skip = new Set(removed)
+    const live: (GenPiece & Placement)[] = gen.filter(g => !skip.has(g.gen))
+    const c = cols.current.get(k)
+    if (c) {
+      for (const g of live) {
+        const def = pieceDef(g.pieceId)!
+        for (const cell of cellsOf(g, def)) {
+          if (!cell.solid) continue
+          const lx = cell.x - gx * SECTION, lz = cell.z - gz * SECTION
+          if (lx < 0 || lx >= SECTION || lz < 0 || lz >= SECTION) continue
+          const sy = (cell.y / SECTION) | 0
+          const s = c.sections[sy]
+          if (s) s.set(lx, cell.y - sy * SECTION, lz, STRUCTURE)
+        }
+      }
+      refreshUniform(c)
+      queueRemesh(gx, gz)
+    }
+    placements.current = [...placements.current.filter(p => !p.gen || colOf(p.x, p.z) !== k), ...live]
+    pieces.sync(placements.current)
+  }, [queueRemesh, colOf, pieces])
 
   /**
    * Write one voxel and repair the geometry.
@@ -1774,7 +1811,7 @@ function World({ inv, toolTier, toolSkill, selItem, weaponDrawn, weaponIdx, onAm
       queueRemesh(gx, gz)
       if (!edits.current.has(ek)) {
         loadColumn(SEED, gx, gz).then(saved => {
-          if (!saved) { edits.current.set(ek, new Map()); return }
+          if (!saved) { edits.current.set(ek, new Map()); applyGenPieces(gx, gz, []); return }
           if (isStale(saved.edits) && !staleWarned.current) {
             staleWarned.current = true
             onStats('⚠ saved edits are from a different generator version — they may not line up')
@@ -1791,6 +1828,8 @@ function World({ inv, toolTier, toolSkill, selItem, weaponDrawn, weaponIdx, onAm
             placements.current = [...placements.current, ...saved.pieces]
             pieces.sync(placements.current)
           }
+          if (saved.genRemoved?.length) genRemovedByCol.current.set(ek, [...saved.genRemoved])
+          applyGenPieces(gx, gz, saved.genRemoved ?? [])
         })
       }
       for (const [ddx, ddz] of [[-1, 0], [1, 0], [0, -1], [0, 1]] as const)
@@ -1975,7 +2014,14 @@ function World({ inv, toolTier, toolSkill, selItem, weaponDrawn, weaponIdx, onAm
           for (const c of fdef.cost) addItems(inv.current!, c.itemId, c.count)
           placements.current = placements.current.filter(p => p !== found)
           const fk = colOf(found.x, found.z)
-          piecesByCol.current.set(fk, (piecesByCol.current.get(fk) ?? []).filter(p => p !== found))
+          const genId = (found as Placement & { gen?: string }).gen
+          if (genId) {
+            // A generated piece: what persists is its ABSENCE. The occupancy edit self-erases
+            // (setVoxel's diff against generated AIR is a no-op), so the tombstone is the record.
+            genRemovedByCol.current.set(fk, [...(genRemovedByCol.current.get(fk) ?? []), genId])
+          } else {
+            piecesByCol.current.set(fk, (piecesByCol.current.get(fk) ?? []).filter(p => p !== found))
+          }
           dirtySaves.current.add(fk)
           pieces.sync(placements.current)
           onInvChange()

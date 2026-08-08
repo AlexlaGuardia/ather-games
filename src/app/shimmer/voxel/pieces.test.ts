@@ -20,9 +20,12 @@ const ok = (c: boolean, m: string) => { if (c) pass++; else fails.push(m) }
 const air = () => AIR
 const solid = () => MAT.STONE
 
-// ── 1. the catalogue is six, and floors/walls are NOT in it ──────────────────────────────────
+// ── 1. the catalogue is counted, and floors/walls are NOT in it ──────────────────────────────
 {
-  ok(PIECES.length === 6, `the v1 catalogue is six pieces (${PIECES.length})`)
+  // Was pinned at six until the loop proved out. Seven since 2026-08-08 (fence — Alex's pieces
+  // pass; also the first GENERATED piece, the holds' parapet). The count stays asserted so
+  // catalogue growth is always a DECISION that edits this line, never a drift.
+  ok(PIECES.length === 7, `the catalogue is seven pieces, deliberately (${PIECES.length})`)
   const ids = PIECES.map(p => p.id)
   ok(!ids.includes('wall') && !ids.includes('floor'),
      '★ walls and floors are BLOCKS, not pieces — that split is the whole design')

@@ -22,6 +22,13 @@ import type { Placement } from '../voxel/pieces'
 export interface ColumnSave {
   edits: PackedEdits
   pieces: Placement[]
+  /**
+   * ★ TOMBSTONES for GENERATED pieces (2026-08-08, the pieces pass). A generated piece (hold
+   * parapet, keep roof) is recomputed from seed on every load — deleting it from a list that gets
+   * rebuilt would resurrect it. What persists is its ABSENCE: the deterministic gen-id of every
+   * generated piece the player deconstructed here. Optional so every pre-pass save loads as-is.
+   */
+  genRemoved?: string[]
 }
 
 const DB = 'shimmer-voxel'
@@ -80,7 +87,7 @@ export async function saveColumn(seed: number, cx: number, cz: number, save: Col
       const store = tx.objectStore(STORE)
       // Empty means EMPTY on both halves — a column whose blocks were restored AND whose pieces
       // were all deconstructed stops costing storage, same rule as `recordEdit` one level down.
-      if (save.edits.idx.length === 0 && save.pieces.length === 0) store.delete(key(seed, cx, cz))
+      if (save.edits.idx.length === 0 && save.pieces.length === 0 && !save.genRemoved?.length) store.delete(key(seed, cx, cz))
       else store.put(save, key(seed, cx, cz))
       tx.oncomplete = () => res()
       tx.onerror = () => res()

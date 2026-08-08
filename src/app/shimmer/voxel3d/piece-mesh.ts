@@ -26,6 +26,7 @@ const TINT: Record<string, number> = {
   roof_cap: 0x6b3f31,
   stair: 0x8d8a94,
   beam: 0x6f5a3f,
+  fence: 0x8a6a34,
 }
 
 /**
@@ -72,6 +73,14 @@ function buildGeometry(def: PieceDef): THREE.BufferGeometry {
       box(1, 0.34, 1, 0, 0.17, 0)
       box(1, 0.33, 0.66, 0, 0.5, -0.17)
       box(1, 0.33, 0.33, 0, 0.83, -0.33)
+      break
+    }
+    case 'fence': {
+      // Two posts, two rails — thin enough to see through, cell-solid to walk into.
+      box(0.14, 1, 0.14, -0.36, 0.5, 0)
+      box(0.14, 1, 0.14, 0.36, 0.5, 0)
+      box(1, 0.12, 0.1, 0, 0.8, 0)
+      box(1, 0.12, 0.1, 0, 0.42, 0)
       break
     }
     default: {   // beam
