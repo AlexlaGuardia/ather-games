@@ -294,10 +294,28 @@ function rawTerrain(x: number, z: number, seed: number, cfg: HeightConfig = DEFA
   return wild + (zoneH - wild) * zn.t
 }
 
+/**
+ * ── ★ THE APPROACH IS ITS OWN, WIDER BAND (2026-08-08 — "a wall with a river behind it") ──────
+ * Model 3 anchored the in-band terrain to the water table, which contained the water — but the
+ * blend ran over riverness's own sliver of field space (|w| 0.027..0.035). Field-space width is
+ * WORLD-space width divided by the field's gradient, and where the field runs steep that whole
+ * approach is three or four blocks wide: raw terrain slams to the waterline as a cliff, and where
+ * the table sits above low country it is literally an earthen wall with water behind it. Alex's
+ * road walked him straight into one (this was the parked "river-approach smoothing" item).
+ * The fix is a band for the approach alone: RIVER_APPROACH widens the blend ~7× in field space
+ * WITHOUT touching riverness — channel shape, water fill, sand shoulders and riverCarve are all
+ * riverness consumers and stay byte-identical. Only the height's walk down to the water changed.
+ */
+export const RIVER_APPROACH = 0.10
+/** |w| where the channel begins (riverness = SHORE_RN) — the inner edge of the approach blend. */
+const SHORE_W = RIVER_EDGE - 0.35 * (RIVER_EDGE - RIVER_FULL)
+
 export function columnHeight(x: number, z: number, seed: number, cfg: HeightConfig = DEFAULT_HEIGHT): number {
-  const rn = riverness(riverField(x, z, seed, cfg))
+  const w = riverField(x, z, seed, cfg)
+  const aw = Math.abs(w)
+  const rn = riverness(w)
   let h: number
-  if (rn <= 0) {
+  if (aw >= RIVER_APPROACH) {
     h = rawTerrain(x, z, seed, cfg)
   } else {
     // Inside the river band the terrain anchors to the WATER TABLE (see the model-3 block above):
@@ -313,7 +331,7 @@ export function columnHeight(x: number, z: number, seed: number, cfg: HeightConf
       // Ends exactly at table+1 so the bank meets the waterline as ground, never as a lip or a
       // face. sm01 is declared below; only evaluated at call time, never during module init.
       const raw = rawTerrain(x, z, seed, cfg)
-      h = raw + ((table + 1) - raw) * sm01(rn / 0.35)
+      h = raw + ((table + 1) - raw) * sm01((RIVER_APPROACH - aw) / (RIVER_APPROACH - SHORE_W))
     }
   }
   const min = 1
