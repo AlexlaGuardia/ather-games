@@ -44,6 +44,8 @@ export const TILE_MATERIALS: number[] = [
   MAT.PATH,
   // Plank block added 2026-08-08 with the road's bridges.
   MAT.PLANKS,
+  // Spring crust added 2026-08-08 with the hot-spring terraces.
+  MAT.SPRING_CRUST,
 ]
 
 /** One spare layer past the end: an unmapped material samples magenta rather than layer 0's stone. */
@@ -229,6 +231,28 @@ function paintWater(dst: Layer, size: number, seed: number) {
       const wave = Math.sin((x / size) * Math.PI * 4 + (y / size) * Math.PI * 2) * 6
       const n = (vnoise(x, y, size, 8, seed) - 0.5) * 2 * 10
       put(dst, size, x, y, shade(base, wave + n))
+    }
+  }
+}
+
+/**
+ * Spring crust — pale mineral shell with deposit rings. The rings are contour lines of one smooth
+ * noise (thin darker-teal bands where it crosses evenly spaced thresholds), which is what layered
+ * mineral deposit actually looks like from above: growth rings around old waterlines.
+ */
+function paintCrust(dst: Layer, size: number, seed: number) {
+  const base = rgbOf(MATERIAL_COLOR[MAT.SPRING_CRUST])
+  const ring: [number, number, number] = [176, 208, 198]   // the teal a wet mineral seam dries to
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const n = vnoise(x, y, size, 5, seed)
+      const grit = (h2(x, y, seed + 31) - 0.5) * 2 * 7
+      // Distance from the nearest ring threshold, in field space — thin band = ring line.
+      const band = Math.abs(((n * 6) % 1 + 1) % 1 - 0.5)
+      const onRing = band > 0.44
+      const calcite = h2(x, y, seed + 77) > 0.93
+      const c = onRing ? mix(base, ring, 0.7) : shade(base, grit + (calcite ? 14 : 0))
+      put(dst, size, x, y, c)
     }
   }
 }
@@ -471,6 +495,7 @@ function paintFor(material: number, face: number, size: number): Layer {
     case MAT.SUBSOIL: paintGrit(dst, size, rgbOf(MATERIAL_COLOR[material]), 18, 22, seed); break
     case MAT.SAND: paintGrit(dst, size, rgbOf(MATERIAL_COLOR[material]), 10, 0, seed); break
     case MAT.WATER: paintWater(dst, size, seed); break
+    case MAT.SPRING_CRUST: paintCrust(dst, size, seed); break
     case MAT.TOPSOIL:
       if (face === TOP) paintGrassTop(dst, size, seed)
       else if (face === SIDE) paintGrassSide(dst, size, seed)

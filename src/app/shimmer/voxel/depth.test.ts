@@ -6,7 +6,7 @@
 // exactly like a cave the carvers did not generate. All three are cheap to assert and expensive
 // to notice.
 
-import { columnHeight, riverCarve, waterSurfaceAt, DEFAULT_HEIGHT } from './height'
+import { columnHeight, riverCarve, waterSurfaceAt, poolDepthAt, DEFAULT_HEIGHT } from './height'
 import { roadAt } from './story-path'
 import { holdIndexAt } from './holds'
 import { materialAt, fillColumn, slopeAt, MAT, DEFAULT_DEPTH } from './depth'
@@ -56,12 +56,15 @@ for (let i = 0; i < 600; i++) COLS.push([(i * 977) % 4000 - 2000, (i * 1583) % 4
       const bridge = (m === MAT.PLANKS || m === MAT.STONE) && roadAt(x, z, SEED)
       const hold = (m === MAT.STONE || m === MAT.MANA_LANTERN) && holdIndexAt(x, z) >= 0
       if (m !== MAT.AIR && m !== MAT.WATER && !bridge && !hold) bad++
-      // Water above sea level is legal in exactly one place: a river channel or pond, filled to
-      // the water table (height.ts waterLevelAt — a body of water has ONE level).
+      // Water above sea level is legal in exactly two places: a river channel or pond filled to
+      // the water table (height.ts waterLevelAt — a body of water has ONE level), and a hot-spring
+      // pool filled to one below its own terrace rim (height.ts poolDepthAt, 2026-08-08).
       if (m === MAT.WATER) {
         wet++
         const riverTop = riverCarve(x, z, SEED) >= 1 ? waterSurfaceAt(x, z, SEED) : -1
-        if (y > D.seaLevel && y > riverTop) bad++
+        const pd = poolDepthAt(x, z, SEED)
+        const poolTop = pd >= 1 ? h + pd - 1 : -1
+        if (y > D.seaLevel && y > riverTop && y > poolTop) bad++
       }
     }
   }

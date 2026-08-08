@@ -12,7 +12,7 @@
 // what you are judging on the right is literally `materialAt`'s surface answer, not a diagram.
 
 import sharp from 'sharp'
-import { columnHeight } from '../src/app/shimmer/voxel/height.ts'
+import { columnHeight, poolDepthAt } from '../src/app/shimmer/voxel/height.ts'
 import { biomeAt, greySurfaceAt, forestness, type BiomeId } from '../src/app/shimmer/voxel/biome.ts'
 import { DEFAULT_DEPTH } from '../src/app/shimmer/voxel/depth.ts'
 import { DEFAULT_SITES, siteAt } from '../src/app/shimmer/voxel/sites.ts'
@@ -29,6 +29,8 @@ const argS = (name: string, dflt: string): string => {
 const SIZE = arg('size', 2048)        // world units on a side
 const STRIDE = arg('stride', 2)       // world units per pixel
 const SEED = arg('seed', 1337)
+const CX = arg('cx', 0)               // world-space centre — e.g. --cx 2100 --cz -300 = the Springs
+const CZ = arg('cz', 0)
 const OUT = argS('out', 'terrain-profile.png')
 const SEA = DEFAULT_DEPTH.seaLevel
 
@@ -65,7 +67,7 @@ let min = Infinity, max = -Infinity
 const heights = new Int16Array(px * px)
 for (let iz = 0; iz < px; iz++) {
   for (let ix = 0; ix < px; ix++) {
-    const h = columnHeight(ix * STRIDE - SIZE / 2, iz * STRIDE - SIZE / 2, SEED)
+    const h = columnHeight(CX + ix * STRIDE - SIZE / 2, CZ + iz * STRIDE - SIZE / 2, SEED)
     heights[iz * px + ix] = h
     if (h < min) min = h
     if (h > max) max = h
@@ -75,11 +77,13 @@ for (let iz = 0; iz < px; iz++) {
 const counts = new Map<string, number>()
 for (let iz = 0; iz < px; iz++) {
   for (let ix = 0; ix < px; ix++) {
-    const x = ix * STRIDE - SIZE / 2, z = iz * STRIDE - SIZE / 2
+    const x = CX + ix * STRIDE - SIZE / 2, z = CZ + iz * STRIDE - SIZE / 2
     const h = heights[iz * px + ix]
 
     // ── left: hypsometric ──────────────────────────────────────────────────────────────────────
-    if (h <= SEA) {
+    if (poolDepthAt(x, z, SEED) > 0) {
+      put(ix, iz, 120, 214, 224)          // hot-spring pool — pale steam-teal, unmissable
+    } else if (h <= SEA) {
       const d = Math.min(1, (SEA - h) / 30)
       put(ix, iz, 40 - d * 25, 90 - d * 50, 140 - d * 60)
     } else {

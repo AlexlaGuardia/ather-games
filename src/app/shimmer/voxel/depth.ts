@@ -15,7 +15,11 @@
 // is the single decision that makes ore appear in cave walls or stay buried.
 
 import { fbm2, value2 } from './noise'
-import { columnHeight, riverCarve, waterSurfaceAt, RIVER_DEPTH, type HeightConfig, DEFAULT_HEIGHT } from './height'
+import {
+  columnHeight, riverCarve, waterSurfaceAt, RIVER_DEPTH,
+  springsPoolAt, poolDepthAt, POOL_DEEP,
+  type HeightConfig, DEFAULT_HEIGHT,
+} from './height'
 import { greySurfaceAt } from './biome'
 import { roadAt } from './story-path'
 import { holdIndexAt, holdVoxelAt, holdCourtyardAt } from './holds'
@@ -65,6 +69,12 @@ export const MAT = {
    * well as pay for pieces. One item per block, both directions.
    */
   PLANKS: 12,
+  /**
+   * The hot springs' mineral shell (2026-08-08, the Springs rework) — the pale crust a spring
+   * deposits around itself. Beds, aprons and the shallow walls of the terrace pools wear it
+   * (height.ts's springsPoolAt says where). ⚠ TBD-CANON on the name, like everything else here.
+   */
+  SPRING_CRUST: 13,
 } as const
 
 export interface DepthConfig {
@@ -171,6 +181,13 @@ export function materialAt(
       const carve = riverCarve(x, z, seed, hcfg)
       if (carve >= 1 && y <= waterSurfaceAt(x, z, seed, hcfg)) return MAT.WATER
     }
+    // Hot-spring pools fill to one below their own rim (height.ts's pools block): h is the carved
+    // bed, h + depth the rim, so the fill is y ≤ h + depth − 1. Gated to the two voxels above a
+    // surface, exactly like the river fill — sky never pays for pools.
+    if (y - h <= POOL_DEEP - 1) {
+      const pd = poolDepthAt(x, z, seed, hcfg)
+      if (pd >= 1 && y <= h + pd - 1) return MAT.WATER
+    }
     return MAT.AIR
   }
 
@@ -183,6 +200,9 @@ export function materialAt(
     if (riverCarve(x, z, seed, hcfg) >= 1) return MAT.SAND              // river bed and its shoulders
     if (holdCourtyardAt(x, z)) return MAT.PATH                          // hold courtyards are worn bare
     if (roadAt(x, z, seed)) return MAT.PATH                             // the story road wears through
+    // Spring crust BEFORE the cliff rule: a pool's rim column sees a 2–3 voxel drop to its own bed,
+    // which the slope test would misread as a cliff face — the shell must win over bare stone.
+    if (springsPoolAt(x, z, seed, hcfg) >= 1) return MAT.SPRING_CRUST   // pool beds + mineral aprons
     if (slopeAt(x, z, seed, hcfg) >= cfg.cliffSlope) return MAT.STONE   // cliff faces show rock
     if (greySurfaceAt(x, z, seed)) return MAT.GREY_SOIL                 // drained ground wears grey
     return MAT.TOPSOIL
@@ -193,6 +213,9 @@ export function materialAt(
   const soil = cfg.soilDepth + Math.round((fbm2(x * 0.08, z * 0.08, seed ^ 0x501, 2) - 0.5) * 2 * cfg.soilVariance)
   if (depth <= Math.max(1, soil)) {
     if (h <= cfg.seaLevel + cfg.beachHeight) return MAT.SAND
+    // The crust has THICKNESS: the shell under a pool bed and apron runs a few voxels deep, so the
+    // short interior walls of a basin read as deposit, not as a soil stripe with a stone cliff.
+    if (depth <= 3 && springsPoolAt(x, z, seed, hcfg) >= 1) return MAT.SPRING_CRUST
     return slopeAt(x, z, seed, hcfg) >= cfg.cliffSlope ? MAT.STONE : MAT.SUBSOIL
   }
 

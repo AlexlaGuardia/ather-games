@@ -104,6 +104,10 @@ export const BLOCKS: BlockDef[] = [
   // in hand, one per block both ways, so a bridge mined is a bridge's worth of planks pocketed.
   { material: MAT.PLANKS, name: 'Goldwood Planks', hardness: 0.7, skill: null, minTier: 0, drops: [{ itemId: 'goldwood_plank', count: 1 }], placeable: true },
 
+  // The hot springs' mineral shell — stone-family, so a spike quarries it, and it drops ITSELF:
+  // pale terrace stone is exactly the block a builder would want to carry home. ⚠ TBD-CANON name.
+  { material: MAT.SPRING_CRUST, name: 'Spring Crust', hardness: 1.2, skill: 'prospecting', minTier: 1, drops: [{ itemId: 'block_spring_crust', count: 1 }], placeable: true },
+
   // ── the Prospecting ladder — hardness AND tier both climb, so depth gates twice over ────────
   { material: ORE.RAW_MANA, name: 'Raw Mana Seam', hardness: 2.2, skill: 'prospecting', minTier: 1, drops: [{ itemId: 'raw_mana_shard', count: 1 }], placeable: false },
   { material: ORE.ELEMENT_VIOLET, name: 'Violet Crystal Seam', hardness: 3.0, skill: 'prospecting', minTier: 1, drops: [{ itemId: 'violet_crystal', count: 1 }], placeable: false },

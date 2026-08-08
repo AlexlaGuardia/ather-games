@@ -15,7 +15,7 @@
 //   weirdness       — signed; drives peaks-and-valleys, so ridges and troughs come from one field.
 
 import { signed2, spline, value2, warped2, type SplinePoint } from './noise'
-import { zoneAt } from './zones'
+import { zoneAt, type ZoneAnchor } from './zones'
 import { HOLDS, padBlendAt } from './holds'
 
 export interface HeightConfig {
@@ -280,19 +280,36 @@ function rawTerrain(x: number, z: number, seed: number, cfg: HeightConfig = DEFA
   // ── zone character (worldgen v2) — the SAME membership value biome/trees read, blended here so
   // a zone can never disagree with its own label. Each zone recomposes the same ingredients:
   // Spirit Meadows drops benches and ridges for a long-wave swell (rolling hills you walk over),
-  // Mana Springs forces the benches (the terraces its pools sit in), settlements calm the relief.
+  // Mana Springs lifts a terraced massif (the mountain its pools climb), settlements calm relief.
   const zn = zoneAt(x, z, seed)
   if (!zn.zone || zn.t <= 0) return wild
   const za = zn.zone
+  // The lift lands on the BASE, before benching — that ordering is what turns a mountainside into
+  // a terrace stack (see ZoneAnchor.lift). zoneLift is shared with the pool gate below, which must
+  // recompute this exact value to know which terrace a column stands on.
+  const zb = base + zoneLift(za, zn.d, x, z, seed)
   const zBase = za.benchK >= 1
-    ? base + (benched(base) - base) * Math.min(1, flat + (za.benchK - 1))
-    : base + (benched(base) - base) * flat * za.benchK
+    ? zb + (benched(zb) - zb) * Math.min(1, flat + (za.benchK - 1))
+    : zb + (benched(zb) - zb) * flat * za.benchK
   const swell = za.swellAmp > 0
     ? (value2(x / 230, z / 230, seed ^ 0x50e11) - 0.5) * 2 * za.swellAmp
     : 0
   const zoneH = cfg.datum + DATUM_CALIBRATION + zBase + swell
     + pv * cfg.ridgeAmplitude * relief * (1 - flat) * za.reliefK
   return wild + (zoneH - wild) * zn.t
+}
+
+/**
+ * The massif profile: a zone's lift at this column. sm01(1 − d) rises from the ellipse edge to the
+ * heart — a peak shape, where membership t (flat 1 across the whole interior) could only build a
+ * mesa. The noise factor (±28%) keeps the flanks irregular and lets the summit wander off the
+ * anchor point; its scale (170) is chosen well above the bench step's horizontal span so it bends
+ * terraces rather than shredding them, and its gradient is part of the pool-safety budget — see
+ * the FLAT_LO margin note below before touching either number.
+ */
+export function zoneLift(za: ZoneAnchor, d: number, x: number, z: number, seed: number): number {
+  if (za.lift <= 0) return 0
+  return za.lift * sm01(1 - d) * (0.72 + 0.56 * value2(x / 170, z / 170, seed ^ 0x5a1e))
 }
 
 /**
@@ -350,6 +367,12 @@ export function columnHeight(x: number, z: number, seed: number, cfg: HeightConf
       const raw = rawTerrain(x, z, seed, cfg)
       h = raw + ((table + 1) - raw) * sm01((RIVER_APPROACH - aw) / (RIVER_APPROACH - SHORE_W))
     }
+  }
+  // Hot-spring pools sink into their terrace (see the pools block below): only ever outside the
+  // river band, so the carve and the river anchoring cannot meet on one column.
+  if (aw >= RIVER_APPROACH) {
+    const pd = poolDepthAt(x, z, seed, cfg)
+    if (pd > 0) h -= pd
   }
   // Hold pads flatten whatever the country wanted here (zones, banks, all of it) — see the
   // holdPadLevel block above. Blend runs 1 inside the walls → 0 across PAD_BLEND past them.
@@ -452,6 +475,81 @@ const sm01 = (t: number): number => { const c = t < 0 ? 0 : t > 1 ? 1 : t; retur
  * it can cost four neighbour columnHeights.
  */
 const wsCache = new Map<string, number>()
+
+/**
+ * ── ★ HOT-SPRING POOLS — water the terraces already contain (2026-08-08, the Springs rework) ────
+ * The Springs' ruled character is steaming pools in mountain terraces. The river system spent three
+ * models learning that flat water and terrain-clamped water are irreconcilable — UNLESS the ground
+ * around the water is level by construction. A bench flat IS level by construction. So pools skip
+ * the water table entirely: a pool is a basin sunk 2–3 voxels into a terrace flat, filled to one
+ * below its own rim. Every column of one pool shares a bench, so rim − 1 is the same altitude
+ * across the pool — dead flat, contained, no table, no clamp, no edge rule.
+ *
+ * WHERE pools live is one blobby field (its own scale, gently warped — the greyfield/river shape
+ * lesson, third time) gated to: Springs interior only (t = 1, so the wild-blend cannot tilt the
+ * rim), outside any river band or hold pad, and the MIDDLE of a bench flat. The middle matters:
+ * FLAT_LO keeps a pool's open water ≥ ~0.8 base-voxels away from the terrace's descending edge, so
+ * the neighbouring ground can never round below rim − 1 and expose a standing water face (the
+ * budget: max |∇(base+lift)| ≈ 0.4 voxel/block against 0.96 voxels of margin). FLAT_HI just keeps
+ * the apron off the ascending riser, where crust on a slope would read as spillage.
+ *
+ * The pools read HOT by material, not by mechanism: bed and apron wear SPRING_CRUST (depth.ts) —
+ * the pale mineral shell hot springs actually deposit — and the steam is a renderer pass keyed off
+ * this same function. depth.ts fills the water; MAT.WATER, so swimming, light and the transparent
+ * pass all come free.
+ */
+export const POOL_SCALE = 64
+export const POOL_APRON = 0.60    // pool field above this = mineral crust apron
+export const POOL_CORE = 0.66     // pool field above this = open water
+export const POOL_DEEP_AT = 0.74  // the hottest hearts run a voxel deeper
+export const POOL_DEPTH = 2
+export const POOL_DEEP = 3
+export const FLAT_LO = 0.12       // bench phase margin above the descending edge — see block above
+export const FLAT_HI = 0.50       // bench phase margin below the riser ramp (riser starts at 0.55)
+
+/** The pool field, 0..1 — blobs at terrace scale. Its own salt; nothing else reads it. */
+export function poolField(x: number, z: number, seed: number): number {
+  return warped2(x / POOL_SCALE, z / POOL_SCALE, seed ^ 0x59a1c7, 0.5, 3)
+}
+
+/**
+ * What the Springs put at this column: 0 none · 1 crust apron · 2 pool (2 deep) · 3 pool (3 deep).
+ * Memoised like the water caches — the carve, the water fill, the surface material and the steam
+ * pass all ask about the same columns.
+ */
+const poolCache = new Map<string, number>()
+
+export function springsPoolAt(x: number, z: number, seed: number, cfg: HeightConfig = DEFAULT_HEIGHT): number {
+  const k = `${seed}:${x},${z}`
+  const hit = poolCache.get(k)
+  if (hit !== undefined) return hit
+  let v = 0
+  const zn = zoneAt(x, z, seed)
+  if (zn.zone?.id === 'mana-springs' && zn.t >= 0.999
+    && Math.abs(riverField(x, z, seed, cfg)) >= RIVER_APPROACH && !padBlendAt(x, z)) {
+    const p = poolField(x, z, seed)
+    if (p >= POOL_APRON) {
+      // The bench-flat gate recomputes the lifted base EXACTLY as rawTerrain's zone branch does —
+      // zoneLift is the shared function, so the two cannot drift apart.
+      const { continentalness } = heightFields(x, z, seed, cfg)
+      const base = spline(CONTINENT_SPLINE, continentalness)
+      const zb = base + zoneLift(zn.zone, zn.d, x, z, seed)
+      const s = zb / BENCH_STEP - Math.floor(zb / BENCH_STEP)
+      if (s >= FLAT_LO && s <= FLAT_HI) {
+        v = p < POOL_CORE ? 1 : p >= POOL_DEEP_AT ? 3 : 2
+      }
+    }
+  }
+  if (poolCache.size > 16384) poolCache.clear()
+  poolCache.set(k, v)
+  return v
+}
+
+/** Voxels a pool sinks below its rim at (x, z) — 0 for dry ground and the crust apron. */
+export function poolDepthAt(x: number, z: number, seed: number, cfg: HeightConfig = DEFAULT_HEIGHT): number {
+  const c = springsPoolAt(x, z, seed, cfg)
+  return c >= 2 ? c : 0
+}
 
 export function waterSurfaceAt(x: number, z: number, seed: number, cfg: HeightConfig = DEFAULT_HEIGHT): number {
   const k = `${seed}:${x},${z}`

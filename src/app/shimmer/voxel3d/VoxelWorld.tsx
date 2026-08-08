@@ -89,6 +89,7 @@ import { createLoco, tickLocomotion, CELL_EMPTY, CELL_SOLID, CELL_WATER, CELL_HA
 import { loadTutorial, saveTutorial, GREG_LINE, OBJECTIVE_LABEL, type TutorialStage, type TutorialState } from './tutorial'
 import { GATE_X, GATE_Z, GATE_SPANS_X, gateCells } from './gate'
 import { createGregMesh } from './greg'
+import { createSteamPoints } from './steam'
 
 const SEED = 1337
 const H = DEFAULT_COLUMN.worldHeight
@@ -1163,6 +1164,8 @@ function World({ inv, toolTier, toolSkill, selItem, weaponDrawn, weaponIdx, onAm
     g.group.position.set(GREG_CX, GREG_Y, GREG_CZ)
     return g
   }, [])
+  // Hot-spring steam (2026-08-08) — sleeps everywhere but the Springs; see steam.ts.
+  const steam = useMemo(() => createSteamPoints(SEED), [])
   const lastNearGreg = useRef(false)
   const lastNearTable = useRef(false)
   const tableScanT = useRef(0)
@@ -1349,7 +1352,8 @@ function World({ inv, toolTier, toolSkill, selItem, weaponDrawn, weaponIdx, onAm
     hollowMat.dispose()
     tiles?.texture.dispose()
     greg.dispose()
-  }, [dropGeo, highlightGeo, flatMaterial, textured, tiles, pieces, greg])
+    steam.dispose()
+  }, [dropGeo, highlightGeo, flatMaterial, textured, tiles, pieces, greg, steam])
 
   // ★ A LOST WEBGL CONTEXT MUST SAY SO. Chrome blocks a page that loses its context repeatedly, and
   // the result is a black canvas with the HUD still drawn on top — indistinguishable from a
@@ -1673,6 +1677,7 @@ function World({ inv, toolTier, toolSkill, selItem, weaponDrawn, weaponIdx, onAm
     const g = group.current
     if (!g) return
     const p = camera.position
+    steam.tick(p.x, p.y, p.z, dt, state.clock.elapsedTime)
     const cx = Math.floor(p.x / SECTION), cz = Math.floor(p.z / SECTION)
 
     // ── ★ WEAPON TICK ────────────────────────────────────────────────────────────────────────
@@ -2282,6 +2287,7 @@ function World({ inv, toolTier, toolSkill, selItem, weaponDrawn, weaponIdx, onAm
       <group ref={dropGroup} />
       <primitive object={pieces.group} />
       <primitive object={greg.group} />
+      <primitive object={steam.points} />
       {/* ⚠ Memoised. Inline `args={[new THREE.BoxGeometry(...)]}` builds a fresh geometry on EVERY
           React render and leaks the previous one — same family as the per-drop material that got
           the page's WebGL context blocked. */}

@@ -52,6 +52,10 @@ export const MATERIAL_COLOR: Record<number, number> = {
   [MAT.PATH]: 0xa8916b,
   // Milled goldwood strips — the bridge deck and the builder's floor.
   [MAT.PLANKS]: 0xa8834d,
+  // The hot springs' mineral shell: pale calcite white with a breath of the springs' teal — bright
+  // against stone and topsoil so a terrace pool reads from across the valley, the way real spring
+  // terraces do.
+  [MAT.SPRING_CRUST]: 0xdcede4,
 }
 
 /** Materials that glow, so ore reads in an unlit cave instead of being a slightly different grey. */

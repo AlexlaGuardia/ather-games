@@ -54,7 +54,10 @@ import { Column, SECTION } from './column'
 // water table (banks/levees/gorges); every riverside surface moved.
 // v13: vertical rebalance (2026-08-08) — sea 140→100, datum 160→120; the whole surface moved
 // down 40 and every shoreline redrew.
-export const GENERATOR_VERSION = 13
+// v14: the Springs mountain (2026-08-08) — mana-springs lifts a terraced massif (lift 64,
+// benchK 2, reliefK 0) with hot-spring pools sunk into the flats; every column in the Springs
+// ellipse moved, nothing outside it did.
+export const GENERATOR_VERSION = 14
 
 /**
  * One column's edits: packed local index → material.
