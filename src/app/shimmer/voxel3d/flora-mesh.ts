@@ -76,7 +76,11 @@ function makeBladeTexture(seed: number, blades: number, size = 16): THREE.DataTe
     const lean = rnd() < 0.5 ? -1 : 1
     for (let y = 0; y < h; y++) {
       const x = Math.min(size - 1, Math.max(0, bx + (y > h * 0.6 ? lean : 0)))
-      const o = ((size - 1 - y) * size + x) * 4
+      // ⚠ DataTexture row 0 is v=0 — the BOTTOM of the quad (no canvas-style flipY here). The
+      // first version indexed (size-1-y) out of canvas habit, which painted every blade growing
+      // DOWN from the quad's top edge and left the root row transparent — grass hovering a gap
+      // above its own ground (Alex caught it on sight).
+      const o = (y * size + x) * 4
       const shade = -24 + rnd() * 40 + (y / h) * 26      // tips catch more light
       data[o] = BLADE_GREEN[0] + shade
       data[o + 1] = BLADE_GREEN[1] + shade
@@ -143,8 +147,10 @@ export function createFloraRenderer(): FloraRenderer {
   const tallTex = makeBladeTexture(0x77c1, 4)
   const headTex = makeHeadTexture()
 
-  const tuftGeo = buildCrossGeometry(0.85, 0.55)
-  const tallGeo = buildCrossGeometry(0.8, 1.05)
+  // Widths chosen against the jitter so a blade can never overhang its cell (w/2 + 0.15 ≤ 0.5):
+  // on a terrace step, grass leaning out over the riser reads as floating from below.
+  const tuftGeo = buildCrossGeometry(0.7, 0.55)
+  const tallGeo = buildCrossGeometry(0.7, 1.05)
   const stemGeo = buildCrossGeometry(0.5, 0.62)
   const headGeo = buildCrossGeometry(0.3, 0.3, 0.55)   // a small cross riding near the stem's top
 
@@ -201,7 +207,9 @@ export function createFloraRenderer(): FloraRenderer {
           // Deterministic per-spot jitter off the variant roll: offset within the cell, a turn,
           // a little size. Same spot, same blades, forever.
           const jx = (s.variant * 7.13) % 1 - 0.5, jz = (s.variant * 3.71) % 1 - 0.5
-          off.set(s.x + 0.5 + jx * 0.5, s.y + 1, s.z + 0.5 + jz * 0.5)
+          // Base sits a shade BELOW the surface top: a root emerging from the ground plane hides
+          // any single-texel alpha seam; a root exactly ON it re-manufactures the hover.
+          off.set(s.x + 0.5 + jx * 0.3, s.y + 0.97, s.z + 0.5 + jz * 0.3)
           quat.setFromAxisAngle(Y_AXIS, s.variant * Math.PI * 2)
           const grow = 0.75 + s.variant * 0.5
           scl.set(1, grow, 1)
