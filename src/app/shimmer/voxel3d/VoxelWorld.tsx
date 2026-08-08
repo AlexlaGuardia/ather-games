@@ -351,8 +351,12 @@ export default function VoxelWorld() {
     if (plan.give.itemId === 'mana_lantern') advanceTutorial('lantern', 'light')
   }, [have, refreshHotbar, advanceTutorial, station])
 
-  /** Craft a tool and equip it. Tools keep their own table; this is the one surface that shows it. */
+  /** Craft a tool and equip it. Tools keep their own table; this is the one surface that shows it.
+   *  ★ TOOLS ARE BENCH WORK. You can snap a log into planks with your hands; you cannot shape a
+   *  blade on your knee. Same split play3d always had (tools were station crafts there), and it is
+   *  what makes the two craft lists DIFFERENT — the bench offers more than the pocket menu. */
   const doCraftTool = useCallback((id: string) => {
+    if (station !== 'crafting_table') return   // spend-path enforcement; the UI grey is only a display
     const def = TOOL_DEFS[id]
     if (!def || !canCraftTool(id, inv.current!)) return
     const made = craftTool(id, inv.current!)
@@ -361,7 +365,7 @@ export default function VoxelWorld() {
     setCrafted(def.name)
     setCraftTick(t => t + 1)
     refreshHotbar()
-  }, [refreshHotbar])
+  }, [refreshHotbar, station])
 
   /** The two tutorial facts World cannot resolve itself because they are mid-mining/mid-placement
    *  events, not craft calls — 'planks'/'lantern' are handled inline in `doCraft` above instead. */
@@ -2091,14 +2095,17 @@ function CraftPanel({ have, tools, tick, station, onCraft, onCraftTool, onClose 
           )
         })}
 
-        <div className="text-white/40 tracking-[.14em] uppercase text-[9px] mt-4 mb-1.5">Tools</div>
+        <div className="text-white/40 tracking-[.14em] uppercase text-[9px] mt-4 mb-1.5">Tools
+          {station !== 'crafting_table' && <span className="ml-2 text-sky-300/60 normal-case tracking-normal">bench work — stand at a crafting table</span>}
+        </div>
         {nextTools.length === 0 && <div className="text-white/35">every tier earned</div>}
         {nextTools.map((d) => {
           // Counted through `have` rather than `canCraftTool`, which wants a whole Inventory (and a
           // BankState) — the panel only ever needs counts, and faking an Inventory to ask a
           // yes/no question is how a display drifts from the thing that actually spends.
           // `onCraftTool` still calls the real `canCraftTool` before spending; this only greys a row.
-          const can = d.recipe.every(i => have(i.itemId) >= i.count)
+          // Tools are bench work: away from a table the whole section shows as goals, not buttons.
+          const can = station === 'crafting_table' && d.recipe.every(i => have(i.itemId) >= i.count)
           return (
             <button key={d.id} disabled={!can} onClick={() => onCraftTool(d.id)}
                     className={`w-full text-left mb-1 px-2 py-1.5 rounded border transition-colors ${
