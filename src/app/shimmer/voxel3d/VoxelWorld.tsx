@@ -864,7 +864,8 @@ function Hud({ stats, pos, look, hotbar, sel, tier, build, pieceIdx, rot, inv, s
       )}
       {build && (
         <div className="absolute bottom-[4.6rem] left-1/2 -translate-x-1/2 text-[10px] font-mono text-white/50 pointer-events-none">
-          rotation {rot * 90}°
+          {/* Pieces face where you look; this is the R key's manual quarter-turn on top of that. */}
+          {rot === 0 ? 'facing you · R to turn' : `R turn +${rot * 90}°`}
         </div>
       )}
 
@@ -2053,12 +2054,21 @@ function World({ inv, toolTier, toolSkill, selItem, weaponDrawn, weaponIdx, onAm
     // ── build mode: ghost, place, deconstruct ────────────────────────────────────────────────
     if (build) {
       const def = pieceDef(PIECES[pieceIdx].id)!
+      // ★ AUTO-FACING (2026-08-08, Alex's ask): pieces orient from where you LOOK, live — turn to
+      // face a different wall and the ghost turns with you. `rot` (the R key) is a persistent
+      // manual quarter-turn ON TOP of that, not the whole job. The mapping is anchored to the
+      // stair: authored rising toward −Z at rot 0, instanced at −rot·π/2 about Y, so rot 1 rises
+      // toward +X — and "rises AWAY from the player" (walkable the way you're going, doors facing
+      // you) works out to rot = 2 − round(yaw / 90°), mod 4. Quantized from the same `aim` the
+      // raycast uses, so the ghost and the crosshair can never disagree about "forward".
+      const yawRot = (2 - Math.round(Math.atan2(aim.x, aim.z) / (Math.PI / 2)) + 8) % 4
+      const face = ((yawRot + rot) % 4) as Rotation
       // The ghost sits in the EMPTY cell before what you are looking at — the same `px,py,pz` that
       // block placement uses, so both verbs agree about where "in front of" is.
-      const target: Placement | null = hit ? { pieceId: def.id, x: hit.px, y: hit.py, z: hit.pz, rot } : null
+      const target: Placement | null = hit ? { pieceId: def.id, x: hit.px, y: hit.py, z: hit.pz, rot: face } : null
       const fits = !!target && canPlace(target, def, (x, y, z) => voxel(x, y, z))
       const afford = canAfford(def, id => countItem(inv.current!, id))
-      if (target) pieces.setGhost(def.id, target.x, target.y, target.z, rot, fits && afford)
+      if (target) pieces.setGhost(def.id, target.x, target.y, target.z, face, fits && afford)
       else pieces.hideGhost()
 
       if (target && mouse.current.right && fits && afford) {
