@@ -31,7 +31,7 @@ import { AIR } from '../voxel/section'
 import { materialAt, MAT, DEFAULT_DEPTH } from '../voxel/depth'
 import { raycast, tickBreak, dropsFor, type BreakState } from '../voxel/mine'
 import { spawnDrop, tickDrops, type Drop } from '../voxel/drops'
-import { blockDef, materialForItem, emitOf, type BlockSkill } from '../voxel/registry'
+import { blockDef, materialForItem, emitOf, BLOCKS, type BlockSkill } from '../voxel/registry'
 import { editIndex, recordEdit, applyEdits, packEdits, unpackEdits, isStale, type ColumnEdits } from '../voxel/edits'
 import { loadColumn, saveColumn, editedColumnCount } from './save'
 import { PIECES, STRUCTURE, pieceDef, cellsOf, canPlace, canAfford, placementAt, type Placement, type Rotation } from '../voxel/pieces'
@@ -55,7 +55,7 @@ import { ensureBasicTools, getEquippedTool, getToolDef, craftTool, canCraft as c
 // everything, and it counts materials across a `BankState` the voxel world does not have. What a
 // block world needs first is the layer the tile world never had: material → material. See the
 // header of `voxel/recipes.ts` for why, including the bug it was already causing.
-import { RECIPES, canCraft as canCraftRecipe, craftPlan, type RecipeDef, type Station } from '../voxel/recipes'
+import { RECIPES, RECIPE_OUTPUTS, canCraft as canCraftRecipe, craftPlan, type RecipeDef, type Station } from '../voxel/recipes'
 // ── PORT STEP 3 — the guns (2026-08-07, Alex ruled they cross into the Ather) ─────────────────
 // `engine/weapons.ts` is the shared half: the table, the tuning, the pure ballistics. It was
 // EXTRACTED from Shimmer3D rather than copied, because the thing that could not come across is
@@ -69,7 +69,7 @@ import { WEAPONS, weaponAt, ADS_FOV, spreadDeg, bloomAfterShot, bloomAfterRest,
 // unchanged; the rig in day-night.tsx turns it into sky. This was the last shipped system reading
 // as permanent noon: the light field's `dayFactor` finally has a day to factor.
 import { VoxelDayNight } from './day-night'
-import { dayProgress, getPhase, getDisplayTime, isTimePinned } from '../engine/day-cycle'
+import { dayProgress, getPhase, getDisplayTime, isTimePinned, setTimePin } from '../engine/day-cycle'
 import { hollowEligible, hollowStep, segmentDist, hollowCap, packSize, packWalk, hollowNight,
          type HollowState, HOLLOW_HP, HOLLOW_HOVER, HOLLOW_RADIUS,
          SPAWN_CYCLE_S, PLAYER_EXCLUSION, GUTTER_SKY } from './hollows'
@@ -156,6 +156,67 @@ interface Slot { itemId: string; count: number }
  */
 const TOOL_FAMILIES = ['forestry', 'prospecting', 'rinning', 'farming'] as const
 type HotbarEntry = { itemId: string; count: number }
+
+// ── ★ THE DEV CONSOLE (T) — commands over every aspect of the game (2026-08-08, Alex) ─────────
+// One registry, one runner. A command is a row here and a capability on `ConsoleCtx`; the day a
+// system exists (weather, seasons, spirits), its command is a five-line append — the console is
+// the standing INTERFACE, the registry is what grows. Cheat-grade verbs (give, tp) are owner-gated;
+// view-grade verbs (time — the pin is per-tab, it never touches the shared wall clock) are not.
+interface ConsoleCtx {
+  isOwner: boolean
+  setRadius: (r: number) => void
+  radius: () => number
+  give: (id: string, n: number) => string
+  tp: (x: number, z: number) => string
+}
+const NAMED_HOURS: Record<string, number> = { midnight: 0, dawn: 6.5, noon: 12, dusk: 18.75, night: 21 }
+interface ConsoleCmd { name: string; usage: string; help: string; owner?: boolean; run: (a: string[], c: ConsoleCtx) => string }
+const CONSOLE_CMDS: ConsoleCmd[] = [
+  { name: 'help', usage: 'help', help: 'list commands', run: (_a, c) =>
+      CONSOLE_CMDS.filter(k => !k.owner || c.isOwner).map(k => `${k.usage} — ${k.help}`).join('\n') },
+  { name: 'time', usage: 'time <0-24 | dawn|noon|dusk|night|midnight | free>', help: 'pin the clock (this tab only) or hand it back',
+    run: (a) => {
+      const w = (a[0] ?? '').toLowerCase()
+      if (!w) return `it is ${getDisplayTime(dayProgress())}${isTimePinned() ? ' (pinned)' : ''}`
+      if (w === 'free' || w === 'live') { setTimePin(null); return 'clock handed back to the world' }
+      const h = w in NAMED_HOURS ? NAMED_HOURS[w] : Number(w)
+      if (!Number.isFinite(h)) return `not an hour: ${w}`
+      setTimePin(h)
+      return `pinned at ${getDisplayTime(dayProgress())} — 'time free' to release`
+    } },
+  { name: 'radius', usage: 'radius [4-12]', help: 'view/load ring, in columns of 16',
+    run: (a, c) => {
+      if (!a[0]) return `radius is ${c.radius()} (${c.radius() * 16} blocks)`
+      const r = Math.round(Number(a[0]))
+      if (!Number.isFinite(r) || r < VIEW_RADIUS_MIN || r > VIEW_RADIUS_MAX) return `radius takes ${VIEW_RADIUS_MIN}..${VIEW_RADIUS_MAX}`
+      c.setRadius(r)
+      return `radius ${r} (${r * 16} blocks)`
+    } },
+  { name: 'give', usage: 'give <item> [count]', help: 'conjure items into the bag', owner: true,
+    run: (a, c) => a[0] ? c.give(a[0], Math.max(1, Math.round(Number(a[1]) || 1))) : 'give what?' },
+  { name: 'tp', usage: 'tp <x> <z>', help: 'teleport to ground level at x,z', owner: true,
+    run: (a, c) => {
+      const x = Number(a[0]), z = Number(a[1])
+      if (!Number.isFinite(x) || !Number.isFinite(z)) return 'tp needs two numbers'
+      return c.tp(Math.floor(x), Math.floor(z))
+    } },
+  { name: 'weather', usage: 'weather', help: 'someday', run: () =>
+      'no weather in the Ather yet — the day it exists, its command lands here' },
+]
+function runConsoleLine(line: string, ctx: ConsoleCtx): string {
+  const parts = line.trim().split(/\s+/)
+  const name = (parts[0] ?? '').toLowerCase().replace(/^\//, '')   // a leading / is muscle memory, accept it
+  if (!name) return ''
+  const cmd = CONSOLE_CMDS.find(k => k.name === name)
+  if (!cmd) return `unknown: ${name} — try 'help'`
+  if (cmd.owner && !ctx.isOwner) return `${name} is keeper-of-the-realm only`
+  return cmd.run(parts.slice(1), ctx)
+}
+/** Item ids the console may conjure — everything a block drops or a recipe produces. */
+const KNOWN_ITEMS: ReadonlySet<string> = new Set([
+  ...BLOCKS.flatMap(b => b.drops.map(d => d.itemId)),
+  ...RECIPE_OUTPUTS,
+])
 
 export default function VoxelWorld() {
   const [stats, setStats] = useState('generating…')
@@ -262,6 +323,24 @@ export default function VoxelWorld() {
   // value that turns recipes.ts's `Station` field from documentation into a gate.
   const [nearTable, setNearTable] = useState(false)
   const station: Station = nearTable ? 'crafting_table' : 'hand'
+
+  // ── the dev console (T) ──────────────────────────────────────────────────────────────────────
+  const [consoleOpen, setConsoleOpen] = useState(false)
+  /** World fills this with the verbs only it can perform (teleport needs the walker + the clock
+   *  of loaded columns). Null until the world mounts; commands degrade to a message, never throw. */
+  const worldCmd = useRef<{ tp: (x: number, z: number) => string } | null>(null)
+  const runCommand = useCallback((line: string): string => runConsoleLine(line, {
+    isOwner,
+    radius: () => settings.viewRadius,
+    setRadius: (r) => update({ viewRadius: r }),
+    give: (id, count) => {
+      if (!KNOWN_ITEMS.has(id)) return `no such item: ${id}`
+      addItems(inv.current!, id, count)
+      refreshHotbar(); setCraftTick(t => t + 1)
+      return `gave ${count}× ${id.replace(/_/g, ' ')}`
+    },
+    tp: (x, z) => worldCmd.current ? worldCmd.current.tp(x, z) : 'the world is still waking',
+  }), [isOwner, settings.viewRadius, update, refreshHotbar])
   const have = useCallback((itemId: string) => countItem(inv.current!, itemId), [])
 
   // ── THE MOUSE HANDOFF (play3d's contract, ported verbatim) ──────────────────────────────────
@@ -376,6 +455,12 @@ export default function VoxelWorld() {
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      // Typing beats verbs: keystrokes aimed at ANY text field (the console line, a settings
+      // slider) must never run game verbs underneath what you're writing.
+      if ((e.target as HTMLElement | null)?.tagName === 'INPUT') return
+      // T — the dev console. Above the draw lock on purpose: a console you cannot open while
+      // your weapon is out is a console you cannot use to debug the weapon.
+      if (e.code === 'KeyT' && !consoleOpen) { e.preventDefault(); openCursorUI(); setConsoleOpen(true); return }
       const n = Number(e.key)
       // ── ★ THE DRAW LOCK (Alex, 2026-08-07) ────────────────────────────────────────────────
       // "when the player has a weapon stowed the hotbar kicks in and when they draw their weapon
@@ -438,6 +523,7 @@ export default function VoxelWorld() {
       if (e.code === 'Escape') {
         if (craftOpen) { setCraftOpen(false); closeCursorUI() }
         if (dialogueOpen) closeDialogue()
+        if (consoleOpen) { setConsoleOpen(false); closeCursorUI() }
       }
     }
     // Scroll to change slot — the reason tools are IN the row rather than on their own keys.
@@ -448,7 +534,7 @@ export default function VoxelWorld() {
     window.addEventListener('keydown', onKey)
     window.addEventListener('wheel', onWheel, { passive: true })
     return () => { window.removeEventListener('keydown', onKey); window.removeEventListener('wheel', onWheel) }
-  }, [build, drawn, dialogueOpen, nearGreg, nearTable, craftOpen, showSettings, closeDialogue, openCursorUI, closeCursorUI])
+  }, [build, drawn, dialogueOpen, nearGreg, nearTable, craftOpen, showSettings, consoleOpen, closeDialogue, openCursorUI, closeCursorUI])
 
   return (
     <div className="fixed inset-0 bg-[#0b0d14]">
@@ -481,7 +567,7 @@ export default function VoxelWorld() {
           build={build} pieceIdx={pieceIdx} rot={rot}
           tools={tools} skills={skills} onSkill={setSkillHud} onLevel={setLevelUp} onTool={setActiveTool}
           tutorial={tutorial} onQuestEvent={onQuestEvent} onNearGreg={setNearGreg}
-          onNearTable={setNearTable}
+          onNearTable={setNearTable} cmdOut={worldCmd}
         />
         {/* selector: deliberately matches NOTHING. Without it drei binds click-to-lock on the whole
             DOCUMENT (and that binding ignores `enabled`), which re-locked the pointer on every
@@ -505,6 +591,7 @@ export default function VoxelWorld() {
                     onCraft={doCraft} onCraftTool={doCraftTool} onClose={() => { setCraftOpen(false); closeCursorUI() }} />
       )}
       {dialogueOpen && <GregDialogue stage={tutorial.current.stage} onClose={closeDialogue} />}
+      {consoleOpen && <DevConsole onRun={runCommand} onClose={() => { setConsoleOpen(false); closeCursorUI() }} />}
     </div>
   )
 }
@@ -546,7 +633,7 @@ function Clock() {
       </div>
       <div className="mt-1 px-1.5 py-0.5 rounded border border-white/15 bg-black/45 text-[9px] font-mono text-white/60 whitespace-nowrap">
         {phase}
-        {isTimePinned && <span className="ml-1.5 text-amber-300/90">PINNED</span>}
+        {isTimePinned() && <span className="ml-1.5 text-amber-300/90">PINNED</span>}
       </div>
     </div>
   )
@@ -602,7 +689,7 @@ function Hud({ stats, pos, look, hotbar, sel, tier, build, pieceIdx, rot, inv, s
         <div className="mt-1 text-white/45">click to look · WASD · space jump · shift slide · hold space climb · V fly</div>
         {build
           ? <div className="text-amber-200/80">BUILD · RMB place · LMB deconstruct · R rotate · 1-6 piece · Tab exit</div>
-          : <div className="text-white/45">hold LMB mine · RMB place · scroll/1-8 slot · F draw · C craft · Tab build</div>}
+          : <div className="text-white/45">hold LMB mine · RMB place · scroll/1-8 slot · F draw · C craft · Tab build · T console</div>}
         {/* ★ The tools are Greg's, from engine/tools.ts, unchanged. Tier is what you HOLD now. */}
         <div className="text-white/40 mt-1">
           {(['forestry', 'prospecting'] as const).map(sk => {
@@ -885,7 +972,7 @@ function ToolGlyph({ family }: { family: 'forestry' | 'prospecting' | 'rinning' 
 const SOLID_EXCEPT = new Set<number>([AIR, MAT.WATER])
 const isSolid = (m: number) => !SOLID_EXCEPT.has(m)
 
-function World({ inv, toolTier, toolSkill, selItem, weaponDrawn, weaponIdx, onAmmo, onStats, onPos, onLook, onInvChange, worker, incoming, inflight, settings, build, pieceIdx, rot, tools, skills, onSkill, onLevel, onTool, tutorial, onQuestEvent, onNearGreg, onNearTable }: {
+function World({ inv, toolTier, toolSkill, selItem, weaponDrawn, weaponIdx, onAmmo, onStats, onPos, onLook, onInvChange, worker, incoming, inflight, settings, build, pieceIdx, rot, tools, skills, onSkill, onLevel, onTool, tutorial, onQuestEvent, onNearGreg, onNearTable, cmdOut }: {
   inv: React.RefObject<Inventory>
   toolTier: React.RefObject<number>
   toolSkill: React.RefObject<BlockSkill>
@@ -926,6 +1013,8 @@ function World({ inv, toolTier, toolSkill, selItem, weaponDrawn, weaponIdx, onAm
   onNearGreg: (near: boolean) => void
   /** Near a placed crafting table — the parent turns this into recipes.ts's `Station`. */
   onNearTable: (near: boolean) => void
+  /** The console's world-verbs, filled on mount — only World can move the walker safely. */
+  cmdOut: React.RefObject<{ tp: (x: number, z: number) => string } | null>
 }) {
   const { camera } = useThree()
   const group = useRef<THREE.Group>(null)
@@ -1028,6 +1117,25 @@ function World({ inv, toolTier, toolSkill, selItem, weaponDrawn, weaponIdx, onAm
   const settled = useRef(false)
   // The walker. Feet-based; the camera is derived from it every frame (feet + eased eye).
   const loco = useRef(createLoco(SPAWN_X + 0.5, columnHeight(SPAWN_X, SPAWN_Z, SEED) + 1, SPAWN_Z + 0.5))
+
+  // ── the console's world-verbs ────────────────────────────────────────────────────────────────
+  // tp re-arms the SAME hold-until-solid gate the spawn uses (settled ref) — the destination's
+  // columns stream in around the new camera position, and physics waits for real ground instead
+  // of dropping the walker through a world that has not generated yet.
+  useEffect(() => {
+    cmdOut.current = {
+      tp: (x: number, z: number) => {
+        const lc = loco.current
+        const h = columnHeight(x, z, SEED)
+        lc.px = x + 0.5; lc.py = h + 1; lc.pz = z + 0.5
+        lc.vy = 0; lc.hvx = 0; lc.hvz = 0; lc.airborne = false
+        camera.position.set(lc.px, lc.py + lc.eye, lc.pz)
+        settled.current = false
+        return `off to ${x}, ${z} (ground ${h}) — the land is catching up`
+      },
+    }
+    return () => { cmdOut.current = null }
+  }, [cmdOut, camera])
   // ★ Scratch vectors, allocated ONCE. Four `new THREE.Vector3()` per frame is 240 objects/sec of
   // pure garbage — not a GPU leak, but exactly the GC pressure the mesher and carver were both
   // rewritten to avoid. Same rule, applied to the frame loop instead of the hot inner loop.
@@ -1044,7 +1152,11 @@ function World({ inv, toolTier, toolSkill, selItem, weaponDrawn, weaponIdx, onAm
     // walkers do not disagree about what F means — and draw/stow is a player verb while fly is a
     // debug convenience, so the player verb wins the good key. Caught only because the new binding
     // would have silently toggled BOTH: pressing F would have drawn your weapon and launched you.
-    const kd = (e: KeyboardEvent) => { keys.current[e.code] = true; if (e.code === 'KeyV') fly.current = !fly.current }
+    // The INPUT guard mirrors onKey's: touch-typing a console command must not walk the player.
+    const kd = (e: KeyboardEvent) => {
+      if ((e.target as HTMLElement | null)?.tagName === 'INPUT') return
+      keys.current[e.code] = true; if (e.code === 'KeyV') fly.current = !fly.current
+    }
     const ku = (e: KeyboardEvent) => { keys.current[e.code] = false }
     const md = (e: MouseEvent) => { if (e.button === 0) mouse.current.left = true; if (e.button === 2) mouse.current.right = true }
     const mu = (e: MouseEvent) => { if (e.button === 0) mouse.current.left = false; if (e.button === 2) mouse.current.right = false }
@@ -1650,7 +1762,9 @@ function World({ inv, toolTier, toolSkill, selItem, weaponDrawn, weaponIdx, onAm
     // Until the spawn column exists every lookup returns AIR, so gravity would drop the player
     // through a world that has not generated yet. Hold until there is ground beneath.
     if (!settled.current) {
-      if (isSolid(voxel(Math.floor(SPAWN_X), Math.floor(p.y) - 3, Math.floor(SPAWN_Z)))) settled.current = true   // real ground, not the phantom floor
+      // Probes the column UNDER THE PLAYER (was hardcoded to spawn) — at boot they are the same
+      // spot, and generalizing is what lets the console's tp reuse this gate at any destination.
+      if (isSolid(voxel(Math.floor(p.x), Math.floor(p.y) - 3, Math.floor(p.z)))) settled.current = true   // real ground, not the phantom floor
       else { onPos(p); onStats(`${cols.current.size} columns · generating…`); return }
     }
 
@@ -2001,6 +2115,52 @@ function World({ inv, toolTier, toolSkill, selItem, weaponDrawn, weaponIdx, onAm
  * ★ NO CHOICES. This is phase 1 (mechanics, placeholder dialogue): one line, one dismiss. A branching
  * conversation tree is a cozy-voice-pass concern, not a wiring one.
  */
+/**
+ * The dev console (T). One input line, the last few results above it. Enter runs and keeps it
+ * open (a session of commands is the normal case); Enter on an empty line, or Esc, closes.
+ * History on ArrowUp/Down. The INPUT tag is the shield: both window-level key handlers drop
+ * events whose target is an input, so touch-typing 'w' here never walks the player.
+ */
+function DevConsole({ onRun, onClose }: { onRun: (line: string) => string; onClose: () => void }) {
+  const [line, setLine] = useState('')
+  const [log, setLog] = useState<string[]>([])
+  const hist = useRef<string[]>([])
+  const histAt = useRef(-1)
+  const submit = () => {
+    const l = line.trim()
+    if (!l) { onClose(); return }
+    const out = onRun(l)
+    hist.current.unshift(l); histAt.current = -1
+    setLog(prev => [...prev, `› ${l}`, ...(out ? out.split('\n') : [])].slice(-10))
+    setLine('')
+  }
+  return (
+    <div className="absolute left-3 bottom-3 w-[460px] font-mono text-[11px] pointer-events-auto">
+      {log.length > 0 && (
+        <div className="mb-1 px-2 py-1.5 bg-black/70 border border-white/10 rounded text-white/70 whitespace-pre-wrap max-h-44 overflow-y-auto">
+          {log.join('\n')}
+        </div>
+      )}
+      <div className="flex items-center gap-1.5 px-2 py-1.5 bg-black/80 border border-white/15 rounded">
+        <span className="text-amber-200/80">›</span>
+        <input
+          autoFocus value={line} onChange={e => setLine(e.target.value)}
+          onKeyDown={e => {
+            e.stopPropagation()
+            if (e.key === 'Enter') submit()
+            else if (e.key === 'Escape') onClose()
+            else if (e.key === 'ArrowUp') { const h = hist.current; if (h.length) { histAt.current = Math.min(h.length - 1, histAt.current + 1); setLine(h[histAt.current]) } e.preventDefault() }
+            else if (e.key === 'ArrowDown') { const h = hist.current; histAt.current = Math.max(-1, histAt.current - 1); setLine(histAt.current === -1 ? '' : h[histAt.current]); e.preventDefault() }
+          }}
+          placeholder="help"
+          className="flex-1 bg-transparent outline-none text-white/90 placeholder:text-white/25"
+        />
+        <span className="text-white/30">esc</span>
+      </div>
+    </div>
+  )
+}
+
 function GregDialogue({ stage, onClose }: { stage: TutorialStage; onClose: () => void }) {
   return (
     <div className="absolute inset-0 grid place-items-center bg-black/50 pointer-events-auto" onClick={onClose}>

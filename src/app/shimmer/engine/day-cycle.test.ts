@@ -119,7 +119,7 @@ console.log('\npurity (what makes offline + multiplayer work)')
   check('the world moves while the tab is closed', dayProgress(t) !== dayProgress(t + CYCLE_MS / 3))
   check('negative/epoch-zero times do not produce a negative hour',
     dayProgress(0) >= 0 && dayProgress(-CYCLE_MS * 1.5) >= 0 && dayProgress(-1) >= 0)
-  check('the pin is off outside a browser', isTimePinned === false)
+  check('the pin is off outside a browser', isTimePinned() === false)
 }
 
 console.log('\nscheduling')

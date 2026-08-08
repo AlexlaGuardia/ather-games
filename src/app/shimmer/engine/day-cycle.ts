@@ -43,13 +43,15 @@ export const RESPAWN_TRIGGERS = {
   rinning:     0,
 } as const
 
-// ── `?hour=` — the art-pass tool ────────────────────────────────────────────
+// ── the time pin — `?hour=` and the dev console ─────────────────────────────
 // Deriving the clock from wall time has one real cost: you cannot LOOK at dusk without waiting for
 // dusk, which makes an eyeball pass on the gold⇄silver crossfade a 64-minute round trip. `?hour=19`
-// pins the garden at that hour so a whole day can be judged in a minute. Read once at module load,
-// never written — so it cannot leak into normal play, and every other consumer of the clock
-// (spawner resets included) inherits the pin for free rather than needing its own override.
-const pinnedHour: number | null = (() => {
+// pins the garden at that hour so a whole day can be judged in a minute. The URL param seeds it at
+// module load; `setTimePin` (2026-08-08, the voxel3d dev console's `time` command) writes the SAME
+// slot at runtime — one pin, every consumer of the clock (spawner resets included) inherits it for
+// free rather than needing its own override. It still cannot leak into normal play: only the URL
+// and an explicit console command reach it.
+let pinnedHour: number | null = (() => {
   if (typeof window === 'undefined') return null
   const raw = new URLSearchParams(window.location.search).get('hour')
   if (raw === null) return null
@@ -57,8 +59,14 @@ const pinnedHour: number | null = (() => {
   return Number.isFinite(h) ? ((h % 24) + 24) % 24 : null
 })()
 
-/** True when the clock is pinned — the HUD says so, so a pinned tab is never mistaken for a bug. */
-export const isTimePinned = pinnedHour !== null
+/** True when the clock is pinned — the HUD says so, so a pinned tab is never mistaken for a bug.
+ *  A function now (was a const): the pin is runtime-writable since the console's `time` command. */
+export const isTimePinned = (): boolean => pinnedHour !== null
+
+/** Pin the clock to an hour (wraps into 0..24), or `null` to hand it back to wall time. */
+export function setTimePin(hour: number | null): void {
+  pinnedHour = hour === null ? null : ((hour % 24) + 24) % 24
+}
 
 /** Where we are in the day, 0..1, with 0 = midnight. */
 export function dayProgress(nowMs: number = Date.now()): number {

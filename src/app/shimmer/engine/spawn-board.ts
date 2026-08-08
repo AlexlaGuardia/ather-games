@@ -188,7 +188,7 @@ export function windowAt(nowMs: number, pin: number | null): DealWindow {
 
 export function currentWindow(nowMs: number = Date.now()): DealWindow {
   if (pinnedWindow !== null) return windowAt(nowMs, pinnedWindow)
-  if (isTimePinned) {
+  if (isTimePinned()) {
     // The pinned hour's own window, held still: floor(progress * RESETS_PER_DAY) is which half of
     // the frozen day we are standing in.
     const idx = Math.floor(dayProgress(nowMs) * RESETS_PER_DAY)
@@ -259,7 +259,7 @@ export function zoneWindow(nowMs: number, cfg?: ZoneSpawnConfig): DealWindow {
     const live = Math.floor(nowMs / wm)
     return { index: pinnedWindow, startMs: live * wm, endMs: (live + 1) * wm }
   }
-  if (isTimePinned) {
+  if (isTimePinned()) {
     const idx = Math.floor(dayProgress(nowMs) * zoneResets(cfg))
     return { index: idx, startMs: idx * wm, endMs: (idx + 1) * wm }
   }

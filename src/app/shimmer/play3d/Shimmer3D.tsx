@@ -2797,7 +2797,7 @@ function DayClock({ zoneId }: { zoneId: string }) {
       <span style={{ font: '13px serif', lineHeight: 1, color: look.c }}>{look.g}</span>
       <span style={{ font: '800 12px ui-monospace, monospace', color: '#eafff6', fontVariantNumeric: 'tabular-nums' }}>{getDisplayTime(p)}</span>
       <span style={{ font: '700 8.5px ui-monospace, monospace', color: look.c, letterSpacing: '0.12em' }}>{phase.toUpperCase()}</span>
-      {isTimePinned && <span title="clock pinned by ?hour= — drop the param for live time" style={{ font: '700 8.5px ui-monospace, monospace', color: '#e0a0d0' }}>PIN</span>}
+      {isTimePinned() && <span title="clock pinned by ?hour= — drop the param for live time" style={{ font: '700 8.5px ui-monospace, monospace', color: '#e0a0d0' }}>PIN</span>}
       {isBoardPinned && <span title="spawn board pinned by ?window= — drop the param for the live board" style={{ font: '700 8.5px ui-monospace, monospace', color: '#9fe0c0' }}>BOARD</span>}
       {/* ★ Loud on purpose, and in a warning colour. `?fadetest=1` cycles EVERY node through the
           dissolve on a 12s loop, which is indistinguishable from the world being broken — the first
