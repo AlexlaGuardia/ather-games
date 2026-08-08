@@ -464,12 +464,14 @@ export default function VoxelWorld() {
           tools={tools} skills={skills} onSkill={setSkillHud} onLevel={setLevelUp} onTool={setActiveTool}
           tutorial={tutorial} onQuestEvent={onQuestEvent} onNearGreg={setNearGreg}
         />
-        {/* enabled-gate: with a cursor surface up, a stray click on the canvas BEHIND the menu must
-            not seize the mouse back — the same seam the handoff exists to close.
-            selector: deliberately matches NOTHING. Without it drei binds click-to-lock on the whole
-            DOCUMENT (and that effect ignores `enabled`), which re-locked the pointer on every
-            craft-menu click. Locking is owned by the canvas listener in onCreated + the handoff. */}
-        <PointerLockControls enabled={!craftOpen && !dialogueOpen && !showSettings} selector="#voxel3d-no-autolock" />
+        {/* selector: deliberately matches NOTHING. Without it drei binds click-to-lock on the whole
+            DOCUMENT (and that binding ignores `enabled`), which re-locked the pointer on every
+            craft-menu click. Locking is owned by the canvas listener in onCreated + the handoff.
+            ⚠ No `enabled` gate here — it disconnects the controls' pointerlockchange listener, and
+            the handoff's re-lock on menu-close lands BEFORE React re-enables them, so isLocked
+            stayed false and the camera froze with the pointer captured. Stray canvas clicks while
+            a menu is up are already refused by the onCreated click handler. */}
+        <PointerLockControls selector="#voxel3d-no-autolock" />
       </Canvas>
       <Hud stats={stats} pos={pos} look={look} hotbar={hotbar} sel={sel} tier={tier}
            build={build} pieceIdx={pieceIdx} rot={rot} inv={inv}
