@@ -90,6 +90,12 @@ export const BLOCKS: BlockDef[] = [
   // off") lives in light.ts; this row only makes the tending possible.
   { material: MAT.MANA_LANTERN, name: 'Mana Lantern', hardness: 0.6, skill: null, minTier: 0, drops: [{ itemId: 'mana_lantern', count: 1 }], placeable: true, emit: 14 },
 
+  // ── The crafting table — the first station ─────────────────────────────────────────────────
+  // Breaks by hand into itself, same reasoning as the lantern: your bench is furniture, and
+  // rearranging your home must be free. Placing it is what flips `Station` in voxel/recipes.ts
+  // from a dormant field to a real gate — recipes marked `crafting_table` light up near one.
+  { material: MAT.CRAFT_TABLE, name: 'Crafting Table', hardness: 0.8, skill: null, minTier: 0, drops: [{ itemId: 'crafting_table', count: 1 }], placeable: true },
+
   // ── the Prospecting ladder — hardness AND tier both climb, so depth gates twice over ────────
   { material: ORE.RAW_MANA, name: 'Raw Mana Seam', hardness: 2.2, skill: 'prospecting', minTier: 1, drops: [{ itemId: 'raw_mana_shard', count: 1 }], placeable: false },
   { material: ORE.ELEMENT_VIOLET, name: 'Violet Crystal Seam', hardness: 3.0, skill: 'prospecting', minTier: 1, drops: [{ itemId: 'violet_crystal', count: 1 }], placeable: false },

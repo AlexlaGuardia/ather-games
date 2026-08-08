@@ -38,6 +38,8 @@ export const TILE_MATERIALS: number[] = [
   MAT.GREY_SOIL,
   // The lantern added 2026-08-07 with the Hollows spawn cycle — the first emitter.
   MAT.MANA_LANTERN,
+  // The crafting table added 2026-08-08 — the first station.
+  MAT.CRAFT_TABLE,
 ]
 
 /** One spare layer past the end: an unmapped material samples magenta rather than layer 0's stone. */
@@ -419,6 +421,40 @@ function paintLantern(dst: Layer, size: number, seed: number) {
   }
 }
 
+/**
+ * The crafting table. TOP is a worked plank surface with a darker etched work-square — the "this
+ * face is where things happen" read, MC muscle memory without copying its grid. SIDE is a light
+ * top rail over a recessed panel between corner legs, so it reads as furniture standing on the
+ * ground rather than another full cube of wood. BOTTOM is plain dark planks.
+ */
+function paintCraftTable(dst: Layer, size: number, seed: number, face: number) {
+  const milled = rgbOf(MATERIAL_COLOR[MAT.CRAFT_TABLE])
+  const dark = shade(milled, -52)
+  const rail = shade(milled, 20)
+  const plankH = Math.max(2, Math.round(size / 4))
+  const b = Math.max(1, Math.round(size / 8))          // etch/leg thickness
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const jitter = (h2(x, y, seed) - 0.5) * 20
+      if (face === TOP) {
+        // plank strips + seam lines, then the etched work-square over them
+        const seam = y % plankH === 0
+        const inEtch = (x === b || x === size - 1 - b) && y >= b && y <= size - 1 - b ||
+                       (y === b || y === size - 1 - b) && x >= b && x <= size - 1 - b
+        put(dst, size, x, y, inEtch ? dark : shade(seam ? dark : milled, seam ? 0 : jitter), 0)
+      } else if (face === SIDE) {
+        const inRail = y < plankH                                  // top rail band
+        const inLeg = x < b || x >= size - b                       // corner legs, full height
+        const panel = shade(milled, -26 + jitter * 0.6)            // recessed panel
+        put(dst, size, x, y, inRail ? shade(rail, jitter) : inLeg ? dark : panel, 0)
+      } else {
+        const seam = y % plankH === 0
+        put(dst, size, x, y, shade(seam ? shade(dark, -14) : dark, seam ? 0 : jitter * 0.6), 0)
+      }
+    }
+  }
+}
+
 // ── assembly ─────────────────────────────────────────────────────────────────────────────────────
 
 function paintFor(material: number, face: number, size: number): Layer {
@@ -442,6 +478,7 @@ function paintFor(material: number, face: number, size: number): Layer {
       else paintGrit(dst, size, rgbOf(MATERIAL_COLOR[MAT.SUBSOIL]), 18, 22, seed)
       break
     case MAT.MANA_LANTERN: paintLantern(dst, size, seed); break
+    case MAT.CRAFT_TABLE: paintCraftTable(dst, size, seed, face); break
     default:
       if (LOG_SET.has(material)) {
         const c = rgbOf(MATERIAL_COLOR[material])

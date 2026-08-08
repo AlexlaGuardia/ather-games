@@ -55,7 +55,7 @@ import { ensureBasicTools, getEquippedTool, getToolDef, craftTool, canCraft as c
 // everything, and it counts materials across a `BankState` the voxel world does not have. What a
 // block world needs first is the layer the tile world never had: material → material. See the
 // header of `voxel/recipes.ts` for why, including the bug it was already causing.
-import { RECIPES, canCraft as canCraftRecipe, craftPlan, type RecipeDef } from '../voxel/recipes'
+import { RECIPES, canCraft as canCraftRecipe, craftPlan, type RecipeDef, type Station } from '../voxel/recipes'
 // ── PORT STEP 3 — the guns (2026-08-07, Alex ruled they cross into the Ather) ─────────────────
 // `engine/weapons.ts` is the shared half: the table, the tuning, the pure ballistics. It was
 // EXTRACTED from Shimmer3D rather than copied, because the thing that could not come across is
@@ -258,6 +258,10 @@ export default function VoxelWorld() {
   // alternative (inventory in state) would re-render the whole world on every mined block.
   const [craftOpen, setCraftOpen] = useState(false)
   const [craftTick, setCraftTick] = useState(0)
+  // Near a PLACED crafting table (World scans and reports, same shape as nearGreg). This is the
+  // value that turns recipes.ts's `Station` field from documentation into a gate.
+  const [nearTable, setNearTable] = useState(false)
+  const station: Station = nearTable ? 'crafting_table' : 'hand'
   const have = useCallback((itemId: string) => countItem(inv.current!, itemId), [])
 
   // ── THE MOUSE HANDOFF (play3d's contract, ported verbatim) ──────────────────────────────────
@@ -312,6 +316,10 @@ export default function VoxelWorld() {
     const t = tutorial.current
     if (t.stage === 'greet') {
       addItems(inv.current!, 'raw_mana_shard', 1)
+      // The starter bag, delivered incrementally — canon (shimmer-quests-mainmap.md quest 1) has
+      // Greg gift "crafting table, pot, grimoire, tools"; the table is the piece that exists.
+      // The hand-craft recipe in voxel/recipes.ts stays as the REPLACEMENT path, per its header.
+      addItems(inv.current!, 'crafting_table', 1)
       refreshHotbar()
       t.stage = 'cut'
       saveTutorial(SEED, t)
@@ -328,7 +336,7 @@ export default function VoxelWorld() {
   /** Refine/build a recipe. The core hands back a plan; the host applies it. */
   const doCraft = useCallback((id: string) => {
     const plan = craftPlan(id)
-    if (!plan || !canCraftRecipe(id, have)) return
+    if (!plan || !canCraftRecipe(id, have, station)) return
     // Take everything BEFORE giving, and only give if every take succeeded — a partial spend that
     // still yields the output is a duplication bug, which is the one economy bug you cannot undo.
     if (!plan.take.every(t => countItem(inv.current!, t.itemId) >= t.count)) return
@@ -341,7 +349,7 @@ export default function VoxelWorld() {
     // three plank recipes satisfies 'planks' (Greg said "a tree", not which one).
     if (plan.give.itemId.endsWith('_plank')) advanceTutorial('planks', 'lantern')
     if (plan.give.itemId === 'mana_lantern') advanceTutorial('lantern', 'light')
-  }, [have, refreshHotbar, advanceTutorial])
+  }, [have, refreshHotbar, advanceTutorial, station])
 
   /** Craft a tool and equip it. Tools keep their own table; this is the one surface that shows it. */
   const doCraftTool = useCallback((id: string) => {
@@ -463,6 +471,7 @@ export default function VoxelWorld() {
           build={build} pieceIdx={pieceIdx} rot={rot}
           tools={tools} skills={skills} onSkill={setSkillHud} onLevel={setLevelUp} onTool={setActiveTool}
           tutorial={tutorial} onQuestEvent={onQuestEvent} onNearGreg={setNearGreg}
+          onNearTable={setNearTable}
         />
         {/* selector: deliberately matches NOTHING. Without it drei binds click-to-lock on the whole
             DOCUMENT (and that binding ignores `enabled`), which re-locked the pointer on every
@@ -481,7 +490,7 @@ export default function VoxelWorld() {
            tutorialStage={tutorial.current.stage} nearGreg={nearGreg} dialogueOpen={dialogueOpen} />
       {showSettings && <SettingsPanel s={settings} update={update} onClose={() => { setShowSettings(false); closeCursorUI() }} />}
       {craftOpen && (
-        <CraftPanel have={have} tools={tools} tick={craftTick}
+        <CraftPanel have={have} tools={tools} tick={craftTick} station={station}
                     onCraft={doCraft} onCraftTool={doCraftTool} onClose={() => { setCraftOpen(false); closeCursorUI() }} />
       )}
       {dialogueOpen && <GregDialogue stage={tutorial.current.stage} onClose={closeDialogue} />}
@@ -853,7 +862,7 @@ function ToolGlyph({ family }: { family: 'forestry' | 'prospecting' | 'rinning' 
 const SOLID_EXCEPT = new Set<number>([AIR, MAT.WATER])
 const isSolid = (m: number) => !SOLID_EXCEPT.has(m)
 
-function World({ inv, toolTier, toolSkill, selItem, weaponDrawn, weaponIdx, onAmmo, onStats, onPos, onLook, onInvChange, worker, incoming, inflight, settings, build, pieceIdx, rot, tools, skills, onSkill, onLevel, onTool, tutorial, onQuestEvent, onNearGreg }: {
+function World({ inv, toolTier, toolSkill, selItem, weaponDrawn, weaponIdx, onAmmo, onStats, onPos, onLook, onInvChange, worker, incoming, inflight, settings, build, pieceIdx, rot, tools, skills, onSkill, onLevel, onTool, tutorial, onQuestEvent, onNearGreg, onNearTable }: {
   inv: React.RefObject<Inventory>
   toolTier: React.RefObject<number>
   toolSkill: React.RefObject<BlockSkill>
@@ -892,6 +901,8 @@ function World({ inv, toolTier, toolSkill, selItem, weaponDrawn, weaponIdx, onAm
   onQuestEvent: (event: 'cut' | 'light') => void
   /** Fires only on change, same dedup shape as `onTool`. */
   onNearGreg: (near: boolean) => void
+  /** Near a placed crafting table — the parent turns this into recipes.ts's `Station`. */
+  onNearTable: (near: boolean) => void
 }) {
   const { camera } = useThree()
   const group = useRef<THREE.Group>(null)
@@ -965,6 +976,8 @@ function World({ inv, toolTier, toolSkill, selItem, weaponDrawn, weaponIdx, onAm
     return g
   }, [])
   const lastNearGreg = useRef(false)
+  const lastNearTable = useRef(false)
+  const tableScanT = useRef(0)
   // The gate: built (sealed or open, matching whatever `tutorial.current.stage` says at the moment
   // its columns arrive) exactly once, then opened exactly once more if the quest completes later.
   const gateBuilt = useRef(false)
@@ -1643,6 +1656,25 @@ function World({ inv, toolTier, toolSkill, selItem, weaponDrawn, weaponIdx, onAm
       if (near !== lastNearGreg.current) { lastNearGreg.current = near; onNearGreg(near) }
     }
 
+    // ── near a crafting table? ───────────────────────────────────────────────────────────────
+    // A placed table upgrades the craft surface's Station within arm's reach (±4 blocks, a house
+    // room — MC asks for a click on the block; ours stays a key, so proximity is the claim).
+    // Scanned on a half-second cadence, not per frame: ~700 voxel reads is nothing once, and
+    // needless 60Hz; dedup on change, same shape as Greg's range above.
+    {
+      tableScanT.current += dt
+      if (tableScanT.current >= 0.5) {
+        tableScanT.current = 0
+        const px = Math.floor(p.x), py = Math.floor(p.y), pz = Math.floor(p.z)
+        let found = false
+        scan: for (let dy = -3; dy <= 2; dy++)
+          for (let dz = -4; dz <= 4; dz++)
+            for (let dx = -4; dx <= 4; dx++)
+              if (voxel(px + dx, py + dy, pz + dz) === MAT.CRAFT_TABLE) { found = true; break scan }
+        if (found !== lastNearTable.current) { lastNearTable.current = found; onNearTable(found) }
+      }
+    }
+
     // ── movement — play3d's locomotion on voxel collision (see locomotion.ts) ────────────────
     // The camera is DERIVED (feet + eased eye), never the physics primitive: the eye dips through
     // a slide without the collision box following it into the floor.
@@ -1973,10 +2005,12 @@ function GregDialogue({ stage, onClose }: { stage: TutorialStage; onClose: () =>
  * `tick` is the re-render handle: the inventory is a ref that crafting mutates in place, so this
  * panel has no other way to know its counts changed.
  */
-function CraftPanel({ have, tools, tick, onCraft, onCraftTool, onClose }: {
+function CraftPanel({ have, tools, tick, station, onCraft, onCraftTool, onClose }: {
   have: (itemId: string) => number
   tools: React.RefObject<EquippedTools>
   tick: number
+  /** 'crafting_table' when standing near a placed one — station-gated recipes light up. */
+  station: Station
   onCraft: (id: string) => void
   onCraftTool: (id: string) => void
   onClose: () => void
@@ -2004,21 +2038,25 @@ function CraftPanel({ have, tools, tick, onCraft, onCraftTool, onClose }: {
     return next ? [next] : []
   })
 
-  const rows = RECIPES.filter(r => r.input.every(i => have(i.itemId) > 0 || canCraftRecipe(r.id, have)))
+  const rows = RECIPES.filter(r => r.input.every(i => have(i.itemId) > 0 || canCraftRecipe(r.id, have, station)))
 
   return (
     <div className="absolute inset-0 grid place-items-center bg-black/50 pointer-events-auto" onClick={onClose}>
       <div className="w-[440px] max-h-[80vh] overflow-y-auto bg-[#0e1018]/95 border border-white/12 rounded-lg p-4 font-mono text-[11px]"
            onClick={(e) => e.stopPropagation()}>
         <div className="flex items-baseline justify-between mb-3">
-          <span className="text-white/95 font-semibold tracking-[.18em] uppercase">Crafting</span>
+          <span className="text-white/95 font-semibold tracking-[.18em] uppercase">Crafting
+            {station === 'crafting_table' && <span className="ml-2 text-amber-200/70 normal-case tracking-normal font-normal">at table</span>}
+          </span>
           <button onClick={onClose} className="text-white/40 hover:text-white/80">esc</button>
         </div>
 
         <div className="text-white/40 tracking-[.14em] uppercase text-[9px] mb-1.5">Refine</div>
         {rows.length === 0 && <div className="text-white/35 mb-3">nothing to refine — go cut a tree</div>}
         {rows.map((r: RecipeDef) => {
-          const can = canCraftRecipe(r.id, have)
+          const can = canCraftRecipe(r.id, have, station)
+          // A row locked by WHERE you are must say so — greyed-with-costs-green reads as a bug.
+          const needsTable = r.station === 'crafting_table' && station !== 'crafting_table'
           return (
             <button key={r.id} disabled={!can} onClick={() => onCraft(r.id)}
                     className={`w-full text-left mb-1 px-2 py-1.5 rounded border transition-colors ${
@@ -2028,7 +2066,10 @@ function CraftPanel({ have, tools, tick, onCraft, onCraftTool, onClose }: {
                 <span>{r.name}</span>
                 <span className="text-amber-200/70 tabular-nums">{r.output.count}× {label(r.output.itemId)}</span>
               </div>
-              <div className="mt-0.5 text-[10px]"><Cost items={r.input} /></div>
+              <div className="mt-0.5 text-[10px]">
+                <Cost items={r.input} />
+                {needsTable && <span className="text-sky-300/60"> · at a crafting table</span>}
+              </div>
             </button>
           )
         })}

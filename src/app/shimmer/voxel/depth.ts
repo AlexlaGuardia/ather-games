@@ -45,6 +45,12 @@ export const MAT = {
    * same as everything else in this enum.
    */
   MANA_LANTERN: 9,
+  /**
+   * The crafting station, placed. The ITEM already existed (`voxel/recipes.ts` hand-crafts it;
+   * canon has Greg gift one in the starter bag) — this id is what lets it stand in the world.
+   * Never generated; only ever placed. ⚠ TBD-CANON on the name, same as everything else here.
+   */
+  CRAFT_TABLE: 10,
 } as const
 
 export interface DepthConfig {

@@ -46,6 +46,8 @@ export const MATERIAL_COLOR: Record<number, number> = {
   // Warm mana-light in a plank frame — the raw-mana blue warmed toward candle, so a lit yard
   // reads as TENDED against the cold ore glow of a cave.
   [MAT.MANA_LANTERN]: 0xffd98a,
+  // Milled goldwood, a step lighter and warmer than the raw log — a worked surface, not bark.
+  [MAT.CRAFT_TABLE]: 0xb08a4e,
 }
 
 /** Materials that glow, so ore reads in an unlit cave instead of being a slightly different grey. */
