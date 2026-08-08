@@ -40,7 +40,7 @@ import { toGeometry, createVoxelMaterial, createWaterMaterial, applySettings } f
 import { layerOf } from './tex/tiles'
 import { makeTileArray } from './tex/atlas'
 import { createTexturedVoxelMaterial } from './tex/atlas'
-import { loadSettings, saveSettings, withStyle, type VoxelSettings, type RenderStyle } from './settings'
+import { loadSettings, saveSettings, withStyle, VIEW_RADIUS_MIN, VIEW_RADIUS_MAX, type VoxelSettings, type RenderStyle } from './settings'
 import { buildAttrsSplit, MATERIAL_COLOR } from './attrs'
 import { createInventory, addItems, removeItems, countItem, type Inventory } from '../engine/inventory'
 // ★ PORT STEP 1 — the zero-coupling systems, wired unchanged.
@@ -72,7 +72,7 @@ import { VoxelDayNight } from './day-night'
 import { dayProgress, getPhase, getDisplayTime, isTimePinned } from '../engine/day-cycle'
 import { hollowEligible, hollowStep, segmentDist, hollowCap, packSize, packWalk, hollowNight,
          type HollowState, HOLLOW_HP, HOLLOW_HOVER, HOLLOW_RADIUS,
-         SPAWN_CYCLE_S, PLAYER_EXCLUSION, DESPAWN_DIST, GUTTER_SKY } from './hollows'
+         SPAWN_CYCLE_S, PLAYER_EXCLUSION, GUTTER_SKY } from './hollows'
 // The light field (port step 4's other half) — computed here, consumed by the spawn cycle only.
 // Per light.ts's header this deliberately never touches a mesh.
 import { computeLight, dayFactor, type LightField } from '../voxel/light'
@@ -91,7 +91,7 @@ import { createGregMesh } from './greg'
 
 const SEED = 1337
 const H = DEFAULT_COLUMN.worldHeight
-const RADIUS = 6
+// Load-ring radius lives in settings now (viewRadius, O panel) — the World loops read it live.
 const REACH = 6            // how far you can mine or place, in voxels
 const key = (cx: number, cz: number) => `${cx},${cz}`
 /** Non-air materials light still passes through — light.ts's "air, water and foliage" contract.
@@ -1500,6 +1500,9 @@ function World({ inv, toolTier, toolSkill, selItem, weaponDrawn, weaponIdx, onAm
           mesh,
         })
       }
+      // The despawn line IS the load edge — it derives from viewRadius now, so a wider view means
+      // a wider night. hollows.ts's DESPAWN_DIST constant documented the r=6 baseline (96).
+      const despawn = settings.viewRadius * SECTION
       // hollowNight is a cheap pre-gate, not the rule: an open surface spot's sky is 15, so
       // spawnDark can only pass once 15·day ≤ 7 anyway. The sweep is skipped, never the ruling.
       if (hollowNight(day) && hollows.current.length < cap && hollowClock.current <= 0) {
@@ -1515,7 +1518,7 @@ function World({ inv, toolTier, toolSkill, selItem, weaponDrawn, weaponIdx, onAm
           const [scx, scz] = keys[(start + i) % keys.length].split(',').map(Number)
           const ccx = scx * SECTION + SECTION / 2, ccz = scz * SECTION + SECTION / 2
           // A column entirely beyond despawn range would breed instant despawns — skip it.
-          if (Math.hypot(ccx - p.x, ccz - p.z) > DESPAWN_DIST + SECTION / 2) continue
+          if (Math.hypot(ccx - p.x, ccz - p.z) > despawn + SECTION / 2) continue
           const kk = key(scx, scz)
           if (!lightCache.current.has(kk)) { if (lightBudget <= 0) continue; lightBudget-- }
           const lf = lightFor(scx, scz)
@@ -1525,7 +1528,7 @@ function World({ inv, toolTier, toolSkill, selItem, weaponDrawn, weaponIdx, onAm
           const wz = scz * SECTION + Math.floor(Math.random() * SECTION)
           const sh = columnHeight(wx, wz, SEED)
           const dp = Math.hypot(wx + 0.5 - p.x, wz + 0.5 - p.z)
-          if (dp < PLAYER_EXCLUSION || dp > DESPAWN_DIST) continue
+          if (dp < PLAYER_EXCLUSION || dp > despawn) continue
           if (!hollowEligible(wx + 0.5, wz + 0.5, SEED, lf.get(wx, sh + 1, wz), day, sh, DEFAULT_DEPTH.seaLevel)) continue
           // The pack: the anchor bodies, then up to 3 mates on a triangular walk — each on its
           // OWN re-validated ground, because a pack mate is not exempt from the ruling (an
@@ -1536,7 +1539,7 @@ function World({ inv, toolTier, toolSkill, selItem, weaponDrawn, weaponIdx, onAm
             const mx = wx + 0.5 + off.dx, mz = wz + 0.5 + off.dz
             const mh = columnHeight(Math.floor(mx), Math.floor(mz), SEED)
             const mdp = Math.hypot(mx - p.x, mz - p.z)
-            if (mdp < PLAYER_EXCLUSION || mdp > DESPAWN_DIST) continue
+            if (mdp < PLAYER_EXCLUSION || mdp > despawn) continue
             if (!hollowEligible(mx, mz, SEED, lf.get(Math.floor(mx), mh + 1, Math.floor(mz)), day, mh, DEFAULT_DEPTH.seaLevel)) continue
             spawnHollow(mx, mh, mz)
           }
@@ -1556,7 +1559,7 @@ function World({ inv, toolTier, toolSkill, selItem, weaponDrawn, weaponIdx, onAm
         hw.mesh.scale.y += (1.55 * s * (1 + Math.sin(now * 1.9 + st.phase) * 0.05) - hw.mesh.scale.y) * Math.min(1, dt * 4)
         hw.mesh.position.set(st.x, st.y - st.gutter * 0.9, st.z)
         const ddx = st.x - p.x, ddz = st.z - p.z
-        if (st.gutter >= 1 || ddx * ddx + ddz * ddz > DESPAWN_DIST * DESPAWN_DIST) {
+        if (st.gutter >= 1 || ddx * ddx + ddz * ddz > despawn * despawn) {
           g.remove(hw.mesh); hollows.current.splice(i, 1)
         }
       }
@@ -1611,10 +1614,11 @@ function World({ inv, toolTier, toolSkill, selItem, weaponDrawn, weaponIdx, onAm
     }
 
     // ── request what is missing, nearest first ───────────────────────────────────────────────
+    const R = settings.viewRadius
     const want: [number, number, number][] = []
-    for (let dz = -RADIUS; dz <= RADIUS; dz++) for (let dx = -RADIUS; dx <= RADIUS; dx++) {
+    for (let dz = -R; dz <= R; dz++) for (let dx = -R; dx <= R; dx++) {
       const d = dx * dx + dz * dz
-      if (d > RADIUS * RADIUS) continue
+      if (d > R * R) continue
       const kk = key(cx + dx, cz + dz)
       if (!cols.current.has(kk) && !requested.current.has(kk)) want.push([d, cx + dx, cz + dz])
     }
@@ -1951,7 +1955,8 @@ function World({ inv, toolTier, toolSkill, selItem, weaponDrawn, weaponIdx, onAm
     // ── evict ────────────────────────────────────────────────────────────────────────────────
     if (frame.current % 120 === 0) {
       const keep = new Set<string>()
-      for (let dz = -RADIUS; dz <= RADIUS; dz++) for (let dx = -RADIUS; dx <= RADIUS; dx++) keep.add(key(cx + dx, cz + dz))
+      const R = settings.viewRadius
+      for (let dz = -R; dz <= R; dz++) for (let dx = -R; dx <= R; dx++) keep.add(key(cx + dx, cz + dz))
       for (const [mk, m] of drawn.current) {
         // FIRST ':', not last — water meshes key as `cx,cz:sec:w`, and lastIndexOf would strip
         // only the `:w`, miss the keep-set, and silently evict every water mesh each sweep.
@@ -2165,6 +2170,19 @@ function SettingsPanel({ s, update, onClose }: {
       <Slider label="outline" k="outline" />
       <Slider label="face light" k="faceShading" />
       <Slider label="shadow lift" k="shadowLift" />
+
+      <div className="text-[11px] font-mono font-semibold tracking-wider text-white/90 uppercase pt-1">World</div>
+      {/* Cost is QUADRATIC in this number (columns, meshes, light fields all scale with r²) —
+          which is why it is a stepped slider with tested bounds, not a free number. */}
+      <label className="flex items-center gap-2 text-[11px] font-mono text-white/70">
+        <span className="w-24 shrink-0">view radius</span>
+        <input
+          type="range" min={VIEW_RADIUS_MIN} max={VIEW_RADIUS_MAX} step={1} value={s.viewRadius}
+          onChange={e => update({ viewRadius: Number(e.target.value) })}
+          className="flex-1 accent-amber-300"
+        />
+        <span className="w-14 text-right tabular-nums text-white/50">{s.viewRadius * 16} blk</span>
+      </label>
 
       <p className="text-[10px] leading-relaxed text-white/35 font-mono pt-1">
         Both shading paths live in one shader program and are picked by a uniform, so switching

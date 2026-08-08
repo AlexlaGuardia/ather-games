@@ -22,14 +22,24 @@ export interface VoxelSettings {
   shadowLift: number
   /** Tile size for the texture array. Ruled 64 by Alex 2026-08-06. */
   tileSize: 32 | 64
+  /**
+   * Load/view ring radius in COLUMNS (16 blocks each). 6 = the shipped baseline (96 blocks, which
+   * is also where the Hollows' despawn line sits — it derives from this now). Cost scales with the
+   * SQUARE of this number: columns to generate, meshes to draw, light fields to cache. The slider's
+   * bounds are the tested-sane range, not a suggestion — see the World section of SettingsPanel.
+   */
+  viewRadius: number
 }
+
+export const VIEW_RADIUS_MIN = 4
+export const VIEW_RADIUS_MAX = 12
 
 /**
  * ★ THE CARTOON PRESET IS A STARTING POINT, NOT A LOOK CALL. Look is Alex's; these are the values
  * that make the levers visible enough to judge. Every one is exposed in the settings panel so the
  * judgement can be made by moving sliders on the real world rather than by reading a description.
  */
-export const PRESETS: Record<RenderStyle, Omit<VoxelSettings, 'style' | 'tileSize'>> = {
+export const PRESETS: Record<RenderStyle, Omit<VoxelSettings, 'style' | 'tileSize' | 'viewRadius'>> = {
   natural: { toon: 0, outline: 0, faceShading: 0.35, shadowLift: 0.15 },
   cartoon: { toon: 0.85, outline: 0.6, faceShading: 0.9, shadowLift: 0.5 },
 }
@@ -40,6 +50,7 @@ export const DEFAULT_SETTINGS: VoxelSettings = {
   // Ruled 2026-08-06 (Alex): 64 over the spike's 32 recommendation. Texel parity holds to ~11
   // blocks rather than ~22, and a tile is 4x the pixels to hand-paint. Look is his call.
   tileSize: 64,
+  viewRadius: 6,
 }
 
 const KEY = 'shimmer.voxel.settings.v1'
@@ -51,7 +62,11 @@ export function loadSettings(): VoxelSettings {
     if (!raw) return { ...DEFAULT_SETTINGS }
     // Merge over defaults rather than trusting the stored shape — a setting added later must not
     // arrive as undefined and silently become 0 in a uniform.
-    return { ...DEFAULT_SETTINGS, ...JSON.parse(raw) }
+    const s = { ...DEFAULT_SETTINGS, ...JSON.parse(raw) }
+    // viewRadius drives loop bounds and eviction, not a uniform — a stored garbage value here is
+    // an infinite want-ring, so it clamps on the way in rather than trusting the merge.
+    s.viewRadius = Math.max(VIEW_RADIUS_MIN, Math.min(VIEW_RADIUS_MAX, Math.round(Number(s.viewRadius) || DEFAULT_SETTINGS.viewRadius)))
+    return s
   } catch {
     return { ...DEFAULT_SETTINGS }
   }
