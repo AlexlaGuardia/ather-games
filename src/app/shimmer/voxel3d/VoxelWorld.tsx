@@ -260,6 +260,29 @@ export default function VoxelWorld() {
   const [craftTick, setCraftTick] = useState(0)
   const have = useCallback((itemId: string) => countItem(inv.current!, itemId), [])
 
+  // ── THE MOUSE HANDOFF (play3d's contract, ported verbatim) ──────────────────────────────────
+  // Overlays own the cursor; play owns the look. Every cursor surface (craft, settings, Greg's
+  // dialogue) releases the pointer on open and hands it BACK on close — the player never has to
+  // Esc + re-click at a seam. Whether to re-lock is remembered from OPEN time rather than assumed:
+  // a player who was already cursor-free must not have their mouse seized just because they closed
+  // a menu. The handoff gives back exactly what it borrowed.
+  const canvasElRef = useRef<HTMLCanvasElement | null>(null)
+  const lockOnCloseRef = useRef(false)
+  const openCursorUI = useCallback(() => {
+    lockOnCloseRef.current = !!document.pointerLockElement
+    document.exitPointerLock?.()
+  }, [])
+  const closeCursorUI = useCallback(() => {
+    const relock = lockOnCloseRef.current
+    lockOnCloseRef.current = false
+    if (!relock) return
+    // The close is itself a user gesture (keypress or button click), which is what the browser
+    // requires to grant pointer lock. The rare cooldown rejection (closing within ~1.25s of an
+    // Esc-forced unlock) is swallowed — a canvas click is always the fallback.
+    const c = canvasElRef.current
+    if (c) { try { const r = c.requestPointerLock?.() as unknown as Promise<void> | undefined; r?.catch?.(() => {}) } catch { /* re-lock cooldown */ } }
+  }, [])
+
   /** Advance the tutorial only if it is currently AT `expected` — an out-of-order action (say,
    *  crafting planks before ever talking to Greg) is silently a no-op rather than skipping a step,
    *  same discipline `recordEdit` uses for a no-op edit: the state only changes when the fact
@@ -280,6 +303,7 @@ export default function VoxelWorld() {
    */
   const closeDialogue = useCallback(() => {
     setDialogueOpen(false)
+    closeCursorUI()
     const t = tutorial.current
     if (t.stage === 'greet') {
       addItems(inv.current!, 'raw_mana_shard', 1)
@@ -294,7 +318,7 @@ export default function VoxelWorld() {
       saveTutorial(SEED, t)
       setTutorialTick(v => v + 1)
     }
-  }, [refreshHotbar])
+  }, [refreshHotbar, closeCursorUI])
 
   /** Refine/build a recipe. The core hands back a plan; the host applies it. */
   const doCraft = useCallback((id: string) => {
@@ -358,7 +382,10 @@ export default function VoxelWorld() {
       if (drawn) return   // every verb below is locked while the weapon is out
       if (n >= 1 && n <= 8) { if (build) setPieceIdx(Math.min(PIECES.length - 1, n - 1)); else setSel(n - 1) }
       // Esc exits pointer lock anyway, so O is the settings key — it must not fight the browser.
-      if (e.code === 'KeyO') setShowSettings(v => !v)
+      if (e.code === 'KeyO') {
+        if (showSettings) { setShowSettings(false); closeCursorUI() }
+        else { openCursorUI(); setShowSettings(true) }
+      }
       if (e.code === 'Tab') { e.preventDefault(); setBuild(v => !v) }
       if (e.code === 'KeyR') setRot(r => ((r + 1) % 4) as Rotation)
       if (e.code === 'BracketLeft' || e.code === 'BracketRight') { /* spike tier, handled below */ }
@@ -371,14 +398,24 @@ export default function VoxelWorld() {
       // all, which hid the fact that the whole forestry ladder was uncraftable — you pressed C,
       // nothing happened, and nothing told you why. A list that shows what you CANNOT afford yet is
       // the difference between a broken key and a goal.
-      if (e.code === 'KeyC') setCraftOpen(o => !o)
+      if (e.code === 'KeyC') {
+        if (craftOpen) { setCraftOpen(false); closeCursorUI() }
+        else { openCursorUI(); setCraftOpen(true) }
+      }
       // E talks to Greg when he is in range, and closes the box that opens from it — the same key
       // both opens and dismisses, matching how C works for the crafting surface just above.
       if (e.code === 'KeyE') {
-        if (dialogueOpen) closeDialogue()
-        else if (nearGreg) setDialogueOpen(true)
+        if (dialogueOpen) closeDialogue()   // hands the cursor back itself
+        else if (nearGreg) { openCursorUI(); setDialogueOpen(true) }
       }
-      if (e.code === 'Escape') { setCraftOpen(false); if (dialogueOpen) closeDialogue() }
+      // Escape only reaches us when the pointer is already free (the browser eats it to exit the
+      // lock first) — so close the surfaces AND settle the handoff ledger. closeCursorUI's relock
+      // will be refused by the browser's post-Esc cooldown and swallowed; that is the one seam
+      // where a canvas click is still needed, same as play3d.
+      if (e.code === 'Escape') {
+        if (craftOpen) { setCraftOpen(false); closeCursorUI() }
+        if (dialogueOpen) closeDialogue()
+      }
     }
     // Scroll to change slot — the reason tools are IN the row rather than on their own keys.
     const onWheel = (e: WheelEvent) => {
@@ -388,11 +425,12 @@ export default function VoxelWorld() {
     window.addEventListener('keydown', onKey)
     window.addEventListener('wheel', onWheel, { passive: true })
     return () => { window.removeEventListener('keydown', onKey); window.removeEventListener('wheel', onWheel) }
-  }, [build, drawn, dialogueOpen, nearGreg, closeDialogue])
+  }, [build, drawn, dialogueOpen, nearGreg, craftOpen, showSettings, closeDialogue, openCursorUI, closeCursorUI])
 
   return (
     <div className="fixed inset-0 bg-[#0b0d14]">
-      <Canvas camera={{ fov: 75, near: 0.1, far: 600 }} shadows={false}>
+      <Canvas camera={{ fov: 75, near: 0.1, far: 600 }} shadows={false}
+              onCreated={({ gl }) => { canvasElRef.current = gl.domElement }}>
         {/* Sky, fog and all scene lights live in the rig now — the clock drives them. The old
             static five-liner IS the rig's DAY palette, so noon looks identical. */}
         <VoxelDayNight />
@@ -411,7 +449,9 @@ export default function VoxelWorld() {
           tools={tools} skills={skills} onSkill={setSkillHud} onLevel={setLevelUp} onTool={setActiveTool}
           tutorial={tutorial} onQuestEvent={onQuestEvent} onNearGreg={setNearGreg}
         />
-        <PointerLockControls />
+        {/* enabled-gate: with a cursor surface up, a stray click on the canvas BEHIND the menu must
+            not seize the mouse back — the same seam the handoff exists to close. */}
+        <PointerLockControls enabled={!craftOpen && !dialogueOpen && !showSettings} />
       </Canvas>
       <Hud stats={stats} pos={pos} look={look} hotbar={hotbar} sel={sel} tier={tier}
            build={build} pieceIdx={pieceIdx} rot={rot} inv={inv}
@@ -419,10 +459,10 @@ export default function VoxelWorld() {
            activeTool={activeTool}
            isOwner={isOwner} drawn={drawn} weaponIdx={weaponIdx} ammoUi={ammoUi}
            tutorialStage={tutorial.current.stage} nearGreg={nearGreg} dialogueOpen={dialogueOpen} />
-      {showSettings && <SettingsPanel s={settings} update={update} onClose={() => setShowSettings(false)} />}
+      {showSettings && <SettingsPanel s={settings} update={update} onClose={() => { setShowSettings(false); closeCursorUI() }} />}
       {craftOpen && (
         <CraftPanel have={have} tools={tools} tick={craftTick}
-                    onCraft={doCraft} onCraftTool={doCraftTool} onClose={() => setCraftOpen(false)} />
+                    onCraft={doCraft} onCraftTool={doCraftTool} onClose={() => { setCraftOpen(false); closeCursorUI() }} />
       )}
       {dialogueOpen && <GregDialogue stage={tutorial.current.stage} onClose={closeDialogue} />}
     </div>
