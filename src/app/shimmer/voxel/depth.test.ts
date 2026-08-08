@@ -7,6 +7,7 @@
 // to notice.
 
 import { columnHeight, riverCarve, waterSurfaceAt, DEFAULT_HEIGHT } from './height'
+import { roadAt } from './story-path'
 import { materialAt, fillColumn, slopeAt, MAT, DEFAULT_DEPTH } from './depth'
 
 let pass = 0
@@ -48,7 +49,11 @@ for (let i = 0; i < 600; i++) COLS.push([(i * 977) % 4000 - 2000, (i * 1583) % 4
     for (const y of [h + 1, h + 4, h + 30]) {
       if (y >= H.worldHeight) continue
       const m = materialAt(x, y, z, SEED, h)
-      if (m !== MAT.AIR && m !== MAT.WATER) bad++
+      // Bridges (2026-08-08): the story road may hang plank deck/rails and stone piers over a
+      // submerged bed — the ONE structure the generator holds above the surface, and only ever
+      // inside the road corridor. Anything built above ground OUTSIDE the corridor is still a bug.
+      const bridge = (m === MAT.PLANKS || m === MAT.STONE) && roadAt(x, z, SEED)
+      if (m !== MAT.AIR && m !== MAT.WATER && !bridge) bad++
       // Water above sea level is legal in exactly one place: a river channel or pond, filled to
       // the water table (height.ts waterLevelAt — a body of water has ONE level).
       if (m === MAT.WATER) {
