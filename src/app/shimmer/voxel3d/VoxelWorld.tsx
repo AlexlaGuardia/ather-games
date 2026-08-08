@@ -2063,6 +2063,16 @@ function World({ inv, toolTier, toolSkill, selItem, weaponDrawn, weaponIdx, onAm
       // raycast uses, so the ghost and the crosshair can never disagree about "forward".
       const yawRot = (2 - Math.round(Math.atan2(aim.x, aim.z) / (Math.PI / 2)) + 8) % 4
       const face = ((yawRot + rot) % 4) as Rotation
+      // ★ ONE PREVIEW, NOT TWO (Alex, 2026-08-08: "it would preview a block away from the
+      // highlighted block"). The wireframe marks the cell your crosshair HITS; the ghost sits in
+      // the empty cell you place AGAINST — one apart by design, but showing both reads as the
+      // ghost being offset. In build mode the ghost IS the preview, so the wireframe only stays
+      // up when it means something of its own: aiming at a placed piece, where it marks what LMB
+      // deconstructs (an O(1) occupancy read, not a placement scan).
+      if (hl) {
+        const hm = hit ? voxel(hit.x, hit.y, hit.z) : AIR
+        hl.visible = hm === STRUCTURE || hm === STRUCTURE_HALF
+      }
       // The ghost sits in the EMPTY cell before what you are looking at — the same `px,py,pz` that
       // block placement uses, so both verbs agree about where "in front of" is.
       const target: Placement | null = hit ? { pieceId: def.id, x: hit.px, y: hit.py, z: hit.pz, rot: face } : null
