@@ -528,7 +528,9 @@ function Clock() {
     return () => clearInterval(t)
   }, [])
   const phase = getPhase(now)
-  const glyph = phase === 'night' ? '☾' : phase === 'day' ? '☀' : phase === 'dawn' ? '🌅' : '🌇'
+  // ✦ not ☾ at night: the Ather has NO MOON (Alex ruling 2026-08-08, CANON_GAPS has the open
+  // "what silvers the night" question). A crescent on the HUD would assert a body the sky refuses.
+  const glyph = phase === 'night' ? '✦' : phase === 'day' ? '☀' : phase === 'dawn' ? '🌅' : '🌇'
   const DIAL = 60             // dial diameter, px
   const R = DIAL / 2 - 9      // marker orbit radius — kept inside the rim
   const theta = now * 2 * Math.PI

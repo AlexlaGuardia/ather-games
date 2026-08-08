@@ -28,10 +28,51 @@
 // light that flips from the western horizon to the eastern one at sundown pops every face's shading
 // on one frame — the exact hard-switch `dayFactor`'s ramp exists to avoid, wearing a lighting hat.
 
-import { useRef, useLayoutEffect } from 'react'
+import { useRef, useLayoutEffect, useMemo, useEffect } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
 import { dayProgress, daylight, sunElevation, sunAzimuth } from '../engine/day-cycle'
+
+// ── The sky dome (2026-08-08, Alex: "add a sky background… sun cycle but no moon in the Ather") ──
+// A camera-following inverted sphere with the whole sky in ONE fragment shader: vertical gradient
+// (horizon → zenith, both lerped by the same day/night clock as everything else), plus the sun —
+// a crisp disc and a halo that widens and warms as the sun drops, so dawn/dusk read at the horizon
+// where blocks can't. Drawing the sun IN the sky shader instead of as a billboard costs nothing
+// per frame, can never sort wrong against the world, and sets below the horizon for free (the
+// disc rides the RAW elevation; the directional light keeps its clamped park).
+// Clouds are deliberately absent — held for their own pass (Alex, same ruling).
+// ⚠ NO MOON. The Ather has no moon (Alex ruling 2026-08-08, logged in CANON_GAPS — what silvers
+// the night is Magii's to name). The night dome is gradient + nothing; the silver night LIGHT
+// below survives because an unlit renderer is a fail state, but it is no longer lunar fiction.
+const SKY_VERT = /* glsl */ `
+  varying vec3 vDir;
+  void main() {
+    vDir = position;
+    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+  }
+`
+const SKY_FRAG = /* glsl */ `
+  varying vec3 vDir;
+  uniform vec3 uZenith; uniform vec3 uHorizon; uniform vec3 uSun;
+  uniform vec3 uSunDir;
+  uniform float uDay;   // daylight(), 1 noon .. 0 midnight
+  uniform float uWarm;  // low-sun warmth, peaks in the twilight band, 0 at noon and at night
+  void main() {
+    vec3 d = normalize(vDir);
+    float up = clamp(d.y, 0.0, 1.0);
+    vec3 sky = mix(uHorizon, uZenith, pow(up, 0.6));
+    float s = clamp(dot(d, normalize(uSunDir)), 0.0, 1.0);
+    float disc = smoothstep(0.99935, 0.99965, s);
+    float halo = pow(s, 90.0) * 0.30 * uDay + pow(s, 7.0) * 0.22 * uWarm;
+    vec3 col = sky + uSun * (halo + disc * (0.9 * uDay + 0.35 * uWarm));
+    gl_FragColor = vec4(col, 1.0);
+  }
+`
+const SKY = {
+  day: { zenith: '#6f9fd0', horizon: '#c9dff0' },
+  night: { zenith: '#101a33', horizon: '#2a3a63' },
+  sunHigh: '#fff4d6', sunLow: '#ffb45e',
+}
 
 // Day = the pre-clock look, verbatim. Night = the Ather's own hour: darker than the garden's
 // Moonwell blue (this is untended country and darkness is about to mean something), but with a
@@ -46,7 +87,10 @@ const DAY = {
 const NIGHT = {
   bg: '#16223f', fogNear: 55, fogFar: 165,   // the dark stands closer — same world, smaller circle
   hemiSky: '#8ea8d8', hemiGround: '#252c47', hemiIntensity: 0.55,
-  moon: '#cfe0ff', moonIntensity: 0.4,
+  // ⚠ NOT A MOON. The Ather has no moon (Alex ruling 2026-08-08). This is the night's silver —
+  // an authored illumination floor, because "you can't see" belongs to the spawn layer, never the
+  // renderer. What the silver IS in-fiction (starlight? the Shimmer?) is an open canon gap.
+  silver: '#cfe0ff', silverIntensity: 0.4,
   ambient: 0.15,
 }
 
@@ -55,18 +99,38 @@ const mix = (a: number, b: number, t: number) => a + (b - a) * t
 /** Preallocated colour pairs — this mutates live objects inside useFrame, so no per-frame `new`. */
 function makePairs() {
   const pair = (d: string, n: string) => ({ d: new THREE.Color(d), n: new THREE.Color(n), out: new THREE.Color() })
-  return { bg: pair(DAY.bg, NIGHT.bg), hemiSky: pair(DAY.hemiSky, NIGHT.hemiSky), hemiGround: pair(DAY.hemiGround, NIGHT.hemiGround) }
+  return {
+    bg: pair(DAY.bg, NIGHT.bg), hemiSky: pair(DAY.hemiSky, NIGHT.hemiSky), hemiGround: pair(DAY.hemiGround, NIGHT.hemiGround),
+    zenith: pair(SKY.day.zenith, SKY.night.zenith), horizon: pair(SKY.day.horizon, SKY.night.horizon),
+    sun: pair(SKY.sunHigh, SKY.sunLow),
+  }
 }
 const lerpInto = (p: { d: THREE.Color; n: THREE.Color; out: THREE.Color }, t: number) => p.out.copy(p.d).lerp(p.n, t)
 
 export function VoxelDayNight() {
-  const { scene } = useThree()
+  const { scene, camera } = useThree()
   const pairs = useRef(makePairs())
   const hemiRef = useRef<THREE.HemisphereLight>(null)
   const sunRef = useRef<THREE.DirectionalLight>(null)
-  const moonRef = useRef<THREE.DirectionalLight>(null)
+  const nightRef = useRef<THREE.DirectionalLight>(null)
   const ambRef = useRef<THREE.AmbientLight>(null)
   const fogRef = useRef<THREE.Fog | null>(null)
+  const skyRef = useRef<THREE.Mesh>(null)
+
+  // One material, one dome, built once — uniforms are mutated per frame, never reconstructed
+  // (the render-audit rule: no GPU resource construction anywhere that runs more than once).
+  const skyMat = useMemo(() => new THREE.ShaderMaterial({
+    vertexShader: SKY_VERT, fragmentShader: SKY_FRAG,
+    uniforms: {
+      uZenith: { value: new THREE.Color(SKY.day.zenith) },
+      uHorizon: { value: new THREE.Color(SKY.day.horizon) },
+      uSun: { value: new THREE.Color(SKY.sunHigh) },
+      uSunDir: { value: new THREE.Vector3(0, 1, 0.4) },
+      uDay: { value: 1 }, uWarm: { value: 0 },
+    },
+    side: THREE.BackSide, depthWrite: false, fog: false,
+  }), [])
+  useEffect(() => () => skyMat.dispose(), [skyMat])
 
   // Own background + fog imperatively (the GardenAtmosphere pattern): mutating live objects keeps
   // the whole sky off React's render path. Restore on unmount so the route swaps clean.
@@ -90,9 +154,30 @@ export function VoxelDayNight() {
     if (bg instanceof THREE.Color) bg.copy(lerpInto(P.bg, sv))
     const fog = fogRef.current
     if (fog) {
-      fog.color.copy(lerpInto(P.bg, sv))   // fog dissolves into the sky, both hours
+      // Fog dissolves into the dome's HORIZON band now, not the flat bg — the terrain edge and
+      // the sky meet in the same colour, which is what makes the dome read as distance.
+      fog.color.copy(lerpInto(P.horizon, sv))
       fog.near = mix(DAY.fogNear, NIGHT.fogNear, sv)
       fog.far = mix(DAY.fogFar, NIGHT.fogFar, sv)
+    }
+
+    // ── the dome ─────────────────────────────────────────────────────────────────────────────
+    const sky = skyRef.current
+    if (sky) {
+      sky.position.copy(camera.position)   // the horizon is unreachable by construction
+      const e = sunElevation(p)
+      const u = skyMat.uniforms
+      ;(u.uZenith.value as THREE.Color).copy(lerpInto(P.zenith, sv))
+      ;(u.uHorizon.value as THREE.Color).copy(lerpInto(P.horizon, sv))
+      // Warmth peaks as the sun crosses the horizon band and is zero at noon and at night —
+      // dl gates it so the same low elevation before dawn doesn't pre-warm the dark.
+      const warm = dl * (1 - Math.min(1, Math.max(0, e) / 0.3))
+      ;(u.uSun.value as THREE.Color).copy(lerpInto(P.sun, warm))
+      // RAW elevation: the disc genuinely sets. The z lean matches the light's fixed 90/220 tilt
+      // so the disc hangs where the shadows say the sun is.
+      ;(u.uSunDir.value as THREE.Vector3).set(sunAzimuth(p), e, 0.41)
+      u.uDay.value = dl
+      u.uWarm.value = warm
     }
     const hemi = hemiRef.current
     if (hemi) {
@@ -108,18 +193,25 @@ export function VoxelDayNight() {
       sun.position.set(sunAzimuth(p) * 220, 30 + Math.max(0, e) * 240, 90)
       sun.intensity = DAY.sunIntensity * dl
     }
-    const moon = moonRef.current
-    if (moon) moon.intensity = NIGHT.moonIntensity * sv
+    const night = nightRef.current
+    if (night) night.intensity = NIGHT.silverIntensity * sv
     const amb = ambRef.current
     if (amb) amb.intensity = mix(DAY.ambient, NIGHT.ambient, sv)
   })
 
   return (
     <>
+      {/* Radius clears the far plane check (520 < 600) and the mesh follows the camera, so it can
+          never be culled wrong or walked out of — frustumCulled off because its bounds ARE wrong
+          (deliberately: it teleports to the camera every frame). */}
+      <mesh ref={skyRef} frustumCulled={false} renderOrder={-1} material={skyMat}>
+        <sphereGeometry args={[520, 24, 12]} />
+      </mesh>
       <hemisphereLight ref={hemiRef} args={[DAY.hemiSky, DAY.hemiGround, DAY.hemiIntensity]} />
       <directionalLight ref={sunRef} position={[80, 200, 40]} intensity={DAY.sunIntensity} />
-      {/* The moon sits high and still — a wandering moon doubles the shading churn for no read. */}
-      <directionalLight ref={moonRef} position={[-70, 200, -50]} color={NIGHT.moon} intensity={0} />
+      {/* The night silver sits high and still — NOT a moon (no moon in the Ather, Alex 2026-08-08);
+          a wandering night light would double the shading churn for no read anyway. */}
+      <directionalLight ref={nightRef} position={[-70, 200, -50]} color={NIGHT.silver} intensity={0} />
       <ambientLight ref={ambRef} intensity={DAY.ambient} />
     </>
   )
