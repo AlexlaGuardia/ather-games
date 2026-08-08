@@ -34,7 +34,7 @@ import { raycast, tickBreak, dropsFor, type BreakState } from '../voxel/mine'
 import { spawnDrop, tickDrops, type Drop } from '../voxel/drops'
 import { blockDef, materialForItem, emitOf, BLOCKS, type BlockSkill } from '../voxel/registry'
 import { editIndex, recordEdit, applyEdits, packEdits, unpackEdits, isStale, type ColumnEdits } from '../voxel/edits'
-import { loadColumn, saveColumn, editedColumnCount } from './save'
+import { loadColumn, saveColumn, editedColumnCount, loadPlayer, savePlayer, type PlayerSave } from './save'
 import { PIECES, STRUCTURE, STRUCTURE_HALF, pieceDef, cellsOf, canPlace, canAfford, placementAt, type Placement, type Rotation } from '../voxel/pieces'
 import { createPieceRenderer } from './piece-mesh'
 import { toGeometry, createVoxelMaterial, createWaterMaterial, applySettings } from './mesh-bridge'
@@ -1210,6 +1210,55 @@ function World({ inv, toolTier, toolSkill, selItem, weaponDrawn, weaponIdx, onAm
     }
     return () => { cmdOut.current = null }
   }, [cmdOut, camera])
+
+  // ── ★ THE PLAYER PERSISTS (2026-08-08) — spawn where you left off, keep what you carried ────
+  // Hydrate once at mount: position, facing, inventory, tools, skills. The settle gate holds
+  // physics until real ground streams in under the restored spot — the same hold the spawn and
+  // the console's tp already use. The Y is clamped to the CURRENT surface: worldgen is still
+  // moving under saves this week (rivers, pads), and a keeper restored into ground would be
+  // entombed. The cost is cave positions restoring to the surface — caves barely exist yet.
+  useEffect(() => {
+    let live = true
+    void loadPlayer(SEED).then(p => {
+      if (!p || !live) return
+      if (p.inv) inv.current = p.inv as Inventory
+      // ensureBasicTools over the SAVED set: a future tool family added to the game arrives in
+      // an old save as its basic tier instead of as undefined.
+      if (p.tools) tools.current = ensureBasicTools(p.tools as EquippedTools)
+      if (p.skills) skills.current = p.skills as SkillSet
+      const lc = loco.current
+      lc.px = p.x; lc.pz = p.z
+      lc.py = Math.max(p.y, columnHeight(Math.floor(p.x), Math.floor(p.z), SEED) + 1)
+      lc.vy = 0; lc.hvx = 0; lc.hvz = 0
+      camera.position.set(lc.px, lc.py + lc.eye, lc.pz)
+      camera.quaternion.setFromEuler(new THREE.Euler(p.rx, p.ry, 0, 'YXZ'))
+      settled.current = false
+      onInvChange()
+    })
+    return () => { live = false }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // Autosave the keeper: every 5s, on tab-hide, and on unmount — same event pair the column
+  // flush trusts (visibilitychange/pagehide; beforeunload is the one that lies on mobile).
+  useEffect(() => {
+    const eul = new THREE.Euler()
+    const snap = (): PlayerSave => {
+      eul.setFromQuaternion(camera.quaternion, 'YXZ')
+      const lc = loco.current
+      return { v: 1, x: lc.px, y: lc.py, z: lc.pz, rx: eul.x, ry: eul.y,
+               inv: inv.current, tools: tools.current, skills: skills.current }
+    }
+    const save = () => { void savePlayer(SEED, snap()) }
+    const t = setInterval(save, 5000)
+    document.addEventListener('visibilitychange', save)
+    window.addEventListener('pagehide', save)
+    return () => {
+      clearInterval(t); save()
+      document.removeEventListener('visibilitychange', save)
+      window.removeEventListener('pagehide', save)
+    }
+  }, [camera])
   // ★ Scratch vectors, allocated ONCE. Four `new THREE.Vector3()` per frame is 240 objects/sec of
   // pure garbage — not a GPU leak, but exactly the GC pressure the mesher and carver were both
   // rewritten to avoid. Same rule, applied to the frame loop instead of the hot inner loop.

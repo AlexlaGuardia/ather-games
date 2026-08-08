@@ -54,6 +54,54 @@ function open(): Promise<IDBDatabase> {
 const key = (seed: number, cx: number, cz: number) => `${seed}:${cx},${cz}`
 
 /**
+ * ── ★ THE PLAYER PERSISTS TOO (2026-08-08, Alex: "spawn where I left off, keep my inventory") ──
+ * One record beside the columns, same store, key `${seed}:player` — a column key can never
+ * collide with it (its coordinate half always contains a comma). Same failure philosophy as the
+ * columns: every miss loads as null and null means "fresh keeper at the glade", never an error.
+ * The refs are stored as-is (they are plain structured-clonable objects); `v` exists so a future
+ * shape change migrates instead of corrupting.
+ */
+export interface PlayerSave {
+  v: 1
+  x: number; y: number; z: number
+  /** Camera pitch/yaw (three's YXZ euler, what PointerLockControls writes). */
+  rx: number; ry: number
+  inv: unknown
+  tools: unknown
+  skills: unknown
+}
+
+const playerKey = (seed: number) => `${seed}:player`
+
+export async function loadPlayer(seed: number): Promise<PlayerSave | null> {
+  try {
+    const db = await open()
+    return await new Promise((res) => {
+      const tx = db.transaction(STORE, 'readonly')
+      const req = tx.objectStore(STORE).get(playerKey(seed))
+      req.onsuccess = () => {
+        const p = req.result as PlayerSave | undefined
+        res(p && p.v === 1 ? p : null)
+      }
+      req.onerror = () => res(null)
+    })
+  } catch { return null }
+}
+
+export async function savePlayer(seed: number, p: PlayerSave): Promise<void> {
+  try {
+    const db = await open()
+    await new Promise<void>((res) => {
+      const tx = db.transaction(STORE, 'readwrite')
+      tx.objectStore(STORE).put(p, playerKey(seed))
+      tx.oncomplete = () => res()
+      tx.onerror = () => res()
+      tx.onabort = () => res()
+    })
+  } catch { /* unpersisted session — the world still works, it just will not remember */ }
+}
+
+/**
  * Load one column's edits. Returns null when there is nothing stored — which is the common case and
  * the whole design: **absence means "pure procedural, regenerate"**, not "empty world".
  *
