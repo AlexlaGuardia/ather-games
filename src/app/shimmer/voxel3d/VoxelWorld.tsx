@@ -81,7 +81,7 @@ import { WOOD } from '../voxel/trees'
 // ── PORT STEP 5 — the movement (2026-08-07, Alex: "slide jump became a dash, climbing and wall
 // jumping are non-existent"). play3d's Apex-lineage locomotion, extracted pure and re-grounded on
 // voxel collision. See locomotion.ts for provenance; its test file is the feel contract.
-import { createLoco, tickLocomotion } from './locomotion'
+import { createLoco, tickLocomotion, CELL_EMPTY, CELL_SOLID, CELL_WATER } from './locomotion'
 // ── ★ THE TUTORIAL (2026-08-08) — Moonwell Glade becomes spawn + the Greg tutorial chain ─────
 // `tutorial.ts` owns the quest state and its (placeholder) dialogue; `gate.ts` is pure math for
 // where the ceremonial arch sits and which of its cells are the sealable doorway; `greg.ts` builds
@@ -1487,10 +1487,13 @@ function World({ inv, toolTier, toolSkill, selItem, weaponDrawn, weaponIdx, onAm
       lightCache.current.delete(key(cx + dx, cz + dz))
   }, [remesh])
 
-  /** The locomotion core's world probe. Ungenerated space reads as solid via voxelSolid — the
-   *  same stand-on-it-don't-fall-through-it rule the old walker had. */
-  const solidProbe = useCallback((x: number, y: number, z: number) =>
-    isSolid(voxelSolid(x, y, z)), [voxelSolid])
+  /** The locomotion core's world probe — a CELL CODE now, not a boolean (2026-08-08): water is
+   *  a medium the walker swims, not a hole it wades. Ungenerated space still reads as solid via
+   *  voxelSolid — the same stand-on-it-don't-fall-through-it rule the old walker had. */
+  const solidProbe = useCallback((x: number, y: number, z: number) => {
+    const m = voxelSolid(x, y, z)
+    return m === MAT.WATER ? CELL_WATER : isSolid(m) ? CELL_SOLID : CELL_EMPTY
+  }, [voxelSolid])
 
   // ── ★ THE FIRING RIG ─────────────────────────────────────────────────────────────────────────
   // Real travelling projectiles, not hitscan. The table already defines projSpeed/projLife per

@@ -8,6 +8,7 @@ import {
   createLoco, tickLocomotion, bodyFree, floorProbe,
   RUN_SPEED, JUMP_V0, SLIDE_SPEED, SLIDEHOP_BOOST, WALLJUMP_PUSH,
   CLIMB_HOLD_MIN, CLIMB_MAX_RISE, EYE_STAND, EYE_SLIDE, type LocoInput,
+  CELL_EMPTY, CELL_SOLID, CELL_WATER, SWIM_SPEED, SWIM_UP, SWIM_IDLE_SINK, TREAD_SINK_CAP,
 } from './locomotion'
 
 let pass = 0
@@ -242,6 +243,49 @@ const settle = (s: ReturnType<typeof createLoco>, solid: any, frames = 30) => {
   ok(!bodyFree(solid, 0.5, 0.5, 9), 'body overlapping the floor does not')
   ok(floorProbe(solid, 0.5, 0.5, 10) === 10, 'floor probe finds the floor under the feet')
   ok(floorProbe(solid, 0.5, 0.5, 30) === null, 'no floor within range reads as none — never a phantom')
+}
+
+// ── swimming — the probe's water code owns the tick (2026-08-08) ─────────────────────────────
+{
+  // A pool: floor top at 4, water fills 4..12 in a wide basin; boolean-world elsewhere.
+  const pool = (x: number, y: number, z: number): number =>
+    y < 4 ? CELL_SOLID : (y < 12 && Math.abs(x) < 20 && Math.abs(z) < 20) ? CELL_WATER : CELL_EMPTY
+
+  // Submerged, hands off: a slow drift down, never a plummet.
+  const s = createLoco(0.5, 7, 0.5)
+  tickLocomotion(s, input(), pool)
+  ok(s.swimming, 'a submerged body is swimming')
+  for (let i = 0; i < 60; i++) tickLocomotion(s, input(), pool)
+  ok(s.vy < 0 && s.vy > -SWIM_IDLE_SINK * 1.2, `idle water is a drift, not a fall (vy ${s.vy.toFixed(2)})`)
+
+  // Space climbs the water; crouch dives. (Half a second — long enough to reach swim-up speed,
+  // short enough to stay submerged; past the surface the tread/bob loop owns vy.)
+  for (let i = 0; i < 30; i++) tickLocomotion(s, input({ jumpKey: true }), pool)
+  ok(s.vy > SWIM_UP * 0.8, `holding jump swims up (vy ${s.vy.toFixed(2)})`)
+  const yUp = s.py
+  for (let i = 0; i < 60; i++) tickLocomotion(s, input({ crouchKey: true }), pool)
+  ok(s.py < yUp, 'crouch dives')
+
+  // Swim speed is capped well under a run — water is drag country.
+  for (let i = 0; i < 180; i++) tickLocomotion(s, input({ mvX: 1 }), pool)
+  const sv = Math.hypot(s.hvx, s.hvz)
+  ok(sv > SWIM_SPEED * 0.8 && sv < RUN_SPEED * 0.7, `swim speed sits at SWIM_SPEED (${sv.toFixed(2)})`)
+
+  // No ground verbs underwater: a slide cannot start, a wall is not grabbed.
+  ok(!s.sliding && !s.onWall && !s.climbing && !s.hanging, 'ground and wall verbs stand down in water')
+
+  // A fall into water is CAUGHT (treading cap), and treading is perpetual coyote ground:
+  // the jump out of shallow water onto the bank is a plain jump.
+  const t = createLoco(0.5, 20, 0.5)
+  const shallow = (x: number, y: number, z: number): number =>
+    y < 10 ? CELL_SOLID : y < 11 ? CELL_WATER : CELL_EMPTY
+  for (let i = 0; i < 120; i++) tickLocomotion(t, input(), shallow)
+  ok(t.vy >= -TREAD_SINK_CAP - 0.01, `water caps the fall (vy ${t.vy.toFixed(2)})`)
+  ok(!t.swimming, 'feet-deep water is treading, not swimming')
+  const beforeJump = t.py
+  tickLocomotion(t, input({ jumpKey: true }), shallow)
+  const rose = t.vy > 0 || t.py > beforeJump
+  ok(rose, 'a jump from treading water fires (perpetual coyote)')
 }
 
 console.log(`\nlocomotion: ${pass} passed, ${fails.length} failed`)

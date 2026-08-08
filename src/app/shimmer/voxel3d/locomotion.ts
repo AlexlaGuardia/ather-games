@@ -78,6 +78,15 @@ export const COYOTE_TIME = 0.12     // jump grace after the ground drops away. S
                                     // Alex: "i tried jumping as i ran down a hill and nothing
                                     // would happen"
 
+// ── swimming (2026-08-08 — the probe learned what water IS) ─────────────────────────────────
+export const SWIM_SPEED = 3.4       // drag-dominated — half a run, deliberate
+export const SWIM_ACCEL = 5
+export const SWIM_UP = 3.6          // Space climbs the water
+export const SWIM_SINK = 2.8        // crouch dives
+export const SWIM_IDLE_SINK = 0.5   // hands-off drift: down, slowly — water is patient, not a floor
+export const SWIM_DRAG = 5
+export const TREAD_SINK_CAP = 1.8   // water catches a fall fast — no crater dives from a cliff
+
 export const BODY_R = 0.3           // the old walker's half-width, kept — the world was built around it
 export const BODY_H = 1.75
 export const EYE_STAND = 1.62       // camera sits this far above the feet (the old walker's eye)
@@ -88,6 +97,20 @@ export const EYE_SLIDE = 1.02       // eye height mid-slide/crouch
 const FLOOR_CAPTURE = 0.1
 
 export type Solid = (x: number, y: number, z: number) => boolean
+
+/**
+ * ── ★ THE CELL PROBE (2026-08-08) — the probe's question grew from "solid?" to "what IS this" ──
+ * A boolean probe cannot say "water" (you waded riverbeds like a submarine with legs) and cannot
+ * say "half" (the slab problem). The probe now returns a CODE; booleans are still accepted and
+ * normalised at the boundary, so every existing caller and every feel test keeps speaking boolean.
+ * CELL_HALF is reserved plumbing: it collides as full until fractional ground-height lands (the
+ * half-slab pass) — reserving the code now is what keeps that pass from re-breaking this contract.
+ */
+export const CELL_EMPTY = 0
+export const CELL_SOLID = 1
+export const CELL_WATER = 2
+export const CELL_HALF = 3
+export type CellProbe = (x: number, y: number, z: number) => boolean | number
 
 export interface LocoState {
   px: number; py: number; pz: number      // py = FEET, not eye — eye is derived (py + eye)
@@ -111,6 +134,8 @@ export interface LocoState {
   /** Set for one tick when a verb fires — the host reads these for HUD/FX and they self-clear. */
   justWallJumped: boolean; justHopped: boolean
   sliding: boolean; crouching: boolean; climbing: boolean
+  /** Body submerged — the swim physics own this tick. The host reads it for HUD/FX. */
+  swimming: boolean
 }
 
 export function createLoco(px: number, feetY: number, pz: number): LocoState {
@@ -123,6 +148,7 @@ export function createLoco(px: number, feetY: number, pz: number): LocoState {
     mantleT: 0, mantleDur: MANTLE_TIME, mFromX: 0, mFromY: 0, mFromZ: 0, mToX: 0, mToY: 0, mToZ: 0,
     vaulting: false, carryVX: 0, carryVZ: 0,
     justWallJumped: false, justHopped: false, sliding: false, crouching: false, climbing: false,
+    swimming: false,
   }
 }
 
@@ -189,11 +215,49 @@ function lipAt(solid: Solid, bx: number, bz: number, feetY: number): number | nu
   return null
 }
 
-export function tickLocomotion(s: LocoState, input: LocoInput, solid: Solid): void {
+export function tickLocomotion(s: LocoState, input: LocoInput, probe: CellProbe): void {
   const dt = Math.min(input.dt, 0.05)          // a stutter frame must not launch a huge step
   const { mvX, mvZ, crouchKey, jumpKey } = input
   const hasInput = (mvX !== 0 || mvZ !== 0)
   s.justWallJumped = false; s.justHopped = false
+
+  // Normalise at the boundary: booleans stay valid (every feel test, unchanged), codes add water.
+  // CELL_HALF collides as full until the half-slab pass teaches ground height fractions.
+  const solid: Solid = (x, y, z) => { const v = probe(x, y, z); return v === true || v === CELL_SOLID || v === CELL_HALF }
+  const waterAt = (x: number, y: number, z: number) => probe(x, y, z) === CELL_WATER
+
+  // ── swimming ────────────────────────────────────────────────────────────────────────────────
+  // Submerged = chest AND feet in water: the swim physics own the whole tick, and every ground/
+  // wall/ledge verb stands down (you cannot slide, vault or bhop through a pond). Feet-only =
+  // TREADING: normal physics with two amendments below — the water caps a fall, and it counts as
+  // perpetual coyote ground, which is what makes "swim to the bank and hop out" a plain jump.
+  const fx = Math.floor(s.px), fz = Math.floor(s.pz)
+  const chestIn = waterAt(fx, Math.floor(s.py + 1.0), fz)
+  const feetIn = waterAt(fx, Math.floor(s.py + 0.2), fz)
+  s.swimming = chestIn && feetIn
+  if (s.swimming) {
+    s.sliding = false; s.crouching = false; s.climbing = false; s.onWall = false
+    s.hanging = false; s.mantleT = 0; s.vaulting = false; s.slideT = 0
+    s.airborne = true                      // leaving the water without a jump is a fall, correctly
+    const k = Math.min(1, dt * SWIM_ACCEL)
+    s.hvx += (mvX * SWIM_SPEED - s.hvx) * k
+    s.hvz += (mvZ * SWIM_SPEED - s.hvz) * k
+    const vTarget = jumpKey ? SWIM_UP : crouchKey ? -SWIM_SINK : -SWIM_IDLE_SINK
+    s.vy += (vTarget - s.vy) * Math.min(1, dt * SWIM_DRAG)
+    const nx = s.px + s.hvx * dt
+    if (bodyFree(solid, nx, s.pz, s.py)) s.px = nx; else s.hvx = 0
+    const nz = s.pz + s.hvz * dt
+    if (bodyFree(solid, s.px, nz, s.py)) s.pz = nz; else s.hvz = 0
+    const ny = s.py + s.vy * dt
+    if (bodyFree(solid, s.px, s.pz, ny)) s.py = ny; else s.vy = 0
+    s.jumpHeld = jumpKey; s.landGrace = 0; s.coyoteT = 0
+    s.eye += (EYE_STAND - s.eye) * 0.25
+    return
+  }
+  if (feetIn) {
+    if (s.vy < -TREAD_SINK_CAP) s.vy = -TREAD_SINK_CAP        // the water catches the fall
+    if (s.vy <= 0) s.coyoteT = COYOTE_TIME                    // water is jumpable ground, always
+  }
 
   // ── crouch / slide ──────────────────────────────────────────────────────────────────────────
   const curSpeed = Math.hypot(s.hvx, s.hvz)
