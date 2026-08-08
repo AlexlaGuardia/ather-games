@@ -90,6 +90,7 @@ import { loadTutorial, saveTutorial, GREG_LINE, OBJECTIVE_LABEL, type TutorialSt
 import { GATE_X, GATE_Z, GATE_SPANS_X, gateCells } from './gate'
 import { createGregMesh } from './greg'
 import { createSteamPoints } from './steam'
+import { createFloraRenderer } from './flora-mesh'
 
 const SEED = 1337
 const H = DEFAULT_COLUMN.worldHeight
@@ -1190,6 +1191,10 @@ function World({ inv, toolTier, toolSkill, selItem, weaponDrawn, weaponIdx, onAm
   }, [])
   // Hot-spring steam (2026-08-08) — sleeps everywhere but the Springs; see steam.ts.
   const steam = useMemo(() => createSteamPoints(SEED), [])
+  // Ground cover (2026-08-08) — flora.ts selects, the live-voxel probe verifies, four draws total.
+  const flora = useMemo(() => createFloraRenderer(), [])
+  /** Set whenever loaded ground changes (adopt, edit, evict); the frame loop syncs once quiet. */
+  const floraDirty = useRef(true)
   const lastNearGreg = useRef(false)
   const lastNearTable = useRef(false)
   const tableScanT = useRef(0)
@@ -1377,7 +1382,8 @@ function World({ inv, toolTier, toolSkill, selItem, weaponDrawn, weaponIdx, onAm
     tiles?.texture.dispose()
     greg.dispose()
     steam.dispose()
-  }, [dropGeo, highlightGeo, flatMaterial, textured, tiles, pieces, greg, steam])
+    flora.dispose()
+  }, [dropGeo, highlightGeo, flatMaterial, textured, tiles, pieces, greg, steam, flora])
 
   // ★ A LOST WEBGL CONTEXT MUST SAY SO. Chrome blocks a page that loses its context repeatedly, and
   // the result is a black canvas with the HUD still drawn on top — indistinguishable from a
@@ -1558,6 +1564,8 @@ function World({ inv, toolTier, toolSkill, selItem, weaponDrawn, weaponIdx, onAm
 
     c.sections[s].set(lx, wy - s * SECTION, lz, mat)
     refreshUniform(c)
+    flora.invalidate(k)             // the ground changed — this column's tufts re-derive
+    floraDirty.current = true
     remesh(cx, cz)
     if (lx === 0) remesh(cx - 1, cz)
     if (lx === SECTION - 1) remesh(cx + 1, cz)
@@ -1702,6 +1710,7 @@ function World({ inv, toolTier, toolSkill, selItem, weaponDrawn, weaponIdx, onAm
     if (!g) return
     const p = camera.position
     steam.tick(p.x, p.y, p.z, dt, state.clock.elapsedTime)
+    flora.tick(state.clock.elapsedTime)
     const cx = Math.floor(p.x / SECTION), cz = Math.floor(p.z / SECTION)
 
     // ── ★ WEAPON TICK ────────────────────────────────────────────────────────────────────────
@@ -1904,6 +1913,7 @@ function World({ inv, toolTier, toolSkill, selItem, weaponDrawn, weaponIdx, onAm
       refreshUniform(col)
       col.stage = Stage.Ready
       cols.current.set(ek, col)
+      floraDirty.current = true
       queueRemesh(gx, gz)
       if (!edits.current.has(ek)) {
         loadColumn(SEED, gx, gz).then(saved => {
@@ -1915,7 +1925,7 @@ function World({ inv, toolTier, toolSkill, selItem, weaponDrawn, weaponIdx, onAm
           const m = unpackEdits(saved.edits)
           edits.current.set(ek, m)
           const c = cols.current.get(ek)
-          if (c && m.size) { applyEdits(c, m); refreshUniform(c); queueRemesh(gx, gz) }
+          if (c && m.size) { applyEdits(c, m); refreshUniform(c); queueRemesh(gx, gz); flora.invalidate(ek); floraDirty.current = true }
           // Pieces come back with their blocks. Occupancy is NOT re-written here — it is already in
           // the block diff, because placing a piece wrote STRUCTURE through `setVoxel`, which is a
           // recorded edit. Writing it twice would be harmless but would double the save.
@@ -1964,6 +1974,30 @@ function World({ inv, toolTier, toolSkill, selItem, weaponDrawn, weaponIdx, onAm
     // Mesh what arrived, nearest first, inside a frame budget. 12ms leaves a 60Hz frame most of its
     // time for everything else while still filling a fresh load radius in a few seconds.
     drainRemeshQueue(cx, cz, 12)
+
+    // ── flora sync: once the streaming burst is quiet, rebuild the ground cover ──────────────
+    // Deferred behind `incoming` so a fresh load radius pays for flora ONCE at the end, not per
+    // adopted column. The probe walks from the generated surface to the ACTUAL one (edits move
+    // it), then demands topsoil with air above — which is what keeps tufts off roads, crust,
+    // grey dither, placed blocks and dug holes without flora.ts knowing materials exist.
+    if (floraDirty.current && incoming.current!.length === 0) {
+      floraDirty.current = false
+      const list: { key: string; x0: number; z0: number }[] = []
+      for (const kk of cols.current.keys()) {
+        const [gx, gz] = kk.split(',').map(Number)
+        list.push({ key: kk, x0: gx * SECTION, z0: gz * SECTION })
+      }
+      flora.sync(list, SEED, (fx, fz) => {
+        const fcx = Math.floor(fx / SECTION), fcz = Math.floor(fz / SECTION)
+        const c = cols.current.get(key(fcx, fcz))
+        if (!c) return -1
+        let y = c.heightAt(fx - fcx * SECTION, fz - fcz * SECTION)
+        let guard = 8
+        while (guard-- > 0 && voxel(fx, y + 1, fz) !== AIR) y++
+        while (guard-- > 0 && y > 1 && voxel(fx, y, fz) === AIR) y--
+        return voxel(fx, y, fz) === MAT.TOPSOIL && voxel(fx, y + 1, fz) === AIR ? y : -1
+      })
+    }
 
     // Until the spawn column exists every lookup returns AIR, so gravity would drop the player
     // through a world that has not generated yet. Hold until there is ground beneath.
@@ -2311,7 +2345,7 @@ function World({ inv, toolTier, toolSkill, selItem, weaponDrawn, weaponIdx, onAm
         if (keep.has(mk.slice(0, mk.indexOf(':')))) continue
         g.remove(m); m.geometry.dispose(); drawn.current.delete(mk)
       }
-      for (const kk of [...cols.current.keys()]) if (!keep.has(kk)) cols.current.delete(kk)
+      for (const kk of [...cols.current.keys()]) if (!keep.has(kk)) { cols.current.delete(kk); floraDirty.current = true }
       for (const kk of [...requested.current]) if (!keep.has(kk)) requested.current.delete(kk)
       for (const kk of [...lightCache.current.keys()]) if (!keep.has(kk)) lightCache.current.delete(kk)
       // The worker mirrors this eviction, or its column cache grows by every chunk ever visited.
@@ -2331,6 +2365,7 @@ function World({ inv, toolTier, toolSkill, selItem, weaponDrawn, weaponIdx, onAm
       <primitive object={pieces.group} />
       <primitive object={greg.group} />
       <primitive object={steam.points} />
+      <primitive object={flora.group} />
       {/* ⚠ Memoised. Inline `args={[new THREE.BoxGeometry(...)]}` builds a fresh geometry on EVERY
           React render and leaks the previous one — same family as the per-drop material that got
           the page's WebGL context blocked. */}
