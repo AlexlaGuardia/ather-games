@@ -27,7 +27,8 @@
 
 import { Section, AIR } from './section'
 import { columnHeight, type HeightConfig, DEFAULT_HEIGHT } from './height'
-import { materialAt, type DepthConfig, DEFAULT_DEPTH } from './depth'
+import { materialAt, MAT, type DepthConfig, DEFAULT_DEPTH } from './depth'
+import { plantWaystones } from './story-path'
 import { carveStack, type CarveConfig, DEFAULT_CARVE } from './carve'
 import { placeOre, type OreBatch, ORE_BATCHES } from './ore'
 import { plantTrees, type TreeConfig, DEFAULT_TREES } from './trees'
@@ -154,6 +155,9 @@ export function generateColumn(
       (x, z, h) => materialAt(x, h, z, seed, h, cfg.depth, cfg.height), cfg.trees)
     // Sites go LAST: a ruin wall punches through whatever the fringe planted, never the reverse.
     placeSites(col.sections, wx, 0, wz, SECTION, seed)
+    // …except the waystones, which go after even the sites: the story road's lit posts are the
+    // one generated thing nothing may bury (they hold the spawn gate's light veto over the road).
+    plantWaystones(col.sections, wx, wz, SECTION, surfaceAt, cfg.depth.seaLevel, MAT.STONE, MAT.MANA_LANTERN)
     col.stage = Stage.Vegetation
   }
 

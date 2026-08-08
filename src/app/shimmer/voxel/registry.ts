@@ -96,6 +96,10 @@ export const BLOCKS: BlockDef[] = [
   // from a dormant field to a real gate — recipes marked `crafting_table` light up near one.
   { material: MAT.CRAFT_TABLE, name: 'Crafting Table', hardness: 0.8, skill: null, minTier: 0, drops: [{ itemId: 'crafting_table', count: 1 }], placeable: true },
 
+  // The story road. Digs like soil and drops SUBSOIL for the same reason greyed soil does: the
+  // road is a CONDITION of the ground, not a block you carry home and lay somewhere else.
+  { material: MAT.PATH, name: 'Worn Path', hardness: 0.5, skill: null, minTier: 0, drops: [{ itemId: 'block_subsoil', count: 1 }], fastSkill: 'farming', placeable: false },
+
   // ── the Prospecting ladder — hardness AND tier both climb, so depth gates twice over ────────
   { material: ORE.RAW_MANA, name: 'Raw Mana Seam', hardness: 2.2, skill: 'prospecting', minTier: 1, drops: [{ itemId: 'raw_mana_shard', count: 1 }], placeable: false },
   { material: ORE.ELEMENT_VIOLET, name: 'Violet Crystal Seam', hardness: 3.0, skill: 'prospecting', minTier: 1, drops: [{ itemId: 'violet_crystal', count: 1 }], placeable: false },

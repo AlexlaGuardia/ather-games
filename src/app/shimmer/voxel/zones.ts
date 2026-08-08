@@ -52,7 +52,10 @@ export const ZONE_ANCHORS: ZoneAnchor[] = [
   { id: 'twilight-thicket', x: -2000, z: -1150, rx: 800, rz: 650, reliefK: 0.4, benchK: 0.5, swellAmp: 2, tended: 1, forest: 0.97 },
   // Hot springs: benches HARD ON (the terraces the pools will sit in), modest relief.
   { id: 'mana-springs', x: 2100, z: -300, rx: 900, rz: 750, reliefK: 0.3, benchK: 1.6, swellAmp: 0, tended: 1, forest: 0.22 },
-  { id: 'gloview-village', x: 3450, z: -1500, rx: 520, rz: 430, reliefK: 0.25, benchK: 1, swellAmp: 0, tended: 1, forest: 0.12 },
+  // ★ Re-dialed 2026-08-08 (Alex's story-spine ruling, see voxel/story-path.ts): the village is
+  // the SECOND story POI, ~500 blocks up the road from Moonwell Glade — the three Moglins' test.
+  // Was parked at (3450,-1500) from the original sketch; radius shrunk to a village, not a region.
+  { id: 'gloview-village', x: -265, z: -1125, rx: 260, rz: 220, reliefK: 0.25, benchK: 1, swellAmp: 0, tended: 1, forest: 0.12 },
   // The Outfields are the frayed edge: still garden, but the grey is allowed to gutter in.
   { id: 'the-outfields', x: 3700, z: 1000, rx: 900, rz: 750, reliefK: 0.5, benchK: 1, swellAmp: 3, tended: 0.45, forest: 0.3 },
 ]

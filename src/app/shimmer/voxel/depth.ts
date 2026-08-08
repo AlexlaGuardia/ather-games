@@ -17,6 +17,7 @@
 import { fbm2, value2 } from './noise'
 import { columnHeight, riverCarve, waterSurfaceAt, RIVER_DEPTH, type HeightConfig, DEFAULT_HEIGHT } from './height'
 import { greySurfaceAt } from './biome'
+import { roadAt } from './story-path'
 import { AIR } from './section'
 
 /**
@@ -51,6 +52,11 @@ export const MAT = {
    * Never generated; only ever placed. ⚠ TBD-CANON on the name, same as everything else here.
    */
   CRAFT_TABLE: 10,
+  /**
+   * The story road's surface — packed earth worn by the quest spine (story-path.ts). Generated,
+   * never placed; digging it yields plain dirt, because a road is wear, not a thing you pocket.
+   */
+  PATH: 11,
 } as const
 
 export interface DepthConfig {
@@ -137,6 +143,7 @@ export function materialAt(
     if (h <= cfg.seaLevel) return MAT.SAND                              // lake / sea bed
     if (h <= cfg.seaLevel + cfg.beachHeight) return MAT.SAND            // beach band
     if (riverCarve(x, z, seed, hcfg) >= 1) return MAT.SAND              // river bed and its shoulders
+    if (roadAt(x, z, seed)) return MAT.PATH                             // the story road wears through
     if (slopeAt(x, z, seed, hcfg) >= cfg.cliffSlope) return MAT.STONE   // cliff faces show rock
     if (greySurfaceAt(x, z, seed)) return MAT.GREY_SOIL                 // drained ground wears grey
     return MAT.TOPSOIL

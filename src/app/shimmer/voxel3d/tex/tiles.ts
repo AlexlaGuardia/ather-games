@@ -40,6 +40,8 @@ export const TILE_MATERIALS: number[] = [
   MAT.MANA_LANTERN,
   // The crafting table added 2026-08-08 — the first station.
   MAT.CRAFT_TABLE,
+  // The story road added 2026-08-08 with the quest-spine worldgen.
+  MAT.PATH,
 ]
 
 /** One spare layer past the end: an unmapped material samples magenta rather than layer 0's stone. */
@@ -479,6 +481,17 @@ function paintFor(material: number, face: number, size: number): Layer {
       break
     case MAT.MANA_LANTERN: paintLantern(dst, size, seed); break
     case MAT.CRAFT_TABLE: paintCraftTable(dst, size, seed, face); break
+    case MAT.PATH:
+      // Packed earth: subsoil's grit, lightened and calmer, with sparse pale pebbles — reads as
+      // WALKED against topsoil's grass without shouting like sand.
+      if (face === TOP) {
+        paintGrit(dst, size, rgbOf(MATERIAL_COLOR[MAT.PATH]), 12, 8, seed)
+        for (let i = 0; i < size; i++) {
+          const px = Math.floor(h2(i, 7, seed) * size), py = Math.floor(h2(3, i, seed ^ 9) * size)
+          if (h2(px, py, seed) > 0.72) put(dst, size, px, py, shade(rgbOf(MATERIAL_COLOR[MAT.PATH]), 34), 0)
+        }
+      } else paintGrit(dst, size, rgbOf(MATERIAL_COLOR[MAT.SUBSOIL]), 18, 22, seed)
+      break
     default:
       if (LOG_SET.has(material)) {
         const c = rgbOf(MATERIAL_COLOR[material])
