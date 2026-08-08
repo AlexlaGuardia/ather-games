@@ -420,6 +420,12 @@ export default function VoxelWorld() {
       if (e.code === 'KeyE') {
         if (dialogueOpen) closeDialogue()   // hands the cursor back itself
         else if (nearGreg) { openCursorUI(); setDialogueOpen(true) }
+        // E is the interact key everywhere else too: at the bench it opens the craft surface —
+        // the MC muscle memory — with Greg taking priority when you're near both. C still works.
+        else if (nearTable) {
+          if (craftOpen) { setCraftOpen(false); closeCursorUI() }
+          else { openCursorUI(); setCraftOpen(true) }
+        }
       }
       // Escape only reaches us when the pointer is already free (the browser eats it to exit the
       // lock first) — so close the surfaces AND settle the handoff ledger. closeCursorUI's relock
@@ -438,7 +444,7 @@ export default function VoxelWorld() {
     window.addEventListener('keydown', onKey)
     window.addEventListener('wheel', onWheel, { passive: true })
     return () => { window.removeEventListener('keydown', onKey); window.removeEventListener('wheel', onWheel) }
-  }, [build, drawn, dialogueOpen, nearGreg, craftOpen, showSettings, closeDialogue, openCursorUI, closeCursorUI])
+  }, [build, drawn, dialogueOpen, nearGreg, nearTable, craftOpen, showSettings, closeDialogue, openCursorUI, closeCursorUI])
 
   return (
     <div className="fixed inset-0 bg-[#0b0d14]">
@@ -487,7 +493,8 @@ export default function VoxelWorld() {
            skill={skillHud} levelUp={levelUp} crafted={crafted} tools={tools} skills={skills}
            activeTool={activeTool}
            isOwner={isOwner} drawn={drawn} weaponIdx={weaponIdx} ammoUi={ammoUi}
-           tutorialStage={tutorial.current.stage} nearGreg={nearGreg} dialogueOpen={dialogueOpen} />
+           tutorialStage={tutorial.current.stage} nearGreg={nearGreg} dialogueOpen={dialogueOpen}
+           nearTable={nearTable} craftOpen={craftOpen} />
       {showSettings && <SettingsPanel s={settings} update={update} onClose={() => { setShowSettings(false); closeCursorUI() }} />}
       {craftOpen && (
         <CraftPanel have={have} tools={tools} tick={craftTick} station={station}
@@ -539,7 +546,7 @@ function Clock() {
   )
 }
 
-function Hud({ stats, pos, look, hotbar, sel, tier, build, pieceIdx, rot, inv, skill, levelUp, crafted, tools, skills, activeTool, isOwner, drawn, weaponIdx, ammoUi, tutorialStage, nearGreg, dialogueOpen }: {
+function Hud({ stats, pos, look, hotbar, sel, tier, build, pieceIdx, rot, inv, skill, levelUp, crafted, tools, skills, activeTool, isOwner, drawn, weaponIdx, ammoUi, tutorialStage, nearGreg, dialogueOpen, nearTable, craftOpen }: {
   stats: string; pos: string
   look: { name: string; progress: number; refused: boolean } | null
   hotbar: HotbarEntry[]; sel: number; tier: number
@@ -563,6 +570,9 @@ function Hud({ stats, pos, look, hotbar, sel, tier, build, pieceIdx, rot, inv, s
   /** Within talk range of Greg, from World's per-frame distance check. Drives the "E — talk" prompt. */
   nearGreg: boolean
   dialogueOpen: boolean
+  /** Within reach of a placed crafting table — drives the "E — craft" prompt. */
+  nearTable: boolean
+  craftOpen: boolean
 }) {
   return (
     <>
@@ -609,10 +619,17 @@ function Hud({ stats, pos, look, hotbar, sel, tier, build, pieceIdx, rot, inv, s
         </div>
       )}
 
-      {/* "E — talk" — Greg's proximity prompt. Hidden while the box he opens is already up. */}
+      {/* "E — talk" — Greg's proximity prompt. Hidden while the box he opens is already up.
+          The bench borrows the same prompt slot ("E — craft"); Greg wins when both are near,
+          mirroring the KeyE handler's priority. */}
       {nearGreg && !dialogueOpen && (
         <div className="absolute left-1/2 top-[63%] -translate-x-1/2 text-center pointer-events-none">
           <div className="text-[11px] font-mono tracking-wide text-white/85">E — talk</div>
+        </div>
+      )}
+      {!nearGreg && nearTable && !craftOpen && (
+        <div className="absolute left-1/2 top-[63%] -translate-x-1/2 text-center pointer-events-none">
+          <div className="text-[11px] font-mono tracking-wide text-white/85">E — craft</div>
         </div>
       )}
 
