@@ -26,7 +26,7 @@ import { VOXEL_WORKER_URL } from '../../../workers/worker-url'
 import { createMeshScratch } from '../voxel/greedy'
 import { columnHeight, holdPadLevel } from '../voxel/height'
 import { holdGenPiecesForCol, type GenPiece } from '../voxel/holds'
-import { biomeAt } from '../voxel/biome'
+import { biomeAt, forestness } from '../voxel/biome'
 import { ZONE_ANCHORS } from '../voxel/zones'
 import { AIR } from '../voxel/section'
 import { materialAt, MAT, DEFAULT_DEPTH } from '../voxel/depth'
@@ -652,7 +652,16 @@ export default function VoxelWorld() {
               }}>
         {/* Sky, fog and all scene lights live in the rig now — the clock drives them. The old
             static five-liner IS the rig's DAY palette, so noon looks identical. */}
-        <VoxelDayNight />
+        {/* Canopy gloom (2026-08-08, the last zone-dressing item): the rig samples this to dim
+            under dense canopy. Same forestness mask the PLANTER reads (sibling law) — the Thicket
+            saturates it to ~0.97 through zone membership, so no zone check is needed here and any
+            deep wild forest earns a lesser gloom by the same rule. */}
+        <VoxelDayNight gloomAt={(x, z) => {
+          const f = forestness(SEED, x / 16, z / 16)
+          const t = (f - 0.62) / (0.95 - 0.62)
+          const c = t < 0 ? 0 : t > 1 ? 1 : t
+          return c * c * (3 - 2 * c)
+        }} />
         <World
           inv={inv} toolTier={toolTier} toolSkill={toolSkill}
           /* A tool in hand is not a block in hand — RMB must not place while you hold a spade.

@@ -94,6 +94,24 @@ const NIGHT = {
   ambient: 0.15,
 }
 
+// ── ★ CANOPY GLOOM (2026-08-08 — "closed canopy, dim floor", the Thicket's ruled character) ────
+// Under dense canopy the world dims and closes in: sun mostly gone (a canopy's whole job), sky
+// light pulled toward light-through-leaves green, fog drawn near so the trees crowd you. The
+// factor arrives via the `gloomAt` prop (the world samples its own forest mask — this file stays
+// ignorant of worldgen), is SMOOTHED over ~half a second so walking under an edge reads as
+// entering shade rather than a light switch, and is GATED BY DAYLIGHT: a canopy blocks sun, and
+// at night there is little sun to block — which is also what keeps gloom from stacking on night
+// down through the renderer's never-fully-dark floor. Dial block:
+const GLOOM = {
+  sunCut: 0.8,       // direct sun killed hardest — shafts are the ungloomed clearings' job
+  hemiCut: 0.45,
+  ambCut: 0.3,
+  fogPull: 0.45,     // near/far both shrink by this × gloom
+  leaf: '#4e6b48',   // what skylight becomes after a canopy: mossy, not grey (the night rule again)
+  fogLeaf: '#3c5238',
+  rate: 2.5,         // smoothing, ~1/s to settle
+}
+
 const mix = (a: number, b: number, t: number) => a + (b - a) * t
 
 /** Preallocated colour pairs — this mutates live objects inside useFrame, so no per-frame `new`. */
@@ -103,13 +121,17 @@ function makePairs() {
     bg: pair(DAY.bg, NIGHT.bg), hemiSky: pair(DAY.hemiSky, NIGHT.hemiSky), hemiGround: pair(DAY.hemiGround, NIGHT.hemiGround),
     zenith: pair(SKY.day.zenith, SKY.night.zenith), horizon: pair(SKY.day.horizon, SKY.night.horizon),
     sun: pair(SKY.sunHigh, SKY.sunLow),
+    leaf: pair(GLOOM.leaf, GLOOM.leaf), fogLeaf: pair(GLOOM.fogLeaf, GLOOM.fogLeaf),
   }
 }
 const lerpInto = (p: { d: THREE.Color; n: THREE.Color; out: THREE.Color }, t: number) => p.out.copy(p.d).lerp(p.n, t)
 
-export function VoxelDayNight() {
+export function VoxelDayNight({ gloomAt }: { gloomAt?: (x: number, z: number) => number } = {}) {
   const { scene, camera } = useThree()
   const pairs = useRef(makePairs())
+  /** Smoothed canopy gloom 0..1 and its sampling clock (the mask is ~16-block features, so 4Hz
+   *  sampling is already oversampling — the smoothing is what the eye actually sees). */
+  const gloom = useRef({ g: 0, target: 0, clock: 0 })
   const hemiRef = useRef<THREE.HemisphereLight>(null)
   const sunRef = useRef<THREE.DirectionalLight>(null)
   const nightRef = useRef<THREE.DirectionalLight>(null)
@@ -144,11 +166,20 @@ export function VoxelDayNight() {
     return () => { scene.background = prevBg; scene.fog = prevFog; fogRef.current = null }
   }, [scene])
 
-  useFrame(() => {
+  useFrame((_state, dt) => {
     const p = dayProgress()
     const dl = daylight(p)          // 1 noon .. 0 midnight, soft twilight band
     const sv = 1 - dl
     const P = pairs.current
+
+    // ── canopy gloom: sample sparsely, smooth always, gate by daylight ───────────────────────
+    const G = gloom.current
+    if (gloomAt) {
+      G.clock -= dt
+      if (G.clock <= 0) { G.clock = 0.25; G.target = gloomAt(camera.position.x, camera.position.z) }
+      G.g += (G.target - G.g) * Math.min(1, dt * GLOOM.rate)
+    }
+    const gd = G.g * dl             // gloom's active strength — a canopy only blocks what shines
 
     const bg = scene.background
     if (bg instanceof THREE.Color) bg.copy(lerpInto(P.bg, sv))
@@ -156,9 +187,9 @@ export function VoxelDayNight() {
     if (fog) {
       // Fog dissolves into the dome's HORIZON band now, not the flat bg — the terrain edge and
       // the sky meet in the same colour, which is what makes the dome read as distance.
-      fog.color.copy(lerpInto(P.horizon, sv))
-      fog.near = mix(DAY.fogNear, NIGHT.fogNear, sv)
-      fog.far = mix(DAY.fogFar, NIGHT.fogFar, sv)
+      fog.color.copy(lerpInto(P.horizon, sv)).lerp(lerpInto(P.fogLeaf, sv), 0.6 * gd)
+      fog.near = mix(DAY.fogNear, NIGHT.fogNear, sv) * (1 - GLOOM.fogPull * gd)
+      fog.far = mix(DAY.fogFar, NIGHT.fogFar, sv) * (1 - GLOOM.fogPull * gd)
     }
 
     // ── the dome ─────────────────────────────────────────────────────────────────────────────
@@ -181,9 +212,11 @@ export function VoxelDayNight() {
     }
     const hemi = hemiRef.current
     if (hemi) {
-      hemi.color.copy(lerpInto(P.hemiSky, sv))
+      // Skylight under a canopy arrives leaf-filtered: pulled toward the moss green, never
+      // toward grey (the same rule the night palette obeys — hue shift, not desaturation).
+      hemi.color.copy(lerpInto(P.hemiSky, sv)).lerp(lerpInto(P.leaf, sv), 0.5 * gd)
       hemi.groundColor.copy(lerpInto(P.hemiGround, sv))
-      hemi.intensity = mix(DAY.hemiIntensity, NIGHT.hemiIntensity, sv)
+      hemi.intensity = mix(DAY.hemiIntensity, NIGHT.hemiIntensity, sv) * (1 - GLOOM.hemiCut * gd)
     }
     const sun = sunRef.current
     if (sun) {
@@ -191,12 +224,12 @@ export function VoxelDayNight() {
       // most of what makes a morning read as a morning on axis-aligned blocks.
       const e = sunElevation(p)
       sun.position.set(sunAzimuth(p) * 220, 30 + Math.max(0, e) * 240, 90)
-      sun.intensity = DAY.sunIntensity * dl
+      sun.intensity = DAY.sunIntensity * dl * (1 - GLOOM.sunCut * gd)
     }
     const night = nightRef.current
     if (night) night.intensity = NIGHT.silverIntensity * sv
     const amb = ambRef.current
-    if (amb) amb.intensity = mix(DAY.ambient, NIGHT.ambient, sv)
+    if (amb) amb.intensity = mix(DAY.ambient, NIGHT.ambient, sv) * (1 - GLOOM.ambCut * gd)
   })
 
   return (
