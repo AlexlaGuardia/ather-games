@@ -220,15 +220,18 @@ const CONSOLE_CMDS: ConsoleCmd[] = [
     },
     suggest: () => ['~'] },
   // ★ /goto (2026-08-08, Alex: "I wasn't able to locate the springs.. its a big map lol").
-  // Bare /goto is the compass: every ruled place with distance and bearing from where you stand,
-  // so wandering there legit stays possible. With a name it teleports — cheat-grade, owner-gated.
-  { name: 'goto', usage: 'goto [zone]', help: 'bare: bearings to every ruled place · named: teleport there', owner: true,
+  // Bare /goto is the compass: every ruled place with distance and bearing from where you stand.
+  // That half is VIEW-GRADE (this file's own rule) and gates nothing — the zones are islands in a
+  // lot of wild country, and a player who cannot find them has a worse problem than a player who
+  // knows where they are. Only the TELEPORT is cheat-grade, checked inside so the compass survives.
+  { name: 'goto', usage: 'goto [zone]', help: 'bare: bearings to every ruled place · named: teleport there',
     run: (a, c) => {
       const q = (a[0] ?? '').toLowerCase()
       const p = c.pos()
       if (!q) return ZONE_ANCHORS.map(z => `${z.id.padEnd(16)} ${bearing(z.x - p.x, z.z - p.z)}`).join('\n')
       const z = ZONE_ANCHORS.find(zn => zn.id === q) ?? ZONE_ANCHORS.find(zn => zn.id.startsWith(q))
       if (!z) return `no such place: ${q} — bare /goto lists them`
+      if (!c.isOwner) return `${z.id}: ${bearing(z.x - p.x, z.z - p.z)} — teleport is keeper-of-the-realm only`
       return c.tp(z.x, z.z)
     },
     suggest: () => ZONE_ANCHORS.map(z => z.id) },
