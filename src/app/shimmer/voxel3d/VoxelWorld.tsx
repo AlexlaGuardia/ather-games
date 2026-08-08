@@ -168,12 +168,22 @@ interface ConsoleCtx {
   radius: () => number
   give: (id: string, n: number) => string
   tp: (x: number, z: number) => string
+  /** Player position, for `~` relative coordinates (MC's convention, ported with the chat). */
+  pos: () => { x: number; z: number }
 }
 const NAMED_HOURS: Record<string, number> = { midnight: 0, dawn: 6.5, noon: 12, dusk: 18.75, night: 21 }
-interface ConsoleCmd { name: string; usage: string; help: string; owner?: boolean; run: (a: string[], c: ConsoleCtx) => string }
+/** `~` / `~-5` → relative to `cur`; anything else parses as absolute. NaN propagates for the caller. */
+const parseCoord = (tok: string, cur: number): number =>
+  tok.startsWith('~') ? cur + (tok.length > 1 ? Number(tok.slice(1)) : 0) : Number(tok)
+interface ConsoleCmd {
+  name: string; usage: string; help: string; owner?: boolean
+  run: (a: string[], c: ConsoleCtx) => string
+  /** Tab-completion values for argument N (0-based), MC's suggestion strip. Filtered by prefix. */
+  suggest?: (argIdx: number, c: ConsoleCtx) => string[]
+}
 const CONSOLE_CMDS: ConsoleCmd[] = [
   { name: 'help', usage: 'help', help: 'list commands', run: (_a, c) =>
-      CONSOLE_CMDS.filter(k => !k.owner || c.isOwner).map(k => `${k.usage} — ${k.help}`).join('\n') },
+      CONSOLE_CMDS.filter(k => !k.owner || c.isOwner).map(k => `/${k.usage} — ${k.help}`).join('\n') },
   { name: 'time', usage: 'time <0-24 | dawn|noon|dusk|night|midnight | free>', help: 'pin the clock (this tab only) or hand it back',
     run: (a) => {
       const w = (a[0] ?? '').toLowerCase()
@@ -183,7 +193,8 @@ const CONSOLE_CMDS: ConsoleCmd[] = [
       if (!Number.isFinite(h)) return `not an hour: ${w}`
       setTimePin(h)
       return `pinned at ${getDisplayTime(dayProgress())} — 'time free' to release`
-    } },
+    },
+    suggest: () => [...Object.keys(NAMED_HOURS), 'free'] },
   { name: 'radius', usage: 'radius [4-12]', help: 'view/load ring, in columns of 16',
     run: (a, c) => {
       if (!a[0]) return `radius is ${c.radius()} (${c.radius() * 16} blocks)`
@@ -191,26 +202,56 @@ const CONSOLE_CMDS: ConsoleCmd[] = [
       if (!Number.isFinite(r) || r < VIEW_RADIUS_MIN || r > VIEW_RADIUS_MAX) return `radius takes ${VIEW_RADIUS_MIN}..${VIEW_RADIUS_MAX}`
       c.setRadius(r)
       return `radius ${r} (${r * 16} blocks)`
-    } },
+    },
+    suggest: () => ['4', '6', '8', '10', '12'] },
   { name: 'give', usage: 'give <item> [count]', help: 'conjure items into the bag', owner: true,
-    run: (a, c) => a[0] ? c.give(a[0], Math.max(1, Math.round(Number(a[1]) || 1))) : 'give what?' },
-  { name: 'tp', usage: 'tp <x> <z>', help: 'teleport to ground level at x,z', owner: true,
+    run: (a, c) => a[0] ? c.give(a[0], Math.max(1, Math.round(Number(a[1]) || 1))) : 'give what?',
+    suggest: (i) => i === 0 ? [...KNOWN_ITEMS].sort() : ['1', '4', '16', '64'] },
+  { name: 'tp', usage: 'tp <x> <z>  (~ = here, ~-20 = 20 west)', help: 'teleport to ground level', owner: true,
     run: (a, c) => {
-      const x = Number(a[0]), z = Number(a[1])
-      if (!Number.isFinite(x) || !Number.isFinite(z)) return 'tp needs two numbers'
+      if (!a[0] || !a[1]) return 'tp needs two coordinates'
+      const p = c.pos()
+      const x = parseCoord(a[0], p.x), z = parseCoord(a[1], p.z)
+      if (!Number.isFinite(x) || !Number.isFinite(z)) return `not coordinates: ${a[0]} ${a[1]}`
       return c.tp(Math.floor(x), Math.floor(z))
-    } },
+    },
+    suggest: () => ['~'] },
   { name: 'weather', usage: 'weather', help: 'someday', run: () =>
       'no weather in the Ather yet — the day it exists, its command lands here' },
 ]
-function runConsoleLine(line: string, ctx: ConsoleCtx): string {
+function runConsoleLine(line: string, ctx: ConsoleCtx): { text: string; err?: boolean } {
   const parts = line.trim().split(/\s+/)
-  const name = (parts[0] ?? '').toLowerCase().replace(/^\//, '')   // a leading / is muscle memory, accept it
-  if (!name) return ''
+  const name = (parts[0] ?? '').toLowerCase().replace(/^\//, '')
+  if (!name) return { text: '' }
   const cmd = CONSOLE_CMDS.find(k => k.name === name)
-  if (!cmd) return `unknown: ${name} — try 'help'`
-  if (cmd.owner && !ctx.isOwner) return `${name} is keeper-of-the-realm only`
-  return cmd.run(parts.slice(1), ctx)
+  if (!cmd) return { text: `unknown command: ${name} — try /help`, err: true }
+  if (cmd.owner && !ctx.isOwner) return { text: `/${name} is keeper-of-the-realm only`, err: true }
+  return { text: cmd.run(parts.slice(1), ctx) }
+}
+
+/**
+ * MC's suggestion strip, sized to ours: given the draft line, what completions apply to the token
+ * under the cursor (always the LAST token — no mid-line cursor support, deliberately), and how to
+ * apply one. Command names complete after `/`; arguments complete from the command's `suggest`.
+ */
+function suggestionsFor(line: string, ctx: ConsoleCtx): { options: string[]; apply: (opt: string) => string } {
+  const none = { options: [], apply: () => line }
+  if (!line.startsWith('/')) return none
+  const body = line.slice(1)
+  const toks = body.split(/\s+/)
+  const completingNew = /\s$/.test(body) || body === ''
+  const partial = completingNew ? '' : toks[toks.length - 1]
+  const tokIdx = completingNew ? toks.filter(Boolean).length : toks.length - 1
+  const stem = completingNew ? body : body.slice(0, body.length - partial.length)
+  const build = (opt: string) => `/${stem}${opt} `
+  if (tokIdx === 0) {
+    const names = CONSOLE_CMDS.filter(k => !k.owner || ctx.isOwner).map(k => k.name)
+    return { options: names.filter(n => n.startsWith(partial.toLowerCase())), apply: build }
+  }
+  const cmd = CONSOLE_CMDS.find(k => k.name === toks[0].toLowerCase())
+  if (!cmd?.suggest || (cmd.owner && !ctx.isOwner)) return none
+  const opts = cmd.suggest(tokIdx - 1, ctx).filter(o => o.startsWith(partial))
+  return { options: opts.slice(0, 8), apply: build }
 }
 /** Item ids the console may conjure — everything a block drops or a recipe produces. */
 const KNOWN_ITEMS: ReadonlySet<string> = new Set([
@@ -324,12 +365,23 @@ export default function VoxelWorld() {
   const [nearTable, setNearTable] = useState(false)
   const station: Station = nearTable ? 'crafting_table' : 'hand'
 
-  // ── the dev console (T) ──────────────────────────────────────────────────────────────────────
+  // ── the chat console (T / Enter / '/') — MC's chat-is-the-surface model ──────────────────────
+  // Chat messages and command output land in ONE log: recent lines float on the HUD and fade
+  // (MC shows ~3s; ours linger a touch longer), the full scrollback lives behind T. A line
+  // starting with '/' is a command; anything else is chat — single-player today, but the shape
+  // is multiplayer's, so the party build inherits a working chat for free.
   const [consoleOpen, setConsoleOpen] = useState(false)
+  const [consoleSeed, setConsoleSeed] = useState('')   // "/" when opened via the slash key
+  const [chatLog, setChatLog] = useState<{ id: number; text: string; kind: 'you' | 'out' | 'err'; at: number }[]>([])
+  const chatId = useRef(0)
+  const pushChat = useCallback((text: string, kind: 'you' | 'out' | 'err') => {
+    const id = ++chatId.current
+    setChatLog(l => [...l.slice(-99), { id, text, kind, at: Date.now() }])
+  }, [])
   /** World fills this with the verbs only it can perform (teleport needs the walker + the clock
    *  of loaded columns). Null until the world mounts; commands degrade to a message, never throw. */
-  const worldCmd = useRef<{ tp: (x: number, z: number) => string } | null>(null)
-  const runCommand = useCallback((line: string): string => runConsoleLine(line, {
+  const worldCmd = useRef<{ tp: (x: number, z: number) => string; pos: () => { x: number; z: number } } | null>(null)
+  const consoleCtx = useMemo<ConsoleCtx>(() => ({
     isOwner,
     radius: () => settings.viewRadius,
     setRadius: (r) => update({ viewRadius: r }),
@@ -340,7 +392,20 @@ export default function VoxelWorld() {
       return `gave ${count}× ${id.replace(/_/g, ' ')}`
     },
     tp: (x, z) => worldCmd.current ? worldCmd.current.tp(x, z) : 'the world is still waking',
+    pos: () => worldCmd.current ? worldCmd.current.pos() : { x: 0, z: 0 },
   }), [isOwner, settings.viewRadius, update, refreshHotbar])
+  const submitLine = useCallback((raw: string) => {
+    const line = raw.trim()
+    if (!line) return
+    if (line.startsWith('/')) {
+      pushChat(`› ${line}`, 'you')
+      const r = runConsoleLine(line, consoleCtx)
+      if (r.text) pushChat(r.text, r.err ? 'err' : 'out')
+    } else {
+      // Plain chat. `keeper` until identity exists — the multiplayer build swaps the name in.
+      pushChat(`<keeper> ${line}`, 'you')
+    }
+  }, [consoleCtx, pushChat])
   const have = useCallback((itemId: string) => countItem(inv.current!, itemId), [])
 
   // ── THE MOUSE HANDOFF (play3d's contract, ported verbatim) ──────────────────────────────────
@@ -458,9 +523,13 @@ export default function VoxelWorld() {
       // Typing beats verbs: keystrokes aimed at ANY text field (the console line, a settings
       // slider) must never run game verbs underneath what you're writing.
       if ((e.target as HTMLElement | null)?.tagName === 'INPUT') return
-      // T — the dev console. Above the draw lock on purpose: a console you cannot open while
-      // your weapon is out is a console you cannot use to debug the weapon.
-      if (e.code === 'KeyT' && !consoleOpen) { e.preventDefault(); openCursorUI(); setConsoleOpen(true); return }
+      // T / Enter / '/' — the chat console (MC's three doors, verbatim: '/' arrives pre-slashed).
+      // Above the draw lock on purpose: a console you cannot open while your weapon is out is a
+      // console you cannot use to debug the weapon.
+      if (!consoleOpen && !dialogueOpen && !craftOpen && !showSettings) {
+        if (e.code === 'KeyT' || e.code === 'Enter') { e.preventDefault(); openCursorUI(); setConsoleSeed(''); setConsoleOpen(true); return }
+        if (e.key === '/') { e.preventDefault(); openCursorUI(); setConsoleSeed('/'); setConsoleOpen(true); return }
+      }
       const n = Number(e.key)
       // ── ★ THE DRAW LOCK (Alex, 2026-08-07) ────────────────────────────────────────────────
       // "when the player has a weapon stowed the hotbar kicks in and when they draw their weapon
@@ -591,7 +660,8 @@ export default function VoxelWorld() {
                     onCraft={doCraft} onCraftTool={doCraftTool} onClose={() => { setCraftOpen(false); closeCursorUI() }} />
       )}
       {dialogueOpen && <GregDialogue stage={tutorial.current.stage} onClose={closeDialogue} />}
-      {consoleOpen && <DevConsole onRun={runCommand} onClose={() => { setConsoleOpen(false); closeCursorUI() }} />}
+      <ChatConsole open={consoleOpen} seed={consoleSeed} log={chatLog} ctx={consoleCtx}
+                   onSubmit={submitLine} onClose={() => { setConsoleOpen(false); closeCursorUI() }} />
     </div>
   )
 }
@@ -689,7 +759,7 @@ function Hud({ stats, pos, look, hotbar, sel, tier, build, pieceIdx, rot, inv, s
         <div className="mt-1 text-white/45">click to look · WASD · space jump · shift slide · hold space climb · V fly</div>
         {build
           ? <div className="text-amber-200/80">BUILD · RMB place · LMB deconstruct · R rotate · 1-6 piece · Tab exit</div>
-          : <div className="text-white/45">hold LMB mine · RMB place · scroll/1-8 slot · F draw · C craft · Tab build · T console</div>}
+          : <div className="text-white/45">hold LMB mine · RMB place · scroll/1-8 slot · F draw · C craft · Tab build · T chat, / commands</div>}
         {/* ★ The tools are Greg's, from engine/tools.ts, unchanged. Tier is what you HOLD now. */}
         <div className="text-white/40 mt-1">
           {(['forestry', 'prospecting'] as const).map(sk => {
@@ -1014,7 +1084,7 @@ function World({ inv, toolTier, toolSkill, selItem, weaponDrawn, weaponIdx, onAm
   /** Near a placed crafting table — the parent turns this into recipes.ts's `Station`. */
   onNearTable: (near: boolean) => void
   /** The console's world-verbs, filled on mount — only World can move the walker safely. */
-  cmdOut: React.RefObject<{ tp: (x: number, z: number) => string } | null>
+  cmdOut: React.RefObject<{ tp: (x: number, z: number) => string; pos: () => { x: number; z: number } } | null>
 }) {
   const { camera } = useThree()
   const group = useRef<THREE.Group>(null)
@@ -1133,6 +1203,7 @@ function World({ inv, toolTier, toolSkill, selItem, weaponDrawn, weaponIdx, onAm
         settled.current = false
         return `off to ${x}, ${z} (ground ${h}) — the land is catching up`
       },
+      pos: () => ({ x: camera.position.x, z: camera.position.z }),
     }
     return () => { cmdOut.current = null }
   }, [cmdOut, camera])
@@ -2115,30 +2186,76 @@ function World({ inv, toolTier, toolSkill, selItem, weaponDrawn, weaponIdx, onAm
  * ★ NO CHOICES. This is phase 1 (mechanics, placeholder dialogue): one line, one dismiss. A branching
  * conversation tree is a cozy-voice-pass concern, not a wiring one.
  */
+const CHAT_KIND_CLASS = { you: 'text-white/85', out: 'text-white/60', err: 'text-rose-300/90' } as const
+
 /**
- * The dev console (T). One input line, the last few results above it. Enter runs and keeps it
- * open (a session of commands is the normal case); Enter on an empty line, or Esc, closes.
- * History on ArrowUp/Down. The INPUT tag is the shield: both window-level key handlers drop
- * events whose target is an input, so touch-typing 'w' here never walks the player.
+ * The chat console — MC's chat model, sized to ours.
+ *
+ * CLOSED: the last few lines float bottom-left and fade out (the HUD feed; MC holds ~3s, ours a
+ * touch longer). OPEN (T / Enter / '/'): full scrollback, a suggestion strip above the input
+ * (Tab applies the highlighted one; typing narrows), ArrowUp/Down history, Enter sends and
+ * closes on an empty line, Esc closes. A leading '/' makes it a command; else it's chat.
+ * The INPUT tag is the shield: both window-level key handlers drop input-targeted events, so
+ * touch-typing 'w' here never walks the player.
  */
-function DevConsole({ onRun, onClose }: { onRun: (line: string) => string; onClose: () => void }) {
-  const [line, setLine] = useState('')
-  const [log, setLog] = useState<string[]>([])
+function ChatConsole({ open, seed, log, ctx, onSubmit, onClose }: {
+  open: boolean
+  seed: string
+  log: { id: number; text: string; kind: 'you' | 'out' | 'err'; at: number }[]
+  ctx: ConsoleCtx
+  onSubmit: (line: string) => void
+  onClose: () => void
+}) {
+  const [line, setLine] = useState(seed)
   const hist = useRef<string[]>([])
   const histAt = useRef(-1)
+  const scrollRef = useRef<HTMLDivElement>(null)
+  // Re-seed on each open ('/' arrives pre-slashed); the component stays mounted for the feed.
+  useEffect(() => { if (open) { setLine(seed); histAt.current = -1 } }, [open, seed])
+  useEffect(() => { const el = scrollRef.current; if (el) el.scrollTop = el.scrollHeight }, [log, open])
+
+  const sug = suggestionsFor(line, ctx)
   const submit = () => {
     const l = line.trim()
     if (!l) { onClose(); return }
-    const out = onRun(l)
-    hist.current.unshift(l); histAt.current = -1
-    setLog(prev => [...prev, `› ${l}`, ...(out ? out.split('\n') : [])].slice(-10))
+    hist.current.unshift(l)
+    onSubmit(l)
     setLine('')
   }
+
+  if (!open) {
+    // The HUD feed: only lines young enough to still matter; each fades via CSS once mounted.
+    const cutoff = Date.now() - 10_000
+    const recent = log.filter(m => m.at > cutoff).slice(-8)
+    if (recent.length === 0) return null
+    return (
+      <div className="absolute left-3 bottom-3 w-[460px] font-mono text-[11px] pointer-events-none">
+        <style>{`@keyframes shimmerchatfade { to { opacity: 0 } }`}</style>
+        {recent.map(m => (
+          <div key={m.id} className={`px-2 py-0.5 bg-black/45 rounded-sm whitespace-pre-wrap ${CHAT_KIND_CLASS[m.kind]}`}
+               style={{ animation: 'shimmerchatfade 1s ease 6s forwards' }}>
+            {m.text}
+          </div>
+        ))}
+      </div>
+    )
+  }
+
   return (
     <div className="absolute left-3 bottom-3 w-[460px] font-mono text-[11px] pointer-events-auto">
       {log.length > 0 && (
-        <div className="mb-1 px-2 py-1.5 bg-black/70 border border-white/10 rounded text-white/70 whitespace-pre-wrap max-h-44 overflow-y-auto">
-          {log.join('\n')}
+        <div ref={scrollRef} className="mb-1 px-2 py-1.5 bg-black/70 border border-white/10 rounded max-h-52 overflow-y-auto">
+          {log.map(m => (
+            <div key={m.id} className={`whitespace-pre-wrap ${CHAT_KIND_CLASS[m.kind]}`}>{m.text}</div>
+          ))}
+        </div>
+      )}
+      {sug.options.length > 0 && (
+        <div className="mb-1 px-2 py-1 bg-black/80 border border-white/10 rounded text-sky-200/80">
+          {sug.options.map((o, i) => (
+            <span key={o}>{i > 0 && <span className="text-white/25"> · </span>}{i === 0 ? <span className="text-sky-100">{o}</span> : o}</span>
+          ))}
+          <span className="text-white/30 float-right">tab</span>
         </div>
       )}
       <div className="flex items-center gap-1.5 px-2 py-1.5 bg-black/80 border border-white/15 rounded">
@@ -2149,10 +2266,11 @@ function DevConsole({ onRun, onClose }: { onRun: (line: string) => string; onClo
             e.stopPropagation()
             if (e.key === 'Enter') submit()
             else if (e.key === 'Escape') onClose()
+            else if (e.key === 'Tab') { e.preventDefault(); if (sug.options.length) setLine(sug.apply(sug.options[0])) }
             else if (e.key === 'ArrowUp') { const h = hist.current; if (h.length) { histAt.current = Math.min(h.length - 1, histAt.current + 1); setLine(h[histAt.current]) } e.preventDefault() }
             else if (e.key === 'ArrowDown') { const h = hist.current; histAt.current = Math.max(-1, histAt.current - 1); setLine(histAt.current === -1 ? '' : h[histAt.current]); e.preventDefault() }
           }}
-          placeholder="help"
+          placeholder="chat — or / for commands"
           className="flex-1 bg-transparent outline-none text-white/90 placeholder:text-white/25"
         />
         <span className="text-white/30">esc</span>
