@@ -39,9 +39,13 @@ export interface StoryNode {
 export const STORY_NODES: StoryNode[] = [
   { id: 'moonwell-glade', x: -150, z: -640 },     // spawn + tutorial (must match the glade anchor)
   { id: 'gloview-village', x: -265, z: -1125 },   // ~500 — the three Moglins' test
-  { id: 'thistle-hold', x: -795, z: -1655 },      // ~750 — the stronghold chain begins
-  { id: 'vetch-hold', x: -1765, z: -1885 },       // ~1000
-  { id: 'brack-hold', x: -2269, z: -2977 },       // ~1200
+  // ★ Hold nodes are SITED, not just spaced (2026-08-08): the first placements dropped Thistle
+  // mid-river-channel (its courtyard was a lake) and Vetch on a band edge. These spots were
+  // scanned river-free across the whole build zone (|riverField| > 0.11 at centre, corners and
+  // gate aprons) while holding Alex's hop ruling: 750 / 1003 / 1098.
+  { id: 'thistle-hold', x: -630, z: -1780 },      // ~750 — the stronghold chain begins
+  { id: 'vetch-hold', x: -1570, z: -2130 },       // ~1000
+  { id: 'brack-hold', x: -2269, z: -2977 },       // ~1100
   { id: 'ather-winds-gate', x: -2437, z: -3341 }, // the sealed door out of act 4
 ]
 

@@ -7,6 +7,7 @@
 
 import { riverness, riverCarve, riverField, waterSurfaceAt, waterLevelAt, RIVER_FULL, RIVER_EDGE, RIVER_DEPTH, columnHeight } from './height'
 import { materialAt, MAT, DEFAULT_DEPTH } from './depth'
+import { roadAt } from './story-path'
 import { makeColumn, SECTION } from './column'
 
 let pass = 0
@@ -37,6 +38,10 @@ const SEED = 1337
     const carve = riverCarve(x, z, SEED)
     if (carve < 2) continue
     rivers++
+    // Bridge columns (2026-08-08): where the story road crosses a channel, stone piers stand in
+    // the water and a plank deck lies at table+1 — a pier column IS a dry channel column, by
+    // design. The water rules below are about rivers, not road furniture; skip the corridor.
+    if (roadAt(x, z, SEED)) continue
     const h = columnHeight(x, z, SEED)
     if (h <= DEFAULT_DEPTH.seaLevel + DEFAULT_DEPTH.beachHeight) continue   // sea swallows the river
     const table = waterSurfaceAt(x, z, SEED)

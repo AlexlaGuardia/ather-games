@@ -16,6 +16,7 @@
 
 import { signed2, spline, value2, warped2, type SplinePoint } from './noise'
 import { zoneAt } from './zones'
+import { HOLDS, padBlendAt } from './holds'
 
 export interface HeightConfig {
   /** Total world height in voxels. Ruled 2026-08-06: 256. */
@@ -310,6 +311,22 @@ export const RIVER_APPROACH = 0.10
 /** |w| where the channel begins (riverness = SHORE_RN) — the inner edge of the approach blend. */
 const SHORE_W = RIVER_EDGE - 0.35 * (RIVER_EDGE - RIVER_FULL)
 
+/**
+ * ── Hold pads (2026-08-08, the story-node blockouts) ─────────────────────────────────────────
+ * Each hold flattens its ground to ONE level — the uncarved terrain at its node, memoised per
+ * seed (three rawTerrain calls per seed, ever). The pad is applied LAST in columnHeight, after
+ * zones and rivers, because a fortification is the thing that wins an argument with geography.
+ */
+const holdPadLevels = new Map<number, number[]>()
+export function holdPadLevel(i: number, seed: number, cfg: HeightConfig = DEFAULT_HEIGHT): number {
+  let levels = holdPadLevels.get(seed)
+  if (!levels) {
+    levels = HOLDS.map(s => Math.round(rawTerrain(s.x, s.z, seed, cfg)))
+    holdPadLevels.set(seed, levels)
+  }
+  return levels[i]
+}
+
 export function columnHeight(x: number, z: number, seed: number, cfg: HeightConfig = DEFAULT_HEIGHT): number {
   const w = riverField(x, z, seed, cfg)
   const aw = Math.abs(w)
@@ -333,6 +350,15 @@ export function columnHeight(x: number, z: number, seed: number, cfg: HeightConf
       const raw = rawTerrain(x, z, seed, cfg)
       h = raw + ((table + 1) - raw) * sm01((RIVER_APPROACH - aw) / (RIVER_APPROACH - SHORE_W))
     }
+  }
+  // Hold pads flatten whatever the country wanted here (zones, banks, all of it) — see the
+  // holdPadLevel block above. Blend runs 1 inside the walls → 0 across PAD_BLEND past them.
+  // The one thing a pad may NOT flatten is an open CHANNEL: hold sites are scanned river-free,
+  // but a pad's outer fringe can kiss a band, and a fringe that lifts the bed dams the river dry
+  // (rivers.test caught exactly one such column). Banks yield to the pad; water does not.
+  {
+    const pb = padBlendAt(x, z)
+    if (pb && rn < 0.35) h = h + (holdPadLevel(pb.i, seed, cfg) - h) * pb.t
   }
   const min = 1
   const max = cfg.worldHeight - 2

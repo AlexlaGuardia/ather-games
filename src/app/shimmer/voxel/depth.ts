@@ -18,6 +18,8 @@ import { fbm2, value2 } from './noise'
 import { columnHeight, riverCarve, waterSurfaceAt, RIVER_DEPTH, type HeightConfig, DEFAULT_HEIGHT } from './height'
 import { greySurfaceAt } from './biome'
 import { roadAt } from './story-path'
+import { holdIndexAt, holdVoxelAt, holdCourtyardAt } from './holds'
+import { holdPadLevel } from './height'
 import { AIR } from './section'
 
 /**
@@ -134,6 +136,16 @@ export function materialAt(
   //    the table and the fill is flat and contained by construction). Guarded: only the voxels
   //    just above a surface run the cheap band read; sky stays on the fast path.
   if (y > h) {
+    // ── the hold blockouts (2026-08-08) — walls, keep, gate lanterns, above the flattened pad.
+    // Gated on a cheap bbox; the pad level is memoised per seed in height.ts. Everything the
+    // holds raise is ordinary voxels: mineable, edit-diffed, lit by the same light field.
+    {
+      const hi = holdIndexAt(x, z)
+      if (hi >= 0) {
+        const m = holdVoxelAt(x, y, z, hi, holdPadLevel(hi, seed, hcfg), MAT.STONE, MAT.MANA_LANTERN)
+        if (m !== 0) return m
+      }
+    }
     // ── the story road BRIDGES water (2026-08-08, Alex: "the fords are fine… lets do the
     // bridges anyway") ── Wherever the road corridor runs over a submerged bed, a plank deck
     // lies at table+1 — which is EXACTLY where the approach band parks the banks, so deck and
@@ -169,6 +181,7 @@ export function materialAt(
     if (h <= cfg.seaLevel) return MAT.SAND                              // lake / sea bed
     if (h <= cfg.seaLevel + cfg.beachHeight) return MAT.SAND            // beach band
     if (riverCarve(x, z, seed, hcfg) >= 1) return MAT.SAND              // river bed and its shoulders
+    if (holdCourtyardAt(x, z)) return MAT.PATH                          // hold courtyards are worn bare
     if (roadAt(x, z, seed)) return MAT.PATH                             // the story road wears through
     if (slopeAt(x, z, seed, hcfg) >= cfg.cliffSlope) return MAT.STONE   // cliff faces show rock
     if (greySurfaceAt(x, z, seed)) return MAT.GREY_SOIL                 // drained ground wears grey
