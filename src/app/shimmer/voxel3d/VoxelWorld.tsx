@@ -218,9 +218,32 @@ const CONSOLE_CMDS: ConsoleCmd[] = [
       return c.tp(Math.floor(x), Math.floor(z))
     },
     suggest: () => ['~'] },
+  // ★ /goto (2026-08-08, Alex: "I wasn't able to locate the springs.. its a big map lol").
+  // Bare /goto is the compass: every ruled place with distance and bearing from where you stand,
+  // so wandering there legit stays possible. With a name it teleports — cheat-grade, owner-gated.
+  { name: 'goto', usage: 'goto [zone]', help: 'bare: bearings to every ruled place · named: teleport there', owner: true,
+    run: (a, c) => {
+      const q = (a[0] ?? '').toLowerCase()
+      const p = c.pos()
+      if (!q) return ZONE_ANCHORS.map(z => `${z.id.padEnd(16)} ${bearing(z.x - p.x, z.z - p.z)}`).join('\n')
+      const z = ZONE_ANCHORS.find(zn => zn.id === q) ?? ZONE_ANCHORS.find(zn => zn.id.startsWith(q))
+      if (!z) return `no such place: ${q} — bare /goto lists them`
+      return c.tp(z.x, z.z)
+    },
+    suggest: () => ZONE_ANCHORS.map(z => z.id) },
   { name: 'weather', usage: 'weather', help: 'someday', run: () =>
       'no weather in the Ather yet — the day it exists, its command lands here' },
 ]
+
+/** Distance + 8-way compass toward (dx, dz). MC's convention: −Z is north, +X is east. */
+function bearing(dx: number, dz: number): string {
+  const d = Math.hypot(dx, dz)
+  if (d < 60) return 'you are here'
+  const dirs = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW']
+  const a = Math.atan2(dx, -dz)                       // 0 = north, clockwise
+  const k = ((Math.round(a / (Math.PI / 4)) % 8) + 8) % 8
+  return `${Math.round(d)} blocks ${dirs[k]}`
+}
 function runConsoleLine(line: string, ctx: ConsoleCtx): { text: string; err?: boolean } {
   const parts = line.trim().split(/\s+/)
   const name = (parts[0] ?? '').toLowerCase().replace(/^\//, '')
