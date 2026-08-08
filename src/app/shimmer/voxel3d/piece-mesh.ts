@@ -77,11 +77,10 @@ function buildGeometry(def: PieceDef): THREE.BufferGeometry {
       break
     }
     case 'fence': {
-      // Two posts, two rails — thin enough to see through, cell-solid to walk into.
-      box(0.14, 1, 0.14, -0.36, 0.5, 0)
-      box(0.14, 1, 0.14, 0.36, 0.5, 0)
-      box(1, 0.12, 0.1, 0, 0.8, 0)
-      box(1, 0.12, 0.1, 0, 0.42, 0)
+      // A single centre post — the ARMS are their own instanced mesh, derived per connected side
+      // at sync time (MC's trick: connection is a question you ask neighbours, never a thing you
+      // store). A lone post is also the honest ghost: that IS what an unconnected fence is.
+      box(0.18, 1, 0.18, 0, 0.5, 0)
       break
     }
     case 'half_slab': {
@@ -102,6 +101,25 @@ function buildGeometry(def: PieceDef): THREE.BufferGeometry {
   // Origin at the cell's min corner, matching how `cellsOf` addresses occupancy — so the ghost sits
   // exactly where the footprint says it will.
   merged.translate(0.5, 0, 0.5)
+  merged.computeVertexNormals()
+  return merged
+}
+
+/**
+ * One fence ARM: two half-length rails from the cell centre to the +x edge, authored around the
+ * LOCAL ORIGIN (not the min-corner convention) so an instance rotates about the post it belongs
+ * to. Emitted per connected side at sync — two draw calls (posts + arms) cover every fence
+ * configuration that can exist.
+ */
+function buildFenceArm(): THREE.BufferGeometry {
+  const parts: THREE.BufferGeometry[] = []
+  for (const y of [0.8, 0.42]) {
+    const g = new THREE.BoxGeometry(0.5, 0.12, 0.1)
+    g.translate(0.25, y, 0)
+    parts.push(g)
+  }
+  const merged = buildMergedGeometry(parts)
+  for (const p of parts) p.dispose()
   merged.computeVertexNormals()
   return merged
 }
@@ -136,6 +154,9 @@ export interface PieceRenderer {
   ghost: THREE.Mesh
   setGhost: (pieceId: string, x: number, y: number, z: number, rot: number, ok: boolean) => void
   hideGhost: () => void
+  /** Host-injected "is this voxel solid?" — fence arms reach for terrain and walls through it.
+   *  Optional: without it fences still connect to each other, just not to the world. */
+  setWorldSolid: (fn: ((x: number, y: number, z: number) => boolean) | null) => void
   dispose: () => void
 }
 
@@ -157,6 +178,16 @@ export function createPieceRenderer(): PieceRenderer {
     group.add(inst)
   }
 
+  // The fence arms: one extra instanced mesh, same law as everything else. 4096 arms = a
+  // thousand fully-connected fences; the cap is a backstop, not a plan.
+  const armGeo = buildFenceArm()
+  const armMat = new THREE.MeshLambertMaterial({ color: TINT.fence })
+  const armMesh = new THREE.InstancedMesh(armGeo, armMat, MAX_PER_TYPE)
+  armMesh.count = 0
+  armMesh.frustumCulled = false
+  group.add(armMesh)
+  let worldSolid: ((x: number, y: number, z: number) => boolean) | null = null
+
   // The ghost reuses a piece geometry but needs its own transparent material — one material total,
   // recoloured on the fly, never one per preview.
   const ghostMat = new THREE.MeshLambertMaterial({ transparent: true, opacity: 0.45, color: 0x7fd4ff })
@@ -169,18 +200,41 @@ export function createPieceRenderer(): PieceRenderer {
   const v = new THREE.Vector3()
   const one = new THREE.Vector3(1, 1, 1)
 
+  const Y = new THREE.Vector3(0, 1, 0)
+  // Arm yaw per direction: the arm points +x at 0. (1,0)→0 · (0,1)→-π/2 · (-1,0)→π · (0,-1)→π/2.
+  const ARM_DIRS: [number, number, number][] = [[1, 0, 0], [0, 1, -Math.PI / 2], [-1, 0, Math.PI], [0, -1, Math.PI / 2]]
+
   const sync: PieceRenderer['sync'] = (placements) => {
     const counts = new Map<string, number>()
+    const fenceCells = new Set<string>()
+    for (const p of placements) if (p.pieceId === 'fence') fenceCells.add(`${p.x},${p.y},${p.z}`)
+    let arms = 0
     for (const p of placements) {
       const inst = meshes.get(p.pieceId)
       if (!inst) continue
       const i = counts.get(p.pieceId) ?? 0
       if (i >= MAX_PER_TYPE) continue
-      q.setFromAxisAngle(new THREE.Vector3(0, 1, 0), -(p.rot * Math.PI) / 2)
+      q.setFromAxisAngle(Y, -(p.rot * Math.PI) / 2)
       v.set(p.x, p.y, p.z)
       inst.setMatrixAt(i, m4.compose(v, q, one))
       counts.set(p.pieceId, i + 1)
+      // ── fence arms: derived, never stored (MC's connection model) ──
+      // A side grows an arm toward a sibling fence or any solid voxel — walls and hillsides
+      // included. Both fences of a pair emit their own half-arm, which is what makes the joint.
+      if (p.pieceId === 'fence') {
+        for (const [dx, dz, yaw] of ARM_DIRS) {
+          if (arms >= MAX_PER_TYPE) break
+          const nx = p.x + dx, nz = p.z + dz
+          const link = fenceCells.has(`${nx},${p.y},${nz}`) || (worldSolid?.(nx, p.y, nz) ?? false)
+          if (!link) continue
+          q.setFromAxisAngle(Y, yaw)
+          v.set(p.x + 0.5, p.y, p.z + 0.5)   // arms rotate about the POST, so centre-origin
+          armMesh.setMatrixAt(arms++, m4.compose(v, q, one))
+        }
+      }
     }
+    armMesh.count = arms
+    armMesh.instanceMatrix.needsUpdate = true
     for (const [id, inst] of meshes) {
       inst.count = counts.get(id) ?? 0
       inst.instanceMatrix.needsUpdate = true
@@ -199,9 +253,11 @@ export function createPieceRenderer(): PieceRenderer {
       ghost.visible = true
     },
     hideGhost: () => { ghost.visible = false },
+    setWorldSolid: (fn) => { worldSolid = fn },
     dispose: () => {
       for (const g of geoms.values()) g.dispose()
       for (const m of mats.values()) m.dispose()
+      armGeo.dispose(); armMat.dispose()
       ghostMat.dispose()
     },
   }

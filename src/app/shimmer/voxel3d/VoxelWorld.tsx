@@ -1539,7 +1539,10 @@ function World({ inv, toolTier, toolSkill, selItem, weaponDrawn, weaponIdx, onAm
     // (or roofing a room) must change what the NEXT spawn scan reads, not what the last one read.
     for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++)
       lightCache.current.delete(key(cx + dx, cz + dz))
-  }, [remesh])
+    // Fence connections are DERIVED from the world, so a terrain edit beside a fence makes or
+    // breaks an arm — re-derive. O(placements) matrix writes; edits are player-paced, not 60Hz.
+    pieces.sync(placements.current)
+  }, [remesh, pieces])
 
   /** The locomotion core's world probe — a CELL CODE now, not a boolean (2026-08-08): water is
    *  a medium the walker swims, not a hole it wades. Ungenerated space still reads as solid via
@@ -1548,6 +1551,13 @@ function World({ inv, toolTier, toolSkill, selItem, weaponDrawn, weaponIdx, onAm
     const m = voxelSolid(x, y, z)
     return m === MAT.WATER ? CELL_WATER : m === STRUCTURE_HALF ? CELL_HALF : isSolid(m) ? CELL_SOLID : CELL_EMPTY
   }, [voxelSolid])
+
+  // Fence arms ask the world what to grab — walls, hillsides, other pieces' occupancy. Slabs are
+  // excluded: a rail into a half-cell's empty upper half reads as floating.
+  useEffect(() => {
+    pieces.setWorldSolid((x, y, z) => { const m = voxelSolid(x, y, z); return isSolid(m) && m !== STRUCTURE_HALF })
+    return () => pieces.setWorldSolid(null)
+  }, [pieces, voxelSolid])
 
   // ── ★ THE FIRING RIG ─────────────────────────────────────────────────────────────────────────
   // Real travelling projectiles, not hitscan. The table already defines projSpeed/projLife per
