@@ -597,9 +597,14 @@ export default function VoxelWorld() {
       }
     }
     // Scroll to change slot — the reason tools are IN the row rather than on their own keys.
+    // In BUILD mode the same wheel walks the piece catalogue (2026-08-08 — it used to dead-end
+    // there, which stranded every piece past the number keys' muscle memory). Drawn still eats
+    // the wheel: a weapon out means neither hand is free.
     const onWheel = (e: WheelEvent) => {
-      if (build || drawn) return
-      setSel(v => (v + (e.deltaY > 0 ? 1 : -1) + 8) % 8)
+      if (drawn) return
+      const dir = e.deltaY > 0 ? 1 : -1
+      if (build) setPieceIdx(v => (v + dir + PIECES.length) % PIECES.length)
+      else setSel(v => (v + dir + 8) % 8)
     }
     window.addEventListener('keydown', onKey)
     window.addEventListener('wheel', onWheel, { passive: true })
