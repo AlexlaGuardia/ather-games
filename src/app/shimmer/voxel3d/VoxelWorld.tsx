@@ -26,6 +26,7 @@ import { VOXEL_WORKER_URL } from '../../../workers/worker-url'
 import { createMeshScratch } from '../voxel/greedy'
 import { columnHeight } from '../voxel/height'
 import { biomeAt } from '../voxel/biome'
+import { ZONE_ANCHORS } from '../voxel/zones'
 import { AIR } from '../voxel/section'
 import { materialAt, MAT, DEFAULT_DEPTH } from '../voxel/depth'
 import { raycast, tickBreak, dropsFor, type BreakState } from '../voxel/mine'
@@ -80,6 +81,13 @@ import { WOOD } from '../voxel/trees'
 // jumping are non-existent"). play3d's Apex-lineage locomotion, extracted pure and re-grounded on
 // voxel collision. See locomotion.ts for provenance; its test file is the feel contract.
 import { createLoco, tickLocomotion } from './locomotion'
+// ── ★ THE TUTORIAL (2026-08-08) — Moonwell Glade becomes spawn + the Greg tutorial chain ─────
+// `tutorial.ts` owns the quest state and its (placeholder) dialogue; `gate.ts` is pure math for
+// where the ceremonial arch sits and which of its cells are the sealable doorway; `greg.ts` builds
+// Greg's placeholder figure. This file only wires all three into the render loop.
+import { loadTutorial, saveTutorial, GREG_LINE, OBJECTIVE_LABEL, type TutorialStage, type TutorialState } from './tutorial'
+import { GATE_X, GATE_Z, GATE_SPANS_X, gateCells } from './gate'
+import { createGregMesh } from './greg'
 
 const SEED = 1337
 const H = DEFAULT_COLUMN.worldHeight
@@ -91,6 +99,45 @@ const key = (cx: number, cz: number) => `${cx},${cz}`
 const LIGHT_PASSES = new Set<number>([
   WOOD.GOLDWOOD_LEAVES, WOOD.SHIMMEROAK_LEAVES, WOOD.STARWILLOW_LEAVES, WOOD.DAWNWOOD_LEAVES,
 ])
+
+// ── ★ SPAWN MOVES TO MOONWELL GLADE (2026-08-08) ──────────────────────────────────────────────
+// Read off the zone anchor rather than hardcoded, so spawn can never drift out of sync with the
+// glade if its anchor ever moves. `save.ts`'s header rules that a save grows with what you BUILD,
+// not with where you have walked — player POSITION is deliberately never persisted, so there is no
+// returning-keeper position to preserve here. That is what satisfies "only new characters spawn in
+// the glade": position-wise, there is no other kind of character. If per-keeper position saving is
+// ever added, it must gate this and read the saved spot instead — do not remove this comment
+// without adding that gate.
+const GLADE = ZONE_ANCHORS.find(z => z.id === 'moonwell-glade')!
+const SPAWN_X = GLADE.x
+const SPAWN_Z = GLADE.z
+
+// Greg stands a few blocks off spawn so a freshly-born keeper does not spawn inside him.
+// GREG_X/GREG_Z are the voxel COLUMN he stands in (columnHeight wants integers); GREG_CX/GREG_CZ
+// are that column's centre, which is where the mesh and the proximity check both actually read —
+// same +0.5 centring the rest of the file uses (spawn, hollow spawns, drop-vs-block math).
+const GREG_X = SPAWN_X + 3
+const GREG_Z = SPAWN_Z + 1
+const GREG_CX = GREG_X + 0.5
+const GREG_CZ = GREG_Z + 0.5
+const GREG_Y = columnHeight(GREG_X, GREG_Z, SEED) + 1
+const GREG_TALK_RANGE = 3
+
+/** Every log a blade can fell — the 'cut' step reads the whole set, not one species; Greg never
+ *  said which tree. */
+const LOG_MATERIALS = new Set<number>([
+  WOOD.GOLDWOOD_LOG, WOOD.SHIMMEROAK_LOG, WOOD.STARWILLOW_LOG, WOOD.DAWNWOOD_LOG,
+])
+
+/** Column keys the gate's whole footprint touches — checked before the first build so a 5-wide arch
+ *  straddling a SECTION seam does not silently drop whichever half lands in an unloaded neighbour. */
+const GATE_COLS: string[] = (() => {
+  const half = 2
+  const pts: [number, number][] = GATE_SPANS_X
+    ? [[GATE_X - half, GATE_Z], [GATE_X + half, GATE_Z]]
+    : [[GATE_X, GATE_Z - half], [GATE_X, GATE_Z + half]]
+  return [...new Set(pts.map(([x, z]) => key(Math.floor(x / SECTION), Math.floor(z / SECTION))))]
+})()
 
 interface Slot { itemId: string; count: number }
 
@@ -166,6 +213,14 @@ export default function VoxelWorld() {
   const tools = useRef<EquippedTools>(ensureBasicTools({}))
   const skills = useRef<SkillSet>(createSkillSet())
   const [skillHud, setSkillHud] = useState<{ id: string; level: number; xp: number; next: number } | null>(null)
+  // ★ THE TUTORIAL. `tutorial` is a ref (mutated in place, like `inv`/`tools`) so World can read the
+  // current stage every frame with no re-render; `tutorialTick` is the counter that forces a HUD
+  // re-render on the rare frames the stage actually changes — same split `craftTick` uses one level
+  // up for the inventory ref.
+  const tutorial = useRef<TutorialState>(loadTutorial(SEED))
+  const [, setTutorialTick] = useState(0)
+  const [dialogueOpen, setDialogueOpen] = useState(false)
+  const [nearGreg, setNearGreg] = useState(false)
   // ★ THE GAUGE SIGNAL. Which family is mining RIGHT NOW, for the tool gauges to light up — set
   // from inside the mining block only on change (see the ref there), never per-frame.
   const [activeTool, setActiveTool] = useState<string | null>(null)
@@ -205,6 +260,42 @@ export default function VoxelWorld() {
   const [craftTick, setCraftTick] = useState(0)
   const have = useCallback((itemId: string) => countItem(inv.current!, itemId), [])
 
+  /** Advance the tutorial only if it is currently AT `expected` — an out-of-order action (say,
+   *  crafting planks before ever talking to Greg) is silently a no-op rather than skipping a step,
+   *  same discipline `recordEdit` uses for a no-op edit: the state only changes when the fact
+   *  actually changed it. */
+  const advanceTutorial = useCallback((expected: TutorialStage, next: TutorialStage) => {
+    const t = tutorial.current
+    if (t.stage !== expected) return
+    t.stage = next
+    saveTutorial(SEED, t)
+    setTutorialTick(v => v + 1)
+  }, [])
+
+  /**
+   * E on Greg closes the dialogue that just opened. The two stages that ACT on close (greet's gift,
+   * report's gate-opening talk) are handled here rather than on open — showing the line for the
+   * stage you were in when you pressed E, then acting once you dismiss it, is what makes "the
+   * current tutorial line" and "advancing quest state on close" both true at the same time.
+   */
+  const closeDialogue = useCallback(() => {
+    setDialogueOpen(false)
+    const t = tutorial.current
+    if (t.stage === 'greet') {
+      addItems(inv.current!, 'raw_mana_shard', 1)
+      refreshHotbar()
+      t.stage = 'cut'
+      saveTutorial(SEED, t)
+      setTutorialTick(v => v + 1)
+    } else if (t.stage === 'report') {
+      // The gate's own open/close write happens in World, reading this same ref — see the gate
+      // block in the render loop. This only flips the stage the ref (and the save) hold.
+      t.stage = 'done'
+      saveTutorial(SEED, t)
+      setTutorialTick(v => v + 1)
+    }
+  }, [refreshHotbar])
+
   /** Refine/build a recipe. The core hands back a plan; the host applies it. */
   const doCraft = useCallback((id: string) => {
     const plan = craftPlan(id)
@@ -217,7 +308,11 @@ export default function VoxelWorld() {
     setCrafted(`${plan.give.count}× ${plan.give.itemId.replace(/_/g, ' ')}`)
     setCraftTick(t => t + 1)
     refreshHotbar()
-  }, [have, refreshHotbar])
+    // ★ Tutorial 'planks'/'lantern' steps read the CRAFT OUTPUT, not the recipe id — any of the
+    // three plank recipes satisfies 'planks' (Greg said "a tree", not which one).
+    if (plan.give.itemId.endsWith('_plank')) advanceTutorial('planks', 'lantern')
+    if (plan.give.itemId === 'mana_lantern') advanceTutorial('lantern', 'light')
+  }, [have, refreshHotbar, advanceTutorial])
 
   /** Craft a tool and equip it. Tools keep their own table; this is the one surface that shows it. */
   const doCraftTool = useCallback((id: string) => {
@@ -231,6 +326,12 @@ export default function VoxelWorld() {
     refreshHotbar()
   }, [refreshHotbar])
 
+  /** The two tutorial facts World cannot resolve itself because they are mid-mining/mid-placement
+   *  events, not craft calls — 'planks'/'lantern' are handled inline in `doCraft` above instead. */
+  const onQuestEvent = useCallback((event: 'cut' | 'light') => {
+    if (event === 'cut') advanceTutorial('cut', 'planks')
+    else advanceTutorial('light', 'report')
+  }, [advanceTutorial])
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -271,7 +372,13 @@ export default function VoxelWorld() {
       // nothing happened, and nothing told you why. A list that shows what you CANNOT afford yet is
       // the difference between a broken key and a goal.
       if (e.code === 'KeyC') setCraftOpen(o => !o)
-      if (e.code === 'Escape') setCraftOpen(false)
+      // E talks to Greg when he is in range, and closes the box that opens from it — the same key
+      // both opens and dismisses, matching how C works for the crafting surface just above.
+      if (e.code === 'KeyE') {
+        if (dialogueOpen) closeDialogue()
+        else if (nearGreg) setDialogueOpen(true)
+      }
+      if (e.code === 'Escape') { setCraftOpen(false); if (dialogueOpen) closeDialogue() }
     }
     // Scroll to change slot — the reason tools are IN the row rather than on their own keys.
     const onWheel = (e: WheelEvent) => {
@@ -281,7 +388,7 @@ export default function VoxelWorld() {
     window.addEventListener('keydown', onKey)
     window.addEventListener('wheel', onWheel, { passive: true })
     return () => { window.removeEventListener('keydown', onKey); window.removeEventListener('wheel', onWheel) }
-  }, [build, drawn])
+  }, [build, drawn, dialogueOpen, nearGreg, closeDialogue])
 
   return (
     <div className="fixed inset-0 bg-[#0b0d14]">
@@ -302,6 +409,7 @@ export default function VoxelWorld() {
           worker={worker} incoming={incoming} inflight={inflight} settings={settings}
           build={build} pieceIdx={pieceIdx} rot={rot}
           tools={tools} skills={skills} onSkill={setSkillHud} onLevel={setLevelUp} onTool={setActiveTool}
+          tutorial={tutorial} onQuestEvent={onQuestEvent} onNearGreg={setNearGreg}
         />
         <PointerLockControls />
       </Canvas>
@@ -309,12 +417,14 @@ export default function VoxelWorld() {
            build={build} pieceIdx={pieceIdx} rot={rot} inv={inv}
            skill={skillHud} levelUp={levelUp} crafted={crafted} tools={tools} skills={skills}
            activeTool={activeTool}
-           isOwner={isOwner} drawn={drawn} weaponIdx={weaponIdx} ammoUi={ammoUi} />
+           isOwner={isOwner} drawn={drawn} weaponIdx={weaponIdx} ammoUi={ammoUi}
+           tutorialStage={tutorial.current.stage} nearGreg={nearGreg} dialogueOpen={dialogueOpen} />
       {showSettings && <SettingsPanel s={settings} update={update} onClose={() => setShowSettings(false)} />}
       {craftOpen && (
         <CraftPanel have={have} tools={tools} tick={craftTick}
                     onCraft={doCraft} onCraftTool={doCraftTool} onClose={() => setCraftOpen(false)} />
       )}
+      {dialogueOpen && <GregDialogue stage={tutorial.current.stage} onClose={closeDialogue} />}
     </div>
   )
 }
@@ -360,7 +470,7 @@ function Clock() {
   )
 }
 
-function Hud({ stats, pos, look, hotbar, sel, tier, build, pieceIdx, rot, inv, skill, levelUp, crafted, tools, skills, activeTool, isOwner, drawn, weaponIdx, ammoUi }: {
+function Hud({ stats, pos, look, hotbar, sel, tier, build, pieceIdx, rot, inv, skill, levelUp, crafted, tools, skills, activeTool, isOwner, drawn, weaponIdx, ammoUi, tutorialStage, nearGreg, dialogueOpen }: {
   stats: string; pos: string
   look: { name: string; progress: number; refused: boolean } | null
   hotbar: HotbarEntry[]; sel: number; tier: number
@@ -379,6 +489,11 @@ function Hud({ stats, pos, look, hotbar, sel, tier, build, pieceIdx, rot, inv, s
   drawn: boolean
   weaponIdx: number
   ammoUi: number
+  /** The tutorial's current objective — drives the HUD chip below. */
+  tutorialStage: TutorialStage
+  /** Within talk range of Greg, from World's per-frame distance check. Drives the "E — talk" prompt. */
+  nearGreg: boolean
+  dialogueOpen: boolean
 }) {
   return (
     <>
@@ -414,6 +529,23 @@ function Hud({ stats, pos, look, hotbar, sel, tier, build, pieceIdx, rot, inv, s
       </div>
 
       <Clock />
+
+      {/* The tutorial objective chip — caps label dim, value bright, same rule the tool row above
+          and the hotbar counts already follow. Hidden once the gate is open: there is no more
+          objective to chase. */}
+      {tutorialStage !== 'done' && (
+        <div className="absolute top-3 left-1/2 -translate-x-1/2 text-[10px] font-mono bg-black/45 rounded px-2.5 py-1 pointer-events-none">
+          <span className="text-white/40 uppercase tracking-[.16em]">objective </span>
+          <span className="text-amber-200/90">{OBJECTIVE_LABEL[tutorialStage]}</span>
+        </div>
+      )}
+
+      {/* "E — talk" — Greg's proximity prompt. Hidden while the box he opens is already up. */}
+      {nearGreg && !dialogueOpen && (
+        <div className="absolute left-1/2 top-[63%] -translate-x-1/2 text-center pointer-events-none">
+          <div className="text-[11px] font-mono tracking-wide text-white/85">E — talk</div>
+        </div>
+      )}
 
       {/* Skill progress — only while it is moving, so it is information rather than furniture. */}
       {skill && (
@@ -661,7 +793,7 @@ function ToolGlyph({ family }: { family: 'forestry' | 'prospecting' | 'rinning' 
 const SOLID_EXCEPT = new Set<number>([AIR, MAT.WATER])
 const isSolid = (m: number) => !SOLID_EXCEPT.has(m)
 
-function World({ inv, toolTier, toolSkill, selItem, weaponDrawn, weaponIdx, onAmmo, onStats, onPos, onLook, onInvChange, worker, incoming, inflight, settings, build, pieceIdx, rot, tools, skills, onSkill, onLevel, onTool }: {
+function World({ inv, toolTier, toolSkill, selItem, weaponDrawn, weaponIdx, onAmmo, onStats, onPos, onLook, onInvChange, worker, incoming, inflight, settings, build, pieceIdx, rot, tools, skills, onSkill, onLevel, onTool, tutorial, onQuestEvent, onNearGreg }: {
   inv: React.RefObject<Inventory>
   toolTier: React.RefObject<number>
   toolSkill: React.RefObject<BlockSkill>
@@ -691,6 +823,15 @@ function World({ inv, toolTier, toolSkill, selItem, weaponDrawn, weaponIdx, onAm
   /** Which family is actively mining, or null — fires only on change (see the ref beside the
    *  mining block), so the gauges can glow without a per-frame re-render. */
   onTool: (family: string | null) => void
+  /** Owned by the parent (like `inv`/`tools`) so a mutation here is visible there with no prop
+   *  round-trip. World only READS `.stage` — every write to it happens in the parent
+   *  (`advanceTutorial`/`closeDialogue`), which is also what owns `saveTutorial`. */
+  tutorial: React.RefObject<TutorialState>
+  /** The two tutorial facts World alone can see — a block breaking under the pick, a block landing
+   *  under the cursor. Crafting is detected in the parent's `doCraft` instead. */
+  onQuestEvent: (event: 'cut' | 'light') => void
+  /** Fires only on change, same dedup shape as `onTool`. */
+  onNearGreg: (near: boolean) => void
 }) {
   const { camera } = useThree()
   const group = useRef<THREE.Group>(null)
@@ -756,6 +897,18 @@ function World({ inv, toolTier, toolSkill, selItem, weaponDrawn, weaponIdx, onAm
   const dropMats = useRef(new Map<number, THREE.Material>())
   const highlightGeo = useMemo(() => new THREE.EdgesGeometry(new THREE.BoxGeometry(1.002, 1.002, 1.002)), [])
   const pieces = useMemo(() => createPieceRenderer(), [])
+  // Greg — built once, positioned once. Static NPC, no per-frame update beyond the proximity check
+  // below (which reads GREG_X/GREG_Z/GREG_Y, not the mesh, so the mesh itself never moves).
+  const greg = useMemo(() => {
+    const g = createGregMesh()
+    g.group.position.set(GREG_CX, GREG_Y, GREG_CZ)
+    return g
+  }, [])
+  const lastNearGreg = useRef(false)
+  // The gate: built (sealed or open, matching whatever `tutorial.current.stage` says at the moment
+  // its columns arrive) exactly once, then opened exactly once more if the quest completes later.
+  const gateBuilt = useRef(false)
+  const gateOpened = useRef(false)
   // Placements are grouped by the column that OWNS them (the one containing the piece origin) —
   // the same ownership rule trees and carvers use, so a piece straddling a border saves once.
   const placements = useRef<Placement[]>([])
@@ -778,7 +931,7 @@ function World({ inv, toolTier, toolSkill, selItem, weaponDrawn, weaponIdx, onAm
   const staleWarned = useRef(false)
   const settled = useRef(false)
   // The walker. Feet-based; the camera is derived from it every frame (feet + eased eye).
-  const loco = useRef(createLoco(0.5, columnHeight(0, 0, SEED) + 1, 0.5))
+  const loco = useRef(createLoco(SPAWN_X + 0.5, columnHeight(SPAWN_X, SPAWN_Z, SEED) + 1, SPAWN_Z + 0.5))
   // ★ Scratch vectors, allocated ONCE. Four `new THREE.Vector3()` per frame is 240 objects/sec of
   // pure garbage — not a GPU leak, but exactly the GC pressure the mesher and carver were both
   // rewritten to avoid. Same rule, applied to the frame loop instead of the hot inner loop.
@@ -810,7 +963,7 @@ function World({ inv, toolTier, toolSkill, selItem, weaponDrawn, weaponIdx, onAm
     }
   }, [])
 
-  useEffect(() => { camera.position.set(0.5, columnHeight(0, 0, SEED) + 2.6, 0.5) }, [camera])
+  useEffect(() => { camera.position.set(SPAWN_X + 0.5, columnHeight(SPAWN_X, SPAWN_Z, SEED) + 2.6, SPAWN_Z + 0.5) }, [camera])
 
   /** What is actually there. Unloaded reads as AIR — used for the raycast, so you can never target
    *  or mine a block that has not been generated. */
@@ -859,7 +1012,8 @@ function World({ inv, toolTier, toolSkill, selItem, weaponDrawn, weaponIdx, onAm
     hollowGeo.dispose()
     hollowMat.dispose()
     tiles?.texture.dispose()
-  }, [dropGeo, highlightGeo, flatMaterial, textured, tiles, pieces])
+    greg.dispose()
+  }, [dropGeo, highlightGeo, flatMaterial, textured, tiles, pieces, greg])
 
   // ★ A LOST WEBGL CONTEXT MUST SAY SO. Chrome blocks a page that loses its context repeatedly, and
   // the result is a black canvas with the HUD still drawn on top — indistinguishable from a
@@ -1396,8 +1550,37 @@ function World({ inv, toolTier, toolSkill, selItem, weaponDrawn, weaponIdx, onAm
     // Until the spawn column exists every lookup returns AIR, so gravity would drop the player
     // through a world that has not generated yet. Hold until there is ground beneath.
     if (!settled.current) {
-      if (isSolid(voxel(0, Math.floor(p.y) - 3, 0))) settled.current = true   // real ground, not the phantom floor
+      if (isSolid(voxel(Math.floor(SPAWN_X), Math.floor(p.y) - 3, Math.floor(SPAWN_Z)))) settled.current = true   // real ground, not the phantom floor
       else { onPos(p); onStats(`${cols.current.size} columns · generating…`); return }
+    }
+
+    // ── the gate ──────────────────────────────────────────────────────────────────────────────
+    // Built once its footprint's columns are all loaded (see GATE_COLS's header for why "all", not
+    // just the centre one) — sealed or already open depending on what the save says at that moment,
+    // so a returning keeper who finished the tutorial elsewhere never sees it reseal. Opened exactly
+    // once more if the quest completes later in this same session.
+    if (!gateBuilt.current && GATE_COLS.every(ck => cols.current.has(ck))) {
+      const baseY = columnHeight(GATE_X, GATE_Z, SEED)
+      const done = tutorial.current.stage === 'done'
+      for (const c of gateCells(baseY)) {
+        const mat = c.doorway ? (done ? AIR : MAT.STONE) : MAT.STONE
+        if (voxel(c.x, c.y, c.z) !== mat) setVoxel(c.x, c.y, c.z, mat)
+      }
+      gateBuilt.current = true
+      gateOpened.current = done
+    } else if (gateBuilt.current && !gateOpened.current && tutorial.current.stage === 'done') {
+      const baseY = columnHeight(GATE_X, GATE_Z, SEED)
+      for (const c of gateCells(baseY)) if (c.doorway) setVoxel(c.x, c.y, c.z, AIR)
+      gateOpened.current = true
+    }
+
+    // ── Greg's talk range ────────────────────────────────────────────────────────────────────
+    // Dedup on change, same shape as the mining gauge's `lastTool` a few blocks down — the HUD
+    // prompt should not re-render 60x/sec while standing still next to him.
+    {
+      const dGreg = Math.hypot(p.x - GREG_CX, p.z - GREG_CZ)
+      const near = dGreg <= GREG_TALK_RANGE && Math.abs(p.y - GREG_Y) <= GREG_TALK_RANGE
+      if (near !== lastNearGreg.current) { lastNearGreg.current = near; onNearGreg(near) }
     }
 
     // ── movement — play3d's locomotion on voxel collision (see locomotion.ts) ────────────────
@@ -1437,9 +1620,9 @@ function World({ inv, toolTier, toolSkill, selItem, weaponDrawn, weaponIdx, onAm
       }, solidProbe)
       p.set(lc.px, lc.py + lc.eye, lc.pz)
       if (lc.py < -20) {
-        const feet = columnHeight(0, 0, SEED) + 1
-        lc.px = 0.5; lc.py = feet; lc.pz = 0.5; lc.vy = 0; lc.hvx = 0; lc.hvz = 0
-        p.set(0.5, feet + lc.eye, 0.5)
+        const feet = columnHeight(SPAWN_X, SPAWN_Z, SEED) + 1
+        lc.px = SPAWN_X + 0.5; lc.py = feet; lc.pz = SPAWN_Z + 0.5; lc.vy = 0; lc.hvx = 0; lc.hvz = 0
+        p.set(SPAWN_X + 0.5, feet + lc.eye, SPAWN_Z + 0.5)
         settled.current = false
       }
     }
@@ -1548,6 +1731,8 @@ function World({ inv, toolTier, toolSkill, selItem, weaponDrawn, weaponIdx, onAm
         // what tells the player the swing landed and what the vein actually yielded.
         for (const d of dropsFor(hit.material)) drops.current.push(spawnDrop(d.itemId, d.count, hit.x, hit.y, hit.z))
         setVoxel(hit.x, hit.y, hit.z, AIR)
+        // ★ Tutorial 'cut' step — any log, not one species (see LOG_MATERIALS's header).
+        if (LOG_MATERIALS.has(hit.material)) onQuestEvent('cut')
         breaking.current = null
       }
     } else {
@@ -1566,6 +1751,8 @@ function World({ inv, toolTier, toolSkill, selItem, weaponDrawn, weaponIdx, onAm
       if (mat !== undefined && !inPlayer && countItem(inv.current!, selItem) > 0 && voxel(hit.px, hit.py, hit.pz) === AIR) {
         removeItems(inv.current!, selItem, 1)
         setVoxel(hit.px, hit.py, hit.pz, mat)
+        // ★ Tutorial 'light' step — placing IS the objective, not just holding a lantern.
+        if (mat === MAT.MANA_LANTERN) onQuestEvent('light')
         onInvChange()
         mouse.current.right = false   // one block per click, not a firehose
       }
@@ -1676,6 +1863,7 @@ function World({ inv, toolTier, toolSkill, selItem, weaponDrawn, weaponIdx, onAm
       <group ref={group} />
       <group ref={dropGroup} />
       <primitive object={pieces.group} />
+      <primitive object={greg.group} />
       {/* ⚠ Memoised. Inline `args={[new THREE.BoxGeometry(...)]}` builds a fresh geometry on EVERY
           React render and leaks the previous one — same family as the per-drop material that got
           the page's WebGL context blocked. */}
@@ -1683,6 +1871,29 @@ function World({ inv, toolTier, toolSkill, selItem, weaponDrawn, weaponIdx, onAm
         <lineBasicMaterial color="#000000" transparent opacity={0.55} />
       </lineSegments>
     </>
+  )
+}
+
+/**
+ * Greg's dialogue box (E). Same plate styling as `CraftPanel` below — one dark plate, one border,
+ * font-mono at the same size — so the two overlays read as the same UI system rather than two.
+ *
+ * ★ NO CHOICES. This is phase 1 (mechanics, placeholder dialogue): one line, one dismiss. A branching
+ * conversation tree is a cozy-voice-pass concern, not a wiring one.
+ */
+function GregDialogue({ stage, onClose }: { stage: TutorialStage; onClose: () => void }) {
+  return (
+    <div className="absolute inset-0 grid place-items-center bg-black/50 pointer-events-auto" onClick={onClose}>
+      <div className="w-[420px] bg-[#0e1018]/95 border border-white/12 rounded-lg p-4 font-mono text-[11px]"
+           onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-baseline justify-between mb-3">
+          <span className="text-white/95 font-semibold tracking-[.18em] uppercase">Gregory</span>
+          <button onClick={onClose} className="text-white/40 hover:text-white/80">esc</button>
+        </div>
+        <div className="text-white/85 leading-relaxed whitespace-pre-line">{GREG_LINE[stage]}</div>
+        <div className="mt-3 text-white/40 text-[10px] uppercase tracking-[.14em]">E / esc — close</div>
+      </div>
+    </div>
   )
 }
 
