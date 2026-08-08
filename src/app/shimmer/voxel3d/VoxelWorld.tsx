@@ -268,6 +268,10 @@ export default function VoxelWorld() {
   // a menu. The handoff gives back exactly what it borrowed.
   const canvasElRef = useRef<HTMLCanvasElement | null>(null)
   const lockOnCloseRef = useRef(false)
+  // Ref mirror of "any cursor surface is up" for the canvas click handler, which is attached once
+  // in onCreated (the canvas does not exist at first-commit effect time) and so cannot close over
+  // fresh state.
+  const cursorUIOpenRef = useRef(false)
   const openCursorUI = useCallback(() => {
     lockOnCloseRef.current = !!document.pointerLockElement
     document.exitPointerLock?.()
@@ -282,6 +286,7 @@ export default function VoxelWorld() {
     const c = canvasElRef.current
     if (c) { try { const r = c.requestPointerLock?.() as unknown as Promise<void> | undefined; r?.catch?.(() => {}) } catch { /* re-lock cooldown */ } }
   }, [])
+  useEffect(() => { cursorUIOpenRef.current = craftOpen || dialogueOpen || showSettings }, [craftOpen, dialogueOpen, showSettings])
 
   /** Advance the tutorial only if it is currently AT `expected` — an out-of-order action (say,
    *  crafting planks before ever talking to Greg) is silently a no-op rather than skipping a step,
@@ -430,7 +435,17 @@ export default function VoxelWorld() {
   return (
     <div className="fixed inset-0 bg-[#0b0d14]">
       <Canvas camera={{ fov: 75, near: 0.1, far: 600 }} shadows={false}
-              onCreated={({ gl }) => { canvasElRef.current = gl.domElement }}>
+              onCreated={({ gl }) => {
+                canvasElRef.current = gl.domElement
+                // OUR click-to-lock, canvas only. drei's PointerLockControls default binds its
+                // click handler on DOCUMENT, so every click — including craft-menu buttons —
+                // seized the mouse back mid-menu. That handler is disarmed below (selector that
+                // matches nothing); this one is the replacement, gated on the handoff.
+                gl.domElement.addEventListener('click', () => {
+                  if (cursorUIOpenRef.current) return
+                  try { const r = gl.domElement.requestPointerLock?.() as unknown as Promise<void> | undefined; r?.catch?.(() => {}) } catch { /* cooldown */ }
+                })
+              }}>
         {/* Sky, fog and all scene lights live in the rig now — the clock drives them. The old
             static five-liner IS the rig's DAY palette, so noon looks identical. */}
         <VoxelDayNight />
@@ -450,8 +465,11 @@ export default function VoxelWorld() {
           tutorial={tutorial} onQuestEvent={onQuestEvent} onNearGreg={setNearGreg}
         />
         {/* enabled-gate: with a cursor surface up, a stray click on the canvas BEHIND the menu must
-            not seize the mouse back — the same seam the handoff exists to close. */}
-        <PointerLockControls enabled={!craftOpen && !dialogueOpen && !showSettings} />
+            not seize the mouse back — the same seam the handoff exists to close.
+            selector: deliberately matches NOTHING. Without it drei binds click-to-lock on the whole
+            DOCUMENT (and that effect ignores `enabled`), which re-locked the pointer on every
+            craft-menu click. Locking is owned by the canvas listener in onCreated + the handoff. */}
+        <PointerLockControls enabled={!craftOpen && !dialogueOpen && !showSettings} selector="#voxel3d-no-autolock" />
       </Canvas>
       <Hud stats={stats} pos={pos} look={look} hotbar={hotbar} sel={sel} tier={tier}
            build={build} pieceIdx={pieceIdx} rot={rot} inv={inv}
