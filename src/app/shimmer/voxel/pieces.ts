@@ -19,6 +19,13 @@
 
 /** Reserved material for "a piece is here". Past WOOD (…39) with room between. */
 export const STRUCTURE = 48
+/**
+ * "The LOWER HALF of a piece is here" (2026-08-08, the half-slab pass). Collision reads this as
+ * a cell whose top is +0.5 — the locomotion probe maps it to CELL_HALF, which is what lets you
+ * STAND on a slab at half height and walk up half-rises without a vault. Same invisibility rule
+ * as STRUCTURE in the mesher; the piece renderer draws the slab.
+ */
+export const STRUCTURE_HALF = 49
 
 export type Rotation = 0 | 1 | 2 | 3
 
@@ -36,6 +43,12 @@ export interface PieceDef {
    */
   /** Cells inside the footprint that stay PASSABLE — a doorway you can walk through. */
   passable?: { x: number; y: number; z: number }[]
+  /**
+   * Occupies only the LOWER HALF of its cells (writes STRUCTURE_HALF, collides at +0.5). The
+   * half-slab's whole mechanic; a flag rather than a per-cell table because no piece so far
+   * wants a MIX of full and half cells — the day one does, this becomes per-cell like passable.
+   */
+  halfHeight?: boolean
 }
 
 /**
@@ -80,6 +93,12 @@ export const PIECES: PieceDef[] = [
   // dozens. Also the holds' parapet — the first GENERATED piece.
   { id: 'fence', name: 'Fence', w: 1, h: 1, d: 1,
     cost: [{ itemId: 'goldwood_plank', count: 1 }] },
+
+  // Eighth, 2026-08-08 (same pass as the probe's CELL_HALF — the piece and its physics shipped
+  // together). Stand at half height, walk up half-rises without a vault: floors that step, low
+  // tables, roof edges. The first fractional-collision piece.
+  { id: 'half_slab', name: 'Half Slab', w: 1, h: 1, d: 1,
+    cost: [{ itemId: 'goldwood_plank', count: 1 }], halfHeight: true },
 ]
 
 const BY_ID = new Map(PIECES.map(p => [p.id, p]))

@@ -22,10 +22,11 @@ const solid = () => MAT.STONE
 
 // ── 1. the catalogue is counted, and floors/walls are NOT in it ──────────────────────────────
 {
-  // Was pinned at six until the loop proved out. Seven since 2026-08-08 (fence — Alex's pieces
-  // pass; also the first GENERATED piece, the holds' parapet). The count stays asserted so
-  // catalogue growth is always a DECISION that edits this line, never a drift.
-  ok(PIECES.length === 7, `the catalogue is seven pieces, deliberately (${PIECES.length})`)
+  // Was pinned at six until the loop proved out. Seven with the fence (2026-08-08, the pieces
+  // pass), eight with the half slab (same day — it shipped WITH its fractional collision, never
+  // before it). The count stays asserted so catalogue growth is always a DECISION that edits
+  // this line, never a drift.
+  ok(PIECES.length === 8, `the catalogue is eight pieces, deliberately (${PIECES.length})`)
   const ids = PIECES.map(p => p.id)
   ok(!ids.includes('wall') && !ids.includes('floor'),
      '★ walls and floors are BLOCKS, not pieces — that split is the whole design')

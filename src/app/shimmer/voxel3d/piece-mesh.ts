@@ -27,6 +27,7 @@ const TINT: Record<string, number> = {
   stair: 0x8d8a94,
   beam: 0x6f5a3f,
   fence: 0x8a6a34,
+  half_slab: 0xa8834d,
 }
 
 /**
@@ -81,6 +82,12 @@ function buildGeometry(def: PieceDef): THREE.BufferGeometry {
       box(0.14, 1, 0.14, 0.36, 0.5, 0)
       box(1, 0.12, 0.1, 0, 0.8, 0)
       box(1, 0.12, 0.1, 0, 0.42, 0)
+      break
+    }
+    case 'half_slab': {
+      // Exactly the collision it claims: the cell's lower half, and nothing else. The one piece
+      // whose placeholder MUST be dimensionally honest, because its mechanic IS its shape.
+      box(1, 0.5, 1, 0, 0.25, 0)
       break
     }
     default: {   // beam

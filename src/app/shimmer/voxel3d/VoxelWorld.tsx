@@ -35,7 +35,7 @@ import { spawnDrop, tickDrops, type Drop } from '../voxel/drops'
 import { blockDef, materialForItem, emitOf, BLOCKS, type BlockSkill } from '../voxel/registry'
 import { editIndex, recordEdit, applyEdits, packEdits, unpackEdits, isStale, type ColumnEdits } from '../voxel/edits'
 import { loadColumn, saveColumn, editedColumnCount } from './save'
-import { PIECES, STRUCTURE, pieceDef, cellsOf, canPlace, canAfford, placementAt, type Placement, type Rotation } from '../voxel/pieces'
+import { PIECES, STRUCTURE, STRUCTURE_HALF, pieceDef, cellsOf, canPlace, canAfford, placementAt, type Placement, type Rotation } from '../voxel/pieces'
 import { createPieceRenderer } from './piece-mesh'
 import { toGeometry, createVoxelMaterial, createWaterMaterial, applySettings } from './mesh-bridge'
 import { layerOf } from './tex/tiles'
@@ -81,7 +81,7 @@ import { WOOD } from '../voxel/trees'
 // ── PORT STEP 5 — the movement (2026-08-07, Alex: "slide jump became a dash, climbing and wall
 // jumping are non-existent"). play3d's Apex-lineage locomotion, extracted pure and re-grounded on
 // voxel collision. See locomotion.ts for provenance; its test file is the feel contract.
-import { createLoco, tickLocomotion, CELL_EMPTY, CELL_SOLID, CELL_WATER } from './locomotion'
+import { createLoco, tickLocomotion, CELL_EMPTY, CELL_SOLID, CELL_WATER, CELL_HALF } from './locomotion'
 // ── ★ THE TUTORIAL (2026-08-08) — Moonwell Glade becomes spawn + the Greg tutorial chain ─────
 // `tutorial.ts` owns the quest state and its (placeholder) dialogue; `gate.ts` is pure math for
 // where the ceremonial arch sits and which of its cells are the sealable doorway; `greg.ts` builds
@@ -759,7 +759,7 @@ function Hud({ stats, pos, look, hotbar, sel, tier, build, pieceIdx, rot, inv, s
         {/* Shift is slide now, not sprint — run is automatic (play3d locomotion, port step 5). */}
         <div className="mt-1 text-white/45">click to look · WASD · space jump · shift slide · hold space climb · V fly</div>
         {build
-          ? <div className="text-amber-200/80">BUILD · RMB place · LMB deconstruct · R rotate · 1-7 piece · Tab exit</div>
+          ? <div className="text-amber-200/80">BUILD · RMB place · LMB deconstruct · R rotate · 1-8 piece · Tab exit</div>
           : <div className="text-white/45">hold LMB mine · RMB place · scroll/1-8 slot · F draw · C craft · Tab build · T chat, / commands</div>}
         {/* ★ The tools are Greg's, from engine/tools.ts, unchanged. Tier is what you HOLD now. */}
         <div className="text-white/40 mt-1">
@@ -1435,7 +1435,7 @@ function World({ inv, toolTier, toolSkill, selItem, weaponDrawn, weaponIdx, onAm
           if (lx < 0 || lx >= SECTION || lz < 0 || lz >= SECTION) continue
           const sy = (cell.y / SECTION) | 0
           const s = c.sections[sy]
-          if (s) s.set(lx, cell.y - sy * SECTION, lz, STRUCTURE)
+          if (s) s.set(lx, cell.y - sy * SECTION, lz, def.halfHeight ? STRUCTURE_HALF : STRUCTURE)
         }
       }
       refreshUniform(c)
@@ -1492,7 +1492,7 @@ function World({ inv, toolTier, toolSkill, selItem, weaponDrawn, weaponIdx, onAm
    *  voxelSolid — the same stand-on-it-don't-fall-through-it rule the old walker had. */
   const solidProbe = useCallback((x: number, y: number, z: number) => {
     const m = voxelSolid(x, y, z)
-    return m === MAT.WATER ? CELL_WATER : isSolid(m) ? CELL_SOLID : CELL_EMPTY
+    return m === MAT.WATER ? CELL_WATER : m === STRUCTURE_HALF ? CELL_HALF : isSolid(m) ? CELL_SOLID : CELL_EMPTY
   }, [voxelSolid])
 
   // ── ★ THE FIRING RIG ─────────────────────────────────────────────────────────────────────────
@@ -1996,7 +1996,7 @@ function World({ inv, toolTier, toolSkill, selItem, weaponDrawn, weaponIdx, onAm
         for (const c of def.cost) removeItems(inv.current!, c.itemId, c.count)
         // ★ OCCUPANCY INTO THE VOXEL GRID — this is what makes collision free. Only the SOLID cells
         // are written, so a doorway stays walkable and a stair can be climbed.
-        for (const c of cellsOf(target, def)) if (c.solid) setVoxel(c.x, c.y, c.z, STRUCTURE)
+        for (const c of cellsOf(target, def)) if (c.solid) setVoxel(c.x, c.y, c.z, def.halfHeight ? STRUCTURE_HALF : STRUCTURE)
         placements.current.push(target)
         const ok = colOf(target.x, target.z)
         piecesByCol.current.set(ok, [...(piecesByCol.current.get(ok) ?? []), target])

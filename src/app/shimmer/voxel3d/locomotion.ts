@@ -87,6 +87,14 @@ export const SWIM_IDLE_SINK = 0.5   // hands-off drift: down, slowly — water i
 export const SWIM_DRAG = 5
 export const TREAD_SINK_CAP = 1.8   // water catches a fall fast — no crater dives from a cliff
 
+// ── half-steps (2026-08-08, the half-slab pass) ─────────────────────────────
+// The grounded floor capture widens to this so a +0.5 surface is WALKED onto — that is the slab's
+// whole mechanic (stairs without a press). A full block's +1 top stays out of reach: the vault
+// ruling ("going up a block is always a deliberate press") is untouched, because only fractional
+// surfaces can exist inside this band. Airborne landing keeps the tiny FLOOR_CAPTURE — the
+// falling-past-a-lip pop this band would reintroduce is exactly what 07-08-07 ruled out.
+export const STEP_CAPTURE = 0.55
+
 export const BODY_R = 0.3           // the old walker's half-width, kept — the world was built around it
 export const BODY_H = 1.75
 export const EYE_STAND = 1.62       // camera sits this far above the feet (the old walker's eye)
@@ -103,8 +111,9 @@ export type Solid = (x: number, y: number, z: number) => boolean
  * A boolean probe cannot say "water" (you waded riverbeds like a submarine with legs) and cannot
  * say "half" (the slab problem). The probe now returns a CODE; booleans are still accepted and
  * normalised at the boundary, so every existing caller and every feel test keeps speaking boolean.
- * CELL_HALF is reserved plumbing: it collides as full until fractional ground-height lands (the
- * half-slab pass) — reserving the code now is what keeps that pass from re-breaking this contract.
+ * CELL_HALF is live (same day, the half-slab pass): bodyFree blocks only its lower half,
+ * floorProbe supports at +0.5, and the grounded STEP_CAPTURE walks up half-rises. Wall, climb,
+ * grab and vault verbs stay FULL-only — a slab is a step, never a wall.
  */
 export const CELL_EMPTY = 0
 export const CELL_SOLID = 1
@@ -162,28 +171,35 @@ export interface LocoInput {
   dt: number
 }
 
-/** True when the body (feet at feetY) fits at (x, z). */
-export function bodyFree(solid: Solid, x: number, z: number, feetY: number): boolean {
+/** True when the body (feet at feetY) fits at (x, z). Accepts the raw cell probe: a CELL_HALF
+ *  cell blocks only its lower half, so a body standing ON a slab (feet at +0.5) is clear. */
+export function bodyFree(probe: CellProbe, x: number, z: number, feetY: number): boolean {
   const y0 = Math.floor(feetY + 0.01)
   const y1 = Math.floor(feetY + BODY_H - 0.01)
   for (let vy = y0; vy <= y1; vy++)
-    for (const dx of [-BODY_R, BODY_R]) for (const dz of [-BODY_R, BODY_R])
-      if (solid(Math.floor(x + dx), vy, Math.floor(z + dz))) return false
+    for (const dx of [-BODY_R, BODY_R]) for (const dz of [-BODY_R, BODY_R]) {
+      const v = probe(Math.floor(x + dx), vy, Math.floor(z + dz))
+      if (v === true || v === CELL_SOLID) return false
+      if (v === CELL_HALF && feetY + 0.01 < vy + 0.5) return false
+    }
   return true
 }
 
-/** Highest supporting surface under the footprint at or just below the feet, or null. The capture
- *  band above the feet is deliberately tiny — see FLOOR_CAPTURE. */
-export function floorProbe(solid: Solid, x: number, z: number, feetY: number): number | null {
-  const top = Math.floor(feetY + FLOOR_CAPTURE)
+/** Highest supporting surface under the footprint at or just below the feet, or null. Full cells
+ *  support at +1, half cells at +0.5 — the slab's standing height. The capture band above the
+ *  feet defaults tiny (FLOOR_CAPTURE); the GROUNDED pass widens it to STEP_CAPTURE so a half-rise
+ *  is a step, not a wall — while a full block's +1 stays out of reach and stays a vault. */
+export function floorProbe(probe: CellProbe, x: number, z: number, feetY: number, capture = FLOOR_CAPTURE): number | null {
+  const top = Math.floor(feetY + capture)
   const bottom = Math.floor(feetY - 1.4)
   for (let vy = top; vy >= bottom; vy--) {
-    let support = false
-    for (const dx of [-BODY_R, BODY_R]) for (const dz of [-BODY_R, BODY_R])
-      if (solid(Math.floor(x + dx), vy, Math.floor(z + dz))) { support = true; break }
-    if (!support) continue
-    const floorTop = vy + 1
-    if (floorTop <= feetY + FLOOR_CAPTURE) return floorTop
+    let best: number | null = null
+    for (const dx of [-BODY_R, BODY_R]) for (const dz of [-BODY_R, BODY_R]) {
+      const v = probe(Math.floor(x + dx), vy, Math.floor(z + dz))
+      const t = (v === true || v === CELL_SOLID) ? vy + 1 : v === CELL_HALF ? vy + 0.5 : null
+      if (t !== null && t <= feetY + capture && (best === null || t > best)) best = t
+    }
+    if (best !== null) return best
   }
   return null
 }
@@ -245,11 +261,11 @@ export function tickLocomotion(s: LocoState, input: LocoInput, probe: CellProbe)
     const vTarget = jumpKey ? SWIM_UP : crouchKey ? -SWIM_SINK : -SWIM_IDLE_SINK
     s.vy += (vTarget - s.vy) * Math.min(1, dt * SWIM_DRAG)
     const nx = s.px + s.hvx * dt
-    if (bodyFree(solid, nx, s.pz, s.py)) s.px = nx; else s.hvx = 0
+    if (bodyFree(probe, nx, s.pz, s.py)) s.px = nx; else s.hvx = 0
     const nz = s.pz + s.hvz * dt
-    if (bodyFree(solid, s.px, nz, s.py)) s.pz = nz; else s.hvz = 0
+    if (bodyFree(probe, s.px, nz, s.py)) s.pz = nz; else s.hvz = 0
     const ny = s.py + s.vy * dt
-    if (bodyFree(solid, s.px, s.pz, ny)) s.py = ny; else s.vy = 0
+    if (bodyFree(probe, s.px, s.pz, ny)) s.py = ny; else s.vy = 0
     s.jumpHeld = jumpKey; s.landGrace = 0; s.coyoteT = 0
     s.eye += (EYE_STAND - s.eye) * 0.25
     return
@@ -348,16 +364,28 @@ export function tickLocomotion(s: LocoState, input: LocoInput, probe: CellProbe)
   }
 
   // ── horizontal apply, axis-separated. A 1-block rise BLOCKS — going up it is the vault. ─────
+  // A HALF rise is a step (2026-08-08): a blocked grounded move retries with the feet lifted
+  // onto a ≤0.5 surface at the target. Full blocks fail the rise check by a whole half-block,
+  // so the vault ruling cannot be re-armed from here.
+  const stepped = (tx: number, tz: number): boolean => {
+    if (s.airborne) return false
+    const ft = floorProbe(probe, tx, tz, s.py, STEP_CAPTURE)
+    if (ft === null || ft <= s.py || ft - s.py > 0.5 + 1e-6) return false
+    if (!bodyFree(probe, tx, tz, ft)) return false
+    s.py = ft
+    return true
+  }
   if ((s.hvx !== 0 || s.hvz !== 0) && s.mantleT <= 0 && !s.hanging) {
     const nx = s.px + s.hvx * dt
-    if (bodyFree(solid, nx, s.pz, s.py)) s.px = nx; else s.hvx = 0
+    if (bodyFree(probe, nx, s.pz, s.py) || stepped(nx, s.pz)) s.px = nx; else s.hvx = 0
     const nz = s.pz + s.hvz * dt
-    if (bodyFree(solid, s.px, nz, s.py)) s.pz = nz; else s.hvz = 0
+    if (bodyFree(probe, s.px, nz, s.py) || stepped(s.px, nz)) s.pz = nz; else s.hvz = 0
   }
 
   // ── vertical ────────────────────────────────────────────────────────────────────────────────
   const jumpEdge = jumpKey && !s.jumpHeld
-  const floorTop = floorProbe(solid, s.px, s.pz, s.py)
+  // Grounded widens the capture so half-surfaces are steps; airborne keeps it tiny (no lip-pop).
+  const floorTop = floorProbe(probe, s.px, s.pz, s.py, s.airborne ? FLOOR_CAPTURE : STEP_CAPTURE)
 
   // Mantle target: over the wall's own cardinal when we have one, else the dominant input axis.
   const useWallCard = (s.onWall || s.wallStick > 0) && (s.wallCX !== 0 || s.wallCZ !== 0)
@@ -463,7 +491,7 @@ export function tickLocomotion(s: LocoState, input: LocoInput, probe: CellProbe)
     else {
       s.vy -= GRAVITY * dt
       const ny = s.py + s.vy * dt
-      if (s.vy > 0 && !bodyFree(solid, s.px, s.pz, ny)) s.vy = 0   // head into a ceiling
+      if (s.vy > 0 && !bodyFree(probe, s.px, s.pz, ny)) s.vy = 0   // head into a ceiling
       else s.py = ny
     }
     if (s.vy <= 0 && floorTop !== null && s.py <= floorTop) {

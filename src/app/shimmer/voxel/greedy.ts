@@ -16,6 +16,7 @@
 // interior face, and it is why a solid section costs 6 quads instead of 6*S*S.
 
 import { AIR, Section } from './section'
+import { STRUCTURE, STRUCTURE_HALF } from './pieces'
 
 export interface MeshResult {
   /** xyz per vertex, 4 vertices per quad. */
@@ -122,8 +123,13 @@ export function greedyMesh(sec: Section, neighbour: NeighbourFn = OUTSIDE_IS_AIR
         for (x[u] = 0; x[u] < S; x[u]++) {
           const a = sample(x[0], x[1], x[2])
           const b = sample(x[0] + q[0], x[1] + q[1], x[2] + q[2])
-          const aSolid = a !== AIR
-          const bSolid = b !== AIR
+          // ★ PIECE OCCUPANCY IS INVISIBLE TO THE MESHER (2026-08-08). STRUCTURE cells are
+          // collision bookkeeping — the piece RENDERER draws the look. Meshing them painted a
+          // loud-magenta fallback cube around every placed piece (the design always said
+          // "renders as a mesh"; this line is where that sentence becomes true). They read as
+          // AIR here so neighbouring terrain still draws its faces behind a see-through piece.
+          const aSolid = a !== AIR && a !== STRUCTURE && a !== STRUCTURE_HALF
+          const bSolid = b !== AIR && b !== STRUCTURE && b !== STRUCTURE_HALF
           // Exactly one solid => a face. Both solid or both air => nothing. This single line is
           // what deletes every interior face in the world.
           if (aSolid === bSolid) mask[n] = 0

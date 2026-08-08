@@ -8,7 +8,7 @@ import {
   createLoco, tickLocomotion, bodyFree, floorProbe,
   RUN_SPEED, JUMP_V0, SLIDE_SPEED, SLIDEHOP_BOOST, WALLJUMP_PUSH,
   CLIMB_HOLD_MIN, CLIMB_MAX_RISE, EYE_STAND, EYE_SLIDE, type LocoInput,
-  CELL_EMPTY, CELL_SOLID, CELL_WATER, SWIM_SPEED, SWIM_UP, SWIM_IDLE_SINK, TREAD_SINK_CAP,
+  CELL_EMPTY, CELL_SOLID, CELL_WATER, CELL_HALF, SWIM_SPEED, SWIM_UP, SWIM_IDLE_SINK, TREAD_SINK_CAP,
 } from './locomotion'
 
 let pass = 0
@@ -286,6 +286,42 @@ const settle = (s: ReturnType<typeof createLoco>, solid: any, frames = 30) => {
   tickLocomotion(t, input({ jumpKey: true }), shallow)
   const rose = t.vy > 0 || t.py > beforeJump
   ok(rose, 'a jump from treading water fires (perpetual coyote)')
+}
+
+// ── half slabs — CELL_HALF collides at half height (2026-08-08) ──────────────────────────────
+{
+  // Floor at y<10, a slab occupying cell y=10 at x>=3: top surface at 10.5.
+  const slabWorld = (x: number, y: number, z: number): number =>
+    y < 10 ? CELL_SOLID : (y === 10 && x >= 3 && Math.abs(z) < 20) ? CELL_HALF : CELL_EMPTY
+
+  // Walking onto a slab is a STEP, not a wall and not a vault.
+  const s = createLoco(0.5, 10, 0.5); settle(s, slabWorld)
+  for (let i = 0; i < 200; i++) tickLocomotion(s, input({ mvX: 1 }), slabWorld)
+  ok(s.px > 4, `a half-rise is walked onto, no press needed (x ${s.px.toFixed(2)})`)
+  ok(Math.abs(s.py - 10.5) < 0.05, `standing height on a slab is +0.5 (feet ${s.py.toFixed(2)})`)
+  ok(!s.vaulting, 'no vault fired — the slab is a step, not a ledge')
+
+  // Standing ON the slab, the body is free (the lower-half rule).
+  ok(bodyFree(slabWorld, 4.5, 0.5, 10.5), 'a body standing on a slab is clear of it')
+  ok(!bodyFree(slabWorld, 4.5, 0.5, 10.0), 'a body inside the slab half is blocked')
+
+  // A slab under the ceiling: 1.25 of clearance does not fit a 1.75 body.
+  const lowRoom = (x: number, y: number, z: number): number =>
+    y < 10 ? CELL_SOLID : y === 11 && x >= 3 ? CELL_HALF : CELL_EMPTY
+  ok(!bodyFree(lowRoom, 3.5, 0.5, 10), 'a slab overhead blocks a standing body underneath')
+
+  // A full block stays a vault: STEP_CAPTURE must not have re-armed the auto step-up.
+  const terrace = world((x, y) => x >= 3 && y < 11)
+  const t = createLoco(0.5, 10, 0.5); settle(t, terrace)
+  for (let i = 0; i < 200; i++) tickLocomotion(t, input({ mvX: 1 }), terrace)
+  ok(t.py === 10 && t.px < 3, '★ a FULL block still stops the run — the vault ruling holds')
+
+  // Slab as a stair: ground → slab → full block, walked without a single press.
+  const stairway = (x: number, y: number, z: number): number =>
+    y < 10 ? CELL_SOLID : (y === 10 && x >= 3 && x < 5) ? CELL_HALF : (y === 10 && x >= 5) ? CELL_SOLID : CELL_EMPTY
+  const w = createLoco(0.5, 10, 0.5); settle(w, stairway)
+  for (let i = 0; i < 260; i++) tickLocomotion(w, input({ mvX: 1 }), stairway)
+  ok(w.px > 6 && Math.abs(w.py - 11) < 0.05, `slab stairs: ground→slab→block in one walk (x ${w.px.toFixed(1)}, feet ${w.py.toFixed(2)})`)
 }
 
 console.log(`\nlocomotion: ${pass} passed, ${fails.length} failed`)
