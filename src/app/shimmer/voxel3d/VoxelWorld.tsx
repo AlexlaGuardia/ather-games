@@ -93,9 +93,11 @@ import { createSteamPoints } from './steam'
 import { createMistPass } from './mist-pass'
 import { mistAt, mistPatchesNear, type MistPatch } from '../voxel/mist'
 import { loadMistLedger, saveMistLedger, recordWithdrawal, type MistLedger, type Resident } from './mist-encounter'
+import { applySparPayout, sparLedgerLines } from './spar-reward'
 import ArenaBattle from '../components/ArenaBattle'
 import { createSpirit, speciesDisplayName, type Spirit } from '../spirits/spirit'
 import { spiritsToSave, spiritsFromSave } from '../spirits/spirit-save'
+import { LAUNCHED_SPECIES } from '../engine/spirit-index'
 import { applyFightResult } from '../engine/spirit-health'
 import type { BattleResult } from '../engine/arena'
 import { createFloraRenderer } from './flora-mesh'
@@ -181,6 +183,19 @@ interface ConsoleCtx {
   tp: (x: number, z: number) => string
   /** Player position, for `~` relative coordinates (MC's convention, ported with the chat). */
   pos: () => { x: number; z: number }
+  /**
+   * The garden, as the console can see and touch it. `list` is VIEW-GRADE — a keeper reading their
+   * own roster is not a cheat, and it is the one thing that explains a refused spar prompt. The
+   * other three write to the SHARED save (`ather:save:shimmer`, the same spirits the 2D game and
+   * play3d own), so they are owner-only: a lent test party landing in a real keeper's garden would
+   * be a cheat that also overwrites the save it cheated into.
+   */
+  party: {
+    list: () => string
+    lend: (count: number, level: number) => string
+    heal: () => string
+    clear: () => string
+  }
 }
 const NAMED_HOURS: Record<string, number> = { midnight: 0, dawn: 6.5, noon: 12, dusk: 18.75, night: 21 }
 /** `~` / `~-5` → relative to `cur`; anything else parses as absolute. NaN propagates for the caller. */
@@ -260,6 +275,26 @@ const CONSOLE_CMDS: ConsoleCmd[] = [
       return found.slice(0, 5).map(m => `mist patch      ${bearing(m.x - p.x, m.z - p.z)}`).join('\n')
     },
     suggest: () => ['go'] },
+  // ★ /party (2026-08-09) — the mist spar refuses to start without spirits, by design and by canon
+  // (Greg's seed sleeps a while yet), which means testing the spar on a fresh world is impossible
+  // without first playing the 2D game to a party. That is a fine rule for a player and a wall for
+  // whoever is dialling the feature. Bare `/party` is the roster; the rest is the workbench, and it
+  // writes to the same save every surface shares, so it is keeper-of-the-realm only.
+  { name: 'party', usage: 'party [lend [n] [level] | heal | clear]', help: 'bare: your spirits · lend/heal/clear: the spar workbench',
+    run: (a, c) => {
+      const verb = (a[0] ?? '').toLowerCase()
+      if (!verb) return c.party.list()
+      if (!c.isOwner) return 'the garden answers only its keeper — bare /party reads your roster'
+      if (verb === 'heal') return c.party.heal()
+      if (verb === 'clear') return c.party.clear()
+      if (verb === 'lend') {
+        const n = Math.min(4, Math.max(1, Math.round(Number(a[1]) || 4)))
+        const lv = Math.min(50, Math.max(1, Math.round(Number(a[2]) || 10)))
+        return c.party.lend(n, lv)
+      }
+      return `party takes lend, heal or clear — not ${verb}`
+    },
+    suggest: (i) => i === 0 ? ['lend', 'heal', 'clear'] : i === 1 ? ['1', '2', '3', '4'] : ['5', '10', '20', '30'] },
   { name: 'weather', usage: 'weather', help: 'someday', run: () =>
       'no weather in the Ather yet — the day it exists, its command lands here' },
 ]
@@ -402,6 +437,65 @@ export default function VoxelWorld() {
    */
   const party = useRef<Spirit[]>([])
   const [hasParty, setHasParty] = useState(false)
+  /** The practice ledger from the spar you just walked out of — one line per spirit, then it goes. */
+  const [sparLedger, setSparLedger] = useState<string[] | null>(null)
+
+  /**
+   * Persist the party back to the SHARED save. Merge-write, always: this world knows nothing about
+   * the fields the 2D game and play3d keep in that slot (flags, wallet, index, plot) and must never
+   * drop them by writing a whole object. One helper because there are now two writers — the spar's
+   * wounds and the console's workbench — and a second hand-rolled merge is how one of them
+   * eventually forgets the spread.
+   */
+  const writeParty = useCallback(() => {
+    setHasParty(party.current.length > 0)
+    try {
+      const raw = localStorage.getItem('ather:save:shimmer')
+      const prev = raw ? JSON.parse(raw) as Record<string, unknown> : {}
+      localStorage.setItem('ather:save:shimmer', JSON.stringify({ ...prev, spirits: spiritsToSave(party.current) }))
+    } catch { /* private mode: the change still holds for this session, it just does not persist */ }
+  }, [])
+
+  /**
+   * The console's view of the garden. `lend` draws EVENLY SPACED species out of the launched list
+   * rather than the first N: the four it hands you then cover all four elements, which is the whole
+   * point of a test party — a roster of one element cannot surface an elemental-matchup bug.
+   * Lent spirits are `base` element and unbonded, i.e. exactly what a fresh keeper would hold, so
+   * what you feel while dialling the spar is what a new player will feel.
+   */
+  const partyOps = useMemo(() => ({
+    list: () => {
+      if (!party.current.length) return 'no spirits in your garden — /party lend to borrow a few'
+      return party.current.map(s => {
+        const hp = Math.round((s.hpFrac ?? 1) * 100)
+        return `${speciesDisplayName(s.species).padEnd(12)} lv ${String(s.level).padStart(2)}  ${hp}% hp${hp === 0 ? '  (down)' : ''}`
+      }).join('\n')
+    },
+    lend: (count: number, level: number) => {
+      const step = LAUNCHED_SPECIES.length / count
+      party.current = Array.from({ length: count }, (_, i) => {
+        const sp = LAUNCHED_SPECIES[Math.min(LAUNCHED_SPECIES.length - 1, Math.floor(i * step))]
+        const s = createSpirit(sp, speciesDisplayName(sp), 0, 0)
+        s.level = level
+        return s
+      })
+      writeParty()
+      return `lent ${count} spirits at level ${level} — ${party.current.map(s => s.name).join(', ')}`
+    },
+    heal: () => {
+      if (!party.current.length) return 'nothing to mend'
+      for (const s of party.current) s.hpFrac = 1
+      writeParty()
+      return `mended ${party.current.length} spirits`
+    },
+    clear: () => {
+      const n = party.current.length
+      party.current = []
+      writeParty()
+      return n ? `sent ${n} spirits home — the mist will say you have none` : 'the garden was already empty'
+    },
+  }), [writeParty])
+
   // ★ THE GAUGE SIGNAL. Which family is mining RIGHT NOW, for the tool gauges to light up — set
   // from inside the mining block only on change (see the ref there), never per-frame.
   const [activeTool, setActiveTool] = useState<string | null>(null)
@@ -423,6 +517,8 @@ export default function VoxelWorld() {
   // Toasts clear themselves. A level-up banner that never leaves stops being a level-up banner.
   useEffect(() => { if (!levelUp) return; const t = setTimeout(() => setLevelUp(null), 2600); return () => clearTimeout(t) }, [levelUp])
   useEffect(() => { if (!crafted) return; const t = setTimeout(() => setCrafted(null), 2600); return () => clearTimeout(t) }, [crafted])
+  // Longer than the other toasts: this one is a list of names and numbers, not a word.
+  useEffect(() => { if (!sparLedger) return; const t = setTimeout(() => setSparLedger(null), 6000); return () => clearTimeout(t) }, [sparLedger])
 
   const refreshHotbar = useCallback(() => {
     const counts = new Map<string, number>()
@@ -472,7 +568,8 @@ export default function VoxelWorld() {
     },
     tp: (x, z) => worldCmd.current ? worldCmd.current.tp(x, z) : 'the world is still waking',
     pos: () => worldCmd.current ? worldCmd.current.pos() : { x: 0, z: 0 },
-  }), [isOwner, settings.viewRadius, update, refreshHotbar])
+    party: partyOps,
+  }), [isOwner, settings.viewRadius, update, refreshHotbar, partyOps])
   const submitLine = useCallback((raw: string) => {
     const line = raw.trim()
     if (!line) return
@@ -556,7 +653,7 @@ export default function VoxelWorld() {
    * cases and only the reason differs, and recording only on a win would leave a beaten keeper
    * able to re-challenge instantly.
    */
-  const endSpar = useCallback((_outcome: 'win' | 'lose' | 'fled', result: BattleResult) => {
+  const endSpar = useCallback((outcome: 'win' | 'lose' | 'fled', result: BattleResult) => {
     const s = spar
     setSpar(null)
     closeCursorUI()
@@ -565,14 +662,13 @@ export default function VoxelWorld() {
       const spirit = s.allies[r.index]
       if (spirit) applyFightResult(spirit, r.hp, r.maxHp)
     }
-    // Wounds outlive the fight, so they go back to the SHARED save — the same party the 2D game
-    // and play3d read. Merge-write: this world knows nothing about the other surfaces' fields and
-    // must not drop them.
-    try {
-      const raw = localStorage.getItem('ather:save:shimmer')
-      const prev = raw ? JSON.parse(raw) as Record<string, unknown> : {}
-      localStorage.setItem('ather:save:shimmer', JSON.stringify({ ...prev, spirits: spiritsToSave(party.current) }))
-    } catch { /* private mode: the fight still happened, it just does not persist */ }
+    // ★ WHAT A SPAR PAYS (see spar-reward.ts) — XP and bond to the spirits that took the field, and
+    // nothing else in either direction. Paid BEFORE the write below so the levels it grants ride the
+    // same merge-write the wounds do; a payout persisted separately is a payout that can be lost.
+    setSparLedger(sparLedgerLines(applySparPayout(s.allies, s.enemies, outcome)))
+    // Wounds and what the spar taught outlive the fight, so both go back to the SHARED save — the
+    // same party the 2D game and play3d read. Merge-write; see writeParty.
+    writeParty()
     mistLedger.current = recordWithdrawal(mistLedger.current, s.patch, Date.now())
     saveMistLedger(SEED, mistLedger.current)
     setNearMist(null)
@@ -821,7 +917,8 @@ export default function VoxelWorld() {
            activeTool={activeTool}
            isOwner={isOwner} drawn={drawn} weaponIdx={weaponIdx} ammoUi={ammoUi}
            tutorialStage={tutorial.current.stage} nearGreg={nearGreg} dialogueOpen={dialogueOpen}
-           nearTable={nearTable} craftOpen={craftOpen} nearMist={nearMist} hasParty={hasParty} />
+           nearTable={nearTable} craftOpen={craftOpen} nearMist={nearMist} hasParty={hasParty}
+           sparLedger={sparLedger} />
       {showSettings && <SettingsPanel s={settings} update={update} onClose={() => { setShowSettings(false); closeCursorUI() }} />}
       {craftOpen && (
         <CraftPanel have={have} tools={tools} tick={craftTick} station={station}
@@ -896,7 +993,7 @@ function Clock() {
   )
 }
 
-function Hud({ stats, pos, look, hotbar, sel, tier, build, pieceIdx, rot, inv, skill, levelUp, crafted, tools, skills, activeTool, isOwner, drawn, weaponIdx, ammoUi, tutorialStage, nearGreg, dialogueOpen, nearTable, craftOpen, nearMist, hasParty }: {
+function Hud({ stats, pos, look, hotbar, sel, tier, build, pieceIdx, rot, inv, skill, levelUp, crafted, tools, skills, activeTool, isOwner, drawn, weaponIdx, ammoUi, tutorialStage, nearGreg, dialogueOpen, nearTable, craftOpen, nearMist, hasParty, sparLedger }: {
   stats: string; pos: string
   look: { name: string; progress: number; refused: boolean } | null
   hotbar: HotbarEntry[]; sel: number; tier: number
@@ -923,6 +1020,7 @@ function Hud({ stats, pos, look, hotbar, sel, tier, build, pieceIdx, rot, inv, s
   /** The presence in spar range, or null — names itself in the prompt before you commit. */
   nearMist: Resident | null
   hasParty: boolean
+  sparLedger: string[] | null
   /** Within reach of a placed crafting table — drives the "E — craft" prompt. */
   nearTable: boolean
   craftOpen: boolean
@@ -1021,6 +1119,18 @@ function Hud({ stats, pos, look, hotbar, sel, tier, build, pieceIdx, rot, inv, s
       {crafted && (
         <div className="absolute top-[38%] left-1/2 -translate-x-1/2 text-center pointer-events-none">
           <div className="text-amber-200 font-mono text-xs tracking-wider">crafted {crafted}</div>
+        </div>
+      )}
+      {/* The practice ledger. A HUD line rather than a reward modal on purpose: play3d's spoils
+          reveal earns its screen because a hold pays marks and gates the story, while a spar pays
+          only what practice pays. A second wall after the arena's own end screen would make the
+          walk back into the mist feel like leaving a menu. Reads as what it is — a note. */}
+      {sparLedger && (
+        <div className="absolute top-[30%] left-1/2 -translate-x-1/2 text-center pointer-events-none">
+          <div className="text-[10px] font-mono uppercase tracking-[.22em] text-white/50">the spar taught</div>
+          {sparLedger.map((line, i) => (
+            <div key={i} className="mt-1 text-[12px] font-mono tracking-wide tabular-nums text-emerald-200/90">{line}</div>
+          ))}
         </div>
       )}
       <div className="hidden">
