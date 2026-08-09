@@ -30,6 +30,9 @@
 import * as THREE from 'three'
 import { columnHeight } from '../voxel/height'
 import { mistAt, mistPatchesNear, DEFAULT_MIST, type MistPatch } from '../voxel/mist'
+import { zoneAt } from '../voxel/zones'
+import { residentAt, type MistLedger, type Resident } from './mist-encounter'
+import { ELEMENT_COLORS } from '../spirits/spirit'
 
 /** Many, large and faint — a layer is made of overlap. See the header. */
 const COUNT = 220
@@ -48,8 +51,11 @@ const RESCAN_S = 0.8
 
 /** Canon's own words: the mist is GOLDEN — luminous mana, not weather-grey. */
 const MIST_RGB = 'vec3(0.98, 0.92, 0.70)'
-const PRESENCE_CORE = 0xfff3cf   // the hollow middle
-const PRESENCE_RIM = 0xffd27a    // the silhouette edge, where the fresnel puts the light
+const PRESENCE_CORE = 0xfff3cf   // the hollow middle — stays near-white whatever the kind
+/** The four element tints a presence can wear (`ELEMENT_COLORS`), pulled toward the mist's gold so
+ *  a rim reads as lit BY the patch rather than as a coloured object dropped into it. */
+const ELEMENTS = ['mana', 'storm', 'earth', 'water'] as const
+type ElementId = typeof ELEMENTS[number]
 
 export interface MistPass {
   points: THREE.Points
@@ -57,11 +63,19 @@ export interface MistPass {
   residents: THREE.Group
   /** The patch the camera is standing in, 0..1 thick — the fog/light lever reads this. */
   thickness(): number
+  /** The presence within spar range, or null. Drives the HUD prompt and the E key. */
+  nearest(): Resident | null
+  /** Swap the withdrawal ledger in (after a spar) so the sparred presence leaves at once. */
+  setLedger(l: MistLedger): void
   tick(px: number, py: number, pz: number, dt: number, elapsed: number): void
   dispose(): void
 }
 
-export function createMistPass(seed: number): MistPass {
+/** How close you must stand for the presence to acknowledge you — a spar is approached, not
+ *  stumbled into, so this is deliberately inside the patch rather than at its edge. */
+export const SPAR_RANGE = 6
+
+export function createMistPass(seed: number, ledger0: MistLedger = {}): MistPass {
   // ── the lying mist ────────────────────────────────────────────────────────────────────────────
   const pos = new Float32Array(COUNT * 3)
   const aT = new Float32Array(COUNT)
@@ -136,7 +150,11 @@ void main() {
   }
   const residentGeo = new THREE.LatheGeometry(profile, 18)
 
-  const residentMat = new THREE.ShaderMaterial({
+  // ★ FOUR materials, one per element, built ONCE — not one per resident. A presence's kind is
+  // legible at a distance because its rim carries its element's colour, and there are exactly four
+  // elements, so a bounded set is the honest shape. (A per-resident material would be the
+  // context-loss bug render-audit exists to catch; a single shared material could not tint.)
+  const makeResidentMat = (tint: number) => new THREE.ShaderMaterial({
     transparent: true,
     depthWrite: false,
     side: THREE.DoubleSide,
@@ -146,7 +164,9 @@ void main() {
     uniforms: {
       uTime: { value: 0 },
       uCore: { value: new THREE.Color(PRESENCE_CORE) },
-      uRim: { value: new THREE.Color(PRESENCE_RIM) },
+      // Pulled 45% toward the mist's gold: the kind reads, without the presence looking like a
+      // coloured prop standing in gold fog.
+      uRim: { value: new THREE.Color(tint).lerp(new THREE.Color(0xffd27a), 0.45) },
     },
     vertexShader: /* glsl */ `
 varying vec3 vN;
@@ -180,6 +200,13 @@ void main() {
 }`,
   })
 
+  const residentMats: Record<ElementId, THREE.ShaderMaterial> = {
+    mana: makeResidentMat(Number(ELEMENT_COLORS.mana.replace('#', '0x'))),
+    storm: makeResidentMat(Number(ELEMENT_COLORS.storm.replace('#', '0x'))),
+    earth: makeResidentMat(Number(ELEMENT_COLORS.earth.replace('#', '0x'))),
+    water: makeResidentMat(Number(ELEMENT_COLORS.water.replace('#', '0x'))),
+  }
+
   const residents = new THREE.Group()
   const live = new Map<string, THREE.Mesh>()
   const keyOf = (p: MistPatch) => `${p.x},${p.z}`
@@ -188,6 +215,10 @@ void main() {
   let near: MistPatch[] = []
   let current: MistPatch | null = null
   let thick = 0
+  let ledger: MistLedger = ledger0
+  /** Every present resident this rescan, and the closest one within SPAR_RANGE. */
+  let present: Resident[] = []
+  let closest: Resident | null = null
 
   const posAttr = geo.getAttribute('position') as THREE.BufferAttribute
   const tAttr = geo.getAttribute('aT') as THREE.BufferAttribute
@@ -196,11 +227,15 @@ void main() {
     points,
     residents,
     thickness: () => thick,
+    nearest: () => closest,
+    // A spar just happened: take the new ledger and force a rescan on the next tick so the spirit
+    // that withdrew is GONE immediately rather than lingering until the 0.8s clock comes round.
+    setLedger(l) { ledger = l; rescan = 0 },
 
     tick(px, py, pz, dt, elapsed) {
       void py
       ;(mat.uniforms.uTime as { value: number }).value = elapsed
-      ;(residentMat.uniforms.uTime as { value: number }).value = elapsed
+      for (const e of ELEMENTS) (residentMats[e].uniforms.uTime as { value: number }).value = elapsed
 
       // ── which patches are in play ───────────────────────────────────────────────────────────
       rescan -= dt
@@ -214,24 +249,43 @@ void main() {
           const d = Math.hypot(p.x - px, p.z - pz)
           if (d < best) { best = d; current = p }
         }
-        // Residents: add what arrived, drop what left. Meshes are cheap; the geometry and material
-        // they share are not, and are built once above.
-        const want = new Set(near.map(keyOf))
+        // ── who is actually standing in each patch ─────────────────────────────────────────────
+        // A patch has a presence only if its zone was RULED (unruled fails closed → nothing) and
+        // it is not still quiet from a recent spar. So this list is shorter than `near`, and the
+        // difference is exactly the two canon rules.
+        const now = Date.now()
+        present = []
+        for (const p of near) {
+          const r = residentAt(p, zoneAt(p.x, p.z, seed).zone?.id, ledger, now)
+          if (r) present.push(r)
+        }
+
+        // Residents: add what arrived, drop what left or withdrew. Meshes are cheap; the geometry
+        // and the four materials they share are not, and are built once above.
+        const want = new Map(present.map(r => [keyOf(r.patch), r]))
         for (const [k, m] of live) {
           if (want.has(k)) continue
           residents.remove(m)
           live.delete(k)
         }
-        for (const p of near) {
-          const k = keyOf(p)
+        for (const [k, r] of want) {
           if (live.has(k)) continue
-          const m = new THREE.Mesh(residentGeo, residentMat)
+          const m = new THREE.Mesh(residentGeo, residentMats[r.element])
           // Stands ON the spar floor, at the heart — the patch's own reference point.
-          m.position.set(p.x, p.floor + 1, p.z)
+          m.position.set(r.patch.x, r.patch.floor + 1, r.patch.z)
           m.frustumCulled = false
           residents.add(m)
           live.set(k, m)
         }
+      }
+
+      // Nearest presence within spar range — recomputed every frame off the rescanned list, so the
+      // prompt tracks your walk rather than lagging a rescan behind.
+      closest = null
+      let bestD = SPAR_RANGE
+      for (const r of present) {
+        const d = Math.hypot(r.patch.x - px, r.patch.z - pz)
+        if (d <= bestD) { bestD = d; closest = r }
       }
 
       // The fog/light lever samples the field directly rather than the patch list: it must be the
@@ -286,7 +340,7 @@ void main() {
       geo.dispose()
       mat.dispose()
       residentGeo.dispose()
-      residentMat.dispose()
+      for (const e of ELEMENTS) residentMats[e].dispose()
       residents.clear()
       live.clear()
     },

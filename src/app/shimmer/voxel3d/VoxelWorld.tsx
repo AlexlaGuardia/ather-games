@@ -91,7 +91,13 @@ import { GATE_X, GATE_Z, GATE_SPANS_X, gateCells } from './gate'
 import { createGregMesh } from './greg'
 import { createSteamPoints } from './steam'
 import { createMistPass } from './mist-pass'
-import { mistAt, mistPatchesNear } from '../voxel/mist'
+import { mistAt, mistPatchesNear, type MistPatch } from '../voxel/mist'
+import { loadMistLedger, saveMistLedger, recordWithdrawal, type MistLedger, type Resident } from './mist-encounter'
+import ArenaBattle from '../components/ArenaBattle'
+import { createSpirit, speciesDisplayName, type Spirit } from '../spirits/spirit'
+import { spiritsToSave, spiritsFromSave } from '../spirits/spirit-save'
+import { applyFightResult } from '../engine/spirit-health'
+import type { BattleResult } from '../engine/arena'
 import { createFloraRenderer } from './flora-mesh'
 
 const SEED = 1337
@@ -262,6 +268,12 @@ const CONSOLE_CMDS: ConsoleCmd[] = [
  *  scan plus a dell ring each), and an unbounded compass would stall the console on a keystroke. */
 const MIST_FIND_REACH = 1200
 
+/** Prompt tint per element — brightened off ELEMENT_COLORS, which are body colours and read muddy
+ *  as small text over gold fog. Same four elements, legible weight. */
+const MIST_PROMPT: Record<'mana' | 'storm' | 'earth' | 'water', string> = {
+  mana: '#d9b3e8', storm: '#9fb8f0', earth: '#e0c08a', water: '#8fd8d0',
+}
+
 /** Distance + 8-way compass toward (dx, dz). MC's convention: −Z is north, +X is east. */
 function bearing(dx: number, dz: number): string {
   const d = Math.hypot(dx, dz)
@@ -375,6 +387,21 @@ export default function VoxelWorld() {
   const [, setTutorialTick] = useState(0)
   const [dialogueOpen, setDialogueOpen] = useState(false)
   const [nearGreg, setNearGreg] = useState(false)
+  // ── The mist spar (2026-08-09) ──────────────────────────────────────────────────────────────
+  // The presence you are standing in front of, the withdrawal ledger, and the fight in progress.
+  const [nearMist, setNearMist] = useState<Resident | null>(null)
+  const mistLedger = useRef<MistLedger>({})
+  const [spar, setSpar] = useState<{ allies: Spirit[]; enemies: Spirit[]; patch: MistPatch; name: string } | null>(null)
+  /**
+   * ★ THE PARTY IS NOT WORLD-LOCAL, and that is canon rather than convenience. `game/shimmer-
+   * geography.md` › *Where a keeper's spirits live* rules that a keeper's spirits live in their
+   * garden and go on living there whether or not you are standing next to them — three rings, none
+   * of them storage. So the voxel world reads the SAME party the 2D game and play3d share
+   * (`ather:save:shimmer`) rather than minting a second roster: a keeper has one set of spirits,
+   * and which surface they are looking at the garden through does not change who is theirs.
+   */
+  const party = useRef<Spirit[]>([])
+  const [hasParty, setHasParty] = useState(false)
   // ★ THE GAUGE SIGNAL. Which family is mining RIGHT NOW, for the tool gauges to light up — set
   // from inside the mining block only on change (see the ref there), never per-frame.
   const [activeTool, setActiveTool] = useState<string | null>(null)
@@ -486,7 +513,70 @@ export default function VoxelWorld() {
     const c = canvasElRef.current
     if (c) { try { const r = c.requestPointerLock?.() as unknown as Promise<void> | undefined; r?.catch?.(() => {}) } catch { /* re-lock cooldown */ } }
   }, [])
-  useEffect(() => { cursorUIOpenRef.current = craftOpen || dialogueOpen || showSettings }, [craftOpen, dialogueOpen, showSettings])
+  useEffect(() => { cursorUIOpenRef.current = craftOpen || dialogueOpen || showSettings || !!spar }, [craftOpen, dialogueOpen, showSettings, spar])
+
+  // ── the shared party + the withdrawal ledger, read once at mount ────────────────────────────
+  // Both are localStorage and therefore synchronous; done in an effect anyway so SSR never touches
+  // them. A missing save is not an error — it is a keeper who has not been given a spirit yet, and
+  // the mist prompt says exactly that rather than failing.
+  useEffect(() => {
+    mistLedger.current = loadMistLedger(SEED)
+    try {
+      const raw = localStorage.getItem('ather:save:shimmer')
+      const data = raw ? JSON.parse(raw) as { spirits?: unknown[] } : null
+      if (data?.spirits?.length) {
+        party.current = spiritsFromSave(data.spirits as never)
+        setHasParty(party.current.length > 0)
+      }
+    } catch { /* unreadable save = no party; the prompt handles it */ }
+  }, [])
+
+  /**
+   * Begin a spar with the presence in front of you. The enemy is built at the party's own level —
+   * a wild spirit answering its own ground has no reason to be a wall or a pushover, and a spar
+   * whose whole point is practice should be worth practising against.
+   */
+  const startSpar = useCallback((r: Resident) => {
+    const roster = party.current.filter(s => (s.hpFrac ?? 1) > 0).slice(0, 4)
+    if (!roster.length) return
+    const avg = Math.max(1, Math.round(roster.reduce((s, a) => s + a.level, 0) / roster.length))
+    const wild = createSpirit(r.species, r.name, 0, 0)
+    wild.level = avg
+    wild.element = r.element
+    wild.seeds = Array.from({ length: 6 }, () => Math.floor(Math.random() * 32))
+    openCursorUI()
+    setSpar({ allies: roster, enemies: [wild], patch: r.patch, name: r.name })
+  }, [openCursorUI])
+
+  /**
+   * ★ THE SPAR TAKES NOTHING — canon, and the reason there is no capture branch here to find.
+   * Spirits manifest via Mana Seeds and are never caught; they retreat, they do not faint. So every
+   * outcome does the same two things: persist what the fight cost the party, and record that the
+   * other spirit withdrew into the mist. Win, loss and flight alike — the spirit left in all three
+   * cases and only the reason differs, and recording only on a win would leave a beaten keeper
+   * able to re-challenge instantly.
+   */
+  const endSpar = useCallback((_outcome: 'win' | 'lose' | 'fled', result: BattleResult) => {
+    const s = spar
+    setSpar(null)
+    closeCursorUI()
+    if (!s) return
+    for (const r of result.allies) {
+      const spirit = s.allies[r.index]
+      if (spirit) applyFightResult(spirit, r.hp, r.maxHp)
+    }
+    // Wounds outlive the fight, so they go back to the SHARED save — the same party the 2D game
+    // and play3d read. Merge-write: this world knows nothing about the other surfaces' fields and
+    // must not drop them.
+    try {
+      const raw = localStorage.getItem('ather:save:shimmer')
+      const prev = raw ? JSON.parse(raw) as Record<string, unknown> : {}
+      localStorage.setItem('ather:save:shimmer', JSON.stringify({ ...prev, spirits: spiritsToSave(party.current) }))
+    } catch { /* private mode: the fight still happened, it just does not persist */ }
+    mistLedger.current = recordWithdrawal(mistLedger.current, s.patch, Date.now())
+    saveMistLedger(SEED, mistLedger.current)
+    setNearMist(null)
+  }, [spar, closeCursorUI])
 
   /** Advance the tutorial only if it is currently AT `expected` — an out-of-order action (say,
    *  crafting planks before ever talking to Greg) is silently a no-op rather than skipping a step,
@@ -636,6 +726,10 @@ export default function VoxelWorld() {
           if (craftOpen) { setCraftOpen(false); closeCursorUI() }
           else { openCursorUI(); setCraftOpen(true) }
         }
+        // A presence in the mist answers E last: Greg and the bench are both things you walked to
+        // deliberately inside a settled place, and a patch never overlaps either. Ordered anyway
+        // so the priority is stated rather than incidental.
+        else if (nearMist && hasParty) startSpar(nearMist)
       }
       // Escape only reaches us when the pointer is already free (the browser eats it to exit the
       // lock first) — so close the surfaces AND settle the handoff ledger. closeCursorUI's relock
@@ -660,7 +754,7 @@ export default function VoxelWorld() {
     window.addEventListener('keydown', onKey)
     window.addEventListener('wheel', onWheel, { passive: true })
     return () => { window.removeEventListener('keydown', onKey); window.removeEventListener('wheel', onWheel) }
-  }, [build, drawn, dialogueOpen, nearGreg, nearTable, craftOpen, showSettings, consoleOpen, closeDialogue, openCursorUI, closeCursorUI])
+  }, [build, drawn, dialogueOpen, nearGreg, nearTable, craftOpen, showSettings, consoleOpen, closeDialogue, openCursorUI, closeCursorUI, nearMist, hasParty, startSpar])
 
   return (
     <div className="fixed inset-0 bg-[#0b0d14]">
@@ -709,6 +803,7 @@ export default function VoxelWorld() {
           build={build} pieceIdx={pieceIdx} rot={rot}
           tools={tools} skills={skills} onSkill={setSkillHud} onLevel={setLevelUp} onTool={setActiveTool}
           tutorial={tutorial} onQuestEvent={onQuestEvent} onNearGreg={setNearGreg}
+          mistLedger={mistLedger} onNearMist={setNearMist} sparring={!!spar}
           onNearTable={setNearTable} cmdOut={worldCmd}
         />
         {/* selector: deliberately matches NOTHING. Without it drei binds click-to-lock on the whole
@@ -726,13 +821,32 @@ export default function VoxelWorld() {
            activeTool={activeTool}
            isOwner={isOwner} drawn={drawn} weaponIdx={weaponIdx} ammoUi={ammoUi}
            tutorialStage={tutorial.current.stage} nearGreg={nearGreg} dialogueOpen={dialogueOpen}
-           nearTable={nearTable} craftOpen={craftOpen} />
+           nearTable={nearTable} craftOpen={craftOpen} nearMist={nearMist} hasParty={hasParty} />
       {showSettings && <SettingsPanel s={settings} update={update} onClose={() => { setShowSettings(false); closeCursorUI() }} />}
       {craftOpen && (
         <CraftPanel have={have} tools={tools} tick={craftTick} station={station}
                     onCraft={doCraft} onCraftTool={doCraftTool} onClose={() => { setCraftOpen(false); closeCursorUI() }} />
       )}
       {dialogueOpen && <GregDialogue stage={tutorial.current.stage} onClose={closeDialogue} />}
+
+      {/* ★ THE SPAR. The SAME real-time arena every other fight runs (`engine/arena.ts` via
+          ArenaBattle) — the spirit fights on its own instinct and the Keeper coaches. That is not a
+          reuse convenience: canon rules it (2026-08-09), because a turn-based move menu would put
+          the Keeper back in command of the spirit, which is the collar wearing practice clothes,
+          inside the one feature whose whole justification is practice.
+          No `collaredIndices` and `enemyTier` left at its wild default: nothing here is leashed and
+          nothing here is a champion — it is a wild spirit answering its own ground. */}
+      {spar && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 50, background: '#0a0a12' }}>
+          <ArenaBattle
+            allies={spar.allies}
+            enemies={spar.enemies}
+            title={`A ${spar.name} answers the mist`}
+            onEnd={endSpar}
+            continueLabel="BACK TO THE GARDEN"
+          />
+        </div>
+      )}
       <ChatConsole open={consoleOpen} seed={consoleSeed} log={chatLog} ctx={consoleCtx}
                    onSubmit={submitLine} onClose={() => { setConsoleOpen(false); closeCursorUI() }} />
     </div>
@@ -782,7 +896,7 @@ function Clock() {
   )
 }
 
-function Hud({ stats, pos, look, hotbar, sel, tier, build, pieceIdx, rot, inv, skill, levelUp, crafted, tools, skills, activeTool, isOwner, drawn, weaponIdx, ammoUi, tutorialStage, nearGreg, dialogueOpen, nearTable, craftOpen }: {
+function Hud({ stats, pos, look, hotbar, sel, tier, build, pieceIdx, rot, inv, skill, levelUp, crafted, tools, skills, activeTool, isOwner, drawn, weaponIdx, ammoUi, tutorialStage, nearGreg, dialogueOpen, nearTable, craftOpen, nearMist, hasParty }: {
   stats: string; pos: string
   look: { name: string; progress: number; refused: boolean } | null
   hotbar: HotbarEntry[]; sel: number; tier: number
@@ -806,6 +920,9 @@ function Hud({ stats, pos, look, hotbar, sel, tier, build, pieceIdx, rot, inv, s
   /** Within talk range of Greg, from World's per-frame distance check. Drives the "E — talk" prompt. */
   nearGreg: boolean
   dialogueOpen: boolean
+  /** The presence in spar range, or null — names itself in the prompt before you commit. */
+  nearMist: Resident | null
+  hasParty: boolean
   /** Within reach of a placed crafting table — drives the "E — craft" prompt. */
   nearTable: boolean
   craftOpen: boolean
@@ -866,6 +983,20 @@ function Hud({ stats, pos, look, hotbar, sel, tier, build, pieceIdx, rot, inv, s
       {!nearGreg && nearTable && !craftOpen && (
         <div className="absolute left-1/2 top-[63%] -translate-x-1/2 text-center pointer-events-none">
           <div className="text-[11px] font-mono tracking-wide text-white/85">E — craft</div>
+        </div>
+      )}
+      {/* ★ The presence names itself before you commit — the whole consent design. You are told
+          WHICH spirit answered this ground and can walk away. A keeper with no spirits is told the
+          truth rather than being given a dead key: canon's own order is that Greg's seed sleeps a
+          while yet, so watching is the only thing to do here and the line says so. */}
+      {!nearGreg && !nearTable && nearMist && (
+        <div className="absolute left-1/2 top-[63%] -translate-x-1/2 text-center pointer-events-none">
+          <div className="text-[13px] font-mono tracking-[.18em] uppercase" style={{ color: MIST_PROMPT[nearMist.element] }}>
+            {nearMist.name}
+          </div>
+          <div className="mt-1 text-[11px] font-mono tracking-wide text-white/85">
+            {hasParty ? 'E — spar' : 'it waits for a spirit you do not have yet'}
+          </div>
         </div>
       )}
 
@@ -1116,7 +1247,7 @@ function ToolGlyph({ family }: { family: 'forestry' | 'prospecting' | 'rinning' 
 const SOLID_EXCEPT = new Set<number>([AIR, MAT.WATER])
 const isSolid = (m: number) => !SOLID_EXCEPT.has(m)
 
-function World({ inv, toolTier, toolSkill, selItem, weaponDrawn, weaponIdx, onAmmo, onStats, onPos, onLook, onInvChange, worker, incoming, inflight, settings, build, pieceIdx, rot, tools, skills, onSkill, onLevel, onTool, tutorial, onQuestEvent, onNearGreg, onNearTable, cmdOut }: {
+function World({ inv, toolTier, toolSkill, selItem, weaponDrawn, weaponIdx, onAmmo, onStats, onPos, onLook, onInvChange, worker, incoming, inflight, settings, build, pieceIdx, rot, tools, skills, onSkill, onLevel, onTool, tutorial, onQuestEvent, onNearGreg, onNearTable, cmdOut, mistLedger, onNearMist, sparring }: {
   inv: React.RefObject<Inventory>
   toolTier: React.RefObject<number>
   toolSkill: React.RefObject<BlockSkill>
@@ -1155,6 +1286,11 @@ function World({ inv, toolTier, toolSkill, selItem, weaponDrawn, weaponIdx, onAm
   onQuestEvent: (event: 'cut' | 'light') => void
   /** Fires only on change, same dedup shape as `onTool`. */
   onNearGreg: (near: boolean) => void
+  /** The withdrawal ledger, by ref — the pass reads it, the spar's end writes it. */
+  mistLedger: React.MutableRefObject<MistLedger>
+  onNearMist: (r: Resident | null) => void
+  /** The arena owns the screen while true; the world keeps streaming but stops reporting prompts. */
+  sparring: boolean
   /** Near a placed crafting table — the parent turns this into recipes.ts's `Station`. */
   onNearTable: (near: boolean) => void
   /** The console's world-verbs, filled on mount — only World can move the walker safely. */
@@ -1235,7 +1371,12 @@ function World({ inv, toolTier, toolSkill, selItem, weaponDrawn, weaponIdx, onAm
   const steam = useMemo(() => createSteamPoints(SEED), [])
   // Mist patches (2026-08-09) — the lying mist plus the presence standing in it; see mist-pass.ts.
   // Sleeps everywhere but inside a patch's reach, the same way steam sleeps outside the Springs.
-  const mist = useMemo(() => createMistPass(SEED), [])
+  const mist = useMemo(() => createMistPass(SEED, mistLedger.current), [mistLedger])
+  const lastNearMist = useRef<string | null>(null)
+  /** The ledger the pass currently holds. `recordWithdrawal` returns a NEW object, so an identity
+   *  compare is enough to notice a spar ended and hand the pass the updated one — without which
+   *  the spirit you just sparred would keep standing there until the world reloaded. */
+  const ledgerSeen = useRef<MistLedger | null>(null)
   // Ground cover (2026-08-08) — flora.ts selects, the live-voxel probe verifies, four draws total.
   const flora = useMemo(() => createFloraRenderer(), [])
   /** Set whenever loaded ground changes (adopt, edit, evict); the frame loop syncs once quiet. */
@@ -1756,7 +1897,15 @@ function World({ inv, toolTier, toolSkill, selItem, weaponDrawn, weaponIdx, onAm
     if (!g) return
     const p = camera.position
     steam.tick(p.x, p.y, p.z, dt, state.clock.elapsedTime)
+    if (ledgerSeen.current !== mistLedger.current) { ledgerSeen.current = mistLedger.current; mist.setLedger(mistLedger.current) }
     mist.tick(p.x, p.y, p.z, dt, state.clock.elapsedTime)
+    // The presence prompt, deduped on identity the way Greg's range is — standing still in front
+    // of a spirit should not re-render the HUD 60×/sec. Silent while the arena owns the screen.
+    {
+      const r = sparring ? null : mist.nearest()
+      const id = r ? `${r.patch.x},${r.patch.z},${r.species}` : null
+      if (id !== lastNearMist.current) { lastNearMist.current = id; onNearMist(r) }
+    }
     flora.tick(state.clock.elapsedTime)
     const cx = Math.floor(p.x / SECTION), cz = Math.floor(p.z / SECTION)
 

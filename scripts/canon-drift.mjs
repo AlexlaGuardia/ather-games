@@ -309,6 +309,98 @@ function run() {
     }
     if (!moveDrift) add('CLEAN', 'keeper-moves', `all ${builtMoves.length} shipped keeper moves match the canon registry`)
   }
+
+  // 7. MIST ROSTERS — voxel3d/mist-roster.ts vs CANON/game/shimmer-geography.md (ruled 2026-08-09)
+  // The roster decides which spirit a player MEETS in a region, so a build-side edit is a lore
+  // change wearing a lookup table. Canon ruled it region-by-region; this diffs both directions.
+  const canonRost = canonMistRosters()
+  const builtRost = gameMistRosters()
+  if (!canonRost.size || !builtRost.size) {
+    add('NOTE', 'mist-rosters', `could not read one side (canon ${canonRost.size}, build ${builtRost.size}) — check skipped`)
+  } else {
+    const base = canonBaseSpecies()                       // canon NAME -> { code, element }
+    const codeOf = new Map(Object.entries(base).map(([n, v]) => [n, v.code]))
+    let rostDrift = 0
+    for (const [zone, canonNames] of canonRost) {
+      const want = canonNames.map((n) => codeOf.get(n) ?? `?${n}`).sort()
+      const got = [...(builtRost.get(zone) ?? [])].sort()
+      if (!builtRost.has(zone)) {
+        rostDrift++
+        add('GAP', 'mist-rosters', `zone '${zone}' has a ruled mist roster that the build does not carry`,
+          `Ruled in shimmer-geography.md › The mist patches: ${canonNames.join(', ') || '(empty)'}. Add it to voxel3d/mist-roster.ts.`)
+        continue
+      }
+      if (want.join('|') !== got.join('|')) {
+        rostDrift++
+        add('CONFLICT', 'mist-rosters', `zone '${zone}' roster differs — build [${got.join(', ') || 'none'}] vs canon [${want.join(', ') || 'none'}]`,
+          `The roster decides who a player meets there. Re-wire the build, or re-rule it in shimmer-geography.md first (Magii).`)
+      }
+    }
+    for (const zone of builtRost.keys()) {
+      if (canonRost.has(zone)) continue
+      rostDrift++
+      add('COLLISION', 'mist-rosters', `zone '${zone}' ships a mist roster that canon never ruled`,
+        `A roster nobody ruled is accidental canon. Rule it in shimmer-geography.md, or drop it — an unruled zone must call nothing.`)
+    }
+    if (!rostDrift) add('CLEAN', 'mist-rosters', `all ${canonRost.size} ruled mist rosters match the build`)
+  }
+}
+
+// ── mist-roster helpers ────────────────────────────────
+/**
+ * The ruled rosters in CANON/game/shimmer-geography.md › "### The rosters — ruled".
+ * Table shape: | **Spirit Meadows** (`spirit-meadow`) | ground character | **Lepara** *(canon…)* · **Dewbear** |
+ * Zone id comes from the backticked code so a prose rename of the region cannot break the join.
+ * `gloview-village` is ruled EMPTY in prose rather than in the table, and is added explicitly —
+ * an empty ruling is still a ruling and the build must carry it.
+ */
+function canonMistRosters() {
+  const out = new Map()
+  const p = join(CANON, 'game', 'shimmer-geography.md')
+  if (!existsSync(p)) return out
+  const txt = read(p)
+  const sec = txt.split('### The rosters — ruled')[1]?.split('### ★ A MIST SPAR')[0] ?? ''
+  if (!sec) return out
+  for (const line of sec.split('\n')) {
+    const m = line.match(/^\|\s*\*\*[^|]*?\*\*\s*\(`([a-z-]+)`\)\s*\|[^|]*\|\s*(.+?)\s*\|\s*$/)
+    if (!m) continue
+    const names = m[2]
+      .split('·')
+      .map((s) => s.replace(/\*\(.*?\)\*/g, '').replace(/\*/g, '').trim())   // drop the *(canon …)* notes
+      .filter(Boolean)
+    out.set(m[1], names)
+  }
+  // ⚠ The corridor/edge zones are ruled in the section's PROSE, not its table, and canon prose
+  // wraps. The first cut matched with `[^\n]*?` and silently found nothing — which surfaced as
+  // "the-outfields ships a roster canon never ruled", i.e. the gate accusing the BUILD of drift
+  // for a bug in the gate. Flatten the section before matching prose rules; the table above is
+  // parsed line-by-line first, so flattening here cannot disturb it.
+  //
+  // The tool bends to how canon is written, never the reverse — a canon file reshaped to suit a
+  // regex is a canon file edited by the build, which is the boundary this whole script defends.
+  const flat = sec.replace(/\s+/g, ' ')
+  if (/\*\*Gloview Village\*\* grows no mist/.test(flat)) out.set('gloview-village', [])
+  const edge = flat.match(/\*\*The Outfields\*\*\s*\(`the-outfields`\)(.*?)(?:A guttering patch|$)/)
+  if (edge) {
+    // Species are the **Capitalised** bolds; skip bolded emphasis words like **thin**.
+    const names = [...edge[1].matchAll(/\*\*([A-Z][a-z]+)\*\*/g)].map((x) => x[1])
+      .filter((n) => codeKey(n) in Object.fromEntries(Object.keys(canonBaseSpecies()).map((k) => [codeKey(k), 1])))
+    out.set('the-outfields', names)
+  }
+  return out
+}
+
+/** The rosters shipped in voxel3d/mist-roster.ts (species CODES). */
+function gameMistRosters() {
+  const out = new Map()
+  const p = join(GAME, 'voxel3d', 'mist-roster.ts')
+  if (!existsSync(p)) return out
+  const txt = read(p)
+  const body = txt.split('export const MIST_ROSTERS')[1]?.split('export const MIST_CORRIDORS')[0] ?? ''
+  for (const m of body.matchAll(/'([a-z-]+)'\s*:\s*\[([^\]]*)\]/g)) {
+    out.set(m[1], [...m[2].matchAll(/'([^']+)'/g)].map((s) => s[1]))
+  }
+  return out
 }
 
 // ── keeper-move helpers ────────────────────────────────
