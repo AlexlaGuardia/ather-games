@@ -22,6 +22,7 @@
 import { value2 } from './noise'
 import { greyness } from './biome'
 import { zoneAt } from './zones'
+import { mistAt } from './mist'
 
 export const FLORA = {
   NONE: 0,
@@ -43,6 +44,10 @@ export const DRIFT_EDGE = 0.60   // drift field above this = flowers allowed
 export const TUFT_DENSITY = 0.16
 export const TALL_DENSITY = 0.035
 export const FLOWER_DENSITY = 0.30   // inside a drift — dense on purpose, drifts are the rarity
+/** Fraction of a mist patch's tufts that give way to bloom at full mist. */
+export const MIST_TUFT_YIELD = 0.75
+/** Flower share mist raises on OPEN ground (outside a drift) — a patch blooms with or without one. */
+export const MIST_OPEN_BLOOM = 0.35
 
 const hash01 = (x: number, z: number, seed: number): number => {
   let h = Math.imul(x | 0, 374761393) ^ Math.imul(z | 0, 668265263) ^ Math.imul(seed | 0, 1274126177)
@@ -70,8 +75,10 @@ export function floraAt(x: number, z: number, seed: number): FloraSpot | null {
     : 1
   const tuftP = TUFT_DENSITY * boost
   const tallP = TALL_DENSITY * boost
-  // Cheap gate first: most cells fail the roll before any field is read.
-  if (roll > (tuftP + tallP) * 1.6 + FLOWER_DENSITY) return null
+  // Cheap gate first: most cells fail the roll before any field is read. Hoisted into a const
+  // because the mist bloom below must fit INSIDE it — see there.
+  const gate = (tuftP + tallP) * 1.6 + FLOWER_DENSITY
+  if (roll > gate) return null
   // Drained ground thins to nothing across the grey fringe — and dies BEFORE the core (0.85, not
   // 1.0): grass giving out while the soil still holds a little colour is the right order for the
   // guttering to read; ground that greys first and loses its grass after would read backwards.
@@ -79,10 +86,31 @@ export function floraAt(x: number, z: number, seed: number): FloraSpot | null {
   if (life <= 0.15) return null
   const drift = value2(x / DRIFT_SCALE, z / DRIFT_SCALE, seed ^ 0xd21f7)
   const inDrift = drift > DRIFT_EDGE
-  const flowerP = inDrift ? FLOWER_DENSITY * (zid === 'spirit-meadow' ? 1 + 0.6 * zn.t : 1) : 0
+  const flowerBase = inDrift ? FLOWER_DENSITY * (zid === 'spirit-meadow' ? 1 + 0.6 * zn.t : 1) : 0
+
+  // ★ MIST BLOOMS WHAT IS ALREADY THERE — it does not add. Inside a patch (mist.ts) the flower
+  // share climbs and the tufts give way to it, so charged ground reads as charged without the
+  // flora budget moving an inch. Adding density instead would have been the obvious move and the
+  // wrong one: it puts MORE geometry exactly where the mist pass, the fog pull and the resident
+  // are already spending frame budget, so the one place guaranteed to be busy would also be the
+  // one place the renderer is asked to draw the most grass.
+  //
+  // Read AFTER both early-outs, so the cost lands only on cells that already survived the roll and
+  // the grey test — and `mistAt` is a memoised single-cell lookup, which is what makes it safe to
+  // call from a per-column field at all.
+  const m = mistAt(x, z, seed)
+  const tuftAdj = tuftP * (1 - MIST_TUFT_YIELD * m)
+  // Clamped against the same `gate` the early-out used: the gate rejects rolls before this line
+  // runs, so a bloom that reached past it would be silently truncated by a threshold upstream —
+  // flowers that thin out at exactly the wrong moment, for a reason invisible from here.
+  const flowerP = Math.min(
+    flowerBase + m * (tuftP * MIST_TUFT_YIELD + (inDrift ? 0 : FLOWER_DENSITY * MIST_OPEN_BLOOM)),
+    gate - tuftAdj - tallP,
+  )
+
   const r = roll / life   // thinning: on half-drained ground a roll must be twice as lucky
   if (r < flowerP) return { kind: FLORA.FLOWER, variant: hash01(x, z, seed ^ 0x77e) }
-  if (r < flowerP + tuftP) return { kind: FLORA.TUFT, variant: hash01(x, z, seed ^ 0x3b1) }
-  if (r < flowerP + tuftP + tallP) return { kind: FLORA.TALL, variant: hash01(x, z, seed ^ 0x9c5) }
+  if (r < flowerP + tuftAdj) return { kind: FLORA.TUFT, variant: hash01(x, z, seed ^ 0x3b1) }
+  if (r < flowerP + tuftAdj + tallP) return { kind: FLORA.TALL, variant: hash01(x, z, seed ^ 0x9c5) }
   return null
 }

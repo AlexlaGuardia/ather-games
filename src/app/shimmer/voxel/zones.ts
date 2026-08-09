@@ -50,29 +50,49 @@ export interface ZoneAnchor {
   /** Target woodland mask at full membership (biome.ts blends toward it). Thicket ≈ 1 = the
    *  closed canopy that IS its character; meadows near 0 = sparse lone trees. */
   forest: number
+  /**
+   * How readily this zone's mana pools into MIST PATCHES (mist.ts) — a per-cell rarity chance,
+   * 0 = never. Zone character again, not a placement table: mist.ts rolls against this, the same
+   * way biome reads `forest` and the grey band reads `tended`. A village is 0 because a village is
+   * somewhere people live, not somewhere the garden's mana is left to gather.
+   *
+   * ⚠ THESE ARE SWEEP-TUNED, AND THEY ARE NOT COMPARABLE TO EACH OTHER. `scripts/mist-sweep.mts`
+   * measured wildly different filter survival by terrain character — the Thicket's mild floor
+   * offers a level dell 57% of the time, the Meadows' rolling hills 8%, the Springs' terraces 11%.
+   * So the chance that lands ~3 patches in the Thicket is a fifth of the one that lands ~3 in the
+   * Meadows, and reading these as "the Thicket is less misty" is exactly backwards. They are the
+   * correction for terrain, not a statement about the zone. Re-sweep after any terrain change.
+   */
+  mist: number
 }
 
 /** The blessed layout, verbatim from zone-sketch v2. Positions/extents are build — dial freely. */
 export const ZONE_ANCHORS: ZoneAnchor[] = [
-  { id: 'garden', x: 0, z: 0, rx: 380, rz: 340, reliefK: 0.25, benchK: 1, swellAmp: 0, tended: 1, forest: 0.15, lift: 0 },
-  { id: 'moonwell-glade', x: -150, z: -640, rx: 340, rz: 300, reliefK: 0.2, benchK: 1, swellAmp: 0, tended: 1, forest: 0.35, lift: 0 },
-  { id: 'mycelial-path', x: -1250, z: -120, rx: 620, rz: 260, reliefK: 0.35, benchK: 1, swellAmp: 0, tended: 1, forest: 0.5, lift: 0 },
+  // ⚠ Home and Moonwell are at chance 1.0 and STILL generate none — measured, not assumed
+  // (mist-sweep: 8 and 7 candidate cells, ~6 in the interior each, every one refused by the pad or
+  // dell test). They are small zones with calm terrain, and calm terrain has no troughs. Do NOT
+  // relax the filters to force one here: that would thin the dell rule everywhere to buy one patch
+  // in one place. If a guaranteed patch at home is wanted it belongs AUTHORED, the way the story
+  // path and the holds are — the garden is where hand-placed content lives, not rolled content.
+  { id: 'garden', x: 0, z: 0, rx: 380, rz: 340, reliefK: 0.25, benchK: 1, swellAmp: 0, tended: 1, forest: 0.15, lift: 0, mist: 1 },
+  { id: 'moonwell-glade', x: -150, z: -640, rx: 340, rz: 300, reliefK: 0.2, benchK: 1, swellAmp: 0, tended: 1, forest: 0.35, lift: 0, mist: 1 },
+  { id: 'mycelial-path', x: -1250, z: -120, rx: 620, rz: 260, reliefK: 0.35, benchK: 1, swellAmp: 0, tended: 1, forest: 0.5, lift: 0, mist: 0.6 },
   // Rolling hills: ridges and benches OFF, a long-wave swell ON — hills you walk over, not into.
-  { id: 'spirit-meadow', x: -2150, z: 700, rx: 950, rz: 780, reliefK: 0.1, benchK: 0, swellAmp: 7, tended: 1, forest: 0.06, lift: 0 },
+  { id: 'spirit-meadow', x: -2150, z: 700, rx: 950, rz: 780, reliefK: 0.1, benchK: 0, swellAmp: 7, tended: 1, forest: 0.06, lift: 0, mist: 0.25 },
   // Dense forest keeps mild terrain — the CANOPY is the character, not the ground.
-  { id: 'twilight-thicket', x: -2000, z: -1150, rx: 800, rz: 650, reliefK: 0.4, benchK: 0.5, swellAmp: 2, tended: 1, forest: 0.97, lift: 0 },
+  { id: 'twilight-thicket', x: -2000, z: -1150, rx: 800, rz: 650, reliefK: 0.4, benchK: 0.5, swellAmp: 2, tended: 1, forest: 0.97, lift: 0, mist: 0.45 },
   // ★ THE HOT-SPRING MOUNTAIN (reworked 2026-08-08 from "benches HARD ON, modest relief"): lift
   // raises a terraced massif, benchK 2 saturates the bench blend so every flank IS terraces
   // (1.6 left the plains-field's low end only 60% benched — sloped steps no pool could sit on),
   // and reliefK 0 kills ridge noise for the same reason: a pool's rim must be LEVEL, and the
   // zone's drama now comes from the massif itself, not from ridges fighting the terraces.
-  { id: 'mana-springs', x: 2100, z: -300, rx: 900, rz: 750, reliefK: 0, benchK: 2, swellAmp: 0, tended: 1, forest: 0.22, lift: 64 },
+  { id: 'mana-springs', x: 2100, z: -300, rx: 900, rz: 750, reliefK: 0, benchK: 2, swellAmp: 0, tended: 1, forest: 0.22, lift: 64, mist: 0.6 },
   // ★ Re-dialed 2026-08-08 (Alex's story-spine ruling, see voxel/story-path.ts): the village is
   // the SECOND story POI, ~500 blocks up the road from Moonwell Glade — the three Moglins' test.
   // Was parked at (3450,-1500) from the original sketch; radius shrunk to a village, not a region.
-  { id: 'gloview-village', x: -265, z: -1125, rx: 260, rz: 220, reliefK: 0.25, benchK: 1, swellAmp: 0, tended: 1, forest: 0.12, lift: 0 },
+  { id: 'gloview-village', x: -265, z: -1125, rx: 260, rz: 220, reliefK: 0.25, benchK: 1, swellAmp: 0, tended: 1, forest: 0.12, lift: 0, mist: 0 },
   // The Outfields are the frayed edge: still garden, but the grey is allowed to gutter in.
-  { id: 'the-outfields', x: 3700, z: 1000, rx: 900, rz: 750, reliefK: 0.5, benchK: 1, swellAmp: 3, tended: 0.45, forest: 0.3, lift: 0 },
+  { id: 'the-outfields', x: 3700, z: 1000, rx: 900, rz: 750, reliefK: 0.5, benchK: 1, swellAmp: 3, tended: 0.45, forest: 0.3, lift: 0, mist: 0.55 },
 ]
 
 /** Membership fades from 1 inside to 0 outside across this band of normalised distance. */

@@ -112,6 +112,28 @@ const GLOOM = {
   rate: 2.5,         // smoothing, ~1/s to settle
 }
 
+// ── ★ MIST PATCHES (2026-08-09 — see voxel/mist.ts for what they ARE) ──────────────────────────
+// Standing in one, the world closes to arm's length and goes gold. Same lever as the gloom above
+// and DELIBERATELY not the same rules, in two ways that matter:
+//
+//  1. NOT DAYLIGHT-GATED. A canopy dims by blocking sun, so gloom scales with `dl` and correctly
+//     does nothing at night. Mist is not a shadow — it is mana made visible, it EMITS. It has to
+//     hold at noon (that is the whole read) and at midnight, so it multiplies nothing by daylight.
+//  2. IT BRIGHTENS WHERE GLOOM DIMS. The hemisphere light goes UP inside a patch, because a
+//     glowing fog lights its own inside. Cutting light here — the reflex, copied from gloom —
+//     produced a grey-brown murk that read as a dust storm.
+//
+// The fog pull is hard on purpose: it is what walls the patch, so the spar has a room to happen in
+// without a single piece of geometry. Free arena, and a diegetic one.
+const MIST = {
+  fogPull: 0.72,     // near/far shrink by this × thickness — the wall
+  hemiLift: 0.5,     // skylight GAINS this fraction: the fog is luminous, not shade
+  sunCut: 0.35,      // direct sun scatters in it, so shadows go soft rather than dark
+  gold: '#ffe9b8',   // canon's own word for it — golden mist, luminous mana
+  fogGold: '#e8cf95',
+  rate: 1.6,         // smoothing; slower than gloom so walking in is a gather, not a switch
+}
+
 const mix = (a: number, b: number, t: number) => a + (b - a) * t
 
 /** Preallocated colour pairs — this mutates live objects inside useFrame, so no per-frame `new`. */
@@ -122,16 +144,28 @@ function makePairs() {
     zenith: pair(SKY.day.zenith, SKY.night.zenith), horizon: pair(SKY.day.horizon, SKY.night.horizon),
     sun: pair(SKY.sunHigh, SKY.sunLow),
     leaf: pair(GLOOM.leaf, GLOOM.leaf), fogLeaf: pair(GLOOM.fogLeaf, GLOOM.fogLeaf),
+    gold: pair(MIST.gold, MIST.gold), fogGold: pair(MIST.fogGold, MIST.fogGold),
   }
 }
 const lerpInto = (p: { d: THREE.Color; n: THREE.Color; out: THREE.Color }, t: number) => p.out.copy(p.d).lerp(p.n, t)
 
-export function VoxelDayNight({ gloomAt }: { gloomAt?: (x: number, z: number) => number } = {}) {
+export function VoxelDayNight(
+  { gloomAt, mistAt }: {
+    gloomAt?: (x: number, z: number) => number
+    /** Mist thickness 0..1 at a position — same prop shape as `gloomAt`, and the world supplies it
+     *  so this file stays ignorant of worldgen. Sampled EVERY frame, unlike gloom: a patch is ~52
+     *  blocks across where the canopy mask is a region, so gloom's 4Hz clock would step visibly. */
+    mistAt?: (x: number, z: number) => number
+  } = {},
+) {
   const { scene, camera } = useThree()
   const pairs = useRef(makePairs())
   /** Smoothed canopy gloom 0..1 and its sampling clock (the mask is ~16-block features, so 4Hz
    *  sampling is already oversampling — the smoothing is what the eye actually sees). */
   const gloom = useRef({ g: 0, target: 0, clock: 0 })
+  /** Smoothed mist thickness. Smoothed for the same reason gloom is: the field is continuous but
+   *  the camera is not, and a hard step in fog density reads as a graphics bug. */
+  const mist = useRef({ m: 0 })
   const hemiRef = useRef<THREE.HemisphereLight>(null)
   const sunRef = useRef<THREE.DirectionalLight>(null)
   const nightRef = useRef<THREE.DirectionalLight>(null)
@@ -181,6 +215,11 @@ export function VoxelDayNight({ gloomAt }: { gloomAt?: (x: number, z: number) =>
     }
     const gd = G.g * dl             // gloom's active strength — a canopy only blocks what shines
 
+    // ── mist: smoothed, and NOT gated by daylight (it emits; see the MIST block) ───────────────
+    const M = mist.current
+    if (mistAt) M.m += (mistAt(camera.position.x, camera.position.z) - M.m) * Math.min(1, dt * MIST.rate)
+    const md = M.m
+
     const bg = scene.background
     if (bg instanceof THREE.Color) bg.copy(lerpInto(P.bg, sv))
     const fog = fogRef.current
@@ -188,8 +227,13 @@ export function VoxelDayNight({ gloomAt }: { gloomAt?: (x: number, z: number) =>
       // Fog dissolves into the dome's HORIZON band now, not the flat bg — the terrain edge and
       // the sky meet in the same colour, which is what makes the dome read as distance.
       fog.color.copy(lerpInto(P.horizon, sv)).lerp(lerpInto(P.fogLeaf, sv), 0.6 * gd)
-      fog.near = mix(DAY.fogNear, NIGHT.fogNear, sv) * (1 - GLOOM.fogPull * gd)
-      fog.far = mix(DAY.fogFar, NIGHT.fogFar, sv) * (1 - GLOOM.fogPull * gd)
+        .lerp(lerpInto(P.fogGold, sv), 0.85 * md)
+      // The two pulls MULTIPLY rather than add: a mist patch in the Thicket should be the thickest
+      // air in the game, and adding two fractions of the same distance would let them cancel out
+      // into something milder than either — the one place the world must feel closed.
+      const pull = (1 - GLOOM.fogPull * gd) * (1 - MIST.fogPull * md)
+      fog.near = mix(DAY.fogNear, NIGHT.fogNear, sv) * pull
+      fog.far = mix(DAY.fogFar, NIGHT.fogFar, sv) * pull
     }
 
     // ── the dome ─────────────────────────────────────────────────────────────────────────────
@@ -215,8 +259,11 @@ export function VoxelDayNight({ gloomAt }: { gloomAt?: (x: number, z: number) =>
       // Skylight under a canopy arrives leaf-filtered: pulled toward the moss green, never
       // toward grey (the same rule the night palette obeys — hue shift, not desaturation).
       hemi.color.copy(lerpInto(P.hemiSky, sv)).lerp(lerpInto(P.leaf, sv), 0.5 * gd)
-      hemi.groundColor.copy(lerpInto(P.hemiGround, sv))
-      hemi.intensity = mix(DAY.hemiIntensity, NIGHT.hemiIntensity, sv) * (1 - GLOOM.hemiCut * gd)
+        .lerp(lerpInto(P.gold, sv), 0.7 * md)
+      hemi.groundColor.copy(lerpInto(P.hemiGround, sv)).lerp(lerpInto(P.gold, sv), 0.45 * md)
+      // Gloom CUTS, mist LIFTS — a luminous fog lights its own inside. See the MIST block.
+      hemi.intensity = mix(DAY.hemiIntensity, NIGHT.hemiIntensity, sv)
+        * (1 - GLOOM.hemiCut * gd) * (1 + MIST.hemiLift * md)
     }
     const sun = sunRef.current
     if (sun) {
@@ -224,7 +271,8 @@ export function VoxelDayNight({ gloomAt }: { gloomAt?: (x: number, z: number) =>
       // most of what makes a morning read as a morning on axis-aligned blocks.
       const e = sunElevation(p)
       sun.position.set(sunAzimuth(p) * 220, 30 + Math.max(0, e) * 240, 90)
-      sun.intensity = DAY.sunIntensity * dl * (1 - GLOOM.sunCut * gd)
+      // Mist scatters sun rather than blocking it: shadows go soft, the ground does not go dark.
+      sun.intensity = DAY.sunIntensity * dl * (1 - GLOOM.sunCut * gd) * (1 - MIST.sunCut * md)
     }
     const night = nightRef.current
     if (night) night.intensity = NIGHT.silverIntensity * sv

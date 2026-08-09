@@ -90,6 +90,8 @@ import { loadTutorial, saveTutorial, GREG_LINE, OBJECTIVE_LABEL, type TutorialSt
 import { GATE_X, GATE_Z, GATE_SPANS_X, gateCells } from './gate'
 import { createGregMesh } from './greg'
 import { createSteamPoints } from './steam'
+import { createMistPass } from './mist-pass'
+import { mistAt, mistPatchesNear } from '../voxel/mist'
 import { createFloraRenderer } from './flora-mesh'
 
 const SEED = 1337
@@ -235,9 +237,30 @@ const CONSOLE_CMDS: ConsoleCmd[] = [
       return c.tp(z.x, z.z)
     },
     suggest: () => ZONE_ANCHORS.map(z => z.id) },
+  // ★ /mist (2026-08-09) — the same lesson /goto was built for, one scale down. A patch is ~52
+  // blocks across in a region 2000 across, and there are three of them: found by walking is found
+  // by accident. The compass half is VIEW-GRADE for the same reason /goto's is (knowing a place
+  // exists is not a cheat); only the teleport is gated.
+  { name: 'mist', usage: 'mist [go]', help: 'bare: bearings to nearby mist patches · go: teleport to the nearest',
+    run: (a, c) => {
+      const p = c.pos()
+      const found = mistPatchesNear(p.x, p.z, SEED, MIST_FIND_REACH)
+        .sort((m, n) => Math.hypot(m.x - p.x, m.z - p.z) - Math.hypot(n.x - p.x, n.z - p.z))
+      if (!found.length) return `no mist patch within ${MIST_FIND_REACH} blocks — they gather inside the ruled regions (/goto)`
+      if ((a[0] ?? '').toLowerCase() === 'go') {
+        if (!c.isOwner) return `nearest: ${bearing(found[0].x - p.x, found[0].z - p.z)} — teleport is keeper-of-the-realm only`
+        return c.tp(found[0].x, found[0].z)
+      }
+      return found.slice(0, 5).map(m => `mist patch      ${bearing(m.x - p.x, m.z - p.z)}`).join('\n')
+    },
+    suggest: () => ['go'] },
   { name: 'weather', usage: 'weather', help: 'someday', run: () =>
       'no weather in the Ather yet — the day it exists, its command lands here' },
 ]
+
+/** How far /mist looks. Bounded because the scan validates every candidate cell it touches (a pad
+ *  scan plus a dell ring each), and an unbounded compass would stall the console on a keystroke. */
+const MIST_FIND_REACH = 1200
 
 /** Distance + 8-way compass toward (dx, dz). MC's convention: −Z is north, +X is east. */
 function bearing(dx: number, dz: number): string {
@@ -659,12 +682,19 @@ export default function VoxelWorld() {
             under dense canopy. Same forestness mask the PLANTER reads (sibling law) — the Thicket
             saturates it to ~0.97 through zone membership, so no zone check is needed here and any
             deep wild forest earns a lesser gloom by the same rule. */}
-        <VoxelDayNight gloomAt={(x, z) => {
-          const f = forestness(SEED, x / 16, z / 16)
-          const t = (f - 0.62) / (0.95 - 0.62)
-          const c = t < 0 ? 0 : t > 1 ? 1 : t
-          return c * c * (3 - 2 * c)
-        }} />
+        {/* Mist patches (2026-08-09): the rig reads the SAME field the particles, the flora bloom
+            and the encounter trigger read, so the fog can never close in somewhere the mist is not.
+            One memoised cell lookup — cheap enough to sample per frame, which a 52-block feature
+            needs (see mist.ts). */}
+        <VoxelDayNight
+          gloomAt={(x, z) => {
+            const f = forestness(SEED, x / 16, z / 16)
+            const t = (f - 0.62) / (0.95 - 0.62)
+            const c = t < 0 ? 0 : t > 1 ? 1 : t
+            return c * c * (3 - 2 * c)
+          }}
+          mistAt={(x, z) => mistAt(x, z, SEED)}
+        />
         <World
           inv={inv} toolTier={toolTier} toolSkill={toolSkill}
           /* A tool in hand is not a block in hand — RMB must not place while you hold a spade.
@@ -1203,6 +1233,9 @@ function World({ inv, toolTier, toolSkill, selItem, weaponDrawn, weaponIdx, onAm
   }, [])
   // Hot-spring steam (2026-08-08) — sleeps everywhere but the Springs; see steam.ts.
   const steam = useMemo(() => createSteamPoints(SEED), [])
+  // Mist patches (2026-08-09) — the lying mist plus the presence standing in it; see mist-pass.ts.
+  // Sleeps everywhere but inside a patch's reach, the same way steam sleeps outside the Springs.
+  const mist = useMemo(() => createMistPass(SEED), [])
   // Ground cover (2026-08-08) — flora.ts selects, the live-voxel probe verifies, four draws total.
   const flora = useMemo(() => createFloraRenderer(), [])
   /** Set whenever loaded ground changes (adopt, edit, evict); the frame loop syncs once quiet. */
@@ -1394,8 +1427,9 @@ function World({ inv, toolTier, toolSkill, selItem, weaponDrawn, weaponIdx, onAm
     tiles?.texture.dispose()
     greg.dispose()
     steam.dispose()
+    mist.dispose()
     flora.dispose()
-  }, [dropGeo, highlightGeo, flatMaterial, textured, tiles, pieces, greg, steam, flora])
+  }, [dropGeo, highlightGeo, flatMaterial, textured, tiles, pieces, greg, steam, mist, flora])
 
   // ★ A LOST WEBGL CONTEXT MUST SAY SO. Chrome blocks a page that loses its context repeatedly, and
   // the result is a black canvas with the HUD still drawn on top — indistinguishable from a
@@ -1722,6 +1756,7 @@ function World({ inv, toolTier, toolSkill, selItem, weaponDrawn, weaponIdx, onAm
     if (!g) return
     const p = camera.position
     steam.tick(p.x, p.y, p.z, dt, state.clock.elapsedTime)
+    mist.tick(p.x, p.y, p.z, dt, state.clock.elapsedTime)
     flora.tick(state.clock.elapsedTime)
     const cx = Math.floor(p.x / SECTION), cz = Math.floor(p.z / SECTION)
 
@@ -2377,6 +2412,8 @@ function World({ inv, toolTier, toolSkill, selItem, weaponDrawn, weaponIdx, onAm
       <primitive object={pieces.group} />
       <primitive object={greg.group} />
       <primitive object={steam.points} />
+      <primitive object={mist.points} />
+      <primitive object={mist.residents} />
       <primitive object={flora.group} />
       {/* ⚠ Memoised. Inline `args={[new THREE.BoxGeometry(...)]}` builds a fresh geometry on EVERY
           React render and leaks the previous one — same family as the per-drop material that got
