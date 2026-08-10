@@ -27,7 +27,7 @@ import { createMeshScratch } from '../voxel/greedy'
 import { columnHeight, holdPadLevel } from '../voxel/height'
 import { holdGenPiecesForCol, type GenPiece } from '../voxel/holds'
 import { biomeAt, forestness } from '../voxel/biome'
-import { ZONE_ANCHORS } from '../voxel/zones'
+import { ZONE_ANCHORS, zoneAt } from '../voxel/zones'
 import { AIR } from '../voxel/section'
 import { materialAt, MAT, DEFAULT_DEPTH } from '../voxel/depth'
 import { raycast, tickBreak, dropsFor, type BreakState } from '../voxel/mine'
@@ -92,7 +92,7 @@ import { createGregMesh } from './greg'
 import { createSteamPoints } from './steam'
 import { createMistPass } from './mist-pass'
 import { mistAt, mistPatchesNear, type MistPatch } from '../voxel/mist'
-import { loadMistLedger, saveMistLedger, recordWithdrawal, type MistLedger, type Resident } from './mist-encounter'
+import { loadMistLedger, saveMistLedger, recordWithdrawal, residentAt, quietMinutes, type MistLedger, type Resident, type ResidentForm } from './mist-encounter'
 import { applySparPayout, sparLedgerLines } from './spar-reward'
 import ArenaBattle from '../components/ArenaBattle'
 import { createSpirit, speciesDisplayName, type Spirit } from '../spirits/spirit'
@@ -196,6 +196,9 @@ interface ConsoleCtx {
     heal: () => string
     clear: () => string
   }
+  /** The withdrawal ledger, so `/mist` can name who is standing in a patch rather than only where
+   *  it lies. View-grade: it reports what walking there would show you anyway, one scale further. */
+  mistLedger: () => MistLedger
 }
 const NAMED_HOURS: Record<string, number> = { midnight: 0, dawn: 6.5, noon: 12, dusk: 18.75, night: 21 }
 /** `~` / `~-5` → relative to `cur`; anything else parses as absolute. NaN propagates for the caller. */
@@ -272,7 +275,19 @@ const CONSOLE_CMDS: ConsoleCmd[] = [
         if (!c.isOwner) return `nearest: ${bearing(found[0].x - p.x, found[0].z - p.z)} — teleport is keeper-of-the-realm only`
         return c.tp(found[0].x, found[0].z)
       }
-      return found.slice(0, 5).map(m => `mist patch      ${bearing(m.x - p.x, m.z - p.z)}`).join('\n')
+      // ★ Names who answers and at what level, because a patch's strength is a property of its
+      // region now and a band nobody can read is a band that reads as an ambush. Same view-grade
+      // line the prompt draws in the world, at compass range: choosing which mist to walk to IS
+      // the difficulty choice, so the compass has to carry the number.
+      const ledger = c.mistLedger()
+      const now = Date.now()
+      return found.slice(0, 5).map(m => {
+        const r = residentAt(m, zoneAt(m.x, m.z, SEED).zone?.id, ledger, now)
+        const who = r
+          ? `${r.name} lv ${r.level}${r.second ? ` + ${r.second.name} lv ${r.second.level}` : ''}`
+          : quietMinutes(ledger, m, now) > 0 ? `quiet ${quietMinutes(ledger, m, now)}m` : 'no answer'
+        return `mist patch      ${bearing(m.x - p.x, m.z - p.z)}      ${who}`
+      }).join('\n')
     },
     suggest: () => ['go'] },
   // ★ /party (2026-08-09) — the mist spar refuses to start without spirits, by design and by canon
@@ -569,6 +584,7 @@ export default function VoxelWorld() {
     tp: (x, z) => worldCmd.current ? worldCmd.current.tp(x, z) : 'the world is still waking',
     pos: () => worldCmd.current ? worldCmd.current.pos() : { x: 0, z: 0 },
     party: partyOps,
+    mistLedger: () => mistLedger.current,
   }), [isOwner, settings.viewRadius, update, refreshHotbar, partyOps])
   const submitLine = useCallback((raw: string) => {
     const line = raw.trim()
@@ -629,20 +645,26 @@ export default function VoxelWorld() {
   }, [])
 
   /**
-   * Begin a spar with the presence in front of you. The enemy is built at the party's own level —
-   * a wild spirit answering its own ground has no reason to be a wall or a pushover, and a spar
-   * whose whole point is practice should be worth practising against.
+   * Begin a spar with the presence in front of you.
+   *
+   * ★ THE ENEMY'S LEVEL COMES FROM THE GROUND, NOT FROM YOU. This used to build the resident at the
+   * party's own average, which is the player-relative model `engine/encounters.ts` deleted on
+   * 2026-07-23 — see mist-difficulty.ts for the full argument. Every number below is already
+   * decided by `residentAt`, so the fight that mounts is the exact fight the prompt described.
    */
   const startSpar = useCallback((r: Resident) => {
     const roster = party.current.filter(s => (s.hpFrac ?? 1) > 0).slice(0, 4)
     if (!roster.length) return
-    const avg = Math.max(1, Math.round(roster.reduce((s, a) => s + a.level, 0) / roster.length))
-    const wild = createSpirit(r.species, r.name, 0, 0)
-    wild.level = avg
-    wild.element = r.element
-    wild.seeds = Array.from({ length: 6 }, () => Math.floor(Math.random() * 32))
+    const manifest = (f: ResidentForm) => {
+      const wild = createSpirit(f.species, f.name, 0, 0)
+      wild.level = f.level
+      wild.element = f.element
+      wild.seeds = Array.from({ length: 6 }, () => Math.floor(Math.random() * 32))
+      return wild
+    }
+    const enemies = [manifest(r), ...(r.second ? [manifest(r.second)] : [])]
     openCursorUI()
-    setSpar({ allies: roster, enemies: [wild], patch: r.patch, name: r.name })
+    setSpar({ allies: roster, enemies, patch: r.patch, name: r.name })
   }, [openCursorUI])
 
   /**
@@ -1086,12 +1108,22 @@ function Hud({ stats, pos, look, hotbar, sel, tier, build, pieceIdx, rot, inv, s
       {/* ★ The presence names itself before you commit — the whole consent design. You are told
           WHICH spirit answered this ground and can walk away. A keeper with no spirits is told the
           truth rather than being given a dead key: canon's own order is that Greg's seed sleeps a
-          while yet, so watching is the only thing to do here and the line says so. */}
+          while yet, so watching is the only thing to do here and the line says so.
+          ★ THE LEVEL IS PART OF THAT SENTENCE, not decoration. A patch's strength is a property of
+          the region now (mist-difficulty.ts), so mist you cannot yet take exists on purpose — and
+          an absolute band is only readable if it is actually READ to you. Printing it is what makes
+          "come back when you are stronger" a choice instead of an ambush; it is also the whole
+          reason the pair needs no party-size floor. */}
       {!nearGreg && !nearTable && nearMist && (
         <div className="absolute left-1/2 top-[63%] -translate-x-1/2 text-center pointer-events-none">
           <div className="text-[13px] font-mono tracking-[.18em] uppercase" style={{ color: MIST_PROMPT[nearMist.element] }}>
-            {nearMist.name}
+            {nearMist.name} <span className="text-white/70 tabular-nums">lv {nearMist.level}</span>
           </div>
+          {nearMist.second && (
+            <div className="text-[12px] font-mono tracking-[.16em] uppercase" style={{ color: MIST_PROMPT[nearMist.second.element] }}>
+              {nearMist.second.name} <span className="text-white/70 tabular-nums">lv {nearMist.second.level}</span>
+            </div>
+          )}
           <div className="mt-1 text-[11px] font-mono tracking-wide text-white/85">
             {hasParty ? 'E — spar' : 'it waits for a spirit you do not have yet'}
           </div>

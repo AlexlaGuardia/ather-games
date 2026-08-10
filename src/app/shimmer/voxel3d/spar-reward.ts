@@ -57,9 +57,10 @@ export function sparXp(allyLevels: number[], enemyLevels: number[], outcome: Spa
   if (!allyLevels.length || !enemyLevels.length) return 0
   const avgAlly = Math.max(1, allyLevels.reduce((s, l) => s + l, 0) / allyLevels.length)
   // Scales with the level RELATION, not the raw level: punching up pays up to 2×, stomping something
-  // far below you pays a quarter. Today a resident is built at the party's own average so this
-  // always resolves to 1× — it is here because the resident difficulty curve is still open, and a
-  // curve landing on a payout with no relation term would silently pay the same for everything.
+  // far below you pays a quarter. ★ LIVE SINCE 2026-08-10 — a resident's level is the REGION's now,
+  // not the party's average (mist-difficulty.ts), so this term finally does something: walking out
+  // to stiffer mist pays for it, and farming the gentlest patch you can reach decays toward the
+  // floor. That is the whole reward for progress the absolute-band doctrine exists to protect.
   const raw = enemyLevels.reduce((s, lv) => {
     const diff = Math.min(2, Math.max(0.25, lv / avgAlly))
     return s + xpForLevel(avgAlly) * SPAR_XP_FRAC * diff

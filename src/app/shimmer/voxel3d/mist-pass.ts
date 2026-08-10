@@ -262,17 +262,26 @@ void main() {
 
         // Residents: add what arrived, drop what left or withdrew. Meshes are cheap; the geometry
         // and the four materials they share are not, and are built once above.
-        const want = new Map(present.map(r => [keyOf(r.patch), r]))
+        // ★ A PAIR SHOWS AS TWO. The prompt names both before you press E, and a silhouette count
+        // that disagreed with it would undo the consent design at the only moment it matters —
+        // you would walk up to one shape and find two in the arena. Keyed `<patch>` and `<patch>:2`
+        // so the second is added and dropped by exactly the same diff as the first.
+        const want = new Map<string, { r: Resident; form: { element: Resident['element'] }; off: number }>()
+        for (const r of present) {
+          want.set(keyOf(r.patch), { r, form: r, off: r.second ? -1.4 : 0 })
+          if (r.second) want.set(`${keyOf(r.patch)}:2`, { r, form: r.second, off: 1.4 })
+        }
         for (const [k, m] of live) {
           if (want.has(k)) continue
           residents.remove(m)
           live.delete(k)
         }
-        for (const [k, r] of want) {
+        for (const [k, w] of want) {
           if (live.has(k)) continue
-          const m = new THREE.Mesh(residentGeo, residentMats[r.element])
-          // Stands ON the spar floor, at the heart — the patch's own reference point.
-          m.position.set(r.patch.x, r.patch.floor + 1, r.patch.z)
+          const m = new THREE.Mesh(residentGeo, residentMats[w.form.element])
+          // Stands ON the spar floor, at the heart — the patch's own reference point. A pair steps
+          // apart across it so neither is hidden inside the other.
+          m.position.set(w.r.patch.x + w.off, w.r.patch.floor + 1, w.r.patch.z)
           m.frustumCulled = false
           residents.add(m)
           live.set(k, m)

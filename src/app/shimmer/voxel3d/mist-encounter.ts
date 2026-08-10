@@ -19,6 +19,7 @@
 import type { Species } from '../spirits/spirit'
 import type { MistPatch } from '../voxel/mist'
 import { residentFor, residentName, rosterFor, SPECIES_AFFINITY, type ZoneId } from './mist-roster'
+import { answersInPair, residentLevel, secondLevel } from './mist-difficulty'
 
 /** How long a sparred patch stays quiet before its mist gathers a new presence. */
 export const WITHDRAW_MS = 10 * 60 * 1000
@@ -47,27 +48,66 @@ export function saveMistLedger(seed: number, l: MistLedger): void {
   try { localStorage.setItem(key(seed), JSON.stringify(l)) } catch { /* private mode: run unpersisted */ }
 }
 
-export interface Resident {
-  patch: MistPatch
+/** One manifested spirit — what the ground called, and how strongly. */
+export interface ResidentForm {
   species: Species
   /** The canon display name — never the species code (the Native-World Law). */
   name: string
   element: 'mana' | 'storm' | 'earth' | 'water'
+  /** Absolute, from the region's own band — never the party's average. See mist-difficulty.ts. */
+  level: number
+}
+
+export interface Resident extends ResidentForm {
+  patch: MistPatch
+  /**
+   * The second spirit that answered this gathering, or null. Decided by the GROUND alone — there is
+   * no party-size gate, deliberately (mist-difficulty.ts says why). It is exposed on the resident
+   * rather than conjured at spar time so the presence you see and the prompt you read describe the
+   * fight you are about to take: a pair renders as two silhouettes and says so before you press E.
+   */
+  second: ResidentForm | null
 }
 
 /**
- * Who stands in this patch right now, or null — either because the zone calls nothing (an unruled
- * zone fails closed) or because the patch is still quiet after a spar.
+ * Who stands in this patch right now, or null — because the zone calls nothing (an unruled zone or
+ * an unbanded one both fail closed), or because the patch is still quiet after a spar.
  */
 export function residentAt(
   patch: MistPatch, zone: ZoneId | null | undefined, ledger: MistLedger, now: number,
 ): Resident | null {
-  if (!rosterFor(zone).length) return null
+  const roster = rosterFor(zone)
+  if (!roster.length) return null
   const e = ledger[patchKey(patch)]
   if (e && now < e.until) return null                 // withdrawn — the mist has not gathered yet
-  const species = residentFor(patch, zone, e?.n ?? 0)
-  if (!species) return null
-  return { patch, species, name: residentName(species), element: SPECIES_AFFINITY[species] }
+  const n = e?.n ?? 0
+  const species = residentFor(patch, zone, n)
+  const level = residentLevel(patch, zone, n)
+  if (!species || level === null) return null         // no band is as final as no roster
+  const lead = { species, name: residentName(species), element: SPECIES_AFFINITY[species], level }
+  return { patch, ...lead, second: secondForm(patch, zone, roster, lead, n) }
+}
+
+/**
+ * The other one, when the ground calls a pair. Drawn from the SAME roster with a nonce of its own
+ * and stepped past the lead's species, so a pair reads as two kinds answering one gathering rather
+ * than a spirit and its copy — a roster of one can therefore never pair, which is also what
+ * `answersInPair` refuses up front.
+ */
+function secondForm(
+  patch: MistPatch, zone: ZoneId | null | undefined, roster: readonly Species[],
+  lead: ResidentForm, nonce: number,
+): ResidentForm | null {
+  if (!answersInPair(patch, zone, nonce)) return null
+  const alt = residentFor(patch, zone, nonce + 7919)
+  if (!alt) return null
+  const species = alt === lead.species ? roster[(roster.indexOf(alt) + 1) % roster.length] : alt
+  return {
+    species,
+    name: residentName(species),
+    element: SPECIES_AFFINITY[species],
+    level: secondLevel(patch, zone, lead.level, nonce),
+  }
 }
 
 /**
