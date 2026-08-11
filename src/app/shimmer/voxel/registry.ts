@@ -21,7 +21,7 @@
 import { MAT, HALF_BIT, TOP_BIT } from './depth'
 
 /** Chance a broken tuft yields a wind-borne Mana Seed. See the grass entries below before dialing. */
-export const MANA_SEED_CHANCE = 1 / 1_000_000
+export const MANA_SEED_CHANCE = 1 / 2_500
 import { ORE } from './ore'
 import { WOOD } from './trees'
 import { AIR } from './section'
@@ -131,10 +131,11 @@ export const BLOCKS: BlockDef[] = [
   // this needed no ruling. A seed pays out a SPIRIT, which is why the rate has to stay mythic:
   // the moment grass is a reliable source, Greg's gift stops being the start of the game.
   //
-  // ⚠ MANA_SEED_CHANCE IS ALEX'S STATED NUMBER AND IT IS EFFECTIVELY NEVER. At one tuft per second
-  // of continuous breaking it is ~11.6 DAYS for an even chance; at a few hundred tufts a session it
-  // is one find per few thousand sessions. `mana-seed.test.ts` proves the drop is wired regardless,
-  // so this is a dial, not a leap of faith — 1/2500 lands a find every several sessions.
+  // ⚠ THE RATE IS THE WHOLE BALANCE OF THIS DROP. 1/2500 (Alex, 2026-08-11) is roughly one find
+  // every several sessions at a few hundred tufts a session — rare enough to be a story, common
+  // enough to exist. It was briefly 1/1,000,000, which measured out at ~11.6 DAYS of continuous
+  // breaking for an even chance: a drop no player would ever meet. `mana-seed.test.ts` proves the
+  // roll is wired at ANY rate, so this stays a dial rather than a leap of faith.
   { material: MAT.TUFT, name: 'Grass Tuft', hardness: 0.05, skill: null, minTier: 0, drops: [{ itemId: 'grass_tuft', count: 1 }, { itemId: 'mana_seed', count: 1, chance: MANA_SEED_CHANCE }], fastSkill: 'farming', placeable: true },
   { material: MAT.TALL_GRASS, name: 'Tall Grass', hardness: 0.05, skill: null, minTier: 0, drops: [{ itemId: 'tall_grass', count: 1 }, { itemId: 'mana_seed', count: 1, chance: MANA_SEED_CHANCE }], fastSkill: 'farming', placeable: true },
   { material: MAT.FLOWER, name: 'Wildflower', hardness: 0.05, skill: null, minTier: 0, drops: [{ itemId: 'wild_flower', count: 1 }], fastSkill: 'farming', placeable: true },
