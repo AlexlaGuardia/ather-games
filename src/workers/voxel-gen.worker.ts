@@ -94,8 +94,17 @@ self.onmessage = (e: MessageEvent) => {
     // away from and re-requests them on return; a request answered with a bare `done` (the old
     // cached-column path) left that chunk a PERMANENT hole — re-request was blocked by the
     // `requested` set, so nothing ever asked again. Repacking a cached column is ~64KB, trivial.
-    const voxels = packVoxels(cols.get(k)!)
-    ;(self as unknown as Worker).postMessage({ type: 'column', cx, cz, voxels }, [voxels.buffer])
+    const col = cols.get(k)!
+    const voxels = packVoxels(col)
+    // ★ THE STAGE OVERRIDES TRAVEL WITH THE VOXELS. They are derived during generation (carving,
+    // ore, trees, ruins, waystones) and CANNOT be recomputed on the main thread without re-running
+    // those stages — and the save's diff is wrong without them: chopping a tree would record
+    // nothing and the tree would be back on reload. Sparse, so this is a few KB, not another 131.
+    const ov = col.overrides ?? new Map<number, number>()
+    const oIdx = new Uint32Array(ov.size), oMat = new Uint16Array(ov.size)
+    { let i = 0; for (const [k2, v] of ov) { oIdx[i] = k2; oMat[i] = v; i++ } }
+    ;(self as unknown as Worker).postMessage({ type: 'column', cx, cz, voxels, oIdx, oMat },
+      [voxels.buffer, oIdx.buffer, oMat.buffer])
     // ★ GENERATION ONLY — meshing stays on the main thread, deliberately.
     // The main thread must own Columns anyway: mining edits a voxel and immediately re-meshes, and
     // shipping a column across the boundary per edit would cost more than it saves. So the worker

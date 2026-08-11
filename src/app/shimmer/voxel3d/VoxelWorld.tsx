@@ -21,7 +21,7 @@ import { useRef, useMemo, useState, useEffect, useCallback } from 'react'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { PointerLockControls } from '@react-three/drei'
 import * as THREE from 'three'
-import { SECTION, DEFAULT_COLUMN, Column, Stage, makeColumn, meshColumn, refreshUniform, isHalfCell, generatedAt } from '../voxel/column'
+import { SECTION, DEFAULT_COLUMN, Column, Stage, makeColumn, meshColumn, refreshUniform, isHalfCell, generatedVoxel } from '../voxel/column'
 import { VOXEL_WORKER_URL } from '../../../workers/worker-url'
 import { createMeshScratch } from '../voxel/greedy'
 import { columnHeight, holdPadLevel } from '../voxel/height'
@@ -397,7 +397,7 @@ export default function VoxelWorld() {
     setSettings(prev => { const next = { ...prev, ...patch }; saveSettings(next); return next })
   }, [])
   const worker = useRef<Worker | null>(null)
-  const incoming = useRef<{ cx: number; cz: number; voxels: Uint16Array }[]>([])
+  const incoming = useRef<{ cx: number; cz: number; voxels: Uint16Array; oIdx?: Uint32Array; oMat?: Uint16Array }[]>([])
   const inflight = useRef(0)
 
   useEffect(() => {
@@ -408,7 +408,7 @@ export default function VoxelWorld() {
     // as "the worker never answered".
     w.onmessage = (e) => {
       const m = e.data
-      if (m.type === 'column') incoming.current.push({ cx: m.cx, cz: m.cz, voxels: m.voxels })
+      if (m.type === 'column') incoming.current.push({ cx: m.cx, cz: m.cz, voxels: m.voxels, oIdx: m.oIdx, oMat: m.oMat })
       else if (m.type === 'done') inflight.current = Math.max(0, inflight.current - 1)
     }
     w.onerror = (ev) => { setStats(`worker error: ${ev.message} — falling back to main thread`); worker.current = null }
@@ -1411,7 +1411,7 @@ function World({ inv, toolTier, toolSkill, selItem, weaponDrawn, weaponIdx, onAm
   onLook: (l: { name: string; progress: number; refused: boolean } | null) => void
   onInvChange: () => void
   worker: React.RefObject<Worker | null>
-  incoming: React.RefObject<{ cx: number; cz: number; voxels: Uint16Array }[]>
+  incoming: React.RefObject<{ cx: number; cz: number; voxels: Uint16Array; oIdx?: Uint32Array; oMat?: Uint16Array }[]>
   inflight: React.RefObject<number>
   settings: VoxelSettings
   build: boolean
@@ -1892,7 +1892,7 @@ function World({ inv, toolTier, toolSkill, selItem, weaponDrawn, weaponIdx, onAm
     // kept a pristine copy of the column around.
     // ★ `generatedAt`, NOT `materialAt` — it knows about ground cover. Ask materialAt here and
     // picking a flower compares AIR against AIR, stores no edit, and the flower is back on reload.
-    const generated = generatedAt(wx, wy, wz, SEED, c.heightAt(lx, lz))
+    const generated = generatedVoxel(c, lx, wy, lz, SEED)
     let e = edits.current.get(k)
     if (!e) { e = new Map(); edits.current.set(k, e) }
     recordEdit(e, editIndex(lx, wy, lz), mat, generated)
@@ -2253,7 +2253,7 @@ function World({ inv, toolTier, toolSkill, selItem, weaponDrawn, weaponIdx, onAm
     const t0 = performance.now()
     let adopted = 0
     while (incoming.current!.length && adopted < 2) {
-      const { cx: gx, cz: gz, voxels } = incoming.current!.shift()!
+      const { cx: gx, cz: gz, voxels, oIdx, oMat } = incoming.current!.shift()!
       const col = new Column(gx * SECTION, gz * SECTION)
       const per = SECTION * SECTION * SECTION
       for (let i = 0; i < col.sections.length; i++) col.sections[i].data.set(voxels.subarray(i * per, (i + 1) * per))
@@ -2266,6 +2266,14 @@ function World({ inv, toolTier, toolSkill, selItem, weaponDrawn, weaponIdx, onAm
       const derived = slumpMask(gx * SECTION, gz * SECTION, SECTION, SEED, (x, z) => columnHeight(x, z, SEED))
       col.surface.set(derived.surface)
       col.slump.set(derived.mask)
+      // Stage overrides come FROM the worker — they are a product of generation (carving, ore,
+      // trees, ruins) and cannot be recovered here. Without them the save's diff compares a chopped
+      // trunk against AIR, stores nothing, and the tree is standing again next time you load.
+      if (oIdx && oMat) {
+        const m2 = new Map<number, number>()
+        for (let i = 0; i < oIdx.length; i++) m2.set(oIdx[i], oMat[i])
+        col.overrides = m2
+      }
       // ★ Apply any stored edits OVER freshly generated terrain — the diff is the save.
       // Edits arrive asynchronously from IndexedDB, so a column may mesh once procedurally and then
       // again once its edits land. That is deliberate: blocking the world on a database read would

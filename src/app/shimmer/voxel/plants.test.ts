@@ -14,14 +14,15 @@
 //   · a placeable block's drops reverse uniquely (`BY_ITEM` maps every drop of every placeable
 //     block, so two plants sharing one item id silently steal each other's).
 
-import { generatedAt, makeColumn, meshColumn, SECTION } from './column'
+import { generatedAt, generatedVoxel, makeColumn, meshColumn, SECTION } from './column'
 import { columnHeight } from './height'
 import { materialAt, MAT, isPlant, PLANT_MIN, PLANT_MAX } from './depth'
 import { plantMaterialAt, plantVariant, FLORA } from './flora'
 import { BLOCKS, blockDef, materialForItem } from './registry'
 import { dropsFor } from './mine'
-import { recordEdit } from './edits'
+import { recordEdit, editIndex } from './edits'
 import { ZONE_ANCHORS } from './zones'
+import { WOOD } from './trees'
 import { AIR } from './section'
 
 let pass = 0
@@ -147,6 +148,60 @@ const garden = ZONE_ANCHORS.find(a => a.id === 'garden')!
   ok(v >= 0 && v < 1, 'a player-placed plant still gets a variant')
   ok(plantMaterialAt(wx, wz, SEED) === 0 || isPlant(plantMaterialAt(wx, wz, SEED)),
     'plantMaterialAt returns a plant or nothing')
+}
+
+// ── 7. ★ THE CHOP STICKS TOO — stage writes are in the diff (2026-08-11) ────────────────────────
+// Same bug as the pick, one layer out. Trees, ruins, ore and carved tunnels are written by stages
+// AFTER the depth rule, so `materialAt` reports AIR at a trunk cell: measured before the fix,
+// 99.9% of tree and leaf voxels in the Thicket compared against AIR, meaning a chopped tree
+// recorded NO edit and stood again on reload. `Column.overrides` is what closes that.
+{
+  const thicket = ZONE_ANCHORS.find(a => a.id === 'twilight-thicket')!
+  const gx = Math.floor(thicket.x / SECTION) * SECTION, gz = Math.floor(thicket.z / SECTION) * SECTION
+  const woods = new Set<number>(Object.values(WOOD) as number[])
+  let logs = 0, lost = 0, carved = 0, carvedLost = 0
+  for (let cz = 0; cz < 3; cz++) for (let cx = 0; cx < 3; cx++) {
+    const col = makeColumn(gx + cx * SECTION, gz + cz * SECTION, SEED)
+    ok(col.overrides !== null, 'a generated column records its stage overrides')
+    for (let z = 0; z < SECTION; z++) for (let x = 0; x < SECTION; x++) {
+      const h = col.heightAt(x, z)
+      for (let y = h + 1; y < Math.min(h + 30, 250); y++) {
+        if (!woods.has(col.get(x, y, z))) continue
+        logs++
+        // Chop it, exactly as setVoxel would: diff against what the generator would have put.
+        const e = new Map<number, number>()
+        recordEdit(e, 1, AIR, generatedVoxel(col, x, y, z, SEED))
+        if (e.size === 0) lost++
+      }
+      // And the other direction: walling up a carved tunnel must survive too.
+      for (let y = 12; y < h - 2; y++) {
+        if (col.get(x, y, z) !== AIR) continue
+        carved++
+        const e = new Map<number, number>()
+        recordEdit(e, 1, MAT.STONE, generatedVoxel(col, x, y, z, SEED))
+        if (e.size === 0) carvedLost++
+      }
+    }
+  }
+  ok(logs > 200, `found real trees to chop (${logs})`)
+  ok(lost === 0, `★ chopping a tree RECORDS an edit — it stays chopped (${lost} lost of ${logs})`)
+  ok(carved > 50, `found carved cave air to wall up (${carved})`)
+  ok(carvedLost === 0, `★ walling a tunnel sticks too — carving is a stage as well (${carvedLost} lost)`)
+}
+
+// ── 8. the duplicated packed index must not drift ───────────────────────────────────────────────
+// column.ts inlines `editIndex` rather than importing it (edits.ts already imports column.ts, and
+// the reverse edge would make that cycle bidirectional). Duplication is only safe while checked.
+{
+  let bad = 0
+  for (const [x, y, z] of [[0, 0, 0], [15, 0, 15], [3, 77, 9], [15, 255, 15], [7, 128, 2]] as const) {
+    const col = makeColumn(0, 0, SEED)
+    // generatedVoxel looks the cell up by column.ts's own packing; edits.ts packs the same cell.
+    const viaEdits = editIndex(x, y, z)
+    const o = col.overrides!
+    if (o.has(viaEdits) && o.get(viaEdits) !== col.get(x, y, z)) bad++
+  }
+  ok(bad === 0, '★ column.ts and edits.ts pack a cell index identically')
 }
 
 console.log(`\nplants: ${pass} passed, ${fails.length} failed`)

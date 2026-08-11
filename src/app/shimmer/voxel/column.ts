@@ -91,6 +91,20 @@ export class Column {
   readonly slump: Uint8Array
   /** Memo for `halfSections` — see there. Not part of generation state. */
   halfSec: Uint8Array | null = null
+  /**
+   * ── ★ WHAT THE STAGES AFTER THE DEPTH RULE PUT HERE (2026-08-11) ──────────────────────────────
+   * Packed local index → material, for every cell where the finished column differs from the bare
+   * terrain fill: carved tunnels, ore, trunks, leaves, ruin walls, waystones. It exists because
+   * the save is a DIFF — `recordEdit` stores an edit only when the new material differs from the
+   * generated one — and `materialAt` cannot see any of those stages. Measured before this existed:
+   * 99.9% of tree and leaf voxels in the Thicket compared against AIR, so chopping a tree recorded
+   * NOTHING and the tree was whole again on reload.
+   *
+   * Sparse on purpose. A full pristine copy is 131KB per column, and the load ring reaches 625
+   * columns at max view radius — 82MB in a tab that already has an OOM history. The stages touch a
+   * few hundred cells per column, so this is a few KB and is thrown away with the column.
+   */
+  overrides: Map<number, number> | null = null
 
   constructor(wx: number, wz: number, cfg: ColumnConfig = DEFAULT_COLUMN) {
     this.wx = wx
@@ -224,6 +238,12 @@ export function generateColumn(
     col.stage = Stage.Terrain
   }
 
+  // Snapshot the bare terrain the moment it exists — this is exactly what `generatedAt` returns,
+  // so diffing the finished column against it yields the stage writes and nothing else. A plain
+  // typed-array compare: no noise is re-evaluated, which is what makes this affordable at all.
+  const bare = (col.stage === Stage.Terrain && upTo >= Stage.Ready && !col.overrides)
+    ? col.sections.map(sec => Uint16Array.from(sec.data)) : null
+
   if (col.stage < Stage.PreOre && upTo >= Stage.PreOre) {
     placeOre(col.sections, wx, 0, wz, cfg.chunk, seed, 'pre', cfg.ore)
     col.stage = Stage.PreOre
@@ -253,10 +273,47 @@ export function generateColumn(
   }
 
   if (col.stage < Stage.Ready && upTo >= Stage.Ready) {
+    if (bare) col.overrides = diffOverrides(col, bare)
     refreshUniform(col)
     col.stage = Stage.Ready
   }
   return col
+}
+
+/**
+ * Column-local packed index. ⚠ MUST match `edits.editIndex` — deliberately duplicated rather than
+ * imported, because `edits.ts` already imports this file and the reverse edge would make the cycle
+ * bidirectional. `plants.test.ts` asserts the two agree, so the duplication cannot drift silently.
+ */
+const packIndex = (x: number, y: number, z: number): number => (y * SECTION + z) * SECTION + x
+
+/** Cells where the finished column differs from its bare terrain fill. See `Column.overrides`. */
+function diffOverrides(col: Column, bare: Uint16Array[]): Map<number, number> {
+  const out = new Map<number, number>()
+  for (let i = 0; i < col.sections.length; i++) {
+    const now = col.sections[i].data, was = bare[i]
+    for (let j = 0; j < now.length; j++) {
+      if (now[j] === was[j]) continue
+      // Section-local j is (y*S + z)*S + x; editIndex wants the column-local y.
+      const y = ((j / (SECTION * SECTION)) | 0) + i * SECTION
+      const rest = j % (SECTION * SECTION)
+      out.set(packIndex(rest % SECTION, y, (rest / SECTION) | 0), now[j])
+    }
+  }
+  return out
+}
+
+/**
+ * ★ THE VALUE `recordEdit` MUST DIFF AGAINST — ask this, never `generatedAt` directly.
+ * Falls back to the depth rule wherever no stage wrote, which is almost everywhere.
+ */
+export function generatedVoxel(
+  col: Column, lx: number, y: number, lz: number, seed: number,
+  depthCfg: DepthConfig = DEFAULT_DEPTH, heightCfg: HeightConfig = DEFAULT_HEIGHT,
+): number {
+  const o = col.overrides?.get(packIndex(lx, y, lz))
+  if (o !== undefined) return o
+  return generatedAt(col.wx + lx, y, col.wz + lz, seed, col.heightAt(lx, lz), depthCfg, heightCfg)
 }
 
 /** Convenience: a fresh, fully generated column. */
