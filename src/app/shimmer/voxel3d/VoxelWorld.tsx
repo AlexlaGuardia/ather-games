@@ -1761,11 +1761,19 @@ function ToolSocket({ family, angleDeg, active, tools, skills }: {
       style={{
         left: `calc(var(--tool-arc-r) * ${cosm})`,
         bottom: `calc(var(--tool-arc-r) * ${sin})`,
-        opacity: active ? 1 : 0.4,
       }}
     >
+      {/* ★ THE DIM GOES ON THE CONTENT, NEVER ON THE PLATE (2026-08-11). This was one
+          `opacity: active ? 1 : 0.4` on the wrapper, which dimmed the socket's own backing along
+          with everything in it: `bg-black/45` × 0.4 is an 18% film, so over a lit grass field the
+          plate disappeared and four faint rings were left floating on the world. In the first
+          headless world shot Alex could not tell what they were — "an odd cluster of translucent
+          green shapes with number labels." The inactive state still has to read as inactive, but
+          "text never sits raw on a scene" outranks it: the plate stays opaque and the CONTENT
+          carries the state contrast. */}
       <div className={`relative w-full h-full rounded-full border
-        ${active ? 'border-amber-300/70 bg-black/60 shadow-[0_0_8px_2px_rgba(252,211,77,0.4)]' : 'border-white/20 bg-black/45'}`}>
+        ${active ? 'border-amber-300/80 bg-black/70 shadow-[0_0_8px_2px_rgba(252,211,77,0.4)]' : 'border-white/25 bg-black/60'}`}>
+        <div className={`absolute inset-0 transition-opacity ${active ? '' : 'opacity-65'}`}>
         {/* XP ring, rotated so 0% starts at 12 o'clock */}
         <svg viewBox="0 0 48 48" className="absolute inset-0 w-full h-full -rotate-90">
           <circle cx="24" cy="24" r={RING_R} fill="none" stroke="rgba(255,255,255,0.12)" strokeWidth="2" />
@@ -1794,6 +1802,7 @@ function ToolSocket({ family, angleDeg, active, tools, skills }: {
         <div className="absolute -bottom-1 -right-1 min-w-[15px] h-[15px] px-[3px] rounded-full bg-black/80 border border-white/25
           text-[9px] leading-[14px] text-center text-white/90 font-mono tabular-nums">
           {sk.level}
+        </div>
         </div>
       </div>
     </div>
