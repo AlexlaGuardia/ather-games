@@ -173,6 +173,20 @@ interface Slot { itemId: string; count: number }
 const TOOL_FAMILIES = ['forestry', 'prospecting', 'rinning', 'farming'] as const
 type HotbarEntry = { itemId: string; count: number }
 
+/**
+ * What to CALL an item on screen.
+ *
+ * Prefers the registry's block name ('Goldwood Planks') over the id ('goldwood_plank'), because the
+ * registry is where a designer already writes the player-facing name and a second list of pretty
+ * names is a second thing to forget. Falls back to de-snaking the id so a purely-crafted item with
+ * no block behind it — a shard, a seed — still reads as words rather than code.
+ */
+export function itemLabel(itemId: string): string {
+  const m = materialForItem(itemId)
+  const named = m !== undefined ? blockDef(m)?.name : undefined
+  return named ?? itemId.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
+}
+
 // ── ★ THE DEV CONSOLE (T) — commands over every aspect of the game (2026-08-08, Alex) ─────────
 // One registry, one runner. A command is a row here and a capability on `ConsoleCtx`; the day a
 // system exists (weather, seasons, spirits), its command is a five-line append — the console is
@@ -385,6 +399,24 @@ export default function VoxelWorld() {
   const [weaponIdx, setWeaponIdx] = useState(0)
   const [ammoUi, setAmmoUi] = useState(WEAPONS[0].clip)
   const [sel, setSel] = useState(0)
+  /**
+   * ── ★ SAY WHAT YOU ARE HOLDING (2026-08-11, Alex) ──────────────────────────────────────────
+   * The hotbar showed a colour swatch and a count and never once named the thing. `out` drives a
+   * fade rather than an unmount so the label does not pop out of existence mid-transition.
+   *
+   * ⚠ KEYED ON THE ITEM, NOT THE HOTBAR ARRAY. `refreshHotbar` rebuilds that array on every
+   * inventory change, so depending on it would re-announce the held item on every single block
+   * mined — a nameplate that flashes constantly while you work reads as a bug, not a help.
+   */
+  const [held, setHeld] = useState<{ text: string; out: boolean } | null>(null)
+  const heldItem = hotbar[sel]?.itemId
+  useEffect(() => {
+    if (!heldItem) { setHeld(null); return }
+    setHeld({ text: itemLabel(heldItem), out: false })
+    const fade = setTimeout(() => setHeld(h => (h ? { ...h, out: true } : h)), 1100)
+    const gone = setTimeout(() => setHeld(null), 1700)
+    return () => { clearTimeout(fade); clearTimeout(gone) }
+  }, [sel, heldItem])
   const [tier, setTier] = useState(1)
   // ★ BUILD MODE. Blocks build the shell (mine/place, already there); pieces dress it. Tab switches
   // which verb the mouse means, so the two halves never fight over a click.
@@ -952,7 +984,7 @@ export default function VoxelWorld() {
             a menu is up are already refused by the onCreated click handler. */}
         <PointerLockControls selector="#voxel3d-no-autolock" />
       </Canvas>
-      <Hud stats={stats} pos={pos} look={look} hotbar={hotbar} sel={sel} tier={tier}
+      <Hud stats={stats} pos={pos} look={look} hotbar={hotbar} sel={sel} tier={tier} held={held}
            build={build} pieceIdx={pieceIdx} rot={rot} inv={inv}
            skill={skillHud} levelUp={levelUp} crafted={crafted} tools={tools} skills={skills}
            activeTool={activeTool}
@@ -1034,10 +1066,11 @@ function Clock() {
   )
 }
 
-function Hud({ stats, pos, look, hotbar, sel, tier, build, pieceIdx, rot, inv, skill, levelUp, crafted, tools, skills, activeTool, isOwner, drawn, weaponIdx, ammoUi, tutorialStage, nearGreg, dialogueOpen, nearTable, craftOpen, nearMist, hasParty, sparLedger }: {
+function Hud({ stats, pos, look, hotbar, sel, tier, held, build, pieceIdx, rot, inv, skill, levelUp, crafted, tools, skills, activeTool, isOwner, drawn, weaponIdx, ammoUi, tutorialStage, nearGreg, dialogueOpen, nearTable, craftOpen, nearMist, hasParty, sparLedger }: {
   stats: string; pos: string
   look: { name: string; progress: number; refused: boolean } | null
   hotbar: HotbarEntry[]; sel: number; tier: number
+  held: { text: string; out: boolean } | null
   build: boolean; pieceIdx: number; rot: Rotation
   inv: React.RefObject<Inventory>
   skill: { id: string; level: number; xp: number; next: number } | null
@@ -1236,6 +1269,13 @@ function Hud({ stats, pos, look, hotbar, sel, tier, build, pieceIdx, rot, inv, s
           The inner div is `relative` so `ToolArc` can anchor itself to this bar's right edge with
           `left-full`, regardless of how much of the row is actually occupied. */}
       {!build && <div className={`absolute bottom-4 left-1/2 -translate-x-1/2 pointer-events-none transition-opacity ${drawn ? 'opacity-35' : 'opacity-100'}`}>
+        {/* The name of what you are holding, over the bar. Always rendered so the row never shifts
+            when it appears; a baked shadow because HUD text must never sit raw on the scene. */}
+        <div className={`mb-1.5 h-5 text-center text-[13px] font-medium tracking-[0.08em] text-amber-100
+          [text-shadow:0_1px_3px_rgba(0,0,0,0.9)] transition-opacity duration-500
+          ${held && !held.out ? 'opacity-100' : 'opacity-0'}`}>
+          {held?.text ?? ''}
+        </div>
         <div className="relative inline-flex items-end gap-1.5">
           {Array.from({ length: 8 }, (_, i) => {
             const e = hotbar[i]
