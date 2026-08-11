@@ -1659,12 +1659,32 @@ function BagPanel({ inv, chest, tick, sel, dragFrom, setDragFrom, onMove, onSpli
           <h2 className="font-medium uppercase tracking-[0.18em] text-amber-200/90 text-sm">
             {chest ? 'Chest' : 'Satchel'}
           </h2>
-          <span className="text-[11px] text-white/40">
-            {dragFrom === null
-              ? `click a stack to lift it · right-click lifts half${chest ? ' · shift-click sends it across' : ''} · I closes`
-              : dragFrom.half
-                ? 'click a slot to place half · right-click drops one at a time · click again to cancel'
-                : 'click a slot to place · right-click drops one at a time · click again to cancel'}
+          {/**
+            * ── ★ THE HINT RESERVES ITS OWN WIDEST WIDTH (2026-08-11, Alex: "the chest menu gets a
+            * little smaller") ────────────────────────────────────────────────────────────────────
+            * This panel is a shrink-to-fit flex item, so its width is the widest thing inside it —
+            * and that is this SENTENCE, not the grid of slots. Swapping in a shorter hint therefore
+            * resized the whole panel the instant you lifted a stack, moving every slot out from
+            * under the cursor mid-action. A menu that changes size while you are aiming at it is
+            * the interface flinching away from the click.
+            *
+            * So EVERY hint is always in the DOM, stacked in one grid cell; only the live one is
+            * visible. The container measures the longest, permanently, and no swap can move
+            * anything. `invisible` (not `hidden`) is the whole trick — it keeps the box.
+            *
+            * ★ Self-maintaining on purpose: a future hint cannot reintroduce the jump without also
+            * being in this list, because the list IS the layout. A hardcoded panel width would have
+            * fixed today's symptom and quietly rotted the first time a sentence grew.
+            */}
+          <span className="grid text-[11px] text-white/40">
+            {([
+              [`click a stack to lift it · right-click lifts half${chest ? ' · shift-click sends it across' : ''} · I closes`, dragFrom === null],
+              ['click a slot to place half · right-click drops one at a time · click again to cancel', dragFrom?.half === true],
+              ['click a slot to place · right-click drops one at a time · click again to cancel', dragFrom?.half === false],
+            ] as const).map(([text, live]) => (
+              <span key={text} style={{ gridArea: '1 / 1' }}
+                    className={live ? '' : 'invisible'} aria-hidden={!live}>{text}</span>
+            ))}
           </span>
         </div>
         {/* The chest's own grid, above the bag and separated by a rule — the same relationship the
