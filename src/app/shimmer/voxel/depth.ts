@@ -41,6 +41,27 @@ import { AIR } from './section'
 // hardness, dropped shards, and `isPlant` matched ore and logs all through the underground.
 // Nothing warned, because these enums are separate `const` objects that never see each other.
 // Check this map before adding any material anywhere.
+/**
+ * ── ★ HALF BLOCKS ARE A MATERIAL, NOT A SHAPE THE TERRAIN REMEMBERS (2026-08-11, Alex's ruling) ──
+ * A slab you can mine and place has to BE a block. The first cut made terrain lips full voxels that
+ * a per-column mask drew at half height, and the seam showed immediately in play: mining one gave a
+ * whole block, and placing ANY block into that cell — stone included — inherited the ground's shape.
+ * Half-ness rode the (x, z) column instead of the cell.
+ *
+ * So it is a bit on the material. Every consequence falls out instead of being arranged:
+ *   · the save is a material diff, so a slab persists with no extra machinery;
+ *   · `dropsFor` can hand back a slab item and placing it writes a slab back;
+ *   · the mesher tests a BIT inline rather than calling a predicate per cell — cheaper than the
+ *     strip-a-copy machinery it replaces (see greedy.ts on what a per-cell call costs there);
+ *   · any material can be a slab, so this is the general building block, not a terrain special case.
+ * Base ids must stay under 256. Uint16 sections leave plenty of room above the flag.
+ */
+export const HALF_BIT = 0x0100
+/** The full-block material behind a possibly-half one. Cheap: one mask. */
+export const baseOf = (m: number): number => m & 0xFF
+/** Is this cell a slab? One bit test — safe in a hot loop. */
+export const isHalfMat = (m: number): boolean => (m & HALF_BIT) !== 0
+
 export const PLANT_MIN = 24
 export const PLANT_MAX = 26
 /** Non-solid, non-opaque ground cover. Range test on purpose — this runs in the mesher's hot loop. */

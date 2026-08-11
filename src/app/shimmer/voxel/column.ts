@@ -27,7 +27,7 @@
 
 import { Section, AIR } from './section'
 import { columnHeight, type HeightConfig, DEFAULT_HEIGHT } from './height'
-import { materialAt, MAT, isPlant, type DepthConfig, DEFAULT_DEPTH } from './depth'
+import { materialAt, MAT, isPlant, isHalfMat, HALF_BIT, type DepthConfig, DEFAULT_DEPTH } from './depth'
 import { plantWaystones } from './story-path'
 import { carveStack, type CarveConfig, DEFAULT_CARVE } from './carve'
 import { placeOre, type OreBatch, ORE_BATCHES } from './ore'
@@ -89,8 +89,6 @@ export class Column {
    *  field alone, so it is NOT part of the save: a player edit changes the cell, never the mask,
    *  and `isHalfCell` reads both before it calls anything half. */
   readonly slump: Uint8Array
-  /** Memo for `halfSections` — see there. Not part of generation state. */
-  halfSec: Uint8Array | null = null
   /**
    * ── ★ WHAT THE STAGES AFTER THE DEPTH RULE PUT HERE (2026-08-11) ──────────────────────────────
    * Packed local index → material, for every cell where the finished column differs from the bare
@@ -105,12 +103,6 @@ export class Column {
    * few hundred cells per column, so this is a few KB and is thrown away with the column.
    */
   overrides: Map<number, number> | null = null
-  /**
-   * This column's live player edits (packed index → material), or null. A REFERENCE to the map the
-   * host owns, not a copy — see `isHalfCell` for the one thing it is read for.
-   * ⚠ Typed inline rather than importing `ColumnEdits`, because edits.ts already imports this file.
-   */
-  edits: Map<number, number> | null = null
 
   constructor(wx: number, wz: number, cfg: ColumnConfig = DEFAULT_COLUMN) {
     this.wx = wx
@@ -172,51 +164,14 @@ export function generatedAt(
  *     business being a step.
  */
 export function isHalfCell(col: Column, lx: number, y: number, lz: number): boolean {
-  const i = lz * SECTION + lx
-  if (!col.slump[i]) return false
-  if (y !== col.surface[i]) return false
-  // ── ★ SLUMP DESCRIBES UNTOUCHED TERRAIN (2026-08-11, Alex found it) ──────────────────────────
-  // A lip is a shape the GENERATOR gave the ground, not a property of whatever material happens to
-  // sit in the cell. Without this, half-ness belonged to the (x, z) column and survived any edit:
-  // mine the lip and you collect a whole block, put STONE back and the stone renders and collides
-  // at half height. An edit exists exactly while the cell differs from what the generator put
-  // there — `recordEdit` deletes it the moment you restore the original — so this one test both
-  // suppresses the lip when you build on it AND brings it back if you undo, with nothing to keep
-  // in sync. O(1); the mesher's ring loop calls this per cell.
-  if (col.edits?.has((y * SECTION + lz) * SECTION + lx)) return false
-  const s = (y / SECTION) | 0
-  if (s < 0 || s >= col.sections.length) return false
-  if (col.sections[s].get(lx, y - s * SECTION, lz) === AIR) return false
-  const up = ((y + 1) / SECTION) | 0
-  if (up >= col.sections.length) return true
-  // AIR *or ground cover*: a plant is non-solid and the renderer stands it on the ground top, so a
-  // tuft growing on a lip must not cancel the lip. Without this, slump would have silently died on
-  // the ~20% of tended ground that carries flora — a feature disabled by another feature.
-  const above = col.sections[up].get(lx, y + 1 - up * SECTION, lz)
-  return above === AIR || isPlant(above)
+  // ★ THE MATERIAL DECIDES NOW (2026-08-11, Alex: "the fix is to make half blocks an actual item").
+  // Kept as a helper because the renderer and the flora probe still ask the question, but it is a
+  // one-bit read of world state — not a rule about the column. Everything that used to make this
+  // fragile (a per-column mask consulted at render time, edits that had to suppress it) is gone:
+  // mine the slab and the cell is AIR, place stone and the cell holds stone.
+  return isHalfMat(col.get(lx, y, lz))
 }
 
-/**
- * Which of this column's sections can hold a half cell at all — 1 per section index, memoised.
- *
- * ★ THIS IS WHAT KEEPS SLUMP AFFORDABLE. Half cells live only at the surface, so at most one or
- * two of a column's 16 sections can contain one; the rest are sky or rock. Handing the mesher a
- * half callback for those 14 put a closure call in the sweep's innermost loop for nothing and
- * DOUBLED column mesh time (10.5ms → 22.2ms, measured the day slump shipped). Derived from
- * `surface` and `slump` alone, both of which are final before anything meshes, so the memo is safe.
- */
-export function halfSections(col: Column): Uint8Array {
-  if (col.halfSec) return col.halfSec
-  const n = col.sections.length
-  const out = new Uint8Array(n)
-  for (let i = 0; i < SECTION * SECTION; i++) {
-    if (!col.slump[i]) continue
-    const s = (col.surface[i] / SECTION) | 0
-    if (s >= 0 && s < n) out[s] = 1
-  }
-  col.halfSec = out
-  return out
-}
 
 /** Recompute the per-section uniform table. Cheap, and it is what makes tall worlds affordable. */
 export function refreshUniform(col: Column): void {
@@ -246,7 +201,10 @@ export function generateColumn(
         const h = col.surface[z * SECTION + x]
         for (let y = 0; y < cfg.worldHeight; y++) {
           const s = (y / SECTION) | 0
-          col.sections[s].set(x, y - s * SECTION, z, generatedAt(wx + x, y, wz + z, seed, h, cfg.depth, cfg.height))
+          let m = generatedAt(wx + x, y, wz + z, seed, h, cfg.depth, cfg.height)
+          // A slumping lip is written as a SLAB, not as a full block a mask will later draw short.
+          if (y === h && m !== AIR && col.slump[z * SECTION + x]) m |= HALF_BIT
+          col.sections[s].set(x, y - s * SECTION, z, m)
         }
       }
     }
@@ -284,6 +242,22 @@ export function generateColumn(
     // …except the waystones, which go after even the sites: the story road's lit posts are the
     // one generated thing nothing may bury (they hold the spawn gate's light veto over the road).
     plantWaystones(col.sections, wx, wz, SECTION, surfaceAt, cfg.depth.seaLevel, MAT.STONE, MAT.MANA_LANTERN)
+    // ★ NOTHING STANDS ON A SLAB. Trunks, ruin walls and waystones are placed after the terrain, so
+    // a lip can end up carrying one — and a trunk on a half block floats half a voxel. Water is
+    // excluded for the same reason the old rule demanded AIR: a submerged bed is not a step.
+    // Runs after the bare-terrain snapshot, so the diff records it as a stage write and
+    // `generatedVoxel` agrees with the world (that disagreement is what regrew chopped trees).
+    for (let z = 0; z < SECTION; z++) for (let x = 0; x < SECTION; x++) {
+      const h = col.surface[z * SECTION + x]
+      const s0 = (h / SECTION) | 0
+      const m = col.sections[s0].get(x, h - s0 * SECTION, z)
+      if (!isHalfMat(m)) continue
+      const s1 = ((h + 1) / SECTION) | 0
+      if (s1 >= col.sections.length) continue
+      const up = col.sections[s1].get(x, h + 1 - s1 * SECTION, z)
+      if (up === AIR || isPlant(up)) continue
+      col.sections[s0].set(x, h - s0 * SECTION, z, m & 0xFF)
+    }
     col.stage = Stage.Vegetation
   }
 
@@ -328,7 +302,11 @@ export function generatedVoxel(
 ): number {
   const o = col.overrides?.get(packIndex(lx, y, lz))
   if (o !== undefined) return o
-  return generatedAt(col.wx + lx, y, col.wz + lz, seed, col.heightAt(lx, lz), depthCfg, heightCfg)
+  const h = col.heightAt(lx, lz)
+  const m = generatedAt(col.wx + lx, y, col.wz + lz, seed, h, depthCfg, heightCfg)
+  // Same slab rule the terrain stage applies — one place, so the save's diff cannot disagree with
+  // what was generated (that disagreement is what made chopped trees regrow).
+  return (y === h && m !== AIR && col.slump[lz * SECTION + lx]) ? m | HALF_BIT : m
 }
 
 /** Convenience: a fresh, fully generated column. */
@@ -435,49 +413,47 @@ export function meshColumn(
     }
 
     // ── slump, and the cost of asking about it ───────────────────────────────────────────────
-    // A section needs a half callback only if IT or one of the four neighbour COLUMNS can hold a
-    // lip in this y band — a neighbour's half cell changes which faces we draw at the shared
-    // plane, so the ring is part of the test, not an optimisation away from it. Everything else
-    // gets `null`, which restores the mesher's original inner loop exactly.
-    // ⚠ THE Y RING IS PART OF THE TEST, NOT JUST THE X/Z ONE. A lip at the very top of section
-    // i-1 has AIR above it, i.e. in section i — and section i's own bottom plane is where that
-    // pair gets meshed. Ask only about section i and it draws a FULL-height cap over the lip.
-    const own = halfSections(col)
-    const sides = [neigh.negX, neigh.posX, neigh.negZ, neigh.posZ]
-    let anyHalf = own[i] === 1 || (i > 0 && own[i - 1] === 1) || (i < n - 1 && own[i + 1] === 1)
-    if (!anyHalf) for (const s of sides) if (s && halfSections(s)[i] === 1) { anyHalf = true; break }
-
-    // ★ STRIP THE LIPS OUT OF A COPY AND HAND THAT TO THE SWEEP. The mesher must not learn that
-    // slump exists — see the HalfCells contract in greedy.ts for the four measurements that
-    // settled this. One 8KB copy per surface section buys back the whole regression.
+    // ── slabs in this section, and in the one-cell ring around it ────────────────────────────
+    // ★ SCANNED FROM THE MATERIAL, never from the terrain's lip mask. The mask only knows where the
+    // GENERATOR put a slab; a player can place one anywhere, and gating on it drew those as full
+    // cubes. The scan is ~4k reads of a typed array per meshed section — a bit test, not the
+    // per-cell CALL that cost 3ms/column (see the HalfCells contract in greedy.ts).
+    //
+    // The lips still leave the sweep through a stripped COPY, for that same reason: the mesher's
+    // inner loop must never learn that half blocks exist.
     let half: HalfCells | null = null
     let meshSec = sec
-    if (anyHalf) {
-      half = new Map()
-      // The one-cell ring too: a lip at x = -1 belongs to the neighbour column, and the pass needs
-      // it to know whether our lip's side is covered. Ring entries are context, never drawn.
-      for (let z = -1; z <= SECTION; z++) {
-        for (let x = -1; x <= SECTION; x++) {
-          const inside = x >= 0 && x < SECTION && z >= 0 && z < SECTION
-          // Which column owns this footprint, and where in it — mirrors `raw`'s frontier rule:
-          // an ABSENT neighbour is opaque, and opaque ground is never a lip.
-          let src: Column | null | undefined = col, sx = x, sz = z
-          if (x < 0) { src = neigh.negX; sx = SECTION - 1 }
-          else if (x >= SECTION) { src = neigh.posX; sx = 0 }
-          else if (z < 0) { src = neigh.negZ; sz = SECTION - 1 }
-          else if (z >= SECTION) { src = neigh.posZ; sz = 0 }
-          if (!src) continue
-          const wy = src.surface[sz * SECTION + sx]
-          if (wy < oy - 1 || wy > oy + SECTION) continue
-          if (!isHalfCell(src, sx, wy, sz)) continue
-          half.set(halfKey(x, wy - oy, z, SECTION), src.get(sx, wy, sz))
-          if (inside && wy >= oy && wy < oy + SECTION) {
-            if (meshSec === sec) { strip.data.set(sec.data); meshSec = strip }
-            meshSec.set(x, wy - oy, z, AIR)
-          }
-        }
-      }
-      if (half.size === 0) half = null
+    const data = sec.data
+    for (let j = 0; j < data.length; j++) {
+      if (!isHalfMat(data[j])) continue
+      const ly = (j / (SECTION * SECTION)) | 0, rest = j % (SECTION * SECTION)
+      const lx = rest % SECTION, lz = (rest / SECTION) | 0
+      if (!half) half = new Map()
+      half.set(halfKey(lx, ly, lz, SECTION), data[j])
+      if (meshSec === sec) { strip.data.set(sec.data); meshSec = strip }
+      meshSec.set(lx, ly, lz, AIR)
+    }
+    // The ring is CONTEXT, never drawn: a slab needs to know whether the cell beside it — possibly
+    // in the next column, or the section above/below — covers its side. ⚠ The Y ring counts too: a
+    // slab at the top of section i-1 is meshed against section i's bottom plane, and without it the
+    // sweep caps that slab at full height. Mirrors `raw`: an absent neighbour is opaque.
+    const ringAt = (rx: number, ry: number, rz: number, src: Column | null | undefined,
+                    sx: number, wy: number, sz: number) => {
+      if (!src || wy < 0 || wy >= n * SECTION) return
+      const m = src.get(sx, wy, sz)
+      if (!isHalfMat(m)) return
+      if (!half) half = new Map()
+      half.set(halfKey(rx, ry, rz, SECTION), m)
+    }
+    for (let a = 0; a < SECTION; a++) for (let b = 0; b < SECTION; b++) {
+      ringAt(-1, b, a, neigh.negX, SECTION - 1, oy + b, a)
+      ringAt(SECTION, b, a, neigh.posX, 0, oy + b, a)
+      ringAt(a, b, -1, neigh.negZ, a, oy + b, SECTION - 1)
+      ringAt(a, b, SECTION, neigh.posZ, a, oy + b, 0)
+    }
+    for (let z = 0; z < SECTION; z++) for (let x = 0; x < SECTION; x++) {
+      ringAt(x, -1, z, col, x, oy - 1, z)
+      ringAt(x, SECTION, z, col, x, oy + SECTION, z)
     }
     // ⚠ THE VERTICAL NEIGHBOUR NEEDS STRIPPING TOO, and only the RARE path pays for it. A lip at
     // the top of section i-1 is read by section i's bottom plane through this closure, not through

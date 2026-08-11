@@ -30,7 +30,7 @@ import { holdGenPiecesForCol, type GenPiece } from '../voxel/holds'
 import { biomeAt, forestness } from '../voxel/biome'
 import { ZONE_ANCHORS, zoneAt } from '../voxel/zones'
 import { AIR } from '../voxel/section'
-import { materialAt, MAT, isPlant, DEFAULT_DEPTH } from '../voxel/depth'
+import { materialAt, MAT, isPlant, isHalfMat, baseOf, DEFAULT_DEPTH } from '../voxel/depth'
 import { FLORA, plantVariant } from '../voxel/flora'
 import { raycast, tickBreak, dropsFor, type BreakState } from '../voxel/mine'
 import { spawnDrop, tickDrops, type Drop } from '../voxel/drops'
@@ -1392,7 +1392,9 @@ function ToolGlyph({ family }: { family: 'forestry' | 'prospecting' | 'rinning' 
 // also pick up, not geometry. Everything downstream of `isSolid` (collision, the light field's
 // opacity, piece connection) inherits that from this one line.
 const SOLID_EXCEPT = new Set<number>([AIR, MAT.WATER, MAT.TUFT, MAT.TALL_GRASS, MAT.FLOWER])
-const isSolid = (m: number) => !SOLID_EXCEPT.has(m)
+// A slab is SOLID — it just occupies half the cell. Collision asks `solidProbe`, which reports
+// CELL_HALF for it; everything else (light, fence arms, piece placement) wants "yes, solid".
+const isSolid = (m: number) => !SOLID_EXCEPT.has(baseOf(m))
 
 function World({ inv, toolTier, toolSkill, selItem, weaponDrawn, weaponIdx, onAmmo, onStats, onPos, onLook, onInvChange, worker, incoming, inflight, settings, build, pieceIdx, rot, tools, skills, onSkill, onLevel, onTool, tutorial, onQuestEvent, onNearGreg, onNearTable, cmdOut, mistLedger, onNearMist, sparring }: {
   inv: React.RefObject<Inventory>
@@ -1895,7 +1897,6 @@ function World({ inv, toolTier, toolSkill, selItem, weaponDrawn, weaponIdx, onAm
     const generated = generatedVoxel(c, lx, wy, lz, SEED)
     let e = edits.current.get(k)
     if (!e) { e = new Map(); edits.current.set(k, e) }
-    c.edits = e
     recordEdit(e, editIndex(lx, wy, lz), mat, generated)
     dirtySaves.current.add(k)
 
@@ -1923,15 +1924,8 @@ function World({ inv, toolTier, toolSkill, selItem, weaponDrawn, weaponIdx, onAm
   const solidProbe = useCallback((x: number, y: number, z: number) => {
     const m = voxelSolid(x, y, z)
     if (m === MAT.WATER) return CELL_WATER
-    if (m === STRUCTURE_HALF) return CELL_HALF
+    if (m === STRUCTURE_HALF || isHalfMat(m)) return CELL_HALF
     if (!isSolid(m)) return CELL_EMPTY
-    // ★ TERRAIN SLUMP READS THROUGH THE SAME `isHalfCell` THE MESHER USES — a lip the walker
-    // treats as full is an invisible wall you vault; one the mesher draws full and the walker
-    // reads half is a floor you sink into. Only asked about solid cells, so the column lookup
-    // rides the miss that `voxelSolid` already paid for.
-    const cx = Math.floor(x / SECTION), cz = Math.floor(z / SECTION)
-    const c = cols.current.get(key(cx, cz))
-    if (c && isHalfCell(c, x - cx * SECTION, y, z - cz * SECTION)) return CELL_HALF
     return CELL_SOLID
   }, [voxelSolid])
 
@@ -2280,7 +2274,6 @@ function World({ inv, toolTier, toolSkill, selItem, weaponDrawn, weaponIdx, onAm
       // again once its edits land. That is deliberate: blocking the world on a database read would
       // stall streaming for the common case, which is a column with no edits at all.
       const ek = key(gx, gz)
-      col.edits = edits.current.get(ek) ?? null
       applyEdits(col, edits.current.get(ek))
       refreshUniform(col)
       col.stage = Stage.Ready
@@ -2297,7 +2290,6 @@ function World({ inv, toolTier, toolSkill, selItem, weaponDrawn, weaponIdx, onAm
           const m = unpackEdits(saved.edits)
           edits.current.set(ek, m)
           const c = cols.current.get(ek)
-          if (c) c.edits = m
           if (c && m.size) { applyEdits(c, m); refreshUniform(c); queueRemesh(gx, gz); flora.invalidate(ek); floraDirty.current = true }
           // Pieces come back with their blocks. Occupancy is NOT re-written here — it is already in
           // the block diff, because placing a piece wrote STRUCTURE through `setVoxel`, which is a

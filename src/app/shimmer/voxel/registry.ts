@@ -18,7 +18,7 @@
 // (`block_stone` etc.) are build-side placeholders for "the block itself in your hand" and are
 // marked TBD-CANON — if the Ather's stone and soil carry real names, those are Magii's.
 
-import { MAT } from './depth'
+import { MAT, HALF_BIT } from './depth'
 import { ORE } from './ore'
 import { WOOD } from './trees'
 import { AIR } from './section'
@@ -156,10 +156,26 @@ export const BLOCKS: BlockDef[] = [
   { material: WOOD.DAWNWOOD_LEAVES, name: 'Dawnwood Leaves', hardness: 0.25, skill: null, minTier: 0, drops: [], placeable: false },
 ]
 
-const BY_MATERIAL = new Map<number, BlockDef>(BLOCKS.map(b => [b.material, b]))
+/**
+ * ── ★ EVERY PLACEABLE BLOCK GETS A SLAB, DERIVED ─────────────────────────────────────────────────
+ * Written as a derivation rather than 20 more table rows so a new block cannot ship without its
+ * slab, and so a slab's name and drop id can never drift from the block it came from. A slab drops
+ * `<item>_slab` and that item places it back — the same round-trip `mine.test` asserts for blocks.
+ * Half the block, half the work to break it.
+ */
+const HALF_DEFS: BlockDef[] = BLOCKS.filter(b => b.placeable && b.drops.length > 0).map(b => ({
+  ...b,
+  material: b.material | HALF_BIT,
+  name: `${b.name} Slab`,
+  hardness: b.hardness / 2,
+  drops: [{ itemId: `${b.drops[0].itemId}_slab`, count: 1 }],
+}))
+
+const BY_MATERIAL = new Map<number, BlockDef>([...BLOCKS, ...HALF_DEFS].map(b => [b.material, b]))
 /** Reverse map so a placed block-item becomes the right voxel. */
 const BY_ITEM = new Map<string, number>(
-  BLOCKS.filter(b => b.placeable).flatMap(b => b.drops.map(d => [d.itemId, b.material] as [string, number])),
+  [...BLOCKS, ...HALF_DEFS].filter(b => b.placeable)
+    .flatMap(b => b.drops.map(d => [d.itemId, b.material] as [string, number])),
 )
 
 export const blockDef = (material: number): BlockDef | undefined => BY_MATERIAL.get(material)

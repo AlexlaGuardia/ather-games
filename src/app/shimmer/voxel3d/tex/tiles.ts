@@ -19,6 +19,7 @@ import { MAT } from '../../voxel/depth'
 import { ORE } from '../../voxel/ore'
 import { WOOD } from '../../voxel/trees'
 import { MATERIAL_COLOR } from '../attrs'
+import { baseOf } from '../../voxel/depth'
 
 export const TOP = 0
 export const SIDE = 1
@@ -60,8 +61,11 @@ const SLOT = (() => {
 })()
 
 /** Material + face → texture-array layer. Out-of-range or unmapped falls to the loud magenta layer. */
+// ⚠ A SLAB IS ITS BASE MATERIAL, texturally. Without the mask a half topsoil block is an unmapped
+// id and the ore artist's magenta fallback claims it — see the block below on that failure mode.
 export function layerOf(material: number, face: number): number {
-  const slot = material >= 0 && material < SLOT.length ? SLOT[material] : -1
+  const m = baseOf(material)
+  const slot = m >= 0 && m < SLOT.length ? SLOT[m] : -1
   return slot < 0 ? FALLBACK_LAYER : slot * 3 + face
 }
 

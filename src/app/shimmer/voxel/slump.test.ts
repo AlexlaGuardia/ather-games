@@ -18,8 +18,10 @@
 import { columnHeight } from './height'
 import { slumpStrength, slumpAllowed, isLip, slumpMask } from './slump'
 import { ZONE_ANCHORS } from './zones'
+import { blockDef, materialForItem } from './registry'
+import { dropsFor } from './mine'
 import { makeColumn, isHalfCell, meshColumn, SECTION } from './column'
-import { MAT, isPlant } from './depth'
+import { MAT, isPlant, isHalfMat, baseOf, HALF_BIT } from './depth'
 import { AIR } from './section'
 
 let pass = 0
@@ -233,49 +235,54 @@ const h = (x: number, z: number) => columnHeight(x, z, SEED)
   ok(aboveHalf === 0, `★ nothing is drawn in the empty upper half of a lip (${aboveHalf} vertices)`)
 }
 
-// ── 8. ★ A LIP IS TERRAIN, NOT A PROPERTY OF THE CELL (2026-08-11, Alex found this in play) ─────
-// "the half blocks at the edges of a hill classify as a whole block when mined, and if you place it
-// back it registers a half block even if you swap it with stone." Exactly right: half-ness lived on
-// the (x, z) column and survived edits, so a placed stone inherited the terrain's shape. The lip is
-// suppressed while the cell differs from what the generator put there — and returns if you undo.
+// ── 8. ★ A LIP IS A SLAB, AND A SLAB IS A BLOCK (2026-08-11, Alex's ruling) ────────────────────
+// He found the first fix went around the issue: "the fix is to make half blocks an actual item."
+// Right — half-ness has to live on the MATERIAL, or it is a property of the ground that any block
+// dropped into the cell inherits. Mine a lip and you get a slab item; place stone and you get
+// stone. These asserts are about the material, because that is now the whole mechanism.
 {
   const garden = ZONE_ANCHORS.find(a => a.id === 'garden')!
   const gx = Math.floor(garden.x / SECTION) * SECTION, gz = Math.floor(garden.z / SECTION) * SECTION
-  let tested = 0, survivedMine = 0, survivedStone = 0, lostOnRestore = 0
-  for (let cz = 0; cz < 4 && tested < 25; cz++) {
-    for (let cx = 0; cx < 4 && tested < 25; cx++) {
-      const col = makeColumn(gx + cx * SECTION, gz + cz * SECTION, SEED)
-      const e = new Map<number, number>()
-      col.edits = e
-      for (let z = 0; z < SECTION && tested < 25; z++) for (let x = 0; x < SECTION && tested < 25; x++) {
-        const y = col.heightAt(x, z)
-        if (!isHalfCell(col, x, y, z)) continue
-        tested++
-        const original = col.get(x, y, z)
-        const idx = (y * SECTION + z) * SECTION + x
-
-        // 1. mine it — the cell is gone, so there is no lip to stand on.
-        e.set(idx, AIR)
-        col.sections[(y / SECTION) | 0].set(x, y - ((y / SECTION) | 0) * SECTION, z, AIR)
-        if (isHalfCell(col, x, y, z)) survivedMine++
-
-        // 2. put STONE back — a block you placed is a whole block, whatever the ground was doing.
-        e.set(idx, MAT.STONE)
-        col.sections[(y / SECTION) | 0].set(x, y - ((y / SECTION) | 0) * SECTION, z, MAT.STONE)
-        if (isHalfCell(col, x, y, z)) survivedStone++
-
-        // 3. restore the original material: the edit is dropped, so the ground is untouched again
-        //    and the lip must come back. This is why the test is "is there an edit", not a flag.
-        e.delete(idx)
-        col.sections[(y / SECTION) | 0].set(x, y - ((y / SECTION) | 0) * SECTION, z, original)
-        if (!isHalfCell(col, x, y, z)) lostOnRestore++
-      }
+  let slabs = 0, wrongBase = 0, standing = 0
+  for (let cz = 0; cz < 4; cz++) for (let cx = 0; cx < 4; cx++) {
+    const col = makeColumn(gx + cx * SECTION, gz + cz * SECTION, SEED)
+    for (let z = 0; z < SECTION; z++) for (let x = 0; x < SECTION; x++) {
+      const y = col.heightAt(x, z)
+      const m = col.get(x, y, z)
+      if (!isHalfMat(m)) continue
+      slabs++
+      // A slab is its base material wearing a bit — it must resolve to a real block.
+      if (!blockDef(baseOf(m))) wrongBase++
+      const up = col.get(x, y + 1, z)
+      if (!(up === AIR || isPlant(up))) standing++
     }
   }
-  ok(tested >= 20, `found real lips to edit (${tested})`)
-  ok(survivedMine === 0, `★ a mined lip is not a half cell (${survivedMine} survived)`)
-  ok(survivedStone === 0, `★ STONE placed in a lip is a WHOLE block — Alex's bug (${survivedStone})`)
-  ok(lostOnRestore === 0, `★ undo the edit and the lip returns (${lostOnRestore} lost)`)
+  ok(slabs > 100, `the garden generates real slab voxels (${slabs})`)
+  ok(wrongBase === 0, 'every slab resolves to a real base block')
+  ok(standing === 0, '★ nothing stands on a slab — trunks and walls clear the bit')
+
+  // ★ Alex's exact sequence, now answered by the material alone.
+  const col = makeColumn(gx, gz, SEED)
+  let lx = -1, ly = -1, lz = -1
+  for (let z = 0; z < SECTION && lx < 0; z++) for (let x = 0; x < SECTION && lx < 0; x++) {
+    const y = col.heightAt(x, z)
+    if (isHalfMat(col.get(x, y, z))) { lx = x; ly = y; lz = z }
+  }
+  ok(lx >= 0, 'found a lip to work with')
+  const slab = col.get(lx, ly, lz)
+  ok(isHalfCell(col, lx, ly, lz), 'the generated lip reads as half')
+  // 1. mine it → a SLAB item, not a whole block.
+  const drop = dropsFor(slab)[0]
+  ok(!!drop && drop.itemId.endsWith('_slab'), `★ mining a lip drops a SLAB item (${drop?.itemId})`)
+  ok(materialForItem(drop!.itemId) === slab, '★ and that item places the same slab back')
+  // 2. put STONE in the cell → a whole stone block, because the material says so.
+  const s0 = (ly / SECTION) | 0
+  col.sections[s0].set(lx, ly - s0 * SECTION, lz, MAT.STONE)
+  ok(!isHalfCell(col, lx, ly, lz), '★ STONE placed in a lip is a WHOLE block — Alex\'s bug')
+  // 3. and a stone SLAB placed there is half, anywhere, with no terrain rule involved.
+  col.sections[s0].set(lx, ly - s0 * SECTION, lz, MAT.STONE | HALF_BIT)
+  ok(isHalfCell(col, lx, ly, lz), '★ a stone slab is half wherever you put it')
+  ok(baseOf(MAT.STONE | HALF_BIT) === MAT.STONE, 'a slab keeps its base material')
 }
 
 console.log(`\nslump: ${pass} passed, ${fails.length} failed`)

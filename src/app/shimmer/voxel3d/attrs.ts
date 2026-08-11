@@ -11,6 +11,7 @@ import { ORE } from '../voxel/ore'
 import { WOOD } from '../voxel/trees'
 import type { MeshResult } from '../voxel/greedy'
 import { layerOf, faceOfNormal } from './tex/tiles'
+import { baseOf } from '../voxel/depth'
 
 /**
  * Palette — one colour per material index.
@@ -162,7 +163,7 @@ export function buildAttrs(mesh: MeshResult): MeshAttrs {
     // Face from the vertex NORMAL — exact for axis-aligned quads, which is why `voxel/` never had
     // to learn that textures exist. normals are 3 floats per vertex; y decides top/side/bottom.
     layers[i] = layerOf(m, faceOfNormal(mesh.normals[i * 3 + 1]))
-    const hex = MATERIAL_COLOR[m] ?? FALLBACK
+    const hex = MATERIAL_COLOR[baseOf(m)] ?? FALLBACK
     // Inline hex→linear-ish float rather than THREE.Color, which is the whole reason this file has
     // no three import. Three's default is sRGB-in, and Lambert with vertexColors expects that.
     colors[i * 3] = ((hex >> 16) & 255) / 255
