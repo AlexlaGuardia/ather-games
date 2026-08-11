@@ -105,6 +105,12 @@ export class Column {
    * few hundred cells per column, so this is a few KB and is thrown away with the column.
    */
   overrides: Map<number, number> | null = null
+  /**
+   * This column's live player edits (packed index → material), or null. A REFERENCE to the map the
+   * host owns, not a copy — see `isHalfCell` for the one thing it is read for.
+   * ⚠ Typed inline rather than importing `ColumnEdits`, because edits.ts already imports this file.
+   */
+  edits: Map<number, number> | null = null
 
   constructor(wx: number, wz: number, cfg: ColumnConfig = DEFAULT_COLUMN) {
     this.wx = wx
@@ -169,6 +175,15 @@ export function isHalfCell(col: Column, lx: number, y: number, lz: number): bool
   const i = lz * SECTION + lx
   if (!col.slump[i]) return false
   if (y !== col.surface[i]) return false
+  // ── ★ SLUMP DESCRIBES UNTOUCHED TERRAIN (2026-08-11, Alex found it) ──────────────────────────
+  // A lip is a shape the GENERATOR gave the ground, not a property of whatever material happens to
+  // sit in the cell. Without this, half-ness belonged to the (x, z) column and survived any edit:
+  // mine the lip and you collect a whole block, put STONE back and the stone renders and collides
+  // at half height. An edit exists exactly while the cell differs from what the generator put
+  // there — `recordEdit` deletes it the moment you restore the original — so this one test both
+  // suppresses the lip when you build on it AND brings it back if you undo, with nothing to keep
+  // in sync. O(1); the mesher's ring loop calls this per cell.
+  if (col.edits?.has((y * SECTION + lz) * SECTION + lx)) return false
   const s = (y / SECTION) | 0
   if (s < 0 || s >= col.sections.length) return false
   if (col.sections[s].get(lx, y - s * SECTION, lz) === AIR) return false

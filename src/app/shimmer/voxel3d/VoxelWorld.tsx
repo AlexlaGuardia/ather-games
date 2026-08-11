@@ -1895,6 +1895,7 @@ function World({ inv, toolTier, toolSkill, selItem, weaponDrawn, weaponIdx, onAm
     const generated = generatedVoxel(c, lx, wy, lz, SEED)
     let e = edits.current.get(k)
     if (!e) { e = new Map(); edits.current.set(k, e) }
+    c.edits = e
     recordEdit(e, editIndex(lx, wy, lz), mat, generated)
     dirtySaves.current.add(k)
 
@@ -2279,6 +2280,7 @@ function World({ inv, toolTier, toolSkill, selItem, weaponDrawn, weaponIdx, onAm
       // again once its edits land. That is deliberate: blocking the world on a database read would
       // stall streaming for the common case, which is a column with no edits at all.
       const ek = key(gx, gz)
+      col.edits = edits.current.get(ek) ?? null
       applyEdits(col, edits.current.get(ek))
       refreshUniform(col)
       col.stage = Stage.Ready
@@ -2295,6 +2297,7 @@ function World({ inv, toolTier, toolSkill, selItem, weaponDrawn, weaponIdx, onAm
           const m = unpackEdits(saved.edits)
           edits.current.set(ek, m)
           const c = cols.current.get(ek)
+          if (c) c.edits = m
           if (c && m.size) { applyEdits(c, m); refreshUniform(c); queueRemesh(gx, gz); flora.invalidate(ek); floraDirty.current = true }
           // Pieces come back with their blocks. Occupancy is NOT re-written here — it is already in
           // the block diff, because placing a piece wrote STRUCTURE through `setVoxel`, which is a

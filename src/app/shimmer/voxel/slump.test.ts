@@ -233,6 +233,51 @@ const h = (x: number, z: number) => columnHeight(x, z, SEED)
   ok(aboveHalf === 0, `★ nothing is drawn in the empty upper half of a lip (${aboveHalf} vertices)`)
 }
 
+// ── 8. ★ A LIP IS TERRAIN, NOT A PROPERTY OF THE CELL (2026-08-11, Alex found this in play) ─────
+// "the half blocks at the edges of a hill classify as a whole block when mined, and if you place it
+// back it registers a half block even if you swap it with stone." Exactly right: half-ness lived on
+// the (x, z) column and survived edits, so a placed stone inherited the terrain's shape. The lip is
+// suppressed while the cell differs from what the generator put there — and returns if you undo.
+{
+  const garden = ZONE_ANCHORS.find(a => a.id === 'garden')!
+  const gx = Math.floor(garden.x / SECTION) * SECTION, gz = Math.floor(garden.z / SECTION) * SECTION
+  let tested = 0, survivedMine = 0, survivedStone = 0, lostOnRestore = 0
+  for (let cz = 0; cz < 4 && tested < 25; cz++) {
+    for (let cx = 0; cx < 4 && tested < 25; cx++) {
+      const col = makeColumn(gx + cx * SECTION, gz + cz * SECTION, SEED)
+      const e = new Map<number, number>()
+      col.edits = e
+      for (let z = 0; z < SECTION && tested < 25; z++) for (let x = 0; x < SECTION && tested < 25; x++) {
+        const y = col.heightAt(x, z)
+        if (!isHalfCell(col, x, y, z)) continue
+        tested++
+        const original = col.get(x, y, z)
+        const idx = (y * SECTION + z) * SECTION + x
+
+        // 1. mine it — the cell is gone, so there is no lip to stand on.
+        e.set(idx, AIR)
+        col.sections[(y / SECTION) | 0].set(x, y - ((y / SECTION) | 0) * SECTION, z, AIR)
+        if (isHalfCell(col, x, y, z)) survivedMine++
+
+        // 2. put STONE back — a block you placed is a whole block, whatever the ground was doing.
+        e.set(idx, MAT.STONE)
+        col.sections[(y / SECTION) | 0].set(x, y - ((y / SECTION) | 0) * SECTION, z, MAT.STONE)
+        if (isHalfCell(col, x, y, z)) survivedStone++
+
+        // 3. restore the original material: the edit is dropped, so the ground is untouched again
+        //    and the lip must come back. This is why the test is "is there an edit", not a flag.
+        e.delete(idx)
+        col.sections[(y / SECTION) | 0].set(x, y - ((y / SECTION) | 0) * SECTION, z, original)
+        if (!isHalfCell(col, x, y, z)) lostOnRestore++
+      }
+    }
+  }
+  ok(tested >= 20, `found real lips to edit (${tested})`)
+  ok(survivedMine === 0, `★ a mined lip is not a half cell (${survivedMine} survived)`)
+  ok(survivedStone === 0, `★ STONE placed in a lip is a WHOLE block — Alex's bug (${survivedStone})`)
+  ok(lostOnRestore === 0, `★ undo the edit and the lip returns (${lostOnRestore} lost)`)
+}
+
 console.log(`\nslump: ${pass} passed, ${fails.length} failed`)
 for (const f of fails) console.log(`  ✗ ${f}`)
 process.exit(fails.length ? 1 : 0)
