@@ -83,7 +83,7 @@ import { WOOD } from '../voxel/trees'
 // ── PORT STEP 5 — the movement (2026-08-07, Alex: "slide jump became a dash, climbing and wall
 // jumping are non-existent"). play3d's Apex-lineage locomotion, extracted pure and re-grounded on
 // voxel collision. See locomotion.ts for provenance; its test file is the feel contract.
-import { createLoco, tickLocomotion, CELL_EMPTY, CELL_SOLID, CELL_WATER, CELL_HALF } from './locomotion'
+import { createLoco, tickLocomotion, eyeY, CELL_EMPTY, CELL_SOLID, CELL_WATER, CELL_HALF } from './locomotion'
 // ── ★ THE TUTORIAL (2026-08-08) — Moonwell Glade becomes spawn + the Greg tutorial chain ─────
 // `tutorial.ts` owns the quest state and its (placeholder) dialogue; `gate.ts` is pure math for
 // where the ceremonial arch sits and which of its cells are the sealable doorway; `greg.ts` builds
@@ -98,6 +98,7 @@ import { loadMistLedger, saveMistLedger, recordWithdrawal, residentAt, quietMinu
 import { applySparPayout, sparLedgerLines } from './spar-reward'
 import ArenaBattle from '../components/ArenaBattle'
 import { createSpirit, speciesDisplayName, type Spirit } from '../spirits/spirit'
+import { rightClickIntent } from './interact'
 import {
   chestKey, createChest, moveBetween, quickMove, addToGrid, isEmpty as isChestEmpty,
   spill as spillChest, CHEST_COLS, CHEST_SLOTS, type Slots,
@@ -1954,8 +1955,8 @@ function World({ inv, toolTier, toolSkill, selItem, weaponDrawn, weaponIdx, onAm
         const lc = loco.current
         const h = columnHeight(x, z, SEED)
         lc.px = x + 0.5; lc.py = h + 1; lc.pz = z + 0.5
-        lc.vy = 0; lc.hvx = 0; lc.hvz = 0; lc.airborne = false
-        camera.position.set(lc.px, lc.py + lc.eye, lc.pz)
+        lc.vy = 0; lc.hvx = 0; lc.hvz = 0; lc.airborne = false; lc.stepSmooth = 0
+        camera.position.set(lc.px, eyeY(lc), lc.pz)
         settled.current = false
         return `off to ${x}, ${z} (ground ${h}) — the land is catching up`
       },
@@ -1982,8 +1983,8 @@ function World({ inv, toolTier, toolSkill, selItem, weaponDrawn, weaponIdx, onAm
       const lc = loco.current
       lc.px = p.x; lc.pz = p.z
       lc.py = Math.max(p.y, columnHeight(Math.floor(p.x), Math.floor(p.z), SEED) + 1)
-      lc.vy = 0; lc.hvx = 0; lc.hvz = 0
-      camera.position.set(lc.px, lc.py + lc.eye, lc.pz)
+      lc.vy = 0; lc.hvx = 0; lc.hvz = 0; lc.stepSmooth = 0
+      camera.position.set(lc.px, eyeY(lc), lc.pz)
       camera.quaternion.setFromEuler(new THREE.Euler(p.rx, p.ry, 0, 'YXZ'))
       settled.current = false
       onInvChange()
@@ -2911,6 +2912,9 @@ function World({ inv, toolTier, toolSkill, selItem, weaponDrawn, weaponIdx, onAm
       if (k.ControlLeft) wish.y -= speed
       p.addScaledVector(wish, dt)
       // Keep the walker under the camera so dropping out of fly resumes physics where you are.
+      // stepSmooth first: py is derived FROM the camera here, so an unpaid step debt would
+      // subtract itself out of the body's feet and sink the walker half a slab into the floor.
+      lc.stepSmooth = 0
       lc.px = p.x; lc.py = p.y - lc.eye; lc.pz = p.z
       lc.vy = 0; lc.airborne = true; lc.hvx = 0; lc.hvz = 0
     } else {
@@ -2923,11 +2927,11 @@ function World({ inv, toolTier, toolSkill, selItem, weaponDrawn, weaponIdx, onAm
         crouchKey: !!k.ShiftLeft || !!k.ShiftRight,
         dt,
       }, solidProbe)
-      p.set(lc.px, lc.py + lc.eye, lc.pz)
+      p.set(lc.px, eyeY(lc), lc.pz)
       if (lc.py < -20) {
         const feet = columnHeight(SPAWN_X, SPAWN_Z, SEED) + 1
-        lc.px = SPAWN_X + 0.5; lc.py = feet; lc.pz = SPAWN_Z + 0.5; lc.vy = 0; lc.hvx = 0; lc.hvz = 0
-        p.set(SPAWN_X + 0.5, feet + lc.eye, SPAWN_Z + 0.5)
+        lc.px = SPAWN_X + 0.5; lc.py = feet; lc.pz = SPAWN_Z + 0.5; lc.vy = 0; lc.hvx = 0; lc.hvz = 0; lc.stepSmooth = 0
+        p.set(lc.px, eyeY(lc), lc.pz)
         settled.current = false
       }
     }
@@ -3082,23 +3086,23 @@ function World({ inv, toolTier, toolSkill, selItem, weaponDrawn, weaponIdx, onAm
       if (lastTool.current !== null) { lastTool.current = null; onTool(null) }
     }
 
-    // ── place ────────────────────────────────────────────────────────────────────────────────
-    if (hit && mouse.current.right && selItem && !weaponDrawn) {
-      const mat = materialForItem(selItem)
-      // Refuse to place inside your own body — the classic way to entomb yourself.
-      const inPlayer = Math.floor(p.x) === hit.px && Math.floor(p.z) === hit.pz
-        && (Math.floor(p.y) === hit.py || Math.floor(p.y - 1.62) === hit.py)
-      // ── ★ THE POT: plant a seed, then come back for what chose you (2026-08-11) ────────────
-      // Handled before placing, because the pot is a thing you USE and the block in your hand
-      // should not be dropped onto it by the same click.
+    // ── use, or place ────────────────────────────────────────────────────────────────────────
+    // ⚠ NOT gated on `selItem` — USING a block is not placing one (2026-08-11). This branch once
+    // required something in hand, so the very first thing a player does with a chest failed: you
+    // place your only chest, the slot empties, `selItem` goes null, and the right-click that should
+    // open it fell through the whole block. Empty-handed is the NORMAL way to open a container.
+    // `rightClickIntent` (interact.ts) now owns that decision so an oracle can hold it; placing
+    // still needs an item and says so on its own branch.
+    if (hit && mouse.current.right && !weaponDrawn) {
       const potMat = voxel(hit.x, hit.y, hit.z)
+      const intent = rightClickIntent(potMat, selItem,
+        selItem === 'mana_seed' && countItem(inv.current!, selItem) > 0)
       // ── ★ THE CHEST OPENS ON RIGHT-CLICK, and is answered FIRST ────────────────────────────
-      // Same reasoning as the pot immediately below: a chest is a thing you USE, and the block in
-      // your hand must not be dropped onto it by the same click that opens it. Handing the whole
-      // panel upward (rather than opening one down here) keeps every cursor surface in one place —
-      // the bag, the bench and the chest are the same panel, so they cannot disagree about what a
-      // move means.
-      if (potMat === MAT.CHEST) {
+      // A chest is a thing you USE, and the block in your hand must not be dropped onto it by the
+      // same click that opens it. Handing the whole panel upward (rather than opening one down
+      // here) keeps every cursor surface in one place — the bag, the bench and the chest are the
+      // same panel, so they cannot disagree about what a move means.
+      if (intent === 'open') {
         // `touch` is bound to THIS chest's column rather than handed up as a coordinate the caller
         // has to remember — the one call that must not be forgotten cannot then be made wrong.
         onOpenChest({
@@ -3107,7 +3111,7 @@ function World({ inv, toolTier, toolSkill, selItem, weaponDrawn, weaponIdx, onAm
           touch: () => touchChest(hit.x, hit.z),
         })
         mouse.current.right = false
-      } else if (potMat === MAT.POT && selItem === 'mana_seed' && countItem(inv.current!, selItem) > 0) {
+      } else if (intent === 'plant') {
         removeItems(inv.current!, 'mana_seed', 1)
         setVoxel(hit.x, hit.y, hit.z, MAT.POT_SEEDED)
         pot.clock()[potKey(hit.x, hit.y, hit.z)] = Date.now()
@@ -3115,11 +3119,11 @@ function World({ inv, toolTier, toolSkill, selItem, weaponDrawn, weaponIdx, onAm
         onInvChange()
         onStats('✦ the seed is in the soil — give it a few minutes')
         mouse.current.right = false
-      } else if (potMat === MAT.POT_SEEDED) {
+      } else if (intent === 'peek') {
         const p01 = potProgress(pot.clock(), hit.x, hit.y, hit.z, Date.now())
         onStats(`the seed is still closed — ${Math.floor(p01 * 100)}%`)
         mouse.current.right = false
-      } else if (potMat === MAT.POT_BLOOM) {
+      } else if (intent === 'harvest') {
         // ★ No prompt and no pick: canon has the spirit choose the keeper, so this only announces.
         const born = bloomSpirit()
         pot.gain(born)
@@ -3128,7 +3132,13 @@ function World({ inv, toolTier, toolSkill, selItem, weaponDrawn, weaponIdx, onAm
         setVoxel(hit.x, hit.y, hit.z, MAT.POT)
         onStats(`✦ a young ${speciesDisplayName(born.species)} chose you!`)
         mouse.current.right = false
-      } else {
+      } else if (intent === 'place') {
+      // Placing — and ONLY placing — needs something in your hand, which `place` already asserts.
+      const held = selItem!
+      const mat = materialForItem(held)
+      // Refuse to place inside your own body — the classic way to entomb yourself.
+      const inPlayer = Math.floor(p.x) === hit.px && Math.floor(p.z) === hit.pz
+        && (Math.floor(p.y) === hit.py || Math.floor(p.y - 1.62) === hit.py)
       // ── ★ SLABS: WHICH HALF, AND WHEN TWO BECOME ONE (2026-08-11) ──────────────────────────
       // Merging first, because it targets the cell you AIMED AT rather than the empty one beside
       // it: a slab meeting its opposite half is a whole block. Deliberately forgiving about which
@@ -3138,13 +3148,13 @@ function World({ inv, toolTier, toolSkill, selItem, weaponDrawn, weaponIdx, onAm
       // `materialForItem` always yields a BOTTOM slab, so "opposite halves" needs no test — a slab
       // in hand always completes a slab in the world, whichever half that one occupies.
       const merging = mat !== undefined && isHalfMat(mat) && isHalfMat(aimed) && baseOf(aimed) === baseOf(mat)
-      if (merging && countItem(inv.current!, selItem) > 0) {
-        removeItems(inv.current!, selItem, 1)
+      if (merging && countItem(inv.current!, held) > 0) {
+        removeItems(inv.current!, held, 1)
         setVoxel(hit.x, hit.y, hit.z, baseOf(aimed))
         onInvChange()
         mouse.current.right = false
-      } else if (mat !== undefined && !inPlayer && countItem(inv.current!, selItem) > 0 && voxel(hit.px, hit.py, hit.pz) === AIR) {
-        removeItems(inv.current!, selItem, 1)
+      } else if (mat !== undefined && !inPlayer && countItem(inv.current!, held) > 0 && voxel(hit.px, hit.py, hit.pz) === AIR) {
+        removeItems(inv.current!, held, 1)
         // A slab takes the half you pointed at. The ray's own hit point decides it: land in the
         // upper half of the target cell and the slab goes up there, so a slab staircase is built
         // by aiming, not by a modifier key.
