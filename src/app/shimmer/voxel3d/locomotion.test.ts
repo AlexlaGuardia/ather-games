@@ -391,6 +391,48 @@ const settle = (s: ReturnType<typeof createLoco>, solid: any, frames = 30) => {
   ok(worst < STEP_SMOOTH_MAX, `★ the debt cap never binds at run speed (worst ${worst.toFixed(3)} of ${STEP_SMOOTH_MAX})`)
   // And the payoff: no frame of the whole flight moves the eye more than a fifth of a slab.
   ok(jump < 0.11, `★ no jolt anywhere on the flight (biggest single frame ${jump.toFixed(3)})`)
+
+  // ── ★ DOWN IS THE MIRROR OF UP (Alex: "make the descent glue too, same as going up") ────────
+  // A 0.5 drop used to exceed FALL_OFF, so every stair down was a 0.21s ballistic fall that hit
+  // -6.2 u/s and slammed to zero in a single frame. Same staircase, walked back down.
+  const d = createLoco(9.5, 14, 0.5); settle(d, stairs, 40)
+  let airFrames = 0, drop = 0, hover = 0, descended = 0
+  let pe = eyeY(d)
+  for (let i = 0; i < 220; i++) {
+    tickLocomotion(d, input({ mvX: -1, fwdX: -1 }), stairs)
+    if (d.airborne) airFrames++
+    else if (floorProbe(stairs, d.px, d.pz, d.py, 0.55) !== d.py) hover++
+    const e = eyeY(d)
+    if (d.px < 9) drop = Math.min(drop, e - pe)
+    pe = e
+  }
+  descended = 14 - d.py
+  ok(descended >= 3.5, `the staircase is walked back down (${descended.toFixed(1)} blocks)`)
+  ok(airFrames === 0, `★ a half-block descent GLUES — not one airborne frame in the flight (${airFrames})`)
+  // The old code eased the BODY down, so the feet spent frames hovering over the floor they stood
+  // on. The feet are now exact every grounded frame and the eye alone carries the lag.
+  ok(hover === 0, `★ the feet are never hovering above the floor they stand on (${hover} frames)`)
+  ok(Math.abs(drop) < 0.11, `★ and no jolt going down either (biggest single frame ${drop.toFixed(3)})`)
+
+  // A FULL block still falls — widening FALL_OFF must not have glued the world flat.
+  const cliff = world((x, y) => x < 3 && y < 11)
+  const c = createLoco(1.5, 11, 0.5); settle(c, cliff)
+  let fell = false
+  for (let i = 0; i < 60; i++) { tickLocomotion(c, input({ mvX: 1 }), cliff); if (c.airborne) fell = true }
+  ok(fell, '★ a 1-block drop is still a FALL — the downhill coyote ruling is untouched')
+
+  // Same time down at 60 and 144fps, same as up.
+  const fallAt = (dt: number) => {
+    const w = createLoco(4.9, 11, 0.5); settle(w, stairs, Math.ceil(0.7 / dt))
+    let t = 0
+    for (let i = 0; i < 900; i++) {
+      tickLocomotion(w, input({ mvX: -1, fwdX: -1, dt }), stairs)
+      if (w.py < 10.9) { t += dt; if (w.stepSmooth === 0) return t }
+    }
+    return -1
+  }
+  const d60 = fallAt(1 / 60), d144 = fallAt(1 / 144)
+  ok(d60 > 0 && Math.abs(d60 - d144) < 0.05, `the descent costs the same at 60 and 144fps (${d60.toFixed(3)}s vs ${d144.toFixed(3)}s)`)
 }
 
 console.log(`\nlocomotion: ${pass} passed, ${fails.length} failed`)

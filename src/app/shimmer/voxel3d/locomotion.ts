@@ -49,7 +49,13 @@ export const BHOP_KEEP = 0.97
 export const LURCH_TURN = 0.64
 export const LURCH_STRENGTH = 0.65
 export const LURCH_KEEP = 0.93
-export const FALL_OFF = 0.32
+// ★ 0.32 → 0.55 (2026-08-11, Alex: "make the descent glue too, same as going up"). play3d still
+// carries 0.32 and should: it resolves tile heightmaps and has no half-blocks. HERE the widened
+// band contains EXACTLY ONE THING — surfaces in a voxel world sit at whole or half blocks, so the
+// only drop that can land between 0.32 and 0.55 is a slab. A 1-block drop is still a fall, so the
+// downhill coyote ruling is untouched. Mirrors STEP_CAPTURE 0.55 on the way up, and deliberately:
+// a half-block is a STEP in both directions or it is a step in neither.
+export const FALL_OFF = 0.55
 export const CLIMB_SPEED = 2.5
 export const CLIMB_STRAFE = 1.6
 export const CLIMB_MAX_RISE = 2.5
@@ -102,6 +108,13 @@ export const STEP_CAPTURE = 0.55
 // still behind the body, and drains to nothing over ~0.2s. Feel only; collision never reads it.
 // Half-life, not a per-frame factor: the eye ease below is `* 0.25` every frame, which means it
 // resolves twice as fast at 120fps as at 60. A step must climb at the same rate on every machine.
+// Signed since the descent joined it (2026-08-11): + = climbed, the eye is still below the body;
+// − = dropped, the eye is still above it. ⚠ The negative direction is the one with a ceiling: a
+// slide down a stair-per-column flight peaks near −0.42, putting the eye 2.04 above the feet
+// against a standing 1.62. Under a 2-high roof that clips the camera into the ceiling block for a
+// few frames. Not seen in play — the world has no slab stairs in a tight tunnel yet — but that is
+// where it will show up first, and the fix then is a ceiling probe in eyeY, not a smaller cap
+// (clamping is a pop, see below).
 export const STEP_SMOOTH_HALF_LIFE = 0.06
 // ⚠ A BACKSTOP, NOT A BUDGET — it must never bind in real play. Clamping the debt THROWS AWAY
 // eye-height, which is a pop, which is the exact bug this whole block exists to remove. The first
@@ -167,9 +180,15 @@ export interface LocoState {
 }
 
 /** Where the camera goes. The one place the step-smoothing offset is applied, so a new call site
- *  cannot forget it and re-introduce the jag on its own screen. */
+ *  cannot forget it and re-introduce the jag on its own screen. A POSITIVE debt means the body
+ *  climbed and the eye is still below it; negative means it dropped and the eye is still above. */
 export function eyeY(s: LocoState): number {
   return s.py + s.eye - s.stepSmooth
+}
+
+/** Hand the eye a height change the feet already took. Signed: + climbed, − dropped. */
+function stepDebt(s: LocoState, rise: number): void {
+  s.stepSmooth = Math.max(-STEP_SMOOTH_MAX, Math.min(STEP_SMOOTH_MAX, s.stepSmooth + rise))
 }
 
 export function createLoco(px: number, feetY: number, pz: number): LocoState {
@@ -398,7 +417,7 @@ export function tickLocomotion(s: LocoState, input: LocoInput, probe: CellProbe)
     if (ft === null || ft <= s.py || ft - s.py > 0.5 + 1e-6) return false
     if (!bodyFree(probe, tx, tz, ft)) return false
     // The feet snap (see STEP_SMOOTH_HALF_LIFE) and the eye owes the difference.
-    s.stepSmooth = Math.min(STEP_SMOOTH_MAX, s.stepSmooth + (ft - s.py))
+    stepDebt(s, ft - s.py)
     s.py = ft
     return true
   }
@@ -554,7 +573,14 @@ export function tickLocomotion(s: LocoState, input: LocoInput, probe: CellProbe)
     s.airborne = true; s.vy = 0; s.airSpeed = Math.hypot(s.hvx, s.hvz)   // walked off a ledge
     s.coyoteT = COYOTE_TIME     // ...and the jump you press a hair late still belongs to the ground
   } else {
-    s.py += (floorTop - s.py) * 0.25     // grounded: ease onto the floor — smooth step-up AND -down
+    // ★ GROUNDED: THE FEET ARE ALWAYS EXACTLY ON THE FLOOR — the eye owes any difference, up or
+    // down. This used to ease the BODY (`py += (floorTop - py) * 0.25`), which meant the feet
+    // spent a few frames hovering above the ground they were standing on, and at a per-frame
+    // factor a 144Hz machine settled 2.4× faster than a 60Hz one — the same frame-rate bug the
+    // step-up smoothing was written to avoid, sitting three lines below it. Now the descent is
+    // the mirror of the climb: py snaps, stepSmooth goes NEGATIVE (eye above the body) and drains
+    // through the same half-life.
+    if (floorTop !== s.py) { stepDebt(s, floorTop - s.py); s.py = floorTop }
     s.climbRise = 0
   }
   s.jumpHeld = jumpKey
@@ -566,9 +592,9 @@ export function tickLocomotion(s: LocoState, input: LocoInput, probe: CellProbe)
   // immediately jumping still resolves the eye instead of freezing it mid-rise. Clamped to zero
   // rather than left with an exponential tail: a hair of permanent offset is a camera that never
   // quite sits where the body is.
-  if (s.stepSmooth > 0) {
+  if (s.stepSmooth !== 0) {
     s.stepSmooth *= Math.pow(0.5, dt / STEP_SMOOTH_HALF_LIFE)
-    if (s.stepSmooth < 1e-3) s.stepSmooth = 0
+    if (Math.abs(s.stepSmooth) < 1e-3) s.stepSmooth = 0
   }
 
   if (s.airborne && hasInput) { s.prevMvX = mvX; s.prevMvZ = mvZ } else { s.prevMvX = 0; s.prevMvZ = 0 }
