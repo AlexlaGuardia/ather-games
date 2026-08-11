@@ -57,7 +57,11 @@ import { Column, SECTION } from './column'
 // v14: the Springs mountain (2026-08-08) — mana-springs lifts a terraced massif (lift 64,
 // benchK 2, reliefK 0) with hot-spring pools sunk into the flats; every column in the Springs
 // ellipse moved, nothing outside it did.
-export const GENERATOR_VERSION = 14
+// 14 → 15 (2026-08-11): terrain changed three times in one day — slumped lips, ground cover as
+// voxels above the surface, and lips becoming slab MATERIALS. Old edits still apply (they are
+// absolute materials at fixed indices), but a save from before today no longer describes the same
+// world, and `isStale` exists precisely so the player is told rather than left to notice.
+export const GENERATOR_VERSION = 15
 
 /**
  * One column's edits: packed local index → material.

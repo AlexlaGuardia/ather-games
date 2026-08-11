@@ -18,7 +18,7 @@
 // (`block_stone` etc.) are build-side placeholders for "the block itself in your hand" and are
 // marked TBD-CANON — if the Ather's stone and soil carry real names, those are Magii's.
 
-import { MAT, HALF_BIT } from './depth'
+import { MAT, HALF_BIT, TOP_BIT } from './depth'
 import { ORE } from './ore'
 import { WOOD } from './trees'
 import { AIR } from './section'
@@ -178,7 +178,10 @@ const BY_ITEM = new Map<string, number>(
     .flatMap(b => b.drops.map(d => [d.itemId, b.material] as [string, number])),
 )
 
-export const blockDef = (material: number): BlockDef | undefined => BY_MATERIAL.get(material)
+/** ⚠ TOP_BIT is POSITION, not identity — a top slab is the same block as a bottom one, so it is
+ *  masked off before the lookup. Without this, mining an upside-down slab finds no definition at
+ *  all: no hardness, no drops, an unbreakable block you placed yourself. */
+export const blockDef = (material: number): BlockDef | undefined => BY_MATERIAL.get(material & ~TOP_BIT)
 export const materialForItem = (itemId: string): number | undefined => BY_ITEM.get(itemId)
 /** Block light emitted by a material — `light.ts`'s `emit` callback in one lookup. */
 export const emitOf = (material: number): number => blockDef(material)?.emit ?? 0

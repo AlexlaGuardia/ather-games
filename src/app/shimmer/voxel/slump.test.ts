@@ -19,9 +19,11 @@ import { columnHeight } from './height'
 import { slumpStrength, slumpAllowed, isLip, slumpMask } from './slump'
 import { ZONE_ANCHORS } from './zones'
 import { blockDef, materialForItem } from './registry'
+import { greedyMesh, halfKey } from './greedy'
+import { Section } from './section'
 import { dropsFor } from './mine'
 import { makeColumn, isHalfCell, meshColumn, SECTION } from './column'
-import { MAT, isPlant, isHalfMat, baseOf, HALF_BIT } from './depth'
+import { MAT, isPlant, isHalfMat, isTopSlab, baseOf, HALF_BIT, TOP_BIT } from './depth'
 import { AIR } from './section'
 
 let pass = 0
@@ -283,6 +285,43 @@ const h = (x: number, z: number) => columnHeight(x, z, SEED)
   col.sections[s0].set(lx, ly - s0 * SECTION, lz, MAT.STONE | HALF_BIT)
   ok(isHalfCell(col, lx, ly, lz), '★ a stone slab is half wherever you put it')
   ok(baseOf(MAT.STONE | HALF_BIT) === MAT.STONE, 'a slab keeps its base material')
+}
+
+// ── 9. ★ TOP SLABS AND MERGING (2026-08-11) ─────────────────────────────────────────────────────
+// A slab is a block, so it must work as one: it can sit in either half, it resolves to the same
+// definition either way, and two halves make a whole.
+{
+  const stoneSlab = MAT.STONE | HALF_BIT
+  const stoneTop = stoneSlab | TOP_BIT
+  ok(isHalfMat(stoneTop) && isTopSlab(stoneTop), 'a top slab is a slab, in the upper half')
+  ok(!isTopSlab(stoneSlab), 'a bottom slab is not a top one')
+  ok(baseOf(stoneTop) === MAT.STONE, 'position does not change what it is made of')
+  // ★ TOP_BIT is POSITION, not identity — the definition lookup must mask it, or an upside-down
+  // slab has no hardness and no drops: a block you placed yourself and can never break.
+  ok(!!blockDef(stoneTop), 'a top slab has a block definition')
+  ok(blockDef(stoneTop)!.name === blockDef(stoneSlab)!.name, 'both halves are the same block')
+  ok(dropsFor(stoneTop)[0]?.itemId === dropsFor(stoneSlab)[0]?.itemId, 'and drop the same item')
+  // Merging is the placement path's job, but the RESULT must be an ordinary whole block.
+  ok(!isHalfMat(baseOf(stoneTop)), 'two halves merge to a full block, not another slab')
+
+  // ★ THE SPAN RULE: a bottom slab beside a top slab covers nothing of it, so BOTH draw their
+  // sides. Collapsing coverage back to a boolean punches see-through gaps into slab staircases.
+  const sec = new Section(SECTION)
+  sec.set(4, 4, 4, stoneSlab)
+  sec.set(5, 4, 4, stoneTop)
+  const mesh = greedyMesh(sec, () => AIR, undefined, new Map([
+    [halfKey(4, 4, 4, SECTION), stoneSlab], [halfKey(5, 4, 4, SECTION), stoneTop],
+  ]))
+  let lowSide = 0, highSide = 0
+  for (let v = 0; v < mesh.positions.length; v += 3) {
+    const x = mesh.positions[v], y = mesh.positions[v + 1]
+    if (Math.abs(x - 5) > 1e-6) continue          // the shared plane between the two cells
+    if (Math.abs(y - 4.5) < 1e-6) { lowSide++; highSide++ }
+    else if (y > 4 && y < 4.5) lowSide++
+    else if (y > 4.5 && y < 5) highSide++
+  }
+  ok(mesh.quads >= 8, `two facing slabs both mesh (${mesh.quads} quads)`)
+  ok(lowSide > 0 && highSide > 0, '★ neither slab hides the other — the shared plane draws both')
 }
 
 console.log(`\nslump: ${pass} passed, ${fails.length} failed`)

@@ -57,8 +57,20 @@ import { AIR } from './section'
  * Base ids must stay under 256. Uint16 sections leave plenty of room above the flag.
  */
 export const HALF_BIT = 0x0100
+/**
+ * A slab sitting in the UPPER half of its cell. Only meaningful with HALF_BIT.
+ *
+ * ★ A TOP SLAB COLLIDES AS A FULL BLOCK, and that is a deliberate simplification worth keeping: the
+ * open lower half of the cell is 0.5 tall and the player is ~1.8, so nothing can ever stand in it.
+ * Its walkable surface is the cell top, exactly like a full block's. That means top slabs cost
+ * locomotion.ts NOTHING — no new cell code, no change to the 58-assert feel contract — and the
+ * difference lives entirely in what the mesher draws.
+ */
+export const TOP_BIT = 0x0200
 /** The full-block material behind a possibly-half one. Cheap: one mask. */
 export const baseOf = (m: number): number => m & 0xFF
+/** A slab in the upper half of its cell. */
+export const isTopSlab = (m: number): boolean => (m & TOP_BIT) !== 0
 /** Is this cell a slab? One bit test — safe in a hot loop. */
 export const isHalfMat = (m: number): boolean => (m & HALF_BIT) !== 0
 

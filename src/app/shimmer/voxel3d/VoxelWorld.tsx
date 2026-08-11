@@ -30,7 +30,7 @@ import { holdGenPiecesForCol, type GenPiece } from '../voxel/holds'
 import { biomeAt, forestness } from '../voxel/biome'
 import { ZONE_ANCHORS, zoneAt } from '../voxel/zones'
 import { AIR } from '../voxel/section'
-import { materialAt, MAT, isPlant, isHalfMat, baseOf, DEFAULT_DEPTH } from '../voxel/depth'
+import { materialAt, MAT, isPlant, isHalfMat, isTopSlab, baseOf, TOP_BIT, DEFAULT_DEPTH } from '../voxel/depth'
 import { FLORA, plantVariant } from '../voxel/flora'
 import { raycast, tickBreak, dropsFor, type BreakState } from '../voxel/mine'
 import { spawnDrop, tickDrops, type Drop } from '../voxel/drops'
@@ -2623,9 +2623,39 @@ function World({ inv, toolTier, toolSkill, selItem, weaponDrawn, weaponIdx, onAm
       // Refuse to place inside your own body — the classic way to entomb yourself.
       const inPlayer = Math.floor(p.x) === hit.px && Math.floor(p.z) === hit.pz
         && (Math.floor(p.y) === hit.py || Math.floor(p.y - 1.62) === hit.py)
-      if (mat !== undefined && !inPlayer && countItem(inv.current!, selItem) > 0 && voxel(hit.px, hit.py, hit.pz) === AIR) {
+      // ── ★ SLABS: WHICH HALF, AND WHEN TWO BECOME ONE (2026-08-11) ──────────────────────────
+      // Merging first, because it targets the cell you AIMED AT rather than the empty one beside
+      // it: a slab meeting its opposite half is a whole block. Deliberately forgiving about which
+      // face you clicked — the intent is unambiguous, and being strict here just makes players
+      // fight the reticle. Same base material only; a stone slab does not complete a soil one.
+      const aimed = voxel(hit.x, hit.y, hit.z)
+      // `materialForItem` always yields a BOTTOM slab, so "opposite halves" needs no test — a slab
+      // in hand always completes a slab in the world, whichever half that one occupies.
+      const merging = mat !== undefined && isHalfMat(mat) && isHalfMat(aimed) && baseOf(aimed) === baseOf(mat)
+      if (merging && countItem(inv.current!, selItem) > 0) {
         removeItems(inv.current!, selItem, 1)
-        setVoxel(hit.px, hit.py, hit.pz, mat)
+        setVoxel(hit.x, hit.y, hit.z, baseOf(aimed))
+        onInvChange()
+        mouse.current.right = false
+      } else if (mat !== undefined && !inPlayer && countItem(inv.current!, selItem) > 0 && voxel(hit.px, hit.py, hit.pz) === AIR) {
+        removeItems(inv.current!, selItem, 1)
+        // A slab takes the half you pointed at. The ray's own hit point decides it: land in the
+        // upper half of the target cell and the slab goes up there, so a slab staircase is built
+        // by aiming, not by a modifier key.
+        let put = mat
+        if (isHalfMat(mat)) {
+          // The face you clicked already answers it, and only a SIDE hit is ambiguous:
+          //   · clicked a block's top face  → the slab rests on it        → bottom half
+          //   · clicked a block's underside → the slab hangs beneath it   → top half
+          //   · clicked a side face         → the aim point's own height decides
+          if (hit.py > hit.y) put = mat
+          else if (hit.py < hit.y) put = mat | TOP_BIT
+          else {
+            const hy = p.y + aim.y * hit.distance
+            put = (hy - Math.floor(hy)) >= 0.5 ? (mat | TOP_BIT) : mat
+          }
+        }
+        setVoxel(hit.px, hit.py, hit.pz, put)
         // ★ Tutorial 'light' step — placing IS the objective, not just holding a lantern.
         if (mat === MAT.MANA_LANTERN) onQuestEvent('light')
         onInvChange()

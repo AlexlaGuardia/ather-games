@@ -17,7 +17,7 @@
 
 import { AIR, Section } from './section'
 import { STRUCTURE, STRUCTURE_HALF } from './pieces'
-import { isPlant } from './depth'
+import { isPlant, isHalfMat, isTopSlab } from './depth'
 
 export interface MeshResult {
   /** xyz per vertex, 4 vertices per quad. */
@@ -299,26 +299,39 @@ export function greedyMesh(
       faces++
     }
     // Winding rule, the same one the sweep obeys: cross(u, v) must equal the face normal.
-    // Iterates the lips themselves — never the section — so this pass costs what slump costs.
+    // Iterates the slabs themselves — never the section — so this pass costs what slabs cost.
+    //
+    // ★ COVERAGE IS A SPAN, NOT A BOOLEAN (2026-08-11, with top slabs). A cell's neighbour may fill
+    // all of it, its lower half, its upper half, or none — so a bottom slab beside a top slab has
+    // BOTH its side and the neighbour's exposed, and each must draw. Collapsing this back to
+    // "is the neighbour solid" punches see-through gaps into any staircase built from slabs.
+    const LOWER = 1, UPPER = 2, FULL = 3
+    const coverOf = (m: number): number =>
+      (m === AIR || m === STRUCTURE || m === STRUCTURE_HALF || isPlant(m)) ? 0
+        : !isHalfMat(m) ? FULL : isTopSlab(m) ? UPPER : LOWER
     for (const [k, m] of half) {
       const cx = (k % (S + 2)) - 1
       const z = ((k / (S + 2)) | 0) % (S + 2) - 1
       const y = ((k / ((S + 2) * (S + 2))) | 0) - 1
       if (cx < 0 || cx >= S || y < 0 || y >= S || z < 0 || z >= S) continue   // ring entry: context only
-      emit(cx, y + 0.5, z, 0, 0, 1, 1, 0, 0, 0, 1, 0, m)                     // top
-      const side = (dx: number, dz: number): boolean => {
-        // A full neighbour covers this 0.5 outright; a slumped one covers exactly as much as we
-        // do — and the sweep's section has had it stripped to AIR, so the map lookup is not
-        // redundant: without it every string of lips along a terrace edge draws a wall between
-        // each pair. Piece occupancy covers nothing (the piece renderer draws its own look).
-        const n = sample(cx + dx, y, z + dz)
-        if (!(n === AIR || n === STRUCTURE || n === STRUCTURE_HALF || isPlant(n))) return false
-        return !half.has(halfKey(cx + dx, y, z + dz, S))
-      }
-      if (side(1, 0)) emit(cx + 1, y, z, 0, 0.5, 0, 0, 0, 1, 1, 0, 0, m)
-      if (side(-1, 0)) emit(cx, y, z, 0, 0, 1, 0, 0.5, 0, -1, 0, 0, m)
-      if (side(0, 1)) emit(cx, y, z + 1, 1, 0, 0, 0, 0.5, 0, 0, 0, 1, m)
-      if (side(0, -1)) emit(cx, y, z, 0, 0.5, 0, 1, 0, 0, 0, 0, -1, m)
+      const top = isTopSlab(m)
+      const lo = top ? y + 0.5 : y
+      const hi = top ? y + 1 : y + 0.5
+      const mine = top ? UPPER : LOWER
+
+      // Top face, unless something solid sits directly on it (only possible for a top slab).
+      if (!top || coverOf(sample(cx, y + 1, z)) === 0) emit(cx, hi, z, 0, 0, 1, 1, 0, 0, 0, 1, 0, m)
+      // Underside. A bottom slab resting on solid ground has none — the sweep already emitted that
+      // ground's top face at this exact plane, and drawing ours would z-fight it. A top slab's
+      // underside is always open, and so is a bottom slab placed in mid-air.
+      const below = top ? 0 : coverOf(sample(cx, y - 1, z)) & UPPER
+      if (below === 0) emit(cx, lo, z, 1, 0, 0, 0, 0, 1, 0, -1, 0, m)
+      const side = (dx: number, dz: number): boolean =>
+        (coverOf(sample(cx + dx, y, z + dz)) & mine) !== mine
+      if (side(1, 0)) emit(cx + 1, lo, z, 0, 0.5, 0, 0, 0, 1, 1, 0, 0, m)
+      if (side(-1, 0)) emit(cx, lo, z, 0, 0, 1, 0, 0.5, 0, -1, 0, 0, m)
+      if (side(0, 1)) emit(cx, lo, z + 1, 1, 0, 0, 0, 0.5, 0, 0, 0, 1, m)
+      if (side(0, -1)) emit(cx, lo, z, 0, 0.5, 0, 1, 0, 0, 0, 0, -1, m)
     }
   }
 
