@@ -99,6 +99,7 @@ import { applySparPayout, sparLedgerLines } from './spar-reward'
 import ArenaBattle from '../components/ArenaBattle'
 import { createSpirit, speciesDisplayName, type Spirit } from '../spirits/spirit'
 import { moveStack } from './satchel'
+import { itemIcon } from './tex/item-icon'
 import { bloom as bloomSpirit, due as potsDue, potKey, progress as potProgress, type PotClock } from './pot'
 import { spiritsToSave, spiritsFromSave } from '../spirits/spirit-save'
 import { LAUNCHED_SPECIES } from '../engine/spirit-index'
@@ -239,6 +240,23 @@ function roomFor(inv: Inventory, itemId: string): number {
  * names is a second thing to forget. Falls back to de-snaking the id so a purely-crafted item with
  * no block behind it — a shard, a seed — still reads as words rather than code.
  */
+/**
+ * The visual for one item, at one size.
+ *
+ * ★ ONE COMPONENT FOR BOTH SURFACES. The hotbar and the satchel had independently-written swatch
+ * markup, which is two places for an item to look like two different things — the same shape as the
+ * sprite pipeline's three frame maps. `itemIcon` derives the picture from the block's own texture;
+ * the colour chip is the honest fallback for items with no block behind them (a seed, a shard),
+ * left plain on purpose so it reads as "no art yet" rather than as finished.
+ */
+function ItemChip({ itemId, size }: { itemId: string; size: number }) {
+  const icon = itemIcon(itemId)
+  if (icon) return <img src={icon} alt="" width={size} height={size} className="[image-rendering:pixelated]" draggable={false} />
+  const mat = materialForItem(itemId)
+  const swatch = mat !== undefined ? `#${(MATERIAL_COLOR[mat] ?? 0x888888).toString(16).padStart(6, '0')}` : undefined
+  return <span className="rounded-sm border border-black/40" style={{ width: size, height: size, background: swatch ?? 'rgba(255,255,255,0.25)' }} />
+}
+
 export function itemLabel(itemId: string): string {
   const m = materialForItem(itemId)
   const named = m !== undefined ? blockDef(m)?.name : undefined
@@ -1364,7 +1382,8 @@ function Hud({ stats, pos, look, hotbar, sel, tier, held, build, pieceIdx, rot, 
         </div>
       )}
 
-      {/* Colour swatches stand in for item art — the registry maps materials to tiles.ts later.
+      {/* Item art is DERIVED from each block's own texture (`tex/item-icon.ts`) — an icon can never
+          show something the block is not, and a new block gets one the moment it gets a texture.
           ★ The hotbar is 8 FIXED slots, ITEMS ONLY (2026-08-07) — always all 8, occupied or not, so
           number keys 1-8 always mean the same physical position. The four tool families live in the
           round arc off its right end (`ToolArc`, below), not in this row.
@@ -1383,16 +1402,14 @@ function Hud({ stats, pos, look, hotbar, sel, tier, held, build, pieceIdx, rot, 
         <div className="relative inline-flex items-end gap-1.5">
           {Array.from({ length: 8 }, (_, i) => {
             const e = hotbar[i]
-            const mat = e ? materialForItem(e.itemId) : undefined
-            const swatch = mat !== undefined ? `#${(MATERIAL_COLOR[mat] ?? 0x888888).toString(16).padStart(6, '0')}` : undefined
             const selected = i === sel && !drawn
             return (
               <div key={i} className={`w-12 h-12 rounded border-2 flex flex-col items-center justify-center text-[9px] font-mono
                 ${selected ? 'border-amber-300 bg-black/60' : 'border-white/20 bg-black/40'}`}>
                 {e ? (
                   <>
-                    <div className="w-5 h-5 rounded-sm border border-white/25" style={{ background: swatch ?? '#6b7280' }} />
-                    <div className="text-white/80 mt-0.5">{e.count}</div>
+                    <ItemChip itemId={e.itemId} size={24} />
+                    <div className="text-white/80 mt-0.5 tabular-nums">{e.count}</div>
                   </>
                 ) : <span className="text-white/25">{i + 1}</span>}
               </div>
@@ -1442,8 +1459,6 @@ function SatchelPanel({ inv, tick, sel, dragFrom, setDragFrom, onMove, onClose }
   const slots = inv.current?.slots ?? []
   const cell = (i: number) => {
     const st = slots[i]
-    const mat = st ? materialForItem(st.itemId) : undefined
-    const swatch = mat !== undefined ? `#${(MATERIAL_COLOR[mat] ?? 0x888888).toString(16).padStart(6, '0')}` : undefined
     const lifted = dragFrom === i
     return (
       <button key={i} type="button"
@@ -1460,9 +1475,7 @@ function SatchelPanel({ inv, tick, sel, dragFrom, setDragFrom, onMove, onClose }
             : 'border-white/20 bg-black/40 hover:border-white/40'}`}>
         {st ? (
           <>
-            {swatch
-              ? <span className="w-6 h-6 rounded-sm border border-black/40" style={{ background: swatch }} />
-              : <span className="w-6 h-6 rounded-sm border border-black/40 bg-white/25" />}
+            <ItemChip itemId={st.itemId} size={26} />
             <span className="mt-0.5 tabular-nums text-white/80">{st.count}</span>
           </>
         ) : <span className="text-white/15">·</span>}

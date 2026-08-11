@@ -490,7 +490,8 @@ function paintCraftTable(dst: Layer, size: number, seed: number, face: number) {
 
 // ── assembly ─────────────────────────────────────────────────────────────────────────────────────
 
-function paintFor(material: number, face: number, size: number): Layer {
+/** Exported for the item-icon renderer: an item's art must BE the block's art (see item-icon.ts). */
+export function paintFor(material: number, face: number, size: number): Layer {
   const dst = new Uint8Array(size * size * 4)
   const seed = material * 1013 + 17
   switch (material) {
