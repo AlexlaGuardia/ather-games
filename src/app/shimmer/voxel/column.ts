@@ -33,6 +33,7 @@ import { carveStack, type CarveConfig, DEFAULT_CARVE } from './carve'
 import { placeOre, type OreBatch, ORE_BATCHES } from './ore'
 import { plantTrees, type TreeConfig, DEFAULT_TREES } from './trees'
 import { placeSites } from './sites'
+import { slumpMask } from './slump'
 import { greedyMesh, createMeshScratch, type MeshScratch, type MeshResult } from './greedy'
 
 export const SECTION = 16
@@ -83,6 +84,10 @@ export class Column {
   readonly uniform: Int32Array
   /** Surface altitude per (x,z), cached — the depth rule wants it once per column, not per voxel. */
   readonly surface: Int32Array
+  /** 1 where this column's surface voxel is a slumping lip (slump.ts). Derived from the height
+   *  field alone, so it is NOT part of the save: a player edit changes the cell, never the mask,
+   *  and `isHalfCell` reads both before it calls anything half. */
+  readonly slump: Uint8Array
 
   constructor(wx: number, wz: number, cfg: ColumnConfig = DEFAULT_COLUMN) {
     this.wx = wx
@@ -91,6 +96,7 @@ export class Column {
     this.sections = Array.from({ length: n }, () => new Section(SECTION))
     this.uniform = new Int32Array(n).fill(-1)
     this.surface = new Int32Array(SECTION * SECTION)
+    this.slump = new Uint8Array(SECTION * SECTION)
   }
 
   get(x: number, y: number, z: number): number {
@@ -100,6 +106,35 @@ export class Column {
 
   /** Surface altitude for a local (x, z). */
   heightAt(x: number, z: number): number { return this.surface[z * SECTION + x] }
+}
+
+/**
+ * ── ★ THE ONE DEFINITION OF "THIS CELL IS HALF HEIGHT" (2026-08-11) ──────────────────────────────
+ * Read by the mesher (what to draw) and by the walker (what to stand on). It has to be ONE
+ * function: a cell drawn at 0.5 that collides at 1.0 is an invisible lip you trip on, and the
+ * reverse is a floor you sink through. Both bugs are silent, and the frame-map lesson from the
+ * sprite pipeline is the same shape — three copies of a truth is three chances to disagree.
+ *
+ * Three conditions, and each is load-bearing:
+ *  1. the column slumps here (slump.ts's lip rule + tendedness);
+ *  2. this is the GENERATED surface voxel — a floor the player dug at some lower altitude is not a
+ *     terrace lip, and half-height dug floors would make placing blocks unreadable;
+ *  3. the cell is solid and open to the AIR above it. This is what makes the whole feature
+ *     self-healing: a trunk, a ruin wall, a waystone or a block the player just set down all land
+ *     ON this cell and it goes back to full height, so nothing ever floats half a block above the
+ *     ground it stands on. AIR specifically, not "non-solid" — a submerged bed under water has no
+ *     business being a step.
+ */
+export function isHalfCell(col: Column, lx: number, y: number, lz: number): boolean {
+  const i = lz * SECTION + lx
+  if (!col.slump[i]) return false
+  if (y !== col.surface[i]) return false
+  const s = (y / SECTION) | 0
+  if (s < 0 || s >= col.sections.length) return false
+  if (col.sections[s].get(lx, y - s * SECTION, lz) === AIR) return false
+  const up = ((y + 1) / SECTION) | 0
+  if (up >= col.sections.length) return true
+  return col.sections[up].get(lx, y + 1 - up * SECTION, lz) === AIR
 }
 
 /** Recompute the per-section uniform table. Cheap, and it is what makes tall worlds affordable. */
@@ -118,12 +153,16 @@ export function generateColumn(
   const surfaceAt = (x: number, z: number) => columnHeight(x, z, seed, cfg.height)
 
   if (col.stage < Stage.Terrain && upTo >= Stage.Terrain) {
+    // The slump mask needs a one-column ring of heights, and hands back the interior it sampled —
+    // so the surface altitudes below are READ, not resampled (see slumpMask's own note).
+    const { mask, surface } = slumpMask(wx, wz, SECTION, seed, surfaceAt)
+    col.slump.set(mask)
+    col.surface.set(surface)
     for (let z = 0; z < SECTION; z++) {
       for (let x = 0; x < SECTION; x++) {
         // Surface altitude once per (x,z), not once per voxel — 256 redundant noise evaluations per
         // column is the difference between a fast generator and a slow one.
-        const h = surfaceAt(wx + x, wz + z)
-        col.surface[z * SECTION + x] = h
+        const h = col.surface[z * SECTION + x]
         for (let y = 0; y < cfg.worldHeight; y++) {
           const s = (y / SECTION) | 0
           col.sections[s].set(x, y - s * SECTION, z, materialAt(wx + x, y, wz + z, seed, h, cfg.depth, cfg.height))
@@ -268,7 +307,19 @@ export function meshColumn(
       return sec.get(x, y, z)
     }
 
-    const mesh = greedyMesh(sec, sample, sc)
+    // Slump, in section-local coordinates. Mirrors `sample`'s frontier rule: an ABSENT neighbour
+    // column is opaque, and opaque ground is never a lip — so the frontier draws no half faces
+    // either, and they arrive with the column when it does.
+    const halfAt = (x: number, y: number, z: number): boolean => {
+      const wy = oy + y
+      if (x < 0) return neigh.negX ? isHalfCell(neigh.negX, SECTION - 1, wy, z) : false
+      if (x >= SECTION) return neigh.posX ? isHalfCell(neigh.posX, 0, wy, z) : false
+      if (z < 0) return neigh.negZ ? isHalfCell(neigh.negZ, x, wy, SECTION - 1) : false
+      if (z >= SECTION) return neigh.posZ ? isHalfCell(neigh.posZ, x, wy, 0) : false
+      if (wy < 0 || wy >= n * SECTION) return false
+      return isHalfCell(col, x, wy, z)
+    }
+    const mesh = greedyMesh(sec, sample, sc, halfAt)
     if (mesh.quads === 0) continue
     // ⚠ The scratch is reused, so these arrays are views that the NEXT section will overwrite.
     // Copy them here: the caller receives a list, and a list of aliased views is a trap.

@@ -21,10 +21,11 @@ import { useRef, useMemo, useState, useEffect, useCallback } from 'react'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { PointerLockControls } from '@react-three/drei'
 import * as THREE from 'three'
-import { SECTION, DEFAULT_COLUMN, Column, Stage, makeColumn, meshColumn, refreshUniform } from '../voxel/column'
+import { SECTION, DEFAULT_COLUMN, Column, Stage, makeColumn, meshColumn, refreshUniform, isHalfCell } from '../voxel/column'
 import { VOXEL_WORKER_URL } from '../../../workers/worker-url'
 import { createMeshScratch } from '../voxel/greedy'
 import { columnHeight, holdPadLevel } from '../voxel/height'
+import { slumpMask } from '../voxel/slump'
 import { holdGenPiecesForCol, type GenPiece } from '../voxel/holds'
 import { biomeAt, forestness } from '../voxel/biome'
 import { ZONE_ANCHORS, zoneAt } from '../voxel/zones'
@@ -1914,7 +1915,17 @@ function World({ inv, toolTier, toolSkill, selItem, weaponDrawn, weaponIdx, onAm
    *  voxelSolid — the same stand-on-it-don't-fall-through-it rule the old walker had. */
   const solidProbe = useCallback((x: number, y: number, z: number) => {
     const m = voxelSolid(x, y, z)
-    return m === MAT.WATER ? CELL_WATER : m === STRUCTURE_HALF ? CELL_HALF : isSolid(m) ? CELL_SOLID : CELL_EMPTY
+    if (m === MAT.WATER) return CELL_WATER
+    if (m === STRUCTURE_HALF) return CELL_HALF
+    if (!isSolid(m)) return CELL_EMPTY
+    // ★ TERRAIN SLUMP READS THROUGH THE SAME `isHalfCell` THE MESHER USES — a lip the walker
+    // treats as full is an invisible wall you vault; one the mesher draws full and the walker
+    // reads half is a floor you sink into. Only asked about solid cells, so the column lookup
+    // rides the miss that `voxelSolid` already paid for.
+    const cx = Math.floor(x / SECTION), cz = Math.floor(z / SECTION)
+    const c = cols.current.get(key(cx, cz))
+    if (c && isHalfCell(c, x - cx * SECTION, y, z - cz * SECTION)) return CELL_HALF
+    return CELL_SOLID
   }, [voxelSolid])
 
   // Fence arms ask the world what to grab — walls, hillsides, other pieces' occupancy. Slabs are
@@ -2240,8 +2251,15 @@ function World({ inv, toolTier, toolSkill, selItem, weaponDrawn, weaponIdx, onAm
       const col = new Column(gx * SECTION, gz * SECTION)
       const per = SECTION * SECTION * SECTION
       for (let i = 0; i < col.sections.length; i++) col.sections[i].data.set(voxels.subarray(i * per, (i + 1) * per))
-      for (let z = 0; z < SECTION; z++) for (let x = 0; x < SECTION; x++)
-        col.surface[z * SECTION + x] = columnHeight(gx * SECTION + x, gz * SECTION + z, SEED)
+      // ★ THE WORKER SENDS VOXELS, NOT THE COLUMN — so everything DERIVED from the height field
+      // has to be rebuilt here, and `slump` is derived (2026-08-11). Rebuilding only `surface`
+      // left every worker-generated column with an all-zero slump mask: terrain slump would have
+      // passed its whole oracle and done nothing in the actual game, because the worker is the
+      // normal path and the main-thread generator is the fallback. `slumpMask` returns both from
+      // one ring sample, which is also what keeps the two ways into a Column agreeing.
+      const derived = slumpMask(gx * SECTION, gz * SECTION, SECTION, SEED, (x, z) => columnHeight(x, z, SEED))
+      col.surface.set(derived.surface)
+      col.slump.set(derived.mask)
       // ★ Apply any stored edits OVER freshly generated terrain — the diff is the save.
       // Edits arrive asynchronously from IndexedDB, so a column may mesh once procedurally and then
       // again once its edits land. That is deliberate: blocking the world on a database read would
@@ -2333,7 +2351,11 @@ function World({ inv, toolTier, toolSkill, selItem, weaponDrawn, weaponIdx, onAm
         let guard = 8
         while (guard-- > 0 && voxel(fx, y + 1, fz) !== AIR) y++
         while (guard-- > 0 && y > 1 && voxel(fx, y, fz) === AIR) y--
-        return voxel(fx, y, fz) === MAT.TOPSOIL && voxel(fx, y + 1, fz) === AIR ? y : -1
+        if (voxel(fx, y, fz) !== MAT.TOPSOIL || voxel(fx, y + 1, fz) !== AIR) return -1
+        // A tuft on a slumped lip grows from the half-height top, not from where a full block
+        // would have been — otherwise 19% of the garden's ground cover hovers half a voxel up.
+        // Fractional by design: the spot's y is only ever used to place a root.
+        return isHalfCell(c, fx - fcx * SECTION, y, fz - fcz * SECTION) ? y - 0.5 : y
       })
     }
 

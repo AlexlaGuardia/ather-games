@@ -38,6 +38,14 @@ export type NeighbourFn = (x: number, y: number, z: number) => number
 const OUTSIDE_IS_AIR: NeighbourFn = () => AIR
 
 /**
+ * Does this cell stand at HALF height? Section-local coordinates; may be asked about neighbours
+ * one step outside the section, exactly like `NeighbourFn`. See the half-cell block below.
+ */
+export type HalfFn = (x: number, y: number, z: number) => boolean
+
+const NOTHING_IS_HALF: HalfFn = () => false
+
+/**
  * Reusable scratch buffers for one section size.
  *
  * ★ THIS IS NOT A MICRO-OPTIMISATION. Sizing for the checkerboard worst case means ~626KB of typed
@@ -74,7 +82,10 @@ export function createMeshScratch(size: number): MeshScratch {
  * underneath you. That is the price of not allocating; it is stated here because the failure mode is
  * a silently corrupted mesh two frames later, not a crash.
  */
-export function greedyMesh(sec: Section, neighbour: NeighbourFn = OUTSIDE_IS_AIR, scratch?: MeshScratch): MeshResult {
+export function greedyMesh(
+  sec: Section, neighbour: NeighbourFn = OUTSIDE_IS_AIR, scratch?: MeshScratch,
+  half: HalfFn = NOTHING_IS_HALF,
+): MeshResult {
   const S = sec.size
   const sc = scratch && scratch.size === S ? scratch : createMeshScratch(S)
   const { positions, normals, materials, indices, mask } = sc
@@ -128,8 +139,16 @@ export function greedyMesh(sec: Section, neighbour: NeighbourFn = OUTSIDE_IS_AIR
           // loud-magenta fallback cube around every placed piece (the design always said
           // "renders as a mesh"; this line is where that sentence becomes true). They read as
           // AIR here so neighbouring terrain still draws its faces behind a see-through piece.
-          const aSolid = a !== AIR && a !== STRUCTURE && a !== STRUCTURE_HALF
-          const bSolid = b !== AIR && b !== STRUCTURE && b !== STRUCTURE_HALF
+          // ★ A SLUMPED CELL IS INVISIBLE TO THE SWEEP, exactly as piece occupancy is (2026-08-11).
+          // Its geometry is not a unit cube, so it cannot take part in a merge that assumes one —
+          // and reading it as AIR here is what makes the surrounding terrain draw the faces a
+          // half-height neighbour exposes. The half pass below then draws the cell itself.
+          // ⚠ Asked only about cells that are otherwise solid: `half` runs on every plane cell of
+          // every plane, and the whole point of the uniform fast path is not to pay per cell.
+          let aSolid = a !== AIR && a !== STRUCTURE && a !== STRUCTURE_HALF
+          if (aSolid && half(x[0], x[1], x[2])) aSolid = false
+          let bSolid = b !== AIR && b !== STRUCTURE && b !== STRUCTURE_HALF
+          if (bSolid && half(x[0] + q[0], x[1] + q[1], x[2] + q[2])) bSolid = false
           // Exactly one solid => a face. Both solid or both air => nothing. This single line is
           // what deletes every interior face in the world.
           if (aSolid === bSolid) mask[n] = 0
@@ -212,6 +231,67 @@ export function greedyMesh(sec: Section, neighbour: NeighbourFn = OUTSIDE_IS_AIR
       if (planes) {
         planeIdx++
         x[d] = planeIdx < planes.length ? planes[planeIdx] : S
+      }
+    }
+  }
+
+  // ── ★ THE HALF PASS — slumped cells, drawn one at a time and on purpose ──────────────────────
+  // Terrain slump (slump.ts) shaves the top half off a step's lip so a 1-block rise walks as two
+  // half-steps. Those cells left the sweep above, so they are drawn here: top face at +0.5, and a
+  // 0.5-tall side wherever the horizontal neighbour does not already cover it.
+  //
+  // NO MERGING, deliberately. A slumped cell is the LIP of a terrace edge, so they come in strings
+  // one or two cells wide, never in the fields greedy exists to collapse — at most one per column
+  // footprint by construction, and only in the surface section. Measured worst case is 5 quads on
+  // ≤S² cells; a merge pass over that would cost more to maintain than it could ever save.
+  //
+  // What is deliberately NOT drawn: the bottom face. The cell below is solid, so the sweep already
+  // emitted its top face at this exact plane — sitting inside the half's own volume, invisible, and
+  // merged into its neighbours' tops for free. Drawing a bottom here would z-fight it.
+  {
+    const maxQuads = (positions.length / 12) | 0
+    const emit = (
+      px: number, py: number, pz: number, ux: number, uy: number, uz: number,
+      vx: number, vy: number, vz: number, nx: number, ny: number, nz: number, mat: number,
+    ) => {
+      if (quads >= maxQuads) return
+      const p = quads * 12
+      positions[p + 0] = px;           positions[p + 1] = py;           positions[p + 2] = pz
+      positions[p + 3] = px + ux;      positions[p + 4] = py + uy;      positions[p + 5] = pz + uz
+      positions[p + 6] = px + ux + vx; positions[p + 7] = py + uy + vy; positions[p + 8] = pz + uz + vz
+      positions[p + 9] = px + vx;      positions[p + 10] = py + vy;     positions[p + 11] = pz + vz
+      for (let k = 0; k < 4; k++) {
+        normals[p + k * 3 + 0] = nx
+        normals[p + k * 3 + 1] = ny
+        normals[p + k * 3 + 2] = nz
+        materials[quads * 4 + k] = mat
+      }
+      const base = quads * 4
+      const ii = quads * 6
+      indices[ii + 0] = base; indices[ii + 1] = base + 1; indices[ii + 2] = base + 2
+      indices[ii + 3] = base; indices[ii + 4] = base + 2; indices[ii + 5] = base + 3
+      quads++
+      faces++
+    }
+    // Winding rule, the same one the sweep obeys: cross(u, v) must equal the face normal.
+    for (let y = 0; y < S; y++) {
+      for (let z = 0; z < S; z++) {
+        for (let cx = 0; cx < S; cx++) {
+          const m = sec.get(cx, y, z)
+          if (m === AIR || m === STRUCTURE || m === STRUCTURE_HALF) continue
+          if (!half(cx, y, z)) continue
+          emit(cx, y + 0.5, z, 0, 0, 1, 1, 0, 0, 0, 1, 0, m)                     // top
+          const side = (dx: number, dz: number): boolean => {
+            const n = sample(cx + dx, y, z + dz)
+            // A full neighbour covers this 0.5 outright; a slumped one covers exactly as much as
+            // we do. Piece occupancy covers nothing — the piece renderer draws its own look.
+            return n === AIR || n === STRUCTURE || n === STRUCTURE_HALF
+          }
+          if (side(1, 0)) emit(cx + 1, y, z, 0, 0.5, 0, 0, 0, 1, 1, 0, 0, m)
+          if (side(-1, 0)) emit(cx, y, z, 0, 0, 1, 0, 0.5, 0, -1, 0, 0, m)
+          if (side(0, 1)) emit(cx, y, z + 1, 1, 0, 0, 0, 0.5, 0, 0, 0, 1, m)
+          if (side(0, -1)) emit(cx, y, z, 0, 0.5, 0, 1, 0, 0, 0, 0, -1, m)
+        }
       }
     }
   }
