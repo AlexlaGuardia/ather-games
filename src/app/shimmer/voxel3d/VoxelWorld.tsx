@@ -174,6 +174,26 @@ const TOOL_FAMILIES = ['forestry', 'prospecting', 'rinning', 'farming'] as const
 type HotbarEntry = { itemId: string; count: number }
 
 /**
+ * ── ★ VOXEL ITEMS STACK (2026-08-11) ────────────────────────────────────────────────────────────
+ * `engine/inventory.getMaxStack` reads the 2D game's ITEMS/FURNITURE tables and returns **1** for
+ * anything it does not recognise — and it recognises none of this world's block items. Measured:
+ * `addItems(inv, 'block_topsoil', 64)` filled all 24 slots and returned 40 LEFTOVER, and every
+ * caller here discarded that return. So an inventory filled at 24 items and everything mined after
+ * that was silently destroyed. The count-derived hotbar hid it perfectly by showing a running total.
+ *
+ * Fixed HERE rather than by adding block ids to the 2D tables: those tables belong to another game
+ * whose balance is not ours, and a voxel world's answer to "how many blocks in a slot" is a
+ * property of THIS world. `give` is the only way items enter the bag now, so the stack size cannot
+ * be forgotten at a call site.
+ */
+export const VOXEL_STACK = 99
+
+/** Add to the bag with this world's stack size. Returns what did NOT fit. */
+function give(inv: Inventory, itemId: string, count: number): number {
+  return addItems(inv, itemId, count, VOXEL_STACK)
+}
+
+/**
  * What to CALL an item on screen.
  *
  * Prefers the registry's block name ('Goldwood Planks') over the id ('goldwood_plank'), because the
@@ -393,7 +413,7 @@ const KNOWN_ITEMS: ReadonlySet<string> = new Set([
 export default function VoxelWorld() {
   const [stats, setStats] = useState('generating…')
   const [pos, setPos] = useState('')
-  const [hotbar, setHotbar] = useState<HotbarEntry[]>([])
+  const [hotbar, setHotbar] = useState<(HotbarEntry | null)[]>([])
   // Stowed vs drawn. F toggles. See the DRAW LOCK note on the keydown handler.
   const [drawn, setDrawn] = useState(false)
   const [weaponIdx, setWeaponIdx] = useState(0)
@@ -586,13 +606,23 @@ export default function VoxelWorld() {
   // Longer than the other toasts: this one is a list of names and numbers, not a word.
   useEffect(() => { if (!sparLedger) return; const t = setTimeout(() => setSparLedger(null), 6000); return () => clearTimeout(t) }, [sparLedger])
 
+  /**
+   * ── ★ THE BAR IS THE FIRST 8 SLOTS, NOT A SUMMARY OF THE BAG (2026-08-11, Alex) ──────────────
+   * It used to sum every slot into a per-item total and slice the top 8, which meant SLOT 3 WAS
+   * NOT A PLACE — the bar re-sorted itself as you picked things up, so what sat under your finger
+   * changed while you worked and nothing could be arranged. Reading real slot positions is what
+   * makes a hotbar a hotbar; it is also the prerequisite for the satchel, since both are then
+   * windows onto one grid rather than two ideas about what you are carrying.
+   *
+   * ⚠ Positional, so empties are NULL and stay null — a gap in the bar is a gap on purpose.
+   * `engine/inventory.addItems` fills the lowest free slot first, so picked-up items land in the
+   * bar before the satchel, which is the behaviour a player expects without being told.
+   */
   const refreshHotbar = useCallback(() => {
-    const counts = new Map<string, number>()
-    for (const s of inv.current.slots) if (s) counts.set(s.itemId, (counts.get(s.itemId) ?? 0) + s.count)
-    const items: HotbarEntry[] = [...counts]
-      .map(([itemId, count]) => ({ itemId, count }))
-      .slice(0, 8)
-    setHotbar(items)
+    setHotbar(Array.from({ length: 8 }, (_, i) => {
+      const s = inv.current.slots[i]
+      return s ? { itemId: s.itemId, count: s.count } : null
+    }))
   }, [])
 
   // ── The crafting surface ────────────────────────────────────────────────────────────────────
@@ -628,7 +658,7 @@ export default function VoxelWorld() {
     setRadius: (r) => update({ viewRadius: r }),
     give: (id, count) => {
       if (!KNOWN_ITEMS.has(id)) return `no such item: ${id}`
-      addItems(inv.current!, id, count)
+      give(inv.current!, id, count)
       refreshHotbar(); setCraftTick(t => t + 1)
       return `gave ${count}× ${id.replace(/_/g, ' ')}`
     },
@@ -770,11 +800,11 @@ export default function VoxelWorld() {
     closeCursorUI()
     const t = tutorial.current
     if (t.stage === 'greet') {
-      addItems(inv.current!, 'raw_mana_shard', 1)
+      give(inv.current!, 'raw_mana_shard', 1)
       // The starter bag, delivered incrementally — canon (shimmer-quests-mainmap.md quest 1) has
       // Greg gift "crafting table, pot, grimoire, tools"; the table is the piece that exists.
       // The hand-craft recipe in voxel/recipes.ts stays as the REPLACEMENT path, per its header.
-      addItems(inv.current!, 'crafting_table', 1)
+      give(inv.current!, 'crafting_table', 1)
       refreshHotbar()
       t.stage = 'cut'
       saveTutorial(SEED, t)
@@ -796,7 +826,7 @@ export default function VoxelWorld() {
     // still yields the output is a duplication bug, which is the one economy bug you cannot undo.
     if (!plan.take.every(t => countItem(inv.current!, t.itemId) >= t.count)) return
     for (const t of plan.take) removeItems(inv.current!, t.itemId, t.count)
-    addItems(inv.current!, plan.give.itemId, plan.give.count)
+    give(inv.current!, plan.give.itemId, plan.give.count)
     setCrafted(`${plan.give.count}× ${plan.give.itemId.replace(/_/g, ' ')}`)
     setCraftTick(t => t + 1)
     refreshHotbar()
@@ -1069,7 +1099,7 @@ function Clock() {
 function Hud({ stats, pos, look, hotbar, sel, tier, held, build, pieceIdx, rot, inv, skill, levelUp, crafted, tools, skills, activeTool, isOwner, drawn, weaponIdx, ammoUi, tutorialStage, nearGreg, dialogueOpen, nearTable, craftOpen, nearMist, hasParty, sparLedger }: {
   stats: string; pos: string
   look: { name: string; progress: number; refused: boolean } | null
-  hotbar: HotbarEntry[]; sel: number; tier: number
+  hotbar: (HotbarEntry | null)[]; sel: number; tier: number
   held: { text: string; out: boolean } | null
   build: boolean; pieceIdx: number; rot: Rotation
   inv: React.RefObject<Inventory>
@@ -2610,7 +2640,7 @@ function World({ inv, toolTier, toolSkill, selItem, weaponDrawn, weaponIdx, onAm
           for (const c of cellsOf(found, fdef)) if (c.solid) setVoxel(c.x, c.y, c.z, AIR)
           // Full refund while the loop is unproven — consequence-free experimenting is what you want
           // while judging feel. A dial, not a ruling.
-          for (const c of fdef.cost) addItems(inv.current!, c.itemId, c.count)
+          for (const c of fdef.cost) give(inv.current!, c.itemId, c.count)
           placements.current = placements.current.filter(p => p !== found)
           const fk = colOf(found.x, found.z)
           const genId = (found as Placement & { gen?: string }).gen
@@ -2771,7 +2801,16 @@ function World({ inv, toolTier, toolSkill, selItem, weaponDrawn, weaponIdx, onAm
       const res = tickDrops(drops.current, dt, p.x, p.y - 0.8, p.z,
         (x, y, z) => isSolid(voxelSolid(x, y, z)))
       if (res.picked.length) {
-        for (const it of res.picked) addItems(inv.current!, it.itemId, it.count)
+        // ⚠ A FULL BAG MUST SAY SO. `give` returns what did not fit, and every caller here used to
+        // discard that — which is how mining past a full inventory destroyed the drop in silence.
+        // With 99-stacks that is now 24 × 99 before it can happen, but "rare" is not "never", and a
+        // player losing a stack they walked over deserves to be told rather than to wonder.
+        // ⏭ The right end state is refusing the PICKUP so the drop stays on the ground; that needs
+        // a capacity check inside `tickDrops`, which is the next inventory slice.
+        for (const it of res.picked) {
+          const left = give(inv.current!, it.itemId, it.count)
+          if (left > 0) onStats(`bag full — ${left}× ${itemLabel(it.itemId)} did not fit`)
+        }
         onInvChange()
       }
     }
