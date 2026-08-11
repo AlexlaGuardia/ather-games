@@ -27,13 +27,14 @@
 
 import { Section, AIR } from './section'
 import { columnHeight, type HeightConfig, DEFAULT_HEIGHT } from './height'
-import { materialAt, MAT, type DepthConfig, DEFAULT_DEPTH } from './depth'
+import { materialAt, MAT, isPlant, type DepthConfig, DEFAULT_DEPTH } from './depth'
 import { plantWaystones } from './story-path'
 import { carveStack, type CarveConfig, DEFAULT_CARVE } from './carve'
 import { placeOre, type OreBatch, ORE_BATCHES } from './ore'
 import { plantTrees, type TreeConfig, DEFAULT_TREES } from './trees'
 import { placeSites } from './sites'
 import { slumpMask } from './slump'
+import { plantMaterialAt } from './flora'
 import { greedyMesh, createMeshScratch, halfKey, type MeshScratch, type MeshResult, type HalfCells } from './greedy'
 
 export const SECTION = 16
@@ -111,6 +112,29 @@ export class Column {
 }
 
 /**
+ * ── ★ WHAT THE GENERATOR WOULD HAVE PUT AT THIS CELL — including ground cover (2026-08-11) ──────
+ * `materialAt` plus the one plant voxel that sits above the surface. This exists as ONE function
+ * because `recordEdit` stores an edit only when the new material DIFFERS from the generated one:
+ * if the diff asked `materialAt` (which knows nothing about plants) then picking a flower would
+ * compare AIR against AIR, store nothing, and the flower would be back on reload. Anything that
+ * asks "was this cell touched by the player" must ask HERE, never `materialAt` directly.
+ *
+ * ⚠ Trees, sites and waystones still write over this afterwards and are NOT reflected — they run
+ * as later stages and re-run identically on regeneration, so a cell they own compares against the
+ * plant (or air) underneath them. That is the pre-existing contract, not something plants changed.
+ */
+export function generatedAt(
+  x: number, y: number, z: number, seed: number, h: number,
+  depthCfg: DepthConfig = DEFAULT_DEPTH, heightCfg: HeightConfig = DEFAULT_HEIGHT,
+): number {
+  if (y === h + 1) {
+    const p = plantMaterialAt(x, z, seed)
+    if (p !== AIR) return p
+  }
+  return materialAt(x, y, z, seed, h, depthCfg, heightCfg)
+}
+
+/**
  * ── ★ THE ONE DEFINITION OF "THIS CELL IS HALF HEIGHT" (2026-08-11) ──────────────────────────────
  * Read by the mesher (what to draw) and by the walker (what to stand on). It has to be ONE
  * function: a cell drawn at 0.5 that collides at 1.0 is an invisible lip you trip on, and the
@@ -136,7 +160,11 @@ export function isHalfCell(col: Column, lx: number, y: number, lz: number): bool
   if (col.sections[s].get(lx, y - s * SECTION, lz) === AIR) return false
   const up = ((y + 1) / SECTION) | 0
   if (up >= col.sections.length) return true
-  return col.sections[up].get(lx, y + 1 - up * SECTION, lz) === AIR
+  // AIR *or ground cover*: a plant is non-solid and the renderer stands it on the ground top, so a
+  // tuft growing on a lip must not cancel the lip. Without this, slump would have silently died on
+  // the ~20% of tended ground that carries flora — a feature disabled by another feature.
+  const above = col.sections[up].get(lx, y + 1 - up * SECTION, lz)
+  return above === AIR || isPlant(above)
 }
 
 /**
@@ -189,7 +217,7 @@ export function generateColumn(
         const h = col.surface[z * SECTION + x]
         for (let y = 0; y < cfg.worldHeight; y++) {
           const s = (y / SECTION) | 0
-          col.sections[s].set(x, y - s * SECTION, z, materialAt(wx + x, y, wz + z, seed, h, cfg.depth, cfg.height))
+          col.sections[s].set(x, y - s * SECTION, z, generatedAt(wx + x, y, wz + z, seed, h, cfg.depth, cfg.height))
         }
       }
     }

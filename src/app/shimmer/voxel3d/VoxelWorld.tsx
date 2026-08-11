@@ -21,7 +21,7 @@ import { useRef, useMemo, useState, useEffect, useCallback } from 'react'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { PointerLockControls } from '@react-three/drei'
 import * as THREE from 'three'
-import { SECTION, DEFAULT_COLUMN, Column, Stage, makeColumn, meshColumn, refreshUniform, isHalfCell } from '../voxel/column'
+import { SECTION, DEFAULT_COLUMN, Column, Stage, makeColumn, meshColumn, refreshUniform, isHalfCell, generatedAt } from '../voxel/column'
 import { VOXEL_WORKER_URL } from '../../../workers/worker-url'
 import { createMeshScratch } from '../voxel/greedy'
 import { columnHeight, holdPadLevel } from '../voxel/height'
@@ -30,7 +30,8 @@ import { holdGenPiecesForCol, type GenPiece } from '../voxel/holds'
 import { biomeAt, forestness } from '../voxel/biome'
 import { ZONE_ANCHORS, zoneAt } from '../voxel/zones'
 import { AIR } from '../voxel/section'
-import { materialAt, MAT, DEFAULT_DEPTH } from '../voxel/depth'
+import { materialAt, MAT, isPlant, DEFAULT_DEPTH } from '../voxel/depth'
+import { FLORA, plantVariant } from '../voxel/flora'
 import { raycast, tickBreak, dropsFor, type BreakState } from '../voxel/mine'
 import { spawnDrop, tickDrops, type Drop } from '../voxel/drops'
 import { blockDef, materialForItem, emitOf, BLOCKS, type BlockSkill } from '../voxel/registry'
@@ -1387,7 +1388,10 @@ function ToolGlyph({ family }: { family: 'forestry' | 'prospecting' | 'rinning' 
   }
 }
 
-const SOLID_EXCEPT = new Set<number>([AIR, MAT.WATER])
+// Ground cover is walked THROUGH, blocks no light, and stops no fence arm — it is scenery you can
+// also pick up, not geometry. Everything downstream of `isSolid` (collision, the light field's
+// opacity, piece connection) inherits that from this one line.
+const SOLID_EXCEPT = new Set<number>([AIR, MAT.WATER, MAT.TUFT, MAT.TALL_GRASS, MAT.FLOWER])
 const isSolid = (m: number) => !SOLID_EXCEPT.has(m)
 
 function World({ inv, toolTier, toolSkill, selItem, weaponDrawn, weaponIdx, onAmmo, onStats, onPos, onLook, onInvChange, worker, incoming, inflight, settings, build, pieceIdx, rot, tools, skills, onSkill, onLevel, onTool, tutorial, onQuestEvent, onNearGreg, onNearTable, cmdOut, mistLedger, onNearMist, sparring }: {
@@ -1886,7 +1890,9 @@ function World({ inv, toolTier, toolSkill, selItem, weaponDrawn, weaponIdx, onAm
     // is what lets mining a block and putting it back return the save to empty instead of storing
     // a no-op forever. `materialAt` is pure, so the original is always recoverable without having
     // kept a pristine copy of the column around.
-    const generated = materialAt(wx, wy, wz, SEED, c.heightAt(lx, lz))
+    // ★ `generatedAt`, NOT `materialAt` — it knows about ground cover. Ask materialAt here and
+    // picking a flower compares AIR against AIR, stores no edit, and the flower is back on reload.
+    const generated = generatedAt(wx, wy, wz, SEED, c.heightAt(lx, lz))
     let e = edits.current.get(k)
     if (!e) { e = new Map(); edits.current.set(k, e) }
     recordEdit(e, editIndex(lx, wy, lz), mat, generated)
@@ -2346,16 +2352,23 @@ function World({ inv, toolTier, toolSkill, selItem, weaponDrawn, weaponIdx, onAm
       flora.sync(list, SEED, (fx, fz) => {
         const fcx = Math.floor(fx / SECTION), fcz = Math.floor(fz / SECTION)
         const c = cols.current.get(key(fcx, fcz))
-        if (!c) return -1
+        if (!c) return null
         let y = c.heightAt(fx - fcx * SECTION, fz - fcz * SECTION)
         let guard = 8
-        while (guard-- > 0 && voxel(fx, y + 1, fz) !== AIR) y++
+        // Walk to the ACTUAL ground (edits move it). Ground cover reads as air to this walk — it
+        // is what we are looking FOR, so stopping on it would report the plant as the ground.
+        const clear = (m: number) => m === AIR || isPlant(m)
+        while (guard-- > 0 && !clear(voxel(fx, y + 1, fz))) y++
         while (guard-- > 0 && y > 1 && voxel(fx, y, fz) === AIR) y--
-        if (voxel(fx, y, fz) !== MAT.TOPSOIL || voxel(fx, y + 1, fz) !== AIR) return -1
+        if (voxel(fx, y, fz) !== MAT.TOPSOIL) return null
+        const m = voxel(fx, y + 1, fz)
+        if (!isPlant(m)) return null
         // A tuft on a slumped lip grows from the half-height top, not from where a full block
         // would have been — otherwise 19% of the garden's ground cover hovers half a voxel up.
         // Fractional by design: the spot's y is only ever used to place a root.
-        return isHalfCell(c, fx - fcx * SECTION, y, fz - fcz * SECTION) ? y - 0.5 : y
+        const gy = isHalfCell(c, fx - fcx * SECTION, y, fz - fcz * SECTION) ? y - 0.5 : y
+        const kind = m === MAT.TUFT ? FLORA.TUFT : m === MAT.TALL_GRASS ? FLORA.TALL : FLORA.FLOWER
+        return { y: gy, kind, variant: plantVariant(fx, fz, SEED, kind) }
       })
     }
 

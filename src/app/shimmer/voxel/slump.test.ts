@@ -19,7 +19,7 @@ import { columnHeight } from './height'
 import { slumpStrength, slumpAllowed, isLip, slumpMask } from './slump'
 import { ZONE_ANCHORS } from './zones'
 import { makeColumn, isHalfCell, meshColumn, SECTION } from './column'
-import { MAT } from './depth'
+import { MAT, isPlant } from './depth'
 import { AIR } from './section'
 
 let pass = 0
@@ -154,7 +154,10 @@ const h = (x: number, z: number) => columnHeight(x, z, SEED)
           found++
           if (y !== s) offSurface++
           if (col.get(x, y, z) === AIR) hollow++
-          if (col.get(x, y + 1, z) !== AIR) buried++
+          // Ground cover is the ONE thing allowed to stand on a lip: a plant is non-solid and the
+          // renderer stands it on the ground top, so it neither floats nor cancels the lip. Anything
+          // SOLID above must still restore full height — that is what this assert protects.
+          if (!(col.get(x, y + 1, z) === AIR || isPlant(col.get(x, y + 1, z)))) buried++
         }
       }
     }
@@ -162,7 +165,7 @@ const h = (x: number, z: number) => columnHeight(x, z, SEED)
   ok(found > 0, `the generated garden really carries half cells (${found})`)
   ok(offSurface === 0, 'a half cell is only ever the generated surface voxel')
   ok(hollow === 0, 'a half cell is never air')
-  ok(buried === 0, '★ nothing ever stands ON a half cell — trunks and walls restore full height')
+  ok(buried === 0, '★ nothing SOLID ever stands on a half cell — trunks and walls restore full height')
 }
 
 // ── 6. slump never touches water's edge ─────────────────────────────────────────────────────────

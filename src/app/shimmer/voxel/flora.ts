@@ -23,6 +23,7 @@ import { value2 } from './noise'
 import { greyness } from './biome'
 import { zoneAt } from './zones'
 import { mistAt } from './mist'
+import { MAT } from './depth'
 
 export const FLORA = {
   NONE: 0,
@@ -119,4 +120,40 @@ export function floraAt(x: number, z: number, seed: number): FloraSpot | null {
   if (r < flowerP + tuftAdj) return { kind: FLORA.TUFT, variant: hash01(x, z, seed ^ 0x3b1) }
   if (r < flowerP + tuftAdj + tallP) return { kind: FLORA.TALL, variant: hash01(x, z, seed ^ 0x9c5) }
   return null
+}
+
+/**
+ * ── ★ THE VOXEL SAYS WHETHER A PLANT IS THERE; THIS FILE SAYS WHAT IT LOOKS LIKE ────────────────
+ * The material a plant cell holds at (x, z), or AIR for bare ground. `column.ts` writes this one
+ * voxel above the surface, which is what makes ground cover breakable, droppable and SAVED — see
+ * the plants block in depth.ts for why that had to stop being a renderer-only fiction.
+ *
+ * The split matters and is worth keeping: EXISTENCE is voxel data (the player can remove it, and
+ * the save records that), while the LOOK — height jitter, turn, flower colour — stays a pure
+ * function of position via `FloraSpot.variant`. So picking one flower cannot change how its
+ * neighbour looks, and no per-plant appearance state is ever stored.
+ *
+ * ⚠ depth.ts may not import this file (mist.ts imports depth, so flora → depth is fine but the
+ * reverse would close a cycle). That is why the write lives in the assembly layer, not the depth
+ * rule, even though "what material is at this cell" is otherwise depth's job.
+ */
+export function plantMaterialAt(x: number, z: number, seed: number): number {
+  const f = floraAt(x, z, seed)
+  if (!f) return 0
+  return f.kind === FLORA.TUFT ? MAT.TUFT : f.kind === FLORA.TALL ? MAT.TALL_GRASS : MAT.FLOWER
+}
+
+/**
+ * The LOOK roll for a plant at (x, z) — height jitter, turn and flower colour.
+ *
+ * Split out so the renderer can derive appearance from position alone once EXISTENCE became voxel
+ * data (see `plantMaterialAt`). The per-kind salts are the ones `floraAt` uses, kept identical on
+ * purpose: a plant must not change how it looks the moment its existence starts coming from the
+ * world instead of from the field. A plant the PLAYER placed has no `floraAt` roll at all and
+ * still gets a stable variant here, which is the other half of why this takes `kind` rather than
+ * re-running the selection.
+ */
+export function plantVariant(x: number, z: number, seed: number, kind: number): number {
+  const salt = kind === FLORA.FLOWER ? 0x77e : kind === FLORA.TUFT ? 0x3b1 : 0x9c5
+  return hash01(x, z, seed ^ salt)
 }

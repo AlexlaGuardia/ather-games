@@ -34,6 +34,18 @@ import { AIR } from './section'
  * the one batched naming question. Do NOT invent Athernyx names for them here — a guess that ships
  * becomes accidental canon.
  */
+// ── ★ THE MATERIAL ID MAP — one number space, four files ────────────────────────────────────────
+// MAT 0-13 (here) · ORE 16-22 (ore.ts) · WOOD 32-39 (trees.ts) · STRUCTURE 48-49 (pieces.ts).
+// PLANTS take 24-26, in the gap between ore and wood. ⚠ The first cut put them at 14-16 because
+// MAT stops at 13 — and 16 is ORE.RAW_MANA, so a wildflower WAS a mana seam: it inherited ore
+// hardness, dropped shards, and `isPlant` matched ore and logs all through the underground.
+// Nothing warned, because these enums are separate `const` objects that never see each other.
+// Check this map before adding any material anywhere.
+export const PLANT_MIN = 24
+export const PLANT_MAX = 26
+/** Non-solid, non-opaque ground cover. Range test on purpose — this runs in the mesher's hot loop. */
+export const isPlant = (m: number): boolean => m >= PLANT_MIN && m <= PLANT_MAX
+
 export const MAT = {
   AIR: AIR,
   BEDROCK: 1,
@@ -75,6 +87,19 @@ export const MAT = {
    * (height.ts's springsPoolAt says where). ⚠ TBD-CANON on the name, like everything else here.
    */
   SPRING_CRUST: 13,
+
+  // ── ★ PLANTS ARE BLOCKS (2026-08-11, Alex: "everything should be collectable") ──────────────
+  // Ground cover used to be a pure function the RENDERER drew and nothing else could see — so it
+  // could not be targeted, broken, dropped or saved. Making it real voxels is what makes "you can
+  // collect it" true by construction rather than by a second system that has to be kept in sync:
+  // `raycast` already stops at any non-AIR material, `tickBreak`/`dropsFor` already read the
+  // registry, and `recordEdit` already diffs against what the generator would have put here — so
+  // a picked flower persists through the same path a mined block does, with no new machinery.
+  // ⚠ KEEP THESE THREE CONTIGUOUS. `isPlant` is a range test, not a Set lookup, because it is
+  // called from the mesher's inner loop — see greedy.ts on what a per-cell call costs there.
+  TUFT: 24,
+  TALL_GRASS: 25,
+  FLOWER: 26,
 } as const
 
 export interface DepthConfig {

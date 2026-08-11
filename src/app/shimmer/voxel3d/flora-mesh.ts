@@ -16,7 +16,7 @@
 // in sync), weighted by uv.y so roots stay planted. CPU never touches a standing instance.
 
 import * as THREE from 'three'
-import { floraAt, FLORA } from '../voxel/flora'
+import { FLORA } from '../voxel/flora'
 
 const SECTION = 16
 
@@ -29,10 +29,24 @@ const HEAD_TINTS = [0xf2f4ee, 0xe8c95a, 0xb08ae0, 0x8ec7e8, 0xe8a0b4]
 
 interface Spot { x: number; y: number; z: number; kind: number; variant: number }
 
+/**
+ * ── ★ THE VOXEL DECIDES WHETHER A PLANT IS THERE (2026-08-11) ──────────────────────────────────
+ * This renderer used to ASK `floraAt` what grows here, which made ground cover a fiction only the
+ * renderer could see — nothing could target it, break it, drop it or save it. Now the world is the
+ * source of truth: the probe reports the plant VOXEL standing at (x, z) and the ground top to
+ * stand it on, or null. Pick a flower and it is gone because the block is gone, through exactly
+ * the same edit path a mined stone takes.
+ *
+ * `kind` comes from the voxel; `variant` stays a pure function of position (see flora.ts) so the
+ * look never has to be stored and picking one plant cannot restyle its neighbour. `y` is
+ * fractional on a slumped lip — it is a ground height, not a cell index.
+ */
+export type PlantProbe = (x: number, z: number) => { y: number; kind: number; variant: number } | null
+
 export interface FloraRenderer {
   group: THREE.Group
   /** Rebuild buffers from the loaded columns. Column spot lists are cached until invalidated. */
-  sync(cols: { key: string; x0: number; z0: number }[], seed: number, probe: (x: number, z: number) => number): void
+  sync(cols: { key: string; x0: number; z0: number }[], seed: number, probe: PlantProbe): void
   /** Drop a column's cached spots (its ground changed — an edit landed). */
   invalidate(colKey: string): void
   tick(elapsed: number): void
@@ -182,17 +196,15 @@ export function createFloraRenderer(): FloraRenderer {
   const tint = new THREE.Color()
   const Y_AXIS = new THREE.Vector3(0, 1, 0)
 
-  const spotsFor = (k: string, x0: number, z0: number, seed: number, probe: (x: number, z: number) => number): Spot[] => {
+  const spotsFor = (k: string, x0: number, z0: number, seed: number, probe: PlantProbe): Spot[] => {
     const hit = cache.get(k)
     if (hit) return hit
     const out: Spot[] = []
     for (let dz = 0; dz < SECTION; dz++) for (let dx = 0; dx < SECTION; dx++) {
       const x = x0 + dx, z = z0 + dz
-      const f = floraAt(x, z, seed)
-      if (!f) continue
-      const y = probe(x, z)
-      if (y < 0) continue
-      out.push({ x, y, z, kind: f.kind, variant: f.variant })
+      const p = probe(x, z)
+      if (!p) continue
+      out.push({ x, y: p.y, z, kind: p.kind, variant: p.variant })
     }
     cache.set(k, out)
     return out

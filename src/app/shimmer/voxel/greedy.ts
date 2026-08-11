@@ -17,6 +17,7 @@
 
 import { AIR, Section } from './section'
 import { STRUCTURE, STRUCTURE_HALF } from './pieces'
+import { isPlant } from './depth'
 
 export interface MeshResult {
   /** xyz per vertex, 4 vertices per quad. */
@@ -167,8 +168,12 @@ export function greedyMesh(
           // every plane, and the whole point of the uniform fast path is not to pay per cell.
           // ★ A SLUMPED CELL IS INVISIBLE HERE because `sample` already returned AIR for it — see
           // the HalfFn contract. Nothing about this loop knows slump exists, which is the point.
-          const aSolid = a !== AIR && a !== STRUCTURE && a !== STRUCTURE_HALF
-          const bSolid = b !== AIR && b !== STRUCTURE && b !== STRUCTURE_HALF
+          // Ground cover is drawn by the instanced flora renderer, never here: a tuft is two
+          // crossed quads, and crossed quads cannot merge — routing ~17k of them through this
+          // mesher would add ~34k unmergeable quads to terrain meshes for geometry that is
+          // already four draw calls. Same exclusion, same reason, as piece occupancy.
+          const aSolid = a !== AIR && a !== STRUCTURE && a !== STRUCTURE_HALF && !isPlant(a)
+          const bSolid = b !== AIR && b !== STRUCTURE && b !== STRUCTURE_HALF && !isPlant(b)
           // Exactly one solid => a face. Both solid or both air => nothing. This single line is
           // what deletes every interior face in the world.
           if (aSolid === bSolid) mask[n] = 0
@@ -307,7 +312,7 @@ export function greedyMesh(
         // redundant: without it every string of lips along a terrace edge draws a wall between
         // each pair. Piece occupancy covers nothing (the piece renderer draws its own look).
         const n = sample(cx + dx, y, z + dz)
-        if (!(n === AIR || n === STRUCTURE || n === STRUCTURE_HALF)) return false
+        if (!(n === AIR || n === STRUCTURE || n === STRUCTURE_HALF || isPlant(n))) return false
         return !half.has(halfKey(cx + dx, y, z + dz, S))
       }
       if (side(1, 0)) emit(cx + 1, y, z, 0, 0.5, 0, 0, 0, 1, 1, 0, 0, m)

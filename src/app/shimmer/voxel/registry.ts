@@ -106,6 +106,17 @@ export const BLOCKS: BlockDef[] = [
 
   // The hot springs' mineral shell — stone-family, so a spike quarries it, and it drops ITSELF:
   // pale terrace stone is exactly the block a builder would want to carry home. ⚠ TBD-CANON name.
+  // ── ground cover: instant to break, always drops, and replantable (2026-08-11) ──────────────
+  // hardness 0.05 = one tap with anything, including a bare hand: a flower is not a mining
+  // problem. `placeable` is true on purpose — "everything should be collectable" reads poorly if
+  // what you collected can never go back down, and replanting a drift is a thing a keeper does.
+  // ⚠ EACH DROPS ITS OWN ITEM, and that is a constraint, not a naming choice: `BY_ITEM` reverses
+  // EVERY drop of a placeable block, so two placeable plants sharing a `plant_fiber` drop makes
+  // one of them unplaceable-as-itself and silently steals the other's id. mine.test asserts the
+  // round-trip. A shared fiber item belongs behind a RECIPE, not in two drop tables.
+  { material: MAT.TUFT, name: 'Grass Tuft', hardness: 0.05, skill: null, minTier: 0, drops: [{ itemId: 'grass_tuft', count: 1 }], fastSkill: 'farming', placeable: true },
+  { material: MAT.TALL_GRASS, name: 'Tall Grass', hardness: 0.05, skill: null, minTier: 0, drops: [{ itemId: 'tall_grass', count: 1 }], fastSkill: 'farming', placeable: true },
+  { material: MAT.FLOWER, name: 'Wildflower', hardness: 0.05, skill: null, minTier: 0, drops: [{ itemId: 'wild_flower', count: 1 }], fastSkill: 'farming', placeable: true },
   { material: MAT.SPRING_CRUST, name: 'Spring Crust', hardness: 1.2, skill: 'prospecting', minTier: 1, drops: [{ itemId: 'block_spring_crust', count: 1 }], placeable: true },
 
   // ── the Prospecting ladder — hardness AND tier both climb, so depth gates twice over ────────
