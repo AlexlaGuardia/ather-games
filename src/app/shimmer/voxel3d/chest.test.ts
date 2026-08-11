@@ -9,7 +9,7 @@
 // position, so a record that outlives its block hands the next chest built on that spot somebody
 // else's items. Those asserts are at the end, against the same key format the host uses.
 
-import { createChest, moveBetween, quickMove, addToGrid, spill, isEmpty, countIn, chestKey, CHEST_SLOTS, type Slots } from './chest'
+import { createChest, moveBetween, moveCount, halfOf, quickMove, addToGrid, spill, isEmpty, countIn, chestKey, CHEST_SLOTS, type Slots } from './chest'
 import { createInventory, isFurnitureItem } from '../engine/inventory'
 
 let pass = 0
@@ -180,6 +180,75 @@ const totalOf = (id: string, ...gs: Slots[]) => gs.reduce((n, g) => n + countIn(
   ok(inv.slots[3]?.count === 99, '★ the existing stack fills first')
   ok(inv.slots[0]?.count === 11, '★ then the LOWEST free slot — pickups reach the bar before the satchel')
   ok(countIn(inv.slots, 'block_stone') === 110, 'totals conserved')
+}
+// ── 14. ★ THE SPLIT — the one move that must never swap ─────────────────────────────────────────
+// Halving is where a conservation bug is least likely to be noticed: both slots still hold the
+// thing, just in the wrong proportions, and nobody counts a bag.
+{
+  ok(halfOf(7) === 4 && halfOf(1) === 1 && halfOf(2) === 1 && halfOf(0) === 0,
+    '★ half rounds UP — a stack of 1 splits to itself rather than being a dead click')
+}
+{
+  const c = createChest()
+  put(c, 0, 'block_stone', 7)
+  ok(moveCount(c, 0, c, 5, halfOf(7), MAX) === 4, 'half of 7 is 4 moved')
+  ok(c[0]?.count === 3 && c[5]?.count === 4, 'and 3 stay behind')
+  ok(countIn(c, 'block_stone') === 7, 'totals conserved')
+}
+{
+  const c = createChest()
+  put(c, 0, 'block_stone', 1)
+  ok(moveCount(c, 0, c, 5, halfOf(1), MAX) === 1, 'a lone item moves whole')
+  ok(c[0] === null, '★ and the source slot becomes a real null, not a zero-count ghost')
+}
+{
+  // ★ THE SWAP REFUSAL. A partial stack onto a different item has no honest outcome, so nothing
+  // moves and the caller is told — this is what keeps the lift alive instead of the click vanishing.
+  const c = createChest()
+  put(c, 0, 'block_stone', 8); put(c, 1, 'block_dirt', 2)
+  ok(moveCount(c, 0, c, 1, 4, MAX) === 0, '★ a split onto a DIFFERENT item moves nothing')
+  ok(c[0]?.count === 8 && c[1]?.itemId === 'block_dirt' && c[1]?.count === 2,
+    '★ and swaps nothing — both stacks are exactly as they were')
+}
+{
+  // The item's own ceiling binds a split exactly as it binds a merge.
+  const c = createChest()
+  put(c, 0, 'mana_seed', 4); put(c, 1, 'mana_seed', 3)
+  ok(moveCount(c, 0, c, 1, 2, MAX) === 1, '★ only what fits under the ceiling moves')
+  ok(c[1]?.count === 4 && c[0]?.count === 3, 'the target stops at max')
+  ok(countIn(c, 'mana_seed') === 7, 'totals conserved')
+  ok(moveCount(c, 0, c, 1, 2, MAX) === 0, 'a full target takes nothing more')
+}
+{
+  // ★ `want` IS CLAMPED. Both callers derive it from a count read a moment earlier, off a live array.
+  const c = createChest()
+  put(c, 0, 'block_stone', 3)
+  ok(moveCount(c, 0, c, 4, 99, MAX) === 3, '★ asking for more than is there moves what is there')
+  ok(countIn(c, 'block_stone') === 3, 'and invents nothing')
+  put(c, 6, 'block_stone', 5)
+  ok(moveCount(c, 6, c, 7, 0, MAX) === 0, 'asking for none moves none')
+  ok(moveCount(c, 6, c, 7, -3, MAX) === 0, '★ and a negative want cannot run the move backwards')
+  ok(c[6]?.count === 5 && c[7] === null, 'nothing touched either way')
+}
+{
+  // Bag → chest, the same function across two grids.
+  const inv = createInventory()
+  const c = createChest()
+  inv.slots[2] = { itemId: 'block_stone', count: 9 }
+  ok(moveCount(inv.slots, 2, c, 0, halfOf(9), MAX) === 5, 'half crosses into the chest')
+  ok(totalOf('block_stone', inv.slots, c) === 9, '★ conserved ACROSS the two grids')
+  ok(moveCount(c, 0, c, 0, 3, MAX) === 0, 'a slot cannot split onto itself')
+  ok(moveCount(c, 0, c, 99, 3, MAX) === 0, 'and an out-of-range target moves nothing')
+  ok(totalOf('block_stone', inv.slots, c) === 9, 'still conserved after both refusals')
+}
+{
+  // Dropping ONE at a time, the right-click-while-lifted path, until the source runs dry.
+  const c = createChest()
+  put(c, 0, 'block_stone', 3)
+  let moved = 0
+  for (let k = 0; k < 5; k++) moved += moveCount(c, 0, c, 1, 1, MAX)
+  ok(moved === 3, '★ ones keep landing until the source is empty, then stop')
+  ok(c[0] === null && c[1]?.count === 3, 'all three arrived, none doubled')
 }
 
 console.log(`\nchest: ${pass} passed, ${fails.length} failed`)

@@ -100,7 +100,7 @@ import ArenaBattle from '../components/ArenaBattle'
 import { createSpirit, speciesDisplayName, type Spirit } from '../spirits/spirit'
 import { rightClickIntent } from './interact'
 import {
-  chestKey, createChest, moveBetween, quickMove, addToGrid, isEmpty as isChestEmpty,
+  chestKey, createChest, moveBetween, moveCount, halfOf, quickMove, addToGrid, isEmpty as isChestEmpty,
   spill as spillChest, CHEST_COLS, CHEST_SLOTS, type Slots,
 } from './chest'
 import { itemIcon } from './tex/item-icon'
@@ -124,6 +124,17 @@ export interface OpenChest { x: number; y: number; z: number; slots: Slots; touc
  * bag, and stops being enough the moment a second grid is on screen.
  */
 type SlotRef = { g: 'bag' | 'chest'; i: number }
+
+/**
+ * A lifted slot, plus HOW it was lifted. A right-click lift means "half of this", and that intent
+ * has to survive until the placing click, because the place is where the amount is finally decided.
+ *
+ * ★ NOTHING LEAVES THE GRID AT LIFT TIME, not even a half. The items sit in their slot until the
+ * second click moves them, so closing the panel, refreshing, or crashing mid-split loses exactly
+ * nothing — there is no floating carried stack to strand. That is the same reason drag is
+ * click-then-click rather than HTML5 drag-and-drop, one level in.
+ */
+type Lift = SlotRef & { half: boolean }
 
 const SEED = 1337
 const H = DEFAULT_COLUMN.worldHeight
@@ -731,6 +742,38 @@ export default function VoxelWorld() {
    * Merges into existing stacks before taking an empty slot, exactly like a pickup does — so
    * putting things away by hand and having them land there by walking behave the same.
    */
+  /**
+   * The split: move HALF the lifted stack (left-click after a right-click lift) or ONE of it (a
+   * right-click while anything is lifted). Both are `moveCount`; only the amount differs.
+   *
+   * ★ THE AMOUNT IS READ AT PLACE TIME, NOT FROZEN AT LIFT. The grid is a live array — a drop walked
+   * over while the panel is open grows the stack under the lift — and a number frozen a click ago
+   * would take "half of what it used to be", which is a quiet theft nobody would ever trace. Half of
+   * what the panel is currently SHOWING is the only amount a player can check.
+   *
+   * ★ THE LIFT CLEARS ONLY WHEN THE SOURCE RUNS DRY. Placing ones is meant to be repeated, so the
+   * lift survives the click; a refusal (0 moved, e.g. onto a different item) also survives it, which
+   * is what makes the refusal visible — the slot stays lit instead of the click evaporating. This
+   * component owns `dragFrom`, so the lifecycle lives here rather than being inferred by the panel.
+   */
+  const splitRef = useCallback((from: SlotRef, to: SlotRef, mode: 'half' | 'one') => {
+    const chest = openChestRef.current
+    if ((from.g === 'chest' || to.g === 'chest') && !chest) return
+    const grid = (r: SlotRef) => (r.g === 'bag' ? inv.current.slots : chest!.slots)
+    const src = grid(from)
+    const stack = src[from.i]
+    if (!stack) { setDragFrom(null); return }
+    const want = mode === 'one' ? 1 : halfOf(stack.count)
+    const moved = moveCount(src, from.i, grid(to), to.i, want, maxStackOf)
+    if (moved > 0) {
+      if (from.g === 'chest' || to.g === 'chest') chest!.touch()
+      refreshHotbarRef.current?.()
+    }
+    // A half-place is one whole action and ends the lift; placing ones is meant to repeat, so it
+    // ends only when there is nothing left under it.
+    if (mode === 'half' || !src[from.i]) setDragFrom(null)
+  }, [])
+
   const quickRef = useCallback((r: SlotRef) => {
     const chest = openChestRef.current
     if (!chest) return
@@ -762,8 +805,8 @@ export default function VoxelWorld() {
    * transfer with rules of its own.
    */
   const [bagOpen, setBagOpen] = useState(false)
-  /** The slot being dragged, or null. Names its GRID as well as its index — see `SlotRef`. */
-  const [dragFrom, setDragFrom] = useState<SlotRef | null>(null)
+  /** The slot being dragged, or null. Names its GRID as well as its index — see `SlotRef`/`Lift`. */
+  const [dragFrom, setDragFrom] = useState<Lift | null>(null)
   /**
    * ── ★ THE CHEST IS THE SAME PANEL WITH A SECOND GRID ON TOP (2026-08-11) ─────────────────────
    * Not its own screen: the bag half of a chest screen and the satchel ARE the same 24 slots, and
@@ -1199,6 +1242,7 @@ export default function VoxelWorld() {
         <BagPanel inv={inv} chest={openChest} tick={craftTick} sel={sel}
                   dragFrom={dragFrom} setDragFrom={setDragFrom}
                   onMove={(f, t) => { moveRef(f, t); setCraftTick(v => v + 1) }}
+                  onSplit={(f, t, m) => { splitRef(f, t, m); setCraftTick(v => v + 1) }}
                   onQuick={(r) => { quickRef(r); setCraftTick(v => v + 1) }}
                   onClose={closeBag} />
       )}
@@ -1537,14 +1581,15 @@ function Hud({ stats, pos, look, hotbar, sel, tier, held, build, pieceIdx, rot, 
  * across to the other container, because emptying a bag one pair of clicks at a time is a chest
  * nobody fills.
  */
-function BagPanel({ inv, chest, tick, sel, dragFrom, setDragFrom, onMove, onQuick, onClose }: {
+function BagPanel({ inv, chest, tick, sel, dragFrom, setDragFrom, onMove, onSplit, onQuick, onClose }: {
   inv: React.RefObject<Inventory>
   chest: OpenChest | null
   tick: number
   sel: number
-  dragFrom: SlotRef | null
-  setDragFrom: (r: SlotRef | null) => void
+  dragFrom: Lift | null
+  setDragFrom: (r: Lift | null) => void
   onMove: (from: SlotRef, to: SlotRef) => void
+  onSplit: (from: SlotRef, to: SlotRef, mode: 'half' | 'one') => void
   onQuick: (r: SlotRef) => void
   onClose: () => void
 }) {
@@ -1558,27 +1603,56 @@ function BagPanel({ inv, chest, tick, sel, dragFrom, setDragFrom, onMove, onQuic
           // Shift is checked FIRST and short-circuits: a shift-click while something is lifted is
           // still a quick-move of the slot you clicked, not a confusing half-placement.
           if (e.shiftKey && chest) { setDragFrom(null); onQuick(ref); return }
-          if (dragFrom === null) { if (st) setDragFrom(ref) }
+          if (dragFrom === null) { if (st) setDragFrom({ ...ref, half: false }) }
           else if (lifted) setDragFrom(null)
+          // A half lift places HALF and a whole lift places the whole stack — the amount was chosen
+          // by the button that lifted it, so this click only has to say where.
+          else if (dragFrom.half) onSplit(dragFrom, ref, 'half')
           else { onMove(dragFrom, ref); setDragFrom(null) }
+        }}
+        /**
+         * Right-click. ★ `preventDefault` is not cosmetic — without it the browser menu opens over
+         * the panel and swallows the next click, so the lift would look stuck.
+         *
+         * Nothing lifted → lift HALF of this stack. Something lifted → drop ONE here, and keep the
+         * lift so the next right-click drops another; that is the whole reason to split by hand
+         * rather than by shift-click. Same slot cancels, exactly like the left button.
+         */
+        onContextMenu={(e) => {
+          e.preventDefault()
+          if (dragFrom === null) { if (st) setDragFrom({ ...ref, half: true }) }
+          else if (lifted) setDragFrom(null)
+          else onSplit(dragFrom, ref, 'one')
         }}
         title={st ? `${itemLabel(st.itemId)} ×${st.count}` : 'empty'}
         className={`relative w-12 h-12 rounded border-2 flex flex-col items-center justify-center
           text-[9px] font-mono transition-colors
-          ${lifted ? 'border-amber-300 bg-amber-300/20'
+          ${lifted && dragFrom?.half ? 'border-sky-300 bg-sky-300/20'
+            : lifted ? 'border-amber-300 bg-amber-300/20'
             : dragFrom !== null ? 'border-white/30 bg-black/50 hover:border-amber-200/70'
             : 'border-white/20 bg-black/40 hover:border-white/40'}`}>
         {st ? (
           <>
             <ItemChip itemId={st.itemId} size={26} />
             <span className="mt-0.5 tabular-nums text-white/80">{st.count}</span>
+            {/* How many a half lift will actually take, stated rather than left to be counted —
+                "half of 7" is 4 here and 3 elsewhere, and a player should not have to find out. */}
+            {lifted && dragFrom?.half && (
+              <span className="absolute -top-1.5 -right-1.5 rounded bg-sky-300 px-1
+                               text-[9px] font-bold tabular-nums text-black">
+                {halfOf(st.count)}
+              </span>
+            )}
           </>
         ) : <span className="text-white/15">·</span>}
       </button>
     )
   }
   return (
-    <div className="absolute inset-0 z-30 flex items-center justify-center bg-black/55" onClick={onClose}>
+    // ★ The backdrop eats the context menu too. Right-click is a game verb inside this panel now, and
+    // a menu opened by a near-miss on a slot covers the grid and swallows the click that follows.
+    <div className="absolute inset-0 z-30 flex items-center justify-center bg-black/55"
+         onClick={onClose} onContextMenu={e => e.preventDefault()}>
       <div className="rounded-lg border border-white/15 bg-neutral-950/95 p-5 shadow-2xl"
            onClick={e => e.stopPropagation()}>
         <div className="mb-3 flex items-baseline justify-between gap-8">
@@ -1587,8 +1661,10 @@ function BagPanel({ inv, chest, tick, sel, dragFrom, setDragFrom, onMove, onQuic
           </h2>
           <span className="text-[11px] text-white/40">
             {dragFrom === null
-              ? `click a stack to lift it${chest ? ' · shift-click to send it across' : ''} · I closes`
-              : 'click a slot to place · click again to cancel'}
+              ? `click a stack to lift it · right-click lifts half${chest ? ' · shift-click sends it across' : ''} · I closes`
+              : dragFrom.half
+                ? 'click a slot to place half · right-click drops one at a time · click again to cancel'
+                : 'click a slot to place · right-click drops one at a time · click again to cancel'}
           </span>
         </div>
         {/* The chest's own grid, above the bag and separated by a rule — the same relationship the

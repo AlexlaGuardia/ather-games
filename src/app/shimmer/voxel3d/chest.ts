@@ -11,6 +11,12 @@
 // is quietly smaller than it was looks like a stack. So the grid-to-grid form is the only
 // implementation and the same-grid case is that function called with one array twice.
 //
+// ★ `moveCount` (the split, 2026-08-11) is a SECOND function on purpose, not a duplicate: it is the
+// one move that must NEVER swap, because a partial stack landing on a different item has no honest
+// outcome. Folding it into `moveBetween` as a `want` parameter would mean one function whose swap
+// branch is live for some argument values and forbidden for others — exactly the `X && useX()` shape
+// that hid the dead chest click. Two functions, each total over its own inputs.
+//
 // ── ★ WHERE THE CONTENTS LIVE (host side, stated here because this file is where you'll look) ──
 // In the COLUMN's save record, beside its block edits and pieces — not in a global sidecar like the
 // pot clock. A chest is a thing you built at a place: its block and its contents have to arrive and
@@ -69,6 +75,51 @@ export function moveBetween(
   }
   from[fi] = b
   to[ti] = a
+}
+
+/**
+ * How many a right-click lifts. Ceiling, so a stack of 1 moves the one — the alternative is a
+ * right-click that does nothing on the most ordinary stack in the bag, and a dead click is the least
+ * visible thing this game can ship (the chest that would not open, same day).
+ */
+export const halfOf = (count: number): number => Math.ceil(count / 2)
+
+/**
+ * Move UP TO `want` of slot `fi` onto slot `ti`. Returns how many actually moved.
+ *
+ * ★ THIS IS THE SPLIT, AND IT IS A MOVE THAT NEVER SWAPS. `moveBetween` may swap because it carries
+ * a whole stack: if the target holds something else, putting one where the other was is the only
+ * sensible reading. A partial move has no such reading — half a stack onto a different item would
+ * have to either destroy the target or invent a second carried stack, so it moves NOTHING and says
+ * so with a 0. The caller keeps the lift alive on a 0, which is what makes the refusal visible: the
+ * slot stays lit rather than the click evaporating.
+ *
+ * ★ `want` IS CLAMPED, NOT TRUSTED. Both callers derive it from a count they read a moment earlier,
+ * and the grid is a live array a pickup can grow. Clamping to what is actually there is what keeps
+ * "half of 7" from becoming "4 out of a stack that is now 3" — i.e. conservation is enforced here,
+ * at the only place that can see both sides, not asked of every caller.
+ *
+ * The item's own ceiling still applies, same ladder as `give` — a split can no more build a stack of
+ * 120 than a merge can.
+ */
+export function moveCount(
+  from: Slots, fi: number, to: Slots, ti: number, want: number, maxStack: (itemId: string) => number,
+): number {
+  if (from === to && fi === ti) return 0
+  if (fi < 0 || ti < 0 || fi >= from.length || ti >= to.length) return 0
+  const a = from[fi]
+  if (!a || a.count <= 0) return 0
+  const max = maxStack(a.itemId)
+  const b = to[ti]
+  if (b && b.itemId !== a.itemId) return 0   // no swap — see above
+  const room = b ? Math.max(0, max - b.count) : max
+  const n = Math.min(Math.max(0, Math.floor(want)), a.count, room)
+  if (n <= 0) return 0
+  if (b) b.count += n
+  else to[ti] = { itemId: a.itemId, count: n }
+  a.count -= n
+  if (a.count <= 0) from[fi] = null
+  return n
 }
 
 /**

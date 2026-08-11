@@ -12,10 +12,12 @@
 
 import type { Inventory } from '../engine/inventory'
 import { createInventory } from '../engine/inventory'
-import { moveBetween } from './chest'
+import { moveBetween, moveCount, halfOf } from './chest'
 
 const moveStack = (inv: Inventory, from: number, to: number, max: (id: string) => number) =>
   moveBetween(inv.slots, from, inv.slots, to, max)
+const splitStack = (inv: Inventory, from: number, to: number, n: number, max: (id: string) => number) =>
+  moveCount(inv.slots, from, inv.slots, to, n, max)
 
 let pass = 0
 const fails: string[] = []
@@ -90,6 +92,31 @@ const total = (i: ReturnType<typeof inv>, itemId: string) =>
   ok(i.slots[0]?.count === 5, 'an out-of-range target is refused, not thrown')
   moveStack(i, -1, 9, MAX)
   ok(i.slots[9] === null, 'and so is an out-of-range source')
+}
+// ── 8. ★ SPLITTING INSIDE THE BAG — no chest required ───────────────────────────────────────────
+// The chest oracle covers the split's arithmetic. This asserts the case a player actually meets
+// first and most often: halving a stack between the satchel and the bar with nothing open but the
+// bag. Splitting is gated on nothing — a chest is where you PUT things, not what makes a stack
+// divisible — and a gate slipped in here would be invisible until someone tried it one-handed.
+{
+  const i = put(inv(), 9, 'block_stone', 20)
+  ok(splitStack(i, 9, 2, halfOf(20), MAX) === 10, 'half a satchel stack moves down to the bar')
+  ok(i.slots[9]?.count === 10 && i.slots[2]?.count === 10, 'ten in each')
+  ok(total(i, 'block_stone') === 20, 'totals conserved')
+}
+{
+  // The bar slot already holds some of the same thing: a split MERGES, it does not replace.
+  const i = put(put(inv(), 9, 'block_stone', 8), 1, 'block_stone', 5)
+  ok(splitStack(i, 9, 1, halfOf(8), MAX) === 4, 'four of the eight cross over')
+  ok(i.slots[1]?.count === 9 && i.slots[9]?.count === 4, '★ and land ON the stack already there')
+  ok(total(i, 'block_stone') === 13, 'totals conserved')
+}
+{
+  // The bag's own ceiling case — mana seeds cap at 4, and a split may not exceed it.
+  const i = put(inv(), 9, 'mana_seed', 4)
+  ok(splitStack(i, 9, 0, halfOf(4), MAX) === 2, 'half of four seeds')
+  ok(i.slots[0]?.count === 2 && i.slots[9]?.count === 2, 'two and two')
+  ok(total(i, 'mana_seed') === 4, '★ a split can no more build an over-tall stack than a merge can')
 }
 
 console.log(`\nsatchel: ${pass} passed, ${fails.length} failed`)
