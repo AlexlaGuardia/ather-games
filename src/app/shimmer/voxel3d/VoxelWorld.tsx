@@ -98,6 +98,7 @@ import { loadMistLedger, saveMistLedger, recordWithdrawal, residentAt, quietMinu
 import { applySparPayout, sparLedgerLines } from './spar-reward'
 import ArenaBattle from '../components/ArenaBattle'
 import { createSpirit, speciesDisplayName, type Spirit } from '../spirits/spirit'
+import { moveStack } from './satchel'
 import { bloom as bloomSpirit, due as potsDue, potKey, progress as potProgress, type PotClock } from './pot'
 import { spiritsToSave, spiritsFromSave } from '../spirits/spirit-save'
 import { LAUNCHED_SPECIES } from '../engine/spirit-index'
@@ -655,17 +656,42 @@ export default function VoxelWorld() {
    * `engine/inventory.addItems` fills the lowest free slot first, so picked-up items land in the
    * bar before the satchel, which is the behaviour a player expects without being told.
    */
+  /**
+   * Move or merge slot `from` onto slot `to`.
+   *
+   * ★ MERGE BEFORE SWAP, and respect the item's own stack ceiling — dropping 60 stone onto 60 more
+   * must leave 99 and 21, not silently destroy 21 or build a stack no other code path could have
+   * made. `maxStackOf` is the same ladder `give` uses, so a stack assembled by hand can never
+   * exceed one assembled by walking over drops.
+   */
+  const moveSlot = useCallback((from: number, to: number) => {
+    moveStack(inv.current, from, to, maxStackOf)
+    refreshHotbarRef.current?.()
+  }, [])
+  const refreshHotbarRef = useRef<(() => void) | null>(null)
+
   const refreshHotbar = useCallback(() => {
     setHotbar(Array.from({ length: 8 }, (_, i) => {
       const s = inv.current.slots[i]
       return s ? { itemId: s.itemId, count: s.count } : null
     }))
   }, [])
+  refreshHotbarRef.current = refreshHotbar
 
   // ── The crafting surface ────────────────────────────────────────────────────────────────────
   // `craftTick` exists because the inventory is a REF, not state — crafting mutates it in place and
   // React has no way to know. Bumping a counter is what re-renders the panel with new counts. The
   // alternative (inventory in state) would re-render the whole world on every mined block.
+  /**
+   * ── ★ THE SATCHEL (2026-08-11) ────────────────────────────────────────────────────────────────
+   * One window onto the SAME 24-slot grid the hotbar reads: slots 0-7 are the bar, 8-23 the
+   * satchel. Not a second container — that is the whole reason the hotbar had to become positional
+   * first, and it is why dragging between the two halves is just a slot swap rather than a
+   * transfer with rules of its own.
+   */
+  const [bagOpen, setBagOpen] = useState(false)
+  /** The slot being dragged, or null. Index into `inv.slots`, not into a panel. */
+  const [dragFrom, setDragFrom] = useState<number | null>(null)
   const [craftOpen, setCraftOpen] = useState(false)
   const [craftTick, setCraftTick] = useState(0)
   // Near a PLACED crafting table (World scans and reports, same shape as nearGreg). This is the
@@ -744,7 +770,7 @@ export default function VoxelWorld() {
     const c = canvasElRef.current
     if (c) { try { const r = c.requestPointerLock?.() as unknown as Promise<void> | undefined; r?.catch?.(() => {}) } catch { /* re-lock cooldown */ } }
   }, [])
-  useEffect(() => { cursorUIOpenRef.current = craftOpen || dialogueOpen || showSettings || !!spar }, [craftOpen, dialogueOpen, showSettings, spar])
+  useEffect(() => { cursorUIOpenRef.current = craftOpen || bagOpen || dialogueOpen || showSettings || !!spar }, [craftOpen, bagOpen, dialogueOpen, showSettings, spar])
 
   // ── the shared party + the withdrawal ledger, read once at mount ────────────────────────────
   // Both are localStorage and therefore synchronous; done in an effect anyway so SSR never touches
@@ -904,7 +930,7 @@ export default function VoxelWorld() {
       // T / Enter / '/' — the chat console (MC's three doors, verbatim: '/' arrives pre-slashed).
       // Above the draw lock on purpose: a console you cannot open while your weapon is out is a
       // console you cannot use to debug the weapon.
-      if (!consoleOpen && !dialogueOpen && !craftOpen && !showSettings) {
+      if (!consoleOpen && !dialogueOpen && !craftOpen && !bagOpen && !showSettings) {
         if (e.code === 'KeyT' || e.code === 'Enter') { e.preventDefault(); openCursorUI(); setConsoleSeed(''); setConsoleOpen(true); return }
         if (e.key === '/') { e.preventDefault(); openCursorUI(); setConsoleSeed('/'); setConsoleOpen(true); return }
       }
@@ -950,6 +976,12 @@ export default function VoxelWorld() {
       if (e.code === 'KeyC') {
         if (craftOpen) { setCraftOpen(false); closeCursorUI() }
         else { openCursorUI(); setCraftOpen(true) }
+      }
+      // I opens the satchel — same open/close-on-the-same-key shape as C and E, so the three
+      // cursor surfaces behave identically and none of them needs Escape to dismiss.
+      if (e.code === 'KeyI') {
+        if (bagOpen) { setBagOpen(false); setDragFrom(null); closeCursorUI() }
+        else { openCursorUI(); setBagOpen(true) }
       }
       // E talks to Greg when he is in range, and closes the box that opens from it — the same key
       // both opens and dismisses, matching how C works for the crafting surface just above.
@@ -1063,6 +1095,11 @@ export default function VoxelWorld() {
       {craftOpen && (
         <CraftPanel have={have} tools={tools} tick={craftTick} station={station}
                     onCraft={doCraft} onCraftTool={doCraftTool} onClose={() => { setCraftOpen(false); closeCursorUI() }} />
+      )}
+      {bagOpen && (
+        <SatchelPanel inv={inv} tick={craftTick} sel={sel} dragFrom={dragFrom} setDragFrom={setDragFrom}
+                      onMove={(f, t) => { moveSlot(f, t); setCraftTick(v => v + 1) }}
+                      onClose={() => { setBagOpen(false); setDragFrom(null); closeCursorUI() }} />
       )}
       {dialogueOpen && <GregDialogue stage={tutorial.current.stage} onClose={closeDialogue} />}
 
@@ -1377,6 +1414,86 @@ function Hud({ stats, pos, look, hotbar, sel, tier, held, build, pieceIdx, rot, 
         spike tier {tier}
       </div>}
     </>
+  )
+}
+
+
+/**
+ * ── ★ THE SATCHEL — one window onto the grid the hotbar already reads ───────────────────────────
+ * Slots 0-7 ARE the hotbar, drawn here as the bottom row and set apart by a rule rather than by
+ * being a different widget. That is the whole point: dragging a stack from the satchel to the bar
+ * is a slot swap, not a transfer between two containers with their own rules, and what you arrange
+ * here is exactly what your fingers find on 1-8.
+ *
+ * Drag is CLICK-then-CLICK, not HTML5 drag-and-drop: the pointer has just been released from lock,
+ * dragend never fires reliably over a WebGL canvas, and a half-finished HTML5 drag leaves a stack
+ * in limbo. Click to lift, click to place, click the same slot to cancel — three states a player
+ * can always see, and no way to lose an item between them.
+ */
+function SatchelPanel({ inv, tick, sel, dragFrom, setDragFrom, onMove, onClose }: {
+  inv: React.RefObject<Inventory>
+  tick: number
+  sel: number
+  dragFrom: number | null
+  setDragFrom: (i: number | null) => void
+  onMove: (from: number, to: number) => void
+  onClose: () => void
+}) {
+  const slots = inv.current?.slots ?? []
+  const cell = (i: number) => {
+    const st = slots[i]
+    const mat = st ? materialForItem(st.itemId) : undefined
+    const swatch = mat !== undefined ? `#${(MATERIAL_COLOR[mat] ?? 0x888888).toString(16).padStart(6, '0')}` : undefined
+    const lifted = dragFrom === i
+    return (
+      <button key={i} type="button"
+        onClick={() => {
+          if (dragFrom === null) { if (st) setDragFrom(i) }
+          else if (dragFrom === i) setDragFrom(null)
+          else { onMove(dragFrom, i); setDragFrom(null) }
+        }}
+        title={st ? `${itemLabel(st.itemId)} ×${st.count}` : 'empty'}
+        className={`relative w-12 h-12 rounded border-2 flex flex-col items-center justify-center
+          text-[9px] font-mono transition-colors
+          ${lifted ? 'border-amber-300 bg-amber-300/20'
+            : dragFrom !== null ? 'border-white/30 bg-black/50 hover:border-amber-200/70'
+            : 'border-white/20 bg-black/40 hover:border-white/40'}`}>
+        {st ? (
+          <>
+            {swatch
+              ? <span className="w-6 h-6 rounded-sm border border-black/40" style={{ background: swatch }} />
+              : <span className="w-6 h-6 rounded-sm border border-black/40 bg-white/25" />}
+            <span className="mt-0.5 tabular-nums text-white/80">{st.count}</span>
+          </>
+        ) : <span className="text-white/15">·</span>}
+      </button>
+    )
+  }
+  return (
+    <div className="absolute inset-0 z-30 flex items-center justify-center bg-black/55" onClick={onClose}>
+      <div className="rounded-lg border border-white/15 bg-neutral-950/95 p-5 shadow-2xl"
+           onClick={e => e.stopPropagation()}>
+        <div className="mb-3 flex items-baseline justify-between gap-8">
+          <h2 className="font-medium uppercase tracking-[0.18em] text-amber-200/90 text-sm">Satchel</h2>
+          <span className="text-[11px] text-white/40">
+            {dragFrom === null ? 'click a stack to lift it · I closes' : 'click a slot to place · click again to cancel'}
+          </span>
+        </div>
+        {/* Satchel: slots 8-23, the 16 that are not the bar. */}
+        <div className="grid grid-cols-8 gap-1.5">
+          {Array.from({ length: 16 }, (_, k) => cell(k + 8))}
+        </div>
+        {/* The bar itself, set apart by a rule so its slots read as the SAME grid, not a copy. */}
+        <div className="mt-4 border-t border-white/10 pt-3">
+          <div className="mb-1.5 text-[10px] uppercase tracking-[0.16em] text-white/35">Hotbar · 1-8</div>
+          <div className="grid grid-cols-8 gap-1.5">
+            {Array.from({ length: 8 }, (_, k) => (
+              <div key={k} className={sel === k ? 'ring-2 ring-amber-300/70 rounded' : ''}>{cell(k)}</div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
   )
 }
 
