@@ -95,6 +95,22 @@ export const TREAD_SINK_CAP = 1.8   // water catches a fall fast — no crater d
 // falling-past-a-lip pop this band would reintroduce is exactly what 07-08-07 ruled out.
 export const STEP_CAPTURE = 0.55
 
+// ── ★ STEP SMOOTHING (2026-08-11, Alex: walking up half slabs "feels jagged") ────────────────
+// A step-up is a TELEPORT and has to be: the body cannot be halfway inside the slab for a few
+// frames, or the next frame's bodyFree pushes it back out and the walk stutters. So the FEET snap
+// (physics stays exact) and the EYE carries the lag — `stepSmooth` holds how far the camera is
+// still behind the body, and drains to nothing over ~0.2s. Feel only; collision never reads it.
+// Half-life, not a per-frame factor: the eye ease below is `* 0.25` every frame, which means it
+// resolves twice as fast at 120fps as at 60. A step must climb at the same rate on every machine.
+export const STEP_SMOOTH_HALF_LIFE = 0.06
+// ⚠ A BACKSTOP, NOT A BUDGET — it must never bind in real play. Clamping the debt THROWS AWAY
+// eye-height, which is a pop, which is the exact bug this whole block exists to remove. The first
+// cut capped at one slab (0.5) and a continuous staircase hit it on every single stair: each rise
+// arrived while ~0.07 of the last one was still owed, the clamp ate that remainder, and the camera
+// jerked 0.16 at every step — smooth on one slab, jagged on the flight. Sized so it cannot be
+// reached below SPEED_CAP: a stair every column at full speed steady-states near 0.72.
+export const STEP_SMOOTH_MAX = 0.9
+
 export const BODY_R = 0.3           // the old walker's half-width, kept — the world was built around it
 export const BODY_H = 1.75
 export const EYE_STAND = 1.62       // camera sits this far above the feet (the old walker's eye)
@@ -145,6 +161,15 @@ export interface LocoState {
   sliding: boolean; crouching: boolean; climbing: boolean
   /** Body submerged — the swim physics own this tick. The host reads it for HUD/FX. */
   swimming: boolean
+  /** How far the EYE is still below the feet after a step-up, draining to 0. Render only —
+   *  read it through `eyeY()`, never in collision. */
+  stepSmooth: number
+}
+
+/** Where the camera goes. The one place the step-smoothing offset is applied, so a new call site
+ *  cannot forget it and re-introduce the jag on its own screen. */
+export function eyeY(s: LocoState): number {
+  return s.py + s.eye - s.stepSmooth
 }
 
 export function createLoco(px: number, feetY: number, pz: number): LocoState {
@@ -157,7 +182,7 @@ export function createLoco(px: number, feetY: number, pz: number): LocoState {
     mantleT: 0, mantleDur: MANTLE_TIME, mFromX: 0, mFromY: 0, mFromZ: 0, mToX: 0, mToY: 0, mToZ: 0,
     vaulting: false, carryVX: 0, carryVZ: 0,
     justWallJumped: false, justHopped: false, sliding: false, crouching: false, climbing: false,
-    swimming: false,
+    swimming: false, stepSmooth: 0,
   }
 }
 
@@ -372,6 +397,8 @@ export function tickLocomotion(s: LocoState, input: LocoInput, probe: CellProbe)
     const ft = floorProbe(probe, tx, tz, s.py, STEP_CAPTURE)
     if (ft === null || ft <= s.py || ft - s.py > 0.5 + 1e-6) return false
     if (!bodyFree(probe, tx, tz, ft)) return false
+    // The feet snap (see STEP_SMOOTH_HALF_LIFE) and the eye owes the difference.
+    s.stepSmooth = Math.min(STEP_SMOOTH_MAX, s.stepSmooth + (ft - s.py))
     s.py = ft
     return true
   }
@@ -534,6 +561,15 @@ export function tickLocomotion(s: LocoState, input: LocoInput, probe: CellProbe)
 
   // Eye dips through slide/crouch, springs back standing. Derived, never part of collision.
   s.eye += (((s.sliding || s.crouching) ? EYE_SLIDE : EYE_STAND) - s.eye) * 0.25
+
+  // The step-up debt drains here — outside the grounded branch on purpose, so stepping and then
+  // immediately jumping still resolves the eye instead of freezing it mid-rise. Clamped to zero
+  // rather than left with an exponential tail: a hair of permanent offset is a camera that never
+  // quite sits where the body is.
+  if (s.stepSmooth > 0) {
+    s.stepSmooth *= Math.pow(0.5, dt / STEP_SMOOTH_HALF_LIFE)
+    if (s.stepSmooth < 1e-3) s.stepSmooth = 0
+  }
 
   if (s.airborne && hasInput) { s.prevMvX = mvX; s.prevMvZ = mvZ } else { s.prevMvX = 0; s.prevMvZ = 0 }
   if (s.landGrace > 0) s.landGrace -= dt

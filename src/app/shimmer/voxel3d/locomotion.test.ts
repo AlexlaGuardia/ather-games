@@ -7,7 +7,7 @@
 import {
   createLoco, tickLocomotion, bodyFree, floorProbe,
   RUN_SPEED, JUMP_V0, SLIDE_SPEED, SLIDEHOP_BOOST, WALLJUMP_PUSH,
-  CLIMB_HOLD_MIN, CLIMB_MAX_RISE, EYE_STAND, EYE_SLIDE, type LocoInput,
+  CLIMB_HOLD_MIN, CLIMB_MAX_RISE, EYE_STAND, EYE_SLIDE, eyeY, STEP_SMOOTH_MAX, type LocoInput,
   CELL_EMPTY, CELL_SOLID, CELL_WATER, CELL_HALF, SWIM_SPEED, SWIM_UP, SWIM_IDLE_SINK, TREAD_SINK_CAP,
 } from './locomotion'
 
@@ -322,6 +322,75 @@ const settle = (s: ReturnType<typeof createLoco>, solid: any, frames = 30) => {
   const w = createLoco(0.5, 10, 0.5); settle(w, stairway)
   for (let i = 0; i < 260; i++) tickLocomotion(w, input({ mvX: 1 }), stairway)
   ok(w.px > 6 && Math.abs(w.py - 11) < 0.05, `slab stairs: ground→slab→block in one walk (x ${w.px.toFixed(1)}, feet ${w.py.toFixed(2)})`)
+}
+
+// ── step smoothing — the feet snap, the EYE climbs (2026-08-11, Alex: "it feels jagged") ─────
+{
+  const slabWorld = (x: number, y: number, z: number): number =>
+    y < 10 ? CELL_SOLID : (y === 10 && x >= 3 && Math.abs(z) < 20) ? CELL_HALF : CELL_EMPTY
+
+  // Walk into the slab one tick at a time and catch the frame the feet rise.
+  const s = createLoco(0.5, 10, 0.5); settle(s, slabWorld)
+  let stepFrame = -1
+  const eyes: number[] = []
+  for (let i = 0; i < 200; i++) {
+    const before = s.py
+    tickLocomotion(s, input({ mvX: 1 }), slabWorld)
+    if (stepFrame < 0 && s.py > before + 0.4) stepFrame = i
+    if (stepFrame >= 0) eyes.push(eyeY(s))
+  }
+  ok(stepFrame >= 0, 'the feet still snap the whole half-block in one tick — physics is exact')
+  // ★ THE BUG: without smoothing the camera jumped the whole 0.5 on that one frame. The bound is
+  // a QUARTER of the rise — the step frame has to be the start of a climb, not most of one.
+  ok(eyes[0] - (10 + EYE_STAND) < 0.125, `★ the eye does NOT teleport with the feet (${(eyes[0] - 10 - EYE_STAND).toFixed(3)} of 0.5 on the step frame)`)
+  ok(s.stepSmooth === 0, 'the debt is fully paid back — no permanent camera offset')
+  ok(Math.abs(eyes[eyes.length - 1] - (10.5 + EYE_STAND)) < 1e-6, 'the eye ends exactly where the body is')
+
+  // Monotonic: a smoothed rise that dips is a different kind of jag.
+  let dips = 0
+  for (let i = 1; i < eyes.length; i++) if (eyes[i] < eyes[i - 1] - 1e-9) dips++
+  ok(dips === 0, `the eye only ever rises through a step (${dips} dips)`)
+
+  // ...and it gets there quickly. A slow float is its own feel bug.
+  const settledAt = eyes.findIndex(e => e > 10.5 + EYE_STAND - 0.02)
+  ok(settledAt >= 0 && settledAt < 0.35 * 60, `the eye catches up in ~${(settledAt / 60).toFixed(2)}s, not a float`)
+
+  // ★ FRAME-RATE INDEPENDENT. The eye ease beside it is a per-frame factor; this must not be, or
+  // a 144Hz machine climbs a step in half the time a 60Hz one does.
+  const climbAt = (dt: number) => {
+    const w = createLoco(0.5, 10, 0.5); settle(w, slabWorld, Math.ceil(0.5 / dt))
+    let t = 0
+    for (let i = 0; i < 600; i++) {
+      tickLocomotion(w, input({ mvX: 1, dt }), slabWorld)
+      if (w.py > 10.4) { t += dt; if (w.stepSmooth === 0) return t }
+    }
+    return -1
+  }
+  const t60 = climbAt(1 / 60), t144 = climbAt(1 / 144)
+  ok(t60 > 0 && Math.abs(t60 - t144) < 0.05, `same climb time at 60 and 144fps (${t60.toFixed(3)}s vs ${t144.toFixed(3)}s)`)
+
+  // ── ★ THE FLIGHT, not the single stair. A 0.5-per-column staircase run at full speed lands each
+  // rise while the last one is still being paid off, which is where the first cut fell over.
+  const stairs = (x: number, y: number, _z: number): number => {
+    const top = 10 + Math.max(0, Math.min(8, Math.floor(x - 2))) * 0.5
+    return y + 1 <= top ? CELL_SOLID : y + 0.5 <= top ? CELL_HALF : CELL_EMPTY
+  }
+  const r = createLoco(0.5, 10, 0.5); settle(r, stairs)
+  let worst = 0, jump = 0, prevEye = eyeY(r), climbed = 0
+  for (let i = 0; i < 300; i++) {
+    tickLocomotion(r, input({ mvX: 1 }), stairs)
+    worst = Math.max(worst, r.stepSmooth)
+    const e = eyeY(r)
+    if (r.py > 10) jump = Math.max(jump, e - prevEye)
+    prevEye = e
+  }
+  climbed = r.py - 10
+  ok(climbed >= 3.5, `the staircase is actually climbed (${climbed.toFixed(1)} blocks)`)
+  // ★ THE CLAMP MUST NOT BIND. Clamping discards owed height, and discarded height is a pop —
+  // which is the bug, not the fix. If this fails, raise STEP_SMOOTH_MAX; do not accept the clamp.
+  ok(worst < STEP_SMOOTH_MAX, `★ the debt cap never binds at run speed (worst ${worst.toFixed(3)} of ${STEP_SMOOTH_MAX})`)
+  // And the payoff: no frame of the whole flight moves the eye more than a fifth of a slab.
+  ok(jump < 0.11, `★ no jolt anywhere on the flight (biggest single frame ${jump.toFixed(3)})`)
 }
 
 console.log(`\nlocomotion: ${pass} passed, ${fails.length} failed`)
