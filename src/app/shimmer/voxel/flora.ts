@@ -39,11 +39,17 @@ export interface FloraSpot {
 
 /** Drift field scale — a flower drift is a place tens of blocks across, not a speckle. */
 export const DRIFT_SCALE = 90
-export const DRIFT_EDGE = 0.60   // drift field above this = flowers allowed
+// ★ 0.60 → 0.72 (2026-08-11, Alex playtesting: "an unnecessary amount of flowers"). At 0.60 THIRTY
+// PERCENT of the garden was drift, so the carpet that is supposed to be a place you FIND was simply
+// the ground — 7728 flowers in a 224-block view, each drawn as two alpha quads (stem + head), which
+// is also the overdraw profile that swamps a GPU. The fix is rarity, not dilution: a drift you walk
+// into should still be a carpet, so `FLOWER_DENSITY` stays high and the FIELD gets pickier. Measured
+// on seed 1337: 30% of ground → 9.4% drift.
+export const DRIFT_EDGE = 0.72   // drift field above this = flowers allowed
 /** Base per-cell densities on healthy open ground (multiplied by zone character below). */
-export const TUFT_DENSITY = 0.16
+export const TUFT_DENSITY = 0.13
 export const TALL_DENSITY = 0.035
-export const FLOWER_DENSITY = 0.30   // inside a drift — dense on purpose, drifts are the rarity
+export const FLOWER_DENSITY = 0.26   // inside a drift — dense on purpose, drifts are the rarity
 /** Fraction of a mist patch's tufts that give way to bloom at full mist. */
 export const MIST_TUFT_YIELD = 0.75
 /** Flower share mist raises on OPEN ground (outside a drift) — a patch blooms with or without one. */

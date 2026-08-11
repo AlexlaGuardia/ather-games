@@ -34,7 +34,7 @@ import { placeOre, type OreBatch, ORE_BATCHES } from './ore'
 import { plantTrees, type TreeConfig, DEFAULT_TREES } from './trees'
 import { placeSites } from './sites'
 import { slumpMask } from './slump'
-import { greedyMesh, createMeshScratch, type MeshScratch, type MeshResult } from './greedy'
+import { greedyMesh, createMeshScratch, halfKey, type MeshScratch, type MeshResult, type HalfCells } from './greedy'
 
 export const SECTION = 16
 
@@ -88,6 +88,8 @@ export class Column {
    *  field alone, so it is NOT part of the save: a player edit changes the cell, never the mask,
    *  and `isHalfCell` reads both before it calls anything half. */
   readonly slump: Uint8Array
+  /** Memo for `halfSections` — see there. Not part of generation state. */
+  halfSec: Uint8Array | null = null
 
   constructor(wx: number, wz: number, cfg: ColumnConfig = DEFAULT_COLUMN) {
     this.wx = wx
@@ -135,6 +137,28 @@ export function isHalfCell(col: Column, lx: number, y: number, lz: number): bool
   const up = ((y + 1) / SECTION) | 0
   if (up >= col.sections.length) return true
   return col.sections[up].get(lx, y + 1 - up * SECTION, lz) === AIR
+}
+
+/**
+ * Which of this column's sections can hold a half cell at all — 1 per section index, memoised.
+ *
+ * ★ THIS IS WHAT KEEPS SLUMP AFFORDABLE. Half cells live only at the surface, so at most one or
+ * two of a column's 16 sections can contain one; the rest are sky or rock. Handing the mesher a
+ * half callback for those 14 put a closure call in the sweep's innermost loop for nothing and
+ * DOUBLED column mesh time (10.5ms → 22.2ms, measured the day slump shipped). Derived from
+ * `surface` and `slump` alone, both of which are final before anything meshes, so the memo is safe.
+ */
+export function halfSections(col: Column): Uint8Array {
+  if (col.halfSec) return col.halfSec
+  const n = col.sections.length
+  const out = new Uint8Array(n)
+  for (let i = 0; i < SECTION * SECTION; i++) {
+    if (!col.slump[i]) continue
+    const s = (col.surface[i] / SECTION) | 0
+    if (s >= 0 && s < n) out[s] = 1
+  }
+  col.halfSec = out
+  return out
 }
 
 /** Recompute the per-section uniform table. Cheap, and it is what makes tall worlds affordable. */
@@ -267,6 +291,9 @@ export function meshColumn(
   out.length = 0
   const sc = scratch ?? createMeshScratch(SECTION)
   const n = col.sections.length
+  // One reusable scratch section for the lip-stripped copy (see the strip block below). Allocated
+  // per column mesh, not per section, and never touched unless a section actually holds a lip.
+  const strip = new Section(SECTION)
 
   for (let i = 0; i < n; i++) {
     const sec = col.sections[i]
@@ -292,7 +319,7 @@ export function meshColumn(
     }
 
     const oy = i * SECTION
-    const sample = (x: number, y: number, z: number): number => {
+    const raw = (x: number, y: number, z: number): number => {
       // Vertical: walk into the section above or below within this column.
       if (y < 0) return i > 0 ? col.sections[i - 1].get(x, SECTION - 1, z) : AIR
       if (y >= SECTION) return i < n - 1 ? col.sections[i + 1].get(x, 0, z) : AIR
@@ -307,19 +334,58 @@ export function meshColumn(
       return sec.get(x, y, z)
     }
 
-    // Slump, in section-local coordinates. Mirrors `sample`'s frontier rule: an ABSENT neighbour
-    // column is opaque, and opaque ground is never a lip — so the frontier draws no half faces
-    // either, and they arrive with the column when it does.
-    const halfAt = (x: number, y: number, z: number): boolean => {
-      const wy = oy + y
-      if (x < 0) return neigh.negX ? isHalfCell(neigh.negX, SECTION - 1, wy, z) : false
-      if (x >= SECTION) return neigh.posX ? isHalfCell(neigh.posX, 0, wy, z) : false
-      if (z < 0) return neigh.negZ ? isHalfCell(neigh.negZ, x, wy, SECTION - 1) : false
-      if (z >= SECTION) return neigh.posZ ? isHalfCell(neigh.posZ, x, wy, 0) : false
-      if (wy < 0 || wy >= n * SECTION) return false
-      return isHalfCell(col, x, wy, z)
+    // ── slump, and the cost of asking about it ───────────────────────────────────────────────
+    // A section needs a half callback only if IT or one of the four neighbour COLUMNS can hold a
+    // lip in this y band — a neighbour's half cell changes which faces we draw at the shared
+    // plane, so the ring is part of the test, not an optimisation away from it. Everything else
+    // gets `null`, which restores the mesher's original inner loop exactly.
+    // ⚠ THE Y RING IS PART OF THE TEST, NOT JUST THE X/Z ONE. A lip at the very top of section
+    // i-1 has AIR above it, i.e. in section i — and section i's own bottom plane is where that
+    // pair gets meshed. Ask only about section i and it draws a FULL-height cap over the lip.
+    const own = halfSections(col)
+    const sides = [neigh.negX, neigh.posX, neigh.negZ, neigh.posZ]
+    let anyHalf = own[i] === 1 || (i > 0 && own[i - 1] === 1) || (i < n - 1 && own[i + 1] === 1)
+    if (!anyHalf) for (const s of sides) if (s && halfSections(s)[i] === 1) { anyHalf = true; break }
+
+    // ★ STRIP THE LIPS OUT OF A COPY AND HAND THAT TO THE SWEEP. The mesher must not learn that
+    // slump exists — see the HalfCells contract in greedy.ts for the four measurements that
+    // settled this. One 8KB copy per surface section buys back the whole regression.
+    let half: HalfCells | null = null
+    let meshSec = sec
+    if (anyHalf) {
+      half = new Map()
+      // The one-cell ring too: a lip at x = -1 belongs to the neighbour column, and the pass needs
+      // it to know whether our lip's side is covered. Ring entries are context, never drawn.
+      for (let z = -1; z <= SECTION; z++) {
+        for (let x = -1; x <= SECTION; x++) {
+          const inside = x >= 0 && x < SECTION && z >= 0 && z < SECTION
+          // Which column owns this footprint, and where in it — mirrors `raw`'s frontier rule:
+          // an ABSENT neighbour is opaque, and opaque ground is never a lip.
+          let src: Column | null | undefined = col, sx = x, sz = z
+          if (x < 0) { src = neigh.negX; sx = SECTION - 1 }
+          else if (x >= SECTION) { src = neigh.posX; sx = 0 }
+          else if (z < 0) { src = neigh.negZ; sz = SECTION - 1 }
+          else if (z >= SECTION) { src = neigh.posZ; sz = 0 }
+          if (!src) continue
+          const wy = src.surface[sz * SECTION + sx]
+          if (wy < oy - 1 || wy > oy + SECTION) continue
+          if (!isHalfCell(src, sx, wy, sz)) continue
+          half.set(halfKey(x, wy - oy, z, SECTION), src.get(sx, wy, sz))
+          if (inside && wy >= oy && wy < oy + SECTION) {
+            if (meshSec === sec) { strip.data.set(sec.data); meshSec = strip }
+            meshSec.set(x, wy - oy, z, AIR)
+          }
+        }
+      }
+      if (half.size === 0) half = null
     }
-    const mesh = greedyMesh(sec, sample, sc, halfAt)
+    // ⚠ THE VERTICAL NEIGHBOUR NEEDS STRIPPING TOO, and only the RARE path pays for it. A lip at
+    // the top of section i-1 is read by section i's bottom plane through this closure, not through
+    // the stripped copy — leave it solid there and the sweep caps the lip at full height. Called
+    // only for out-of-section coordinates, so this lookup never touches the hot loop.
+    const neighbourFn = half === null ? raw
+      : (x: number, y: number, z: number) => half!.has(halfKey(x, y, z, SECTION)) ? AIR : raw(x, y, z)
+    const mesh = greedyMesh(meshSec, neighbourFn, sc, half)
     if (mesh.quads === 0) continue
     // ⚠ The scratch is reused, so these arrays are views that the NEXT section will overwrite.
     // Copy them here: the caller receives a list, and a list of aliased views is a trap.

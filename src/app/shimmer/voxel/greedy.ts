@@ -40,10 +40,30 @@ const OUTSIDE_IS_AIR: NeighbourFn = () => AIR
 /**
  * Does this cell stand at HALF height? Section-local coordinates; may be asked about neighbours
  * one step outside the section, exactly like `NeighbourFn`. See the half-cell block below.
+ *
+ * ★ THE SWEEP MUST NEVER LEARN THAT SLUMP EXISTS — it is CALL-bound, and this is a measurement,
+ * not a preference (2026-08-11, the day slump shipped, and it shipped WITH the regression):
+ *   · sweep asks a `half(x,y,z)` callback per cell ............ 22.2ms/column (from 10.5 baseline)
+ *   · same, but only for sections that can hold a lip ......... 19.3ms  (barely helps — the
+ *     sections that can hold a lip are exactly the ones that do the meshing work)
+ *   · fold the test into the `sample` closure it already calls . 19.3ms  (no gain: two calls per
+ *     sample became three; the indirection WAS the cost, not the work inside it)
+ *   · hand it a section whose lips are already AIR ............. 10.6ms  ← this
+ * At 19ms a single column blows a 16.7ms frame, which is exactly what the lag was. So the caller
+ * strips the lips out of a COPY of the section and passes that; the inner loop stays byte-identical
+ * to the pre-slump mesher, and the cost of the whole feature becomes one 8KB copy per surface
+ * section. Do not "simplify" this back into a predicate.
+ *
+ * The map below is what the half pass draws FROM: section-local cells keyed by `halfKey`, valued
+ * with the material the sweep can no longer see. It carries the one-cell ring (−1 .. S) as well,
+ * so a lip can tell whether the neighbour beside it — including one in the next column — covers
+ * its side. `null` means nothing here slumps and the pass is skipped whole.
  */
-export type HalfFn = (x: number, y: number, z: number) => boolean
+export type HalfCells = Map<number, number>
 
-const NOTHING_IS_HALF: HalfFn = () => false
+/** Key for `HalfCells`. Accepts the one-cell ring, so −1 and S are legal on every axis. */
+export const halfKey = (x: number, y: number, z: number, S: number): number =>
+  ((y + 1) * (S + 2) + (z + 1)) * (S + 2) + (x + 1)
 
 /**
  * Reusable scratch buffers for one section size.
@@ -84,7 +104,7 @@ export function createMeshScratch(size: number): MeshScratch {
  */
 export function greedyMesh(
   sec: Section, neighbour: NeighbourFn = OUTSIDE_IS_AIR, scratch?: MeshScratch,
-  half: HalfFn = NOTHING_IS_HALF,
+  half: HalfCells | null = null,
 ): MeshResult {
   const S = sec.size
   const sc = scratch && scratch.size === S ? scratch : createMeshScratch(S)
@@ -145,10 +165,10 @@ export function greedyMesh(
           // half-height neighbour exposes. The half pass below then draws the cell itself.
           // ⚠ Asked only about cells that are otherwise solid: `half` runs on every plane cell of
           // every plane, and the whole point of the uniform fast path is not to pay per cell.
-          let aSolid = a !== AIR && a !== STRUCTURE && a !== STRUCTURE_HALF
-          if (aSolid && half(x[0], x[1], x[2])) aSolid = false
-          let bSolid = b !== AIR && b !== STRUCTURE && b !== STRUCTURE_HALF
-          if (bSolid && half(x[0] + q[0], x[1] + q[1], x[2] + q[2])) bSolid = false
+          // ★ A SLUMPED CELL IS INVISIBLE HERE because `sample` already returned AIR for it — see
+          // the HalfFn contract. Nothing about this loop knows slump exists, which is the point.
+          const aSolid = a !== AIR && a !== STRUCTURE && a !== STRUCTURE_HALF
+          const bSolid = b !== AIR && b !== STRUCTURE && b !== STRUCTURE_HALF
           // Exactly one solid => a face. Both solid or both air => nothing. This single line is
           // what deletes every interior face in the world.
           if (aSolid === bSolid) mask[n] = 0
@@ -248,7 +268,7 @@ export function greedyMesh(
   // What is deliberately NOT drawn: the bottom face. The cell below is solid, so the sweep already
   // emitted its top face at this exact plane — sitting inside the half's own volume, invisible, and
   // merged into its neighbours' tops for free. Drawing a bottom here would z-fight it.
-  {
+  if (half !== null) {
     const maxQuads = (positions.length / 12) | 0
     const emit = (
       px: number, py: number, pz: number, ux: number, uy: number, uz: number,
@@ -274,25 +294,26 @@ export function greedyMesh(
       faces++
     }
     // Winding rule, the same one the sweep obeys: cross(u, v) must equal the face normal.
-    for (let y = 0; y < S; y++) {
-      for (let z = 0; z < S; z++) {
-        for (let cx = 0; cx < S; cx++) {
-          const m = sec.get(cx, y, z)
-          if (m === AIR || m === STRUCTURE || m === STRUCTURE_HALF) continue
-          if (!half(cx, y, z)) continue
-          emit(cx, y + 0.5, z, 0, 0, 1, 1, 0, 0, 0, 1, 0, m)                     // top
-          const side = (dx: number, dz: number): boolean => {
-            const n = sample(cx + dx, y, z + dz)
-            // A full neighbour covers this 0.5 outright; a slumped one covers exactly as much as
-            // we do. Piece occupancy covers nothing — the piece renderer draws its own look.
-            return n === AIR || n === STRUCTURE || n === STRUCTURE_HALF
-          }
-          if (side(1, 0)) emit(cx + 1, y, z, 0, 0.5, 0, 0, 0, 1, 1, 0, 0, m)
-          if (side(-1, 0)) emit(cx, y, z, 0, 0, 1, 0, 0.5, 0, -1, 0, 0, m)
-          if (side(0, 1)) emit(cx, y, z + 1, 1, 0, 0, 0, 0.5, 0, 0, 0, 1, m)
-          if (side(0, -1)) emit(cx, y, z, 0, 0.5, 0, 1, 0, 0, 0, 0, -1, m)
-        }
+    // Iterates the lips themselves — never the section — so this pass costs what slump costs.
+    for (const [k, m] of half) {
+      const cx = (k % (S + 2)) - 1
+      const z = ((k / (S + 2)) | 0) % (S + 2) - 1
+      const y = ((k / ((S + 2) * (S + 2))) | 0) - 1
+      if (cx < 0 || cx >= S || y < 0 || y >= S || z < 0 || z >= S) continue   // ring entry: context only
+      emit(cx, y + 0.5, z, 0, 0, 1, 1, 0, 0, 0, 1, 0, m)                     // top
+      const side = (dx: number, dz: number): boolean => {
+        // A full neighbour covers this 0.5 outright; a slumped one covers exactly as much as we
+        // do — and the sweep's section has had it stripped to AIR, so the map lookup is not
+        // redundant: without it every string of lips along a terrace edge draws a wall between
+        // each pair. Piece occupancy covers nothing (the piece renderer draws its own look).
+        const n = sample(cx + dx, y, z + dz)
+        if (!(n === AIR || n === STRUCTURE || n === STRUCTURE_HALF)) return false
+        return !half.has(halfKey(cx + dx, y, z + dz, S))
       }
+      if (side(1, 0)) emit(cx + 1, y, z, 0, 0.5, 0, 0, 0, 1, 1, 0, 0, m)
+      if (side(-1, 0)) emit(cx, y, z, 0, 0, 1, 0, 0.5, 0, -1, 0, 0, m)
+      if (side(0, 1)) emit(cx, y, z + 1, 1, 0, 0, 0, 0.5, 0, 0, 0, 1, m)
+      if (side(0, -1)) emit(cx, y, z, 0, 0.5, 0, 1, 0, 0, 0, 0, -1, m)
     }
   }
 
