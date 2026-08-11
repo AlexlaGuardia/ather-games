@@ -188,9 +188,46 @@ type HotbarEntry = { itemId: string; count: number }
  */
 export const VOXEL_STACK = 99
 
+/**
+ * ── ★ STACK SIZE IS A BALANCE LEVER, NOT A CONSTANT (2026-08-11, Alex asked) ────────────────────
+ * The first cut stacked EVERYTHING to 99, which is fine for dirt and wrong for the rest: how many
+ * of a thing fit in a slot is the game saying how precious it is, and a bag that carries 99 of
+ * anything says nothing is. So the ladder below is deliberately short and readable:
+ *
+ *   · 99 — ground you dig by the hundred: soil, stone, sand, grass, planks, slabs.
+ *   · 16 — things you MAKE and place one at a time. A lantern or a pot is a decision, and
+ *          carrying sixteen already means never walking home for one.
+ *   ·  4 — a Mana Seed. It pays out a SPIRIT (canon: the seed chooses you), so it is the single
+ *          most valuable item in the world. Stacking it like dirt would say otherwise in the one
+ *          place a player actually looks. Four is "a good haul", not "a resource".
+ *
+ * Unlisted ids fall to 99 on purpose: a new BLOCK is the common case, and the failure mode of a
+ * too-generous default is a mild balance miss, while a too-strict one is a bag that fills up for
+ * reasons nobody can see. Precious things are the exception and exceptions get written down.
+ */
+const STACK_OVERRIDE: Record<string, number> = {
+  mana_seed: 4,
+  clay_pot: 16,
+  mana_lantern: 16,
+  crafting_table: 16,
+}
+
+export const maxStackOf = (itemId: string): number => STACK_OVERRIDE[itemId] ?? VOXEL_STACK
+
 /** Add to the bag with this world's stack size. Returns what did NOT fit. */
 function give(inv: Inventory, itemId: string, count: number): number {
-  return addItems(inv, itemId, count, VOXEL_STACK)
+  return addItems(inv, itemId, count, maxStackOf(itemId))
+}
+
+/** How many more of `itemId` the bag could take right now. Drives the pickup gate in `tickDrops`. */
+function roomFor(inv: Inventory, itemId: string): number {
+  const max = maxStackOf(itemId)
+  let room = 0
+  for (const s of inv.slots) {
+    if (!s) room += max
+    else if (s.itemId === itemId && s.count < max) room += max - s.count
+  }
+  return room
 }
 
 /**
@@ -2799,7 +2836,11 @@ function World({ inv, toolTier, toolSkill, selItem, weaponDrawn, weaponIdx, onAm
     // on the cave floor rather than on the surface hundreds of blocks above it.
     if (drops.current.length) {
       const res = tickDrops(drops.current, dt, p.x, p.y - 0.8, p.z,
-        (x, y, z) => isSolid(voxelSolid(x, y, z)))
+        (x, y, z) => isSolid(voxelSolid(x, y, z)), undefined,
+        // ★ A FULL BAG REFUSES THE PICKUP so the item stays on the ground and stays yours. Before
+        // this the drop was consumed and the leftover discarded — walking over a stack you had no
+        // room for destroyed it, with nothing on screen to say so.
+        (itemId) => roomFor(inv.current!, itemId))
       if (res.picked.length) {
         // ⚠ A FULL BAG MUST SAY SO. `give` returns what did not fit, and every caller here used to
         // discard that — which is how mining past a full inventory destroyed the drop in silence.

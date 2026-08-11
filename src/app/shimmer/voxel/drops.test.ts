@@ -168,6 +168,34 @@ const run = (drops: Drop[], seconds: number, player: [number, number, number] = 
   ok(a.vx !== c.vx || a.vz !== c.vz, 'different blocks throw differently')
 }
 
+// ── ★ A FULL BAG REFUSES THE PICKUP (2026-08-11) ────────────────────────────────────────────────
+// The drop used to be consumed here and the leftover discarded upstream, so walking over a stack
+// you had no room for destroyed it. The item must stay on the ground, and a PARTIAL accept must
+// leave its remainder behind rather than rounding to all-or-nothing.
+{
+  const mk = () => [spawnDrop('block_stone', 10, 0, 10, 0)].map(d => { d.pickupDelay = 0; d.y = 10; return d })
+  const ground = (x: number, y: number, z: number) => y < 10
+
+  const full = mk()
+  const r0 = tickDrops(full, 0.016, 0.5, 10, 0.5, ground, undefined, () => 0)
+  ok(r0.picked.length === 0, '★ a full bag picks up nothing')
+  ok(full.length === 1 && full[0].count === 10, '★ and the drop is still lying there, intact')
+
+  const part = mk()
+  const r1 = tickDrops(part, 0.016, 0.5, 10, 0.5, ground, undefined, () => 4)
+  ok(r1.picked[0]?.count === 4, 'a partial accept takes what fits')
+  ok(part.length === 1 && part[0].count === 6, '★ and leaves the remainder on the ground')
+
+  const room = mk()
+  const r2 = tickDrops(room, 0.016, 0.5, 10, 0.5, ground, undefined, () => 999)
+  ok(r2.picked[0]?.count === 10, 'room to spare takes the whole stack')
+  ok(room.length === 0, 'and the drop is gone')
+
+  const legacy = mk()
+  const r3 = tickDrops(legacy, 0.016, 0.5, 10, 0.5, ground)
+  ok(r3.picked[0]?.count === 10, 'no capacity fn = take everything (the old behaviour)')
+}
+
 console.log(`\ndropped items: ${pass} passed, ${fails.length} failed`)
 for (const f of fails) console.log('  ✗ ' + f)
 if (fails.length) process.exit(1)

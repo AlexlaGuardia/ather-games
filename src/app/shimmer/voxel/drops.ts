@@ -99,6 +99,14 @@ export function tickDrops(
   px: number, py: number, pz: number,
   solidAt: (x: number, y: number, z: number) => boolean,
   cfg: DropConfig = DEFAULT_DROPS,
+  /**
+   * ★ HOW MANY OF THIS ITEM THE BAG WOULD ACTUALLY TAKE, 0..count. Absent = take everything, which
+   * is what every caller assumed and why a full bag used to DESTROY what you walked over: the drop
+   * was consumed here and the leftover discarded upstream. Refusing the pickup instead leaves the
+   * item on the ground — the only outcome a player can act on. A PARTIAL accept is honoured too, so
+   * a stack that half-fits leaves its remainder lying there rather than rounding to all-or-nothing.
+   */
+  capacity?: (itemId: string, count: number) => number,
 ): DropTickResult {
   const picked: { itemId: string; count: number }[] = []
   const expired: number[] = []
@@ -156,8 +164,11 @@ export function tickDrops(
     if (d.pickupDelay > 0) continue
     const dx = d.x - px, dy = d.y - py, dz = d.z - pz
     if (dx * dx + dy * dy + dz * dz <= cfg.pickupRadius * cfg.pickupRadius) {
-      picked.push({ itemId: d.itemId, count: d.count })
-      d.count = 0
+      const take = capacity ? Math.max(0, Math.min(d.count, capacity(d.itemId, d.count))) : d.count
+      if (take <= 0) continue          // bag full: the item stays where it is, and stays yours
+      picked.push({ itemId: d.itemId, count: take })
+      d.count -= take
+      // What did not fit keeps its pickup delay clear but must not be re-offered this same tick.
     }
   }
 
