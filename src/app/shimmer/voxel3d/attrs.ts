@@ -52,6 +52,9 @@ export const MATERIAL_COLOR: Record<number, number> = {
   [MAT.MANA_LANTERN]: 0xffd98a,
   // Milled goldwood, a step lighter and warmer than the raw log — a worked surface, not bark.
   [MAT.CRAFT_TABLE]: 0xb08a4e,
+  // Darker than the bench: a chest is sturdier stock, and the two stand side by side in a keeper's
+  // home — they have to read apart at a glance, not just up close.
+  [MAT.CHEST]: 0x8f6535,
   // Packed earth, drier than subsoil, tanner than sand — the story road.
   [MAT.PATH]: 0xa8916b,
   // Milled goldwood strips — the bridge deck and the builder's floor.

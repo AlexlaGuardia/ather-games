@@ -45,7 +45,7 @@ import { makeTileArray } from './tex/atlas'
 import { createTexturedVoxelMaterial } from './tex/atlas'
 import { loadSettings, saveSettings, withStyle, VIEW_RADIUS_MIN, VIEW_RADIUS_MAX, type VoxelSettings, type RenderStyle } from './settings'
 import { buildAttrsSplit, MATERIAL_COLOR } from './attrs'
-import { createInventory, addItems, removeItems, countItem, type Inventory } from '../engine/inventory'
+import { createInventory, removeItems, countItem, type Inventory } from '../engine/inventory'
 // ★ PORT STEP 1 — the zero-coupling systems, wired unchanged.
 // PLAY3D-MIGRATION measured 16 of 23 engine systems as having NO reference to zones, tiles or world
 // grids. These are three of them, imported exactly as `Shimmer3D` imports them: they do not know
@@ -98,7 +98,10 @@ import { loadMistLedger, saveMistLedger, recordWithdrawal, residentAt, quietMinu
 import { applySparPayout, sparLedgerLines } from './spar-reward'
 import ArenaBattle from '../components/ArenaBattle'
 import { createSpirit, speciesDisplayName, type Spirit } from '../spirits/spirit'
-import { moveStack } from './satchel'
+import {
+  chestKey, createChest, moveBetween, quickMove, addToGrid, isEmpty as isChestEmpty,
+  spill as spillChest, CHEST_COLS, CHEST_SLOTS, type Slots,
+} from './chest'
 import { itemIcon } from './tex/item-icon'
 import { bloom as bloomSpirit, due as potsDue, potKey, progress as potProgress, type PotClock } from './pot'
 import { spiritsToSave, spiritsFromSave } from '../spirits/spirit-save'
@@ -106,6 +109,20 @@ import { LAUNCHED_SPECIES } from '../engine/spirit-index'
 import { applyFightResult } from '../engine/spirit-health'
 import type { BattleResult } from '../engine/arena'
 import { createFloraRenderer } from './flora-mesh'
+
+/**
+ * A chest the player has opened: where it stands, its LIVE contents array, and the call that marks
+ * its column dirty. The array is shared with the world's own record by reference — one array, one
+ * truth, so a panel that shows 40 stone and a save that holds 40 stone cannot come apart.
+ */
+export interface OpenChest { x: number; y: number; z: number; slots: Slots; touch: () => void }
+
+/**
+ * Which grid a slot click means. The bag and an open chest are two grids inside ONE panel, so a
+ * lifted stack has to name where it came from — an index alone was enough while there was only the
+ * bag, and stops being enough the moment a second grid is on screen.
+ */
+type SlotRef = { g: 'bag' | 'chest'; i: number }
 
 const SEED = 1337
 const H = DEFAULT_COLUMN.worldHeight
@@ -212,13 +229,23 @@ const STACK_OVERRIDE: Record<string, number> = {
   clay_pot: 16,
   mana_lantern: 16,
   crafting_table: 16,
+  chest: 16,
 }
 
 export const maxStackOf = (itemId: string): number => STACK_OVERRIDE[itemId] ?? VOXEL_STACK
 
-/** Add to the bag with this world's stack size. Returns what did NOT fit. */
+/**
+ * Add to the bag with this world's stack size. Returns what did NOT fit.
+ *
+ * ★ THE ONLY WAY ITEMS ENTER THE BAG, and it deliberately does NOT go through
+ * `engine/inventory.addItems` any more (2026-08-11, the chests pass). That function carries the 2D
+ * game's rules — its stack table answers 1 for every block here, and its furniture rule refuses to
+ * put furniture in a hotbar band that means something else in this world. `chest` is already an id
+ * in the 2D FURNITURE table, so a crafted chest silently inherited that rule while `roomFor` below
+ * did not, which made a walked-over chest vanish. See `addToGrid`'s header for the whole autopsy.
+ */
 function give(inv: Inventory, itemId: string, count: number): number {
-  return addItems(inv, itemId, count, maxStackOf(itemId))
+  return addToGrid(inv.slots, itemId, count, maxStackOf)
 }
 
 /** How many more of `itemId` the bag could take right now. Drives the pickup gate in `tickDrops`. */
@@ -671,19 +698,45 @@ export default function VoxelWorld() {
    * windows onto one grid rather than two ideas about what you are carrying.
    *
    * ⚠ Positional, so empties are NULL and stay null — a gap in the bar is a gap on purpose.
-   * `engine/inventory.addItems` fills the lowest free slot first, so picked-up items land in the
-   * bar before the satchel, which is the behaviour a player expects without being told.
+   * `give`/`addToGrid` fills the lowest free slot first, so picked-up items land in the bar before
+   * the satchel, which is the behaviour a player expects without being told.
    */
   /**
-   * Move or merge slot `from` onto slot `to`.
+   * Move or merge one slot onto another, in the bag or across into an open chest.
    *
    * ★ MERGE BEFORE SWAP, and respect the item's own stack ceiling — dropping 60 stone onto 60 more
    * must leave 99 and 21, not silently destroy 21 or build a stack no other code path could have
    * made. `maxStackOf` is the same ladder `give` uses, so a stack assembled by hand can never
    * exceed one assembled by walking over drops.
+   *
+   * ★ ONE function for both grids: a bag→chest move and a bag→bag move differ in nothing, and
+   * written twice they drift the first time one is fixed. `moveBetween` is the only implementation
+   * (chest.ts); `moveStack` is that same call with one array passed twice.
    */
-  const moveSlot = useCallback((from: number, to: number) => {
-    moveStack(inv.current, from, to, maxStackOf)
+  const moveRef = useCallback((from: SlotRef, to: SlotRef) => {
+    const chest = openChestRef.current
+    if ((from.g === 'chest' || to.g === 'chest') && !chest) return
+    const grid = (r: SlotRef) => (r.g === 'bag' ? inv.current.slots : chest!.slots)
+    moveBetween(grid(from), from.i, grid(to), to.i, maxStackOf)
+    if (from.g === 'chest' || to.g === 'chest') chest!.touch()
+    refreshHotbarRef.current?.()
+  }, [])
+
+  /**
+   * Shift-click: send a whole stack to the other container.
+   *
+   * ★ THIS IS WHAT MAKES A CHEST WORTH HAVING. Emptying a bag one lift-and-place at a time is
+   * twenty-four pairs of clicks, and a container that costs that much to fill is one nobody fills.
+   * Merges into existing stacks before taking an empty slot, exactly like a pickup does — so
+   * putting things away by hand and having them land there by walking behave the same.
+   */
+  const quickRef = useCallback((r: SlotRef) => {
+    const chest = openChestRef.current
+    if (!chest) return
+    const from = r.g === 'bag' ? inv.current.slots : chest.slots
+    const to = r.g === 'bag' ? chest.slots : inv.current.slots
+    if (!quickMove(from, r.i, to, maxStackOf)) return
+    chest.touch()
     refreshHotbarRef.current?.()
   }, [])
   const refreshHotbarRef = useRef<(() => void) | null>(null)
@@ -708,8 +761,21 @@ export default function VoxelWorld() {
    * transfer with rules of its own.
    */
   const [bagOpen, setBagOpen] = useState(false)
-  /** The slot being dragged, or null. Index into `inv.slots`, not into a panel. */
-  const [dragFrom, setDragFrom] = useState<number | null>(null)
+  /** The slot being dragged, or null. Names its GRID as well as its index — see `SlotRef`. */
+  const [dragFrom, setDragFrom] = useState<SlotRef | null>(null)
+  /**
+   * ── ★ THE CHEST IS THE SAME PANEL WITH A SECOND GRID ON TOP (2026-08-11) ─────────────────────
+   * Not its own screen: the bag half of a chest screen and the satchel ARE the same 24 slots, and
+   * two components drawing them is two places for a stack to look like two different things — the
+   * shape the hotbar/satchel swatches already had once. `openChest.slots` is the world's own live
+   * array, so what the panel shows and what the column saves cannot come apart.
+   *
+   * Mirrored into a ref because `moveRef`/`quickRef` are stable callbacks the panel calls on every
+   * click; reading state through the closure would need them rebuilt on every open.
+   */
+  const [openChest, setOpenChest] = useState<OpenChest | null>(null)
+  const openChestRef = useRef<OpenChest | null>(null)
+  openChestRef.current = openChest
   const [craftOpen, setCraftOpen] = useState(false)
   const [craftTick, setCraftTick] = useState(0)
   // Near a PLACED crafting table (World scans and reports, same shape as nearGreg). This is the
@@ -788,7 +854,19 @@ export default function VoxelWorld() {
     const c = canvasElRef.current
     if (c) { try { const r = c.requestPointerLock?.() as unknown as Promise<void> | undefined; r?.catch?.(() => {}) } catch { /* re-lock cooldown */ } }
   }, [])
-  useEffect(() => { cursorUIOpenRef.current = craftOpen || bagOpen || dialogueOpen || showSettings || !!spar }, [craftOpen, bagOpen, dialogueOpen, showSettings, spar])
+  /**
+   * One way out of the inventory surface, whichever way you came in.
+   *
+   * ⚠ The chest MUST be cleared here. It holds a live reference into the world's chest record; a
+   * panel left mounted against a chest the player has walked away from (or broken) would keep
+   * writing into an array nothing loads any more, and the items would be gone with no error.
+   */
+  const closeBag = useCallback(() => {
+    setBagOpen(false); setOpenChest(null); setDragFrom(null); closeCursorUI()
+  }, [closeCursorUI])
+  // ⚠ `openChest` belongs in here too, or right-clicking a chest captures the cursor while the
+  // canvas still thinks it owns the click — the pointer re-locks on the first slot you press.
+  useEffect(() => { cursorUIOpenRef.current = craftOpen || bagOpen || !!openChest || dialogueOpen || showSettings || !!spar }, [craftOpen, bagOpen, openChest, dialogueOpen, showSettings, spar])
 
   // ── the shared party + the withdrawal ledger, read once at mount ────────────────────────────
   // Both are localStorage and therefore synchronous; done in an effect anyway so SSR never touches
@@ -998,7 +1076,7 @@ export default function VoxelWorld() {
       // I opens the satchel — same open/close-on-the-same-key shape as C and E, so the three
       // cursor surfaces behave identically and none of them needs Escape to dismiss.
       if (e.code === 'KeyI') {
-        if (bagOpen) { setBagOpen(false); setDragFrom(null); closeCursorUI() }
+        if (bagOpen || openChest) closeBag()
         else { openCursorUI(); setBagOpen(true) }
       }
       // E talks to Greg when he is in range, and closes the box that opens from it — the same key
@@ -1023,6 +1101,7 @@ export default function VoxelWorld() {
       // where a canvas click is still needed, same as play3d.
       if (e.code === 'Escape') {
         if (craftOpen) { setCraftOpen(false); closeCursorUI() }
+        if (bagOpen || openChest) closeBag()
         if (dialogueOpen) closeDialogue()
         if (consoleOpen) { setConsoleOpen(false); closeCursorUI() }
       }
@@ -1040,7 +1119,7 @@ export default function VoxelWorld() {
     window.addEventListener('keydown', onKey)
     window.addEventListener('wheel', onWheel, { passive: true })
     return () => { window.removeEventListener('keydown', onKey); window.removeEventListener('wheel', onWheel) }
-  }, [build, drawn, dialogueOpen, nearGreg, nearTable, craftOpen, showSettings, consoleOpen, closeDialogue, openCursorUI, closeCursorUI, nearMist, hasParty, startSpar])
+  }, [build, drawn, dialogueOpen, nearGreg, nearTable, craftOpen, showSettings, consoleOpen, closeDialogue, openCursorUI, closeCursorUI, nearMist, hasParty, startSpar, bagOpen, openChest, closeBag])
 
   return (
     <div className="fixed inset-0 bg-[#0b0d14]">
@@ -1091,6 +1170,7 @@ export default function VoxelWorld() {
           tutorial={tutorial} onQuestEvent={onQuestEvent} onNearGreg={setNearGreg}
           mistLedger={mistLedger} onNearMist={setNearMist} sparring={!!spar}
           onNearTable={setNearTable} cmdOut={worldCmd} pot={potOps}
+          onOpenChest={(c) => { openCursorUI(); setOpenChest(c) }}
         />
         {/* selector: deliberately matches NOTHING. Without it drei binds click-to-lock on the whole
             DOCUMENT (and that binding ignores `enabled`), which re-locked the pointer on every
@@ -1114,10 +1194,12 @@ export default function VoxelWorld() {
         <CraftPanel have={have} tools={tools} tick={craftTick} station={station}
                     onCraft={doCraft} onCraftTool={doCraftTool} onClose={() => { setCraftOpen(false); closeCursorUI() }} />
       )}
-      {bagOpen && (
-        <SatchelPanel inv={inv} tick={craftTick} sel={sel} dragFrom={dragFrom} setDragFrom={setDragFrom}
-                      onMove={(f, t) => { moveSlot(f, t); setCraftTick(v => v + 1) }}
-                      onClose={() => { setBagOpen(false); setDragFrom(null); closeCursorUI() }} />
+      {(bagOpen || openChest) && (
+        <BagPanel inv={inv} chest={openChest} tick={craftTick} sel={sel}
+                  dragFrom={dragFrom} setDragFrom={setDragFrom}
+                  onMove={(f, t) => { moveRef(f, t); setCraftTick(v => v + 1) }}
+                  onQuick={(r) => { quickRef(r); setCraftTick(v => v + 1) }}
+                  onClose={closeBag} />
       )}
       {dialogueOpen && <GregDialogue stage={tutorial.current.stage} onClose={closeDialogue} />}
 
@@ -1436,36 +1518,48 @@ function Hud({ stats, pos, look, hotbar, sel, tier, held, build, pieceIdx, rot, 
 
 
 /**
- * ── ★ THE SATCHEL — one window onto the grid the hotbar already reads ───────────────────────────
+ * ── ★ THE BAG — one window onto the grid the hotbar already reads, plus whatever it is open ON ──
  * Slots 0-7 ARE the hotbar, drawn here as the bottom row and set apart by a rule rather than by
  * being a different widget. That is the whole point: dragging a stack from the satchel to the bar
  * is a slot swap, not a transfer between two containers with their own rules, and what you arrange
  * here is exactly what your fingers find on 1-8.
  *
+ * ★ A CHEST IS THIS PANEL WITH A SECOND GRID ON TOP, not a screen of its own (2026-08-11). The bag
+ * half of a chest screen and the satchel are the same 24 slots, so a separate chest component would
+ * be two places for one stack to look like two different things — the shape the hotbar and satchel
+ * swatches already had once, and the reason `ItemChip` exists.
+ *
  * Drag is CLICK-then-CLICK, not HTML5 drag-and-drop: the pointer has just been released from lock,
  * dragend never fires reliably over a WebGL canvas, and a half-finished HTML5 drag leaves a stack
  * in limbo. Click to lift, click to place, click the same slot to cancel — three states a player
- * can always see, and no way to lose an item between them.
+ * can always see, and no way to lose an item between them. SHIFT-click sends a whole stack straight
+ * across to the other container, because emptying a bag one pair of clicks at a time is a chest
+ * nobody fills.
  */
-function SatchelPanel({ inv, tick, sel, dragFrom, setDragFrom, onMove, onClose }: {
+function BagPanel({ inv, chest, tick, sel, dragFrom, setDragFrom, onMove, onQuick, onClose }: {
   inv: React.RefObject<Inventory>
+  chest: OpenChest | null
   tick: number
   sel: number
-  dragFrom: number | null
-  setDragFrom: (i: number | null) => void
-  onMove: (from: number, to: number) => void
+  dragFrom: SlotRef | null
+  setDragFrom: (r: SlotRef | null) => void
+  onMove: (from: SlotRef, to: SlotRef) => void
+  onQuick: (r: SlotRef) => void
   onClose: () => void
 }) {
-  const slots = inv.current?.slots ?? []
-  const cell = (i: number) => {
-    const st = slots[i]
-    const lifted = dragFrom === i
+  const bag = inv.current?.slots ?? []
+  const cell = (ref: SlotRef) => {
+    const st = (ref.g === 'bag' ? bag : chest?.slots ?? [])[ref.i]
+    const lifted = dragFrom?.g === ref.g && dragFrom.i === ref.i
     return (
-      <button key={i} type="button"
-        onClick={() => {
-          if (dragFrom === null) { if (st) setDragFrom(i) }
-          else if (dragFrom === i) setDragFrom(null)
-          else { onMove(dragFrom, i); setDragFrom(null) }
+      <button key={`${ref.g}${ref.i}`} type="button"
+        onClick={(e) => {
+          // Shift is checked FIRST and short-circuits: a shift-click while something is lifted is
+          // still a quick-move of the slot you clicked, not a confusing half-placement.
+          if (e.shiftKey && chest) { setDragFrom(null); onQuick(ref); return }
+          if (dragFrom === null) { if (st) setDragFrom(ref) }
+          else if (lifted) setDragFrom(null)
+          else { onMove(dragFrom, ref); setDragFrom(null) }
         }}
         title={st ? `${itemLabel(st.itemId)} ×${st.count}` : 'empty'}
         className={`relative w-12 h-12 rounded border-2 flex flex-col items-center justify-center
@@ -1487,21 +1581,37 @@ function SatchelPanel({ inv, tick, sel, dragFrom, setDragFrom, onMove, onClose }
       <div className="rounded-lg border border-white/15 bg-neutral-950/95 p-5 shadow-2xl"
            onClick={e => e.stopPropagation()}>
         <div className="mb-3 flex items-baseline justify-between gap-8">
-          <h2 className="font-medium uppercase tracking-[0.18em] text-amber-200/90 text-sm">Satchel</h2>
+          <h2 className="font-medium uppercase tracking-[0.18em] text-amber-200/90 text-sm">
+            {chest ? 'Chest' : 'Satchel'}
+          </h2>
           <span className="text-[11px] text-white/40">
-            {dragFrom === null ? 'click a stack to lift it · I closes' : 'click a slot to place · click again to cancel'}
+            {dragFrom === null
+              ? `click a stack to lift it${chest ? ' · shift-click to send it across' : ''} · I closes`
+              : 'click a slot to place · click again to cancel'}
           </span>
         </div>
+        {/* The chest's own grid, above the bag and separated by a rule — the same relationship the
+            satchel and the hotbar already have, one level out. */}
+        {chest && (
+          <div className="mb-4 border-b border-white/10 pb-4">
+            <div className="mb-1.5 text-[10px] uppercase tracking-[0.16em] text-white/35">
+              in the chest · {chest.x} {chest.y} {chest.z}
+            </div>
+            <div className="grid gap-1.5" style={{ gridTemplateColumns: `repeat(${CHEST_COLS}, minmax(0, 1fr))` }}>
+              {Array.from({ length: CHEST_SLOTS }, (_, k) => cell({ g: 'chest', i: k }))}
+            </div>
+          </div>
+        )}
         {/* Satchel: slots 8-23, the 16 that are not the bar. */}
         <div className="grid grid-cols-8 gap-1.5">
-          {Array.from({ length: 16 }, (_, k) => cell(k + 8))}
+          {Array.from({ length: 16 }, (_, k) => cell({ g: 'bag', i: k + 8 }))}
         </div>
         {/* The bar itself, set apart by a rule so its slots read as the SAME grid, not a copy. */}
         <div className="mt-4 border-t border-white/10 pt-3">
           <div className="mb-1.5 text-[10px] uppercase tracking-[0.16em] text-white/35">Hotbar · 1-8</div>
           <div className="grid grid-cols-8 gap-1.5">
             {Array.from({ length: 8 }, (_, k) => (
-              <div key={k} className={sel === k ? 'ring-2 ring-amber-300/70 rounded' : ''}>{cell(k)}</div>
+              <div key={k} className={sel === k ? 'ring-2 ring-amber-300/70 rounded' : ''}>{cell({ g: 'bag', i: k })}</div>
             ))}
           </div>
         </div>
@@ -1650,7 +1760,7 @@ const SOLID_EXCEPT = new Set<number>([AIR, MAT.WATER, MAT.TUFT, MAT.TALL_GRASS, 
 // CELL_HALF for it; everything else (light, fence arms, piece placement) wants "yes, solid".
 const isSolid = (m: number) => !SOLID_EXCEPT.has(baseOf(m))
 
-function World({ inv, toolTier, toolSkill, selItem, weaponDrawn, weaponIdx, onAmmo, onStats, onPos, onLook, onInvChange, worker, incoming, inflight, settings, build, pieceIdx, rot, tools, skills, onSkill, onLevel, onTool, tutorial, onQuestEvent, onNearGreg, onNearTable, cmdOut, mistLedger, onNearMist, sparring, pot }: {
+function World({ inv, toolTier, toolSkill, selItem, weaponDrawn, weaponIdx, onAmmo, onStats, onPos, onLook, onInvChange, worker, incoming, inflight, settings, build, pieceIdx, rot, tools, skills, onSkill, onLevel, onTool, tutorial, onQuestEvent, onNearGreg, onNearTable, cmdOut, mistLedger, onNearMist, sparring, pot, onOpenChest }: {
   inv: React.RefObject<Inventory>
   toolTier: React.RefObject<number>
   toolSkill: React.RefObject<BlockSkill>
@@ -1698,6 +1808,13 @@ function World({ inv, toolTier, toolSkill, selItem, weaponDrawn, weaponIdx, onAm
   onNearTable: (near: boolean) => void
   /** The console's world-verbs, filled on mount — only World can move the walker safely. */
   pot: { clock: () => PotClock; save: () => void; gain: (s: Spirit) => void }
+  /**
+   * Right-clicking a chest hands the whole thing upward: its cell, the LIVE contents array, and the
+   * one call that marks its column dirty. World does not open a panel of its own — the bag, the
+   * bench and the chest are one surface in the parent, so they cannot disagree about what a move
+   * means or which of them owns the cursor.
+   */
+  onOpenChest: (c: OpenChest) => void
   cmdOut: React.RefObject<{ tp: (x: number, z: number) => string; pos: () => { x: number; z: number } } | null>
 }) {
   const { camera } = useThree()
@@ -1799,6 +1916,13 @@ function World({ inv, toolTier, toolSkill, selItem, weaponDrawn, weaponIdx, onAm
   const placements = useRef<(Placement & { gen?: string })[]>([])
   /** Tombstones per column: gen-ids of generated pieces the player deconstructed. Saved. */
   const genRemovedByCol = useRef(new Map<string, string[]>())
+  /**
+   * ── ★ CHEST CONTENTS, PER COLUMN (2026-08-11) ────────────────────────────────────────────────
+   * `colKey → { "x,y,z" → slots }`, saved inside that column's record so a chest's block and its
+   * contents move as one (see chest.ts's header). Kept in memory across an evict for exactly the
+   * reason edits are: the column is regenerable, what you put in the chest is not.
+   */
+  const chestsByCol = useRef(new Map<string, Record<string, Slots>>())
   const piecesByCol = useRef(new Map<string, Placement[]>())
   const colOf = useCallback((x: number, z: number) => key(Math.floor(x / SECTION), Math.floor(z / SECTION)), [])
   const dropGroup = useRef<THREE.Group>(null)
@@ -1932,12 +2056,24 @@ function World({ inv, toolTier, toolSkill, selItem, weaponDrawn, weaponIdx, onAm
   // page that leaks a full render's worth of buffers per visit is how the context gets lost in the
   // first place. The shared resources are disposed here and ONLY here, because disposing them
   // anywhere else would break every object still using them.
-  /** Write every dirty column's blocks AND pieces in one record each. */
+  /** Write every dirty column's blocks, pieces AND chest contents in one record each. */
   const flushSaves = useCallback(() => {
     for (const k of dirtySaves.current) {
       const [gx, gz] = k.split(',').map(Number)
       const e = edits.current.get(k) ?? new Map()
-      void saveColumn(SEED, gx, gz, { edits: packEdits(e), pieces: piecesByCol.current.get(k) ?? [], genRemoved: genRemovedByCol.current.get(k) })
+      // Empty chests are dropped from the RECORD but kept in memory: opening a chest and taking
+      // everything out must stop costing storage, the same rule `saveColumn` applies to a column
+      // whose blocks were all restored. The live grid stays in the map so the panel's array
+      // identity survives — it just has nothing worth writing down.
+      const rec = chestsByCol.current.get(k)
+      let chests: Record<string, Slots> | undefined
+      if (rec) {
+        for (const [ck, g] of Object.entries(rec)) if (!isChestEmpty(g)) (chests ??= {})[ck] = g
+      }
+      void saveColumn(SEED, gx, gz, {
+        edits: packEdits(e), pieces: piecesByCol.current.get(k) ?? [],
+        genRemoved: genRemovedByCol.current.get(k), chests,
+      })
     }
     dirtySaves.current.clear()
   }, [])
@@ -2127,6 +2263,30 @@ function World({ inv, toolTier, toolSkill, selItem, weaponDrawn, weaponIdx, onAm
   }, [queueRemesh, colOf, pieces])
 
   /**
+   * The contents of the chest at this cell, created on first open.
+   *
+   * ★ LAZY, so an untouched chest costs nothing — and `flushSaves` drops empty grids from the
+   * record, so opening one and taking everything back out costs nothing again. The grid is returned
+   * BY REFERENCE and the panel mutates it in place; that is deliberate (one array, one truth), and
+   * it is why `touchChest` exists rather than a setter that could be forgotten.
+   */
+  const chestAt = useCallback((x: number, y: number, z: number): Slots => {
+    const k = colOf(x, z)
+    let rec = chestsByCol.current.get(k)
+    if (!rec) { rec = {}; chestsByCol.current.set(k, rec) }
+    const ck = chestKey(x, y, z)
+    return (rec[ck] ??= createChest())
+  }, [colOf])
+
+  /**
+   * ⚠ CALL THIS AFTER EVERY CHANGE TO A CHEST'S CONTENTS. Moving an item into a chest does not go
+   * through `setVoxel`, so nothing marks the column dirty on its own — without this a full chest is
+   * written only when some block near it happens to change, and a session that only sorted its
+   * storage saves nothing at all.
+   */
+  const touchChest = useCallback((x: number, z: number) => { dirtySaves.current.add(colOf(x, z)) }, [colOf])
+
+  /**
    * Write one voxel and repair the geometry.
    *
    * ★ THE NEIGHBOUR RE-MESH IS NOT OPTIONAL. Editing a voxel on a column's edge changes which faces
@@ -2156,6 +2316,22 @@ function World({ inv, toolTier, toolSkill, selItem, weaponDrawn, weaponIdx, onAm
     if (!e) { e = new Map(); edits.current.set(k, e) }
     recordEdit(e, editIndex(lx, wy, lz), mat, generated)
     dirtySaves.current.add(k)
+
+    // ── ★ A CHEST'S RECORD DIES WITH ITS BLOCK ─────────────────────────────────────────────────
+    // Here rather than in the mining branch because this is the funnel EVERY world write goes
+    // through, so no future path (an explosion, a piece deconstruct, a console verb) can leave a
+    // contents record stranded at a cell that is no longer a chest — which would hand the next
+    // chest built on that spot somebody else's items, and grow the save with keys nothing can
+    // reach. The guard on `prevMat !== mat` matters: a no-op write of CHEST over CHEST must not
+    // empty a chest the player is standing in front of.
+    const prevMat = c.sections[s].get(lx, wy - s * SECTION, lz)
+    if (prevMat !== mat && (prevMat === MAT.CHEST || mat === MAT.CHEST)) {
+      const rec = chestsByCol.current.get(k)
+      if (rec) {
+        delete rec[chestKey(wx, wy, wz)]
+        if (!Object.keys(rec).length) chestsByCol.current.delete(k)
+      }
+    }
 
     c.sections[s].set(lx, wy - s * SECTION, lz, mat)
     refreshUniform(c)
@@ -2557,6 +2733,15 @@ function World({ inv, toolTier, toolSkill, selItem, weaponDrawn, weaponIdx, onAm
             pieces.sync(placements.current)
           }
           if (saved.genRemoved?.length) genRemovedByCol.current.set(ek, [...saved.genRemoved])
+          // Chest contents come back with their blocks, which is the whole reason they live in this
+          // record. ⚠ Never clobber a grid already in the map: this load is async, and a chest the
+          // player has ALREADY opened and filled in the seconds since the column meshed would
+          // otherwise be overwritten by the version on disk.
+          if (saved.chests) {
+            const have = chestsByCol.current.get(ek) ?? {}
+            for (const [ck, g] of Object.entries(saved.chests)) if (!have[ck]) have[ck] = g as Slots
+            chestsByCol.current.set(ek, have)
+          }
           applyGenPieces(gx, gz, saved.genRemoved ?? [])
         })
       }
@@ -2876,6 +3061,15 @@ function World({ inv, toolTier, toolSkill, selItem, weaponDrawn, weaponIdx, onAm
         // Straight-to-inventory works and feels like nothing happened; seeing the shard fall is
         // what tells the player the swing landed and what the vein actually yielded.
         for (const d of dropsFor(hit.material)) drops.current.push(spawnDrop(d.itemId, d.count, hit.x, hit.y, hit.z))
+        // ★ A BROKEN CHEST SPILLS WHAT IT HELD — before `setVoxel`, which is what drops the record.
+        // It spills rather than refusing to break: the pile is visible, `tickDrops`' capacity gate
+        // already leaves what will not fit lying on the ground, and a container you cannot pick up
+        // without emptying it by hand first is a trap, not a rule.
+        if (hit.material === MAT.CHEST) {
+          const held = spillChest(chestAt(hit.x, hit.y, hit.z))
+          for (const d of held) drops.current.push(spawnDrop(d.itemId, d.count, hit.x, hit.y, hit.z))
+          if (held.length) onStats(`the chest spills — ${held.reduce((n, d) => n + d.count, 0)} items on the ground`)
+        }
         setVoxel(hit.x, hit.y, hit.z, AIR)
         // ★ Tutorial 'cut' step — any log, not one species (see LOG_MATERIALS's header).
         if (LOG_MATERIALS.has(hit.material)) onQuestEvent('cut')
@@ -2898,7 +3092,22 @@ function World({ inv, toolTier, toolSkill, selItem, weaponDrawn, weaponIdx, onAm
       // Handled before placing, because the pot is a thing you USE and the block in your hand
       // should not be dropped onto it by the same click.
       const potMat = voxel(hit.x, hit.y, hit.z)
-      if (potMat === MAT.POT && selItem === 'mana_seed' && countItem(inv.current!, selItem) > 0) {
+      // ── ★ THE CHEST OPENS ON RIGHT-CLICK, and is answered FIRST ────────────────────────────
+      // Same reasoning as the pot immediately below: a chest is a thing you USE, and the block in
+      // your hand must not be dropped onto it by the same click that opens it. Handing the whole
+      // panel upward (rather than opening one down here) keeps every cursor surface in one place —
+      // the bag, the bench and the chest are the same panel, so they cannot disagree about what a
+      // move means.
+      if (potMat === MAT.CHEST) {
+        // `touch` is bound to THIS chest's column rather than handed up as a coordinate the caller
+        // has to remember — the one call that must not be forgotten cannot then be made wrong.
+        onOpenChest({
+          x: hit.x, y: hit.y, z: hit.z,
+          slots: chestAt(hit.x, hit.y, hit.z),
+          touch: () => touchChest(hit.x, hit.z),
+        })
+        mouse.current.right = false
+      } else if (potMat === MAT.POT && selItem === 'mana_seed' && countItem(inv.current!, selItem) > 0) {
         removeItems(inv.current!, 'mana_seed', 1)
         setVoxel(hit.x, hit.y, hit.z, MAT.POT_SEEDED)
         pot.clock()[potKey(hit.x, hit.y, hit.z)] = Date.now()

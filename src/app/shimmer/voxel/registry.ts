@@ -152,6 +152,14 @@ export const BLOCKS: BlockDef[] = [
   // committed would make planting risk-free, and the seed is the scarce thing.
   { noSlab: true, material: MAT.POT_SEEDED, name: 'Planted Pot', hardness: 0.5, skill: null, minTier: 0, drops: [{ itemId: 'clay_pot', count: 1 }], placeable: false },
   { noSlab: true, material: MAT.POT_BLOOM, name: 'Bloomed Pot', hardness: 0.5, skill: null, minTier: 0, drops: [{ itemId: 'clay_pot', count: 1 }], placeable: false },
+
+  // ── the chest — the first block that holds something ────────────────────────────────────────
+  // Breaks by hand into itself, same reasoning as the lantern and the bench: storage you cannot
+  // rearrange for free is storage nobody commits to. What was INSIDE it is not in this row and
+  // cannot be — a drop table is a fixed list and contents are not — so the host spills them
+  // separately (voxel3d/chest.ts `spill`). It drops the chest ITEM only; the two are independent
+  // and the oracle asserts you cannot get one without the other.
+  { noSlab: true, material: MAT.CHEST, name: 'Chest', hardness: 0.9, skill: null, minTier: 0, drops: [{ itemId: 'chest', count: 1 }], fastSkill: 'forestry', placeable: true },
   { material: MAT.SPRING_CRUST, name: 'Spring Crust', hardness: 1.2, skill: 'prospecting', minTier: 1, drops: [{ itemId: 'block_spring_crust', count: 1 }], placeable: true },
 
   // ── the Prospecting ladder — hardness AND tier both climb, so depth gates twice over ────────

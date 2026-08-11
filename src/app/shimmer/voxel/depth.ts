@@ -144,6 +144,14 @@ export const MAT = {
   POT: 27,
   POT_SEEDED: 28,
   POT_BLOOM: 29,
+
+  // ── ★ THE CHEST — the first block that HOLDS something (2026-08-11) ─────────────────────────
+  // Unlike the pot, a chest's state is NOT expressible as a material: what is inside it is a grid
+  // of stacks, so this id names the block and the contents live beside its column's block edits
+  // (see voxel3d/chest.ts's header for why there and not in a global sidecar). A chest cell that
+  // stops being a chest must drop its record in the same breath, or the next one built on that
+  // spot inherits somebody else's items.
+  CHEST: 30,
 } as const
 
 export interface DepthConfig {

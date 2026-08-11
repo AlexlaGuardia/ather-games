@@ -48,6 +48,8 @@ export const TILE_MATERIALS: number[] = [
   // Spring crust added 2026-08-08 with the hot-spring terraces.
   MAT.SPRING_CRUST,
   MAT.POT, MAT.POT_SEEDED, MAT.POT_BLOOM,
+  // The chest added 2026-08-11 — the first block that holds something.
+  MAT.CHEST,
 ]
 
 /** One spare layer past the end: an unmapped material samples magenta rather than layer 0's stone. */
@@ -488,6 +490,56 @@ function paintCraftTable(dst: Layer, size: number, seed: number, face: number) {
   }
 }
 
+/**
+ * The chest. SIDE carries the whole read: a lid seam across the upper third, two dark iron straps,
+ * and a latch plate centred on the seam — the silhouette a player identifies from six blocks away
+ * without reading a label. TOP is lid boards running crosswise to the body's, banded by the same
+ * iron. BOTTOM is plain dark stock.
+ *
+ * ⚠ ONE SIDE LAYER MEANS THE LATCH IS ON ALL FOUR SIDES. The atlas is three faces per material
+ * (top/side/bottom), not six, so there is no front. That is honest rather than wrong — the block
+ * has no facing to respect yet, and inventing one here would be a lie the placement code cannot
+ * keep. The day directional blocks land (the parked stairs/logs item), this gets a front.
+ */
+function paintChest(dst: Layer, size: number, seed: number, face: number) {
+  const wood = rgbOf(MATERIAL_COLOR[MAT.CHEST])
+  const iron = shade(wood, -74)
+  const lid = shade(wood, 16)
+  const plankH = Math.max(2, Math.round(size / 4))
+  const strap = Math.max(1, Math.round(size / 10))          // iron strap width
+  const seamY = Math.max(2, Math.round(size / 3))           // where the lid meets the body
+  const c = (size - 1) / 2
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const jitter = (h2(x, y, seed) - 0.5) * 18
+      if (face === TOP) {
+        // lid boards run across, with the straps continuing over the top so the bands wrap
+        const seam = x % plankH === 0
+        const onStrap = Math.abs(y - size / 4) < strap / 2 || Math.abs(y - (3 * size) / 4) < strap / 2
+        put(dst, size, x, y, onStrap ? shade(iron, jitter * 0.4) : shade(seam ? shade(lid, -30) : lid, seam ? 0 : jitter), 0)
+      } else if (face === SIDE) {
+        const onSeam = y === seamY || y === seamY - 1
+        const onStrap = Math.abs(x - size / 4) < strap / 2 || Math.abs(x - (3 * size) / 4) < strap / 2
+        // The latch: a plate straddling the seam, dead centre. ⚠ Sized to READ AT 16px, which is
+        // the tile the world actually samples — the first cut was 2px wide and vanished into the
+        // strap noise at real size while looking fine blown up.
+        const latchW = Math.max(3, Math.round(size / 5))
+        const inLatch = Math.abs(x - c) <= latchW / 2 && y >= seamY - 2 && y <= seamY + latchW
+        const board = y % plankH === 0 ? shade(wood, -22) : shade(y < seamY ? lid : wood, jitter)
+        put(dst, size, x, y,
+          inLatch ? shade(iron, 22 + jitter * 0.3)
+            : onSeam ? shade(iron, -12)
+            : onStrap ? shade(iron, jitter * 0.4)
+            : board, 0)
+      } else {
+        const seam = y % plankH === 0
+        const dark = shade(wood, -56)
+        put(dst, size, x, y, shade(seam ? shade(dark, -14) : dark, seam ? 0 : jitter * 0.6), 0)
+      }
+    }
+  }
+}
+
 // ── assembly ─────────────────────────────────────────────────────────────────────────────────────
 
 /** Exported for the item-icon renderer: an item's art must BE the block's art (see item-icon.ts). */
@@ -556,6 +608,9 @@ export function paintFor(material: number, face: number, size: number): Layer {
       break
     }
     case MAT.CRAFT_TABLE: paintCraftTable(dst, size, seed, face); break
+    // ⚠ Appended to TILE_MATERIALS above, so it NEEDS this case — the switch's default is the ore
+    // painter, which is how every tree once rendered as crystal.
+    case MAT.CHEST: paintChest(dst, size, seed, face); break
     case MAT.PATH:
       // Packed earth: subsoil's grit, lightened and calmer, with sparse pale pebbles — reads as
       // WALKED against topsoil's grass without shouting like sand.

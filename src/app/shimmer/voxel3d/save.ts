@@ -29,6 +29,20 @@ export interface ColumnSave {
    * generated piece the player deconstructed here. Optional so every pre-pass save loads as-is.
    */
   genRemoved?: string[]
+  /**
+   * ★ CHEST CONTENTS (2026-08-11, the chests pass), keyed `"x,y,z"` in WORLD coordinates.
+   *
+   * Here rather than in a global sidecar (the shape the pot clock uses) for the reason this
+   * record's header already gives: a chest's block and its contents must arrive and leave in ONE
+   * transaction. Split across two stores, a refresh can land between them and a break in that
+   * window destroys what was inside. It also means a hundred chests across the world cost nothing
+   * until you walk to them, which a single flat blob would not.
+   *
+   * ⚠ Moving an item into a chest does NOT go through `setVoxel`, so nothing marks the column dirty
+   * for you — the host has to do it on every content change or a full chest saves only when some
+   * block near it happens to change. Optional so every pre-pass save loads unchanged.
+   */
+  chests?: Record<string, unknown[]>
 }
 
 const DB = 'shimmer-voxel'
@@ -135,7 +149,8 @@ export async function saveColumn(seed: number, cx: number, cz: number, save: Col
       const store = tx.objectStore(STORE)
       // Empty means EMPTY on both halves — a column whose blocks were restored AND whose pieces
       // were all deconstructed stops costing storage, same rule as `recordEdit` one level down.
-      if (save.edits.idx.length === 0 && save.pieces.length === 0 && !save.genRemoved?.length) store.delete(key(seed, cx, cz))
+      if (save.edits.idx.length === 0 && save.pieces.length === 0 && !save.genRemoved?.length
+          && !Object.keys(save.chests ?? {}).length) store.delete(key(seed, cx, cz))
       else store.put(save, key(seed, cx, cz))
       tx.oncomplete = () => res()
       tx.onerror = () => res()

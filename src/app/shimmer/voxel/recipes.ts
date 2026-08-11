@@ -111,6 +111,15 @@ export const RECIPES: RecipeDef[] = [
   { id: 'clay_pot', name: 'Clay Pot', station: 'hand', mana: 0,
     input: [{ itemId: 'block_subsoil', count: 3 }],
     output: { itemId: 'clay_pot', count: 1 } },
+
+  // ── STORING ─────────────────────────────────────────────────────────────────────────────────
+  // By HAND and cheap on purpose. A chest is what makes the 24-slot bag survivable, so gating it
+  // behind the bench would mean the first hours of the game are spent throwing things away — the
+  // same bootstrap argument as the bench itself. Eight planks (two logs' worth) against the
+  // bench's four: a chest holds a bagful, and it should cost more than the table it stands next to.
+  { id: 'chest', name: 'Chest', station: 'hand', mana: 0,
+    input: [{ itemId: 'goldwood_plank', count: 8 }],
+    output: { itemId: 'chest', count: 1 } },
 ]
 
 const BY_ID = new Map(RECIPES.map(r => [r.id, r]))

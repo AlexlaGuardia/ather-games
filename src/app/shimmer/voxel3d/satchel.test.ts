@@ -1,10 +1,21 @@
-// Satchel oracle. Run: npx tsx src/app/shimmer/voxel3d/satchel.test.ts
+// Satchel oracle — the BAG's half of the move contract.
+// Run: npx tsx src/app/shimmer/voxel3d/satchel.test.ts
 //
 // Moving stacks is the one inventory action that can silently DESTROY items, and none of its
 // failure modes are visible in play — a stack you were carrying is just smaller than it was.
+//
+// ⚠ The rules moved into `chest.ts` (2026-08-11): a bag→bag move and a bag→chest move differ in
+// nothing, so there is ONE implementation and the bag case is that function called with one array
+// twice — `satchel.ts` was deleted rather than left as a wrapper nobody calls. This oracle stays
+// because the bag's contract is worth asserting in the bag's own words: if a chest-side change ever
+// breaks the satchel, this is the file that says so by name.
 
+import type { Inventory } from '../engine/inventory'
 import { createInventory } from '../engine/inventory'
-import { moveStack } from './satchel'
+import { moveBetween } from './chest'
+
+const moveStack = (inv: Inventory, from: number, to: number, max: (id: string) => number) =>
+  moveBetween(inv.slots, from, inv.slots, to, max)
 
 let pass = 0
 const fails: string[] = []
