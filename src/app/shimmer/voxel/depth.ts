@@ -78,6 +78,8 @@ export const PLANT_MIN = 24
 export const PLANT_MAX = 26
 /** Non-solid, non-opaque ground cover. Range test on purpose — this runs in the mesher's hot loop. */
 export const isPlant = (m: number): boolean => m >= PLANT_MIN && m <= PLANT_MAX
+/** Any state of the pot. */
+export const isPot = (m: number): boolean => m === 27 || m === 28 || m === 29
 
 export const MAT = {
   AIR: AIR,
@@ -133,6 +135,15 @@ export const MAT = {
   TUFT: 24,
   TALL_GRASS: 25,
   FLOWER: 26,
+
+  // ── ★ THE POT — where a Mana Seed becomes a spirit (2026-08-11) ─────────────────────────────
+  // Three materials rather than one block plus a growth record, because THE MATERIAL IS THE STATE
+  // and the save is a material diff: a planted pot survives a reload, an evict and a walk to the
+  // Outfields with no new persistence layer. The only thing a material cannot hold is WHEN it was
+  // planted, so that — and only that — lives beside the player save.
+  POT: 27,
+  POT_SEEDED: 28,
+  POT_BLOOM: 29,
 } as const
 
 export interface DepthConfig {

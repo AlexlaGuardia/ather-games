@@ -47,6 +47,7 @@ export const TILE_MATERIALS: number[] = [
   MAT.PLANKS,
   // Spring crust added 2026-08-08 with the hot-spring terraces.
   MAT.SPRING_CRUST,
+  MAT.POT, MAT.POT_SEEDED, MAT.POT_BLOOM,
 ]
 
 /** One spare layer past the end: an unmapped material samples magenta rather than layer 0's stone. */
@@ -511,6 +512,48 @@ function paintFor(material: number, face: number, size: number): Layer {
       else paintGrit(dst, size, rgbOf(MATERIAL_COLOR[MAT.SUBSOIL]), 18, 22, seed)
       break
     case MAT.MANA_LANTERN: paintLantern(dst, size, seed); break
+    // ── the pot, in three states ────────────────────────────────────────────────────────────
+    // ⚠ Appended to TILE_MATERIALS above, so it NEEDS these cases: the switch's default is the ore
+    // painter, and that is exactly how every tree once rendered as crystal in deep stone.
+    // The three states must read apart AT A GLANCE and from across a garden, so they differ in
+    // what sits on the SOIL rather than in the pot's own clay: bare, a pale sprout, an open bloom.
+    case MAT.POT:
+    case MAT.POT_SEEDED:
+    case MAT.POT_BLOOM: {
+      const clay = rgbOf(MATERIAL_COLOR[MAT.POT])
+      if (face === BOTTOM) { paintGrit(dst, size, shade(clay, -18), 10, 10, seed); break }
+      if (face === SIDE) {
+        paintGrit(dst, size, clay, 12, 10, seed)
+        // A rim band across the top quarter — the silhouette cue that says "vessel", not "block".
+        for (let y = 0; y < Math.max(1, size >> 2); y++)
+          for (let x = 0; x < size; x++) put(dst, size, x, y, shade(clay, 26), 0)
+        break
+      }
+      // TOP: soil in the mouth of the pot, ringed by clay, with the state sitting in the middle.
+      paintGrit(dst, size, clay, 10, 8, seed)
+      const c = (size - 1) / 2, r = size * 0.34
+      const soil = rgbOf(MATERIAL_COLOR[MAT.SUBSOIL])
+      for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {
+        if (Math.hypot(x - c, y - c) > r) continue
+        put(dst, size, x, y, shade(soil, Math.floor(h2(x, y, seed) * 16) - 8), 0)
+      }
+      if (material === MAT.POT) break
+      const sprout = rgbOf(MATERIAL_COLOR[MAT.TUFT])
+      if (material === MAT.POT_SEEDED) {
+        // A thin pale shoot: small on purpose, so "not ready yet" is legible without a HUD.
+        for (let y = Math.floor(c - r * 0.55); y <= Math.ceil(c); y++)
+          put(dst, size, Math.round(c), y, shade(sprout, 30), 0)
+      } else {
+        // Bloomed: an open four-petal star in mana gold — the one state worth crossing a garden for.
+        const petal = rgbOf(MATERIAL_COLOR[MAT.MANA_LANTERN] ?? MATERIAL_COLOR[MAT.TUFT])
+        for (let d = -Math.floor(r * 0.7); d <= Math.floor(r * 0.7); d++) {
+          put(dst, size, Math.round(c + d), Math.round(c), petal, 0)
+          put(dst, size, Math.round(c), Math.round(c + d), petal, 0)
+        }
+        put(dst, size, Math.round(c), Math.round(c), shade(petal, 40), 0)
+      }
+      break
+    }
     case MAT.CRAFT_TABLE: paintCraftTable(dst, size, seed, face); break
     case MAT.PATH:
       // Packed earth: subsoil's grit, lightened and calmer, with sparse pale pebbles — reads as

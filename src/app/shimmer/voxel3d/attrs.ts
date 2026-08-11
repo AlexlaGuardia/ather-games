@@ -21,6 +21,9 @@ import { baseOf } from '../voxel/depth'
  * before any art decision is made. Nothing here is a look call.
  */
 export const MATERIAL_COLOR: Record<number, number> = {
+  [MAT.POT]: 0xa9663f,
+  [MAT.POT_SEEDED]: 0xa9663f,
+  [MAT.POT_BLOOM]: 0xa9663f,
   [MAT.BEDROCK]: 0x2b2b33,
   [MAT.DEEP_STONE]: 0x494455,
   [MAT.STONE]: 0x7d7a86,

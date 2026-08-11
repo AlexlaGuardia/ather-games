@@ -70,6 +70,13 @@ export interface BlockDef {
   /** Can a player place this back down? */
   placeable: boolean
   /**
+   * Opt OUT of the derived slab (see `HALF_DEFS`). For anything that is not a full cube — ground
+   * cover, a lantern, a workbench, a pot. Half a flower is not a thing, and shipping "Grass Tuft
+   * Slab" as a real item is the kind of nonsense a derivation quietly manufactures if nobody says
+   * where it stops.
+   */
+  noSlab?: boolean
+  /**
    * Block light emitted, 0–15 (`light.ts`'s block channel BFSes from these). Absent = 0. Data,
    * not behaviour — the Rust side reads the same number.
    */
@@ -98,13 +105,13 @@ export const BLOCKS: BlockDef[] = [
   // brightest thing in the world. Breaks by hand into itself — lighting your ground is meant to
   // be cheap to do and free to rearrange. The canon line it serves ("tended light holds grey
   // off") lives in light.ts; this row only makes the tending possible.
-  { material: MAT.MANA_LANTERN, name: 'Mana Lantern', hardness: 0.6, skill: null, minTier: 0, drops: [{ itemId: 'mana_lantern', count: 1 }], placeable: true, emit: 14 },
+  { noSlab: true, material: MAT.MANA_LANTERN, name: 'Mana Lantern', hardness: 0.6, skill: null, minTier: 0, drops: [{ itemId: 'mana_lantern', count: 1 }], placeable: true, emit: 14 },
 
   // ── The crafting table — the first station ─────────────────────────────────────────────────
   // Breaks by hand into itself, same reasoning as the lantern: your bench is furniture, and
   // rearranging your home must be free. Placing it is what flips `Station` in voxel/recipes.ts
   // from a dormant field to a real gate — recipes marked `crafting_table` light up near one.
-  { material: MAT.CRAFT_TABLE, name: 'Crafting Table', hardness: 0.8, skill: null, minTier: 0, drops: [{ itemId: 'crafting_table', count: 1 }], placeable: true },
+  { noSlab: true, material: MAT.CRAFT_TABLE, name: 'Crafting Table', hardness: 0.8, skill: null, minTier: 0, drops: [{ itemId: 'crafting_table', count: 1 }], placeable: true },
 
   // The story road. Digs like soil and drops SUBSOIL for the same reason greyed soil does: the
   // road is a CONDITION of the ground, not a block you carry home and lay somewhere else.
@@ -136,9 +143,15 @@ export const BLOCKS: BlockDef[] = [
   // enough to exist. It was briefly 1/1,000,000, which measured out at ~11.6 DAYS of continuous
   // breaking for an even chance: a drop no player would ever meet. `mana-seed.test.ts` proves the
   // roll is wired at ANY rate, so this stays a dial rather than a leap of faith.
-  { material: MAT.TUFT, name: 'Grass Tuft', hardness: 0.05, skill: null, minTier: 0, drops: [{ itemId: 'grass_tuft', count: 1 }, { itemId: 'mana_seed', count: 1, chance: MANA_SEED_CHANCE }], fastSkill: 'farming', placeable: true },
-  { material: MAT.TALL_GRASS, name: 'Tall Grass', hardness: 0.05, skill: null, minTier: 0, drops: [{ itemId: 'tall_grass', count: 1 }, { itemId: 'mana_seed', count: 1, chance: MANA_SEED_CHANCE }], fastSkill: 'farming', placeable: true },
-  { material: MAT.FLOWER, name: 'Wildflower', hardness: 0.05, skill: null, minTier: 0, drops: [{ itemId: 'wild_flower', count: 1 }], fastSkill: 'farming', placeable: true },
+  { noSlab: true, material: MAT.TUFT, name: 'Grass Tuft', hardness: 0.05, skill: null, minTier: 0, drops: [{ itemId: 'grass_tuft', count: 1 }, { itemId: 'mana_seed', count: 1, chance: MANA_SEED_CHANCE }], fastSkill: 'farming', placeable: true },
+  { noSlab: true, material: MAT.TALL_GRASS, name: 'Tall Grass', hardness: 0.05, skill: null, minTier: 0, drops: [{ itemId: 'tall_grass', count: 1 }, { itemId: 'mana_seed', count: 1, chance: MANA_SEED_CHANCE }], fastSkill: 'farming', placeable: true },
+  { noSlab: true, material: MAT.FLOWER, name: 'Wildflower', hardness: 0.05, skill: null, minTier: 0, drops: [{ itemId: 'wild_flower', count: 1 }], fastSkill: 'farming', placeable: true },
+  // ── the pot: one block in three states, and only the empty one is a thing you carry ──────────
+  { noSlab: true, material: MAT.POT, name: 'Clay Pot', hardness: 0.5, skill: null, minTier: 0, drops: [{ itemId: 'clay_pot', count: 1 }], placeable: true },
+  // A planted or bloomed pot gives the POT back, never the seed: pulling a seed you already
+  // committed would make planting risk-free, and the seed is the scarce thing.
+  { noSlab: true, material: MAT.POT_SEEDED, name: 'Planted Pot', hardness: 0.5, skill: null, minTier: 0, drops: [{ itemId: 'clay_pot', count: 1 }], placeable: false },
+  { noSlab: true, material: MAT.POT_BLOOM, name: 'Bloomed Pot', hardness: 0.5, skill: null, minTier: 0, drops: [{ itemId: 'clay_pot', count: 1 }], placeable: false },
   { material: MAT.SPRING_CRUST, name: 'Spring Crust', hardness: 1.2, skill: 'prospecting', minTier: 1, drops: [{ itemId: 'block_spring_crust', count: 1 }], placeable: true },
 
   // ── the Prospecting ladder — hardness AND tier both climb, so depth gates twice over ────────
@@ -185,7 +198,7 @@ export const BLOCKS: BlockDef[] = [
  * `<item>_slab` and that item places it back — the same round-trip `mine.test` asserts for blocks.
  * Half the block, half the work to break it.
  */
-const HALF_DEFS: BlockDef[] = BLOCKS.filter(b => b.placeable && b.drops.length > 0).map(b => ({
+const HALF_DEFS: BlockDef[] = BLOCKS.filter(b => b.placeable && !b.noSlab && b.drops.length > 0).map(b => ({
   ...b,
   material: b.material | HALF_BIT,
   name: `${b.name} Slab`,

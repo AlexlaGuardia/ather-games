@@ -98,6 +98,7 @@ import { loadMistLedger, saveMistLedger, recordWithdrawal, residentAt, quietMinu
 import { applySparPayout, sparLedgerLines } from './spar-reward'
 import ArenaBattle from '../components/ArenaBattle'
 import { createSpirit, speciesDisplayName, type Spirit } from '../spirits/spirit'
+import { bloom as bloomSpirit, due as potsDue, potKey, progress as potProgress, type PotClock } from './pot'
 import { spiritsToSave, spiritsFromSave } from '../spirits/spirit-save'
 import { LAUNCHED_SPECIES } from '../engine/spirit-index'
 import { applyFightResult } from '../engine/spirit-health'
@@ -453,6 +454,8 @@ export default function VoxelWorld() {
    * and which surface they are looking at the garden through does not change who is theirs.
    */
   const party = useRef<Spirit[]>([])
+  /** Planting times by world position. The ONE thing the pot's material cannot hold (see pot.ts). */
+  const potClock = useRef<PotClock>({})
   const [hasParty, setHasParty] = useState(false)
   /** The practice ledger from the spar you just walked out of — one line per spirit, then it goes. */
   const [sparLedger, setSparLedger] = useState<string[] | null>(null)
@@ -480,6 +483,20 @@ export default function VoxelWorld() {
    * Lent spirits are `base` element and unbonded, i.e. exactly what a fresh keeper would hold, so
    * what you feel while dialling the spar is what a new player will feel.
    */
+  const POT_KEY = `voxel3d:pots:${SEED}`
+  const savePotClock = useCallback(() => {
+    try { localStorage.setItem(POT_KEY, JSON.stringify(potClock.current)) } catch { /* full disk */ }
+  }, [POT_KEY])
+  useEffect(() => {
+    try { potClock.current = JSON.parse(localStorage.getItem(POT_KEY) ?? '{}') } catch { potClock.current = {} }
+  }, [POT_KEY])
+  /** What the world needs of the pot: the clock, a way to persist it, and where a spirit goes. */
+  const potOps = useMemo(() => ({
+    clock: () => potClock.current,
+    save: savePotClock,
+    gain: (s: Spirit) => { party.current = [...party.current, s]; writeParty() },
+  }), [savePotClock, writeParty])
+
   const partyOps = useMemo(() => ({
     list: () => {
       if (!party.current.length) return 'no spirits in your garden — /party lend to borrow a few'
@@ -924,7 +941,7 @@ export default function VoxelWorld() {
           tools={tools} skills={skills} onSkill={setSkillHud} onLevel={setLevelUp} onTool={setActiveTool}
           tutorial={tutorial} onQuestEvent={onQuestEvent} onNearGreg={setNearGreg}
           mistLedger={mistLedger} onNearMist={setNearMist} sparring={!!spar}
-          onNearTable={setNearTable} cmdOut={worldCmd}
+          onNearTable={setNearTable} cmdOut={worldCmd} pot={potOps}
         />
         {/* selector: deliberately matches NOTHING. Without it drei binds click-to-lock on the whole
             DOCUMENT (and that binding ignores `enabled`), which re-locked the pointer on every
@@ -1396,7 +1413,7 @@ const SOLID_EXCEPT = new Set<number>([AIR, MAT.WATER, MAT.TUFT, MAT.TALL_GRASS, 
 // CELL_HALF for it; everything else (light, fence arms, piece placement) wants "yes, solid".
 const isSolid = (m: number) => !SOLID_EXCEPT.has(baseOf(m))
 
-function World({ inv, toolTier, toolSkill, selItem, weaponDrawn, weaponIdx, onAmmo, onStats, onPos, onLook, onInvChange, worker, incoming, inflight, settings, build, pieceIdx, rot, tools, skills, onSkill, onLevel, onTool, tutorial, onQuestEvent, onNearGreg, onNearTable, cmdOut, mistLedger, onNearMist, sparring }: {
+function World({ inv, toolTier, toolSkill, selItem, weaponDrawn, weaponIdx, onAmmo, onStats, onPos, onLook, onInvChange, worker, incoming, inflight, settings, build, pieceIdx, rot, tools, skills, onSkill, onLevel, onTool, tutorial, onQuestEvent, onNearGreg, onNearTable, cmdOut, mistLedger, onNearMist, sparring, pot }: {
   inv: React.RefObject<Inventory>
   toolTier: React.RefObject<number>
   toolSkill: React.RefObject<BlockSkill>
@@ -1443,6 +1460,7 @@ function World({ inv, toolTier, toolSkill, selItem, weaponDrawn, weaponIdx, onAm
   /** Near a placed crafting table — the parent turns this into recipes.ts's `Station`. */
   onNearTable: (near: boolean) => void
   /** The console's world-verbs, filled on mount — only World can move the walker safely. */
+  pot: { clock: () => PotClock; save: () => void; gain: (s: Spirit) => void }
   cmdOut: React.RefObject<{ tp: (x: number, z: number) => string; pos: () => { x: number; z: number } } | null>
 }) {
   const { camera } = useThree()
@@ -1530,6 +1548,8 @@ function World({ inv, toolTier, toolSkill, selItem, weaponDrawn, weaponIdx, onAm
   const flora = useMemo(() => createFloraRenderer(), [])
   /** Set whenever loaded ground changes (adopt, edit, evict); the frame loop syncs once quiet. */
   const floraDirty = useRef(true)
+  /** Next wall-clock ms at which planted pots are checked for coming due. */
+  const potTick = useRef(0)
   const lastNearGreg = useRef(false)
   const lastNearTable = useRef(false)
   const tableScanT = useRef(0)
@@ -2340,6 +2360,20 @@ function World({ inv, toolTier, toolSkill, selItem, weaponDrawn, weaponIdx, onAm
     // time for everything else while still filling a fresh load radius in a few seconds.
     drainRemeshQueue(cx, cz, 12)
 
+    const nowMs = Date.now()
+    // ── pots come due ────────────────────────────────────────────────────────────────────────
+    // Swept from the CLOCK, not by scanning the world: the clock already knows every planted pot's
+    // position, so a garden of them costs a handful of map reads instead of a search. A pot outside
+    // the load radius is skipped, not lost — `setVoxel` needs its column, and the clock keeps the
+    // stamp until it can be flipped.
+    if (potTick.current < nowMs) {
+      potTick.current = nowMs + 3000
+      for (const q of potsDue(pot.clock(), nowMs)) {
+        if (voxel(q.x, q.y, q.z) !== MAT.POT_SEEDED) continue
+        setVoxel(q.x, q.y, q.z, MAT.POT_BLOOM)
+      }
+    }
+
     // ── flora sync: once the streaming burst is quiet, rebuild the ground cover ──────────────
     // Deferred behind `incoming` so a fresh load radius pays for flora ONCE at the end, not per
     // adopted column. The probe walks from the generated surface to the ACTUAL one (edits move
@@ -2623,6 +2657,32 @@ function World({ inv, toolTier, toolSkill, selItem, weaponDrawn, weaponIdx, onAm
       // Refuse to place inside your own body — the classic way to entomb yourself.
       const inPlayer = Math.floor(p.x) === hit.px && Math.floor(p.z) === hit.pz
         && (Math.floor(p.y) === hit.py || Math.floor(p.y - 1.62) === hit.py)
+      // ── ★ THE POT: plant a seed, then come back for what chose you (2026-08-11) ────────────
+      // Handled before placing, because the pot is a thing you USE and the block in your hand
+      // should not be dropped onto it by the same click.
+      const potMat = voxel(hit.x, hit.y, hit.z)
+      if (potMat === MAT.POT && selItem === 'mana_seed' && countItem(inv.current!, selItem) > 0) {
+        removeItems(inv.current!, 'mana_seed', 1)
+        setVoxel(hit.x, hit.y, hit.z, MAT.POT_SEEDED)
+        pot.clock()[potKey(hit.x, hit.y, hit.z)] = Date.now()
+        pot.save()
+        onInvChange()
+        onStats('✦ the seed is in the soil — give it a few minutes')
+        mouse.current.right = false
+      } else if (potMat === MAT.POT_SEEDED) {
+        const p01 = potProgress(pot.clock(), hit.x, hit.y, hit.z, Date.now())
+        onStats(`the seed is still closed — ${Math.floor(p01 * 100)}%`)
+        mouse.current.right = false
+      } else if (potMat === MAT.POT_BLOOM) {
+        // ★ No prompt and no pick: canon has the spirit choose the keeper, so this only announces.
+        const born = bloomSpirit()
+        pot.gain(born)
+        delete pot.clock()[potKey(hit.x, hit.y, hit.z)]
+        pot.save()
+        setVoxel(hit.x, hit.y, hit.z, MAT.POT)
+        onStats(`✦ a young ${speciesDisplayName(born.species)} chose you!`)
+        mouse.current.right = false
+      } else {
       // ── ★ SLABS: WHICH HALF, AND WHEN TWO BECOME ONE (2026-08-11) ──────────────────────────
       // Merging first, because it targets the cell you AIMED AT rather than the empty one beside
       // it: a slab meeting its opposite half is a whole block. Deliberately forgiving about which
@@ -2660,6 +2720,7 @@ function World({ inv, toolTier, toolSkill, selItem, weaponDrawn, weaponIdx, onAm
         if (mat === MAT.MANA_LANTERN) onQuestEvent('light')
         onInvChange()
         mouse.current.right = false   // one block per click, not a firehose
+      }
       }
     }
 

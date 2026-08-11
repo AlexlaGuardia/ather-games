@@ -104,6 +104,13 @@ export const RECIPES: RecipeDef[] = [
   { id: 'mana_lantern', name: 'Mana Lantern', station: 'hand', mana: 0,
     input: [{ itemId: 'raw_mana_shard', count: 1 }, { itemId: 'goldwood_plank', count: 2 }],
     output: { itemId: 'mana_lantern', count: 4 } },
+  // ── GROWING ─────────────────────────────────────────────────────────────────────────────────
+  // Canon has Greg GIFT the first pot, and the tutorial's starter-bag step is still parked — so
+  // this recipe is the second pot and every pot after it, not a replacement for that moment.
+  // Subsoil, because a pot is fired earth and subsoil is the only earth a keeper digs by the stack.
+  { id: 'clay_pot', name: 'Clay Pot', station: 'hand', mana: 0,
+    input: [{ itemId: 'block_subsoil', count: 3 }],
+    output: { itemId: 'clay_pot', count: 1 } },
 ]
 
 const BY_ID = new Map(RECIPES.map(r => [r.id, r]))
