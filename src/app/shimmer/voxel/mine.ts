@@ -117,6 +117,21 @@ export function tickBreak(
 }
 
 /** What a broken block yields. Empty for bedrock, water, and anything with no drop table. */
-export function dropsFor(material: number): { itemId: string; count: number }[] {
-  return blockDef(material)?.drops ?? []
+/**
+ * What breaking this block yields, rolling any chance-gated entries.
+ *
+ * ⚠ `rng` is injectable so the oracle can prove a one-in-a-million drop actually fires without
+ * waiting for a one-in-a-million event. A rare drop nobody can test is a rare drop nobody knows is
+ * WIRED — and the failure mode (a typo'd item id that simply never appears) is invisible in play.
+ */
+export function dropsFor(
+  material: number, rng: () => number = Math.random,
+): { itemId: string; count: number }[] {
+  const all = blockDef(material)?.drops ?? []
+  const out: { itemId: string; count: number }[] = []
+  for (const d of all) {
+    if (d.chance !== undefined && rng() >= d.chance) continue
+    out.push({ itemId: d.itemId, count: d.count })
+  }
+  return out
 }

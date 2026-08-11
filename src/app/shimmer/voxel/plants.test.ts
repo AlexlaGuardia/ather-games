@@ -49,16 +49,18 @@ const garden = ZONE_ANCHORS.find(a => a.id === 'garden')!
 
 // ── 2. every placeable block's item reverses to exactly itself ──────────────────────────────────
 {
+  // Only the IDENTITY drop reverses — a bonus drop is loot, not a block you can place.
   const seen = new Map<string, number>()
   let clash = 0
   for (const b of BLOCKS) {
-    if (!b.placeable) continue
-    for (const d of b.drops) {
-      if (seen.has(d.itemId) && seen.get(d.itemId) !== b.material) clash++
-      seen.set(d.itemId, b.material)
-    }
+    if (!b.placeable || !b.drops[0] || b.drops[0].chance !== undefined) continue
+    const d = b.drops[0]
+    if (seen.has(d.itemId) && seen.get(d.itemId) !== b.material) clash++
+    seen.set(d.itemId, b.material)
   }
-  ok(clash === 0, `★ no two placeable blocks share a drop id (${clash} clashes)`)
+  ok(clash === 0, `★ no two placeable blocks share an identity drop (${clash} clashes)`)
+  // ★ A Mana Seed pays out a SPIRIT. It must never be placeable as the grass it came from.
+  ok(materialForItem('mana_seed') === undefined, '★ a bonus drop is loot, never a placeable block')
   ok(materialForItem('grass_tuft') === MAT.TUFT, 'a collected tuft places a tuft')
   ok(materialForItem('tall_grass') === MAT.TALL_GRASS, 'collected tall grass places tall grass')
   ok(materialForItem('wild_flower') === MAT.FLOWER, 'a picked flower can be replanted')

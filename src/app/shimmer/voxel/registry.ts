@@ -19,6 +19,9 @@
 // marked TBD-CANON — if the Ather's stone and soil carry real names, those are Magii's.
 
 import { MAT, HALF_BIT, TOP_BIT } from './depth'
+
+/** Chance a broken tuft yields a wind-borne Mana Seed. See the grass entries below before dialing. */
+export const MANA_SEED_CHANCE = 1 / 1_000_000
 import { ORE } from './ore'
 import { WOOD } from './trees'
 import { AIR } from './section'
@@ -56,7 +59,14 @@ export interface BlockDef {
    */
   fastSkill?: BlockSkill
   /** What lands in the inventory. Empty = breaks into nothing. */
-  drops: { itemId: string; count: number }[]
+  /**
+   * What breaking it yields. `chance` (0..1, absent = always) gates an entry.
+   *
+   * ★ A RARE DROP IS A DROP-TABLE ENTRY, NOT A SPECIAL CASE IN THE MINING CODE. Put the roll here
+   * and every consumer — mining, future auto-harvest, explosions — inherits it for free, and the
+   * rate becomes data a designer can dial without reading `mine.ts`.
+   */
+  drops: { itemId: string; count: number; chance?: number }[]
   /** Can a player place this back down? */
   placeable: boolean
   /**
@@ -114,8 +124,19 @@ export const BLOCKS: BlockDef[] = [
   // EVERY drop of a placeable block, so two placeable plants sharing a `plant_fiber` drop makes
   // one of them unplaceable-as-itself and silently steals the other's id. mine.test asserts the
   // round-trip. A shared fiber item belongs behind a RECIPE, not in two drop tables.
-  { material: MAT.TUFT, name: 'Grass Tuft', hardness: 0.05, skill: null, minTier: 0, drops: [{ itemId: 'grass_tuft', count: 1 }], fastSkill: 'farming', placeable: true },
-  { material: MAT.TALL_GRASS, name: 'Tall Grass', hardness: 0.05, skill: null, minTier: 0, drops: [{ itemId: 'tall_grass', count: 1 }], fastSkill: 'farming', placeable: true },
+  // ── ★ WIND-BORNE SEEDS (2026-08-11, Alex) ────────────────────────────────────────────────────
+  // Grass can yield a Mana Seed, and canon backs it rather than merely allowing it: CANON/core.md
+  // rules that in the cozy line "Mana Seeds come from the world itself — the Anemonyx (the
+  // Seed-Tender Ancient), wind-borne." A seed caught in tended grass IS what wind-borne means, so
+  // this needed no ruling. A seed pays out a SPIRIT, which is why the rate has to stay mythic:
+  // the moment grass is a reliable source, Greg's gift stops being the start of the game.
+  //
+  // ⚠ MANA_SEED_CHANCE IS ALEX'S STATED NUMBER AND IT IS EFFECTIVELY NEVER. At one tuft per second
+  // of continuous breaking it is ~11.6 DAYS for an even chance; at a few hundred tufts a session it
+  // is one find per few thousand sessions. `mana-seed.test.ts` proves the drop is wired regardless,
+  // so this is a dial, not a leap of faith — 1/2500 lands a find every several sessions.
+  { material: MAT.TUFT, name: 'Grass Tuft', hardness: 0.05, skill: null, minTier: 0, drops: [{ itemId: 'grass_tuft', count: 1 }, { itemId: 'mana_seed', count: 1, chance: MANA_SEED_CHANCE }], fastSkill: 'farming', placeable: true },
+  { material: MAT.TALL_GRASS, name: 'Tall Grass', hardness: 0.05, skill: null, minTier: 0, drops: [{ itemId: 'tall_grass', count: 1 }, { itemId: 'mana_seed', count: 1, chance: MANA_SEED_CHANCE }], fastSkill: 'farming', placeable: true },
   { material: MAT.FLOWER, name: 'Wildflower', hardness: 0.05, skill: null, minTier: 0, drops: [{ itemId: 'wild_flower', count: 1 }], fastSkill: 'farming', placeable: true },
   { material: MAT.SPRING_CRUST, name: 'Spring Crust', hardness: 1.2, skill: 'prospecting', minTier: 1, drops: [{ itemId: 'block_spring_crust', count: 1 }], placeable: true },
 
@@ -173,9 +194,18 @@ const HALF_DEFS: BlockDef[] = BLOCKS.filter(b => b.placeable && b.drops.length >
 
 const BY_MATERIAL = new Map<number, BlockDef>([...BLOCKS, ...HALF_DEFS].map(b => [b.material, b]))
 /** Reverse map so a placed block-item becomes the right voxel. */
+/**
+ * Reverse map so a placed block-item becomes the right voxel.
+ *
+ * ★ ONLY THE IDENTITY DROP (`drops[0]`), and only when it is guaranteed. Mapping every drop was
+ * fine while every drop WAS the block, and broke the moment grass grew a bonus: two placeable
+ * blocks both dropping `mana_seed` made the seed resolve to a block, so a Mana Seed — the thing
+ * that pays out a SPIRIT — would have been placeable as a tuft. A bonus drop is loot, not identity.
+ */
 const BY_ITEM = new Map<string, number>(
-  [...BLOCKS, ...HALF_DEFS].filter(b => b.placeable)
-    .flatMap(b => b.drops.map(d => [d.itemId, b.material] as [string, number])),
+  [...BLOCKS, ...HALF_DEFS]
+    .filter(b => b.placeable && b.drops[0] && b.drops[0].chance === undefined)
+    .map(b => [b.drops[0].itemId, b.material] as [string, number]),
 )
 
 /** ⚠ TOP_BIT is POSITION, not identity — a top slab is the same block as a bottom one, so it is
