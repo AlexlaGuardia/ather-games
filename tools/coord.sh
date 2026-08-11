@@ -112,6 +112,10 @@ cmd_build() {
   echo ">> build lock acquired by '$WIN'"
   signal "$WIN building: $msg"
   cd "$REPO"
+  # A satellite's dev server sets NEXT_DIST_DIR. If one ever leaks into this shell the
+  # deploy would build somewhere else and pm2 would restart onto a stale `.next`, with
+  # every log line still saying it succeeded. The production build dir is not negotiable.
+  unset NEXT_DIST_DIR
   if npm run build && pm2 restart ather-games >/dev/null; then
     echo ">> build + restart OK"
     # Breadcrumb for the health monitor. The lock dies on the next line, but the

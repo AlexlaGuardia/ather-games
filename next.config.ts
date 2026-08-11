@@ -3,6 +3,10 @@ import type { NextConfig } from "next";
 // ather.games — public games site. Cortex redirects dropped; security + asset-cache headers kept.
 const nextConfig: NextConfig = {
   compress: true,
+  // Satellite windows run their own dev server against their own build dir, so a
+  // preview never touches the `.next` that `coord build` deploys from. Unset (the
+  // production path, and any plain `npm run build`) always means `.next`.
+  distDir: process.env.NEXT_DIST_DIR || ".next",
   // Eyuun's Bookstore streams the ~500MB of narration that lives in akatskii-web's
   // /public/listen. Loading it cross-origin from akatskii.com stalls in the browser
   // (Cloudflare treats a cross-site <audio> fetch as a hotlink and hangs it — curl,

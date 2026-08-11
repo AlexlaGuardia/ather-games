@@ -54,7 +54,9 @@ coord build "what changed"     # acquire lock -> npm run build -> pm2 restart ->
 ```
 - **Convention: only the hub deploys.** Satellites edit + commit their lane; the hub integrates and runs `coord build`. Keeps git + lock contention near zero. The lock still **serializes** any build as a backstop (and protects you if a second deployer ever happens or you open a real extra window), waiting up to 4m for a held lock.
 - A build older than 15m is treated as dead and stolen (a wedged build never blocks the team forever).
-- **Never run `npm run build` / `pm2 restart` / a side `npm run dev` directly.** All three touch `.next`; only `coord build` is safe. No background dev servers in swarm mode — they hold `.next` and block every build.
+- **Never run `npm run build` / `pm2 restart` / a bare `npm run dev` directly.** All three touch the production `.next`; only `coord build` is safe.
+- **Satellites preview with `tools/devwin.sh <lane>`, not `npm run dev`.** It pins the window to its own `.next-<lane>` (via `NEXT_DIST_DIR`) and its own port — world 3201, sprites 3202, play 3203, assets 3204 — so a preview can never touch the `.next` the hub deploys from. It refuses `hub` and refuses port 3200. A bare `npm run dev` is still banned because it defaults to both.
+- Satellites are no longer blind: your lane runs live on your own port while the hub owns what ships. `coord build` unsets `NEXT_DIST_DIR` itself, so a leaked dev env var can't redirect a production build.
 - Iterate by reading code, running the **doctor** (`/shimmer/dev?mode=doctor`) and tests; see it live by deploying through the lock.
 
 ## Coordination bus = `[coord]` cortex thread
