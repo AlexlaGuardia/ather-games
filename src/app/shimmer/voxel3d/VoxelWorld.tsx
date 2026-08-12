@@ -919,9 +919,26 @@ export default function VoxelWorld() {
   const closeBag = useCallback(() => {
     setBagOpen(false); setOpenChest(null); setDragFrom(null); closeCursorUI()
   }, [closeCursorUI])
-  // ⚠ `openChest` belongs in here too, or right-clicking a chest captures the cursor while the
-  // canvas still thinks it owns the click — the pointer re-locks on the first slot you press.
-  useEffect(() => { cursorUIOpenRef.current = craftOpen || bagOpen || !!openChest || dialogueOpen || showSettings || !!spar }, [craftOpen, bagOpen, openChest, dialogueOpen, showSettings, spar])
+  /**
+   * ── ★ ONE ANSWER TO "IS A MENU UP?" (2026-08-11, Alex: "the controls are still having the player
+   * crouch and stuff") ──────────────────────────────────────────────────────────────────────────
+   * Three separate places needed this and each carried its own idea of it: the canvas re-lock gate
+   * had a list here, the verb handler inferred it from whichever flags its own `if` happened to
+   * name, and the world's raw key/mouse listeners did not know menus existed AT ALL. So with the bag
+   * open, Shift still crouched the player and — worse, because it leaves damage — a mousedown on a
+   * slot set `mouse.left` and the frame loop mined the block behind the panel.
+   *
+   * ★ A list like this drifts the moment a surface is added, and it drifts SILENTLY: the new panel
+   * simply does not suppress the world, which looks like a physics bug and not a missing entry. One
+   * const, read by all three, so a forgotten surface is one mistake instead of three.
+   *
+   * ⚠ `openChest` belongs in here, or right-clicking a chest captures the cursor while the canvas
+   * still thinks it owns the click — the pointer re-locks on the first slot you press. `consoleOpen`
+   * belongs too and was missing: clicking the canvas while typing a command seized the mouse back
+   * mid-sentence.
+   */
+  const cursorUIOpen = craftOpen || bagOpen || !!openChest || dialogueOpen || showSettings || !!spar || consoleOpen
+  useEffect(() => { cursorUIOpenRef.current = cursorUIOpen }, [cursorUIOpen])
 
   // ── the shared party + the withdrawal ledger, read once at mount ────────────────────────────
   // Both are localStorage and therefore synchronous; done in an effect anyway so SSR never touches
@@ -1086,6 +1103,68 @@ export default function VoxelWorld() {
         if (e.key === '/') { e.preventDefault(); openCursorUI(); setConsoleSeed('/'); setConsoleOpen(true); return }
       }
       const n = Number(e.key)
+      /**
+       * ── ★ THE SURFACE KEYS RUN FIRST, AND THEY RUN EVEN WITH A SURFACE UP ────────────────────
+       * They are how you get OUT. Everything below them is a world verb, and a world verb under an
+       * open menu is a key whose effect the player cannot see happen — which is how you end up
+       * drawing a weapon or flipping into build mode from inside the bag and only finding out when
+       * you close it. Ordered this way rather than gated in place because the close paths and the
+       * world verbs want opposite answers to the same question.
+       *
+       * The draw lock still wraps them: with a weapon out neither hand is free, menus included.
+       */
+      if (e.code === 'Escape') {
+        // Escape only reaches us when the pointer is already free (the browser eats it to exit the
+        // lock first) — so close the surfaces AND settle the handoff ledger. closeCursorUI's relock
+        // will be refused by the browser's post-Esc cooldown and swallowed; that is the one seam
+        // where a canvas click is still needed, same as play3d.
+        if (craftOpen) { setCraftOpen(false); closeCursorUI() }
+        if (bagOpen || openChest) closeBag()
+        if (dialogueOpen) closeDialogue()
+        if (consoleOpen) { setConsoleOpen(false); closeCursorUI() }
+        return
+      }
+      if (!drawn) {
+        // Esc exits pointer lock anyway, so O is the settings key — it must not fight the browser.
+        if (e.code === 'KeyO') {
+          if (showSettings) { setShowSettings(false); closeCursorUI() }
+          else { openCursorUI(); setShowSettings(true) }
+          return
+        }
+        // C opens the crafting surface. It used to auto-craft the next affordable tool with no UI at
+        // all, which hid the fact that the whole forestry ladder was uncraftable — you pressed C,
+        // nothing happened, and nothing told you why. A list that shows what you CANNOT afford yet
+        // is the difference between a broken key and a goal.
+        if (e.code === 'KeyC') {
+          if (craftOpen) { setCraftOpen(false); closeCursorUI() }
+          else { openCursorUI(); setCraftOpen(true) }
+          return
+        }
+        // I opens the satchel — same open/close-on-the-same-key shape as C and E, so the three
+        // cursor surfaces behave identically. Escape dismisses them all as well.
+        if (e.code === 'KeyI') {
+          if (bagOpen || openChest) closeBag()
+          else { openCursorUI(); setBagOpen(true) }
+          return
+        }
+        // E talks to Greg when he is in range, and closes the box that opens from it — the same key
+        // both opens and dismisses, matching how C works for the crafting surface just above.
+        if (e.code === 'KeyE') {
+          if (dialogueOpen) closeDialogue()   // hands the cursor back itself
+          else if (cursorUIOpen) { /* a surface is up and E is not its door — do nothing */ }
+          else if (nearGreg) { openCursorUI(); setDialogueOpen(true) }
+          // E is the interact key everywhere else too: at the bench it opens the craft surface —
+          // the MC muscle memory — with Greg taking priority when you're near both. C still works.
+          else if (nearTable) { openCursorUI(); setCraftOpen(true) }
+          // A presence in the mist answers E last: Greg and the bench are both things you walked to
+          // deliberately inside a settled place, and a patch never overlaps either. Ordered anyway
+          // so the priority is stated rather than incidental.
+          else if (nearMist && hasParty) startSpar(nearMist)
+          return
+        }
+      }
+      // ★ Past this line every key changes the WORLD, so a surface being up stops all of them.
+      if (cursorUIOpen) return
       // ── ★ THE DRAW LOCK (Alex, 2026-08-07) ────────────────────────────────────────────────
       // "when the player has a weapon stowed the hotbar kicks in and when they draw their weapon
       // the hotbar and tools lock up." F is the toggle, matching play3d's holster key so the two
@@ -1107,66 +1186,24 @@ export default function VoxelWorld() {
       if (e.code === 'KeyQ' && drawn) { setWeaponIdx(i => { const n = (i + 1) % WEAPONS.length; setAmmoUi(WEAPONS[n].clip); return n }); return }
       if (drawn) return   // every verb below is locked while the weapon is out
       if (n >= 1 && n <= 8) { if (build) setPieceIdx(Math.min(PIECES.length - 1, n - 1)); else setSel(n - 1) }
-      // Esc exits pointer lock anyway, so O is the settings key — it must not fight the browser.
-      if (e.code === 'KeyO') {
-        if (showSettings) { setShowSettings(false); closeCursorUI() }
-        else { openCursorUI(); setShowSettings(true) }
-      }
       if (e.code === 'Tab') { e.preventDefault(); setBuild(v => !v) }
       if (e.code === 'KeyR') setRot(r => ((r + 1) % 4) as Rotation)
       if (e.code === 'BracketLeft' || e.code === 'BracketRight') { /* spike tier, handled below */ }
       // Tool tier is a debug lever so the tier GATE can be felt in ten seconds: a tier-1 spike
       // REFUSES pure core, and that should be provable without crafting your way up first.
       // ★ THE TIER LEVER IS GONE. Tier comes from the equipped tool now, and a better tool is
-      // CRAFTED from what you mined — which is the loop this port exists to close. C crafts the
-      // next spike or blade you can afford.
-      // C opens the crafting surface. It used to auto-craft the next affordable tool with no UI at
-      // all, which hid the fact that the whole forestry ladder was uncraftable — you pressed C,
-      // nothing happened, and nothing told you why. A list that shows what you CANNOT afford yet is
-      // the difference between a broken key and a goal.
-      if (e.code === 'KeyC') {
-        if (craftOpen) { setCraftOpen(false); closeCursorUI() }
-        else { openCursorUI(); setCraftOpen(true) }
-      }
-      // I opens the satchel — same open/close-on-the-same-key shape as C and E, so the three
-      // cursor surfaces behave identically and none of them needs Escape to dismiss.
-      if (e.code === 'KeyI') {
-        if (bagOpen || openChest) closeBag()
-        else { openCursorUI(); setBagOpen(true) }
-      }
-      // E talks to Greg when he is in range, and closes the box that opens from it — the same key
-      // both opens and dismisses, matching how C works for the crafting surface just above.
-      if (e.code === 'KeyE') {
-        if (dialogueOpen) closeDialogue()   // hands the cursor back itself
-        else if (nearGreg) { openCursorUI(); setDialogueOpen(true) }
-        // E is the interact key everywhere else too: at the bench it opens the craft surface —
-        // the MC muscle memory — with Greg taking priority when you're near both. C still works.
-        else if (nearTable) {
-          if (craftOpen) { setCraftOpen(false); closeCursorUI() }
-          else { openCursorUI(); setCraftOpen(true) }
-        }
-        // A presence in the mist answers E last: Greg and the bench are both things you walked to
-        // deliberately inside a settled place, and a patch never overlaps either. Ordered anyway
-        // so the priority is stated rather than incidental.
-        else if (nearMist && hasParty) startSpar(nearMist)
-      }
-      // Escape only reaches us when the pointer is already free (the browser eats it to exit the
-      // lock first) — so close the surfaces AND settle the handoff ledger. closeCursorUI's relock
-      // will be refused by the browser's post-Esc cooldown and swallowed; that is the one seam
-      // where a canvas click is still needed, same as play3d.
-      if (e.code === 'Escape') {
-        if (craftOpen) { setCraftOpen(false); closeCursorUI() }
-        if (bagOpen || openChest) closeBag()
-        if (dialogueOpen) closeDialogue()
-        if (consoleOpen) { setConsoleOpen(false); closeCursorUI() }
-      }
+      // CRAFTED from what you mined — which is the loop this port exists to close. The C / I / E / O
+      // surface keys and Escape live ABOVE the world-verb gate now (see the block up there): they
+      // are the doors, and a door that only works when nothing is open is not a door.
     }
     // Scroll to change slot — the reason tools are IN the row rather than on their own keys.
     // In BUILD mode the same wheel walks the piece catalogue (2026-08-08 — it used to dead-end
     // there, which stranded every piece past the number keys' muscle memory). Drawn still eats
     // the wheel: a weapon out means neither hand is free.
     const onWheel = (e: WheelEvent) => {
-      if (drawn) return
+      // Same gate as the world verbs: scrolling a menu must not walk the hotbar underneath it, and
+      // a bag long enough to scroll is exactly when you would notice.
+      if (drawn || cursorUIOpen) return
       const dir = e.deltaY > 0 ? 1 : -1
       if (build) setPieceIdx(v => (v + dir + PIECES.length) % PIECES.length)
       else setSel(v => (v + dir + 8) % 8)
@@ -1174,7 +1211,7 @@ export default function VoxelWorld() {
     window.addEventListener('keydown', onKey)
     window.addEventListener('wheel', onWheel, { passive: true })
     return () => { window.removeEventListener('keydown', onKey); window.removeEventListener('wheel', onWheel) }
-  }, [build, drawn, dialogueOpen, nearGreg, nearTable, craftOpen, showSettings, consoleOpen, closeDialogue, openCursorUI, closeCursorUI, nearMist, hasParty, startSpar, bagOpen, openChest, closeBag])
+  }, [build, drawn, dialogueOpen, nearGreg, nearTable, craftOpen, showSettings, consoleOpen, closeDialogue, openCursorUI, closeCursorUI, nearMist, hasParty, startSpar, bagOpen, openChest, closeBag, cursorUIOpen])
 
   return (
     <div className="fixed inset-0 bg-[#0b0d14]">
@@ -1226,6 +1263,7 @@ export default function VoxelWorld() {
           mistLedger={mistLedger} onNearMist={setNearMist} sparring={!!spar}
           onNearTable={setNearTable} cmdOut={worldCmd} pot={potOps}
           onOpenChest={(c) => { openCursorUI(); setOpenChest(c) }}
+          uiOpen={cursorUIOpenRef}
         />
         {/* selector: deliberately matches NOTHING. Without it drei binds click-to-lock on the whole
             DOCUMENT (and that binding ignores `enabled`), which re-locked the pointer on every
@@ -1825,6 +1863,16 @@ function BagPanel({ inv, chest, tick, sel, dragFrom, setDragFrom, onMove, onSpli
                     className={live ? '' : 'invisible'} aria-hidden={!live}>{text}</span>
             ))}
           </span>
+          {/* ★ A VISIBLE WAY OUT. I and Escape both close this, and neither is discoverable from
+              inside it — a player who does not already know the key is stuck looking at their bag
+              with the mouse free and no button to press, which reads as the game having hung.
+              `pointerDown` rather than click, matching the slots: every other press in this panel
+              acts on the way down, and a close that waited for the release would feel heavier than
+              the thing it closes. */}
+          <button type="button" onPointerDown={onClose} title="close (I or Esc)"
+                  className="ml-auto -mt-1 -mr-1 h-6 w-6 shrink-0 rounded border border-white/15
+                             text-white/40 leading-none transition-colors
+                             hover:border-white/40 hover:text-white/80">×</button>
         </div>
         {/* The chest's own grid, above the bag and separated by a rule — the same relationship the
             satchel and the hotbar already have, one level out. */}
@@ -2005,7 +2053,7 @@ const SOLID_EXCEPT = new Set<number>([AIR, MAT.WATER, MAT.TUFT, MAT.TALL_GRASS, 
 // CELL_HALF for it; everything else (light, fence arms, piece placement) wants "yes, solid".
 const isSolid = (m: number) => !SOLID_EXCEPT.has(baseOf(m))
 
-function World({ inv, toolTier, toolSkill, selItem, weaponDrawn, weaponIdx, onAmmo, onStats, onPos, onLook, onInvChange, worker, incoming, inflight, settings, build, pieceIdx, rot, tools, skills, onSkill, onLevel, onTool, tutorial, onQuestEvent, onNearGreg, onNearTable, cmdOut, mistLedger, onNearMist, sparring, pot, onOpenChest }: {
+function World({ inv, toolTier, toolSkill, selItem, weaponDrawn, weaponIdx, onAmmo, onStats, onPos, onLook, onInvChange, worker, incoming, inflight, settings, build, pieceIdx, rot, tools, skills, onSkill, onLevel, onTool, tutorial, onQuestEvent, onNearGreg, onNearTable, cmdOut, mistLedger, onNearMist, sparring, pot, onOpenChest, uiOpen }: {
   inv: React.RefObject<Inventory>
   toolTier: React.RefObject<number>
   toolSkill: React.RefObject<BlockSkill>
@@ -2060,6 +2108,12 @@ function World({ inv, toolTier, toolSkill, selItem, weaponDrawn, weaponIdx, onAm
    * means or which of them owns the cursor.
    */
   onOpenChest: (c: OpenChest) => void
+  /**
+   * Is a cursor surface up? A REF, not a boolean prop, on purpose: opening the bag must not
+   * re-render the whole scene, and the only readers are a listener and the frame loop — both of
+   * which want the LIVE value rather than the one captured at their last render.
+   */
+  uiOpen: React.RefObject<boolean>
   cmdOut: React.RefObject<{ tp: (x: number, z: number) => string; pos: () => { x: number; z: number } } | null>
 }) {
   const { camera } = useThree()
@@ -2274,12 +2328,33 @@ function World({ inv, toolTier, toolSkill, selItem, weaponDrawn, weaponIdx, onAm
     // debug convenience, so the player verb wins the good key. Caught only because the new binding
     // would have silently toggled BOTH: pressing F would have drawn your weapon and launched you.
     // The INPUT guard mirrors onKey's: touch-typing a console command must not walk the player.
+    /**
+     * ── ★ A MENU SWALLOWS THE PRESS, NEVER THE RELEASE (2026-08-11, Alex) ────────────────────────
+     * With a cursor surface up the world takes no new input: Shift stops crouching the player under
+     * the bag, and a mousedown on a slot stops setting `mouse.left` — which the frame loop was
+     * reading as "start mining", so clicking around your inventory quietly broke the block you were
+     * facing. That one leaves damage behind, and nothing on screen says it happened.
+     *
+     * ★ BUT THE RELEASE ALWAYS GETS THROUGH, and that asymmetry is the whole fix. Gate keyup as well
+     * and a key that was DOWN when the menu opened is stranded `true` forever — you open the bag
+     * mid-sprint, close it, and the player walks into a wall with no key left to press that would
+     * stop them, because the physical release already happened behind the gate. Down is a request
+     * the world may refuse; up is a fact it has to record.
+     *
+     * The per-frame clear below handles the same case from the other side (held at open time, never
+     * released), so the two together mean no input can survive a menu.
+     */
     const kd = (e: KeyboardEvent) => {
       if ((e.target as HTMLElement | null)?.tagName === 'INPUT') return
+      // The INPUT guard above is about typing; this one is about menus. Both mirror `onKey`'s.
+      if (uiOpen.current) return
       keys.current[e.code] = true; if (e.code === 'KeyV') fly.current = !fly.current
     }
     const ku = (e: KeyboardEvent) => { keys.current[e.code] = false }
-    const md = (e: MouseEvent) => { if (e.button === 0) mouse.current.left = true; if (e.button === 2) mouse.current.right = true }
+    const md = (e: MouseEvent) => {
+      if (uiOpen.current) return
+      if (e.button === 0) mouse.current.left = true; if (e.button === 2) mouse.current.right = true
+    }
     const mu = (e: MouseEvent) => { if (e.button === 0) mouse.current.left = false; if (e.button === 2) mouse.current.right = false }
     const ctx = (e: Event) => e.preventDefault()
     window.addEventListener('keydown', kd); window.addEventListener('keyup', ku)
@@ -2739,6 +2814,20 @@ function World({ inv, toolTier, toolSkill, selItem, weaponDrawn, weaponIdx, onAm
 
   useFrame((state, dtRaw) => {
     const dt = Math.min(dtRaw, 0.05)
+    /**
+     * ★ While a menu is up the world holds NO input at all. The listeners above already refuse new
+     * presses; this clears what was held at the moment the menu opened — open the bag mid-sprint
+     * and the sprint must not be waiting for you when you close it.
+     *
+     * Done every frame rather than once on the open EDGE because there is no edge to hang it on
+     * here (`uiOpen` is a ref, deliberately, so opening a menu does not re-render the scene), and a
+     * state that is re-derived every frame cannot drift out of sync with the thing it mirrors. It
+     * costs one object literal per frame.
+     */
+    if (uiOpen.current) {
+      keys.current = {}
+      mouse.current.left = false; mouse.current.right = false
+    }
     waterMaterial.tick(state.clock.elapsedTime)
     const g = group.current
     if (!g) return
