@@ -77,7 +77,7 @@ export const ZONE_ECOLOGY: { zone: string; supports: ('water' | 'earth' | 'mana'
   { zone: 'route-moonwell-garden', supports: ['earth', 'water', 'mana', 'storm'] }, // open windy hub
   { zone: 'mycelial-path',         supports: ['mana', 'storm', 'water', 'earth'] }, // damp fungal gloom
   { zone: 'spirit-meadow',         supports: ['earth', 'storm', 'mana'] },          // open grass, no standing water
-  { zone: 'sorrel-hold',           supports: ['mana', 'earth', 'storm'] },          // occupied ground
+  { zone: 'vetch-hold',           supports: ['mana', 'earth', 'storm'] },          // occupied ground
   { zone: 'wooded-trail',          supports: ['mana', 'earth'] },                   // canopy
   { zone: 'twilight-thicket',      supports: ['storm', 'mana'] },                   // night forest
   { zone: 'mana-springs',          supports: ['water', 'storm'] },                  // open water + spray
@@ -175,8 +175,8 @@ export const ENCOUNTER_TABLES: Record<string, ZoneEncounters> = {
     aiTier: 'wild',
   },
 
-  // Sorrel Hold — Hold 2's stronghold grounds. Sorrel's own team is pinned 7/6/6 (Alex).
-  'sorrel-hold': {
+  // Vetch Hold — Hold 2's stronghold grounds. Vetch's own team is pinned 7/6/6 (Alex).
+  'vetch-hold': {
     rate: 0.10,
     levels: [7, 9],
     entries: [
@@ -280,10 +280,10 @@ export const ENCOUNTER_TABLES: Record<string, ZoneEncounters> = {
 //
 // Alex's shape (2026-07-23): a boss sits at or just under its area's wild band — it is
 // the gatekeeper of the region, not a difficulty spike. Thistle Lv 7 under Spirit
-// Meadows' 7-8; Sorrel 7/6/6 under Sorrel Hold's 7-9.
+// Meadows' 7-8; Vetch 7/6/6 under Vetch Hold's 7-9.
 export const HOLD_LEVELS = {
   thistle: 7,                                     // Hold 1 — one collared captive (canon: you free it)
-  sorrel:  { guard: 7, captive: 6 },              // Hold 2 — guard + 2 captives  → 6/7/6
+  vetch:  { guard: 7, captive: 6 },              // Hold 2 — guard + 2 captives  → 6/7/6
   brack:   { muscle: 19, enforcer: 18, captive: 17 },  // Hold 3 — 2 guards + 3 captives, under Brack Hold's 17-19
 } as const
 

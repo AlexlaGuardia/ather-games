@@ -70,7 +70,7 @@ import type { AITier } from '../engine/battle-ai'
 import ArenaBattle from '../components/ArenaBattle'
 import PartyPanel from './PartyPanel'
 import HotBar from './HotBar'
-import { NPCS_3D, GREG_INTRO_LINES, GREG_NUDGE, GREG_RETURN, THISTLE_TAUNT_NO_SPIRIT, THISTLE_PREFIGHT, THISTLE_DEFEAT, FREED_SPIRIT_BEAT, SORREL_PREFIGHT, SORREL_DEFEAT, FREED_PAIR_BEAT, BRACK_PREFIGHT, BRACK_FINALE, type NPC3D } from './npcs3d'
+import { NPCS_3D, GREG_INTRO_LINES, GREG_NUDGE, GREG_RETURN, THISTLE_TAUNT_NO_SPIRIT, THISTLE_PREFIGHT, THISTLE_DEFEAT, FREED_SPIRIT_BEAT, VETCH_PREFIGHT, VETCH_DEFEAT, FREED_PAIR_BEAT, BRACK_PREFIGHT, BRACK_FINALE, type NPC3D } from './npcs3d'
 import { useCloudSave } from '@/lib/use-cloud-save'
 import { useWallet } from '@/lib/use-wallet'
 import { StationMenus, type PlacedStruct, type StationKind } from './StationMenus'
@@ -202,7 +202,7 @@ const HANG_MIN = 0.22       // guaranteed grip beat (s) before commit/drop can f
 const DIR_YAW: Record<string, number> = { up: 0, down: Math.PI, left: Math.PI / 2, right: -Math.PI / 2 }
 
 type Cell = [number, number]
-type SpawnerTool = 'sp_thistle' | 'sp_sorrel' | 'sp_brack'
+type SpawnerTool = 'sp_thistle' | 'sp_vetch' | 'sp_brack'
 type Tool = 'raise' | 'lower' | 'floor' | 'wall' | 'water' | 'mist' | 'warp' | 'void' | NodeType | SpawnerTool
 // Node-placing tools exposed in the editor (place = click, erase = shift-click). Terrain tools
 // paint the tile grid; node tools drop/remove a resource node in the separate node layer.
@@ -220,11 +220,11 @@ const NODE_TOOL_IDS = new Set<string>(NODE_TOOLS.map(t => t.id))
 // falls (the grind-ladder: better XP + marks than wilds, worth farming until hold-ready).
 const SPAWNER_TOOLS: { id: SpawnerTool; gate: SpawnerPlacement['gate']; label: string }[] = [
   { id: 'sp_thistle', gate: 'thistle', label: 'Sp·Thistle' },
-  { id: 'sp_sorrel', gate: 'sorrel', label: 'Sp·Sorrel' },
+  { id: 'sp_vetch', gate: 'vetch', label: 'Sp·Vetch' },
   { id: 'sp_brack', gate: 'brack', label: 'Sp·Brack' },
 ]
 const SPAWNER_TOOL_IDS = new Set<string>(SPAWNER_TOOLS.map(t => t.id))
-const GATE_COLORS: Record<SpawnerPlacement['gate'], string> = { thistle: '#8fd14f', sorrel: '#f0a526', brack: '#e05a4d' }
+const GATE_COLORS: Record<SpawnerPlacement['gate'], string> = { thistle: '#8fd14f', vetch: '#f0a526', brack: '#e05a4d' }
 // itemId → display label (e.g. shimmeroak_plank → "Shimmeroak Plank"). Real item names live in
 // sprites/items.ts; this prettifier is enough for harvest toasts until those are wired.
 // Tap-to-transfer destination pick: a slot already holding the same item (merge target) wins,
@@ -1118,7 +1118,7 @@ const ZoneGeometry = memo(function ZoneGeometry({ gridRef, heights, version, pai
 })
 
 // An NPC stands in the world when it hasn't been cleared (defeated) and its gate flag (if any) is set.
-// Gating chains the holds: Sorrel only appears once `freedThistle` is true (he fled up here).
+// Gating chains the holds: Vetch only appears once `freedThistle` is true (he fled up here).
 function npcInWorld(n: NPC3D, defeated: Record<string, boolean>, flags: Record<string, boolean>): boolean {
   if (defeated[n.id]) return false
   if (n.requiredFlag && !flags[n.requiredFlag]) return false
@@ -3619,7 +3619,7 @@ export default function Shimmer3D() {
   // next deal, same clock as every other living thing.
   const patrolBeatenRef = useRef<BeatenRecord>({})
   const patrolKeyRef = useRef<string | null>(null)
-  const [battle, setBattle] = useState<{ allies: Spirit[]; enemies: Spirit[]; aiTier: AITier; zoneId: string; kind?: 'wild' | 'thistle' | 'sorrel' | 'brack' | 'patrol'; title?: string; collared?: number[] } | null>(null)
+  const [battle, setBattle] = useState<{ allies: Spirit[]; enemies: Spirit[]; aiTier: AITier; zoneId: string; kind?: 'wild' | 'thistle' | 'vetch' | 'brack' | 'patrol'; title?: string; collared?: number[] } | null>(null)
   const curBattleRef = useRef(battle); curBattleRef.current = battle
   // Wild encounters play a brief "drawn to you" approach beat before the arena mounts (see below).
   const [approach, setApproach] = useState<{ enc: WildEncounter; battle: NonNullable<typeof battle> } | null>(null)
@@ -4785,11 +4785,11 @@ export default function Shimmer3D() {
       // collar just breaks on the win — one freeing path.
       setDialogue({ name: 'Thistle', lines: [...THISTLE_DEFEAT, FREED_SPIRIT_BEAT], idx: 0, onDone: () => setBanner('✦ Hold 1 cleared — Spirit Meadows is open') })
     }
-    // Hold 2: Sorrel's stronghold falls — both collars break, he retreats up to Brack, and a Mana Seed
+    // Hold 2: Vetch's stronghold falls — both collars break, he retreats up to Brack, and a Mana Seed
     // is left behind. Canon reward = the Mana Seed blooms into a new companion (party growth = seeds/bloom).
-    if (outcome === 'win' && bd?.kind === 'sorrel') {
-      flagsRef.current.freedSorrel = true
-      setDefeated((d) => ({ ...d, sorrel: true }))
+    if (outcome === 'win' && bd?.kind === 'vetch') {
+      flagsRef.current.freedVetch = true
+      setDefeated((d) => ({ ...d, vetch: true }))
       const sp = LAUNCHED_SPECIES[Math.floor(Math.random() * LAUNCHED_SPECIES.length)]
       const bloom = createSpirit(sp, speciesDisplayName(sp), 0, 0)
       bloom.level = Math.max(5, partyLevelRef.current)
@@ -4798,7 +4798,7 @@ export default function Shimmer3D() {
       // the Home Plot now, and the dialogue below says which of the two happened.
       bloom.inParty = activeSpirits(partyRef.current ?? []).length < MAX_PARTY
       partyRef.current = [...(partyRef.current ?? []), bloom]
-      setDialogue({ name: 'Sorrel', lines: [...SORREL_DEFEAT, FREED_PAIR_BEAT, `A Mana Seed sits where the leashes were. It blooms — a young ${speciesDisplayName(sp)} ${bloom.inParty ? 'joins you' : 'joins you, and waits at the Home Plot — your party is full'}.`], idx: 0, onDone: () => setBanner('✦ Hold 2 cleared — the Mana Springs are free') })
+      setDialogue({ name: 'Vetch', lines: [...VETCH_DEFEAT, FREED_PAIR_BEAT, `A Mana Seed sits where the leashes were. It blooms — a young ${speciesDisplayName(sp)} ${bloom.inParty ? 'joins you' : 'joins you, and waits at the Home Plot — your party is full'}.`], idx: 0, onDone: () => setBanner('✦ Hold 2 cleared — the Mana Springs are free') })
     }
     // Hold 3 — the climax. Brack's stronghold falls; all three collars break at once and the three Moglins
     // deflate together (the four-voice finale). Mana Seed reward blooms a companion; the arc closes.
@@ -4973,18 +4973,18 @@ export default function Shimmer3D() {
     setBattle({ allies: fielded, enemies: [captive], aiTier: 'wild', zoneId: logicalZoneAt(zoneIdRef.current, posRef.current!.x, posRef.current!.z), kind: 'thistle', title: 'HOLD 1 — THISTLE', collared: [0] })
   }, [fieldParty])
 
-  // Sorrel — Hold 2, the stronghold. Enemies = [guard, captive, captive]. The guard (no collar) SHIELDS
+  // Vetch — Hold 2, the stronghold. Enemies = [guard, captive, captive]. The guard (no collar) SHIELDS
   // the two collared captives: you break the brute first, then reach BOTH to free them. KO'ing either
   // captive = "forced" (you broke who you came to save). Tougher than Thistle (champion AI, higher levels).
-  const startSorrelBattle = useCallback(() => {
+  const startVetchBattle = useCallback(() => {
     const pick = () => LAUNCHED_SPECIES[Math.floor(Math.random() * LAUNCHED_SPECIES.length)]
-    const guard = createSpirit(pick(), 'Sorrel’s Brute', 0, 0)
-    guard.level = HOLD_LEVELS.sorrel.guard
+    const guard = createSpirit(pick(), 'Vetch’s Brute', 0, 0)
+    guard.level = HOLD_LEVELS.vetch.guard
     guard.seeds = Array.from({ length: 6 }, () => 16 + Math.floor(Math.random() * 16))
     const mkCaptive = () => {
       const sp = pick()
       const c = createSpirit(sp, `Collared ${speciesDisplayName(sp)}`, 0, 0)
-      c.level = HOLD_LEVELS.sorrel.captive
+      c.level = HOLD_LEVELS.vetch.captive
       c.seeds = Array.from({ length: 6 }, () => Math.floor(Math.random() * 32))
       return c
     }
@@ -4992,7 +4992,7 @@ export default function Shimmer3D() {
     if (!fielded) return
     battleRef.current = true
     document.exitPointerLock?.()
-    setBattle({ allies: fielded, enemies: [guard, mkCaptive(), mkCaptive()], aiTier: 'champion', zoneId: logicalZoneAt(zoneIdRef.current, posRef.current!.x, posRef.current!.z), kind: 'sorrel', title: "HOLD 2 — SORREL'S STRONGHOLD", collared: [1, 2] })
+    setBattle({ allies: fielded, enemies: [guard, mkCaptive(), mkCaptive()], aiTier: 'champion', zoneId: logicalZoneAt(zoneIdRef.current, posRef.current!.x, posRef.current!.z), kind: 'vetch', title: "HOLD 2 — VETCH'S STRONGHOLD", collared: [1, 2] })
   }, [fieldParty])
 
   // Brack — Hold 3, the climax. The pooled force: TWO enforcers (guards) shielding THREE collared
@@ -5029,14 +5029,14 @@ export default function Shimmer3D() {
     } else if (npc.id === 'thistle') {
       if (!hasSpirit) setDialogue({ name: 'Thistle', lines: THISTLE_TAUNT_NO_SPIRIT, idx: 0, onDone: () => {} })
       else setDialogue({ name: 'Thistle', lines: THISTLE_PREFIGHT, idx: 0, onDone: startThistleBattle })
-    } else if (npc.id === 'sorrel') {
-      // Sorrel only stands here once Thistle has fled to him (gated by requiredFlag), so the player
+    } else if (npc.id === 'vetch') {
+      // Vetch only stands here once Thistle has fled to him (gated by requiredFlag), so the player
       // always has a party by now — straight to the swagger, then the stronghold Reach battle.
-      setDialogue({ name: 'Sorrel', lines: SORREL_PREFIGHT, idx: 0, onDone: startSorrelBattle })
+      setDialogue({ name: 'Vetch', lines: VETCH_PREFIGHT, idx: 0, onDone: startVetchBattle })
     } else if (npc.id === 'brack') {
       setDialogue({ name: 'Brack', lines: BRACK_PREFIGHT, idx: 0, onDone: startBrackBattle })
     }
-  }, [startThistleBattle, startSorrelBattle, startBrackBattle])
+  }, [startThistleBattle, startVetchBattle, startBrackBattle])
 
   const [version, setVersion] = useState(0)
   const [confirmNew, setConfirmNew] = useState(false)
@@ -6865,7 +6865,7 @@ export default function Shimmer3D() {
       <KeyToggle onB={() => { if (isOwner && !battleRef.current) setEditMode((e) => !e) }} />
 
       {/* Combat, mounted over the 3D world. ALL fights — wild and the scripted liberation holds
-          (thistle/sorrel/brack) — run the real-time Keeper's Arena. The collar breaks on the win
+          (thistle/vetch/brack) — run the real-time Keeper's Arena. The collar breaks on the win
           (freed-vs-forced was ruled non-canon 2026-07-04: win = free). */}
       {/* wild-encounter approach beat — the mist stirs and a spirit is drawn to you, then the ring
           materializes. Tap to skip straight into the fight. */}

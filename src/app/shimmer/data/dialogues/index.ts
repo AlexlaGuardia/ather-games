@@ -13,16 +13,16 @@ import studyObservation from './study-observation.json'
 import thistlePrefight from './thistle-prefight.json'
 import thistleReturn from './thistle-return.json'
 import thistleDefeat from './thistle-defeat.json'
-import sorrelPrefight from './sorrel-prefight.json'
-import sorrelDefeat from './sorrel-defeat.json'
+import vetchPrefight from './vetch-prefight.json'
+import vetchDefeat from './vetch-defeat.json'
 import brackPrefight from './brack-prefight.json'
 import brackDefeat from './brack-defeat.json'
 import atherWindsHook from './ather-winds-hook.json'
 import thistleHome from './thistle-home.json'
-import sorrelHome from './sorrel-home.json'
+import vetchHome from './vetch-home.json'
 import brackHome from './brack-home.json'
 import thistlePostWin from './thistle-post-win.json'
-import sorrelPostWin from './sorrel-post-win.json'
+import vetchPostWin from './vetch-post-win.json'
 import brackPostWin from './brack-post-win.json'
 
 const ALL_GRAPHS: DialogueGraph[] = [
@@ -37,15 +37,15 @@ const ALL_GRAPHS: DialogueGraph[] = [
   thistleReturn,
   thistleDefeat,
   thistlePostWin,
-  sorrelPrefight,
-  sorrelDefeat,
-  sorrelPostWin,
+  vetchPrefight,
+  vetchDefeat,
+  vetchPostWin,
   brackPrefight,
   brackDefeat,
   brackPostWin,
   atherWindsHook,
   thistleHome,
-  sorrelHome,
+  vetchHome,
   brackHome,
 ] as DialogueGraph[]
 

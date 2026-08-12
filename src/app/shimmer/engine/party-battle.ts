@@ -170,7 +170,7 @@ export function createPartyBattle(
     events: [],
   }
 
-  // Reach-encounter setup: collar each captive (Hold 1 = one captive; a stronghold like Sorrel keeps
+  // Reach-encounter setup: collar each captive (Hold 1 = one captive; a stronghold like Vetch keeps
   // TWO on the leash), dim its offense, and give every ally the calming moves (Still-Breath / Spirit
   // Ward) so the party can reach the collared while they fight under the collar.
   if (reach) {
@@ -483,7 +483,7 @@ function addPartyReach(state: PartyBattleState, captive: PartyCombatant, delta: 
   if (captive.reach >= max && captive.collared && state.outcome === 'pending') {
     captive.collared = false
     state.events.push({ type: 'COLLAR_BREAK', captiveId: captive.id })
-    // A stronghold can hold more than one captive (Sorrel keeps two). The hold only falls — and the
+    // A stronghold can hold more than one captive (Vetch keeps two). The hold only falls — and the
     // battle is won — once EVERY collar is broken; until then the fight continues for the rest.
     const stillCollared = state.enemies.some(e => e.reachMax !== undefined && e.collared && e.alive)
     if (!stillCollared) {

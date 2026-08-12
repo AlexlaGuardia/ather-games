@@ -3,7 +3,7 @@
 // A test slice of the real-time combat, decoupled from the world so the feel can be
 // tuned in isolation. The renderer + HUD live in components/ArenaBattle.tsx — the
 // SAME component play3d mounts in-world — so this harness stays honest to the real
-// thing. Route: /shimmer/arena · boss slice: /shimmer/arena?mode=hold (a Sorrel-shaped
+// thing. Route: /shimmer/arena · boss slice: /shimmer/arena?mode=hold (a Vetch-shaped
 // stronghold: champion guard + two collared captives, hold banner, freed beat).
 
 import { useState, useCallback } from 'react'
@@ -24,7 +24,7 @@ function buildSlice() {
   return { allies, enemies }
 }
 
-// The boss slice — Sorrel-shaped: one juiced champion guard shielding two collared
+// The boss slice — Vetch-shaped: one juiced champion guard shielding two collared
 // captives. Exercises the whole hold layer (tier AI, collar render, banner, freed beat).
 function buildHoldSlice() {
   const allies = [mk('fox', 'Kit', 22, 'storm'), mk('owl', 'Sage', 22, 'mana'), mk('water-bear', 'Tor', 22, 'earth')]

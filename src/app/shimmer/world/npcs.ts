@@ -93,7 +93,7 @@ const GATE_SPRITE = px(16, 16, `
 `)
 
 // Moglin placeholder sprites — Gregory base with collar accent (col 5 = red = collar)
-// TODO: replace with proper Thistle/Sorrel/Brack renders (Alex's art pipeline)
+// TODO: replace with proper Thistle/Vetch/Brack renders (Alex's art pipeline)
 const MOGLIN_SPRITE = px(16, 16, `
   0000000000000000
   0000003330000000
@@ -157,24 +157,33 @@ export const NPCS: NPCDef[] = [
       aiTier: 'trained',
     },
   },
+  // ★ RENAMED FROM `sorrel` 2026-08-12, FOLLOWING CANON — do not revert, and do not re-use the old
+  // name for any collar-Moglin. **Sorrel was already canon as a garden-KEEPER**: Book 10, Wren's
+  // hopeful mirror, the keeper who got the warning in time (`CANON/glossary.md` › *Sorrel*). A warm
+  // keeper and a collar-Moglin cannot share a name inside the cozy line, so canon moved the MOGLIN
+  // (a shipped zone id and some strings, not a written character) and the keeper kept hers.
+  // `Vetch` holds the plant/burr convention and suits a hold that squeezes.
+  // Canon ruled it 2026-08-06 and `CANON/game/shimmer-quests-mainmap.md:71` left the build side —
+  // zone id, defeat flag, NPC strings — owed to Jin. This is that, six days late: the drift gate
+  // does not cover NPC ids, so it sat green and wrong.
   {
-    id: 'sorrel',
-    name: 'Sorrel',
-    zone: 'sorrel-hold',
+    id: 'vetch',
+    name: 'Vetch',
+    zone: 'vetch-hold',
     tileX: 20, tileY: 15,
     direction: 'down',
-    dialogueId: 'sorrel-prefight',
+    dialogueId: 'vetch-prefight',
     dialogueChain: [
-      { dialogueId: 'sorrel-prefight' },
-      { dialogueId: 'sorrel-defeat', requiresFlag: 'defeated_sorrel' },
+      { dialogueId: 'vetch-prefight' },
+      { dialogueId: 'vetch-defeat', requiresFlag: 'defeated_vetch' },
     ],
-    hideWhenFlag: 'sorrelDefeated',
+    hideWhenFlag: 'vetchDefeated',
     sprite: MOGLIN_SPRITE,
     palette: ['#8a6a20', '#c8a040', '#f0e8b0', '#1a1a2e', '#c03030'],
     blocking: true,
     trainer: {
       species: 'fox',
-      name: "Sorrel's Fox",
+      name: "Vetch's Fox",
       levelOffset: 3,
       element: 'earth',
       aiTier: 'trained',
@@ -216,12 +225,12 @@ export const NPCS: NPCDef[] = [
     palette: ['#2a5a20', '#50a038', '#c8e8b0', '#1a1a2e', '#88cc88'],
   },
   {
-    id: 'sorrel-home',
-    name: 'Sorrel',
+    id: 'vetch-home',
+    name: 'Vetch',
     zone: 'garden',
     tileX: 7, tileY: 14,
     direction: 'down',
-    dialogueId: 'sorrel-home',
+    dialogueId: 'vetch-home',
     showWhenFlag: 'moglinsReformed',
     sprite: MOGLIN_SPRITE,
     palette: ['#8a6a20', '#c8a040', '#f0e8b0', '#1a1a2e', '#eec888'],

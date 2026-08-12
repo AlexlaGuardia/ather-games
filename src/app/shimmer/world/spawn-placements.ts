@@ -15,14 +15,14 @@
 
 export interface SpawnerPlacement {
   kind: 'moglin'
-  gate: 'thistle' | 'sorrel' | 'brack'
+  gate: 'thistle' | 'vetch' | 'brack'
   tileX: number
   tileY: number
 }
 
 const THE_OUTFIELDS_SPAWNERS: SpawnerPlacement[] = [
   { kind: 'moglin', gate: 'thistle', tileX: 7, tileY: 16 },
-  { kind: 'moglin', gate: 'sorrel', tileX: 17, tileY: 10 },
+  { kind: 'moglin', gate: 'vetch', tileX: 17, tileY: 10 },
   { kind: 'moglin', gate: 'brack', tileX: 27, tileY: 14 },
 ]
 

@@ -20,7 +20,7 @@ export interface PartyBattleSceneProps {
   ai?: AIConfig
   mana?: { ally?: Partial<ManaConfig>; enemy?: Partial<ManaConfig> }
   reach?: boolean   // Reach-encounter: enemy lead (idx 0) is a collared captive — free it, don't KO it
-  captiveIdxs?: number[]   // stronghold reach: explicit collared-captive enemy indices (Sorrel keeps two)
+  captiveIdxs?: number[]   // stronghold reach: explicit collared-captive enemy indices (Vetch keeps two)
   keeper?: KeeperArchetype   // a Keeper support companion joins your side (AI-driven)
   onEnd: (outcome: 'win' | 'lose', reachResult?: 'freed' | 'forced' | 'fainted' | null) => void
 }

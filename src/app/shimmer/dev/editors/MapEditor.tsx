@@ -154,10 +154,10 @@ interface BrushEntry {
 
 // Moglin burrow mouths (canon: shimmer-geography.md) — the gate names the hold that quiets it.
 // Colors match play3d's GATE_COLORS so a burrow reads the same in both editors.
-type BurrowGate = 'thistle' | 'sorrel' | 'brack'
+type BurrowGate = 'thistle' | 'vetch' | 'brack'
 const BURROW_GATES: { gate: BurrowGate; label: string; color: string }[] = [
   { gate: 'thistle', label: 'Burrow · Thistle', color: '#8fd14f' },
-  { gate: 'sorrel', label: 'Burrow · Sorrel', color: '#f0a526' },
+  { gate: 'vetch', label: 'Burrow · Vetch', color: '#f0a526' },
   { gate: 'brack', label: 'Burrow · Brack', color: '#e05a4d' },
 ]
 const BURROW_COLOR: Record<BurrowGate, string> = Object.fromEntries(BURROW_GATES.map(g => [g.gate, g.color])) as Record<BurrowGate, string>

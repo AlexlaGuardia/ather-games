@@ -72,14 +72,14 @@ for (const [zone, want] of pinned) {
   }
 }
 if (HOLD_LEVELS.thistle !== 7) fails.push(`Thistle is Lv ${HOLD_LEVELS.thistle}, Alex pinned 7`)
-if (HOLD_LEVELS.sorrel.guard !== 7 || HOLD_LEVELS.sorrel.captive !== 6) {
-  fails.push(`Sorrel is ${HOLD_LEVELS.sorrel.captive}/${HOLD_LEVELS.sorrel.guard}/${HOLD_LEVELS.sorrel.captive}, Alex pinned 6/7/6`)
+if (HOLD_LEVELS.vetch.guard !== 7 || HOLD_LEVELS.vetch.captive !== 6) {
+  fails.push(`Vetch is ${HOLD_LEVELS.vetch.captive}/${HOLD_LEVELS.vetch.guard}/${HOLD_LEVELS.vetch.captive}, Alex pinned 6/7/6`)
 }
 
 // ── 5. A boss is its region's gatekeeper, not a spike — at or under the local band. ──
 const bossIn: [string, number, string][] = [
   ['spirit-meadow', HOLD_LEVELS.thistle, 'Thistle'],
-  ['sorrel-hold', HOLD_LEVELS.sorrel.guard, "Sorrel's guard"],
+  ['vetch-hold', HOLD_LEVELS.vetch.guard, "Vetch's guard"],
   ['brack-hold', HOLD_LEVELS.brack.muscle, "Brack's muscle"],
 ]
 for (const [zone, lv, who] of bossIn) {
@@ -117,7 +117,7 @@ for (const { zone } of ZONE_ECOLOGY) {
   const who = t.entries.map(e => `${speciesDisplayName(e.species)}${e.levels ? `(${e.levels[0]}-${e.levels[1]})` : ''}`).join(', ')
   console.log(`  ${zone.padEnd(26)}${`${t.levels[0]}-${t.levels[1]}`.padEnd(9)}${String(t.rate).padEnd(7)}${who}`)
 }
-console.log(`\n  holds: Thistle Lv ${HOLD_LEVELS.thistle} · Sorrel ${HOLD_LEVELS.sorrel.captive}/${HOLD_LEVELS.sorrel.guard}/${HOLD_LEVELS.sorrel.captive} · Brack ${HOLD_LEVELS.brack.muscle}/${HOLD_LEVELS.brack.enforcer} + 3× Lv ${HOLD_LEVELS.brack.captive}\n`)
+console.log(`\n  holds: Thistle Lv ${HOLD_LEVELS.thistle} · Vetch ${HOLD_LEVELS.vetch.captive}/${HOLD_LEVELS.vetch.guard}/${HOLD_LEVELS.vetch.captive} · Brack ${HOLD_LEVELS.brack.muscle}/${HOLD_LEVELS.brack.enforcer} + 3× Lv ${HOLD_LEVELS.brack.captive}\n`)
 
 if (fails.length) { console.error('❌ ENCOUNTER ORACLE FAILED:\n  - ' + fails.join('\n  - ')); process.exit(1) }
 console.log(`✅ encounter oracle: bands absolute and rising, ecology matches canon affinity, Alex's pins intact.${ok.length ? '' : ''}`)

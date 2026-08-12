@@ -346,10 +346,10 @@ export async function POST(req: NextRequest) {
           saved.push('region-nodes')
         }
         if (body.spawners && Array.isArray(body.spawners)) {
-          const GATES = new Set(['thistle', 'sorrel', 'brack'])
+          const GATES = new Set(['thistle', 'vetch', 'brack'])
           region.spawners = (body.spawners as unknown[]).map((s, i) => {
             const gate = safeId((s as { gate: unknown }).gate, `spawners[${i}].gate`)
-            if (!GATES.has(gate)) throw new BadRequest(`spawners[${i}].gate must be thistle|sorrel|brack`)
+            if (!GATES.has(gate)) throw new BadRequest(`spawners[${i}].gate must be thistle|vetch|brack`)
             return {
               kind: 'moglin',
               gate,
@@ -736,10 +736,10 @@ export async function POST(req: NextRequest) {
     // Save moglin-patrol spawner placements for the current map (mirror of the nodes flow)
     if (body.spawners && Array.isArray(body.spawners)) {
       const mapId = bodyMapId(body)
-      const GATES = new Set(['thistle', 'sorrel', 'brack'])
+      const GATES = new Set(['thistle', 'vetch', 'brack'])
       const spawners = (body.spawners as unknown[]).map((n, i) => {
         const gate = safeId((n as { gate: unknown }).gate, `spawners[${i}].gate`)
-        if (!GATES.has(gate)) throw new Error(`spawners[${i}].gate must be thistle|sorrel|brack`)
+        if (!GATES.has(gate)) throw new Error(`spawners[${i}].gate must be thistle|vetch|brack`)
         return {
           gate,
           x: safeInt((n as { x: unknown }).x, `spawners[${i}].x`, 0, 9999),

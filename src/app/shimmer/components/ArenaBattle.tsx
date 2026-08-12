@@ -625,7 +625,7 @@ export default function ArenaBattle({ allies, enemies, seed, aidKit, enemyTier, 
   aidKit?: AidKit
   enemyTier?: ArenaAITier          // holds pass 'champion' — decision quality, never stats
   collaredIndices?: number[]       // enemy indices rendered as collared captives (freed on win)
-  title?: string                   // hold framing, e.g. "HOLD 2 — SORREL'S STRONGHOLD"
+  title?: string                   // hold framing, e.g. "HOLD 2 — VETCH'S STRONGHOLD"
   bagCharges?: number              // mend potions on hand; omit for unlimited (the feel harness)
   // Hands back what the fight left of the party AND what it spent, alongside the outcome. Wounds
   // persist, so the caller writes them into the save. Fleeing counts: you still took the hits.

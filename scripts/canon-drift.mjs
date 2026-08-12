@@ -155,8 +155,16 @@ function evolutionConfigCitation() {
 // pinned here with their canon citation. Update when the ruling changes.
 
 // v1 cast ruled 2026-06-24 (shimmer-storyline.md:122): Greg + 3 reformed Moglins.
-// brack/sorrel/thistle are the three holds (dialogues/ + zones.ts brack-hold/sorrel-hold).
-const CANON_V1_CAST = ['gregory', 'brack', 'sorrel', 'thistle', 'narrator']
+// brack/vetch/thistle are the three holds (dialogues/ + zones.ts brack-hold/vetch-hold).
+//
+// ★ `sorrel` → `vetch` 2026-08-12, and THE GATE ITSELF WAS THE REASON THIS SAT WRONG FOR SIX DAYS.
+// Canon renamed hold 2's Moglin on 2026-08-06 (Sorrel was already the Book 10 garden-keeper's name)
+// and left the build side owed. The build still said `sorrel` — and so did this list, because it is
+// a HAND TRANSCRIPTION of canon rather than a read of it. So the checker agreed with the code,
+// reported CLEAN, and the drift it exists to catch was invisible in both places at once.
+// **A gate that mirrors canon by hand drifts exactly like the code it is checking.** When a ruling
+// lands, this file is part of the build that has to follow it.
+const CANON_V1_CAST = ['gregory', 'brack', 'vetch', 'thistle', 'narrator']
 // canon entities whose names a game NPC must NOT silently reuse (audit §5 collisions).
 const CANON_NAMED_ENTITIES = ['Bramble', 'Echo', 'Ember', 'Dusk', 'Spore']
 // ruled v1 geography — the FULL Tier-1 map (shimmer-storyline.md:37-76) plus the two
@@ -167,7 +175,7 @@ const CANON_V1_ZONES = [
   'Spirit Meadows', 'Twilight Thicket', 'Wooded Trail', 'Voranyx Caverns',
   'Mana Springs', 'Ather Winds', 'Gate to the folds',
   'Route One', 'Route Two', 'Route Three', 'Route Four', 'Route Five',
-  'Brack Hold', 'Sorrel Hold', 'Thistle Hold',
+  'Brack Hold', 'Vetch Hold', 'Thistle Hold',
   'Gloview Village', 'The Outfields',
   // ruled 2026-07-22 (Alex, home-plot gate build): the Rune Hold shop interior across the
   // permanent gate — shimmer-storyline.md + shimmer-geography.md; street door stays sealed.

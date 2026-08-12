@@ -628,15 +628,15 @@ export const THE_THRESHOLD: number[][] = [
 ]
 /* eslint-enable no-multi-spaces */
 
-// Sorrel Hold — 40x30, earth element, east arm Hold 2
+// Vetch Hold — 40x30, earth element, east arm Hold 2
 // Entry: west wall rows 14-15 (from Mana Springs), east wall rows 14-15 (to Brack Hold)
-export const SORREL_HOLD: number[][] = createStubMap(40, 30, [
+export const VETCH_HOLD: number[][] = createStubMap(40, 30, [
   { side: 'west', positions: [14, 15] },
   { side: 'east', positions: [14, 15] },
 ])
 
 // Brack Hold — 40x30, storm element, east arm Hold 3
-// Entry: west wall rows 14-15 (from Sorrel Hold), south wall cols 19-20 (to Ather Winds)
+// Entry: west wall rows 14-15 (from Vetch Hold), south wall cols 19-20 (to Ather Winds)
 export const BRACK_HOLD: number[][] = createStubMap(40, 30, [
   { side: 'west', positions: [14, 15] },
   { side: 'south', positions: [19, 20] },
@@ -1169,8 +1169,8 @@ export const ROUTE_2: number[][] = [
 ]
 
 // Gloview Village — 34x22 blockout (was a stub). From Alex's whiteboard: village with
-// building footprints, a left divider, and the SORREL boss compound (top-right walled pen,
-// door gap in its left wall at rows 6-7 -> warps to the sorrel-hold arena). RIGHT (rows
+// building footprints, a left divider, and the VETCH boss compound (top-right walled pen,
+// door gap in its left wall at rows 6-7 -> warps to the vetch-hold arena). RIGHT (rows
 // 11-12) -> Route 2, BOTTOM-LEFT (cols 2-3) -> Route 3. Grass 97 / walls 34 — blockout.
 export const GLOVIEW_VILLAGE: number[][] = [
   [34,34,34,34,34,34,34,34,34,34,34,34,34,34,34,34,34,34,34,34,34,34,34,34,34,34,34,34,34,34,34,34,34,34],
@@ -1232,7 +1232,7 @@ export const ROUTE_3: number[][] = [
 ]
 
 // The Outfields — 34x24 blockout (was a stub). From Alex's whiteboard: the frontier boss
-// gauntlet holding all THREE boss pens — Thistle (bottom-left U), Sorrel (upper-center hook),
+// gauntlet holding all THREE boss pens — Thistle (bottom-left U), Vetch (upper-center hook),
 // Brack (center-right bracket). TOP (cols 6-7) -> Route 3. RIGHT (rows 11-12) = sealed mouth
 // to the Ather Wilds (LOCKED in v1, no warp). Grass 97 / walls 34 — all blockout.
 export const THE_OUTFIELDS: number[][] = [

@@ -44,11 +44,11 @@ const BRACK: VoiceProfile = {
   volume: 0.75,
 }
 
-// Sorrel — careful with words, gentle, thoughtful; finds the right name for things.
+// Vetch — careful with words, gentle, thoughtful; finds the right name for things.
 // "And I am good with names. If ever a friend of yours wants a new one, a kinder one…"
-const SORREL: VoiceProfile = {
-  id: 'sorrel',
-  name: 'Sorrel',
+const VETCH: VoiceProfile = {
+  id: 'vetch',
+  name: 'Vetch',
   pitch: 195,            // mid-high, bright but unhurried
   pitchVariance: 18,     // light variance — turning words over
   speed: 7,              // measured, not slow; she chooses each word
@@ -76,7 +76,7 @@ export const VOICE_PROFILES: Record<string, VoiceProfile> = {
   gregory: GREGORY,
   narrator: NARRATOR,
   brack: BRACK,
-  sorrel: SORREL,
+  vetch: VETCH,
   thistle: THISTLE,
 }
 

@@ -154,7 +154,7 @@ export function getZone(zones: Zone[], id: string): Zone | null {
 // Garden → east → Moonwell Glade (shortcut, blocked until tutorialComplete)
 // Moonwell Glade → east → Spore Hollow (post-tutorial)
 
-import { GARDEN, MYCELIAL_PATH, MOONWELL_GLADE, SPORE_HOLLOW, VORANYX_DEEP, TWILIGHT_THICKET, WOODED_TRAIL, THE_THRESHOLD, MANA_SPRINGS, ROUTE_2, ROUTE_3, THE_OUTFIELDS, GLOVIEW_VILLAGE, SPIRIT_MEADOW, MOONWELL_GLADE_GREGORY_S_HOME, FIRING_RANGE, TRAVELERS_STATION, CRUCIBLE, RUNE_HOLD, THE_PASSAGE, SORREL_HOLD, BRACK_HOLD, TEST_SANDBOX,
+import { GARDEN, MYCELIAL_PATH, MOONWELL_GLADE, SPORE_HOLLOW, VORANYX_DEEP, TWILIGHT_THICKET, WOODED_TRAIL, THE_THRESHOLD, MANA_SPRINGS, ROUTE_2, ROUTE_3, THE_OUTFIELDS, GLOVIEW_VILLAGE, SPIRIT_MEADOW, MOONWELL_GLADE_GREGORY_S_HOME, FIRING_RANGE, TRAVELERS_STATION, CRUCIBLE, RUNE_HOLD, THE_PASSAGE, VETCH_HOLD, BRACK_HOLD, TEST_SANDBOX,
   ROUTE_GARDEN_MYCELIAL, ROUTE_MYCELIAL_SPIRIT, ROUTE_SPIRIT_MOONWELL, ROUTE_MOONWELL_GARDEN } from './tilemap'
 export const ZONES: Zone[] = [
   {
@@ -350,10 +350,10 @@ export const ZONES: Zone[] = [
       // BOTTOM-LEFT (cols 2-3) → Route 3 (arrive at its north opening)
       { fromX: 2, fromY: 21, toZone: 'route-3', toX: 10, toY: 1, direction: 'down' },
       { fromX: 3, fromY: 21, toZone: 'route-3', toX: 11, toY: 1, direction: 'down' },
-      // SORREL compound door (gap in the pen's left wall) → the sorrel-hold arena.
+      // VETCH compound door (gap in the pen's left wall) → the vetch-hold arena.
       // Ungated for now; the Thistle progression-gate gets added in the F2P gating pass.
-      { fromX: 20, fromY: 6, toZone: 'sorrel-hold', toX: 1, toY: 14, direction: 'right' },
-      { fromX: 20, fromY: 7, toZone: 'sorrel-hold', toX: 1, toY: 15, direction: 'right' },
+      { fromX: 20, fromY: 6, toZone: 'vetch-hold', toX: 1, toY: 14, direction: 'right' },
+      { fromX: 20, fromY: 7, toZone: 'vetch-hold', toX: 1, toY: 15, direction: 'right' },
     ],
   },
   {
@@ -398,20 +398,20 @@ export const ZONES: Zone[] = [
     ],
   },
   {
-    id: 'sorrel-hold',
-    name: 'Sorrel Hold',
+    id: 'vetch-hold',
+    name: 'Vetch Hold',
     element: 'earth',
-    grid: SORREL_HOLD,
+    grid: VETCH_HOLD,
     playerStart: { tileX: 2, tileY: 14 },
     warps: [
-      // Return west to Gloview Village (back to the Sorrel compound door). Gloview was absorbed
+      // Return west to Gloview Village (back to the Vetch compound door). Gloview was absorbed
       // by the Mana Springs canvas at +183/+110, so the door names the region directly now —
       // (19,6) there is (202,116) here. See the cutover note at the head of REGION_ZONES.
       { fromX: 0, fromY: 14, toZone: 'r-mana-springs', toX: 202, toY: 116, direction: 'left' },
       { fromX: 0, fromY: 15, toZone: 'r-mana-springs', toX: 202, toY: 117, direction: 'left' },
-      // Forward east to Brack Hold (gated: need defeated_sorrel)
-      { fromX: 39, fromY: 14, toZone: 'brack-hold', toX: 1, toY: 14, direction: 'right', requiredFlag: 'defeated_sorrel' },
-      { fromX: 39, fromY: 15, toZone: 'brack-hold', toX: 1, toY: 15, direction: 'right', requiredFlag: 'defeated_sorrel' },
+      // Forward east to Brack Hold (gated: need defeated_vetch)
+      { fromX: 39, fromY: 14, toZone: 'brack-hold', toX: 1, toY: 14, direction: 'right', requiredFlag: 'defeated_vetch' },
+      { fromX: 39, fromY: 15, toZone: 'brack-hold', toX: 1, toY: 15, direction: 'right', requiredFlag: 'defeated_vetch' },
     ],
   },
   {
@@ -421,9 +421,9 @@ export const ZONES: Zone[] = [
     grid: BRACK_HOLD,
     playerStart: { tileX: 2, tileY: 14 },
     warps: [
-      // Return west to Sorrel Hold (open)
-      { fromX: 0, fromY: 14, toZone: 'sorrel-hold', toX: 38, toY: 14, direction: 'left' },
-      { fromX: 0, fromY: 15, toZone: 'sorrel-hold', toX: 38, toY: 15, direction: 'left' },
+      // Return west to Vetch Hold (open)
+      { fromX: 0, fromY: 14, toZone: 'vetch-hold', toX: 38, toY: 14, direction: 'left' },
+      { fromX: 0, fromY: 15, toZone: 'vetch-hold', toX: 38, toY: 15, direction: 'left' },
       // Forward south to Ather Winds (gated: need defeated_brack). The Threshold was absorbed by
       // the Outfields canvas at +190/+230 — (9,1) there is (199,231) here.
       { fromX: 19, fromY: 29, toZone: 'r-the-outfields', toX: 199, toY: 231, direction: 'down', requiredFlag: 'defeated_brack' },
