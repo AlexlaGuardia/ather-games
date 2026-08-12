@@ -134,7 +134,17 @@ type SlotRef = { g: 'bag' | 'chest'; i: number }
  * nothing — there is no floating carried stack to strand. That is the same reason drag is
  * click-then-click rather than HTML5 drag-and-drop, one level in.
  */
-type Lift = SlotRef & { half: boolean }
+type Lift = SlotRef & { mode: LiftMode }
+
+/**
+ * What a lift is going to do when it lands, named rather than inferred. `whole` swaps or merges the
+ * stack, `half` places half of it, `one` deals a single item and stays lifted.
+ *
+ * ★ It is a MODE, not a `half: boolean`, because the third verb arrived (the right-drag sprinkle)
+ * and a boolean would have had to answer "is a sprinkle half?" — a question with no true answer, so
+ * whichever way it was answered the badge and the highlight would have lied about one of the two.
+ */
+type LiftMode = 'whole' | 'half' | 'one'
 
 const SEED = 1337
 const H = DEFAULT_COLUMN.worldHeight
@@ -1581,6 +1591,24 @@ function Hud({ stats, pos, look, hotbar, sel, tier, held, build, pieceIdx, rot, 
  * across to the other container, because emptying a bag one pair of clicks at a time is a chest
  * nobody fills.
  */
+/**
+ * How far the hand has to travel before a press stops being a click and becomes a drag. Small enough
+ * that a deliberate drag never reads as a click, large enough that the tremor in a click never reads
+ * as a drag — and a click that silently became a one-item drag would be a stack quietly losing an
+ * item, which is the failure mode this whole panel is written against.
+ */
+const DRAG_SLOP = 5
+
+/** One place each for what a lift LOOKS like, so a fourth mode cannot be added and left invisible. */
+const LIFT_LOOK: Record<LiftMode, string> = {
+  whole: 'border-amber-300 bg-amber-300/20',
+  half: 'border-sky-300 bg-sky-300/20',
+  one: 'border-emerald-300 bg-emerald-300/20',
+}
+const LIFT_BADGE: Record<LiftMode, string> = {
+  whole: 'bg-amber-300', half: 'bg-sky-300', one: 'bg-emerald-300',
+}
+
 function BagPanel({ inv, chest, tick, sel, dragFrom, setDragFrom, onMove, onSplit, onQuick, onClose }: {
   inv: React.RefObject<Inventory>
   chest: OpenChest | null
@@ -1594,53 +1622,162 @@ function BagPanel({ inv, chest, tick, sel, dragFrom, setDragFrom, onMove, onSpli
   onClose: () => void
 }) {
   const bag = inv.current?.slots ?? []
+  const slotKey = (r: SlotRef) => `${r.g}${r.i}`
+
+  /**
+   * The press that has not been released yet. A REF, not state: it changes on every pointermove and
+   * re-rendering the whole panel per mouse-pixel would drop frames on a 16-slot grid, and nothing on
+   * screen depends on it until the drag actually starts (which does set state, once).
+   */
+  const drag = useRef<{
+    from: SlotRef; mode: 'whole' | 'one'; x: number; y: number
+    moved: boolean; visited: Set<string>
+  } | null>(null)
+  /** The slot under the pointer, or null when it is over none — kept by enter/leave on each cell. */
+  const hover = useRef<SlotRef | null>(null)
+
+  /**
+   * The parent's callbacks, read through a ref by the window listeners below.
+   *
+   * ⚠ `onMove`/`onSplit` are inline arrows on the parent, so they are NEW every render — putting
+   * them in the effect's deps would tear down and re-add a window listener on every inventory tick,
+   * i.e. potentially mid-drag. One ref, one subscription, always the current functions.
+   */
+  const api = useRef({ onMove, onSplit, setDragFrom })
+  api.current = { onMove, onSplit, setDragFrom }
+
+  /**
+   * ── ★ THE POINTER OWNS THE WHOLE INTERACTION (2026-08-11, Alex: "no drag to move yet i see") ───
+   * Press, move, release — one state machine, rather than `click` and `contextmenu` handlers with
+   * pointer handlers layered beside them. Two reasons, and the second is the one that would have
+   * bitten:
+   *
+   * ★ `contextmenu` FIRES AT DIFFERENT TIMES ON DIFFERENT PLATFORMS — on mousedown under X11 and
+   * Mac, on mouseup under Windows. A right-DRAG would therefore have fired the right-CLICK verb
+   * before the drag began on some of Alex's machines and not others, which is a bug that reproduces
+   * on one desk and not the next. Deriving both verbs from pointerdown/up instead makes the
+   * platform's menu timing irrelevant; `contextmenu` now does nothing but `preventDefault`.
+   *
+   * ★ A drag ends over a DIFFERENT element than it began on, and `click` only fires on the common
+   * ancestor of the two — so a drag between slots fires no click at all while a drag that happens to
+   * end where it started does. Suppressing that inconsistency is more code than not relying on it.
+   *
+   * Keyboard still comes in through `onClick`, gated on `detail === 0` (a real pointer click always
+   * carries a click count, an Enter/Space activation does not) — losing keyboard access to the bag
+   * to gain a mouse gesture would be a bad trade.
+   */
+  useEffect(() => {
+    const move = (e: PointerEvent) => {
+      const d = drag.current
+      if (!d || d.moved) return
+      // Manhattan distance, not Euclidean: this is a "did the hand move" threshold, not a
+      // measurement, and a square deadzone is the honest shape of that question.
+      if (Math.abs(e.clientX - d.x) + Math.abs(e.clientY - d.y) < DRAG_SLOP) return
+      d.moved = true
+      api.current.setDragFrom({ ...d.from, mode: d.mode })
+    }
+    const up = () => {
+      const d = drag.current
+      drag.current = null
+      if (!d) return
+      // ★ A PRESS THAT NEVER MOVED IS A CLICK, and the click verbs live here too so that the two
+      // gestures cannot disagree about what a right button means.
+      if (!d.moved) { api.current.setDragFrom({ ...d.from, mode: d.mode === 'one' ? 'half' : 'whole' }); return }
+      const to = hover.current
+      // A sprinkle already dropped its items on the way across; releasing just ends it. A whole-stack
+      // drag lands here, and releasing over nothing (outside the grid) cancels rather than guessing.
+      if (d.mode === 'whole' && to && slotKey(to) !== slotKey(d.from)) api.current.onMove(d.from, to)
+      api.current.setDragFrom(null)
+    }
+    // `pointercancel` matters on touch: a scroll or a system gesture steals the pointer and no
+    // pointerup ever arrives, which would leave the panel permanently mid-drag.
+    const cancel = () => { drag.current = null; api.current.setDragFrom(null) }
+    window.addEventListener('pointermove', move)
+    window.addEventListener('pointerup', up)
+    window.addEventListener('pointercancel', cancel)
+    return () => {
+      window.removeEventListener('pointermove', move)
+      window.removeEventListener('pointerup', up)
+      window.removeEventListener('pointercancel', cancel)
+    }
+  }, [])
+
   const cell = (ref: SlotRef) => {
     const st = (ref.g === 'bag' ? bag : chest?.slots ?? [])[ref.i]
     const lifted = dragFrom?.g === ref.g && dragFrom.i === ref.i
     return (
-      <button key={`${ref.g}${ref.i}`} type="button"
-        onClick={(e) => {
-          // Shift is checked FIRST and short-circuits: a shift-click while something is lifted is
-          // still a quick-move of the slot you clicked, not a confusing half-placement.
-          if (e.shiftKey && chest) { setDragFrom(null); onQuick(ref); return }
-          if (dragFrom === null) { if (st) setDragFrom({ ...ref, half: false }) }
-          else if (lifted) setDragFrom(null)
-          // A half lift places HALF and a whole lift places the whole stack — the amount was chosen
-          // by the button that lifted it, so this click only has to say where.
-          else if (dragFrom.half) onSplit(dragFrom, ref, 'half')
-          else { onMove(dragFrom, ref); setDragFrom(null) }
+      <button key={slotKey(ref)} type="button"
+        /**
+         * Press. With a lift already up this IS the place, and it happens on the way DOWN — a
+         * placement that waited for the release would feel like the panel was thinking about it.
+         * With nothing lifted it only arms a drag; whether that press was a click or a drag is not
+         * knowable yet, and guessing here is what forces the two paths apart.
+         */
+        onPointerDown={(e) => {
+          if (e.button !== 0 && e.button !== 2) return
+          hover.current = ref
+          // Shift short-circuits everything: a shift-press is a quick-move of the slot under it,
+          // never a half-placement of whatever happened to be lifted.
+          if (e.shiftKey && e.button === 0 && chest) { setDragFrom(null); onQuick(ref); return }
+          if (dragFrom !== null) {
+            if (lifted) { setDragFrom(null); return }              // press the lit slot to cancel
+            if (e.button === 2) { onSplit(dragFrom, ref, 'one'); return }   // deal one, stay lifted
+            if (dragFrom.mode === 'half') onSplit(dragFrom, ref, 'half')
+            else { onMove(dragFrom, ref); setDragFrom(null) }
+            return
+          }
+          if (!st) return                                          // nothing here to pick up
+          drag.current = {
+            from: ref, mode: e.button === 2 ? 'one' : 'whole',
+            x: e.clientX, y: e.clientY, moved: false, visited: new Set([slotKey(ref)]),
+          }
         }}
         /**
-         * Right-click. ★ `preventDefault` is not cosmetic — without it the browser menu opens over
-         * the panel and swallows the next click, so the lift would look stuck.
-         *
-         * Nothing lifted → lift HALF of this stack. Something lifted → drop ONE here, and keep the
-         * lift so the next right-click drops another; that is the whole reason to split by hand
-         * rather than by shift-click. Same slot cancels, exactly like the left button.
+         * ★ THE SPRINKLE HAPPENS HERE, ON ENTRY, not on release — dealing one into each slot you
+         * cross is the point of the gesture, so the items have to land as you pass. `visited` is
+         * what makes it one-per-slot: without it a pointer wobbling inside a slot would pour the
+         * whole stack into it, and the source slot is pre-seeded so a sprinkle never feeds itself.
          */
-        onContextMenu={(e) => {
-          e.preventDefault()
-          if (dragFrom === null) { if (st) setDragFrom({ ...ref, half: true }) }
-          else if (lifted) setDragFrom(null)
-          else onSplit(dragFrom, ref, 'one')
+        onPointerEnter={() => {
+          hover.current = ref
+          const d = drag.current
+          if (!d || !d.moved || d.mode !== 'one') return
+          if (d.visited.has(slotKey(ref))) return
+          d.visited.add(slotKey(ref))
+          onSplit(d.from, ref, 'one')
         }}
+        onPointerLeave={() => { if (slotKey(hover.current ?? ref) === slotKey(ref)) hover.current = null }}
+        // Everything above is driven by the pointer; this exists so Enter/Space still work. A real
+        // click carries a click count, a keyboard activation reports 0.
+        onClick={(e) => {
+          if (e.detail !== 0) return
+          if (dragFrom === null) { if (st) setDragFrom({ ...ref, mode: 'whole' }) }
+          else if (lifted) setDragFrom(null)
+          else if (dragFrom.mode === 'half') onSplit(dragFrom, ref, 'half')
+          else { onMove(dragFrom, ref); setDragFrom(null) }
+        }}
+        // The menu's only job now is to not appear. Its TIMING is why the verbs moved to the
+        // pointer; see the state machine above.
+        onContextMenu={(e) => e.preventDefault()}
         title={st ? `${itemLabel(st.itemId)} ×${st.count}` : 'empty'}
+        // ⚠ `touch-none` is what lets a drag be a drag on a phone — without it the browser claims the
+        // gesture as a scroll partway through and the pointer stream just stops.
         className={`relative w-12 h-12 rounded border-2 flex flex-col items-center justify-center
-          text-[9px] font-mono transition-colors
-          ${lifted && dragFrom?.half ? 'border-sky-300 bg-sky-300/20'
-            : lifted ? 'border-amber-300 bg-amber-300/20'
+          text-[9px] font-mono transition-colors touch-none select-none
+          ${lifted && dragFrom ? LIFT_LOOK[dragFrom.mode]
             : dragFrom !== null ? 'border-white/30 bg-black/50 hover:border-amber-200/70'
             : 'border-white/20 bg-black/40 hover:border-white/40'}`}>
         {st ? (
           <>
             <ItemChip itemId={st.itemId} size={26} />
             <span className="mt-0.5 tabular-nums text-white/80">{st.count}</span>
-            {/* How many a half lift will actually take, stated rather than left to be counted —
-                "half of 7" is 4 here and 3 elsewhere, and a player should not have to find out. */}
-            {lifted && dragFrom?.half && (
-              <span className="absolute -top-1.5 -right-1.5 rounded bg-sky-300 px-1
-                               text-[9px] font-bold tabular-nums text-black">
-                {halfOf(st.count)}
+            {/* How many the lift will actually take, stated rather than left to be counted — "half
+                of 7" is 4 here and 3 elsewhere, and a player should not have to find out by doing
+                it. A whole lift needs no badge: the count under the icon already says it. */}
+            {lifted && dragFrom && dragFrom.mode !== 'whole' && (
+              <span className={`absolute -top-1.5 -right-1.5 rounded px-1
+                                text-[9px] font-bold tabular-nums text-black ${LIFT_BADGE[dragFrom.mode]}`}>
+                {dragFrom.mode === 'half' ? halfOf(st.count) : 1}
               </span>
             )}
           </>
@@ -1678,9 +1815,10 @@ function BagPanel({ inv, chest, tick, sel, dragFrom, setDragFrom, onMove, onSpli
             */}
           <span className="grid text-[11px] text-white/40">
             {([
-              [`click a stack to lift it · right-click lifts half${chest ? ' · shift-click sends it across' : ''} · I closes`, dragFrom === null],
-              ['click a slot to place half · right-click drops one at a time · click again to cancel', dragFrom?.half === true],
-              ['click a slot to place · right-click drops one at a time · click again to cancel', dragFrom?.half === false],
+              [`drag a stack to move it · right-drag deals one per slot${chest ? ' · shift-click sends it across' : ''} · I closes`, dragFrom === null],
+              ['click a slot to place · right-click deals one and keeps hold · click again to cancel', dragFrom?.mode === 'whole'],
+              ['click a slot to place half · right-click deals one instead · click again to cancel', dragFrom?.mode === 'half'],
+              ['release over a slot to leave one there · drag on to keep dealing', dragFrom?.mode === 'one'],
             ] as const).map(([text, live]) => (
               <span key={text} style={{ gridArea: '1 / 1' }}
                     className={live ? '' : 'invisible'} aria-hidden={!live}>{text}</span>
