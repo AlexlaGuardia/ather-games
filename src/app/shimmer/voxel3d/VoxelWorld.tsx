@@ -114,6 +114,8 @@ import { KeeperFrame, TabEmpty, type KeeperTab } from './keeper-panel'
 import { loadRuneInventory } from '../play3d/rune-inventory'
 import { RUNES } from '../play3d/birth/runes.data'
 import { knownMoves, learnableMoves, MOVES_BY_RUNE } from '../play3d/keeper-moves'
+import { CAST_SLOTS, SLOT_KEYS, eligibleMoves, isBuilt, castForMove } from '../play3d/cast'
+import { loadLoadout, saveLoadout, setSlot, type Loadout } from '../play3d/loadout'
 import { applyFightResult } from '../engine/spirit-health'
 import type { BattleResult } from '../engine/arena'
 import { createFloraRenderer } from './flora-mesh'
@@ -1789,6 +1791,113 @@ function ToolsTab({ tools, skills }: {
   )
 }
 
+/**
+ * The LOADOUT tab — which of your known moves sit on G / Z / X / C.
+ *
+ * ── WHAT WAS ACTUALLY MISSING (2026-08-12) ────────────────────────────────────────────────────
+ * Not the chain. `cast.ts` has mapped LOADOUT SLOT → MOVE → ARCHETYPE since 2026-08-03 (63 asserts):
+ * CAST_SLOTS, SLOT_KEYS, eligibleMoves, canSlot, castForMove, isBuilt. What was missing is that
+ * nothing ever stored a CHOICE — `Shimmer3D` recomputed `defaultLoadout(owned)` on every load, so a
+ * keeper received a loadout and could never pick one. `loadout.ts` is that half; this is its face.
+ *
+ * ★ SLOTS ARE TYPED, NOT FOUR HOLES. `CAST_SLOTS` is passive / tactical / tactical / ultimate,
+ * mirroring the authoring target of one passive + two tacticals + one ultimate per rune. A held
+ * stance behaves nothing like a signature, so a slot only offers moves of its own tier.
+ *
+ * ★ AN UNBUILT MOVE IS SHOWN AND SAYS SO. `cast.ts`'s honesty rule: a canon move the sim cannot run
+ * is archetype 'unbuilt' WITH a reason, never a silent no-op. Hiding those would make the book look
+ * smaller than canon; binding one without a word would read as "casting is broken". So they are
+ * listed, dimmed, bindable, and carry their reason.
+ */
+function LoadoutTab() {
+  const [owned] = useState(() => loadRuneInventory().owned)
+  const [slots, setSlots] = useState<Loadout>(() => loadLoadout(owned))
+  const [picking, setPicking] = useState<number | null>(null)
+
+  const bind = (slot: number, moveId: string | null) => {
+    const next = setSlot(owned, slots, slot, moveId)
+    setSlots(next)
+    saveLoadout(next)
+    setPicking(null)
+  }
+
+  if (owned.length === 0) {
+    return <TabEmpty>No runes, so no moves to bring. A keeper is born with their first.</TabEmpty>
+  }
+
+  return (
+    <div className="flex flex-col gap-1.5">
+      {CAST_SLOTS.map((kind, i) => {
+        const bound = slots[i] ?? null
+        const spec = bound ? castForMove(bound) : null
+        const open = picking === i
+        const options = eligibleMoves(owned, kind)
+        return (
+          <div key={i} className="rounded border border-white/10 bg-white/[0.03]">
+            <button type="button" onPointerDown={() => setPicking(open ? null : i)}
+                    className="flex w-full items-center gap-2.5 px-3 py-2 text-left">
+              <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded border
+                               border-white/20 text-[10px] font-bold text-white/60">
+                {SLOT_KEYS[i].toUpperCase()}
+              </span>
+              <span className="w-[68px] shrink-0 text-[9px] uppercase tracking-[0.14em] text-white/30">{kind}</span>
+              <span className={`text-[12px] ${spec ? (isBuilt(bound) ? 'text-amber-200/90' : 'text-white/40') : 'text-white/25'}`}>
+                {spec ? spec.label : '— empty —'}
+              </span>
+              {spec && !isBuilt(bound) && (
+                <span className="text-[9px] uppercase tracking-[0.14em] text-amber-200/40">unbuilt</span>
+              )}
+              <span className="ml-auto text-[10px] text-white/25">{open ? '▴' : '▾'}</span>
+            </button>
+            {open && (
+              <div className="border-t border-white/10 px-2 py-1.5">
+                {options.length === 0 ? (
+                  <div className="px-1 py-1 text-[10px] text-white/30">
+                    Your runes open no {kind} yet.
+                  </div>
+                ) : (
+                  <>
+                    {options.map(m => {
+                      const built = isBuilt(m.id)
+                      return (
+                        <button key={m.id} type="button" onPointerDown={() => bind(i, m.id)}
+                                className="block w-full rounded px-2 py-1 text-left hover:bg-white/[0.06]">
+                          <span className="flex items-baseline gap-2">
+                            <span className={`text-[11px] ${built ? 'text-white/75' : 'text-white/35'}`}>{m.name}</span>
+                            {bound === m.id && <span className="text-[9px] text-amber-200/60">bound</span>}
+                            {!built && (
+                              <span className="text-[9px] text-white/25">{castForMove(m.id).why}</span>
+                            )}
+                          </span>
+                        </button>
+                      )
+                    })}
+                    {bound && (
+                      <button type="button" onPointerDown={() => bind(i, null)}
+                              className="mt-0.5 block w-full rounded px-2 py-1 text-left text-[10px]
+                                         text-white/30 hover:bg-white/[0.06]">
+                        leave this slot empty
+                      </button>
+                    )}
+                  </>
+                )}
+              </div>
+            )}
+          </div>
+        )
+      })}
+      {/* ★ SAY WHERE THIS TAKES EFFECT. Casting runs in play3d, not in this world — `castForMove` is
+          imported by exactly one component and it is not this one. A chooser that silently governs
+          nothing here is the unwired dial this repo keeps paying for, so the panel states its own
+          reach rather than letting a keeper infer it from a fight that never casts. */}
+      <div className="mt-1 text-[10px] leading-relaxed text-white/25">
+        Saved to your keeper. Casting itself does not run in this world yet — these binds take effect
+        where the cast layer lives, until it is ported here (#294).
+      </div>
+    </div>
+  )
+}
+
 function BagPanel({ inv, chest, tick, sel, dragFrom, setDragFrom, onMove, onSplit, onQuick, onClose,
                    tools, skills }: {
   inv: React.RefObject<Inventory>
@@ -2062,14 +2171,7 @@ function BagPanel({ inv, chest, tick, sel, dragFrom, setDragFrom, onMove, onSpli
         </TabEmpty>
       )}
       {tab === 'tools' && <ToolsTab tools={tools} skills={skills} />}
-      {tab === 'loadout' && (
-        <TabEmpty>
-          Nothing to equip yet. Moves reach a cast slot through
-          <code className="mx-1 text-white/45">cast.ts</code>, which still maps a birth rune straight
-          to an archetype — until it is repointed to loadout-slot → move → archetype, a loadout has
-          no slots to fill.
-        </TabEmpty>
-      )}
+      {tab === 'loadout' && <LoadoutTab />}
     </KeeperFrame>
   )
 }

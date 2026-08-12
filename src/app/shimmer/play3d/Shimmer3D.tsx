@@ -26,7 +26,8 @@ import { useParty, newPartyCode, sanitizePartyCode, inviteUrl } from '@/lib/part
 import { useAccount, type UseAccount } from '@/lib/accounts/use-account'
 import { pushCloudSave } from '@/lib/cloud-sync'
 import { birthAffinity, NEUTRAL_AFFINITY, type Affinity } from './birth-affinity'
-import { castForMove, isBuilt, defaultLoadout, CAST_SLOTS, SLOT_KEYS, type CastSpec } from './cast'
+import { castForMove, isBuilt, CAST_SLOTS, SLOT_KEYS, type CastSpec } from './cast'
+import { loadLoadout } from './loadout'
 import { loadRuneInventory, saveRuneInventory, setBirthRune, grantRune, revokeRune, EMPTY_INVENTORY, type RuneInventory } from './rune-inventory'
 import { spawnField, tickFields, fieldsAt, blocksShotAt, type Field } from './field-effects'
 import { conjure, shapeCells, blockedAt as conjuredBlockedAt, expireConjured, liveCells, type Conjured } from './conjured-terrain'
@@ -5102,8 +5103,16 @@ export default function Shimmer3D() {
   }, [])
   // Re-derive the loadout from the runes held. Called on load and whenever the inventory changes.
   // Any stance held through the change is dropped — you cannot keep holding a move you no longer own.
+  //
+  // ★ The keeper's CHOICE outranks the starting kit (2026-08-12). This used to call
+  // `defaultLoadout` unconditionally, which recomputed the automatic kit on every load and every
+  // inventory change — so a keeper could never pick a loadout, only receive one. `loadLoadout`
+  // returns the saved choice when there is one and the same default kit when there is not, and it
+  // re-validates every bind against the runes held NOW. That last part is what keeps this call site
+  // correct on a rune change: a move whose rune just went away comes back null rather than staying
+  // bound, which is exactly the drop this function already promises for stances.
   const applyLoadout = useCallback(() => {
-    castLoadoutRef.current = defaultLoadout(runeInvRef.current.owned)
+    castLoadoutRef.current = loadLoadout(runeInvRef.current.owned)
     castCdRef.current = CAST_SLOTS.map(() => 0)
     stanceRef.current = null; resistRef.current = 0; castMultRef.current = 1; stanceMoveRef.current = 1
     surgeRef.current = { until: 0, mult: 1 }; infusionRef.current = { until: 0, mult: 1 }
@@ -5128,7 +5137,7 @@ export default function Shimmer3D() {
         const rn = RUNES.find(r => r.id === bornWith)?.name ?? 'your rune'
         // Half the carousel currently opens a book with no move the sim can run — that is the real
         // authoring gap (moves.md), so the banner tells the truth instead of promising a cast.
-        const bound = defaultLoadout(inv.owned).filter((m) => m && isBuilt(m)).length
+        const bound = loadLoadout(inv.owned).filter((m) => m && isBuilt(m)).length
         const castHint = bound > 0 ? ` · ${bound} move${bound > 1 ? 's' : ''} in hand (G/Z/X/C)` : ''
         setBanner(`Born of ${rn} — ${affinityRef.current.label || 'find Gregory in the glade'}${castHint}`)
       }
@@ -6467,7 +6476,7 @@ export default function Shimmer3D() {
             const rn = RUNES.find(r => r.id === id)?.name ?? 'your rune'
             // Half the carousel currently opens a book with no move the sim can run — that is the real
             // authoring gap (moves.md), so the banner tells the truth instead of promising a cast.
-            const bound = defaultLoadout(inv.owned).filter((m) => m && isBuilt(m)).length
+            const bound = loadLoadout(inv.owned).filter((m) => m && isBuilt(m)).length
             const castHint = bound > 0 ? ` · ${bound} move${bound > 1 ? 's' : ''} in hand (G/Z/X/C)` : ''
             setBanner(`Born of ${rn} — ${affinityRef.current.label || 'find Gregory in the glade'}${castHint}`)
           }}

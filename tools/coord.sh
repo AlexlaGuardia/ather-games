@@ -71,6 +71,20 @@ signal() {
 cmd_claim() {
   local lane="${1:?usage: coord claim <lane> [note]}"; shift || true
   local note="${*:-}"
+  # ★ Claiming a lane someone else holds silently DELETED their claim — same hole `release` had,
+  # and it bit within the hour: a window re-claimed `hub` believing the board was free and
+  # overwrote a live claim, leaving the board asserting the wrong owner while both edited one file.
+  # Re-claiming your OWN lane stays free (that is how you update the note), and an unattributed
+  # claim stays claimable so a crashed window's lane can be taken.
+  if [ -f "$CLAIMS_DIR/$lane" ]; then
+    local held; held=$(sed -n 's/^session=//p' "$CLAIMS_DIR/$lane")
+    if [ -n "$held" ] && [ -n "$SESSION" ] && [ "$held" != "$SESSION" ] && [ "${COORD_FORCE:-}" != "1" ]; then
+      echo "lane '$lane' is already claimed by session ${held:0:8} (yours: ${SESSION:0:8})."
+      sed 's/^/  /' "$CLAIMS_DIR/$lane"
+      echo "  take it anyway only if that window is gone: COORD_FORCE=1 coord claim $lane \"note\""
+      return 1
+    fi
+  fi
   # ★ session= is written BEFORE note= on purpose: note is free text and is the
   # one field that could ever carry something odd, so it stays last where it can
   # only swallow itself. Empty when COORD_SESSION is unset — an unattributed
