@@ -112,7 +112,7 @@ import { spiritsToSave, spiritsFromSave } from '../spirits/spirit-save'
 import { LAUNCHED_SPECIES } from '../engine/spirit-index'
 import { KeeperFrame, TabEmpty, type KeeperTab } from './keeper-panel'
 import { GrimoireTab } from './grimoire-tab'
-import { loadRuneInventory } from '../play3d/rune-inventory'
+import { loadRuneInventory, saveRuneInventory, grantRune, revokeRune } from '../play3d/rune-inventory'
 import { birthAffinity } from '../play3d/birth-affinity'
 // Health + shields are SHARED rules, not a second copy — see engine/vitals.ts on why.
 import { freshVitals, type Vitals } from '../engine/vitals'
@@ -366,6 +366,18 @@ interface ConsoleCtx {
   /** The withdrawal ledger, so `/mist` can name who is standing in a patch rather than only where
    *  it lies. View-grade: it reports what walking there would show you anyway, one scale further. */
   mistLedger: () => MistLedger
+  /**
+   * ★ THE RUNES A KEEPER HOLDS. Bare `/rune` is VIEW-GRADE — reading your own hand is not a cheat,
+   * and it is the one thing that explains why a cast key does nothing. GRANTING is cheat-grade and
+   * checked inside, exactly as `/goto`'s compass-vs-teleport split does it.
+   *
+   * ⚠ THIS IS A TEST HARNESS, NOT THE ACQUISITION SYSTEM. Canon ruled acquisition on 2026-08-03:
+   * a rune is trained off the birth rune along its lane (element row / state column), never bought;
+   * a Knowledge Scroll teaches a MOVE, never a rune, and the Passage under Rune Hold is where that
+   * trade happens. None of that is built. This command exists so the cast layer is testable before
+   * it is, and it must NOT become the way a player gets a second rune.
+   */
+  rune: (arg?: string) => string
 }
 const NAMED_HOURS: Record<string, number> = { midnight: 0, dawn: 6.5, noon: 12, dusk: 18.75, night: 21 }
 /** `~` / `~-5` → relative to `cur`; anything else parses as absolute. NaN propagates for the caller. */
@@ -412,6 +424,14 @@ const CONSOLE_CMDS: ConsoleCmd[] = [
       return `radius ${r} (${r * 16} blocks)`
     },
     suggest: () => ['4', '6', '8', '10', '12'] },
+  // ★ /rune (2026-08-12, Alex: "I went to test but as a new player I have none").
+  // Bare /rune is the keeper's own hand — what you hold, what it opens, what is bound. That half is
+  // VIEW-GRADE and gates nothing: a player whose keys do nothing deserves to be told WHY, and until
+  // the Passage exists the panel is the only other place that says it. Granting is cheat-grade and
+  // checked inside `c.rune`, so the readout survives for everyone.
+  { name: 'rune', usage: 'rune [id]  (bare: your hand · id: develop/drop it)', help: 'the runes you hold and the moves they open',
+    run: (a, c) => c.rune(a[0]),
+    suggest: (i, c) => i === 0 && c.isOwner ? RUNES.map(r => r.id).sort() : [] },
   { name: 'give', usage: 'give <item> [count]', help: 'conjure items into the bag', owner: true,
     run: (a, c) => a[0] ? c.give(a[0], Math.max(1, Math.round(Number(a[1]) || 1))) : 'give what?',
     suggest: (i) => i === 0 ? [...KNOWN_ITEMS].sort() : ['1', '4', '16', '64'] },
@@ -554,6 +574,30 @@ const KNOWN_ITEMS: ReadonlySet<string> = new Set([
 
 export default function VoxelWorld() {
   const [stats, setStats] = useState('generating…')
+  /**
+   * ── ★ THE SAY CHANNEL — what the WORLD tells the PLAYER (2026-08-12) ────────────────────────
+   * `stats` is the plumbing readout and the frame loop OVERWRITES IT EVERY 10 FRAMES with the
+   * biome/column/geo line. Everything player-facing was being written to it too — a cast refusal,
+   * "the seed is in the soil", "a young Wisp chose you!", "bag full" — so each one lived ~150ms in
+   * 11px grey debug text and read as nothing happening at all.
+   *
+   * That is what made a fresh keeper's cast keys look BROKEN rather than empty: `cast-dispatch`
+   * refuses honestly ("No tactical bound — your book has none for your runes") and the host threw
+   * the sentence away before it could be read. The pure layer was right and the host lost it.
+   *
+   * So: two channels. `stats` stays plumbing and may be clobbered at will; `say` is addressed to
+   * the player and holds until it expires. A message nobody can read is the same as no message.
+   */
+  const [toast, setToast] = useState<{ text: string; at: number } | null>(null)
+  /** Bumped when the rune inventory changes, so the world re-resolves the loadout without a reload.
+   *  A counter rather than the inventory itself: the world reads storage, this only says "again". */
+  const [runeTick, setRuneTick] = useState(0)
+  const say = useCallback((text: string) => setToast({ text, at: Date.now() }), [])
+  useEffect(() => {
+    if (!toast) return
+    const t = setTimeout(() => setToast(c => (c && c.at === toast.at ? null : c)), 4200)
+    return () => clearTimeout(t)
+  }, [toast])
   const [pos, setPos] = useState('')
   const [hotbar, setHotbar] = useState<(HotbarEntry | null)[]>([])
   // Stowed vs drawn. F toggles. See the DRAW LOCK note on the keydown handler.
@@ -938,6 +982,31 @@ export default function VoxelWorld() {
     pos: () => worldCmd.current ? worldCmd.current.pos() : { x: 0, z: 0 },
     party: partyOps,
     mistLedger: () => mistLedger.current,
+    rune: (arg) => {
+      const inv = loadRuneInventory()
+      // The readout, and the reason the bare form is view-grade: it names the gap instead of
+      // leaving four dead keys. `bound` counts SLOTS FILLED, not moves owned — a keeper can know a
+      // move the loadout cannot seat (wrong slot kind), and that difference is the whole confusion.
+      const report = (held: string[], lead: string) => {
+        const names = held.map(id => RUNES.find(r => r.id === id)?.name ?? id)
+        const moves = knownMoves(held)
+        const bound = loadLoadout(held).filter(Boolean).length
+        const tail = moves.length === 0
+          ? 'no move answers to it yet — the Schools have not written one'
+          : `${moves.length} move${moves.length === 1 ? '' : 's'} known · ${bound}/4 cast slot${bound === 1 ? '' : 's'} bound`
+        return `${lead}${names.join(', ') || 'nothing'} — ${tail}`
+      }
+      if (!arg) return report(inv.owned, inv.owned.length === 1 ? 'born of ' : 'you hold ')
+      if (!isOwner) return 'a rune is trained, not typed — bare /rune reads your hand'
+      const id = arg.toLowerCase()
+      if (!RUNES.some(r => r.id === id)) return `no such rune: ${arg}`
+      const held = inv.owned.includes(id)
+      const next = held ? revokeRune(inv, id) : grantRune(inv, id)
+      if (next === inv) return 'the birth rune cannot be dropped — you cannot un-be born'
+      saveRuneInventory(next)
+      setRuneTick(t => t + 1)
+      return report(next.owned, `⟳ dev · ${held ? 'dropped' : 'developed'} ${RUNES.find(r => r.id === id)!.name} · `)
+    },
   }), [isOwner, settings.viewRadius, update, refreshHotbar, partyOps])
   const submitLine = useCallback((raw: string) => {
     const line = raw.trim()
@@ -1324,7 +1393,8 @@ export default function VoxelWorld() {
           weaponDrawn={drawn}
           weaponIdx={weaponIdx}
           onAmmo={setAmmoUi}
-          onStats={setStats} onPos={p => setPos(`x ${p.x.toFixed(0)}  y ${p.y.toFixed(0)}  z ${p.z.toFixed(0)}`)}
+          onStats={setStats} onSay={say} runeTick={runeTick}
+          onPos={p => setPos(`x ${p.x.toFixed(0)}  y ${p.y.toFixed(0)}  z ${p.z.toFixed(0)}`)}
           onLook={setLook} onInvChange={refreshHotbar}
           worker={worker} incoming={incoming} inflight={inflight} settings={settings}
           build={build} pieceIdx={pieceIdx} rot={rot}
@@ -1344,7 +1414,7 @@ export default function VoxelWorld() {
             a menu is up are already refused by the onCreated click handler. */}
         <PointerLockControls selector="#voxel3d-no-autolock" />
       </Canvas>
-      <Hud stats={stats} pos={pos} look={look} hotbar={hotbar} sel={sel} tier={tier} held={held}
+      <Hud stats={stats} toast={toast} pos={pos} look={look} hotbar={hotbar} sel={sel} tier={tier} held={held}
            build={build} pieceIdx={pieceIdx} rot={rot} inv={inv}
            skill={skillHud} levelUp={levelUp} crafted={crafted} tools={tools} skills={skills}
            activeTool={activeTool}
@@ -1473,8 +1543,10 @@ function ResourceBars({ vitals }: { vitals: React.RefObject<Vitals> }) {
   )
 }
 
-function Hud({ stats, pos, look, hotbar, sel, tier, held, build, pieceIdx, rot, inv, skill, levelUp, crafted, tools, skills, activeTool, isOwner, drawn, weaponIdx, ammoUi, tutorialStage, nearGreg, dialogueOpen, nearTable, craftOpen, nearMist, hasParty, sparLedger, vitals }: {
+function Hud({ stats, toast, pos, look, hotbar, sel, tier, held, build, pieceIdx, rot, inv, skill, levelUp, crafted, tools, skills, activeTool, isOwner, drawn, weaponIdx, ammoUi, tutorialStage, nearGreg, dialogueOpen, nearTable, craftOpen, nearMist, hasParty, sparLedger, vitals }: {
   stats: string; pos: string
+  /** The say line — player-addressed, held ~4s. See the SAY CHANNEL note on VoxelWorld. */
+  toast: { text: string; at: number } | null
   look: { name: string; progress: number; refused: boolean } | null
   hotbar: (HotbarEntry | null)[]; sel: number; tier: number
   held: { text: string; out: boolean } | null
@@ -1542,6 +1614,21 @@ function Hud({ stats, pos, look, hotbar, sel, tier, held, build, pieceIdx, rot, 
       </div>
 
       <Clock />
+
+      {/* ★ THE SAY LINE. Sits above the hotbar, centre-low — where the eye already is during play,
+          not in the debug corner it used to die in. Plated, because this file's own UI law says text
+          never sits raw on a scene, and a refusal read over bright canopy is the case that matters.
+          `pointer-events-none` throughout: it must never eat a click meant for the world. */}
+      {toast && (
+        <div className="pointer-events-none absolute inset-x-0 bottom-[19%] z-30 flex justify-center px-4">
+          <div key={toast.at}
+               className="max-w-[34rem] rounded border border-white/15 bg-black/70 px-3.5 py-2 text-center
+                          text-[13px] leading-snug text-amber-100/90 shadow-lg backdrop-blur-[2px]
+                          motion-safe:animate-[fadeSlideIn_140ms_ease-out]">
+            {toast.text}
+          </div>
+        </div>
+      )}
 
       {/* The tutorial objective chip — caps label dim, value bright, same rule the tool row above
           and the hotbar counts already follow. Hidden once the gate is open: there is no more
@@ -2412,7 +2499,7 @@ const SOLID_EXCEPT = new Set<number>([AIR, MAT.WATER, MAT.TUFT, MAT.TALL_GRASS, 
 // CELL_HALF for it; everything else (light, fence arms, piece placement) wants "yes, solid".
 const isSolid = (m: number) => !SOLID_EXCEPT.has(baseOf(m))
 
-function World({ inv, toolTier, toolSkill, vitals, mana, selItem, weaponDrawn, weaponIdx, onAmmo, onStats, onPos, onLook, onInvChange, worker, incoming, inflight, settings, build, pieceIdx, rot, tools, skills, onSkill, onLevel, onTool, tutorial, onQuestEvent, onNearGreg, onNearTable, cmdOut, mistLedger, onNearMist, sparring, pot, onOpenChest, uiOpen }: {
+function World({ inv, toolTier, toolSkill, vitals, mana, selItem, weaponDrawn, weaponIdx, onAmmo, onStats, onSay, runeTick, onPos, onLook, onInvChange, worker, incoming, inflight, settings, build, pieceIdx, rot, tools, skills, onSkill, onLevel, onTool, tutorial, onQuestEvent, onNearGreg, onNearTable, cmdOut, mistLedger, onNearMist, sparring, pot, onOpenChest, uiOpen }: {
   inv: React.RefObject<Inventory>
   toolTier: React.RefObject<number>
   toolSkill: React.RefObject<BlockSkill>
@@ -2425,6 +2512,11 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, weaponDrawn, w
   /** Rounds left, pushed up for the HUD. Called on fire and on reload completion. */
   onAmmo: (n: number) => void
   onStats: (s: string) => void
+  /** Addressed to the PLAYER — held long enough to read. `onStats` is plumbing and gets clobbered
+   *  every 10 frames by the biome line; see the SAY CHANNEL note on VoxelWorld. */
+  onSay: (s: string) => void
+  /** Bumped when the rune inventory changed under us — re-resolve the loadout, no reload. */
+  runeTick: number
   onPos: (p: THREE.Vector3) => void
   onLook: (l: { name: string; progress: number; refused: boolean } | null) => void
   onInvChange: () => void
@@ -3226,6 +3318,18 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, weaponDrawn, w
   const infusion = useRef<{ until: number; mult: number } | null>(null)
   const loadout = useRef<(string | null)[]>(loadLoadout(loadRuneInventory().owned))
   /**
+   * The rune inventory changed (today only `/rune`; tomorrow the Passage). Re-resolve rather than
+   * patch: `loadLoadout` re-validates every bind against what is now owned, so a dropped rune takes
+   * its move out of the slot on the same pass that a developed one opens a new bind. Skips the
+   * mount tick — the ref above already did that read.
+   */
+  const runeTickSeen = useRef(runeTick)
+  useEffect(() => {
+    if (runeTickSeen.current === runeTick) return
+    runeTickSeen.current = runeTick
+    loadout.current = loadLoadout(loadRuneInventory().owned)
+  }, [runeTick])
+  /**
    * ★ WHAT THIS WORLD CAN ACTUALLY LAND, DECLARED RATHER THAN IMPLIED.
    * Projectiles ride the shot pool that already exists, and every SELF archetype only touches
    * hp/mana/speed, which live here. Fields, terrain and statuses do NOT: `field-effects.ts`,
@@ -3244,7 +3348,7 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, weaponDrawn, w
       cooldownUntil: castCd.current, stanceMoveId: stance.current?.moveId ?? null, supports,
     }
     const out = resolveCast(slot, loadout.current, env)
-    if (out.kind === 'refused') { onStats(out.message); return }
+    if (out.kind === 'refused') { onSay(out.message); return }
 
     // One apply, no archetype branching — every effect field is neutral when it does not apply,
     // which is the entire point of the outcome being a description rather than an action.
@@ -3270,8 +3374,8 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, weaponDrawn, w
         speed: out.placed.projSpeed, life: out.placed.projLife, mesh, dmg: out.placed.damage,
       })
     }
-    if (out.message) onStats(out.message)
-  }, [camera, tracerGeo, tracerMat, supports, vitals, mana, onStats])
+    if (out.message) onSay(out.message)
+  }, [camera, tracerGeo, tracerMat, supports, vitals, mana, onSay])
 
   const fire = useCallback((w: WeaponDef, g: THREE.Group) => {
     const f = new THREE.Vector3()
@@ -3519,7 +3623,7 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, weaponDrawn, w
           const first = keeper.drainT <= 0
           // The form sets how long its drain holds — the warden is the one you cannot shrug off.
           keeper.drainT = Math.max(keeper.drainT, formOf(st).drain)
-          if (first) onStats('the grey takes hold — you are slowed')
+          if (first) onSay('the grey takes hold — you are slowed')
         }
         const s = Math.max(0.01, (1 - st.gutter))
         const pulse = 1 + Math.sin(now * 2.3 + st.phase) * 0.07
@@ -3577,7 +3681,7 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, weaponDrawn, w
           if (!saved) { edits.current.set(ek, new Map()); applyGenPieces(gx, gz, []); return }
           if (isStale(saved.edits) && !staleWarned.current) {
             staleWarned.current = true
-            onStats('⚠ saved edits are from a different generator version — they may not line up')
+            onSay('⚠ saved edits are from a different generator version — they may not line up')
           }
           const m = unpackEdits(saved.edits)
           edits.current.set(ek, m)
@@ -3952,7 +4056,7 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, weaponDrawn, w
         if (hit.material === MAT.CHEST) {
           const held = spillChest(chestAt(hit.x, hit.y, hit.z))
           for (const d of held) drops.current.push(spawnDrop(d.itemId, d.count, hit.x, hit.y, hit.z))
-          if (held.length) onStats(`the chest spills — ${held.reduce((n, d) => n + d.count, 0)} items on the ground`)
+          if (held.length) onSay(`the chest spills — ${held.reduce((n, d) => n + d.count, 0)} items on the ground`)
         }
         setVoxel(hit.x, hit.y, hit.z, AIR)
         // ★ Tutorial 'cut' step — any log, not one species (see LOG_MATERIALS's header).
@@ -3997,11 +4101,11 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, weaponDrawn, w
         pot.clock()[potKey(hit.x, hit.y, hit.z)] = Date.now()
         pot.save()
         onInvChange()
-        onStats('✦ the seed is in the soil — give it a few minutes')
+        onSay('✦ the seed is in the soil — give it a few minutes')
         mouse.current.right = false
       } else if (intent === 'peek') {
         const p01 = potProgress(pot.clock(), hit.x, hit.y, hit.z, Date.now())
-        onStats(`the seed is still closed — ${Math.floor(p01 * 100)}%`)
+        onSay(`the seed is still closed — ${Math.floor(p01 * 100)}%`)
         mouse.current.right = false
       } else if (intent === 'harvest') {
         // ★ No prompt and no pick: canon has the spirit choose the keeper, so this only announces.
@@ -4010,7 +4114,7 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, weaponDrawn, w
         delete pot.clock()[potKey(hit.x, hit.y, hit.z)]
         pot.save()
         setVoxel(hit.x, hit.y, hit.z, MAT.POT)
-        onStats(`✦ a young ${speciesDisplayName(born.species)} chose you!`)
+        onSay(`✦ a young ${speciesDisplayName(born.species)} chose you!`)
         mouse.current.right = false
       } else if (intent === 'place') {
       // Placing — and ONLY placing — needs something in your hand, which `place` already asserts.
@@ -4079,7 +4183,7 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, weaponDrawn, w
         // a capacity check inside `tickDrops`, which is the next inventory slice.
         for (const it of res.picked) {
           const left = give(inv.current!, it.itemId, it.count)
-          if (left > 0) onStats(`bag full — ${left}× ${itemLabel(it.itemId)} did not fit`)
+          if (left > 0) onSay(`bag full — ${left}× ${itemLabel(it.itemId)} did not fit`)
         }
         onInvChange()
       }
