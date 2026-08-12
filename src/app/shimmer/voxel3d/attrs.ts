@@ -133,6 +133,7 @@ export function buildAttrsSplit(mesh: MeshResult, isWater: (m: number) => boolea
     const positions = new Float32Array(quads * 12)
     const normals = new Float32Array(quads * 12)
     const materials = new Uint16Array(quads * 4)
+    const ao = new Uint8Array(quads * 4)
     const indices = new Uint32Array(quads * 6)
     let outQ = 0
     for (let q = 0; q < mesh.quads; q++) {
@@ -140,12 +141,16 @@ export function buildAttrsSplit(mesh: MeshResult, isWater: (m: number) => boolea
       positions.set(mesh.positions.subarray(q * 12, q * 12 + 12), outQ * 12)
       normals.set(mesh.normals.subarray(q * 12, q * 12 + 12), outQ * 12)
       materials.set(mesh.materials.subarray(q * 4, q * 4 + 4), outQ * 4)
+      // ⚠ AO travels WITH the quad through the water split. Dropping it here would leave the water
+      // half reading `undefined` per vertex and silently fall back to unoccluded — a river bed that
+      // is correctly shaded until the moment water covers it.
+      ao.set(mesh.ao.subarray(q * 4, q * 4 + 4), outQ * 4)
       // Remap the quad's OWN indices rather than assuming a triangulation: winding is what makes a
       // face face outward, and the mesher owns that decision, not this split.
       for (let i = 0; i < 6; i++) indices[outQ * 6 + i] = mesh.indices[q * 6 + i] - q * 4 + outQ * 4
       outQ++
     }
-    return buildAttrs({ positions, normals, materials, indices, quads, faces: quads })
+    return buildAttrs({ positions, normals, materials, ao, indices, quads, faces: quads })
   }
   const solidQuads = mesh.quads - waterQuads
   return {
@@ -159,6 +164,22 @@ export function buildAttrsSplit(mesh: MeshResult, isWater: (m: number) => boolea
  * mesher's reusable scratch — they are views that the next section would overwrite, so a copy here
  * is not waste, it is the thing that makes the result safe to hand across a thread boundary.
  */
+/**
+ * ── ★ AO IS A COLOUR MULTIPLIER, NOT A NEW ATTRIBUTE (2026-08-12) ───────────────────────────────
+ * The mesher hands back a 0–3 corner term per vertex. Folding it into the vertex colour here means
+ * no new buffer crosses the worker boundary, no extra `setAttribute` on chunk arrival, and — the
+ * part that actually decided it — **no shader change**, so AO cannot become the reason a material
+ * needs its own program. The world shader already multiplies texture by vertex colour; darkening
+ * that colour at a corner is exactly ambient occlusion, arriving through a path that already exists.
+ *
+ * The curve is deliberately gentle at the bright end and steep at the dark end. Voxel AO with a
+ * linear ramp reads as dirt smeared on the walls; what sells the corner is the last step, not the
+ * first. These four numbers are the entire look and are meant to be dialled — 0.62 is the darkest
+ * an inside corner ever gets, which stays well clear of black so a shadowed corner keeps its
+ * material's colour instead of turning into a hole.
+ */
+const AO_CURVE = [0.62, 0.78, 0.91, 1] as const
+
 export function buildAttrs(mesh: MeshResult): MeshAttrs {
   const n = mesh.materials.length
   const colors = new Float32Array(n * 3)
@@ -172,9 +193,10 @@ export function buildAttrs(mesh: MeshResult): MeshAttrs {
     const hex = MATERIAL_COLOR[baseOf(m)] ?? FALLBACK
     // Inline hex→linear-ish float rather than THREE.Color, which is the whole reason this file has
     // no three import. Three's default is sRGB-in, and Lambert with vertexColors expects that.
-    colors[i * 3] = ((hex >> 16) & 255) / 255
-    colors[i * 3 + 1] = ((hex >> 8) & 255) / 255
-    colors[i * 3 + 2] = (hex & 255) / 255
+    const ao = AO_CURVE[mesh.ao[i]] ?? 1
+    colors[i * 3] = (((hex >> 16) & 255) / 255) * ao
+    colors[i * 3 + 1] = (((hex >> 8) & 255) / 255) * ao
+    colors[i * 3 + 2] = ((hex & 255) / 255) * ao
     emissive[i] = EMISSIVE[m] ?? 0
   }
   return {

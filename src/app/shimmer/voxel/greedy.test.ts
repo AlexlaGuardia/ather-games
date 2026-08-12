@@ -114,7 +114,19 @@ for (const S of [4, 16, 32]) {
   // Solid only on -x and +y; every other side is open. Expect exactly the 4 open faces.
   const mixed = (x: number, y: number, _z: number) => (x < 0 ? 1 : y >= S ? 1 : AIR)
   const r = greedyMesh(sec, mixed)
-  eq(r.quads, 4, 'uniform section with 2 of 6 sides occluded emits exactly 4 quads')
+  // ★ THIS ASSERTION USED TO COUNT QUADS AND NOW COUNTS SIDES (2026-08-12, when AO landed).
+  // The property it was written to defend is "no missing wall", and quad count was only ever a
+  // proxy for it — a proxy that stopped being valid the moment corner AO could legitimately split
+  // one wall into several rectangles. Counting DISTINCT FACE DIRECTIONS tests the actual property
+  // and is immune to how finely the mesher chooses to subdivide.
+  const sides = new Set<string>()
+  for (let i = 0; i < r.quads; i++)
+    sides.add(`${r.normals[i * 12]},${r.normals[i * 12 + 1]},${r.normals[i * 12 + 2]}`)
+  eq(sides.size, 4, 'uniform section with 2 of 6 sides occluded emits exactly 4 distinct walls')
+  // And the granularity is still pinned, because a merge regression that shattered every face into
+  // single cells would pass the check above. Each of the 4 open walls borders BOTH occluders, so
+  // each splits into 3 shading regions: a strip along -x, a strip along +y, and the bright field.
+  eq(r.quads, 12, 'each open wall splits into exactly 3 AO regions (4 walls x 3)')
 
   // And the faces it does emit must be on the right sides: no quad may lie on an occluded plane.
   let wrong = 0
@@ -127,7 +139,136 @@ for (const S of [4, 16, 32]) {
 
   // Per-axis: a uniform section occluded on ONE side of an axis still emits the opposite side.
   const oneSide = greedyMesh(sec, (x) => (x < 0 ? 1 : AIR))
-  eq(oneSide.quads, 5, 'occluding a single side leaves the other five')
+  const oneSides = new Set<string>()
+  for (let i = 0; i < oneSide.quads; i++)
+    oneSides.add(`${oneSide.normals[i * 12]},${oneSide.normals[i * 12 + 1]},${oneSide.normals[i * 12 + 2]}`)
+  eq(oneSides.size, 5, 'occluding a single side leaves the other five walls')
+  // 4 walls border the single occluder and split in two; the wall OPPOSITE it touches nothing and
+  // stays one quad. 4x2 + 1 = 9. That the opposite wall does not split is the useful half of this
+  // number: it proves AO is reading the occluder's actual position, not darkening indiscriminately.
+  eq(oneSide.quads, 9, 'four bordering walls split in two, the opposite wall stays whole')
+}
+
+// ── 10. AMBIENT OCCLUSION (2026-08-12) ───────────────────────────────────────────────────────
+// AO is the class of thing that looks plausible while being wrong: mirrored on back faces, applied
+// to the wrong side of a wall, or quietly all-3 because a buffer never got written. Each of those
+// ships as "the lighting looks a bit off" and nobody can say why. So assert the values.
+{
+  // A lone cube in open air is occluded by nothing. Every corner of every face must be full bright,
+  // and this is also the guard against the whole feature silently degrading to zeros.
+  const s = new Section(8)
+  s.set(4, 4, 4, 1)
+  const r = greedyMesh(s)
+  eq(r.quads, 6, 'lone cube emits its 6 faces')
+  eq(r.ao.length, r.quads * 4, 'one AO value per vertex')
+  let dim = 0
+  for (let i = 0; i < r.ao.length; i++) if (r.ao[i] !== 3) dim++
+  eq(dim, 0, 'a cube alone in the air has no occluded corner')
+}
+{
+  // Two cubes side by side along x. On the +y (top) face of each, the two corners over the shared
+  // edge sit against a solid neighbour and must darken; the two outer corners must not.
+  const s = new Section(8)
+  s.set(4, 4, 4, 1)
+  s.set(5, 4, 4, 1)
+  const r = greedyMesh(s)
+  let tops = 0, darkened = 0, bright = 0
+  for (let q = 0; q < r.quads; q++) {
+    if (r.normals[q * 12 + 1] !== 1) continue      // top faces only
+    tops++
+    for (let k = 0; k < 4; k++) (r.ao[q * 4 + k] < 3 ? () => darkened++ : () => bright++)()
+  }
+  ok(tops >= 1, 'the pair has a top face')
+  eq(darkened, 0, 'a flat 1-high pair has nothing above it to occlude its top')
+  ok(bright > 0, 'top corners are lit')
+
+  // The vertical faces are where the neighbour shows up: the +z wall of the pair runs past both
+  // cubes, and nothing occludes it either (still 1 high, nothing beside it in z).
+  let sideDark = 0
+  for (let q = 0; q < r.quads; q++) {
+    if (r.normals[q * 12 + 2] !== 1) continue
+    for (let k = 0; k < 4; k++) if (r.ao[q * 4 + k] < 3) sideDark++
+  }
+  eq(sideDark, 0, 'an isolated 2x1 wall has no occluders on its open side')
+}
+{
+  // An inside corner: a floor with a wall rising out of it. The floor's top face, where it meets
+  // the wall, must darken — this is the case AO exists for, and the one a player sees constantly.
+  const S = 8
+  const s = new Section(S)
+  for (let z = 0; z < S; z++) for (let x = 0; x < S; x++) s.set(x, 0, z, 1)   // floor at y=0
+  for (let z = 0; z < S; z++) s.set(0, 1, z, 1)                                // wall at x=0, y=1
+  const r = greedyMesh(s)
+  let floorDark = 0, floorBright = 0
+  for (let q = 0; q < r.quads; q++) {
+    if (r.normals[q * 12 + 1] !== 1) continue
+    // Only the floor's own top plane (y = 1), not the wall's top.
+    if (r.positions[q * 12 + 1] !== 1) continue
+    for (let k = 0; k < 4; k++) (r.ao[q * 4 + k] < 3 ? () => floorDark++ : () => floorBright++)()
+  }
+  ok(floorDark > 0, 'the floor darkens where a wall stands on it')
+  ok(floorBright > 0, 'the floor away from the wall stays lit')
+
+  // ★ AND THE SPLIT IS LOCAL. If AO were darkening the whole plane rather than the strip beside the
+  // wall, floorDark would be everything and this would catch it — the failure mode where the world
+  // just gets uniformly muddier and reads as a bad colour choice rather than a bug.
+  ok(floorBright >= floorDark, 'most of an open floor is not in shadow')
+}
+{
+  // Triangulation: whichever diagonal the flip picks, a quad's 6 indices must still describe two
+  // triangles over exactly its own four vertices. A flip that dropped or repeated a corner would
+  // render a torn face, and the tear only appears on asymmetrically-shaded quads.
+  const S = 8
+  const s = new Section(S)
+  for (let z = 0; z < S; z++) for (let x = 0; x < S; x++) s.set(x, 0, z, 1)
+  s.set(3, 1, 3, 1)                     // a lone pillar: guarantees asymmetric corners nearby
+  const r = greedyMesh(s)
+  let bad = 0
+  for (let q = 0; q < r.quads; q++) {
+    const base = q * 4
+    const used = new Set<number>()
+    for (let i = 0; i < 6; i++) {
+      const v = r.indices[q * 6 + i]
+      if (v < base || v > base + 3) bad++
+      used.add(v)
+    }
+    if (used.size !== 4) bad++          // both triangles together must touch all four corners
+  }
+  eq(bad, 0, 'every quad triangulates over its own four vertices, flipped or not')
+}
+
+{
+  // ── ★ THE BACK FACE MUST NOT MIRROR ITS SHADING (added because the oracle MISSED it) ──────────
+  // Front and back quads wind their corners in different orders, so the AO has to be reordered with
+  // them. Writing the canonical order onto both mirrors every back face. Every test above passed
+  // with that bug present — the counts, the splits and the inside corner are all symmetric enough
+  // not to notice — which is exactly the shape of a defect that ships. Caught by mutating the line
+  // and finding the suite still green.
+  //
+  // Setup: one cube, and one occluder touching only its +x side, one step toward -z. Nothing else
+  // in the section, so every AO value has a hand-computable answer.
+  const s = new Section(8)
+  s.set(4, 4, 4, 1)      // the cube under test, spanning x,y,z in [4,5]
+  s.set(5, 4, 3, 1)      // occluder: +x of the cube, and on the OPEN side of its -z face
+  const r = greedyMesh(s)
+
+  // Its -z face sits at z = 4 and is a BACK face. The occluder is at x+1, so the two corners on the
+  // x = 5 edge darken and the two on x = 4 stay lit. Mirror the order and the darkening lands on
+  // x = 4 instead — same values, same count, wrong side. Only position tells them apart.
+  let checked = 0, misplaced = 0
+  for (let q = 0; q < r.quads; q++) {
+    if (r.normals[q * 12 + 2] !== -1) continue        // -z faces
+    if (r.positions[q * 12 + 2] !== 4) continue       // ...belonging to the cube, not the occluder
+    for (let k = 0; k < 4; k++) {
+      const vx = r.positions[q * 12 + k * 3]
+      const lit = r.ao[q * 4 + k] === 3
+      checked++
+      // x = 5 must be occluded, x = 4 must be lit.
+      if ((vx === 5) === lit) misplaced++
+    }
+  }
+  eq(checked, 4, 'found the cube -z face')
+  eq(misplaced, 0, 'back-face AO lands on the corners nearest the occluder, not their mirror')
 }
 
 console.log(`\ngreedy mesher: ${pass} passed, ${fails.length} failed`)

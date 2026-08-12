@@ -26,6 +26,18 @@ export interface MeshResult {
   normals: Float32Array
   /** palette index per vertex — the renderer maps this to a material/atlas tile. */
   materials: Uint16Array
+  /**
+   * Corner ambient occlusion per vertex, 0 (fully tucked into a corner) to 3 (open).
+   *
+   * ── ★ WHY A VOXEL WORLD NEEDS THIS MORE THAN IT NEEDS BETTER TEXTURES (2026-08-11 → 08-12) ────
+   * Alex asked "does our world have to be blocky?" The honest answer was that the GRID is load
+   * bearing — mining, the light BFS, collision, ColumnSave and the DDA raycast all assume it — but
+   * the READ is not, and the single biggest reason our cubes read as Lego rather than as a world
+   * was that there was no ambient occlusion anywhere in the mesher. Not weak AO; none. Corner
+   * darkening is most of what makes stacked cubes look like they share a space, and unlike trees or
+   * a prop layer it needs no art, no canon ruling, and improves every block at once.
+   */
+  ao: Uint8Array
   /** 6 indices per quad (two triangles). */
   indices: Uint32Array
   quads: number
@@ -82,6 +94,30 @@ export interface MeshScratch {
   materials: Uint16Array
   indices: Uint32Array
   mask: Int32Array
+  ao: Uint8Array
+  /**
+   * ── ★ TWO CACHED SLICES, AND THEY MADE AO CHEAPER THAN NOT HAVING IT ────────────────────────
+   * A plane sits between two slices of cells. The sweep used to `sample()` both sides of every cell
+   * — 2·S² lookups per plane — and AO then wanted eight MORE per visible face, which measured 53.4
+   * ms/column against a 27.3 baseline. Sampling was the whole cost; the AO arithmetic was noise.
+   *
+   * So each slice is materialised ONCE into a flat grid (with a one-cell ring, which is what AO
+   * needs and the old loop never had), and both the visibility test and the eight AO lookups become
+   * array reads. Then the observation that pays for everything: **consecutive planes share a
+   * slice.** Plane k's upper slice is plane k+1's lower slice, so the buffers swap and only one new
+   * slice is filled per plane — `(S+2)²` samples where the old loop did `2·S²`. At S=32 that is
+   * 1156 against 2048, so the mesher now takes FEWER samples per plane than it did before AO
+   * existed, and the ring comes free with it.
+   *
+   * ⚠ The swap only holds while planes are contiguous. The uniform fast path jumps straight from
+   * the low boundary plane to the high one, so `filled` tracks which slice is actually resident and
+   * both are rebuilt when the jump breaks the chain. Getting that wrong reads as AO computed
+   * against the wrong slice — shading that looks fine everywhere except at section boundaries.
+   */
+  sliceMatA: Int32Array
+  sliceMatB: Int32Array
+  sliceSolA: Uint8Array
+  sliceSolB: Uint8Array
 }
 
 export function createMeshScratch(size: number): MeshScratch {
@@ -94,8 +130,45 @@ export function createMeshScratch(size: number): MeshScratch {
     materials: new Uint16Array(maxQuads * 4),
     indices: new Uint32Array(maxQuads * 6),
     mask: new Int32Array(size * size),
+    ao: new Uint8Array(maxQuads * 4),
+    sliceMatA: new Int32Array((size + 2) * (size + 2)),
+    sliceMatB: new Int32Array((size + 2) * (size + 2)),
+    sliceSolA: new Uint8Array((size + 2) * (size + 2)),
+    sliceSolB: new Uint8Array((size + 2) * (size + 2)),
   }
 }
+
+/**
+ * ── ★ AO RIDES IN THE MASK KEY, WHICH IS WHY MERGING STAYS CORRECT FOR FREE ─────────────────────
+ * The greedy sweep merges a run while `mask[n] === c`. If AO lived beside the mask in a second
+ * array, every merge test would need a second compare in the hottest loop in the mesher — and this
+ * file has already measured what an extra per-cell touch costs here (10.5 → 22.2 ms/column when
+ * slump added one callback; the indirection WAS the cost, not the work inside it).
+ *
+ * So AO is packed into the mask value itself. The mask is `Int32Array`, materials occupy 10 bits
+ * (`0xFF` base plus HALF_BIT/TOP_BIT), and four corners at 2 bits each is one byte — parked at
+ * bit 16, far above anything a material can reach. The existing equality test then separates two
+ * cells that differ ONLY in shading, at zero additional cost, because they are simply not equal.
+ *
+ * The consequence is the intended one: a flat field merges to a single quad exactly as before,
+ * since its interior corners are all unoccluded and therefore all equal. Merging only breaks where
+ * the shading genuinely changes, which is where a merged quad would have been wrong anyway.
+ */
+const AO_SHIFT = 16
+const packAO = (a00: number, a10: number, a11: number, a01: number): number =>
+  (a00 | (a10 << 2) | (a11 << 4) | (a01 << 6)) << AO_SHIFT
+
+/**
+ * The standard three-sample corner term. `side1`/`side2` are the two edge-adjacent cells on the
+ * OPEN side of the face, `corner` is the diagonal between them.
+ *
+ * ★ TWO TOUCHING SIDES FULLY OCCLUDE REGARDLESS OF THE CORNER, and that special case is not an
+ * optimisation — it is the difference between an inside corner reading as a seam and reading as a
+ * crease. With both sides solid the diagonal cell is unreachable by light along this face, so
+ * counting it would let a hollow inside-corner come out brighter than a filled one.
+ */
+const vertexAO = (side1: number, side2: number, corner: number): number =>
+  side1 && side2 ? 0 : 3 - (side1 + side2 + corner)
 
 /**
  * ⚠ When `scratch` is supplied the returned arrays are VIEWS INTO IT, not copies. Upload or copy
@@ -109,7 +182,12 @@ export function greedyMesh(
 ): MeshResult {
   const S = sec.size
   const sc = scratch && scratch.size === S ? scratch : createMeshScratch(S)
-  const { positions, normals, materials, indices, mask } = sc
+  const { positions, normals, materials, indices, mask, ao } = sc
+  // `let` because the two slices SWAP each plane — see MeshScratch.
+  let sliceMatA = sc.sliceMatA, sliceMatB = sc.sliceMatB
+  let sliceSolA = sc.sliceSolA, sliceSolB = sc.sliceSolB
+  /** Row stride of a slice grid: the section plus its one-cell ring on each side. */
+  const SW = S + 2
   mask.fill(0)
 
   let quads = 0
@@ -122,6 +200,15 @@ export function greedyMesh(
 
   const sample = (a: number, b: number, c: number): number =>
     a >= 0 && a < S && b >= 0 && b < S && c >= 0 && c < S ? sec.get(a, b, c) : neighbour(a, b, c)
+
+  // ⚠ THE ROAD HERE IS WORTH KNOWING, because the obvious implementation is the slow one and it
+  // measures 5.6x. AO first sampled the world directly, eight times per visible face, building a
+  // little coordinate array per sample: **27.3 → 153.9 ms/column at S=32.** Flattening those
+  // allocations away got it to 53.4 — still 2x, and a block break re-meshes up to eight sections,
+  // so that lands as a hitch on the game's core verb. The AO arithmetic was never the cost at any
+  // point; the SAMPLING was. Only caching the two slices (see MeshScratch) fixed it, by removing
+  // more lookups than AO added. Same lesson as slump's callback, one layer along: in this loop,
+  // touching the world is expensive and everything else is free.
 
   // ★ THE UNIFORM FAST PATH — this is what makes world height nearly free.
   //
@@ -144,17 +231,56 @@ export function greedyMesh(
     x[0] = x[1] = x[2] = 0
     q[0] = q[1] = q[2] = 0
     q[d] = 1
+    // Unit steps along the two in-plane axes, as scalars — loop-invariant for this axis, and the
+    // reason the AO samples need no array indexing at all.
+    const u0 = u === 0 ? 1 : 0, u1 = u === 1 ? 1 : 0, u2 = u === 2 ? 1 : 0
+    const v0 = v === 0 ? 1 : 0, v1 = v === 1 ? 1 : 0, v2 = v === 2 ? 1 : 0
+
+    /**
+     * Materialise one slice of cells at `dc` along this axis, ring included, into `mat`/`sol`.
+     * Indexed `(uu + 1) + (vv + 1) * SW` so the ring at −1 and S is addressable without a branch.
+     */
+    const fillSlice = (mat: Int32Array, sol: Uint8Array, dc: number): void => {
+      const c0 = d === 0 ? dc : 0, c1 = d === 1 ? dc : 0, c2 = d === 2 ? dc : 0
+      let i = 0
+      for (let vv = -1; vv <= S; vv++) {
+        for (let uu = -1; uu <= S; uu++) {
+          const m = sample(c0 + uu * u0 + vv * v0, c1 + uu * u1 + vv * v1, c2 + uu * u2 + vv * v2)
+          mat[i] = m
+          sol[i] = m !== AIR && m !== STRUCTURE && m !== STRUCTURE_HALF && !isPlant(m) ? 1 : 0
+          i++
+        }
+      }
+    }
+
+    /** d-coordinate currently held in slice B, so a contiguous step can swap instead of refill. */
+    let filled = Number.NaN
 
     const planes = uniform ? [-1, S - 1] : null
     let planeIdx = 0
 
     for (x[d] = planes ? planes[0] : -1; x[d] < S; ) {
+      // ── materialise the two slices bounding this plane ────────────────────────────────────
+      // Contiguous step: last plane's upper slice IS this plane's lower slice, so swap and fill
+      // only the new one. Otherwise (first plane, or a uniform-section jump) build both.
+      if (filled === x[d]) {
+        const tm = sliceMatA; sliceMatA = sliceMatB; sliceMatB = tm
+        const ts = sliceSolA; sliceSolA = sliceSolB; sliceSolB = ts
+        fillSlice(sliceMatB, sliceSolB, x[d] + 1)
+      } else {
+        fillSlice(sliceMatA, sliceSolA, x[d])
+        fillSlice(sliceMatB, sliceSolB, x[d] + 1)
+      }
+      filled = x[d] + 1
+
       // ── build the visibility mask for this plane ──────────────────────────────────────────
       let n = 0
       for (x[v] = 0; x[v] < S; x[v]++) {
         for (x[u] = 0; x[u] < S; x[u]++) {
-          const a = sample(x[0], x[1], x[2])
-          const b = sample(x[0] + q[0], x[1] + q[1], x[2] + q[2])
+          // Slice index for this cell. The +1s step over the ring.
+          const si = (x[u] + 1) + (x[v] + 1) * SW
+          const a = sliceMatA[si]
+          const b = sliceMatB[si]
           // ★ PIECE OCCUPANCY IS INVISIBLE TO THE MESHER (2026-08-08). STRUCTURE cells are
           // collision bookkeeping — the piece RENDERER draws the look. Meshing them painted a
           // loud-magenta fallback cube around every placed piece (the design always said
@@ -172,13 +298,36 @@ export function greedyMesh(
           // crossed quads, and crossed quads cannot merge — routing ~17k of them through this
           // mesher would add ~34k unmergeable quads to terrain meshes for geometry that is
           // already four draw calls. Same exclusion, same reason, as piece occupancy.
-          const aSolid = a !== AIR && a !== STRUCTURE && a !== STRUCTURE_HALF && !isPlant(a)
-          const bSolid = b !== AIR && b !== STRUCTURE && b !== STRUCTURE_HALF && !isPlant(b)
+          const aSolid = sliceSolA[si] === 1
+          const bSolid = sliceSolB[si] === 1
           // Exactly one solid => a face. Both solid or both air => nothing. This single line is
           // what deletes every interior face in the world.
           if (aSolid === bSolid) mask[n] = 0
-          else if (aSolid) { mask[n] = a; faces++ }
-          else { mask[n] = -b; faces++ }
+          else {
+            // ★ AO IS COMPUTED ONLY ON THE FACE-POSITIVE BRANCH. The mask loop runs over every cell
+            // of every plane and the uniform fast path exists because that is the expensive part —
+            // so the eight extra samples must never be paid by the cells that emit nothing. In
+            // terrain, faces are a small minority of plane cells, which is what keeps this
+            // affordable at all.
+            //
+            // Occluders sit on the OPEN side of the face: the air side, since that is where light
+            // would have to come from. `od` is that plane; the eight samples ring the face in u/v.
+            // Occluders live on the OPEN side of the face — the air side, since that is where
+            // light would have to arrive from. That is slice B for a front face, slice A for a
+            // back one, and both are already resident, so the eight lookups are array reads at
+            // fixed offsets around `si`.
+            const sol = aSolid ? sliceSolB : sliceSolA
+            const nU = sol[si - 1], pU = sol[si + 1]
+            const nV = sol[si - SW], pV = sol[si + SW]
+            const a00 = vertexAO(nU, nV, sol[si - 1 - SW])
+            const a10 = vertexAO(pU, nV, sol[si + 1 - SW])
+            const a11 = vertexAO(pU, pV, sol[si + 1 + SW])
+            const a01 = vertexAO(nU, pV, sol[si - 1 + SW])
+            const shade = packAO(a00, a10, a11, a01)
+            if (aSolid) mask[n] = a | shade
+            else mask[n] = -(b | shade)
+            faces++
+          }
           n++
         }
       }
@@ -210,7 +359,11 @@ export function greedyMesh(
           dv[v] = h
 
           const back = c < 0
-          const mat = back ? -c : c
+          const key = back ? -c : c
+          const mat = key & 0xFFFF
+          const shade = (key >> AO_SHIFT) & 0xFF
+          // Canonical corner order is the FRONT winding: (0,0) (1,0) (1,1) (0,1) in u/v.
+          const s00 = shade & 3, s10 = (shade >> 2) & 3, s11 = (shade >> 4) & 3, s01 = (shade >> 6) & 3
           const p = quads * 12
           // Wind the quad so the front face points along the material's side of the plane.
           if (back) {
@@ -235,14 +388,44 @@ export function greedyMesh(
             materials[quads * 4 + k] = mat
           }
 
+          // ⚠ THE BACK WINDING VISITS THE CORNERS IN A DIFFERENT ORDER, so the shading has to be
+          // reordered with it. The front quad walks (0,0)(1,0)(1,1)(0,1); the back quad swaps du and
+          // dv to face the other way, giving (0,0)(0,1)(1,1)(1,0). Writing the canonical order onto
+          // both would mirror the AO on every back face — subtly wrong, and invisible until you
+          // stand at an inside corner and one wall's shading runs the wrong way.
           const base = quads * 4
+          if (back) {
+            ao[base] = s00; ao[base + 1] = s01; ao[base + 2] = s11; ao[base + 3] = s10
+          } else {
+            ao[base] = s00; ao[base + 1] = s10; ao[base + 2] = s11; ao[base + 3] = s01
+          }
+
+          // ── ★ THE FLIP: A QUAD IS TWO TRIANGLES AND THE DIAGONAL IS VISIBLE ────────────────────
+          // Interpolating four corner values across a fixed diagonal makes the two triangles
+          // disagree wherever the corners are asymmetric — the classic voxel-AO artifact, a hard
+          // crease running the wrong way across a face, most obvious on the outside corner of a
+          // step. Choosing the diagonal that joins the two BRIGHTEST opposing corners hides the
+          // seam, because the interpolation error lands where the gradient is flattest.
+          //
+          // This is why the winding is chosen here rather than baked once: the same rectangle needs
+          // a different triangulation depending only on its shading.
           const ii = quads * 6
-          indices[ii + 0] = base
-          indices[ii + 1] = base + 1
-          indices[ii + 2] = base + 2
-          indices[ii + 3] = base
-          indices[ii + 4] = base + 2
-          indices[ii + 5] = base + 3
+          const flip = ao[base] + ao[base + 2] > ao[base + 1] + ao[base + 3]
+          if (flip) {
+            indices[ii + 0] = base + 1
+            indices[ii + 1] = base + 2
+            indices[ii + 2] = base + 3
+            indices[ii + 3] = base + 1
+            indices[ii + 4] = base + 3
+            indices[ii + 5] = base
+          } else {
+            indices[ii + 0] = base
+            indices[ii + 1] = base + 1
+            indices[ii + 2] = base + 2
+            indices[ii + 3] = base
+            indices[ii + 4] = base + 2
+            indices[ii + 5] = base + 3
+          }
           quads++
 
           for (let l = 0; l < h; l++) for (let k = 0; k < w; k++) mask[n + k + l * S] = 0
@@ -292,6 +475,12 @@ export function greedyMesh(
         materials[quads * 4 + k] = mat
       }
       const base = quads * 4
+      // ★ SLUMPED LIPS TAKE NO AO, and that is a decision rather than a gap. A lip is a half-height
+      // cell whose geometry is not a unit cube, so the corner test above — which asks about whole
+      // neighbouring cells — does not describe it. Shading it with the cube rule would darken the
+      // one surface a player walks across most, on evidence that does not apply to its shape.
+      // Unoccluded (3) is the honest default until a lip-shaped term exists.
+      ao[base] = 3; ao[base + 1] = 3; ao[base + 2] = 3; ao[base + 3] = 3
       const ii = quads * 6
       indices[ii + 0] = base; indices[ii + 1] = base + 1; indices[ii + 2] = base + 2
       indices[ii + 3] = base; indices[ii + 4] = base + 2; indices[ii + 5] = base + 3
@@ -339,6 +528,7 @@ export function greedyMesh(
     positions: positions.subarray(0, quads * 12),
     normals: normals.subarray(0, quads * 12),
     materials: materials.subarray(0, quads * 4),
+    ao: ao.subarray(0, quads * 4),
     indices: indices.subarray(0, quads * 6),
     quads,
     faces,

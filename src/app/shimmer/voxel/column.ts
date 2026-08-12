@@ -471,6 +471,7 @@ export function meshColumn(
         positions: mesh.positions.slice(),
         normals: mesh.normals.slice(),
         materials: mesh.materials.slice(),
+        ao: mesh.ao.slice(),
         indices: mesh.indices.slice(),
         quads: mesh.quads,
         faces: mesh.faces,
