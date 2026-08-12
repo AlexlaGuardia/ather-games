@@ -37,3 +37,7 @@ __pycache__/
 # Generated contact sheets — rebuild with `npm run item:art:sheet`, never a source of truth.
 item-art.png
 icon-sheet.png
+
+# Generated world/canopy shots
+canopy*.png
+world.png
