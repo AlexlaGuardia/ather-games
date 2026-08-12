@@ -10,11 +10,25 @@
 //
 // It is also free and instant, which matters less than the correctness argument but is not nothing.
 //
-// Non-block items (a seed, a shard) have no faces to wear and DO need real art. They fall back to a
-// flat chip here, and that fallback is deliberately plain so it reads as "not drawn yet" rather
-// than as a finished thing nobody will revisit.
+// Non-block items (a seed, a shard) have no faces to wear and DO need real art.
+//
+// ── ★ AND MOST OF THAT ART ALREADY EXISTED (2026-08-12) ─────────────────────────────────────────
+// The line above used to end "they fall back to a flat chip, deliberately plain so it reads as *not
+// drawn yet*". The chip was honest about this file and wrong about the game: `sprites/items.ts`
+// holds 76 hand-painted 32×32 icons from the 2D game, and **34 of them are items voxel3d can
+// actually hold** — every crystal, every plank, every blade and spike and rinstick. The bag was
+// showing "no art yet" for art Alex drew months ago, because nothing here ever looked.
+//
+// So the fallback order is now: the block's own faces → the hand-painted flat sprite → the plain
+// chip. The chip survives as the third tier and keeps its old meaning, which is now TRUE when it
+// appears: nobody has drawn this one.
+//
+// ⚠ THIS IS WHY voxel3d NOW PULLS IN THE 2D SPRITE TREE. It is ~3k lines of palette strings and the
+// only alternative was a second copy of the same art keyed for this game — the exact second source
+// of truth the header above refuses for blocks. One art table, two games.
 
 import { materialForItem } from '../../voxel/registry'
+import { ITEM_ICONS, paletteForItem } from '../../sprites/items'
 import { paintFor, TILE_MATERIALS, TOP, SIDE } from './tiles'
 
 /** Icon edge in CSS pixels. Small enough to stay crisp, large enough for the cube to read. */
@@ -83,6 +97,57 @@ export function rasterIcon(top: Uint8Array, side: Uint8Array, size = ICON, tile 
 /** Does a real painter own this material, or would it fall to the ore artist's default? */
 export const hasTileArt = (material: number): boolean => TILE_MATERIALS.includes(material & 0xFF)
 
+/** `#rrggbb` → three bytes. Returns null on anything it does not understand, never a guessed colour. */
+function hexRGB(hex: string): [number, number, number] | null {
+  const m = /^#([0-9a-f]{6})$/i.exec(hex.trim())
+  if (!m) return null
+  const n = parseInt(m[1], 16)
+  return [(n >> 16) & 255, (n >> 8) & 255, n & 255]
+}
+
+/**
+ * A palette-indexed sprite as RGBA, nearest-neighbour scaled to `size`.
+ *
+ * Pure for the same reason `rasterIcon` is: `scripts/item-art.mts` renders the contact sheet through
+ * this exact function, so the sheet cannot show art the game does not draw.
+ *
+ * ★ THE INDEXING IS `components/SpriteRenderers.drawSprite`'S, RESTATED ONCE AND ONLY HERE: value 0
+ * is transparent, value v takes `palette[v - 1]`, and the sprite's edge is `sqrt(length)` rather
+ * than a passed-in constant — several item sprites are 16×16 art sitting in a 32×32 buffer, and
+ * anything that assumed 32 would render them at quarter scale in the corner. Deriving the edge is
+ * what makes those come out right without touching the data.
+ *
+ * ⚠ AN UNKNOWN PALETTE ENTRY DRAWS NOTHING RATHER THAN BLACK. A missing colour is a wiring mistake,
+ * and a hole in a sprite is visible where a black pixel silently becomes part of the outline.
+ */
+export function flatIconPixels(frame: Uint8Array, palette: readonly string[], size = ICON): Uint8Array {
+  const out = new Uint8Array(size * size * 4)
+  const src = Math.round(Math.sqrt(frame.length)) || 16
+  const rgb = palette.map(hexRGB)
+  for (let y = 0; y < size; y++) {
+    const sy = Math.min(src - 1, ((y * src) / size) | 0)
+    for (let x = 0; x < size; x++) {
+      const sx = Math.min(src - 1, ((x * src) / size) | 0)
+      const v = frame[sy * src + sx]
+      if (v === 0) continue
+      const c = rgb[v - 1]
+      if (!c) continue
+      const di = (y * size + x) * 4
+      out[di] = c[0]; out[di + 1] = c[1]; out[di + 2] = c[2]; out[di + 3] = 255
+    }
+  }
+  return out
+}
+
+/** The hand-painted flat icon for an item as RGBA, or null when nobody has drawn it. */
+export function flatIcon(itemId: string, size = ICON): Uint8Array | null {
+  const frame = ITEM_ICONS[itemId]?.frames[0]
+  // A wired-but-blank frame is not art. Returning it would retire the "not drawn yet" chip for an
+  // item that renders as nothing at all — the worst of both, and invisible.
+  if (!frame || !frame.some(v => v !== 0)) return null
+  return flatIconPixels(frame, paletteForItem(itemId), size)
+}
+
 /**
  * The icon for a material as a raw RGBA buffer.
  *
@@ -113,16 +178,19 @@ export function itemIcon(itemId: string): string | null {
   if (typeof document === 'undefined') return null
 
   const mat = materialForItem(itemId)
-  // No block, or a block with no painter of its own: fall back to the plain chip rather than
-  // shipping a confidently WRONG picture. Ground cover lands here until it is drawn.
-  if (mat === undefined || !hasTileArt(mat)) { cache.set(itemId, null); return null }
+  // ★ THE ORDER IS THE BLOCK FIRST, ALWAYS. An item with a block behind it must wear that block's
+  // real faces even if a flat sprite also exists, or the two drift and the icon starts describing
+  // last month's texture — the whole argument at the top of this file. Flat art only ever answers
+  // for items the derivation genuinely cannot: ground cover (a cross-quad, not a cube), and
+  // everything with no block at all. Third tier is the honest chip.
+  const px = mat !== undefined && hasTileArt(mat) ? iconPixels(mat) : flatIcon(itemId)
+  if (!px) { cache.set(itemId, null); return null }
 
   // The browser's only job is to carry the pure buffer onto a canvas — no projection lives here.
   const c = document.createElement('canvas')
   c.width = ICON; c.height = ICON
   const ctx = c.getContext('2d')
   if (!ctx) { cache.set(itemId, null); return null }
-  const px = iconPixels(mat)
   const img = new ImageData(ICON, ICON)
   img.data.set(px)
   ctx.putImageData(img, 0, 0)

@@ -214,6 +214,16 @@ const HALF_DEFS: BlockDef[] = BLOCKS.filter(b => b.placeable && !b.noSlab && b.d
   drops: [{ itemId: `${b.drops[0].itemId}_slab`, count: 1 }],
 }))
 
+/**
+ * Every block row that exists at runtime, hand-written and derived alike.
+ *
+ * ★ EXPORTED SO AUDITS READ THE REAL TABLE INSTEAD OF REBUILDING IT. `scripts/item-art.mts` needs
+ * the slab rows; the only other way to get them is to re-apply `HALF_DEFS`' naming rule in a second
+ * place, and a checklist that re-derives what it checks agrees with itself forever while the game
+ * says something else. Same reason `icon-sheet.mts` calls the shipped rasteriser.
+ */
+export const ALL_BLOCKS: readonly BlockDef[] = [...BLOCKS, ...HALF_DEFS]
+
 const BY_MATERIAL = new Map<number, BlockDef>([...BLOCKS, ...HALF_DEFS].map(b => [b.material, b]))
 /** Reverse map so a placed block-item becomes the right voxel. */
 /**

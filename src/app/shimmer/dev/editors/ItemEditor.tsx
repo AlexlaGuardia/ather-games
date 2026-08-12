@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useCallback, useEffect, useRef, useMemo } from 'react'
-import { ITEM_ICONS, ITEM_PALETTE, ITEM_PALETTES, ITEM_FRAME_MAP, ITEMS } from '../../sprites/items'
+import { ITEM_ICONS, ITEM_FRAME_MAP, ITEMS, paletteForItem } from '../../sprites/items'
 import { SpriteAnim } from '../../sprites/sprite-data'
 import { ViewMode, parseDigits, pixelsToDigits, flipH, flipV, shiftAllPixels } from '../../components/PixelUtils'
 import { FramePreview, drawSprite } from '../../components/SpriteRenderers'
@@ -118,7 +118,15 @@ export default function ItemEditor({ onDeploy, deployState }: {
   const safeFrameIndex = Math.min(frameIndex, totalFrames - 1)
   const currentFrame = currentAnim?.frames[safeFrameIndex]
   const currentItem = ITEMS.find(i => i.id === selected)
-  const palette = (livePalettes?.[selected] ?? ITEM_PALETTES[selected] ?? [...ITEM_PALETTE]) as readonly string[]
+  // ★ The editor resolves colours the way the GAME does (`paletteForItem`), not the way it used to
+  // resolve them for itself — that gap is what let 13 items preview correctly and ship magenta.
+  // `livePalettes` still wins: unsaved edits must show, or painting has no feedback.
+  //
+  // ⚠ Known consequence, and it is the RIGHT failure: for the three seeds in both palette tables,
+  // `SEED_PALETTES` wins here as it does in game, while `save-sprite` writes `ITEM_PALETTES`. So a
+  // palette edit to those seeds visibly does not stick. It never stuck in game either — this only
+  // moves the lie to where it can be seen. Fix by ruling the seed palettes, not by re-splitting.
+  const palette = livePalettes?.[selected] ?? paletteForItem(selected)
   const { setInspectorContent, setInspectorTitle } = useInspector()
 
   // Push item details to inspector
@@ -278,7 +286,7 @@ export default function ItemEditor({ onDeploy, deployState }: {
       }
 
       const anim = sprites[item.id]
-      const itemPal = (livePalettes?.[item.id] ?? ITEM_PALETTES[item.id] ?? [...ITEM_PALETTE]) as readonly string[]
+      const itemPal = livePalettes?.[item.id] ?? paletteForItem(item.id)
       if (anim) {
         const frame = anim.frames[0]
         const ss = Math.round(Math.sqrt(frame.length)) || 16

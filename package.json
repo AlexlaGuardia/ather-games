@@ -7,6 +7,8 @@
     "build": "next build",
     "start": "next start -p 3200",
     "canon": "node scripts/canon-drift.mjs",
+    "item:art": "npx tsx scripts/item-art.mts",
+    "item:art:sheet": "npx tsx scripts/item-art.mts --sheet",
     "canon:report": "node scripts/canon-drift.mjs --report",
     "build:worker": "node scripts/build-worker.mjs",
     "prebuild": "node scripts/build-worker.mjs"
