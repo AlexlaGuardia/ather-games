@@ -196,5 +196,41 @@ const humans = (n: number, party?: string): HumanEntry[] =>
   chk('the shared on-hit tell is the canon line', /bleed/.test(PUPPET_TELLS.onHit))
 }
 
+// 12. tuning is an ARGUMENT — the range console's live sliders must reach the sim
+// A slider wired to nothing looks EXACTLY like a slider that works: you drag it, the fight carries
+// on, and "it didn't feel different" is indistinguishable from "it isn't connected". So each knob
+// the console exposes is asserted to change an outcome, and the defaults are asserted unchanged.
+{
+  const fast = { ...GUARD_TUNING, phaseSec: 2 }
+  chk('default tuning still holds a phase for 7s', stepEncounter(initEncounter(), 2, 1).phase === 'squeeze')
+  chk('a shorter phaseSec flips the phase', stepEncounter(initEncounter(), 2, 1, fast).phase === 'trap')
+
+  chk('initEncounter honours a custom boxStartRadius',
+    initEncounter({ ...GUARD_TUNING, boxStartRadius: 30 }).boxRadius === 30)
+
+  // 0.5s into the counter phase — inside the default window, outside a narrowed one
+  const toCounter = (t = GUARD_TUNING) => {
+    let s = initEncounter(t)
+    s = stepEncounter(s, t.phaseSec, 1, t)   // → trap
+    s = stepEncounter(s, t.phaseSec, 1, t)   // → counter
+    return stepEncounter(s, 0.5, 1, t)
+  }
+  chk('default: a hit 0.5s into counter is turned back', damageGuard(toCounter(), 'wren', 100).returned > 0)
+  const narrow = { ...GUARD_TUNING, counterWindowSec: 0.2 }
+  chk('a narrowed counterWindowSec closes the window',
+    damageGuard(toCounter(narrow), 'wren', 100, narrow).returned === 0)
+
+  const soft = { ...GUARD_TUNING, counterReturn: 0.9 }
+  chk('counterReturn scales what Wren turns back',
+    damageGuard(toCounter(soft), 'wren', 100, soft).returned === 90)
+
+  // the raised-minimum invariant — the reason boxRadius is clamped every step, not only on shrink
+  let s = initEncounter()
+  for (let i = 0; i < 30; i++) s = stepEncounter(s, GUARD_TUNING.phaseSec, 1)
+  chk('the box shrinks to its minimum and stops', s.boxRadius === GUARD_TUNING.boxMinRadius)
+  chk('raising boxMinRadius gives the room back on the very next step',
+    stepEncounter(s, 0.1, 1, { ...GUARD_TUNING, boxMinRadius: 9 }).boxRadius === 9)
+}
+
 console.log(`\ncrucible-encounter oracle: ${ok} passed, ${bad} failed`)
 process.exit(bad ? 1 : 0)

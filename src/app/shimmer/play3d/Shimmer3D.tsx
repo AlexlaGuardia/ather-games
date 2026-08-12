@@ -76,7 +76,44 @@ import { StationMenus, type PlacedStruct, type StationKind } from './StationMenu
 import { prettyItem, menuBtn, TOOL_HUD } from './ui'
 import { GfxPanel, FrameProbe, type FrameStats, type SaveStats } from './GfxPanel'
 import MoveBook from './MoveBook'
-import { GUARDS, initEncounter, stepEncounter, damageGuard, specOf } from './puppet-guards'
+import { GUARDS, GUARD_TUNING, initEncounter, stepEncounter, damageGuard, specOf, type GuardTuning } from './puppet-guards'
+
+/**
+ * The T range-console settings, in one place.
+ *
+ * `tune` rides here rather than on its own ref because the guard numbers ARE a range-console
+ * setting — the console is where they are turned, and threading a second ref through the same
+ * five call sites would only give the two halves a chance to disagree. The shape was written out
+ * inline in three separate places before this; three copies of a type is three chances to add a
+ * field to two of them.
+ */
+export type RangeCfg = {
+  moving: boolean
+  hostile: boolean
+  guards: boolean
+  /** live guard tuning — first guesses until Alex has felt them (focus #298) */
+  tune: GuardTuning
+}
+
+/**
+ * The knobs the range console exposes, as DATA.
+ *
+ * Only the ones that change how the fight FEELS moment to moment, and only ones that take effect
+ * on the running encounter — a slider that needs a re-arm to do anything is indistinguishable from
+ * a broken one while you are dragging it. `boxStartRadius` is deliberately absent for exactly that
+ * reason (it is read once at spawn); `counterReturn` is absent because it is a damage number, not
+ * a feel number, and the panel earns its place by staying short.
+ */
+const GUARD_KNOBS: {
+  key: keyof GuardTuning; label: string; min: number; max: number; step: number; dp: number; unit: string
+}[] = [
+  { key: 'phaseSec',         label: 'PHASE LENGTH',  min: 1.5, max: 14, step: 0.5,  dp: 1, unit: 's' },
+  { key: 'claimPerPhase',    label: 'SEREN CLAIM',   min: 0,   max: 6,  step: 0.2,  dp: 1, unit: 'm/s' },
+  { key: 'boxShrink',        label: 'BOX SHRINK',    min: 0.5, max: 1,  step: 0.02, dp: 2, unit: '×' },
+  { key: 'boxMinRadius',     label: 'BOX FLOOR',     min: 3,   max: 14, step: 0.5,  dp: 1, unit: 'm' },
+  { key: 'counterWindowSec', label: 'WREN WINDOW',   min: 0,   max: 3,  step: 0.1,  dp: 1, unit: 's' },
+  { key: 'staggerSec',       label: 'STAGGER',       min: 0.2, max: 4,  step: 0.1,  dp: 1, unit: 's' },
+]
 import { loadGfx, storeGfx, gfxKey, dprCeiling, SHADOW_MAP_SIZE, DPR_FLOOR, type GfxSettings } from './gfx'
 import { WorldMap, MiniMap } from './WorldMap'
 import { WORLD_ZONE_ID, registerGardenWorld, getGardenWorld, isStitched, fromWorld } from '../world/garden-world'
@@ -1850,7 +1887,7 @@ function FiringRange({ firingRef, adsRef, weaponIdxRef, gridRef, recoilRef, bloo
   shieldRef: React.MutableRefObject<number> // player shield; drains first — mend potions refill it
   hpMaxRef: React.RefObject<number>         // live HP cap (100, +bonus with the Life birth rune)
   shieldMaxRef: React.RefObject<number>     // live shield cap (100, +25 with the Barrier birth rune)
-  rangeCfgRef: React.RefObject<{ moving: boolean; hostile: boolean; guards: boolean }>  // range console (T) settings
+  rangeCfgRef: React.RefObject<RangeCfg>  // range console (T) settings — incl. live guard tuning
   ammoRef: React.MutableRefObject<number>       // rounds left in the clip; this sim decrements
   reloadingRef: React.MutableRefObject<number>  // >0 while the recharge channel runs — fire is blocked
   // The cast layer resolves slot → move → spec in the PARENT (where mana/hp/stance live) and hands
@@ -2074,7 +2111,7 @@ function FiringRange({ firingRef, adsRef, weaponIdxRef, gridRef, recoilRef, bloo
             for (let gi = 0; gi < guardBodies.length; gi++) {
               const b = guardBodies[gi], st = guardSim.current.enc.guards[gi]
               if (!st?.alive || (b.pos.x - f.x) ** 2 + (b.pos.z - f.z) ** 2 > f.radius * f.radius) continue
-              guardSim.current.enc = damageGuard(guardSim.current.enc, st.id, f.dps).state
+              guardSim.current.enc = damageGuard(guardSim.current.enc, st.id, f.dps, rangeCfgRef.current.tune).state
             }
           }
         }
@@ -2127,7 +2164,7 @@ function FiringRange({ firingRef, adsRef, weaponIdxRef, gridRef, recoilRef, bloo
           const st = guardSim.current.enc.guards[gi]
           if (!st?.alive || p.pos.distanceToSquared(b.pos) >= HUNTER_HIT_R2) continue
           const crit = p.pos.y > b.pos.y + CRIT_Y
-          const r = damageGuard(guardSim.current.enc, st.id, crit ? wCrit : wDmg)
+          const r = damageGuard(guardSim.current.enc, st.id, crit ? wCrit : wDmg, rangeCfgRef.current.tune)
           guardSim.current.enc = r.state
           p.life = 0; onHit(crit)
           // Wren turning a hit back is real damage to the shooter, not a miss.
@@ -2248,7 +2285,7 @@ function FiringRange({ firingRef, adsRef, weaponIdxRef, gridRef, recoilRef, bloo
       const gs = guardSim.current
       if (cfg?.guards) {
         if (!gs.spawned) {
-          gs.enc = initEncounter(); gs.spawned = true; gs.orbit = 0; gs.fireCd = [1.0, 1.6, 2.2]
+          gs.enc = initEncounter(cfg.tune); gs.spawned = true; gs.orbit = 0; gs.fireCd = [1.0, 1.6, 2.2]
           const base = (posRef.current?.y ?? 0) + 0.55
           guardBodies.forEach((b, i) => {
             const a = -Math.PI / 2 + (i - 1) * 0.7
@@ -2256,7 +2293,7 @@ function FiringRange({ firingRef, adsRef, weaponIdxRef, gridRef, recoilRef, bloo
           })
         }
         const hpFrac = (hpRef.current ?? 1) / (hpMaxRef.current || 1)
-        gs.enc = stepEncounter(gs.enc, dt, hpFrac)
+        gs.enc = stepEncounter(gs.enc, dt, hpFrac, cfg.tune)
         gs.orbit += dt * 0.5
         guardBodies.forEach((b, i) => {
           const st = gs.enc.guards[i]
@@ -2293,7 +2330,7 @@ function FiringRange({ firingRef, adsRef, weaponIdxRef, gridRef, recoilRef, bloo
             }
           }
         })
-      } else if (gs.spawned) { gs.spawned = false; gs.enc = initEncounter() }  // toggle off = gone
+      } else if (gs.spawned) { gs.spawned = false; gs.enc = initEncounter(rangeCfgRef.current.tune) }  // toggle off = gone
       for (const o of orbs) {
         if (o.life <= 0) continue
         o.life -= dt
@@ -2951,7 +2988,7 @@ const Scene = memo(function Scene(props: {
   hpMaxRef: React.RefObject<number>
   shieldRef: React.MutableRefObject<number>
   shieldMaxRef: React.RefObject<number>
-  rangeCfgRef: React.RefObject<{ moving: boolean; hostile: boolean; guards: boolean }>
+  rangeCfgRef: React.RefObject<RangeCfg>
   ammoRef: React.MutableRefObject<number>
   reloadingRef: React.MutableRefObject<number>
   pendingCastRef: React.MutableRefObject<CastSpec | null>
@@ -5302,7 +5339,13 @@ export default function Shimmer3D() {
   // close re-locks. Settings live in a ref so FiringRange reads them at frame rate with no re-render.
   const [rangeOpen, setRangeOpen] = useState(false)
   const rangeOpenRef = useRef(false); rangeOpenRef.current = rangeOpen
-  const [rangeCfg, setRangeCfg] = useState({ moving: false, hostile: false, guards: false })
+  const [rangeCfg, setRangeCfg] = useState<RangeCfg>({
+    moving: false, hostile: false, guards: false,
+    // a COPY, never the module object: the sliders write to this and GUARD_TUNING is the
+    // shipped default the oracle asserts against. Sharing one object would let a drag in the
+    // console silently redefine what "default" means for the rest of the session.
+    tune: { ...GUARD_TUNING },
+  })
   const rangeCfgRef = useRef(rangeCfg); rangeCfgRef.current = rangeCfg
   const toggleRange = useCallback((open: boolean) => {
     setRangeOpen(open)
@@ -5319,8 +5362,14 @@ export default function Shimmer3D() {
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [toggleRange])
-  // holstering (leaving the outside realm) closes the console and resets the range to peaceful defaults
-  useEffect(() => { if (!weaponDrawn) { setRangeOpen(false); setRangeCfg({ moving: false, hostile: false, guards: false }) } }, [weaponDrawn])
+  // Holstering (leaving the outside realm) closes the console and resets the range to peaceful
+  // defaults. `tune` deliberately SURVIVES: what this reset exists for is that danger is never
+  // sprung on you on re-entry, and a slider position is not danger. Wiping it would also mean a
+  // tuning pass lost its numbers every time you walked back through the station door, which is
+  // the exact loop this panel was built to make cheap.
+  useEffect(() => {
+    if (!weaponDrawn) { setRangeOpen(false); setRangeCfg((c) => ({ ...c, moving: false, hostile: false, guards: false })) }
+  }, [weaponDrawn])
   // ── Gun bench (the armory) — walk up to a GUN_BENCH (E) to open the loadout editor. Proximity is
   // polled off posRef (benches are static; a 200ms tick is plenty). Opening releases the cursor via the
   // shared handoff, same as the range console / stations.
@@ -6575,6 +6624,46 @@ export default function Shimmer3D() {
                     <span style={{ color: rangeCfg[key] ? '#7fffa0' : '#ffffff55', letterSpacing: '0.08em' }}>{rangeCfg[key] ? 'ON' : 'OFF'}</span>
                   </button>
                 ))}
+                {/* ── live guard tuning — OWNER ONLY ──────────────────────────────────────────
+                    Owner-gated because this is a tuning surface, not a game control: the console's
+                    own header calls itself "new-player range controls", and six sliders of boss
+                    internals is the opposite of that. Shown only while the guards are ON, so it
+                    cannot be read as settings for a fight that is not happening. */}
+                {isOwner && rangeCfg.guards && (
+                  <div style={{ marginBottom: 8, padding: '9px 10px', borderRadius: 8,
+                    background: 'rgba(255,255,255,0.03)', border: '1px solid #ffd98a2e' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 9 }}>
+                      <span style={{ color: '#ffd98a', letterSpacing: '0.1em', fontSize: 11 }}>GUARD TUNING</span>
+                      <button onClick={() => setRangeCfg((c) => ({ ...c, tune: { ...GUARD_TUNING } }))} style={{
+                        background: 'rgba(255,255,255,0.05)', border: '1px solid #ffffff22', borderRadius: 6,
+                        padding: '3px 8px', cursor: 'pointer', color: '#ffffff99',
+                        font: '700 10px ui-monospace, monospace', letterSpacing: '0.06em',
+                      }}>RESET</button>
+                    </div>
+                    {GUARD_KNOBS.map((k) => (
+                      <label key={k.key} style={{ display: 'block', marginBottom: 7 }}>
+                        <span style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: '#cfeeff', fontWeight: 600 }}>
+                          <span>{k.label}</span>
+                          <span style={{ color: rangeCfg.tune[k.key] === GUARD_TUNING[k.key] ? '#ffffff66' : '#7fffa0', fontVariantNumeric: 'tabular-nums' }}>
+                            {rangeCfg.tune[k.key].toFixed(k.dp)}{k.unit}
+                          </span>
+                        </span>
+                        <input
+                          type="range" min={k.min} max={k.max} step={k.step} value={rangeCfg.tune[k.key]}
+                          onChange={(e) => {
+                            const v = Number(e.target.value)
+                            setRangeCfg((c) => ({ ...c, tune: { ...c.tune, [k.key]: v } }))
+                          }}
+                          style={{ width: '100%', accentColor: '#ffd98a', cursor: 'pointer' }}
+                        />
+                      </label>
+                    ))}
+                    <div style={{ color: '#ffffff55', fontWeight: 600, fontSize: 10, lineHeight: 1.45 }}>
+                      live on the running fight. green = moved off default. toggle the guards
+                      off then on to re-arm three fresh puppets.
+                    </div>
+                  </div>
+                )}
                 <button onClick={() => { shotsRef.current = 0; hitsRef.current = 0; setHudStats({ shots: 0, hits: 0 }) }} style={{
                   width: '100%', background: 'rgba(255,255,255,0.04)', border: '1px solid #ffffff1e', borderRadius: 8,
                   padding: '8px 11px', cursor: 'pointer', color: '#ffd98a', font: '700 12px ui-monospace, monospace', letterSpacing: '0.06em',

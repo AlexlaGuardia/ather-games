@@ -67,23 +67,49 @@ export interface GuardSpec {
 }
 
 // ── TUNING — every number in the encounter ─────────────────────────────────────
-export const GUARD_TUNING = {
+//
+// ── ★ TUNING IS AN ARGUMENT, NOT A MODULE CONSTANT (2026-08-12) ────────────────
+// Every number below was a first guess, and a first guess is only ever settled by someone
+// FEELING it. The range console can now drive these live (`GuardTuningPanel` in Shimmer3D),
+// which is worth a word about why it did not become a mutable module-level `let`:
+//
+//   A mutable export would make `stepEncounter` impure — the same state and the same dt would
+//   stop producing the same next state, which is the one property this file's header promises
+//   and the whole reason the encounter is provable headless. It would also mean the oracle and
+//   the running game could silently disagree, because the oracle imports the same binding the
+//   sliders are writing to.
+//
+// Passing tuning IN keeps the functions total over their inputs and actually makes them *more*
+// pure than before: the numbers stop being ambient. The default argument is what keeps all
+// existing call sites (and every assert in crucible-encounter.test.ts) working untouched.
+export interface GuardTuning {
   /** seconds each phase of the loop holds before handing to the next */
-  phaseSec: 7,
+  phaseSec: number
   /** Seren's advance claims this much ground per phase — the "squeezed out of a room" feel */
-  claimPerPhase: 2.2,
+  claimPerPhase: number
   /** how tight Cade's box gets each time the loop comes round. Options stripped away. */
-  boxShrink: 0.82,
+  boxShrink: number
   /** Wren's counter window — attacks landing inside it get turned back */
-  counterWindowSec: 1.1,
+  counterWindowSec: number
   /** fraction of damage Wren returns on a successful counter */
-  counterReturn: 0.55,
+  counterReturn: number
   /** a guard is staggered this long when broken out of its posture */
-  staggerSec: 1.4,
+  staggerSec: number
   /** the arena radius the trio will not let the player leave */
+  boxStartRadius: number
+  boxMinRadius: number
+}
+
+export const GUARD_TUNING: Readonly<GuardTuning> = {
+  phaseSec: 7,
+  claimPerPhase: 2.2,
+  boxShrink: 0.82,
+  counterWindowSec: 1.1,
+  counterReturn: 0.55,
+  staggerSec: 1.4,
   boxStartRadius: 14,
   boxMinRadius: 5,
-} as const
+}
 
 export const GUARDS: GuardSpec[] = [
   {
@@ -131,10 +157,10 @@ export interface EncounterState {
   cleared: boolean
 }
 
-export function initEncounter(): EncounterState {
+export function initEncounter(tuning: Readonly<GuardTuning> = GUARD_TUNING): EncounterState {
   return {
     t: 0, phase: LOOP_ORDER[0], cycle: 0, phaseElapsed: 0,
-    boxRadius: GUARD_TUNING.boxStartRadius,
+    boxRadius: tuning.boxStartRadius,
     cleared: false,
     guards: GUARDS.map((g) => ({
       id: g.id, hp: g.hp, alive: true, standoff: g.standoff,
@@ -155,7 +181,10 @@ export const specOf = (id: GuardId): GuardSpec => {
  * `playerHpFrac` drives the personality thresholds (Seren raising her barrier at the last possible
  * moment reads off the pressure she's under, not a timer).
  */
-export function stepEncounter(prev: EncounterState, dt: number, playerHpFrac = 1): EncounterState {
+export function stepEncounter(
+  prev: EncounterState, dt: number, playerHpFrac = 1,
+  tuning: Readonly<GuardTuning> = GUARD_TUNING,
+): EncounterState {
   if (prev.cleared) return prev
 
   const guards = prev.guards.map((g) => ({ ...g }))
@@ -165,7 +194,7 @@ export function stepEncounter(prev: EncounterState, dt: number, playerHpFrac = 1
 
   // the loop only advances while someone is alive to run it
   const anyAlive = guards.some((g) => g.alive)
-  if (anyAlive && phaseElapsed >= GUARD_TUNING.phaseSec) {
+  if (anyAlive && phaseElapsed >= tuning.phaseSec) {
     phaseElapsed = 0
     const i = LOOP_ORDER.indexOf(phase)
     const nextI = (i + 1) % LOOP_ORDER.length
@@ -173,9 +202,14 @@ export function stepEncounter(prev: EncounterState, dt: number, playerHpFrac = 1
     // a full pass of squeeze→trap→counter = one cycle: the box tightens, canon's "nowhere to go"
     if (nextI === 0) {
       cycle += 1
-      boxRadius = Math.max(GUARD_TUNING.boxMinRadius, boxRadius * GUARD_TUNING.boxShrink)
+      boxRadius = Math.max(tuning.boxMinRadius, boxRadius * tuning.boxShrink)
     }
   }
+  // The minimum is an INVARIANT, not merely a floor applied at shrink time. Once tuning can move
+  // under a running encounter, raising `boxMinRadius` has to actually give the room back — the old
+  // one-sided clamp only ever ran on the shrink step, so a raised minimum would sit there doing
+  // nothing and read as a dead slider. Costs one Math.max per step and makes the state honest.
+  boxRadius = Math.max(tuning.boxMinRadius, boxRadius)
 
   for (const g of guards) {
     if (!g.alive) { g.leading = false; g.guarding = false; continue }
@@ -189,7 +223,7 @@ export function stepEncounter(prev: EncounterState, dt: number, playerHpFrac = 1
     g.leading = spec.leads === phase
     // Seren claims ground while she leads the squeeze — she closes and does not give it back
     if (g.id === 'seren' && g.leading) {
-      g.standoff = Math.max(spec.standoff, g.standoff - GUARD_TUNING.claimPerPhase * dt)
+      g.standoff = Math.max(spec.standoff, g.standoff - tuning.claimPerPhase * dt)
     } else if (!g.leading) {
       // supporting guards drift back toward their own preferred distance
       g.standoff += (spec.standoff - g.standoff) * Math.min(1, dt * 0.8)
@@ -211,6 +245,7 @@ export function stepEncounter(prev: EncounterState, dt: number, playerHpFrac = 1
 /** Damage a guard. Returns the new state plus how much Wren turned back, if any. */
 export function damageGuard(
   state: EncounterState, id: GuardId, amount: number,
+  tuning: Readonly<GuardTuning> = GUARD_TUNING,
 ): { state: EncounterState; returned: number } {
   const guards = state.guards.map((g) => ({ ...g }))
   const g = guards.find((x) => x.id === id)
@@ -220,14 +255,14 @@ export function damageGuard(
   let returned = 0
 
   // Wren "never the first move, always the counter" — inside her window she turns it back.
-  if (g.id === 'wren' && state.phase === 'counter' && state.phaseElapsed <= GUARD_TUNING.counterWindowSec) {
-    returned = amount * GUARD_TUNING.counterReturn
-    dealt = amount * (1 - GUARD_TUNING.counterReturn)
+  if (g.id === 'wren' && state.phase === 'counter' && state.phaseElapsed <= tuning.counterWindowSec) {
+    returned = amount * tuning.counterReturn
+    dealt = amount * (1 - tuning.counterReturn)
   }
   // a raised barrier blunts the hit and staggers the guard instead of dropping it
   if (g.guarding) {
     dealt *= 0.4
-    g.staggerFor = GUARD_TUNING.staggerSec
+    g.staggerFor = tuning.staggerSec
     g.guarding = false
   }
 
