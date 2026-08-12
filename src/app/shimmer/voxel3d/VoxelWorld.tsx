@@ -113,6 +113,9 @@ import { LAUNCHED_SPECIES } from '../engine/spirit-index'
 import { KeeperFrame, TabEmpty, type KeeperTab } from './keeper-panel'
 import { GrimoireTab } from './grimoire-tab'
 import { loadRuneInventory } from '../play3d/rune-inventory'
+import { birthAffinity } from '../play3d/birth-affinity'
+// Health + shields are SHARED rules, not a second copy — see engine/vitals.ts on why.
+import { freshVitals, damage as applyDamage, type Vitals } from '../engine/vitals'
 import { RUNES } from '../play3d/birth/runes.data'
 import { knownMoves, learnableMoves, MOVES_BY_RUNE } from '../play3d/keeper-moves'
 import { CAST_SLOTS, SLOT_KEYS, eligibleMoves, isBuilt, castForMove } from '../play3d/cast'
@@ -633,6 +636,21 @@ export default function VoxelWorld() {
    * and which surface they are looking at the garden through does not change who is theirs.
    */
   const party = useRef<Spirit[]>([])
+  /**
+   * ── ★ THE KEEPER'S VITALS (2026-08-12, Alex ruled them into this world) ──────────────────────
+   * "100hp and another 100 barrier shields (the barrier birth rune affords an extra 25 to their
+   * base)." Health and shields each count 100 — 200 effective, Apex-style.
+   *
+   * The rules live in `engine/vitals.ts` and are SHARED with play3d rather than written twice, for
+   * the reason every extraction on this seam exists: two worlds disagreeing about what a hit does
+   * is a bug nobody can trace, because both look right in isolation.
+   *
+   * ⚠ CAPS COME FROM THE BIRTH AFFINITY, NEVER FROM A RUNE ID. Alex stated the +25 for Barrier, but
+   * `birth-affinity.ts` already applies it to a FAMILY off the canon essence table — `defense`
+   * (+25 shield) covers Barrier AND Stone, `vitality` (+25 HP) covers Life. Reading the rune id here
+   * would silently drop the other two the day anyone looked.
+   */
+  const vitals = useRef<Vitals>(freshVitals(birthAffinity(loadRuneInventory().birth)))
   /** Planting times by world position. The ONE thing the pot's material cannot hold (see pot.ts). */
   const potClock = useRef<PotClock>({})
   const [hasParty, setHasParty] = useState(false)
@@ -1302,7 +1320,7 @@ export default function VoxelWorld() {
            isOwner={isOwner} drawn={drawn} weaponIdx={weaponIdx} ammoUi={ammoUi}
            tutorialStage={tutorial.current.stage} nearGreg={nearGreg} dialogueOpen={dialogueOpen}
            nearTable={nearTable} craftOpen={craftOpen} nearMist={nearMist} hasParty={hasParty}
-           sparLedger={sparLedger} />
+           sparLedger={sparLedger} vitals={vitals} />
       {showSettings && <SettingsPanel s={settings} update={update} onClose={() => { setShowSettings(false); closeCursorUI() }} />}
       {craftOpen && (
         <CraftPanel have={have} tools={tools} tick={craftTick} station={station}
@@ -1385,7 +1403,46 @@ function Clock() {
   )
 }
 
-function Hud({ stats, pos, look, hotbar, sel, tier, held, build, pieceIdx, rot, inv, skill, levelUp, crafted, tools, skills, activeTool, isOwner, drawn, weaponIdx, ammoUi, tutorialStage, nearGreg, dialogueOpen, nearTable, craftOpen, nearMist, hasParty, sparLedger }: {
+/**
+ * The keeper's two bars — shield over health, Apex-style, because that is the order they empty in.
+ *
+ * ★ POLLED, NOT RE-RENDERED. `vitals` is a ref the frame loop writes every time something lands, and
+ * routing that through React state would re-render the whole HUD on every tick of a drain. Same
+ * pattern the ammo readout and the clock already use here: read on an interval, write the DOM width
+ * directly, and leave the component tree alone. 10 Hz is well under a frame and well over the eye.
+ */
+function ResourceBars({ vitals }: { vitals: React.RefObject<Vitals> }) {
+  const hpEl = useRef<HTMLDivElement>(null)
+  const shEl = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    const id = setInterval(() => {
+      const v = vitals.current
+      if (!v) return
+      if (hpEl.current) hpEl.current.style.width = `${Math.max(0, (v.hp / (v.hpMax || 1)) * 100)}%`
+      if (shEl.current) shEl.current.style.width = `${Math.max(0, (v.shield / (v.shieldMax || 1)) * 100)}%`
+    }, 100)
+    return () => clearInterval(id)
+  }, [vitals])
+  return (
+    // ★ A PLATE, NOT BARE BARS. The first cut drew these straight onto the canvas and the health bar
+    // was EMERALD — a green bar on a green world, which vanished into the grass in the very first
+    // screenshot. The style guide's rule is not decoration: text and readouts never sit raw on a
+    // scene, because the scene is the one thing whose colour you do not control. Dark plate, and
+    // health goes warm so the two bars can never be confused with each other or with the ground.
+    <div className="absolute bottom-4 left-4 w-44 rounded bg-black/45 p-1.5 ring-1 ring-white/10
+                    flex flex-col gap-1 pointer-events-none font-mono">
+      {/* Shield above health, in the order a fight actually spends them. */}
+      <div className="h-[6px] rounded-sm bg-black/60 overflow-hidden">
+        <div ref={shEl} className="h-full bg-sky-300 transition-[width] duration-100" style={{ width: '100%' }} />
+      </div>
+      <div className="h-[6px] rounded-sm bg-black/60 overflow-hidden">
+        <div ref={hpEl} className="h-full bg-rose-400 transition-[width] duration-100" style={{ width: '100%' }} />
+      </div>
+    </div>
+  )
+}
+
+function Hud({ stats, pos, look, hotbar, sel, tier, held, build, pieceIdx, rot, inv, skill, levelUp, crafted, tools, skills, activeTool, isOwner, drawn, weaponIdx, ammoUi, tutorialStage, nearGreg, dialogueOpen, nearTable, craftOpen, nearMist, hasParty, sparLedger, vitals }: {
   stats: string; pos: string
   look: { name: string; progress: number; refused: boolean } | null
   hotbar: (HotbarEntry | null)[]; sel: number; tier: number
@@ -1414,6 +1471,8 @@ function Hud({ stats, pos, look, hotbar, sel, tier, held, build, pieceIdx, rot, 
   nearMist: Resident | null
   hasParty: boolean
   sparLedger: string[] | null
+  /** The keeper's health + shields. A ref: the bars poll it, nothing re-renders. */
+  vitals: React.RefObject<Vitals>
   /** Within reach of a placed crafting table — drives the "E — craft" prompt. */
   nearTable: boolean
   craftOpen: boolean
@@ -1627,6 +1686,7 @@ function Hud({ stats, pos, look, hotbar, sel, tier, held, build, pieceIdx, rot, 
       {!build && <div className="absolute bottom-[4.6rem] left-1/2 -translate-x-1/2 text-[10px] font-mono text-white/50 pointer-events-none">
         spike tier {tier}
       </div>}
+      {!build && <ResourceBars vitals={vitals} />}
     </>
   )
 }
