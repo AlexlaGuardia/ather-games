@@ -36,6 +36,15 @@ COORD_WIN=<lane> COORD_SESSION=<cc-session> tools/coord.sh claim <lane> "what yo
 `<lane>` = hub | world | sprites | play. Claim a FREE lane (check `status` first) or take the one
 Alex assigns. From then on, prefix every `coord` call with `COORD_WIN=<lane> COORD_SESSION=<id>`.
 
+> ⚠ **An empty board is not proof you are alone, and a CLAIMED board is not proof anyone is alive.**
+> `status` prints a session column: `(YOU)` marks your own lanes, a bare id marks another window's,
+> and `session ?` means the claim predates 2026-08-12 or its window never passed `COORD_SESSION` —
+> **unknown, not dead.** Nothing here is a heartbeat; the column tells you whose lane it is so you can
+> ask, not whether they are still typing. Releasing another session's lane is refused
+> (`COORD_FORCE=1` overrides, once you actually know the window is gone).
+> This is here because on 2026-08-12 a booting window read a live hub claim, matched it on timestamp
+> alone, and told Alex it held the lane. The id was being passed on every call and thrown away.
+
 ## New Jin window joins the swarm
 1. Boot `/jin` — its boot sequence runs `coord status` and detects the live swarm automatically.
 2. Read this file.

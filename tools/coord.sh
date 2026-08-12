@@ -7,8 +7,15 @@
 # never corrupt .next or OOM the box.
 #
 # Identity: export COORD_WIN=<lane> once per window (e.g. hub, world, sprites).
-# Optional: export COORD_SESSION=<cc-session-id> so cortex claims attribute to
-# your window's handoff. Falls back safely if unset.
+# COORD_SESSION=<cc-session-id> attributes cortex signals to your window AND is
+# recorded in the claim file, so `status` can tell you which lanes are yours.
+# Falls back safely if unset (the lane reads as "session ?" — unknown, not dead).
+#
+# ⚠ A CLAIM IS NOT A HEARTBEAT. Nothing here observes whether a window is still
+# running; `status` reports who claimed a lane and how long ago, and you judge.
+# This existed to be judged wrong: before 2026-08-12 the session id was read and
+# thrown away, so a live window and a dead claim were byte-identical on disk and
+# a booting window mistook another window's lane for its own.
 #
 # Usage:
 #   coord claim <lane> [note]   register this window as owner of a lane
@@ -39,6 +46,17 @@ mkdir -p "$CLAIMS_DIR"
 now_epoch() { date +%s; }
 now_iso()   { date -u +%Y-%m-%dT%H:%M:%SZ; }
 
+iso_to_epoch() { date -u -d "${1:-}" +%s 2>/dev/null || echo 0; }
+
+age_human() {
+  local s="${1:-0}"
+  if   [ "$s" -lt 60 ]   ; then echo "${s}s"
+  elif [ "$s" -lt 3600 ] ; then echo "$((s/60))m"
+  elif [ "$s" -lt 86400 ]; then echo "$((s/3600))h$(((s%3600)/60))m"
+  else                          echo "$((s/86400))d$(((s%86400)/3600))h"
+  fi
+}
+
 signal() {
   # best-effort cortex signal, never fails the command
   local content="$1"
@@ -53,7 +71,11 @@ signal() {
 cmd_claim() {
   local lane="${1:?usage: coord claim <lane> [note]}"; shift || true
   local note="${*:-}"
-  printf 'owner=%s\nts=%s\nnote=%s\n' "$WIN" "$(now_iso)" "$note" > "$CLAIMS_DIR/$lane"
+  # ★ session= is written BEFORE note= on purpose: note is free text and is the
+  # one field that could ever carry something odd, so it stays last where it can
+  # only swallow itself. Empty when COORD_SESSION is unset — an unattributed
+  # claim must read as "unknown", never get silently credited to whoever asks.
+  printf 'owner=%s\nts=%s\nsession=%s\nnote=%s\n' "$WIN" "$(now_iso)" "$SESSION" "$note" > "$CLAIMS_DIR/$lane"
   echo "claimed lane '$lane' as '$WIN'${note:+ — $note}"
   signal "$WIN claims lane '$lane'${note:+ — $note}"
 }
@@ -61,6 +83,17 @@ cmd_claim() {
 cmd_release() {
   local lane="${1:-$WIN}"
   if [ -f "$CLAIMS_DIR/$lane" ]; then
+    # Releasing someone else's lane deletes the only record that they exist. A
+    # claim we can positively attribute to a DIFFERENT session is the one case
+    # worth blocking; an unattributed claim (legacy format, or a window that
+    # never passed COORD_SESSION) stays freely releasable, because cleaning
+    # those up is exactly what a human does after a crash.
+    local sess; sess=$(sed -n 's/^session=//p' "$CLAIMS_DIR/$lane")
+    if [ -n "$sess" ] && [ -n "$SESSION" ] && [ "$sess" != "$SESSION" ] && [ "${COORD_FORCE:-}" != "1" ]; then
+      echo "refusing to release lane '$lane' — held by session ${sess:0:8}, not yours (${SESSION:0:8})."
+      echo "  if that window is definitely gone: COORD_FORCE=1 coord release $lane"
+      return 1
+    fi
     rm -f "$CLAIMS_DIR/$lane"
     echo "released lane '$lane'"
     signal "$WIN releases lane '$lane'"
@@ -138,14 +171,25 @@ cmd_lock()   { acquire_lock && echo "locked by '$WIN' (release with: coord unloc
 cmd_unlock() { release_lock; echo "build lock released"; }
 
 cmd_status() {
-  echo "=== window: $WIN ==="
+  echo "=== window: $WIN${SESSION:+  (session ${SESSION:0:8})} ==="
   echo "--- lane claims ---"
   if ls "$CLAIMS_DIR"/* >/dev/null 2>&1; then
     for f in "$CLAIMS_DIR"/*; do
-      local lane owner ts note
+      local lane owner ts sess note ep age mark
       lane=$(basename "$f")
-      owner=$(sed -n 's/^owner=//p' "$f"); ts=$(sed -n 's/^ts=//p' "$f"); note=$(sed -n 's/^note=//p' "$f")
-      printf "  %-14s %-10s %s%s\n" "$lane" "$owner" "$ts" "${note:+  ($note)}"
+      owner=$(sed -n 's/^owner=//p' "$f"); ts=$(sed -n 's/^ts=//p' "$f")
+      sess=$(sed -n 's/^session=//p' "$f"); note=$(sed -n 's/^note=//p' "$f")
+      ep=$(iso_to_epoch "$ts")
+      if [ "$ep" -gt 0 ]; then age="$(age_human $(( $(now_epoch) - ep ))) ago"; else age="?"; fi
+      # ★ A CLAIM IS NOT PROOF A WINDOW IS ALIVE. This column is the whole point
+      # of the field: say which session owns the lane, and say "?" plainly when
+      # the claim predates this format. "?" means UNKNOWN, not dead — the tool
+      # must not assert a liveness it cannot observe.
+      if   [ -z "$sess" ]           ; then mark="session ?"
+      elif [ "$sess" = "$SESSION" ] ; then mark="session ${sess:0:8} (YOU)"
+      else                                 mark="session ${sess:0:8}"
+      fi
+      printf "  %-8s %-8s %-9s %-24s %s\n" "$lane" "$owner" "$age" "$mark" "${note:+— $note}"
     done
   else
     echo "  (none)"
