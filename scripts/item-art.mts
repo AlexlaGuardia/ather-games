@@ -28,7 +28,7 @@
 // rendering an invisible sprite. The lie only survives in the editor's list, which is what this
 // report exists to say out loud.
 
-import { writeFileSync } from 'node:fs'
+import { readFileSync, writeFileSync } from 'node:fs'
 import { ALL_BLOCKS, materialForItem } from '../src/app/shimmer/voxel/registry'
 import { RECIPES } from '../src/app/shimmer/voxel/recipes'
 import { TOOL_DEFS } from '../src/app/shimmer/engine/tools'
@@ -37,6 +37,38 @@ import { hasTileArt, flatIcon, iconPixels } from '../src/app/shimmer/voxel3d/tex
 
 type Status = 'derived' | 'painted' | 'missing' | 'blank'
 interface Row { id: string; status: Status; from: string[] }
+
+/**
+ * ── ★ THE ONE CHECK THAT WOULD HAVE CAUGHT BOTH SPRITE BUGS (2026-08-12) ────────────────────────
+ * Every sprite literal declares its size and then supplies digits, and `px` reconciles the two by
+ * silently ignoring the disagreement: too few digits leaves the tail zeroed, too many are dropped.
+ * Nothing downstream can tell — consumers derive the edge from `sqrt(buffer.length)`, which reports
+ * the DECLARED size no matter what was actually written.
+ *
+ * Both faults found today are that one disagreement wearing different clothes: 65 literals gave 256
+ * digits to a 32×32 declaration (16×16 art, rendered as an 8-row scramble), and two gave 992 (rows
+ * one column short, rendered skewed). Neither is visible in the data, in a type, or in a test — only
+ * in the arithmetic between the two arguments and the string.
+ *
+ * So the guard is arithmetic, and it runs on the source text rather than the parsed module: by the
+ * time a literal is a Uint8Array the evidence is gone.
+ */
+function raggedLiterals(): string[] {
+  const file = new URL('../src/app/shimmer/sprites/items.ts', import.meta.url)
+  const text = readFileSync(file, 'utf8')
+  // `S` is the file's own size constant; read it rather than assuming 32, or this check quietly
+  // stops meaning anything the day the file is retargeted.
+  const S = Number(/^const\s+S\s*=\s*(\d+)/m.exec(text)?.[1] ?? 0)
+  const bad: string[] = []
+  const re = /const\s+([A-Z0-9_]+)\s*=\s*px\(\s*([A-Za-z0-9]+)\s*,\s*([A-Za-z0-9]+)\s*,\s*`([^`]*)`\s*\)/g
+  for (const m of text.matchAll(re)) {
+    const dim = (t: string) => (t === 'S' ? S : Number(t))
+    const want = dim(m[2]) * dim(m[3])
+    const got = m[4].replace(/[^0-9a-fA-F]/g, '').length
+    if (want && got !== want) bad.push(`${m[1]}: declares ${m[2]}×${m[3]} (${want} digits) but has ${got}`)
+  }
+  return bad
+}
 
 // ── The reachable item universe ────────────────────────────────────────────────────────────────
 // Everything a keeper can end up holding, gathered from the tables that can actually produce one.
@@ -205,5 +237,19 @@ if (process.argv.includes('--sheet')) {
 if (blank.length) {
   console.log(`\n⚠ ${blank.length} item(s) wired to a blank frame: ${blank.map(r => r.id).join(', ')}`)
   console.log('  The editor lists them as drawn; the game shows the plain chip. Draw or unwire.')
-  if (process.argv.includes('--strict')) process.exit(1)
 }
+
+// ★ THIS one exits non-zero even without --strict, and the asymmetry is the point. Missing art is a
+// person's pending work and gating on it would keep the repo red for weeks. A literal whose digits
+// disagree with its declared size is not pending anything — it is art that is already silently
+// rendering wrong, it is fixable by whoever introduced it, and it is invisible by every other means.
+const ragged = raggedLiterals()
+if (ragged.length) {
+  console.error(`\n✖ ${ragged.length} sprite literal(s) disagree with their declared size:`)
+  for (const r of ragged) console.error(`    ${r}`)
+  console.error('  These render scrambled or skewed. Fix the data — do not teach the renderer to guess.')
+  process.exit(1)
+}
+console.log('✓ all sprite literals match their declared size')
+
+if (blank.length && process.argv.includes('--strict')) process.exit(1)
