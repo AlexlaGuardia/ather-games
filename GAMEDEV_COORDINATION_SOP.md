@@ -99,6 +99,48 @@ coord build "what changed"     # acquire lock -> npm run build -> pm2 restart ->
 - ❌ Two windows editing the shared engine — that's the hub's job; ask it.
 - ❌ Editing the `/root/akatskii-web` fossil — live games are here in `ather-games` (:3200).
 - ❌ Hand-writing a canon name/NPC/region to unblock — that ships accidental canon. Park + flag.
+- ❌ **Building from a spec without grepping for its implementation first.** See below — this cost a
+  whole duplicate system on 2026-08-12.
+
+## ★ A SPEC IN PLANNING TENSE IS NOT EVIDENCE THE THING IS UNBUILT (2026-08-12)
+
+**Grep for the implementation before you believe a design doc's tense.** One command, every time:
+
+```bash
+grep -rln "<the thing>" src/ | grep -v "\.md$"        # is it already code?
+ls -la $(grep -rl "<the thing>" --include=*.ts src/)  # and how old is that code?
+```
+
+**What happened.** A Jin window read `STRUCTURE-LAYER.md` — which is written as a proposal, with
+"§ 4 the trick that keeps it cheap", "§ 5 non-negotiable", recommendations, and open calls marked
+for Alex — plus a GBOARD block in the same register, and concluded the piece layer was unbuilt. It
+then designed and shipped a registry, placeholder geometry, a rotation transform and an 89-assert
+oracle for **six pieces**.
+
+**`voxel/pieces.ts` had shipped on 2026-08-08**: eight pieces, `STRUCTURE`/`STRUCTURE_HALF` occupancy
+already written into the voxel grid, already skipped by the mesher, already colliding, persisted in
+`ColumnSave.pieces` with tombstones, rendered through `voxel3d/piece-mesh.ts` as merged instanced
+blockouts, placeable by the player, 40-assert oracle green. The duplicate was **strictly worse** on
+every axis it overlapped, including one it never reached — the live `def.passable` is a per-CELL set
+where the duplicate had a per-piece flag.
+
+**Both windows then made the same mistake in the same hour, in opposite directions.** The satellite
+asserted the system did not exist without grepping `src/`. The hub asserted the live oracle "very
+likely shares the same blind spot" without grepping the oracle — it did not; `pieces.test.ts:70` had
+carried an asymmetric `wide` fixture for eight days — and was mid-edit adding a duplicate fixture to
+guard it. **A guess dressed as a finding is the thing to catch here, in either direction.**
+
+**Why a duplicate is worse than nothing**, and why the fix was to delete rather than merge: two
+catalogues that both claim to be the piece system is the same second-source-of-truth shape as
+`ITEM_PALETTES` (written by the editor, read by the editor, read by nothing that renders — 13 items
+shipped wrong for months behind it), except with collision and persistence attached. **When you find
+a duplicate, one of them dies.** "Merge the best of both" is how you get a third thing.
+
+**What actually worked, and is the reason this cost one afternoon instead of a week:** the hub said
+*"stop, I think we have two piece systems, and I'd rather be wrong loudly than let this compound"*
+before doing anything else. Then both windows checked each other's claims with `grep` instead of
+conceding politely, and each found the other partly right. **Raising it loudly and early costs one
+message; a merged duplicate costs a subsystem.**
 ```
 coord {claim <lane> [note] | status | build [msg] | release [lane] | lock | unlock}
 ```
