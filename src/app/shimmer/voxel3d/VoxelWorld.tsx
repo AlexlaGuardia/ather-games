@@ -110,6 +110,10 @@ import { itemIcon } from './tex/item-icon'
 import { bloom as bloomSpirit, due as potsDue, potKey, progress as potProgress, type PotClock } from './pot'
 import { spiritsToSave, spiritsFromSave } from '../spirits/spirit-save'
 import { LAUNCHED_SPECIES } from '../engine/spirit-index'
+import { KeeperFrame, TabEmpty, type KeeperTab } from './keeper-panel'
+import { loadRuneInventory } from '../play3d/rune-inventory'
+import { RUNES } from '../play3d/birth/runes.data'
+import { knownMoves, learnableMoves, MOVES_BY_RUNE } from '../play3d/keeper-moves'
 import { applyFightResult } from '../engine/spirit-health'
 import type { BattleResult } from '../engine/arena'
 import { createFloraRenderer } from './flora-mesh'
@@ -1307,7 +1311,7 @@ export default function VoxelWorld() {
                   onMove={(f, t) => { moveRef(f, t); setCraftTick(v => v + 1) }}
                   onSplit={(f, t, m) => { splitRef(f, t, m); setCraftTick(v => v + 1) }}
                   onQuick={(r) => { quickRef(r); setCraftTick(v => v + 1) }}
-                  onClose={closeBag} />
+                  onClose={closeBag} tools={tools} skills={skills} />
       )}
       {dialogueOpen && <GregDialogue stage={tutorial.current.stage} onClose={closeDialogue} />}
 
@@ -1662,7 +1666,131 @@ const LIFT_BADGE: Record<LiftMode, string> = {
   whole: 'bg-amber-300', half: 'bg-sky-300', one: 'bg-emerald-300',
 }
 
-function BagPanel({ inv, chest, tick, sel, dragFrom, setDragFrom, onMove, onSplit, onQuick, onClose }: {
+/**
+ * The RUNES tab — your runes, and what each one opens.
+ *
+ * ── THE BOOK IS DERIVED, NEVER KEPT ───────────────────────────────────────────────────────────
+ * `keeper-moves.ts` already builds the whole index by inverting each move's rune requirement, so
+ * this component owns no lists of its own and cannot drift from the registry. Three states, which
+ * are the three a keeper actually cares about (#309):
+ *   KNOWN     — you hold every rune it needs. Yours now.
+ *   REACHABLE — one rune away, along your rune's own element/state lanes. The path forward.
+ *   LOCKED    — everything else. Shown as a count, not a list; a wall of unreachable names is
+ *               noise, and the number alone still says "there is more".
+ *
+ * ★ SCATTER'S EMPTY LIST IS CANON, NOT A GAP. `runes.data.ts` states it: the Schools do not teach
+ * Scatter, scholars do not recognise it, and a Scatter-born keeper has no trainable keeper move at
+ * all. So an empty book here must read as a *fact about the world*, never as "content coming soon" —
+ * Benji carries this rune, and the emptiness is the point of him.
+ */
+function RunesTab() {
+  // localStorage read, so it happens once per mount rather than per render.
+  const [inv] = useState(() => loadRuneInventory())
+  const owned = inv.owned
+  const known = knownMoves(owned)
+  const learnable = learnableMoves(owned)
+  const lockedCount = Math.max(0, Object.values(MOVES_BY_RUNE).flat()
+    .filter((m, i, a) => a.findIndex(x => x.id === m.id) === i).length - known.length - learnable.length)
+
+  if (owned.length === 0) {
+    return <TabEmpty>You have no rune yet. A keeper is born with one — the birth screen sets it.</TabEmpty>
+  }
+
+  const row = (label: string, moves: typeof known, tone: string) => moves.length > 0 && (
+    <div className="mb-4">
+      <div className="mb-1.5 text-[10px] uppercase tracking-[0.16em] text-white/35">{label} · {moves.length}</div>
+      <div className="flex flex-col gap-1">
+        {moves.map(m => (
+          <div key={m.id} className="rounded border border-white/10 bg-white/[0.03] px-2.5 py-1.5">
+            <div className="flex items-baseline gap-2">
+              <span className={`text-[12px] ${tone}`}>{m.name}</span>
+              <span className="text-[9px] uppercase tracking-[0.14em] text-white/25">{m.tier}</span>
+              {m.needs && <span className="text-[9px] text-amber-200/40">needs {m.needs}</span>}
+            </div>
+            <div className="text-[10px] leading-snug text-white/40">{m.effect}</div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+
+  return (
+    <div>
+      <div className="mb-4 flex flex-wrap gap-1.5">
+        {owned.map(id => {
+          const r = RUNES.find(x => x.id === id)
+          return (
+            <span key={id} className="rounded px-2 py-1 text-[11px] uppercase tracking-[0.14em]"
+                  style={{ color: r?.glow ?? '#fff', background: `${r?.glow ?? '#fff'}18` }}>
+              {r?.name ?? id}{id === inv.birth && <span className="ml-1.5 text-[9px] text-white/35">birth</span>}
+            </span>
+          )
+        })}
+      </div>
+      {known.length === 0 && learnable.length === 0 ? (
+        <div className="rounded border border-white/10 bg-white/[0.03] px-3 py-2.5 text-[11px] leading-relaxed text-white/40">
+          No move answers to this rune. The Schools do not teach it and scholars do not name it —
+          a keeper born to it manifests, untrained. That is the rune, not a missing page.
+        </div>
+      ) : (
+        <>
+          {row('Known', known, 'text-amber-200/90')}
+          {row('One rune away', learnable, 'text-white/70')}
+          {lockedCount > 0 && (
+            <div className="text-[10px] text-white/25">
+              {lockedCount} more move{lockedCount === 1 ? '' : 's'} sit behind runes you do not hold.
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  )
+}
+
+/**
+ * The TOOLS tab — the four gathering families, what you hold in each, and how far your skill has come.
+ *
+ * ★ This is the surface `ToolArc` deliberately is not. That arc is read-only on purpose ("nothing
+ * here is clickable, which is the point") because it lives over the world during play. The same
+ * four sockets need somewhere they CAN be inspected without a HUD element growing a menu, and this
+ * is it — same data, same order, no second source.
+ */
+function ToolsTab({ tools, skills }: {
+  tools: React.RefObject<EquippedTools>
+  skills: React.RefObject<SkillSet>
+}) {
+  return (
+    <div className="flex flex-col gap-1.5">
+      {TOOL_FAMILIES.map(family => {
+        const held = getEquippedTool(tools.current!, family)
+        const def = held ? getToolDef(held) : undefined
+        const sk = skills.current![family]
+        const need = xpForSkillLevel(sk.level)
+        const pct = Math.min(1, sk.xp / Math.max(1, need))
+        return (
+          <div key={family} className="rounded border border-white/10 bg-white/[0.03] px-3 py-2">
+            <div className="flex items-baseline gap-2">
+              <span className="text-[12px] uppercase tracking-[0.14em] text-amber-200/80">{family}</span>
+              <span className="ml-auto text-[10px] tabular-nums text-white/35">lv {sk.level}</span>
+            </div>
+            <div className="mt-1 flex items-baseline gap-2">
+              {/* An empty hand is a real state, not a missing tool — bare hands mine, just slowly. */}
+              <span className="text-[11px] text-white/60">{def?.name ?? 'bare hands'}</span>
+              {def && <span className="text-[9px] uppercase tracking-[0.14em] text-white/25">tier {def.tier}</span>}
+            </div>
+            <div className="mt-1.5 h-1 overflow-hidden rounded bg-white/10">
+              <div className="h-full bg-amber-300/50" style={{ width: `${(pct * 100).toFixed(1)}%` }} />
+            </div>
+            <div className="mt-1 text-[9px] tabular-nums text-white/25">{sk.xp} / {need} xp</div>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+function BagPanel({ inv, chest, tick, sel, dragFrom, setDragFrom, onMove, onSplit, onQuick, onClose,
+                   tools, skills }: {
   inv: React.RefObject<Inventory>
   chest: OpenChest | null
   tick: number
@@ -1673,7 +1801,13 @@ function BagPanel({ inv, chest, tick, sel, dragFrom, setDragFrom, onMove, onSpli
   onSplit: (from: SlotRef, to: SlotRef, mode: 'half' | 'one') => void
   onQuick: (r: SlotRef) => void
   onClose: () => void
+  tools: React.RefObject<EquippedTools>
+  skills: React.RefObject<SkillSet>
 }) {
+  // Which screen is open resets to the satchel on every open, deliberately: `I` is muscle-memory
+  // for "my bag", and a key that sometimes opens the grimoire because that is where you were last
+  // is a key that has to be looked at before it is pressed.
+  const [tab, setTab] = useState<KeeperTab>('satchel')
   const bag = inv.current?.slots ?? []
   const slotKey = (r: SlotRef) => `${r.g}${r.i}`
 
@@ -1838,83 +1972,105 @@ function BagPanel({ inv, chest, tick, sel, dragFrom, setDragFrom, onMove, onSpli
       </button>
     )
   }
-  return (
-    // ★ The backdrop eats the context menu too. Right-click is a game verb inside this panel now, and
-    // a menu opened by a near-miss on a slot covers the grid and swallows the click that follows.
-    <div className="absolute inset-0 z-30 flex items-center justify-center bg-black/55"
-         onClick={onClose} onContextMenu={e => e.preventDefault()}>
-      <div className="rounded-lg border border-white/15 bg-neutral-950/95 p-5 shadow-2xl"
-           onClick={e => e.stopPropagation()}>
-        <div className="mb-3 flex items-baseline justify-between gap-8">
-          <h2 className="font-medium uppercase tracking-[0.18em] text-amber-200/90 text-sm">
-            {chest ? 'Chest' : 'Satchel'}
-          </h2>
-          {/**
-            * ── ★ THE HINT RESERVES ITS OWN WIDEST WIDTH (2026-08-11, Alex: "the chest menu gets a
-            * little smaller") ────────────────────────────────────────────────────────────────────
-            * This panel is a shrink-to-fit flex item, so its width is the widest thing inside it —
-            * and that is this SENTENCE, not the grid of slots. Swapping in a shorter hint therefore
-            * resized the whole panel the instant you lifted a stack, moving every slot out from
-            * under the cursor mid-action. A menu that changes size while you are aiming at it is
-            * the interface flinching away from the click.
-            *
-            * So EVERY hint is always in the DOM, stacked in one grid cell; only the live one is
-            * visible. The container measures the longest, permanently, and no swap can move
-            * anything. `invisible` (not `hidden`) is the whole trick — it keeps the box.
-            *
-            * ★ Self-maintaining on purpose: a future hint cannot reintroduce the jump without also
-            * being in this list, because the list IS the layout. A hardcoded panel width would have
-            * fixed today's symptom and quietly rotted the first time a sentence grew.
-            */}
-          <span className="grid text-[11px] text-white/40">
-            {([
-              [`drag a stack to move it · right-drag deals one per slot${chest ? ' · shift-click sends it across' : ''} · I closes`, dragFrom === null],
-              ['click a slot to place · right-click deals one and keeps hold · click again to cancel', dragFrom?.mode === 'whole'],
-              ['click a slot to place half · right-click deals one instead · click again to cancel', dragFrom?.mode === 'half'],
-              ['release over a slot to leave one there · drag on to keep dealing', dragFrom?.mode === 'one'],
-            ] as const).map(([text, live]) => (
-              <span key={text} style={{ gridArea: '1 / 1' }}
-                    className={live ? '' : 'invisible'} aria-hidden={!live}>{text}</span>
-            ))}
-          </span>
-          {/* ★ A VISIBLE WAY OUT. I and Escape both close this, and neither is discoverable from
-              inside it — a player who does not already know the key is stuck looking at their bag
-              with the mouse free and no button to press, which reads as the game having hung.
-              `pointerDown` rather than click, matching the slots: every other press in this panel
-              acts on the way down, and a close that waited for the release would feel heavier than
-              the thing it closes. */}
-          <button type="button" onPointerDown={onClose} title="close (I or Esc)"
-                  className="ml-auto -mt-1 -mr-1 h-6 w-6 shrink-0 rounded border border-white/15
-                             text-white/40 leading-none transition-colors
-                             hover:border-white/40 hover:text-white/80">×</button>
-        </div>
-        {/* The chest's own grid, above the bag and separated by a rule — the same relationship the
-            satchel and the hotbar already have, one level out. */}
-        {chest && (
-          <div className="mb-4 border-b border-white/10 pb-4">
-            <div className="mb-1.5 text-[10px] uppercase tracking-[0.16em] text-white/35">
-              in the chest · {chest.x} {chest.y} {chest.z}
-            </div>
-            <div className="grid gap-1.5" style={{ gridTemplateColumns: `repeat(${CHEST_COLS}, minmax(0, 1fr))` }}>
-              {Array.from({ length: CHEST_SLOTS }, (_, k) => cell({ g: 'chest', i: k }))}
-            </div>
+  /**
+   * ── ★ THE HINT STILL RESERVES ITS OWN LARGEST BOX (2026-08-11; re-justified 2026-08-12) ───────
+   * Originally: this panel was shrink-to-fit, so its WIDTH was the widest thing inside it — this
+   * sentence, not the grid of slots. Swapping in a shorter hint resized the whole panel the instant
+   * you lifted a stack, moving every slot out from under the cursor mid-action. A menu that changes
+   * size while you are aiming at it is the interface flinching away from the click.
+   *
+   * `KeeperFrame` now fixes the width, so that original reason is gone — and the trick STAYS, for a
+   * new one. The hint sits below the frame's fixed-height body, outside the scroll, so it is the one
+   * piece of content that can still change the panel's size: a longer sentence wraps to a second
+   * line and moves everything above it. Width was the old axis; height is the live one.
+   *
+   * So EVERY hint is always in the DOM, stacked in one grid cell; only the live one is visible. The
+   * container measures the largest, permanently, and no swap can move anything. `invisible` (not
+   * `hidden`) is the whole trick — it keeps the box.
+   *
+   * ★ Self-maintaining on purpose: a future hint cannot reintroduce the jump without also being in
+   * this list, because the list IS the layout.
+   */
+  const hint = (
+    <span className="grid text-[11px] text-white/40">
+      {([
+        [`drag a stack to move it · right-drag deals one per slot${chest ? ' · shift-click sends it across' : ''} · I closes`, dragFrom === null],
+        ['click a slot to place · right-click deals one and keeps hold · click again to cancel', dragFrom?.mode === 'whole'],
+        ['click a slot to place half · right-click deals one instead · click again to cancel', dragFrom?.mode === 'half'],
+        ['release over a slot to leave one there · drag on to keep dealing', dragFrom?.mode === 'one'],
+      ] as const).map(([text, live]) => (
+        <span key={text} style={{ gridArea: '1 / 1' }}
+              className={live ? '' : 'invisible'} aria-hidden={!live}>{text}</span>
+      ))}
+    </span>
+  )
+
+  const satchel = (
+    <>
+      {/* The chest's own grid, above the bag and separated by a rule — the same relationship the
+          satchel and the hotbar already have, one level out. */}
+      {chest && (
+        <div className="mb-4 border-b border-white/10 pb-4">
+          <div className="mb-1.5 text-[10px] uppercase tracking-[0.16em] text-white/35">
+            in the chest · {chest.x} {chest.y} {chest.z}
           </div>
-        )}
-        {/* Satchel: slots 8-23, the 16 that are not the bar. */}
+          <div className="grid gap-1.5" style={{ gridTemplateColumns: `repeat(${CHEST_COLS}, minmax(0, 1fr))` }}>
+            {Array.from({ length: CHEST_SLOTS }, (_, k) => cell({ g: 'chest', i: k }))}
+          </div>
+        </div>
+      )}
+      {/* Satchel: slots 8-23, the 16 that are not the bar. */}
+      <div className="grid grid-cols-8 gap-1.5">
+        {Array.from({ length: 16 }, (_, k) => cell({ g: 'bag', i: k + 8 }))}
+      </div>
+      {/* The bar itself, set apart by a rule so its slots read as the SAME grid, not a copy. */}
+      <div className="mt-4 border-t border-white/10 pt-3">
+        <div className="mb-1.5 text-[10px] uppercase tracking-[0.16em] text-white/35">Hotbar · 1-8</div>
         <div className="grid grid-cols-8 gap-1.5">
-          {Array.from({ length: 16 }, (_, k) => cell({ g: 'bag', i: k + 8 }))}
-        </div>
-        {/* The bar itself, set apart by a rule so its slots read as the SAME grid, not a copy. */}
-        <div className="mt-4 border-t border-white/10 pt-3">
-          <div className="mb-1.5 text-[10px] uppercase tracking-[0.16em] text-white/35">Hotbar · 1-8</div>
-          <div className="grid grid-cols-8 gap-1.5">
-            {Array.from({ length: 8 }, (_, k) => (
-              <div key={k} className={sel === k ? 'ring-2 ring-amber-300/70 rounded' : ''}>{cell({ g: 'bag', i: k })}</div>
-            ))}
-          </div>
+          {Array.from({ length: 8 }, (_, k) => (
+            <div key={k} className={sel === k ? 'ring-2 ring-amber-300/70 rounded' : ''}>{cell({ g: 'bag', i: k })}</div>
+          ))}
         </div>
       </div>
-    </div>
+    </>
+  )
+
+  /**
+   * ★ A CHEST IS A MODE, NOT A TAB. Opening a chest is a focused two-container interaction; the
+   * other four screens have nothing to do with it, and a rail sitting above an open chest invites a
+   * click that would strand a lifted stack between containers. So the chest takes the frame's
+   * `title` path, which replaces the rail entirely, and the bag stays the only thing on screen.
+   */
+  if (chest) {
+    return (
+      <KeeperFrame tab="satchel" setTab={() => {}} title="Chest" hint={hint} onClose={onClose}>
+        {satchel}
+      </KeeperFrame>
+    )
+  }
+
+  return (
+    <KeeperFrame tab={tab} setTab={setTab} onClose={onClose}
+                 hint={tab === 'satchel' ? hint : undefined}>
+      {tab === 'satchel' && satchel}
+      {tab === 'runes' && <RunesTab />}
+      {tab === 'grimoire' && (
+        <TabEmpty>
+          The grimoire is built (<code className="text-white/45">components/Grimoire.tsx</code>) but
+          is not wired into this world yet — it needs the spirit index persisted here and the 2D
+          sprite sheets it draws from. Your roster lives in the party for now.
+        </TabEmpty>
+      )}
+      {tab === 'tools' && <ToolsTab tools={tools} skills={skills} />}
+      {tab === 'loadout' && (
+        <TabEmpty>
+          Nothing to equip yet. Moves reach a cast slot through
+          <code className="mx-1 text-white/45">cast.ts</code>, which still maps a birth rune straight
+          to an archetype — until it is repointed to loadout-slot → move → archetype, a loadout has
+          no slots to fill.
+        </TabEmpty>
+      )}
+    </KeeperFrame>
   )
 }
 
