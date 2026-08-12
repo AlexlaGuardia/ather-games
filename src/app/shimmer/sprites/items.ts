@@ -3045,6 +3045,11 @@ export const SEED_PALETTES: Record<string, readonly string[]> = {
   seed_rabbit:      seedPal('#e8d8c0', '#8a6040'),    // cream / brown
   seed_hummingbird: seedPal('#30a050', '#c83030'),    // iridescent green / ruby
   seed_bat:         seedPal('#584868', '#8858a8'),    // dark purple / violet
+  // The generic wind-borne seed: `seedPal`'s own base tones with no species tint, because the pot
+  // rolls the species at BLOOM and a seed in the bag must not advertise what it will become.
+  // Without an entry here it falls to `ITEM_PALETTE`, whose index 1 is magenta — the same
+  // default-palette trap that had 13 items shipping wrong this morning. ⚠ Alex's to re-colour.
+  mana_seed:        seedPal('#d4a843', '#8a6a3a'),    // husk gold / plain brown — un-speciated
 }
 
 /**
@@ -3094,6 +3099,16 @@ export const ITEM_ICONS: Record<string, SpriteAnim> = {
   seed_rabbit:      { frames: [MANA_SEED, MANA_SEED_1], rate: 8 },
   seed_hummingbird: { frames: [MANA_SEED, MANA_SEED_1], rate: 8 },
   seed_bat:         { frames: [MANA_SEED, MANA_SEED_1], rate: 8 },
+  // ★ THE GENERIC SEED WAS PAINTED ALL ALONG AND SIMPLY NEVER WIRED (2026-08-12). `mana_seed` — the
+  // wind-borne seed a tuft can yield, the thing that pays out a SPIRIT — sat in ITEM_FRAME_MAP
+  // pointing at these exact frames with no row here, so the editor listed it as painted and the game
+  // drew the "no art yet" chip. It is the ONLY item in that state; the doctor's `item-map-sync`
+  // check names precisely this and had been reporting it.
+  //
+  // It wears the un-speciated seed colours on purpose: the pot rolls the species at BLOOM
+  // (`rollBloomSpecies`, canon-flat — the spirit chooses you), so a seed in the bag must not
+  // advertise which one it will become.
+  mana_seed:        { frames: [MANA_SEED, MANA_SEED_1], rate: 8 },
   spirit_treat:     { frames: [SPIRIT_TREAT], rate: 1 },
   shimmer_dust:     { frames: [SHIMMER_DUST, SHIMMER_DUST_1], rate: 8 },
   // Resource items — T1

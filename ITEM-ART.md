@@ -9,8 +9,9 @@ Items reachable in voxel3d: **58**
 | status | count | meaning |
 |---|---|---|
 | 🟦 derived | 26 | wears its own block's faces. Never needs hand art. |
-| 🟩 painted | 20 | hand-painted flat sprite in `sprites/items.ts`. |
-| ⬜ missing | 10 | **needs art** — draws the plain chip today. |
+| 🌱 flora | 3 | drawn by the world's own ground-cover generator. Never needs hand art. |
+| 🟩 painted | 21 | hand-painted flat sprite in `sprites/items.ts`. |
+| ⬜ missing | 6 | **needs art** — draws the plain chip today. |
 | 🟥 blank | 2 | wired to an all-zero frame. Reads as done, renders nothing. |
 
 ## 🟥 Wired but blank — needs art, and the wiring says otherwise
@@ -28,15 +29,21 @@ Paint at `/shimmer/dev?mode=item` (32×32, palette-indexed). Each is one flat sp
 view-angle call to make — these are held objects, not world props.
 
 - [ ] `goldwood_spade` — tool: farming t1
-- [ ] `grass_tuft` — drop: Grass Tuft
-- [ ] `mana_seed` — drop: Grass Tuft, drop: Tall Grass
 - [ ] `shimmeroak_spade` — tool: farming t2
 - [ ] `starwillow_spade` — tool: farming t3
-- [ ] `tall_grass` — drop: Tall Grass
-- [ ] `wild_flower` — drop: Wildflower
 - [ ] `worn_blade` — tool: forestry t1
 - [ ] `worn_rinstick` — tool: rinning t1
 - [ ] `worn_spike` — tool: prospecting t1
+
+## 🌱 Drawn by the flora generator — nothing to draw
+
+Ground cover has no block face, but the world draws it procedurally, so the icon comes
+from the same fill (`voxel3d/tex/flora-tex.ts`). Hand-painting one would create a second
+source of truth for what a tuft looks like.
+
+- `grass_tuft`
+- `tall_grass`
+- `wild_flower`
 
 ## 🟩 Painted — already shipping
 
@@ -49,6 +56,7 @@ view-angle call to make — these are held objects, not world props.
 - [x] `glowfin_rinstick`
 - [x] `goldwood_bark`
 - [x] `goldwood_blade`
+- [x] `mana_seed`
 - [x] `mana_spike`
 - [x] `pure_mana_core`
 - [x] `raw_mana_shard`

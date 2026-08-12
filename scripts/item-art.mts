@@ -33,9 +33,9 @@ import { ALL_BLOCKS, materialForItem } from '../src/app/shimmer/voxel/registry'
 import { RECIPES } from '../src/app/shimmer/voxel/recipes'
 import { TOOL_DEFS } from '../src/app/shimmer/engine/tools'
 import { ITEM_ICONS, ITEM_PALETTES, SEED_PALETTES, PALETTE_COLLISIONS } from '../src/app/shimmer/sprites/items'
-import { hasTileArt, flatIcon, iconPixels } from '../src/app/shimmer/voxel3d/tex/item-icon'
+import { iconSourceFor, iconPixelsFor, flatIcon } from '../src/app/shimmer/voxel3d/tex/item-icon'
 
-type Status = 'derived' | 'painted' | 'missing' | 'blank'
+type Status = 'derived' | 'flora' | 'painted' | 'missing' | 'blank'
 interface Row { id: string; status: Status; from: string[] }
 
 /**
@@ -93,11 +93,15 @@ for (const t of Object.values(TOOL_DEFS)) note(t.id, `tool: ${t.skillId} t${t.ti
 // ── Classify by calling the shipped path, never by restating its rules ─────────────────────────
 const rows: Row[] = [...sources.entries()]
   .map(([id, from]): Row => {
-    const mat = materialForItem(id)
-    if (mat !== undefined && hasTileArt(mat)) return { id, status: 'derived', from: [...from] }
-    // `flatIcon` returns null for a blank frame too, so ask ITEM_ICONS separately to tell the two
-    // apart: "nobody drew it" and "somebody wired an empty one" need different answers.
-    if (flatIcon(id)) return { id, status: 'painted', from: [...from] }
+    // ★ ASK THE SHIPPED CHAIN, never a local copy of its order. This used to re-state the
+    // fallback here and drifted the same day: flora icons rendered in game while this file still
+    // called grass unpainted.
+    const src = iconSourceFor(id)
+    if (src === 'block') return { id, status: 'derived', from: [...from] }
+    if (src === 'flora') return { id, status: 'flora', from: [...from] }
+    if (src === 'painted') return { id, status: 'painted', from: [...from] }
+    // `flatIcon` refuses a blank frame too, so ask ITEM_ICONS separately to tell "nobody drew it"
+    // from "somebody wired an empty one" — they need different answers.
     if (ITEM_ICONS[id]) return { id, status: 'blank', from: [...from] }
     return { id, status: 'missing', from: [...from] }
   })
@@ -120,6 +124,7 @@ const lines: string[] = [
   '| status | count | meaning |',
   '|---|---|---|',
   `| 🟦 derived | ${of('derived').length} | wears its own block's faces. Never needs hand art. |`,
+  `| 🌱 flora | ${of('flora').length} | drawn by the world's own ground-cover generator. Never needs hand art. |`,
   `| 🟩 painted | ${of('painted').length} | hand-painted flat sprite in \`sprites/items.ts\`. |`,
   `| ⬜ missing | ${of('missing').length} | **needs art** — draws the plain chip today. |`,
   `| 🟥 blank | ${blank.length} | wired to an all-zero frame. Reads as done, renders nothing. |`,
@@ -147,6 +152,14 @@ lines.push(
   '',
 )
 for (const r of of('missing')) lines.push(`- [ ] \`${r.id}\` — ${r.from.join(', ')}`)
+
+if (of('flora').length) {
+  lines.push('', '## 🌱 Drawn by the flora generator — nothing to draw', '')
+  lines.push('Ground cover has no block face, but the world draws it procedurally, so the icon comes')
+  lines.push('from the same fill (`voxel3d/tex/flora-tex.ts`). Hand-painting one would create a second')
+  lines.push('source of truth for what a tuft looks like.', '')
+  for (const r of of('flora')) lines.push(`- \`${r.id}\``)
+}
 
 lines.push('', '## 🟩 Painted — already shipping', '')
 for (const r of of('painted')) lines.push(`- [x] \`${r.id}\``)
@@ -211,7 +224,7 @@ console.log('\nwrote ITEM-ART.md')
 if (process.argv.includes('--sheet')) {
   const sharp = (await import('sharp')).default
   const S = 48, PAD = 6, COLS = 8, BG = [24, 24, 27]
-  const drawn = rows.filter(r => r.status === 'derived' || r.status === 'painted')
+  const drawn = rows.filter(r => r.status === 'derived' || r.status === 'painted' || r.status === 'flora')
   const H = Math.ceil(drawn.length / COLS) * (S + PAD) + PAD
   const W = COLS * (S + PAD) + PAD
   const sheet = Buffer.alloc(W * H * 4)
@@ -219,8 +232,7 @@ if (process.argv.includes('--sheet')) {
     sheet[i * 4] = BG[0]; sheet[i * 4 + 1] = BG[1]; sheet[i * 4 + 2] = BG[2]; sheet[i * 4 + 3] = 255
   }
   drawn.forEach((r, i) => {
-    const mat = materialForItem(r.id)
-    const px = r.status === 'derived' ? iconPixels(mat!) : flatIcon(r.id)!
+    const px = iconPixelsFor(r.id, S)!
     const ox = PAD + (i % COLS) * (S + PAD), oy = PAD + Math.floor(i / COLS) * (S + PAD)
     for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) {
       const s = (y * S + x) * 4

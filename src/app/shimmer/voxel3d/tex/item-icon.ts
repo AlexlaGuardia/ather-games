@@ -29,6 +29,7 @@
 
 import { materialForItem } from '../../voxel/registry'
 import { ITEM_ICONS, paletteForItem } from '../../sprites/items'
+import { bladePixels, headPixels, HEAD_TINTS, TUFT_SEED, TUFT_BLADES, TALL_SEED, TALL_BLADES } from './flora-tex'
 import { paintFor, TILE_MATERIALS, TOP, SIDE } from './tiles'
 
 /** Icon edge in CSS pixels. Small enough to stay crisp, large enough for the cube to read. */
@@ -139,6 +140,53 @@ export function flatIconPixels(frame: Uint8Array, palette: readonly string[], si
   return out
 }
 
+/**
+ * ── ★ GROUND COVER DERIVES TOO, IT JUST DERIVES FROM A DIFFERENT GENERATOR (2026-08-12) ─────────
+ * A tuft has no block face to wear — it is two crossed quads — so the isometric projection above
+ * has nothing to project, and grass sat on the hand-paint list. It did not belong there: the world
+ * draws grass procedurally, so its icon can come from the SAME fill, exactly as a stone icon comes
+ * from the same painter that textures stone. Redrawing it by hand would have made a second source
+ * of truth for what a tuft looks like — the thing this file's header refuses for blocks.
+ *
+ * ⚠ THE FLIP IS LOAD-BEARING. `bladePixels` puts row 0 at the BOTTOM (v = 0, no canvas flipY),
+ * which is what makes blades grow up out of the ground in the world. Copied straight into a
+ * top-down icon it draws grass hanging from the ceiling — the same mistake, in the same texture,
+ * that Alex caught on sight in the world mesh. `flip` undoes it for surfaces that draw downward.
+ */
+const FLORA: Record<string, { pixels: () => Uint8Array; src: number; tint?: number }> = {
+  grass_tuft: { pixels: () => bladePixels(TUFT_SEED, TUFT_BLADES, 16), src: 16 },
+  tall_grass: { pixels: () => bladePixels(TALL_SEED, TALL_BLADES, 16), src: 16 },
+  // The heads are painted white so a tint carries the whole hue; the icon takes the first bloom
+  // colour rather than inventing one, so it is a flower the world actually grows.
+  wild_flower: { pixels: () => headPixels(8), src: 8, tint: HEAD_TINTS[3] },
+}
+
+/** Nearest-neighbour scale an RGBA tile to `size`, flipping it upright, with an optional tint. */
+function floraIcon(itemId: string, size = ICON): Uint8Array | null {
+  const f = FLORA[itemId]
+  if (!f) return null
+  const src = f.pixels(), n = f.src
+  const tr = f.tint === undefined ? 1 : ((f.tint >> 16) & 255) / 255
+  const tg = f.tint === undefined ? 1 : ((f.tint >> 8) & 255) / 255
+  const tb = f.tint === undefined ? 1 : (f.tint & 255) / 255
+  const out = new Uint8Array(size * size * 4)
+  for (let y = 0; y < size; y++) {
+    // ★ THE FLIP: destination row 0 is the TOP, source row 0 is the BOTTOM.
+    const sy = Math.min(n - 1, n - 1 - (((y * n) / size) | 0))
+    for (let x = 0; x < size; x++) {
+      const sx = Math.min(n - 1, ((x * n) / size) | 0)
+      const si = (sy * n + sx) * 4
+      if (src[si + 3] === 0) continue
+      const di = (y * size + x) * 4
+      out[di] = Math.min(255, src[si] * tr)
+      out[di + 1] = Math.min(255, src[si + 1] * tg)
+      out[di + 2] = Math.min(255, src[si + 2] * tb)
+      out[di + 3] = 255
+    }
+  }
+  return out
+}
+
 /** The hand-painted flat icon for an item as RGBA, or null when nobody has drawn it. */
 export function flatIcon(itemId: string, size = ICON): Uint8Array | null {
   const frame = ITEM_ICONS[itemId]?.frames[0]
@@ -164,6 +212,36 @@ export function iconPixels(material: number, size = ICON, tile = TILE): Uint8Arr
   return rasterIcon(paintFor(base, TOP, tile), paintFor(base, SIDE, tile), size, tile)
 }
 
+/**
+ * ── ★ ONE CHAIN, NAMED ONCE (2026-08-12) ────────────────────────────────────────────────────────
+ * Block faces → the world's own flora generator → a hand-painted flat sprite → nothing.
+ *
+ * Exported because `scripts/item-art.mts` must classify items by CALLING this, not by restating the
+ * order. It briefly did restate it, and immediately drifted: flora icons started rendering in game
+ * while the checklist still listed grass as unpainted, which is precisely the "the doc says one
+ * thing, the code does another" failure the checklist exists to prevent. A second copy of a
+ * fallback chain is a second source of truth about what the player sees.
+ *
+ * ★ BLOCK FACES ALWAYS WIN. An item with a real block behind it must wear that block's texture even
+ * if other art exists, or the two drift and the icon starts describing last month's stone.
+ */
+export function iconSourceFor(itemId: string): 'block' | 'flora' | 'painted' | null {
+  const mat = materialForItem(itemId)
+  if (mat !== undefined && hasTileArt(mat)) return 'block'
+  if (itemId in FLORA) return 'flora'
+  return ITEM_ICONS[itemId] && flatIcon(itemId) ? 'painted' : null
+}
+
+/** The icon pixels for an item, from whichever source owns it. */
+export function iconPixelsFor(itemId: string, size = ICON): Uint8Array | null {
+  switch (iconSourceFor(itemId)) {
+    case 'block': return iconPixels(materialForItem(itemId)!, size)
+    case 'flora': return floraIcon(itemId, size)
+    case 'painted': return flatIcon(itemId, size)
+    default: return null
+  }
+}
+
 const cache = new Map<string, string | null>()
 /**
  * A data URL for this item's icon, or null when it has no block behind it.
@@ -183,7 +261,7 @@ export function itemIcon(itemId: string): string | null {
   // last month's texture — the whole argument at the top of this file. Flat art only ever answers
   // for items the derivation genuinely cannot: ground cover (a cross-quad, not a cube), and
   // everything with no block at all. Third tier is the honest chip.
-  const px = mat !== undefined && hasTileArt(mat) ? iconPixels(mat) : flatIcon(itemId)
+  const px = iconPixelsFor(itemId)
   if (!px) { cache.set(itemId, null); return null }
 
   // The browser's only job is to carry the pure buffer onto a canvas — no projection lives here.

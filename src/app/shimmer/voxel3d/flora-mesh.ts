@@ -16,6 +16,7 @@
 // in sync), weighted by uv.y so roots stay planted. CPU never touches a standing instance.
 
 import * as THREE from 'three'
+import { bladePixels, headPixels, HEAD_TINTS, TUFT_SEED, TUFT_BLADES, TALL_SEED, TALL_BLADES } from './tex/flora-tex'
 import { FLORA } from '../voxel/flora'
 
 const SECTION = 16
@@ -24,8 +25,6 @@ const SECTION = 16
 const CAP = { tuft: 24000, tall: 6000, flower: 9000 } as const
 
 /** Placeholder palette, tiles.ts's register: greens off TOPSOIL, heads in mana-adjacent pastels. */
-const BLADE_GREEN: [number, number, number] = [86, 158, 66]
-const HEAD_TINTS = [0xf2f4ee, 0xe8c95a, 0xb08ae0, 0x8ec7e8, 0xe8a0b4]
 
 interface Spot { x: number; y: number; z: number; kind: number; variant: number }
 
@@ -79,29 +78,15 @@ function buildCrossGeometry(width: number, height: number, yBase = 0): THREE.Buf
   return g
 }
 
-/** Blade texture: tapered vertical strokes, cutout alpha. Deterministic — same seed, same tile. */
-function makeBladeTexture(seed: number, blades: number, size = 16): THREE.DataTexture {
-  const data = new Uint8Array(size * size * 4)
-  let s = seed
-  const rnd = () => { s = (Math.imul(s, 1103515245) + 12345) >>> 0; return s / 4294967296 }
-  for (let b = 0; b < blades; b++) {
-    const bx = Math.floor(rnd() * size)
-    const h = Math.floor(size * (0.55 + rnd() * 0.45))
-    const lean = rnd() < 0.5 ? -1 : 1
-    for (let y = 0; y < h; y++) {
-      const x = Math.min(size - 1, Math.max(0, bx + (y > h * 0.6 ? lean : 0)))
-      // ⚠ DataTexture row 0 is v=0 — the BOTTOM of the quad (no canvas-style flipY here). The
-      // first version indexed (size-1-y) out of canvas habit, which painted every blade growing
-      // DOWN from the quad's top edge and left the root row transparent — grass hovering a gap
-      // above its own ground (Alex caught it on sight).
-      const o = (y * size + x) * 4
-      const shade = -24 + rnd() * 40 + (y / h) * 26      // tips catch more light
-      data[o] = BLADE_GREEN[0] + shade
-      data[o + 1] = BLADE_GREEN[1] + shade
-      data[o + 2] = BLADE_GREEN[2] + shade * 0.6
-      data[o + 3] = 255
-    }
-  }
+/**
+ * ★ THE PIXELS MOVED TO `tex/flora-tex.ts` AND THESE ARE NOW WRAPPERS (2026-08-12).
+ * Ground cover has no block face, so its ITEM ICON had nothing to derive from and grass was on the
+ * list for Alex to hand-paint. But the world draws grass from CODE, so the icon needs the same
+ * generator rather than new art — hand-painting one would have created a second source of truth for
+ * what a tuft looks like, which is exactly what `item-icon.ts` refuses for blocks. The fills are
+ * three-free now; all that lives here is the GPU wrapper.
+ */
+function toTexture(data: Uint8Array, size: number): THREE.DataTexture {
   const t = new THREE.DataTexture(data, size, size)
   t.magFilter = THREE.NearestFilter
   t.minFilter = THREE.NearestFilter
@@ -110,28 +95,10 @@ function makeBladeTexture(seed: number, blades: number, size = 16): THREE.DataTe
   return t
 }
 
-/** Flower-head texture: a white bloom (petal ring + core) the instanceColor tints. */
-function makeHeadTexture(size = 8): THREE.DataTexture {
-  const data = new Uint8Array(size * size * 4)
-  const c = (size - 1) / 2
-  for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {
-    const d = Math.hypot(x - c, y - c) / (size / 2)
-    if (d > 0.9) continue
-    const o = (y * size + x) * 4
-    const core = d < 0.3
-    // Painted WHITE so instanceColor is the whole hue; the core dips warm so a bloom has a centre.
-    data[o] = core ? 232 : 255
-    data[o + 1] = core ? 206 : 255
-    data[o + 2] = core ? 120 : 255
-    data[o + 3] = 255
-  }
-  const t = new THREE.DataTexture(data, size, size)
-  t.magFilter = THREE.NearestFilter
-  t.minFilter = THREE.NearestFilter
-  t.colorSpace = THREE.SRGBColorSpace
-  t.needsUpdate = true
-  return t
-}
+const makeBladeTexture = (seed: number, blades: number, size = 16): THREE.DataTexture =>
+  toTexture(bladePixels(seed, blades, size), size)
+
+const makeHeadTexture = (size = 8): THREE.DataTexture => toTexture(headPixels(size), size)
 
 export function createFloraRenderer(): FloraRenderer {
   const uTime = { value: 0 }
@@ -157,8 +124,8 @@ export function createFloraRenderer(): FloraRenderer {
     return m
   }
 
-  const bladeTex = makeBladeTexture(0x5eaf, 5)
-  const tallTex = makeBladeTexture(0x77c1, 4)
+  const bladeTex = makeBladeTexture(TUFT_SEED, TUFT_BLADES)
+  const tallTex = makeBladeTexture(TALL_SEED, TALL_BLADES)
   const headTex = makeHeadTexture()
 
   // Widths chosen against the jitter so a blade can never overhang its cell (w/2 + 0.15 ≤ 0.5):
