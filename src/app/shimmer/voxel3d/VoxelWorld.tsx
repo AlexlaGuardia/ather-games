@@ -111,6 +111,7 @@ import { bloom as bloomSpirit, due as potsDue, potKey, progress as potProgress, 
 import { spiritsToSave, spiritsFromSave } from '../spirits/spirit-save'
 import { LAUNCHED_SPECIES } from '../engine/spirit-index'
 import { KeeperFrame, TabEmpty, type KeeperTab } from './keeper-panel'
+import { GrimoireTab } from './grimoire-tab'
 import { loadRuneInventory } from '../play3d/rune-inventory'
 import { RUNES } from '../play3d/birth/runes.data'
 import { knownMoves, learnableMoves, MOVES_BY_RUNE } from '../play3d/keeper-moves'
@@ -1313,7 +1314,7 @@ export default function VoxelWorld() {
                   onMove={(f, t) => { moveRef(f, t); setCraftTick(v => v + 1) }}
                   onSplit={(f, t, m) => { splitRef(f, t, m); setCraftTick(v => v + 1) }}
                   onQuick={(r) => { quickRef(r); setCraftTick(v => v + 1) }}
-                  onClose={closeBag} tools={tools} skills={skills} />
+                  onClose={closeBag} tools={tools} skills={skills} party={party} />
       )}
       {dialogueOpen && <GregDialogue stage={tutorial.current.stage} onClose={closeDialogue} />}
 
@@ -1899,7 +1900,7 @@ function LoadoutTab() {
 }
 
 function BagPanel({ inv, chest, tick, sel, dragFrom, setDragFrom, onMove, onSplit, onQuick, onClose,
-                   tools, skills }: {
+                   tools, skills, party }: {
   inv: React.RefObject<Inventory>
   chest: OpenChest | null
   tick: number
@@ -1912,6 +1913,7 @@ function BagPanel({ inv, chest, tick, sel, dragFrom, setDragFrom, onMove, onSpli
   onClose: () => void
   tools: React.RefObject<EquippedTools>
   skills: React.RefObject<SkillSet>
+  party: React.RefObject<Spirit[]>
 }) {
   // Which screen is open resets to the satchel on every open, deliberately: `I` is muscle-memory
   // for "my bag", and a key that sometimes opens the grimoire because that is where you were last
@@ -2163,13 +2165,7 @@ function BagPanel({ inv, chest, tick, sel, dragFrom, setDragFrom, onMove, onSpli
                  hint={tab === 'satchel' ? hint : undefined}>
       {tab === 'satchel' && satchel}
       {tab === 'runes' && <RunesTab />}
-      {tab === 'grimoire' && (
-        <TabEmpty>
-          The grimoire is built (<code className="text-white/45">components/Grimoire.tsx</code>) but
-          is not wired into this world yet — it needs the spirit index persisted here and the 2D
-          sprite sheets it draws from. Your roster lives in the party for now.
-        </TabEmpty>
-      )}
+      {tab === 'grimoire' && <GrimoireTab party={party} />}
       {tab === 'tools' && <ToolsTab tools={tools} skills={skills} />}
       {tab === 'loadout' && <LoadoutTab />}
     </KeeperFrame>
