@@ -29,6 +29,8 @@ import { birthAffinity, NEUTRAL_AFFINITY, type Affinity } from './birth-affinity
 import { castForMove, isBuilt, CAST_SLOTS, SLOT_KEYS, type CastSpec } from './cast'
 import { loadLoadout } from './loadout'
 import { stepHunter, hunterRng, RANGE_HUNTER, type HunterCtx } from '../engine/hunter-ai'
+import { fillRoster, ROSTER_SIZE } from './crucible-bots'
+import { createFleet, stepFleet, aliveCount, type Fleet, type FleetTarget } from './crucible-fleet'
 import { loadRuneInventory, saveRuneInventory, setBirthRune, grantRune, revokeRune, EMPTY_INVENTORY, type RuneInventory } from './rune-inventory'
 import { spawnField, tickFields, fieldsAt, blocksShotAt, type Field } from './field-effects'
 import { conjure, shapeCells, blockedAt as conjuredBlockedAt, expireConjured, liveCells, type Conjured } from './conjured-terrain'
@@ -93,6 +95,8 @@ export type RangeCfg = {
   moving: boolean
   hostile: boolean
   guards: boolean
+  /** the Crucible bot fleet — 59 challengers on the extracted hunter brain (#302) */
+  bots: boolean
   /** live guard tuning — first guesses until Alex has felt them (focus #298) */
   tune: GuardTuning
 }
@@ -1880,7 +1884,7 @@ function GunBenches() {
     </>
   )
 }
-function FiringRange({ firingRef, adsRef, weaponIdxRef, gridRef, recoilRef, bloomRef, posRef, hpRef, hpMaxRef, shieldRef, shieldMaxRef, rangeCfgRef, ammoRef, reloadingRef, pendingCastRef, castMultRef, resistRef, infusionRef, fieldsRef, conjuredRef, statusRef, onHeal, onNeedReload, onHit, onShot, onPlayerDamage, onPlayerDown }: {
+function FiringRange({ zoneId, firingRef, adsRef, weaponIdxRef, gridRef, recoilRef, bloomRef, posRef, hpRef, hpMaxRef, shieldRef, shieldMaxRef, rangeCfgRef, ammoRef, reloadingRef, pendingCastRef, castMultRef, resistRef, infusionRef, fieldsRef, conjuredRef, statusRef, onHeal, onNeedReload, onHit, onShot, onPlayerDamage, onPlayerDown }: {
   firingRef: React.RefObject<boolean>   // held while left-click is down → full-auto (semi-auto weapons fire once per press)
   adsRef: React.RefObject<boolean>      // aiming → muzzle offset moves to center (ADS tracer runs flat)
   weaponIdxRef: React.RefObject<number> // which WEAPONS entry is live — drives fire stats + tracer look
@@ -1893,6 +1897,10 @@ function FiringRange({ firingRef, adsRef, weaponIdxRef, gridRef, recoilRef, bloo
   hpMaxRef: React.RefObject<number>         // live HP cap (100, +bonus with the Life birth rune)
   shieldMaxRef: React.RefObject<number>     // live shield cap (100, +25 with the Barrier birth rune)
   rangeCfgRef: React.RefObject<RangeCfg>  // range console (T) settings — incl. live guard tuning
+  /** which zone this sim is running in. The SAME component serves the range and the Crucible —
+   *  `realm: outside` + not peaceful is both — so anything belonging to only one of them (the
+   *  bot fleet) has to ask. */
+  zoneId: string
   ammoRef: React.MutableRefObject<number>       // rounds left in the clip; this sim decrements
   reloadingRef: React.MutableRefObject<number>  // >0 while the recharge channel runs — fire is blocked
   // The cast layer resolves slot → move → spec in the PARENT (where mana/hp/stance live) and hands
@@ -1951,6 +1959,29 @@ function FiringRange({ firingRef, adsRef, weaponIdxRef, gridRef, recoilRef, bloo
     // Seeded, where this used to be `Math.random()`. Single-player, so nothing depended on the old
     // non-determinism, and a repeatable range makes a tuning change judgeable.
     rng: hunterRng(0xC0FFEE, 0),
+    blocked: (x, z) => {
+      const cell = gridRef.current?.[Math.round(z)]?.[Math.round(x)]
+      if (cell === undefined || (cell & 0xFF) === WALL_ID) return true
+      return conjuredBlockedAt(conjuredRef.current, x, z, hunterNow.current)
+    },
+  })
+
+  // ── THE CRUCIBLE FLEET (#302) ───────────────────────────────────────────────────────────────
+  // Built lazily on first frame in the crucible with the toggle on, and dropped on the way out, so
+  // no hook has to know about the zone and no roster is built for a zone nobody is standing in.
+  //
+  // ⚠ THE SEED IS FIXED, AND THAT IS THE POINT. `fillRoster` and every bot's stream descend from
+  // it, so this match is the SAME match on every client and re-runnable while tuning. A clock-based
+  // seed would make the fleet unreproducible the moment anyone tried to compare two runs.
+  const CRUCIBLE_SEED = 0x0C0DE
+  const fleetRef = useRef<Fleet | null>(null)
+  const botMeshRef = useRef<THREE.InstancedMesh>(null)
+  /** rebuilt in place each frame — one array for the fleet, not one per bot */
+  const botBodies = useRef<FleetTarget[]>([])
+  const botMat = useRef(new THREE.Matrix4())
+  const botCtx = useRef<HunterCtx>({
+    targetX: 0, targetZ: 0, rooted: false, disarmed: false, fallbackX: 0, fallbackZ: 0,
+    rng: hunterRng(CRUCIBLE_SEED, 0),   // replaced per-member by stepFleet; never actually read
     blocked: (x, z) => {
       const cell = gridRef.current?.[Math.round(z)]?.[Math.round(x)]
       if (cell === undefined || (cell & 0xFF) === WALL_ID) return true
@@ -2186,6 +2217,26 @@ function FiringRange({ firingRef, adsRef, weaponIdxRef, gridRef, recoilRef, bloo
         h.hp -= crit ? wCrit : wDmg; p.life = 0; onHit(crit)
         if (h.hp <= 0) { h.alive = false; h.respawn = HUNTER_RESPAWN; statusRef.current = clearTarget(statusRef.current, 'hunter') }
       }
+      // ── the fleet takes fire too (#302) ──────────────────────────────────────────────────────
+      // ⚠ A DEAD CHALLENGER STAYS DEAD — `respawn = Infinity`, not a timer. Canon has 60 enter and
+      // the squads thin each other out until one stands; a respawning arena would never converge
+      // and `aliveCount`, the match-over read, would never fall.
+      // 2D test plus a height band: the fleet carries only x/z, and a round passing well over a
+      // challenger's head should miss.
+      if (p.life > 0 && fleetRef.current) {
+        const botY = (posRef.current.y ?? 0) + 0.95
+        if (Math.abs(p.pos.y - botY) < 1.2) {
+          for (const m of fleetRef.current.members) {
+            if (!m.state.alive) continue
+            const bdx = p.pos.x - m.state.x, bdz = p.pos.z - m.state.z
+            if (bdx * bdx + bdz * bdz >= HUNTER_HIT_R2) continue
+            const bcrit = p.pos.y > botY + CRIT_Y
+            m.state.hp -= bcrit ? wCrit : wDmg; p.life = 0; onHit(bcrit)
+            if (m.state.hp <= 0) { m.state.alive = false; m.state.respawn = Number.POSITIVE_INFINITY }
+            break
+          }
+        }
+      }
       // rounds vs the Puppet Guards. Damage goes through damageGuard() so a raised barrier blunts
       // it and Wren's counter can turn it back — the canon behaviours live in the sim, not here.
       if (p.life > 0 && guardSim.current.spawned) {
@@ -2241,6 +2292,20 @@ function FiringRange({ firingRef, adsRef, weaponIdxRef, gridRef, recoilRef, bloo
         if (h.alive && p.pos.distanceToSquared(h.pos) < HUNTER_HIT_R2) {
           h.hp -= dmg; p.life = 0; onHit(true)
           if (h.hp <= 0) { h.alive = false; h.respawn = HUNTER_RESPAWN; statusRef.current = clearTarget(statusRef.current, 'hunter') }
+        }
+        // ── the fleet takes cast damage too (#302). Same death rule: a challenger stays down.
+        if (p.life > 0 && fleetRef.current) {
+          const botY2 = (posRef.current.y ?? 0) + 0.95
+          if (Math.abs(p.pos.y - botY2) < 1.2) {
+            for (const m of fleetRef.current.members) {
+              if (!m.state.alive) continue
+              const bdx = p.pos.x - m.state.x, bdz = p.pos.z - m.state.z
+              if (bdx * bdx + bdz * bdz >= HUNTER_HIT_R2) continue
+              m.state.hp -= dmg; p.life = 0; hit = true; onHit(true)
+              if (m.state.hp <= 0) { m.state.alive = false; m.state.respawn = Number.POSITIVE_INFINITY }
+              break
+            }
+          }
         }
       }
     }
@@ -2300,6 +2365,59 @@ function FiringRange({ firingRef, adsRef, weaponIdxRef, gridRef, recoilRef, bloo
           }
         }
       } else if (h.alive || h.respawn > 0) { h.alive = false; h.respawn = 0 }  // toggle off = despawn now
+
+      // ── THE CRUCIBLE FLEET (#302) ─────────────────────────────────────────────────────────
+      // 59 challengers on the same brain the range runs. This block is the HOST, exactly as the
+      // hunter's is: it answers what is solid, supplies the bodies, and owns orbs and death. The
+      // fleet decides who fights whom; `stepHunter` decides how.
+      if (cfg?.bots && zoneId === 'crucible') {
+        if (!fleetRef.current) {
+          fleetRef.current = createFleet(fillRoster([{ id: 'you', name: 'You' }], CRUCIBLE_SEED), CRUCIBLE_SEED)
+        }
+        const fleet = fleetRef.current
+        const bodies = botBodies.current
+        bodies.length = 0
+        // The player stands in the roster as squad -1: nobody's squadmate, so everyone's enemy.
+        bodies.push({ x: pEye.x, z: pEye.z, squad: -1, alive: true, index: -1 })
+        for (const m of fleet.members) {
+          bodies.push({ x: m.state.x, z: m.state.z, squad: m.challenger.squad, alive: m.state.alive, index: m.index })
+        }
+        hunterNow.current = nowFrame
+        const bc = botCtx.current
+        bc.rooted = false; bc.disarmed = false
+        bc.fallbackX = targets[0].ax; bc.fallbackZ = targets[0].az
+        const results = stepFleet(fleet, bodies, bc, dt, RANGE_HUNTER)
+        for (const r of results) {
+          if (!r.intent.fire) continue
+          // ⚠ ONLY shots aimed at the PLAYER get an orb. Sixty bots trading fire would drain the
+          // pool in a frame and the player would face an arena that never shoots back — the pool is
+          // a rendering budget, not the sim. Bot-on-bot fire resolves without a projectile.
+          if (r.target.index !== -1) continue
+          const o = orbs.find((or) => or.life <= 0)
+          if (!o) continue
+          o.pos.set(r.member.state.x, (posRef.current.y ?? 0) + 0.95, r.member.state.z)
+          o.vel.copy(pEye).sub(o.pos).normalize().multiplyScalar(DRONE_SPEED)
+          o.life = DRONE_LIFE
+        }
+        // Instanced, one matrix per LIVING challenger, `count` trimmed to the survivors — the
+        // same shape the Puppet Guards use. Sixty separate meshes is what `render-audit` exists
+        // to prevent.
+        const bm = botMeshRef.current
+        if (bm) {
+          let n = 0
+          const by = (posRef.current.y ?? 0) + 0.95
+          for (const m of fleet.members) {
+            if (!m.state.alive) continue
+            botMat.current.makeTranslation(m.state.x, by, m.state.z)
+            bm.setMatrixAt(n++, botMat.current)
+          }
+          bm.count = n
+          bm.instanceMatrix.needsUpdate = true
+        }
+      } else if (fleetRef.current) {
+        fleetRef.current = null   // left the zone or flipped the toggle — the match is over
+        if (botMeshRef.current) botMeshRef.current.count = 0
+      }
 
       // ── the Three Puppet Guards ────────────────────────────────────────────────────────────
       // The formation is canon: Seren holds the line, Cade flanks and traps, Wren hangs back and
@@ -2494,6 +2612,11 @@ function FiringRange({ firingRef, adsRef, weaponIdxRef, gridRef, recoilRef, bloo
           are constructs, and no colour of their own is exactly the point. Alex's call on the real
           look (TODO(puppet-guard-art) — canon gives stances + "armor that fits like it grew there"
           for Seren, quality leather for Cade, forgettable-by-design for Wren). */}
+      {/* Crucible challengers (#302) — capacity is the canon roster, `count` is who is still up. */}
+      <instancedMesh ref={botMeshRef} args={[undefined, undefined, ROSTER_SIZE]} frustumCulled={false}>
+        <capsuleGeometry args={[0.34, 0.82, 4, 8]} />
+        <meshStandardMaterial color="#b4694a" metalness={0.15} roughness={0.72} />
+      </instancedMesh>
       <instancedMesh ref={guardMeshRef} args={[undefined, undefined, GUARDS.length]} frustumCulled={false}>
         <capsuleGeometry args={[0.42, 0.9, 4, 10]} />
         <meshStandardMaterial color="#8d9199" metalness={0.55} roughness={0.62} />
@@ -3123,7 +3246,7 @@ const Scene = memo(function Scene(props: {
       <ZoneGeometry key={`${props.zone.id}-${props.dims}`} gridRef={props.gridRef} heights={props.heights} version={props.version} paint={props.paint} editing={props.editing} center={center} mountTick={mountTick} />
       <NPCMarkers npcs={ALL_NPCS.filter((n) => n.zone === props.zone.id && npcInWorld(n, props.defeated, props.flagsRef.current))} heights={props.heights} />
       {props.isOwner && props.zone.id === 'moonwell-glade-gregory-s-home' && <HubGateMarkers heights={props.heights} />}
-      {props.zone.realm === 'outside' && !props.zone.peaceful && <FiringRange firingRef={props.firingRef} adsRef={props.adsRef} weaponIdxRef={props.weaponIdxRef} gridRef={props.gridRef} recoilRef={props.recoilRef} bloomRef={props.bloomRef} posRef={props.posRef} hpRef={props.hpRef} hpMaxRef={props.hpMaxRef} shieldRef={props.shieldRef} shieldMaxRef={props.shieldMaxRef} rangeCfgRef={props.rangeCfgRef} ammoRef={props.ammoRef} reloadingRef={props.reloadingRef} pendingCastRef={props.pendingCastRef} castMultRef={props.castMultRef} resistRef={props.resistRef} infusionRef={props.infusionRef} fieldsRef={props.fieldsRef} conjuredRef={props.conjuredRef} statusRef={props.statusRef} onHeal={props.onHeal} onNeedReload={props.onNeedReload} onHit={props.onRangeHit} onShot={props.onRangeShot} onPlayerDamage={props.onPlayerDamage} onPlayerDown={props.onPlayerDown} />}
+      {props.zone.realm === 'outside' && !props.zone.peaceful && <FiringRange zoneId={props.zone.id} firingRef={props.firingRef} adsRef={props.adsRef} weaponIdxRef={props.weaponIdxRef} gridRef={props.gridRef} recoilRef={props.recoilRef} bloomRef={props.bloomRef} posRef={props.posRef} hpRef={props.hpRef} hpMaxRef={props.hpMaxRef} shieldRef={props.shieldRef} shieldMaxRef={props.shieldMaxRef} rangeCfgRef={props.rangeCfgRef} ammoRef={props.ammoRef} reloadingRef={props.reloadingRef} pendingCastRef={props.pendingCastRef} castMultRef={props.castMultRef} resistRef={props.resistRef} infusionRef={props.infusionRef} fieldsRef={props.fieldsRef} conjuredRef={props.conjuredRef} statusRef={props.statusRef} onHeal={props.onHeal} onNeedReload={props.onNeedReload} onHit={props.onRangeHit} onShot={props.onRangeShot} onPlayerDamage={props.onPlayerDamage} onPlayerDown={props.onPlayerDown} />}
       {props.zone.realm === 'outside' && !props.zone.peaceful && <GunBenches />}
       {props.zone.realm === 'outside' && <ExitMarkers warps={props.zone.warps} heights={props.heights} />}
       {/* gates render in EVERY realm, not just outside: a gate is a named destination, and the
@@ -5371,7 +5494,7 @@ export default function Shimmer3D() {
   const [rangeOpen, setRangeOpen] = useState(false)
   const rangeOpenRef = useRef(false); rangeOpenRef.current = rangeOpen
   const [rangeCfg, setRangeCfg] = useState<RangeCfg>({
-    moving: false, hostile: false, guards: false,
+    moving: false, hostile: false, guards: false, bots: false,
     // a COPY, never the module object: the sliders write to this and GUARD_TUNING is the
     // shipped default the oracle asserts against. Sharing one object would let a drag in the
     // console silently redefine what "default" means for the rest of the session.
@@ -6642,6 +6765,7 @@ export default function Shimmer3D() {
                   ['TARGET DRIFT', 'floating targets strafe side to side', 'moving'],
                   ['HOSTILE HUNTER', 'ground drone hunts you + returns fire', 'hostile'],
                   ['THE PUPPET GUARDS', 'Seren · Cade · Wren — squeeze, trap, counter', 'guards'],
+                  ['CRUCIBLE BOTS', '59 challengers fill the roster — Crucible zone only', 'bots'],
                 ] as const).map(([label, desc, key]) => (
                   <button key={key} onClick={() => setRangeCfg((c) => ({ ...c, [key]: !c[key] }))} style={{
                     display: 'flex', width: '100%', alignItems: 'center', justifyContent: 'space-between', gap: 10,
