@@ -35,6 +35,19 @@ export const WOOD = {
   DAWNWOOD_LOG: 38, DAWNWOOD_LEAVES: 39,
 } as const
 
+/**
+ * Is this material foliage? The ids alternate log/leaves per species, so leaves are the ODD ones in
+ * the wood range — the same parity test `canLeaf` uses inline, named once now that the mesher, the
+ * renderer and the census all have to agree on what a leaf is.
+ *
+ * ★ THIS IS THE SEAM FOR THE CANOPY'S LOOK, not just a tidy-up. Leaves leave the greedy sweep and
+ * come back as crossed quads (see `greedy.ts`'s leaf pass), and the moment two files disagree about
+ * which materials that applies to, a species' canopy renders as cubes while the rest render as
+ * foliage — a difference nobody would trace back to a parity check.
+ */
+export const isLeafMat = (m: number): boolean =>
+  m >= WOOD.GOLDWOOD_LEAVES && m <= WOOD.DAWNWOOD_LEAVES && m % 2 === 1
+
 export type TrunkShape = 'straight' | 'forking'
 export type FoliageShape = 'blob' | 'layered'
 

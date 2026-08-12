@@ -100,6 +100,14 @@ export interface MeshAttrs {
    * learn about textures. That is why the pure core is still untouched by any of this.
    */
   layers: Float32Array
+  /**
+   * ★ ONLY THE LEAF PARTITION CARRIES UVs, and only because it has to. Every other quad is
+   * axis-aligned, so the shader derives its UV from position and normal and no buffer is needed —
+   * that derivation is why `voxel/` never had to learn textures exist. A leaf is a crossed quad on
+   * a diagonal: the derivation has no face to key off and would smear the tile. So leaves get real
+   * UVs, and nothing else pays for them.
+   */
+  uv?: Float32Array
   indices: Uint32Array
   quads: number
 }
@@ -107,7 +115,8 @@ export interface MeshAttrs {
 /** Every buffer in a MeshAttrs, for structuredClone transfer. Zero-copy across the worker boundary. */
 export const attrBuffers = (a: MeshAttrs): ArrayBuffer[] =>
   [a.positions.buffer, a.normals.buffer, a.colors.buffer, a.emissive.buffer,
-   a.layers.buffer, a.indices.buffer] as ArrayBuffer[]
+   a.layers.buffer, a.indices.buffer,
+   ...(a.uv ? [a.uv.buffer] : [])] as ArrayBuffer[]
 
 /**
  * ── ★ WATER IS ITS OWN DRAW, AND THIS IS WHERE IT SPLITS (2026-08-07 late) ─────────────────────
@@ -123,13 +132,23 @@ export const attrBuffers = (a: MeshAttrs): ArrayBuffer[] =>
  * Either half can be null — most sections have no water at all, and a null skips the mesh, the
  * geometry, and the draw, so dry country pays nothing.
  */
-export function buildAttrsSplit(mesh: MeshResult, isWater: (m: number) => boolean):
-  { solid: MeshAttrs | null; water: MeshAttrs | null } {
-  let waterQuads = 0
-  for (let q = 0; q < mesh.quads; q++) if (isWater(mesh.materials[q * 4])) waterQuads++
-  if (waterQuads === 0) return { solid: buildAttrs(mesh), water: null }
+export function buildAttrsSplit(
+  mesh: MeshResult, isWater: (m: number) => boolean, isLeaf: (m: number) => boolean = () => false,
+): { solid: MeshAttrs | null; water: MeshAttrs | null; leaves: MeshAttrs | null } {
+  // ★ LEAVES EARN A THIRD PASS FOR A DIFFERENT REASON THAN WATER. Water splits for ORDER (blend
+  // after opaque). Leaves split for MATERIAL: they are crossed quads that need alpha cutout and
+  // double-sided lighting, and neither can be a per-chunk uniform on the main program without
+  // giving every block a cutout test it does not need. Still one extra program total, which is what
+  // the per-chunk-material rule actually forbids — not a second pass.
+  let waterQuads = 0, leafQuads = 0
+  for (let q = 0; q < mesh.quads; q++) {
+    const m = mesh.materials[q * 4]
+    if (isWater(m)) waterQuads++
+    else if (isLeaf(m)) leafQuads++
+  }
+  if (waterQuads === 0 && leafQuads === 0) return { solid: buildAttrs(mesh), water: null, leaves: null }
 
-  const pick = (want: boolean, quads: number): MeshAttrs => {
+  const pick = (want: 'solid' | 'water' | 'leaf', quads: number): MeshAttrs => {
     const positions = new Float32Array(quads * 12)
     const normals = new Float32Array(quads * 12)
     const materials = new Uint16Array(quads * 4)
@@ -137,7 +156,9 @@ export function buildAttrsSplit(mesh: MeshResult, isWater: (m: number) => boolea
     const indices = new Uint32Array(quads * 6)
     let outQ = 0
     for (let q = 0; q < mesh.quads; q++) {
-      if (isWater(mesh.materials[q * 4]) !== want) continue
+      const m = mesh.materials[q * 4]
+      const kind = isWater(m) ? 'water' : isLeaf(m) ? 'leaf' : 'solid'
+      if (kind !== want) continue
       positions.set(mesh.positions.subarray(q * 12, q * 12 + 12), outQ * 12)
       normals.set(mesh.normals.subarray(q * 12, q * 12 + 12), outQ * 12)
       materials.set(mesh.materials.subarray(q * 4, q * 4 + 4), outQ * 4)
@@ -150,12 +171,13 @@ export function buildAttrsSplit(mesh: MeshResult, isWater: (m: number) => boolea
       for (let i = 0; i < 6; i++) indices[outQ * 6 + i] = mesh.indices[q * 6 + i] - q * 4 + outQ * 4
       outQ++
     }
-    return buildAttrs({ positions, normals, materials, ao, indices, quads, faces: quads })
+    return buildAttrs({ positions, normals, materials, ao, indices, quads, faces: quads }, want === 'leaf')
   }
-  const solidQuads = mesh.quads - waterQuads
+  const solidQuads = mesh.quads - waterQuads - leafQuads
   return {
-    solid: solidQuads > 0 ? pick(false, solidQuads) : null,
-    water: pick(true, waterQuads),
+    solid: solidQuads > 0 ? pick('solid', solidQuads) : null,
+    water: waterQuads > 0 ? pick('water', waterQuads) : null,
+    leaves: leafQuads > 0 ? pick('leaf', leafQuads) : null,
   }
 }
 
@@ -180,7 +202,7 @@ export function buildAttrsSplit(mesh: MeshResult, isWater: (m: number) => boolea
  */
 const AO_CURVE = [0.62, 0.78, 0.91, 1] as const
 
-export function buildAttrs(mesh: MeshResult): MeshAttrs {
+export function buildAttrs(mesh: MeshResult, withUV = false): MeshAttrs {
   const n = mesh.materials.length
   const colors = new Float32Array(n * 3)
   const emissive = new Float32Array(n)
@@ -199,12 +221,24 @@ export function buildAttrs(mesh: MeshResult): MeshAttrs {
     colors[i * 3 + 2] = ((hex & 255) / 255) * ao
     emissive[i] = EMISSIVE[m] ?? 0
   }
+  // Corner UVs from the vertex's index WITHIN its quad — the mesher winds every quad the same way,
+  // so (0,0) (1,0) (1,1) (0,1) is the whole mapping and needs no extra data from the mesher.
+  let uv: Float32Array | undefined
+  if (withUV) {
+    uv = new Float32Array(n * 2)
+    for (let i = 0; i < n; i++) {
+      const k = i & 3
+      uv[i * 2] = k === 1 || k === 2 ? 1 : 0
+      uv[i * 2 + 1] = k >= 2 ? 1 : 0
+    }
+  }
   return {
     positions: mesh.positions.slice(),
     normals: mesh.normals.slice(),
     colors,
     emissive,
     layers,
+    uv,
     indices: mesh.indices.slice(),
     quads: mesh.quads,
   }

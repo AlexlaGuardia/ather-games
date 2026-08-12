@@ -45,6 +45,8 @@ import { makeTileArray } from './tex/atlas'
 import { createTexturedVoxelMaterial } from './tex/atlas'
 import { loadSettings, saveSettings, withStyle, VIEW_RADIUS_MIN, VIEW_RADIUS_MAX, type VoxelSettings, type RenderStyle } from './settings'
 import { buildAttrsSplit, MATERIAL_COLOR } from './attrs'
+import { leafPixels } from './tex/flora-tex'
+import { isLeafMat } from '../voxel/trees'
 import { createInventory, removeItems, countItem, type Inventory } from '../engine/inventory'
 // ★ PORT STEP 1 — the zero-coupling systems, wired unchanged.
 // PLAY3D-MIGRATION measured 16 of 23 engine systems as having NO reference to zones, tiles or world
@@ -2151,6 +2153,34 @@ function World({ inv, toolTier, toolSkill, selItem, weaponDrawn, weaponIdx, onAm
   // The world's ONE transparent pass — see mesh-bridge.ts. Shared instance, same rule as above.
   const waterMaterial = useMemo(() => createWaterMaterial(tiles, layerOf(MAT.WATER, 0)), [tiles])
 
+  /**
+   * ── ★ THE CANOPY MATERIAL (2026-08-12) ────────────────────────────────────────────────────────
+   * One extra compiled program for the whole world, which is what the per-chunk-material rule
+   * actually permits — it forbids a program per CHUNK, not a second pass (see attrs.ts on water).
+   *
+   * `alphaTest` not `transparent`: a cutout writes depth and needs no sorting, so a canopy composes
+   * correctly with itself from any angle. Marking leaves transparent instead would drag thousands
+   * of quads into the blended pass and make the tree draw order-dependent — the exact bug water is
+   * split out to avoid, re-created on a much bigger surface.
+   *
+   * `DoubleSide` is what lets the mesher emit ONE quad per plane instead of two: three flips the
+   * normal for back faces, so a cross is lit from both sides for half the geometry.
+   */
+  const leafMaterial = useMemo(() => {
+    const tex = new THREE.DataTexture(leafPixels(16), 16, 16)
+    tex.magFilter = THREE.NearestFilter
+    tex.minFilter = THREE.NearestFilter
+    tex.colorSpace = THREE.SRGBColorSpace
+    tex.needsUpdate = true
+    return new THREE.MeshLambertMaterial({
+      map: tex,
+      vertexColors: true,        // species tint x canopy-depth shade, straight from the mesher
+      alphaTest: 0.5,
+      side: THREE.DoubleSide,
+    })
+  }, [])
+  useEffect(() => () => { leafMaterial.map?.dispose(); leafMaterial.dispose() }, [leafMaterial])
+
   // ★ A VALUE WRITE, NOT A REBUILD. Both shading paths live in the one compiled program and are
   // selected by a uniform, so changing style costs nothing and creates no second shader program.
   useEffect(() => {
@@ -2522,7 +2552,7 @@ function World({ inv, toolTier, toolSkill, selItem, weaponDrawn, weaponIdx, onAm
       posZ: cols.current.get(key(cx, cz + 1)) ?? null,
     }, scratch)) {
       // Water splits into its own mesh so it can blend AFTER the opaque pass — see attrs.ts.
-      const { solid, water } = buildAttrsSplit(sm.mesh, m => m === MAT.WATER)
+      const { solid, water, leaves } = buildAttrsSplit(sm.mesh, m => m === MAT.WATER, isLeafMat)
       if (solid) {
         const mesh = new THREE.Mesh(toGeometry(solid), material)
         mesh.position.set(sm.wx, sm.wy, sm.wz)
@@ -2536,8 +2566,14 @@ function World({ inv, toolTier, toolSkill, selItem, weaponDrawn, weaponIdx, onAm
         g.add(mesh)
         drawn.current.set(`${k}:${sm.index}:w`, mesh)
       }
+      if (leaves) {
+        const mesh = new THREE.Mesh(toGeometry(leaves), leafMaterial)
+        mesh.position.set(sm.wx, sm.wy, sm.wz)
+        g.add(mesh)
+        drawn.current.set(`${k}:${sm.index}:l`, mesh)
+      }
     }
-  }, [material, waterMaterial, scratch])
+  }, [material, waterMaterial, leafMaterial, scratch])
 
   /**
    * ── ★ STREAMING MESHES THROUGH A BUDGETED QUEUE, NOT SYNCHRONOUSLY (2026-08-07) ────────────

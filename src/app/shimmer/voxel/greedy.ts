@@ -18,6 +18,7 @@
 import { AIR, Section } from './section'
 import { STRUCTURE, STRUCTURE_HALF } from './pieces'
 import { isPlant, isHalfMat, isTopSlab } from './depth'
+import { isLeafMat } from './trees'
 
 export interface MeshResult {
   /** xyz per vertex, 4 vertices per quad. */
@@ -247,7 +248,15 @@ export function greedyMesh(
         for (let uu = -1; uu <= S; uu++) {
           const m = sample(c0 + uu * u0 + vv * v0, c1 + uu * u1 + vv * v1, c2 + uu * u2 + vv * v2)
           mat[i] = m
-          sol[i] = m !== AIR && m !== STRUCTURE && m !== STRUCTURE_HALF && !isPlant(m) ? 1 : 0
+          // ★ A LEAF IS INVISIBLE TO THE SWEEP, for the same reason a plant and a piece are: its
+          // geometry is not a unit cube. Leaves are crossed quads now (the leaf pass below), so a
+          // leaf must neither be merged as a cube nor hide the faces of whatever is behind it —
+          // reading as AIR here is what lets a trunk draw the bark a canopy used to bury.
+          //
+          // ⚠ THIS IS A RENDER FACT ONLY. Leaves stay solid to collision, to the light BFS and to
+          // mining; nothing outside this mesher learns anything from this line. Same split as AO:
+          // the grid is load-bearing, the READ is not.
+          sol[i] = m !== AIR && m !== STRUCTURE && m !== STRUCTURE_HALF && !isPlant(m) && !isLeafMat(m) ? 1 : 0
           i++
         }
       }
@@ -521,6 +530,93 @@ export function greedyMesh(
       if (side(-1, 0)) emit(cx, lo, z, 0, 0, 1, 0, 0.5, 0, -1, 0, 0, m)
       if (side(0, 1)) emit(cx, lo, z + 1, 1, 0, 0, 0, 0.5, 0, 0, 0, 1, m)
       if (side(0, -1)) emit(cx, lo, z, 0, 0.5, 0, 1, 0, 0, 0, 0, -1, m)
+    }
+  }
+
+  // ── ★ THE LEAF PASS — the canopy stops being a green box ─────────────────────────────────────
+  // Alex, on whether the world has to look blocky: the grid is load-bearing, the READ is not. AO
+  // was the first answer; leaf-cubes were the biggest remaining silhouette offender, because a
+  // canopy is the one place the world puts a large opaque cube where the eye expects a ragged edge.
+  //
+  // ★ THE ALTERNATIVE WAS TO STOP MAKING LEAVES VOXELS AT ALL — swapping trees for GLTF props
+  // through the (play3d-only) prop layer. That would have killed chopping outright: logs carry the
+  // whole forestry economy (drops, skill XP, tier gates, every plank and blade and spade recipe),
+  // leaves are breakable, and `Column.overrides` exists specifically so a chopped tree stays
+  // chopped. Trees stay voxels. Only their geometry changes.
+  //
+  // ★ AND IT IS AFFORDABLE, MEASURED RATHER THAN HOPED (`scripts/leaf-census.mts`). The instance
+  // count looked alarming — 59k exposed leaf voxels at max radius in the Thicket — but that was the
+  // wrong number. Meshed for real at radius 6: the canopy already emits **31,481 quads** because a
+  // blob of radius 3-5 has almost nothing coplanar to merge, against **34,776** as crossed quads.
+  // 1.10x the leaves, **1.01x the world**. The greedy mesher was never winning here.
+  //
+  // NO MERGING, like the half pass and for the same reason: crossed quads are not coplanar with
+  // anything, so there is nothing a merge pass could collapse.
+  // ⚠ A uniform section cannot hold a mixed canopy, so scanning 4096 cells of solid air or solid
+  // stone to find nothing is pure waste — and it is most of the column. Same argument as the sweep's
+  // own uniform fast path, which is what keeps world height nearly free.
+  if (!uniform || isLeafMat(sec.uniformValue()!)) {
+    const maxQuads = (positions.length / 12) | 0
+    // Diagonals of the cell, inset so two neighbouring canopies do not z-fight along a shared face.
+    const K = 0.5 - 0.0625
+    // ⚠ `break` would leave the two outer loops running. The scratch is sized for the checkerboard
+    // worst case so this should never trip, but "should never" plus a partial exit is how a mesh
+    // comes back silently missing its top half.
+    let full = false
+    for (let y = 0; y < S && !full; y++) {
+      for (let z = 0; z < S && !full; z++) {
+        for (let x = 0; x < S; x++) {
+          const m = sec.get(x, y, z)
+          if (!isLeafMat(m)) continue
+          if (quads + 2 > maxQuads) { full = true; break }
+
+          // ★ DEPTH SHADING FROM ENCLOSURE, since corner AO cannot describe a quad that is not a
+          // face. A leaf walled in by other leaves is deep inside the canopy and should read dark;
+          // one on the rim should catch light. Counting the six neighbours costs six lookups on a
+          // cell we are already visiting and is what stops the canopy reading as one flat colour.
+          let enclosed = 0
+          if (sample(x + 1, y, z) !== AIR) enclosed++
+          if (sample(x - 1, y, z) !== AIR) enclosed++
+          if (sample(x, y + 1, z) !== AIR) enclosed++
+          if (sample(x, y - 1, z) !== AIR) enclosed++
+          if (sample(x, y, z + 1) !== AIR) enclosed++
+          if (sample(x, y, z - 1) !== AIR) enclosed++
+          // ⚠ THE THRESHOLDS MATTER MORE THAN THEY LOOK. The first cut darkened at 3+ neighbours,
+          // and the oracle caught that a blob's CORNER already has 3 — so nothing in an entire
+          // canopy came out lit and the effect read as "the trees got muddy" rather than as depth.
+          // Only genuine burial darkens: the rim (<= 3) stays full bright.
+          const shade = enclosed >= 6 ? 0 : enclosed >= 5 ? 1 : enclosed >= 4 ? 2 : 3
+
+          const cx = x + 0.5, cy = y + 0.5, cz = z + 0.5
+          // Two vertical quads on the cell's diagonals. Wound counter-clockwise from the low-left;
+          // the material is DOUBLE-SIDED, so one quad per plane is enough and the back face is lit
+          // by the shader's flipped normal rather than by a second copy of the geometry.
+          for (let d = 0; d < 2; d++) {
+            const dx = d === 0 ? K : -K
+            const p = quads * 12
+            positions[p + 0] = cx - dx; positions[p + 1] = cy - 0.5; positions[p + 2] = cz - K
+            positions[p + 3] = cx + dx; positions[p + 4] = cy - 0.5; positions[p + 5] = cz + K
+            positions[p + 6] = cx + dx; positions[p + 7] = cy + 0.5; positions[p + 8] = cz + K
+            positions[p + 9] = cx - dx; positions[p + 10] = cy + 0.5; positions[p + 11] = cz - K
+            // Normal is the quad's own plane normal, horizontal — foliage catches side light rather
+            // than reading as a floor. Not normalised to the diagonal on purpose: an exact diagonal
+            // normal makes both quads of a cross shade identically and the cross disappears.
+            const nx = d === 0 ? -0.7071 : 0.7071
+            for (let k = 0; k < 4; k++) {
+              normals[p + k * 3 + 0] = nx
+              normals[p + k * 3 + 1] = 0
+              normals[p + k * 3 + 2] = 0.7071
+              materials[quads * 4 + k] = m
+              ao[quads * 4 + k] = shade
+            }
+            const base = quads * 4, ii = quads * 6
+            indices[ii + 0] = base; indices[ii + 1] = base + 1; indices[ii + 2] = base + 2
+            indices[ii + 3] = base; indices[ii + 4] = base + 2; indices[ii + 5] = base + 3
+            quads++
+            faces++
+          }
+        }
+      }
     }
   }
 

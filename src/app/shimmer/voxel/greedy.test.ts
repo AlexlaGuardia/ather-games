@@ -7,6 +7,7 @@
 
 import { AIR, Section } from './section'
 import { greedyMesh } from './greedy'
+import { WOOD } from './trees'
 
 let pass = 0
 const fails: string[] = []
@@ -269,6 +270,77 @@ for (const S of [4, 16, 32]) {
   }
   eq(checked, 4, 'found the cube -z face')
   eq(misplaced, 0, 'back-face AO lands on the corners nearest the occluder, not their mirror')
+}
+
+// ── 11. THE LEAF PASS (2026-08-12) ───────────────────────────────────────────────────────────
+// Leaves left the greedy sweep and come back as crossed quads. The failure that matters is not
+// "the canopy looks wrong" — it is that a leaf silently stops being a BLOCK. Chopping, drops, the
+// light BFS and collision all read the same voxels, and none of them go through this file; a change
+// here that made leaves disappear from the world data would take the forestry economy with it.
+{
+  const S = 8
+  const s = new Section(S)
+  s.set(4, 4, 4, WOOD.GOLDWOOD_LEAVES)
+  const r = greedyMesh(s)
+  eq(r.quads, 2, 'a lone leaf emits two crossed quads, not six cube faces')
+
+  // Both quads must stand upright and span the cell: a cross that collapsed to a plane, or one
+  // drawn flat, reads as a floating card rather than foliage.
+  let vertical = 0, spans = 0
+  for (let q = 0; q < r.quads; q++) {
+    if (r.normals[q * 12 + 1] === 0) vertical++
+    let lo = Infinity, hi = -Infinity
+    for (let k = 0; k < 4; k++) {
+      const vy = r.positions[q * 12 + k * 3 + 1]
+      lo = Math.min(lo, vy); hi = Math.max(hi, vy)
+    }
+    if (Math.abs(hi - lo - 1) < 1e-6) spans++
+  }
+  eq(vertical, 2, 'both leaf quads are upright')
+  eq(spans, 2, 'and each spans the full height of its cell')
+
+  // The two quads must not be coplanar, or the "cross" is one doubled surface.
+  const n0 = r.normals[0], n1 = r.normals[12]
+  ok(Math.abs(n0 - n1) > 1e-6, 'the two quads face different ways — it is a cross, not a doubled plane')
+}
+{
+  // ★ A LEAF NO LONGER HIDES WHAT IS BEHIND IT. Leaves read as AIR to the sweep, so a trunk beside
+  // one must draw the bark the canopy used to bury. If this regresses, trees develop holes where
+  // foliage touches wood — visible only from inside a canopy, which is where nobody screenshots.
+  const S = 8
+  const bare = new Section(S)
+  bare.set(4, 4, 4, WOOD.GOLDWOOD_LOG)
+  const clothed = new Section(S)
+  clothed.set(4, 4, 4, WOOD.GOLDWOOD_LOG)
+  clothed.set(5, 4, 4, WOOD.GOLDWOOD_LEAVES)
+  const a = greedyMesh(bare), b = greedyMesh(clothed)
+  let logA = 0, logB = 0
+  for (let q = 0; q < a.quads; q++) if (a.materials[q * 4] === WOOD.GOLDWOOD_LOG) logA++
+  for (let q = 0; q < b.quads; q++) if (b.materials[q * 4] === WOOD.GOLDWOOD_LOG) logB++
+  eq(logB, logA, 'a leaf beside a log hides none of the log — it is see-through to the sweep')
+}
+{
+  // Canopy depth: a buried leaf must shade darker than one on the rim, or the whole canopy reads
+  // as one flat colour and the crossed quads have bought nothing.
+  const S = 8
+  const s = new Section(S)
+  for (let y = 3; y <= 5; y++) for (let z = 3; z <= 5; z++) for (let x = 3; x <= 5; x++)
+    s.set(x, y, z, WOOD.GOLDWOOD_LEAVES)
+  const r = greedyMesh(s)
+  let darkest = 3, brightest = 0
+  for (let i = 0; i < r.ao.length; i++) { darkest = Math.min(darkest, r.ao[i]); brightest = Math.max(brightest, r.ao[i]) }
+  eq(brightest, 3, 'the rim of a canopy is fully lit')
+  ok(darkest < 3, 'and the middle of it is not')
+}
+{
+  // ★ THE ONE THAT GUARDS THE ECONOMY. The mesher may say what it likes about leaves; the SECTION
+  // must still hold them, or chopping, drops and persistence lose their subject. Cheap to assert,
+  // and it is the assertion that would catch someone "cleaning up" by deleting leaf voxels.
+  const S = 8
+  const s = new Section(S)
+  s.set(4, 4, 4, WOOD.GOLDWOOD_LEAVES)
+  greedyMesh(s)
+  eq(s.get(4, 4, 4), WOOD.GOLDWOOD_LEAVES, 'meshing does not consume the leaf — it is still a block')
 }
 
 console.log(`\ngreedy mesher: ${pass} passed, ${fails.length} failed`)

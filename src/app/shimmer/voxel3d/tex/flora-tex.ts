@@ -74,3 +74,46 @@ export function headPixels(size = 8): Uint8Array {
   }
   return data
 }
+
+/**
+ * Leaf-cluster tile: a ragged clump of leaf shapes with CUTOUT alpha.
+ *
+ * ── ★ THE CUTOUT IS THE ENTIRE FEATURE (2026-08-12) ─────────────────────────────────────────────
+ * Leaves became crossed quads so the canopy stops reading as a green box. But crossed quads of
+ * SOLID colour are just two intersecting cards — arguably worse than cubes, because at least a cube
+ * looks deliberate. What actually makes foliage read as foliage is the ragged silhouette, and that
+ * comes from alpha, not from geometry. Ship the cross without the cutout and the work is wasted.
+ *
+ * ★ PAINTED WHITE ON PURPOSE, exactly like the flower head above: the vertex colour already carries
+ * the species tint (four woods, four greens, straight out of `MATERIAL_COLOR`) multiplied by the
+ * canopy-depth shade the mesher computed. So ONE tile serves all four species and a retune of a
+ * leaf colour needs no new texture. Baking green in here would fight the vertex colour and flatten
+ * all four species into one.
+ */
+export function leafPixels(size = 16, seed = 0x1eaf): Uint8Array {
+  const data = new Uint8Array(size * size * 4)
+  let s = seed
+  const rnd = () => { s = (Math.imul(s, 1103515245) + 12345) >>> 0; return s / 4294967296 }
+  // A handful of overlapping blobs rather than one disc: a single round mask reads as a bubble, and
+  // the gaps BETWEEN blobs are what the eye reads as leaves rather than as a smear.
+  const blobs = 7
+  for (let b = 0; b < blobs; b++) {
+    const bx = rnd() * size, by = rnd() * size
+    const r = size * (0.16 + rnd() * 0.14)
+    for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {
+      if (Math.hypot(x + 0.5 - bx, y + 0.5 - by) > r) continue
+      const o = (y * size + x) * 4
+      // Slight per-pixel value noise so a lit canopy has grain instead of flat panels.
+      const v = 216 + Math.floor(rnd() * 40)
+      data[o] = v; data[o + 1] = 255; data[o + 2] = v
+      data[o + 3] = 255
+    }
+  }
+  // Chew the border so no quad ends in a straight edge — a hard rectangular rim is the one thing
+  // that would still say "this is a card" no matter how good the blobs are.
+  for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {
+    const edge = Math.min(x, y, size - 1 - x, size - 1 - y)
+    if (edge === 0 || (edge === 1 && rnd() < 0.6)) data[(y * size + x) * 4 + 3] = 0
+  }
+  return data
+}

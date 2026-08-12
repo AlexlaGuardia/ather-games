@@ -22,6 +22,8 @@ export function toGeometry(a: MeshAttrs): THREE.BufferGeometry {
   g.setAttribute('aEmissive', new THREE.BufferAttribute(a.emissive, 1))
   // One float per vertex is the entire cost of texturing — UVs are derived in-shader.
   g.setAttribute('aLayer', new THREE.BufferAttribute(a.layers, 1))
+  // Leaves only — crossed quads have no face for the shader's UV derivation to key off. See attrs.ts.
+  if (a.uv) g.setAttribute('uv', new THREE.BufferAttribute(a.uv, 2))
   g.setIndex(new THREE.BufferAttribute(a.indices, 1))
   g.computeBoundingSphere()
   return g
