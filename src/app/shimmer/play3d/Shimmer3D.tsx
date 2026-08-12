@@ -28,6 +28,7 @@ import { pushCloudSave } from '@/lib/cloud-sync'
 import { birthAffinity, NEUTRAL_AFFINITY, type Affinity } from './birth-affinity'
 import { castForMove, isBuilt, CAST_SLOTS, SLOT_KEYS, type CastSpec } from './cast'
 import { loadLoadout } from './loadout'
+import { stepHunter, hunterRng, RANGE_HUNTER, type HunterCtx } from '../engine/hunter-ai'
 import { loadRuneInventory, saveRuneInventory, setBirthRune, grantRune, revokeRune, EMPTY_INVENTORY, type RuneInventory } from './rune-inventory'
 import { spawnField, tickFields, fieldsAt, blocksShotAt, type Field } from './field-effects'
 import { conjure, shapeCells, blockedAt as conjuredBlockedAt, expireConjured, liveCells, type Conjured } from './conjured-terrain'
@@ -1808,9 +1809,12 @@ const TARGET_HP = 21          // 3 body rounds / 2 crits to pop a board (rescale
 const DRONE_DMG = 11          // hunter orb damage to the player
 const DRONE_SPEED = 9         // tiles/sec — slow on purpose, dodging is the counterplay
 const DRONE_LIFE = 6          // seconds before an orb fizzles
+// ⚠ HUNTER_SPEED and HUNTER_FIRE_CD USED TO LIVE HERE AND ARE NOW `RANGE_HUNTER` in
+// `engine/hunter-ai.ts`. They were deleted rather than left behind: a constant that still looks
+// like a dial but no longer reaches anything is the worst kind of stale — the next person tunes it,
+// sees no change, and concludes the FEEL is unfixable rather than the knob unplugged. The hunter's
+// HP stays here because the host owns damage and death; the module never touches either.
 const HUNTER_HP = 35          // ground hunter takes 5 body rounds (rescaled)
-const HUNTER_SPEED = 3.2      // chase speed, tiles/sec — pressure, not a race
-const HUNTER_FIRE_CD = 2.2    // seconds between hunter shots
 const HUNTER_HIT_R2 = 0.8 * 0.8
 const HUNTER_RESPAWN = 4      // seconds after a kill before it re-spawns (while the console toggle is on)
 const DRIFT_AMP = 2.4         // moving-targets strafe amplitude (tiles)
@@ -1927,7 +1931,32 @@ function FiringRange({ firingRef, adsRef, weaponIdxRef, gridRef, recoilRef, bloo
     alive: true, down: 0, hp: TARGET_HP,
   })), [])
   // the ground hunter — spawned by the console's HOSTILE toggle; chases, strafes, returns fire
-  const hunter = useRef({ pos: new THREE.Vector3(), hp: 0, alive: false, respawn: 0, fireCd: 0, strafe: 0 })
+  // `x`/`z` are the hunter's truth (they are what `engine/hunter-ai.ts` steps); `pos` is the
+  // render/hit-test mirror, written one-way from them once per frame. Everything else in this file
+  // reads `pos` and nothing outside the hunter block writes it, so the two cannot drift.
+  const hunter = useRef({ pos: new THREE.Vector3(), x: 0, z: 0, hp: 0, alive: false, respawn: 0, fireCd: 0, strafe: 0 })
+  /** frame clock the hunter's `blocked` probe needs for conjured terrain — set each frame */
+  const hunterNow = useRef(0)
+  /**
+   * Rebuilt never: one ctx object, mutated per frame. A fresh object per tick for 60 Crucible bots
+   * is precisely what `render-audit` exists to catch, so the range models the shape the fleet needs.
+   *
+   * ⚠ `blocked` answers for BOTH the spawn ring and each step. The inline version tested only the
+   * tile grid when spawning and grid+conjured when moving — one predicate is the deliberate
+   * unification, and it can only ever refuse *more*, never place a hunter somewhere the old code
+   * would have refused.
+   */
+  const hunterCtx = useRef<HunterCtx>({
+    targetX: 0, targetZ: 0, rooted: false, disarmed: false, fallbackX: 0, fallbackZ: 0,
+    // Seeded, where this used to be `Math.random()`. Single-player, so nothing depended on the old
+    // non-determinism, and a repeatable range makes a tuning change judgeable.
+    rng: hunterRng(0xC0FFEE, 0),
+    blocked: (x, z) => {
+      const cell = gridRef.current?.[Math.round(z)]?.[Math.round(x)]
+      if (cell === undefined || (cell & 0xFF) === WALL_ID) return true
+      return conjuredBlockedAt(conjuredRef.current, x, z, hunterNow.current)
+    },
+  })
   // ── THE THREE PUPPET GUARDS (console toggle) ────────────────────────────────────────────────
   // Canon's Level 3 encounter, fought here because the range IS the combat lab and the pyramid's
   // floors do not exist yet. BEHAVIOUR LIVES IN puppet-guards.ts — this ref holds only bodies.
@@ -2231,50 +2260,43 @@ function FiringRange({ firingRef, adsRef, weaponIdxRef, gridRef, recoilRef, bloo
       // ── ground hunter (console HOSTILE toggle): spawn → chase to mid-range → strafe → return fire ──
       const h = hunter.current
       if (cfg?.hostile) {
-        if (!h.alive) {
-          h.respawn -= dt
-          if (h.respawn <= 0) {
-            // spawn 12-16 tiles out at a random bearing; if that lands in a wall/OOB, tuck under target #1
-            const ang = Math.random() * Math.PI * 2, d = 12 + Math.random() * 4
-            h.pos.set(pEye.x + Math.cos(ang) * d, (posRef.current.y ?? 0) + 0.55, pEye.z + Math.sin(ang) * d)
-            const gx = Math.round(h.pos.x), gz = Math.round(h.pos.z)
-            const cell = gridRef.current?.[gz]?.[gx]
-            if (cell === undefined || (cell & 0xFF) === WALL_ID) h.pos.set(targets[0].ax, h.pos.y, targets[0].az)
-            h.hp = HUNTER_HP; h.alive = true; h.fireCd = 1.2; h.strafe = Math.random() * Math.PI * 2
-          }
-        } else {
-          toPlayer.copy(pEye).sub(h.pos); toPlayer.y = 0
-          const dist = toPlayer.length()
-          if (dist > 0.01) toPlayer.multiplyScalar(1 / dist)
-          h.strafe += dt * 0.9
-          // close to mid-range, then orbit-strafe (perpendicular sine) so it's not a static turret
-          step.set(0, 0, 0)
-          if (dist > 9.5) step.addScaledVector(toPlayer, HUNTER_SPEED * dt)
-          step.x += -toPlayer.z * Math.sin(h.strafe) * HUNTER_SPEED * 0.6 * dt
-          step.z += toPlayer.x * Math.sin(h.strafe) * HUNTER_SPEED * 0.6 * dt
-          // ── SYSTEM 3 reads here. A status removes an OPTION, never HP: rooted can't step,
-          // disarmed can't fire, blinded fires at where it *thinks* you are. ──
-          const rooted = hasStatus(statusRef.current, 'hunter', 'rooted', nowFrame)
-          const disarmed = hasStatus(statusRef.current, 'hunter', 'disarmed', nowFrame)
-          const blinded = hasStatus(statusRef.current, 'hunter', 'blinded', nowFrame)
-          if (!rooted) {
-            const nx = h.pos.x + step.x, nz = h.pos.z + step.z
-            const cell = gridRef.current?.[Math.round(nz)]?.[Math.round(nx)]
-            if (cell !== undefined && (cell & 0xFF) !== WALL_ID && !conjuredBlockedAt(conjuredRef.current, nx, nz, nowFrame)) { h.pos.x = nx; h.pos.z = nz }
-          }
-          h.fireCd -= dt
-          if (h.fireCd <= 0 && !disarmed) {
-            h.fireCd = HUNTER_FIRE_CD
-            const o = orbs.find((or) => or.life <= 0)
-            if (o) {
-              o.pos.copy(h.pos); o.pos.y += 0.4
-              o.vel.copy(pEye).sub(o.pos).normalize()
-              // blinded: it still shoots, it just doesn't know where you are. A flash-bang buys you
-              // the fight, it doesn't end it — deliberately not a hard silence.
-              if (blinded) { o.vel.x += Math.sin(h.strafe * 7.3) * 0.85; o.vel.z += Math.cos(h.strafe * 5.1) * 0.85; o.vel.normalize() }
-              o.vel.multiplyScalar(DRONE_SPEED)
-              o.life = DRONE_LIFE
-            }
+        // ── THE BRAIN LIVES IN `engine/hunter-ai.ts` NOW (2026-08-12, #302) ──────────────────
+        // It was written here, inline, and it was good — but a roster of 60 Crucible bots needs the
+        // same behaviour and could not reach it. Extracting it also forced out three things that
+        // were invisible while only one hunter in a private range ran it: it drew from
+        // `Math.random()` (fatal for a deterministic lobby), it read `gridRef` directly (the
+        // dependency that trapped the GUNS extraction), and its status gates were a lookup rather
+        // than an input. This block is now the HOST: it answers what is solid, supplies the
+        // randomness, and owns the consequences (orbs, damage, death). It does not decide.
+        //
+        // ⚠ The rng is SEEDED, where this used to call `Math.random()`. Single-player, so nothing
+        // depended on the old non-determinism — and a repeatable range is strictly easier to judge
+        // a tuning change in.
+        const hRooted = hasStatus(statusRef.current, 'hunter', 'rooted', nowFrame)
+        const hDisarmed = hasStatus(statusRef.current, 'hunter', 'disarmed', nowFrame)
+        const hBlinded = hasStatus(statusRef.current, 'hunter', 'blinded', nowFrame)
+        hunterNow.current = nowFrame
+        const hc = hunterCtx.current
+        hc.targetX = pEye.x; hc.targetZ = pEye.z
+        hc.rooted = hRooted; hc.disarmed = hDisarmed
+        hc.fallbackX = targets[0].ax; hc.fallbackZ = targets[0].az
+        const hIntent = stepHunter(h, hc, dt, RANGE_HUNTER)
+        // State → the render/hit-test vector. One-way, one place: everything else in this file
+        // reads `h.pos` and nothing outside this block writes it.
+        if (hIntent.spawnedAt) h.pos.y = (posRef.current.y ?? 0) + 0.55
+        h.pos.x = h.x; h.pos.z = h.z
+        if (hIntent.fire) {
+          const o = orbs.find((or) => or.life <= 0)
+          if (o) {
+            o.pos.copy(h.pos); o.pos.y += 0.4
+            o.vel.copy(pEye).sub(o.pos).normalize()
+            // blinded: it still shoots, it just doesn't know where you are. A flash-bang buys you
+            // the fight, it doesn't end it — deliberately not a hard silence. Stays HERE rather
+            // than in the module: where a shot goes is the host's business, and the module has no
+            // opinion about orbs.
+            if (hBlinded) { o.vel.x += Math.sin(h.strafe * 7.3) * 0.85; o.vel.z += Math.cos(h.strafe * 5.1) * 0.85; o.vel.normalize() }
+            o.vel.multiplyScalar(DRONE_SPEED)
+            o.life = DRONE_LIFE
           }
         }
       } else if (h.alive || h.respawn > 0) { h.alive = false; h.respawn = 0 }  // toggle off = despawn now
