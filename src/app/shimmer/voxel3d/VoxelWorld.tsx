@@ -75,7 +75,7 @@ import { VoxelDayNight } from './day-night'
 import { dayProgress, getPhase, getDisplayTime, isTimePinned, setTimePin } from '../engine/day-cycle'
 import { hollowEligible, hollowStep, segmentDist, hollowCap, packSize, packWalk, hollowNight,
          type HollowState, HOLLOW_HP, HOLLOW_HOVER, HOLLOW_RADIUS,
-         SPAWN_CYCLE_S, PLAYER_EXCLUSION, GUTTER_SKY } from './hollows'
+         SPAWN_CYCLE_S, PLAYER_EXCLUSION, GUTTER_SKY, hollowTouching, DRAIN_TIME } from './hollows'
 // The light field (port step 4's other half) — computed here, consumed by the spawn cycle only.
 // Per light.ts's header this deliberately never touches a mesh.
 import { computeLight, dayFactor, type LightField } from '../voxel/light'
@@ -2768,6 +2768,19 @@ function World({ inv, toolTier, toolSkill, selItem, weaponDrawn, weaponIdx, onAm
         // GUTTER_SKY > NIGHT_SKY_MAX gives the dusk boundary hysteresis instead of a flap.
         if (15 * day >= GUTTER_SKY || st.hp <= 0) st.gutter = Math.min(1, st.gutter + dt * (st.hp <= 0 ? 2.2 : 0.7))
         hollowStep(st, dt, p.x, p.z, (x, z) => columnHeight(Math.floor(x), Math.floor(z), SEED), now)
+        // ── ★ THE TOUCH LANDS (2026-08-11) — before this, a Hollow that caught you glided
+        // THROUGH you and nothing happened. Every system upstream (the two-channel light field,
+        // the spawn cycle, the pack walk, the lantern's safe room) exists to make the dark cost
+        // something, and the cost was never wired. Refreshed, never stacked: four in a pack must
+        // read as one sustained drain, not a timer you can never outlive.
+        if (hollowTouching(st, p.x, p.z)) {
+          // `loco.current`, not `lc` — the frame callback's `lc` alias is declared further down,
+          // in the movement block. Same ref either way.
+          const keeper = loco.current
+          const first = keeper.drainT <= 0
+          keeper.drainT = DRAIN_TIME
+          if (first) onStats('the grey takes hold — you are slowed')
+        }
         const s = Math.max(0.01, (1 - st.gutter))
         const pulse = 1 + Math.sin(now * 2.3 + st.phase) * 0.07
         hw.mesh.scale.x += (s * pulse - hw.mesh.scale.x) * Math.min(1, dt * 4)

@@ -7,9 +7,11 @@
 import {
   createLoco, tickLocomotion, bodyFree, floorProbe,
   RUN_SPEED, JUMP_V0, SLIDE_SPEED, SLIDEHOP_BOOST, WALLJUMP_PUSH,
-  CLIMB_HOLD_MIN, CLIMB_MAX_RISE, EYE_STAND, EYE_SLIDE, eyeY, STEP_SMOOTH_MAX, type LocoInput,
+  CLIMB_HOLD_MIN, CLIMB_MAX_RISE, EYE_STAND, EYE_SLIDE, eyeY, STEP_SMOOTH_MAX, DRAINED_SPEED,
+  CROUCH_SPEED, type LocoInput,
   CELL_EMPTY, CELL_SOLID, CELL_WATER, CELL_HALF, SWIM_SPEED, SWIM_UP, SWIM_IDLE_SINK, TREAD_SINK_CAP,
 } from './locomotion'
+import { hollowTouching, HOLLOW_SPEED, HOLLOW_HP, DRAIN_TIME } from './hollows'
 
 let pass = 0
 const fails: string[] = []
@@ -433,6 +435,53 @@ const settle = (s: ReturnType<typeof createLoco>, solid: any, frames = 30) => {
   }
   const d60 = fallAt(1 / 60), d144 = fallAt(1 / 144)
   ok(d60 > 0 && Math.abs(d60 - d144) < 0.05, `the descent costs the same at 60 and 144fps (${d60.toFixed(3)}s vs ${d144.toFixed(3)}s)`)
+}
+
+// ── ★ THE HOLLOW'S DRAIN — the night costs speed, never the run itself ──────────────────────
+{
+  const solid = world()
+
+  // Baseline: a clean run reaches RUN_SPEED (asserted at the top of this file too).
+  const s = createLoco(0.5, 10, 0.5); settle(s, solid)
+  for (let i = 0; i < 200; i++) tickLocomotion(s, input({ mvX: 1 }), solid)
+  const clean = Math.hypot(s.hvx, s.hvz)
+
+  // Drained: the same run is capped, and the cap is the ONLY thing that changed.
+  s.drainT = DRAIN_TIME
+  for (let i = 0; i < 120; i++) tickLocomotion(s, input({ mvX: 1 }), solid)
+  const drained = Math.hypot(s.hvx, s.hvz)
+  ok(drained < clean - 1, `a touched keeper is slowed (${drained.toFixed(2)} vs ${clean.toFixed(2)})`)
+  ok(Math.abs(drained - DRAINED_SPEED) < 0.1, `...to exactly DRAINED_SPEED (${drained.toFixed(2)})`)
+
+  // ★ THE RULING, AS AN ASSERT. shimmer-geography.md: a keeper who runs, ESCAPES — "menace, not
+  // a wall". Drop the drained speed below the Hollow's own glide and one touch is a death
+  // sentence by arithmetic, and nothing else in the codebase would complain.
+  ok(DRAINED_SPEED > HOLLOW_SPEED, `★ a drained keeper can still outrun a Hollow (${DRAINED_SPEED} > ${HOLLOW_SPEED}) — menace, not a wall`)
+
+  // It wears off, and it wears off on the clock rather than on distance. Re-armed first: the
+  // cap check above already spent 2s of the timer.
+  s.drainT = DRAIN_TIME
+  let t = 0
+  while (s.drainT > 0 && t < 10) { tickLocomotion(s, input({ mvX: 1 }), solid); t += DT }
+  ok(Math.abs(t - DRAIN_TIME) < 0.1, `the drain expires on its own clock (${t.toFixed(2)}s of ${DRAIN_TIME})`)
+  for (let i = 0; i < 200; i++) tickLocomotion(s, input({ mvX: 1 }), solid)
+  ok(Math.abs(Math.hypot(s.hvx, s.hvz) - clean) < 0.1, 'and the full run comes back — a drain is never permanent')
+
+  // ★ A CAP, NOT A MULTIPLIER. A crouch is already slower than the drain; being touched must not
+  // make a crouching keeper FASTER. This is the failure a `* 0.65` would have shipped silently.
+  const c = createLoco(0.5, 10, 0.5); settle(c, solid)
+  c.drainT = DRAIN_TIME
+  for (let i = 0; i < 200; i++) tickLocomotion(c, input({ mvX: 1, crouchKey: true }), solid)
+  ok(Math.hypot(c.hvx, c.hvz) <= CROUCH_SPEED + 0.05, `★ the drain never speeds anything UP (crouch ${Math.hypot(c.hvx, c.hvz).toFixed(2)} <= ${CROUCH_SPEED})`)
+
+  // The touch test itself: it has to be able to reach you, and a guttering one must not.
+  const hw = { x: 10, y: 11, z: 10, hp: HOLLOW_HP, gutter: 0, phase: 0 }
+  ok(hollowTouching(hw, 10.5, 10.2), 'a Hollow on the keeper is touching her')
+  ok(!hollowTouching(hw, 13, 10), 'one across the clearing is not')
+  hw.gutter = 1
+  ok(!hollowTouching(hw, 10.5, 10.2), '★ a guttered Hollow cannot touch — dawn ends the threat, not just the body')
+  hw.gutter = 0; hw.hp = 0
+  ok(!hollowTouching(hw, 10.5, 10.2), '★ nor can a dispersed one — no drain from something already gone')
 }
 
 console.log(`\nlocomotion: ${pass} passed, ${fails.length} failed`)

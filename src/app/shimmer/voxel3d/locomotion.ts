@@ -34,6 +34,17 @@
 export const RUN_SPEED = 6.5
 export const BACK_SPEED = 3.5
 export const CROUCH_SPEED = 2.6
+
+/**
+ * ⚠ THE DRAINED SPEED IS PINNED BY `HOLLOW_SPEED` (hollows.ts)`, NOT BY TASTE. The ruling this body is built on
+ * says a keeper who runs, ESCAPES — "menace, not a wall". Drain her below the Hollow's own glide
+ * and one touch becomes a death sentence by arithmetic: it is faster than you forever, so the
+ * pack closes and never lets go, and the ruling is broken by a tuning number nobody would think
+ * to re-read. It must stay above 3.4. The oracle asserts exactly that, so a future balance pass
+ * that lowers it fails loudly instead of quietly turning menace into a wall.
+ */
+export const DRAINED_SPEED = 4.2
+
 export const GROUND_ACCEL = 7
 export const GROUND_FRICTION = 13
 export const GRAVITY = 22
@@ -177,6 +188,9 @@ export interface LocoState {
   /** How far the EYE is still below the feet after a step-up, draining to 0. Render only —
    *  read it through `eyeY()`, never in collision. */
   stepSmooth: number
+  /** Seconds of Hollow-drain left on the keeper. While positive her run is capped to
+   *  `DRAINED_SPEED`. The host sets it on contact; locomotion only spends it. */
+  drainT: number
 }
 
 /** Where the camera goes. The one place the step-smoothing offset is applied, so a new call site
@@ -201,7 +215,7 @@ export function createLoco(px: number, feetY: number, pz: number): LocoState {
     mantleT: 0, mantleDur: MANTLE_TIME, mFromX: 0, mFromY: 0, mFromZ: 0, mToX: 0, mToY: 0, mToZ: 0,
     vaulting: false, carryVX: 0, carryVZ: 0,
     justWallJumped: false, justHopped: false, sliding: false, crouching: false, climbing: false,
-    swimming: false, stepSmooth: 0,
+    swimming: false, stepSmooth: 0, drainT: 0,
   }
 }
 
@@ -401,7 +415,14 @@ export function tickLocomotion(s: LocoState, input: LocoInput, probe: CellProbe)
     }
   } else {
     const backpedal = hasInput && (mvX * input.fwdX + mvZ * input.fwdZ) < -0.2
-    const target = s.crouching ? CROUCH_SPEED : backpedal ? BACK_SPEED : RUN_SPEED
+    // ── ★ THE HOLLOW'S DRAIN (2026-08-11) — a CAP, not a multiplier ─────────────────────────
+    // Applied with `min` so it can only ever take speed away. A multiplier would silently SPEED
+    // UP a crouch (2.6 × anything < 1 is still a slow-down, but the sliding branch above runs at
+    // 10 and a drained slide must not read as a normal one), and it would compound with a future
+    // second source of slow into something neither of them meant. A cap composes; a factor does
+    // not. Above the Hollow's own glide by ruling — see DRAINED_SPEED above.
+    const free = s.crouching ? CROUCH_SPEED : backpedal ? BACK_SPEED : RUN_SPEED
+    const target = s.drainT > 0 ? Math.min(free, DRAINED_SPEED) : free
     const rate = Math.min(1, (hasInput ? GROUND_ACCEL : GROUND_FRICTION) * dt)
     s.hvx += ((hasInput ? mvX * target : 0) - s.hvx) * rate
     s.hvz += ((hasInput ? mvZ * target : 0) - s.hvz) * rate
@@ -599,4 +620,5 @@ export function tickLocomotion(s: LocoState, input: LocoInput, probe: CellProbe)
 
   if (s.airborne && hasInput) { s.prevMvX = mvX; s.prevMvZ = mvZ } else { s.prevMvX = 0; s.prevMvZ = 0 }
   if (s.landGrace > 0) s.landGrace -= dt
+  if (s.drainT > 0) s.drainT = Math.max(0, s.drainT - dt)
 }

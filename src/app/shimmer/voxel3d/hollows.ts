@@ -144,6 +144,36 @@ export function hollowStep(
   h.y += (want - h.y) * Math.min(1, dt * 3)
 }
 
+/**
+ * ── ★ THE TOUCH (2026-08-11) — the night finally costs something ────────────────────────────
+ * Everything upstream of this existed to make the dark dangerous — the two-channel light field,
+ * the spawn cycle, the pack walk, the lantern that buys a safe room — and a Hollow that reached
+ * the keeper GLIDED THROUGH HER and did nothing at all. The threat could not threaten.
+ *
+ * ★ IT DRAINS, IT DOES NOT DAMAGE, AND THAT IS THE CANON NOT A SOFTENING. A Hollow is
+ * "unanswered drain-grey... absence given just enough form to move" — there is nothing in it to
+ * free and nothing in it that strikes. What absence does on contact is TAKE FREQUENCY. So the
+ * keeper leaves the touch slowed, not wounded. This also keeps me out of the one question that
+ * is NOT mine: whether a keeper can die is the open cozy-vs-peril gap for /magii, and a drain
+ * needs no answer to it. `shimmer-geography.md` hands Jin "counts, tiers, drops, difficulty"
+ * explicitly; the drain is difficulty, and the lethality question stays where it belongs.
+ */
+export const HOLLOW_TOUCH = 0.95     // a shade past the hit sphere — the smear reaches before it overlaps
+export const DRAIN_TIME = 2.6        // seconds of slowed keeper per touch, refreshed not stacked
+
+/** The keeper's drained speed lives in `locomotion.ts` with her other speeds — the walker must
+ *  not have to know what drained her. The invariant that ties them (drained > HOLLOW_SPEED, or
+ *  "menace" becomes "wall") is asserted in the locomotion oracle, which is the one place that
+ *  legitimately knows both. */
+
+/** True when the smear is on the keeper. Pure and shared with the oracle for the same reason the
+ *  projectile test is: "it can actually reach you" has to be assertable. */
+export function hollowTouching(h: HollowState, px: number, pz: number): boolean {
+  if (h.hp <= 0 || h.gutter >= 1) return false
+  const dx = px - h.x, dz = pz - h.z
+  return dx * dx + dz * dz < HOLLOW_TOUCH * HOLLOW_TOUCH
+}
+
 /** Distance from point P to the segment A→A+D·len — the projectile hit test, shared with the
  *  oracle so "the gun can actually hit one" is an assertable claim, not a hope. */
 export function segmentDist(
