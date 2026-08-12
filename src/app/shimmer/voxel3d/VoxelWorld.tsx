@@ -32,7 +32,7 @@ import { ZONE_ANCHORS, zoneAt } from '../voxel/zones'
 import { AIR } from '../voxel/section'
 import { materialAt, MAT, isPlant, isHalfMat, isTopSlab, baseOf, TOP_BIT, DEFAULT_DEPTH } from '../voxel/depth'
 import { FLORA, plantVariant } from '../voxel/flora'
-import { raycast, tickBreak, dropsFor, type BreakState } from '../voxel/mine'
+import { raycast, tickBreak, dropsFor, setBreakRate, getBreakRate, type BreakState } from '../voxel/mine'
 import { spawnDrop, tickDrops, type Drop } from '../voxel/drops'
 import { blockDef, materialForItem, emitOf, BLOCKS, type BlockSkill } from '../voxel/registry'
 import { editIndex, recordEdit, applyEdits, packEdits, unpackEdits, isStale, type ColumnEdits } from '../voxel/edits'
@@ -367,6 +367,18 @@ const CONSOLE_CMDS: ConsoleCmd[] = [
       return `pinned at ${getDisplayTime(dayProgress())} — 'time free' to release`
     },
     suggest: () => [...Object.keys(NAMED_HOURS), 'free'] },
+  // ★ OWNER-GATED because it is a balance dial, not a view. `time` is view-grade (it pins one tab's
+  // clock and touches nothing shared); this changes how the game PLAYS, which is the line this
+  // registry already draws between cheat-grade and view-grade verbs.
+  { name: 'mine', usage: 'mine [rate]  (1 = normal, 2 = twice as slow)', help: 'dial how long blocks take to break', owner: true,
+    run: (a) => {
+      if (!a[0]) return `break rate ${getBreakRate()}x — 'mine 2' for twice as slow, 'mine 1' for normal`
+      const r = Number(a[0])
+      if (!Number.isFinite(r) || r <= 0) return `not a rate: ${a[0]}`
+      setBreakRate(r)
+      return `blocks now take ${getBreakRate()}x as long — session only, tell Jin the number to bake in`
+    },
+    suggest: () => ['1', '1.5', '2', '3'] },
   { name: 'radius', usage: 'radius [4-12]', help: 'view/load ring, in columns of 16',
     run: (a, c) => {
       if (!a[0]) return `radius is ${c.radius()} (${c.radius() * 16} blocks)`
@@ -2353,6 +2365,25 @@ function World({ inv, toolTier, toolSkill, selItem, weaponDrawn, weaponIdx, onAm
     const ku = (e: KeyboardEvent) => { keys.current[e.code] = false }
     const md = (e: MouseEvent) => {
       if (uiOpen.current) return
+      /**
+       * ── ★ THE CLICK THAT GRABS THE CAMERA IS NOT A GAME VERB (2026-08-12, Alex) ───────────────
+       * Alex: "when I try to grab the camera it mines whatever block is in front of me." Exactly
+       * that. Clicking the canvas while unlocked means *give me the mouse* — but this handler set
+       * `mouse.left` first and the frame loop read it as "start mining", so taking the camera back
+       * after any Escape cost you the block you happened to be facing.
+       *
+       * It is the same bug as the bag's slot-click one directly above, one layer out: that gate
+       * asked "is a cursor SURFACE open", and the pointer being free is the case it could not see —
+       * there is no panel up, the world is simply not listening yet. The honest question is not
+       * which UI is open but **whether the mouse belongs to the world at all**, and the pointer lock
+       * is the only thing that actually answers it.
+       *
+       * ★ AND IT STAYS ASYMMETRIC, for the reason written above: only the PRESS is refused. `mu`
+       * is deliberately ungated, so a button held across a lock change still records its release
+       * and cannot strand `mouse.left` true — down is a request the world may refuse, up is a fact
+       * it has to record.
+       */
+      if (!document.pointerLockElement) return
       if (e.button === 0) mouse.current.left = true; if (e.button === 2) mouse.current.right = true
     }
     const mu = (e: MouseEvent) => { if (e.button === 0) mouse.current.left = false; if (e.button === 2) mouse.current.right = false }
@@ -3406,8 +3437,30 @@ function World({ inv, toolTier, toolSkill, selItem, weaponDrawn, weaponIdx, onAm
       const wantSkill: BlockSkill = hitDef?.skill ?? hitDef?.fastSkill ?? null
       const equipped = wantSkill ? getEquippedTool(tools.current!, wantSkill as never) : undefined
       const eDef = equipped ? getToolDef(equipped) : undefined
-      toolSkill.current = wantSkill
+      /**
+       * ── ★ AN EMPTY HAND MUST NOT CLAIM THE TOOL'S SKILL (2026-08-12, Alex: mining is "way too
+       * fast without upgraded tools") ─────────────────────────────────────────────────────────
+       * This passed `wantSkill` to `breakSeconds` whether or not a tool was actually equipped, and
+       * on an UNGATED block that is the whole discount: `breakSeconds` reads `toolSkill ===
+       * fastSkill` as "holding the right family" and returns `hardness * 0.55`. So bare hands dug
+       * soil, sand, grass and path at the full spade rate from the first second of the game.
+       *
+       * ★ THE TELL IS WHAT IT DID TO THE SPADE, not to the dirt. `tools.ts` calls the spade "a SPEED
+       * tier on top" of hands, and the first tool a new keeper should reach for — but hands were
+       * already collecting that tier, so a Goldwood Spade bought a 0.9 speedBonus and nothing else:
+       * **10% instead of ~50%.** The upgrade was invisible, which is exactly the complaint. A
+       * mechanic can be perfectly implemented in the registry and still be dead because a caller
+       * hands it the wrong argument.
+       *
+       * Gated blocks are unaffected: `ensureBasicTools` guarantees a worn blade, spike and rinstick,
+       * so those three families always have a tool and `wantSkill` still reaches the gate. Farming
+       * is the only family with no basic tool, which is precisely the case this restores — and it
+       * is deliberate, since hands must always be able to dig or a fresh keeper is stranded.
+       */
+      toolSkill.current = eDef ? wantSkill : null
       toolTier.current = eDef?.tier ?? 0
+      // The GAUGE still names the family the block wants, tool or not — it answers "what is this
+      // block asking for", which is the one thing that explains an empty hand being slow.
       if (lastTool.current !== wantSkill) { lastTool.current = wantSkill; onTool(wantSkill) }
       const r = tickBreak(breaking.current, hit, dt, toolTier.current!, toolSkill.current!, eDef?.speedBonus ?? 1)
       breaking.current = r.state

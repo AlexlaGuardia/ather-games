@@ -87,6 +87,31 @@ export interface BreakState {
  *
  * Returns the new state, or `'broken'` when the block should be removed.
  */
+/**
+ * ── ★ A LIVE DIAL FOR HOW LONG BLOCKS TAKE (2026-08-12, Alex: mining is "way too fast") ─────────
+ * Two real bugs were making mining faster than the registry intended, and both are fixed. What is
+ * left is a TASTE question — whether the intended numbers are themselves right — and that is Alex's
+ * to answer, not mine to guess. Guessing a multiplier on top of a fresh bug fix is how you overshoot
+ * and then retune twice.
+ *
+ * So he gets the number rather than my opinion of it: `/mine 1.5` in the console makes every block
+ * take half again as long, live, with no deploy. Same reasoning as the play lane's guard sliders —
+ * a feel question that costs a build per guess does not get answered, it gets abandoned.
+ *
+ * ⚠ SCALED AT THE TICK, NOT THROUGH `toolSpeed`, and the difference matters: `breakSeconds` applies
+ * `toolSpeed` on its two TOOL branches but deliberately drops it on the bare-hand branch, so a dial
+ * riding on it would silently not touch hands — which is most of what a new keeper digs, and the
+ * exact case Alex is judging. Slowing the accumulation instead is uniform across every branch.
+ *
+ * Session-only and never persisted: this is a measuring instrument. A dial that survives a refresh
+ * is a game-balance change nobody remembers making.
+ */
+let breakRate = 1
+
+/** Multiplier on how long every block takes. 1 = the registry's own numbers, 2 = twice as slow. */
+export const setBreakRate = (r: number): void => { breakRate = Math.max(0.05, Math.min(20, r)) }
+export const getBreakRate = (): number => breakRate
+
 export function tickBreak(
   state: BreakState | null,
   target: { x: number; y: number; z: number; material: number } | null,
@@ -106,7 +131,9 @@ export function tickBreak(
     && state.x === target.x && state.y === target.y && state.z === target.z
     && state.material === target.material
 
-  const progress = (same ? state!.progress : 0) + dt
+  // The dial slows the ACCUMULATION rather than inflating `required`, so `state.required` stays the
+  // registry's honest number and the break-progress HUD keeps meaning what it says.
+  const progress = (same ? state!.progress : 0) + dt / breakRate
   if (progress >= required) {
     return { state: null, broken: true }
   }

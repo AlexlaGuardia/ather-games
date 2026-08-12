@@ -3,7 +3,7 @@
 import { AIR } from './section'
 import { MAT } from './depth'
 import { ORE } from './ore'
-import { raycast, tickBreak, dropsFor, type BreakState } from './mine'
+import { raycast, tickBreak, dropsFor, setBreakRate, getBreakRate, type BreakState } from './mine'
 import { breakSeconds, canBreak, blockDef, materialForItem, BLOCKS } from './registry'
 
 let pass = 0
@@ -144,6 +144,50 @@ const world = (x: number, y: number, z: number): number => {
     ORE.PURE_CORE, ORE.ATHER_CRYSTAL]
   const missing = generated.filter(m => !blockDef(m))
   ok(missing.length === 0, `every generated material has a BlockDef (missing: ${missing.join(',')})`)
+}
+
+// ── THE fastSkill DISCOUNT BELONGS TO THE TOOL, NOT TO THE HAND (2026-08-12) ──────────────────
+// `breakSeconds` was always right about this; the CALLER was wrong, passing the block's wanted
+// skill even with nothing equipped, so bare hands dug at the full spade rate and the spade itself
+// became worth 10% instead of ~50%. The registry contract is asserted here so the arithmetic that
+// makes the tool worth owning is pinned somewhere a component cannot quietly undo it.
+{
+  const hand = breakSeconds(MAT.TOPSOIL, 0, null)
+  const spade = breakSeconds(MAT.TOPSOIL, 1, 'farming', 0.9)
+  const wrongTool = breakSeconds(MAT.TOPSOIL, 1, 'prospecting')
+  ok(spade < hand, 'a spade digs soil faster than a bare hand')
+  // The gap has to be worth reaching for. Half is the registry's own 0.55 factor; anything near 1
+  // means the upgrade is invisible, which is the bug this pins.
+  ok(spade < hand * 0.6, 'and the gap is a real tier, not a rounding error')
+  ok(wrongTool < hand, 'any tool beats a fist on soft ground')
+  ok(wrongTool > spade, 'but the RIGHT family is meaningfully better than a spike on dirt')
+  // Hands must never be refused on ungated ground, or a fresh keeper with no tools is stranded.
+  ok(hand < Infinity, 'bare hands can always dig ungated ground')
+}
+
+// ── the break-rate dial actually moves the break (2026-08-12) ─────────────────────────────────
+// A tuning dial that quietly does nothing is worse than no dial: Alex would turn it, feel no
+// difference, and conclude the FEEL is unfixable rather than that the knob is unwired.
+{
+  const target = { x: 0, y: 0, z: 0, material: MAT.STONE }
+  const swing = (rate: number): number => {
+    setBreakRate(rate)
+    let s = null as ReturnType<typeof tickBreak>['state']
+    for (let i = 0; i < 10_000; i++) {
+      const r = tickBreak(s, target, 0.01, 1, 'prospecting')
+      if (r.broken) return i + 1
+      s = r.state
+    }
+    return -1
+  }
+  const normal = swing(1)
+  const slow = swing(2)
+  setBreakRate(1)                                   // ⚠ restore, or every later test inherits it
+  ok(normal > 0, 'stone breaks at the normal rate')
+  ok(slow > normal * 1.8 && slow < normal * 2.2, 'rate 2 makes stone take about twice as many ticks')
+  setBreakRate(1000); ok(getBreakRate() <= 20, 'the dial clamps rather than making a block unbreakable')
+  setBreakRate(0);    ok(getBreakRate() > 0, 'and clamps at the fast end rather than dividing by zero')
+  setBreakRate(1)
 }
 
 console.log(`\nmining: ${pass} passed, ${fails.length} failed`)
