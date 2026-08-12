@@ -52,6 +52,22 @@ Alex assigns. From then on, prefix every `coord` call with `COORD_WIN=<lane> COO
 ```bash
 coord build "what changed"     # acquire lock -> npm run build -> pm2 restart -> release
 ```
+- **★ COMMIT BEFORE YOU TAKE THE LOCK, so a deploy can only ship what is in git.** `coord build`
+  builds the **working tree**, not `HEAD`, and the tree is **shared** — so whoever holds the lock
+  deploys *every* window's uncommitted work, not just their own. On 2026-08-11 the hub's ~82
+  uncommitted lines went live inside two of the `play` window's deploys: green build, correct
+  behaviour, and the running site contained code that existed nowhere in git. Nothing looks wrong
+  while that is true, which is the problem — the divergence is only discovered later, by someone
+  reading the repo to explain behaviour that is not in it. The rule turns a thing to remember into
+  a thing you cannot get wrong: if it is committed first, the tree and `HEAD` agree and the deploy
+  is honest by construction.
+- **⚠ `coord build "msg"` DOES NOT COMMIT.** It builds, restarts, and signals; the message argument
+  is a **signal note**, not a commit message — but it reads exactly like one, which is the trap.
+  Same night, the hub ran `coord build "voxel3d: splitting a stack…"`, then saw the `play` window's
+  unrelated commit sitting at `HEAD` and briefly read it as *its own commit having been eaten by a
+  teammate*. Nothing was lost (pathspec staging held), but the wrong diagnosis there is "another
+  window clobbered me", which is the one accusation that stops a swarm cold. Commit separately, by
+  pathspec, and check `git log -1` after — not before.
 - **Convention: only the hub deploys.** Satellites edit + commit their lane; the hub integrates and runs `coord build`. Keeps git + lock contention near zero. The lock still **serializes** any build as a backstop (and protects you if a second deployer ever happens or you open a real extra window), waiting up to 4m for a held lock.
 - A build older than 15m is treated as dead and stolen (a wedged build never blocks the team forever).
 - **Never run `npm run build` / `pm2 restart` / a bare `npm run dev` directly.** All three touch the production `.next`; only `coord build` is safe.
