@@ -66,7 +66,34 @@ for (const file of files) {
     const line = lines[lineNo - 1] ?? ''
     const context = lines.slice(Math.max(0, lineNo - 4), lineNo).join('\n')
 
-    const memoised = /useMemo\(/.test(context) || /useMemo\(/.test(line)
+    // ── ★ CONTAINMENT, NOT PROXIMITY (2026-08-12) ─────────────────────────────────────────────
+    // This asked whether the words `useMemo(` appeared within the previous four lines, which is a
+    // guess about distance standing in for the question actually being asked: *are we inside the
+    // memo?* It broke the moment a memo returned an object with more than three entries — the
+    // Hollow material table (`warden`/`stalker`/`caster`) had its FIRST entry pass and the other
+    // two reported as unmemoised GPU allocations. Two false alarms on correct code.
+    //
+    // That is worse than a missed check. This audit's own header tells the reader not to widen the
+    // allowlist when it fails, so a false positive here spends the one thing a lint has — being
+    // believed — and the next real finding arrives looking exactly like the noise.
+    //
+    // So: walk back to the nearest `useMemo(` and count parens forward. If the call has not closed
+    // by the time we reach the construction, we are lexically inside it. Same reasoning the factory
+    // check below already uses — ask which construct encloses this, do not measure how far away it
+    // is. (Parens inside strings or comments could fool the count; for a lint over our own source
+    // that trade is fine, and it is strictly better than a line window.)
+    const insideMemo = (): boolean => {
+      const open = src.lastIndexOf('useMemo(', idx)
+      if (open < 0) return false
+      let depth = 0
+      for (let i = open + 'useMemo'.length; i < idx; i++) {
+        const c = src[i]
+        if (c === '(') depth++
+        else if (c === ')') { depth--; if (depth === 0) return false }
+      }
+      return depth > 0
+    }
+    const memoised = insideMemo() || /useMemo\(/.test(context) || /useMemo\(/.test(line)
     // A cache write: `xs.set(key, new THREE.Something(...))` or `x = new THREE...` right before a `.set(`
     const cached = /\.set\(/.test(context) || /\.set\(/.test(lines.slice(lineNo - 1, lineNo + 2).join('\n'))
     // ★ A FACTORY IS LEGITIMATE — the rule moves to its CALL SITES, it is not waived.
