@@ -33,19 +33,37 @@
 // Multiplying them would give nine variants and count difficulty twice. They stay separate tables,
 // and a raid keeps its own tuned numbers untouched.
 //
-// ── ⚠ THE NAMES ARE BUILD-SIDE PLACEHOLDERS AND THE CANON GAP IS LOGGED ─────────────────────────
-// Alex's "assassin" and "mage" cannot ship as canon. `hollows.ts` already had to rule this once:
-// *"a job implies someone who chose it"* — and the whole thesis of the collar-Moglins is that the
-// species is not the sin, the collar is. They are teddy-soft folk made brave by a collar, not
-// killers by trade. Canon names collar-Moglins as CHARACTERS (Brack, Vetch, Thistle), never as a
-// role triangle, so whether a role triangle exists at all is Magii's to rule. These three ids are
-// build-side and neutral until it does; see CANON_GAPS.md.
+// ── ★ POSTURE IS THE COLLARED SPIRIT'S, NOT THE MOGLIN'S — AND CANON SAYS SO OUTRIGHT ──────────
+// The first cut of this file attached posture to the Moglin and then had to tiptoe around Alex's
+// "assassin", because a job implies someone who chose it (`hollows.ts` ruled that once already).
+// That was solving the wrong problem. Canon states the subject plainly, in two places:
+//
+//   `spirit-tales-bible.md:155` — "A meek little Moglin with a collared spirit at his back suddenly
+//   feels ten feet tall. The power is borrowed and the bravery is fake… they gain a spine the
+//   instant there's a spirit between them and the world, and lose it the instant it's gone."
+//   `design-briefs/moglins.md:18` — "The **collared spirit looms behind/beside** as the borrowed power."
+//
+// **The Moglin is not the threat. The thing he brought is.** So a fighting posture was never his
+// job — it is the shape of the spirit on the end of the collar, and **a spirit cannot have chosen a
+// profession**, which dissolves the naming objection instead of working around it. Alex's frame is
+// *"the Team Rocket of this universe"*: you do not fight the grunt, you fight what they brought.
+//
+// It also makes `win = free` mechanically obvious rather than a rule bolted on — breaking the collar
+// removes the threat AND deflates the Moglin in the same beat, which is the books' own image.
+//
+// ⚠ The three ids stay build-side pending `CANON_GAPS.md` › *Do collared Moglins come in FIGHTING
+// ROLES*, but only the NAMES are open now; the subject is settled. Rank is a separate, already-half-
+// ruled axis measured in collars (Thornlord = one → unnamed middle → Hemlock = many) and it does not
+// belong in this table — see the two-axes note above, which now applies three ways.
 //
 // ★ AND THE TRIANGLE HAS TO BE A TRIANGLE — the same rule hollows.ts fought for. Three foes that
 // differ only in integrity are one foe with three bars. Each must break a different habit, and the
 // oracle asserts they stay distinct on their own axis so a balance pass cannot quietly converge them.
 
-/** Build-side ids. Canon owns whether these are a thing and what they are called — see the header. */
+/**
+ * How the COLLARED SPIRIT fights — not the Moglin's job. See the header; canon is explicit.
+ * Build-side ids: canon owns what these are called, not whether they exist.
+ */
 export type FoePosture = 'bulwark' | 'channeler' | 'skirmisher'
 
 export interface CollarFoeDef {
@@ -60,7 +78,12 @@ export interface CollarFoeDef {
   reach: number
   /** Solid half-width. A body you can walk through is scenery, not a blockade. */
   body: number
-  /** Borrowed-power pressure per second while it has you. Comes from the bound spirit, never from him. */
+  /**
+   * Pressure per second while it has you.
+   * ⚠ BORROWED, ALWAYS. Canon: "the power is borrowed and the bravery is fake." Every point of this
+   * comes from the collared spirit, which is exactly why breaking the collar ends the fight outright
+   * rather than starting a second phase — there is nothing of his own underneath it.
+   */
   pressureDps: number
   /** How far out it stops closing. The channeler holds this line; the other two come all the way. */
   standoff: number
@@ -104,6 +127,7 @@ export function pickPosture(roll: number): FoePosture {
 
 export interface CollarFoe {
   id: string
+  /** The shape of the spirit on the end of his collar — the thing you are actually fighting. */
   posture: FoePosture
   x: number
   z: number
