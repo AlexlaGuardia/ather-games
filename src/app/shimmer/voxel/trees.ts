@@ -274,21 +274,55 @@ function foliageBlob(
   }
 }
 
-/** Layered canopy — stacked discs of shrinking radius. Reads taller and more deliberate. */
+/**
+ * Layered canopy — stacked discs. Reads taller and more deliberate than the blob. Starwillow's two
+ * limbs and dawnwood's spire.
+ *
+ * ── ★ THIS WAS A PAGODA ROOF, WHICH IS AN UMBRELLA WITH EXTRA STEPS (2026-08-12) ────────────────
+ * The cross-section that caught the blob species caught these too, and I nearly shipped without
+ * looking because they are only 16% of the forest by weight. Two faults, and they compounded:
+ *
+ *   1. `tiers = max(2, round(r))` with each tier ONE block tall gave dawnwood a **4-block crown on
+ *      a 10-15 block trunk** — 27% of the tree's height. The blob species were fixed to ~50%.
+ *   2. the radius shrank MONOTONICALLY from the bottom tier, so the widest disc was the LOWEST one.
+ *      A stack that is widest at its base and tapers upward is precisely a parasol; making it taller
+ *      without fixing the profile would have produced a taller parasol.
+ *
+ * So the profile now peaks about a third of the way up and tapers to a point above — a spire with a
+ * narrowed base, which is a silhouette the blob cannot make and is the reason two placers exist.
+ */
 function foliageLayered(c: Ctx, g: () => number, cx: number, cy: number, cz: number, r: number, leaves: number): void {
-  const tiers = Math.max(2, Math.round(r))
+  const tiers = Math.max(3, Math.round(r * 1.6))
+  // Sink the stack so its base overlaps the trunk instead of perching on the tip. Without this the
+  // extra tiers all grow UPWARD and buy height by lengthening the bare pole underneath.
+  const base = cy - Math.floor(tiers * 0.35)
   for (let t = 0; t < tiers; t++) {
-    const rr = r * (1 - t / (tiers + 0.6))
+    const f = t / (tiers - 1)                       // 0 at the base, 1 at the tip
+    const rr = r * (f < 0.3 ? 0.62 + (f / 0.3) * 0.38 : 1 - ((f - 0.3) / 0.7) ** 1.5)
     const rr2 = rr * rr
-    const y = cy + t
+    const y = base + t
     for (let dz = -Math.ceil(rr); dz <= Math.ceil(rr); dz++) {
       for (let dx = -Math.ceil(rr); dx <= Math.ceil(rr); dx++) {
         const d = dx * dx + dz * dz
         if (d > rr2) continue
-        if (d > rr2 * 0.6 && g() < 0.35) continue
+        // Rim only, same correction as the blob's nibble — and for the same reason: the mesher's
+        // per-cell jitter now supplies the raggedness this used to buy by deleting foliage.
+        if (d > rr2 * 0.72 && g() < 0.3) continue
         put(c, cx + dx, y, cz + dz, leaves, true)
       }
     }
+  }
+
+  // The base tier is a flat disc and the player walks under it — same underside problem, same fix.
+  // ⚠ Fixed roll order, for the seam test. See the note in `foliageBlob`.
+  const strands = Math.round(r * 2)
+  const rBase = r * 0.62
+  for (let i = 0; i < strands; i++) {
+    const dx = Math.round((g() * 2 - 1) * rBase)
+    const dz = Math.round((g() * 2 - 1) * rBase)
+    const len = 1 + Math.floor(g() * 2)
+    if (dx * dx + dz * dz > rBase * rBase) continue
+    for (let k = 0; k <= len; k++) put(c, cx + dx, base - k, cz + dz, leaves, true)
   }
 }
 
