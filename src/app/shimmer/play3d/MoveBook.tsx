@@ -5,17 +5,26 @@
 // opens on YOUR RUNE'S PAGE — the moves canon has written for it — and the matrix underneath shows
 // where that rune sits in the world's grid.
 //
-// ⚠ Two honesty rules this panel holds, deliberately:
-//  1. **No move is claimed as "known."** Move ACQUISITION is an [OPEN] canon gap (can a Knowledge
-//     Scroll teach a move? — CANON_GAPS.md 2026-08-03). Until that's ruled, the book is a CATALOGUE.
-//     It says what exists for your rune, never that you can run it. Claiming otherwise would be a
-//     lie in the UI and would quietly invent the acquisition system.
-//  2. **The lanes are OWNER-ONLY.** Element-row + state-column as the compatibility law is also an
-//     [OPEN] gap. Showing it to a player would assert unruled canon on screen. Alex can see and feel
-//     it; nobody else does until Magii rules. Flip `isOwner` off the lane block when it lands.
+// ⚠ ★ BOTH OF THIS HEADER'S "[OPEN] GAP" CLAIMS WERE RULED ON 2026-08-03 AND THIS NOTE MISSED IT
+// FOR NINE DAYS (corrected 2026-08-12). Same trap as the duplicate piece layer and #305: a comment
+// written in planning tense outlived the ruling it was waiting on, and the next reader parks again.
 //
-// The empty pages are ON PURPOSE. 8 of 20 runes have no keeper move written (filed as a coverage
-// gap). The book shows that hole plainly instead of padding it — an empty shelf is the argument.
+//  1. **A scroll teaches a MOVE, never a RUNE — RULED.** The Passage under Rune Hold is the move
+//     economy; the runes you hold are the FILTER on what a scroll can teach you (a Water keeper who
+//     buys a Metalergy scroll owns a beautiful piece of paper). It stocks passives and tacticals —
+//     ULTIMATES ARE NOT FOR SALE. So the book MAY claim a move as known once acquisition is built.
+//     It still doesn't, because nothing grants one yet: the catalogue is now a build gap, not a
+//     canon one, and `keeper-moves.knownMoves()` is already the honest answer for what you can run.
+//  2. **The lane law is CANON — RULED.** Element row + state column is how a keeper reaches a second
+//     rune ("focused practice using your birth rune"). The `isOwner` gate on the lane block was
+//     explicitly conditioned on this landing, so it is now free to come off; left in place only
+//     because play3d is an owner-only route today and flipping it changes nothing anyone can see.
+//
+// The empty pages are ON PURPOSE, and the coverage gap RULED why: the 8 "empty" runes all carry
+// moves on the SPIRIT KITS shelf, and that shelf is spirits-only — a keeper never learns Mist Cloud.
+// Scatter's emptiness (Static/Dust/Vapor) is the lost state rendered, not a hole to fill. What IS
+// real debt is keeper-side authoring: P1 Hydro + Mist, and Freeze/Fluid reach no ultimate on any
+// lane. An empty shelf is still the argument — it is just a different argument than this said.
 
 import React from 'react'
 import { RUNES, ELEMENTS } from './birth/runes.data'

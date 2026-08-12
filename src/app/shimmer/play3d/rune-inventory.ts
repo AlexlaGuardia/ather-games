@@ -11,10 +11,26 @@
 // the first link only.
 //
 // ── BOUNDARY ──────────────────────────────────────────────────────────────────
-// HOW a second rune is acquired is an [OPEN] canon gap (CANON_GAPS.md — can a Knowledge Scroll
-// teach a move? was ruled; rune acquisition itself is not). So this module deliberately ships NO
-// acquisition rules: it stores what you hold and exposes a grant used only by the owner dev tool.
-// Nothing in the game grants a second rune yet. When Magii rules acquisition, the granter is here.
+// ★ CORRECTED 2026-08-12 — this note used to say rune acquisition was an [OPEN] canon gap. IT IS
+// NOT, and had not been for nine days. CANON_GAPS.md carries TWO rulings from 2026-08-03:
+//
+//   1. THE LANE LAW (rune acquisition). A rune is TRAINED off the birth rune along its own lane —
+//      the element ROW (same substance, different behaviour ⇒ breadth ⇒ tacticals) or the state
+//      COLUMN (same behaviour, different substance ⇒ scarcity ⇒ the signature). Canon's phrase is
+//      "focused practice using your birth rune". A rune is never bought, and never taught: it is
+//      identity. Veyra's Breeze and Lazerin's Illuminate are the law's second clause, not exceptions.
+//   2. THE SCROLL RULING (move acquisition). A Knowledge Scroll teaches a MOVE, never a RUNE, and
+//      the rune you hold is the FILTER on what a scroll can even teach you. The Passage, under
+//      Rune Hold, is where that trade happens. It stocks passives and tacticals; ULTIMATES ARE NOT
+//      FOR SALE — a signature comes from a teacher, a bond, a debt, a crucible.
+//
+// So the granter's SHAPE is ruled and this module can be built against. What canon does not state
+// is which act of play COUNTS as focused practice (a spar count? a threshold? a place?) — and by
+// the boundary test that is Jin's, not Magii's: choosing the trigger cannot contradict the books.
+//
+// What is still true: nothing in the shipped game grants a second rune. The only caller of
+// `grantRune` is a dev tool (play3d's ☰, and voxel3d's owner-gated `/rune`). When the trigger is
+// built, it belongs here — and it must respect the lane, or it is not the ruled system.
 
 /** legacy single-rune key — still the source of truth for the BIRTH rune (BirthScreen writes it) */
 export const BIRTH_KEY = 'ather:shimmer:birthRune'
