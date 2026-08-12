@@ -18,6 +18,8 @@
 // expensive-sounding half of the idea reduces to a value already in an array.
 
 /** Reserved material for "a piece is here". Past WOOD (…39) with room between. */
+import type { BlockSkill } from './registry'
+
 export const STRUCTURE = 48
 /**
  * "The LOWER HALF of a piece is here" (2026-08-08, the half-slab pass). Collision reads this as
@@ -49,6 +51,25 @@ export interface PieceDef {
    * wants a MIX of full and half cells — the day one does, this becomes per-cell like passable.
    */
   halfHeight?: boolean
+  /**
+   * ── ★ A CHOPPABLE PIECE (2026-08-12, Alex: "what if we didn't do blocky trees?") ──────────────
+   * Structure pieces are deliberately unmineable — §4 of STRUCTURE-LAYER gives them infinite
+   * hardness so a pick cannot chew a door, and deconstruct is its own verb. A TREE cannot work that
+   * way. Felling is a real gathering verb with a tool family, a skill, XP and drops, and the whole
+   * point of trees-as-pieces is that you chop one and the tree comes apart a piece at a time.
+   *
+   * So a piece may declare itself choppable, and that is what separates a tree from a door: the
+   * door has no `chop` and refuses the swing exactly as before. Same shape as `BlockDef` on purpose
+   * — skill gates the family, `minTier` refuses rather than slows, hardness sets the time — so a
+   * blade cuts a trunk under the identical rules that make a blade cut a log today.
+   */
+  chop?: {
+    skill: BlockSkill
+    minTier: 0 | 1 | 2 | 3
+    /** Seconds with a tier-1 tool, same scale as `BlockDef.hardness`. */
+    hardness: number
+    drops: { itemId: string; count: number }[]
+  }
 }
 
 /**
