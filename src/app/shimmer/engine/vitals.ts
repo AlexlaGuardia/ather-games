@@ -102,6 +102,39 @@ export function damage(v: Vitals, raw: number, resist = 0): DamageResult {
   }
 }
 
+export interface PressureResult {
+  vitals: Vitals
+  toShield: number
+  /** The guard is gone. NOT a wound and never a death — see below for what this is for. */
+  guardBroken: boolean
+}
+
+/**
+ * PRESSURE — wears the guard down and stops. It can never reach health.
+ *
+ * ── ★ THIS EXISTS BECAUSE OF A TONE CEILING, NOT A BALANCE CHOICE (2026-08-12) ─────────────────
+ * `core.md:53` and `spirit-tales-bible.md:340` lock Shimmer as cozy: *"peril stays in-world (Rule 3),
+ * no real cruelty on the page… the game gets the warmth and the lesson, not the wound."* The collar
+ * ruling applies that to the collared Moglins by name — **they take and pressure; they do not
+ * injure.** Canon marks Vane and Grust robbing Wend on the road as *"Rule-3 unhurt."*
+ *
+ * So a road encounter must NOT route through `damage()`, which spills into health by design and
+ * would quietly make a cozy game's roadside bully able to wound a child's keeper. A shield is your
+ * GUARD, not your body — stripping it is exactly the pressure canon allows, and stopping dead at
+ * zero is exactly the cruelty it forbids.
+ *
+ * ⚠ `guardBroken` is therefore NOT a defeat and must never be wired to one. It is the moment a road
+ * encounter is LOST in the way canon actually describes: you are dispossessed, blocked, sent back —
+ * never hurt. What that costs is host policy; what it may not cost is health.
+ */
+export function pressure(v: Vitals, amount: number, resist = 0): PressureResult {
+  const r = Math.min(1, Math.max(0, resist))
+  const applied = Math.max(0, amount) * (1 - r)
+  const toShield = Math.min(v.shield, applied)
+  const shield = v.shield - toShield
+  return { vitals: { ...v, shield }, toShield, guardBroken: shield <= 0 }
+}
+
 /** Restore health and/or shield, each clamped to its own cap. Mend, potions, a bed, a dawn. */
 export function heal(v: Vitals, hpAmount = 0, shieldAmount = 0): Vitals {
   return {

@@ -7,7 +7,7 @@
 
 import {
   MAX_HP, MAX_SHIELD, BARRIER_SHIELD_BONUS,
-  capsFor, freshVitals, damage, heal, recap, type Vitals,
+  capsFor, freshVitals, damage, pressure, heal, recap, type Vitals,
 } from './vitals'
 import { birthAffinity } from '../play3d/birth-affinity'
 
@@ -84,6 +84,40 @@ const near = (a: number, b: number) => Math.abs(a - b) < 1e-9
   // a pure rule that respawned you would force a death both worlds have not signed off on.
   check('★ downing does not silently refill the bars', out.vitals.hp === 0 && out.vitals.shield === 0)
   check('a survivable hit does not flag downed', !damage(low, 5).downed)
+}
+
+// ── 4b. ★ PRESSURE MAY NEVER REACH HEALTH — a TONE ceiling, not a balance dial ─────────────────
+// core.md:53 + spirit-tales-bible.md:340 lock Shimmer cozy: "peril stays in-world (Rule 3), no real
+// cruelty on the page… the game gets the warmth and the lesson, not the wound." The collar ruling
+// applies it by name: collared Moglins take and pressure, they do not injure. If this ever routes
+// through damage() the roadside bully in a children's game can wound you, and nothing would look
+// broken — the fight would still "work".
+{
+  const full: Vitals = { hp: 100, hpMax: 100, shield: 100, shieldMax: 100 }
+  const some = pressure(full, 40)
+  check('pressure wears the guard down', some.vitals.shield === 60)
+  check('and leaves health completely alone', some.vitals.hp === 100 && !some.guardBroken)
+
+  // ★ THE ONE THAT MATTERS. Overwhelming pressure empties the guard and STOPS.
+  const over = pressure(full, 10_000)
+  check('★ pressure cannot spill into health, however large', over.vitals.hp === 100)
+  check('★ it empties the guard and stops there', over.vitals.shield === 0 && over.guardBroken)
+  check('and reports only what the guard took', over.toShield === 100)
+
+  // Already guardless: still no injury. This is the state a road encounter ENDS in, not one it
+  // pushes through.
+  const bare: Vitals = { hp: 55, hpMax: 100, shield: 0, shieldMax: 100 }
+  const again = pressure(bare, 500)
+  check('★ pressure on a broken guard still does not wound', again.vitals.hp === 55)
+  check('and stays flagged as broken', again.guardBroken)
+
+  // A stance still helps — resisting pressure is legitimate, it just cannot turn into damage.
+  check('a stance reduces pressure too', pressure(full, 100, 0.5).vitals.shield === 50)
+
+  // ⚠ The contrast that gives this teeth: the SAME hit through damage() does reach health. If these
+  // two ever agree, one of them has been "unified" and the tone ceiling is gone.
+  check('★ damage() still spills where pressure() refuses to',
+    damage(full, 150).vitals.hp === 50 && pressure(full, 150).vitals.hp === 100)
 }
 
 // ── 5. healing clamps per-bar ───────────────────────────────────────────────────────────────────

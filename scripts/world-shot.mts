@@ -43,8 +43,14 @@ try {
   // Seed BEFORE any page script: born, with the epoch already current.
   await page.evaluateOnNewDocument(() => {
     localStorage.setItem('ather:epoch', '2')
-    localStorage.setItem('ather:shimmer:birthRune', 'ember')
-    localStorage.setItem('ather:shimmer:runes', JSON.stringify(['ember']))
+    // ⚠ 'ember' IS NOT A RUNE ID, and this seeded it for weeks (fixed 2026-08-12). The real ids are
+    // in `play3d/birth/runes.data.ts` — manalic/barrier/star/life/enchant/lightning/… — so every
+    // headless shot was of a keeper holding NOTHING: no affinity, no book, no loadout, no castable
+    // move. Harmless while this only photographed terrain; a lie the moment anyone shot the HUD or
+    // the cast layer, which is exactly what it was about to be used for. 'barrier' is a deliberate
+    // pick: it is a `defense` rune, so a shot also exercises the +25 shield cap.
+    localStorage.setItem('ather:shimmer:birthRune', 'barrier')
+    localStorage.setItem('ather:shimmer:runes', JSON.stringify(['barrier']))
   })
 
   const errors: string[] = []

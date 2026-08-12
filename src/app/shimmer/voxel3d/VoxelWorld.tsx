@@ -115,10 +115,22 @@ import { GrimoireTab } from './grimoire-tab'
 import { loadRuneInventory } from '../play3d/rune-inventory'
 import { birthAffinity } from '../play3d/birth-affinity'
 // Health + shields are SHARED rules, not a second copy — see engine/vitals.ts on why.
-import { freshVitals, damage as applyDamage, type Vitals } from '../engine/vitals'
+import { freshVitals, type Vitals } from '../engine/vitals'
+import { getMaxPool, getRegenRate } from '../engine/mana'
+import { resolveCast, SELF_ARCHETYPES, type CastEnv } from '../engine/cast-dispatch'
+import type { CastSpec, CastArchetype } from '../play3d/cast'
+
+/**
+ * ★ THE CAST BINDS FOR THIS WORLD, AND WHY THEY ARE NOT `SLOT_KEYS`.
+ * `cast.ts` rules g/z/x/c — but **C is `craft` here**, bound long before casting arrived, and the
+ * Loadout panel reads this same array to LABEL each slot. One constant so the label and the key can
+ * never disagree: a panel that says C while the world listens on B is worse than either choice.
+ */
+const CAST_KEYS: readonly string[] = ['g', 'z', 'x', 'b']
+const CAST_CODES: readonly string[] = CAST_KEYS.map(k => `Key${k.toUpperCase()}`)
 import { RUNES } from '../play3d/birth/runes.data'
 import { knownMoves, learnableMoves, MOVES_BY_RUNE } from '../play3d/keeper-moves'
-import { CAST_SLOTS, SLOT_KEYS, eligibleMoves, isBuilt, castForMove } from '../play3d/cast'
+import { CAST_SLOTS, eligibleMoves, isBuilt, castForMove } from '../play3d/cast'
 import { loadLoadout, saveLoadout, setSlot, type Loadout } from '../play3d/loadout'
 import { applyFightResult } from '../engine/spirit-health'
 import type { BattleResult } from '../engine/arena'
@@ -651,6 +663,25 @@ export default function VoxelWorld() {
    * would silently drop the other two the day anyone looked.
    */
   const vitals = useRef<Vitals>(freshVitals(birthAffinity(loadRuneInventory().birth)))
+  /**
+   * ── ★ MANA — the cost side of casting, and it needed no new design ──────────────────────────
+   * `engine/mana.ts` already derives pool and regen from `skills.mana.level`, which this world
+   * ALREADY levels, and canon already says what mana is for (`shimmer-skilling.md`: all gathering
+   * is mana-powered). So turning casting on costs one ref and a regen tick, not an economy.
+   *
+   * ⚠ GATHERING STAYS FREE THIS PASS. `engine/crafting.ts` was deliberately refused by this world
+   * because it charges mana on everything (see the PORT STEP 2 note at the top of this file), and
+   * making the cozy loop cost mana in the same commit that makes casting cost mana would blur which
+   * change did what. Casting spends; harvesting does not, yet.
+   */
+  const mana = useRef({ cur: 0, max: 0, regen: 1 })
+  useEffect(() => {
+    const aff = birthAffinity(loadRuneInventory().birth)
+    const lvl = skills.current.mana.level
+    mana.current.max = getMaxPool(lvl) + aff.manaBonus
+    mana.current.regen = getRegenRate(lvl)
+    mana.current.cur = mana.current.max
+  }, [])
   /** Planting times by world position. The ONE thing the pot's material cannot hold (see pot.ts). */
   const potClock = useRef<PotClock>({})
   const [hasParty, setHasParty] = useState(false)
@@ -1286,7 +1317,7 @@ export default function VoxelWorld() {
           mistAt={(x, z) => mistAt(x, z, SEED)}
         />
         <World
-          inv={inv} toolTier={toolTier} toolSkill={toolSkill}
+          inv={inv} toolTier={toolTier} toolSkill={toolSkill} vitals={vitals} mana={mana}
           /* A tool in hand is not a block in hand — RMB must not place while you hold a spade.
              `drawn` blanks it too: a weapon out means neither hand is free. */
           selItem={(() => { const e = hotbar[sel]; return !drawn && e ? e.itemId : null })()}
@@ -1899,7 +1930,7 @@ function LoadoutTab() {
                     className="flex w-full items-center gap-2.5 px-3 py-2 text-left">
               <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded border
                                border-white/20 text-[10px] font-bold text-white/60">
-                {SLOT_KEYS[i].toUpperCase()}
+                {CAST_KEYS[i].toUpperCase()}
               </span>
               <span className="w-[68px] shrink-0 text-[9px] uppercase tracking-[0.14em] text-white/30">{kind}</span>
               <span className={`text-[12px] ${spec ? (isBuilt(bound) ? 'text-amber-200/90' : 'text-white/40') : 'text-white/25'}`}>
@@ -2381,7 +2412,7 @@ const SOLID_EXCEPT = new Set<number>([AIR, MAT.WATER, MAT.TUFT, MAT.TALL_GRASS, 
 // CELL_HALF for it; everything else (light, fence arms, piece placement) wants "yes, solid".
 const isSolid = (m: number) => !SOLID_EXCEPT.has(baseOf(m))
 
-function World({ inv, toolTier, toolSkill, selItem, weaponDrawn, weaponIdx, onAmmo, onStats, onPos, onLook, onInvChange, worker, incoming, inflight, settings, build, pieceIdx, rot, tools, skills, onSkill, onLevel, onTool, tutorial, onQuestEvent, onNearGreg, onNearTable, cmdOut, mistLedger, onNearMist, sparring, pot, onOpenChest, uiOpen }: {
+function World({ inv, toolTier, toolSkill, vitals, mana, selItem, weaponDrawn, weaponIdx, onAmmo, onStats, onPos, onLook, onInvChange, worker, incoming, inflight, settings, build, pieceIdx, rot, tools, skills, onSkill, onLevel, onTool, tutorial, onQuestEvent, onNearGreg, onNearTable, cmdOut, mistLedger, onNearMist, sparring, pot, onOpenChest, uiOpen }: {
   inv: React.RefObject<Inventory>
   toolTier: React.RefObject<number>
   toolSkill: React.RefObject<BlockSkill>
@@ -2442,6 +2473,10 @@ function World({ inv, toolTier, toolSkill, selItem, weaponDrawn, weaponIdx, onAm
    * which want the LIVE value rather than the one captured at their last render.
    */
   uiOpen: React.RefObject<boolean>
+  /** The keeper's two bars. Written here, polled by the HUD. */
+  vitals: React.RefObject<Vitals>
+  /** The cast pool. `regen` is per second, derived from the Mana skill. */
+  mana: React.RefObject<{ cur: number; max: number; regen: number }>
   cmdOut: React.RefObject<{ tp: (x: number, z: number) => string; pos: () => { x: number; z: number } } | null>
 }) {
   const { camera } = useThree()
@@ -2705,6 +2740,10 @@ function World({ inv, toolTier, toolSkill, selItem, weaponDrawn, weaponIdx, onAm
       // The INPUT guard above is about typing; this one is about menus. Both mirror `onKey`'s.
       if (uiOpen.current) return
       keys.current[e.code] = true; if (e.code === 'KeyV') fly.current = !fly.current
+      // ★ The cast binds. `pendingCast` rather than calling straight through, because a cast that
+      // spawns a projectile needs the scene GROUP, which only the frame loop holds — the same
+      // reason play3d hands placed archetypes to its sim instead of resolving them in the handler.
+      { const ci = CAST_CODES.indexOf(e.code); if (ci >= 0) pendingCast.current = ci }
     }
     const ku = (e: KeyboardEvent) => { keys.current[e.code] = false }
     const md = (e: MouseEvent) => {
@@ -3080,8 +3119,11 @@ function World({ inv, toolTier, toolSkill, selItem, weaponDrawn, weaponIdx, onAm
   // projectile, which is precisely what got this page BLOCKED from WebGL on 08-06 (black screen,
   // HUD alive, no console error) and why render-audit.test.ts exists. Full-auto would have hit that
   // within a second of holding the trigger.
+  // ⚠ `dmg` is carried ON the shot, not read from the held weapon at impact. It has to be: a cast
+  // bolt is not the gun, and even for gun rounds the old read was subtly wrong — swapping weapons
+  // mid-flight retro-changed what an already-travelling round would do.
   const shots = useRef<{ x: number; y: number; z: number; dx: number; dy: number; dz: number
-                         speed: number; life: number; mesh: THREE.Mesh }[]>([])
+                         speed: number; life: number; mesh: THREE.Mesh; dmg: number }[]>([])
   const tracerGeo = useMemo(() => new THREE.SphereGeometry(1, 6, 4), [])
   const tracerMat = useMemo(() => new THREE.MeshBasicMaterial({ color: 0xffd88a, toneMapped: false }), [])
   const impacts = useRef<{ mesh: THREE.Mesh; life: number }[]>([])
@@ -3173,6 +3215,64 @@ function World({ inv, toolTier, toolSkill, selItem, weaponDrawn, weaponIdx, onAm
     onAmmo(ammo.current)
   }, [weaponIdx, onAmmo])
 
+  // ── ★ THE CAST LAYER REACHES THIS WORLD (2026-08-12, #294) ──────────────────────────────────
+  // The rules are in `engine/cast-dispatch.ts` and are SHARED with play3d. This is only the host
+  // half: what this world can land, and where the outcome goes.
+  const castCd = useRef<number[]>([0, 0, 0, 0])
+  /** Slot pressed this frame, consumed by the frame loop. -1 = nothing. */
+  const pendingCast = useRef<number>(-1)
+  const stance = useRef<CastSpec | null>(null)
+  const surge = useRef<{ until: number; mult: number } | null>(null)
+  const infusion = useRef<{ until: number; mult: number } | null>(null)
+  const loadout = useRef<(string | null)[]>(loadLoadout(loadRuneInventory().owned))
+  /**
+   * ★ WHAT THIS WORLD CAN ACTUALLY LAND, DECLARED RATHER THAN IMPLIED.
+   * Projectiles ride the shot pool that already exists, and every SELF archetype only touches
+   * hp/mana/speed, which live here. Fields, terrain and statuses do NOT: `field-effects.ts`,
+   * `conjured-terrain.ts` and `statuses.ts` all resolve against play3d's tile grid and its named
+   * hunter/guard targets, neither of which exists here. Declaring that makes Stonewall say "not in
+   * this world yet" instead of being a key that silently does nothing — see cast-dispatch's header.
+   */
+  const supports = useMemo<ReadonlySet<CastArchetype>>(
+    () => new Set<CastArchetype>([...SELF_ARCHETYPES, 'projectile']), [])
+
+  const castSlot = useCallback((slot: number, g: THREE.Group) => {
+    const v = vitals.current, m = mana.current
+    if (!v || !m) return
+    const env: CastEnv = {
+      now: performance.now(), hp: v.hp, hpMax: v.hpMax, mana: m.cur,
+      cooldownUntil: castCd.current, stanceMoveId: stance.current?.moveId ?? null, supports,
+    }
+    const out = resolveCast(slot, loadout.current, env)
+    if (out.kind === 'refused') { onStats(out.message); return }
+
+    // One apply, no archetype branching — every effect field is neutral when it does not apply,
+    // which is the entire point of the outcome being a description rather than an action.
+    m.cur = Math.max(0, m.cur - out.manaCost)
+    if (out.cooldownUntil !== null) castCd.current[slot] = out.cooldownUntil
+    if (out.stanceChange) stance.current = out.stanceChange.to
+    if (out.hpDelta) v.hp = Math.min(v.hpMax, v.hp + out.hpDelta)
+    if (out.surge) surge.current = out.surge
+    if (out.infusion) infusion.current = out.infusion
+
+    if (out.placed && out.placed.archetype === 'projectile') {
+      // Rides the SAME pool and the same segment sweep as a gun round, so a bolt cannot tunnel
+      // through a wall or miss a Hollow the gun would have hit. Only the numbers differ.
+      const f = new THREE.Vector3()
+      camera.getWorldDirection(f)
+      const mesh = new THREE.Mesh(tracerGeo, tracerMat)
+      mesh.scale.setScalar(0.1)
+      mesh.position.copy(camera.position)
+      g.add(mesh)
+      shots.current.push({
+        x: camera.position.x, y: camera.position.y, z: camera.position.z,
+        dx: f.x, dy: f.y, dz: f.z,
+        speed: out.placed.projSpeed, life: out.placed.projLife, mesh, dmg: out.placed.damage,
+      })
+    }
+    if (out.message) onStats(out.message)
+  }, [camera, tracerGeo, tracerMat, supports, vitals, mana, onStats])
+
   const fire = useCallback((w: WeaponDef, g: THREE.Group) => {
     const f = new THREE.Vector3()
     camera.getWorldDirection(f)
@@ -3184,7 +3284,7 @@ function World({ inv, toolTier, toolSkill, selItem, weaponDrawn, weaponIdx, onAm
     mesh.position.copy(camera.position)
     g.add(mesh)
     shots.current.push({ x: camera.position.x, y: camera.position.y, z: camera.position.z,
-                         dx, dy, dz, speed: w.projSpeed, life: w.projLife, mesh })
+                         dx, dy, dz, speed: w.projSpeed, life: w.projLife, mesh, dmg: w.damage })
     ammo.current = Math.max(0, ammo.current - 1)
     bloom.current = bloomAfterShot(w, bloom.current)
     const kick = recoilKick(w, Math.random)
@@ -3232,6 +3332,19 @@ function World({ inv, toolTier, toolSkill, selItem, weaponDrawn, weaponIdx, onAm
     {
       const w = weaponAt(weaponIdx)
       lastShot.current += dt
+      // ── the cast, consumed once per frame where the scene group is in hand ──────────────────
+      // ⚠ Casting is deliberately NOT gated on `weaponDrawn`. A rune is not a gun and does not need
+      // stowing to use — gating it behind the weapon would make the cast layer an accessory to the
+      // thing canon says cannot answer half the world.
+      if (pendingCast.current >= 0) { const slot = pendingCast.current; pendingCast.current = -1; castSlot(slot, g) }
+      // Mana regen, and a held stance PAUSES it — canon's own cost for a passive (runes.md economy).
+      {
+        const m = mana.current
+        if (m && !stance.current) m.cur = Math.min(m.max, m.cur + m.regen * dt)
+        const nowMs = performance.now()
+        if (surge.current && nowMs >= surge.current.until) surge.current = null
+        if (infusion.current && nowMs >= infusion.current.until) infusion.current = null
+      }
       ads.current = weaponDrawn && mouse.current.right
       // ADS zoom is lerped, never snapped: an instant FOV change reads as a teleport.
       const wantFov = ads.current ? ADS_FOV : 75
@@ -3278,7 +3391,7 @@ function World({ inv, toolTier, toolSkill, selItem, weaponDrawn, weaponIdx, onAm
           const st = hw.st
           if (st.hp <= 0 || st.gutter >= 1) continue
           if (segmentDist(sh.x, sh.y, sh.z, sh.dx, sh.dy, sh.dz, step, st.x, st.y, st.z) < formOf(st).radius) {
-            st.hp -= weaponAt(weaponIdx).damage
+            st.hp -= sh.dmg
             const m = new THREE.Mesh(tracerGeo, tracerMat)
             m.scale.setScalar(0.16)
             m.position.set(st.x, st.y, st.z)
