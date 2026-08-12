@@ -75,7 +75,8 @@ import { VoxelDayNight } from './day-night'
 import { dayProgress, getPhase, getDisplayTime, isTimePinned, setTimePin } from '../engine/day-cycle'
 import { hollowEligible, hollowStep, segmentDist, hollowCap, packSize, packWalk, hollowNight,
          type HollowState, HOLLOW_HP, HOLLOW_HOVER, HOLLOW_RADIUS,
-         SPAWN_CYCLE_S, PLAYER_EXCLUSION, GUTTER_SKY, hollowTouching, DRAIN_TIME } from './hollows'
+         SPAWN_CYCLE_S, PLAYER_EXCLUSION, GUTTER_SKY, hollowTouching, DRAIN_TIME,
+         HOLLOW_FORMS, pickForm, formOf, pushOutOfBodies } from './hollows'
 // The light field (port step 4's other half) — computed here, consumed by the spawn cycle only.
 // Per light.ts's header this deliberately never touches a mesh.
 import { computeLight, dayFactor, type LightField } from '../voxel/light'
@@ -2349,8 +2350,8 @@ function World({ inv, toolTier, toolSkill, selItem, weaponDrawn, weaponIdx, onAm
     flatMaterial.dispose()
     textured?.material.dispose()
     waterMaterial.dispose()
-    hollowGeo.dispose()
-    hollowMat.dispose()
+    for (const gm of Object.values(hollowGeo)) gm.dispose()
+    for (const mt of Object.values(hollowMat)) mt.dispose()
     tiles?.texture.dispose()
     greg.dispose()
     steam.dispose()
@@ -2677,10 +2678,25 @@ function World({ inv, toolTier, toolSkill, selItem, weaponDrawn, weaponIdx, onAm
     lightCache.current.set(k, field)
     return field
   }, [voxel])
-  const hollowGeo = useMemo(() => new THREE.IcosahedronGeometry(0.55, 1), [])
-  const hollowMat = useMemo(() => new THREE.MeshLambertMaterial({
-    // A smear of grey that holds a silhouette: darker than any ground grey, never a face.
-    color: 0x4a4d47, transparent: true, opacity: 0.85,
+  // ── ★ THREE SILHOUETTES, ONE GEOMETRY EACH, SHARED ACROSS EVERY BODY OF THAT FORM ──────────
+  // ⚠ BLOCKOUT, same standing as the single body it replaces: the locked look is owed a
+  // design-brief + /picaso pass (hollows.ts says so in writing) and these are read-at-a-glance
+  // placeholders, not art. What they DO have to do is be tellable apart in the dark at forty
+  // metres, because a triangle the player cannot read is not a triangle. Squat and wide, thin and
+  // tall, small and hovering.
+  // Three geometries and three materials TOTAL — not per body. A material per Hollow is a shader
+  // program per Hollow, which is the allocation that got this page blocked from WebGL on 08-06.
+  const hollowGeo = useMemo(() => ({
+    warden: new THREE.IcosahedronGeometry(0.95, 1),
+    stalker: new THREE.ConeGeometry(0.38, 1.5, 6),
+    caster: new THREE.OctahedronGeometry(0.62, 0),
+  }), [])
+  const hollowMat = useMemo(() => ({
+    // A smear of grey that holds a silhouette: darker than any ground grey, never a face. The
+    // caster reads a shade colder so the thing draining you from range is findable.
+    warden: new THREE.MeshLambertMaterial({ color: 0x3f423d, transparent: true, opacity: 0.9 }),
+    stalker: new THREE.MeshLambertMaterial({ color: 0x4a4d47, transparent: true, opacity: 0.82 }),
+    caster: new THREE.MeshLambertMaterial({ color: 0x474f58, transparent: true, opacity: 0.78 }),
   }), [])
   const lastShot = useRef(0)
   const bloom = useRef(0)
@@ -2791,7 +2807,7 @@ function World({ inv, toolTier, toolSkill, selItem, weaponDrawn, weaponIdx, onAm
         for (const hw of hollows.current) {
           const st = hw.st
           if (st.hp <= 0 || st.gutter >= 1) continue
-          if (segmentDist(sh.x, sh.y, sh.z, sh.dx, sh.dy, sh.dz, step, st.x, st.y, st.z) < HOLLOW_RADIUS) {
+          if (segmentDist(sh.x, sh.y, sh.z, sh.dx, sh.dy, sh.dz, step, st.x, st.y, st.z) < formOf(st).radius) {
             st.hp -= weaponAt(weaponIdx).damage
             const m = new THREE.Mesh(tracerGeo, tracerMat)
             m.scale.setScalar(0.16)
@@ -2845,12 +2861,14 @@ function World({ inv, toolTier, toolSkill, selItem, weaponDrawn, weaponIdx, onAm
       hollowClock.current -= dt
       const cap = hollowCap(cols.current.size)
       const spawnHollow = (sx: number, sh: number, sz: number) => {
-        const mesh = new THREE.Mesh(hollowGeo, hollowMat)
+        const form = pickForm(Math.random())
+        const mesh = new THREE.Mesh(hollowGeo[form], hollowMat[form])
         mesh.scale.set(0.01, 0.01, 0.01)          // rises from nothing — the forming IS the tell
         mesh.position.set(sx, sh + 1 + HOLLOW_HOVER, sz)
         g.add(mesh)
         hollows.current.push({
-          st: { x: sx, y: sh + 1 + HOLLOW_HOVER, z: sz, hp: HOLLOW_HP, gutter: 0, phase: Math.random() * 6.28 },
+          st: { x: sx, y: sh + 1 + HOLLOW_HOVER, z: sz, form, hp: HOLLOW_FORMS[form].hp,
+                gutter: 0, phase: Math.random() * 6.28 },
           mesh,
         })
       }
@@ -2916,7 +2934,8 @@ function World({ inv, toolTier, toolSkill, selItem, weaponDrawn, weaponIdx, onAm
           // in the movement block. Same ref either way.
           const keeper = loco.current
           const first = keeper.drainT <= 0
-          keeper.drainT = DRAIN_TIME
+          // The form sets how long its drain holds — the warden is the one you cannot shrug off.
+          keeper.drainT = Math.max(keeper.drainT, formOf(st).drain)
           if (first) onStats('the grey takes hold — you are slowed')
         }
         const s = Math.max(0.01, (1 - st.gutter))

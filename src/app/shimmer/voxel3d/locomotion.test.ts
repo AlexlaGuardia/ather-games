@@ -475,8 +475,8 @@ const settle = (s: ReturnType<typeof createLoco>, solid: any, frames = 30) => {
   ok(Math.hypot(c.hvx, c.hvz) <= CROUCH_SPEED + 0.05, `★ the drain never speeds anything UP (crouch ${Math.hypot(c.hvx, c.hvz).toFixed(2)} <= ${CROUCH_SPEED})`)
 
   // The touch test itself: it has to be able to reach you, and a guttering one must not.
-  const hw = { x: 10, y: 11, z: 10, hp: HOLLOW_HP, gutter: 0, phase: 0 }
-  ok(hollowTouching(hw, 10.5, 10.2), 'a Hollow on the keeper is touching her')
+  const hw = { x: 10, y: 11, z: 10, form: 'stalker' as const, hp: HOLLOW_HP, gutter: 0, phase: 0 }
+  ok(hollowTouching(hw, 10.4, 10.1), 'a Hollow on the keeper is touching her')
   ok(!hollowTouching(hw, 13, 10), 'one across the clearing is not')
   hw.gutter = 1
   ok(!hollowTouching(hw, 10.5, 10.2), '★ a guttered Hollow cannot touch — dawn ends the threat, not just the body')

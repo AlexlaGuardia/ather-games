@@ -7,11 +7,12 @@
 
 import { hollowEligible, hollowStep, segmentDist, hollowCap, packSize, packWalk, hollowNight,
          HOLLOW_SPEED, HOLLOW_HOVER, PACK_MAX, PACK_STEP, NIGHT_SKY_MAX, GUTTER_SKY,
-         type HollowState } from './hollows'
+         HOLLOW_FORMS, FORM_ORDER, pickForm, pushOutOfBodies, hollowTouching,
+         type HollowState, type HollowForm } from './hollows'
 import { greyness } from '../voxel/biome'
 import { columnHeight } from '../voxel/height'
 import { packLight } from '../voxel/light'
-import { RUN_SPEED } from './locomotion'
+import { RUN_SPEED, DRAINED_SPEED } from './locomotion'
 
 let pass = 0
 const fails: string[] = []
@@ -78,19 +79,21 @@ const SEED = 1337
 
 // ── 2. the drift: toward the keeper, slower than a runner, riding the ground line ───────────────
 {
-  const st: HollowState = { x: 0, y: 10, z: 0, hp: 30, gutter: 0, phase: 0 }
+  // The pure chaser, so this stays a test of the DRIFT and not of one form's standoff.
+  const SPD = HOLLOW_FORMS.stalker.speed
+  const st: HollowState = { x: 0, y: 10, z: 0, form: 'stalker', hp: 30, gutter: 0, phase: 0 }
   const flat = (_x: number, _z: number) => 8
   const before = Math.hypot(20 - st.x, 15 - st.z)
   for (let i = 0; i < 60; i++) hollowStep(st, 1 / 60, 20, 15, flat, i / 60)
   const after = Math.hypot(20 - st.x, 15 - st.z)
   ok(after < before, 'the Hollow closes distance')
-  ok(before - after <= HOLLOW_SPEED * 1.05, `it drifts at its speed, not faster (${(before - after).toFixed(2)} in 1s)`)
-  ok(RUN_SPEED > HOLLOW_SPEED, `running away always works (run ${RUN_SPEED} > hollow ${HOLLOW_SPEED})`)
+  ok(before - after <= SPD * 1.05, `it drifts at its speed, not faster (${(before - after).toFixed(2)} in 1s)`)
+  ok(FORM_ORDER.every(f => RUN_SPEED > HOLLOW_FORMS[f].speed), 'running away always works — from EVERY form')
   ok(Math.abs(st.y - (8 + 1 + HOLLOW_HOVER)) < 0.6, 'it rides the ground line at hover height')
-  const stG: HollowState = { x: 0, y: 10, z: 0, hp: 30, gutter: 0.9, phase: 0 }
+  const stG: HollowState = { x: 0, y: 10, z: 0, form: 'stalker', hp: 30, gutter: 0.9, phase: 0 }
   const b2 = stG.x
   hollowStep(stG, 1 / 60, 100, 0, flat, 0)
-  ok(stG.x - b2 < HOLLOW_SPEED / 60 * 0.2, 'a guttering Hollow loses its will first')
+  ok(stG.x - b2 < SPD / 60 * 0.2, 'a guttering Hollow loses its will first')
 }
 
 // ── 3. the gun can actually hit one ─────────────────────────────────────────────────────────────
@@ -100,6 +103,82 @@ const SEED = 1337
   ok(segmentDist(0, 0, 0, 1, 0, 0, 0.9, 5, 0, 0) > 4, 'a short segment cannot hit a distant body — no tunnelling in reverse')
 }
 
+// ── ★ THE THREE FORMS — a triangle, not one enemy with three healthbars ─────────────────────
+{
+  const forms = FORM_ORDER.map((f) => HOLLOW_FORMS[f])
+  const [warden, stalker, caster] = forms
+
+  // Each form has to OWN an axis, or they are reskins. These are the three habits the night is
+  // meant to break, one per body.
+  // NOT "the slowest of the three" — the caster is slower still, because it never chases. The
+  // warden's claim is that it is the toughest thing that DOES come for you.
+  ok(warden.hp === Math.max(...forms.map(f => f.hp)) && warden.speed < stalker.speed, '★ the warden is the toughest, and lumbers — the wall you go around')
+  ok(stalker.speed === Math.max(...forms.map(f => f.speed)) && stalker.hp < warden.hp / 2, '★ the stalker is the fastest and among the frailest — the reason not to stand still')
+  ok(caster.reach > 3 * Math.max(warden.reach, stalker.reach), '★ the caster reaches furthest by a mile — the reason to keep moving')
+
+  // ★ THE CANON BOUND, HELD FROM THE OTHER SIDE. locomotion.ts asserts a drained keeper outruns
+  // HOLLOW_SPEED; this asserts no FORM sneaks above it. Adding a fourth fast form is exactly the
+  // change that would break "a keeper who runs, escapes" without touching either old number.
+  ok(forms.every(f => f.speed < DRAINED_SPEED), '★ no form out-glides a drained keeper — menace, not a wall')
+
+  // A body is what makes a guard a guard.
+  ok(warden.body === Math.max(...forms.map(f => f.body)) && caster.body === 0, 'the warden has the largest body; the caster has none at all')
+
+  // Weighted spawn: every form must be reachable, and the roll must not fall off either end.
+  const counts: Record<string, number> = { warden: 0, stalker: 0, caster: 0 }
+  for (let i = 0; i < 900; i++) counts[pickForm(i / 900)]++
+  ok(FORM_ORDER.every(f => counts[f] > 0), 'every form can actually spawn')
+  ok(counts.stalker > counts.caster, 'the common form is the commonest')
+  ok(pickForm(0) === 'warden' && pickForm(1) === 'caster' && pickForm(1.7) === 'caster', 'the roll is total at both ends')
+
+  const mk = (form: HollowForm, x: number, z: number): HollowState =>
+    ({ x, y: 11, z, form, hp: HOLLOW_FORMS[form].hp, gutter: 0, phase: 0 })
+
+  // ★ THE CASTER HOLDS ITS LINE FROM BOTH SIDES. Closing only would leave it standing on the
+  // keeper, which is the one range its whole form exists to deny.
+  const c = mk('caster', 40, 0)
+  // 30s: 33.5 units to walk at 1.5/s. A loop too short to finish the walk asserts nothing.
+  for (let i = 0; i < 1800; i++) hollowStep(c, 1 / 60, 0, 0, () => 10, 0)
+  const held = Math.hypot(c.x, c.z)
+  ok(Math.abs(held - HOLLOW_FORMS.caster.standoff) < 0.6, `the caster closes to its standoff and stops (${held.toFixed(1)})`)
+  c.x = 1; c.z = 0
+  for (let i = 0; i < 600; i++) hollowStep(c, 1 / 60, 0, 0, () => 10, 0)
+  ok(Math.hypot(c.x, c.z) > 3, `★ ...and BACKS OFF when the keeper walks in (${Math.hypot(c.x, c.z).toFixed(1)})`)
+  // The melee forms are unaffected by the same code path — one movement function, not two.
+  const w = mk('warden', 40, 0)
+  for (let i = 0; i < 1800; i++) hollowStep(w, 1 / 60, 0, 0, () => 10, 0)
+  ok(Math.hypot(w.x, w.z) < 0.6, `the warden still comes all the way in (${Math.hypot(w.x, w.z).toFixed(2)})`)
+
+  // ── bodies ────────────────────────────────────────────────────────────────────────────────
+  const open = () => true
+  const wall = mk('warden', 0, 0)
+  const out = pushOutOfBodies(0.2, 0, 0.3, [wall], open)
+  ok(Math.hypot(out.x - wall.x, out.z - wall.z) >= HOLLOW_FORMS.warden.body + 0.3 - 1e-9, '★ a keeper inside a warden is pushed clear of it')
+  const centred = pushOutOfBodies(0, 0, 0.3, [wall], open)
+  ok(Number.isFinite(centred.x) && Number.isFinite(centred.z) && Math.hypot(centred.x, centred.z) > 1, 'dead centre still resolves — no divide-by-zero, no NaN')
+  ok((() => {
+    const r = pushOutOfBodies(9, 9, 0.3, [wall], open); return r.x === 9 && r.z === 9
+  })(), 'a keeper standing clear is left exactly alone')
+  ok((() => { const r = pushOutOfBodies(0.1, 0, 0.3, [mk('caster', 0, 0)], open); return r.x === 0.1 })(), '★ the caster is incorporeal — reach is its body, there is nothing to bump')
+  // ★ It must REFUSE a push it cannot make safely.
+  ok((() => { const r = pushOutOfBodies(0.2, 0, 0.3, [wall], () => false); return r.x === 0.2 && r.z === 0 })(), '★ a push that would extrude the keeper into terrain is refused, not forced')
+  ok((() => {
+    const g = mk('warden', 0, 0); g.gutter = 1
+    const r = pushOutOfBodies(0.2, 0, 0.3, [g], open); return r.x === 0.2
+  })(), 'a guttered body stops blocking')
+  ok((() => {
+    const d = mk('warden', 0, 0); d.hp = 0
+    const r = pushOutOfBodies(0.2, 0, 0.3, [d], open); return r.x === 0.2
+  })(), 'so does a dispersed one')
+
+  // Reach is per-form: the caster drains from where the warden cannot.
+  ok(hollowTouching(mk('caster', 5, 0), 0, 0) && !hollowTouching(mk('warden', 5, 0), 0, 0), '★ the caster drains at a range the warden cannot reach')
+}
+
+// ⚠ THE REPORT MUST BE THE LAST THING IN THE FILE. It used to sit mid-file, above the block
+// added on 2026-08-11, so anything asserted below it was tallied into `pass` and then announced
+// with a ✅ that no longer checked `fails` — three real failures printed as a green run and exit
+// 0. An oracle that cannot fail is worse than no oracle, because it is trusted.
 if (fails.length) {
   console.error(`❌ ${fails.length} failed (${pass} passed)`)
   for (const f of fails) console.error('  - ' + f)

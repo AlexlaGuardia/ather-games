@@ -22,6 +22,9 @@ import { spawnDark } from '../voxel/light'
 
 export interface HollowState {
   x: number; y: number; z: number
+  /** Which shape the greying took. Set at spawn, never changes — a Hollow does not become a
+   *  different Hollow, it disperses and the ground congeals another. */
+  form: HollowForm
   hp: number
   /** 0 = fully formed .. 1 = guttered out (despawn). Driven up by dawn, never down. */
   gutter: number
@@ -29,6 +32,84 @@ export interface HollowState {
   phase: number
 }
 
+/**
+ * ── ★ THE THREE FORMS (2026-08-11, Alex: "a guard type and assassin and a mage type") ────────
+ * Canon already handed this to the build: the 08-07 gun ruling closes with "Jin still owns (build):
+ * FORMS, tiers, spawn-rules, difficulty". So the shapes the greying takes are a tuning table, not
+ * a canon question — but WHAT they are is still bounded by the ruling, and the boundary changed
+ * Alex's words on the way in.
+ *
+ * ★ THEY CANNOT BE PROFESSIONS. "Assassin" and "mage" are jobs, and a job implies someone who
+ * chose it. A Hollow has nothing in it — that absence is the entire reason it is legal to shoot,
+ * because the Ather's other enemy class is collared and its verb is FREE, not disperse. Name one
+ * of these an assassin and you have quietly moved it into the class the guns are forbidden to
+ * answer. Same triangle, drain-shaped names: a body that BLOCKS, a body that CHASES, a body that
+ * REACHES.
+ *
+ * ★ AND THE TRIANGLE HAS TO BE A TRIANGLE. Three enemies that differ only in HP are one enemy
+ * with three healthbars. Each form must break a different habit: the warden punishes walking
+ * straight at things, the stalker punishes standing still, the caster punishes ignoring range.
+ * The oracle asserts the three are actually distinct on their own axis, so a balance pass cannot
+ * quietly converge them.
+ */
+export type HollowForm = 'warden' | 'stalker' | 'caster'
+
+export interface HollowFormDef {
+  /** Dispersal pool. */
+  hp: number
+  /** Glide speed. ⚠ See DRAINED_SPEED in locomotion.ts — no form may out-glide a drained keeper,
+   *  or "a keeper who runs, escapes" stops being true and menace becomes a wall. */
+  speed: number
+  /** Projectile hit sphere. */
+  radius: number
+  /** How close it has to be to drain. The caster's is long — that IS its form. */
+  reach: number
+  /** ★ Solid half-width. A warden you can walk through is not a guard, it is scenery — this is
+   *  what makes the form mean anything. 0 = incorporeal (the caster: reach is its body). */
+  body: number
+  /** Seconds of drain a touch lays on the keeper. */
+  drain: number
+  /** How far out it stops closing. The caster holds this line; the melee forms come all the way. */
+  standoff: number
+  /** Relative spawn frequency within a pack. */
+  weight: number
+}
+
+/**
+ * ⚠ SPEEDS ARE BOUNDED FROM BOTH SIDES, and the bound is a canon sentence, not taste. Every form
+ * must glide SLOWER than a drained keeper (locomotion's DRAINED_SPEED, 4.2) so the escape the
+ * ruling promises survives even at the keeper's worst. The stalker sits as close to that ceiling
+ * as the triangle allows — it should feel like it is about to catch you and never quite does.
+ */
+export const HOLLOW_FORMS: Record<HollowForm, HollowFormDef> = {
+  // The wall. Slow enough to walk around, solid enough that you must, and the heaviest drain —
+  // so going THROUGH it is a real cost rather than a formality.
+  warden:  { hp: 60, speed: 2.0, radius: 1.15, reach: 1.25, body: 0.85, drain: 3.4, standoff: 0,   weight: 3 },
+  // The pressure. Frail, fast, small. It is the reason you cannot stand still and mine while a
+  // pack is out, which is the habit the night is supposed to break.
+  stalker: { hp: 18, speed: 3.9, radius: 0.62, reach: 0.80, body: 0.34, drain: 1.8, standoff: 0,   weight: 4 },
+  // The reason to move. It never closes and it barely has a body — it drains from across the
+  // clearing, so a keeper who solves the other two by backing away has solved nothing.
+  caster:  { hp: 14, speed: 1.5, radius: 0.70, reach: 7.5,  body: 0,    drain: 2.2, standoff: 6.5, weight: 2 },
+}
+
+export const formOf = (h: HollowState): HollowFormDef => HOLLOW_FORMS[h.form]
+
+/** Pick a form by weight. `roll` is 0..1 — injected so the oracle can pin the distribution
+ *  instead of hoping. Ordered explicitly: a Record's key order is not a contract to lean on. */
+export const FORM_ORDER: HollowForm[] = ['warden', 'stalker', 'caster']
+export function pickForm(roll: number): HollowForm {
+  const total = FORM_ORDER.reduce((a, f) => a + HOLLOW_FORMS[f].weight, 0)
+  let acc = 0
+  const target = Math.min(0.999999, Math.max(0, roll)) * total
+  for (const f of FORM_ORDER) {
+    acc += HOLLOW_FORMS[f].weight
+    if (target < acc) return f
+  }
+  return FORM_ORDER[FORM_ORDER.length - 1]
+}
+
+/** Legacy single-body numbers, kept as the warden-neutral defaults the older call sites read. */
 export const HOLLOW_HP = 30
 export const HOLLOW_HOVER = 1.15     // metres above the ground line
 export const HOLLOW_SPEED = 3.4      // < run speed: running away always works
@@ -133,12 +214,22 @@ export function hollowStep(
   h: HollowState, dt: number, px: number, pz: number,
   groundAt: (x: number, z: number) => number, time: number,
 ): void {
+  const f = formOf(h)
   const dx = px - h.x, dz = pz - h.z
   const d = Math.hypot(dx, dz)
-  const speed = HOLLOW_SPEED * (1 - h.gutter)          // a guttering Hollow loses its will first
-  if (d > 0.5) {
+  const speed = f.speed * (1 - h.gutter)               // a guttering Hollow loses its will first
+  // ★ THE CASTER HOLDS ITS LINE, AND HOLDS IT FROM BOTH SIDES. It closes to `standoff` and then
+  // BACKS OFF if the keeper walks in — without the retreat it is just a slow stalker, because
+  // every fight ends with the player standing on top of it, which is the one range its whole form
+  // exists to deny. The melee forms have standoff 0, so this is a no-op for them and there is one
+  // movement function rather than a melee one and a ranged one that drift apart.
+  const stop = Math.max(0.5, f.standoff)
+  if (d > stop) {
     h.x += (dx / d) * speed * dt
     h.z += (dz / d) * speed * dt
+  } else if (f.standoff > 0 && d < f.standoff * 0.72 && d > 1e-4) {
+    h.x -= (dx / d) * speed * dt
+    h.z -= (dz / d) * speed * dt
   }
   const want = groundAt(h.x, h.z) + 1 + HOLLOW_HOVER + Math.sin(time * 1.7 + h.phase) * 0.12
   h.y += (want - h.y) * Math.min(1, dt * 3)
@@ -170,8 +261,48 @@ export const DRAIN_TIME = 2.6        // seconds of slowed keeper per touch, refr
  *  projectile test is: "it can actually reach you" has to be assertable. */
 export function hollowTouching(h: HollowState, px: number, pz: number): boolean {
   if (h.hp <= 0 || h.gutter >= 1) return false
+  const r = formOf(h).reach
   const dx = px - h.x, dz = pz - h.z
-  return dx * dx + dz * dz < HOLLOW_TOUCH * HOLLOW_TOUCH
+  return dx * dx + dz * dz < r * r
+}
+
+/**
+ * ── ★ BODIES (2026-08-11) — "id like them to be phisical enemies" ────────────────────────────
+ * Push the keeper out of any solid form she has ended up inside. Resolved HERE, after locomotion
+ * has run, rather than by teaching the walker about monsters: locomotion's whole contract is that
+ * the world is one injected `solid(x,y,z)` probe, and a Hollow is not a voxel. Keeping it out
+ * means the walker stays testable against a synthetic grid with no creatures in it.
+ *
+ * ★ IT REFUSES A PUSH IT CANNOT MAKE SAFELY. `fits` is the caller's body test; if shoving the
+ * keeper clear would put her inside terrain, she stays overlapping instead. A monster that can
+ * press you into rock is a monster that can kill you through the floor, and momentary overlap is
+ * a far cheaper bug than being extruded into a hillside. Same instinct as the chest that spills
+ * rather than refusing to break.
+ *
+ * Incorporeal forms (`body` 0 — the caster) are skipped: reach is its body, and a thing made of
+ * absence at seven metres has no surface to bump into.
+ */
+export function pushOutOfBodies(
+  px: number, pz: number, keeperR: number,
+  bodies: HollowState[],
+  fits: (x: number, z: number) => boolean,
+): { x: number; z: number } {
+  let x = px, z = pz
+  for (const h of bodies) {
+    if (h.hp <= 0 || h.gutter >= 1) continue
+    const b = formOf(h).body
+    if (b <= 0) continue
+    const min = b + keeperR
+    let dx = x - h.x, dz = z - h.z
+    let d = Math.hypot(dx, dz)
+    if (d >= min) continue
+    // Dead centre has no direction to leave by; pick one rather than dividing by zero.
+    if (d < 1e-4) { dx = 1; dz = 0; d = 1 }
+    const nx = h.x + (dx / d) * min
+    const nz = h.z + (dz / d) * min
+    if (fits(nx, nz)) { x = nx; z = nz }
+  }
+  return { x, z }
 }
 
 /** Distance from point P to the segment A→A+D·len — the projectile hit test, shared with the
