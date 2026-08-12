@@ -172,14 +172,32 @@ const vertexAO = (side1: number, side2: number, corner: number): number =>
   side1 && side2 ? 0 : 3 - (side1 + side2 + corner)
 
 /**
+ * Integer hash of one world cell → u32. Feeds the leaf pass's per-cross orientation and size.
+ *
+ * ★ WORLD COORDINATES, WHICH IS THE ENTIRE REASON `origin` EXISTS. Section-local coordinates
+ * restart at every section boundary, so hashing them stamps the identical 16-block pattern into
+ * every section — trading a 1-block repeat for a 16-block one, which is MORE visible, not less.
+ * The atlas shader's per-block jitter learned this the same way and says so in `atlas.ts`.
+ */
+function cellHash(x: number, y: number, z: number): number {
+  let h = Math.imul(x | 0, 374761393) ^ Math.imul(y | 0, 668265263) ^ Math.imul(z | 0, 2246822519)
+  h = Math.imul(h ^ (h >>> 13), 1274126177)
+  h ^= h >>> 16
+  return h >>> 0
+}
+
+/**
  * ⚠ When `scratch` is supplied the returned arrays are VIEWS INTO IT, not copies. Upload or copy
  * them before the next `greedyMesh` call with the same scratch, or the previous mesh is overwritten
  * underneath you. That is the price of not allocating; it is stated here because the failure mode is
  * a silently corrupted mesh two frames later, not a crash.
+ *
+ * `origin` is this section's world corner. It affects NOTHING but the leaf pass's hash, and it
+ * defaults to the origin so every existing caller and every bench keeps its exact current output.
  */
 export function greedyMesh(
   sec: Section, neighbour: NeighbourFn = OUTSIDE_IS_AIR, scratch?: MeshScratch,
-  half: HalfCells | null = null,
+  half: HalfCells | null = null, origin: readonly [number, number, number] = [0, 0, 0],
 ): MeshResult {
   const S = sec.size
   const sc = scratch && scratch.size === S ? scratch : createMeshScratch(S)
@@ -555,10 +573,19 @@ export function greedyMesh(
   // ⚠ A uniform section cannot hold a mixed canopy, so scanning 4096 cells of solid air or solid
   // stone to find nothing is pure waste — and it is most of the column. Same argument as the sweep's
   // own uniform fast path, which is what keeps world height nearly free.
+  //
+  // ── ★ EVERY CROSS WAS IDENTICAL, AND THAT WAS THE OTHER HALF OF "THE TREES LOOK LIKE UMBRELLAS"
+  // (2026-08-12). The first cut emitted both quads at a fixed 45°/135°, full cell width, dead centre
+  // — so a canopy was a LATTICE of the same X repeated on a perfect grid, which the eye reads as a
+  // textured slab rather than as foliage. The crossed-quad trick buys a ragged silhouette only if
+  // the crosses disagree with each other. Yaw, width and offset are now hashed per world cell:
+  // deterministic (a remesh reproduces it exactly), free (one hash, four bit-slices of it) and
+  // invisible to every other system, because leaves remain ordinary voxels.
   if (!uniform || isLeafMat(sec.uniformValue()!)) {
     const maxQuads = (positions.length / 12) | 0
     // Diagonals of the cell, inset so two neighbouring canopies do not z-fight along a shared face.
     const K = 0.5 - 0.0625
+    const [owx, owy, owz] = origin
     // ⚠ `break` would leave the two outer loops running. The scratch is sized for the checkerboard
     // worst case so this should never trip, but "should never" plus a partial exit is how a mesh
     // comes back silently missing its top half.
@@ -581,31 +608,55 @@ export function greedyMesh(
           if (sample(x, y - 1, z) !== AIR) enclosed++
           if (sample(x, y, z + 1) !== AIR) enclosed++
           if (sample(x, y, z - 1) !== AIR) enclosed++
+          // ★ A LEAF WALLED IN ON ALL SIX SIDES DRAWS NOTHING. It is behind its own neighbours'
+          // crosses from every angle, and the pass used to spend two quads on it anyway — 3,046 of
+          // 17,388 in the Thicket, 17% of the canopy's cost, invisible. Culling it is what pays for
+          // the fuller crown the generator now grows. Chopping re-meshes, so the moment a neighbour
+          // becomes air this cell draws again; the solid sweep has always worked exactly this way.
+          if (enclosed === 6) continue
           // ⚠ THE THRESHOLDS MATTER MORE THAN THEY LOOK. The first cut darkened at 3+ neighbours,
           // and the oracle caught that a blob's CORNER already has 3 — so nothing in an entire
           // canopy came out lit and the effect read as "the trees got muddy" rather than as depth.
           // Only genuine burial darkens: the rim (<= 3) stays full bright.
-          const shade = enclosed >= 6 ? 0 : enclosed >= 5 ? 1 : enclosed >= 4 ? 2 : 3
+          const shade = enclosed >= 5 ? 1 : enclosed >= 4 ? 2 : 3
 
-          const cx = x + 0.5, cy = y + 0.5, cz = z + 0.5
-          // Two vertical quads on the cell's diagonals. Wound counter-clockwise from the low-left;
+          // One hash, four independent slices of it — cheaper than four hashes and just as
+          // uncorrelated, since the mixer has already avalanched every input bit across the word.
+          const h = cellHash(owx + x, owy + y, owz + z)
+          // A quarter turn covers every DISTINCT orientation: the pair is perpendicular, so turning
+          // it by 90° maps the cross onto itself. Anything wider would just repeat.
+          const yaw = ((h & 1023) / 1024) * (Math.PI / 2)
+          const wide = K * (0.78 + (((h >>> 10) & 63) / 63) * 0.44)
+          const jx = ((((h >>> 16) & 31) / 31) - 0.5) * 0.24
+          const jz = ((((h >>> 21) & 31) / 31) - 0.5) * 0.24
+          // ⚠ Vertical jitter must OFFSET the cell, never resize it — both corners move by the same
+          // `jy`, so the quad still spans exactly one block. A scaled height would shrink the cross
+          // away from its neighbours and open holes along the canopy's underside.
+          const jy = ((((h >>> 26) & 31) / 31) - 0.5) * 0.3
+
+          const cx = x + 0.5 + jx, cy = y + 0.5 + jy, cz = z + 0.5 + jz
+          const ax0 = Math.cos(yaw) * wide, az0 = Math.sin(yaw) * wide
+          // Two vertical quads, turned a quarter apart. Wound counter-clockwise from the low-left;
           // the material is DOUBLE-SIDED, so one quad per plane is enough and the back face is lit
           // by the shader's flipped normal rather than by a second copy of the geometry.
           for (let d = 0; d < 2; d++) {
-            const dx = d === 0 ? K : -K
+            // (cos, sin) turned a quarter is (-sin, cos) — so the pair stays perpendicular however
+            // far the cross as a whole is rotated, and it is still a cross rather than a wedge.
+            const ax = d === 0 ? ax0 : -az0
+            const az = d === 0 ? az0 : ax0
             const p = quads * 12
-            positions[p + 0] = cx - dx; positions[p + 1] = cy - 0.5; positions[p + 2] = cz - K
-            positions[p + 3] = cx + dx; positions[p + 4] = cy - 0.5; positions[p + 5] = cz + K
-            positions[p + 6] = cx + dx; positions[p + 7] = cy + 0.5; positions[p + 8] = cz + K
-            positions[p + 9] = cx - dx; positions[p + 10] = cy + 0.5; positions[p + 11] = cz - K
-            // Normal is the quad's own plane normal, horizontal — foliage catches side light rather
-            // than reading as a floor. Not normalised to the diagonal on purpose: an exact diagonal
-            // normal makes both quads of a cross shade identically and the cross disappears.
-            const nx = d === 0 ? -0.7071 : 0.7071
+            positions[p + 0] = cx - ax; positions[p + 1] = cy - 0.5; positions[p + 2] = cz - az
+            positions[p + 3] = cx + ax; positions[p + 4] = cy - 0.5; positions[p + 5] = cz + az
+            positions[p + 6] = cx + ax; positions[p + 7] = cy + 0.5; positions[p + 8] = cz + az
+            positions[p + 9] = cx - ax; positions[p + 10] = cy + 0.5; positions[p + 11] = cz - az
+            // The quad's own plane normal — (ax,0,az) x (0,1,0), divided by the half-width it was
+            // scaled by, which is exactly the normalisation. Horizontal, so foliage catches side
+            // light rather than reading as a floor, and the two quads of a cross never shade alike.
+            const nx = -az / wide, nz = ax / wide
             for (let k = 0; k < 4; k++) {
               normals[p + k * 3 + 0] = nx
               normals[p + k * 3 + 1] = 0
-              normals[p + k * 3 + 2] = 0.7071
+              normals[p + k * 3 + 2] = nz
               materials[quads * 4 + k] = m
               ao[quads * 4 + k] = shade
             }

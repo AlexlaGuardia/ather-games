@@ -84,12 +84,13 @@ console.log(`  leaf voxels EXPOSED     ${exposedLeaves.toLocaleString()}   <- th
 console.log(`  per column              ${(exposedLeaves / cols).toFixed(1)} exposed leaves`)
 console.log(`\n  for scale: the flora renderer already carries ~17,000 instances on this box.`)
 
-// ── ★ THE DECISIVE COMPARISON: what leaves cost NOW vs what cross-quads would cost ─────────────
-// The exposed-voxel count alone cannot answer whether instancing is affordable, because the mesher
-// MERGES leaf faces today and a cross-quad renderer would not merge anything: a cross is two quads
-// per leaf voxel, always, exposed or not. So the real question is the ratio between the quads the
-// canopy emits today and 2x the leaf voxels. Guessing that ratio from "leaves are blobby so they
-// probably do not merge well" is exactly the kind of hunch this file exists to replace.
+// ── ★ WHAT THE CANOPY COSTS, MESHED FOR REAL ───────────────────────────────────────────────────
+// ⚠ THIS BLOCK USED TO COMPARE THE MESHER AGAINST A HYPOTHETICAL THAT HAS SINCE SHIPPED, and once
+// it shipped the comparison was the live mesher against itself — it printed "1.26x the current leaf
+// cost" for a change that cost 1.06x. The original question was *should* leaves become cross-quads;
+// they did, on 2026-08-12. The question now is what the canopy costs and how much of that the
+// enclosure cull saves, so that is what it prints. A measurement script that outlives its question
+// does not go quiet, it reports a wrong number confidently.
 import { meshColumn, type Neighbours } from '../src/app/shimmer/voxel/column'
 import { createMeshScratch } from '../src/app/shimmer/voxel/greedy'
 
@@ -106,11 +107,14 @@ for (const key of Object.keys(grid)) {
     for (let q = 0; q < sm.mesh.quads; q++) if (isLeaf(sm.mesh.materials[q * 4])) leafQuads++
   }
 }
-const crossQuads = leaves * 2
+// Every leaf voxel would emit two crossed quads; the ones walled in on all six sides are culled,
+// because they sit behind their own neighbours' crosses from every angle. That saving is what pays
+// for a fuller crown, so it is worth printing next to the bill rather than buried in it.
+const uncapped = leaves * 2
 console.log(`\n  ── what the canopy costs, meshed for real ──`)
 console.log(`  total quads in view     ${totalQuads.toLocaleString()}`)
-console.log(`  LEAF quads today        ${leafQuads.toLocaleString()}   (${(leafQuads / totalQuads * 100).toFixed(1)}% of the world)`)
-console.log(`  cross-quads instead     ${crossQuads.toLocaleString()}   (2 per leaf voxel, no merging possible)`)
-console.log(`  ratio                   ${(crossQuads / Math.max(1, leafQuads)).toFixed(2)}x the current leaf cost`)
-console.log(`  world total after       ${(totalQuads - leafQuads + crossQuads).toLocaleString()} quads ` +
-            `(${((totalQuads - leafQuads + crossQuads) / totalQuads).toFixed(2)}x)`)
+console.log(`  LEAF quads             ${leafQuads.toLocaleString()}   (${(leafQuads / totalQuads * 100).toFixed(1)}% of the world)`)
+console.log(`  without the cull        ${uncapped.toLocaleString()}   (2 per leaf voxel, no merging possible)`)
+console.log(`  buried leaves culled    ${(leaves - exposedLeaves).toLocaleString()} voxels ` +
+            `= ${(uncapped - leafQuads).toLocaleString()} quads saved ` +
+            `(${((1 - leafQuads / Math.max(1, uncapped)) * 100).toFixed(0)}%)`)

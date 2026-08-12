@@ -300,8 +300,44 @@ for (const S of [4, 16, 32]) {
   eq(spans, 2, 'and each spans the full height of its cell')
 
   // The two quads must not be coplanar, or the "cross" is one doubled surface.
-  const n0 = r.normals[0], n1 = r.normals[12]
-  ok(Math.abs(n0 - n1) > 1e-6, 'the two quads face different ways — it is a cross, not a doubled plane')
+  //
+  // ⚠ COMPARE THE WHOLE NORMAL, NOT ITS X (fixed 2026-08-12). This asserted `|n0.x - n1.x| > 1e-6`,
+  // which is a proxy that a correct cross can fail: two perpendicular quads share an x component
+  // whenever the cross sits at 45°, which is precisely where the old fixed-yaw pass put every one
+  // of them. It passed only because it was comparing -0.7071 against +0.7071 — a sign, not an
+  // orientation. Now that yaw is hashed per cell it would have false-failed on 1 cell in 1024.
+  const dot = r.normals[0] * r.normals[12] + r.normals[1] * r.normals[13] + r.normals[2] * r.normals[14]
+  ok(Math.abs(dot) < 1e-6, 'the two quads face different ways — it is a cross, not a doubled plane')
+  for (let q = 0; q < 2; q++) {
+    const nx = r.normals[q * 12], ny = r.normals[q * 12 + 1], nz = r.normals[q * 12 + 2]
+    ok(Math.abs(Math.hypot(nx, ny, nz) - 1) < 1e-6, 'and each quad carries a UNIT normal')
+  }
+}
+{
+  // ★ THE CROSSES MUST DISAGREE WITH EACH OTHER, or the canopy is a lattice of the identical X on a
+  // perfect grid and reads as a textured slab — half of why the trees looked like umbrellas. This
+  // is the assertion that would catch someone "simplifying" the hash back to a constant yaw.
+  const S = 16
+  const s = new Section(S)
+  for (let y = 2; y < 14; y++) for (let z = 2; z < 14; z++) for (let x = 2; x < 14; x++)
+    s.set(x, y, z, WOOD.GOLDWOOD_LEAVES)
+  const r = greedyMesh(s)
+  const yaws = new Set<number>()
+  for (let q = 0; q < r.quads; q++) yaws.add(Math.round(Math.atan2(r.normals[q * 12 + 2], r.normals[q * 12]) * 200))
+  ok(yaws.size > 40, `★ leaf crosses vary in orientation (${yaws.size} distinct yaws), not one repeated X`)
+
+  // ★ AND THE HASH IS WORLD-STABLE. Same cells, different section origin ⇒ a different arrangement;
+  // if `origin` were ignored the identical 16-block pattern would tile across every section, which
+  // is a bigger repeat than the one the jitter was added to break.
+  const shifted = greedyMesh(s, undefined, undefined, null, [16, 0, 0])
+  let moved = 0
+  for (let i = 0; i < r.positions.length; i++) if (Math.abs(r.positions[i] - shifted.positions[i]) > 1e-6) moved++
+  ok(moved > 0, '★ the leaf hash follows world position — sections do not all draw the same pattern')
+
+  // ★ A FULLY BURIED LEAF DRAWS NOTHING. 12^3 leaves, of which the 10^3 interior are walled in on
+  // all six sides; only the 12^3 - 10^3 shell may emit. Guards the cull that pays for the fuller
+  // crown, and it fails loudly if someone reinstates the buried quads.
+  eq(r.quads, (12 * 12 * 12 - 10 * 10 * 10) * 2, 'only the shell of a solid canopy is meshed')
 }
 {
   // ★ A LEAF NO LONGER HIDES WHAT IS BEHIND IT. Leaves read as AIR to the sweep, so a trunk beside

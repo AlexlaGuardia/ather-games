@@ -461,7 +461,9 @@ export function meshColumn(
     // only for out-of-section coordinates, so this lookup never touches the hot loop.
     const neighbourFn = half === null ? raw
       : (x: number, y: number, z: number) => half!.has(halfKey(x, y, z, SECTION)) ? AIR : raw(x, y, z)
-    const mesh = greedyMesh(meshSec, neighbourFn, sc, half)
+    // The world corner, for the leaf pass's per-cell hash — see `greedyMesh`. Everything else in
+    // the mesher is section-local on purpose and stays that way.
+    const mesh = greedyMesh(meshSec, neighbourFn, sc, half, [col.wx, oy, col.wz])
     if (mesh.quads === 0) continue
     // ⚠ The scratch is reused, so these arrays are views that the NEXT section will overwrite.
     // Copy them here: the caller receives a list, and a list of aliased views is a trap.

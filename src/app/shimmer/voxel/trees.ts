@@ -63,6 +63,12 @@ export interface TreeSpecies {
   /** Canopy radius at its widest. Sets the write margin, so it is a contract, not a hint. */
   radius: number
   /**
+   * Blob species only: how hard the crown is flattened vertically. Semi-axis = radius / sqrt(squash),
+   * so 1 is a sphere and anything past ~1.6 starts reading as a disc on a stick. See `foliageBlob`.
+   * Optional because the layered placer builds its own profile out of tiers and never consults it.
+   */
+  squash?: number
+  /**
    * Relative selection weight.
    *
    * ★ RARITY IS A WEIGHT, NOT A RARE FEATURE — the research is explicit about this. Making dawnwood
@@ -77,10 +83,12 @@ export interface TreeSpecies {
  * heights, radii and weights are build tuning and are mine.
  */
 export const SPECIES: TreeSpecies[] = [
+  // ⚠ goldwood is 58% of the forest, so its proportions ARE the world's tree silhouette. minHeight
+  // rose 5→6 with the taller crown: at 5 the crown swallowed the whole trunk and it read as a bush.
   { id: 'goldwood', log: WOOD.GOLDWOOD_LOG, leaves: WOOD.GOLDWOOD_LEAVES,
-    trunk: 'straight', foliage: 'blob', minHeight: 5, maxHeight: 8, radius: 3, weight: 58 },
+    trunk: 'straight', foliage: 'blob', minHeight: 6, maxHeight: 9, radius: 3, weight: 58, squash: 1.15 },
   { id: 'shimmeroak', log: WOOD.SHIMMEROAK_LOG, leaves: WOOD.SHIMMEROAK_LEAVES,
-    trunk: 'straight', foliage: 'blob', minHeight: 7, maxHeight: 11, radius: 4, weight: 26 },
+    trunk: 'straight', foliage: 'blob', minHeight: 7, maxHeight: 11, radius: 4, weight: 26, squash: 1.25 },
   // ★ The one species that earns the second trunk placer — a forking silhouette is the whole reason
   // two implementations exist rather than one.
   { id: 'starwillow', log: WOOD.STARWILLOW_LOG, leaves: WOOD.STARWILLOW_LEAVES,
@@ -199,21 +207,70 @@ function put(c: Ctx, wx: number, wy: number, wz: number, mat: number, leaf: bool
   sec.data[li] = mat
 }
 
-/** Blob canopy — a squashed sphere. The common silhouette. */
-function foliageBlob(c: Ctx, g: () => number, cx: number, cy: number, cz: number, r: number, leaves: number): void {
+/**
+ * Blob canopy — a squashed sphere. The common silhouette, and 84% of the forest by weight, so this
+ * function very nearly IS what the world's trees look like.
+ *
+ * ── ★ `squash` IS THE UMBRELLA DIAL (2026-08-12) ────────────────────────────────────────────────
+ * It divides the crown's vertical semi-axis, and it was a hardcoded 2.1 shared silently by every
+ * blob species. At 2.1 a radius-3 goldwood resolves to a crown 6-7 wide and *3 tall* — one third of
+ * the tree's height, sitting on a bare pole. That is not a canopy, it is a parasol, and it is what
+ * Alex saw. A broadleaf crown wants its height near its width, so this belongs to the species.
+ */
+function foliageBlob(
+  c: Ctx, g: () => number, cx: number, cy: number, cz: number, r: number, leaves: number, squash: number,
+): void {
   const r2 = r * r
   for (let dy = -r; dy <= r; dy++) {
     for (let dz = -r; dz <= r; dz++) {
       for (let dx = -r; dx <= r; dx++) {
         // Squashed vertically so a canopy reads as a canopy rather than a ball on a stick.
-        const d = dx * dx + dy * dy * 2.1 + dz * dz
+        const d = dx * dx + dy * dy * squash + dz * dz
         if (d > r2) continue
         // Nibble the outer shell so the silhouette is not a perfect solid — a clean sphere reads
         // as geometry, a ragged one reads as foliage.
-        if (d > r2 * 0.55 && g() < 0.4) continue
+        //
+        // ⚠ THE SHELL WAS FAR TOO THICK AND THE RATE FAR TOO HIGH (0.55 / 0.4, fixed 2026-08-12).
+        // "Past 55% of r-squared" is not a rim, it is most of the volume — at radius 3 it caught
+        // every cell but the innermost handful, so a 40% drop rate hollowed the CROWN rather than
+        // fraying its edge. A cross-section showed goldwood resolving to 77 sparse, visibly
+        // LOPSIDED voxels: not ragged, moth-eaten. 0.72/0.3 confines it to the true rim.
+        //
+        // ★ AND THE MESHER NOW CARRIES THIS LOAD. Per-cell yaw/width/offset jitter (see the leaf
+        // pass in `greedy.ts`) makes the canopy's surface irregular on its own, so the generator no
+        // longer has to buy raggedness by deleting foliage. Two systems were paying for the same
+        // effect and the geometry could least afford it.
+        if (d > r2 * 0.72 && g() < 0.3) continue
         put(c, cx + dx, cy + dy, cz + dz, leaves, true)
       }
     }
+  }
+
+  // ★ THE UNDERSIDE IS THE OTHER HALF OF IT, and `squash` alone does not fix it: an ellipsoid's
+  // bottom is a clean horizontal disc however tall you make the crown above it, and a clean
+  // horizontal disc seen from below at eye level is a parasol. Real foliage hangs unevenly. A
+  // handful of short strands under the rim is the cheapest thing that breaks that line — a dozen
+  // voxels against the crown's hundred, and it is the only part of the tree the player walks under.
+  //
+  // ⚠ The rolls happen in a fixed order whatever lands in this stack, which is what keeps the seam
+  // test green: `put` discards out-of-bounds writes but never consumes the stream, so a tree grows
+  // identically from either column alignment. Do not make a `g()` call conditional on position.
+  const strands = Math.round(r * 3)
+  for (let i = 0; i < strands; i++) {
+    const dx = Math.round((g() * 2 - 1) * r)
+    const dz = Math.round((g() * 2 - 1) * r)
+    const len = 1 + Math.floor(g() * 2)
+    const rem = r2 - dx * dx - dz * dz
+    if (rem <= 0) continue
+    const bottom = -Math.floor(Math.sqrt(rem / squash))
+    // ⚠ START AT THE SHELL CELL ITSELF (k=0), NOT BELOW IT. Hanging from `bottom - 1` leaves a gap
+    // wherever the nibble happened to remove the cell above, and a one-voxel leaf floating two
+    // blocks under a crown reads as debris, not as foliage — a cross-section caught exactly that.
+    // Re-writing a cell that is already a leaf costs nothing and guarantees the strand connects.
+    //
+    // Leaves-only, so a strand over the trunk column is refused by `canLeaf` rather than boring a
+    // hole through the bark.
+    for (let k = 0; k <= len; k++) put(c, cx + dx, cy + bottom - k, cz + dz, leaves, true)
   }
 }
 
@@ -252,7 +309,7 @@ export function growTree(
   if (sp.trunk === 'straight') {
     for (let i = 0; i < start.height; i++) put(c, start.x, baseY + i, start.z, sp.log, false)
     const top = baseY + start.height
-    if (sp.foliage === 'blob') foliageBlob(c, g, start.x, top - 1, start.z, sp.radius, sp.leaves)
+    if (sp.foliage === 'blob') foliageBlob(c, g, start.x, top - 1, start.z, sp.radius, sp.leaves, sp.squash ?? 1.2)
     else foliageLayered(c, g, start.x, top - 2, start.z, sp.radius, sp.leaves)
     return
   }
