@@ -181,7 +181,12 @@ export interface Spirit {
   heldItem?: string         // held item ID (from held-items.ts), one per spirit
 
   // Party/bank
-  inParty: boolean          // true = in active party (max 5), false = stored in bank
+  // true = at your side (max 5), false = elsewhere in your garden.
+  // ⚠ NOT "stored in a bank", which is what this said until 2026-08-12. CANON/glossary.md rules it
+  // outright: "there is no spirit-bank, box or depot anywhere in the Ather, because a keeper knows
+  // spirits, never stores them." The MECHANIC — an active subset of a larger roster — was always
+  // right; only the word was wrong, and a wrong word in a shared type is how it reaches a HUD.
+  inParty: boolean
 
 }
 
