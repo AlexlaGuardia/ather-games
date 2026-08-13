@@ -9,6 +9,7 @@ import React, { useEffect, useRef } from 'react'
 import type * as THREE from 'three'
 import { getGardenWorld, WORLD_ZONE_ID } from '../world/garden-world'
 import { ZONES, getZone } from '../world/zones'
+import { CELL, isSeen, type Seen } from './discovery'
 
 const VOID = -1, WATER_ID = 8, WARP_ID = 14, MIST_ID = 31, WALL_ID = 34
 
@@ -79,6 +80,131 @@ function drawDoors(ctx: CanvasRenderingContext2D, px: number, withLabels: boolea
   ctx.restore()
 }
 
+
+// ── ★ THE CLOUD (2026-08-13, Alex: "introduce the clouds from canon") ──────────────────────────
+// Unwalked ground is not greyed out, it is CLOUD — and in the Ather that is the literal truth, not
+// a convention borrowed for it. `glossary.md` › the cloud-ocean: the Ather is an ocean of cloud and
+// a garden is "a pocket carved into the calm deep — the cloud-walls are the ocean pressed soft
+// around them." So a map with unexplored country under cloud is drawing the world as it is: what a
+// keeper has walked is pressed open, what they have not is still ocean.
+//
+// The read runs OUTWARD in three bands, straight off `spirit-tales-bible.md:216`+:242 — "walls of
+// soft, pale, faintly glowing cloud, piled like heaped wool. Beyond the cloud-walls lies a dark,
+// star-flecked void", and that void "is the deep cloud seen from inside the pocket":
+//
+//   walked         →  the map, drawn plainly
+//   just beyond    →  the cloud-WALL: pale, glowing, wool-thick. The frontier, and it should read
+//                     as an invitation rather than a lid
+//   further out    →  the deep: dark, star-flecked. Not "no data" — the ocean at depth
+//
+// ★ HOW, and why it is two blurs rather than a per-cell paint. Painting each cell its own alpha
+// gives a grid you can count, which is the tell that turns weather into a spreadsheet. Instead the
+// seen-mask is drawn ONCE into a tiny offscreen canvas (one pixel per cell), then composited twice
+// at different blur radii: a wide, additive pass paints the glow that fades outward into the deep,
+// and a tight `destination-out` pass punches the walked ground clear. The canvas blur does the
+// wool for free and the cell grid disappears into it.
+const CLOUD = '#e9edf8'          // canon: soft, pale, faintly glowing
+const DEEP = '#080614'           // the star-flecked void beyond the walls
+const WALL_GLOW = 0.5            // how bright the frontier wall burns
+const BLUR_WALL = 3.4            // × cell size — how far the glow reaches into the deep
+const BLUR_EDGE = 1.15           // × cell size — how soft the walked edge is
+
+// ★ THE SCRATCH CANVASES ARE MODULE-LEVEL AND REUSED. The first cut built three per call, which is
+// fine for the full map (once per open) and wrong for the minimap, which redraws every time the
+// player crosses a half-tile or turns their head — a steady drip of 148×148 canvas allocations for
+// the whole session. Same rule voxel3d's render-audit enforces for GPU objects, applied to 2D.
+const scratch: Record<string, HTMLCanvasElement> = {}
+function buf(name: string, w: number, h: number): CanvasRenderingContext2D {
+  let c = scratch[name]
+  if (!c) { c = document.createElement('canvas'); scratch[name] = c }
+  if (c.width !== w || c.height !== h) { c.width = w; c.height = h }
+  const ctx = c.getContext('2d')!
+  ctx.setTransform(1, 0, 0, 1, 0, 0)
+  ctx.globalAlpha = 1
+  ctx.filter = 'none'
+  ctx.globalCompositeOperation = 'source-over'
+  ctx.clearRect(0, 0, w, h)
+  return ctx
+}
+
+/**
+ * One pixel per cell, white where walked — the stencil both composite passes draw through.
+ * Cached on the map's `rev`, because `see()` mutates in place: without a change counter this would
+ * rebuild a few thousand cells on every minimap redraw to produce a byte-identical image.
+ */
+let maskRev = -1, maskFor: Seen | null = null
+function seenMask(seen: Seen): HTMLCanvasElement {
+  if (maskFor === seen && maskRev === seen.rev) return scratch.mask
+  const mc = buf('mask', seen.cw, seen.ch)
+  mc.fillStyle = '#fff'
+  for (let y = 0; y < seen.ch; y++) for (let x = 0; x < seen.cw; x++) if (isSeen(seen, x, y)) mc.fillRect(x, y, 1, 1)
+  maskFor = seen; maskRev = seen.rev
+  return scratch.mask
+}
+
+/**
+ * Deterministic stars over the deep. Seeded by index, so the same patch of unexplored ocean carries
+ * the same stars every time the map is opened — a field that reshuffled on each open would read as
+ * static, and the void is meant to be a PLACE the keeper has not been, not an effect.
+ */
+function drawStars(ctx: CanvasRenderingContext2D, w: number, h: number, scale: number) {
+  const n = Math.round((w * h) / (2600 * scale))
+  for (let i = 0; i < n; i++) {
+    const a = Math.sin(i * 12.9898) * 43758.5453
+    const b = Math.sin(i * 78.233) * 43758.5453
+    const c = Math.sin(i * 39.425) * 43758.5453
+    const x = (a - Math.floor(a)) * w, y = (b - Math.floor(b)) * h
+    ctx.fillStyle = `rgba(226,232,255,${(0.25 + (c - Math.floor(c)) * 0.55).toFixed(3)})`
+    ctx.fillRect(x, y, scale, scale)
+  }
+}
+
+/**
+ * Lay the cloud over everything the keeper has not walked. Call LAST — it paints over the finished
+ * map, which is what lets doors, labels and routes be drawn in ignorance of what is hidden.
+ * `ox/oy` offset the stencil for the minimap, the only caller not looking at the whole world.
+ */
+function drawCloud(ctx: CanvasRenderingContext2D, seen: Seen, px: number, ox = 0, oy = 0) {
+  const w = ctx.canvas.width, h = ctx.canvas.height
+  const cellPx = px * CELL
+  const mask = seenMask(seen)
+  const mw = seen.cw * cellPx, mh = seen.ch * cellPx
+
+  // 1. the deep, everywhere — walked ground is cut back out in step 3
+  const lc = buf('cloud', w, h)
+  lc.fillStyle = DEEP
+  lc.fillRect(0, 0, w, h)
+  drawStars(lc, w, h, Math.max(1, px * 0.5))
+
+  // 2. the wall: the stencil tinted cloud-pale, blurred WIDE and added — brightest where the
+  //    keeper's ground ends, fading outward into the deep. `lighter` lets neighbouring frontiers
+  //    pile up like heaped wool instead of flat-topping at one alpha.
+  const tc = buf('tint', w, h)
+  tc.imageSmoothingEnabled = true
+  tc.drawImage(mask, ox, oy, mw, mh)
+  tc.globalCompositeOperation = 'source-in'
+  tc.fillStyle = CLOUD
+  tc.fillRect(0, 0, w, h)
+
+  lc.save()
+  lc.globalCompositeOperation = 'lighter'
+  lc.globalAlpha = WALL_GLOW
+  lc.filter = `blur(${(cellPx * BLUR_WALL).toFixed(1)}px)`
+  lc.drawImage(scratch.tint, 0, 0)
+  lc.restore()
+
+  // 3. punch the walked ground clear, tightly. This edge is what the player reads as "here is what
+  //    I know", so it is far sharper than the glow around it.
+  lc.save()
+  lc.globalCompositeOperation = 'destination-out'
+  lc.filter = `blur(${(cellPx * BLUR_EDGE).toFixed(1)}px)`
+  lc.imageSmoothingEnabled = true
+  lc.drawImage(mask, ox, oy, mw, mh)
+  lc.restore()
+
+  ctx.drawImage(scratch.cloud, 0, 0)
+}
+
 function drawPlayer(ctx: CanvasRenderingContext2D, x: number, y: number, yaw: number, px: number) {
   ctx.save()
   ctx.translate(x, y)
@@ -92,11 +218,15 @@ function drawPlayer(ctx: CanvasRenderingContext2D, x: number, y: number, yaw: nu
   ctx.restore()
 }
 
-export function WorldMap({ zoneId, gridRef, posRef, yawRef, onClose }: {
+export function WorldMap({ zoneId, gridRef, posRef, yawRef, seenRef, seenTick, onClose }: {
   zoneId: string
   gridRef: React.RefObject<number[][]>
   posRef: React.RefObject<THREE.Vector3 | null>
   yawRef: React.RefObject<number>
+  /** What the keeper has walked. Null = discovery is off for this zone (interiors draw whole). */
+  seenRef: React.RefObject<Seen | null>
+  /** Bumped when new ground opens, so an open map redraws its cloud as you walk. */
+  seenTick: number
   onClose: () => void
 }) {
   const mapCanvas = useRef<HTMLCanvasElement>(null)
@@ -133,7 +263,10 @@ export function WorldMap({ zoneId, gridRef, posRef, yawRef, onClose }: {
       }
       drawDoors(ctx, px, true)
     }
-  }, [zoneId, gridRef])
+    // ★ LAST. The map is drawn in full and then hidden — doors, labels and routes never have to
+    // know what is concealed, so there is exactly one place that decides what a keeper has seen.
+    if (seenRef.current) drawCloud(ctx, seenRef.current, px)
+  }, [zoneId, gridRef, seenRef, seenTick])
 
   // marker layer: player dot + facing wedge, rAF-driven
   useEffect(() => {
@@ -166,7 +299,7 @@ export function WorldMap({ zoneId, gridRef, posRef, yawRef, onClose }: {
         <canvas ref={markCanvas} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none' }} />
       </div>
       <div style={{ position: 'fixed', bottom: 26, left: '50%', transform: 'translateX(-50%)', color: '#cfc7ae', font: '700 13px ui-monospace, monospace' }}>
-        ✦ The Shimmer Garden · ◆ = doors (dashes = underground routes) · M or click to close
+        ✦ The Shimmer Garden · ◆ = doors (dashes = underground routes) · the cloud is what you have not walked · M or click to close
       </div>
     </div>
   )
@@ -175,11 +308,12 @@ export function WorldMap({ zoneId, gridRef, posRef, yawRef, onClose }: {
 // Persistent minimap — a north-up crop centered on the player. Redraws only when the
 // player crosses a tile or turns; click (or M) expands to the full map.
 const MINI_TILES = 30 // half-width of the crop, in tiles
-export function MiniMap({ zoneId, gridRef, posRef, yawRef, onExpand }: {
+export function MiniMap({ zoneId, gridRef, posRef, yawRef, seenRef, onExpand }: {
   zoneId: string
   gridRef: React.RefObject<number[][]>
   posRef: React.RefObject<THREE.Vector3 | null>
   yawRef: React.RefObject<number>
+  seenRef: React.RefObject<Seen | null>
   onExpand: () => void
 }) {
   const canvas = useRef<HTMLCanvasElement>(null)
@@ -195,7 +329,10 @@ export function MiniMap({ zoneId, gridRef, posRef, yawRef, onExpand }: {
       const grid = gridRef.current
       const p = posRef.current
       if (!grid?.length || !p) return
-      const key = `${zoneId}:${Math.round(p.x * 2)},${Math.round(p.z * 2)},${Math.round(yawRef.current * 10)}`
+      // `rev` is in the key so ground opening repaints the crop. Without it the cloud would only
+      // peel back when the player happened to turn or cross a half-tile, which reads as the map
+      // lagging a step behind the walk.
+      const key = `${zoneId}:${Math.round(p.x * 2)},${Math.round(p.z * 2)},${Math.round(yawRef.current * 10)},${seenRef.current?.rev ?? -1}`
       if (key === last) return
       last = key
       const ctx = cv.getContext('2d')!
@@ -215,6 +352,13 @@ export function MiniMap({ zoneId, gridRef, posRef, yawRef, onExpand }: {
         ctx.translate(-c0 * px, -r0 * px)
         drawDoors(ctx, px, false)
         ctx.restore()
+      }
+      // The cloud, cropped to the same window. The mask is offset by the crop's origin in CELL
+      // units × cellPx, which is why `drawCloud` takes an offset at all — the minimap is the only
+      // caller that is not looking at the whole world.
+      if (seenRef.current) {
+        const cellPx = px * CELL
+        drawCloud(ctx, seenRef.current, px, -(c0 / CELL) * cellPx, -(r0 / CELL) * cellPx)
       }
       drawPlayer(ctx, (p.x - c0) * px, (p.z - r0) * px, yawRef.current, px)
     }
