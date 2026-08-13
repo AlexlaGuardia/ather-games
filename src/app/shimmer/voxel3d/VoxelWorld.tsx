@@ -49,7 +49,7 @@ import { layerOf } from './tex/tiles'
 import { makeTileArray } from './tex/atlas'
 import { createTexturedVoxelMaterial } from './tex/atlas'
 import { loadSettings, saveSettings, withStyle, VIEW_RADIUS_MIN, VIEW_RADIUS_MAX, type VoxelSettings, type RenderStyle } from './settings'
-import { buildAttrsSplit, MATERIAL_COLOR } from './attrs'
+import { buildAttrsSplit, concatAttrs, MATERIAL_COLOR, type AttrPart } from './attrs'
 import { leafPixels } from './tex/flora-tex'
 import { isLeafMat, isLogMat } from '../voxel/trees'
 import { treeOwning, fellTree, fellXP } from '../voxel/tree-node'
@@ -118,6 +118,11 @@ import {
   chestKey, createChest, moveBetween, moveCount, halfOf, quickMove, addToGrid, isEmpty as isChestEmpty,
   spill as spillChest, CHEST_COLS, CHEST_SLOTS, type Slots,
 } from './chest'
+import {
+  stationKey, loadJob as loadStationJob, collect as collectStation, salvage as salvageStation,
+  runsReady, runProgress, stationRecipes, maxRuns, jobCost, milledYield, RUN_MS, MAX_RUNS,
+  type StationJob, type Workshop,
+} from '../voxel/workshop'
 import { itemIcon } from './tex/item-icon'
 import { bloom as bloomSpirit, due as potsDue, potKey, progress as potProgress, type PotClock } from './pot'
 import { spiritsToSave, spiritsFromSave } from '../spirits/spirit-save'
@@ -158,6 +163,17 @@ import { createFloraRenderer } from './flora-mesh'
  * truth, so a panel that shows 40 stone and a save that holds 40 stone cannot come apart.
  */
 export interface OpenChest { x: number; y: number; z: number; slots: Slots; touch: () => void }
+
+/**
+ * A bench the player has opened. Mirrors `OpenChest`: position plus a bound writer, never a copy of
+ * the job — the panel derives everything else from `workshop.ts` and the wall clock, so there is no
+ * second version of the truth to drift.
+ */
+interface OpenStation {
+  x: number; y: number; z: number
+  job: StationJob | undefined
+  commit: (shop: Workshop) => void
+}
 
 /**
  * Which grid a slot click means. The bag and an open chest are two grids inside ONE panel, so a
@@ -1001,6 +1017,8 @@ export default function VoxelWorld() {
    * click; reading state through the closure would need them rebuilt on every open.
    */
   const [openChest, setOpenChest] = useState<OpenChest | null>(null)
+  /** The bench whose job panel is up, or null. Position + a bound writer; see `OpenStation`. */
+  const [openStation, setOpenStation] = useState<OpenStation | null>(null)
   const openChestRef = useRef<OpenChest | null>(null)
   openChestRef.current = openChest
   const [craftOpen, setCraftOpen] = useState(false)
@@ -1473,6 +1491,7 @@ export default function VoxelWorld() {
           mistLedger={mistLedger} onNearMist={setNearMist} sparring={!!spar}
           onNearTable={setNearTable} cmdOut={worldCmd} pot={potOps}
           onOpenChest={(c) => { openCursorUI(); setOpenChest(c) }}
+          onOpenStation={(st) => { openCursorUI(); setOpenStation(st) }}
           uiOpen={cursorUIOpenRef}
         />
         {/* selector: deliberately matches NOTHING. Without it drei binds click-to-lock on the whole
@@ -1496,6 +1515,12 @@ export default function VoxelWorld() {
       {craftOpen && (
         <CraftPanel have={have} tools={tools} tick={craftTick} station={station}
                     onCraft={doCraft} onCraftTool={doCraftTool} onClose={() => { setCraftOpen(false); closeCursorUI() }} />
+      )}
+      {openStation && (
+        <StationPanel st={openStation} have={have} inv={inv}
+                      onChange={() => { setCraftTick(v => v + 1); refreshHotbar() }}
+                      onSay={say}
+                      onClose={() => { setOpenStation(null); closeCursorUI() }} />
       )}
       {(bagOpen || openChest) && (
         <BagPanel inv={inv} chest={openChest} tick={craftTick} sel={sel}
@@ -1680,7 +1705,10 @@ function Hud({ stats, toast, pos, look, hotbar, sel, tier, held, build, pieceIdx
           {isOwner && <a href="/shimmer/play3d" className="hover:text-white/85 underline decoration-white/20">❈ play3d (legacy)</a>}
         </div>
         <div>{pos}</div>
-        <div className="text-white/55">{stats}</div>
+        {/* `data-stats` is the handle `scripts/world-shot.mts` scrapes — the HUD line is the only
+            place the renderer's live counters surface, and a headless perf run needs to read them
+            without the class name (a styling detail) being load-bearing. */}
+        <div data-stats className="text-white/55">{stats}</div>
         {/* Shift is slide now, not sprint — run is automatic (play3d locomotion, port step 5). */}
         <div className="mt-1 text-white/45">click to look · WASD · space jump · shift slide · hold space climb · V fly</div>
         {build
@@ -2593,7 +2621,7 @@ const SOLID_EXCEPT = new Set<number>([
 // CELL_HALF for it; everything else (light, fence arms, piece placement) wants "yes, solid".
 const isSolid = (m: number) => !SOLID_EXCEPT.has(baseOf(m))
 
-function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weaponDrawn, weaponIdx, onAmmo, onStats, onSay, runeTick, onPos, onLook, onInvChange, worker, incoming, inflight, settings, build, pieceIdx, rot, tools, skills, onSkill, onLevel, onTool, tutorial, onQuestEvent, onNearGreg, onNearTable, cmdOut, mistLedger, onNearMist, sparring, pot, onOpenChest, uiOpen }: {
+function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weaponDrawn, weaponIdx, onAmmo, onStats, onSay, runeTick, onPos, onLook, onInvChange, worker, incoming, inflight, settings, build, pieceIdx, rot, tools, skills, onSkill, onLevel, onTool, tutorial, onQuestEvent, onNearGreg, onNearTable, cmdOut, mistLedger, onNearMist, sparring, pot, onOpenChest, onOpenStation, uiOpen }: {
   inv: React.RefObject<Inventory>
   toolTier: React.RefObject<number>
   toolSkill: React.RefObject<BlockSkill>
@@ -2656,6 +2684,7 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
    * means or which of them owns the cursor.
    */
   onOpenChest: (c: OpenChest) => void
+  onOpenStation: (s: OpenStation) => void
   /**
    * Is a cursor surface up? A REF, not a boolean prop, on purpose: opening the bag must not
    * re-render the whole scene, and the only readers are a listener and the frame loop — both of
@@ -2819,6 +2848,12 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
    * reason edits are: the column is regenerable, what you put in the chest is not.
    */
   const chestsByCol = useRef(new Map<string, Record<string, Slots>>())
+  /**
+   * ── ★ STATION JOBS, PER COLUMN (2026-08-13, the workshop pass) ───────────────────────────────
+   * Same shape and same reasoning as `chestsByCol` above: a job holds input the player already
+   * paid, so it rides in the block's own record rather than a global sidecar. See save.ts.
+   */
+  const jobsByCol = useRef(new Map<string, Workshop>())
   const piecesByCol = useRef(new Map<string, Placement[]>())
   const colOf = useCallback((x: number, z: number) => key(Math.floor(x / SECTION), Math.floor(z / SECTION)), [])
   const dropGroup = useRef<THREE.Group>(null)
@@ -3050,9 +3085,14 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
       if (rec) {
         for (const [ck, g] of Object.entries(rec)) if (!isChestEmpty(g)) (chests ??= {})[ck] = g
       }
+      // Station jobs, same rule as chests: a spent record is dropped rather than written, so a
+      // bench you loaded once and emptied stops costing storage.
+      const shopRec = jobsByCol.current.get(k)
+      let jobs: Workshop | undefined
+      if (shopRec) for (const [jk, j] of Object.entries(shopRec)) if (j.runs > 0) (jobs ??= {})[jk] = j
       void saveColumn(SEED, gx, gz, {
         edits: packEdits(e), pieces: piecesByCol.current.get(k) ?? [],
-        genRemoved: genRemovedByCol.current.get(k), chests,
+        genRemoved: genRemovedByCol.current.get(k), chests, jobs,
       })
     }
     dirtySaves.current.clear()
@@ -3179,6 +3219,16 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
       if (!mk.startsWith(k + ':')) continue
       g.remove(m); m.geometry.dispose(); drawn.current.delete(mk)
     }
+    // ── ★ ONE MESH PER COLUMN PER PASS (2026-08-13) ────────────────────────────────────────────
+    // The three passes are collected across every section of the column and merged once, so a
+    // column costs at most three draws instead of three per section. The reasoning, and the
+    // frustum-granularity trade it buys, is on `concatAttrs` in attrs.ts.
+    //
+    // ⚠ The passes stay SEPARATE — merging them into one mesh would be a different change and a
+    // wrong one. Water is a second pass because transparency must blend after opaque, and leaves
+    // are a third because they need an alpha cutout the block program must not carry. Neither is
+    // about draw-call count, so neither is fixed by counting draw calls.
+    const solids: AttrPart[] = [], waters: AttrPart[] = [], leafParts: AttrPart[] = []
     for (const sm of meshColumn(c, {
       negX: cols.current.get(key(cx - 1, cz)) ?? null,
       posX: cols.current.get(key(cx + 1, cz)) ?? null,
@@ -3187,26 +3237,26 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
     }, scratch)) {
       // Water splits into its own mesh so it can blend AFTER the opaque pass — see attrs.ts.
       const { solid, water, leaves } = buildAttrsSplit(sm.mesh, m => m === MAT.WATER, isLeafMat)
-      if (solid) {
-        const mesh = new THREE.Mesh(toGeometry(solid), material)
-        mesh.position.set(sm.wx, sm.wy, sm.wz)
-        g.add(mesh)
-        drawn.current.set(`${k}:${sm.index}`, mesh)
-      }
-      if (water) {
-        const mesh = new THREE.Mesh(toGeometry(water), waterMaterial)
-        mesh.position.set(sm.wx, sm.wy, sm.wz)
-        mesh.renderOrder = 1
-        g.add(mesh)
-        drawn.current.set(`${k}:${sm.index}:w`, mesh)
-      }
-      if (leaves) {
-        const mesh = new THREE.Mesh(toGeometry(leaves), leafMaterial)
-        mesh.position.set(sm.wx, sm.wy, sm.wz)
-        g.add(mesh)
-        drawn.current.set(`${k}:${sm.index}:l`, mesh)
-      }
+      if (solid) solids.push({ attrs: solid, dy: sm.wy })
+      if (water) waters.push({ attrs: water, dy: sm.wy })
+      if (leaves) leafParts.push({ attrs: leaves, dy: sm.wy })
     }
+
+    // ⚠ THE MESH SITS AT THE COLUMN ORIGIN, y=0 — `concatAttrs` already lifted each section's
+    // positions by its own `wy`. Positioning this at a section's `wy` as the old code did would
+    // apply that offset twice and float the whole column.
+    const emit = (parts: AttrPart[], mat: THREE.Material, suffix: string, order = 0) => {
+      const merged = concatAttrs(parts)
+      if (!merged) return
+      const mesh = new THREE.Mesh(toGeometry(merged), mat)
+      mesh.position.set(c.wx, 0, c.wz)
+      if (order) mesh.renderOrder = order
+      g.add(mesh)
+      drawn.current.set(`${k}:${suffix}`, mesh)
+    }
+    emit(solids, material, 's')
+    emit(waters, waterMaterial, 'w', 1)
+    emit(leafParts, leafMaterial, 'l')
   }, [material, waterMaterial, leafMaterial, scratch])
 
   /**
@@ -3308,6 +3358,33 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
   const touchChest = useCallback((x: number, z: number) => { dirtySaves.current.add(colOf(x, z)) }, [colOf])
 
   /**
+   * A station's standing job, or undefined for an idle bench.
+   *
+   * ⚠ READ-ONLY. Unlike `chestAt` this hands back a value rather than a live grid to mutate: a job
+   * is replaced wholesale by `workshop.ts`'s pure functions (which return a new Workshop), so there
+   * is nothing here to mutate in place and a caller that tried would be writing past the oracle.
+   */
+  const jobAt = useCallback((x: number, y: number, z: number): StationJob | undefined =>
+    jobsByCol.current.get(colOf(x, z))?.[stationKey(x, y, z)], [colOf])
+
+  /**
+   * Put a station's job back, and mark the column so it is actually written down.
+   *
+   * ⚠ THE `dirtySaves` LINE IS THE WHOLE POINT — the same trap `touchChest` documents. Loading or
+   * collecting a job never goes through `setVoxel`, so without this a bench is saved only when some
+   * block near it happens to change, and a session spent running the workshop saves nothing.
+   */
+  const setJob = useCallback((x: number, y: number, z: number, shop: Workshop) => {
+    const k = colOf(x, z)
+    const rec = shop[stationKey(x, y, z)]
+    let cur = jobsByCol.current.get(k)
+    if (!cur) { cur = {}; jobsByCol.current.set(k, cur) }
+    if (rec) cur[stationKey(x, y, z)] = rec
+    else delete cur[stationKey(x, y, z)]
+    dirtySaves.current.add(k)
+  }, [colOf])
+
+  /**
    * Write one voxel and repair the geometry.
    *
    * ★ THE NEIGHBOUR RE-MESH IS NOT OPTIONAL. Editing a voxel on a column's edge changes which faces
@@ -3351,6 +3428,18 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
       if (rec) {
         delete rec[chestKey(wx, wy, wz)]
         if (!Object.keys(rec).length) chestsByCol.current.delete(k)
+      }
+    }
+    // ★ AND A STATION'S JOB DIES WITH ITS BLOCK, for the identical reason — otherwise the next
+    // bench built on this cell inherits somebody else's half-finished work. The mining branch has
+    // already SALVAGED it into drops by the time this runs; this is the record cleanup, not the
+    // payout. Same `prevMat !== mat` guard: re-writing CRAFT_TABLE over CRAFT_TABLE must not
+    // silently void the job of a bench the player is standing at.
+    if (prevMat !== mat && (prevMat === MAT.CRAFT_TABLE || mat === MAT.CRAFT_TABLE)) {
+      const rec = jobsByCol.current.get(k)
+      if (rec) {
+        delete rec[stationKey(wx, wy, wz)]
+        if (!Object.keys(rec).length) jobsByCol.current.delete(k)
       }
     }
 
@@ -3930,6 +4019,14 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
             for (const [ck, g] of Object.entries(saved.chests)) if (!have[ck]) have[ck] = g as Slots
             chestsByCol.current.set(ek, have)
           }
+          // Station jobs, same async-clobber guard as chests: a bench the player has ALREADY
+          // loaded in the seconds since the column meshed must not be overwritten by the version
+          // on disk, or his logs go back into a job he already replaced.
+          if (saved.jobs) {
+            const have = jobsByCol.current.get(ek) ?? {}
+            for (const [jk, j] of Object.entries(saved.jobs)) if (!have[jk]) have[jk] = j as StationJob
+            jobsByCol.current.set(ek, have)
+          }
           applyGenPieces(gx, gz, saved.genRemoved ?? [])
         })
       }
@@ -4380,6 +4477,20 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
           for (const d of held) drops.current.push(spawnDrop(d.itemId, d.count, hit.x, hit.y, hit.z))
           if (held.length) onSay(`the chest spills — ${held.reduce((n, d) => n + d.count, 0)} items on the ground`)
         }
+        // ★ AND A BROKEN BENCH HANDS BACK ITS JOB — finished runs at the milled rate, unstarted
+        // runs as the input you paid. Same placement and same argument as the chest above: before
+        // `setVoxel`, which is what drops the record. A station you cannot pick up without emptying
+        // it by hand first is a trap, and silently eating a stack of logs for a mis-swung pickaxe
+        // is worse than either.
+        if (hit.material === MAT.CRAFT_TABLE) {
+          const k = colOf(hit.x, hit.z)
+          const shop = jobsByCol.current.get(k)
+          if (shop?.[stationKey(hit.x, hit.y, hit.z)]) {
+            const { drops: owed } = salvageStation(shop, stationKey(hit.x, hit.y, hit.z), Date.now())
+            for (const d of owed) drops.current.push(spawnDrop(d.itemId, d.count, hit.x, hit.y, hit.z))
+            if (owed.length) onSay(`the bench gives up its work — ${owed.reduce((n: number, d: { count: number }) => n + d.count, 0)} items on the ground`)
+          }
+        }
         if (felled) {
           // ⚠ TOP DOWN. Every write funnels through `setVoxel`, which asks `orphanedLeaves` what
           // the removal stranded — and that question is only correct against the world as it then
@@ -4424,6 +4535,16 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
           x: hit.x, y: hit.y, z: hit.z,
           slots: chestAt(hit.x, hit.y, hit.z),
           touch: () => touchChest(hit.x, hit.z),
+        })
+        mouse.current.right = false
+      } else if (intent === 'work') {
+        // Same shape as the chest above and for the same reason: the bench hands its POSITION and a
+        // bound `touch` upward, never a copy of the job. The panel edits through `workshop.ts`'s
+        // pure functions, so the only thing the host owes it is where the bench is.
+        onOpenStation({
+          x: hit.x, y: hit.y, z: hit.z,
+          job: jobAt(hit.x, hit.y, hit.z),
+          commit: (shop: Workshop) => setJob(hit.x, hit.y, hit.z, shop),
         })
         mouse.current.right = false
       } else if (intent === 'plant') {
@@ -4674,8 +4795,15 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
       // The place label leads — it is the line's one piece of GAME, the rest is plumbing. Pure
       // function of position, so reading it costs a couple of noise samples every 10th frame.
       const bh = columnHeight(Math.floor(p.x), Math.floor(p.z), SEED)
+      // ★ `draws` IS THE PERF NUMBER; `mesh` IS NOT, AND CONFUSING THE TWO COST A SESSION.
+      // `drawn.current.size` counts meshes we BUILT — every one of them, including the ones behind
+      // the camera. `info.render.calls` counts what the GPU was actually asked to draw THIS FRAME,
+      // after frustum culling. The gap between them is what culling is worth, and a perf claim made
+      // from the first number is a claim about work that may never happen. Both are here on purpose:
+      // `mesh` tracks the geometry budget (and leaks), `draws` tracks the frame.
       onStats(`${biomeAt(Math.floor(p.x), Math.floor(p.z), SEED, bh, DEFAULT_DEPTH.seaLevel)} · `
-        + `${cols.current.size} col · ${drawn.current.size} mesh · ${drops.current.length} drops · `
+        + `${cols.current.size} col · ${drawn.current.size} mesh · ${info.render.calls} draws · `
+        + `${(info.render.triangles / 1000).toFixed(0)}k tris · ${drops.current.length} drops · `
         + `geo ${info.memory.geometries} prog ${info.programs?.length ?? 0} · `
         + `${built} edits saved · ${worker.current ? 'worker' : 'main'}`)
     }
@@ -4694,8 +4822,8 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
       const R = settings.viewRadius
       for (let dz = -R; dz <= R; dz++) for (let dx = -R; dx <= R; dx++) keep.add(key(cx + dx, cz + dz))
       for (const [mk, m] of drawn.current) {
-        // FIRST ':', not last — water meshes key as `cx,cz:sec:w`, and lastIndexOf would strip
-        // only the `:w`, miss the keep-set, and silently evict every water mesh each sweep.
+        // Keys are `cx,cz:<pass>` — `s`, `w` or `l`. Split on the ':' to get back the column key
+        // the keep-set is built from; the column part holds a comma, never a colon.
         if (keep.has(mk.slice(0, mk.indexOf(':')))) continue
         g.remove(m); m.geometry.dispose(); drawn.current.delete(mk)
       }
@@ -4923,7 +5051,13 @@ function CraftPanel({ have, tools, tick, station, onCraft, onCraftTool, onClose 
                           : 'border-white/5 text-white/30 cursor-not-allowed'}`}>
               <div className="flex justify-between gap-3">
                 <span>{r.name}</span>
-                <span className="text-amber-200/70 tabular-nums">{r.output.count}× {label(r.output.itemId)}</span>
+                {/* Both numbers, always — the same honesty the bench panel owes. A player who
+                    refines in the field should be able to see what the bench would have given him
+                    at the moment he decides, not discover it later. */}
+                <span className="text-amber-200/70 tabular-nums">{r.output.count}× {label(r.output.itemId)}
+                  {milledYield(r) > r.output.count &&
+                    <span className="text-white/30"> · {milledYield(r)}× milled</span>}
+                </span>
               </div>
               <div className="mt-0.5 text-[10px]">
                 <Cost items={r.input} />
@@ -4954,6 +5088,144 @@ function CraftPanel({ have, tools, tick, station, onCraft, onCraftTool, onClose 
                 <span className="text-white/45">tier {d.tier} {d.skillId}</span>
               </div>
               <div className="mt-0.5 text-[10px]"><Cost items={d.recipe} /></div>
+            </button>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+/**
+ * The bench's standing job — load it, walk away, come back to the pile.
+ *
+ * ★ THE PANEL OWNS NO STATE ABOUT THE JOB. Every number on screen is derived on render from the
+ * job the host handed in plus `Date.now()`, exactly as `workshop.ts` intends: nothing is simulated,
+ * so a panel opened on a bench that has been running for two hours is already correct, and one left
+ * open cannot drift away from what the world thinks. The 500ms `tick` below only forces a repaint —
+ * it never advances anything.
+ *
+ * ⚠ THE STATION IS NOT A GATE. Everything here is also craftable instantly by hand anywhere (see
+ * `recipes.ts`), so this panel prints BOTH yields on every row. A player who refines in the field
+ * is making an informed trade, not walking into a penalty he finds out about later.
+ */
+function StationPanel({ st, have, inv, onChange, onSay, onClose }: {
+  st: OpenStation
+  have: (itemId: string) => number
+  inv: React.RefObject<Inventory>
+  onChange: () => void
+  onSay: (t: string) => void
+  onClose: () => void
+}) {
+  // Repaint handle only — see the header. 500ms is well under the 12s run so the bar never visibly
+  // jumps, and costs nothing next to the frame loop already running behind this panel.
+  const [, setBeat] = useState(0)
+  useEffect(() => {
+    const h = setInterval(() => setBeat(b => b + 1), 500)
+    return () => clearInterval(h)
+  }, [])
+
+  const key = stationKey(st.x, st.y, st.z)
+  // The job is read from the ref-backed record every render rather than captured once: `commit`
+  // writes through the host, and a captured copy would leave the panel showing the job the player
+  // just replaced.
+  const [job, setJob] = useState<StationJob | undefined>(st.job)
+  const now = Date.now()
+  const label = (id: string) => id.replace(/_/g, ' ')
+
+  const ready = job ? runsReady(job, now) : 0
+  const r = job ? RECIPES.find(x => x.id === job.recipeId) : undefined
+
+  const doCollect = () => {
+    if (!job || !r || ready <= 0) return
+    const { shop, payout } = collectStation({ [key]: job }, key, now)
+    if (!payout) return
+    give(inv.current!, payout.itemId, payout.count)
+    st.commit(shop)
+    setJob(shop[key])
+    onChange()
+    onSay(`the bench hands you ${payout.count}× ${label(payout.itemId)}`)
+  }
+
+  const doLoad = (recipeId: string, runs: number) => {
+    if (runs <= 0) return
+    const def = RECIPES.find(x => x.id === recipeId)
+    if (!def) return
+    // ⚠ SPEND FIRST, AND ONLY IF `loadJob` ACCEPTED. `loadJob` refuses to overwrite a live job, so
+    // taking the input before asking would eat a bagful on a click the pure core then declined.
+    const shop = loadStationJob({}, key, recipeId, runs, now)
+    if (!shop[key]) return
+    for (const c of jobCost(def, runs)) removeItems(inv.current!, c.itemId, c.count)
+    st.commit(shop)
+    setJob(shop[key])
+    onChange()
+    onSay(`the bench sets to work — ${runs}× ${def.name.toLowerCase()}`)
+  }
+
+  const busy = !!job && job.runs > 0
+  const rows = stationRecipes()
+
+  return (
+    <div className="absolute inset-0 grid place-items-center bg-black/50 pointer-events-auto" onClick={onClose}>
+      <div className="w-[460px] max-h-[80vh] overflow-y-auto bg-[#0e1018]/95 border border-white/12 rounded-lg p-4 font-mono text-[11px]"
+           onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-baseline justify-between mb-3">
+          <span className="text-white/95 font-semibold tracking-[.18em] uppercase">The Bench</span>
+          <button onClick={onClose} className="text-white/40 hover:text-white/80">esc</button>
+        </div>
+
+        {busy && r ? (
+          <div className="mb-4 rounded border border-amber-200/25 bg-amber-100/[0.03] px-3 py-2.5">
+            <div className="flex justify-between items-baseline">
+              <span className="text-amber-100/90">{r.name}</span>
+              <span className="text-white/45 tabular-nums">{job!.runs} left</span>
+            </div>
+            {/* The bar is the CURRENT run, not the whole job: a job of 30 moves a whole-job bar so
+                slowly it reads as broken, while a per-run bar visibly ticks and says the bench is
+                alive. The count beside it carries the long story. */}
+            <div className="mt-2 h-1 rounded bg-white/10 overflow-hidden">
+              <div className="h-full bg-amber-200/60 transition-[width] duration-500"
+                   style={{ width: `${Math.round(runProgress(job!, now) * 100)}%` }} />
+            </div>
+            <div className="mt-2 flex justify-between items-center">
+              <span className="text-white/40 tabular-nums">
+                {ready > 0 ? `${ready * milledYield(r)}× ${label(r.output.itemId)} waiting` : `${Math.ceil((RUN_MS - (now - job!.since) % RUN_MS) / 1000)}s to the next`}
+              </span>
+              <button disabled={ready <= 0} onClick={doCollect}
+                      className={`px-2.5 py-1 rounded border transition-colors ${
+                        ready > 0 ? 'border-amber-200/50 text-amber-100/90 hover:bg-amber-200/10'
+                                  : 'border-white/5 text-white/25 cursor-not-allowed'}`}>
+                take
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="mb-4 text-white/35">the bench is idle — give it something to work on</div>
+        )}
+
+        <div className="text-white/40 tracking-[.14em] uppercase text-[9px] mb-1.5">
+          Set to work {busy && <span className="ml-2 text-sky-300/60 normal-case tracking-normal">finish the current job first</span>}
+        </div>
+        {rows.map((rec) => {
+          const n = maxRuns(rec, have)
+          const can = !busy && n > 0
+          const bonus = milledYield(rec) > rec.output.count
+          return (
+            <button key={rec.id} disabled={!can} onClick={() => doLoad(rec.id, n)}
+                    className={`w-full text-left mb-1 px-2 py-1.5 rounded border transition-colors ${
+                      can ? 'border-white/15 hover:border-amber-200/50 hover:bg-white/5 text-white/90'
+                          : 'border-white/5 text-white/30 cursor-not-allowed'}`}>
+              <div className="flex justify-between gap-3">
+                <span>{rec.name}</span>
+                <span className="tabular-nums">
+                  <span className={bonus ? 'text-amber-200/80' : 'text-white/45'}>{milledYield(rec)}×</span>
+                  {bonus && <span className="text-white/25"> (by hand {rec.output.count}×)</span>}
+                </span>
+              </div>
+              <div className="mt-0.5 text-[10px] text-white/40">
+                {n > 0 ? `${n} run${n === 1 ? '' : 's'} from your bag` : `no ${label(rec.input[0].itemId)}`}
+                {n >= MAX_RUNS && <span className="text-white/25"> · the bench holds no more</span>}
+              </div>
             </button>
           )
         })}

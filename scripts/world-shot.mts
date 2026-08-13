@@ -5,6 +5,10 @@
 //   WORLD_GOTO=twilight-thicket                               — drive the console before shooting
 //   WORLD_PITCH=-10                                           — degrees; negative looks UP
 //   WORLD_LOG='\\[canopy\\]'                                     — forward matching console lines to stdout
+//   WORLD_RADIUS=10                                           — load ring, in columns (default: the app's 6)
+//
+// It prints the HUD counter line after the shot. `mesh` is geometry BUILT, `draws` is what survived
+// frustum culling this frame — the two are far apart and only the second is the frame's cost.
 //
 // ★ WORLD_LOG EXISTS BECAUSE A SCREENSHOT ONLY SHOWS YOU THAT SOMETHING IS WRONG, NEVER WHY. The
 // smooth-canopy spike (2026-08-13) drew ONE crown in a forest and the picture could not say whether
@@ -57,7 +61,7 @@ try {
   await page.setViewport({ width: 1280, height: 760 })
 
   // Seed BEFORE any page script: born, with the epoch already current.
-  await page.evaluateOnNewDocument(() => {
+  await page.evaluateOnNewDocument((R: number) => {
     localStorage.setItem('ather:epoch', '2')
     // ⚠ 'ember' IS NOT A RUNE ID, and this seeded it for weeks (fixed 2026-08-12). The real ids are
     // in `play3d/birth/runes.data.ts` — manalic/barrier/star/life/enchant/lightning/… — so every
@@ -67,7 +71,10 @@ try {
     // pick: it is a `defense` rune, so a shot also exercises the +25 shield cap.
     localStorage.setItem('ather:shimmer:birthRune', 'barrier')
     localStorage.setItem('ather:shimmer:runes', JSON.stringify(['barrier']))
-  })
+    // WORLD_RADIUS: measure a bigger load ring than the default 6 without a human in the settings
+    // panel. `loadSettings` merges over the defaults, so a lone `viewRadius` is a safe partial.
+    if (R) localStorage.setItem('shimmer.voxel.settings.v1', JSON.stringify({ viewRadius: R }))
+  }, Number(process.env.WORLD_RADIUS ?? 0))
 
   const errors: string[] = []
   const LOG = process.env.WORLD_LOG ? new RegExp(process.env.WORLD_LOG) : null
@@ -115,6 +122,14 @@ try {
     return c ? { w: c.width, h: c.height } : null
   })
   console.log(`shot → ${OUT}  ·  canvas ${canvas ? `${canvas.w}×${canvas.h}` : 'NONE (no renderer mounted)'}`)
+
+  // ── ★ THE HUD COUNTERS, SCRAPED ────────────────────────────────────────────────────────────────
+  // `mesh` (built) and `draws` (submitted after frustum culling) are the two numbers a perf claim
+  // rests on, and they are hardware-INDEPENDENT — SwiftShader counts them exactly as a real GPU
+  // does. Frame RATE from this box is meaningless and is deliberately not reported: the whole point
+  // of scraping is to get the honest half rather than invent the other one.
+  const stats = await page.evaluate(() => document.querySelector('[data-stats]')?.textContent ?? null)
+  console.log(stats ? `stats · ${stats}` : 'stats · NONE (no [data-stats] node — old build?)')
   if (errors.length) console.log(`page errors (${errors.length}):\n  ${errors.slice(0, 6).join('\n  ')}`)
 } finally {
   await browser.close()   // never leave a chrome behind on an 8GB box

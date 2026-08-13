@@ -204,6 +204,88 @@ export function buildAttrsSplit(
   }
 }
 
+/** One section's attributes plus the height its section sits at within its column. */
+export interface AttrPart {
+  attrs: MeshAttrs
+  /** Section origin Y. Positions arrive section-local (0..SECTION); this is what makes them column-local. */
+  dy: number
+}
+
+/**
+ * ── ★ ONE DRAW PER COLUMN PER PASS, NOT ONE PER SECTION (2026-08-13) ───────────────────────────
+ * Concatenate a column's section attributes into a single buffer set, lifting each section's
+ * positions by its own origin so the merged geometry is COLUMN-local and its mesh sits at y=0.
+ *
+ * ★ WHY THIS EXISTS: the mesher's unit is the 16³ section, and the renderer inherited that unit as
+ * its DRAW unit — one `THREE.Mesh` per section per pass. A 256-tall world is 16 sections per
+ * column, so a load ring of 441 columns was uploading thousands of meshes and asking the GPU for
+ * each one separately. Draw calls are near-pure CPU overhead when every mesh shares one material
+ * (and they do — see `createVoxelMaterial`), so that count IS the frame budget. Meshing per section
+ * and DRAWING per section are separate decisions that only looked like one decision.
+ *
+ * ★ THE COST IS FRUSTUM GRANULARITY, AND IT IS SMALL FOR A REASON WORTH WRITING DOWN. Culling now
+ * happens per column, so a column with one corner on screen submits its whole height. That sounds
+ * expensive and is not: the frustum is TALL at distance — by ~150 blocks out it already spans more
+ * than the world's 256 height — so per-section vertical culling only ever rejected anything for the
+ * handful of columns near the player. We trade a rejection that rarely fired for a call count that
+ * always did. The bounding sphere is computed from real vertices (`toGeometry`), not from the
+ * column's theoretical 16×256×16 box, so a shallow column still gets a tight sphere.
+ *
+ * Returns null for an empty list — most columns have no water at all, and a null skips the merge,
+ * the geometry and the draw.
+ */
+export function concatAttrs(parts: AttrPart[]): MeshAttrs | null {
+  if (parts.length === 0) return null
+
+  let verts = 0, idxLen = 0, quads = 0, anyUV = false
+  for (const p of parts) {
+    verts += p.attrs.positions.length / 3
+    idxLen += p.attrs.indices.length
+    quads += p.attrs.quads
+    if (p.attrs.uv) anyUV = true
+  }
+
+  const positions = new Float32Array(verts * 3)
+  const normals = new Float32Array(verts * 3)
+  const colors = new Float32Array(verts * 3)
+  const emissive = new Float32Array(verts)
+  const layers = new Float32Array(verts)
+  const indices = new Uint32Array(idxLen)
+  const uv = anyUV ? new Float32Array(verts * 2) : undefined
+
+  let v = 0, i = 0
+  for (const p of parts) {
+    const a = p.attrs
+    const n = a.positions.length / 3
+    positions.set(a.positions, v * 3)
+    // The one transform in the whole merge. Sections are meshed against their own origin, so
+    // without this every section of a column would stack at the bottom of it.
+    if (p.dy !== 0) for (let j = 0; j < n; j++) positions[(v + j) * 3 + 1] += p.dy
+    normals.set(a.normals, v * 3)
+    colors.set(a.colors, v * 3)
+    emissive.set(a.emissive, v)
+    layers.set(a.layers, v)
+    // ⚠ UV IS ALL-OR-NOTHING PER PASS BY CONSTRUCTION — only the leaf partition asks for it, and it
+    // asks for every part. If a mixed list ever arrives anyway, derive the missing corners rather
+    // than zero-filling: zeros would pin a whole section to one texel and read as a smear, which is
+    // the kind of wrong that looks like an art bug and gets hunted in the wrong file for an hour.
+    if (uv) {
+      if (a.uv) uv.set(a.uv, v * 2)
+      else for (let j = 0; j < n; j++) {
+        const corner = j & 3
+        uv[(v + j) * 2] = corner === 1 || corner === 2 ? 1 : 0
+        uv[(v + j) * 2 + 1] = corner >= 2 ? 1 : 0
+      }
+    }
+    // Indices are section-local too, so they shift by the vertices already written.
+    for (let j = 0; j < a.indices.length; j++) indices[i + j] = a.indices[j] + v
+    v += n
+    i += a.indices.length
+  }
+
+  return { positions, normals, colors, emissive, layers, uv, indices, quads }
+}
+
 /**
  * Expand a core mesh into render-ready attributes. Copies positions/normals/indices out of the
  * mesher's reusable scratch — they are views that the next section would overwrite, so a copy here
