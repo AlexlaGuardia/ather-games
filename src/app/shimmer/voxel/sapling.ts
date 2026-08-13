@@ -26,6 +26,7 @@
 import { MAT } from './depth'
 import { AIR } from './section'
 import { SPECIES, crownAt, type TreeSpecies, type TreeStart } from './trees'
+import { hash2 } from './noise'
 
 /**
  * How long a sapling takes.
@@ -166,4 +167,42 @@ export function progress(clock: SaplingClock, sp: TreeSpecies, x: number, y: num
 /** The species a sapling item grows into. One sapling item per species — see the note in `drops`. */
 export function speciesOf(id: string): TreeSpecies | null {
   return SPECIES.find(s => s.id === id) ?? null
+}
+
+/**
+ * Sapling material per species, and its inverse.
+ *
+ * ★ THE MATERIAL CARRIES THE SPECIES, which is why there are four of them rather than one generic
+ * sapling plus a record. The world alone then answers "what grows here" — the clock only ever has
+ * to hold the one thing a material id cannot, which is WHEN. Lose the clock and you lose minutes;
+ * lose a species sidecar and you have a sapling nobody can identify.
+ */
+export const SAPLING_MAT: Record<string, number> = {
+  goldwood: MAT.SAPLING_GOLDWOOD,
+  shimmeroak: MAT.SAPLING_SHIMMEROAK,
+  starwillow: MAT.SAPLING_STARWILLOW,
+  dawnwood: MAT.SAPLING_DAWNWOOD,
+}
+
+const BY_MAT = new Map<number, TreeSpecies>(
+  SPECIES.filter(s => SAPLING_MAT[s.id] !== undefined).map(s => [SAPLING_MAT[s.id], s]),
+)
+
+/** Which species is this sapling block, or null if the material is not a sapling at all. */
+export const saplingSpecies = (material: number): TreeSpecies | null => BY_MAT.get(material) ?? null
+
+/** Is this material any sapling? One test the host can use without knowing the four ids. */
+export const isSaplingMat = (material: number): boolean => BY_MAT.has(material)
+
+/**
+ * The height a planted sapling grows to.
+ *
+ * ⚠ ROLLED FROM POSITION, NOT FROM `Math.random`, so it is stable: the clearance check and the tree
+ * that actually appears must agree about how tall it will be, and they run minutes apart. A random
+ * roll at growth time could exceed the height the envelope reserved and put a crown through a
+ * ceiling that had been checked and approved.
+ */
+export function plantedHeight(sp: TreeSpecies, x: number, z: number): number {
+  const h = hash2(x, z, 0x5a71)
+  return sp.minHeight + Math.floor(h * (sp.maxHeight - sp.minHeight + 1))
 }

@@ -458,6 +458,10 @@ function paintAshlar(dst: Layer, size: number, base: [number, number, number], s
 
 const LOG_SET = new Set<number>([WOOD.GOLDWOOD_LOG, WOOD.SHIMMEROAK_LOG, WOOD.STARWILLOW_LOG, WOOD.DAWNWOOD_LOG])
 const LEAF_SET = new Set<number>([WOOD.GOLDWOOD_LEAVES, WOOD.SHIMMEROAK_LEAVES, WOOD.STARWILLOW_LEAVES, WOOD.DAWNWOOD_LEAVES])
+/** Saplings paint as foliage — a seedling is leaves, and `paintLeaves` already reads as foliage. */
+const SAPLING_SET = new Set<number>([
+  MAT.SAPLING_GOLDWOOD, MAT.SAPLING_SHIMMEROAK, MAT.SAPLING_STARWILLOW, MAT.SAPLING_DAWNWOOD,
+])
 
 // ── the lantern ──────────────────────────────────────────────────────────────────────────────────
 
@@ -678,7 +682,8 @@ export function paintFor(material: number, face: number, size: number): Layer {
         if (face === SIDE) paintBark(dst, size, c, seed)
         else paintRings(dst, size, c, seed)
       }
-      else if (LEAF_SET.has(material)) paintLeaves(dst, size, rgbOf(MATERIAL_COLOR[material]), seed)
+      else if (LEAF_SET.has(material) || SAPLING_SET.has(material))
+        paintLeaves(dst, size, rgbOf(MATERIAL_COLOR[material]), seed)
       else writeOre(dst, size, material, seed)
   }
   return dst

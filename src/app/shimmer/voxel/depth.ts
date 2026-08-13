@@ -172,6 +172,17 @@ export const MAT = {
   // sit against ORE's range and that adjacency is exactly how a wildflower became a mana seam.
   RUBBLE: 40,
   CUT_STONE: 41,
+  // ── ★ SAPLINGS (2026-08-13) — a forest you planted ──────────────────────────────────────────
+  // One material PER SPECIES, not one generic sapling, and the reason is the same one that made
+  // pots three materials instead of one with a record: the world itself then says what will grow
+  // here. No sidecar, no lookup, and a save that survives a wipe of everything except the blocks.
+  //
+  // ⚠ 42-45. STRUCTURE is 48 and STRUCTURE_HALF is 49 (pieces.ts), so 42-47 is the free gap — NOT
+  // the 14-23 gap, which is ORE.
+  SAPLING_GOLDWOOD: 42,
+  SAPLING_SHIMMEROAK: 43,
+  SAPLING_STARWILLOW: 44,
+  SAPLING_DAWNWOOD: 45,
 } as const
 
 export interface DepthConfig {

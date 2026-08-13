@@ -677,6 +677,47 @@ export function crownAt(start: TreeStart, groundY: number): {
 }
 
 /**
+ * Every voxel a tree would occupy, as absolute cells — trunk and canopy together.
+ *
+ * ★★ THIS CALLS `growTree` RATHER THAN DESCRIBING IT, and that is the entire point. A sapling has
+ * to become a tree at RUNTIME, and the obvious way to do that is a second tree-drawing routine in
+ * the host. That routine would then drift from the generator, and a planted goldwood would slowly
+ * stop looking like a wild one — the exact class of bug this file spent the day deleting (there
+ * were three descriptions of a crown this morning; there is one now).
+ *
+ * So: a scratch stack, the real generator, and a diff. A planted tree is byte-identical to a wild
+ * tree of the same seed because it IS one.
+ *
+ * ⚠ The scratch has to be wider than the tree in every direction or the canopy is clipped by the
+ * scratch itself and a planted tree comes out shaved — `maxSpread` on each side, plus the height.
+ */
+export function growTreeCells(
+  start: TreeStart, groundY: number, cfg: TreeConfig = DEFAULT_TREES,
+): { x: number; y: number; z: number; mat: number }[] {
+  const S = 32
+  const pad = cfg.maxSpread + 1
+  if (pad > S / 2) throw new Error('scratch too small for maxSpread')
+  // Origin placed so the trunk sits at the scratch's centre column, with the ground low enough that
+  // the whole canopy fits above it.
+  const ox = start.x - S / 2, oz = start.z - S / 2
+  const oy0 = groundY - 4
+  const sections = [new Section(S), new Section(S), new Section(S)]
+  const c: Ctx = { sections, ox, oy0, oz, size: S, yTop: oy0 + sections.length * S }
+  growTree(c, start, groundY)
+
+  const out: { x: number; y: number; z: number; mat: number }[] = []
+  for (let si = 0; si < sections.length; si++) {
+    const sec = sections[si]
+    for (let y = 0; y < S; y++) for (let z = 0; z < S; z++) for (let x = 0; x < S; x++) {
+      const m = sec.get(x, y, z)
+      if (m === AIR) continue
+      out.push({ x: ox + x, y: oy0 + si * S + y, z: oz + z, mat: m })
+    }
+  }
+  return out
+}
+
+/**
  * Plant every tree that can reach this stack.
  *
  * `surfaceAt` and `materialAt` are the pure generator functions — a trunk needs to know the ground

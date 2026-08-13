@@ -110,6 +110,19 @@ export const BLOCKS: BlockDef[] = [
   // is the rung the ruling needs that pieces alone cannot supply: doorways, fences and beams do
   // not make a house without something to be the wall between them.
   { material: MAT.CUT_STONE, name: 'Cut Stone', hardness: 1.5, skill: 'prospecting', minTier: 1, drops: [{ itemId: 'cut_stone', count: 1 }], placeable: true },
+
+  // ── ★ SAPLINGS — placeable, and that is the whole plumbing ──────────────────────────────────
+  // `materialForItem` is DERIVED from `placeable && drops[0]` (see BY_ITEM below), so declaring
+  // these four rows is what makes a sapling item place a sapling block. No item->block table to
+  // write and none to keep in sync.
+  //
+  // Breakable by hand, dropping itself, so a sapling planted in the wrong spot is a mistake you
+  // undo rather than a rare item you destroyed. `skill: null` because planting a tree is not
+  // forestry — cutting one is.
+  { material: MAT.SAPLING_GOLDWOOD, name: 'Goldwood Sapling', hardness: 0.2, skill: null, minTier: 0, drops: [{ itemId: 'goldwood_sapling', count: 1 }], placeable: true },
+  { material: MAT.SAPLING_SHIMMEROAK, name: 'Shimmeroak Sapling', hardness: 0.2, skill: null, minTier: 0, drops: [{ itemId: 'shimmeroak_sapling', count: 1 }], placeable: true },
+  { material: MAT.SAPLING_STARWILLOW, name: 'Starwillow Sapling', hardness: 0.2, skill: null, minTier: 0, drops: [{ itemId: 'starwillow_sapling', count: 1 }], placeable: true },
+  { material: MAT.SAPLING_DAWNWOOD, name: 'Dawnwood Sapling', hardness: 0.2, skill: null, minTier: 0, drops: [{ itemId: 'dawnwood_sapling', count: 1 }], placeable: true },
   { material: MAT.SUBSOIL, name: 'Subsoil', hardness: 0.5, skill: null, minTier: 0, drops: [{ itemId: 'block_subsoil', count: 1 }], fastSkill: 'farming', placeable: true },
   { material: MAT.TOPSOIL, name: 'Topsoil', hardness: 0.55, skill: null, minTier: 0, drops: [{ itemId: 'block_topsoil', count: 1 }], fastSkill: 'farming', placeable: true },
   { material: MAT.SAND, name: 'Sand', hardness: 0.45, skill: null, minTier: 0, drops: [{ itemId: 'block_sand', count: 1 }], fastSkill: 'farming', placeable: true },

@@ -17,6 +17,7 @@
 import { generatedAt, generatedVoxel, makeColumn, meshColumn, SECTION } from './column'
 import { columnHeight } from './height'
 import { materialAt, MAT, isPlant, PLANT_MIN, PLANT_MAX } from './depth'
+import { isLeafMat } from './trees'
 import { plantMaterialAt, plantVariant, FLORA } from './flora'
 import { BLOCKS, blockDef, materialForItem } from './registry'
 import { dropsFor } from './mine'
@@ -96,7 +97,7 @@ const garden = ZONE_ANCHORS.find(a => a.id === 'garden')!
 // ── 4. plants stand on ground, in the open, in a real generated column ──────────────────────────
 {
   const gx = Math.floor(garden.x / SECTION) * SECTION, gz = Math.floor(garden.z / SECTION) * SECTION
-  let found = 0, floating = 0, buried = 0, drowned = 0
+  let found = 0, floating = 0, buried = 0, drowned = 0, shaded = 0
   for (let cz = 0; cz < 4; cz++) for (let cx = 0; cx < 4; cx++) {
     const col = makeColumn(gx + cx * SECTION, gz + cz * SECTION, SEED)
     for (let z = 0; z < SECTION; z++) for (let x = 0; x < SECTION; x++) {
@@ -106,14 +107,31 @@ const garden = ZONE_ANCHORS.find(a => a.id === 'garden')!
         const below = col.get(x, y - 1, z)
         if (below === AIR) floating++
         if (below === MAT.WATER) drowned++
-        if (col.get(x, y + 1, z) !== AIR) buried++
+        // ⚠ FOLIAGE ABOVE A PLANT IS LEGAL; TERRAIN ABOVE ONE IS NOT. See the note on `buried`.
+        const up = col.get(x, y + 1, z)
+        if (up !== AIR && !isLeafMat(up)) buried++
+        if (isLeafMat(up)) shaded++
       }
     }
   }
   ok(found > 200, `the garden really grows plant voxels (${found})`)
   ok(floating === 0, 'no plant floats in the air')
   ok(drowned === 0, 'no plant grows out of water')
-  ok(buried === 0, 'nothing is stacked on top of a plant')
+  // ── ★ THIS ASSERT WAS RELAXED ON 2026-08-13 AND THE REASON MATTERS ────────────────────────
+  // It read `col.get(x, y + 1, z) !== AIR`, i.e. NOTHING may sit above ground cover. That was true
+  // and unremarkable while every canopy floated well clear of the floor. The lobed crown hangs
+  // satellite lobes BELOW the main one — deliberately, it is the whole fix for "trees look like a
+  // pole with a ball on it" — so foliage now reaches down to grass height and 2 of 658 plants ended
+  // up under a leaf.
+  //
+  // ⚠ I am the author of the change that broke this, so the relaxation deserves suspicion. The
+  // defence is that a leaf over a tuft is a tuft in dappled shade, which is a thing forests do,
+  // while a STONE over a tuft is ground cover buried by terrain — the failure the assert was
+  // actually written to catch. So the hazard is asserted at zero and the harmless case is measured
+  // and BOUNDED, rather than the whole check being deleted. If canopies ever drape so low that
+  // this rate climbs, this goes red and someone gets to re-litigate it.
+  ok(buried === 0, `★ no plant is buried under terrain (${buried})`)
+  ok(shaded / found < 0.05, `foliage over ground cover stays incidental (${shaded}/${found})`)
 }
 
 // ── 5. ★ THE MESHER NEVER DRAWS A PLANT ─────────────────────────────────────────────────────────

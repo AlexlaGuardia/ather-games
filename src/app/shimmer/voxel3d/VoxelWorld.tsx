@@ -53,6 +53,11 @@ import { buildAttrsSplit, MATERIAL_COLOR } from './attrs'
 import { leafPixels } from './tex/flora-tex'
 import { isLeafMat, isLogMat } from '../voxel/trees'
 import { treeOwning, fellTree, fellXP } from '../voxel/tree-node'
+import { growTreeCells, type TreeStart } from '../voxel/trees'
+import {
+  isSaplingMat, saplingSpecies, saplingKey, canPlant, blockedBy, plantedHeight,
+  type SaplingClock,
+} from '../voxel/sapling'
 import { createInventory, removeItems, countItem, type Inventory } from '../engine/inventory'
 // ★ PORT STEP 1 — the zero-coupling systems, wired unchanged.
 // PLAY3D-MIGRATION measured 16 of 23 engine systems as having NO reference to zones, tiles or world
@@ -146,7 +151,6 @@ import { screenHeading } from './map-heading'
 import { applyFightResult } from '../engine/spirit-health'
 import type { BattleResult } from '../engine/arena'
 import { createFloraRenderer } from './flora-mesh'
-import { createCanopyRenderer } from './canopy-mesh'
 
 /**
  * A chest the player has opened: where it stands, its LIVE contents array, and the call that marks
@@ -2766,23 +2770,30 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
    *  compare is enough to notice a spar ended and hand the pass the updated one — without which
    *  the spirit you just sparred would keep standing there until the world reloaded. */
   const ledgerSeen = useRef<MistLedger | null>(null)
-  // ── ★ SMOOTH CANOPY EXPERIMENT (2026-08-13, `?canopy=smooth`) ───────────────────────────────
-  // Alex asked whether the voxel world can hold 3D models. This draws the crowns the generator
-  // already grew as geometry instead of cells, so the question stops being an argument and becomes
-  // a screenshot. OFF by default and it changes NOTHING about the world — see canopy-mesh.ts.
-  //
-  // ⚠ Read once, not reactive: flipping it mid-session would need the whole leaf mesh rebuilt, and
-  // a query param nobody can change without a reload is the honest shape for an experiment.
-  const smoothCanopy = useMemo(
-    () => typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('canopy') === 'smooth',
-    [])
-  const canopy = useMemo(() => createCanopyRenderer(), [])
   // Ground cover (2026-08-08) — flora.ts selects, the live-voxel probe verifies, four draws total.
   const flora = useMemo(() => createFloraRenderer(), [])
   /** Set whenever loaded ground changes (adopt, edit, evict); the frame loop syncs once quiet. */
   const floraDirty = useRef(true)
   /** Next wall-clock ms at which planted pots are checked for coming due. */
   const potTick = useRef(0)
+  /** Next wall-clock ms at which planted saplings are checked for coming up. */
+  const saplingTick = useRef(0)
+  /**
+   * When each planted sapling went in — the one thing a material id cannot carry (see sapling.ts).
+   *
+   * ⚠ Lives HERE, in `World`, and not beside the pot clock in the outer component. The pot's clock
+   * is passed down as a prop because the outer component owns the party a bloom hands a spirit to;
+   * a sapling has no such consumer. Its only readers are the growth tick and the place branch, both
+   * of which are in this scope — passing it through a prop would be plumbing that buys nothing.
+   */
+  const saplingClock = useRef<SaplingClock>({})
+  const SAPLING_KEY = `voxel3d:saplings:${SEED}`
+  const saveSaplings = useCallback(() => {
+    try { localStorage.setItem(SAPLING_KEY, JSON.stringify(saplingClock.current)) } catch { /* full disk */ }
+  }, [SAPLING_KEY])
+  useEffect(() => {
+    try { saplingClock.current = JSON.parse(localStorage.getItem(SAPLING_KEY) ?? '{}') } catch { saplingClock.current = {} }
+  }, [SAPLING_KEY])
   const lastNearGreg = useRef(false)
   const lastNearTable = useRef(false)
   // The gate: built (sealed or open, matching whatever `tutorial.current.stage` says at the moment
@@ -3074,8 +3085,7 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
     steam.dispose()
     mist.dispose()
     flora.dispose()
-    canopy.dispose()
-  }, [dropGeo, highlightGeo, flatMaterial, textured, tiles, pieces, greg, steam, mist, flora, canopy])
+  }, [dropGeo, highlightGeo, flatMaterial, textured, tiles, pieces, greg, steam, mist, flora])
 
   // ★ A LOST WEBGL CONTEXT MUST SAY SO. Chrome blocks a page that loses its context repeatedly, and
   // the result is a black canvas with the HUD still drawn on top — indistinguishable from a
@@ -3183,16 +3193,14 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
         g.add(mesh)
         drawn.current.set(`${k}:${sm.index}:w`, mesh)
       }
-      // ⚠ The smooth canopy REPLACES the voxel leaves rather than sitting on top of them — two
-      // canopies in the same space is a z-fighting mess that would make the experiment unreadable.
-      if (leaves && !smoothCanopy) {
+      if (leaves) {
         const mesh = new THREE.Mesh(toGeometry(leaves), leafMaterial)
         mesh.position.set(sm.wx, sm.wy, sm.wz)
         g.add(mesh)
         drawn.current.set(`${k}:${sm.index}:l`, mesh)
       }
     }
-  }, [material, waterMaterial, leafMaterial, scratch, smoothCanopy])
+  }, [material, waterMaterial, leafMaterial, scratch])
 
   /**
    * ── ★ STREAMING MESHES THROUGH A BUDGETED QUEUE, NOT SYNCHRONOUSLY (2026-08-07) ────────────
@@ -3378,29 +3386,28 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
   /** The locomotion core's world probe — a CELL CODE now, not a boolean (2026-08-08): water is
    *  a medium the walker swims, not a hole it wades. Ungenerated space still reads as solid via
    *  voxelSolid — the same stand-on-it-don't-fall-through-it rule the old walker had. */
+  /**
+   * Is this cell open to the sky?
+   *
+   * ⚠ A BOUNDED WALK, not a true column scan, and it is bounded for a reason worth stating: the
+   * only caller is the sapling rule, which asks it a handful of times every few seconds. Scanning
+   * to world height would be exact and pointless; 96 blocks is far above anything a player builds
+   * or any terrain that overhangs, and a mountain 96 blocks above your garden is a roof by any
+   * reasonable reading. Leaves count as cover — growing a tree under a canopy is the case the rule
+   * exists to prevent.
+   */
+  const openToSky = useCallback((x: number, z: number, y: number): boolean => {
+    for (let k = 1; k <= 96; k++) if (voxel(x, y + k, z) !== AIR) return false
+    return true
+  }, [voxel])
+
   const solidProbe = useCallback((x: number, y: number, z: number) => {
     const m = voxelSolid(x, y, z)
     if (m === MAT.WATER) return CELL_WATER
     if (m === STRUCTURE_HALF || isHalfMat(m)) return CELL_HALF
-    // ── ★ RENDERING AND COLLISION MUST AGREE (2026-08-13) ────────────────────────────────────
-    // Alex, walking the smooth-canopy build: *"the spaces around the trunk are filled with
-    // invisible leaves."* Exactly right, and it was mine. The experiment hides the leaf MESH but
-    // the leaf VOXELS are untouched — and leaves are absent from `SOLID_EXCEPT`, so they block
-    // movement. Hiding geometry that still collides is the worst failure a renderer can have:
-    // there is nothing on screen to blame.
-    //
-    // ⚠ SCOPED TO THE FLAG ON PURPOSE. Making leaves walk-through in the DEFAULT world is a
-    // gameplay change (you can stand on a canopy today), not a bug fix, and it is not this
-    // commit's to make. Under the flag it is the only coherent answer: you cannot collide with
-    // what is not drawn.
-    //
-    // ★ Note this deliberately leaves `isSolid` alone, so leaves stay OPAQUE and the forest floor
-    // keeps its dappled shade. Collision and light wanted different answers about foliage all
-    // along; the flag is just the first place that difference became visible.
-    if (smoothCanopy && isLeafMat(m)) return CELL_EMPTY
     if (!isSolid(m)) return CELL_EMPTY
     return CELL_SOLID
-  }, [voxelSolid, smoothCanopy])
+  }, [voxelSolid])
 
   // Fence arms ask the world what to grab — walls, hillsides, other pieces' occupancy. Slabs are
   // excluded: a rail into a half-cell's empty upper half reads as floating.
@@ -3970,6 +3977,50 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
       }
     }
 
+    // ── ★ SAPLINGS COME UP ───────────────────────────────────────────────────────────────────
+    // Swept from the CLOCK, like the pots, and for the same reason: the clock already knows every
+    // planted sapling's position, so a plantation costs a few map reads instead of a world search.
+    //
+    // ⚠ EVERY RULE IS RE-ASKED HERE rather than cached from planting time. That is sapling.ts's
+    // central point: the world moves between planting and growing, so a shed built over a sapling
+    // has to stop it — and a blocked sapling WAITS. Nothing below deletes an entry except a tree
+    // actually appearing, or the block being gone.
+    if (saplingTick.current < nowMs) {
+      saplingTick.current = nowMs + 3000
+      for (const k of Object.keys(saplingClock.current)) {
+        const [sx, sy, sz] = k.split(',').map(Number)
+        const mat = voxel(sx, sy, sz)
+        // Dug up, broken, or its column is not loaded. A missing block with a live column means the
+        // player removed it, so the stamp goes; an unloaded column reads as AIR too, so the guard
+        // is the column, not the material.
+        const col = cols.current.get(key(Math.floor(sx / SECTION), Math.floor(sz / SECTION)))
+        if (!col) continue
+        const sp = saplingSpecies(mat)
+        if (!sp) { delete saplingClock.current[k]; saveSaplings(); continue }
+        if (blockedBy(saplingClock.current, voxel, openToSky, sp, sx, sy, sz, nowMs) !== null) continue
+
+        // ★ THE TREE IS GROWN BY THE GENERATOR ITSELF (`growTreeCells`), never by a second
+        // tree-drawing routine here. A planted goldwood is byte-identical to a wild one because it
+        // IS one — same walk, same crown, same lump seeds.
+        //
+        // ⚠ Height is hashed from POSITION, not rolled now: the clearance check reserved for the
+        // species' tallest, and a fresh random roll could still surprise a ceiling that had been
+        // approved. Position also means the same sapling always becomes the same tree.
+        const start: TreeStart = {
+          x: sx, z: sz, species: sp,
+          height: plantedHeight(sp, sx, sz),
+          seed: (sx * 73856093) ^ (sz * 19349663),
+        }
+        delete saplingClock.current[k]
+        saveSaplings()
+        // The sapling's own cell is where the trunk's base goes, so clear it first — `growTreeCells`
+        // writes a log there and a stale sapling underneath would survive as a hidden block.
+        setVoxel(sx, sy, sz, AIR)
+        for (const c of growTreeCells(start, sy - 1)) setVoxel(c.x, c.y, c.z, c.mat)
+        onSay(`a ${sp.id} has grown`)
+      }
+    }
+
     // ── flora sync: once the streaming burst is quiet, rebuild the ground cover ──────────────
     // Deferred behind `incoming` so a fresh load radius pays for flora ONCE at the end, not per
     // adopted column. The probe walks from the generated surface to the ACTUAL one (edits move
@@ -3982,26 +4033,6 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
         const [gx, gz] = kk.split(',').map(Number)
         list.push({ key: kk, x0: gx * SECTION, z0: gz * SECTION })
       }
-      // ── smooth canopy sync (2026-08-13) — same beat, same column list ─────────────────────
-      // ⚠ Rides `floraDirty` deliberately rather than inventing a second dirty flag. Both layers
-      // answer the same question ("what ground is loaded, and has it changed"), and two flags for
-      // one question is how one of them ends up stale in a way nobody can reproduce.
-      //
-      // The ground probe is the GENERATED surface (`heightAt`), NOT the walked one flora uses: a
-      // tree was planted against the generated height, so a player digging under a trunk must not
-      // drag its crown into the hole.
-      if (smoothCanopy) {
-        canopy.sync(list, SEED, (tx, tz) => {
-          const tcx = Math.floor(tx / SECTION), tcz = Math.floor(tz / SECTION)
-          const c = cols.current.get(key(tcx, tcz))
-          if (!c) return null
-          return c.heightAt(tx - tcx * SECTION, tz - tcz * SECTION)
-        }, (wx, wy, wz) => {
-          const m = voxel(wx, wy, wz)
-          return isLeafMat(m) || isLogMat(m)
-        })
-      }
-
       flora.sync(list, SEED, (fx, fz) => {
         const fcx = Math.floor(fx / SECTION), fcz = Math.floor(fz / SECTION)
         const c = cols.current.get(key(fcx, fcz))
@@ -4430,6 +4461,17 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
         setVoxel(hit.x, hit.y, hit.z, baseOf(aimed))
         onInvChange()
         mouse.current.right = false
+      } else if (mat !== undefined && isSaplingMat(mat)
+                 && !canPlant(voxel, openToSky, hit.px, hit.py, hit.pz)) {
+        // ── ★ A SAPLING REFUSES BAD GROUND, AND SAYS SO ──────────────────────────────────────
+        // `canPlant` is the generator's own rule (topsoil, open sky) — refusing silently would read
+        // as a broken right-click, which is exactly how the cast refusals were being lost before
+        // `onSay` existed. Clearance is NOT checked here on purpose: you may plant somewhere
+        // cramped and the sapling waits. See sapling.ts.
+        onSay(voxel(hit.px, hit.py - 1, hit.pz) === MAT.TOPSOIL
+          ? 'it needs open sky to grow'
+          : 'a sapling only takes in soil')
+        mouse.current.right = false
       } else if (mat !== undefined && !inPlayer && countItem(inv.current!, held) > 0 && voxel(hit.px, hit.py, hit.pz) === AIR) {
         removeItems(inv.current!, held, 1)
         // A slab takes the half you pointed at. The ray's own hit point decides it: land in the
@@ -4449,6 +4491,12 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
           }
         }
         setVoxel(hit.px, hit.py, hit.pz, put)
+        // The material is the state; the clock holds the one thing it cannot — WHEN.
+        if (isSaplingMat(put)) {
+          saplingClock.current[saplingKey(hit.px, hit.py, hit.pz)] = Date.now()
+          saveSaplings()
+          onSay('planted — it needs room overhead to come up')
+        }
         // ★ Tutorial 'light' step — placing IS the objective, not just holding a lantern.
         if (mat === MAT.MANA_LANTERN) onQuestEvent('light')
         onInvChange()
@@ -4667,7 +4715,6 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
       <primitive object={mist.points} />
       <primitive object={mist.residents} />
       <primitive object={flora.group} />
-      <primitive object={canopy.group} />
       {/* ⚠ Memoised. Inline `args={[new THREE.BoxGeometry(...)]}` builds a fresh geometry on EVERY
           React render and leaks the previous one — same family as the per-drop material that got
           the page's WebGL context blocked. */}

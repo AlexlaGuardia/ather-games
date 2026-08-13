@@ -61,6 +61,15 @@ export const MATERIAL_COLOR: Record<number, number> = {
   // without leaving the wood family.
   [WOOD.STARWILLOW_LOG]: 0xb3a690, [WOOD.STARWILLOW_LEAVES]: 0x7fc0a8,
   [WOOD.DAWNWOOD_LOG]: 0x9a5f4a, [WOOD.DAWNWOOD_LEAVES]: 0xd9a05e,
+  // ── ★ SAPLINGS (2026-08-13) — a young tree, tinted toward its species' own canopy ──────────
+  // ⚠ WITHOUT THESE FOUR LINES A PLANTED SAPLING RENDERS AS THE MAGENTA CHECKERBOARD. `tiles.ts`
+  // paints an unmapped material as a loud checker on purpose ("a bug you SEE"), and a brand-new
+  // material is exactly the case that trips it. Adding a MAT id is never the whole job.
+  //
+  // Each is its species' leaf colour pulled darker and greener — a seedling reads younger than the
+  // canopy it becomes, and four saplings in a hotbar have to be told apart at a glance.
+  [MAT.SAPLING_GOLDWOOD]: 0x3f7a30, [MAT.SAPLING_SHIMMEROAK]: 0x34682c,
+  [MAT.SAPLING_STARWILLOW]: 0x4d8878, [MAT.SAPLING_DAWNWOOD]: 0x8a6a3a,
   // Warm mana-light in a plank frame — the raw-mana blue warmed toward candle, so a lit yard
   // reads as TENDED against the cold ore glow of a cave.
   [MAT.MANA_LANTERN]: 0xffd98a,
