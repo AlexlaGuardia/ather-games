@@ -500,6 +500,27 @@ export function forkLimbs(start: TreeStart): { x: number; z: number; dx: number;
 }
 
 /**
+ * How many LOG voxels this tree is made of.
+ *
+ * ★ THIS IS THE WOOD ECONOMY'S CONTINUITY GUARANTEE, and it exists because of a way the node model
+ * could have broken the game silently. Today a tree is felled voxel by voxel and every log voxel
+ * drops one log — so a goldwood pays 6-9 logs and a dawnwood pays 10-15. A node that drops "a log"
+ * would cut the wood supply by an order of magnitude, and nothing would look broken: recipes would
+ * still work, planking would still craft, the building grammar Alex shipped would just quietly
+ * become unaffordable. Deriving the count from the trunk the tree ACTUALLY has keeps the payout
+ * identical to the day before the change.
+ *
+ * ⚠ DERIVED FROM THE SAME WALK `growTree` PERFORMS, never counted by hand. The forking trunk is the
+ * reason: starwillow is a stem plus TWO limbs, so it carries meaningfully more wood than its height
+ * suggests, and a hand-written `height` would underpay the species that is hardest to cut.
+ */
+export function trunkVoxels(start: TreeStart): number {
+  if (start.species.trunk === 'straight') return start.height
+  const forkAt = FORK_AT(start.height)
+  return forkAt + 2 * (start.height - forkAt)
+}
+
+/**
  * Grow one tree into whatever part of this stack it touches.
  *
  * The whole tree is generated every time regardless of how much lands here — it is a few hundred
