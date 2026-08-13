@@ -139,6 +139,7 @@ import { loadLoadout, saveLoadout, setSlot, type Loadout } from '../play3d/loado
 import { keeperBook } from '../play3d/book'
 import { VoxelMap, VoxelMiniMap, MAP_W, MAP_H, toLocal } from './VoxelMap'
 import { loadSeen, saveSeen, see, CELL, type Seen } from './discovery'
+import { screenHeading } from './map-heading'
 import { applyFightResult } from '../engine/spirit-health'
 import type { BattleResult } from '../engine/arena'
 import { createFloraRenderer } from './flora-mesh'
@@ -616,7 +617,8 @@ export default function VoxelWorld() {
   // The keeper's live spot, kept as a ref rather than state: the frame loop writes it 60×/sec and a
   // setState there would re-render the whole HUD on every frame.
   const mapPos = useRef<{ x: number; z: number } | null>(null)
-  const mapYaw = useRef(0)
+  /** Canvas rotation for the map marker — `screenHeading`, not a world yaw. See map-heading.ts. */
+  const mapHeading = useRef(0)
   const [showMap, setShowMap] = useState(false)
   /**
    * What the keeper has walked. See `discovery.ts` for why unwalked ground is CLOUD and not a grey
@@ -1453,7 +1455,7 @@ export default function VoxelWorld() {
           onStats={setStats} onSay={say} runeTick={runeTick}
           onPos={(p, yaw) => {
             mapPos.current = { x: p.x, z: p.z }
-            mapYaw.current = yaw
+            mapHeading.current = yaw
             setPos(`x ${p.x.toFixed(0)}  y ${p.y.toFixed(0)}  z ${p.z.toFixed(0)}`)
           }}
           onLook={setLook} onInvChange={refreshHotbar}
@@ -1499,11 +1501,11 @@ export default function VoxelWorld() {
       {/* The map — minimap always up, M expands it. Hidden while another cursor surface owns the
           screen, so it never sits on top of the bag or the craft grid. */}
       {!cursorUIOpen && !showMap && (
-        <VoxelMiniMap seed={SEED} seenRef={seenRef} posRef={mapPos} yawRef={mapYaw}
+        <VoxelMiniMap seed={SEED} seenRef={seenRef} posRef={mapPos} headingRef={mapHeading}
           onExpand={() => { openCursorUI(); setShowMap(true) }} />
       )}
       {showMap && (
-        <VoxelMap seed={SEED} seenRef={seenRef} seenTick={seenTick} posRef={mapPos} yawRef={mapYaw}
+        <VoxelMap seed={SEED} seenRef={seenRef} seenTick={seenTick} posRef={mapPos} headingRef={mapHeading}
           onClose={() => { setShowMap(false); closeCursorUI() }} />
       )}
 
@@ -2597,6 +2599,7 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
   onSay: (s: string) => void
   /** Bumped when the rune inventory changed under us — re-resolve the loadout, no reload. */
   runeTick: number
+  /** `yaw` is a map-marker CANVAS ROTATION (`screenHeading`), not a world yaw. */
   onPos: (p: THREE.Vector3, yaw: number) => void
   onLook: (l: { name: string; progress: number; refused: boolean } | null) => void
   onInvChange: () => void
@@ -4183,7 +4186,7 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
       }
 
       onLook(hit ? { name: `${def.name}${!afford ? ' — need materials' : fits ? '' : ' — blocked'}`, progress: 0, refused: !fits || !afford } : null)
-      onPos(p, Math.atan2(aim.x, aim.z))
+      onPos(p, screenHeading(aim.x, aim.z))
       if (++frame.current % 10 === 0) {
         const info = gl.info
         onStats(`${cols.current.size} col · ${placements.current.length} pieces · geo ${info.memory.geometries} prog ${info.programs?.length ?? 0} · BUILD`)
@@ -4577,7 +4580,7 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
           refused: mouse.current.left && !breaking.current && def.hardness !== Infinity,
         }
       : null)
-    onPos(p, Math.atan2(aim.x, aim.z))
+    onPos(p, screenHeading(aim.x, aim.z))
     if (++frame.current % 10 === 0) {
       // ★ GPU RESOURCE COUNTS IN THE HUD. A leak used to announce itself by Chrome blocking the
       // context and the screen going black with no explanation. `programs` is the number that

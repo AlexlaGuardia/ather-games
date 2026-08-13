@@ -251,12 +251,20 @@ function drawCloud(ctx: CanvasRenderingContext2D, seen: Seen, cellPx: number, ox
   ctx.drawImage(scratch.cloud, 0, 0)
 }
 
-function drawKeeper(ctx: CanvasRenderingContext2D, x: number, y: number, yaw: number, r: number) {
+/**
+ * The keeper: a dot with a view-cone.
+ *
+ * ★ `heading` is a CANVAS ROTATION from `screenHeading`, not a world yaw — and the cone is drawn
+ * along +x so that rotation is the whole transform. The first cut drew the cone pointing UP and
+ * rotated by `-yaw`, which is two conventions fighting: it came out exactly 180° backwards, and
+ * every single-axis spot check you would think to write still passed. See `map-heading.test.ts`.
+ */
+function drawKeeper(ctx: CanvasRenderingContext2D, x: number, y: number, heading: number, r: number) {
   ctx.save()
   ctx.translate(x, y)
-  ctx.rotate(-yaw)
+  ctx.rotate(heading)
   ctx.fillStyle = 'rgba(232,88,74,0.30)'
-  ctx.beginPath(); ctx.moveTo(0, 0); ctx.arc(0, 0, r * 5, -Math.PI / 2 - 0.5, -Math.PI / 2 + 0.5); ctx.closePath(); ctx.fill()
+  ctx.beginPath(); ctx.moveTo(0, 0); ctx.arc(0, 0, r * 5, -0.5, 0.5); ctx.closePath(); ctx.fill()
   ctx.fillStyle = '#ff6b5a'; ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.5
   ctx.beginPath(); ctx.arc(0, 0, r, 0, Math.PI * 2); ctx.fill(); ctx.stroke()
   ctx.restore()
@@ -264,13 +272,14 @@ function drawKeeper(ctx: CanvasRenderingContext2D, x: number, y: number, yaw: nu
 
 // ── the full map (M) ────────────────────────────────────────────────────────────────────────────
 
-export function VoxelMap({ seed, seenRef, seenTick, posRef, yawRef, onClose }: {
+export function VoxelMap({ seed, seenRef, seenTick, posRef, headingRef, onClose }: {
   seed: number
   seenRef: React.RefObject<Seen | null>
   /** Bumped when ground opens, so an open map peels back as you walk rather than on next open. */
   seenTick: number
   posRef: React.RefObject<{ x: number; z: number } | null>
-  yawRef: React.RefObject<number>
+  /** Canvas rotation from `screenHeading` — NOT a world yaw. */
+  headingRef: React.RefObject<number>
   onClose: () => void
 }) {
   const base = useRef<HTMLCanvasElement>(null)
@@ -313,13 +322,13 @@ export function VoxelMap({ seed, seenRef, seenTick, posRef, yawRef, onClose }: {
       if (p) {
         const { lx, lz } = toLocal(p.x, p.z)
         const px = cv.width / MAP_W
-        drawKeeper(ctx, (lx / SAMPLE) * px, (lz / SAMPLE) * px, yawRef.current, Math.max(3, px * 0.9))
+        drawKeeper(ctx, (lx / SAMPLE) * px, (lz / SAMPLE) * px, headingRef.current, Math.max(3, px * 0.9))
       }
       id = requestAnimationFrame(tick)
     }
     id = requestAnimationFrame(tick)
     return () => cancelAnimationFrame(id)
-  }, [posRef, yawRef])
+  }, [posRef, headingRef])
 
   return (
     <div onClick={onClose} style={{
@@ -342,11 +351,12 @@ export function VoxelMap({ seed, seenRef, seenTick, posRef, yawRef, onClose }: {
  *  screen agrees with what the keeper can actually see out there. */
 const MINI_REACH = 240
 
-export function VoxelMiniMap({ seed, seenRef, posRef, yawRef, onExpand }: {
+export function VoxelMiniMap({ seed, seenRef, posRef, headingRef, onExpand }: {
   seed: number
   seenRef: React.RefObject<Seen | null>
   posRef: React.RefObject<{ x: number; z: number } | null>
-  yawRef: React.RefObject<number>
+  /** Canvas rotation from `screenHeading` — NOT a world yaw. */
+  headingRef: React.RefObject<number>
   onExpand: () => void
 }) {
   const cvRef = useRef<HTMLCanvasElement>(null)
@@ -362,7 +372,7 @@ export function VoxelMiniMap({ seed, seenRef, posRef, yawRef, onExpand }: {
       if (!p) return
       // `rev` is in the key so opening ground repaints the crop. Without it the cloud would only
       // peel back when the keeper happened to turn, which reads as the map lagging behind the walk.
-      const key = `${Math.round(p.x / 4)},${Math.round(p.z / 4)},${Math.round(yawRef.current * 10)},${seen?.rev ?? -1},${plateRev}`
+      const key = `${Math.round(p.x / 4)},${Math.round(p.z / 4)},${Math.round(headingRef.current * 10)},${seen?.rev ?? -1},${plateRev}`
       if (key === last) return
       last = key
       const ctx = cv.getContext('2d')!
@@ -376,11 +386,11 @@ export function VoxelMiniMap({ seed, seenRef, posRef, yawRef, onExpand }: {
       ctx.fillRect(0, 0, cv.width, cv.height)
       ctx.drawImage(terrainPlate(seed), ox, oy, MAP_W * cellPx, MAP_H * cellPx)
       if (seen) drawCloud(ctx, seen, cellPx, ox, oy)
-      drawKeeper(ctx, cv.width / 2, cv.height / 2, yawRef.current, 5)
+      drawKeeper(ctx, cv.width / 2, cv.height / 2, headingRef.current, 5)
     }
     id = requestAnimationFrame(tick)
     return () => cancelAnimationFrame(id)
-  }, [seed, seenRef, posRef, yawRef])
+  }, [seed, seenRef, posRef, headingRef])
   return (
     <canvas ref={cvRef} onClick={onExpand} title="Map (M)" style={{
       position: 'fixed', top: 12, right: 12, zIndex: 33, width: 148, height: 148,
