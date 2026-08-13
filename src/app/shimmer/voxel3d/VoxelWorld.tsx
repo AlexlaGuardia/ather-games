@@ -37,7 +37,10 @@ import { spawnDrop, tossDrop, tickDrops, type Drop } from '../voxel/drops'
 import { orphanedLeaves, dueLeaves, withoutLeaves, enqueueLeaves, type PendingLeaf } from '../voxel/decay'
 import { salvageItems, salvageMessage } from '../voxel/salvage'
 import { blockDef, materialForItem, emitOf, BLOCKS, type BlockSkill } from '../voxel/registry'
-import { editIndex, recordEdit, applyEdits, packEdits, unpackEdits, isStale, type ColumnEdits } from '../voxel/edits'
+import { editIndex, recordEdit, applyEdits, packEdits, unpackEdits, isStale, GENERATOR_VERSION, type ColumnEdits } from '../voxel/edits'
+
+/** Which generator version the player has already been warned about. See `staleWarned`. */
+const GEN_WARN_KEY = 'ather:shimmer:genWarned'
 import { loadColumn, saveColumn, editedColumnCount, loadPlayer, savePlayer, type PlayerSave } from './save'
 import { PIECES, STRUCTURE, STRUCTURE_HALF, pieceDef, cellsOf, canPlace, canAfford, placementAt, type Placement, type Rotation } from '../voxel/pieces'
 import { createPieceRenderer } from './piece-mesh'
@@ -2814,7 +2817,23 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
   // columns costs zero bytes; a save grows with what you BUILD.
   const edits = useRef(new Map<string, ColumnEdits>())
   const dirtySaves = useRef(new Set<string>())
-  const staleWarned = useRef(false)
+  /**
+   * ── ★ THE STALE-SAVE WARNING FIRES ONCE PER GENERATOR VERSION, NOT ONCE PER PAGE LOAD ────────
+   * Alex, 2026-08-13: *"when i refresh the page it keeps saying something about different
+   * generator versions."* It did, and it always would have — this was a `useRef(false)`, so the
+   * latch died with the page.
+   *
+   * ★ THE REASON IT NEVER STOPPED is subtler than the latch: `packEdits` stamps the CURRENT version,
+   * but a column is only written when it is EDITED. So a column touched weeks ago at v14 stays v14
+   * for ever, and every refresh finds it and warns again. The warning was structurally permanent
+   * for anyone with old edits — which is everyone who has played.
+   *
+   * A warning that fires every single load is not a warning, it is furniture. The player reads it
+   * once, learns it means nothing, and is then equally blind the day the generator really does move
+   * their house. So the acknowledgement is PERSISTED against the version it was given for: told once
+   * when the world changes under you, silent afterwards, and told again the next time it changes.
+   */
+  const staleWarned = useRef<boolean>(false)
   const settled = useRef(false)
   // The walker. Feet-based; the camera is derived from it every frame (feet + eased eye).
   const loco = useRef(createLoco(SPAWN_X + 0.5, columnHeight(SPAWN_X, SPAWN_Z, SEED) + 1, SPAWN_Z + 0.5))
@@ -3865,7 +3884,15 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
           if (!saved) { edits.current.set(ek, new Map()); applyGenPieces(gx, gz, []); return }
           if (isStale(saved.edits) && !staleWarned.current) {
             staleWarned.current = true
-            onSay('⚠ saved edits are from a different generator version — they may not line up')
+            // ⚠ Wrapped: a wiped or blocked localStorage must not take the warning down with it.
+            // Failing closed here would mean the one load that genuinely needed the message is the
+            // one that throws.
+            let seen: string | null = null
+            try { seen = localStorage.getItem(GEN_WARN_KEY) } catch { /* private mode */ }
+            if (seen !== String(GENERATOR_VERSION)) {
+              try { localStorage.setItem(GEN_WARN_KEY, String(GENERATOR_VERSION)) } catch { /* ignore */ }
+              onSay('⚠ the world generator changed — saved edits from an older build may not line up')
+            }
           }
           const m = unpackEdits(saved.edits)
           edits.current.set(ek, m)

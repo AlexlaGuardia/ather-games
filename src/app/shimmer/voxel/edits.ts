@@ -61,7 +61,17 @@ import { Column, SECTION } from './column'
 // voxels above the surface, and lips becoming slab MATERIALS. Old edits still apply (they are
 // absolute materials at fixed indices), but a save from before today no longer describes the same
 // world, and `isStale` exists precisely so the player is told rather than left to notice.
-export const GENERATOR_VERSION = 15
+// 15 → 16 (2026-08-13): the crown became a cluster of lobes. Every blob-species canopy changed
+// shape — satellites hung below the main lobe, a warped radius, ~17% more leaf voxels — so any
+// edit a player made inside or against a canopy now sits against different foliage. Terrain did
+// not move; only the trees did.
+//
+// ⚠ I SHIPPED THAT CHANGE WITHOUT BUMPING THIS, and the bump is the entire point of the constant.
+// The generator moved under saved edits for most of a day and nothing told anybody. Trunk geometry
+// changed too (the root flare) but that one is RENDER-ONLY and correctly needs no bump — which is
+// exactly the distinction that makes this easy to forget: two tree changes in one session, one of
+// them version-affecting and one not.
+export const GENERATOR_VERSION = 16
 
 /**
  * One column's edits: packed local index → material.
