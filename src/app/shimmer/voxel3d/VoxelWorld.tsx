@@ -3300,9 +3300,25 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
     const m = voxelSolid(x, y, z)
     if (m === MAT.WATER) return CELL_WATER
     if (m === STRUCTURE_HALF || isHalfMat(m)) return CELL_HALF
+    // ── ★ RENDERING AND COLLISION MUST AGREE (2026-08-13) ────────────────────────────────────
+    // Alex, walking the smooth-canopy build: *"the spaces around the trunk are filled with
+    // invisible leaves."* Exactly right, and it was mine. The experiment hides the leaf MESH but
+    // the leaf VOXELS are untouched — and leaves are absent from `SOLID_EXCEPT`, so they block
+    // movement. Hiding geometry that still collides is the worst failure a renderer can have:
+    // there is nothing on screen to blame.
+    //
+    // ⚠ SCOPED TO THE FLAG ON PURPOSE. Making leaves walk-through in the DEFAULT world is a
+    // gameplay change (you can stand on a canopy today), not a bug fix, and it is not this
+    // commit's to make. Under the flag it is the only coherent answer: you cannot collide with
+    // what is not drawn.
+    //
+    // ★ Note this deliberately leaves `isSolid` alone, so leaves stay OPAQUE and the forest floor
+    // keeps its dappled shade. Collision and light wanted different answers about foliage all
+    // along; the flag is just the first place that difference became visible.
+    if (smoothCanopy && isLeafMat(m)) return CELL_EMPTY
     if (!isSolid(m)) return CELL_EMPTY
     return CELL_SOLID
-  }, [voxelSolid])
+  }, [voxelSolid, smoothCanopy])
 
   // Fence arms ask the world what to grab — walls, hillsides, other pieces' occupancy. Slabs are
   // excluded: a rail into a half-cell's empty upper half reads as floating.
