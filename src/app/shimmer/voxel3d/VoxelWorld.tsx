@@ -2581,7 +2581,14 @@ function ToolGlyph({ family }: { family: 'forestry' | 'prospecting' | 'rinning' 
 // Ground cover is walked THROUGH, blocks no light, and stops no fence arm — it is scenery you can
 // also pick up, not geometry. Everything downstream of `isSolid` (collision, the light field's
 // opacity, piece connection) inherits that from this one line.
-const SOLID_EXCEPT = new Set<number>([AIR, MAT.WATER, MAT.TUFT, MAT.TALL_GRASS, MAT.FLOWER])
+// ⚠ SAPLINGS JOIN GROUND COVER HERE (2026-08-13). A seedling drawn as a small cross must not be a
+// full solid cell you bump into and cannot see — that is the invisible-wall failure one size down.
+// It also stops a sapling blocking light, which matters more than it sounds: `blockedBy` refuses to
+// grow a tree without open sky, and a sapling that shadowed ITSELF would never come up.
+const SOLID_EXCEPT = new Set<number>([
+  AIR, MAT.WATER, MAT.TUFT, MAT.TALL_GRASS, MAT.FLOWER,
+  MAT.SAPLING_GOLDWOOD, MAT.SAPLING_SHIMMEROAK, MAT.SAPLING_STARWILLOW, MAT.SAPLING_DAWNWOOD,
+])
 // A slab is SOLID — it just occupies half the cell. Collision asks `solidProbe`, which reports
 // CELL_HALF for it; everything else (light, fence arms, piece placement) wants "yes, solid".
 const isSolid = (m: number) => !SOLID_EXCEPT.has(baseOf(m))

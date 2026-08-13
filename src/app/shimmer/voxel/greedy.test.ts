@@ -8,6 +8,7 @@
 import { AIR, Section } from './section'
 import { greedyMesh, TRUNK_WIDTH } from './greedy'
 import { WOOD } from './trees'
+import { MAT } from './depth'
 
 let pass = 0
 const fails: string[] = []
@@ -460,6 +461,62 @@ for (const S of [4, 16, 32]) {
   // have occluded the cell beneath it and punched a hole in that rectangle, splitting it into
   // several — so this number is also the assert that the trunk is genuinely out of the sweep.
   eq(withLog, bare + 6, '★ a thin trunk leaves the ground under it whole, and visible')
+}
+
+// ── ★ A SAPLING DRAWS AS A ROOTED CROSS, NOT A CUBE ──────────────────────────────────────────
+// It rides the leaf pass, so it inherits crossed quads for free — but it needs the OPPOSITE of a
+// leaf's spill: a leaf deliberately reaches past its own cell to close canopy seams, and a seedling
+// doing that pokes through whatever you planted it beside. That claim was a comment; this makes it
+// a check.
+{
+  const sec = new Section(16)
+  sec.set(8, 4, 8, MAT.SAPLING_GOLDWOOD)
+  const m = greedyMesh(sec, undefined, undefined, undefined, [0, 0, 0])
+  ok(m.quads === 2, `★ a sapling is a CROSS — two quads, not a cube's six (${m.quads})`)
+
+  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity, minZ = Infinity, maxZ = -Infinity
+  for (let i = 0; i < m.quads * 4; i++) {
+    const x = m.positions[i * 3], y = m.positions[i * 3 + 1], z = m.positions[i * 3 + 2]
+    minX = Math.min(minX, x); maxX = Math.max(maxX, x)
+    minY = Math.min(minY, y); maxY = Math.max(maxY, y)
+    minZ = Math.min(minZ, z); maxZ = Math.max(maxZ, z)
+  }
+  // ⚠ INSIDE ITS OWN CELL on both horizontal axes. The leaf pass runs 1.08-1.54 cells wide on
+  // purpose; if a future tweak to that range silently widened saplings too, a planted seedling would
+  // start clipping through the wall beside it and nothing else would fail.
+  ok(minX >= 8 && maxX <= 9, `★ a sapling stays inside its cell on x (${minX.toFixed(2)}..${maxX.toFixed(2)})`)
+  ok(minZ >= 8 && maxZ <= 9, `★ and on z (${minZ.toFixed(2)}..${maxZ.toFixed(2)})`)
+  ok(maxY > 4 && maxY < 5, `a sapling is shorter than a full block (${maxY.toFixed(2)})`)
+
+  // ── ★ ROOTED, AND THE FIRST VERSION OF THIS ASSERT WAS VACUOUS ─────────────────────────────
+  // It checked one sapling's bottom edge against the cell floor — which a LEAF also satisfies,
+  // because both start at -0.5 from the cell centre. The mutation that made saplings float came
+  // back GREEN. What actually differs is that a sapling suppresses the pass's vertical jitter, and
+  // jitter is per-cell-hash, so it only shows across MANY cells: a leaf's base wanders, a sprout's
+  // never does. One sample could never have caught it.
+  const bases = new Set<string>()
+  for (let i = 0; i < 12; i++) {
+    const sp = new Section(16)
+    sp.set(2 + i, 4, 3 + (i % 5), MAT.SAPLING_GOLDWOOD)
+    const sm = greedyMesh(sp, undefined, undefined, undefined, [i * 16, 0, 0])
+    let lo = Infinity
+    for (let v = 0; v < sm.quads * 4; v++) lo = Math.min(lo, sm.positions[v * 3 + 1])
+    bases.add((lo - 4).toFixed(4))
+  }
+  ok(bases.size === 1 && bases.has('0.0000'),
+    `★ every sapling sits exactly on its cell floor — no vertical jitter (${[...bases].join(',')})`)
+
+  // A leaf in the same slot must STILL spill — the two treatments have to stay distinguishable, or
+  // this assert would also pass on a build that quietly made leaves rooted and narrow too.
+  const leafSec = new Section(16)
+  leafSec.set(8, 4, 8, WOOD.GOLDWOOD_LEAVES)
+  const lm = greedyMesh(leafSec, undefined, undefined, undefined, [0, 0, 0])
+  let lMinX = Infinity, lMaxX = -Infinity
+  for (let i = 0; i < lm.quads * 4; i++) {
+    const x = lm.positions[i * 3]
+    lMinX = Math.min(lMinX, x); lMaxX = Math.max(lMaxX, x)
+  }
+  ok(lMaxX - lMinX > 1, `★ a LEAF still spills past its cell, unlike a sapling (${(lMaxX - lMinX).toFixed(2)} wide)`)
 }
 
 console.log(`\ngreedy mesher: ${pass} passed, ${fails.length} failed`)

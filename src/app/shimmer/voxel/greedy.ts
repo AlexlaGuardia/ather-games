@@ -17,7 +17,7 @@
 
 import { AIR, Section } from './section'
 import { STRUCTURE, STRUCTURE_HALF } from './pieces'
-import { isPlant, isHalfMat, isTopSlab } from './depth'
+import { isPlant, isHalfMat, isTopSlab, isSapling } from './depth'
 import { isLeafMat, isLogMat } from './trees'
 
 /**
@@ -296,8 +296,12 @@ export function greedyMesh(
           // ★ AND A LOG LEAVES THE SWEEP FOR THE SAME REASON, as of 2026-08-13: it no longer draws
           // as a unit cube either (see `TRUNK_WIDTH`). One arithmetic test on `m`, no extra sample
           // — which is the only kind of test this function can afford.
+          // ★ A SAPLING RIDES THE LEAF PASS (2026-08-13). It is foliage the size of one cell, so
+          // it wants exactly what a leaf wants — crossed quads, not a cube — and the pass that
+          // draws those already exists. Building a second crossed-quad renderer for four materials
+          // would be the same duplication the crown layout was just rescued from.
           sol[i] = m !== AIR && m !== STRUCTURE && m !== STRUCTURE_HALF && !isPlant(m)
-            && !isLeafMat(m) && !isLogMat(m) ? 1 : 0
+            && !isLeafMat(m) && !isLogMat(m) && !isSapling(m) ? 1 : 0
           i++
         }
       }
@@ -700,7 +704,7 @@ export function greedyMesh(
   // the crosses disagree with each other. Yaw, width and offset are now hashed per world cell:
   // deterministic (a remesh reproduces it exactly), free (one hash, four bit-slices of it) and
   // invisible to every other system, because leaves remain ordinary voxels.
-  if (!uniform || isLeafMat(sec.uniformValue()!)) {
+  if (!uniform || isLeafMat(sec.uniformValue()!) || isSapling(sec.uniformValue()!)) {
     const maxQuads = (positions.length / 12) | 0
     // ★ THE CROSS NOW SPILLS PAST ITS OWN CELL, and that is the other half of the density fix.
     // A cross inset inside its cube leaves a gap at every cell boundary, and a canopy is a grid of
@@ -721,7 +725,8 @@ export function greedyMesh(
       for (let z = 0; z < S && !full; z++) {
         for (let x = 0; x < S; x++) {
           const m = sec.get(x, y, z)
-          if (!isLeafMat(m)) continue
+          const sapling = isSapling(m)
+          if (!isLeafMat(m) && !sapling) continue
           if (quads + 2 > maxQuads) { full = true; break }
 
           // ★ DEPTH SHADING FROM ENCLOSURE, since corner AO cannot describe a quad that is not a
@@ -784,8 +789,26 @@ export function greedyMesh(
           // away from its neighbours and open holes along the canopy's underside.
           const jy = ((((h >>> 26) & 31) / 31) - 0.5) * 0.3
 
-          const cx = x + 0.5 + jx, cy = y + 0.5 + jy, cz = z + 0.5 + jz
-          const ax0 = Math.cos(yaw) * wide, az0 = Math.sin(yaw) * wide
+          // ── ★ A SAPLING IS THE SAME CROSS, ROOTED AND SMALL ────────────────────────────────
+          // It rides this pass because it wants crossed quads, but it is not a leaf: a leaf floats
+          // in a canopy and may spill into its neighbours, a seedling STANDS ON THE GROUND. So it
+          // takes no vertical jitter (a sprout hovering half a block up is the debris read the
+          // strand fix already chased out of the canopy), it starts at the cell FLOOR rather than
+          // spanning the cell, and it is narrow enough to read as a shoot instead of a shrub.
+          //
+          // ⚠ The width has to stay UNDER 1.0 — the leaf pass deliberately spills past its cell to
+          // close canopy seams, and a sapling doing that would poke through whatever you planted it
+          // beside.
+          const wideM = sapling ? wide * 0.30 : wide
+          const cx = x + 0.5 + (sapling ? jx * 0.3 : jx)
+          const cy = sapling ? y + 0.5 : y + 0.5 + jy
+          const cz = z + 0.5 + (sapling ? jz * 0.3 : jz)
+          // Both start at the cell floor (`cy` is the cell centre, so -0.5 is its base); a sapling
+          // simply stops short of the ceiling. What actually makes it ROOTED is `jy` above being
+          // suppressed — a leaf floats by up to 0.15 of a cell and a sprout must not.
+          const yLo = -0.5
+          const yHi = sapling ? 0.2 : 0.5
+          const ax0 = Math.cos(yaw) * wideM, az0 = Math.sin(yaw) * wideM
           // Two vertical quads, turned a quarter apart. Wound counter-clockwise from the low-left;
           // the material is DOUBLE-SIDED, so one quad per plane is enough and the back face is lit
           // by the shader's flipped normal rather than by a second copy of the geometry.
@@ -795,14 +818,14 @@ export function greedyMesh(
             const ax = d === 0 ? ax0 : -az0
             const az = d === 0 ? az0 : ax0
             const p = quads * 12
-            positions[p + 0] = cx - ax; positions[p + 1] = cy - 0.5; positions[p + 2] = cz - az
-            positions[p + 3] = cx + ax; positions[p + 4] = cy - 0.5; positions[p + 5] = cz + az
-            positions[p + 6] = cx + ax; positions[p + 7] = cy + 0.5; positions[p + 8] = cz + az
-            positions[p + 9] = cx - ax; positions[p + 10] = cy + 0.5; positions[p + 11] = cz - az
+            positions[p + 0] = cx - ax; positions[p + 1] = cy + yLo; positions[p + 2] = cz - az
+            positions[p + 3] = cx + ax; positions[p + 4] = cy + yLo; positions[p + 5] = cz + az
+            positions[p + 6] = cx + ax; positions[p + 7] = cy + yHi; positions[p + 8] = cz + az
+            positions[p + 9] = cx - ax; positions[p + 10] = cy + yHi; positions[p + 11] = cz - az
             // The quad's own plane normal — (ax,0,az) x (0,1,0), divided by the half-width it was
             // scaled by, which is exactly the normalisation. Horizontal, so foliage catches side
             // light rather than reading as a floor, and the two quads of a cross never shade alike.
-            const nx = -az / wide, nz = ax / wide
+            const nx = -az / wideM, nz = ax / wideM
             for (let k = 0; k < 4; k++) {
               normals[p + k * 3 + 0] = nx
               normals[p + k * 3 + 1] = 0

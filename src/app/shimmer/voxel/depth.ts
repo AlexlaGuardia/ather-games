@@ -78,6 +78,18 @@ export const PLANT_MIN = 24
 export const PLANT_MAX = 26
 /** Non-solid, non-opaque ground cover. Range test on purpose — this runs in the mesher's hot loop. */
 export const isPlant = (m: number): boolean => m >= PLANT_MIN && m <= PLANT_MAX
+
+/**
+ * Saplings, as a contiguous range — the same shape `isPlant` uses, and for the same reason: the
+ * mesher has to ask "is this one of those" on every cell it sweeps, and a range test is the only
+ * kind of question that function can afford.
+ *
+ * ⚠ KEEP 42-45 CONTIGUOUS. A fifth species inserted anywhere else silently stops rendering as a
+ * seedling and comes back as a cube, with nothing in the code looking wrong.
+ */
+export const SAPLING_MIN = 42
+export const SAPLING_MAX = 45
+export const isSapling = (m: number): boolean => m >= SAPLING_MIN && m <= SAPLING_MAX
 /** Any state of the pot. */
 export const isPot = (m: number): boolean => m === 27 || m === 28 || m === 29
 
