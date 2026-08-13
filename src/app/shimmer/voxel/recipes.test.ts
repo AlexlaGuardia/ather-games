@@ -11,7 +11,9 @@
 // A cost table is a promise that the thing is obtainable. This is the test that checks the promise.
 
 import { RECIPES, recipeDef, canCraft, craftPlan, availableRecipes, RECIPE_OUTPUTS } from './recipes'
-import { BLOCKS } from './registry'
+import { BLOCKS, ALL_BLOCKS, materialForItem } from './registry'
+import { MAT } from './depth'
+import { PIECES } from './pieces'
 import { TOOL_DEFS } from '../engine/tools'
 
 let pass = 0, fail = 0
@@ -147,6 +149,54 @@ console.log('reachability')
     const gaps = unreachable(TOOL_DEFS[id].recipe.map(i => i.itemId))
     check(`${id} is craftable`, gaps.length === 0, `missing ${gaps.join(', ')}`)
   }
+}
+
+// ── ★ THE BUILDING GRAMMAR (2026-08-13, Alex's ruling) ────────────────────────
+// "Blocks when broken give items… stone turns into rubble when mined." The rule is easy to state
+// and easy to erode one convenient `placeable: true` at a time, so it is asserted rather than
+// merely written down. Each of these is a way the ruling dies quietly.
+console.log('building grammar')
+{
+  const def = (m: number) => ALL_BLOCKS.find(b => b.material === m)!
+
+  // 1. YOU CANNOT PUT THE MOUNTAIN BACK. The whole ruling in one property.
+  check('raw stone is not placeable', def(MAT.STONE).placeable === false,
+    'placing back what you dug is the Minecraft loop this ruling replaces')
+  check('deep stone is not placeable', def(MAT.DEEP_STONE).placeable === false)
+
+  // 2. ...AND IT GIVES YOU A MATERIAL, not itself. A drop of `block_stone` would satisfy (1) while
+  //    quietly restoring the old loop the moment anything made that item placeable again.
+  check('quarrying stone yields rubble', def(MAT.STONE).drops[0].itemId === 'rubble')
+  check('deep stone yields the same rubble', def(MAT.DEEP_STONE).drops[0].itemId === 'rubble',
+    'one broken-rock economy, not two — the tier lives in what it costs to break')
+
+  // 3. THE FORGIVENESS VALVE. Rubble goes back down, and only ever as rubble.
+  check('rubble is placeable', def(MAT.RUBBLE).placeable === true,
+    'a cozy game cannot make every mis-swing a permanent scar')
+  check('rubble places as rubble, never as stone', materialForItem('rubble') === MAT.RUBBLE,
+    'a patch has to show — that is what makes it forgiving rather than an undo')
+  check('a bare hand can move rubble', def(MAT.RUBBLE).skill === null)
+
+  // 4. SOIL, SUBSOIL AND SAND ARE EXEMPT — Alex ruled landscaping stays. This is the assert that
+  //    catches someone "finishing" the ruling by sweeping every terrain block into it.
+  for (const m of [MAT.TOPSOIL, MAT.SUBSOIL, MAT.SAND])
+    check(`${def(m).name} stays placeable for landscaping`, def(m).placeable === true,
+      'shaping your own plot is the cozy loop, not the Minecraft one')
+
+  // 5. THE RUNG THAT MAKES IT BUILDABLE. Pieces alone do not make a house; without a crafted
+  //    surface the ruling just removes building.
+  check('cut stone is placeable', def(MAT.CUT_STONE).placeable === true)
+  check('cut stone is CRAFTED, never dug', !ALL_BLOCKS.some(b => b.drops.some(d => d.itemId === 'cut_stone') && b.material !== MAT.CUT_STONE),
+    'if any terrain block dropped it, the refine step is decoration')
+  check('and the refine step exists', recipeDef('cut_stone')?.input[0].itemId === 'rubble')
+
+  // 6. NOTHING STILL ASKS FOR THE ITEM THAT NO LONGER EXISTS. `block_stone` was a real cost on a
+  //    real piece (the stair) until this ruling, and an uncraftable piece is invisible until a
+  //    player tries to build one.
+  const dead = new Set(['block_stone', 'block_deep_stone'])
+  check('no recipe still costs raw stone', !RECIPES.some(r => r.input.some(i => dead.has(i.itemId))))
+  check('no piece still costs raw stone', !PIECES.some(p => p.cost.some(c => dead.has(c.itemId))),
+    'the stair pointed at block_stone and would have become uncraftable in silence')
 }
 
 console.log(`\n${pass} passed, ${fail} failed`)

@@ -35,7 +35,7 @@ import { AIR } from './section'
  * becomes accidental canon.
  */
 // ── ★ THE MATERIAL ID MAP — one number space, four files ────────────────────────────────────────
-// MAT 0-13 (here) · ORE 16-22 (ore.ts) · WOOD 32-39 (trees.ts) · STRUCTURE 48-49 (pieces.ts).
+// MAT 0-13 + 24-30 + 40-41 (here) · ORE 16-22 (ore.ts) · WOOD 32-39 (trees.ts) · STRUCTURE 48-49 (pieces.ts).
 // PLANTS take 24-26, in the gap between ore and wood. ⚠ The first cut put them at 14-16 because
 // MAT stops at 13 — and 16 is ORE.RAW_MANA, so a wildflower WAS a mana seam: it inherited ore
 // hardness, dropped shards, and `isPlant` matched ore and logs all through the underground.
@@ -152,6 +152,26 @@ export const MAT = {
   // stops being a chest must drop its record in the same breath, or the next one built on that
   // spot inherits somebody else's items.
   CHEST: 30,
+
+  // ── ★ BUILDING MATERIALS — you build with what you MADE, not with what you dug (2026-08-13) ──
+  // Alex's ruling, and it is the line that separates this game's building from Minecraft's: a
+  // block you break gives you a MATERIAL, and the material is refined before it can go back into
+  // the world. Stone is the first grammar: mine it and you hold RUBBLE, cut the rubble and you
+  // hold CUT_STONE, and cut stone is the wall. Raw stone stops being placeable entirely — there
+  // is no putting the mountain back.
+  //
+  // ⚠ SOIL, SUBSOIL AND SAND ARE DELIBERATELY EXEMPT (Alex, same ruling): landscaping your own
+  // plot, filling a hole, shaping a garden bed IS the cozy loop, and the pot/farming chain reads
+  // straight through it. "No block is ever placeable" is the Minecraft answer wearing a coat.
+  //
+  // ★ RUBBLE IS PLACEABLE, and that is the forgiveness valve. It goes back down as rubble — never
+  // as stone — so a hole can be filled but the patch always shows. A cozy game where one mis-swing
+  // permanently scars the garden is the wrong trade; so is a perfect undo.
+  //
+  // ⚠ Ids 40-41, in the clean band between WOOD (32-39) and STRUCTURE (48-49). NOT 14-15: those
+  // sit against ORE's range and that adjacency is exactly how a wildflower became a mana seam.
+  RUBBLE: 40,
+  CUT_STONE: 41,
 } as const
 
 export interface DepthConfig {

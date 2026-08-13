@@ -90,6 +90,27 @@ export const RECIPES: RecipeDef[] = [
   { id: 'dawnwood_planks', name: 'Dawnwood Planks', station: 'hand', mana: 0,
     input: [{ itemId: 'dawnwood_log', count: 1 }], output: { itemId: 'dawnwood_plank', count: 4 } },
 
+  // ── ★ STONE: RUBBLE → CUT STONE (2026-08-13) ────────────────────────────────────────────────
+  // The stone half of Alex's building grammar. Mining gives rubble; rubble is CUT into the block
+  // you actually build with. This step is the whole point of the ruling — without it, "stone drops
+  // rubble" is a rename and you are still placing back what you dug.
+  //
+  // ⚠ 2:1 ON PURPOSE, and it is the dial to turn if a wall feels expensive. A 1:1 refine has no
+  // weight — it is a keystroke between digging and placing, and the player learns to resent it.
+  // Losing half means a quarry is a real trip, which is what makes a stone building read as
+  // something you went and got rather than something you swept up.
+  //
+  // ⚠ I WROTE THIS AT THE TABLE FIRST AND THE ORACLE REFUSED IT, correctly. `recipes.test.ts`
+  // asserts every refine step is hand-makeable — *"mining is the gate, not furniture"* — and my
+  // reason for the station was flavour (dressing stone feels like bench work) plus a wish to give
+  // the crafting table a second job. Neither outranks a stated invariant, and the invariant's
+  // reason applies here exactly as it does to splitting a log: a player who has quarried a bag of
+  // rubble should not have to walk home before it is worth anything. If stations are ever to mean
+  // something, that is a deliberate pass over the whole table, not a side effect of adding a rock.
+  // No mana — cutting stone channels nothing. See the header on where mana is genuinely due.
+  { id: 'cut_stone', name: 'Cut Stone', station: 'hand', mana: 0,
+    input: [{ itemId: 'rubble', count: 2 }], output: { itemId: 'cut_stone', count: 1 } },
+
   // ── THE STATION ITSELF ──────────────────────────────────────────────────────────────────────
   // Craftable by hand, and it must stay that way: a crafting table gated behind a crafting table is
   // the bootstrap that cannot start. Canon has Greg gift one in the starter bag

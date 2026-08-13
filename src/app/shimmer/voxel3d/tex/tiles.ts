@@ -50,6 +50,10 @@ export const TILE_MATERIALS: number[] = [
   MAT.POT, MAT.POT_SEEDED, MAT.POT_BLOOM,
   // The chest added 2026-08-11 — the first block that holds something.
   MAT.CHEST,
+  // Rubble + cut stone added 2026-08-13 with the building grammar: what a quarried block gives you,
+  // and what you cut it into. ⚠ Appending here without a `paintFor` case below is how every tree
+  // once rendered as crystal — the switch's default IS the ore painter.
+  MAT.RUBBLE, MAT.CUT_STONE,
 ]
 
 /** One spare layer past the end: an unmapped material samples magenta rather than layer 0's stone. */
@@ -424,6 +428,34 @@ function paintLeaves(dst: Layer, size: number, base: [number, number, number], s
   }
 }
 
+/**
+ * Dressed stone — courses of blocks with a mortar line between them, offset row to row.
+ *
+ * ★ THE COURSE OFFSET IS THE WHOLE READ. A grid of squares is a texture; bricks that step half a
+ * block each row are unmistakably BUILT, and that is the one thing this tile has to say from
+ * across a garden. Each block takes its own slight tone so a wall does not read as wallpaper.
+ */
+function paintAshlar(dst: Layer, size: number, base: [number, number, number], seed: number) {
+  const mortar = shade(base, -34)
+  const rows = 4
+  const rh = size / rows
+  for (let y = 0; y < size; y++) {
+    const row = Math.floor(y / rh)
+    // Half-block stagger per row, which is what stops it reading as a grid.
+    const off = (row % 2) * (size / 4)
+    for (let x = 0; x < size; x++) {
+      const bx = Math.floor(((x + off) % size) / (size / 2))
+      const onCourse = Math.floor(y % rh) === 0
+      const onJoint = Math.floor((x + off) % (size / 2)) === 0
+      if (onCourse || onJoint) { put(dst, size, x, y, mortar); continue }
+      // One tone per block, so neighbouring stones differ slightly.
+      const tone = (h2(row, bx + row * 7, seed) - 0.5) * 22
+      const grit = (h2(x, y, seed + 5) - 0.5) * 2 * 5
+      put(dst, size, x, y, shade(base, tone + grit))
+    }
+  }
+}
+
 const LOG_SET = new Set<number>([WOOD.GOLDWOOD_LOG, WOOD.SHIMMEROAK_LOG, WOOD.STARWILLOW_LOG, WOOD.DAWNWOOD_LOG])
 const LEAF_SET = new Set<number>([WOOD.GOLDWOOD_LEAVES, WOOD.SHIMMEROAK_LEAVES, WOOD.STARWILLOW_LEAVES, WOOD.DAWNWOOD_LEAVES])
 
@@ -564,6 +596,14 @@ export function paintFor(material: number, face: number, size: number): Layer {
       else if (face === SIDE) paintGrassSide(dst, size, seed, MATERIAL_COLOR[MAT.GREY_SOIL])
       else paintGrit(dst, size, rgbOf(MATERIAL_COLOR[MAT.SUBSOIL]), 18, 22, seed)
       break
+    // ── ★ THE BUILDING GRAMMAR'S TWO STONES (2026-08-13) ────────────────────────────────────
+    // They must read apart ACROSS A ROOM, because the whole point of the ruling is that a player
+    // can see the difference between what they patched and what they built. So the split is in the
+    // SHAPE language, not the hue: rubble is loose rock — heavy speckle, big blotches, no
+    // structure — while cut stone is a dressed ASHLAR face with mortar courses, which is the one
+    // thing nothing else in the world draws.
+    case MAT.RUBBLE: paintRock(dst, size, rgbOf(MATERIAL_COLOR[material]), { speckle: 26, blotch: 30, vein: 0, seed }); break
+    case MAT.CUT_STONE: paintAshlar(dst, size, rgbOf(MATERIAL_COLOR[material]), seed); break
     case MAT.MANA_LANTERN: paintLantern(dst, size, seed); break
     // ── the pot, in three states ────────────────────────────────────────────────────────────
     // ⚠ Appended to TILE_MATERIALS above, so it NEEDS these cases: the switch's default is the ore

@@ -34,6 +34,14 @@ export const MATERIAL_COLOR: Record<number, number> = {
   // Desaturated on purpose — the greying IS desaturation (canon: grey is drained mana, and the
   // frayed edges gutter grey). An ashen green-grey, not a stone grey, so it still reads as ground.
   [MAT.GREY_SOIL]: 0x83887b,
+  // ── ★ THE BUILDING GRAMMAR'S STONE (2026-08-13) ──────────────────────────────────────────────
+  // Rubble reads BROKEN and cut stone reads WORKED, and they must not be told apart by hue: a
+  // player standing in a half-built wall needs to see at a glance which cells are the patch and
+  // which are the build. So they share stone's family and split on VALUE — rubble a shade darker
+  // and browner (dirt in the cracks), cut stone paler and cooler than raw stone, the way a dressed
+  // face is. ⚠ TBD-CANON on the names, like every other generic material in MAT.
+  [MAT.RUBBLE]: 0x6e6862,
+  [MAT.CUT_STONE]: 0x9aa0a4,
   [ORE.RAW_MANA]: 0x7fd4ff,
   [ORE.ELEMENT_VIOLET]: 0xa974ff,
   [ORE.ELEMENT_STORM]: 0xe8e46a,

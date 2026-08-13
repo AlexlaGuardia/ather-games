@@ -101,8 +101,11 @@ export const PIECES: PieceDef[] = [
     cost: [{ itemId: 'shimmeroak_plank', count: 4 }] },
 
   // Stairs are walkable by design — you stand ON them, so the occupied cell must not block you.
+  // ⚠ RE-PRICED 2026-08-13 with the building ruling: `block_stone` is no longer obtainable — raw
+  // stone stopped being placeable and now drops rubble — so this cost was pointing at an item
+  // nothing yields, i.e. an uncraftable piece. Cut stone is the same idea one refine further along.
   { id: 'stair', name: 'Stair', w: 1, h: 1, d: 1,
-    cost: [{ itemId: 'block_stone', count: 3 }],
+    cost: [{ itemId: 'cut_stone', count: 3 }],
     passable: [{ x: 0, y: 0, z: 0 }] },
 
   { id: 'beam', name: 'Beam', w: 1, h: 1, d: 1,

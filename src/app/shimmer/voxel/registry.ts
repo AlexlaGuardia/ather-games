@@ -90,8 +90,26 @@ export interface BlockDef {
  */
 export const BLOCKS: BlockDef[] = [
   { material: MAT.BEDROCK, name: 'Bedrock', hardness: Infinity, skill: null, minTier: 0, drops: [], placeable: false },
-  { material: MAT.DEEP_STONE, name: 'Deep Stone', hardness: 2.4, skill: 'prospecting', minTier: 1, drops: [{ itemId: 'block_deep_stone', count: 1 }], placeable: true },
-  { material: MAT.STONE, name: 'Stone', hardness: 1.6, skill: 'prospecting', minTier: 1, drops: [{ itemId: 'block_stone', count: 1 }], placeable: true },
+  // ── ★ QUARRIED STONE YIELDS RUBBLE, AND DOES NOT GO BACK (2026-08-13, Alex's ruling) ────────
+  // Both drop the SAME rubble on purpose: what a pick leaves behind is broken rock either way, and
+  // the tier lives in what it costs to BREAK them (hardness + minTier), which is where a player
+  // already feels it. Two rubbles would be two economies for one material.
+  // `placeable: false` is the whole ruling in one field — and it needs no other code, because
+  // `BY_ITEM` below only reverses PLACEABLE blocks, so `block_stone` simply stops resolving to a
+  // voxel. ⚠ `block_stone`/`block_deep_stone` are now unobtainable ids: anything that still asks
+  // for them is uncraftable, which is what `recipes.test.ts`'s reachability sweep is for.
+  { material: MAT.DEEP_STONE, name: 'Deep Stone', hardness: 2.4, skill: 'prospecting', minTier: 1, drops: [{ itemId: 'rubble', count: 1 }], placeable: false },
+  { material: MAT.STONE, name: 'Stone', hardness: 1.6, skill: 'prospecting', minTier: 1, drops: [{ itemId: 'rubble', count: 1 }], placeable: false },
+
+  // ★ RUBBLE IS THE FORGIVENESS VALVE — placeable, but only ever as rubble. A hole can be filled
+  // and the patch always shows, which is the honest middle between an irreversible scar and a
+  // perfect undo. Loose rock, so it is softer than the stone it came from and a bare hand can move
+  // it (`skill: null`); a spike is simply faster.
+  { material: MAT.RUBBLE, name: 'Rubble', hardness: 0.6, skill: null, minTier: 0, drops: [{ itemId: 'rubble', count: 1 }], fastSkill: 'prospecting', placeable: true },
+  // ★ AND CUT STONE IS THE WALL — the first CRAFTED surface, never generated and never dug. This
+  // is the rung the ruling needs that pieces alone cannot supply: doorways, fences and beams do
+  // not make a house without something to be the wall between them.
+  { material: MAT.CUT_STONE, name: 'Cut Stone', hardness: 1.5, skill: 'prospecting', minTier: 1, drops: [{ itemId: 'cut_stone', count: 1 }], placeable: true },
   { material: MAT.SUBSOIL, name: 'Subsoil', hardness: 0.5, skill: null, minTier: 0, drops: [{ itemId: 'block_subsoil', count: 1 }], fastSkill: 'farming', placeable: true },
   { material: MAT.TOPSOIL, name: 'Topsoil', hardness: 0.55, skill: null, minTier: 0, drops: [{ itemId: 'block_topsoil', count: 1 }], fastSkill: 'farming', placeable: true },
   { material: MAT.SAND, name: 'Sand', hardness: 0.45, skill: null, minTier: 0, drops: [{ itemId: 'block_sand', count: 1 }], fastSkill: 'farming', placeable: true },
