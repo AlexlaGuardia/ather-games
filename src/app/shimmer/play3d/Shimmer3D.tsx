@@ -17,7 +17,7 @@ import { ALL_ZONES } from '../world/all-zones'
 import { getHeightGrid } from '../world/heightmaps'
 import { GardenAtmosphere } from '../world/atmosphere'
 import { dayProgress, sunElevation, sunAzimuth, daylight, getPhase, getDisplayTime, CYCLE_MS, isTimePinned } from '../engine/day-cycle'
-import { currentWindow, nodeAlpha, zoneWindow, msUntilZoneReset, isBoardPinned, isFadeTest, fadeTestAlpha, slotKey, zoneBand, TIER_WEIGHTS, NOTHING_WEIGHT, FADE_OUT_MS, type DealtNode } from '../engine/spawn-board'
+import { WORLD_SEED, currentWindow, nodeAlpha, zoneWindow, msUntilZoneReset, isBoardPinned, isFadeTest, fadeTestAlpha, slotKey, zoneBand, TIER_WEIGHTS, NOTHING_WEIGHT, FADE_OUT_MS, type DealtNode } from '../engine/spawn-board'
 import { FloraTree, FloraDressing } from '../world/flora'
 import { StationProp, GhostProp } from '../world/prop-models'
 import { RemotePlayers, useRoster } from './RemotePlayers'
@@ -73,9 +73,12 @@ import type { AITier } from '../engine/battle-ai'
 import ArenaBattle from '../components/ArenaBattle'
 import PartyPanel from './PartyPanel'
 import HotBar from './HotBar'
-import { NPCS_3D, GREG_INTRO_LINES, GREG_NUDGE, GREG_RETURN, THISTLE_TAUNT_NO_SPIRIT, THISTLE_PREFIGHT, THISTLE_DEFEAT, FREED_SPIRIT_BEAT, VETCH_PREFIGHT, VETCH_DEFEAT, FREED_PAIR_BEAT, BRACK_PREFIGHT, BRACK_FINALE, type NPC3D } from './npcs3d'
+import { NPCS_3D, GREG_INTRO_LINES, GREG_NUDGE, GREG_RETURN, THISTLE_TAUNT_NO_SPIRIT, THISTLE_PREFIGHT, THISTLE_DEFEAT, FREED_SPIRIT_BEAT, VETCH_PREFIGHT, VETCH_DEFEAT, FREED_PAIR_BEAT, BRACK_PREFIGHT, BRACK_FINALE, TRADER_LINES, type NPC3D } from './npcs3d'
 import { useCloudSave } from '@/lib/use-cloud-save'
 import { useWallet } from '@/lib/use-wallet'
+import { keeperBook, saveBook } from './book'
+import { PassageRack } from './PassageRack'
+import { EMPTY_BOOK, type Book } from './scroll-market'
 import { StationMenus, type PlacedStruct, type StationKind } from './StationMenus'
 import { prettyItem, menuBtn, TOOL_HUD } from './ui'
 import { GfxPanel, FrameProbe, type FrameStats, type SaveStats } from './GfxPanel'
@@ -5168,6 +5171,19 @@ export default function Shimmer3D() {
   // sneers you off; with a bonded spirit → pre-fight swagger, then the Reach battle to free his captive.
   const talk = useCallback((npc: NPC3D) => {
     const hasSpirit = (partyRef.current?.length ?? 0) > 0
+    if (npc.id === 'passage-trader') {
+      // The rack opens when the lines finish — same shape as Thistle handing off to a battle, and
+      // the reason the dialogue ACTION system is not used: `openShop` exists in dialogue-schema.ts
+      // and the editor offers it, but NOTHING calls `consumeActions` anywhere in the tree, so every
+      // authored action is queued and dropped. Wiring the rack to it would have produced a trader
+      // who says his lines and opens nothing. (Recorded on GBOARD — that limb needs a decision.)
+      setDialogue({ name: 'A trader', lines: TRADER_LINES, idx: 0, onDone: () => {
+        battleRef.current = true       // freeze the walker while the rack is up, as stations do
+        openCursorUI()
+        setRackOpen(Date.now())
+      } })
+      return
+    }
     if (npc.id === 'gregory') {
       if (!hasSpirit) setDialogue({ name: 'Gregory', lines: [...GREG_INTRO_LINES, GREG_NUDGE], idx: 0, grantAt: GREG_INTRO_LINES.length, onDone: () => {} })
       else setDialogue({ name: 'Gregory', lines: [GREG_RETURN], idx: 0, onDone: () => {} })
@@ -5256,8 +5272,15 @@ export default function Shimmer3D() {
   // re-validates every bind against the runes held NOW. That last part is what keeps this call site
   // correct on a rune change: a move whose rune just went away comes back null rather than staying
   // bound, which is exactly the drop this function already promises for stances.
+  /** What this keeper has LEARNED. Re-read by `applyLoadout`; written by a Passage purchase. */
+  const bookRef = useRef<Book>(EMPTY_BOOK)
+  /** The scroll rack, open. Holds the instant it opened so the stock cannot rotate under the cursor. */
+  const [rackOpen, setRackOpen] = useState<number | null>(null)
   const applyLoadout = useCallback(() => {
-    castLoadoutRef.current = loadLoadout(runeInvRef.current.owned)
+    // The book is re-read here rather than held from mount: this runs on every rune change, and a
+    // scroll bought in the Passage between two rune changes must be in hand by the next resolve.
+    bookRef.current = keeperBook(runeInvRef.current.owned)
+    castLoadoutRef.current = loadLoadout(runeInvRef.current.owned, bookRef.current)
     castCdRef.current = CAST_SLOTS.map(() => 0)
     stanceRef.current = null; resistRef.current = 0; castMultRef.current = 1; stanceMoveRef.current = 1
     surgeRef.current = { until: 0, mult: 1 }; infusionRef.current = { until: 0, mult: 1 }
@@ -5282,7 +5305,7 @@ export default function Shimmer3D() {
         const rn = RUNES.find(r => r.id === bornWith)?.name ?? 'your rune'
         // Half the carousel currently opens a book with no move the sim can run — that is the real
         // authoring gap (moves.md), so the banner tells the truth instead of promising a cast.
-        const bound = loadLoadout(inv.owned).filter((m) => m && isBuilt(m)).length
+        const bound = loadLoadout(inv.owned, bookRef.current).filter((m) => m && isBuilt(m)).length
         const castHint = bound > 0 ? ` · ${bound} move${bound > 1 ? 's' : ''} in hand (G/Z/X/C)` : ''
         setBanner(`Born of ${rn} — ${affinityRef.current.label || 'find Gregory in the glade'}${castHint}`)
       }
@@ -6621,7 +6644,7 @@ export default function Shimmer3D() {
             const rn = RUNES.find(r => r.id === id)?.name ?? 'your rune'
             // Half the carousel currently opens a book with no move the sim can run — that is the real
             // authoring gap (moves.md), so the banner tells the truth instead of promising a cast.
-            const bound = loadLoadout(inv.owned).filter((m) => m && isBuilt(m)).length
+            const bound = loadLoadout(inv.owned, keeperBook(inv.owned)).filter((m) => m && isBuilt(m)).length
             const castHint = bound > 0 ? ` · ${bound} move${bound > 1 ? 's' : ''} in hand (G/Z/X/C)` : ''
             setBanner(`Born of ${rn} — ${affinityRef.current.label || 'find Gregory in the glade'}${castHint}`)
           }}
@@ -7039,6 +7062,25 @@ export default function Shimmer3D() {
         tradeSell={tradeSell} tradeBuy={tradeBuy}
         harvestAt={harvestAt} plantAt={plantAt}
       />
+
+      {rackOpen !== null && (
+        <PassageRack
+          seed={WORLD_SEED}
+          nowMs={rackOpen}
+          book={bookRef.current}
+          marks={wallet.marks}
+          ownedRunes={runeInvRef.current.owned}
+          onBuy={(book, spent) => {
+            bookRef.current = book
+            saveBook(book)
+            wallet.spend(spent)
+            // Re-resolve immediately: a scroll you just bought must be bindable without a reload,
+            // and `applyLoadout` re-reads the book by design.
+            applyLoadout()
+          }}
+          onClose={() => { setRackOpen(null); battleRef.current = false; closeCursorUI() }}
+        />
+      )}
 
       {battle && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 50, background: '#0a0a12' }}>

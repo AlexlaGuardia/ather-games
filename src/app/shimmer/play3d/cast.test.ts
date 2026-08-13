@@ -15,8 +15,15 @@
 //       rather than stack, and a death clears its target
 //   7. the birth rune is rune #1 of an inventory and can never be revoked
 
-import { KEEPER_MOVES } from './keeper-moves'
 import { castForMove, isBuilt, defaultLoadout, eligibleMoves, canSlot, CAST_SLOTS, SLOT_KEYS, NO_CAST } from './cast'
+import { KEEPER_MOVES } from './keeper-moves'
+import { EMPTY_BOOK, type Book } from './scroll-market'
+
+// A keeper who has learned everything. These asserts are about the RUNE→slot chain, so the book is
+// held wide open on purpose — the book's own gate is asserted at the end of this section and in
+// scroll-market.test.ts. ⚠ Do not "simplify" this into cast.ts as a default: an optional book is
+// how the old, wrong answer (runes alone grant moves) would creep back in.
+const ALL: Book = { learned: KEEPER_MOVES.map((m) => m.id) }
 import { grantRune, revokeRune, setBirthRune, EMPTY_INVENTORY } from './rune-inventory'
 import { spawnField, tickFields, expireFields, contains, blocksShotAt, resetFieldIds, MAX_FIELDS, type Field } from './field-effects'
 import { wallCells, ringCells, blockCells, conjure, blockedAt, liveCells, expireConjured, resetConjuredIds } from './conjured-terrain'
@@ -184,28 +191,42 @@ const chk = (n: string, c: boolean, x = '') => { c ? ok++ : (bad++, console.erro
     JSON.stringify(CAST_SLOTS) === JSON.stringify(['passive', 'tactical', 'tactical', 'ultimate']))
   chk('one distinct key per slot', SLOT_KEYS.length === CAST_SLOTS.length && new Set(SLOT_KEYS).size === SLOT_KEYS.length)
 
-  const life = defaultLoadout(['life'])
+  const life = defaultLoadout(['life'], ALL)
   chk('a Life-born keeper slots Mend', life.includes('mend'))
   chk('...and has no passive to hold (Life registers none)', life[0] === null)
   chk('...and no ultimate (Healing Grove also needs Barrier)', life[3] === null)
 
-  const lo = defaultLoadout(['barrier']).filter(Boolean)
+  const lo = defaultLoadout(['barrier'], ALL).filter(Boolean)
   chk('never slots the same move twice', new Set(lo).size === lo.length)
   chk('an empty book yields an empty loadout, not a crash',
-    JSON.stringify(defaultLoadout([])) === JSON.stringify([null, null, null, null]))
+    JSON.stringify(defaultLoadout([], ALL)) === JSON.stringify([null, null, null, null]))
 
   // Star owns Firewall + Flame Infusion (both unbuilt); adding Freeze must surface Ice Dart first
-  chk('prefers a move the sim can actually run', isBuilt(eligibleMoves(['star', 'freeze'], 'tactical')[0].id))
+  chk('prefers a move the sim can actually run', isBuilt(eligibleMoves(['star', 'freeze'], 'tactical', ALL)[0].id))
 
-  chk('rejects a move whose runes you do not own', !canSlot(['life'], 1, 'ice-dart'))
-  chk('rejects a tier/slot mismatch (Mend is tactical, slot 0 is the passive)', !canSlot(['life'], 0, 'mend'))
-  chk('accepts a legal bind', canSlot(['life'], 1, 'mend'))
+  chk('rejects a move whose runes you do not own', !canSlot(['life'], 1, 'ice-dart', ALL))
+  chk('rejects a tier/slot mismatch (Mend is tactical, slot 0 is the passive)', !canSlot(['life'], 0, 'mend', ALL))
+  chk('accepts a legal bind', canSlot(['life'], 1, 'mend', ALL))
+
+  // ── ★ THE BOOK GATES THE SLOT (2026-08-13) ───────────────────────────────────────────────────
+  // Carrying the rune is no longer enough — canon rules a move is OBTAINED, and the rune is the
+  // filter on the scroll rather than the source of the move. If this pair ever disagrees, the
+  // Passage has nothing to sell and the whole scroll economy is decoration.
+  chk('★ a move you have not learned cannot be bound, even holding its rune',
+    !canSlot(['life'], 1, 'mend', EMPTY_BOOK))
+  chk('★ an unlearned move is not eligible for its slot either',
+    eligibleMoves(['life'], 'tactical', EMPTY_BOOK).length === 0)
+  chk('★ and a keeper with an empty book gets an empty starting kit',
+    JSON.stringify(defaultLoadout(['life', 'barrier'], EMPTY_BOOK)) === JSON.stringify([null, null, null, null]))
+  chk('★ learning just that one move opens exactly it',
+    canSlot(['life'], 1, 'mend', { learned: ['mend'] }) &&
+    eligibleMoves(['life'], 'tactical', { learned: ['mend'] }).length === 1)
 }
 
 // 6. a 2nd rune opens the cross-hatch
 {
-  chk('Life alone does not reach Healing Grove', !defaultLoadout(['life']).includes('healing-grove'))
-  chk('Life + Barrier does', defaultLoadout(['life', 'barrier']).includes('healing-grove'))
+  chk('Life alone does not reach Healing Grove', !defaultLoadout(['life'], ALL).includes('healing-grove'))
+  chk('Life + Barrier does', defaultLoadout(['life', 'barrier'], ALL).includes('healing-grove'))
 }
 
 // 7. the rune inventory

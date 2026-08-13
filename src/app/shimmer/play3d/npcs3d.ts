@@ -30,6 +30,26 @@ export const NPCS_3D: NPC3D[] = [
   // TODO(hold-placement): canon home is the `brack-hold` zone (via vetch-hold's gated east door).
   // Parked at the south end of mana-springs (65,92) because brack-hold isn't baked in 3D yet — move here.
   { id: 'brack', name: 'Brack', zone: 'mana-springs', tileX: 65, tileY: 92, color: '#5a4632', kind: 'moglin', requiredFlag: 'freedVetch', defeatedFlag: 'freedBrack' },
+  // ── The Passage's trader (2026-08-13) — the face of the scroll rack ──────────────────────────
+  // Canon (`world/rune-hold.md` § The Passage): traders take ROTATING spots, "one leaves, another
+  // takes their place. No permanent claims." So this is deliberately not a character: one id, one
+  // table, and the stock under it turns over with the day (`scroll-market.ts`). The person you meet
+  // is whoever is holding that spot this cycle, which is exactly what canon describes.
+  //
+  // ⚠ NAMED FOR THE ROLE, NOT THE PERSON — "a trader" is the canon-safe version. Giving them a name
+  // and a history would be authoring a Passage character, which is Magii's, not mine. The colour is
+  // a placeholder the same way voxel-Greg's boxes are; the look is Alex's call when the Passage gets
+  // its real interior (which is CONTINUOUS geometry, not this tile shell — see GBOARD).
+  { id: 'passage-trader', name: 'A trader', zone: 'the-passage', tileX: 12, tileY: 9, color: '#c9a05a', kind: 'keeper' },
+]
+
+// ── The trader's lines. Canon's register for the place: "if you know, you know" — no pitch, no
+// welcome, no explanation of the rules to someone who is standing in a place you only reach by
+// being shown. The rule the player needs (the rune gates the scroll) is stated as a shrug.
+export const TRADER_LINES: string[] = [
+  'You came down the back way, so somebody vouched. Fine.',
+  'Technique only. Nobody here sells you a rune, and anyone who says otherwise is selling you paper.',
+  'What you can read is what you already are. Look for yourself.',
 ]
 
 // ── Region clones (2026-08-01, the walkability pass): every NPC keyed to a legacy zone a

@@ -135,6 +135,7 @@ import { RUNES } from '../play3d/birth/runes.data'
 import { knownMoves, learnableMoves, MOVES_BY_RUNE } from '../play3d/keeper-moves'
 import { CAST_SLOTS, eligibleMoves, isBuilt, castForMove } from '../play3d/cast'
 import { loadLoadout, saveLoadout, setSlot, type Loadout } from '../play3d/loadout'
+import { keeperBook } from '../play3d/book'
 import { applyFightResult } from '../engine/spirit-health'
 import type { BattleResult } from '../engine/arena'
 import { createFloraRenderer } from './flora-mesh'
@@ -1000,7 +1001,7 @@ export default function VoxelWorld() {
       const report = (held: string[], lead: string) => {
         const names = held.map(id => RUNES.find(r => r.id === id)?.name ?? id)
         const moves = knownMoves(held)
-        const bound = loadLoadout(held).filter(Boolean).length
+        const bound = loadLoadout(held, keeperBook(held)).filter(Boolean).length
         const tail = moves.length === 0
           ? 'no move answers to it yet — the Schools have not written one'
           : `${moves.length} move${moves.length === 1 ? '' : 's'} known · ${bound}/4 cast slot${bound === 1 ? '' : 's'} bound`
@@ -2003,11 +2004,15 @@ function ToolsTab({ tools, skills }: {
  */
 function LoadoutTab() {
   const [owned] = useState(() => loadRuneInventory().owned)
-  const [slots, setSlots] = useState<Loadout>(() => loadLoadout(owned))
+  // The book is read ONCE per mount alongside the runes: both are the keeper's identity as of the
+  // moment this panel opened, and a slot list that re-derived mid-interaction would change its
+  // options under the cursor.
+  const [book] = useState(() => keeperBook(owned))
+  const [slots, setSlots] = useState<Loadout>(() => loadLoadout(owned, book))
   const [picking, setPicking] = useState<number | null>(null)
 
   const bind = (slot: number, moveId: string | null) => {
-    const next = setSlot(owned, slots, slot, moveId)
+    const next = setSlot(owned, slots, slot, moveId, book)
     setSlots(next)
     saveLoadout(next)
     setPicking(null)
@@ -2023,7 +2028,7 @@ function LoadoutTab() {
         const bound = slots[i] ?? null
         const spec = bound ? castForMove(bound) : null
         const open = picking === i
-        const options = eligibleMoves(owned, kind)
+        const options = eligibleMoves(owned, kind, book)
         return (
           <div key={i} className="rounded border border-white/10 bg-white/[0.03]">
             <button type="button" onPointerDown={() => setPicking(open ? null : i)}
@@ -3421,7 +3426,7 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
   const stance = useRef<CastSpec | null>(null)
   const surge = useRef<{ until: number; mult: number } | null>(null)
   const infusion = useRef<{ until: number; mult: number } | null>(null)
-  const loadout = useRef<(string | null)[]>(loadLoadout(loadRuneInventory().owned))
+  const loadout = useRef<(string | null)[]>(loadLoadout(loadRuneInventory().owned, keeperBook(loadRuneInventory().owned)))
   /**
    * The rune inventory changed (today only `/rune`; tomorrow the Passage). Re-resolve rather than
    * patch: `loadLoadout` re-validates every bind against what is now owned, so a dropped rune takes
@@ -3432,7 +3437,7 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
   useEffect(() => {
     if (runeTickSeen.current === runeTick) return
     runeTickSeen.current = runeTick
-    loadout.current = loadLoadout(loadRuneInventory().owned)
+    loadout.current = loadLoadout(loadRuneInventory().owned, keeperBook(loadRuneInventory().owned))
   }, [runeTick])
   /**
    * ★ WHAT THIS WORLD CAN ACTUALLY LAND, DECLARED RATHER THAN IMPLIED.

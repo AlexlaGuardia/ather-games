@@ -10,6 +10,7 @@
 // so there is one definition of legality and this file cannot drift from it.
 
 import { CAST_SLOTS, canSlot, defaultLoadout } from './cast'
+import type { Book } from './scroll-market'
 
 export const LOADOUT_KEY = 'ather:shimmer:loadout'
 
@@ -34,28 +35,41 @@ export type Loadout = (string | null)[]
  * does nothing, which is precisely the "cast is broken" report `cast.ts`'s honesty rule was written
  * to prevent.
  */
-export function loadLoadout(owned: string[]): Loadout {
+export function loadLoadout(owned: string[], book: Book): Loadout {
   let raw: string | null = null
   try {
     raw = localStorage.getItem(LOADOUT_KEY)
   } catch {
-    return defaultLoadout(owned)  // private mode — a keeper who cannot save still gets a kit
+    return defaultLoadout(owned, book)  // private mode — a keeper who cannot save still gets a kit
   }
-  if (!raw) return defaultLoadout(owned)
+  if (!raw) return defaultLoadout(owned, book)
 
   let saved: unknown
   try {
     saved = JSON.parse(raw)
   } catch {
-    return defaultLoadout(owned)  // corrupt JSON reads as "never chosen", not as an empty loadout
+    return defaultLoadout(owned, book)  // corrupt JSON reads as "never chosen", not as an empty loadout
   }
-  if (!Array.isArray(saved)) return defaultLoadout(owned)
+  if (!Array.isArray(saved)) return defaultLoadout(owned, book)
 
   return CAST_SLOTS.map((_, i) => {
     const id = saved[i]
     if (typeof id !== 'string') return null
-    return canSlot(owned, i, id) ? id : null
+    return canSlot(owned, i, id, book) ? id : null
   })
+}
+
+/**
+ * The saved loadout EXACTLY as stored — no validation, no default. Exists for one caller: the book
+ * migration, which must seed from what the keeper literally had bound. `loadLoadout` cannot serve
+ * it, because validating a bind now requires a book and the book is what we are building.
+ */
+export function rawLoadout(): (string | null)[] {
+  try {
+    const saved: unknown = JSON.parse(localStorage.getItem(LOADOUT_KEY) ?? 'null')
+    if (!Array.isArray(saved)) return []
+    return saved.map((id) => (typeof id === 'string' ? id : null))
+  } catch { return [] }
 }
 
 export function saveLoadout(slots: Loadout): void {
@@ -73,9 +87,9 @@ export function saveLoadout(slots: Loadout): void {
  * that are secretly one. `defaultLoadout` already refuses duplicates for the same reason, so
  * allowing them here would make hand-picking worse than the automatic kit.
  */
-export function setSlot(owned: string[], slots: Loadout, slot: number, moveId: string | null): Loadout {
+export function setSlot(owned: string[], slots: Loadout, slot: number, moveId: string | null, book: Book): Loadout {
   if (slot < 0 || slot >= CAST_SLOTS.length) return slots
-  if (moveId !== null && !canSlot(owned, slot, moveId)) return slots
+  if (moveId !== null && !canSlot(owned, slot, moveId, book)) return slots
   const next = CAST_SLOTS.map((_, i) => (i === slot ? moveId : (slots[i] ?? null)))
   if (moveId !== null) {
     for (let i = 0; i < next.length; i++) if (i !== slot && next[i] === moveId) next[i] = null

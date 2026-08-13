@@ -209,6 +209,23 @@ export function buy(
 // ── seeding an existing keeper ──────────────────────────────────────────────────────────────────
 
 /**
+ * Gregory's gift, resolved against the keeper's own runes rather than fixed. A single hardcoded
+ * starter would be unreadable for most keepers (canon: the rune gates the scroll), so it would be
+ * ceremony that hands over a move nobody can cast.
+ *
+ * ⚠ Returns undefined for a keeper whose runes open NOTHING — 7 of the 17 birthable runes carry
+ * their moves on the spirit-kits shelf, which a keeper never learns from. That is a content gap in
+ * the registry, not a bug here, and the honest answer is an empty book rather than a fake move.
+ */
+export function starterFor(ownedRunes: readonly string[]): string | undefined {
+  const mine = TRADE_POOL.filter((m) => canRead(m, ownedRunes))
+  // A TACTICAL first, deliberately: Z and X are the keys a keeper reaches for, and a starter that
+  // only fills the passive slot leaves the two throw keys dead — which is the complaint this whole
+  // feature exists to answer. Falls back to a passive when the runes open nothing to throw.
+  return (mine.find((m) => m.tier === 'tactical') ?? mine[0])?.id
+}
+
+/**
  * ★ THE MIGRATION, and it is a design decision rather than a data one. Every keeper alive today was
  * built under "your runes ARE your moves", so switching to a learned set would strip them silently —
  * the worst possible first contact with a feature that is supposed to GIVE you moves.

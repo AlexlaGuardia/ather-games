@@ -27,6 +27,7 @@
 // asserts full coverage, so a newly authored canon move cannot slip through unclassified.
 
 import { KEEPER_MOVES, type KeeperMove, type MoveTier, knownMoves } from './keeper-moves'
+import { hasLearned, type Book } from './scroll-market'
 import type { ConjureShape } from './conjured-terrain'
 import type { StatusKind } from './statuses'
 
@@ -198,9 +199,22 @@ export const CAST_SLOTS: readonly SlotKind[] = ['passive', 'tactical', 'tactical
 /** keyboard bind per slot, in slot order. G holds the stance; Z/X throw tacticals; C is the signature. */
 export const SLOT_KEYS: readonly string[] = ['g', 'z', 'x', 'c'] as const
 
-/** Moves the keeper can run right now that fit a slot kind. Built ones first — the rest are honest but dead. */
-export function eligibleMoves(owned: string[], kind: SlotKind): KeeperMove[] {
-  const known = knownMoves(owned).filter((m) => m.tier === kind)
+/**
+ * Moves the keeper can run right now that fit a slot kind. Built ones first — the rest are honest
+ * but dead.
+ *
+ * ── ★ THE BOOK IS REQUIRED, AND IT IS REQUIRED ON PURPOSE (2026-08-13) ────────────────────────
+ * This used to ask the runes alone, which quietly asserted that holding a rune teaches you every
+ * technique ever written in it. Canon rules the opposite (`game/moves.md` › "How a Move Is
+ * OBTAINED"): a rune is identity, a move is somebody's application of it, and the rune is the
+ * FILTER on a scroll rather than the source of the move. `scroll-market.ts` has the full argument.
+ *
+ * The parameter is NOT optional. An optional book would default every un-updated call site back to
+ * the old, wrong answer — silently, and only in the places nobody remembered to change. Required
+ * means the compiler walks the call sites for me, which is the whole reason to take the churn.
+ */
+export function eligibleMoves(owned: string[], kind: SlotKind, book: Book): KeeperMove[] {
+  const known = knownMoves(owned).filter((m) => m.tier === kind && hasLearned(book, m.id))
   return [...known].sort((a, b) => Number(isBuilt(b.id)) - Number(isBuilt(a.id)))
 }
 
@@ -209,18 +223,18 @@ export function eligibleMoves(owned: string[], kind: SlotKind): KeeperMove[] {
  * actually run, and never the same move twice. Slots with nothing to put in them stay null — an
  * empty ultimate slot is the coverage gap rendered, not a bug.
  */
-export function defaultLoadout(owned: string[]): (string | null)[] {
+export function defaultLoadout(owned: string[], book: Book): (string | null)[] {
   const used = new Set<string>()
   return CAST_SLOTS.map((kind) => {
-    const pick = eligibleMoves(owned, kind).find((m) => !used.has(m.id))
+    const pick = eligibleMoves(owned, kind, book).find((m) => !used.has(m.id))
     if (pick) used.add(pick.id)
     return pick?.id ?? null
   })
 }
 
-/** Is this move legal in this slot? Slot kind must match the move's tier, and you must own its runes. */
-export function canSlot(owned: string[], slot: number, moveId: string): boolean {
+/** Legal in this slot? The tier must match, you must own its runes, AND you must have learned it. */
+export function canSlot(owned: string[], slot: number, moveId: string, book: Book): boolean {
   const kind = CAST_SLOTS[slot]
   if (!kind) return false
-  return eligibleMoves(owned, kind).some((m) => m.id === moveId)
+  return eligibleMoves(owned, kind, book).some((m) => m.id === moveId)
 }
