@@ -26,6 +26,19 @@ const ok = (c: boolean, m: string) => { if (c) pass++; else fails.push(m) }
     + 'player with two chests never sees it')
 }
 
+// ── 1b. the bench is a thing you USE (2026-08-13, the workshop pass) ────────────────────────────
+// Stated separately from the sweep below because the failure has its own flavour: a player standing
+// at his bench is very often holding more planks, and a plank is what a bench is MADE of. So the
+// hand that most wants to open a table is exactly the hand that would have placed a second one.
+{
+  ok(rightClickIntent(MAT.CRAFT_TABLE, null, false) === 'work',
+    'an empty hand at a crafting table opens its job')
+  ok(rightClickIntent(MAT.CRAFT_TABLE, 'crafting_table', false) === 'work',
+    'holding ANOTHER crafting table opens the one you aimed at rather than stacking a second')
+  ok(rightClickIntent(MAT.CRAFT_TABLE, 'goldwood_plank', false) === 'work',
+    'and a fistful of planks does not turn the bench into a floor tile')
+}
+
 // ── 2. use beats place, for every usable block ──────────────────────────────────────────────────
 // The rule that makes a usable block usable: a full hand must never turn USE into PLACE, or the
 // block in your hand lands on the thing you were trying to interact with.
@@ -68,6 +81,7 @@ const ok = (c: boolean, m: string) => { if (c) pass++; else fails.push(m) }
 {
   const usable: Array<[number, string]> = [
     [MAT.CHEST, 'open'], [MAT.POT_SEEDED, 'peek'], [MAT.POT_BLOOM, 'harvest'],
+    [MAT.CRAFT_TABLE, 'work'],
   ]
   for (const [mat, want] of usable) {
     ok(rightClickIntent(mat, 'block_stone', false) === want && rightClickIntent(mat, null, false) === want,

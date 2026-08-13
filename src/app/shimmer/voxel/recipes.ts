@@ -44,6 +44,27 @@ export interface RecipeDef {
   input: { itemId: string; count: number }[]
   /** Produced. One stack out per recipe; a recipe wanting two outputs is two recipes. */
   output: { itemId: string; count: number }
+  /**
+   * ★ WHAT THIS RUN PAYS WHEN A STATION RUNS IT UNATTENDED (`voxel/workshop.ts`). Absent = the same
+   * as `output.count`, i.e. no bonus.
+   *
+   * It exists because the obvious design for a working station does not survive contact: hand
+   * crafting is instant, free and unlimited, so "the bench does it slowly while you're away" is
+   * worth *nothing* — every run it performs is one you could have clicked faster. A station needs a
+   * reason to exist that a click cannot beat, and the honest one is the fiction: a bench splits a
+   * log cleanly, a blade across your thigh wastes half the wood.
+   *
+   * ⚠ THIS IS NOT A GATE AND MUST NEVER BECOME ONE. Every recipe stays hand-makeable anywhere —
+   * `recipes.test.ts` asserts it and the header above says why. What a station sells is efficiency,
+   * never access. A player refining in the field is making a fair trade (I need it now, my bag is
+   * full), and the craft panel prints both numbers so it is a decision rather than a trap.
+   *
+   * ⚠ ONLY ON TAKING A LOG APART. Extraction is what a bench does better. Assembly is not
+   * (`planking` is two planks nailed together — a bench does not conjure a third), and `cut_stone`
+   * is deliberately excluded: its 2:1 loss is the dial that makes a quarry a real trip, and a mill
+   * quietly erasing it would overturn that ruling as a side effect of a different feature.
+   */
+  milled?: number
   station: Station
   /**
    * ★ MANA IS CHARGED ONLY WHERE MANA IS ACTUALLY CHANNELLED.
@@ -69,25 +90,25 @@ export interface RecipeDef {
  */
 export const RECIPES: RecipeDef[] = [
   // Goldwood — the day-one tree. Tier-1 forestry.
-  { id: 'goldwood_planks', name: 'Goldwood Planks', station: 'hand', mana: 0,
+  { id: 'goldwood_planks', name: 'Goldwood Planks', milled: 6, station: 'hand', mana: 0,
     input: [{ itemId: 'goldwood_log', count: 1 }], output: { itemId: 'goldwood_plank', count: 4 } },
-  { id: 'goldwood_bark', name: 'Strip Goldwood Bark', station: 'hand', mana: 0,
+  { id: 'goldwood_bark', name: 'Strip Goldwood Bark', milled: 3, station: 'hand', mana: 0,
     input: [{ itemId: 'goldwood_log', count: 1 }], output: { itemId: 'goldwood_bark', count: 2 } },
 
   // Shimmeroak — tier-2 forestry. Sap is tapped from the log, not rolled off a node.
-  { id: 'shimmeroak_planks', name: 'Shimmeroak Planks', station: 'hand', mana: 0,
+  { id: 'shimmeroak_planks', name: 'Shimmeroak Planks', milled: 6, station: 'hand', mana: 0,
     input: [{ itemId: 'shimmeroak_log', count: 1 }], output: { itemId: 'shimmeroak_plank', count: 4 } },
-  { id: 'amber_sap', name: 'Tap Amber Sap', station: 'hand', mana: 0,
+  { id: 'amber_sap', name: 'Tap Amber Sap', milled: 3, station: 'hand', mana: 0,
     input: [{ itemId: 'shimmeroak_log', count: 1 }], output: { itemId: 'amber_sap', count: 2 } },
 
   // Starwillow — tier-3 forestry. The branch is the structural piece here, not a plank.
-  { id: 'starwillow_branches', name: 'Starwillow Branches', station: 'hand', mana: 0,
+  { id: 'starwillow_branches', name: 'Starwillow Branches', milled: 6, station: 'hand', mana: 0,
     input: [{ itemId: 'starwillow_log', count: 1 }], output: { itemId: 'starwillow_branch', count: 4 } },
-  { id: 'starwillow_sap', name: 'Tap Starwillow Sap', station: 'hand', mana: 0,
+  { id: 'starwillow_sap', name: 'Tap Starwillow Sap', milled: 3, station: 'hand', mana: 0,
     input: [{ itemId: 'starwillow_log', count: 1 }], output: { itemId: 'starwillow_sap', count: 2 } },
 
   // Dawnwood — the deep-forest tree. No tool tier claims it yet; it is building timber.
-  { id: 'dawnwood_planks', name: 'Dawnwood Planks', station: 'hand', mana: 0,
+  { id: 'dawnwood_planks', name: 'Dawnwood Planks', milled: 6, station: 'hand', mana: 0,
     input: [{ itemId: 'dawnwood_log', count: 1 }], output: { itemId: 'dawnwood_plank', count: 4 } },
 
   // ── ★ STONE: RUBBLE → CUT STONE (2026-08-13) ────────────────────────────────────────────────

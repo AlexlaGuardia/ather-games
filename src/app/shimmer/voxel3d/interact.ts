@@ -26,6 +26,16 @@ import { MAT } from '../voxel/depth'
 export type Intent =
   /** A container: hand it upward and open the panel. */
   | 'open'
+  /**
+   * A station: open its standing job (`voxel/workshop.ts`).
+   *
+   * ★ SEPARATE FROM `'open'` ON PURPOSE, though both raise a panel. A container answers "what is
+   * inside"; a station answers "what are you working on" — different panels, different verbs, and
+   * folding them into one intent would mean the host has to re-derive which it meant from the
+   * material it just handed in. The one thing they share is that neither may be built on by the
+   * same click that uses it, which is what this whole function is for.
+   */
+  | 'work'
   /** Bury the Mana Seed in your hand. */
   | 'plant'
   /** Ask a seeded pot how far along it is. */
@@ -48,6 +58,10 @@ export function rightClickIntent(aimed: number, selItem: string | null, holdsSee
   // USE is answered FIRST, always. A block you use must not have the block in your hand dropped
   // onto it by the same click that uses it.
   if (aimed === MAT.CHEST) return 'open'
+  // ⚠ A BENCH WITH A PLANK IN YOUR HAND MUST STILL OPEN, not stack a second bench onto it. This is
+  // the same trap the chest fell into from the other side: the table is the block you are most
+  // likely to be holding more of while standing at it.
+  if (aimed === MAT.CRAFT_TABLE) return 'work'
   if (aimed === MAT.POT && selItem === 'mana_seed' && holdsSeed) return 'plant'
   if (aimed === MAT.POT_SEEDED) return 'peek'
   if (aimed === MAT.POT_BLOOM) return 'harvest'

@@ -43,6 +43,20 @@ export interface ColumnSave {
    * block near it happens to change. Optional so every pre-pass save loads unchanged.
    */
   chests?: Record<string, unknown[]>
+  /**
+   * ★ STATION JOBS (2026-08-13, the workshop pass), keyed `"x,y,z"` in WORLD coordinates.
+   *
+   * Here for the chest's reason exactly, not the pot's: a job HOLDS GOODS. Its input is already out
+   * of the player's bag and its finished output is sitting inside the block, so the block and the
+   * job have to arrive and leave in one transaction — split across two stores, a refresh landing
+   * between the loads is a stack of logs deleted. The pot can live in a global sidecar because all
+   * it stores is a timestamp; losing one costs four minutes, not a satchel.
+   *
+   * ⚠ Same dirty-marking caveat as `chests`: loading or collecting a job does not go through
+   * `setVoxel`, so the host marks the column itself or a station's work is only written down when
+   * some block near it happens to change.
+   */
+  jobs?: Record<string, unknown>
 }
 
 const DB = 'shimmer-voxel'
