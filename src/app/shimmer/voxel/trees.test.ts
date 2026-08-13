@@ -7,7 +7,7 @@
 import { AIR, Section } from './section'
 import { MAT } from './depth'
 import { SECTION, makeColumn } from './column'
-import { WOOD, SPECIES, treeStartsAt, treeScanRadius, DEFAULT_TREES, growTree } from './trees'
+import { WOOD, SPECIES, treeStartsAt, treeScanRadius, DEFAULT_TREES, growTree, crownAt } from './trees'
 import { columnHeight } from './height'
 import { breakSeconds, blockDef } from './registry'
 
@@ -341,6 +341,69 @@ for (let i = 0; SITES.length < 40 && i < 4000; i++) {
   // and the deletion mutation goes red — which is the whole reason this assert exists.
   ok(sum / trees > 0.48,
     `★ foliage hangs down the trunk, not just over it (${(sum / trees * 100).toFixed(0)}% of mass below centre)`)
+}
+
+// ── 13. ★ `crownAt` AGREES WITH THE CANOPY THE GENERATOR ACTUALLY GREW ───────────────────────
+// `crownAt` exists so something outside the generator (the smooth-canopy renderer) can know where
+// the foliage is without growing it. That makes it a SECOND SOURCE OF TRUTH about the same shape,
+// and the whole file's history is other people's second sources quietly drifting.
+//
+// The failure it guards is nasty precisely because it is plausible: pass the rng's derived seed
+// instead of the raw one, or forget that the centre is `top - 1`, and you get a perfectly
+// well-formed crown hanging beside or above the tree it belongs to. Nothing throws. So: grow the
+// tree for real, then check every lobe `crownAt` reports is actually sitting in leaves.
+{
+  const S = 64, CENTRE = 32, GROUND = 20
+  let checked = 0, adrift = 0, worstMiss = ''
+  for (const sp of SPECIES) {
+    for (let h = sp.minHeight; h <= sp.maxHeight; h++) {
+      for (let k = 0; k < 8; k++) {
+        const start = { x: CENTRE, z: CENTRE, species: sp, height: h, seed: (k * 69069 + h * 31) | 0 }
+        const stack = [new Section(S), new Section(S), new Section(S)]
+        const c = { sections: stack, ox: 0, oy0: 0, oz: 0, size: S, yTop: 3 * S }
+        growTree(c, start, GROUND)
+        // ⚠ EVERY species must be describable now, layered and forking included. This assert used
+        // to demand `null` for those two — correct while only the blob placer had a layout, and
+        // immediately wrong once the tier stack and the fork limbs came off the rng stream too. A
+        // renderer that covers 84% of the forest leaves the other 16% bare, which is not a spike,
+        // it is a bug with a flag on it.
+        const crown = crownAt(start, GROUND)
+        if (!crown) { adrift++; worstMiss = `${sp.id} h${h} returned null`; continue }
+        for (const lo of crown.lobes) {
+          const x = crown.x + lo.dx, y = crown.y + lo.dy, z = crown.z + lo.dz
+          const sec = stack[(y / S) | 0]
+          if (!sec) { adrift++; continue }
+          checked++
+          // ⚠ THE CENTRE CELL IS NOT ALWAYS A LEAF, and the first cut of this assert failed 72
+          // times on exactly that. The MAIN lobe is centred on `top - 1`, which is the trunk's own
+          // topmost log — and `canLeaf` correctly refuses to overwrite a log. So the centre must be
+          // WOOD (leaf or log), not specifically leaf.
+          //
+          // A centre test alone would then be weak, since a lobe drifting one block sideways still
+          // lands on the trunk. So the real measure is mass: count the foliage the lobe should have
+          // put down. A lobe placed in open air by a bad seed scores ~0 against a floor of r².
+          const centre = sec.get(x, y % S, z)
+          // ⚠ INTEGER BOUNDS. A layered tier's radius is fractional, and looping `ddy = -lo.r;
+          // ddy <= lo.r; ddy++` walks fractional offsets — which index a voxel array at .585 and
+          // read zero from everywhere. The test reported 720 lobes "adrift" from a generator that
+          // was placing them perfectly.
+          const R = Math.ceil(lo.r)
+          let mass = 0
+          for (let ddy = -R; ddy <= R; ddy++)
+            for (let ddz = -R; ddz <= R; ddz++)
+              for (let ddx = -R; ddx <= R; ddx++) {
+                const yy = y + ddy
+                const s2 = stack[(yy / S) | 0]
+                if (s2 && LEAVES.has(s2.get(x + ddx, yy % S, z + ddz))) mass++
+              }
+          if (!LEAVES.has(centre) && !LOGS.has(centre)) { adrift++; worstMiss = `${sp.id} h${h} r${lo.r} centre=${centre}` }
+          else if (mass <= lo.r * lo.r) { adrift++; worstMiss = `${sp.id} h${h} r${lo.r} mass=${mass}` }
+        }
+      }
+    }
+  }
+  ok(checked > 100, `the crownAt check found lobes to verify (${checked})`)
+  ok(adrift === 0, `★ every lobe crownAt reports lands in real foliage (${adrift} adrift, e.g. ${worstMiss})`)
 }
 
 console.log(`\ntrees: ${pass} passed, ${fails.length} failed`)

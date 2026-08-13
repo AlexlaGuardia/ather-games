@@ -355,16 +355,38 @@ function foliageBlob(
  * chosen against it (worst case ~1.3 x radius, so radius 4 reaches ~5.9 against a spread of 7), and
  * the oracle measures the real thing rather than trusting this comment.
  */
-function crownLobes(
-  c: Ctx, g: () => number, cx: number, cy: number, cz: number, r: number, leaves: number, squash: number,
-  seed: number,
-): void {
-  foliageBlob(c, g, cx, cy, cz, r, leaves, squash, seed)
-  const n = 2 + Math.floor(g() * 2)
+/**
+ * One lobe of a crown, as an offset from the crown's origin.
+ *
+ * `squash` is the lobe's own vertical flattening, in `foliageBlob`'s sense — the vertical semi-axis
+ * is `r / sqrt(squash)`. It lives on the LOBE and not on the crown because a layered tier is a lobe
+ * squashed to a single cell tall, so one shape covers both placers and no caller needs a sentinel
+ * to ask "is this a disc or a ball".
+ */
+export interface Lobe { dx: number; dy: number; dz: number; r: number; squash: number; seed: number }
+
+/**
+ * ── ★ THE CROWN'S LAYOUT IS A VALUE, NOT A SIDE EFFECT (2026-08-13) ────────────────────────────
+ * Where the lobes sit is now a pure function of the tree's seed, computed from `hash2` rather than
+ * drawn off the `g()` stream that `foliageBlob` is simultaneously consuming for its rim nibble.
+ *
+ * ★ THE REASON IS THAT SOMETHING OTHER THAN THE GENERATOR NEEDS TO KNOW THE ANSWER. Alex asked
+ * whether the voxel world can hold 3D models. The cheapest honest experiment is a canopy drawn as
+ * smooth geometry at exactly the places the voxel canopy occupies — same shape, different medium,
+ * so what he judges is "smooth vs blocky" and not "cone vs blob". A renderer cannot replay an
+ * interleaved rng stream to find that out; it can call a pure function.
+ *
+ * ⚠ SO DO NOT "TIDY" THESE BACK ONTO `g()`. Lobe placement drawn off the shared stream is placement
+ * only the generator can ever know, and the renderer silently loses the ability to agree with it.
+ * The stream stays for the things that are genuinely per-voxel (the nibble, the strands).
+ */
+export function crownLayout(r: number, squash: number, seed: number): Lobe[] {
+  const out: Lobe[] = [{ dx: 0, dy: 0, dz: 0, r, squash, seed }]
+  const roll = (k: number) => hash2(k, 0x51, seed)
+  const n = 2 + Math.floor(roll(0) * 2)
   for (let i = 0; i < n; i++) {
-    // ⚠ Rolls in a fixed order, unconditionally — same seam rule as the strands. See `foliageBlob`.
-    const ang = g() * Math.PI * 2
-    const off = r * (0.4 + g() * 0.25)
+    const ang = roll(i * 4 + 1) * Math.PI * 2
+    const off = r * (0.4 + roll(i * 4 + 2) * 0.25)
     // Below the main lobe, never above it: a satellite on top would grow the tree's height and put
     // the mass back where it already was. Down is where the bare trunk is.
     //
@@ -373,15 +395,26 @@ function crownLobes(
     // centred ellipsoid. At radius 3 that range rounds to one or two blocks, which is a nudge, not
     // a second lobe. Dropping them 0.45-1.0r puts a satellite's own bulk beside the trunk rather
     // than just under the main crown's shoulder.
-    const dy = -Math.round(r * (0.45 + g() * 0.55))
-    const rr = Math.max(1, Math.round(r * (0.45 + g() * 0.2)))
-    foliageBlob(
-      c, g,
-      cx + Math.round(Math.cos(ang) * off), cy + dy, cz + Math.round(Math.sin(ang) * off),
-      rr, leaves, squash, mixSeed(seed, i + 1),
-    )
+    out.push({
+      dx: Math.round(Math.cos(ang) * off),
+      dy: -Math.round(r * (0.45 + roll(i * 4 + 3) * 0.55)),
+      dz: Math.round(Math.sin(ang) * off),
+      r: Math.max(1, Math.round(r * (0.45 + roll(i * 4 + 4) * 0.2))),
+      squash,
+      seed: mixSeed(seed, i + 1),
+    })
   }
+  return out
 }
+
+// ★ THERE IS NO `crownLobes` ANY MORE, DELIBERATELY. It existed for about an hour and it was a
+// second place that knew where a crown sits. `growTree` now draws straight off `crownAt` (below),
+// so the generator and the renderer read the SAME function rather than two functions that agree.
+//
+// ⚠ The oracle is why. An assert was written to catch `crownAt` drifting from the generator, and it
+// caught a wrong SEED — but a one-block vertical shift sailed straight through it, because a crown
+// is several blocks tall and a lobe moved up one still lands in foliage. That is a weak proxy, and
+// the fix for a weak proxy is not a cleverer assert: it is having nothing to disagree with.
 
 /**
  * Layered canopy — stacked discs. Reads taller and more deliberate than the blob. Starwillow's two
@@ -442,6 +475,30 @@ function foliageLayered(
   }
 }
 
+/** Where a forking trunk splits, as a fraction of its height. One definition, three readers. */
+const FORK_AT = (height: number) => Math.floor(height * 0.55)
+
+/**
+ * The two limbs of a forking trunk: their lean direction and where the walk ends up.
+ *
+ * ★ HASH-DERIVED, NOT ROLLED OFF `g()`, for the same reason `crownLayout` is — a limb's crown has
+ * to be describable to something that is not the generator. This was the last piece of a tree's
+ * STRUCTURE hiding inside the per-voxel rng stream.
+ */
+export function forkLimbs(start: TreeStart): { x: number; z: number; dx: number; dz: number }[] {
+  const dirs: [number, number][] = [[1, 0], [-1, 0], [0, 1], [0, -1]]
+  const ai = Math.floor(hash2(1, 0x9c, start.seed) * 4) % 4
+  const bi = (ai + 1 + Math.floor(hash2(2, 0x9c, start.seed) * 2)) % 4
+  const forkAt = FORK_AT(start.height)
+  const limb = start.height - forkAt
+  // Steps happen on even `i`, so the walk moves ceil(limb / 2) times. Derived, never counted twice.
+  const steps = Math.ceil(limb / 2)
+  return [ai, bi].map(i => {
+    const [dx, dz] = dirs[i]
+    return { x: start.x + dx * steps, z: start.z + dz * steps, dx, dz }
+  })
+}
+
 /**
  * Grow one tree into whatever part of this stack it touches.
  *
@@ -458,23 +515,26 @@ export function growTree(
 
   if (sp.trunk === 'straight') {
     for (let i = 0; i < start.height; i++) put(c, start.x, baseY + i, start.z, sp.log, false)
-    const top = baseY + start.height
-    if (sp.foliage === 'blob') crownLobes(c, g, start.x, top - 1, start.z, sp.radius, sp.leaves, sp.squash ?? 1.2, start.seed)
-    else foliageLayered(c, g, start.x, top - 2, start.z, sp.radius, sp.leaves, start.seed)
+    // ★ THE GENERATOR READS THE SAME `crownAt` THE RENDERER DOES — see the note above. A blob crown
+    // has exactly one description of where it is, and this is the code that consumes it.
+    const crown = crownAt(start, groundY)
+    if (crown) {
+      for (const lo of crown.lobes)
+        foliageBlob(c, g, crown.x + lo.dx, crown.y + lo.dy, crown.z + lo.dz, lo.r, sp.leaves, lo.squash, lo.seed)
+    } else {
+      foliageLayered(c, g, start.x, baseY + start.height - 2, start.z, sp.radius, sp.leaves, start.seed)
+    }
     return
   }
 
   // ── forking ──────────────────────────────────────────────────────────────────────────────
   // A single stem, then two limbs that lean apart. Each limb gets its own canopy, which is what
   // makes the silhouette read as a different SPECIES rather than a taller version of the same one.
-  const forkAt = Math.floor(start.height * 0.55)
+  const forkAt = FORK_AT(start.height)
   for (let i = 0; i < forkAt; i++) put(c, start.x, baseY + i, start.z, sp.log, false)
 
-  const dirs: [number, number][] = [[1, 0], [-1, 0], [0, 1], [0, -1]]
-  const a = dirs[Math.floor(g() * 4) % 4]
-  const b = dirs[(dirs.indexOf(a) + 1 + Math.floor(g() * 2)) % 4]
   let limbNo = 0
-  for (const [dx, dz] of [a, b]) {
+  for (const { x: tipX, z: tipZ, dx, dz } of forkLimbs(start)) {
     let x = start.x, z = start.z
     const limb = start.height - forkAt
     for (let i = 0; i < limb; i++) {
@@ -482,11 +542,86 @@ export function growTree(
       if (i % 2 === 0) { x += dx; z += dz }
       put(c, x, baseY + forkAt + i, z, sp.log, false)
     }
+    // The walk above must land exactly where `forkLimbs` says it will, or the crown and the limb
+    // that holds it part company. Same single-source rule as the blob crown — this is the walk,
+    // that is the description of the walk, and the oracle pins them together.
+    x = tipX; z = tipZ
     // ⚠ Each limb gets its OWN lump seed. Sharing one would deform both crowns identically, and a
     // forking tree whose two halves are mirror images is more obviously generated than a plain
     // sphere was — the fork is the silhouette people look at.
     foliageLayered(c, g, x, baseY + forkAt + limb - 2, z, sp.radius * 0.75, sp.leaves, mixSeed(start.seed, 0x1b + limbNo++))
   }
+}
+
+/**
+ * Where a tree's crown actually sits in the world, for anything that has to agree with the canopy
+ * without generating it — currently the smooth-canopy renderer (`voxel3d/canopy-mesh.ts`).
+ *
+ * ⚠ BLOB SPECIES ONLY, and it returns null rather than guessing for the others. The layered placer
+ * builds a tiered profile that is not a set of lobes, and handing back a lobe list for it would be
+ * a renderer quietly drawing a shape the world does not contain. `foliage === 'blob'` is 84% of the
+ * forest by weight, which is enough to answer the question the renderer exists to ask.
+ *
+ * The centre matches `growTree`'s call exactly (`top - 1`, where top = groundY + 1 + height). If one
+ * of those two ever moves, the smooth canopy floats off its own tree — so they are asserted together.
+ */
+export function crownAt(start: TreeStart, groundY: number): {
+  x: number; y: number; z: number; lobes: Lobe[]
+} | null {
+  const sp = start.species
+  const baseY = groundY + 1
+
+  if (sp.trunk === 'straight' && sp.foliage === 'blob') {
+    return {
+      x: start.x,
+      y: baseY + start.height - 1,
+      z: start.z,
+      // ⚠ `start.seed`, NOT the `^ 0x5bf0` the per-voxel rng is seeded with — `growTree` derives
+      // the stream separately. Getting this wrong produces a perfectly plausible crown in the wrong
+      // place, which is the failure that looks like a bug in the ground height rather than a seed.
+      lobes: crownLayout(sp.radius, sp.squash ?? 1.2, start.seed),
+    }
+  }
+
+  // ── layered crowns ──────────────────────────────────────────────────────────────────────────
+  // ★ A TIER IS A LOBE THAT HAS BEEN SAT ON. `foliageLayered`'s radius profile is a pure function
+  // of the tier index — no rng touches it — so the whole stack is describable, and describing it as
+  // squashed lobes means one renderer covers every species instead of growing a second code path.
+  // The `squash` here is per-lobe rather than per-crown, which is what makes a disc a disc.
+  const tierLobes = (r: number, seed: number, originDx: number, originDz: number, dyBase: number): Lobe[] => {
+    const tiers = Math.max(3, Math.round(r * 1.6))
+    const base = dyBase - Math.floor(tiers * 0.35)
+    const out: Lobe[] = []
+    for (let t = 0; t < tiers; t++) {
+      const f = t / (tiers - 1)
+      const rr = r * (f < 0.3 ? 0.62 + (f / 0.3) * 0.38 : 1 - ((f - 0.3) / 0.7) ** 1.5)
+      if (rr < 0.5) continue                      // a tier under half a cell writes nothing
+      // One cell tall against a radius of `rr`: vertical semi-axis 0.5 means squash = (rr/0.5)^2.
+      out.push({ dx: originDx, dy: base + t, dz: originDz, r: rr, squash: 4 * rr * rr, seed: mixSeed(seed, t + 1) })
+    }
+    return out
+  }
+
+  if (sp.trunk === 'straight') {
+    return {
+      x: start.x, y: baseY + start.height - 2, z: start.z,
+      lobes: tierLobes(sp.radius, start.seed, 0, 0, 0),
+    }
+  }
+
+  // ── forking (starwillow) ────────────────────────────────────────────────────────────────────
+  // Two limbs, each with its own tier stack at its own tip, each with its own lump seed — mirrored
+  // crowns read as generated harder than a plain sphere ever did.
+  const forkAt = FORK_AT(start.height)
+  const limb = start.height - forkAt
+  const lobes: Lobe[] = []
+  forkLimbs(start).forEach((lm, i) => {
+    lobes.push(...tierLobes(
+      sp.radius * 0.75, mixSeed(start.seed, 0x1b + i),
+      lm.x - start.x, lm.z - start.z, forkAt + limb - 2,
+    ))
+  })
+  return { x: start.x, y: baseY, z: start.z, lobes }
 }
 
 /**

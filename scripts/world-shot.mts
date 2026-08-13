@@ -4,6 +4,12 @@
 //   WORLD_URL=http://localhost:3201/shimmer/voxel3d?hour=12   — a lane's dev server, day pinned
 //   WORLD_GOTO=twilight-thicket                               — drive the console before shooting
 //   WORLD_PITCH=-10                                           — degrees; negative looks UP
+//   WORLD_LOG='\\[canopy\\]'                                     — forward matching console lines to stdout
+//
+// ★ WORLD_LOG EXISTS BECAUSE A SCREENSHOT ONLY SHOWS YOU THAT SOMETHING IS WRONG, NEVER WHY. The
+// smooth-canopy spike (2026-08-13) drew ONE crown in a forest and the picture could not say whether
+// that was placement, scale, culling or a probe rejecting every tree. A counter in the page answers
+// it in one run. Opt-in and regex-filtered so a normal shot stays quiet.
 //
 // ★ WHY `WORLD_GOTO` EXISTS: the player always spawns in the GLADE, which is a clearing — there is
 // no saved position to seed, so without this every headless shot photographs the one place in the
@@ -64,8 +70,12 @@ try {
   })
 
   const errors: string[] = []
+  const LOG = process.env.WORLD_LOG ? new RegExp(process.env.WORLD_LOG) : null
   page.on('pageerror', e => errors.push(String(e)))
-  page.on('console', m => { if (m.type() === 'error') errors.push(m.text()) })
+  page.on('console', m => {
+    if (m.type() === 'error') errors.push(m.text())
+    else if (LOG && LOG.test(m.text())) console.log(`  ‹page› ${m.text()}`)
+  })
 
   await page.goto(URL, { waitUntil: 'networkidle2', timeout: 60_000 })
   // The world streams; there is no "ready" event to wait on, so give it wall-clock and say so.

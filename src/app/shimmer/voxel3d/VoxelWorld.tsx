@@ -138,6 +138,7 @@ import { loadLoadout, saveLoadout, setSlot, type Loadout } from '../play3d/loado
 import { applyFightResult } from '../engine/spirit-health'
 import type { BattleResult } from '../engine/arena'
 import { createFloraRenderer } from './flora-mesh'
+import { createCanopyRenderer } from './canopy-mesh'
 
 /**
  * A chest the player has opened: where it stands, its LIVE contents array, and the call that marks
@@ -2694,6 +2695,17 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
    *  compare is enough to notice a spar ended and hand the pass the updated one — without which
    *  the spirit you just sparred would keep standing there until the world reloaded. */
   const ledgerSeen = useRef<MistLedger | null>(null)
+  // ── ★ SMOOTH CANOPY EXPERIMENT (2026-08-13, `?canopy=smooth`) ───────────────────────────────
+  // Alex asked whether the voxel world can hold 3D models. This draws the crowns the generator
+  // already grew as geometry instead of cells, so the question stops being an argument and becomes
+  // a screenshot. OFF by default and it changes NOTHING about the world — see canopy-mesh.ts.
+  //
+  // ⚠ Read once, not reactive: flipping it mid-session would need the whole leaf mesh rebuilt, and
+  // a query param nobody can change without a reload is the honest shape for an experiment.
+  const smoothCanopy = useMemo(
+    () => typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('canopy') === 'smooth',
+    [])
+  const canopy = useMemo(() => createCanopyRenderer(), [])
   // Ground cover (2026-08-08) — flora.ts selects, the live-voxel probe verifies, four draws total.
   const flora = useMemo(() => createFloraRenderer(), [])
   /** Set whenever loaded ground changes (adopt, edit, evict); the frame loop syncs once quiet. */
@@ -2975,7 +2987,8 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
     steam.dispose()
     mist.dispose()
     flora.dispose()
-  }, [dropGeo, highlightGeo, flatMaterial, textured, tiles, pieces, greg, steam, mist, flora])
+    canopy.dispose()
+  }, [dropGeo, highlightGeo, flatMaterial, textured, tiles, pieces, greg, steam, mist, flora, canopy])
 
   // ★ A LOST WEBGL CONTEXT MUST SAY SO. Chrome blocks a page that loses its context repeatedly, and
   // the result is a black canvas with the HUD still drawn on top — indistinguishable from a
@@ -3083,14 +3096,16 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
         g.add(mesh)
         drawn.current.set(`${k}:${sm.index}:w`, mesh)
       }
-      if (leaves) {
+      // ⚠ The smooth canopy REPLACES the voxel leaves rather than sitting on top of them — two
+      // canopies in the same space is a z-fighting mess that would make the experiment unreadable.
+      if (leaves && !smoothCanopy) {
         const mesh = new THREE.Mesh(toGeometry(leaves), leafMaterial)
         mesh.position.set(sm.wx, sm.wy, sm.wz)
         g.add(mesh)
         drawn.current.set(`${k}:${sm.index}:l`, mesh)
       }
     }
-  }, [material, waterMaterial, leafMaterial, scratch])
+  }, [material, waterMaterial, leafMaterial, scratch, smoothCanopy])
 
   /**
    * ── ★ STREAMING MESHES THROUGH A BUDGETED QUEUE, NOT SYNCHRONOUSLY (2026-08-07) ────────────
@@ -3856,6 +3871,26 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
         const [gx, gz] = kk.split(',').map(Number)
         list.push({ key: kk, x0: gx * SECTION, z0: gz * SECTION })
       }
+      // ── smooth canopy sync (2026-08-13) — same beat, same column list ─────────────────────
+      // ⚠ Rides `floraDirty` deliberately rather than inventing a second dirty flag. Both layers
+      // answer the same question ("what ground is loaded, and has it changed"), and two flags for
+      // one question is how one of them ends up stale in a way nobody can reproduce.
+      //
+      // The ground probe is the GENERATED surface (`heightAt`), NOT the walked one flora uses: a
+      // tree was planted against the generated height, so a player digging under a trunk must not
+      // drag its crown into the hole.
+      if (smoothCanopy) {
+        canopy.sync(list, SEED, (tx, tz) => {
+          const tcx = Math.floor(tx / SECTION), tcz = Math.floor(tz / SECTION)
+          const c = cols.current.get(key(tcx, tcz))
+          if (!c) return null
+          return c.heightAt(tx - tcx * SECTION, tz - tcz * SECTION)
+        }, (wx, wy, wz) => {
+          const m = voxel(wx, wy, wz)
+          return isLeafMat(m) || isLogMat(m)
+        })
+      }
+
       flora.sync(list, SEED, (fx, fz) => {
         const fcx = Math.floor(fx / SECTION), fcz = Math.floor(fz / SECTION)
         const c = cols.current.get(key(fcx, fcz))
@@ -4464,6 +4499,7 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
       <primitive object={mist.points} />
       <primitive object={mist.residents} />
       <primitive object={flora.group} />
+      <primitive object={canopy.group} />
       {/* ⚠ Memoised. Inline `args={[new THREE.BoxGeometry(...)]}` builds a fresh geometry on EVERY
           React render and leaks the previous one — same family as the per-drop material that got
           the page's WebGL context blocked. */}
