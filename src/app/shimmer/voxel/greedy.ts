@@ -18,7 +18,26 @@
 import { AIR, Section } from './section'
 import { STRUCTURE, STRUCTURE_HALF } from './pieces'
 import { isPlant, isHalfMat, isTopSlab } from './depth'
-import { isLeafMat } from './trees'
+import { isLeafMat, isLogMat } from './trees'
+
+/**
+ * How wide a trunk DRAWS, as a fraction of its cell.
+ *
+ * ── ★ 15% THINNER, AND IT IS A RENDER FACT ONLY (2026-08-13, Alex's call) ──────────────────────
+ * A trunk is one voxel, so "thinner" cannot come from the generator — there is nothing between one
+ * cell and none. It has to come from the mesher, which is the same split the world already lives
+ * by: **the grid is load-bearing, the READ is not.** A log stays a full cell to collision, to
+ * mining, to the light BFS and to every save; it merely draws as a slightly narrower box.
+ *
+ * ⚠ THE COST, STATED HONESTLY: logs are `placeable`, so a wall built out of RAW logs draws thin
+ * too, with a 0.075 slot at every join. Planks are the building material and logs are the raw drop,
+ * so this trades an unusual build's tidiness for the silhouette of every tree in the world. If
+ * someone ever builds in raw logs and hates it, the fix is a free-standing test (all four
+ * horizontal neighbours non-solid) — deliberately NOT done here, because that test costs four extra
+ * `sample` calls per cell inside `fillSlice`, and the slump regression is the measurement that says
+ * the sweep is CALL-bound and cannot afford them.
+ */
+export const TRUNK_WIDTH = 0.85
 
 export interface MeshResult {
   /** xyz per vertex, 4 vertices per quad. */
@@ -274,7 +293,11 @@ export function greedyMesh(
           // ⚠ THIS IS A RENDER FACT ONLY. Leaves stay solid to collision, to the light BFS and to
           // mining; nothing outside this mesher learns anything from this line. Same split as AO:
           // the grid is load-bearing, the READ is not.
-          sol[i] = m !== AIR && m !== STRUCTURE && m !== STRUCTURE_HALF && !isPlant(m) && !isLeafMat(m) ? 1 : 0
+          // ★ AND A LOG LEAVES THE SWEEP FOR THE SAME REASON, as of 2026-08-13: it no longer draws
+          // as a unit cube either (see `TRUNK_WIDTH`). One arithmetic test on `m`, no extra sample
+          // — which is the only kind of test this function can afford.
+          sol[i] = m !== AIR && m !== STRUCTURE && m !== STRUCTURE_HALF && !isPlant(m)
+            && !isLeafMat(m) && !isLogMat(m) ? 1 : 0
           i++
         }
       }
@@ -551,6 +574,77 @@ export function greedyMesh(
     }
   }
 
+  // ── ★ THE TRUNK PASS — a log draws 15% thinner than its cell ─────────────────────────────────
+  // Alex, 2026-08-13: *"first the trunk, can we make them a bit thinner (just like 15%)."*
+  //
+  // A per-cell box rather than an inset applied to the greedy sweep's output, and the reason is the
+  // corner: insetting a merged +X face along its normal still leaves its Z extent running the full
+  // width of the cell, so it would stick out past the inset +Z face as a visible fin. Getting that
+  // right inside the sweep means shrinking merged rectangles per-edge, on evidence about which
+  // edges are exposed that the sweep has already thrown away. A box per log cell is exact, and it
+  // is affordable for a reason worth writing down: the census counts **2,011 log voxels against
+  // 29,393 leaves** in a radius-6 Thicket view, so trunks are ~7% of the foliage's cell count and
+  // this pass is noise beside the leaf pass sitting under it.
+  //
+  // NO MERGING, like the leaf and half passes: an inset box is not coplanar with its neighbours.
+  // Faces adjacent to another LOG are skipped — that is the trunk's own interior, and it is what
+  // keeps a 12-block trunk at 4 side quads per cell instead of 6.
+  if (!uniform || isLogMat(sec.uniformValue()!)) {
+    const maxQuads = (positions.length / 12) | 0
+    const t = (1 - TRUNK_WIDTH) / 2
+    /** Winding rule, same as everywhere else in this file: cross(u, v) must equal the face normal. */
+    const face = (
+      px: number, py: number, pz: number, ux: number, uy: number, uz: number,
+      vx: number, vy: number, vz: number, nx: number, ny: number, nz: number, mat: number, shade: number,
+    ) => {
+      const p = quads * 12
+      positions[p + 0] = px;           positions[p + 1] = py;           positions[p + 2] = pz
+      positions[p + 3] = px + ux;      positions[p + 4] = py + uy;      positions[p + 5] = pz + uz
+      positions[p + 6] = px + ux + vx; positions[p + 7] = py + uy + vy; positions[p + 8] = pz + uz + vz
+      positions[p + 9] = px + vx;      positions[p + 10] = py + vy;     positions[p + 11] = pz + vz
+      const base = quads * 4
+      for (let k = 0; k < 4; k++) {
+        normals[p + k * 3 + 0] = nx; normals[p + k * 3 + 1] = ny; normals[p + k * 3 + 2] = nz
+        materials[base + k] = mat
+        ao[base + k] = shade
+      }
+      const ii = quads * 6
+      indices[ii + 0] = base; indices[ii + 1] = base + 1; indices[ii + 2] = base + 2
+      indices[ii + 3] = base; indices[ii + 4] = base + 2; indices[ii + 5] = base + 3
+      quads++
+      faces++
+    }
+    let full = false
+    for (let y = 0; y < S && !full; y++) {
+      for (let z = 0; z < S && !full; z++) {
+        for (let x = 0; x < S; x++) {
+          const m = sec.get(x, y, z)
+          if (!isLogMat(m)) continue
+          if (quads + 6 > maxQuads) { full = true; break }
+          const a = x + t, b = x + 1 - t, c = z + t, e = z + 1 - t
+          const w = b - a
+          // Same enclosure shading the leaf pass uses, and it earns its keep here: a trunk standing
+          // inside its own canopy should read darker than one out in a clearing, which is most of
+          // what stops a pole looking pasted onto the scene.
+          let enc = 0
+          if (sample(x + 1, y, z) !== AIR) enc++
+          if (sample(x - 1, y, z) !== AIR) enc++
+          if (sample(x, y + 1, z) !== AIR) enc++
+          if (sample(x, y - 1, z) !== AIR) enc++
+          if (sample(x, y, z + 1) !== AIR) enc++
+          if (sample(x, y, z - 1) !== AIR) enc++
+          const sh = enc >= 6 ? 1 : enc >= 5 ? 2 : 3
+          if (!isLogMat(sample(x + 1, y, z))) face(b, y, c, 0, 1, 0, 0, 0, e - c, 1, 0, 0, m, sh)
+          if (!isLogMat(sample(x - 1, y, z))) face(a, y, c, 0, 0, e - c, 0, 1, 0, -1, 0, 0, m, sh)
+          if (!isLogMat(sample(x, y, z + 1))) face(a, y, e, w, 0, 0, 0, 1, 0, 0, 0, 1, m, sh)
+          if (!isLogMat(sample(x, y, z - 1))) face(a, y, c, 0, 1, 0, w, 0, 0, 0, 0, -1, m, sh)
+          if (!isLogMat(sample(x, y + 1, z))) face(a, y + 1, c, 0, 0, e - c, w, 0, 0, 0, 1, 0, m, sh)
+          if (!isLogMat(sample(x, y - 1, z))) face(a, y, c, w, 0, 0, 0, 0, e - c, 0, -1, 0, m, sh)
+        }
+      }
+    }
+  }
+
   // ── ★ THE LEAF PASS — the canopy stops being a green box ─────────────────────────────────────
   // Alex, on whether the world has to look blocky: the grid is load-bearing, the READ is not. AO
   // was the first answer; leaf-cubes were the biggest remaining silhouette offender, because a
@@ -650,11 +744,14 @@ export function greedyMesh(
           // A quarter turn covers every DISTINCT orientation: the pair is perpendicular, so turning
           // it by 90° maps the cross onto itself. Anything wider would just repeat.
           const yaw = ((h & 1023) / 1024) * (Math.PI / 2)
-          // 0.92–1.34 of a cell across, so a cross reaches into its neighbours instead of stopping
-          // short of them. Kept as a RANGE rather than one fat constant: crosses that disagree
-          // about their size are what stop a canopy reading as a textured slab, and that lesson
-          // cost a whole pass on 08-12.
-          const wide = K * (0.92 + (((h >>> 10) & 63) / 63) * 0.42)
+          // 1.08–1.54 of a cell across, so a cross reaches WELL into its neighbours instead of
+          // stopping short of them. Kept as a RANGE rather than one fat constant: crosses that
+          // disagree about their size are what stop a canopy reading as a textured slab, and that
+          // lesson cost a whole pass on 08-12.
+          // ⚠ Widened past 1.0 twice now (08-13). This is the free lever — quad COUNT is unchanged,
+          // only the area each one covers — so it is the first thing to reach for when a canopy
+          // reads thin, and the last thing to blame when the frame budget goes.
+          const wide = K * (1.08 + (((h >>> 10) & 63) / 63) * 0.46)
           const jx = ((((h >>> 16) & 31) / 31) - 0.5) * 0.24
           const jz = ((((h >>> 21) & 31) / 31) - 0.5) * 0.24
           // ⚠ Vertical jitter must OFFSET the cell, never resize it — both corners move by the same

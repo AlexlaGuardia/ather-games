@@ -6,7 +6,7 @@
 // rather than something to notice by eye later.
 
 import { AIR, Section } from './section'
-import { greedyMesh } from './greedy'
+import { greedyMesh, TRUNK_WIDTH } from './greedy'
 import { WOOD } from './trees'
 
 let pass = 0
@@ -392,6 +392,74 @@ for (const S of [4, 16, 32]) {
   s.set(4, 4, 4, WOOD.GOLDWOOD_LEAVES)
   greedyMesh(s)
   eq(s.get(4, 4, 4), WOOD.GOLDWOOD_LEAVES, 'meshing does not consume the leaf — it is still a block')
+}
+
+// ── ★ THE TRUNK PASS — a log draws thinner than its cell ─────────────────────────────────────────
+// Alex asked for a trunk 15% thinner. A voxel cannot be thinner, so the mesher draws it inset, and
+// these are the two ways that goes wrong invisibly: a box that is the WRONG SIZE (nobody eyeballs
+// 0.85 against 1.0 in a screenshot) and a face wound backwards (a wall you cannot see from outside,
+// which reads as "the tree has a hole in it" from exactly one angle).
+{
+  const S = 16
+  const s = new Section(S)
+  s.set(8, 8, 8, WOOD.GOLDWOOD_LOG)
+  const r = greedyMesh(s)
+  eq(r.quads, 6, 'a lone log draws all six of its faces')
+
+  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity, minZ = Infinity, maxZ = -Infinity
+  for (let v = 0; v < r.quads * 4; v++) {
+    minX = Math.min(minX, r.positions[v * 3]);     maxX = Math.max(maxX, r.positions[v * 3])
+    minY = Math.min(minY, r.positions[v * 3 + 1]); maxY = Math.max(maxY, r.positions[v * 3 + 1])
+    minZ = Math.min(minZ, r.positions[v * 3 + 2]); maxZ = Math.max(maxZ, r.positions[v * 3 + 2])
+  }
+  ok(Math.abs((maxX - minX) - TRUNK_WIDTH) < 1e-6, `★ the trunk is TRUNK_WIDTH across in X (got ${(maxX - minX).toFixed(3)})`)
+  ok(Math.abs((maxZ - minZ) - TRUNK_WIDTH) < 1e-6, `★ ... and in Z (got ${(maxZ - minZ).toFixed(3)})`)
+  // ⚠ HEIGHT MUST STAY A FULL CELL. Shrinking it too would open a ring of gaps between every log of
+  // a trunk — the same trap the leaf pass's vertical jitter carries a warning about.
+  ok(Math.abs((maxY - minY) - 1) < 1e-6, '★ but a FULL cell tall — a shrunk height gaps every join')
+  // The box is centred: it must not drift off its own cell, or a trunk leans away from its roots.
+  ok(Math.abs((minX + maxX) / 2 - 8.5) < 1e-6, 'and centred on its cell in X')
+  ok(Math.abs((minZ + maxZ) / 2 - 8.5) < 1e-6, 'and centred on its cell in Z')
+
+  // ★ WINDING: the geometric normal of each quad must equal the normal it declares. A face wound
+  // the other way is culled by the GPU and simply is not there, from outside only.
+  let wound = 0
+  for (let q = 0; q < r.quads; q++) {
+    const p = q * 12
+    const ux = r.positions[p + 3] - r.positions[p], uy = r.positions[p + 4] - r.positions[p + 1], uz = r.positions[p + 5] - r.positions[p + 2]
+    const vx = r.positions[p + 9] - r.positions[p], vy = r.positions[p + 10] - r.positions[p + 1], vz = r.positions[p + 11] - r.positions[p + 2]
+    const cx = uy * vz - uz * vy, cy = uz * vx - ux * vz, cz = ux * vy - uy * vx
+    const len = Math.hypot(cx, cy, cz)
+    const dot = (cx / len) * r.normals[p] + (cy / len) * r.normals[p + 1] + (cz / len) * r.normals[p + 2]
+    if (dot > 0.999) wound++
+  }
+  eq(wound, 6, '★ every trunk face is wound to match the normal it declares')
+}
+{
+  // ★ A TRUNK'S INTERIOR JOINS DO NOT DRAW. Three stacked logs are 3x4 sides plus one cap at each
+  // end — 14, not 18. This is the assert that fails if someone "simplifies" the log-neighbour test
+  // away, which would cost 4 quads per log of every trunk in the world and be invisible on screen.
+  const S = 16
+  const s = new Section(S)
+  for (let y = 6; y <= 8; y++) s.set(8, y, 8, WOOD.SHIMMEROAK_LOG)
+  const r = greedyMesh(s)
+  eq(r.quads, 3 * 4 + 2, '★ a stacked trunk skips the faces between its own logs')
+}
+{
+  // ★ AND THE GROUND UNDER A THIN TRUNK IS NOW VISIBLE. A log reads as AIR to the sweep (it is not
+  // a unit cube any more), so soil beside one draws the face the full-width log used to bury —
+  // which is exactly what you must see through the 15% that was taken away.
+  const S = 16
+  const s = new Section(S)
+  for (let z = 0; z < S; z++) for (let x = 0; x < S; x++) s.set(x, 6, z, 3)   // a floor
+  const bare = greedyMesh(s).quads
+  s.set(8, 7, 8, WOOD.GOLDWOOD_LOG)                                          // a trunk standing on it
+  const withLog = greedyMesh(s).quads
+  // Exactly the log's own six faces and not one more: because a log reads as AIR to the sweep, the
+  // floor's top stays ONE merged rectangle running clean under the trunk. A full-size log would
+  // have occluded the cell beneath it and punched a hole in that rectangle, splitting it into
+  // several — so this number is also the assert that the trunk is genuinely out of the sweep.
+  eq(withLog, bare + 6, '★ a thin trunk leaves the ground under it whole, and visible')
 }
 
 console.log(`\ngreedy mesher: ${pass} passed, ${fails.length} failed`)

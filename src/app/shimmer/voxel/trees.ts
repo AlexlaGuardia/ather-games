@@ -252,7 +252,11 @@ function foliageBlob(
         // pass in `greedy.ts`) makes the canopy's surface irregular on its own, so the generator no
         // longer has to buy raggedness by deleting foliage. Two systems were paying for the same
         // effect and the geometry could least afford it.
-        if (d > r2 * 0.72 && g() < 0.3) continue
+        // ⚠ SOFTENED AGAIN 2026-08-13 (0.72/0.3 → 0.82/0.18) — Alex, after the mesher's cull came
+        // out: *"the leaves are still too thin."* The rim band and the drop rate multiply, so 0.72
+        // at 30% was still removing ~1 in 8 of the whole crown, on top of a shell that is most of
+        // what you see. Confined to the true outer skin now, and thinned there.
+        if (d > r2 * 0.82 && g() < 0.18) continue
         put(c, cx + dx, cy + dy, cz + dz, leaves, true)
       }
     }
@@ -319,7 +323,7 @@ function foliageLayered(c: Ctx, g: () => number, cx: number, cy: number, cz: num
         if (d > rr2) continue
         // Rim only, same correction as the blob's nibble — and for the same reason: the mesher's
         // per-cell jitter now supplies the raggedness this used to buy by deleting foliage.
-        if (d > rr2 * 0.72 && g() < 0.3) continue
+        if (d > rr2 * 0.82 && g() < 0.18) continue     // see foliageBlob's note (2026-08-13)
         put(c, cx + dx, y, cz + dz, leaves, true)
       }
     }
