@@ -591,7 +591,9 @@ export function greedyMesh(
   // keeps a 12-block trunk at 4 side quads per cell instead of 6.
   if (!uniform || isLogMat(sec.uniformValue()!)) {
     const maxQuads = (positions.length / 12) | 0
-    const t = (1 - TRUNK_WIDTH) / 2
+    // The trunk's nominal half-inset. The flare below eats into it per cell, so a base log is wider
+    // than TRUNK_WIDTH and everything above it is exactly TRUNK_WIDTH, as before.
+    const tBase = (1 - TRUNK_WIDTH) / 2
     /** Winding rule, same as everywhere else in this file: cross(u, v) must equal the face normal. */
     const face = (
       px: number, py: number, pz: number, ux: number, uy: number, uz: number,
@@ -621,6 +623,29 @@ export function greedyMesh(
           const m = sec.get(x, y, z)
           if (!isLogMat(m)) continue
           if (quads + 6 > maxQuads) { full = true; break }
+          // ── ★ ROOT FLARE — the trunk stops being an extruded rectangle (2026-08-13) ───────────
+          // With the crown fixed, the trunk was the last thing in the forest still reading as a
+          // primitive: one width, held exactly, from the soil to the canopy. Real stems thicken
+          // where they meet the ground, and the eye uses that taper to tell a tree from a post.
+          //
+          // ★ RENDER-ONLY, AND THAT IS WHY IT IS AFFORDABLE. A tapered trunk in the GENERATOR
+          // would mean a 2-wide base, which is four log voxels where there was one — new drops,
+          // new chop timings, a different tree to fell, and a decay graph that changes shape. The
+          // flare is worth none of that. Here it costs two samples on a cell already being visited
+          // and the world underneath is untouched: the same one voxel, mined the same way.
+          //
+          // ⚠ THE TEST IS "STANDS ON SOLID GROUND", NOT "HAS NO LOG BELOW", and the difference is
+          // starwillow. Its forking limbs lean by stepping sideways every other block, so half of
+          // every limb's logs have AIR underneath them — a bare no-log-below test flared all of
+          // them and beaded the limbs like a string of knuckles. Requiring the cell below to be
+          // solid-and-not-log means only a stem actually meeting the terrain gets a foot.
+          //
+          // The mesher still has no surface height and must not acquire one: this stays a local
+          // question with the same answer at any column alignment, which is what keeps the seam.
+          const b1 = sample(x, y - 1, z), b2 = sample(x, y - 2, z)
+          const rooted = (v: number) => v !== AIR && !isLogMat(v)
+          const flare = rooted(b1) ? 0.14 : isLogMat(b1) && rooted(b2) ? 0.07 : 0
+          const t = tBase - flare / 2
           const a = x + t, b = x + 1 - t, c = z + t, e = z + 1 - t
           const w = b - a
           // Same enclosure shading the leaf pass uses, and it earns its keep here: a trunk standing

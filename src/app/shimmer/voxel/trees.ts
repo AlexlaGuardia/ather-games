@@ -27,6 +27,16 @@ import { MAT } from './depth'
 import { hash2, mixSeed } from './noise'
 import { forestness, speciesFactor } from './biome'
 
+/**
+ * How hard a lobe's radius is warped, as a fraction of r-squared. 0 is a perfect ellipsoid.
+ *
+ * ⚠ THIS IS THE SILHOUETTE DIAL, and it is deliberately large. Alex, 2026-08-13, looking at the
+ * forest: the trees read as *primitives* — a pole with a ball on it. The canopy's SURFACE was
+ * already fine (the mesher's crossed quads fray it nicely); what read as geometry was its SHAPE,
+ * and no amount of surface detail rescues a sphere.
+ */
+const LUMP = 0.5
+
 /** Wood materials. Continue past ORE (which ends at 22) with room to spare. */
 export const WOOD = {
   GOLDWOOD_LOG: 32, GOLDWOOD_LEAVES: 33,
@@ -124,7 +134,11 @@ export interface TreeConfig {
 export const DEFAULT_TREES: TreeConfig = {
   perColumn: 1.7,          // unchanged — this was always a fine density FOR A FOREST
   meadowPerColumn: 0.05,   // ~one lone tree per 20 open columns; a meadow is not a void
-  maxSpread: 6,
+  // ⚠ 6 → 7 with the lobed crown (2026-08-13): a satellite lobe's centre sits off the trunk, so the
+  // canopy's true reach is now the offset PLUS that lobe's own warped radius, not just `radius`.
+  // Raising it is free — `treeScanRadius` still rounds to one column at section 16 — and the
+  // oracle now measures the real reach rather than trusting this number (see trees.test.ts).
+  maxSpread: 7,
   maxAltitude: 165,     // datum+45, rebalanced with it
   species: SPECIES,
 }
@@ -220,6 +234,23 @@ function put(c: Ctx, wx: number, wy: number, wz: number, mat: number, leaf: bool
 }
 
 /**
+ * Low-frequency radius warp — the lump that stops a lobe reading as a sphere.
+ *
+ * ★ HASHED ON THE OFFSET FROM THE LOBE'S OWN CENTRE, never on world position, and that is what
+ * keeps the seam test green: (dx,dy,dz) are relative to the tree, so both column alignments compute
+ * an identical warp for an identical voxel. It also means a species looks like itself wherever it
+ * is planted, which a world-space hash would not give.
+ *
+ * ⚠ CELLS ARE GROUPED IN 2x2x2 BLOCKS, and the grouping is the entire point. Per-cell noise frosts
+ * the silhouette evenly, which reads as a FUZZY SPHERE — still a sphere. Lumps have to be bigger
+ * than the thing they are deforming before the eye stops solving for the primitive underneath.
+ */
+function lump(dx: number, dy: number, dz: number, seed: number): number {
+  const h = hash2((dx >> 1) * 131 + (dy >> 1), dz >> 1, seed)
+  return 1 + (h - 0.5) * LUMP
+}
+
+/**
  * Blob canopy — a squashed sphere. The common silhouette, and 84% of the forest by weight, so this
  * function very nearly IS what the world's trees look like.
  *
@@ -231,14 +262,22 @@ function put(c: Ctx, wx: number, wy: number, wz: number, mat: number, leaf: bool
  */
 function foliageBlob(
   c: Ctx, g: () => number, cx: number, cy: number, cz: number, r: number, leaves: number, squash: number,
+  lobeSeed: number,
 ): void {
   const r2 = r * r
-  for (let dy = -r; dy <= r; dy++) {
-    for (let dz = -r; dz <= r; dz++) {
-      for (let dx = -r; dx <= r; dx++) {
+  // The warp can push a cell past `r`, so the scan box has to be wider than the nominal radius or
+  // the lump is clipped flat against the loop bound and reads as a shaved side.
+  const box = Math.ceil(r * Math.sqrt(1 + LUMP / 2))
+  for (let dy = -box; dy <= box; dy++) {
+    for (let dz = -box; dz <= box; dz++) {
+      for (let dx = -box; dx <= box; dx++) {
         // Squashed vertically so a canopy reads as a canopy rather than a ball on a stick.
         const d = dx * dx + dy * dy * squash + dz * dz
-        if (d > r2) continue
+        // ★ THE RADIUS IS NO LONGER CONSTANT AROUND THE LOBE (2026-08-13). Everything below still
+        // measures against `lim` rather than `r2`, so the rim nibble and the strands follow the
+        // lumpy surface instead of the sphere it used to be.
+        const lim = r2 * lump(dx, dy, dz, lobeSeed)
+        if (d > lim) continue
         // Nibble the outer shell so the silhouette is not a perfect solid — a clean sphere reads
         // as geometry, a ragged one reads as foliage.
         //
@@ -256,7 +295,7 @@ function foliageBlob(
         // out: *"the leaves are still too thin."* The rim band and the drop rate multiply, so 0.72
         // at 30% was still removing ~1 in 8 of the whole crown, on top of a shell that is most of
         // what you see. Confined to the true outer skin now, and thinned there.
-        if (d > r2 * 0.82 && g() < 0.18) continue
+        if (d > lim * 0.82 && g() < 0.18) continue
         put(c, cx + dx, cy + dy, cz + dz, leaves, true)
       }
     }
@@ -272,11 +311,16 @@ function foliageBlob(
   // test green: `put` discards out-of-bounds writes but never consumes the stream, so a tree grows
   // identically from either column alignment. Do not make a `g()` call conditional on position.
   const strands = Math.round(r * 3)
+  // ⚠ MEASURED AGAINST THE LOBE'S SMALLEST POSSIBLE RADIUS, not its nominal one. The warp means the
+  // real shell under (dx,dz) sits anywhere in a one-cell band, and a strand that starts BELOW it is
+  // a leaf floating under the crown — the exact debris the k=0 fix removed. Starting inside the
+  // canopy costs one re-written leaf and can never disconnect; `len` gains a block to compensate.
+  const rMin2 = r2 * (1 - LUMP / 2)
   for (let i = 0; i < strands; i++) {
     const dx = Math.round((g() * 2 - 1) * r)
     const dz = Math.round((g() * 2 - 1) * r)
-    const len = 1 + Math.floor(g() * 2)
-    const rem = r2 - dx * dx - dz * dz
+    const len = 2 + Math.floor(g() * 2)
+    const rem = rMin2 - dx * dx - dz * dz
     if (rem <= 0) continue
     const bottom = -Math.floor(Math.sqrt(rem / squash))
     // ⚠ START AT THE SHELL CELL ITSELF (k=0), NOT BELOW IT. Hanging from `bottom - 1` leaves a gap
@@ -287,6 +331,55 @@ function foliageBlob(
     // Leaves-only, so a strand over the trunk column is refused by `canLeaf` rather than boring a
     // hole through the bark.
     for (let k = 0; k <= len; k++) put(c, cx + dx, cy + bottom - k, cz + dz, leaves, true)
+  }
+}
+
+/**
+ * ── ★ THE CROWN IS A CLUSTER OF LOBES, NOT ONE BLOB (2026-08-13) ────────────────────────────────
+ * The second half of Alex's "these read as primitives". One ellipsoid centred over the trunk is a
+ * ball on a stick however lumpy you make its skin, because its MASS is still a single centred
+ * volume — and worse, it leaves the lower half of every trunk bare, which is the pole the eye sees.
+ *
+ * So a crown is now a main lobe plus two or three satellites hung BELOW and to the side of it. The
+ * satellites are what fills the bare pole: they drape the canopy down around the upper trunk
+ * instead of perching it on top, and because each carries its own lump seed no two crowns in the
+ * forest share a silhouette.
+ *
+ * ★ THIS IS THE COMPOSITION RULE AGAIN, one level down. Four species already share two foliage
+ * implementations; now the blob implementation is itself built out of a smaller primitive rather
+ * than being one. A fifth species buys a different crown by changing counts, not by getting code.
+ *
+ * ⚠ REACH IS A CONTRACT. A satellite's centre offset plus its own warped radius must stay inside
+ * `maxSpread`, because that number is what `treeScanRadius` hands the planter — a lobe that reaches
+ * past it is a canopy sliced flat at a column boundary. The offset and radius fractions below are
+ * chosen against it (worst case ~1.3 x radius, so radius 4 reaches ~5.9 against a spread of 7), and
+ * the oracle measures the real thing rather than trusting this comment.
+ */
+function crownLobes(
+  c: Ctx, g: () => number, cx: number, cy: number, cz: number, r: number, leaves: number, squash: number,
+  seed: number,
+): void {
+  foliageBlob(c, g, cx, cy, cz, r, leaves, squash, seed)
+  const n = 2 + Math.floor(g() * 2)
+  for (let i = 0; i < n; i++) {
+    // ⚠ Rolls in a fixed order, unconditionally — same seam rule as the strands. See `foliageBlob`.
+    const ang = g() * Math.PI * 2
+    const off = r * (0.4 + g() * 0.25)
+    // Below the main lobe, never above it: a satellite on top would grow the tree's height and put
+    // the mass back where it already was. Down is where the bare trunk is.
+    //
+    // ⚠ THE FIRST CUT DROPPED THEM 0.3-0.8r AND IT WAS NOT ENOUGH — measured, not eyeballed: the
+    // canopy's mass-below-centre went 42% → 51% where the shape called for a clear break from a
+    // centred ellipsoid. At radius 3 that range rounds to one or two blocks, which is a nudge, not
+    // a second lobe. Dropping them 0.45-1.0r puts a satellite's own bulk beside the trunk rather
+    // than just under the main crown's shoulder.
+    const dy = -Math.round(r * (0.45 + g() * 0.55))
+    const rr = Math.max(1, Math.round(r * (0.45 + g() * 0.2)))
+    foliageBlob(
+      c, g,
+      cx + Math.round(Math.cos(ang) * off), cy + dy, cz + Math.round(Math.sin(ang) * off),
+      rr, leaves, squash, mixSeed(seed, i + 1),
+    )
   }
 }
 
@@ -307,7 +400,9 @@ function foliageBlob(
  * So the profile now peaks about a third of the way up and tapers to a point above — a spire with a
  * narrowed base, which is a silhouette the blob cannot make and is the reason two placers exist.
  */
-function foliageLayered(c: Ctx, g: () => number, cx: number, cy: number, cz: number, r: number, leaves: number): void {
+function foliageLayered(
+  c: Ctx, g: () => number, cx: number, cy: number, cz: number, r: number, leaves: number, lobeSeed: number,
+): void {
   const tiers = Math.max(3, Math.round(r * 1.6))
   // Sink the stack so its base overlaps the trunk instead of perching on the tip. Without this the
   // extra tiers all grow UPWARD and buy height by lengthening the bare pole underneath.
@@ -317,13 +412,18 @@ function foliageLayered(c: Ctx, g: () => number, cx: number, cy: number, cz: num
     const rr = r * (f < 0.3 ? 0.62 + (f / 0.3) * 0.38 : 1 - ((f - 0.3) / 0.7) ** 1.5)
     const rr2 = rr * rr
     const y = base + t
-    for (let dz = -Math.ceil(rr); dz <= Math.ceil(rr); dz++) {
-      for (let dx = -Math.ceil(rr); dx <= Math.ceil(rr); dx++) {
+    // A disc warps too, and it needs it more than a blob does: a stack of clean circles is the most
+    // machined shape in the forest. `t` rides the hash so consecutive tiers deform differently and
+    // the stack cannot read as one extruded profile.
+    const box = Math.ceil(rr * Math.sqrt(1 + LUMP / 2))
+    for (let dz = -box; dz <= box; dz++) {
+      for (let dx = -box; dx <= box; dx++) {
         const d = dx * dx + dz * dz
-        if (d > rr2) continue
+        const lim = rr2 * lump(dx, t, dz, lobeSeed)
+        if (d > lim) continue
         // Rim only, same correction as the blob's nibble — and for the same reason: the mesher's
         // per-cell jitter now supplies the raggedness this used to buy by deleting foliage.
-        if (d > rr2 * 0.82 && g() < 0.18) continue     // see foliageBlob's note (2026-08-13)
+        if (d > lim * 0.82 && g() < 0.18) continue     // see foliageBlob's note (2026-08-13)
         put(c, cx + dx, y, cz + dz, leaves, true)
       }
     }
@@ -359,8 +459,8 @@ export function growTree(
   if (sp.trunk === 'straight') {
     for (let i = 0; i < start.height; i++) put(c, start.x, baseY + i, start.z, sp.log, false)
     const top = baseY + start.height
-    if (sp.foliage === 'blob') foliageBlob(c, g, start.x, top - 1, start.z, sp.radius, sp.leaves, sp.squash ?? 1.2)
-    else foliageLayered(c, g, start.x, top - 2, start.z, sp.radius, sp.leaves)
+    if (sp.foliage === 'blob') crownLobes(c, g, start.x, top - 1, start.z, sp.radius, sp.leaves, sp.squash ?? 1.2, start.seed)
+    else foliageLayered(c, g, start.x, top - 2, start.z, sp.radius, sp.leaves, start.seed)
     return
   }
 
@@ -373,6 +473,7 @@ export function growTree(
   const dirs: [number, number][] = [[1, 0], [-1, 0], [0, 1], [0, -1]]
   const a = dirs[Math.floor(g() * 4) % 4]
   const b = dirs[(dirs.indexOf(a) + 1 + Math.floor(g() * 2)) % 4]
+  let limbNo = 0
   for (const [dx, dz] of [a, b]) {
     let x = start.x, z = start.z
     const limb = start.height - forkAt
@@ -381,7 +482,10 @@ export function growTree(
       if (i % 2 === 0) { x += dx; z += dz }
       put(c, x, baseY + forkAt + i, z, sp.log, false)
     }
-    foliageLayered(c, g, x, baseY + forkAt + limb - 2, z, sp.radius * 0.75, sp.leaves)
+    // ⚠ Each limb gets its OWN lump seed. Sharing one would deform both crowns identically, and a
+    // forking tree whose two halves are mirror images is more obviously generated than a plain
+    // sphere was — the fork is the silhouette people look at.
+    foliageLayered(c, g, x, baseY + forkAt + limb - 2, z, sp.radius * 0.75, sp.leaves, mixSeed(start.seed, 0x1b + limbNo++))
   }
 }
 

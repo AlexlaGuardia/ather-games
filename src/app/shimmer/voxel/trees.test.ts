@@ -4,10 +4,10 @@
 // above the ground, a canopy sheared flat at a column border, leaves eating the terrain they landed
 // on. All three read as "the art is wrong" and none of them show in a material census.
 
-import { AIR } from './section'
+import { AIR, Section } from './section'
 import { MAT } from './depth'
 import { SECTION, makeColumn } from './column'
-import { WOOD, SPECIES, treeStartsAt, treeScanRadius, DEFAULT_TREES } from './trees'
+import { WOOD, SPECIES, treeStartsAt, treeScanRadius, DEFAULT_TREES, growTree } from './trees'
 import { columnHeight } from './height'
 import { breakSeconds, blockDef } from './registry'
 
@@ -216,6 +216,131 @@ for (let i = 0; SITES.length < 40 && i < 4000; i++) {
   // commit updated the registry + recipes tests but missed this file, so they were failing stale.)
   ok(blockDef(WOOD.GOLDWOOD_LOG)?.drops[0]?.itemId === 'goldwood_log', 'goldwood drops its raw log')
   ok(blockDef(WOOD.STARWILLOW_LOG)?.drops[0]?.itemId === 'starwillow_log', 'starwillow drops its raw log')
+}
+
+// ── 10. ★ maxSpread is a CONTRACT, and it is now measured rather than trusted ────────────────
+// `treeScanRadius` derives the planter's scan margin from `maxSpread`, so a canopy that reaches
+// further than the number claims is simply MISSING from the neighbouring column — a tree sliced
+// flat down a column border, which reads as an art bug and is a generation one.
+//
+// ⚠ Nothing checked this before. Test 2's assert compares the margin against the number; it has no
+// opinion about whether the trees agree with it. That was survivable while a crown was one centred
+// ellipsoid of exactly `radius` — the lobed crown (2026-08-13) hangs satellites OFF the trunk, so
+// the reach is an emergent sum of offset + warped radius and no longer readable off the config.
+{
+  const S = 64                        // wide enough that nothing clips: reach is asserted at ≤ 7
+  const CENTRE = 32
+  let worst = 0, worstWho = ''
+  for (const sp of SPECIES) {
+    for (let h = sp.minHeight; h <= sp.maxHeight; h++) {
+      for (let k = 0; k < 24; k++) {
+        const stack = [new Section(S), new Section(S), new Section(S)]
+        const c = { sections: stack, ox: 0, oy0: 0, oz: 0, size: S, yTop: 3 * S }
+        growTree(c, { x: CENTRE, z: CENTRE, species: sp, height: h, seed: (k * 2654435761 + h) | 0 }, 20)
+        for (let si = 0; si < stack.length; si++) {
+          const d = stack[si].data
+          for (let i = 0; i < d.length; i++) {
+            if (!isWood(d[i])) continue
+            const x = i % S, z = ((i / S) | 0) % S
+            const reach = Math.max(Math.abs(x - CENTRE), Math.abs(z - CENTRE))
+            if (reach > worst) { worst = reach; worstWho = `${sp.id} h${h}` }
+          }
+        }
+      }
+    }
+  }
+  ok(worst > 0, `the reach check actually grew trees (${worst})`)
+  ok(worst <= CFG.maxSpread,
+    `★ no canopy reaches past maxSpread=${CFG.maxSpread} (worst ${worst} on ${worstWho})`)
+}
+
+// ── 11. ★ the crown is not a sphere — the lump is real, not decorative ───────────────────────
+// The whole 2026-08-13 change is "these trees read as primitives". A silhouette dial that is wired
+// up but has no effect would leave the forest looking identical while every other assert stayed
+// green, so this measures the deviation directly: how much the canopy's horizontal half-width
+// varies from layer to layer. A perfect ellipsoid varies smoothly and symmetrically; a lobed,
+// warped crown does not.
+{
+  const S = 64, CENTRE = 32
+  let asymmetric = 0, sampled = 0
+  for (const sp of SPECIES) {
+    for (let k = 0; k < 16; k++) {
+      const stack = [new Section(S), new Section(S), new Section(S)]
+      const c = { sections: stack, ox: 0, oy0: 0, oz: 0, size: S, yTop: 3 * S }
+      growTree(c, { x: CENTRE, z: CENTRE, species: sp, height: sp.maxHeight, seed: (k * 40503 + 7) | 0 }, 20)
+      // Compare the canopy's extent on +x against -x, per layer. A centred ellipsoid is exactly
+      // symmetric about the trunk; lobes and warp break that, and by more than one voxel.
+      for (let y = 0; y < 3 * S; y++) {
+        const sec = stack[(y / S) | 0], ly = y % S
+        let px = 0, nx = 0, any = false
+        for (let dx = -12; dx <= 12; dx++) {
+          for (let dz = -12; dz <= 12; dz++) {
+            if (!LEAVES.has(sec.get(CENTRE + dx, ly, CENTRE + dz))) continue
+            any = true
+            if (dx > 0) px = Math.max(px, dx); else if (dx < 0) nx = Math.max(nx, -dx)
+          }
+        }
+        if (!any) continue
+        sampled++
+        if (px !== nx) asymmetric++
+      }
+    }
+  }
+  ok(sampled > 100, `the lump check found canopy layers to measure (${sampled})`)
+  // ⚠ Deliberately a RATE, not a count, and the threshold is MEASURED against the old generator
+  // rather than picked. The pre-change centred ellipsoid was not perfectly symmetric either — the
+  // rim nibble deletes cells at random — so "any asymmetry at all" would have passed on the exact
+  // shape this change exists to replace. Stashing trees.ts and running this same check against the
+  // old file gives **33%**; the lobed, warped crown gives **53%**. 45% sits clear of both.
+  ok(asymmetric / sampled > 0.45,
+    `★ canopies are lopsided, not centred spheres (${(asymmetric / sampled * 100).toFixed(0)}% of layers)`)
+}
+
+// ── 12. ★ the crown DRAPES the trunk instead of perching on it ───────────────────────────────
+// ⚠ THIS ASSERT EXISTS BECAUSE THE ONE ABOVE COULD NOT FAIL FOR THE RIGHT REASON. Deleting the
+// satellite lobes outright left test 11 GREEN at 45% — the warp alone carries it — so half the
+// change was covered by decoration. The lump and the lobes fix DIFFERENT halves of "a pole with a
+// ball on it": the warp fixes the ball, the lobes fix the pole. They need separate oracles.
+//
+// What a satellite lobe is FOR is hanging canopy mass down the side of the upper trunk. So measure
+// exactly that: how much of the tree is bare stem below the lowest leaf.
+{
+  const S = 64, CENTRE = 32, GROUND = 20
+  let sum = 0, trees = 0
+  for (const sp of SPECIES) {
+    if (sp.foliage !== 'blob') continue          // lobes are the blob placer's; layered has its own profile
+    for (let h = sp.minHeight; h <= sp.maxHeight; h++) {
+      for (let k = 0; k < 12; k++) {
+        const stack = [new Section(S), new Section(S), new Section(S)]
+        const c = { sections: stack, ox: 0, oy0: 0, oz: 0, size: S, yTop: 3 * S }
+        growTree(c, { x: CENTRE, z: CENTRE, species: sp, height: h, seed: (k * 22695477 + h * 13) | 0 }, GROUND)
+        // The main lobe is centred on `top - 1`, so in the OLD generator the canopy's mass was
+        // symmetric about that line by construction. Every satellite hangs below it. So the share
+        // of leaf voxels sitting under the main lobe's centre is a direct readout of whether the
+        // mass moved DOWN the trunk — which is the entire job of a satellite.
+        const centreY = GROUND + 1 + h - 1
+        let below = 0, all = 0
+        for (let y = 0; y < 3 * S; y++) {
+          const sec = stack[(y / S) | 0], ly = y % S
+          for (let dx = -12; dx <= 12; dx++)
+            for (let dz = -12; dz <= 12; dz++) {
+              if (!LEAVES.has(sec.get(CENTRE + dx, ly, CENTRE + dz))) continue
+              all++
+              if (y < centreY) below++
+            }
+        }
+        if (!all) continue
+        sum += below / all
+        trees++
+      }
+    }
+  }
+  ok(trees > 20, `the bare-stem check grew blob trees (${trees})`)
+  // ⚠ Threshold MEASURED in all three states, not picked: pre-change generator **41.1%**, warp
+  // with the satellites deleted **41.9%**, lobed crown **53.6%**. 48% sits clear of both sides,
+  // and the deletion mutation goes red — which is the whole reason this assert exists.
+  ok(sum / trees > 0.48,
+    `★ foliage hangs down the trunk, not just over it (${(sum / trees * 100).toFixed(0)}% of mass below centre)`)
 }
 
 console.log(`\ntrees: ${pass} passed, ${fails.length} failed`)
