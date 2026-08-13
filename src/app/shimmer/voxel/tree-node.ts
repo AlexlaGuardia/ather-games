@@ -34,7 +34,31 @@
 // item (0.3 of one bark, against 2 bark guaranteed per log), so the ruled numbers survive and the
 // refine step stays the reliable route.
 
-import { SPECIES, trunkVoxels, type TreeSpecies, type TreeStart } from './trees'
+import {
+  SPECIES, trunkVoxels, trunkCells, treeStartsAt, treeScanRadius, DEFAULT_TREES,
+  type TreeConfig, type TreeSpecies, type TreeStart,
+} from './trees'
+import { blockDef } from './registry'
+
+/**
+ * Forestry XP for felling one tree.
+ *
+ * ★★ THE SAME CONTINUITY TRAP THE LOG COUNT HAD, and it very nearly shipped. Canon's node table
+ * pays a flat 20 / 50 / 120 / 300 per harvest — numbers written for the 2D game, where one harvest
+ * WAS one node. Our voxel forestry has been paying per block broken, so a goldwood was worth
+ * ~8 x 17 = 136 XP and a dawnwood ~15 x 41 = 615. Adopting canon's flat numbers would have cut
+ * forestry progression by roughly 85% in a commit about drop tables, and the only symptom would
+ * have been that levelling "feels slow now".
+ *
+ * So felling pays what chopping paid: the per-block award, once per trunk voxel. The formula is the
+ * host's own (`max(4, hardness * 12)`), read off the SAME registry row the block used, so the two
+ * cannot drift. Canon's per-node ladder is left alone in `world/resources.ts` — it describes the 2D
+ * node game and is right about that game.
+ */
+export function fellXP(start: TreeStart): number {
+  const hardness = blockDef(start.species.log)?.hardness ?? 1
+  return trunkVoxels(start) * Math.max(4, Math.round(hardness * 12))
+}
 
 /** A stack of one item. Matches what the inventory already takes. */
 export interface Drop { itemId: string; count: number }
@@ -44,15 +68,6 @@ export interface TreeNodeDef {
   secondary: { itemId: string; chance: number }
   /** Chance of a sapling of this species. The only source of one — see the header. */
   saplingChance: number
-  /**
-   * Skill XP for felling.
-   *
-   * ⚠ RESTATED FROM CANON, NOT IMPORTED, and that is a real cost worth naming. `world/resources.ts`
-   * holds these numbers (20 / 50 / 120 / 300) but it lives outside `voxel/`, and this file is pure
-   * core — importing it would break the one rule that keeps the generator portable. So these are a
-   * SECOND copy, and the oracle pins them to canon's ladder rather than to canon's file.
-   */
-  xp: number
 }
 
 /**
@@ -61,10 +76,10 @@ export interface TreeNodeDef {
  * secondary is the only drop here with no refine route competing with it at all.
  */
 export const TREE_NODES: Record<string, TreeNodeDef> = {
-  goldwood:   { secondary: { itemId: 'goldwood_bark',    chance: 0.30 }, saplingChance: 0.35, xp: 20 },
-  shimmeroak: { secondary: { itemId: 'amber_sap',        chance: 0.40 }, saplingChance: 0.28, xp: 50 },
-  starwillow: { secondary: { itemId: 'starwillow_sap',   chance: 0.35 }, saplingChance: 0.20, xp: 120 },
-  dawnwood:   { secondary: { itemId: 'crystallized_sap', chance: 0.25 }, saplingChance: 0.12, xp: 300 },
+  goldwood:   { secondary: { itemId: 'goldwood_bark',    chance: 0.30 }, saplingChance: 0.35 },
+  shimmeroak: { secondary: { itemId: 'amber_sap',        chance: 0.40 }, saplingChance: 0.28 },
+  starwillow: { secondary: { itemId: 'starwillow_sap',   chance: 0.35 }, saplingChance: 0.20 },
+  dawnwood:   { secondary: { itemId: 'crystallized_sap', chance: 0.25 }, saplingChance: 0.12 },
 }
 
 /** The sapling item for a species. One per species, so cultivating a dawnwood is its own reward. */
@@ -114,8 +129,48 @@ export function fellTree(start: TreeStart, roll: () => number): { drops: Drop[];
     if (r1 < def.secondary.chance) drops.push({ itemId: def.secondary.itemId, count: 1 })
     if (r2 < def.saplingChance) drops.push({ itemId: saplingItem(sp.id), count: 1 })
   }
-  return { drops, xp: def?.xp ?? 0 }
+  return { drops, xp: fellXP(start) }
 }
 
 /** Every species has a node definition, or felling it silently pays nothing but wood. */
 export const speciesMissingNode = (): TreeSpecies[] => SPECIES.filter(s => !TREE_NODES[s.id])
+
+/** A tree found in the world: the roll that made it, the ground it stands on, and its log cells. */
+export interface FoundTree { start: TreeStart; groundY: number; cells: { x: number; y: number; z: number }[] }
+
+/**
+ * Which tree owns the log cell at (x, y, z)?
+ *
+ * ★ THE HOST MUST NOT ANSWER THIS BY HAND. Chopping happens on a voxel, but the fell verb acts on a
+ * TREE, and the step between the two is the whole node model. Doing it in the renderer would mean a
+ * second walk of the trunk living next to the generator's — the exact shape of drift this file spent
+ * the morning deleting. So it lives here, pure, and reads the same `trunkCells` the generator wrote.
+ *
+ * ⚠ SEARCHED BY THE PLANTER'S OWN SCAN RADIUS, not by a guess. A trunk's origin is confined to its
+ * own column (`in_square`), but a forking limb leans OUT of it — so the cell under the player's
+ * reticle can belong to a tree rolled by a neighbouring column. Anything narrower silently fails to
+ * find starwillow's limbs, and only starwillow's, which is the kind of bug that reads as "sometimes
+ * chopping does nothing".
+ *
+ * `groundAt` returns null for unloaded columns; those simply cannot own the cell, since a tree the
+ * player is standing next to is loaded by definition.
+ */
+export function treeOwning(
+  seed: number, size: number, x: number, y: number, z: number,
+  groundAt: (x: number, z: number) => number | null,
+  cfg: TreeConfig = DEFAULT_TREES,
+): FoundTree | null {
+  const rad = treeScanRadius(size, cfg)
+  const c0x = Math.floor(x / size), c0z = Math.floor(z / size)
+  for (let cz = c0z - rad; cz <= c0z + rad; cz++) {
+    for (let cx = c0x - rad; cx <= c0x + rad; cx++) {
+      for (const st of treeStartsAt(seed, cx, cz, size, cfg)) {
+        const g = groundAt(st.x, st.z)
+        if (g === null) continue
+        const cells = trunkCells(st, g)
+        if (cells.some(c => c.x === x && c.y === y && c.z === z)) return { start: st, groundY: g, cells }
+      }
+    }
+  }
+  return null
+}

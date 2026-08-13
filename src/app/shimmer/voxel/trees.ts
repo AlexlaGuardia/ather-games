@@ -515,9 +515,40 @@ export function forkLimbs(start: TreeStart): { x: number; z: number; dx: number;
  * suggests, and a hand-written `height` would underpay the species that is hardest to cut.
  */
 export function trunkVoxels(start: TreeStart): number {
-  if (start.species.trunk === 'straight') return start.height
+  return trunkCells(start, 0).length
+}
+
+/**
+ * Every log cell this tree occupies, in world coordinates.
+ *
+ * ★ THIS IS THE FELL VERB'S WHOLE FOUNDATION. Making a tree one object means one act has to know
+ * which cells the tree IS — both to ask "does the cell the player just hit belong to a tree" and to
+ * take the whole trunk down in one go.
+ *
+ * ⚠ IT REPRODUCES `growTree`'S WALK RATHER THAN DESCRIBING IT, and the forking branch is why: the
+ * limb steps sideways on even `i` only, so its cells are not a formula anyone would write down
+ * correctly from the shape. `trunkVoxels` is now literally this list's LENGTH, so the payout and
+ * the removal cannot disagree about how big a tree is — which is the bug that would have paid a
+ * player for wood the world never took away.
+ */
+export function trunkCells(start: TreeStart, groundY: number): { x: number; y: number; z: number }[] {
+  const out: { x: number; y: number; z: number }[] = []
+  const baseY = groundY + 1
+  if (start.species.trunk === 'straight') {
+    for (let i = 0; i < start.height; i++) out.push({ x: start.x, y: baseY + i, z: start.z })
+    return out
+  }
   const forkAt = FORK_AT(start.height)
-  return forkAt + 2 * (start.height - forkAt)
+  for (let i = 0; i < forkAt; i++) out.push({ x: start.x, y: baseY + i, z: start.z })
+  const limb = start.height - forkAt
+  for (const { dx, dz } of forkLimbs(start)) {
+    let x = start.x, z = start.z
+    for (let i = 0; i < limb; i++) {
+      if (i % 2 === 0) { x += dx; z += dz }
+      out.push({ x, y: baseY + forkAt + i, z })
+    }
+  }
+  return out
 }
 
 /**

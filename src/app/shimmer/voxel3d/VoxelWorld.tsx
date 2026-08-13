@@ -49,6 +49,7 @@ import { loadSettings, saveSettings, withStyle, VIEW_RADIUS_MIN, VIEW_RADIUS_MAX
 import { buildAttrsSplit, MATERIAL_COLOR } from './attrs'
 import { leafPixels } from './tex/flora-tex'
 import { isLeafMat, isLogMat } from '../voxel/trees'
+import { treeOwning, fellTree, fellXP } from '../voxel/tree-node'
 import { createInventory, removeItems, countItem, type Inventory } from '../engine/inventory'
 // ★ PORT STEP 1 — the zero-coupling systems, wired unchanged.
 // PLAY3D-MIGRATION measured 16 of 23 engine systems as having NO reference to zones, tiles or world
@@ -4178,6 +4179,27 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
       const r = tickBreak(breaking.current, hit, dt, toolTier.current!, toolSkill.current!, eDef?.speedBonus ?? 1)
       breaking.current = r.state
       if (r.broken) {
+        // ── ★ THE FELL VERB — a tree is ONE object (Alex, 2026-08-13) ────────────────────────
+        // *"lets make the trees one object that drops rng loot when felled logs included."* A swing
+        // that lands on any log takes the WHOLE trunk, pays once, and is done — rather than the
+        // player mining a tree the way they mine a wall.
+        //
+        // ⚠ RESOLVED FIRST, because the XP award below needs it. Felling pays `fellXP`, which is
+        // the per-block award times the trunk's voxel count — i.e. exactly what chopping it cell by
+        // cell paid yesterday. Awarding the per-block amount ONCE for a whole tree would have cut
+        // forestry progression by ~90% and looked like nothing at all.
+        //
+        // ⚠ FALLS BACK TO THE ORDINARY BLOCK PATH if the tree cannot be resolved. A log with no
+        // owner is not impossible — a save from before this existed, a generator retune — and the
+        // honest failure is "you got one log", never "the swing did nothing".
+        const felled = isLogMat(hit.material)
+          ? treeOwning(SEED, SECTION, hit.x, hit.y, hit.z, (tx, tz) => {
+              const tcx = Math.floor(tx / SECTION), tcz = Math.floor(tz / SECTION)
+              const c = cols.current.get(key(tcx, tcz))
+              return c ? c.heightAt(tx - tcx * SECTION, tz - tcz * SECTION) : null
+            })
+          : null
+
         // ★ XP GOES TO THE BLOCK'S SKILL. Mining ore trains Prospecting, felling a tree trains
         // Forestry — the two halves of gathering finally exist in the same world, which is the whole
         // reason this port was worth doing before combat or NPCs.
@@ -4185,16 +4207,43 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
           const sk = skills.current![wantSkill as keyof SkillSet]
           // XP scales with hardness, so the deep tiers train faster than topsoil — the ladder the
           // registry already encodes, reused rather than restated.
-          const res = addSkillXP(sk, Math.max(4, Math.round((hitDef?.hardness ?? 1) * 12)))
+          const res = addSkillXP(sk, felled ? fellXP(felled.start)
+            : Math.max(4, Math.round((hitDef?.hardness ?? 1) * 12)))
           if (res.leveled) {
             onLevel(`${wantSkill} ${res.newLevel}${getMilestone(res.newLevel) ? ' — ' + getMilestone(res.newLevel) : ''}`)
           }
           onSkill({ id: wantSkill, level: sk.level, xp: sk.xp, next: xpForSkillLevel(sk.level) })
         }
+        // ── ★ THE FELL VERB — a tree is ONE object (Alex, 2026-08-13) ────────────────────────
+        // *"lets make the trees one object that drops rng loot when felled logs included."* So a
+        // swing that lands on any log takes the WHOLE trunk, pays the node's payout once, and is
+        // done — rather than the player mining a tree the way they mine a wall.
+        //
+        // ★ IT PAYS EXACTLY WHAT CHOPPING CELL BY CELL PAID (`fellTree` → one log per trunk voxel,
+        // asserted in tree-node.test.ts). The building grammar is priced against the old yield, so
+        // a node that paid less would leave every recipe working and every build unaffordable.
+        //
+        // ⚠ FALLS BACK TO THE ORDINARY BLOCK DROP if the tree cannot be resolved. A log with no
+        // owner is not impossible — a player-placed log one day, a generator retune, a save from
+        // before this existed — and the honest failure there is "you got one log", never "the swing
+        // did nothing". Silence would read as broken input.
         // ★ The block bursts into an ENTITY on the floor, it does not teleport into the satchel.
         // Straight-to-inventory works and feels like nothing happened; seeing the shard fall is
         // what tells the player the swing landed and what the vein actually yielded.
-        for (const d of dropsFor(hit.material)) drops.current.push(spawnDrop(d.itemId, d.count, hit.x, hit.y, hit.z))
+        if (felled) {
+          const { drops: paid } = fellTree(felled.start, Math.random)
+          // Dropped at the BASE, not at the cell that was hit. You fell a tree from its foot and
+          // the pile belongs where you are standing — a payout raining from a limb you cut at head
+          // height lands in the canopy and reads as lost.
+          const base = felled.cells[0]
+          for (const d of paid) drops.current.push(spawnDrop(d.itemId, d.count, base.x, base.y, base.z))
+          const extra = paid.length - 1
+          onSay(extra > 0
+            ? `the ${felled.start.species.id} comes down — ${paid[0].count} logs and ${extra} more`
+            : `the ${felled.start.species.id} comes down — ${paid[0].count} logs`)
+        } else {
+          for (const d of dropsFor(hit.material)) drops.current.push(spawnDrop(d.itemId, d.count, hit.x, hit.y, hit.z))
+        }
         // ★ A BROKEN CHEST SPILLS WHAT IT HELD — before `setVoxel`, which is what drops the record.
         // It spills rather than refusing to break: the pile is visible, `tickDrops`' capacity gate
         // already leaves what will not fit lying on the ground, and a container you cannot pick up
@@ -4204,7 +4253,16 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
           for (const d of held) drops.current.push(spawnDrop(d.itemId, d.count, hit.x, hit.y, hit.z))
           if (held.length) onSay(`the chest spills — ${held.reduce((n, d) => n + d.count, 0)} items on the ground`)
         }
-        setVoxel(hit.x, hit.y, hit.z, AIR)
+        if (felled) {
+          // ⚠ TOP DOWN. Every write funnels through `setVoxel`, which asks `orphanedLeaves` what
+          // the removal stranded — and that question is only correct against the world as it then
+          // is. Taking the base out first would strand the whole canopy on the first call and then
+          // re-scan it on every remaining cell; from the top, each step orphans the little that
+          // step actually released, and `enqueueLeaves` keeps the earliest time either way.
+          for (const c of [...felled.cells].sort((a, b) => b.y - a.y)) setVoxel(c.x, c.y, c.z, AIR)
+        } else {
+          setVoxel(hit.x, hit.y, hit.z, AIR)
+        }
         // ★ Tutorial 'cut' step — any log, not one species (see LOG_MATERIALS's header).
         if (LOG_MATERIALS.has(hit.material)) onQuestEvent('cut')
         breaking.current = null
