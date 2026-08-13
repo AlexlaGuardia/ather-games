@@ -5,7 +5,7 @@
 // falls at all, which is the entire point of the feature; an entity list compacted mid-loop
 // silently skips entries. All three are cheap to assert and unpleasant to find by playing.
 
-import { spawnDrop, tickDrops, resetDropIds, DEFAULT_DROPS, type Drop } from './drops'
+import { spawnDrop, tossDrop, tickDrops, resetDropIds, DEFAULT_DROPS, type Drop } from './drops'
 
 let pass = 0
 const fails: string[] = []
@@ -194,6 +194,28 @@ const run = (drops: Drop[], seconds: number, player: [number, number, number] = 
   const legacy = mk()
   const r3 = tickDrops(legacy, 0.016, 0.5, 10, 0.5, ground)
   ok(r3.picked[0]?.count === 10, 'no capacity fn = take everything (the old behaviour)')
+}
+
+// ── ★ A THROWN ITEM MUST NOT COME STRAIGHT BACK (2026-08-13) ────────────────────────────────────
+// The drop verb's whole failure mode: you stand where you threw from, `pickupRadius` is a generous
+// 1.6, and mining's 0.45s delay is far too short — so "drop this" silently puts it back in the bag
+// and reads as a dead key. Both properties below are the fix, asserted rather than eyeballed.
+{
+  const t = tossDrop('rubble', 5, 10, 64, 10, 0, 1)
+  ok(t.pickupDelay > 1, `★ a thrown item cannot be re-collected immediately (${t.pickupDelay}s)`)
+  ok(t.pickupDelay > spawnDrop('rubble', 1, 0, 0, 0).pickupDelay,
+    '★ ...and waits longer than a mined one, which only needs to be seen leaving the block')
+  ok(t.vz > 0 && Math.abs(t.vx) < 1e-6, '★ it is thrown along the look vector, not a hash of a block')
+  ok(t.z > 10, 'and it starts ahead of the thrower, not inside them')
+  ok(t.vy > 0, 'thrown slightly upward so it arcs instead of scuffing the floor')
+  ok(t.count === 5, 'the whole stack travels as one entity')
+
+  // ⚠ A straight-up look gives a zero-length horizontal direction. Without the guard the item
+  // lands on the player's feet and is vacuumed the moment the delay expires — the same dead-verb
+  // outcome by a different route.
+  const up = tossDrop('rubble', 1, 0, 64, 0, 0, 0)
+  ok(Number.isFinite(up.x) && Number.isFinite(up.z), '★ looking straight up does not produce NaN')
+  ok(Math.hypot(up.vx, up.vz) > 0, '...and still throws it somewhere')
 }
 
 console.log(`\ndropped items: ${pass} passed, ${fails.length} failed`)

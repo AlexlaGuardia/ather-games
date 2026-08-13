@@ -33,8 +33,9 @@ import { AIR } from '../voxel/section'
 import { materialAt, MAT, isPlant, isHalfMat, isTopSlab, baseOf, TOP_BIT, DEFAULT_DEPTH } from '../voxel/depth'
 import { FLORA, plantVariant } from '../voxel/flora'
 import { raycast, tickBreak, dropsFor, setBreakRate, getBreakRate, type BreakState } from '../voxel/mine'
-import { spawnDrop, tickDrops, type Drop } from '../voxel/drops'
+import { spawnDrop, tossDrop, tickDrops, type Drop } from '../voxel/drops'
 import { orphanedLeaves, dueLeaves, withoutLeaves, enqueueLeaves, type PendingLeaf } from '../voxel/decay'
+import { salvageItems, salvageMessage } from '../voxel/salvage'
 import { blockDef, materialForItem, emitOf, BLOCKS, type BlockSkill } from '../voxel/registry'
 import { editIndex, recordEdit, applyEdits, packEdits, unpackEdits, isStale, type ColumnEdits } from '../voxel/edits'
 import { loadColumn, saveColumn, editedColumnCount, loadPlayer, savePlayer, type PlayerSave } from './save'
@@ -1394,6 +1395,7 @@ export default function VoxelWorld() {
           /* A tool in hand is not a block in hand — RMB must not place while you hold a spade.
              `drawn` blanks it too: a weapon out means neither hand is free. */
           selItem={(() => { const e = hotbar[sel]; return !drawn && e ? e.itemId : null })()}
+          selSlot={sel}
           weaponDrawn={drawn}
           weaponIdx={weaponIdx}
           onAmmo={setAmmoUi}
@@ -1606,7 +1608,7 @@ function Hud({ stats, toast, pos, look, hotbar, sel, tier, held, build, pieceIdx
         <div className="mt-1 text-white/45">click to look · WASD · space jump · shift slide · hold space climb · V fly</div>
         {build
           ? <div className="text-amber-200/80">BUILD · RMB place · LMB deconstruct · R rotate · 1-8 piece · Tab exit</div>
-          : <div className="text-white/45">hold LMB mine · RMB place · scroll/1-8 slot · F draw · C craft · Tab build · T chat, / commands</div>}
+          : <div className="text-white/45">hold LMB mine · RMB place · scroll/1-8 slot · Q drop (shift = stack) · F draw · C craft · Tab build · T chat, / commands</div>}
         {/* ★ The tools are Greg's, from engine/tools.ts, unchanged. Tier is what you HOLD now. */}
         <div className="text-white/40 mt-1">
           {(['forestry', 'prospecting'] as const).map(sk => {
@@ -2503,11 +2505,13 @@ const SOLID_EXCEPT = new Set<number>([AIR, MAT.WATER, MAT.TUFT, MAT.TALL_GRASS, 
 // CELL_HALF for it; everything else (light, fence arms, piece placement) wants "yes, solid".
 const isSolid = (m: number) => !SOLID_EXCEPT.has(baseOf(m))
 
-function World({ inv, toolTier, toolSkill, vitals, mana, selItem, weaponDrawn, weaponIdx, onAmmo, onStats, onSay, runeTick, onPos, onLook, onInvChange, worker, incoming, inflight, settings, build, pieceIdx, rot, tools, skills, onSkill, onLevel, onTool, tutorial, onQuestEvent, onNearGreg, onNearTable, cmdOut, mistLedger, onNearMist, sparring, pot, onOpenChest, uiOpen }: {
+function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weaponDrawn, weaponIdx, onAmmo, onStats, onSay, runeTick, onPos, onLook, onInvChange, worker, incoming, inflight, settings, build, pieceIdx, rot, tools, skills, onSkill, onLevel, onTool, tutorial, onQuestEvent, onNearGreg, onNearTable, cmdOut, mistLedger, onNearMist, sparring, pot, onOpenChest, uiOpen }: {
   inv: React.RefObject<Inventory>
   toolTier: React.RefObject<number>
   toolSkill: React.RefObject<BlockSkill>
   selItem: string | null
+  /** Which hotbar slot `selItem` came from — the drop verb needs the SLOT, not just the id. */
+  selSlot: number
   /** Weapon out. Mining and placing are locked while true. Named `weaponDrawn`, not
    *  `drawn`: this component already has a `drawn` ref holding the rendered mesh map. */
   weaponDrawn: boolean
@@ -2760,7 +2764,24 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, weaponDrawn, w
     let live = true
     void loadPlayer(SEED).then(p => {
       if (!p || !live) return
-      if (p.inv) inv.current = p.inv as Inventory
+      if (p.inv) {
+        inv.current = p.inv as Inventory
+        // ── ★ A BAG OUTLIVES THE RULES IT WAS FILLED UNDER (2026-08-13) ────────────────────────
+        // The building grammar retired `block_stone`, so a save from before it holds an item that
+        // nothing places, nothing crafts and nothing names — junk the game cannot explain. Remap it
+        // to its successor here, at the one point a save becomes live state.
+        //
+        // ⚠ REMAP, NEVER DELETE, and never a recipe: see `salvage.ts`'s header. Rock became rubble,
+        // so the hour spent quarrying survives the ruling that renamed rock.
+        const fixed = salvageItems(inv.current.slots)
+        const msg = salvageMessage(fixed.changed)
+        if (msg) {
+          inv.current.slots = fixed.slots
+          // Said out loud rather than done quietly: items changing in your bag while you were not
+          // looking is exactly the kind of thing a player should be told, not left to discover.
+          onSay(`your bag caught up: ${msg}`)
+        }
+      }
       // ensureBasicTools over the SAVED set: a future tool family added to the game arrives in
       // an old save as its basic tier instead of as undefined.
       if (p.tools) tools.current = ensureBasicTools(p.tools as EquippedTools)
@@ -2840,6 +2861,13 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, weaponDrawn, w
       // spawns a projectile needs the scene GROUP, which only the frame loop holds — the same
       // reason play3d hands placed archetypes to its sim instead of resolving them in the handler.
       { const ci = CAST_CODES.indexOf(e.code); if (ci >= 0) pendingCast.current = ci }
+      // ★ Q THROWS THE SELECTED STACK (Shift+Q for all of it). Deliberately NOT gated on the
+      // weapon here: `weaponDrawn` is a prop and this listener is registered once, so testing it
+      // in this closure would read whatever it was on mount forever. The frame loop below has the
+      // live value and does the gate — `selItem` is already null while drawn, so it comes free.
+      // ⚠ Q also cycles weapons in the parent's handler, but only WHILE DRAWN, and the two cases
+      // cannot overlap for exactly that reason.
+      if (e.code === 'KeyQ') pendingDrop.current = { all: e.shiftKey }
     }
     const ku = (e: KeyboardEvent) => { keys.current[e.code] = false }
     const md = (e: MouseEvent) => {
@@ -2999,6 +3027,16 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, weaponDrawn, w
    * later finds the whole canopy already due — which is the only reading of "over time" that
    * survives the game not running.
    */
+  /**
+   * A queued throw, set by the key handler and resolved in the frame loop.
+   *
+   * ★ SAME PATTERN AS `pendingCast`, and for the same reason: a toss needs the CAMERA's facing and
+   * the live drops array, neither of which a `keydown` closure registered once on mount can see
+   * without going stale. `all` carries Shift at the moment the key went down, because by the time
+   * the frame runs the modifier may already be released.
+   */
+  const pendingDrop = useRef<null | { all: boolean }>(null)
+
   const decayQueue = useRef<PendingLeaf[]>([])
   /** Last wall-clock second the queue was written to storage. See the throttle in the decay tick. */
   const decaySavedAt = useRef(0)
@@ -4208,6 +4246,32 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, weaponDrawn, w
         onInvChange()
         mouse.current.right = false   // one block per click, not a firehose
       }
+      }
+    }
+
+    // ── ★ THROWING SOMETHING AWAY ────────────────────────────────────────────────────────────
+    // Alex asked for it the same day the building grammar retired `block_stone`: a bag with no way
+    // out is a bag that fills with the last balance change forever.
+    //
+    // The gate is `selItem`, which the parent already nulls while the weapon is drawn — so the
+    // draw-lock that governs every other verb governs this one without a second rule to keep in
+    // sync. The slot is re-checked against `selItem` before anything leaves it: a frame can pass
+    // between the key and here, and dropping whatever happens to be in the slot NOW would throw the
+    // wrong stack if the player scrolled in that gap.
+    if (pendingDrop.current) {
+      const req = pendingDrop.current
+      pendingDrop.current = null
+      const slot = inv.current?.slots[selSlot]
+      if (selItem && slot && slot.itemId === selItem && slot.count > 0) {
+        const itemId = slot.itemId
+        const n = req.all ? slot.count : 1
+        slot.count -= n
+        if (slot.count <= 0) inv.current!.slots[selSlot] = null
+        camera.getWorldDirection(vAim.current)
+        // Chest height, not eye height: an item that leaves from your eyes reads as spat out.
+        drops.current.push(tossDrop(itemId, n, p.x, p.y - 0.45, p.z, vAim.current.x, vAim.current.z))
+        onInvChange()
+        onSay(`dropped ${n} ${blockDef(materialForItem(itemId) ?? -1)?.name ?? itemId}`)
       }
     }
 

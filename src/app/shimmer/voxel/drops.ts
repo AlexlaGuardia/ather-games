@@ -75,6 +75,46 @@ export function spawnDrop(itemId: string, count: number, bx: number, by: number,
   }
 }
 
+/**
+ * Throw an item out of the player's hands.
+ *
+ * ── ★ WHY THIS IS NOT `spawnDrop` WITH DIFFERENT ARGUMENTS (2026-08-13, Alex asked for it) ──────
+ * Two fields differ and both of them are the whole feature:
+ *
+ * 1. **DIRECTION IS THE LOOK VECTOR, not a hash of the block coordinate.** A mined block throws its
+ *    drop a deterministic way because the same block broken twice must behave identically. A THROWN
+ *    item has no block — it comes from a player who is facing somewhere, and an item that ignores
+ *    where you were looking reads as dropping through yourself rather than throwing.
+ *
+ * 2. **`pickupDelay` IS FAR LONGER.** Mining uses 0.45s, which exists only so the drop is visible
+ *    leaving the block. At 0.45 a thrown item is back in your bag before it lands, because you are
+ *    standing exactly where you threw it from and `pickupRadius` is a generous 1.6 — so "drop this"
+ *    would silently do nothing, which is the least debuggable outcome a verb can have. 1.6s is long
+ *    enough to walk away from a stack you meant to be rid of.
+ *
+ * Spawned at chest height and thrown slightly upward, so it arcs away instead of scuffing the floor
+ * at the player's feet.
+ */
+export function tossDrop(
+  itemId: string, count: number, x: number, y: number, z: number, dirX: number, dirZ: number,
+): Drop {
+  // ⚠ A LOOK STRAIGHT UP OR DOWN HAS NO HORIZONTAL DIRECTION, and the first cut of this guard only
+  // stopped the NaN — it still left the item with zero horizontal speed, landing on the thrower's
+  // feet to be vacuumed the moment the delay expired. That is the same dead verb by another route,
+  // and the oracle caught it. So the fallback is a real direction, not a safe zero: pitch fully up,
+  // and the item still leaves your hands.
+  const len = Math.hypot(dirX, dirZ)
+  const nx = len > 1e-6 ? dirX / len : 0
+  const nz = len > 1e-6 ? dirZ / len : 1
+  return {
+    id: nextId++,
+    itemId, count,
+    x: x + nx * 0.6, y, z: z + nz * 0.6,
+    vx: nx * 5.2, vy: 2.4, vz: nz * 5.2,
+    age: 0, pickupDelay: 1.6, resting: false,
+  }
+}
+
 export interface DropTickResult {
   /** Items collected this tick, already merged by id. */
   picked: { itemId: string; count: number }[]
