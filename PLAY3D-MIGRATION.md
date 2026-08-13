@@ -1,4 +1,51 @@
 # Moving play3d onto the voxel world — what actually has to change
+
+> ## ★ MEASURED STATE — 2026-08-13 (jin-cc). Read this part first.
+>
+> Alex, walking the world: *"i feel like its forked from the room .. if we can park the older
+> versions so all work gets added to the right place."* The feeling is right; the diagnosis is
+> narrower than it looks. **Everything below the doors is fine. The doors are already correct.**
+>
+> **The doors, verified rather than assumed:**
+> - `/shimmer` → redirects to `/shimmer/voxel3d` (flipped 2026-08-07, see `shimmer/page.tsx`)
+> - `/room` → `/shimmer/voxel3d` (`app/room/page.tsx:24`)
+> - the two trees share **exactly one filename** (`page.tsx`). No duplicated modules.
+>
+> **So what makes it feel forked:** the voxel world's own HUD advertises `⊕ play3d (legacy)`
+> (`VoxelWorld.tsx`). You land correctly in voxel3d and are then invited back into the old game
+> from inside the new one. That link is the fork you can feel.
+>
+> ### Where each engine system actually lives, counted today
+>
+> ⚠ This counts DIRECT imports from `voxel3d/` and `play3d/` only. It says where a system is
+> *wired*, not where it is reachable — a module pulled in by another engine module reads as
+> neither. Good enough to answer "what is left to port"; do not read it as a dead-code census.
+>
+> | state | systems | meaning |
+> |---|---|---|
+> | **both** (11) | arena, day-cycle, encounters, farming, inventory, mana, skills, spirit-health, spirit-index, tools, weapons | already ported — the shared spine |
+> | **voxel only** (2) | cast-dispatch, vitals | new work, landing in the right place |
+> | **⚠ play3d only** (15) | alchemy, bank, battle-ai, burrows, crafting, exchange, harvesting, hunter-ai, moves, party-stats, player, potion-effects, rinning, segs-collision, spawn-board | **this list IS the remaining fork** |
+>
+> **The 15 are the answer to "park the older versions".** You cannot park `play3d` yet, for the
+> reason the 08-06 audit already gave and which still holds: *you do not archive the thing you are
+> still mining.* Park it when that column is empty. `spawn-board` (54 zone refs) is still the
+> biggest single piece, exactly as predicted.
+>
+> ### Five engine modules have no importers at all
+>
+> `chatterbox` (321 loc) · `collar-foes` (169) · `token-renderer` (146) · `tool-swing` (124) ·
+> `world-items` (192). **`collar-foes` is expected** — it is the tested pure half of #294 and its
+> wiring is the known-open work, not a discovery. The other four are worth a look before anyone
+> ports them by accident.
+>
+> ### ⚠ And the thing that made this audit necessary
+>
+> This file was written 2026-08-06 as a PLAN and never updated, so seven days later nobody could
+> answer "what is left" without re-deriving it from the imports. **A migration doc that is not a
+> tracker rots into a doc that gets believed.** Same family as every other stale-note find this
+> month. If you port a system, move it between the rows above in the same commit.
+
 > Audited 2026-08-06 (jin-cc) after Alex asked how to swap the voxel stack in for play3d.
 > Method is the zone-cutover one: **measure the coupling before planning the work**, because the
 > last two times the scary-sounding job turned out to be three small ones and the small-sounding
