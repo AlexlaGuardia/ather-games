@@ -137,6 +137,8 @@ import { knownMoves, learnableMoves, MOVES_BY_RUNE } from '../play3d/keeper-move
 import { CAST_SLOTS, eligibleMoves, isBuilt, castForMove } from '../play3d/cast'
 import { loadLoadout, saveLoadout, setSlot, type Loadout } from '../play3d/loadout'
 import { keeperBook } from '../play3d/book'
+import { VoxelMap, VoxelMiniMap, MAP_W, MAP_H, toLocal } from './VoxelMap'
+import { loadSeen, saveSeen, see, CELL, type Seen } from './discovery'
 import { applyFightResult } from '../engine/spirit-health'
 import type { BattleResult } from '../engine/arena'
 import { createFloraRenderer } from './flora-mesh'
@@ -610,6 +612,41 @@ export default function VoxelWorld() {
     return () => clearTimeout(t)
   }, [toast])
   const [pos, setPos] = useState('')
+  // ── ★ THE MAP (2026-08-13) ────────────────────────────────────────────────────────────────────
+  // The keeper's live spot, kept as a ref rather than state: the frame loop writes it 60×/sec and a
+  // setState there would re-render the whole HUD on every frame.
+  const mapPos = useRef<{ x: number; z: number } | null>(null)
+  const mapYaw = useRef(0)
+  const [showMap, setShowMap] = useState(false)
+  /**
+   * What the keeper has walked. See `discovery.ts` for why unwalked ground is CLOUD and not a grey
+   * overlay — in the Ather it is the literal substance of the place.
+   *
+   * ★ SAMPLED ON ITS OWN 250ms CLOCK, NOT IN THE FRAME LOOP. A fog cell is 16 blocks across and a
+   * walker crosses one every couple of seconds, so 60Hz would ask the same question hundreds of
+   * times per answer. `see()` returns 0 when nothing opened, so the common tick costs one distance
+   * check and nothing else — and the SAVE is debounced off ground opening rather than off the
+   * clock, so a keeper standing still never writes.
+   */
+  const seenRef = useRef<Seen | null>(null)
+  const [seenTick, setSeenTick] = useState(0)
+  const seenDirty = useRef(false)
+  useEffect(() => {
+    seenRef.current = loadSeen('voxel', MAP_W * CELL, MAP_H * CELL)
+    setSeenTick(n => n + 1)
+    let saveT = 0
+    const id = setInterval(() => {
+      const p = mapPos.current, seen = seenRef.current
+      if (!p || !seen) return
+      const { lx, lz } = toLocal(p.x, p.z)
+      if (see(seen, lx, lz) > 0) { seenDirty.current = true; setSeenTick(n => n + 1) }
+      if (seenDirty.current && ++saveT >= 8) { saveT = 0; seenDirty.current = false; saveSeen('voxel', seen) }
+    }, 250)
+    return () => {
+      clearInterval(id)
+      if (seenDirty.current && seenRef.current) saveSeen('voxel', seenRef.current)
+    }
+  }, [])
   const [hotbar, setHotbar] = useState<(HotbarEntry | null)[]>([])
   // Stowed vs drawn. F toggles. See the DRAW LOCK note on the keydown handler.
   const [drawn, setDrawn] = useState(false)
@@ -1293,6 +1330,13 @@ export default function VoxelWorld() {
         }
         // I opens the satchel — same open/close-on-the-same-key shape as C and E, so the three
         // cursor surfaces behave identically. Escape dismisses them all as well.
+        // M opens the map and closes it — the same one-key shape as I and C, and it is a CURSOR
+        // surface (you read a map standing still), so it takes the pointer like the others do.
+        if (e.code === 'KeyM') {
+          if (showMap) { setShowMap(false); closeCursorUI() }
+          else if (!cursorUIOpen) { openCursorUI(); setShowMap(true) }
+          return
+        }
         if (e.code === 'KeyI') {
           if (bagOpen || openChest) closeBag()
           else { openCursorUI(); setBagOpen(true) }
@@ -1362,7 +1406,7 @@ export default function VoxelWorld() {
     window.addEventListener('keydown', onKey)
     window.addEventListener('wheel', onWheel, { passive: true })
     return () => { window.removeEventListener('keydown', onKey); window.removeEventListener('wheel', onWheel) }
-  }, [build, drawn, dialogueOpen, nearGreg, nearTable, craftOpen, showSettings, consoleOpen, closeDialogue, openCursorUI, closeCursorUI, nearMist, hasParty, startSpar, bagOpen, openChest, closeBag, cursorUIOpen])
+  }, [build, drawn, dialogueOpen, nearGreg, nearTable, craftOpen, showSettings, consoleOpen, closeDialogue, openCursorUI, closeCursorUI, nearMist, hasParty, startSpar, bagOpen, openChest, closeBag, cursorUIOpen, showMap])
 
   return (
     <div className="fixed inset-0 bg-[#0b0d14]">
@@ -1407,7 +1451,11 @@ export default function VoxelWorld() {
           weaponIdx={weaponIdx}
           onAmmo={setAmmoUi}
           onStats={setStats} onSay={say} runeTick={runeTick}
-          onPos={p => setPos(`x ${p.x.toFixed(0)}  y ${p.y.toFixed(0)}  z ${p.z.toFixed(0)}`)}
+          onPos={(p, yaw) => {
+            mapPos.current = { x: p.x, z: p.z }
+            mapYaw.current = yaw
+            setPos(`x ${p.x.toFixed(0)}  y ${p.y.toFixed(0)}  z ${p.z.toFixed(0)}`)
+          }}
           onLook={setLook} onInvChange={refreshHotbar}
           worker={worker} incoming={incoming} inflight={inflight} settings={settings}
           build={build} pieceIdx={pieceIdx} rot={rot}
@@ -1448,6 +1496,17 @@ export default function VoxelWorld() {
                   onQuick={(r) => { quickRef(r); setCraftTick(v => v + 1) }}
                   onClose={closeBag} tools={tools} skills={skills} party={party} />
       )}
+      {/* The map — minimap always up, M expands it. Hidden while another cursor surface owns the
+          screen, so it never sits on top of the bag or the craft grid. */}
+      {!cursorUIOpen && !showMap && (
+        <VoxelMiniMap seed={SEED} seenRef={seenRef} posRef={mapPos} yawRef={mapYaw}
+          onExpand={() => { openCursorUI(); setShowMap(true) }} />
+      )}
+      {showMap && (
+        <VoxelMap seed={SEED} seenRef={seenRef} seenTick={seenTick} posRef={mapPos} yawRef={mapYaw}
+          onClose={() => { setShowMap(false); closeCursorUI() }} />
+      )}
+
       {dialogueOpen && <GregDialogue stage={tutorial.current.stage} onClose={closeDialogue} />}
 
       {/* ★ THE SPAR. The SAME real-time arena every other fight runs (`engine/arena.ts` via
@@ -2538,7 +2597,7 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
   onSay: (s: string) => void
   /** Bumped when the rune inventory changed under us — re-resolve the loadout, no reload. */
   runeTick: number
-  onPos: (p: THREE.Vector3) => void
+  onPos: (p: THREE.Vector3, yaw: number) => void
   onLook: (l: { name: string; progress: number; refused: boolean } | null) => void
   onInvChange: () => void
   worker: React.RefObject<Worker | null>
@@ -3942,7 +4001,7 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
       // Probes the column UNDER THE PLAYER (was hardcoded to spawn) — at boot they are the same
       // spot, and generalizing is what lets the console's tp reuse this gate at any destination.
       if (isSolid(voxel(Math.floor(p.x), Math.floor(p.y) - 3, Math.floor(p.z)))) settled.current = true   // real ground, not the phantom floor
-      else { onPos(p); onStats(`${cols.current.size} columns · generating…`); return }
+      else { onPos(p, 0); onStats(`${cols.current.size} columns · generating…`); return }
     }
 
     // ── the gate ──────────────────────────────────────────────────────────────────────────────
@@ -4124,7 +4183,7 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
       }
 
       onLook(hit ? { name: `${def.name}${!afford ? ' — need materials' : fits ? '' : ' — blocked'}`, progress: 0, refused: !fits || !afford } : null)
-      onPos(p)
+      onPos(p, Math.atan2(aim.x, aim.z))
       if (++frame.current % 10 === 0) {
         const info = gl.info
         onStats(`${cols.current.size} col · ${placements.current.length} pieces · geo ${info.memory.geometries} prog ${info.programs?.length ?? 0} · BUILD`)
@@ -4518,7 +4577,7 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
           refused: mouse.current.left && !breaking.current && def.hardness !== Infinity,
         }
       : null)
-    onPos(p)
+    onPos(p, Math.atan2(aim.x, aim.z))
     if (++frame.current % 10 === 0) {
       // ★ GPU RESOURCE COUNTS IN THE HUD. A leak used to announce itself by Chrome blocking the
       // context and the screen going black with no explanation. `programs` is the number that

@@ -23,16 +23,22 @@
 // own record. Do not write anything that asserts the cloud-ocean covers Athernyx; it does not.
 
 /**
- * Tiles per fog cell. The fog is deliberately COARSER than the grid: per-tile discovery stores 16×
- * more bits for a resolution nobody can see once it is blurred into cloud, and a hard per-tile edge
- * is the tell that turns weather into a spreadsheet. Four also means a keeper who steps one tile
- * never watches a single pixel wink on.
+ * BLOCKS per fog cell. Coarser than the world on purpose: per-block discovery stores 256× more bits
+ * for a resolution nobody can see once it is blurred into cloud, and a hard per-block edge is the
+ * tell that turns weather into a spreadsheet.
+ *
+ * ⚠ SCALE. These are voxel-world numbers. The garden's zones are 300-900 blocks across
+ * (`voxel/zones.ts`), so a 16-block cell puts ~20-55 cells across a zone — enough that a walk reads
+ * as a widening trail rather than a few squares blinking on.
  */
-export const CELL = 4
+export const CELL = 16
 
-/** How far the keeper maps around themselves, in TILES. Not sight — a walker notes the lie of the
- *  land a little way off, and a radius under a screen's worth makes the map lag behind the walk. */
-export const SEE_RADIUS = 14
+/**
+ * How far the keeper maps around themselves, in BLOCKS. Not sight and not draw distance — a walker
+ * notes the lie of the land some way off. Sits inside the daytime fog (`day-night.tsx` far = 200),
+ * so the map never claims ground the keeper could not physically have made out.
+ */
+export const SEE_RADIUS = 112
 
 export interface Seen {
   /** Cell columns/rows — derived from the grid, stored so a world resize invalidates cleanly. */

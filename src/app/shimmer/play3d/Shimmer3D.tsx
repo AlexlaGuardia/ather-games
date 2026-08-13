@@ -77,7 +77,6 @@ import { NPCS_3D, GREG_INTRO_LINES, GREG_NUDGE, GREG_RETURN, THISTLE_TAUNT_NO_SP
 import { useCloudSave } from '@/lib/use-cloud-save'
 import { useWallet } from '@/lib/use-wallet'
 import { keeperBook, saveBook } from './book'
-import { loadSeen, saveSeen, see, type Seen } from './discovery'
 import { PassageRack } from './PassageRack'
 import { EMPTY_BOOK, type Book } from './scroll-market'
 import { StationMenus, type PlacedStruct, type StationKind } from './StationMenus'
@@ -3693,49 +3692,6 @@ export default function Shimmer3D() {
   const slideRef = useRef(false)
   // World map overlay (M / HUD button). Closed during battles — the arena owns the screen.
   const [showMap, setShowMap] = useState(false)
-  // ── ★ THE MAP'S MEMORY (2026-08-13) ───────────────────────────────────────────────────────────
-  // What the keeper has walked, per zone. See `discovery.ts` for why unwalked ground is cloud and
-  // not a grey overlay — in the Ather it is the literal substance of the place.
-  //
-  // ★ SAMPLED ON ITS OWN CLOCK, NOT IN THE FRAME LOOP. A fog cell is 4 tiles across and a walker
-  // crosses one every second or two, so 60Hz would ask the same question ~200 times per answer. A
-  // 250ms sampler is indistinguishable in play, cannot slow the render path, and — because `see()`
-  // returns 0 when nothing opened — costs one distance check on the overwhelming majority of ticks.
-  const seenRef = useRef<Seen | null>(null)
-  const [seenTick, setSeenTick] = useState(0)
-  const seenZoneRef = useRef<string>('')
-  const seenDirty = useRef(false)
-  useEffect(() => {
-    let saveT = 0
-    const id = setInterval(() => {
-      const grid = gridRef.current, p = posRef.current
-      if (!grid?.length || !p) return
-      const zid = zoneIdRef.current
-      // A zone change swaps the record. Keyed on the id rather than reloaded on every tick so the
-      // walk into a new zone is the only thing that touches storage.
-      if (zid !== seenZoneRef.current) {
-        if (seenDirty.current && seenZoneRef.current) { saveSeen(seenZoneRef.current, seenRef.current!); seenDirty.current = false }
-        seenZoneRef.current = zid
-        seenRef.current = loadSeen(zid, grid[0].length, grid.length)
-        setSeenTick((n) => n + 1)
-      }
-      if (!seenRef.current) return
-      if (see(seenRef.current, p.x, p.z) > 0) {
-        seenDirty.current = true
-        setSeenTick((n) => n + 1)
-      }
-      // Saving is debounced off the OPENING, not the clock: a keeper standing still never writes,
-      // and a keeper walking a long line writes once every few seconds instead of per cell.
-      if (seenDirty.current && ++saveT >= 8) {
-        saveT = 0; seenDirty.current = false
-        saveSeen(zid, seenRef.current)
-      }
-    }, 250)
-    return () => {
-      clearInterval(id)
-      if (seenDirty.current && seenZoneRef.current && seenRef.current) saveSeen(seenZoneRef.current, seenRef.current)
-    }
-  }, [])
   // The mouse-handoff pair, reached through refs because the helpers are defined further down
   // (they need canvasElRef/isTouch) and this effect would otherwise touch them before init.
   const openCursorUIRef = useRef<() => void>(() => {})
@@ -6367,9 +6323,9 @@ export default function Shimmer3D() {
 
       {/* minimap — persistent, click (or M) expands to the full map */}
       {!battle && !editMode && !showMap && (
-        <MiniMap zoneId={zone.id} gridRef={gridRef} posRef={posRef} yawRef={camYaw} seenRef={seenRef} onExpand={() => { openCursorUI(); setShowMap(true) }} />
+        <MiniMap zoneId={zone.id} gridRef={gridRef} posRef={posRef} yawRef={camYaw} onExpand={() => { openCursorUI(); setShowMap(true) }} />
       )}
-      {showMap && <WorldMap zoneId={zone.id} gridRef={gridRef} posRef={posRef} yawRef={camYaw} seenRef={seenRef} seenTick={seenTick} onClose={() => { setShowMap(false); closeCursorUI() }} />}
+      {showMap && <WorldMap zoneId={zone.id} gridRef={gridRef} posRef={posRef} yawRef={camYaw} onClose={() => { setShowMap(false); closeCursorUI() }} />}
 
       {/* talk prompt when standing by an NPC */}
       {nearNpc && !dialogue && !battle && !editMode && (

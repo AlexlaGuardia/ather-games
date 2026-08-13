@@ -15,7 +15,11 @@ let pass = 0
 const fails: string[] = []
 const ok = (c: boolean, m: string) => { if (c) pass++; else fails.push(m) }
 
-const COLS = 200, ROWS = 160
+// A world sized like the voxel garden rather than a tile map: zone anchors span thousands of
+// blocks. Fixture distances below are written in terms of SEE_RADIUS so retuning the radius does
+// not quietly turn a "fresh ground" fixture into ground the previous look already opened.
+const COLS = 3200, ROWS = 2400
+const FAR = SEE_RADIUS * 3     // comfortably outside one look
 
 // ── 1. a fresh world is entirely cloud ─────────────────────────────────────────────────────────
 {
@@ -30,14 +34,14 @@ const COLS = 200, ROWS = 160
 // ── 2. standing somewhere opens a disc around it ───────────────────────────────────────────────
 {
   const s = emptySeen(COLS, ROWS)
-  const opened = see(s, 100, 80)
+  const opened = see(s, 800, 640)
   ok(opened > 0, 'standing still opens ground')
-  ok(isSeen(s, Math.floor(100 / CELL), Math.floor(80 / CELL)), 'the cell under the keeper is open')
-  ok(!isSeen(s, Math.floor(100 / CELL), Math.floor((80 + SEE_RADIUS * 3) / CELL)),
+  ok(isSeen(s, Math.floor(800 / CELL), Math.floor(640 / CELL)), 'the cell under the keeper is open')
+  ok(!isSeen(s, Math.floor(800 / CELL), Math.floor((640 + FAR) / CELL)),
     'and somewhere well outside the radius is not')
   // ★ A DISC, NOT A SQUARE. The diagonal must fall short of the axis — a square reveals its
   // corners 41% further out, which stamps visible boxes along a walked path.
-  const c = { x: Math.floor(100 / CELL), y: Math.floor(80 / CELL) }
+  const c = { x: Math.floor(800 / CELL), y: Math.floor(640 / CELL) }
   const edge = Math.floor(SEE_RADIUS / CELL)
   ok(isSeen(s, c.x + edge - 1, c.y), 'the disc reaches along the axis')
   ok(!isSeen(s, c.x + edge, c.y + edge), '★ but not into the corner — this is a disc, not a box')
@@ -48,15 +52,15 @@ const COLS = 200, ROWS = 160
 // open, the map re-serialises the whole world every frame a player stands still breathing on it.
 {
   const s = emptySeen(COLS, ROWS)
-  const first = see(s, 60, 60)
+  const first = see(s, 500, 500)
   ok(first > 0, 'the first look opens ground')
-  ok(see(s, 60, 60) === 0, '★ looking at the same spot again opens nothing')
-  ok(see(s, 60 + CELL * 20, 60) > 0, 'walking somewhere new opens more')
+  ok(see(s, 500, 500) === 0, '★ looking at the same spot again opens nothing')
+  ok(see(s, 500 + FAR, 500) > 0, 'walking somewhere new opens more')
   // `rev` is what the renderer caches its stencil against — if it moved without ground opening,
   // the minimap would rebuild a 2000-cell mask on every frame a player stood still.
   const r0 = s.rev
-  ok(see(s, 60, 60) === 0 && s.rev === r0, '★ rev does not move when nothing opens')
-  ok(see(s, 60, 130) > 0, 'fixture: (60,130) is fresh ground inside the world')
+  ok(see(s, 500, 500) === 0 && s.rev === r0, '★ rev does not move when nothing opens')
+  ok(see(s, 500, 500 + FAR) > 0, 'fixture: that is fresh ground inside the world')
   ok(s.rev === r0 + 1, 'and moves exactly once when ground does open')
 }
 
@@ -118,7 +122,7 @@ const COLS = 200, ROWS = 160
 // ── 5. a round trip through storage is exact ───────────────────────────────────────────────────
 {
   const s = emptySeen(COLS, ROWS)
-  see(s, 40, 40); see(s, 150, 120); see(s, 12, 99)
+  see(s, 400, 400); see(s, 1500, 1200); see(s, 120, 990)
   const back = decodeSeen(encodeSeen(s), COLS, ROWS)!
   ok(!!back, 'a saved map loads')
   ok(back.cw === s.cw && back.ch === s.ch, 'the dimensions survive')
@@ -132,7 +136,7 @@ const COLS = 200, ROWS = 160
 // shears diagonally across the map and stays that way forever, looking like a renderer bug.
 {
   const s = emptySeen(COLS, ROWS)
-  see(s, 40, 40)
+  see(s, 400, 400)
   const raw = encodeSeen(s)
   ok(decodeSeen(raw, COLS, ROWS) !== null, 'the same world still loads')
   ok(decodeSeen(raw, COLS + CELL * 4, ROWS) === null, '★ a wider world refuses the old record')
@@ -153,7 +157,7 @@ const COLS = 200, ROWS = 160
 {
   const s = emptySeen(COLS, ROWS)
   ok(seenFraction(s) === 0, 'nothing walked')
-  see(s, 100, 80)
+  see(s, 800, 640)
   const one = seenFraction(s)
   ok(one > 0 && one < 0.2, `one standing spot is a small slice of the world (${(one * 100).toFixed(1)}%)`)
   for (let x = 0; x < COLS; x += CELL) for (let y = 0; y < ROWS; y += CELL) see(s, x, y)
