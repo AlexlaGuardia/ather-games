@@ -135,9 +135,23 @@ export const BLOCKS: BlockDef[] = [
   // road is a CONDITION of the ground, not a block you carry home and lay somewhere else.
   { material: MAT.PATH, name: 'Worn Path', hardness: 0.5, skill: null, minTier: 0, drops: [{ itemId: 'block_subsoil', count: 1 }], fastSkill: 'farming', placeable: false },
 
-  // Planks as a block: bridges generate from it, players place it — the plank ITEM is the block
-  // in hand, one per block both ways, so a bridge mined is a bridge's worth of planks pocketed.
-  { material: MAT.PLANKS, name: 'Goldwood Planks', hardness: 0.7, skill: null, minTier: 0, drops: [{ itemId: 'goldwood_plank', count: 1 }], placeable: true },
+  // ── ★ PLANKING — the WOOD half of the building grammar (2026-08-13, Alex's ruling) ───────────
+  // Alex: *"which get turned into planks .. actual planks not the block, not placeable, but can be
+  // used to craft materials to build with."* So the plank stopped being a block in hand and became
+  // pure CURRENCY — it buys doors, fences, beams, windows — and this block became the thing you
+  // craft OUT of planks when you want a wooden surface. Same third rung cut stone is for stone:
+  // pieces do not make a house without a wall between them.
+  //
+  // ★ IT IS THE SAME MATERIAL ID, RENAMED AND RE-DROPPED, not a new block. The id already exists,
+  // already generates in the road's bridges and already has a milled-plank painter — and a bridge
+  // deck IS planking, which is what a crafted wooden surface should look like. Adding a second
+  // wooden block beside it would have left two ids meaning one thing.
+  //
+  // ⚠ CHANGING THE DROP IS WHAT MAKES THE PLANK UNPLACEABLE, and it needs no other code: `BY_ITEM`
+  // maps a placeable block's identity drop back to its material, so the moment this row stops
+  // dropping `goldwood_plank`, that item stops resolving to a voxel. Breaking planking gives back
+  // `planking` (salvage the panel), never the planks it was made from.
+  { material: MAT.PLANKS, name: 'Planking', hardness: 0.7, skill: null, minTier: 0, drops: [{ itemId: 'planking', count: 1 }], fastSkill: 'forestry', placeable: true },
 
   // The hot springs' mineral shell — stone-family, so a spike quarries it, and it drops ITSELF:
   // pale terrace stone is exactly the block a builder would want to carry home. ⚠ TBD-CANON name.
@@ -204,10 +218,14 @@ export const BLOCKS: BlockDef[] = [
   // Blade (tier 1) as the ceiling and made STARWILLOW (minTier 2) and DAWNWOOD (minTier 3) trees
   // permanently unharvestable. The generator was placing wood nobody could ever cut.
   // `recipes.ts` is the missing layer; `recipes.test.ts` asserts nothing is unreachable again.
-  { material: WOOD.GOLDWOOD_LOG, name: 'Goldwood', hardness: 1.4, skill: 'forestry', minTier: 1, drops: [{ itemId: 'goldwood_log', count: 1 }], placeable: true },
-  { material: WOOD.SHIMMEROAK_LOG, name: 'Shimmeroak', hardness: 1.9, skill: 'forestry', minTier: 1, drops: [{ itemId: 'shimmeroak_log', count: 1 }], placeable: true },
-  { material: WOOD.STARWILLOW_LOG, name: 'Starwillow', hardness: 2.6, skill: 'forestry', minTier: 2, drops: [{ itemId: 'starwillow_log', count: 1 }], placeable: true },
-  { material: WOOD.DAWNWOOD_LOG, name: 'Dawnwood', hardness: 3.4, skill: 'forestry', minTier: 3, drops: [{ itemId: 'dawnwood_log', count: 1 }], placeable: true },
+  // ★ A LOG IS RAW MATERIAL, NOT A BUILDING BLOCK (2026-08-13, the same ruling as stone). You fell
+  // a tree and hold timber; timber becomes planks; planks buy the pieces and the planking. Putting
+  // the trunk back up was the Minecraft loop this replaces — and it is also what made the 15%
+  // thinner trunk safe to ship, since a raw-log WALL is no longer a thing anyone can build.
+  { material: WOOD.GOLDWOOD_LOG, name: 'Goldwood', hardness: 1.4, skill: 'forestry', minTier: 1, drops: [{ itemId: 'goldwood_log', count: 1 }], placeable: false },
+  { material: WOOD.SHIMMEROAK_LOG, name: 'Shimmeroak', hardness: 1.9, skill: 'forestry', minTier: 1, drops: [{ itemId: 'shimmeroak_log', count: 1 }], placeable: false },
+  { material: WOOD.STARWILLOW_LOG, name: 'Starwillow', hardness: 2.6, skill: 'forestry', minTier: 2, drops: [{ itemId: 'starwillow_log', count: 1 }], placeable: false },
+  { material: WOOD.DAWNWOOD_LOG, name: 'Dawnwood', hardness: 3.4, skill: 'forestry', minTier: 3, drops: [{ itemId: 'dawnwood_log', count: 1 }], placeable: false },
 
   // Leaves come away by hand — soft, fast, and they drop nothing in v1. Sapling drops are a
   // regrowth mechanic and regrowth is not built, so promising one here would be a lie.

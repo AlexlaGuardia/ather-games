@@ -13,6 +13,7 @@
 import { RECIPES, recipeDef, canCraft, craftPlan, availableRecipes, RECIPE_OUTPUTS } from './recipes'
 import { BLOCKS, ALL_BLOCKS, materialForItem } from './registry'
 import { MAT } from './depth'
+import { isLogMat } from './trees'
 import { PIECES } from './pieces'
 import { TOOL_DEFS } from '../engine/tools'
 
@@ -190,7 +191,30 @@ console.log('building grammar')
     'if any terrain block dropped it, the refine step is decoration')
   check('and the refine step exists', recipeDef('cut_stone')?.input[0].itemId === 'rubble')
 
-  // 6. NOTHING STILL ASKS FOR THE ITEM THAT NO LONGER EXISTS. `block_stone` was a real cost on a
+  // 6. THE WOOD HALF, same shape. A log is raw material; the PLANK is currency, not a block in
+  //    hand; planking is the wooden surface you spend planks on.
+  check('a log is not placeable', ALL_BLOCKS.filter(b => isLogMat(b.material)).every(b => b.placeable === false),
+    'putting the trunk back up is the loop this ruling replaces')
+  check('★ a plank is currency, not a block', materialForItem('goldwood_plank') === undefined,
+    'Alex: "actual planks not the block, not placeable" — it buys doors and fences, it is not one')
+  check('planking is the wooden surface', def(MAT.PLANKS).placeable === true)
+  check('and it is crafted from planks', recipeDef('planking')?.input[0].itemId === 'goldwood_plank')
+  check('breaking planking salvages the panel, not its planks', def(MAT.PLANKS).drops[0].itemId === 'planking',
+    'dropping planks would make the craft step a no-op you could farm')
+
+  // 7. THE TWO HALVES MUST NOT COST THE SAME. Stone runs at a net loss (2 mined -> 1 placed) and
+  //    wood at a net gain (1 log -> 4 planks -> 2 planking); that asymmetry IS the economy, and it
+  //    is the kind of thing a later balance pass flattens without noticing what it was for.
+  {
+    const perLog = recipeDef('goldwood_planks')!.output.count
+    const perPanel = recipeDef('planking')!.input[0].count
+    const woodOut = perLog / perPanel                    // placed blocks per block mined
+    const stoneOut = 1 / recipeDef('cut_stone')!.input[0].count
+    check('wood is cheaper to build in than stone', woodOut > stoneOut,
+      `wood ${woodOut} vs stone ${stoneOut} placed per block mined — timber is renewable and should feel it`)
+  }
+
+  // 8. NOTHING STILL ASKS FOR THE ITEM THAT NO LONGER EXISTS. `block_stone` was a real cost on a
   //    real piece (the stair) until this ruling, and an uncraftable piece is invisible until a
   //    player tries to build one.
   const dead = new Set(['block_stone', 'block_deep_stone'])

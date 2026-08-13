@@ -111,6 +111,18 @@ export const RECIPES: RecipeDef[] = [
   { id: 'cut_stone', name: 'Cut Stone', station: 'hand', mana: 0,
     input: [{ itemId: 'rubble', count: 2 }], output: { itemId: 'cut_stone', count: 1 } },
 
+  // ── ★ WOOD: PLANKS → PLANKING (2026-08-13) ──────────────────────────────────────────────────
+  // The wood half of the grammar, and the mirror of `cut_stone`. The plank is currency now — it
+  // buys doors, windows, fences, beams — and this is what you spend it on when you want a floor or
+  // a wall rather than a fitting.
+  //
+  // ⚠ CHEAPER THAN STONE ON PURPOSE, and the whole economy is in these two numbers. Stone runs
+  // 2 mined -> 1 placed, a net LOSS, so a stone building is a quarry you went and did. Wood runs
+  // 1 log -> 4 planks -> 2 planking, a net GAIN, so timber is what you throw up first. Renewable,
+  // softer, and it should feel it. Turn these if building in wood ever feels harder than digging.
+  { id: 'planking', name: 'Planking', station: 'hand', mana: 0,
+    input: [{ itemId: 'goldwood_plank', count: 2 }], output: { itemId: 'planking', count: 1 } },
+
   // ── THE STATION ITSELF ──────────────────────────────────────────────────────────────────────
   // Craftable by hand, and it must stay that way: a crafting table gated behind a crafting table is
   // the bootstrap that cannot start. Canon has Greg gift one in the starter bag
