@@ -11,6 +11,20 @@
 # The production `.next` and port 3200 are refused on purpose: `coord build` deploys
 # from `.next` and pm2 serves 3200, and a dev server pointed at either is the
 # `.next`-corruption footgun the build lock exists to prevent.
+#
+# ── ★ AND IT STILL REACHED THE PRODUCTION BUILD ONCE, THROUGH tsconfig (2026-08-13) ──────────────
+# Separate dist dirs are not separate enough on their own. Next.js REWRITES the shared
+# `tsconfig.json` on dev start to add its dist dir to `include` — so running this appended
+# `.next-world/dev/types/**/*.ts`, and the next `coord build` typechecked a LANE DEV SERVER's
+# generated types as part of the production build. It failed on a half-written `validator.ts`
+# (`Cannot find name 'vault'`) — a deploy broken by a file no human wrote, in a lane nobody was
+# building. Worse, it is a cross-window failure: the satellite that ran devwin is not the window
+# whose deploy breaks.
+#
+# Fixed at the root rather than by asking anyone to remember: `tsconfig.json` now carries
+# `.next-*` in `exclude`, and **exclude filters include**, so Next may re-add whatever it likes and
+# it stays out of the build. (`.next-*` does not match `.next`, so the production types still load.)
+# ⚠ If you add a dist dir that is not named `.next-<lane>`, add it to that exclude too.
 set -euo pipefail
 
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
