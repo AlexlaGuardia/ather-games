@@ -95,9 +95,10 @@ import { createLoco, tickLocomotion, eyeY, CELL_EMPTY, CELL_SOLID, CELL_WATER, C
 // Greg's placeholder figure. This file only wires all three into the render loop.
 import { loadTutorial, saveTutorial, GREG_LINE, OBJECTIVE_LABEL, type TutorialStage, type TutorialState } from './tutorial'
 import { GATE_X, GATE_Z, GATE_SPANS_X, gateCells } from './gate'
-import { createGregMesh } from './greg'
+import { createGregMesh, GREG_BOUNDS } from './greg'
+import { aimedAt, bodyBox } from './aim'
 import { createSteamPoints } from './steam'
-import { createMistPass } from './mist-pass'
+import { createMistPass, SPAR_RANGE } from './mist-pass'
 import { mistAt, mistPatchesNear, type MistPatch } from '../voxel/mist'
 import { loadMistLedger, saveMistLedger, recordWithdrawal, residentAt, quietMinutes, type MistLedger, type Resident, type ResidentForm } from './mist-encounter'
 import { applySparPayout, sparLedgerLines } from './spar-reward'
@@ -198,14 +199,17 @@ const SPAWN_Z = GLADE.z
 
 // Greg stands a few blocks off spawn so a freshly-born keeper does not spawn inside him.
 // GREG_X/GREG_Z are the voxel COLUMN he stands in (columnHeight wants integers); GREG_CX/GREG_CZ
-// are that column's centre, which is where the mesh and the proximity check both actually read —
+// are that column's centre, which is where the mesh and the aim box both actually read —
 // same +0.5 centring the rest of the file uses (spawn, hollow spawns, drop-vs-block math).
 const GREG_X = SPAWN_X + 3
 const GREG_Z = SPAWN_Z + 1
 const GREG_CX = GREG_X + 0.5
 const GREG_CZ = GREG_Z + 0.5
 const GREG_Y = columnHeight(GREG_X, GREG_Z, SEED) + 1
+/** How far down the ray you can reach him. Was a radius; now a distance to the box's near face. */
 const GREG_TALK_RANGE = 3
+/** Greg's body in WORLD space — `greg.ts`'s own part dimensions, lifted to where he stands. */
+const GREG_BOX = bodyBox(GREG_CX, GREG_CZ, GREG_Y + GREG_BOUNDS.y0, GREG_Y + GREG_BOUNDS.y1, GREG_BOUNDS.halfW)
 
 /** Every log a blade can fell — the 'cut' step reads the whole set, not one species; Greg never
  *  said which tree.
@@ -1291,7 +1295,7 @@ export default function VoxelWorld() {
           else { openCursorUI(); setBagOpen(true) }
           return
         }
-        // E talks to Greg when he is in range, and closes the box that opens from it — the same key
+        // E talks to Greg when the crosshair is ON him, and closes the box that opens from it — the same key
         // both opens and dismisses, matching how C works for the crafting surface just above.
         if (e.code === 'KeyE') {
           if (dialogueOpen) closeDialogue()   // hands the cursor back itself
@@ -1573,7 +1577,9 @@ function Hud({ stats, toast, pos, look, hotbar, sel, tier, held, build, pieceIdx
   ammoUi: number
   /** The tutorial's current objective — drives the HUD chip below. */
   tutorialStage: TutorialStage
-  /** Within talk range of Greg, from World's per-frame distance check. Drives the "E — talk" prompt. */
+  /** The crosshair is on Greg, in reach, unoccluded — World's per-frame aim test. Drives "E — talk".
+   *  The prompt appearing IS the highlight: there is no outline on him, so this is how a player
+   *  learns the verb is armed. Which is why it must never show for someone he is not looking at. */
   nearGreg: boolean
   dialogueOpen: boolean
   /** The presence in spar range, or null — names itself in the prompt before you commit. */
@@ -1646,7 +1652,7 @@ function Hud({ stats, toast, pos, look, hotbar, sel, tier, held, build, pieceIdx
         </div>
       )}
 
-      {/* "E — talk" — Greg's proximity prompt. Hidden while the box he opens is already up.
+      {/* "E — talk" — shown while the crosshair is on Greg. Hidden while the box he opens is already up.
           The bench borrows the same prompt slot ("E — craft"); Greg wins when both are near,
           mirroring the KeyE handler's priority. */}
       {nearGreg && !dialogueOpen && (
@@ -2671,7 +2677,7 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
   const dropMats = useRef(new Map<number, THREE.Material>())
   const highlightGeo = useMemo(() => new THREE.EdgesGeometry(new THREE.BoxGeometry(1.002, 1.002, 1.002)), [])
   const pieces = useMemo(() => createPieceRenderer(), [])
-  // Greg — built once, positioned once. Static NPC, no per-frame update beyond the proximity check
+  // Greg — built once, positioned once. Static NPC, no per-frame update beyond the aim check
   // below (which reads GREG_X/GREG_Z/GREG_Y, not the mesh, so the mesh itself never moves).
   const greg = useMemo(() => {
     const g = createGregMesh()
@@ -2696,7 +2702,6 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
   const potTick = useRef(0)
   const lastNearGreg = useRef(false)
   const lastNearTable = useRef(false)
-  const tableScanT = useRef(0)
   // The gate: built (sealed or open, matching whatever `tutorial.current.stage` says at the moment
   // its columns arrive) exactly once, then opened exactly once more if the quest completes later.
   const gateBuilt = useRef(false)
@@ -3505,13 +3510,8 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
     steam.tick(p.x, p.y, p.z, dt, state.clock.elapsedTime)
     if (ledgerSeen.current !== mistLedger.current) { ledgerSeen.current = mistLedger.current; mist.setLedger(mistLedger.current) }
     mist.tick(p.x, p.y, p.z, dt, state.clock.elapsedTime)
-    // The presence prompt, deduped on identity the way Greg's range is — standing still in front
-    // of a spirit should not re-render the HUD 60×/sec. Silent while the arena owns the screen.
-    {
-      const r = sparring ? null : mist.nearest()
-      const id = r ? `${r.patch.x},${r.patch.z},${r.species}` : null
-      if (id !== lastNearMist.current) { lastNearMist.current = id; onNearMist(r) }
-    }
+    // ⚠ The presence PROMPT is not decided here any more — it needs this frame's aim, which does
+    // not exist until the reticle raycast below. See "the three aimed verbs".
     flora.tick(state.clock.elapsedTime)
     const cx = Math.floor(p.x / SECTION), cz = Math.floor(p.z / SECTION)
 
@@ -3908,34 +3908,6 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
       gateOpened.current = true
     }
 
-    // ── Greg's talk range ────────────────────────────────────────────────────────────────────
-    // Dedup on change, same shape as the mining gauge's `lastTool` a few blocks down — the HUD
-    // prompt should not re-render 60x/sec while standing still next to him.
-    {
-      const dGreg = Math.hypot(p.x - GREG_CX, p.z - GREG_CZ)
-      const near = dGreg <= GREG_TALK_RANGE && Math.abs(p.y - GREG_Y) <= GREG_TALK_RANGE
-      if (near !== lastNearGreg.current) { lastNearGreg.current = near; onNearGreg(near) }
-    }
-
-    // ── near a crafting table? ───────────────────────────────────────────────────────────────
-    // A placed table upgrades the craft surface's Station within arm's reach (±4 blocks, a house
-    // room — MC asks for a click on the block; ours stays a key, so proximity is the claim).
-    // Scanned on a half-second cadence, not per frame: ~700 voxel reads is nothing once, and
-    // needless 60Hz; dedup on change, same shape as Greg's range above.
-    {
-      tableScanT.current += dt
-      if (tableScanT.current >= 0.5) {
-        tableScanT.current = 0
-        const px = Math.floor(p.x), py = Math.floor(p.y), pz = Math.floor(p.z)
-        let found = false
-        scan: for (let dy = -3; dy <= 2; dy++)
-          for (let dz = -4; dz <= 4; dz++)
-            for (let dx = -4; dx <= 4; dx++)
-              if (voxel(px + dx, py + dy, pz + dz) === MAT.CRAFT_TABLE) { found = true; break scan }
-        if (found !== lastNearTable.current) { lastNearTable.current = found; onNearTable(found) }
-      }
-    }
-
     // ── movement — play3d's locomotion on voxel collision (see locomotion.ts) ────────────────
     // The camera is DERIVED (feet + eased eye), never the physics primitive: the eye dips through
     // a slide without the collision box following it into the floor.
@@ -3989,6 +3961,39 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
     if (hl) {
       hl.visible = !!hit
       if (hit) hl.position.set(hit.x + 0.5, hit.y + 0.5, hit.z + 0.5)
+    }
+
+    // ── ★ THE THREE AIMED VERBS (2026-08-13, Alex: "only work when on the item/person you are
+    //    currently looking at or highlighting") ───────────────────────────────────────────────
+    // Greg, the bench and a presence in the mist were all proximity-only — a radius, a box scan and
+    // a nearest-within-6. Blocks were never wrong (chest/pot/place read the reticle), so the world
+    // was answering two different questions depending on whether the thing you pointed at happened
+    // to be made of voxels. All three now ask `aim.ts` the same one.
+    //
+    // ★ THEY SIT HERE, BELOW THE RAYCAST, AND THAT IS THE POINT. `hit` is this frame's crosshair,
+    // measured on this frame's `aim`, after movement. Greg's check used to run in the streaming
+    // section ~70 lines up — before the player had moved — and a second ray cast for the entities
+    // would let the wireframe and the prompt disagree about what is in front of you.
+    // `hit.distance` is the occluder: no talking through the gate wall.
+    const blockDist = hit ? hit.distance : Infinity
+    {
+      const near = aimedAt(p.x, p.y, p.z, aim.x, aim.y, aim.z, GREG_BOX, GREG_TALK_RANGE, blockDist)
+      if (near !== lastNearGreg.current) { lastNearGreg.current = near; onNearGreg(near) }
+    }
+    {
+      // The bench is a BLOCK, so it needs no box of its own — "the cell the reticle is on is a
+      // crafting table" is the whole test, and it is the same read `rightClickIntent` already does
+      // for a chest. This also retires a ±4×6×9 voxel scan that ran twice a second forever.
+      const found = !!hit && voxel(hit.x, hit.y, hit.z) === MAT.CRAFT_TABLE
+      if (found !== lastNearTable.current) { lastNearTable.current = found; onNearTable(found) }
+    }
+    {
+      // Aim AND range: `aimed` says the crosshair is on a silhouette, `nearest` says you walked to
+      // it. A presence is legible from across the patch on purpose (the consent design), so without
+      // the range half you could call out a spar from the far side of the fog.
+      const r = sparring ? null : (mist.nearest() && mist.aimed(p.x, p.y, p.z, aim.x, aim.y, aim.z, SPAR_RANGE, blockDist))
+      const id = r ? `${r.patch.x},${r.patch.z},${r.species}` : null
+      if (id !== lastNearMist.current) { lastNearMist.current = id; onNearMist(r ?? null) }
     }
 
     // ── build mode: ghost, place, deconstruct ────────────────────────────────────────────────

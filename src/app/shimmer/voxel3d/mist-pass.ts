@@ -32,6 +32,7 @@ import { columnHeight } from '../voxel/height'
 import { mistAt, mistPatchesNear, DEFAULT_MIST, type MistPatch } from '../voxel/mist'
 import { zoneAt } from '../voxel/zones'
 import { residentAt, type MistLedger, type Resident } from './mist-encounter'
+import { bodyBox, rayBox } from './aim'
 import { ELEMENT_COLORS } from '../spirits/spirit'
 
 /** Many, large and faint — a layer is made of overlap. See the header. */
@@ -63,8 +64,26 @@ export interface MistPass {
   residents: THREE.Group
   /** The patch the camera is standing in, 0..1 thick — the fog/light lever reads this. */
   thickness(): number
-  /** The presence within spar range, or null. Drives the HUD prompt and the E key. */
+  /** The presence within spar range, or null. The range half of the prompt gate. */
   nearest(): Resident | null
+  /**
+   * The presence the CROSSHAIR is on, or null — the other half, and what actually drives the HUD
+   * prompt and the E key (2026-08-13).
+   *
+   * ★ Asked of this file rather than computed by the host, because this file is what decides where
+   * a presence STANDS: the pair offset (`±1.4` across the patch heart) and the spindle's radius and
+   * height live here. A host-side box would be a second copy of that placement, correct until the
+   * day a pair steps further apart. `nearest()` stays for the range question; the two are ANDed by
+   * the caller so a presence must be both close and looked at.
+   *
+   * ⚠ Direction must be unit length. `blockDist` is the reticle raycast's own hit distance, so a
+   * presence behind a wall is not aimed at — the mist is transparent, the world it lies in is not.
+   */
+  aimed(
+    ox: number, oy: number, oz: number,
+    dx: number, dy: number, dz: number,
+    maxDist: number, blockDist: number,
+  ): Resident | null
   /** Swap the withdrawal ledger in (after a spar) so the sparred presence leaves at once. */
   setLedger(l: MistLedger): void
   tick(px: number, py: number, pz: number, dt: number, elapsed: number): void
@@ -74,6 +93,15 @@ export interface MistPass {
 /** How close you must stand for the presence to acknowledge you — a spar is approached, not
  *  stumbled into, so this is deliberately inside the patch rather than at its edge. */
 export const SPAR_RANGE = 6
+
+// ── The spindle's dimensions, hoisted so `aimed()` can test the shape that is actually drawn ────
+// `PRESENCE_TALL` is the lathe profile's height and `PRESENCE_R` its widest radius (the waist, per
+// the profile below). `PAIR_OFF` is how far a pair steps apart across the patch heart. All three
+// were inline literals; they are up here because the crosshair test and the mesh must agree, and
+// two copies of a number are two numbers.
+const PRESENCE_TALL = 2.1
+const PRESENCE_R = 0.49
+const PAIR_OFF = 1.4
 
 export function createMistPass(seed: number, ledger0: MistLedger = {}): MistPass {
   // ── the lying mist ────────────────────────────────────────────────────────────────────────────
@@ -140,7 +168,7 @@ void main() {
   // A spindle: narrow at the ground, full through the middle, tapering to nothing. Read as a
   // standing form without being a body — no head, no limbs, nothing a species could be read off.
   const profile: THREE.Vector2[] = []
-  const SEGS = 14, TALL = 2.1
+  const SEGS = 14, TALL = PRESENCE_TALL
   for (let i = 0; i <= SEGS; i++) {
     const t = i / SEGS
     // sin gives the waist a full belly and pinches both ends; the 0.72 power lifts the widest point
@@ -228,6 +256,25 @@ void main() {
     residents,
     thickness: () => thick,
     nearest: () => closest,
+
+    // Walks the same `present` list the meshes are built from, so a silhouette you can see is a
+    // silhouette you can aim at — and one that withdrew after a spar is neither. A pair is two
+    // boxes and the NEAREST hit wins, which is what makes "aim at the left one" mean anything.
+    aimed(ox, oy, oz, dx, dy, dz, maxDist, blockDist) {
+      let best: Resident | null = null
+      let bestT = Infinity
+      for (const r of present) {
+        // Same expression as the mesh placement above: heart, stepped aside only when paired.
+        const offs = r.second ? [-PAIR_OFF, PAIR_OFF] : [0]
+        for (const off of offs) {
+          const box = bodyBox(r.patch.x + off, r.patch.z, r.patch.floor + 1,
+            r.patch.floor + 1 + PRESENCE_TALL, PRESENCE_R)
+          const t = rayBox(ox, oy, oz, dx, dy, dz, box, maxDist)
+          if (t !== null && t <= blockDist && t < bestT) { bestT = t; best = r }
+        }
+      }
+      return best
+    },
     // A spar just happened: take the new ledger and force a rescan on the next tick so the spirit
     // that withdrew is GONE immediately rather than lingering until the 0.8s clock comes round.
     setLedger(l) { ledger = l; rescan = 0 },
@@ -268,8 +315,8 @@ void main() {
         // so the second is added and dropped by exactly the same diff as the first.
         const want = new Map<string, { r: Resident; form: { element: Resident['element'] }; off: number }>()
         for (const r of present) {
-          want.set(keyOf(r.patch), { r, form: r, off: r.second ? -1.4 : 0 })
-          if (r.second) want.set(`${keyOf(r.patch)}:2`, { r, form: r.second, off: 1.4 })
+          want.set(keyOf(r.patch), { r, form: r, off: r.second ? -PAIR_OFF : 0 })
+          if (r.second) want.set(`${keyOf(r.patch)}:2`, { r, form: r.second, off: PAIR_OFF })
         }
         for (const [k, m] of live) {
           if (want.has(k)) continue
