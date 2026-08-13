@@ -583,8 +583,16 @@ export function greedyMesh(
   // invisible to every other system, because leaves remain ordinary voxels.
   if (!uniform || isLeafMat(sec.uniformValue()!)) {
     const maxQuads = (positions.length / 12) | 0
-    // Diagonals of the cell, inset so two neighbouring canopies do not z-fight along a shared face.
-    const K = 0.5 - 0.0625
+    // ★ THE CROSS NOW SPILLS PAST ITS OWN CELL, and that is the other half of the density fix.
+    // A cross inset inside its cube leaves a gap at every cell boundary, and a canopy is a grid of
+    // those gaps — the lattice you can see the trunk through. Letting the quads overlap their
+    // neighbours closes the seams for FREE: the quad count is unchanged, only its width, so this
+    // costs vertex area rather than draw calls or geometry.
+    //
+    // The old inset existed so two neighbouring canopies could not z-fight along a shared face.
+    // Nothing here is coplanar any more — yaw is hashed per world cell, so two crosses agreeing on
+    // a plane to the last bit is not a case that occurs.
+    const K = 0.5
     const [owx, owy, owz] = origin
     // ⚠ `break` would leave the two outer loops running. The scratch is sized for the checkerboard
     // worst case so this should never trip, but "should never" plus a partial exit is how a mesh
@@ -608,12 +616,28 @@ export function greedyMesh(
           if (sample(x, y - 1, z) !== AIR) enclosed++
           if (sample(x, y, z + 1) !== AIR) enclosed++
           if (sample(x, y, z - 1) !== AIR) enclosed++
-          // ★ A LEAF WALLED IN ON ALL SIX SIDES DRAWS NOTHING. It is behind its own neighbours'
-          // crosses from every angle, and the pass used to spend two quads on it anyway — 3,046 of
-          // 17,388 in the Thicket, 17% of the canopy's cost, invisible. Culling it is what pays for
-          // the fuller crown the generator now grows. Chopping re-meshes, so the moment a neighbour
-          // becomes air this cell draws again; the solid sweep has always worked exactly this way.
-          if (enclosed === 6) continue
+          // ── ★ THE SIX-SIDED CULL IS GONE, AND IT WAS THE "YOU CAN SEE THE TRUNK" BUG (2026-08-13)
+          // Alex: *"the foliage is too sparse so the trunk is clearly visible through the leaves."*
+          //
+          // This pass used to skip any leaf walled in on all six sides, on the argument that it
+          // "sits behind its own neighbours' crosses from every angle". **That argument holds only
+          // if a neighbour is OPAQUE, and a crossed cutout quad is about half gap** — two vertical
+          // planes through a cube cover nowhere near a cube's solid angle. So the cull was not
+          // removing hidden geometry; it was removing exactly the cells the eye looks THROUGH the
+          // rim to find, and behind them is the trunk.
+          //
+          // It was never a small trim either — the census calls it 17% because it measured against
+          // a thinner canopy. Re-measured in the Thicket today: **9,796 of 29,393 leaf voxels, a
+          // third of the entire canopy**, and every one of them interior. The whole saving was 7%
+          // of the world's quads (leaves are 13.2% of it), which is not a price worth a see-through
+          // forest.
+          //
+          // ⚠ The enclosure count STAYS, and is now doing its real job on its own: an interior leaf
+          // draws, and draws DARK (`shade` below), so the crown reads as a lit rim over a mass
+          // rather than as a lattice with sky behind it. Depth shading was always the useful half.
+          //
+          // Same family as the 08-12 finding one layer up: a leaf's geometry is not a cube, so
+          // every rule written for cubes has to be re-derived rather than inherited.
           // ⚠ THE THRESHOLDS MATTER MORE THAN THEY LOOK. The first cut darkened at 3+ neighbours,
           // and the oracle caught that a blob's CORNER already has 3 — so nothing in an entire
           // canopy came out lit and the effect read as "the trees got muddy" rather than as depth.
@@ -626,7 +650,11 @@ export function greedyMesh(
           // A quarter turn covers every DISTINCT orientation: the pair is perpendicular, so turning
           // it by 90° maps the cross onto itself. Anything wider would just repeat.
           const yaw = ((h & 1023) / 1024) * (Math.PI / 2)
-          const wide = K * (0.78 + (((h >>> 10) & 63) / 63) * 0.44)
+          // 0.92–1.34 of a cell across, so a cross reaches into its neighbours instead of stopping
+          // short of them. Kept as a RANGE rather than one fat constant: crosses that disagree
+          // about their size are what stop a canopy reading as a textured slab, and that lesson
+          // cost a whole pass on 08-12.
+          const wide = K * (0.92 + (((h >>> 10) & 63) / 63) * 0.42)
           const jx = ((((h >>> 16) & 31) / 31) - 0.5) * 0.24
           const jz = ((((h >>> 21) & 31) / 31) - 0.5) * 0.24
           // ⚠ Vertical jitter must OFFSET the cell, never resize it — both corners move by the same

@@ -48,6 +48,18 @@ export const WOOD = {
 export const isLeafMat = (m: number): boolean =>
   m >= WOOD.GOLDWOOD_LEAVES && m <= WOOD.DAWNWOOD_LEAVES && m % 2 === 1
 
+/**
+ * Is this material a trunk? The other half of the same parity rule — logs are the EVEN ids in the
+ * wood range.
+ *
+ * ★ NAMED HERE FOR THE SAME REASON `isLeafMat` IS. Leaf decay has to ask "is anything still holding
+ * this canopy up", and a fourth hand-written species list (the mesher, the census and
+ * `LOG_MATERIALS` in VoxelWorld are the others) is how a fifth species ships one day and decays a
+ * whole forest because one of the four never heard of it.
+ */
+export const isLogMat = (m: number): boolean =>
+  m >= WOOD.GOLDWOOD_LOG && m <= WOOD.DAWNWOOD_LOG && m % 2 === 0
+
 export type TrunkShape = 'straight' | 'forking'
 export type FoliageShape = 'blob' | 'layered'
 

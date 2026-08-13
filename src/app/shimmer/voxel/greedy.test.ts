@@ -334,10 +334,25 @@ for (const S of [4, 16, 32]) {
   for (let i = 0; i < r.positions.length; i++) if (Math.abs(r.positions[i] - shifted.positions[i]) > 1e-6) moved++
   ok(moved > 0, '★ the leaf hash follows world position — sections do not all draw the same pattern')
 
-  // ★ A FULLY BURIED LEAF DRAWS NOTHING. 12^3 leaves, of which the 10^3 interior are walled in on
-  // all six sides; only the 12^3 - 10^3 shell may emit. Guards the cull that pays for the fuller
-  // crown, and it fails loudly if someone reinstates the buried quads.
-  eq(r.quads, (12 * 12 * 12 - 10 * 10 * 10) * 2, 'only the shell of a solid canopy is meshed')
+  // ── ★ EVERY LEAF DRAWS, INTERIOR INCLUDED (2026-08-13) ────────────────────────────────────────
+  // This assert used to demand the OPPOSITE — only the 12³ − 10³ shell — guarding a cull that
+  // skipped any leaf walled in on all six sides. Alex: *"the foliage is too sparse so the trunk is
+  // clearly visible through the leaves."* The cull's premise was that a neighbour hides you, and a
+  // crossed cutout quad hides almost nothing: it is two vertical planes in a cube, roughly half
+  // gap. So the cull was deleting a third of the Thicket's canopy — 9,796 of 29,393 voxels — and
+  // all of it interior, which is precisely the depth the eye looks through the rim to find.
+  //
+  // The assert is inverted rather than deleted, because the number is still the thing worth
+  // pinning: a canopy's quad count must be exactly 2 per leaf voxel, no cull, nothing merged.
+  eq(r.quads, 12 * 12 * 12 * 2, '★ every leaf voxel draws — a cutout cross cannot hide the one behind it')
+
+  // ★ AND THE ENCLOSURE COUNT IS WHAT MAKES THAT AFFORDABLE TO LOOK AT. It stopped being a cull and
+  // is now purely depth shading: an interior leaf draws DARK (ao 1) and a rim leaf draws lit (ao 3),
+  // so the fuller crown reads as a lit shell over a mass rather than as a solid green cube. If this
+  // regresses to one flat tone, the canopy goes back to reading as geometry — the umbrella again.
+  const shades = new Set<number>()
+  for (let v = 0; v < r.quads * 4; v++) shades.add(r.ao[v])
+  ok(shades.has(1) && shades.has(3), `★ interior leaves shade dark and rim leaves light (got ${[...shades].sort()})`)
 }
 {
   // ★ A LEAF NO LONGER HIDES WHAT IS BEHIND IT. Leaves read as AIR to the sweep, so a trunk beside

@@ -1,6 +1,14 @@
 // Screenshot the running voxel world, headless.
 //
 // Run: npx tsx scripts/world-shot.mts [out.png] [seconds-to-settle]
+//   WORLD_URL=http://localhost:3201/shimmer/voxel3d?hour=12   — a lane's dev server, day pinned
+//   WORLD_GOTO=twilight-thicket                               — drive the console before shooting
+//   WORLD_PITCH=-10                                           — degrees; negative looks UP
+//
+// ★ WHY `WORLD_GOTO` EXISTS: the player always spawns in the GLADE, which is a clearing — there is
+// no saved position to seed, so without this every headless shot photographs the one place in the
+// world with the fewest trees in it. The console is the only mover the page exposes to a script,
+// and `/goto` is already the command a human uses for exactly this. Zones: `/goto` bare lists them.
 //
 // ★ WHY THIS IS AWKWARD AND WORTH IT: unlike the icon sheet, the 3D world cannot be rendered from
 // pure code — it needs a GL context, a canvas, a streaming loop and a HUD. So this drives the real
@@ -23,6 +31,8 @@ import puppeteer from 'puppeteer-core'
 const OUT = process.argv[2] ?? 'world.png'
 const SETTLE = Number(process.argv[3] ?? 12)
 const URL = process.env.WORLD_URL ?? 'http://localhost:3200/shimmer/voxel3d'
+const GOTO = process.env.WORLD_GOTO ?? ''
+const PITCH = Number(process.env.WORLD_PITCH ?? 0)
 const EXE = process.env.CHROME ?? '/usr/bin/chromium-browser'
 
 const browser = await puppeteer.launch({
@@ -60,6 +70,34 @@ try {
   await page.goto(URL, { waitUntil: 'networkidle2', timeout: 60_000 })
   // The world streams; there is no "ready" event to wait on, so give it wall-clock and say so.
   await new Promise(r => setTimeout(r, SETTLE * 1000))
+
+  if (GOTO) {
+    // T opens the chat, Escape closes it. Typed through the real keyboard because the console is a
+    // controlled input — dispatching a synthetic KeyboardEvent sets no value and submits nothing.
+    await page.keyboard.press('KeyT')
+    await new Promise(r => setTimeout(r, 300))
+    await page.keyboard.type(`/goto ${GOTO}`)
+    await page.keyboard.press('Enter')
+    await new Promise(r => setTimeout(r, 300))
+    await page.keyboard.press('Escape')
+    // A teleport discards every loaded column and streams a new place in from nothing, so this
+    // needs the SAME wall-clock the first load did. Shooting early photographs a blue void.
+    await new Promise(r => setTimeout(r, SETTLE * 1000))
+  }
+
+  if (PITCH !== 0) {
+    // ⚠ The camera only turns while the pointer is LOCKED — `PointerLockControls` ignores every
+    // mousemove otherwise. A real click is what earns the lock (headless Chrome treats page.mouse
+    // as trusted input); a scripted `requestPointerLock()` has no user activation and is refused.
+    // Guarded, because a refused lock must degrade to "the shot has default pitch", never a crash.
+    try {
+      await page.mouse.click(640, 380)
+      await new Promise(r => setTimeout(r, 400))
+      // Same sign convention as the mouse: dragging down looks down, so a negative pitch looks up.
+      await page.mouse.move(640, 380 + PITCH * 8)
+      await new Promise(r => setTimeout(r, 400))
+    } catch { /* no lock — default pitch */ }
+  }
 
   await page.screenshot({ path: OUT })
   const canvas = await page.evaluate(() => {

@@ -34,6 +34,7 @@ import { materialAt, MAT, isPlant, isHalfMat, isTopSlab, baseOf, TOP_BIT, DEFAUL
 import { FLORA, plantVariant } from '../voxel/flora'
 import { raycast, tickBreak, dropsFor, setBreakRate, getBreakRate, type BreakState } from '../voxel/mine'
 import { spawnDrop, tickDrops, type Drop } from '../voxel/drops'
+import { orphanedLeaves, dueLeaves, withoutLeaves, enqueueLeaves, type PendingLeaf } from '../voxel/decay'
 import { blockDef, materialForItem, emitOf, BLOCKS, type BlockSkill } from '../voxel/registry'
 import { editIndex, recordEdit, applyEdits, packEdits, unpackEdits, isStale, type ColumnEdits } from '../voxel/edits'
 import { loadColumn, saveColumn, editedColumnCount, loadPlayer, savePlayer, type PlayerSave } from './save'
@@ -46,7 +47,7 @@ import { createTexturedVoxelMaterial } from './tex/atlas'
 import { loadSettings, saveSettings, withStyle, VIEW_RADIUS_MIN, VIEW_RADIUS_MAX, type VoxelSettings, type RenderStyle } from './settings'
 import { buildAttrsSplit, MATERIAL_COLOR } from './attrs'
 import { leafPixels } from './tex/flora-tex'
-import { isLeafMat } from '../voxel/trees'
+import { isLeafMat, isLogMat } from '../voxel/trees'
 import { createInventory, removeItems, countItem, type Inventory } from '../engine/inventory'
 // ★ PORT STEP 1 — the zero-coupling systems, wired unchanged.
 // PLAY3D-MIGRATION measured 16 of 23 engine systems as having NO reference to zones, tiles or world
@@ -206,7 +207,9 @@ const GREG_Y = columnHeight(GREG_X, GREG_Z, SEED) + 1
 const GREG_TALK_RANGE = 3
 
 /** Every log a blade can fell — the 'cut' step reads the whole set, not one species; Greg never
- *  said which tree. */
+ *  said which tree.
+ *  ⚠ Must stay exactly the set `isLogMat` (trees.ts) describes. Kept as a literal Set only because
+ *  the quest step wants `.has`; if a fifth species is ever ruled, both change or neither does. */
 const LOG_MATERIALS = new Set<number>([
   WOOD.GOLDWOOD_LOG, WOOD.SHIMMEROAK_LOG, WOOD.STARWILLOW_LOG, WOOD.DAWNWOOD_LOG,
 ])
@@ -762,6 +765,7 @@ export default function VoxelWorld() {
   useEffect(() => {
     try { potClock.current = JSON.parse(localStorage.getItem(POT_KEY) ?? '{}') } catch { potClock.current = {} }
   }, [POT_KEY])
+
   /** What the world needs of the pot: the clock, a way to persist it, and where a spirit goes. */
   const potOps = useMemo(() => ({
     clock: () => potClock.current,
@@ -2981,6 +2985,31 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, weaponDrawn, w
     return c.get(wx - cx * SECTION, wy, wz - cz * SECTION)
   }, [])
 
+  /**
+   * ── ★ LEAVES WAITING TO FALL (2026-08-13) ─────────────────────────────────────────────────────
+   * Alex: *"once the trunk is mined the leaves should come down over time."*
+   *
+   * A SIDECAR like the pot clock, not a column record like a chest's contents, and the difference
+   * is which transaction the data has to be atomic with. A chest's items must arrive and leave with
+   * its block or a badly-timed refresh destroys them. A pending leaf is the opposite: the block it
+   * names is still perfectly ordinary world state, and the queue is only a note about the FUTURE.
+   * Losing it costs one canopy that stays up, never an item.
+   *
+   * ⚠ It is keyed by SEED and holds absolute timestamps, so walking away and coming back an hour
+   * later finds the whole canopy already due — which is the only reading of "over time" that
+   * survives the game not running.
+   */
+  const decayQueue = useRef<PendingLeaf[]>([])
+  /** Last wall-clock second the queue was written to storage. See the throttle in the decay tick. */
+  const decaySavedAt = useRef(0)
+  const DECAY_KEY = `voxel3d:leafdecay:${SEED}`
+  const saveDecay = useCallback(() => {
+    try { localStorage.setItem(DECAY_KEY, JSON.stringify(decayQueue.current)) } catch { /* full disk */ }
+  }, [DECAY_KEY])
+  useEffect(() => {
+    try { decayQueue.current = JSON.parse(localStorage.getItem(DECAY_KEY) ?? '[]') } catch { decayQueue.current = [] }
+  }, [DECAY_KEY])
+
   const remesh = useCallback((cx: number, cz: number) => {
     const g = group.current
     const c = cols.current.get(key(cx, cz))
@@ -3181,7 +3210,25 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, weaponDrawn, w
     // Fence connections are DERIVED from the world, so a terrain edit beside a fence makes or
     // breaks an arm — re-derive. O(placements) matrix writes; edits are player-paced, not 60Hz.
     pieces.sync(placements.current)
-  }, [remesh, pieces])
+
+    // ── ★ A FELLED TRUNK LOSES ITS CANOPY ────────────────────────────────────────────────────
+    // In this funnel for exactly the reason the chest record above is: every world write passes
+    // through here, so a log that disappears down some future path (an explosion, a console verb)
+    // drops its leaves too, rather than only the one that goes through the mining branch.
+    //
+    // ⚠ RUN IT AFTER the section write, never before — `orphanedLeaves` asks the world what is
+    // still standing, and if the log being felled is still in the grid it counts as its own
+    // support and nothing is ever orphaned.
+    //
+    // ⚠ `voxel` reads unloaded space as AIR, so in principle a tree straddling the edge of the
+    // loaded world could look unsupported. It cannot in practice: you have to be standing next to
+    // a trunk to chop it, and its own column plus neighbours are loaded by definition.
+    if (isLogMat(prevMat) && mat === AIR) {
+      const now = performance.now() / 1000
+      const cells = orphanedLeaves(voxel, isLeafMat, isLogMat, wx, wy, wz, Math.random)
+      if (cells.length) { decayQueue.current = enqueueLeaves(decayQueue.current, cells, now); saveDecay() }
+    }
+  }, [remesh, pieces, voxel, saveDecay])
 
   /** The locomotion core's world probe — a CELL CODE now, not a boolean (2026-08-08): water is
    *  a medium the walker swims, not a hole it wades. Ungenerated space still reads as solid via
@@ -4161,6 +4208,66 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, weaponDrawn, w
         onInvChange()
         mouse.current.right = false   // one block per click, not a firehose
       }
+      }
+    }
+
+    // ── ★ THE CANOPY COMES DOWN ──────────────────────────────────────────────────────────────
+    // Guarded on a non-empty queue, so a player who has never felled a tree pays one length check
+    // per frame — this runs inside the 60Hz loop and the empty case is the case.
+    //
+    // ⚠ A DUE LEAF WHOSE COLUMN IS NOT LOADED STAYS QUEUED rather than being dropped: `setVoxel`
+    // returns silently when the column is missing, so consuming the entry anyway would mean felling
+    // a tree, walking out of view while it decayed, and coming back to a canopy that is now
+    // permanent — the exact bug this feature exists to remove, hidden behind the fix for it.
+    if (decayQueue.current.length) {
+      const now = performance.now() / 1000
+      const due = dueLeaves(decayQueue.current, now)
+      if (due.length) {
+        // ── ★ ONE LEAF PER FRAME, AND THIS IS THE WHOLE REASON THE CAP EXISTS ──────────────────
+        // `setVoxel` remeshes its column inline — correct for a player mining a block per click,
+        // ruinous here. A felled goldwood orphans ~100 leaves at once (measured against the real
+        // generator, seed 1337), and dropping them all in the frame they came due would be ~100
+        // column remeshes in one frame against a budget of 16.7ms and a warm mesh cost of ~3.4ms
+        // per column. That is the slump regression's exact shape: a feature that is fine per-block
+        // and catastrophic per-canopy.
+        //
+        // Draining at one per frame bounds the cost to what mining already costs, and 60 leaves a
+        // second still reads as a shower rather than a queue — the tree clears in under two
+        // seconds. ⚠ Do NOT "optimise" this by raising the cap; raise it only after measuring the
+        // remesh, or by giving decay a batched write path that remeshes each column once.
+        //
+        // Oldest-due first, so a canopy unravels in the order `orphanedLeaves` staggered it in
+        // rather than in whatever order the queue happens to hold.
+        due.sort((a, b) => a.at - b.at)
+        const fell: PendingLeaf[] = []
+        for (const d of due) {
+          const cx = Math.floor(d.x / SECTION), cz = Math.floor(d.z / SECTION)
+          if (!cols.current.has(key(cx, cz))) continue
+          // Leaves drop nothing (registry), so this is a removal and not a loot event — no
+          // spawnDrop, and felling a wood cannot be farmed for items.
+          if (isLeafMat(voxel(d.x, d.y, d.z))) {
+            setVoxel(d.x, d.y, d.z, AIR)
+            fell.push(d)
+            break                      // ← the cap. One remesh per frame, same as a pick swing.
+          }
+          // A cell that is no longer a leaf costs nothing to retire, so those do NOT spend the
+          // frame's single slot — otherwise a queue full of already-mined cells would take one
+          // frame each to notice and the real leaves behind them would crawl.
+          fell.push(d)
+        }
+        if (fell.length) {
+          decayQueue.current = withoutLeaves(decayQueue.current, fell)
+          // ⚠ THROTTLED, because this drains at 60Hz and `localStorage.setItem` is SYNCHRONOUS —
+          // re-serialising the whole queue every frame would put a JSON write of the entire
+          // remaining canopy in the frame budget, next to the remesh it already costs. Saved on a
+          // 2s tick, and always the moment the queue empties so the finished state is the one on
+          // disk. The worst case a crash can cost is two seconds of leaves that fall again later,
+          // which is the same outcome as never having decayed them.
+          if (!decayQueue.current.length || now - decaySavedAt.current > 2) {
+            decaySavedAt.current = now
+            saveDecay()
+          }
+        }
       }
     }
 

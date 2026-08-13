@@ -107,14 +107,18 @@ for (const key of Object.keys(grid)) {
     for (let q = 0; q < sm.mesh.quads; q++) if (isLeaf(sm.mesh.materials[q * 4])) leafQuads++
   }
 }
-// Every leaf voxel would emit two crossed quads; the ones walled in on all six sides are culled,
-// because they sit behind their own neighbours' crosses from every angle. That saving is what pays
-// for a fuller crown, so it is worth printing next to the bill rather than buried in it.
-const uncapped = leaves * 2
+// ⚠ AND IT OUTLIVED ITS QUESTION A SECOND TIME (2026-08-13) — the warning above was written on
+// 08-12 and the very next edit to the mesher falsified this block again. It printed "buried leaves
+// culled … 0 quads saved (0%)", which is not wrong so much as an answer to a question nobody is
+// asking: the six-sided cull is GONE, deleted for making canopies see-through. Rewritten to the
+// live question — what the canopy costs, and how much of it is the interior mass the cull used to
+// throw away. **If you change the leaf pass, change this block in the same commit.**
+const perLeaf = leaves * 2
+const interior = leaves - exposedLeaves
 console.log(`\n  ── what the canopy costs, meshed for real ──`)
 console.log(`  total quads in view     ${totalQuads.toLocaleString()}`)
 console.log(`  LEAF quads             ${leafQuads.toLocaleString()}   (${(leafQuads / totalQuads * 100).toFixed(1)}% of the world)`)
-console.log(`  without the cull        ${uncapped.toLocaleString()}   (2 per leaf voxel, no merging possible)`)
-console.log(`  buried leaves culled    ${(leaves - exposedLeaves).toLocaleString()} voxels ` +
-            `= ${(uncapped - leafQuads).toLocaleString()} quads saved ` +
-            `(${((1 - leafQuads / Math.max(1, uncapped)) * 100).toFixed(0)}%)`)
+console.log(`  expected (2 per leaf)   ${perLeaf.toLocaleString()}   ${leafQuads === perLeaf ? '✓ every leaf draws' : '⚠ something is culling leaves'}`)
+console.log(`  of which INTERIOR       ${interior.toLocaleString()} voxels = ${(interior * 2).toLocaleString()} quads ` +
+            `(${(interior / Math.max(1, leaves) * 100).toFixed(0)}% of the canopy)`)
+console.log(`     ^ the depth that hides the trunk. Culling it is what made the forest see-through.`)
