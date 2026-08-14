@@ -77,6 +77,28 @@ coord build "what changed"     # acquire lock -> npm run build -> pm2 restart ->
   teammate*. Nothing was lost (pathspec staging held), but the wrong diagnosis there is "another
   window clobbered me", which is the one accusation that stops a swarm cold. Commit separately, by
   pathspec, and check `git log -1` after — not before.
+- **★★ AND CHECK `git status` AGAIN *AFTER* THE BUILD — A BUILD WRITES LOAD-BEARING FILES (2026-08-13).**
+  The commit-first rule above makes the tree match `HEAD` *going in*. It says nothing about coming
+  out, and `coord build` can leave **generated artifacts uncommitted**. `build-worker.mjs` publishes
+  the generation worker under a **content hash** and rewrites `src/workers/worker-url.ts` to point at
+  it, so any change reaching the worker's import graph deletes the old `public/voxel-gen.worker.<hash>.js`,
+  writes a new one, and edits the URL module. On 08-13 the mesh-merge pass touched `attrs.ts` — which
+  is in that graph — and the deploy left `HEAD` pointing `VOXEL_WORKER_URL` at a hash that **no longer
+  existed on disk**.
+  - **Prod was green, and that is the trap.** The *running* tree happened to hold the new file. A
+    clean checkout would have shipped a 404ing worker URL, and **that failure is silent by design**:
+    the worker never constructs, the liveness probe falls back, worldgen quietly moves onto the main
+    thread, and nothing reaches the console. You would meet it as "the game got slow" weeks later.
+  - It is the 08-11 lesson **pointed the other way** — there, git was missing code the site was
+    running; here, git holds a pointer to a file the site would not have. Same class: *the repo and
+    the running thing disagree, and only one of them is being looked at.*
+  - **The rule: the hashed artifact and its URL module travel in ONE commit** (as `b50f3ac`/`63b8c7b`
+    already did). A deploy is not finished at `prod 200`; it is finished at `git status` clean,
+    `master` in sync with `origin`, and the URL in `worker-url.ts` matching a file that is actually
+    in `public/`.
+  - **⚠ AND DO NOT REPORT A POST-BUILD TREE FROM A PRE-BUILD READING.** The hub called the tree clean
+    in its wrap on the strength of a `git status` run *before* taking the lock, which was true when
+    it was run and stale by the time it was quoted. A build is exactly the step that invalidates it.
 - **Convention: only the hub deploys.** Satellites edit + commit their lane; the hub integrates and runs `coord build`. Keeps git + lock contention near zero. The lock still **serializes** any build as a backstop (and protects you if a second deployer ever happens or you open a real extra window), waiting up to 4m for a held lock.
 - A build older than 15m is treated as dead and stolen (a wedged build never blocks the team forever).
 - **Never run `npm run build` / `pm2 restart` / a bare `npm run dev` directly.** All three touch the production `.next`; only `coord build` is safe.
