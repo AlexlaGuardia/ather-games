@@ -137,6 +137,7 @@ import { getMaxPool, getRegenRate } from '../engine/mana'
 import { resolveCast, SELF_ARCHETYPES, castAimPoint, type CastEnv } from '../engine/cast-dispatch'
 import { spawnField, tickFields, containsVolume, fieldsAtVolume, blocksShotAtVolume,
          FIELD_HEIGHT, type Field } from '../engine/field-effects'
+import { conjure, shapeCells, expireConjured, conjuredWriteCells, type Conjured } from '../engine/conjured-terrain'
 import type { CastSpec, CastArchetype } from '../play3d/cast'
 
 /**
@@ -3225,6 +3226,37 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
   }, [])
 
   /**
+   * ── ★ THE LIVE GROUND LINE — what is actually underfoot, not what the generator planned ───────
+   *
+   * `columnHeight(x, z, SEED)` is a PURE GENERATOR QUERY: it does not know about mining, building,
+   * or anything a player has ever done. Every consumer that asks it is asking about the world as
+   * first imagined.
+   *
+   * ★ THAT IS A BUG WHEREVER SOMETHING HAS TO WALK, AND IT PREDATES THE CAST WORK. The Hollows'
+   * ground probe was `columnHeight`, which means **no wall has ever stopped a Hollow** — not a
+   * conjured one and not one the player spent an evening building. It glided through both, because
+   * as far as it could see the ground was still the ground. I claimed in the 08-14 walker commit
+   * that conjured terrain would stop a warden "for free once it writes real voxels"; that was
+   * wrong, and this is the missing half.
+   *
+   * Returns the y of the topmost SOLID block near `fromY`, i.e. the same thing `columnHeight`
+   * returns but true. Bounded to a window around the asker's own height on purpose — a walking body
+   * only needs to know the step in front of it, and an unbounded column scan per body per frame is
+   * a cost with no buyer. Falls back to the generator when the window is all air, so behaviour
+   * degrades to exactly today's rather than dropping a body through the floor.
+   */
+  const groundTopNear = useCallback((x: number, z: number, fromY: number, span = 6): number => {
+    const xi = Math.floor(x), zi = Math.floor(z)
+    const top = Math.min(H - 1, Math.floor(fromY) + span)
+    const bottom = Math.max(0, Math.floor(fromY) - span)
+    for (let y = top; y >= bottom; y--) {
+      if (voxel(xi, y, zi) !== AIR) return y
+    }
+    return columnHeight(xi, zi, SEED)
+  }, [voxel])
+
+
+  /**
    * ── ★ LEAVES WAITING TO FALL (2026-08-13) ─────────────────────────────────────────────────────
    * Alex: *"once the trunk is mined the leaves should come down over time."*
    *
@@ -3347,6 +3379,38 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
       if (performance.now() > end) break
     }
   }, [remesh])
+
+  /**
+   * ── ★ A RUNTIME WRITE: real voxels that never enter the save ──────────────────────────────────
+   *
+   * The `applyGenPieces` path, generalised. Writes straight into sections, so it does NOT
+   * `recordEdit`, does NOT touch `dirtySaves`, and does not run the chest/station/leaf-decay funnels
+   * that `setVoxel` owns — none of which a conjured wall should ever trigger. It is an occupancy
+   * with a lifetime, not a change to the world.
+   *
+   * ⚠ REMESHES ONCE PER TOUCHED COLUMN, not once per block. A Pillar Tomb is 9 cells × 4 tall = 36
+   * writes; going through a per-block remesh would rebuild the same column three dozen times in one
+   * frame, which is the shape of every "why did casting hitch" bug I would then have to find.
+   */
+  const runtimeWrite = useCallback((cells: readonly { x: number; y: number; z: number }[], mat: number) => {
+    const touched = new Set<string>()
+    for (const c of cells) {
+      const cx = Math.floor(c.x / SECTION), cz = Math.floor(c.z / SECTION)
+      const col = cols.current.get(key(cx, cz))
+      if (!col) continue                                   // unloaded: nothing to write into
+      const sy = (c.y / SECTION) | 0
+      const s = col.sections[sy]
+      if (!s) continue
+      s.set(c.x - cx * SECTION, c.y - sy * SECTION, c.z - cz * SECTION, mat)
+      touched.add(key(cx, cz))
+    }
+    for (const k of touched) {
+      const col = cols.current.get(k)
+      if (col) refreshUniform(col)
+      const [cx, cz] = k.split(',').map(Number)
+      queueRemesh(cx, cz)
+    }
+  }, [queueRemesh])
 
   /**
    * ── ★ GENERATED PIECES (the pieces pass, 2026-08-08) ─────────────────────────────────────────
@@ -3591,6 +3655,20 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
   // below), which is also the only differentiator the render-audit rule allows.
   const fields = useRef<Field[]>([])
   const fieldMeshes = useRef(new Map<number, THREE.Mesh>())
+
+  // ── cast TERRAIN (SYSTEM 2, ported 2026-08-14) — REAL BLOCKS, not a parallel entity ────────────
+  // The cells live in the pure module; what makes this the better half of the port is that the host
+  // WRITES them. No render pool, no second collision path: a conjured wall is voxels, so it blocks,
+  // meshes, occludes and can be stood on by the same code that does all of that for a hillside.
+  const conjured = useRef<Conjured[]>([])
+  /**
+   * ★ EXACTLY WHICH CELLS EACH CAST WROTE, so expiry undoes its own work and nothing else.
+   *
+   * Not derivable from the `Conjured` cells: those are a footprint, and the host only writes the
+   * subset that was actually AIR. Reverting the footprint instead of the record would blow a hole
+   * through whatever the wall grew up against — including, on a ten-second timer, a chest.
+   */
+  const conjuredWrites = useRef(new Map<number, { x: number; y: number; z: number }[]>())
   // Open-ended so you can see your own feet inside a grove, unit-sized so one geometry serves every
   // radius by scale alone (render-audit: a geometry per field is how a voxel renderer dies).
   const fieldGeo = useMemo(() => new THREE.CylinderGeometry(1, 1, 1, 18, 1, true), [])
@@ -3717,14 +3795,16 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
    * would ("slice 2 adds 'field' to the voxel host's set and deletes nothing here"). It cost a
    * height on `FieldDef`, a target adapter onto the Hollows, and a render pass. **11 casts lit up.**
    *
-   * `terrain` and `statuses` still do NOT: `conjured-terrain.ts` resolves against play3d's tile grid
-   * (and wants re-founding on real voxel blocks, which is the better version of the feature —
-   * Glacial Path's walkable ramps become possible), and `statuses.ts` keys off play3d's named
-   * hunter/guard targets. Declaring that makes Stonewall say "not in this world yet" instead of
-   * being a key that silently does nothing — see cast-dispatch's header.
+   * **`terrain` joined it the same day** — step 3, and the one that got BETTER in the move: play3d
+   * consults cells beside its tilemap so a wall can only block, while here the cells are WRITTEN as
+   * `MAT.CONJURED` voxels, which collide, mesh, occlude and **can be stood on**. 7 more casts.
+   *
+   * `statuses` still does NOT: `statuses.ts` keys off play3d's named `hunter`/`guard` targets, and
+   * this world's bodies are Hollows. Declaring that makes Shackle say "not in this world yet"
+   * instead of being a key that silently does nothing — see cast-dispatch's header.
    */
   const supports = useMemo<ReadonlySet<CastArchetype>>(
-    () => new Set<CastArchetype>([...SELF_ARCHETYPES, 'projectile', 'field']), [])
+    () => new Set<CastArchetype>([...SELF_ARCHETYPES, 'projectile', 'field', 'terrain']), [])
 
   const castSlot = useCallback((slot: number, g: THREE.Group) => {
     const v = vitals.current, m = mana.current
@@ -3763,6 +3843,36 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
         radius: out.placed.areaSize, height: FIELD_HEIGHT, secs: out.placed.areaSecs,
         dps: out.placed.fieldDps, hps: out.placed.fieldHps, stopsShots: out.placed.fieldStopsShots,
       }, env.now)
+    }
+    if (out.placed && out.placed.archetype === 'terrain') {
+      const f = new THREE.Vector3()
+      camera.getWorldDirection(f)
+      const p = loco.current
+      const flat = Math.hypot(f.x, f.z) || 1
+      const aim = castAimPoint(f.x, f.z, p.px, p.pz, out.placed.castRange)
+      const cells = shapeCells(out.placed.shape, aim.x, aim.z, f.x / flat, f.z / flat, out.placed.areaSize)
+      // ★ ONLY INTO AIR, and record precisely what was written. The rule is pure and asserted in
+      // `conjuredWriteCells` — the host just supplies the two world probes.
+      const wrote = conjuredWriteCells(
+        cells, out.placed.shapeHeight,
+        (cx, cz) => groundTopNear(cx, cz, p.py),
+        (vx, vy, vz) => voxel(vx, vy, vz) === AIR,
+        H,
+      )
+      runtimeWrite(wrote, MAT.CONJURED)
+      const before = new Set(conjured.current.map((c) => c.id))
+      conjured.current = conjure(conjured.current, out.placed.moveId, cells, out.placed.areaSecs, out.placed.shapeHeight, env.now)
+      const added = conjured.current.find((c) => !before.has(c.id))
+      if (added) conjuredWrites.current.set(added.id, wrote)
+      // ⚠ `conjure` DROPS THE OLDEST at the cap, and a dropped wall must give its blocks back or the
+      // world keeps them forever. The pure module has no idea the host wrote anything, so the host
+      // has to notice the eviction — this is the same id-diff the field meshes do.
+      const now = new Set(conjured.current.map((c) => c.id))
+      for (const [id, cellsWritten] of conjuredWrites.current) {
+        if (now.has(id)) continue
+        runtimeWrite(cellsWritten, AIR)
+        conjuredWrites.current.delete(id)
+      }
     }
     if (out.placed && out.placed.archetype === 'projectile') {
       // Rides the SAME pool and the same segment sweep as a gun round, so a bolt cannot tunnel
@@ -3903,6 +4013,23 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
         camera.rotation.y += recoil.current.y * Math.min(1, dt * 18)
         const k = 1 - Math.min(1, dt * 18)
         recoil.current.p *= k; recoil.current.y *= k
+      }
+
+      // ── cast TERRAIN: hand the blocks back when the wall's time is up ───────────────────────
+      // Cheap when nothing is up (the common case), and the revert is driven by the RECORD rather
+      // than by re-deriving the footprint — see `conjuredWrites`.
+      if (conjured.current.length > 0) {
+        const nowMs = performance.now()
+        const next = expireConjured(conjured.current, nowMs)
+        if (next !== conjured.current) {
+          const live = new Set(next.map((c) => c.id))
+          for (const [id, cellsWritten] of conjuredWrites.current) {
+            if (live.has(id)) continue
+            runtimeWrite(cellsWritten, AIR)
+            conjuredWrites.current.delete(id)
+          }
+          conjured.current = next
+        }
       }
 
       // ── cast FIELDS: tick, bite, mend, render ──────────────────────────────────────────────
@@ -4111,7 +4238,13 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
         // Dawn wins on the SAME clock the spawn gate reads (15·day = effective open-sky light);
         // GUTTER_SKY > NIGHT_SKY_MAX gives the dusk boundary hysteresis instead of a flap.
         if (15 * day >= GUTTER_SKY || st.hp <= 0) st.gutter = Math.min(1, st.gutter + dt * (st.hp <= 0 ? 2.2 : 0.7))
-        hollowStep(st, dt, p.x, p.z, (x, z) => columnHeight(Math.floor(x), Math.floor(z), SEED), now)
+        // ★ THE LIVE GROUND, NOT THE GENERATOR'S (2026-08-14). This was `columnHeight`, which knows
+        // nothing about mining, building or casting — so **no wall had ever stopped a Hollow**, and
+        // my own walker commit claimed conjured terrain would stop a warden "for free". It would
+        // not have: the walker's step-up rule was reading a world where the wall does not exist.
+        // Now a Stonewall, a Cordon and a shed the player built all read as ground to climb, and the
+        // two-high rule does the rest. `st.y` scopes the scan to the body's own height.
+        hollowStep(st, dt, p.x, p.z, (x, z) => groundTopNear(x, z, st.y), now)
         // ── ★ THE TOUCH LANDS (2026-08-11) — before this, a Hollow that caught you glided
         // THROUGH you and nothing happened. Every system upstream (the two-channel light field,
         // the spawn cycle, the pack walk, the lantern's safe room) exists to make the dark cost

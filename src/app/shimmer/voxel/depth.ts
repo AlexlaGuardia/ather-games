@@ -201,6 +201,27 @@ export const MAT = {
    * everything else in this enum. 46; 47 is the last of the 42-47 gap.
    */
   SAWMILL: 46,
+  /**
+   * ── ★ CONJURED MATTER (2026-08-14, the terrain-cast port) ────────────────────────────────────
+   * A wall a keeper CAST, not one anybody built: Stonewall, Cordon, Pillar Tomb, Flash Freeze,
+   * Glacial Path, Living Architecture, Living Fortress all write this and only this.
+   *
+   * ★ IT IS ITS OWN MATERIAL FOR A GAMEPLAY REASON, NOT A TIDINESS ONE. Reusing `STONE` would put a
+   * block in the world that looks permanent and then evaporates ten seconds later, which reads as a
+   * bug every single time. **A temporary wall has to LOOK temporary**, so this glows (it is mana in
+   * the shape of a wall, not rock) and reads unlike anything quarried.
+   *
+   * ★ AND `hardness: Infinity` IN THE REGISTRY IS WHAT CLOSES THE EXPLOIT, using the mechanism that
+   * already exists rather than a guard in the mining path: `breakSeconds` returns Infinity, so
+   * `canBreak` is false and a keeper cannot farm 16-mana Stonewalls for free rubble. Nothing in the
+   * mine code had to learn about casts.
+   *
+   * ⚠ NEVER GENERATED, NEVER PLACED BY HAND, AND NEVER SAVED. The host writes it straight into
+   * sections (the `applyGenPieces` path), so it never enters the edit record — a conjured wall is a
+   * runtime occupancy, not an edit to the world. Close the tab mid-Cordon and it is simply gone.
+   * 47; this closes the 42-47 gap.
+   */
+  CONJURED: 47,
 } as const
 
 export interface DepthConfig {

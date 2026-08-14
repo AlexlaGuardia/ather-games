@@ -14,6 +14,28 @@
 // the player, the AI and bullets identically, for free, and it can never corrupt the zone's real
 // tilemap (which is authored data and persists).
 //
+// ── ★ MOVED play3d/ → engine/ 2026-08-14 — AND IN THE VOXEL WORLD IT IS REAL BLOCKS ─────────────
+// Step 3 of the cast port. This module stays exactly what it was — a pure set of cells with an
+// expiry — but the two hosts now realise it very differently, and the voxel one is the better
+// version of the feature:
+//
+//   play3d   cells + `blockedAt`, consulted beside the tilemap. A wall can only ever BLOCK.
+//   voxel3d  the cells are WRITTEN, as `MAT.CONJURED` voxels stacked to `shapeHeight`.
+//
+// ★ WHY THAT MATTERS BEYOND TIDINESS: a written block is a block. It collides, it meshes, it
+// occludes, it lights, and **you can stand on it** — so Glacial Path's canon *"bridges, ramps,
+// slides"* stops being impossible. play3d's collision is binary (in a cell or not), which is why
+// the 08-13 note had to write that half off; a voxel has a top face.
+//
+// ⚠ THE HOST WRITES STRAIGHT INTO SECTIONS, NEVER THROUGH `setVoxel`. Same rule and same reason as
+// `applyGenPieces`: regenerable content must not enter the save. A conjured wall is a RUNTIME
+// OCCUPANCY, not an edit to the world — close the tab mid-Cordon and it is simply gone, which is the
+// only behaviour that cannot litter a save with permanent free stone.
+//
+// ⚠ AND IT ONLY EVER WRITES INTO AIR, recording exactly which cells it wrote, so expiry reverts its
+// own work and nothing else. A wall that overwrote a chest and then "restored" AIR over it would
+// destroy player property on a ten-second timer.
+//
 // ── BOUNDARY ───────────────────────────────────────────────────────────────────
 // The SHAPES here (a line, a ring, a block) are build calls. Which move conjures which shape, and
 // its size/duration, live on the move's CastSpec — no move names in this module.
@@ -88,6 +110,42 @@ export function blockCells(cx: number, cz: number, side: number): { x: number; z
   const out: { x: number; z: number }[] = []
   for (let dx = -half; dx <= half; dx++) for (let dz = -half; dz <= half; dz++) out.push({ x: c.x + dx, z: c.z + dz })
   return uniq(out)
+}
+
+/**
+ * ── ★ WHICH VOXELS A CONJURED SHAPE ACTUALLY WRITES (2026-08-14) ────────────────────────────────
+ * Pure on purpose: this is the invariant the whole voxel port rests on, and it does not belong
+ * buried in a 5,000-line component where nothing can assert it.
+ *
+ * Two rules, both load-bearing:
+ *  1. **A column grows from its OWN ground.** `groundTop` is asked per cell, so a wall follows a
+ *     slope instead of burying its low end and floating its high one — and it grows off a roof the
+ *     player built, because the host's probe reads the live world.
+ *  2. **Never overwrite anything.** Only cells that are currently air are returned, so the caller's
+ *     revert (write air back to exactly these) can never destroy what the wall grew against. A wall
+ *     that "restored" air over a chest would be a ten-second timer on player property.
+ *
+ * ⚠ It also SKIPS rather than stops when a cell is occupied. A wall crossing a boulder should carry
+ * on past it with a notch missing, not give up at the boulder and leave half a wall.
+ */
+export function conjuredWriteCells(
+  cells: readonly { x: number; z: number }[],
+  height: number,
+  groundTop: (x: number, z: number) => number,
+  isAir: (x: number, y: number, z: number) => boolean,
+  worldHeight: number,
+): { x: number; y: number; z: number }[] {
+  const out: { x: number; y: number; z: number }[] = []
+  for (const c of cells) {
+    const top = groundTop(c.x, c.z)
+    for (let h = 1; h <= height; h++) {
+      const y = top + h
+      if (y < 0 || y >= worldHeight) break
+      if (!isAir(c.x, y, c.z)) continue
+      out.push({ x: c.x, y, z: c.z })
+    }
+  }
+  return out
 }
 
 export type ConjureShape = 'wall' | 'ring' | 'block'

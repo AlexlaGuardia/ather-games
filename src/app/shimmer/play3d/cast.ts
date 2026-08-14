@@ -28,7 +28,7 @@
 
 import { KEEPER_MOVES, type KeeperMove, type MoveTier, knownMoves } from './keeper-moves'
 import { hasLearned, type Book } from './scroll-market'
-import type { ConjureShape } from './conjured-terrain'
+import type { ConjureShape } from '../engine/conjured-terrain'
 import type { StatusKind } from './statuses'
 
 /** The archetypes the sim can actually run today, plus the honest 'unbuilt' tag. */
@@ -93,7 +93,12 @@ export interface CastSpec {
   fieldStopsShots: boolean
   /** terrain: which shape is raised */
   shape: ConjureShape
-  /** terrain: tiers of visible height (render only — collision is binary) */
+  /**
+   * terrain: how tall the raised shape stands.
+   * ⚠ WAS "render only — collision is binary", and that stopped being true on 2026-08-14: in the
+   * voxel world this is a count of REAL stacked blocks, so height is collision. play3d still reads
+   * it the old way, which is fine — it is the host's business how a cell becomes a wall.
+   */
   shapeHeight: number
   /** status: which options this cast removes from enemies in the area */
   statuses: readonly StatusKind[]

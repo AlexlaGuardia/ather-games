@@ -43,6 +43,9 @@ export const MATERIAL_COLOR: Record<number, number> = {
   [MAT.RUBBLE]: 0x6e6862,
   [MAT.CUT_STONE]: 0x9aa0a4,
   [ORE.RAW_MANA]: 0x7fd4ff,
+  // Mana in the shape of a wall. Deliberately the palest, coolest thing in the table and NOT in
+  // stone's family — a cast wall must never be mistaken for one you could have built.
+  [MAT.CONJURED]: 0xaef2ff,
   [ORE.ELEMENT_VIOLET]: 0xa974ff,
   [ORE.ELEMENT_STORM]: 0xe8e46a,
   [ORE.ELEMENT_EARTH]: 0xc4813f,
@@ -101,6 +104,9 @@ export const EMISSIVE: Record<number, number> = {
   // The lantern out-glows every seam — it is the one block whose JOB is light. (Render-side only;
   // the spawn-side truth is registry `emit`, flooded by light.ts. Two systems, one story.)
   [MAT.MANA_LANTERN]: 1.0,
+  // It glows because it IS mana, and because a glow is the cheapest way to say "this is not rock
+  // and it will not be here long". Below the lantern: a wall should not out-light the light source.
+  [MAT.CONJURED]: 0.45,
 }
 
 /** An unmapped material must be LOUD, not invisible — magenta says "the registry missed one". */

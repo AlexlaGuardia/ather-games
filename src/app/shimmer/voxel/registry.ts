@@ -148,6 +148,12 @@ export const BLOCKS: BlockDef[] = [
   // differs is entirely in `voxel/workshop.ts`: it runs logs 2.4x faster and refuses everything
   // else, so it does not obsolete the bench it costs five logs to stand beside.
   { noSlab: true, material: MAT.SAWMILL, name: 'Sawmill', hardness: 0.9, skill: null, minTier: 0, drops: [{ itemId: 'sawmill', count: 1 }], placeable: true },
+  // ── ★ CAST MATTER CANNOT BE QUARRIED (2026-08-14) ────────────────────────────────────────────
+  // `hardness: Infinity` ⇒ `breakSeconds` returns Infinity ⇒ `canBreak` is false. That single value
+  // is the whole anti-exploit: without it a keeper casts a 16-mana Stonewall, mines five rubble, and
+  // repeats. Using the registry's existing gate means the mining path never learns what a cast is.
+  // `drops: []` is belt-and-braces — if some future path forces a break, it still pays nothing.
+  { material: MAT.CONJURED, name: 'Conjured Matter', hardness: Infinity, skill: null, minTier: 0, drops: [], placeable: false },
 
   // The story road. Digs like soil and drops SUBSOIL for the same reason greyed soil does: the
   // road is a CONDITION of the ground, not a block you carry home and lay somewhere else.

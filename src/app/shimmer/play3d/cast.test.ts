@@ -27,7 +27,7 @@ const ALL: Book = { learned: KEEPER_MOVES.map((m) => m.id) }
 import { grantRune, revokeRune, setBirthRune, EMPTY_INVENTORY } from './rune-inventory'
 import { spawnField, tickFields, expireFields, contains, containsVolume, blocksShotAt, blocksShotAtVolume,
          resetFieldIds, MAX_FIELDS, FIELD_HEIGHT, FIELD_UNDERBITE, type Field } from '../engine/field-effects'
-import { wallCells, ringCells, blockCells, conjure, blockedAt, liveCells, expireConjured, resetConjuredIds } from './conjured-terrain'
+import { wallCells, ringCells, blockCells, conjure, blockedAt, liveCells, expireConjured, resetConjuredIds } from '../engine/conjured-terrain'
 import { emptyBag, applyStatus, applyStatuses, hasStatus, remaining, statusesOn, pruneStatuses, clearTarget } from './statuses'
 
 let ok = 0, bad = 0
