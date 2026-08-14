@@ -143,6 +143,11 @@ export const BLOCKS: BlockDef[] = [
   // rearranging your home must be free. Placing it is what flips `Station` in voxel/recipes.ts
   // from a dormant field to a real gate — recipes marked `crafting_table` light up near one.
   { noSlab: true, material: MAT.CRAFT_TABLE, name: 'Crafting Table', hardness: 0.8, skill: null, minTier: 0, drops: [{ itemId: 'crafting_table', count: 1 }], placeable: true },
+  // ── The sawmill — the second station, and the first SPECIALIST one ─────────────────────────
+  // Same shape as the bench above (no slab, soft, drops itself, placeable, never generated). What
+  // differs is entirely in `voxel/workshop.ts`: it runs logs 2.4x faster and refuses everything
+  // else, so it does not obsolete the bench it costs five logs to stand beside.
+  { noSlab: true, material: MAT.SAWMILL, name: 'Sawmill', hardness: 0.9, skill: null, minTier: 0, drops: [{ itemId: 'sawmill', count: 1 }], placeable: true },
 
   // The story road. Digs like soil and drops SUBSOIL for the same reason greyed soil does: the
   // road is a CONDITION of the ground, not a block you carry home and lay somewhere else.

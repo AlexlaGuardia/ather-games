@@ -42,7 +42,8 @@
 // between two loads destroys what was in there. That is `chest.ts`'s argument verbatim, and it
 // applies here for the same reason: the pot stores a timestamp, this stores your logs.
 
-import { RECIPES, recipeDef, type RecipeDef, type Station } from './recipes'
+import { RECIPES, recipeDef, type RecipeDef } from './recipes'
+import { MAT } from './depth'
 
 /**
  * How long one run takes at an unstaffed station, in ms.
@@ -57,6 +58,65 @@ import { RECIPES, recipeDef, type RecipeDef, type Station } from './recipes'
  * pointless until it is staffed makes the staffing the feature and the building a chore.
  */
 export const RUN_MS = 12_000
+
+/** The kinds of station that exist. Matches the `MAT.*` blocks and the item ids that place them. */
+export type StationId = 'crafting_table' | 'sawmill'
+
+export interface StationDef {
+  id: StationId
+  /** What the panel calls it. */
+  name: string
+  /** ms per run at this station, unstaffed. */
+  runMs: number
+  /**
+   * What it will work on. `'any'` = every hand-refine in the table; `'logs'` = only recipes that
+   * consume a log.
+   *
+   * ★ DERIVED, NOT LISTED. `'logs'` asks the recipe's own inputs, so a fifth tree species joins the
+   * sawmill the day it is added and nobody has to remember a second list — the same reason
+   * `stationRecipes` filters on `station === 'hand'` rather than naming rows.
+   */
+  accepts: 'any' | 'logs'
+}
+
+/**
+ * ★ THE SAWMILL IS FASTER **AND NARROWER**, AND THE SECOND HALF IS WHAT MAKES IT A DESIGN RATHER
+ * THAN AN UPGRADE.
+ *
+ * A station strictly better than the bench retires the bench, and then the game has one station
+ * again with extra steps — the same failure as a station whose only product is elapsed time. So the
+ * mill runs logs 2.4x faster and **refuses everything else**: stone, lanterns, pots and chests stay
+ * bench work. Specialist against generalist, so a plot that does both wants both.
+ *
+ * ⚠ THE RATE IS NOT STORED ON THE JOB. It is read from here at the moment it is used, so tuning
+ * these numbers retunes every station already standing in the world. A rate copied into the save
+ * when the job was queued would leave old jobs running at whatever the balance was that day, and no
+ * amount of later tuning would ever reach them.
+ */
+export const STATIONS: Record<StationId, StationDef> = {
+  crafting_table: { id: 'crafting_table', name: 'The Bench',   runMs: RUN_MS, accepts: 'any' },
+  sawmill:        { id: 'sawmill',        name: 'The Sawmill', runMs: 5_000,  accepts: 'logs' },
+}
+
+/** Item ids that place a station. Used by `recipes.test.ts` to state the gate rule. */
+export const STATION_ITEMS: ReadonlySet<string> = new Set(Object.keys(STATIONS))
+
+/**
+ * Block material → which station it is, or null for anything that is not one.
+ *
+ * ★ THE SINGLE DEFINITION, and everything that needs to know asks it: `interact.ts` (does a
+ * right-click mean 'work'), the panel (which rate and which recipe list), the mining branch (does
+ * breaking this owe a salvage) and `setVoxel` (does removing this drop a job record). Four places,
+ * and every one of them would otherwise carry its own `=== MAT.CRAFT_TABLE || === MAT.SAWMILL`
+ * that agrees today and forgets the third station on the day it is added — which is the failure
+ * mode the frame maps already have in three places and warn about.
+ */
+export const STATION_MAT: Readonly<Record<number, StationId>> = {
+  [MAT.CRAFT_TABLE]: 'crafting_table',
+  [MAT.SAWMILL]: 'sawmill',
+}
+
+export const stationOf = (mat: number): StationId | null => STATION_MAT[mat] ?? null
 
 /** A station's standing job. `runs` counts RECIPE RUNS, never items — see `queue`. */
 export interface StationJob {
@@ -104,23 +164,29 @@ export function milledYield(r: RecipeDef): number {
 /**
  * Runs finished and waiting, given the wall clock.
  *
+ * ⚠ `runMs` IS REQUIRED, NOT DEFAULTED, AND THAT IS DELIBERATE. A default would silently hand the
+ * bench's 12s to every call site that had not been updated — so the sawmill would run at bench
+ * speed, correctly, quietly, and forever. This repo has already ruled that shape once: `eligibleMoves`
+ * /`canSlot`/`defaultLoadout` were made to REQUIRE a Book for exactly this reason, because an
+ * optional one defaults every un-updated caller back to the old wrong answer with nothing to see.
+ *
  * ⚠ Clamped at BOTH ends. Below zero because a `since` in the future (a clock that stepped back, a
  * hand-edited save) would otherwise read as negative progress and underflow the collect maths;
  * above `runs` because a station left overnight must not manufacture a debt nobody paid input for.
  */
-export function runsReady(job: StationJob, now: number): number {
+export function runsReady(job: StationJob, now: number, runMs: number): number {
   const elapsed = now - job.since
   if (elapsed < 0) return 0
-  const done = Math.floor(elapsed / RUN_MS)
+  const done = Math.floor(elapsed / runMs)
   return done > job.runs ? job.runs : done
 }
 
 /** 0..1 toward the NEXT run finishing. For the HUD hint; never gates a payout. */
-export function runProgress(job: StationJob, now: number): number {
-  if (runsReady(job, now) >= job.runs) return 1      // job is done; nothing is in flight
+export function runProgress(job: StationJob, now: number, runMs: number): number {
+  if (runsReady(job, now, runMs) >= job.runs) return 1   // job is done; nothing is in flight
   const elapsed = now - job.since
   if (elapsed < 0) return 0
-  const t = (elapsed % RUN_MS) / RUN_MS
+  const t = (elapsed % runMs) / runMs
   return t < 0 ? 0 : t > 1 ? 1 : t
 }
 
@@ -194,19 +260,19 @@ export function loadJob(
  * Collecting an unfinished job is legal and pays zero; the job is untouched, not reset.
  */
 export function collect(
-  shop: Workshop, key: string, now: number,
+  shop: Workshop, key: string, now: number, runMs: number,
 ): { shop: Workshop; payout: { itemId: string; count: number } | null } {
   const job = shop[key]
   if (!job) return { shop, payout: null }
   const r = recipeOf(job.recipeId)
   if (!r) return { shop, payout: null }               // table changed under an old save; see `salvage`
-  const done = runsReady(job, now)
+  const done = runsReady(job, now, runMs)
   if (done <= 0) return { shop, payout: null }
 
   const left = job.runs - done
   const next: Workshop = { ...shop }
   if (left <= 0) delete next[key]                     // spent stations leave no record behind
-  else next[key] = { ...job, runs: left, since: job.since + done * RUN_MS }
+  else next[key] = { ...job, runs: left, since: job.since + done * runMs }
 
   return { shop: next, payout: { itemId: r.output.itemId, count: done * milledYield(r) } }
 }
@@ -224,7 +290,7 @@ export function collect(
  * partial run to a whole one in either direction is a lie in one direction or the other.
  */
 export function salvage(
-  shop: Workshop, key: string, now: number,
+  shop: Workshop, key: string, now: number, runMs: number,
 ): { shop: Workshop; drops: { itemId: string; count: number }[] } {
   const job = shop[key]
   if (!job) return { shop, drops: [] }
@@ -234,7 +300,7 @@ export function salvage(
   const r = recipeOf(job.recipeId)
   if (!r) return { shop: next, drops: [] }            // unknown recipe: nothing honest to hand back
 
-  const done = runsReady(job, now)
+  const done = runsReady(job, now, runMs)
   const drops: { itemId: string; count: number }[] = []
   if (done > 0) drops.push({ itemId: r.output.itemId, count: done * milledYield(r) })
   const unstarted = job.runs - done
@@ -250,6 +316,11 @@ export function salvage(
  * bench work you do yourself). Filtering on `station === 'hand'` also means a future table row that
  * genuinely requires the player present is excluded automatically instead of being forgotten.
  */
-export function stationRecipes(_at: Station = 'crafting_table'): RecipeDef[] {
-  return RECIPES.filter(r => r.station === 'hand' && r.input.length > 0)
+export function stationRecipes(at: StationId = 'crafting_table'): RecipeDef[] {
+  const def = STATIONS[at]
+  return RECIPES.filter(r => {
+    if (r.station !== 'hand' || r.input.length === 0) return false
+    // `'logs'` asks the recipe, never a list — see StationDef.accepts.
+    return def.accepts === 'any' || r.input.some(i => i.itemId.endsWith('_log'))
+  })
 }

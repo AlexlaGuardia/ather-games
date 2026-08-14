@@ -120,8 +120,8 @@ import {
 } from './chest'
 import {
   stationKey, loadJob as loadStationJob, collect as collectStation, salvage as salvageStation,
-  runsReady, runProgress, stationRecipes, maxRuns, jobCost, milledYield, RUN_MS, MAX_RUNS,
-  type StationJob, type Workshop,
+  runsReady, runProgress, stationRecipes, maxRuns, jobCost, milledYield, MAX_RUNS,
+  STATIONS, stationOf, type StationId, type StationJob, type Workshop,
 } from '../voxel/workshop'
 import { itemIcon } from './tex/item-icon'
 import { bloom as bloomSpirit, due as potsDue, potKey, progress as potProgress, type PotClock } from './pot'
@@ -171,6 +171,8 @@ export interface OpenChest { x: number; y: number; z: number; slots: Slots; touc
  */
 interface OpenStation {
   x: number; y: number; z: number
+  /** Which station this block is — decides the rate and the recipe list. */
+  kind: StationId
   job: StationJob | undefined
   commit: (shop: Workshop) => void
 }
@@ -3480,7 +3482,7 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
     // already SALVAGED it into drops by the time this runs; this is the record cleanup, not the
     // payout. Same `prevMat !== mat` guard: re-writing CRAFT_TABLE over CRAFT_TABLE must not
     // silently void the job of a bench the player is standing at.
-    if (prevMat !== mat && (prevMat === MAT.CRAFT_TABLE || mat === MAT.CRAFT_TABLE)) {
+    if (prevMat !== mat && (stationOf(prevMat) || stationOf(mat))) {
       const rec = jobsByCol.current.get(k)
       if (rec) {
         delete rec[stationKey(wx, wy, wz)]
@@ -4551,11 +4553,14 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
         // `setVoxel`, which is what drops the record. A station you cannot pick up without emptying
         // it by hand first is a trap, and silently eating a stack of logs for a mis-swung pickaxe
         // is worse than either.
-        if (hit.material === MAT.CRAFT_TABLE) {
+        const brokeStation = stationOf(hit.material)
+        if (brokeStation) {
           const k = colOf(hit.x, hit.z)
           const shop = jobsByCol.current.get(k)
           if (shop?.[stationKey(hit.x, hit.y, hit.z)]) {
-            const { drops: owed } = salvageStation(shop, stationKey(hit.x, hit.y, hit.z), Date.now())
+            // ⚠ AT ITS OWN RATE. Salvaging a sawmill's job against the bench's 12s would refund
+            // runs it had already finished — the rate is a property of the block you just broke.
+            const { drops: owed } = salvageStation(shop, stationKey(hit.x, hit.y, hit.z), Date.now(), STATIONS[brokeStation].runMs)
             for (const d of owed) drops.current.push(spawnDrop(d.itemId, d.count, hit.x, hit.y, hit.z))
             if (owed.length) onSay(`the bench gives up its work — ${owed.reduce((n: number, d: { count: number }) => n + d.count, 0)} items on the ground`)
           }
@@ -4610,8 +4615,11 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
         // Same shape as the chest above and for the same reason: the bench hands its POSITION and a
         // bound `touch` upward, never a copy of the job. The panel edits through `workshop.ts`'s
         // pure functions, so the only thing the host owes it is where the bench is.
-        onOpenStation({
-          x: hit.x, y: hit.y, z: hit.z,
+        // The KIND travels with the position: the panel must never re-derive which station this
+        // is from anything but the block that was actually aimed at.
+        const kind = stationOf(potMat)
+        if (kind) onOpenStation({
+          x: hit.x, y: hit.y, z: hit.z, kind,
           job: jobAt(hit.x, hit.y, hit.z),
           commit: (shop: Workshop) => setJob(hit.x, hit.y, hit.z, shop),
         })
@@ -5194,6 +5202,8 @@ function StationPanel({ st, have, inv, onChange, onSay, onClose }: {
     return () => clearInterval(h)
   }, [])
 
+  const def = STATIONS[st.kind]
+  const runMs = def.runMs
   const key = stationKey(st.x, st.y, st.z)
   // The job is read from the ref-backed record every render rather than captured once: `commit`
   // writes through the host, and a captured copy would leave the panel showing the job the player
@@ -5202,12 +5212,12 @@ function StationPanel({ st, have, inv, onChange, onSay, onClose }: {
   const now = Date.now()
   const label = (id: string) => id.replace(/_/g, ' ')
 
-  const ready = job ? runsReady(job, now) : 0
+  const ready = job ? runsReady(job, now, runMs) : 0
   const r = job ? RECIPES.find(x => x.id === job.recipeId) : undefined
 
   const doCollect = () => {
     if (!job || !r || ready <= 0) return
-    const { shop, payout } = collectStation({ [key]: job }, key, now)
+    const { shop, payout } = collectStation({ [key]: job }, key, now, runMs)
     if (!payout) return
     give(inv.current!, payout.itemId, payout.count)
     st.commit(shop)
@@ -5232,14 +5242,14 @@ function StationPanel({ st, have, inv, onChange, onSay, onClose }: {
   }
 
   const busy = !!job && job.runs > 0
-  const rows = stationRecipes()
+  const rows = stationRecipes(st.kind)
 
   return (
     <div className="absolute inset-0 grid place-items-center bg-black/50 pointer-events-auto" onClick={onClose}>
       <div className="w-[460px] max-h-[80vh] overflow-y-auto bg-[#0e1018]/95 border border-white/12 rounded-lg p-4 font-mono text-[11px]"
            onClick={(e) => e.stopPropagation()}>
         <div className="flex items-baseline justify-between mb-3">
-          <span className="text-white/95 font-semibold tracking-[.18em] uppercase">The Bench</span>
+          <span className="text-white/95 font-semibold tracking-[.18em] uppercase">{def.name}</span>
           <button onClick={onClose} className="text-white/40 hover:text-white/80">esc</button>
         </div>
 
@@ -5254,11 +5264,11 @@ function StationPanel({ st, have, inv, onChange, onSay, onClose }: {
                 alive. The count beside it carries the long story. */}
             <div className="mt-2 h-1 rounded bg-white/10 overflow-hidden">
               <div className="h-full bg-amber-200/60 transition-[width] duration-500"
-                   style={{ width: `${Math.round(runProgress(job!, now) * 100)}%` }} />
+                   style={{ width: `${Math.round(runProgress(job!, now, runMs) * 100)}%` }} />
             </div>
             <div className="mt-2 flex justify-between items-center">
               <span className="text-white/40 tabular-nums">
-                {ready > 0 ? `${ready * milledYield(r)}× ${label(r.output.itemId)} waiting` : `${Math.ceil((RUN_MS - (now - job!.since) % RUN_MS) / 1000)}s to the next`}
+                {ready > 0 ? `${ready * milledYield(r)}× ${label(r.output.itemId)} waiting` : `${Math.ceil((runMs - (now - job!.since) % runMs) / 1000)}s to the next`}
               </span>
               <button disabled={ready <= 0} onClick={doCollect}
                       className={`px-2.5 py-1 rounded border transition-colors ${
@@ -5269,7 +5279,10 @@ function StationPanel({ st, have, inv, onChange, onSay, onClose }: {
             </div>
           </div>
         ) : (
-          <div className="mb-4 text-white/35">the bench is idle — give it something to work on</div>
+          <div className="mb-4 text-white/35">
+            {def.name.toLowerCase().replace('the ', 'the ')} is idle — give it something to work on
+            {st.kind === 'sawmill' && <span className="block mt-1 text-white/25">a sawmill takes logs, nothing else — stone and fittings are bench work</span>}
+          </div>
         )}
 
         <div className="text-white/40 tracking-[.14em] uppercase text-[9px] mb-1.5">

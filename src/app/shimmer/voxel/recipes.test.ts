@@ -12,6 +12,7 @@
 
 import { RECIPES, recipeDef, canCraft, craftPlan, availableRecipes, RECIPE_OUTPUTS } from './recipes'
 import { BLOCKS, ALL_BLOCKS, materialForItem } from './registry'
+import { STATION_ITEMS } from './workshop'
 import { MAT } from './depth'
 import { isLogMat } from './trees'
 import { PIECES } from './pieces'
@@ -43,9 +44,37 @@ console.log('bootstrap')
   // A crafting table gated behind a crafting table is a game that cannot start. This assert exists
   // because that is an easy line to "tidy up" later.
   check('the crafting table is makeable by hand', recipeDef('crafting_table')?.station === 'hand')
-  check('every refine step is makeable by hand',
-    RECIPES.filter(r => r.id !== 'crafting_table').every(r => r.station === 'hand'),
-    'v1 refining is deliberately station-free; mining is the gate, not furniture')
+  // ★ NARROWED 2026-08-13 (the sawmill), and narrowed rather than weakened. The old form was
+  // "every recipe except `crafting_table` is hand" — a blanket rule with one id carved out, which
+  // grows a second carve-out the moment a second station exists and then means nothing.
+  //
+  // What it was always DEFENDING is materials: a player who mined a thing must be able to make it
+  // useful where he stands, because mining is the gate and not furniture. A STATION is not a
+  // material — it is a thing you build, and gating one behind the bench is the same call the tool
+  // ladder already makes ("you cannot shape a blade on your knee"). So the rule now says that, and
+  // says it about a derived set rather than a list of ids.
+  //
+  // ⚠ If this ever fails because someone gated a plank, that is the bug. Do not add an id to an
+  // exemption list — there is no exemption list on purpose.
+  check('every MATERIAL recipe is makeable by hand',
+    RECIPES.filter(r => !STATION_ITEMS.has(r.output.itemId)).every(r => r.station === 'hand'),
+    'refining is deliberately station-free; mining is the gate, not furniture — '
+    + RECIPES.filter(r => !STATION_ITEMS.has(r.output.itemId) && r.station !== 'hand').map(r => r.id).join(', '))
+
+  // A station MAY be gated, but the chain has to terminate or the game cannot bootstrap into it.
+  // Walks each station's gate back to 'hand'; a cycle (bench behind mill behind bench) runs out of
+  // hops and fails instead of hanging.
+  check("every station's gate chain reaches the hand", RECIPES
+    .filter(r => STATION_ITEMS.has(r.output.itemId))
+    .every((r) => {
+      let at: string = r.station, hops = 0
+      while (at !== 'hand' && hops++ < STATION_ITEMS.size + 1) {
+        const gate = RECIPES.find(x => x.output.itemId === at)
+        if (!gate) return false          // gated behind a station nothing can make
+        at = gate.station
+      }
+      return at === 'hand'
+    }))
 }
 
 // ── mana ──────────────────────────────────────────────────────────────────────

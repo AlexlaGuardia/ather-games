@@ -34,8 +34,16 @@
 // below is already ruled in `resources.ts`, and `log` is generic English exactly like the `plank`
 // and `sap` that already ship. Nothing here invents an Athernyx word, so no canon gap is owed.
 
-/** Where you have to be to make a thing. `hand` = anywhere, no station. */
-export type Station = 'hand' | 'crafting_table'
+/**
+ * Where you have to be to make a thing. `hand` = anywhere, no station.
+ *
+ * ⚠ THIS FIELD IS THE GATE, AND IT IS NOT THE SAME QUESTION AS "WHICH STATION WILL RUN THIS
+ * UNATTENDED". Every refine is and must stay `'hand'` (the invariant this file's header defends);
+ * what a bench or a sawmill will *work on while you are away* is `voxel/workshop.ts`'s business,
+ * derived there. Reusing this field for that would silently gate refining behind furniture the
+ * first time someone added a station-only recipe, which is the exact thing that was refused.
+ */
+export type Station = 'hand' | 'crafting_table' | 'sawmill'
 
 export interface RecipeDef {
   id: string
@@ -150,6 +158,18 @@ export const RECIPES: RecipeDef[] = [
   // (`shimmer-quests-mainmap.md`), so this is the REPLACEMENT path, not the only one.
   { id: 'crafting_table', name: 'Crafting Table', station: 'hand', mana: 0,
     input: [{ itemId: 'goldwood_plank', count: 4 }], output: { itemId: 'crafting_table', count: 1 } },
+
+  // ── ★ THE SAWMILL — the second station (2026-08-13) ─────────────────────────────────────────
+  // Bench work, unlike the bench itself: the table is the bootstrap and must stay hand-makeable,
+  // but by the time you want a mill you demonstrably own a table. Costs planking (so the building
+  // material has a use that is not a wall) plus bark (a saw needs an edge, and bark is the tier-1
+  // blade material the forestry ladder already runs on).
+  //
+  // ~5 goldwood logs all in. Expensive enough to be a decision, cheap enough to reach in the
+  // session you first notice you are refining a lot of wood.
+  { id: 'sawmill', name: 'Sawmill', station: 'crafting_table', mana: 0,
+    input: [{ itemId: 'planking', count: 6 }, { itemId: 'goldwood_bark', count: 4 }],
+    output: { itemId: 'sawmill', count: 1 } },
 
   // ── LIGHT ───────────────────────────────────────────────────────────────────────────────────
   // One shard, four lanterns: night safety is meant to be a first-session purchase, not a grind —

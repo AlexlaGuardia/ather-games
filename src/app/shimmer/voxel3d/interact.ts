@@ -17,6 +17,7 @@
 // container, not an edge case.
 
 import { MAT } from '../voxel/depth'
+import { stationOf } from '../voxel/workshop'
 
 /**
  * What the click does. `place` is the fallback precisely because it is the only one that consumes
@@ -61,7 +62,11 @@ export function rightClickIntent(aimed: number, selItem: string | null, holdsSee
   // ⚠ A BENCH WITH A PLANK IN YOUR HAND MUST STILL OPEN, not stack a second bench onto it. This is
   // the same trap the chest fell into from the other side: the table is the block you are most
   // likely to be holding more of while standing at it.
-  if (aimed === MAT.CRAFT_TABLE) return 'work'
+  //
+  // ★ ASKS `stationOf` RATHER THAN NAMING MATERIALS, so a station added to that map is usable the
+  // same day. A hand-kept `=== CRAFT_TABLE || === SAWMILL` here is how a new station ships as a
+  // block you can place, look at, and not open — a dead click, which this file exists to prevent.
+  if (stationOf(aimed)) return 'work'
   if (aimed === MAT.POT && selItem === 'mana_seed' && holdsSeed) return 'plant'
   if (aimed === MAT.POT_SEEDED) return 'peek'
   if (aimed === MAT.POT_BLOOM) return 'harvest'

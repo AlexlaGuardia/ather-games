@@ -10,6 +10,7 @@
 
 import { rightClickIntent } from './interact'
 import { MAT } from '../voxel/depth'
+import { STATION_MAT } from '../voxel/workshop'
 
 let pass = 0
 const fails: string[] = []
@@ -37,6 +38,11 @@ const ok = (c: boolean, m: string) => { if (c) pass++; else fails.push(m) }
     'holding ANOTHER crafting table opens the one you aimed at rather than stacking a second')
   ok(rightClickIntent(MAT.CRAFT_TABLE, 'goldwood_plank', false) === 'work',
     'and a fistful of planks does not turn the bench into a floor tile')
+  // ★ THE SWEEP THAT MATTERS MORE THAN THE ROWS: every station in the map is openable. A station
+  // that places but never opens is a dead click, and a dead click is the least visible bug a game
+  // can have — no error, no state change, nothing to tell a missing feature from a broken one.
+  ok(Object.keys(STATION_MAT).every(m => rightClickIntent(Number(m), null, false) === 'work'),
+    'EVERY material in STATION_MAT opens on right-click, not just the two named above')
 }
 
 // ── 2. use beats place, for every usable block ──────────────────────────────────────────────────
@@ -81,7 +87,7 @@ const ok = (c: boolean, m: string) => { if (c) pass++; else fails.push(m) }
 {
   const usable: Array<[number, string]> = [
     [MAT.CHEST, 'open'], [MAT.POT_SEEDED, 'peek'], [MAT.POT_BLOOM, 'harvest'],
-    [MAT.CRAFT_TABLE, 'work'],
+    [MAT.CRAFT_TABLE, 'work'], [MAT.SAWMILL, 'work'],
   ]
   for (const [mat, want] of usable) {
     ok(rightClickIntent(mat, 'block_stone', false) === want && rightClickIntent(mat, null, false) === want,

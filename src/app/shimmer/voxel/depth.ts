@@ -195,6 +195,12 @@ export const MAT = {
   SAPLING_SHIMMEROAK: 43,
   SAPLING_STARWILLOW: 44,
   SAPLING_DAWNWOOD: 45,
+  /**
+   * The sawmill — the second station, and the first one that is not general-purpose
+   * (`voxel/workshop.ts`). Never generated; only ever placed. ⚠ TBD-CANON on the name, same as
+   * everything else in this enum. 46; 47 is the last of the 42-47 gap.
+   */
+  SAWMILL: 46,
 } as const
 
 export interface DepthConfig {

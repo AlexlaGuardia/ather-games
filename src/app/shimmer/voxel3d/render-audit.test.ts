@@ -166,6 +166,49 @@ for (const file of files) {
   ok(/waterMaterial\.dispose\(\)/.test(vw), 'the shared water material is released on unmount')
 }
 
+// ── ★ EVERY MATERIAL IN THE ATLAS HAS A PAINTER (2026-08-13, the sawmill) ───────────────────────
+// `paintFor`'s switch DEFAULTS TO THE ORE ARTIST, so a material listed in TILE_MATERIALS with no
+// painter of its own ships as a magenta crystal in host rock. That has happened twice — every tree
+// once rendered as crystal, and the ground-cover icons — and tiles.ts says the second was "caught
+// by looking at `scripts/icon-sheet.mts`, not by any test". FOUR ⚠ comments in that file now warn
+// about it, which is what a missing test looks like written down four times. This is the test.
+//
+// THE MODEL, stated because getting it wrong makes this cry wolf: a material is covered if it has a
+// `case`, OR it is wood/leaf/sapling (the default branch dispatches those on LOG_SET/LEAF_SET/
+// SAPLING_SET), OR it is an actual ORE — for which `writeOre` is the correct painter, not a fallback.
+// So only a bare `MAT.` entry with no case is an orphan. That is precisely the shape a new station,
+// block or fitting arrives in.
+//
+// ⚠ TWO EARLIER VERSIONS OF THIS CHECK WERE GREEN AND WRONG. The first matched only `MAT.` while the
+// list also carries `ORE.` and `WOOD.`, so it audited 20 of 35 and reported a clean sweep. The second
+// demanded a `case` for everything and flagged all 15 ore and wood entries, which are correct as they
+// are. A parser-based oracle needs BOTH a count guard (am I seeing the whole list) and a model of
+// what legitimately differs — without the first it under-reports, without the second it cries wolf.
+{
+  const src = readFileSync(join(process.cwd(), 'src/app/shimmer/voxel3d/tex/tiles.ts'), 'utf8')
+  const listed = /export const TILE_MATERIALS: number\[\] = \[([\s\S]*?)\n\]/.exec(src)
+  const painterAt = src.indexOf('export function paintFor')
+  if (!listed || painterAt < 0) {
+    fails.push('render-audit cannot find TILE_MATERIALS or paintFor — this check has gone blind, fix it')
+  } else {
+    const entries = [...listed[1].matchAll(/(MAT|ORE|WOOD)\.([A-Z0-9_]+)/g)].map(m => ({ ns: m[1], name: m[2] }))
+    const cased = new Set([...src.slice(painterAt).matchAll(/case (?:MAT|ORE|WOOD)\.([A-Z0-9_]+)/g)].map(m => m[1]))
+
+    // The count guard. The atlas has been ~35 materials for months; if this parse ever collapses,
+    // the regex has drifted and every assert below is auditing a subset it silently chose.
+    if (entries.length < 30) {
+      fails.push(`TILE_MATERIALS parsed as only ${entries.length} materials — the regex has drifted and this check is no longer auditing the atlas`)
+    } else pass++
+
+    const orphans = entries
+      .filter(e => e.ns === 'MAT' && !e.name.startsWith('SAPLING_') && !cased.has(e.name))
+      .map(e => e.name)
+    if (orphans.length) {
+      fails.push(`in TILE_MATERIALS but NO case in paintFor — ships as a magenta ore block: ${orphans.join(', ')}`)
+    } else pass++
+  }
+}
+
 console.log(`\nrender-path audit: ${pass} checks passed, ${fails.length} failed`)
 for (const f of fails) console.log('  ✗ ' + f)
 if (fails.length) {

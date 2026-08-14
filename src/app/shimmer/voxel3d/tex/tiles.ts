@@ -41,6 +41,7 @@ export const TILE_MATERIALS: number[] = [
   MAT.MANA_LANTERN,
   // The crafting table added 2026-08-08 — the first station.
   MAT.CRAFT_TABLE,
+  MAT.SAWMILL,
   // The story road added 2026-08-08 with the quest-spine worldgen.
   MAT.PATH,
   // Plank block added 2026-08-08 with the road's bridges.
@@ -527,6 +528,57 @@ function paintCraftTable(dst: Layer, size: number, seed: number, face: number) {
 }
 
 /**
+ * The sawmill. Deliberately the crafting table's SIBLING and not a new idiom — both are timber
+ * workstations and should read as one family across a plot — with exactly one thing carrying the
+ * difference: the BLADE SLOT.
+ *
+ * ★ THE TINT ALONE WAS NOT ENOUGH, and that is why this function exists rather than reusing
+ * `paintCraftTable` with a different colour. The two stations do different jobs (the mill takes
+ * logs 2.4x faster and refuses everything else), so a player who owns both has to tell them apart
+ * at a glance from across the plot. Two pale timber cubes differing only in warmth is a legibility
+ * bug wearing a palette, and it costs the player a wasted walk every time he guesses wrong.
+ *
+ * TOP is the plank bed split by a dark kerf with a bright steel lip on one side — the one mark that
+ * says "saw" with no other cue. SIDE shows the bed line and the blade's rim standing proud of it.
+ * BOTTOM is plain dark planks, same as the bench: nobody sees it and inventing detail there is work
+ * that renders for no one.
+ */
+function paintSawmill(dst: Layer, size: number, seed: number, face: number) {
+  const milled = rgbOf(MATERIAL_COLOR[MAT.SAWMILL])
+  const dark = shade(milled, -52)
+  const steel = shade(rgbOf(0xb9c0c6), 0)
+  const plankH = Math.max(2, Math.round(size / 4))
+  const mid = Math.round(size / 2)
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const jitter = (h2(x, y, seed) - 0.5) * 20
+      if (face === TOP) {
+        // The kerf runs the full width at the midline; the lip is the single bright pixel row that
+        // makes it read as a cutting edge rather than a plank seam.
+        const seam = y % plankH === 0
+        const kerf = y === mid
+        const lip = y === mid - 1
+        put(dst, size, x, y,
+          kerf ? shade(dark, -18) : lip ? shade(steel, jitter * 0.5)
+               : shade(seam ? dark : milled, seam ? 0 : jitter), 0)
+      } else if (face === SIDE) {
+        // Bed line across the upper third with the blade rim above it, legs below — the same
+        // standing-furniture silhouette the bench uses, so they sit together correctly.
+        const bed = y === plankH
+        const rim = y === plankH - 1 && x > 2 && x < size - 3
+        const inLeg = x < Math.max(1, Math.round(size / 8)) || x >= size - Math.max(1, Math.round(size / 8))
+        put(dst, size, x, y,
+          rim ? shade(steel, jitter * 0.5) : bed ? shade(dark, -10)
+              : inLeg ? dark : shade(milled, -22 + jitter * 0.6), 0)
+      } else {
+        const seam = y % plankH === 0
+        put(dst, size, x, y, shade(seam ? shade(dark, -14) : dark, seam ? 0 : jitter * 0.6), 0)
+      }
+    }
+  }
+}
+
+/**
  * The chest. SIDE carries the whole read: a lid seam across the upper third, two dark iron straps,
  * and a latch plate centred on the seam — the silhouette a player identifies from six blocks away
  * without reading a label. TOP is lid boards running crosswise to the body's, banded by the same
@@ -652,6 +704,9 @@ export function paintFor(material: number, face: number, size: number): Layer {
       break
     }
     case MAT.CRAFT_TABLE: paintCraftTable(dst, size, seed, face); break
+    // ⚠ Appended to TILE_MATERIALS above, so it NEEDS this case — the switch's default is the ore
+    // artist, and a station with no case ships as a magenta crystal you can right-click.
+    case MAT.SAWMILL: paintSawmill(dst, size, seed, face); break
     // ⚠ Appended to TILE_MATERIALS above, so it NEEDS this case — the switch's default is the ore
     // painter, which is how every tree once rendered as crystal.
     case MAT.CHEST: paintChest(dst, size, seed, face); break

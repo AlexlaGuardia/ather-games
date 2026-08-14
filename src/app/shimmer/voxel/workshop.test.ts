@@ -17,7 +17,8 @@
 import { RECIPES, recipeDef } from './recipes'
 import {
   RUN_MS, stationKey, milledYield, runsReady, runProgress, isSpent,
-  jobCost, loadJob, collect, salvage, stationRecipes, maxRuns, MAX_RUNS, type Workshop,
+  jobCost, loadJob, collect, salvage, stationRecipes, maxRuns, MAX_RUNS,
+  STATIONS, STATION_ITEMS, type Workshop,
 } from './workshop'
 
 let pass = 0, fail = 0
@@ -63,6 +64,64 @@ console.log('station recipes')
   check('nothing input-less sneaks in', rows.every(r => r.input.length > 0))
 }
 
+// ── ★ the two stations differ, and the DIFFERENCE is the design ───────────────
+// A station strictly better than the bench retires the bench. These asserts are what stop the
+// sawmill drifting into a plain upgrade the next time someone tunes it.
+console.log('station kinds')
+{
+  const bench = stationRecipes('crafting_table')
+  const mill = stationRecipes('sawmill')
+
+  check('the sawmill is faster than the bench',
+    STATIONS.sawmill.runMs < STATIONS.crafting_table.runMs)
+
+  // ★ THE ONE THAT KEEPS THE BENCH ALIVE. Speed alone would make the mill a straight upgrade.
+  check('the sawmill is NARROWER than the bench, not just quicker',
+    mill.length < bench.length, `bench=${bench.length} mill=${mill.length}`)
+
+  check('the sawmill takes only recipes that consume a log',
+    mill.length > 0 && mill.every(r => r.input.some(i => i.itemId.endsWith('_log'))),
+    mill.filter(r => !r.input.some(i => i.itemId.endsWith('_log'))).map(r => r.id).join(', '))
+
+  // Named explicitly: these are the jobs the bench must keep, or a plot only ever wants a mill.
+  for (const id of ['cut_stone', 'planking', 'mana_lantern', 'clay_pot', 'chest']) {
+    check(`the bench keeps ${id}`, bench.some(r => r.id === id) && !mill.some(r => r.id === id))
+  }
+
+  // The mill is a SUBSET, never a divergent list — a recipe it runs must be one the bench runs too,
+  // or the two tables have drifted into separate hand-kept lists.
+  check('everything the mill runs, the bench runs',
+    mill.every(m => bench.some(b => b.id === m.id)))
+
+  // Every station id must resolve, or a placed block opens a panel with no rate.
+  check('every station id has a definition',
+    [...STATION_ITEMS].every(id => !!STATIONS[id as keyof typeof STATIONS]))
+  check('every station is craftable from the recipe table',
+    [...STATION_ITEMS].every(id => RECIPES.some(r => r.output.itemId === id)),
+    [...STATION_ITEMS].filter(id => !RECIPES.some(r => r.output.itemId === id)).join(', '))
+}
+
+// ── the rate is per-station, and it is never read off the job ─────────────────
+console.log('per-station rate')
+{
+  const MILL = STATIONS.sawmill.runMs
+  const job = load('goldwood_planks', 4)[KEY]
+
+  check('the same job pays faster at the mill than at the bench',
+    runsReady(job, T0 + 3 * MILL, MILL) === 3 && runsReady(job, T0 + 3 * MILL, RUN_MS) === 1)
+
+  // ★ The job carries no rate of its own — that is what lets STATIONS be tuned for benches already
+  // standing in the world. If a `runMs` ever appears on StationJob, this is the assert to argue with.
+  check('a job stores no rate of its own',
+    !Object.keys(job).includes('runMs') && !Object.keys(job).includes('rate'))
+
+  // Collect at the mill advances by the MILL's run, not the bench's — the collect-clock property
+  // restated per-station, because getting this wrong would silently pay bench progress at a mill.
+  const c = collect(load('goldwood_planks', 5), KEY, T0 + Math.floor(1.5 * MILL), MILL)
+  check('a mill collect advances by the MILL run length',
+    c.shop[KEY].since === T0 + MILL, `since=${c.shop[KEY].since - T0} want=${MILL}`)
+}
+
 // ── how much the bag can queue ────────────────────────────────────────────────
 console.log('queue size')
 {
@@ -98,23 +157,23 @@ console.log('the clock')
   const shop = load('goldwood_planks', 5)
   const job = shop[KEY]
 
-  check('nothing is ready immediately', runsReady(job, T0) === 0)
-  check('one run lands exactly on RUN_MS', runsReady(job, T0 + RUN_MS) === 1)
-  check('a run is not paid a millisecond early', runsReady(job, T0 + RUN_MS - 1) === 0)
-  check('runs accumulate', runsReady(job, T0 + 3 * RUN_MS) === 3)
+  check('nothing is ready immediately', runsReady(job, T0, RUN_MS) === 0)
+  check('one run lands exactly on RUN_MS', runsReady(job, T0 + RUN_MS, RUN_MS) === 1)
+  check('a run is not paid a millisecond early', runsReady(job, T0 + RUN_MS - 1, RUN_MS) === 0)
+  check('runs accumulate', runsReady(job, T0 + 3 * RUN_MS, RUN_MS) === 3)
 
   // A station left overnight must not manufacture runs nobody paid input for.
-  check('ready is capped at the runs owed', runsReady(job, T0 + 500 * RUN_MS) === 5)
+  check('ready is capped at the runs owed', runsReady(job, T0 + 500 * RUN_MS, RUN_MS) === 5)
 
   // A clock that stepped backwards (or a hand-edited save) must not underflow the collect maths.
-  check('a future stamp reads as zero, never negative', runsReady(job, T0 - 60_000) === 0)
-  check('progress on a future stamp is zero', runProgress(job, T0 - 60_000) === 0)
+  check('a future stamp reads as zero, never negative', runsReady(job, T0 - 60_000, RUN_MS) === 0)
+  check('progress on a future stamp is zero', runProgress(job, T0 - 60_000, RUN_MS) === 0)
 
-  check('progress is halfway at half a run', Math.abs(runProgress(job, T0 + RUN_MS / 2) - 0.5) < 1e-9)
+  check('progress is halfway at half a run', Math.abs(runProgress(job, T0 + RUN_MS / 2, RUN_MS) - 0.5) < 1e-9)
   check('progress resets across a run boundary',
-    Math.abs(runProgress(job, T0 + RUN_MS + RUN_MS / 4) - 0.25) < 1e-9)
+    Math.abs(runProgress(job, T0 + RUN_MS + RUN_MS / 4, RUN_MS) - 0.25) < 1e-9)
   check('a finished job reads as full progress, not mid-run',
-    runProgress(job, T0 + 5 * RUN_MS) === 1 && runProgress(job, T0 + 9 * RUN_MS) === 1)
+    runProgress(job, T0 + 5 * RUN_MS, RUN_MS) === 1 && runProgress(job, T0 + 9 * RUN_MS, RUN_MS) === 1)
 }
 
 // ── ★ the collect clock — the assert this file exists for ─────────────────────
@@ -123,7 +182,7 @@ console.log('the collect clock')
   const r = recipeDef('goldwood_planks')!
   // Collect 1.5 runs in: one run is owed, and HALF of the next is already in the machine.
   const midway = T0 + Math.floor(1.5 * RUN_MS)
-  const first = collect(load('goldwood_planks', 5), KEY, midway)
+  const first = collect(load('goldwood_planks', 5), KEY, midway, RUN_MS)
   check('a mid-run collect pays only the finished run',
     first.payout?.count === milledYield(r), String(first.payout?.count))
   check('and leaves the rest owed', first.shop[KEY].runs === 4)
@@ -134,9 +193,9 @@ console.log('the collect clock')
   check('the in-flight run keeps its progress across a collect',
     first.shop[KEY].since === T0 + RUN_MS, `since=${first.shop[KEY].since - T0}`)
   check('so the next run lands on the ORIGINAL schedule, not the collect time',
-    runsReady(first.shop[KEY], T0 + 2 * RUN_MS) === 1)
+    runsReady(first.shop[KEY], T0 + 2 * RUN_MS, RUN_MS) === 1)
   check('and the half-run is not silently re-charged',
-    runProgress(first.shop[KEY], midway) === 0.5)
+    runProgress(first.shop[KEY], midway, RUN_MS) === 0.5)
 
   // The same property stated as the thing a player would actually notice: collecting constantly
   // must produce exactly as much as never collecting at all.
@@ -147,35 +206,35 @@ console.log('the collect clock')
   // under the very mutation it was written to catch. A player checks his workshop at whatever
   // moment he walks past it, so the oracle has to as well.
   const STRIDE = 1777
-  const patient = collect(load('goldwood_planks', 8), KEY, T0 + 8 * RUN_MS)
+  const patient = collect(load('goldwood_planks', 8), KEY, T0 + 8 * RUN_MS, RUN_MS)
   let anxious = load('goldwood_planks', 8)
   let got = 0
   for (let ms = STRIDE; ms <= 8 * RUN_MS; ms += STRIDE) {
-    const c = collect(anxious, KEY, T0 + ms)
+    const c = collect(anxious, KEY, T0 + ms, RUN_MS)
     anxious = c.shop
     got += c.payout?.count ?? 0
   }
-  got += collect(anxious, KEY, T0 + 8 * RUN_MS).payout?.count ?? 0   // the tail the stride overshot
+  got += collect(anxious, KEY, T0 + 8 * RUN_MS, RUN_MS).payout?.count ?? 0   // the tail the stride overshot
   check('checking on the workshop every second costs nothing',
     got === patient.payout!.count, `anxious=${got} patient=${patient.payout!.count}`)
 
   check('collecting an unfinished job pays nothing and does not reset it', (() => {
     const s = load('goldwood_planks', 3)
-    const c = collect(s, KEY, T0 + RUN_MS / 2)
+    const c = collect(s, KEY, T0 + RUN_MS / 2, RUN_MS)
     return c.payout === null && c.shop[KEY].since === T0 && c.shop[KEY].runs === 3
   })())
 
   check('a fully drained station leaves no record behind', (() => {
-    const c = collect(load('goldwood_planks', 2), KEY, T0 + 2 * RUN_MS)
+    const c = collect(load('goldwood_planks', 2), KEY, T0 + 2 * RUN_MS, RUN_MS)
     return c.shop[KEY] === undefined
   })())
 
   check('collecting an empty station is a no-op, not a throw',
-    collect({}, KEY, T0).payout === null)
+    collect({}, KEY, T0, RUN_MS).payout === null)
 
   check('an unknown recipe id pays nothing rather than crashing an old save', (() => {
     const s: Workshop = { [KEY]: { recipeId: 'sawdust_pudding', runs: 4, since: T0 } }
-    return collect(s, KEY, T0 + 9 * RUN_MS).payout === null
+    return collect(s, KEY, T0 + 9 * RUN_MS, RUN_MS).payout === null
   })())
 }
 
@@ -194,7 +253,7 @@ console.log('loading')
   check('a live job cannot be overwritten',
     stomp[KEY].recipeId === 'goldwood_planks' && stomp[KEY].runs === 6)
 
-  const drained = collect(load('goldwood_planks', 2), KEY, T0 + 2 * RUN_MS).shop
+  const drained = collect(load('goldwood_planks', 2), KEY, T0 + 2 * RUN_MS, RUN_MS).shop
   check('but a spent station takes a new job',
     loadJob(drained, KEY, 'amber_sap', 3, T0)[KEY].recipeId === 'amber_sap')
 
@@ -220,14 +279,14 @@ console.log('conservation')
   check('cost scales with runs', jobCost(r, 7)[0].count === 7 * r.input[0].count)
 
   // Break it before it has done anything: you get your logs back, exactly.
-  const untouched = salvage(load('goldwood_planks', 5), KEY, T0)
+  const untouched = salvage(load('goldwood_planks', 5), KEY, T0, RUN_MS)
   check('smashing an untouched station refunds the whole input',
     untouched.drops.length === 1 &&
     untouched.drops[0].itemId === 'goldwood_log' && untouched.drops[0].count === 5)
   check('and clears the record', untouched.shop[KEY] === undefined)
 
   // Half done: two runs paid at the milled rate, three logs handed back.
-  const half = salvage(load('goldwood_planks', 5), KEY, T0 + 2 * RUN_MS)
+  const half = salvage(load('goldwood_planks', 5), KEY, T0 + 2 * RUN_MS, RUN_MS)
   const planks = half.drops.find(d => d.itemId === 'goldwood_plank')
   const logs = half.drops.find(d => d.itemId === 'goldwood_log')
   check('a part-done station pays finished runs at the milled rate',
@@ -241,7 +300,7 @@ console.log('conservation')
 
   // ⚠ The run IN FLIGHT refunds as input rather than part-paying: there is no half a plank, and
   // rounding it either way is a lie in one direction.
-  const inflight = salvage(load('goldwood_planks', 4), KEY, T0 + Math.floor(1.5 * RUN_MS))
+  const inflight = salvage(load('goldwood_planks', 4), KEY, T0 + Math.floor(1.5 * RUN_MS), RUN_MS)
   check('the in-flight run comes back as input, not as a rounded payout',
     inflight.drops.find(d => d.itemId === 'goldwood_log')?.count === 3 &&
     inflight.drops.find(d => d.itemId === 'goldwood_plank')?.count === milledYield(r))
@@ -252,7 +311,7 @@ console.log('conservation')
   for (const rec of stationRecipes()) {
     for (const runs of [1, 3, 12]) {
       for (const at of [0, 1, runs - 1, runs]) {
-        const s = salvage(load(rec.id, runs), KEY, T0 + at * RUN_MS)
+        const s = salvage(load(rec.id, runs), KEY, T0 + at * RUN_MS, RUN_MS)
         const out = s.drops.find(d => d.itemId === rec.output.itemId)?.count ?? 0
         const doneRuns = out / milledYield(rec)
         const backs = rec.input.map(i =>
@@ -267,7 +326,7 @@ console.log('conservation')
   }
   check('every station recipe conserves runs across a salvage at any point', conserved, offender)
 
-  check('salvaging an empty station is a no-op', salvage({}, KEY, T0).drops.length === 0)
+  check('salvaging an empty station is a no-op', salvage({}, KEY, T0, RUN_MS).drops.length === 0)
 }
 
 console.log(`\nworkshop: ${pass} passed, ${fail} failed`)
