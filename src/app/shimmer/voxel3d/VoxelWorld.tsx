@@ -134,7 +134,9 @@ import { birthAffinity } from '../play3d/birth-affinity'
 // Health + shields are SHARED rules, not a second copy — see engine/vitals.ts on why.
 import { freshVitals, type Vitals } from '../engine/vitals'
 import { getMaxPool, getRegenRate } from '../engine/mana'
-import { resolveCast, SELF_ARCHETYPES, type CastEnv } from '../engine/cast-dispatch'
+import { resolveCast, SELF_ARCHETYPES, castAimPoint, type CastEnv } from '../engine/cast-dispatch'
+import { spawnField, tickFields, containsVolume, fieldsAtVolume, blocksShotAtVolume,
+         FIELD_HEIGHT, type Field } from '../engine/field-effects'
 import type { CastSpec, CastArchetype } from '../play3d/cast'
 
 /**
@@ -3578,6 +3580,25 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
   const tracerMat = useMemo(() => new THREE.MeshBasicMaterial({ color: 0xffd88a, toneMapped: false }), [])
   const impacts = useRef<{ mesh: THREE.Mesh; life: number }[]>([])
 
+  // ── cast FIELDS (SYSTEM 1, ported from play3d 2026-08-14) ─────────────────────────────────────
+  // ⚠ BLOCKOUT, same standing as the Hollow bodies: legible geometry, no locked look. A design-brief
+  // + /picaso pass owns what a Firewall actually looks like.
+  //
+  // ★ ONE material for every field, and that is CANON rather than a render shortcut. `moves.md:5` —
+  // *"Colour is never part of a move. Colour is the mage's own, their soul-frequency, applied when
+  // they cast it."* So a Firewall and a Healing Grove cast by the same keeper are the SAME colour,
+  // and hue can never be the thing that tells them apart. The tell has to be MOTION (the pulse rate
+  // below), which is also the only differentiator the render-audit rule allows.
+  const fields = useRef<Field[]>([])
+  const fieldMeshes = useRef(new Map<number, THREE.Mesh>())
+  // Open-ended so you can see your own feet inside a grove, unit-sized so one geometry serves every
+  // radius by scale alone (render-audit: a geometry per field is how a voxel renderer dies).
+  const fieldGeo = useMemo(() => new THREE.CylinderGeometry(1, 1, 1, 18, 1, true), [])
+  const fieldMat = useMemo(() => new THREE.MeshBasicMaterial({
+    color: 0xaef2ff, transparent: true, opacity: 0.17, side: THREE.DoubleSide,
+    depthWrite: false, toneMapped: false,
+  }), [])
+
   // ── the Hollows (body blockout — see hollows.ts for the canon) ────────────────────────────────
   // ONE shared geometry and material for every Hollow that will ever body (render-audit rule).
   // Guttering is expressed through per-mesh SCALE and a sink, never per-mesh material state.
@@ -3690,13 +3711,20 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
   /**
    * ★ WHAT THIS WORLD CAN ACTUALLY LAND, DECLARED RATHER THAN IMPLIED.
    * Projectiles ride the shot pool that already exists, and every SELF archetype only touches
-   * hp/mana/speed, which live here. Fields, terrain and statuses do NOT: `field-effects.ts`,
-   * `conjured-terrain.ts` and `statuses.ts` all resolve against play3d's tile grid and its named
-   * hunter/guard targets, neither of which exists here. Declaring that makes Stonewall say "not in
-   * this world yet" instead of being a key that silently does nothing — see cast-dispatch's header.
+   * hp/mana/speed, which live here.
+   *
+   * **`field` joined the set 2026-08-14** — slice 2, exactly as `cast-dispatch.ts` predicted it
+   * would ("slice 2 adds 'field' to the voxel host's set and deletes nothing here"). It cost a
+   * height on `FieldDef`, a target adapter onto the Hollows, and a render pass. **11 casts lit up.**
+   *
+   * `terrain` and `statuses` still do NOT: `conjured-terrain.ts` resolves against play3d's tile grid
+   * (and wants re-founding on real voxel blocks, which is the better version of the feature —
+   * Glacial Path's walkable ramps become possible), and `statuses.ts` keys off play3d's named
+   * hunter/guard targets. Declaring that makes Stonewall say "not in this world yet" instead of
+   * being a key that silently does nothing — see cast-dispatch's header.
    */
   const supports = useMemo<ReadonlySet<CastArchetype>>(
-    () => new Set<CastArchetype>([...SELF_ARCHETYPES, 'projectile']), [])
+    () => new Set<CastArchetype>([...SELF_ARCHETYPES, 'projectile', 'field']), [])
 
   const castSlot = useCallback((slot: number, g: THREE.Group) => {
     const v = vitals.current, m = mana.current
@@ -3717,6 +3745,25 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
     if (out.surge) surge.current = out.surge
     if (out.infusion) infusion.current = out.infusion
 
+    if (out.placed && out.placed.archetype === 'field') {
+      // The aim point is the SHARED rule (`castAimPoint`), not a second hand-rolled copy: camera
+      // forward flattened onto the ground plane, walked `castRange` from the caster's feet. play3d
+      // open-codes this because the helper did not exist yet; there is no reason for a third version.
+      const f = new THREE.Vector3()
+      camera.getWorldDirection(f)
+      const p = loco.current
+      const aim = castAimPoint(f.x, f.z, p.px, p.pz, out.placed.castRange)
+      // ★ GROUND IT TO THE TERRAIN IT LANDS ON, not to the caster's eye or the caster's feet. Cast
+      // downhill and an eye-anchored field would hang in the air with its fire above the target's
+      // head; cast uphill and it would bury itself. `columnHeight` is the same query the walker and
+      // the Hollow spawner use, so the field stands on exactly the surface everything else does.
+      const gy = columnHeight(Math.floor(aim.x), Math.floor(aim.z), SEED) + 1
+      fields.current = spawnField(fields.current, {
+        moveId: out.placed.moveId, x: aim.x, y: gy, z: aim.z,
+        radius: out.placed.areaSize, height: FIELD_HEIGHT, secs: out.placed.areaSecs,
+        dps: out.placed.fieldDps, hps: out.placed.fieldHps, stopsShots: out.placed.fieldStopsShots,
+      }, env.now)
+    }
     if (out.placed && out.placed.archetype === 'projectile') {
       // Rides the SAME pool and the same segment sweep as a gun round, so a bolt cannot tunnel
       // through a wall or miss a Hollow the gun would have hit. Only the numbers differ.
@@ -3858,6 +3905,70 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
         recoil.current.p *= k; recoil.current.y *= k
       }
 
+      // ── cast FIELDS: tick, bite, mend, render ──────────────────────────────────────────────
+      // Runs BEFORE the projectile sweep so a Firewall spawned this frame is already cover this
+      // frame, and so `blocksShotAtVolume` below never reads a field the tick has just expired.
+      //
+      // ⚠ USES `performance.now()`, NOT `state.clock.elapsedTime`. A field's `until`/`nextTick` were
+      // stamped by `castSlot` off `performance.now()` (the same clock the cooldowns use). Mixing the
+      // two clocks here would make every field either immortal or stillborn depending on how long
+      // the tab had been open — and the render would look perfectly fine either way.
+      if (fields.current.length > 0) {
+        const nowMs = performance.now()
+        const ticked = tickFields(fields.current, nowMs)
+        fields.current = ticked.fields
+        const lc = loco.current
+        for (const fd of ticked.fired) {
+          // Enemies inside take the bite. Same guard as the projectile path: a Hollow already at
+          // hp<=0 is mid-disperse, and re-hitting it would double-drop its shard.
+          if (fd.dps > 0) {
+            for (const hw of hollows.current) {
+              const st = hw.st
+              if (st.hp <= 0 || st.gutter >= 1) continue
+              if (!containsVolume(fd, st.x, st.y, st.z)) continue
+              st.hp -= fd.dps
+              if (st.hp <= 0) {
+                // Dispersed by a field rather than a round — the loop must close identically, or
+                // "kill it with fire" would quietly pay less than shooting it.
+                drops.current.push(spawnDrop('raw_mana_shard', 1, Math.floor(st.x), Math.floor(st.y), Math.floor(st.z)))
+              }
+            }
+          }
+          // And the keeper standing in a grove is mended. Clamped to max: a heal that overshoots is
+          // how a vitals bar starts reading above full.
+          // `py` is the FEET (locomotion.ts), which is the body point that means 'standing in it'.
+          if (fd.hps > 0 && containsVolume(fd, lc.px, lc.py, lc.pz)) {
+            const v = vitals.current
+            if (v) v.hp = Math.min(v.hpMax, v.hp + fd.hps)
+          }
+        }
+        // ── the bodies. One mesh per live field, keyed by id, adopted and retired by diff.
+        const live = new Set<number>()
+        for (const fd of fields.current) {
+          live.add(fd.id)
+          let mesh = fieldMeshes.current.get(fd.id)
+          if (!mesh) {
+            mesh = new THREE.Mesh(fieldGeo, fieldMat)
+            g.add(mesh)
+            fieldMeshes.current.set(fd.id, mesh)
+          }
+          // A mend breathes slowly; a bite flickers. Motion is the ONLY tell available — canon puts
+          // colour on the caster's soul, not the move, so two fields of one keeper share a hue.
+          const rate = fd.hps > 0 ? 1.4 : 7.5
+          const amp = fd.hps > 0 ? 0.05 : 0.02
+          const pulse = 1 + Math.sin(nowMs * 0.001 * rate + fd.id) * amp
+          mesh.scale.set(fd.radius * pulse, fd.height, fd.radius * pulse)
+          // CylinderGeometry is centred on its own origin, so the slab's midpoint is half its height
+          // above the ground line it was stamped with.
+          mesh.position.set(fd.x, fd.y + fd.height / 2, fd.z)
+        }
+        for (const [id, mesh] of fieldMeshes.current) {
+          if (live.has(id)) continue
+          g.remove(mesh)
+          fieldMeshes.current.delete(id)
+        }
+      }
+
       // ── projectiles ────────────────────────────────────────────────────────────────────────
       // Each round raycasts the SEGMENT it travelled this frame, never just its endpoint. At 54
       // units/sec a Lance round covers ~0.9 units per frame, so endpoint sampling would tunnel
@@ -3865,7 +3976,20 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
       for (let i = shots.current.length - 1; i >= 0; i--) {
         const sh = shots.current[i]
         const step = sh.speed * dt
-        // ── Hollows absorb rounds FIRST: a Hollow between the muzzle and a wall takes the hit.
+        // ── ★ COVER EATS THE ROUND FIRST. Canon calls Firewall cover, so it stops shots — and it
+        // stops YOURS too, symmetrically. That is the point: a wall of flame you can shoot through
+        // is a damage puddle, and one that only blocks THEM is a free win. Same reasoning as Cordon
+        // trapping the caster who stands in his own ring.
+        //
+        // ⚠ Tested at the round's CURRENT point, not swept. A field is metres across and a round
+        // covers ~1 unit per frame, so a bolt cannot skip one — unlike the block raycast, which must
+        // sweep because a wall is one voxel thin. Sweeping this too would cost a per-field segment
+        // test every frame for no reachable bug.
+        if (blocksShotAtVolume(fields.current, sh.x, sh.y, sh.z)) {
+          g.remove(sh.mesh); shots.current.splice(i, 1)
+          continue
+        }
+        // ── Hollows absorb rounds next: a Hollow between the muzzle and a wall takes the hit.
         // Same segment the block raycast walks, so nothing can tunnel through a body either.
         let absorbed = false
         for (const hw of hollows.current) {

@@ -25,7 +25,8 @@ import { EMPTY_BOOK, type Book } from './scroll-market'
 // how the old, wrong answer (runes alone grant moves) would creep back in.
 const ALL: Book = { learned: KEEPER_MOVES.map((m) => m.id) }
 import { grantRune, revokeRune, setBirthRune, EMPTY_INVENTORY } from './rune-inventory'
-import { spawnField, tickFields, expireFields, contains, blocksShotAt, resetFieldIds, MAX_FIELDS, type Field } from './field-effects'
+import { spawnField, tickFields, expireFields, contains, containsVolume, blocksShotAt, blocksShotAtVolume,
+         resetFieldIds, MAX_FIELDS, FIELD_HEIGHT, FIELD_UNDERBITE, type Field } from '../engine/field-effects'
 import { wallCells, ringCells, blockCells, conjure, blockedAt, liveCells, expireConjured, resetConjuredIds } from './conjured-terrain'
 import { emptyBag, applyStatus, applyStatuses, hasStatus, remaining, statusesOn, pruneStatuses, clearTarget } from './statuses'
 
@@ -108,10 +109,26 @@ const chk = (n: string, c: boolean, x = '') => { c ? ok++ : (bad++, console.erro
   // ── SYSTEM 1: fields ──
   {
     const fw = castForMove('firewall')
-    let fields = spawnField([], { moveId: fw.moveId, x: 10, z: 10, radius: fw.areaSize, secs: fw.areaSecs, dps: fw.fieldDps, hps: fw.fieldHps, stopsShots: fw.fieldStopsShots }, T0)
+    let fields = spawnField([], { moveId: fw.moveId, x: 10, y: 0, z: 10, radius: fw.areaSize, height: FIELD_HEIGHT, secs: fw.areaSecs, dps: fw.fieldDps, hps: fw.fieldHps, stopsShots: fw.fieldStopsShots }, T0)
     chk('a field contains its centre', contains(fields[0], 10, 10))
     chk('...and not a point outside its radius', !contains(fields[0], 10 + fw.areaSize + 1, 10))
     chk('Firewall blocks a shot crossing it', blocksShotAt(fields, 10, 10))
+
+    // ── ★ A FIELD IS A SLAB, NOT AN INFINITE COLUMN (2026-08-14, the voxel port) ──────────────
+    // In play3d's flat world a circle and a column were the same thing. In a voxel world they are
+    // not: a cave runs under the ground you cast on, and a ridge runs over it. Both of these would
+    // have been silent — a Hollow burning through a tunnel roof reads as "the fire is buggy", never
+    // as "the fire has no top".
+    chk('the slab contains a body standing in it', containsVolume(fields[0], 10, 0, 10))
+    chk('...and one in a shallow dip inside the radius (terrain is not flat)',
+      containsVolume(fields[0], 10, -FIELD_UNDERBITE + 0.01, 10))
+    chk('...but NOT one in the cave below it', !containsVolume(fields[0], 10, -6, 10))
+    chk('...and NOT one on the ridge above it', !containsVolume(fields[0], 10, FIELD_HEIGHT + 2, 10))
+    chk('a slab still respects its own footprint at the right height',
+      !containsVolume(fields[0], 10 + fields[0].radius + 1, 0, 10))
+    chk('Firewall is cover at body height', blocksShotAtVolume(fields, 10, 1, 10))
+    chk('...and a round crossing the ridge above it is NOT eaten',
+      !blocksShotAtVolume(fields, 10, FIELD_HEIGHT + 2, 10))
 
     // ticks fire once per interval, not once per frame
     let fired = 0
@@ -119,7 +136,7 @@ const chk = (n: string, c: boolean, x = '') => { c ? ok++ : (bad++, console.erro
     chk('a field ticks once per second, not once per frame', fired === 3, `fired ${fired} over 3s`)
 
     // a backgrounded tab must not burst-apply the ticks it missed
-    let f2 = spawnField([], { moveId: 'x', x: 0, z: 0, radius: 3, secs: 30, dps: 5, hps: 0, stopsShots: false }, T0)
+    let f2 = spawnField([], { moveId: 'x', x: 0, y: 0, z: 0, radius: 3, height: FIELD_HEIGHT, secs: 30, dps: 5, hps: 0, stopsShots: false }, T0)
     const jump = tickFields(f2, T0 + 10_000)
     chk('a long stall resyncs instead of replaying 10 ticks', jump.fired.length === 1)
 
@@ -127,7 +144,7 @@ const chk = (n: string, c: boolean, x = '') => { c ? ok++ : (bad++, console.erro
 
     // the cap drops the OLDEST, never the cast just paid for
     let many: Field[] = []
-    for (let i = 0; i < MAX_FIELDS + 3; i++) many = spawnField(many, { moveId: `m${i}`, x: i, z: 0, radius: 1, secs: 60, dps: 1, hps: 0, stopsShots: false }, T0)
+    for (let i = 0; i < MAX_FIELDS + 3; i++) many = spawnField(many, { moveId: `m${i}`, x: i, y: 0, z: 0, radius: 1, height: FIELD_HEIGHT, secs: 60, dps: 1, hps: 0, stopsShots: false }, T0)
     chk('the field cap holds', many.length === MAX_FIELDS)
     chk('...and drops the oldest, so a paid cast always appears', many[many.length - 1].moveId === `m${MAX_FIELDS + 2}`)
   }

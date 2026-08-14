@@ -32,7 +32,7 @@ import { stepHunter, hunterRng, RANGE_HUNTER, type HunterCtx } from '../engine/h
 import { fillRoster, ROSTER_SIZE } from './crucible-bots'
 import { createFleet, stepFleet, aliveCount, type Fleet, type FleetTarget } from './crucible-fleet'
 import { loadRuneInventory, saveRuneInventory, setBirthRune, grantRune, revokeRune, EMPTY_INVENTORY, type RuneInventory } from './rune-inventory'
-import { spawnField, tickFields, fieldsAt, blocksShotAt, type Field } from './field-effects'
+import { spawnField, tickFields, fieldsAt, blocksShotAt, FIELD_HEIGHT, type Field } from '../engine/field-effects'
 import { conjure, shapeCells, blockedAt as conjuredBlockedAt, expireConjured, liveCells, type Conjured } from './conjured-terrain'
 import { emptyBag, applyStatuses, hasStatus, pruneStatuses, clearTarget, type StatusBag } from './statuses'
 import { rollEncounter, HOLD_LEVELS, type WildEncounter } from '../engine/encounters'
@@ -2129,6 +2129,9 @@ function FiringRange({ zoneId, firingRef, adsRef, weaponIdxRef, gridRef, recoilR
           fieldsRef.current = spawnField(fieldsRef.current, {
             moveId: pending.moveId, x: ax, z: az, radius: pending.areaSize, secs: pending.areaSecs,
             dps: pending.fieldDps, hps: pending.fieldHps, stopsShots: pending.fieldStopsShots,
+            // y/height are new (the voxel port made a field a slab). play3d's own readers stay 2D,
+            // so these change nothing here — they are recorded truthfully rather than faked.
+            y: posRef.current?.y ?? 0, height: FIELD_HEIGHT,
           }, nowMs)
         } else if (pending.archetype === 'terrain') {
           const cells = shapeCells(pending.shape, ax, az, flatX / flatLen, flatZ / flatLen, pending.areaSize)

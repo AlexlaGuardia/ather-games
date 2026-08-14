@@ -23,8 +23,16 @@
 >
 > | state | systems | meaning |
 > |---|---|---|
-> | **both** (11) | arena, day-cycle, encounters, farming, inventory, mana, skills, spirit-health, spirit-index, tools, weapons | already ported — the shared spine |
+> | **both** (12) | arena, day-cycle, encounters, farming, **field-effects**, inventory, mana, skills, spirit-health, spirit-index, tools, weapons | already ported — the shared spine |
 > | **voxel only** (2) | cast-dispatch, vitals | new work, landing in the right place |
+>
+> **Ported 2026-08-14 — `field-effects` (play3d/ → engine/).** Slice 2 of the plan `cast-dispatch.ts`
+> wrote down. Cost: a required `y`+`height` on `FieldDef` (a circle is an infinite column, and in a
+> voxel world that burns a Hollow in the cave below and eats a round fired from the ridge above), a
+> target adapter onto the Hollows, and a render pass. **Casts that run in voxel3d: 22 → 33 of 47.**
+> Remaining dark: `statuses` (7 casts, keys off play3d's named hunter/guard targets) and
+> `conjured-terrain` (7 casts, wants re-founding on real voxel blocks — the BETTER version, since
+> Glacial Path's walkable ramps become possible).
 > | **⚠ play3d only** (15) | alchemy, bank, battle-ai, burrows, crafting, exchange, harvesting, hunter-ai, moves, party-stats, player, potion-effects, rinning, segs-collision, spawn-board | **this list IS the remaining fork** |
 >
 > **The 15 are the answer to "park the older versions".** You cannot park `play3d` yet, for the
