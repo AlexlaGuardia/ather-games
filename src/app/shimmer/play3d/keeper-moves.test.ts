@@ -8,8 +8,8 @@
 //   4. the lane model matches the canon mages (Eyuun/Samantha/Kael) and its two known breaks
 //      (Veyra/Lazerin) stay off-lane — so a silent change to the matrix trips here
 //   5. no birth rune opens an EMPTY book once lanes are applied (the reason for the model)
-//   6. the coverage gap is pinned — the 8 move-less runes are asserted, so filling one is a
-//      deliberate edit here and not a silent drift
+//   6. the coverage gap is pinned — the move-less runes are asserted, so filling one is a
+//      deliberate edit here and not a silent drift (was 8 runes; the Great Registration left 1)
 
 import { RUNES } from './birth/runes.data'
 import {
@@ -98,22 +98,33 @@ const runeIds = new Set(RUNES.map((r) => r.id))
   }
   chk('no birth rune reaches zero moves via its lanes', thin.length === 0, thin.join())
 
-  // and the direct book IS empty for the gap runes — the model is doing the work, not luck
-  chk('Magma has no moves of its own', MOVES_BY_RUNE['magma'].length === 0)
-  chk('Magma still reaches moves via lanes', learnableMoves(['magma']).length > 0)
+  // and the direct book IS empty for the ONE gap rune left — the model is doing the work, not luck
+  chk('Manalic has no moves of its own', MOVES_BY_RUNE['manalic'].length === 0)
+  chk('Manalic still reaches moves via lanes', learnableMoves(['manalic']).length > 0)
 }
 
-// 6. the coverage gap, pinned (CANON_GAPS.md 2026-08-03)
+// 6. the coverage gap, pinned — RECOUNTED after THE GREAT REGISTRATION (2026-08-13/14)
+//
+// Was 8 move-less runes (CANON_GAPS.md 2026-08-03). The registration pass found 37 School techniques
+// carrying full effect text in `runes.md` Part III with only 2 of them registered in `moves.md`; all
+// 37 are now in the build. That closed SEVEN of the eight in one pass, so this pin gets smaller
+// rather than going away — Manalic is the one genuinely empty keeper rune, and canon says so
+// ("it appears in none of the 40 techniques at all", moves.md › Keeper coverage).
 {
-  const expected = ['manalic', 'tempest', 'gem', 'magma', 'dust', 'hydro', 'mist', 'vapor'].sort()
-  chk('the 8 move-less runes are exactly the ones filed as a canon gap',
+  const expected = ['manalic']
+  chk('Manalic is the ONLY move-less rune left after the Great Registration',
     JSON.stringify([...RUNES_WITHOUT_MOVES].sort()) === JSON.stringify(expected),
     RUNES_WITHOUT_MOVES.join())
 
-  // Freeze/Fluid/Vapor reach no ultimate anywhere on their lanes — the sharpest half of the gap
+  // ⚠ THE POINT THIS PIN MAKES, AND IT IS NOT THE SAME AS THE ONE ABOVE: a rune having a book page is
+  // not a rune having an ULTIMATE. Freeze and Fluid both reached none before this pass; Freeze now
+  // reaches Pillar Tomb (Stone shares its Solid state) and Fluid reaches Healing Stream (Life shares
+  // its Flow state), so the pin shrinks to Vapor alone — whose only ultimate, Monsoon Veil, also
+  // needs Life, which is on neither of its lanes.
   const noUlt = ['freeze', 'fluid', 'vapor'].filter(
     (r) => ![...knownMoves([r]), ...learnableMoves([r])].some((m) => m.tier === 'ultimate'))
-  chk('Freeze/Fluid/Vapor still reach no ultimate (pinned gap)', noUlt.length === 3, noUlt.join())
+  chk('Vapor alone still reaches no ultimate (pinned gap, was Freeze/Fluid/Vapor)',
+    JSON.stringify(noUlt) === JSON.stringify(['vapor']), noUlt.join())
 }
 
 // 7. a second rune opens a cross-hatch, not a list

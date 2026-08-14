@@ -1,5 +1,14 @@
 // keeper-moves.ts — the KEEPER's move registry + the per-rune book index.
 //
+// ── ★ THE GREAT REGISTRATION (canon 2026-08-13, adopted here 2026-08-14): 24 → 61 ───────────────
+// `runes.md` Part III had carried 40 named School techniques WITH full effect text all along, and a
+// machine diff found exactly 2 of them registered in `moves.md`. Magii registered the missing 37;
+// this file now ships them. Nothing here was invented — every name, rune requirement and tier below
+// is a transcription, and `npm run canon` was the worklist.
+//
+// The lesson is the one the canon session wrote down four times in a row: **the drift is never in
+// what the world says, it is in WHERE the world says it.** Nothing was unwritten. It was unplaced.
+//
 // ── THE LAW ────────────────────────────────────────────────────────────────────
 // CANON/game/moves.md is the ONE registry (ruled 2026-07-22) — mages and spirits draw from the
 // same list; a move is registered ONCE, caster-agnostic (name + runes + effect). This file is the
@@ -68,6 +77,16 @@ export const KEEPER_MOVES: KeeperMove[] = [
   { id: 'herbal-knowledge', name: 'Herbal Knowledge', tier: 'passive', runes: [],
     effect: 'Decades of practical medicine — mends, sets bone, purges infection without a drop of mana.',
     needs: 'no rune — a craft, not magic' },
+  { id: 'flame-cloak', name: 'Flame Cloak', tier: 'passive', runes: ['star', 'static'], pausesRecovery: true,
+    effect: 'Heat built across the skin and released as a burning aura the instant someone makes contact.' },
+  { id: 'molten-shell', name: 'Molten Shell', tier: 'passive', runes: ['magma', 'barrier'], pausesRecovery: true,
+    effect: 'A barrier that punishes contact — the shield ripples like lava and burns what touches it.' },
+  { id: 'storm-cloak', name: 'Storm Cloak', tier: 'passive', runes: ['static', 'barrier'], pausesRecovery: true,
+    effect: 'Electricity dancing across a protective shell. Sustained contact builds charge, so pressing it is worse.' },
+  { id: 'ice-armor', name: 'Ice Armor', tier: 'passive', runes: ['freeze', 'barrier'], pausesRecovery: true,
+    effect: 'A crystalline shell of scales that shift, crack and regrow — every hit feeds the next defense.' },
+  { id: 'tremor-sense', name: 'Tremor Sense', tier: 'passive', runes: ['stone', 'enchant'], pausesRecovery: true,
+    effect: 'Awareness bound to the ground underfoot — footsteps, weight, where everyone stands. Ambush becomes impossible.' },
 
   // Tactical — active, moment-to-moment.
   { id: 'static-burst', name: 'Static Burst', tier: 'tactical', runes: ['static'],
@@ -88,6 +107,56 @@ export const KEEPER_MOVES: KeeperMove[] = [
     effect: "Bind metal against its bearer — clamp a foe in iron, or jam a manalic weapon mid-draw." },
   { id: 'living-architecture', name: 'Living Architecture', tier: 'tactical', runes: ['life', 'barrier'],
     effect: 'Grow living wood into structure — Barrier used to SHAPE, not to defend.' },
+  { id: 'tidal-arms', name: 'Tidal Arms', tier: 'tactical', runes: ['fluid'],
+    effect: 'Ribbons of water worn as extensions of yourself — they move like limbs, strike like whips, grab like hands.' },
+  { id: 'flash-freeze', name: 'Flash Freeze', tier: 'tactical', runes: ['fluid', 'freeze'],
+    effect: 'Shape water, then crystallize it instantly — walls, weapons, restraints. Costs the water it uses.' },
+  { id: 'pressure-lance', name: 'Pressure Lance', tier: 'tactical', runes: ['hydro'],
+    effect: 'Water compressed to a cutting stream — pure focus, no combination. A needle of water harder than steel.' },
+  { id: 'fog-bank', name: 'Fog Bank', tier: 'tactical', runes: ['mist', 'breeze'],
+    effect: 'Vapor expanded and steered to fill a space with blinding white. Masters anchor it in zones.' },
+  { id: 'drowning-grasp', name: 'Drowning Grasp', tier: 'tactical', runes: ['fluid', 'mist'],
+    effect: 'Water wraps the face and expands into the airways. No visible flood, just a thin film and no breath.' },
+  { id: 'glacial-path', name: 'Glacial Path', tier: 'tactical', runes: ['freeze', 'stone'],
+    effect: 'Ice anchored into earth — bridges, ramps, terrain that did not exist a second ago, fused to bedrock.' },
+  { id: 'lava-stride', name: 'Lava Stride', tier: 'tactical', runes: ['magma', 'stone'],
+    effect: 'Soften the ground under them, harden it under you. They sink into molten rock while you keep your footing.' },
+  { id: 'flashpoint', name: 'Flashpoint', tier: 'tactical', runes: ['star', 'lightning'],
+    effect: "Ignition delivered at lightning's speed — the fire appears THERE rather than travelling to it." },
+  { id: 'forge-fist', name: 'Forge Fist', tier: 'tactical', runes: ['magma', 'metalergy'],
+    effect: 'A weapon heated to glowing and held stable — strikes that cauterize, blades that cut and burn at once.' },
+  { id: 'heat-mirage', name: 'Heat Mirage', tier: 'tactical', runes: ['star', 'mist'],
+    effect: 'Superheated air bent into distortion — they see you three feet from where you stand.' },
+  { id: 'volcano-spike', name: 'Volcano Spike', tier: 'tactical', runes: ['magma', 'gem'],
+    effect: 'Molten earth compressed into crystalline shot. Slower than fire but it PIERCES barriers and shatters inside.' },
+  { id: 'ember-trail', name: 'Ember Trail', tier: 'tactical', runes: ['star', 'dust'],
+    effect: 'Burning particles scattered in your wake — a corridor of floating embers that burn from the inside when breathed.' },
+  { id: 'crystal-barrage', name: 'Crystal Barrage', tier: 'tactical', runes: ['gem', 'breeze'],
+    effect: 'Mineral shards held mid-air and launched on precise wind. Slower than an arrow, punches through shields.' },
+  { id: 'grindstone', name: 'Grindstone', tier: 'tactical', runes: ['dust', 'metalergy'],
+    effect: 'Metal particles suspended and spinning — a cloud that shreds what walks through it.' },
+  { id: 'dust-lung', name: 'Dust Lung', tier: 'tactical', runes: ['dust', 'breeze'],
+    effect: 'Fine particles carried on directed wind and breathed in before they are noticed.' },
+  { id: 'quake-step', name: 'Quake Step', tier: 'tactical', runes: ['stone', 'static'],
+    effect: 'Charge built with every step and released into the ground — tremors, splitting floor, lost footing.' },
+  { id: 'shard-grenade', name: 'Shard Grenade', tier: 'tactical', runes: ['gem', 'static'],
+    effect: 'A crystallized sphere packed with charge; on impact it bursts and every fragment carries an electric bite.' },
+  { id: 'sandstorm-veil', name: 'Sandstorm Veil', tier: 'tactical', runes: ['dust', 'mist'],
+    effect: 'Particles suspended in expanding vapor — a choking fog that scours and blinds.' },
+  { id: 'overcharge', name: 'Overcharge', tier: 'tactical', runes: ['static', 'lightning'],
+    effect: 'Charge built through movement and released as propulsion — not an attack, a launch, the body the projectile.' },
+  { id: 'gale-cutter', name: 'Gale Cutter', tier: 'tactical', runes: ['breeze'],
+    effect: 'Wind compressed to a razor edge — pure focus, no combination. Masters cleave stone, the blades invisible.' },
+  { id: 'updraft', name: 'Updraft', tier: 'tactical', runes: ['breeze', 'stone'],
+    effect: 'Wind against earth to launch debris, allies or yourself — high ground on demand, attacks arriving from above.' },
+  { id: 'thunder-step', name: 'Thunder Step', tier: 'tactical', runes: ['lightning', 'mist'],
+    effect: 'Vanish into vapor, return on a crack of lightning. Masters leave afterimages and strike from behind the fog.' },
+  { id: 'bolt-snipe', name: 'Bolt Snipe', tier: 'tactical', runes: ['lightning', 'illuminate'],
+    effect: 'Light finds the target and the bolt follows the beam — distance barely matters. Masters mark through walls.' },
+  { id: 'static-field', name: 'Static Field', tier: 'tactical', runes: ['static', 'dust'],
+    effect: 'Charged particles hung in the air. Step in and muscles twitch, manatech sputters, focus breaks. Disabling, not lethal.' },
+  { id: 'pressure-drop', name: 'Pressure Drop', tier: 'tactical', runes: ['tempest', 'freeze'],
+    effect: 'Violent storm meeting sudden cold — pressure plummets, ears pop, lungs strain. Masters make a blizzard out of clear sky.' },
 
   // Ultimates — signature, high pool cost.
   { id: 'chain-lightning', name: 'Chain Lightning', tier: 'ultimate', runes: ['lightning'],
@@ -103,6 +172,20 @@ export const KEEPER_MOVES: KeeperMove[] = [
   { id: 'grey-arena', name: 'Grey Arena', tier: 'ultimate', runes: ['barrier'],
     effect: 'A dome that DRAINS the mana of everyone inside, feeding the caster. A self-refueling trap.',
     needs: 'manatech — a drain-engine' },
+  { id: 'healing-stream', name: 'Healing Stream', tier: 'ultimate', runes: ['fluid', 'life'],
+    effect: 'Water carrying restoration, guided through the body. Masters split one stream and mend a line of people at once.' },
+  { id: 'vein-puppet', name: 'Vein Puppet', tier: 'ultimate', runes: ['fluid', 'enchant'],
+    effect: 'Water bound to a body through a link — not healing, CONTROL: their blood answers to you. Forbidden.' },
+  { id: 'firestorm', name: 'Firestorm', tier: 'ultimate', runes: ['star', 'tempest'],
+    effect: 'Burn wedded to chaos — a surgical inferno that takes one side of a street and leaves the other untouched.' },
+  { id: 'cyclone-cage', name: 'Cyclone Cage', tier: 'ultimate', runes: ['breeze', 'tempest'],
+    effect: 'Controlled wind walling in violent wind — shredding within, unreachable from without. Containment in a different element.' },
+  { id: 'pillar-tomb', name: 'Pillar Tomb', tier: 'ultimate', runes: ['stone'],
+    effect: 'Pure Stone depth, no combination — pillars from below, walls from the sides, ceiling above. Sealed on all six faces.' },
+  { id: 'living-fortress', name: 'Living Fortress', tier: 'ultimate', runes: ['stone', 'metalergy', 'barrier'],
+    effect: 'Stone walls on a bonded metal frame, humming with protective mana. Not a shield, A BUILDING, and good against siege.' },
+  { id: 'monsoon-veil', name: 'Monsoon Veil', tier: 'ultimate', runes: ['mist', 'vapor', 'life'],
+    effect: 'Expanding fog saturated with moisture and carrying Life — wounds close, fatigue lifts, poison purges. A battlefield hospital.' },
 
   // Combos — require two or more mages in sync.
   { id: 'counterpoint', name: 'Counterpoint', tier: 'combo', runes: ['barrier'],

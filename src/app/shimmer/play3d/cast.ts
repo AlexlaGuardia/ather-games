@@ -128,6 +128,24 @@ const BUILDS: Record<string, Build> = {
   'bind-mastery': { archetype: 'unbuilt', why: 'gatecraft + manatech — no runtime system yet' },
   'herbal-knowledge': { archetype: 'unbuilt', why: 'out-of-combat medicine; no combat behaviour' },
 
+  // ── ★ THE CONTACT-PUNISH SHELLS, and why three ship and one does not (the Great Registration) ──
+  // Canon writes four passives that hurt whoever touches you. The sim has no retaliation hook: a
+  // stance carries resist / moveMult / castMult / manaPerSec, and nothing that damages an attacker
+  // back. So the line is drawn on canon's own NOUN. Molten Shell, Storm Cloak and Ice Armor are each
+  // a *shell* first ("a barrier that punishes contact", "a protective shell", "a crystalline shell")
+  // — they ship as shells, and their burn-back is the half still owed. Flame Cloak is retaliation
+  // ONLY, an aura with no shell underneath, so shipping it as a stance would be a stance that does
+  // nothing its canon line describes. It stays unbuilt and names the hook.
+  //
+  // ⚠ ONE hook (damage-taken → damage the attacker) finishes all four at once. Until then these three
+  // are deliberately incomplete rather than deliberately absent, and they differ on the axes that DO
+  // exist: Molten Shell is the heaviest and slowest, Storm Cloak the lightest, Ice Armor the middle.
+  'molten-shell': { archetype: 'stance', resist: 0.5, moveMult: 0.8, pausesRecovery: true, cooldownMs: 500 },
+  'storm-cloak': { archetype: 'stance', resist: 0.3, pausesRecovery: true, cooldownMs: 500 },
+  'ice-armor': { archetype: 'stance', resist: 0.42, moveMult: 0.95, pausesRecovery: true, cooldownMs: 500 },
+  'flame-cloak': { archetype: 'unbuilt', why: 'needs a contact-retaliation hook — it is aura only, with no shell to fall back on' },
+  'tremor-sense': { archetype: 'unbuilt', why: 'needs a perception layer — enemy positions surfaced to the HUD' },
+
   // ── Tacticals ────────────────────────────────────────────────────────────────────────────────
   'static-burst': { archetype: 'surge', manaCost: 10, cooldownMs: 4500, surgeSecs: 2.5, surgeMult: 1.7 },
   // "A wall of flame thrown BETWEEN you and a threat — escape, area-denial, cover." All three verbs
@@ -148,6 +166,59 @@ const BUILDS: Record<string, Build> = {
   // that LASTS: it is architecture, not a barricade.
   'living-architecture': { archetype: 'terrain', manaCost: 20, cooldownMs: 12000, castRange: 6, areaSize: 3, areaSecs: 45, shape: 'block', shapeHeight: 3 },
 
+  // ── The Great Registration's tacticals (2026-08-13) ──────────────────────────────────────────
+  // Each one is classified off the VERB in its canon line, not off its element: "a cutting stream" is
+  // a projectile, "fill a space with blinding white" is a status, "terrain that did not exist a second
+  // ago" is terrain. Where the verb has no hook in the sim it is unbuilt and says which hook.
+  'tidal-arms': { archetype: 'projectile', manaCost: 8, cooldownMs: 900, damage: 16, projSpeed: 40, projLife: 0.9 },
+  'flash-freeze': { archetype: 'terrain', manaCost: 15, cooldownMs: 7000, castRange: 8, areaSize: 4, areaSecs: 8, shape: 'wall', shapeHeight: 2 },
+  // "Pure focus, no combination... a needle of water harder than steel." Hydro's ONE keeper move, and
+  // the starter a Hydro-born keeper now gets — so it has to feel like the rune: fast, thin, punishing.
+  'pressure-lance': { archetype: 'projectile', manaCost: 12, cooldownMs: 1100, damage: 30, projSpeed: 85, projLife: 1.6 },
+  // "Fill a space with blinding white" — obscurement, no damage. The widest, longest blind in the book.
+  'fog-bank': { archetype: 'status', manaCost: 18, cooldownMs: 12000, castRange: 10, areaSize: 8, areaSecs: 8, statuses: ['blinded'] },
+  // "No visible flood, just a thin film and no breath." Canon aims it at ONE face; the sim's smallest
+  // radius is the closest honest reading, so it is a tight, nasty area rather than a true single target.
+  'drowning-grasp': { archetype: 'field', manaCost: 16, cooldownMs: 9000, castRange: 9, areaSize: 2, areaSecs: 4, fieldDps: 18 },
+  // "Fused to bedrock" — the one conjured wall that LASTS, because canon anchors it. ⚠ The bridges and
+  // ramps half is not here: conjured collision is binary, so this raises a wall you cannot walk on.
+  'glacial-path': { archetype: 'terrain', manaCost: 14, cooldownMs: 6500, castRange: 9, areaSize: 6, areaSecs: 20, shape: 'wall', shapeHeight: 2 },
+  // "They sink into molten rock while you walk on solid footing" — the ground takes their feet, so it
+  // is a root that costs them nothing else. Rooted, never damage: canon's verb is sinking, not burning.
+  'lava-stride': { archetype: 'status', manaCost: 17, cooldownMs: 10000, castRange: 8, areaSize: 4, areaSecs: 3.5, statuses: ['rooted'] },
+  // "The fire appears THERE rather than travelling to it" — so it is NOT a projectile. The longest
+  // cast range in the book, the shortest burn: ignition delivered, not a fire tended.
+  flashpoint: { archetype: 'field', manaCost: 15, cooldownMs: 5000, castRange: 14, areaSize: 2.2, areaSecs: 2, fieldDps: 26 },
+  'forge-fist': { archetype: 'infusion', manaCost: 16, cooldownMs: 9000, surgeSecs: 6, surgeMult: 1.7 },
+  'heat-mirage': { archetype: 'unbuilt', why: 'needs a self-centred status — enemies mis-aim at the CASTER, not at a placed point' },
+  // "Slower than fire but it pierces barriers." Slowest projectile, hardest hit.
+  'volcano-spike': { archetype: 'projectile', manaCost: 14, cooldownMs: 1400, damage: 34, projSpeed: 34, projLife: 2 },
+  'ember-trail': { archetype: 'unbuilt', why: "needs fields spawned along the caster's PATH — every field today lands at the aim point" },
+  'crystal-barrage': { archetype: 'projectile', manaCost: 11, cooldownMs: 800, damage: 20, projSpeed: 46, projLife: 1.5 },
+  'grindstone': { archetype: 'field', manaCost: 17, cooldownMs: 8000, castRange: 8, areaSize: 3, areaSecs: 7, fieldDps: 15 },
+  'dust-lung': { archetype: 'field', manaCost: 13, cooldownMs: 8000, castRange: 10, areaSize: 2.5, areaSecs: 6, fieldDps: 11 },
+  'quake-step': { archetype: 'status', manaCost: 14, cooldownMs: 8000, castRange: 6, areaSize: 5, areaSecs: 2.5, statuses: ['rooted'] },
+  // "Every fragment carries an electric bite" — fragmentation IS the chain the sim already has, just
+  // at a short hop instead of Chain Lightning's long one. Same field, different reach.
+  'shard-grenade': { archetype: 'projectile', manaCost: 13, cooldownMs: 1600, damage: 22, projSpeed: 38, projLife: 1.8, chain: 3, chainRange: 4 },
+  // Canon says it "scours AND blinds" and only ONE of those has a home: a field carries damage, a
+  // status carries the blind, and no field carries statuses today. Shipping the scour keeps it
+  // distinct from Fog Bank (which is the pure blind) instead of making two identical blind clouds.
+  // ⚠ One hook (a field applying statuses on tick, as terrain already does at cast) finishes it.
+  'sandstorm-veil': { archetype: 'field', manaCost: 16, cooldownMs: 11000, castRange: 9, areaSize: 5, areaSecs: 6, fieldDps: 13 },
+  'overcharge': { archetype: 'unbuilt', why: 'needs a velocity impulse on the player — canon says a LAUNCH, and a speed multiplier is Static Burst by another name' },
+  // Breeze's one solo keeper move, so it is a Breeze-born keeper's whole opening kit: cheapest cast
+  // in the book, near-instant, invisible.
+  'gale-cutter': { archetype: 'projectile', manaCost: 6, cooldownMs: 600, damage: 17, projSpeed: 78, projLife: 1.1 },
+  'updraft': { archetype: 'unbuilt', why: 'needs a vertical impulse on the player' },
+  'thunder-step': { archetype: 'unbuilt', why: 'needs a blink — reposition the player to the aim point' },
+  // "Distance barely matters." Fastest and hardest-hitting bolt, on the longest fuse.
+  'bolt-snipe': { archetype: 'projectile', manaCost: 16, cooldownMs: 2200, damage: 40, projSpeed: 120, projLife: 2.4 },
+  // "Muscles twitch, manatech sputters. DISABLING, NOT LETHAL" — canon forbids damage here. Same pair
+  // as Shackle, but thrown wide and held long instead of clamped on one target.
+  'static-field': { archetype: 'status', manaCost: 15, cooldownMs: 10000, castRange: 9, areaSize: 4.5, areaSecs: 5, statuses: ['rooted', 'disarmed'] },
+  'pressure-drop': { archetype: 'field', manaCost: 19, cooldownMs: 10000, castRange: 10, areaSize: 5, areaSecs: 6, fieldDps: 14 },
+
   // ── Ultimates ────────────────────────────────────────────────────────────────────────────────
   'chain-lightning': { archetype: 'projectile', manaCost: 34, cooldownMs: 9000, damage: 26, projSpeed: 70, projLife: 1.2, chain: 3, chainRange: 9 },
   'flame-barrage': { archetype: 'unbuilt', why: 'needs independently tracking projectiles' },
@@ -161,6 +232,29 @@ const BUILDS: Record<string, Build> = {
   // single sentence, so the dispatcher applies a terrain cast's `statuses` too when it carries any.
   cordon:    { archetype: 'terrain', manaCost: 45, cooldownMs: 25000, castRange: 10, areaSize: 4, areaSecs: 8, shape: 'ring', shapeHeight: 3, statuses: ['disarmed'] },
   'grey-arena': { archetype: 'unbuilt', why: 'canon requires manatech (a drain-engine) the player has no access to' },
+
+  // ── The Great Registration's ultimates (2026-08-13) ──────────────────────────────────────────
+  // "Samantha's signature" — the biggest heal in the book, and the first ultimate a Water keeper can
+  // reach at all (Fluid had none before this pass).
+  'healing-stream': { archetype: 'restore', manaCost: 36, cooldownMs: 16000, heal: 60 },
+  // "Not healing, CONTROL: their blood answers to you." Locked joints = rooted + disarmed, no damage —
+  // canon is explicit that the horror is the control, not the wound.
+  'vein-puppet': { archetype: 'status', manaCost: 38, cooldownMs: 20000, castRange: 10, areaSize: 3.5, areaSecs: 5, statuses: ['rooted', 'disarmed'] },
+  // "Takes one side of a street and leaves the other untouched" — wide and hot, and NOT cover: an
+  // inferno you can shoot through is a place you deny, not a place you hide.
+  'firestorm': { archetype: 'field', manaCost: 44, cooldownMs: 24000, castRange: 12, areaSize: 7, areaSecs: 10, fieldDps: 22, fieldStopsShots: false },
+  // "Shredding within, UNREACHABLE FROM WITHOUT" — the only damaging field that also eats shots, which
+  // is what makes it containment rather than a bigger Firestorm.
+  'cyclone-cage': { archetype: 'field', manaCost: 42, cooldownMs: 24000, castRange: 10, areaSize: 5, areaSecs: 9, fieldDps: 18, fieldStopsShots: true },
+  // "Sealed on all six faces" — a solid block, deliberately. This one BURIES where Cordon contains,
+  // and it is Stone's own ultimate, needing no second rune.
+  'pillar-tomb': { archetype: 'terrain', manaCost: 38, cooldownMs: 20000, castRange: 9, areaSize: 3, areaSecs: 12, shape: 'block', shapeHeight: 4 },
+  // "Not a shield, A BUILDING... the answer to 'protect everyone'" — so a RING, not a block: walls with
+  // an inside, because a solid lump protects nobody. The longest-lived cast in the book.
+  'living-fortress': { archetype: 'terrain', manaCost: 48, cooldownMs: 30000, castRange: 7, areaSize: 5, areaSecs: 60, shape: 'ring', shapeHeight: 4 },
+  // The green answer to Cyclone Cage's teeth. Registered though no keeper can reach it: canon needs
+  // Vapor, a Scatter rune the birth screen does not offer — the emptiness IS the canon (runes.data.ts).
+  'monsoon-veil': { archetype: 'field', manaCost: 46, cooldownMs: 26000, castRange: 8, areaSize: 7, areaSecs: 16, fieldHps: 16, fieldStopsShots: false },
 
   // ── Combos — never solo-castable. Canon requires a second mage in sync. ──────────────────────
   counterpoint: { archetype: 'unbuilt', why: 'needs a second same-frequency mage running Barrier' },

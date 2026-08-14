@@ -20,11 +20,19 @@
 //     explicitly conditioned on this landing, so it is now free to come off; left in place only
 //     because play3d is an owner-only route today and flipping it changes nothing anyone can see.
 //
-// The empty pages are ON PURPOSE, and the coverage gap RULED why: the 8 "empty" runes all carry
-// moves on the SPIRIT KITS shelf, and that shelf is spirits-only — a keeper never learns Mist Cloud.
-// Scatter's emptiness (Static/Dust/Vapor) is the lost state rendered, not a hole to fill. What IS
-// real debt is keeper-side authoring: P1 Hydro + Mist, and Freeze/Fluid reach no ultimate on any
-// lane. An empty shelf is still the argument — it is just a different argument than this said.
+// ── ★ UPDATED 2026-08-14 — THE GREAT REGISTRATION CLOSED MOST OF THIS (24 → 61 moves) ───────────
+// This block used to say "the 8 empty runes all carry their moves on the SPIRIT KITS shelf" and name
+// Hydro + Mist as P1 authoring debt. Canon registered 37 School techniques that were sitting unplaced
+// in `runes.md`, so **exactly ONE page is empty now: Manalic**, and Hydro's page is filled (Pressure
+// Lance). Scatter's runes (Static/Dust/Vapor) do now appear in moves, and that is not a contradiction
+// of the lost state — the birth screen still never offers them, which is where the canon lives.
+//
+// ⚠ THE DEBT DID NOT VANISH, IT MOVED, AND THIS PANEL IS WHERE A PLAYER MEETS IT. A page being full
+// is not the same as a page being usable: for **Enchant · Lightning · Tempest · Gem · Magma · Mist**
+// every move on the page either needs a SECOND rune or is a signature (canon won't sell those), so a
+// fresh keeper reads a full page and can hold none of it. That is what `MoveRow`'s "ALSO NEEDS" line
+// is for — it renders the real reason instead of an empty box, and it is the honest face of the gap
+// until canon authors solo moves for those six or the ruled tutorial hands out a second rune.
 
 import React from 'react'
 import { RUNES, ELEMENTS } from './birth/runes.data'
@@ -169,7 +177,7 @@ export default function MoveBook({ runeId, isOwner }: { runeId: string | null; i
       )}
 
       <div style={{ font: `400 8px ${MONO}`, color: '#6f817d', lineHeight: 1.5, marginTop: 10, borderTop: '1px solid #ffffff12', paddingTop: 7 }}>
-        A rune is a word. How a keeper comes to learn one of its techniques is not yet written.
+        A rune is a word. A move is someone else&apos;s idea about it, bought as a scroll in the Passage.
       </div>
     </div>
   )

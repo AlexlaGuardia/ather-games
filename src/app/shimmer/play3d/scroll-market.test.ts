@@ -86,6 +86,37 @@ const SEED = 1337
   ok(changed >= 45, `the rack turns over cycle to cycle (${changed}/49)`)
 }
 
+// ── 4b. ★ A ONE-RUNE KEEPER MUST FIND SOMETHING TO READ (the Great Registration regression) ──────
+// The pool tripled (16 → 46) when the 37 School techniques landed, and a uniform deal quietly turned
+// that into a WORSE market: a keeper holding one rune went from finding a readable scroll on 36-78%
+// of racks to 10-37%. `RUNE_COUNT_WEIGHT` is the fix. These asserts are the regression guard, because
+// the failure is invisible from inside the code — every function stays correct while the shop reads
+// as empty, and the next person to add 30 moves will re-break it by doing nothing wrong.
+{
+  const CYCLES = 400
+  const readsSomething = (rune: string) => {
+    let hits = 0
+    for (let c = 0; c < CYCLES; c++) if (rackFor(SEED, c).some((m) => canRead(m, [rune]))) hits++
+    return hits / CYCLES
+  }
+  // Star is the sharpest case: it gained no new SOLO-readable scroll in the pass, so its rack was
+  // diluted for nothing. If the weighting is ever dropped this drops to ~0.37 and trips.
+  ok(readsSomething('star') >= 0.45, `a Star-born keeper reads something on most racks (${(readsSomething('star') * 100).toFixed(0)}%)`)
+  // ...and the thinnest rune that has ANY solo scroll must still clear a floor.
+  const thin = ['freeze', 'hydro', 'breeze', 'life', 'illuminate', 'stone'].map(readsSomething)
+  ok(Math.min(...thin) >= 0.2, `every rune with a solo scroll clears a floor (worst ${(Math.min(...thin) * 100).toFixed(0)}%)`)
+  // A SECOND rune has to visibly pay, or the lane law is advice rather than a reward.
+  let both = 0
+  for (let c = 0; c < CYCLES; c++) if (rackFor(SEED, c).some((m) => canRead(m, ['star', 'breeze']))) both++
+  ok(both / CYCLES > readsSomething('star'), `a 2nd rune widens the rack (${(both / CYCLES * 100).toFixed(0)}% vs ${(readsSomething('star') * 100).toFixed(0)}%)`)
+  // The weighting must SKEW the deal, not just survive it — single-rune paper is common paper.
+  let solo = 0, rows = 0
+  for (let c = 0; c < CYCLES; c++) for (const m of rackFor(SEED, c)) { rows++; if (m.runes.length <= 1) solo++ }
+  const poolShare = TRADE_POOL.filter((m) => m.runes.length <= 1).length / TRADE_POOL.length
+  ok(solo / rows > poolShare + 0.1,
+    `1-rune scrolls are over-represented vs the pool (${(100 * solo / rows).toFixed(0)}% of rows, ${(100 * poolShare).toFixed(0)}% of pool)`)
+}
+
 // ── 5. THE RACK IS THE SAME FOR EVERYONE, AND STABLE WITHIN A CYCLE ─────────────────────────────
 // The design this protects: "the same rack means something different to every keeper who walks
 // past it." A rack pre-filtered per keeper would be tidier and would delete that sentence.

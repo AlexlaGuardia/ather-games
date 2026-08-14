@@ -5631,8 +5631,10 @@ export default function Shimmer3D() {
   // status) are handed to the sim via pendingCastRef, because only the frame loop has the live
   // camera, and every one of them needs an aim point.
   //
-  // An 'unbuilt' move SAYS SO. Canon has 24 registered moves and the sim can run 9 of them; a silent
-  // no-op on the other 15 reads as a broken cast, so the toast names the move and the reason.
+  // An 'unbuilt' move SAYS SO. Canon has 61 registered keeper moves and the sim can run 47 of them
+  // (24/17 before the Great Registration, 2026-08-14); a silent no-op on the other 14 reads as a
+  // broken cast, so the toast names the move and the reason. ⚠ Counts here are a comment and rot —
+  // `cast.test.ts` prints the live pair on every run, which is the number to believe.
   const castSlot = useCallback((slot: number) => {
     const moveId = castLoadoutRef.current[slot]
     if (!moveId) { setHarvestToast(`No ${CAST_SLOTS[slot]} bound — your book has none for your runes`); return }

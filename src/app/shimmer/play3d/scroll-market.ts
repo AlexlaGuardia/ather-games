@@ -54,8 +54,14 @@ export interface Book {
 
 export const EMPTY_BOOK: Book = { learned: [] }
 
-/** How many scrolls stand on the rack at once. A rack, not a warehouse: you should read all of it. */
-export const RACK_SIZE = 6
+/**
+ * How many scrolls stand on the rack at once. A rack, not a warehouse: you should read all of it.
+ *
+ * 6 → 8 on 2026-08-14, and the reason is THE GREAT REGISTRATION rather than a feel call: the trade
+ * pool went 16 → 46 in one pass, so every scroll's share of a fixed-size rack fell by two thirds.
+ * See `RUNE_COUNT_WEIGHT` below — the size bump and the weighting are one fix, measured together.
+ */
+export const RACK_SIZE = 8
 
 /**
  * How long one rack stands. The traders turn over with the day — one in-game day is 64 real
@@ -113,6 +119,29 @@ function hash01(s: string): number {
   return ((h >>> 0) % 100000) / 100000
 }
 
+// ── ★ WHAT THE RACK STOCKS, AND THE REGRESSION THAT FORCED IT (2026-08-14) ──────────────────────
+// THE GREAT REGISTRATION took the keeper registry 24 → 61 moves, which took this trade pool 16 → 46.
+// A uniform deal onto a fixed rack turned that gift into a loss: measured over 2000 cycles, a keeper
+// carrying ONE rune found something they could read on 10–37% of racks, down from 36–78% before the
+// pass. Star-born was the clearest case — it gained no new solo-readable scroll and had its rack
+// diluted 2.9x, so a strictly better registry made the Passage strictly worse to walk into. That is
+// the failure mode this file's header warns about, arriving from the other direction: the market
+// looked broken ("they never have anything") while every line of it worked.
+//
+// The lever is mine by canon's own boundary note — "rack size, rotation cadence, WHICH MOVES APPEAR
+// WHEN = the build's" — and it must not become a per-keeper filter, because "the same rack means
+// something different to every keeper who walks past it" is the thing the rack is for.
+//
+// So: weight by how many runes a scroll is written in. A trader stocks what the tunnel can read, and
+// most keepers down there carry one or two runes, so single-rune scrolls are common paper and a
+// three-rune scroll is a rarity. Pool-wide, identical for everyone, no inventory consulted.
+//
+// Measured with RACK_SIZE 8: one-rune keepers back to 28–65%, and a SECOND rune visibly pays (a
+// Star+Breeze keeper reads something on 77% of racks). Every one of the 46 scrolls still appears, and
+// the rack still turns over every cycle — both asserted in the oracle, not assumed.
+const RUNE_COUNT_WEIGHT: Record<number, number> = { 0: 6, 1: 6, 2: 2, 3: 1 }
+const weightOf = (m: KeeperMove): number => RUNE_COUNT_WEIGHT[m.runes.length] ?? 1
+
 /**
  * The scrolls standing on the rack this cycle. A pure function of (seed, cycle) — every keeper in
  * the tunnel sees the same rack in the same hour, the same way the spawn board deals one garden for
@@ -123,8 +152,13 @@ function hash01(s: string): number {
 export function rackFor(seed: number, cycle: number, size = RACK_SIZE): KeeperMove[] {
   // Sort the whole pool by this cycle's key and take the top `size`. Dealing from the full pool
   // every time is what makes the pool RETURNING: nothing is consumed, so nothing is ever gone.
+  //
+  // The key is `-ln(u) / weight` (Efraimidis-Spirakis): weighted sampling WITHOUT replacement, in one
+  // sort, and still pure over (seed, cycle). A plain `u / weight` would bias correctly but could not
+  // be reasoned about; this one is exact, and every weight > 0 keeps every scroll reachable, which is
+  // what the returning pool depends on. `+1e-6` guards `ln(0)` — hash01 can land exactly on zero.
   return [...TRADE_POOL]
-    .map((m) => ({ m, k: hash01(`${seed}|${cycle}|${m.id}`) }))
+    .map((m) => ({ m, k: -Math.log(hash01(`${seed}|${cycle}|${m.id}`) + 1e-6) / weightOf(m) }))
     .sort((a, b) => a.k - b.k || (a.m.id < b.m.id ? -1 : 1))
     .slice(0, size)
     .map((e) => e.m)
@@ -213,9 +247,21 @@ export function buy(
  * starter would be unreadable for most keepers (canon: the rune gates the scroll), so it would be
  * ceremony that hands over a move nobody can cast.
  *
- * ⚠ Returns undefined for a keeper whose runes open NOTHING — 7 of the 17 birthable runes carry
- * their moves on the spirit-kits shelf, which a keeper never learns from. That is a content gap in
- * the registry, not a bug here, and the honest answer is an empty book rather than a fake move.
+ * ⚠ Returns undefined for a keeper whose runes open NOTHING. Still 9 → 7 of the 17 birthable runes
+ * after THE GREAT REGISTRATION (2026-08-14) — only Breeze and Hydro were bought out of it, by Gale
+ * Cutter and Pressure Lance. The *reason* changed, though, and the new one is sharper than the old
+ * "their moves live on the spirit shelf":
+ *
+ *   Manalic appears in no technique at all, and for Enchant · Lightning · Tempest · Gem · Magma ·
+ *   Mist every registered move either needs a SECOND rune or is an ultimate — and canon forbids
+ *   selling an ultimate ("a signature is not bought over a table"). So a fresh one-rune keeper of
+ *   those six has a full book PAGE and nothing on it they can hold.
+ *
+ * Book pages went 6 empty → 1 (measured, not the handoff's estimate); starting kits went 9 → 7. Both
+ * are true and they are different questions — a page is what the rune COULD reach, a kit is what a
+ * keeper can cast on their first day. Filling the rest is canon's (author solo-readable moves for
+ * those six) or the ruled tutorial's (hand a second rune at the Enchant Temple), never this function's.
+ * The honest answer here stays an empty book rather than a fake move.
  */
 export function starterFor(ownedRunes: readonly string[]): string | undefined {
   const mine = TRADE_POOL.filter((m) => canRead(m, ownedRunes))
