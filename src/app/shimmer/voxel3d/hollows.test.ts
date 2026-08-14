@@ -6,7 +6,7 @@
 // drift is slower than a runner, the gun can actually hit one, dawn always wins.
 
 import { hollowEligible, hollowStep, segmentDist, hollowCap, packSize, packWalk, hollowNight,
-         HOLLOW_SPEED, HOLLOW_HOVER, PACK_MAX, PACK_STEP, NIGHT_SKY_MAX, GUTTER_SKY,
+         HOLLOW_SPEED, HOLLOW_HOVER, HOLLOW_STEP_UP, PACK_MAX, PACK_STEP, NIGHT_SKY_MAX, GUTTER_SKY,
          HOLLOW_FORMS, FORM_ORDER, pickForm, pushOutOfBodies, hollowTouching,
          type HollowState, type HollowForm } from './hollows'
 import { greyness } from '../voxel/biome'
@@ -89,7 +89,9 @@ const SEED = 1337
   ok(after < before, 'the Hollow closes distance')
   ok(before - after <= SPD * 1.05, `it drifts at its speed, not faster (${(before - after).toFixed(2)} in 1s)`)
   ok(FORM_ORDER.every(f => RUN_SPEED > HOLLOW_FORMS[f].speed), 'running away always works — from EVERY form')
-  ok(Math.abs(st.y - (8 + 1 + HOLLOW_HOVER)) < 0.6, 'it rides the ground line at hover height')
+  // ★ A STALKER WALKS (Alex 2026-08-14) — feet on the ground line, no hover, no bob. This assert
+  // used to add HOLLOW_HOVER and was the only thing in the suite that noticed the change.
+  ok(Math.abs(st.y - (8 + 1)) < 0.6, `a walker rides the ground line itself (y=${st.y.toFixed(2)})`)
   const stG: HollowState = { x: 0, y: 10, z: 0, form: 'stalker', hp: 30, gutter: 0.9, phase: 0 }
   const b2 = stG.x
   hollowStep(stG, 1 / 60, 100, 0, flat, 0)
@@ -184,4 +186,51 @@ if (fails.length) {
   for (const f of fails) console.error('  - ' + f)
   process.exit(1)
 }
+// ── ★ THE WALK/HOVER SPLIT (Alex 2026-08-14: goopy bipedal creatures; only the ranged form floats) ──
+// The form table carried the melee/ranged split from the day it was written (`body`, `standoff`,
+// `reach`); locomotion applied one universal hover over the top of it. These asserts are what stop
+// that from silently coming back, and what stop a "tidy-up" from welding `hover` to `body === 0`.
+{
+  const flat = (_x: number, _z: number) => 8
+  ok(HOLLOW_FORMS.warden.hover === 0 && HOLLOW_FORMS.stalker.hover === 0,
+    'the melee forms have feet')
+  ok(HOLLOW_FORMS.caster.hover > 0, 'the caster is the one that floats')
+  ok(FORM_ORDER.filter((f) => HOLLOW_FORMS[f].hover > 0).length === 1,
+    'exactly ONE form floats — if this grows, a wall stops meaning anything')
+
+  // A floater sits its hover above the ground; a walker sits ON it.
+  const cast: HollowState = { x: 0, y: 20, z: 0, form: 'caster', hp: 14, gutter: 0, phase: 0 }
+  for (let i = 0; i < 240; i++) hollowStep(cast, 1 / 60, 0.2, 0, flat, i / 60)
+  ok(Math.abs(cast.y - (8 + 1 + HOLLOW_HOVER)) < 0.4, `a caster holds its hover (y=${cast.y.toFixed(2)})`)
+
+  // ── terrain: a two-high face stops a walker, and a one-high kerb does not.
+  //    `wall` is a step at x >= 4 — the shape a Stonewall will have once terrain writes real voxels.
+  const wall = (x: number, _z: number) => (x >= 4 ? 8 + HOLLOW_STEP_UP + 1 : 8)
+  const kerb = (x: number, _z: number) => (x >= 4 ? 8 + HOLLOW_STEP_UP : 8)
+  const walkerAt = (x: number): HollowState => ({ x, y: 9, z: 0, form: 'stalker', hp: 18, gutter: 0, phase: 0 })
+
+  const blocked = walkerAt(0)
+  for (let i = 0; i < 600; i++) hollowStep(blocked, 1 / 60, 20, 0, wall, i / 60)
+  ok(blocked.x < 4, `a two-high face stops a walker dead (reached x=${blocked.x.toFixed(2)})`)
+
+  const stepped = walkerAt(0)
+  for (let i = 0; i < 600; i++) hollowStep(stepped, 1 / 60, 20, 0, kerb, i / 60)
+  ok(stepped.x > 4, `...but a one-block kerb is stepped (reached x=${stepped.x.toFixed(2)})`)
+
+  // ...and the caster ignores the same face entirely. This pairing IS the design: the wall answers
+  // the two that walk, and the one that outranges walls is the reason you cannot just build a box.
+  const flyer: HollowState = { x: 0, y: 9, z: 0, form: 'caster', hp: 14, gutter: 0, phase: 0 }
+  for (let i = 0; i < 900; i++) hollowStep(flyer, 1 / 60, 20, 0, wall, i / 60)
+  ok(flyer.x > 4, `a caster crosses a wall a walker cannot (reached x=${flyer.x.toFixed(2)})`)
+
+  // ── wall-sliding: blocked head-on, a walker still makes progress ALONG the face rather than
+  //    freezing nose-first against it. Not pathfinding — it cannot solve a U — but a body at a wall
+  //    should look like it is trying.
+  const slider = walkerAt(3.5)
+  const z0 = slider.z
+  for (let i = 0; i < 300; i++) hollowStep(slider, 1 / 60, 20, 12, wall, i / 60)
+  ok(slider.x < 4 && Math.abs(slider.z - z0) > 1,
+    `blocked head-on, a walker slides along the face (dz=${(slider.z - z0).toFixed(2)})`)
+}
+
 console.log(`✅ the dark has a body, and it obeys the ruling — ${pass} passed`)

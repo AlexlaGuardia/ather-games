@@ -12,10 +12,31 @@
 // Everything else — counts, tiers, drops, difficulty, whether they linger in deep-greyed pockets
 // by day — is build tuning and is Jin's (the ruling says so explicitly).
 //
-// ★ THE BODY IS A GLIDE, NOT A WALKER. A smear has no feet: it drifts toward the keeper at a
-// fixed hover above the ground line, unbothered by single blocks. That is cheaper than pathing
-// and reads MORE wrong-in-the-right-way — terrain does not slow it, which is quietly the scariest
-// thing about it. Speed sits under run speed: a keeper who runs, escapes. Menace, not a wall.
+// ★ MOST OF THEM WALK. ONLY THE CASTER HOVERS. (Alex, 2026-08-14 — his concept call, and it
+// overturns what this header said for a week.)
+//
+// This block used to argue "THE BODY IS A GLIDE, NOT A WALKER — a smear has no feet… terrain does
+// not slow it, which is quietly the scariest thing about it." That was a real design argument and
+// Alex has overruled it: **the Hollows are goopy BIPEDAL creatures. They have feet. Only the ranged
+// form floats.** The current models are placeholders, which is why the correction arrives now.
+//
+// ★ AND THE FORM TABLE BELOW ALREADY SAID SO — THE LOCOMOTION JUST WASN'T READING IT. `caster` is
+// the only form with `body: 0` (incorporeal, `standoff: 6.5`, `reach: 7.5` — it never closes), while
+// warden and stalker both carry solid bodies and come all the way in. The data had the melee/ranged
+// split from the day it was written; `hollowStep` applied one universal hover over the top of it.
+// Same shape as everything else this week: the description was right and the mechanism ignored it.
+//
+// **What we lose, stated plainly, because it was deliberate:** terrain-does-not-slow-it was the
+// scariest property the melee forms had. **What we keep:** the caster still floats and still
+// outranges any wall, so the menace survives on the form whose whole job is denying the answer —
+// and the two walkers gain legible counterplay, which is the better trade. A wall now means
+// something to 7 of every 9 Hollows (the warden+stalker spawn weight) and nothing to the caster.
+//
+// Speed still sits under run speed: a keeper who runs, escapes. Menace, not a wall.
+//
+// ⚠ THE LOCKED LOOK IS STILL OWED A CANON DESIGN-BRIEF. "Goopy bipedal" is Alex's concept and is
+// recorded here as direction, but `/picaso` builds against `CANON/design-briefs/`, so the brief has
+// to land there before anyone models one. This file fixes BEHAVIOUR only, as it always has.
 
 import { greyness } from '../voxel/biome'
 import { spawnDark } from '../voxel/light'
@@ -67,6 +88,16 @@ export interface HollowFormDef {
   /** ★ Solid half-width. A warden you can walk through is not a guard, it is scenery — this is
    *  what makes the form mean anything. 0 = incorporeal (the caster: reach is its body). */
   body: number
+  /**
+   * ★ How far above the ground line this form FLOATS. 0 = it walks, feet on the ground, and is
+   * step-height limited like anything with legs (Alex 2026-08-14: goopy bipedal creatures).
+   * Non-zero = it hovers, ignores terrain, and a wall means nothing to it.
+   *
+   * Deliberately its own axis rather than inferred from `body === 0`. Incorporeal and airborne
+   * happen to coincide on today's three forms, but they are two different claims — a corporeal
+   * floater or a walking smear are both coherent, and inferring would silently weld them together.
+   */
+  hover: number
   /** Seconds of drain a touch lays on the keeper. */
   drain: number
   /** How far out it stops closing. The caster holds this line; the melee forms come all the way. */
@@ -74,6 +105,22 @@ export interface HollowFormDef {
   /** Relative spawn frequency within a pack. */
   weight: number
 }
+
+// ⚠ DECLARED ABOVE `HOLLOW_FORMS` ON PURPOSE — the caster's `hover` reads it. A `const` below its
+// consumer is a temporal-dead-zone ReferenceError at module load, not a lint nit: it took the whole
+// module down on the first run of this change.
+/** The CASTER's float height, in metres above the ground line. The walkers use 0 — see `hover`. */
+export const HOLLOW_HOVER = 1.15
+/**
+ * ★ How high a walking Hollow can haul itself in one step. One block: it steps a kerb, a tilled row
+ * or a single stair, and a two-high face stops it dead. This is the number that makes TERRAIN mean
+ * something to the melee forms — and once conjured terrain writes real voxels (step 3 of the cast
+ * port), a Stonewall becomes a wall to a warden for free, with no monster code involved.
+ *
+ * ⚠ It bounds the CLIMB only. A goop walking off a ledge oozes down, which is why descent is left
+ * to the same lerp it always used.
+ */
+export const HOLLOW_STEP_UP = 1
 
 /**
  * ⚠ SPEEDS ARE BOUNDED FROM BOTH SIDES, and the bound is a canon sentence, not taste. Every form
@@ -84,13 +131,14 @@ export interface HollowFormDef {
 export const HOLLOW_FORMS: Record<HollowForm, HollowFormDef> = {
   // The wall. Slow enough to walk around, solid enough that you must, and the heaviest drain —
   // so going THROUGH it is a real cost rather than a formality.
-  warden:  { hp: 60, speed: 2.0, radius: 1.15, reach: 1.25, body: 0.85, drain: 3.4, standoff: 0,   weight: 3 },
+  warden:  { hp: 60, speed: 2.0, radius: 1.15, reach: 1.25, body: 0.85, hover: 0, drain: 3.4, standoff: 0,   weight: 3 },
   // The pressure. Frail, fast, small. It is the reason you cannot stand still and mine while a
   // pack is out, which is the habit the night is supposed to break.
-  stalker: { hp: 18, speed: 3.9, radius: 0.62, reach: 0.80, body: 0.34, drain: 1.8, standoff: 0,   weight: 4 },
+  stalker: { hp: 18, speed: 3.9, radius: 0.62, reach: 0.80, body: 0.34, hover: 0, drain: 1.8, standoff: 0,   weight: 4 },
   // The reason to move. It never closes and it barely has a body — it drains from across the
   // clearing, so a keeper who solves the other two by backing away has solved nothing.
-  caster:  { hp: 14, speed: 1.5, radius: 0.70, reach: 7.5,  body: 0,    drain: 2.2, standoff: 6.5, weight: 2 },
+  // ★ The ONLY form that floats — and the only one a wall cannot answer. That pairing is the point.
+  caster:  { hp: 14, speed: 1.5, radius: 0.70, reach: 7.5,  body: 0,    hover: HOLLOW_HOVER, drain: 2.2, standoff: 6.5, weight: 2 },
 }
 
 export const formOf = (h: HollowState): HollowFormDef => HOLLOW_FORMS[h.form]
@@ -111,7 +159,6 @@ export function pickForm(roll: number): HollowForm {
 
 /** Legacy single-body numbers, kept as the warden-neutral defaults the older call sites read. */
 export const HOLLOW_HP = 30
-export const HOLLOW_HOVER = 1.15     // metres above the ground line
 export const HOLLOW_SPEED = 3.4      // < run speed: running away always works
 export const HOLLOW_RADIUS = 0.85    // hit sphere for projectiles
 /**
@@ -224,14 +271,41 @@ export function hollowStep(
   // exists to deny. The melee forms have standoff 0, so this is a no-op for them and there is one
   // movement function rather than a melee one and a ranged one that drift apart.
   const stop = Math.max(0.5, f.standoff)
+  let mx = 0, mz = 0
   if (d > stop) {
-    h.x += (dx / d) * speed * dt
-    h.z += (dz / d) * speed * dt
+    mx = (dx / d) * speed * dt
+    mz = (dz / d) * speed * dt
   } else if (f.standoff > 0 && d < f.standoff * 0.72 && d > 1e-4) {
-    h.x -= (dx / d) * speed * dt
-    h.z -= (dz / d) * speed * dt
+    mx = -(dx / d) * speed * dt
+    mz = -(dz / d) * speed * dt
   }
-  const want = groundAt(h.x, h.z) + 1 + HOLLOW_HOVER + Math.sin(time * 1.7 + h.phase) * 0.12
+
+  if (f.hover > 0) {
+    // A floater ignores the ground entirely — this is the caster, and a wall meaning nothing to it
+    // is the whole reason it is the form that punishes walling up.
+    h.x += mx
+    h.z += mz
+  } else if (mx !== 0 || mz !== 0) {
+    // ★ A WALKER HAS FEET (Alex 2026-08-14). It can haul itself up `HOLLOW_STEP_UP` and no further,
+    // so terrain finally means something to the melee forms.
+    //
+    // Axis-separated fallback, in this order: try the whole move, then X alone, then Z alone. That
+    // is three `groundAt` probes in the worst case and it buys WALL-SLIDING for free — a warden that
+    // meets a Stonewall mills along it looking for the end instead of freezing nose-first against
+    // it. **It is emphatically not pathfinding** and must not be mistaken for it: it cannot solve a
+    // U-shape and it is not supposed to. Milling at a wall IS the counterplay a wall should buy.
+    const g0 = groundAt(h.x, h.z)
+    const climbable = (nx: number, nz: number) => groundAt(nx, nz) - g0 <= HOLLOW_STEP_UP
+    if (climbable(h.x + mx, h.z + mz)) { h.x += mx; h.z += mz }
+    else if (climbable(h.x + mx, h.z)) { h.x += mx }
+    else if (climbable(h.x, h.z + mz)) { h.z += mz }
+    // else: blocked on both axes. It stays put this frame and keeps trying — a body against a wall.
+  }
+
+  // The bob is a FLOATER's tell, not a universal one: a thing with feet that sinusoidally rises out
+  // of the ground reads as broken, and it was the clearest visual lie in the placeholder.
+  const bob = f.hover > 0 ? Math.sin(time * 1.7 + h.phase) * 0.12 : 0
+  const want = groundAt(h.x, h.z) + 1 + f.hover + bob
   h.y += (want - h.y) * Math.min(1, dt * 3)
 }
 
