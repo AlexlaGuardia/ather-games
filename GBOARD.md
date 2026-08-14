@@ -1170,6 +1170,47 @@ the Arcade frame.
 
 ## ✳️ Shimmer play3d — THE BIRTH RUNE → THE MOVE BOOK → THE CAST LAYER (v3 SHIPPED 2026-08-04, jin-cc) · *Last touched 2026-08-14*
 
+> ### ✅ STEP ① SHIPPED 2026-08-14 (`29eec52` + `cdd7ee8`, live :3200) — **FIELDS REACH THE VOXEL WORLD, 22 → 33 of 47.**
+> `field-effects.ts` moved **`play3d/` → `engine/`**, joining the 11 other both-worlds systems on the shared
+> spine. Exactly the slice `cast-dispatch.ts` had written down in advance (*"slice 2 adds 'field' to the voxel
+> host's set and deletes nothing here"*) — nothing was deleted. **Of the 30 casts shipped yesterday, 21 now run
+> where Alex plays instead of 12.**
+> - **★ THE ONE THING THAT COULD NOT TRAVEL UNCHANGED WAS THE SHAPE.** A field was a **circle**, which in play3d's
+>   flat tile world is an **infinitely tall column** and nobody could tell. A voxel world has caves under the
+>   ground you cast on and ridges over it — so an infinite column means a Firewall **burning a Hollow through a
+>   tunnel roof** and **eating a round fired from the cliff above**. A field is now a **SLAB**: `y` + `height`,
+>   both **REQUIRED** so the compiler walks the call sites instead of letting an un-updated caller keep the old
+>   wrong answer silently (the `book`-parameter lesson). `contains` stays 2D for play3d's genuinely ground-plane
+>   readers; `containsVolume` is what the voxel host asks. **Both failures would have read as "the fire is buggy"
+>   rather than "the fire has no top"** — 6 asserts pin the cave and the ridge.
+> - **Grounded to the terrain it LANDS on** (`columnHeight`), never the caster's eye: cast downhill and an
+>   eye-anchored field hangs with its fire above the target's head. Uses the **shared `castAimPoint`**, not a
+>   third hand-rolled copy (play3d open-codes it only because the helper did not exist yet).
+> - **★ ONE material for every field, and that is CANON not a render shortcut.** `moves.md:5` puts colour on the
+>   **mage's soul**, not the move — so a Firewall and a Healing Grove cast by the same keeper are the **same hue**,
+>   and **colour can never be the tell**. The tell is **motion** (a mend breathes at 1.4, a bite flickers at 7.5),
+>   which is also the only differentiator the render-audit rule permits. **That answers the Apex "tells" question
+>   from this morning: our tells cannot be hue-coded, canon forbids it.** ⚠ Still a **blockout** — the locked look
+>   is owed a design-brief + `/picaso` pass, same standing as the Hollow bodies.
+> - **Firewall is real cover and eats YOUR rounds too**, symmetrically. A wall of flame you can shoot through is a
+>   damage puddle; one that only blocks *them* is a free win. Same reasoning as Cordon trapping its own caster.
+> - **⚠ `performance.now()`, NEVER `state.clock.elapsedTime`.** A field's `until`/`nextTick` are stamped off
+>   `performance.now()` by `castSlot` (the cooldown clock). Mixing the two would make every field **immortal or
+>   stillborn depending on how long the tab had been open** — and the render would look fine either way.
+> - Field kills drop `raw_mana_shard` on the **same path a round does**, guarded on `hp<=0` so a mid-disperse
+>   Hollow cannot double-drop — otherwise killing with fire would quietly pay less than shooting.
+> - **★ `voxel3d/cast-fields.test.ts` (13 asserts) pins something no other test could:** a field sits at
+>   `columnHeight+1` with `FIELD_HEIGHT`/`FIELD_UNDERBITE`, a Hollow floats at `HOLLOW_HOVER` over the same
+>   ground, and **nothing in the tree referenced both sets.** Retune `HOLLOW_HOVER` for a better silhouette and
+>   every damaging field silently stops connecting — reading as *"fields do nothing"*, indistinguishable from the
+>   port never working. Margins are asserted, not assumed, so a retune that eats them **fails and says why**.
+>   Same family as the 07-07 watchdog probe-calibration lesson.
+> - **Oracles:** cast **74** · cast-dispatch 37 · keeper-moves 349 · Passage 49 · loadout 25 · render-audit 75 ·
+>   cast-fields **13**. Canon gate **7 CLEAN**. `PLAY3D-MIGRATION.md` row moved in the same commit, per its rule.
+> - **Left dark, unchanged:** `statuses` (7 casts — keys off play3d's named hunter/guard targets) and
+>   `conjured-terrain` (7 casts — wants re-founding on **real voxel blocks**, which is the *better* version:
+>   Glacial Path's walkable bridges/ramps become possible). Those are steps ② and ③.
+
 > ### 🔍 THE APEX CROSS-REFERENCE 2026-08-14 (analysis, no code) — **we built ONE Apex class 47 times.**
 > Alex: *"take the moves we already have and cross reference them against apex legends… any that could be made
 > better or reworked to provide more variety."* Apex is established prior art here (the 07-22 movement model),
