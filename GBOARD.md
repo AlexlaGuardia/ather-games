@@ -1170,6 +1170,46 @@ the Arcade frame.
 
 ## ✳️ Shimmer play3d — THE BIRTH RUNE → THE MOVE BOOK → THE CAST LAYER (v3 SHIPPED 2026-08-04, jin-cc) · *Last touched 2026-08-14*
 
+> ### ✅ STEP ③ SHIPPED 2026-08-14 (`a054992` + `ba53808`, live :3200) — **TERRAIN IS REAL VOXELS. 33 → 40 of 47.**
+> `conjured-terrain.ts` moved **`play3d/` → `engine/`** (13th both-worlds system). **Only `statuses` is dark now.**
+> **The one that got BETTER in the move rather than merely arriving:** play3d consults cells beside its tilemap so
+> a wall can only ever *block*; the voxel host **WRITES** them as voxels that collide, mesh, occlude and **can be
+> stood on** — which is what makes Glacial Path's canon *"bridges, ramps, slides"* stop being impossible.
+> - **★ `MAT.CONJURED` (id 47) is its own material for a GAMEPLAY reason, not tidiness.** Reusing `STONE` would put
+>   a block in the world that looks permanent and then evaporates ten seconds later, and that **reads as a bug every
+>   single time**. A temporary wall has to LOOK temporary, so it glows (mana in the shape of a wall, not rock) and
+>   sits deliberately outside stone's family. ⚠ Palette entry is a placeholder like every other material.
+> - **★ `hardness: Infinity` CLOSES THE EXPLOIT AT THE REGISTRY**, not with a guard in the mining path.
+>   `breakSeconds` → Infinity ⇒ `canBreak` false, so a keeper cannot cast a 16-mana Stonewall, mine five rubble and
+>   repeat. **Nothing in the dig code had to learn what a cast is, and no future dig route can miss it.** `drops: []`
+>   as belt-and-braces.
+> - **★ RUNTIME WRITES, NEVER `setVoxel`** — same rule and reason as `applyGenPieces`: regenerable content must not
+>   enter the save. A conjured wall is an **occupancy with a lifetime, not an edit**; close the tab mid-Cordon and it
+>   is simply gone, which is the only behaviour that cannot litter a save with permanent free unbreakable stone. It
+>   also skips the chest / station / leaf-decay funnels `setVoxel` owns, none of which a cast should trigger.
+> - **★ AIR-ONLY, WITH A RECORD OF EXACTLY WHAT WAS WRITTEN.** Reverting the *footprint* instead of the *record*
+>   would blow a hole through whatever the wall grew against — **including, on a ten-second timer, a chest.** The
+>   rule is pure (`conjuredWriteCells`) and asserted rather than buried in a 5,000-line component: it **skips rather
+>   than stops** on an occupied cell (a wall crossing a boulder carries on with a notch missing), grows each column
+>   from its **own live ground** so a slope steps instead of burying its low end, and clamps at the world ceiling.
+>   The cap **evicting** a wall is an id-diff the host must watch, since the pure module has no idea voxels exist.
+> - **★★ AND IT CORRECTS MY OWN WALKER COMMIT FROM AN HOUR EARLIER, WHICH WAS WRONG.** That commit claimed conjured
+>   terrain would stop a warden *"for free once it writes real voxels."* **It would not have.** The Hollows' ground
+>   probe was `columnHeight` — a **pure generator query** that knows nothing about mining, building or casting. So
+>   **no wall had ever stopped a Hollow**: not a conjured one, and not a shed the player spent an evening building.
+>   The probe now reads the **live world**, bounded to a window around the body's own height, with a generator
+>   fallback so it degrades to today's behaviour rather than dropping a body through the floor. *That* is what makes
+>   a wall answer 7 of 9 — it was never free, and the claim was a guess dressed as a consequence.
+> - **⚠ THE WORKER ARTIFACT CHANGED THIS TIME.** `depth.ts` + `registry.ts` are inside the generator's import graph,
+>   so `build:worker` produced a new hash that had to be committed (`ba53808`) — otherwise prod serves a worker file
+>   that is not in git and a clean checkout 404s. The 08-13 note found the hash unchanged; that was because *that*
+>   change sat outside the graph. **Check, don't assume, whichever way it goes.**
+> - **Oracles:** `cast-terrain` **22 (new)** · cast-fields 22 · hollows 52 · cast 74 · cast-dispatch 37 ·
+>   render-audit 75 · mine + edits green. Canon gate **7 CLEAN**. Migration row moved in the same commit.
+> - **Next:** ① **statuses** — the last dark archetype, 7 casts. ② **Glacial Path's walkable DECK** is now *possible*
+>   and is not built: a shape whose cells sit at an **absolute y** (a bridge you cross) rather than growing from the
+>   ground. ③ then the three Apex verbs, voxel-side.
+
 > ### 🦶 ALEX'S CURVE BALL 2026-08-14 (`2377006`, live :3200) — **THE MELEE FORMS WALK. ONLY THE CASTER HOVERS.**
 > Alex, on reading the field port: *"the only hallows that hover are the ranged attackers.. the others walk .. the
 > concepts im thinking of is goopy bipedal creatures.. i just havent said anything sence they were only placeholder
