@@ -609,8 +609,28 @@ const KNOWN_ITEMS: ReadonlySet<string> = new Set([
   ...RECIPE_OUTPUTS,
 ])
 
+/**
+ * One window of the frame meter. `worst` is the point of it: an average hides exactly the hitch a
+ * player feels, and the remesh queue draining as you walk into new ground is a hitch, not a rate.
+ */
+export interface PerfSample {
+  fps: number
+  /** Mean frame time, ms. THE number to compare across an A/B — ms subtracts, fps does not. */
+  ms: number
+  /** Longest single frame in the window, ms. */
+  worst: number
+}
+
 export default function VoxelWorld() {
   const [stats, setStats] = useState('generating…')
+  /**
+   * ── ★ THE FRAME METER (2026-08-13 night) ──────────────────────────────────────────────────────
+   * Its own state, not a slice of the `stats` string, because the two answer to different clocks:
+   * `stats` is rebuilt every 10th frame and can be clobbered, while this has to keep a steady
+   * cadence to be readable while the number it reports is moving. Null until the first window
+   * closes, so the meter never shows a fabricated 0.
+   */
+  const [perf, setPerf] = useState<PerfSample | null>(null)
   /**
    * ── ★ THE SAY CHANNEL — what the WORLD tells the PLAYER (2026-08-12) ────────────────────────
    * `stats` is the plumbing readout and the frame loop OVERWRITES IT EVERY 10 FRAMES with the
@@ -1477,7 +1497,7 @@ export default function VoxelWorld() {
           weaponDrawn={drawn}
           weaponIdx={weaponIdx}
           onAmmo={setAmmoUi}
-          onStats={setStats} onSay={say} runeTick={runeTick}
+          onStats={setStats} onPerf={setPerf} onSay={say} runeTick={runeTick}
           onPos={(p, yaw) => {
             mapPos.current = { x: p.x, z: p.z }
             mapHeading.current = yaw
@@ -1503,7 +1523,7 @@ export default function VoxelWorld() {
             a menu is up are already refused by the onCreated click handler. */}
         <PointerLockControls selector="#voxel3d-no-autolock" />
       </Canvas>
-      <Hud stats={stats} toast={toast} pos={pos} look={look} hotbar={hotbar} sel={sel} tier={tier} held={held}
+      <Hud stats={stats} perf={settings.showFps ? perf : null} toast={toast} pos={pos} look={look} hotbar={hotbar} sel={sel} tier={tier} held={held}
            build={build} pieceIdx={pieceIdx} rot={rot} inv={inv}
            skill={skillHud} levelUp={levelUp} crafted={crafted} tools={tools} skills={skills}
            activeTool={activeTool}
@@ -1649,7 +1669,7 @@ function ResourceBars({ vitals }: { vitals: React.RefObject<Vitals> }) {
   )
 }
 
-function Hud({ stats, toast, pos, look, hotbar, sel, tier, held, build, pieceIdx, rot, inv, skill, levelUp, crafted, tools, skills, activeTool, isOwner, drawn, weaponIdx, ammoUi, tutorialStage, nearGreg, dialogueOpen, nearTable, craftOpen, nearMist, hasParty, sparLedger, vitals }: {
+function Hud({ stats, perf, toast, pos, look, hotbar, sel, tier, held, build, pieceIdx, rot, inv, skill, levelUp, crafted, tools, skills, activeTool, isOwner, drawn, weaponIdx, ammoUi, tutorialStage, nearGreg, dialogueOpen, nearTable, craftOpen, nearMist, hasParty, sparLedger, vitals }: {
   stats: string; pos: string
   /** The say line — player-addressed, held ~4s. See the SAY CHANNEL note on VoxelWorld. */
   toast: { text: string; at: number } | null
@@ -1657,6 +1677,9 @@ function Hud({ stats, toast, pos, look, hotbar, sel, tier, held, build, pieceIdx
   hotbar: (HotbarEntry | null)[]; sel: number; tier: number
   held: { text: string; out: boolean } | null
   build: boolean; pieceIdx: number; rot: Rotation
+  /** Latest frame-meter window, or null when the meter is off — the gate lives at the CALL site so
+   *  this component never has to know a setting exists. */
+  perf: PerfSample | null
   inv: React.RefObject<Inventory>
   skill: { id: string; level: number; xp: number; next: number } | null
   levelUp: string | null
@@ -1705,6 +1728,23 @@ function Hud({ stats, toast, pos, look, hotbar, sel, tier, held, build, pieceIdx
           {isOwner && <a href="/shimmer/play3d" className="hover:text-white/85 underline decoration-white/20">❈ play3d (legacy)</a>}
         </div>
         <div>{pos}</div>
+        {/* ── ★ THE FRAME METER ────────────────────────────────────────────────────────────────
+            Above the plumbing line and brighter than it, because while you are measuring this is
+            the only number on screen you are actually reading.
+            · `ms` sits beside `fps` because ms is what SUBTRACTS across an A/B — 60→30fps and
+              30→20fps are the same 16.7ms of added work, and only one of those pairs looks equal.
+            · `worst` is the whole reason this beats an average: the remesh queue draining as you
+              walk into new ground is a HITCH, and a mean frame time is exactly the statistic that
+              hides one.
+            · `tabular-nums` so the digits do not dance while you watch them. */}
+        {perf && (
+          <div data-perf className="font-mono tabular-nums text-white/90">
+            {perf.fps} fps · {perf.ms.toFixed(1)} ms
+            <span className={perf.worst > 33 ? 'text-amber-300/90' : 'text-white/45'}>
+              {' '}· worst {perf.worst.toFixed(0)} ms
+            </span>
+          </div>
+        )}
         {/* `data-stats` is the handle `scripts/world-shot.mts` scrapes — the HUD line is the only
             place the renderer's live counters surface, and a headless perf run needs to read them
             without the class name (a styling detail) being load-bearing. */}
@@ -2621,7 +2661,7 @@ const SOLID_EXCEPT = new Set<number>([
 // CELL_HALF for it; everything else (light, fence arms, piece placement) wants "yes, solid".
 const isSolid = (m: number) => !SOLID_EXCEPT.has(baseOf(m))
 
-function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weaponDrawn, weaponIdx, onAmmo, onStats, onSay, runeTick, onPos, onLook, onInvChange, worker, incoming, inflight, settings, build, pieceIdx, rot, tools, skills, onSkill, onLevel, onTool, tutorial, onQuestEvent, onNearGreg, onNearTable, cmdOut, mistLedger, onNearMist, sparring, pot, onOpenChest, onOpenStation, uiOpen }: {
+function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weaponDrawn, weaponIdx, onAmmo, onStats, onPerf, onSay, runeTick, onPos, onLook, onInvChange, worker, incoming, inflight, settings, build, pieceIdx, rot, tools, skills, onSkill, onLevel, onTool, tutorial, onQuestEvent, onNearGreg, onNearTable, cmdOut, mistLedger, onNearMist, sparring, pot, onOpenChest, onOpenStation, uiOpen }: {
   inv: React.RefObject<Inventory>
   toolTier: React.RefObject<number>
   toolSkill: React.RefObject<BlockSkill>
@@ -2636,6 +2676,8 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
   /** Rounds left, pushed up for the HUD. Called on fire and on reload completion. */
   onAmmo: (n: number) => void
   onStats: (s: string) => void
+  /** One window of the frame meter, ~4x a second and only while `settings.showFps` is on. */
+  onPerf: (p: PerfSample) => void
   /** Addressed to the PLAYER — held long enough to read. `onStats` is plumbing and gets clobbered
    *  every 10 frames by the biome line; see the SAY CHANNEL note on VoxelWorld. */
   onSay: (s: string) => void
@@ -2865,6 +2907,9 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
   const ads = useRef(false)
   const recoil = useRef({ p: 0, y: 0 })
   const frame = useRef(0)
+  /** The frame meter's open window: frames and seconds since the last publish, plus the worst
+   *  single frame in it. A ref, not state — accumulating in state would re-render per frame. */
+  const perfWin = useRef({ frames: 0, time: 0, worst: 0 })
   const requested = useRef(new Set<string>())
   // ★ Edits live here, keyed by column, and are the ONLY thing the world stores. Walking a thousand
   // columns costs zero bytes; a save grows with what you BUILD.
@@ -3710,6 +3755,30 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
 
   useFrame((state, dtRaw) => {
     const dt = Math.min(dtRaw, 0.05)
+
+    // ── ★ THE FRAME METER ────────────────────────────────────────────────────────────────────────
+    // ⚠ SAMPLES `dtRaw`, NEVER `dt`. The clamp above is a gameplay guard — it stops a long frame
+    // teleporting the player — and it floors at 0.05s, which is 20fps. Measuring the clamped value
+    // would silently erase every hitch worse than 20fps, i.e. exactly the ones worth finding.
+    //
+    // ⚠ AND IT PUBLISHES ON A TIMER, NOT PER FRAME. A `setState` every frame re-renders the whole
+    // HUD every frame, which costs enough to move the number — an instrument that changes what it
+    // measures. Four windows a second is readable and effectively free.
+    if (settings.showFps) {
+      const w = perfWin.current
+      w.frames++
+      w.time += dtRaw
+      if (dtRaw > w.worst) w.worst = dtRaw
+      if (w.time >= 0.25) {
+        onPerf({
+          fps: Math.round(w.frames / w.time),
+          ms: (w.time / w.frames) * 1000,
+          worst: w.worst * 1000,
+        })
+        w.frames = 0; w.time = 0; w.worst = 0
+      }
+    }
+
     /**
      * ★ While a menu is up the world holds NO input at all. The listeners above already refuse new
      * presses; this clears what was held at the moment the menu opened — open the bag mid-sprint
@@ -5287,6 +5356,21 @@ function SettingsPanel({ s, update, onClose }: {
           className="flex-1 accent-amber-300"
         />
         <span className="w-14 text-right tabular-nums text-white/50">{s.viewRadius * 16} blk</span>
+      </label>
+
+      {/* ── ★ ITS OWN SECTION, because it is the one setting that changes nothing about the world ──
+          Everything above is a look or a budget; this is an instrument. Keeping it out of Render
+          also keeps it out of PRESETS, so flipping natural↔cartoon mid-measurement cannot switch
+          off the meter you are measuring with. */}
+      <div className="text-[11px] font-mono font-semibold tracking-wider text-white/90 uppercase pt-1">Debug</div>
+      <label className="flex items-center gap-2 text-[11px] font-mono text-white/70 cursor-pointer">
+        <input
+          type="checkbox" checked={s.showFps}
+          onChange={e => update({ showFps: e.target.checked })}
+          className="accent-amber-300"
+        />
+        <span>frame meter</span>
+        <span className="ml-auto text-white/35">fps · ms · worst</span>
       </label>
 
       <p className="text-[10px] leading-relaxed text-white/35 font-mono pt-1">

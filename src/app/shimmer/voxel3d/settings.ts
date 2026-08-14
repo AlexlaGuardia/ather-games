@@ -29,6 +29,15 @@ export interface VoxelSettings {
    * bounds are the tested-sane range, not a suggestion — see the World section of SettingsPanel.
    */
   viewRadius: number
+  /**
+   * The frame meter. OFF by default — it is an instrument, not a look, and it is the only setting
+   * here that is not about how the world is drawn.
+   *
+   * ⚠ IT IS DELIBERATELY OUTSIDE `PRESETS` (see the Omit below). Every other field is a style value,
+   * so switching natural↔cartoon overwrites it — and a style flip that silently turned the meter off
+   * mid-measurement would corrupt the exact A/B this exists to serve.
+   */
+  showFps: boolean
 }
 
 export const VIEW_RADIUS_MIN = 4
@@ -38,8 +47,12 @@ export const VIEW_RADIUS_MAX = 12
  * ★ THE CARTOON PRESET IS A STARTING POINT, NOT A LOOK CALL. Look is Alex's; these are the values
  * that make the levers visible enough to judge. Every one is exposed in the settings panel so the
  * judgement can be made by moving sliders on the real world rather than by reading a description.
+ *
+ * ⚠ A PRESET MAY ONLY CARRY LOOK. Anything omitted here survives a style switch untouched; anything
+ * listed gets overwritten by it. `showFps` is omitted because an instrument that a look-toggle can
+ * switch off is worse than no instrument.
  */
-export const PRESETS: Record<RenderStyle, Omit<VoxelSettings, 'style' | 'tileSize' | 'viewRadius'>> = {
+export const PRESETS: Record<RenderStyle, Omit<VoxelSettings, 'style' | 'tileSize' | 'viewRadius' | 'showFps'>> = {
   natural: { toon: 0, outline: 0, faceShading: 0.35, shadowLift: 0.15 },
   cartoon: { toon: 0.85, outline: 0.6, faceShading: 0.9, shadowLift: 0.5 },
 }
@@ -51,6 +64,7 @@ export const DEFAULT_SETTINGS: VoxelSettings = {
   // blocks rather than ~22, and a tile is 4x the pixels to hand-paint. Look is his call.
   tileSize: 64,
   viewRadius: 6,
+  showFps: false,
 }
 
 const KEY = 'shimmer.voxel.settings.v1'

@@ -6,6 +6,7 @@
 //   WORLD_PITCH=-10                                           — degrees; negative looks UP
 //   WORLD_LOG='\\[canopy\\]'                                     — forward matching console lines to stdout
 //   WORLD_RADIUS=10                                           — load ring, in columns (default: the app's 6)
+//   WORLD_FPS=1                                               — turn the frame meter on for the shot
 //
 // It prints the HUD counter line after the shot. `mesh` is geometry BUILT, `draws` is what survived
 // frustum culling this frame — the two are far apart and only the second is the frame's cost.
@@ -61,7 +62,7 @@ try {
   await page.setViewport({ width: 1280, height: 760 })
 
   // Seed BEFORE any page script: born, with the epoch already current.
-  await page.evaluateOnNewDocument((R: number) => {
+  await page.evaluateOnNewDocument((R: number, FPS: boolean) => {
     localStorage.setItem('ather:epoch', '2')
     // ⚠ 'ember' IS NOT A RUNE ID, and this seeded it for weeks (fixed 2026-08-12). The real ids are
     // in `play3d/birth/runes.data.ts` — manalic/barrier/star/life/enchant/lightning/… — so every
@@ -73,8 +74,13 @@ try {
     localStorage.setItem('ather:shimmer:runes', JSON.stringify(['barrier']))
     // WORLD_RADIUS: measure a bigger load ring than the default 6 without a human in the settings
     // panel. `loadSettings` merges over the defaults, so a lone `viewRadius` is a safe partial.
-    if (R) localStorage.setItem('shimmer.voxel.settings.v1', JSON.stringify({ viewRadius: R }))
-  }, Number(process.env.WORLD_RADIUS ?? 0))
+    // WORLD_FPS=1 turns the frame meter on for the shot. The RATE it reports from this box is
+    // meaningless (SwiftShader), but whether the meter renders and publishes at all is not.
+    const st: Record<string, unknown> = {}
+    if (R) st.viewRadius = R
+    if (FPS) st.showFps = true
+    if (R || FPS) localStorage.setItem('shimmer.voxel.settings.v1', JSON.stringify(st))
+  }, Number(process.env.WORLD_RADIUS ?? 0), process.env.WORLD_FPS === '1')
 
   const errors: string[] = []
   const LOG = process.env.WORLD_LOG ? new RegExp(process.env.WORLD_LOG) : null
@@ -130,6 +136,8 @@ try {
   // of scraping is to get the honest half rather than invent the other one.
   const stats = await page.evaluate(() => document.querySelector('[data-stats]')?.textContent ?? null)
   console.log(stats ? `stats · ${stats}` : 'stats · NONE (no [data-stats] node — old build?)')
+  const perf = await page.evaluate(() => document.querySelector('[data-perf]')?.textContent ?? null)
+  if (perf) console.log(`perf  · ${perf.trim()}   ⚠ SwiftShader — the rate is not a real frame rate`)
   if (errors.length) console.log(`page errors (${errors.length}):\n  ${errors.slice(0, 6).join('\n  ')}`)
 } finally {
   await browser.close()   // never leave a chrome behind on an 8GB box
