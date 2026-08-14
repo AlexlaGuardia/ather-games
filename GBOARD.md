@@ -1200,12 +1200,45 @@ the Arcade frame.
 > - **Decisions:** *(a)* **Everything here is build-side** — no name, effect or rune requirement changes, so none of
 >   it needs a canon ruling. *(b)* **Ranked by canon-moves-unlocked per unit of new engine**, not by feel.
 >   *(c)* **Cooldown re-banding is LAST and is Alex's** — a feel call gets played before it gets tuned.
-> - **Build order:** ① **player-impulse verb** (impulse + blink) → Overcharge/Updraft/Thunder Step + Gate groundwork,
->   Skirmisher 1→5, and it lands inside the already-Apex-modelled movement system = smallest new mechanism.
->   ② **reveal verb** (mark + draw through geometry) → Bolt Snipe/Tremor Sense/Enlighten, Recon 0→3; biggest pure
->   *variety* jump, and it makes the collar-raid enemies legible when they get wired. ③ **ally targeting** →
->   Support 0→3. ④ **charges · tether · pierce · arc** — four small cast properties, cheapest work, best done
->   together once ①-③ settle the shape. ⑤ re-band tactical cooldowns (Alex, after a play session).
+> - **~~Build order: ① impulse ② reveal ③ ally targeting~~ — SUPERSEDED WITHIN THE HOUR, see below.**
+>
+> ### ⚠ THE ORDER WAS WRONG: 25 OF 47 CASTS DO NOT RUN IN THE WORLD ALEX PLAYS (2026-08-14, same session)
+> Caught by asking *"where next"* and checking `PLAY3D-MIGRATION.md` instead of trusting my own build order.
+> **All three Apex verbs I had just ranked would have landed in `play3d` — the surface being retired.**
+> - **`/shimmer` and `/room` BOTH redirect to `voxel3d`** (flipped 08-07). `VoxelWorld` declares what it can land
+>   (`supports`, ~L3697): **SELF archetypes + `projectile` only.** `field-effects.ts` / `conjured-terrain.ts` /
+>   `statuses.ts` all resolve against **play3d's tile grid and its named hunter/guard targets**, neither of which
+>   exists in the voxel world. That declaration is honest — Stonewall says *"not in this world yet"* rather than
+>   silently doing nothing — but it means the cast layer is **half dark where the game actually is.**
+> - **Measured:** of 47 built casts, **22 run in voxel3d, 25 do not** — all **11 fields**, all **7 statuses**, all
+>   **7 terrains**. **Of the 30 I shipped yesterday, 18 do not run there.** So the binding constraint was never
+>   variety of *kind*; it is that half of what we already have does not exist where it is played. Building three
+>   brand-new verbs on top would have added variety to the world nobody opens.
+> - **★ THE FIGHT IS ALREADY THERE, and the session file's framing was out of date.** `voxel3d/hollows.ts`
+>   (canon-ruled 08-07) is a **live real-time enemy**: three forms (warden/stalker/caster), HP 30, drifts at the
+>   keeper at **3.4 < run speed**, hovers over terrain, **disperses** rather than dies. #294's collar-raid is a
+>   *different* thing (moglin raiders stealing spirits, still needs quarries). **We do not need #294 to make casts
+>   matter — the Hollows already answer that**, which is the opposite of what the 08-13 notes imply.
+> - **CORRECTED build order:** ① **port `field-effects` to voxel3d** — 11 casts, and fields are the archetype that
+>   pairs best with a body that drifts at you in a straight line slower than you run; the module is already pure
+>   (no THREE/React) so it is a target adapter + a render pass, not a rewrite. ② **statuses** — 7 casts, and against
+>   a *homing* body every status gains a concrete meaning (blinded loses you · rooted stops the drift · the `caster`
+>   form gives disarm a target). ③ **terrain as REAL BLOCKS** — 7 casts, and it gets **better** in the move:
+>   play3d's version is cells + one predicate so a wall can only block, while the voxel world has genuine placeable
+>   blocks, which makes **Glacial Path's bridges/ramps/slides buildable** — the canon half I wrote off as impossible
+>   yesterday. ⚠ Design tension to hold: **a Hollow glides over terrain**, so walls are for space and for things
+>   that WALK, not for the drifting dead. ④ then the three Apex verbs (impulse · reveal · ally), unchanged in content
+>   but built **once**, in the world that ships. ⑤ charges/tether/pierce/arc, then cooldown re-banding (Alex).
+> - **★ Two things still unmined from Apex.** *(a)* **Abilities that touch each other** — Apex depth is not 30
+>   independent buttons (a scan is beaten by a wall, a grenade eaten by a pylon). We have **8 shell stances and
+>   nothing that pierces one**, 11 fields and nothing that disperses one, 7 walls and nothing that breaks one. Canon
+>   already writes counters in this vocabulary (*Barrier = "a combatant's answer to manalic weapons"*), and Volcano
+>   Spike's barrier-pierce would be the first cast that answers another cast. Cheapest depth on offer.
+>   *(b)* **Tells** — every Apex ability announces itself. Eleven of ours are about to become fields sharing one
+>   archetype; if they share one VFX, players meet one move with eleven names. **Decide it AS the field port lands.**
+> - **Decision:** *(a)* **Nothing new gets built in `play3d` from here.** It is the thing being mined, not extended —
+>   any cast work lands voxel-side or ports first. *(b)* Move each ported system between the rows in
+>   `PLAY3D-MIGRATION.md` **in the same commit**, per that file's own rule.
 
 > ### ✅ THE GREAT REGISTRATION ADOPTED 2026-08-14 (`a942e22`, live :3200) — **24 → 61 moves, 17 → 47 built.**
 > Canon registered 37 School techniques on 08-13 that had sat in `runes.md` Part III with full effect text
