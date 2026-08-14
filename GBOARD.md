@@ -1170,6 +1170,43 @@ the Arcade frame.
 
 ## ✳️ Shimmer play3d — THE BIRTH RUNE → THE MOVE BOOK → THE CAST LAYER (v3 SHIPPED 2026-08-04, jin-cc) · *Last touched 2026-08-14*
 
+> ### 🔍 THE APEX CROSS-REFERENCE 2026-08-14 (analysis, no code) — **we built ONE Apex class 47 times.**
+> Alex: *"take the moves we already have and cross reference them against apex legends… any that could be made
+> better or reworked to provide more variety."* Apex is established prior art here (the 07-22 movement model),
+> and this is the ability-side pass. **Report:** artifact `06fb0750-ca68-4287-9b1c-122ed2e1597c`.
+> - **Measured, not eyeballed:** of 47 built casts — **18 deal damage · 14 deny space · 13 self · 1 mobility ·
+>   0 information · 0 ally-facing.** Apex spreads abilities across **five roles** (Assault / Skirmisher / Recon /
+>   Controller / Support) precisely so no two legends solve a fight the same way. We are **Controller with a
+>   damage hat on**, and the roles we have ~none of are **Skirmisher (1), Recon (0), Support (0)**.
+> - **★ CANON ALREADY WROTE ALL THREE MISSING ROLES. I FLATTENED THEM INTO WHATEVER ARCHETYPE EXISTED.**
+>   Skirmisher: **Overcharge · Updraft · Thunder Step · Gate** (all registered, all unbuilt). Recon: **Tremor
+>   Sense** (*"ambush becomes impossible"*) · **Bolt Snipe** (*"masters mark through walls"*) · **Enlighten's**
+>   *"reveals what is hidden"* half. Support: **Healing Stream** (*"split one stream into many and mend a line of
+>   people"*) · **Monsoon Veil** · **Healing Grove**. This is the same error as the rack regression, one layer up:
+>   **I picked the mechanism on the shelf over the one in the sentence.**
+> - **★ 9 PLAIN BOLTS, 8 OF THEM UNDER A 2.2s COOLDOWN — that is a gun rhythm, not an ability rhythm.** Apex keeps
+>   tacticals long enough that casting is a *decision*, and keeps most abilities OFF damage because the gun already
+>   does damage. **Alex's own 08-03 law says exactly this** (*"a coloured bolt is a worse gun"*) and is quoted in
+>   `cast.ts` — then I added seven more bolts. In **6 of 9** cases canon describes something better: Bolt Snipe =
+>   mark-then-hit · Tidal Arms = a tether (*"grab like hands"*, which I dropped) · Crystal Barrage = banked charges
+>   (*"a floating arsenal orbiting"*) · Pressure Lance = hold-to-compress (*"the tighter the compression the
+>   sharper the cut"*) · Volcano Spike = barrier-pierce + burn · Shard Grenade = an arced throw. **Ice Dart and
+>   Chain Lightning stay** — every roster needs its honest bolt, and Chain Lightning already does what a gun can't.
+> - **Where we are already right (do not touch):** the loadout's **1 passive / 2 tacticals / 1 signature** is
+>   structurally Apex's own three-tier shape, reached from canon's tier vocabulary rather than borrowed. And canon's
+>   **"holding a passive pauses mana recovery"** is the same design as Octane's Stim costing HEALTH instead of time —
+>   a cost you feel continuously rather than a timer you wait out.
+> - **Support is NOT blocked on netcode** — `useMultiplayer` / `RemotePlayer` / party zones all ship today.
+> - **Decisions:** *(a)* **Everything here is build-side** — no name, effect or rune requirement changes, so none of
+>   it needs a canon ruling. *(b)* **Ranked by canon-moves-unlocked per unit of new engine**, not by feel.
+>   *(c)* **Cooldown re-banding is LAST and is Alex's** — a feel call gets played before it gets tuned.
+> - **Build order:** ① **player-impulse verb** (impulse + blink) → Overcharge/Updraft/Thunder Step + Gate groundwork,
+>   Skirmisher 1→5, and it lands inside the already-Apex-modelled movement system = smallest new mechanism.
+>   ② **reveal verb** (mark + draw through geometry) → Bolt Snipe/Tremor Sense/Enlighten, Recon 0→3; biggest pure
+>   *variety* jump, and it makes the collar-raid enemies legible when they get wired. ③ **ally targeting** →
+>   Support 0→3. ④ **charges · tether · pierce · arc** — four small cast properties, cheapest work, best done
+>   together once ①-③ settle the shape. ⑤ re-band tactical cooldowns (Alex, after a play session).
+
 > ### ✅ THE GREAT REGISTRATION ADOPTED 2026-08-14 (`a942e22`, live :3200) — **24 → 61 moves, 17 → 47 built.**
 > Canon registered 37 School techniques on 08-13 that had sat in `runes.md` Part III with full effect text
 > and **only 2 of them in `moves.md`**. This ships all 37. Nothing invented — every name, rune requirement
