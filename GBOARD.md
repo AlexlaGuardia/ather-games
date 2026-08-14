@@ -1168,7 +1168,54 @@ the Arcade frame.
 > **Research sources:** Apex movement tech (slide-hop, tap-strafe, wall-bounce, superglide, mantle input model) —
 > BoostRoom + ProGuides + Alegends movement guides, 07-22.
 
-## ✳️ Shimmer play3d — THE BIRTH RUNE → THE MOVE BOOK → THE CAST LAYER (v3 SHIPPED 2026-08-04, jin-cc) · *Last touched 2026-08-04*
+## ✳️ Shimmer play3d — THE BIRTH RUNE → THE MOVE BOOK → THE CAST LAYER (v3 SHIPPED 2026-08-04, jin-cc) · *Last touched 2026-08-14*
+
+> ### ✅ THE GREAT REGISTRATION ADOPTED 2026-08-14 (`a942e22`, live :3200) — **24 → 61 moves, 17 → 47 built.**
+> Canon registered 37 School techniques on 08-13 that had sat in `runes.md` Part III with full effect text
+> and **only 2 of them in `moves.md`**. This ships all 37. Nothing invented — every name, rune requirement
+> and tier is a transcription, and `npm run canon` was the worklist. **The drift gate goes 1 NOTE → 7 CLEAN**
+> and now agrees in both directions.
+> - **30 of 37 built on archetypes the sim already had**, classified by **the VERB in the canon line, not the
+>   element**: *"a cutting stream"* is a projectile, *"fill a space with blinding white"* is a status,
+>   *"terrain that did not exist a second ago"* is terrain. No new engine was needed, which is the payoff of
+>   the 08-04 three-systems pass.
+> - **The 7 still unbuilt each name their hook, and they CLUSTER — that is the useful part.** Overcharge,
+>   Updraft and Thunder Step all want the same missing thing, **a player impulse** (launch / vertical lift /
+>   blink to the aim point). One slice unblocks three canon moves. The rest: Flame Cloak wants contact
+>   retaliation, Heat Mirage a **self-centred** status, Ember Trail a field laid along the caster's **path**,
+>   Tremor Sense a perception layer.
+> - **★ THE CONTACT-PUNISH SHELLS, and the line drawn on canon's own NOUN.** Canon writes four passives that
+>   hurt whoever touches you and the sim has no retaliation hook. Molten Shell, Storm Cloak and Ice Armor are
+>   each a *shell* first (*"a barrier that punishes contact"*, *"a protective shell"*, *"a crystalline shell"*)
+>   so they ship as shells with the burn-back owed. **Flame Cloak is aura only** — nothing of its canon line
+>   survives without the hook, so it stays unbuilt rather than shipping as a stance that does none of it.
+> - **★ THE REGRESSION THIS PASS CAUSED, AND IT WAS ONLY FOUND BY MEASURING.** The trade pool went **16 → 46**,
+>   so a uniform deal onto a 6-slot rack cut every scroll's share by two thirds: a keeper holding ONE rune went
+>   from finding something readable on **36-78% of racks to 10-37%**. **Star-born gained no new solo scroll and
+>   had its rack diluted 2.9x** — a strictly better registry made the Passage strictly *worse to walk into*,
+>   while every function in it stayed correct. The shop reads as empty and nothing is broken. Fixed with
+>   **weighted stocking** (1-rune ×6, 2-rune ×2, 3-rune ×1, Efraimidis-Spirakis keys so it stays one pure sort
+>   and every scroll stays reachable) **+ rack 6 → 8** — both mine by canon's boundary note (*"rack size,
+>   rotation cadence, which moves appear when = the build's"*). Back to **28-65%**, and a second rune visibly
+>   pays (**77%**). **Pinned in the oracle**, because the next 30-move pass will re-break it by doing nothing wrong.
+> - **★ TWO DIFFERENT QUESTIONS, AND THE HANDOFF'S NUMBER ANSWERED THE EASIER ONE.** The 08-13 wrap predicted
+>   birthable-runes-opening-nothing would go **7 → 1**. Measured: **book pages 6 → 1** (Manalic alone) but
+>   **starting kits only 9 → 7**. A page is what a rune *could* reach; a kit is what a keeper can cast on day
+>   one. Only **Breeze** and **Hydro** were bought out, by **Gale Cutter** and **Pressure Lance** — the two new
+>   techniques written in a single rune. For **Enchant · Lightning · Tempest · Gem · Magma · Mist** every move
+>   on the page needs a 2nd rune or is a signature canon won't sell. **Filed as `[OPEN]` in `CANON_GAPS.md`**
+>   (canon's call: author solo moves, or hand a 2nd rune in the ruled tutorial). `MoveRow`'s **ALSO NEEDS**
+>   line already renders the real reason, so the gap is legible on screen instead of an empty box.
+> - **Killed three comments that lied about counts** — including `MoveBook.tsx`'s own header, which warns about
+>   exactly this trap two paragraphs further up. `cast.test.ts` prints the live built/total pair every run;
+>   that is the number to believe, never a comment.
+> - **Next:** ① **Alex plays the new casts and calls the feel** — 30 moves shipped on first-guess numbers, and
+>   Gale Cutter / Pressure Lance are now the *whole* opening kit for a Breeze- or Hydro-born keeper.
+>   ② the **player-impulse slice** (3 canon moves at once). ③ contact retaliation (finishes all four shells).
+>   ④ a field that carries statuses on tick, as terrain already does at cast — finishes Sandstorm Veil's blind.
+> - **Files:** `play3d/keeper-moves.ts` (+37), `play3d/cast.ts` (+37 build calls), `play3d/scroll-market.ts`
+>   (weighted rack), `play3d/MoveBook.tsx`, `play3d/Shimmer3D.tsx` (stale counts), `keeper-moves.test.ts` (349),
+>   `scroll-market.test.ts` (49), `cast.test.ts` (67) · `/root/athernyx/CANON/CANON_GAPS.md` (the `[OPEN]`).
 
 > ### ✅ THE THREE SYSTEMS SHIPPED 2026-08-04 (`54eed46`+`83142ee`, live :3200) — **9 → 17 of 24 moves.**
 > The 15 unbuilt moves did not want 15 one-off implementations; they wanted **three engines**. Each is
