@@ -1170,6 +1170,39 @@ the Arcade frame.
 
 ## ✳️ Shimmer play3d — THE BIRTH RUNE → THE MOVE BOOK → THE CAST LAYER (v3 SHIPPED 2026-08-04, jin-cc) · *Last touched 2026-08-14*
 
+> ### 🦶 ALEX'S CURVE BALL 2026-08-14 (`2377006`, live :3200) — **THE MELEE FORMS WALK. ONLY THE CASTER HOVERS.**
+> Alex, on reading the field port: *"the only hallows that hover are the ranged attackers.. the others walk .. the
+> concepts im thinking of is goopy bipedal creatures.. i just havent said anything sence they were only placeholder
+> models."* It overturns `hollows.ts`'s own header, which had argued *"a smear has no feet… terrain does not slow
+> it, which is quietly the scariest thing about it."*
+> - **★ THE FORM TABLE ALREADY SAID SO AND THE LOCOMOTION WASN'T READING IT.** `caster` is the only form with
+>   `body: 0` (incorporeal, `standoff: 6.5`, `reach: 7.5` — it never closes); warden and stalker both carry solid
+>   bodies and come all the way in. **The melee/ranged split has been in the data since the day it was written** and
+>   `hollowStep` applied one universal hover over the top of it. Third time this week in the same shape: the
+>   description was right, the mechanism ignored it (cf. the rack regression, the Apex flattening).
+> - **`hover` is its own per-form axis, NOT inferred from `body === 0`.** Incorporeal and airborne coincide on
+>   today's three forms but they are two different claims; inferring would weld them silently.
+> - **Walkers are step-limited** (`HOLLOW_STEP_UP = 1`): a kerb or single stair is stepped, a **two-high face stops
+>   them dead**, and an axis-separated fallback buys **wall-sliding** so a warden mills along a face instead of
+>   freezing nose-first against it. ⚠ **Explicitly not pathfinding** — it cannot solve a U-shape and is not meant
+>   to. *Milling at a wall IS the counterplay a wall should buy.* The bob is now a floater's tell only.
+> - **★ WHAT IT COSTS, because the old behaviour was deliberate:** terrain-does-not-slow-it was the scariest thing
+>   the melee forms had. **What it buys:** a wall answers **7 of every 9** Hollows by spawn weight, while the caster
+>   still outranges any wall — so the menace survives on the form whose whole job is denying the answer.
+> - **★ AND IT FIXES THE STEP ③ TENSION I FLAGGED THIS MORNING.** The note read *"a Hollow glides over terrain, so
+>   walls are for space and things that WALK"* — most of them now walk, so **conjured terrain becomes a real counter
+>   to the melee pressure**, and once step ③ writes actual voxels a Stonewall stops a warden **for free, with no
+>   monster code involved** (`columnHeight` rises, the step-up rule does the rest). Step ③ got more valuable.
+> - **⚠ Caught on the first run: a temporal-dead-zone crash.** `HOLLOW_HOVER` was declared BELOW `HOLLOW_FORMS`, so
+>   the caster reading it was a `ReferenceError` that took the whole module down at load. Moved above its consumer.
+> - **★ The field port from an hour earlier needed this.** `cast-fields.test.ts` pinned only the HOVER body height,
+>   so **a Firewall missing 7 of 9 Hollows would have gone on passing.** It now walks the form table itself — add a
+>   fourth form and it is checked automatically. Two margin asserts failed honestly: a walker stands ON the cast's
+>   ground line, so its slack below IS the underbite by construction, and demanding *"more than 1 below"* of a
+>   walker was demanding it hover. **Fixed the claim, not the number.**
+> - **Oracles:** hollows 44 → **52**, cast-fields 13 → **22**. Look filed `[OPEN]` in `CANON_GAPS.md` — *goopy
+>   bipedal* is ruled, but `/picaso` models against `CANON/design-briefs/` and no Hollow brief exists yet.
+
 > ### ✅ STEP ① SHIPPED 2026-08-14 (`29eec52` + `cdd7ee8`, live :3200) — **FIELDS REACH THE VOXEL WORLD, 22 → 33 of 47.**
 > `field-effects.ts` moved **`play3d/` → `engine/`**, joining the 11 other both-worlds systems on the shared
 > spine. Exactly the slice `cast-dispatch.ts` had written down in advance (*"slice 2 adds 'field' to the voxel
