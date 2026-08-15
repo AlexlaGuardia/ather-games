@@ -1,0 +1,283 @@
+// The Home Plot's ground — a bounded island of green walled in cloud, floating in a starry dark.
+//
+// ★ PURE CORE. No react/three/DOM, no host imports. Same contract as `depth.ts`/`trees.ts`.
+//
+// ── ★ WHY THIS IS A SEPARATE GENERATOR AND NOT A BIOME ───────────────────────────────────────────
+// Canon (RULED 2026-08-13, `CANON_GAPS.md` › *Is the garden one contiguous ground, or POCKETS?*):
+// **"plots are AUTHORED and BOUNDED; the folds are PROCEDURAL and endless."** `spirit-tales-bible.md`
+// has said since 2026-06-02 that plots are *"warm dream-islands of green walled in cloud, floating
+// in a starry dark,"* joined by passages, and that **"you do not cross the void."**
+//
+// The continuous generator in `height.ts`/`depth.ts` is the exact opposite of all of that: endless,
+// procedural, and by construction it has no edge. Every knob it owns — rivers, biome bands, the
+// story road, holds, ore batches, the carver — is a statement about a world that keeps going. A
+// bounded island is not that world with a smaller number in it; **the boundary is the whole design**,
+// and expressing it as a biome would mean teaching a dozen continent systems to stop at a line they
+// have no concept of. So: its own module, its own entry point, and the continent's stages simply
+// never run here.
+//
+// ── ★ WHAT THIS DELIBERATELY DOES NOT GENERATE, AND WHY IT IS NOT AN OMISSION ────────────────────
+// **No ore. No caves. No respawning anything.** `engine/spawn-board.ts` already ruled the line and
+// Alex reversed the first cut to get there: *"a home plot that refills itself is a farm you never
+// have to leave, which quietly defeats a world that re-deals at all… HOME is where you grow things,
+// WILD is where you gather them."* A plot that pays out materials would collapse the wilds loop this
+// island exists to serve. Anything standing on the plot got carried here.
+
+import { value2, fbm2 } from './noise'
+import { AIR } from './section'
+
+/**
+ * The materials a plot is built from, supplied by the caller rather than imported.
+ *
+ * ★ THE PRECEDENT IS `plantWaystones(…, stoneMat, lanternMat)`, and the reason is the same: a pure
+ * generator that hardcodes palette ids owns a piece of the registry it cannot see. Passing them in
+ * also means this module ships and is fully testable BEFORE the cloud-wall material is registered —
+ * which matters here, because that registration touches four files another window is live in.
+ */
+export interface PlotMaterials {
+  /** The tended surface. */
+  topsoil: number
+  /** Under the turf. */
+  subsoil: number
+  /** The island's rock body. */
+  stone: number
+  /**
+   * The keel — pressed cloud, HARD. `world/mother.md`: mana *"cools as it sinks, compresses as it
+   * deepens."* Unbreakable by registry, which is what stops a keeper mining a hole out of the bottom
+   * of their own island into the void.
+   */
+  floor: number
+  /**
+   * The rim — pressed cloud, SOFT. `spirit-tales-bible.md`: the walls ringing every plot are *"the
+   * cloud-ocean itself, held back and pressed soft and glowing."*
+   *
+   * ⚠ SOFT AND HARD ARE TWO MATERIALS, NOT ONE USED TWICE, and canon is explicit about it —
+   * `depth.ts`'s own PACKED_CLOUD note says *"pressed soft at the walls, pressed hard at the floor."*
+   * A caller may pass the same id for both today; the SHAPE below is already correct for two.
+   */
+  wall: number
+}
+
+export interface PlotConfig {
+  /**
+   * The generated island's radius — what Greg folds for a new keeper. Ground exists only inside it.
+   */
+  coreRadius: number
+  /**
+   * ★ HOW FAR THE KEEPER MAY BUILD, AND THIS MODULE IS DELIBERATELY AGNOSTIC ABOUT WHAT RAISES IT.
+   *
+   * Canon ruled that **liberation** decides ground and **resources** decide what stands on it; Alex's
+   * plot design instead buys ground with blocks. That question is live (`CANON_GAPS.md`, 2026-08-15)
+   * and **this generator does not need it answered** — the cap arrives as a number. Whichever way it
+   * rules, nothing in this file changes. Do NOT teach it where the number came from.
+   */
+  capRadius: number
+  /** Altitude of the plot's ground plane — the island sits at a fixed height in its own space. */
+  baseY: number
+  /** Peak-to-trough of the surface roll, in blocks. A tended garden, not wild terrain. */
+  roll: number
+  /** Rock+cloud thickness under the surface at the island's centre. Tapers to nothing at the rim. */
+  keel: number
+  /** How much of the keel's underside is cloud rather than rock. */
+  cloudBand: number
+  /** Thickness of the cloud wall ring, in blocks. */
+  wallWidth: number
+  /** How far the wall stands above the ground plane. */
+  wallHeight: number
+  /** Depth the wall sinks below the ground plane, so it reads as held rather than balanced. */
+  wallSkirt: number
+  /** How much the island's edge wanders, as a fraction of coreRadius. Never grows it — see `edgeAt`. */
+  wobble: number
+  materials: PlotMaterials
+}
+
+/**
+ * A first plot.
+ *
+ * ⚠ EVERY NUMBER HERE IS A FIRST GUESS AND IS MINE (build tuning, per the 08-13 boundary note:
+ * *"Pocket size/shape, passage rendering + loading, how the void looks on screen, expansion pacing,
+ * costs, every number = Jin's"*). They are set to be walked and argued with, not defended.
+ *
+ * `coreRadius` 20 gives a ~40-block starting garden — small enough that a new keeper reads the whole
+ * island at a glance, which is the fantasy ("your corner of the Ather to tend"), and small enough
+ * that expansion is felt immediately. `capRadius` 30 leaves a visible ring of room inside the wall
+ * on day one, so the mechanic explains itself: **the wall is where your fold ends, the ground is
+ * what you have filled in so far, and the gap between them is the invitation.**
+ *
+ * ★ THE FULLY-GROWN PLOT IS SIZED AGAINST THE ONE THAT SHIPPED. The old tilemap home plot was
+ * 150x150 (`world/region-maps/home-plot.json`), so a cap of ~72 lands the endgame island on roughly
+ * the same footprint players already had. Continuity by arithmetic rather than by accident.
+ */
+export const DEFAULT_PLOT: PlotConfig = {
+  coreRadius: 20,
+  capRadius: 30,
+  baseY: 96,
+  roll: 2,
+  keel: 14,
+  cloudBand: 5,
+  wallWidth: 2,
+  wallHeight: 9,
+  wallSkirt: 4,
+  wobble: 0.18,
+  materials: { topsoil: 5, subsoil: 4, stone: 3, floor: 1, wall: 1 },
+}
+
+/** Distance from the plot's centre. The plot's own space, so the centre is the origin. */
+export const distFromCentre = (x: number, z: number): number => Math.hypot(x, z)
+
+/**
+ * The island's edge at the bearing of (x, z), in blocks from centre.
+ *
+ * ★ THE WOBBLE ONLY EVER CUTS IN, NEVER OUT, and that is load-bearing rather than cosmetic. `cap`
+ * is a promise about how far the keeper may build, and an edge that wandered PAST `coreRadius` would
+ * make the generated ground contradict the promise at some bearings — ground outside the buildable
+ * region, which reads as a bug and cannot be filled or removed sensibly. So the noise scales a
+ * radius DOWN from the maximum. The island is organic; the bound is exact.
+ */
+export function edgeAt(x: number, z: number, seed: number, cfg: PlotConfig = DEFAULT_PLOT): number {
+  const d = distFromCentre(x, z)
+  if (d === 0) return cfg.coreRadius
+  // Sample on the unit circle so the noise is a function of BEARING only — otherwise the edge
+  // ripples with distance too and the island's outline stops being a closed curve.
+  const n = fbm2((x / d) * 2.3, (z / d) * 2.3, seed ^ 0x9107, 3)
+  return cfg.coreRadius * (1 - cfg.wobble * n)
+}
+
+/** Is this column inside the generated island? */
+export const insideCore = (x: number, z: number, seed: number, cfg: PlotConfig = DEFAULT_PLOT): boolean =>
+  distFromCentre(x, z) <= edgeAt(x, z, seed, cfg)
+
+/**
+ * May the keeper place a block in this column?
+ *
+ * ★ EXPORTED BEFORE IT IS WIRED, ON PURPOSE. The placement gate is a host concern and lands later,
+ * but the *rule* belongs beside the geometry that has to agree with it. Anything else invents a
+ * second definition of "the plot's extent" in the host, and the two drift the first time the wall
+ * moves. A circle, deliberately, with no wobble: **the fold's boundary is a made thing and reads as
+ * one**, against ground that reads as grown.
+ */
+export const withinCap = (x: number, z: number, cfg: PlotConfig = DEFAULT_PLOT): boolean =>
+  distFromCentre(x, z) <= cfg.capRadius
+
+/** Is this column in the cloud-wall ring that marks the fold's edge? */
+export const inWall = (x: number, z: number, cfg: PlotConfig = DEFAULT_PLOT): boolean => {
+  const d = distFromCentre(x, z)
+  return d > cfg.capRadius && d <= cfg.capRadius + cfg.wallWidth
+}
+
+/**
+ * Surface altitude of the plot's ground at this column, or `null` where there is no ground.
+ *
+ * A gentle two-octave roll around `baseY`. Flat enough to build on and to read as tended; not so
+ * flat it is a table. ⚠ The roll is faded out toward the rim so the edge meets the keel at a
+ * predictable altitude — an island whose lip wanders vertically makes the drop-off read as ragged
+ * damage rather than as an edge.
+ */
+export function plotHeight(
+  x: number, z: number, seed: number, cfg: PlotConfig = DEFAULT_PLOT,
+): number | null {
+  if (!insideCore(x, z, seed, cfg)) return null
+  const e = edgeAt(x, z, seed, cfg)
+  const t = e === 0 ? 0 : Math.min(1, distFromCentre(x, z) / e)
+  const fade = 1 - t * t                       // full roll at centre, flat at the lip
+  const n = fbm2(x / 19, z / 19, seed ^ 0x50a7, 2) - 0.5
+  return Math.round(cfg.baseY + n * cfg.roll * 2 * fade)
+}
+
+/**
+ * How thick the island is under its surface at this column.
+ *
+ * A lens: deepest at the centre, tapering to nothing at the lip, so the underside reads as a keel
+ * rather than as a cylinder that was cut off. `sqrt(1 - t^2)` is the ellipse, which falls away
+ * slowly near the middle and steeply at the edge — the profile a floating island wants.
+ */
+export function keelDepth(
+  x: number, z: number, seed: number, cfg: PlotConfig = DEFAULT_PLOT,
+): number {
+  const e = edgeAt(x, z, seed, cfg)
+  if (e <= 0) return 0
+  const t = Math.min(1, distFromCentre(x, z) / e)
+  // A little noise so the belly is not a perfect machined dome.
+  const bump = (value2(x / 11, z / 11, seed ^ 0x0ee1) - 0.5) * 2
+  return Math.max(1, Math.round(cfg.keel * Math.sqrt(Math.max(0, 1 - t * t)) + bump))
+}
+
+/**
+ * The solid span of a ground column: `bottom` and `top` inclusive, exactly `keelDepth` voxels tall.
+ *
+ * ★ EXPORTED SO NOTHING RE-DERIVES IT. The keel's arithmetic is off-by-one bait, and a test that
+ * recomputes `h - depth` independently is not checking the generator, it is checking that two
+ * copies of the same guess agree. One definition, and the oracle asks it the same question the
+ * mesher will.
+ */
+export function columnSpan(
+  x: number, z: number, seed: number, cfg: PlotConfig = DEFAULT_PLOT,
+): { bottom: number; top: number } | null {
+  const h = plotHeight(x, z, seed, cfg)
+  if (h === null) return null
+  return { bottom: h - keelDepth(x, z, seed, cfg) + 1, top: h }
+}
+
+/**
+ * What is at (x, y, z) in the plot's own space?
+ *
+ * ★ ORDERED PREDICATE LIST, FIRST MATCH WINS — the same shape as `depth.ts`'s rule, for the same
+ * reason: it is O(1) at any y, so a chunk builder can fill any section in any order without walking
+ * a column. The order below IS the design: wall beats air (it stands over the void), ground beats
+ * wall (the ring never eats the garden it rings).
+ *
+ * ★★ AND THE CLOUD BAND IS TESTED BEFORE THE SOIL, WHICH IS NOT THE OBVIOUS ORDER. Written the
+ * intuitive way — turf, subsoil, then whatever is left — the soil layers eat the entire keel on the
+ * thin rim columns, and 31 of them came out with no cloud underneath at all. Those are exactly the
+ * columns a keeper can stand on at the lip, so the island had a ring of ordinary diggable dirt with
+ * the VOID directly beneath it. The floor material's `hardness: Infinity` is the only thing stopping
+ * a keeper mining out of the bottom of their own plot, and it protects nothing if the soil rule
+ * outranks it. **The keel is a floor first and a surface second.**
+ *
+ * The visible consequence is a feature rather than a cost: at the very lip, where the island is
+ * thinner than `cloudBand`, cloud wins the whole column — so the green fades into the cloud it was
+ * pressed out of, which is what *"islands of green walled in cloud"* describes anyway.
+ */
+export function plotMaterialAt(
+  x: number, y: number, z: number, seed: number, cfg: PlotConfig = DEFAULT_PLOT,
+): number {
+  const m = cfg.materials
+  const h = plotHeight(x, z, seed, cfg)
+
+  // 1. The cloud wall — a ring standing on nothing, outside the buildable cap.
+  if (h === null && inWall(x, z, cfg)) {
+    if (y <= cfg.baseY + cfg.wallHeight && y >= cfg.baseY - cfg.wallSkirt) return m.wall
+    return AIR
+  }
+
+  // 2. Outside the island: the void. ★ EMPTY ON PURPOSE — canon calls the void "not unbuilt space,
+  //    not to be dressed with scenery so it looks finished. Cloud-wall, then dark, then stars."
+  //    Anything returned here is a decision to contradict that.
+  if (h === null) return AIR
+
+  // 3. Above the ground, and below the keel: the void either way.
+  if (y > h) return AIR
+  const bottom = h - keelDepth(x, z, seed, cfg) + 1
+  if (y < bottom) return AIR
+
+  // 4. The keel, FIRST — see the note above. This is the floor of the plot and it outranks the turf.
+  if (y < bottom + cfg.cloudBand) return m.floor
+
+  // 5. Then the turf and what is under it, in whatever depth the keel left.
+  if (y === h) return m.topsoil
+  if (y >= h - 2) return m.subsoil
+  return m.stone
+}
+
+/**
+ * The lowest and highest y this generator can ever write, for a caller sizing a column.
+ *
+ * Stated rather than derived at runtime: a plot occupies a thin slab of a 256-tall world, and a
+ * chunk builder that meshes all 256 for it is doing 16x the work for nothing.
+ */
+export function plotYRange(cfg: PlotConfig = DEFAULT_PLOT): { min: number; max: number } {
+  return {
+    min: cfg.baseY - cfg.roll - cfg.keel - 2,
+    max: cfg.baseY + Math.max(cfg.wallHeight, cfg.roll) + 1,
+  }
+}
