@@ -1216,6 +1216,29 @@ the Arcade frame.
 
 ## ✳️ Shimmer play3d — THE BIRTH RUNE → THE MOVE BOOK → THE CAST LAYER (v3 SHIPPED 2026-08-04, jin-cc) · *Last touched 2026-08-14*
 
+> ### ✅ THE CROSSING 2026-08-15 (`6f798e8`, live :3200) — **the door is a SEAM, and the plot is the hub.**
+> Slice 2, and it closes the passages layer end to end: walk into the seam in the Wilds → your garden; stand at your
+> threshold → pick a passage → step out. Plus the canon soft return.
+> - **★ THE DOOR IS A THRESHOLD YOU STEP INTO; THE SHELL IS NEVER PIERCED.** Canon: *"a soft seam in the cloud… no
+>   gates, no locks, no keep-out"* and *"a build that puts a locked gate on a plot has misread the world"* — a
+>   doorway-shaped hole through a wall IS that gate. Nothing behind the shell to walk into either (separate space,
+>   interior never generated), so a hole leads to 500 blocks of nothing if a trigger ever fails. Built on
+>   `inPassageVolume`. ⚠ **Widen `passageWidth`, never the distance band** — the band is what stops the trigger firing
+>   across the whole interior.
+> - **★★ THE PLOT IS THE HUB; the planted threshold shipped 4h earlier is DELETED.** It was an admitted stand-in, and
+>   when the plot landed it became **wrong, not just redundant** — a planted hub is a second home in the Wilds, which
+>   contradicts the ruling. It also **designed out** the feature's worst failure: the old *"pulling the hub must not
+>   strand you"* promotion machinery is gone, because a derived hub cannot be broken. Don't re-add a guard for a state
+>   that cannot occur. `MAX_MARKS` 4 → 3 (one used to be spent on the hub).
+> - **⚠⚠ THE CROSSING LATCH** — you ARRIVE at the threshold and the threshold is a crossing volume, so unlatched the
+>   next frame sends you back. Cleared by **walking off**, never a timer (a cooldown still fires if you stand still).
+> - **★ SOFT RETURN IS CANON** (no damage, no dropped inventory — the plot is the one ground that holds you) and routes
+>   through the **same** travel code: one mover in the build. `hasFallenOut` asks **altitude, not footprint**.
+> - **⚠ THE SEAM OWES A LOOK — ALEX'S CALL.** Canon gives *"a shimmer in the air"*; deliberately left unstyled by both
+>   windows so no placeholder material calcifies on the keeper's own front door.
+> - **⏭️ Next:** the seam's look · walk the round trip (threshold inset, seam width, MAX_MARKS 3, coreRadius 20 /
+>   capRadius 30 are all first guesses) · **Greg SELLS waymarks** is ruled and unbuilt (shop + dialogue + marks).
+
 > ### ✅ THE SECOND SPACE 2026-08-15 (`51e6b7f`, live :3200) — **the Home Plot exists and can be stood in.**
 > Slice 1 of the plot wiring; `/space` crosses (owner-gated). The canon door is slice 2, on purpose.
 > - **★ IT IS A SECOND COORDINATE SPACE, and the two pure cores settle that rather than me:** `BubbleConfig.cx/cz` is
