@@ -29,6 +29,13 @@ the Arcade frame.
 > assertions; closed the audit's P1. Two real defects behind it (a sprite-dir write escape, an arbitrary file
 > read via `save-npc`'s `spriteFile`), not just cosmetics. Detail in `SHIMMER_SESSION.md` + the audit doc.
 >
+> **★ PALETTE LAW (2026-08-15) — a pale base clips, so contrast is bought in the TROUGHS.** Adding a lift to a light
+> base pushes it toward white and flattens the whole face: the cloud-wall at 0xd6dcea rendered as a blank cube, and
+> sandstone's first pass as a flat tan one. **A softer/lighter material needs a LOWER base than a hard one**, and the
+> shadow between two heaps is the only thing that says there are two. Same family as the starwillow bark that ran
+> B-highest and read as poured concrete — **both invisible by reading the code, both obvious in one render.** Render
+> the tile before believing the palette.
+
 > **Shimmer Decisions (don't relitigate):**
 > - **✖ KILLED — Mana'mal care loop / races / menagerie (Alex, 2026-07-05).** Companions stay **simple**:
 >   one flat passive perk each, no feed→happiness→perk-strength tending, no races mini-game, no home-plot
@@ -1196,6 +1203,28 @@ the Arcade frame.
 > BoostRoom + ProGuides + Alegends movement guides, 07-22.
 
 ## ✳️ Shimmer play3d — THE BIRTH RUNE → THE MOVE BOOK → THE CAST LAYER (v3 SHIPPED 2026-08-04, jin-cc) · *Last touched 2026-08-14*
+
+> ### ✅ THE SECOND SPACE 2026-08-15 (`51e6b7f`, live :3200) — **the Home Plot exists and can be stood in.**
+> Slice 1 of the plot wiring; `/space` crosses (owner-gated). The canon door is slice 2, on purpose.
+> - **★ IT IS A SECOND COORDINATE SPACE, and the two pure cores settle that rather than me:** `BubbleConfig.cx/cz` is
+>   *"in Wilds coordinates"* with an interior unreachable by construction, while `plot.ts` measures from ITS origin.
+>   So plot (0,0) and Wilds (0,0) are both real, and every host cache keyed by chunk overlaps.
+> - **⚠⚠ THE SAVE BASELINE WAS THE BUG, caught by the world lane before my wiring reached it.** `generatedVoxel` falls
+>   back to the CONTINENT's depth rule, so asked about a plot column it answers with what the endless world would have
+>   put there — and `recordEdit` diffs against exactly that. **5888 of 7424 cells (79.3%) stored as phantom edits on
+>   first load, before the keeper touches anything.** The ballooning save is the lesser cost; the bad one is the plot's
+>   **shape freezing**, every later geometry change masked by a save asserting the old shape was deliberate. Same
+>   family as the chopped-trees bug, one space over and much larger. Fixed via `plotGeneratedVoxel`.
+> - **⚠ THE WILDS SAVE KEY IS BYTE-IDENTICAL** — plot takes a `${seed}:plot:` prefix. Namespacing both would have been
+>   tidier and orphaned every world anyone has built, silently. Assumes one plot per save; noted at the key.
+> - **⚠⚠ `enterSpace` IS FLUSH-THEN-FLIP** — `dirtySaves` holds chunk keys with no space on them, so flipping first
+>   writes the keeper's last unsaved Wilds swings into the garden's namespace. Crossing tears down eight host caches.
+> - **★ The worker's cache needed the space too** — keyed by chunk, it would have served the garden the Wilds column
+>   the keeper had just left. Cached, correct-looking, wrong world.
+> - **★ DERIVE WHAT THE WORLD OWNS, STORE WHAT THE PLAYER PLACED** — the rule the two lanes settled on. The threshold
+>   is derived (`plotThreshold`); waymark spokes keep coordinates, because a spoke's position is a fact about an EDIT.
+> - **Used the world lane's `generatePlotColumn`, deleted my own `makePlotColumn`.** Two generators for one thing is
+>   how they drift. ⏭ Slice 2: passage through the bubble · threshold binding · soft return through the travel code.
 
 > ### ✅ WAYMARKS SHIPPED 2026-08-15 (`fce4202`, live :3200) — **the keeper's own passages, planted.**
 > Alex's design, built to the ruling that landed the same hour (`CANON_GAPS.md` → **[RULED]**: *"JIN IS UNBLOCKED — the
