@@ -1197,6 +1197,33 @@ the Arcade frame.
 
 ## ✳️ Shimmer play3d — THE BIRTH RUNE → THE MOVE BOOK → THE CAST LAYER (v3 SHIPPED 2026-08-04, jin-cc) · *Last touched 2026-08-14*
 
+> ### ✅ STEP ② SHIPPED 2026-08-15 (`807cab2`, live :3200) — **STATUSES. 40 → 47 of 47. THE CAST LAYER IS WHOLE.**
+> The last dark archetype. Enlighten · Shackle · Fog Bank · Lava Stride · Quake Step · Static Field · Vein Puppet
+> all ran "not in this world yet" until today. `statuses.ts` moved **`play3d/` → `engine/`** (14th both-worlds system)
+> **without one line changing** — its June header promised exactly that (*"targets are opaque string ids, so this
+> module never learns what an enemy is"*), and the promise held.
+> - **⚠ THE `supports` COMMENT WAS WRONG ABOUT WHY IT COULD NOT TRAVEL.** It said statuses key off play3d's named
+>   hunter/guard targets — false about the module, true only about play3d's *use* of it. **Grep the module before
+>   believing a note about the module.** The port cost a Hollow id, a target adapter and two booleans.
+> - **★★ THE HALF THAT MAKES IT REAL IS THE BODY READING THE BAG, NOT THE CAST WRITING IT.** A Hollow that never
+>   asks turns 7 casts into timers that tick down and change nothing — the silent no-op `cast-dispatch` outlaws,
+>   pushed one layer deeper where **no refusal can catch it** because the cast genuinely was accepted. `Impair` is a
+>   **required** parameter for that reason (third time this repo has ruled that shape in two days).
+> - **★ ONE RULE, THREE MEANINGS, because the forms already differ on `reach`.** Blinding collapses reach to contact
+>   — which removes the **caster's whole seven-metre form** and barely touches a warden's 1.25. Rooting stops the
+>   drift; disarming jams the touch. A status doing the same thing to every form would be a fourth healthbar.
+> - **★ Blinded goes the WRONG WAY, not nowhere** (else blind and root feel identical), rotated off each body's own
+>   `phase` so a blinded pack **scatters** instead of wheeling in formation. **Rooted is clamped, not switched off** —
+>   an early return would freeze it mid-air and read as the game hanging.
+> - **★ The cast says what it caught** ("Shackle — 3 held" / "nothing in reach"). A status is invisible by nature, so
+>   casting into empty air and onto three wardens would otherwise print the same line.
+> - **⚠⚠ THE HOLLOWS ORACLE COULD NOT FAIL — its own comment's bug, for the second time.** The report sat mid-file
+>   under *"THE REPORT MUST BE THE LAST THING IN THE FILE"*; the 08-14 and 08-15 blocks were both appended below it,
+>   so ~30 asserts printed a bare ✅ that checks nothing. **A convention that depends on every future editor reading a
+>   comment is not a fix.** The report now rides `process.on('exit')` — no position to be stranded above.
+> - 67 hollows asserts (was 52), 5 mutations red **and exiting 1**. ⏭ Next cast slice: the three Apex verbs
+>   (impulse · reveal · ally), built once, in the world that ships.
+
 > ### ✅ STEP ③ SHIPPED 2026-08-14 (`a054992` + `ba53808`, live :3200) — **TERRAIN IS REAL VOXELS. 33 → 40 of 47.**
 > `conjured-terrain.ts` moved **`play3d/` → `engine/`** (13th both-worlds system). **Only `statuses` is dark now.**
 > **The one that got BETTER in the move rather than merely arriving:** play3d consults cells beside its tilemap so
