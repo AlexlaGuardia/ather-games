@@ -1197,6 +1197,32 @@ the Arcade frame.
 
 ## ✳️ Shimmer play3d — THE BIRTH RUNE → THE MOVE BOOK → THE CAST LAYER (v3 SHIPPED 2026-08-04, jin-cc) · *Last touched 2026-08-14*
 
+> ### ✅ STEP ④a SHIPPED 2026-08-15 (`74b7966`, live :3200) — **IMPULSE: THE SKIRMISHER VERBS. 47 → 50 BUILT.**
+> The first of the three Apex verbs. The 08-14 cross-reference measured **1 mobility cast in 47** and found canon had
+> already written the role: **Overcharge · Updraft · Thunder Step**, all registered, all unbuilt. No new name, effect
+> or rune requirement — the moves existed and the engine did not — so **no canon ruling owed**.
+> - **★ THREE MOTIONS, NOT ONE DASH WITH THREE COOLDOWNS.** Overcharge is HORIZONTAL (*"not an attack, a LAUNCH,
+>   with the body as the projectile"*), Updraft is VERTICAL (*"high ground on demand"* — forward is a nudge, because
+>   crossing a field is the axis Overcharge owns), Thunder Step is a BLINK (*"vanish into vapor"*).
+> - **★★ `launchKeeper` LIVES IN `locomotion.ts`, AND `airSpeed` IS THE WHOLE REASON.** Setting `hvx/hvz` alone passes
+>   any single-frame check and is then **erased** — the airborne branch renormalises horizontal velocity to `airSpeed`
+>   every tick the player holds a key. The bug would present as *"Overcharge works unless you're moving."* Wall jump
+>   and coyote jump already set both together; a host-side impulse would be the third copy of that coupling.
+> - **★ THE BLINK PASSES THROUGH TERRAIN — and the oracle is how that got decided.** The first assert demanded it stop
+>   short of a wall, failed, and **the assert was the thing that was wrong**: canon's vanish has nothing to be blocked
+>   by, and a blink a wall stops is a dash that costs more mana. The back-search is **not** line-of-sight; its only job
+>   is that wherever you arrive, a body fits.
+> - **⚠⚠ A VACUOUS ASSERT WHOSE CODE HAD THE SAME HOLE.** *"Updraft mid-fall still lifts you"* checked `vy > 0`, which a
+>   plain assignment also satisfies. The implementation read `max(up, vy + up)` under a comment claiming it was additive
+>   — but falling makes `vy` negative, so the max picked `up` every time: **an assignment wearing an addition**, whose
+>   only real effect was stacking upward, the one case it should not have. Now `max(up, vy)`; three asserts, both wrong
+>   forms mutation-red.
+> - **⚠ THE FIXTURE TESTED HALF A VECTOR** — every launch fired along +x, so scaling `hvz` by 0.2 came back green. An
+>   axis-aligned fixture skips the case a real player is always in.
+> - **⚠ Gate stays unbuilt on purpose:** a two-point bind you place, leave and return to is a persistent placed entity,
+>   not a blink. 104 locomotion asserts (was 84). ⏭ Next verb: **reveal** (Tremor Sense · Bolt Snipe · Enlighten's
+>   reveal half), then **ally targeting** (Healing Stream · Monsoon Veil · Healing Grove).
+
 > ### ✅ STEP ② SHIPPED 2026-08-15 (`807cab2`, live :3200) — **STATUSES. 40 → 47 of 47. THE CAST LAYER IS WHOLE.**
 > The last dark archetype. Enlighten · Shackle · Fog Bank · Lava Stride · Quake Step · Static Field · Vein Puppet
 > all ran "not in this world yet" until today. `statuses.ts` moved **`play3d/` → `engine/`** (14th both-worlds system)
