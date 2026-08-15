@@ -62,18 +62,30 @@ export interface BubbleConfig {
  * ⚠ EVERY NUMBER IS A FIRST GUESS AND MINE (build tuning, per the 08-13 boundary note). `radius`
  * is Alex's, asked for directly.
  *
- * ⚠⚠ `cx`/`cz` ARE DELIBERATELY 0 AND THAT IS *NOT* A CLAIM THAT THE BUBBLE BELONGS AT THE WORLD
- * ORIGIN. Measured 2026-08-15: a radius-1000 bubble centred on the CURRENT world's origin swallows
- * **Moonwell Glade** (657 blocks out — canon-ruled *"a pocket AND a permanent hub, never
- * visit-once"*, and it holds the ruled gate into the Sea of Folds) plus the first leg of the story
- * road. Gloview Village clears it by 156 blocks. So the centre is a decision that has to be made
- * with a map in hand, and this module takes it as a parameter precisely so that decision lives at
- * the wiring and not in here.
+ * ── ★ WHY THE RADIUS IS 500 AND NOT THE 1000 THAT WAS ASKED FOR (2026-08-15, Alex's call) ───────
+ * Measured first: a radius-1000 bubble centred on this world's origin **swallows Moonwell Glade**
+ * (657 blocks out — canon-ruled *"a pocket AND a permanent hub, never visit-once"*, and it holds the
+ * ruled gate into the Sea of Folds) along with the first leg of the story road. Gloview Village
+ * cleared it by only 156. The bubble would have rendered perfectly over the top of a place it had
+ * deleted, which is the whole reason `bubbleSwallows` exists.
+ *
+ * ★ THE RADIUS WAS THE CHEAP THING TO MOVE, BECAUSE IT IS DECOUPLED FROM THE PLOT ENTIRELY. A
+ * fully-grown plot is ~72; even at 500 the bubble is seven times that. A fold is not 1:1 with what
+ * it contains, so this number buys nothing but presence on the horizon — no plot mechanic reads it,
+ * and no amount of expansion pushes on it.
+ *
+ * ★ AND SHRINKING IT PAID FOR ITSELF: at 500 the wall stands **157 blocks off the glade's
+ * doorstep**, which is inside the far end of the view slider (4-12 columns = 64-192 blocks). So the
+ * keeper's own fold is a landmark on the skyline **from where Gregory is standing when he tells them
+ * about it.** The tutorial geography argues for itself instead of needing a marker.
+ *
+ * ⚠ The centre stays a parameter. If the Wilds ever becomes its own space, 1000 costs nothing there
+ * and this default should be revisited rather than inherited.
  */
 export const DEFAULT_BUBBLE: BubbleConfig = {
   cx: 0,
   cz: 0,
-  radius: 1000,
+  radius: 500,
   thickness: 3,
   topY: 190,
   bottomY: 20,

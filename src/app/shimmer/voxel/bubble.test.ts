@@ -157,17 +157,24 @@ console.log('\nthe siting')
     { id: 'gloview-village', x: -265, z: -1125 },
     { id: 'thistle-hold', x: -630, z: -1780 },
   ]
-  const swallowed = bubbleSwallows(DEFAULT_BUBBLE, STORY_LANDMARKS)
-  check('the guard catches the glade at the world origin',
-    swallowed.some(s => s.id === 'moonwell-glade'),
-    'a radius-1000 bubble at 0,0 buries the glade and nothing about the render would look wrong')
-  check('and does not cry wolf about Gloview', !swallowed.some(s => s.id === 'gloview-village'),
-    'Gloview clears it by 156 blocks — a guard that flags everything gets switched off')
+  // ★ THE DEFAULT IS NOW CLEAN, AND THAT IS THE ASSERT THAT MATTERS. Alex chose to keep the centre
+  // and shrink the radius (1000 -> 500) rather than move the bubble or split the Wilds into its own
+  // space. At 500 the glade sits 157 blocks outside the wall.
+  check('the shipped bubble swallows nothing', bubbleSwallows(DEFAULT_BUBBLE, STORY_LANDMARKS).length === 0,
+    bubbleSwallows(DEFAULT_BUBBLE, STORY_LANDMARKS).map(s => `${s.id}@${Math.round(s.dist)}`).join(', '))
+  check('and it clears the glade by a walkable margin',
+    657 - DEFAULT_BUBBLE.radius > 100 && 657 - DEFAULT_BUBBLE.radius < 400,
+    `${657 - DEFAULT_BUBBLE.radius} blocks — too little and the tutorial hub is crowded, ` +
+    'too much and the keeper cannot see their own fold from where Greg tells them about it')
 
-  // Sited away from the story world, the same bubble is clean. This is the shape the wiring wants.
-  const sited: BubbleConfig = { ...DEFAULT_BUBBLE, cx: 20000, cz: 20000 }
-  check('a bubble sited off the story world swallows nothing',
-    bubbleSwallows(sited, STORY_LANDMARKS).length === 0)
+  // ★ AND THE GUARD IS STILL PROVEN TO BITE, against the config that was measured to be wrong.
+  // Asserting only that the default is clean would pass just as well with a guard that returns [].
+  const asAsked: BubbleConfig = { ...DEFAULT_BUBBLE, radius: 1000 }
+  check('the guard catches the 1000 radius that started this',
+    bubbleSwallows(asAsked, STORY_LANDMARKS).some(s => s.id === 'moonwell-glade'),
+    'at r1000 the glade is buried and nothing about the render would look wrong')
+  check('and does not cry wolf about Gloview', !bubbleSwallows(asAsked, STORY_LANDMARKS).some(s => s.id === 'gloview-village'),
+    'Gloview clears r1000 by 156 blocks — a guard that flags everything gets switched off')
 }
 
 console.log(`\n${pass} passed, ${fail} failed`)
