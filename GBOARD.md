@@ -1197,6 +1197,35 @@ the Arcade frame.
 
 ## ✳️ Shimmer play3d — THE BIRTH RUNE → THE MOVE BOOK → THE CAST LAYER (v3 SHIPPED 2026-08-04, jin-cc) · *Last touched 2026-08-14*
 
+> ### ✅ WAYMARKS SHIPPED 2026-08-15 (`fce4202`, live :3200) — **the keeper's own passages, planted.**
+> Alex's design, built to the ruling that landed the same hour (`CANON_GAPS.md` → **[RULED]**: *"JIN IS UNBLOCKED — the
+> mechanic ships as Alex designed it. One noun changes."*).
+> - **★ THE NOUN IS THE WHOLE POINT.** `game/shimmer-geography.md` grants the build **waymark · passage · fold ·
+>   threshold** and reserves **gate** for crossings out of the WAKING WORLD, and bans *"a bought rune"*. Alex's pitch
+>   used both banned words for a mechanic that is entirely legal. The ruling splits on his own design line: **Rune Hold
+>   ⟷ plot = the ONE home-gate** (Greg gives it — a different feature), **plot → Wilds = passages**, *"as many as the
+>   build wants."*
+> - **★ HUB AND SPOKE, no spoke-to-spoke.** `destination()` is the single place that rule lives. A mesh is a different
+>   claim about the world, and it would walk into the still-**[OPEN]** question (*is the plot a landing you may return
+>   to from ANYWHERE?*). Every end here is a place the keeper walked to and planted a block on, so whichever way that
+>   gap is ruled, none of this is undone.
+> - **★★ PULLING THE HUB MUST NOT STRAND YOU** — the assert the oracle exists for. A hubless network has *no route at
+>   all*: every spoke points at a place that no longer exists, it never throws, and it just quietly stops working.
+>   `pull` promotes the oldest surviving spoke and says so. 43 asserts, 5 mutations red.
+> - **⚠ The threshold is a STAND-IN and is marked as one** — canon fixes the hub as the home plot; when the plot is
+>   wired the threshold binds to it. `designate` exists because otherwise "the first one you plant is home" is a trap.
+> - **⚠ The cap is checked AFTER the block is down, and a refusal UNDOES** (block back to air, item back to the bag).
+>   Re-deriving placement rules above the spend would be a second copy that can disagree with `place`. An unbound
+>   waymark left standing looks identical to a working one.
+> - **⚠ The network lives in `PlayerSave`, not `ColumnSave`** — the opposite of chests/jobs, on purpose. Their rule is
+>   *holds goods ⇒ one transaction with its block*; a waymark holds nothing. And the whole verb is **listing passages
+>   while standing nowhere near them**, which per-column storage cannot do.
+> - **★ Arrival reuses `blinkKeeper`** (steps: 1 — "the destination or nothing"), so there is one safe-arrival rule in
+>   the world rather than two that drift.
+> - **★ Also took `MAT.CLOUD_WALL` (56)** for the world lane's plot/bubble — canon's soft-pressed sibling to the world
+>   floor. ⏭ **Plot host wiring is next, and it is mine** (agreed with the world lane; `VoxelWorld.tsx` at 5k lines
+>   with two windows in it is the 08-13 near-miss).
+
 > ### ✅ STEP ④a SHIPPED 2026-08-15 (`74b7966`, live :3200) — **IMPULSE: THE SKIRMISHER VERBS. 47 → 50 BUILT.**
 > The first of the three Apex verbs. The 08-14 cross-reference measured **1 mobility cast in 47** and found canon had
 > already written the role: **Overcharge · Updraft · Thunder Step**, all registered, all unbuilt. No new name, effect
