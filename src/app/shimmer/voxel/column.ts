@@ -333,14 +333,25 @@ export function generateColumn(
   // expensive half would be teaching five stages about a shell.
   if (col.stage >= Stage.Vegetation && upTo >= Stage.Ready
       && columnTouchesBubble(wx, wz, SECTION, WILDS_BUBBLE)) {
+    // ⚠ THE BUBBLE IS ASKED ONCE PER (x,z), NOT ONCE PER VOXEL. Its answer varies with `y` only at
+    // the shell's top and bottom caps, and `shellRadiusAt` — the expensive half — does not depend on
+    // `y` at all. Asking per cell meant 65,536 fbm evaluations per column and was slow enough to
+    // stall the stream (see `bubbleMaterialAt`'s own header for what that looked like).
     for (let z = 0; z < SECTION; z++) {
       for (let x = 0; x < SECTION; x++) {
         const h = col.surface[z * SECTION + x]
-        for (let y = 0; y < cfg.worldHeight; y++) {
-          const b = bubbleMaterialAt(wx + x, y, wz + z, seed, h, WILDS_BUBBLE)
-          if (b === null) continue
+        // One probe decides this whole vertical: mid-shell, where the caps cannot confuse the
+        // answer. `null` here means the bubble has no opinion about this column at all.
+        const probeY = Math.floor((WILDS_BUBBLE.bottomY + WILDS_BUBBLE.topY) / 2)
+        const mine = bubbleMaterialAt(wx + x, probeY, wz + z, seed, h, WILDS_BUBBLE)
+        if (mine === null) continue
+        // AIR is the fold's interior and spans the FULL height (there is no ground in there at all).
+        // The wall stands only between its caps, so it still has to respect them.
+        const y0 = mine === AIR ? 0 : WILDS_BUBBLE.bottomY
+        const y1 = mine === AIR ? cfg.worldHeight - 1 : Math.min(WILDS_BUBBLE.topY, cfg.worldHeight - 1)
+        for (let y = y0; y <= y1; y++) {
           const s = (y / SECTION) | 0
-          if (col.sections[s].get(x, y - s * SECTION, z) !== b) col.sections[s].set(x, y - s * SECTION, z, b)
+          if (col.sections[s].get(x, y - s * SECTION, z) !== mine) col.sections[s].set(x, y - s * SECTION, z, mine)
         }
       }
     }

@@ -184,10 +184,32 @@ export function inPassage(x: number, z: number, cfg: BubbleConfig = DEFAULT_BUBB
 export function bubbleMaterialAt(
   x: number, y: number, z: number, seed: number, h: number, cfg: BubbleConfig = DEFAULT_BUBBLE,
 ): number | null {
+  // ── ★★ THE CHEAP REJECT COMES FIRST, AND IT IS NOT A MICRO-OPTIMISATION (2026-08-15) ──────────
+  // This function is called ONCE PER VOXEL BY THE WHOLE WORLD'S GENERATOR (`column.ts` ›
+  // `generatedAt`), which is 65,536 calls per column, for every column a player ever walks to. The
+  // first wiring went straight to `insideShell` then `inShell`, and each of those calls
+  // `shellRadiusAt` — a three-octave fbm. So every voxel in the Wilds, ten thousand blocks from the
+  // bubble, paid TWO noise evaluations to be told it was nowhere near a bubble.
+  //
+  // It shipped, and the symptom was not a frame-rate dip: it was the world failing to STREAM. The
+  // columns nearest a keeper standing at the wall are the shell's own, generation fell far enough
+  // behind that the settle gate never saw ground, and the player hung in the air over an
+  // ungenerated world with the HUD reading "generating…" forever. A slow generator does not look
+  // slow — it looks broken.
+  //
+  // A hypot against the widest the shell can possibly reach answers "not mine" for ~every column in
+  // the world with no noise at all. Keep this first.
+  const d = distFromAxis(x, z, cfg)
+  if (d > cfg.radius * (1 + cfg.wobble) + cfg.thickness) return null
+
+  // ★ AND ONE `shellRadiusAt`, NOT TWO. `insideShell` and `inShell` each recompute it; asking both
+  // means the same fbm twice for every cell that got this far. Read it once and branch on it.
+  const r = shellRadiusAt(x, z, seed, cfg)
+
   // The fold's own space. The Wilds does not generate here — not as ground, and not as air with
   // ground under it. Unreachable by construction, so nothing is spent on it.
-  if (insideShell(x, z, seed, cfg)) return AIR
-  if (!inShell(x, z, seed, cfg)) return null
+  if (d < r) return AIR
+  if (d >= r + cfg.thickness) return null
 
   if (y > cfg.topY || y < cfg.bottomY) return null
 
