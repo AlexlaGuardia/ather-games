@@ -48,6 +48,16 @@ export interface FloraRenderer {
   sync(cols: { key: string; x0: number; z0: number }[], seed: number, probe: PlantProbe): void
   /** Drop a column's cached spots (its ground changed — an edit landed). */
   invalidate(colKey: string): void
+  /**
+   * Drop EVERY column's cached spots.
+   *
+   * ★ FOR CROSSING BETWEEN SPACES, AND IT IS NOT THE SAME AS LETTING `sync` PRUNE (2026-08-15).
+   * `sync` drops cache entries whose key is no longer loaded — which is exactly the wrong rule at a
+   * space change, because **Wilds column "0,0" and Home Plot column "0,0" are the same key.** The
+   * stale entry stays "live" and the garden is handed the Wilds' ground cover for that column. Same
+   * two-spaces-one-name hazard `save.ts` namespaces its records against.
+   */
+  invalidateAll(): void
   tick(elapsed: number): void
   dispose(): void
 }
@@ -217,6 +227,7 @@ export function createFloraRenderer(): FloraRenderer {
       }
     },
     invalidate(colKey) { cache.delete(colKey) },
+    invalidateAll() { cache.clear() },
     tick(elapsed) { uTime.value = elapsed },
     dispose() {
       tuftGeo.dispose(); tallGeo.dispose(); stemGeo.dispose(); headGeo.dispose()

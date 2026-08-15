@@ -3407,6 +3407,20 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
     chestsByCol.current.clear()
     jobsByCol.current.clear()
     genRemovedByCol.current.clear()
+    // ── ★★ THE GROUND COVER HAS TO CROSS TOO (2026-08-15, Alex: "I'm floating in the void and all
+    // that's visible is the grass and flowers") ────────────────────────────────────────────────
+    // Every voxel cache above is cleared on a crossing and flora was not one of them, which put the
+    // WILDS' tufts and flowers in the garden's sky: the meshes they stood on were disposed one line
+    // up, so they hung in the void with nothing under them. It is the most alarming-looking bug in
+    // the game and the smallest — it reads as "the plot failed to generate" when the plot is fine.
+    //
+    // ⚠ BOTH LINES ARE LOAD-BEARING, AND `invalidateAll` IS THE SUBTLE ONE. Marking it dirty alone
+    // re-runs `sync`, but `sync` only prunes columns that are no longer loaded — and **plot column
+    // "0,0" wears the same key as Wilds column "0,0"**, so the stale entry looks live and the garden
+    // inherits the Wilds' flora for it. Clearing the cache is what makes the two spaces disagree
+    // properly. Same hazard `save.ts` namespaces its column records against.
+    flora.invalidateAll()
+    floraDirty.current = true
     // The keeper lands at the plot's derived threshold, or back at spawn in the Wilds. ★ DERIVED,
     // never stored: a coordinate saved before a generator change returns a keeper into rock, and
     // `plotThreshold` is computed from the same functions that build the ground so it cannot
