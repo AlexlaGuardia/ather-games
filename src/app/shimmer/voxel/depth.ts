@@ -35,7 +35,7 @@ import { AIR } from './section'
  * becomes accidental canon.
  */
 // ── ★ THE MATERIAL ID MAP — one number space, four files ────────────────────────────────────────
-// MAT 0-13 + 24-30 + 40-47 + 50-53 (here) · ORE 16-22 (ore.ts) · WOOD 32-39 (trees.ts) · STRUCTURE 48-49 (pieces.ts).
+// MAT 0-13 + 24-30 + 40-47 + 50-56 (here) · ORE 16-22 (ore.ts) · WOOD 32-39 (trees.ts) · STRUCTURE 48-49 (pieces.ts).
 // PLANTS take 24-26, in the gap between ore and wood. ⚠ The first cut put them at 14-16 because
 // MAT stops at 13 — and 16 is ORE.RAW_MANA, so a wildflower WAS a mana seam: it inherited ore
 // hardness, dropped shards, and `isPlant` matched ore and logs all through the underground.
@@ -307,6 +307,30 @@ export const MAT = {
   // reason that once turned a wildflower into a mana seam. So 50+ is the OVERFLOW band, not the
   // hand-placed band. Read it that way from here on.
   DECK: 54,
+
+  /**
+   * ── ★ THE WAYMARK (2026-08-15) — a keeper's passage, planted ────────────────────────────────
+   * `voxel/waymark.ts` owns what the network IS; this id is what lets one stand in the world.
+   * Never generated, only ever placed.
+   *
+   * ⚠ VOCABULARY IS CANON HERE, not a naming preference. `game/shimmer-geography.md` grants the
+   * build **waymark · passage · fold · threshold** and reserves **gate** for crossings out of the
+   * WAKING WORLD (that is the Rune Hold gate-rune, a different feature Greg gives). It also bans
+   * "a bought rune". Do not rename this to anything in that reserved set.
+   */
+  WAYMARK: 55,
+  /**
+   * ── ★ THE CLOUD-WALL (2026-08-15) — the plot's boundary, and PACKED_CLOUD's sibling ──────────
+   * Canon draws the distinction explicitly and it is why this is a second material rather than a
+   * reuse: the cloud-ocean is pressed **SOFT and glowing** where it rings a plot
+   * (`spirit-tales-bible.md`: *"walls of soft, pale, faintly glowing cloud, piled like heaped
+   * wool"*) and pressed **HARD** where you stand on it (`MAT.PACKED_CLOUD`, id 1). Same stuff, two
+   * pressures, two reads.
+   *
+   * Registered here for the world lane's `plot.ts` / `bubble.ts`, both of which take their
+   * materials as parameters so neither module has to reach into this file.
+   */
+  CLOUD_WALL: 56,
 } as const
 
 export interface DepthConfig {

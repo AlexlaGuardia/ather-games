@@ -56,10 +56,37 @@ console.log('bootstrap')
   //
   // ⚠ If this ever fails because someone gated a plank, that is the bug. Do not add an id to an
   // exemption list — there is no exemption list on purpose.
+  //
+  // ★ NARROWED AGAIN 2026-08-15 (the waymark), and again by widening the DERIVED set rather than
+  // carving out an id. The sawmill pass replaced "every recipe except `crafting_table`" with "every
+  // recipe that is not a STATION" — right in spirit, too narrow in fact. A waymark is not a station
+  // and it is not a material either; it is FURNITURE, the same category the rule already excused,
+  // and `STATION_ITEMS` just happened to be the only furniture that existed when the line was
+  // written. Left alone, the next lamp-post trips a rule aimed at planks.
+  //
+  // So the set is now derived from what the output PLACES: `noSlab` marks a block that is not a
+  // full cube — a bench, a chest, a pot, a lantern, a waymark — which is exactly the build's
+  // existing word for furniture. Everything else (planks, bark, sap, cut stone, bricks, sandstone,
+  // planking, and every non-block item) is a MATERIAL and must stay hand-makeable anywhere.
+  //
+  // ⚠ Still no exemption list, and still do not add one. If this fails because someone gated a
+  // plank, that is the bug. If it fails because someone gated a new *fixture*, the fixture is
+  // missing `noSlab` — fix the registry row, not this test.
+  const isFurniture = (itemId: string) => {
+    const m = materialForItem(itemId)
+    return m !== undefined && ALL_BLOCKS.some(b => b.material === m && b.noSlab === true)
+  }
+  const gatedMaterials = RECIPES.filter(r => !isFurniture(r.output.itemId) && r.station !== 'hand')
   check('every MATERIAL recipe is makeable by hand',
-    RECIPES.filter(r => !STATION_ITEMS.has(r.output.itemId)).every(r => r.station === 'hand'),
+    gatedMaterials.length === 0,
     'refining is deliberately station-free; mining is the gate, not furniture — '
-    + RECIPES.filter(r => !STATION_ITEMS.has(r.output.itemId) && r.station !== 'hand').map(r => r.id).join(', '))
+    + gatedMaterials.map(r => r.id).join(', '))
+  // ...and the derivation must actually SEE the furniture, or the rule above passes by being blind.
+  check('the furniture set is non-empty and holds the things it should',
+    ['crafting_table', 'sawmill', 'stonecutter', 'waymark', 'chest', 'clay_pot', 'mana_lantern'].every(isFurniture),
+    ['crafting_table', 'sawmill', 'stonecutter', 'waymark', 'chest', 'clay_pot', 'mana_lantern'].filter(i => !isFurniture(i)).join(', '))
+  check('...and does NOT hold a building material',
+    !['cut_stone', 'stone_brick', 'pale_brick', 'sandstone', 'planking'].some(isFurniture))
 
   // A station MAY be gated, but the chain has to terminate or the game cannot bootstrap into it.
   // Walks each station's gate back to 'hand'; a cycle (bench behind mill behind bench) runs out of

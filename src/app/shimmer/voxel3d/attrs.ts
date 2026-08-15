@@ -115,6 +115,27 @@ export const MATERIAL_COLOR: Record<number, number> = {
   // grey, which is the whole point: the family's third member must be told apart from the other two
   // across a plot, and a third warm timber cube could not be.
   [MAT.STONECUTTER]: 0x8f9296,
+  // ── ★ THE WAYMARK (2026-08-15) — mana bound to a place ───────────────────────────────────────
+  // Pale dressed stone, but pulled toward the raw-mana blue (0x7fd4ff) rather than sitting in
+  // stone's grey family — a waymark is *"mana bound to a place"*, and the binding is the point. It
+  // must read as a MARKER from distance, so it takes the coolest, brightest note in the masonry
+  // range and carries a lit glyph the painter draws on top.
+  // ⚠ DARKER THAN IT FIRST WAS (0x9fb6c8), because the GLYPH has to out-read the stone it is cut
+  // into. At 16px a pale post with a pale mark on it renders as a few scattered dots — the icon
+  // sheet showed it plainly. Slate gives the lit glyph somewhere to be bright against.
+  [MAT.WAYMARK]: 0x74879b,
+  // ── ★ THE CLOUD-WALL (2026-08-15) — PACKED_CLOUD's soft sibling ──────────────────────────────
+  // Canon: *"soft, pale, faintly glowing cloud, piled like heaped wool."* So it is the SAME stuff
+  // as the world floor (0xa8b4cc) pressed less hard — lighter, warmer and softer-edged, because at
+  // the walls the cloud-ocean is held back rather than stood on. The two must read as one material
+  // at two pressures, which is why they share a hue and split on value, exactly the way rubble and
+  // cut stone do.
+  // ⚠ DEEPER THAN IT FIRST WAS (0xd6dcea), for the arithmetic reason rather than a taste one: a
+  // base that pale clips against white the moment the billow lift is added, so the whole face
+  // compressed into one flat tone and the wall rendered as a blank cube. A softer material needs a
+  // LOWER base than a hard one, not a higher one, if its highlights are going to have anywhere to
+  // go — the floor (0xa8b4cc) gets away with less because its swing is narrower.
+  [MAT.CLOUD_WALL]: 0xbcc7dd,
   // Darker than the bench: a chest is sturdier stock, and the two stand side by side in a keeper's
   // home — they have to read apart at a glance, not just up close.
   [MAT.CHEST]: 0x8f6535,

@@ -175,6 +175,28 @@ export const BLOCKS: BlockDef[] = [
   // Heavier than the two timber benches (a stone bed on a timber frame), which is all `hardness`
   // is saying. Still `skill: null` and still drops itself: the furniture rule holds across the
   // whole family — rearranging your own plot must be free, whatever the station is made of.
+  // ── ★ THE WAYMARK (2026-08-15) — the keeper's planted passage ───────────────────────────────
+  // Furniture rules, same as every station: breaks by hand into itself, so moving a passage costs a
+  // walk and nothing else. ⚠ Breaking it MUST drop the network record in the same breath — the
+  // `setVoxel` hook does that, exactly as it does for a station's job.
+  //
+  // `emit: 7` — it is mana bound to a place and should be findable at night. Dimmer than a lantern
+  // (14) on purpose: a waymark is a landmark, not a light source, and a keeper should still want
+  // lanterns for a camp. ⚠ It DOES suppress Hollows in its own small radius, which is a real
+  // consequence and a fair one — a bound place is a tended place. It changes nothing at the plot,
+  // where `hollowEligible`'s greyness gate already refuses tended ground.
+  { noSlab: true, material: MAT.WAYMARK, name: 'Waymark', hardness: 0.9, skill: null, minTier: 0, drops: [{ itemId: 'waymark', count: 1 }], placeable: true, emit: 7 },
+
+  // ── ★ THE CLOUD-WALL (2026-08-15) — the plot's boundary ─────────────────────────────────────
+  // `hardness: Infinity` ⇒ `breakSeconds` is Infinity ⇒ `canBreak` is false, the same one-value
+  // guard the conjured wall and the world floor use. A keeper cannot mine their way out of their
+  // own fold, and nothing in the mining path had to learn what a boundary is.
+  //
+  // `placeable: false` + `drops: []` — it is the ocean held back, not a block anybody carries. And
+  // it GLOWS (canon: *"soft, pale, faintly glowing"*), which is the one place emit is unambiguously
+  // right: the walls are the lit rim of a tended pocket seen from inside.
+  { material: MAT.CLOUD_WALL, name: 'Cloud-Wall', hardness: Infinity, skill: null, minTier: 0, drops: [], placeable: false, emit: 5 },
+
   { noSlab: true, material: MAT.STONECUTTER, name: 'Stonecutter', hardness: 1.2, skill: null, minTier: 0, drops: [{ itemId: 'stonecutter', count: 1 }], placeable: true },
   // ── ★ CAST MATTER CANNOT BE QUARRIED (2026-08-14) ────────────────────────────────────────────
   // `hardness: Infinity` ⇒ `breakSeconds` returns Infinity ⇒ `canBreak` is false. That single value

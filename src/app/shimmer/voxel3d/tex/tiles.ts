@@ -60,6 +60,8 @@ export const TILE_MATERIALS: number[] = [
   MAT.RUBBLE, MAT.CUT_STONE,
   // The masonry palette added 2026-08-15 — three crafted surfaces, no new rock.
   MAT.STONE_BRICK, MAT.PALE_BRICK, MAT.SANDSTONE,
+  // The waymark + the plot's cloud-wall, added 2026-08-15 with the passages layer.
+  MAT.WAYMARK, MAT.CLOUD_WALL,
 ]
 
 /** One spare layer past the end: an unmapped material samples magenta rather than layer 0's stone. */
@@ -702,6 +704,84 @@ function paintStonecutter(dst: Layer, size: number, seed: number, face: number) 
 }
 
 /**
+ * The waymark — a planted passage. A dressed post with a LIT GLYPH on its faces.
+ *
+ * ★ THE GLYPH IS THE WHOLE READ, and it is drawn with the alpha channel rather than a brighter
+ * colour. `writeOre`'s trick: alpha is an EMISSIVE MASK here, not opacity, so only the glyph glows
+ * and the stone around it stays stone. A waymark lit uniformly would read as a lamp — which is
+ * exactly what it must not be mistaken for, since the registry gives it a real `emit` and a keeper
+ * needs to tell "my passage" from "my lantern" across a dark field.
+ *
+ * TOP is the glyph square, whole. SIDE carries a vertical bar with the same square at eye height,
+ * so the marker reads from any approach without four painted faces. BOTTOM is plain dark stone.
+ */
+function paintWaymark(dst: Layer, size: number, seed: number, face: number) {
+  const stone = rgbOf(MATERIAL_COLOR[MAT.WAYMARK])
+  const dark = shade(stone, -48)
+  const lit = rgbOf(0xe4f7ff)
+  const c = (size - 1) / 2
+  // ⚠ THIN STROKE, WIDE RING. The first cut used a size/8 stroke on a size/4 ring, which at 16px
+  // made the lit band nearly as wide as the gap it was supposed to outline — the icon sheet showed
+  // it as a bright plate with dark speckles rather than as a mark. A glyph needs MORE background
+  // than foreground to read as a glyph.
+  const arm = Math.max(1, Math.round(size / 16))      // glyph stroke, in texels
+  const rad = Math.max(3, Math.round(size / 3))
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const grit = (h2(x, y, seed + 23) - 0.5) * 12
+      const dx = Math.abs(x - c), dy = Math.abs(y - c)
+      // A ring-and-cross glyph: legible at 16px, and nothing in the world shares the shape.
+      // A square ring with a solid pip at its centre: two shapes, lots of dark between them, and
+      // nothing else in the world wears it. Legible at 16px, which is the only size that matters.
+      const onRing = Math.abs(Math.max(dx, dy) - rad) <= arm * 0.6
+      const onPip = dx <= arm && dy <= arm
+      const glyph = face === BOTTOM ? false : onRing || onPip
+      if (glyph) { put(dst, size, x, y, shade(lit, grit * 0.4), 255); continue }
+      if (face === SIDE && dy > rad + arm) {
+        // the post below/above the glyph plate — banded so it reads as stacked stone
+        const band = Math.floor(y / Math.max(2, Math.round(size / 5))) % 2 === 0
+        put(dst, size, x, y, shade(band ? stone : shade(stone, -14), grit), 0)
+        continue
+      }
+      put(dst, size, x, y, shade(face === BOTTOM ? dark : stone, grit), 0)
+    }
+  }
+}
+
+/**
+ * The cloud-wall — the plot's boundary, and `paintPackedCloud`'s soft sibling.
+ *
+ * ★ SAME BILLOWS, LESS PRESSURE — the pair has to read as one material at two pressures (canon:
+ * pressed soft and glowing at the walls, pressed hard where you stand). So it reuses the floor's
+ * two-octave wrapping lattice at a LARGER cell and a WIDER swing: bigger, looser banks with more
+ * contrast between them, which is what "piled like heaped wool" looks like next to "pressed flat".
+ *
+ * ⚠ `vnoise`, not `h2`, for the same reason the floor gives: billows have shape, so the lattice has
+ * to WRAP or a visible grid draws across what is by definition the largest continuous surface a
+ * player ever looks at — the wall around their whole world.
+ */
+function paintCloudWall(dst: Layer, size: number, seed: number) {
+  const base = rgbOf(MATERIAL_COLOR[MAT.CLOUD_WALL])
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const banks = vnoise(x, y, size, 2, seed)          // 2 cells: bigger heaps than the floor's 3
+      const curdle = vnoise(x, y, size, 5, seed + 61)
+      const n = banks * 0.72 + curdle * 0.28
+      // ★ THE CONTRAST IS BOUGHT IN THE TROUGHS, NOT THE CRESTS. Raising the highlights on a pale
+      // material just clips it toward white and flattens the whole face (that is what happened at
+      // 0xd6dcea). Pushing the gaps DOWN is what makes heaped wool read as heaps — the shadow
+      // between two piles is the only thing that says there are two.
+      const lift = n < 0.5 ? (n - 0.5) * 96 : (n - 0.5) * 44
+      const crest = n > 0.62 ? (n - 0.62) * 60 : 0
+      // Alpha lifts on the crests only: the glow lives in the lit rim of a heap, never flat across
+      // the face, or the wall reads as a light-box instead of as cloud with a sun behind it.
+      const a = n > 0.66 ? Math.round(Math.min(1, (n - 0.66) * 3) * 150) : 0
+      put(dst, size, x, y, shade(base, lift + crest + (h2(x, y, seed + 9) - 0.5) * 4), a)
+    }
+  }
+}
+
+/**
  * The chest. SIDE carries the whole read: a lid seam across the upper third, two dark iron straps,
  * and a latch plate centred on the seam — the silhouette a player identifies from six blocks away
  * without reading a label. TOP is lid boards running crosswise to the body's, banded by the same
@@ -788,6 +868,8 @@ export function paintFor(material: number, face: number, size: number): Layer {
     case MAT.STONE_BRICK:
     case MAT.PALE_BRICK: paintAshlar(dst, size, rgbOf(MATERIAL_COLOR[material]), seed, 8, 4); break
     case MAT.SANDSTONE: paintBanded(dst, size, rgbOf(MATERIAL_COLOR[material]), seed); break
+    case MAT.WAYMARK: paintWaymark(dst, size, seed, face); break
+    case MAT.CLOUD_WALL: paintCloudWall(dst, size, seed); break
     case MAT.MANA_LANTERN: paintLantern(dst, size, seed); break
     // ── the pot, in three states ────────────────────────────────────────────────────────────
     // ⚠ Appended to TILE_MATERIALS above, so it NEEDS these cases: the switch's default is the ore

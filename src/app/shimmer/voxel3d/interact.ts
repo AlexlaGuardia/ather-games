@@ -37,6 +37,15 @@ export type Intent =
    * same click that uses it, which is what this whole function is for.
    */
   | 'work'
+  /**
+   * A planted waymark — step through, or choose where to step (`voxel/waymark.ts`).
+   *
+   * ★ ITS OWN INTENT, not `'work'` or `'open'`, because the three panels answer different questions
+   * and the reticle verb is what tells a player which one they are about to get. A container asks
+   * "what is inside", a station asks "what shall I make", a waymark asks "where am I going" — and
+   * that last one moves the keeper, which is the one outcome nobody should get by mistake.
+   */
+  | 'travel'
   /** Bury the Mana Seed in your hand. */
   | 'plant'
   /** Ask a seeded pot how far along it is. */
@@ -67,6 +76,9 @@ export function rightClickIntent(aimed: number, selItem: string | null, holdsSee
   // same day. A hand-kept `=== CRAFT_TABLE || === SAWMILL` here is how a new station ships as a
   // block you can place, look at, and not open — a dead click, which this file exists to prevent.
   if (stationOf(aimed)) return 'work'
+  // Above the seed/pot branches for the same reason the station is: a keeper carrying a stack of
+  // waymarks while standing at one must OPEN it, not stack a second onto its face.
+  if (aimed === MAT.WAYMARK) return 'travel'
   if (aimed === MAT.POT && selItem === 'mana_seed' && holdsSeed) return 'plant'
   if (aimed === MAT.POT_SEEDED) return 'peek'
   if (aimed === MAT.POT_BLOOM) return 'harvest'

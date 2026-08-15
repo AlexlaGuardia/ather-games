@@ -97,6 +97,23 @@ export interface PlayerSave {
   inv: unknown
   tools: unknown
   skills: unknown
+  /**
+   * ★ THE WAYMARK NETWORK (2026-08-15) — and it belongs HERE rather than in `ColumnSave`, which is
+   * the opposite of where chests and station jobs live.
+   *
+   * The rule those two follow is *a thing that HOLDS GOODS must arrive and leave with its block, in
+   * one transaction* — split them and a refresh landing between two writes destroys what was inside.
+   * A waymark holds nothing. What it stores is a POSITION, which is the pot clock's case, not the
+   * chest's.
+   *
+   * ⚠ AND IT MUST BE READABLE FROM ANYWHERE, which is the half that actually decides it. A column
+   * record is invisible until you walk to the column — and the entire verb here is *listing the
+   * passages you own while standing nowhere near any of them.* Per-column storage would make the
+   * panel show only the waymark you are already standing at.
+   *
+   * Optional so every pre-pass save loads unchanged.
+   */
+  waymarks?: unknown
 }
 
 const playerKey = (seed: number) => `${seed}:player`

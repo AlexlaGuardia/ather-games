@@ -141,6 +141,9 @@ import { spawnField, tickFields, containsVolume, fieldsAtVolume, blocksShotAtVol
 import { conjure, shapeCells, expireConjured, conjuredWriteCells, type Conjured } from '../engine/conjured-terrain'
 import { emptyBag, applyStatuses, hasStatus, pruneStatuses, clearTarget,
          type StatusBag } from '../engine/statuses'
+import { emptyNet, plant as plantMark, pull as pullMark, destination as markDestination,
+         rename as renameMark, thresholdOf, spokesOf, markAt, arrivalOf, MAX_MARKS,
+         type WaymarkNet, type Waymark } from '../voxel/waymark'
 import type { CastSpec, CastArchetype } from '../play3d/cast'
 
 /**
@@ -175,6 +178,18 @@ export interface OpenChest { x: number; y: number; z: number; slots: Slots; touc
  * the job — the panel derives everything else from `workshop.ts` and the wall clock, so there is no
  * second version of the truth to drift.
  */
+/**
+ * A waymark the keeper is standing at. Same shape as `OpenStation`: the host hands up WHERE it is
+ * and bound callbacks, never a copy of the network the panel could then edit behind its back.
+ */
+export interface OpenWaymark {
+  fromId: string
+  net: WaymarkNet
+  /** Step through. Undefined destination = "home", which only resolves from a spoke. */
+  go: (toId?: string) => void
+  rename: (name: string) => void
+}
+
 interface OpenStation {
   x: number; y: number; z: number
   /** Which station this block is — decides the rate and the recipe list. */
@@ -1047,6 +1062,7 @@ export default function VoxelWorld() {
   const [openChest, setOpenChest] = useState<OpenChest | null>(null)
   /** The bench whose job panel is up, or null. Position + a bound writer; see `OpenStation`. */
   const [openStation, setOpenStation] = useState<OpenStation | null>(null)
+  const [openWaymark, setOpenWaymark] = useState<OpenWaymark | null>(null)
   const openChestRef = useRef<OpenChest | null>(null)
   openChestRef.current = openChest
   const [craftOpen, setCraftOpen] = useState(false)
@@ -1520,6 +1536,7 @@ export default function VoxelWorld() {
           onNearTable={setNearTable} cmdOut={worldCmd} pot={potOps}
           onOpenChest={(c) => { openCursorUI(); setOpenChest(c) }}
           onOpenStation={(st) => { openCursorUI(); setOpenStation(st) }}
+          onOpenWaymark={(w) => { openCursorUI(); setOpenWaymark(w) }}
           uiOpen={cursorUIOpenRef}
         />
         {/* selector: deliberately matches NOTHING. Without it drei binds click-to-lock on the whole
@@ -1543,6 +1560,10 @@ export default function VoxelWorld() {
       {craftOpen && (
         <CraftPanel have={have} tools={tools} tick={craftTick} station={station}
                     onCraft={doCraft} onCraftTool={doCraftTool} onClose={() => { setCraftOpen(false); closeCursorUI() }} />
+      )}
+      {openWaymark && (
+        <WaymarkPanel wm={openWaymark} onSay={say}
+                      onClose={() => { setOpenWaymark(null); closeCursorUI() }} />
       )}
       {openStation && (
         <StationPanel st={openStation} have={have} inv={inv}
@@ -2669,7 +2690,7 @@ const SOLID_EXCEPT = new Set<number>([
 // CELL_HALF for it; everything else (light, fence arms, piece placement) wants "yes, solid".
 const isSolid = (m: number) => !SOLID_EXCEPT.has(baseOf(m))
 
-function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weaponDrawn, weaponIdx, onAmmo, onStats, onPerf, onSay, runeTick, onPos, onLook, onInvChange, worker, incoming, inflight, settings, build, pieceIdx, rot, tools, skills, onSkill, onLevel, onTool, tutorial, onQuestEvent, onNearGreg, onNearTable, cmdOut, mistLedger, onNearMist, sparring, pot, onOpenChest, onOpenStation, uiOpen }: {
+function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weaponDrawn, weaponIdx, onAmmo, onStats, onPerf, onSay, runeTick, onPos, onLook, onInvChange, worker, incoming, inflight, settings, build, pieceIdx, rot, tools, skills, onSkill, onLevel, onTool, tutorial, onQuestEvent, onNearGreg, onNearTable, cmdOut, mistLedger, onNearMist, sparring, pot, onOpenChest, onOpenStation, onOpenWaymark, uiOpen }: {
   inv: React.RefObject<Inventory>
   toolTier: React.RefObject<number>
   toolSkill: React.RefObject<BlockSkill>
@@ -2735,6 +2756,7 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
    */
   onOpenChest: (c: OpenChest) => void
   onOpenStation: (s: OpenStation) => void
+  onOpenWaymark: (w: OpenWaymark) => void
   /**
    * Is a cursor surface up? A REF, not a boolean prop, on purpose: opening the bag must not
    * re-render the whole scene, and the only readers are a listener and the frame loop — both of
@@ -2996,6 +3018,11 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
       // an old save as its basic tier instead of as undefined.
       if (p.tools) tools.current = ensureBasicTools(p.tools as EquippedTools)
       if (p.skills) skills.current = p.skills as SkillSet
+      // ⚠ SHAPE-CHECKED, NOT TRUSTED. An older save has no `waymarks` at all and a hand-edited one
+      // could have anything; a malformed net would throw inside the travel panel, which is the
+      // worst possible place for it. Anything that is not recognisably a net loads as an empty one.
+      const wm = p.waymarks as WaymarkNet | undefined
+      if (wm && Array.isArray(wm.marks) && typeof wm.next === 'number') waymarks.current = wm
       const lc = loco.current
       lc.px = p.x; lc.pz = p.z
       lc.py = Math.max(p.y, columnHeight(Math.floor(p.x), Math.floor(p.z), SEED) + 1)
@@ -3017,7 +3044,8 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
       eul.setFromQuaternion(camera.quaternion, 'YXZ')
       const lc = loco.current
       return { v: 1, x: lc.px, y: lc.py, z: lc.pz, rx: eul.x, ry: eul.y,
-               inv: inv.current, tools: tools.current, skills: skills.current }
+               inv: inv.current, tools: tools.current, skills: skills.current,
+               waymarks: waymarks.current }
     }
     const save = () => { void savePlayer(SEED, snap()) }
     const t = setInterval(save, 5000)
@@ -3698,6 +3726,51 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
    * which shows up only under spawn churn and looks like a physics glitch rather than a leak.
    */
   const hollowSeq = useRef(0)
+  /**
+   * ── ★ THE WAYMARK NETWORK (2026-08-15) ───────────────────────────────────────────────────────
+   * Player-global, not per-column — see `PlayerSave.waymarks` for why. `voxel/waymark.ts` owns
+   * every rule; this ref is just where the host keeps the current value between saves.
+   */
+  const waymarks = useRef<WaymarkNet>(emptyNet())
+
+  /**
+   * Step through a passage.
+   *
+   * ★ THE ROUTING RULE IS NOT HERE — `destination` owns it (`voxel/waymark.ts`), so hub-and-spoke
+   * has exactly one definition and this function cannot quietly grow a second one. All the host
+   * does is turn a resolved waymark into a keeper standing on it.
+   *
+   * ⚠ IT LANDS THROUGH `blinkKeeper`, WHICH IS THE SAME SAFE-ARRIVAL PATH THUNDER STEP USES. A
+   * passage that dropped the keeper at raw coordinates would bury them the first time the world
+   * changed under a saved mark — someone builds over their own waymark, or a generator pass moves
+   * the ground. The back-search guarantees a body FITS wherever it puts you, and reusing it means
+   * there is one arrival rule in the world rather than two that drift.
+   */
+  const travelTo = useCallback((fromId: string, toId?: string) => {
+    const r = markDestination(waymarks.current, fromId, toId)
+    if ('refused' in r) {
+      onSay(r.refused === 'is-threshold' ? 'choose where to step'
+        : r.refused === 'no-threshold' ? 'you have no threshold to return to'
+        : r.refused === 'same-mark' ? 'you are already here'
+        : 'that passage is gone')
+      return
+    }
+    const at = arrivalOf(r.to)
+    const lc = loco.current
+    // ⚠ Aim the search AT the destination: `blinkKeeper` walks back toward the caster's CURRENT
+    // position, so a full-world hop whose exact cell is blocked must not settle halfway across the
+    // map. One step means "the destination, or nothing" — and `steps: 1` is what says that.
+    const moved = blinkKeeper(lc, at.x, at.z, () => at.y, solidProbe, 1)
+    if (moved <= 0) {
+      // Refuse rather than approximate. A passage that lands you "somewhere near" a blocked mark is
+      // how a keeper ends up inside their own shed.
+      onSay('something is standing in that passage')
+      return
+    }
+    onSay(r.to.threshold
+      ? 'you step home'
+      : `you step through to ${r.to.name || `${r.to.x}, ${r.to.z}`}`)
+  }, [onSay, solidProbe])
 
   // ── the light field, cached per column ────────────────────────────────────────────────────────
   // `light.ts` produces DATA and this is its one consumer: the spawn scan. Each cached field
@@ -4909,6 +4982,21 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
         // `setVoxel`, which is what drops the record. A station you cannot pick up without emptying
         // it by hand first is a trap, and silently eating a stack of logs for a mis-swung pickaxe
         // is worse than either.
+        // ⚠ A BROKEN WAYMARK MUST LEAVE THE NETWORK IN THE SAME BREATH AS THE WORLD, exactly like a
+        // station's job. A record whose block is gone is a passage that lands the keeper in open
+        // country with nothing there — and worse, if it was the THRESHOLD, every other passage
+        // points at it. `pull` promotes the oldest spoke so the network is never hubless; the
+        // keeper is told, because a hub moving without a word is indistinguishable from a bug.
+        if (hit.material === MAT.WAYMARK) {
+          const gone = markAt(waymarks.current, hit.x, hit.y, hit.z)
+          if (gone) {
+            const { net, promoted } = pullMark(waymarks.current, gone.id)
+            waymarks.current = net
+            onSay(promoted
+              ? `the waymark comes up — your threshold moves to ${promoted.name || 'the oldest passage'}`
+              : 'the waymark comes up')
+          }
+        }
         const brokeStation = stationOf(hit.material)
         if (brokeStation) {
           const k = colOf(hit.x, hit.z)
@@ -4969,6 +5057,25 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
           slots: chestAt(hit.x, hit.y, hit.z),
           touch: () => touchChest(hit.x, hit.z),
         })
+        mouse.current.right = false
+      } else if (intent === 'travel') {
+        // The panel needs the whole network (to list where you may go) plus WHICH mark you are
+        // standing at. Handed up, never re-derived: the block that was aimed at is the only honest
+        // answer to "where am I stepping from", and a panel that recomputed it from the keeper's
+        // position would pick the wrong one when two waymarks sit within a few blocks.
+        const here = markAt(waymarks.current, hit.x, hit.y, hit.z)
+        if (here) {
+          onOpenWaymark({
+            fromId: here.id,
+            net: waymarks.current,
+            go: (toId?: string) => travelTo(here.id, toId),
+            rename: (name: string) => { waymarks.current = renameMark(waymarks.current, here.id, name) },
+          })
+        } else {
+          // The block exists and the record does not — only reachable via a hand-edited save or a
+          // path that wrote the voxel directly. Say so rather than opening an empty panel.
+          onSay('this waymark is not bound to anything')
+        }
         mouse.current.right = false
       } else if (intent === 'work') {
         // Same shape as the chest above and for the same reason: the bench hands its POSITION and a
@@ -5060,6 +5167,30 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
           saplingClock.current[saplingKey(hit.px, hit.py, hit.pz)] = Date.now()
           saveSaplings()
           onSay('planted — it needs room overhead to come up')
+        }
+        // ── ★ A PLANTED WAYMARK JOINS THE NETWORK (2026-08-15) ──────────────────────────────
+        // ⚠ THE CAP IS CHECKED HERE, AFTER THE BLOCK IS DOWN, AND THE BLOCK IS THEN TAKEN BACK UP.
+        // That reads backwards and it is the only correct order: `place` has already validated air,
+        // reach, body clearance and slab halves, and re-deriving all of that above the spend to
+        // pre-check the cap would be a second copy of the placement rules that can disagree with
+        // the first. So the pure core decides, and a refusal UNDOES — the item returns to the bag
+        // and the cell returns to air, which is exactly what the player would expect from a click
+        // that was not allowed. Silently leaving an unbound waymark standing is the failure here:
+        // it looks identical to a working one.
+        if (put === MAT.WAYMARK) {
+          const r = plantMark(waymarks.current, hit.px, hit.py, hit.pz)
+          if ('refused' in r) {
+            setVoxel(hit.px, hit.py, hit.pz, AIR)
+            give(inv.current!, held, 1)
+            onSay(r.refused === 'full'
+              ? `you hold as many passages as you can keep (${MAX_MARKS}) — take one up first`
+              : 'there is already a waymark bound here')
+          } else {
+            waymarks.current = r.net
+            onSay(r.mark.threshold
+              ? 'your threshold is bound — every passage you plant returns here'
+              : `a passage opens back to your threshold (${spokesOf(r.net).length} of ${MAX_MARKS - 1})`)
+          }
         }
         // ★ Tutorial 'light' step — placing IS the objective, not just holding a lantern.
         if (mat === MAT.MANA_LANTERN) onQuestEvent('light')
@@ -5562,6 +5693,113 @@ function CraftPanel({ have, tools, tick, station, onCraft, onCraftTool, onClose 
 const SPECIALITY_NOTE: Record<Exclude<StationDef['accepts'], 'any'>, string> = {
   wood: 'a sawmill takes timber, nothing else — stone and fittings are bench work',
   stone: 'a stonecutter takes masonry, nothing else — it is slower than the bench and wastes less',
+}
+
+/**
+ * The passage panel — where a keeper chooses where to step.
+ *
+ * ★ IT SHOWS THE WHOLE NETWORK EVEN THOUGH ONLY SOME OF IT IS REACHABLE FROM HERE, and that is the
+ * design rather than clutter. Hub-and-spoke means a spoke has exactly one destination, so a panel
+ * that listed only what you can reach would show a single unlabelled button and teach a player
+ * nothing about the shape of what they own. Standing at a spoke you SEE your other passages, greyed,
+ * with the hub lit — which is how the rule explains itself without a tutorial line.
+ *
+ * ⚠ No spoke-to-spoke row is clickable, and `destination` refuses it anyway if one ever became so.
+ * The panel is a display; the pure core is the enforcement. Same split as the station's grey button.
+ */
+function WaymarkPanel({ wm, onSay, onClose }: {
+  wm: OpenWaymark
+  onSay: (t: string) => void
+  onClose: () => void
+}) {
+  const here = wm.net.marks.find((m) => m.id === wm.fromId)
+  const hub = thresholdOf(wm.net)
+  const atHub = !!here?.threshold
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState(here?.name ?? '')
+  const label = (m: Waymark) => m.name || `${m.x}, ${m.z}`
+
+  const rows = wm.net.marks.filter((m) => m.id !== wm.fromId)
+  const step = (toId?: string) => { wm.go(toId); onClose() }
+
+  return (
+    <div className="absolute inset-0 grid place-items-center bg-black/50 pointer-events-auto" onClick={onClose}>
+      <div className="w-[420px] max-h-[80vh] overflow-y-auto bg-[#0e1018]/95 border border-white/12 rounded-lg p-4 font-mono text-[11px]"
+           onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-baseline justify-between mb-3">
+          <span className="text-white/95 font-semibold tracking-[.18em] uppercase">
+            {atHub ? 'Your Threshold' : 'Waymark'}
+          </span>
+          <button onClick={onClose} className="text-white/40 hover:text-white/80">esc</button>
+        </div>
+
+        {/* Where you are, and what it is called. Renaming lives here because this is the only
+            surface that ever shows a waymark's name — a passage called "10, -426" is a passage the
+            player cannot plan a trip around. */}
+        <div className="mb-4 rounded border border-white/10 bg-white/[0.03] px-3 py-2">
+          <div className="text-white/35 text-[9px] uppercase tracking-[.14em] mb-1">standing at</div>
+          {editing ? (
+            <input autoFocus value={draft} maxLength={24}
+                   onChange={(e) => setDraft(e.target.value)}
+                   onKeyDown={(e) => {
+                     if (e.key === 'Enter') { wm.rename(draft.trim()); setEditing(false) }
+                     if (e.key === 'Escape') { setDraft(here?.name ?? ''); setEditing(false) }
+                     e.stopPropagation()
+                   }}
+                   className="w-full bg-black/40 border border-amber-200/30 rounded px-1.5 py-0.5 text-amber-100/90 outline-none" />
+          ) : (
+            <button onClick={() => setEditing(true)}
+                    className="text-amber-100/90 hover:text-amber-100 text-left">
+              {here ? label(here) : 'unbound'}
+              <span className="ml-2 text-white/25">rename</span>
+            </button>
+          )}
+        </div>
+
+        <div className="text-white/40 tracking-[.14em] uppercase text-[9px] mb-1.5">
+          {atHub ? 'Step out to' : 'Step home'}
+        </div>
+
+        {rows.length === 0 && (
+          <div className="text-white/35">
+            {atHub
+              ? 'no passages yet — plant a waymark out in the Wilds and it will lead back here'
+              : 'your threshold is gone'}
+          </div>
+        )}
+
+        {rows.map((m) => {
+          // From a spoke, the ONLY live row is the hub. Everything else is shown greyed so the
+          // shape of the network is legible from anywhere, and so a player learns the rule by
+          // seeing it rather than by being refused.
+          const live = atHub || m.threshold
+          return (
+            <button key={m.id} disabled={!live}
+                    onClick={() => step(atHub ? m.id : undefined)}
+                    className={`w-full text-left mb-1 px-2 py-1.5 rounded border transition-colors ${
+                      live ? 'border-white/15 hover:border-amber-200/50 hover:bg-white/5 text-white/90'
+                           : 'border-white/5 text-white/25 cursor-not-allowed'}`}>
+              <div className="flex justify-between gap-3">
+                <span>{label(m)}</span>
+                <span className={m.threshold ? 'text-amber-200/80' : 'text-white/35'}>
+                  {m.threshold ? 'threshold' : 'passage'}
+                </span>
+              </div>
+              {!live && (
+                <div className="mt-0.5 text-[10px] text-white/25">
+                  step home first — passages run through your threshold
+                </div>
+              )}
+            </button>
+          )
+        })}
+
+        <div className="mt-3 text-[10px] text-white/25">
+          {spokesOf(wm.net).length} of {MAX_MARKS - 1} passages · break a waymark to take it up
+        </div>
+      </div>
+    </div>
+  )
 }
 
 function StationPanel({ st, have, inv, onChange, onSay, onClose }: {

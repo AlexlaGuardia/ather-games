@@ -283,6 +283,23 @@ export const RECIPES: RecipeDef[] = [
     input: [{ itemId: 'cut_stone', count: 6 }, { itemId: 'planking', count: 4 }],
     output: { itemId: 'stonecutter', count: 1 } },
 
+  // ── ★ THE WAYMARK — a passage you plant (2026-08-15) ────────────────────────────────────────
+  // Bench work, like the two specialist stations: by the time a keeper wants to bind a place they
+  // demonstrably own a table, and the crossing they are opening is worth more than four planks.
+  //
+  // ★ COSTS A RAW MANA SHARD, AND THAT IS THE FICTION DOING THE WORK. Canon: a waymark is *"mana
+  // bound to a place"* — the shard IS the mana, exactly as it is in the lantern, so the recipe says
+  // what the thing is rather than charging an arbitrary toll. Cut stone for something that stands
+  // out in the weather and stays put.
+  //
+  // ⚠ NOT gated behind developing Enchant, and that is my call to make (canon hands it over by
+  // name: *"whether a keeper may craft one before developing Enchant = Jin's build"*). Gating the
+  // only shipped half of the ruled arc behind a rune the build cannot yet develop would ship a
+  // feature no keeper can reach.
+  { id: 'waymark', name: 'Waymark', station: 'crafting_table', mana: 0,
+    input: [{ itemId: 'raw_mana_shard', count: 1 }, { itemId: 'cut_stone', count: 4 }],
+    output: { itemId: 'waymark', count: 1 } },
+
   // ── LIGHT ───────────────────────────────────────────────────────────────────────────────────
   // One shard, four lanterns: night safety is meant to be a first-session purchase, not a grind —
   // the Hollows' pressure is "light your ground", and a mechanic you cannot afford is a mechanic
