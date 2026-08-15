@@ -109,8 +109,12 @@ export const MATERIAL_COLOR: Record<number, number> = {
   [MAT.CHEST]: 0x8f6535,
   // Packed earth, drier than subsoil, tanner than sand — the story road.
   [MAT.PATH]: 0xa8916b,
-  // Milled goldwood strips — the bridge deck and the builder's floor.
+  // Milled goldwood strips — the builder's floor. ⚠ No longer the bridge deck; see MAT.DECK.
   [MAT.PLANKS]: 0xa8834d,
+  // The road's bridge timber: the same goldwood weathered paler and greyer by whatever years the
+  // story road has stood. It must NOT read as fresh planking — the colour is the only warning a
+  // player gets that this one pays nothing, so it is a visible step toward PATH's tan, not a tint.
+  [MAT.DECK]: 0x8d7f63,
   // The hot springs' mineral shell: pale calcite white with a breath of the springs' teal — bright
   // against stone and topsoil so a terrace pool reads from across the valley, the way real spring
   // terraces do.

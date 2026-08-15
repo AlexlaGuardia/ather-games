@@ -123,9 +123,13 @@ export const MAT = {
    */
   PATH: 11,
   /**
-   * Milled goldwood as a BLOCK. Generated in the road's bridges, and placeable by players — the
-   * `goldwood_plank` item finally has a block form, so a crafter's planks can floor a house as
-   * well as pay for pieces. One item per block, both directions.
+   * PLANKING — the crafted wooden wall (2 planks nailed together), the wood half of the building
+   * grammar. ⚠ NEVER GENERATED as of 2026-08-15: the bridges that used to emit this id now emit
+   * `DECK` (54), because handing the crafted material out in the world is the same hole as making
+   * it diggable. Placed only, and it drops `planking` rather than the planks it was made from.
+   *
+   * ⚠ The id keeps the name PLANKS while the block is called "Planking" — it was renamed and
+   * re-dropped in place on 2026-08-13 rather than replaced, so that two ids never meant one thing.
    */
   PLANKS: 12,
   /**
@@ -249,6 +253,30 @@ export const MAT = {
   STONE_BRICK: 51,
   PALE_BRICK: 52,
   SANDSTONE: 53,
+
+  // ── ★ BRIDGE DECK (2026-08-15) — the road's own timber, and NOT the timber you build with ────
+  // The story road's bridges generated `MAT.PLANKS`, which on 2026-08-13 stopped being "a plank
+  // block" and became PLANKING: the crafted wooden WALL, the third rung of the building grammar.
+  // Nobody moved the bridges, so the world went on handing out the crafted material for free.
+  // Measured on the default seed, the spine alone: 1902 planking (1336 deck + 566 rail) = 951
+  // logs = ~127 goldwoods, breakable BY HAND with no tool. Alex's ruling is that you build with
+  // what you MADE, not what you dug; a bridge you can strip for two hundred trees' worth of wall
+  // is that ruling with a hole in it.
+  //
+  // ★ THE PRECEDENT IS `MAT.PATH`, ONE BAND DOWN, AND IT ALREADY SETTLED THIS: the road drops
+  // subsoil "because the road is a CONDITION of the ground, not a block you carry home and lay
+  // somewhere else." A bridge is the road where it crosses water. Same rule, same reason — so
+  // this is not a second id meaning one thing (the objection that kept the bridges on PLANKS in
+  // the first place). PLANKING is what you MADE; DECK is worn infrastructure that happens to be
+  // timber, exactly as PATH is worn ground that happens to be soil.
+  //
+  // ⚠ 54 BREAKS THIS BAND'S STATED RULE AND THE RULE IS THE THING THAT WAS WRONG. The 51-53 note
+  // says everything up here is "placed rather than generated" — true of 50-53, and never a
+  // contract (nothing range-tests it). This is GENERATED, and it still belongs at 54: the
+  // generated band 0-13 is full, and 14-15/23/31 are all rejected for the documented ORE-adjacency
+  // reason that once turned a wildflower into a mana seam. So 50+ is the OVERFLOW band, not the
+  // hand-placed band. Read it that way from here on.
+  DECK: 54,
 } as const
 
 export interface DepthConfig {
@@ -342,11 +370,14 @@ export function materialAt(
       if (carve >= 1) {
         const table = Math.floor(waterSurfaceAt(x, z, seed, hcfg))
         if (h <= table) {
-          if (y === table + 1) return MAT.PLANKS
+          // ⚠ MAT.DECK, never MAT.PLANKS (2026-08-15). These two lines used to emit the crafted
+          // building material and made the whole wood economy free to anyone who walked the road
+          // — see the DECK note in the MAT table for the measurement and the PATH precedent.
+          if (y === table + 1) return MAT.DECK
           if (y <= table && ((x % 4) + 4) % 4 === 0 && ((z % 4) + 4) % 4 === 0) return MAT.STONE
           if (y === table + 2 &&
               (!roadAt(x + 1, z, seed) || !roadAt(x - 1, z, seed) ||
-               !roadAt(x, z + 1, seed) || !roadAt(x, z - 1, seed))) return MAT.PLANKS
+               !roadAt(x, z + 1, seed) || !roadAt(x, z - 1, seed))) return MAT.DECK
         }
       }
     }

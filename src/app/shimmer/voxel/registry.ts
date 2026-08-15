@@ -200,6 +200,28 @@ export const BLOCKS: BlockDef[] = [
   // `planking` (salvage the panel), never the planks it was made from.
   { material: MAT.PLANKS, name: 'Planking', hardness: 0.7, skill: null, minTier: 0, drops: [{ itemId: 'planking', count: 1 }], fastSkill: 'forestry', placeable: true },
 
+  // ── ★ BRIDGE DECK — the road's timber, and it pays NOTHING (2026-08-15) ─────────────────────
+  // Split off `MAT.PLANKS` because the bridges were generating the crafted wall: 1902 free
+  // planking on the spine of the default seed, ~127 goldwoods' worth, by hand. See the DECK note
+  // in `depth.ts` for the measurement and for why `MAT.PATH` is the precedent rather than an
+  // exception to it.
+  //
+  // ★ `drops: []` IS THE RULING, and it is a deliberate choice over the two alternatives:
+  //   · A worthless drop (PATH's subsoil) has no wood analogue — every wood item in the tree is
+  //     already a craft input, `goldwood_bark` included (the sawmill eats 4 of it).
+  //   · `hardness: Infinity` would close the hole harder, and it is what `MAT.CONJURED` does —
+  //     but a conjured wall LOOKS temporary and a bridge looks solid. An identical-looking plank
+  //     that breaks when you placed it and refuses when the world did reads as a bug, and this
+  //     file's own `breakSeconds` note says a block that was never going to break is the worst
+  //     version of the mechanic. So the deck breaks. It just does not pay.
+  // Net read: prying up the crossing is pure vandalism — you wreck the road that holds the grey
+  // off at night and you carry away nothing. That is the honest shape of "you build with what you
+  // made", not a locked block.
+  //
+  // `placeable: false` needs no other code: `BY_ITEM` only reverses placeable blocks with a drop,
+  // and this row has neither, so no item can ever resolve back to a deck voxel.
+  { material: MAT.DECK, name: 'Bridge Deck', hardness: 0.7, skill: null, minTier: 0, drops: [], fastSkill: 'forestry', placeable: false },
+
   // The hot springs' mineral shell — stone-family, so a spike quarries it, and it drops ITSELF:
   // pale terrace stone is exactly the block a builder would want to carry home. ⚠ TBD-CANON name.
   // ── ground cover: instant to break, always drops, and replantable (2026-08-11) ──────────────

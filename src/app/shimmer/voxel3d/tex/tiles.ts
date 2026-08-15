@@ -45,8 +45,10 @@ export const TILE_MATERIALS: number[] = [
   MAT.STONECUTTER,
   // The story road added 2026-08-08 with the quest-spine worldgen.
   MAT.PATH,
-  // Plank block added 2026-08-08 with the road's bridges.
+  // Plank block added 2026-08-08 with the road's bridges; it stopped generating there 2026-08-15.
   MAT.PLANKS,
+  // The bridge deck split off PLANKS 2026-08-15 — same strips, weathered, and it pays nothing.
+  MAT.DECK,
   // Spring crust added 2026-08-08 with the hot-spring terraces.
   MAT.SPRING_CRUST,
   MAT.POT, MAT.POT_SEEDED, MAT.POT_BLOOM,
@@ -834,6 +836,25 @@ export function paintFor(material: number, face: number, size: number): Layer {
       for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {
         const seam = (face === SIDE ? x : y) % strip === 0
         put(dst, size, x, y, seam ? shade(milled, -48) : shade(milled, (h2(x, y, seed) - 0.5) * 22), 0)
+      }
+      break
+    }
+    case MAT.DECK: {
+      // The same milled strips, weathered: wider boards, a deeper gap between them, and grain
+      // noise at nearly twice the plank's spread so the surface reads worn rather than machined.
+      // ★ The SILHOUETTE stays a plank floor on purpose — this is still a bridge, and a player
+      // should recognise the crossing instantly. What has to differ is only the thing that says
+      // "this is the road's, not yours", so the tell is tone and wear, never a different shape.
+      const worn = rgbOf(MATERIAL_COLOR[MAT.DECK])
+      const strip = Math.max(3, Math.round(size / 3))
+      for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {
+        const along = face === SIDE ? x : y
+        const seam = along % strip === 0
+        // A second, sparser darkening picks out split boards — weather, not a seam grid.
+        const split = h2(x, Math.floor(y / strip), seed ^ 0x5ec) > 0.86
+        put(dst, size, x, y,
+          seam ? shade(worn, -56)
+            : shade(worn, (h2(x, y, seed) - 0.5) * 40 - (split ? 18 : 0)), 0)
       }
       break
     }

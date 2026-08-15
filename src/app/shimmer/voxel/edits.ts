@@ -71,7 +71,12 @@ import { Column, SECTION } from './column'
 // changed too (the root flare) but that one is RENDER-ONLY and correctly needs no bump — which is
 // exactly the distinction that makes this easy to forget: two tree changes in one session, one of
 // them version-affecting and one not.
-export const GENERATOR_VERSION = 16
+// 16 → 17 (2026-08-15): the road's bridges stopped generating `MAT.PLANKS` (the crafted wall) and
+// now generate `MAT.DECK`. Terrain did not move and no bridge changed shape — but every deck and
+// rail voxel on the spine is a different material than the save was written against, and a player
+// who mined one has an edit sitting in a hole that used to be worth something. Materially the same
+// class of change as the v15→16 canopy reshape: the world did not move, what it is MADE of did.
+export const GENERATOR_VERSION = 17
 
 /**
  * One column's edits: packed local index → material.

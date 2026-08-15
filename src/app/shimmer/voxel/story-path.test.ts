@@ -73,8 +73,11 @@ check('waystones were placed', WAYSTONE_CELLS.size > 40)
       const h = columnHeight(x, z, SEED)
       const table = Math.floor(waterSurfaceAt(x, z, SEED))
       if (h > table) continue
+      // ⚠ MAT.DECK, not MAT.PLANKS (2026-08-15). The crossings are unchanged in shape and
+      // position; only what they are MADE of moved, so that the road stops handing out the
+      // crafted wall. See `bridge-deck.test.ts` for the measurement and the sweep.
       const deck = materialAt(x, table + 1, z, SEED, h)
-      if (deck === MAT.PLANKS) deckCells++
+      if (deck === MAT.DECK) deckCells++
       if (deckCells === 1 && checkedEnds === 0) {
         checkedEnds = 1
         check('deck sits in otherwise-open air', materialAt(x, table + 3, z, SEED, h) === MAT.AIR)
