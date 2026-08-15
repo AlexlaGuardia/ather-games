@@ -1,15 +1,17 @@
 // Waymark oracle. Run: npx tsx src/app/shimmer/voxel/waymark.test.ts
 //
-// ★ THE ASSERT THIS FILE EXISTS FOR IS "PULLING THE HUB DOES NOT STRAND THE KEEPER".
+// ★ THE ASSERT THIS FILE EXISTS FOR IS "EVERY PASSAGE ALWAYS LEADS SOMEWHERE".
 //
-// Everything else here is ordinary bookkeeping. The one that earns its place is the promotion pair:
-// a network whose threshold is removed has NO route at all — every remaining spoke points at a place
-// that no longer exists, and the keeper is left holding three dead passages with no way to rebuild
-// the hub except by walking home across the world. It never throws and it never looks broken; it
-// just quietly stops working, which is the failure mode this whole file is shaped around avoiding.
+// ⚠ THIS FILE'S OLD HEADLINE WAS "pulling the hub does not strand the keeper", and it is GONE ON
+// PURPOSE (2026-08-15, slice 2). The hub used to be a planted waymark, so breaking it left every
+// other passage pointing at nothing — a network that never throws, never looks broken, and quietly
+// stops working. The hub is the PLOT now: generated, derived, impossible to break. The failure is
+// designed out rather than handled, so the promotion machinery that handled it is deleted rather
+// than left standing over a state that cannot occur. What remains asserted is the property that
+// mattered underneath it: **a keeper holding a waymark can always get home.**
 
 import {
-  emptyNet, plant, pull, rename, designate, destination, thresholdOf, spokesOf,
+  emptyNet, plant, pull, rename, destination, spokesOf,
   markAt, arrivalOf, MAX_MARKS, type WaymarkNet,
 } from './waymark'
 
@@ -45,19 +47,10 @@ const netOf = (n: number): WaymarkNet => {
 // ── planting ──────────────────────────────────────────────────────────────────
 {
   const empty = emptyNet()
-  ok(thresholdOf(empty) === null, 'an empty network has no hub')
-  ok(spokesOf(empty).length === 0, '...and no spokes')
-
-  const one = netOf(1)
-  ok(thresholdOf(one)?.name === 'm0', '★ the FIRST one planted is the threshold')
-  ok(spokesOf(one).length === 0, 'and it is not also a spoke')
+  ok(spokesOf(empty).length === 0, 'an empty network holds no passages')
 
   const three = netOf(3)
-  ok(thresholdOf(three)?.name === 'm0', 'later plants do not steal the hub')
-  ok(spokesOf(three).length === 2, 'the rest are spokes')
-  ok(three.marks.filter((m) => m.threshold).length === 1, '★ there is EXACTLY one hub, always')
-
-  // ⚠ Ids come off the saved counter, never off the length — see WaymarkNet.next.
+  ok(spokesOf(three).length === 3, 'every planted waymark is a passage — none is spent on a hub')
   ok(three.marks.map((m) => m.id).join(',') === 'w1,w2,w3', 'ids are minted in order')
   ok(new Set(three.marks.map((m) => m.id)).size === 3, 'ids are unique')
 }
@@ -68,6 +61,9 @@ const netOf = (n: number): WaymarkNet => {
   const r = plant(full, 999, 64, 999)
   ok('refused' in r && r.refused === 'full', 'the cap refuses')
   ok(full.marks.length === MAX_MARKS, '★ ...and does NOT silently drop the oldest passage')
+  // ⚠ The cap is 3 and not 4: one used to be spent on the hub, and the plot costs no waymark.
+  // Holding it at 4 would have handed the keeper a free extra passage as a plumbing side effect.
+  ok(MAX_MARKS === 3, 'three passages — the hub is the plot and costs none of them')
 
   const dup = plant(netOf(2), 0, 64, 0)
   ok('refused' in dup && dup.refused === 'occupied', 'two waymarks cannot share a cell')
@@ -76,78 +72,53 @@ const netOf = (n: number): WaymarkNet => {
   ok(markAt(netOf(3), 11, 64, 0) === null, '...and misses cleanly')
 }
 
-// ── ★★ PULLING THE HUB — the assert this file exists for ──────────────────────
+// ── pulling ───────────────────────────────────────────────────────────────────
 {
   const net = netOf(3)
-  const hub = thresholdOf(net)!
-  const { net: after, removed, promoted } = pull(net, hub.id)
-
-  ok(removed?.id === hub.id, 'the hub comes out')
-  ok(after.marks.length === 2, 'and the spokes survive')
-  ok(promoted?.name === 'm1', '★★ the OLDEST surviving spoke is promoted — the network is never hubless')
-  ok(thresholdOf(after)?.name === 'm1', '...and it really is the hub now')
-  ok(after.marks.filter((m) => m.threshold).length === 1, '...still exactly one')
-
-  // Every spoke must still resolve. This is the stranding case stated as the thing a player feels.
+  const { net: after, removed } = pull(net, 'w2')
+  ok(removed?.id === 'w2' && after.marks.length === 2, 'a passage comes up')
+  // ★★ THE PROPERTY THE OLD PROMOTION ASSERT WAS REALLY DEFENDING, now true by construction: there
+  // is no removal that can leave a surviving passage pointing at nothing, because the far end is
+  // not in this network at all.
   let allResolve = true
-  for (const s of spokesOf(after)) if (!('to' in destination(after, s.id))) allResolve = false
-  ok(allResolve, '★★ every surviving spoke still leads somewhere — nobody is stranded')
-
-  // Pulling a spoke leaves the hub alone.
-  const spoke = spokesOf(net)[0]
-  const p2 = pull(net, spoke.id)
-  ok(p2.promoted === null, 'pulling a spoke promotes nothing')
-  ok(thresholdOf(p2.net)?.id === hub.id, '...and the hub is untouched')
-
-  // The last one out leaves an empty, still-valid network.
-  const lone = pull(netOf(1), thresholdOf(netOf(1))!.id)
-  ok(lone.net.marks.length === 0 && lone.promoted === null, 'pulling the only mark empties cleanly')
-
+  for (const m of spokesOf(after)) if (!('toPlot' in destination(after, { fromPlot: false, fromId: m.id }))) allResolve = false
+  ok(allResolve, '★★ every surviving passage still leads home — the hub cannot be removed')
   ok(pull(net, 'nope').removed === null, 'pulling an unknown id is a no-op, not a throw')
-  // ⚠ Ids must not be recycled by a removal, or a stale panel row resolves to the wrong place.
   const reused = plant(pull(netOf(3), 'w2').net, 500, 64, 0)
   ok('net' in reused && reused.mark.id === 'w4', '★ an id is never reused after a pull')
-}
-
-// ── designation — "first one you plant is home" must not be a trap ────────────
-{
-  const net = netOf(3)
-  const moved = designate(net, 'w3')
-  ok(thresholdOf(moved)?.id === 'w3', '★ the hub can be moved — a keeper moves house')
-  ok(moved.marks.filter((m) => m.threshold).length === 1, '...and there is still exactly one')
-  ok(moved.marks.length === 3, '...and nothing is lost')
-  ok(thresholdOf(designate(net, 'nope'))?.id === 'w1', 'designating an unknown id changes nothing')
+  const emptied = pull(netOf(1), 'w1')
+  ok(emptied.net.marks.length === 0, 'pulling the only passage empties cleanly')
 }
 
 // ── ★ HUB AND SPOKE — the routing rule, in one place ──────────────────────────
 {
   const net = netOf(3)
-  const hub = thresholdOf(net)!
-  const [s1, s2] = spokesOf(net)
 
-  const home = destination(net, s1.id)
-  ok('to' in home && home.to.id === hub.id, '★ a spoke goes home, with no destination named')
+  const home = destination(net, { fromPlot: false, fromId: 'w1' })
+  ok('toPlot' in home, '★ a waymark in the Wilds goes to THE PLOT, never to another waymark')
 
-  const out = destination(net, hub.id, s2.id)
-  ok('to' in out && out.to.id === s2.id, '★ the hub goes out to a NAMED spoke')
+  const out = destination(net, { fromPlot: true, toId: 'w2' })
+  ok('to' in out && out.to.id === 'w2', '★ the plot steps out to a NAMED passage')
 
-  const unnamed = destination(net, hub.id)
-  ok('refused' in unnamed && unnamed.refused === 'is-threshold',
-    '★ standing at the hub with nowhere named is "choose where to go", not "you are already there"')
+  const unnamed = destination(net, { fromPlot: true })
+  ok('refused' in unnamed && unnamed.refused === 'at-plot-pick-one',
+    '★ standing at the plot with nowhere named is "choose where to go"')
 
-  // ★★ NO SPOKE-TO-SPOKE. This is the whole hub-and-spoke claim; if it ever passes, the feature has
-  // quietly become the arbitrary-destination mesh canon names as its failure case.
-  const across = destination(net, s1.id, s2.id)
-  ok('to' in across && across.to.id === hub.id,
-    '★★ a spoke ignores a named destination and still goes home — there is no spoke-to-spoke hop')
+  // ★★ NO SPOKE-TO-SPOKE — and this assert was VACUOUS as first written, caught by mutation.
+  //
+  // The discriminated union makes `toId` unrepresentable on the `fromPlot: false` arm, so the first
+  // version simply called it without one and asserted `toPlot` — which a mutation that honoured a
+  // passed `toId` still satisfied, because nothing ever passed one. **A type that forbids the call
+  // is stronger than an assert, but it is not the same claim**: the type protects TypeScript
+  // callers, and this module also ships to a JS host, a saved-state replay and anything that casts.
+  // So the cast is deliberate: it asks the exact question the type will not let a caller ask.
+  const across = destination(net, { fromPlot: false, fromId: 'w1', toId: 'w2' } as never)
+  ok('toPlot' in across, '★★ a waymark IGNORES a named destination and still goes home')
 
-  ok('refused' in destination(net, 'nope'), 'an unknown origin refuses')
-  ok('refused' in destination(net, hub.id, 'nope'), 'an unknown destination refuses')
-  const self = destination(net, hub.id, hub.id)
-  ok('refused' in self && self.refused === 'same-mark', 'the hub cannot travel to itself')
-
-  // A single lone hub has nowhere to go, and says so rather than resolving to itself.
-  ok('refused' in destination(netOf(1), 'w1'), 'a lone hub has no passage yet')
+  ok('refused' in destination(net, { fromPlot: false, fromId: 'nope' }), 'an unknown origin refuses')
+  ok('refused' in destination(net, { fromPlot: true, toId: 'nope' }), 'an unknown destination refuses')
+  const none = destination(emptyNet(), { fromPlot: true })
+  ok('refused' in none && none.refused === 'no-passages', 'the plot with no passages says so')
 }
 
 // ── naming + arrival ──────────────────────────────────────────────────────────
@@ -159,7 +130,7 @@ const netOf = (n: number): WaymarkNet => {
 
   // ★ Arrival is the cell ABOVE the block, centred. A corner arrival puts the body half inside the
   // neighbouring cell, which the host's fit check then rejects for a spot that was actually fine.
-  const a = arrivalOf({ id: 'w1', x: 10, y: 64, z: -4, name: '', threshold: true })
+  const a = arrivalOf({ id: 'w1', x: 10, y: 64, z: -4, name: '' })
   ok(a.x === 10.5 && a.z === -3.5, '★ arrival is CENTRED in the cell, not on its corner')
   ok(a.y === 65, '★ ...and one above the block, standing on it rather than inside it')
 }
@@ -168,6 +139,6 @@ const netOf = (n: number): WaymarkNet => {
 {
   const before = netOf(2)
   const snapshot = JSON.stringify(before)
-  plant(before, 77, 64, 77); pull(before, 'w1'); rename(before, 'w1', 'x'); designate(before, 'w2')
+  plant(before, 77, 64, 77); pull(before, 'w1'); rename(before, 'w1', 'x')
   ok(JSON.stringify(before) === snapshot, '★ every operation returns a new net and mutates nothing')
 }

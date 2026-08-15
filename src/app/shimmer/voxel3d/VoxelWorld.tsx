@@ -39,7 +39,8 @@ import { salvageItems, salvageMessage } from '../voxel/salvage'
 import { blockDef, materialForItem, emitOf, BLOCKS, type BlockSkill } from '../voxel/registry'
 import { editIndex, recordEdit, applyEdits, packEdits, unpackEdits, isStale, GENERATOR_VERSION, type ColumnEdits } from '../voxel/edits'
 import { generatePlotColumn, plotGeneratedVoxel } from '../voxel/plot-column'
-import { plotThreshold, hasFallenOut, DEFAULT_PLOT } from '../voxel/plot'
+import { plotThreshold, hasFallenOut } from '../voxel/plot'
+import { inPassageVolume, DEFAULT_BUBBLE } from '../voxel/bubble'
 import type { Space } from './save'
 
 /** Which generator version the player has already been warned about. See `staleWarned`. */
@@ -145,7 +146,7 @@ import { conjure, shapeCells, expireConjured, conjuredWriteCells, type Conjured 
 import { emptyBag, applyStatuses, hasStatus, pruneStatuses, clearTarget,
          type StatusBag } from '../engine/statuses'
 import { emptyNet, plant as plantMark, pull as pullMark, destination as markDestination,
-         rename as renameMark, thresholdOf, spokesOf, markAt, arrivalOf, MAX_MARKS,
+         rename as renameMark, spokesOf, markAt, arrivalOf, MAX_MARKS,
          type WaymarkNet, type Waymark } from '../voxel/waymark'
 import type { CastSpec, CastArchetype } from '../play3d/cast'
 
@@ -186,7 +187,8 @@ export interface OpenChest { x: number; y: number; z: number; slots: Slots; touc
  * and bound callbacks, never a copy of the network the panel could then edit behind its back.
  */
 export interface OpenWaymark {
-  fromId: string
+  /** The waymark being stood at, or NULL for the plot's own threshold (which is not a waymark). */
+  fromId: string | null
   net: WaymarkNet
   /** Step through. Undefined destination = "home", which only resolves from a spoke. */
   go: (toId?: string) => void
@@ -3390,6 +3392,11 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
     }
     lc.hvx = 0; lc.hvz = 0; lc.vy = 0; lc.airborne = true
     settled.current = false
+    // ⚠ LATCHED ON ARRIVAL, ALWAYS. Crossing INTO the plot lands the keeper on the plot's threshold,
+    // which is itself a crossing volume — unlatched, the next frame would send them straight back
+    // out, and the round trip would look like the door randomly not working. The latch clears when
+    // they walk off it.
+    crossLatched.current = true
     onSay(to === 'plot' ? 'you step through into your garden' : 'you step out into the Wilds')
   }, [flushSaves, onSay])
   useEffect(() => { enterSpaceRef.current = enterSpace }, [enterSpace])
@@ -3836,6 +3843,16 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
    * populated by the time anything can call it.
    */
   const enterSpaceRef = useRef<((to: Space) => void) | null>(null)
+  /**
+   * ⚠ THE CROSSING LATCH — without it the two ends face each other and the keeper ping-pongs.
+   *
+   * The keeper ARRIVES at the plot's threshold, and the plot's threshold is itself a crossing
+   * volume; on the very next frame the trigger fires again and sends them straight back. Minecraft's
+   * nether portal solves this the same way and for the same reason: once you cross, the trigger is
+   * latched until you have LEFT every crossing volume. Leaving is the reset, not a timer — a
+   * cooldown would still fire if the keeper simply stood still long enough.
+   */
+  const crossLatched = useRef(false)
   const waymarks = useRef<WaymarkNet>(emptyNet())
 
   /**
@@ -3851,30 +3868,33 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
    * the ground. The back-search guarantees a body FITS wherever it puts you, and reusing it means
    * there is one arrival rule in the world rather than two that drift.
    */
-  const travelTo = useCallback((fromId: string, toId?: string) => {
-    const r = markDestination(waymarks.current, fromId, toId)
+  const travelTo = useCallback((fromId: string | null, toId?: string) => {
+    const r = fromId === null
+      ? markDestination(waymarks.current, { fromPlot: true, toId })
+      : markDestination(waymarks.current, { fromPlot: false, fromId })
     if ('refused' in r) {
-      onSay(r.refused === 'is-threshold' ? 'choose where to step'
-        : r.refused === 'no-threshold' ? 'you have no threshold to return to'
-        : r.refused === 'same-mark' ? 'you are already here'
+      onSay(r.refused === 'at-plot-pick-one' ? 'choose where to step'
+        : r.refused === 'no-passages' ? 'you have planted no passages yet'
         : 'that passage is gone')
       return
     }
+    // ★ A PASSAGE CROSSES SPACES, which is what makes it a passage rather than a teleport. Going
+    // home leaves the Wilds entirely; stepping out re-enters it. `enterSpace` is the one teardown
+    // that knows how (flush, flip, evict eight caches), so travel calls it rather than doing any
+    // part of that itself.
+    if ('toPlot' in r) { enterSpaceRef.current?.('plot'); return }
+    enterSpaceRef.current?.('wilds')
     const at = arrivalOf(r.to)
     const lc = loco.current
-    // ⚠ Aim the search AT the destination: `blinkKeeper` walks back toward the caster's CURRENT
-    // position, so a full-world hop whose exact cell is blocked must not settle halfway across the
-    // map. One step means "the destination, or nothing" — and `steps: 1` is what says that.
+    // ⚠ Aim the search AT the destination: `blinkKeeper` walks back toward the keeper's CURRENT
+    // position, so a hop whose exact cell is blocked must not settle halfway across the map. One
+    // step means "the destination, or nothing".
     const moved = blinkKeeper(lc, at.x, at.z, () => at.y, solidProbe, 1)
     if (moved <= 0) {
-      // Refuse rather than approximate. A passage that lands you "somewhere near" a blocked mark is
-      // how a keeper ends up inside their own shed.
       onSay('something is standing in that passage')
       return
     }
-    onSay(r.to.threshold
-      ? 'you step home'
-      : `you step through to ${r.to.name || `${r.to.x}, ${r.to.z}`}`)
+    onSay(`you step through to ${r.to.name || `${r.to.x}, ${r.to.z}`}`)
   }, [onSay, solidProbe])
 
   // ── the light field, cached per column ────────────────────────────────────────────────────────
@@ -4833,7 +4853,59 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
         dt,
       }, solidProbe)
       p.set(lc.px, eyeY(lc), lc.pz)
-      if (lc.py < -20) {
+
+      // ── ★ THE TWO CROSSINGS, AND THE SOFT RETURN (2026-08-15, slice 2) ──────────────────────
+      if (space.current === 'plot') {
+        // ★ THE SOFT RETURN IS CANON, RULED THE SAME DAY: over the edge is not a fall out of the
+        // world, it is *"falling through their own fold, which returns them to their threshold"* —
+        // **no death, no fall damage, no dropped inventory**, because the plot is the one ground
+        // that holds you. That is what lets a keeper build at the very lip of their island without
+        // the game punishing ambition, so the temptation to "just add a little damage" is the
+        // temptation to undo the ruling.
+        //
+        // ⚠ `hasFallenOut` asks about ALTITUDE, not footprint — a keeper standing in open air over
+        // ground they have not built out to yet has not fallen anywhere, and snatching them back
+        // would make expansion feel like a wall.
+        if (hasFallenOut(lc.py)) {
+          const t = plotThreshold(SEED)
+          lc.px = t.x + 0.5; lc.py = t.y; lc.pz = t.z + 0.5
+          lc.vy = 0; lc.hvx = 0; lc.hvz = 0; lc.stepSmooth = 0
+          p.set(lc.px, eyeY(lc), lc.pz)
+          settled.current = false
+          crossLatched.current = true      // arriving at the threshold must not bounce you out
+          onSay('the fold catches you and sets you down again')
+        } else {
+          // Standing at your own threshold is the way OUT — the same volume you arrive in, which is
+          // exactly why the latch exists.
+          const t = plotThreshold(SEED)
+          const near = Math.hypot(lc.px - (t.x + 0.5), lc.pz - (t.z + 0.5)) < 1.6 && Math.abs(lc.py - t.y) < 2.5
+          if (near && !crossLatched.current && waymarks.current.marks.length > 0) {
+            crossLatched.current = true
+            onOpenWaymark({
+              fromId: null, net: waymarks.current,
+              go: (toId?: string) => travelTo(null, toId),
+              rename: () => {},
+            })
+          }
+          if (!near) crossLatched.current = false
+        }
+      } else {
+        // ★ THE WILDS SIDE IS A THRESHOLD YOU STEP INTO, AND THE SHELL IS NEVER PIERCED. Canon:
+        // a threshold is *"a soft seam in the cloud… no gates, no locks, no keep-out"*, and *"a
+        // build that puts a locked gate on a plot has misread the world"* — a doorway-shaped hole
+        // cut through a wall IS that gate. There is also nothing behind the shell to walk into: the
+        // plot is a separate coordinate space and the bubble's interior is never generated, so a
+        // hole would lead to 500 blocks of nothing if the trigger ever failed to fire.
+        const gh = columnHeight(Math.floor(lc.px), Math.floor(lc.pz), SEED)
+        const inSeam = inPassageVolume(lc.px, lc.py, lc.pz, SEED, gh, DEFAULT_BUBBLE)
+        if (inSeam && !crossLatched.current) {
+          crossLatched.current = true
+          enterSpaceRef.current?.('plot')
+        }
+        if (!inSeam) crossLatched.current = false
+      }
+
+      if (lc.py < -20 && space.current === 'wilds') {
         const feet = columnHeight(SPAWN_X, SPAWN_Z, SEED) + 1
         lc.px = SPAWN_X + 0.5; lc.py = feet; lc.pz = SPAWN_Z + 0.5; lc.vy = 0; lc.hvx = 0; lc.hvz = 0; lc.stepSmooth = 0
         p.set(lc.px, eyeY(lc), lc.pz)
@@ -5095,11 +5167,10 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
         if (hit.material === MAT.WAYMARK) {
           const gone = markAt(waymarks.current, hit.x, hit.y, hit.z)
           if (gone) {
-            const { net, promoted } = pullMark(waymarks.current, gone.id)
-            waymarks.current = net
-            onSay(promoted
-              ? `the waymark comes up — your threshold moves to ${promoted.name || 'the oldest passage'}`
-              : 'the waymark comes up')
+            // ★ No promotion to worry about any more: the hub is the plot, which cannot be broken.
+            // Taking a waymark up costs the keeper that ONE passage and nothing else.
+            waymarks.current = pullMark(waymarks.current, gone.id).net
+            onSay('the waymark comes up')
           }
         }
         const brokeStation = stationOf(hit.material)
@@ -5292,9 +5363,7 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
               : 'there is already a waymark bound here')
           } else {
             waymarks.current = r.net
-            onSay(r.mark.threshold
-              ? 'your threshold is bound — every passage you plant returns here'
-              : `a passage opens back to your threshold (${spokesOf(r.net).length} of ${MAX_MARKS - 1})`)
+            onSay(`a passage opens back to your garden (${spokesOf(r.net).length} of ${MAX_MARKS})`)
           }
         }
         // ★ Tutorial 'light' step — placing IS the objective, not just holding a lantern.
@@ -5803,29 +5872,22 @@ const SPECIALITY_NOTE: Record<Exclude<StationDef['accepts'], 'any'>, string> = {
 /**
  * The passage panel — where a keeper chooses where to step.
  *
- * ★ IT SHOWS THE WHOLE NETWORK EVEN THOUGH ONLY SOME OF IT IS REACHABLE FROM HERE, and that is the
- * design rather than clutter. Hub-and-spoke means a spoke has exactly one destination, so a panel
- * that listed only what you can reach would show a single unlabelled button and teach a player
- * nothing about the shape of what they own. Standing at a spoke you SEE your other passages, greyed,
- * with the hub lit — which is how the rule explains itself without a tutorial line.
- *
- * ⚠ No spoke-to-spoke row is clickable, and `destination` refuses it anyway if one ever became so.
- * The panel is a display; the pure core is the enforcement. Same split as the station's grey button.
+ * ★ TWO FACES, BECAUSE THE TWO ENDS ASK DIFFERENT QUESTIONS. Standing at a waymark out in the Wilds
+ * there is exactly one place to go (home), so the panel is a confirmation and a rename. Standing at
+ * the plot's threshold there are up to three, so it is a chooser. A single symmetrical list would
+ * have made the Wilds face a menu with one item, which teaches a player that there might be more.
  */
 function WaymarkPanel({ wm, onSay, onClose }: {
   wm: OpenWaymark
   onSay: (t: string) => void
   onClose: () => void
 }) {
-  const here = wm.net.marks.find((m) => m.id === wm.fromId)
-  const hub = thresholdOf(wm.net)
-  const atHub = !!here?.threshold
+  const here = wm.fromId === null ? null : wm.net.marks.find((m) => m.id === wm.fromId)
+  const atPlot = wm.fromId === null
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState(here?.name ?? '')
   const label = (m: Waymark) => m.name || `${m.x}, ${m.z}`
-
   const rows = wm.net.marks.filter((m) => m.id !== wm.fromId)
-  const step = (toId?: string) => { wm.go(toId); onClose() }
 
   return (
     <div className="absolute inset-0 grid place-items-center bg-black/50 pointer-events-auto" onClick={onClose}>
@@ -5833,74 +5895,72 @@ function WaymarkPanel({ wm, onSay, onClose }: {
            onClick={(e) => e.stopPropagation()}>
         <div className="flex items-baseline justify-between mb-3">
           <span className="text-white/95 font-semibold tracking-[.18em] uppercase">
-            {atHub ? 'Your Threshold' : 'Waymark'}
+            {atPlot ? 'Your Threshold' : 'Waymark'}
           </span>
           <button onClick={onClose} className="text-white/40 hover:text-white/80">esc</button>
         </div>
 
-        {/* Where you are, and what it is called. Renaming lives here because this is the only
-            surface that ever shows a waymark's name — a passage called "10, -426" is a passage the
-            player cannot plan a trip around. */}
-        <div className="mb-4 rounded border border-white/10 bg-white/[0.03] px-3 py-2">
-          <div className="text-white/35 text-[9px] uppercase tracking-[.14em] mb-1">standing at</div>
-          {editing ? (
-            <input autoFocus value={draft} maxLength={24}
-                   onChange={(e) => setDraft(e.target.value)}
-                   onKeyDown={(e) => {
-                     if (e.key === 'Enter') { wm.rename(draft.trim()); setEditing(false) }
-                     if (e.key === 'Escape') { setDraft(here?.name ?? ''); setEditing(false) }
-                     e.stopPropagation()
-                   }}
-                   className="w-full bg-black/40 border border-amber-200/30 rounded px-1.5 py-0.5 text-amber-100/90 outline-none" />
-          ) : (
-            <button onClick={() => setEditing(true)}
-                    className="text-amber-100/90 hover:text-amber-100 text-left">
-              {here ? label(here) : 'unbound'}
-              <span className="ml-2 text-white/25">rename</span>
-            </button>
-          )}
-        </div>
-
-        <div className="text-white/40 tracking-[.14em] uppercase text-[9px] mb-1.5">
-          {atHub ? 'Step out to' : 'Step home'}
-        </div>
-
-        {rows.length === 0 && (
-          <div className="text-white/35">
-            {atHub
-              ? 'no passages yet — plant a waymark out in the Wilds and it will lead back here'
-              : 'your threshold is gone'}
+        {/* Renaming lives on the waymark's own face because this is the only surface that ever shows
+            a passage's name — one called "10, -426" is one the player cannot plan a trip around. */}
+        {here && (
+          <div className="mb-4 rounded border border-white/10 bg-white/[0.03] px-3 py-2">
+            <div className="text-white/35 text-[9px] uppercase tracking-[.14em] mb-1">standing at</div>
+            {editing ? (
+              <input autoFocus value={draft} maxLength={24}
+                     onChange={(e) => setDraft(e.target.value)}
+                     onKeyDown={(e) => {
+                       if (e.key === 'Enter') { wm.rename(draft.trim()); setEditing(false) }
+                       if (e.key === 'Escape') { setDraft(here.name); setEditing(false) }
+                       e.stopPropagation()
+                     }}
+                     className="w-full bg-black/40 border border-amber-200/30 rounded px-1.5 py-0.5 text-amber-100/90 outline-none" />
+            ) : (
+              <button onClick={() => setEditing(true)} className="text-amber-100/90 hover:text-amber-100 text-left">
+                {label(here)}<span className="ml-2 text-white/25">rename</span>
+              </button>
+            )}
           </div>
         )}
 
-        {rows.map((m) => {
-          // From a spoke, the ONLY live row is the hub. Everything else is shown greyed so the
-          // shape of the network is legible from anywhere, and so a player learns the rule by
-          // seeing it rather than by being refused.
-          const live = atHub || m.threshold
-          return (
-            <button key={m.id} disabled={!live}
-                    onClick={() => step(atHub ? m.id : undefined)}
-                    className={`w-full text-left mb-1 px-2 py-1.5 rounded border transition-colors ${
-                      live ? 'border-white/15 hover:border-amber-200/50 hover:bg-white/5 text-white/90'
-                           : 'border-white/5 text-white/25 cursor-not-allowed'}`}>
+        {!atPlot ? (
+          <>
+            <button onClick={() => { wm.go(); onClose() }}
+                    className="w-full text-left px-2 py-2 rounded border border-white/15 hover:border-amber-200/50 hover:bg-white/5 text-white/90 transition-colors">
               <div className="flex justify-between gap-3">
-                <span>{label(m)}</span>
-                <span className={m.threshold ? 'text-amber-200/80' : 'text-white/35'}>
-                  {m.threshold ? 'threshold' : 'passage'}
-                </span>
+                <span>step home</span>
+                <span className="text-amber-200/80">your garden</span>
               </div>
-              {!live && (
-                <div className="mt-0.5 text-[10px] text-white/25">
-                  step home first — passages run through your threshold
-                </div>
-              )}
             </button>
-          )
-        })}
+            {/* The other passages are shown, greyed — a keeper seeing the shape of what they own is
+                how the hub-and-spoke rule explains itself without a tutorial line. */}
+            {rows.length > 0 && (
+              <div className="mt-3 text-[10px] text-white/25">
+                your other passages ({rows.map(label).join(' · ')}) run through your garden, not to each other
+              </div>
+            )}
+          </>
+        ) : (
+          <>
+            <div className="text-white/40 tracking-[.14em] uppercase text-[9px] mb-1.5">Step out to</div>
+            {wm.net.marks.length === 0 && (
+              <div className="text-white/35">
+                no passages yet — plant a waymark out in the Wilds and it will lead back here
+              </div>
+            )}
+            {wm.net.marks.map((m) => (
+              <button key={m.id} onClick={() => { wm.go(m.id); onClose() }}
+                      className="w-full text-left mb-1 px-2 py-1.5 rounded border border-white/15 hover:border-amber-200/50 hover:bg-white/5 text-white/90 transition-colors">
+                <div className="flex justify-between gap-3">
+                  <span>{label(m)}</span>
+                  <span className="text-white/35">passage</span>
+                </div>
+              </button>
+            ))}
+          </>
+        )}
 
         <div className="mt-3 text-[10px] text-white/25">
-          {spokesOf(wm.net).length} of {MAX_MARKS - 1} passages · break a waymark to take it up
+          {wm.net.marks.length} of {MAX_MARKS} passages · break a waymark to take it up
         </div>
       </div>
     </div>

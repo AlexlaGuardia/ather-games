@@ -33,12 +33,22 @@
 // canon's shape is one fixed home end with routes running off it (the same shape as Gregory's
 // brokered inter-garden routes).
 //
-// ⚠ THE THRESHOLD IS A STAND-IN UNTIL THE PLOT IS WIRED, AND THAT IS TEMPORARY, NOT THE DESIGN.
-// `voxel/plot.ts` exists (the world lane's bounded island) but has no host wiring yet, so there is
-// no plot cell for a passage to land in. Until there is, the keeper's FIRST waymark carries the
-// `threshold` flag and acts as the hub, and `designate` can move it. When the plot lands, the
-// threshold binds to the plot and this flag becomes a fallback for a keeper who has not yet got one.
-// Read the flag as *"where home currently is"*, never as *"the hub is wherever you first planted"*.
+// ★★ THE HUB IS THE PLOT ITSELF, AND THE PLANTED THRESHOLD IS GONE (2026-08-15, slice 2).
+// This file shipped hours earlier with a `threshold` flag on the first waymark planted, because the
+// plot had no host wiring and there was no plot cell for a passage to land in. Its own comment said
+// the flag was a stand-in that would bind to the plot when the plot landed. The plot landed.
+//
+// ★ AND THE STAND-IN DID NOT JUST BECOME REDUNDANT — IT BECAME WRONG. A planted hub means a keeper
+// can have a second home in the Wilds, which contradicts the ruling this feature is built on
+// (*"Rune Hold ⟷ plot = the ONE home-gate; plot → Wilds = passages"* — the plot is the fixed end,
+// singular). Leaving it as a harmless fallback would have shipped a way to opt out of canon.
+//
+// ★ IT ALSO DESIGNS OUT THIS FILE'S WORST FAILURE RATHER THAN HANDLING IT. The old headline assert
+// was "pulling the hub must not strand you" — a keeper broke their threshold and every passage
+// pointed at nothing, so `pull` promoted the oldest spoke. That whole class is now unrepresentable:
+// **the hub is generated and derived (`plot.ts` › `plotThreshold`), so it cannot be broken, moved,
+// or missing.** Deleting the promotion is the fix; keeping it would be machinery guarding a state
+// that can no longer occur, which is how dead safety code outlives the danger and starts lying.
 //
 // ⚠ AND IT KEEPS THE BUILD OUT OF A STILL-OPEN QUESTION. My own `[OPEN]` (08-15) asks whether the
 // plot is a landing a keeper may return to *from anywhere* — the 08-13 ruling says *"a landing is a
@@ -61,15 +71,21 @@
 // there. That is the decision the feature exists to create; a generous cap deletes it and leaves a
 // fast-travel menu.
 
-/** A planted waymark. World coordinates of the BLOCK; the keeper arrives on top of it. */
+/**
+ * A planted waymark — always a SPOKE now. World coordinates of the BLOCK; the keeper arrives on top.
+ *
+ * ★ THE COORDINATE IS STORED, WHILE THE PLOT'S THRESHOLD IS DERIVED, and that asymmetry is the rule
+ * the two lanes settled on: **derive what the world owns, store what the player placed.** A spoke's
+ * position is a fact about an EDIT — a block the keeper set down, which no generator change moves —
+ * so storing it is correct. The plot's threshold is a fact about TERRAIN, so storing it would be a
+ * coordinate that can disagree with the ground it names.
+ */
 export interface Waymark {
   /** Stable id, minted by the host. Never reused — see `WaymarkNet.next`. */
   id: string
   x: number; y: number; z: number
   /** What the keeper called it. Empty is legal and renders as its coordinates. */
   name: string
-  /** ★ The FIRST one planted. Exactly one per network, and it is the hub every spoke returns to. */
-  threshold: boolean
 }
 
 export interface WaymarkNet {
@@ -88,21 +104,21 @@ export interface WaymarkNet {
 export const emptyNet = (): WaymarkNet => ({ marks: [], next: 1 })
 
 /**
- * How many a keeper may hold at once, threshold included.
+ * How many passages a keeper may hold at once.
  *
- * Canon says the number is mine (*"three, or any"*). Four = a threshold plus three spokes, which is
- * the smallest count where WHERE they go is a real decision: enough to keep a quarry, a treeline and
- * a frontier, not enough to keep everywhere. Raise it only after a playtest says the map feels big
- * rather than because it feels generous.
+ * Canon says the number is mine (*"three, or any"*). Three is the smallest count where WHERE they go
+ * is a real decision: enough to keep a quarry, a treeline and a frontier, not enough to keep
+ * everywhere. Raise it only after a playtest says the map feels big rather than because it feels
+ * generous.
+ *
+ * ⚠ WAS 4 WHEN ONE OF THEM HAD TO BE SPENT ON THE HUB. The plot is the hub now and costs no
+ * waymark, so holding the number at 4 would have quietly handed the keeper an extra passage as a
+ * side effect of a plumbing change. Three spokes then, three spokes now.
  */
-export const MAX_MARKS = 4
+export const MAX_MARKS = 3
 
-/** The hub, or null before anything is planted. */
-export const thresholdOf = (net: WaymarkNet): Waymark | null =>
-  net.marks.find((m) => m.threshold) ?? null
-
-/** Everything that is not the hub, in plant order. */
-export const spokesOf = (net: WaymarkNet): Waymark[] => net.marks.filter((m) => !m.threshold)
+/** Every passage the keeper holds, in plant order. All of them run to the plot. */
+export const spokesOf = (net: WaymarkNet): Waymark[] => net.marks
 
 export const markKey = (x: number, y: number, z: number): string => `${x},${y},${z}`
 export const markAt = (net: WaymarkNet, x: number, y: number, z: number): Waymark | null =>
@@ -114,10 +130,6 @@ export type PlantRefusal = 'full' | 'occupied'
 /**
  * Plant one. The host has already decided a waymark BLOCK belongs at (x,y,z) and taken the item.
  *
- * ★ THE FIRST ONE IS THE THRESHOLD, DECIDED HERE AND NOT BY THE HOST. It is a property of the
- * network ("is there already a hub?"), and a host that computed it from its own state would get it
- * wrong the first time a save loaded with marks already in it.
- *
  * Returns the new net and the mark, or a refusal. Refusing rather than silently replacing matters:
  * a keeper at the cap who plants anyway must be told, not have their oldest passage quietly deleted.
  */
@@ -126,50 +138,25 @@ export function plant(
 ): { net: WaymarkNet; mark: Waymark } | { refused: PlantRefusal } {
   if (markAt(net, x, y, z)) return { refused: 'occupied' }
   if (net.marks.length >= MAX_MARKS) return { refused: 'full' }
-  const mark: Waymark = {
-    id: `w${net.next}`, x, y, z, name,
-    threshold: thresholdOf(net) === null,
-  }
+  const mark: Waymark = { id: `w${net.next}`, x, y, z, name }
   return { net: { marks: [...net.marks, mark], next: net.next + 1 }, mark }
 }
 
 /**
  * Pull one out — the block was broken, or the keeper moved it.
  *
- * ★★ REMOVING THE THRESHOLD PROMOTES THE OLDEST SPOKE. This is the case that decides whether the
- * feature survives contact: a network whose hub is gone has NO route at all — every spoke leads to a
- * place that no longer exists, and the keeper is stranded with three dead passages and no way to
- * rebuild the hub except by walking home. Silently promoting is not a fudge; it is what "the crease
- * answers to the hand that tends it" means when the hand moves house. The keeper is told.
- *
- * ⚠ Promotion is by PLANT ORDER, not by distance from anything. Order is stable, saveable and the
- * same on every machine; "nearest to spawn" is none of those and would pick differently after any
- * world edit.
+ * ★ NO PROMOTION, AND ITS ABSENCE IS THE POINT. This function used to promote the oldest spoke when
+ * the hub was removed, because a hubless network stranded the keeper with passages leading nowhere.
+ * The hub is the plot now: generated, derived, impossible to break. **The failure is designed out
+ * rather than handled**, and the machinery that handled it is gone rather than left standing over a
+ * state that can no longer occur.
  */
-export function pull(net: WaymarkNet, id: string): { net: WaymarkNet; removed: Waymark | null; promoted: Waymark | null } {
+export function pull(net: WaymarkNet, id: string): { net: WaymarkNet; removed: Waymark | null } {
   const removed = net.marks.find((m) => m.id === id) ?? null
-  if (!removed) return { net, removed: null, promoted: null }
-  let rest = net.marks.filter((m) => m.id !== id)
-  let promoted: Waymark | null = null
-  if (removed.threshold && rest.length > 0) {
-    promoted = { ...rest[0], threshold: true }
-    rest = [promoted, ...rest.slice(1)]
-  }
-  return { net: { ...net, marks: rest }, removed, promoted }
+  if (!removed) return { net, removed: null }
+  return { net: { ...net, marks: net.marks.filter((m) => m.id !== id) }, removed }
 }
 
-/**
- * Move the hub to an existing waymark.
- *
- * ★ WITHOUT THIS, "the first one you plant is home" IS A TRAP. A keeper plants their first waymark
- * at the quarry they happened to be standing in, and every passage they own for the rest of the
- * save runs to a hole in the ground. Re-designating costs nothing, cannot lose a mark, and is the
- * honest reading of *"the crease answers to the hand that tends it"* — a keeper moves house.
- */
-export function designate(net: WaymarkNet, id: string): WaymarkNet {
-  if (!net.marks.some((m) => m.id === id)) return net
-  return { ...net, marks: net.marks.map((m) => ({ ...m, threshold: m.id === id })) }
-}
 
 /** Rename. Empty names are legal — the panel falls back to coordinates. */
 export function rename(net: WaymarkNet, id: string, name: string): WaymarkNet {
@@ -178,36 +165,39 @@ export function rename(net: WaymarkNet, id: string, name: string): WaymarkNet {
 }
 
 /** Why a passage would not open. */
-export type TravelRefusal = 'unknown-mark' | 'no-threshold' | 'is-threshold' | 'same-mark'
+export type TravelRefusal = 'unknown-mark' | 'no-passages' | 'at-plot-pick-one'
 
 /**
- * Where does stepping into the waymark at `fromId` let out?
+ * Where does stepping into a passage let out?
  *
  * ★ THE WHOLE HUB-AND-SPOKE RULE IS THIS ONE FUNCTION, so there is exactly one place to argue with
- * it. A spoke goes to the threshold. The threshold goes to a NAMED spoke (the panel picks). Nothing
- * else resolves, and `'is-threshold'` is a distinct refusal from `'same-mark'` so the host can say
- * "choose where to go" rather than "you are already there".
+ * it. A waymark out in the Wilds goes to THE PLOT — `{ toPlot: true }`, not a `Waymark`, because
+ * the plot's arrival point is derived from the terrain by `plot.ts` and this pure module has no
+ * business holding a coordinate for it. Standing at the plot's own threshold, the keeper picks a
+ * named waymark and steps out to it.
+ *
+ * ⚠ `fromPlot` IS PASSED, NOT INFERRED. A waymark and the plot's threshold are in two different
+ * coordinate spaces that share every number, so nothing here can tell them apart by position — the
+ * host knows which space the keeper is in and says so. Inferring would be the same class of bug as
+ * the worker cache that was right about its key and wrong about its universe.
  */
 export function destination(
-  net: WaymarkNet, fromId: string, toId?: string,
-): { to: Waymark } | { refused: TravelRefusal } {
-  const from = net.marks.find((m) => m.id === fromId)
-  if (!from) return { refused: 'unknown-mark' }
-  if (!from.threshold) {
-    const hub = thresholdOf(net)
-    if (!hub) return { refused: 'no-threshold' }
-    if (hub.id === from.id) return { refused: 'same-mark' }
-    return { to: hub }
+  net: WaymarkNet, opts: { fromPlot: true; toId?: string } | { fromPlot: false; fromId: string },
+): { to: Waymark } | { toPlot: true } | { refused: TravelRefusal } {
+  if (!opts.fromPlot) {
+    if (!net.marks.some((m) => m.id === opts.fromId)) return { refused: 'unknown-mark' }
+    return { toPlot: true }
   }
-  if (!toId) return { refused: 'is-threshold' }
-  const to = net.marks.find((m) => m.id === toId)
+  if (net.marks.length === 0) return { refused: 'no-passages' }
+  if (!opts.toId) return { refused: 'at-plot-pick-one' }
+  const to = net.marks.find((m) => m.id === opts.toId)
   if (!to) return { refused: 'unknown-mark' }
-  if (to.id === from.id) return { refused: 'same-mark' }
   return { to }
 }
 
 /**
  * The cell a keeper should arrive in, given the destination waymark: the block's own cell, one up.
+ * (The PLOT's arrival is `plot.ts` › `plotThreshold` — derived there, never mirrored here.)
  *
  * Returned rather than applied, and deliberately NOT validated here — this file cannot see voxels.
  * The host does the fit check, exactly as it does for a blink (`locomotion.blinkKeeper`). Centring
