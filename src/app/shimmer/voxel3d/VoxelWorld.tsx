@@ -117,6 +117,7 @@ import { GATE_X, GATE_Z, GATE_SPANS_X, gateCells } from './gate'
 import { createGregMesh, GREG_BOUNDS } from './greg'
 import { aimedAt, bodyBox } from './aim'
 import { createSteamPoints } from './steam'
+import { createSeamShimmer } from './seam'
 import { createMistPass, SPAR_RANGE } from './mist-pass'
 import { mistAt, mistPatchesNear, type MistPatch } from '../voxel/mist'
 import { loadMistLedger, saveMistLedger, recordWithdrawal, residentAt, quietMinutes, type MistLedger, type Resident, type ResidentForm } from './mist-encounter'
@@ -2908,6 +2909,9 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
   }, [])
   // Hot-spring steam (2026-08-08) — sleeps everywhere but the Springs; see steam.ts.
   const steam = useMemo(() => createSteamPoints(SEED), [])
+  // The keeper's front door, drawn. ⚠ Takes the LIVE config — `createSeamShimmer` requires it with
+  // no default on purpose, so no call site can quietly draw the seam at the default's bearing 0.
+  const seam = useMemo(() => createSeamShimmer(SEED, WILDS_BUBBLE), [])
   // Mist patches (2026-08-09) — the lying mist plus the presence standing in it; see mist-pass.ts.
   // Sleeps everywhere but inside a patch's reach, the same way steam sleeps outside the Springs.
   const mist = useMemo(() => createMistPass(SEED, mistLedger.current), [mistLedger])
@@ -3260,9 +3264,10 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
     tiles?.texture.dispose()
     greg.dispose()
     steam.dispose()
+    seam.dispose()
     mist.dispose()
     flora.dispose()
-  }, [dropGeo, highlightGeo, flatMaterial, textured, tiles, pieces, greg, steam, mist, flora])
+  }, [dropGeo, highlightGeo, flatMaterial, textured, tiles, pieces, greg, steam, seam, mist, flora])
 
   // ★ A LOST WEBGL CONTEXT MUST SAY SO. Chrome blocks a page that loses its context repeatedly, and
   // the result is a black canvas with the HUD still drawn on top — indistinguishable from a
@@ -4284,6 +4289,10 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
     if (!g) return
     const p = camera.position
     steam.tick(p.x, p.y, p.z, dt, state.clock.elapsedTime)
+    // ⚠ NEEDS THE CURRENT SPACE — the one argument steam does not take. It draws the Wilds seam
+    // only in the Wilds and the plot-side one only in the plot. Hooked but never ticked renders
+    // NOTHING and throws nothing (the meshes start hidden), so suspect this line before the shader.
+    seam.tick(p.x, p.y, p.z, dt, state.clock.elapsedTime, space.current)
     if (ledgerSeen.current !== mistLedger.current) { ledgerSeen.current = mistLedger.current; mist.setLedger(mistLedger.current) }
     mist.tick(p.x, p.y, p.z, dt, state.clock.elapsedTime)
     // ⚠ The presence PROMPT is not decided here any more — it needs this frame's aim, which does
@@ -5666,6 +5675,7 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
       <primitive object={pieces.group} />
       <primitive object={greg.group} />
       <primitive object={steam.points} />
+      <primitive object={seam.group} />
       <primitive object={mist.points} />
       <primitive object={mist.residents} />
       <primitive object={flora.group} />
