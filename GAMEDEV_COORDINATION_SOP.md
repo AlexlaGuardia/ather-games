@@ -45,6 +45,15 @@ Alex assigns. From then on, prefix every `coord` call with `COORD_WIN=<lane> COO
 > This is here because on 2026-08-12 a booting window read a live hub claim, matched it on timestamp
 > alone, and told Alex it held the lane. The id was being passed on every call and thrown away.
 
+> ★ **RE-CLAIM WHEN YOUR WORK CHANGES — the claim note is a statement about what you are doing RIGHT
+> NOW, not a lock you take once (2026-08-15).** `claim` is idempotent on your own lane, so running it
+> again just updates the note. This was learned the boring way: a hub claim sat for **9h40m** still
+> reading *"jin boot 08-15 solo"* while that window had long since shipped three features and moved
+> on to a fourth. Nothing broke, and that is the point — **the failure mode is a peer reading it and
+> planning around work that finished hours ago**, which is the same misdirection an unreleased claim
+> causes, from a lane that is genuinely live. "Release when you wrap" is not enough guidance on its
+> own, because the hazard shows up long before anyone wraps.
+
 ## New Jin window joins the swarm
 1. Boot `/jin` — its boot sequence runs `coord status` and detects the live swarm automatically.
 2. Read this file.
