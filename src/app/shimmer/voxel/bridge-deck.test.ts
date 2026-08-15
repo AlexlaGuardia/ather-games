@@ -21,6 +21,7 @@ import { Column, generateColumn, SECTION } from './column'
 import { STORY_NODES, roadAt, WAYSTONE_CELLS } from './story-path'
 import { BLOCKS, ALL_BLOCKS, blockDef, materialForItem, canBreak } from './registry'
 import { RECIPE_OUTPUTS } from './recipes'
+import { layerOf, paintFor, FALLBACK_LAYER, TOP, SIDE, BOTTOM } from '../voxel3d/tex/tiles'
 
 let pass = 0, fail = 0
 function check(label: string, ok: boolean, detail = '') {
@@ -72,6 +73,32 @@ console.log('bridge deck')
   const reversible = ALL_BLOCKS.filter(b => materialForItem(b.drops[0]?.itemId ?? '') === MAT.DECK)
   check('nothing at all reverses into DECK', reversible.length === 0,
     reversible.map(b => b.name).join(', '))
+}
+
+// ── the deck has a FACE, and it is not the magenta of shame ───────────────────
+//
+// ★ tiles.ts's own note: "appending here without a `paintFor` case below is how every tree once
+// rendered as crystal — the switch's default IS the ore painter." An unmapped id falls to the
+// loud magenta fallback instead. Both failures ship a bridge that looks like a bug, and neither
+// is visible from any test that only reads the pure core, so the checks live here beside the
+// material they belong to.
+console.log('\nthe deck renders')
+{
+  // The control, so the assert below is known to be capable of failing: an id nobody mapped MUST
+  // land on the fallback. Without this, "not the fallback" could be true because `layerOf` never
+  // returns it, and the check would pass for a deck that renders as magenta.
+  check('control: an unmapped id DOES fall back', layerOf(200, TOP) === FALLBACK_LAYER)
+  check('the deck has its own atlas slot', layerOf(MAT.DECK, TOP) !== FALLBACK_LAYER,
+    'unmapped — it would render as the magenta checker')
+  for (const [face, name] of [[TOP, 'top'], [SIDE, 'side'], [BOTTOM, 'bottom']] as const) {
+    check(`deck ${name} differs from planking`,
+      Buffer.compare(
+        Buffer.from(paintFor(MAT.DECK, face, 16)),
+        Buffer.from(paintFor(MAT.PLANKS, face, 16))) !== 0,
+      'the whole point is that a player can SEE which timber pays')
+  }
+  // ⚠ The colour and the wear pattern are jin's placeholders and are Alex's call — this only
+  // asserts that they are DISTINCT, never that they are right.
 }
 
 // ── the bridges, as the generator actually builds them ────────────────────────
