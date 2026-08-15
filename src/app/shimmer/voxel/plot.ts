@@ -88,6 +88,10 @@ export interface PlotConfig {
   wallSkirt: number
   /** How much the island's edge wanders, as a fraction of coreRadius. Never grows it — see `edgeAt`. */
   wobble: number
+  /** Bearing from centre to the threshold, in radians. */
+  thresholdBearing: number
+  /** How far out the threshold sits, as a fraction of coreRadius. Kept well inside the lip. */
+  thresholdInset: number
   materials: PlotMaterials
 }
 
@@ -119,6 +123,11 @@ export const DEFAULT_PLOT: PlotConfig = {
   wallHeight: 9,
   wallSkirt: 4,
   wobble: 0.18,
+  // ⚠ 0.62 keeps the threshold clear of the lip even at the wobble's deepest cut (which can pull the
+  // edge in to 0.82 of coreRadius), with room left over. A threshold that lands on the rim would put
+  // the soft return one step from the drop it just caught the keeper from.
+  thresholdBearing: 0,
+  thresholdInset: 0.62,
   materials: { topsoil: 5, subsoil: 4, stone: 3, floor: 1, wall: 1 },
 }
 
@@ -268,6 +277,50 @@ export function plotMaterialAt(
   if (y >= h - 2) return m.subsoil
   return m.stone
 }
+
+/**
+ * ── ★ THE THRESHOLD — where the keeper's fold opens, and where the island catches them ──────────
+ *
+ * Canon (`game/shimmer-geography.md:268`): *"the spot where a keeper's personal fold opens."* It is
+ * one place doing two jobs, and the second is why it belongs in the generator rather than in a save:
+ *
+ * **★ YOU CANNOT FALL OUT OF YOUR OWN FOLD** (ruled 2026-08-15): *"a keeper who goes over the edge is
+ * not falling out of the world — they are falling through their own fold, which returns them to
+ * their threshold. No death, no fall damage, no dropped inventory… The fall is a soft return, never
+ * a penalty."* So the threshold is the one coordinate on the island that must ALWAYS be a safe place
+ * to stand, and it has to exist before any save does — a keeper falls off on their first day.
+ *
+ * ⚠ IT IS DERIVED, NOT STORED, and that is deliberate. A stored threshold is a coordinate that can
+ * disagree with the terrain (a save from before a generator change returns the keeper into rock, or
+ * into the void). Derived from the same functions that build the ground, it cannot.
+ */
+export function plotThreshold(
+  seed: number, cfg: PlotConfig = DEFAULT_PLOT,
+): { x: number; z: number; y: number } {
+  // Inset from the rim rather than at the centre: a keeper stepping through should be looking ACROSS
+  // their whole garden, not standing in the middle of it with the island behind them. The centre is
+  // also the most valuable ground to build on, and the arrival pad should not squat on it.
+  const r = cfg.coreRadius * cfg.thresholdInset
+  const x = Math.round(Math.cos(cfg.thresholdBearing) * r)
+  const z = Math.round(Math.sin(cfg.thresholdBearing) * r)
+  const h = plotHeight(x, z, seed, cfg)
+  // ★ FALLING BACK TO THE CENTRE IS A REAL GUARD, NOT DEFENSIVE PADDING. If a future inset or wobble
+  // ever put this outside the ground, the "soft return" would deposit the keeper into the void on a
+  // loop — falling, returning, falling. The centre is inside the island by construction.
+  if (h === null) return { x: 0, z: 0, y: plotHeight(0, 0, seed, cfg)! + 1 }
+  return { x, z, y: h + 1 }
+}
+
+/**
+ * Has the keeper gone over the edge and out from under their own island?
+ *
+ * The geometric half of the soft return; the host does the moving. Deliberately asks about ALTITUDE
+ * rather than about being outside the island's footprint — a keeper standing in the open air inside
+ * the cap (on the ground they have not built out to yet) has not fallen anywhere, and snatching them
+ * back the moment they step off the generated core would make expansion feel like a wall.
+ */
+export const hasFallenOut = (y: number, cfg: PlotConfig = DEFAULT_PLOT): boolean =>
+  y < plotYRange(cfg).min
 
 /**
  * The lowest and highest y this generator can ever write, for a caller sizing a column.

@@ -11,7 +11,8 @@
 
 import {
   DEFAULT_PLOT, plotHeight, plotMaterialAt, keelDepth, edgeAt,
-  insideCore, withinCap, inWall, distFromCentre, plotYRange, columnSpan, type PlotConfig,
+  insideCore, withinCap, inWall, distFromCentre, plotYRange, columnSpan,
+  plotThreshold, hasFallenOut, type PlotConfig,
 } from './plot'
 import { AIR } from './section'
 
@@ -261,6 +262,43 @@ console.log('\ngrowth')
   check('raising the cap leaves the island untouched', moved === 0, `${moved} voxels changed`)
   check('raising the cap opens new buildable ground',
     withinCap(DEFAULT_PLOT.capRadius + 10, 0, grown) && !withinCap(DEFAULT_PLOT.capRadius + 10, 0))
+}
+
+// ── the threshold, and the soft return that depends on it ─────────────────────
+console.log('\nthe threshold')
+{
+  const t = plotThreshold(SEED)
+
+  // ★ IT MUST BE SOMEWHERE A KEEPER CAN STAND, because canon makes it the place the island CATCHES
+  // them: "a keeper who goes over the edge is falling through their own fold, which returns them to
+  // their threshold. No death, no fall damage." A threshold in rock or over the void turns the
+  // gentlest rule in the game into a loop the keeper cannot escape.
+  check('the threshold is on the island', insideCore(t.x, t.z, SEED))
+  check('it is inside the buildable cap', withinCap(t.x, t.z))
+  check('there is ground under it', plotMaterialAt(t.x, t.y - 1, t.z, SEED) === M.topsoil)
+  check('it is standing room, not rock', plotMaterialAt(t.x, t.y, t.z, SEED) === AIR)
+  check('and headroom above that', plotMaterialAt(t.x, t.y + 1, t.z, SEED) === AIR)
+
+  // ★ WELL CLEAR OF THE LIP. The soft return must not deposit the keeper one step from the drop it
+  // just caught them from — the rule would read as a bug rather than as kindness.
+  const e = edgeAt(t.x, t.z, SEED)
+  check('it is not perched on the rim', distFromCentre(t.x, t.z) < e * 0.85,
+    `${distFromCentre(t.x, t.z).toFixed(1)} out of an edge at ${e.toFixed(1)}`)
+
+  // ★ IT MUST NOT WANDER WHEN THE PLOT GROWS. The threshold is where the keeper arrives and where
+  // they are returned to; if raising the cap moved it, every expansion would quietly relocate the
+  // front door of a garden somebody has been decorating.
+  const grown: PlotConfig = { ...DEFAULT_PLOT, capRadius: DEFAULT_PLOT.capRadius + 24 }
+  const t2 = plotThreshold(SEED, grown)
+  check('growing the plot does not move the threshold',
+    t.x === t2.x && t.z === t2.z && t.y === t2.y, `${JSON.stringify(t)} vs ${JSON.stringify(t2)}`)
+
+  // The soft-return trigger: below the island, yes; standing on it, no.
+  check('falling below the island counts as fallen', hasFallenOut(plotYRange().min - 1))
+  check('standing on the turf does not', !hasFallenOut(t.y))
+  // ⚠ Open air INSIDE the cap is not a fall — it is ground the keeper has not built out to yet, and
+  // snatching them back there would make expansion feel like a wall rather than an invitation.
+  check('hovering over unbuilt ground is not a fall', !hasFallenOut(DEFAULT_PLOT.baseY))
 }
 
 console.log(`\n${pass} passed, ${fail} failed`)
