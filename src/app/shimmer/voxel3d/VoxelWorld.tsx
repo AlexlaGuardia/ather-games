@@ -3440,6 +3440,21 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
       lc.py = columnHeight(SPAWN_X, SPAWN_Z, SEED) + 1
     }
     lc.hvx = 0; lc.hvz = 0; lc.vy = 0; lc.airborne = true
+    // ── ★★ THE CAMERA HAS TO CROSS TOO, AND IT IS THE SAME BUG AS THE FLORA (2026-08-15) ────────
+    // Every other teleport in this file moves the camera the instant it moves the body — `tp` does
+    // it, the save-restore does it. This did not, and the consequence is not a cosmetic lag: the
+    // SETTLE GATE READS THE CAMERA (`voxel(floor(p.x), floor(p.y) - 3, …)`), so after a crossing it
+    // probed the OLD SPACE'S ALTITUDE in the new world. The Wilds sits near y130 and the garden's
+    // ground is at y96, so the probe asked about a cell 35 blocks up in open sky, found air, and
+    // held physics — forever. And because that gate `return`s, the frame never reached the line
+    // that would have moved the camera onto the body. It could not recover on its own.
+    //
+    // The keeper's body was standing on the threshold the whole time; only the eye was left behind.
+    // That is why it reads as "floating in the void" rather than as "the plot failed to load".
+    //
+    // ⚠ Keep this next to the body move. A future space (the Sea of Folds) will land here too, and
+    // any altitude difference between two spaces re-arms exactly this.
+    camera.position.set(lc.px, eyeY(lc), lc.pz)
     settled.current = false
     // ⚠ LATCHED ON ARRIVAL, ALWAYS. Crossing INTO the plot lands the keeper on the plot's threshold,
     // which is itself a crossing volume — unlatched, the next frame would send them straight back
