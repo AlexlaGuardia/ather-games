@@ -191,16 +191,44 @@ export function bubbleMaterialAt(
 
   if (y > cfg.topY || y < cfg.bottomY) return null
 
-  // ★ THE DOORWAY IS CUT FROM THE WILDS' OWN GROUND UP, which is why `h` is a parameter rather
-  // than a constant. The first cut of this used `bottomY` — the shell's underground base — so the
-  // opening was a slot ~100 blocks below the terrain, entirely buried, while the wall stayed solid
-  // at head height. It would have read as "the passage did not generate", and nothing about the
-  // wall would have looked wrong. A door has to be cut where the FLOOR is, and the floor moves.
+  // ★★ THE SHELL IS NEVER PIERCED, NOT EVEN AT THE PASSAGE — reversed 2026-08-15, and the first
+  // version of this file was wrong. It cut a doorway-shaped hole clean through. Three things say no,
+  // and they arrived from three different directions:
   //
-  // `h` is passed in for the same reason `materialAt` takes it: a chunk builder already has the
-  // column's surface altitude, and recomputing it per voxel is 256 redundant noise samples.
-  if (inPassage(x, z, cfg)) {
-    if (y >= h && y < h + cfg.passageHeight) return AIR
-  }
+  // 1. **CANON.** A threshold is *"a soft seam in the cloud, a shimmer in the air, ground that simply
+  //    continues. No gates, no locks, no keep-out… A build or a book that puts a locked gate on a
+  //    plot has misread the world"* (`game/shimmer-geography.md:272`). A hole cut through a wall is
+  //    a gate — it is the exact silhouette canon names as the misreading.
+  // 2. **THERE IS NOTHING ON THE OTHER SIDE TO WALK INTO.** The plot is a separate coordinate space,
+  //    and this bubble's interior is unreachable by construction and never generated. A hole does
+  //    not lead to the garden; it leads to 500 blocks of ungenerated nothing. So the crossing was
+  //    always going to be a TRIGGER rather than a corridor — and once it is a trigger, the hole is
+  //    load-bearing for no one and dangerous if the trigger ever fails to fire.
+  // 3. **IT MAKES THE SHELL'S OWN INVARIANT CONDITIONAL.** `bubble.test.ts` had to SEAL the door to
+  //    prove the wall holds, which means the shipped configuration was the one arrangement never
+  //    tested. With the shell continuous, the flood runs against exactly what ships.
+  //
+  // So `inPassage` marks a VOLUME, not a cut. The wall stands unbroken through it; the keeper steps
+  // into the seam and is moved. What the seam LOOKS like is a render question and Alex's call — do
+  // not answer it here with a material.
   return cfg.materials.wall
+}
+
+/**
+ * Should a crossing fire for a keeper standing here?
+ *
+ * The whole trigger in one call, so the host does not re-derive the altitude band and drift from it.
+ * `h` is the Wilds' surface altitude at this column — the seam stands ON the ground, and the ground
+ * moves.
+ */
+export function inPassageVolume(
+  x: number, y: number, z: number, seed: number, h: number, cfg: BubbleConfig = DEFAULT_BUBBLE,
+): boolean {
+  if (!inPassage(x, z, cfg)) return false
+  if (y < h || y >= h + cfg.passageHeight) return false
+  // Only at the wall itself. A trigger that reached inward would fire across the whole interior;
+  // one that reached outward would grab a keeper walking past on their own business.
+  const d = distFromAxis(x, z, cfg)
+  const r = shellRadiusAt(x, z, seed, cfg)
+  return d >= r - 1 && d < r + cfg.thickness + 1
 }

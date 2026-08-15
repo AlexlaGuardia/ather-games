@@ -1,14 +1,15 @@
 // Run: npx tsx src/app/shimmer/voxel/bubble.test.ts
 //
-// ★ THE POINT OF THIS FILE IS THAT THE SHELL HOLDS AND THE DOOR OPENS — the two things that cannot
-// be checked by looking at a sphere 2km across.
+// ★ THE POINT OF THIS FILE IS THAT THE SHELL HOLDS EVERYWHERE AND THE SEAM STILL CROSSES — two
+// claims that cannot be checked by looking at a sphere 2km across.
 //
-// A player never sees this object. They see a wall of cloud curving away in both directions, and at
-// that scale a hole and a door are the same picture. So both are asked as reachability questions:
-// can you get in anywhere you should not (flood), and can you get in where you should (the passage).
+// A player never sees this object whole. They see a wall of cloud curving away in both directions,
+// and at that scale a hole and an unbroken wall are the same picture. So the wall is asked as a
+// reachability question (flood it), and the seam is asked as a trigger question (does the crossing
+// fire exactly there and nowhere else) — because since 2026-08-15 the seam is a VOLUME, not a cut.
 
 import {
-  DEFAULT_BUBBLE, bubbleMaterialAt, insideShell, inShell, inPassage,
+  DEFAULT_BUBBLE, bubbleMaterialAt, insideShell, inShell, inPassage, inPassageVolume,
   shellRadiusAt, distFromAxis, bubbleSwallows, type BubbleConfig,
 } from './bubble'
 import { AIR } from './section'
@@ -77,10 +78,12 @@ console.log('\nthe integration contract')
 console.log('\nthe shell holds')
 {
   // Flood from OUTSIDE inward, through everything that is not shell, at head height. Anything that
-  // reaches the centre is a hole a player walks through into 1000 blocks of ungenerated nothing.
-  // ⚠ The passage is deliberately moved out of the way for this pass — it is a hole ON PURPOSE and
-  // is checked separately below. Testing the wall with its own door open proves nothing.
-  const sealed: BubbleConfig = { ...SMALL, passageWidth: 0 }
+  // reaches the centre is a hole a player walks through into ungenerated nothing.
+  //
+  // ★ THIS NOW RUNS AGAINST THE SHIPPED CONFIG, AND THAT IS THE POINT OF THE 08-15 REVERSAL. While
+  // the passage was a hole cut through the wall, this test had to SEAL the door first — so the one
+  // arrangement never tested was the one that ships. The shell is continuous now, the passage is a
+  // trigger volume rather than a cut, and the flood proves the real thing.
   const seen = new Set<string>()
   const stack: [number, number][] = [[R, R]]
   let leaked = 0
@@ -90,42 +93,61 @@ console.log('\nthe shell holds')
     if (seen.has(k)) continue
     seen.add(k)
     if (Math.abs(x) > R || Math.abs(z) > R) continue
-    if (bubbleMaterialAt(x, GROUND + 1, z, SEED, GROUND, sealed) === WALL) continue   // the wall stops it
-    if (distFromAxis(x, z, sealed) < sealed.radius - sealed.thickness) { leaked++; continue }
+    if (bubbleMaterialAt(x, GROUND + 1, z, SEED, GROUND, SMALL) === WALL) continue   // the wall stops it
+    if (distFromAxis(x, z, SMALL) < SMALL.radius - SMALL.thickness) { leaked++; continue }
     stack.push([x + 1, z], [x - 1, z], [x, z + 1], [x, z - 1],
                [x + 1, z + 1], [x + 1, z - 1], [x - 1, z + 1], [x - 1, z - 1])
   }
-  check('no way through the shell but the passage', leaked === 0,
+  check('the shell has no way through it at all', leaked === 0,
     `${leaked} interior columns reachable from outside`)
 }
 
-// ── the door actually opens ───────────────────────────────────────────────────
+// ── the seam crosses, and only there ─────────────────────────────────────────
 console.log('\nthe passage')
 {
-  // ★ A DOOR THAT IS SEALED IS THE SAME BUG AS A WALL THAT LEAKS, and it is the likelier one: the
-  // opening is an arc a few blocks wide on a circumference of kilometres, so an arithmetic slip in
-  // the bearing simply closes it, and nothing looks wrong.
+  // ★ A SEAM THAT NEVER FIRES IS THE SAME BUG AS A WALL THAT LEAKS, and it is the likelier one: the
+  // seam is an arc a few blocks wide on a circumference of kilometres, so an arithmetic slip in the
+  // bearing simply silences it, and nothing about the wall looks wrong.
   const bearingX = Math.round(SMALL.cx + Math.cos(SMALL.passageBearing) * (SMALL.radius + 1))
   const bearingZ = Math.round(SMALL.cz + Math.sin(SMALL.passageBearing) * (SMALL.radius + 1))
-  check('the doorway column is in the passage', inPassage(bearingX, bearingZ, SMALL))
-  check('the doorway is open at the sill', bubbleMaterialAt(bearingX, GROUND, bearingZ, SEED, GROUND, SMALL) === AIR)
-  check('the doorway is open at head height', bubbleMaterialAt(bearingX, GROUND + 2, bearingZ, SEED, GROUND, SMALL) === AIR)
-  check('the doorway has a lintel',
-    bubbleMaterialAt(bearingX, GROUND + SMALL.passageHeight, bearingZ, SEED, GROUND, SMALL) === WALL)
+  check('the seam column is in the passage', inPassage(bearingX, bearingZ, SMALL))
 
-  // ⚠ THE SILL FOLLOWS THE GROUND. The first cut cut the door from the shell's underground base, so
-  // the opening was a buried slot and the wall was solid where a player walks. Asserted by moving
-  // the terrain and checking the door moves with it.
+  // ★ THE WALL IS UNBROKEN THROUGH THE SEAM. Canon: a threshold is "a soft seam… ground that simply
+  // continues. No gates, no locks, no keep-out", and "a build that puts a locked gate on a plot has
+  // misread the world." A hole is a gate. It is also a walk into an interior that is a separate
+  // coordinate space and is never generated — so if the crossing ever failed to fire, the keeper
+  // would step through the door into nothing.
+  check('the wall is solid at the seam, at the sill',
+    bubbleMaterialAt(bearingX, GROUND, bearingZ, SEED, GROUND, SMALL) === WALL)
+  check('and solid at head height',
+    bubbleMaterialAt(bearingX, GROUND + 2, bearingZ, SEED, GROUND, SMALL) === WALL)
+
+  // ★ BUT THE TRIGGER FIRES THERE — the seam is a volume, not a cut.
+  check('the crossing fires in the seam', inPassageVolume(bearingX, GROUND + 1, bearingZ, SEED, GROUND, SMALL))
+  check('it does not fire below the ground', !inPassageVolume(bearingX, GROUND - 2, bearingZ, SEED, GROUND, SMALL))
+  check('nor above the seam', !inPassageVolume(bearingX, GROUND + SMALL.passageHeight + 1, bearingZ, SEED, GROUND, SMALL))
+
+  // ⚠ THE SEAM FOLLOWS THE GROUND, which is why `h` is a parameter. An earlier cut pinned it to the
+  // shell's underground base, so it sat ~100 blocks below the terrain — a trigger a keeper could
+  // never reach, with nothing about the wall looking wrong.
   const high = GROUND + 30
-  check('the door moves with the terrain',
-    bubbleMaterialAt(bearingX, high + 1, bearingZ, SEED, high, SMALL) === AIR &&
-    bubbleMaterialAt(bearingX, GROUND + 1, bearingZ, SEED, high, SMALL) === WALL,
+  check('the seam moves with the terrain',
+    inPassageVolume(bearingX, high + 1, bearingZ, SEED, high, SMALL) &&
+    !inPassageVolume(bearingX, GROUND + 1, bearingZ, SEED, high, SMALL),
     'the sill is pinned to an altitude instead of to the ground')
 
-  // Opposite the door, the wall is shut — otherwise "the passage" is just the whole ring.
+  // Away from the seam the trigger must be silent, or "the passage" is the whole ring.
   const backX = Math.round(SMALL.cx - Math.cos(SMALL.passageBearing) * (SMALL.radius + 1))
   const backZ = Math.round(SMALL.cz - Math.sin(SMALL.passageBearing) * (SMALL.radius + 1))
-  check('the far side is shut', bubbleMaterialAt(backX, GROUND + 1, backZ, SEED, GROUND, SMALL) === WALL)
+  check('the far side is wall', bubbleMaterialAt(backX, GROUND + 1, backZ, SEED, GROUND, SMALL) === WALL)
+  check('and the far side does not cross', !inPassageVolume(backX, GROUND + 1, backZ, SEED, GROUND, SMALL))
+
+  // ★ AND THE TRIGGER MUST NOT REACH. One that bled inward would fire across the whole interior;
+  // one that bled outward would grab a keeper walking past on their own business.
+  check('the trigger does not reach into the interior',
+    !inPassageVolume(Math.round(bearingX * 0.5), GROUND + 1, Math.round(bearingZ * 0.5), SEED, GROUND, SMALL))
+  check('nor out into the open Wilds',
+    !inPassageVolume(bearingX + 12, GROUND + 1, bearingZ, SEED, GROUND, SMALL))
 
   // ★ AND AT THE REAL RADIUS, because this is the one property that does NOT survive scaling: the
   // doorway is an ANGLE, so at radius 1000 a fixed angle would be a 100-block hole. It is derived
