@@ -43,7 +43,7 @@
  * derived there. Reusing this field for that would silently gate refining behind furniture the
  * first time someone added a station-only recipe, which is the exact thing that was refused.
  */
-export type Station = 'hand' | 'crafting_table' | 'sawmill'
+export type Station = 'hand' | 'crafting_table' | 'sawmill' | 'stonecutter'
 
 export interface RecipeDef {
   id: string
@@ -53,8 +53,15 @@ export interface RecipeDef {
   /** Produced. One stack out per recipe; a recipe wanting two outputs is two recipes. */
   output: { itemId: string; count: number }
   /**
-   * ★ WHAT THIS RUN PAYS WHEN A STATION RUNS IT UNATTENDED (`voxel/workshop.ts`). Absent = the same
-   * as `output.count`, i.e. no bonus.
+   * ★ WHAT THIS RUN PAYS AT A STATION THAT IS BUILT FOR IT (`voxel/workshop.ts`). Absent = the same
+   * as `output.count`, i.e. no bonus anywhere.
+   *
+   * ⚠ DECLARING IT DOES NOT MEAN EVERY STATION PAYS IT — that is `StationDef.pays`, and the split
+   * arrived with the stonecutter (2026-08-15). A bonus is a property of the STATION × RECIPE pair
+   * and always was; the sawmill only got away with reading this field alone because the bench
+   * happened to deserve the same bonus on wood that the mill does. Stone is where that breaks: the
+   * cutter dresses rubble better than a carpenter's bench does, and if this field alone decided it
+   * the BENCH would quietly get the cutter's yield and the cutter would have no reason to exist.
    *
    * It exists because the obvious design for a working station does not survive contact: hand
    * crafting is instant, free and unlimited, so "the bench does it slowly while you're away" is
@@ -67,10 +74,20 @@ export interface RecipeDef {
    * never access. A player refining in the field is making a fair trade (I need it now, my bag is
    * full), and the craft panel prints both numbers so it is a decision rather than a trap.
    *
-   * ⚠ ONLY ON TAKING A LOG APART. Extraction is what a bench does better. Assembly is not
-   * (`planking` is two planks nailed together — a bench does not conjure a third), and `cut_stone`
-   * is deliberately excluded: its 2:1 loss is the dial that makes a quarry a real trip, and a mill
-   * quietly erasing it would overturn that ruling as a side effect of a different feature.
+   * ⚠ ONLY ON TAKING RAW MATERIAL APART. Extraction is what a purpose-built station does better.
+   * Assembly is not — `planking` is two planks nailed together and a bench does not conjure a
+   * third, so it stays bonus-free and the oracle guards that.
+   *
+   * ★ `cut_stone` NOW DECLARES ONE, AND THAT IS A REVISION, NOT AN EROSION — read this before
+   * touching it. This comment used to exclude stone outright, on the grounds that its 2:1 loss is
+   * the dial that makes a quarry a real trip and *"a mill quietly erasing it would overturn that
+   * ruling as a side effect of a different feature."* The operative words were **quietly** and
+   * **side effect**: the stonecutter is the deliberate pass that clause was holding the door open
+   * for, and it does not erase the loss — 4 rubble buys 2 cut stone by hand and 3 at the cutter,
+   * so stone still runs at a net loss everywhere and wood still runs at a net gain. Stone's
+   * identity survives; it just stops being brutal once you have built the thing that dresses it.
+   * `workshop.test.ts` asserts the loss survives at EVERY station rather than asserting this field
+   * is absent, which is the stronger form of the same defence.
    */
   milled?: number
   station: Station
@@ -137,8 +154,16 @@ export const RECIPES: RecipeDef[] = [
   // rubble should not have to walk home before it is worth anything. If stations are ever to mean
   // something, that is a deliberate pass over the whole table, not a side effect of adding a rock.
   // No mana — cutting stone channels nothing. See the header on where mana is genuinely due.
-  { id: 'cut_stone', name: 'Cut Stone', station: 'hand', mana: 0,
-    input: [{ itemId: 'rubble', count: 2 }], output: { itemId: 'cut_stone', count: 1 } },
+  //
+  // ⚠ RE-GRANULATED 4→2 ON 2026-08-15, AND THE RATIO IS UNCHANGED. It was 2 rubble → 1 cut stone;
+  // it is now 4 → 2, which is the same 2:1 and the same hand experience in every way except that
+  // the smallest batch is two blocks. The reason is arithmetic, not balance: the stonecutter's
+  // bonus has to be expressible as a whole block, and there is no integer between 1 and 2. At the
+  // old granularity the only bonus the data shape could express was 2 rubble → 2 stone, i.e. the
+  // loss erased entirely — the one outcome the ruling above forbids. Written 4→2, the cutter pays
+  // 3 and stone keeps a loss it can never dress away.
+  { id: 'cut_stone', name: 'Cut Stone', milled: 3, station: 'hand', mana: 0,
+    input: [{ itemId: 'rubble', count: 4 }], output: { itemId: 'cut_stone', count: 2 } },
 
   // ── ★ WOOD: PLANKS → PLANKING (2026-08-13) ──────────────────────────────────────────────────
   // The wood half of the grammar, and the mirror of `cut_stone`. The plank is currency now — it
@@ -170,6 +195,19 @@ export const RECIPES: RecipeDef[] = [
   { id: 'sawmill', name: 'Sawmill', station: 'crafting_table', mana: 0,
     input: [{ itemId: 'planking', count: 6 }, { itemId: 'goldwood_bark', count: 4 }],
     output: { itemId: 'sawmill', count: 1 } },
+
+  // ── ★ THE STONECUTTER — the third station, and it pays in MATERIAL (2026-08-15) ─────────────
+  // Bench work like the mill, and it costs the material it exists to save you: 24 rubble's worth
+  // of cut stone for the bed, planking for the frame. That ordering is the point — you cannot buy
+  // your way out of hand-cutting stone until you have hand-cut a real pile of it, so the station
+  // is a reward for the trip rather than a way to skip it.
+  //
+  // Deliberately NOT costing a blade material (the mill takes bark for its edge). A cutter works
+  // stone down by abrasion against a heavy bed; the mass IS the tool, which is also why it is the
+  // slowest thing on the plot.
+  { id: 'stonecutter', name: 'Stonecutter', station: 'crafting_table', mana: 0,
+    input: [{ itemId: 'cut_stone', count: 6 }, { itemId: 'planking', count: 4 }],
+    output: { itemId: 'stonecutter', count: 1 } },
 
   // ── LIGHT ───────────────────────────────────────────────────────────────────────────────────
   // One shard, four lanterns: night safety is meant to be a first-session purchase, not a grind —

@@ -42,6 +42,7 @@ export const TILE_MATERIALS: number[] = [
   // The crafting table added 2026-08-08 — the first station.
   MAT.CRAFT_TABLE,
   MAT.SAWMILL,
+  MAT.STONECUTTER,
   // The story road added 2026-08-08 with the quest-spine worldgen.
   MAT.PATH,
   // Plank block added 2026-08-08 with the road's bridges.
@@ -579,6 +580,56 @@ function paintSawmill(dst: Layer, size: number, seed: number, face: number) {
 }
 
 /**
+ * The stonecutter. The family's third station, and the first one that is not made of wood — which
+ * is doing the legibility work the sawmill had to buy with a blade slot.
+ *
+ * ★ MATERIAL, NOT TINT, IS WHAT TELLS THREE STATIONS APART. The mill needed its own painter because
+ * two pale timber cubes differing only in warmth is a legibility bug wearing a palette. A THIRD
+ * pale timber cube would have been worse than either — so the cutter is a grey stone bed standing
+ * on timber legs, and it reads at a glance from across a plot even in silhouette.
+ *
+ * TOP is a dressed slab, gritty rather than grained, split by the same dark kerf and bright steel
+ * lip the mill uses — the family mark, and the one cue that says the block cuts things. SIDE is the
+ * heavy bed as a thick band with the blade rim proud of it, standing on short dark legs: mass on
+ * legs, where the mill is a bench on legs. BOTTOM is plain dark stone; nobody sees it and inventing
+ * detail there is work that renders for no one.
+ */
+function paintStonecutter(dst: Layer, size: number, seed: number, face: number) {
+  const slab = rgbOf(MATERIAL_COLOR[MAT.STONECUTTER])
+  const dark = shade(slab, -46)
+  const timber = shade(rgbOf(MATERIAL_COLOR[MAT.CRAFT_TABLE]), -30)   // the family's leg stock
+  const steel = rgbOf(0xb9c0c6)
+  const bedH = Math.max(3, Math.round(size / 3))                      // the bed is THICK — it is the tool
+  const mid = Math.round(size / 2)
+  const legW = Math.max(1, Math.round(size / 8))
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      // Grit rather than grain: two hashes at different scales so the surface reads as stone that
+      // was worked, not as a plank that was greyed.
+      const grit = (h2(x, y, seed + 19) - 0.5) * 16
+      const blot = (h2(x >> 2, y >> 2, seed + 5) - 0.5) * 14
+      if (face === TOP) {
+        const kerf = y === mid
+        const lip = y === mid - 1
+        put(dst, size, x, y,
+          kerf ? shade(dark, -16) : lip ? shade(steel, grit * 0.5)
+               : shade(slab, grit + blot), 0)
+      } else if (face === SIDE) {
+        const rim = y === bedH - 1 && x > 2 && x < size - 3
+        const inBed = y < bedH
+        const inLeg = x < legW || x >= size - legW
+        put(dst, size, x, y,
+          rim ? shade(steel, grit * 0.5)
+              : inBed ? shade(slab, grit + blot)
+              : inLeg ? shade(timber, grit * 0.4) : shade(dark, -8 + grit * 0.6), 0)
+      } else {
+        put(dst, size, x, y, shade(dark, grit * 0.6 + blot * 0.5), 0)
+      }
+    }
+  }
+}
+
+/**
  * The chest. SIDE carries the whole read: a lid seam across the upper third, two dark iron straps,
  * and a latch plate centred on the seam — the silhouette a player identifies from six blocks away
  * without reading a label. TOP is lid boards running crosswise to the body's, banded by the same
@@ -707,6 +758,9 @@ export function paintFor(material: number, face: number, size: number): Layer {
     // ⚠ Appended to TILE_MATERIALS above, so it NEEDS this case — the switch's default is the ore
     // artist, and a station with no case ships as a magenta crystal you can right-click.
     case MAT.SAWMILL: paintSawmill(dst, size, seed, face); break
+    // ⚠ Same story a third time — TILE_MATERIALS without a case here is a magenta ore block. The
+    // render-audit oracle now fails on that, which is why this line cannot be forgotten again.
+    case MAT.STONECUTTER: paintStonecutter(dst, size, seed, face); break
     // ⚠ Appended to TILE_MATERIALS above, so it NEEDS this case — the switch's default is the ore
     // painter, which is how every tree once rendered as crystal.
     case MAT.CHEST: paintChest(dst, size, seed, face); break

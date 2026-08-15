@@ -121,7 +121,7 @@ import {
 import {
   stationKey, loadJob as loadStationJob, collect as collectStation, salvage as salvageStation,
   runsReady, runProgress, stationRecipes, maxRuns, jobCost, milledYield, MAX_RUNS,
-  STATIONS, stationOf, type StationId, type StationJob, type Workshop,
+  STATIONS, stationOf, payingStations, type StationDef, type StationId, type StationJob, type Workshop,
 } from '../voxel/workshop'
 import { itemIcon } from './tex/item-icon'
 import { bloom as bloomSpirit, due as potsDue, potKey, progress as potProgress, type PotClock } from './pot'
@@ -4815,11 +4815,14 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
           const k = colOf(hit.x, hit.z)
           const shop = jobsByCol.current.get(k)
           if (shop?.[stationKey(hit.x, hit.y, hit.z)]) {
-            // ⚠ AT ITS OWN RATE. Salvaging a sawmill's job against the bench's 12s would refund
-            // runs it had already finished — the rate is a property of the block you just broke.
-            const { drops: owed } = salvageStation(shop, stationKey(hit.x, hit.y, hit.z), Date.now(), STATIONS[brokeStation].runMs)
+            // ⚠ AT ITS OWN STATION — rate AND yield. Salvaging a sawmill's job against the bench's
+            // 12s would refund runs it had already finished, and paying a cutter's job at the
+            // bench's yield would quietly shave the bonus off work it had genuinely done. Both are
+            // properties of the block you just broke, which is why the whole def travels.
+            const brokeDef = STATIONS[brokeStation]
+            const { drops: owed } = salvageStation(shop, stationKey(hit.x, hit.y, hit.z), Date.now(), brokeDef)
             for (const d of owed) drops.current.push(spawnDrop(d.itemId, d.count, hit.x, hit.y, hit.z))
-            if (owed.length) onSay(`the bench gives up its work — ${owed.reduce((n: number, d: { count: number }) => n + d.count, 0)} items on the ground`)
+            if (owed.length) onSay(`${brokeDef.name.toLowerCase()} gives up its work — ${owed.reduce((n: number, d: { count: number }) => n + d.count, 0)} items on the ground`)
           }
         }
         if (felled) {
@@ -5386,12 +5389,21 @@ function CraftPanel({ have, tools, tick, station, onCraft, onCraftTool, onClose 
               <div className="flex justify-between gap-3">
                 <span>{r.name}</span>
                 {/* Both numbers, always — the same honesty the bench panel owes. A player who
-                    refines in the field should be able to see what the bench would have given him
-                    at the moment he decides, not discover it later. */}
-                <span className="text-amber-200/70 tabular-nums">{r.output.count}× {label(r.output.itemId)}
-                  {milledYield(r) > r.output.count &&
-                    <span className="text-white/30"> · {milledYield(r)}× milled</span>}
-                </span>
+                    refines in the field should be able to see what a station would have given him
+                    at the moment he decides, not discover it later.
+                    ★ AND IT NAMES THE STATION NOW, because with three of them "milled" stopped
+                    being an answer: the mill's bonus is not the cutter's, and a bare "3× milled"
+                    beside a stone row would send a player to whichever bench he owns to find the
+                    number is 2. `payingStations` is empty for assembly rows, which stay silent. */}
+                {(() => {
+                  const pays = payingStations(r)
+                  const at = pays[0]
+                  return (
+                    <span className="text-amber-200/70 tabular-nums">{r.output.count}× {label(r.output.itemId)}
+                      {at && <span className="text-white/30"> · {milledYield(r, at)}× at {at.name.toLowerCase()}</span>}
+                    </span>
+                  )
+                })()}
               </div>
               <div className="mt-0.5 text-[10px]">
                 <Cost items={r.input} />
@@ -5443,6 +5455,16 @@ function CraftPanel({ have, tools, tick, station, onCraft, onCraftTool, onClose 
  * `recipes.ts`), so this panel prints BOTH yields on every row. A player who refines in the field
  * is making an informed trade, not walking into a penalty he finds out about later.
  */
+/**
+ * Why a specialist's list is short, in the player's words. Keyed by `StationDef.accepts`, so a
+ * fourth station gets its line by declaring a speciality rather than by someone remembering to add
+ * a branch to the panel.
+ */
+const SPECIALITY_NOTE: Record<Exclude<StationDef['accepts'], 'any'>, string> = {
+  logs: 'a sawmill takes logs, nothing else — stone and fittings are bench work',
+  stone: 'a stonecutter takes rubble, nothing else — it is slower than the bench and wastes less',
+}
+
 function StationPanel({ st, have, inv, onChange, onSay, onClose }: {
   st: OpenStation
   have: (itemId: string) => number
@@ -5474,28 +5496,32 @@ function StationPanel({ st, have, inv, onChange, onSay, onClose }: {
 
   const doCollect = () => {
     if (!job || !r || ready <= 0) return
-    const { shop, payout } = collectStation({ [key]: job }, key, now, runMs)
+    const { shop, payout } = collectStation({ [key]: job }, key, now, def)
     if (!payout) return
     give(inv.current!, payout.itemId, payout.count)
     st.commit(shop)
     setJob(shop[key])
     onChange()
-    onSay(`the bench hands you ${payout.count}× ${label(payout.itemId)}`)
+    onSay(`${def.name.toLowerCase()} hands you ${payout.count}× ${label(payout.itemId)}`)
   }
 
+  // ⚠ `rec`, NOT `def` — the outer `def` is this panel's STATION and every sibling closure reads it
+  // for the rate and the yield. A local RecipeDef called `def` shadowed it here, which was harmless
+  // while nothing in this function wanted the station and is a payout bug waiting for the day one
+  // does. Two different `def`s in one component is a trap, not a naming preference.
   const doLoad = (recipeId: string, runs: number) => {
     if (runs <= 0) return
-    const def = RECIPES.find(x => x.id === recipeId)
-    if (!def) return
+    const rec = RECIPES.find(x => x.id === recipeId)
+    if (!rec) return
     // ⚠ SPEND FIRST, AND ONLY IF `loadJob` ACCEPTED. `loadJob` refuses to overwrite a live job, so
     // taking the input before asking would eat a bagful on a click the pure core then declined.
     const shop = loadStationJob({}, key, recipeId, runs, now)
     if (!shop[key]) return
-    for (const c of jobCost(def, runs)) removeItems(inv.current!, c.itemId, c.count)
+    for (const c of jobCost(rec, runs)) removeItems(inv.current!, c.itemId, c.count)
     st.commit(shop)
     setJob(shop[key])
     onChange()
-    onSay(`the bench sets to work — ${runs}× ${def.name.toLowerCase()}`)
+    onSay(`${def.name.toLowerCase()} sets to work — ${runs}× ${rec.name.toLowerCase()}`)
   }
 
   const busy = !!job && job.runs > 0
@@ -5525,7 +5551,7 @@ function StationPanel({ st, have, inv, onChange, onSay, onClose }: {
             </div>
             <div className="mt-2 flex justify-between items-center">
               <span className="text-white/40 tabular-nums">
-                {ready > 0 ? `${ready * milledYield(r)}× ${label(r.output.itemId)} waiting` : `${Math.ceil((runMs - (now - job!.since) % runMs) / 1000)}s to the next`}
+                {ready > 0 ? `${ready * milledYield(r, def)}× ${label(r.output.itemId)} waiting` : `${Math.ceil((runMs - (now - job!.since) % runMs) / 1000)}s to the next`}
               </span>
               <button disabled={ready <= 0} onClick={doCollect}
                       className={`px-2.5 py-1 rounded border transition-colors ${
@@ -5537,8 +5563,11 @@ function StationPanel({ st, have, inv, onChange, onSay, onClose }: {
           </div>
         ) : (
           <div className="mb-4 text-white/35">
-            {def.name.toLowerCase().replace('the ', 'the ')} is idle — give it something to work on
-            {st.kind === 'sawmill' && <span className="block mt-1 text-white/25">a sawmill takes logs, nothing else — stone and fittings are bench work</span>}
+            {def.name.toLowerCase()} is idle — give it something to work on
+            {/* ★ THE SPECIALITY LINE IS DERIVED FROM `accepts`, not written per station. A hand-kept
+                `st.kind === 'sawmill' && …` shipped station three with no explanation of why its
+                list is short, which reads as a bug in the panel rather than as the design. */}
+            {def.accepts !== 'any' && <span className="block mt-1 text-white/25">{SPECIALITY_NOTE[def.accepts]}</span>}
           </div>
         )}
 
@@ -5548,7 +5577,7 @@ function StationPanel({ st, have, inv, onChange, onSay, onClose }: {
         {rows.map((rec) => {
           const n = maxRuns(rec, have)
           const can = !busy && n > 0
-          const bonus = milledYield(rec) > rec.output.count
+          const bonus = milledYield(rec, def) > rec.output.count
           return (
             <button key={rec.id} disabled={!can} onClick={() => doLoad(rec.id, n)}
                     className={`w-full text-left mb-1 px-2 py-1.5 rounded border transition-colors ${
@@ -5557,13 +5586,13 @@ function StationPanel({ st, have, inv, onChange, onSay, onClose }: {
               <div className="flex justify-between gap-3">
                 <span>{rec.name}</span>
                 <span className="tabular-nums">
-                  <span className={bonus ? 'text-amber-200/80' : 'text-white/45'}>{milledYield(rec)}×</span>
+                  <span className={bonus ? 'text-amber-200/80' : 'text-white/45'}>{milledYield(rec, def)}×</span>
                   {bonus && <span className="text-white/25"> (by hand {rec.output.count}×)</span>}
                 </span>
               </div>
               <div className="mt-0.5 text-[10px] text-white/40">
                 {n > 0 ? `${n} run${n === 1 ? '' : 's'} from your bag` : `no ${label(rec.input[0].itemId)}`}
-                {n >= MAX_RUNS && <span className="text-white/25"> · the bench holds no more</span>}
+                {n >= MAX_RUNS && <span className="text-white/25"> · {def.name.toLowerCase()} holds no more</span>}
               </div>
             </button>
           )

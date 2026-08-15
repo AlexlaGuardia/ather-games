@@ -238,9 +238,18 @@ console.log('building grammar')
     const perLog = recipeDef('goldwood_planks')!.output.count
     const perPanel = recipeDef('planking')!.input[0].count
     const woodOut = perLog / perPanel                    // placed blocks per block mined
-    const stoneOut = 1 / recipeDef('cut_stone')!.input[0].count
+    // ⚠ WAS `1 / input.count`, WHICH HARDCODED AN OUTPUT OF ONE. It read as "placed per mined" and
+    // was really "one over the input", so the 2026-08-15 re-granulation of cut_stone from 2→1 to
+    // 4→2 — the SAME 2:1 ratio, by construction — would have reported the stone economy as having
+    // silently halved and failed for a change that altered nothing. A ratio assert that only reads
+    // one side of the ratio is a weak proxy wearing arithmetic.
+    const cut = recipeDef('cut_stone')!
+    const stoneOut = cut.output.count / cut.input[0].count
     check('wood is cheaper to build in than stone', woodOut > stoneOut,
       `wood ${woodOut} vs stone ${stoneOut} placed per block mined — timber is renewable and should feel it`)
+    // And the loss itself, stated directly: hand-cutting stone must never break even, or "a quarry
+    // is a real trip" stops being true and §7's asymmetry is decoration.
+    check('hand-cut stone runs at a net loss', stoneOut < 1, `${stoneOut} placed per rubble`)
   }
 
   // 8. NOTHING STILL ASKS FOR THE ITEM THAT NO LONGER EXISTS. `block_stone` was a real cost on a

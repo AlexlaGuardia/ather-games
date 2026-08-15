@@ -79,6 +79,11 @@ export const MATERIAL_COLOR: Record<number, number> = {
   // Milled goldwood, a step lighter and warmer than the raw log — a worked surface, not bark.
   [MAT.CRAFT_TABLE]: 0xb08a4e,
   [MAT.SAWMILL]: 0xc9a97a,
+  // The stonecutter reads STONE, not timber — a shade under cut stone (0x9aa0a4) so a dressed bed
+  // sits visibly darker than the wall blocks it produces. The two mills are pale wood; this one is
+  // grey, which is the whole point: the family's third member must be told apart from the other two
+  // across a plot, and a third warm timber cube could not be.
+  [MAT.STONECUTTER]: 0x8f9296,
   // Darker than the bench: a chest is sturdier stock, and the two stand side by side in a keeper's
   // home — they have to read apart at a glance, not just up close.
   [MAT.CHEST]: 0x8f6535,

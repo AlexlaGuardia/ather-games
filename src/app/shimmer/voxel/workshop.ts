@@ -60,7 +60,17 @@ import { MAT } from './depth'
 export const RUN_MS = 12_000
 
 /** The kinds of station that exist. Matches the `MAT.*` blocks and the item ids that place them. */
-export type StationId = 'crafting_table' | 'sawmill'
+export type StationId = 'crafting_table' | 'sawmill' | 'stonecutter'
+
+/**
+ * A body of work a station can be built around.
+ *
+ * ★ EACH ONE IS DERIVED FROM THE RECIPE'S OWN INPUTS, NEVER FROM A LIST OF RECIPE IDS (see
+ * `inSpeciality`). A fifth tree species joins the sawmill the day it is added and nobody has to
+ * remember a second table — the same reason `stationRecipes` filters on `station === 'hand'`
+ * rather than naming rows.
+ */
+export type Speciality = 'logs' | 'stone'
 
 export interface StationDef {
   id: StationId
@@ -68,15 +78,63 @@ export interface StationDef {
   name: string
   /** ms per run at this station, unstaffed. */
   runMs: number
+  /** What it will WORK ON. `'any'` = every hand-refine in the table. */
+  accepts: 'any' | Speciality
   /**
-   * What it will work on. `'any'` = every hand-refine in the table; `'logs'` = only recipes that
-   * consume a log.
+   * What it pays the recipe's `milled` bonus on, or `'none'`. Always a SUBSET of `accepts`
+   * (asserted): a station works on everything it accepts and pays extra only on what it was BUILT
+   * for.
    *
-   * ★ DERIVED, NOT LISTED. `'logs'` asks the recipe's own inputs, so a fifth tree species joins the
-   * sawmill the day it is added and nobody has to remember a second list — the same reason
-   * `stationRecipes` filters on `station === 'hand'` rather than naming rows.
+   * ★ THIS FIELD IS WHY THE STONECUTTER CAN EXIST AT ALL. Before it, the bonus lived only on the
+   * recipe, so any station that accepted a row paid its bonus. That was invisible while the only
+   * bonus was on wood and both wood stations deserved it — and it breaks the instant a speciality
+   * has a station the generalist bench should NOT match. Give `cut_stone` a bonus under the old
+   * model and the bench pays it too: the quarry dial is erased for free and the cutter is a slower
+   * bench. The bonus is a property of the STATION × RECIPE pair; this is the station's half.
+   *
+   * ⚠ THE BENCH PAYS `'logs'`, WHICH IS NOT AN ODDITY — it is today's behaviour written down. The
+   * bench is a carpenter's bench: a plank bed and a blade, so it splits a log cleanly and shatters
+   * stone like anything else you improvise on. Changing it to `'none'` would be a real balance
+   * change to a station that has not been playtested yet, not a tidy-up.
    */
-  accepts: 'any' | 'logs'
+  pays: Speciality | 'none'
+}
+
+/**
+ * Raw quarried stone, as an item id.
+ *
+ * ★ SAFE AS A SINGLE ID RATHER THAN A LIST, BECAUSE THE REGISTRY RULED IT SO: every stone block in
+ * the game — stone and deep stone alike — drops this same rubble, deliberately, so that there is
+ * *"one broken-rock economy, not two"* (`registry.ts`, asserted in `recipes.test.ts`). "Takes
+ * rubble" therefore cannot fragment the way "takes a log" would have across four tree species,
+ * which is why that one is a suffix test and this one is an equality test.
+ */
+const RAW_STONE = 'rubble'
+
+/** Is this recipe inside that body of work? The one place a speciality is decided. */
+function inSpeciality(r: RecipeDef, s: Speciality): boolean {
+  return s === 'logs'
+    ? r.input.some(i => i.itemId.endsWith('_log'))
+    : r.input.some(i => i.itemId === RAW_STONE)
+}
+
+/** Will this station take the job at all? */
+export const worksOn = (def: StationDef, r: RecipeDef): boolean =>
+  def.accepts === 'any' || inSpeciality(r, def.accepts)
+
+/** Will it pay the recipe's `milled` bonus on that job? */
+export const paysBonus = (def: StationDef, r: RecipeDef): boolean =>
+  def.pays !== 'none' && inSpeciality(r, def.pays)
+
+/**
+ * Which stations pay this recipe's bonus, in table order. Empty = nowhere pays extra.
+ *
+ * For the hand-craft panel, which has no station of its own and still owes the player the honest
+ * comparison: it prints the yield AND where to get it, so "refine here or carry it home" is a
+ * decision made with both numbers rather than discovered afterwards.
+ */
+export function payingStations(r: RecipeDef): StationDef[] {
+  return Object.values(STATIONS).filter(def => paysBonus(def, r) && milledYield(r, def) > r.output.count)
 }
 
 /**
@@ -88,14 +146,43 @@ export interface StationDef {
  * mill runs logs 2.4x faster and **refuses everything else**: stone, lanterns, pots and chests stay
  * bench work. Specialist against generalist, so a plot that does both wants both.
  *
+ * ★★ AND THE THIRD STATION SELLS A DIFFERENT THING AGAIN — THAT IS THE WHOLE REASON IT EXISTS.
+ *
+ * The sawmill proved a station can be narrower. If the stonecutter were "the sawmill for stone" the
+ * family would have exactly one dial (speed) and a third member would be a copy wearing a new
+ * texture. Worse, it could not have been built at all: the only stone recipe is `cut_stone`, which
+ * paid no bonus, so a faster-but-narrower cutter would have sold nothing except elapsed time — and
+ * elapsed time is worth precisely zero against instant, free, unlimited hand-crafting. That is the
+ * failure this file's header was written about, and stone is exactly where it lands.
+ *
+ * ⚠ THE REPO'S OWN NOTE POINTED STRAIGHT AT THE TRAP. `milledYield` said stone's reward for a
+ * station is *"unattended bulk"* — which the header two screens up already proves is worth nothing.
+ * Stone had no station-shaped reward at all, so the cutter had to be given one rather than handed
+ * the mill's.
+ *
+ * So the cutter INVERTS the mill's axis: it is the slowest thing on the plot and it pays in
+ * MATERIAL. 4 rubble buys 2 cut stone in the hand or at the bench, and 3 at the cutter.
+ *
+ * ★ ITS THROUGHPUT IS EXACTLY THE BENCH'S — 3 per 18s and 2 per 12s are the same stone per second,
+ * chosen rather than stumbled into, and asserted. The cutter does not make stone arrive faster; it
+ * makes rubble go further. So the panel offers a real choice with no dominant answer: a player
+ * sitting on a rubble mountain uses the bench, a player who has to walk to the quarry uses the
+ * cutter, and neither retires the other.
+ *
+ * Read across, the three answers to "why build me" are all different:
+ *   bench       — generalist. Runs anything; the baseline both other axes are measured against.
+ *   sawmill     — sells TIME.     2.4x faster, logs only, at the same yield the bench gives.
+ *   stonecutter — sells MATERIAL. 1.5x the yield, stone only, and slower than the bench for it.
+ *
  * ⚠ THE RATE IS NOT STORED ON THE JOB. It is read from here at the moment it is used, so tuning
  * these numbers retunes every station already standing in the world. A rate copied into the save
  * when the job was queued would leave old jobs running at whatever the balance was that day, and no
  * amount of later tuning would ever reach them.
  */
 export const STATIONS: Record<StationId, StationDef> = {
-  crafting_table: { id: 'crafting_table', name: 'The Bench',   runMs: RUN_MS, accepts: 'any' },
-  sawmill:        { id: 'sawmill',        name: 'The Sawmill', runMs: 5_000,  accepts: 'logs' },
+  crafting_table: { id: 'crafting_table', name: 'The Bench',       runMs: RUN_MS, accepts: 'any',   pays: 'logs'  },
+  sawmill:        { id: 'sawmill',        name: 'The Sawmill',     runMs: 5_000,  accepts: 'logs',  pays: 'logs'  },
+  stonecutter:    { id: 'stonecutter',    name: 'The Stonecutter', runMs: 18_000, accepts: 'stone', pays: 'stone' },
 }
 
 /** Item ids that place a station. Used by `recipes.test.ts` to state the gate rule. */
@@ -114,6 +201,7 @@ export const STATION_ITEMS: ReadonlySet<string> = new Set(Object.keys(STATIONS))
 export const STATION_MAT: Readonly<Record<number, StationId>> = {
   [MAT.CRAFT_TABLE]: 'crafting_table',
   [MAT.SAWMILL]: 'sawmill',
+  [MAT.STONECUTTER]: 'stonecutter',
 }
 
 export const stationOf = (mat: number): StationId | null => STATION_MAT[mat] ?? null
@@ -149,16 +237,20 @@ export const stationKey = (x: number, y: number, z: number): string => `${x},${y
 export const recipeOf = recipeDef
 
 /**
- * What ONE run of this recipe pays at a station.
+ * What ONE run of this recipe pays AT THIS STATION.
  *
- * Falls back to the hand yield when a row declares no `milled` bonus, which is deliberate and not a
- * gap: `cut_stone` runs 2 rubble → 1 on purpose (`recipes.ts` — the loss is what makes a quarry a
- * real trip), and a mill that quietly erased it would overturn that ruling as a side effect of this
- * feature. Stone's reward for a station is unattended bulk; wood's is the cleaner split. Two
- * materials that feel different is the point, not an oversight.
+ * Falls back to the hand yield whenever the row declares no bonus, or declares one this station is
+ * not built to pay. Both fallbacks are deliberate and neither is a gap: a chest is assembly and
+ * earns nothing anywhere, and `cut_stone` earns its bonus at the cutter and nowhere else.
+ *
+ * ⚠ THE STATION IS REQUIRED, NOT DEFAULTED, and this is the same lesson `runMs` learnt one commit
+ * ago — with more teeth, because the wrong answer here is a payout rather than a rate. A default of
+ * "any station" would hand the cutter's stone bonus to the bench, silently erasing the quarry dial
+ * for players who never build a cutter; a default of "the bench" would silently withhold it from
+ * the cutter. Every call site has a station in hand, so there is nothing to save by guessing.
  */
-export function milledYield(r: RecipeDef): number {
-  return r.milled ?? r.output.count
+export function milledYield(r: RecipeDef, at: StationDef): number {
+  return paysBonus(at, r) ? (r.milled ?? r.output.count) : r.output.count
 }
 
 /**
@@ -258,14 +350,21 @@ export function loadJob(
  * mysteriously slower than the number says.
  *
  * Collecting an unfinished job is legal and pays zero; the job is untouched, not reset.
+ *
+ * ★ TAKES THE WHOLE STATION, NOT A RATE. A payout needs both halves — how fast this block runs and
+ * what it pays per run — and passing them separately is an invitation to hand it one station's
+ * clock with another's yield, which would read as correct and be wrong by exactly one bonus. The
+ * pure clock helpers (`runsReady`/`runProgress`) still take a bare `runMs`, because a clock has no
+ * opinion about payment.
  */
 export function collect(
-  shop: Workshop, key: string, now: number, runMs: number,
+  shop: Workshop, key: string, now: number, at: StationDef,
 ): { shop: Workshop; payout: { itemId: string; count: number } | null } {
   const job = shop[key]
   if (!job) return { shop, payout: null }
   const r = recipeOf(job.recipeId)
   if (!r) return { shop, payout: null }               // table changed under an old save; see `salvage`
+  const runMs = at.runMs
   const done = runsReady(job, now, runMs)
   if (done <= 0) return { shop, payout: null }
 
@@ -274,7 +373,7 @@ export function collect(
   if (left <= 0) delete next[key]                     // spent stations leave no record behind
   else next[key] = { ...job, runs: left, since: job.since + done * runMs }
 
-  return { shop: next, payout: { itemId: r.output.itemId, count: done * milledYield(r) } }
+  return { shop: next, payout: { itemId: r.output.itemId, count: done * milledYield(r, at) } }
 }
 
 /**
@@ -288,9 +387,14 @@ export function collect(
  *
  * ⚠ The run IN FLIGHT is refunded as input, not part-paid. There is no half a plank, and rounding a
  * partial run to a whole one in either direction is a lie in one direction or the other.
+ *
+ * ⚠ AT THE BROKEN BLOCK'S OWN STATION, both for rate and for yield. Salvaging a cutter's job
+ * against the bench would hand back the wrong number of finished runs AND pay them at the wrong
+ * rate — two errors in the same direction, which is how "load a cutter, smash it with a bench
+ * open" would become the best stone in the game.
  */
 export function salvage(
-  shop: Workshop, key: string, now: number, runMs: number,
+  shop: Workshop, key: string, now: number, at: StationDef,
 ): { shop: Workshop; drops: { itemId: string; count: number }[] } {
   const job = shop[key]
   if (!job) return { shop, drops: [] }
@@ -300,9 +404,9 @@ export function salvage(
   const r = recipeOf(job.recipeId)
   if (!r) return { shop: next, drops: [] }            // unknown recipe: nothing honest to hand back
 
-  const done = runsReady(job, now, runMs)
+  const done = runsReady(job, now, at.runMs)
   const drops: { itemId: string; count: number }[] = []
-  if (done > 0) drops.push({ itemId: r.output.itemId, count: done * milledYield(r) })
+  if (done > 0) drops.push({ itemId: r.output.itemId, count: done * milledYield(r, at) })
   const unstarted = job.runs - done
   if (unstarted > 0) for (const c of jobCost(r, unstarted)) drops.push(c)
   return { shop: next, drops }
@@ -318,9 +422,6 @@ export function salvage(
  */
 export function stationRecipes(at: StationId = 'crafting_table'): RecipeDef[] {
   const def = STATIONS[at]
-  return RECIPES.filter(r => {
-    if (r.station !== 'hand' || r.input.length === 0) return false
-    // `'logs'` asks the recipe, never a list — see StationDef.accepts.
-    return def.accepts === 'any' || r.input.some(i => i.itemId.endsWith('_log'))
-  })
+  // `worksOn` asks the recipe's own inputs, never a list — see `Speciality`.
+  return RECIPES.filter(r => r.station === 'hand' && r.input.length > 0 && worksOn(def, r))
 }

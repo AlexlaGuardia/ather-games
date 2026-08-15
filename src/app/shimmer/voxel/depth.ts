@@ -35,7 +35,7 @@ import { AIR } from './section'
  * becomes accidental canon.
  */
 // ── ★ THE MATERIAL ID MAP — one number space, four files ────────────────────────────────────────
-// MAT 0-13 + 24-30 + 40-41 (here) · ORE 16-22 (ore.ts) · WOOD 32-39 (trees.ts) · STRUCTURE 48-49 (pieces.ts).
+// MAT 0-13 + 24-30 + 40-47 + 50 (here) · ORE 16-22 (ore.ts) · WOOD 32-39 (trees.ts) · STRUCTURE 48-49 (pieces.ts).
 // PLANTS take 24-26, in the gap between ore and wood. ⚠ The first cut put them at 14-16 because
 // MAT stops at 13 — and 16 is ORE.RAW_MANA, so a wildflower WAS a mana seam: it inherited ore
 // hardness, dropped shards, and `isPlant` matched ore and logs all through the underground.
@@ -222,6 +222,17 @@ export const MAT = {
    * 47; this closes the 42-47 gap.
    */
   CONJURED: 47,
+  /**
+   * The stonecutter — the third station, and the stone half of the family (`voxel/workshop.ts`).
+   * Never generated; only ever placed. ⚠ TBD-CANON on the name, same as everything else here.
+   *
+   * ⚠ 50 OPENS A NEW BAND, because 42-47 is full and STRUCTURE owns 48-49 (pieces.ts). Ids 14-15,
+   * 23 and 31 are also free and were all rejected: 14-15 sit against ORE's range (that adjacency is
+   * how a wildflower once became a mana seam), 23 is the same story one slot up, and 31 is the lone
+   * cell under WOOD's 32-39 band. A station is furniture, so 50+ is the STATION/FURNITURE band from
+   * here on — the next one is 51, not another squeeze into somebody else's gap.
+   */
+  STONECUTTER: 50,
 } as const
 
 export interface DepthConfig {

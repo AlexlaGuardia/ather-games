@@ -148,6 +148,11 @@ export const BLOCKS: BlockDef[] = [
   // differs is entirely in `voxel/workshop.ts`: it runs logs 2.4x faster and refuses everything
   // else, so it does not obsolete the bench it costs five logs to stand beside.
   { noSlab: true, material: MAT.SAWMILL, name: 'Sawmill', hardness: 0.9, skill: null, minTier: 0, drops: [{ itemId: 'sawmill', count: 1 }], placeable: true },
+  // ── The stonecutter — the third station, and the one that sells YIELD instead of speed ───────
+  // Heavier than the two timber benches (a stone bed on a timber frame), which is all `hardness`
+  // is saying. Still `skill: null` and still drops itself: the furniture rule holds across the
+  // whole family — rearranging your own plot must be free, whatever the station is made of.
+  { noSlab: true, material: MAT.STONECUTTER, name: 'Stonecutter', hardness: 1.2, skill: null, minTier: 0, drops: [{ itemId: 'stonecutter', count: 1 }], placeable: true },
   // ── ★ CAST MATTER CANNOT BE QUARRIED (2026-08-14) ────────────────────────────────────────────
   // `hardness: Infinity` ⇒ `breakSeconds` returns Infinity ⇒ `canBreak` is false. That single value
   // is the whole anti-exploit: without it a keeper casts a 16-mana Stonewall, mines five rubble, and
