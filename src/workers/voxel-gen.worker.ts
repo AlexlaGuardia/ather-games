@@ -24,6 +24,7 @@
 import {
   Column, SECTION, makeColumn, meshColumn, DEFAULT_COLUMN,
 } from '../app/shimmer/voxel/column'
+import { generatePlotColumn } from '../app/shimmer/voxel/plot-column'
 import { createMeshScratch } from '../app/shimmer/voxel/greedy'
 import { buildAttrs, attrBuffers, type MeshAttrs } from '../app/shimmer/voxel3d/attrs'
 
@@ -73,7 +74,7 @@ function emitMesh(cx: number, cz: number): void {
 }
 
 self.onmessage = (e: MessageEvent) => {
-  const msg = e.data as { type: string; cx?: number; cz?: number; seed?: number; keep?: string[] }
+  const msg = e.data as { type: string; cx?: number; cz?: number; seed?: number; keep?: string[]; space?: string }
 
   if (msg.type === 'init') {
     seed = msg.seed ?? seed
@@ -88,8 +89,24 @@ self.onmessage = (e: MessageEvent) => {
 
   if (msg.type === 'request') {
     const cx = msg.cx!, cz = msg.cz!
-    const k = key(cx, cz)
-    if (!cols.has(k)) cols.set(k, makeColumn(cx * SECTION, cz * SECTION, seed))
+    // ── ★ TWO SPACES (2026-08-15) ──────────────────────────────────────────────────────────────
+    // The Home Plot is its own bounded generator measured from its own origin, so the SPACE has to
+    // ride the request — it cannot be inferred from the coordinates, which overlap the Wilds by
+    // construction (plot 0,0 and Wilds 0,0 are both real and different).
+    //
+    // ⚠ AND IT MUST RIDE THE CACHE KEY TOO. `cols` is keyed by chunk coords; without the space in
+    // the key, walking into the garden at 0,0 would be served the Wilds column the keeper had just
+    // been standing in — cached, correct-looking, and completely the wrong world.
+    const space: string = msg.space === 'plot' ? 'plot' : 'wilds'
+    const k = space === 'wilds' ? key(cx, cz) : `${space}:${key(cx, cz)}`
+    if (!cols.has(k)) {
+      cols.set(k, space === 'plot'
+        // The world lane's adapter, not a second generator here: it mirrors `generateColumn`'s
+        // post-conditions (uniform refreshed, stage Ready) so the switch is one line rather than a
+        // mode threaded through seven stages the plot needs none of.
+        ? generatePlotColumn(new Column(cx * SECTION, cz * SECTION, DEFAULT_COLUMN), seed)
+        : makeColumn(cx * SECTION, cz * SECTION, seed))
+    }
     // ★ ALWAYS answer with the voxels, cached or fresh. The main thread evicts columns it walks
     // away from and re-requests them on return; a request answered with a bare `done` (the old
     // cached-column path) left that chunk a PERMANENT hole — re-request was blocked by the

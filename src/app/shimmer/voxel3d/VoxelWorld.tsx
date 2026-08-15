@@ -38,6 +38,9 @@ import { orphanedLeaves, dueLeaves, withoutLeaves, enqueueLeaves, type PendingLe
 import { salvageItems, salvageMessage } from '../voxel/salvage'
 import { blockDef, materialForItem, emitOf, BLOCKS, type BlockSkill } from '../voxel/registry'
 import { editIndex, recordEdit, applyEdits, packEdits, unpackEdits, isStale, GENERATOR_VERSION, type ColumnEdits } from '../voxel/edits'
+import { generatePlotColumn, plotGeneratedVoxel } from '../voxel/plot-column'
+import { plotThreshold, hasFallenOut, DEFAULT_PLOT } from '../voxel/plot'
+import type { Space } from './save'
 
 /** Which generator version the player has already been warned about. See `staleWarned`. */
 const GEN_WARN_KEY = 'ather:shimmer:genWarned'
@@ -410,6 +413,8 @@ interface ConsoleCtx {
   tp: (x: number, z: number) => string
   /** Player position, for `~` relative coordinates (MC's convention, ported with the chat). */
   pos: () => { x: number; z: number }
+  /** Cross between the Wilds and the Home Plot. Owner-gated — see the `/space` row. */
+  space: (to?: string) => string
   /**
    * The garden, as the console can see and touch it. `list` is VIEW-GRADE — a keeper reading their
    * own roster is not a cheat, and it is the one thing that explains a refused spar prompt. The
@@ -524,6 +529,12 @@ const CONSOLE_CMDS: ConsoleCmd[] = [
   // blocks across in a region 2000 across, and there are three of them: found by walking is found
   // by accident. The compass half is VIEW-GRADE for the same reason /goto's is (knowing a place
   // exists is not a cheat); only the teleport is gated.
+  // ★ /space (2026-08-15) — the Home Plot's coordinate space, reached before its door exists.
+  // OWNER-GATED, unlike /mist's compass half: this is not "knowing a place exists", it is standing
+  // in it, and the canon door is a passage through the bubble (slice 2). Shipping the risky half
+  // behind a command means it gets walked before travel depends on it.
+  { name: 'space', usage: 'space [plot|wilds]', help: 'bare: toggle · plot/wilds: cross to that space', owner: true,
+    run: (a, c) => c.space(a[0]) },
   { name: 'mist', usage: 'mist [go]', help: 'bare: bearings to nearby mist patches · go: teleport to the nearest',
     run: (a, c) => {
       const p = c.pos()
@@ -1087,7 +1098,7 @@ export default function VoxelWorld() {
   }, [])
   /** World fills this with the verbs only it can perform (teleport needs the walker + the clock
    *  of loaded columns). Null until the world mounts; commands degrade to a message, never throw. */
-  const worldCmd = useRef<{ tp: (x: number, z: number) => string; pos: () => { x: number; z: number } } | null>(null)
+  const worldCmd = useRef<{ tp: (x: number, z: number) => string; pos: () => { x: number; z: number }; space: (to?: string) => string } | null>(null)
   const consoleCtx = useMemo<ConsoleCtx>(() => ({
     isOwner,
     radius: () => settings.viewRadius,
@@ -1100,6 +1111,7 @@ export default function VoxelWorld() {
     },
     tp: (x, z) => worldCmd.current ? worldCmd.current.tp(x, z) : 'the world is still waking',
     pos: () => worldCmd.current ? worldCmd.current.pos() : { x: 0, z: 0 },
+    space: (to) => worldCmd.current ? worldCmd.current.space(to) : 'the world is still waking',
     party: partyOps,
     mistLedger: () => mistLedger.current,
     rune: (arg) => {
@@ -2767,7 +2779,7 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
   vitals: React.RefObject<Vitals>
   /** The cast pool. `regen` is per second, derived from the Mana skill. */
   mana: React.RefObject<{ cur: number; max: number; regen: number }>
-  cmdOut: React.RefObject<{ tp: (x: number, z: number) => string; pos: () => { x: number; z: number } } | null>
+  cmdOut: React.RefObject<{ tp: (x: number, z: number) => string; pos: () => { x: number; z: number }; space: (to?: string) => string } | null>
 }) {
   const { camera } = useThree()
   const group = useRef<THREE.Group>(null)
@@ -2982,6 +2994,17 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
         return `off to ${x}, ${z} (ground ${h}) — the land is catching up`
       },
       pos: () => ({ x: camera.position.x, z: camera.position.z }),
+      // ★ SLICE 1 OF THE PLOT IS REACHED BY CONSOLE, ON PURPOSE. The canon door is a passage
+      // through the bubble's shell, and that is slice 2. Shipping the coordinate-space half behind
+      // an owner command means it gets WALKED before travel depends on it — and it is the half
+      // where a mistake costs a save, so it should be the half that gets played first.
+      space: (to?: string) => {
+        const want: Space = to === 'plot' ? 'plot' : to === 'wilds' ? 'wilds'
+          : space.current === 'plot' ? 'wilds' : 'plot'
+        if (want === space.current) return `already in the ${want}`
+        enterSpaceRef.current?.(want)
+        return want === 'plot' ? 'stepping into your garden' : 'stepping out into the Wilds'
+      },
     }
     return () => { cmdOut.current = null }
   }, [cmdOut, camera])
@@ -3174,7 +3197,7 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
       void saveColumn(SEED, gx, gz, {
         edits: packEdits(e), pieces: piecesByCol.current.get(k) ?? [],
         genRemoved: genRemovedByCol.current.get(k), chests, jobs,
-      })
+      }, space.current)
     }
     dirtySaves.current.clear()
   }, [])
@@ -3321,6 +3344,56 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
   useEffect(() => {
     try { decayQueue.current = JSON.parse(localStorage.getItem(DECAY_KEY) ?? '[]') } catch { decayQueue.current = [] }
   }, [DECAY_KEY])
+
+/* eslint-disable react-hooks/exhaustive-deps */
+  /**
+   * ── ★ CROSS BETWEEN THE TWO SPACES (2026-08-15) ─────────────────────────────────────────────
+   * Everything the host holds about the world is per-space and none of it is keyed by space: the
+   * column cache, the meshes, the edit maps, the pieces, the chests, the station jobs. They are
+   * keyed by CHUNK, and both spaces have a chunk (0,0). So crossing is a teardown, not a teleport —
+   * carry one map across and the garden inherits whatever the Wilds had at the same coordinates.
+   *
+   * ⚠⚠ THE FLUSH COMES FIRST, AND THE ORDER IS THE WHOLE FUNCTION. `dirtySaves` holds chunk keys
+   * with no space on them, and `flushSaves` writes them with `space.current`. Flip the space first
+   * and every unsaved edit in the Wilds is written into the garden's namespace — the keeper's last
+   * few swings silently move to another world. Flush, THEN flip.
+   *
+   * ⚠ The worker's own cache is already space-keyed, so nothing has to be said to it beyond the
+   * space on each request. It is the HOST's caches that overlap.
+   */
+  const enterSpace = useCallback((to: Space) => {
+    if (space.current === to) return
+    const g = group.current
+    flushSaves()                                    // ⚠ before the flip — see above
+    space.current = to
+    for (const [, m] of drawn.current) { g?.remove(m); m.geometry.dispose() }
+    drawn.current.clear()
+    cols.current.clear()
+    requested.current.clear()
+    edits.current.clear()
+    dirtySaves.current.clear()
+    piecesByCol.current.clear()
+    chestsByCol.current.clear()
+    jobsByCol.current.clear()
+    genRemovedByCol.current.clear()
+    // The keeper lands at the plot's derived threshold, or back at spawn in the Wilds. ★ DERIVED,
+    // never stored: a coordinate saved before a generator change returns a keeper into rock, and
+    // `plotThreshold` is computed from the same functions that build the ground so it cannot
+    // disagree with them.
+    const lc = loco.current
+    if (to === 'plot') {
+      const t = plotThreshold(SEED)
+      lc.px = t.x + 0.5; lc.py = t.y; lc.pz = t.z + 0.5
+    } else {
+      lc.px = SPAWN_X + 0.5; lc.pz = SPAWN_Z + 0.5
+      lc.py = columnHeight(SPAWN_X, SPAWN_Z, SEED) + 1
+    }
+    lc.hvx = 0; lc.hvz = 0; lc.vy = 0; lc.airborne = true
+    settled.current = false
+    onSay(to === 'plot' ? 'you step through into your garden' : 'you step out into the Wilds')
+  }, [flushSaves, onSay])
+  useEffect(() => { enterSpaceRef.current = enterSpace }, [enterSpace])
+/* eslint-enable react-hooks/exhaustive-deps */
 
   const remesh = useCallback((cx: number, cz: number) => {
     const g = group.current
@@ -3553,7 +3626,20 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
     // kept a pristine copy of the column around.
     // ★ `generatedAt`, NOT `materialAt` — it knows about ground cover. Ask materialAt here and
     // picking a flower compares AIR against AIR, stores no edit, and the flower is back on reload.
-    const generated = generatedVoxel(c, lx, wy, lz, SEED)
+    // ⚠⚠ THE BASELINE MUST COME FROM THE SPACE THE KEEPER IS STANDING IN (2026-08-15).
+    // `generatedVoxel` falls back to the CONTINENT's depth rule for every cell no stage overrode.
+    // Asked about a plot column it answers with whatever the endless world would have generated at
+    // that coordinate — which is not what is there. Measured by the world lane on one column at the
+    // island's middle: **5888 of 7424 cells, 79.3%, would be stored as phantom edits on first load,
+    // before the keeper touched anything.**
+    //
+    // The save ballooning is the lesser cost. The bad one is that the plot's SHAPE FREEZES: every
+    // future change to the island's geometry arrives masked by a save asserting the old shape was
+    // deliberate. Same family as the chopped-trees bug — a diff baseline disagreeing with what was
+    // generated — one space over and much larger.
+    const generated = space.current === 'plot'
+      ? plotGeneratedVoxel(c, lx, wy, lz, SEED)
+      : generatedVoxel(c, lx, wy, lz, SEED)
     let e = edits.current.get(k)
     if (!e) { e = new Map(); edits.current.set(k, e) }
     recordEdit(e, editIndex(lx, wy, lz), mat, generated)
@@ -3731,6 +3817,25 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
    * Player-global, not per-column — see `PlayerSave.waymarks` for why. `voxel/waymark.ts` owns
    * every rule; this ref is just where the host keeps the current value between saves.
    */
+  /**
+   * ── ★ WHICH SPACE THE KEEPER IS STANDING IN (2026-08-15) ─────────────────────────────────────
+   * The Wilds streams forever from the origin; the Home Plot is a bounded, authored island that
+   * measures from ITS origin. Two real places share every coordinate, so nothing may be inferred
+   * from position — the space is state, and it rides every column request, every save key and the
+   * edit baseline.
+   *
+   * ⚠ A REF, NOT `useState`, because the frame loop and the worker bridge read it and neither may
+   * be re-created to learn a new value. Switching spaces is a deliberate teardown (see `enterSpace`)
+   * rather than a re-render.
+   */
+  const space = useRef<Space>('wilds')
+  /**
+   * ⚠ `enterSpace` is defined further down (it needs `flushSaves`), and the console bridge is wired
+   * further UP. Rather than reorder two unrelated effects to satisfy a declaration order, the
+   * crossing is published through a ref. The bridge cannot fire before mount, so the ref is always
+   * populated by the time anything can call it.
+   */
+  const enterSpaceRef = useRef<((to: Space) => void) | null>(null)
   const waymarks = useRef<WaymarkNet>(emptyNet())
 
   /**
@@ -4483,7 +4588,7 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
       floraDirty.current = true
       queueRemesh(gx, gz)
       if (!edits.current.has(ek)) {
-        loadColumn(SEED, gx, gz).then(saved => {
+        loadColumn(SEED, gx, gz, space.current).then(saved => {
           if (!saved) { edits.current.set(ek, new Map()); applyGenPieces(gx, gz, []); return }
           if (isStale(saved.edits) && !staleWarned.current) {
             staleWarned.current = true
@@ -4551,7 +4656,7 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
         if (inflight.current! >= 4) break
         requested.current.add(key(gx, gz))
         inflight.current!++
-        w.postMessage({ type: 'request', cx: gx, cz: gz })
+        w.postMessage({ type: 'request', cx: gx, cz: gz, space: space.current })
       } else {
         // No worker (construction failed): generate here so the world still exists.
         if (performance.now() - t0 > 10) break

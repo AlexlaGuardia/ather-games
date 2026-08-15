@@ -79,7 +79,24 @@ function open(): Promise<IDBDatabase> {
   return dbp
 }
 
-const key = (seed: number, cx: number, cz: number) => `${seed}:${cx},${cz}`
+/**
+ * ── ★ TWO SPACES (2026-08-15, the Home Plot) ────────────────────────────────────────────────────
+ * The Wilds streams forever from the origin; the Home Plot is its own bounded coordinate space that
+ * also measures from ITS origin (`voxel/plot.ts` › `distFromCentre`). So plot column (0,0) and
+ * Wilds column (0,0) are two different places wearing one name, and without a namespace the first
+ * edit in the garden would overwrite whatever the keeper had built at the world's centre.
+ */
+export type Space = 'wilds' | 'plot'
+
+/**
+ * ⚠ THE WILDS KEY IS BYTE-IDENTICAL TO WHAT IT ALWAYS WAS, AND THAT IS THE WHOLE POINT OF THE
+ * SHAPE. Namespacing BOTH spaces would have been tidier and would have silently orphaned every
+ * world anyone has already built — the records would still be sitting in IndexedDB, addressed by a
+ * key nothing asks for any more, which reads to a player as "my save is gone" and to a developer as
+ * "the loader is broken". A new space pays for its own prefix; the old one pays nothing.
+ */
+const key = (seed: number, cx: number, cz: number, space: Space = 'wilds') =>
+  space === 'wilds' ? `${seed}:${cx},${cz}` : `${seed}:${space}:${cx},${cz}`
 
 /**
  * ── ★ THE PLAYER PERSISTS TOO (2026-08-08, Alex: "spawn where I left off, keep my inventory") ──
@@ -153,12 +170,12 @@ export async function savePlayer(seed: number, p: PlayerSave): Promise<void> {
  * ⚠ Every failure path returns null rather than throwing. A browser in private mode, a corrupt
  * store, a quota error — none of those should cost the player the world, only the edits.
  */
-export async function loadColumn(seed: number, cx: number, cz: number): Promise<ColumnSave | null> {
+export async function loadColumn(seed: number, cx: number, cz: number, space: Space = 'wilds'): Promise<ColumnSave | null> {
   try {
     const db = await open()
     return await new Promise((res) => {
       const tx = db.transaction(STORE, 'readonly')
-      const req = tx.objectStore(STORE).get(key(seed, cx, cz))
+      const req = tx.objectStore(STORE).get(key(seed, cx, cz, space))
       req.onsuccess = () => res((req.result as ColumnSave) ?? null)
       req.onerror = () => res(null)
     })
@@ -172,7 +189,7 @@ export async function loadColumn(seed: number, cx: number, cz: number): Promise<
  * "you only pay for what you build" property quietly becomes "you pay for everywhere you have ever
  * swung a pick". `recordEdit` already drops no-op edits; this is the same rule at the file level.
  */
-export async function saveColumn(seed: number, cx: number, cz: number, save: ColumnSave): Promise<void> {
+export async function saveColumn(seed: number, cx: number, cz: number, save: ColumnSave, space: Space = 'wilds'): Promise<void> {
   try {
     const db = await open()
     await new Promise<void>((res) => {
@@ -181,8 +198,8 @@ export async function saveColumn(seed: number, cx: number, cz: number, save: Col
       // Empty means EMPTY on both halves — a column whose blocks were restored AND whose pieces
       // were all deconstructed stops costing storage, same rule as `recordEdit` one level down.
       if (save.edits.idx.length === 0 && save.pieces.length === 0 && !save.genRemoved?.length
-          && !Object.keys(save.chests ?? {}).length) store.delete(key(seed, cx, cz))
-      else store.put(save, key(seed, cx, cz))
+          && !Object.keys(save.chests ?? {}).length) store.delete(key(seed, cx, cz, space))
+      else store.put(save, key(seed, cx, cz, space))
       tx.oncomplete = () => res()
       tx.onerror = () => res()
       tx.onabort = () => res()
