@@ -14,6 +14,22 @@
 // ── BOUNDARY ───────────────────────────────────────────────────────────────────
 // The three kinds are read straight off canon's effect lines. Durations and radii are Jin's and
 // live on the move's CastSpec. No move names in this module.
+//
+// ── ★ MOVED play3d/ → engine/ 2026-08-15 — THE 14th BOTH-WORLDS SYSTEM, AND IT COST NOTHING ─────
+// The last dark archetype. `voxel3d` declared `supports` = SELF + projectile + field + terrain, so
+// all 7 status casts (Enlighten · Shackle · Fog Bank · Lava Stride · Quake Step · Static Field ·
+// Vein Puppet) refused with "not in this world yet" — honest, and still 7 keys that do nothing in
+// the world Alex actually plays.
+//
+// ★ NOT ONE LINE OF THIS FILE CHANGED IN THE MOVE, and that is the design paying out rather than
+// luck. The header above already promised it: *"targets are opaque string ids, so this module never
+// learns what an enemy is."* play3d's targets are `'hunter'` / `'guard:seren'`; the voxel world's
+// are Hollow ids. A module that had reached for a hunter's fields — the way `field-effects` once
+// reached for a tile grid — would have needed the rewrite this one did not.
+//
+// ⚠ AND THE SYMMETRY HOLDS ON THE OTHER SIDE TOO: `hollows.ts` does not import this file. It takes
+// two booleans (`rooted`, `blinded`) and never learns what a status system is, for exactly the
+// reason stated above in reverse. The host is the only thing that knows both.
 
 export type StatusKind =
   | 'rooted'    // cannot move (Shackle: clamped in iron)

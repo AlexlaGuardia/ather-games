@@ -41,7 +41,52 @@
 import { greyness } from '../voxel/biome'
 import { spawnDark } from '../voxel/light'
 
+/**
+ * ── ★ WHAT A CAST HAS DONE TO THIS BODY (2026-08-15, the status port) ───────────────────────────
+ * Two booleans, and deliberately NOT a `StatusBag` or a `StatusKind[]`.
+ *
+ * `engine/statuses.ts` keeps targets as opaque string ids so it never learns what an enemy is; this
+ * is that same wall from the other side, so a Hollow never learns what a status system is. The host
+ * is the only thing that knows both, which is what let the status module move worlds without a line
+ * changing. Import the module here and the two would be welded together for one import's convenience.
+ *
+ * ⚠ ONE STRUCT FOR BOTH FUNCTIONS, NOT ONE PER FUNCTION. `rooted` only reaches `hollowStep` and
+ * `disarmed` only reaches `hollowTouching`, so a tighter pair of types is arguable — but the host
+ * builds this ONCE per body per frame and hands the same value to both, and two types would mean
+ * two builds that can disagree about the same Hollow in the same tick. `blinded` needs both halves
+ * anyway (it moves you wrong AND shortens your reach), so the split would not even be clean.
+ */
+export interface Impair {
+  /** Clamped in place — cannot move at all. Read by `hollowStep`. */
+  rooted: boolean
+  /** Cannot find the keeper: drifts on a wrong heading, and cannot reach past contact. Read by both. */
+  blinded: boolean
+  /** Its weapon is jammed — the touch lays no drain. Read by `hollowTouching`. */
+  disarmed: boolean
+}
+
+/**
+ * No cast has touched this body.
+ *
+ * ⚠ EXPORTED AS A CONSTANT SO A CALL SITE READS AS A CLAIM, and NOT as a default parameter. An
+ * `imp: Impair = UNIMPAIRED` would hand "nothing is affecting this Hollow" to every call site that
+ * had not been updated — so statuses would land in the bag, tick down, expire, and never once
+ * change a body's behaviour, with nothing to see. That is the `runMs` lesson and the `milledYield`
+ * lesson for the third time in two days; the parameter is required.
+ */
+export const UNIMPAIRED: Impair = { rooted: false, blinded: false, disarmed: false }
+
 export interface HollowState {
+  /**
+   * ★ STABLE, UNIQUE, AND NEVER REUSED — the status bag keys on it (2026-08-15).
+   *
+   * ⚠ NEVER REUSING AN ID IS A CORRECTNESS PROPERTY, NOT TIDINESS. `statuses.ts` warns that "an
+   * enemy that dies must not carry a root into its respawn". The host clears a despawning Hollow's
+   * entry, but a *missed* clear plus a recycled id would silently hand a brand-new body somebody
+   * else's three-second root — a bug that appears only under spawn churn and looks like a physics
+   * glitch. A monotonic counter makes that unrepresentable, which is cheaper than remembering.
+   */
+  id: string
   x: number; y: number; z: number
   /** Which shape the greying took. Set at spawn, never changes — a Hollow does not become a
    *  different Hollow, it disperses and the ground congeals another. */
@@ -260,9 +305,27 @@ export function hollowEligible(
 export function hollowStep(
   h: HollowState, dt: number, px: number, pz: number,
   groundAt: (x: number, z: number) => number, time: number,
+  imp: Impair,
 ): void {
   const f = formOf(h)
-  const dx = px - h.x, dz = pz - h.z
+  // ★ ROOTED STOPS THE DRIFT AND NOTHING ELSE. It still guttes, still bobs, still reads as alive —
+  // Shackle clamps a body in iron, it does not switch it off. Returning early here (before the bob)
+  // would freeze it mid-air like a paused video, which reads as the game hanging rather than as the
+  // cast landing.
+  let dx = px - h.x, dz = pz - h.z
+  // ★ BLINDED SENDS IT THE WRONG WAY RATHER THAN NOWHERE, and that distinction is the whole tell.
+  // A blinded Hollow that simply stopped would be indistinguishable from a rooted one, and the two
+  // casts would feel identical. So its heading is rotated by a fixed per-body angle taken from
+  // `phase` — deterministic (no rng in a frame loop), different per Hollow (a blinded pack scatters
+  // instead of wheeling in formation), and constant for the duration so it commits to a wrong
+  // direction rather than jittering on the spot.
+  if (imp.blinded) {
+    const a = h.phase * 1.7 + 2.2                       // ~126°..~485°: never near zero, so never "sighted"
+    const cs = Math.cos(a), sn = Math.sin(a)
+    const rx = dx * cs - dz * sn
+    const rz = dx * sn + dz * cs
+    dx = rx; dz = rz
+  }
   const d = Math.hypot(dx, dz)
   const speed = f.speed * (1 - h.gutter)               // a guttering Hollow loses its will first
   // ★ THE CASTER HOLDS ITS LINE, AND HOLDS IT FROM BOTH SIDES. It closes to `standoff` and then
@@ -272,7 +335,9 @@ export function hollowStep(
   // movement function rather than a melee one and a ranged one that drift apart.
   const stop = Math.max(0.5, f.standoff)
   let mx = 0, mz = 0
-  if (d > stop) {
+  if (imp.rooted) {
+    // Clamped: no translation this frame. Everything below the movement block still runs.
+  } else if (d > stop) {
     mx = (dx / d) * speed * dt
     mz = (dz / d) * speed * dt
   } else if (f.standoff > 0 && d < f.standoff * 0.72 && d > 1e-4) {
@@ -333,9 +398,24 @@ export const DRAIN_TIME = 2.6        // seconds of slowed keeper per touch, refr
 
 /** True when the smear is on the keeper. Pure and shared with the oracle for the same reason the
  *  projectile test is: "it can actually reach you" has to be assertable. */
-export function hollowTouching(h: HollowState, px: number, pz: number): boolean {
+export function hollowTouching(h: HollowState, px: number, pz: number, imp: Impair): boolean {
   if (h.hp <= 0 || h.gutter >= 1) return false
-  const r = formOf(h).reach
+  // ★ DISARMED STOPS THE DRAIN OUTRIGHT. Canon's Shackle "jams a manalic weapon mid-draw"; the
+  // Hollow's weapon is the touch, so this is the whole of it.
+  if (imp.disarmed) return false
+  const f = formOf(h)
+  // ★ BLINDED COLLAPSES REACH TO CONTACT, AND THIS IS WHERE THE STATUS TRIANGLE EARNS ITSELF.
+  // The three forms already differ on `reach` (warden 1.25 · stalker 0.8 · CASTER 7.5), so one rule
+  // means three different things: blinding a caster takes away the seven-metre drain that IS its
+  // form, while blinding a warden barely touches its attack and only makes it wander. A status that
+  // did the same thing to every body would be a fourth healthbar, which is the failure the form
+  // table's own header warns about.
+  //
+  // It is a floor, not a multiplier: something that blunders into you still drains, because a blind
+  // thing you are standing inside has found you by accident. `body` is that contact line, with a
+  // small margin for the incorporeal caster (body 0) so blinding it does not make it literally
+  // harmless to stand on top of.
+  const r = imp.blinded ? Math.max(0.6, f.body) : f.reach
   const dx = px - h.x, dz = pz - h.z
   return dx * dx + dz * dz < r * r
 }

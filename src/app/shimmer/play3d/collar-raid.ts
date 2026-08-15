@@ -35,7 +35,7 @@
 // Pure step function — no THREE, no React, no clock of its own. Same discipline as
 // puppet-guards.ts and crucible-phases.ts, so the whole thing is provable headless.
 
-import { type StatusBag, hasStatus } from './statuses'
+import { type StatusBag, hasStatus } from '../engine/statuses'
 
 export type RaidMode =
   | 'patrol'    // walking its loop, hasn't noticed anything

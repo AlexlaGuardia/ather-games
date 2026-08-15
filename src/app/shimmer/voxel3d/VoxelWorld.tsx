@@ -138,6 +138,8 @@ import { resolveCast, SELF_ARCHETYPES, castAimPoint, type CastEnv } from '../eng
 import { spawnField, tickFields, containsVolume, fieldsAtVolume, blocksShotAtVolume,
          FIELD_HEIGHT, type Field } from '../engine/field-effects'
 import { conjure, shapeCells, expireConjured, conjuredWriteCells, type Conjured } from '../engine/conjured-terrain'
+import { emptyBag, applyStatuses, hasStatus, pruneStatuses, clearTarget,
+         type StatusBag } from '../engine/statuses'
 import type { CastSpec, CastArchetype } from '../play3d/cast'
 
 /**
@@ -3682,6 +3684,19 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
   // Guttering is expressed through per-mesh SCALE and a sink, never per-mesh material state.
   const hollows = useRef<{ st: HollowState; mesh: THREE.Mesh }[]>([])
   const hollowClock = useRef(0)
+  /**
+   * ── ★ STATUSES (2026-08-15) — the last dark archetype ────────────────────────────────────────
+   * `target id → kind → expiry`. The bag is the ONLY thing in this world that knows both what a
+   * status is and what a Hollow is; `engine/statuses.ts` keys on opaque strings and `hollows.ts`
+   * takes two booleans, so neither had to learn about the other.
+   */
+  const statusBag = useRef<StatusBag>(emptyBag())
+  /**
+   * ⚠ MONOTONIC AND NEVER RESET, so no Hollow id is ever reused in a session. See `HollowState.id`:
+   * a recycled id plus one missed `clearTarget` silently hands a fresh body somebody else's root,
+   * which shows up only under spawn churn and looks like a physics glitch rather than a leak.
+   */
+  const hollowSeq = useRef(0)
 
   // ── the light field, cached per column ────────────────────────────────────────────────────────
   // `light.ts` produces DATA and this is its one consumer: the spawn scan. Each cached field
@@ -3799,12 +3814,15 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
    * consults cells beside its tilemap so a wall can only block, while here the cells are WRITTEN as
    * `MAT.CONJURED` voxels, which collide, mesh, occlude and **can be stood on**. 7 more casts.
    *
-   * `statuses` still does NOT: `statuses.ts` keys off play3d's named `hunter`/`guard` targets, and
-   * this world's bodies are Hollows. Declaring that makes Shackle say "not in this world yet"
-   * instead of being a key that silently does nothing — see cast-dispatch's header.
+   * **`status` joined it 2026-08-15** — the last dark archetype, and **every built cast now runs
+   * in the world that ships (47 of 47).** The claim in the line this replaces (*"statuses.ts keys
+   * off play3d's named hunter/guard targets"*) turned out to be false about the module and true
+   * only about play3d's USE of it: targets were opaque strings all along, so the port cost a Hollow
+   * id, a target adapter and two booleans on the monster step — and not one line of `statuses.ts`.
+   * 7 more casts.
    */
   const supports = useMemo<ReadonlySet<CastArchetype>>(
-    () => new Set<CastArchetype>([...SELF_ARCHETYPES, 'projectile', 'field', 'terrain']), [])
+    () => new Set<CastArchetype>([...SELF_ARCHETYPES, 'projectile', 'field', 'terrain', 'status']), [])
 
   const castSlot = useCallback((slot: number, g: THREE.Group) => {
     const v = vitals.current, m = mana.current
@@ -3843,6 +3861,37 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
         radius: out.placed.areaSize, height: FIELD_HEIGHT, secs: out.placed.areaSecs,
         dps: out.placed.fieldDps, hps: out.placed.fieldHps, stopsShots: out.placed.fieldStopsShots,
       }, env.now)
+    }
+    if (out.placed && out.placed.archetype === 'status') {
+      // Same aim rule as a field — `castAimPoint`, camera forward flattened and walked `castRange`.
+      const f = new THREE.Vector3()
+      camera.getWorldDirection(f)
+      const p = loco.current
+      const aim = castAimPoint(f.x, f.z, p.px, p.pz, out.placed.castRange)
+      const kinds = out.placed.statuses
+      // ★ FLAT (x,z) RADIUS, MATCHING THE FIELD'S FOOTPRINT RATHER THAN A SPHERE. A caster hovers
+      // at HOLLOW_HOVER and a warden's centre sits a metre up; a true 3D distance would make the
+      // same Shackle catch the walkers and miss the floater standing in the same spot, which reads
+      // as the cast randomly failing. Statuses are cast at a PLACE, and a place has no ceiling.
+      const r2 = out.placed.areaSize * out.placed.areaSize
+      let caught = 0
+      for (const hw of hollows.current) {
+        const st = hw.st
+        if (st.hp <= 0 || st.gutter >= 1) continue      // already dispersing; do not root a corpse
+        const dx = st.x - aim.x, dz = st.z - aim.z
+        if (dx * dx + dz * dz > r2) continue
+        statusBag.current = applyStatuses(statusBag.current, st.id, kinds, out.placed.areaSecs, env.now)
+        caught++
+      }
+      // ★ SAY WHAT IT CAUGHT. Every other placed archetype leaves something on screen — a bolt
+      // flies, a field burns, a wall stands — but a status is invisible by nature: its whole effect
+      // is a body NOT doing something. Casting Shackle into empty air and casting it onto three
+      // wardens would otherwise print the identical line, which is indistinguishable from the cast
+      // being broken. This is the same honesty rule `cast-dispatch` applies to refusals, one level
+      // down: a cast that landed on nothing has to say so.
+      onSay(caught > 0
+        ? `${out.placed.label} — ${caught} held`
+        : `${out.placed.label} — nothing in reach`)
     }
     if (out.placed && out.placed.archetype === 'terrain') {
       const f = new THREE.Vector3()
@@ -4182,8 +4231,8 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
         mesh.position.set(sx, sh + 1 + HOLLOW_HOVER, sz)
         g.add(mesh)
         hollows.current.push({
-          st: { x: sx, y: sh + 1 + HOLLOW_HOVER, z: sz, form, hp: HOLLOW_FORMS[form].hp,
-                gutter: 0, phase: Math.random() * 6.28 },
+          st: { id: `h${++hollowSeq.current}`, x: sx, y: sh + 1 + HOLLOW_HOVER, z: sz, form,
+                hp: HOLLOW_FORMS[form].hp, gutter: 0, phase: Math.random() * 6.28 },
           mesh,
         })
       }
@@ -4232,6 +4281,14 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
           }
         }
       }
+      // ⚠ `performance.now()`, NOT `state.clock.elapsedTime`. The bag's expiries were written by the
+      // cast handler off `performance.now()`, and the two clocks share no origin — mixing them makes
+      // every status either instantly expired or effectively permanent, deterministically, which is
+      // the kind of bug that reads as "shackle does nothing" or "shackle never wears off".
+      const nowMs = performance.now()
+      // Same-object-when-unchanged (see `pruneStatuses`), so a quiet night writes nothing and this
+      // never churns garbage at 60fps.
+      statusBag.current = pruneStatuses(statusBag.current, nowMs)
       for (let i = hollows.current.length - 1; i >= 0; i--) {
         const hw = hollows.current[i]
         const st = hw.st
@@ -4244,13 +4301,22 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
         // not have: the walker's step-up rule was reading a world where the wall does not exist.
         // Now a Stonewall, a Cordon and a shed the player built all read as ground to climb, and the
         // two-high rule does the rest. `st.y` scopes the scan to the body's own height.
-        hollowStep(st, dt, p.x, p.z, (x, z) => groundTopNear(x, z, st.y), now)
+        // ── ★ THE STATUS BAG IS READ HERE, AND THIS IS THE HALF THAT MAKES A STATUS REAL ────────
+        // Applying one is bookkeeping; a body that never asks is 7 casts that tick down a timer and
+        // change nothing — the same silent no-op `cast-dispatch`'s honesty rule exists to outlaw,
+        // pushed one layer deeper where no refusal can catch it.
+        const imp = {
+          rooted: hasStatus(statusBag.current, st.id, 'rooted', nowMs),
+          blinded: hasStatus(statusBag.current, st.id, 'blinded', nowMs),
+          disarmed: hasStatus(statusBag.current, st.id, 'disarmed', nowMs),
+        }
+        hollowStep(st, dt, p.x, p.z, (x, z) => groundTopNear(x, z, st.y), now, imp)
         // ── ★ THE TOUCH LANDS (2026-08-11) — before this, a Hollow that caught you glided
         // THROUGH you and nothing happened. Every system upstream (the two-channel light field,
         // the spawn cycle, the pack walk, the lantern's safe room) exists to make the dark cost
         // something, and the cost was never wired. Refreshed, never stacked: four in a pack must
         // read as one sustained drain, not a timer you can never outlive.
-        if (hollowTouching(st, p.x, p.z)) {
+        if (hollowTouching(st, p.x, p.z, imp)) {
           // `loco.current`, not `lc` — the frame callback's `lc` alias is declared further down,
           // in the movement block. Same ref either way.
           const keeper = loco.current
@@ -4267,6 +4333,11 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
         hw.mesh.position.set(st.x, st.y - st.gutter * 0.9, st.z)
         const ddx = st.x - p.x, ddz = st.z - p.z
         if (st.gutter >= 1 || ddx * ddx + ddz * ddz > despawn * despawn) {
+          // ⚠ CLEAR THE BAG ENTRY IN THE SAME BREATH AS THE BODY. `statuses.ts`: "an enemy that dies
+          // must not carry a root into its respawn." Ids are never reused so this cannot mis-target,
+          // but skipping it would leak one entry per Hollow for the whole session — a slow bag on a
+          // long night, growing fastest exactly when the most is happening.
+          statusBag.current = clearTarget(statusBag.current, st.id)
           g.remove(hw.mesh); hollows.current.splice(i, 1)
         }
       }

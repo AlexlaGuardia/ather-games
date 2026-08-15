@@ -10,7 +10,7 @@ import {
   RAID_TUNING, TIER_DIALS, spawnRaider, stepRaid, strikeRaider, strikeCollar, raidTarget, raidSettled,
   type Raider, type RaidContext, type RaidTier,
 } from './collar-raid'
-import { emptyBag, applyStatus, applyStatuses } from './statuses'
+import { emptyBag, applyStatus, applyStatuses } from '../engine/statuses'
 
 let pass = 0
 const fails: string[] = []

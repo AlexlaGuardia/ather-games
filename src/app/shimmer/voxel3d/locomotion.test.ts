@@ -11,7 +11,7 @@ import {
   CROUCH_SPEED, type LocoInput,
   CELL_EMPTY, CELL_SOLID, CELL_WATER, CELL_HALF, SWIM_SPEED, SWIM_UP, SWIM_IDLE_SINK, TREAD_SINK_CAP,
 } from './locomotion'
-import { hollowTouching, HOLLOW_SPEED, HOLLOW_HP, DRAIN_TIME } from './hollows'
+import { hollowTouching, HOLLOW_SPEED, HOLLOW_HP, DRAIN_TIME, UNIMPAIRED } from './hollows'
 
 let pass = 0
 const fails: string[] = []
@@ -475,13 +475,13 @@ const settle = (s: ReturnType<typeof createLoco>, solid: any, frames = 30) => {
   ok(Math.hypot(c.hvx, c.hvz) <= CROUCH_SPEED + 0.05, `★ the drain never speeds anything UP (crouch ${Math.hypot(c.hvx, c.hvz).toFixed(2)} <= ${CROUCH_SPEED})`)
 
   // The touch test itself: it has to be able to reach you, and a guttering one must not.
-  const hw = { x: 10, y: 11, z: 10, form: 'stalker' as const, hp: HOLLOW_HP, gutter: 0, phase: 0 }
-  ok(hollowTouching(hw, 10.4, 10.1), 'a Hollow on the keeper is touching her')
-  ok(!hollowTouching(hw, 13, 10), 'one across the clearing is not')
+  const hw = { id: 'h', x: 10, y: 11, z: 10, form: 'stalker' as const, hp: HOLLOW_HP, gutter: 0, phase: 0 }
+  ok(hollowTouching(hw, 10.4, 10.1, UNIMPAIRED), 'a Hollow on the keeper is touching her')
+  ok(!hollowTouching(hw, 13, 10, UNIMPAIRED), 'one across the clearing is not')
   hw.gutter = 1
-  ok(!hollowTouching(hw, 10.5, 10.2), '★ a guttered Hollow cannot touch — dawn ends the threat, not just the body')
+  ok(!hollowTouching(hw, 10.5, 10.2, UNIMPAIRED), '★ a guttered Hollow cannot touch — dawn ends the threat, not just the body')
   hw.gutter = 0; hw.hp = 0
-  ok(!hollowTouching(hw, 10.5, 10.2), '★ nor can a dispersed one — no drain from something already gone')
+  ok(!hollowTouching(hw, 10.5, 10.2, UNIMPAIRED), '★ nor can a dispersed one — no drain from something already gone')
 }
 
 console.log(`\nlocomotion: ${pass} passed, ${fails.length} failed`)

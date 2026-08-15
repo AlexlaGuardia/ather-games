@@ -29,7 +29,7 @@
 import { KEEPER_MOVES, type KeeperMove, type MoveTier, knownMoves } from './keeper-moves'
 import { hasLearned, type Book } from './scroll-market'
 import type { ConjureShape } from '../engine/conjured-terrain'
-import type { StatusKind } from './statuses'
+import type { StatusKind } from '../engine/statuses'
 
 /** The archetypes the sim can actually run today, plus the honest 'unbuilt' tag. */
 export type CastArchetype =
