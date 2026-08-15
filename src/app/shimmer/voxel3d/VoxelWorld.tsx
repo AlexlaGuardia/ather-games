@@ -21,7 +21,7 @@ import { useRef, useMemo, useState, useEffect, useCallback } from 'react'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { PointerLockControls } from '@react-three/drei'
 import * as THREE from 'three'
-import { SECTION, DEFAULT_COLUMN, Column, Stage, makeColumn, meshColumn, refreshUniform, isHalfCell, generatedVoxel } from '../voxel/column'
+import { SECTION, DEFAULT_COLUMN, Column, Stage, makeColumn, meshColumn, refreshUniform, isHalfCell, generatedVoxel, WILDS_BUBBLE } from '../voxel/column'
 import { VOXEL_WORKER_URL } from '../../../workers/worker-url'
 import { createMeshScratch } from '../voxel/greedy'
 import { columnHeight, holdPadLevel } from '../voxel/height'
@@ -40,7 +40,12 @@ import { blockDef, materialForItem, emitOf, BLOCKS, type BlockSkill } from '../v
 import { editIndex, recordEdit, applyEdits, packEdits, unpackEdits, isStale, GENERATOR_VERSION, type ColumnEdits } from '../voxel/edits'
 import { generatePlotColumn, plotGeneratedVoxel } from '../voxel/plot-column'
 import { plotThreshold, hasFallenOut, chestCap } from '../voxel/plot'
-import { inPassageVolume, DEFAULT_BUBBLE } from '../voxel/bubble'
+// ⚠ `WILDS_BUBBLE` (from column.ts, imported above), NEVER `bubble.ts`'s `DEFAULT_BUBBLE`. The
+// default's door faces bearing 0 and its wall is a placeholder material; the live one is aimed at
+// the glade and made of cloud. Read the default here and the crossing would fire on the far side of
+// the shell from the door the generator actually built — a trigger and a doorway in two different
+// places, which is invisible until someone walks 1000 blocks looking for a way in.
+import { inPassageVolume } from '../voxel/bubble'
 import type { Space } from './save'
 
 /** Which generator version the player has already been warned about. See `staleWarned`. */
@@ -4948,7 +4953,7 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
         // plot is a separate coordinate space and the bubble's interior is never generated, so a
         // hole would lead to 500 blocks of nothing if the trigger ever failed to fire.
         const gh = columnHeight(Math.floor(lc.px), Math.floor(lc.pz), SEED)
-        const inSeam = inPassageVolume(lc.px, lc.py, lc.pz, SEED, gh, DEFAULT_BUBBLE)
+        const inSeam = inPassageVolume(lc.px, lc.py, lc.pz, SEED, gh, WILDS_BUBBLE)
         if (inSeam && !crossLatched.current) {
           crossLatched.current = true
           enterSpaceRef.current?.('plot')

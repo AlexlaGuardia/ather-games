@@ -28,6 +28,8 @@
 import { Section, AIR } from './section'
 import { columnHeight, type HeightConfig, DEFAULT_HEIGHT } from './height'
 import { materialAt, MAT, isPlant, isHalfMat, HALF_BIT, type DepthConfig, DEFAULT_DEPTH } from './depth'
+import { bubbleMaterialAt, distFromAxis, DEFAULT_BUBBLE, type BubbleConfig } from './bubble'
+import { ZONE_ANCHORS } from './zones'
 import { plantWaystones } from './story-path'
 import { carveStack, type CarveConfig, DEFAULT_CARVE } from './carve'
 import { placeOre, type OreBatch, ORE_BATCHES } from './ore'
@@ -135,10 +137,61 @@ export class Column {
  * as later stages and re-run identically on regeneration, so a cell they own compares against the
  * plant (or air) underneath them. That is the pre-existing contract, not something plants changed.
  */
+/**
+ * ── ★ THE KEEPER'S FOLD, STANDING IN THE WILDS (2026-08-15, the wiring) ─────────────────────────
+ * The one live bubble. `bubble.ts` ships a DEFAULT whose materials are placeholders and whose door
+ * faces nowhere in particular, on purpose — it is pure geometry and takes both as parameters (the
+ * `plantWaystones` precedent). This is the wiring site, so this is where they get answered.
+ *
+ * ★★ THE DOOR IS AIMED AT THE PLAYER, AND THAT IS NOT A TWEAK — IT IS THE FEATURE. `bubble.ts`'s
+ * own header says it: *"A single opening in a 6.3km circumference is undiscoverable by exploration,
+ * so the build must put the player's arrival AT it rather than hoping they find it. Nothing here
+ * picks that spot."* Nothing did, and the default bearing of 0 put the fold's only entrance on the
+ * FAR side of the shell from every place a player has ever stood — about 1000 blocks of featureless
+ * wall away from spawn. The bubble was unreachable in the most literal sense.
+ *
+ * So the bearing is DERIVED from the glade rather than typed: the passage sits on the line from the
+ * bubble's centre to where the keeper wakes up, which puts it ~157 blocks off the glade's doorstep —
+ * inside the view slider, on the skyline from where Gregory is standing when he tells them about it.
+ * Derived, so it follows the glade if the glade ever moves; a typed bearing would silently rot.
+ */
+const GLADE = ZONE_ANCHORS.find(z => z.id === 'moonwell-glade')!
+
+export const WILDS_BUBBLE: BubbleConfig = {
+  ...DEFAULT_BUBBLE,
+  passageBearing: Math.atan2(GLADE.z - DEFAULT_BUBBLE.cz, GLADE.x - DEFAULT_BUBBLE.cx),
+  materials: { wall: MAT.CLOUD_WALL },
+}
+
+/**
+ * Could this column hold any part of the bubble? A cheap rejection so the ~every column in the
+ * world that has nothing to do with it pays one hypot and leaves.
+ *
+ * ⚠ CONSERVATIVE ON PURPOSE — it answers "possibly" wherever the wobble could reach, because a
+ * false NO leaves a hole in the shell and a false YES costs one wasted pass.
+ */
+function columnTouchesBubble(wx: number, wz: number, span: number, cfg: BubbleConfig): boolean {
+  // Nearest point of the column's footprint to the axis; if even that is beyond the shell's
+  // outermost possible face, nothing in this column is the bubble's.
+  const nx = Math.max(cfg.cx - (wx + span), Math.min(0, cfg.cx - wx))
+  const nz = Math.max(cfg.cz - (wz + span), Math.min(0, cfg.cz - wz))
+  const near = Math.hypot(nx, nz)
+  return near <= cfg.radius * (1 + cfg.wobble) + cfg.thickness + 1
+}
+
 export function generatedAt(
   x: number, y: number, z: number, seed: number, h: number,
   depthCfg: DepthConfig = DEFAULT_DEPTH, heightCfg: HeightConfig = DEFAULT_HEIGHT,
+  bubbleCfg: BubbleConfig = WILDS_BUBBLE,
 ): number {
+  // ★ THE BUBBLE ANSWERS FIRST, AND BEING HERE IS WHAT KEEPS THE SAVE HONEST. This function is the
+  // ONE definition of "what the generator would have put here" — the terrain stage writes it and
+  // `recordEdit` diffs against it. Wire the shell into the terrain stage alone and every wall voxel
+  // becomes a phantom edit the moment anything near it is touched: exactly the trap the plot lane
+  // caught at 79.3% of a column, one space over. `null` means "not mine" and costs one distance
+  // test almost everywhere.
+  const b = bubbleMaterialAt(x, y, z, seed, h, bubbleCfg)
+  if (b !== null) return b
   if (y === h + 1) {
     const p = plantMaterialAt(x, z, seed)
     if (p !== AIR) return p
@@ -259,6 +312,38 @@ export function generateColumn(
       col.sections[s0].set(x, h - s0 * SECTION, z, m & 0xFF)
     }
     col.stage = Stage.Vegetation
+  }
+
+  // ── ★★ THE FOLD IS RE-ASSERTED AFTER EVERY STAGE, AND IT COSTS THE SAVE NOTHING ───────────────
+  // The terrain stage already wrote the shell (`generatedAt` answers it first), but five stages run
+  // afterwards and none of them has ever heard of a bubble: `carveStack` would drive a cave clean
+  // through the cloud-wall, `plantTrees` would stand a trunk in the fold's empty interior, ore and
+  // ruins would speckle both.
+  //
+  // ★ THE CAVE IS THE ONE THAT MATTERS. A carver breaching the shell is a HOLE, and a hole is the
+  // exact silhouette canon names as the misreading — *"no gates, no locks"* — leading into 500
+  // blocks of ungenerated nothing. `bubble.test.ts` floods 8-connected to prove the wall has no gap;
+  // that proof is about the geometry, and it says nothing about a carver that arrives later. This is
+  // what makes the shipped world match the tested shape.
+  //
+  // ★ AND IT IS FREE IN THE SAVE, WHICH IS WHY IT IS SAFE TO DO BLUNTLY. `bare` is the post-terrain
+  // snapshot, which already holds the bubble. Re-asserting restores those cells to exactly what
+  // `bare` has, so `diffOverrides` sees no difference and records no override — the world is fixed
+  // and the diff stays empty. Writing the same truth twice is the cheap half of a bargain whose
+  // expensive half would be teaching five stages about a shell.
+  if (col.stage >= Stage.Vegetation && upTo >= Stage.Ready
+      && columnTouchesBubble(wx, wz, SECTION, WILDS_BUBBLE)) {
+    for (let z = 0; z < SECTION; z++) {
+      for (let x = 0; x < SECTION; x++) {
+        const h = col.surface[z * SECTION + x]
+        for (let y = 0; y < cfg.worldHeight; y++) {
+          const b = bubbleMaterialAt(wx + x, y, wz + z, seed, h, WILDS_BUBBLE)
+          if (b === null) continue
+          const s = (y / SECTION) | 0
+          if (col.sections[s].get(x, y - s * SECTION, z) !== b) col.sections[s].set(x, y - s * SECTION, z, b)
+        }
+      }
+    }
   }
 
   if (col.stage < Stage.Ready && upTo >= Stage.Ready) {

@@ -31,7 +31,17 @@ const fails: string[] = []
 const ok = (c: boolean, m: string) => { if (c) pass++; else fails.push(m) }
 
 const SEED = 1337
-const garden = ZONE_ANCHORS.find(a => a.id === 'garden')!
+// ── ★ THE SAMPLE SITE MOVED OFF THE `garden` ANCHOR (2026-08-15, the bubble wiring) ─────────────
+// It used to be `garden` (0,0), and every assert below passed there for months. That anchor IS the
+// Home Plot (canon `shimmer-geography.md`: *"Home Plot (`garden`) — the player's own plot"*), and
+// the plot is now its own coordinate space inside a cloud bubble: the Wilds no longer generates
+// ground there at all, by design. So the old site stopped growing plants because it stopped being
+// ground — the test was correct and its LOCATION had expired.
+//
+// ⚠ Every assert here is about plants, not about a place, so the fix is to sample somewhere that is
+// still country. The glade is the right one: `tended: 1` like the garden was, it is where the
+// keeper wakes up, and at 657 blocks out it is comfortably clear of the shell.
+const garden = ZONE_ANCHORS.find(a => a.id === 'moonwell-glade')!
 
 // ── 1. the three plants are real, cheap, collectable blocks ─────────────────────────────────────
 {

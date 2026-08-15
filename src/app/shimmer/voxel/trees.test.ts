@@ -76,7 +76,11 @@ for (let i = 0; SITES.length < 40 && i < 4000; i++) {
   // Sites picked to sit INSIDE the woodland mask (forestness ≥ 0.9) with wood actually crossing the
   // shared column — the originals went bare when forests became patchy (2026-08-07) and a seam test
   // over bare ground proves nothing, which is exactly what its own guard assert said.
-  for (const [bx, bz] of [[384, 192], [1728, 192], [960, 384], [2688, 0]] as const) {
+  // ⚠ [384,192] RETIRED 2026-08-15 (the bubble wiring): 429 blocks from the origin puts it inside
+  // the keeper's fold, where the Wilds deliberately generates nothing — so it went bare for the
+  // same reason the 2026-08-07 originals did, one cause over. [-576,384] replaces it: forestness
+  // 1.00, 692 blocks out, 106 wood voxels crossing the shared column.
+  for (const [bx, bz] of [[-576, 384], [1728, 192], [960, 384], [2688, 0]] as const) {
     const a = makeColumn(bx, bz, SEED)
     const b = makeColumn(bx + SECTION - 1, bz, SEED)
     for (let y = 1; y < 250; y++) for (let z = 0; z < SECTION; z++) {

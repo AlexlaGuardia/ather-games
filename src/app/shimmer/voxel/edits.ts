@@ -76,7 +76,14 @@ import { Column, SECTION } from './column'
 // rail voxel on the spine is a different material than the save was written against, and a player
 // who mined one has an edit sitting in a hole that used to be worth something. Materially the same
 // class of change as the v15→16 canopy reshape: the world did not move, what it is MADE of did.
-export const GENERATOR_VERSION = 17
+// 17 → 18 (2026-08-15): THE KEEPER'S FOLD STANDS IN THE WILDS. `generatedAt` now answers the bubble
+// first, so a 500-radius shell of cloud-wall exists where ordinary terrain used to generate and the
+// disc inside it is empty. This is the largest terrain change the world has taken — it does not
+// nudge a surface, it replaces a region — and any edit a player made inside that footprint is now
+// an edit against ground that no longer exists. Nothing canon is in there (`bubbleSwallows` clears
+// every anchor but `garden`, which IS the plot), so in practice this touches empty country; the
+// bump is what makes the warning fire anyway rather than betting on that.
+export const GENERATOR_VERSION = 18
 
 /**
  * One column's edits: packed local index → material.
