@@ -42,7 +42,7 @@
 // between two loads destroys what was in there. That is `chest.ts`'s argument verbatim, and it
 // applies here for the same reason: the pot stores a timestamp, this stores your logs.
 
-import { RECIPES, recipeDef, type RecipeDef } from './recipes'
+import { RECIPES, recipeDef, type Family, type RecipeDef } from './recipes'
 import { MAT } from './depth'
 
 /**
@@ -63,14 +63,13 @@ export const RUN_MS = 12_000
 export type StationId = 'crafting_table' | 'sawmill' | 'stonecutter'
 
 /**
- * A body of work a station can be built around.
+ * A body of work a station can be built around — the same vocabulary the recipe table uses.
  *
- * ★ EACH ONE IS DERIVED FROM THE RECIPE'S OWN INPUTS, NEVER FROM A LIST OF RECIPE IDS (see
- * `inSpeciality`). A fifth tree species joins the sawmill the day it is added and nobody has to
- * remember a second table — the same reason `stationRecipes` filters on `station === 'hand'`
- * rather than naming rows.
+ * ★ IT IS `RecipeDef['family']`, NOT A SECOND ENUM. A station's speciality and a recipe's family
+ * are the same question asked from two sides, and two enums that mean one thing is how a station
+ * ends up specialising in a category no recipe can ever be in.
  */
-export type Speciality = 'logs' | 'stone'
+export type Speciality = Family
 
 export interface StationDef {
   id: StationId
@@ -92,7 +91,7 @@ export interface StationDef {
    * model and the bench pays it too: the quarry dial is erased for free and the cutter is a slower
    * bench. The bonus is a property of the STATION × RECIPE pair; this is the station's half.
    *
-   * ⚠ THE BENCH PAYS `'logs'`, WHICH IS NOT AN ODDITY — it is today's behaviour written down. The
+   * ⚠ THE BENCH PAYS `'wood'`, WHICH IS NOT AN ODDITY — it is today's behaviour written down. The
    * bench is a carpenter's bench: a plank bed and a blade, so it splits a log cleanly and shatters
    * stone like anything else you improvise on. Changing it to `'none'` would be a real balance
    * change to a station that has not been playtested yet, not a tidy-up.
@@ -101,22 +100,20 @@ export interface StationDef {
 }
 
 /**
- * Raw quarried stone, as an item id.
+ * Is this recipe inside that body of work? The one place a speciality is decided.
  *
- * ★ SAFE AS A SINGLE ID RATHER THAN A LIST, BECAUSE THE REGISTRY RULED IT SO: every stone block in
- * the game — stone and deep stone alike — drops this same rubble, deliberately, so that there is
- * *"one broken-rock economy, not two"* (`registry.ts`, asserted in `recipes.test.ts`). "Takes
- * rubble" therefore cannot fragment the way "takes a log" would have across four tree species,
- * which is why that one is a suffix test and this one is an equality test.
+ * ★ IT ASKS THE ROW, AND THAT REPLACED TWO STRING TESTS (2026-08-15). This used to sniff the
+ * inputs — `endsWith('_log')` for the mill, `=== 'rubble'` for the cutter — which was genuinely
+ * better while each speciality had one raw material, because a fifth tree species enrolled itself.
+ * The masonry palette killed it: a cutter works rubble, cut stone, spring crust and sand, four ids
+ * whose only shared property is that a mason works them. Any test that spots THAT is the hand-kept
+ * list the derivation existed to avoid, written in the file furthest from the data.
+ *
+ * ⚠ AN UNTAGGED ROW IS IN NO SPECIALITY, so it is bench work and earns no bonus — see `Family` on
+ * why that direction is the safe one. The derivations that still work are kept as ORACLES in
+ * `workshop.test.ts`, so forgetting `family: 'wood'` on a log refine is still caught loudly.
  */
-const RAW_STONE = 'rubble'
-
-/** Is this recipe inside that body of work? The one place a speciality is decided. */
-function inSpeciality(r: RecipeDef, s: Speciality): boolean {
-  return s === 'logs'
-    ? r.input.some(i => i.itemId.endsWith('_log'))
-    : r.input.some(i => i.itemId === RAW_STONE)
-}
+const inSpeciality = (r: RecipeDef, s: Speciality): boolean => r.family === s
 
 /** Will this station take the job at all? */
 export const worksOn = (def: StationDef, r: RecipeDef): boolean =>
@@ -180,8 +177,8 @@ export function payingStations(r: RecipeDef): StationDef[] {
  * amount of later tuning would ever reach them.
  */
 export const STATIONS: Record<StationId, StationDef> = {
-  crafting_table: { id: 'crafting_table', name: 'The Bench',       runMs: RUN_MS, accepts: 'any',   pays: 'logs'  },
-  sawmill:        { id: 'sawmill',        name: 'The Sawmill',     runMs: 5_000,  accepts: 'logs',  pays: 'logs'  },
+  crafting_table: { id: 'crafting_table', name: 'The Bench',       runMs: RUN_MS, accepts: 'any',   pays: 'wood'   },
+  sawmill:        { id: 'sawmill',        name: 'The Sawmill',     runMs: 5_000,  accepts: 'wood',  pays: 'wood'   },
   stonecutter:    { id: 'stonecutter',    name: 'The Stonecutter', runMs: 18_000, accepts: 'stone', pays: 'stone' },
 }
 

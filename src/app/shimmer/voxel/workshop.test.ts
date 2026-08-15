@@ -14,7 +14,7 @@
 // every path off it (collect, salvage, refusing to overwrite) is a place inventory can be silently
 // destroyed or duplicated. `conservation` sweeps that.
 
-import { RECIPES, recipeDef } from './recipes'
+import { RECIPES, recipeDef, type RecipeDef } from './recipes'
 import {
   RUN_MS, stationKey, milledYield, runsReady, runProgress, isSpent,
   jobCost, loadJob, collect, salvage, stationRecipes, maxRuns, MAX_RUNS,
@@ -54,6 +54,38 @@ console.log('milled yield')
   check('every log-refine DOES pay better milled', logRefines.length > 0 &&
     logRefines.every(r => milledYield(r, MILL) > r.output.count),
     logRefines.filter(r => milledYield(r, MILL) <= r.output.count).map(r => r.id).join(', '))
+}
+
+// ── ★ THE DERIVATIONS SURVIVE AS ORACLES (2026-08-15) ─────────────────────────
+// `RecipeDef.family` replaced two string tests that used to BE the mechanism (`endsWith('_log')`
+// and `=== 'rubble'`). Those tests were right about every case they could see; what killed them is
+// that masonry grew inputs they cannot see (cut stone, spring crust, sand). So they move here.
+//
+// ★ THIS IS THE WHOLE MITIGATION FOR MOVING FROM A DERIVED RULE TO A HAND-WRITTEN FIELD. A tag is
+// a thing someone forgets, and forgetting it is SILENT — the recipe simply never appears at its
+// specialist, which looks like a design decision. Every case still mechanically derivable is
+// therefore asserted, so the field can only be forgotten where nothing could have known better.
+console.log('family tags')
+{
+  const untagged = (pred: (r: RecipeDef) => boolean, want: string) =>
+    RECIPES.filter(r => pred(r) && r.family !== want).map(r => r.id)
+
+  const logs = untagged(r => r.input.some(i => i.itemId.endsWith('_log')), 'wood')
+  check('every recipe consuming a log is tagged wood', logs.length === 0,
+    `${logs.join(', ')} — a fifth tree species needs family: 'wood' on its row`)
+
+  const stone = untagged(r => r.input.some(i => i.itemId === 'rubble'), 'stone')
+  check('every recipe consuming rubble is tagged stone', stone.length === 0, stone.join(', '))
+
+  // A family nobody claims is a tag that does nothing — either a station is missing or the tag is.
+  const claimed = new Set(Object.values(STATIONS).flatMap(s => [s.accepts, s.pays]))
+  const orphan = [...new Set(RECIPES.map(r => r.family).filter(Boolean))].filter(f => !claimed.has(f as never))
+  check('every family a recipe declares is some station\'s speciality', orphan.length === 0,
+    `${orphan.join(', ')} — tagged rows that no station will ever run`)
+
+  // And the reverse: a station specialising in a family no recipe carries is furniture with a panel.
+  const empty = Object.values(STATIONS).filter(s => s.accepts !== 'any' && stationRecipes(s.id).length === 0)
+  check('no station specialises in an empty family', empty.length === 0, empty.map(s => s.id).join(', '))
 }
 
 // ── ★ THE BONUS IS A STATION × RECIPE PAIR, NOT A PROPERTY OF THE ROW ─────────
@@ -104,6 +136,33 @@ console.log('the quarry dial')
     check(`stone still loses material at ${st.id}`, milledYield(stone, st) < rubblePerRun,
       `${milledYield(stone, st)} out of ${rubblePerRun} rubble — a station may narrow the loss, never erase it`)
   }
+
+  // ★★ AND THE GENERAL FORM, WHICH IS THE ONE THAT SCALES: MASONRY NEVER MULTIPLIES. The rule above
+  // guards one row; this guards the palette. Every stone recipe must hand back at most as many
+  // blocks as it consumed, at every station that will run it — break even at best, never profit.
+  //
+  // This is `recipes.test.ts` §7's asymmetry stated where a station can violate it: WOOD multiplies
+  // (one log becomes four planks, because a tree is renewable and timber should feel it) and STONE
+  // does not (you went to a quarry). A masonry row that pays 4 for 3 would not throw, would not
+  // look wrong in the table, and would quietly make stone the cheap material — inverting the whole
+  // building grammar as a side effect of somebody being generous with a brick.
+  const masonry = RECIPES.filter(r => r.family === 'stone')
+  check('there is a masonry palette to check at all', masonry.length >= 4, `${masonry.length} rows`)
+  let mult = ''
+  for (const r of masonry) {
+    const inBlocks = r.input.reduce((n, i) => n + i.count, 0)
+    for (const st of Object.values(STATIONS)) {
+      if (!worksOn(st, r)) continue
+      if (milledYield(r, st) > inBlocks) mult = `${r.id} pays ${milledYield(r, st)} for ${inBlocks} at ${st.id}`
+    }
+  }
+  check('★ masonry never multiplies — stone breaks even at best, anywhere', mult === '', mult)
+
+  // ...and the other half of the asymmetry, so "stone never multiplies" cannot be satisfied by
+  // quietly flattening wood to match it.
+  const woodGain = RECIPES.filter(r => r.family === 'wood')
+    .some(r => r.output.count > r.input.reduce((n, i) => n + i.count, 0))
+  check('wood still DOES multiply — the asymmetry is the economy', woodGain)
 }
 
 // ── what a station will run ───────────────────────────────────────────────────

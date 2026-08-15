@@ -45,6 +45,29 @@
  */
 export type Station = 'hand' | 'crafting_table' | 'sawmill' | 'stonecutter'
 
+/**
+ * The body of work a refine belongs to. Absent = general, and general means BENCH ONLY.
+ *
+ * ★ ON THE ROW RATHER THAN SNIFFED FROM THE INPUTS (2026-08-15, and this replaces a derivation).
+ * `workshop.ts` used to decide a sawmill's list by testing `itemId.endsWith('_log')` and a cutter's
+ * by `itemId === 'rubble'`, on the reasoning that a derived rule needs no maintenance when a fifth
+ * tree species arrives. That held exactly as long as a speciality had ONE raw input. Masonry now
+ * runs on rubble, cut stone, spring crust and sand — four ids with nothing in common but the fact
+ * that a mason works them — and no string test can spot that without becoming the hand-kept list
+ * it was avoiding, written in the wrong file.
+ *
+ * ⚠ ABSENT IS THE FAIL-CLOSED DIRECTION AND THAT IS THE WHOLE REASON IT IS OPTIONAL. A writer who
+ * has never heard of this field lands in "bench only, no bonus" — annoying and instantly visible.
+ * The opposite default would silently enrol a new recipe in a speciality and pay it a bonus nobody
+ * decided on. Never give this a default value.
+ *
+ * ⚠ AND THE OLD DERIVATIONS SURVIVE AS ORACLES, NOT AS MECHANISM: `workshop.test.ts` asserts that
+ * every recipe consuming a `_log` is tagged `wood` and every one consuming `rubble` is tagged
+ * `stone`. A forgotten tag on the cases we CAN derive still fails loudly; the cases we cannot are
+ * the reason the field exists.
+ */
+export type Family = 'wood' | 'stone'
+
 export interface RecipeDef {
   id: string
   name: string
@@ -90,6 +113,8 @@ export interface RecipeDef {
    * is absent, which is the stronger form of the same defence.
    */
   milled?: number
+  /** Which specialist station cares about this row, if any. See `Family` — omit for general work. */
+  family?: Family
   station: Station
   /**
    * ★ MANA IS CHARGED ONLY WHERE MANA IS ACTUALLY CHANNELLED.
@@ -115,25 +140,25 @@ export interface RecipeDef {
  */
 export const RECIPES: RecipeDef[] = [
   // Goldwood — the day-one tree. Tier-1 forestry.
-  { id: 'goldwood_planks', name: 'Goldwood Planks', milled: 6, station: 'hand', mana: 0,
+  { id: 'goldwood_planks', name: 'Goldwood Planks', milled: 6, family: 'wood', station: 'hand', mana: 0,
     input: [{ itemId: 'goldwood_log', count: 1 }], output: { itemId: 'goldwood_plank', count: 4 } },
-  { id: 'goldwood_bark', name: 'Strip Goldwood Bark', milled: 3, station: 'hand', mana: 0,
+  { id: 'goldwood_bark', name: 'Strip Goldwood Bark', milled: 3, family: 'wood', station: 'hand', mana: 0,
     input: [{ itemId: 'goldwood_log', count: 1 }], output: { itemId: 'goldwood_bark', count: 2 } },
 
   // Shimmeroak — tier-2 forestry. Sap is tapped from the log, not rolled off a node.
-  { id: 'shimmeroak_planks', name: 'Shimmeroak Planks', milled: 6, station: 'hand', mana: 0,
+  { id: 'shimmeroak_planks', name: 'Shimmeroak Planks', milled: 6, family: 'wood', station: 'hand', mana: 0,
     input: [{ itemId: 'shimmeroak_log', count: 1 }], output: { itemId: 'shimmeroak_plank', count: 4 } },
-  { id: 'amber_sap', name: 'Tap Amber Sap', milled: 3, station: 'hand', mana: 0,
+  { id: 'amber_sap', name: 'Tap Amber Sap', milled: 3, family: 'wood', station: 'hand', mana: 0,
     input: [{ itemId: 'shimmeroak_log', count: 1 }], output: { itemId: 'amber_sap', count: 2 } },
 
   // Starwillow — tier-3 forestry. The branch is the structural piece here, not a plank.
-  { id: 'starwillow_branches', name: 'Starwillow Branches', milled: 6, station: 'hand', mana: 0,
+  { id: 'starwillow_branches', name: 'Starwillow Branches', milled: 6, family: 'wood', station: 'hand', mana: 0,
     input: [{ itemId: 'starwillow_log', count: 1 }], output: { itemId: 'starwillow_branch', count: 4 } },
-  { id: 'starwillow_sap', name: 'Tap Starwillow Sap', milled: 3, station: 'hand', mana: 0,
+  { id: 'starwillow_sap', name: 'Tap Starwillow Sap', milled: 3, family: 'wood', station: 'hand', mana: 0,
     input: [{ itemId: 'starwillow_log', count: 1 }], output: { itemId: 'starwillow_sap', count: 2 } },
 
   // Dawnwood — the deep-forest tree. No tool tier claims it yet; it is building timber.
-  { id: 'dawnwood_planks', name: 'Dawnwood Planks', milled: 6, station: 'hand', mana: 0,
+  { id: 'dawnwood_planks', name: 'Dawnwood Planks', milled: 6, family: 'wood', station: 'hand', mana: 0,
     input: [{ itemId: 'dawnwood_log', count: 1 }], output: { itemId: 'dawnwood_plank', count: 4 } },
 
   // ── ★ STONE: RUBBLE → CUT STONE (2026-08-13) ────────────────────────────────────────────────
@@ -162,8 +187,57 @@ export const RECIPES: RecipeDef[] = [
   // old granularity the only bonus the data shape could express was 2 rubble → 2 stone, i.e. the
   // loss erased entirely — the one outcome the ruling above forbids. Written 4→2, the cutter pays
   // 3 and stone keeps a loss it can never dress away.
-  { id: 'cut_stone', name: 'Cut Stone', milled: 3, station: 'hand', mana: 0,
+  { id: 'cut_stone', name: 'Cut Stone', milled: 3, family: 'stone', station: 'hand', mana: 0,
     input: [{ itemId: 'rubble', count: 4 }], output: { itemId: 'cut_stone', count: 2 } },
+
+  // ── ★ THE MASONRY PALETTE (2026-08-15, Alex: "3 other stone types.. different colors and
+  // textures to work with") ───────────────────────────────────────────────────────────────────
+  // Three more building surfaces, and the important thing about all three is WHERE THE COLOUR
+  // COMES FROM: nothing new is generated and no new rock is invented. The world already quarries
+  // three differently-coloured mineral things, and two of them had NO CRAFTING USE AT ALL —
+  // `block_spring_crust` (pale mint, the terrace shell, whose registry row has said since 08-08
+  // that it is "exactly the block a builder would want to carry home") and `block_sand` (warm tan,
+  // every beach in the world). They were dead ends you could dig and stack and nothing else.
+  //
+  // ⚠ SO THIS IS DELIBERATELY *NOT* NEW ROCK TYPES. A red stone that outcrops in the Outfields is a
+  // statement about what that region is MADE OF, which is canon and Magii's — and it would want
+  // worldgen, a GENERATOR_VERSION bump and a biome argument. Dressing rock the player can already
+  // hold is entirely Jin's, ships today, and gives the same palette. If Alex wants genuinely new
+  // strata later that is a canon gap, filed then, on purpose.
+  //
+  // ⚠ DEEP STONE IS THE OBVIOUS FOURTH COLOUR AND IT IS RULED OUT — do not "fix" this. It is a dark
+  // violet-grey (0x494455) and would be the perfect dark family, but Alex ruled 08-13 that stone
+  // and deep stone drop the SAME rubble ("two rubbles would be two economies for one material"),
+  // and `recipes.test.ts` asserts it. A dark building stone needs either that ruling revisited or a
+  // darkening step that does not exist yet. It is a question for Alex, not a gap to quietly fill.
+  //
+  // ★ EVERY ONE IS 3→2 BY HAND AND 3 AT THE CUTTER, i.e. 1:1 dressing once you own the station.
+  // Chiselling a face by hand spoils one block in three; a heavy bed does not. That is the cutter's
+  // whole pitch restated per recipe, and it never CREATES material — masonry may break even at
+  // best, which `workshop.test.ts` asserts across the whole family. Wood multiplies, stone does
+  // not; that asymmetry is the building grammar and these rows must not flatten it.
+  //
+  // Names are generic English (brick, sandstone, pale) describing worked versions of rock already
+  // in the world — same call `plank`, `planking` and `cut stone` made. No Athernyx word is coined,
+  // so no canon gap is owed.
+
+  // Fine grey courses against cut stone's big ashlar blocks — the "somebody BUILT this" read that
+  // a wall of dressed slabs does not give you. The one Alex actually asked for.
+  { id: 'stone_brick', name: 'Stone Bricks', milled: 3, family: 'stone', station: 'hand', mana: 0,
+    input: [{ itemId: 'cut_stone', count: 3 }], output: { itemId: 'stone_brick', count: 2 } },
+
+  // Pale mint-white, from the hot springs' terrace shell. The colour is already in the world and
+  // already quarryable; this is what makes a trip to the Springs worth a cart.
+  { id: 'pale_brick', name: 'Pale Bricks', milled: 3, family: 'stone', station: 'hand', mana: 0,
+    input: [{ itemId: 'block_spring_crust', count: 3 }], output: { itemId: 'pale_brick', count: 2 } },
+
+  // Warm tan, from beach sand — and the texture is BANDED rather than coursed, because sedimentary
+  // layers are what tells sandstone apart from masonry at a glance even before the hue lands.
+  // ⚠ Sand is spade work, not prospecting, so this is the one masonry row whose raw material a
+  // fresh keeper can dig bare-handed. That is on purpose: it is the cheap warm surface you can
+  // build with on day one, against stone's tier-1 pick and the Springs' walk.
+  { id: 'sandstone', name: 'Sandstone', milled: 3, family: 'stone', station: 'hand', mana: 0,
+    input: [{ itemId: 'block_sand', count: 3 }], output: { itemId: 'sandstone', count: 2 } },
 
   // ── ★ WOOD: PLANKS → PLANKING (2026-08-13) ──────────────────────────────────────────────────
   // The wood half of the grammar, and the mirror of `cut_stone`. The plank is currency now — it
@@ -174,7 +248,7 @@ export const RECIPES: RecipeDef[] = [
   // 2 mined -> 1 placed, a net LOSS, so a stone building is a quarry you went and did. Wood runs
   // 1 log -> 4 planks -> 2 planking, a net GAIN, so timber is what you throw up first. Renewable,
   // softer, and it should feel it. Turn these if building in wood ever feels harder than digging.
-  { id: 'planking', name: 'Planking', station: 'hand', mana: 0,
+  { id: 'planking', name: 'Planking', family: 'wood', station: 'hand', mana: 0,
     input: [{ itemId: 'goldwood_plank', count: 2 }], output: { itemId: 'planking', count: 1 } },
 
   // ── THE STATION ITSELF ──────────────────────────────────────────────────────────────────────

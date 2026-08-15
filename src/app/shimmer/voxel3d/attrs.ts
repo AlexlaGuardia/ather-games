@@ -42,6 +42,26 @@ export const MATERIAL_COLOR: Record<number, number> = {
   // face is. ⚠ TBD-CANON on the names, like every other generic material in MAT.
   [MAT.RUBBLE]: 0x6e6862,
   [MAT.CUT_STONE]: 0x9aa0a4,
+  // ── ★ THE MASONRY PALETTE (2026-08-15) ───────────────────────────────────────────────────────
+  // The rule above ("share stone's family, split on VALUE") governs the two GREYS, because rubble
+  // and cut stone are the same rock in two states. It deliberately does NOT govern these: pale
+  // brick and sandstone are different MINERAL — terrace crust and beach sand — and a builder
+  // reaching for a warm wall against a cold one is choosing hue on purpose. Each sits a step
+  // deeper than the raw material it is bound from (crust 0xdcede4, sand 0xd8c691), so a wall reads
+  // as worked next to the ground it came out of.
+  //
+  // ⚠ STONE BRICK IS THE ONE THAT HAD TO FIGHT FOR ITS READ. It is the same rock as cut stone, so
+  // hue cannot separate them and the TEXTURE carries it (fine courses against big ashlar blocks);
+  // this shade is a touch cooler and darker so a brick wall still reads apart from a dressed-slab
+  // wall at distance, where the pattern blurs out first.
+  [MAT.STONE_BRICK]: 0x8a9095,
+  [MAT.PALE_BRICK]: 0xcfe0d7,
+  // ⚠ ROSY, NOT YELLOW-TAN, AND THAT IS A LEGIBILITY FIX RATHER THAN A PREFERENCE. The first pass
+  // took sand's own hue a step deeper (0xc6a76c) and landed it squarely between beach sand and
+  // GOLDWOOD PLANKING — a warm banded cube beside a warm grained cube, which is the whole point of
+  // adding a colour lost. Iron-pink is what real sandstone does anyway, it still reads as descended
+  // from the sand it was bound out of, and nothing else in the world is in that hue.
+  [MAT.SANDSTONE]: 0xc9977a,
   [ORE.RAW_MANA]: 0x7fd4ff,
   // Mana in the shape of a wall. Deliberately the palest, coolest thing in the table and NOT in
   // stone's family — a cast wall must never be mistaken for one you could have built.

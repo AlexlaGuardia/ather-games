@@ -35,7 +35,7 @@ import { AIR } from './section'
  * becomes accidental canon.
  */
 // ── ★ THE MATERIAL ID MAP — one number space, four files ────────────────────────────────────────
-// MAT 0-13 + 24-30 + 40-47 + 50 (here) · ORE 16-22 (ore.ts) · WOOD 32-39 (trees.ts) · STRUCTURE 48-49 (pieces.ts).
+// MAT 0-13 + 24-30 + 40-47 + 50-53 (here) · ORE 16-22 (ore.ts) · WOOD 32-39 (trees.ts) · STRUCTURE 48-49 (pieces.ts).
 // PLANTS take 24-26, in the gap between ore and wood. ⚠ The first cut put them at 14-16 because
 // MAT stops at 13 — and 16 is ORE.RAW_MANA, so a wildflower WAS a mana seam: it inherited ore
 // hardness, dropped shards, and `isPlant` matched ore and logs all through the underground.
@@ -233,6 +233,22 @@ export const MAT = {
    * here on — the next one is 51, not another squeeze into somebody else's gap.
    */
   STONECUTTER: 50,
+
+  // ── ★ THE MASONRY PALETTE (2026-08-15, Alex asked for colours and textures to build with) ────
+  // Three crafted building surfaces beside CUT_STONE, and none of them is a new ROCK: the colour
+  // comes from mineral the world already quarries. Pale from the springs' terrace crust, tan from
+  // beach sand, and fine grey courses cut from cut stone. Never generated; only ever placed, so
+  // none of them needs a GENERATOR_VERSION bump — see `recipes.ts` for why new strata would be a
+  // canon question and this is not.
+  //
+  // ⚠ 51-53 CONTINUE THE HAND-PLACED BAND OPENED AT 50. The building-materials band (40-41) filled
+  // up in August and the clean gaps below STRUCTURE are gone, so everything placed rather than
+  // generated lives up here from now on. They are NOT range-tested anywhere — unlike plants and
+  // saplings, nothing asks "is this masonry" in a hot loop — so the adjacency is tidiness, not a
+  // contract. Keep it anyway; the next one is 54.
+  STONE_BRICK: 51,
+  PALE_BRICK: 52,
+  SANDSTONE: 53,
 } as const
 
 export interface DepthConfig {

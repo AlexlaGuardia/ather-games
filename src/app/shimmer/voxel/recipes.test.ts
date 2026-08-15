@@ -220,6 +220,29 @@ console.log('building grammar')
     'if any terrain block dropped it, the refine step is decoration')
   check('and the refine step exists', recipeDef('cut_stone')?.input[0].itemId === 'rubble')
 
+  // ── ★ 5b. THE SAME RULE OVER THE WHOLE MASONRY PALETTE (2026-08-15) ────────────────────────
+  // Generalised rather than repeated three times: any block whose item the recipe table can PRODUCE
+  // must be reachable only by crafting it, or the refine step is decoration and the material is
+  // just something you dig. The version above named `cut_stone`, so the three surfaces added with
+  // the palette would each have needed someone to remember to copy it.
+  {
+    // ⚠ THE POT'S TWO GROWN STATES ARE EXCLUDED WITH THEIR REASON, not silently skipped. POT_SEEDED
+    // and POT_BLOOM drop `clay_pot`, which IS a recipe output whose material is the empty POT — so
+    // they trip the letter of this rule while being exactly right: the material IS the state
+    // (depth.ts), and breaking a planted pot must hand back the pot you made. That is a state
+    // machine over one crafted item, not a second way to obtain it. Anything else appearing here
+    // is the real bug.
+    const POT_STATES = new Set<number>([MAT.POT_SEEDED, MAT.POT_BLOOM])
+    const dugCrafted = ALL_BLOCKS.filter(b => !POT_STATES.has(b.material) &&
+      b.drops.some(d => RECIPE_OUTPUTS.has(d.itemId) && materialForItem(d.itemId) !== b.material))
+    check('no terrain block drops a crafted surface', dugCrafted.length === 0,
+      dugCrafted.map(b => b.name).join(', '))
+    // And each new surface actually goes back down as itself — the `BY_ITEM` round-trip that makes
+    // a placeable block's drop resolve to a voxel. A collision here silently steals another id.
+    for (const id of ['stone_brick', 'pale_brick', 'sandstone'])
+      check(`${id} places as itself`, ALL_BLOCKS.some(b => b.material === materialForItem(id) && b.drops[0].itemId === id))
+  }
+
   // 6. THE WOOD HALF, same shape. A log is raw material; the PLANK is currency, not a block in
   //    hand; planking is the wooden surface you spend planks on.
   check('a log is not placeable', ALL_BLOCKS.filter(b => isLogMat(b.material)).every(b => b.placeable === false),

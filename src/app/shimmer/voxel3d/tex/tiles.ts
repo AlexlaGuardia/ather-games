@@ -56,6 +56,8 @@ export const TILE_MATERIALS: number[] = [
   // and what you cut it into. ⚠ Appending here without a `paintFor` case below is how every tree
   // once rendered as crystal — the switch's default IS the ore painter.
   MAT.RUBBLE, MAT.CUT_STONE,
+  // The masonry palette added 2026-08-15 — three crafted surfaces, no new rock.
+  MAT.STONE_BRICK, MAT.PALE_BRICK, MAT.SANDSTONE,
 ]
 
 /** One spare layer past the end: an unmapped material samples magenta rather than layer 0's stone. */
@@ -437,23 +439,68 @@ function paintLeaves(dst: Layer, size: number, base: [number, number, number], s
  * block each row are unmistakably BUILT, and that is the one thing this tile has to say from
  * across a garden. Each block takes its own slight tone so a wall does not read as wallpaper.
  */
-function paintAshlar(dst: Layer, size: number, base: [number, number, number], seed: number) {
+/**
+ * Staggered masonry. `rows`×`cols` blocks per face, half-block stagger per course.
+ *
+ * ★ THE COURSE COUNT IS A PARAMETER BECAUSE TEXTURE IS THE ONLY THING SEPARATING TWO GREYS
+ * (2026-08-15). Cut stone and stone bricks are the SAME ROCK, so hue cannot tell them apart the
+ * way it separates pale brick and sandstone — a builder picking a wall has nothing to go on but
+ * the pattern. Ashlar stays 4×2 (big dressed slabs, byte-identical to what shipped); bricks are
+ * 8×4, half the unit in both axes, which reads as "somebody laid this" rather than "somebody cut
+ * this". Both divisors keep the joints on whole pixels at 16 and 32.
+ */
+function paintAshlar(
+  dst: Layer, size: number, base: [number, number, number], seed: number,
+  rows = 4, cols = 2,
+) {
   const mortar = shade(base, -34)
-  const rows = 4
   const rh = size / rows
+  const bw = size / cols
   for (let y = 0; y < size; y++) {
     const row = Math.floor(y / rh)
     // Half-block stagger per row, which is what stops it reading as a grid.
-    const off = (row % 2) * (size / 4)
+    const off = (row % 2) * (bw / 2)
     for (let x = 0; x < size; x++) {
-      const bx = Math.floor(((x + off) % size) / (size / 2))
+      const bx = Math.floor(((x + off) % size) / bw)
       const onCourse = Math.floor(y % rh) === 0
-      const onJoint = Math.floor((x + off) % (size / 2)) === 0
+      const onJoint = Math.floor((x + off) % bw) === 0
       if (onCourse || onJoint) { put(dst, size, x, y, mortar); continue }
       // One tone per block, so neighbouring stones differ slightly.
       const tone = (h2(row, bx + row * 7, seed) - 0.5) * 22
       const grit = (h2(x, y, seed + 5) - 0.5) * 2 * 5
       put(dst, size, x, y, shade(base, tone + grit))
+    }
+  }
+}
+
+/**
+ * Sedimentary banding — sandstone, and the reason it is not just tinted ashlar.
+ *
+ * ★ A DIFFERENT IDIOM, NOT A DIFFERENT PALETTE. Three masonry blocks all wearing courses would put
+ * the whole read on hue, and hue is the first thing that goes at distance, in shadow, and at night
+ * under a lantern. Sandstone is BOUND SAND, not laid blocks — so it gets horizontal strata with no
+ * joints at all, which is legible as a silhouette texture long after the tan has gone grey in the
+ * dark. Bands are hashed per-row so a wall of them does not tile into stripes.
+ */
+function paintBanded(dst: Layer, size: number, base: [number, number, number], seed: number) {
+  // ⚠ THE FIRST VERSION OF THESE NUMBERS WAS INVISIBLE, AND ONLY LOOKING FOUND IT. Bands 2px tall
+  // with a ±10 tone swing and a rare -14 seam rendered as a FLAT TAN CUBE at icon scale — all hue,
+  // no texture, which is exactly the "tint is not a texture" failure the sawmill and the cutter
+  // were each written to avoid, arrived at from the other direction. A procedural pattern has to be
+  // checked against the pixels it produces, not against how it reads in the source.
+  const bh = Math.max(2, Math.round(size / 5))         // ~3px at 16, ~6px at 32: a band you can see
+  for (let y = 0; y < size; y++) {
+    const band = Math.floor(y / bh)
+    const tone = (h2(band, band * 13, seed) - 0.5) * 34
+    // The parting line between beds. Every band gets one at its top edge, varying in strength, so
+    // the strata read as layers rather than as a stack of differently-coloured stripes.
+    const edge = y % bh === 0 && band > 0
+    const deep = h2(band, band * 7, seed + 11) > 0.5
+    for (let x = 0; x < size; x++) {
+      // Grain runs ALONG the bedding — sampled coarsely in x and finely in y, so the noise itself
+      // is horizontal and reinforces the layering instead of fighting it with isotropic speckle.
+      const grain = (h2(x >> 1, y, seed + 17) - 0.5) * 13
+      put(dst, size, x, y, shade(base, tone + grain + (edge ? (deep ? -34 : -20) : 0)))
     }
   }
 }
@@ -711,6 +758,11 @@ export function paintFor(material: number, face: number, size: number): Layer {
     // thing nothing else in the world draws.
     case MAT.RUBBLE: paintRock(dst, size, rgbOf(MATERIAL_COLOR[material]), { speckle: 26, blotch: 30, vein: 0, seed }); break
     case MAT.CUT_STONE: paintAshlar(dst, size, rgbOf(MATERIAL_COLOR[material]), seed); break
+    // ⚠ The masonry palette (2026-08-15). Same painter, finer courses — see `paintAshlar` on why
+    // the two greys are separated by pattern and the other two by mineral.
+    case MAT.STONE_BRICK:
+    case MAT.PALE_BRICK: paintAshlar(dst, size, rgbOf(MATERIAL_COLOR[material]), seed, 8, 4); break
+    case MAT.SANDSTONE: paintBanded(dst, size, rgbOf(MATERIAL_COLOR[material]), seed); break
     case MAT.MANA_LANTERN: paintLantern(dst, size, seed); break
     // ── the pot, in three states ────────────────────────────────────────────────────────────
     // ⚠ Appended to TILE_MATERIALS above, so it NEEDS these cases: the switch's default is the ore

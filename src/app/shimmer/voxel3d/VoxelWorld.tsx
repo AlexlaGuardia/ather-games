@@ -5461,8 +5461,8 @@ function CraftPanel({ have, tools, tick, station, onCraft, onCraftTool, onClose 
  * a branch to the panel.
  */
 const SPECIALITY_NOTE: Record<Exclude<StationDef['accepts'], 'any'>, string> = {
-  logs: 'a sawmill takes logs, nothing else — stone and fittings are bench work',
-  stone: 'a stonecutter takes rubble, nothing else — it is slower than the bench and wastes less',
+  wood: 'a sawmill takes timber, nothing else — stone and fittings are bench work',
+  stone: 'a stonecutter takes masonry, nothing else — it is slower than the bench and wastes less',
 }
 
 function StationPanel({ st, have, inv, onChange, onSay, onClose }: {
