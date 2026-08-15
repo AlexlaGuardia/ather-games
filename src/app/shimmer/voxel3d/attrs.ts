@@ -24,7 +24,18 @@ export const MATERIAL_COLOR: Record<number, number> = {
   [MAT.POT]: 0xa9663f,
   [MAT.POT_SEEDED]: 0xa9663f,
   [MAT.POT_BLOOM]: 0xa9663f,
-  [MAT.BEDROCK]: 0x2b2b33,
+  // ── ★ THE FLOOR OF THE WORLD (2026-08-15) — was bedrock's near-black 0x2b2b33 ────────────────
+  // Cool blue-white: the cloud-ocean pressed hard, seen from inside a garden pocket. It is the
+  // PALEST thing underground on purpose — digging to the bottom and hitting something lighter than
+  // the rock above it is the whole read ("this is not more world, this is the edge of it"), and a
+  // dark floor is exactly how bedrock managed to look like ordinary deep stone for months.
+  //
+  // ⚠ IT DOES NOT EMIT, AND THAT IS A GAMEPLAY DECISION NOT AN ART ONE. Canon has cloud-walls
+  // "faintly glowing", so an `emit` on the registry row would be defensible — and it would light
+  // the floor of every deep cave in the world, which feeds `light.ts`'s block channel, which gates
+  // Hollow spawn eligibility. That is a balance change to the night, smuggled in as a texture pass.
+  // If the floor should glow, it should be Alex's call with the spawn consequence on the table.
+  [MAT.PACKED_CLOUD]: 0xa8b4cc,
   [MAT.DEEP_STONE]: 0x494455,
   [MAT.STONE]: 0x7d7a86,
   [MAT.SUBSOIL]: 0x6b4f34,

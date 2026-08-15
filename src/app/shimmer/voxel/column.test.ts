@@ -57,7 +57,7 @@ const scratch = createMeshScratch(SECTION)
   const col = makeColumn(512, 768, SEED)
   const seen = new Set<number>()
   for (const s of col.sections) for (const v of s.data) seen.add(v)
-  ok(seen.has(MAT.BEDROCK), 'the column has bedrock')
+  ok(seen.has(MAT.PACKED_CLOUD), 'the column has a cloud floor')
   ok(seen.has(MAT.STONE) || seen.has(MAT.DEEP_STONE), 'the column has rock')
   ok(seen.has(AIR), 'the column has sky')
   ok(seen.has(ORE.RAW_MANA), 'the column has ore')
@@ -65,9 +65,9 @@ const scratch = createMeshScratch(SECTION)
   for (let z = 0; z < SECTION; z++) for (let x = 0; x < SECTION; x++) {
     const h = col.heightAt(x, z)
     if (h < 1 || h >= C.worldHeight) bad++
-    if (col.get(x, 0, z) !== MAT.BEDROCK) bad++
+    if (col.get(x, 0, z) !== MAT.PACKED_CLOUD) bad++
   }
-  ok(bad === 0, 'cached surface heights are sane and bedrock survives the pipeline')
+  ok(bad === 0, 'cached surface heights are sane and the cloud floor survives the pipeline')
 }
 
 // ── 4. ★ NO GLASS PANES BETWEEN SECTIONS ─────────────────────────────────────────────────────

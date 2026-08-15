@@ -3217,11 +3217,11 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
    * the frontier.
    */
   const voxelSolid = useCallback((wx: number, wy: number, wz: number): number => {
-    if (wy < 0) return MAT.BEDROCK
+    if (wy < 0) return MAT.PACKED_CLOUD
     if (wy >= H) return AIR
     const cx = Math.floor(wx / SECTION), cz = Math.floor(wz / SECTION)
     const c = cols.current.get(key(cx, cz))
-    if (!c) return MAT.BEDROCK          // not generated yet ⇒ stand on it, do not fall through it
+    if (!c) return MAT.PACKED_CLOUD          // not generated yet ⇒ stand on it, do not fall through it
     return c.get(wx - cx * SECTION, wy, wz - cz * SECTION)
   }, [])
 

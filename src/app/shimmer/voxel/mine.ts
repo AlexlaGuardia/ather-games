@@ -143,7 +143,7 @@ export function tickBreak(
   }
 }
 
-/** What a broken block yields. Empty for bedrock, water, and anything with no drop table. */
+/** What a broken block yields. Empty for the cloud floor, water, and anything with no drop table. */
 /**
  * What breaking this block yields, rolling any chance-gated entries.
  *

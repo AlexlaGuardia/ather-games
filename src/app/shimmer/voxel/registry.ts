@@ -89,7 +89,12 @@ export interface BlockDef {
  * `resources.ts` and must not be renamed.
  */
 export const BLOCKS: BlockDef[] = [
-  { material: MAT.BEDROCK, name: 'Bedrock', hardness: Infinity, skill: null, minTier: 0, drops: [], placeable: false },
+  // ── ★ THE FLOOR IS PRESSED CLOUD, NOT ROCK (2026-08-15, Alex) ───────────────────────────────
+  // Mechanically untouched — `hardness: Infinity` was already the unbreakable bottom and still is.
+  // What changed is what it IS: the Ather is condensed cloud-stuff (`depth.ts` on MAT.PACKED_CLOUD
+  // cites the rulings), so a granite basement was the one block in the column contradicting the
+  // world's own physical model. Same id, same generation, same saves.
+  { material: MAT.PACKED_CLOUD, name: 'Packed Cloud', hardness: Infinity, skill: null, minTier: 0, drops: [], placeable: false },
   // ── ★ QUARRIED STONE YIELDS RUBBLE, AND DOES NOT GO BACK (2026-08-13, Alex's ruling) ────────
   // Both drop the SAME rubble on purpose: what a pick leaves behind is broken rock either way, and
   // the tier lives in what it costs to BREAK them (hardness + minTier), which is where a player

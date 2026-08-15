@@ -95,7 +95,37 @@ export const isPot = (m: number): boolean => m === 27 || m === 28 || m === 29
 
 export const MAT = {
   AIR: AIR,
-  BEDROCK: 1,
+  /**
+   * ── ★ THE FLOOR OF THE WORLD IS PRESSED CLOUD, NOT ROCK (2026-08-15, Alex) ────────────────────
+   * Alex: *"we need an unbreakable bottom similar to bedrock .. maybe clouds or the compressed
+   * version of clouds, since clouds will already be the borders in the wilds as world limit, as
+   * well as in the home plot."*
+   *
+   * ★ THIS IS A RENAME, NOT A NEW MATERIAL, AND THAT IS THE WHOLE POINT. Id 1 was `BEDROCK` — a
+   * Minecraft inheritance sitting in a world CANON says is made of cloud, and it had been the
+   * bottom of every column since the first generator. Nothing about its mechanics was wrong
+   * (hardness Infinity, drops nothing, unplaceable); its IDENTITY was. So the id, the generation
+   * and every save keep meaning exactly what they meant, and only the name, the colour and the
+   * tile change. ⚠ NO `GENERATOR_VERSION` BUMP IS OWED for the same reason — `materialAt` returns
+   * the same id at the same cells, so this is a render change wearing a rename. Do not bump it to
+   * be safe; a spurious bump makes every stored column read as stale.
+   *
+   * ★ AND IT IS CANON-LITERAL, not a reskin for flavour. `world/mother.md` (ruled 2026-07-19):
+   * mana *"clouds inward and settles into the cloud-stuff that IS the Ather — cooling as it sinks,
+   * compressing as it deepens,"* and the walkable world rests on **the Settle**, *"the crust where
+   * the cloud-ocean has cooled just solid enough to stand on."* `spirit-tales-bible.md` (ruled
+   * 2026-06-02/06-07): the cloud-walls ringing every plot ARE *"the cloud-ocean itself, held back
+   * and pressed soft and glowing."* Pressed cloud is what this world is made of at every scale —
+   * pressed soft at the walls, pressed hard at the floor. Digging to the bottom and finding
+   * granite was the odd part.
+   *
+   * ⚠ WHY IT IS NOT CALLED "THE SETTLE" OR "THE SILT", both of which are ruled terms and both of
+   * which would be wrong. The Settle is the WHOLE crust — the soil and stone above this are also
+   * the Settle — and the Silt is the packed graveyard at the dead centre of the Ather, nowhere
+   * near the floor of one garden pocket. Misusing a ruled name is worse than plain English, so
+   * this is plain English for what it is, in Alex's own words. No canon gap is owed.
+   */
+  PACKED_CLOUD: 1,
   DEEP_STONE: 2,
   STONE: 3,
   SUBSOIL: 4,
@@ -287,8 +317,8 @@ export interface DepthConfig {
   soilVariance: number
   /** Below this altitude, stone becomes deep stone — the tier-3/4 host rock. */
   deepStoneLevel: number
-  /** Bedrock floor: solid at y=0, ragged up to this. */
-  bedrockTop: number
+  /** The packed-cloud floor: solid at y=0, ragged up to this. */
+  cloudFloorTop: number
   /** Surfaces steeper than this (voxels of rise per voxel across) show bare rock, not soil. */
   cliffSlope: number
   /** Sand reaches this far above sea level — the beach band. */
@@ -303,7 +333,7 @@ export const DEFAULT_DEPTH: DepthConfig = {
   soilDepth: 4,
   soilVariance: 2,
   deepStoneLevel: 56,   // keeps its 64-under-datum offset through the rebalance
-  bedrockTop: 4,
+  cloudFloorTop: 4,
   cliffSlope: 2.2,
   beachHeight: 2,
 }
@@ -338,10 +368,14 @@ export function materialAt(
   x: number, y: number, z: number, seed: number, h: number,
   cfg: DepthConfig = DEFAULT_DEPTH, hcfg: HeightConfig = DEFAULT_HEIGHT,
 ): number {
-  // 1. An unbreakable floor. Ragged rather than flat, so the bottom of the world reads as rock
-  //    rather than as a rendering plane — Minecraft's own trick, and it costs one noise sample.
-  if (y <= 0) return MAT.BEDROCK
-  if (y < cfg.bedrockTop && value2(x * 0.7, z * 0.7, seed ^ 0xbed0) > y / cfg.bedrockTop) return MAT.BEDROCK
+  // 1. An unbreakable floor: the cloud-ocean pressed hard enough to stand on, where the Settle
+  //    bottoms out (see MAT.PACKED_CLOUD). Ragged rather than flat, so it reads as a real edge of
+  //    the world rather than as a rendering plane — Minecraft's own trick, one noise sample.
+  //    ⚠ THE RAGGEDNESS EARNS MORE HERE THAN IT DID AS BEDROCK. Pressed cloud banked in uneven
+  //    drifts is what the material IS; a flat white plane at the bottom of a cave would read as a
+  //    missing chunk, which is the one failure this line has always existed to prevent.
+  if (y <= 0) return MAT.PACKED_CLOUD
+  if (y < cfg.cloudFloorTop && value2(x * 0.7, z * 0.7, seed ^ 0xbed0) > y / cfg.cloudFloorTop) return MAT.PACKED_CLOUD
 
   // 2. Above the surface: water if we are in a basin — or in a river channel, filled to the WATER
   //    TABLE (height.ts: the land generates around the water, so the bed hangs ≤RIVER_DEPTH under

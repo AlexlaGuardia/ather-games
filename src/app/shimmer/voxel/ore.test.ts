@@ -111,7 +111,7 @@ const total = (m: number) => (census[m] || []).length
 }
 
 // ── 5. ore replaces ROCK, and only rock ──────────────────────────────────────────────────────
-// Ore in topsoil is ore nobody finds by mining; ore replacing bedrock is a hole in the floor.
+// Ore in topsoil is ore nobody finds by mining; ore replacing the cloud floor is a hole in the floor.
 {
   let bad = 0
   for (const [ox, oz] of SITES.slice(0, 25)) {

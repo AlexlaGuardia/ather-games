@@ -27,7 +27,7 @@ export const BOTTOM = 2
 
 /** Ordered — a material's position here IS its slot, so do not reorder without rebuilding. */
 export const TILE_MATERIALS: number[] = [
-  MAT.BEDROCK, MAT.DEEP_STONE, MAT.STONE, MAT.SUBSOIL, MAT.TOPSOIL, MAT.SAND, MAT.WATER,
+  MAT.PACKED_CLOUD, MAT.DEEP_STONE, MAT.STONE, MAT.SUBSOIL, MAT.TOPSOIL, MAT.SAND, MAT.WATER,
   ORE.RAW_MANA, ORE.ELEMENT_VIOLET, ORE.ELEMENT_STORM, ORE.ELEMENT_EARTH, ORE.ELEMENT_WATER,
   ORE.PURE_CORE, ORE.ATHER_CRYSTAL,
   // ⚠ APPEND ONLY — a material's position here IS its layer slot. Wood added 2026-08-07 with trees.
@@ -274,15 +274,38 @@ function paintCrust(dst: Layer, size: number, seed: number) {
   }
 }
 
-function paintBedrock(dst: Layer, size: number, seed: number) {
-  const base = rgbOf(MATERIAL_COLOR[MAT.BEDROCK])
-  const b = Math.max(2, Math.round(size / 8))
-  for (let py = 0; py < size; py += b) {
-    for (let px = 0; px < size; px += b) {
-      const d = (h2(px / b, py / b, seed) - 0.5) * 2 * 46
-      for (let y = py; y < py + b && y < size; y++)
-        for (let x = px; x < px + b && x < size; x++)
-          put(dst, size, x, y, shade(base, d + (h2(x, y, seed + 9) - 0.5) * 10))
+/**
+ * Packed cloud — the floor of the world (2026-08-15). Was `paintBedrock`, a blocky 8-cell mosaic
+ * that said "hard rock, do not dig further"; the message is the same and the material is not.
+ *
+ * ★ SOFT SHAPES, HARD VALUE — that pairing is the whole brief. This is cloud, so the forms have to
+ * be rounded and banked (wrapping value noise at two scales, no straight edge anywhere), but it is
+ * cloud pressed until you can stand on it, so the contrast is TIGHT: a fluffy high-contrast tile
+ * would read as sky leaking into the cave and invite the player to try to break it. Dense, cool,
+ * quiet — heaped wool compressed into a floor.
+ *
+ * ⚠ `vnoise` AND NOT `h2`, DELIBERATELY, and it is the one thing that would go wrong invisibly.
+ * The old mosaic was per-texel hash, which tiles fine because noise has no shape. Billows DO have
+ * shape, so this needs the WRAPPING lattice — `vnoise`'s whole reason for existing (see its header:
+ * a tile whose left edge does not meet its right draws a visible grid across every large surface,
+ * and the floor of the world is the largest unbroken surface in the game).
+ */
+function paintPackedCloud(dst: Layer, size: number, seed: number) {
+  const base = rgbOf(MATERIAL_COLOR[MAT.PACKED_CLOUD])
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      // Two octaves: 3 cells for the banks, 6 for the curdle along their edges.
+      const banks = vnoise(x, y, size, 3, seed)
+      const curdle = vnoise(x, y, size, 6, seed + 41)
+      const n = banks * 0.7 + curdle * 0.3
+      // Swing (±20) — measured by rendering, not picked: ±13 read as an untextured placeholder cube
+      // and anything past ±25 starts reading as fluffy sky leaking into the cave.
+      const lift = (n - 0.5) * 40
+      // A faint bright rim where a bank crests, which is what makes it read as volume rather than
+      // as a stain. Kept subtle: this material must never look like it emits (it does not — see
+      // the registry on why giving the floor an `emit` would relight every deep cave).
+      const crest = n > 0.64 ? (n - 0.64) * 62 : 0
+      put(dst, size, x, y, shade(base, lift + crest + (h2(x, y, seed + 9) - 0.5) * 4))
     }
   }
 }
@@ -735,7 +758,7 @@ export function paintFor(material: number, face: number, size: number): Layer {
   const dst = new Uint8Array(size * size * 4)
   const seed = material * 1013 + 17
   switch (material) {
-    case MAT.BEDROCK: paintBedrock(dst, size, seed); break
+    case MAT.PACKED_CLOUD: paintPackedCloud(dst, size, seed); break
     case MAT.DEEP_STONE: paintRock(dst, size, rgbOf(MATERIAL_COLOR[material]), { speckle: 10, blotch: 16, vein: 22, seed }); break
     case MAT.STONE: paintRock(dst, size, rgbOf(MATERIAL_COLOR[material]), { speckle: 11, blotch: 14, vein: 16, seed }); break
     case MAT.SUBSOIL: paintGrit(dst, size, rgbOf(MATERIAL_COLOR[material]), 18, 22, seed); break

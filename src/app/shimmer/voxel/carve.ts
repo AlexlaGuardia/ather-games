@@ -135,9 +135,9 @@ export function carveStartsAt(seed: number, cx: number, cz: number, chunk: numbe
 export const carveScanRadius = (chunk: number, cfg: CarveConfig = DEFAULT_CARVE): number =>
   Math.ceil(cfg.maxReach / chunk)
 
-/** A voxel may be carved unless it is structural. Bedrock and the floor guard are never removed. */
+/** A voxel may be carved unless it is structural. The cloud floor and the guard below it are never removed. */
 function carvable(m: number): boolean {
-  return m !== AIR && m !== MAT.BEDROCK && m !== MAT.WATER
+  return m !== AIR && m !== MAT.PACKED_CLOUD && m !== MAT.WATER
 }
 
 /**

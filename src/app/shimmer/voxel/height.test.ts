@@ -48,7 +48,7 @@ const C = DEFAULT_HEIGHT
   ok(same < 200, `seeds 1 and 2 produce different terrain (${same}/400 columns matched)`)
 }
 
-// ── 3. clamping — nothing may reach bedrock or the ceiling ───────────────────────────────────
+// ── 3. clamping — nothing may reach the cloud floor or the ceiling ───────────────────────────────────
 {
   let lo = 0, hi = 0
   for (let i = 0; i < 40000; i++) {
@@ -56,7 +56,7 @@ const C = DEFAULT_HEIGHT
     if (h < 1) lo++
     if (h > C.worldHeight - 2) hi++
   }
-  ok(lo === 0, `no column below y=1 (bedrock stays reachable) — ${lo} violations`)
+  ok(lo === 0, `no column below y=1 (the cloud floor stays reachable) — ${lo} violations`)
   ok(hi === 0, `no column at the world ceiling — ${hi} violations`)
 }
 

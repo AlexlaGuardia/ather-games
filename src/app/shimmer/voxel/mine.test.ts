@@ -53,7 +53,7 @@ const world = (x: number, y: number, z: number): number => {
 
 // ── 4. the registry gates by tool, and refuses rather than slows ─────────────────────────────
 {
-  ok(breakSeconds(MAT.BEDROCK, 3, 'prospecting') === Infinity, 'bedrock never breaks')
+  ok(breakSeconds(MAT.PACKED_CLOUD, 3, 'prospecting') === Infinity, 'the cloud floor never breaks')
   ok(breakSeconds(MAT.WATER, 3, 'prospecting') === Infinity, 'water never breaks')
   ok(breakSeconds(MAT.STONE, 0, null) === Infinity, 'stone refuses bare hands')
   ok(breakSeconds(MAT.STONE, 1, 'forestry') === Infinity, 'a blade will not cut stone — wrong family')
@@ -112,15 +112,15 @@ const world = (x: number, y: number, z: number): number => {
 
 // ── 7. a refused block never accumulates ─────────────────────────────────────────────────────
 {
-  const r = tickBreak(null, { x: 0, y: 0, z: 0, material: MAT.BEDROCK }, 5, 3, 'prospecting')
-  ok(r.state === null && !r.broken, 'bedrock accrues no progress and never breaks')
+  const r = tickBreak(null, { x: 0, y: 0, z: 0, material: MAT.PACKED_CLOUD }, 5, 3, 'prospecting')
+  ok(r.state === null && !r.broken, 'the cloud floor accrues no progress and never breaks')
   const r2 = tickBreak(null, { x: 0, y: 0, z: 0, material: ORE.PURE_CORE }, 5, 1, 'prospecting')
   ok(r2.state === null && !r2.broken, 'an under-tier tool accrues nothing')
 }
 
 // ── 8. drops, and the item→block round trip ──────────────────────────────────────────────────
 {
-  ok(dropsFor(MAT.BEDROCK).length === 0, 'bedrock drops nothing')
+  ok(dropsFor(MAT.PACKED_CLOUD).length === 0, 'the cloud floor drops nothing')
   ok(dropsFor(MAT.WATER).length === 0, 'water drops nothing')
   ok(dropsFor(ORE.RAW_MANA)[0]?.itemId === 'raw_mana_shard', 'raw mana drops the RULED shard id')
   ok(dropsFor(ORE.PURE_CORE)[0]?.itemId === 'pure_mana_core', 'pure core drops the ruled core id')
@@ -139,7 +139,7 @@ const world = (x: number, y: number, z: number): number => {
 // ── 9. every material the world generates has a definition ───────────────────────────────────
 // A material with no BlockDef is unmineable and unnamed — it would read as an invisible wall.
 {
-  const generated = [MAT.BEDROCK, MAT.DEEP_STONE, MAT.STONE, MAT.SUBSOIL, MAT.TOPSOIL, MAT.SAND, MAT.WATER,
+  const generated = [MAT.PACKED_CLOUD, MAT.DEEP_STONE, MAT.STONE, MAT.SUBSOIL, MAT.TOPSOIL, MAT.SAND, MAT.WATER,
     ORE.RAW_MANA, ORE.ELEMENT_VIOLET, ORE.ELEMENT_STORM, ORE.ELEMENT_EARTH, ORE.ELEMENT_WATER,
     ORE.PURE_CORE, ORE.ATHER_CRYSTAL]
   const missing = generated.filter(m => !blockDef(m))

@@ -1,7 +1,7 @@
 // Depth-rule oracle. Run: npx tsx src/app/shimmer/voxel/depth.test.ts
 //
 // The depth rule decides what every voxel under the sky is made of. Its failures are quiet: a
-// missing bedrock floor is a hole you fall out of the world through, an inverted layer order puts
+// missing cloud floor is a hole you fall out of the world through, an inverted layer order puts
 // stone above soil and reads as "the textures are wrong", and stray air below the surface looks
 // exactly like a cave the carvers did not generate. All three are cheap to assert and expensive
 // to notice.
@@ -35,11 +35,11 @@ for (let i = 0; i < 600; i++) COLS.push([(i * 977) % 4000 - 2000, (i * 1583) % 4
 // Not cosmetic: an air voxel at y=0 is a hole a player falls through forever.
 {
   let bad = 0
-  for (const [x, z] of COLS) if (at(x, 0, z) !== MAT.BEDROCK) bad++
-  ok(bad === 0, `y=0 is always bedrock (${bad} violations)`)
+  for (const [x, z] of COLS) if (at(x, 0, z) !== MAT.PACKED_CLOUD) bad++
+  ok(bad === 0, `y=0 is always packed cloud (${bad} violations)`)
   let ragged = 0
-  for (const [x, z] of COLS) if (at(x, 1, z) === MAT.BEDROCK) ragged++
-  ok(ragged > 0 && ragged < COLS.length, 'the bedrock layer is ragged, not a flat plane')
+  for (const [x, z] of COLS) if (at(x, 1, z) === MAT.PACKED_CLOUD) ragged++
+  ok(ragged > 0 && ragged < COLS.length, 'the cloud floor is ragged, not a flat plane')
 }
 
 // ── 3. above the surface is sky, or water in a basin ─────────────────────────────────────────
@@ -111,7 +111,7 @@ for (let i = 0; i < 600; i++) COLS.push([(i * 977) % 4000 - 2000, (i * 1583) % 4
   for (const [x, z] of COLS) for (const y of [20, 80, 95, 100, 150]) {
     const m = at(x, y, z)
     if (m === MAT.DEEP_STONE && y >= D.deepStoneLevel) bad++
-    if (m === MAT.STONE && y < D.deepStoneLevel && y > D.bedrockTop) bad++
+    if (m === MAT.STONE && y < D.deepStoneLevel && y > D.cloudFloorTop) bad++
   }
   ok(bad === 0, `the deep/shallow host split honours deepStoneLevel=${D.deepStoneLevel} (${bad} violations)`)
 }

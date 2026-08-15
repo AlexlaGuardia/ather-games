@@ -341,7 +341,7 @@ export interface SectionMesh {
  * 2. **★ AN ABSENT NEIGHBOUR MEANS "DRAW NO FACE", NOT "DRAW A WALL".** This originally treated a
  *    missing neighbour as AIR, on the reasoning that it is the honest render for the edge of the
  *    loaded world. In play it is catastrophic: a column meshed before its neighbour arrives draws
- *    its entire side — 16 wide by ~185 tall, bedrock to surface — and a few of those read as sheer
+ *    its entire side — 16 wide by ~185 tall, floor to surface — and a few of those read as sheer
  *    grey cliffs with a chasm between them. Alex hit exactly that and reported terrain holes; the
  *    height field there was gentle (steepest adjacent step: 3 voxels). It was the frontier, drawn.
  *

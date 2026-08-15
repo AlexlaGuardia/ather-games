@@ -89,11 +89,11 @@ const at = (st: Section[], x: number, y: number, z: number) => st[(y / S) | 0].g
   for (const [ox, oz] of [[512, 768], [0, 0], [-256, 128]] as const) {
     const st = stackAt(ox, oz)
     for (let z = 0; z < S; z++) for (let x = 0; x < S; x++) {
-      if (at(st, x, 0, z) !== MAT.BEDROCK) bed++
+      if (at(st, x, 0, z) !== MAT.PACKED_CLOUD) bed++
       for (let y = 1; y < CV.floorGuard; y++) if (at(st, x, y, z) === AIR && materialAt(ox + x, y, oz + z, SEED, surf(ox + x, oz + z)) !== AIR) low++
     }
   }
-  ok(bed === 0, `bedrock at y=0 is never carved (${bed} violations)`)
+  ok(bed === 0, `the cloud floor at y=0 is never carved (${bed} violations)`)
   ok(low === 0, `nothing below floorGuard=${CV.floorGuard} is carved (${low} violations)`)
 }
 
