@@ -10,6 +10,7 @@ import {
   CLIMB_HOLD_MIN, CLIMB_MAX_RISE, EYE_STAND, EYE_SLIDE, eyeY, STEP_SMOOTH_MAX, DRAINED_SPEED,
   CROUCH_SPEED, type LocoInput,
   CELL_EMPTY, CELL_SOLID, CELL_WATER, CELL_HALF, SWIM_SPEED, SWIM_UP, SWIM_IDLE_SINK, TREAD_SINK_CAP,
+  launchKeeper, blinkKeeper,
 } from './locomotion'
 import { hollowTouching, HOLLOW_SPEED, HOLLOW_HP, DRAIN_TIME, UNIMPAIRED } from './hollows'
 
@@ -482,6 +483,149 @@ const settle = (s: ReturnType<typeof createLoco>, solid: any, frames = 30) => {
   ok(!hollowTouching(hw, 10.5, 10.2, UNIMPAIRED), '★ a guttered Hollow cannot touch — dawn ends the threat, not just the body')
   hw.gutter = 0; hw.hp = 0
   ok(!hollowTouching(hw, 10.5, 10.2, UNIMPAIRED), '★ nor can a dispersed one — no drain from something already gone')
+}
+
+// ── ★ SYSTEM 4: A CAST MOVES THE KEEPER (2026-08-15) ─────────────────────────────────────────
+// ★★ THE FIRST ASSERT IS THE WHOLE REASON `launchKeeper` LIVES IN locomotion.ts. Setting hvx/hvz
+// without `airSpeed` passes any single-frame check and is then ERASED: the airborne branch
+// renormalises horizontal velocity to `airSpeed` on every tick the player holds a movement key. So
+// the launch dies the instant a finger touches W, nothing throws, and the bug presents as
+// "Overcharge works unless you're moving" — which is the hardest possible thing to report.
+{
+  const solid = world()
+
+  // 1. A launch survives HELD INPUT, which is the case the naive version fails.
+  {
+    const s = createLoco(0, 10, 0); settle(s, solid)
+    launchKeeper(s, 1, 0, 17, 4.2)
+    for (let i = 0; i < 6; i++) tickLocomotion(s, input({ mvX: 1 }), solid)   // holding forward
+    ok(Math.hypot(s.hvx, s.hvz) > RUN_SPEED * 2,
+      `★ a launch survives held input (${Math.hypot(s.hvx, s.hvz).toFixed(1)} vs run ${RUN_SPEED}) — this is the airSpeed coupling`)
+  }
+
+  // 2. ...and it actually carries you further than a sprinting jump would.
+  {
+    const a = createLoco(0, 10, 0); settle(a, solid)
+    for (let i = 0; i < 90; i++) tickLocomotion(a, input({ mvX: 1, jumpKey: i === 0 }), solid)
+    const b = createLoco(0, 10, 0); settle(b, solid)
+    launchKeeper(b, 1, 0, 17, 4.2)
+    for (let i = 0; i < 90; i++) tickLocomotion(b, input({ mvX: 1 }), solid)
+    ok(b.px > a.px * 1.5, `★ Overcharge crosses ground a running jump cannot (${b.px.toFixed(1)} vs ${a.px.toFixed(1)})`)
+  }
+
+  // 3. UPDRAFT IS VERTICAL: it must gain real height and barely move you sideways, or it is
+  //    Overcharge with different numbers and canon's two moves have collapsed into one.
+  {
+    const s = createLoco(0, 10, 0); settle(s, solid)
+    const y0 = s.py, x0 = s.px
+    launchKeeper(s, 1, 0, 2.5, 13.5)
+    let peak = s.py
+    for (let i = 0; i < 120; i++) { tickLocomotion(s, input(), solid); peak = Math.max(peak, s.py) }
+    ok(peak - y0 > 3.5, `★ Updraft is high ground on demand (+${(peak - y0).toFixed(1)} blocks)`)
+    ok(Math.abs(s.px - x0) < peak - y0, '★ ...and it lifts more than it throws — not a second Overcharge')
+  }
+
+  // 4. A JUMP MUST STILL BE A JUMP. The launch shares `vy`/`airSpeed` with the jump code, so the
+  //    cheapest way to break the feel contract is to make an ordinary hop suddenly enormous.
+  {
+    const s = createLoco(0, 10, 0); settle(s, solid)
+    const y0 = s.py
+    let peak = s.py
+    for (let i = 0; i < 120; i++) { tickLocomotion(s, input({ jumpKey: i === 0 }), solid); peak = Math.max(peak, s.py) }
+    ok(peak - y0 < 2, `an ordinary jump is untouched (+${(peak - y0).toFixed(2)} blocks)`)
+  }
+
+  // 5. ★★ VERTICAL IS A FLOOR: `max(up, vy)`. Three cases, and the middle one is the assert that
+  //    matters — `vy > 0` alone was VACUOUS, because a plain assignment passes it too. Mutation
+  //    caught that, and chasing it found the implementation had the same hole as the test: it read
+  //    `max(up, vy + up)`, which when falling is just `up`, i.e. an assignment wearing an addition.
+  {
+    // (a) mid-fall gets the FULL lift, not lift-minus-your-fall.
+    const fall = createLoco(0, 30, 0)
+    for (let i = 0; i < 30; i++) tickLocomotion(fall, input(), solid)
+    ok(fall.vy < -5, `precondition: falling fast (vy=${fall.vy.toFixed(1)})`)
+    launchKeeper(fall, 1, 0, 2.5, 13.5)
+    const rest = createLoco(0, 10, 0); settle(rest, solid)
+    launchKeeper(rest, 1, 0, 2.5, 13.5)
+    ok(Math.abs(fall.vy - rest.vy) < 1e-9,
+      `★ a mid-fall Updraft lifts exactly as hard as one from standing (${fall.vy.toFixed(1)} vs ${rest.vy.toFixed(1)})`)
+
+    // (b) an existing CLIMB is never cut — Updraft off the top of an Overcharge must not brake you.
+    const rising = createLoco(0, 10, 0); settle(rising, solid)
+    rising.vy = 20
+    launchKeeper(rising, 1, 0, 2.5, 13.5)
+    ok(rising.vy === 20, `★ ...and never slows a keeper already rising faster (vy=${rising.vy})`)
+
+    // (c) ...nor does it STACK into the skybox.
+    const chained = createLoco(0, 10, 0); settle(chained, solid)
+    launchKeeper(chained, 1, 0, 2.5, 13.5)
+    launchKeeper(chained, 1, 0, 2.5, 13.5)
+    ok(chained.vy === 13.5, `★ ...and two in a row do not compound (vy=${chained.vy})`)
+  }
+
+  // 5d. ★ BOTH HORIZONTAL COMPONENTS ARE LIVE. Every assert above launches along +x, so `hvz` was
+  //     never exercised — a mutation scaling it by 0.2 came back GREEN. An axis-aligned fixture
+  //     tests half a vector, and the half it skips is the one a real player is almost always on.
+  {
+    const s = createLoco(0, 10, 0); settle(s, solid)
+    launchKeeper(s, 1, 1, 17, 0)                       // 45°, deliberately unnormalised input
+    ok(Math.abs(Math.hypot(s.hvx, s.hvz) - 17) < 1e-6,
+      `★ a diagonal launch has the SPEED it was given, not √2 times it (${Math.hypot(s.hvx, s.hvz).toFixed(2)})`)
+    ok(Math.abs(s.hvx - s.hvz) < 1e-9, '★ ...split evenly across both axes')
+  }
+
+  // 6. THE BLINK ARRIVES, AND ARRIVES STOPPED. Velocity carried through a blink would slide you off
+  //    the ledge you just aimed at.
+  {
+    const s = createLoco(0, 10, 0); settle(s, solid)
+    for (let i = 0; i < 30; i++) tickLocomotion(s, input({ mvX: 1 }), solid)   // running
+    ok(Math.hypot(s.hvx, s.hvz) > 1, 'precondition: moving before the blink')
+    const moved = blinkKeeper(s, s.px + 12, s.pz, () => 10, solid)
+    ok(moved > 11, `★ Thunder Step covers its range (${moved.toFixed(1)})`)
+    ok(Math.hypot(s.hvx, s.hvz) < 1e-6, '★ ...and arrives STOPPED, not sliding')
+  }
+
+  // 7. ★★ IT GOES THROUGH THE WALL, AND NEVER INSIDE IT — and the first half of that is a design
+  //    call this oracle originally got wrong, which is why it is written down here.
+  //
+  //    The first version of this assert demanded the blink stop SHORT of a wall, and it failed:
+  //    the keeper arrived cleanly on the far side. That is correct and the assert was the thing
+  //    that was wrong. Canon calls Thunder Step *"vanish into vapor, return on a crack of
+  //    lightning"* — the distance between is never crossed, so there is nothing to be blocked BY,
+  //    and *"masters… strike from behind the fog"* only reads if you can get behind things. A blink
+  //    that a wall stops is a dash with extra mana, which is exactly the flattening the 08-14 Apex
+  //    pass caught ("I picked the mechanism on the shelf over the one in the sentence").
+  //
+  //    So the back-search's job is NOT line-of-sight. It is the guarantee that wherever you arrive,
+  //    a body fits — which is the half that must never fail.
+  {
+    const wall = world((x) => x >= 6 && x <= 8)          // a solid slab at x 6..8, full height
+    const s = createLoco(0, 10, 0); settle(s, wall)
+    blinkKeeper(s, 12, 0, () => 10, wall)
+    ok(s.px > 8, `★ a blink passes THROUGH a wall — it is a vanish, not a dash (x=${s.px.toFixed(1)})`)
+    ok(bodyFree(wall, s.px, s.pz, s.py), '★ ...and wherever it lands, a body fits')
+  }
+
+  // 7b. ★ AIMED INTO THE ROCK ITSELF, it must fall back to somewhere free — this is the case the
+  //     back-search exists for, and the one that would otherwise bury a keeper in a hillside.
+  {
+    const wall = world((x) => x >= 6 && x <= 8)
+    const s = createLoco(0, 10, 0); settle(s, wall)
+    blinkKeeper(s, 7, 0, () => 10, wall)                 // aim point is INSIDE the slab
+    ok(bodyFree(wall, s.px, s.pz, s.py),
+      `★ aimed into solid rock, it lands somewhere a body fits (x=${s.px.toFixed(1)})`)
+    ok(s.px < 6, '...which means short of the slab, since there is no room within it')
+  }
+
+  // 8. Fully walled in, it refuses and says so (0) rather than throwing or half-moving. The
+  //    caster's own cell is free by definition, so this is the honest floor of the search.
+  {
+    const boxed = world((x) => x >= 1)
+    const s = createLoco(0, 10, 0); settle(s, boxed)
+    const x0 = s.px
+    ok(blinkKeeper(s, 12, 0, () => 10, boxed) === 0, '★ nowhere to land reports 0, it does not throw')
+    ok(s.px === x0, '...and does not move you')
+  }
 }
 
 console.log(`\nlocomotion: ${pass} passed, ${fails.length} failed`)

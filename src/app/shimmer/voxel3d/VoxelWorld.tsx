@@ -97,7 +97,8 @@ import { WOOD } from '../voxel/trees'
 // ── PORT STEP 5 — the movement (2026-08-07, Alex: "slide jump became a dash, climbing and wall
 // jumping are non-existent"). play3d's Apex-lineage locomotion, extracted pure and re-grounded on
 // voxel collision. See locomotion.ts for provenance; its test file is the feel contract.
-import { createLoco, tickLocomotion, eyeY, CELL_EMPTY, CELL_SOLID, CELL_WATER, CELL_HALF } from './locomotion'
+import { createLoco, tickLocomotion, eyeY, launchKeeper, blinkKeeper,
+         CELL_EMPTY, CELL_SOLID, CELL_WATER, CELL_HALF } from './locomotion'
 // ── ★ THE TUTORIAL (2026-08-08) — Moonwell Glade becomes spawn + the Greg tutorial chain ─────
 // `tutorial.ts` owns the quest state and its (placeholder) dialogue; `gate.ts` is pure math for
 // where the ceremonial arch sits and which of its cells are the sealable doorway; `greg.ts` builds
@@ -3822,7 +3823,7 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
    * 7 more casts.
    */
   const supports = useMemo<ReadonlySet<CastArchetype>>(
-    () => new Set<CastArchetype>([...SELF_ARCHETYPES, 'projectile', 'field', 'terrain', 'status']), [])
+    () => new Set<CastArchetype>([...SELF_ARCHETYPES, 'projectile', 'field', 'terrain', 'status', 'impulse']), [])
 
   const castSlot = useCallback((slot: number, g: THREE.Group) => {
     const v = vitals.current, m = mana.current
@@ -3861,6 +3862,33 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
         radius: out.placed.areaSize, height: FIELD_HEIGHT, secs: out.placed.areaSecs,
         dps: out.placed.fieldDps, hps: out.placed.fieldHps, stopsShots: out.placed.fieldStopsShots,
       }, env.now)
+    }
+    if (out.placed && out.placed.archetype === 'impulse') {
+      // ★ THE ONE ARCHETYPE WHOSE TARGET IS THE CASTER, so it deliberately does NOT use
+      // `castAimPoint` for the launch: that helper walks `castRange` down the reticle to find a
+      // PLACE, and a launch has no destination — it has a direction. Reusing it would have quietly
+      // capped Overcharge's throw at whatever `castRange` happened to be.
+      const f = new THREE.Vector3()
+      camera.getWorldDirection(f)
+      const p = loco.current
+      if (out.placed.motion === 'launch') {
+        // ⚠ FLATTENED HORIZONTAL, VERTICAL FROM THE SPEC — never from the camera's pitch. Canon's
+        // Updraft is "high ground on demand" and Overcharge is a field crossed in an eyeblink; if
+        // the launch inherited pitch, looking at your feet would fire you into the ground and
+        // looking up would turn a horizontal dash into a pop. The cast decides its own arc.
+        launchKeeper(p, f.x, f.z, out.placed.impulseFwd, out.placed.impulseUp)
+        onSay(out.placed.label)
+      } else {
+        const aim = castAimPoint(f.x, f.z, p.px, p.pz, out.placed.castRange)
+        const moved = blinkKeeper(
+          p, aim.x, aim.z,
+          (x, z) => columnHeight(Math.floor(x), Math.floor(z), SEED) + 1,
+          solidProbe,
+        )
+        // Same honesty rule the status cast follows: a blink is invisible when it fails, so a short
+        // one has to say so rather than looking like the key did nothing.
+        onSay(moved < 1 ? `${out.placed.label} — no room to step` : out.placed.label)
+      }
     }
     if (out.placed && out.placed.archetype === 'status') {
       // Same aim rule as a field — `castAimPoint`, camera forward flattened and walked `castRange`.
@@ -3939,7 +3967,7 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
       })
     }
     if (out.message) onSay(out.message)
-  }, [camera, tracerGeo, tracerMat, supports, vitals, mana, onSay])
+  }, [camera, tracerGeo, tracerMat, supports, vitals, mana, onSay, solidProbe])
 
   const fire = useCallback((w: WeaponDef, g: THREE.Group) => {
     const f = new THREE.Vector3()

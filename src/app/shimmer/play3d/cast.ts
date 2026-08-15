@@ -40,6 +40,7 @@ export type CastArchetype =
   | 'field'       // SYSTEM 1 — a persistent area entity placed at the aim point (field-effects.ts)
   | 'terrain'     // SYSTEM 2 — runtime terrain raised at the aim point (conjured-terrain.ts)
   | 'status'      // SYSTEM 3 — removes an OPTION from every enemy near the aim point (statuses.ts)
+  | 'impulse'     // SYSTEM 4 — the cast moves the KEEPER: a launch or a blink (locomotion.ts)
   | 'infusion'    // a timed multiplier on the WEAPON, not the cast (Flame Infusion)
   | 'unbuilt'     // registered in canon, no sim behaviour yet — labelled, never a silent no-op
 
@@ -102,6 +103,20 @@ export interface CastSpec {
   shapeHeight: number
   /** status: which options this cast removes from enemies in the area */
   statuses: readonly StatusKind[]
+  // ── impulse (SYSTEM 4) — the cast moves the CASTER ─────────────────────────
+  /**
+   * How the keeper is moved.
+   *
+   * ★ TWO MOTIONS UNDER ONE ARCHETYPE, because canon writes them as one idea (a Skirmisher's escape)
+   * and the host dispatches them at one place. A `launch` hands velocity to the walker and lets
+   * physics finish the sentence; a `blink` sets position outright. Keeping them separate archetypes
+   * would put the same "which world can move a keeper" question in two `supports` entries.
+   */
+  motion: 'launch' | 'blink'
+  /** launch: speed along the aim direction, world units/sec. Canon's *"body as the projectile"*. */
+  impulseFwd: number
+  /** launch: speed straight up, world units/sec. Updraft is almost all of this and no forward. */
+  impulseUp: number
   /** why this move has no sim behaviour yet — only set on 'unbuilt' */
   why?: string
 }
@@ -115,6 +130,7 @@ const BASE: Omit<CastSpec, 'moveId' | 'label' | 'tier' | 'archetype'> = {
   castRange: 0, areaSize: 0, areaSecs: 0,
   fieldDps: 0, fieldHps: 0, fieldStopsShots: false,
   shape: 'wall', shapeHeight: 1, statuses: [],
+  motion: 'launch', impulseFwd: 0, impulseUp: 0,
 }
 
 /** per-move build spec, keyed by keeper-moves id. Numbers are Jin's and free to tune. */
@@ -211,12 +227,42 @@ const BUILDS: Record<string, Build> = {
   // distinct from Fog Bank (which is the pure blind) instead of making two identical blind clouds.
   // ⚠ One hook (a field applying statuses on tick, as terrain already does at cast) finishes it.
   'sandstorm-veil': { archetype: 'field', manaCost: 16, cooldownMs: 11000, castRange: 9, areaSize: 5, areaSecs: 6, fieldDps: 13 },
-  'overcharge': { archetype: 'unbuilt', why: 'needs a velocity impulse on the player — canon says a LAUNCH, and a speed multiplier is Static Burst by another name' },
+  // ── ★ SYSTEM 4: THE SKIRMISHER VERBS (2026-08-15) ───────────────────────────────────────────
+  // The 08-14 Apex cross-reference measured the table at **1 mobility cast in 47** and found canon
+  // had already written the whole missing role — these three plus Gate, all registered, all unbuilt.
+  // Nothing here is a new name, effect or rune requirement, so none of it needed a canon ruling;
+  // the moves existed and the engine did not.
+  //
+  // ⚠ EACH IS BUILT AGAINST ITS OWN CANON LINE, NOT AGAINST ONE SHARED "DASH". `game/moves.md`
+  // describes three different motions and flattening them into one launch with different numbers is
+  // exactly the mistake the cross-reference caught ("I picked the mechanism on the shelf over the
+  // one in the sentence").
+  //
+  // ★ OVERCHARGE IS HORIZONTAL, AND IT IS THE ONE THAT MUST NOT BECOME A SPEED BUFF. Canon: *"charge
+  // built through movement and released as propulsion — NOT AN ATTACK, A LAUNCH, with the body as
+  // the projectile."* The old `why` on this row already said it: a speed multiplier is Static Burst
+  // by another name. So it hands the walker real velocity and lets ballistics finish — you commit to
+  // a direction and ride it, which is what makes it a decision rather than a held button.
+  // ⚠ Kael's signature and Scatter-locked in canon; the rune gate lives in keeper-moves, not here.
+  'overcharge': { archetype: 'impulse', motion: 'launch', manaCost: 16, cooldownMs: 9000,
+                  impulseFwd: 17, impulseUp: 4.2 },
   // Breeze's one solo keeper move, so it is a Breeze-born keeper's whole opening kit: cheapest cast
   // in the book, near-instant, invisible.
   'gale-cutter': { archetype: 'projectile', manaCost: 6, cooldownMs: 600, damage: 17, projSpeed: 78, projLife: 1.1 },
-  'updraft': { archetype: 'unbuilt', why: 'needs a vertical impulse on the player' },
-  'thunder-step': { archetype: 'unbuilt', why: 'needs a blink — reposition the player to the aim point' },
+  // ★ UPDRAFT IS VERTICAL AND BARELY MOVES YOU SIDEWAYS. Canon: *"wind against earth to launch
+  // debris, allies or yourself… masters build vertical highways — HIGH GROUND ON DEMAND."* So the
+  // forward component is a nudge, not a leap: the whole point is that it answers a wall rather than
+  // crossing a field, which is the axis Overcharge already owns. JUMP_V0 is 7.4 for ~1.24 blocks;
+  // 13.5 clears roughly four, so a keeper reaches a roof and not the skybox.
+  'updraft': { archetype: 'impulse', motion: 'launch', manaCost: 12, cooldownMs: 8000,
+               impulseFwd: 2.5, impulseUp: 13.5 },
+  // ★ THUNDER STEP IS A BLINK, NOT A FAST LAUNCH. Canon: *"vanish into vapor, return on a crack of
+  // lightning."* A launch that merely travelled quickly would be Overcharge with a shorter cooldown;
+  // vanishing means the distance between is never crossed — no ballistics, no wall to clip, and it
+  // goes exactly as far as the reticle says. Shorter range than Overcharge's ride on purpose: it is
+  // precise where the other is committed.
+  'thunder-step': { archetype: 'impulse', motion: 'blink', manaCost: 14, cooldownMs: 7000,
+                    castRange: 12 },
   // "Distance barely matters." Fastest and hardest-hitting bolt, on the longest fuse.
   'bolt-snipe': { archetype: 'projectile', manaCost: 16, cooldownMs: 2200, damage: 40, projSpeed: 120, projLife: 2.4 },
   // "Muscles twitch, manatech sputters. DISABLING, NOT LETHAL" — canon forbids damage here. Same pair
@@ -227,6 +273,10 @@ const BUILDS: Record<string, Build> = {
   // ── Ultimates ────────────────────────────────────────────────────────────────────────────────
   'chain-lightning': { archetype: 'projectile', manaCost: 34, cooldownMs: 9000, damage: 26, projSpeed: 70, projLife: 1.2, chain: 3, chainRange: 9 },
   'flame-barrage': { archetype: 'unbuilt', why: 'needs independently tracking projectiles' },
+  // ⚠ GATE STAYS UNBUILT AND IS NOT AN IMPULSE. Thunder Step goes where you are LOOKING; a gate is
+  // a two-point bind — you place an anchor, leave, and return to it later. That is a persistent
+  // placed entity with its own lifetime, closer to conjured terrain than to a blink, and folding it
+  // in here would have shipped it as 'a blink with extra words'. Its `why` is unchanged on purpose.
   gate:      { archetype: 'unbuilt', why: 'needs a two-point bind + warp on a placed anchor' },
   // "A living sanctuary grown and tended — everyone within is steadily restored." Wide, long, and
   // NOT cover: a grove you can shoot through is a place you choose to stand, not a place to hide.

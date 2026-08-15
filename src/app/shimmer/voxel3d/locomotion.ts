@@ -289,6 +289,101 @@ function lipAt(solid: Solid, bx: number, bz: number, feetY: number): number | nu
   return null
 }
 
+/**
+ * ── ★ SYSTEM 4: A CAST MOVES THE KEEPER — THE LAUNCH (2026-08-15) ───────────────────────────────
+ * Overcharge and Updraft. Canon calls both a LAUNCH ("the body as the projectile", "high ground on
+ * demand"), so this hands the walker velocity and lets the existing ballistics finish the sentence.
+ *
+ * ★★ IT LIVES HERE, NOT IN THE HOST, AND `airSpeed` IS THE ENTIRE REASON. Setting `hvx/hvz` alone
+ * looks like it works and is erased on the very next tick: the airborne branch RENORMALISES
+ * horizontal velocity to `s.airSpeed` whenever the player is holding a movement key, so a keeper who
+ * launches and then touches W is instantly back at walking pace. The symptom is "Overcharge does
+ * nothing, sometimes" — nothing throws, and it depends on whether a finger is on a key.
+ *
+ * Both places in this file that already launch a body (the wall jump and the coyote jump) set
+ * `airSpeed` in the same breath as `hvx/hvz`. A host-side impulse would be the THIRD copy of that
+ * coupling and the first one written by someone who had not read this paragraph. So the coupling
+ * never leaves the file that owns it.
+ *
+ * ⚠ IT ALSO CLEARS THE STICKY WALL STATE. A keeper launching off a face she is clinging to must
+ * actually leave — `wallStick`/`hanging`/`climbing` all re-grab within a frame or two otherwise, and
+ * the cast reads as being eaten by the wall.
+ */
+export function launchKeeper(s: LocoState, dirX: number, dirZ: number, fwd: number, up: number): void {
+  const len = Math.hypot(dirX, dirZ) || 1
+  s.hvx = (dirX / len) * fwd
+  s.hvz = (dirZ / len) * fwd
+  // ★ A FLOOR ON VERTICAL SPEED — NOT ADDITIVE, AND NOT A PLAIN ASSIGNMENT. Both alternatives are
+  // wrong in a way that only shows up mid-air:
+  //   · `s.vy = up` fires correctly from the ground and CUTS a keeper who is already rising faster
+  //     (Updraft off the top of an Overcharge would brake her), which reads as the cast misfiring.
+  //   · `s.vy += up` stacks, so two mobility casts chained send you to the skybox.
+  // `max` gives the honest reading of both canon lines at once: a fall is fully cancelled (fire it
+  // while dropping and you get the whole lift, not lift-minus-your-fall), and an existing climb is
+  // never reduced or compounded.
+  //
+  // ⚠ THIS REPLACED `Math.max(up, s.vy + up)`, WHICH WAS A COMMENT DESCRIBING CODE IT DID NOT HAVE.
+  // That form claimed to be "additive so a mid-fall cast still lifts you" — but when falling, `s.vy`
+  // is negative, so `s.vy + up < up` and the `max` picked `up` every time. It was a plain assignment
+  // wearing an addition, and the only case where the addition actually bit was chaining upward,
+  // which is the one case it should NOT have. Found by mutation: swapping it for `s.vy = up` changed
+  // nothing any assert could see.
+  s.vy = up > 0 ? Math.max(up, s.vy) : s.vy
+  s.airborne = true
+  s.airSpeed = fwd
+  s.coyoteT = 0
+  s.wallStick = 0; s.wallLock = 0
+  s.hanging = false; s.hangT = 0
+  s.climbing = false; s.mantleT = 0
+  s.slideT = 0
+}
+
+/**
+ * ── ★ SYSTEM 4: THE BLINK (2026-08-15) — Thunder Step ───────────────────────────────────────────
+ * Canon: *"vanish into vapor, return on a crack of lightning."* The distance between is never
+ * crossed, so this is a position write and not a fast launch — no ballistics, nothing to clip.
+ *
+ * ★ IT PASSES THROUGH TERRAIN, AND THAT IS A RULING NOT AN OVERSIGHT. There is no line-of-sight
+ * check here on purpose: canon's *"vanish into vapor"* means the distance between is never crossed,
+ * so there is nothing for a wall to block, and *"masters… strike from behind the fog"* only reads if
+ * you can get behind things. A blink a wall stops is a dash that costs more mana. (The oracle
+ * originally asserted the opposite, failed, and the assert was the thing that was wrong.)
+ *
+ * ★ IT WALKS BACK ALONG THE LINE RATHER THAN REFUSING. Landing INSIDE a hillside must not happen, and
+ * the naive fix (refuse if the destination is solid) makes the cast fail silently exactly where a
+ * player most wants it — at a wall. So it samples from the aim point BACKWARD toward the caster and
+ * takes the furthest free spot. The search always terminates: the caster's own cell is free by
+ * definition, so the worst case is "you did not move" rather than a throw or a keeper in rock.
+ *
+ * ⚠ VELOCITY IS ZEROED, and that is the difference between a blink and a teleporting launch. Arriving
+ * with your running speed intact would slide you off the ledge you just aimed at.
+ *
+ * Returns the distance actually travelled, so the host can tell the player it was short.
+ */
+export function blinkKeeper(
+  s: LocoState, toX: number, toZ: number, groundY: (x: number, z: number) => number,
+  probe: CellProbe, steps = 8,
+): number {
+  const fromX = s.px, fromZ = s.pz
+  const dx = toX - fromX, dz = toZ - fromZ
+  for (let i = steps; i >= 1; i--) {
+    const t = i / steps
+    const x = fromX + dx * t, z = fromZ + dz * t
+    const y = groundY(x, z)
+    if (!bodyFree(probe, x, z, y)) continue
+    s.px = x; s.pz = z; s.py = y
+    s.hvx = 0; s.hvz = 0; s.vy = 0
+    s.airSpeed = 0
+    s.airborne = true            // let the next tick settle her onto the surface she arrived above
+    s.wallStick = 0; s.wallLock = 0
+    s.hanging = false; s.hangT = 0
+    s.climbing = false; s.mantleT = 0
+    s.slideT = 0
+    return Math.hypot(x - fromX, z - fromZ)
+  }
+  return 0
+}
+
 export function tickLocomotion(s: LocoState, input: LocoInput, probe: CellProbe): void {
   const dt = Math.min(input.dt, 0.05)          // a stutter frame must not launch a huge step
   const { mvX, mvZ, crouchKey, jumpKey } = input
