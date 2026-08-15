@@ -39,13 +39,13 @@ import { salvageItems, salvageMessage } from '../voxel/salvage'
 import { blockDef, materialForItem, emitOf, BLOCKS, type BlockSkill } from '../voxel/registry'
 import { editIndex, recordEdit, applyEdits, packEdits, unpackEdits, isStale, GENERATOR_VERSION, type ColumnEdits } from '../voxel/edits'
 import { generatePlotColumn, plotGeneratedVoxel } from '../voxel/plot-column'
-import { plotThreshold, hasFallenOut } from '../voxel/plot'
+import { plotThreshold, hasFallenOut, chestCap } from '../voxel/plot'
 import { inPassageVolume, DEFAULT_BUBBLE } from '../voxel/bubble'
 import type { Space } from './save'
 
 /** Which generator version the player has already been warned about. See `staleWarned`. */
 const GEN_WARN_KEY = 'ather:shimmer:genWarned'
-import { loadColumn, saveColumn, editedColumnCount, loadPlayer, savePlayer, type PlayerSave } from './save'
+import { loadColumn, saveColumn, editedColumnCount, countMaterial, loadPlayer, savePlayer, type PlayerSave } from './save'
 import { PIECES, STRUCTURE, STRUCTURE_HALF, pieceDef, cellsOf, canPlace, canAfford, placementAt, type Placement, type Rotation } from '../voxel/pieces'
 import { createPieceRenderer } from './piece-mesh'
 import { toGeometry, createVoxelMaterial, createWaterMaterial, applySettings } from './mesh-bridge'
@@ -120,8 +120,9 @@ import ArenaBattle from '../components/ArenaBattle'
 import { createSpirit, speciesDisplayName, type Spirit } from '../spirits/spirit'
 import { rightClickIntent } from './interact'
 import {
-  chestKey, createChest, moveBetween, moveCount, halfOf, quickMove, addToGrid, isEmpty as isChestEmpty,
-  spill as spillChest, CHEST_COLS, CHEST_SLOTS, type Slots,
+  chestKey, createChest, adoptChest, moveBetween, moveCount, halfOf, quickMove, addToGrid,
+  takeFromGrid, attachedChests, countIn as countInChest, isEmpty as isChestEmpty,
+  spill as spillChest, CHEST_COLS, CHEST_SLOTS, CHEST_BAGFULS, type Slots,
 } from './chest'
 import {
   stationKey, loadJob as loadStationJob, collect as collectStation, salvage as salvageStation,
@@ -201,6 +202,20 @@ interface OpenStation {
   kind: StationId
   job: StationJob | undefined
   commit: (shop: Workshop) => void
+  /**
+   * ★ THE CHESTS STANDING AGAINST THIS BENCH — LIVE GRIDS, BY REFERENCE (2026-08-15).
+   *
+   * The same choice `OpenChest.slots` makes and for the same reason: one array, one truth. A copy
+   * would let the panel spend out of a snapshot while the world's grid kept its stack, which is the
+   * quiet duplication bug rather than the loud one.
+   *
+   * Resolved once, at open. The set cannot change while the panel is up — it captures the cursor,
+   * so no block can be placed or broken behind it — and re-deriving it per render would mean a
+   * voxel read on every repaint of a panel that already ticks twice a second.
+   */
+  feeds: Slots[]
+  /** Mark every feeding chest's column dirty. ⚠ Call after ANY spend or payout that touched them. */
+  touchFeeds: () => void
 }
 
 /**
@@ -1580,7 +1595,7 @@ export default function VoxelWorld() {
                       onClose={() => { setOpenWaymark(null); closeCursorUI() }} />
       )}
       {openStation && (
-        <StationPanel st={openStation} have={have} inv={inv}
+        <StationPanel st={openStation} inv={inv}
                       onChange={() => { setCraftTick(v => v + 1); refreshHotbar() }}
                       onSay={say}
                       onClose={() => { setOpenStation(null); closeCursorUI() }} />
@@ -2498,8 +2513,12 @@ function BagPanel({ inv, chest, tick, sel, dragFrom, setDragFrom, onMove, onSpli
           satchel and the hotbar already have, one level out. */}
       {chest && (
         <div className="mb-4 border-b border-white/10 pb-4">
-          <div className="mb-1.5 text-[10px] uppercase tracking-[0.16em] text-white/35">
-            in the chest · {chest.x} {chest.y} {chest.z}
+          {/* The capacity is stated in BAGFULS, not slots — the number means something that way
+              ("two of these") and 48 does not. Derived from the grid so the sentence cannot drift
+              from it; see `CHEST_BAGFULS`. */}
+          <div className="mb-1.5 flex items-baseline justify-between text-[10px] uppercase tracking-[0.16em] text-white/35">
+            <span>in the chest · {chest.x} {chest.y} {chest.z}</span>
+            <span className="text-white/20">{CHEST_BAGFULS} bagfuls</span>
           </div>
           <div className="grid gap-1.5" style={{ gridTemplateColumns: `repeat(${CHEST_COLS}, minmax(0, 1fr))` }}>
             {Array.from({ length: CHEST_SLOTS }, (_, k) => cell({ g: 'chest', i: k }))}
@@ -2530,7 +2549,7 @@ function BagPanel({ inv, chest, tick, sel, dragFrom, setDragFrom, onMove, onSpli
    */
   if (chest) {
     return (
-      <KeeperFrame tab="satchel" setTab={() => {}} title="Chest" hint={hint} onClose={onClose}>
+      <KeeperFrame tab="satchel" setTab={() => {}} title="Chest" tall hint={hint} onClose={onClose}>
         {satchel}
       </KeeperFrame>
     )
@@ -3384,6 +3403,12 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
     // disagree with them.
     const lc = loco.current
     if (to === 'plot') {
+      // ★ THE CHEST CENSUS IS TAKEN HERE AND ONLY HERE, because this is the one instant it can be
+      // taken exactly: `flushSaves` ran three lines up, every cache above was just cleared, and no
+      // plot column is resident. A count run at any later moment would miss unflushed edits and
+      // read low, which is the direction that hands out free chests. See `plotChests`.
+      plotChests.current = 0
+      void countMaterial(SEED, 'plot', MAT.CHEST).then(n => { plotChests.current += n })
       const t = plotThreshold(SEED)
       lc.px = t.x + 0.5; lc.py = t.y; lc.pz = t.z + 0.5
     } else {
@@ -3582,6 +3607,23 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
   const touchChest = useCallback((x: number, z: number) => { dirtySaves.current.add(colOf(x, z)) }, [colOf])
 
   /**
+   * ── ★ HOW MANY CHESTS ARE STANDING IN THE PLOT (2026-08-15) ────────────────────────────────────
+   * The live census behind `chestCap`. Set from a disk scan the moment the keeper steps into the
+   * garden (see `enterSpace`), then kept by ±1 at `setVoxel`, which is the one funnel every world
+   * write goes through — so no future path can add a chest the count does not know about.
+   *
+   * ★ THE SCAN'S RESULT IS ADDED, NOT ASSIGNED, and that is what makes the async safe. A placement
+   * landing in the millisecond before the scan resolves has already ticked this to 1; assigning the
+   * scan's number would erase that tick and the keeper would get one chest over the cap, forever,
+   * every entry. Adding is correct in both orders, because IndexedDB's read transaction snapshots
+   * at the instant it opens and therefore cannot see that placement either.
+   *
+   * ⚠ Meaningless while `space.current === 'wilds'` — chests out there are uncapped on purpose (see
+   * `chestCap`), so nothing reads this outside the plot.
+   */
+  const plotChests = useRef(0)
+
+  /**
    * A station's standing job, or undefined for an idle bench.
    *
    * ⚠ READ-ONLY. Unlike `chestAt` this hands back a value rather than a live grid to mutate: a job
@@ -3666,6 +3708,11 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
         delete rec[chestKey(wx, wy, wz)]
         if (!Object.keys(rec).length) chestsByCol.current.delete(k)
       }
+      // ★ AND THE PLOT'S CENSUS MOVES IN THE SAME BREATH, for the identical reason the record does:
+      // this is the funnel, so a chest that leaves by a path invented next month is still counted
+      // out. Under the same `prevMat !== mat` guard — a no-op write of CHEST over CHEST is not a
+      // new chest, and counting it would leak the cap away one redundant write at a time.
+      if (space.current === 'plot') plotChests.current += mat === MAT.CHEST ? 1 : -1
     }
     // ★ AND A STATION'S JOB DIES WITH ITS BLOCK, for the identical reason — otherwise the next
     // bench built on this cell inherits somebody else's half-finished work. The mining branch has
@@ -4639,9 +4686,13 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
           // record. ⚠ Never clobber a grid already in the map: this load is async, and a chest the
           // player has ALREADY opened and filled in the seconds since the column meshed would
           // otherwise be overwritten by the version on disk.
+          // ⚠ `adoptChest`, NEVER the stored array as-is: every chest saved before 2026-08-15 is 24
+          // slots long and this build's grid is 48. A raw hand-off would give the panel a grid whose
+          // back three rows are `undefined` rather than empty — indistinguishable from a slot until
+          // something writes to it.
           if (saved.chests) {
             const have = chestsByCol.current.get(ek) ?? {}
-            for (const [ck, g] of Object.entries(saved.chests)) if (!have[ck]) have[ck] = g as Slots
+            for (const [ck, g] of Object.entries(saved.chests)) if (!have[ck]) have[ck] = adoptChest(g)
             chestsByCol.current.set(ek, have)
           }
           // Station jobs, same async-clobber guard as chests: a bench the player has ALREADY
@@ -5260,11 +5311,19 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
         // The KIND travels with the position: the panel must never re-derive which station this
         // is from anything but the block that was actually aimed at.
         const kind = stationOf(potMat)
-        if (kind) onOpenStation({
-          x: hit.x, y: hit.y, z: hit.z, kind,
-          job: jobAt(hit.x, hit.y, hit.z),
-          commit: (shop: Workshop) => setJob(hit.x, hit.y, hit.z, shop),
-        })
+        if (kind) {
+          // The chests set around this bench, resolved through the host's own voxel read so there
+          // is exactly one definition of "there is a chest here". `chestAt` is lazy, so asking for
+          // a neighbour's grid costs nothing until something is actually put in it.
+          const beside = attachedChests(hit.x, hit.y, hit.z, (x, y, z) => voxel(x, y, z) === MAT.CHEST)
+          onOpenStation({
+            x: hit.x, y: hit.y, z: hit.z, kind,
+            job: jobAt(hit.x, hit.y, hit.z),
+            commit: (shop: Workshop) => setJob(hit.x, hit.y, hit.z, shop),
+            feeds: beside.map(c => chestAt(c.x, c.y, c.z)),
+            touchFeeds: () => { for (const c of beside) touchChest(c.x, c.z) },
+          })
+        }
         mouse.current.right = false
       } else if (intent === 'plant') {
         removeItems(inv.current!, 'mana_seed', 1)
@@ -5365,6 +5424,20 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
             waymarks.current = r.net
             onSay(`a passage opens back to your garden (${spokesOf(r.net).length} of ${MAX_MARKS})`)
           }
+        }
+        // ── ★ THE FOLD HOLDS ONLY SO MANY CHESTS (2026-08-15) ───────────────────────────────
+        // Same shape as the waymark cap directly above, and for the same reason: `place` has
+        // already settled air, reach and body clearance, so pre-checking would be a second copy of
+        // the placement rules that can disagree with the first. Place, then take it back up.
+        //
+        // ⚠ The census has ALREADY counted this chest by the time we get here (`setVoxel` is the
+        // funnel and it ran on the line above), so the test is `>` and not `>=` — comparing against
+        // the cap as though the block were not yet down is off by exactly one, and off-by-one in
+        // the direction that gives away a free chest at every tier.
+        if (put === MAT.CHEST && space.current === 'plot' && plotChests.current > chestCap()) {
+          setVoxel(hit.px, hit.py, hit.pz, AIR)
+          give(inv.current!, held, 1)
+          onSay(`your fold holds as many chests as it can keep (${chestCap()}) — a wider fold keeps more`)
         }
         // ★ Tutorial 'light' step — placing IS the objective, not just holding a lantern.
         if (mat === MAT.MANA_LANTERN) onQuestEvent('light')
@@ -5967,9 +6040,23 @@ function WaymarkPanel({ wm, onSay, onClose }: {
   )
 }
 
-function StationPanel({ st, have, inv, onChange, onSay, onClose }: {
+/**
+ * ── ★ A BENCH REACHES INTO THE CHESTS BESIDE IT (2026-08-15, Alex's spec: "station-attached") ────
+ *
+ * The whole feature is three functions in this panel — `have`, `spend`, `payout` — and every one of
+ * them is **bag first, then the chests**. That order is the entire design and it is not arbitrary:
+ * what is in your hand is what you meant to use, so a keeper who picked up eight logs specifically
+ * to mill them does not watch the bench quietly drain the stack he was saving. The chest is the
+ * OVERFLOW in both directions — it is what the job falls back on, and it is where the payout goes
+ * when the bag will not hold it.
+ *
+ * ★ THE PAYOUT HALF IS THE ONE THAT MATTERS. A workshop's failure mode was never "not enough
+ * material" — it was coming back to a finished job with a full bag, taking nothing, and having the
+ * station sit on it. Spilling into the chest beside the bench means the workshop keeps running
+ * while you are away, which is the only reason to build one.
+ */
+function StationPanel({ st, inv, onChange, onSay, onClose }: {
   st: OpenStation
-  have: (itemId: string) => number
   inv: React.RefObject<Inventory>
   onChange: () => void
   onSay: (t: string) => void
@@ -5996,15 +6083,44 @@ function StationPanel({ st, have, inv, onChange, onSay, onClose }: {
   const ready = job ? runsReady(job, now, runMs) : 0
   const r = job ? RECIPES.find(x => x.id === job.recipeId) : undefined
 
+  // What this bench can reach. ⚠ Recomputed on every render rather than memoised: the grids are
+  // live references and a memo keyed on anything cheap would go stale the moment a job spent out
+  // of one — a button greyed against a chest it already emptied.
+  const have = (itemId: string) =>
+    countItem(inv.current!, itemId) + st.feeds.reduce((n, g) => n + countInChest(g, itemId), 0)
+
+  /** Take `n` of an item, bag first. The caller has already checked `have` — see `takeFromGrid`. */
+  const spend = (itemId: string, n: number) => {
+    const fromBag = Math.min(countItem(inv.current!, itemId), n)
+    if (fromBag > 0) removeItems(inv.current!, itemId, fromBag)
+    let left = n - fromBag
+    for (const g of st.feeds) { if (left <= 0) break; left = takeFromGrid(g, itemId, left) }
+  }
+
+  /** Hand `n` over, bag first then the chests. Returns what fit NOWHERE — the caller must not eat it. */
+  const payout = (itemId: string, n: number) => {
+    let left = give(inv.current!, itemId, n)
+    for (const g of st.feeds) { if (left <= 0) break; left = addToGrid(g, itemId, left, maxStackOf) }
+    return left
+  }
+
   const doCollect = () => {
     if (!job || !r || ready <= 0) return
-    const { shop, payout } = collectStation({ [key]: job }, key, now, def)
-    if (!payout) return
-    give(inv.current!, payout.itemId, payout.count)
+    const { shop, payout: paid } = collectStation({ [key]: job }, key, now, def)
+    if (!paid) return
+    // ⚠ REFUSE RATHER THAN DESTROY. `collect` has already cleared those runs in the returned shop,
+    // so committing a payout that did not fit anywhere would delete the goods and the job at once.
+    // Nothing is committed unless there is somewhere for the output to land; the station keeps
+    // holding it, which is the honest outcome and the one the player can fix.
+    const lost = payout(paid.itemId, paid.count)
+    if (lost >= paid.count) { onSay('nowhere to put it — empty your bag, or set a chest beside the bench'); return }
     st.commit(shop)
+    st.touchFeeds()
     setJob(shop[key])
     onChange()
-    onSay(`${def.name.toLowerCase()} hands you ${payout.count}× ${label(payout.itemId)}`)
+    onSay(lost > 0
+      ? `${def.name.toLowerCase()} hands you ${paid.count - lost}× ${label(paid.itemId)} — ${lost} would not fit`
+      : `${def.name.toLowerCase()} hands you ${paid.count}× ${label(paid.itemId)}`)
   }
 
   // ⚠ `rec`, NOT `def` — the outer `def` is this panel's STATION and every sibling closure reads it
@@ -6019,8 +6135,9 @@ function StationPanel({ st, have, inv, onChange, onSay, onClose }: {
     // taking the input before asking would eat a bagful on a click the pure core then declined.
     const shop = loadStationJob({}, key, recipeId, runs, now)
     if (!shop[key]) return
-    for (const c of jobCost(rec, runs)) removeItems(inv.current!, c.itemId, c.count)
+    for (const c of jobCost(rec, runs)) spend(c.itemId, c.count)
     st.commit(shop)
+    st.touchFeeds()
     setJob(shop[key])
     onChange()
     onSay(`${def.name.toLowerCase()} sets to work — ${runs}× ${rec.name.toLowerCase()}`)
@@ -6070,6 +6187,13 @@ function StationPanel({ st, have, inv, onChange, onSay, onClose }: {
                 `st.kind === 'sawmill' && …` shipped station three with no explanation of why its
                 list is short, which reads as a bug in the panel rather than as the design. */}
             {def.accepts !== 'any' && <span className="block mt-1 text-white/25">{SPECIALITY_NOTE[def.accepts]}</span>}
+            {/* Said out loud, because an invisible rule that silently spends your storage is worse
+                than no rule. Absence is worth saying too — it is the hint that builds the workshop. */}
+            <span className="block mt-1 text-white/25">
+              {st.feeds.length
+                ? `drawing on ${st.feeds.length} chest${st.feeds.length === 1 ? '' : 's'} beside it`
+                : 'set a chest against it and it will work out of that too'}
+            </span>
           </div>
         )}
 
@@ -6093,7 +6217,7 @@ function StationPanel({ st, have, inv, onChange, onSay, onClose }: {
                 </span>
               </div>
               <div className="mt-0.5 text-[10px] text-white/40">
-                {n > 0 ? `${n} run${n === 1 ? '' : 's'} from your bag` : `no ${label(rec.input[0].itemId)}`}
+                {n > 0 ? `${n} run${n === 1 ? '' : 's'} from ${st.feeds.length ? 'your bag and the chests beside it' : 'your bag'}` : `no ${label(rec.input[0].itemId)}`}
                 {n >= MAX_RUNS && <span className="text-white/25"> · {def.name.toLowerCase()} holds no more</span>}
               </div>
             </button>

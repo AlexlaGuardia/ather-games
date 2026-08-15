@@ -33,14 +33,58 @@ export type Slots = (ItemStack | null)[]
 /**
  * 8 wide because the satchel is 8 wide, and the two are drawn one above the other in the same
  * panel: a chest row that did not line up with a bag row would read as a different kind of thing.
- * Three rows = 24, which is also the bag's size — a chest holds a bagful, which is the sentence a
- * player can actually feel.
+ *
+ * ★ SIX ROWS = 48 = TWO BAGFULS (2026-08-15). It was three rows, and three rows was chosen because
+ * 24 is the bag's size and *"a chest holds a bagful"* is a sentence a player can feel. Growing it
+ * had to keep that sentence rather than spend it: **36 would have bought half a row and killed the
+ * only phrase the number had**, while 48 buys a whole doubling and the sentence survives intact —
+ * a chest holds two bagfuls. Any future change to this number should have to answer the same
+ * question: what does the new number SAY?
  */
 export const CHEST_COLS = 8
-export const CHEST_ROWS = 3
+export const CHEST_ROWS = 6
 export const CHEST_SLOTS = CHEST_COLS * CHEST_ROWS
 
+/** How many bagfuls a chest holds, for prose. Derived so the sentence cannot drift from the grid. */
+export const CHEST_BAGFULS = CHEST_SLOTS / 24
+
 export const createChest = (): Slots => new Array(CHEST_SLOTS).fill(null)
+
+/**
+ * Take a grid off disk and make it the size this build uses.
+ *
+ * ★ THE MIGRATION IS THE WHOLE REASON THIS EXISTS, AND IT NEVER TRUNCATES. Every chest saved before
+ * 2026-08-15 is 24 long; a loader that trusted the stored length would hand the panel a grid whose
+ * back half does not exist, and one that sliced to `CHEST_SLOTS` would silently delete items the
+ * day the number ever goes DOWN. So: short grids gain empty slots at the end (a chest that grew
+ * keeps every stack exactly where the player left it), and a grid that is somehow LONGER is
+ * COMPACTED rather than cut — the overflow moves forward into whatever room the front has, and only
+ * what genuinely cannot fit is dropped. Losing a stack to a config change is the one outcome worth
+ * writing code to avoid.
+ *
+ * Anything that is not a plausible stack is discarded rather than trusted: this is data off a disk
+ * a console can write to, and a malformed slot would crash the panel that renders it.
+ */
+export function adoptChest(saved: unknown): Slots {
+  const g = createChest()
+  if (!Array.isArray(saved)) return g
+  const spare: ItemStack[] = []
+  for (let i = 0; i < saved.length; i++) {
+    const s = saved[i] as ItemStack | null
+    if (!s || typeof s.itemId !== 'string' || !(s.count > 0)) continue
+    const stack: ItemStack = { itemId: s.itemId, count: s.count }
+    if (i < CHEST_SLOTS) g[i] = stack
+    else spare.push(stack)
+  }
+  // Only reachable when the grid shrank under a save. Front-fill, in order, so the result is
+  // deterministic and the player's own arrangement survives as far as it can.
+  for (const s of spare) {
+    const free = g.indexOf(null)
+    if (free < 0) break
+    g[free] = s
+  }
+  return g
+}
 
 /** World position → record key. Same format as `potKey`: one key shape for everything positional. */
 export const chestKey = (x: number, y: number, z: number): string => `${x},${y},${z}`
@@ -187,6 +231,59 @@ export function addToGrid(
     left -= n
   }
   return left
+}
+
+/**
+ * Take `count` of an item out of a grid. Returns what could NOT be taken.
+ *
+ * ★ THE MIRROR OF `addToGrid`, AND IT RETURNS THE SHORTFALL FOR THE SAME REASON that one returns
+ * the overflow: the caller is usually spending across SEVERAL grids (a bag and the chests standing
+ * against a bench), and threading "how much is still owed" through the chain is the only way the
+ * arithmetic stays in one place. A boolean would force every caller to count first and take second,
+ * which is two passes that can disagree the moment anything else touches the grid between them.
+ *
+ * ⚠ PARTIAL TAKES ARE REAL AND ARE KEPT. It empties what it can and reports the rest; it does not
+ * roll back. The caller checked affordability across every grid before it started — see the
+ * station panel's `spend` — and a take that undid itself halfway would need a transaction log for
+ * a case that cannot happen.
+ */
+export function takeFromGrid(g: Slots, itemId: string, count: number): number {
+  let left = count
+  for (let i = 0; i < g.length && left > 0; i++) {
+    const s = g[i]
+    if (!s || s.itemId !== itemId) continue
+    const n = Math.min(s.count, left)
+    s.count -= n; left -= n
+    if (s.count <= 0) g[i] = null
+  }
+  return left
+}
+
+/**
+ * ── ★ THE CHEST THAT STANDS AGAINST A BENCH (2026-08-15) ────────────────────────────────────────
+ * Where a station looks for material besides the keeper's bag.
+ *
+ * **The four horizontal neighbours, and deliberately not six.** A chest ABOVE a bench is a chest on
+ * a shelf and a chest BELOW it is a chest in the floor; neither is a thing a player builds on
+ * purpose, and both would attach silently — you would find a bench eating out of storage you never
+ * meant to connect, which is the worst version of an invisible rule. Beside it is the arrangement
+ * anyone would build anyway, and it is legible from across the garden: **the workshop is the bench
+ * and the chests you set around it.**
+ *
+ * ⚠ POSITIONS, NOT CONTENTS. This file cannot see the world; `isChest` is the host's own voxel read,
+ * so there is exactly one definition of "is there a chest here" and this cannot drift from it.
+ */
+export const ATTACH_SIDES: readonly (readonly [number, number])[] =
+  [[1, 0], [-1, 0], [0, 1], [0, -1]] as const
+
+export function attachedChests(
+  x: number, y: number, z: number, isChest: (x: number, y: number, z: number) => boolean,
+): { x: number; y: number; z: number }[] {
+  const out: { x: number; y: number; z: number }[] = []
+  for (const [dx, dz] of ATTACH_SIDES) {
+    if (isChest(x + dx, y, z + dz)) out.push({ x: x + dx, y, z: z + dz })
+  }
+  return out
 }
 
 export const isEmpty = (g: Slots): boolean => g.every(s => !s || s.count <= 0)

@@ -12,7 +12,7 @@
 import {
   DEFAULT_PLOT, plotHeight, plotMaterialAt, keelDepth, edgeAt,
   insideCore, withinCap, inWall, distFromCentre, plotYRange, columnSpan,
-  plotThreshold, hasFallenOut, type PlotConfig,
+  plotThreshold, hasFallenOut, chestCap, type PlotConfig,
 } from './plot'
 import { AIR } from './section'
 
@@ -299,6 +299,28 @@ console.log('\nthe threshold')
   // ⚠ Open air INSIDE the cap is not a fall — it is ground the keeper has not built out to yet, and
   // snatching them back there would make expansion feel like a wall rather than an invitation.
   check('hovering over unbuilt ground is not a fall', !hasFallenOut(DEFAULT_PLOT.baseY))
+}
+
+// ── how many chests one fold holds ──────────────────────────────────────────────────────────────
+{
+  // ★ The number Alex asked for, at the cap that ships. If this ever fails, the spec changed and
+  // somebody should have to say so out loud rather than discover it in a save.
+  check('a first plot holds 10 chests', chestCap() === 10, `got ${chestCap()}`)
+
+  // ★ IT RIDES `capRadius` AND NOTHING ELSE. That is what makes storage part of the same reward as
+  // ground instead of a second track to balance — and it is why this survives whichever way the
+  // ground-versus-resources gap is ruled.
+  const wider = (r: number): PlotConfig => ({ ...DEFAULT_PLOT, capRadius: r })
+  check('a fully-grown fold holds 24', chestCap(wider(72)) === 24, `got ${chestCap(wider(72))}`)
+  check('it rises with the cap', chestCap(wider(45)) > chestCap(), '')
+  check('and never falls as the cap rises', [30, 33, 40, 51, 60, 72].every((r, i, a) =>
+    i === 0 || chestCap(wider(r)) >= chestCap(wider(a[i - 1]))))
+
+  // ⚠ A cap of ZERO is a plot you cannot put a single chest in, which reads as a broken game rather
+  // than as a rule. The floor is 1, whatever arithmetic arrives.
+  check('never zero, however small the fold', chestCap(wider(1)) >= 1, `got ${chestCap(wider(1))}`)
+  check('nor negative on a nonsense config', chestCap(wider(-10)) >= 1, `got ${chestCap(wider(-10))}`)
+  check('always a whole number of chests', [1, 7, 30, 31, 32, 72, 100].every(r => Number.isInteger(chestCap(wider(r)))))
 }
 
 console.log(`\n${pass} passed, ${fail} failed`)

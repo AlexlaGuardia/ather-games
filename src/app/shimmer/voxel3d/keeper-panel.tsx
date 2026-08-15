@@ -69,13 +69,28 @@ const FRAME = {
   box: 'w-[min(94vw,720px)]',
   /** Bodies scroll inside this; they never grow it. Capped against short laptop screens too. */
   body: 'h-[min(58vh,400px)]',
+  /**
+   * ★ THE CHEST MODE IS TALLER, AND IT IS STILL SIZED HERE (2026-08-15, the 48-slot chest).
+   *
+   * This does not reopen the rule above — content still may not size the frame; there are simply
+   * TWO frames now and both are stated in this object. The chest earns the second one: at six rows
+   * it is 48 cells above the satchel's 24, and the whole reason those two grids share one panel is
+   * that you drag between them. A grid whose bottom rows are below the fold turns every put-away
+   * into a scroll-and-aim, which is exactly the friction the shift-click shortcut exists to remove.
+   *
+   * Still bounded and still scrolls past its cap — a phone gets the scroll rather than a panel
+   * taller than the screen.
+   */
+  tallBody: 'h-[min(78vh,560px)]',
 } as const
 
-export function KeeperFrame({ tab, setTab, title, hint, onClose, children }: {
+export function KeeperFrame({ tab, setTab, title, tall, hint, onClose, children }: {
   tab: KeeperTab
   setTab: (t: KeeperTab) => void
   /** Overrides the tab rail entirely — used by the chest, which is a mode, not a tab. */
   title?: string
+  /** Take the taller of the two frame sizes. See `FRAME.tallBody` for who may ask and why. */
+  tall?: boolean
   hint?: ReactNode
   onClose: () => void
   children: ReactNode
@@ -122,7 +137,7 @@ export function KeeperFrame({ tab, setTab, title, hint, onClose, children }: {
                              text-white/40 leading-none transition-colors
                              hover:border-white/40 hover:text-white/80">×</button>
         </div>
-        <div className={`${FRAME.body} overflow-y-auto overflow-x-hidden`}>{children}</div>
+        <div className={`${tall ? FRAME.tallBody : FRAME.body} overflow-y-auto overflow-x-hidden`}>{children}</div>
         {/* The hint sits BELOW the body, outside the scroll, so it is always readable and can never
             be scrolled away mid-drag. */}
         {hint && <div className="mt-3 border-t border-white/10 pt-2.5">{hint}</div>}

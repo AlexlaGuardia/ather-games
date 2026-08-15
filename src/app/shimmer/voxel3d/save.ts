@@ -207,6 +207,56 @@ export async function saveColumn(seed: number, cx: number, cz: number, save: Col
   } catch { /* unpersisted session — the world still works, it just will not remember */ }
 }
 
+/**
+ * How many cells of one material stand in a space, counted across EVERY stored column.
+ *
+ * ── ★ WHY A DISK SCAN RATHER THAN A LEDGER (2026-08-15, the chest cap) ──────────────────────────
+ * A per-plot chest cap needs a count that is right about chests the player cannot currently see:
+ * at the endgame cap the island is wider than the load ring, so counting what is resident would let
+ * a keeper exceed the cap simply by walking to the far side of their own garden and building there.
+ *
+ * The obvious fix — a stored list of chest positions maintained as they are placed and broken — is
+ * a SECOND SOURCE OF TRUTH about a thing the world already knows, and the two drift the first time
+ * a chest leaves by a path nobody remembered to hook. This has no such failure mode: a chest is
+ * never generated, so every chest that exists IS an edit, and the edits are already on disk. The
+ * world stays the only truth and the census is derived from it.
+ *
+ * ⚠ IT IS EXACT ONLY WHEN NOTHING IS DIRTY, which is why the caller runs it at the moment of
+ * ENTERING the space — `enterSpace` flushes before it flips, so at that instant the disk holds
+ * everything and no column of the space being entered is resident yet. From there the host keeps
+ * the number by ±1 at its single write funnel. Called at any other moment it would miss unflushed
+ * edits and read low.
+ *
+ * Cheap: the plot is a bounded space of a few dozen small records, and the scan touches only the
+ * packed material arrays.
+ */
+export async function countMaterial(seed: number, space: Space, mat: number): Promise<number> {
+  // The wilds key is unprefixed (see `key`), so "starts with the seed" also matches plot records and
+  // the player record — both have to be excluded by shape, not by hope.
+  const plotPrefix = `${seed}:plot:`
+  const mine = (k: string) => space === 'plot'
+    ? k.startsWith(plotPrefix)
+    : k.startsWith(`${seed}:`) && !k.startsWith(plotPrefix) && k.includes(',')
+  try {
+    const db = await open()
+    return await new Promise((res) => {
+      let n = 0
+      const tx = db.transaction(STORE, 'readonly')
+      const req = tx.objectStore(STORE).openCursor()
+      req.onsuccess = () => {
+        const cur = req.result
+        if (!cur) { res(n); return }
+        if (mine(String(cur.key))) {
+          const m = (cur.value as ColumnSave | undefined)?.edits?.mat
+          if (m) for (let i = 0; i < m.length; i++) if (m[i] === mat) n++
+        }
+        cur.continue()
+      }
+      req.onerror = () => res(n)
+    })
+  } catch { return 0 }
+}
+
 /** How many columns hold edits. Cheap, and worth surfacing: it is the size of what you have built. */
 export async function editedColumnCount(seed: number): Promise<number> {
   try {

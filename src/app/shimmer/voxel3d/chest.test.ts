@@ -9,7 +9,7 @@
 // position, so a record that outlives its block hands the next chest built on that spot somebody
 // else's items. Those asserts are at the end, against the same key format the host uses.
 
-import { createChest, moveBetween, moveCount, halfOf, quickMove, addToGrid, spill, isEmpty, countIn, chestKey, CHEST_SLOTS, type Slots } from './chest'
+import { createChest, adoptChest, moveBetween, moveCount, halfOf, quickMove, addToGrid, takeFromGrid, attachedChests, spill, isEmpty, countIn, chestKey, CHEST_SLOTS, CHEST_BAGFULS, type Slots } from './chest'
 import { createInventory, isFurnitureItem } from '../engine/inventory'
 
 let pass = 0
@@ -23,7 +23,8 @@ const totalOf = (id: string, ...gs: Slots[]) => gs.reduce((n, g) => n + countIn(
 // ── 1. the shape ────────────────────────────────────────────────────────────────────────────────
 {
   const c = createChest()
-  ok(c.length === CHEST_SLOTS && CHEST_SLOTS === 24, 'a chest is 24 slots — a bagful')
+  ok(c.length === CHEST_SLOTS && CHEST_SLOTS === 48, 'a chest is 48 slots')
+  ok(CHEST_BAGFULS === 2, '★ which is TWO BAGFULS — the sentence the number exists to keep')
   ok(c.every(s => s === null), 'and starts empty, with real nulls rather than a short array')
   ok(isEmpty(c), 'isEmpty agrees')
 }
@@ -249,6 +250,80 @@ const totalOf = (id: string, ...gs: Slots[]) => gs.reduce((n, g) => n + countIn(
   for (let k = 0; k < 5; k++) moved += moveCount(c, 0, c, 1, 1, MAX)
   ok(moved === 3, '★ ones keep landing until the source is empty, then stop')
   ok(c[0] === null && c[1]?.count === 3, 'all three arrived, none doubled')
+}
+
+// ── the migration: a grid off disk becomes this build's size, and NEVER loses a stack ───────────
+{
+  // Every chest saved before 2026-08-15 is 24 long. The failure this guards is silent: a short grid
+  // handed straight to the panel has `undefined` where its back rows should be.
+  const old24: (unknown)[] = new Array(24).fill(null)
+  old24[0] = { itemId: 'block_stone', count: 40 }
+  old24[23] = { itemId: 'goldwood_log', count: 7 }
+  const g = adoptChest(old24)
+  ok(g.length === CHEST_SLOTS, '★ a 24-slot save loads as a 48-slot chest')
+  ok(g.every(s => s === null || (typeof s.itemId === 'string' && s.count > 0)), 'with real nulls, no holes')
+  ok(g[0]?.count === 40 && g[23]?.count === 7, '★ and every stack stays in the slot the player left it in')
+  ok(countIn(g, 'block_stone') === 40 && countIn(g, 'goldwood_log') === 7, 'nothing invented, nothing lost')
+}
+{
+  // ★ THE SHRINK CASE. It cannot happen today and it is the one worth writing code for: a config
+  // change must never be able to delete a keeper's stack.
+  const big: unknown[] = new Array(CHEST_SLOTS + 3).fill(null)
+  big[CHEST_SLOTS] = { itemId: 'block_stone', count: 5 }
+  big[CHEST_SLOTS + 2] = { itemId: 'goldwood_log', count: 2 }
+  const g = adoptChest(big)
+  ok(g.length === CHEST_SLOTS, 'an oversized save is cut to size')
+  ok(countIn(g, 'block_stone') === 5 && countIn(g, 'goldwood_log') === 2,
+     '★ but the overflow is COMPACTED forward, not truncated into the void')
+}
+{
+  // Disk data is not trusted: a console can write this store, and a malformed slot would crash the
+  // panel that renders it.
+  const junk: unknown[] = [null, { itemId: 'block_stone', count: 0 }, { count: 4 }, 'nonsense', { itemId: 'x', count: 3 }]
+  const g = adoptChest(junk)
+  ok(g.length === CHEST_SLOTS, 'junk still yields a well-formed chest')
+  ok(countIn(g, 'x') === 3, 'the one real stack survives')
+  ok(g.filter(s => s !== null).length === 1, '★ and nothing malformed is kept as a slot')
+  ok(adoptChest(undefined).length === CHEST_SLOTS && isEmpty(adoptChest(undefined)), 'a missing record is an empty chest')
+}
+
+// ── taking OUT: the mirror of addToGrid, and the half the station spends through ────────────────
+{
+  const g = createChest()
+  put(g, 0, 'block_stone', 30); put(g, 5, 'block_stone', 12); put(g, 9, 'goldwood_log', 4)
+  ok(takeFromGrid(g, 'block_stone', 35) === 0, 'a take that is covered reports nothing owed')
+  ok(countIn(g, 'block_stone') === 7, '★ and takes it across as many stacks as it needs')
+  ok(g[0] === null, 'an emptied slot becomes a real null, not a zero stack')
+  ok(countIn(g, 'goldwood_log') === 4, 'and leaves everything else alone')
+  ok(takeFromGrid(g, 'block_stone', 99) === 92, '★ a short take reports the SHORTFALL, which is what chains across grids')
+  ok(countIn(g, 'block_stone') === 0, 'having emptied what there was — a partial take is a real outcome')
+  ok(takeFromGrid(g, 'nothing_here', 4) === 4, 'taking what is absent owes all of it')
+}
+{
+  // The station's own path: bag first, then the chests beside it. Conservation across three grids.
+  const bag = createChest(), a = createChest(), b = createChest()
+  put(bag, 0, 'goldwood_log', 5); put(a, 0, 'goldwood_log', 10); put(b, 3, 'goldwood_log', 10)
+  let left = takeFromGrid(bag, 'goldwood_log', 22)
+  for (const g of [a, b]) { if (left <= 0) break; left = takeFromGrid(g, 'goldwood_log', left) }
+  ok(left === 0, '★ a job spends across the bag and both chests')
+  ok(totalOf('goldwood_log', bag, a, b) === 3, 'and exactly the cost left the world')
+  ok(countIn(bag, 'goldwood_log') === 0 && countIn(a, 'goldwood_log') === 0,
+     '★ BAG FIRST — what is in your hand is what you meant to use')
+  ok(countIn(b, 'goldwood_log') === 3, 'the far chest is the last touched')
+}
+
+// ── which chests a bench reaches ────────────────────────────────────────────────────────────────
+{
+  // A cross of chests around a bench at the origin, plus one above and one below.
+  const chests = new Set(['1,0,0', '-1,0,0', '0,0,1', '0,0,-1', '0,1,0', '0,-1,0'])
+  const isChest = (x: number, y: number, z: number) => chests.has(`${x},${y},${z}`)
+  const got = attachedChests(0, 0, 0, isChest)
+  ok(got.length === 4, '★ four horizontal neighbours, and NOT the ones above and below')
+  ok(got.every(c => c.y === 0), 'every one of them at the bench\'s own height')
+  ok(new Set(got.map(c => `${c.x},${c.y},${c.z}`)).size === 4, 'and no position reported twice')
+  ok(attachedChests(0, 0, 0, () => false).length === 0, 'a bench with nothing beside it reaches nothing')
+  ok(attachedChests(50, 7, -3, (x, y, z) => x === 51 && y === 7 && z === -3).length === 1,
+     'the rule travels — it is relative, not anchored at the origin')
 }
 
 console.log(`\nchest: ${pass} passed, ${fails.length} failed`)

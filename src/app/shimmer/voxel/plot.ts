@@ -168,6 +168,27 @@ export const insideCore = (x: number, z: number, seed: number, cfg: PlotConfig =
 export const withinCap = (x: number, z: number, cfg: PlotConfig = DEFAULT_PLOT): boolean =>
   distFromCentre(x, z) <= cfg.capRadius
 
+/**
+ * ── ★ HOW MANY CHESTS ONE FOLD HOLDS (2026-08-15, Alex's spec: "10 per plot", tied to plot tier) ─
+ *
+ * **A chest for every three blocks of cap radius.** At the starting cap of 30 that is 10, which is
+ * the number Alex asked for; a fully-grown plot (~72) holds 24. So storage is not a separate reward
+ * track that has to be designed and balanced on its own — **it is the SAME number that decides how
+ * far you may build**, which means whatever raises your ground raises what you can keep on it, in
+ * one motion and with nothing to keep in sync.
+ *
+ * ⚠ AGNOSTIC ABOUT WHAT RAISES IT, exactly like `capRadius` itself — see that field's note. The
+ * ground-versus-resources question is live in `CANON_GAPS.md` and this function does not need it
+ * answered: it takes a config and returns a number, and rules either way without changing.
+ *
+ * ⚠ AND IT IS A PLOT RULE, NOT A WORLD RULE. Chests in the Wilds are uncapped, because the Wilds is
+ * not a thing you are given — the scarcity here is the fold's, and it is what makes a bigger fold
+ * worth having. A keeper who wants a hundred containers can have them; they just cannot have them
+ * at home, where it is safe and warm and one step from the bench.
+ */
+export const chestCap = (cfg: PlotConfig = DEFAULT_PLOT): number =>
+  Math.max(1, Math.floor(cfg.capRadius / 3))
+
 /** Is this column in the cloud-wall ring that marks the fold's edge? */
 export const inWall = (x: number, z: number, cfg: PlotConfig = DEFAULT_PLOT): boolean => {
   const d = distFromCentre(x, z)
