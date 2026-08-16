@@ -46,6 +46,11 @@ import { plotThreshold, hasFallenOut, chestCap } from '../voxel/plot'
 // the shell from the door the generator actually built — a trigger and a doorway in two different
 // places, which is invisible until someone walks 1000 blocks looking for a way in.
 import { inPassageVolume, insideShell, bubbleSwallows, passageApproach } from '../voxel/bubble'
+import { HOLDS } from '../voxel/holds'
+import {
+  spawnFoe, stepFoe, strike, hostile, foeDef, pickPosture, collarFrac, type CollarFoe,
+} from '../engine/collar-foes'
+import { mulberry32 } from '../engine/arena'
 import type { Space } from './save'
 
 /** Which generator version the player has already been warned about. See `staleWarned`. */
@@ -144,7 +149,7 @@ import { GrimoireTab } from './grimoire-tab'
 import { loadRuneInventory, saveRuneInventory, grantRune, revokeRune } from '../play3d/rune-inventory'
 import { birthAffinity } from '../play3d/birth-affinity'
 // Health + shields are SHARED rules, not a second copy — see engine/vitals.ts on why.
-import { freshVitals, type Vitals } from '../engine/vitals'
+import { freshVitals, pressure, heal, type Vitals } from '../engine/vitals'
 import { getMaxPool, getRegenRate } from '../engine/mana'
 import { resolveCast, SELF_ARCHETYPES, castAimPoint, type CastEnv } from '../engine/cast-dispatch'
 import { spawnField, tickFields, containsVolume, fieldsAtVolume, blocksShotAtVolume,
@@ -256,6 +261,18 @@ const SEED = 1337
 const H = DEFAULT_COLUMN.worldHeight
 // Load-ring radius lives in settings now (viewRadius, O panel) — the World loops read it live.
 const REACH = 6            // how far you can mine or place, in voxels
+/**
+ * How far outside a hold's curtain wall its patrol comes out to meet you, in blocks.
+ *
+ * ⚠ A RING, NOT A RADIUS — the spawn needs a near edge as well as a far one. Trigger on "closer
+ * than N" alone and a keeper who approaches from inside the hold (walking out of a gate) has the
+ * patrol appear behind them, which reads as an ambush rather than as being met on the road.
+ */
+const PATROL_MEET = 34
+/** Seconds out of anyone's reach before the guard starts coming back. */
+const GUARD_CALM_S = 5
+/** Guard restored per second once calm. A full guard is ~12s of not being held. */
+const GUARD_REGEN_PER_S = 9
 /**
  * How long the settle gate will hold physics after the player's own column has generated, in
  * seconds of frame time. Past this, the ground is not late — it is absent. See the gate.
@@ -3955,7 +3972,57 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
   // bolt is not the gun, and even for gun rounds the old read was subtly wrong — swapping weapons
   // mid-flight retro-changed what an already-travelling round would do.
   const shots = useRef<{ x: number; y: number; z: number; dx: number; dy: number; dz: number
-                         speed: number; life: number; mesh: THREE.Mesh; dmg: number }[]>([])
+                         speed: number; life: number; mesh: THREE.Mesh; dmg: number
+                         /**
+                          * ── ★★ WHAT THIS ROUND IS MADE OF, AND IT IS A CANON FIELD (2026-08-16, #294) ──
+                          * A cast bolt and a gun round have ridden the same pool since the port, which is
+                          * right for everything they meet in the Wilds: a Hollow is absence, and absence
+                          * is dispersed by either. A COLLARED MOGLIN is the case that splits them. Canon
+                          * is explicit that guns are forbidden to answer that class — you free a person,
+                          * and *"a bullet cannot free anyone"*.
+                          *
+                          * ★ THIS FIELD IS THE WHOLE REASON "RUNES ARE THE COMBAT" IS TRUE RATHER THAN
+                          * ASSERTED. Without it the region fights are gun fights with a different bar,
+                          * and the cast layer is garnish. With it, the one class that fills the regions
+                          * has exactly one answer, and it is the rune.
+                          */
+                         frequency: boolean }[]>([])
+  // ── ★ THE COLLARED PATROLS (#294, 2026-08-16) ────────────────────────────────────────────────
+  // The engine half has existed and been green since 08-12 with NO live caller — `collar-foes.ts`
+  // knew what a foe is and what freeing one does, and nothing in either world ever moved one. This
+  // is that module's first host.
+  //
+  // ⚠ BLOCKOUT BODIES, and the standing is the Hollow bodies' and the mist resident's, not a
+  // shortcut. A collared Moglin's LOOK is canon (Magii owns whether Moglins look like anything) and
+  // Alex's (art-medium law). So these are legible neutral shapes that assert no species — posture is
+  // read from SIZE and BEHAVIOUR, which are build numbers and mine. A guess that ships becomes
+  // accidental canon; a blockout that ships is a placeholder everyone can see is one.
+  const foes = useRef<{ f: CollarFoe; y: number; mesh: THREE.Mesh }[]>([])
+  const foeSeq = useRef(0)
+  /** Which holds have already sent out their patrol this session. */
+  const foePatrolled = useRef<Set<string>>(new Set())
+  /** Rate-limits the "a bullet cannot free anyone" line so it teaches once, not once per round. */
+  const leadSaid = useRef(0)
+  /**
+   * One dispossession per encounter. Without the latch the guard sits at zero while the patrol keeps
+   * pressing, so every frame fires another send-back and the keeper is pinned at the glade being
+   * told about it — the losing state would be the unrecoverable one, which is the exact shape the
+   * settle gate was fixed for this morning. Cleared when the guard comes back.
+   */
+  const dispossessed = useRef(false)
+  /** When the keeper was last inside someone's reach. The guard only comes back out of contact. */
+  const lastPressed = useRef(-999)
+  const foeGeo = useMemo(() => ({
+    bulwark: new THREE.BoxGeometry(1.5, 1.9, 1.5),
+    channeler: new THREE.ConeGeometry(0.55, 2.2, 6),
+    skirmisher: new THREE.BoxGeometry(0.7, 1.35, 0.7),
+  }), [])
+  const foeMat = useMemo(() => new THREE.MeshLambertMaterial({ color: 0x6f6486 }), [])
+  /** Freed: the same blockout, warm instead of bruised. The body stays — nothing died. */
+  const foeFreedMat = useMemo(() => new THREE.MeshLambertMaterial({ color: 0xc9b48a }), [])
+  /** The collar itself: the one part that is not neutral, because it is the thing you aim at. */
+  const collarGeo = useMemo(() => new THREE.TorusGeometry(0.42, 0.09, 6, 12), [])
+  const collarMat = useMemo(() => new THREE.MeshBasicMaterial({ color: 0xd8604f, toneMapped: false }), [])
   const tracerGeo = useMemo(() => new THREE.SphereGeometry(1, 6, 4), [])
   const tracerMat = useMemo(() => new THREE.MeshBasicMaterial({ color: 0xffd88a, toneMapped: false }), [])
   const impacts = useRef<{ mesh: THREE.Mesh; life: number }[]>([])
@@ -4354,6 +4421,7 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
         x: camera.position.x, y: camera.position.y, z: camera.position.z,
         dx: f.x, dy: f.y, dz: f.z,
         speed: out.placed.projSpeed, life: out.placed.projLife, mesh, dmg: out.placed.damage,
+        frequency: true,                       // a cast — the only thing that can open a collar
       })
     }
     if (out.message) onSay(out.message)
@@ -4370,7 +4438,8 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
     mesh.position.copy(camera.position)
     g.add(mesh)
     shots.current.push({ x: camera.position.x, y: camera.position.y, z: camera.position.z,
-                         dx, dy, dz, speed: w.projSpeed, life: w.projLife, mesh, dmg: w.damage })
+                         dx, dy, dz, speed: w.projSpeed, life: w.projLife, mesh, dmg: w.damage,
+                         frequency: false })   // lead. Disperses a Hollow, cannot free a person.
     ammo.current = Math.max(0, ammo.current - 1)
     bloom.current = bloomAfterShot(w, bloom.current)
     const kick = recoilKick(w, Math.random)
@@ -4610,6 +4679,48 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
           }
         }
         if (absorbed) continue
+        // ── ★★ AND HERE IS WHERE THE TWO KINDS OF ROUND STOP BEING THE SAME THING (#294) ─────────
+        // A Hollow is absence and either answer disperses it, so the loop above never had to ask
+        // what a round was made of. A collared Moglin is a PERSON, and canon forbids guns to answer
+        // that class outright: you free him, and a bullet cannot free anyone.
+        //
+        // ★ THE ROUND IS STILL ABSORBED EITHER WAY, and that matters. Letting lead pass THROUGH a
+        // body would read as a miss or a broken hitbox — the player would conclude the game is
+        // buggy rather than that they are using the wrong verb. It stops, nothing opens, and the
+        // world says why. That one line is the entire tutorial for the region combat system.
+        for (const e of foes.current) {
+          if (!hostile(e.f)) continue                 // a freed Moglin is not a target, ever
+          const def = foeDef(e.f.posture)
+          const r = Math.max(0.5, def.body + 0.35)    // the channeler has no body; it is still a person
+          if (segmentDist(sh.x, sh.y, sh.z, sh.dx, sh.dy, sh.dz, step, e.f.x, e.y + 0.95, e.f.z) > r) continue
+          const m = new THREE.Mesh(tracerGeo, tracerMat)
+          m.scale.setScalar(0.16)
+          m.position.set(e.f.x, e.y + 1.2, e.f.z)
+          g.add(m); impacts.current.push({ mesh: m, life: 0.25 })
+          if (sh.frequency) {
+            const res = strike(e.f, sh.dmg)
+            e.f = res.foe
+            if (res.freed) {
+              // ⚠ FIRED ON THE EXACT STRIKE THAT BREAKS IT, which is what `freed` is for — the host
+              // does not track edges itself. Canon gives no wounded state and no second phase: the
+              // collar comes off and he is simply the sweet creature again. So the body stays, and
+              // it stops being a threat rather than dying.
+              const collarMesh = e.mesh.children[0]
+              if (collarMesh) e.mesh.remove(collarMesh)
+              ;(e.mesh.material as THREE.MeshLambertMaterial) === foeMat && (e.mesh.material = foeFreedMat)
+              onSay('the collar gives — he is himself again')
+            }
+          } else if (state.clock.elapsedTime - leadSaid.current > 6) {
+            leadSaid.current = state.clock.elapsedTime
+            // Said, not punished. The keeper is not doing something wrong so much as reaching for
+            // the wrong tool, and the sentence names the tool that works.
+            onSay('lead will not open a collar — it is a rune he needs, not a bullet')
+          }
+          g.remove(sh.mesh); shots.current.splice(i, 1)
+          absorbed = true
+          break
+        }
+        if (absorbed) continue
         const hit = raycast(sh.x, sh.y, sh.z, sh.dx, sh.dy, sh.dz, step, voxelSolid)
         sh.life -= dt
         if (hit) {
@@ -4703,6 +4814,115 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
           }
         }
       }
+      // ── ★ THE COLLARED PATROLS: SPAWN, APPROACH, PRESS (#294, 2026-08-16) ──────────────────────
+      // ★ KEYED TO THE HOLDS, NOT TO A TIMER OR TO DARKNESS. Canon: *"a burrow is a mouth, a hold is
+      // the hand behind it"* — Hollows well up out of the ground anywhere the light fails, but a
+      // collared Moglin was SENT. He belongs to a stronghold, so the encounter belongs to the road
+      // outside one. That also keeps the two populations from blurring into "things that attack you":
+      // Hollows are weather, patrols are people with an address.
+      //
+      // ⚠ ONCE PER HOLD PER SESSION, deliberately. A respawning patrol turns freeing someone into
+      // farming, and canon has no wounded state to farm — the reward for breaking a collar is that a
+      // person is free, which is spent exactly once. `foePatrolled` is a Set of hold ids, not a
+      // timer, so walking away and coming back does not re-collar anyone you already freed.
+      for (const hold of HOLDS) {
+        if (foePatrolled.current.has(hold.id)) continue
+        // The trigger ring sits outside the curtain wall: met on the ROAD, approaching, never
+        // materialising inside a courtyard the keeper is already standing in.
+        const dh = Math.hypot(hold.x - p.x, hold.z - p.z)
+        if (dh > hold.half + PATROL_MEET || dh < hold.half) continue
+        foePatrolled.current.add(hold.id)
+        // ⚠ DETERMINISTIC FROM THE HOLD, not `Math.random()`. Two keepers meeting the same hold must
+        // meet the same patrol, and a reload must not reroll it into a different fight — the same
+        // rule `hunter-ai` had to be extracted to obey. The hold's own coordinates are the seed.
+        let roll = mulberry32((hold.x * 73856093) ^ (hold.z * 19349663))
+        const size = 2 + Math.floor(roll() * 2)                     // 2-3: a patrol, not a raid
+        for (let n = 0; n < size; n++) {
+          const posture = pickPosture(roll())
+          // Placed between the keeper and the hold, spread across the road — they came OUT of it.
+          const ang = Math.atan2(p.z - hold.z, p.x - hold.x) + (roll() - 0.5) * 0.9
+          const rad = hold.half + 3 + roll() * 6
+          const fx = hold.x + Math.cos(ang) * rad, fz = hold.z + Math.sin(ang) * rad
+          const fy = columnHeight(Math.floor(fx), Math.floor(fz), SEED) + 1
+          const mesh = new THREE.Mesh(foeGeo[posture], foeMat)
+          mesh.position.set(fx, fy + 0.95, fz)
+          const collar = new THREE.Mesh(collarGeo, collarMat)
+          collar.rotation.x = Math.PI / 2
+          collar.position.y = 0.75
+          mesh.add(collar)
+          g.add(mesh)
+          foes.current.push({ f: spawnFoe(`f${++foeSeq.current}`, posture, fx, fz), y: fy, mesh })
+        }
+        onSay('a patrol comes out to meet you — they are wearing someone else\'s cruelty')
+      }
+
+      for (let i = foes.current.length - 1; i >= 0; i--) {
+        const e = foes.current[i]
+        // Despawn on the load edge, exactly as the Hollows do — a body outside the streamed world is
+        // standing on ground that no longer exists.
+        if (Math.hypot(e.f.x - p.x, e.f.z - p.z) > settings.viewRadius * SECTION) {
+          g.remove(e.mesh); foes.current.splice(i, 1); continue
+        }
+        const intent = stepFoe(e.f, {
+          px: p.x, pz: p.z,
+          // The one thing that cannot travel between worlds: what is solid. A voxel probe at chest
+          // height, so a foe walks around a wall instead of into it.
+          blocked: (x, z) => isSolid(voxel(Math.floor(x), Math.floor(e.y) + 1, Math.floor(z))),
+        }, dt)
+        if (intent.moveTo) {
+          e.f = { ...e.f, x: intent.moveTo.x, z: intent.moveTo.z }
+          // Re-ground every step: the road rolls, and a foe that keeps its spawn altitude walks
+          // through hillsides and hovers over dips.
+          e.y = columnHeight(Math.floor(e.f.x), Math.floor(e.f.z), SEED) + 1
+          e.mesh.position.set(e.f.x, e.y + 0.95, e.f.z)
+        }
+        // Face the keeper. Cheap, and without it three blockouts slide about like furniture.
+        e.mesh.rotation.y = Math.atan2(p.x - e.f.x, p.z - e.f.z)
+        if (intent.pressing && vitals.current) {
+          // ★★ `pressure`, NEVER `damage`, AND THAT IS RULE 3 IN CODE. Canon: *"the game gets the
+          // warmth and the lesson, not the wound."* `vitals.pressure` wears the guard down and
+          // STOPS — it can never reach health — so losing a road encounter is dispossession, being
+          // sent back, never dying. Reaching for `damage` here would undo the ruling in one line.
+          const pr = pressure(vitals.current, foeDef(e.f.posture).pressureDps * dt)
+          vitals.current = pr.vitals
+          // ★ GUARD BROKEN IS DISPOSSESSION, NOT DEFEAT, and this is the whole shape of losing here.
+          // Canon rules there is no death in the regions, so the cost of being held is that you are
+          // SENT BACK — the road encounter is lost, the collar stays on, and the person you came to
+          // free is still wearing it. That last part is the real penalty and it costs no HP at all.
+          lastPressed.current = state.clock.elapsedTime
+          if (pr.guardBroken && !dispossessed.current) {
+            dispossessed.current = true
+            const lc = loco.current
+            lc.px = SPAWN_X + 0.5; lc.pz = SPAWN_Z + 0.5
+            lc.py = columnHeight(SPAWN_X, SPAWN_Z, SEED) + 1
+            lc.vy = 0; lc.hvx = 0; lc.hvz = 0; lc.stepSmooth = 0
+            camera.position.set(lc.px, eyeY(lc), lc.pz)
+            settled.current = false
+            onSay('they have you — you wake at the glade, and the collar is still on him')
+          }
+        }
+        // The collar bar is the mesh's own scale — no HP bar, because there is no HP. It shrinks as
+        // the collar gives, so the thing you are emptying is visibly the collar and not the person.
+        const collarMesh = e.mesh.children[0] as THREE.Mesh | undefined
+        if (collarMesh) collarMesh.scale.setScalar(Math.max(0.05, collarFrac(e.f)))
+      }
+
+      // ── ★ THE GUARD COMES BACK, AND IT HAS TO (2026-08-16) ────────────────────────────────────
+      // Nothing in this world wrote `vitals` before the patrols did, so pressure was a one-way
+      // ratchet: guard to zero once and it stayed there for the session, which would have made the
+      // FIRST road encounter the last one that could ever be lost — and left `dispossessed` latched
+      // forever, so the send-back would fire once and never again.
+      //
+      // ★ OUT OF CONTACT, NOT OVER TIME. Regenerating while someone is leaning on you would make
+      // standing still a strategy and pressure a stalemate; recovering only once you are out of
+      // reach makes DISENGAGING the answer the canon already wants — you can always walk away, and
+      // the cost of walking away is that the collar stays on.
+      if (vitals.current && state.clock.elapsedTime - lastPressed.current > GUARD_CALM_S) {
+        const v = vitals.current
+        if (v.shield < v.shieldMax) vitals.current = heal(v, 0, GUARD_REGEN_PER_S * dt)
+        if (vitals.current.shield > 0) dispossessed.current = false
+      }
+
       // ⚠ `performance.now()`, NOT `state.clock.elapsedTime`. The bag's expiries were written by the
       // cast handler off `performance.now()`, and the two clocks share no origin — mixing them makes
       // every status either instantly expired or effectively permanent, deterministically, which is

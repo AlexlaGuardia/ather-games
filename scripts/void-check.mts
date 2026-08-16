@@ -142,6 +142,52 @@ try {
   ok(asPlayer.climb === 0, `an ordinary keeper is back on the ground (${asPlayer.climb >= 0 ? '+' : ''}${asPlayer.climb})`)
   const hints = await page.evaluate(() => document.body.innerText)
   ok(!/V fly/.test(hints), 'and is not told about a key that would do nothing')
+
+  // ── 4. THE COLLARED PATROLS (#294, 2026-08-16) ───────────────────────────────────────────────
+  // The picture could not settle this: by the time the settle gate releases and the patrol closes,
+  // every foe is standing ON the keeper and below the frame. What matters is not where they are
+  // drawn anyway — it is that the two kinds of round are answered differently, which is the whole
+  // claim that "runes ARE the combat" rests on.
+  console.log('\nthe patrol')
+  // Poll while approaching: the spawn line is a toast and expires, so a single late read misses it.
+  await page.keyboard.press('KeyT'); await sleep(200)
+  await page.keyboard.type('/tp -600 -1780'); await page.keyboard.press('Enter'); await sleep(400)
+  await page.keyboard.press('Escape')
+  let met = false
+  for (let t = 0; t < 14 && !met; t++) {
+    await sleep(2000)
+    if (/patrol comes out to meet you/.test(await readLog())) met = true
+  }
+  ok(met, 'a patrol comes out to meet you outside the hold')
+
+  const fireAndRead = async (keys: () => Promise<void>, label: string) => {
+    const before = await readLog()
+    await keys()
+    await sleep(2500)
+    const after = await readLog()
+    return { before, after, label }
+  }
+
+  // ★★ THE CANON RULE, AS A TEST. A gun round must not open a collar, and the world must SAY why —
+  // a round that silently does nothing is indistinguishable from a broken hitbox.
+  await page.mouse.click(640, 380)                    // pointer lock, so the world takes input
+  await sleep(400)
+  await page.keyboard.press('KeyF')                   // draw the weapon
+  await sleep(600)
+  const lead = await fireAndRead(async () => {
+    for (let i = 0; i < 6; i++) { await page.mouse.down(); await sleep(160); await page.mouse.up(); await sleep(260) }
+  }, 'lead')
+  ok(/lead will not open a collar/.test(lead.after),
+    '★★ lead is refused, out loud — "it is a rune he needs, not a bullet"')
+
+  await page.keyboard.press('KeyF')                   // stow, so a cast is not competing with a gun
+  await sleep(600)
+  const cast = await fireAndRead(async () => {
+    for (let i = 0; i < 14; i++) { await page.keyboard.press('KeyG'); await sleep(700) }
+  }, 'cast')
+  ok(/the collar gives/.test(cast.after) || /Mana|mana/.test(cast.after),
+    'a cast reaches the collar (freed it, or ran the keeper out of mana trying)')
+  if (/the collar gives/.test(cast.after)) console.log('  · a collar was broken and a Moglin freed')
 } finally {
   await browser.close()
 }
