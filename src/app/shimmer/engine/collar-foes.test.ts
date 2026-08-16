@@ -12,7 +12,7 @@
 // converging them back into each other.
 
 import {
-  COLLAR_FOES, POSTURE_ORDER, foeDef, pickPosture, spawnFoe, strike, hostile, collarFrac, stepFoe, answerCollar,
+  COLLAR_FOES, POSTURE_ORDER, foeDef, pickPosture, spawnFoe, strike, hostile, collarFrac, stepFoe, answerCollar, LEAVING_SPEED,
   type FoePosture,
 } from './collar-foes'
 import { TIER_DIALS } from '../play3d/collar-raid'
@@ -122,12 +122,23 @@ const check = (label: string, ok: boolean, detail = '') => {
   const at = (p: FoePosture, x: number, z: number) => spawnFoe(`t-${p}`, p, x, z)
   const KEEPER = { px: 0, pz: 0 }
 
-  // ★★ THE RULING, NOT A BALANCE NUMBER. Canon gives a freed Moglin no wounded state and no second
-  // phase, so he must go completely inert — not slower, not passive-but-following. If this ever goes
-  // green-by-accident the encounter grows a second phase canon explicitly refuses.
+  // ★★ THE RULING, NOT A BALANCE NUMBER — AND IT CHANGED ON 2026-08-16. This first asserted that a
+  // freed Moglin goes completely INERT, which I filed as a placeholder and canon then refused:
+  // *"the only thing that separates this from a nicer collar is that he can go… the exit is not a
+  // courtesy feature. It is the canon. Build it and never hide it."* A Moglin standing frozen on
+  // the road forever is the build quietly keeping him. He walks off.
   const freed = strike(at('skirmisher', 5, 0), 999).foe
   const fi = stepFoe(freed, KEEPER, 0.1)
-  check('★★ a freed Moglin does not move and does not press', fi.moveTo === null && !fi.pressing)
+  check('★★ a freed Moglin never presses again', !fi.pressing)
+  check('★★ and he LEAVES — the exit is canon, not a courtesy', fi.moveTo !== null)
+  check('★ away from the keeper, not toward them',
+    (fi.moveTo?.x ?? 0) > 5, `moved to ${fi.moveTo?.x?.toFixed(3)} from 5`)
+  // ⚠ Leaving is a walk, not a rout. Canon's beat is deflation; a freed Moglin sprinting away reads
+  // as fear, and the line's whole point is that he was never the frightening one.
+  const gone = Math.hypot((fi.moveTo?.x ?? 5) - 5, fi.moveTo?.z ?? 0)
+  check('at a leaving pace, slower than he fought at',
+    Math.abs(gone - LEAVING_SPEED * 0.1) < 1e-9 && LEAVING_SPEED < COLLAR_FOES.skirmisher.speed,
+    `${gone.toFixed(3)} in 0.1s`)
 
   // The channeler holds its line instead of closing, and presses from it — reach 8 > standoff 7 is
   // what makes "hold still and lean on you" a behaviour rather than a stalemate.

@@ -125,13 +125,35 @@ export function pickPosture(roll: number): FoePosture {
   return POSTURE_ORDER[POSTURE_ORDER.length - 1]
 }
 
+/**
+ * ── ★★ A PAIR, NOT A PERSON — CORRECTED 2026-08-16 (/magii + Alex, `game/shimmer-storyline.md`) ──
+ * This file was built as *"a collared Moglin is a person wearing someone else's cruelty."* **Canon
+ * does not have that anywhere.** The collar is a Moglin invention and *"its power works on spirits
+ * only"* — it does not bite on a Moglin, an Alkin or a Mana'mal. Every canon instance is the same
+ * shape: **the Moglin holding the leash**, with a dimmed spirit dragging behind him.
+ *
+ * ★ THE HEADER OF THIS FILE WAS ALREADY RIGHT AND THE TYPE WAS WRONG. It has said *"how the
+ * COLLARED SPIRIT fights — not the Moglin's job"* and *"the posture belongs to the spirit"* since it
+ * was written. The three postures were the spirit's all along; only the bar was on the wrong body.
+ * The mistake was an ambiguous compound: **`collar-Moglin` means a Moglin OF the collar — a
+ * collarer** — and the build read it as a Moglin wearing one.
+ *
+ * ⚠ THE ORDERING IS THE PAYOFF AND MUST NOT BE COLLAPSED: you defeat the SPIRIT, its collar breaks,
+ * it leaves — and the Moglin deflates **as the consequence**, because his bravery was borrowed and
+ * the loan has been called. A Moglin who wore the collar himself would have nothing to lose and no
+ * swagger to drain, and the beat the whole cozy line rests on stops working.
+ */
 export interface CollarFoe {
   id: string
-  /** The shape of the spirit on the end of his collar — the thing you are actually fighting. */
+  /** How the COLLARED SPIRIT fights — the thing the keeper actually contests. Never the Moglin's. */
   posture: FoePosture
+  /** Where the pair stands. The Moglin leads; the spirit drags behind him on the leash. */
   x: number
   z: number
-  /** `null` = freed. Canon: a Moglin without a collar is never hostile and never a target. */
+  /**
+   * The SPIRIT's collar. `null` = the contest is won: the spirit is free and gone, and the Moglin
+   * holding the leash is just the sweet harmless folk he always was.
+   */
   collar: { integrity: number; max: number } | null
 }
 
@@ -185,6 +207,12 @@ export const hostile = (foe: CollarFoe): boolean => foe.collar !== null
 // himself in the road, the channeler holds a line and leans on you from it, and the skirmisher runs
 // you down. Orbiting would make all three read as the same evasive gunfighter wearing three speeds.
 
+/**
+ * How fast a freed Moglin walks off, in blocks/sec. Slower than any posture's fighting speed on
+ * purpose: he is leaving, not fleeing, and canon's beat is deflation rather than panic.
+ */
+export const LEAVING_SPEED = 1.4
+
 export interface FoeStepCtx {
   /** Where the keeper is standing. */
   px: number
@@ -217,7 +245,22 @@ export interface FoeIntent {
 export function stepFoe(
   foe: CollarFoe, ctx: FoeStepCtx, dt: number, def: CollarFoeDef = foeDef(foe.posture),
 ): FoeIntent {
-  if (!hostile(foe)) return { moveTo: null, pressing: false }
+  // ── ★★ HE CAN GO, AND CANON SAYS SO IN AS MANY WORDS (2026-08-16) ──────────────────────────
+  // *"The only thing that separates this from a nicer collar is that he can go… the exit is not a
+  // courtesy feature. It is the canon. Build it and never hide it."*
+  //
+  // The first version returned `{ moveTo: null }` here and left a freed Moglin standing on the road
+  // forever — inert, which I filed as a placeholder and canon has now refused. A deflated Moglin
+  // WALKS AWAY. He never presses and he is never a target again; he simply leaves, which is the
+  // entire difference between this and the thing he was doing to the spirit.
+  if (!hostile(foe)) {
+    const ax = foe.x - ctx.px, az = foe.z - ctx.pz
+    const d = Math.hypot(ax, az)
+    // Standing exactly on the keeper has no away-direction; he will have one next frame.
+    if (d < 1e-6) return { moveTo: null, pressing: false }
+    const step = LEAVING_SPEED * dt
+    return { moveTo: { x: foe.x + (ax / d) * step, z: foe.z + (az / d) * step }, pressing: false }
+  }
 
   const dx = ctx.px - foe.x, dz = ctx.pz - foe.z
   const dist = Math.hypot(dx, dz)

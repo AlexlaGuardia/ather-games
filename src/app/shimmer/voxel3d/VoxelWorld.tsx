@@ -281,6 +281,10 @@ const GUARD_REGEN_PER_S = 9
 const FOE_HEIGHT: Record<'bulwark' | 'channeler' | 'skirmisher', number> = {
   bulwark: 1.9, channeler: 2.2, skirmisher: 1.35,
 }
+/** How far behind the Moglin the collared spirit drags, in blocks. It is hauled, never leading. */
+const SPIRIT_TRAIL = 1.5
+/** How far a freed Moglin walks before he is gone. Far enough to read as leaving, not as vanishing. */
+const FREED_FAREWELL = 26
 /**
  * How long the settle gate will hold physics after the player's own column has generated, in
  * seconds of frame time. Past this, the ground is not late — it is absent. See the gate.
@@ -1200,8 +1204,12 @@ export default function VoxelWorld() {
     foes: () => {
       const list = foesRef.current?.() ?? []
       if (!list.length) return 'no patrol near you — they come out of the holds (/goto thistle-hold)'
+      // ⚠ Reads the SPIRIT's collar and says so. A line that named the Moglin's collar would be the
+      // 08-16 misreading printed back at whoever came to check it.
       return list.map(f =>
-        `${f.posture.padEnd(11)} ${f.dist.toFixed(1).padStart(6)} blocks   collar ${(f.collar * 100).toFixed(0)}%${f.collar === 0 ? '  FREED' : ''}`,
+        f.collar === 0
+          ? `moglin (${f.posture}) ${f.dist.toFixed(1).padStart(6)} blocks   FREED — walking away`
+          : `moglin w/ ${f.posture.padEnd(10)} ${f.dist.toFixed(1).padStart(6)} blocks   spirit's collar ${(f.collar * 100).toFixed(0)}%`,
       ).join('\n')
     },
     radius: () => settings.viewRadius,
@@ -4050,7 +4058,16 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
   // Alex's (art-medium law). So these are legible neutral shapes that assert no species — posture is
   // read from SIZE and BEHAVIOUR, which are build numbers and mine. A guess that ships becomes
   // accidental canon; a blockout that ships is a placeholder everyone can see is one.
-  const foes = useRef<{ f: CollarFoe; y: number; mesh: THREE.Mesh }[]>([])
+  const foes = useRef<{
+    f: CollarFoe
+    y: number
+    /** The Moglin, holding the leash. He never wears the collar — see `collar-foes.ts`. */
+    mesh: THREE.Mesh
+    /** The collared spirit he is dragging. Removed the instant it is freed: it LEAVES. */
+    spirit: THREE.Mesh | null
+    /** The leash between them, which is the whole read. Goes with the spirit. */
+    leash: THREE.Mesh | null
+  }[]>([])
   const foeSeq = useRef(0)
   /** Which holds have already sent out their patrol this session. */
   const foePatrolled = useRef<Set<string>>(new Set())
@@ -4065,11 +4082,20 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
   const dispossessed = useRef(false)
   /** When the keeper was last inside someone's reach. The guard only comes back out of contact. */
   const lastPressed = useRef(-999)
+  // ⚠ THE POSTURE SHAPES ARE THE SPIRIT'S, NOT THE MOGLIN'S. `collar-foes.ts` has said so in its
+  // header since it was written — bulwark/channeler/skirmisher describe how the COLLARED SPIRIT
+  // fights. The Moglin is the same small fellow in every encounter; what changes is what he is
+  // dragging. Getting this backwards is what the 08-16 ruling corrected.
   const foeGeo = useMemo(() => ({
     bulwark: new THREE.BoxGeometry(1.5, 1.9, 1.5),
     channeler: new THREE.ConeGeometry(0.55, 2.2, 6),
     skirmisher: new THREE.BoxGeometry(0.7, 1.35, 0.7),
   }), [])
+  /** The Moglin — small, up on his tiptoes, and identical whichever spirit he holds. */
+  const moglinGeo = useMemo(() => new THREE.BoxGeometry(0.55, 0.95, 0.55), [])
+  const moglinMat = useMemo(() => new THREE.MeshLambertMaterial({ color: 0x7a6a52 }), [])
+  const leashGeo = useMemo(() => new THREE.BoxGeometry(0.06, 0.06, 1), [])
+  const leashMat = useMemo(() => new THREE.MeshBasicMaterial({ color: 0x2b2b33, toneMapped: false }), [])
   const foeMat = useMemo(() => new THREE.MeshLambertMaterial({ color: 0x6f6486 }), [])
   /** Freed: the same blockout, warm instead of bruised. The body stays — nothing died. */
   const foeFreedMat = useMemo(() => new THREE.MeshLambertMaterial({ color: 0xc9b48a }), [])
@@ -4778,10 +4804,15 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
           // Clamping the test point into the body's vertical SPAN makes it a capsule: the shot is
           // measured against the nearest part of the body it could actually have struck. Heights
           // match the blockout meshes, so what you see is what you can hit.
+          // ★★ THE ROUND IS TESTED AGAINST THE SPIRIT, NOT THE MOGLIN. You defeat the spirit; the
+          // Moglin deflates as the consequence. Aiming at the fellow holding the leash would free
+          // nobody, and canon is explicit that the collar *"works on spirits only"*.
+          const sp = e.spirit
+          if (!sp) continue
           const bodyH = FOE_HEIGHT[e.f.posture]
-          const footY = e.y
+          const footY = sp.position.y - 0.95
           const testY = Math.min(Math.max(sh.y, footY), footY + bodyH)
-          if (segmentDist(sh.x, sh.y, sh.z, sh.dx, sh.dy, sh.dz, step, e.f.x, testY, e.f.z) > r) continue
+          if (segmentDist(sh.x, sh.y, sh.z, sh.dx, sh.dy, sh.dz, step, sp.position.x, testY, sp.position.z) > r) continue
           const m = new THREE.Mesh(tracerGeo, tracerMat)
           m.scale.setScalar(0.16)
           m.position.set(e.f.x, e.y + 1.2, e.f.z)
@@ -4794,14 +4825,18 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
             const res = strike(e.f, sh.dmg)
             e.f = res.foe
             if (res.freed) {
-              // ⚠ FIRED ON THE EXACT STRIKE THAT BREAKS IT, which is what `freed` is for — the host
-              // does not track edges itself. Canon gives no wounded state and no second phase: the
-              // collar comes off and he is simply the sweet creature again. So the body stays, and
-              // it stops being a threat rather than dying.
-              const collarMesh = e.mesh.children[0]
-              if (collarMesh) e.mesh.remove(collarMesh)
-              ;(e.mesh.material as THREE.MeshLambertMaterial) === foeMat && (e.mesh.material = foeFreedMat)
-              onSay('the collar gives — he is himself again')
+              // ⚠ FIRED ON THE EXACT STRIKE THAT BREAKS IT — that is what `freed` is for; the host
+              // does not track edges itself.
+              //
+              // ★★ THE ORDER IS THE PAYOFF AND CANON FORBIDS COLLAPSING IT: the SPIRIT is freed and
+              // *"returns to its freedom (it is not caught or kept)"* — so it leaves the world here,
+              // and the keeper gains nothing they can hold, which is the point. The Moglin deflates
+              // as the CONSEQUENCE, because his bravery was borrowed and the loan has just been
+              // called. He is not defeated; he is unfunded.
+              if (e.spirit) { g.remove(e.spirit); e.spirit = null }
+              if (e.leash) { g.remove(e.leash); e.leash = null }
+              e.mesh.material = foeFreedMat
+              onSay('the collar gives — the spirit goes free, and his swagger drains out of him')
             }
           } else if (state.clock.elapsedTime - leadSaid.current > 6) {
             leadSaid.current = state.clock.elapsedTime
@@ -4939,14 +4974,20 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
           // ⚠ Spawn on the LIVE surface for the same reason the walk probes it — a hold's pad stands
           // above the continent rule, and a patrol placed by `columnHeight` starts buried in it.
           const fy = groundTopNear(fx, fz, columnHeight(Math.floor(fx), Math.floor(fz), SEED) + 2, 12) + 1
-          const mesh = new THREE.Mesh(foeGeo[posture], foeMat)
-          mesh.position.set(fx, fy + 0.95, fz)
+          // ★ TWO BODIES AND A LEASH BETWEEN THEM. Canon's own picture of this encounter is *"a
+          // Moglin up on his tiptoes, a dimmed, grey-guttered spirit dragging behind him on a
+          // leash"* — so the build draws both, and the collar goes on the SPIRIT.
+          const mesh = new THREE.Mesh(moglinGeo, moglinMat)        // the Moglin, holding the leash
+          mesh.position.set(fx, fy + 0.48, fz)
+          const spirit = new THREE.Mesh(foeGeo[posture], foeMat)   // what he is dragging
+          spirit.position.set(fx, fy + 0.95, fz)
           const collar = new THREE.Mesh(collarGeo, collarMat)
           collar.rotation.x = Math.PI / 2
           collar.position.y = 0.75
-          mesh.add(collar)
-          g.add(mesh)
-          foes.current.push({ f: spawnFoe(`f${++foeSeq.current}`, posture, fx, fz), y: fy, mesh })
+          spirit.add(collar)
+          const leash = new THREE.Mesh(leashGeo, leashMat)
+          g.add(mesh); g.add(spirit); g.add(leash)
+          foes.current.push({ f: spawnFoe(`f${++foeSeq.current}`, posture, fx, fz), y: fy, mesh, spirit, leash })
         }
         onSay('a patrol comes out to meet you — they are wearing someone else\'s cruelty')
       }
@@ -4981,10 +5022,37 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
           // Re-ground every step against the LIVE surface, so a foe walks up a pad and over a road
           // instead of through the hillside or hovering above a dip.
           e.y = groundTopNear(e.f.x, e.f.z, e.y, 6) + 1
-          e.mesh.position.set(e.f.x, e.y + 0.95, e.f.z)
         }
-        // Face the keeper. Cheap, and without it three blockouts slide about like furniture.
-        e.mesh.rotation.y = Math.atan2(p.x - e.f.x, p.z - e.f.z)
+        e.mesh.position.set(e.f.x, e.y + 0.48, e.f.z)
+        // Face the keeper. Cheap, and without it the blockouts slide about like furniture. A freed
+        // Moglin faces the way he is WALKING instead — he is done looking at you.
+        e.mesh.rotation.y = hostile(e.f)
+          ? Math.atan2(p.x - e.f.x, p.z - e.f.z)
+          : Math.atan2(e.f.x - p.x, e.f.z - p.z)
+        if (e.spirit && e.leash) {
+          // ⚠ THE SPIRIT TRAILS BEHIND THE MOGLIN, ON THE FAR SIDE FROM THE KEEPER. It is being
+          // DRAGGED — canon's word — so it must never lead, or the picture inverts and reads as the
+          // spirit bringing the Moglin. That inversion is exactly the misreading the 08-16 ruling
+          // corrected in this file's data.
+          const bx = e.f.x - p.x, bz = e.f.z - p.z
+          const bd = Math.hypot(bx, bz) || 1
+          const sx = e.f.x + (bx / bd) * SPIRIT_TRAIL, sz = e.f.z + (bz / bd) * SPIRIT_TRAIL
+          const sy = groundTopNear(sx, sz, e.y, 6) + 1
+          e.spirit.position.set(sx, sy + 0.95, sz)
+          e.spirit.rotation.y = Math.atan2(p.x - sx, p.z - sz)
+          // The leash: a thin bar spanning Moglin to spirit, scaled to the gap so it always reads
+          // as a tether rather than a floating stick.
+          e.leash.position.set((e.f.x + sx) / 2, e.y + 0.8, (e.f.z + sz) / 2)
+          e.leash.rotation.y = Math.atan2(sx - e.f.x, sz - e.f.z)
+          e.leash.scale.z = Math.max(0.1, Math.hypot(sx - e.f.x, sz - e.f.z))
+        }
+        // ★ A FREED MOGLIN WALKS OFF AND IS GONE. Canon: *"the exit is not a courtesy feature. It is
+        // the canon. Build it and never hide it."* Despawning him at range is not hiding the exit —
+        // it is the exit completing. What must never happen is him standing there forever, which is
+        // the build quietly keeping him.
+        if (!hostile(e.f) && Math.hypot(e.f.x - p.x, e.f.z - p.z) > FREED_FAREWELL) {
+          g.remove(e.mesh); foes.current.splice(i, 1); continue
+        }
         if (intent.pressing && vitals.current) {
           // ★★ `pressure`, NEVER `damage`, AND THAT IS RULE 3 IN CODE. Canon: *"the game gets the
           // warmth and the lesson, not the wound."* `vitals.pressure` wears the guard down and
@@ -5008,9 +5076,14 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
             onSay('they have you — you wake at the glade, and the collar is still on him')
           }
         }
-        // The collar bar is the mesh's own scale — no HP bar, because there is no HP. It shrinks as
-        // the collar gives, so the thing you are emptying is visibly the collar and not the person.
-        const collarMesh = e.mesh.children[0] as THREE.Mesh | undefined
+        // The collar bar is the collar's own scale — no HP bar, because there is no HP. It shrinks
+        // as the collar gives, so what you are visibly emptying is the collar itself.
+        //
+        // ⚠ IT HANGS OFF THE SPIRIT, NOT THE MOGLIN, and this line silently stopped working for one
+        // build when the collar moved bodies — `e.mesh.children[0]` is the Moglin's, and he has no
+        // children, so the bar simply never updated and nothing errored. A parent-index lookup is
+        // the kind of reference that rots invisibly the moment the scene graph is rearranged.
+        const collarMesh = e.spirit?.children[0] as THREE.Mesh | undefined
         if (collarMesh) collarMesh.scale.setScalar(Math.max(0.05, collarFrac(e.f)))
       }
 
