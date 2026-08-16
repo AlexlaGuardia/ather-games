@@ -65,6 +65,19 @@ export interface BubbleConfig {
    */
   crown: number
   /**
+   * How far the cap frays, in blocks, on top of the crown.
+   *
+   * ★ THIS IS THE ONE PART OF THE SHAPE THAT IS **NOT** SCALE-FREE, AND THAT IS THE POINT. `crown`
+   * and `wobble` ride `lobeAt`, which walks the UNIT CIRCLE — so a puff is always the same fraction
+   * of the wall however big the wall is. A fringe wants the opposite: raggedness measured in BLOCKS,
+   * because it is answering the block grid rather than the fold's size. Sampled in world space, it
+   * is ~`fringeScale` blocks across on a bubble of any radius; ride the unit circle instead and the
+   * same constant is 6-block tearing at r500 and per-column dither at the r60 test bubble.
+   */
+  fringe: number
+  /** Size of one fray, in blocks. See `fringe`. */
+  fringeScale: number
+  /**
    * ★ THE PASSAGE'S BEARING, IN RADIANS, AND IT IS A PARAMETER BECAUSE IT IS THE PLAYER'S FRONT DOOR.
    * A single opening in a 6.3km circumference is undiscoverable by exploration, so the build must
    * put the player's arrival AT it rather than hoping they find it. Nothing here picks that spot.
@@ -123,6 +136,8 @@ export const DEFAULT_BUBBLE: BubbleConfig = {
   wobble: 0.03,
   lobeFreq: 5.5,
   crown: 16,
+  fringe: 2.5,
+  fringeScale: 4,
   passageBearing: 0,
   passageWidth: 6,
   passageHeight: 8,
@@ -255,9 +270,48 @@ export function shellRadiusAt(x: number, z: number, seed: number, cfg: BubbleCon
  * ⚠ CALLERS MUST ASK RATHER THAN READ `cfg.topY`. It is now the MEAN of the cap, not the top of it;
  * a caller that fills up to `topY` leaves the crowns unbuilt and puts the flat lid back, one file
  * over, where nothing would look wrong until someone stood outside and looked up.
+ *
+ * ── ★★ TWO TERMS, AND THE SECOND ONE IS WHY IT READS AS CLOUD AND NOT AS STAIRS (2026-08-16) ─────
+ * Shipped with the crown alone, the silhouette came back **blocky sawtooth** rather than puffs, and
+ * the cause is arithmetic rather than taste: a smooth low-frequency field rounded to whole blocks is
+ * FLAT for a long run near every peak and trough, then steps once. That is a terrace, and no amount
+ * of crown fixes it — a bigger crown just builds taller terraces.
+ *
+ * So the cap carries a second, small, fast term whose only job is to break those runs. The edge
+ * frays by a couple of blocks over ~7, which is the difference between a wall that was CUT to a
+ * curve and cloud that simply stops. **`crown` is the shape; `fringe` is the edge.**
+ *
+ * ⚠ AND THE FRINGE IS DELIBERATELY NOT PART OF THE ONE-FIELD COUPLING. `crown` must ride `lobeAt`
+ * or the heaps stop being heaps (see `lobeAt`); the fringe must NOT, or it is just more crown at a
+ * higher frequency and terraces the same way. `bubble.test.ts` asserts the coupling with the fringe
+ * as its tolerance rather than asserting it exactly — the weaker claim is the true one, and an
+ * independent crown noise still fails it by an order of magnitude.
  */
 export const shellCapTop = (x: number, z: number, seed: number, cfg: BubbleConfig = DEFAULT_BUBBLE): number =>
-  Math.round(cfg.topY + cfg.crown * lobeAt(x, z, seed, cfg) * 2)
+  capFromLobe(lobeAt(x, z, seed, cfg), x, z, seed, cfg)
+
+/**
+ * The cap, for a caller that already holds the lobe.
+ *
+ * ⚠ IT EXISTS SO THERE IS EXACTLY ONE COPY OF THIS EXPRESSION. `bubbleMaterialAt` reads the lobe
+ * once and derives the radius and the cap from it, so it cannot call `shellCapTop` without paying
+ * for a second `fbm2` on every cell in the shell band — but a hand-inlined second copy of the cap
+ * arithmetic is how `column.ts` and this file end up disagreeing about where the wall stops, which
+ * is a hole at the top of the world that only shows from outside, in the air, looking up.
+ */
+const capFromLobe = (n: number, x: number, z: number, seed: number, cfg: BubbleConfig): number =>
+  Math.round(cfg.topY + cfg.crown * n * 2 + cfg.fringe * fringeAt(x, z, seed, cfg) * 2)
+
+/**
+ * The fray on the cap's edge: fast, small, and measured in blocks. See `shellCapTop` and `fringe`.
+ *
+ * ⚠ SAMPLED IN WORLD SPACE ON PURPOSE — every other term in this module reads the bearing. This one
+ * is answering the BLOCK GRID, so it has to be told about blocks.
+ */
+export function fringeAt(x: number, z: number, seed: number, cfg: BubbleConfig = DEFAULT_BUBBLE): number {
+  const s = Math.max(1, cfg.fringeScale)
+  return fbm2(x / s, z / s, seed ^ 0x51ed, 2) - 0.5
+}
 
 /** Is this column strictly inside the bubble — the fold's own space, which the Wilds must not fill? */
 export const insideShell = (x: number, z: number, seed: number, cfg: BubbleConfig = DEFAULT_BUBBLE): boolean =>
@@ -369,8 +423,8 @@ export function bubbleMaterialAt(
   if (d >= r + cfg.thickness) return null
 
   // The cap is this column's own, crowned off the same lobe — see `shellCapTop`. Derived from `n`
-  // rather than called, so the crowns cost nothing on top of the radius that was already computed.
-  if (y > Math.round(cfg.topY + cfg.crown * n * 2) || y < cfg.bottomY) return null
+  // rather than called, so the crown costs nothing on top of the radius that was already computed.
+  if (y > capFromLobe(n, x, z, seed, cfg) || y < cfg.bottomY) return null
 
   // ★★ THE SHELL IS NEVER PIERCED, NOT EVEN AT THE PASSAGE — reversed 2026-08-15, and the first
   // version of this file was wrong. It cut a doorway-shaped hole clean through. Three things say no,

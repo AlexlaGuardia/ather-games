@@ -141,7 +141,7 @@ const onShell = (bearing: number) => {
         // switched off, and it would have been switched off next to real carver breaches.
         // ★ It still cannot hide one: below the crown every claimed cell is checked exactly as before,
         // and `bubble.test.ts` floods the geometry at head height where a carver would come through.
-        const top = Math.min(cfg.topY + cfg.crown, shellCapTop(wx, wz, SEED, cfg))
+        const top = Math.min(cfg.topY + cfg.crown + cfg.fringe, shellCapTop(wx, wz, SEED, cfg))
         for (let y = cfg.bottomY; y <= top; y += 2) {
           cells++
           const m = at(col, wx, y, wz)

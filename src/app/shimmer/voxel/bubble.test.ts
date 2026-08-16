@@ -105,14 +105,67 @@ console.log('\nthe pile')
   // wall wearing an unrelated bumpy hat. So: the widest bearing must also be the tallest.
   // ⚠ ASSERTED AS AN ORDERING, NOT AS "THE WIDEST IS THE TALLEST". That first form was red by ONE
   // sample out of 720: the cap is rounded to whole blocks, so the two peaks tie and the tie broke
-  // the other way. Both quantities are strictly increasing in the same lobe, and rounding is
-  // non-decreasing — so walking the bearings in order of radius, the crowns may never step DOWN.
-  // Exactly as strong, and it does not depend on where the sampling happens to land.
+  // the other way. Walking the bearings in order of radius, the crowns may not step DOWN — a claim
+  // that does not depend on where the sampling happens to land.
+  //
+  // ⚠⚠ AND THE TOLERANCE IS THE FRINGE, WHICH IS A REAL WEAKENING AND IS WRITTEN DOWN AS ONE. Once
+  // the cap grew its fray (see `shellCapTop`) the exact form became FALSE — deliberately, since the
+  // fringe's whole job is to break the terraces the coupling alone produces, and it can only do that
+  // by stepping the cap around. So the claim is now "the crown tracks the bulge to within the fray",
+  // and the honest question is whether that still bites. It does, by an order of magnitude: an
+  // independent crown noise swings ±`crown` (16 blocks) where this permits ±`fringe` (2.5), and the
+  // mutation is red. A tolerance that admitted the mutation would be a deleted assert wearing a
+  // number.
+  const slack = Math.ceil(SMALL.fringe * 2) + 1
   const byWidth = [...caps.keys()].sort((a, b) => rs[a] - rs[b])
-  let inversion = -1
-  for (let i = 1; i < byWidth.length; i++) if (caps[byWidth[i]] < caps[byWidth[i - 1]]) { inversion = i; break }
-  check('a puff that bulges out also stands taller', inversion === -1,
-    inversion < 0 ? '' : `a wider bearing crowns lower at sample ${inversion} — the crown has come off the bulge's field`)
+  let worst = 0
+  for (let i = 1; i < byWidth.length; i++) worst = Math.max(worst, caps[byWidth[i - 1]] - caps[byWidth[i]])
+  check('a puff that bulges out also stands taller', worst <= slack,
+    `a wider bearing crowns ${worst} blocks lower, past the ${slack} the fray may account for — the crown has come off the bulge's field`)
+
+  // ★★ AND THE FRAY DOES ITS ONE JOB: NO LONG FLAT RUNS ALONG THE TOP. This is the assert the
+  // shipped-and-looked-at pass bought. With the crown alone the silhouette came back as blocky
+  // sawtooth, because a smooth field rounded to whole blocks holds ONE value for a long stretch
+  // near every peak and trough and then steps once — a terrace, which a bigger crown only builds
+  // taller.
+  //
+  // ⚠⚠ AND THIS IS THE ONE ASSERT IN THE FILE THAT MUST RUN AT THE SHIPPED RADIUS. Written against
+  // `SMALL` it was **VACUOUS** — green with the fray switched off — and it took a mutation run to
+  // notice. The reason is the same scale-free property every other assert here leans on, pointing
+  // the other way: at r60 a whole lobe is ~20 blocks across, so the crown is never locally flat for
+  // long and there is no terrace to break; at r500 a lobe is ~90 blocks and the flat run is 52.
+  // **The bug only exists at the size that ships.** Everything above may use the stand-in; a claim
+  // about BLOCKS may not.
+  const shipped: BubbleConfig = { ...SMALL, radius: 500 }
+  const N2 = Math.round(2 * Math.PI * shipped.radius)      // one sample per block of circumference
+  const capsAlong: number[] = []
+  for (let i = 0; i < N2; i++) {
+    const b = (i / N2) * Math.PI * 2
+    capsAlong.push(shellCapTop(
+      Math.round(shipped.cx + Math.cos(b) * shipped.radius),
+      Math.round(shipped.cz + Math.sin(b) * shipped.radius), SEED, shipped))
+  }
+  let run = 1, longest = 1
+  for (let i = 1; i < N2; i++) {
+    run = capsAlong[i] === capsAlong[i - 1] ? run + 1 : 1
+    if (run > longest) longest = run
+  }
+  // 52 with the fray off, 13 with it on. 20 sits well clear of both — a threshold that admitted
+  // the terrace would be a deleted assert wearing a number.
+  check('the top edge frays instead of terracing', longest <= 20,
+    `${longest} blocks of wall sit at exactly one height — that is a stair, not cloud`)
+
+  // ★ AND THE FRAY HAS A SIZE — it is torn cloud, not static. The assert above is one-sided, and a
+  // mutation proved that costs something: dropping `fringeScale` to 1 makes the cap change on very
+  // nearly every block, which breaks every terrace and passes. That is dither, and at 500 blocks
+  // out it reads as a fizzing edge rather than as cloud. Mean run: 2.7 blocks shipped, 1.4 at
+  // scale 1, 9.4 with the fray off — so this pins the fray between static and stairs from below
+  // while `longest` pins it from above.
+  let steps = 0
+  for (let i = 1; i < N2; i++) if (capsAlong[i] !== capsAlong[i - 1]) steps++
+  const meanRun = N2 / (steps + 1)
+  check('and the fray is torn, not fizzing', meanRun >= 2,
+    `the cap changes every ${meanRun.toFixed(2)} blocks — that is static, not cloud`)
 
   // ★ THE BOUNDS ARE EXACT, and two reach-rejects in two files depend on it. A shape that overruns
   // `maxShellReach` does not render wrong — it renders a HOLE, because the reject upstream answers
