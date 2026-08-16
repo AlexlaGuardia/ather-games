@@ -98,6 +98,18 @@ export interface BubbleConfig {
  * keeper's own fold is a landmark on the skyline **from where Gregory is standing when he tells them
  * about it.** The tutorial geography argues for itself instead of needing a marker.
  *
+ * ── ⚠⚠ AND THAT LAST PARAGRAPH IS ARITHMETIC, NOT AN OBSERVATION (flagged 2026-08-16) ────────────
+ * **Nobody has ever seen the fold from the glade.** 157 < 192 is a true sum about the slider's far
+ * end; it is not a sighting. Asked for one on 2026-08-16 the hub window flew the glade with the day
+ * pinned and found the wall absent at viewRadius 9 (correct — 144 blocks) **and still absent at 12
+ * with 398 columns loaded after a 60s settle** — which is evidence and not proof, because that box
+ * runs SwiftShader and probably never finished streaming the ring's far edge. Unverifiable there.
+ *
+ * ★ IT MATTERS BECAUSE IT IS LOAD-BEARING: this is the stated REASON the radius is 500, so it will
+ * be cited the next time someone retunes it. And if the sightline only holds at slider MAX, it is
+ * not the tutorial's geography — it is a thing most players never see. **Needs Alex's GPU, once.**
+ * Until then this is a hypothesis with a good argument behind it, which is not the same as a fact.
+ *
  * ⚠ The centre stays a parameter. If the Wilds ever becomes its own space, 1000 costs nothing there
  * and this default should be revisited rather than inherited.
  */
