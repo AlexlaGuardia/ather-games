@@ -45,7 +45,7 @@ import { plotThreshold, hasFallenOut, chestCap } from '../voxel/plot'
 // the glade and made of cloud. Read the default here and the crossing would fire on the far side of
 // the shell from the door the generator actually built — a trigger and a doorway in two different
 // places, which is invisible until someone walks 1000 blocks looking for a way in.
-import { inPassageVolume, insideShell } from '../voxel/bubble'
+import { inPassageVolume, insideShell, bubbleSwallows, passageApproach } from '../voxel/bubble'
 import type { Space } from './save'
 
 /** Which generator version the player has already been warned about. See `staleWarned`. */
@@ -256,6 +256,15 @@ const SEED = 1337
 const H = DEFAULT_COLUMN.worldHeight
 // Load-ring radius lives in settings now (viewRadius, O panel) — the World loops read it live.
 const REACH = 6            // how far you can mine or place, in voxels
+/**
+ * How long the settle gate will hold physics after the player's own column has generated, in
+ * seconds of frame time. Past this, the ground is not late — it is absent. See the gate.
+ *
+ * Generous on purpose: the column arriving is not the same instant as its neighbours arriving, and
+ * this must never fire on a slow-but-honest stream. A wrong rescue moves a keeper who was fine; a
+ * late one costs six seconds on top of a session that was already broken.
+ */
+const SETTLE_PATIENCE = 6
 const key = (cx: number, cz: number) => `${cx},${cz}`
 /** Non-air materials light still passes through — light.ts's "air, water and foliage" contract.
  *  (Water is handled by id in the opaque callback; foliage is enumerated here.) */
@@ -545,6 +554,30 @@ const CONSOLE_CMDS: ConsoleCmd[] = [
       const z = ZONE_ANCHORS.find(zn => zn.id === q) ?? ZONE_ANCHORS.find(zn => zn.id.startsWith(q))
       if (!z) return `no such place: ${q} — bare /goto lists them`
       if (!c.isOwner) return `${z.id}: ${bearing(z.x - p.x, z.z - p.z)} — teleport is keeper-of-the-realm only`
+      // ── ★★ AN ANCHOR INSIDE THE FOLD IS A DOOR, NOT A DESTINATION (2026-08-16) ─────────────────
+      // `/goto garden` used to hand `tp` the anchor's raw centre, and the landing altitude comes
+      // from `columnHeight` — the CONTINENT's rule, which has never heard of the bubble. The garden
+      // anchor is at (0,0), dead centre of the shell, whose interior is AIR for all 256 blocks: the
+      // keeper arrived in a column with zero solid cells, the settle gate probed `py - 3`, found
+      // air, and returned early every frame FOREVER. Listed, tab-completable, owner-gated, and a
+      // guaranteed hang. 7 of the 8 anchors settle; this was the one.
+      //
+      // ★ ASKED OF THE GUARD, NOT HARDCODED FOR `garden`, and this is `bubbleSwallows`' FIRST LIVE
+      // CALLER — until now it existed only inside a test, checked against a hand-written list that
+      // happened to leave `garden` out. Fed the real anchor it is exactly the question this command
+      // needs answered ("is this centre inside the fold"), so any future anchor swallowed by any
+      // future fold routes to a door instead of shipping the same hang a second time.
+      //
+      // ⚠ NO EXEMPTION LIST HERE, ON PURPOSE. `WILDS_SWALLOW_EXEMPT` answers a different question —
+      // *"is this collision a bug"* — and `garden` is on it because the collision is intended. It is
+      // still not somewhere a keeper can stand. Pass the list here and the one anchor that needs
+      // this routing is the one anchor that would not get it.
+      if (bubbleSwallows(WILDS_BUBBLE, [z]).length > 0) {
+        const at = passageApproach(SEED, WILDS_BUBBLE)
+        // Say what happened. A keeper who asked for one place and was silently put down somewhere
+        // else 500 blocks away reads it as the command being broken.
+        return `${c.tp(at.x, at.z)}\n${z.id} is a fold — you are at its door, not inside it. walk into the seam.`
+      }
       return c.tp(z.x, z.z)
     },
     suggest: () => ZONE_ANCHORS.map(z => z.id) },
@@ -3005,6 +3038,10 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
    */
   const staleWarned = useRef<boolean>(false)
   const settled = useRef(false)
+  /** Seconds the settle gate has been holding physics. See the gate for why it is counted at all. */
+  const settleHeld = useRef(0)
+  /** How many times the gate has given up and sent the keeper home. Caps at one — see the gate. */
+  const settleRescues = useRef(0)
   // The walker. Feet-based; the camera is derived from it every frame (feet + eased eye).
   const loco = useRef(createLoco(SPAWN_X + 0.5, columnHeight(SPAWN_X, SPAWN_Z, SEED) + 1, SPAWN_Z + 0.5))
 
@@ -4928,8 +4965,86 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
     if (!settled.current) {
       // Probes the column UNDER THE PLAYER (was hardcoded to spawn) — at boot they are the same
       // spot, and generalizing is what lets the console's tp reuse this gate at any destination.
-      if (isSolid(voxel(Math.floor(p.x), Math.floor(p.y) - 3, Math.floor(p.z)))) settled.current = true   // real ground, not the phantom floor
-      else { onPos(p, 0); onStats(`${cols.current.size} columns · generating…`); return }
+      if (isSolid(voxel(Math.floor(p.x), Math.floor(p.y) - 3, Math.floor(p.z)))) {  // real ground, not the phantom floor
+        settled.current = true
+        settleHeld.current = 0
+      } else {
+        // ── ★★ A GATE THAT CAN WAIT FOREVER IS NOT A GATE, IT IS A HANG (2026-08-16) ────────────
+        // This gate is the mechanism behind EVERY void bug of the last two days — not the cause of
+        // any of them, but the reason each one was unrecoverable instead of merely wrong. It holds
+        // physics until there is ground, and it never once asked whether ground was coming. Land in
+        // a column that generates nothing at any altitude (the fold's hollow interior, reachable by
+        // `/goto garden`, by an old save's coordinates, by flying over the wall) and it returns
+        // early every frame for the rest of the session. The player cannot walk, fall, or recover.
+        //
+        // Two ways out, and the FIRST one needs no waiting at all:
+        //
+        // ⚠⚠ BOTH ASK THE BODY, NEVER THE CAMERA, AND THE FIRST VERSION OF THIS ASKED THE CAMERA.
+        // The probe above reads `p` (the eye) because a stranded eye is what hung the gate on 08-15
+        // — but `p` is R3F's camera, and until the first frame places it that is the DEFAULT
+        // `[0, 0, 5]`: the world origin, which is dead centre of the fold. So the void test below
+        // fired on frame one of EVERY boot, spent the one rescue before the keeper had moved, and
+        // announced "there is no ground inside your own fold" to someone standing in the glade. The
+        // next real void then took the second branch and released the gate into a free fall.
+        // `loco` is the walker and is constructed AT the spawn point, so it is never meaningless.
+        // ★ A COORDINATE THAT HAS NOT BEEN SET YET IS NOT A COORDINATE. Same family as the save that
+        // stored a position without its space: the numbers were always there and never meant a thing.
+        const lc0 = loco.current
+        settleHeld.current += dt
+        const generated = cols.current.has(key(Math.floor(lc0.px / SECTION), Math.floor(lc0.pz / SECTION)))
+        // (1) GEOMETRY, KNOWN IMMEDIATELY. The shell is a pure function of position — it needs
+        //     nothing streamed and is true of exactly this corruption, which is why the save-restore
+        //     rescue uses the same test. Inside it there is no ground at ANY altitude, so waiting is
+        //     not optimism, it is a promise that cannot be kept.
+        const inTheVoid = space.current === 'wilds' && insideShell(lc0.px, lc0.pz, SEED, WILDS_BUBBLE)
+        // (2) THE BACKSTOP, for a groundless spot no geometry predicts. Only counted once the
+        //     player's OWN column has generated: while it is still streaming, waiting is exactly
+        //     right and the budget must not run.
+        //     ⚠ COUNTED IN CLAMPED FRAME TIME, NOT WALL CLOCK, and that is deliberate. A tab in the
+        //     background has its rAF throttled to a crawl — real seconds pour past while the world
+        //     barely advances — and a wall-clock budget would fire on a perfectly healthy stream.
+        //     That exact confusion cost a day on 08-15 and got a real bug retracted as "throttling".
+        const patienceGone = generated && settleHeld.current > SETTLE_PATIENCE
+        if (inTheVoid || patienceGone) {
+          const lc = lc0
+          // ⚠ ONE RESCUE, THEN RELEASE. If home itself will not settle the world is not generating
+          // at all, and hopping the keeper back and forth forever is the same disease with more
+          // steps. Releasing the gate lets them fall, which is visibly broken — and visibly broken
+          // is strictly better than frozen, because it can be reported.
+          if (settleRescues.current > 0) {
+            settled.current = true
+            settleHeld.current = 0
+            onSay('the world is not generating under you — reload the page')
+          } else {
+            settleRescues.current++
+            settleHeld.current = 0
+            if (space.current === 'plot') {
+              const t = plotThreshold(SEED)
+              lc.px = t.x + 0.5; lc.py = t.y; lc.pz = t.z + 0.5
+            } else {
+              lc.px = SPAWN_X + 0.5; lc.pz = SPAWN_Z + 0.5
+              lc.py = columnHeight(SPAWN_X, SPAWN_Z, SEED) + 1
+            }
+            lc.vy = 0; lc.hvx = 0; lc.hvz = 0; lc.stepSmooth = 0; lc.airborne = false
+            camera.position.set(lc.px, eyeY(lc), lc.pz)
+            // Said out loud, and said TRUTHFULLY. A keeper silently moved 500 blocks reads it as a
+            // second bug on top of the first.
+            onSay(inTheVoid
+              ? 'there is no ground inside your own fold — you are back at the glade'
+              : 'nothing generated where you landed — you are back at the glade')
+          }
+          onPos(p, 0)
+          return
+        }
+        onPos(p, 0)
+        // ── ★ AND THE HUD STOPS ASSERTING A CAUSE IT NEVER CHECKED ─────────────────────────────
+        // `N columns · generating…` printed identically for a slow generator and for a destination
+        // that cannot generate. It has now misnamed its own cause twice in two days — a day lost to
+        // it each time. The two states are trivially distinguishable: has the player's own column
+        // arrived? If it has, generation is not what we are waiting on.
+        onStats(`${cols.current.size} columns · ${generated ? 'no ground here' : 'generating…'}`)
+        return
+      }
     }
 
     // ── the gate ──────────────────────────────────────────────────────────────────────────────

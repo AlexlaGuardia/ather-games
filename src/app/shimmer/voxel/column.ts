@@ -164,6 +164,22 @@ export const WILDS_BUBBLE: BubbleConfig = {
 }
 
 /**
+ * ── ★★ THE ONE ANCHOR THIS BUBBLE IS ALLOWED TO SWALLOW, AND WHY (declared 2026-08-16) ──────────
+ * `garden` sits at (0,0) — the exact centre of `WILDS_BUBBLE` — and that is CORRECT: this bubble IS
+ * the garden's outside, and the zone entry named here shapes the terrain around the fold rather than
+ * describing ground inside it. There is no conflict to fix.
+ *
+ * ⚠ IT IS WRITTEN DOWN BECAUSE "INTENDED" AND "FORGOTTEN" LOOK IDENTICAL FROM THE OUTSIDE. The
+ * collision went unnoticed for a day precisely because the only list it was ever checked against
+ * quietly did not contain it, and the cost was `/goto garden` teleporting keepers into a void with
+ * no ground at any altitude. An exemption that is stated can be argued with; an omission cannot.
+ *
+ * ⚠ NOTHING ELSE GOES IN HERE WITHOUT A MEASUREMENT. Adding an id to silence a red guard is how the
+ * glade gets buried — that is the exact failure `bubbleSwallows` was written to prevent.
+ */
+export const WILDS_SWALLOW_EXEMPT = ['garden'] as const
+
+/**
  * Could this column hold any part of the bubble? A cheap rejection so the ~every column in the
  * world that has nothing to do with it pays one hypot and leaves.
  *

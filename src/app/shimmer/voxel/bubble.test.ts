@@ -197,6 +197,24 @@ console.log('\nthe siting')
     'at r1000 the glade is buried and nothing about the render would look wrong')
   check('and does not cry wolf about Gloview', !bubbleSwallows(asAsked, STORY_LANDMARKS).some(s => s.id === 'gloview-village'),
     'Gloview clears r1000 by 156 blocks — a guard that flags everything gets switched off')
+
+  // ── ★★ AND THE LIMIT OF EVERY ASSERT ABOVE, WRITTEN DOWN WHERE IT MISLED SOMEONE (2026-08-16) ──
+  // All four of these check a HAND-WRITTEN list. On 2026-08-16 the world lane fed the same guard the
+  // real `ZONE_ANCHORS` registry and it returned `garden@0` — an anchor at the exact centre of the
+  // shipped bubble, in a column with no ground at any altitude, which `/goto garden` had been
+  // teleporting keepers into for a day. Nothing here was wrong. The literal simply did not contain
+  // the one entry that mattered, and a guard is only ever as true as its input.
+  //
+  // ⚠ THE REGISTRY-LEVEL ASSERT LIVES IN `bubble-wiring.test.ts` (§7) BY DESIGN — this file is the
+  // pure-core oracle and importing `zones` would give it knowledge of the world it exists not to
+  // have. What is asserted HERE is only the mechanism the fix leans on: an exemption exempts.
+  check('an exempted landmark is not reported',
+    bubbleSwallows(asAsked, STORY_LANDMARKS, ['moonwell-glade']).length === 0,
+    'a collision that has been declared is the caller\'s business, not a failure')
+  check('and exempting one does not silence the rest',
+    bubbleSwallows({ ...asAsked, radius: 1200 }, STORY_LANDMARKS, ['moonwell-glade'])
+      .some(s => s.id === 'gloview-village'),
+    '★ an exemption list is a named door, never an off switch')
 }
 
 console.log(`\n${pass} passed, ${fail} failed`)

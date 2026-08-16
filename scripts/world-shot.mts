@@ -21,6 +21,15 @@
 // world with the fewest trees in it. The console is the only mover the page exposes to a script,
 // and `/goto` is already the command a human uses for exactly this. Zones: `/goto` bare lists them.
 //
+// ── ⚠⚠ AND UNTIL 2026-08-16 IT NEVER MOVED ANYTHING. READ THIS BEFORE TRUSTING AN OLD SHOT. ──────
+// `/goto <zone>` splits: the COMPASS half is view-grade, the TELEPORT half is keeper-of-the-realm
+// only. A headless profile carries no owner cookie, so every `WORLD_GOTO` run typed the command,
+// got a polite bearing back, and photographed **the glade** — the exact failure the paragraph above
+// says this flag exists to prevent, wearing the flag's own name. Nothing errored, nothing was empty,
+// and the filename said `twilight-thicket`. Any zone shot taken before this date is the glade.
+// The fix is the `/owner` visit below; `OWNER_KEY` comes from `/root/ather-games/.env`.
+// ★ THE GENERAL SHAPE, third time in two days: A COMMAND THAT ANSWERS IS NOT A COMMAND THAT RAN.
+//
 // ★ WHY THIS IS AWKWARD AND WORTH IT: unlike the icon sheet, the 3D world cannot be rendered from
 // pure code — it needs a GL context, a canvas, a streaming loop and a HUD. So this drives the real
 // page in the real renderer, which is the only way to see what actually ships.
@@ -90,9 +99,30 @@ try {
     else if (LOG && LOG.test(m.text())) console.log(`  ‹page› ${m.text()}`)
   })
 
+  // The owner cookie, before the page — without it `/goto <zone>` answers with a bearing and moves
+  // nobody. Only needed when we intend to drive the console; a plain shot stays anonymous.
+  if (GOTO) {
+    const KEY = process.env.OWNER_KEY
+    if (!KEY) {
+      // ⚠ LOUD, AND IT STOPS. Carrying on would hand back a glade shot under the requested zone's
+      // filename, which is how this went unnoticed for weeks in the first place.
+      console.error('WORLD_GOTO needs OWNER_KEY (teleport is owner-gated) — `set -a; . /root/ather-games/.env; set +a`')
+      process.exit(2)
+    }
+    // ⚠ `globalThis.URL` — this module's own `const URL` shadows the constructor.
+    await page.goto(`${new globalThis.URL(URL).origin}/owner?key=${encodeURIComponent(KEY)}`, { waitUntil: 'networkidle2', timeout: 30_000 })
+  }
+
   await page.goto(URL, { waitUntil: 'networkidle2', timeout: 60_000 })
   // The world streams; there is no "ready" event to wait on, so give it wall-clock and say so.
   await new Promise(r => setTimeout(r, SETTLE * 1000))
+
+  if (GOTO) {
+    // ⚠ Asked from the GAME page: `/owner` sets the cookie and redirects, so a check issued there
+    // races its own navigation and reports false while the cookie is perfectly good.
+    const owner = await page.evaluate(() => fetch('/api/owner', { cache: 'no-store' }).then(r => r.json()).then(d => !!d.owner).catch(() => false))
+    if (!owner) { console.error('the owner cookie did not take — the shot would be of the glade, not of ' + GOTO); process.exit(2) }
+  }
 
   if (GOTO) {
     // T opens the chat, Escape closes it. Typed through the real keyboard because the console is a

@@ -108,11 +108,28 @@ export const DEFAULT_BUBBLE: BubbleConfig = {
  *
  * Returns the landmarks that fall inside, so a caller can name them rather than just fail. Call it
  * at wiring time with whatever the target world holds; an empty list is the answer you want.
+ *
+ * ── ★★ FEED IT THE REGISTRY, NOT A LITERAL (2026-08-16, the world lane's find) ──────────────────
+ * For a day this function was correct and answered a question nobody was asking. Its only caller was
+ * a test holding a hand-written three-item list, and that list omitted the `garden` anchor — which
+ * sits at (0,0), the exact centre of the shipped bubble. So the guard whose own comment calls it
+ * *"the thing that will actually protect the world"* reported clean while the world's most-used
+ * anchor was buried, and `/goto garden` shipped as a permanent hang. **A guard checked against a
+ * literal is a guard checked against the author's memory.** Same family as the handoff-sort lie:
+ * believe the registry, not the note.
+ *
+ * ── ★ `exempt` EXISTS SO AN INTENDED COLLISION IS DECLARED RATHER THAN OMITTED ──────────────────
+ * The garden anchor being inside the bubble IS correct — the bubble is that fold's outside, and the
+ * zone it names shapes the terrain AROUND it. But "intended" and "forgotten" look identical to a
+ * filtered list, and the only difference that matters is whether anyone wrote down which one it is.
+ * An id passed here must carry its reason at the call site; anything not named is still caught.
  */
 export function bubbleSwallows(
   cfg: BubbleConfig, landmarks: readonly { id: string; x: number; z: number }[],
+  exempt: readonly string[] = [],
 ): { id: string; dist: number }[] {
   return landmarks
+    .filter(l => !exempt.includes(l.id))
     .map(l => ({ id: l.id, dist: Math.hypot(l.x - cfg.cx, l.z - cfg.cz) }))
     .filter(l => l.dist <= cfg.radius)
 }
@@ -171,6 +188,39 @@ export function inPassage(x: number, z: number, cfg: BubbleConfig = DEFAULT_BUBB
   let delta = Math.abs(bearing - cfg.passageBearing) % (Math.PI * 2)
   if (delta > Math.PI) delta = Math.PI * 2 - delta
   return delta <= passageHalfAngle(cfg)
+}
+
+/**
+ * How far beyond the shell's outer face the door's approach stands, in blocks.
+ *
+ * ⚠ IT HAS TO CLEAR THE CROSSING TRIGGER, NOT JUST THE WALL. `inPassageVolume` accepts about a block
+ * past the shell's outer face, so a standoff of 1 or 2 would drop the keeper straight THROUGH the
+ * door they were brought to see. 10 puts them a few paces back on open ground, looking at it.
+ */
+export const APPROACH_STANDOFF = 10
+
+/**
+ * Where a keeper should be put down when they ask for a place that is inside this bubble: on real
+ * ground outside the wall, on the door's own bearing, facing it.
+ *
+ * ── ★★ THE FIX FOR "TELEPORTED INTO A PLACE THAT HAS NO GROUND" (2026-08-16) ────────────────────
+ * `/goto garden` handed `tp` a landing from `columnHeight` — the CONTINENT's rule, which knows
+ * nothing about this bubble — so the keeper arrived at y134 in a column with **zero solid cells at
+ * any altitude** and hung there forever. The destination was never wrong as a *place*; it was wrong
+ * as a *coordinate*. The fold's centre is not somewhere you stand, it is somewhere you enter, and
+ * the only standable answer to "take me to the garden" is its door.
+ *
+ * ★ ONE EVALUATION, NOT AN ITERATION — `shellRadiusAt` normalises its input, so the radius depends
+ * on the BEARING alone and any point along it gives the same answer. Same trick as `wildsSeamAnchor`,
+ * which lands one block off the wall because it is drawing the seam; this stands back to look at it.
+ */
+export function passageApproach(
+  seed: number, cfg: BubbleConfig = DEFAULT_BUBBLE, standoff: number = APPROACH_STANDOFF,
+): { x: number; z: number } {
+  const b = cfg.passageBearing
+  const r = shellRadiusAt(cfg.cx + Math.cos(b) * cfg.radius, cfg.cz + Math.sin(b) * cfg.radius, seed, cfg)
+  const d = r + cfg.thickness + standoff
+  return { x: Math.floor(cfg.cx + Math.cos(b) * d), z: Math.floor(cfg.cz + Math.sin(b) * d) }
 }
 
 /**

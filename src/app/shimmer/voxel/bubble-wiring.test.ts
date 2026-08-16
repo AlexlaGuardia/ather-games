@@ -11,8 +11,11 @@
 // file asserts against `generateColumn` — the real generator, all seven stages — and against
 // `generatedVoxel`, the save's baseline. Both of those are what a player meets.
 
-import { generateColumn, generatedVoxel, WILDS_BUBBLE, SECTION, Column, DEFAULT_COLUMN } from './column'
-import { inShell, insideShell, inPassage, inPassageVolume, distFromAxis, shellRadiusAt } from './bubble'
+import { generateColumn, generatedVoxel, WILDS_BUBBLE, WILDS_SWALLOW_EXEMPT, SECTION, Column, DEFAULT_COLUMN } from './column'
+import {
+  inShell, insideShell, inPassage, inPassageVolume, distFromAxis, shellRadiusAt,
+  bubbleSwallows, passageApproach,
+} from './bubble'
 import { columnHeight } from './height'
 import { MAT } from './depth'
 import { AIR } from './section'
@@ -166,7 +169,11 @@ const onShell = (bearing: number) => {
   // ★ The bubble must be invisible everywhere it is not. `bubbleMaterialAt` returns null outside its
   // own footprint precisely so the Wilds' generator keeps answering — a module that returned AIR
   // "helpfully" would punch its own shape into terrain a thousand blocks away.
-  for (const z of ZONE_ANCHORS.filter(a => a.id !== 'garden')) {
+  // ⚠ The skip is `WILDS_SWALLOW_EXEMPT`, not a hand-typed `!== 'garden'`. This filter used to be
+  // exactly that literal — the same undeclared omission, one file over, that let `/goto garden`
+  // ship as a hang. If a second anchor is ever exempted, this loop must learn about it in the same
+  // breath rather than quietly keep asserting ground under a place that no longer has any.
+  for (const z of ZONE_ANCHORS.filter(a => !WILDS_SWALLOW_EXEMPT.includes(a.id as never))) {
     const col = gen(colOrigin(z.x), colOrigin(z.z))
     const h = columnHeight(z.x, z.z, SEED)
     let cloud = 0
@@ -174,6 +181,51 @@ const onShell = (bearing: number) => {
     ok(cloud === 0, `${z.id} has no cloud-wall in it`)
     ok(at(col, z.x, h, z.z) !== AIR, `${z.id} still has ground under the keeper`)
   }
+}
+
+// ── 7. THE GUARD, FED THE REAL REGISTRY ─────────────────────────────────────────────────────────
+{
+  // ★★ THIS IS THE ASSERT THAT WAS MISSING, AND IT IS THE WHOLE LESSON OF 2026-08-16. `bubble.test.ts`
+  // asserts "the shipped bubble swallows nothing" against a hand-written three-item literal that does
+  // not contain the `garden` anchor. It passed every run while `garden` sat at (0,0) — dead centre of
+  // the shell — and `/goto garden` teleported keepers into a column with no ground at any altitude.
+  // The guard was correct the whole time. It was asked about the author's memory instead of the world.
+  const swallowed = bubbleSwallows(cfg, ZONE_ANCHORS, WILDS_SWALLOW_EXEMPT)
+  ok(swallowed.length === 0,
+    `★ the shipped bubble swallows no undeclared anchor — got ${swallowed.map(s => `${s.id}@${Math.round(s.dist)}`).join(', ')}`)
+
+  // ★ AND THE EXEMPTION IS PROVEN TO BE DOING SOMETHING. An exempt list that covers nothing real
+  // makes the assert above pass for the wrong reason — it would then be green against a registry
+  // whose collisions had all been quietly renamed away.
+  const unexempt = bubbleSwallows(cfg, ZONE_ANCHORS)
+  ok(unexempt.length === 1 && unexempt[0].id === 'garden',
+    `garden is the one declared exception, and only it — got ${unexempt.map(s => s.id).join(', ') || 'nothing'}`)
+
+  // ★ WHY THAT EXCEPTION CANNOT SIMPLY BE IGNORED: its centre is not somewhere a keeper can be put
+  // down. This is the hang itself, asserted — 0 solid cells in the whole 256-block column.
+  const g = ZONE_ANCHORS.find(a => a.id === 'garden')!
+  const gcol = gen(colOrigin(g.x), colOrigin(g.z))
+  let solid = 0
+  for (let y = 0; y < DEFAULT_COLUMN.worldHeight; y++) if (at(gcol, g.x, y, g.z) !== AIR) solid++
+  ok(solid === 0, `★ the garden anchor's column has no ground at any altitude (${solid} solid cells) — a landing there hangs the settle gate`)
+}
+
+// ── 8. THE DOOR'S APPROACH IS SOMEWHERE A KEEPER CAN ACTUALLY STAND ─────────────────────────────
+{
+  // Where `/goto garden` now puts them instead. Three separate claims, and the third is the one that
+  // is easy to get wrong: a standoff too small drops the keeper straight THROUGH the door they were
+  // brought to look at, which reads as the command teleporting them somewhere random.
+  const a = passageApproach(SEED, cfg)
+  const h = columnHeight(a.x, a.z, SEED)
+  const col = gen(colOrigin(a.x), colOrigin(a.z))
+  ok(at(col, a.x, h, a.z) !== AIR, `★ the approach stands on real ground (y${h})`)
+  ok(!insideShell(a.x, a.z, SEED, cfg) && !inShell(a.x, a.z, SEED, cfg),
+    `★ and outside the wall, not in it (${distFromAxis(a.x, a.z, cfg).toFixed(1)} from the axis, shell at ${shellRadiusAt(a.x, a.z, SEED, cfg).toFixed(1)})`)
+  ok(!inPassageVolume(a.x, h + 1, a.z, SEED, h, cfg),
+    '★ and clear of the crossing trigger — you are put down facing the door, not carried through it')
+  // ⚠ ON the bearing, so the door is straight ahead. Off-bearing ground is standable and useless:
+  // the keeper would be looking at 3km of identical cloud wall with no way to tell where to walk.
+  ok(inPassage(a.x, a.z, cfg), 'and on the door\'s own bearing, so the seam is in front of them')
 }
 
 console.log(`\nbubble wiring: ${pass} passed, ${fails.length} failed`)
