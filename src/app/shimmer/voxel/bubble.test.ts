@@ -10,7 +10,8 @@
 
 import {
   DEFAULT_BUBBLE, bubbleMaterialAt, insideShell, inShell, inPassage, inPassageVolume,
-  shellRadiusAt, distFromAxis, bubbleSwallows, type BubbleConfig,
+  shellRadiusAt, distFromAxis, bubbleSwallows, shellCapTop, lobeAt, maxShellRadius,
+  type BubbleConfig,
 } from './bubble'
 import { AIR } from './section'
 
@@ -53,8 +54,90 @@ console.log('the shell')
 
   check('the wall is solid at head height',
     bubbleMaterialAt(SMALL.radius + 1, GROUND + 2, 0, SEED, GROUND, { ...SMALL, passageBearing: Math.PI }) === WALL)
-  check('the wall stops at its top', bubbleMaterialAt(SMALL.radius + 1, SMALL.topY + 1, 0, SEED, GROUND, SMALL) === null)
-  check('the wall stops at its base', bubbleMaterialAt(SMALL.radius + 1, SMALL.bottomY - 1, 0, SEED, GROUND, SMALL) === null)
+  // ⚠ ASKED OF `shellCapTop`, NOT OF `topY + 1`. Since the cap crowns, `topY` is the MEAN height of
+  // the lid and a column whose puff stands proud is still solid well above it — the old form of this
+  // assert was not a stricter test, it was a test of a number that no longer describes the wall.
+  //
+  // ⚠ AND THE COLUMN IS DERIVED, NOT `radius + 1`. With the bulge at ±3% that literal lands INSIDE
+  // the wall on some bearings and outside it on others, so the assert would have been reporting the
+  // seed rather than the cap. `lobeAt` reads the bearing alone, so any point on this ray answers for
+  // the whole ray.
+  const SEALED: BubbleConfig = { ...SMALL, passageBearing: Math.PI }
+  const capX = Math.floor(shellRadiusAt(100, 0, SEED, SEALED)) + 1
+  const cap = shellCapTop(capX, 0, SEED, SEALED)
+  check('the wall stops at its own top', bubbleMaterialAt(capX, cap + 1, 0, SEED, GROUND, SEALED) === null, `cap ${cap}`)
+  check('and is still wall at that top', bubbleMaterialAt(capX, cap, 0, SEED, GROUND, SEALED) === WALL, `cap ${cap}, x ${capX}`)
+  check('the wall stops at its base', bubbleMaterialAt(capX, SEALED.bottomY - 1, 0, SEED, GROUND, SEALED) === null)
+}
+
+// ── ★ THE WALL IS A PILE OF CLOUDS, WHICH IS A CLAIM AND NOT A CONFIG VALUE ───
+console.log('\nthe pile')
+{
+  // ★ WHY THIS SECTION EXISTS AT ALL. Every number that makes the shell read as heaped cloud rather
+  // than as a tank lives in the config, and a config value proves nothing — it is exactly as true
+  // with `wobble: 0`. What has to be asserted is that the SHAPE arrives: that the wall leans in and
+  // out by a real amount, that the skyline is not a level line, and that the two agree with each
+  // other. Sweep the bearings and measure it.
+  const N = 720
+  const rs: number[] = [], caps: number[] = [], lobes: number[] = []
+  for (let i = 0; i < N; i++) {
+    const b = (i / N) * Math.PI * 2
+    const x = SMALL.cx + Math.cos(b) * SMALL.radius, z = SMALL.cz + Math.sin(b) * SMALL.radius
+    rs.push(shellRadiusAt(x, z, SEED, SMALL))
+    caps.push(shellCapTop(x, z, SEED, SMALL))
+    lobes.push(lobeAt(x, z, SEED, SMALL))
+  }
+  const span = (a: number[]) => Math.max(...a) - Math.min(...a)
+
+  // The bulge is real. Stated as a FRACTION of the band the config allows, so it stays true if the
+  // radius is ever retuned — and it fails loudly if the lobe field is ever flattened to a constant.
+  const band = 2 * SMALL.wobble * SMALL.radius
+  check('the wall bulges through most of the band it is given', span(rs) > band * 0.6,
+    `${span(rs).toFixed(1)} blocks of a possible ${band.toFixed(1)}`)
+
+  // ★ AND THE SKYLINE IS NOT A LINE. This is the half a player sees from the glade — see
+  // `shellCapTop`. A flat lid is the failure mode, so the assert is about SPREAD, not about height.
+  check('the skyline is heaped, not level', span(caps) > SMALL.crown,
+    `${span(caps)} blocks between the lowest and highest crown`)
+
+  // ★★ THE CLAIM THAT WOULD ROT SILENTLY: bulge and crown are ONE field. Split them onto two noises
+  // and every assert above still passes while the wall stops reading as cloud — it becomes a bumpy
+  // wall wearing an unrelated bumpy hat. So: the widest bearing must also be the tallest.
+  // ⚠ ASSERTED AS AN ORDERING, NOT AS "THE WIDEST IS THE TALLEST". That first form was red by ONE
+  // sample out of 720: the cap is rounded to whole blocks, so the two peaks tie and the tie broke
+  // the other way. Both quantities are strictly increasing in the same lobe, and rounding is
+  // non-decreasing — so walking the bearings in order of radius, the crowns may never step DOWN.
+  // Exactly as strong, and it does not depend on where the sampling happens to land.
+  const byWidth = [...caps.keys()].sort((a, b) => rs[a] - rs[b])
+  let inversion = -1
+  for (let i = 1; i < byWidth.length; i++) if (caps[byWidth[i]] < caps[byWidth[i - 1]]) { inversion = i; break }
+  check('a puff that bulges out also stands taller', inversion === -1,
+    inversion < 0 ? '' : `a wider bearing crowns lower at sample ${inversion} — the crown has come off the bulge's field`)
+
+  // ★ THE BOUNDS ARE EXACT, and two reach-rejects in two files depend on it. A shape that overruns
+  // `maxShellReach` does not render wrong — it renders a HOLE, because the reject upstream answers
+  // "not mine" and the wall is simply never built there.
+  check('nothing reaches past the bound the rejects trust', Math.max(...rs) <= maxShellRadius(SMALL),
+    `${Math.max(...rs).toFixed(2)} vs ${maxShellRadius(SMALL).toFixed(2)}`)
+
+  // ★ AND THE PUFFS ARE THE SAME SIZE ON ANY BUBBLE. `lobeFreq` is a radius in noise space walked
+  // along the unit circle, so the lobe COUNT is scale-free — which is the only reason this whole
+  // file may test a radius-60 stand-in and claim anything about the 500 that ships.
+  let crossings = 0
+  for (let i = 0; i < N; i++) if ((lobes[i] < 0) !== (lobes[(i + 1) % N] < 0)) crossings++
+  const expected = Math.round(Math.PI * 2 * SMALL.lobeFreq)
+  check('the puffs are the size the lobe count says', crossings >= expected * 0.4 && crossings <= expected * 2.2,
+    `${crossings} sign changes around the ring against ~${expected} lobes`)
+  const big: BubbleConfig = { ...SMALL, radius: 500 }
+  let bigCrossings = 0
+  for (let i = 0; i < N; i++) {
+    const b = (i / N) * Math.PI * 2, b2 = ((i + 1) / N) * Math.PI * 2
+    const a = lobeAt(Math.cos(b) * 500, Math.sin(b) * 500, SEED, big)
+    const c = lobeAt(Math.cos(b2) * 500, Math.sin(b2) * 500, SEED, big)
+    if ((a < 0) !== (c < 0)) bigCrossings++
+  }
+  check('and the shipped radius has the same number of them', bigCrossings === crossings,
+    `${bigCrossings} on r500 vs ${crossings} on r${SMALL.radius} — the shape is no longer scale-free`)
 }
 
 // ── ★ `null` IS NOT `AIR`, AND THE WILDS DEPENDS ON THE DIFFERENCE ────────────

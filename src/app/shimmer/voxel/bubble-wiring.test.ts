@@ -14,7 +14,7 @@
 import { generateColumn, generatedVoxel, WILDS_BUBBLE, WILDS_SWALLOW_EXEMPT, SECTION, Column, DEFAULT_COLUMN } from './column'
 import {
   inShell, insideShell, inPassage, inPassageVolume, distFromAxis, shellRadiusAt,
-  bubbleSwallows, passageApproach,
+  bubbleSwallows, passageApproach, shellCapTop,
 } from './bubble'
 import { columnHeight } from './height'
 import { MAT } from './depth'
@@ -39,9 +39,17 @@ const at = (col: Column, wx: number, y: number, wz: number) => {
 /** Snap a world coord down to its column origin. */
 const colOrigin = (v: number) => Math.floor(v / SECTION) * SECTION
 /** A point on the shell at a given bearing. */
+// ⚠ THE WALL, NOT THE MEAN RADIUS (2026-08-16). This used to place the point at `cfg.radius` flat.
+// While the bulge was ±5 blocks against a 3-block wall that was already only luck — it landed in the
+// wall on the bearings this file happens to sample. At ±15 the luck ran out and two asserts went red
+// reporting **zero cloud-wall in the column**, which reads exactly like the wiring having come
+// undone. The wall was never missing; the probe was standing next to it.
+// ★ `shellRadiusAt` reads the BEARING alone, so one evaluation anywhere on the ray answers for the
+// whole ray — the same trick `seam.ts` and `passageApproach` use, for the same reason.
 const onShell = (bearing: number) => {
-  const r = cfg.radius
-  return { x: Math.round(cfg.cx + Math.cos(bearing) * r), z: Math.round(cfg.cz + Math.sin(bearing) * r) }
+  const r = shellRadiusAt(cfg.cx + Math.cos(bearing) * cfg.radius, cfg.cz + Math.sin(bearing) * cfg.radius, SEED, cfg)
+  const d = r + 1                                       // inside the shell band, which spans [r, r + thickness)
+  return { x: Math.round(cfg.cx + Math.cos(bearing) * d), z: Math.round(cfg.cz + Math.sin(bearing) * d) }
 }
 
 // ── 1. THE DOOR IS WHERE THE PLAYER IS ──────────────────────────────────────────────────────────
@@ -125,7 +133,16 @@ const onShell = (bearing: number) => {
         const shell = inShell(wx, wz, SEED, cfg)
         const inside = insideShell(wx, wz, SEED, cfg)
         if (!shell && !inside) continue
-        for (let y = cfg.bottomY; y <= cfg.topY; y += 2) {
+        // ⚠ THE TOP OF THE SWEEP IS THIS COLUMN'S OWN CAP, NOT `cfg.topY` (2026-08-16). When the wall
+        // became a pile of clouds the cap started crowning ±`crown` blocks around `topY`, and this
+        // loop — still demanding CLOUD_WALL all the way to the mean — reported **1005 breaches** on a
+        // wall with nothing wrong with it: every column whose puff sits LOW is empty above its own
+        // crown, which is the shape working. A test that reads a deliberate silhouette as damage gets
+        // switched off, and it would have been switched off next to real carver breaches.
+        // ★ It still cannot hide one: below the crown every claimed cell is checked exactly as before,
+        // and `bubble.test.ts` floods the geometry at head height where a carver would come through.
+        const top = Math.min(cfg.topY + cfg.crown, shellCapTop(wx, wz, SEED, cfg))
+        for (let y = cfg.bottomY; y <= top; y += 2) {
           cells++
           const m = at(col, wx, y, wz)
           if (shell && m !== MAT.CLOUD_WALL) breached++

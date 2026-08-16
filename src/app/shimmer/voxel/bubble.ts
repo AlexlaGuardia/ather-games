@@ -43,8 +43,27 @@ export interface BubbleConfig {
   /** Altitude the shell rises to, and sinks to. The Wilds' ground sits between them. */
   topY: number
   bottomY: number
-  /** How much the wall's outline wanders, as a fraction of radius. Purely a look. */
+  /**
+   * How far the wall bulges in and out, as a fraction of radius. Purely a look — but see
+   * `maxShellRadius`: every reach bound in the build is written in terms of this, so raising it is
+   * safe and lowering it never leaves a stale bound behind.
+   */
   wobble: number
+  /**
+   * How MANY bulges there are, as the radius of the circle this module walks through noise space.
+   * The lobe count around the wall is `2π · lobeFreq` and does not depend on the bubble's size, so
+   * a lobe is always the same fraction of the wall — the shape reads the same on the radius-60
+   * test bubble as on the shipped one, which is the only reason `bubble.test.ts` can prove anything
+   * about a wall it is too slow to sweep at full size.
+   */
+  lobeFreq: number
+  /**
+   * How far the shell's top cap rises on a bulge, in blocks. Zero puts a dead-flat lid on the wall.
+   *
+   * ★ IT IS DRIVEN BY THE SAME FIELD AS `wobble`, ON PURPOSE — a bulge that also stands taller is
+   * one puff, while two unrelated noises are a bumpy wall wearing a bumpy hat. See `lobeAt`.
+   */
+  crown: number
   /**
    * ★ THE PASSAGE'S BEARING, IN RADIANS, AND IT IS A PARAMETER BECAUSE IT IS THE PLAYER'S FRONT DOOR.
    * A single opening in a 6.3km circumference is undiscoverable by exploration, so the build must
@@ -89,7 +108,9 @@ export const DEFAULT_BUBBLE: BubbleConfig = {
   thickness: 3,
   topY: 190,
   bottomY: 20,
-  wobble: 0.01,
+  wobble: 0.03,
+  lobeFreq: 5.5,
+  crown: 16,
   passageBearing: 0,
   passageWidth: 6,
   passageHeight: 8,
@@ -128,15 +149,67 @@ export function bubbleSwallows(
   cfg: BubbleConfig, landmarks: readonly { id: string; x: number; z: number }[],
   exempt: readonly string[] = [],
 ): { id: string; dist: number }[] {
+  // ⚠ `maxShellRadius`, NOT `cfg.radius` — the difference is the bulge, and the bulge got 3× bigger
+  // on 2026-08-16. Against a ±5-block wobble a flat radius was a rounding error; against ±15 it is a
+  // 15-block band in which a landmark is genuinely buried and this guard says it is fine. A guard
+  // asked about the mean of a shape it exists to check the extremes of is the same failure as
+  // asking it about a hand-written literal, one abstraction down.
+  const reach = maxShellRadius(cfg)
   return landmarks
     .filter(l => !exempt.includes(l.id))
     .map(l => ({ id: l.id, dist: Math.hypot(l.x - cfg.cx, l.z - cfg.cz) }))
-    .filter(l => l.dist <= cfg.radius)
+    .filter(l => l.dist <= reach)
 }
 
 /** Distance from the bubble's axis. The bubble is a cylinder-with-a-cap, not a sphere — see below. */
 export const distFromAxis = (x: number, z: number, cfg: BubbleConfig = DEFAULT_BUBBLE): number =>
   Math.hypot(x - cfg.cx, z - cfg.cz)
+
+/**
+ * The furthest the shell's inner face can stand from the axis, and the furthest any wall voxel can.
+ *
+ * ★ EVERY REACH BOUND IN THE BUILD GOES THROUGH THESE TWO, BECAUSE A BOUND THAT UNDERSTATES THE
+ * SHAPE IS A HOLE. `bubbleMaterialAt`'s cheap reject and `column.ts`'s `columnTouchesBubble` both
+ * answer "not mine" below a threshold — a false NO there leaves a gap in the wall, which is the one
+ * failure this module has no other defence against (`columnTouchesBubble`'s own header says so).
+ * They were two hand-written copies of `radius * (1 + wobble) + thickness`, correct only for as
+ * long as nobody changed the shape. This session changed the shape.
+ *
+ * ⚠ `lobeAt` is bounded on ±0.5 BY CONSTRUCTION (`fbm2` returns 0..1), so these are exact rather
+ * than generous. If the lobe field ever gains a term that is not `fbm2`, this bound is what has to
+ * learn about it first.
+ */
+export const maxShellRadius = (cfg: BubbleConfig): number => cfg.radius * (1 + cfg.wobble)
+export const maxShellReach = (cfg: BubbleConfig): number => maxShellRadius(cfg) + cfg.thickness
+
+/**
+ * The bubble's lobe field at this bearing: one signed number in [-0.5, +0.5], read once and used
+ * for every part of the shape that has to agree with itself.
+ *
+ * ── ★★ ONE FIELD, TWO EFFECTS — THIS IS WHAT MAKES IT A PILE OF CLOUDS (2026-08-16, Alex's call) ──
+ * The wall shipped as a near-perfect cylinder with a dead-flat lid: wobble 0.01 is ±5 blocks over a
+ * 3km circumference, which is not a wobble, and all the cloud character lived in the TEXTURE. At 170
+ * blocks tall a player reads the silhouette long before the tile, and the silhouette said *dome*.
+ *
+ * The fix is shape, and the whole trick is that the bulge and the crown are the SAME number. A puff
+ * that pushes out also stands taller, so the eye groups them into discrete heaps. Drive the top cap
+ * off its own independent noise instead and you get a bumpy wall wearing an unrelated bumpy hat —
+ * which reads as a defect in a smooth wall rather than as cloud.
+ *
+ * ★ SAMPLED ON THE UNIT CIRCLE, so it is a function of BEARING ALONE, and that is load-bearing far
+ * beyond this file. `column.ts` decides a whole 256-block vertical from ONE probe at mid-shell, and
+ * is only allowed to because the expensive half of the answer does not vary with `y`. A lobe field
+ * that took an altitude would be honest cloud and would reinstate the streaming stall this module's
+ * header spends thirteen lines on: 65,536 fbm evaluations per column, the world failing to generate
+ * fast enough for the settle gate, and a keeper hung in the air over the HUD reading "generating…".
+ * **The vertical shape is bought in the CAP, which is per-column, not in the radius, which is not.**
+ */
+export function lobeAt(x: number, z: number, seed: number, cfg: BubbleConfig = DEFAULT_BUBBLE): number {
+  const d = distFromAxis(x, z, cfg)
+  if (d === 0) return 0
+  const ux = (x - cfg.cx) / d, uz = (z - cfg.cz) / d
+  return fbm2(ux * cfg.lobeFreq, uz * cfg.lobeFreq, seed ^ 0x8b1e, 3) - 0.5
+}
 
 /**
  * The shell's radius at this bearing.
@@ -145,14 +218,34 @@ export const distFromAxis = (x: number, z: number, cfg: BubbleConfig = DEFAULT_B
  * wobble may only cut IN because `capRadius` is a promise about buildable ground. Nothing is
  * promised out here — the shell is scenery and a boundary, so it may breathe in both directions and
  * look less machined for it.
+ *
+ * ⚠ THE BULGE IS LIMITED BY SLOPE, NOT BY AMPLITUDE, and the two are easy to confuse. `thickness` is
+ * measured RADIALLY (`d >= r && d < r + thickness`), so where the wall leans, the skin a player
+ * would have to squeeze through is `thickness · cos(lean)` — thinner than it says on the config. The
+ * lean is roughly `wobble · lobeFreq · 2π`, which means doubling the lobe COUNT costs exactly as
+ * much wall as doubling the bulge DEPTH. `bubble.test.ts` floods 8-connected against the shipped
+ * numbers rather than trusting either of them; tune against that flood, never against a screenshot.
  */
 export function shellRadiusAt(x: number, z: number, seed: number, cfg: BubbleConfig = DEFAULT_BUBBLE): number {
   const d = distFromAxis(x, z, cfg)
   if (d === 0) return cfg.radius
-  const ux = (x - cfg.cx) / d, uz = (z - cfg.cz) / d
-  const n = fbm2(ux * 3.1, uz * 3.1, seed ^ 0x8b1e, 3) - 0.5
-  return cfg.radius * (1 + cfg.wobble * n * 2)
+  return cfg.radius * (1 + cfg.wobble * lobeAt(x, z, seed, cfg) * 2)
 }
+
+/**
+ * How high the shell stands in this column — its own top cap, not the config's flat one.
+ *
+ * ★ THIS IS THE HALF OF "A PILE OF CLOUDS" A PLAYER ACTUALLY SEES. The wall rises ~60 blocks above
+ * the Wilds' ground, so the skyline is the only part of it in view from any distance, and a skyline
+ * that is a perfectly level line at y190 for 3km reads as a TANK — no amount of billowing texture
+ * on the face argues with it. Crowning the cap is what turns the same wall into heaped cloud.
+ *
+ * ⚠ CALLERS MUST ASK RATHER THAN READ `cfg.topY`. It is now the MEAN of the cap, not the top of it;
+ * a caller that fills up to `topY` leaves the crowns unbuilt and puts the flat lid back, one file
+ * over, where nothing would look wrong until someone stood outside and looked up.
+ */
+export const shellCapTop = (x: number, z: number, seed: number, cfg: BubbleConfig = DEFAULT_BUBBLE): number =>
+  Math.round(cfg.topY + cfg.crown * lobeAt(x, z, seed, cfg) * 2)
 
 /** Is this column strictly inside the bubble — the fold's own space, which the Wilds must not fill? */
 export const insideShell = (x: number, z: number, seed: number, cfg: BubbleConfig = DEFAULT_BUBBLE): boolean =>
@@ -250,18 +343,22 @@ export function bubbleMaterialAt(
   // A hypot against the widest the shell can possibly reach answers "not mine" for ~every column in
   // the world with no noise at all. Keep this first.
   const d = distFromAxis(x, z, cfg)
-  if (d > cfg.radius * (1 + cfg.wobble) + cfg.thickness) return null
+  if (d > maxShellReach(cfg)) return null
 
-  // ★ AND ONE `shellRadiusAt`, NOT TWO. `insideShell` and `inShell` each recompute it; asking both
-  // means the same fbm twice for every cell that got this far. Read it once and branch on it.
-  const r = shellRadiusAt(x, z, seed, cfg)
+  // ★ AND ONE NOISE EVALUATION, NOT THREE. `insideShell` and `inShell` each recompute the radius, and
+  // since 2026-08-16 the cap needs the same field again; asking each in turn means the same fbm three
+  // times for every cell that got this far. Read the lobe once and derive all of it.
+  const n = lobeAt(x, z, seed, cfg)
+  const r = cfg.radius * (1 + cfg.wobble * n * 2)
 
   // The fold's own space. The Wilds does not generate here — not as ground, and not as air with
   // ground under it. Unreachable by construction, so nothing is spent on it.
   if (d < r) return AIR
   if (d >= r + cfg.thickness) return null
 
-  if (y > cfg.topY || y < cfg.bottomY) return null
+  // The cap is this column's own, crowned off the same lobe — see `shellCapTop`. Derived from `n`
+  // rather than called, so the crowns cost nothing on top of the radius that was already computed.
+  if (y > Math.round(cfg.topY + cfg.crown * n * 2) || y < cfg.bottomY) return null
 
   // ★★ THE SHELL IS NEVER PIERCED, NOT EVEN AT THE PASSAGE — reversed 2026-08-15, and the first
   // version of this file was wrong. It cut a doorway-shaped hole clean through. Three things say no,

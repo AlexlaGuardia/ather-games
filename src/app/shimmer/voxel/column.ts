@@ -28,7 +28,9 @@
 import { Section, AIR } from './section'
 import { columnHeight, type HeightConfig, DEFAULT_HEIGHT } from './height'
 import { materialAt, MAT, isPlant, isHalfMat, HALF_BIT, type DepthConfig, DEFAULT_DEPTH } from './depth'
-import { bubbleMaterialAt, distFromAxis, DEFAULT_BUBBLE, type BubbleConfig } from './bubble'
+import {
+  bubbleMaterialAt, distFromAxis, DEFAULT_BUBBLE, maxShellReach, shellCapTop, type BubbleConfig,
+} from './bubble'
 import { ZONE_ANCHORS } from './zones'
 import { plantWaystones } from './story-path'
 import { carveStack, type CarveConfig, DEFAULT_CARVE } from './carve'
@@ -192,7 +194,10 @@ function columnTouchesBubble(wx: number, wz: number, span: number, cfg: BubbleCo
   const nx = Math.max(cfg.cx - (wx + span), Math.min(0, cfg.cx - wx))
   const nz = Math.max(cfg.cz - (wz + span), Math.min(0, cfg.cz - wz))
   const near = Math.hypot(nx, nz)
-  return near <= cfg.radius * (1 + cfg.wobble) + cfg.thickness + 1
+  // ⚠ `maxShellReach`, NOT A SECOND HAND-WRITTEN COPY OF THE SAME ARITHMETIC. This line and
+  // `bubbleMaterialAt`'s cheap reject were the same expression typed twice in two files; the shape
+  // changed on 2026-08-16 and only one of them would have been found by grepping for `wobble`.
+  return near <= maxShellReach(cfg) + 1
 }
 
 export function generatedAt(
@@ -363,8 +368,13 @@ export function generateColumn(
         if (mine === null) continue
         // AIR is the fold's interior and spans the FULL height (there is no ground in there at all).
         // The wall stands only between its caps, so it still has to respect them.
+        // ⚠ `shellCapTop`, NOT `WILDS_BUBBLE.topY` — since 2026-08-16 `topY` is the MEAN of the cap
+        // and each column crowns to its own height. Filling to the mean would build the wall and
+        // shave every crown flat in the same pass, putting back the dead-level 3km skyline the
+        // crowns exist to break, and it would look like nothing at all from the ground.
         const y0 = mine === AIR ? 0 : WILDS_BUBBLE.bottomY
-        const y1 = mine === AIR ? cfg.worldHeight - 1 : Math.min(WILDS_BUBBLE.topY, cfg.worldHeight - 1)
+        const top = shellCapTop(wx + x, wz + z, seed, WILDS_BUBBLE)
+        const y1 = mine === AIR ? cfg.worldHeight - 1 : Math.min(top, cfg.worldHeight - 1)
         for (let y = y0; y <= y1; y++) {
           const s = (y / SECTION) | 0
           if (col.sections[s].get(x, y - s * SECTION, z) !== mine) col.sections[s].set(x, y - s * SECTION, z, mine)
