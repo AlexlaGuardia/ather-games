@@ -111,6 +111,18 @@ export interface PlayerSave {
   x: number; y: number; z: number
   /** Camera pitch/yaw (three's YXZ euler, what PointerLockControls writes). */
   rx: number; ry: number
+  /**
+   * ★★ WHICH SPACE THE POSITION IS IN (2026-08-15). Optional so every older save loads, but a save
+   * WITHOUT it is exactly the corruption described below.
+   *
+   * `x/y/z` are meaningless without this, because the two spaces both measure from their own
+   * origin — plot (0,0) and Wilds (0,0) are different places wearing one name, which is the same
+   * reason `key()` namespaces the plot's column records. Persisting the position and not the space
+   * meant a keeper who crossed into the garden was autosaved at plot coordinates and reloaded into
+   * the WILDS at those numbers, ~12 blocks from the world origin — which is inside the fold's shell,
+   * where nothing is generated. They woke in a void, and reloading put them straight back.
+   */
+  space?: Space
   inv: unknown
   tools: unknown
   skills: unknown

@@ -45,7 +45,7 @@ import { plotThreshold, hasFallenOut, chestCap } from '../voxel/plot'
 // the glade and made of cloud. Read the default here and the crossing would fire on the far side of
 // the shell from the door the generator actually built — a trigger and a doorway in two different
 // places, which is invisible until someone walks 1000 blocks looking for a way in.
-import { inPassageVolume } from '../voxel/bubble'
+import { inPassageVolume, insideShell } from '../voxel/bubble'
 import type { Space } from './save'
 
 /** Which generator version the player has already been warned about. See `staleWarned`. */
@@ -3077,8 +3077,48 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
       const wm = p.waymarks as WaymarkNet | undefined
       if (wm && Array.isArray(wm.marks) && typeof wm.next === 'number') waymarks.current = wm
       const lc = loco.current
-      lc.px = p.x; lc.pz = p.z
-      lc.py = Math.max(p.y, columnHeight(Math.floor(p.x), Math.floor(p.z), SEED) + 1)
+      // ── ★★ RESTORE INTO THE SPACE THE POSITION BELONGS TO (2026-08-15) ─────────────────────
+      // A save written before `space` existed says nothing about which world its numbers are in,
+      // and the old default was "the Wilds" — which is how a keeper who logged out in their garden
+      // woke up at the world's origin.
+      const savedSpace: Space = p.space === 'plot' ? 'plot' : 'wilds'
+
+      // ── ★★ AND THE RESCUE, FOR SAVES ALREADY POISONED (Alex, 2026-08-15: "my player walked to
+      // the passage to the home plot and now he's just stuck in a void") ─────────────────────────
+      // Those saves exist and they cannot heal themselves: the stored position is a set of PLOT
+      // coordinates wearing no space, so every reload reads them as Wilds coordinates ~12 blocks
+      // from the origin — inside the fold's shell, where nothing is generated at any altitude. The
+      // keeper falls into an empty world, the autosave writes that position back, and reloading
+      // returns them to it. Adding `space` fixes the CAUSE and does nothing for the keepers already
+      // in there.
+      //
+      // ⚠ THE TEST IS GEOMETRIC, NOT "IS THERE GROUND". At restore time no column is loaded, so
+      // `voxel()` answers AIR everywhere and a ground probe would rescue EVERYONE, every load. The
+      // shell is a pure function of position, needs nothing streamed, and is true of exactly the
+      // corruption and nothing else: no legitimate Wilds position is ever inside it, because the
+      // Wilds does not generate in there at all.
+      const stranded = savedSpace === 'wilds' && insideShell(p.x, p.z, SEED, WILDS_BUBBLE)
+      if (stranded) {
+        space.current = 'wilds'
+        lc.px = SPAWN_X + 0.5; lc.pz = SPAWN_Z + 0.5
+        lc.py = columnHeight(SPAWN_X, SPAWN_Z, SEED) + 1
+        // Said out loud. A keeper silently moved across the world would read it as a second bug.
+        onSay('you were adrift inside your own fold — the glade has you back')
+      } else {
+        space.current = savedSpace
+        lc.px = p.x; lc.pz = p.z
+        // ⚠ The surface clamp is the CONTINENT's and would drag a plot position up to Wilds
+        // altitude (~130 against the garden's 96). The garden is flat, authored and bounded, so a
+        // restored plot position needs no clamp at all.
+        lc.py = savedSpace === 'plot'
+          ? p.y
+          : Math.max(p.y, columnHeight(Math.floor(p.x), Math.floor(p.z), SEED) + 1)
+      }
+      // The plot's chest census normally rides `enterSpace`, which a direct restore never calls.
+      if (space.current === 'plot') {
+        plotChests.current = 0
+        void countMaterial(SEED, 'plot', MAT.CHEST).then(n => { plotChests.current += n })
+      }
       lc.vy = 0; lc.hvx = 0; lc.hvz = 0; lc.stepSmooth = 0
       camera.position.set(lc.px, eyeY(lc), lc.pz)
       camera.quaternion.setFromEuler(new THREE.Euler(p.rx, p.ry, 0, 'YXZ'))
@@ -3096,7 +3136,11 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
     const snap = (): PlayerSave => {
       eul.setFromQuaternion(camera.quaternion, 'YXZ')
       const lc = loco.current
+      // ⚠ `space` IS NOT OPTIONAL DATA — x/y/z mean nothing without it. Both spaces measure from
+      // their own origin, so a position saved without its space is read back as a DIFFERENT PLACE.
+      // See `PlayerSave.space` for what that cost.
       return { v: 1, x: lc.px, y: lc.py, z: lc.pz, rx: eul.x, ry: eul.y,
+               space: space.current,
                inv: inv.current, tools: tools.current, skills: skills.current,
                waymarks: waymarks.current }
     }
