@@ -481,6 +481,15 @@ interface ConsoleCtx {
    *  it lies. View-grade: it reports what walking there would show you anyway, one scale further. */
   mistLedger: () => MistLedger
   /**
+   * Who is on the road right now, how far off, and how much collar is left. OWNER-GATED and it is
+   * a TEST INSTRUMENT, not a player verb — a keeper is supposed to learn a patrol is there by being
+   * met by one. It exists because the encounter cannot otherwise be verified: by the time a patrol
+   * has closed, every foe is standing ON the keeper and below the frame, so a screenshot cannot say
+   * whether they arrived, and a shot that hits nothing is indistinguishable from a shot that hits
+   * something the rules refused to open.
+   */
+  foes: () => string
+  /**
    * ★ THE RUNES A KEEPER HOLDS. Bare `/rune` is VIEW-GRADE — reading your own hand is not a cheat,
    * and it is the one thing that explains why a cast key does nothing. GRANTING is cheat-grade and
    * checked inside, exactly as `/goto`'s compass-vs-teleport split does it.
@@ -598,6 +607,12 @@ const CONSOLE_CMDS: ConsoleCmd[] = [
       return c.tp(z.x, z.z)
     },
     suggest: () => ZONE_ANCHORS.map(z => z.id) },
+  // ★ /foes (2026-08-16, #294) — the instrument the patrols needed before they could be trusted.
+  // Owner-only in FULL, unlike /goto and /mist: those two split because knowing a PLACE exists is
+  // not a cheat, but knowing where three people are standing and how close their collars are to
+  // breaking is exactly the information the encounter is supposed to make you earn.
+  { name: 'foes', usage: 'foes', help: 'the collared patrol near you: distance and collar left', owner: true,
+    run: (_a, c) => c.foes() },
   // ★ /mist (2026-08-09) — the same lesson /goto was built for, one scale down. A patch is ~52
   // blocks across in a region 2000 across, and there are three of them: found by walking is found
   // by accident. The compass half is VIEW-GRADE for the same reason /goto's is (knowing a place
@@ -1174,6 +1189,13 @@ export default function VoxelWorld() {
   const worldCmd = useRef<{ tp: (x: number, z: number) => string; pos: () => { x: number; z: number }; space: (to?: string) => string } | null>(null)
   const consoleCtx = useMemo<ConsoleCtx>(() => ({
     isOwner,
+    foes: () => {
+      const list = foesRef.current?.() ?? []
+      if (!list.length) return 'no patrol near you — they come out of the holds (/goto thistle-hold)'
+      return list.map(f =>
+        `${f.posture.padEnd(11)} ${f.dist.toFixed(1).padStart(6)} blocks   collar ${(f.collar * 100).toFixed(0)}%${f.collar === 0 ? '  FREED' : ''}`,
+      ).join('\n')
+    },
     radius: () => settings.viewRadius,
     setRadius: (r) => update({ viewRadius: r }),
     give: (id, count) => {
@@ -1292,6 +1314,12 @@ export default function VoxelWorld() {
    */
   const isOwnerRef = useRef(false)
   useEffect(() => { isOwnerRef.current = isOwner }, [isOwner])
+  /**
+   * `/foes` reaches into the World's live patrol through this. A ref rather than state because the
+   * list changes every frame and re-rendering the whole HUD to report a debug line would cost more
+   * than the thing it measures — the same reason the frame meter publishes on a timer.
+   */
+  const foesRef = useRef<null | (() => { posture: string; dist: number; collar: number }[])>(null)
 
   // ── the shared party + the withdrawal ledger, read once at mount ────────────────────────────
   // Both are localStorage and therefore synchronous; done in an effect anyway so SSR never touches
@@ -1631,7 +1659,7 @@ export default function VoxelWorld() {
           onOpenChest={(c) => { openCursorUI(); setOpenChest(c) }}
           onOpenStation={(st) => { openCursorUI(); setOpenStation(st) }}
           onOpenWaymark={(w) => { openCursorUI(); setOpenWaymark(w) }}
-          uiOpen={cursorUIOpenRef} owner={isOwnerRef}
+          uiOpen={cursorUIOpenRef} owner={isOwnerRef} foesOut={foesRef}
         />
         {/* selector: deliberately matches NOTHING. Without it drei binds click-to-lock on the whole
             DOCUMENT (and that binding ignores `enabled`), which re-locked the pointer on every
@@ -2791,7 +2819,7 @@ const SOLID_EXCEPT = new Set<number>([
 // CELL_HALF for it; everything else (light, fence arms, piece placement) wants "yes, solid".
 const isSolid = (m: number) => !SOLID_EXCEPT.has(baseOf(m))
 
-function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weaponDrawn, weaponIdx, onAmmo, onStats, onPerf, onSay, runeTick, onPos, onLook, onInvChange, worker, incoming, inflight, settings, build, pieceIdx, rot, tools, skills, onSkill, onLevel, onTool, tutorial, onQuestEvent, onNearGreg, onNearTable, cmdOut, mistLedger, onNearMist, sparring, pot, onOpenChest, onOpenStation, onOpenWaymark, uiOpen, owner }: {
+function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weaponDrawn, weaponIdx, onAmmo, onStats, onPerf, onSay, runeTick, onPos, onLook, onInvChange, worker, incoming, inflight, settings, build, pieceIdx, rot, tools, skills, onSkill, onLevel, onTool, tutorial, onQuestEvent, onNearGreg, onNearTable, cmdOut, mistLedger, onNearMist, sparring, pot, onOpenChest, onOpenStation, onOpenWaymark, uiOpen, owner, foesOut }: {
   inv: React.RefObject<Inventory>
   toolTier: React.RefObject<number>
   toolSkill: React.RefObject<BlockSkill>
@@ -2866,6 +2894,8 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
   uiOpen: React.RefObject<boolean>
   /** Keeper of the realm. Gates FLY — see the V binding. Live ref, never the state (async fetch). */
   owner: React.RefObject<boolean>
+  /** Filled by the World so the owner-only `/foes` can read the live patrol. See its ctx entry. */
+  foesOut: React.RefObject<null | (() => { posture: string; dist: number; collar: number }[])>
   /** The keeper's two bars. Written here, polled by the HUD. */
   vitals: React.RefObject<Vitals>
   /** The cast pool. `regen` is per second, derived from the Mana skill. */
@@ -3106,6 +3136,16 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
     }
     return () => { cmdOut.current = null }
   }, [cmdOut, camera])
+
+  // `/foes` reads the live patrol through here — see the ctx entry for why it is owner-only in full.
+  useEffect(() => {
+    foesOut.current = () => foes.current.map(e => ({
+      posture: e.f.posture,
+      dist: Math.hypot(e.f.x - camera.position.x, e.f.z - camera.position.z),
+      collar: collarFrac(e.f),
+    }))
+    return () => { foesOut.current = null }
+  }, [foesOut, camera])
 
   // ── ★ THE PLAYER PERSISTS (2026-08-08) — spawn where you left off, keep what you carried ────
   // Hydrate once at mount: position, facing, inventory, tools, skills. The settle gate holds
