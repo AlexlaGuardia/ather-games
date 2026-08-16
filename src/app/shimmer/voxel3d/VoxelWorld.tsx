@@ -1266,6 +1266,15 @@ export default function VoxelWorld() {
    */
   const cursorUIOpen = craftOpen || bagOpen || !!openChest || dialogueOpen || showSettings || !!spar || consoleOpen
   useEffect(() => { cursorUIOpenRef.current = cursorUIOpen }, [cursorUIOpen])
+  /**
+   * ── ★ THE OWNER BIT, AS A REF, BECAUSE THE KEY LISTENER IS REGISTERED ONCE ─────────────────────
+   * `isOwner` arrives ASYNC (a fetch to `/api/owner`), and `World`'s keydown handler is bound in a
+   * mount-time effect. Read the STATE in that closure and it is frozen at its mount value — `false`
+   * for everyone, forever, including the owner. The same trap `Q`-throws documents two screens down.
+   * A ref is the live value, so the check happens at the moment the key is pressed.
+   */
+  const isOwnerRef = useRef(false)
+  useEffect(() => { isOwnerRef.current = isOwner }, [isOwner])
 
   // ── the shared party + the withdrawal ledger, read once at mount ────────────────────────────
   // Both are localStorage and therefore synchronous; done in an effect anyway so SSR never touches
@@ -1605,7 +1614,7 @@ export default function VoxelWorld() {
           onOpenChest={(c) => { openCursorUI(); setOpenChest(c) }}
           onOpenStation={(st) => { openCursorUI(); setOpenStation(st) }}
           onOpenWaymark={(w) => { openCursorUI(); setOpenWaymark(w) }}
-          uiOpen={cursorUIOpenRef}
+          uiOpen={cursorUIOpenRef} owner={isOwnerRef}
         />
         {/* selector: deliberately matches NOTHING. Without it drei binds click-to-lock on the whole
             DOCUMENT (and that binding ignores `enabled`), which re-locked the pointer on every
@@ -1847,7 +1856,10 @@ function Hud({ stats, perf, toast, pos, look, hotbar, sel, tier, held, build, pi
             without the class name (a styling detail) being load-bearing. */}
         <div data-stats className="text-white/55">{stats}</div>
         {/* Shift is slide now, not sprint — run is automatic (play3d locomotion, port step 5). */}
-        <div className="mt-1 text-white/45">click to look · WASD · space jump · shift slide · hold space climb · V fly</div>
+        {/* ⚠ `V fly` is listed only for the keeper of the realm — the binding is owner-gated, and a
+            key hint that does nothing when you press it reads as a broken game, not as a locked
+            door. The rest of the line is everyone's. */}
+        <div className="mt-1 text-white/45">click to look · WASD · space jump · shift slide · hold space climb{isOwner ? ' · V fly' : ''}</div>
         {build
           ? <div className="text-amber-200/80">BUILD · RMB place · LMB deconstruct · R rotate · 1-8 piece · Tab exit</div>
           : <div className="text-white/45">hold LMB mine · RMB place · scroll/1-8 slot · Q drop (shift = stack) · F draw · C craft · Tab build · T chat, / commands</div>}
@@ -2762,7 +2774,7 @@ const SOLID_EXCEPT = new Set<number>([
 // CELL_HALF for it; everything else (light, fence arms, piece placement) wants "yes, solid".
 const isSolid = (m: number) => !SOLID_EXCEPT.has(baseOf(m))
 
-function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weaponDrawn, weaponIdx, onAmmo, onStats, onPerf, onSay, runeTick, onPos, onLook, onInvChange, worker, incoming, inflight, settings, build, pieceIdx, rot, tools, skills, onSkill, onLevel, onTool, tutorial, onQuestEvent, onNearGreg, onNearTable, cmdOut, mistLedger, onNearMist, sparring, pot, onOpenChest, onOpenStation, onOpenWaymark, uiOpen }: {
+function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weaponDrawn, weaponIdx, onAmmo, onStats, onPerf, onSay, runeTick, onPos, onLook, onInvChange, worker, incoming, inflight, settings, build, pieceIdx, rot, tools, skills, onSkill, onLevel, onTool, tutorial, onQuestEvent, onNearGreg, onNearTable, cmdOut, mistLedger, onNearMist, sparring, pot, onOpenChest, onOpenStation, onOpenWaymark, uiOpen, owner }: {
   inv: React.RefObject<Inventory>
   toolTier: React.RefObject<number>
   toolSkill: React.RefObject<BlockSkill>
@@ -2835,6 +2847,8 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
    * which want the LIVE value rather than the one captured at their last render.
    */
   uiOpen: React.RefObject<boolean>
+  /** Keeper of the realm. Gates FLY — see the V binding. Live ref, never the state (async fetch). */
+  owner: React.RefObject<boolean>
   /** The keeper's two bars. Written here, polled by the HUD. */
   vitals: React.RefObject<Vitals>
   /** The cast pool. `regen` is per second, derived from the Mana skill. */
@@ -3228,7 +3242,18 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
       if ((e.target as HTMLElement | null)?.tagName === 'INPUT') return
       // The INPUT guard above is about typing; this one is about menus. Both mirror `onKey`'s.
       if (uiOpen.current) return
-      keys.current[e.code] = true; if (e.code === 'KeyV') fly.current = !fly.current
+      keys.current[e.code] = true
+      // ── ★ FLY IS OWNER-ONLY (2026-08-16, Alex: "id rather not give players the ability to fly") ──
+      // It was always a debug convenience wearing a player key, and it is the one verb that can put
+      // a keeper somewhere the world does not exist: the fold's shell caps at y190 in a 256-block
+      // world, so flying over the wall drops you into a 1000-block-wide hole with no ground at any
+      // altitude. Gating it removes that hazard TODAY, without pre-empting the design call about
+      // what the interior should be. It also stops fly quietly answering questions the game is
+      // supposed to ask — how far the map is, how long the walk is, whether the climb is worth it.
+      //
+      // ⚠ THE REF, NOT THE PROP'S VALUE. This listener is bound once at mount and `isOwner` arrives
+      // from an async fetch, so a captured boolean would be `false` forever — for the owner too.
+      if (e.code === 'KeyV' && owner.current) fly.current = !fly.current
       // ★ The cast binds. `pendingCast` rather than calling straight through, because a cast that
       // spawns a projectile needs the scene GROUP, which only the frame loop holds — the same
       // reason play3d hands placed archetypes to its sim instead of resolving them in the handler.
@@ -5083,7 +5108,12 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
     if (wish.lengthSq() > 0) wish.normalize()
 
     const lc = loco.current
-    if (fly.current) {
+    // ⚠ GATED HERE TOO, AND NOT AS BELT-AND-BRACES. The keybind decides whether fly can be turned
+    // ON; this decides whether it is IN EFFECT, so the ability is bound to the permission rather
+    // than to a press that happened while the permission was held. An owner cookie that lapses
+    // mid-session puts the keeper back on their feet at the next frame instead of leaving them
+    // airborne over a world they can no longer legitimately be above.
+    if (fly.current && owner.current) {
       const speed = (k.ShiftLeft ? 44 : 20)
       wish.multiplyScalar(speed)
       if (k.Space) wish.y += speed

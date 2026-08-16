@@ -107,6 +107,41 @@ try {
   ok(!/no ground here|generating…/.test(vStats), 'and the world settled again afterwards')
   const v = vPos?.match(/x (-?\d+)\s+y (-?\d+)\s+z (-?\d+)/)
   ok(!!v && Math.hypot(Number(v[1]), Number(v[3])) > 480, `and the keeper is back out of the void (${vPos})`)
+  // ── 3. FLY IS OWNER-ONLY (2026-08-16) ────────────────────────────────────────────────────────
+  // Alex: *"id rather not give players the ability to fly around."* It is also the one verb that
+  // can put a keeper over the fold's shell (caps at y190 in a 256-block world) and into the hollow
+  // interior, so this gate is the cheap half of the interior-void decision.
+  // ⚠ MEASURED AS "ARE THEY STILL UP AFTER LETTING GO", NOT AS CLIMB RATE. This box renders through
+  // SwiftShader at a few frames a second and the sim clamps dt to 0.05, so it runs in slow motion:
+  // a working fly climbed FOUR blocks in 2.5s here, against the ~50 the speed implies. A rate
+  // threshold tuned on that is a threshold tuned on this box's frame rate. What separates the two
+  // states without any timing at all is gravity — fly has none, so a flyer HANGS where they let go
+  // while a walker's jump always comes back down.
+  const flyClimb = async () => {
+    const y = (s: string | null) => Number(s?.match(/y (-?\d+)/)?.[1] ?? 0)
+    const before = await readPos()
+    await page.keyboard.press('KeyV')                 // toggle fly
+    await page.keyboard.down('Space'); await sleep(3000); await page.keyboard.up('Space')
+    await sleep(2500)                                 // long enough for any jump arc to finish
+    const after = await readPos()
+    return { climb: y(after) - y(before), before, after }
+  }
+  console.log('\nfly gate')
+  const asOwner = await flyClimb()
+  console.log(`  owner     · ${asOwner.before}  →  ${asOwner.after}   (climb ${asOwner.climb})`)
+  ok(asOwner.climb > 2, `the keeper of the realm still flies, and HANGS there after letting go (+${asOwner.climb})`)
+
+  // Same page, same keeper, cookie dropped. `/owner?logout` clears it.
+  await page.goto(`${new URL(PAGE).origin}/owner?logout=1`, { waitUntil: 'networkidle2', timeout: 30_000 })
+  await page.goto(PAGE, { waitUntil: 'networkidle2', timeout: 60_000 })
+  await sleep(SETTLE * 1000)
+  const asPlayer = await flyClimb()
+  console.log(`  player    · ${asPlayer.before}  →  ${asPlayer.after}   (climb ${asPlayer.climb})`)
+  // Space is still JUMP for a walker, so the assert is that they came back DOWN — the sample is
+  // taken 2.5s after release, which is several arcs' worth even at this frame rate.
+  ok(asPlayer.climb === 0, `an ordinary keeper is back on the ground (${asPlayer.climb >= 0 ? '+' : ''}${asPlayer.climb})`)
+  const hints = await page.evaluate(() => document.body.innerText)
+  ok(!/V fly/.test(hints), 'and is not told about a key that would do nothing')
 } finally {
   await browser.close()
 }
