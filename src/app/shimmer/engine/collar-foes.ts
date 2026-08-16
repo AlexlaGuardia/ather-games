@@ -164,6 +164,95 @@ export function strike(foe: CollarFoe, amount: number): FreeResult {
 /** Is this foe still a threat? Freed ones never are — canon, not balance. */
 export const hostile = (foe: CollarFoe): boolean => foe.collar !== null
 
+// ── ★ THE APPROACH (2026-08-16, #294 — the half that was missing when the wiring started) ────────
+//
+// Everything above describes what a collared foe IS and what breaking its collar DOES. Nothing here
+// moved one, so a host had defs, a strike and no encounter: the four modules were "done and green"
+// with no live caller, which is the same shape `bubbleSwallows` was found in this morning.
+//
+// ⚠ THIS IS DELIBERATELY NOT `hunter-ai.ts`'s `stepHunter`, AND THE REASON IS CANON, NOT TASTE.
+// That module is the right SHAPE — pure, intent-returning, `blocked()` injected so a voxel world and
+// a tile grid can both answer — and it was explicitly lifted out of the range "so more than one thing
+// can use it". But its tuning is a GUNFIGHT: `fireCd`, `firstShotCd`, `hp`, and an intent whose verb
+// is `fire`. Guns are forbidden against this class — a bullet cannot free anyone — so routing these
+// three postures through it would mean carrying three dead fields and reinterpreting `fire` as
+// "press", which is a lie at the type level and the kind a later reader would believe. What the two
+// genuinely share is one line ("close to a standoff and hold"), and that line is cheaper to write
+// twice than to abstract into a brain that has to explain which half applies.
+//
+// ★ AND THE BEHAVIOUR IS SIMPLER THAN A HUNTER'S ON PURPOSE. A hunter orbit-strafes so it is not a
+// static turret. These PRESS: canon's threat is being held, not being shot at, so the bulwark plants
+// himself in the road, the channeler holds a line and leans on you from it, and the skirmisher runs
+// you down. Orbiting would make all three read as the same evasive gunfighter wearing three speeds.
+
+export interface FoeStepCtx {
+  /** Where the keeper is standing. */
+  px: number
+  pz: number
+  /**
+   * Is a walker blocked at this spot? The one thing that cannot travel between worlds — a tile
+   * lookup in the range, a voxel probe here. Omit it and the foe walks as if the ground were open,
+   * which is the right default for a pure test.
+   */
+  blocked?: (x: number, z: number) => boolean
+  /** Half-width of the keeper, so a foe closing to standoff 0 stops AT them, never inside them. */
+  keeperRadius?: number
+}
+
+export interface FoeIntent {
+  /** Where the foe wants to be. The host applies it, or refuses — see `blocked`. */
+  moveTo: { x: number; z: number } | null
+  /** Within reach this frame: the host bills `vitals.pressure()` for `pressureDps * dt`. */
+  pressing: boolean
+}
+
+/**
+ * One frame of a collared foe's approach. Pure: it MOVES NOTHING and returns what it wants.
+ *
+ * ⚠ A FREED MOGLIN IS INERT, AND THIS IS THE FIRST LINE FOR A REASON. Canon gives him no wounded
+ * state and no second phase — he is simply the sweet creature again — so a freed foe must not walk
+ * toward you, must not press, and must not be re-armed by anything downstream. Every other rule in
+ * this function is balance; this one is the ruling.
+ */
+export function stepFoe(
+  foe: CollarFoe, ctx: FoeStepCtx, dt: number, def: CollarFoeDef = foeDef(foe.posture),
+): FoeIntent {
+  if (!hostile(foe)) return { moveTo: null, pressing: false }
+
+  const dx = ctx.px - foe.x, dz = ctx.pz - foe.z
+  const dist = Math.hypot(dx, dz)
+  // Standing exactly on the keeper has no direction to move along, and normalising it is a divide by
+  // zero that would send the foe to NaN and out of the world for the rest of the session.
+  if (dist < 1e-6) return { moveTo: null, pressing: true }
+
+  const ux = dx / dist, uz = dz / dist
+  // ★ THE LINE THIS FOE HOLDS. `standoff` is the posture's own (7 for the channeler, 0 for the two
+  // that come all the way), but 0 does not mean "occupy the keeper" — a body has width, and so does
+  // a keeper. The floor keeps the bulwark a blockade you walk around rather than a shape you stand
+  // inside, which is the whole point of his `body`.
+  const hold = Math.max(def.standoff, def.body + (ctx.keeperRadius ?? 0.35))
+  const want = dist - hold
+  // Already at or inside the line: hold it. Pressing is decided by REACH, never by the line — the
+  // channeler's reach (8) is deliberately longer than its standoff (7) so holding still presses.
+  if (want <= 0) return { moveTo: null, pressing: dist <= def.reach }
+
+  const step = Math.min(def.speed * dt, want)
+  const tx = foe.x + ux * step, tz = foe.z + uz * step
+
+  // ⚠ SLIDE, DO NOT STOP. A foe that refuses to move when its straight line is blocked parks itself
+  // on the first tree between it and the keeper and the encounter quietly ends — indistinguishable,
+  // from the player's side, from the spawn having failed. Try the full step, then each axis alone.
+  const free = (x: number, z: number) => !ctx.blocked || !ctx.blocked(x, z)
+  const moveTo = free(tx, tz) ? { x: tx, z: tz }
+    : free(tx, foe.z) ? { x: tx, z: foe.z }
+    : free(foe.x, tz) ? { x: foe.x, z: tz }
+    : null
+
+  // ★ REACH IS MEASURED FROM WHERE IT IS NOW, NOT FROM WHERE IT WANTS TO BE. Billing pressure for a
+  // step the host may refuse would let a foe press you through a wall it never got around.
+  return { moveTo, pressing: dist <= def.reach }
+}
+
 /** 0..1 for a collar bar. A freed foe reads 0 and should draw no bar at all. */
 export const collarFrac = (foe: CollarFoe): number =>
   foe.collar ? foe.collar.integrity / foe.collar.max : 0

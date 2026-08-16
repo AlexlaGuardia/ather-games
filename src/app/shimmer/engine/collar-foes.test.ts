@@ -12,7 +12,7 @@
 // converging them back into each other.
 
 import {
-  COLLAR_FOES, POSTURE_ORDER, foeDef, pickPosture, spawnFoe, strike, hostile, collarFrac,
+  COLLAR_FOES, POSTURE_ORDER, foeDef, pickPosture, spawnFoe, strike, hostile, collarFrac, stepFoe,
   type FoePosture,
 } from './collar-foes'
 import { TIER_DIALS } from '../play3d/collar-raid'
@@ -115,6 +115,72 @@ const check = (label: string, ok: boolean, detail = '') => {
   for (let i = 0; i < 200; i++) seen.add(pickPosture(i / 200))
   check('every posture is reachable', seen.size === 3)
   check('foeDef agrees with the table', foeDef('channeler') === COLLAR_FOES.channeler)
+}
+
+// ── 6. the approach (2026-08-16, #294) ──────────────────────────────────────────────────────────
+{
+  const at = (p: FoePosture, x: number, z: number) => spawnFoe(`t-${p}`, p, x, z)
+  const KEEPER = { px: 0, pz: 0 }
+
+  // ★★ THE RULING, NOT A BALANCE NUMBER. Canon gives a freed Moglin no wounded state and no second
+  // phase, so he must go completely inert — not slower, not passive-but-following. If this ever goes
+  // green-by-accident the encounter grows a second phase canon explicitly refuses.
+  const freed = strike(at('skirmisher', 5, 0), 999).foe
+  const fi = stepFoe(freed, KEEPER, 0.1)
+  check('★★ a freed Moglin does not move and does not press', fi.moveTo === null && !fi.pressing)
+
+  // The channeler holds its line instead of closing, and presses from it — reach 8 > standoff 7 is
+  // what makes "hold still and lean on you" a behaviour rather than a stalemate.
+  const ch = at('channeler', 7, 0)
+  const chI = stepFoe(ch, KEEPER, 0.5)
+  check('the channeler holds its standoff', chI.moveTo === null)
+  check('★ and presses from it — reach outlives standoff', chI.pressing)
+  const chFar = stepFoe(at('channeler', 40, 0), KEEPER, 0.5)
+  check('but from far off it closes and does not press', !!chFar.moveTo && !chFar.pressing)
+  check('and it closes toward the keeper, never away',
+    (chFar.moveTo?.x ?? 99) < 40, `moved to ${chFar.moveTo?.x}`)
+
+  // ⚠ Nothing may end up INSIDE the keeper. standoff 0 means "come all the way", not "occupy them".
+  let bul = at('bulwark', 12, 0)
+  for (let i = 0; i < 400; i++) {
+    const it = stepFoe(bul, KEEPER, 0.05)
+    if (it.moveTo) bul = { ...bul, x: it.moveTo.x, z: it.moveTo.z }
+  }
+  const rest = Math.hypot(bul.x, bul.z)
+  check('★ a standoff-0 foe stops AT the keeper, never inside them',
+    rest >= COLLAR_FOES.bulwark.body, `rested at ${rest.toFixed(3)}`)
+  check('and it did arrive — a blockade that never blocks is scenery', rest < 2)
+  check('and it presses once it is there', stepFoe(bul, KEEPER, 0.05).pressing)
+
+  // A step never overshoots the line it is closing to, at any dt the frame loop can hand it.
+  const over = stepFoe(at('skirmisher', 3, 0), KEEPER, 5)
+  check('★ a long frame cannot overshoot the keeper', (over.moveTo?.x ?? -1) >= 0)
+
+  // ⚠ The wall case. A foe that stops dead on its first obstacle reads as a failed spawn.
+  const wallAt5 = (x: number, _z: number) => x > 4.5 && x < 5.5
+  const blocked = stepFoe(at('skirmisher', 5.6, 3), { ...KEEPER, blocked: wallAt5 }, 0.2)
+  check('★ a blocked foe slides along the wall rather than parking on it',
+    blocked.moveTo !== null && Math.abs((blocked.moveTo?.x ?? 0) - 5.6) < 1e-9,
+    'x is held by the wall, z is free to slide')
+
+  // ★ Pressing is billed from where it STANDS. Otherwise a foe presses you through a wall it never
+  // got around — the fight would resolve on the far side of geometry the player is using correctly.
+  // ⚠ THE DISTANCE HAS TO BE CHOSEN SO THE TWO ANSWERS DIFFER. A walled foe 30 blocks out is not
+  // pressing under either rule, so that version of this assert was green for the wrong reason and
+  // survived the mutation. Here the step it WANTS would carry it from 1.5 (outside reach 0.85) to
+  // 0.71 (inside), while the wall means it never actually goes anywhere.
+  const sealed = () => true
+  const stuck = stepFoe(at('skirmisher', 1.5, 0), { ...KEEPER, blocked: sealed }, 0.3)
+  check('★ a walled-off foe cannot press you from where it merely WANTED to be',
+    stuck.moveTo === null && !stuck.pressing)
+
+  // Speed is honoured — the defs bound it so nothing out-runs a keeper, and the stepper must not
+  // quietly exceed the number that guarantee rests on.
+  const sk = at('skirmisher', 20, 0)
+  const one = stepFoe(sk, KEEPER, 0.1)
+  const moved = Math.hypot((one.moveTo?.x ?? 20) - 20, (one.moveTo?.z ?? 0))
+  check('a step is exactly speed x dt', Math.abs(moved - COLLAR_FOES.skirmisher.speed * 0.1) < 1e-9,
+    `moved ${moved.toFixed(4)}`)
 }
 
 console.log(`\ncollar foes: ${pass} passed, ${fail} failed`)
