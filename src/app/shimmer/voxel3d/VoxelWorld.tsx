@@ -5429,6 +5429,22 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
               go: (toId?: string) => travelTo(null, toId),
               rename: () => {},
             })
+          } else if (near && !crossLatched.current) {
+            // ── ★★ A THRESHOLD THAT IS DRAWN AND DOES NOTHING (Alex, 2026-08-16: "theres no passage
+            // back to the wilds from the home plot") ────────────────────────────────────────────
+            // With zero waymarks this branch used to be silent: no prompt, no message, no refusal.
+            // Meanwhile `seam.ts` draws this threshold UNCONDITIONALLY and calls it in its own header
+            // *"the keeper's only way out"*. So a fresh keeper crosses in through the fold's seam,
+            // sees a correctly-drawn parting standing in their garden, walks into it, and nothing
+            // happens — which reads as the game being broken rather than as a rule being applied.
+            //
+            // ⚠ THIS SAYS WHY; IT DOES NOT DECIDE. Whether the first keeper can leave at all is an
+            // OPEN CANON GAP (the world lane filed it): the travel ruling buys a passage off a
+            // waymark, and never says how someone holding none gets home. Answering that here would
+            // be authoring canon on a page, so the guard stays exactly as ruled and only the silence
+            // is fixed. Every candidate ruling agrees a drawn threshold must not be mute.
+            crossLatched.current = true
+            onSay('the seam will not take you — a passage is bought off a waymark, and you have planted none')
           }
           if (!near) crossLatched.current = false
         }
