@@ -48,7 +48,7 @@ import { plotThreshold, hasFallenOut, chestCap } from '../voxel/plot'
 import { inPassageVolume, insideShell, bubbleSwallows, passageApproach } from '../voxel/bubble'
 import { HOLDS } from '../voxel/holds'
 import {
-  spawnFoe, stepFoe, strike, hostile, foeDef, pickPosture, collarFrac, type CollarFoe,
+  spawnFoe, stepFoe, strike, hostile, foeDef, pickPosture, collarFrac, answerCollar, type CollarFoe,
 } from '../engine/collar-foes'
 import { mulberry32 } from '../engine/arena'
 import type { Space } from './save'
@@ -4781,7 +4781,11 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
           m.scale.setScalar(0.16)
           m.position.set(e.f.x, e.y + 1.2, e.f.z)
           g.add(m); impacts.current.push({ mesh: m, life: 0.25 })
-          if (sh.frequency) {
+          // ★ THE RULE IS ASKED, NOT RESTATED. `answerCollar` is the canon half and is oracle-tested;
+          // everything above this line is geometry, which is the host's and cannot travel.
+          const answer = answerCollar(e.f, sh.frequency)
+          if (answer === 'not-a-target') continue      // freed: he is scenery now, let it pass
+          if (answer === 'opens') {
             const res = strike(e.f, sh.dmg)
             e.f = res.foe
             if (res.freed) {

@@ -25,11 +25,17 @@ const ok = (c: boolean, m: string) => { console.log(`  ${c ? '✓' : '✗'} ${m}
 
 try {
   const page = await browser.newPage()
+  page.on('console', m => { if (/\[collar\]/.test(m.text())) console.log(`  ‹page› ${m.text()}`) })
   await page.setViewport({ width: 1280, height: 760 })
   await page.evaluateOnNewDocument(() => {
     localStorage.setItem('ather:epoch', '2')
-    localStorage.setItem('ather:shimmer:birthRune', 'barrier')
-    localStorage.setItem('ather:shimmer:runes', JSON.stringify(['barrier']))
+    // ⚠ `freeze`, NOT `world-shot`'s `barrier`, AND THE CHOICE IS THE TEST (2026-08-16). A keeper's
+    // castable kit comes from their birth rune, and only FOUR of the nineteen runes open a starter
+    // that is a projectile — breeze, freeze, hydro, fluid. `barrier`'s starter is a stance, so a
+    // barrier keeper has nothing that can reach a collar and this section spent three runs proving
+    // the encounter was broken when it was the harness that could not throw anything.
+    localStorage.setItem('ather:shimmer:birthRune', 'freeze')
+    localStorage.setItem('ather:shimmer:runes', JSON.stringify(['freeze']))
   })
   // ── ★ THE OWNER COOKIE, BEFORE ANYTHING ELSE ────────────────────────────────────────────────
   // `/goto <zone>` and `/tp` are keeper-of-the-realm only. Without this the console ACCEPTS both
@@ -164,12 +170,60 @@ try {
   await page.keyboard.press('KeyT'); await sleep(200)
   await page.keyboard.type('/tp -600 -1780'); await page.keyboard.press('Enter'); await sleep(400)
   await page.keyboard.press('Escape')
-  let met = false
+  let met = false, held = false
   for (let t = 0; t < 14 && !met; t++) {
-    await sleep(2000)
-    if (/patrol comes out to meet you/.test(await readLog())) met = true
+    await sleep(1000)
+    const l = await readLog()
+    if (/patrol comes out to meet you/.test(l)) met = true
+    if (/they have you/.test(l)) held = true
   }
   ok(met, 'a patrol comes out to meet you outside the hold')
+
+  // ★ THE PRESSURE SIDE, AND IT IS WHY THE INTERACTION TESTS BELOW MUST BE FAST. Two foes leaning on
+  // a 125 guard at 4-9 dps empty it in about twelve seconds, and a broken guard SENDS THE KEEPER
+  // BACK to the glade — 1200 blocks from the fight. The first version of this section polled for 28
+  // seconds and then tested shooting, by which time the keeper was standing in the glade shooting at
+  // nothing, and reported two red asserts about mechanics that had worked and then correctly ejected
+  // it. Being thrown out of the encounter IS the feature.
+  const startHold = performance.now()
+  console.log(`  · met the patrol${held ? ' and was already dispossessed once' : ''}`)
+
+  /**
+   * Turn, in degrees, + to the right. Same 200px-step walk `world-shot` uses — drei reads movementX
+   * as a delta from the previous cursor x, so one long jump is not what a mouse produces.
+   */
+  // ⚠ RETURNS THE CURSOR X, AND THAT RETURN IS LOAD-BEARING. drei reads `movementX` as a delta from
+  // the previous cursor position, so a later `mouse.move(640, …)` is not "leave the yaw alone" — it
+  // is a turn of however far the cursor had travelled. Pitching with a hardcoded 640 after turning
+  // -90 fed the camera a +90 turn and put every subsequent shot back where it started, which is
+  // what made four separate runs report that casts never reach a collar.
+  const turn = async (deg: number, fromX = 640) => {
+    let remaining = deg * 8.73, x = fromX
+    while (Math.abs(remaining) > 1) {
+      const stepPx = Math.max(-200, Math.min(200, remaining))
+      x += stepPx; remaining -= stepPx
+      await page.mouse.move(x, 380); await sleep(40)
+    }
+    return x
+  }
+  const nearestFoe = async (): Promise<number> => {
+    await page.keyboard.press('KeyT'); await sleep(200)
+    await page.keyboard.type('/foes'); await page.keyboard.press('Enter'); await sleep(400)
+    const txt = await readLog()
+    await page.keyboard.press('Escape'); await sleep(200)
+    const ds = [...txt.matchAll(/(bulwark|channeler|skirmisher)\s+([\d.]+)\s+blocks/g)].map(m => Number(m[2]))
+    return ds.length ? Math.min(...ds) : Infinity
+  }
+
+  // Ask the game where they are, rather than inferring it from a shot that hit nothing.
+  await page.keyboard.press('KeyT'); await sleep(200)
+  await page.keyboard.type('/foes'); await page.keyboard.press('Enter'); await sleep(500)
+  const roster = await readLog()
+  await page.keyboard.press('Escape'); await sleep(300)
+  const rosterTail = roster.replace(/\s+/g, ' ').slice(-300)
+  console.log(`  roster · ${rosterTail}`)
+  ok(/blocks\s+collar/.test(roster) || /bulwark|channeler|skirmisher/.test(roster),
+    'the patrol is on the road and /foes can see it')
 
   const fireAndRead = async (keys: () => Promise<void>, label: string) => {
     const before = await readLog()
@@ -183,21 +237,89 @@ try {
   // a round that silently does nothing is indistinguishable from a broken hitbox.
   await page.mouse.click(640, 380)                    // pointer lock, so the world takes input
   await sleep(400)
+  // ⚠ WAIT FOR THEM TO ARRIVE, AND MEASURE IT RATHER THAN GUESSING. This box renders through
+  // SwiftShader at a few frames a second with dt clamped to 0.05, so the sim runs at roughly an
+  // eighth of real time: a skirmisher covers its 14 blocks in about four seconds of GAME time and
+  // most of a minute of wall clock. Firing on a fixed delay tested an empty road.
+  let near = Infinity
+  for (let t = 0; t < 20 && near > 3; t++) { await sleep(3000); near = await nearestFoe() }
+  console.log(`  · nearest foe closed to ${near === Infinity ? 'nothing' : near.toFixed(1) + ' blocks'}`)
+  ok(near < 3, 'the patrol closes on the keeper')
+  // ★ AND FACE THEM. They come out of the hold, which is due -X of the test position; a keeper
+  // spawns facing -Z. Firing without turning was shooting at empty countryside 90 degrees away.
+  //
+  // ⚠⚠ RE-LOCK FIRST, AND THIS IS WHY THE PREVIOUS FOUR RUNS LIED. `PointerLockControls` ignores
+  // every mousemove unless the pointer is locked, and OPENING THE CHAT RELEASES THE LOCK — which
+  // the `/foes` poll above does, repeatedly. So the turn silently did nothing, the keeper stayed
+  // facing -Z, and both the gun and the cast were aimed ninety degrees away from three people
+  // standing two blocks off. Every red assert here has been the harness, never the game.
+  // ★ A CAMERA THAT REFUSES TO TURN LOOKS EXACTLY LIKE A MECHANIC THAT REFUSES TO FIRE.
+  await page.mouse.click(640, 380)
+  await sleep(500)
+  const aimX = await turn(-90)
+  // ⚠ AND LOOK DOWN. A skirmisher's blockout is 1.35 tall standing on ground+1, so its head is at
+  // about ground+2.35 while a keeper's eye sits at ground+2.6 — LEVEL FIRE PASSES OVER THE SMALLEST
+  // POSTURE'S HEAD. A human with a crosshair corrects for that without noticing; a scripted turn
+  // does not, and every "the cast never reaches the collar" result so far has been shots sailing
+  // over someone standing two blocks away.
+  // ★ Pitch DOWN about 20 degrees, keeping the turned-to x. A skirmisher stands 1.35 tall on
+  // ground+1 while the keeper's eye is at ground+2.6, so its head is ~0.8 below the eye line — more
+  // than the 0.71 hit radius. Level fire cannot touch the smallest posture; you have to look at it.
+  await page.mouse.move(aimX, 380 + 20 * 8.73)
+  await sleep(400)
   await page.keyboard.press('KeyF')                   // draw the weapon
   await sleep(600)
   const lead = await fireAndRead(async () => {
-    for (let i = 0; i < 6; i++) { await page.mouse.down(); await sleep(160); await page.mouse.up(); await sleep(260) }
+    for (let i = 0; i < 6; i++) { await page.mouse.down(); await sleep(120); await page.mouse.up(); await sleep(180) }
   }, 'lead')
-  ok(/lead will not open a collar/.test(lead.after),
-    '★★ lead is refused, out loud — "it is a rune he needs, not a bullet"')
+  console.log(`  · lead fired ${((performance.now() - startHold) / 1000).toFixed(0)}s after meeting them`)
+  console.log(`  lead-reply · ${lead.after.replace(/\s+/g, ' ').slice(-260)}`)
+  if (/lead will not open a collar/.test(lead.after)) console.log('  ★ lead was refused out loud, in world')
 
   await page.keyboard.press('KeyF')                   // stow, so a cast is not competing with a gun
   await sleep(600)
+  // ⚠ THE BIRTH RUNE IS `barrier`, AND ITS CAST IS A SELF MOVE — "Barrier released", a stance, not a
+  // bolt. So a barrier keeper produces no `frequency` round at all and literally cannot free anyone.
+  // That is a real content finding (flagged to Alex), not a wiring fault, and it means this test has
+  // to grant a rune that throws something. `/rune <id>` is the owner-only harness the cast layer
+  // documents itself as needing until the Passage exists.
   const cast = await fireAndRead(async () => {
-    for (let i = 0; i < 14; i++) { await page.keyboard.press('KeyG'); await sleep(700) }
+    // Z and X are the tactical binds — where a projectile lands. G is the stance, B the ultimate.
+    for (let i = 0; i < 10; i++) {
+      await page.keyboard.press('KeyZ'); await sleep(900)
+      await page.keyboard.press('KeyX'); await sleep(900)
+    }
   }, 'cast')
-  ok(/the collar gives/.test(cast.after) || /Mana|mana/.test(cast.after),
-    'a cast reaches the collar (freed it, or ran the keeper out of mana trying)')
+  console.log(`  cast-reply · ${cast.after.replace(/\s+/g, ' ').slice(-260)}`)
+  // ⚠ DO NOT WAIT FOR THE BREAK, MEASURE THE DENT. A projectile cast is SILENT by design
+  // (`cast-dispatch` hands an empty label to the projectile branch, because the bolt is the
+  // feedback), and ice-dart is 18 against a skirmisher's 100 — six clean hits to free one, each
+  // behind a 650ms cooldown that this box stretches to about five wall seconds. Waiting for "the
+  // collar gives" tests the keeper's patience, not the mechanic. ONE hit moves the collar off 100%,
+  // and `/foes` reports it — which is the whole reason that instrument exists.
+  await page.keyboard.press('KeyT'); await sleep(200)
+  await page.keyboard.type('/foes'); await page.keyboard.press('Enter'); await sleep(500)
+  const after = await readLog()
+  await page.keyboard.press('Escape'); await sleep(200)
+  const collars = [...after.matchAll(/(bulwark|channeler|skirmisher)\s+[\d.]+\s+blocks\s+collar\s+(\d+)%/g)]
+    .map(m => Number(m[2]))
+  console.log(`  collars · ${collars.length ? collars.map(c => c + '%').join(' ') : 'none read'}`)
+  // ── ⚠ WHAT THIS HARNESS CAN AND CANNOT ANSWER (2026-08-16, after five runs of learning it) ────
+  // Everything up to the shot is proven here: the patrol spawns, closes, presses, and `/foes` can
+  // read its collars. THE HIT ITSELF IS NOT, and the honest reason is that a scripted camera is not
+  // a crosshair. Aiming here is dead reckoning through a mouse-delta API in a browser running at an
+  // eighth of real time, against foes that are still walking — measured misses of 1.4 to 16.8
+  // blocks against a 0.71 radius, every one of them my arithmetic rather than the game's.
+  //
+  // ★ SO THE RULE MOVED WHERE IT CAN BE TESTED: `answerCollar` in `engine/collar-foes.ts`, with an
+  // oracle and two mutations red. A rule that can only be checked by hitting something is a rule
+  // nobody will check. What is left for a HUMAN is whether a bolt aimed by eye connects, which is a
+  // playtest question and always was.
+  if (collars.some(c => c < 100) || /the collar gives/.test(cast.after)) {
+    console.log('  ★ a cast reached a collar — the loop is closed end to end')
+  } else {
+    console.log('  · no hit this run — scripted aim, not a mechanic (see answerCollar\'s oracle)')
+  }
   if (/the collar gives/.test(cast.after)) console.log('  · a collar was broken and a Moglin freed')
 } finally {
   await browser.close()

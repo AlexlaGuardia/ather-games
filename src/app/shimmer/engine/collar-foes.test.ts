@@ -12,7 +12,7 @@
 // converging them back into each other.
 
 import {
-  COLLAR_FOES, POSTURE_ORDER, foeDef, pickPosture, spawnFoe, strike, hostile, collarFrac, stepFoe,
+  COLLAR_FOES, POSTURE_ORDER, foeDef, pickPosture, spawnFoe, strike, hostile, collarFrac, stepFoe, answerCollar,
   type FoePosture,
 } from './collar-foes'
 import { TIER_DIALS } from '../play3d/collar-raid'
@@ -181,6 +181,26 @@ const check = (label: string, ok: boolean, detail = '') => {
   const moved = Math.hypot((one.moveTo?.x ?? 20) - 20, (one.moveTo?.z ?? 0))
   check('a step is exactly speed x dt', Math.abs(moved - COLLAR_FOES.skirmisher.speed * 0.1) < 1e-9,
     `moved ${moved.toFixed(4)}`)
+}
+
+// ── 7. what a round does to a collar (2026-08-16, #294) ─────────────────────────────────────────
+{
+  const collared = spawnFoe('a', 'bulwark', 3, 0)
+  const freed = strike(spawnFoe('b', 'bulwark', 3, 0), 999).foe
+
+  // ★★ THE RULE THE WHOLE REGION-COMBAT DESIGN RESTS ON. Canon forbids guns to answer this class:
+  // you free a person, and a bullet cannot free anyone. If this ever goes green the wrong way,
+  // "runes ARE the combat" quietly becomes "gun fights with a different bar".
+  check('★★ frequency opens a collar', answerCollar(collared, true) === 'opens')
+  check('★★ lead does not', answerCollar(collared, false) === 'refused-lead')
+
+  // ⚠ Refused is NOT the same as absent. Lead must STOP on a collared body — a round passing through
+  // a person reads as a broken hitbox, and the player blames the game rather than their choice of
+  // tool. A freed Moglin is the opposite: nothing there to answer.
+  check('★ a freed Moglin is not a target at all', answerCollar(freed, true) === 'not-a-target')
+  check('and lead does not target him either', answerCollar(freed, false) === 'not-a-target')
+  check('★ refused and not-a-target are distinct answers',
+    answerCollar(collared, false) !== answerCollar(freed, false))
 }
 
 console.log(`\ncollar foes: ${pass} passed, ${fail} failed`)

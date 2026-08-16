@@ -256,3 +256,38 @@ export function stepFoe(
 /** 0..1 for a collar bar. A freed foe reads 0 and should draw no bar at all. */
 export const collarFrac = (foe: CollarFoe): number =>
   foe.collar ? foe.collar.integrity / foe.collar.max : 0
+
+// ── ★★ WHAT A ROUND DOES TO A COLLAR (2026-08-16, #294) ─────────────────────────────────────────
+//
+// This lived inline in the voxel host's shot sweep, which meant the one rule the whole region-combat
+// design rests on — *a bullet cannot free anyone* — could only be checked by driving a browser,
+// aiming a camera through a mouse-delta API, and hoping the shot connected. Five runs of that proved
+// only that my aim was bad. **A rule that can only be tested by hitting something is a rule nobody
+// will test.** Pulled out here, it is three lines and an oracle, and the host keeps the geometry.
+//
+// ★ THE HOST STILL OWNS THE HIT. Whether a round reaches a body is a question about capsules and
+// segments in a particular world; whether reaching one MEANS anything is a question about canon, and
+// canon travels. Same seam as everything else in this file.
+
+export type CollarAnswer =
+  /** Frequency reached the collar: strike it. */
+  | 'opens'
+  /** Lead reached a person. Absorbed, opens nothing, and the world should say why. */
+  | 'refused-lead'
+  /** Already free. Not a target, not a hitbox, not a thing to shoot at. */
+  | 'not-a-target'
+
+/**
+ * What this round does to this foe, given only what the round is made of.
+ *
+ * ⚠ `refused-lead` IS NOT `not-a-target`, and collapsing them is the mistake worth guarding against.
+ * A freed Moglin should let rounds through as though he were scenery, because he is no longer in the
+ * fight. A COLLARED one must STOP the round and say why — letting lead pass through him would read
+ * as a broken hitbox, and the player would conclude the game is buggy rather than that they are
+ * reaching for the wrong verb. One is "nothing here"; the other is "this is the wrong tool", and
+ * they must look different to the host and to the keeper.
+ */
+export function answerCollar(foe: CollarFoe, roundCarriesFrequency: boolean): CollarAnswer {
+  if (!hostile(foe)) return 'not-a-target'
+  return roundCarriesFrequency ? 'opens' : 'refused-lead'
+}
