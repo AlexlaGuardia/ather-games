@@ -158,7 +158,7 @@ import { conjure, shapeCells, expireConjured, conjuredWriteCells, type Conjured 
 import { emptyBag, applyStatuses, hasStatus, pruneStatuses, clearTarget,
          type StatusBag } from '../engine/statuses'
 import { emptyNet, plant as plantMark, pull as pullMark, destination as markDestination,
-         rename as renameMark, spokesOf, markAt, arrivalOf, MAX_MARKS,
+         rename as renameMark, spokesOf, markAt, arrivalOf, MAX_MARKS, DOOR_ID,
          type WaymarkNet, type Waymark } from '../voxel/waymark'
 import type { CastSpec, CastArchetype } from '../play3d/cast'
 
@@ -4180,9 +4180,7 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
       ? markDestination(waymarks.current, { fromPlot: true, toId })
       : markDestination(waymarks.current, { fromPlot: false, fromId })
     if ('refused' in r) {
-      onSay(r.refused === 'at-plot-pick-one' ? 'choose where to step'
-        : r.refused === 'no-passages' ? 'you have planted no passages yet'
-        : 'that passage is gone')
+      onSay(r.refused === 'at-plot-pick-one' ? 'choose where to step' : 'that passage is gone')
       return
     }
     // ★ A PASSAGE CROSSES SPACES, which is what makes it a passage rather than a teleport. Going
@@ -4191,6 +4189,30 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
     // part of that itself.
     if ('toPlot' in r) { enterSpaceRef.current?.('plot'); return }
     enterSpaceRef.current?.('wilds')
+
+    // ── ★★ OUT THROUGH THE KEEPER'S OWN DOOR (Alex, 2026-08-16: "the fold seam is two-way") ──────
+    // The one destination that is not a waymark, so it has no stored coordinate to arrive at — it is
+    // DERIVED, every time, from the bubble. `passageApproach` is the same landing `/goto <fold>`
+    // already uses, and reusing it means the fold has ONE outside address rather than two that drift.
+    //
+    // ⚠ THE STANDOFF IS LOAD-BEARING, NOT COSMETIC. `APPROACH_STANDOFF` (10) exists because
+    // `inPassageVolume` accepts about a block past the shell's outer face — land any closer and the
+    // keeper drops straight back through the seam they just left, which would present as the door
+    // being broken in the more confusing direction. Latching as well, belt and braces: if the arrival
+    // ever does land inside the volume, the latch stops the bounce, and if it does not, the frame
+    // loop's own `if (!inSeam) crossLatched = false` clears it next tick at no cost.
+    if ('toDoor' in r) {
+      const a = passageApproach(SEED, WILDS_BUBBLE)
+      const lc0 = loco.current
+      const gy = columnHeight(a.x, a.z, SEED) + 1
+      const ok = blinkKeeper(lc0, a.x, a.z, () => gy, solidProbe, 1)
+      crossLatched.current = true
+      settled.current = false
+      onSay(ok > 0 ? 'you step back out through your own seam'
+                   : 'something is standing in your doorway')
+      return
+    }
+
     const at = arrivalOf(r.to)
     const lc = loco.current
     // ⚠ Aim the search AT the destination: `blinkKeeper` walks back toward the keeper's CURRENT
@@ -5458,29 +5480,31 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
           // exactly why the latch exists.
           const t = plotThreshold(SEED)
           const near = Math.hypot(lc.px - (t.x + 0.5), lc.pz - (t.z + 0.5)) < 1.6 && Math.abs(lc.py - t.y) < 2.5
-          if (near && !crossLatched.current && waymarks.current.marks.length > 0) {
+          // ── ★★ THE SEAM IS TWO-WAY — RULED BY ALEX 2026-08-16 ("go with 1, the fold seam is
+          // two-way"), and this is the whole fix ──────────────────────────────────────────────────
+          // Found by Alex walking into his own threshold and having NOTHING happen: *"theres no
+          // passage back to the wilds from the home plot."* The guard here used to read
+          // `&& waymarks.current.marks.length > 0`, faithfully implementing the 08-15 split — *"the
+          // plot → a Wilds location = a passage, bought off a waymark"* — which never said how the
+          // FIRST keeper leaves. They cross IN through the fold's own seam, which is not a waymark
+          // and cannot be planted, and arrive holding none. Sealed in their own garden, in front of
+          // a parting `seam.ts` draws unconditionally and calls *"the keeper's only way out"*.
+          //
+          // The ruling: a keeper's own fold-seam is a two-way passage. So there is no mark count to
+          // check — the door is ALWAYS a destination, because it is the same passage they came in
+          // through. `destination()` owns that rule (`voxel/waymark.ts`); this only opens the panel.
+          //
+          // ⚠ THE REFUSAL THAT LIVED HERE FOR ONE HOUR IS DELETED, NOT REWORDED. It said *"a passage
+          // is bought off a waymark, and you have planted none"* — true under the old ruling, false
+          // under this one, and the branch is now unreachable anyway. A refusal kept for a state that
+          // can no longer occur is how a dead limb starts lying.
+          if (near && !crossLatched.current) {
             crossLatched.current = true
             onOpenWaymark({
               fromId: null, net: waymarks.current,
               go: (toId?: string) => travelTo(null, toId),
               rename: () => {},
             })
-          } else if (near && !crossLatched.current) {
-            // ── ★★ A THRESHOLD THAT IS DRAWN AND DOES NOTHING (Alex, 2026-08-16: "theres no passage
-            // back to the wilds from the home plot") ────────────────────────────────────────────
-            // With zero waymarks this branch used to be silent: no prompt, no message, no refusal.
-            // Meanwhile `seam.ts` draws this threshold UNCONDITIONALLY and calls it in its own header
-            // *"the keeper's only way out"*. So a fresh keeper crosses in through the fold's seam,
-            // sees a correctly-drawn parting standing in their garden, walks into it, and nothing
-            // happens — which reads as the game being broken rather than as a rule being applied.
-            //
-            // ⚠ THIS SAYS WHY; IT DOES NOT DECIDE. Whether the first keeper can leave at all is an
-            // OPEN CANON GAP (the world lane filed it): the travel ruling buys a passage off a
-            // waymark, and never says how someone holding none gets home. Answering that here would
-            // be authoring canon on a page, so the guard stays exactly as ruled and only the silence
-            // is fixed. Every candidate ruling agrees a drawn threshold must not be mute.
-            crossLatched.current = true
-            onSay('the seam will not take you — a passage is bought off a waymark, and you have planted none')
           }
           if (!near) crossLatched.current = false
         }
@@ -6560,9 +6584,22 @@ function WaymarkPanel({ wm, onSay, onClose }: {
         ) : (
           <>
             <div className="text-white/40 tracking-[.14em] uppercase text-[9px] mb-1.5">Step out to</div>
+            {/* ★★ THE DOOR IS ALWAYS THE FIRST ROW (Alex, 2026-08-16: "the fold seam is two-way").
+                It is not a waymark and never appears in `net.marks` — it is the keeper's own fold,
+                so it is listed separately and cannot be broken, renamed or counted against the cap.
+                ⚠ It sits FIRST rather than last because for a keeper holding no passages it is the
+                only row there is, and this panel's previous zero-mark state was a dead end that
+                read *"no passages yet"* while the seam behind them was drawn as the way out. */}
+            <button onClick={() => { wm.go(DOOR_ID); onClose() }}
+                    className="w-full text-left mb-1 px-2 py-1.5 rounded border border-amber-200/25 hover:border-amber-200/60 hover:bg-white/5 text-white/90 transition-colors">
+              <div className="flex justify-between gap-3">
+                <span>your own door</span>
+                <span className="text-amber-200/70">back to the Wilds</span>
+              </div>
+            </button>
             {wm.net.marks.length === 0 && (
-              <div className="text-white/35">
-                no passages yet — plant a waymark out in the Wilds and it will lead back here
+              <div className="mt-2 mb-1 text-white/30 text-[10px]">
+                plant a waymark out in the Wilds and it will stand here too
               </div>
             )}
             {wm.net.marks.map((m) => (

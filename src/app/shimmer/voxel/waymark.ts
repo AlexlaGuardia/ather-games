@@ -165,7 +165,20 @@ export function rename(net: WaymarkNet, id: string, name: string): WaymarkNet {
 }
 
 /** Why a passage would not open. */
-export type TravelRefusal = 'unknown-mark' | 'no-passages' | 'at-plot-pick-one'
+export type TravelRefusal = 'unknown-mark' | 'at-plot-pick-one'
+
+/**
+ * The id of the keeper's own front door — the fold-seam they came in through.
+ *
+ * ⚠ IT IS NOT A `Waymark` AND MUST NEVER BE PUT IN `net.marks`. A waymark is a thing the keeper
+ * PLANTED, which is why its coordinate is stored (see `Waymark`); the door is a fact about the
+ * keeper's own fold, derived by the host from the bubble every time it is asked. Putting it in the
+ * net would give it a stored coordinate, let `pull` delete it, and make it count against `MAX_MARKS`
+ * — three ways to lose the one exit that is not allowed to be losable.
+ *
+ * ★ The literal is prefixed so it can never collide with a minted id (`WaymarkNet.next` counts).
+ */
+export const DOOR_ID = '@door'
 
 /**
  * Where does stepping into a passage let out?
@@ -180,15 +193,39 @@ export type TravelRefusal = 'unknown-mark' | 'no-passages' | 'at-plot-pick-one'
  * coordinate spaces that share every number, so nothing here can tell them apart by position — the
  * host knows which space the keeper is in and says so. Inferring would be the same class of bug as
  * the worker cache that was right about its key and wrong about its universe.
+ *
+ * ── ★★ THE DOOR IS ALWAYS A DESTINATION — RULED BY ALEX 2026-08-16 ("the fold seam is two-way") ──
+ * This function used to refuse `no-passages` from a plot with an empty net, faithfully implementing
+ * the 08-15 split (*"the plot → a Wilds location = a passage, bought off a waymark"*). Alex hit the
+ * consequence live: **a keeper crosses IN through their fold's seam, arrives holding zero marks, and
+ * the ruling gives them nothing to leave by.** Worse in practice than in principle — the host drew
+ * the threshold anyway and it sat there silently inert, a visible front door that did nothing.
+ *
+ * The ruling: **a keeper's own fold-seam is a two-way passage.** Stepping into the threshold puts
+ * them back out at their own door needing no waymark, because it is THE SAME PASSAGE THEY CAME IN
+ * THROUGH — not a new destination, not a purchase, nothing Greg has to give. Waymarks are unchanged
+ * and stay what the split made them: EXTRA places to step out to, bought off a planted mark.
+ *
+ * ⚠ SO `no-passages` IS GONE RATHER THAN LEFT UNREACHABLE. Once the door always answers, an empty
+ * net is not a refusal — it is the case with exactly one destination and nothing to choose between.
+ * A refusal kept "just in case" is a state the code claims can happen and cannot, which is how a
+ * dead limb starts lying (this repo has one such limb already documented in `pipeline_config`).
+ *
+ * ⚠ AND THE PICKER STILL OPENS WHEN THERE ARE MARKS. With the door plus N spokes there IS a choice,
+ * so a bare step still refuses `at-plot-pick-one` and the host asks. Sending the keeper out the door
+ * whenever they did not name a destination would silently make the door the only reachable exit for
+ * anyone who steps without opening the panel — the opposite bug, one week later.
  */
 export function destination(
   net: WaymarkNet, opts: { fromPlot: true; toId?: string } | { fromPlot: false; fromId: string },
-): { to: Waymark } | { toPlot: true } | { refused: TravelRefusal } {
+): { to: Waymark } | { toPlot: true } | { toDoor: true } | { refused: TravelRefusal } {
   if (!opts.fromPlot) {
     if (!net.marks.some((m) => m.id === opts.fromId)) return { refused: 'unknown-mark' }
     return { toPlot: true }
   }
-  if (net.marks.length === 0) return { refused: 'no-passages' }
+  if (opts.toId === DOOR_ID) return { toDoor: true }
+  // Nothing planted: the door is the only way out, so there is nothing to ask about.
+  if (net.marks.length === 0) return { toDoor: true }
   if (!opts.toId) return { refused: 'at-plot-pick-one' }
   const to = net.marks.find((m) => m.id === opts.toId)
   if (!to) return { refused: 'unknown-mark' }

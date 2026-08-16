@@ -12,7 +12,7 @@
 
 import {
   emptyNet, plant, pull, rename, destination, spokesOf,
-  markAt, arrivalOf, MAX_MARKS, type WaymarkNet,
+  markAt, arrivalOf, MAX_MARKS, DOOR_ID, type WaymarkNet,
 } from './waymark'
 
 let pass = 0
@@ -117,8 +117,32 @@ const netOf = (n: number): WaymarkNet => {
 
   ok('refused' in destination(net, { fromPlot: false, fromId: 'nope' }), 'an unknown origin refuses')
   ok('refused' in destination(net, { fromPlot: true, toId: 'nope' }), 'an unknown destination refuses')
+
+  // ── ★★ THE DOOR IS ALWAYS A WAY OUT (Alex, 2026-08-16: "the fold seam is two-way") ────────────
+  // This assert used to read `refused === 'no-passages'` — "the plot with no passages says so" — and
+  // it was GREEN the whole time a keeper was sealed in their own garden. **The test was not wrong
+  // about the code; the code was right about the wrong ruling**, and a passing assert is exactly
+  // what stopped anyone looking. Alex found it by walking into his own threshold and having nothing
+  // happen. Nothing about it was catchable from inside this file — which is the argument for the
+  // playtest, not for a better test.
   const none = destination(emptyNet(), { fromPlot: true })
-  ok('refused' in none && none.refused === 'no-passages', 'the plot with no passages says so')
+  ok('toDoor' in none, '★★ a keeper who has planted nothing still steps out their own door')
+
+  const named = destination(net, { fromPlot: true, toId: DOOR_ID })
+  ok('toDoor' in named, '★ and the door is namable even with spokes planted')
+
+  // ⚠ THE PICKER MUST SURVIVE. With the door plus N spokes there is a genuine choice, so a bare step
+  // still asks — sending the keeper out the door whenever they named nothing would quietly make the
+  // door the only exit anyone reaches without opening the panel. That is the same bug inverted, and
+  // it is the one this fix could most easily have introduced.
+  ok('refused' in unnamed && unnamed.refused === 'at-plot-pick-one',
+    '★ a bare step with spokes planted still asks where to')
+
+  // ★ AND THE DOOR IS NOT A WAYMARK. It must never appear in the net: a stored coordinate could be
+  // pulled, could count against MAX_MARKS, and could disagree with the ground it names. The host
+  // derives it from the bubble every time.
+  ok(!net.marks.some((m) => m.id === DOOR_ID) && !emptyNet().marks.some((m) => m.id === DOOR_ID),
+    '★ the door is never a planted mark')
 }
 
 // ── naming + arrival ──────────────────────────────────────────────────────────
