@@ -83,7 +83,21 @@ import { Column, SECTION } from './column'
 // an edit against ground that no longer exists. Nothing canon is in there (`bubbleSwallows` clears
 // every anchor but `garden`, which IS the plot), so in practice this touches empty country; the
 // bump is what makes the warning fire anyway rather than betting on that.
-export const GENERATOR_VERSION = 18
+// 18 → 19 (2026-08-16): THE FOLD'S WALL BECAME A PILE OF CLOUDS. The shell stopped being a near
+// cylinder with a flat lid: `wobble` 0.01 → 0.03 swings the wall ±15 blocks in and out around its
+// old line, and the cap crowns and frays between y174 and y206 where it used to stop dead at 190.
+// So the wall now STANDS where it did not (a bulge reaches 15 blocks further out over ground a
+// player could have been building on) and is ABSENT where it did (a trough pulls it 15 blocks back,
+// and a low crown leaves 16 blocks of sky where there was wall). Same class as 17 → 18 exactly: the
+// footprint moved, and an edit inside the swept band is now an edit against ground that moved.
+//
+// ⚠ THE SHELL ITSELF IS UNMINEABLE (`hardness: Infinity`, `placeable: false`), which is precisely
+// the argument that nearly talked me out of this bump — you cannot hold an edit made OF the wall.
+// You can absolutely hold one the wall has since moved ON TOP OF, and that is the case the constant
+// exists for. **The header three lines up says the bump is the entire point and was forgotten once
+// already; the reasoning that skips it is always "in practice this touches empty country."** The
+// bump is what makes the warning fire instead of betting on that.
+export const GENERATOR_VERSION = 19
 
 /**
  * One column's edits: packed local index → material.
