@@ -149,6 +149,17 @@ try {
   // drawn anyway — it is that the two kinds of round are answered differently, which is the whole
   // claim that "runes ARE the combat" rests on.
   console.log('\nthe patrol')
+  // ⚠⚠ RE-ACQUIRE THE COOKIE FIRST. §3 deliberately logs the keeper OUT to test the non-owner fly
+  // path, and `/tp` is owner-gated — so the first version of this section typed a teleport that was
+  // politely refused, left the keeper standing in the glade 1200 blocks from any hold, and reported
+  // three red asserts about a patrol system that was never given a chance to run. Exactly the bug
+  // this file's own header warns about, committed by the file itself one section later.
+  // ★ A TEST THAT CHANGES AUTH STATE MUST PUT IT BACK, or every later test inherits the wrong one.
+  await page.goto(`${new URL(PAGE).origin}/owner?key=${encodeURIComponent(KEY)}`, { waitUntil: 'networkidle2', timeout: 30_000 })
+  await page.goto(PAGE, { waitUntil: 'networkidle2', timeout: 60_000 })
+  await sleep(SETTLE * 1000)
+  ok(await page.evaluate(() => fetch('/api/owner', { cache: 'no-store' }).then(r => r.json()).then(d => !!d.owner)),
+    'the harness is the keeper again (§3 logged it out on purpose)')
   // Poll while approaching: the spawn line is a toast and expires, so a single late read misses it.
   await page.keyboard.press('KeyT'); await sleep(200)
   await page.keyboard.type('/tp -600 -1780'); await page.keyboard.press('Enter'); await sleep(400)
