@@ -103,7 +103,13 @@ import { Column, SECTION } from './column'
 // radius, and the threshold moved from the middle of the island to the wall. This is the largest
 // change the plot's terrain has taken — the island is a different size and a different shape under
 // the turf. Every plot edit in a save predating it is a diff against ground that has moved.
-export const GENERATOR_VERSION = 20
+// 20 → 21 (2026-08-16, same evening): the plot's surface roll now rises FROM `baseY` instead of
+// rolling around it, and the keel hangs from the ground plane instead of from the surface — the two
+// changes that make growing a fold purely additive (0 voxels removed, was 261). Both move the
+// generated ground: every plot column's surface sits up to `roll` higher than v20 put it, and the
+// keel's underside no longer follows the turf. v20 shipped and was live for half an hour, so it
+// gets its own number rather than being folded into 19 → 20.
+export const GENERATOR_VERSION = 21
 
 /**
  * One column's edits: packed local index → material.

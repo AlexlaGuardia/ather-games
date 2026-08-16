@@ -274,8 +274,27 @@ export function plotHeight(
   // columns changed altitude on a +18 growth. `coastT` is the one definition both use.
   const t = coastT(x, z, seed, cfg)
   const fade = 1 - t * t                       // full roll inland, flat at the lip
-  const n = fbm2(x / 19, z / 19, seed ^ 0x50a7, 2) - 0.5
-  return Math.round(cfg.baseY + n * cfg.roll * 2 * fade)
+  // ── ★★ THE ROLL RISES FROM `baseY`; IT NEVER DIPS BELOW IT (2026-08-16, canon-required) ────────
+  // It used to be `(n - 0.5) * roll * 2` — noise centred on the ground plane, so the surface rolled
+  // BOTH WAYS around `baseY`. Growing the fold raises `fade`, which then moved a column's surface in
+  // whichever direction its noise happened to sit: measured on a +18 growth, **257 columns lost a
+  // block of ground.** Any keeper who had built there is left standing on air.
+  //
+  // Canon ruled the guard the same day (`shimmer-geography.md` › *the old shoreline becomes field*):
+  // expansion may reshape the COAST, it may **never reach the interior a keeper built** — and the
+  // reason given is not aesthetic. *"A player who learns that expanding costs them their base stops
+  // expanding, and the whole grimoire-ledger arc dies with it."*
+  //
+  // ★ THE `keel`-BAND INVARIANCE IS NOT ENOUGH ON ITS OWN, WHICH IS WHY THIS EXISTS. That protects
+  // ground well inland; a keeper may build right up to their shore, and the shore is exactly where
+  // growth churns. **Making growth ADDITIVE covers everywhere at once**: the surface only ever rises
+  // as the coast moves out, the keel only ever deepens, so no cell that was solid becomes air. A
+  // build near the old shore gets filled in UNDER it, never dropped out from beneath it.
+  //
+  // ⚠ Costs a garden that dips below its own plane — `baseY` is the floor of the roll now, not its
+  // mean. That is the whole price, and it buys "expanding never takes your work".
+  const n = fbm2(x / 19, z / 19, seed ^ 0x50a7, 2)
+  return Math.round(cfg.baseY + n * cfg.roll * fade)
 }
 
 /**
@@ -327,7 +346,12 @@ export function columnSpan(
 ): { bottom: number; top: number } | null {
   const h = plotHeight(x, z, seed, cfg)
   if (h === null) return null
-  return { bottom: h - keelDepth(x, z, seed, cfg) + 1, top: h }
+  // ⚠ THE BOTTOM HANGS FROM `baseY`, NOT FROM `h` — the last four voxels of the additive-growth fix
+  // (2026-08-16). Anchored to the surface, raising a column by one block lifted its whole keel and
+  // emptied the cell underneath: ground removed, by a change whose entire point was to add some.
+  // Hung from the ground PLANE, a rising surface can only stack soil on top of a keel that stays
+  // put, and `keelDepth` itself only ever deepens as the coast moves out. Both directions additive.
+  return { bottom: cfg.baseY - keelDepth(x, z, seed, cfg) + 1, top: h }
 }
 
 /**
@@ -369,7 +393,7 @@ export function plotMaterialAt(
 
   // 3. Above the ground, and below the keel: the void either way.
   if (y > h) return AIR
-  const bottom = h - keelDepth(x, z, seed, cfg) + 1
+  const bottom = cfg.baseY - keelDepth(x, z, seed, cfg) + 1   // see `columnSpan` — hung from the plane
   if (y < bottom) return AIR
 
   // 4. The keel, FIRST — see the note above. This is the floor of the plot and it outranks the turf.

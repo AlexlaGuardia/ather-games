@@ -297,6 +297,34 @@ console.log('\ngrowth')
   }
   check('growing the fold leaves the island\'s interior bit-identical', moved === 0,
     `${moved} voxels changed across ${interior} interior columns`)
+
+  // ── ★★ AND GROWTH IS ADDITIVE EVERYWHERE: NO CELL THAT WAS SOLID BECOMES AIR ──────────────────
+  // The interior guarantee above is NOT enough on its own, and canon is the reason (`/magii`,
+  // 2026-08-16, `shimmer-geography.md` › *the old shoreline becomes field*): expansion may reshape
+  // the COAST, it may **never reach the interior a keeper built** — and a keeper may build right up
+  // to their own shore, which is exactly where growth churns. The ruling gives the stake in plain
+  // terms: *"a player who learns that expanding costs them their base stops expanding, and the whole
+  // grimoire-ledger arc dies with it."*
+  //
+  // So the claim is widened to cover every column, in the one direction that matters. Ground may be
+  // ADDED under and around a keeper's work; it may never be taken from beneath it.
+  //
+  // ⚠ CAUGHT TWO REAL LOSSES, BOTH INVISIBLE FROM THE INTERIOR ASSERT: the roll was centred on
+  // `baseY` so a rising `fade` moved a column's surface in whichever direction its noise sat (**257
+  // columns lost a block**), and the keel hung from `h`, so raising a surface lifted the whole keel
+  // and emptied the cell underneath (**4 more**). Both fixed at the shape, not clamped after.
+  let taken = 0, added = 0
+  for (const [x, z] of columns()) {
+    if (!insideCore(x, z, SEED)) continue
+    for (let y = min; y <= max; y++) {
+      const a = plotMaterialAt(x, y, z, SEED), b = plotMaterialAt(x, y, z, SEED, grown)
+      if (a !== AIR && b === AIR) taken++
+      if (a === AIR && b !== AIR) added++
+    }
+  }
+  check('growing the fold never takes ground away', taken === 0,
+    `${taken} voxels went solid -> AIR; a keeper who built there is standing on nothing now`)
+  check('and it does add some', added > 1000, `${added} voxels of new ground`)
   check('raising the cap opens new buildable ground',
     withinCap(DEFAULT_PLOT.capRadius + 10, 0, SEED, grown) && !withinCap(DEFAULT_PLOT.capRadius + 10, 0, SEED))
 }
