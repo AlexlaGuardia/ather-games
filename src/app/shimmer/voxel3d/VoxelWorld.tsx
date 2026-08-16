@@ -4883,7 +4883,9 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
           const ang = Math.atan2(p.z - hold.z, p.x - hold.x) + (roll() - 0.5) * 0.9
           const rad = hold.half + 3 + roll() * 6
           const fx = hold.x + Math.cos(ang) * rad, fz = hold.z + Math.sin(ang) * rad
-          const fy = columnHeight(Math.floor(fx), Math.floor(fz), SEED) + 1
+          // ⚠ Spawn on the LIVE surface for the same reason the walk probes it — a hold's pad stands
+          // above the continent rule, and a patrol placed by `columnHeight` starts buried in it.
+          const fy = groundTopNear(fx, fz, columnHeight(Math.floor(fx), Math.floor(fz), SEED) + 2, 12) + 1
           const mesh = new THREE.Mesh(foeGeo[posture], foeMat)
           mesh.position.set(fx, fy + 0.95, fz)
           const collar = new THREE.Mesh(collarGeo, collarMat)
@@ -4905,15 +4907,27 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
         }
         const intent = stepFoe(e.f, {
           px: p.x, pz: p.z,
-          // The one thing that cannot travel between worlds: what is solid. A voxel probe at chest
-          // height, so a foe walks around a wall instead of into it.
-          blocked: (x, z) => isSolid(voxel(Math.floor(x), Math.floor(e.y) + 1, Math.floor(z))),
+          // ── ★★ ASK THE WORLD WHAT IS UNDERFOOT, NEVER `columnHeight` (fixed 2026-08-16) ────────
+          // The first version probed `columnHeight + 2` and every patrol froze on the spot — three
+          // foes reported by `/foes` at 14.4, 15.1 and 14.5 blocks, still there seven seconds later.
+          // `columnHeight` is the CONTINENT's rule, and a hold RAISES A PAD over it, so outside a
+          // stronghold the real surface is metres above what that function says. The probe was
+          // sampling a cell inside the pad, every candidate step read as blocked, and `stepFoe`
+          // correctly refused to walk into a wall that was really the ground.
+          //
+          // ★ THIS IS THE `/goto garden` BUG WEARING A DIFFERENT HAT, on the same day: a position
+          // taken from the generator's idea of the terrain, used in a place the generator has since
+          // overridden. `groundTopNear` is the live ground line and exists for exactly this.
+          //
+          // Blocked now means A STEP TOO TALL TO CLIMB rather than "something is solid here" — the
+          // ground is always solid, which is why the naive test could never have worked.
+          blocked: (x, z) => groundTopNear(x, z, e.y, 6) - (e.y - 1) > 1.2,
         }, dt)
         if (intent.moveTo) {
           e.f = { ...e.f, x: intent.moveTo.x, z: intent.moveTo.z }
-          // Re-ground every step: the road rolls, and a foe that keeps its spawn altitude walks
-          // through hillsides and hovers over dips.
-          e.y = columnHeight(Math.floor(e.f.x), Math.floor(e.f.z), SEED) + 1
+          // Re-ground every step against the LIVE surface, so a foe walks up a pad and over a road
+          // instead of through the hillside or hovering above a dip.
+          e.y = groundTopNear(e.f.x, e.f.z, e.y, 6) + 1
           e.mesh.position.set(e.f.x, e.y + 0.95, e.f.z)
         }
         // Face the keeper. Cheap, and without it three blockouts slide about like furniture.
