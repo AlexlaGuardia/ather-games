@@ -321,6 +321,35 @@ try {
     console.log('  · no hit this run — scripted aim, not a mechanic (see answerCollar\'s oracle)')
   }
   if (/the collar gives/.test(cast.after)) console.log('  · a collar was broken and a Moglin freed')
+
+  // ── 5. A SPENT PATROL STAYS SPENT (2026-08-16) ───────────────────────────────────────────────
+  // ⚠ THE BUG THIS CATCHES IS THE ONE THE DESIGN NOTE PROMISED WOULD NOT EXIST. `foePatrolled` was
+  // a ref, so it covered exactly one page-mount: a keeper could break a collar, refresh, and meet
+  // the same Moglin wearing it again. Canon gives a freed Moglin no wounded state and no second
+  // phase — the reward is that a person is free, spent once — so a reload undoing it is not a
+  // balance problem, it is the ruling being reversed by the browser.
+  //
+  // ★ AIM-INDEPENDENT ON PURPOSE, which is why it is a real test and the shooting ones are not:
+  // it asks whether the patrol comes back, and that question has nothing to do with a crosshair.
+  console.log('\nthe patrol is spent')
+  await sleep(6000)                                   // autosave runs on a 5s interval
+  await page.goto(PAGE, { waitUntil: 'networkidle2', timeout: 60_000 })
+  await sleep(SETTLE * 1000)
+  await page.keyboard.press('KeyT'); await sleep(200)
+  await page.keyboard.type('/tp -600 -1780'); await page.keyboard.press('Enter'); await sleep(400)
+  await page.keyboard.press('Escape')
+  let metAgain = false
+  for (let t = 0; t < 8 && !metAgain; t++) {
+    await sleep(2000)
+    if (/patrol comes out to meet you/.test(await readLog())) metAgain = true
+  }
+  ok(!metAgain, '★★ a patrol already met does not come back after a reload')
+  const rosterAfter = await (async () => {
+    await page.keyboard.press('KeyT'); await sleep(200)
+    await page.keyboard.type('/foes'); await page.keyboard.press('Enter'); await sleep(400)
+    const t = await readLog(); await page.keyboard.press('Escape'); return t
+  })()
+  console.log(`  · ${/no patrol near you/.test(rosterAfter) ? 'the road is empty, as it should be' : 'foes present — check whether they are new'}`)
 } finally {
   await browser.close()
 }

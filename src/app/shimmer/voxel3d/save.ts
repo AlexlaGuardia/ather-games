@@ -143,6 +143,23 @@ export interface PlayerSave {
    * Optional so every pre-pass save loads unchanged.
    */
   waymarks?: unknown
+  /**
+   * ── ★★ WHICH HOLDS HAVE ALREADY SENT THEIR PATROL (2026-08-16, #294) ──────────────────────────
+   * Hold ids, one entry per patrol that has been met. **This has to persist or freeing someone is
+   * undone by a refresh**, which is the exact thing the encounter was designed not to allow: canon
+   * gives a freed Moglin no wounded state and no second phase, so the reward for breaking a collar
+   * is that a person is free — spent once, permanently. Held only in a ref, the guard covered a
+   * single page-mount, and a reload put the collar back on someone the keeper had already freed.
+   *
+   * ⚠ IT RECORDS THE PATROL, NOT THE FOES. Nothing here stores who was freed and who was left
+   * collared, because the encounter is spent either way — walking off and reloading must not re-roll
+   * a fight the keeper declined any more than it should undo one they won. If a later ruling gives
+   * a freed Moglin somewhere to go, THAT will need per-Moglin state; this deliberately does not
+   * pretend to have it.
+   *
+   * Optional, so every older save loads and simply has met nobody.
+   */
+  patrolled?: string[]
 }
 
 const playerKey = (seed: number) => `${seed}:player`

@@ -3192,6 +3192,8 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
       // worst possible place for it. Anything that is not recognisably a net loads as an empty one.
       const wm = p.waymarks as WaymarkNet | undefined
       if (wm && Array.isArray(wm.marks) && typeof wm.next === 'number') waymarks.current = wm
+      // Patrols already met stay met — a reload must not put a collar back on a freed Moglin.
+      if (Array.isArray(p.patrolled)) foePatrolled.current = new Set(p.patrolled.filter(h => typeof h === 'string'))
       const lc = loco.current
       // ── ★★ RESTORE INTO THE SPACE THE POSITION BELONGS TO (2026-08-15) ─────────────────────
       // A save written before `space` existed says nothing about which world its numbers are in,
@@ -3258,7 +3260,10 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
       return { v: 1, x: lc.px, y: lc.py, z: lc.pz, rx: eul.x, ry: eul.y,
                space: space.current,
                inv: inv.current, tools: tools.current, skills: skills.current,
-               waymarks: waymarks.current }
+               waymarks: waymarks.current,
+               // Spent patrols. See `PlayerSave.patrolled` — without this a refresh re-collars
+               // someone the keeper already freed.
+               patrolled: [...foePatrolled.current] }
     }
     const save = () => { void savePlayer(SEED, snap()) }
     const t = setInterval(save, 5000)
