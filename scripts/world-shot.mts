@@ -3,7 +3,10 @@
 // Run: npx tsx scripts/world-shot.mts [out.png] [seconds-to-settle]
 //   WORLD_URL=http://localhost:3201/shimmer/voxel3d?hour=12   — a lane's dev server, day pinned
 //   WORLD_GOTO=twilight-thicket                               — drive the console before shooting
+//   WORLD_CMD='tp -139 -588'                                  — any console line (owner-gated, same as GOTO)
+//   WORLD_FLY=8                                               — rise for N seconds first (owner-only)
 //   WORLD_PITCH=-10                                           — degrees; negative looks UP
+//   WORLD_YAW=180                                             — degrees, + turns right (spawn faces -Z)
 //   WORLD_LOG='\\[canopy\\]'                                     — forward matching console lines to stdout
 //   WORLD_RADIUS=10                                           — load ring, in columns (default: the app's 6)
 //   WORLD_FPS=1                                               — turn the frame meter on for the shot
@@ -52,7 +55,16 @@ const OUT = process.argv[2] ?? 'world.png'
 const SETTLE = Number(process.argv[3] ?? 12)
 const URL = process.env.WORLD_URL ?? 'http://localhost:3200/shimmer/voxel3d'
 const GOTO = process.env.WORLD_GOTO ?? ''
+// WORLD_CMD: any console line, for vantages `/goto` cannot name — `tp -139 -588` to stand off a
+// landmark and shoot its SILHOUETTE, which is the half a close-up can never show. Owner-gated the
+// same way GOTO is, and for the same reason: `tp` is keeper-of-the-realm only.
+const CMD = process.env.WORLD_CMD ?? ''
+// WORLD_FLY: seconds of ascent before the shot, for the vantage no ground position can give — above
+// the canopy, where a landmark's SILHOUETTE is against sky instead of behind trees. Owner-only, both
+// because fly is (2026-08-16) and because it is a camera trick, never something a player sees.
+const FLY = Number(process.env.WORLD_FLY ?? 0)
 const PITCH = Number(process.env.WORLD_PITCH ?? 0)
+const YAW = Number(process.env.WORLD_YAW ?? 0)   // degrees, + turns right. A fresh keeper faces -Z.
 const EXE = process.env.CHROME ?? '/usr/bin/chromium-browser'
 
 const browser = await puppeteer.launch({
@@ -101,12 +113,12 @@ try {
 
   // The owner cookie, before the page — without it `/goto <zone>` answers with a bearing and moves
   // nobody. Only needed when we intend to drive the console; a plain shot stays anonymous.
-  if (GOTO) {
+  if (GOTO || CMD || FLY) {
     const KEY = process.env.OWNER_KEY
     if (!KEY) {
       // ⚠ LOUD, AND IT STOPS. Carrying on would hand back a glade shot under the requested zone's
       // filename, which is how this went unnoticed for weeks in the first place.
-      console.error('WORLD_GOTO needs OWNER_KEY (teleport is owner-gated) — `set -a; . /root/ather-games/.env; set +a`')
+      console.error('WORLD_GOTO/WORLD_CMD needs OWNER_KEY (teleport is owner-gated) — `set -a; . /root/ather-games/.env; set +a`')
       process.exit(2)
     }
     // ⚠ `globalThis.URL` — this module's own `const URL` shadows the constructor.
@@ -117,19 +129,19 @@ try {
   // The world streams; there is no "ready" event to wait on, so give it wall-clock and say so.
   await new Promise(r => setTimeout(r, SETTLE * 1000))
 
-  if (GOTO) {
+  if (GOTO || CMD || FLY) {
     // ⚠ Asked from the GAME page: `/owner` sets the cookie and redirects, so a check issued there
     // races its own navigation and reports false while the cookie is perfectly good.
     const owner = await page.evaluate(() => fetch('/api/owner', { cache: 'no-store' }).then(r => r.json()).then(d => !!d.owner).catch(() => false))
     if (!owner) { console.error('the owner cookie did not take — the shot would be of the glade, not of ' + GOTO); process.exit(2) }
   }
 
-  if (GOTO) {
+  if (GOTO || CMD) {
     // T opens the chat, Escape closes it. Typed through the real keyboard because the console is a
     // controlled input — dispatching a synthetic KeyboardEvent sets no value and submits nothing.
     await page.keyboard.press('KeyT')
     await new Promise(r => setTimeout(r, 300))
-    await page.keyboard.type(`/goto ${GOTO}`)
+    await page.keyboard.type(CMD ? `/${CMD.replace(/^\//, '')}` : `/goto ${GOTO}`)
     await page.keyboard.press('Enter')
     await new Promise(r => setTimeout(r, 300))
     await page.keyboard.press('Escape')
@@ -138,7 +150,22 @@ try {
     await new Promise(r => setTimeout(r, SETTLE * 1000))
   }
 
-  if (PITCH !== 0) {
+  if (FLY > 0) {
+    // ⚠ Needs the pointer lock first (the click below earns it) — but the lock is claimed in the
+    // yaw/pitch block, so do the click here and let that block reuse it. A refused lock must leave
+    // the shot on the ground rather than crash.
+    try {
+      await page.mouse.click(640, 380)
+      await new Promise(r => setTimeout(r, 400))
+      await page.keyboard.press('KeyV')
+      await page.keyboard.down('Space')
+      await new Promise(r => setTimeout(r, FLY * 1000))
+      await page.keyboard.up('Space')
+      await new Promise(r => setTimeout(r, 400))
+    } catch { /* no lock — the shot stays on the ground */ }
+  }
+
+  if (PITCH !== 0 || YAW !== 0) {
     // ⚠ The camera only turns while the pointer is LOCKED — `PointerLockControls` ignores every
     // mousemove otherwise. A real click is what earns the lock (headless Chrome treats page.mouse
     // as trusted input); a scripted `requestPointerLock()` has no user activation and is refused.
@@ -146,10 +173,29 @@ try {
     try {
       await page.mouse.click(640, 380)
       await new Promise(r => setTimeout(r, 400))
+      // ── ★ WORLD_YAW (2026-08-16) — WITHOUT IT THE HARNESS CAN ONLY PHOTOGRAPH ONE DIRECTION ─────
+      // A fresh keeper faces -Z, and both of the fold's useful vantages are behind them: the wall
+      // sits +Z of the glade, and looking AT the door means looking back inward. Every shot of the
+      // fold taken before this was of the countryside opposite it.
+      //
+      // ⚠ TURNED IN STEPS, AND THAT IS NOT COSMETIC. drei reads `movementX`, which Chrome computes
+      // as the delta from the previous cursor x — so one 1571px jump is a single delta the pointer
+      // -lock path handles poorly, while a walk in ~200px steps is what a real mouse produces.
+      // 8.73 px per degree: drei's PointerLockControls turns 0.002 rad per pixel at pointerSpeed 1.
+      const PX_PER_DEG = 8.73
+      let remaining = YAW * PX_PER_DEG
+      let x = 640
+      while (Math.abs(remaining) > 1) {
+        const step = Math.max(-200, Math.min(200, remaining))
+        x += step
+        remaining -= step
+        await page.mouse.move(x, 380)
+        await new Promise(r => setTimeout(r, 40))
+      }
       // Same sign convention as the mouse: dragging down looks down, so a negative pitch looks up.
-      await page.mouse.move(640, 380 + PITCH * 8)
+      await page.mouse.move(x, 380 + PITCH * 8)
       await new Promise(r => setTimeout(r, 400))
-    } catch { /* no lock — default pitch */ }
+    } catch { /* no lock — default facing */ }
   }
 
   await page.screenshot({ path: OUT })
