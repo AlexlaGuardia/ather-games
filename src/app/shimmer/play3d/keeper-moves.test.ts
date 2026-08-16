@@ -11,6 +11,7 @@
 //   6. the coverage gap is pinned — the move-less runes are asserted, so filling one is a
 //      deliberate edit here and not a silent drift (was 8 runes; the Great Registration left 1)
 
+import { castForMove } from './cast'
 import { RUNES } from './birth/runes.data'
 import {
   KEEPER_MOVES, MOVES_BY_RUNE, RUNES_WITHOUT_MOVES,
@@ -133,6 +134,36 @@ const runeIds = new Set(RUNES.map((r) => r.id))
   const two = reachableRunes(['star', 'stone']).length
   chk('a 2nd rune widens reach', two > one, `${one} → ${two}`)
   chk('Veyra (Star+Breeze) unlocks Flame Barrage', knownMoves(['star', 'breeze']).some((m) => m.id === 'flame-barrage'))
+}
+
+// ── ★★ EVERY CASTABLE MOVE DECLARES HOW IT ANSWERS A COLLAR (ruled 2026-08-16, /magii) ──────────
+// The anti-rot half of the ruling: the PRINCIPLE is canon, the CLASSIFICATION travels with the move
+// and is decided when the move is written. A list kept anywhere else goes stale the first time
+// anyone authors a move, and then someone has to go back to Magii for a fresh one.
+//
+// ★ THIS ASSERT IS THE THING THAT MAKES "FAIL CLOSED" REAL RATHER THAN POLITE. `answerCollar`
+// already refuses an unclassified move at runtime, so nothing unsafe ships either way — but a
+// silent refusal would show up as a rune that mysteriously cannot free anyone, which is exactly the
+// bug the ruling was called in to fix. This turns that into a red test at authoring time instead.
+{
+  const castable = KEEPER_MOVES.filter((m) => {
+    const a = castForMove(m.id).archetype
+    return a !== 'unbuilt' && a !== 'stance'
+  })
+  const unclassified = castable.filter((m) => !m.collar)
+  chk('★★ every castable move declares a collar class',
+    unclassified.length === 0,
+    unclassified.length
+      ? `unclassified: ${unclassified.map((m) => m.id).join(', ')} — decide it where the move is written, ` +
+        'test 1 is Rule-3 cruelty (is the BODY the described mechanism?), test 2 is thematic control ' +
+        '(IS the move force-control?), then no-contest for heals/launches, else opens'
+      : `${castable.length} castable moves, all classified`)
+
+  // ⚠ A class that nothing carries is a class nobody is applying. Both refusal classes must have at
+  // least one real member, or a later "tidy-up" quietly deletes a distinction canon drew on purpose.
+  chk('both refusal classes are actually in use',
+    castable.some((m) => m.collar === 'cruelty') && castable.some((m) => m.collar === 'control'),
+    'canon drew two classes because class 2 catches gentle moves class 1 clears')
 }
 
 console.log(`\nkeeper-moves oracle: ${ok} passed, ${bad} failed`)

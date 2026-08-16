@@ -48,8 +48,10 @@ import { plotThreshold, hasFallenOut, chestCap } from '../voxel/plot'
 import { inPassageVolume, insideShell, bubbleSwallows, passageApproach } from '../voxel/bubble'
 import { HOLDS } from '../voxel/holds'
 import {
-  spawnFoe, stepFoe, strike, hostile, foeDef, pickPosture, collarFrac, answerCollar, type CollarFoe,
+  spawnFoe, stepFoe, strike, hostile, foeDef, pickPosture, collarFrac, answerCollar,
+  type CollarFoe, type CollarDelivery,
 } from '../engine/collar-foes'
+import { KEEPER_MOVES } from '../play3d/keeper-moves'
 import { mulberry32 } from '../engine/arena'
 import type { Space } from './save'
 
@@ -285,6 +287,16 @@ const FOE_HEIGHT: Record<'bulwark' | 'channeler' | 'skirmisher', number> = {
 const SPIRIT_TRAIL = 1.5
 /** How far a freed Moglin walks before he is gone. Far enough to read as leaving, not as vanishing. */
 const FREED_FAREWELL = 26
+/**
+ * How a move answers a collar, read off the move where it was authored (`keeper-moves.ts`).
+ *
+ * ⚠ RETURNS `undefined` FOR AN UNKNOWN MOVE ON PURPOSE — `answerCollar` refuses that, so a move that
+ * has never been classified cannot become a way to free someone by being forgotten. The oracle in
+ * `keeper-moves.test.ts` turns the same omission into a red test at authoring time.
+ */
+const COLLAR_CLASS = new Map<string, CollarDelivery>(
+  KEEPER_MOVES.filter(m => m.collar).map(m => [m.id, m.collar as CollarDelivery]))
+const collarClassOf = (moveId: string): CollarDelivery | undefined => COLLAR_CLASS.get(moveId)
 /**
  * How long the settle gate will hold physics after the player's own column has generated, in
  * seconds of frame time. Past this, the ground is not late — it is absent. See the gate.
@@ -4047,7 +4059,8 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
                           * and the cast layer is garnish. With it, the one class that fills the regions
                           * has exactly one answer, and it is the rune.
                           */
-                         frequency: boolean }[]>([])
+                         /** `undefined` = an unclassified move. `answerCollar` refuses it. */
+                         delivery: CollarDelivery | undefined }[]>([])
   // ── ★ THE COLLARED PATROLS (#294, 2026-08-16) ────────────────────────────────────────────────
   // The engine half has existed and been green since 08-12 with NO live caller — `collar-foes.ts`
   // knew what a foe is and what freeing one does, and nothing in either world ever moved one. This
@@ -4522,7 +4535,11 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
         x: camera.position.x, y: camera.position.y, z: camera.position.z,
         dx: f.x, dy: f.y, dz: f.z,
         speed: out.placed.projSpeed, life: out.placed.projLife, mesh, dmg: out.placed.damage,
-        frequency: true,                       // a cast — the only thing that can open a collar
+        // ★ THE MOVE'S OWN CLASS RIDES THE ROUND. Not "is this a cast" — canon refuses two whole
+        // classes of cast (cruelty, control) and rules that heals and launches never open a collar
+        // at all. The class is authored on the move (`keeper-moves.ts`), so a new move arrives here
+        // already decided, and an unclassified one is refused by `answerCollar` rather than trusted.
+        delivery: collarClassOf(out.placed.moveId),
       })
     }
     if (out.message) onSay(out.message)
@@ -4540,7 +4557,7 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
     g.add(mesh)
     shots.current.push({ x: camera.position.x, y: camera.position.y, z: camera.position.z,
                          dx, dy, dz, speed: w.projSpeed, life: w.projLife, mesh, dmg: w.damage,
-                         frequency: false })   // lead. Disperses a Hollow, cannot free a person.
+                         delivery: 'lead' })   // lead. Disperses a Hollow, cannot free a person.
     ammo.current = Math.max(0, ammo.current - 1)
     bloom.current = bloomAfterShot(w, bloom.current)
     const kick = recoilKick(w, Math.random)
@@ -4819,8 +4836,8 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
           g.add(m); impacts.current.push({ mesh: m, life: 0.25 })
           // ★ THE RULE IS ASKED, NOT RESTATED. `answerCollar` is the canon half and is oracle-tested;
           // everything above this line is geometry, which is the host's and cannot travel.
-          const answer = answerCollar(e.f, sh.frequency)
-          if (answer === 'not-a-target') continue      // freed: he is scenery now, let it pass
+          const answer = answerCollar(e.f, sh.delivery)
+          if (answer === 'not-a-target') continue      // freed: they are scenery now, let it pass
           if (answer === 'opens') {
             const res = strike(e.f, sh.dmg)
             e.f = res.foe
@@ -4840,9 +4857,23 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
             }
           } else if (state.clock.elapsedTime - leadSaid.current > 6) {
             leadSaid.current = state.clock.elapsedTime
-            // Said, not punished. The keeper is not doing something wrong so much as reaching for
-            // the wrong tool, and the sentence names the tool that works.
-            onSay('lead will not open a collar — it is a rune he needs, not a bullet')
+            // ★ EACH REFUSAL SAYS ITS OWN REASON, because canon drew the classes for different
+            // reasons and a keeper who hears one flat "that didn't work" learns nothing. Said, not
+            // punished: they are reaching for the wrong tool, and the line names why it is wrong.
+            onSay(
+              answer === 'refused-cruelty'
+                // Class 1. The refusal is about the MOGLIN, who is the soft body in the scene —
+                // not about the spirit, and not about the collar.
+                ? 'not like that — you would hurt him, and he is not the one you are freeing'
+                : answer === 'refused-control'
+                // Class 2, and the sharpest line in the encounter: the move IS the thing being
+                // undone. A keeper who takes a choice cannot be the one handing one back.
+                ? 'you cannot give a choice back by taking one'
+                : answer === 'no-contest'
+                // Not a rebuke. It is a fine move; it simply never entered the contest, and canon's
+                // verb is defeating.
+                ? 'kind, but a collar is not opened by kindness — it is out-contested'
+                : 'lead will not open a collar — it is a rune he needs, not a bullet')
           }
           g.remove(sh.mesh); shots.current.splice(i, 1)
           absorbed = true

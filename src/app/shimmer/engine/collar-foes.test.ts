@@ -202,16 +202,35 @@ const check = (label: string, ok: boolean, detail = '') => {
   // ★★ THE RULE THE WHOLE REGION-COMBAT DESIGN RESTS ON. Canon forbids guns to answer this class:
   // you free a person, and a bullet cannot free anyone. If this ever goes green the wrong way,
   // "runes ARE the combat" quietly becomes "gun fights with a different bar".
-  check('★★ frequency opens a collar', answerCollar(collared, true) === 'opens')
-  check('★★ lead does not', answerCollar(collared, false) === 'refused-lead')
+  check('★★ a move that strikes the collar opens it', answerCollar(collared, 'opens') === 'opens')
+  check('★★ lead does not', answerCollar(collared, 'lead') === 'refused-lead')
+
+  // ⚠ TWO REFUSAL CLASSES, AND THEY ARE NOT INTERCHANGEABLE (ruled 2026-08-16). Class 1 is Rule 3 —
+  // the body IS the described mechanism. Class 2 is thematic — the move IS the line's named evil,
+  // and it catches moves that are perfectly gentle. **A move can pass Rule 3 cleanly and still fail
+  // class 2**, so collapsing them into one "refused" would lose the distinction canon drew.
+  check('★ cruelty is refused (class 1 — Rule 3)', answerCollar(collared, 'cruelty') === 'refused-cruelty')
+  check('★ control is refused (class 2 — hypocrisy)', answerCollar(collared, 'control') === 'refused-control')
+  check('★ and the two refusals are distinguishable',
+    answerCollar(collared, 'cruelty') !== answerCollar(collared, 'control'))
+  // Canon's verb is DEFEATING. A heal or a launch is a legitimate part of winning and never the
+  // thing that opens a collar — delivery-agnostic was never "any cast counts".
+  check('★ a move that never enters the contest cannot win it',
+    answerCollar(collared, 'no-contest') === 'no-contest')
+
+  // ★★ FAIL CLOSED. An unclassified move has never been checked against Rule 3, so it must not be
+  // the thing that frees someone. Same shape as WILDS_SWALLOW_EXEMPT and focus_active's allowlist:
+  // never let an unrecognised value land in the band that GRANTS permission.
+  check('★★ an unclassified move is REFUSED, never allowed through',
+    answerCollar(collared, undefined) !== 'opens')
 
   // ⚠ Refused is NOT the same as absent. Lead must STOP on a collared body — a round passing through
   // a person reads as a broken hitbox, and the player blames the game rather than their choice of
   // tool. A freed Moglin is the opposite: nothing there to answer.
-  check('★ a freed Moglin is not a target at all', answerCollar(freed, true) === 'not-a-target')
-  check('and lead does not target him either', answerCollar(freed, false) === 'not-a-target')
+  check('★ a freed pair is not a target at all', answerCollar(freed, 'opens') === 'not-a-target')
+  check('and lead does not target them either', answerCollar(freed, 'lead') === 'not-a-target')
   check('★ refused and not-a-target are distinct answers',
-    answerCollar(collared, false) !== answerCollar(freed, false))
+    answerCollar(collared, 'lead') !== answerCollar(freed, 'lead'))
 }
 
 console.log(`\ncollar foes: ${pass} passed, ${fail} failed`)

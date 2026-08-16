@@ -30,6 +30,7 @@
 // list to drift. A move naming two runes appears under both and unlocks only when you own both,
 // which is canon's runeword compatibility rule ("the combination must become one") for free.
 
+import type { CollarDelivery } from '../engine/collar-foes'
 import { RUNES, type Rune } from './birth/runes.data'
 
 export type RuneId = string
@@ -50,6 +51,27 @@ export interface KeeperMove {
    * Present = the move needs something the rune inventory alone can't satisfy.
    */
   needs?: string
+  /**
+   * ── ★★ HOW THIS MOVE ANSWERS A COLLAR (ruled 2026-08-16, /magii) ──────────────────────────────
+   * `game/shimmer-storyline.md` › *WHICH MOVES THE GUARD CATCHES*. The PRINCIPLE is canon; the
+   * classification **travels with the move and is decided when the move is written**, which is the
+   * anti-rot half of the ruling: a frozen roster kept anywhere else goes stale the first time
+   * anyone authors a move, and then someone has to go back to Magii for a list.
+   *
+   * ⚠ **OMITTED MEANS REFUSED.** `answerCollar` treats `undefined` as cruelty-refused, and
+   * `keeper-moves.test.ts` fails if any castable move leaves this blank — so a new move cannot
+   * quietly become a way to free someone without a human deciding that it should be.
+   *
+   * Two tests, applied in order, and **the second catches moves the first clears**:
+   *  1. **Rule 3 / cruelty** — is the BODY the described mechanism? Then it cannot be aimed at an
+   *     object, and the cozy line will not put it on the page.
+   *  2. **Thematic / control** — IS the move the line's named evil? *"The evil is force-control."*
+   *     A move that takes someone's choice cannot be the thing that gives a choice back — true even
+   *     of a perfectly gentle move.
+   * Otherwise: does it enter the CONTEST at all (canon's verb is *defeating*)? A heal or a launch is
+   * a legitimate part of winning and never the key — `no-contest`. Everything else `opens`.
+   */
+  collar?: CollarDelivery
   /**
    * Held passives PAUSE MANA RECOVERY while active (runes.md, the mana economy) — the double
    * edge that makes a passive a stance, not a permanent state.
@@ -90,102 +112,115 @@ export const KEEPER_MOVES: KeeperMove[] = [
 
   // Tactical — active, moment-to-moment.
   { id: 'static-burst', name: 'Static Burst', tier: 'tactical', runes: ['static'],
-    effect: 'A burst of speed and evasion — gap-close or escape.' },
+    effect: 'A burst of speed and evasion — gap-close or escape.', collar: 'no-contest' },
   { id: 'firewall', name: 'Firewall', tier: 'tactical', runes: ['star'],
-    effect: 'A wall of flame thrown between you and a threat — escape, area-denial, cover.' },
+    effect: 'A wall of flame thrown between you and a threat — escape, area-denial, cover.', collar: 'cruelty' },
   { id: 'flame-infusion', name: 'Flame Infusion', tier: 'tactical', runes: ['star'],
-    effect: 'Sheathes a weapon or strike in fire — melee enhancement.' },
+    effect: 'Sheathes a weapon or strike in fire — melee enhancement.', collar: 'cruelty' },
   { id: 'mend', name: 'Mend', tier: 'tactical', runes: ['life'],
-    effect: 'A Life-infused heal — accelerates recovery, mends tissue, purges infection.' },
+    effect: 'A Life-infused heal — accelerates recovery, mends tissue, purges infection.', collar: 'no-contest' },
   { id: 'ice-dart', name: 'Ice Dart', tier: 'tactical', runes: ['freeze'],
-    effect: 'Compacts water into a frozen dart — precise, punishing.' },
+    effect: 'Compacts water into a frozen dart — precise, punishing.', collar: 'opens' },
   { id: 'enlighten', name: 'Enlighten', tier: 'tactical', runes: ['illuminate'],
-    effect: 'A burst of blinding light — disorients, and reveals what is hidden. A flash-bang, not a blade.' },
+    effect: 'A burst of blinding light — disorients, and reveals what is hidden. A flash-bang, not a blade.', collar: 'opens' },
   { id: 'stonewall', name: 'Stonewall', tier: 'tactical', runes: ['stone'],
-    effect: 'Tear rock from the ground into a wall — terrain you impose. Close the gap, do not chase.' },
+    effect: 'Tear rock from the ground into a wall — terrain you impose. Close the gap, do not chase.', collar: 'opens' },
   { id: 'shackle', name: 'Shackle', tier: 'tactical', runes: ['metalergy'],
-    effect: "Bind metal against its bearer — clamp a foe in iron, or jam a manalic weapon mid-draw." },
+    effect: "Bind metal against its bearer — clamp a foe in iron, or jam a manalic weapon mid-draw.", collar: 'opens' },
   { id: 'living-architecture', name: 'Living Architecture', tier: 'tactical', runes: ['life', 'barrier'],
-    effect: 'Grow living wood into structure — Barrier used to SHAPE, not to defend.' },
+    effect: 'Grow living wood into structure — Barrier used to SHAPE, not to defend.', collar: 'opens' },
   { id: 'tidal-arms', name: 'Tidal Arms', tier: 'tactical', runes: ['fluid'],
-    effect: 'Ribbons of water worn as extensions of yourself — they move like limbs, strike like whips, grab like hands.' },
+    effect: 'Ribbons of water worn as extensions of yourself — they move like limbs, strike like whips, grab like hands.', collar: 'opens' },
   { id: 'flash-freeze', name: 'Flash Freeze', tier: 'tactical', runes: ['fluid', 'freeze'],
-    effect: 'Shape water, then crystallize it instantly — walls, weapons, restraints. Costs the water it uses.' },
+    effect: 'Shape water, then crystallize it instantly — walls, weapons, restraints. Costs the water it uses.',
+    // Terrain and restraint, the family canon cleared (`stonewall`/`glacial-path`/`cordon`, and
+    // `shackle` — *"clamp a foe in iron"*). No body is the mechanism; ice is.
+    collar: 'opens' },
   { id: 'pressure-lance', name: 'Pressure Lance', tier: 'tactical', runes: ['hydro'],
-    effect: 'Water compressed to a cutting stream — pure focus, no combination. A needle of water harder than steel.' },
+    effect: 'Water compressed to a cutting stream — pure focus, no combination. A needle of water harder than steel.', collar: 'opens' },
   { id: 'fog-bank', name: 'Fog Bank', tier: 'tactical', runes: ['mist', 'breeze'],
-    effect: 'Vapor expanded and steered to fill a space with blinding white. Masters anchor it in zones.' },
+    effect: 'Vapor expanded and steered to fill a space with blinding white. Masters anchor it in zones.', collar: 'opens' },
   { id: 'drowning-grasp', name: 'Drowning Grasp', tier: 'tactical', runes: ['fluid', 'mist'],
-    effect: 'Water wraps the face and expands into the airways. No visible flood, just a thin film and no breath.' },
+    effect: 'Water wraps the face and expands into the airways. No visible flood, just a thin film and no breath.', collar: 'cruelty' },
   { id: 'glacial-path', name: 'Glacial Path', tier: 'tactical', runes: ['freeze', 'stone'],
-    effect: 'Ice anchored into earth — bridges, ramps, terrain that did not exist a second ago, fused to bedrock.' },
+    effect: 'Ice anchored into earth — bridges, ramps, terrain that did not exist a second ago, fused to bedrock.', collar: 'opens' },
   { id: 'lava-stride', name: 'Lava Stride', tier: 'tactical', runes: ['magma', 'stone'],
-    effect: 'Soften the ground under them, harden it under you. They sink into molten rock while you keep your footing.' },
+    effect: 'Soften the ground under them, harden it under you. They sink into molten rock while you keep your footing.', collar: 'cruelty' },
   { id: 'flashpoint', name: 'Flashpoint', tier: 'tactical', runes: ['star', 'lightning'],
-    effect: "Ignition delivered at lightning's speed — the fire appears THERE rather than travelling to it." },
+    effect: "Ignition delivered at lightning's speed — the fire appears THERE rather than travelling to it.", collar: 'cruelty' },
   { id: 'forge-fist', name: 'Forge Fist', tier: 'tactical', runes: ['magma', 'metalergy'],
-    effect: 'A weapon heated to glowing and held stable — strikes that cauterize, blades that cut and burn at once.' },
+    effect: 'A weapon heated to glowing and held stable — strikes that cauterize, blades that cut and burn at once.', collar: 'cruelty' },
   { id: 'heat-mirage', name: 'Heat Mirage', tier: 'tactical', runes: ['star', 'mist'],
     effect: 'Superheated air bent into distortion — they see you three feet from where you stand.' },
   { id: 'volcano-spike', name: 'Volcano Spike', tier: 'tactical', runes: ['magma', 'gem'],
-    effect: 'Molten earth compressed into crystalline shot. Slower than fire but it PIERCES barriers and shatters inside.' },
+    effect: 'Molten earth compressed into crystalline shot. Slower than fire but it PIERCES barriers and shatters inside.', collar: 'cruelty' },
   { id: 'ember-trail', name: 'Ember Trail', tier: 'tactical', runes: ['star', 'dust'],
     effect: 'Burning particles scattered in your wake — a corridor of floating embers that burn from the inside when breathed.' },
   { id: 'crystal-barrage', name: 'Crystal Barrage', tier: 'tactical', runes: ['gem', 'breeze'],
-    effect: 'Mineral shards held mid-air and launched on precise wind. Slower than an arrow, punches through shields.' },
+    effect: 'Mineral shards held mid-air and launched on precise wind. Slower than an arrow, punches through shields.', collar: 'opens' },
   { id: 'grindstone', name: 'Grindstone', tier: 'tactical', runes: ['dust', 'metalergy'],
-    effect: 'Metal particles suspended and spinning — a cloud that shreds what walks through it.' },
+    effect: 'Metal particles suspended and spinning — a cloud that shreds what walks through it.', collar: 'cruelty' },
   { id: 'dust-lung', name: 'Dust Lung', tier: 'tactical', runes: ['dust', 'breeze'],
-    effect: 'Fine particles carried on directed wind and breathed in before they are noticed.' },
+    effect: 'Fine particles carried on directed wind and breathed in before they are noticed.', collar: 'cruelty' },
   { id: 'quake-step', name: 'Quake Step', tier: 'tactical', runes: ['stone', 'static'],
-    effect: 'Charge built with every step and released into the ground — tremors, splitting floor, lost footing.' },
+    effect: 'Charge built with every step and released into the ground — tremors, splitting floor, lost footing.', collar: 'opens' },
   { id: 'shard-grenade', name: 'Shard Grenade', tier: 'tactical', runes: ['gem', 'static'],
-    effect: 'A crystallized sphere packed with charge; on impact it bursts and every fragment carries an electric bite.' },
+    effect: 'A crystallized sphere packed with charge; on impact it bursts and every fragment carries an electric bite.', collar: 'opens' },
   { id: 'sandstorm-veil', name: 'Sandstorm Veil', tier: 'tactical', runes: ['dust', 'mist'],
-    effect: 'Particles suspended in expanding vapor — a choking fog that scours and blinds.' },
+    effect: 'Particles suspended in expanding vapor — a choking fog that scours and blinds.', collar: 'cruelty' },
   { id: 'overcharge', name: 'Overcharge', tier: 'tactical', runes: ['static', 'lightning'],
-    effect: 'Charge built through movement and released as propulsion — not an attack, a launch, the body the projectile.' },
+    effect: 'Charge built through movement and released as propulsion — not an attack, a launch, the body the projectile.', collar: 'no-contest' },
   { id: 'gale-cutter', name: 'Gale Cutter', tier: 'tactical', runes: ['breeze'],
-    effect: 'Wind compressed to a razor edge — pure focus, no combination. Masters cleave stone, the blades invisible.' },
+    effect: 'Wind compressed to a razor edge — pure focus, no combination. Masters cleave stone, the blades invisible.', collar: 'opens' },
   { id: 'updraft', name: 'Updraft', tier: 'tactical', runes: ['breeze', 'stone'],
-    effect: 'Wind against earth to launch debris, allies or yourself — high ground on demand, attacks arriving from above.' },
+    effect: 'Wind against earth to launch debris, allies or yourself — high ground on demand, attacks arriving from above.', collar: 'no-contest' },
   { id: 'thunder-step', name: 'Thunder Step', tier: 'tactical', runes: ['lightning', 'mist'],
-    effect: 'Vanish into vapor, return on a crack of lightning. Masters leave afterimages and strike from behind the fog.' },
+    effect: 'Vanish into vapor, return on a crack of lightning. Masters leave afterimages and strike from behind the fog.', collar: 'no-contest' },
   { id: 'bolt-snipe', name: 'Bolt Snipe', tier: 'tactical', runes: ['lightning', 'illuminate'],
-    effect: 'Light finds the target and the bolt follows the beam — distance barely matters. Masters mark through walls.' },
+    effect: 'Light finds the target and the bolt follows the beam — distance barely matters. Masters mark through walls.', collar: 'opens' },
   { id: 'static-field', name: 'Static Field', tier: 'tactical', runes: ['static', 'dust'],
-    effect: 'Charged particles hung in the air. Step in and muscles twitch, manatech sputters, focus breaks. Disabling, not lethal.' },
+    effect: 'Charged particles hung in the air. Step in and muscles twitch, manatech sputters, focus breaks. Disabling, not lethal.', collar: 'opens' },
   { id: 'pressure-drop', name: 'Pressure Drop', tier: 'tactical', runes: ['tempest', 'freeze'],
-    effect: 'Violent storm meeting sudden cold — pressure plummets, ears pop, lungs strain. Masters make a blizzard out of clear sky.' },
+    effect: 'Violent storm meeting sudden cold — pressure plummets, ears pop, lungs strain. Masters make a blizzard out of clear sky.', collar: 'cruelty' },
 
   // Ultimates — signature, high pool cost.
   { id: 'chain-lightning', name: 'Chain Lightning', tier: 'ultimate', runes: ['lightning'],
-    effect: 'Arcs between every target and conductor in range, jumping through groups.' },
+    effect: 'Arcs between every target and conductor in range, jumping through groups.', collar: 'opens' },
   { id: 'flame-barrage', name: 'Flame Barrage', tier: 'ultimate', runes: ['star', 'breeze'],
     effect: 'A volley of fire that independently tracks and curves mid-flight — a flock of burning birds.' },
   { id: 'gate', name: 'Gate', tier: 'ultimate', runes: ['enchant'],
     effect: 'Bind two points into one and step through. Utility, not damage — the founded craft.' },
   { id: 'healing-grove', name: 'Healing Grove', tier: 'ultimate', runes: ['life', 'barrier'],
-    effect: 'A living sanctuary grown and tended — everyone within is steadily restored.' },
+    effect: 'A living sanctuary grown and tended — everyone within is steadily restored.', collar: 'no-contest' },
   { id: 'cordon', name: 'Cordon', tier: 'ultimate', runes: ['stone', 'metalergy'],
-    effect: 'Seal an area entirely — stone rises on every side and all metal locks to the caster. Containment, not a kill.' },
+    effect: 'Seal an area entirely — stone rises on every side and all metal locks to the caster. Containment, not a kill.', collar: 'opens' },
   { id: 'grey-arena', name: 'Grey Arena', tier: 'ultimate', runes: ['barrier'],
     effect: 'A dome that DRAINS the mana of everyone inside, feeding the caster. A self-refueling trap.',
     needs: 'manatech — a drain-engine' },
   { id: 'healing-stream', name: 'Healing Stream', tier: 'ultimate', runes: ['fluid', 'life'],
-    effect: 'Water carrying restoration, guided through the body. Masters split one stream and mend a line of people at once.' },
+    effect: 'Water carrying restoration, guided through the body. Masters split one stream and mend a line of people at once.', collar: 'no-contest' },
   { id: 'vein-puppet', name: 'Vein Puppet', tier: 'ultimate', runes: ['fluid', 'enchant'],
-    effect: 'Water bound to a body through a link — not healing, CONTROL: their blood answers to you. Forbidden.' },
+    effect: 'Water bound to a body through a link — not healing, CONTROL: their blood answers to you. Forbidden.', collar: 'control' },
   { id: 'firestorm', name: 'Firestorm', tier: 'ultimate', runes: ['star', 'tempest'],
-    effect: 'Burn wedded to chaos — a surgical inferno that takes one side of a street and leaves the other untouched.' },
+    effect: 'Burn wedded to chaos — a surgical inferno that takes one side of a street and leaves the other untouched.', collar: 'cruelty' },
   { id: 'cyclone-cage', name: 'Cyclone Cage', tier: 'ultimate', runes: ['breeze', 'tempest'],
-    effect: 'Controlled wind walling in violent wind — shredding within, unreachable from without. Containment in a different element.' },
+    effect: 'Controlled wind walling in violent wind — shredding within, unreachable from without. Containment in a different element.', collar: 'cruelty' },
   { id: 'pillar-tomb', name: 'Pillar Tomb', tier: 'ultimate', runes: ['stone'],
-    effect: 'Pure Stone depth, no combination — pillars from below, walls from the sides, ceiling above. Sealed on all six faces.' },
+    effect: 'Pure Stone depth, no combination — pillars from below, walls from the sides, ceiling above. Sealed on all six faces.',
+    // ⚠ THE ONE I AM LEAST SURE OF, AND IT FAILS CLOSED ON PURPOSE — flagged to /magii. By canon's
+    // test 1 it should clear: the mechanism is stone, not a body, and it is `cordon` at ultimate
+    // scale (*"containment, not a kill"*). But *tomb* is a death word and *"sealed on all six
+    // faces"* is being buried alive, which is a tonal risk on a cozy line that the two tests do not
+    // quite reach. Refusing costs little — it is an ultimate, never a starter — and the ruling's own
+    // instinct is that the cheap failure is the one that refuses. Re-classify if canon says clear.
+    collar: 'cruelty' },
   { id: 'living-fortress', name: 'Living Fortress', tier: 'ultimate', runes: ['stone', 'metalergy', 'barrier'],
-    effect: 'Stone walls on a bonded metal frame, humming with protective mana. Not a shield, A BUILDING, and good against siege.' },
+    effect: 'Stone walls on a bonded metal frame, humming with protective mana. Not a shield, A BUILDING, and good against siege.',
+    // A building. It shelters; it never enters the contest — the same standing as a heal, and a
+    // legitimate part of winning rather than the thing that opens a collar.
+    collar: 'no-contest' },
   { id: 'monsoon-veil', name: 'Monsoon Veil', tier: 'ultimate', runes: ['mist', 'vapor', 'life'],
-    effect: 'Expanding fog saturated with moisture and carrying Life — wounds close, fatigue lifts, poison purges. A battlefield hospital.' },
+    effect: 'Expanding fog saturated with moisture and carrying Life — wounds close, fatigue lifts, poison purges. A battlefield hospital.', collar: 'no-contest' },
 
   // Combos — require two or more mages in sync.
   { id: 'counterpoint', name: 'Counterpoint', tier: 'combo', runes: ['barrier'],

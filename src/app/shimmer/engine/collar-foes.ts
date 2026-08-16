@@ -171,6 +171,16 @@ export interface FreeResult {
 /**
  * Put frequency back into a collar. The only way this class is ever answered.
  *
+ * ── ★★ THE NUMBER BELONGS TO THE COLLAR (ruled 2026-08-16) ──────────────────────────────────────
+ * `integrity` is **the collar's grip**, never the spirit's health, and that single sentence is what
+ * makes a cutting projectile tonally safe on a cozy line. Breaking it is dispossession — *"no wound,
+ * no death"* — and the freed spirit *"returns to its freedom (it is not caught or kept)."* **A freed
+ * spirit walks away whole. You are not damaging anyone; you are out-contesting a hold.**
+ *
+ * ⚠ SO THIS MUST NEVER BE RENAMED `hp`/`damage`/`health`, and no future move may reduce it as a side
+ * effect of hurting someone. The moment the number means injury, a dart stops being allowed to be
+ * the answer and the whole 08-16 ruling has to be re-fought.
+ *
  * ⚠ A FREED MOGLIN IS PERMANENTLY DONE, and re-striking one must be a no-op rather than a re-arm.
  * Canon gives no wounded state and no second phase, so there is nothing here to model but the
  * moment it comes off. `freed` is true on exactly the strike that breaks it, so a caller can fire
@@ -312,11 +322,41 @@ export const collarFrac = (foe: CollarFoe): number =>
 // segments in a particular world; whether reaching one MEANS anything is a question about canon, and
 // canon travels. Same seam as everything else in this file.
 
+/**
+ * ── ★★ WHAT A THING IS MADE OF, AS FAR AS A COLLAR CARES (ruled 2026-08-16, /magii) ─────────────
+ * `game/shimmer-storyline.md` › *WHICH MOVES THE GUARD CATCHES*. **Delivery is agnostic; the guard
+ * is not.** A collar opens to whatever WINS THE CONTEST — canon's verb is *"freed by **defeating**
+ * it in battle"* — and refuses two separate classes for two different reasons.
+ *
+ * ⚠ **UNCLASSIFIED IS REFUSED.** A move that has never been classified must never open a collar,
+ * because the failure direction matters: a wrongly-refused move is a rune that feels thin, and a
+ * wrongly-accepted one puts described cruelty on a cozy line's page. Same fail-closed shape as
+ * `WILDS_SWALLOW_EXEMPT` and `focus_active`'s allowlist — never let an unrecognised value land in
+ * the band that grants permission.
+ */
+export type CollarDelivery =
+  /** A move that strikes the collar. Canon: it is *"a loop of metal"* — an object, and things can be struck. */
+  | 'opens'
+  /** CLASS 1 — Rule 3. The body IS the described mechanism, so it cannot be aimed at an object. */
+  | 'cruelty'
+  /** CLASS 2 — thematic. The move IS the line's named evil: *"the evil is force-control."* */
+  | 'control'
+  /** Restores, launches, surges. Legitimate, and never the thing that opens a collar. */
+  | 'no-contest'
+  /** A gun round. Canon forbids this class outright — a bullet cannot free anyone. */
+  | 'lead'
+
 export type CollarAnswer =
   /** Frequency reached the collar: strike it. */
   | 'opens'
   /** Lead reached a person. Absorbed, opens nothing, and the world should say why. */
   | 'refused-lead'
+  /** ★ CLASS 1. Canon will not put it on the page: *"takes and pressures; he does not injure."* */
+  | 'refused-cruelty'
+  /** ★ CLASS 2. A move that takes someone's choice cannot be the thing that gives a choice back. */
+  | 'refused-control'
+  /** Never entered the contest, so it cannot have won it. Not a refusal of the keeper — of the verb. */
+  | 'no-contest'
   /** Already free. Not a target, not a hitbox, not a thing to shoot at. */
   | 'not-a-target'
 
@@ -330,7 +370,18 @@ export type CollarAnswer =
  * reaching for the wrong verb. One is "nothing here"; the other is "this is the wrong tool", and
  * they must look different to the host and to the keeper.
  */
-export function answerCollar(foe: CollarFoe, roundCarriesFrequency: boolean): CollarAnswer {
+export function answerCollar(foe: CollarFoe, delivery: CollarDelivery | undefined): CollarAnswer {
   if (!hostile(foe)) return 'not-a-target'
-  return roundCarriesFrequency ? 'opens' : 'refused-lead'
+  switch (delivery) {
+    case 'opens': return 'opens'
+    case 'cruelty': return 'refused-cruelty'
+    case 'control': return 'refused-control'
+    case 'no-contest': return 'no-contest'
+    case 'lead': return 'refused-lead'
+    // ⚠ `undefined` LANDS HERE ON PURPOSE. A move nobody has classified is a move nobody has
+    // checked against Rule 3, and the cheap failure is the one that refuses it.
+    default: return 'refused-cruelty'
+  }
 }
+
+
