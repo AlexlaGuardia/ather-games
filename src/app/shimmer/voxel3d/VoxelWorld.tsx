@@ -274,6 +274,14 @@ const GUARD_CALM_S = 5
 /** Guard restored per second once calm. A full guard is ~12s of not being held. */
 const GUARD_REGEN_PER_S = 9
 /**
+ * Body heights for the blockout meshes, in blocks. ⚠ These MUST match the geometry in `foeGeo` —
+ * they are what a round is tested against, so a mesh taller than its entry is a head you can see
+ * and cannot hit, and a mesh shorter is a hit on empty air above someone.
+ */
+const FOE_HEIGHT: Record<'bulwark' | 'channeler' | 'skirmisher', number> = {
+  bulwark: 1.9, channeler: 2.2, skirmisher: 1.35,
+}
+/**
  * How long the settle gate will hold physics after the player's own column has generated, in
  * seconds of frame time. Past this, the ground is not late — it is absent. See the gate.
  *
@@ -4732,7 +4740,21 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
           if (!hostile(e.f)) continue                 // a freed Moglin is not a target, ever
           const def = foeDef(e.f.posture)
           const r = Math.max(0.5, def.body + 0.35)    // the channeler has no body; it is still a person
-          if (segmentDist(sh.x, sh.y, sh.z, sh.dx, sh.dy, sh.dz, step, e.f.x, e.y + 0.95, e.f.z) > r) continue
+          // ── ★ A BODY IS A COLUMN, NOT A MARBLE (fixed 2026-08-16) ──────────────────────────────
+          // Testing one sphere at the body's CENTRE made every shot a knife-edge: a keeper's eye
+          // sits ~0.65 above a foe's midpoint, and the smallest posture's radius is 0.71, so a level
+          // shot at two blocks passed 0.65 from the centre and hit by six hundredths of a block.
+          // Aim a hair high, or stand a step further back, and rounds sail through a person you are
+          // looking straight at — which reads as a broken hitbox, and would have been blamed on the
+          // collar rule rather than on the geometry.
+          //
+          // Clamping the test point into the body's vertical SPAN makes it a capsule: the shot is
+          // measured against the nearest part of the body it could actually have struck. Heights
+          // match the blockout meshes, so what you see is what you can hit.
+          const bodyH = FOE_HEIGHT[e.f.posture]
+          const footY = e.y
+          const testY = Math.min(Math.max(sh.y, footY), footY + bodyH)
+          if (segmentDist(sh.x, sh.y, sh.z, sh.dx, sh.dy, sh.dz, step, e.f.x, testY, e.f.z) > r) continue
           const m = new THREE.Mesh(tracerGeo, tracerMat)
           m.scale.setScalar(0.16)
           m.position.set(e.f.x, e.y + 1.2, e.f.z)
