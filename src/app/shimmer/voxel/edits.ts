@@ -97,7 +97,13 @@ import { Column, SECTION } from './column'
 // exists for. **The header three lines up says the bump is the entire point and was forgotten once
 // already; the reasoning that skips it is always "in practice this touches empty country."** The
 // bump is what makes the warning fire instead of betting on that.
-export const GENERATOR_VERSION = 19
+// 19 → 20 (2026-08-16): THE HOME PLOT'S ISLAND FILLS TO ITS WALL. Ground used to stop at radius 20
+// with the cloud-wall out at 30 and ten blocks of void between them; it now fills to the wall on
+// every bearing, the surface roll and the keel taper from the COAST instead of as a fraction of the
+// radius, and the threshold moved from the middle of the island to the wall. This is the largest
+// change the plot's terrain has taken — the island is a different size and a different shape under
+// the turf. Every plot edit in a save predating it is a diff against ground that has moved.
+export const GENERATOR_VERSION = 20
 
 /**
  * One column's edits: packed local index → material.

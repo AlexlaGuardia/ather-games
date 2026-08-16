@@ -33,13 +33,32 @@ function* columns(): Generator<[number, number]> {
 // ── the config is coherent before anything is generated ───────────────────────
 console.log('the fold')
 {
-  // ★ THE CAP MUST NEVER BE SMALLER THAN THE GROUND. If it were, the generator would hand the
-  // keeper ground they are forbidden to build on and cannot remove — the plot would open with a
-  // rule it is already breaking. Asserted on the config rather than discovered in play.
-  check('cap is never inside the island', DEFAULT_PLOT.capRadius >= DEFAULT_PLOT.coreRadius,
-    `cap ${DEFAULT_PLOT.capRadius} vs core ${DEFAULT_PLOT.coreRadius}`)
-  check('there is room to build on day one', DEFAULT_PLOT.capRadius > DEFAULT_PLOT.coreRadius,
-    'cap == core means expansion has nowhere to go and the wall reads as a cage')
+  // ── ★★ THE CAP AND THE GROUND ARE ONE EDGE NOW (2026-08-16) ──────────────────────────────────
+  // These two asserts used to police `capRadius >= coreRadius` and demand a STRICT gap between them
+  // — "cap == core means expansion has nowhere to go and the wall reads as a cage". That gap was a
+  // ten-block ring of void the keeper could neither build on nor walk across, and it is exactly
+  // what put the passage out of reach (Alex: *"island sits in the cloud bubble resting against the
+  // cloud wall so it can reach the passage"*). **The invariant they protected cannot be violated
+  // any more, because there is only one number.** Expansion is felt by the wall moving OUT, not by
+  // a moat filling in. So the claim that replaces them is the one that is now load-bearing.
+  // ★★ THE INVARIANT, SWEPT RATHER THAN SPOT-CHECKED: on no bearing is there a gap between the last
+  // block of ground and the first block of wall. A single void column in that seam is a hole a
+  // keeper falls through on the one ground canon says holds them — and it is what the old layout
+  // had ten of, all the way round.
+  let seamGaps = 0, bearings = 0
+  for (let i = 0; i < 360; i++) {
+    const b = (i / 360) * Math.PI * 2
+    bearings++
+    let lastGround = -1, firstWall = -1
+    for (let r = 1; r <= DEFAULT_PLOT.capRadius + DEFAULT_PLOT.wallWidth + 3; r++) {
+      const x = Math.round(Math.cos(b) * r), z = Math.round(Math.sin(b) * r)
+      if (insideCore(x, z, SEED)) lastGround = r
+      else if (inWall(x, z, SEED) && firstWall < 0) firstWall = r
+    }
+    if (lastGround < 0 || firstWall < 0 || firstWall - lastGround > 1) seamGaps++
+  }
+  check('the ground reaches its own wall on every bearing', seamGaps === 0,
+    `${seamGaps} of ${bearings} bearings have void between the grass and the wall`)
 }
 
 // ── the edge is organic but BOUNDED ───────────────────────────────────────────
@@ -50,14 +69,14 @@ console.log('\nthe edge')
     const e = edgeAt(x, z, SEED)
     if (e > maxEdge) maxEdge = e
     if (e < minEdge) minEdge = e
-    if (insideCore(x, z, SEED) && !withinCap(x, z)) groundOutsideCap++
+    if (insideCore(x, z, SEED) && !withinCap(x, z, SEED)) groundOutsideCap++
   }
 
   // ★ THE WOBBLE CUTS IN, NEVER OUT. This is the assert the module's own comment promises; without
   // it "organic edge" and "exact bound" are two claims nothing reconciles.
-  check('the edge never exceeds coreRadius', maxEdge <= DEFAULT_PLOT.coreRadius + 1e-9,
-    `max edge ${maxEdge.toFixed(2)} vs core ${DEFAULT_PLOT.coreRadius}`)
-  check('the edge actually wanders', minEdge < DEFAULT_PLOT.coreRadius - 0.5,
+  check('the edge never exceeds capRadius', maxEdge <= DEFAULT_PLOT.capRadius + 1e-9,
+    `max edge ${maxEdge.toFixed(2)} vs cap ${DEFAULT_PLOT.capRadius}`)
+  check('the edge actually wanders', minEdge < DEFAULT_PLOT.capRadius - 0.5,
     `min ${minEdge.toFixed(2)} — a perfect circle means the wobble is dead`)
 
   // The consequence that matters in play, stated directly rather than inferred from the two above.
@@ -95,7 +114,7 @@ console.log('\nthe island')
 
   // A lens, not a cylinder: the middle is materially deeper than the lip.
   const mid = keelDepth(0, 0, SEED)
-  const lip = keelDepth(Math.round(DEFAULT_PLOT.coreRadius * 0.95), 0, SEED)
+  const lip = keelDepth(Math.round(DEFAULT_PLOT.capRadius * 0.95), 0, SEED)
   check('the belly is a lens', mid > lip * 2, `centre ${mid} vs lip ${lip}`)
 }
 
@@ -146,7 +165,7 @@ console.log('\nthe wall and the void')
 {
   let wallCols = 0, wallOverGround = 0
   for (const [x, z] of columns()) {
-    if (!inWall(x, z)) continue
+    if (!inWall(x, z, SEED)) continue
     wallCols++
     if (plotHeight(x, z, SEED) !== null) wallOverGround++
   }
@@ -156,7 +175,12 @@ console.log('\nthe wall and the void')
   check('the wall never stands on ground', wallOverGround === 0, `${wallOverGround} columns`)
 
   // The wall is tall enough to be a boundary rather than a kerb the keeper walks over.
-  const wx = DEFAULT_PLOT.capRadius + 1
+  // ⚠ DERIVED, NOT `capRadius + 1` (2026-08-16). The wall used to sit at the bare cap radius, so a
+  // literal landed in it. It stands on the COAST now and the coast wobbles in by up to 18%, so at
+  // bearing 0 the wall is at 27-28 while `capRadius + 1` is 31 — out in the void, and all three
+  // asserts below went red reporting AIR as though the wall had stopped generating. **Exactly the
+  // `onShell` bug from this morning's bubble work, in a second file, the same day.** Ask the shape.
+  const wx = Math.ceil(edgeAt(1, 0, SEED)) + 1
   check('the wall stands above the ground plane',
     plotMaterialAt(wx, DEFAULT_PLOT.baseY + DEFAULT_PLOT.wallHeight, 0, SEED) === M.wall)
   check('the wall skirts below it',
@@ -180,7 +204,7 @@ console.log('\nthe wall and the void')
       const k = `${x},${z}`
       if (seen.has(k)) continue
       seen.add(k)
-      if (inWall(x, z)) continue                       // the wall stops the flood; that is its job
+      if (inWall(x, z, SEED)) continue                       // the wall stops the flood; that is its job
       if (distFromCentre(x, z) > DEFAULT_PLOT.capRadius + DEFAULT_PLOT.wallWidth) { escaped++; continue }
       if (Math.abs(x) > R || Math.abs(z) > R) continue
       // ⚠ 8-CONNECTED, NOT 4. A player is a moving box, not a rook: a wall that is watertight
@@ -200,7 +224,7 @@ console.log('\nthe wall and the void')
   // here — a decorative cloud floor, a skybox proxy, a safety net — fails this, which is the point.
   let voidCells = 0, dressed = 0
   for (const [x, z] of columns()) {
-    if (insideCore(x, z, SEED) || inWall(x, z)) continue
+    if (insideCore(x, z, SEED) || inWall(x, z, SEED)) continue
     for (let y = 0; y < 160; y++) {
       voidCells++
       if (plotMaterialAt(x, y, z, SEED) !== AIR) dressed++
@@ -247,21 +271,34 @@ console.log('\nthe slab')
 // ── expansion does not rewrite the island ─────────────────────────────────────
 console.log('\ngrowth')
 {
-  // ★ RAISING THE CAP MUST NOT MOVE ONE VOXEL OF GROUND. Expansion is the keeper placing blocks;
-  // if the generator's output shifted when the cap rose, every block already placed would be
-  // sitting against different terrain — and the save is a DIFF against generated material, so the
-  // damage is silent and permanent. This is the assert that lets the cap be a live number.
+  // ── ★★ THE INTERIOR MUST NOT MOVE. THE OLD COAST IS ALLOWED TO, AND MUST (2026-08-16) ────────
+  // This asserted that raising the cap moves NOT ONE VOXEL — correct while expansion granted only
+  // permission and the island's size was fixed. Under the 08-16 layout the ground fills to the wall,
+  // so growing the fold GROWS THE ISLAND: some generated change is the feature. The reason behind
+  // the old assert survives intact though, and it is the sharpest sentence in this file — *the save
+  // is a DIFF against generated material, so the damage is silent and permanent.* So the claim is
+  // narrowed rather than dropped: **everything more than `keel` blocks inside the old coast is
+  // bit-identical**, which is where a keeper has actually been building. The ring around the old
+  // shoreline thickens into field, which is the growth being visible rather than terrain moving
+  // under someone's house.
+  // ⚠ Found by this assert going red at **87.7% of columns changed** — `keelDepth` tapered as a
+  // FRACTION of the radius, so a bigger fold had a deeper belly everywhere. Fixed at the taper.
   const grown: PlotConfig = { ...DEFAULT_PLOT, capRadius: DEFAULT_PLOT.capRadius + 18 }
   let moved = 0
   const { min, max } = plotYRange()
+  let interior = 0
   for (const [x, z] of columns()) {
     if (!insideCore(x, z, SEED)) continue
+    // Deep inland of the OLD coast — the ground a keeper has had time to build on.
+    if (edgeAt(x, z, SEED) - distFromCentre(x, z) <= DEFAULT_PLOT.keel) continue
+    interior++
     for (let y = min; y <= max; y++)
       if (plotMaterialAt(x, y, z, SEED) !== plotMaterialAt(x, y, z, SEED, grown)) moved++
   }
-  check('raising the cap leaves the island untouched', moved === 0, `${moved} voxels changed`)
+  check('growing the fold leaves the island\'s interior bit-identical', moved === 0,
+    `${moved} voxels changed across ${interior} interior columns`)
   check('raising the cap opens new buildable ground',
-    withinCap(DEFAULT_PLOT.capRadius + 10, 0, grown) && !withinCap(DEFAULT_PLOT.capRadius + 10, 0))
+    withinCap(DEFAULT_PLOT.capRadius + 10, 0, SEED, grown) && !withinCap(DEFAULT_PLOT.capRadius + 10, 0, SEED))
 }
 
 // ── the threshold, and the soft return that depends on it ─────────────────────
@@ -274,24 +311,43 @@ console.log('\nthe threshold')
   // their threshold. No death, no fall damage." A threshold in rock or over the void turns the
   // gentlest rule in the game into a loop the keeper cannot escape.
   check('the threshold is on the island', insideCore(t.x, t.z, SEED))
-  check('it is inside the buildable cap', withinCap(t.x, t.z))
+  check('it is inside the buildable cap', withinCap(t.x, t.z, SEED))
   check('there is ground under it', plotMaterialAt(t.x, t.y - 1, t.z, SEED) === M.topsoil)
   check('it is standing room, not rock', plotMaterialAt(t.x, t.y, t.z, SEED) === AIR)
   check('and headroom above that', plotMaterialAt(t.x, t.y + 1, t.z, SEED) === AIR)
 
-  // ★ WELL CLEAR OF THE LIP. The soft return must not deposit the keeper one step from the drop it
-  // just caught them from — the rule would read as a bug rather than as kindness.
+  // ── ★★ AT THE WALL, WHICH IS THE REVERSE OF WHAT THIS USED TO ASSERT (2026-08-16) ────────────
+  // It demanded the threshold sit inside `0.85 * edge`, because *"the soft return must not deposit
+  // the keeper one step from the drop it just caught them from."* That reasoning was sound while the
+  // rim was a LIP over the void. It is not any more: the cloud-wall now stands ON the coast, so the
+  // edge is a wall you bump into rather than a drop you walk off, and **the failure the inset was
+  // defending against cannot occur on this geometry.** Meanwhile the inset was the bug Alex hit —
+  // it put the door twelve blocks out with the wall twenty blocks further, so the passage could not
+  // be reached at all.
+  // ⚠ So the assert is INVERTED, not deleted: the door must now be AT the wall, and something that
+  // quietly moved it back inland would silently restore the original bug.
   const e = edgeAt(t.x, t.z, SEED)
-  check('it is not perched on the rim', distFromCentre(t.x, t.z) < e * 0.85,
-    `${distFromCentre(t.x, t.z).toFixed(1)} out of an edge at ${e.toFixed(1)}`)
+  const gap = e - distFromCentre(t.x, t.z)
+  check('the threshold stands at its own wall', gap <= DEFAULT_PLOT.thresholdInset + 1.5,
+    `${gap.toFixed(1)} blocks in from an edge at ${e.toFixed(1)} — the door has drifted inland again`)
+  check('and still on solid ground, not in the wall', insideCore(t.x, t.z, SEED) && !inWall(t.x, t.z, SEED),
+    'the arrival must be ground the keeper stands on, with the wall in front of them')
 
-  // ★ IT MUST NOT WANDER WHEN THE PLOT GROWS. The threshold is where the keeper arrives and where
-  // they are returned to; if raising the cap moved it, every expansion would quietly relocate the
-  // front door of a garden somebody has been decorating.
+  // ── ★ IT MOVES WITH THE WALL NOW, AND THAT IS THE POINT ──────────────────────────────────────
+  // This used to assert the threshold NEVER moves — *"every expansion would quietly relocate the
+  // front door of a garden somebody has been decorating."* True of a door standing in a field.
+  // The door is a gap in the WALL now, so when the fold grows the wall goes with it and the door
+  // must follow or it would be left standing inland with nothing to be a gap in. What has to hold
+  // is the RELATIONSHIP, not the coordinate: still at the wall, still on the same bearing.
   const grown: PlotConfig = { ...DEFAULT_PLOT, capRadius: DEFAULT_PLOT.capRadius + 24 }
   const t2 = plotThreshold(SEED, grown)
-  check('growing the plot does not move the threshold',
-    t.x === t2.x && t.z === t2.z && t.y === t2.y, `${JSON.stringify(t)} vs ${JSON.stringify(t2)}`)
+  const e2 = edgeAt(t2.x, t2.z, SEED, grown)
+  check('the threshold follows its wall out',
+    e2 - distFromCentre(t2.x, t2.z) <= DEFAULT_PLOT.thresholdInset + 1.5,
+    `${(e2 - distFromCentre(t2.x, t2.z)).toFixed(1)} in from the grown edge — the door was left inland`)
+  check('and stays on the same bearing',
+    Math.abs(Math.atan2(t2.z, t2.x) - Math.atan2(t.z, t.x)) < 0.12,
+    'a door that walks around the wall as you grow is a door you have to go looking for')
 
   // The soft-return trigger: below the island, yes; standing on it, no.
   check('falling below the island counts as fallen', hasFallenOut(plotYRange().min - 1))

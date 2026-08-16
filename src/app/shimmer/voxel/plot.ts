@@ -60,10 +60,9 @@ export interface PlotMaterials {
 
 export interface PlotConfig {
   /**
-   * The generated island's radius — what Greg folds for a new keeper. Ground exists only inside it.
-   */
-  coreRadius: number
-  /**
+   * ★ THE FOLD'S EXTENT — how far the keeper may build, AND where the ground ends, AND where the
+   * cloud-wall stands. One number, because since 2026-08-16 they are one edge (see `edgeAt`).
+   *
    * ★ HOW FAR THE KEEPER MAY BUILD, AND THIS MODULE IS DELIBERATELY AGNOSTIC ABOUT WHAT RAISES IT.
    *
    * Canon ruled that **liberation** decides ground and **resources** decide what stands on it; Alex's
@@ -86,11 +85,11 @@ export interface PlotConfig {
   wallHeight: number
   /** Depth the wall sinks below the ground plane, so it reads as held rather than balanced. */
   wallSkirt: number
-  /** How much the island's edge wanders, as a fraction of coreRadius. Never grows it — see `edgeAt`. */
+  /** How much the island's edge wanders, as a fraction of capRadius. Never grows it — see `edgeAt`. */
   wobble: number
   /** Bearing from centre to the threshold, in radians. */
   thresholdBearing: number
-  /** How far out the threshold sits, as a fraction of coreRadius. Kept well inside the lip. */
+  /** How far INSIDE the coast the threshold stands, in blocks. The wall is what you face. */
   thresholdInset: number
   materials: PlotMaterials
 }
@@ -102,18 +101,20 @@ export interface PlotConfig {
  * *"Pocket size/shape, passage rendering + loading, how the void looks on screen, expansion pacing,
  * costs, every number = Jin's"*). They are set to be walked and argued with, not defended.
  *
- * `coreRadius` 20 gives a ~40-block starting garden — small enough that a new keeper reads the whole
- * island at a glance, which is the fantasy ("your corner of the Ather to tend"), and small enough
- * that expansion is felt immediately. `capRadius` 30 leaves a visible ring of room inside the wall
- * on day one, so the mechanic explains itself: **the wall is where your fold ends, the ground is
- * what you have filled in so far, and the gap between them is the invitation.**
+ * `capRadius` 30 gives a ~60-block starting garden, walled at its coast. It was ~40 with a ten-block
+ * moat of void around it until 2026-08-16; the moat is gone, so the same number now buys usable
+ * ground instead of a gap. Still small enough to read at a glance, which is the fantasy ("your
+ * corner of the Ather to tend"), and small enough that expansion is felt immediately.
+ *
+ * ⚠ THE OLD LINE HERE — *"the gap between them is the invitation"* — DESCRIBED THE BUG. The gap was
+ * a ten-block ring of void the keeper could neither build on nor cross, and it is what put the
+ * passage out of reach. Expansion is now felt by the **wall moving out**, not by a moat filling in.
  *
  * ★ THE FULLY-GROWN PLOT IS SIZED AGAINST THE ONE THAT SHIPPED. The old tilemap home plot was
  * 150x150 (`world/region-maps/home-plot.json`), so a cap of ~72 lands the endgame island on roughly
  * the same footprint players already had. Continuity by arithmetic rather than by accident.
  */
 export const DEFAULT_PLOT: PlotConfig = {
-  coreRadius: 20,
   capRadius: 30,
   baseY: 96,
   roll: 2,
@@ -123,11 +124,11 @@ export const DEFAULT_PLOT: PlotConfig = {
   wallHeight: 9,
   wallSkirt: 4,
   wobble: 0.18,
-  // ⚠ 0.62 keeps the threshold clear of the lip even at the wobble's deepest cut (which can pull the
-  // edge in to 0.82 of coreRadius), with room left over. A threshold that lands on the rim would put
-  // the soft return one step from the drop it just caught the keeper from.
   thresholdBearing: 0,
-  thresholdInset: 0.62,
+  // ⚠ BLOCKS, not a fraction — 2 puts the keeper's back two paces off their own wall, close enough
+  // that the passage is plainly what they are standing at. See `plotThreshold` for why the old
+  // fractional inset was actively wrong once the fold can grow.
+  thresholdInset: 2,
   materials: { topsoil: 5, subsoil: 4, stone: 3, floor: 1, wall: 1 },
 }
 
@@ -138,18 +139,38 @@ export const distFromCentre = (x: number, z: number): number => Math.hypot(x, z)
  * The island's edge at the bearing of (x, z), in blocks from centre.
  *
  * ★ THE WOBBLE ONLY EVER CUTS IN, NEVER OUT, and that is load-bearing rather than cosmetic. `cap`
- * is a promise about how far the keeper may build, and an edge that wandered PAST `coreRadius` would
+ * is a promise about how far the keeper may build, and an edge that wandered PAST `capRadius` would
  * make the generated ground contradict the promise at some bearings — ground outside the buildable
  * region, which reads as a bug and cannot be filled or removed sensibly. So the noise scales a
  * radius DOWN from the maximum. The island is organic; the bound is exact.
  */
+// ── ★★ ONE CURVE. THE GROUND ENDS WHERE THE WALL BEGINS (Alex, 2026-08-16) ──────────────────────
+// The island used to stop at `coreRadius` 20 with the wall out at 30, leaving a **ten-block ring of
+// void** between the ground and the fold's edge — and the threshold sat at 12, another twenty blocks
+// short of it. So the keeper's own front door could not be walked to at all. Alex, describing what
+// it should have been: *"island sits in the cloud bubble resting against the cloud wall so it can
+// reach the passage."*
+//
+// **Canon had already said so, and the build had drifted from it.** The bible: plots are *"ringed by
+// walls of cloud… Plots connect to one another by passages — **gates and gaps breached through the
+// cloud-walls**."* A passage is a gap **through the wall**. A door standing in the middle of a field
+// with the wall twenty blocks away is not that, and it is why the plot-side seam had no surface to
+// be parallel to and had to billboard.
+//
+// So `coreRadius` is GONE and this is the only boundary the plot has: ground fills to it, the wall
+// starts at it, and the build limit is it. Three things that had to agree now cannot disagree,
+// which is the same reasoning `withinCap` used to give for being a separate circle — turned around,
+// because under one curve there is nothing left to keep in sync.
+//
+// ⚠ CONSEQUENCE ALEX SHOULD FEEL: the starting garden went from ~40 blocks across to ~60. That is
+// `capRadius` and it is one number to dial, not a shape to rebuild.
 export function edgeAt(x: number, z: number, seed: number, cfg: PlotConfig = DEFAULT_PLOT): number {
   const d = distFromCentre(x, z)
-  if (d === 0) return cfg.coreRadius
+  if (d === 0) return cfg.capRadius
   // Sample on the unit circle so the noise is a function of BEARING only — otherwise the edge
   // ripples with distance too and the island's outline stops being a closed curve.
   const n = fbm2((x / d) * 2.3, (z / d) * 2.3, seed ^ 0x9107, 3)
-  return cfg.coreRadius * (1 - cfg.wobble * n)
+  return cfg.capRadius * (1 - cfg.wobble * n)
 }
 
 /** Is this column inside the generated island? */
@@ -157,16 +178,48 @@ export const insideCore = (x: number, z: number, seed: number, cfg: PlotConfig =
   distFromCentre(x, z) <= edgeAt(x, z, seed, cfg)
 
 /**
+ * How close to the coast this column is: **0 deep inland, 1 at the very edge.**
+ *
+ * ── ★★ THE ONE THING THAT MAKES GROWING A FOLD SAFE (2026-08-16) ────────────────────────────────
+ * Both the surface roll and the keel used to fade on `distFromCentre / edgeAt` — a FRACTION of the
+ * radius. That is invisible while an island's size is fixed, and became a real bug the moment the
+ * ground started filling to a wall that moves: a bigger fold had a deeper belly and a different
+ * surface **everywhere**, so growing changed terrain under ground the keeper had already built on.
+ * Measured on a +18 growth before the fix: **87.7% of columns changed keel depth, 18.4% changed
+ * surface altitude.** The save is a diff against generated material, so all of that is edits
+ * silently re-interpreted against ground that moved.
+ *
+ * Measured from the coast in BLOCKS, everything more than `keel` blocks inland is pinned at 0 and
+ * **cannot move when the fold grows.** Growth becomes additive: a ring around the old shoreline
+ * thickens into field, and nothing else changes.
+ *
+ * ⚠ ONE DEFINITION FOR BOTH, deliberately. They are the same question — *"how near the edge am
+ * I"* — and two copies of it drift the first time one is retuned.
+ */
+export function coastT(x: number, z: number, seed: number, cfg: PlotConfig = DEFAULT_PLOT): number {
+  const e = edgeAt(x, z, seed, cfg)
+  if (e <= 0) return 1
+  const bevel = Math.max(1, Math.min(cfg.keel, e))
+  return 1 - Math.min(1, Math.max(0, e - distFromCentre(x, z)) / bevel)
+}
+
+/**
  * May the keeper place a block in this column?
  *
  * ★ EXPORTED BEFORE IT IS WIRED, ON PURPOSE. The placement gate is a host concern and lands later,
  * but the *rule* belongs beside the geometry that has to agree with it. Anything else invents a
  * second definition of "the plot's extent" in the host, and the two drift the first time the wall
- * moves. A circle, deliberately, with no wobble: **the fold's boundary is a made thing and reads as
- * one**, against ground that reads as grown.
+ * moves.
+ *
+ * ⚠ IT USED TO BE A PERFECT CIRCLE ON PURPOSE — *"the fold's boundary is a made thing and reads as
+ * one, against ground that reads as grown"* — and that reversed on 2026-08-16. It was a good line
+ * while the ground stopped ten blocks short of the wall and the two edges were separate objects you
+ * could see between. Once the ground fills to the wall they are **the same edge**, so a circle here
+ * and a wobble there would mean the buildable limit and the ground disagreeing by up to `wobble` of
+ * the radius — a keeper refused a block on ground they are standing on. One curve, no argument.
  */
-export const withinCap = (x: number, z: number, cfg: PlotConfig = DEFAULT_PLOT): boolean =>
-  distFromCentre(x, z) <= cfg.capRadius
+export const withinCap = (x: number, z: number, seed: number, cfg: PlotConfig = DEFAULT_PLOT): boolean =>
+  distFromCentre(x, z) <= edgeAt(x, z, seed, cfg)
 
 /**
  * ── ★ HOW MANY CHESTS ONE FOLD HOLDS (2026-08-15, Alex's spec: "10 per plot", tied to plot tier) ─
@@ -189,10 +242,19 @@ export const withinCap = (x: number, z: number, cfg: PlotConfig = DEFAULT_PLOT):
 export const chestCap = (cfg: PlotConfig = DEFAULT_PLOT): number =>
   Math.max(1, Math.floor(cfg.capRadius / 3))
 
-/** Is this column in the cloud-wall ring that marks the fold's edge? */
-export const inWall = (x: number, z: number, cfg: PlotConfig = DEFAULT_PLOT): boolean => {
+/**
+ * Is this column in the cloud-wall ring that marks the fold's edge?
+ *
+ * ⚠ IT STARTS AT `edgeAt`, NOT AT `capRadius` — the wall stands directly on the coast. Keyed to the
+ * bare radius while the ground wobbled inside it, this would leave a **crescent of void between the
+ * grass and the wall** on every bearing the edge cut in — a gap you could fall through, on the one
+ * ground canon says holds you. The whole point of the 08-16 layout is that there is nothing between
+ * the two.
+ */
+export const inWall = (x: number, z: number, seed: number, cfg: PlotConfig = DEFAULT_PLOT): boolean => {
   const d = distFromCentre(x, z)
-  return d > cfg.capRadius && d <= cfg.capRadius + cfg.wallWidth
+  const e = edgeAt(x, z, seed, cfg)
+  return d > e && d <= e + cfg.wallWidth
 }
 
 /**
@@ -207,9 +269,11 @@ export function plotHeight(
   x: number, z: number, seed: number, cfg: PlotConfig = DEFAULT_PLOT,
 ): number | null {
   if (!insideCore(x, z, seed, cfg)) return null
-  const e = edgeAt(x, z, seed, cfg)
-  const t = e === 0 ? 0 : Math.min(1, distFromCentre(x, z) / e)
-  const fade = 1 - t * t                       // full roll at centre, flat at the lip
+  // ⚠ SAME COAST-RELATIVE RULE AS THE KEEL, AND FOR THE SAME REASON. This was `d / edgeAt` too, so
+  // growing the fold re-rolled the surface of ground the keeper was standing on — 18.4% of existing
+  // columns changed altitude on a +18 growth. `coastT` is the one definition both use.
+  const t = coastT(x, z, seed, cfg)
+  const fade = 1 - t * t                       // full roll inland, flat at the lip
   const n = fbm2(x / 19, z / 19, seed ^ 0x50a7, 2) - 0.5
   return Math.round(cfg.baseY + n * cfg.roll * 2 * fade)
 }
@@ -226,7 +290,25 @@ export function keelDepth(
 ): number {
   const e = edgeAt(x, z, seed, cfg)
   if (e <= 0) return 0
-  const t = Math.min(1, distFromCentre(x, z) / e)
+  // ── ★★ THE TAPER IS MEASURED FROM THE COAST IN BLOCKS, NOT AS A FRACTION OF THE RADIUS ────────
+  // It used to be `d / edgeAt`, which was invisible while the island's size was fixed and became a
+  // real bug the moment growing the fold grew the ground (2026-08-16). A proportional taper means
+  // raising the cap makes the belly deeper EVERYWHERE — measured on a +18 growth: **87.7% of the
+  // existing island's columns changed keel depth**, while the surface held on 82% and the centre
+  // column was bit-identical. The save is a DIFF against generated material, so every one of those
+  // is a keeper's edit silently re-interpreted against terrain that moved under it.
+  //
+  // Measured from the coast instead, everything more than `bevel` blocks inland is at full depth
+  // and **cannot change when the fold grows** — growth becomes additive. What does change is the
+  // ring around the OLD coast, and that is the feature rather than the damage: your old shoreline
+  // is inland now, so it thickens into field.
+  //
+  // ⚠ IT COSTS THE LENS ON A BIG PLOT, AND THAT IS THE TRADE. A young island is nearly all bevel and
+  // still reads as a lens from below; a fully-grown one is a flat-bottomed disc with a rounded rim.
+  // Invariance wins because the alternative is silent save damage on an ordinary gameplay action —
+  // but if the underside ever needs to look domed again, `bevel` is the dial, and the cost is
+  // written down here rather than rediscovered.
+  const t = coastT(x, z, seed, cfg)
   // A little noise so the belly is not a perfect machined dome.
   const bump = (value2(x / 11, z / 11, seed ^ 0x0ee1) - 0.5) * 2
   return Math.max(1, Math.round(cfg.keel * Math.sqrt(Math.max(0, 1 - t * t)) + bump))
@@ -275,7 +357,7 @@ export function plotMaterialAt(
   const h = plotHeight(x, z, seed, cfg)
 
   // 1. The cloud wall — a ring standing on nothing, outside the buildable cap.
-  if (h === null && inWall(x, z, cfg)) {
+  if (h === null && inWall(x, z, seed, cfg)) {
     if (y <= cfg.baseY + cfg.wallHeight && y >= cfg.baseY - cfg.wallSkirt) return m.wall
     return AIR
   }
@@ -318,12 +400,28 @@ export function plotMaterialAt(
 export function plotThreshold(
   seed: number, cfg: PlotConfig = DEFAULT_PLOT,
 ): { x: number; z: number; y: number } {
-  // Inset from the rim rather than at the centre: a keeper stepping through should be looking ACROSS
-  // their whole garden, not standing in the middle of it with the island behind them. The centre is
-  // also the most valuable ground to build on, and the arrival pad should not squat on it.
-  const r = cfg.coreRadius * cfg.thresholdInset
-  const x = Math.round(Math.cos(cfg.thresholdBearing) * r)
-  const z = Math.round(Math.sin(cfg.thresholdBearing) * r)
+  // ── ★★ AT THE WALL, WHICH IS THE WHOLE 2026-08-16 CHANGE ────────────────────────────────────
+  // It used to sit at 0.62 of the old `coreRadius` — twelve blocks out, with the wall another
+  // twenty beyond that and nothing but void in between. The keeper arrived in the middle of a field
+  // and there was no passage to walk to. Now it stands `thresholdInset` blocks INSIDE the coast,
+  // with the cloud-wall directly in front of them: you walk up to the wall and step through the gap,
+  // which is the same gesture as the Wilds side and what canon means by *"gaps breached through the
+  // cloud-walls."*
+  //
+  // ★ AND THE OLD GUARD AGAINST THIS IS NOW MOOT RATHER THAN IGNORED. The reason for the inset was
+  // that *"a threshold that lands on the rim would put the soft return one step from the drop it
+  // just caught the keeper from."* True while the rim was a lip over the void — but the wall now
+  // stands ON the coast, so the edge is not a drop you can walk off; it is a wall you bump into.
+  // The failure that inset was defending against cannot happen on this geometry.
+  //
+  // ⚠ INSET IS IN BLOCKS NOW, NOT A FRACTION OF THE RADIUS. As a fraction it silently walked the
+  // door further from the wall every time the fold grew — the arrival would have drifted inland as
+  // the keeper expanded, which is exactly backwards.
+  const b = cfg.thresholdBearing
+  const e = edgeAt(Math.cos(b), Math.sin(b), seed, cfg)
+  const r = Math.max(1, e - cfg.thresholdInset)
+  const x = Math.round(Math.cos(b) * r)
+  const z = Math.round(Math.sin(b) * r)
   const h = plotHeight(x, z, seed, cfg)
   // ★ FALLING BACK TO THE CENTRE IS A REAL GUARD, NOT DEFENSIVE PADDING. If a future inset or wobble
   // ever put this outside the ground, the "soft return" would deposit the keeper into the void on a
