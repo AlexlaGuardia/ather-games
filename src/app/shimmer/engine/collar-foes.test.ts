@@ -13,6 +13,7 @@
 
 import {
   COLLAR_FOES, POSTURE_ORDER, foeDef, pickPosture, spawnFoe, strike, hostile, collarFrac, stepFoe, answerCollar, LEAVING_SPEED,
+  rollPatrol,
   type FoePosture,
 } from './collar-foes'
 import { TIER_DIALS } from '../play3d/collar-raid'
@@ -231,6 +232,71 @@ const check = (label: string, ok: boolean, detail = '') => {
   check('and lead does not target them either', answerCollar(freed, 'lead') === 'not-a-target')
   check('★ refused and not-a-target are distinct answers',
     answerCollar(collared, 'lead') !== answerCollar(freed, 'lead'))
+}
+
+// ── ★★ FREEING IS PERMANENT, FAILING IS NOT (2026-08-16, the send-back pass) ──────────────────────
+//
+// This exists because the rule it replaces could only be checked by walking 1237 blocks to the
+// nearest hold, losing a fight on purpose, and reloading. Nobody was ever going to do that, and so
+// nobody noticed that being SENT BACK — the encounter's own designed losing state — consumed the
+// hold as permanently as freeing everybody did, in a save file. The old flag recorded that a patrol
+// had SPAWNED and was read as "this encounter is resolved". Those are different events.
+{
+  const H = { x: -630, z: -1780, half: 10 }        // thistle-hold, the nearest one to the glade
+  const full = rollPatrol(H.x, H.z, H.half, 0)
+
+  check('a patrol is 2-3, not a raid', full.size >= 2 && full.size <= 3, `size ${full.size}`)
+  check('nobody freed means everybody is out', full.slots.length === full.size)
+
+  // ⚠ THE WHOLE POINT. A keeper who was sent back must find them still standing there.
+  check('★★ a hold the keeper LOST at still sends its patrol',
+    rollPatrol(H.x, H.z, H.half, 0).slots.length === full.size)
+
+  // ★ And the ones actually freed do not come back — that half IS canon, and it is the half the old
+  // flag got right. A reload may never re-collar a spirit the keeper let go.
+  check('★ one freed comes back one lighter', rollPatrol(H.x, H.z, H.half, 1).slots.length === full.size - 1)
+  check('★ a fully freed hold never sends anyone again',
+    rollPatrol(H.x, H.z, H.half, full.size).slots.length === 0)
+  check('and an over-count cannot resurrect anyone',
+    rollPatrol(H.x, H.z, H.half, full.size + 7).slots.length === 0)
+
+  // ★★ THE PREFIX RULE, AND IT IS THE ONE A REFACTOR BREAKS SILENTLY. Skipping a freed Moglin must
+  // still consume his rolls: advance the stream without drawing his numbers and the SURVIVOR
+  // inherits them, so the keeper walks back to a patrol of the right size standing in the wrong
+  // places wearing the wrong postures. That reads exactly like the fight being re-rolled, which is
+  // the thing determinism is here to prevent — and the count would still be right, so a length
+  // assert alone would stay green through it.
+  const tail = rollPatrol(H.x, H.z, H.half, 1).slots
+  const expected = full.slots.slice(1)
+  check('★★ the survivors are the SAME Moglins — same posture, same spot',
+    tail.length === expected.length &&
+    tail.every((s, i) => s.n === expected[i].n && s.posture === expected[i].posture &&
+                         s.spread === expected[i].spread && s.rad === expected[i].rad),
+    JSON.stringify({ tail, expected }))
+
+  // Determinism across calls: two keepers meeting the same hold meet the same patrol, and a reload
+  // does not reroll it. Same rule hunter-ai had to be extracted to obey.
+  const again = rollPatrol(H.x, H.z, H.half, 0)
+  check('★ the same hold rolls the same patrol every time',
+    JSON.stringify(again) === JSON.stringify(full))
+
+  // ⚠ AND THE HOLDS ARE NOT ALL ONE FIGHT. Seeded from coordinates, so three holds at three places
+  // must not converge on one patrol — that would make the second and third meeting a repeat.
+  const vetch = rollPatrol(-1570, -2130, 12, 0)
+  const brack = rollPatrol(-2269, -2977, 14, 0)
+  check('the three holds do not roll the same patrol',
+    new Set([full, vetch, brack].map(r => JSON.stringify(r.slots.map(s => s.posture)))).size > 1 ||
+    new Set([full, vetch, brack].map(r => r.size)).size > 1)
+
+  // A slot the host can actually place: the spread is a bearing offset, the radius is outside the
+  // curtain wall. A negative or wall-swallowed radius would spawn the patrol inside the courtyard,
+  // which is the ambush read the trigger ring exists to prevent.
+  for (const r of [full, vetch, brack]) {
+    check('every slot stands outside the hold wall',
+      r.slots.every(s => s.rad > (r === full ? H.half : r === vetch ? 12 : 14)))
+    check('and within a road-width of the approach bearing',
+      r.slots.every(s => Math.abs(s.spread) <= 0.45))
+  }
 }
 
 console.log(`\ncollar foes: ${pass} passed, ${fail} failed`)

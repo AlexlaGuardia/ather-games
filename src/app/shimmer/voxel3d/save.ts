@@ -151,13 +151,40 @@ export interface PlayerSave {
    * is that a person is free — spent once, permanently. Held only in a ref, the guard covered a
    * single page-mount, and a reload put the collar back on someone the keeper had already freed.
    *
-   * ⚠ IT RECORDS THE PATROL, NOT THE FOES. Nothing here stores who was freed and who was left
-   * collared, because the encounter is spent either way — walking off and reloading must not re-roll
-   * a fight the keeper declined any more than it should undo one they won. If a later ruling gives
-   * a freed Moglin somewhere to go, THAT will need per-Moglin state; this deliberately does not
-   * pretend to have it.
+   * ── ★★ REPLACED 2026-08-16 (the send-back pass). `patrolled` RECORDED THE WRONG EVENT. ─────────
+   * It was written at SPAWN and read as "resolved". Those are not the same event, and the gap is the
+   * whole of #294's replay value: a keeper who was **sent back** — the losing state the encounter is
+   * built around — marked the hold spent exactly as thoroughly as one who freed everybody. Combined
+   * with a 1237-block walk to the nearest hold and a per-save (not per-session, despite the comment)
+   * lifetime, **losing once destroyed that hold's encounter permanently in that world.** The penalty
+   * canon describes is *"the collar stays on him"*; the build made it *"and you may never go back."*
    *
-   * Optional, so every older save loads and simply has met nobody.
+   * ⚠ THE OLD DOC ARGUED FOR THIS AND THE ARGUMENT ONLY COVERED HALF: *"walking off and reloading
+   * must not re-roll a fight the keeper declined any more than it should undo one they won."* The
+   * second clause is canon (a freed spirit is free, permanently). The first is a save-scum worry
+   * about a fight with **no reward to farm** — you gain nothing you can hold, which the free path
+   * says out loud. One clause was load-bearing and the other was not, and they were enforced with
+   * one flag.
+   *
+   * ★ SO THIS COUNTS THE ONES FREED, per hold. It is the only fact that must survive: a patrol comes
+   * back minus whoever the keeper already freed, at full collar, and a hold whose count reaches its
+   * patrol size never comes back at all. Freeing is permanent; failing is not.
+   *
+   * ⚠ THE COUNT IS A PREFIX, NOT A SET OF IDS. The patrol is rolled deterministically from the
+   * hold's own coordinates, so "3 of them, 2 freed" re-rolls the identical 3 and skips the first 2 —
+   * the survivor is the same Moglin with the same posture standing in the same place. Storing ids
+   * would be a second source of truth about something the seed already knows.
+   *
+   * Optional, so every older save loads and simply has freed nobody.
+   */
+  freedAt?: Record<string, number>
+  /**
+   * ⚠ LEGACY, READ BY NOBODY (2026-08-16). It cannot be migrated: it says a patrol was *met* and
+   * says nothing about whether it was *resolved*, so reading it as `freedAt` would permanently
+   * delete the encounter for anyone who had merely walked past a hold, and reading it as nothing
+   * re-collars anyone who genuinely freed a patrol. Neither is recoverable from the data. The
+   * recoverable direction was chosen: the encounter comes back. Kept in the type so a future reader
+   * knows the key on disk is dead rather than forgotten.
    */
   patrolled?: string[]
 }

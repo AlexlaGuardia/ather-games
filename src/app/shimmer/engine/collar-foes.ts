@@ -60,6 +60,8 @@
 // differ only in integrity are one foe with three bars. Each must break a different habit, and the
 // oracle asserts they stay distinct on their own axis so a balance pass cannot quietly converge them.
 
+import { mulberry32 } from './arena'
+
 /**
  * How the COLLARED SPIRIT fights — not the Moglin's job. See the header; canon is explicit.
  * Build-side ids: canon owns what these are called, not whether they exist.
@@ -304,6 +306,69 @@ export function stepFoe(
   // ★ REACH IS MEASURED FROM WHERE IT IS NOW, NOT FROM WHERE IT WANTS TO BE. Billing pressure for a
   // step the host may refuse would let a foe press you through a wall it never got around.
   return { moveTo, pressing: dist <= def.reach }
+}
+
+// ── ★★ WHO IS STILL STANDING THERE (2026-08-16, the send-back pass) ──────────────────────────────
+//
+// The host used to roll a patrol inline and mark the hold spent the moment it did. That flag was
+// written at SPAWN and read as *"this encounter is over"*, and persisted — so the encounter's own
+// LOSING state, being sent back, consumed the hold exactly as permanently as freeing everybody. The
+// nearest hold is 1237 blocks from the glade. Lose once and #294's content was gone from that save.
+//
+// ★ THE RULE THAT REPLACES IT: **freeing is permanent, failing is not.** A spirit that went free is
+// free and no reload may re-collar it; a Moglin still holding a leash is still holding it, and
+// meeting him again on the road is the world working, not a respawn. Canon spends the REWARD once —
+// it says nothing about an unresolved meeting, and there is nothing here to farm: the free path
+// gives the keeper nothing they can hold, which it says out loud.
+//
+// ★ SO THE STATE IS A COUNT, AND THE PATROL IS A PREFIX. The roll is deterministic from the hold's
+// own coordinates, so "3 of them, 2 freed" re-rolls the identical 3 and drops the first 2 — the
+// survivor is the same Moglin, same posture, same spot. Storing ids would be a second source of
+// truth about something the seed already knows, and it would drift the first time the roll changed.
+//
+// ⚠ IT LIVES HERE, NOT IN THE HOST, FOR THE REASON THIS FILE KEEPS LEARNING: a rule that can only be
+// checked by walking 1237 blocks and losing a fight is a rule nobody will check. The host keeps the
+// geometry (which way the road faces, where the ground is); the seed math travels.
+
+/** One Moglin's slot in a hold's patrol, before the host decides which way the road faces. */
+export interface PatrolSlot {
+  /** Index in the full patrol. The freed are the low ones — see the prefix rule above. */
+  n: number
+  posture: FoePosture
+  /** Radians either side of the bearing the keeper is approaching from. Host adds the bearing. */
+  spread: number
+  /** Blocks from the hold's centre. */
+  rad: number
+}
+
+/**
+ * Roll a hold's patrol, minus whoever the keeper already freed.
+ *
+ * ⚠ THE SKIPPED SLOTS STILL CONSUME THEIR ROLLS. Advance past a freed Moglin without drawing his
+ * numbers and the survivor inherits them — the keeper walks back to a patrol of the right size
+ * standing in the wrong places wearing the wrong postures, which reads as the fight being re-rolled
+ * and is exactly what determinism is here to prevent.
+ */
+export function rollPatrol(holdX: number, holdZ: number, half: number, alreadyFreed = 0): {
+  /** How many the hold sends when nobody has been freed. `alreadyFreed >= size` means never again. */
+  size: number
+  /** Only those still wearing a collar. Empty once the whole patrol has been freed. */
+  slots: PatrolSlot[]
+} {
+  // Deterministic from the hold, not `Math.random()`: two keepers meeting the same hold must meet
+  // the same patrol, and a reload must not reroll it into a different fight.
+  const roll = mulberry32((holdX * 73856093) ^ (holdZ * 19349663))
+  const size = 2 + Math.floor(roll() * 2)                     // 2-3: a patrol, not a raid
+  const freed = Math.max(0, Math.min(size, Math.floor(alreadyFreed)))
+  const slots: PatrolSlot[] = []
+  for (let n = 0; n < size; n++) {
+    const posture = pickPosture(roll())
+    const spread = (roll() - 0.5) * 0.9
+    const rad = half + 3 + roll() * 6
+    if (n < freed) continue                                   // gone, and staying gone
+    slots.push({ n, posture, spread, rad })
+  }
+  return { size, slots }
 }
 
 /** 0..1 for a collar bar. A freed foe reads 0 and should draw no bar at all. */

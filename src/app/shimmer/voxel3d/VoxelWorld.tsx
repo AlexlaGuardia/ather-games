@@ -49,7 +49,8 @@ import { inPassageVolume, insideShell, bubbleSwallows, passageApproach } from '.
 import { HOLDS } from '../voxel/holds'
 import {
   spawnFoe, stepFoe, strike, hostile, foeDef, pickPosture, collarFrac, answerCollar,
-  type CollarFoe, type CollarDelivery,
+  COLLAR_FOES, POSTURE_ORDER, rollPatrol, type CollarFoeDef,
+  type CollarFoe, type CollarDelivery, type FoePosture,
 } from '../engine/collar-foes'
 import { KEEPER_MOVES } from '../play3d/keeper-moves'
 import { mulberry32 } from '../engine/arena'
@@ -271,10 +272,39 @@ const REACH = 6            // how far you can mine or place, in voxels
  * patrol appear behind them, which reads as an ambush rather than as being met on the road.
  */
 const PATROL_MEET = 34
-/** Seconds out of anyone's reach before the guard starts coming back. */
-const GUARD_CALM_S = 5
-/** Guard restored per second once calm. A full guard is ~12s of not being held. */
-const GUARD_REGEN_PER_S = 9
+/**
+ * ── ★★ THE SEND-BACK'S CLOCK, IN ONE PLACE AND LIVE-TUNABLE (2026-08-16) ────────────────────────
+ * Every number here is a first guess of mine, and a feel pass on eight guesses that each need a
+ * rebuild is a feel pass nobody finishes. `/press` (owner-only) reads and writes this at runtime, so
+ * the dials move while standing in front of a patrol. Same reason `GUARD_TUNING` exists for the
+ * Puppet Guards.
+ *
+ * ⚠ THIS IS THE DEFAULT, NOT THE LIVE VALUE. The mount copies it; the loops read the copy. Mutating
+ * this object would leak one session's tuning into the next mount, which is the sort of thing that
+ * makes a "reload and it's fine" bug.
+ *
+ * ⚠ AND IT IS A HOST DIAL, NOT A CANON ONE. What may be tuned is how long a keeper lasts and how
+ * long they wait; what may NEVER be tuned is that pressure stops at the guard (`vitals.pressure`
+ * cannot reach health) and that losing is dispossession. No dial here can reach either.
+ */
+interface SendbackTuning {
+  /** Seconds out of anyone's reach before the guard starts coming back. */
+  calm: number
+  /** Guard restored per second once calm. At regen 9 against a 100 guard, full takes ~11s. */
+  regen: number
+  /**
+   * Fraction of the guard the keeper wakes with at the glade. 1 = whole.
+   *
+   * ★ DEFAULTS TO WHOLE BECAUSE OF THE LINE THE ENCOUNTER ALREADY SAYS: *"you wake at the glade."*
+   * Waking is rest. Arriving at 0 and standing in an empty tutorial clearing for 16 seconds is a
+   * loading screen with grass, and it punishes a loss twice — the real cost is the collar still
+   * being on him and the walk back, both of which are already paid.
+   */
+  wake: number
+  /** How far outside a hold's curtain wall its patrol comes out to meet you, in blocks. */
+  meet: number
+}
+const SENDBACK_DEFAULT: Readonly<SendbackTuning> = { calm: 5, regen: 9, wake: 1, meet: PATROL_MEET }
 /**
  * Body heights for the blockout meshes, in blocks. ⚠ These MUST match the geometry in `foeGeo` —
  * they are what a round is tested against, so a mesh taller than its entry is a head you can see
@@ -513,6 +543,8 @@ interface ConsoleCtx {
    * something the rules refused to open.
    */
   foes: () => string
+  /** `/press` — the send-back dials. Bare lists them; a key+value sets one; `reset` restores. */
+  press: (key?: string, value?: number) => string
   /**
    * ★ THE RUNES A KEEPER HOLDS. Bare `/rune` is VIEW-GRADE — reading your own hand is not a cheat,
    * and it is the one thing that explains why a cast key does nothing. GRANTING is cheat-grade and
@@ -637,6 +669,18 @@ const CONSOLE_CMDS: ConsoleCmd[] = [
   // breaking is exactly the information the encounter is supposed to make you earn.
   { name: 'foes', usage: 'foes', help: 'the collared patrol near you: distance and collar left', owner: true,
     run: (_a, c) => c.foes() },
+  // ★ /press (2026-08-16) — the send-back's dials, live. Owner-only for the same reason /foes is:
+  // these decide how long a keeper survives a patrol, and handing that to a player is handing them
+  // the encounter's difficulty slider. It exists because eight first guesses cannot be judged from a
+  // file, only from standing in front of a patrol — and a rebuild per guess is a feel pass nobody
+  // finishes. ⚠ RUNTIME ONLY, deliberately not persisted: what a session decides gets written back
+  // into `SENDBACK_DEFAULT` and `COLLAR_FOES` by hand, so the shipped numbers stay reviewable in the
+  // file rather than living in one keeper's save.
+  { name: 'press', usage: 'press [key value | reset]', owner: true,
+    help: 'the send-back dials: guard, calm, regen, wake, meet, <posture>.dps/.reach/.speed',
+    run: (a, c) => c.press(a[0]?.toLowerCase(), a[1] === undefined ? undefined : Number(a[1])),
+    suggest: () => ['reset', 'guard', 'calm', 'regen', 'wake', 'meet',
+      ...['bulwark', 'channeler', 'skirmisher'].flatMap(p => [`${p}.dps`, `${p}.reach`, `${p}.speed`])] },
   // ★ /mist (2026-08-09) — the same lesson /goto was built for, one scale down. A patch is ~52
   // blocks across in a region 2000 across, and there are three of them: found by walking is found
   // by accident. The compass half is VIEW-GRADE for the same reason /goto's is (knowing a place
@@ -1224,6 +1268,7 @@ export default function VoxelWorld() {
           : `moglin w/ ${f.posture.padEnd(10)} ${f.dist.toFixed(1).padStart(6)} blocks   spirit's collar ${(f.collar * 100).toFixed(0)}%`,
       ).join('\n')
     },
+    press: (key, value) => pressRef.current ? pressRef.current(key, value) : 'the world is still waking',
     radius: () => settings.viewRadius,
     setRadius: (r) => update({ viewRadius: r }),
     give: (id, count) => {
@@ -1348,6 +1393,8 @@ export default function VoxelWorld() {
    * than the thing it measures — the same reason the frame meter publishes on a timer.
    */
   const foesRef = useRef<null | (() => { posture: string; dist: number; collar: number }[])>(null)
+  /** `/press` reads and writes the live send-back dials through here. Owner-only — see the ctx entry. */
+  const pressRef = useRef<null | ((key?: string, value?: number) => string)>(null)
 
   // ── the shared party + the withdrawal ledger, read once at mount ────────────────────────────
   // Both are localStorage and therefore synchronous; done in an effect anyway so SSR never touches
@@ -1687,7 +1734,7 @@ export default function VoxelWorld() {
           onOpenChest={(c) => { openCursorUI(); setOpenChest(c) }}
           onOpenStation={(st) => { openCursorUI(); setOpenStation(st) }}
           onOpenWaymark={(w) => { openCursorUI(); setOpenWaymark(w) }}
-          uiOpen={cursorUIOpenRef} owner={isOwnerRef} foesOut={foesRef}
+          uiOpen={cursorUIOpenRef} owner={isOwnerRef} foesOut={foesRef} pressOut={pressRef}
         />
         {/* selector: deliberately matches NOTHING. Without it drei binds click-to-lock on the whole
             DOCUMENT (and that binding ignores `enabled`), which re-locked the pointer on every
@@ -2847,7 +2894,7 @@ const SOLID_EXCEPT = new Set<number>([
 // CELL_HALF for it; everything else (light, fence arms, piece placement) wants "yes, solid".
 const isSolid = (m: number) => !SOLID_EXCEPT.has(baseOf(m))
 
-function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weaponDrawn, weaponIdx, onAmmo, onStats, onPerf, onSay, runeTick, onPos, onLook, onInvChange, worker, incoming, inflight, settings, build, pieceIdx, rot, tools, skills, onSkill, onLevel, onTool, tutorial, onQuestEvent, onNearGreg, onNearTable, cmdOut, mistLedger, onNearMist, sparring, pot, onOpenChest, onOpenStation, onOpenWaymark, uiOpen, owner, foesOut }: {
+function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weaponDrawn, weaponIdx, onAmmo, onStats, onPerf, onSay, runeTick, onPos, onLook, onInvChange, worker, incoming, inflight, settings, build, pieceIdx, rot, tools, skills, onSkill, onLevel, onTool, tutorial, onQuestEvent, onNearGreg, onNearTable, cmdOut, mistLedger, onNearMist, sparring, pot, onOpenChest, onOpenStation, onOpenWaymark, uiOpen, owner, foesOut, pressOut }: {
   inv: React.RefObject<Inventory>
   toolTier: React.RefObject<number>
   toolSkill: React.RefObject<BlockSkill>
@@ -2924,6 +2971,7 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
   owner: React.RefObject<boolean>
   /** Filled by the World so the owner-only `/foes` can read the live patrol. See its ctx entry. */
   foesOut: React.RefObject<null | (() => { posture: string; dist: number; collar: number }[])>
+  pressOut: React.RefObject<null | ((key?: string, value?: number) => string)>
   /** The keeper's two bars. Written here, polled by the HUD. */
   vitals: React.RefObject<Vitals>
   /** The cast pool. `regen` is per second, derived from the Mana skill. */
@@ -3175,6 +3223,73 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
     return () => { foesOut.current = null }
   }, [foesOut, camera])
 
+  // ── ★★ `/press` — THE SEND-BACK'S DIALS, LIVE (2026-08-16) ────────────────────────────────────
+  // Every number in this encounter is a first guess of mine, and the only person who can judge them
+  // is standing in front of a patrol. A rebuild per guess is a feel pass nobody finishes, so the
+  // dials move at runtime and the readout does the arithmetic the guesses are actually about: not
+  // "dps is 9" but "a channeler alone empties your guard in 11 seconds."
+  //
+  // ★ THE DERIVED LINE IS THE POINT. `pressureDps` is unreadable as a feel number — three of them
+  // stack, and what a player experiences is the total. Printing seconds-to-send-back is what turned
+  // "the guard is ~12s" (which was the REGEN time, not the drain time) into something checkable.
+  useEffect(() => {
+    const secs = (dps: number) => {
+      const g = vitals.current?.shieldMax ?? 100
+      return dps <= 0 ? '  never' : `${(g / dps).toFixed(1).padStart(5)}s`
+    }
+    pressOut.current = (key, value) => {
+      const sb = sendback.current
+      if (key === 'reset') {
+        Object.assign(sb, SENDBACK_DEFAULT)
+        for (const p of POSTURE_ORDER) foeTune.current[p] = { ...COLLAR_FOES[p] }
+        return 'send-back dials back to the shipped guesses'
+      }
+      if (key !== undefined) {
+        if (value === undefined || !Number.isFinite(value)) return `/press ${key} needs a number`
+        // ⚠ `guard` IS THE CAP AND THE CURRENT VALUE BOTH. Raising the max alone leaves the keeper
+        // standing at the old number until regen catches up, which reads as the dial not working.
+        if (key === 'guard') {
+          if (!vitals.current) return 'the keeper is still waking'
+          vitals.current = { ...vitals.current, shieldMax: value, shield: value }
+          return `guard ${value}`
+        }
+        if (key in sb) { (sb as unknown as Record<string, number>)[key] = value; return `${key} ${value}` }
+        const [who, dial] = key.split('.')
+        const def = foeTune.current[who as FoePosture]
+        // Only the dials that decide the send-back's clock. Integrity/body/weight/standoff are a
+        // different pass and pretending otherwise would make this command a second, worse copy of
+        // the table it is meant to help tune.
+        if (def && (dial === 'dps' || dial === 'reach' || dial === 'speed')) {
+          if (dial === 'dps') def.pressureDps = value; else if (dial === 'reach') def.reach = value; else def.speed = value
+          return `${who} ${dial} ${value}`
+        }
+        return `no such dial: ${key} — bare /press lists them`
+      }
+      const g = vitals.current?.shieldMax ?? 100
+      const rows = POSTURE_ORDER.map(p => {
+        const d = foeTune.current[p]
+        return `  ${p.padEnd(11)}${d.pressureDps.toFixed(1).padStart(5)}${d.reach.toFixed(2).padStart(8)}${d.speed.toFixed(1).padStart(7)}   ${secs(d.pressureDps)}`
+      })
+      const all = POSTURE_ORDER.reduce((a, p) => a + foeTune.current[p].pressureDps, 0)
+      const closers = foeTune.current.bulwark.pressureDps + foeTune.current.skirmisher.pressureDps
+      return [
+        'send-back dials — /press <key> <value> · /press reset',
+        `  guard  ${String(g).padStart(6)}    the bar a patrol empties. pressure stops here, always`,
+        `  calm   ${sb.calm.toFixed(1).padStart(6)}s   out of everyone's reach before it comes back`,
+        `  regen  ${sb.regen.toFixed(1).padStart(6)}/s  → whole again ${(g / Math.max(0.001, sb.regen)).toFixed(1)}s after that`,
+        `  wake   ${(sb.wake * 100).toFixed(0).padStart(6)}%   guard you wake with at the glade`,
+        `  meet   ${sb.meet.toFixed(0).padStart(6)}    blocks past a hold's wall the patrol comes out`,
+        '',
+        '  posture      dps   reach  speed   alone, empties your guard in',
+        ...rows,
+        '',
+        `  all three pressing at once ${secs(all)}   ·   the two that close on you ${secs(closers)}`,
+        `  the channeler never closes (reach ${foeTune.current.channeler.reach.toFixed(1)} > standoff ${foeTune.current.channeler.standoff.toFixed(1)}) — it presses from where it stands`,
+      ].join('\n')
+    }
+    return () => { pressOut.current = null }
+  }, [pressOut, vitals])
+
   // ── ★ THE PLAYER PERSISTS (2026-08-08) — spawn where you left off, keep what you carried ────
   // Hydrate once at mount: position, facing, inventory, tools, skills. The settle gate holds
   // physics until real ground streams in under the restored spot — the same hold the spawn and
@@ -3212,8 +3327,16 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
       // worst possible place for it. Anything that is not recognisably a net loads as an empty one.
       const wm = p.waymarks as WaymarkNet | undefined
       if (wm && Array.isArray(wm.marks) && typeof wm.next === 'number') waymarks.current = wm
-      // Patrols already met stay met — a reload must not put a collar back on a freed Moglin.
-      if (Array.isArray(p.patrolled)) foePatrolled.current = new Set(p.patrolled.filter(h => typeof h === 'string'))
+      // ★ THE FREED STAY FREED — a reload must never put a collar back on a spirit the keeper let
+      // go. What a reload MAY do is stand the ones still wearing collars back on the road, which is
+      // the half the old `patrolled` flag threw away. ⚠ Shape-checked, not trusted: a hand-edited
+      // save could carry anything, and a junk count would either hide a patrol forever or spawn a
+      // negative slice of one.
+      if (p.freedAt && typeof p.freedAt === 'object' && !Array.isArray(p.freedAt)) {
+        for (const [id, n] of Object.entries(p.freedAt)) {
+          if (typeof n === 'number' && Number.isFinite(n) && n > 0) foeFreed.current[id] = Math.floor(n)
+        }
+      }
       const lc = loco.current
       // ── ★★ RESTORE INTO THE SPACE THE POSITION BELONGS TO (2026-08-15) ─────────────────────
       // A save written before `space` existed says nothing about which world its numbers are in,
@@ -3281,9 +3404,10 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
                space: space.current,
                inv: inv.current, tools: tools.current, skills: skills.current,
                waymarks: waymarks.current,
-               // Spent patrols. See `PlayerSave.patrolled` — without this a refresh re-collars
-               // someone the keeper already freed.
-               patrolled: [...foePatrolled.current] }
+               // Who has been freed, per hold. See `PlayerSave.freedAt` — without this a refresh
+               // re-collars someone the keeper already freed. ⚠ NOT the old `patrolled` list: that
+               // one also erased holds the keeper lost at, permanently.
+               freedAt: { ...foeFreed.current } }
     }
     const save = () => { void savePlayer(SEED, snap()) }
     const t = setInterval(save, 5000)
@@ -4074,6 +4198,8 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
   const foes = useRef<{
     f: CollarFoe
     y: number
+    /** Which hold sent him. Freeing is counted per hold, so a patrol comes back minus the freed. */
+    hold: string
     /** The Moglin, holding the leash. He never wears the collar — see `collar-foes.ts`. */
     mesh: THREE.Mesh
     /** The collared spirit he is dragging. Removed the instant it is freed: it LEAVES. */
@@ -4082,8 +4208,29 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
     leash: THREE.Mesh | null
   }[]>([])
   const foeSeq = useRef(0)
-  /** Which holds have already sent out their patrol this session. */
-  const foePatrolled = useRef<Set<string>>(new Set())
+  /**
+   * ★★ HOW MANY OF EACH HOLD'S PATROL THE KEEPER HAS FREED. Persisted (`PlayerSave.freedAt`), and it
+   * replaces the old `patrolled` flag, which recorded that a patrol had SPAWNED and was read as
+   * "this encounter is over" — so being sent back consumed the hold exactly as permanently as
+   * winning did. See `save.ts` for the full autopsy. Freeing is permanent; failing is not.
+   */
+  const foeFreed = useRef<Record<string, number>>({})
+  /**
+   * Which holds have a patrol standing in the world right now. In-memory ONLY, and that is the
+   * point: it stops a patrol re-spawning on top of itself frame after frame while you fight it, and
+   * it releases the moment the last of them leaves the load ring — so walking away and coming back
+   * meets them again, which is what "the collar stays on him" is supposed to mean.
+   */
+  const foeOut = useRef<Set<string>>(new Set())
+  /**
+   * The live posture dials. A COPY of the engine's table, because `/press` writes to it and
+   * `COLLAR_FOES` is a pure module const that other worlds read.
+   */
+  const foeTune = useRef<Record<FoePosture, CollarFoeDef>>(
+    Object.fromEntries(POSTURE_ORDER.map(p => [p, { ...COLLAR_FOES[p] }])) as Record<FoePosture, CollarFoeDef>,
+  )
+  /** The live send-back dials. See `SENDBACK_DEFAULT` — this is the copy the loops read. */
+  const sendback = useRef<SendbackTuning>({ ...SENDBACK_DEFAULT })
   /** Rate-limits the "a bullet cannot free anyone" line so it teaches once, not once per round. */
   const leadSaid = useRef(0)
   /**
@@ -4853,6 +5000,10 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
               if (e.spirit) { g.remove(e.spirit); e.spirit = null }
               if (e.leash) { g.remove(e.leash); e.leash = null }
               e.mesh.material = foeFreedMat
+              // ★★ THE ONLY THING THAT IS PERMANENT. Counted HERE, on the strike that breaks the
+              // collar — never at spawn, which is the mistake the old `patrolled` flag made. This
+              // one Moglin does not come back; the ones still holding leashes do.
+              foeFreed.current[e.hold] = (foeFreed.current[e.hold] ?? 0) + 1
               onSay('the collar gives — the spirit goes free, and his swagger drains out of him')
             }
           } else if (state.clock.elapsedTime - leadSaid.current > 6) {
@@ -4980,28 +5131,39 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
       // outside one. That also keeps the two populations from blurring into "things that attack you":
       // Hollows are weather, patrols are people with an address.
       //
-      // ⚠ ONCE PER HOLD PER SESSION, deliberately. A respawning patrol turns freeing someone into
-      // farming, and canon has no wounded state to farm — the reward for breaking a collar is that a
-      // person is free, which is spent exactly once. `foePatrolled` is a Set of hold ids, not a
-      // timer, so walking away and coming back does not re-collar anyone you already freed.
+      // ── ★★ FREEING IS PERMANENT. FAILING IS NOT (rebuilt 2026-08-16, the send-back pass) ───────
+      // The first cut marked a hold spent the moment its patrol SPAWNED, and persisted that. So the
+      // encounter's own losing state — being sent back, which is the thing the whole design is
+      // built around — consumed the hold as permanently as freeing everybody did, in a save file,
+      // 1237 blocks from the glade. Canon's penalty is *"the collar stays on him."* The build's was
+      // *"and you may never go back."*
+      //
+      // ★ WHAT MUST BE PERMANENT IS THE FREEING, and only that: a spirit that went free is free, and
+      // no reload may re-collar it. So the count of FREED ones persists, the patrol comes back minus
+      // exactly those, and a hold whose count reaches its patrol size never sends one again.
+      //
+      // ⚠ THE SKIP CONSUMES ITS ROLLS. The patrol is rolled from the hold's coordinates, so skipping
+      // the freed ones must still advance the stream — otherwise the survivor inherits the freed
+      // Moglin's posture and spot, and the keeper meets a different fight than the one they left.
       for (const hold of HOLDS) {
-        if (foePatrolled.current.has(hold.id)) continue
+        if (foeOut.current.has(hold.id)) continue
         // The trigger ring sits outside the curtain wall: met on the ROAD, approaching, never
         // materialising inside a courtyard the keeper is already standing in.
         const dh = Math.hypot(hold.x - p.x, hold.z - p.z)
-        if (dh > hold.half + PATROL_MEET || dh < hold.half) continue
-        foePatrolled.current.add(hold.id)
-        // ⚠ DETERMINISTIC FROM THE HOLD, not `Math.random()`. Two keepers meeting the same hold must
-        // meet the same patrol, and a reload must not reroll it into a different fight — the same
-        // rule `hunter-ai` had to be extracted to obey. The hold's own coordinates are the seed.
-        let roll = mulberry32((hold.x * 73856093) ^ (hold.z * 19349663))
-        const size = 2 + Math.floor(roll() * 2)                     // 2-3: a patrol, not a raid
-        for (let n = 0; n < size; n++) {
-          const posture = pickPosture(roll())
+        if (dh > hold.half + sendback.current.meet || dh < hold.half) continue
+        // ⚠ SET BEFORE THE FULLY-FREED TEST, not after. A hold with nobody left to send has no foe
+        // to despawn, so nothing would ever release it — which is exactly right (it never comes
+        // back) and also stops this block re-rolling the same patrol every frame you stand there.
+        foeOut.current.add(hold.id)
+        // ★ THE SEED MATH IS `rollPatrol`'s AND IT IS ORACLE-TESTED. The host keeps only what cannot
+        // travel: which way the keeper came from, and where the live ground is.
+        const alreadyFreed = foeFreed.current[hold.id] ?? 0
+        const patrol = rollPatrol(hold.x, hold.z, hold.half, alreadyFreed)
+        for (const slot of patrol.slots) {
+          const posture = slot.posture
           // Placed between the keeper and the hold, spread across the road — they came OUT of it.
-          const ang = Math.atan2(p.z - hold.z, p.x - hold.x) + (roll() - 0.5) * 0.9
-          const rad = hold.half + 3 + roll() * 6
-          const fx = hold.x + Math.cos(ang) * rad, fz = hold.z + Math.sin(ang) * rad
+          const ang = Math.atan2(p.z - hold.z, p.x - hold.x) + slot.spread
+          const fx = hold.x + Math.cos(ang) * slot.rad, fz = hold.z + Math.sin(ang) * slot.rad
           // ⚠ Spawn on the LIVE surface for the same reason the walk probes it — a hold's pad stands
           // above the continent rule, and a patrol placed by `columnHeight` starts buried in it.
           const fy = groundTopNear(fx, fz, columnHeight(Math.floor(fx), Math.floor(fz), SEED) + 2, 12) + 1
@@ -5018,17 +5180,40 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
           spirit.add(collar)
           const leash = new THREE.Mesh(leashGeo, leashMat)
           g.add(mesh); g.add(spirit); g.add(leash)
-          foes.current.push({ f: spawnFoe(`f${++foeSeq.current}`, posture, fx, fz), y: fy, mesh, spirit, leash })
+          foes.current.push({ f: spawnFoe(`f${++foeSeq.current}`, posture, fx, fz), y: fy, hold: hold.id, mesh, spirit, leash })
         }
-        onSay('a patrol comes out to meet you — they are wearing someone else\'s cruelty')
+        // ⚠ SILENT WHEN NOBODY CAME OUT. A hold whose patrol is entirely freed must not announce an
+        // empty one — and it reaches here once, on the frame it is added to `foeOut`.
+        if (!patrol.slots.length) continue
+        // The line names the smaller party when the keeper has already taken some of it, because a
+        // returning keeper who hears the same sentence assumes their work came undone.
+        onSay(alreadyFreed
+          ? 'the rest of the patrol is still out here, and still holding their leashes'
+          : 'a patrol comes out to meet you — they are wearing someone else\'s cruelty')
       }
 
+      // ⚠ THE MOGLIN IS THREE MESHES, AND THE FIRST CUT REMOVED ONE. `g.remove(e.mesh)` takes the
+      // Moglin and leaves the collared spirit and the leash in the scene graph — a dimmed spirit and
+      // a floating tether standing on the road with nobody holding them, permanently, one pair per
+      // despawn. Invisible in practice only because despawn happens at the load edge; walk back and
+      // they are still there. Every removal goes through here now.
+      const dropFoe = (i: number) => {
+        const e = foes.current[i]
+        g.remove(e.mesh)
+        if (e.spirit) g.remove(e.spirit)
+        if (e.leash) g.remove(e.leash)
+        foes.current.splice(i, 1)
+        // ★ AND THE HOLD LETS GO. Once the last of a patrol is out of the world the hold may send
+        // again — that is what makes a lost encounter repeatable. The freed ones are held back by
+        // `foeFreed`, which is counted at the moment a collar breaks and not here.
+        if (!foes.current.some(o => o.hold === e.hold)) foeOut.current.delete(e.hold)
+      }
       for (let i = foes.current.length - 1; i >= 0; i--) {
         const e = foes.current[i]
         // Despawn on the load edge, exactly as the Hollows do — a body outside the streamed world is
         // standing on ground that no longer exists.
         if (Math.hypot(e.f.x - p.x, e.f.z - p.z) > settings.viewRadius * SECTION) {
-          g.remove(e.mesh); foes.current.splice(i, 1); continue
+          dropFoe(i); continue
         }
         const intent = stepFoe(e.f, {
           px: p.x, pz: p.z,
@@ -5047,7 +5232,9 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
           // Blocked now means A STEP TOO TALL TO CLIMB rather than "something is solid here" — the
           // ground is always solid, which is why the naive test could never have worked.
           blocked: (x, z) => groundTopNear(x, z, e.y, 6) - (e.y - 1) > 1.2,
-        }, dt)
+          // The LIVE posture dials, so `/press` moves reach and speed without a rebuild. Defaults to
+          // `foeDef(posture)` when omitted, which is what the oracles use.
+        }, dt, foeTune.current[e.f.posture])
         if (intent.moveTo) {
           e.f = { ...e.f, x: intent.moveTo.x, z: intent.moveTo.z }
           // Re-ground every step against the LIVE surface, so a foe walks up a pad and over a road
@@ -5082,14 +5269,14 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
         // it is the exit completing. What must never happen is him standing there forever, which is
         // the build quietly keeping him.
         if (!hostile(e.f) && Math.hypot(e.f.x - p.x, e.f.z - p.z) > FREED_FAREWELL) {
-          g.remove(e.mesh); foes.current.splice(i, 1); continue
+          dropFoe(i); continue
         }
         if (intent.pressing && vitals.current) {
           // ★★ `pressure`, NEVER `damage`, AND THAT IS RULE 3 IN CODE. Canon: *"the game gets the
           // warmth and the lesson, not the wound."* `vitals.pressure` wears the guard down and
           // STOPS — it can never reach health — so losing a road encounter is dispossession, being
           // sent back, never dying. Reaching for `damage` here would undo the ruling in one line.
-          const pr = pressure(vitals.current, foeDef(e.f.posture).pressureDps * dt)
+          const pr = pressure(vitals.current, foeTune.current[e.f.posture].pressureDps * dt)
           vitals.current = pr.vitals
           // ★ GUARD BROKEN IS DISPOSSESSION, NOT DEFEAT, and this is the whole shape of losing here.
           // Canon rules there is no death in the regions, so the cost of being held is that you are
@@ -5104,6 +5291,17 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
             lc.vy = 0; lc.hvx = 0; lc.hvz = 0; lc.stepSmooth = 0
             camera.position.set(lc.px, eyeY(lc), lc.pz)
             settled.current = false
+            // ★ YOU WAKE, AND WAKING IS REST. Arriving at zero guard means standing in an empty
+            // tutorial clearing for ~16s before the world will let you do anything, which punishes
+            // the loss a second time — the real costs (the collar still on him, the walk back) are
+            // already paid in full. `wake` is a dial because it is a feel call, not a rule.
+            const v0 = vitals.current
+            vitals.current = heal(v0, 0, v0.shieldMax * Math.max(0, Math.min(1, sendback.current.wake)))
+            // ⚠ AND THE CONTACT CLOCK RESETS WITH IT. `lastPressed` was stamped three lines above by
+            // the press that broke the guard; leaving it would hold regen off for `calm` seconds
+            // after a send-back that already handed the guard back, so a `wake` below 1 would
+            // silently idle at the glade for no reason anyone could see.
+            lastPressed.current = -999
             onSay('they have you — you wake at the glade, and the collar is still on him')
           }
         }
@@ -5128,9 +5326,9 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
       // standing still a strategy and pressure a stalemate; recovering only once you are out of
       // reach makes DISENGAGING the answer the canon already wants — you can always walk away, and
       // the cost of walking away is that the collar stays on.
-      if (vitals.current && state.clock.elapsedTime - lastPressed.current > GUARD_CALM_S) {
+      if (vitals.current && state.clock.elapsedTime - lastPressed.current > sendback.current.calm) {
         const v = vitals.current
-        if (v.shield < v.shieldMax) vitals.current = heal(v, 0, GUARD_REGEN_PER_S * dt)
+        if (v.shield < v.shieldMax) vitals.current = heal(v, 0, sendback.current.regen * dt)
         if (vitals.current.shield > 0) dispossessed.current = false
       }
 
