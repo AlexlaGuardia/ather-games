@@ -62,14 +62,27 @@ export interface KeeperMove {
    * `keeper-moves.test.ts` fails if any castable move leaves this blank — so a new move cannot
    * quietly become a way to free someone without a human deciding that it should be.
    *
-   * Two tests, applied in order, and **the second catches moves the first clears**:
-   *  1. **Rule 3 / cruelty** — is the BODY the described mechanism? Then it cannot be aimed at an
-   *     object, and the cozy line will not put it on the page.
+   * **THREE tells, applied in order, and each catches moves the ones before it clear:**
+   *  1. **Rule 3 / cruelty** — *"peril stays in-world, no real cruelty on the page."* ⚠ THE TEST IS
+   *     WHAT THE MOVE **RENDERS**, NOT WHAT ITS MECHANISM IS MADE OF. "Can it be aimed at an object"
+   *     is a good proxy and it is why cutting projectiles clear — but it is only a proxy, and when
+   *     proxy and law disagree the LAW wins. *"Stone, water, wind and light are not a licence;
+   *     they're just what the cruelty is made of."* (Amended 2026-08-16 after `pillar-tomb`.)
    *  2. **Thematic / control** — IS the move the line's named evil? *"The evil is force-control."*
    *     A move that takes someone's choice cannot be the thing that gives a choice back — true even
    *     of a perfectly gentle move.
+   *  3. **★ CAN HE STILL LEAVE?** The ruled win-state is **dispossession** — sent back, no wound, no
+   *     death — and *"he can go"* is what canon calls the one thing separating this from a nicer
+   *     collar. **A foe sealed on all six faces has not been sent back; he has been put somewhere.**
+   *     So a move whose outcome leaves the foe UNABLE TO LEAVE cannot open a collar: it cannot
+   *     produce the outcome canon requires. ⚠ This is why `cordon` and `shackle` still clear —
+   *     **containment leaves a person present in the world; a tomb removes them from it.**
    * Otherwise: does it enter the CONTEST at all (canon's verb is *defeating*)? A heal or a launch is
    * a legitimate part of winning and never the key — `no-contest`. Everything else `opens`.
+   *
+   * ★ **AND WHEN IT IS GENUINELY A JUDGMENT CALL, REFUSE — ratified as canon 2026-08-16.** The costs
+   * are not symmetric: *a wrongly-refused move is a build note; a wrongly-cleared one is a cruelty
+   * shipped inside the cozy line.* Doubt resolves one way.
    */
   collar?: CollarDelivery
   /**
@@ -207,12 +220,19 @@ export const KEEPER_MOVES: KeeperMove[] = [
     effect: 'Controlled wind walling in violent wind — shredding within, unreachable from without. Containment in a different element.', collar: 'cruelty' },
   { id: 'pillar-tomb', name: 'Pillar Tomb', tier: 'ultimate', runes: ['stone'],
     effect: 'Pure Stone depth, no combination — pillars from below, walls from the sides, ceiling above. Sealed on all six faces.',
-    // ⚠ THE ONE I AM LEAST SURE OF, AND IT FAILS CLOSED ON PURPOSE — flagged to /magii. By canon's
-    // test 1 it should clear: the mechanism is stone, not a body, and it is `cordon` at ultimate
-    // scale (*"containment, not a kill"*). But *tomb* is a death word and *"sealed on all six
-    // faces"* is being buried alive, which is a tonal risk on a cozy line that the two tests do not
-    // quite reach. Refusing costs little — it is an ultimate, never a starter — and the ruling's own
-    // instinct is that the cheap failure is the one that refuses. Re-classify if canon says clear.
+    // ── ★★ REFUSED, AND CANON RATIFIED IT WITH A BETTER REASON THAN MINE (2026-08-16, `c772036`) ──
+    // I flagged this as a tonal edge case: stone mechanism, buried-alive image. Magii's answer was
+    // that it is not an edge case at all — **it is a hole in the "aim it at an object" proxy.** Rule
+    // 3 asks what a move RENDERS, not what it is made of, and this is exactly where the two come
+    // apart. *"Stone, water, wind and light are not a licence; they're just what the cruelty is
+    // made of."*
+    //
+    // ★ AND THE REASON THAT NEEDS NO TASTE JUDGMENT, WHICH IS THE ONE TO BUILD AGAINST: it
+    // contradicts the ruled WIN-STATE. The win is dispossession — sent back, collar still on him —
+    // and a freed Moglin *"can go"*. **Sealed on all six faces, he has not been sent back; he has
+    // been put somewhere.** That is the line between this and `cordon`: containment leaves a person
+    // present in the world, a tomb removes them from it. The move cannot produce the outcome canon
+    // requires, so it fails before tone is even reached.
     collar: 'cruelty' },
   { id: 'living-fortress', name: 'Living Fortress', tier: 'ultimate', runes: ['stone', 'metalergy', 'barrier'],
     effect: 'Stone walls on a bonded metal frame, humming with protective mana. Not a shield, A BUILDING, and good against siege.',
