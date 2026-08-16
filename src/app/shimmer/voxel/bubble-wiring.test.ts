@@ -243,6 +243,34 @@ const onShell = (bearing: number) => {
   // ⚠ ON the bearing, so the door is straight ahead. Off-bearing ground is standable and useless:
   // the keeper would be looking at 3km of identical cloud wall with no way to tell where to walk.
   ok(inPassage(a.x, a.z, cfg), 'and on the door\'s own bearing, so the seam is in front of them')
+
+  // ── ★★ AND A BODY FITS THERE ON EVERY SEED, NOT JUST THIS ONE (2026-08-16) ────────────────────
+  // Since the two-way seam shipped, this point is not only where `/goto` sets you down to LOOK at
+  // the door — it is where the keeper is put when they step OUT of their own garden, which is a
+  // thing they will do constantly. So it has to hold on more than the one seed this file fixes.
+  //
+  // ⚠ THE HEADROOM HALF IS THE POINT, AND IT COMES FROM THE HUB'S PATROL BUG THE SAME DAY. Their
+  // walk probe asked `columnHeight` about ground a stronghold's PAD had since raised, so it sampled
+  // a cell inside the terrain and every step read as blocked — *a position taken from the
+  // generator's idea of the surface, used where the generator has since overridden it.* That is the
+  // third appearance of that shape in one day (`/goto garden` was the first). The door's landing
+  // takes its altitude from `columnHeight` too, so if anything ever stands over this spot — a bridge
+  // deck, a hold's pad, a ruin — the keeper arrives inside it and the fit check refuses, which
+  // presents as *"something is standing in your doorway"* forever, on that seed only.
+  // Measured while writing this: seed 7 already has solid cells 5 blocks above the keeper's head.
+  // Harmless today, and exactly the direction this will fail from.
+  for (const s of [1, 7, 42, 90210, 2026, 555]) {
+    const p = passageApproach(s, cfg)
+    const ph = columnHeight(p.x, p.z, s)
+    // ⚠ NOT `gen()` — it closes over this file's `SEED`, so using it here would generate the 1337
+    // world at another seed's coordinates and assert nothing. Build the column at `s` explicitly.
+    const own = generateColumn(new Column(colOrigin(p.x), colOrigin(p.z), DEFAULT_COLUMN), s)
+    const solid = at(own, p.x, ph, p.z) !== AIR
+    const headroom = at(own, p.x, ph + 1, p.z) === AIR && at(own, p.x, ph + 2, p.z) === AIR
+    ok(solid && headroom,
+      `★ seed ${s}: the door's landing has ground under it and room to stand (y${ph}, ` +
+      `ground ${solid ? 'solid' : 'AIR'}, headroom ${headroom ? 'clear' : 'BLOCKED'})`)
+  }
 }
 
 console.log(`\nbubble wiring: ${pass} passed, ${fails.length} failed`)
