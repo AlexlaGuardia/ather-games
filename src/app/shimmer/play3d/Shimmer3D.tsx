@@ -5722,8 +5722,16 @@ export default function Shimmer3D() {
     setBanner(`⟳ dev · born of ${rn} — ${affinityRef.current.label} · ${bound} castable`)
     persist()
   }, [applyAffinity, applyLoadout, persist])
-  // Owner dev tool: grant/drop a SECOND rune. Rune acquisition is an [OPEN] canon gap, so nothing in
-  // the game does this — but the cross-hatch (a 2nd rune opening two-rune moves) is only testable here.
+  // Owner dev tool: grant/drop a SECOND rune.
+  //
+  // ★ CORRECTED 2026-08-17 — this said "rune acquisition is an [OPEN] canon gap". It is RULED, and
+  // was on 2026-08-03: *"a rune is identity: born, or trained off the birth rune (the lane law),
+  // never bought"* (CANON_GAPS.md). What is missing is the BUILD — nothing implements the focused
+  // practice that walks a keeper along their row/column — so this is a build gap wearing a canon
+  // gap's label, and the label is the part that makes the next reader park instead of build it.
+  // ⚠ The tool grants ANY rune, which the lane law would not: a real second rune must sit on the
+  // birth rune's row or column. That is deliberate for testing the cross-hatch, and it is exactly
+  // why it stays owner-only — it is not a preview of how acquisition will work.
   const toggleDevRune = useCallback((id: string) => {
     const held = runeInvRef.current.owned.includes(id)
     const inv = held ? revokeRune(runeInvRef.current, id) : grantRune(runeInvRef.current, id)
@@ -6525,10 +6533,11 @@ export default function Shimmer3D() {
                       ))}
                     </div>
                   ))}
-                  {/* ⚠ Rune ACQUISITION is an [OPEN] canon gap — nothing in the game grants a second
-                      rune. This grants one anyway so the cross-hatch (two-rune moves like Healing
-                      Grove, Cordon, Flame Barrage) is playable before the ruling lands. Owner-only. */}
-                  <span style={{ color: '#e0a34a', font: '700 9px ui-monospace, monospace', letterSpacing: '.1em', textAlign: 'right', marginTop: 4 }}>+ DEVELOPED RUNES — unruled, dev-only</span>
+                  {/* ⚠ Rune acquisition is RULED (trained off the birth rune, never bought) but not
+                      BUILT — nothing in the game walks a keeper along their lane yet. This grants one
+                      anyway so the cross-hatch (two-rune moves like Healing Grove, Cordon, Flame
+                      Barrage) is playable meanwhile. Owner-only, and it ignores the lane law. */}
+                  <span style={{ color: '#e0a34a', font: '700 9px ui-monospace, monospace', letterSpacing: '.1em', textAlign: 'right', marginTop: 4 }}>+ DEVELOPED RUNES — unbuilt path, dev-only</span>
                   {['mana', 'storm', 'earth', 'water'].map(el => (
                     <div key={`dev-${el}`} style={{ display: 'flex', flexWrap: 'wrap', gap: 3, justifyContent: 'flex-end' }}>
                       {RUNES.filter(r => r.element === el).map(r => {
@@ -6611,7 +6620,19 @@ export default function Shimmer3D() {
             width: 40, height: 40, borderRadius: 10, border: `1px solid ${bookOpen ? '#e8c46a' : '#ffffff33'}`,
             background: bookOpen ? '#2a2312' : 'rgba(16,20,32,0.86)', color: '#f0dda6', font: '800 15px ui-monospace, monospace', cursor: 'pointer',
           }} title="The book — your rune's moves">✦</button>
-          {bookOpen && <MoveBook runeId={birthRuneRef.current} isOwner={isOwner} />}
+          {/* The book is handed what the keeper has LEARNED and what they CARRY, so each row can
+              say where it stands instead of stamping one status on all of them. Both come off refs
+              that `applyLoadout` rewrites, and every path that changes either (birth, a Passage
+              purchase, a dev rune grant) calls it — so the panel re-reads on the render that
+              follows, the same way this call site already reads `birthRuneRef` during render. */}
+          {bookOpen && (
+            <MoveBook
+              runeId={birthRuneRef.current}
+              isOwner={isOwner}
+              book={bookRef.current}
+              owned={runeInvRef.current.owned}
+            />
+          )}
         </div>
       )}
 

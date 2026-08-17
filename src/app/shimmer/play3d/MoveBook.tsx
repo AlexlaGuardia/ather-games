@@ -12,13 +12,32 @@
 //  1. **A scroll teaches a MOVE, never a RUNE — RULED.** The Passage under Rune Hold is the move
 //     economy; the runes you hold are the FILTER on what a scroll can teach you (a Water keeper who
 //     buys a Metalergy scroll owns a beautiful piece of paper). It stocks passives and tacticals —
-//     ULTIMATES ARE NOT FOR SALE. So the book MAY claim a move as known once acquisition is built.
-//     It still doesn't, because nothing grants one yet: the catalogue is now a build gap, not a
-//     canon one, and `keeper-moves.knownMoves()` is already the honest answer for what you can run.
+//     ULTIMATES ARE NOT FOR SALE.
 //  2. **The lane law is CANON — RULED.** Element row + state column is how a keeper reaches a second
 //     rune ("focused practice using your birth rune"). The `isOwner` gate on the lane block was
 //     explicitly conditioned on this landing, so it is now free to come off; left in place only
 //     because play3d is an owner-only route today and flipping it changes nothing anyone can see.
+//
+// ── ★★ 2026-08-17 — THE PANEL WAS THE LAST THING THAT DIDN'T KNOW THE PASSAGE SHIPPED ───────────
+// The line above used to end *"the book MAY claim a move as known once acquisition is built. It
+// still doesn't, because nothing grants one yet."* **That stopped being true when `scroll-market.ts`
+// + `PassageRack.tsx` shipped** — the rack rotates, prices, refuses with typed reasons, and writes
+// a `Book` the cast layer reads. So the keeper buys a scroll, the rack's own button says **known**,
+// the move binds to a cast key and FIRES — and this panel went on stamping **NOT YET LEARNED** on
+// it, because `MoveRow` hardcoded that string and the component was never handed the book.
+//
+// ★ THE TELL WAS A HARDCODED STATUS. A row that cannot say anything else is not reporting state,
+// it is asserting a belief the file held on the day it was written — the same shape as the `[OPEN]`
+// claims above, one layer down. It read as a canon gap ("acquisition is unruled") when what it
+// actually was, by then, was a panel that had not been re-wired. **The book now takes the `Book`
+// and the runes held, and every row derives its own status.** Four states, canon's own words:
+//   **KNOWN** (learned + runes carried) · **KNOWN, QUIET** (learned, rune since lost — `castable()`
+//   keeps the knowledge and silences the move) · **A SCROLL YOU CAN READ** (readable, priced, in
+//   the rack's rotation) · **LOCKED** (you do not carry the runes it is written in).
+//   Signatures and runewords get their own line, because canon does not sell those at all.
+// `NOT BUILT YET` stays orthogonal and rides along any of them: 13 of the 68 are archetype
+// `unbuilt` with a `why`, and they are SHOWN rather than hidden — hiding a registered move is how
+// a keeper concludes their book is short.
 //
 // ── ★ UPDATED 2026-08-14 — THE GREAT REGISTRATION CLOSED MOST OF THIS (24 → 61 moves) ───────────
 // This block used to say "the 8 empty runes all carry their moves on the SPIRIT KITS shelf" and name
@@ -38,6 +57,7 @@ import React from 'react'
 import { RUNES, ELEMENTS } from './birth/runes.data'
 import { MOVES_BY_RUNE, lanesFor, learnableMoves, type KeeperMove, type MoveTier } from './keeper-moves'
 import { isBuilt } from './cast'
+import { canRead, hasLearned, priceOf, tradeable, EMPTY_BOOK, type Book } from './scroll-market'
 
 const MONO = 'ui-monospace, monospace'
 
@@ -51,10 +71,35 @@ const TIER: Record<MoveTier, { label: string; tint: string }> = {
   combo:    { label: 'COMBO',    tint: '#d79ae0' },
 }
 
-function MoveRow({ m, glow, ownedRune }: { m: KeeperMove; glow: string; ownedRune: string }) {
+/**
+ * The four states a move can be in for THIS keeper, in canon's vocabulary.
+ *
+ * ★ `learned` and `readable` are independent on purpose and that is not an edge case: reading a
+ * scroll does not rewrite what you are, so a keeper can know a move and later lose the rune it is
+ * written in. `castable()` keeps the knowledge and silences the move rather than editing the book
+ * behind the player's back — this panel says the same thing out loud instead of lying in either
+ * direction ("forgotten" would be false; a plain "KNOWN" next to a dead key would be worse).
+ */
+export function statusOf(m: KeeperMove, book: Book, owned: readonly string[]) {
+  const learned = hasLearned(book, m.id)
+  const readable = canRead(m, owned)
+  if (learned && readable) return { label: 'KNOWN', tone: '#8fd9c4', lit: true }
+  if (learned) return { label: 'KNOWN · QUIET WITHOUT ITS RUNE', tone: '#c9a86a', lit: false }
+  if (!readable) return { label: 'LOCKED', tone: '#7d918c', lit: false }
+  // Readable and unlearned: the Passage is the only way in, and canon decides whether it stocks it.
+  if (tradeable(m)) return { label: `A SCROLL YOU CAN READ · ✦ ${priceOf(m)}`, tone: '#e0c07a', lit: false }
+  return {
+    label: m.tier === 'combo' ? 'A RUNEWORD — TWO MAGES IN SYNC' : 'EARNED IN THE WORLD — NEVER SOLD',
+    tone: '#e8c46a', lit: false,
+  }
+}
+
+function MoveRow({ m, owned, book }: { m: KeeperMove; owned: readonly string[]; book: Book }) {
   const t = TIER[m.tier]
-  // runes this move needs BEYOND the one whose page we're on — the reason it isn't yours yet
-  const extra = m.runes.filter((r) => r !== ownedRune)
+  // The runes this keeper does NOT carry — the real reason the move isn't theirs, which is not the
+  // same as "every rune but this page's" once a second rune is developed.
+  const extra = m.runes.filter((r) => !owned.includes(r))
+  const st = statusOf(m, book, owned)
   return (
     <div style={{ padding: '6px 8px', borderRadius: 7, background: '#ffffff08', border: '1px solid #ffffff12', marginBottom: 5 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8 }}>
@@ -70,17 +115,29 @@ function MoveRow({ m, glow, ownedRune }: { m: KeeperMove; glow: string; ownedRun
         </div>
       )}
       {/* Two different absences, and conflating them is how "my key does nothing" happens.
-          NOT YET LEARNED = canon acquisition is unruled (an [OPEN] gap).
-          NOT BUILT YET   = canon HAS written this move; the sim can't run it. A build debt, ours. */}
-      <div style={{ font: `700 8px ${MONO}`, color: glow, opacity: 0.55, marginTop: 3, letterSpacing: '.1em' }}>
-        NOT YET LEARNED{!isBuilt(m.id) ? ' · NOT BUILT YET' : ''}
+          The STATUS   = where this keeper stands with the move (learned? runes carried? for sale?).
+          NOT BUILT YET = canon HAS written this move; the sim can't run it. A build debt, ours —
+          orthogonal to the status, so a KNOWN move can still be unbuilt and must say so. */}
+      <div style={{ font: `700 8px ${MONO}`, color: st.tone, opacity: st.lit ? 0.95 : 0.6, marginTop: 3, letterSpacing: '.1em' }}>
+        {st.lit ? '◆ ' : ''}{st.label}{!isBuilt(m.id) ? ' · NOT BUILT YET' : ''}
       </div>
     </div>
   )
 }
 
-// runeId is nullable on purpose — a keeper who hasn't chosen at the birth rite has no page yet.
-export default function MoveBook({ runeId, isOwner }: { runeId: string | null; isOwner: boolean }) {
+/**
+ * runeId is nullable on purpose — a keeper who hasn't chosen at the birth rite has no page yet.
+ *
+ * `book` and `owned` both default, and the defaults lean the safe way. An absent book is the EMPTY
+ * one, so a caller that forgets it can never invent knowledge the keeper does not have — the panel
+ * under-claims instead of lighting up a move whose key is dead. Absent `owned` falls back to the
+ * birth rune alone, which is not a guess: the page belongs to that rune and a keeper always carries
+ * the one they were born of. A second, developed rune is the thing a caller must actually pass.
+ */
+export default function MoveBook(
+  { runeId, isOwner, book = EMPTY_BOOK, owned }:
+  { runeId: string | null; isOwner: boolean; book?: Book; owned?: readonly string[] },
+) {
   const rune = RUNES.find((r) => r.id === runeId)
   if (!rune) {
     return (
@@ -92,6 +149,7 @@ export default function MoveBook({ runeId, isOwner }: { runeId: string | null; i
     )
   }
 
+  const have = owned ?? [rune.id]
   const page = MOVES_BY_RUNE[rune.id] ?? []
   const lanes = lanesFor(rune.id)
   const reachable = learnableMoves([rune.id])
@@ -113,7 +171,7 @@ export default function MoveBook({ runeId, isOwner }: { runeId: string | null; i
       {/* ── the page: moves written for this rune ── */}
       <div style={label}>{page.length ? `WRITTEN FOR ${rune.name.toUpperCase()}` : `${rune.name.toUpperCase()}'S PAGE`}</div>
       {page.length ? (
-        page.map((m) => <MoveRow key={m.id} m={m} glow={rune.glow} ownedRune={rune.id} />)
+        page.map((m) => <MoveRow key={m.id} m={m} owned={have} book={book} />)
       ) : (
         <div style={{ padding: '10px 8px', borderRadius: 7, background: '#ffffff06', border: '1px dashed #ffffff20', marginBottom: 6 }}>
           <div style={{ font: `700 10px ${MONO}`, color: '#c9a86a' }}>This page is empty.</div>
@@ -167,7 +225,7 @@ export default function MoveBook({ runeId, isOwner }: { runeId: string | null; i
 
           <div style={label}>ON YOUR LANES <span style={{ color: '#c9a86a', letterSpacing: '.06em' }}>· {reachable.length}</span></div>
           {reachable.length ? (
-            reachable.map((m) => <MoveRow key={m.id} m={m} glow={rune.glow} ownedRune={rune.id} />)
+            reachable.map((m) => <MoveRow key={m.id} m={m} owned={have} book={book} />)
           ) : (
             <div style={{ font: `400 9px ${MONO}`, color: '#9fb8b2', padding: '6px 2px' }}>
               Nothing reachable — no move on this rune&apos;s row or column has been written.
