@@ -49,7 +49,7 @@ import { inPassageVolume, insideShell, bubbleSwallows, passageApproach } from '.
 import { HOLDS } from '../voxel/holds'
 import {
   spawnFoe, stepFoe, strike, hostile, foeDef, pickPosture, collarFrac, answerCollar,
-  COLLAR_FOES, POSTURE_ORDER, rollPatrol, type CollarFoeDef,
+  COLLAR_FOES, POSTURE_ORDER, rollPatrol, pressArrival, sendbackClock, type CollarFoeDef,
   type CollarFoe, type CollarDelivery, type FoePosture,
 } from '../engine/collar-foes'
 import { KEEPER_MOVES } from '../play3d/keeper-moves'
@@ -271,7 +271,24 @@ const REACH = 6            // how far you can mine or place, in voxels
  * than N" alone and a keeper who approaches from inside the hold (walking out of a gate) has the
  * patrol appear behind them, which reads as an ambush rather than as being met on the road.
  */
-const PATROL_MEET = 34
+/**
+ * ── ★★ 34 → 22 (2026-08-17, the tuning pass) — THIS DIAL OWNS THE ENCOUNTER ────────────────────
+ * Measured against the real approach, not the readout's arithmetic: at 34 a patrol did not arrive,
+ * it TRICKLED. Thistle's three landed at 7.6s, 7.8s and 14.4s; Vetch's at 8.1s, 13.7s and 15.3s.
+ * Nearly seven seconds of nothing, then three separate encounters — which reads as three unrelated
+ * things wandering over, not as *"a patrol comes out to meet you"*, the line the game actually says.
+ *
+ * At 22 the same patrols land within 1.5s (Thistle) and 4.2s (Vetch) of each other: a group. And it
+ * is the dial that MOVES the clock — doubling every posture's pressure buys less than this does,
+ * because most of the wait was walking. `collar-foes.test.ts` pins that comparison so a later pass
+ * reaches for the right dial.
+ *
+ * ⚠ FLOOR, NOT JUST A NUMBER. The ring is `half` to `half + meet`, and a keeper crosses it at up to
+ * 6.5 blocks/sec — so it must stay wide enough that nobody tunnels through between frames, and far
+ * enough out that the patrol is met on the ROAD rather than materialising on top of someone. 22
+ * leaves a 15-17 block gap at the moment they come out, which is still a walk toward you.
+ */
+const PATROL_MEET = 22
 /**
  * ── ★★ THE SEND-BACK'S CLOCK, IN ONE PLACE AND LIVE-TUNABLE (2026-08-16) ────────────────────────
  * Every number here is a first guess of mine, and a feel pass on eight guesses that each need a
@@ -290,7 +307,16 @@ const PATROL_MEET = 34
 interface SendbackTuning {
   /** Seconds out of anyone's reach before the guard starts coming back. */
   calm: number
-  /** Guard restored per second once calm. At regen 9 against a 100 guard, full takes ~11s. */
+  /**
+   * Guard restored per second once calm. At regen 15 against a 100 guard, full takes ~6.7s.
+   *
+   * ★ 9 → 15, AND THE RULE THAT SET IT (2026-08-17): **recovering the guard must never cost more
+   * than losing it.** At calm 5 / regen 9 recovery was 16.1s against a fight the keeper loses in
+   * 10-13s — so the cheapest way to play was to disengage and stand in a field, and the loss was
+   * taxed twice. The real penalty is the collar staying on him and the walk back; a bar refilling
+   * is not a penalty, it is a wait. Now 3 + 6.7 = 9.7s, just under the fastest hold's 10.0s, and
+   * `collar-foes.test.ts` asserts that ordering so a later dial pass cannot silently invert it.
+   */
   regen: number
   /**
    * Fraction of the guard the keeper wakes with at the glade. 1 = whole.
@@ -304,7 +330,7 @@ interface SendbackTuning {
   /** How far outside a hold's curtain wall its patrol comes out to meet you, in blocks. */
   meet: number
 }
-const SENDBACK_DEFAULT: Readonly<SendbackTuning> = { calm: 5, regen: 9, wake: 1, meet: PATROL_MEET }
+const SENDBACK_DEFAULT: Readonly<SendbackTuning> = { calm: 3, regen: 15, wake: 1, meet: PATROL_MEET }
 /**
  * Body heights for the blockout meshes, in blocks. ⚠ These MUST match the geometry in `foeGeo` —
  * they are what a round is tested against, so a mesh taller than its entry is a head you can see
@@ -3266,12 +3292,32 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
         return `no such dial: ${key} — bare /press lists them`
       }
       const g = vitals.current?.shieldMax ?? 100
+      const tune = (p: FoePosture) => foeTune.current[p]
+      // ★★ EACH POSTURE'S LANDING TIME IS THE LINE THAT WAS MISSING (2026-08-17). The first cut
+      // printed `guard / sum-of-dps` as *"all three pressing at once"*, and that went into the board
+      // as the measurement — but the three land seconds apart, so the sum is a floor nobody stands
+      // in. Printing WHEN each one arrives is what makes the floor legible as a floor.
       const rows = POSTURE_ORDER.map(p => {
-        const d = foeTune.current[p]
-        return `  ${p.padEnd(11)}${d.pressureDps.toFixed(1).padStart(5)}${d.reach.toFixed(2).padStart(8)}${d.speed.toFixed(1).padStart(7)}   ${secs(d.pressureDps)}`
+        const d = tune(p)
+        const at = pressArrival(d, sb.meet)
+        return `  ${p.padEnd(11)}${d.pressureDps.toFixed(1).padStart(5)}${d.reach.toFixed(2).padStart(8)}${d.speed.toFixed(1).padStart(7)}` +
+          `${at.toFixed(1).padStart(8)}s   ${secs(d.pressureDps)}`
       })
-      const all = POSTURE_ORDER.reduce((a, p) => a + foeTune.current[p].pressureDps, 0)
-      const closers = foeTune.current.bulwark.pressureDps + foeTune.current.skirmisher.pressureDps
+      // The three patrols the spine actually rolls, so a dial pass reads the SPINE rather than
+      // whichever fight the keeper happens to be standing in front of.
+      const spine: [string, FoePosture[]][] = [
+        ['thistle', ['skirmisher', 'skirmisher', 'channeler']],
+        ['vetch', ['bulwark', 'bulwark', 'skirmisher']],
+        ['brack', ['channeler', 'skirmisher']],
+      ]
+      const clocks = spine.map(([id, ps]) => {
+        const c = sendbackClock(ps, sb.meet, g, tune)
+        const floor = g / ps.reduce((a, p) => a + tune(p).pressureDps, 0)
+        return `  ${id.padEnd(9)}${ps.map(p => p[0].toUpperCase()).join('').padEnd(5)}` +
+          `${c === Infinity ? ' never' : c.toFixed(1).padStart(6)}s   (all-at-once floor ${floor.toFixed(1)}s)`
+      })
+      const recovery = sb.calm + g / Math.max(0.001, sb.regen)
+      const fastest = Math.min(...spine.map(([, ps]) => sendbackClock(ps, sb.meet, g, tune)))
       return [
         'send-back dials — /press <key> <value> · /press reset',
         `  guard  ${String(g).padStart(6)}    the bar a patrol empties. pressure stops here, always`,
@@ -3280,11 +3326,17 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
         `  wake   ${(sb.wake * 100).toFixed(0).padStart(6)}%   guard you wake with at the glade`,
         `  meet   ${sb.meet.toFixed(0).padStart(6)}    blocks past a hold's wall the patrol comes out`,
         '',
-        '  posture      dps   reach  speed   alone, empties your guard in',
+        '  posture      dps   reach  speed   lands at   alone, empties your guard in',
         ...rows,
         '',
-        `  all three pressing at once ${secs(all)}   ·   the two that close on you ${secs(closers)}`,
-        `  the channeler never closes (reach ${foeTune.current.channeler.reach.toFixed(1)} > standoff ${foeTune.current.channeler.standoff.toFixed(1)}) — it presses from where it stands`,
+        '  ── stand still and do nothing: seconds until you are sent back ──',
+        ...clocks,
+        '',
+        `  recovery ${recovery.toFixed(1)}s (calm + regen) vs the fastest hold's ${fastest.toFixed(1)}s` +
+          `${recovery > fastest ? '   ⚠ recovering costs MORE than losing' : ''}`,
+        `  the channeler never closes (reach ${tune('channeler').reach.toFixed(1)} > standoff ${tune('channeler').standoff.toFixed(1)}) — it presses from where it stands`,
+        '  ⚠ the send-back line assumes a keeper who never moves. walking in meets them sooner;',
+        '    walking away is never caught at all — nothing here out-runs a keeper, by design.',
       ].join('\n')
     }
     return () => { pressOut.current = null }

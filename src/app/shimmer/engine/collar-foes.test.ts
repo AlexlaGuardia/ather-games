@@ -13,7 +13,7 @@
 
 import {
   COLLAR_FOES, POSTURE_ORDER, foeDef, pickPosture, spawnFoe, strike, hostile, collarFrac, stepFoe, answerCollar, LEAVING_SPEED,
-  rollPatrol,
+  rollPatrol, pressArrival, sendbackClock,
   type FoePosture,
 } from './collar-foes'
 import { TIER_DIALS } from '../play3d/collar-raid'
@@ -297,6 +297,76 @@ const check = (label: string, ok: boolean, detail = '') => {
     check('and within a road-width of the approach bearing',
       r.slots.every(s => Math.abs(s.spread) <= 0.45))
   }
+}
+
+// ── ★★ THE SEND-BACK CLOCK, AND THE NUMBER IT REPLACES ──────────────────────────────────────────
+// `/press` shipped printing `guard / sum-of-dps` and the board recorded it as the measurement. It is
+// a floor that assumes the whole patrol lands on one frame. These asserts exist so the difference
+// between the floor and the clock can never quietly close again.
+{
+  const MEET = 22, GUARD = 100
+  const ceiling = (ps: FoePosture[]) => GUARD / ps.reduce((a, p) => a + COLLAR_FOES[p].pressureDps, 0)
+
+  // ── arrival ──
+  check('a posture that is already in reach presses immediately',
+    pressArrival({ ...COLLAR_FOES.channeler, reach: 99 }, MEET) === 0)
+  check('the skirmisher lands first — fastest feet, shortest reach to close',
+    pressArrival(COLLAR_FOES.skirmisher, MEET) < pressArrival(COLLAR_FOES.bulwark, MEET))
+  check('and the bulwark lands last: slowest over the same ground',
+    pressArrival(COLLAR_FOES.bulwark, MEET) > pressArrival(COLLAR_FOES.channeler, MEET))
+  // ★ REACH, NOT STANDOFF. Measuring the channeler to its standoff would report it arriving late;
+  // it starts pressing a block before it stops walking, which is the whole point of that posture.
+  check('the channeler is measured to its reach, not to the line it holds',
+    Math.abs(pressArrival(COLLAR_FOES.channeler, MEET) - (MEET - 6 - 8) / 1.4) < 1e-9)
+  check('meeting a patrol closer brings every posture in sooner', POSTURE_ORDER.every(p =>
+    pressArrival(COLLAR_FOES[p], 16) < pressArrival(COLLAR_FOES[p], 34)))
+
+  // ── the clock ──
+  const spine: Record<string, FoePosture[]> = {
+    thistle: ['skirmisher', 'skirmisher', 'channeler'],
+    vetch: ['bulwark', 'bulwark', 'skirmisher'],
+    brack: ['channeler', 'skirmisher'],
+  }
+  for (const [id, ps] of Object.entries(spine)) {
+    const real = sendbackClock(ps, MEET, GUARD)
+    // ★★ THE ASSERT THE OLD READOUT WOULD HAVE FAILED. The floor is not the clock, and at the
+    // shipped meet it is not close to it — this is the number that got written into the board.
+    check(`${id}: the clock is well above the all-at-once floor`, real > ceiling(ps) * 1.5,
+      `real ${real.toFixed(1)}s vs floor ${ceiling(ps).toFixed(1)}s`)
+    check(`${id}: losing is reachable — a keeper who does nothing is sent back inside 15s`,
+      real < 15, `${real.toFixed(1)}s`)
+  }
+
+  // ★ MUTATION: collapse every arrival to zero and the clock MUST fall back to the floor. This is
+  // what pins the piecewise drain — a clock that ignored arrivals entirely would pass every assert
+  // above by accident and this one on purpose.
+  const inReach = (p: FoePosture) => ({ ...COLLAR_FOES[p], reach: 999 })
+  check('with everyone already in reach, the clock IS the old floor',
+    Math.abs(sendbackClock(spine.thistle, MEET, GUARD, inReach) - ceiling(spine.thistle)) < 1e-9)
+
+  // ★ MUTATION: a patrol that cannot press is never a send-back, and must say so rather than
+  // returning a very large number that reads like a real clock.
+  check('a patrol with no pressure never sends anyone back',
+    sendbackClock(spine.vetch, MEET, GUARD, p => ({ ...COLLAR_FOES[p], pressureDps: 0 })) === Infinity)
+
+  // ── the two dials, and which one actually owns the clock ──
+  check('meeting them closer shortens the fight', POSTURE_ORDER.every(() =>
+    sendbackClock(spine.vetch, 16, GUARD) < sendbackClock(spine.vetch, 34, GUARD)))
+  // ★ THE FIND OF THE TUNING PASS, PINNED. Doubling every posture's pressure buys less than cutting
+  // the meet ring by a third, because most of the clock is walking. If this ever flips, the
+  // encounter's shape has changed and the dial a tuner should reach for has changed with it.
+  const doubled = sendbackClock(spine.vetch, 34, GUARD, p => ({ ...COLLAR_FOES[p], pressureDps: COLLAR_FOES[p].pressureDps * 2 }))
+  check('walking, not pressure, owns the clock: 2x dps buys less than a shorter meet',
+    doubled > sendbackClock(spine.vetch, 22, GUARD),
+    `2x dps at meet 34 = ${doubled.toFixed(1)}s vs 1x dps at meet 22 = ${sendbackClock(spine.vetch, 22, GUARD).toFixed(1)}s`)
+
+  // ── recovery must not cost more than the loss ──
+  // Standing about waiting for a bar is not the penalty; the collar staying on him is. A recovery
+  // longer than the fight turns every loss into a second, duller wait.
+  const recovery = 3 + GUARD / 15   // SENDBACK_DEFAULT's calm + regen, kept in step by hand
+  check('recovering the guard costs no more than losing it', POSTURE_ORDER.length > 0 &&
+    recovery <= Math.min(...Object.values(spine).map(ps => sendbackClock(ps, MEET, GUARD))),
+    `recovery ${recovery.toFixed(1)}s`)
 }
 
 console.log(`\ncollar foes: ${pass} passed, ${fail} failed`)

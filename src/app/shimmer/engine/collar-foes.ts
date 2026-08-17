@@ -98,17 +98,36 @@ export interface CollarFoeDef {
  * "walk away" stops being an answer and a road becomes a wall. These are PEOPLE pressing a plot,
  * not predators — leaving should always work, and the cost of leaving is that the collar stays on.
  */
+/**
+ * ── ★★ THE PRESSURE PASS, 2026-08-17 — DPS IS PAID FOR BY WALKING ───────────────────────────────
+ * `pressureDps` was redistributed once the clock was measured against the real approach (see
+ * `sendbackClock` below). The rule that decided it, and it is the triangle's rule one layer down:
+ *
+ *   **what a posture costs the keeper must be paid for by what it risks getting there.**
+ *
+ * The channeler had the HIGHEST pressure (9) on the SAFEST posture — it holds at standoff 7, never
+ * closes, and starts pressing before either of the others has crossed half the ground. It was
+ * earning the most for the least, so it is taxed to 7. The bulwark walks slowest (1.9) over the
+ * longest distance and arrives last of the three; he was the CHEAPEST at 6, which made the one who
+ * plants himself in the road a formality — 9 now, so a keeper who lets him arrive feels it. The
+ * skirmisher lands first and alone, and at 4 it was a non-event for the several seconds it owned
+ * the fight by itself; 6 makes the opening of the encounter mean something.
+ *
+ * ⚠ The three still sum close to what they summed before (19 vs 19). This is a redistribution along
+ * the risk axis, not an across-the-board buff — the encounter got sharper, not heavier.
+ */
 export const COLLAR_FOES: Record<FoePosture, CollarFoeDef> = {
   // "melee 175" — the one that plants himself in the road. Slowest, solid, heaviest collar, so
   // going THROUGH him is a real commitment rather than a formality. Punishes walking straight in.
-  bulwark:    { integrity: 175, speed: 1.9, reach: 1.30, body: 0.90, pressureDps: 6,  standoff: 0,   weight: 3 },
+  // Heaviest pressure BECAUSE he is last to arrive and slowest to do it — see the note above.
+  bulwark:    { integrity: 175, speed: 1.9, reach: 1.30, body: 0.90, pressureDps: 9,  standoff: 0,   weight: 3 },
   // "mage 125" — never closes, presses from across the clearing on borrowed frequency. Punishes
-  // solving the other two by backing away.
-  channeler:  { integrity: 125, speed: 1.4, reach: 8.0,  body: 0,    pressureDps: 9,  standoff: 7.0, weight: 2 },
+  // solving the other two by backing away. Taxed for that safety: it presses for free from 8 blocks.
+  channeler:  { integrity: 125, speed: 1.4, reach: 8.0,  body: 0,    pressureDps: 7,  standoff: 7.0, weight: 2 },
   // "assassin 100" — the lightest collar and the fastest feet. Punishes standing still to work on
   // someone else's. Frail BY DESIGN: it is the one you can free quickly, which is what makes
-  // choosing whom to free first a decision rather than a queue.
-  skirmisher: { integrity: 100, speed: 3.6, reach: 0.85, body: 0.36, pressureDps: 4,  standoff: 0,   weight: 4 },
+  // choosing whom to free first a decision rather than a queue. It also opens every fight alone.
+  skirmisher: { integrity: 100, speed: 3.6, reach: 0.85, body: 0.36, pressureDps: 6,  standoff: 0,   weight: 4 },
 }
 
 export const POSTURE_ORDER: FoePosture[] = ['bulwark', 'channeler', 'skirmisher']
@@ -374,6 +393,83 @@ export function rollPatrol(holdX: number, holdZ: number, half: number, alreadyFr
 /** 0..1 for a collar bar. A freed foe reads 0 and should draw no bar at all. */
 export const collarFrac = (foe: CollarFoe): number =>
   foe.collar ? foe.collar.integrity / foe.collar.max : 0
+
+// ── ★★★ HOW LONG UNTIL YOU ARE SENT BACK (2026-08-17, the tuning pass) ───────────────────────────
+//
+// `/press` shipped 08-16 printing `guard / (sum of every posture's dps)` under the label *"all three
+// pressing at once"*, and that number was written into the board as the measurement: **thistle 5.9s
+// · vetch 6.3s · brack 7.7s**. It is not the send-back time. It is a FLOOR that assumes the whole
+// patrol lands on the same frame, and a patrol never does — measured against the real approach, the
+// three postures arrived **7.6s, 7.8s and 14.4s** apart at Thistle, and the true clock was **17.1s**.
+// Three times the number the board carried.
+//
+// ★ AND IT IS THE SAME MISTAKE THE COMMAND WAS BUILT TO FIX, ONE LAYER IN. Its own header says the
+// derived line exists because *"the guard is ~12s"* turned out to be the REGEN clock rather than the
+// drain clock. The replacement was also not the drain clock. **A readout that does arithmetic the
+// player cannot check is a claim, and this file's rule applies to it: a rule that can only be tested
+// by walking 1237 blocks and losing on purpose is a rule nobody will test.** So the arithmetic moves
+// here, where an oracle can hold it, and the host keeps only the geometry.
+//
+// ★ THE THING THE FLOOR HID: most of the clock is WALKING, not pressing. That is why re-pointing the
+// dps dials barely moved it (+125% dps bought 19% off the clock) and why `meet` — how far out the
+// patrol comes to greet you — turned out to own the encounter's whole shape.
+
+/**
+ * Half the width of the band a patrol spawns in, in blocks. `rollPatrol` places each slot at
+ * `half + 3 + roll()*6` from the hold's centre while the keeper trips the ring at `half + meet`, so
+ * the gap between them is `meet - 3` to `meet - 9`. The middle of that band is the typical patrol.
+ *
+ * ⚠ THIS IS A TYPICAL, NOT A ROLL. A specific hold's slots sit where its seed put them; this answers
+ * *"what does a patrol met at this range feel like"*, which is the tuning question. Asking it of one
+ * hold's actual roll would tune the spine to whichever fight the seed happened to hand out.
+ */
+export const PATROL_SPAWN_MID = 6
+
+/**
+ * Seconds before this posture is close enough to press, from the moment the patrol comes out.
+ *
+ * ★ REACH, NEVER STANDOFF. The channeler's reach (8) is longer than the line it holds (7) precisely
+ * so that holding still presses — it starts leaning on you a full block before it stops walking.
+ * Measuring to the standoff would report it arriving late and understate the posture whose entire
+ * job is being early and safe.
+ */
+export function pressArrival(def: CollarFoeDef, meet: number): number {
+  return Math.max(0, (meet - PATROL_SPAWN_MID - def.reach) / Math.max(0.001, def.speed))
+}
+
+/**
+ * Seconds until a keeper who STANDS THERE AND DOES NOTHING has their guard emptied.
+ *
+ * Piecewise, because the patrol lands in pieces: each posture starts billing at its own arrival, and
+ * the drain rate steps up as the next one gets there. The old ceiling is what this returns only in
+ * the degenerate case where every arrival is 0.
+ *
+ * ⚠ IT IS AN UPPER BOUND ON THE FIGHT AND A LOWER BOUND ON NOTHING. A keeper who walks IN meets them
+ * sooner (the gap closes from both ends) and a keeper who walks away is never caught at all — no
+ * posture out-runs a keeper, by the rule at the top of this file. What this number is for is the one
+ * question a dial pass has to answer: *is losing reachable at all?*
+ */
+export function sendbackClock(
+  postures: readonly FoePosture[], meet: number, guard: number,
+  def: (p: FoePosture) => CollarFoeDef = foeDef,
+): number {
+  const events = postures
+    .map(p => ({ at: pressArrival(def(p), meet), dps: Math.max(0, def(p).pressureDps) }))
+    .sort((a, b) => a.at - b.at)
+  let left = guard, t = 0, dps = 0
+  for (const e of events) {
+    if (dps > 0) {
+      const span = e.at - t
+      if (left / dps <= span) return t + left / dps
+      left -= dps * span
+    }
+    t = e.at
+    dps += e.dps
+  }
+  // Nobody presses at all (every posture at 0 dps): the keeper is never sent back, and saying
+  // "never" is the honest answer rather than a very large number that reads like a real clock.
+  return dps > 0 ? t + left / dps : Infinity
+}
 
 // ── ★★ WHAT A ROUND DOES TO A COLLAR (2026-08-16, #294) ─────────────────────────────────────────
 //
