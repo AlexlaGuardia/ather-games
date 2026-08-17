@@ -25,6 +25,20 @@
 # `.next-*` in `exclude`, and **exclude filters include**, so Next may re-add whatever it likes and
 # it stays out of the build. (`.next-*` does not match `.next`, so the production types still load.)
 # ⚠ If you add a dist dir that is not named `.next-<lane>`, add it to that exclude too.
+#
+# ── ★★ AND THE REWRITE ITSELF IS NOW PREVENTED, NOT JUST DEFUSED (2026-08-17) ────────────────────
+# The `exclude` above stops a lane's dev types reaching the production BUILD, which was the harmful
+# half. It does nothing about the other half: while a satellite previews, `tsconfig.json` sits DIRTY
+# in a tree four windows share, and one `git add -A` from any of them ships it. The `restore` trap
+# below covers a clean exit and cannot cover a SIGKILL or a lost terminal.
+#
+# So `tsconfig.json` now PRE-SEEDS the four lane globs (`.next-{world,sprites,play,assets}` × both
+# `types` and `dev/types`). Next only appends what is missing, so with them present it rewrites
+# nothing at all — **verified by running this script and hashing the file before and after: byte
+# identical, where an unseeded run comes back modified.** Excluded and seeded is not a contradiction:
+# `include` decides what Next thinks it must add, `exclude` decides what the compiler reads.
+# ⚠ A lane NOT in that list (anything falling through to port 3205) is unseeded and will still dirty
+# the file — the trap is what catches it, so keep the trap.
 set -euo pipefail
 
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
