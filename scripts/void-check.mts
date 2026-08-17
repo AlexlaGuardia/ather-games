@@ -12,6 +12,12 @@ import puppeteer from 'puppeteer-core'
 const PAGE = process.env.WORLD_URL ?? 'http://localhost:3200/shimmer/voxel3d'
 const EXE = process.env.CHROME ?? '/usr/bin/chromium-browser'
 const SETTLE = Number(process.env.SETTLE ?? 12)
+/**
+ * How long to WATCH the chat log after a command, in ms. Covers the frame-loop rescue message, which
+ * arrives a beat after the command's own synchronous reply — measured at ~400ms quiet, past 600ms
+ * busy, so this is roughly 4x the worst observed and still under a second of test time.
+ */
+const LOG_WATCH = 2400
 
 const browser = await puppeteer.launch({
   executablePath: EXE,
@@ -74,15 +80,34 @@ try {
    */
   const run = async (cmd: string, seconds = SETTLE * 2) => {
     await page.keyboard.press('KeyT'); await sleep(300)
-    await page.keyboard.type(cmd); await page.keyboard.press('Enter'); await sleep(600)
-    const reply = await page.evaluate(() => document.body.innerText)
+    await page.keyboard.type(cmd); await page.keyboard.press('Enter')
+    // ── ★★ THE LOG IS POLLED, NOT SNAPSHOTTED (2026-08-17) — AND THIS FILE ALREADY KNEW WHY ──────
+    // The two ⚠ notes above say the position readout must be sampled as a TIMELINE because a single
+    // reading cannot tell settling from stuck. The log scrape never got the same treatment: it slept
+    // 600ms and read `body.innerText` ONCE.
+    //
+    // ⚠ AND THE MESSAGE IT MATTERS MOST FOR IS NOT THE COMMAND'S REPLY. `/tp` answers synchronously
+    // ("off to 0, 0"), but the void rescue is emitted by the FRAME LOOP a beat later, once the gate
+    // has looked under the keeper and refused to wait. Measured in the real page it lands **~400ms
+    // after Enter on a quiet world and past 600ms on a busy one** — so the old snapshot sat right on
+    // top of the race and lost it. It reported *"the gate gave up and said so"* as FAILED against a
+    // build where the gate gives up, says so, and puts the keeper back at the glade, every time.
+    //
+    // ★ A FLAKY ASSERT ON A WORKING FIX IS WORSE THAN NO ASSERT, because the next person to read it
+    // goes and "fixes" the game. Watch the window instead of guessing where in it the line falls.
+    let reply = '', last = ''
+    for (let t = 0; t < LOG_WATCH; t += 200) {
+      await sleep(200)
+      last = await page.evaluate(() => document.body.innerText)
+      reply += `\n${last}`
+    }
     await page.keyboard.press('Escape')
     const track: string[] = []
     for (let t = 2; t <= seconds; t += 2) {
       await sleep(2000)
       track.push(`   t+${String(t).padStart(2)}s  ${await readPos()}   ${(await readStats()).slice(0, 46)}`)
     }
-    return { reply, track }
+    return { reply, last, track }
   }
 
   console.log(`\nspawn · ${await readPos()}`)
@@ -91,7 +116,7 @@ try {
   console.log('\n/goto garden')
   const g = await run('/goto garden')
   console.log(g.track.join('\n'))
-  console.log(`  reply · ${g.reply.replace(/\s+/g, ' ').slice(-320)}`)
+  console.log(`  reply · ${g.last.replace(/\s+/g, ' ').slice(-320)}`)
   const gPos = await readPos()
   const gStats = await readStats()
   ok(/is a fold — you are at its door/.test(g.reply), 'the command says where it actually put you')
@@ -106,10 +131,13 @@ try {
   console.log('\n/tp 0 0  (dead centre of the fold — nothing generates there at any altitude)')
   const vr = await run('/tp 0 0')
   console.log(vr.track.join('\n'))
-  console.log(`  reply · ${vr.reply.replace(/\s+/g, ' ').slice(-320)}`)
+  console.log(`  reply · ${vr.last.replace(/\s+/g, ' ').slice(-320)}`)
   const vPos = await readPos()
   const vStats = await readStats()
-  ok(/no ground inside your own fold/.test(vr.reply + await readLog()), 'the gate gave up and said so')
+  // ⚠ `vr.reply` is now the whole WATCH WINDOW, so the trailing `readLog()` that used to prop this
+  // up is gone. It was reading the page AFTER escape, where the chat log no longer is — it never
+  // contributed a thing, and it made a snapshot look like two chances.
+  ok(/no ground inside your own fold/.test(vr.reply), 'the gate gave up and said so')
   ok(!/no ground here|generating…/.test(vStats), 'and the world settled again afterwards')
   const v = vPos?.match(/x (-?\d+)\s+y (-?\d+)\s+z (-?\d+)/)
   ok(!!v && Math.hypot(Number(v[1]), Number(v[3])) > 480, `and the keeper is back out of the void (${vPos})`)
@@ -145,7 +173,15 @@ try {
   console.log(`  player    · ${asPlayer.before}  →  ${asPlayer.after}   (climb ${asPlayer.climb})`)
   // Space is still JUMP for a walker, so the assert is that they came back DOWN — the sample is
   // taken 2.5s after release, which is several arcs' worth even at this frame rate.
-  ok(asPlayer.climb === 0, `an ordinary keeper is back on the ground (${asPlayer.climb >= 0 ? '+' : ''}${asPlayer.climb})`)
+  // ⚠ `<= 1`, NOT `=== 0`, AND THE BLOCK IS MEASUREMENT NOISE RATHER THAN SLACK (2026-08-17). Seen
+  // once for real: a player run came back **+1** on a world that was still streaming, then read 0 on
+  // the very next run from the same spot. The readout is integer blocks and the ground can resolve a
+  // block under a keeper who is jumping on it — that is not flight. What the assert has to separate
+  // is retaining altitude from landing, and the two are nowhere near each other here: **flying reads
+  // 3-4 on this box, walking reads 0-1.** An exact-equality on a physics readout in a streaming world
+  // is the same shape of flake as the log snapshot two sections up, and it fails the same way — by
+  // crying wolf on a build that works, which is the failure that gets a good gate ignored.
+  ok(asPlayer.climb <= 1, `an ordinary keeper is back on the ground (${asPlayer.climb >= 0 ? '+' : ''}${asPlayer.climb})`)
   const hints = await page.evaluate(() => document.body.innerText)
   ok(!/V fly/.test(hints), 'and is not told about a key that would do nothing')
 
