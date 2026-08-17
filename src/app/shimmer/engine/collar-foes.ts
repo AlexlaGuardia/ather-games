@@ -254,8 +254,63 @@ export interface FoeStepCtx {
    * which is the right default for a pure test.
    */
   blocked?: (x: number, z: number) => boolean
+  /**
+   * Is the world OPAQUE at this point on the line between the foe and the keeper? `t` is how far
+   * along that line the sample is (0 at the foe, 1 at the keeper), so a host can lift the probe from
+   * the foe's head to the keeper's eye instead of testing one flat height across sloping ground.
+   *
+   * The same shape as `blocked` and for the same reason: only the world knows what a wall is here.
+   * Omit it and the line is always clear, which is the right default for a pure test — and it is
+   * also exactly today's behaviour, so every existing caller keeps it.
+   */
+  opaque?: (x: number, z: number, t: number) => boolean
   /** Half-width of the keeper, so a foe closing to standoff 0 stops AT them, never inside them. */
   keeperRadius?: number
+}
+
+/**
+ * How often the sight line is sampled, in blocks. Half a cell, so a one-block wall cannot fall
+ * between two samples — the only line that slips through is one clipping a corner, which is the
+ * generous direction: it presses you when you are barely covered rather than sparing you when you
+ * are plainly not.
+ */
+export const SIGHT_STEP = 0.5
+
+/**
+ * ── ★★ COVER IS AN ANSWER, AND IT WAS NOT ONE (2026-08-17, #294) ─────────────────────────────────
+ *
+ * The channeler holds a line at 7 blocks and presses from 8, and it did that **through the curtain
+ * wall**. Reach was a distance and nothing else, so a keeper who put a hold's own wall between
+ * themselves and the thing leaning on them was worn down from behind it — pressure arriving from a
+ * body they could not see, could not reach, and had done the right thing about.
+ *
+ * ⚠ IT WAS NEVER ONLY THE CHANNELER. Reach 8 is what made it visible; a bulwark at reach 1.3 on the
+ * far side of a one-block wall pressed through it exactly the same way, for the same reason. The
+ * rule is on pressing, not on a posture.
+ *
+ * ★ AND THE FIX IS TWO HALVES, because the first alone builds a statue. Deny the press and a
+ * channeler behind a wall stands at its standoff pressing nothing, forever — the encounter quietly
+ * ends, which is the same failure the `blocked` slide exists to prevent one line down. So losing the
+ * line also drops the standoff: it CLOSES until it can see you again. Cover buys a reprieve — break
+ * contact, let the guard come back — not immunity, and canon already wants disengaging to be the
+ * answer rather than a wall being one.
+ *
+ * Endpoints are not sampled. A foe with its shoulder against a wall, or a keeper standing in a
+ * doorway, must not blind themselves with the cell they are in.
+ */
+export function sightClear(
+  fromX: number, fromZ: number, toX: number, toZ: number,
+  opaque?: (x: number, z: number, t: number) => boolean,
+): boolean {
+  if (!opaque) return true
+  const dx = toX - fromX, dz = toZ - fromZ
+  const dist = Math.hypot(dx, dz)
+  const n = Math.ceil(dist / SIGHT_STEP)
+  for (let i = 1; i < n; i++) {
+    const t = i / n
+    if (opaque(fromX + dx * t, fromZ + dz * t, t)) return false
+  }
+  return true
 }
 
 export interface FoeIntent {
@@ -300,15 +355,20 @@ export function stepFoe(
   if (dist < 1e-6) return { moveTo: null, pressing: true }
 
   const ux = dx / dist, uz = dz / dist
+  // ★★ CAN IT SEE YOU? Pressure is a person leaning on you, so it needs a line to lean along — see
+  // `sightClear`. Without one this foe presses nothing AND stops holding its standoff, because a
+  // line held across a wall is not a line: it closes until it has you in sight again.
+  const seen = sightClear(foe.x, foe.z, ctx.px, ctx.pz, ctx.opaque)
   // ★ THE LINE THIS FOE HOLDS. `standoff` is the posture's own (7 for the channeler, 0 for the two
   // that come all the way), but 0 does not mean "occupy the keeper" — a body has width, and so does
   // a keeper. The floor keeps the bulwark a blockade you walk around rather than a shape you stand
   // inside, which is the whole point of his `body`.
-  const hold = Math.max(def.standoff, def.body + (ctx.keeperRadius ?? 0.35))
+  const floor = def.body + (ctx.keeperRadius ?? 0.35)
+  const hold = seen ? Math.max(def.standoff, floor) : floor
   const want = dist - hold
   // Already at or inside the line: hold it. Pressing is decided by REACH, never by the line — the
   // channeler's reach (8) is deliberately longer than its standoff (7) so holding still presses.
-  if (want <= 0) return { moveTo: null, pressing: dist <= def.reach }
+  if (want <= 0) return { moveTo: null, pressing: seen && dist <= def.reach }
 
   const step = Math.min(def.speed * dt, want)
   const tx = foe.x + ux * step, tz = foe.z + uz * step
@@ -324,7 +384,7 @@ export function stepFoe(
 
   // ★ REACH IS MEASURED FROM WHERE IT IS NOW, NOT FROM WHERE IT WANTS TO BE. Billing pressure for a
   // step the host may refuse would let a foe press you through a wall it never got around.
-  return { moveTo, pressing: dist <= def.reach }
+  return { moveTo, pressing: seen && dist <= def.reach }
 }
 
 // ── ★★ WHO IS STILL STANDING THERE (2026-08-16, the send-back pass) ──────────────────────────────

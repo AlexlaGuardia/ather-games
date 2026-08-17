@@ -5284,6 +5284,24 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
           // Blocked now means A STEP TOO TALL TO CLIMB rather than "something is solid here" — the
           // ground is always solid, which is why the naive test could never have worked.
           blocked: (x, z) => groundTopNear(x, z, e.y, 6) - (e.y - 1) > 1.2,
+          // ── ★★ AND WHETHER IT CAN SEE YOU (fixed 2026-08-17) ───────────────────────────────────
+          // The channeler pressed through the curtain wall: reach was a distance and nothing else,
+          // so standing behind a hold's own wall did not stop the thing leaning on you from 8
+          // blocks. `sightClear` marches this probe along the line; losing it stops the press AND
+          // drops the standoff, so the answer to cover is that it walks around, not that it freezes.
+          //
+          // ★ THE HEIGHT IS LERPED, NOT FIXED. `t` runs 0 at the Moglin's head to 1 at the keeper's
+          // eye, so a line across sloping ground is sampled where it actually runs — a flat height
+          // taken from either end reads the hillside between them as a wall (or misses one).
+          // `isSolid` is the same solidity collision and light use, which is why a leaf canopy
+          // covers you and a tuft does not.
+          opaque: (x, z, t) => {
+            // Feet at `e.y` and the body spans `FOE_HEIGHT` above it — the same span a round is
+            // tested against, so the line leaves the head the player can see.
+            const eye = e.y + FOE_HEIGHT[e.f.posture] * 0.9
+            const y = eye + (p.y - eye) * t
+            return isSolid(voxelSolid(Math.floor(x), Math.floor(y), Math.floor(z)))
+          },
           // The LIVE posture dials, so `/press` moves reach and speed without a rebuild. Defaults to
           // `foeDef(posture)` when omitted, which is what the oracles use.
         }, dt, foeTune.current[e.f.posture])

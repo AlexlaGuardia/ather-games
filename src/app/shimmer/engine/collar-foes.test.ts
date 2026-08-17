@@ -13,7 +13,7 @@
 
 import {
   COLLAR_FOES, POSTURE_ORDER, foeDef, pickPosture, spawnFoe, strike, hostile, collarFrac, stepFoe, answerCollar, LEAVING_SPEED,
-  rollPatrol, pressArrival, sendbackClock,
+  rollPatrol, pressArrival, sendbackClock, sightClear, SIGHT_STEP,
   type FoePosture,
 } from './collar-foes'
 import { TIER_DIALS } from '../play3d/collar-raid'
@@ -185,6 +185,86 @@ const check = (label: string, ok: boolean, detail = '') => {
   const stuck = stepFoe(at('skirmisher', 1.5, 0), { ...KEEPER, blocked: sealed }, 0.3)
   check('★ a walled-off foe cannot press you from where it merely WANTED to be',
     stuck.moveTo === null && !stuck.pressing)
+
+  // ── ★★ COVER (2026-08-17): PRESSING NEEDS A LINE, AND LOSING IT MUST NOT BUILD A STATUE ────────
+  // The channeler pressed through the curtain wall — reach was a distance and nothing else, so a
+  // keeper doing the right thing about a body 8 blocks away was worn down from behind a wall.
+  //
+  // A wall standing between the keeper (0,0) and anything out along +x. Deliberately NOT a function
+  // of t: the probe's job is answering about a POINT, and a test that keyed off t would pass for a
+  // stepper that never moved the sample.
+  const curtain = (x: number, _z: number) => x > 3.5 && x < 4.5
+  {
+    const walled = { ...KEEPER, opaque: curtain }
+    const chW = stepFoe(at('channeler', 7, 0), walled, 0.5)
+    check('★★ a channeler cannot press through a wall it is only standing behind', !chW.pressing)
+    // ★ THE SECOND HALF, AND WITHOUT IT THE FIX IS A NEW BUG. Deny the press alone and it stands at
+    // its standoff pressing nothing forever — the encounter quietly ends, exactly the failure the
+    // `blocked` slide above exists to prevent. It must come looking.
+    check('★★ and it closes instead of holding a line it cannot see across',
+      !!chW.moveTo && (chW.moveTo?.x ?? 9) < 7, `moved to ${chW.moveTo?.x?.toFixed(3)}`)
+
+    // ⚠ THE RULE IS ON PRESSING, NOT ON A POSTURE. Reach 8 is what made the channeler the visible
+    // case; a bulwark at reach 1.3 pressed through a one-block wall in exactly the same way.
+    // ⚠ AND THE DISTANCE HAS TO PUT HIM IN REACH, or this is green because he is 4 blocks away and
+    // survives any mutation — the same wrong-reason trap the `stuck` assert above documents. At 1.2
+    // he is inside reach 1.30, so the wall is the only thing deciding it.
+    const nearWall = (x: number) => x > 0.5 && x < 0.9
+    const bulW = stepFoe(at('bulwark', 1.2, 0), { ...KEEPER, opaque: nearWall }, 0.05)
+    check('★ nor a bulwark stood on the far side of a wall he is otherwise in reach through',
+      !bulW.pressing)
+    check('and the same bulwark presses the moment the wall is gone',
+      stepFoe(at('bulwark', 1.2, 0), KEEPER, 0.05).pressing)
+  }
+
+  // ⚠ ENDPOINTS ARE NOT SAMPLED. A foe with its shoulder against a wall, or a keeper standing in a
+  // doorway, must not blind themselves with the cell they are standing in — that would make cover
+  // depend on where a body happens to be rather than on what is between two bodies.
+  {
+    const onlyEnds = (x: number, _z: number) => x < 0.4 || x > 6.6
+    check('★ a body pressed against a wall still sees past it',
+      stepFoe(at('channeler', 7, 0), { ...KEEPER, opaque: onlyEnds }, 0.5).pressing)
+  }
+
+  // A wall BEHIND the foe is not between anybody. The naive version of this fix tested a box around
+  // the pair and would have called this covered.
+  {
+    const behind = (x: number, _z: number) => x > 9
+    check('a wall behind the foe covers nobody',
+      stepFoe(at('channeler', 7, 0), { ...KEEPER, opaque: behind }, 0.5).pressing)
+  }
+
+  // ★ THE SAMPLING IS FINE ENOUGH FOR THE THING IT GUARDS. A one-block wall may not fall between two
+  // samples at any distance the channeler presses from, or cover would work at some ranges and not
+  // others — the worst kind of rule, since a player would learn it as "it sometimes cheats".
+  {
+    let missed = 0
+    for (let d = 1; d <= 8; d += 0.25) {
+      for (let w = 0.5; w + 1 <= d - 0.5; w += 0.25) {
+        const wall = (x: number) => x > w && x < w + 1
+        if (sightClear(d, 0, 0, 0, x => wall(x))) missed++
+      }
+    }
+    check('★ no one-block wall slips between two sight samples', missed === 0, `${missed} misses`)
+    check('the step is half a cell — the number that guarantee rests on', SIGHT_STEP === 0.5)
+  }
+
+  // `t` is what lets a host lift the line from the foe's head to the keeper's eye. It must run
+  // strictly between the two, or a probe using it samples one of the endpoints it was promised not.
+  {
+    const ts: number[] = []
+    sightClear(0, 0, 8, 0, (_x, _z, t) => { ts.push(t); return false })
+    check('★ t is handed out strictly between the endpoints', ts.length > 0 && ts[0] > 0 && ts[0] < 1)
+    const along: number[] = []
+    sightClear(0, 0, 8, 0, (x, _z, t) => { along.push(Math.abs(x - t * 8)); return false })
+    check('and it agrees with how far along the line the sample is',
+      along.every(d => d < 1e-9))
+  }
+
+  // A probe that is never asked is the default, and it is today's behaviour exactly — every caller
+  // that has not been taught about walls keeps working.
+  check('no probe means an open line', sightClear(0, 0, 40, 0) &&
+    stepFoe(at('channeler', 7, 0), KEEPER, 0.5).pressing)
 
   // Speed is honoured — the defs bound it so nothing out-runs a keeper, and the stepper must not
   // quietly exceed the number that guarantee rests on.
