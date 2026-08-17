@@ -99,23 +99,31 @@ const runeIds = new Set(RUNES.map((r) => r.id))
   }
   chk('no birth rune reaches zero moves via its lanes', thin.length === 0, thin.join())
 
-  // and the direct book IS empty for the ONE gap rune left — the model is doing the work, not luck
-  chk('Manalic has no moves of its own', MOVES_BY_RUNE['manalic'].length === 0)
-  chk('Manalic still reaches moves via lanes', learnableMoves(['manalic']).length > 0)
+  // ── ★ UPDATED 2026-08-17: THE DIRECT PAGE IS NO LONGER EMPTY FOR ANYONE ──────────────────────
+  // These two asserts used to read *"Manalic has no moves of its own"* + *"but still reaches some via
+  // lanes"* — a pin on a TRANSITIONAL state, making the point that the lane model carried the one
+  // rune the registry had missed. Canon's doubled-focus pass (08-15) registered seven single-rune
+  // tacticals so that *"every keeper-reachable rune owns at least one move written in that rune
+  // alone"*, and Quickform is Manalic's. The pin is replaced by the stronger claim rather than
+  // deleted: what mattered was never Manalic, it was that **no keeper opens their book on nothing.**
+  const emptyPage = RUNES.filter((r) => MOVES_BY_RUNE[r.id]?.length ? false : true).map((r) => r.name)
+  chk('★ every rune owns at least one move written in that rune alone', emptyPage.length === 0, emptyPage.join())
 }
 
-// 6. the coverage gap, pinned — RECOUNTED after THE GREAT REGISTRATION (2026-08-13/14)
+// 6. the coverage gap — CLOSED 2026-08-17, and the pin becomes a floor
 //
-// Was 8 move-less runes (CANON_GAPS.md 2026-08-03). The registration pass found 37 School techniques
-// carrying full effect text in `runes.md` Part III with only 2 of them registered in `moves.md`; all
-// 37 are now in the build. That closed SEVEN of the eight in one pass, so this pin gets smaller
-// rather than going away — Manalic is the one genuinely empty keeper rune, and canon says so
-// ("it appears in none of the 40 techniques at all", moves.md › Keeper coverage).
+// The history, because it is the whole shape of this file: 8 move-less runes (CANON_GAPS.md,
+// 2026-08-03) → 1 after THE GREAT REGISTRATION (08-13/14: 37 School techniques carrying full effect
+// text in `runes.md` Part III, exactly 2 of them registered in `moves.md`) → **0** after canon's
+// doubled-focus pass (08-15) registered seven single-rune tacticals and this build adopted them.
+//
+// ⚠ SO THE ASSERT INVERTS RATHER THAN RETIRING. It used to name the survivors; naming an empty list
+// is a test that passes by describing today. It now says the RULE — nobody is move-less — which is a
+// claim about every rune anyone adds later, and the direction the failure comes from is the useful
+// one: a new rune with no move fails here instead of shipping as a blank page.
 {
-  const expected = ['manalic']
-  chk('Manalic is the ONLY move-less rune left after the Great Registration',
-    JSON.stringify([...RUNES_WITHOUT_MOVES].sort()) === JSON.stringify(expected),
-    RUNES_WITHOUT_MOVES.join())
+  chk('★★ no rune is move-less any more — the empty-page problem is closed',
+    RUNES_WITHOUT_MOVES.length === 0, RUNES_WITHOUT_MOVES.join())
 
   // ⚠ THE POINT THIS PIN MAKES, AND IT IS NOT THE SAME AS THE ONE ABOVE: a rune having a book page is
   // not a rune having an ULTIMATE. Freeze and Fluid both reached none before this pass; Freeze now

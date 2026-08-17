@@ -196,6 +196,47 @@ export const KEEPER_MOVES: KeeperMove[] = [
   { id: 'pressure-drop', name: 'Pressure Drop', tier: 'tactical', runes: ['tempest', 'freeze'],
     effect: 'Violent storm meeting sudden cold — pressure plummets, ears pop, lungs strain. Masters make a blizzard out of clear sky.', collar: 'cruelty' },
 
+  // ── ★ THE DOUBLED-FOCUS SEVEN (canon 2026-08-15, adopted here 2026-08-17) ──────────────────────
+  // Seven SINGLE-RUNE tacticals, registered so that *"every keeper-reachable rune owns at least one
+  // move written in that rune alone"*. Canon has said that since 08-15; the BUILD said otherwise for
+  // two days, and `npm run canon` had been printing the seven names as a NOTE on every single run.
+  //
+  // ⚠ THAT NOTE WAS THE ONLY THING KEEPING THE GATE FROM CLEAN, WHICH IS ITS OWN HAZARD. A gate that
+  // always warns is a gate people stop reading — and this one is what a Jin window runs at boot to
+  // find out what is true. Adopting these is as much about the gate staying loud as about the moves.
+  //
+  // ★ AND MANALIC WAS THE LAST EMPTY BOOK — verified by counting, not taken from the board: 61 moves
+  // across 20 runes, `manalic: 0`. A keeper born to Manalic opened their book on nothing. Quickform
+  // is the entry that closes it, which is why it is BUILT below and not parked as `unbuilt`.
+  { id: 'quickform', name: 'Quickform', tier: 'tactical', runes: ['manalic'],
+    effect: 'Mana pushed until it clicks into shape — a plank, a rung, a blade, a thrown wedge. Brittle and short-lived, but it exists a breath after you decide it should.', collar: 'opens' },
+  // ★ CANON'S OWN WORDS DECIDE IT: *"no force in it at all."* It never enters the contest, so it is
+  // no more the key to a collar than a heal is — and unlike a heal it is not even part of winning.
+  { id: 'waymark', name: 'Waymark', tier: 'tactical', runes: ['enchant'],
+    effect: 'Mana bound to a place or an object until you feel it like a limb — you know where it is, whether it has moved, and whether anyone has touched it.', collar: 'no-contest' },
+  { id: 'forked-bolt', name: 'Forked Bolt', tier: 'tactical', runes: ['lightning'],
+    effect: 'One arc thrown at the nearest path of least resistance, splitting once when it finds a second. The floor Chain Lightning is the ceiling of.', collar: 'opens' },
+  // ⚠ SQUALL vs PRESSURE DROP IS TELL 1 DONE PROPERLY, and the two rows sit next to each other on
+  // purpose. Pressure Drop is `cruelty` because it renders on the BODY — *"ears pop, lungs strain."*
+  // Squall renders on the SPACE — rain, pressure, footing — and a foe standing in it is inconvenienced,
+  // not injured. The test is what a move RENDERS, and weather is not a licence either way.
+  { id: 'squall', name: 'Squall', tier: 'tactical', runes: ['tempest'],
+    effect: 'Weather called down with nothing shaping it — sideways rain, ugly pressure, footing gone. You spoil a space rather than strike into it.', collar: 'opens' },
+  { id: 'keenshard', name: 'Keenshard', tier: 'tactical', runes: ['gem'],
+    effect: 'Every ounce of pressure driven to one crystalline point and loosed. One shard, no spread — it pierces where a thrown stone would only break.', collar: 'opens' },
+  // ⚠ `cruelty`, and the mechanism is not the reason — the RENDER is. *"Molten focus held against one
+  // spot until the spot stops existing"* is a door when aimed at a door and a hole through a person
+  // when aimed at a person, slowly and on purpose. This is the `pillar-tomb` amendment exactly:
+  // stone, water, wind and light are not a licence, and neither is magma.
+  { id: 'meltbore', name: 'Meltbore', tier: 'tactical', runes: ['magma'],
+    effect: 'Molten focus held against one spot until the spot stops existing. Slow, undramatic, and nothing refuses it forever — the breach move.', collar: 'cruelty' },
+  // ★ THE NON-CRUEL SIBLING OF `sandstorm-veil`, and the pair is the cleanest illustration of the
+  // rule in this file. Both are fog. That one SCOURS AND CHOKES, so it is `cruelty`; this one carries
+  // *"nothing but itself"* and canon calls it *"confrontation declined rather than won"* — declining
+  // is not defeating, so it never opens a collar and it is not trying to.
+  { id: 'hush', name: 'Hush', tier: 'tactical', runes: ['mist'],
+    effect: 'Vapor spread wide and carrying nothing but itself — sight goes soft, sound goes flat, edges stop agreeing on where they are.', collar: 'no-contest' },
+
   // Ultimates — signature, high pool cost.
   { id: 'chain-lightning', name: 'Chain Lightning', tier: 'ultimate', runes: ['lightning'],
     effect: 'Arcs between every target and conductor in range, jumping through groups.', collar: 'opens' },

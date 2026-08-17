@@ -270,6 +270,48 @@ const BUILDS: Record<string, Build> = {
   'static-field': { archetype: 'status', manaCost: 15, cooldownMs: 10000, castRange: 9, areaSize: 4.5, areaSecs: 5, statuses: ['rooted', 'disarmed'] },
   'pressure-drop': { archetype: 'field', manaCost: 19, cooldownMs: 10000, castRange: 10, areaSize: 5, areaSecs: 6, fieldDps: 14 },
 
+  // ── The doubled-focus seven (canon 2026-08-15, built 2026-08-17) ─────────────────────────────
+  // ★ QUICKFORM IS THE ONE THAT MATTERS AND IT IS THE CHEAPEST THING IN THIS FILE. Manalic was the
+  // last rune with an empty book, so this entry is the difference between a Manalic keeper having a
+  // cast layer and having a menu of nothing. Canon: *"brittle and short-lived, but it exists a breath
+  // after you decide it should… masters build the bridge they are already running across."* Every
+  // number below is that sentence: least mana, shortest fuse, smallest and shortest-lived terrain in
+  // the game. Stonewall is the considered barricade; this is the plank you throw down mid-stride.
+  quickform: { archetype: 'terrain', manaCost: 8, cooldownMs: 3000, castRange: 6, areaSize: 2.6, areaSecs: 4, shape: 'wall', shapeHeight: 2 },
+  // ⚠ UNBUILT, AND NOT FOR WANT OF A SYSTEM — for want of the RIGHT one. A waymark is a place bound
+  // *"until you feel it like a limb"*, and canon ruled it the craft behind Gregory's passage business
+  // (`moves.md`: what Greg sells is a waymark). The build already HAS waymarks — `voxel/waymark.ts`,
+  // placed blocks with their own persistence. Realising this as a combat slot would ship the name on
+  // top of something that is not it; realising it properly is the *"develop Enchant → cast your own
+  // Waymark → outgrow Greg"* arc, which is a feature, not a number. Same call as `gate`.
+  waymark:   { archetype: 'unbuilt', why: 'a place-binding, not a combat cast — it wants voxel/waymark.ts and the passage arc, not a slot' },
+  // "Splitting ONCE when it finds a second… the floor Chain Lightning is the ceiling of." So it is
+  // literally the ultimate with `chain` turned down to one and the price turned down with it: a
+  // tactical you throw constantly, against an ultimate you spend a pool on.
+  'forked-bolt': { archetype: 'projectile', manaCost: 12, cooldownMs: 900, damage: 19, projSpeed: 72, projLife: 1.2, chain: 1, chainRange: 6 },
+  // "It does not aim, which is the point: you spoil a space rather than strike into it. Feeds on the
+  // caster's temper and BURNS MANA FAST." So: the widest field in the game, the lowest damage in it,
+  // and the highest cost of any tactical. A Squall that hurt would be a worse Firewall.
+  squall:    { archetype: 'field', manaCost: 24, cooldownMs: 9000, castRange: 10, areaSize: 6.5, areaSecs: 5, fieldDps: 9, fieldStopsShots: false },
+  // "One shard, no spread — it pierces where a thrown stone would only break." The fastest and hardest
+  // single bolt a tactical gets; Gale Cutter is cheaper and quicker, Crystal Barrage throws more.
+  // Paying for one perfect shard is the Gem keeper's whole posture.
+  keenshard: { archetype: 'projectile', manaCost: 9, cooldownMs: 900, damage: 24, projSpeed: 84, projLife: 1.3 },
+  // ⚠ UNBUILT ON PURPOSE, AND THE `why` NAMES THE MISSING VERB. Meltbore is a CHANNEL held on one
+  // spot *"until the spot stops existing"* — the breach move, whose point is opening what refuses to
+  // open. The cast layer can RAISE terrain (conjured-terrain) and has no way to open any; and there
+  // is no held-cast verb, so the honest realisations are both lies: a field is "set it and walk away"
+  // and a projectile is "a hot bolt". Either would ship the name on the wrong mechanic — which is the
+  // one thing this file's `unbuilt` tag exists to refuse.
+  meltbore:  { archetype: 'unbuilt', why: 'a held channel that BREACHES — the sim has no sustained cast and nothing that opens terrain' },
+  // "Sight goes soft, edges stop agreeing on where they are. Confrontation DECLINED rather than won."
+  // ⚠ It lands on `blinded` — the same option Enlighten removes — and that is not the two converging:
+  // the sim's three statuses are what a move can take, and both of these take sight. The geometry is
+  // where they part. Enlighten is a flash thrown FAR at a point (range 11, size 6, 3.5s); Hush is a
+  // bank of vapor you pull over the ground around you (range 10, size 8, 4s) so you can leave.
+  // Blinding everyone nearby IS concealment realised, with no concealment status to model it.
+  hush:      { archetype: 'status', manaCost: 14, cooldownMs: 10000, castRange: 10, areaSize: 8, areaSecs: 4, statuses: ['blinded'] },
+
   // ── Ultimates ────────────────────────────────────────────────────────────────────────────────
   'chain-lightning': { archetype: 'projectile', manaCost: 34, cooldownMs: 9000, damage: 26, projSpeed: 70, projLife: 1.2, chain: 3, chainRange: 9 },
   'flame-barrage': { archetype: 'unbuilt', why: 'needs independently tracking projectiles' },
