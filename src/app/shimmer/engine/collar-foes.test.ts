@@ -13,10 +13,11 @@
 
 import {
   COLLAR_FOES, POSTURE_ORDER, foeDef, pickPosture, spawnFoe, strike, hostile, collarFrac, stepFoe, answerCollar, LEAVING_SPEED,
-  rollPatrol, pressArrival, sendbackClock, sightClear, SIGHT_STEP,
+  rollPatrol, pressArrival, sendbackClock, sightClear, SIGHT_STEP, PATROL_SIZE, recoverySeconds,
   type FoePosture,
 } from './collar-foes'
 import { TIER_DIALS } from '../play3d/collar-raid'
+import { HOLDS } from '../voxel/holds'
 
 let pass = 0, fail = 0
 const check = (label: string, ok: boolean, detail = '') => {
@@ -322,23 +323,24 @@ const check = (label: string, ok: boolean, detail = '') => {
 // hold as permanently as freeing everybody did, in a save file. The old flag recorded that a patrol
 // had SPAWNED and was read as "this encounter is resolved". Those are different events.
 {
-  const H = { x: -630, z: -1780, half: 10 }        // thistle-hold, the nearest one to the glade
-  const full = rollPatrol(H.x, H.z, H.half, 0)
+  // thistle-hold, the nearest one to the glade, and RANK 0 — the first hold on the spine.
+  const H = { x: -630, z: -1780, half: 10, rank: 0 }
+  const full = rollPatrol(H.x, H.z, H.half, H.rank)
 
-  check('a patrol is 2-3, not a raid', full.size >= 2 && full.size <= 3, `size ${full.size}`)
+  check('a patrol is a patrol, not a raid', full.size >= 2 && full.size <= 4, `size ${full.size}`)
   check('nobody freed means everybody is out', full.slots.length === full.size)
 
   // ⚠ THE WHOLE POINT. A keeper who was sent back must find them still standing there.
   check('★★ a hold the keeper LOST at still sends its patrol',
-    rollPatrol(H.x, H.z, H.half, 0).slots.length === full.size)
+    rollPatrol(H.x, H.z, H.half, H.rank).slots.length === full.size)
 
   // ★ And the ones actually freed do not come back — that half IS canon, and it is the half the old
   // flag got right. A reload may never re-collar a spirit the keeper let go.
-  check('★ one freed comes back one lighter', rollPatrol(H.x, H.z, H.half, 1).slots.length === full.size - 1)
+  check('★ one freed comes back one lighter', rollPatrol(H.x, H.z, H.half, H.rank, 1).slots.length === full.size - 1)
   check('★ a fully freed hold never sends anyone again',
-    rollPatrol(H.x, H.z, H.half, full.size).slots.length === 0)
+    rollPatrol(H.x, H.z, H.half, H.rank, full.size).slots.length === 0)
   check('and an over-count cannot resurrect anyone',
-    rollPatrol(H.x, H.z, H.half, full.size + 7).slots.length === 0)
+    rollPatrol(H.x, H.z, H.half, H.rank, full.size + 7).slots.length === 0)
 
   // ★★ THE PREFIX RULE, AND IT IS THE ONE A REFACTOR BREAKS SILENTLY. Skipping a freed Moglin must
   // still consume his rolls: advance the stream without drawing his numbers and the SURVIVOR
@@ -346,7 +348,7 @@ const check = (label: string, ok: boolean, detail = '') => {
   // places wearing the wrong postures. That reads exactly like the fight being re-rolled, which is
   // the thing determinism is here to prevent — and the count would still be right, so a length
   // assert alone would stay green through it.
-  const tail = rollPatrol(H.x, H.z, H.half, 1).slots
+  const tail = rollPatrol(H.x, H.z, H.half, H.rank, 1).slots
   const expected = full.slots.slice(1)
   check('★★ the survivors are the SAME Moglins — same posture, same spot',
     tail.length === expected.length &&
@@ -356,14 +358,14 @@ const check = (label: string, ok: boolean, detail = '') => {
 
   // Determinism across calls: two keepers meeting the same hold meet the same patrol, and a reload
   // does not reroll it. Same rule hunter-ai had to be extracted to obey.
-  const again = rollPatrol(H.x, H.z, H.half, 0)
+  const again = rollPatrol(H.x, H.z, H.half, H.rank)
   check('★ the same hold rolls the same patrol every time',
     JSON.stringify(again) === JSON.stringify(full))
 
   // ⚠ AND THE HOLDS ARE NOT ALL ONE FIGHT. Seeded from coordinates, so three holds at three places
   // must not converge on one patrol — that would make the second and third meeting a repeat.
-  const vetch = rollPatrol(-1570, -2130, 12, 0)
-  const brack = rollPatrol(-2269, -2977, 14, 0)
+  const vetch = rollPatrol(-1570, -2130, 12, 1)
+  const brack = rollPatrol(-2269, -2977, 14, 2)
   check('the three holds do not roll the same patrol',
     new Set([full, vetch, brack].map(r => JSON.stringify(r.slots.map(s => s.posture)))).size > 1 ||
     new Set([full, vetch, brack].map(r => r.size)).size > 1)
@@ -402,11 +404,13 @@ const check = (label: string, ok: boolean, detail = '') => {
     pressArrival(COLLAR_FOES[p], 16) < pressArrival(COLLAR_FOES[p], 34)))
 
   // ── the clock ──
-  const spine: Record<string, FoePosture[]> = {
-    thistle: ['skirmisher', 'skirmisher', 'channeler'],
-    vetch: ['bulwark', 'bulwark', 'skirmisher'],
-    brack: ['channeler', 'skirmisher'],
-  }
+  // ⚠ DERIVED FROM THE SHIPPED MAP, NOT COPIED OUT OF IT. This was three hand-written posture lists
+  // transcribed from a `/foes` readout, which is a second source of truth about what `rollPatrol`
+  // returns — it agrees until the day it does not, and then the clock asserts below are measuring a
+  // patrol nobody meets. `HOLDS` is pure map data (no seed, derived from `STORY_NODES` at module
+  // load), so the test can just ask.
+  const spine: Record<string, FoePosture[]> = Object.fromEntries(
+    HOLDS.map((h, rank) => [h.id.replace('-hold', ''), rollPatrol(h.x, h.z, h.half, rank).slots.map(s => s.posture)]))
   for (const [id, ps] of Object.entries(spine)) {
     const real = sendbackClock(ps, MEET, GUARD)
     // ★★ THE ASSERT THE OLD READOUT WOULD HAVE FAILED. The floor is not the clock, and at the
@@ -443,10 +447,80 @@ const check = (label: string, ok: boolean, detail = '') => {
   // ── recovery must not cost more than the loss ──
   // Standing about waiting for a bar is not the penalty; the collar staying on him is. A recovery
   // longer than the fight turns every loss into a second, duller wait.
-  const recovery = 3 + GUARD / 15   // SENDBACK_DEFAULT's calm + regen, kept in step by hand
-  check('recovering the guard costs no more than losing it', POSTURE_ORDER.length > 0 &&
-    recovery <= Math.min(...Object.values(spine).map(ps => sendbackClock(ps, MEET, GUARD))),
-    `recovery ${recovery.toFixed(1)}s`)
+  // ⚠ THE DIALS ARE IMPORTED, NOT COPIED. This line used to read `3 + GUARD / 15` with the comment
+  // *"SENDBACK_DEFAULT's calm + regen, kept in step by hand"* — and a hand-kept mirror of a dial
+  // asserts the rule about numbers the game may no longer ship. The 08-17 spine pass turned regen
+  // and would have left this measuring the old one.
+  const fastest = Math.min(...Object.values(spine).map(ps => sendbackClock(ps, MEET, GUARD)))
+  check('recovering the guard costs no more than losing it', recoverySeconds(GUARD) <= fastest,
+    `recovery ${recoverySeconds(GUARD).toFixed(1)}s vs the fastest hold's ${fastest.toFixed(1)}s`)
+}
+
+// ── ★★ THE SPINE RUNS FORWARDS (2026-08-17, #577) ───────────────────────────────────────────────
+//
+// Patrol size was `2 + floor(roll() * 2)` off the hold's own coordinates, with no spine axis at all,
+// so **difficulty ran backwards**: Thistle — the first hold a keeper ever meets — rolled 3 and was
+// the hardest fight on the road, while Brack, the hold canon says *looms*, rolled 2 and was the
+// softest. Chance was standing in for design, and no dial could fix it.
+//
+// ⚠ THESE ASSERTS RUN AGAINST THE SHIPPED MAP, and that is the point. The rule is not *"bigger rank,
+// bigger number"* in the abstract — it is *"the road gets harder as you walk it"*, which is a claim
+// about the three holds a player actually meets. Move a hold and this must go red.
+{
+  const MEET = 22, GUARD = 100
+  const patrol = (rank: number) =>
+    rollPatrol(HOLDS[rank].x, HOLDS[rank].z, HOLDS[rank].half, rank).slots.map(s => s.posture)
+  const clock = (rank: number) => sendbackClock(patrol(rank), MEET, GUARD)
+
+  check('★ size escalates along the spine and is not rolled at all',
+    HOLDS.every((h, r) => rollPatrol(h.x, h.z, h.half, r).size === PATROL_SIZE[r]) &&
+    PATROL_SIZE.every((n, i) => i === 0 || n > PATROL_SIZE[i - 1]), JSON.stringify(PATROL_SIZE))
+
+  // ★★ THE ASSERT THE OLD BUILD FAILED. Lower clock = lost sooner = harder.
+  const clocks = HOLDS.map((_, r) => clock(r))
+  check('★★ every hold down the spine is harder than the one before it',
+    clocks.every((c, i) => i === 0 || c < clocks[i - 1]),
+    HOLDS.map((h, i) => `${h.id} ${clocks[i].toFixed(1)}s`).join(' · '))
+
+  // ⚠ AND IT MUST STILL BE A PATROL. The fold raid is the feature that fields a crowd; a road
+  // meeting that sends five is not a meeting any more, and `PATROL_SIZE` growing quietly is how
+  // that ships.
+  check('the last hold still sends a patrol, not a raid', Math.max(...PATROL_SIZE) <= 4)
+  check('and losing is reachable at every hold — nobody is unlosable', clocks.every(c => c < 15))
+
+  // ★ THE SEED STILL OWNS *WHO*, and that is what keeps three holds three fights rather than one
+  // fight at three sizes. If composition ever became a function of rank too, the holds would
+  // converge into a single escalating silhouette — the same convergence the triangle block guards.
+  check('★ the spine fixes how many, the seed still picks who',
+    new Set(HOLDS.map((_, r) => patrol(r).join(','))).size === HOLDS.length,
+    HOLDS.map((h, r) => `${h.id}: ${patrol(r).join(',')}`).join(' · '))
+
+  // ⚠ RANK IS REQUIRED AND CLAMPED, NEVER GUESSED. A caller who omitted it would get *"every hold is
+  // the first hold"*, which is the bug this parameter exists to fix, silently restored. TypeScript
+  // enforces the requirement; this pins the clamp so an out-of-range rank cannot return `undefined`
+  // as a size and spawn a patrol of NaN Moglins.
+  const H0 = HOLDS[0]
+  check('an over-range rank clamps to the last hold, never undefined',
+    rollPatrol(H0.x, H0.z, H0.half, 99).size === PATROL_SIZE[PATROL_SIZE.length - 1])
+  check('and a negative rank clamps to the first', rollPatrol(H0.x, H0.z, H0.half, -4).size === PATROL_SIZE[0])
+
+  // ★★ THE VESTIGIAL SIZE DRAW IS LOAD-BEARING, AND NOTHING ELSE WOULD CATCH ITS REMOVAL. Size no
+  // longer comes off the stream, but the draw is still taken and thrown away, because composition
+  // comes off the SAME stream — delete it and every hold's postures shift by one. That is invisible
+  // to every other assert here and highly visible in a live save: a keeper part-way through Thistle
+  // walks back to different Moglins standing in different places, which is precisely the re-rolled
+  // fight the prefix rule exists to prevent. These two are the pair already standing on that road.
+  check('★★ the shipped roll is unchanged — a live save meets the Moglins it left',
+    patrol(0).join(',') === 'skirmisher,skirmisher', patrol(0).join(','))
+
+  // ★ THE PREFIX RULE SURVIVES THE SPINE. Size now comes from rank rather than the stream, so the
+  // freed-prefix must still line up with the full roll — a keeper mid-way through a hold meets the
+  // same Moglins, one lighter.
+  const full = rollPatrol(H0.x, H0.z, H0.half, 0)
+  const one = rollPatrol(H0.x, H0.z, H0.half, 0, 1)
+  check('★ a rank-sized patrol still comes back as its own prefix',
+    one.slots.length === full.size - 1 &&
+    one.slots.every((s, i) => JSON.stringify(s) === JSON.stringify(full.slots[i + 1])))
 }
 
 console.log(`\ncollar foes: ${pass} passed, ${fail} failed`)

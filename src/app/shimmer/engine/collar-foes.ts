@@ -421,14 +421,43 @@ export interface PatrolSlot {
 }
 
 /**
+ * ── ★★ HOW MANY A HOLD SENDS, BY ITS PLACE ON THE SPINE (2026-08-17) ────────────────────────────
+ *
+ * The size used to be `2 + floor(roll() * 2)` — **2 or 3, drawn purely from the hold's coordinates,
+ * with no spine axis at all.** So difficulty ran BACKWARDS: Thistle, the first hold a keeper ever
+ * meets, happened to roll 3 and was the hardest fight on the road (10.0s to lose); Brack, the hold
+ * canon says *looms*, rolled 2 and was the softest (12.7s). No dial could fix it, because the
+ * inversion was not in the dials — chance was standing in for design.
+ *
+ * ★ AND THE AXIS ALREADY EXISTED EVERYWHERE ELSE. `HoldSpec.half` escalates 10/12/14 with the
+ * comment *"Escalates down the chain — Brack looms"*, and `collar-raid.ts` tiers collar integrity
+ * 70/120/200. One roll ignored the order the whole rest of the world is built on.
+ *
+ * ⚠ SO SIZE IS NOT ROLLED AT ALL NOW. Keeping a chance term would keep the failure available — a
+ * later hold that rolls low is the same bug wearing a smaller number. **What varies by seed is WHO
+ * comes; what the spine fixes is HOW MANY.** Each hold keeps its own character (Vetch's two bulwarks
+ * are still Vetch's) and cannot be softer than the hold before it.
+ *
+ * ⚠ 4 IS THE CEILING AND *"a patrol, not a raid"* is why. The fold raid is a separate feature with
+ * its own tiers; a road meeting that fields five is not a meeting any more.
+ */
+export const PATROL_SIZE: readonly number[] = [2, 3, 4]
+
+/**
  * Roll a hold's patrol, minus whoever the keeper already freed.
+ *
+ * `rank` is the hold's index along the story spine (0 = Thistle, first; 2 = Brack, last) and it is
+ * REQUIRED, with no default. A default would be 0, and a caller that forgot it would quietly get
+ * *"every hold is the first hold"* — which is precisely the bug this parameter exists to fix, and it
+ * would come back silently. Same fail-closed reasoning as `answerCollar` refusing an unclassified
+ * move: the value is load-bearing, so absence must be a mistake you cannot make.
  *
  * ⚠ THE SKIPPED SLOTS STILL CONSUME THEIR ROLLS. Advance past a freed Moglin without drawing his
  * numbers and the survivor inherits them — the keeper walks back to a patrol of the right size
  * standing in the wrong places wearing the wrong postures, which reads as the fight being re-rolled
  * and is exactly what determinism is here to prevent.
  */
-export function rollPatrol(holdX: number, holdZ: number, half: number, alreadyFreed = 0): {
+export function rollPatrol(holdX: number, holdZ: number, half: number, rank: number, alreadyFreed = 0): {
   /** How many the hold sends when nobody has been freed. `alreadyFreed >= size` means never again. */
   size: number
   /** Only those still wearing a collar. Empty once the whole patrol has been freed. */
@@ -437,7 +466,12 @@ export function rollPatrol(holdX: number, holdZ: number, half: number, alreadyFr
   // Deterministic from the hold, not `Math.random()`: two keepers meeting the same hold must meet
   // the same patrol, and a reload must not reroll it into a different fight.
   const roll = mulberry32((holdX * 73856093) ^ (holdZ * 19349663))
-  const size = 2 + Math.floor(roll() * 2)                     // 2-3: a patrol, not a raid
+  // ⚠ THE SIZE DRAW IS STILL TAKEN, AND DELIBERATELY THROWN AWAY. Composition comes off this same
+  // stream, so removing the draw would shift every hold's postures by one — a keeper mid-way through
+  // Thistle would come back to different Moglins standing in different places, which is exactly the
+  // re-rolled fight the prefix rule exists to prevent. Costs one number; buys every live save.
+  roll()
+  const size = PATROL_SIZE[Math.max(0, Math.min(PATROL_SIZE.length - 1, Math.floor(rank)))]
   const freed = Math.max(0, Math.min(size, Math.floor(alreadyFreed)))
   const slots: PatrolSlot[] = []
   for (let n = 0; n < size; n++) {
@@ -530,6 +564,35 @@ export function sendbackClock(
   // "never" is the honest answer rather than a very large number that reads like a real clock.
   return dps > 0 ? t + left / dps : Infinity
 }
+
+/**
+ * ── ★ THE TWO RECOVERY DIALS LIVE HERE, WITH THE CLOCK THEY ARE JUDGED AGAINST (2026-08-17) ──────
+ *
+ * `SENDBACK_DEFAULT` in the voxel host owns the send-back dials, and it still owns `wake` and `meet`
+ * — those are about waking somewhere and about geometry. These two are different: they are the only
+ * half of that table the **rule below** is about, and the rule is this file's.
+ *
+ *   **RECOVERING THE GUARD MUST NEVER COST MORE THAN LOSING IT.**
+ *
+ * At calm 5 / regen 9 recovery took 16.1s against a fight lost in 10-13s, so the cheapest way to
+ * play was to disengage and stand in a field, and a loss was taxed twice. The real penalty is the
+ * collar staying on him and the walk back; **a bar refilling is not a penalty, it is a wait.**
+ *
+ * ⚠ AND THE TEST USED TO HOLD ITS OWN COPY OF THESE, *"kept in step by hand"* — a mirror that agrees
+ * until someone turns a dial in the host, at which point the oracle keeps asserting the rule about
+ * numbers the game no longer ships. It caught a real inversion within a day of being written, which
+ * is exactly why it must not be allowed to go stale. One definition, imported by both.
+ *
+ * ★ 15 → 17 (2026-08-17, the spine pass): escalating the last hold to four Moglins pulled Brack's
+ * clock down to 9.3s, under the 9.7s recovery — the rule broke, and the oracle said so. The dials
+ * are Alex's; this is the smallest move that keeps his ordering intact (3 + 100/17 = 8.9s).
+ */
+export const SENDBACK_CALM = 3
+export const SENDBACK_REGEN = 17
+
+/** Seconds from an empty guard back to a full one, out of contact. The left side of the rule above. */
+export const recoverySeconds = (guard: number, calm = SENDBACK_CALM, regen = SENDBACK_REGEN): number =>
+  calm + guard / Math.max(0.001, regen)
 
 // ── ★★ WHAT A ROUND DOES TO A COLLAR (2026-08-16, #294) ─────────────────────────────────────────
 //

@@ -50,6 +50,7 @@ import { HOLDS } from '../voxel/holds'
 import {
   spawnFoe, stepFoe, strike, hostile, foeDef, pickPosture, collarFrac, answerCollar,
   COLLAR_FOES, POSTURE_ORDER, rollPatrol, pressArrival, sendbackClock, type CollarFoeDef,
+  SENDBACK_CALM, SENDBACK_REGEN,
   type CollarFoe, type CollarDelivery, type FoePosture,
 } from '../engine/collar-foes'
 import { KEEPER_MOVES } from '../play3d/keeper-moves'
@@ -308,14 +309,17 @@ interface SendbackTuning {
   /** Seconds out of anyone's reach before the guard starts coming back. */
   calm: number
   /**
-   * Guard restored per second once calm. At regen 15 against a 100 guard, full takes ~6.7s.
+   * Guard restored per second once calm. At regen 17 against a 100 guard, full takes ~5.9s.
    *
-   * ★ 9 → 15, AND THE RULE THAT SET IT (2026-08-17): **recovering the guard must never cost more
-   * than losing it.** At calm 5 / regen 9 recovery was 16.1s against a fight the keeper loses in
-   * 10-13s — so the cheapest way to play was to disengage and stand in a field, and the loss was
-   * taxed twice. The real penalty is the collar staying on him and the walk back; a bar refilling
-   * is not a penalty, it is a wait. Now 3 + 6.7 = 9.7s, just under the fastest hold's 10.0s, and
-   * `collar-foes.test.ts` asserts that ordering so a later dial pass cannot silently invert it.
+   * ★ 9 → 15 → 17, AND THE RULE THAT SETS IT: **recovering the guard must never cost more than
+   * losing it.** At calm 5 / regen 9 recovery was 16.1s against a fight the keeper loses in 10-13s,
+   * so the cheapest way to play was to disengage and stand in a field and the loss was taxed twice.
+   * A bar refilling is not a penalty, it is a wait.
+   *
+   * ⚠ THE DEFAULT LIVES IN `collar-foes.ts` NOW (`SENDBACK_REGEN`), beside the clock it is judged
+   * against — the oracle used to hold a hand-kept copy of it, and a mirror of a dial is a mirror
+   * that goes stale. The 08-17 spine pass moved it 15 → 17 because four Moglins at Brack pulled the
+   * fastest hold's clock to 9.3s, under the old 9.7s recovery, and the oracle caught it.
    */
   regen: number
   /**
@@ -330,7 +334,7 @@ interface SendbackTuning {
   /** How far outside a hold's curtain wall its patrol comes out to meet you, in blocks. */
   meet: number
 }
-const SENDBACK_DEFAULT: Readonly<SendbackTuning> = { calm: 3, regen: 15, wake: 1, meet: PATROL_MEET }
+const SENDBACK_DEFAULT: Readonly<SendbackTuning> = { calm: SENDBACK_CALM, regen: SENDBACK_REGEN, wake: 1, meet: PATROL_MEET }
 /**
  * Body heights for the blockout meshes, in blocks. ⚠ These MUST match the geometry in `foeGeo` —
  * they are what a round is tested against, so a mesh taller than its entry is a head you can see
@@ -3305,11 +3309,13 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
       })
       // The three patrols the spine actually rolls, so a dial pass reads the SPINE rather than
       // whichever fight the keeper happens to be standing in front of.
-      const spine: [string, FoePosture[]][] = [
-        ['thistle', ['skirmisher', 'skirmisher', 'channeler']],
-        ['vetch', ['bulwark', 'bulwark', 'skirmisher']],
-        ['brack', ['channeler', 'skirmisher']],
-      ]
+      // ⚠ ASKED, NOT TRANSCRIBED (2026-08-17). This was three literal posture lists copied out of a
+      // `/foes` readout, and the spine pass made every one of them wrong within a day — the command
+      // would have printed clocks for patrols nobody meets while claiming to be the tuning readout.
+      // A number a player cannot check is a claim; a readout that hand-copies its input is a claim
+      // about a stale copy. Same reason the clock arithmetic moved into the engine in the first place.
+      const spine: [string, FoePosture[]][] = HOLDS.map((h, rank) =>
+        [h.id.replace('-hold', ''), rollPatrol(h.x, h.z, h.half, rank).slots.map(s => s.posture)])
       const clocks = spine.map(([id, ps]) => {
         const c = sendbackClock(ps, sb.meet, g, tune)
         const floor = g / ps.reduce((a, p) => a + tune(p).pressureDps, 0)
@@ -5197,7 +5203,12 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
       // ⚠ THE SKIP CONSUMES ITS ROLLS. The patrol is rolled from the hold's coordinates, so skipping
       // the freed ones must still advance the stream — otherwise the survivor inherits the freed
       // Moglin's posture and spot, and the keeper meets a different fight than the one they left.
-      for (const hold of HOLDS) {
+      // ★ THE INDEX IS THE SPINE RANK. `HOLDS` is derived from `STORY_NODES[2,3,4]` in order, so a
+      // hold's position in this array IS how far down the chain it sits — the same order `half`
+      // (10/12/14) and the raid's collar tiers already escalate along. `rollPatrol` needs it and
+      // refuses to guess; before it took one, patrol size was pure chance and Thistle outfought Brack.
+      for (let rank = 0; rank < HOLDS.length; rank++) {
+        const hold = HOLDS[rank]
         if (foeOut.current.has(hold.id)) continue
         // The trigger ring sits outside the curtain wall: met on the ROAD, approaching, never
         // materialising inside a courtyard the keeper is already standing in.
@@ -5210,7 +5221,7 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
         // ★ THE SEED MATH IS `rollPatrol`'s AND IT IS ORACLE-TESTED. The host keeps only what cannot
         // travel: which way the keeper came from, and where the live ground is.
         const alreadyFreed = foeFreed.current[hold.id] ?? 0
-        const patrol = rollPatrol(hold.x, hold.z, hold.half, alreadyFreed)
+        const patrol = rollPatrol(hold.x, hold.z, hold.half, rank, alreadyFreed)
         for (const slot of patrol.slots) {
           const posture = slot.posture
           // Placed between the keeper and the hold, spread across the road — they came OUT of it.
