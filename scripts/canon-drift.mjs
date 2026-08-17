@@ -352,6 +352,54 @@ function run() {
     }
     if (!rostDrift) add('CLEAN', 'mist-rosters', `all ${canonRost.size} ruled mist rosters match the build`)
   }
+
+  // 8. BIRTH-RUNE AFFINITY — play3d/birth-affinity.ts vs CANON/game/shimmer-birth-rune.md
+  //
+  // ★ WHY THIS CHECK EXISTS. `AFFINITY` is twenty rows HAND-COPIED out of the canon table, and the
+  // boundary that makes it safe to hand-copy is the same one that makes drift invisible: canon owns
+  // the CATEGORY, Jin owns the NUMBER. So a wrong magnitude is legal and a wrong category is a lore
+  // change — and both look identical in a diff. Nothing was watching the half canon owns.
+  //
+  // The failure is quiet by construction, which is the argument for gating it. `birthAffinity()`
+  // falls back to NEUTRAL on an unknown id, so a rune canon rules and the build forgets does not
+  // throw: a keeper born of it simply gets no lean at all, forever, and the birth screen still
+  // offers the rune. "Your birth rune is you" resolves to nothing and nobody sees a stack trace.
+  const canonLeans = canonBirthLeans()
+  const builtLeans = gameBirthLeans()
+  if (!canonLeans.size || !builtLeans.size) {
+    add('NOTE', 'birth-affinity', `could not read one side (canon ${canonLeans.size}, build ${builtLeans.size}) — check skipped`)
+  } else {
+    let leanDrift = 0
+    for (const [rune, lean] of canonLeans) {
+      // A lean the build cannot express means canon grew a category with no constructor behind it.
+      // Reported rather than skipped: silently dropping it is how the row would go missing below.
+      if (!AFFINITY_LEANS.has(lean)) {
+        leanDrift++
+        add('CONFLICT', 'birth-affinity', `canon gives '${rune}' the lean '${lean}', which the build has no constructor for`,
+          `birth-affinity.ts builds leans from ${[...AFFINITY_LEANS].join(' / ')}. Either add the category to the build, or the table cell is a typo.`)
+        continue
+      }
+      const got = builtLeans.get(rune)
+      if (!got) {
+        leanDrift++
+        add('GAP', 'birth-affinity', `'${rune}' is ruled '${lean}' in canon but carries no affinity in the build`,
+          `birthAffinity() falls back to NEUTRAL, so a keeper born of ${rune} gets NO lean and nothing errors. Add it to AFFINITY in birth-affinity.ts.`)
+        continue
+      }
+      if (got !== lean) {
+        leanDrift++
+        add('CONFLICT', 'birth-affinity', `'${rune}' lean differs — build '${got}' vs canon '${lean}'`,
+          `The category is canon's half of the boundary (magnitudes are Jin's). Re-wire the build, or re-rule the essence in shimmer-birth-rune.md first (Magii).`)
+      }
+    }
+    for (const rune of builtLeans.keys()) {
+      if (canonLeans.has(rune)) continue
+      leanDrift++
+      add('COLLISION', 'birth-affinity', `'${rune}' ships an affinity that canon's table never rules`,
+        `A lean nobody ruled is accidental canon — it asserts what that rune IS. Rule it in shimmer-birth-rune.md, or drop it.`)
+    }
+    if (!leanDrift) add('CLEAN', 'birth-affinity', `all ${canonLeans.size} birth-rune leans match the ruled essence table`)
+  }
 }
 
 // ── mist-roster helpers ────────────────────────────────
@@ -441,6 +489,48 @@ function gameKeeperMoves() {
     const runes = [...m[2].matchAll(/'([^']+)'/g)].map((r) => r[1])
     out.push({ name: m[1], runes })
   }
+  return out
+}
+
+// ── birth-affinity helpers ─────────────────────────────
+/** The five lean categories the build can actually construct (birth-affinity.ts). */
+const AFFINITY_LEANS = new Set(['vitality', 'defense', 'mobility', 'utility', 'offense'])
+
+/**
+ * The ruled leans in CANON/game/shimmer-birth-rune.md › "## Essence → affinity lean (v1)".
+ * Table shape: | Magma | Earth·Ignite | slow, unstoppable, melts through | offense — heavy/armor-break |
+ *
+ * Only the FIRST word of the lean cell is read, and that is the boundary in one line: the category
+ * ('offense') is canon's, the prose after it ('heavy / armor-break') is intent Jin reads but is not
+ * gated on — pinning the flavour text would fail the build on a canon copy-edit.
+ *
+ * The scan is bounded to that one section on purpose. The file carries other tables, and a parser
+ * that swept the whole document would silently harvest rows from whichever table canon adds next.
+ */
+function canonBirthLeans() {
+  const out = new Map()
+  const p = join(CANON, 'game', 'shimmer-birth-rune.md')
+  if (!existsSync(p)) return out
+  const sec = read(p).split(/^##\s+Essence.*affinity lean/m)[1]
+  if (!sec) return out
+  for (const line of sec.split(/^##\s/m)[0].split('\n')) {
+    const m = line.match(/^\|\s*([A-Za-z]+)\s*\|[^|]*\|[^|]*\|\s*([^|]+?)\s*\|/)
+    if (!m) continue
+    const rune = norm(m[1]).toLowerCase()
+    if (rune === 'rune') continue                       // the header row
+    out.set(rune, norm(m[2]).split(/[\s—]+/)[0].toLowerCase())
+  }
+  return out
+}
+
+/** The leans the build ships, read off the AFFINITY table's constructor per rune. */
+function gameBirthLeans() {
+  const out = new Map()
+  const p = join(GAME, 'play3d', 'birth-affinity.ts')
+  if (!existsSync(p)) return out
+  const txt = read(p)
+  const body = (txt.split('const AFFINITY')[1] ?? '').split('NEUTRAL_AFFINITY')[0]
+  for (const m of body.matchAll(/^\s*([a-z]+):\s*([a-z]+)\(/gm)) out.set(m[1], m[2])
   return out
 }
 
