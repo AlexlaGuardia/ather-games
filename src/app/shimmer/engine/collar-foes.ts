@@ -586,6 +586,8 @@ export function sendbackClock(
  * ★ 15 → 17 (2026-08-17, the spine pass): escalating the last hold to four Moglins pulled Brack's
  * clock down to 9.3s, under the 9.7s recovery — the rule broke, and the oracle said so. The dials
  * are Alex's; this is the smallest move that keeps his ordering intact (3 + 100/17 = 8.9s).
+ * **RATIFIED by Alex the same day** — 17 stands, pending his playtest. It is his number now, not a
+ * repair I made to his: don't quietly walk it back to 15 on the grounds that 15 was "the tuned one".
  */
 export const SENDBACK_CALM = 3
 export const SENDBACK_REGEN = 17
