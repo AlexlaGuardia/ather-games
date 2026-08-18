@@ -151,7 +151,10 @@ import { LAUNCHED_SPECIES } from '../engine/spirit-index'
 import { KeeperFrame, TabEmpty, type KeeperTab } from './keeper-panel'
 import { GrimoireTab } from './grimoire-tab'
 import { evolveSpirit } from '../spirits/evolution'
-import { POTION_IDS } from '../engine/alchemy'
+import { POTION_IDS, POTION_DEFS } from '../engine/alchemy'
+import { MAX_INFUSIONS_PER_ELEMENT } from '../spirits/spirit'
+import { BrewPanel } from './brew-panel'
+import { brewBlocker } from './brew'
 import { loadRuneInventory, saveRuneInventory, grantRune, revokeRune } from '../play3d/rune-inventory'
 import { birthAffinity } from '../play3d/birth-affinity'
 // Health + shields are SHARED rules, not a second copy — see engine/vitals.ts on why.
@@ -475,6 +478,18 @@ const STACK_OVERRIDE: Record<string, number> = {
   mana_lantern: 16,
   crafting_table: 16,
   chest: 16,
+  cauldron: 16,
+  // ── ★ A POTION STACKS TO ONE SPIRIT'S WORTH (2026-08-18, brewing) ──────────────────────────
+  // Derived from the infusion cap, not chosen: the most any single spirit can take of ONE element is
+  // `MAX_INFUSIONS_PER_ELEMENT` (9), so a full stack is exactly one spirit's capacity with a bottle
+  // spare. That is a number that SAYS something — the chest pass's rule, where 48 slots exist so
+  // *"a chest holds a bagful"* stays true — rather than a number that balances something.
+  //
+  // ⚠ AND IT IS DELIBERATELY NOT THE 2D GAME'S 5. `engine/inventory.getMaxStack` reads that table
+  // and it is another game's balance; the whole reason `give` exists is that this world answers
+  // "how many fit in a slot" for itself. Written for EVERY brew, not just the four Infusions, so a
+  // tier-4 cordial does not silently fall back to a different rule than the bottle beside it.
+  ...Object.fromEntries(POTION_IDS.map(id => [id, MAX_INFUSIONS_PER_ELEMENT + 1])),
 }
 
 export const maxStackOf = (itemId: string): number => STACK_OVERRIDE[itemId] ?? VOXEL_STACK
@@ -577,6 +592,17 @@ interface ConsoleCtx {
   foes: () => string
   /** `/press` — the send-back dials. Bare lists them; a key+value sets one; `reset` restores. */
   press: (key?: string, value?: number) => string
+  /**
+   * ★ `/brew` — raise the cauldron's panel where you stand. OWNER-GATED and it is a TEST
+   * INSTRUMENT, not a player verb: a keeper is supposed to craft a cauldron and right-click it.
+   *
+   * It exists because that is the ONE step of this feature no harness can drive. Opening the panel
+   * needs a right-click on a placed block, and a right-click needs pointer lock, which headless
+   * Chrome will not grant — so without this row the brew list, the refusals and the spend path
+   * could only ever be checked by hand, forever, on every future change. Same argument `/foes`
+   * makes one field up: the verb exists because the thing cannot otherwise be verified.
+   */
+  brew: () => string
   /**
    * ★ THE RUNES A KEEPER HOLDS. Bare `/rune` is VIEW-GRADE — reading your own hand is not a cheat,
    * and it is the one thing that explains why a cast key does nothing. GRANTING is cheat-grade and
@@ -768,6 +794,8 @@ const CONSOLE_CMDS: ConsoleCmd[] = [
       return `party takes lend, heal or clear — not ${verb}`
     },
     suggest: (i) => i === 0 ? ['lend', 'heal', 'clear'] : i === 1 ? ['1', '2', '3', '4'] : ['5', '10', '20', '30'] },
+  { name: 'brew', usage: 'brew', help: 'open the cauldron here (owner)', owner: true,
+    run: (_a, c) => c.brew() },
   { name: 'weather', usage: 'weather', help: 'someday', run: () =>
       'no weather in the Ather yet — the day it exists, its command lands here' },
 ]
@@ -827,21 +855,38 @@ function suggestionsFor(line: string, ctx: ConsoleCtx): { options: string[]; app
 }
 /** Item ids the console may conjure — everything a block drops or a recipe produces. */
 /**
- * What `/give` will conjure. Block drops + voxel recipe outputs + every brewed potion.
+ * ── ★★ WHAT THIS WORLD CAN ACTUALLY PRODUCE (2026-08-18, brewing) ─────────────────────────────
+ * Every item a keeper can obtain HERE by playing: what a block drops, and what the voxel recipe
+ * table makes. Nothing else — no fishing, no Exchange Booth, no crops.
  *
- * ⚠ THE POTIONS ARE HERE BECAUSE THIS WORLD CANNOT MAKE THEM (2026-08-18). Brewing lives in
- * `engine/alchemy.ts` and is wired only into play3d; the voxel crafting path is `voxel/recipes.ts`,
- * a different system with `hand`/`crafting_table` stations and no alchemy in it. So until a bench
- * exists here, an owner testing anything downstream of a brew — the infusion pour on the grimoire's
- * Yours face, most of all — has no way to hold one. A validation set that silently excludes a whole
- * economy makes that economy untestable rather than unreachable, which is worse: unreachable gets
- * noticed.
+ * ★ IT IS THE CAULDRON'S HONESTY GATE, and that is why it is worth naming rather than inlining.
+ * `engine/alchemy.ts` is shared with play3d, whose world grows ten crops and sells seeds, so most of
+ * canon's brews name at least one ingredient that cannot be had here — including all four flagship
+ * Infusions, whose element herbs are farm crops. The brew panel greys those rows and says *"in these
+ * lands"* instead of printing a red `0/2` that reads as "go and find some". See `voxel3d/brew.ts`.
+ *
+ * ⚠ DERIVED, NEVER HAND-KEPT — the day herbs arrive as a crop or as wild flora they enter this set
+ * from the registry and the warning disappears by itself. A hand-written "can't do these yet" list
+ * is the thing that would still be there a month after they shipped.
+ *
+ * ⚠ POTIONS ARE DELIBERATELY EXCLUDED. They are obtainable now (the cauldron makes them), but no
+ * recipe in the table takes a potion as an INPUT, so leaving them out costs nothing and keeps this
+ * from needing a fixpoint. `brew-reach.test.ts` asserts that premise rather than trusting it.
  */
-const KNOWN_ITEMS: ReadonlySet<string> = new Set([
+const WORLD_ITEMS: ReadonlySet<string> = new Set([
   ...BLOCKS.flatMap(b => b.drops.map(d => d.itemId)),
   ...RECIPE_OUTPUTS,
-  ...POTION_IDS,
 ])
+
+/**
+ * What `/give` will conjure. Everything this world produces, plus every brew.
+ *
+ * ⚠ THE POTIONS STAY IN THIS SET even now that the cauldron can make them: an owner testing the far
+ * end of the chain — the infusion pour on the grimoire's Yours face — should not have to grind an
+ * alchemy level to hold a bottle. What changed on 2026-08-18 is only the REASON: they used to be
+ * here because this world could not brew at all.
+ */
+const KNOWN_ITEMS: ReadonlySet<string> = new Set([...WORLD_ITEMS, ...POTION_IDS])
 
 /**
  * One window of the frame meter. `worst` is the point of it: an average hides exactly the hitch a
@@ -1274,6 +1319,16 @@ export default function VoxelWorld() {
   /** The bench whose job panel is up, or null. Position + a bound writer; see `OpenStation`. */
   const [openStation, setOpenStation] = useState<OpenStation | null>(null)
   const [openWaymark, setOpenWaymark] = useState<OpenWaymark | null>(null)
+  /**
+   * Is the cauldron's brew list up (2026-08-18)? A BOOLEAN, not a position — and that is a design
+   * claim, not a shortcut. The chest and the bench hand up coordinates because their contents live
+   * in the world: two chests hold different things, two benches run different jobs. A cauldron holds
+   * nothing. Brewing reads the keeper's bag, the keeper's mana and the keeper's alchemy level, all of
+   * which are the same at every cauldron in the world, so a position would be a fact the panel could
+   * only misuse. ⚠ If brewing ever grows a standing job (the workshop's clock), this becomes an
+   * `OpenStation`-shaped record on the same day and for the same reason.
+   */
+  const [brewOpen, setBrewOpen] = useState(false)
   const openChestRef = useRef<OpenChest | null>(null)
   openChestRef.current = openChest
   const [craftOpen, setCraftOpen] = useState(false)
@@ -1313,6 +1368,17 @@ export default function VoxelWorld() {
       ).join('\n')
     },
     press: (key, value) => pressRef.current ? pressRef.current(key, value) : 'the world is still waking',
+    /**
+     * ⚠ IT CLOSES THE CONSOLE AND DOES **NOT** CALL `openCursorUI` — that is the whole trick, and
+     * getting it wrong makes the panel unclickable rather than absent. The console is already a
+     * cursor surface: it exited pointer lock on the way in and armed `lockOnCloseRef` to re-lock
+     * afterwards. Calling `openCursorUI` again would re-read `document.pointerLockElement` (now
+     * false) and DISARM that, so the keeper never gets the pointer back. And leaving the console
+     * open would mean Escape's console branch fires `closeCursorUI`, re-locking the pointer with the
+     * brew list still up — a panel you can see and cannot press. So the console hands the surface
+     * over: it closes, the panel opens, and the panel's own close settles the lock.
+     */
+    brew: () => { setConsoleOpen(false); setBrewOpen(true); return 'the cauldron is warm' },
     radius: () => settings.viewRadius,
     setRadius: (r) => update({ viewRadius: r }),
     give: (id, count) => {
@@ -1576,6 +1642,58 @@ export default function VoxelWorld() {
     if (plan.give.itemId === 'mana_lantern') advanceTutorial('lantern', 'light')
   }, [have, refreshHotbar, advanceTutorial, station])
 
+  /**
+   * ── ★★ BREW ONE POTION (2026-08-18, #262's missing front door) ───────────────────────────────
+   * The keeper's bag pays, the keeper's mana pays, the keeper's alchemy level gates it, and the
+   * cauldron is only where it happens. `brewBlocker` (voxel3d/brew.ts) has already decided; this
+   * applies, and re-asks first because a UI grey is a display and never a spend-path guard — the same
+   * rule `doCraftTool` states one function down.
+   *
+   * ★★ IT DOES NOT CALL `brewPotion`, AND THAT IS THE ONE DECISION IN HERE WORTH READING.
+   * `engine/alchemy.brewPotion` does the whole run — spend, drain, add, XP — and its add goes through
+   * `engine/inventory.addItems`, which reads the 2D game's stack table (a potion is 5 there) and
+   * DISCARDS the leftover it returns. That is the exact bug the 08-11 chests pass was written about:
+   * `addItems(inv,'block_topsoil',64)` filled 24 slots and silently destroyed 40, and every caller
+   * threw the return away. A brew is four gathered ingredients and a mana cost, so losing the bottle
+   * to a full bag would be the most expensive version of that bug in the game. `give` is this world's
+   * only way into the bag and it answers with what did not fit.
+   *
+   * So the run is assembled from the same pure pieces in this world's own order: ask, take, drain,
+   * give, pay XP. Every one of those calls is the engine's except the give, which must be ours.
+   */
+  const doBrew = useCallback((potionId: string) => {
+    const def = POTION_DEFS[potionId]
+    if (!def) return
+    const why = brewBlocker(def, skills.current.alchemy.level, mana.current.cur,
+      (id) => countItem(inv.current!, id),
+      (id) => WORLD_ITEMS.has(id),
+      (id) => roomFor(inv.current!, id))
+    if (why !== 'ok') return
+    // Take everything BEFORE giving — the same order `doCraft` states: a partial spend that still
+    // yields the output is a duplication bug, and the reverse is a theft.
+    for (const r of def.recipe) {
+      if (countItem(inv.current!, r.itemId) < r.count) return
+    }
+    for (const r of def.recipe) removeItems(inv.current!, r.itemId, r.count)
+    mana.current.cur = Math.max(0, mana.current.cur - def.manaCost)
+    const left = give(inv.current!, potionId, def.resultCount)
+    // `room` was checked above, so this cannot fire today — and it SAYS SO OUT LOUD if it ever
+    // does, which is the whole point. The 08-11 bug was not that items overflowed; it was that a
+    // caller threw the leftover away and the loss left no evidence. A visible sentence about two
+    // lost bottles is recoverable; a silent one is a bug report that says "brewing is broken".
+    if (left > 0) setCrafted(`${left}× ${def.name} would not fit — satchel full`)
+    else setCrafted(`${def.resultCount}× ${def.name}`)
+    // Alchemy is levelled by BREWING and by nothing else in this world, so this is the only XP the
+    // skill will ever see here — and the level-up shout is the same one gathering uses, because a
+    // keeper who just reached alchemy 7 has four Infusions come into view and should be told.
+    const res = addSkillXP(skills.current.alchemy, def.xpGrant)
+    if (res.leveled) {
+      setLevelUp(`alchemy ${res.newLevel}${getMilestone(res.newLevel) ? ' — ' + getMilestone(res.newLevel) : ''}`)
+    }
+    setCraftTick(t => t + 1)
+    refreshHotbar()
+  }, [refreshHotbar])
+
   /** Craft a tool and equip it. Tools keep their own table; this is the one surface that shows it.
    *  ★ TOOLS ARE BENCH WORK. You can snap a log into planks with your hands; you cannot shape a
    *  blade on your knee. Same split play3d always had (tools were station crafts there), and it is
@@ -1787,6 +1905,7 @@ export default function VoxelWorld() {
           onOpenChest={(c) => { openCursorUI(); setOpenChest(c) }}
           onOpenStation={(st) => { openCursorUI(); setOpenStation(st) }}
           onOpenWaymark={(w) => { openCursorUI(); setOpenWaymark(w) }}
+          onOpenBrew={() => { openCursorUI(); setBrewOpen(true) }}
           uiOpen={cursorUIOpenRef} owner={isOwnerRef} foesOut={foesRef} pressOut={pressRef}
         />
         {/* selector: deliberately matches NOTHING. Without it drei binds click-to-lock on the whole
@@ -1814,6 +1933,13 @@ export default function VoxelWorld() {
       {openWaymark && (
         <WaymarkPanel wm={openWaymark} onSay={say}
                       onClose={() => { setOpenWaymark(null); closeCursorUI() }} />
+      )}
+      {brewOpen && (
+        <BrewPanel inv={inv} skills={skills} mana={mana} tick={craftTick}
+                   inWorld={(id) => WORLD_ITEMS.has(id)}
+                   room={(id) => roomFor(inv.current!, id)}
+                   onBrew={doBrew}
+                   onClose={() => { setBrewOpen(false); closeCursorUI() }} />
       )}
       {openStation && (
         <StationPanel st={openStation} inv={inv}
@@ -2955,7 +3081,7 @@ const SOLID_EXCEPT = new Set<number>([
 // CELL_HALF for it; everything else (light, fence arms, piece placement) wants "yes, solid".
 const isSolid = (m: number) => !SOLID_EXCEPT.has(baseOf(m))
 
-function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weaponDrawn, weaponIdx, onAmmo, onStats, onPerf, onSay, runeTick, onPos, onLook, onInvChange, worker, incoming, inflight, settings, build, pieceIdx, rot, tools, skills, onSkill, onLevel, onTool, tutorial, onQuestEvent, onNearGreg, onNearTable, cmdOut, mistLedger, onNearMist, sparring, pot, onOpenChest, onOpenStation, onOpenWaymark, uiOpen, owner, foesOut, pressOut }: {
+function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weaponDrawn, weaponIdx, onAmmo, onStats, onPerf, onSay, runeTick, onPos, onLook, onInvChange, worker, incoming, inflight, settings, build, pieceIdx, rot, tools, skills, onSkill, onLevel, onTool, tutorial, onQuestEvent, onNearGreg, onNearTable, cmdOut, mistLedger, onNearMist, sparring, pot, onOpenChest, onOpenStation, onOpenWaymark, onOpenBrew, uiOpen, owner, foesOut, pressOut }: {
   inv: React.RefObject<Inventory>
   toolTier: React.RefObject<number>
   toolSkill: React.RefObject<BlockSkill>
@@ -3021,6 +3147,8 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
    */
   onOpenChest: (c: OpenChest) => void
   onOpenStation: (s: OpenStation) => void
+  /** A cauldron was right-clicked. No payload — a cauldron holds nothing; see `brewOpen`. */
+  onOpenBrew: () => void
   onOpenWaymark: (w: OpenWaymark) => void
   /**
    * Is a cursor surface up? A REF, not a boolean prop, on purpose: opening the bag must not
@@ -6320,6 +6448,12 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
             touchFeeds: () => { for (const c of beside) touchChest(c.x, c.z) },
           })
         }
+        mouse.current.right = false
+      } else if (intent === 'brew') {
+        // Nothing is handed up. The brew list is a function of the KEEPER (bag, mana, alchemy level),
+        // not of this block, so a position would be a fact the panel could only get wrong — the
+        // opposite call from the chest and the bench two branches up, and the reason is in `brewOpen`.
+        onOpenBrew()
         mouse.current.right = false
       } else if (intent === 'plant') {
         removeItems(inv.current!, 'mana_seed', 1)

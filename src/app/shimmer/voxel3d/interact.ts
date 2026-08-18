@@ -46,6 +46,17 @@ export type Intent =
    * that last one moves the keeper, which is the one outcome nobody should get by mistake.
    */
   | 'travel'
+  /**
+   * A cauldron: open the brew list (`voxel3d/brew.ts`).
+   *
+   * ★ ITS OWN INTENT, NOT `'work'`, AND THE REASON IS THE STATION MODEL ITSELF. `voxel/workshop.ts`
+   * is built on *work happening while you are not there* — a job derived from wall-clock, nothing
+   * simulated, a closed tab costing nothing. Brewing cannot be that: it spends the KEEPER's mana and
+   * pays the KEEPER's alchemy XP, and neither of those is available to a bench three hundred blocks
+   * away. Folding it into `'work'` would put a brew list inside a panel whose whole vocabulary is
+   * queued runs, and `stationOf` would have to start lying about which materials are workshops.
+   */
+  | 'brew'
   /** Bury the Mana Seed in your hand. */
   | 'plant'
   /** Ask a seeded pot how far along it is. */
@@ -76,6 +87,9 @@ export function rightClickIntent(aimed: number, selItem: string | null, holdsSee
   // same day. A hand-kept `=== CRAFT_TABLE || === SAWMILL` here is how a new station ships as a
   // block you can place, look at, and not open — a dead click, which this file exists to prevent.
   if (stationOf(aimed)) return 'work'
+  // Above the place fallback for the same reason the bench is: a keeper standing at their cauldron
+  // holding a second one must OPEN it. And it is deliberately NOT in `STATION_MAT` — see `'brew'`.
+  if (aimed === MAT.CAULDRON) return 'brew'
   // Above the seed/pot branches for the same reason the station is: a keeper carrying a stack of
   // waymarks while standing at one must OPEN it, not stack a second onto its face.
   if (aimed === MAT.WAYMARK) return 'travel'

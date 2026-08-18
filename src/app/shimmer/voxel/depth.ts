@@ -331,6 +331,25 @@ export const MAT = {
    * materials as parameters so neither module has to reach into this file.
    */
   CLOUD_WALL: 56,
+  /**
+   * ── ★ THE CAULDRON (2026-08-18) — where a keeper BREWS ───────────────────────────────────────
+   * The alchemy station. Never generated, only ever placed; `voxel3d/brew.ts` owns what brewing
+   * decides and `engine/alchemy.ts` (already built, already canon-clean) owns what a potion IS.
+   *
+   * ⚠ VOCABULARY IS CANON, not a naming preference — same as WAYMARK above. `game/alchemy.md` says
+   * brewing happens in a **cauldron** (*"contribute ingredients to shared cauldron"*), so this is
+   * canon's own word for the vessel rather than an invented "alchemy bench". A brewing HALL is
+   * canon too, and it is a settlement building, not a block: this is the keeper's own single
+   * vessel, which canon neither describes nor forbids.
+   *
+   * ⚠ FIRED CLAY, NOT IRON, AND THAT IS A CANON CONSTRAINT ON THE LOOK. `design-briefs/
+   * shimmer-alchemy-vessels.md` locks the substance law for everything alchemy touches: *"No
+   * metal... hand-blown glass, fired clay, cork, wax, cord and cloth. Metal belongs to the collar
+   * and the Mint."* A black iron pot on three legs is the default mental image of a cauldron and it
+   * is the one look this block may NOT have. Painted as a clay basin on a stone hearth
+   * (`tex/tiles.ts`), which is a placeholder standing INSIDE the law — Alex's call on the final read.
+   */
+  CAULDRON: 57,
 } as const
 
 export interface DepthConfig {

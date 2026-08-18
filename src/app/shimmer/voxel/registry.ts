@@ -198,6 +198,19 @@ export const BLOCKS: BlockDef[] = [
   { material: MAT.CLOUD_WALL, name: 'Cloud-Wall', hardness: Infinity, skill: null, minTier: 0, drops: [], placeable: false, emit: 5 },
 
   { noSlab: true, material: MAT.STONECUTTER, name: 'Stonecutter', hardness: 1.2, skill: null, minTier: 0, drops: [{ itemId: 'stonecutter', count: 1 }], placeable: true },
+
+  // ── ★ THE CAULDRON (2026-08-18) — the alchemy station, and the fourth of the family ──────────
+  // Furniture rules, unbroken: breaks by hand into itself, `skill: null`, so a keeper who put their
+  // brewer in the wrong corner pays a walk and nothing else. Hardness between the timber benches
+  // and the stone bed — a fired clay basin is heavier than a plank and lighter than a dressed slab.
+  //
+  // ⚠ NO `emit`, deliberately, and it is a design claim rather than an omission. A lit cauldron
+  // would be the prettiest block on the plot and it would lie every minute the keeper is not
+  // brewing: `voxel3d/brew.ts` holds no state, so there is no "is a brew running" for a light to be
+  // honest about. The vessels brief makes the *liquid* the light source, which is a property of a
+  // full bottle, not of the pot it came out of. If brewing ever grows a clock (the workshop's job
+  // model), the glow arrives WITH it and means something.
+  { noSlab: true, material: MAT.CAULDRON, name: 'Cauldron', hardness: 1.0, skill: null, minTier: 0, drops: [{ itemId: 'cauldron', count: 1 }], placeable: true },
   // ── ★ CAST MATTER CANNOT BE QUARRIED (2026-08-14) ────────────────────────────────────────────
   // `hardness: Infinity` ⇒ `breakSeconds` returns Infinity ⇒ `canBreak` is false. That single value
   // is the whole anti-exploit: without it a keeper casts a 16-mana Stonewall, mines five rubble, and

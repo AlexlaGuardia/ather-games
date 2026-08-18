@@ -315,6 +315,27 @@ export const RECIPES: RecipeDef[] = [
     input: [{ itemId: 'block_subsoil', count: 3 }],
     output: { itemId: 'clay_pot', count: 1 } },
 
+  // ── ★ BREWING — THE CAULDRON (2026-08-18) ───────────────────────────────────────────────────
+  // Fired earth like the pot, and eight subsoil against its three because it is a BASIN, not a pot:
+  // the number says the size. Four cut stone for the hearth it stands over, which is the only part
+  // of it that is not clay and the reason it can hold a fire at all.
+  //
+  // ★ BENCH WORK, and no mana. A keeper who wants to brew has been digging and quarrying already,
+  // so the table is not a wall — and charging mana to BUILD the thing that charges mana to USE it
+  // would take the same toll twice for one loop.
+  //
+  // ⚠ THIS FILE REFUSES TO GATE REFINING BEHIND FURNITURE (*"mining is the gate, not furniture"*)
+  // AND THE CAULDRON IS NOT A COUNTEREXAMPLE. That rule protects a verb the player ALREADY HAS
+  // everywhere: hand-refining is instant, free and unlimited, so a bench that gated it would be
+  // taking something away. Brewing has never existed in this world at all — the cauldron is the
+  // verb arriving, not a toll booth appearing on one that was free. Canon puts brewing in a vessel
+  // by name (`game/alchemy.md`: *"contribute ingredients to shared cauldron"*), you cannot boil a
+  // brew on your knee, and the whole gate costs a stack of dirt you already walk over. The gate the
+  // player actually feels is the INGREDIENTS, which is exactly where this file says it belongs.
+  { id: 'cauldron', name: 'Cauldron', station: 'crafting_table', mana: 0,
+    input: [{ itemId: 'block_subsoil', count: 8 }, { itemId: 'cut_stone', count: 4 }],
+    output: { itemId: 'cauldron', count: 1 } },
+
   // ── STORING ─────────────────────────────────────────────────────────────────────────────────
   // By HAND and cheap on purpose. A chest is what makes the 24-slot bag survivable, so gating it
   // behind the bench would mean the first hours of the game are spent throwing things away — the

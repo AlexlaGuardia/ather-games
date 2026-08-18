@@ -62,6 +62,8 @@ export const TILE_MATERIALS: number[] = [
   MAT.STONE_BRICK, MAT.PALE_BRICK, MAT.SANDSTONE,
   // The waymark + the plot's cloud-wall, added 2026-08-15 with the passages layer.
   MAT.WAYMARK, MAT.CLOUD_WALL,
+  // The cauldron added 2026-08-18 with brewing — the alchemy station.
+  MAT.CAULDRON,
 ]
 
 /** One spare layer past the end: an unmapped material samples magenta rather than layer 0's stone. */
@@ -834,6 +836,57 @@ function paintChest(dst: Layer, size: number, seed: number, face: number) {
 // ── assembly ─────────────────────────────────────────────────────────────────────────────────────
 
 /** Exported for the item-icon renderer: an item's art must BE the block's art (see item-icon.ts). */
+/**
+ * The cauldron. The alchemy station, and the family's fourth — first one that is a VESSEL.
+ *
+ * ★ MATERIAL TELLS THE STATIONS APART (the rule paintStonecutter states): two pale timbers and a
+ * grey stone bed are already on a plot, so the brewer is FIRED CLAY on a stone hearth. Nothing else
+ * in the world is that warm brown at that size, so it reads in silhouette from across a garden —
+ * which is the whole test, because the four of them will stand in a row.
+ *
+ * ⚠ NOT IRON, NOT THREE LEGS, and that is canon rather than taste. `design-briefs/
+ * shimmer-alchemy-vessels.md`: *"No metal... hand-blown glass, fired clay, cork, wax, cord and
+ * cloth. Metal belongs to the collar and the Mint."* The default cauldron in anyone's head is a
+ * black iron pot, so the painter has to actively refuse it.
+ *
+ * TOP is the brew: a dark still surface inside a clay rim, with a faint sheen — the vessels brief
+ * makes *the liquid the light source*, so the sheen is the only bright thing here and the clay never
+ * is. Deliberately DIM: an idle cauldron is holding water, and painting a glow into it would promise
+ * a brew that is not running. SIDE is a heavy clay belly with the pot's own rim band at the top and
+ * a dark stone hearth course at the bottom, so the silhouette says *basin standing on a fire*.
+ * BOTTOM is plain soot — nobody sees it.
+ */
+function paintCauldron(dst: Layer, size: number, seed: number, face: number) {
+  const clay = rgbOf(MATERIAL_COLOR[MAT.CAULDRON])
+  const hearth = shade(rgbOf(MATERIAL_COLOR[MAT.STONE]), -18)
+  const soot = shade(clay, -52)
+  const brew = rgbOf(0x2e3b46)                                  // still, dark, unlit water
+  const hearthH = Math.max(2, Math.round(size / 4))             // the fire bed it stands on
+  const rimH = Math.max(1, size >> 3)
+  if (face === BOTTOM) { paintGrit(dst, size, soot, 10, 8, seed); return }
+  if (face === SIDE) {
+    paintGrit(dst, size, clay, 12, 10, seed)
+    for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {
+      const grit = (h2(x, y, seed + 31) - 0.5) * 14
+      if (y < rimH) put(dst, size, x, y, shade(clay, 24 + grit * 0.5), 0)           // the rim
+      else if (y >= size - hearthH) put(dst, size, x, y, shade(hearth, grit * 0.7), 0)  // the hearth
+    }
+    return
+  }
+  // TOP: clay ring, brew inside it, one soft sheen arc off-centre so the surface reads as liquid
+  // rather than as a hole. The arc is asymmetric on purpose — hand-blown, hand-fired, never a
+  // factory shape (the brief's *"slight asymmetry"* clause, at 16px where that is all it can be).
+  paintGrit(dst, size, clay, 10, 8, seed)
+  const c = (size - 1) / 2, r = size * 0.36
+  for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {
+    const d = Math.hypot(x - c, y - c)
+    if (d > r) continue
+    const grit = (h2(x, y, seed + 7) - 0.5) * 10
+    const sheen = Math.abs(d - r * 0.62) < 0.9 && x < c            // one arc, left of centre
+    put(dst, size, x, y, sheen ? shade(brew, 34) : shade(brew, grit), 0)
+  }
+}
+
 export function paintFor(material: number, face: number, size: number): Layer {
   const dst = new Uint8Array(size * size * 4)
   const seed = material * 1013 + 17
@@ -923,6 +976,10 @@ export function paintFor(material: number, face: number, size: number): Layer {
     // ⚠ Appended to TILE_MATERIALS above, so it NEEDS this case — the switch's default is the ore
     // painter, which is how every tree once rendered as crystal.
     case MAT.CHEST: paintChest(dst, size, seed, face); break
+    // ⚠ Fourth time this warning earns its keep — TILE_MATERIALS without a case here is a magenta
+    // ore block you can right-click. `render-audit.test.ts` fails on it, which is the only reason
+    // this line is hard to forget.
+    case MAT.CAULDRON: paintCauldron(dst, size, seed, face); break
     case MAT.PATH:
       // Packed earth: subsoil's grit, lightened and calmer, with sparse pale pebbles — reads as
       // WALKED against topsoil's grass without shouting like sand.

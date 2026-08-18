@@ -115,6 +115,12 @@ export const MATERIAL_COLOR: Record<number, number> = {
   // grey, which is the whole point: the family's third member must be told apart from the other two
   // across a plot, and a third warm timber cube could not be.
   [MAT.STONECUTTER]: 0x8f9296,
+  // ── ★ THE CAULDRON (2026-08-18) — fired clay, deliberately NOT iron ──────────────────────────
+  // Deeper and greyer than the planting pot's warm terracotta (0xa9663f): the same fired earth,
+  // bigger, and darkened by the fire it stands over. Iron would be the obvious cauldron and it is
+  // the one colour the substance law forbids (`design-briefs/shimmer-alchemy-vessels.md`), so the
+  // brown is load-bearing — it is what tells a keeper this is Ather craft and not Mint metal.
+  [MAT.CAULDRON]: 0x8a5236,
   // ── ★ THE WAYMARK (2026-08-15) — mana bound to a place ───────────────────────────────────────
   // Pale dressed stone, but pulled toward the raw-mana blue (0x7fd4ff) rather than sitting in
   // stone's grey family — a waymark is *"mana bound to a place"*, and the binding is the point. It
