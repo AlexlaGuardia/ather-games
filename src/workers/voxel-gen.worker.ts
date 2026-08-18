@@ -25,6 +25,7 @@ import {
   Column, SECTION, makeColumn, meshColumn, DEFAULT_COLUMN,
 } from '../app/shimmer/voxel/column'
 import { generatePlotColumn } from '../app/shimmer/voxel/plot-column'
+import { plotForTier } from '../app/shimmer/voxel/plot'
 import { createMeshScratch } from '../app/shimmer/voxel/greedy'
 import { buildAttrs, attrBuffers, type MeshAttrs } from '../app/shimmer/voxel3d/attrs'
 
@@ -74,7 +75,7 @@ function emitMesh(cx: number, cz: number): void {
 }
 
 self.onmessage = (e: MessageEvent) => {
-  const msg = e.data as { type: string; cx?: number; cz?: number; seed?: number; keep?: string[]; space?: string }
+  const msg = e.data as { type: string; cx?: number; cz?: number; seed?: number; keep?: string[]; space?: string; tier?: number }
 
   if (msg.type === 'init') {
     seed = msg.seed ?? seed
@@ -98,13 +99,21 @@ self.onmessage = (e: MessageEvent) => {
     // the key, walking into the garden at 0,0 would be served the Wilds column the keeper had just
     // been standing in — cached, correct-looking, and completely the wrong world.
     const space: string = msg.space === 'plot' ? 'plot' : 'wilds'
-    const k = space === 'wilds' ? key(cx, cz) : `${space}:${key(cx, cz)}`
+    // ── ★★ AND THE FOLD'S TIER RIDES IT TOO (2026-08-18, Greg's upgrade) ────────────────────────
+    // A keeper's garden has a size now, stored per save, so "the plot column at 3,4" is no longer a
+    // single answer — it is one answer per radius. The tier therefore has to arrive with the request
+    // (the worker holds no save) AND be part of the cache key: without the key, a keeper who widened
+    // their fold mid-session would be served the columns generated before the upgrade, cached and
+    // correct-looking, with the new ground missing exactly where they were told to go and look.
+    // Same failure the space itself had, one field over.
+    const tier = space === 'plot' ? Math.max(0, Math.round(Number(msg.tier) || 0)) : 0
+    const k = space === 'wilds' ? key(cx, cz) : `${space}:${tier}:${key(cx, cz)}`
     if (!cols.has(k)) {
       cols.set(k, space === 'plot'
         // The world lane's adapter, not a second generator here: it mirrors `generateColumn`'s
         // post-conditions (uniform refreshed, stage Ready) so the switch is one line rather than a
         // mode threaded through seven stages the plot needs none of.
-        ? generatePlotColumn(new Column(cx * SECTION, cz * SECTION, DEFAULT_COLUMN), seed)
+        ? generatePlotColumn(new Column(cx * SECTION, cz * SECTION, DEFAULT_COLUMN), seed, plotForTier(tier))
         : makeColumn(cx * SECTION, cz * SECTION, seed))
     }
     // ★ ALWAYS answer with the voxels, cached or fresh. The main thread evicts columns it walks

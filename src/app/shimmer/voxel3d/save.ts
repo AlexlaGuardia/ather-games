@@ -187,6 +187,35 @@ export interface PlayerSave {
    * knows the key on disk is dead rather than forgotten.
    */
   patrolled?: string[]
+  /**
+   * ── ★★ HOW WIDE GREG HAS FOLDED THIS KEEPER'S GARDEN (2026-08-18) ─────────────────────────────
+   * An index into `PLOT_TIERS`, not a radius. Storing the NUMBER of blocks would freeze a keeper's
+   * garden at whatever the tier ladder happened to be the day they earned it — retune the ladder and
+   * every existing save keeps the old geometry forever, silently, with nothing in the code looking
+   * wrong. An index re-reads the live table, so a tuning pass reaches saves that already exist.
+   *
+   * ⚠ IT IS THE GROUND THAT EXISTS, NOT THE GROUND THAT IS OWED. The grimoire can race ahead of it
+   * (a keeper fills the book and has not been back to Greg); `fold-ledger.ts` compares the two and
+   * `foldOwed` is what makes Greg's conversation have something to say. Never write the earned tier
+   * here without the keeper standing in front of him — the ceremony IS the feature.
+   *
+   * Optional, so every older save loads at tier 0 and simply has not been widened yet.
+   */
+  plotTier?: number
+  /**
+   * The keeper's species index — the grimoire's *what a spirit IS* face (`engine/spirit-index.ts`,
+   * `indexToSave`/`indexFromSave`).
+   *
+   * ★ IT HAD TO START BEING PERSISTED FOR GREG'S UPGRADE TO MEAN WHAT CANON SAYS IT MEANS. The
+   * grimoire tab's own header recorded the gap: *"There is no persisted SpiritIndex in this world…
+   * knowledge here is DERIVED from the spirits you hold, which is a strictly smaller claim: a spirit
+   * you met in the mist and walked away from leaves no trace."* Canon makes DISCOVERING a spirit one
+   * of the two faces that buys ground — so without this, half of the ruling could not exist and the
+   * seeker's whole path paid nothing.
+   *
+   * Optional; absent reads as an empty index, which is exactly what a keeper who has met nothing has.
+   */
+  index?: unknown
 }
 
 const playerKey = (seed: number) => `${seed}:player`

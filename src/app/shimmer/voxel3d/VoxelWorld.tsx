@@ -39,7 +39,9 @@ import { salvageItems, salvageMessage } from '../voxel/salvage'
 import { blockDef, materialForItem, emitOf, BLOCKS, type BlockSkill } from '../voxel/registry'
 import { editIndex, recordEdit, applyEdits, packEdits, unpackEdits, isStale, GENERATOR_VERSION, type ColumnEdits } from '../voxel/edits'
 import { generatePlotColumn, plotGeneratedVoxel } from '../voxel/plot-column'
-import { plotThreshold, hasFallenOut, chestCap, plotStandY } from '../voxel/plot'
+import { plotThreshold, hasFallenOut, chestCap, plotStandY, plotForTier, PLOT_TIERS, type PlotConfig } from '../voxel/plot'
+import { foldLedger, foldOwed, foldProgressLine, tierRadius, TIER_NEED } from './fold-ledger'
+import { createSpiritIndex, markSeen, indexToSave, indexFromSave, type SpiritIndex, type IndexSave } from '../engine/spirit-index'
 // ⚠ `WILDS_BUBBLE` (from column.ts, imported above), NEVER `bubble.ts`'s `DEFAULT_BUBBLE`. The
 // default's door faces bearing 0 and its wall is a placeholder material; the live one is aimed at
 // the glade and made of cloud. Read the default here and the crossing would fire on the far side of
@@ -122,6 +124,7 @@ import { createLoco, tickLocomotion, eyeY, launchKeeper, blinkKeeper,
 // where the ceremonial arch sits and which of its cells are the sealable doorway; `greg.ts` builds
 // Greg's placeholder figure. This file only wires all three into the render loop.
 import { loadTutorial, saveTutorial, GREG_LINE, OBJECTIVE_LABEL, type TutorialStage, type TutorialState } from './tutorial'
+import { GREG_LINES } from './greg-lines'
 import { GATE_X, GATE_Z, GATE_SPANS_X, gateCells } from './gate'
 import { createGregMesh, GREG_BOUNDS } from './greg'
 import { aimedAt, bodyBox } from './aim'
@@ -148,6 +151,7 @@ import { itemIcon } from './tex/item-icon'
 import { bloom as bloomSpirit, due as potsDue, potKey, progress as potProgress, type PotClock } from './pot'
 import { spiritsToSave, spiritsFromSave } from '../spirits/spirit-save'
 import { LAUNCHED_SPECIES } from '../engine/spirit-index'
+import type { Species } from '../spirits/spirit'
 import { KeeperFrame, TabEmpty, type KeeperTab } from './keeper-panel'
 import { GrimoireTab } from './grimoire-tab'
 import { evolveSpirit } from '../spirits/evolution'
@@ -604,6 +608,13 @@ interface ConsoleCtx {
    */
   brew: () => string
   /**
+   * ★ `/greg` — raise Gregory's conversation from where you stand. OWNER-GATED, and it exists for
+   * the same reason `/brew` does: the real door is *aiming the crosshair at a character within talk
+   * range*, and headless Chrome grants no pointer lock, so without this row the fold-widening
+   * ceremony — the payoff of the whole grimoire arc — could only ever be checked by hand.
+   */
+  greg: () => string
+  /**
    * ★ THE RUNES A KEEPER HOLDS. Bare `/rune` is VIEW-GRADE — reading your own hand is not a cheat,
    * and it is the one thing that explains why a cast key does nothing. GRANTING is cheat-grade and
    * checked inside, exactly as `/goto`'s compass-vs-teleport split does it.
@@ -796,6 +807,8 @@ const CONSOLE_CMDS: ConsoleCmd[] = [
     suggest: (i) => i === 0 ? ['lend', 'heal', 'clear'] : i === 1 ? ['1', '2', '3', '4'] : ['5', '10', '20', '30'] },
   { name: 'brew', usage: 'brew', help: 'open the cauldron here (owner)', owner: true,
     run: (_a, c) => c.brew() },
+  { name: 'greg', usage: 'greg', help: 'talk to Gregory from here (owner)', owner: true,
+    run: (_a, c) => c.greg() },
   { name: 'weather', usage: 'weather', help: 'someday', run: () =>
       'no weather in the Ather yet — the day it exists, its command lands here' },
 ]
@@ -1098,6 +1111,40 @@ export default function VoxelWorld() {
     mana.current.regen = getRegenRate(lvl)
     mana.current.cur = mana.current.max
   }, [])
+  /**
+   * ── ★★ THE GRIMOIRE'S TWO FACES, AND THE GROUND THEY BUY (2026-08-18) ────────────────────────
+   * Canon (`shimmer-geography.md` › *THE GRIMOIRE IS WHAT GREG READS*) makes **knowing** the thing
+   * that widens a fold, and both of the grimoire's faces pay: the species index fills by MEETING a
+   * spirit, the roster by keeping one. `party` was already here; the index was not persisted
+   * anywhere in this world, so half of the ruling had nothing to read.
+   *
+   * ⚠ A REF, NOT STATE. It is written from the frame loop (a mist resident coming into range) and
+   * read by the dialogue; state here would re-render the world on an encounter.
+   */
+  const spiritIndex = useRef<SpiritIndex>(createSpiritIndex())
+  /**
+   * How wide Greg has folded this garden — an INDEX into `PLOT_TIERS`, mirrored from the save.
+   *
+   * ★ AND `plotCfg` IS DERIVED FROM IT IN ONE PLACE. Every plot function takes a config and defaults
+   * to `DEFAULT_PLOT`; the moment the size became a per-keeper fact, every one of those defaults
+   * became a silent lie waiting to happen — a threshold computed at r300 while the ground generated
+   * at r400 puts the door in a field. So the host holds ONE config and hands it to all of them,
+   * including across the worker boundary.
+   */
+  /**
+   * The autosave's own `snap()`, handed upward so a once-per-arc event can persist IMMEDIATELY
+   * rather than waiting up to five seconds for the interval. A refresh in the wrong second after
+   * Greg widens a fold would take the ground back, and taking ground back is the one thing the
+   * additive-growth guarantee forbids.
+   */
+  const playerSnapRef = useRef<(() => PlayerSave) | null>(null)
+  const plotTier = useRef(0)
+  const plotCfg = useRef<PlotConfig>(plotForTier(0))
+  // ⚠ NO `tierTick` STATE HERE, DELIBERATELY. The first cut bumped a counter on every discovery and
+  // every widening to "refresh the UI" — which re-rendered the whole world tree every time a keeper
+  // walked past a mist patch, for nothing: the dialogue reads the ledger from these refs at OPEN
+  // time, which is the only moment it can be looked at. A ref written from the frame loop must not
+  // have a setState beside it.
   /** Planting times by world position. The ONE thing the pot's material cannot hold (see pot.ts). */
   const potClock = useRef<PotClock>({})
   const [hasParty, setHasParty] = useState(false)
@@ -1379,6 +1426,9 @@ export default function VoxelWorld() {
      * over: it closes, the panel opens, and the panel's own close settles the lock.
      */
     brew: () => { setConsoleOpen(false); setBrewOpen(true); return 'the cauldron is warm' },
+    // Same console→panel handoff as `brew` above: the console closes itself and does NOT re-claim
+    // the cursor, or the pointer re-locks with the dialogue still up. See that entry for the autopsy.
+    greg: () => { setConsoleOpen(false); setDialogueOpen(true); return 'he looks up from the book' },
     radius: () => settings.viewRadius,
     setRadius: (r) => update({ viewRadius: r }),
     give: (id, count) => {
@@ -1694,6 +1744,42 @@ export default function VoxelWorld() {
     refreshHotbar()
   }, [refreshHotbar])
 
+  /**
+   * ── ★★ GREG WIDENS THE FOLD (2026-08-18) ─────────────────────────────────────────────────────
+   * Canon rules the vector and the ceremony both (`shimmer-geography.md` › *THE GRIMOIRE IS WHAT
+   * GREG READS*): **knowing** buys extent, never materials, and **nothing is bought at all** — he is
+   * *"rewarding his own life's work, not a shopkeeper taking payment."* So this takes no price, and
+   * `fold-ledger.ts` decides whether he has something to give.
+   *
+   * ★ IT RAISES BY ONE TIER PER VISIT, EVEN IF THE BOOK EARNED TWO. The widening is the moment; a
+   * keeper who filled the grimoire while away should get the ceremony twice rather than a silent
+   * double jump they cannot see. `foldOwed` stays true, so the next talk gives the next one.
+   *
+   * ⚠ AND THE COLUMNS HAVE TO GO. The ground is generated per tier and cached by tier in the worker
+   * — correct on its own — but the columns already resident on the main thread were built at the old
+   * radius. Without dropping them a keeper standing in their garden watches nothing happen, walks a
+   * hundred blocks, and finds the new ground only where they had never been. `enterSpace` already
+   * owns "throw the world away and rebuild it"; this is the same teardown for the same reason.
+   */
+  const widenFold = useCallback(() => {
+    const next = Math.min(PLOT_TIERS.length - 1, plotTier.current + 1)
+    if (next === plotTier.current) return
+    plotTier.current = next
+    plotCfg.current = plotForTier(next)
+    // Persist immediately rather than waiting for the 5s autosave: this is a once-per-arc event and
+    // a refresh in the wrong second would take the ground back, which is the one thing the
+    // additive-growth guarantee exists to forbid.
+    const snap = playerSnapRef.current
+    if (snap) void savePlayer(SEED, snap())
+    // ⚠ NOTHING IS TORN DOWN HERE, AND THAT IS SAFE FOR ONE REASON ONLY: **Greg stands at the
+    // Glade, in the WILDS.** A keeper talking to him has no plot column resident, and the next
+    // crossing rebuilds the garden through `enterSpace` at the new tier (the worker keys its cache
+    // by tier, so nothing stale can be served). ⚠ THE DAY ANYTHING ELSE WIDENS A FOLD — a quest, the
+    // console, a second Greg inside the garden — this needs `enterSpace('plot')` beside it, or the
+    // keeper stands in their own garden while the new ground exists only where they have not walked.
+    say(`your fold widens to ${tierRadius(next)} blocks`)
+  }, [say])
+
   /** Craft a tool and equip it. Tools keep their own table; this is the one surface that shows it.
    *  ★ TOOLS ARE BENCH WORK. You can snap a log into planks with your hands; you cannot shape a
    *  blade on your knee. Same split play3d always had (tools were station crafts there), and it is
@@ -1901,6 +1987,8 @@ export default function VoxelWorld() {
           tools={tools} skills={skills} onSkill={setSkillHud} onLevel={setLevelUp} onTool={setActiveTool}
           tutorial={tutorial} onQuestEvent={onQuestEvent} onNearGreg={setNearGreg}
           mistLedger={mistLedger} onNearMist={setNearMist} sparring={!!spar}
+          onDiscover={(sp) => markSeen(spiritIndex.current, sp)}
+          plotCfg={plotCfg} plotTier={plotTier} spiritIndex={spiritIndex} snapOut={playerSnapRef}
           onNearTable={setNearTable} cmdOut={worldCmd} pot={potOps}
           onOpenChest={(c) => { openCursorUI(); setOpenChest(c) }}
           onOpenStation={(st) => { openCursorUI(); setOpenStation(st) }}
@@ -1967,7 +2055,14 @@ export default function VoxelWorld() {
           onClose={() => { setShowMap(false); closeCursorUI() }} />
       )}
 
-      {dialogueOpen && <GregDialogue stage={tutorial.current.stage} onClose={closeDialogue} />}
+      {dialogueOpen && (() => {
+        // Read at OPEN time, from the live refs — the party and the index are both refs, so a
+        // panel that captured them in state would show yesterday's book.
+        const led = foldLedger(spiritIndex.current, party.current)
+        return <GregDialogue stage={tutorial.current.stage} ledger={led}
+                             owed={foldOwed(led, plotTier.current)} onWiden={widenFold}
+                             onClose={closeDialogue} />
+      })()}
 
       {/* ★ THE SPAR. The SAME real-time arena every other fight runs (`engine/arena.ts` via
           ArenaBattle) — the spirit fights on its own instinct and the Keeper coaches. That is not a
@@ -3087,7 +3182,7 @@ const SOLID_EXCEPT = new Set<number>([
 // CELL_HALF for it; everything else (light, fence arms, piece placement) wants "yes, solid".
 const isSolid = (m: number) => !SOLID_EXCEPT.has(baseOf(m))
 
-function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weaponDrawn, weaponIdx, onAmmo, onStats, onPerf, onSay, runeTick, onPos, onLook, onInvChange, worker, incoming, inflight, settings, build, pieceIdx, rot, tools, skills, onSkill, onLevel, onTool, tutorial, onQuestEvent, onNearGreg, onNearTable, cmdOut, mistLedger, onNearMist, sparring, pot, onOpenChest, onOpenStation, onOpenWaymark, onOpenBrew, uiOpen, owner, foesOut, pressOut }: {
+function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weaponDrawn, weaponIdx, onAmmo, onStats, onPerf, onSay, runeTick, onPos, onLook, onInvChange, worker, incoming, inflight, settings, build, pieceIdx, rot, tools, skills, onSkill, onLevel, onTool, tutorial, onQuestEvent, onNearGreg, onNearTable, cmdOut, mistLedger, onNearMist, onDiscover, sparring, pot, plotCfg, plotTier, spiritIndex, snapOut, onOpenChest, onOpenStation, onOpenWaymark, onOpenBrew, uiOpen, owner, foesOut, pressOut }: {
   inv: React.RefObject<Inventory>
   toolTier: React.RefObject<number>
   toolSkill: React.RefObject<BlockSkill>
@@ -3139,6 +3234,22 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
   /** The withdrawal ledger, by ref — the pass reads it, the spar's end writes it. */
   mistLedger: React.MutableRefObject<MistLedger>
   onNearMist: (r: Resident | null) => void
+  /** A species has been MET — the grimoire's index face. See the call site for why it is here. */
+  onDiscover: (species: Species) => void
+  /**
+   * ── ★ THE KEEPER'S OWN FOLD SIZE, LIVE (2026-08-18) ────────────────────────────────────────
+   * Every `plot.ts` function defaults to `DEFAULT_PLOT`, which stopped being the truth the day a
+   * garden could be widened. The host holds ONE config and this is it; nothing in here may call a
+   * plot function without it, or the door, the chest cap and the fall line get measured against a
+   * different island than the one generating.
+   */
+  plotCfg: React.RefObject<PlotConfig>
+  /** The tier index, for the worker request — the worker holds no save and cannot infer it. */
+  plotTier: React.RefObject<number>
+  /** The grimoire's index face. Restored and persisted here because the save lives here. */
+  spiritIndex: React.RefObject<SpiritIndex>
+  /** Filled with the autosave's `snap()` so a once-per-arc event can persist without waiting 5s. */
+  snapOut: React.RefObject<(() => PlayerSave) | null>
   /** The arena owns the screen while true; the world keeps streaming but stops reporting prompts. */
   sparring: boolean
   /** Near a placed crafting table — the parent turns this into recipes.ts's `Station`. */
@@ -3600,7 +3711,7 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
         // the keeper walled into their own topsoil, unable to move — and the autosave writes that
         // position back, so a reload cannot escape it. See `plotStandY` for the whole account.
         lc.py = savedSpace === 'plot'
-          ? plotStandY(p.x, p.y, p.z, SEED)
+          ? plotStandY(p.x, p.y, p.z, SEED, plotCfg.current)
           : Math.max(p.y, columnHeight(Math.floor(p.x), Math.floor(p.z), SEED) + 1)
       }
       // The plot's chest census normally rides `enterSpace`, which a direct restore never calls.
@@ -3612,6 +3723,16 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
       camera.position.set(lc.px, eyeY(lc), lc.pz)
       camera.quaternion.setFromEuler(new THREE.Euler(p.rx, p.ry, 0, 'YXZ'))
       settled.current = false
+      // ⚠ THE TIER MUST LAND BEFORE ANY PLOT COLUMN IS ASKED FOR, which is why it is restored here
+      // beside the position rather than in its own effect: a request that goes out at tier 0 and is
+      // answered after the tier arrives caches ground at the wrong radius, and the cache key would
+      // have to be the thing that saves us. It still is (see the worker), but the order is free.
+      plotTier.current = Math.max(0, Math.min(PLOT_TIERS.length - 1, Math.round(p.plotTier ?? 0)))
+      plotCfg.current = plotForTier(plotTier.current)
+      // ⚠ MUTATED IN PLACE, NEVER REASSIGNED — the outer component and the dialogue both hold this
+      // same ref object, and swapping the `.current` from in here is fine, but a save whose index is
+      // the wrong shape must leave the empty one standing rather than throw mid-restore.
+      if (p.index) { try { spiritIndex.current = indexFromSave(p.index as IndexSave) } catch { /* older shape */ } }
       onInvChange()
     })
     return () => { live = false }
@@ -3635,8 +3756,13 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
                // Who has been freed, per hold. See `PlayerSave.freedAt` — without this a refresh
                // re-collars someone the keeper already freed. ⚠ NOT the old `patrolled` list: that
                // one also erased holds the keeper lost at, permanently.
-               freedAt: { ...foeFreed.current } }
+               freedAt: { ...foeFreed.current },
+               // The fold Greg has actually given, and the book he reads to decide. See both fields
+               // in `PlayerSave` — the tier is what EXISTS, never what is owed.
+               plotTier: plotTier.current,
+               index: indexToSave(spiritIndex.current) }
     }
+    snapOut.current = snap
     const save = () => { void savePlayer(SEED, snap()) }
     const t = setInterval(save, 5000)
     document.addEventListener('visibilitychange', save)
@@ -3981,7 +4107,7 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
       // read low, which is the direction that hands out free chests. See `plotChests`.
       plotChests.current = 0
       void countMaterial(SEED, 'plot', MAT.CHEST).then(n => { plotChests.current += n })
-      const t = plotThreshold(SEED)
+      const t = plotThreshold(SEED, plotCfg.current)
       lc.px = t.x + 0.5; lc.py = t.y; lc.pz = t.z + 0.5
     } else {
       lc.px = SPAWN_X + 0.5; lc.pz = SPAWN_Z + 0.5
@@ -4274,7 +4400,7 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
     // deliberate. Same family as the chopped-trees bug — a diff baseline disagreeing with what was
     // generated — one space over and much larger.
     const generated = space.current === 'plot'
-      ? plotGeneratedVoxel(c, lx, wy, lz, SEED)
+      ? plotGeneratedVoxel(c, lx, wy, lz, SEED, plotCfg.current)
       : generatedVoxel(c, lx, wy, lz, SEED)
     let e = edits.current.get(k)
     if (!e) { e = new Map(); edits.current.set(k, e) }
@@ -5756,12 +5882,23 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
         if (inflight.current! >= 4) break
         requested.current.add(key(gx, gz))
         inflight.current!++
-        w.postMessage({ type: 'request', cx: gx, cz: gz, space: space.current })
+        // ⚠ THE TIER RIDES THE REQUEST, exactly as the SPACE does and for the same reason: the
+        // worker cannot infer it. Without it every plot column would generate at the default radius
+        // while the host measured its threshold, its chest cap and its fall line against the
+        // keeper's own — a fold whose door stands in a field.
+        w.postMessage({ type: 'request', cx: gx, cz: gz, space: space.current, tier: plotTier.current })
       } else {
         // No worker (construction failed): generate here so the world still exists.
         if (performance.now() - t0 > 10) break
         requested.current.add(key(gx, gz))
-        cols.current.set(key(gx, gz), makeColumn(gx * SECTION, gz * SECTION, SEED))
+        // ⚠ AND THE FALLBACK HAS TO KNOW ABOUT THE PLOT TOO (fixed 2026-08-18). It called
+        // `makeColumn` unconditionally — the CONTINENT generator — so a keeper whose worker failed
+        // to construct would walk into their own garden and find Wilds terrain: rivers, ore, trees,
+        // and no island. `generatePlotColumn` was already imported here and used by nobody, which is
+        // the tell. Rare path, silent failure, and the save would have recorded the difference.
+        cols.current.set(key(gx, gz), space.current === 'plot'
+          ? generatePlotColumn(new Column(gx * SECTION, gz * SECTION, DEFAULT_COLUMN), SEED, plotCfg.current)
+          : makeColumn(gx * SECTION, gz * SECTION, SEED))
         queueRemesh(gx, gz)
         for (const [ddx, ddz] of [[-1, 0], [1, 0], [0, -1], [0, 1]] as const)
           queueRemesh(gx + ddx, gz + ddz)
@@ -5930,7 +6067,7 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
             settleRescues.current++
             settleHeld.current = 0
             if (space.current === 'plot') {
-              const t = plotThreshold(SEED)
+              const t = plotThreshold(SEED, plotCfg.current)
               lc.px = t.x + 0.5; lc.py = t.y; lc.pz = t.z + 0.5
             } else {
               lc.px = SPAWN_X + 0.5; lc.pz = SPAWN_Z + 0.5
@@ -6035,8 +6172,8 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
         // ⚠ `hasFallenOut` asks about ALTITUDE, not footprint — a keeper standing in open air over
         // ground they have not built out to yet has not fallen anywhere, and snatching them back
         // would make expansion feel like a wall.
-        if (hasFallenOut(lc.py)) {
-          const t = plotThreshold(SEED)
+        if (hasFallenOut(lc.py, plotCfg.current)) {
+          const t = plotThreshold(SEED, plotCfg.current)
           lc.px = t.x + 0.5; lc.py = t.y; lc.pz = t.z + 0.5
           lc.vy = 0; lc.hvx = 0; lc.hvz = 0; lc.stepSmooth = 0
           p.set(lc.px, eyeY(lc), lc.pz)
@@ -6046,7 +6183,7 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
         } else {
           // Standing at your own threshold is the way OUT — the same volume you arrive in, which is
           // exactly why the latch exists.
-          const t = plotThreshold(SEED)
+          const t = plotThreshold(SEED, plotCfg.current)
           // ⚠ THE RADIUS COMES FROM `seam.ts`, WHICH ALSO DRAWS IT (2026-08-18). It was a bare 1.6
           // typed here and a matching constant there — and the pair is exactly why Alex was sealed
           // in his own garden: the trigger was tuned for a crease nobody could see, and neither
@@ -6144,7 +6281,20 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
       // the range half you could call out a spar from the far side of the fog.
       const r = sparring ? null : (mist.nearest() && mist.aimed(p.x, p.y, p.z, aim.x, aim.y, aim.z, SPAR_RANGE, blockDist))
       const id = r ? `${r.patch.x},${r.patch.z},${r.species}` : null
-      if (id !== lastNearMist.current) { lastNearMist.current = id; onNearMist(r ?? null) }
+      if (id !== lastNearMist.current) {
+        lastNearMist.current = id
+        onNearMist(r ?? null)
+        // ── ★★ THIS IS THE SEEKER'S HALF OF THE GRIMOIRE, AND IT PAYS (2026-08-18) ──────────────
+        // Canon (`shimmer-geography.md` › *THE GRIMOIRE IS WHAT GREG READS*) makes DISCOVERING a
+        // spirit one of the two faces that widens a fold — *"document the glimpse instead of chasing
+        // it."* Meeting one in the mist is that glimpse: you have walked to it, it has shown itself,
+        // and nothing was owned. Writing it here rather than at the spar is the whole point — the
+        // seeker who looks and walks on must be paid the same as the one who fights.
+        //
+        // ⚠ `markSeen` never downgrades, so this is idempotent across a hundred passes of the same
+        // patch, and the ledger counts DISTINCT species. A patch you camp cannot farm ground.
+        if (r) onDiscover(r.species)
+      }
     }
 
     // ── build mode: ghost, place, deconstruct ────────────────────────────────────────────────
@@ -6582,10 +6732,10 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
         // funnel and it ran on the line above), so the test is `>` and not `>=` — comparing against
         // the cap as though the block were not yet down is off by exactly one, and off-by-one in
         // the direction that gives away a free chest at every tier.
-        if (put === MAT.CHEST && space.current === 'plot' && plotChests.current > chestCap()) {
+        if (put === MAT.CHEST && space.current === 'plot' && plotChests.current > chestCap(plotCfg.current)) {
           setVoxel(hit.px, hit.py, hit.pz, AIR)
           give(inv.current!, held, 1)
-          onSay(`your fold holds as many chests as it can keep (${chestCap()}) — a wider fold keeps more`)
+          onSay(`your fold holds as many chests as it can keep (${chestCap(plotCfg.current)}) — a wider fold keeps more`)
         }
         // ★ Tutorial 'light' step — placing IS the objective, not just holding a lantern.
         if (mat === MAT.MANA_LANTERN) onQuestEvent('light')
@@ -6923,16 +7073,69 @@ function ChatConsole({ open, seed, log, ctx, onSubmit, onClose }: {
   )
 }
 
-function GregDialogue({ stage, onClose }: { stage: TutorialStage; onClose: () => void }) {
+/**
+ * ── ★★ AND ONCE THE TUTORIAL IS DONE, GREG IS THE MAN WHO WIDENS YOUR FOLD (2026-08-18) ─────────
+ * Canon gives him exactly this job (`shimmer-geography.md` › *THE GRIMOIRE IS WHAT GREG READS*):
+ * he folds what the keeper cannot, **the book is how he sees they are ready**, and nothing is
+ * bought. So the post-tutorial conversation stops being a farewell on repeat and becomes the one
+ * thing he is for.
+ *
+ * ★ THE COUNTER IS SAID OUT LOUD EVERY TIME, ready or not. The ruling's own words are that the
+ * grimoire gives the progression *"the legible counter it never had"* — a keeper who walks away not
+ * knowing whether they are two entries short or twenty has been given a slot machine.
+ *
+ * ⚠ THE WIDENING IS A BUTTON, NOT A SIDE EFFECT OF OPENING THE BOX. Greg doing it silently on
+ * approach would spend the one moment the arc is built around while the keeper was reading the
+ * first line, and a keeper who closed the panel early would never learn what happened.
+ */
+function GregDialogue({ stage, ledger, owed, onWiden, onClose }: {
+  stage: TutorialStage
+  ledger: ReturnType<typeof foldLedger>
+  owed: boolean
+  onWiden: () => void
+  onClose: () => void
+}) {
+  const [widened, setWidened] = useState(false)
+  // Before the tutorial ends he is still teaching; the fold talk would land on a keeper who has not
+  // met a single spirit and does not yet know what a grimoire is.
+  const fold = stage === 'done' || stage === 'report'
+  const lines = !fold ? GREG_LINE[stage]
+    : widened ? GREG_LINES.foldReady[GREG_LINES.foldReady.length - 1]
+    : owed ? GREG_LINES.foldReady.join('\n')
+    : ledger.atTop ? GREG_LINES.foldTop.join('\n')
+    : GREG_LINES.foldWaiting.join('\n')
   return (
     <div className="absolute inset-0 grid place-items-center bg-black/50 pointer-events-auto" onClick={onClose}>
-      <div className="w-[420px] bg-[#0e1018]/95 border border-white/12 rounded-lg p-4 font-mono text-[11px]"
+      {/* `data-panel` is the harness's handle, same as the brew plate's — picking this box out by
+          its text finds the HEADER row (shortest match, "Gregoryesc") and every assert downstream
+          then describes a two-word string instead of the conversation. */}
+      <div data-panel="greg"
+           className="w-[420px] bg-[#0e1018]/95 border border-white/12 rounded-lg p-4 font-mono text-[11px]"
            onClick={(e) => e.stopPropagation()}>
         <div className="flex items-baseline justify-between mb-3">
           <span className="text-white/95 font-semibold tracking-[.18em] uppercase">Gregory</span>
           <button onClick={onClose} className="text-white/40 hover:text-white/80">esc</button>
         </div>
-        <div className="text-white/85 leading-relaxed whitespace-pre-line">{GREG_LINE[stage]}</div>
+        <div className="text-white/85 leading-relaxed whitespace-pre-line">{lines}</div>
+        {fold && (
+          <div className="mt-3 pt-2 border-t border-white/8">
+            {/* Both faces, named, because canon splits them and a keeper should see which half they
+                have been playing. `seen` is the seeker's, `held` is the liberator's. */}
+            <div className="text-white/40 tabular-nums">
+              {ledger.seen} met <span className="text-white/20">·</span> {ledger.held} yours
+              <span className="text-white/20"> · </span>
+              <span className="text-white/70">{ledger.total} entries</span>
+            </div>
+            <div className="mt-1 text-white/50">{foldProgressLine(ledger)}</div>
+            {owed && !widened && (
+              <button onClick={() => { onWiden(); setWidened(true) }}
+                      className="mt-2 w-full px-2 py-1.5 rounded border border-amber-200/40 text-amber-100/90
+                                 hover:border-amber-200/70 hover:bg-white/5 transition-colors">
+                let him fold it
+              </button>
+            )}
+          </div>
+        )}
         <div className="mt-3 text-white/40 text-[10px] uppercase tracking-[.14em]">E / esc — close</div>
       </div>
     </div>
