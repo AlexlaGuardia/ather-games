@@ -23,10 +23,18 @@ export const TOOL_HUD: Record<string, { glyph: string; tint: string; label: stri
   rinning:     { glyph: '🎣', tint: '#6fb8d9', label: 'Rinning' },
 }
 
-/** The early-game staple shortlist the Exchange Booth offers for sale. */
+/**
+ * The early-game staple shortlist the Exchange Booth offers for sale.
+ *
+ * The four element-herb seeds are stocked even though they are farming level 6, because the booth
+ * is the only shop in the build: a crop with no seed source is a crop nobody can plant, and the
+ * infusion economy already spent months in exactly that state. Growing them still needs the level;
+ * buying the seed early just means the shelf is not the thing standing in the way.
+ */
 export const GE_BUY_CURATED = [
   'mana_draught', 'shard_tonic', 'goldwood_plank', 'goldwood_bark', 'raw_mana_shard',
   'shimmeroak_plank', 'seed_shimmerwheat', 'seed_glowroot', 'seed_sunpetal',
+  'seed_violetbloom', 'seed_stormgrass', 'seed_rootvine', 'seed_tidepetal',
 ]
 
 /** A tappable inventory/chest grid. Empty slots are disabled, not hidden. */

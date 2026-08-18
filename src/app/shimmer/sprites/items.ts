@@ -344,6 +344,12 @@ export const ITEMS: ItemDef[] = [
   { id: 'seed_shimmerbloom', name: 'Shimmerbloom Bulb', type: 'crop_seed', rarity: 'rare', description: 'Iridescent bulb that shifts color in different light.', stackable: true, maxStack: 20, sellPrice: 22, buyPrice: 55, tradeable: true },
   { id: 'seed_atherwheat', name: 'Atherwheat Seed', type: 'crop_seed', rarity: 'rare', description: 'Grain from the deep Ather. Slightly warm to the touch.', stackable: true, maxStack: 20, sellPrice: 30, buyPrice: 75, tradeable: true },
   { id: 'seed_dawncap', name: 'Dawncap Spore', type: 'crop_seed', rarity: 'legendary', description: 'Glows at dawn. Ancient gardeners called it the first light.', stackable: true, maxStack: 20, sellPrice: 40, buyPrice: 100, tradeable: true },
+  // Element-herb seeds — canon tier 2. Priced as peers: one element must never be cheaper to
+  // reach than another, or the market quietly picks every spirit's evolution path.
+  { id: 'seed_violetbloom', name: 'Violetbloom Seed', type: 'crop_seed', rarity: 'uncommon', description: 'Dusty violet seed. Hums faintly between your fingers.', stackable: true, maxStack: 20, sellPrice: 10, buyPrice: 25, tradeable: true },
+  { id: 'seed_stormgrass', name: 'Stormgrass Seed', type: 'crop_seed', rarity: 'uncommon', description: 'Tiny blue-tipped seed. The air tastes sharp around it.', stackable: true, maxStack: 20, sellPrice: 10, buyPrice: 25, tradeable: true },
+  { id: 'seed_rootvine', name: 'Rootvine Cutting', type: 'crop_seed', rarity: 'uncommon', description: 'A stubborn brown cutting. Heavier than it looks.', stackable: true, maxStack: 20, sellPrice: 10, buyPrice: 25, tradeable: true },
+  { id: 'seed_tidepetal', name: 'Tidepetal Seed', type: 'crop_seed', rarity: 'uncommon', description: 'Smooth teal seed, always faintly damp.', stackable: true, maxStack: 20, sellPrice: 10, buyPrice: 25, tradeable: true },
   // --- Crop Harvest Items (produced by farming) ---
   { id: 'shimmerwheat_grain', name: 'Shimmerwheat Grain', type: 'resource', rarity: 'common', description: 'Warm golden grain with mild mana resonance.', stackable: true, maxStack: 50, sellPrice: 4, tradeable: true },
   { id: 'glowroot_bulb', name: 'Glowroot Bulb', type: 'resource', rarity: 'common', description: 'Soft-glowing root bulb. Faintly bioluminescent.', stackable: true, maxStack: 50, sellPrice: 4, tradeable: true },
@@ -355,6 +361,12 @@ export const ITEMS: ItemDef[] = [
   { id: 'shimmerbloom_petal', name: 'Shimmerbloom Petal', type: 'resource', rarity: 'rare', description: 'Iridescent petal that shifts between violet and gold.', stackable: true, maxStack: 50, sellPrice: 28, tradeable: true },
   { id: 'atherwheat_grain', name: 'Atherwheat Grain', type: 'resource', rarity: 'rare', description: 'Grain from the Ather. Warm and heavy for its size.', stackable: true, maxStack: 50, sellPrice: 35, tradeable: true },
   { id: 'dawncap_spore', name: 'Dawncap Spore', type: 'resource', rarity: 'legendary', description: 'Glows faintly gold. Alchemists pay dearly for these.', stackable: true, maxStack: 50, sellPrice: 50, tradeable: true },
+  // Element herbs — the ingredient half of the infusion economy (CANON/game/alchemy.md).
+  // Descriptions are canon's own words from shimmer-skilling.md's tier-2 table.
+  { id: 'violetbloom_petal', name: 'Violetbloom Petal', type: 'resource', rarity: 'uncommon', description: 'Deep purple petals that hum when touched. Mana element aligned.', stackable: true, maxStack: 50, sellPrice: 14, tradeable: true },
+  { id: 'stormgrass_blade', name: 'Stormgrass Blade', type: 'resource', rarity: 'uncommon', description: 'Blue-tipped blades that crackle faintly in still air.', stackable: true, maxStack: 50, sellPrice: 14, tradeable: true },
+  { id: 'rootvine_coil', name: 'Rootvine Coil', type: 'resource', rarity: 'uncommon', description: 'Dense brown vine that anchors deep. Heavy to harvest.', stackable: true, maxStack: 50, sellPrice: 14, tradeable: true },
+  { id: 'tidepetal_bloom', name: 'Tidepetal Bloom', type: 'resource', rarity: 'uncommon', description: 'Teal flower always beaded with moisture. Cool to the touch.', stackable: true, maxStack: 50, sellPrice: 14, tradeable: true },
   // --- Crop Potions (brewed from farmed ingredients) ---
   { id: 'harvest_brew', name: 'Harvest Brew', type: 'consumable', rarity: 'common', description: 'Hearty grain brew. Restores a steady flow of mana.', stackable: true, maxStack: 5, sellPrice: 10, tradeable: true, effect: { stat: 'mana', amount: 25 } },
   { id: 'moonvine_tonic', name: 'Moonvine Tonic', type: 'consumable', rarity: 'uncommon', description: 'Silvery tonic. Sharpens the mind for learning.', stackable: true, maxStack: 5, sellPrice: 22, tradeable: true, effect: { stat: 'xp_boost', amount: 0.15, duration: 120 } },
@@ -2883,7 +2895,153 @@ export const TOOL_SPRITES: Record<string, SpriteAnim> = {
 
 // Per-item palettes — each item can have its own colors (0=transparent, 1-N=palette index)
 // Items without an entry here fall back to ITEM_PALETTE
+// --- Element herb harvests (Violetbloom / Stormgrass / Rootvine / Tidepetal) ---
+// Placeholder icons in the house style: readable silhouettes, canon colours via ITEM_PALETTES.
+// Alex draws the finals — these exist so the infusion economy is playable before the art lands.
+const VIOLETBLOOM_PETAL = px(S, S, `
+  00000000000000000000000000000000
+  00000000000000000000000000000000
+  00000000000000000000000000000000
+  00000000000000000000000000000000
+  00000000004444444400000000000000
+  00000000004444444400000000000000
+  00000000441111111144000000000000
+  00000000441111111144000000000000
+  00000044113333333311440000000000
+  00000044113333333311440000000000
+  00000044113322223311440000000000
+  00000044113322223311440000000000
+  00000044113333333311440000000000
+  00000044113333333311440000000000
+  00000000441111111144000000000000
+  00000000441111111144000000000000
+  00000000004444444400000000000000
+  00000000004444444400000000000000
+  00000000000044666600000000000000
+  00000000000044666600000000000000
+  00000000000000666600000000000000
+  00000000000000666600000000000000
+  00000000000066006666000000000000
+  00000000000066006666000000000000
+  00000000000000000000000000000000
+  00000000000000000000000000000000
+  00000000000000000000000000000000
+  00000000000000000000000000000000
+  00000000000000000000000000000000
+  00000000000000000000000000000000
+  00000000000000000000000000000000
+  00000000000000000000000000000000
+`)
+const STORMGRASS_BLADE = px(S, S, `
+  00000000000000000000000000000000
+  00000000000000000000000000000000
+  00000000000000000000000000000000
+  00000000000000000000000000000000
+  00000000000000330000000000000000
+  00000000000000330000000000000000
+  00000000330000113300000000000000
+  00000000330000113300000000000000
+  00000011330000112200003300000000
+  00000011330000112200003300000000
+  00000011220000112200001133000000
+  00000011220000112200001133000000
+  00000011220000112200001122000000
+  00000011220000112200001122000000
+  00000011220000112200001122000000
+  00000011220000112200001122000000
+  00000000220000112200001122000000
+  00000000220000112200001122000000
+  00000000004422224422224400000000
+  00000000004422224422224400000000
+  00000000000044444444440000000000
+  00000000000044444444440000000000
+  00000000000000000000000000000000
+  00000000000000000000000000000000
+  00000000000000000000000000000000
+  00000000000000000000000000000000
+  00000000000000000000000000000000
+  00000000000000000000000000000000
+  00000000000000000000000000000000
+  00000000000000000000000000000000
+  00000000000000000000000000000000
+  00000000000000000000000000000000
+`)
+const ROOTVINE_COIL = px(S, S, `
+  00000000000000000000000000000000
+  00000000000000000000000000000000
+  00000000000000000000000000000000
+  00000000000000000000000000000000
+  00000000000000111100000000000000
+  00000000000000111100000000000000
+  00000000000011222211000000000000
+  00000000000011222211000000000000
+  00000000001122000022110000000000
+  00000000001122000022110000000000
+  00000000000011220011000000000000
+  00000000000011220011000000000000
+  00000000000000112200000000000000
+  00000000000000112200000000000000
+  00000000000011002211000000000000
+  00000000000011002211000000000000
+  00000000001122000022110000000000
+  00000000001122000022110000000000
+  00000000000011222211000000000000
+  00000000000011222211000000000000
+  00000000000000111100000000000000
+  00000000000000111100000000000000
+  00000000000000000000000000000000
+  00000000000000000000000000000000
+  00000000000000000000000000000000
+  00000000000000000000000000000000
+  00000000000000000000000000000000
+  00000000000000000000000000000000
+  00000000000000000000000000000000
+  00000000000000000000000000000000
+  00000000000000000000000000000000
+  00000000000000000000000000000000
+`)
+const TIDEPETAL_BLOOM = px(S, S, `
+  00000000000000000000000000000000
+  00000000000000000000000000000000
+  00000000000000000000000000000000
+  00000000000000000000000000000000
+  00000000004444444400000000000000
+  00000000004444444400000000000000
+  00000000441133331144000000000000
+  00000000441133331144000000000000
+  00000044113333333311440000000000
+  00000044113333333311440000000000
+  00000044113322223311440000000000
+  00000044113322223311440000000000
+  00000044113333333311440000000000
+  00000044113333333311440000000000
+  00000000441133331144000000000000
+  00000000441133331144000000000000
+  00000000004444444400000000000000
+  00000000004444444400000000000000
+  00000000000000330000000000000000
+  00000000000000330000000000000000
+  00000000000033663300000000000000
+  00000000000033663300000000000000
+  00000000000000330000000000000000
+  00000000000000330000000000000000
+  00000000000000000000000000000000
+  00000000000000000000000000000000
+  00000000000000000000000000000000
+  00000000000000000000000000000000
+  00000000000000000000000000000000
+  00000000000000000000000000000000
+  00000000000000000000000000000000
+  00000000000000000000000000000000
+`)
+
 export const ITEM_PALETTES: Record<string, string[]> = {
+  // Element herbs — canon names its colours ("deep purple", "blue-tipped", "dense brown", "teal"),
+  // so the palette is the half of the icon that is canon's. The shape is placeholder; these are not.
+  violetbloom_petal: ['#a463d8', '#6d3f96', '#d9a8f0', '#1a1a2e', '#d06040', '#50a040', '#4080c0', '#8060b0'],
+  stormgrass_blade: ['#5aa8d8', '#356f9c', '#cfeaf7', '#1a1a2e', '#d06040', '#50a040', '#4080c0', '#8060b0'],
+  rootvine_coil: ['#7a5a2e', '#4e3819', '#a8894f', '#1a1a2e', '#d06040', '#50a040', '#4080c0', '#8060b0'],
+  tidepetal_bloom: ['#48c0b8', '#2b8079', '#bdf0ea', '#1a1a2e', '#d06040', '#50a040', '#4080c0', '#8060b0'],
   sunfruit: ['#1a1a2e', '#c89832', '#ae852d', '#dfe859', '#805814', '#236417'],
   moonberry: ['#64c0e8', '#58a5c6', '#4a8aa5', '#1a1a2e', '#865c2d', '#50a040', '#4080c0', '#8060b0'],
   stonemelon: ['#caa5c7', '#5a3a10', '#f0e6c8', '#1a1a2e', '#d06040', '#50a040', '#e0d6be', '#b493b1'],
@@ -3010,6 +3168,10 @@ export const ITEM_FRAME_MAP: Record<string, string[]> = {
   seed_shimmerbloom:   ['CROP_SEED_ICON'],
   seed_atherwheat:     ['CROP_SEED_ICON'],
   seed_dawncap:        ['CROP_SEED_ICON'],
+  seed_violetbloom:    ['CROP_SEED_ICON'],
+  seed_stormgrass:     ['CROP_SEED_ICON'],
+  seed_rootvine:       ['CROP_SEED_ICON'],
+  seed_tidepetal:      ['CROP_SEED_ICON'],
   // Crop harvests
   shimmerwheat_grain:  ['SHIMMERWHEAT_GRAIN'],
   glowroot_bulb:       ['GLOWROOT_BULB'],
@@ -3021,6 +3183,10 @@ export const ITEM_FRAME_MAP: Record<string, string[]> = {
   shimmerbloom_petal:  ['SHIMMERBLOOM_PETAL'],
   atherwheat_grain:    ['ATHERWHEAT_GRAIN'],
   dawncap_spore:       ['DAWNCAP_SPORE'],
+  violetbloom_petal:   ['VIOLETBLOOM_PETAL'],
+  stormgrass_blade:    ['STORMGRASS_BLADE'],
+  rootvine_coil:       ['ROOTVINE_COIL'],
+  tidepetal_bloom:     ['TIDEPETAL_BLOOM'],
   // Crop potions
   harvest_brew:        ['HARVEST_BREW'],
   moonvine_tonic:      ['MOONVINE_TONIC'],
@@ -3168,6 +3334,10 @@ export const ITEM_ICONS: Record<string, SpriteAnim> = {
   seed_shimmerbloom:   { frames: [CROP_SEED_ICON], rate: 1 },
   seed_atherwheat:     { frames: [CROP_SEED_ICON], rate: 1 },
   seed_dawncap:        { frames: [CROP_SEED_ICON], rate: 1 },
+  seed_violetbloom:    { frames: [CROP_SEED_ICON], rate: 1 },
+  seed_stormgrass:     { frames: [CROP_SEED_ICON], rate: 1 },
+  seed_rootvine:       { frames: [CROP_SEED_ICON], rate: 1 },
+  seed_tidepetal:      { frames: [CROP_SEED_ICON], rate: 1 },
   // Crop harvest items
   shimmerwheat_grain:  { frames: [SHIMMERWHEAT_GRAIN], rate: 1 },
   glowroot_bulb:       { frames: [GLOWROOT_BULB], rate: 1 },
@@ -3179,6 +3349,10 @@ export const ITEM_ICONS: Record<string, SpriteAnim> = {
   shimmerbloom_petal:  { frames: [SHIMMERBLOOM_PETAL], rate: 1 },
   atherwheat_grain:    { frames: [ATHERWHEAT_GRAIN], rate: 1 },
   dawncap_spore:       { frames: [DAWNCAP_SPORE], rate: 1 },
+  violetbloom_petal:   { frames: [VIOLETBLOOM_PETAL], rate: 1 },
+  stormgrass_blade:    { frames: [STORMGRASS_BLADE], rate: 1 },
+  rootvine_coil:       { frames: [ROOTVINE_COIL], rate: 1 },
+  tidepetal_bloom:     { frames: [TIDEPETAL_BLOOM], rate: 1 },
   // Crop potions
   harvest_brew:        { frames: [HARVEST_BREW], rate: 1 },
   moonvine_tonic:      { frames: [MOONVINE_TONIC], rate: 1 },

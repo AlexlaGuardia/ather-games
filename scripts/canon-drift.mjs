@@ -400,6 +400,60 @@ function run() {
     }
     if (!leanDrift) add('CLEAN', 'birth-affinity', `all ${canonLeans.size} birth-rune leans match the ruled essence table`)
   }
+
+  // 9. ELEMENT HERBS — engine/farming.ts vs CANON/game/shimmer-skilling.md (tier-2 table)
+  //
+  // ★ WHY THIS CHECK EXISTS. The four element herbs are the ingredient half of the infusion
+  // economy, and the infusions are canon's ONLY road to an evolved form. Which herb carries which
+  // element is therefore a claim about the world, hand-copied into a build file — the same shape as
+  // the birth-rune leans above, with a longer fuse.
+  //
+  // The failure is silent at every step. `ELEMENT_HERBS` pointing at a cropId that does not exist
+  // does not throw; nothing plants, nothing harvests, no brew ever gets its ingredient, so
+  // `dominantInfusion()` returns null for that element forever and the ten canon second forms
+  // behind it are unreachable — while the game runs fine and the other three elements work. A
+  // keeper would experience it as "Earth spirits just don't seem to evolve."
+  //
+  // ⚠ WHAT IS DELIBERATELY NOT GATED: the growth times (20/20/25/20 min). Canon prints them, but
+  // alchemy.md's 07-30 boundary hands Jin the level gates and durations — they are magnitudes, and
+  // gating a magnitude fails the build on a canon copy-edit. Canon owns THAT the herb exists and
+  // WHICH element it carries. That is what this reads.
+  const canonHerbs = canonElementHerbs()
+  const builtHerbs = gameElementHerbs()
+  const builtCropNames = gameCropNames()
+  if (!canonHerbs.size || !builtHerbs.size) {
+    add('NOTE', 'element-herbs', `could not read one side (canon ${canonHerbs.size}, build ${builtHerbs.size}) — check skipped`)
+  } else {
+    let herbDrift = 0
+    for (const [element, herbName] of canonHerbs) {
+      const built = builtHerbs.get(element)
+      if (!built) {
+        herbDrift++
+        add('GAP', 'element-herbs', `canon's ${element} herb '${herbName}' has no crop in the build`,
+          `Nothing grants a ${element} infusion, so dominantInfusion() never returns '${element}' and the ten canon second forms behind it are unreachable. Add it to CROP_DEFS + ELEMENT_HERBS in engine/farming.ts.`)
+        continue
+      }
+      const shippedName = builtCropNames.get(built)
+      if (!shippedName) {
+        herbDrift++
+        add('GAP', 'element-herbs', `ELEMENT_HERBS points '${element}' at cropId '${built}', which is not in CROP_DEFS`,
+          `A dangling cropId is the quiet version of a missing herb — nothing throws, the element is simply unplantable forever.`)
+        continue
+      }
+      if (shippedName.toLowerCase() !== herbName.toLowerCase()) {
+        herbDrift++
+        add('CONFLICT', 'element-herbs', `the ${element} herb is named '${shippedName}' in the build, '${herbName}' in canon`,
+          `The herb's name is canon's half (its numbers are Jin's). Rename the crop, or re-rule the plant in shimmer-skilling.md first (Magii).`)
+      }
+    }
+    for (const element of builtHerbs.keys()) {
+      if (canonHerbs.has(element)) continue
+      herbDrift++
+      add('COLLISION', 'element-herbs', `the build ships an element herb for '${element}', which canon's tier-2 table never rules`,
+        `A fifth element, or a renamed one — either way it is accidental canon. Rule it in shimmer-skilling.md, or drop it.`)
+    }
+    if (!herbDrift) add('CLEAN', 'element-herbs', `all ${canonHerbs.size} element herbs match the ruled tier-2 table`)
+  }
 }
 
 // ── mist-roster helpers ────────────────────────────────
@@ -531,6 +585,52 @@ function gameBirthLeans() {
   const txt = read(p)
   const body = (txt.split('const AFFINITY')[1] ?? '').split('NEUTRAL_AFFINITY')[0]
   for (const m of body.matchAll(/^\s*([a-z]+):\s*([a-z]+)\(/gm)) out.set(m[1], m[2])
+  return out
+}
+
+// ── element-herb helpers ───────────────────────────────
+/**
+ * The ruled element herbs in CANON/game/shimmer-skilling.md › "Tier 2 ... (Element Herbs)".
+ * Table shape: | **Violetbloom** | 20 min | Mana infusion ingredient | Deep purple petals ... |
+ * Returns element -> herb name, keyed by ELEMENT because that is the half canon owns: the plant
+ * may be renamed, but "something feeds the Storm infusion" is structural.
+ *
+ * The scan is bounded to that one tier block. The file carries four resource tables and a recipe
+ * table, and an unbounded sweep would harvest the Mana Infusion RECIPE rows as herbs.
+ */
+function canonElementHerbs() {
+  const out = new Map()
+  const p = join(CANON, 'game', 'shimmer-skilling.md')
+  if (!existsSync(p)) return out
+  const sec = read(p).split(/^\*\*Tier 2[^\n]*Element Herbs[^\n]*\*\*/m)[1]
+  if (!sec) return out
+  for (const line of sec.split(/^\*\*Tier 3/m)[0].split('\n')) {
+    // | **Violetbloom** | 20 min | Mana infusion ingredient | ... |
+    const m = line.match(/^\|\s*\*\*([A-Za-z]+)\*\*\s*\|[^|]*\|\s*([A-Za-z]+)\s+infusion ingredient/i)
+    if (!m) continue
+    const el = norm(m[2]).toLowerCase()
+    if (ELEMENTS.includes(el)) out.set(el, norm(m[1]))
+  }
+  return out
+}
+
+/** element -> cropId, read off ELEMENT_HERBS in engine/farming.ts. */
+function gameElementHerbs() {
+  const out = new Map()
+  const p = join(GAME, 'engine', 'farming.ts')
+  if (!existsSync(p)) return out
+  const body = (read(p).split('export const ELEMENT_HERBS')[1] ?? '').split('\n}')[0]
+  for (const m of body.matchAll(/^\s*([a-z]+):\s*\{\s*cropId:\s*'([^']+)'/gm)) out.set(m[1], m[2])
+  return out
+}
+
+/** cropId -> display name, read off CROP_DEFS in engine/farming.ts. */
+function gameCropNames() {
+  const out = new Map()
+  const p = join(GAME, 'engine', 'farming.ts')
+  if (!existsSync(p)) return out
+  const body = (read(p).split('export const CROP_DEFS')[1] ?? '').split('\nexport const CROP_IDS')[0]
+  for (const m of body.matchAll(/^\s*id:\s*'?([A-Za-z_]+)'?,\s*name:\s*'([^']+)'/gm)) out.set(m[1], m[2])
   return out
 }
 

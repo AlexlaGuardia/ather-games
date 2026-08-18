@@ -2,6 +2,7 @@
 // Canon: Gardening is a life skill. Levels 1-10 unlock all content, 11-99 is prestige.
 // Mirrors alchemy.ts pattern: canPlantCrop/harvestCrop
 
+import type { Element } from '../spirits/spirit'
 import type { Inventory } from './inventory'
 import type { SkillSet } from './skills'
 import type { ManaPool } from './mana'
@@ -129,6 +130,44 @@ export const CROP_DEFS: Record<string, CropDef> = {
     yields: [{ itemId: 'starbean_pod', count: 2, chance: 1.0 }],
   },
 
+  // ── The four element herbs — the ingredient half of the infusion economy ──────────────────
+  // CANON (`CANON/game/alchemy.md`, ruled 2026-07-30 · `game/shimmer-skilling.md` › Tier 2):
+  // Violetbloom (Mana) · Stormgrass (Storm) · Rootvine (Earth) · Tidepetal (Water) feed the four
+  // Infusions, and the Infusions are the ONLY road to an evolved form. Canon owns that these four
+  // exist, which element each carries, and their growth times (20/20/25/20 min — Rootvine "anchors
+  // deep. Heavy to harvest."). Level gates, mana cost, XP and yield counts are Jin's.
+  //
+  // ⚠ ALL FOUR SHARE ONE LEVEL, MANA COST AND YIELD ON PURPOSE. The four elements are peers: a
+  // keeper who can reach Storm can reach Water on the same day. Make one herb cheaper and you have
+  // silently ruled that its element is the default evolution path for every spirit in the game —
+  // a balance dial reaching through into forty canon second forms.
+  //
+  // yields 2 because one canon Infusion recipe costs herb ×2 — one harvest, one infusion.
+  violetbloom: {
+    id: 'violetbloom', name: 'Violetbloom', tier: 2,
+    minFarmingLevel: 6, manaCost: 6, plantXp: 14, xpGrant: 55, growthMs: 20 * 60 * 1000,
+    seedItemId: 'seed_violetbloom', yieldBonusPerLevel: 0.03,
+    yields: [{ itemId: 'violetbloom_petal', count: 2, chance: 1.0 }],
+  },
+  stormgrass: {
+    id: 'stormgrass', name: 'Stormgrass', tier: 2,
+    minFarmingLevel: 6, manaCost: 6, plantXp: 14, xpGrant: 55, growthMs: 20 * 60 * 1000,
+    seedItemId: 'seed_stormgrass', yieldBonusPerLevel: 0.03,
+    yields: [{ itemId: 'stormgrass_blade', count: 2, chance: 1.0 }],
+  },
+  rootvine: {
+    id: 'rootvine', name: 'Rootvine', tier: 2,
+    minFarmingLevel: 6, manaCost: 6, plantXp: 14, xpGrant: 60, growthMs: 25 * 60 * 1000,
+    seedItemId: 'seed_rootvine', yieldBonusPerLevel: 0.03,
+    yields: [{ itemId: 'rootvine_coil', count: 2, chance: 1.0 }],
+  },
+  tidepetal: {
+    id: 'tidepetal', name: 'Tidepetal', tier: 2,
+    minFarmingLevel: 6, manaCost: 6, plantXp: 14, xpGrant: 55, growthMs: 20 * 60 * 1000,
+    seedItemId: 'seed_tidepetal', yieldBonusPerLevel: 0.03,
+    yields: [{ itemId: 'tidepetal_bloom', count: 2, chance: 1.0 }],
+  },
+
   // Tier 3 — Advanced
   dreamroot: {
     id: 'dreamroot', name: 'Dreamroot', tier: 3,
@@ -168,6 +207,35 @@ export const CROP_DEFS: Record<string, CropDef> = {
 }
 
 export const CROP_IDS = Object.keys(CROP_DEFS)
+
+/**
+ * Which herb carries which element — the canon half of the infusion economy.
+ *
+ * ⚠ THIS LIVES OUTSIDE `CROP_DEFS` DELIBERATELY, AND THE REASON IS A LIVE TRAP. The Farming
+ * editor's save route (`save-map/route.ts`) does not patch `CROP_DEFS`; it REBUILDS the whole block
+ * from a fixed list of fields. Any field it does not serialize is deleted the next time somebody
+ * saves a tuning change — silently, in a file nobody re-reads. A canon mapping must not sit in a
+ * block a tuning editor rewrites.
+ *
+ * Keyed by element rather than by crop so the type system enforces what the gate also checks:
+ * `Record<Exclude<Element, 'base'>, ...>` cannot compile with an element missing, and a missing
+ * element is the failure that matters — it makes ten canon second forms unreachable while
+ * everything still runs.
+ */
+export const ELEMENT_HERBS: Record<Exclude<Element, 'base'>, { cropId: string; harvestItemId: string }> = {
+  mana:  { cropId: 'violetbloom', harvestItemId: 'violetbloom_petal' },
+  storm: { cropId: 'stormgrass',  harvestItemId: 'stormgrass_blade' },
+  earth: { cropId: 'rootvine',    harvestItemId: 'rootvine_coil' },
+  water: { cropId: 'tidepetal',   harvestItemId: 'tidepetal_bloom' },
+}
+
+/** The element an element-herb harvest item carries, or null if it is an ordinary crop. */
+export function elementForHerbItem(itemId: string): Exclude<Element, 'base'> | null {
+  for (const [el, h] of Object.entries(ELEMENT_HERBS) as [Exclude<Element, 'base'>, { harvestItemId: string }][]) {
+    if (h.harvestItemId === itemId) return el
+  }
+  return null
+}
 
 /** Get growth phase of a planted crop (0-3) */
 export function getCropGrowthPhase(crop: PlantedCrop): CropGrowthPhase {

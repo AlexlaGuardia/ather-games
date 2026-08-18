@@ -1208,7 +1208,7 @@ export async function POST(req: NextRequest) {
 
     // ── Save Farming Crops ──
     if (body.farming && typeof body.farming === 'object') {
-      const cropData: Record<string, { id: string; name: string; tier: number; minFarmingLevel: number; manaCost: number; plantXp: number; xpGrant: number; growthMs: number; seedItemId: string; yieldBonusPerLevel: number; yields: { itemId: string; count: number; chance: number }[] }> = body.farming
+      const cropData: Record<string, { id: string; name: string; tier: number; minFarmingLevel: number; manaCost: number; plantXp: number; xpGrant: number; growthMs: number; seedItemId: string; yieldBonusPerLevel: number; yields: { itemId: string; count: number; chance: number }[]; bloomsSpirit?: boolean }> = body.farming
 
       const tierComments: Record<number, string> = { 1: 'Tier 1 — Beginner', 2: 'Tier 2 — Intermediate', 3: 'Tier 3 — Advanced', 4: 'Tier 4 — Master' }
       const byTier: Record<number, string[]> = { 1: [], 2: [], 3: [], 4: [] }
@@ -1227,12 +1227,19 @@ export async function POST(req: NextRequest) {
           ? `${growthMs / 60000} * 60 * 1000`
           : `${growthMs}`
 
+        // ⚠ THIS SERIALIZER REBUILDS THE WHOLE BLOCK, SO ANY FIELD IT FORGETS IS DELETED.
+        // `bloomsSpirit` is the Mana Seed's entire payout — the spirit Greg's gift grows, which is
+        // how every player gets their first spirit. It was NOT written here, so one save of an
+        // unrelated tuning change from the Farming editor silently turned the opening of the game
+        // into a crop that yields nothing, with no error anywhere. Add a CropDef field to this list
+        // the same day you add it to the type, or the editor eats it.
         const line = [
           `  ${key}: {`,
           `    id: '${safeId(c.id, `farming.${key}.id`)}', name: '${escText(c.name, `farming.${key}.name`, 80)}', tier: ${safeInt(c.tier, `farming.${key}.tier`, 1, 4)},`,
           `    minFarmingLevel: ${safeInt(c.minFarmingLevel, `farming.${key}.minFarmingLevel`, 0, 999)}, manaCost: ${safeInt(c.manaCost, `farming.${key}.manaCost`, 0, 99999)}, plantXp: ${safeInt(c.plantXp, `farming.${key}.plantXp`, 0, 99999)}, xpGrant: ${safeInt(c.xpGrant, `farming.${key}.xpGrant`, 0, 99999)}, growthMs: ${growthExpr},`,
           `    seedItemId: '${safeId(c.seedItemId, `farming.${key}.seedItemId`)}', yieldBonusPerLevel: ${safeNum(c.yieldBonusPerLevel, `farming.${key}.yieldBonusPerLevel`, 0, 1000)},`,
           `    yields: ${yieldsBlock},`,
+          ...(c.bloomsSpirit ? ['    bloomsSpirit: true,'] : []),
           `  },`,
         ].join('\n')
         const tier = c.tier as 1 | 2 | 3 | 4
