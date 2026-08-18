@@ -327,6 +327,10 @@ export const ITEMS: ItemDef[] = [
   { id: 'shard_tonic', name: 'Shard Tonic', type: 'consumable', rarity: 'common', description: 'Gritty crystal-infused tonic. Hands move faster.', stackable: true, maxStack: 5, sellPrice: 10, tradeable: true, effect: { stat: 'harvest_speed', amount: 0.15, duration: 60 } },
   { id: 'shimmer_salve', name: 'Shimmer Salve', type: 'consumable', rarity: 'common', description: 'Warm shimmering paste. Spirits brighten when they smell it.', stackable: true, maxStack: 5, sellPrice: 12, tradeable: true, effect: { stat: 'happiness', amount: 25 } },
   { id: 'glowfin_brew', name: 'Glowfin Brew', type: 'consumable', rarity: 'uncommon', description: 'Bioluminescent brew. Knowledge sinks in faster.', stackable: true, maxStack: 5, sellPrice: 20, tradeable: true, effect: { stat: 'xp_boost', amount: 0.2, duration: 90 } },
+  { id: 'mana_infusion', name: 'Mana Infusion', type: 'consumable', rarity: 'rare', description: 'Deep purple, lit from within. Feeds a spirit the Mana element.', stackable: true, maxStack: 10, sellPrice: 60, tradeable: true },
+  { id: 'storm_infusion', name: 'Storm Infusion', type: 'consumable', rarity: 'rare', description: 'Pale blue, sparks crossing the glass. Feeds a spirit the Storm element.', stackable: true, maxStack: 10, sellPrice: 60, tradeable: true },
+  { id: 'earth_infusion', name: 'Earth Infusion', type: 'consumable', rarity: 'rare', description: 'Brown-amber and heavier than it looks. Feeds a spirit the Earth element.', stackable: true, maxStack: 10, sellPrice: 60, tradeable: true },
+  { id: 'water_infusion', name: 'Water Infusion', type: 'consumable', rarity: 'rare', description: 'Teal and always moving. Feeds a spirit the Water element.', stackable: true, maxStack: 10, sellPrice: 60, tradeable: true },
   { id: 'crystal_elixir', name: 'Crystal Elixir', type: 'consumable', rarity: 'uncommon', description: 'Clear crystalline liquid. Mana surges and lingers.', stackable: true, maxStack: 5, sellPrice: 25, tradeable: true, effect: { stat: 'mana', amount: 50 } },
   { id: 'bond_philter', name: 'Bond Philter', type: 'consumable', rarity: 'uncommon', description: 'Rose-tinted draught. Spirits feel closer after drinking it.', stackable: true, maxStack: 5, sellPrice: 22, tradeable: true, effect: { stat: 'bond', amount: 15 } },
   { id: 'starlight_tincture', name: 'Starlight Tincture', type: 'consumable', rarity: 'rare', description: 'Starwillow extract. Everything you learn sticks.', stackable: true, maxStack: 5, sellPrice: 40, tradeable: true, effect: { stat: 'xp_boost', amount: 0.3, duration: 120 } },
@@ -3035,7 +3039,162 @@ const TIDEPETAL_BLOOM = px(S, S, `
   00000000000000000000000000000000
 `)
 
+// ── ★ THE FOUR INFUSION VESSELS — PLACEHOLDERS, AND THE SILHOUETTE IS THE POINT ────────────────
+// Canon calls these "the flagship vessels" and the art is unblocked, but a flagship look is Alex's
+// brush, not mine. One shouldered, corked bottle shared by all four, distinguished only by the
+// liquid's colour and a mark: they are PEERS, and a fancier vessel for one element would say the
+// element is fancier. Colours come from canon's own words for each catalyst crystal (deep purple /
+// pale blue with sparks / brown-amber and dense / teal and fluid), carried in ITEM_PALETTES.
+//
+// ⚠ FOUR CONSTS, NOT ONE SHARED SHAPE, deliberately. A single const re-tinted four ways is how
+// palette-indexed art wants to work — and it would mean Alex painting one bottle silently repaints
+// all four. Separate consts cost four blocks of text and keep each one his to edit alone.
+const MANA_INFUSION = px(S, S, `
+  00000000000000000000000000000000
+  00000000000000000000000000000000
+  00000000000000000000000000000000
+  00000000000000000000000000000000
+  00000000000000555500000000000000
+  00000000000000555500000000000000
+  00000000000000555500000000000000
+  00000000000000555500000000000000
+  00000000000044444444000000000000
+  00000000000044444444000000000000
+  00000000004477777744000000000000
+  00000000004477777744000000000000
+  00000000447777777777440000000000
+  00000000447777337777440000000000
+  00000000447773333777440000000000
+  00000000447733333377440000000000
+  00000000447733333377440000000000
+  00000000447733333377440000000000
+  00000000447773333777440000000000
+  00000000447777337777440000000000
+  00000000447777777777440000000000
+  00000000447777777777440000000000
+  00000000004477777744000000000000
+  00000000004477777744000000000000
+  00000000000044444400000000000000
+  00000000000044444400000000000000
+  00000000000000000000000000000000
+  00000000000000000000000000000000
+  00000000000000000000000000000000
+  00000000000000000000000000000000
+  00000000000000000000000000000000
+  00000000000000000000000000000000
+`)
+
+const STORM_INFUSION = px(S, S, `
+  00000000000000000000000000000000
+  00000000000000000000000000000000
+  00000000000000000000000000000000
+  00000000000000000000000000000000
+  00000000000000555500000000000000
+  00000000000000555500000000000000
+  00000000000000555500000000000000
+  00000000000000555500000000000000
+  00000000000044444444000000000000
+  00000000000044444444000000000000
+  00000000004477777744000000000000
+  00000000004477777744000000000000
+  00000000447777773377440000000000
+  00000000447777733777440000000000
+  00000000447777337777440000000000
+  00000000447773333777440000000000
+  00000000447777337777440000000000
+  00000000447773377777440000000000
+  00000000447733777777440000000000
+  00000000447337777777440000000000
+  00000000447777777777440000000000
+  00000000447777777777440000000000
+  00000000004477777744000000000000
+  00000000004477777744000000000000
+  00000000000044444400000000000000
+  00000000000044444400000000000000
+  00000000000000000000000000000000
+  00000000000000000000000000000000
+  00000000000000000000000000000000
+  00000000000000000000000000000000
+  00000000000000000000000000000000
+  00000000000000000000000000000000
+`)
+
+const EARTH_INFUSION = px(S, S, `
+  00000000000000000000000000000000
+  00000000000000000000000000000000
+  00000000000000000000000000000000
+  00000000000000000000000000000000
+  00000000000000555500000000000000
+  00000000000000555500000000000000
+  00000000000000555500000000000000
+  00000000000000555500000000000000
+  00000000000044444444000000000000
+  00000000000044444444000000000000
+  00000000004477777744000000000000
+  00000000004477777744000000000000
+  00000000447777777777440000000000
+  00000000447777777777440000000000
+  00000000447777777777440000000000
+  00000000447773333777440000000000
+  00000000447733333377440000000000
+  00000000447733333377440000000000
+  00000000447333333337440000000000
+  00000000447333333337440000000000
+  00000000447777777777440000000000
+  00000000447777777777440000000000
+  00000000004477777744000000000000
+  00000000004477777744000000000000
+  00000000000044444400000000000000
+  00000000000044444400000000000000
+  00000000000000000000000000000000
+  00000000000000000000000000000000
+  00000000000000000000000000000000
+  00000000000000000000000000000000
+  00000000000000000000000000000000
+  00000000000000000000000000000000
+`)
+
+const WATER_INFUSION = px(S, S, `
+  00000000000000000000000000000000
+  00000000000000000000000000000000
+  00000000000000000000000000000000
+  00000000000000000000000000000000
+  00000000000000555500000000000000
+  00000000000000555500000000000000
+  00000000000000555500000000000000
+  00000000000000555500000000000000
+  00000000000044444444000000000000
+  00000000000044444444000000000000
+  00000000004477777744000000000000
+  00000000004477777744000000000000
+  00000000447777777777440000000000
+  00000000447337733777440000000000
+  00000000447773377337440000000000
+  00000000447777777777440000000000
+  00000000447337733777440000000000
+  00000000447773377337440000000000
+  00000000447777777777440000000000
+  00000000447337733777440000000000
+  00000000447777777777440000000000
+  00000000447777777777440000000000
+  00000000004477777744000000000000
+  00000000004477777744000000000000
+  00000000000044444400000000000000
+  00000000000044444400000000000000
+  00000000000000000000000000000000
+  00000000000000000000000000000000
+  00000000000000000000000000000000
+  00000000000000000000000000000000
+  00000000000000000000000000000000
+  00000000000000000000000000000000
+`)
+
 export const ITEM_PALETTES: Record<string, string[]> = {
+  mana_infusion: ['#d544c8', '#5a3a10', '#e6c8ff', '#1a1a2e', '#c8a020', '#50a040', '#8a3fd0', '#8060b0'],
+  storm_infusion: ['#d544c8', '#5a3a10', '#eaf6ff', '#1a1a2e', '#c8a020', '#50a040', '#6fb8e8', '#8060b0'],
+  earth_infusion: ['#d544c8', '#5a3a10', '#f0d8a0', '#1a1a2e', '#c8a020', '#50a040', '#a8752e', '#8060b0'],
+  water_infusion: ['#d544c8', '#5a3a10', '#d8f6f0', '#1a1a2e', '#c8a020', '#50a040', '#2ea8a0', '#8060b0'],
+
   // Element herbs — canon names its colours ("deep purple", "blue-tipped", "dense brown", "teal"),
   // so the palette is the half of the icon that is canon's. The shape is placeholder; these are not.
   violetbloom_petal: ['#a463d8', '#6d3f96', '#d9a8f0', '#1a1a2e', '#d06040', '#50a040', '#4080c0', '#8060b0'],
@@ -3184,6 +3343,10 @@ export const ITEM_FRAME_MAP: Record<string, string[]> = {
   atherwheat_grain:    ['ATHERWHEAT_GRAIN'],
   dawncap_spore:       ['DAWNCAP_SPORE'],
   violetbloom_petal:   ['VIOLETBLOOM_PETAL'],
+  mana_infusion:       ['MANA_INFUSION'],
+  storm_infusion:      ['STORM_INFUSION'],
+  earth_infusion:      ['EARTH_INFUSION'],
+  water_infusion:      ['WATER_INFUSION'],
   stormgrass_blade:    ['STORMGRASS_BLADE'],
   rootvine_coil:       ['ROOTVINE_COIL'],
   tidepetal_bloom:     ['TIDEPETAL_BLOOM'],
@@ -3350,6 +3513,10 @@ export const ITEM_ICONS: Record<string, SpriteAnim> = {
   atherwheat_grain:    { frames: [ATHERWHEAT_GRAIN], rate: 1 },
   dawncap_spore:       { frames: [DAWNCAP_SPORE], rate: 1 },
   violetbloom_petal:   { frames: [VIOLETBLOOM_PETAL], rate: 1 },
+  mana_infusion:       { frames: [MANA_INFUSION], rate: 1 },
+  storm_infusion:      { frames: [STORM_INFUSION], rate: 1 },
+  earth_infusion:      { frames: [EARTH_INFUSION], rate: 1 },
+  water_infusion:      { frames: [WATER_INFUSION], rate: 1 },
   stormgrass_blade:    { frames: [STORMGRASS_BLADE], rate: 1 },
   rootvine_coil:       { frames: [ROOTVINE_COIL], rate: 1 },
   tidepetal_bloom:     { frames: [TIDEPETAL_BLOOM], rate: 1 },

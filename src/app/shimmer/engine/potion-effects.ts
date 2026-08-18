@@ -9,6 +9,8 @@
 // Effect NAMES/flavor lean on the potions' canon names; magnitudes/durations are build-side
 // feel dials (Jin's lane, per SHIMMER-CANON-BOUNDARY) — tune them at the top of this file.
 
+import { elementForInfusion } from './alchemy'
+
 // ── feel dials ─────────────────────────────────────────────────────────────────────────────
 export const FLEETFOOT_SPEED = 1.12    // moonvine_tonic — ground speed mult (matches slide-hop's ×1.12 feel step)
 export const ANGLER_BITE = 0.5         // glowfin_brew — bites land this × sooner…
@@ -86,6 +88,20 @@ export function potionEffectLine(potionId: string): string | null {
   const heal = HEAL_POTIONS[potionId]
   if (heal) return heal.hp ? `mends +${heal.hp} HP (outside the Ather)` : `re-forms +${heal.sh} shield (outside the Ather)`
   if (potionId === 'harvest_brew') return 'planted crops jump 3m of growth'
+  // ── ★ THE FOUR ELEMENTAL INFUSIONS — AND THEY SAY THE HONEST THING (2026-08-18, #262 slice ②) ──
+  // An infusion is not a player buff. It goes on a SPIRIT, and canon makes it the only road to an
+  // evolved form. The brews ship now; the application site (`addInfusion`, still zero callers) is
+  // slice ③, so the line says so out loud rather than implying a drink that does nothing.
+  //
+  // ⚠ SHOWN, NOT HIDDEN — the same call the MoveBook made for its 13 unbuilt moves. Hiding a brew
+  // the keeper can genuinely make is how someone concludes their alchemy list is short; naming the
+  // gap is how they know the game knows.
+  //
+  // ⚠ AND IT ASKS `INFUSION_BREWS`, NEVER THE ID'S SPELLING. `ather_infusion` is a tier-4 player
+  // buff and already has a real line above; a `/_infusion$/` test would steal it and tell the
+  // keeper their mana potion belonged on a spirit.
+  const el = elementForInfusion(potionId)
+  if (el) return `+1 ${el} infusion for a spirit · NOT BUILT YET — nothing applies it`
   return null
 }
 

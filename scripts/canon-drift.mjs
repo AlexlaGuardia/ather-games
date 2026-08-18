@@ -454,6 +454,67 @@ function run() {
     }
     if (!herbDrift) add('CLEAN', 'element-herbs', `all ${canonHerbs.size} element herbs match the ruled tier-2 table`)
   }
+
+  // 10. THE ELEMENTAL INFUSIONS — engine/alchemy.ts vs CANON/game/{alchemy,shimmer-skilling}.md
+  //
+  // ★ WHY THIS CHECK EXISTS, AND WHY IT IS NOT COVERED BY #9. Gate 9 reads which HERB carries which
+  // element. This reads the other end of the same chain: which BREW carries which element, and what
+  // canon says goes into it. `alchemy.md` (RULED 2026-07-30) makes the four Infusions the spine of
+  // alchemy and the ONLY road to an evolved form; `shimmer-skilling.md` names each element's
+  // catalyst crystal. Both are canon claims hand-copied into a recipe table a tuning editor rewrites.
+  //
+  // ⚠ THE FAILURE THIS IS REALLY FOR IS A SWAP, NOT AN ABSENCE. A storm brew catalysed by a water
+  // crystal, or fed by tidepetal, is perfectly legal code that compiles, brews, and sells — and it
+  // quietly hands the keeper the WRONG one of four ruled second forms. In a diff it is one word.
+  // That is gate #8's lesson (canon owns the category, Jin owns the number, and a wrong category
+  // looks exactly like a wrong number) applied to the economy canon calls its money-maker.
+  //
+  // ⚠ DELIBERATELY NOT GATED: counts, level gate, mana, XP and yield. alchemy.md's boundary hands
+  // Jin every magnitude — gating one fails the build on a canon copy-edit.
+  const canonCat = canonInfusionCatalysts()
+  const brews = gameInfusionBrews()
+  const recipes = gamePotionRecipes()
+  const herbItems = gameElementHerbItems()
+  if (!canonCat.size || !brews.size) {
+    add('NOTE', 'infusions', `could not read one side (canon ${canonCat.size}, build ${brews.size}) — check skipped`)
+  } else {
+    let infDrift = 0
+    for (const [element, crystalName] of canonCat) {
+      const potionId = brews.get(element)
+      if (!potionId) {
+        infDrift++
+        add('GAP', 'infusions', `canon rules a ${element} infusion and the build brews none`,
+          `The Infusions are canon's only road to an evolved form, so nothing can ever grant '${element}' and the ten second forms behind it are unreachable. Add it to POTION_DEFS + INFUSION_BREWS in engine/alchemy.ts.`)
+        continue
+      }
+      const recipe = recipes.get(potionId)
+      if (!recipe) {
+        infDrift++
+        add('GAP', 'infusions', `INFUSION_BREWS points '${element}' at '${potionId}', which is not in POTION_DEFS`,
+          `A dangling potion id is the quiet version of a missing brew — nothing throws, the element is simply unbrewable forever.`)
+        continue
+      }
+      const crystalId = crystalName.toLowerCase().replace(/\s+/g, '_')
+      if (!recipe.includes(crystalId)) {
+        infDrift++
+        add('CONFLICT', 'infusions', `the ${element} infusion is not catalysed by canon's '${crystalName}'`,
+          `shimmer-skilling.md rules ${crystalName} the ${element} infusion catalyst; the recipe reads ${recipe.join(' + ')}. Fix the recipe, or re-rule the catalyst first (Magii).`)
+      }
+      const herb = herbItems.get(element)
+      if (herb && !recipe.includes(herb)) {
+        infDrift++
+        add('CONFLICT', 'infusions', `the ${element} infusion is not fed by the ${element} herb`,
+          `alchemy.md rules the Infusions are fed by the four element herbs. Feeding it '${recipe.join(' + ')}' means the keeper farms one element and their spirit grows into another — legal code, wrong world.`)
+      }
+    }
+    for (const element of brews.keys()) {
+      if (canonCat.has(element)) continue
+      infDrift++
+      add('COLLISION', 'infusions', `the build brews an infusion for '${element}', which canon's crystal table never rules`,
+        `A fifth element, or a renamed one — either way it is accidental canon on the road to an evolved form. Rule it, or drop it.`)
+    }
+    if (!infDrift) add('CLEAN', 'infusions', `all ${canonCat.size} elemental infusions match canon's catalysts and herbs`)
+  }
 }
 
 // ── mist-roster helpers ────────────────────────────────
@@ -621,6 +682,55 @@ function gameElementHerbs() {
   if (!existsSync(p)) return out
   const body = (read(p).split('export const ELEMENT_HERBS')[1] ?? '').split('\n}')[0]
   for (const m of body.matchAll(/^\s*([a-z]+):\s*\{\s*cropId:\s*'([^']+)'/gm)) out.set(m[1], m[2])
+  return out
+}
+
+/** element -> canon catalyst crystal name, off the Tier-2 Element Crystals table. */
+function canonInfusionCatalysts() {
+  const out = new Map()
+  const p = join(CANON, 'game', 'shimmer-skilling.md')
+  if (!existsSync(p)) return out
+  const sec = read(p).split(/^\*\*Tier 2[^\n]*Element Crystals[^\n]*\*\*/m)[1]
+  if (!sec) return out
+  for (const line of sec.split(/^\*\*Tier 3/m)[0].split('\n')) {
+    // | **Violet Crystal** | Deep purple, inner glow | Mana infusion catalyst | ... |
+    const m = line.match(/^\|\s*\*\*([A-Za-z ]+?)\*\*\s*\|[^|]*\|\s*([A-Za-z]+)\s+infusion catalyst/i)
+    if (!m) continue
+    const el = norm(m[2]).toLowerCase()
+    if (ELEMENTS.includes(el)) out.set(el, norm(m[1]))
+  }
+  return out
+}
+
+/** element -> potionId, read off INFUSION_BREWS in engine/alchemy.ts. */
+function gameInfusionBrews() {
+  const out = new Map()
+  const p = join(GAME, 'engine', 'alchemy.ts')
+  if (!existsSync(p)) return out
+  const body = (read(p).split('export const INFUSION_BREWS')[1] ?? '').split('\n}')[0]
+  for (const m of body.matchAll(/^\s*([a-z]+):\s*'([^']+)'/gm)) out.set(m[1], m[2])
+  return out
+}
+
+/** potionId -> [ingredient itemIds], read off POTION_DEFS in engine/alchemy.ts. */
+function gamePotionRecipes() {
+  const out = new Map()
+  const p = join(GAME, 'engine', 'alchemy.ts')
+  if (!existsSync(p)) return out
+  const body = (read(p).split('export const POTION_DEFS')[1] ?? '').split('\nexport const POTION_IDS')[0]
+  for (const m of body.matchAll(/^\s*([a-z_0-9]+):\s*\{[\s\S]*?recipe:\s*\[([^\]]*)\]/gm)) {
+    out.set(m[1], [...m[2].matchAll(/itemId:\s*'([^']+)'/g)].map(x => x[1]))
+  }
+  return out
+}
+
+/** element -> harvest item id, off ELEMENT_HERBS in engine/farming.ts. */
+function gameElementHerbItems() {
+  const out = new Map()
+  const p = join(GAME, 'engine', 'farming.ts')
+  if (!existsSync(p)) return out
+  const body = (read(p).split('export const ELEMENT_HERBS')[1] ?? '').split('\n}')[0]
+  for (const m of body.matchAll(/^\s*([a-z]+):\s*\{[^}]*harvestItemId:\s*'([^']+)'/gm)) out.set(m[1], m[2])
   return out
 }
 

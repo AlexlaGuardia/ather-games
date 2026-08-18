@@ -64,7 +64,7 @@ import { createBank, bankFromSave, bankToSave, bankUsed, bankCapacity, bankDepos
 import { ITEMS, NODE_TYPE_LABELS } from '../sprites/items'
 import { startPerfLog, mark, logPerf } from './perflog'
 import { createManaPool, manaToSave, manaFromSave, getMaxPool, type ManaPool } from '../engine/mana'
-import { brewPotion, POTION_DEFS } from '../engine/alchemy'
+import { brewPotion, POTION_DEFS, elementForInfusion } from '../engine/alchemy'
 import { MANA_POTIONS, HEAL_POTIONS, SPIRIT_MEND_POTIONS, MEND_POTION_ID, POTION_BUFFS, BUFF_DEFS, HARVEST_BREW_ADVANCE_MS, drinkBuff, activeBuffList, pruneBuffs, gatherXpMult, bonusFind, kindredMult, speedMult, manaRegenMult, rinTune, suppressEncounters, potionEffectLine, type ActiveBuffs } from '../engine/potion-effects'
 import { canCraft, craftItem, RECIPE_DEFS } from '../engine/crafting'
 import { createGEState, buyFromGE, sellToGE, tickPriceDrift, GE_ITEM_IDS, geToSave, geFromSave, type GEMarketState, type GESave } from '../engine/exchange'
@@ -300,7 +300,14 @@ function grantStarterKit(inv: Inventory) {
 // hotbar double-tap hints (drinkable potions + placeable stations)
 const USE_HINTS: Record<string, string> = {
   // every potion's hint derives from its engine effect line — one source of truth
-  ...Object.fromEntries(Object.keys(POTION_DEFS).map(k => [k, `${potionEffectLine(k)} · double-tap to drink`])),
+  // ⚠ AN INFUSION IS NOT DRUNK. It goes on a spirit, so it must not carry the drink affordance —
+  // and `potionEffectLine` returns null for anything it has no line for, which a template literal
+  // renders as the word "null" on the hotbar. Both are guarded here rather than assumed away.
+  ...Object.fromEntries(Object.keys(POTION_DEFS).map(k => {
+    const line = potionEffectLine(k)
+    if (!line) return [k, 'no effect wired yet']
+    return [k, elementForInfusion(k) ? line : `${line} · double-tap to drink`]
+  })),
   ...Object.fromEntries(Object.keys(PLACEABLES).map(k => [k, 'double-tap to place'])),
 }
 

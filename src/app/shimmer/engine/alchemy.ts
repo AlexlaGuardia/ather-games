@@ -2,6 +2,7 @@
 // Canon: alchemy skill levels 1-25 unlock 4 tiers of potions
 // Mirrors tools.ts pattern: canBrew/brewPotion
 
+import type { Element } from '../spirits/spirit'
 import type { Inventory } from './inventory'
 import type { SkillSet } from './skills'
 import type { ManaPool } from './mana'
@@ -55,6 +56,26 @@ export const POTION_DEFS: Record<string, PotionDef> = {
     minAlchemyLevel: 8, manaCost: 18, xpGrant: 45, resultCount: 1,
     recipe: [{ itemId: 'ribboneel', count: 3 }, { itemId: 'moonberry', count: 3 }, { itemId: 'amber_sap', count: 2 }],
   },
+  mana_infusion: {
+    id: 'mana_infusion', name: 'Mana Infusion', tier: 2,
+    minAlchemyLevel: 10, manaCost: 25, xpGrant: 60, resultCount: 1,
+    recipe: [{ itemId: 'violet_crystal', count: 1 }, { itemId: 'violetbloom_petal', count: 2 }, { itemId: 'amber_sap', count: 1 }],
+  },
+  storm_infusion: {
+    id: 'storm_infusion', name: 'Storm Infusion', tier: 2,
+    minAlchemyLevel: 10, manaCost: 25, xpGrant: 60, resultCount: 1,
+    recipe: [{ itemId: 'storm_crystal', count: 1 }, { itemId: 'stormgrass_blade', count: 2 }, { itemId: 'amber_sap', count: 1 }],
+  },
+  earth_infusion: {
+    id: 'earth_infusion', name: 'Earth Infusion', tier: 2,
+    minAlchemyLevel: 10, manaCost: 25, xpGrant: 60, resultCount: 1,
+    recipe: [{ itemId: 'earth_crystal', count: 1 }, { itemId: 'rootvine_coil', count: 2 }, { itemId: 'amber_sap', count: 1 }],
+  },
+  water_infusion: {
+    id: 'water_infusion', name: 'Water Infusion', tier: 2,
+    minAlchemyLevel: 10, manaCost: 25, xpGrant: 60, resultCount: 1,
+    recipe: [{ itemId: 'water_crystal', count: 1 }, { itemId: 'tidepetal_bloom', count: 2 }, { itemId: 'amber_sap', count: 1 }],
+  },
 
   // Tier 3 — Advanced
   starlight_tincture: {
@@ -99,6 +120,61 @@ export const POTION_DEFS: Record<string, PotionDef> = {
 }
 
 export const POTION_IDS = Object.keys(POTION_DEFS)
+
+/**
+ * ── ★ THE FOUR ELEMENTAL INFUSIONS — WHICH BREW CARRIES WHICH ELEMENT ─────────────────────────
+ *
+ * Canon (`game/alchemy.md`, RULED 2026-07-30) makes the Infusions the spine of alchemy: four
+ * first-class brews, one per element, fed by the four element herbs, and **the only road to an
+ * evolved form** — a spirit's second form is set at level 34 by its dominant infusion, so these
+ * four recipes are the gate in front of all forty ruled second forms. `game/shimmer-skilling.md`
+ * names each element's **catalyst crystal** (Violet/Storm/Earth/Water) and Amber Sap as the key
+ * infusion ingredient. Canon owns THAT they exist, which element each carries, and what feeds
+ * them; the counts, level gate, mana and XP below are Jin's.
+ *
+ * ★★ AND IT LIVES OUT HERE FOR THE REASON SLICE ① LEARNED THE HARD WAY. `save-map/route.ts` does
+ * not patch `POTION_DEFS` — it **rebuilds the whole block** from a fixed field list
+ * (id/name/tier/minAlchemyLevel/manaCost/xpGrant/resultCount/recipe) and regenerates its comments
+ * from a tier table. An `infusionElement` field hung on `PotionDef` would be **deleted by the first
+ * save from the Alchemy editor**, silently, with no error — which is exactly how `bloomsSpirit`
+ * nearly took the opening of the game with it. A canon mapping must never sit inside a block a
+ * tuning editor rewrites. Same answer as `ELEMENT_HERBS` living outside `CROP_DEFS`.
+ *
+ * ★ KEYED BY ELEMENT, not by potion id, so `Record<Exclude<Element, 'base'>, …>` cannot compile
+ * with one missing. A missing element is the failure that matters and it is silent: nothing grants
+ * that element, `dominantInfusion()` never returns it, and the ten second forms behind it are
+ * unreachable while the other three work perfectly. A keeper reads that as *"Earth spirits just
+ * don't seem to evolve."*
+ *
+ * ⚠ ALL FOUR ARE PEERS ON PURPOSE — same level, mana, XP, yield and recipe shape, exactly like the
+ * herbs that feed them. A cheaper infusion would be a cheaper ELEMENT, and the element decides
+ * which of four ruled second forms a spirit becomes. Pricing them differently is a tuning dial
+ * reaching through into forty canon forms.
+ *
+ * ⚠ POTENCY IS NOT BUILT. Canon rules ingredient quality → potency → evolution speed; there is no
+ * ingredient-quality axis in the build yet, so these ship as one grade each. That is scope, not a
+ * contradiction — the quality tier is additive when it comes.
+ */
+export const INFUSION_BREWS: Record<Exclude<Element, 'base'>, string> = {
+  mana:  'mana_infusion',
+  storm: 'storm_infusion',
+  earth: 'earth_infusion',
+  water: 'water_infusion',
+}
+
+/**
+ * The element an infusion brew grants, or null for an ordinary potion.
+ *
+ * ⚠ Asked of `INFUSION_BREWS`, never of the id's spelling. `ather_infusion` is a tier-4 player buff
+ * that has nothing to do with the elemental spine, and any rule that reads "…_infusion" would sweep
+ * it in and hand spirits an element canon never ruled.
+ */
+export function elementForInfusion(potionId: string): Exclude<Element, 'base'> | null {
+  for (const [el, id] of Object.entries(INFUSION_BREWS) as [Exclude<Element, 'base'>, string][]) {
+    if (id === potionId) return el
+  }
+  return null
+}
 
 /** Check if player can brew a potion (has materials, level, mana) */
 export function canBrew(potionId: string, inv: Inventory, alchemyLevel: number, mana?: ManaPool, bank: BankState | null = null): boolean {

@@ -6,15 +6,28 @@ import {
   STARLIGHT_XP, DAWN_XP, DEEPSIGHT_FIND, DAWN_FIND, KINDRED_MULT, FLEETFOOT_SPEED, DAWN_SPEED, ATHER_REGEN,
   type ActiveBuffs,
 } from './potion-effects'
-import { POTION_DEFS } from './alchemy'
+import { POTION_DEFS, elementForInfusion, INFUSION_BREWS } from './alchemy'
 
 let ok = 0, bad = 0
 const chk = (n: string, c: boolean, x = '') => { c ? ok++ : (bad++, console.error('  FAIL:', n, x)) }
 const close = (a: number, b: number) => Math.abs(a - b) < 1e-9
 
-// every potion in POTION_DEFS has a drink effect — no more inert bottles
+// ── every bottle in POTION_DEFS has a REASON TO EXIST — no more inert brews ─────────────────────
+// This assert is why 9 of the 13 potions stopped being brew-for-XP dead ends. It is WIDENED here,
+// not weakened: a bottle qualifies by having a drink effect OR by being one of the four elemental
+// infusions, which are not drunk at all — canon puts them on a SPIRIT. An ordinary potion with no
+// effect still fails exactly as it did before.
+//
+// ⚠ THE EXEMPTION IS EARNED BY `elementForInfusion`, NEVER BY THE ID'S SPELLING. Anything looser
+// would let a future `foo_infusion` excuse itself from having any effect at all, which is precisely
+// the hole this loop was written to close.
+//
+// ⚠ AND IT IS HONEST ABOUT BEING INCOMPLETE: applying an infusion (`addInfusion`, still zero
+// callers) is #262 slice 3. Until that lands the four brews genuinely do nothing — which their
+// effect line says out loud on the hotbar rather than implying a drink that goes nowhere.
 for (const id of Object.keys(POTION_DEFS)) {
-  const covered = id in POTION_BUFFS || id in MANA_POTIONS || id in HEAL_POTIONS || id === 'harvest_brew'
+  const drinkable = id in POTION_BUFFS || id in MANA_POTIONS || id in HEAL_POTIONS || id === 'harvest_brew'
+  const covered = drinkable || elementForInfusion(id) !== null
   chk(`${id} does something when drunk`, covered)
   chk(`${id} has a menu effect line`, potionEffectLine(id) !== null)
 }
@@ -70,6 +83,16 @@ const pruned = pruneBuffs(b2, now + BUFF_DEFS.dawn.durationMs + 1)
 chk('prune drops everything expired', Object.keys(pruned).length === 0)
 const half = pruneBuffs(b2, now + BUFF_DEFS.fleetfoot.durationMs + 1)
 chk('prune keeps the still-live', Object.keys(half).length > 0 && !('fleetfoot' in half))
+
+// ── the four elemental infusions are a different verb ───────────────────────────────────────────
+// ★ PINNED FROM BOTH SIDES. Permitting the exemption above without asserting what it covers would
+// let the four quietly become drinkable buffs later with nothing to notice.
+for (const [el, id] of Object.entries(INFUSION_BREWS)) {
+  chk(`${id} is not a drinkable buff`, !(id in POTION_BUFFS), 'an infusion belongs on a spirit')
+  chk(`${id} is not a mana potion`, !(id in MANA_POTIONS))
+  chk(`${id} is not a heal potion`, !(id in HEAL_POTIONS))
+  chk(`${id} reports its element`, elementForInfusion(id) === el)
+}
 
 console.log(`\npotion-effects: ${ok} ok, ${bad} failed`)
 if (bad > 0) process.exit(1)
