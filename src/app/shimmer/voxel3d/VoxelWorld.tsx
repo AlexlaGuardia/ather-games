@@ -30,7 +30,7 @@ import { holdGenPiecesForCol, type GenPiece } from '../voxel/holds'
 import { biomeAt, forestness } from '../voxel/biome'
 import { ZONE_ANCHORS, zoneAt } from '../voxel/zones'
 import { AIR } from '../voxel/section'
-import { materialAt, MAT, isPlant, isHalfMat, isTopSlab, baseOf, TOP_BIT, DEFAULT_DEPTH } from '../voxel/depth'
+import { materialAt, MAT, isPlant, isHerb, isHalfMat, isTopSlab, baseOf, TOP_BIT, DEFAULT_DEPTH } from '../voxel/depth'
 import { FLORA, plantVariant } from '../voxel/flora'
 import { raycast, tickBreak, dropsFor, setBreakRate, getBreakRate, type BreakState } from '../voxel/mine'
 import { spawnDrop, tossDrop, tickDrops, type Drop } from '../voxel/drops'
@@ -3076,6 +3076,12 @@ function ToolGlyph({ family }: { family: 'forestry' | 'prospecting' | 'rinning' 
 const SOLID_EXCEPT = new Set<number>([
   AIR, MAT.WATER, MAT.TUFT, MAT.TALL_GRASS, MAT.FLOWER,
   MAT.SAPLING_GOLDWOOD, MAT.SAPLING_SHIMMEROAK, MAT.SAPLING_STARWILLOW, MAT.SAPLING_DAWNWOOD,
+  // ⚠ THE HERBS JOIN GROUND COVER HERE (2026-08-18), and forgetting this line is a specific bug
+  // rather than a rough edge: a plant you can see through but walk into is the invisible-wall
+  // failure, and on a SHORE — where Tidepetal grows — it would be a chest-high fence along the
+  // waterline. This Set is a membership test, not a range, so `isPlant` gaining a second span does
+  // not reach it; the four ids have to be written out.
+  MAT.VIOLETBLOOM, MAT.STORMGRASS, MAT.ROOTVINE, MAT.TIDEPETAL,
 ])
 // A slab is SOLID — it just occupies half the cell. Collision asks `solidProbe`, which reports
 // CELL_HALF for it; everything else (light, fence arms, piece placement) wants "yes, solid".
@@ -5854,8 +5860,14 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
         // would have been — otherwise 19% of the garden's ground cover hovers half a voxel up.
         // Fractional by design: the spot's y is only ever used to place a root.
         const gy = isHalfCell(c, fx - fcx * SECTION, y, fz - fcz * SECTION) ? y - 0.5 : y
-        const kind = m === MAT.TUFT ? FLORA.TUFT : m === MAT.TALL_GRASS ? FLORA.TALL : FLORA.FLOWER
-        return { y: gy, kind, variant: plantVariant(fx, fz, SEED, kind) }
+        // ⚠ ASKS `isHerb` BEFORE FALLING THROUGH TO FLOWER. The old chain ended in an unguarded
+        // `: FLORA.FLOWER`, so every material that was not a tuft or tall grass rendered as a
+        // wildflower — which is exactly how four new plants would have shipped as pink blooms with
+        // nothing in the code looking wrong. Same family as the tex switch defaulting to the ore
+        // painter, one layer up.
+        const kind = m === MAT.TUFT ? FLORA.TUFT : m === MAT.TALL_GRASS ? FLORA.TALL
+          : isHerb(m) ? FLORA.HERB : FLORA.FLOWER
+        return { y: gy, kind, variant: plantVariant(fx, fz, SEED, kind), mat: m }
       })
     }
 

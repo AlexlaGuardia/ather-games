@@ -90,6 +90,34 @@ try {
   ok(/in these lands/.test(opened),
     'the panel says "in these lands" about what this world cannot grow, rather than showing a red zero')
 
+  // ── 2b. ★★ THE INFUSIONS ARE NO LONGER STRANDED (canon ruling, 2026-08-18) ──────────────────
+  // The herbs went into the generator and NOT ONE LINE of the panel changed — the warning is derived
+  // from what the world produces, so it retired itself. This asserts that end to end, in the page: no
+  // infusion row may say "in these lands" any more, while the rows that ARE still stranded (the salve
+  // needs shimmerscale and sunfruit, both play3d's) must still say it. If the derivation ever breaks,
+  // one of these two goes red and says which direction it broke in.
+  ok(/in these lands/.test(opened) && /shimmerscale|sunfruit/.test(opened),
+    'the still-stranded salve names its missing ingredients')
+  const infusionStranded = await page.evaluate(() => {
+    const rows = Array.from(document.querySelectorAll('[data-panel="brew"] button'))
+      .map(b => b.textContent ?? '')
+      .filter(t => /Infusion/.test(t) && !/Ather/.test(t))
+    return rows.filter(t => /in these lands/.test(t)).length
+  })
+  ok(infusionStranded === 0,
+    `★ no element Infusion reports a missing ingredient any more (${infusionStranded} do) — the herbs `
+    + 'are in the Wilds and the road to an evolved spirit is open at the front door')
+
+  // ── 2c. the herbs are real items this world knows ──────────────────────────────────────────
+  await page.keyboard.press('Escape'); await sleep(400)
+  await cmd('/give violetbloom_petal 2')
+  await sleep(300)
+  const gave = await page.evaluate(() => document.body.innerText)
+  ok(!/no such item/.test(gave.slice(-400)),
+    'violetbloom petal is an item this world recognises — it drops from a block now')
+  await cmd('/brew')
+  await sleep(600)
+
   // ── 3. a brew you cannot afford refuses, and SAYS WHY ───────────────────────────────────────
   ok(await pressRow('Mana Draught'), 'the Mana Draught row is pressable')
   await sleep(500)

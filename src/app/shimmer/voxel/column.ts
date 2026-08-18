@@ -39,6 +39,7 @@ import { plantTrees, type TreeConfig, DEFAULT_TREES } from './trees'
 import { placeSites } from './sites'
 import { slumpMask } from './slump'
 import { plantMaterialAt } from './flora'
+import { biomeAt, DEFAULT_BIOME } from './biome'
 import { greedyMesh, createMeshScratch, halfKey, type MeshScratch, type MeshResult, type HalfCells } from './greedy'
 
 export const SECTION = 16
@@ -213,8 +214,28 @@ export function generatedAt(
   // test almost everywhere.
   const b = bubbleMaterialAt(x, y, z, seed, h, bubbleCfg)
   if (b !== null) return b
-  if (y === h + 1) {
-    const p = plantMaterialAt(x, z, seed)
+  // ⚠ NOTHING GROWS UNDER WATER, AND THIS GATE WAS MISSING ENTIRELY (found 2026-08-18 by walking to
+  // a herb patch and arriving neck-deep in a lake). The plant branch below OVERWRITES whatever
+  // `materialAt` would have put at h+1 — including WATER — so every submerged column in the world
+  // has been quietly growing tufts and flowers on its bed. They rendered as nothing (the renderer's
+  // probe demands topsoil with air above) which is exactly why nobody saw it: invisible voxels, real
+  // in the save, breakable by a swimmer.
+  //
+  // ★ IT BECAME LOAD-BEARING WITH THE HERBS. Canon puts Violetbloom on the BASIN, and this build's
+  // `basin` is `h <= seaLevel` — 82% of it is lake bed. Without this line the flagship Mana herb
+  // grows underwater, which contradicts the ruling's own reason for putting it there (*"low,
+  // sheltered, **the air standing**"*). With it, a basin's Violetbloom grows on the dry rim at the
+  // waterline: the sheltered margin of a pool, which is the sentence canon actually wrote.
+  const dry = h >= depthCfg.seaLevel
+  if (y === h + 1 && dry) {
+    // ★ THE GROUND IS RESOLVED HERE BECAUSE THIS IS WHERE `h` LIVES (2026-08-18, the herbs).
+    // `biomeAt` needs the column's height and the sea level, and `flora.ts` has neither — it is a
+    // pure selection field over (x, z). So the generator, which holds both, answers "what ground is
+    // this" once per COLUMN (this branch runs on exactly one voxel of the 65,536 in a column) and
+    // hands it down. ⚠ That per-column-ness is load-bearing: `biomeAt` reads rivers, zones, grey and
+    // continentalness, and calling it per voxel would put five noise fields on the world's hot path
+    // — the same shape as the shell-radius bug that made a slow generator look like a broken game.
+    const p = plantMaterialAt(x, z, seed, biomeAt(x, z, seed, h, depthCfg.seaLevel, DEFAULT_BIOME, heightCfg))
     if (p !== AIR) return p
   }
   return materialAt(x, y, z, seed, h, depthCfg, heightCfg)

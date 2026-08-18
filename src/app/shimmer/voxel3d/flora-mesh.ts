@@ -1,9 +1,10 @@
 // Ground-cover renderer — flora.ts's selection field, standing up in the world.
 //
 // ★ ONE InstancedMesh PER KIND, NON-NEGOTIABLE (piece-mesh's rule, same reasoning): a meadow is
-// tens of thousands of tufts, and anything per-tuft is the WebGL-context-loss bug. Four draws
-// total: tufts, tall grass, flower stems, flower heads (heads split out so instanceColor can tint
-// the bloom without turning the stem pink).
+// tens of thousands of tufts, and anything per-tuft is the WebGL-context-loss bug. Six draws total:
+// tufts, tall grass, flower stems, flower heads (heads split out so instanceColor can tint the bloom
+// without turning the stem pink), and — since 2026-08-18 — herb bodies and herb tips, which is how
+// canon's four element herbs cost two draws between them instead of eight.
 //
 // ★ THE RENDERER OWNS SURFACE TRUTH. flora.ts says what WOULD grow; the probe (VoxelWorld's live
 // voxel read) says whether the actual ground is still topsoil with air above — so player-dug holes
@@ -18,15 +19,40 @@
 import * as THREE from 'three'
 import { bladePixels, headPixels, HEAD_TINTS, TUFT_SEED, TUFT_BLADES, TALL_SEED, TALL_BLADES } from './tex/flora-tex'
 import { FLORA } from '../voxel/flora'
+import { MATERIAL_COLOR } from './attrs'
+import { MAT } from '../voxel/depth'
 
 const SECTION = 16
 
 /** Instance caps — generous against radius-12 meadow country; sync stops quietly at the cap. */
-const CAP = { tuft: 24000, tall: 6000, flower: 9000 } as const
+const CAP = { tuft: 24000, tall: 6000, flower: 9000, herb: 4000 } as const
+
+/**
+ * ── ★ THE FOUR ELEMENT HERBS, AS ONE SHAPE IN FOUR COLOURS (2026-08-18) ────────────────────────
+ * A taller cross card with a tinted TIP riding above it — body colour and tip colour per species,
+ * both instance-tinted, so four canon plants cost two draws instead of eight.
+ *
+ * ★ THE TIP IS NOT DECORATION FOR ONE OF THEM: canon calls Stormgrass *"blue-tipped blades"*, so
+ * blade-plus-tip is that plant drawn literally, and it carries the other three honestly enough at
+ * this size (a bloom, a bead, a coil's crown are all "something at the top of a stalk").
+ *
+ * ⚠ ALL FOUR SHARE A SILHOUETTE, AND THAT IS THE PLACEHOLDER. Colour is doing all the work of
+ * telling them apart, which is exactly what the vessels brief warns against for a shelf of bottles.
+ * They stand on four different grounds so a player never sees two side by side — that is what makes
+ * this survivable, not good. **Distinct silhouettes are Alex's call** (art), and the canon text is
+ * already specific enough to draw from: a bloom that hums, blue-tipped blades, a deep-anchored coil,
+ * a petal beaded with moisture.
+ */
+const HERB_TIP: Readonly<Record<number, number>> = {
+  [MAT.VIOLETBLOOM]: 0xd9b0ff,   // the hum, made visible — the one that glows a little
+  [MAT.STORMGRASS]: 0x9fe4ff,    // canon's blue tip, verbatim
+  [MAT.ROOTVINE]: 0x7f8f4a,      // a pale crown over dark root-green; the plant is the STEM here
+  [MAT.TIDEPETAL]: 0xeafffb,     // beaded — near white, wet
+}
 
 /** Placeholder palette, tiles.ts's register: greens off TOPSOIL, heads in mana-adjacent pastels. */
 
-interface Spot { x: number; y: number; z: number; kind: number; variant: number }
+interface Spot { x: number; y: number; z: number; kind: number; variant: number; mat: number }
 
 /**
  * ── ★ THE VOXEL DECIDES WHETHER A PLANT IS THERE (2026-08-11) ──────────────────────────────────
@@ -40,7 +66,7 @@ interface Spot { x: number; y: number; z: number; kind: number; variant: number 
  * look never has to be stored and picking one plant cannot restyle its neighbour. `y` is
  * fractional on a slumped lip — it is a ground height, not a cell index.
  */
-export type PlantProbe = (x: number, z: number) => { y: number; kind: number; variant: number } | null
+export type PlantProbe = (x: number, z: number) => { y: number; kind: number; variant: number; mat: number } | null
 
 export interface FloraRenderer {
   group: THREE.Group
@@ -144,7 +170,13 @@ export function createFloraRenderer(): FloraRenderer {
   const tallGeo = buildCrossGeometry(0.7, 1.05)
   const stemGeo = buildCrossGeometry(0.5, 0.62)
   const headGeo = buildCrossGeometry(0.3, 0.3, 0.55)   // a small cross riding near the stem's top
+  // A herb stands taller than a wildflower and shorter than tall grass: it has to be findable from
+  // a few blocks away (it is the thing you came for) without hiding what is behind it.
+  const herbGeo = buildCrossGeometry(0.55, 0.8)
+  const tipGeo = buildCrossGeometry(0.34, 0.34, 0.72)
 
+  const herbMat = swayMaterial(bladeTex, 0.07)
+  const tipMat = swayMaterial(headTex, 0.07)
   const tuftMat = swayMaterial(bladeTex, 0.05)
   const tallMat = swayMaterial(tallTex, 0.1)
   const stemMat = swayMaterial(bladeTex, 0.08)
@@ -155,7 +187,13 @@ export function createFloraRenderer(): FloraRenderer {
   const stems = new THREE.InstancedMesh(stemGeo, stemMat, CAP.flower)
   const heads = new THREE.InstancedMesh(headGeo, headMat, CAP.flower)
   heads.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(CAP.flower * 3), 3)
-  for (const m of [tufts, talls, stems, heads]) {
+  const herbs = new THREE.InstancedMesh(herbGeo, herbMat, CAP.herb)
+  const tips = new THREE.InstancedMesh(tipGeo, tipMat, CAP.herb)
+  // BOTH halves are tinted, unlike the flower (whose stem stays green): a herb's body colour is
+  // most of what identifies it, and four species sharing one silhouette have nothing else to say.
+  herbs.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(CAP.herb * 3), 3)
+  tips.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(CAP.herb * 3), 3)
+  for (const m of [tufts, talls, stems, heads, herbs, tips]) {
     m.count = 0
     m.frustumCulled = false     // instances span the whole load radius; the default bounds lie
     m.receiveShadow = false
@@ -163,7 +201,7 @@ export function createFloraRenderer(): FloraRenderer {
   }
 
   const group = new THREE.Group()
-  group.add(tufts, talls, stems, heads)
+  group.add(tufts, talls, stems, heads, herbs, tips)
 
   const cache = new Map<string, Spot[]>()
   const mtx = new THREE.Matrix4()
@@ -181,7 +219,7 @@ export function createFloraRenderer(): FloraRenderer {
       const x = x0 + dx, z = z0 + dz
       const p = probe(x, z)
       if (!p) continue
-      out.push({ x, y: p.y, z, kind: p.kind, variant: p.variant })
+      out.push({ x, y: p.y, z, kind: p.kind, variant: p.variant, mat: p.mat })
     }
     cache.set(k, out)
     return out
@@ -190,7 +228,7 @@ export function createFloraRenderer(): FloraRenderer {
   return {
     group,
     sync(cols, seed, probe) {
-      let nT = 0, nL = 0, nF = 0
+      let nT = 0, nL = 0, nF = 0, nH = 0
       for (const c of cols) {
         for (const s of spotsFor(c.key, c.x0, c.z0, seed, probe)) {
           // Deterministic per-spot jitter off the variant roll: offset within the cell, a turn,
@@ -205,6 +243,17 @@ export function createFloraRenderer(): FloraRenderer {
           mtx.compose(off, quat, scl)
           if (s.kind === FLORA.TUFT) { if (nT < CAP.tuft) tufts.setMatrixAt(nT++, mtx) }
           else if (s.kind === FLORA.TALL) { if (nL < CAP.tall) talls.setMatrixAt(nL++, mtx) }
+          else if (s.kind === FLORA.HERB) {
+            if (nH < CAP.herb) {
+              herbs.setMatrixAt(nH, mtx)
+              tips.setMatrixAt(nH, mtx)
+              // Tinted from the SAME table the block and its item icon read (`MATERIAL_COLOR`), so a
+              // Violetbloom in the ground, in the bag and on the block are one colour by construction.
+              herbs.setColorAt(nH, tint.set(MATERIAL_COLOR[s.mat] ?? 0x6f8f4a))
+              tips.setColorAt(nH, tint.set(HERB_TIP[s.mat] ?? 0xffffff))
+              nH++
+            }
+          }
           else if (nF < CAP.flower) {
             stems.setMatrixAt(nF, mtx)
             heads.setMatrixAt(nF, mtx)
@@ -214,11 +263,16 @@ export function createFloraRenderer(): FloraRenderer {
         }
       }
       tufts.count = nT; talls.count = nL; stems.count = nF; heads.count = nF
+      herbs.count = nH; tips.count = nH
       tufts.instanceMatrix.needsUpdate = true
       talls.instanceMatrix.needsUpdate = true
       stems.instanceMatrix.needsUpdate = true
       heads.instanceMatrix.needsUpdate = true
+      herbs.instanceMatrix.needsUpdate = true
+      tips.instanceMatrix.needsUpdate = true
       if (heads.instanceColor) heads.instanceColor.needsUpdate = true
+      if (herbs.instanceColor) herbs.instanceColor.needsUpdate = true
+      if (tips.instanceColor) tips.instanceColor.needsUpdate = true
       // Evicted columns fall out of `cols`, so their spots simply stop being written; drop their
       // cache too or a long walk grows it forever.
       if (cache.size > cols.length * 2 + 64) {
@@ -231,7 +285,9 @@ export function createFloraRenderer(): FloraRenderer {
     tick(elapsed) { uTime.value = elapsed },
     dispose() {
       tuftGeo.dispose(); tallGeo.dispose(); stemGeo.dispose(); headGeo.dispose()
+      herbGeo.dispose(); tipGeo.dispose()
       tuftMat.dispose(); tallMat.dispose(); stemMat.dispose(); headMat.dispose()
+      herbMat.dispose(); tipMat.dispose()
       bladeTex.dispose(); tallTex.dispose(); headTex.dispose()
     },
   }

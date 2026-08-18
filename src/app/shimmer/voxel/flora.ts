@@ -20,7 +20,7 @@
 // invent named species here.
 
 import { value2 } from './noise'
-import { greyness } from './biome'
+import { greyness, type BiomeId } from './biome'
 import { zoneAt } from './zones'
 import { mistAt } from './mist'
 import { MAT } from './depth'
@@ -30,6 +30,7 @@ export const FLORA = {
   TUFT: 1,     // a short grass tuft — the universal filler
   TALL: 2,     // knee-high grass — occasional, breaks the tuft rhythm
   FLOWER: 3,   // a wildflower — only inside drifts; variant colours the head
+  HERB: 4,     // one of canon's four element herbs — only on its own ruled ground
 } as const
 
 export interface FloraSpot {
@@ -60,6 +61,117 @@ const hash01 = (x: number, z: number, seed: number): number => {
   let h = Math.imul(x | 0, 374761393) ^ Math.imul(z | 0, 668265263) ^ Math.imul(seed | 0, 1274126177)
   h = Math.imul(h ^ (h >>> 13), 2246822519)
   return ((h ^ (h >>> 16)) >>> 0) / 4294967296
+}
+
+// ── ★★ THE FOUR ELEMENT HERBS — CANON'S GROUND, TRANSCRIBED (ruled 2026-08-18, /magii) ──────────
+// `game/shimmer-geography.md` › *★ WHERE THE FOUR ELEMENT HERBS GROW* — and the ruling's own
+// heading is the warning label: **read the ground, not the element.** The obvious table (Earth herb
+// → crag, because rock) is the one canon explicitly refuses, and it names Rootvine as the test case:
+// *"the lookup would have put the Earth herb on rock. Rock has no depth."*
+//
+//   Violetbloom (Mana)  → basin     — it HUMS, and a sound needs stillness; mana pools deepest in
+//                                     the ground everything drains into and nothing leaves.
+//   Stormgrass  (Storm) → highland  — it crackles IN STILL AIR, so the charge is its own; it wants
+//                                     unbroken sky, not weather. Not the crag: bare rock grows no grass.
+//   Rootvine    (Earth) → woodland  — *anchors deep*; the deepest ground here is old forest floor,
+//                                     where the Network's roots break surface.
+//   Tidepetal   (Water) → shore     — *beaded with moisture* is water taken from the AIR. A river
+//                                     scours and would strip it; a shore is wetted and never scoured.
+//
+// ⚠ THE OTHER FOUR GROUNDS CARRY NONE, AND THAT IS THE DESIGN, not an omission: river scours, crag
+// is the prospector's business, meadow is what a farm is made of, and **a greyfield grows nothing at
+// all — canon, not a dial** (*"No forage of any kind in a greyfield, ever, before the freeing"*).
+// Half the country carrying none is what makes a herb a reason to travel.
+//
+// ★ IT IS AN ALLOWLIST KEYED ON THE BIOME ID, which gets the greyfield refusal for free — and it
+// also means a RULED ZONE (Spirit Meadows, the Springs, Gloview) grows none of them, because
+// `biomeAt` answers with the zone's id there and no zone is in this table. **That is my call, not
+// canon's** (canon ruled the eight generic grounds and said nothing about tended zones), and it is
+// the fail-closed direction: the herbs are a thing you find in wild country, and a zone that should
+// grow one can be added the day canon says so. The reverse — a denylist admitting every id it does
+// not recognise — is how the greyfield would quietly start growing herbs.
+export const HERB_GROUND: Readonly<Record<string, BiomeId>> = {
+  [MAT.VIOLETBLOOM]: 'basin',
+  [MAT.STORMGRASS]: 'highland',
+  [MAT.ROOTVINE]: 'woodland',
+  [MAT.TIDEPETAL]: 'shore',
+}
+/** The herb that grows on a ground, or 0. The one lookup — everything asks this. */
+export const HERB_OF_GROUND: Readonly<Record<string, number>> = {
+  basin: MAT.VIOLETBLOOM,
+  highland: MAT.STORMGRASS,
+  woodland: MAT.ROOTVINE,
+  shore: MAT.TIDEPETAL,
+}
+
+// ★ HERBS GROW IN PATCHES, for the same reason flowers grow in drifts — and RARER, because canon
+// made them *"a reason to travel"*. Their own field at its own scale, so a herb patch is a place you
+// find rather than a speckle you walk past: a wider field than the flower drift (140 vs 90) that
+// opens less often (0.80 vs 0.72). Inside one they are worth stopping for.
+//
+// ⚠ THE NUMBERS ARE MINE AND ARE UNPLAYTESTED — canon fixed the GROUND and left *"rarity, patch
+// density, yield per pick, respawn"* to me by name. One infusion costs 2 petals, so a patch must be
+// worth a walk; if it plays thin, this is the dial and nothing canon moves.
+export const HERB_SCALE = 140
+export const HERB_EDGE = 0.80
+export const HERB_DENSITY = 0.11
+
+/**
+ * ── ★★ PER-GROUND COMPENSATION — because the four grounds are NOT the same size ────────────────
+ * Measured on seed 1337 over a 1600×1600 sample around spawn, and this is the number that forced
+ * this table to exist: **woodland 13.6% of land · highland 2.0% · basin 0.9% · shore 0.6%.**
+ * At one flat density that made Rootvine **187× more common than Tidepetal** — an accident of
+ * terrain frequency, not a design, and it would have read to a player as "the Water Infusion is the
+ * rare one" when canon says nothing of the sort. All four are the same tier at the same cost.
+ *
+ * ★ SO THE DIAL COMPENSATES FOR THE GROUND, NEVER FOR THE HERB'S VALUE. A rarer ground opens its
+ * patches more often and packs them tighter, which is also the honest reading: a plant that only
+ * lives on a thin coastal ribbon grows in the good spots of that ribbon *densely*, because that is
+ * all the ground it has. `shore` needs the most help twice over — it is the smallest share AND it is
+ * a ribbon, so a wide patch field mostly falls in the sea or inland.
+ *
+ * ⚠ THESE ARE MINE AND THEY ARE TUNING, NOT CANON. Canon fixed the ground and handed me *"rarity,
+ * patch density, yield per pick, respawn"* by name. Re-measure before changing them — the whole
+ * point is the RATIO between the four, and a change to terrain generation moves it without touching
+ * this file. `herbs.test.ts` § 11 holds the ratio, not the numbers.
+ *
+ * ⚠ MEASURED THROUGH `generatedAt`, NEVER THROUGH THE FIELD — the waterline gate sits between them
+ * and it eats 82% of the basin. Tuning against `herbAt` alone balanced Violetbloom against plants
+ * standing on a lake bed that no player will ever pick. Latest sweep (seed 1337, 1600×1600, step 4,
+ * through the generator): violetbloom 70 · stormgrass 108 · rootvine 109 · tidepetal 117 — 1.7×.
+ */
+export const HERB_TUNE: Readonly<Record<string, { edge: number; density: number }>> = {
+  woodland: { edge: 0.85, density: 0.075 },   // the common ground — pulled DOWN toward the others
+  highland: { edge: 0.74, density: 0.19 },
+  basin: { edge: 0.38, density: 0.80 },
+  shore: { edge: 0.52, density: 0.52 },
+}
+
+/**
+ * The element herb standing at (x, z) on `ground`, or 0.
+ *
+ * ★ ITS OWN FIELD, NOT A FIFTH BRANCH OF `floraAt`. That function is the meadow's cover — one hash
+ * for most columns, tuned against grass — and a herb is a different kind of thing: it is selected by
+ * GROUND, which `floraAt` cannot see (it deliberately reads no materials and takes no height). Kept
+ * apart, each stays testable on its own terms and the grass field's hot path is untouched.
+ *
+ * ⚠ A HERB OUTRANKS GRASS ON ITS OWN CELL (see `plantMaterialAt`) — otherwise a herb patch in
+ * meadow-grade country would be mostly tufts wearing the patch's name.
+ */
+export function herbAt(x: number, z: number, seed: number, ground: BiomeId): number {
+  const herb = HERB_OF_GROUND[ground]
+  if (!herb) return 0
+  // Same order as `floraAt`: cheap roll first, field second. Most cells on a herb's own ground still
+  // fail here, which is what keeps this off the per-column budget.
+  const tune = HERB_TUNE[ground] ?? { edge: HERB_EDGE, density: HERB_DENSITY }
+  const roll = hash01(x, z, seed ^ 0x4e2b)
+  if (roll > tune.density) return 0
+  // Drained ground grows none — belt and braces beside the biome allowlist, which already refuses a
+  // greyfield. The fringe greys before the label flips, and canon's "no forage of any kind" should
+  // start where the ground starts failing, not where the name changes.
+  if (greyness(x, z, seed) >= 0.35) return 0
+  const patch = value2(x / HERB_SCALE, z / HERB_SCALE, seed ^ 0x8be31)
+  return patch > tune.edge ? herb : 0
 }
 
 /**
@@ -137,7 +249,19 @@ export function floraAt(x: number, z: number, seed: number): FloraSpot | null {
  * reverse would close a cycle). That is why the write lives in the assembly layer, not the depth
  * rule, even though "what material is at this cell" is otherwise depth's job.
  */
-export function plantMaterialAt(x: number, z: number, seed: number): number {
+export function plantMaterialAt(x: number, z: number, seed: number, ground?: BiomeId): number {
+  // ★ THE HERB IS ASKED FIRST, and that is the whole of its priority rule. Its ground is ordinary
+  // living country (a basin is grass), so under the grass field a patch would come up mostly tufts
+  // with a herb here and there — the patch would exist in the field and not on the ground.
+  //
+  // ⚠ `ground` IS OPTIONAL AND ITS ABSENCE MEANS "NO HERBS", not "unknown, guess". The only caller
+  // that can answer it is the generator (it holds the column's height, which `biomeAt` needs); the
+  // pot, the tests and any future field reader get grass exactly as before. A default of "assume
+  // meadow" would have been the same trap as a denylist — quietly right until it is quietly wrong.
+  if (ground) {
+    const herb = herbAt(x, z, seed, ground)
+    if (herb) return herb
+  }
   const f = floraAt(x, z, seed)
   if (!f) return 0
   return f.kind === FLORA.TUFT ? MAT.TUFT : f.kind === FLORA.TALL ? MAT.TALL_GRASS : MAT.FLOWER
@@ -154,6 +278,7 @@ export function plantMaterialAt(x: number, z: number, seed: number): number {
  * re-running the selection.
  */
 export function plantVariant(x: number, z: number, seed: number, kind: number): number {
-  const salt = kind === FLORA.FLOWER ? 0x77e : kind === FLORA.TUFT ? 0x3b1 : 0x9c5
+  const salt = kind === FLORA.HERB ? 0x4e2b
+    : kind === FLORA.FLOWER ? 0x77e : kind === FLORA.TUFT ? 0x3b1 : 0x9c5
   return hash01(x, z, seed ^ salt)
 }

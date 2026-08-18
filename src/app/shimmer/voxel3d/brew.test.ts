@@ -5,9 +5,14 @@
 // not "does the arithmetic work" but "does the panel tell the truth about a world that is missing
 // two whole gathering systems". Every assert below is one sentence a keeper reads.
 //
-// The one that matters most is section 4: canon's four flagship Infusions are visible at alchemy 7,
-// need a farm crop, and this world has no farm. If that row ever prints a red `0/2` instead of
-// saying so, every keeper who reaches level 10 goes looking for a herb that is not here.
+// ★ SECTION 4 WAS REWRITTEN THE SAME DAY IT WAS WRITTEN (2026-08-18) — AND IT IS A LOCATION THAT
+// EXPIRED, NOT AN ASSERTION THAT WAS WRONG. It used to assert that all four flagship Infusions
+// report `absent`, because their element herbs were farm crops and this world had no farm. Canon
+// then ruled the herbs grow WILD and named the ground for each (`game/shimmer-geography.md`), they
+// went into the generator, and the four rows went live **without a line of the panel changing** —
+// which was the entire point of deriving the warning instead of hand-keeping it. The section now
+// asserts the road is OPEN, and the `absent` machinery is still held by the brews that remain
+// genuinely unreachable here. Do not read the diff as the rule being relaxed.
 
 import { brewBlocker, absentInputs, cauldronMenu, isInfusionBrew, ALL_BREWS } from './brew'
 import { POTION_DEFS, INFUSION_BREWS } from '../engine/alchemy'
@@ -82,45 +87,61 @@ const full = () => 0
     'short on BOTH mana and ingredients reports the ingredients — the thing you must go do')
   ok(brewBlocker(draught, 1, 0, rich, inWorld, full) === 'room',
     'and a full bag outranks empty mana for the same reason')
-  const infusion = POTION_DEFS.mana_infusion
-  ok(brewBlocker(infusion, 99, 99, rich, inWorld, roomy) === 'absent',
+  // ⚠ THESE THREE USED TO BE ASKED OF `mana_infusion`, WHOSE HERB THIS WORLD DID NOT GROW. Canon
+  // ruled the herbs wild on 2026-08-18 and that row went live, so the question moved to a brew that
+  // is still stranded — `shimmer_salve` (shimmerscale + sunfruit, both play3d's). The RULE being
+  // asserted has not changed by a word; only the row that can still demonstrate it has.
+  const stranded = POTION_DEFS.shimmer_salve   // tier 1, alchemy 3, and unreachable here
+  ok(brewBlocker(stranded, 99, 99, rich, inWorld, roomy) === 'absent',
     'an absent ingredient outranks everything a keeper could fix — a maxed keeper with a full bag '
     + 'and full mana still cannot brew what this world does not contain')
-  // ★★ THE ONE THE PAGE HARNESS CAUGHT. Infusions are visible at alchemy 7 and gated at 10, so a
-  // level-first order told a keeper at 7 *"alchemy 10 — you are 7"* — a promise that is still false
-  // at 10, and five hundred XP of grinding toward nothing. A refusal that survives being fixed must
-  // be said first.
-  ok(brewBlocker(infusion, 7, 99, rich, inWorld, roomy) === 'absent',
-    '★ and it outranks LEVEL too: a keeper at 7 is told the herb is not here, not to come back at 10')
-  ok(brewBlocker(POTION_DEFS.shimmer_salve, 1, 99, rich, inWorld, roomy) === 'absent',
-    'same for the tier-1 salve at alchemy 1 — absence is reported at every level, not just past the gate')
+  // ★★ THE ONE THE PAGE HARNESS CAUGHT, and the reason it mattered: a level-first order told a
+  // keeper *"alchemy 10 — you are 7"* about an Infusion whose herb did not exist, which is a promise
+  // still false at 10 — five hundred XP of grinding toward nothing. A refusal that survives being
+  // fixed must be said first. That case is now fixed at the world level; the ORDER still is not
+  // allowed to regress, which is what this asserts.
+  ok(brewBlocker(stranded, 1, 99, rich, inWorld, roomy) === 'absent',
+    '★ and it outranks LEVEL too: an under-level keeper is told the ingredient is not here, rather '
+    + 'than being sent to grind toward a row that will still be dead when they arrive')
 }
 
-// ── 4. ★★ THE FLAGSHIP ROW TELLS THE TRUTH ABOUT THIS WORLD ────────────────────────────────────
+// ── 4. ★★ THE FLAGSHIP ROAD IS OPEN — canon ruled the herbs wild, and nothing had to be rewired ─
 // Canon (`game/alchemy.md`, RULED 2026-07-30) makes the four Infusions the spine of alchemy and the
-// only road to an evolved form. They are visible from alchemy 7 (the level+3 window) and every one
-// of them needs its element herb, which is a FARM CROP — and this world has no farming. The whole
-// value of `absent` is that this fact is stated rather than implied by a red zero.
+// only road to an evolved form; the 2026-08-18 ruling put their herbs in the Wilds on one ground
+// each. Every ingredient of all four is now obtainable in this world, so a keeper who reaches
+// alchemy 10 can actually brew one — which is the sentence #594 existed to make true.
 {
   const four = Object.values(INFUSION_BREWS).map(id => POTION_DEFS[id])
   ok(four.length === 4 && four.every(Boolean), 'all four canon Infusions are in the table')
   for (const def of four) {
-    const missing = absentInputs(def, inWorld)
-    ok(missing.length > 0, `${def.id}: names at least one ingredient this world cannot produce`)
-    ok(brewBlocker(def, 99, 99, rich, inWorld, roomy) === 'absent',
-      `${def.id}: refuses with 'absent', so the panel says "in these lands" and not "0/2"`)
+    ok(absentInputs(def, inWorld).length === 0,
+      `${def.id}: every ingredient is obtainable in this world — the road to an evolved spirit is open`)
+    ok(brewBlocker(def, 10, 99, rich, inWorld, roomy) === 'ok',
+      `${def.id}: a level-10 keeper with the ingredients and the mana can brew it`)
+    ok(brewBlocker(def, 9, 99, rich, inWorld, roomy) === 'level',
+      `${def.id}: and at 9 the refusal is LEVEL — a promise the world can now keep, which is exactly `
+      + 'what it could not do while the herb was missing')
   }
-  // ★ AND THE HERB IS THE ONE MISSING — the crystal and the sap are already here. That is what
-  // makes this ONE slice away rather than a system away, and it is the sentence the next session
-  // needs: bring the four element herbs into this world and all four rows go live untouched.
+  // ★ THE FOUR HERBS, BY NAME. This is the assert that would have caught the ruling being applied
+  // to three of them, or to the wrong item ids — the recipes name these four strings and nothing
+  // else in the chain checks that a block actually drops them.
   const herbs = ['violetbloom_petal', 'stormgrass_blade', 'rootvine_coil', 'tidepetal_bloom']
-  ok(herbs.every(h => !inWorld(h)), 'none of the four element herbs is obtainable here (no farming)')
+  ok(herbs.every(inWorld), 'all four element herbs are obtainable in the Wilds (ruled 2026-08-18)')
   ok(['violet_crystal', 'storm_crystal', 'earth_crystal', 'water_crystal', 'amber_sap'].every(inWorld),
-    'but every OTHER infusion ingredient already drops here — the crystals and the sap')
-  for (const def of four) {
-    ok(absentInputs(def, inWorld).every(id => herbs.includes(id)),
-      `${def.id}: the herb is the ONLY thing standing between this world and an evolved spirit`)
-  }
+    'and the crystals and the sap they brew with were already here')
+}
+
+// ── 4b. ★ THE `absent` MACHINERY IS STILL LOAD-BEARING — the herbs were not the only gap ────────
+// Fishing, the Exchange Booth and the crop roster are still play3d's, so most of canon's table names
+// something this world cannot produce. The refusal that saved the Infusions from a lying red `0/2`
+// is the same one still speaking for those rows.
+{
+  const stranded = ALL_BREWS.map(id => POTION_DEFS[id]).filter(d => absentInputs(d, inWorld).length > 0)
+  ok(stranded.length > 0, `brews still unreachable here (${stranded.length}) keep the refusal honest`)
+  const salve = POTION_DEFS.shimmer_salve
+  ok(brewBlocker(salve, 99, 99, rich, inWorld, roomy) === 'absent',
+    'the tier-1 salve still says "in these lands" — shimmerscale and sunfruit have no source here')
+  ok(absentInputs(salve, inWorld).length === 2, 'and it names both of them, not just the first')
 }
 
 // ── 5. ★ SOMETHING IS ACTUALLY BREWABLE — this is not a shelf with nothing on it ───────────────

@@ -287,6 +287,31 @@ export const BLOCKS: BlockDef[] = [
   { noSlab: true, material: MAT.TUFT, name: 'Grass Tuft', hardness: 0.05, skill: null, minTier: 0, drops: [{ itemId: 'grass_tuft', count: 1 }, { itemId: 'mana_seed', count: 1, chance: MANA_SEED_CHANCE }], fastSkill: 'farming', placeable: true },
   { noSlab: true, material: MAT.TALL_GRASS, name: 'Tall Grass', hardness: 0.05, skill: null, minTier: 0, drops: [{ itemId: 'tall_grass', count: 1 }, { itemId: 'mana_seed', count: 1, chance: MANA_SEED_CHANCE }], fastSkill: 'farming', placeable: true },
   { noSlab: true, material: MAT.FLOWER, name: 'Wildflower', hardness: 0.05, skill: null, minTier: 0, drops: [{ itemId: 'wild_flower', count: 1 }], fastSkill: 'farming', placeable: true },
+
+  // ── ★★ THE FOUR ELEMENT HERBS (2026-08-18) — canon's ground, picked by hand ──────────────────
+  // `game/alchemy.md` + `game/shimmer-geography.md`, ruled by /magii on the hub lane's gap. These
+  // four are the last link between this world and an evolved spirit: the cauldron brews, the
+  // crystals drop, the sap is tapped, and until today nothing here grew a herb.
+  //
+  // ★ SAME NUMBERS AS GRASS ON PURPOSE — `hardness: 0.05`, `skill: null`, `fastSkill: 'farming'`.
+  // A herb is picked, not harvested with a tool: canon's tiers grade an ingredient by WHERE it was
+  // got, never by what you got it with, so gating a wild plant behind a spade would invent an axis
+  // the ruling explicitly says not to build. The tier lives in the country you walked to.
+  //
+  // ⚠ `count: 1`, and it is the dial to reach for first. One Infusion costs 2 petals; a patch is
+  // meant to be worth the walk, so the generosity is supposed to live in patch DENSITY (`flora.ts`)
+  // rather than in a plant paying double. Unplayted either way — canon left rarity and yield to me
+  // by name.
+  //
+  // ⚠ `placeable: true` matches every other plant, so a keeper can carry a Rootvine home and set it
+  // in their own garden. It does NOT make the plot grow them (nothing generates in a fold) and it
+  // does not make a herb farmable — a placed plant is decoration that happens to be pickable again.
+  // Canon is safe here: tending *"persuades the Network to fruit"*, so a keeper planting one is the
+  // world's own story, not a contradiction of it.
+  { noSlab: true, material: MAT.VIOLETBLOOM, name: 'Violetbloom', hardness: 0.05, skill: null, minTier: 0, drops: [{ itemId: 'violetbloom_petal', count: 1 }], fastSkill: 'farming', placeable: true },
+  { noSlab: true, material: MAT.STORMGRASS, name: 'Stormgrass', hardness: 0.05, skill: null, minTier: 0, drops: [{ itemId: 'stormgrass_blade', count: 1 }], fastSkill: 'farming', placeable: true },
+  { noSlab: true, material: MAT.ROOTVINE, name: 'Rootvine', hardness: 0.05, skill: null, minTier: 0, drops: [{ itemId: 'rootvine_coil', count: 1 }], fastSkill: 'farming', placeable: true },
+  { noSlab: true, material: MAT.TIDEPETAL, name: 'Tidepetal', hardness: 0.05, skill: null, minTier: 0, drops: [{ itemId: 'tidepetal_bloom', count: 1 }], fastSkill: 'farming', placeable: true },
   // ── the pot: one block in three states, and only the empty one is a thing you carry ──────────
   { noSlab: true, material: MAT.POT, name: 'Clay Pot', hardness: 0.5, skill: null, minTier: 0, drops: [{ itemId: 'clay_pot', count: 1 }], placeable: true },
   // A planted or bloomed pot gives the POT back, never the seed: pulling a seed you already

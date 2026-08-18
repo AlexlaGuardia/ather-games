@@ -121,6 +121,17 @@ export const MATERIAL_COLOR: Record<number, number> = {
   // the one colour the substance law forbids (`design-briefs/shimmer-alchemy-vessels.md`), so the
   // brown is load-bearing — it is what tells a keeper this is Ather craft and not Mint metal.
   [MAT.CAULDRON]: 0x8a5236,
+  // ── ★ THE FOUR ELEMENT HERBS (2026-08-18) — canon's own descriptions, at 16px ────────────────
+  // Each colour is read off the herb's canon text rather than off its element's palette, because
+  // the ruling that placed them says the same thing about their ground: read the thing, not the
+  // lookup. Violetbloom HUMS (a violet that glows a little rather than a purple flower), Stormgrass
+  // is *blue-tipped blades* on ordinary turf, Rootvine ANCHORS DEEP (dark root-brown-green, not a
+  // leaf green), Tidepetal is *beaded with moisture* — pale, wet, almost white at the edge.
+  // ⚠ These are the STEM/BODY colours; the head tint the renderer draws is derived from them.
+  [MAT.VIOLETBLOOM]: 0x8f5fd8,
+  [MAT.STORMGRASS]: 0x5f8fbe,
+  [MAT.ROOTVINE]: 0x4a5f34,
+  [MAT.TIDEPETAL]: 0x9fd8d0,
   // ── ★ THE WAYMARK (2026-08-15) — mana bound to a place ───────────────────────────────────────
   // Pale dressed stone, but pulled toward the raw-mana blue (0x7fd4ff) rather than sitting in
   // stone's grey family — a waymark is *"mana bound to a place"*, and the binding is the point. It

@@ -109,7 +109,18 @@ import { Column, SECTION } from './column'
 // generated ground: every plot column's surface sits up to `roll` higher than v20 put it, and the
 // keel's underside no longer follows the turf. v20 shipped and was live for half an hour, so it
 // gets its own number rather than being folded into 19 → 20.
-export const GENERATOR_VERSION = 21
+// 21 → 22 (2026-08-18): THE FOUR ELEMENT HERBS GROW IN THE WILDS. Canon ruled where each one grows
+// (`game/shimmer-geography.md`) and the generator now writes a herb voxel one above the surface, on
+// its own ground, inside its own patch field — the cell that used to hold a tuft, a flower or air.
+// Terrain did not move; what stands ON it did, which is the same class as the v14→15 ground-cover
+// change and the v16→17 deck relabel. A player who mowed a patch of grass in a basin has an edit
+// sitting where a Violetbloom now generates.
+//
+// ⚠ THE REASONING THAT SKIPS THIS BUMP IS ALWAYS "it is only a few plants" — the header above
+// records that exact excuse costing a silent day when the canopies changed. One voxel per column is
+// still the generated world, and `isStale` is what tells the player rather than betting they will
+// not notice.
+export const GENERATOR_VERSION = 22
 
 /**
  * One column's edits: packed local index → material.

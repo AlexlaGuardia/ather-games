@@ -76,8 +76,32 @@ export const isHalfMat = (m: number): boolean => (m & HALF_BIT) !== 0
 
 export const PLANT_MIN = 24
 export const PLANT_MAX = 26
-/** Non-solid, non-opaque ground cover. Range test on purpose — this runs in the mesher's hot loop. */
-export const isPlant = (m: number): boolean => m >= PLANT_MIN && m <= PLANT_MAX
+
+/**
+ * ── ★ THE FOUR ELEMENT HERBS (2026-08-18) — a SECOND plant range, and it had to be ──────────────
+ * Canon's wild herbs are ground cover in every way that matters to the mesher, the walker and the
+ * light field, so they must answer `isPlant`. They could not join 24-26: 27-30 are the pot's three
+ * states and the chest, and **a material id is written into every save**, so renumbering to make
+ * room would silently repaint every stored edit in the world. A second range is the honest cost.
+ *
+ * ⚠ KEEP 58-61 CONTIGUOUS, exactly as the note on 24-26 and the saplings' 42-45 say. A fifth herb
+ * inserted anywhere else stops being a plant — solid, opaque, un-mowable — with nothing in the code
+ * looking wrong.
+ */
+export const HERB_MIN = 58
+export const HERB_MAX = 61
+export const isHerb = (m: number): boolean => m >= HERB_MIN && m <= HERB_MAX
+
+/**
+ * Non-solid, non-opaque ground cover. Range test on purpose — this runs in the mesher's hot loop.
+ *
+ * ⚠ TWO RANGES NOW, AND THE ORDER IS THE CHEAP ONE FIRST. Grass and flowers cover most of the
+ * living world; herbs are rare by design, so the common case still costs two comparisons and the
+ * rare one costs four. Anything that treats "plant" as a single span (a `<= PLANT_MAX` written by
+ * hand somewhere) is wrong from today — ask this function, never the constants.
+ */
+export const isPlant = (m: number): boolean =>
+  (m >= PLANT_MIN && m <= PLANT_MAX) || (m >= HERB_MIN && m <= HERB_MAX)
 
 /**
  * Saplings, as a contiguous range — the same shape `isPlant` uses, and for the same reason: the
@@ -350,6 +374,23 @@ export const MAT = {
    * (`tex/tiles.ts`), which is a placeholder standing INSIDE the law — Alex's call on the final read.
    */
   CAULDRON: 57,
+
+  /**
+   * ── ★★ THE FOUR ELEMENT HERBS — RULED 2026-08-18 (/magii, on the hub lane's gap) ─────────────
+   * Canon: `game/alchemy.md` › *The four element herbs grow WILD* and `game/shimmer-geography.md`
+   * › *★ WHERE THE FOUR ELEMENT HERBS GROW*. They are the last link between the front door and an
+   * evolved spirit — the crystals and the sap were already in this world; only these were missing.
+   *
+   * ⚠ ONE MATERIAL EACH, NOT ONE `HERB` WITH A VARIANT. A variant is derived from position and
+   * would re-derive fine, but the DROP is read off the registry by material — one id could only
+   * ever drop one herb. Four ids is also what lets each carry its own name and look.
+   *
+   * ⚠ 58-61 IS THE `isHerb` RANGE. Contiguous, and the range test above is why.
+   */
+  VIOLETBLOOM: 58,
+  STORMGRASS: 59,
+  ROOTVINE: 60,
+  TIDEPETAL: 61,
 } as const
 
 export interface DepthConfig {
