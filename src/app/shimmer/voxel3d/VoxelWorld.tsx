@@ -150,6 +150,7 @@ import { spiritsToSave, spiritsFromSave } from '../spirits/spirit-save'
 import { LAUNCHED_SPECIES } from '../engine/spirit-index'
 import { KeeperFrame, TabEmpty, type KeeperTab } from './keeper-panel'
 import { GrimoireTab } from './grimoire-tab'
+import { evolveSpirit } from '../spirits/evolution'
 import { POTION_IDS } from '../engine/alchemy'
 import { loadRuneInventory, saveRuneInventory, grantRune, revokeRune } from '../play3d/rune-inventory'
 import { birthAffinity } from '../play3d/birth-affinity'
@@ -1499,6 +1500,15 @@ export default function VoxelWorld() {
     // nothing else in either direction. Paid BEFORE the write below so the levels it grants ride the
     // same merge-write the wounds do; a payout persisted separately is a payout that can be lost.
     setSparLedger(sparLedgerLines(applySparPayout(s.allies, s.enemies, outcome)))
+    // ★ A spar can be the level that crosses 34. `pendingEvolution` is a standing condition, so this
+    // is a sweep of the whole party rather than a check on whoever happened to level — a spirit owed
+    // a form from an earlier fight takes it here too. No overlay in this world (that screen is the
+    // 2D pipeline); the say channel is what this surface has, and a silent form change is worse than
+    // a plain sentence.
+    for (const sp of party.current) {
+      const took = evolveSpirit(sp)
+      if (took) { say(`${sp.name} became ${took.formName} — ${took.element} was strongest in them`); writeParty() }
+    }
     // Wounds and what the spar taught outlive the fight, so both go back to the SHARED save — the
     // same party the 2D game and play3d read. Merge-write; see writeParty.
     writeParty()

@@ -92,6 +92,50 @@ try {
   const held = await page.evaluate(() => document.body.innerText)
   ok(/storm/i.test(held), 'the grimoire is still showing after the pour')
 
+  // ── ★★ THE WHOLE CHAIN, ON THE SURFACE A PLAYER OPENS (#262 slice ④) ────────────────────────
+  // A spirit past level 34 with NO lean is the case an edge-triggered rule answers wrong forever.
+  // `/party lend 1 40` mints one at level 40 with empty infusions — exactly that spirit — and the
+  // pour below has to be enough to make it take its form, late.
+  // ⚠ CLOSE THE BAG FIRST. The world's keydown handler returns early while `uiOpen` is true, so a
+  // chat command typed with a panel open goes nowhere and every assert after it fails describing
+  // the PREVIOUS state — which is exactly how this section first read as a broken feature.
+  await page.keyboard.press('Escape'); await sleep(500)
+  await cmd('/party lend 1 40')
+  await cmd('/give earth_infusion 4')
+  const pre = await spirits()
+  ok(pre.length === 1 && pre[0].level >= 34, `a level-${pre[0]?.level} spirit, past the threshold`)
+  ok((pre[0]?.element ?? 'base') === 'base', 'and it has no form yet')
+
+  await page.keyboard.press('KeyI'); await sleep(900)
+  await page.evaluate(() => {
+    const b = Array.from(document.querySelectorAll('button')).find(x => (x.textContent ?? '').trim() === 'Grimoire')
+    ;(b as HTMLElement | undefined)?.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }))
+  })
+  await sleep(700)
+  // ⚠ ONE POUR, AND THAT IS THE ASSERT. A single earth point is already a majority of one, so a
+  // spirit past 34 must take its form on the FIRST bottle — no second pour to hide behind.
+  await page.evaluate(() => {
+    const b = Array.from(document.querySelectorAll('button[title]'))
+      .find(x => (x.getAttribute('title') ?? '').startsWith('earth ·')) as HTMLElement | undefined
+    b?.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }))
+  })
+  await sleep(800)
+  const evoNote = await page.evaluate(() => {
+    const t = Array.from(document.querySelectorAll('div')).map(x => (x.textContent ?? '').trim())
+    return t.find(x => /became .* — earth was strongest/.test(x) && x.length < 160) ?? null
+  })
+  ok(!!evoNote, `the grimoire announces the form — ${JSON.stringify(evoNote)}`)
+
+  const post = await spirits()
+  ok(post[0]?.element === 'earth', `★ the form is TAKEN and persisted (element = ${post[0]?.element})`)
+
+  // ⚠ AND A SETTLED SPIRIT IS OFFERED NOTHING MORE — pouring into a decided form spends a tier-2
+  // brew on a change nobody can see.
+  const live = await page.evaluate(() => Array.from(document.querySelectorAll('button[title]'))
+    .filter(b => /^(mana|storm|earth|water) ·/.test(b.getAttribute('title') ?? ''))
+    .filter(b => !(b as HTMLButtonElement).disabled).length)
+  ok(live === 0, `no pours offered once the form is settled (${live} still live)`)
+
   console.log(fails ? `\n${fails} FAILED` : '\nall clear')
 } finally { await browser.close() }
 process.exit(fails ? 1 : 0)

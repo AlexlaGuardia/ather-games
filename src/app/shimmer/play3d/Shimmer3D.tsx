@@ -45,6 +45,8 @@ import {
 } from '../engine/spirit-health'
 import { getMovesForSpirit } from '../engine/moves'
 import { createSpirit, addXP, xpForLevel, speciesDisplayName, ELEMENT_COLORS, type Spirit, type Species, type Element } from '../spirits/spirit'
+import { pendingEvolution, evolveSpirit, type PendingEvolution } from '../spirits/evolution'
+import EvolutionOverlay from '../components/EvolutionOverlay'
 import { spiritsToSave, spiritsFromSave } from '../spirits/spirit-save'
 import { LAUNCHED_SPECIES } from '../engine/spirit-index'
 import { ZONE_NODES, type NodePlacement } from '../world/node-placements'
@@ -3785,6 +3787,14 @@ export default function Shimmer3D() {
   type RewardRow = { name: string; element: Element; fromLevel: number; toLevel: number; xpGained: number; curXp: number; needXp: number; evolved: boolean; statsBefore: PartyStats; statsAfter: PartyStats; learned: string[] }
   const [rewards, setRewards] = useState<{ gold: number; rows: RewardRow[] } | null>(null)
   const [banner, setBanner] = useState<string | null>(null)
+  /**
+   * ── ★ THE EVOLUTION QUEUE (#262 slice ④, 2026-08-18) ────────────────────────────────────────
+   * The spirit is evolved and PERSISTED the moment it is owed a form; this only holds what to show
+   * once the screen is free. Splitting them is deliberate: an overlay is dismissable and a tab is
+   * closable, and a form that only lands if the keeper watches the animation is a form that goes
+   * missing. State first, ceremony second.
+   */
+  const [evolving, setEvolving] = useState<{ spirit: Spirit; evolution: PendingEvolution } | null>(null)
   const [nearNpc, setNearNpc] = useState<NPC3D | null>(null)
   const [dialogue, setDialogue] = useState<{ name: string; lines: string[]; speakers?: string[]; idx: number; grantAt?: number; onDone: () => void } | null>(null)
   const dialogueRef = useRef(dialogue); dialogueRef.current = dialogue
@@ -4916,13 +4926,20 @@ export default function Shimmer3D() {
         const statsAfter = derivePartyStats(spirit)
         const learned = getMovesForSpirit(spirit.species, spirit.element, spirit.level, spirit.bond)
           .filter(m => !movesBefore.has(m.id)).map(m => m.name)
-        // Full evolution (form/element change) is the 2D EvolutionScene's job — not ported yet. We just
-        // celebrate the threshold here; the spirit keeps leveling until it can evolve in the full flow.
-        if (xpResult.evolved) setBanner(`✦ ${spirit.name} is ready to evolve!`)
+        // ── ★★ THIS LINE WAS CANON'S COMPLAINT, WORD FOR WORD (fixed 2026-08-18, #262 slice ④) ──
+        // It read: "Full evolution is the 2D EvolutionScene's job — not ported yet. We just
+        // celebrate the threshold here." So the build announced `✦ ready to evolve!` and then
+        // nothing happened, forever, which is exactly what `game/alchemy.md` names. The sweep after
+        // this loop takes the form for real; the banner now only says a threshold was crossed, and
+        // `addXP` no longer raises it for a spirit that has no infusion to read.
+        if (xpResult.evolved) setBanner(`✦ ${spirit.name} is changing…`)
         rows.push({ name: spirit.name, element: spirit.element, fromLevel, toLevel: spirit.level, xpGained: perXp, curXp: spirit.xp, needXp: xpForLevel(spirit.level), evolved: !!xpResult.evolved, statsBefore, statsAfter, learned })
       }
       // Wild + patrol fights get the spoils reveal; the scripted holds keep their narrative payoff (dialogue below).
       if (!bd.kind || bd.kind === 'wild' || bd.kind === 'patrol') spoils = { gold, rows }
+      // ★ After every spirit has its XP, not inside the loop — evolving mid-loop would mutate a
+      // spirit whose stats-before snapshot has already been taken for the rewards row.
+      runEvolutions()
     }
     // A beaten patrol's spawner sleeps on the long clock (win only — a loss leaves it prowling).
     if (bd?.kind === 'patrol' && patrolKeyRef.current) {
@@ -5476,6 +5493,30 @@ export default function Shimmer3D() {
   // (which takes the worst-off). Reviving a downed spirit also mends it with the same salve,
   // or the item would be spent putting something on its feet at a sliver.
   /**
+   * Take any second form the party is owed, one at a time.
+   *
+   * ⚠ ASKED OF THE WHOLE PARTY, NOT OF THE SPIRIT THAT JUST CHANGED, and asked at every moment that
+   * could have made one due — after a fight's XP and after a pour. `pendingEvolution` is a STANDING
+   * condition precisely so this can be a sweep: a spirit that crossed level 34 un-infused months ago
+   * is owed its form the instant the pour lands, and nothing about that pour knows it was the last
+   * thing missing.
+   *
+   * ⚠ ONE AT A TIME. Two spirits crossing together would otherwise race one overlay; the second is
+   * still owed and the next sweep takes it.
+   */
+  const runEvolutions = useCallback(() => {
+    for (const s of partyRef.current ?? []) {
+      const due = pendingEvolution(s)
+      if (!due) continue
+      evolveSpirit(s)
+      persist()
+      setPartyTick(t => t + 1)
+      setEvolving({ spirit: s, evolution: due })
+      return
+    }
+  }, [persist])
+
+  /**
    * ── ★ POURING AN INFUSION (#262 slice ③, 2026-08-18) ────────────────────────────────────────
    * Mirrors `mendSpirit` exactly, because it is the same shape: spend one bottle from the satchel
    * on one spirit, tell the keeper, persist. The rules all live in `applyInfusion` — this only
@@ -5499,7 +5540,10 @@ export default function Shimmer3D() {
     setPartyTick(t => t + 1)
     setHarvestToast(`${spirit.name} takes the ${element} infusion · ${r.inElement} ${element}, ${r.total}/11`)
     persist()
-  }, [persist])
+    // ★ The pour may have been the last thing missing — a spirit sitting past 34 with no lean, or
+    // with a tie this bottle just broke. Ask immediately; the keeper poured to make this happen.
+    runEvolutions()
+  }, [persist, runEvolutions])
 
   const mendSpirit = useCallback((spirit: Spirit) => {
     const amount = SPIRIT_MEND_POTIONS[MEND_POTION_ID]
@@ -7027,6 +7071,23 @@ export default function Shimmer3D() {
             <div style={{ marginTop: 12, color: '#ffffff55', fontWeight: 600, fontSize: 11, textAlign: 'center' }}>E / Esc — close</div>
           </div>
         </>
+      )}
+
+      {/* ── ★ THE REVEAL — shown only once the screen is free ──────────────────────────────────
+          The spirit is ALREADY evolved and persisted by `runEvolutions`; this is the ceremony. It
+          waits behind the spoils reveal and any dialogue rather than stacking on top of them, which
+          is why the two are split: the state cannot be lost by a queue that never gets its turn. */}
+      {evolving && !battle && !approach && !rewards && !dialogue && (
+        <EvolutionOverlay
+          spirit={evolving.spirit}
+          evolution={evolving.evolution}
+          onComplete={() => {
+            setEvolving(null)
+            // A second spirit may have crossed in the same fight — one overlay at a time, so ask
+            // again on the way out rather than dropping the rest of the party's forms.
+            runEvolutions()
+          }}
+        />
       )}
 
       {partyOpen && (

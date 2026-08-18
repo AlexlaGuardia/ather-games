@@ -250,12 +250,26 @@ export function addXP(spirit: Spirit, amount: number): XPResult {
     spirit.xp = 0
   }
 
-  // Detect form stage transition
+  // ── ★ WHAT THIS CALL ANNOUNCES, AND WHAT IT DELIBERATELY DOES NOT (2026-08-18, #262 slice ④) ──
+  // `evolved` is an EDGE: "crossing this level is the moment something became true". It is read by
+  // the rewards screen to mark a row, and an edge is right for that — a fight report says what
+  // happened during the fight.
+  //
+  // ★★ IT NO LONGER ANNOUNCES A SECOND FORM THE SPIRIT CANNOT TAKE. This branch used to fire on any
+  // crossing of 34 with `element === 'base'`, on the premise in its own old comment — *"player picks
+  // element during evolution"*. Canon deleted that premise: the form is set by DOMINANT INFUSION, so
+  // a spirit crossing 34 with no infusions or a tie has no form to take. Announcing one anyway is
+  // precisely the failure `game/alchemy.md` names — *"the build announces 'ready to evolve!' and
+  // then nothing happens."*
+  //
+  // ⚠ AND AN EDGE IS NOT THE SOURCE OF TRUTH FOR WHETHER A SPIRIT MAY EVOLVE — `pendingEvolution`
+  // is, because it is a STANDING condition. A spirit that crosses 34 un-infused is owed a form later,
+  // when the pour arrives, and no edge on this function will ever fire again for it. Do not rebuild
+  // the eligibility test here; ask that one.
   const newStage = formStage(spirit.level)
   if (newStage !== prevStage) {
-    // Second form requires base element (player picks element during evolution)
-    // Awakened form requires non-base element (already evolved once)
-    if (newStage === 'second' && spirit.element === 'base') evolved = 'second'
+    if (newStage === 'second' && spirit.element === 'base' && dominantInfusion(spirit.infusions)) evolved = 'second'
+    // Awakened needs a form already taken. It has no branch data yet — see spirits/evolution.ts.
     else if (newStage === 'awakened' && spirit.element !== 'base') evolved = 'awakened'
   }
 

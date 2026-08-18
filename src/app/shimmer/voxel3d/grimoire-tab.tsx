@@ -54,6 +54,7 @@ import {
 import { ALL_SPECIES } from '../engine/spirit-index'
 import { AWAKENED_FORM_NAMES, INFUSION_CAPS } from '../spirits/evolution-config'
 import { infusionTotal, dominantInfusion } from '../spirits/spirit'
+import { evolveSpirit, evolutionBlocker } from '../spirits/evolution'
 import { INFUSION_BREWS, applyInfusion } from '../engine/alchemy'
 import { countItem } from '../engine/inventory'
 import type { Inventory } from '../engine/inventory'
@@ -145,7 +146,15 @@ function YoursFace({ party, inv, onChange }: {
         : r.reason === 'spirit-full' ? `${s.name} has taken all the infusion they can hold`
         : 'that is not an infusion',
     )
-    if (r.ok) onChange()
+    // ★ THE POUR MAY BE THE LAST THING MISSING. A spirit already past level 34 with no lean — or
+    // with a tie this bottle just broke — is owed its form the instant this lands. `pendingEvolution`
+    // is a standing condition precisely so it can be asked here, at the moment the keeper acted,
+    // rather than only on the level-up that will never come again.
+    if (r.ok) {
+      const took = evolveSpirit(s)
+      if (took) setNote(`${s.name} became ${took.formName} — ${took.element} was strongest in them`)
+      onChange()
+    }
     bump(v => v + 1)
   }
 
@@ -203,12 +212,28 @@ function YoursFace({ party, inv, onChange }: {
             {infusionTotal(s.infusions)}/{INFUSION_CAPS.totalCap}
           </span>
           <span className="text-[9px] text-white/30">
-            {dom ? `leaning ${dom}` : infusionTotal(s.infusions) ? 'tied — no form yet' : 'unset'}
+            {(() => {
+              // ⚠ The blocker is named rather than left as a silent nothing. "tied" is the one a
+              // keeper would otherwise read as a bug: the bar is full, the level is there, and the
+              // spirit stubbornly stays base.
+              const b = evolutionBlocker(s)
+              if (b === 'settled') return `${s.element} form`
+              if (b === 'tied') return 'pulled two ways — no form'
+              if (b === 'no-infusions') return 'unset'
+              if (b === 'too-young') return dom ? `leaning ${dom} · form at 34` : 'unset'
+              return dom ? `leaning ${dom}` : 'unset'
+            })()}
           </span>
           <span className="ml-auto flex gap-1">
             {ELEMENT_POUR.map(el => {
               const held = inv?.current ? countItem(inv.current, INFUSION_BREWS[el]) : 0
-              const full = s.infusions[el] >= INFUSION_CAPS.perElementCap
+              // ⚠ A SETTLED SPIRIT TAKES NO MORE, and that is not a cap — it is that the pour has
+              // nothing left to decide. Canon makes the infusions the road to an evolved FORM; once
+              // the form is taken, another bottle changes nothing a keeper can see, so offering it
+              // is inviting them to spend a tier-2 brew on nothing. Same call PartyPanel makes by
+              // hiding its pours after `element` settles.
+              const full = s.element !== 'base'
+                        || s.infusions[el] >= INFUSION_CAPS.perElementCap
                         || infusionTotal(s.infusions) >= INFUSION_CAPS.totalCap
               const dead = held === 0 || full
               return (
