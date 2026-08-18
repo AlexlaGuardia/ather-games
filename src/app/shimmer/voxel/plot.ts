@@ -65,10 +65,30 @@ export interface PlotConfig {
    *
    * ★ HOW FAR THE KEEPER MAY BUILD, AND THIS MODULE IS DELIBERATELY AGNOSTIC ABOUT WHAT RAISES IT.
    *
-   * Canon ruled that **liberation** decides ground and **resources** decide what stands on it; Alex's
-   * plot design instead buys ground with blocks. That question is live (`CANON_GAPS.md`, 2026-08-15)
-   * and **this generator does not need it answered** — the cap arrives as a number. Whichever way it
-   * rules, nothing in this file changes. Do NOT teach it where the number came from.
+   * The cap arrives as a number and nothing in this file cares where it came from. Keep it that way.
+   *
+   * ★ THE QUESTION IS NO LONGER LIVE — RULED 2026-08-16, and this note said "live" for two days.
+   * It used to read *"canon ruled liberation decides ground ... Alex's plot design instead buys
+   * ground with blocks ... that question is live"*. It is not: `game/shimmer-geography.md` ›
+   * *The grimoire is what Greg reads* settles it — **the grimoire raises the CAP, the keeper's
+   * blocks fill it in.** Knowing buys extent, materials build on ground already won by knowing, and
+   * **Greg reads the book**, so the fold NEVER widens on its own. Alex restated it on 2026-08-18:
+   * *"the home plot island should not grow on its own but instead greg should make the boundary
+   * larger."* Canon owns the ledger, that both its faces pay, and that Greg reads it; entry counts,
+   * rates, pacing and how the widening renders are Jin's.
+   *
+   * ⚠⚠ AND THAT RULING PUTS ONE OBLIGATION ON WHOEVER WIRES THE RAISE. Because growth is a
+   * **discrete Greg-brokered event** rather than anything emergent, a cap raise has exactly ONE call
+   * site — and it must lift every keeper standing on the fold through `plotStandY` in the same
+   * breath. `plotHeight` is additive by canon (the surface only ever RISES), so widening the coast
+   * raises `fade` and can close the ground **over a keeper standing on it**, walling them into their
+   * own topsoil exactly as the 2026-08-18 bug did — but arriving through the front door instead of
+   * through a stale save, with **no reload involved**, which is the one thing the restore clamp
+   * cannot see. Wire the lift WITH the raise, not after it.
+   *
+   * ⚠ Nothing raises it today: `DEFAULT_PLOT.capRadius` is a constant and the grimoire ledger is
+   * UNBUILT. So that burial is unreachable right now. It becomes reachable the day Greg can widen a
+   * fold, which is precisely the day nobody will be thinking about collision.
    */
   capRadius: number
   /** Altitude of the plot's ground plane — the island sits at a fixed height in its own space. */
