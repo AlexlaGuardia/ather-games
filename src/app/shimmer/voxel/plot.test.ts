@@ -12,7 +12,7 @@
 import {
   DEFAULT_PLOT, plotHeight, plotMaterialAt, keelDepth, edgeAt,
   insideCore, withinCap, inWall, distFromCentre, plotYRange, columnSpan,
-  plotThreshold, hasFallenOut, chestCap, type PlotConfig,
+  plotThreshold, hasFallenOut, chestCap, plotStandY, type PlotConfig,
 } from './plot'
 import { AIR } from './section'
 
@@ -405,6 +405,70 @@ console.log('\nthe threshold')
   check('never zero, however small the fold', chestCap(wider(1)) >= 1, `got ${chestCap(wider(1))}`)
   check('nor negative on a nonsense config', chestCap(wider(-10)) >= 1, `got ${chestCap(wider(-10))}`)
   check('always a whole number of chests', [1, 7, 30, 31, 32, 72, 100].every(r => Number.isInteger(chestCap(wider(r)))))
+}
+
+// ── the ground closing over a saved keeper ──────────────────────────────────────────────────────
+// ★ THESE ARE WRITTEN AGAINST THE FAILURE, NOT THE ARITHMETIC. The bug shipped as "my player is
+// stuck in the home plot unable to move" (Alex, 2026-08-18) and reproduced from his real save: feet
+// stored at the exact y `plotHeight` now answers, i.e. one block INSIDE the topsoil, where collision
+// refuses every direction. Every assert below is a sentence about a keeper, not about a number.
+{
+  // A spot with real ground, taken from the generator rather than assumed.
+  const [gx, gz] = (() => {
+    for (const [x, z] of columns()) if (plotHeight(x, z, SEED) !== null) return [x, z]
+    throw new Error('the plot has no ground at all')
+  })()
+  const h = plotHeight(gx, gz, SEED)!
+
+  // ★★ THE BUG ITSELF. Standing y is the first AIR block, so the surface block's own y is buried.
+  check('a keeper saved inside the grass is lifted onto it',
+    plotStandY(gx, h, gz, SEED) === h + 1, `got ${plotStandY(gx, h, gz, SEED)}, want ${h + 1}`)
+
+  // ⚠ AND FROM ANY DEPTH, not just one block. Growth is additive and unbounded by this function, so
+  // a save old enough to be two or three blocks under must not come back still buried.
+  check('and from any depth the ground has grown to',
+    [1, 2, 3, 8].every(d => plotStandY(gx, h - d, gz, SEED) === h + 1))
+
+  // ★ A KEEPER WHO IS ALREADY STANDING MUST NOT BE MOVED AT ALL. If this ever fails, every load
+  // teleports everyone a block upward forever — the fix becoming a slower version of the bug.
+  check('a keeper already standing is left exactly where they are',
+    plotStandY(gx, h + 1, gz, SEED) === h + 1)
+
+  // ⚠ MID-JUMP, MID-FALL, IN FLIGHT. `Math.max` and not an assignment is what buys this, and it is
+  // the one thing a naive "snap to the surface" fix would silently destroy.
+  check('and one in the air stays in the air',
+    [2, 5, 20].every(up => plotStandY(gx, h + up, gz, SEED) === h + up))
+
+  // ⚠ OVER THE VOID THE SOFT RETURN OWNS THE FALL, not this. Returning anything but the stored y
+  // here would give one fall two owners.
+  const [vx, vz] = (() => {
+    for (const [x, z] of columns()) if (plotHeight(x, z, SEED) === null) return [x, z]
+    throw new Error('the plot has no void around it')
+  })()
+  check('outside the island the stored altitude is untouched',
+    [80, 97, 140].every(y => plotStandY(vx, y, vz, SEED) === y))
+
+  // ★ IT NEVER RETURNS A BURIED y ANYWHERE ON THE ISLAND. The sweep is the assert: a per-column
+  // spot check would pass on a function that only works where it was sampled.
+  let buried = 0
+  for (const [x, z] of columns()) {
+    const hh = plotHeight(x, z, SEED)
+    if (hh === null) continue
+    if (plotStandY(x, hh, z, SEED) <= hh) buried++
+  }
+  check('no column on the whole island restores a keeper under its own grass',
+    buried === 0, `${buried} columns still bury the keeper`)
+
+  // ★ AND THE ANSWER IS ALWAYS SOMEWHERE THE GENERATOR CALLS AIR — the property the keeper actually
+  // cares about, asked of `plotMaterialAt` rather than re-derived from `plotHeight`.
+  let solid = 0
+  for (const [x, z] of columns()) {
+    const hh = plotHeight(x, z, SEED)
+    if (hh === null) continue
+    if (plotMaterialAt(x, plotStandY(x, hh, z, SEED), z, SEED) !== AIR) solid++
+  }
+  check('and every restored keeper stands in air, not in a block',
+    solid === 0, `${solid} columns restore into solid ground`)
 }
 
 console.log(`\n${pass} passed, ${fail} failed`)

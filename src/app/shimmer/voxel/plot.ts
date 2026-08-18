@@ -455,6 +455,44 @@ export function plotThreshold(
 }
 
 /**
+ * The altitude a keeper restored at (x, z) must stand at, given the y their save recorded.
+ *
+ * ── ★★ THE GARDEN'S GROUND ONLY EVER RISES, SO A STORED y CAN BE SWALLOWED (2026-08-18) ────────
+ * `plotHeight`'s own header rules that expansion is ADDITIVE — *"the surface only ever rises as the
+ * coast moves out ... no cell that was solid becomes air"* — because a keeper whose build gets
+ * dropped out from under them stops expanding. That guard is canon and stays. What it also means,
+ * and what nothing accounted for, is the mirror case: a keeper's position is stored as an ABSOLUTE
+ * y, so ground that rises under a saved standing spot **closes over the keeper**. They reload with
+ * their feet inside topsoil, collision refuses every horizontal move, and they cannot walk, jump or
+ * fall. Alex, 2026-08-18: *"my player is stuck in the home plot unable to move."* Measured on his
+ * real save: feet stored at y 97 where `plotHeight` now answers 97, i.e. one block under the grass.
+ *
+ * ★ AND THE RESTORE COULD NOT HEAL IT, WHICH IS WHY IT WAS A TRAP RATHER THAN A GLITCH. The host
+ * deliberately applied no clamp to a plot position — correctly rejecting the CONTINENT's clamp,
+ * which would have dragged a garden position up to Wilds altitude — and then concluded that meant
+ * *no clamp at all*. The garden has its own height field; declining the wrong clamp is not the same
+ * as needing none. The autosave then wrote the buried position straight back every few seconds, so
+ * every reload returned the keeper to it. Same self-perpetuating shape as the 08-15 save that
+ * stored a position without its space, and it wants the same answer: fix it where the stale number
+ * meets the live terrain.
+ *
+ * ⚠ `Math.max`, NOT an assignment — a keeper who saved mid-jump, mid-fall or in flight is ABOVE
+ * their ground and must stay there. Only a position the terrain has grown over is lifted.
+ *
+ * ⚠ OUTSIDE THE ISLAND (`plotHeight` null) THE y IS RETURNED UNTOUCHED, deliberately. There is no
+ * surface to clamp to, the keeper is over the void, and `hasFallenOut` + the host's soft return
+ * already own that case and are tested for it. Inventing a second rescue here would give the same
+ * fall two owners that could disagree.
+ */
+export function plotStandY(
+  x: number, y: number, z: number, seed: number, cfg: PlotConfig = DEFAULT_PLOT,
+): number {
+  const h = plotHeight(Math.floor(x), Math.floor(z), seed, cfg)
+  if (h === null) return y
+  return Math.max(y, h + 1)
+}
+
+/**
  * Has the keeper gone over the edge and out from under their own island?
  *
  * The geometric half of the soft return; the host does the moving. Deliberately asks about ALTITUDE

@@ -39,7 +39,7 @@ import { salvageItems, salvageMessage } from '../voxel/salvage'
 import { blockDef, materialForItem, emitOf, BLOCKS, type BlockSkill } from '../voxel/registry'
 import { editIndex, recordEdit, applyEdits, packEdits, unpackEdits, isStale, GENERATOR_VERSION, type ColumnEdits } from '../voxel/edits'
 import { generatePlotColumn, plotGeneratedVoxel } from '../voxel/plot-column'
-import { plotThreshold, hasFallenOut, chestCap } from '../voxel/plot'
+import { plotThreshold, hasFallenOut, chestCap, plotStandY } from '../voxel/plot'
 // ⚠ `WILDS_BUBBLE` (from column.ts, imported above), NEVER `bubble.ts`'s `DEFAULT_BUBBLE`. The
 // default's door faces bearing 0 and its wall is a placeholder material; the live one is aimed at
 // the glade and made of cloud. Read the default here and the crossing would fire on the far side of
@@ -3427,10 +3427,15 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
         space.current = savedSpace
         lc.px = p.x; lc.pz = p.z
         // ⚠ The surface clamp is the CONTINENT's and would drag a plot position up to Wilds
-        // altitude (~130 against the garden's 96). The garden is flat, authored and bounded, so a
-        // restored plot position needs no clamp at all.
+        // altitude (~130 against the garden's 96) — so the garden does NOT take this one. What it
+        // takes instead is its OWN (`plotStandY`), which is the 2026-08-18 fix: this line used to
+        // read `p.y` bare, on the reasoning that a bounded authored garden "needs no clamp at all".
+        // Declining the wrong clamp is not the same as needing none. The garden's surface only ever
+        // RISES (see `plotHeight`), so ground can close over a stored standing position and leave
+        // the keeper walled into their own topsoil, unable to move — and the autosave writes that
+        // position back, so a reload cannot escape it. See `plotStandY` for the whole account.
         lc.py = savedSpace === 'plot'
-          ? p.y
+          ? plotStandY(p.x, p.y, p.z, SEED)
           : Math.max(p.y, columnHeight(Math.floor(p.x), Math.floor(p.z), SEED) + 1)
       }
       // The plot's chest census normally rides `enterSpace`, which a direct restore never calls.
