@@ -12,8 +12,7 @@
 import {
   DEFAULT_PLOT, plotHeight, plotMaterialAt, keelDepth, edgeAt,
   insideCore, withinCap, inWall, distFromCentre, plotYRange, columnSpan,
-  plotThreshold, hasFallenOut, chestCap, plotStandY, type PlotConfig,
-} from './plot'
+  plotThreshold, hasFallenOut, chestCap, plotStandY, type PlotConfig, plotForTier, PLOT_TIERS } from './plot'
 import { AIR } from './section'
 
 let pass = 0, fail = 0
@@ -325,8 +324,15 @@ console.log('\ngrowth')
   check('growing the fold never takes ground away', taken === 0,
     `${taken} voxels went solid -> AIR; a keeper who built there is standing on nothing now`)
   check('and it does add some', added > 1000, `${added} voxels of new ground`)
+  // ⚠ PROBES RELATIVE TO THE COAST, NOT TO `capRadius` + A LITERAL (2026-08-18). The old form asked
+  // about `capRadius + 10`, which sat outside BOTH edges once the starting cap became 300: the
+  // wobble takes a *fraction* of the radius, so at r300 it eats ~29 blocks and a 10-block probe
+  // never reaches the ground. It read as "growth opens nothing" when growth was fine — a test
+  // calibrated to a number rather than to the shape it was checking.
+  const past = Math.round(edgeAt(1, 0, SEED) + 2)
   check('raising the cap opens new buildable ground',
-    withinCap(DEFAULT_PLOT.capRadius + 10, 0, SEED, grown) && !withinCap(DEFAULT_PLOT.capRadius + 10, 0, SEED))
+    withinCap(past, 0, SEED, grown) && !withinCap(past, 0, SEED),
+    `probe at ${past}: inside grown=${withinCap(past, 0, SEED, grown)}, inside today=${withinCap(past, 0, SEED)}`)
 }
 
 // ── the threshold, and the soft return that depends on it ─────────────────────
@@ -394,10 +400,22 @@ console.log('\nthe threshold')
   // ★ IT RIDES `capRadius` AND NOTHING ELSE. That is what makes storage part of the same reward as
   // ground instead of a second track to balance — and it is why this survives whichever way the
   // ground-versus-resources gap is ruled.
+  // ⚠ RE-AIMED AT THE TIER LADDER (2026-08-18). These asked about r72 — the "fully grown" fold under
+  // the pre-tier plan — and about r45, a cap that no longer exists anywhere. Alex's ladder is
+  // 300 → 400 → 500, and the SPEC being held is unchanged: ten at the start, more as you grow.
+  check('the top tier holds 16', chestCap(plotForTier(2)) === 16, `got ${chestCap(plotForTier(2))}`)
+  check('it rises with every tier',
+    chestCap(plotForTier(1)) > chestCap(plotForTier(0)) && chestCap(plotForTier(2)) > chestCap(plotForTier(1)),
+    `${PLOT_TIERS.map((_, i) => chestCap(plotForTier(i))).join(' → ')}`)
+  // ★ AND A SAVE CANNOT ASK FOR A FOLD THAT DOES NOT EXIST. The tier comes off disk; a corrupt or
+  // future value must give a garden, not an exception.
+  check('an out-of-range tier clamps to the top', plotForTier(7).capRadius === PLOT_TIERS[2], '')
+  check('a missing tier reads as the first', plotForTier(NaN).capRadius === PLOT_TIERS[0], '')
+  // `wider` still exists for the monotonicity + floor checks below: those are about the ARITHMETIC
+  // holding for any cap, tier ladder or not, and they should keep working the day a fourth tier or a
+  // continuous cap arrives.
   const wider = (r: number): PlotConfig => ({ ...DEFAULT_PLOT, capRadius: r })
-  check('a fully-grown fold holds 24', chestCap(wider(72)) === 24, `got ${chestCap(wider(72))}`)
-  check('it rises with the cap', chestCap(wider(45)) > chestCap(), '')
-  check('and never falls as the cap rises', [30, 33, 40, 51, 60, 72].every((r, i, a) =>
+  check('and never falls as the cap rises', [30, 90, 150, 300, 400, 500].every((r, i, a) =>
     i === 0 || chestCap(wider(r)) >= chestCap(wider(a[i - 1]))))
 
   // ⚠ A cap of ZERO is a plot you cannot put a single chest in, which reads as a broken game rather

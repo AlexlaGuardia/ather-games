@@ -10,7 +10,7 @@
 // REAL predicates (`inPassageVolume`, `plotThreshold`) rather than against copies of their numbers,
 // which is what makes a future retune of `passageWidth` show up here instead of in a playtest.
 
-import { wildsSeamAnchor, wildsSeamRibbon, plotSeamAnchor, seamNearness } from './seam'
+import { wildsSeamAnchor, wildsSeamRibbon, plotSeamAnchor, seamNearness, PLOT_TRIGGER_RADIUS } from './seam'
 import { DEFAULT_BUBBLE, inPassage, inPassageVolume, shellRadiusAt, distFromAxis } from '../voxel/bubble'
 import { WILDS_BUBBLE } from '../voxel/column'
 import { DEFAULT_PLOT, plotThreshold } from '../voxel/plot'
@@ -135,17 +135,23 @@ function quadPoints(a: { x: number; z: number; y: number; bearing: number; halfW
     '★ the anchor is derived from the shell — different worlds put the door in different places')
 }
 
-// ── 5. ★ THE PLOT SIDE IS NARROW BECAUSE ITS TRIGGER IS ────────────────────────────────────────
-// The host opens the waymark panel within 1.6 blocks of the threshold. A seam drawn to the Wilds'
-// width here would be a 12-block shimmer around a 3-block door — the same lie as assert 1, on the
-// side the keeper stands in every session.
+// ── 5. ★ THE PLOT SEAM'S FOOTPRINT STAYS INSIDE ITS TRIGGER ───────────────────────────────────
+// The rule is unchanged and the NUMBER moved (2026-08-18): what you can see must be what opens, so
+// the drawn quad may never reach past the radius the host tests. It used to read a hardcoded `1.6`
+// — a second copy of the host's own literal, which is precisely the pair that sealed Alex in his
+// garden — and now asks `PLOT_TRIGGER_RADIUS`, the one definition both the host and the mesh use.
+//
+// ⚠ THIS ASSERT DOES NOT SAY THE SEAM SHOULD BE SMALL. That was the old header's claim and it was
+// the wrong lesson: the seam is now a 14-block landmark drawn from 120 blocks out, because it is the
+// keeper's only way out of a fold whose wall is ~1,900 blocks around. What must stay small is the
+// gap between what is drawn AT THE GROUND and what the trigger accepts.
 {
   for (const seed of SEEDS) {
     const a = plotSeamAnchor(seed)
     const t = plotThreshold(seed, DEFAULT_PLOT)
     let outside = 0
     for (const p of quadPoints(a)) {
-      if (Math.hypot(p.x - (t.x + 0.5), p.z - (t.z + 0.5)) >= 1.6) outside++
+      if (Math.hypot(p.x - (t.x + 0.5), p.z - (t.z + 0.5)) >= PLOT_TRIGGER_RADIUS) outside++
     }
     ok(outside === 0, `★ seed ${seed}: the plot seam's whole footprint is inside the panel's reach (${outside} outside)`)
     ok(a.y === t.y, `seed ${seed}: the plot seam stands on the threshold the keeper is set down on`)

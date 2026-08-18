@@ -126,7 +126,7 @@ import { GATE_X, GATE_Z, GATE_SPANS_X, gateCells } from './gate'
 import { createGregMesh, GREG_BOUNDS } from './greg'
 import { aimedAt, bodyBox } from './aim'
 import { createSteamPoints } from './steam'
-import { createSeamShimmer } from './seam'
+import { createSeamShimmer, PLOT_TRIGGER_RADIUS } from './seam'
 import { createMistPass, SPAR_RANGE } from './mist-pass'
 import { mistAt, mistPatchesNear, type MistPatch } from '../voxel/mist'
 import { loadMistLedger, saveMistLedger, recordWithdrawal, residentAt, quietMinutes, type MistLedger, type Resident, type ResidentForm } from './mist-encounter'
@@ -6047,7 +6047,13 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
           // Standing at your own threshold is the way OUT — the same volume you arrive in, which is
           // exactly why the latch exists.
           const t = plotThreshold(SEED)
-          const near = Math.hypot(lc.px - (t.x + 0.5), lc.pz - (t.z + 0.5)) < 1.6 && Math.abs(lc.py - t.y) < 2.5
+          // ⚠ THE RADIUS COMES FROM `seam.ts`, WHICH ALSO DRAWS IT (2026-08-18). It was a bare 1.6
+          // typed here and a matching constant there — and the pair is exactly why Alex was sealed
+          // in his own garden: the trigger was tuned for a crease nobody could see, and neither
+          // number knew about the other. One definition, so the door you can see is the door that
+          // opens.
+          const near = Math.hypot(lc.px - (t.x + 0.5), lc.pz - (t.z + 0.5)) < PLOT_TRIGGER_RADIUS
+            && Math.abs(lc.py - t.y) < 2.5
           // ── ★★ THE SEAM IS TWO-WAY — RULED BY ALEX 2026-08-16 ("go with 1, the fold seam is
           // two-way"), and this is the whole fix ──────────────────────────────────────────────────
           // Found by Alex walking into his own threshold and having NOTHING happen: *"theres no

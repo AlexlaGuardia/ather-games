@@ -120,7 +120,13 @@ import { Column, SECTION } from './column'
 // records that exact excuse costing a silent day when the canopies changed. One voxel per column is
 // still the generated world, and `isStale` is what tells the player rather than betting they will
 // not notice.
-export const GENERATOR_VERSION = 22
+// 22 → 23 (2026-08-18): THE HOME PLOT STARTS AT r300 (Alex: *"the plot starts at 300 block radius
+// and then greg can upgrade to 3, 4, and even 500"*). The island went from ~60 blocks across to
+// ~600 — the largest single change any terrain in this build has taken. Growth is ADDITIVE by
+// construction (the 08-16 coast-anchored keel + plane-hung span), so nothing a keeper built is
+// standing on nothing; but the wall, the threshold and the coast all moved several hundred blocks,
+// and a save written against the old island is a save written against a different place.
+export const GENERATOR_VERSION = 23
 
 /**
  * One column's edits: packed local index → material.

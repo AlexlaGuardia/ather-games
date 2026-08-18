@@ -134,8 +134,43 @@ export interface PlotConfig {
  * 150x150 (`world/region-maps/home-plot.json`), so a cap of ~72 lands the endgame island on roughly
  * the same footprint players already had. Continuity by arithmetic rather than by accident.
  */
+/**
+ * ── ★★ THE FOLD'S SIZE IS A TIER NOW, AND THE FIRST ONE IS 300 (Alex, 2026-08-18) ──────────────
+ * *"im thinking the plot starts at 300 block radius and then greg can upgrade to 3, 4, and even 500
+ * block radius as they progress."* Canon left every number here to the build (`shimmer-geography.md`
+ * 08-13: *"Pocket size/shape… expansion pacing, costs, every number = Jin's"*), so this is a design
+ * call and it is Alex's to make.
+ *
+ * ★ WHY THE JUMP IS SAFE TO MAKE AT ALL: the 08-16 additive-growth work was built for exactly this
+ * operation. `keelDepth` measures its taper from the COAST in blocks, so everything more than
+ * `bevel` inland cannot change when the cap moves; `columnSpan` hangs the keel from the ground PLANE
+ * so a rising surface only ever stacks soil on top. Growing 30 → 300 therefore ADDS ground and
+ * moves nothing a keeper built on. `plotStandY` catches the one keeper whose stored y the risen
+ * turf closed over. None of that was speculative — it was measured on an +18 growth.
+ *
+ * ⚠ WHAT IT COSTS, STATED SO NOBODY REDISCOVERS IT: a 600-block-wide island of empty grass is a lot
+ * of nothing to walk across, and the fantasy the r30 plot sold ("your corner of the Ather to tend",
+ * readable at a glance) is not the fantasy this sells. That is a deliberate trade for room to build
+ * in, and the thing that makes it work is what gets PUT on the ground — not the ground.
+ */
+export const PLOT_TIERS = [300, 400, 500] as const
+export type PlotTier = 0 | 1 | 2
+
+/**
+ * The config for a keeper at tier `t`. **The only way to size a fold** — nothing else may reach for
+ * `capRadius` and add to it.
+ *
+ * ⚠ CLAMPED, NOT TRUSTED. The tier comes out of a save file, and a save that says `7` must give a
+ * fold rather than an exception. Out-of-range reads as the top tier, which is the fail-safe
+ * direction for a value that only ever grows.
+ */
+export const plotForTier = (tier: number, base: PlotConfig = DEFAULT_PLOT): PlotConfig => ({
+  ...base,
+  capRadius: PLOT_TIERS[Math.max(0, Math.min(PLOT_TIERS.length - 1, Math.round(tier || 0)))],
+})
+
 export const DEFAULT_PLOT: PlotConfig = {
-  capRadius: 30,
+  capRadius: 300,
   baseY: 96,
   roll: 2,
   keel: 14,
@@ -259,8 +294,14 @@ export const withinCap = (x: number, z: number, seed: number, cfg: PlotConfig = 
  * worth having. A keeper who wants a hundred containers can have them; they just cannot have them
  * at home, where it is safe and warm and one step from the bench.
  */
+// ⚠ THE DIVISOR MOVED 3 → 30 WITH THE r300 PLOT (2026-08-18), AND THAT IS THE NUMBER STAYING PUT
+// RATHER THAN CHANGING. Alex's spec was **10 chests at the starting plot**; the starting plot went
+// from r30 to r300, so a divisor of 3 would have handed a first-day keeper **100 chests** and
+// deleted the scarcity the spec exists to create. Re-anchored, the ladder is 10 → 13 → 16 across
+// the three tiers: still *"whatever raises your ground raises what you can keep on it"*, still one
+// number, and still the figure Alex asked for on day one.
 export const chestCap = (cfg: PlotConfig = DEFAULT_PLOT): number =>
-  Math.max(1, Math.floor(cfg.capRadius / 3))
+  Math.max(1, Math.floor(cfg.capRadius / 30))
 
 /**
  * Is this column in the cloud-wall ring that marks the fold's edge?

@@ -89,16 +89,29 @@ const SEAM_STANDOFF = 0.5
 const SEAM_RIBS = 12
 
 /**
- * ★ AND THE PLOT'S SEAM IS NARROW FOR THE SAME REASON THE WILDS' ONE IS WIDE. It is not a style
- * choice: the Wilds door is an arc in a wall and `inPassageVolume` accepts ~6 blocks either side of
- * the bearing, while the plot's threshold opens the waymark panel within **1.6 blocks** of one spot
- * (`VoxelWorld.tsx`, the `near` test). Drawing the two at the same size would make one of them lie.
- * A tall narrow crease is also simply what the canon sentence describes, so the constraint and the
- * look agree here.
+ * ── ★★ THE KEEPER'S ONLY WAY OUT MUST BE VISIBLE FROM ACROSS THEIR OWN GARDEN (2026-08-18) ──────
+ * Alex: *"my player is still trapped in the home plot with no way out."* Everything worked — the
+ * threshold was where it should be, the two-way rule was live, the panel opened when you stood in
+ * the right spot. **The spot was a 1.6-block circle on a wall 190 blocks around, marked by a crease
+ * that only began to draw within 7 blocks of it.** Standing anywhere else in your garden, the wall
+ * was featureless in every direction. That is not a door with a bug; it is a door nobody can find,
+ * and the fault was mine for sizing the LOOK against the trigger instead of against the job.
+ *
+ * ★ THE OLD NOTE HERE ARGUED THE OPPOSITE AND WAS WRONG IN ITS PREMISE. It said the plot's seam
+ * should be narrow *because* its trigger was narrow — *"drawing the two at the same size would make
+ * one of them lie."* True, and it fixed the wrong half: the honest move is to widen the TRIGGER to
+ * something a walking keeper can hit, then draw a seam that says so. A door you can see and cannot
+ * enter is a bug; a door you can enter and cannot see is a sealed garden.
+ *
+ * ⚠ AND IT HAS TO SCALE WITH THE FOLD. At the r30 starting plot a 7-block draw was merely bad; at
+ * the r300 plot (2026-08-18) the wall is ~1,900 blocks around and a keeper could walk the perimeter
+ * for ten minutes without passing the door. So the seam is a LANDMARK now — tall, and drawn from far
+ * enough that turning on the spot anywhere inside a young fold will show it.
  */
-const PLOT_NEAR_RADIUS = 1.6
+const PLOT_NEAR_RADIUS = 3
 const PLOT_WIDTH_FRAC = 0.85
-const PLOT_HEIGHT = 5
+/** Tall enough to clear the cloud-wall's own height and read as a beacon, not as a doorway. */
+const PLOT_HEIGHT = 14
 
 /**
  * ── ⚠⚠ WHY `cfg` IS REQUIRED HERE AND HAS NO DEFAULT ────────────────────────────────────────────
@@ -185,6 +198,17 @@ export function wildsSeamRibbon(seed: number, cfg: BubbleConfig): SeamRib[] {
  * which for the keeper's only way out is a bug wearing an art decision. The tick yaws it about Y
  * only, so it always stands upright; a full billboard would flatten it into a sprite.
  */
+/**
+ * How close the keeper must be to their threshold for it to open — the TRIGGER, and the same number
+ * the seam is drawn against.
+ *
+ * ★ EXPORTED SO THE HOST CANNOT DISAGREE WITH THE PICTURE. It was a bare `1.6` typed into
+ * `VoxelWorld.tsx`'s `near` test and a separate `PLOT_NEAR_RADIUS` here; two copies of one fact,
+ * and the sort of pair that drifts the first time either is tuned. Same reasoning as `CAST_KEYS`
+ * driving both the handler and the label.
+ */
+export const PLOT_TRIGGER_RADIUS = PLOT_NEAR_RADIUS
+
 export function plotSeamAnchor(seed: number, cfg: PlotConfig = DEFAULT_PLOT): SeamAnchor {
   const t = plotThreshold(seed, cfg)
   return {
@@ -212,9 +236,15 @@ export function seamNearness(dist: number, shut: number, open: number): number {
 }
 
 const WILDS_SHUT = 22, WILDS_OPEN = 2.5
-const PLOT_SHUT = 7, PLOT_OPEN = 1
+// ⚠ 7 → 120. `shut` is the distance at which the parting is fully closed and therefore invisible,
+// so it WAS the number that sealed the garden: past seven blocks the only exit rendered as nothing.
+// The Wilds keeps its 22 on purpose — out there the seam is a secret you approach, and the fold's
+// wall is a landmark of its own. Inside, the seam IS the landmark.
+const PLOT_SHUT = 120, PLOT_OPEN = 3
 /** Beyond this the mesh is hidden outright — a crease 80 blocks off is sub-pixel anyway. */
-const WILDS_DRAW = 90, PLOT_DRAW = 48
+// ⚠ PLOT_DRAW must stay >= PLOT_SHUT or the mesh is culled while the shader still says it is open —
+// the door would fade in and then vanish as you walked toward it.
+const WILDS_DRAW = 90, PLOT_DRAW = 420
 
 export interface SeamPass {
   group: THREE.Group
