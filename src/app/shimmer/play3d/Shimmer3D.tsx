@@ -64,7 +64,7 @@ import { createBank, bankFromSave, bankToSave, bankUsed, bankCapacity, bankDepos
 import { ITEMS, NODE_TYPE_LABELS } from '../sprites/items'
 import { startPerfLog, mark, logPerf } from './perflog'
 import { createManaPool, manaToSave, manaFromSave, getMaxPool, type ManaPool } from '../engine/mana'
-import { brewPotion, POTION_DEFS, elementForInfusion } from '../engine/alchemy'
+import { brewPotion, POTION_DEFS, elementForInfusion, applyInfusion, INFUSION_BREWS } from '../engine/alchemy'
 import { MANA_POTIONS, HEAL_POTIONS, SPIRIT_MEND_POTIONS, MEND_POTION_ID, POTION_BUFFS, BUFF_DEFS, HARVEST_BREW_ADVANCE_MS, drinkBuff, activeBuffList, pruneBuffs, gatherXpMult, bonusFind, kindredMult, speedMult, manaRegenMult, rinTune, suppressEncounters, potionEffectLine, type ActiveBuffs } from '../engine/potion-effects'
 import { canCraft, craftItem, RECIPE_DEFS } from '../engine/crafting'
 import { createGEState, buyFromGE, sellToGE, tickPriceDrift, GE_ITEM_IDS, geToSave, geFromSave, type GEMarketState, type GESave } from '../engine/exchange'
@@ -5475,6 +5475,32 @@ export default function Shimmer3D() {
   // Spend a salve on ONE named spirit — the deliberate counterpart to the hotbar's auto-pick
   // (which takes the worst-off). Reviving a downed spirit also mends it with the same salve,
   // or the item would be spent putting something on its feet at a sliver.
+  /**
+   * ── ★ POURING AN INFUSION (#262 slice ③, 2026-08-18) ────────────────────────────────────────
+   * Mirrors `mendSpirit` exactly, because it is the same shape: spend one bottle from the satchel
+   * on one spirit, tell the keeper, persist. The rules all live in `applyInfusion` — this only
+   * routes the answer to a toast and writes the save.
+   *
+   * ⚠ THE SAVE IS WRITTEN ONLY ON SUCCESS, and `applyInfusion` removes the bottle only on success
+   * too, so a refusal is genuinely a no-op on both sides. A refusal that persisted a half-change is
+   * how a keeper loses a tier-2 brew to a button that "did nothing".
+   */
+  const infuseSpirit = useCallback((spirit: Spirit, element: Exclude<Element, 'base'>) => {
+    const r = applyInfusion(invRef.current, spirit, INFUSION_BREWS[element])
+    if (!r.ok) {
+      setHarvestToast(
+        r.reason === 'none-in-bag' ? `No ${element} infusion in the satchel`
+        : r.reason === 'element-full' ? `${spirit.name} will hold no more ${element}`
+        : r.reason === 'spirit-full' ? `${spirit.name} has taken all the infusion they can hold`
+        : 'That is not an infusion')
+      return
+    }
+    setInvSlots([...invRef.current.slots])
+    setPartyTick(t => t + 1)
+    setHarvestToast(`${spirit.name} takes the ${element} infusion · ${r.inElement} ${element}, ${r.total}/11`)
+    persist()
+  }, [persist])
+
   const mendSpirit = useCallback((spirit: Spirit) => {
     const amount = SPIRIT_MEND_POTIONS[MEND_POTION_ID]
     if (!amount) return
@@ -7009,8 +7035,15 @@ export default function Shimmer3D() {
           owned={partyRef.current ?? []}
           maxParty={MAX_PARTY}
           salves={countItem(invRef.current, MEND_POTION_ID)}
+          infusionsHeld={{
+            mana:  countItem(invRef.current, INFUSION_BREWS.mana),
+            storm: countItem(invRef.current, INFUSION_BREWS.storm),
+            earth: countItem(invRef.current, INFUSION_BREWS.earth),
+            water: countItem(invRef.current, INFUSION_BREWS.water),
+          }}
           isTouch={isTouch}
           onMend={mendSpirit}
+          onInfuse={infuseSpirit}
           onSetLead={setPartyLead}
           onSetActive={setSpiritActiveIn}
           initialSelId={partyInitialSelRef.current}

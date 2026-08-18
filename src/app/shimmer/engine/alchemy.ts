@@ -2,11 +2,12 @@
 // Canon: alchemy skill levels 1-25 unlock 4 tiers of potions
 // Mirrors tools.ts pattern: canBrew/brewPotion
 
-import type { Element } from '../spirits/spirit'
+import type { Element, Spirit } from '../spirits/spirit'
+import { addInfusion, infusionTotal, MAX_INFUSIONS_TOTAL, MAX_INFUSIONS_PER_ELEMENT } from '../spirits/spirit'
 import type { Inventory } from './inventory'
 import type { SkillSet } from './skills'
 import type { ManaPool } from './mana'
-import { addItems } from './inventory'
+import { addItems, countItem, removeItems } from './inventory'
 import { addSkillXP } from './skills'
 import { drainMana } from './mana'
 import { canAfford, spendMaterials, type BankState } from './bank'
@@ -174,6 +175,54 @@ export function elementForInfusion(potionId: string): Exclude<Element, 'base'> |
     if (id === potionId) return el
   }
   return null
+}
+
+/**
+ * ── ★★ THE APPLICATION SITE — #262 slice ③, 2026-08-18 ──────────────────────────────────────────
+ *
+ * Pouring one infusion into one spirit. Until this function existed `addInfusion()` had **zero
+ * callers**, which `game/alchemy.md` (RULED 2026-07-30) identified as the reason **no spirit in the
+ * game could evolve**: a spirit's second form is set at level 34 by its DOMINANT infusion, `element`
+ * was written `'base'` at creation and never written again, so `dominantInfusion()` returned null
+ * forever and all forty ruled second forms were unreachable. The brews existed (slice ②), the herbs
+ * existed (slice ①), and the middle was missing.
+ *
+ * ★★ THE ORDER IS THE WHOLE FUNCTION: ASK FIRST, SPEND SECOND. `addInfusion` refuses at the caps
+ * (11 total, 9 per element) and returns false. Consuming the bottle and *then* discovering the
+ * refusal destroys a tier-2 brew — four gathered ingredients and a farming cycle — for nothing, and
+ * it would look exactly like a UI that "sometimes doesn't register". Nothing is removed from the
+ * bag on any path that does not also add a point.
+ *
+ * ⚠ NO LEVEL GATE, AND THAT IS THE DESIGN. Infusing is how a keeper STEERS which of four ruled
+ * forms their spirit becomes; the level-34 threshold is when the world reads the ledger, not when
+ * you may write to it. Gating application behind 34 would mean the choice is made after it is
+ * announced — which is the same inversion `EvolutionOverlay` currently embodies and slice ④ fixes.
+ *
+ * ⚠ NAMED `applyInfusion`, NOT `useInfusion`. In a React tree a `useX` free function reads as a
+ * hook to every human and to the rules-of-hooks lint, and this one is called from an event handler
+ * inside a component — the exact shape the rule exists to forbid. The verb was never worth the
+ * ambiguity.
+ *
+ * ⚠ THE REFUSALS ARE TYPED, NOT A BARE BOOLEAN, because the four mean genuinely different things to
+ * a keeper — "you have none", "this one is full of storm", "this one has taken all it can hold" and
+ * "that is not an infusion" are four different sentences, and a false that means all of them is how
+ * a panel ends up saying nothing at all.
+ */
+export type InfusionResult =
+  | { ok: true; element: Exclude<Element, 'base'>; total: number; inElement: number }
+  | { ok: false; reason: 'not-an-infusion' | 'none-in-bag' | 'element-full' | 'spirit-full' }
+
+export function applyInfusion(inv: Inventory, spirit: Spirit, potionId: string): InfusionResult {
+  const element = elementForInfusion(potionId)
+  if (!element) return { ok: false, reason: 'not-an-infusion' }
+  if (countItem(inv, potionId) < 1) return { ok: false, reason: 'none-in-bag' }
+  // ⚠ Asked BEFORE the bottle is spent — see the header. The two caps are distinguished here rather
+  // than inside `addInfusion` because only the caller knows which element was aimed at.
+  if (spirit.infusions[element] >= MAX_INFUSIONS_PER_ELEMENT) return { ok: false, reason: 'element-full' }
+  if (infusionTotal(spirit.infusions) >= MAX_INFUSIONS_TOTAL) return { ok: false, reason: 'spirit-full' }
+  if (!addInfusion(spirit.infusions, element)) return { ok: false, reason: 'spirit-full' }
+  removeItems(inv, potionId, 1)
+  return { ok: true, element, total: infusionTotal(spirit.infusions), inElement: spirit.infusions[element] }
 }
 
 /** Check if player can brew a potion (has materials, level, mana) */

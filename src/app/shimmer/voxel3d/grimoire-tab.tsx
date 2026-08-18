@@ -52,9 +52,16 @@ import {
   speciesDisplayName, formStage, xpForLevel,
 } from '../spirits/spirit'
 import { ALL_SPECIES } from '../engine/spirit-index'
-import { AWAKENED_FORM_NAMES } from '../spirits/evolution-config'
+import { AWAKENED_FORM_NAMES, INFUSION_CAPS } from '../spirits/evolution-config'
+import { infusionTotal, dominantInfusion } from '../spirits/spirit'
+import { INFUSION_BREWS, applyInfusion } from '../engine/alchemy'
+import { countItem } from '../engine/inventory'
+import type { Inventory } from '../engine/inventory'
 
 type Face = 'yours' | 'species'
+
+/** The four pourable elements, in canon's own order. `ELEMENTS` includes 'base', which is not one. */
+const ELEMENT_POUR = ['mana', 'storm', 'earth', 'water'] as const
 
 /** A lit cube face. Unknown entries pass `lit={false}` and read as the same cube in shadow. */
 function Cube({ color, lit, size = 18 }: { color: string; lit: boolean; size?: number }) {
@@ -95,7 +102,53 @@ function derivedKnowledge(party: Spirit[]) {
   return { species, second }
 }
 
-function YoursFace({ party }: { party: Spirit[] }) {
+/**
+ * ── ★★ THE APPLICATION SITE, ON SCREEN — #262 slice ③ (2026-08-18) ─────────────────────────────
+ *
+ * Pouring a brewed infusion into one of your own spirits. This is the gesture that was missing:
+ * canon makes the Infusions the ONLY road to an evolved form, and until now nothing in the game
+ * called `addInfusion` at all, so every spirit's `element` stayed `'base'` for life.
+ *
+ * ★ IT LIVES ON THE GRIMOIRE'S "YOURS" FACE BECAUSE THAT IS WHERE THE ANSWER IS ALREADY WRITTEN.
+ * Canon rules the grimoire *"the first instrument for STUDYING spirits"*, and the same file's
+ * contrast is the collar OWNS while the grimoire KNOWS. Steering which of four ruled forms a spirit
+ * grows into is study, not storage — it belongs on the page that already lists who yours are, next
+ * to the level bar the threshold reads. It is deliberately NOT a hotbar "drink": an infusion is not
+ * taken by the keeper, and slice ② already stripped that affordance from the tooltip.
+ *
+ * ⚠ THE REFUSALS ARE SHOWN, NOT SWALLOWED. `applyInfusion` returns four distinct reasons and each
+ * gets its own sentence — "you have none" and "this one is full" are different facts, and a button
+ * that simply does nothing is how a keeper concludes the feature is broken. Same call as the
+ * MoveBook's four honest states.
+ *
+ * ⚠ AND THE BUTTONS STAY VISIBLE WHEN THEY CANNOT FIRE, disabled and counted, for the same reason
+ * the MoveBook shows its 13 unbuilt moves: hiding the Earth pour because you hold no Earth infusion
+ * hides the existence of Earth infusions from the keeper who most needs to learn about them.
+ */
+function YoursFace({ party, inv, onChange }: {
+  party: Spirit[]
+  inv: React.RefObject<Inventory> | null
+  onChange: () => void
+}) {
+  const [, bump] = useState(0)
+  const [note, setNote] = useState<string | null>(null)
+
+  const pour = (s: Spirit, element: Exclude<Element, 'base'>) => {
+    const bag = inv?.current
+    if (!bag) return
+    const r = applyInfusion(bag, s, INFUSION_BREWS[element])
+    setNote(
+      r.ok
+        ? `${s.name} takes the ${element} infusion — ${r.inElement} ${element}, ${r.total}/${INFUSION_CAPS.totalCap} in all`
+        : r.reason === 'none-in-bag' ? `no ${element} infusion in your satchel — brew one first`
+        : r.reason === 'element-full' ? `${s.name} will hold no more ${element}`
+        : r.reason === 'spirit-full' ? `${s.name} has taken all the infusion they can hold`
+        : 'that is not an infusion',
+    )
+    if (r.ok) onChange()
+    bump(v => v + 1)
+  }
+
   if (party.length === 0) {
     return (
       <div className="flex h-full items-center justify-center px-8 text-center text-[11px] leading-relaxed text-white/30">
@@ -115,8 +168,10 @@ function YoursFace({ party }: { party: Spirit[] }) {
       : speciesDisplayName(s.species)
     const hp = Math.round((s.hpFrac ?? 1) * 100)
     const xpPct = Math.min(1, s.xp / Math.max(1, xpForLevel(s.level)))
+    const dom = dominantInfusion(s.infusions)
     return (
-      <div key={s.id} className="flex items-center gap-2.5 rounded border border-white/10 bg-white/[0.03] px-2.5 py-1.5">
+      <div key={s.id} className="rounded border border-white/10 bg-white/[0.03] px-2.5 py-1.5">
+        <div className="flex items-center gap-2.5">
         <Cube color={tint} lit size={22} />
         <div className="min-w-0 flex-1">
           <div className="flex items-baseline gap-2">
@@ -138,12 +193,47 @@ function YoursFace({ party }: { party: Spirit[] }) {
             {hp === 0 ? 'down' : `${hp}% hp`}
           </div>
         </div>
+        </div>
+        {/* ── the infusion ledger + the pour ─────────────────────────────────────────────────
+            The dominant element is named rather than left to be counted off four bars: it is the
+            single fact the level-34 threshold will read, and a tie means no form at all. */}
+        <div className="mt-1.5 flex items-center gap-2 border-t border-white/[0.06] pt-1.5">
+          <span className="text-[9px] uppercase tracking-[0.14em] text-white/30">infusion</span>
+          <span className="text-[10px] tabular-nums text-white/45">
+            {infusionTotal(s.infusions)}/{INFUSION_CAPS.totalCap}
+          </span>
+          <span className="text-[9px] text-white/30">
+            {dom ? `leaning ${dom}` : infusionTotal(s.infusions) ? 'tied — no form yet' : 'unset'}
+          </span>
+          <span className="ml-auto flex gap-1">
+            {ELEMENT_POUR.map(el => {
+              const held = inv?.current ? countItem(inv.current, INFUSION_BREWS[el]) : 0
+              const full = s.infusions[el] >= INFUSION_CAPS.perElementCap
+                        || infusionTotal(s.infusions) >= INFUSION_CAPS.totalCap
+              const dead = held === 0 || full
+              return (
+                <button key={el} type="button" disabled={dead}
+                        onPointerDown={() => !dead && pour(s, el)}
+                        title={`${el} · ${s.infusions[el]} in this spirit · ${held} in your satchel`}
+                        className={`flex items-center gap-1 rounded px-1.5 py-0.5 text-[9px] tabular-nums transition-colors ${
+                          dead ? 'cursor-default text-white/20' : 'text-white/70 hover:bg-white/10'}`}>
+                  <Cube color={ELEMENT_COLORS[el]} lit={!dead} size={9} />
+                  {s.infusions[el]}
+                  <span className="text-white/25">·{held}</span>
+                </button>
+              )
+            })}
+          </span>
+        </div>
       </div>
     )
   }
 
   return (
     <div className="flex flex-col gap-3">
+      {/* One line, and it says what actually happened — a refusal that shows nothing is how a
+          keeper concludes the button is broken. */}
+      {note && <div className="rounded bg-white/[0.05] px-2 py-1 text-[10px] text-white/55">{note}</div>}
       <div>
         <div className="mb-1.5 text-[10px] uppercase tracking-[0.16em] text-white/35">
           With you · {withYou.length}
@@ -241,7 +331,11 @@ function SpeciesFace({ party }: { party: Spirit[] }) {
   )
 }
 
-export function GrimoireTab({ party }: { party: React.RefObject<Spirit[]> }) {
+export function GrimoireTab({ party, inv, onChange }: {
+  party: React.RefObject<Spirit[]>
+  inv?: React.RefObject<Inventory> | null
+  onChange?: () => void
+}) {
   const [face, setFace] = useState<Face>('yours')
   // Read once per open. The party is a ref mutated by the world, and this panel is a modal over a
   // paused-ish surface, so a snapshot is what the keeper is looking at.
@@ -260,7 +354,9 @@ export function GrimoireTab({ party }: { party: React.RefObject<Spirit[]> }) {
           </button>
         ))}
       </div>
-      {face === 'yours' ? <YoursFace party={spirits} /> : <SpeciesFace party={spirits} />}
+      {face === 'yours'
+        ? <YoursFace party={spirits} inv={inv ?? null} onChange={onChange ?? (() => {})} />
+        : <SpeciesFace party={spirits} />}
     </div>
   )
 }

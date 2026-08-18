@@ -150,6 +150,7 @@ import { spiritsToSave, spiritsFromSave } from '../spirits/spirit-save'
 import { LAUNCHED_SPECIES } from '../engine/spirit-index'
 import { KeeperFrame, TabEmpty, type KeeperTab } from './keeper-panel'
 import { GrimoireTab } from './grimoire-tab'
+import { POTION_IDS } from '../engine/alchemy'
 import { loadRuneInventory, saveRuneInventory, grantRune, revokeRune } from '../play3d/rune-inventory'
 import { birthAffinity } from '../play3d/birth-affinity'
 // Health + shields are SHARED rules, not a second copy — see engine/vitals.ts on why.
@@ -824,9 +825,21 @@ function suggestionsFor(line: string, ctx: ConsoleCtx): { options: string[]; app
   return { options: opts.slice(0, 8), apply: build }
 }
 /** Item ids the console may conjure — everything a block drops or a recipe produces. */
+/**
+ * What `/give` will conjure. Block drops + voxel recipe outputs + every brewed potion.
+ *
+ * ⚠ THE POTIONS ARE HERE BECAUSE THIS WORLD CANNOT MAKE THEM (2026-08-18). Brewing lives in
+ * `engine/alchemy.ts` and is wired only into play3d; the voxel crafting path is `voxel/recipes.ts`,
+ * a different system with `hand`/`crafting_table` stations and no alchemy in it. So until a bench
+ * exists here, an owner testing anything downstream of a brew — the infusion pour on the grimoire's
+ * Yours face, most of all — has no way to hold one. A validation set that silently excludes a whole
+ * economy makes that economy untestable rather than unreachable, which is worse: unreachable gets
+ * noticed.
+ */
 const KNOWN_ITEMS: ReadonlySet<string> = new Set([
   ...BLOCKS.flatMap(b => b.drops.map(d => d.itemId)),
   ...RECIPE_OUTPUTS,
+  ...POTION_IDS,
 ])
 
 /**
@@ -1804,7 +1817,8 @@ export default function VoxelWorld() {
                   onMove={(f, t) => { moveRef(f, t); setCraftTick(v => v + 1) }}
                   onSplit={(f, t, m) => { splitRef(f, t, m); setCraftTick(v => v + 1) }}
                   onQuick={(r) => { quickRef(r); setCraftTick(v => v + 1) }}
-                  onClose={closeBag} tools={tools} skills={skills} party={party} />
+                  onClose={closeBag} tools={tools} skills={skills} party={party}
+                  onParty={() => { writeParty(); setCraftTick(v => v + 1) }} />
       )}
       {/* The map — minimap always up, M expands it. Hidden while another cursor surface owns the
           screen, so it never sits on top of the bag or the craft grid. */}
@@ -2492,7 +2506,7 @@ function LoadoutTab() {
 }
 
 function BagPanel({ inv, chest, tick, sel, dragFrom, setDragFrom, onMove, onSplit, onQuick, onClose,
-                   tools, skills, party }: {
+                   tools, skills, party, onParty }: {
   inv: React.RefObject<Inventory>
   chest: OpenChest | null
   tick: number
@@ -2506,6 +2520,13 @@ function BagPanel({ inv, chest, tick, sel, dragFrom, setDragFrom, onMove, onSpli
   tools: React.RefObject<EquippedTools>
   skills: React.RefObject<SkillSet>
   party: React.RefObject<Spirit[]>
+  /**
+   * Persist after the grimoire changes a spirit — pouring an infusion mutates the Spirit in place
+   * (the panel holds the same objects the world does, not copies), so nothing else would ever write
+   * it. ⚠ A pour that survives until reload and then vanishes is worse than one that is refused:
+   * the keeper spent a tier-2 brew on it.
+   */
+  onParty: () => void
 }) {
   // Which screen is open resets to the satchel on every open, deliberately: `I` is muscle-memory
   // for "my bag", and a key that sometimes opens the grimoire because that is where you were last
@@ -2761,7 +2782,7 @@ function BagPanel({ inv, chest, tick, sel, dragFrom, setDragFrom, onMove, onSpli
                  hint={tab === 'satchel' ? hint : undefined}>
       {tab === 'satchel' && satchel}
       {tab === 'runes' && <RunesTab />}
-      {tab === 'grimoire' && <GrimoireTab party={party} />}
+      {tab === 'grimoire' && <GrimoireTab party={party} inv={inv} onChange={onParty} />}
       {tab === 'tools' && <ToolsTab tools={tools} skills={skills} />}
       {tab === 'loadout' && <LoadoutTab />}
     </KeeperFrame>

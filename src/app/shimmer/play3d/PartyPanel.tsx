@@ -128,9 +128,12 @@ function LineupCard({ spirit, index, resting, selected, onClick }: {
 }
 
 // ── the dossier ─────────────────────────────────────────────────────────────
-function Detail({ spirit, index, resting, salves, onMend, onSetLead, onSetActive }: {
+function Detail({ spirit, index, resting, salves, infusionsHeld, onMend, onInfuse, onSetLead, onSetActive }: {
   spirit: Spirit; index: number; resting: boolean; salves: number
+  /** How many of each elemental infusion sit in the satchel — counts, not the bag, like `salves`. */
+  infusionsHeld: Record<Exclude<Element, 'base'>, number>
   onMend: (s: Spirit) => void
+  onInfuse: (s: Spirit, element: Exclude<Element, 'base'>) => void
   onSetLead: (s: Spirit) => void
   onSetActive: (s: Spirit, active: boolean) => void
 }) {
@@ -314,6 +317,38 @@ function Detail({ spirit, index, resting, salves, onMend, onSetLead, onSetActive
               return `leaning ${dom}`
             })()}
           </div>
+          {/* ── ★ THE POUR (#262 slice ③, 2026-08-18) ─────────────────────────────────────────
+              Brewing lives on THIS surface, so the gesture that spends a brew belongs here too —
+              a keeper who can make an infusion and not use it is the same middle-removed failure
+              this whole row exists to close.
+              ⚠ Once `element` is settled the pours go away rather than refusing: after level 34
+              the form is decided, and offering a control that can no longer change anything is a
+              worse lie than not offering it. Before then they stay VISIBLE but disabled, with the
+              count you hold, so the keeper learns the mechanic exists. */}
+          {spirit.element === 'base' && (
+            <div style={{ display: 'flex', gap: 4, marginTop: 6 }}>
+              {(['mana', 'storm', 'earth', 'water'] as const).map(el => {
+                const held = infusionsHeld[el] ?? 0
+                const full = spirit.infusions[el] >= 9 || infusionTotal(spirit.infusions) >= 11
+                const dead = held === 0 || full
+                return (
+                  <button key={el} type="button" disabled={dead}
+                          onClick={() => !dead && onInfuse(spirit, el)}
+                          title={`${el} · ${spirit.infusions[el]} in ${spirit.name} · ${held} in your satchel`}
+                          style={{
+                            flex: 1, padding: '4px 0', borderRadius: 4, cursor: dead ? 'default' : 'pointer',
+                            border: `1px solid ${dead ? '#ffffff18' : ELEMENT_COLORS[el] + '66'}`,
+                            background: dead ? 'transparent' : ELEMENT_COLORS[el] + '1f',
+                            color: dead ? dim : '#e6efe9',
+                            font: `700 8.5px ${mono}`, letterSpacing: '0.08em',
+                            fontVariantNumeric: 'tabular-nums',
+                          }}>
+                    {el.slice(0, 2).toUpperCase()} {spirit.infusions[el]}·{held}
+                  </button>
+                )
+              })}
+            </div>
+          )}
         </div>
       </div>
 
@@ -345,12 +380,14 @@ function Detail({ spirit, index, resting, salves, onMend, onSetLead, onSetActive
 }
 
 // ── the panel ───────────────────────────────────────────────────────────────
-export default function PartyPanel({ owned, maxParty, salves, isTouch, onMend, onSetLead, onSetActive, onClose, initialSelId }: {
+export default function PartyPanel({ owned, maxParty, salves, infusionsHeld, isTouch, onMend, onInfuse, onSetLead, onSetActive, onClose, initialSelId }: {
   owned: Spirit[]                 // every spirit you have; `inParty` splits party from resting
   maxParty: number
   salves: number
+  infusionsHeld: Record<Exclude<Element, 'base'>, number>
   isTouch: boolean
   onMend: (s: Spirit) => void
+  onInfuse: (s: Spirit, element: Exclude<Element, 'base'>) => void
   onSetLead: (s: Spirit) => void
   onSetActive: (s: Spirit, active: boolean) => void
   onClose: () => void
@@ -438,7 +475,9 @@ export default function PartyPanel({ owned, maxParty, salves, isTouch, onMend, o
                   index={Math.max(0, selIndex)}
                   resting={isResting}
                   salves={salves}
+                  infusionsHeld={infusionsHeld}
                   onMend={onMend}
+                  onInfuse={onInfuse}
                   onSetLead={onSetLead}
                   onSetActive={onSetActive}
                 />
