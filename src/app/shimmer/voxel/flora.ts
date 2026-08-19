@@ -25,6 +25,7 @@ import { zoneAt } from './zones'
 import { floraCharacterAt } from './character'
 import { mistAt } from './mist'
 import { MAT, LAND_DRESS } from './depth'
+import { scatterAt, scatterCharacterAt, SCATTER } from './scatter'
 
 export const FLORA = {
   NONE: 0,
@@ -32,6 +33,20 @@ export const FLORA = {
   TALL: 2,     // knee-high grass — occasional, breaks the tuft rhythm
   FLOWER: 3,   // a wildflower — only inside drifts; variant colours the head
   HERB: 4,     // one of canon's four element herbs — only on its own ruled ground
+
+  // ── ★ SCATTER JOINS THIS ENUM, AND IT IS NOT A CLAIM THAT A ROCK IS A PLANT (slice ③) ────────
+  // This is the kind space for "what stands on the cell above the ground", which is what the
+  // renderer's probe reports and what `flora-mesh` switches on. Scatter occupies exactly that slot
+  // (see `plantMaterialAt`), so it has to be expressible here or the probe would need a second,
+  // parallel kind space — and two kind spaces over one cell is the three-copies-of-a-truth failure
+  // this codebase keeps paying for. The NAME of the enum is historical; its job is the slot.
+  //
+  // ⚠ THESE ARE NOT DRAWN AS CROSS-QUADS. Tuft/tall/flower/herb are swaying alpha cards; a stone
+  // that sways is a bug you cannot unsee. `flora-mesh` gives these three solid geometry and a
+  // non-sway material — if you add a fourth, decide which of those two families it joins.
+  ROCK: 5,
+  DEADFALL: 6,
+  MUSHROOM: 7,
 } as const
 
 export interface FloraSpot {
@@ -289,7 +304,42 @@ export function plantMaterialAt(x: number, z: number, seed: number, ground?: Bio
   if (ground) {
     const herb = herbAt(x, z, seed, ground)
     if (herb) return herb
+
+  // ── ★★ SCATTER SITS BELOW THE HERB AND ABOVE THE GRASS (2026-08-19, slice ③) ─────────────────
+  // BELOW the herb, and that ordering is load-bearing far past looks: the four element herbs'
+  // densities were compensated per-ground against a MEASURED land share, so anything that wins
+  // their cell moves the rarity of all four infusions — and the alchemy economy downstream of them
+  // — with nothing looking wrong. A stone displaces a tuft, never a Violetbloom.
+  //
+  // ABOVE the grass because a stone lying on the ground has grass growing AROUND it, not through
+  // it. Scatter runs at ~1-3% against grass's ~13%, so what this costs the flora budget is far
+  // below its own tuning.
+  //
+  // ⚠ INSIDE THE `ground` GUARD FOR THE SAME REASON THE HERB IS, and `herbs.test.ts` is what said
+  // so: *"without a ground, plantMaterialAt is exactly the grass field it always was"*. `ground`'s
+  // presence is the GENERATOR'S SIGNATURE — it is the only caller that can answer it. The pot, the
+  // tests and any field reader must keep getting plain grass, or a mushroom comes up in a seed pot.
+  //
+  // ⚠ SCATTER DOES NOT ASK `TURF`, AND THAT IS A DECISION RATHER THAN AN OMISSION. `TURF` answers
+  // "can a plant GROW here" — it gates the tree planter and the sapling rule, and marsh mud is
+  // outside it on purpose. But scatter is not planted: a stone and a fallen branch LIE on whatever
+  // is under them, and a mushroom comes up on rot and wet mud as readily as on turf. Gating this on
+  // TURF would strip mushrooms from ~a third of the marsh, which is the second land they most
+  // belong to. This is the deliberate second predicate, not a widening of TURF — do not "fix" it by
+  // adding one, and do not add these materials to TURF either (they are not grounds at all).
+  //
+  // ★ RESOLVED HERE RATHER THAN IN column.ts SO THERE IS EXACTLY ONE h+1 RESOLVER. Three copies of
+  // "what stands on this cell" is three chances to disagree, which is the sprite frame-map lesson
+  // and the isHalfCell lesson wearing a third face. The generator already calls this function and
+  // needs no change at all.
+  const sc = scatterAt(x, z, seed, () => scatterCharacterAt(x, z, seed))
+  if (sc) {
+    return sc.kind === SCATTER.ROCK ? MAT.LOOSE_ROCK
+      : sc.kind === SCATTER.DEADFALL ? MAT.DEADFALL
+      : MAT.MUSHROOM
   }
+  }
+
   const f = floraAt(x, z, seed)
   if (!f) return 0
   return f.kind === FLORA.TUFT ? MAT.TUFT : f.kind === FLORA.TALL ? MAT.TALL_GRASS : MAT.FLOWER

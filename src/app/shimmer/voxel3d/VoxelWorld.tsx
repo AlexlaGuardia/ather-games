@@ -31,7 +31,7 @@ import { biomeAt, forestness } from '../voxel/biome'
 import { ZONE_ANCHORS, zoneAt } from '../voxel/zones'
 import { findLands, LAND_IDS } from '../voxel/character'
 import { AIR } from '../voxel/section'
-import { materialAt, MAT, isPlant, isHerb, isHalfMat, isTopSlab, baseOf, TOP_BIT, DEFAULT_DEPTH, TURF } from '../voxel/depth'
+import { materialAt, MAT, isPlant, isHerb, isScatter, isHalfMat, isTopSlab, baseOf, TOP_BIT, DEFAULT_DEPTH, TURF } from '../voxel/depth'
 import { FLORA, plantVariant } from '../voxel/flora'
 import { raycast, tickBreak, dropsFor, setBreakRate, getBreakRate, type BreakState } from '../voxel/mine'
 import { spawnDrop, tossDrop, tickDrops, type Drop } from '../voxel/drops'
@@ -3275,6 +3275,11 @@ const SOLID_EXCEPT = new Set<number>([
   // waterline. This Set is a membership test, not a range, so `isPlant` gaining a second span does
   // not reach it; the four ids have to be written out.
   MAT.VIOLETBLOOM, MAT.STORMGRASS, MAT.ROOTVINE, MAT.TIDEPETAL,
+  // ⚠ AND SCATTER JOINS THEM (2026-08-19, slice ③) — third span, same specific bug. A loose rock
+  // you can see through and walk INTO is the invisible wall, and unlike the herbs these turn up on
+  // open country a keeper crosses constantly. The comment above is now load-bearing for a third
+  // time: this Set is membership, not a range, so `isPlant` gaining a span does not reach it.
+  MAT.LOOSE_ROCK, MAT.DEADFALL, MAT.MUSHROOM,
 ])
 // A slab is SOLID — it just occupies half the cell. Collision asks `solidProbe`, which reports
 // CELL_HALF for it; everything else (light, fence arms, piece placement) wants "yes, solid".
@@ -6212,9 +6217,17 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
         // TURF, not TOPSOIL (2026-08-19): ground cover grows on every land's turf, so picking it
         // has to accept the same set the generator planted it on.
         const ground = voxel(fx, y, fz)
-        if (!TURF.has(ground)) return null
         const m = voxel(fx, y + 1, fz)
         if (!isPlant(m)) return null
+        // ⚠ SCATTER IS EXEMPT FROM THE TURF GATE, AND THIS IS THE PICKING HALF OF A DECISION THE
+        // GENERATOR ALREADY MADE (slice ③). `TURF` answers "can a plant GROW here"; a stone and a
+        // fallen branch LIE on whatever is beneath them, and a mushroom comes up on wet mud — which
+        // is outside TURF on purpose. Without this line scatter would GENERATE on marsh mud and
+        // then be unpickable there: visible, solid-looking, and inert. Read the material FIRST so
+        // this can ask about it — the old order gated on the ground before it knew what stood on it.
+        // ⚠ DO NOT "fix" this by widening TURF or by adding these materials to it. They are not
+        // grounds, and that predicate has been reached for wrongly three times now.
+        if (!isScatter(m) && !TURF.has(ground)) return null
         // A tuft on a slumped lip grows from the half-height top, not from where a full block
         // would have been — otherwise 19% of the garden's ground cover hovers half a voxel up.
         // Fractional by design: the spot's y is only ever used to place a root.
@@ -6224,13 +6237,27 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
         // wildflower — which is exactly how four new plants would have shipped as pink blooms with
         // nothing in the code looking wrong. Same family as the tex switch defaulting to the ore
         // painter, one layer up.
+        // ⚠ SCATTER IS ASKED BEFORE THE FLOWER TAIL, for the exact reason the herb line above was
+        // added: an unguarded `: FLORA.FLOWER` renders every unrecognised material as a wildflower,
+        // and that is how four plants nearly shipped as pink blooms. These three would have been
+        // the fifth through seventh — swaying pink blooms where a boulder field should be.
         const kind = m === MAT.TUFT ? FLORA.TUFT : m === MAT.TALL_GRASS ? FLORA.TALL
+          : m === MAT.LOOSE_ROCK ? FLORA.ROCK
+          : m === MAT.DEADFALL ? FLORA.DEADFALL
+          : m === MAT.MUSHROOM ? FLORA.MUSHROOM
           : isHerb(m) ? FLORA.HERB : FLORA.FLOWER
+        // ★ A LOG'S AXIS COMES FROM THE NEIGHBOURING VOXEL, NOT FROM THE FIELD. The world already
+        // holds the answer — the run was written into it — so re-deriving it would mean resolving
+        // the land blend at ten neighbour columns to learn something the save knows for free. If
+        // neither X neighbour is deadfall the run lies along Z, which is also the right default for
+        // a one-cell remnant clipped by a dial change.
+        const alongX = kind === FLORA.DEADFALL
+          && (voxel(fx + 1, y + 1, fz) === MAT.DEADFALL || voxel(fx - 1, y + 1, fz) === MAT.DEADFALL)
         // `ground` rides along because this walk has ALREADY resolved it — `mat` is the plant, and
         // `ground` is the somewhere it stands. `flora-mesh` tints the blades from it (slice ②), and
         // any later consumer that wants to know what a plant is rooted in gets it for free rather
         // than re-walking the column.
-        return { y: gy, kind, variant: plantVariant(fx, fz, SEED, kind), mat: m, ground }
+        return { y: gy, kind, variant: plantVariant(fx, fz, SEED, kind), mat: m, ground, alongX }
       })
     }
 

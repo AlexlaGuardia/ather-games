@@ -24,8 +24,39 @@ import { MAT } from '../voxel/depth'
 
 const SECTION = 16
 
+/**
+ * ── ★ SCATTER COLOURS, AND THEY ARE NOT MULTIPLIERS ────────────────────────────────────────────
+ * ⚠ THE ONE TRAP HERE IS THAT THESE READ NOTHING LIKE `GRASS_OF_GROUND` BELOW, AND MUST NOT.
+ * A blade's `instanceColor` is `target / BLADE_GREEN` — a MULTIPLIER — because the blade texture is
+ * painted green and a green texture cannot multiply into straw. Scatter geometry carries NO map at
+ * all, so its material colour is plain white and `instanceColor` lands as the FINAL colour. Divide
+ * these by anything and you get a black stone. Same field, opposite arithmetic, one screen apart.
+ *
+ * ★ A STONE TAKES ITS COLOUR FROM THE GROUND IT LIES ON — slice ②'s lesson, and for the same
+ * reason it was learned: one grey stone on nine different grounds is half of what "samey" meant.
+ * ⚠ A GROUND ABSENT FROM THIS TABLE FALLS BACK TO neutral grey, never black or magenta.
+ */
+const ROCK_OF_GROUND: Readonly<Record<number, number>> = {
+  [MAT.TOPSOIL]: 0x8a8880,
+  [MAT.FOREST_LOAM]: 0x7b756a,   // damp wood floor — darker, a little brown in it
+  [MAT.LUSH_TURF]: 0x848275,
+  [MAT.MARSH_MUD]: 0x6e6a5a,     // wet, silt-stained
+  [MAT.DRY_GRASS]: 0x9e9784,     // dusty, sun-bleached
+  [MAT.HIGHLAND_TURF]: 0x8d8b86,
+  [MAT.SCREE]: 0x97948c,         // the stone it broke off — lightest, and the land with the most
+}
+const ROCK_FALLBACK = 0x8a8880
+
+/** Weathered, barkless, sun-greyed — deliberately NOT any species' fresh log colour. */
+const DEADFALL_COLOR = 0x6b5c47
+const SHROOM_STEM_COLOR = 0xe0d6bd
+/** Placeholder caps. Generic build vocabulary — canon names no fungus, so neither do we. */
+const SHROOM_CAPS = [0xa8503c, 0xc08a45, 0x8f6f9e, 0xb8ab86] as const
+
 /** Instance caps — generous against radius-12 meadow country; sync stops quietly at the cap. */
-const CAP = { tuft: 24000, tall: 6000, flower: 9000, herb: 4000 } as const
+// Scatter caps are far below grass because scatter IS rare (~1-3% of columns against grass's 13%).
+// Sized against the measured worst case — a crag at rockK 3.0 is 3% of its columns — with headroom.
+const CAP = { tuft: 24000, tall: 6000, flower: 9000, herb: 4000, rock: 5000, log: 4000, shroom: 3000 } as const
 
 /**
  * ── ★ THE FOUR ELEMENT HERBS, AS ONE SHAPE IN FOUR COLOURS (2026-08-18) ────────────────────────
@@ -83,7 +114,7 @@ const GRASS_OF_GROUND: Readonly<Record<number, number>> = {
   [MAT.HIGHLAND_TURF]: 0x74a06a,  // cooler and greyer, hardy turf at altitude
 }
 
-interface Spot { x: number; y: number; z: number; kind: number; variant: number; mat: number; ground: number }
+interface Spot { x: number; y: number; z: number; kind: number; variant: number; mat: number; ground: number; alongX?: boolean }
 
 /**
  * ── ★ THE VOXEL DECIDES WHETHER A PLANT IS THERE (2026-08-11) ──────────────────────────────────
@@ -97,7 +128,7 @@ interface Spot { x: number; y: number; z: number; kind: number; variant: number;
  * look never has to be stored and picking one plant cannot restyle its neighbour. `y` is
  * fractional on a slumped lip — it is a ground height, not a cell index.
  */
-export type PlantProbe = (x: number, z: number) => { y: number; kind: number; variant: number; mat: number; ground: number } | null
+export type PlantProbe = (x: number, z: number) => { y: number; kind: number; variant: number; mat: number; ground: number; alongX?: boolean } | null
 
 export interface FloraRenderer {
   group: THREE.Group
@@ -206,6 +237,42 @@ export function createFloraRenderer(): FloraRenderer {
   const herbGeo = buildCrossGeometry(0.55, 0.8)
   const tipGeo = buildCrossGeometry(0.34, 0.34, 0.72)
 
+  // ── ★★ SCATTER IS SOLID AND DOES NOT SWAY (2026-08-19, slice ③) ──────────────────────────────
+  // Every material above injects a sway into its vertex shader, and that is correct for an alpha
+  // card standing on a stalk. A stone that sways is a bug you cannot unsee, and a fallen log that
+  // breathes is worse. So these three get real geometry and a plain Lambert: no `onBeforeCompile`,
+  // no `alphaTest` (nothing is cut out), `side: FrontSide` because a closed solid never shows its
+  // interior — which also halves their fill cost against the double-sided cards.
+  //
+  // ⚠ PLACEHOLDER FORMS, LIKE EVERY MATERIAL IN THIS WORLD. An icosahedron is a stone the way a
+  // corked bottle was an infusion vessel: honest, readable at range, and waiting for Alex's call on
+  // what the Ather's ground furniture actually looks like. Silhouette is what is being fixed here —
+  // that a rock reads as a lump, a log as a long low bar, a mushroom as a stalk with a cap.
+  const solidMaterial = (): THREE.MeshLambertMaterial =>
+    new THREE.MeshLambertMaterial({ side: THREE.FrontSide })
+
+  // A stone: low, angular, wider than tall so it reads as lying ON the ground rather than set INTO
+  // it. Flattened on Y by the instance scale below rather than in the geometry, so one buffer
+  // serves every size.
+  const rockGeo = new THREE.IcosahedronGeometry(0.21, 0)
+  // A log: EXACTLY ONE CELL LONG (1.0) so consecutive cells of a run butt against each other into a
+  // continuous trunk with no gap and no overlap. Six-sided rather than smooth — this world's
+  // vocabulary is faceted, and a 6-gon costs 12 triangles. Built lying along +X; the instance
+  // quaternion turns it a quarter turn for a Z-axis log (see `alongX`).
+  const logGeo = new THREE.CylinderGeometry(0.15, 0.13, 1.0, 6)
+  logGeo.rotateZ(Math.PI / 2)
+  // A mushroom in two parts, for the same reason a herb is body-plus-tip: the cap carries the
+  // colour and the silhouette, the stalk just holds it up.
+  const shroomStemGeo = new THREE.CylinderGeometry(0.05, 0.07, 0.24, 5)
+  shroomStemGeo.translate(0, 0.12, 0)
+  const shroomCapGeo = new THREE.ConeGeometry(0.17, 0.15, 8)
+  shroomCapGeo.translate(0, 0.30, 0)
+
+  const rockMat = solidMaterial()
+  const logMat = solidMaterial()
+  const shroomStemMat = solidMaterial()
+  const shroomCapMat = solidMaterial()
+
   const herbMat = swayMaterial(bladeTex, 0.07)
   const tipMat = swayMaterial(headTex, 0.07)
   const tuftMat = swayMaterial(bladeTex, 0.05)
@@ -227,7 +294,19 @@ export function createFloraRenderer(): FloraRenderer {
   // most of what identifies it, and four species sharing one silhouette have nothing else to say.
   herbs.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(CAP.herb * 3), 3)
   tips.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(CAP.herb * 3), 3)
-  for (const m of [tufts, talls, stems, heads, herbs, tips]) {
+  const rocks = new THREE.InstancedMesh(rockGeo, rockMat, CAP.rock)
+  const logs = new THREE.InstancedMesh(logGeo, logMat, CAP.log)
+  const shroomStems = new THREE.InstancedMesh(shroomStemGeo, shroomStemMat, CAP.shroom)
+  const shroomCaps = new THREE.InstancedMesh(shroomCapGeo, shroomCapMat, CAP.shroom)
+  // ★ ALL FOUR ARE INSTANCE-TINTED. A stone takes its colour from the GROUND it lies on — the same
+  // move slice ② made for grass, and for the same reason: one grey stone on nine different grounds
+  // was half of what "samey" meant. The cap colour is the mushroom's whole identity.
+  rocks.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(CAP.rock * 3), 3)
+  logs.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(CAP.log * 3), 3)
+  shroomStems.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(CAP.shroom * 3), 3)
+  shroomCaps.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(CAP.shroom * 3), 3)
+
+  for (const m of [tufts, talls, stems, heads, herbs, tips, rocks, logs, shroomStems, shroomCaps]) {
     m.count = 0
     m.frustumCulled = false     // instances span the whole load radius; the default bounds lie
     m.receiveShadow = false
@@ -235,7 +314,15 @@ export function createFloraRenderer(): FloraRenderer {
   }
 
   const group = new THREE.Group()
-  group.add(tufts, talls, stems, heads, herbs, tips)
+  group.add(tufts, talls, stems, heads, herbs, tips, rocks, logs, shroomStems, shroomCaps)
+
+  // Memoised per ground — a Color object per material ever, not per stone.
+  const rockCols = new Map<number, THREE.Color>()
+  const rockTint = (ground: number): THREE.Color => {
+    let c = rockCols.get(ground)
+    if (!c) { c = new THREE.Color(ROCK_OF_GROUND[ground] ?? ROCK_FALLBACK); rockCols.set(ground, c) }
+    return c
+  }
 
   const cache = new Map<string, Spot[]>()
   const mtx = new THREE.Matrix4()
@@ -278,7 +365,7 @@ export function createFloraRenderer(): FloraRenderer {
   return {
     group,
     sync(cols, seed, probe) {
-      let nT = 0, nL = 0, nF = 0, nH = 0
+      let nT = 0, nL = 0, nF = 0, nH = 0, nR = 0, nG = 0, nS = 0
       for (const c of cols) {
         for (const s of spotsFor(c.key, c.x0, c.z0, seed, probe)) {
           // Deterministic per-spot jitter off the variant roll: offset within the cell, a turn,
@@ -291,7 +378,42 @@ export function createFloraRenderer(): FloraRenderer {
           const grow = 0.75 + s.variant * 0.5
           scl.set(1, grow, 1)
           mtx.compose(off, quat, scl)
-          if (s.kind === FLORA.TUFT) {
+          // ── ★★ SCATTER TAKES ITS OWN TRANSFORM, BEFORE THE SHARED ONE IS APPLIED ─────────────
+          // The `mtx` composed above is right for a stalk: a full random turn about Y and a
+          // `grow` scale on Y only. Both are wrong here. A LOG must be turned to its RUN's axis and
+          // to nothing else — a random turn would break a straight trunk into scattered sticks,
+          // which is the pebble bug rebuilt in the renderer after the field went to the trouble of
+          // avoiding it. A STONE may turn freely (it has no axis) but must be scaled on all three,
+          // not stretched vertically into a menhir.
+          if (s.kind === FLORA.ROCK || s.kind === FLORA.DEADFALL || s.kind === FLORA.MUSHROOM) {
+            const sz = 0.8 + s.variant * 0.45
+            if (s.kind === FLORA.DEADFALL) {
+              // Quarter turn for a Z-run; no jitter along the log's own axis or the run gaps show.
+              quat.setFromAxisAngle(Y_AXIS, s.alongX ? 0 : Math.PI / 2)
+              off.set(s.x + 0.5, s.y + 1.12, s.z + 0.5)
+              scl.set(1, sz, sz)          // ⚠ NOT the length axis — that stays 1.0 so runs butt up
+              mtx.compose(off, quat, scl)
+              if (nG < CAP.log) { logs.setMatrixAt(nG, mtx); logs.setColorAt(nG, tint.set(DEADFALL_COLOR)); nG++ }
+            } else if (s.kind === FLORA.ROCK) {
+              quat.setFromAxisAngle(Y_AXIS, s.variant * Math.PI * 2)
+              off.set(s.x + 0.5 + jx * 0.5, s.y + 1.06, s.z + 0.5 + jz * 0.5)
+              scl.set(sz, sz * 0.75, sz)  // squat: a stone lies ON the ground, it does not stand
+              mtx.compose(off, quat, scl)
+              if (nR < CAP.rock) { rocks.setMatrixAt(nR, mtx); rocks.setColorAt(nR, rockTint(s.ground)); nR++ }
+            } else {
+              quat.setFromAxisAngle(Y_AXIS, s.variant * Math.PI * 2)
+              off.set(s.x + 0.5 + jx * 0.55, s.y + 0.99, s.z + 0.5 + jz * 0.55)
+              scl.set(sz, sz, sz)
+              mtx.compose(off, quat, scl)
+              if (nS < CAP.shroom) {
+                shroomStems.setMatrixAt(nS, mtx); shroomCaps.setMatrixAt(nS, mtx)
+                shroomStems.setColorAt(nS, tint.set(SHROOM_STEM_COLOR))
+                shroomCaps.setColorAt(nS, tint.set(SHROOM_CAPS[Math.floor(s.variant * 991) % SHROOM_CAPS.length]))
+                nS++
+              }
+            }
+          }
+          else if (s.kind === FLORA.TUFT) {
             if (nT < CAP.tuft) { tufts.setMatrixAt(nT, mtx); tufts.setColorAt(nT, grassTint(s.ground)); nT++ }
           }
           else if (s.kind === FLORA.TALL) {
@@ -318,6 +440,11 @@ export function createFloraRenderer(): FloraRenderer {
       }
       tufts.count = nT; talls.count = nL; stems.count = nF; heads.count = nF
       herbs.count = nH; tips.count = nH
+      rocks.count = nR; logs.count = nG; shroomStems.count = nS; shroomCaps.count = nS
+      for (const m of [rocks, logs, shroomStems, shroomCaps]) {
+        m.instanceMatrix.needsUpdate = true
+        if (m.instanceColor) m.instanceColor.needsUpdate = true
+      }
       tufts.instanceMatrix.needsUpdate = true
       talls.instanceMatrix.needsUpdate = true
       if (tufts.instanceColor) tufts.instanceColor.needsUpdate = true

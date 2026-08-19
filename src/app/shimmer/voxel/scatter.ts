@@ -81,10 +81,20 @@ export interface ScatterDials {
   mushroomK: number
 }
 
-/** Base per-cell densities on the ground each kind most belongs on, before any dial or mask. */
+/**
+ * Base per-cell densities on the ground each kind most belongs on, before any dial or mask.
+ *
+ * ★ MUSHROOM WENT 0.008 → 0.018 FROM LOOKING, NOT FROM ARGUING. At 0.008 the measured rate in
+ * deepwood — the land the table says carries the MOST fungus — was 0.22% of columns, one mushroom
+ * per ~450 blocks. I flew to the site and could not find one. A thing meant to be a land's
+ * character has to be findable in that land, and "I went there and it wasn't there" is the only
+ * evidence that settles a density. The shape asserts are ratios, so they do not pin this number;
+ * that is deliberate, and it means ⚠ THIS IS A LOOK CALL AND IT IS ALEX'S, not something the suite
+ * can defend. Rock (1.91% in crag) and deadfall (0.86% in deepwood) both read on screen already.
+ */
 export const ROCK_DENSITY = 0.010
 export const DEADFALL_DENSITY = 0.006
-export const MUSHROOM_DENSITY = 0.008
+export const MUSHROOM_DENSITY = 0.018
 
 /**
  * Ceiling values of each dial across the whole table — the cheap gate's upper bound.
