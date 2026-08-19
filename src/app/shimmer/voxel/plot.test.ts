@@ -668,5 +668,45 @@ console.log('\nthe cloud cave')
   check('and standing in the middle of the garden moves nobody', far.x === 0 && far.z === 0)
 }
 
+// ── the config is not optional ────────────────────────────────────────────────
+// ★★ WHY THIS SECTION EXISTS: on 2026-08-19 the host was running BOTH position clamps against a
+// **tier-0** config while restoring a keeper whose save said tier 2, because the tier was restored
+// at the bottom of the block and the geometry ran at the top. Neither clamp threw, neither logged,
+// and both simply stopped protecting anyone past the starting fold. The asserts below are the
+// PREMISE of that bug — that these functions genuinely answer differently per tier — so a future
+// refactor that drops the `cfg` argument, or defaults it, fails here instead of in a save file.
+console.log('\nthe config is not optional')
+{
+  const t0 = plotForTier(0), t2 = plotForTier(PLOT_TIERS.length - 1)
+  // A column that is solid ground on a grown fold and open void on a young one.
+  const far = Math.round((PLOT_TIERS[0] + PLOT_TIERS[PLOT_TIERS.length - 1]) / 2)
+  const h2 = plotHeight(far, 0, SEED, t2)
+  check('the mid-radius column is ground at the top tier', h2 !== null)
+  check('and is not ground at tier 0', plotHeight(far, 0, SEED, t0) === null)
+
+  // ★ THE SILENT HALF. Asked at the wrong tier, `plotStandY` does not throw and does not clamp — it
+  // returns the buried y unchanged, which the host then writes back. That is the shape of a
+  // protection that is "on" and doing nothing.
+  const buried = (h2 ?? 0)
+  check('plotStandY lifts a buried keeper when it is given their own fold',
+    plotStandY(far, buried, 0, SEED, t2) > buried)
+  check('★ and silently lifts NOBODY when handed a younger fold',
+    plotStandY(far, buried, 0, SEED, t0) === buried)
+
+  // ★ AND THE CAVE MOVES WITH THE COAST, so the wrong config puts a phantom mound in the middle of
+  // a grown garden — a keeper standing near their OLD shoreline teleported to a door that is not
+  // there. Asserted as "the two tiers disagree about where the door is", which is the fact that
+  // makes the ordering load-bearing.
+  const a0 = caveAnchor(SEED, t0), a2 = caveAnchor(SEED, t2)
+  check('the door stands in a different place on a grown fold',
+    Math.hypot(a2.x - a0.x, a2.z - a0.z) > 50,
+    `only ${Math.hypot(a2.x - a0.x, a2.z - a0.z).toFixed(1)} blocks apart`)
+  // Somewhere inside the young fold's mound, which on a grown fold is open garden.
+  const gx = Math.round(a0.x - 4), gz = Math.round(a0.z + 8)
+  const gy = (plotHeight(gx, gz, SEED, t2) ?? 0) + 1
+  check('★ a keeper in open garden is moved by the wrong tier and left alone by the right one',
+    plotCaveStand(gx, gy, gz, SEED, t2).x === gx && caveAt(gx, gy, gz, SEED, t0) === 'shell')
+}
+
 console.log(`\n${pass} passed, ${fail} failed`)
 if (fail > 0) process.exit(1)

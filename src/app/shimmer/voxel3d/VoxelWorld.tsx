@@ -3779,6 +3779,30 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
       // shell is a pure function of position, needs nothing streamed, and is true of exactly the
       // corruption and nothing else: no legitimate Wilds position is ever inside it, because the
       // Wilds does not generate in there at all.
+      // ── ★★ THE TIER LANDS FIRST, AND "THE ORDER IS FREE" WAS TRUE EXACTLY ONCE (2026-08-19) ────
+      // This used to sit at the BOTTOM of the restore, with a note saying the tier only had to
+      // arrive before a plot column was requested and that the ordering was otherwise free. That
+      // was true when the tier's only consumer was the worker's cache key. It stopped being true
+      // the moment the restore started doing GEOMETRY: `plotStandY` and `plotCaveStand` both take
+      // `plotCfg.current`, and a tier-2 keeper was having their position clamped against a **tier-0
+      // fold** — a 300-block radius standing in for their real 500.
+      //
+      // What that costs, and neither symptom looks like a tier bug:
+      //   · `plotStandY` asks `plotHeight` at r300, which answers **null** for anyone standing past
+      //     300 blocks out, and null means "no ground, leave them alone". So the 08-18 anti-burial
+      //     clamp silently did nothing for **every keeper past tier 0** — the ones with the most
+      //     ground to be buried under.
+      //   · `plotCaveStand` would site the cave at r300 while the real door is at r400/r500, so a
+      //     keeper standing near the OLD coast sits inside a phantom mound and gets teleported
+      //     across their own garden to a doorway that is not there.
+      //
+      // ⚠ Generalize, because this file keeps re-learning it: a value restored from a save must land
+      // before ANYTHING reads it, and "reads it" includes pure math, not just the streaming that
+      // originally motivated the note. When a note says an ordering is free, it is describing the
+      // consumers that existed the day it was written.
+      plotTier.current = Math.max(0, Math.min(PLOT_TIERS.length - 1, Math.round(p.plotTier ?? 0)))
+      plotCfg.current = plotForTier(plotTier.current)
+
       const stranded = savedSpace === 'wilds' && insideShell(p.x, p.z, SEED, WILDS_BUBBLE)
       if (stranded) {
         space.current = 'wilds'
@@ -3821,12 +3845,6 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
       camera.position.set(lc.px, eyeY(lc), lc.pz)
       camera.quaternion.setFromEuler(new THREE.Euler(p.rx, p.ry, 0, 'YXZ'))
       settled.current = false
-      // ⚠ THE TIER MUST LAND BEFORE ANY PLOT COLUMN IS ASKED FOR, which is why it is restored here
-      // beside the position rather than in its own effect: a request that goes out at tier 0 and is
-      // answered after the tier arrives caches ground at the wrong radius, and the cache key would
-      // have to be the thing that saves us. It still is (see the worker), but the order is free.
-      plotTier.current = Math.max(0, Math.min(PLOT_TIERS.length - 1, Math.round(p.plotTier ?? 0)))
-      plotCfg.current = plotForTier(plotTier.current)
       // ⚠ MUTATED IN PLACE, NEVER REASSIGNED — the outer component and the dialogue both hold this
       // same ref object, and swapping the `.current` from in here is fine, but a save whose index is
       // the wrong shape must leave the empty one standing rather than throw mid-restore.
