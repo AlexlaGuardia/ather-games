@@ -3,6 +3,32 @@
 // for the desync bug classes we've hit repeatedly (frame-map drift, orphan frames,
 // duplicate keys, palette range overflows, stale deploys, broken warps).
 // Never mutates anything.
+//
+// ══ ★★★ THE DOCTOR'S OWN RECURRING BUG: CHECKING AGAINST A REGISTRY THAT IS NO LONGER THE WHOLE
+// REGISTRY (three faces found in one evening, 2026-08-19) ═════════════════════════════════════
+// It went 198 errors / 161 warns -> 7 / 29. Almost none of that was fixing the game; it was the
+// doctor being wrong three times in the same shape, and the volume is what made it believable.
+//   1. `objectKeys` on a block that FAILED TO PARSE. One apostrophe in a comment broke
+//      `braceBlock`, ITEM_ICONS read as {}, and all 92 items were reported as unwired art. The
+//      two maps were in perfect sync.
+//   2. `checkWorld` against `ZONES` alone. The region world registers in `world/region-maps.ts`
+//      under an `r-` prefix, so 7 warps to real zones — including play3d's START ZONE — were
+//      reported as dead ends.
+//   3. `px-size-mismatch` against a RETIRED pipeline. 228 findings claimed "renders garbled in
+//      game" for sprite sheets no live 3D surface loads.
+//
+// The lesson is not "fix these three". It is that a check is a comparison against a model of what
+// exists, and the model rots silently while the code keeps answering confidently. So:
+//   • DERIVE the reference set from its source, never restate it here. A hardcoded list is how (2)
+//     happened, and it is why `registeredZoneIds` and `liveSpriteImports` read the real registries.
+//   • A special case needs its REASON attached (see the Wilds note) or the next reader deletes it.
+//   • FAIL LOUD WHEN YOU CANNOT LOOK. A parse failure must surface as `unparsed-block`, never as an
+//     empty set — an empty set is indistinguishable from a real answer and scores as one.
+//   • SEVERITY IS REACHABILITY. "Is it wired in its own file" is not "does the running game draw
+//     it". Assert an in-game consequence only for something a live surface actually loads.
+//   • A check that stops reporting must still be ABLE to report. Both quiet checks above are
+//     mutation-tested: a truly unresolvable warp id still errors, and a retired sprite module
+//     re-escalates the moment a live surface imports it.
 
 import { promises as fs } from 'fs'
 import path from 'path'
@@ -295,15 +321,27 @@ async function checkSpriteFile(add: Add, rel: string, spritesExport: string, pal
   }
 
   // px dimension sanity: row widths / counts vs declared size
+  const liveModules = await liveSpriteImports()
+  const moduleName = rel.replace(/^sprites\//, '').replace(/\.tsx?$/, '')
+  const onLiveSurface = liveModules.has(moduleName)
   for (const c of consts) {
     const total = c.rows.reduce((n, r) => n + r.length, 0)
     if (total === 0) continue
     if (total !== c.w * c.h) {
       const widths = [...new Set(c.rows.map(r => r.length))].join('/')
       const wired = referenced.has(c.name)
+      // ★ SEVERITY COMES FROM REACHABILITY, NOT FROM WIRING. `wired` only ever asked whether a
+      // const is named in its own file's _SPRITES export — true of plenty of art in a pipeline
+      // nothing renders. A malformed frame in a retired module is a fact about the data; it is
+      // not a bug in the running game, and calling it one for 185 frames is what taught everyone
+      // to scroll past this check.
+      const severity = onLiveSurface ? (wired ? 'error' : 'warn') : 'info'
+      const consequence = onLiveSurface
+        ? (wired ? 'wired into an animation, renders garbled in game.' : 'unwired (16px-era leftover), would garble if wired.')
+        : 'RETIRED 2D pipeline — no live 3D surface imports this module, so it renders nowhere in game. Real only if the 2D surface is revived, or in the dev editors that still load it.'
       add({
-        severity: wired ? 'error' : 'warn', domain: 'sprites', check: 'px-size-mismatch', file: rel,
-        message: `'${c.name}' declares ${c.w}x${c.h} (${c.w * c.h} px) but contains ${total} digits (row widths: ${widths}) — ${wired ? 'wired into an animation, renders garbled in game.' : 'unwired (16px-era leftover), would garble if wired.'}`,
+        severity, domain: 'sprites', check: 'px-size-mismatch', file: rel,
+        message: `'${c.name}' declares ${c.w}x${c.h} (${c.w * c.h} px) but contains ${total} digits (row widths: ${widths}) — ${consequence}`,
       })
     }
   }
@@ -439,12 +477,82 @@ async function checkSidecars(add: Add) {
   }
 }
 
+/**
+ * Every zone id a warp may legally name.
+ *
+ * ★★ `ZONES` IN `world/zones.ts` IS NO LONGER THE WHOLE REGISTRY, AND A CHECK THAT STILL THINKS
+ * IT IS REPORTS THE LIVE WORLD AS BROKEN. The region world registers separately, in
+ * `world/region-maps.ts`, under the `r-` prefix (`REGION_WIP_PREFIX`) — and it is not a side
+ * experiment: `r-home-plot` is play3d's START_ZONE, the zone players actually spawn into. All
+ * seven `warp-dead-zone` errors this check was raising named region zones that exist, including
+ * the one `zones.ts:487` documents as "the door names its real destination".
+ *
+ * Read off the json imports rather than a hardcoded list, so adding a region map cannot silently
+ * age this check back into wrongness. `r-wilds` is the composite overland — it is a real zone with
+ * no single backing file, which is exactly the trap `isRegionZone` warns about in region-maps.ts.
+ */
+async function registeredZoneIds(): Promise<Set<string>> {
+  const zones = await read('world/zones.ts')
+  const zonesBlock = zones ? (exportBlock(zones, 'ZONES', '[', ']') ?? zones) : ''
+  const ids = new Set([...zonesBlock.matchAll(/^\s*id:\s*'([\w-]+)'/gm)].map(m => m[1]))
+  const regions = await read('world/region-maps.ts')
+  if (regions) {
+    const prefix = regions.match(/REGION_WIP_PREFIX\s*=\s*'([^']+)'/)?.[1] ?? 'r-'
+    for (const m of regions.matchAll(/from '\.\/region-maps\/([\w-]+)\.json'/g)) ids.add(prefix + m[1])
+    // THE ONE NAMED EXCEPTION: the Wilds are a real zone with NO backing file — the region maps
+    // `wilds-N-N.json` are tiles composed into a single overland zone, so the loop above adds the
+    // tiles and never the zone players are actually in. This is the same trap region-maps.ts warns
+    // about on `isRegionZone`: anything written as "does a file exist for this" silently answers
+    // "not a zone" for the whole overland. Read the id from its source so a rename cannot orphan it.
+    const wilds = await read('world/wilds-world.ts')
+    const wildsId = wilds?.match(/WILDS_ZONE_ID\s*=\s*'([^']+)'/)?.[1]
+    if (wildsId) ids.add(prefix + wildsId)
+  }
+  return ids
+}
+
+/**
+ * Sprite modules a LIVE surface imports, by module basename ('items', 'player', ...).
+ *
+ * ★★ THE 2D SPRITE-SHEET PIPELINE IS RETIRED (Alex, 2026-08-19) AND `px-size-mismatch` WAS STILL
+ * REPORTING IT AS "renders garbled in game". Neither 3D surface loads a sprite sheet: voxel3d's
+ * `grimoire-tab.tsx` says so in its own header, and `InventoryGrid` / `ChestPanel` / `ItemIcon`
+ * are mounted nowhere at all. 228 findings claimed an in-game consequence on surfaces that never
+ * draw the data.
+ *
+ * DERIVED, NOT LISTED, and that is the point — a hardcoded "retired" list is how `checkWorld`
+ * ended up calling the live world's start zone a dead warp. This walks the live surfaces and asks
+ * what they import, so wiring any sprite module back into voxel3d or play3d re-escalates its
+ * findings to errors on the next run with nothing to remember.
+ */
+let liveSpriteModules: Set<string> | null = null
+
+async function liveSpriteImports(): Promise<Set<string>> {
+  if (liveSpriteModules) return liveSpriteModules
+  const found = new Set<string>()
+  const walk = async (dir: string): Promise<void> => {
+    let entries: import('fs').Dirent[]
+    try { entries = await fs.readdir(path.join(SHIMMER, dir), { withFileTypes: true }) } catch { return }
+    for (const e of entries) {
+      const rel = `${dir}/${e.name}`
+      if (e.isDirectory()) { await walk(rel); continue }
+      if (!/\.tsx?$/.test(e.name)) continue
+      const content = await read(rel)
+      if (!content) continue
+      for (const m of content.matchAll(/from '[^']*\bsprites\/([\w-]+)'/g)) found.add(m[1])
+    }
+  }
+  await walk('voxel3d')
+  await walk('play3d')
+  liveSpriteModules = found
+  return found
+}
+
 async function checkWorld(add: Add) {
   const zones = await read('world/zones.ts')
   if (zones) {
     const zonesBlock = exportBlock(zones, 'ZONES', '[', ']') ?? zones
-    const zoneIds = [...zonesBlock.matchAll(/^\s*id:\s*'([\w-]+)'/gm)].map(m => m[1])
-    const idSet = new Set(zoneIds)
+    const idSet = await registeredZoneIds()
     // associate warps with their containing zone by walking zone object boundaries
     const re = /\bid:\s*'([\w-]+)'|toZone:\s*'([\w-]+)'/g
     let currentZone = ''
@@ -515,6 +623,7 @@ async function checkStaleness(add: Add) {
 export async function runDoctor(): Promise<DoctorReport> {
   cache.clear()
   parseFailures.length = 0
+  liveSpriteModules = null
   const findings: Finding[] = []
   const add: Add = f => findings.push(f)
 
