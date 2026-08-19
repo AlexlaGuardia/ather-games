@@ -430,8 +430,33 @@ export function accentAt(x: number, z: number, seed: number, accentP: number): b
  * contact sheet (`scripts/land-tour.mts`). If they searched separately they would disagree about
  * where a dell is, and the picture would stop being evidence for the place you can walk to.
  *
- * Returns the NEAREST interior of each land, not the strongest. A near-perfect dell four thousand
- * blocks away is a worse answer than a good one over the hill: the point is to stand in it.
+ * Returns a site in the INTERIOR of each land — near, but interior first. A near-perfect dell four
+ * thousand blocks away is still a worse answer than a good one over the hill (the point is to stand
+ * in it), so distance is a cost rather than the sort key.
+ *
+ * ── ★★ AND "NEAREST ABOVE A FLOOR" WAS THE WRONG SORT KEY, WHICH TOOK A SCREENSHOT TO SEE ───────
+ * The first cut took the nearest column clearing `minT`. That reads as obviously right and it is
+ * obviously wrong the moment anything is excluded: **a nearest-search against a hard exclusion
+ * always answers on its boundary.** `maxShellRadius(WILDS_BUBBLE)` is 515, the tour passes a 220
+ * clearance margin, and the contact sheet came back with EIGHT OF NINE SITES AT 735-738 BLOCKS —
+ * nine compass bearings on one ring, every one of them the fringe of its land rather than its
+ * interior. The clearance margin had not fixed the pile-up against the cloud wall; it had moved it
+ * one radius out and bought a picture of the ring instead.
+ *
+ * ★★ AND NEITHER ASSERT COULD SEE IT. `!exclude(x,z)` passes on a ring site and `t >= 0.62` passes
+ * on a ring site; the suite measured HOW MUCH land was at the point and nothing measured WHAT WAS
+ * AROUND IT. Same family as the accent chessboard one screen up — 225 green asserts shipped a marsh
+ * that looked like lino, because every one of them counted and none of them looked at shape.
+ *
+ * ★ SO THE SCORE IS THE NEIGHBOURHOOD, NOT THE POINT. `interiorAt` samples two rings around a
+ * candidate and asks how much of them is still the same land, counting an EXCLUDED probe as not
+ * interior — which is what drags a site off the boundary without the search knowing anything about
+ * what the exclusion means. Distance is then a mild subtraction, so a clearly better interior can
+ * pull you further out and a tie goes to the nearer.
+ *
+ * ⚠ THE EXAMINED SET MUST SPAN THE RADIUS, and scoring the nearest N would have re-created the very
+ * bug it fixes: for a common land the nearest N candidates are all on the same fringe, so the best
+ * of them is still a fringe. The pool is sampled by rank as well as taken from the front.
  *
  * ⚠ PASS `exclude`. THE FIRST RUN WITHOUT ONE PRODUCED NINE SITES AND EIGHT IDENTICAL PICTURES.
  * "Nearest" from spawn means inside the fold's bubble, where there is no ground at any altitude, so
@@ -440,28 +465,111 @@ export function accentAt(x: number, z: number, seed: number, accentP: number): b
  * `wildsSwallows` for exactly this and both callers pass it. This module cannot import it directly:
  * column → depth → character, and the cycle would be real.
  */
-export interface LandSite { id: LandId; x: number; z: number; t: number; dist: number }
+export interface LandSite { id: LandId; x: number; z: number; t: number; dist: number; interior: number }
+
+/**
+ * How much of a candidate's SURROUNDINGS is the same land. Two rings rather than one because a
+ * single radius can sit neatly inside a lobe of a border and report an interior that isn't there;
+ * the outer ring is offset by half a step so the spokes do not line up into a star whose arms can
+ * slip either side of the same boundary.
+ *
+ * ⚠ AN EXCLUDED PROBE COUNTS AS NOT-INTERIOR — it stays in the denominator. A site on the ring has
+ * half its neighbourhood inside the excluded disc, so it cannot score above ~0.5. The search never
+ * has to know what the exclusion MEANS, only that you cannot stand there, which is what the
+ * predicate already says.
+ *
+ * ★ BUT BE HONEST ABOUT WHAT THAT LINE IS WORTH: it is a GUARD, not the mechanism. Mutating it to
+ * drop excluded probes from the denominator instead leaves the whole suite green, because what
+ * actually unpins the search is scoring the neighbourhood at all, plus spreading the examined
+ * sample across the pool. So it is pinned directly, on `interiorAt` itself (§15e), rather than left
+ * to a site-selection assert that would pass either way — a comment claiming a mechanism no test
+ * can feel is the kind of decoration this file keeps having to delete.
+ */
+const INTERIOR_RINGS = [40, 96] as const
+const INTERIOR_SPOKES = 6
+
+export function interiorAt(
+  x: number, z: number, id: LandId, seed: number,
+  exclude?: (x: number, z: number) => boolean,
+  cfg: BiomeConfig = DEFAULT_BIOME, hcfg: HeightConfig = DEFAULT_HEIGHT,
+): number {
+  let hit = 0, n = 0
+  for (let r = 0; r < INTERIOR_RINGS.length; r++) {
+    const rad = INTERIOR_RINGS[r]
+    const phase = (r % 2) * (Math.PI / INTERIOR_SPOKES)
+    for (let s = 0; s < INTERIOR_SPOKES; s++) {
+      const a = phase + (s * 2 * Math.PI) / INTERIOR_SPOKES
+      const px = Math.round(x + rad * Math.cos(a)), pz = Math.round(z + rad * Math.sin(a))
+      n++
+      if (exclude?.(px, pz)) continue
+      if (dominantLand(landMix(px, pz, seed, cfg, hcfg)).id === id) hit++
+    }
+  }
+  return hit / n
+}
 
 export function findLands(
   fromX: number, fromZ: number, seed: number,
-  opts: { radius?: number; stride?: number; minT?: number; exclude?: (x: number, z: number) => boolean } = {},
+  opts: {
+    radius?: number; stride?: number; minT?: number
+    exclude?: (x: number, z: number) => boolean
+    /** How far a better interior is allowed to pull the answer out. 0 = pure nearest (the old bug). */
+    distCost?: number
+    /**
+     * Candidates actually scored per land, taken from the front AND spread across the pool.
+     * ⚠ MEASURED, NOT PICKED: at 40 the worst site scored 58% interior and at 400 it scores 83%,
+     * for the SAME ~310ms — the cost here is phase 1's grid scan, and phase 2 disappears into it
+     * (800 is where it starts to show, at 494ms). A budget that looks generous is free; the one
+     * that looked frugal was buying a fringe woodland at full price.
+     */
+    examine?: number
+  } = {},
   cfg: BiomeConfig = DEFAULT_BIOME, hcfg: HeightConfig = DEFAULT_HEIGHT,
 ): LandSite[] {
   const radius = opts.radius ?? 2600
   const stride = opts.stride ?? 24
   const minT = opts.minT ?? 0.62
-  const best = new Map<LandId, LandSite>()
+  const distCost = opts.distCost ?? 0.35
+  const examine = opts.examine ?? 400
+
+  // ── phase 1: clearing the floor makes a column a CANDIDATE, never an answer ───────────────────
+  const pool = new Map<LandId, LandSite[]>()
   for (let dz = -radius; dz <= radius; dz += stride) {
     for (let dx = -radius; dx <= radius; dx += stride) {
       const x = fromX + dx, z = fromZ + dz
       if (opts.exclude?.(x, z)) continue
       const { id, t } = dominantLand(landMix(x, z, seed, cfg, hcfg))
       if (t < minT) continue
-      const dist = Math.hypot(dx, dz)
-      const cur = best.get(id)
-      if (!cur || dist < cur.dist) best.set(id, { id, x, z, t, dist })
+      const arr = pool.get(id)
+      const site: LandSite = { id, x, z, t, dist: Math.hypot(dx, dz), interior: 0 }
+      if (arr) arr.push(site); else pool.set(id, [site])
     }
   }
+
+  // ── phase 2: score the neighbourhood of a spread sample, not the point of the nearest ─────────
+  const out: LandSite[] = []
+  for (const id of LAND_IDS) {
+    const arr = pool.get(id)
+    if (!arr) continue
+    arr.sort((a, b) => a.dist - b.dist)
+    // The front of the list is where the nearest answer lives; the stride across the whole list is
+    // what stops a common land from being judged entirely on its fringe. Both, deduped by index.
+    const step = Math.max(1, Math.floor(arr.length / examine))
+    const idx = new Set<number>()
+    for (let i = 0; i < Math.min(examine, arr.length); i++) idx.add(i)
+    for (let i = 0; i < arr.length; i += step) idx.add(i)
+
+    let best: LandSite | undefined
+    let bestScore = -Infinity
+    for (const i of idx) {
+      const c = arr[i]
+      const interior = interiorAt(c.x, c.z, id, seed, opts.exclude, cfg, hcfg)
+      const score = interior - distCost * (c.dist / radius)
+      if (score > bestScore) { bestScore = score; best = { ...c, interior } }
+    }
+    if (best) out.push(best)
+  }
   // Stable order: the table's order, so two runs read the same way down the page.
-  return LAND_IDS.map(id => best.get(id)).filter((s): s is LandSite => !!s)
+  const byId = new Map(out.map(s => [s.id, s]))
+  return LAND_IDS.map(id => byId.get(id)).filter((s): s is LandSite => !!s)
 }

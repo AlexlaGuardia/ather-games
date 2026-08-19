@@ -11,7 +11,7 @@
 
 import {
   LAND_IDS, landWeights, landRollAt, dominantLand, landCharacter, surfaceBlockAt,
-  treeDensityAt, speciesFactor, floraCharacterAt, landMix, sharpenWeights, accentAt, accentThreshold, findLands,
+  treeDensityAt, speciesFactor, floraCharacterAt, landMix, sharpenWeights, accentAt, accentThreshold, findLands, interiorAt,
   CHARACTER_SHARP, type LandId,
 } from './character'
 import { treeStartsAt, DEFAULT_TREES, SPECIES } from './trees'
@@ -414,6 +414,65 @@ const DRESS = landCharacter({
   const naive = findLands(0, 0, SEED)
   ok(naive.some(s => wildsSwallows(s.x, s.z)),
     'and the exclusion is load-bearing: without it the search does propose sites inside the fold')
+}
+
+// ── 15d. ★★ A SITE IS ITS NEIGHBOURHOOD, NOT ITS POINT ────────────────────────────────────────
+// The assert 15c could not make. `!wildsSwallows(x,z)` and `t >= 0.62` BOTH pass on a site pinned
+// to the exclusion boundary, and that is exactly what shipped: the tour's contact sheet came back
+// with eight of nine sites at 735-738 blocks — `maxShellRadius` 515 plus the tour's 220 clearance
+// margin — because a nearest-search against a hard exclusion always answers on its edge. Nine
+// compass bearings on one ring, every one the fringe of its land. The suite was green throughout,
+// for the same reason the accent chessboard was green: every assert measured HOW MUCH land was at
+// the point and none measured WHAT WAS AROUND IT.
+{
+  // 0.75 with headroom: at the shipped `examine` the worst land measures 83% (crag) and the mean
+  // is 94%. A site pinned to the exclusion ring scores ~50% — half its neighbourhood is the
+  // excluded disc — so the floor sits well clear of both the pass and the fail.
+  const INTERIOR_FLOOR = 0.75
+  const sites = findLands(0, 0, SEED, { exclude: wildsSwallows })
+  for (const s of sites) {
+    const measured = interiorAt(s.x, s.z, s.id, SEED, wildsSwallows)
+    ok(measured >= INTERIOR_FLOOR,
+      `★ ${s.id}'s site is INTERIOR, not fringe — ${(measured * 100).toFixed(0)}% of its surroundings are ${s.id}`)
+    ok(Math.abs(measured - s.interior) < 1e-9, `${s.id} reports the interior it was scored on`)
+  }
+  // ⚠ THE PAIRED NEGATION, and it is the whole point of the section. A huge `distCost` makes the
+  // score distance alone, which IS the first cut's sort key — so this reproduces the shipped bug on
+  // demand. If it ever stops finding a fringe site, the fix above has become untested and this
+  // section is decoration.
+  const nearestOnly = findLands(0, 0, SEED, { exclude: wildsSwallows, distCost: 1e6 })
+  ok(nearestOnly.some(s => interiorAt(s.x, s.z, s.id, SEED, wildsSwallows) < INTERIOR_FLOOR),
+    'and sorting by distance alone still pins sites to the fringe: the interior score is load-bearing')
+  // And it must actually be the BOUNDARY it pins them to, not merely somewhere worse — that is the
+  // difference between "nearest is a bit worse" and the specific failure this section is named for.
+  const ring = 515 + 0   // maxShellRadius(WILDS_BUBBLE); margin 0 here, so the ring is the shell
+  ok(nearestOnly.filter(s => s.dist < ring + 60).length >= 5,
+    `sorting by distance alone piles most sites onto the exclusion ring (~${ring}b)`)
+}
+
+// ── 15e. ★ THE EXCLUDED PROBE, PINNED WHERE IT ACTUALLY LIVES ─────────────────────────────────
+// `interiorAt` keeps an excluded probe in the DENOMINATOR, so a point hard against the exclusion
+// cannot score above ~0.5 however pure the reachable half is. That line was mutation-tested and
+// the whole suite stayed green through it — because site selection is carried by scoring the
+// neighbourhood at all and by spreading the examined sample, not by this. It is a guard, and a
+// guard nothing can feel is decoration, so it is asserted here on the function rather than left
+// to §15d where it would pass either way.
+{
+  // A point just outside the shell: reachable, but with the fold filling half its surroundings.
+  const R = 520
+  let pinned = 0
+  for (let a = 0; a < 12; a++) {
+    const th = (a * 2 * Math.PI) / 12
+    const x = Math.round(R * Math.cos(th)), z = Math.round(R * Math.sin(th))
+    if (wildsSwallows(x, z)) continue
+    const id = dominantLand(landMix(x, z, SEED)).id
+    const guarded = interiorAt(x, z, id, SEED, wildsSwallows)
+    const blind = interiorAt(x, z, id, SEED)
+    ok(guarded <= blind, `${id} at ${a}: counting the fold against a site can only lower its score`)
+    if (guarded < blind) pinned++
+  }
+  ok(pinned > 0,
+    '★ an excluded probe counts AGAINST a site: hard against the fold, the guarded score is strictly worse')
 }
 
 // ── 16. ★ ONE DISTRIBUTION, READ TWO WAYS — the roll and the dials must not disagree ──────────

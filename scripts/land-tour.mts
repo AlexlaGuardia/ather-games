@@ -1,6 +1,6 @@
 // A CONTACT SHEET OF THE NINE GROUNDS — see the biome layer without walking to it.
 //
-// Run: npx tsx scripts/land-tour.mts [out.png] [--seed 1337] [--from 0,0] [--pitch 18] [--only dell,crag]
+// Run: npx tsx scripts/land-tour.mts [out.png] [--seed 1337] [--from 0,0] [--pitch 34] [--fly 3] [--only dell,crag]
 //   (teleporting needs the owner key: `set -a; . /root/ather-games/.env; set +a`)
 //
 // ── ★ WHY THIS EXISTS (2026-08-19) ─────────────────────────────────────────────────────────────
@@ -36,14 +36,27 @@ const arg = (n: string, d: string) => {
 const OUT = process.argv[2]?.startsWith('--') ? 'land-tour.png' : (process.argv[2] ?? 'land-tour.png')
 const SEED = Number(arg('seed', '1337'))
 const [FX, FZ] = arg('from', '0,0').split(',').map(Number)
-const PITCH = arg('pitch', '18')
+// ── ★ THE FIRST SHEET WAS A BLOCK INSPECTION, NOT A LANDSCAPE (fixed 2026-08-19) ───────────────
+// At pitch 18 from standing height the middle-band crop lands squarely on the block-target reticle
+// and its name label, so every tile was a close-up of ONE block's texture at point-blank range with
+// the sky and most standing vegetation cropped away: a `woodland` tile with no tree in it, a `crag`
+// tile that was mostly grass. A biome sheet has to show the GROUND PATTERN and the silhouette on
+// it, which is a vantage no standing shot can give — so rise first, then look down. `world-shot`
+// already had `WORLD_FLY` for exactly this (it exists so a landmark reads against sky rather than
+// through trees); it just was not being used.
+const PITCH = arg('pitch', '34')
+const FLY = arg('fly', '3')
 const URL = arg('url', 'http://localhost:3200/shimmer/voxel3d?hour=12')
 const ONLY = arg('only', '')
 const SETTLE = arg('settle', '8')
 
 const want = ONLY ? new Set(ONLY.split(',').map(s => s.trim())) : null
-// 220 blocks of clearance past the shell: at margin 0 every nearest-site answer hugs the cloud
-// wall and the tile is a picture of the wall, not of the land.
+// 220 blocks of clearance past the shell. ⚠ THIS IS NO LONGER WHAT KEEPS THE SITES OFF THE WALL —
+// `findLands` scores a candidate's NEIGHBOURHOOD now, and a site hard against the fold cannot score
+// well because half of what surrounds it is the excluded disc. The margin used to be the whole
+// defence and it was not enough: it stopped the wall-hugging tiles and moved the pile-up one radius
+// out, onto the ring at 735. Kept because asking for standable ground with room around it is still
+// the honest question for a search; demoted from mechanism to belt-and-braces.
 const MARGIN = Number(arg('margin', '220'))
 const sites = findLands(FX, FZ, SEED, { exclude: (x, z) => wildsSwallows(x, z, MARGIN) }).filter(s => !want || want.has(s.id))
 const missing = LAND_IDS.filter(id => !sites.some(s => s.id === id) && (!want || want.has(id)))
@@ -58,16 +71,18 @@ const dir = mkdtempSync(join(tmpdir(), 'land-tour-'))
 const tiles: { id: LandId; file: string; note: string }[] = []
 for (const s of sites) {
   const file = join(dir, `${s.id}.png`)
-  process.stdout.write(`  ${s.id.padEnd(10)} (${s.x}, ${s.z})  ${(s.t * 100).toFixed(0)}% pure  ${Math.round(s.dist)} blocks … `)
+  process.stdout.write(`  ${s.id.padEnd(10)} (${s.x}, ${s.z})  ${(s.interior * 100).toFixed(0)}% interior  ${(s.t * 100).toFixed(0)}% pure  ${Math.round(s.dist)} blocks … `)
   try {
     execFileSync('npx', ['tsx', 'scripts/world-shot.mts', file, SETTLE], {
-      env: { ...process.env, WORLD_URL: URL, WORLD_CMD: `tp ${s.x} ${s.z}`, WORLD_PITCH: PITCH },
+      env: { ...process.env, WORLD_URL: URL, WORLD_CMD: `tp ${s.x} ${s.z}`, WORLD_PITCH: PITCH, WORLD_FLY: FLY },
       stdio: ['ignore', 'ignore', 'inherit'], timeout: 220_000,
     })
   } catch { console.log('SHOT FAILED'); continue }
   if (!existsSync(file)) { console.log('no file'); continue }
   console.log('ok')
-  tiles.push({ id: s.id, file, note: `${(s.t * 100).toFixed(0)}% · ${Math.round(s.dist)}b` })
+  // interior BEFORE purity: purity is what the column is, interior is whether it is the middle of
+  // anything — and it was the number whose absence let eight ring sites ship looking fine.
+  tiles.push({ id: s.id, file, note: `in ${(s.interior * 100).toFixed(0)}% · ${(s.t * 100).toFixed(0)}% · ${Math.round(s.dist)}b` })
 }
 
 if (!tiles.length) { console.error('every shot failed — is :3200 up?'); rmSync(dir, { recursive: true, force: true }); process.exit(1) }
