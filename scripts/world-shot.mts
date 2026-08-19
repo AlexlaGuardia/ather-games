@@ -65,9 +65,22 @@
 // has stopped climbing** — raise the settle and shoot again. A presence claim is safe at the
 // default; an absence claim is not, because the default 12s is below where flora finishes.
 //
-// ★ GENERALIZE, because this is the fourth instrument failure in one day (a mutation that crashed
+// ── ⚠⚠ AND A NODE PROBE AND THE RENDERED PAGE CAN RUN TWO DIFFERENT GENERATORS ─────────────────
+// Learned the same day, one hour lost. **Generation on the page runs the PREBUILT
+// `public/voxel-gen.worker.<hash>.js`; a `.mts` script imports the source modules directly.** So
+// after any edit to something in the worker's import graph (height/depth/character/flora/column/
+// trees/scatter/boulders...), a headless probe reports the NEW world while the browser draws the
+// OLD one — and the disagreement is silent, because both halves are internally consistent.
+//
+// The shape it takes: every measurement insists the feature is there, every screenshot says it is
+// not, and the hunt goes to framing, yaw, pitch and settle — none of which are wrong. Rebuild the
+// worker (`npm run build:worker`, or just `coord build`) and restart the server BEFORE believing a
+// probe-vs-picture contradiction. **If code and camera disagree, suspect the artifact first.**
+
+// ★ GENERALIZE, because this is the fifth instrument failure in one day (a mutation that crashed
 // instead of failing and read as green; `npx tsx` passing types `tsc` rejects; misread specks in a
-// contact sheet; this): EVERY ONE WAS WRONG IN THE DIRECTION THAT LOOKED LIKE A REAL FINDING.
+// contact sheet; settle time; a stale worker artifact): EVERY ONE WAS WRONG IN THE DIRECTION
+// THAT LOOKED LIKE A REAL FINDING.
 // Verify the instrument before believing the reading — the same rule the backgrounded-tab entry in
 // PATTERNS states, arriving here by a different road.
 
