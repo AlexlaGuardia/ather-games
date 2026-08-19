@@ -235,7 +235,12 @@ export function seamNearness(dist: number, shut: number, open: number): number {
   return (shut - dist) / (shut - open)
 }
 
-const WILDS_SHUT = 22, WILDS_OPEN = 2.5
+// ⚠ 22 → 150 (2026-08-19, Alex: *"it blends too well"*). The old number carried a deliberate
+// subtlety — *"you can just about see something at 20m"* — which is a lovely idea for a secret and
+// the wrong one for the ONE door home on a 6.3km wall. The keeper is not meant to discover it; the
+// build is supposed to put them at it (`passageBearing`'s own header says so). It stays a shimmer,
+// it is simply a shimmer you can see coming.
+const WILDS_SHUT = 150, WILDS_OPEN = 2.5
 // ⚠ 7 → 120. `shut` is the distance at which the parting is fully closed and therefore invisible,
 // so it WAS the number that sealed the garden: past seven blocks the only exit rendered as nothing.
 // The Wilds keeps its 22 on purpose — out there the seam is a secret you approach, and the fold's
@@ -322,7 +327,9 @@ void main() {
   float d = abs(u - wob);
 
   // Shut it is a hairline; open it is a hand's width. This is the fold answering the keeper.
-  float w = mix(0.012, 0.045, uNear) * taper + 1e-4;
+  // Widened with the same pass: at 150 blocks the ribbon is a few pixels across, and a hairline
+  // parting inside it rounds away to nothing on screen.
+  float w = mix(0.020, 0.055, uNear) * taper + 1e-4;
 
   // ⚠⚠ THE LIPS ARE OFFSET AND NARROW, AND THE FIRST VERSION GOT THIS WRONG IN THE ONE WAY THAT
   // COSTS THE WHOLE LOOK. Their Gaussian was wide enough to still be at 0.67 in the middle of the
@@ -338,7 +345,11 @@ void main() {
   float g = 0.85 + 0.15 * sin(y * 18.0 - uTime * 0.8 + sin(u * 5.0 + uTime * 0.3) * 1.3);
 
   vec3 col = mix(vec3(0.13, 0.20, 0.28), vec3(0.90, 0.98, 1.0), clamp(lip + bloom * 0.25, 0.0, 1.0));
-  float a = g * (slit * 0.85 + lip * 0.80 + bloom * 0.10) * (0.35 + 0.65 * uNear);
+  // ⚠ THE FLOOR WAS THE OTHER HALF OF "IT BLENDS TOO WELL": 0.35 meant that at any real distance the
+  // seam drew at a third of an already-quiet alpha, against a wall that is itself pale cloud. 0.60
+  // keeps the near/far difference (the fold still answers you as you approach) without making the
+  // far state a rumour.
+  float a = g * (slit * 0.85 + lip * 0.80 + bloom * 0.10) * (0.60 + 0.40 * uNear);
   if (a < 0.004) discard;        // cheaper than blending a thousand invisible fragments
   gl_FragColor = vec4(col, a);
 }`,

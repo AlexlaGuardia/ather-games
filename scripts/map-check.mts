@@ -54,7 +54,15 @@ try {
   await page.keyboard.press('KeyM'); await sleep(2500)
   const wilds = await caption()
   ok(/% walked/.test(wilds), `out in the country the map counts what you have walked — ${JSON.stringify(wilds)}`)
-  ok(!/your fold/.test(wilds), 'and does not claim to be a fold')
+  // ⚠ ASKS FOR THE FOLD CAPTION'S OPENING, NOT THE WORDS "your fold" — the Wilds caption now ends
+  // with "the passage to your fold", so a substring test flags the correct caption as wrong. The
+  // assert broke on the day the thing it was guarding got better, which is the tell for a test that
+  // was matching a sentence rather than a claim.
+  ok(!/✦ your fold/.test(wilds), 'and does not claim to BE the fold')
+  // ★ THE PASSAGE IS MARKED OUT HERE TOO (2026-08-19). The Wilds map had exactly one mark on it —
+  // the keeper — so the one door home was findable only by walking a 6.3km wall until the shimmer
+  // showed up. Same ring as the fold's threshold, on purpose: one symbol, one meaning.
+  ok(/the ring is the passage/.test(wilds), 'and it names the passage ring')
   await page.keyboard.press('KeyM'); await sleep(900)
 
   // ── 2. ★★ INSIDE THE FOLD IT IS THE FOLD ────────────────────────────────────────────────────

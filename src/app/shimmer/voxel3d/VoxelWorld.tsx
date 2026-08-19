@@ -39,7 +39,13 @@ import { salvageItems, salvageMessage } from '../voxel/salvage'
 import { blockDef, materialForItem, emitOf, BLOCKS, type BlockSkill } from '../voxel/registry'
 import { editIndex, recordEdit, applyEdits, packEdits, unpackEdits, isStale, GENERATOR_VERSION, type ColumnEdits } from '../voxel/edits'
 import { generatePlotColumn, plotGeneratedVoxel } from '../voxel/plot-column'
-import { plotThreshold, hasFallenOut, chestCap, plotStandY, plotForTier, PLOT_TIERS, type PlotConfig } from '../voxel/plot'
+import { plotThreshold, hasFallenOut, chestCap, plotStandY, plotForTier, plotHeight, PLOT_TIERS, type PlotConfig } from '../voxel/plot'
+/**
+ * How far inside their own fold a keeper lands when they step through — blocks, along the door's
+ * bearing. Far enough that the seam is fully in frame, near enough that leaving is one step back.
+ * ⚠ Must stay OUTSIDE `PLOT_TRIGGER_RADIUS` or arrival re-fires the crossing the latch just caught.
+ */
+const ARRIVE_STANDOFF = 6
 import { foldLedger, foldOwed, foldProgressLine, tierRadius, TIER_NEED } from './fold-ledger'
 import { createSpiritIndex, markSeen, indexToSave, indexFromSave, type SpiritIndex, type IndexSave } from '../engine/spirit-index'
 // ⚠ `WILDS_BUBBLE` (from column.ts, imported above), NEVER `bubble.ts`'s `DEFAULT_BUBBLE`. The
@@ -615,6 +621,18 @@ interface ConsoleCtx {
    */
   greg: () => string
   /**
+   * ★ `/look <deg>` — point the camera along a compass bearing. OWNER-GATED, a TEST INSTRUMENT.
+   *
+   * It exists because **camera yaw is the one thing no harness can drive**: turning needs pointer
+   * lock and headless Chrome grants none, so every visual check of a thing that is only visible from
+   * one direction — a seam in a wall, a herb patch, the far side of a plot — has been a coin flip on
+   * whichever way the camera happened to be pointing. Three checks in two days were blocked on it.
+   * Same argument as `/foes` and `/brew`: the verb exists because the thing cannot otherwise be seen.
+   *
+   * 0 is north (-Z), 90 east (+X) — the compass the map and `/goto` already speak.
+   */
+  look: (deg: number) => string
+  /**
    * ★ THE RUNES A KEEPER HOLDS. Bare `/rune` is VIEW-GRADE — reading your own hand is not a cheat,
    * and it is the one thing that explains why a cast key does nothing. GRANTING is cheat-grade and
    * checked inside, exactly as `/goto`'s compass-vs-teleport split does it.
@@ -809,6 +827,8 @@ const CONSOLE_CMDS: ConsoleCmd[] = [
     run: (_a, c) => c.brew() },
   { name: 'greg', usage: 'greg', help: 'talk to Gregory from here (owner)', owner: true,
     run: (_a, c) => c.greg() },
+  { name: 'look', usage: 'look <deg>  (0 = north, 90 = east)', help: 'point the camera (owner)', owner: true,
+    run: (a, c) => c.look(Number(a[0]) || 0) },
   { name: 'weather', usage: 'weather', help: 'someday', run: () =>
       'no weather in the Ather yet — the day it exists, its command lands here' },
 ]
@@ -1149,6 +1169,8 @@ export default function VoxelWorld() {
    * additive-growth guarantee forbids.
    */
   const playerSnapRef = useRef<(() => PlayerSave) | null>(null)
+  /** Filled by the scene: the camera is three's and only the component holding it can turn it. */
+  const lookOut = useRef<((deg: number) => string) | null>(null)
   const plotTier = useRef(0)
   const plotCfg = useRef<PlotConfig>(plotForTier(0))
   /**
@@ -1449,6 +1471,7 @@ export default function VoxelWorld() {
     // Same console→panel handoff as `brew` above: the console closes itself and does NOT re-claim
     // the cursor, or the pointer re-locks with the dialogue still up. See that entry for the autopsy.
     greg: () => { setConsoleOpen(false); setDialogueOpen(true); return 'he looks up from the book' },
+    look: (deg) => lookOut.current ? lookOut.current(deg) : 'the world is still waking',
     radius: () => settings.viewRadius,
     setRadius: (r) => update({ viewRadius: r }),
     give: (id, count) => {
@@ -2008,7 +2031,7 @@ export default function VoxelWorld() {
           tutorial={tutorial} onQuestEvent={onQuestEvent} onNearGreg={setNearGreg}
           mistLedger={mistLedger} onNearMist={setNearMist} sparring={!!spar}
           onDiscover={(sp) => markSeen(spiritIndex.current, sp)}
-          plotCfg={plotCfg} plotTier={plotTier} spiritIndex={spiritIndex} snapOut={playerSnapRef} space={space}
+          plotCfg={plotCfg} plotTier={plotTier} spiritIndex={spiritIndex} snapOut={playerSnapRef} space={space} lookOut={lookOut}
           onNearTable={setNearTable} cmdOut={worldCmd} pot={potOps}
           onOpenChest={(c) => { openCursorUI(); setOpenChest(c) }}
           onOpenStation={(st) => { openCursorUI(); setOpenStation(st) }}
@@ -3204,7 +3227,7 @@ const SOLID_EXCEPT = new Set<number>([
 // CELL_HALF for it; everything else (light, fence arms, piece placement) wants "yes, solid".
 const isSolid = (m: number) => !SOLID_EXCEPT.has(baseOf(m))
 
-function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weaponDrawn, weaponIdx, onAmmo, onStats, onPerf, onSay, runeTick, onPos, onLook, onInvChange, worker, incoming, inflight, settings, build, pieceIdx, rot, tools, skills, onSkill, onLevel, onTool, tutorial, onQuestEvent, onNearGreg, onNearTable, cmdOut, mistLedger, onNearMist, onDiscover, sparring, pot, plotCfg, plotTier, spiritIndex, snapOut, space, onOpenChest, onOpenStation, onOpenWaymark, onOpenBrew, uiOpen, owner, foesOut, pressOut }: {
+function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weaponDrawn, weaponIdx, onAmmo, onStats, onPerf, onSay, runeTick, onPos, onLook, onInvChange, worker, incoming, inflight, settings, build, pieceIdx, rot, tools, skills, onSkill, onLevel, onTool, tutorial, onQuestEvent, onNearGreg, onNearTable, cmdOut, mistLedger, onNearMist, onDiscover, sparring, pot, plotCfg, plotTier, spiritIndex, snapOut, space, lookOut, onOpenChest, onOpenStation, onOpenWaymark, onOpenBrew, uiOpen, owner, foesOut, pressOut }: {
   inv: React.RefObject<Inventory>
   toolTier: React.RefObject<number>
   toolSkill: React.RefObject<BlockSkill>
@@ -3280,6 +3303,8 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
    * re-created to learn a new value. Switching spaces is a deliberate teardown, not a re-render.
    */
   space: React.RefObject<Space>
+  /** Filled with a camera-yaw setter for `/look` — see that entry on why it has to exist. */
+  lookOut: React.RefObject<((deg: number) => string) | null>
   /** The arena owns the screen while true; the world keeps streaming but stops reporting prompts. */
   sparring: boolean
   /** Near a placed crafting table — the parent turns this into recipes.ts's `Station`. */
@@ -4137,8 +4162,30 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
       // read low, which is the direction that hands out free chests. See `plotChests`.
       plotChests.current = 0
       void countMaterial(SEED, 'plot', MAT.CHEST).then(n => { plotChests.current += n })
+      // ── ★★ YOU ARRIVE IN FRONT OF YOUR DOOR, NOT INSIDE IT (2026-08-19) ──────────────────────
+      // Alex: *"in the homeplot you dont even start off in front of the passsage."* Landing exactly
+      // ON the threshold put the keeper INSIDE the seam's own quad — near-plane clipped, so the one
+      // landmark in a 600-block garden rendered as nothing at the only moment it is guaranteed to be
+      // in front of them. Standing back six blocks along the fold's bearing puts the shimmer in
+      // view, at the size it will be every time they come back to leave.
+      //
+      // ⚠ THE SOFT RETURN STILL LANDS ON THE THRESHOLD ITSELF — that one is a rescue from falling
+      // and must be the safest cell on the island, not a nice camera angle. Two different arrivals,
+      // two different spots, and only this one is a doorway.
+      //
+      // ⚠ AND THE GROUND IS RE-ASKED AT THE NEW SPOT. `plotThreshold` carries its own y; six blocks
+      // inland is a different column, and the roll means a different altitude. Reusing `t.y` would
+      // drop the keeper into the turf or leave them a step in the air — and the settle gate reads
+      // the camera, so "a step in the air" is the shape that hangs physics.
       const t = plotThreshold(SEED, plotCfg.current)
-      lc.px = t.x + 0.5; lc.py = t.y; lc.pz = t.z + 0.5
+      const b = plotCfg.current.thresholdBearing
+      const bx = Math.round(t.x - Math.cos(b) * ARRIVE_STANDOFF)
+      const bz = Math.round(t.z - Math.sin(b) * ARRIVE_STANDOFF)
+      const bh = plotHeight(bx, bz, SEED, plotCfg.current)
+      // A fold small enough that six blocks inland is off the island falls back to the threshold —
+      // the door is still the safe cell, and this is a view preference, never a correctness one.
+      if (bh === null) { lc.px = t.x + 0.5; lc.py = t.y; lc.pz = t.z + 0.5 }
+      else { lc.px = bx + 0.5; lc.py = bh + 1; lc.pz = bz + 0.5 }
     } else {
       lc.px = SPAWN_X + 0.5; lc.pz = SPAWN_Z + 0.5
       lc.py = columnHeight(SPAWN_X, SPAWN_Z, SEED) + 1
@@ -4159,6 +4206,40 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
     // ⚠ Keep this next to the body move. A future space (the Sea of Folds) will land here too, and
     // any altitude difference between two spaces re-arms exactly this.
     camera.position.set(lc.px, eyeY(lc), lc.pz)
+    // ── ★★ AND THE KEEPER ARRIVES LOOKING AT THEIR OWN DOOR (2026-08-19) ────────────────────────
+    // Alex: *"in the homeplot you dont even start off in front of the passage."* The body landed on
+    // the threshold correctly — what nobody set was the EYE'S DIRECTION, so a keeper stepped through
+    // and arrived facing wherever they happened to have been looking in the Wilds. Half the time the
+    // door was behind them, and the first thing they saw of their own garden was an empty field with
+    // no way back in sight. That is how a fold reads as a room with no exit even when the exit is
+    // one step away.
+    //
+    // ★ FACING THE SEAM, NOT THE GARDEN, AND THAT IS THE DELIBERATE HALF. The narratively obvious
+    // choice is to face INWARD — you just walked in, your back is to the door. It is also the choice
+    // that hides the one thing a keeper must learn: **where home's exit is.** Arriving nose-to-nose
+    // with the shimmer teaches it every single time you come home, at the cost of one turn before
+    // you walk off to build. The garden is 600 blocks wide; the door is one seam.
+    //
+    // Yaw only — pitch is left alone, because a forced look-up/down on arrival reads as the camera
+    // being taken away from you.
+    //
+    // ⚠⚠ THE SIGNS ARE NOT DECORATION, AND I GOT THEM BACKWARDS FIRST TIME. A three.js camera with
+    // YXZ euler looks along **(-sin yaw, 0, -cos yaw)** — its rest direction is -Z, not +Z. So
+    // facing a direction (dx, dz) is `atan2(-dx, -dz)`, and the natural-looking `atan2(dx, dz)`
+    // aims the keeper at exactly 180° from the thing you meant. It shipped for one deploy and the
+    // screenshot was of a keeper standing at their door looking away from it across an empty
+    // field — which is the ORIGINAL bug, arrived at by a sign.
+    if (to === 'plot') {
+      const t = plotThreshold(SEED, plotCfg.current)
+      const dx = (t.x + 0.5) - lc.px, dz = (t.z + 0.5) - lc.pz
+      // ⚠ The keeper stands ON the threshold, so the vector to it is ~zero and its angle is noise.
+      // Face straight OUT along the fold's own bearing instead — the direction the door opens.
+      const b = plotCfg.current.thresholdBearing
+      const yaw = Math.hypot(dx, dz) > 0.5 ? Math.atan2(-dx, -dz)
+        : Math.atan2(-Math.cos(b), -Math.sin(b))
+      const eul = new THREE.Euler().setFromQuaternion(camera.quaternion, 'YXZ')
+      camera.quaternion.setFromEuler(new THREE.Euler(eul.x, yaw, 0, 'YXZ'))
+    }
     settled.current = false
     // ⚠ LATCHED ON ARRIVAL, ALWAYS. Crossing INTO the plot lands the keeper on the plot's threshold,
     // which is itself a crossing volume — unlatched, the next frame would send them straight back
@@ -4168,6 +4249,16 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
     onSay(to === 'plot' ? 'you step through into your garden' : 'you step out into the Wilds')
   }, [flushSaves, onSay])
   useEffect(() => { enterSpaceRef.current = enterSpace }, [enterSpace])
+  // ⚠ SAME SIGN CONVENTION AS THE ARRIVAL FACING, AND FOR THE SAME REASON: a YXZ camera looks along
+  // (-sin yaw, 0, -cos yaw), so compass north (-Z) is yaw 0 and east (+X) is yaw -90°. Getting this
+  // backwards points the instrument at exactly the thing you were not checking.
+  useEffect(() => {
+    lookOut.current = (deg: number) => {
+      const eul = new THREE.Euler().setFromQuaternion(camera.quaternion, 'YXZ')
+      camera.quaternion.setFromEuler(new THREE.Euler(eul.x, -deg * Math.PI / 180, 0, 'YXZ'))
+      return `looking ${Math.round(((deg % 360) + 360) % 360)}°`
+    }
+  }, [camera, lookOut])
 /* eslint-enable react-hooks/exhaustive-deps */
 
   const remesh = useCallback((cx: number, cz: number) => {

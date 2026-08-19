@@ -33,6 +33,8 @@ import { materialAt, MAT } from '../voxel/depth'
 import { zoneAt, ZONE_ANCHORS } from '../voxel/zones'
 import { CELL, isSeen, type Seen } from './discovery'
 import { DEFAULT_PLOT, plotHeight, plotMaterialAt, inWall, plotThreshold, type PlotConfig } from '../voxel/plot'
+import { passageApproach } from '../voxel/bubble'
+import { WILDS_BUBBLE } from '../voxel/column'
 import type { Space } from './save'
 
 /** Blocks per sampled pixel of the terrain plate. One plate pixel per fog cell keeps the two
@@ -259,6 +261,29 @@ function foldPlate(seed: number, cfg: PlotConfig): HTMLCanvasElement {
  * ~1,900 blocks around at the top tier; the whole reason the map is worth fixing is so nobody has to
  * walk the perimeter looking for it again.
  */
+/**
+ * ── ★★ THE DOOR, ON THE COUNTRY'S MAP TOO (2026-08-19) ─────────────────────────────────────────
+ * Alex: *"maybe with a marker on the map as well."* The Wilds map had exactly one mark on it — the
+ * keeper — so the fold's passage was findable only by walking a 6.3km wall until the shimmer
+ * appeared. This is the same ring the fold's own map wears for its threshold, on purpose: **one
+ * symbol for one thing.** A keeper who learns the ring inside their garden reads it instantly out in
+ * the country, and both rings mean the same sentence — *this is the way through*.
+ *
+ * ⚠ IT IS NOT GATED ON HAVING FOUND IT. Canon puts the build's job plainly (`bubble.ts` ›
+ * `passageBearing`): *"a single opening in a 6.3km circumference is undiscoverable by exploration,
+ * so the build must put the player's arrival AT it rather than hoping they find it."* A fog-of-war
+ * rule that hid your own front door until you stumbled on it would be that sentence inverted.
+ */
+function drawDoor(ctx: CanvasRenderingContext2D, x: number, y: number, scale: number) {
+  const r = Math.max(4, scale * 1.6)
+  ctx.save()
+  ctx.strokeStyle = '#ffe9b0'; ctx.lineWidth = Math.max(1.5, scale * 0.35)
+  ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.stroke()
+  ctx.fillStyle = 'rgba(255,233,176,0.35)'
+  ctx.beginPath(); ctx.arc(x, y, r * 0.45, 0, Math.PI * 2); ctx.fill()
+  ctx.restore()
+}
+
 function drawThreshold(ctx: CanvasRenderingContext2D, seed: number, cfg: PlotConfig,
                        scale: number, ox = 0, oy = 0) {
   const t = plotThreshold(seed, cfg)
@@ -266,13 +291,14 @@ function drawThreshold(ctx: CanvasRenderingContext2D, seed: number, cfg: PlotCon
   // ⚠ THE OFFSET IS NOT OPTIONAL ON THE MINIMAP. That surface draws the plate translated so the
   // keeper sits at the centre; a marker placed in plate space without the same translation lands
   // somewhere in the corner and confidently points at nothing.
-  const x = ox + px * scale, y = oy + py * scale, r = Math.max(4, scale * 1.6)
-  ctx.save()
-  ctx.strokeStyle = '#ffe9b0'; ctx.lineWidth = Math.max(1.5, scale * 0.35)
-  ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.stroke()
-  ctx.fillStyle = 'rgba(255,233,176,0.35)'
-  ctx.beginPath(); ctx.arc(x, y, r * 0.45, 0, Math.PI * 2); ctx.fill()
-  ctx.restore()
+  drawDoor(ctx, ox + px * scale, oy + py * scale, scale)
+}
+
+/** The fold's passage, in WILDS coordinates — the same ring, on the country's map. */
+function drawWildsDoor(ctx: CanvasRenderingContext2D, seed: number, cellPx: number, ox = 0, oy = 0) {
+  const a = passageApproach(seed, WILDS_BUBBLE)
+  const { lx, lz } = toLocal(a.x, a.z)
+  drawDoor(ctx, ox + (lx / SAMPLE) * cellPx, oy + (lz / SAMPLE) * cellPx, cellPx)
 }
 
 // ── the cloud ───────────────────────────────────────────────────────────────────────────────────
@@ -433,8 +459,13 @@ export function VoxelMap({ seed, seenRef, seenTick, posRef, headingRef, space, p
     cv.width = MAP_W * px; cv.height = MAP_H * px
     ctx.imageSmoothingEnabled = false
     ctx.drawImage(terrainPlate(seed), 0, 0, cv.width, cv.height)
+    // ⚠ AFTER the cloud, never before: the fog is painted over the plate, so a mark drawn first is
+    // a mark the weather rubs out — and the one thing this map exists to point at would be the first
+    // thing hidden.
+    drawWildsDoor(ctx, seed, px)
     if (seen) {
       drawCloud(ctx, seen, px)
+      drawWildsDoor(ctx, seed, px)
       let on = 0
       for (let y = 0; y < seen.ch; y++) for (let x = 0; x < seen.cw; x++) if (isSeen(seen, x, y)) on++
       setPct((on / (seen.cw * seen.ch)) * 100)
@@ -485,7 +516,7 @@ export function VoxelMap({ seed, seenRef, seenTick, posRef, headingRef, space, p
       <div style={{ position: 'fixed', bottom: 24, left: '50%', transform: 'translateX(-50%)', color: '#cfc7ae', font: '700 12px ui-monospace, monospace', textAlign: 'center' }}>
         {inFold
           ? '✦ your fold · the ring is your threshold · M or click to close'
-          : `✦ ${pct.toFixed(1)}% walked · the cloud is what you have not · M or click to close`}
+          : `✦ ${pct.toFixed(1)}% walked · the ring is the passage to your fold · M or click to close`}
       </div>
     </div>
   )
@@ -557,6 +588,7 @@ export function VoxelMiniMap({ seed, seenRef, posRef, headingRef, spaceRef, plot
       const oy = -((lz - MINI_REACH) / SAMPLE) * cellPx
       ctx.drawImage(terrainPlate(seed), ox, oy, MAP_W * cellPx, MAP_H * cellPx)
       if (seen) drawCloud(ctx, seen, cellPx, ox, oy)
+      drawWildsDoor(ctx, seed, cellPx, ox, oy)
       drawKeeper(ctx, cv.width / 2, cv.height / 2, headingRef.current, 5)
     }
     id = requestAnimationFrame(tick)

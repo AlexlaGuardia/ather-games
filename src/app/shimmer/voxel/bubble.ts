@@ -85,7 +85,21 @@ export interface BubbleConfig {
   passageBearing: number
   /** Half-width of the passage opening, in blocks, measured along the shell. */
   passageWidth: number
-  /** How tall the opening is above the Wilds' ground at that point. */
+  /**
+   * How tall the opening is above the Wilds' ground at that point.
+   *
+   * ── ★★ IT IS ALSO HOW TALL THE SEAM IS DRAWN, WHICH IS WHY IT GREW (2026-08-19) ──────────────
+   * Alex: *"it blends too well."* `seam.ts` derives the ribbon from these two numbers on purpose —
+   * so what is DRAWN can never promise a doorway that is not there — and `seam.test.ts` asserts every
+   * ribbon point sits inside `inPassageVolume`. That pact means the seam cannot be made taller than
+   * the opening: the only honest way to make the door read from across the country is for the
+   * **door itself** to be taller.
+   *
+   * ⚠ NOTHING IS CARVED. The shell is never pierced (canon: a doorway-shaped hole IS the locked gate
+   * the world forbids); this volume is the crossing TRIGGER and the seam's extent, nothing else. So
+   * a taller passage costs no geometry and no wall — it means a keeper who jumps at the door still
+   * crosses, which was always the intent.
+   */
   passageHeight: number
   materials: BubbleMaterials
 }
@@ -139,8 +153,13 @@ export const DEFAULT_BUBBLE: BubbleConfig = {
   fringe: 2.5,
   fringeScale: 4,
   passageBearing: 0,
-  passageWidth: 6,
-  passageHeight: 8,
+  // 6 → 9 and 8 → 24 (2026-08-19). The doorway was 12 blocks across and 8 tall in a wall that stands
+  // ~69 blocks over the ground and runs 6.3km around: at any distance it was a scratch. Now 18 across
+  // and 24 tall — a third of the wall's height, which is what makes it a landmark rather than a
+  // detail you find by walking into it. ⚠ These feed `inPassageVolume` (the crossing trigger) AND
+  // the seam's drawn size; they cannot be tuned independently and must not be.
+  passageWidth: 9,
+  passageHeight: 24,
   materials: { wall: 1 },
 }
 
