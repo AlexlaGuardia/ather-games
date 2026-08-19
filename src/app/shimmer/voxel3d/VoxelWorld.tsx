@@ -975,6 +975,17 @@ export default function VoxelWorld() {
     const id = setInterval(() => {
       const p = mapPos.current, seen = seenRef.current
       if (!p || !seen) return
+      // ── ★★ THE FOG IS THE WILDS' AND ONLY THE WILDS' (2026-08-18, found while fixing the map) ──
+      // This ran every 250ms regardless of world, pushing the keeper's PLOT coordinates through the
+      // continent's `toLocal` and marking those cells walked. A keeper who spent an evening building
+      // in their garden — coordinates within ±300 of the fold's own origin — quietly opened a patch
+      // of the Wilds map around the WORLD origin: country they have never stood in, written to disk
+      // by `saveSeen`, indistinguishable afterwards from ground they had really walked.
+      //
+      // ★ AND THE FIX IS TO RECORD NOTHING, NOT TO KEEP A SECOND GRID. The fold is deliberately
+      // unfogged (see `foldPlate`): it is bounded, it is yours, and its map exists so you can plan a
+      // build on it. There is nothing there to discover, so there is nothing to store.
+      if (space.current === 'plot') return
       const { lx, lz } = toLocal(p.x, p.z)
       if (see(seen, lx, lz) > 0) { seenDirty.current = true; setSeenTick(n => n + 1) }
       if (seenDirty.current && ++saveT >= 8) { saveT = 0; seenDirty.current = false; saveSeen('voxel', seen) }
@@ -1140,6 +1151,15 @@ export default function VoxelWorld() {
   const playerSnapRef = useRef<(() => PlayerSave) | null>(null)
   const plotTier = useRef(0)
   const plotCfg = useRef<PlotConfig>(plotForTier(0))
+  /**
+   * ── ★ WHICH WORLD THE KEEPER IS IN — HOISTED OUT OF `World` (2026-08-18, the map fix) ─────────
+   * It lived inside the scene component, where the frame loop and the worker bridge read it. The
+   * MAP lives out here, and drawing it without this fact is what had the minimap showing the Wilds
+   * while the keeper stood in their garden. One ref, passed down — the alternative (a second copy
+   * out here, mirrored) is two sources of truth about the one fact this codebase has already been
+   * bitten by twice (`PlayerSave.space`, the worker's cache key).
+   */
+  const space = useRef<Space>('wilds')
   // ⚠ NO `tierTick` STATE HERE, DELIBERATELY. The first cut bumped a counter on every discovery and
   // every widening to "refresh the UI" — which re-rendered the whole world tree every time a keeper
   // walked past a mist patch, for nothing: the dialogue reads the ledger from these refs at OPEN
@@ -1988,7 +2008,7 @@ export default function VoxelWorld() {
           tutorial={tutorial} onQuestEvent={onQuestEvent} onNearGreg={setNearGreg}
           mistLedger={mistLedger} onNearMist={setNearMist} sparring={!!spar}
           onDiscover={(sp) => markSeen(spiritIndex.current, sp)}
-          plotCfg={plotCfg} plotTier={plotTier} spiritIndex={spiritIndex} snapOut={playerSnapRef}
+          plotCfg={plotCfg} plotTier={plotTier} spiritIndex={spiritIndex} snapOut={playerSnapRef} space={space}
           onNearTable={setNearTable} cmdOut={worldCmd} pot={potOps}
           onOpenChest={(c) => { openCursorUI(); setOpenChest(c) }}
           onOpenStation={(st) => { openCursorUI(); setOpenStation(st) }}
@@ -2048,10 +2068,12 @@ export default function VoxelWorld() {
           screen, so it never sits on top of the bag or the craft grid. */}
       {!cursorUIOpen && !showMap && (
         <VoxelMiniMap seed={SEED} seenRef={seenRef} posRef={mapPos} headingRef={mapHeading}
+          spaceRef={space} plotCfg={plotCfg}
           onExpand={() => { openCursorUI(); setShowMap(true) }} />
       )}
       {showMap && (
         <VoxelMap seed={SEED} seenRef={seenRef} seenTick={seenTick} posRef={mapPos} headingRef={mapHeading}
+          space={space.current} plotCfg={plotCfg}
           onClose={() => { setShowMap(false); closeCursorUI() }} />
       )}
 
@@ -3182,7 +3204,7 @@ const SOLID_EXCEPT = new Set<number>([
 // CELL_HALF for it; everything else (light, fence arms, piece placement) wants "yes, solid".
 const isSolid = (m: number) => !SOLID_EXCEPT.has(baseOf(m))
 
-function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weaponDrawn, weaponIdx, onAmmo, onStats, onPerf, onSay, runeTick, onPos, onLook, onInvChange, worker, incoming, inflight, settings, build, pieceIdx, rot, tools, skills, onSkill, onLevel, onTool, tutorial, onQuestEvent, onNearGreg, onNearTable, cmdOut, mistLedger, onNearMist, onDiscover, sparring, pot, plotCfg, plotTier, spiritIndex, snapOut, onOpenChest, onOpenStation, onOpenWaymark, onOpenBrew, uiOpen, owner, foesOut, pressOut }: {
+function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weaponDrawn, weaponIdx, onAmmo, onStats, onPerf, onSay, runeTick, onPos, onLook, onInvChange, worker, incoming, inflight, settings, build, pieceIdx, rot, tools, skills, onSkill, onLevel, onTool, tutorial, onQuestEvent, onNearGreg, onNearTable, cmdOut, mistLedger, onNearMist, onDiscover, sparring, pot, plotCfg, plotTier, spiritIndex, snapOut, space, onOpenChest, onOpenStation, onOpenWaymark, onOpenBrew, uiOpen, owner, foesOut, pressOut }: {
   inv: React.RefObject<Inventory>
   toolTier: React.RefObject<number>
   toolSkill: React.RefObject<BlockSkill>
@@ -3250,6 +3272,14 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
   spiritIndex: React.RefObject<SpiritIndex>
   /** Filled with the autosave's `snap()` so a once-per-arc event can persist without waiting 5s. */
   snapOut: React.RefObject<(() => PlayerSave) | null>
+  /**
+   * Which world the keeper is in. Owned by the host (the map needs it too) and written HERE, by
+   * `enterSpace` and the save restore — the scene is the only thing that may change it.
+   *
+   * ⚠ A REF, NOT `useState`: the frame loop and the worker bridge read it and neither may be
+   * re-created to learn a new value. Switching spaces is a deliberate teardown, not a re-render.
+   */
+  space: React.RefObject<Space>
   /** The arena owns the screen while true; the world keeps streaming but stops reporting prompts. */
   sparring: boolean
   /** Near a placed crafting table — the parent turns this into recipes.ts's `Station`. */
@@ -4687,7 +4717,6 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
    * be re-created to learn a new value. Switching spaces is a deliberate teardown (see `enterSpace`)
    * rather than a re-render.
    */
-  const space = useRef<Space>('wilds')
   /**
    * ⚠ `enterSpace` is defined further down (it needs `flushSaves`), and the console bridge is wired
    * further UP. Rather than reorder two unrelated effects to satisfy a declaration order, the

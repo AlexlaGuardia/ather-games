@@ -32,6 +32,8 @@ import { columnHeight } from '../voxel/height'
 import { materialAt, MAT } from '../voxel/depth'
 import { zoneAt, ZONE_ANCHORS } from '../voxel/zones'
 import { CELL, isSeen, type Seen } from './discovery'
+import { DEFAULT_PLOT, plotHeight, plotMaterialAt, inWall, plotThreshold, type PlotConfig } from '../voxel/plot'
+import type { Space } from './save'
 
 /** Blocks per sampled pixel of the terrain plate. One plate pixel per fog cell keeps the two
  *  layers in lockstep, so the cloud can never sit half a pixel off the ground it hides. */
@@ -165,6 +167,114 @@ function terrainPlate(seed: number): HTMLCanvasElement {
   return plate
 }
 
+// ── ★★ THE OTHER WORLD: THE KEEPER'S OWN FOLD (2026-08-18) ─────────────────────────────────────
+// Alex, inside his garden: *"fix the map so it shows the plot."* Pressing M in the fold drew the
+// WILDS — starfield, two green blobs — with the keeper's plot position plotted in **Wilds
+// coordinates**, because plot (0,0) and Wilds (0,0) are different places wearing one name. That is
+// the same two-spaces-one-name hazard `save.ts` namespaces its records against and `enterSpace`
+// clears eleven caches for; the map was simply never told there were two worlds.
+//
+// ★ EVERYTHING ABOVE IS THE CONTINENT'S MAP AND STAYS THAT WAY. `BOUNDS` is derived from
+// `ZONE_ANCHORS`, the plate samples `columnHeight`/`zoneAt`/`materialAt`, and the fog grid is sized
+// to it. None of that means anything inside a bounded island measured from its own centre. So the
+// plot gets its own plate, its own bounds and its own sample rate rather than a mode threaded
+// through a lattice built for an endless world.
+//
+// ★★ AND THE PLOT IS **NOT FOGGED**, which is a design call worth stating. The cloud is honest out
+// there — canon: *"what you have walked is pressed open, what you have not is still ocean"* — but
+// inside your own pocket it inverts the meaning: Greg folded this ground FOR you, it is bounded, it
+// is yours, and the whole verb here is planning a build on it. A keeper who cannot see the shape of
+// their own garden cannot choose where the bench goes. Hiding the threshold behind fog would also
+// re-create, on the map, the exact bug that had Alex sealed in this garden yesterday.
+
+/** Blocks per plate pixel inside the fold. Derived, so a widened fold does not lose resolution. */
+const plotSample = (cfg: PlotConfig) => Math.max(1, Math.round(cfg.capRadius / 64))
+/** The plate is a square of the whole fold plus a little void, in plate pixels. */
+const plotSpan = (cfg: PlotConfig) => Math.ceil(((cfg.capRadius + cfg.wallWidth + 6) * 2) / plotSample(cfg))
+/** Fold XZ (centre-origin) → plate pixel. */
+const plotToPixel = (x: number, z: number, cfg: PlotConfig) => {
+  const n = plotSpan(cfg), s = plotSample(cfg)
+  return { px: n / 2 + x / s, py: n / 2 + z / s }
+}
+
+const PLOT_TURF: [number, number, number] = [104, 146, 82]
+const PLOT_SOIL: [number, number, number] = [122, 104, 78]
+const PLOT_ROCK: [number, number, number] = [124, 126, 130]
+
+let pPlate: HTMLCanvasElement | null = null
+let pPlateKey = ''
+
+/**
+ * The fold, drawn whole.
+ *
+ * ★ BUILT IN ONE PASS, UNLIKE THE CONTINENT'S. That one is 147,000 cells of noise and had to be
+ * spread over idle slices; this is ~130×130 of cheap arithmetic on a bounded disc — a few ms — and
+ * a progressive build would add a second cache-invalidation story for nothing.
+ *
+ * ⚠ KEYED ON `capRadius` AS WELL AS THE SEED. The fold grows (Greg widens it), and a plate cached
+ * on seed alone would keep showing the island the keeper had before their upgrade — the map lying
+ * about the one thing they just earned.
+ */
+function foldPlate(seed: number, cfg: PlotConfig): HTMLCanvasElement {
+  const key = `${seed}:${cfg.capRadius}`
+  if (pPlate && pPlateKey === key) return pPlate
+  const n = plotSpan(cfg), s = plotSample(cfg)
+  const cv = pPlate ?? document.createElement('canvas')
+  cv.width = n; cv.height = n
+  const ctx = cv.getContext('2d')!
+  const img = ctx.createImageData(n, n)
+  for (let py = 0; py < n; py++) {
+    for (let px = 0; px < n; px++) {
+      const x = Math.round((px - n / 2) * s), z = Math.round((py - n / 2) * s)
+      const h = plotHeight(x, z, seed, cfg)
+      let r: number, g: number, b: number
+      if (h === null) {
+        // The wall reads as the cloud it is; everything past it is the star-flecked deep, and canon
+        // is explicit that the void is not to be dressed up.
+        if (inWall(x, z, seed, cfg)) { r = 233; g = 237; b = 248 }
+        else { r = 8; g = 6; b = 20 }
+      } else {
+        const m = plotMaterialAt(x, h, z, seed, cfg)
+        const c = m === cfg.materials.topsoil ? PLOT_TURF
+          : m === cfg.materials.subsoil ? PLOT_SOIL
+          : m === cfg.materials.stone ? PLOT_ROCK
+          : [214, 222, 236] as [number, number, number]   // the keel's cloud, where the lip thins
+        // Gentle relief so a roll reads. The fold is nearly flat by design, so the range is small.
+        const k = 0.86 + Math.max(0, Math.min(1, (h - cfg.baseY) / Math.max(1, cfg.roll * 2))) * 0.28
+        r = c[0] * k; g = c[1] * k; b = c[2] * k
+      }
+      const i = (py * n + px) * 4
+      img.data[i] = r; img.data[i + 1] = g; img.data[i + 2] = b; img.data[i + 3] = 255
+    }
+  }
+  ctx.putImageData(img, 0, 0)
+  pPlate = cv; pPlateKey = key
+  return cv
+}
+
+/**
+ * The door, marked.
+ *
+ * ★ THE ONE THING A KEEPER OPENS THIS MAP FOR. The fold's only way out is a seam in a wall that is
+ * ~1,900 blocks around at the top tier; the whole reason the map is worth fixing is so nobody has to
+ * walk the perimeter looking for it again.
+ */
+function drawThreshold(ctx: CanvasRenderingContext2D, seed: number, cfg: PlotConfig,
+                       scale: number, ox = 0, oy = 0) {
+  const t = plotThreshold(seed, cfg)
+  const { px, py } = plotToPixel(t.x, t.z, cfg)
+  // ⚠ THE OFFSET IS NOT OPTIONAL ON THE MINIMAP. That surface draws the plate translated so the
+  // keeper sits at the centre; a marker placed in plate space without the same translation lands
+  // somewhere in the corner and confidently points at nothing.
+  const x = ox + px * scale, y = oy + py * scale, r = Math.max(4, scale * 1.6)
+  ctx.save()
+  ctx.strokeStyle = '#ffe9b0'; ctx.lineWidth = Math.max(1.5, scale * 0.35)
+  ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.stroke()
+  ctx.fillStyle = 'rgba(255,233,176,0.35)'
+  ctx.beginPath(); ctx.arc(x, y, r * 0.45, 0, Math.PI * 2); ctx.fill()
+  ctx.restore()
+}
+
 // ── the cloud ───────────────────────────────────────────────────────────────────────────────────
 const CLOUD = '#e9edf8'          // canon: soft, pale, faintly glowing
 const DEEP = '#080614'           // the star-flecked void beyond the walls
@@ -272,7 +382,7 @@ function drawKeeper(ctx: CanvasRenderingContext2D, x: number, y: number, heading
 
 // ── the full map (M) ────────────────────────────────────────────────────────────────────────────
 
-export function VoxelMap({ seed, seenRef, seenTick, posRef, headingRef, onClose }: {
+export function VoxelMap({ seed, seenRef, seenTick, posRef, headingRef, space, plotCfg, onClose }: {
   seed: number
   seenRef: React.RefObject<Seen | null>
   /** Bumped when ground opens, so an open map peels back as you walk rather than on next open. */
@@ -280,8 +390,18 @@ export function VoxelMap({ seed, seenRef, seenTick, posRef, headingRef, onClose 
   posRef: React.RefObject<{ x: number; z: number } | null>
   /** Canvas rotation from `screenHeading` — NOT a world yaw. */
   headingRef: React.RefObject<number>
+  /**
+   * ⚠ WHICH WORLD THE POSITION IS IN. Without it this drew the Wilds while the keeper stood in
+   * their fold, with their plot coordinates plotted against continent bounds — a starfield and a
+   * dot in the wrong country. Same field, same reason, as `PlayerSave.space`.
+   */
+  space: Space
+  /** The keeper's own fold size — it grows, and the plate is cached against it. */
+  plotCfg: React.RefObject<PlotConfig>
   onClose: () => void
 }) {
+  const inFold = space === 'plot'
+  const cfg = plotCfg.current ?? DEFAULT_PLOT
   const base = useRef<HTMLCanvasElement>(null)
   const marks = useRef<HTMLCanvasElement>(null)
   const [pct, setPct] = useState(0)
@@ -297,9 +417,20 @@ export function VoxelMap({ seed, seenRef, seenTick, posRef, headingRef, onClose 
   useEffect(() => {
     const cv = base.current, seen = seenRef.current
     if (!cv) return
+    const ctx = cv.getContext('2d')!
+    if (inFold) {
+      // The fold: its own plate, no fog (see the fold-plate header), and the door marked.
+      const n = plotSpan(cfg)
+      const px = Math.max(1, Math.floor(Math.min(1100 / n, 820 / n)))
+      cv.width = n * px; cv.height = n * px
+      ctx.imageSmoothingEnabled = false
+      ctx.drawImage(foldPlate(seed, cfg), 0, 0, cv.width, cv.height)
+      drawThreshold(ctx, seed, cfg, px)
+      setPct(-1)
+      return
+    }
     const px = Math.max(1, Math.floor(Math.min(1500 / MAP_W, 900 / MAP_H)))
     cv.width = MAP_W * px; cv.height = MAP_H * px
-    const ctx = cv.getContext('2d')!
     ctx.imageSmoothingEnabled = false
     ctx.drawImage(terrainPlate(seed), 0, 0, cv.width, cv.height)
     if (seen) {
@@ -308,7 +439,7 @@ export function VoxelMap({ seed, seenRef, seenTick, posRef, headingRef, onClose 
       for (let y = 0; y < seen.ch; y++) for (let x = 0; x < seen.cw; x++) if (isSeen(seen, x, y)) on++
       setPct((on / (seen.cw * seen.ch)) * 100)
     }
-  }, [seed, seenRef, seenTick, tick])
+  }, [seed, seenRef, seenTick, tick, inFold, cfg])
 
   useEffect(() => {
     const cv = marks.current, b = base.current
@@ -320,9 +451,18 @@ export function VoxelMap({ seed, seenRef, seenTick, posRef, headingRef, onClose 
       ctx.clearRect(0, 0, cv.width, cv.height)
       const p = posRef.current
       if (p) {
-        const { lx, lz } = toLocal(p.x, p.z)
-        const px = cv.width / MAP_W
-        drawKeeper(ctx, (lx / SAMPLE) * px, (lz / SAMPLE) * px, headingRef.current, Math.max(3, px * 0.9))
+        // ⚠ THE KEEPER DOT IS THE HALF THAT WAS ACTIVELY LYING. Plot coordinates run through the
+        // continent's `toLocal` put the dot hundreds of blocks from where the keeper stood, on a map
+        // of a different world — and it looked like a plausible position, which is worse than none.
+        if (inFold) {
+          const px = cv.width / plotSpan(cfg)
+          const { px: mx, py: my } = plotToPixel(p.x, p.z, cfg)
+          drawKeeper(ctx, mx * px, my * px, headingRef.current, Math.max(3, px * 0.9))
+        } else {
+          const { lx, lz } = toLocal(p.x, p.z)
+          const px = cv.width / MAP_W
+          drawKeeper(ctx, (lx / SAMPLE) * px, (lz / SAMPLE) * px, headingRef.current, Math.max(3, px * 0.9))
+        }
       }
       id = requestAnimationFrame(tick)
     }
@@ -336,11 +476,16 @@ export function VoxelMap({ seed, seenRef, seenTick, posRef, headingRef, onClose 
       display: 'grid', placeItems: 'center', cursor: 'pointer',
     }}>
       <div style={{ position: 'relative', maxWidth: '94vw', maxHeight: '86vh' }}>
-        <canvas ref={base} style={{ maxWidth: '94vw', maxHeight: '82vh', width: 'auto', height: 'auto', imageRendering: 'pixelated', borderRadius: 10, border: '1px solid #ffe9b033', display: 'block' }} />
+        {/* `data-map` is the harness's handle. Picking "the biggest canvas" finds the WORLD's WebGL
+            surface, whose 2D context is null — so a pixel assert against it reads as -1 and looks
+            like a drawing failure rather than a selector failure. */}
+        <canvas ref={base} data-map="base" style={{ maxWidth: '94vw', maxHeight: '82vh', width: 'auto', height: 'auto', imageRendering: 'pixelated', borderRadius: 10, border: '1px solid #ffe9b033', display: 'block' }} />
         <canvas ref={marks} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none' }} />
       </div>
       <div style={{ position: 'fixed', bottom: 24, left: '50%', transform: 'translateX(-50%)', color: '#cfc7ae', font: '700 12px ui-monospace, monospace', textAlign: 'center' }}>
-        ✦ {pct.toFixed(1)}% walked · the cloud is what you have not · M or click to close
+        {inFold
+          ? '✦ your fold · the ring is your threshold · M or click to close'
+          : `✦ ${pct.toFixed(1)}% walked · the cloud is what you have not · M or click to close`}
       </div>
     </div>
   )
@@ -351,12 +496,20 @@ export function VoxelMap({ seed, seenRef, seenTick, posRef, headingRef, onClose 
  *  screen agrees with what the keeper can actually see out there. */
 const MINI_REACH = 240
 
-export function VoxelMiniMap({ seed, seenRef, posRef, headingRef, onExpand }: {
+export function VoxelMiniMap({ seed, seenRef, posRef, headingRef, spaceRef, plotCfg, onExpand }: {
   seed: number
   seenRef: React.RefObject<Seen | null>
   posRef: React.RefObject<{ x: number; z: number } | null>
   /** Canvas rotation from `screenHeading` — NOT a world yaw. */
   headingRef: React.RefObject<number>
+  /**
+   * ⚠ A REF, NOT A PROP VALUE, UNLIKE THE FULL MAP'S. The minimap redraws from a rAF loop that is
+   * set up once; a prop would be captured in that closure and the corner of the screen would keep
+   * drawing the Wilds after the keeper crossed into their garden — the same staleness the crossing
+   * bugs kept producing, in the one surface that is on screen the whole time.
+   */
+  spaceRef: React.RefObject<Space>
+  plotCfg: React.RefObject<PlotConfig>
   onExpand: () => void
 }) {
   const cvRef = useRef<HTMLCanvasElement>(null)
@@ -370,27 +523,45 @@ export function VoxelMiniMap({ seed, seenRef, posRef, headingRef, onExpand }: {
       id = requestAnimationFrame(tick)
       const p = posRef.current, seen = seenRef.current
       if (!p) return
+      const inFold = spaceRef.current === 'plot'
+      const cfg = plotCfg.current ?? DEFAULT_PLOT
       // `rev` is in the key so opening ground repaints the crop. Without it the cloud would only
       // peel back when the keeper happened to turn, which reads as the map lagging behind the walk.
-      const key = `${Math.round(p.x / 4)},${Math.round(p.z / 4)},${Math.round(headingRef.current * 10)},${seen?.rev ?? -1},${plateRev}`
+      // ⚠ THE SPACE AND THE FOLD SIZE ARE IN THE KEY TOO: both change without the keeper moving —
+      // crossing the seam, and Greg widening the fold — and a crop keyed on position alone would sit
+      // there showing the other world until they happened to take a step.
+      const key = `${Math.round(p.x / 4)},${Math.round(p.z / 4)},${Math.round(headingRef.current * 10)},${seen?.rev ?? -1},${plateRev},${inFold ? cfg.capRadius : 'w'}`
       if (key === last) return
       last = key
       const ctx = cv.getContext('2d')!
-      const cellPx = cv.width / ((MINI_REACH * 2) / SAMPLE)
-      const { lx, lz } = toLocal(p.x, p.z)
-      const ox = -((lx - MINI_REACH) / SAMPLE) * cellPx
-      const oy = -((lz - MINI_REACH) / SAMPLE) * cellPx
       ctx.setTransform(1, 0, 0, 1, 0, 0)
       ctx.imageSmoothingEnabled = false
       ctx.fillStyle = DEEP
       ctx.fillRect(0, 0, cv.width, cv.height)
+      if (inFold) {
+        // Same crop reach in BLOCKS as out in the country, so the corner of the screen means one
+        // thing in both worlds — and at r300 that is a window on the fold rather than the whole of
+        // it, which is the honest read: a garden that size is not glanceable.
+        const cellPx = cv.width / ((MINI_REACH * 2) / plotSample(cfg))
+        const { px: mx, py: my } = plotToPixel(p.x, p.z, cfg)
+        const n = plotSpan(cfg)
+        const ox = cv.width / 2 - mx * cellPx, oy = cv.height / 2 - my * cellPx
+        ctx.drawImage(foldPlate(seed, cfg), ox, oy, n * cellPx, n * cellPx)
+        drawThreshold(ctx, seed, cfg, cellPx, ox, oy)
+        drawKeeper(ctx, cv.width / 2, cv.height / 2, headingRef.current, 5)
+        return
+      }
+      const cellPx = cv.width / ((MINI_REACH * 2) / SAMPLE)
+      const { lx, lz } = toLocal(p.x, p.z)
+      const ox = -((lx - MINI_REACH) / SAMPLE) * cellPx
+      const oy = -((lz - MINI_REACH) / SAMPLE) * cellPx
       ctx.drawImage(terrainPlate(seed), ox, oy, MAP_W * cellPx, MAP_H * cellPx)
       if (seen) drawCloud(ctx, seen, cellPx, ox, oy)
       drawKeeper(ctx, cv.width / 2, cv.height / 2, headingRef.current, 5)
     }
     id = requestAnimationFrame(tick)
     return () => cancelAnimationFrame(id)
-  }, [seed, seenRef, posRef, headingRef])
+  }, [seed, seenRef, posRef, headingRef, spaceRef, plotCfg])
   return (
     <canvas ref={cvRef} onClick={onExpand} title="Map (M)" style={{
       position: 'fixed', top: 12, right: 12, zIndex: 33, width: 148, height: 148,
