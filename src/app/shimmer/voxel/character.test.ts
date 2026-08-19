@@ -11,10 +11,11 @@
 
 import {
   LAND_IDS, landWeights, landRollAt, dominantLand, landCharacter, surfaceBlockAt,
-  treeDensityAt, speciesFactor, floraCharacterAt, landMix, sharpenWeights, accentAt, accentThreshold,
+  treeDensityAt, speciesFactor, floraCharacterAt, landMix, sharpenWeights, accentAt, accentThreshold, findLands,
   CHARACTER_SHARP, type LandId,
 } from './character'
 import { treeStartsAt, DEFAULT_TREES, SPECIES } from './trees'
+import { wildsSwallows } from './column'
 import { floraAt, MAX_FLORA_K, MAX_FLOWER_K, MAX_TALL_K } from './flora'
 import { columnHeight } from './height'
 import { MAT, TURF, DEFAULT_DEPTH, materialAt } from './depth'
@@ -389,6 +390,30 @@ const DRESS = landCharacter({
   ok(accentThreshold(0.22) > 0.5 && accentThreshold(0.22) < 0.75, 'the fitted threshold sits inside the field range')
   // Determinism, like everything else here.
   ok(accentAt(101, -37, SEED, 0.2) === accentAt(101, -37, SEED, 0.2), 'the accent field is deterministic')
+}
+
+// ── 15c. ★ `findLands` — the tour has to land you somewhere that EXISTS ────────────────────────
+// The review tools (`/land`, `scripts/land-tour.mts`) both go through this, and its first run
+// without an exclusion produced nine sites and EIGHT IDENTICAL PICTURES: every "nearest" answer
+// from spawn sits inside the fold's bubble, where there is no ground at any altitude, so the
+// teleports silently did nothing and the contact sheet was eight copies of the spawn view. That
+// reads as "the biome layer does nothing" rather than as "the tour is broken", which is the worst
+// possible failure for an instrument — it indicts the thing it was built to measure.
+{
+  const sites = findLands(0, 0, SEED, { exclude: wildsSwallows })
+  ok(sites.length >= 7, `the tour finds most of the nine lands from spawn (${sites.length})`)
+  ok(new Set(sites.map(s => s.id)).size === sites.length, 'each land appears at most once')
+  for (const s of sites) {
+    ok(!wildsSwallows(s.x, s.z), `★ ${s.id}'s site is outside the fold — somewhere a keeper can stand`)
+    // The site must actually BE the land it claims, or the picture is evidence about nothing.
+    ok(dominantLand(landMix(s.x, s.z, SEED)).id === s.id, `${s.id}'s site really is ${s.id}`)
+    ok(s.t >= 0.62, `${s.id}'s site is a real interior (${s.t.toFixed(2)})`)
+  }
+  // Without the exclusion it must find swallowed sites — otherwise the guard above is vacuous and
+  // would keep passing after someone removed the reason it exists.
+  const naive = findLands(0, 0, SEED)
+  ok(naive.some(s => wildsSwallows(s.x, s.z)),
+    'and the exclusion is load-bearing: without it the search does propose sites inside the fold')
 }
 
 // ── 16. ★ ONE DISTRIBUTION, READ TWO WAYS — the roll and the dials must not disagree ──────────

@@ -21,7 +21,7 @@ import { useRef, useMemo, useState, useEffect, useCallback } from 'react'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { PointerLockControls } from '@react-three/drei'
 import * as THREE from 'three'
-import { SECTION, DEFAULT_COLUMN, Column, Stage, makeColumn, meshColumn, refreshUniform, isHalfCell, generatedVoxel, WILDS_BUBBLE } from '../voxel/column'
+import { SECTION, DEFAULT_COLUMN, Column, Stage, makeColumn, meshColumn, refreshUniform, isHalfCell, generatedVoxel, WILDS_BUBBLE, wildsSwallows } from '../voxel/column'
 import { VOXEL_WORKER_URL } from '../../../workers/worker-url'
 import { createMeshScratch } from '../voxel/greedy'
 import { columnHeight, holdPadLevel } from '../voxel/height'
@@ -29,6 +29,7 @@ import { slumpMask } from '../voxel/slump'
 import { holdGenPiecesForCol, type GenPiece } from '../voxel/holds'
 import { biomeAt, forestness } from '../voxel/biome'
 import { ZONE_ANCHORS, zoneAt } from '../voxel/zones'
+import { findLands, LAND_IDS } from '../voxel/character'
 import { AIR } from '../voxel/section'
 import { materialAt, MAT, isPlant, isHerb, isHalfMat, isTopSlab, baseOf, TOP_BIT, DEFAULT_DEPTH, TURF } from '../voxel/depth'
 import { FLORA, plantVariant } from '../voxel/flora'
@@ -794,6 +795,42 @@ const CONSOLE_CMDS: ConsoleCmd[] = [
   // behind a command means it gets walked before travel depends on it.
   { name: 'space', usage: 'space [plot|wilds]', help: 'bare: toggle · plot/wilds: cross to that space', owner: true,
     run: (a, c) => c.space(a[0]) },
+  // ── ★ /land (2026-08-19) — Alex: *"is it possible to set up test maps to see the biome gen in
+  // action without wandering for 30 min looking for one?"* ────────────────────────────────────
+  // He is describing a real property of what we built, not asking for a convenience: highland is
+  // 4% of the world and crag 2%, so the two most visually distinct grounds are the two you are
+  // least likely to walk into. A generator nobody can review gets tuned by argument.
+  //
+  // Same view-grade line `/goto` and `/mist` draw: the COMPASS is for everyone (knowing that dry
+  // high plains exist somewhere north is not a cheat, and a keeper who cannot find the country
+  // has a worse problem than one who can), the TELEPORT is keeper-of-the-realm only.
+  //
+  // ⚠ SHARES `findLands` WITH `scripts/land-tour.mts`. If the console and the contact sheet
+  // searched separately they would disagree about where a dell is, and the picture would stop
+  // being evidence about the place you can actually walk to.
+  { name: 'land', usage: 'land [id]  (bare: bearings to every land)', help: 'find the nine grounds — meadow, dell, crag…',
+    run: (a, c) => {
+      const p = c.pos()
+      const q = (a[0] ?? '').toLowerCase()
+      // ⚠ `wildsSwallows` — without it every nearby answer is inside the fold, where there is no
+      // ground at any altitude and the teleport silently does nothing. See findLands' own note.
+      const found = findLands(Math.floor(p.x), Math.floor(p.z), SEED, { exclude: (x, z) => wildsSwallows(x, z, 220) })
+      if (!q) {
+        const missing = LAND_IDS.filter(id => !found.some(f => f.id === id))
+        const rows = found.map(f =>
+          `${f.id.padEnd(10)} ${bearing(f.x - p.x, f.z - p.z)}   ${(f.t * 100).toFixed(0)}% pure`)
+        // Naming what was NOT found matters more than it looks: an empty row is the difference
+        // between "there is no crag near you" and "crag is broken", and those read identically
+        // when the answer is silence.
+        if (missing.length) rows.push(`— none within reach: ${missing.join(', ')}`)
+        return rows.join('\n')
+      }
+      const hit = found.find(f => f.id === q) ?? found.find(f => f.id.startsWith(q))
+      if (!hit) return `no ${q} within reach — bare /land lists what is near you`
+      if (!c.isOwner) return `${hit.id}: ${bearing(hit.x - p.x, hit.z - p.z)} — teleport is keeper-of-the-realm only`
+      return c.tp(hit.x, hit.z)
+    },
+    suggest: (i) => i === 0 ? [...LAND_IDS] : [] },
   { name: 'mist', usage: 'mist [go]', help: 'bare: bearings to nearby mist patches · go: teleport to the nearest',
     run: (a, c) => {
       const p = c.pos()

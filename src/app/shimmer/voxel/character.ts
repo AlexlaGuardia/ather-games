@@ -417,3 +417,51 @@ export function accentAt(x: number, z: number, seed: number, accentP: number): b
   // a contour. Weighted by how far across the band we are, so the fray has no hard side.
   return hash01(x, z, seed ^ 0xa11e63) < (d + ACCENT_FRAY) / (2 * ACCENT_FRAY)
 }
+
+/**
+ * ── ★ FINDING A LAND, because 6,000 blocks of country is not a browsable index ──────────────────
+ * Alex, 2026-08-19: *"is it possible to set up test maps to see the biome gen in action without
+ * wandering for 30 min looking for one?"* — and he is describing a real property of the thing we
+ * built, not a missing convenience. Highland is 4% of the world and crag 2%, so the two most
+ * visually distinct grounds are the two you are least likely to walk into. A generator you cannot
+ * review is a generator that gets tuned by argument.
+ *
+ * ★ ONE DEFINITION, TWO CONSUMERS — the `/land` console command a keeper types and the headless
+ * contact sheet (`scripts/land-tour.mts`). If they searched separately they would disagree about
+ * where a dell is, and the picture would stop being evidence for the place you can walk to.
+ *
+ * Returns the NEAREST interior of each land, not the strongest. A near-perfect dell four thousand
+ * blocks away is a worse answer than a good one over the hill: the point is to stand in it.
+ *
+ * ⚠ PASS `exclude`. THE FIRST RUN WITHOUT ONE PRODUCED NINE SITES AND EIGHT IDENTICAL PICTURES.
+ * "Nearest" from spawn means inside the fold's bubble, where there is no ground at any altitude, so
+ * every teleport silently failed and the contact sheet was eight copies of the spawn view — which
+ * reads as *"the biome layer does nothing"*, not as *"the tour is broken"*. `column.ts` exports
+ * `wildsSwallows` for exactly this and both callers pass it. This module cannot import it directly:
+ * column → depth → character, and the cycle would be real.
+ */
+export interface LandSite { id: LandId; x: number; z: number; t: number; dist: number }
+
+export function findLands(
+  fromX: number, fromZ: number, seed: number,
+  opts: { radius?: number; stride?: number; minT?: number; exclude?: (x: number, z: number) => boolean } = {},
+  cfg: BiomeConfig = DEFAULT_BIOME, hcfg: HeightConfig = DEFAULT_HEIGHT,
+): LandSite[] {
+  const radius = opts.radius ?? 2600
+  const stride = opts.stride ?? 24
+  const minT = opts.minT ?? 0.62
+  const best = new Map<LandId, LandSite>()
+  for (let dz = -radius; dz <= radius; dz += stride) {
+    for (let dx = -radius; dx <= radius; dx += stride) {
+      const x = fromX + dx, z = fromZ + dz
+      if (opts.exclude?.(x, z)) continue
+      const { id, t } = dominantLand(landMix(x, z, seed, cfg, hcfg))
+      if (t < minT) continue
+      const dist = Math.hypot(dx, dz)
+      const cur = best.get(id)
+      if (!cur || dist < cur.dist) best.set(id, { id, x, z, t, dist })
+    }
+  }
+  // Stable order: the table's order, so two runs read the same way down the page.
+  return LAND_IDS.map(id => best.get(id)).filter((s): s is LandSite => !!s)
+}

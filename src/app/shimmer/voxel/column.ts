@@ -29,7 +29,7 @@ import { Section, AIR } from './section'
 import { columnHeight, type HeightConfig, DEFAULT_HEIGHT } from './height'
 import { materialAt, MAT, isPlant, isHalfMat, HALF_BIT, type DepthConfig, DEFAULT_DEPTH } from './depth'
 import {
-  bubbleMaterialAt, distFromAxis, DEFAULT_BUBBLE, maxShellReach, shellCapTop, type BubbleConfig,
+  bubbleMaterialAt, distFromAxis, DEFAULT_BUBBLE, maxShellRadius, maxShellReach, shellCapTop, type BubbleConfig,
 } from './bubble'
 import { ZONE_ANCHORS } from './zones'
 import { plantWaystones } from './story-path'
@@ -165,6 +165,33 @@ export const WILDS_BUBBLE: BubbleConfig = {
   passageBearing: Math.atan2(GLADE.z - DEFAULT_BUBBLE.cz, GLADE.x - DEFAULT_BUBBLE.cx),
   materials: { wall: MAT.CLOUD_WALL },
 }
+
+/**
+ * ── ★ IS THIS WILDS COORDINATE SOMEWHERE A KEEPER CAN STAND? (2026-08-19) ──────────────────────
+ * Inside the shell there is no ground at any altitude — the interior is unreachable by construction
+ * (see bubble.ts on why only the skin is real), so a Wilds coordinate within the shell is not a
+ * place, it is the outside of the fold seen from the wrong side.
+ *
+ * ★ EXPORTED BECAUSE TWO TOOLS NEEDED IT AND ONE OF THEM LEARNED THE HARD WAY. `findLands` had no
+ * such filter, so `/land` and the contact sheet both proposed sites within a few hundred blocks of
+ * spawn — every one of them inside the bubble. The teleports silently failed and **eight of nine
+ * tiles in the first sheet were the same picture of the spawn view**, which reads as "the biome
+ * layer does nothing" rather than as "the tour is broken". Third instance of the same family:
+ * `/goto garden` teleported into the void, the slump oracle sampled plot geometry, and now this.
+ *
+ * ⚠ `maxShellRadius`, NOT `.radius` — the same reasoning `bubbleSwallows` states one block down:
+ * the bulge is ±15 and a guard asked about the mean of a shape it exists to check the extremes of
+ * is no guard at all.
+ *
+ * ★ `margin` IS FOR SEARCHES, and it is the second half of the same lesson. With margin 0 the
+ * predicate answers the strict question ("could a keeper stand here"), and a NEAREST-site search
+ * against it piles every answer up against the shell — the second contact sheet had four tiles
+ * that were mostly cloud wall, technically standable and useless as pictures of a biome. A search
+ * wants "somewhere with country around it", which is this question plus room. Same predicate, so
+ * the two cannot drift; the margin says which question is being asked.
+ */
+export const wildsSwallows = (x: number, z: number, margin = 0): boolean =>
+  Math.hypot(x - WILDS_BUBBLE.cx, z - WILDS_BUBBLE.cz) <= maxShellRadius(WILDS_BUBBLE) + margin
 
 /**
  * ── ★★ THE ONE ANCHOR THIS BUBBLE IS ALLOWED TO SWALLOW, AND WHY (declared 2026-08-16) ──────────
