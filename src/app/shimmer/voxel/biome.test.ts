@@ -5,7 +5,7 @@
 // reachable. These asserts pin the claims a screenshot can't — the map render (terrain-profile) is
 // the other half of the review, and neither replaces the other.
 
-import { DEFAULT_BIOME, biomeAt, forestness, greySurfaceAt, greyness, richness, speciesFactor, type BiomeId } from './biome'
+import { DEFAULT_BIOME, biomeAt, forestness, greySurfaceAt, greyness, richness, type BiomeId } from './biome'
 import { columnHeight } from './height'
 import { DEFAULT_DEPTH, materialAt, MAT } from './depth'
 import { treeStartsAt, DEFAULT_TREES } from './trees'
@@ -114,36 +114,11 @@ const SEA = DEFAULT_DEPTH.seaLevel
   ok(cols > 0 && grounded === 0, `no drained-core column surface is plantable topsoil (${grounded}/${cols})`)
 }
 
-// ── species follow the country: the same four trees, different woods ────────────────────────────
-{
-  ok(speciesFactor('starwillow', SEED, 0, 0) >= 0.3, 'speciesFactor returns a sane multiplier')
-  // Find a low-ground column and an upland column, then compare willow leanings directly.
-  let lowC: [number, number] | null = null, highC: [number, number] | null = null
-  for (let cz = -300; cz < 300 && !(lowC && highC); cz += 3) {
-    for (let cx = -300; cx < 300 && !(lowC && highC); cx += 3) {
-      const f = speciesFactor('starwillow', SEED, cx, cz)
-      if (f >= 3 && !lowC) lowC = [cx, cz]
-      if (f <= 0.3 && !highC) highC = [cx, cz]
-    }
-  }
-  ok(!!lowC, 'starwillow country (low ground) exists')
-  ok(!!highC, 'starwillow-hostile country (uplands) exists')
-  if (lowC && highC) {
-    const count = (c: [number, number]) => {
-      let willows = 0, total = 0
-      for (let d = 0; d < 60; d++) {
-        for (const t of treeStartsAt(SEED, c[0] + (d % 8), c[1] + ((d / 8) | 0), 16, DEFAULT_TREES)) {
-          total++
-          if (t.species.id === 'starwillow') willows++
-        }
-      }
-      return { willows, total }
-    }
-    const lo = count(lowC), hi = count(highC)
-    ok(lo.total === 0 || hi.total === 0 || (lo.willows / Math.max(1, lo.total)) > (hi.willows / Math.max(1, hi.total)),
-      `willow share leans to low ground (low ${lo.willows}/${lo.total} vs upland ${hi.willows}/${hi.total})`)
-  }
-}
+// ★ THE SPECIES SECTION MOVED TO character.test.ts on 2026-08-19 (slice ②), with `speciesFactor`
+// itself. It asked "does the willow lean to low ground", which was the best question available when
+// altitude was the only thing weighting a species; the land layer can ask the question that was
+// actually meant — does a dell grow a different WOOD from a highland — so the assert moved rather
+// than being duplicated into a weaker copy that would rot next to the real one.
 
 // ── woodland mask still answers through its new home ────────────────────────────────────────────
 {

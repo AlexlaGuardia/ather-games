@@ -17,7 +17,7 @@
 // in sync), weighted by uv.y so roots stay planted. CPU never touches a standing instance.
 
 import * as THREE from 'three'
-import { bladePixels, headPixels, HEAD_TINTS, TUFT_SEED, TUFT_BLADES, TALL_SEED, TALL_BLADES } from './tex/flora-tex'
+import { bladePixels, headPixels, HEAD_TINTS, BLADE_GREEN, TUFT_SEED, TUFT_BLADES, TALL_SEED, TALL_BLADES } from './tex/flora-tex'
 import { FLORA } from '../voxel/flora'
 import { MATERIAL_COLOR } from './attrs'
 import { MAT } from '../voxel/depth'
@@ -52,7 +52,38 @@ const HERB_TIP: Readonly<Record<number, number>> = {
 
 /** Placeholder palette, tiles.ts's register: greens off TOPSOIL, heads in mana-adjacent pastels. */
 
-interface Spot { x: number; y: number; z: number; kind: number; variant: number; mat: number }
+/**
+ * ── ★ GRASS TAKES ITS COLOUR FROM THE GROUND IT GROWS IN (slice ②, 2026-08-19) ─────────────────
+ * Ground cover was ONE green everywhere. Flower heads have been tinted by variant and herbs by
+ * material since they shipped, but tufts and tall grass shared a single blade texture with no
+ * instance colour at all — so the grass on a barrens' straw read identically to the grass in a wet
+ * dell, which quietly undid a good part of what the ground layer bought: you would walk from green
+ * turf to straw turf and the thing standing ON it never changed.
+ *
+ * ★ THESE ARE TARGET COLOURS, NOT MULTIPLIERS, and the difference is the whole reason this is
+ * readable. The blade texture is painted in `BLADE_GREEN` with an additive per-pixel shade, so a
+ * multiplicative tint can only ever darken it and no product of a green texture will ever look like
+ * straw. Instead each ground names the colour its grass SHOULD be, and the multiplier is derived
+ * (target / BLADE_GREEN) — which may exceed 1 per channel, which is fine: `instanceColor` is a
+ * float attribute and the shader multiplies.
+ *
+ * ⚠ TOPSOIL IS `BLADE_GREEN` EXACTLY, so its multiplier is exactly (1,1,1) and the world's most
+ * common ground looks byte-identical to how it looked before this existed. That is deliberate: a
+ * change meant to add variety must not quietly restyle the 45% case as a side effect.
+ *
+ * ⚠ A GROUND ABSENT FROM THIS TABLE FALLS BACK TO BLADE_GREEN — it does not go black or magenta.
+ * Ground cover only grows on `TURF`, so the table needs one row per turf and nothing else; a new
+ * turf added without a row is merely un-tinted, which is the right failure for a look table.
+ */
+const GRASS_OF_GROUND: Readonly<Record<number, number>> = {
+  [MAT.TOPSOIL]: 0x569e42,        // === BLADE_GREEN. Multiplier (1,1,1). Do not "tidy" this away.
+  [MAT.FOREST_LOAM]: 0x3f7a38,    // deeper and bluer under a closed canopy
+  [MAT.LUSH_TURF]: 0x63bc46,      // a wet valley floor: the most alive grass in the world
+  [MAT.DRY_GRASS]: 0xa89a52,      // straw — the one that could never have come from a multiply
+  [MAT.HIGHLAND_TURF]: 0x74a06a,  // cooler and greyer, hardy turf at altitude
+}
+
+interface Spot { x: number; y: number; z: number; kind: number; variant: number; mat: number; ground: number }
 
 /**
  * ── ★ THE VOXEL DECIDES WHETHER A PLANT IS THERE (2026-08-11) ──────────────────────────────────
@@ -66,7 +97,7 @@ interface Spot { x: number; y: number; z: number; kind: number; variant: number;
  * look never has to be stored and picking one plant cannot restyle its neighbour. `y` is
  * fractional on a slumped lip — it is a ground height, not a cell index.
  */
-export type PlantProbe = (x: number, z: number) => { y: number; kind: number; variant: number; mat: number } | null
+export type PlantProbe = (x: number, z: number) => { y: number; kind: number; variant: number; mat: number; ground: number } | null
 
 export interface FloraRenderer {
   group: THREE.Group
@@ -184,6 +215,9 @@ export function createFloraRenderer(): FloraRenderer {
 
   const tufts = new THREE.InstancedMesh(tuftGeo, tuftMat, CAP.tuft)
   const talls = new THREE.InstancedMesh(tallGeo, tallMat, CAP.tall)
+  // Slice ②: the blades take the colour of the ground under them (see GRASS_OF_GROUND).
+  tufts.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(CAP.tuft * 3), 3)
+  talls.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(CAP.tall * 3), 3)
   const stems = new THREE.InstancedMesh(stemGeo, stemMat, CAP.flower)
   const heads = new THREE.InstancedMesh(headGeo, headMat, CAP.flower)
   heads.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(CAP.flower * 3), 3)
@@ -211,6 +245,22 @@ export function createFloraRenderer(): FloraRenderer {
   const tint = new THREE.Color()
   const Y_AXIS = new THREE.Vector3(0, 1, 0)
 
+  // target / BLADE_GREEN, memoised per ground — one divide per material ever, not per blade.
+  const grassMul = new Map<number, THREE.Color>()
+  const grassTint = (ground: number): THREE.Color => {
+    let c = grassMul.get(ground)
+    if (!c) {
+      const t = GRASS_OF_GROUND[ground] ?? 0x569e42
+      c = new THREE.Color().setRGB(
+        ((t >> 16) & 255) / BLADE_GREEN[0],
+        ((t >> 8) & 255) / BLADE_GREEN[1],
+        (t & 255) / BLADE_GREEN[2],
+      )
+      grassMul.set(ground, c)
+    }
+    return c
+  }
+
   const spotsFor = (k: string, x0: number, z0: number, seed: number, probe: PlantProbe): Spot[] => {
     const hit = cache.get(k)
     if (hit) return hit
@@ -219,7 +269,7 @@ export function createFloraRenderer(): FloraRenderer {
       const x = x0 + dx, z = z0 + dz
       const p = probe(x, z)
       if (!p) continue
-      out.push({ x, y: p.y, z, kind: p.kind, variant: p.variant, mat: p.mat })
+      out.push({ x, y: p.y, z, kind: p.kind, variant: p.variant, mat: p.mat, ground: p.ground })
     }
     cache.set(k, out)
     return out
@@ -241,8 +291,12 @@ export function createFloraRenderer(): FloraRenderer {
           const grow = 0.75 + s.variant * 0.5
           scl.set(1, grow, 1)
           mtx.compose(off, quat, scl)
-          if (s.kind === FLORA.TUFT) { if (nT < CAP.tuft) tufts.setMatrixAt(nT++, mtx) }
-          else if (s.kind === FLORA.TALL) { if (nL < CAP.tall) talls.setMatrixAt(nL++, mtx) }
+          if (s.kind === FLORA.TUFT) {
+            if (nT < CAP.tuft) { tufts.setMatrixAt(nT, mtx); tufts.setColorAt(nT, grassTint(s.ground)); nT++ }
+          }
+          else if (s.kind === FLORA.TALL) {
+            if (nL < CAP.tall) { talls.setMatrixAt(nL, mtx); talls.setColorAt(nL, grassTint(s.ground)); nL++ }
+          }
           else if (s.kind === FLORA.HERB) {
             if (nH < CAP.herb) {
               herbs.setMatrixAt(nH, mtx)
@@ -266,6 +320,8 @@ export function createFloraRenderer(): FloraRenderer {
       herbs.count = nH; tips.count = nH
       tufts.instanceMatrix.needsUpdate = true
       talls.instanceMatrix.needsUpdate = true
+      if (tufts.instanceColor) tufts.instanceColor.needsUpdate = true
+      if (talls.instanceColor) talls.instanceColor.needsUpdate = true
       stems.instanceMatrix.needsUpdate = true
       heads.instanceMatrix.needsUpdate = true
       herbs.instanceMatrix.needsUpdate = true

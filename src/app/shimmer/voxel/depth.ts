@@ -436,8 +436,13 @@ export const TURF: ReadonlySet<number> = new Set<number>([
  * The land-character table, bound to this file's materials once. `character.ts` cannot import `MAT`
  * (it would close a cycle — see `GroundMaterials`), so the binding happens here, at the one place
  * that owns both halves.
+ *
+ * ⚠ EXPORTED, AND THERE MUST ONLY EVER BE THIS ONE. `trees.ts` and `flora.ts` read it too (slice
+ * ②) — a second `landCharacter(...)` call elsewhere would compile, run, and hold a second opinion
+ * about what grows where, which is the three-copies-of-a-truth failure the sprite frame maps
+ * taught us. Every consumer imports this binding.
  */
-const LAND_DRESS = landCharacter({
+export const LAND_DRESS = landCharacter({
   topsoil: MAT.TOPSOIL, loam: MAT.FOREST_LOAM, lush: MAT.LUSH_TURF, mud: MAT.MARSH_MUD,
   dry: MAT.DRY_GRASS, highland: MAT.HIGHLAND_TURF, scree: MAT.SCREE,
   subsoil: MAT.SUBSOIL, stone: MAT.STONE,

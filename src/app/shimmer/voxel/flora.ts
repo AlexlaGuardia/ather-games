@@ -22,8 +22,9 @@
 import { value2 } from './noise'
 import { greyness, type BiomeId } from './biome'
 import { zoneAt } from './zones'
+import { floraCharacterAt } from './character'
 import { mistAt } from './mist'
-import { MAT } from './depth'
+import { MAT, LAND_DRESS } from './depth'
 
 export const FLORA = {
   NONE: 0,
@@ -56,6 +57,26 @@ export const FLOWER_DENSITY = 0.26   // inside a drift — dense on purpose, dri
 export const MIST_TUFT_YIELD = 0.75
 /** Flower share mist raises on OPEN ground (outside a drift) — a patch blooms with or without one. */
 export const MIST_OPEN_BLOOM = 0.35
+
+/**
+ * ── ★ THE CONSERVATIVE GATE (slice ②, 2026-08-19) ───────────────────────────────────────────────
+ * `floraAt` costs one hash for most columns, and that early-out is the reason ground cover is free
+ * on the world's hot path. Land character would destroy it: reading it before the gate puts a
+ * `landWeights` call — four noise fields — on every column in the world to answer "no" for ~85% of
+ * them.
+ *
+ * So the gate runs first at the LARGEST multiplier any land can ask for, and only survivors pay for
+ * the real one. A conservative gate can let a cell through that the true dials then reject; it can
+ * never reject one the true dials would have grown, which is the only direction that would be a
+ * bug. Same shape as `herbAt`'s "cheap roll first, field second" and as the `riverCarve > 0` guard
+ * in front of the water table.
+ *
+ * ⚠ THESE ARE THE MAXIMA OVER `LAND_CHARACTER`, and they are asserted against it in flora.test.ts
+ * rather than trusted — a land tuned past one of them silently loses the flora it was tuned to get.
+ */
+export const MAX_FLORA_K = 1.30   // dell
+export const MAX_FLOWER_K = 1.35  // meadow
+export const MAX_TALL_K = 3.0     // marsh
 
 const hash01 = (x: number, z: number, seed: number): number => {
   let h = Math.imul(x | 0, 374761393) ^ Math.imul(z | 0, 668265263) ^ Math.imul(seed | 0, 1274126177)
@@ -192,11 +213,18 @@ export function floraAt(x: number, z: number, seed: number): FloraSpot | null {
     : zid === 'twilight-thicket' ? 1 - 0.72 * zn.t
     : zid === 'mana-springs' ? 1 - 0.45 * zn.t
     : 1
-  const tuftP = TUFT_DENSITY * boost
-  const tallP = TALL_DENSITY * boost
-  // Cheap gate first: most cells fail the roll before any field is read. Hoisted into a const
-  // because the mist bloom below must fit INSIDE it — see there.
-  const gate = (tuftP + tallP) * 1.6 + FLOWER_DENSITY
+  // ── Cheap gate first: most cells fail the roll before any field is read (see MAX_FLORA_K) ────
+  const ceilGate = (TUFT_DENSITY * boost * MAX_FLORA_K + TALL_DENSITY * boost * MAX_FLORA_K * MAX_TALL_K) * 1.6
+    + FLOWER_DENSITY * MAX_FLOWER_K
+  if (roll > ceilGate) return null
+
+  // Survivor: now the land's real dials. Slice ② — a dell is deep grass, a barrens is nearly bare,
+  // a marsh is reeds, a wood core is a dim floor. Blended across the lands, so density has no seam.
+  const lc = floraCharacterAt(x, z, seed, LAND_DRESS)
+  const tuftP = TUFT_DENSITY * boost * lc.floraK
+  const tallP = TALL_DENSITY * boost * lc.floraK * lc.tallK
+  // Hoisted into a const because the mist bloom below must fit INSIDE it — see there.
+  const gate = (tuftP + tallP) * 1.6 + FLOWER_DENSITY * lc.flowerK
   if (roll > gate) return null
   // Drained ground thins to nothing across the grey fringe — and dies BEFORE the core (0.85, not
   // 1.0): grass giving out while the soil still holds a little colour is the right order for the
@@ -205,7 +233,7 @@ export function floraAt(x: number, z: number, seed: number): FloraSpot | null {
   if (life <= 0.15) return null
   const drift = value2(x / DRIFT_SCALE, z / DRIFT_SCALE, seed ^ 0xd21f7)
   const inDrift = drift > DRIFT_EDGE
-  const flowerBase = inDrift ? FLOWER_DENSITY * (zid === 'spirit-meadow' ? 1 + 0.6 * zn.t : 1) : 0
+  const flowerBase = inDrift ? FLOWER_DENSITY * lc.flowerK * (zid === 'spirit-meadow' ? 1 + 0.6 * zn.t : 1) : 0
 
   // ★ MIST BLOOMS WHAT IS ALREADY THERE — it does not add. Inside a patch (mist.ts) the flower
   // share climbs and the tufts give way to it, so charged ground reads as charged without the
@@ -223,7 +251,7 @@ export function floraAt(x: number, z: number, seed: number): FloraSpot | null {
   // runs, so a bloom that reached past it would be silently truncated by a threshold upstream —
   // flowers that thin out at exactly the wrong moment, for a reason invisible from here.
   const flowerP = Math.min(
-    flowerBase + m * (tuftP * MIST_TUFT_YIELD + (inDrift ? 0 : FLOWER_DENSITY * MIST_OPEN_BLOOM)),
+    flowerBase + m * (tuftP * MIST_TUFT_YIELD + (inDrift ? 0 : FLOWER_DENSITY * lc.flowerK * MIST_OPEN_BLOOM)),
     gate - tuftAdj - tallP,
   )
 

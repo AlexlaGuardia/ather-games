@@ -6174,7 +6174,8 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
         while (guard-- > 0 && y > 1 && voxel(fx, y, fz) === AIR) y--
         // TURF, not TOPSOIL (2026-08-19): ground cover grows on every land's turf, so picking it
         // has to accept the same set the generator planted it on.
-        if (!TURF.has(voxel(fx, y, fz))) return null
+        const ground = voxel(fx, y, fz)
+        if (!TURF.has(ground)) return null
         const m = voxel(fx, y + 1, fz)
         if (!isPlant(m)) return null
         // A tuft on a slumped lip grows from the half-height top, not from where a full block
@@ -6188,7 +6189,11 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
         // painter, one layer up.
         const kind = m === MAT.TUFT ? FLORA.TUFT : m === MAT.TALL_GRASS ? FLORA.TALL
           : isHerb(m) ? FLORA.HERB : FLORA.FLOWER
-        return { y: gy, kind, variant: plantVariant(fx, fz, SEED, kind), mat: m }
+        // `ground` rides along because this walk has ALREADY resolved it — `mat` is the plant, and
+        // `ground` is the somewhere it stands. `flora-mesh` tints the blades from it (slice ②), and
+        // any later consumer that wants to know what a plant is rooted in gets it for free rather
+        // than re-walking the column.
+        return { y: gy, kind, variant: plantVariant(fx, fz, SEED, kind), mat: m, ground }
       })
     }
 

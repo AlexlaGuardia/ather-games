@@ -23,9 +23,10 @@
 // is pushed, so nothing has to wait.
 
 import { Section, AIR } from './section'
-import { MAT, TURF } from './depth'
+import { MAT, TURF, LAND_DRESS } from './depth'
 import { hash2, mixSeed } from './noise'
-import { forestness, speciesFactor } from './biome'
+import { forestness } from './biome'
+import { speciesFactor, treeDensityAt } from './character'
 
 /**
  * How hard a lobe's radius is warped, as a fraction of r-squared. 0 is a perfect ellipsoid.
@@ -176,15 +177,27 @@ export function treeStartsAt(seed: number, cx: number, cz: number, size: number,
   const g0 = rng(base)
   // The mask scales EXPECTED count, not a per-tree veto — so the forest edge thins gradually and a
   // meadow still rolls its occasional lone tree from the same stream (determinism untouched).
-  const expected = cfg.meadowPerColumn + forestness(seed, cx, cz) * (cfg.perColumn - cfg.meadowPerColumn)
+  // ── ★ SLICE ② (2026-08-19): the mask says WHERE a forest is, the land says whether this
+  // country carries trees at all ─────────────────────────────────────────────────────────────
+  // These are two questions and the multiplication is the point. `forestness` stays Alex's rule
+  // (a forest is a place you enter and leave, never a global density); `treeK` is what makes a
+  // barrens bare and a wood core dense INSIDE that. A tableland can sit under a forest mask and
+  // still be open ground, which is exactly the case a single mask could never express.
+  //
+  // ⚠ BLENDED, NOT ROLLED. A trunk count is continuous, so it eases from 1.18 in a wood core to
+  // 0.15 in a barrens with no border at all — see `blend` in character.ts on why the discrete/
+  // continuous split is the whole design and not an optimisation.
+  const expected = (cfg.meadowPerColumn + forestness(seed, cx, cz) * (cfg.perColumn - cfg.meadowPerColumn))
+    * treeDensityAt(cx * size + size / 2, cz * size + size / 2, seed, LAND_DRESS)
   const whole = Math.floor(expected)
   const n = whole + (g0() < expected - whole ? 1 : 0)
 
-  // ★ Weights are modulated BY PLACE (biome.ts speciesFactor) before the pick: starwillow crowds
-  // the low ground, goldwood the hills, dawnwood the deep forest cores. Computed once per column —
+  // ★ Weights are modulated BY PLACE (character.ts speciesFactor) before the pick: starwillow
+  // takes the dells and marshes, goldwood the highlands and high plains, dawnwood the deep forest
+  // cores — so the same four ruled species make visibly different woods. Computed once per column —
   // every trunk this column rolls faces the same woods — and the multiplier keeps rarity a weight,
   // never a separate placement pass.
-  const w = cfg.species.map(sp => sp.weight * speciesFactor(sp.id, seed, cx, cz))
+  const w = cfg.species.map(sp => sp.weight * speciesFactor(sp.id, seed, cx, cz, LAND_DRESS))
   const total = w.reduce((a, b) => a + b, 0)
   for (let i = 0; i < n; i++) {
     const s = mixSeed(base, i)

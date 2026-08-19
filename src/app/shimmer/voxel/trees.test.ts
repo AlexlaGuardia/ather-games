@@ -161,7 +161,14 @@ for (let i = 0; SITES.length < 40 && i < 4000; i++) {
 {
   const count = new Map<string, number>()
   let total = 0
-  for (let cx = 0; cx < 40; cx++) for (let cz = 0; cz < 40; cz++)
+  // ⚠ WINDOW WIDENED 40 → 56 ON 2026-08-19 (slice ②), and the reason is the feature, not the test.
+  // Land character multiplies the trunk count, and most of what it multiplies is DOWN: a barrens
+  // is 0.15, a crag 0, a tableland 0.45, while the wooded lands stay at 1.0-1.18. So the world has
+  // roughly a fifth fewer trees than it did and every one of them came out of open country, which
+  // is precisely the "or no trees" Alex asked for. The same 40x40 window fell from >800 trunks to
+  // 625. Lowering the threshold instead would have quietly weakened a mix assert that wants a big
+  // sample to be meaningful — the fix for a thinner world is a wider window, not a smaller claim.
+  for (let cx = 0; cx < 56; cx++) for (let cz = 0; cz < 56; cz++)
     for (const st of treeStartsAt(SEED, cx, cz, SECTION, CFG)) {
       count.set(st.species.id, (count.get(st.species.id) ?? 0) + 1)
       total++

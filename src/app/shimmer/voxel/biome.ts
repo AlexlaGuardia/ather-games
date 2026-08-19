@@ -176,29 +176,7 @@ export function biomeAt(
   return 'meadow'
 }
 
-/**
- * Per-place species weight multiplier — how the same four ruled trees make DIFFERENT woods.
- *
- * ★ Weights stay weights (trees.ts's own rarity rule): a species is never placed by its own pass,
- * it just gets heavier where it belongs. Species NAMES and drop tables are canon; where each one
- * likes to grow is build tuning and is mine. The shape: starwillow crowds the low wet ground,
- * goldwood takes the hills, dawnwood concentrates in deep forest cores (rare stays rare, but you
- * now know where to LOOK — a rare tree scattered uniformly is just litter with a low weight).
- */
-export function speciesFactor(
-  id: string, seed: number, cx: number, cz: number,
-  cfg: BiomeConfig = DEFAULT_BIOME, hcfg: HeightConfig = DEFAULT_HEIGHT,
-): number {
-  const x = cx * 16 + 8, z = cz * 16 + 8
-  const { continentalness } = heightFields(x, z, seed, hcfg)
-  switch (id) {
-    case 'starwillow':
-      return continentalness <= 0.45 ? 3.0 : continentalness >= cfg.highlandC ? 0.3 : 1.0
-    case 'goldwood':
-      return continentalness >= cfg.highlandC ? 1.8 : 1.0
-    case 'dawnwood':
-      return forestness(seed, cx, cz, cfg) >= 0.85 ? 3.5 : 0.6
-    default:
-      return 1.0
-  }
-}
+// ★ `speciesFactor` MOVED TO character.ts on 2026-08-19 (slice ②). Which species a place favours is
+// land CHARACTER, and reading it off the land weights means the woods change with the country
+// rather than holding a second, private opinion about altitude. It could not stay here: it would
+// have to import character.ts, and character.ts imports this file.

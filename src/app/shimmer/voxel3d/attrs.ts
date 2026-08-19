@@ -50,7 +50,10 @@ export const MATERIAL_COLOR: Record<number, number> = {
   //   loam     — forest floor: dark, brown-shifted, the litter under a closed canopy
   //   lush     — a wet valley bottom: the most saturated green in the world, and the only one
   //              brighter than the meadow, so a dell reads as somewhere the water collects
-  //   mud      — olive-brown, low value: marsh is the one ground that is not really a green
+  //   mud      — WET EARTH, and it took two passes to get there. 0x5a5738 then 0x6e6144 both went
+  //              cold and near-grey in the scene: low-saturation browns lose their warmth entirely
+  //              under this light, next to a turf that keeps all of its green. Only a properly
+  //              saturated brown reads as mud rather than as dirty stone.
   //   dry      — OLIVE straw, not sand-straw. First pass was 0xb3a25c and the map killed it: it
   //              read as SAND (0xd8c691) at a glance, so every barrens and high plain looked like a
   //              beach that had wandered inland, right next to the real sand of the river shoulders.
@@ -60,7 +63,7 @@ export const MATERIAL_COLOR: Record<number, number> = {
   //              which is what separates a crag's loose surface from the bedrock it sits on
   [MAT.FOREST_LOAM]: 0x3a6b2c,
   [MAT.LUSH_TURF]: 0x63b83e,
-  [MAT.MARSH_MUD]: 0x5a5738,
+  [MAT.MARSH_MUD]: 0x7a5f3a,
   [MAT.DRY_GRASS]: 0x9c9a4e,
   [MAT.HIGHLAND_TURF]: 0x6d9270,
   [MAT.SCREE]: 0x93897c,

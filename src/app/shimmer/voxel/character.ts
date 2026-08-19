@@ -33,7 +33,7 @@
 
 import { heightFields, riverField, peaksValleys, flatnessF, type HeightConfig, DEFAULT_HEIGHT } from './height'
 import { forestness, canopy, type BiomeConfig, DEFAULT_BIOME } from './biome'
-import { value2 } from './noise'
+import { fbm2 } from './noise'
 
 /** The noise-placed grounds. Water, shore and the greyfield are NOT here — see `surfaceBlockAt`. */
 export type LandId = 'meadow' | 'woodland' | 'deepwood' | 'dell' | 'marsh'
@@ -48,12 +48,35 @@ export interface LandCharacter {
   /** The ground this land wears. */
   surface: number
   /**
-   * A second block dithered through the first, and the reason within-biome ground is not flat
+   * A second block PATCHED through the first, and the reason within-biome ground is not flat
    * colour: bare earth showing through a barrens, rock breaking a highland's turf, loam under a
    * wood's litter. 0 disables it.
    */
   accent: number
+  /** Target share of columns wearing the accent. See `accentThreshold` — it is a share, not a
+   *  per-block probability, and the difference is what stopped the marsh looking like lino. */
   accentP: number
+
+  // ── Slice ② (2026-08-19): what GROWS here ────────────────────────────────────────────────────
+  /**
+   * Trunk-count multiplier. **0 means no trees, and that is a character rather than an omission** —
+   * Alex's ask names it: *"producing a certain tree (or no trees)"*. Bare country is what makes
+   * wooded country read as wooded.
+   *
+   * ⚠ THIS MULTIPLIES THE FOREST MASK, IT DOES NOT REPLACE IT. `forestness` still decides where a
+   * forest IS (Alex's standing rule: a forest is a place you enter and leave, not a global
+   * density). This says how readily a given land carries trees at all, which is a different
+   * question — a tableland can sit inside a forest mask and still be open country.
+   */
+  treeK: number
+  /** Per-species weight multipliers, by species id. Absent = 1. See `speciesFactor`. */
+  trees: Readonly<Record<string, number>>
+  /** Ground-cover density multiplier — tufts and tall grass together. */
+  floraK: number
+  /** Flower-share multiplier, applied inside a drift. */
+  flowerK: number
+  /** Tall-grass share multiplier. High is how a marsh reads as reeds and a dell as deep grass. */
+  tallK: number
 }
 
 /**
@@ -86,13 +109,33 @@ export interface GroundMaterials {
  */
 export function landCharacter(m: GroundMaterials): Readonly<Record<LandId, LandCharacter>> {
   return {
-    meadow:    { surface: m.topsoil,  accent: 0,         accentP: 0 },
-    woodland:  { surface: m.topsoil,  accent: m.loam,    accentP: 0.26 },
-    deepwood:  { surface: m.loam,     accent: m.topsoil, accentP: 0.14 },
-    dell:      { surface: m.lush,     accent: m.topsoil, accentP: 0.18 },
-    marsh:     { surface: m.mud,      accent: m.lush,    accentP: 0.30 },
-    tableland: { surface: m.dry,      accent: m.topsoil, accentP: 0.12 },
-    barrens:   { surface: m.dry,      accent: m.subsoil, accentP: 0.18 },
+    meadow:    { surface: m.topsoil,  accent: 0,         accentP: 0,
+      treeK: 1,    floraK: 1.15, flowerK: 1.35, tallK: 1.0,
+      trees: { goldwood: 1.0, shimmeroak: 1.0, starwillow: 0.8, dawnwood: 0.3 } },
+    woodland:  { surface: m.topsoil,  accent: m.loam,    accentP: 0.20,
+      treeK: 1,    floraK: 0.9,  flowerK: 0.7,  tallK: 1.0,
+      trees: { goldwood: 1.0, shimmeroak: 1.4, starwillow: 1.0, dawnwood: 1.0 } },
+    deepwood:  { surface: m.loam,     accent: m.topsoil, accentP: 0.12,
+      treeK: 1.18, floraK: 0.45, flowerK: 0.30, tallK: 0.8,
+      trees: { goldwood: 0.7, shimmeroak: 1.2, starwillow: 1.0, dawnwood: 4.0 } },
+    dell:      { surface: m.lush,     accent: m.topsoil, accentP: 0.14,
+      treeK: 0.9,  floraK: 1.30, flowerK: 1.0,  tallK: 2.2,
+      trees: { goldwood: 0.6, shimmeroak: 1.0, starwillow: 3.5, dawnwood: 0.5 } },
+    // ★★ TURF WITH MUD THROUGH IT, NOT MUD WITH TURF THROUGH IT (flipped 2026-08-19, from the
+    // render). The first cut made mud the base at 78% and the screenshot named it: that is a
+    // MUDFLAT, not a marsh. A marsh is wet ground that GROWS — dense reeds standing in it, bare
+    // soft patches between — so the turf is the base and the mud is what shows through. It also
+    // makes the rest of the row work: mud is outside TURF, so with mud as the base almost nothing
+    // could grow here and `tallK: 3.0` was buying reeds for a fifth of the columns.
+    marsh:     { surface: m.lush,     accent: m.mud,     accentP: 0.35,
+      treeK: 0.35, floraK: 1.10, flowerK: 0.40, tallK: 3.0,
+      trees: { goldwood: 0.3, shimmeroak: 0.5, starwillow: 4.0, dawnwood: 0.2 } },
+    tableland: { surface: m.dry,      accent: m.topsoil, accentP: 0.12,
+      treeK: 0.45, floraK: 0.70, flowerK: 0.80, tallK: 0.5,
+      trees: { goldwood: 1.6, shimmeroak: 0.8, starwillow: 0.3, dawnwood: 0.3 } },
+    barrens:   { surface: m.dry,      accent: m.subsoil, accentP: 0.14,
+      treeK: 0.15, floraK: 0.30, flowerK: 0.35, tallK: 0.3,
+      trees: { goldwood: 1.4, shimmeroak: 0.6, starwillow: 0.2, dawnwood: 0.2 } },
     // ⚠ NEITHER OF THESE MAY ACCENT WITH BARE STONE, and depth.test.ts §5 is what proved it: a
     // STONE surface voxel dithered onto an otherwise gentle column puts rock directly above the
     // soil band, which is a real inversion of the world's layering law, not a cosmetic one. SCREE
@@ -100,8 +143,72 @@ export function landCharacter(m: GroundMaterials): Readonly<Record<LandId, LandC
     // about what is underneath, and on the steep ground where bedrock genuinely does surface, the
     // cliff rule in depth.ts already returns STONE and outranks all of this anyway. So a crag is
     // scree on its shoulders and bare rock on its faces, from two rules that already existed.
-    highland:  { surface: m.highland, accent: m.scree,   accentP: 0.10 },
-    crag:      { surface: m.scree,    accent: 0,         accentP: 0 },
+    highland:  { surface: m.highland, accent: m.scree,   accentP: 0.09,
+      treeK: 0.5,  floraK: 0.65, flowerK: 0.90, tallK: 0.5,
+      trees: { goldwood: 2.0, shimmeroak: 0.8, starwillow: 0.2, dawnwood: 0.3 } },
+    // ★ THE ONE LAND THAT GROWS NOTHING AT ALL, stated twice on purpose. Its ground is outside
+    // TURF so the planter already refuses it; `treeK: 0` says the same thing from the other side,
+    // so a future ground change cannot quietly forest a crag by making scree plantable.
+    crag:      { surface: m.scree,    accent: 0,         accentP: 0,
+      treeK: 0,    floraK: 0.05, flowerK: 0,    tallK: 0,
+      trees: {} },
+  }
+}
+
+/**
+ * A character dial, BLENDED across the lands at this column rather than rolled.
+ *
+ * ★★ THIS IS THE HALF OF THE SIBLING LAW THAT THE GROUND ROLL IS NOT. A block is discrete — you
+ * cannot lay down 0.6 of a turf — so `surfaceBlockAt` rolls and lets the dither carry the border.
+ * A DENSITY is continuous, so it blends, and blending is strictly better wherever it is available:
+ * the tree count easing from 1.18 in a wood core to 0.15 in a barrens has no border at all, not
+ * even a dithered one. Rolling a density would quantise a smooth quantity for no reason and put a
+ * visible seam back into the one place we could have had none.
+ */
+function blend(w: number[], dress: Readonly<Record<LandId, LandCharacter>>, pick: (c: LandCharacter) => number): number {
+  let v = 0
+  for (let i = 0; i < w.length; i++) v += w[i] * pick(dress[LAND_IDS[i]])
+  return v
+}
+
+/** Trunk-count multiplier at this column, 0 (bare) .. ~1.2 (forest core). Blended. */
+export function treeDensityAt(
+  x: number, z: number, seed: number, dress: Readonly<Record<LandId, LandCharacter>>,
+  cfg: BiomeConfig = DEFAULT_BIOME, hcfg: HeightConfig = DEFAULT_HEIGHT,
+): number {
+  return blend(landMix(x, z, seed, cfg, hcfg), dress, c => c.treeK)
+}
+
+/**
+ * How much this place favours a species, as a multiplier on its base weight.
+ *
+ * ★ MOVED HERE FROM biome.ts 2026-08-19, and the move is forced rather than tidy: species
+ * preference is land CHARACTER, and reading it from the land weights means the woods change with
+ * the country instead of against a second, private opinion about altitude. biome.ts could not host
+ * it — it would have to import character.ts, which imports biome.ts.
+ *
+ * ★ WEIGHTS STAY WEIGHTS (trees.ts's own rarity rule): a species is never placed by its own pass,
+ * it just gets heavier where it belongs. Species NAMES and drop tables are canon; where each one
+ * likes to grow is build tuning and is mine.
+ */
+export function speciesFactor(
+  id: string, seed: number, cx: number, cz: number,
+  dress: Readonly<Record<LandId, LandCharacter>>,
+  cfg: BiomeConfig = DEFAULT_BIOME, hcfg: HeightConfig = DEFAULT_HEIGHT,
+): number {
+  return blend(landMix(cx * 16 + 8, cz * 16 + 8, seed, cfg, hcfg), dress, c => c.trees[id] ?? 1)
+}
+
+/** Ground-cover dials at this column: overall density, flower share, tall-grass share. Blended. */
+export function floraCharacterAt(
+  x: number, z: number, seed: number, dress: Readonly<Record<LandId, LandCharacter>>,
+  cfg: BiomeConfig = DEFAULT_BIOME, hcfg: HeightConfig = DEFAULT_HEIGHT,
+): { floraK: number; flowerK: number; tallK: number } {
+  const w = landMix(x, z, seed, cfg, hcfg)
+  return {
+    floraK: blend(w, dress, c => c.floraK),
+    flowerK: blend(w, dress, c => c.flowerK),
+    tallK: blend(w, dress, c => c.tallK),
   }
 }
 
@@ -188,6 +295,36 @@ export function landWeights(
  */
 export const CHARACTER_SHARP = 4
 
+/**
+ * The weights, sharpened and renormalised — **the distribution every consumer actually reads.**
+ *
+ * ★★ ONE DISTRIBUTION, READ TWO WAYS, and unifying this fixed a real dilution rather than tidying
+ * anything. The roll sharpened; the blend did not. So a dell — whose raw weight peaks around 0.5,
+ * because the meadow floor term and the overlapping bands never let the specialised lands run away
+ * with a column — got its GROUND from a sharpened roll and only half its CHARACTER from an
+ * unsharpened blend. Its `tallK` of 3.0 arrived on the ground as about 1.6, and a marsh that is
+ * supposed to read as reeds read as slightly long grass. Measured: with dominance taken on raw
+ * weights, dell, marsh, highland and crag NEVER cleared 0.62 anywhere in a 240×240-chunk window.
+ *
+ * ★ AND SHARPENING COSTS THE BLEND NOTHING, which is why this is safe. `wᵏ / Σwᵏ` is smooth in w —
+ * continuity is preserved exactly, so the no-seam property the blend exists for is untouched. The
+ * only thing that changes is how confidently a land speaks for its own interior.
+ */
+export function sharpenWeights(w: number[]): number[] {
+  let sum = 0
+  for (let i = 0; i < w.length; i++) { w[i] = Math.pow(w[i], CHARACTER_SHARP); sum += w[i] }
+  for (let i = 0; i < w.length; i++) w[i] /= sum
+  return w
+}
+
+/** The sharpened distribution at a column — what the roll and every dial read. */
+export function landMix(
+  x: number, z: number, seed: number,
+  cfg: BiomeConfig = DEFAULT_BIOME, hcfg: HeightConfig = DEFAULT_HEIGHT,
+): number[] {
+  return sharpenWeights(landWeights(x, z, seed, cfg, hcfg))
+}
+
 /** The dominant land at this column, and how strongly it dominates (0..1). For labels and tests. */
 export function dominantLand(w: number[]): { id: LandId; t: number } {
   let best = 0
@@ -205,10 +342,8 @@ export function landRollAt(
   x: number, z: number, seed: number,
   cfg: BiomeConfig = DEFAULT_BIOME, hcfg: HeightConfig = DEFAULT_HEIGHT,
 ): LandId {
-  const w = landWeights(x, z, seed, cfg, hcfg)
-  let sum = 0
-  for (let i = 0; i < w.length; i++) { w[i] = Math.pow(w[i], CHARACTER_SHARP); sum += w[i] }
-  const r = hash01(x, z, seed ^ 0x5b1f27) * sum
+  const w = landMix(x, z, seed, cfg, hcfg)
+  const r = hash01(x, z, seed ^ 0x5b1f27)
   let acc = 0
   for (let i = 0; i < w.length; i++) { acc += w[i]; if (r < acc) return LAND_IDS[i] }
   return 'meadow'
@@ -228,17 +363,57 @@ export function surfaceBlockAt(
   cfg: BiomeConfig = DEFAULT_BIOME, hcfg: HeightConfig = DEFAULT_HEIGHT,
 ): number {
   const ch = dress[landRollAt(x, z, seed, cfg, hcfg)]
-  // ── ★ ACCENTS CLUMP. A FLAT PER-COLUMN HASH IS STATIC, NOT GROUND ──────────────────────────
-  // The first cut rolled the accent on the hash alone, which is spatially independent by
-  // construction — and independent noise at block scale is what television snow is. On the map it
-  // read as a hiss laid over the barrens rather than as bare earth showing through. Modulating the
-  // threshold by a small-scale field gathers it into patches instead, which is the same move
-  // `flora.ts` already makes for flower drifts and for the same reason: real ground varies in
-  // PLACES. The field's mean is 0.5, so `0.25 + 1.5f` averages 1 and the overall accent rate stays
-  // exactly `accentP` — this changes where the accent lands, never how much of it there is.
-  if (ch.accent) {
-    const f = value2(x / 11, z / 11, seed ^ 0x7e2a1)
-    if (hash01(x, z, seed ^ 0xa11e63) < ch.accentP * (0.25 + 1.5 * f)) return ch.accent
-  }
+  if (ch.accent && accentAt(x, z, seed, ch.accentP)) return ch.accent
   return ch.surface
+}
+
+
+/**
+ * ── ★★ ACCENTS ARE PATCHES, NOT SPECKLE, AND THIS WAS LEARNED FROM A SCREENSHOT ────────────────
+ * Two earlier cuts both failed, and both failed for the same reason wearing different clothes:
+ *
+ *   1. a flat per-column hash — spatially independent by construction, which at block scale is
+ *      television snow;
+ *   2. a hash whose PROBABILITY was modulated by a small field — which gathers the accent into
+ *      regions but still decides every block independently inside one, so the result is a
+ *      dense scatter of ISOLATED single blocks. In the world that read as a chessboard: the marsh
+ *      came out as alternating mud and turf tiles, a lino floor rather than wet ground, and the
+ *      barrens the same in brown. **The oracles were all green — the render is what caught it.**
+ *
+ * The requirement neither cut satisfied is CONTIGUITY. Ground does not vary block by block; it
+ * varies in patches several blocks across. Only a threshold on a smooth field gives that, because
+ * neighbouring columns then share the field value that decided them. So the field decides, and the
+ * hash is demoted to fraying the boundary — which is exactly the division of labour `greySurfaceAt`
+ * uses, and the reason the greyfield has always read as guttering rather than as dither.
+ */
+const ACCENT_SCALE = 6.5
+/** Field-space width of the ragged boundary. Wider reads as speckle again; 0 reads as cut vinyl. */
+const ACCENT_FRAY = 0.022
+
+/**
+ * Field threshold for a target share, fitted to `fbm2`'s own distribution.
+ *
+ * ⚠ `accentP` IS A SHARE AND THE FIELD IS NOT UNIFORM, so it cannot be used as a threshold
+ * directly — fbm2 clusters hard around 0.5 (measured over 400k samples: q50 0.502, q80 0.647,
+ * q90 0.711), so a naive `f > 1 - p` would put the accent on a fraction of a percent of the world
+ * instead of the fifth the table asks for. This quadratic is a least-squares fit through the
+ * measured quantiles over the range the table actually uses (p from 0.05 to 0.35) and is accurate
+ * to about a point of share across it. `character.test.ts` asserts the REALIZED share against the
+ * table, so this approximation cannot drift out of agreement with the numbers it is fitted to.
+ */
+export function accentThreshold(p: number): number {
+  return 0.8043 - 0.9715 * p + 0.9127 * p * p
+}
+
+/** Is this column one of its land's accent patches? */
+export function accentAt(x: number, z: number, seed: number, accentP: number): boolean {
+  if (accentP <= 0) return false
+  const f = fbm2(x / ACCENT_SCALE, z / ACCENT_SCALE, seed ^ 0x7e2a1, 2)
+  const t = accentThreshold(accentP)
+  const d = f - t
+  if (d > ACCENT_FRAY) return true
+  if (d < -ACCENT_FRAY) return false
+  // The boundary, frayed: inside the band the hash decides, so a patch edge is ragged rather than
+  // a contour. Weighted by how far across the band we are, so the fray has no hard side.
+  return hash01(x, z, seed ^ 0xa11e63) < (d + ACCENT_FRAY) / (2 * ACCENT_FRAY)
 }
