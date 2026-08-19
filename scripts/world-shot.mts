@@ -46,6 +46,31 @@
 //    seed we just wrote and hands us the ritual anyway.
 // 3. TIME. Terrain streams in over several seconds and a screenshot taken on `load` is a blue void.
 //
+// ── ⚠⚠ SETTLE TIME: JUDGING AN ABSENCE NEEDS A LONGER SETTLE THAN JUDGING A PRESENCE ───────────
+// Learned 2026-08-19, and it cost a false production alarm. GROUND COVER AND TERRAIN ARE TWO
+// PIPELINES: trees and terrain are baked into the greedy CHUNK mesh and arrive with the column,
+// while grass, flowers and scatter are a separate instanced renderer synced off `floraDirty`.
+// Flora trails terrain by a wide margin — instrumented at spawn: 10s gives cols=24 spots=853,
+// 30s gives cols=117 spots=7546.
+//
+// So an under-settled shot produces, precisely and every single time: TERRAIN RENDERS, TREES
+// RENDER, GROUND COVER COMPLETELY ABSENT. That is not a symptom that narrows to a bug — it is the
+// exact shape of a half-loaded world, and it reads as a catastrophic render regression. It even
+// survives the obvious cross-check: the block-target reticle will happily name a "Grass Tuft" over
+// what looks like bare ground, because the raycast reads the generated VOXEL while the instance
+// for it has not synced yet.
+//
+// ★ THE TELL IS THE DRAW COUNT, WHICH THIS SCRIPT ALREADY PRINTS. 41 draws and 66 draws are the
+// same scene at different settles. **Never conclude that something is ABSENT until the draw count
+// has stopped climbing** — raise the settle and shoot again. A presence claim is safe at the
+// default; an absence claim is not, because the default 12s is below where flora finishes.
+//
+// ★ GENERALIZE, because this is the fourth instrument failure in one day (a mutation that crashed
+// instead of failing and read as green; `npx tsx` passing types `tsc` rejects; misread specks in a
+// contact sheet; this): EVERY ONE WAS WRONG IN THE DIRECTION THAT LOOKED LIKE A REAL FINDING.
+// Verify the instrument before believing the reading — the same rule the backgrounded-tab entry in
+// PATTERNS states, arriving here by a different road.
+
 // ⚠ Uses the SYSTEM chromium, not a downloaded one: `/` sits near the disk-watcher's prune
 // threshold and Playwright's bundled browser is ~400MB.
 
