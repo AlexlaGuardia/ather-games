@@ -313,17 +313,24 @@ async function checkSpriteFile(add: Add, rel: string, spritesExport: string, pal
         add({ severity: 'error', domain: 'sprites', check: 'undefined-frame-ref', file: rel, message: `${spritesExport}.${anim} references '${f}' but no such const exists in ${rel}.` })
     }
 
+  // Reachability decides severity for everything below — see liveSpriteImports().
+  const liveModules = await liveSpriteImports()
+  const moduleName = rel.replace(/^sprites\//, '').replace(/\.tsx?$/, '')
+  const onLiveSurface = liveModules.has(moduleName)
+
   // orphan painted consts (defined, never referenced anywhere else in the file)
   for (const c of consts) {
     const uses = (content.match(new RegExp(`\\b${c.name}\\b`, 'g')) || []).length
     if (uses <= 1)
-      add({ severity: 'warn', domain: 'sprites', check: 'orphan-frame', file: rel, message: `'${c.name}' is painted but referenced nowhere — it will never render in game.` })
+      add({
+        severity: onLiveSurface ? 'warn' : 'info', domain: 'sprites', check: 'orphan-frame', file: rel,
+        message: onLiveSurface
+          ? `'${c.name}' is painted but referenced nowhere — it will never render in game.`
+          : `'${c.name}' is painted but referenced nowhere — RETIRED 2D pipeline, so nothing in this module renders in game either way.`,
+      })
   }
 
   // px dimension sanity: row widths / counts vs declared size
-  const liveModules = await liveSpriteImports()
-  const moduleName = rel.replace(/^sprites\//, '').replace(/\.tsx?$/, '')
-  const onLiveSurface = liveModules.has(moduleName)
   for (const c of consts) {
     const total = c.rows.reduce((n, r) => n + r.length, 0)
     if (total === 0) continue
@@ -454,7 +461,14 @@ async function checkSidecars(add: Add) {
         if (!entries[anim]) {
           add({ severity: 'warn', domain: 'sidecars', check: 'durations-unknown-anim', file: 'data/frame-durations.json', message: `Durations for '${charId}.${anim}' but ${exportName} has no such animation.` })
         } else if (Array.isArray(durs) && durs.length !== entries[anim].length) {
-          add({ severity: 'error', domain: 'sidecars', check: 'durations-length', file: 'data/frame-durations.json', message: `'${charId}.${anim}' has ${durs.length} durations but ${entries[anim].length} frames — timing misaligned.` })
+          // Same reachability rule as px-size-mismatch: misaligned timing for a sheet no live
+          // surface draws is sidecar drift, not a bug in the running game. frame-durations.json
+          // has no consumer outside the dev editors and SandboxPreview.
+          const liveDur = (await liveSpriteImports()).has(file.replace(/\.tsx?$/, ''))
+          add({
+            severity: liveDur ? 'error' : 'info', domain: 'sidecars', check: 'durations-length', file: 'data/frame-durations.json',
+            message: `'${charId}.${anim}' has ${durs.length} durations but ${entries[anim].length} frames — ${liveDur ? 'timing misaligned.' : 'stale sidecar for a RETIRED 2D sheet; read only by the dev editors, renders nowhere.'}`,
+          })
         }
       }
     }
