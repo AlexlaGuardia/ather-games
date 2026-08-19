@@ -9,7 +9,7 @@
 import { columnHeight, riverCarve, waterSurfaceAt, poolDepthAt, DEFAULT_HEIGHT } from './height'
 import { roadAt } from './story-path'
 import { holdIndexAt } from './holds'
-import { materialAt, fillColumn, slopeAt, MAT, DEFAULT_DEPTH } from './depth'
+import { materialAt, fillColumn, slopeAt, MAT, TURF, DEFAULT_DEPTH } from './depth'
 
 let pass = 0
 const fails: string[] = []
@@ -96,7 +96,7 @@ for (let i = 0; i < 600; i++) COLS.push([(i * 977) % 4000 - 2000, (i * 1583) % 4
     let lastSoil = -1, firstStone = Infinity
     for (let y = h; y > h - 20 && y > 0; y--) {
       const m = materialAt(x, y, z, SEED, h)
-      if (m === MAT.SUBSOIL || m === MAT.TOPSOIL) lastSoil = Math.max(lastSoil, h - y)
+      if (m === MAT.SUBSOIL || TURF.has(m) || m === MAT.MARSH_MUD) lastSoil = Math.max(lastSoil, h - y)
       if (m === MAT.STONE || m === MAT.DEEP_STONE) firstStone = Math.min(firstStone, h - y)
     }
     if (lastSoil >= 0 && firstStone < Infinity) { checked++; if (firstStone < lastSoil) inverted++ }
@@ -123,11 +123,19 @@ for (let i = 0; i < 600; i++) COLS.push([(i * 977) % 4000 - 2000, (i * 1583) % 4
   const surf: Record<number, number> = {}
   for (const [x, z] of COLS) { const h = columnHeight(x, z, SEED); const m = materialAt(x, h, z, SEED, h); surf[m] = (surf[m] || 0) + 1 }
   const n = COLS.length
-  const soil = (surf[MAT.TOPSOIL] || 0) / n
-  const sand = (surf[MAT.SAND] || 0) / n
-  const rock = (surf[MAT.STONE] || 0) / n
+  // ⚠ WIDENED, NOT WEAKENED (2026-08-19, the character layer). This read `surf[MAT.TOPSOIL]` when
+  // topsoil was the world's ONLY ground; the same 60% claim is now spread across the turf family,
+  // and asserting on topsoil alone would fail at 44% while the world got strictly more walkable.
+  // The refusal is unchanged and is the point: bare rock stays rare. SCREE counts as rock here
+  // rather than as ground, because a crag's loose surface is exactly what "not bare rock" is
+  // measuring against — folding it into `soil` would let the whole world turn to scree unnoticed.
+  const share = (m: number) => (surf[m] || 0) / n
+  const soil = [...TURF].reduce((a, m) => a + share(m), 0)
+  const sand = share(MAT.SAND)
+  const rock = share(MAT.STONE) + share(MAT.SCREE)
   ok(soil > 0.6, `most of the world is walkable soil, not bare rock (${(soil * 100).toFixed(0)}%)`)
   ok(rock < 0.2, `bare rock is reserved for real cliffs (${(rock * 100).toFixed(0)}%)`)
+  ok(share(MAT.TOPSOIL) < 0.9, `the world wears more than one ground (topsoil ${(share(MAT.TOPSOIL) * 100).toFixed(0)}%)`)
   ok(sand > 0.02 && sand < 0.4, `coasts exist but the world is not a beach (${(sand * 100).toFixed(0)}%)`)
   ok((surf[MAT.AIR] || 0) === 0, 'no column has an air surface')
 }

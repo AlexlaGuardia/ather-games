@@ -85,6 +85,28 @@ export function forestness(seed: number, cx: number, cz: number, cfg: BiomeConfi
 }
 
 /**
+ * ── ★ HOW CLOSED THE CANOPY IS, 0 (open) .. 1 (deep interior) — and why it is NOT `forestness` ──
+ * `forestness` saturates at `forestFull` on purpose: past that line you are in a forest, and the
+ * planter has no use for "even more forest". That saturation makes it USELESS for telling a wood's
+ * edge from its heart — measured, it reads 1.0 across the entire interior of every wild forest, so
+ * anything asking "is this a deep wood" gets a yes for the whole thing (character.ts's first cut
+ * scored 23% of the world as forest CORE and 0.6% as ordinary woodland, which is backwards).
+ *
+ * This rescales the SAME sample against the top of the range instead of against `forestFull`, so it
+ * keeps climbing where the other one has stopped. Same field, same salt, same zone blend — no new
+ * noise, and a zone that rules a closed canopy (the Thicket, at 0.97) still reads as deep interior
+ * rather than depending on where its underlying mask happens to sit.
+ */
+export function canopy(seed: number, cx: number, cz: number, cfg: BiomeConfig = DEFAULT_BIOME): number {
+  const f = value2(cx * cfg.forestScale, cz * cfg.forestScale, seed ^ 0xf07e57)
+  const t = (f - cfg.forestThreshold) / (1 - cfg.forestThreshold)
+  const wild = t < 0 ? 0 : t > 1 ? 1 : t
+  const zn = zoneAt(cx * 16, cz * 16, seed)
+  if (!zn.zone || zn.t <= 0) return wild
+  return wild + (zn.zone.forest - wild) * zn.t
+}
+
+/**
  * The mana field, raw: ~0 drained .. ~1 rich. GENTLY warped, and the number is a shape call made
  * off the rendered map: at warp 4 (what continentalness runs — ⚠ warped2's 4th arg is WARP, not
  * octaves) the drained band came out as long curled SMEARS chasing the flow lines, which reads as

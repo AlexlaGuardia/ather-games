@@ -5,7 +5,7 @@
 // on. All three read as "the art is wrong" and none of them show in a material census.
 
 import { AIR, Section } from './section'
-import { MAT } from './depth'
+import { MAT, TURF } from './depth'
 import { SECTION, makeColumn } from './column'
 import { WOOD, SPECIES, treeStartsAt, treeScanRadius, DEFAULT_TREES, growTree, crownAt } from './trees'
 import { columnHeight } from './height'
@@ -125,12 +125,19 @@ for (let i = 0; SITES.length < 40 && i < 4000; i++) {
       const h = columnHeight(ox + x, oz + z, SEED)
       if (!LOGS.has(col.get(x, h + 1, z))) continue
       checked++
-      // The surface under a trunk is overwritten by nothing, so it should still be topsoil.
-      if (col.get(x, h, z) !== MAT.TOPSOIL) wrongGround++
+      // ⚠ WIDENED TO `TURF`, NOT WEAKENED (2026-08-19, the character layer). This read
+      // `!== MAT.TOPSOIL` when topsoil was the world's only ground; the claim being made has always
+      // been "a trunk stands on ground that grows", and TURF is now the definition of that. The
+      // refusals it exists for are all still refusals — sand, stone, scree and marsh mud are every
+      // one of them outside the set, which is checked explicitly below so this cannot rot into a
+      // test that passes because the set grew.
+      if (!TURF.has(col.get(x, h, z))) wrongGround++
     }
   }
   ok(checked > 10, 'the ground check found trunks')
-  ok(wrongGround === 0, `★ every trunk stands on topsoil, never sand or stone (${wrongGround} wrong)`)
+  ok(wrongGround === 0, `★ every trunk stands on ground that grows, never sand or stone (${wrongGround} wrong)`)
+  for (const bad of [MAT.SAND, MAT.STONE, MAT.SCREE, MAT.MARSH_MUD, MAT.WATER, MAT.GREY_SOIL])
+    ok(!TURF.has(bad), `TURF still refuses ${bad} — the planter's allowlist has not gone soft`)
 }
 
 // ── 6. leaves never eat terrain or logs ──────────────────────────────────────────────────────

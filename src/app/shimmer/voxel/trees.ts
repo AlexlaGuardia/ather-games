@@ -23,7 +23,7 @@
 // is pushed, so nothing has to wait.
 
 import { Section, AIR } from './section'
-import { MAT } from './depth'
+import { MAT, TURF } from './depth'
 import { hash2, mixSeed } from './noise'
 import { forestness, speciesFactor } from './biome'
 
@@ -211,7 +211,13 @@ export const treeScanRadius = (size: number, cfg: TreeConfig = DEFAULT_TREES): n
   Math.ceil(cfg.maxSpread / size)
 
 /** Only these may host a trunk. Sand and stone stay bare, which is what makes woodland read as woodland. */
-const PLANTABLE = new Set<number>([MAT.TOPSOIL])
+// ⚠ WAS `new Set([MAT.TOPSOIL])` UNTIL 2026-08-19. The character layer gave the world eight more
+// grounds, and a planter that only knows topsoil would have quietly deforested every dell, wood
+// core, high plain and highland the moment they stopped being green #1 — a bug with no error, no
+// wrong pixel, just a world that grows fewer trees each time a ground is added. `TURF` is the one
+// definition; marsh mud and crag scree are absent from it on purpose, which is what makes a marsh
+// and a crag read as places where big trees do not grow.
+const PLANTABLE = TURF
 
 /** Leaves may overwrite air and other leaves, never a log and never terrain. */
 const canLeaf = (m: number): boolean => m === AIR || (m >= WOOD.GOLDWOOD_LEAVES && m <= WOOD.DAWNWOOD_LEAVES && m % 2 === 1)

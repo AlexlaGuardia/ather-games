@@ -33,6 +33,27 @@ const ok = (c: boolean, m: string) => { if (c) pass++; else fails.push(m) }
 const SEED = 1337
 const h = (x: number, z: number) => columnHeight(x, z, SEED)
 
+/**
+ * ── ★ THE TENDED SAMPLE ORIGIN, AND WHY IT IS NOT THE GARDEN ANCHOR (moved 2026-08-19) ──────────
+ * Three sections below sample "tended country with slumped lips in it" and all three used the
+ * `garden` anchor at (0, 0). That anchor is now entirely INSIDE the home plot — the fold starts at
+ * a 300-block radius and the whole 4×4 and 8×8 chunk sweeps land in plot geometry, which is built
+ * by `plot-column.ts` and never slumps. Measured: **0 lips at the garden anchor, 356 at Moonwell
+ * Glade**, and every other tended zone in the hundreds.
+ *
+ * ⚠ THIS WAS ALREADY BROKEN BEFORE THE CHARACTER LAYER — verified by running this oracle against
+ * the pre-change tree, where it crashes identically. The sections were not measuring a weaker
+ * version of the claim, they were measuring the wrong PLACE, and the crash they finally produced
+ * was `dropsFor(undefined)` rather than a failed assert, which is why it read as a broken test
+ * rather than as a broken world. **A test whose fixture silently moved out from under it asserts
+ * nothing, and reports that as a pass right up until it reports it as a crash.**
+ *
+ * Moonwell Glade is the substitute for a reason: `tended: 1` like the garden, a ruled zone rather
+ * than a patch of wild country, and 640 blocks out — comfortably clear of any plot radius Greg can
+ * upgrade to (canon tops out around 500).
+ */
+const TENDED = ZONE_ANCHORS.find(a => a.id === 'moonwell-glade')!
+
 // ── 1. the lip rule, stated directly ────────────────────────────────────────────────────────────
 {
   ok(isLip(11, 10, 11, 11, 11), 'a lip one above its neighbour slumps')
@@ -145,7 +166,7 @@ const h = (x: number, z: number) => columnHeight(x, z, SEED)
 
 // ── 5. the half cell agrees with the world it sits in ───────────────────────────────────────────
 {
-  const garden = ZONE_ANCHORS.find(a => a.id === 'garden')!
+  const garden = TENDED
   const gx = Math.floor(garden.x / SECTION) * SECTION, gz = Math.floor(garden.z / SECTION) * SECTION
   let found = 0, buried = 0, offSurface = 0, hollow = 0
   for (let cz = 0; cz < 8; cz++) {
@@ -194,7 +215,7 @@ const h = (x: number, z: number) => columnHeight(x, z, SEED)
 // itself — that half cells produce a surface at exactly +0.5, and that NOTHING is drawn in the
 // upper half of a cell the walker treats as empty.
 {
-  const garden = ZONE_ANCHORS.find(a => a.id === 'garden')!
+  const garden = TENDED
   const gx = Math.floor(garden.x / SECTION) * SECTION, gz = Math.floor(garden.z / SECTION) * SECTION
   const cols = new Map<string, ReturnType<typeof makeColumn>>()
   for (let cz = -1; cz <= 4; cz++) for (let cx = -1; cx <= 4; cx++)
@@ -243,7 +264,7 @@ const h = (x: number, z: number) => columnHeight(x, z, SEED)
 // dropped into the cell inherits. Mine a lip and you get a slab item; place stone and you get
 // stone. These asserts are about the material, because that is now the whole mechanism.
 {
-  const garden = ZONE_ANCHORS.find(a => a.id === 'garden')!
+  const garden = TENDED
   const gx = Math.floor(garden.x / SECTION) * SECTION, gz = Math.floor(garden.z / SECTION) * SECTION
   let slabs = 0, wrongBase = 0, standing = 0
   for (let cz = 0; cz < 4; cz++) for (let cx = 0; cx < 4; cx++) {
@@ -274,9 +295,47 @@ const h = (x: number, z: number) => columnHeight(x, z, SEED)
   const slab = col.get(lx, ly, lz)
   ok(isHalfCell(col, lx, ly, lz), 'the generated lip reads as half')
   // 1. mine it → a SLAB item, not a whole block.
-  const drop = dropsFor(slab)[0]
+  const drop = dropsFor(slab)[0] as { itemId: string } | undefined
   ok(!!drop && drop.itemId.endsWith('_slab'), `★ mining a lip drops a SLAB item (${drop?.itemId})`)
-  ok(materialForItem(drop!.itemId) === slab, '★ and that item places the same slab back')
+  // ⚠ WIDENED 2026-08-19, and the widening is the RULE not a concession. This asserted
+  // `materialForItem(drop.itemId) === slab` — true only while every slumping surface was a block
+  // that drops ITSELF. The character layer's grounds drop plain soil (a ground is what the world
+  // grows, not a thing you pocket), so mining a forest-loam lip correctly yields a TOPSOIL slab.
+  // The claim worth keeping is the one that was always the point: a slab item places a SLAB, never
+  // a whole block, and it round-trips through the block's own DROP rather than through whichever
+  // ground you happened to be standing on.
+  // ⚠ GUARDED, because the failure this section exists to catch produces a MISSING drop — and
+  // `drop!.itemId` on a missing one throws, which exits before the reporter runs and turns a red
+  // assert into a stack trace. A test that crashes on the regression it was written for is a test
+  // nobody reads the output of; verified by re-introducing the bug (M8) and watching this stay red.
+  const placed = (drop ? materialForItem(drop.itemId) : 0) ?? 0
+  ok(!!drop && isHalfMat(placed), `★ and that item places a SLAB back, not a whole block (${placed})`)
+  const wholeDrop = dropsFor(baseOf(slab))[0]
+  ok(!!wholeDrop && !!drop && baseOf(placed) === (materialForItem(wholeDrop.itemId) ?? -1),
+    'the slab round-trips through the same item its whole block drops')
+
+  // ── ★ EVERY GROUND THE WORLD CAN SLUMP HAS A SLAB ROW ──────────────────────────────────────
+  // The general form of the bug found on 2026-08-19, and the reason `BlockDef.ground` exists. A
+  // half cell whose base has no slab row has NO DEFINITION: no hardness, no drops, no name — a lip
+  // a keeper swings at forever with nothing happening and nothing logged. Grey soil had been in
+  // that state since the greyfield shipped, at 1.5% of lips, which is exactly why nobody saw it.
+  // Sampling the REAL generator rather than a list, so a ground added later is covered by having
+  // been generated, not by being remembered here.
+  {
+    const seen = new Set<number>()
+    let broken = 0
+    for (let cz = -30; cz <= 30; cz += 3) for (let cx = -30; cx <= 30; cx += 3) {
+      const c = makeColumn(cx * SECTION, cz * SECTION, SEED)
+      for (let z = 0; z < SECTION; z++) for (let x = 0; x < SECTION; x++) {
+        const m = c.get(x, c.heightAt(x, z), z)
+        if (!isHalfMat(m)) continue
+        seen.add(baseOf(m))
+        if (!blockDef(m) || dropsFor(m).length === 0) broken++
+      }
+    }
+    ok(seen.size >= 4, `the sweep met several grounds slumping (${seen.size})`)
+    ok(broken === 0, `★ every lip the world generates is a mineable block (${broken} dead lips)`)
+  }
   // 2. put STONE in the cell → a whole stone block, because the material says so.
   const s0 = (ly / SECTION) | 0
   col.sections[s0].set(lx, ly - s0 * SECTION, lz, MAT.STONE)
@@ -299,7 +358,9 @@ const h = (x: number, z: number) => columnHeight(x, z, SEED)
   // ★ TOP_BIT is POSITION, not identity — the definition lookup must mask it, or an upside-down
   // slab has no hardness and no drops: a block you placed yourself and can never break.
   ok(!!blockDef(stoneTop), 'a top slab has a block definition')
-  ok(blockDef(stoneTop)!.name === blockDef(stoneSlab)!.name, 'both halves are the same block')
+  // ⚠ Guarded for the same reason as the drop assert above: a missing slab row is exactly the
+  // regression this line catches, and `!.name` on a missing one throws before the reporter runs.
+  ok(!!blockDef(stoneTop) && blockDef(stoneTop)!.name === blockDef(stoneSlab)?.name, 'both halves are the same block')
   ok(dropsFor(stoneTop)[0]?.itemId === dropsFor(stoneSlab)[0]?.itemId, 'and drop the same item')
   // Merging is the placement path's job, but the RESULT must be an ordinary whole block.
   ok(!isHalfMat(baseOf(stoneTop)), 'two halves merge to a full block, not another slab')

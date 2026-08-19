@@ -77,6 +77,21 @@ export interface BlockDef {
    */
   noSlab?: boolean
   /**
+   * ── ★ THIS BLOCK IS GENERATED AS A TERRAIN SURFACE, so the world can make a HALF CELL of it ───
+   * `slump.ts` wears tended ground's rounding steps down into halves, and it does that to whatever
+   * material the surface happens to be — it has no opinion about `placeable`. So "can a half cell
+   * of this exist" is a DIFFERENT question from "can the player put this down", and deriving slabs
+   * from `placeable` alone answered the wrong one.
+   *
+   * ⚠ THE FAILURE IS SILENT AND IT WAS ALREADY SHIPPING. A half cell whose base has no slab row
+   * has NO BLOCK DEFINITION AT ALL: `blockDef` returns undefined, so it has no hardness, no drops
+   * and no name, and a keeper swinging at that lip gets nothing with no error anywhere. Measured
+   * 2026-08-19 over a 60-chunk garden sample: 4 grey-soil lips were already in this state before
+   * the character layer existed, which nobody had noticed because grey soil is 1.5% of lips. The
+   * new grounds took it to 189 of 262. The bug was old; the character layer only made it loud.
+   */
+  ground?: boolean
+  /**
    * Block light emitted, 0–15 (`light.ts`'s block channel BFSes from these). Absent = 0. Data,
    * not behaviour — the Rust side reads the same number.
    */
@@ -103,8 +118,8 @@ export const BLOCKS: BlockDef[] = [
   // `BY_ITEM` below only reverses PLACEABLE blocks, so `block_stone` simply stops resolving to a
   // voxel. ⚠ `block_stone`/`block_deep_stone` are now unobtainable ids: anything that still asks
   // for them is uncraftable, which is what `recipes.test.ts`'s reachability sweep is for.
-  { material: MAT.DEEP_STONE, name: 'Deep Stone', hardness: 2.4, skill: 'prospecting', minTier: 1, drops: [{ itemId: 'rubble', count: 1 }], placeable: false },
-  { material: MAT.STONE, name: 'Stone', hardness: 1.6, skill: 'prospecting', minTier: 1, drops: [{ itemId: 'rubble', count: 1 }], placeable: false },
+  { ground: true, material: MAT.DEEP_STONE, name: 'Deep Stone', hardness: 2.4, skill: 'prospecting', minTier: 1, drops: [{ itemId: 'rubble', count: 1 }], placeable: false },
+  { ground: true, material: MAT.STONE, name: 'Stone', hardness: 1.6, skill: 'prospecting', minTier: 1, drops: [{ itemId: 'rubble', count: 1 }], placeable: false },
 
   // ★ RUBBLE IS THE FORGIVENESS VALVE — placeable, but only ever as rubble. A hole can be filled
   // and the patch always shows, which is the honest middle between an irreversible scar and a
@@ -151,7 +166,18 @@ export const BLOCKS: BlockDef[] = [
   { material: MAT.SAND, name: 'Sand', hardness: 0.45, skill: null, minTier: 0, drops: [{ itemId: 'block_sand', count: 1 }], fastSkill: 'farming', placeable: true },
   // Drained ground digs like soil and drops SUBSOIL: the mana is gone, not the dirt — carrying a
   // "grey block" home to build with would make the greying a decoration, which it must never be.
-  { material: MAT.GREY_SOIL, name: 'Greyed Soil', hardness: 0.55, skill: null, minTier: 0, drops: [{ itemId: 'block_subsoil', count: 1 }], fastSkill: 'farming', placeable: false },
+  // ── ★ THE GROUNDS (2026-08-19, the character layer) ────────────────────────────────────────
+  // Nine biomes' worth of ground, and every one of them digs like the soil it is and drops plain
+  // soil. See the MAT block in depth.ts for why none of them is placeable: a ground is what the
+  // world grows, not a swatch for the build palette. Scree is the exception that proves it —
+  // broken rock is not soil, so it takes stone's skill gate and drops rubble like stone does.
+  { ground: true, material: MAT.FOREST_LOAM, name: 'Forest Loam', hardness: 0.55, skill: null, minTier: 0, drops: [{ itemId: 'block_topsoil', count: 1 }], fastSkill: 'farming', placeable: false },
+  { ground: true, material: MAT.LUSH_TURF, name: 'Lush Turf', hardness: 0.55, skill: null, minTier: 0, drops: [{ itemId: 'block_topsoil', count: 1 }], fastSkill: 'farming', placeable: false },
+  { ground: true, material: MAT.MARSH_MUD, name: 'Marsh Mud', hardness: 0.45, skill: null, minTier: 0, drops: [{ itemId: 'block_subsoil', count: 1 }], fastSkill: 'farming', placeable: false },
+  { ground: true, material: MAT.DRY_GRASS, name: 'Dry Grass', hardness: 0.5, skill: null, minTier: 0, drops: [{ itemId: 'block_topsoil', count: 1 }], fastSkill: 'farming', placeable: false },
+  { ground: true, material: MAT.HIGHLAND_TURF, name: 'Highland Turf', hardness: 0.55, skill: null, minTier: 0, drops: [{ itemId: 'block_topsoil', count: 1 }], fastSkill: 'farming', placeable: false },
+  { ground: true, material: MAT.SCREE, name: 'Scree', hardness: 1.1, skill: 'prospecting', minTier: 1, drops: [{ itemId: 'rubble', count: 1 }], placeable: false },
+  { ground: true, material: MAT.GREY_SOIL, name: 'Greyed Soil', hardness: 0.55, skill: null, minTier: 0, drops: [{ itemId: 'block_subsoil', count: 1 }], fastSkill: 'farming', placeable: false },
   { material: MAT.WATER, name: 'Water', hardness: Infinity, skill: null, minTier: 0, drops: [], placeable: false },
 
   // ── The lantern — the first emitter ────────────────────────────────────────────────────────
@@ -220,7 +246,7 @@ export const BLOCKS: BlockDef[] = [
 
   // The story road. Digs like soil and drops SUBSOIL for the same reason greyed soil does: the
   // road is a CONDITION of the ground, not a block you carry home and lay somewhere else.
-  { material: MAT.PATH, name: 'Worn Path', hardness: 0.5, skill: null, minTier: 0, drops: [{ itemId: 'block_subsoil', count: 1 }], fastSkill: 'farming', placeable: false },
+  { ground: true, material: MAT.PATH, name: 'Worn Path', hardness: 0.5, skill: null, minTier: 0, drops: [{ itemId: 'block_subsoil', count: 1 }], fastSkill: 'farming', placeable: false },
 
   // ── ★ PLANKING — the WOOD half of the building grammar (2026-08-13, Alex's ruling) ───────────
   // Alex: *"which get turned into planks .. actual planks not the block, not placeable, but can be
@@ -376,7 +402,9 @@ export const BLOCKS: BlockDef[] = [
  * `<item>_slab` and that item places it back — the same round-trip `mine.test` asserts for blocks.
  * Half the block, half the work to break it.
  */
-const HALF_DEFS: BlockDef[] = BLOCKS.filter(b => b.placeable && !b.noSlab && b.drops.length > 0).map(b => ({
+// ⚠ `placeable || ground`, NOT `placeable` — see `BlockDef.ground`. A slab exists either because
+// the player can place one or because the terrain can generate one, and those are different sets.
+const HALF_DEFS: BlockDef[] = BLOCKS.filter(b => (b.placeable || b.ground) && !b.noSlab && b.drops.length > 0).map(b => ({
   ...b,
   material: b.material | HALF_BIT,
   name: `${b.name} Slab`,

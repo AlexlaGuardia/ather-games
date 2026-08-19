@@ -14,7 +14,8 @@
 import sharp from 'sharp'
 import { columnHeight, poolDepthAt } from '../src/app/shimmer/voxel/height.ts'
 import { biomeAt, greySurfaceAt, forestness, type BiomeId } from '../src/app/shimmer/voxel/biome.ts'
-import { DEFAULT_DEPTH } from '../src/app/shimmer/voxel/depth.ts'
+import { DEFAULT_DEPTH, materialAt, MAT } from '../src/app/shimmer/voxel/depth.ts'
+import { MATERIAL_COLOR } from '../src/app/shimmer/voxel3d/attrs.ts'
 import { DEFAULT_SITES, siteAt } from '../src/app/shimmer/voxel/sites.ts'
 
 const arg = (name: string, dflt: number): number => {
@@ -35,7 +36,12 @@ const OUT = argS('out', 'terrain-profile.png')
 const SEA = DEFAULT_DEPTH.seaLevel
 
 const px = Math.floor(SIZE / STRIDE)
-const W = px * 2 + 8                  // two panels + a divider
+// ★ THREE PANELS SINCE 2026-08-19 (the character layer). The middle one is the biome LABEL — what
+// the region is called — and the right is the ground actually generated there, which is a different
+// question now that it has a different answer per land (see voxel/character.ts on why those two
+// layers are deliberately not the same thing). Judging the character layer on the label panel would
+// show you nothing: `biomeAt` is unchanged by it, on purpose.
+const W = px * 3 + 16                 // three panels + two dividers
 const H = px
 
 const LEGEND: Record<BiomeId, [number, number, number]> = {
@@ -75,6 +81,7 @@ for (let iz = 0; iz < px; iz++) {
 }
 
 const counts = new Map<string, number>()
+const ground = new Map<number, number>()
 for (let iz = 0; iz < px; iz++) {
   for (let ix = 0; ix < px; ix++) {
     const x = CX + ix * STRIDE - SIZE / 2, z = CZ + iz * STRIDE - SIZE / 2
@@ -112,9 +119,23 @@ for (let iz = 0; iz < px; iz++) {
       r = r * (0.75 + 0.25 * (1 - f)); g = g * (0.75 + 0.25 * (1 - f)); bl = bl * (0.75 + 0.25 * (1 - f))
     }
     put(px + 8 + ix, iz, r, g, bl)
+
+    // ── right: THE GROUND AS GENERATED — `materialAt`'s own surface answer, no diagram ─────────
+    const m = materialAt(x, h, z, SEED, h)
+    ground.set(m, (ground.get(m) ?? 0) + 1)
+    const c = MATERIAL_COLOR[m] ?? 0xff00ff
+    // Hillshaded with the same gradient as the left panel: flat colour hides which ground is on a
+    // slope and which is on a floor, and that relationship is half of what this panel is for.
+    const e2 = ix + 1 < px ? heights[iz * px + ix + 1] : h
+    const s2 = iz + 1 < px ? heights[(iz + 1) * px + ix] : h
+    const sh = Math.max(-26, Math.min(26, (h - e2) * 4 + (h - s2) * 4))
+    put(px * 2 + 16 + ix, iz,
+      Math.max(0, Math.min(255, ((c >> 16) & 255) + sh)),
+      Math.max(0, Math.min(255, ((c >> 8) & 255) + sh)),
+      Math.max(0, Math.min(255, (c & 255) + sh)))
   }
 }
-for (let iz = 0; iz < H; iz++) for (let d = 0; d < 8; d++) put(px + d, iz, 20, 20, 24)
+for (let iz = 0; iz < H; iz++) for (let d = 0; d < 8; d++) { put(px + d, iz, 20, 20, 24); put(px * 2 + 8 + d, iz, 20, 20, 24) }
 
 // ── structure sites, marked on BOTH panels so pad-vs-relief can be judged at a glance ────────────
 let siteCount = 0
@@ -140,5 +161,11 @@ await sharp(Buffer.from(img), { raw: { width: W, height: H, channels: 3 } }).png
 
 const total = px * px
 console.log(`${OUT} — ${SIZE}×${SIZE} world units at stride ${STRIDE}, seed ${SEED}, height ${min}..${max}, ${siteCount} sites in frame`)
+const NAME: Record<number, string> = {}
+for (const [k, v] of Object.entries(MAT)) NAME[v as number] = k
+console.log('\n  biome label:')
 for (const [b, n] of [...counts.entries()].sort((a, c) => c[1] - a[1]))
-  console.log(`  ${b.padEnd(10)} ${((n / total) * 100).toFixed(1)}%`)
+  console.log(`    ${b.padEnd(16)} ${((n / total) * 100).toFixed(1)}%`)
+console.log('  ground generated:')
+for (const [m, n] of [...ground.entries()].sort((a, c) => c[1] - a[1]))
+  console.log(`    ${(NAME[m] ?? String(m)).padEnd(16)} ${((n / total) * 100).toFixed(1)}%`)

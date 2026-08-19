@@ -23,7 +23,7 @@
 // reason. A keeper who loses a few minutes is annoyed; a keeper whose sapling can never grow has
 // lost it with no way to find out why.
 
-import { MAT } from './depth'
+import { MAT, TURF } from './depth'
 import { AIR } from './section'
 import { SPECIES, crownAt, type TreeSpecies, type TreeStart } from './trees'
 import { hash2 } from './noise'
@@ -57,7 +57,10 @@ export const saplingKey = (x: number, y: number, z: number): string => `${x},${y
  * separately-maintained question is how a player ends up able to grow a forest on a beach that the
  * world itself would never put one on. One law, one place.
  */
-export const PLANTABLE_GROUND: ReadonlySet<number> = new Set([MAT.TOPSOIL])
+// ⚠ THE SAME SET THE GENERATOR PLANTS ON (2026-08-19). A sapling rule that disagreed with the
+// world's own planter is the worst kind of disagreement: the forest around you grew on this ground
+// and your sapling refuses it, which reads as a broken item rather than a rule.
+export const PLANTABLE_GROUND: ReadonlySet<number> = TURF
 
 export type MaterialAt = (x: number, y: number, z: number) => number
 

@@ -30,7 +30,7 @@ import { holdGenPiecesForCol, type GenPiece } from '../voxel/holds'
 import { biomeAt, forestness } from '../voxel/biome'
 import { ZONE_ANCHORS, zoneAt } from '../voxel/zones'
 import { AIR } from '../voxel/section'
-import { materialAt, MAT, isPlant, isHerb, isHalfMat, isTopSlab, baseOf, TOP_BIT, DEFAULT_DEPTH } from '../voxel/depth'
+import { materialAt, MAT, isPlant, isHerb, isHalfMat, isTopSlab, baseOf, TOP_BIT, DEFAULT_DEPTH, TURF } from '../voxel/depth'
 import { FLORA, plantVariant } from '../voxel/flora'
 import { raycast, tickBreak, dropsFor, setBreakRate, getBreakRate, type BreakState } from '../voxel/mine'
 import { spawnDrop, tossDrop, tickDrops, type Drop } from '../voxel/drops'
@@ -6172,7 +6172,9 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
         const clear = (m: number) => m === AIR || isPlant(m)
         while (guard-- > 0 && !clear(voxel(fx, y + 1, fz))) y++
         while (guard-- > 0 && y > 1 && voxel(fx, y, fz) === AIR) y--
-        if (voxel(fx, y, fz) !== MAT.TOPSOIL) return null
+        // TURF, not TOPSOIL (2026-08-19): ground cover grows on every land's turf, so picking it
+        // has to accept the same set the generator planted it on.
+        if (!TURF.has(voxel(fx, y, fz))) return null
         const m = voxel(fx, y + 1, fz)
         if (!isPlant(m)) return null
         // A tuft on a slumped lip grows from the half-height top, not from where a full block
@@ -6854,7 +6856,7 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
         // as a broken right-click, which is exactly how the cast refusals were being lost before
         // `onSay` existed. Clearance is NOT checked here on purpose: you may plant somewhere
         // cramped and the sapling waits. See sapling.ts.
-        onSay(voxel(hit.px, hit.py - 1, hit.pz) === MAT.TOPSOIL
+        onSay(TURF.has(voxel(hit.px, hit.py - 1, hit.pz))
           ? 'it needs open sky to grow'
           : 'a sapling only takes in soil')
         mouse.current.right = false

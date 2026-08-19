@@ -42,6 +42,28 @@ export const MATERIAL_COLOR: Record<number, number> = {
   [MAT.TOPSOIL]: 0x4f9c3a,
   [MAT.SAND]: 0xd8c691,
   [MAT.WATER]: 0x2f6f9e,
+  // ── ★ THE GROUNDS (2026-08-19, the character layer) ──────────────────────────────────────────
+  // The world had ONE ground colour until today, which is most of what "it feels samey" was. These
+  // eight have to read apart ACROSS A VALLEY, not just side by side in a swatch, so they are spread
+  // on VALUE and SATURATION rather than nudged around one hue — a set of eight tasteful greens is
+  // indistinguishable at fifty blocks and would have bought nothing.
+  //   loam     — forest floor: dark, brown-shifted, the litter under a closed canopy
+  //   lush     — a wet valley bottom: the most saturated green in the world, and the only one
+  //              brighter than the meadow, so a dell reads as somewhere the water collects
+  //   mud      — olive-brown, low value: marsh is the one ground that is not really a green
+  //   dry      — OLIVE straw, not sand-straw. First pass was 0xb3a25c and the map killed it: it
+  //              read as SAND (0xd8c691) at a glance, so every barrens and high plain looked like a
+  //              beach that had wandered inland, right next to the real sand of the river shoulders.
+  //              Duller and greener — dead grass is still grass, and it has to say so from a hill.
+  //   highland — cool and grey-shifted, hardier turf at altitude, kin to stone rather than to grass
+  //   scree    — warmer and paler than STONE (0x7d7a86) on purpose: broken rock catching light,
+  //              which is what separates a crag's loose surface from the bedrock it sits on
+  [MAT.FOREST_LOAM]: 0x3a6b2c,
+  [MAT.LUSH_TURF]: 0x63b83e,
+  [MAT.MARSH_MUD]: 0x5a5738,
+  [MAT.DRY_GRASS]: 0x9c9a4e,
+  [MAT.HIGHLAND_TURF]: 0x6d9270,
+  [MAT.SCREE]: 0x93897c,
   // Desaturated on purpose — the greying IS desaturation (canon: grey is drained mana, and the
   // frayed edges gutter grey). An ashen green-grey, not a stone grey, so it still reads as ground.
   [MAT.GREY_SOIL]: 0x83887b,

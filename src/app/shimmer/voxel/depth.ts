@@ -20,7 +20,8 @@ import {
   springsPoolAt, poolDepthAt, POOL_DEEP,
   type HeightConfig, DEFAULT_HEIGHT,
 } from './height'
-import { greySurfaceAt } from './biome'
+import { greySurfaceAt, DEFAULT_BIOME } from './biome'
+import { landCharacter, surfaceBlockAt } from './character'
 import { roadAt } from './story-path'
 import { holdIndexAt, holdVoxelAt, holdCourtyardAt } from './holds'
 import { holdPadLevel } from './height'
@@ -391,7 +392,56 @@ export const MAT = {
   STORMGRASS: 59,
   ROOTVINE: 60,
   TIDEPETAL: 61,
+
+  /**
+   * ── ★ THE GROUNDS (2026-08-19, the character layer) ────────────────────────────────────────
+   * Until today this world had ONE ground. Every biome, every altitude, every valley and plain
+   * wore `TOPSOIL`, and the terrain's considerable variety in SHAPE was dressed in a single green
+   * — which is precisely what "it feels samey" was reporting. These are the rest of the grounds;
+   * `character.ts` decides which one a column wears, and it decides by a blended roll rather than
+   * by a biome id, for the reason written at the top of that file.
+   *
+   * ⚠ THEY ALL DROP `block_topsoil` (mud and scree excepted) AND NONE IS PLACEABLE, deliberately.
+   * A ground is a thing the world grows, not a thing you pocket: nine placeable turfs would put
+   * nine near-identical greens in the build palette and make the biome layer read as a colour
+   * swatch. Dig one up and you get soil, exactly as digging grass has always given soil here.
+   *
+   * ⚠ ADD ANY NEW GROUND TO `TURF` BELOW IF IT GROWS THINGS. A ground missing from that set is
+   * silently barren — no trees, no saplings, no ground cover you can pick — with nothing in the
+   * code looking wrong. That is the failure mode this set exists to make impossible to reach by
+   * accident, and it is the same shape as the sprite pipeline's "painted but never wired".
+   */
+  FOREST_LOAM: 62,
+  LUSH_TURF: 63,
+  MARSH_MUD: 64,
+  DRY_GRASS: 65,
+  HIGHLAND_TURF: 66,
+  SCREE: 67,
 } as const
+
+/**
+ * Ground that GROWS — the one definition of "a plant can stand here", read by the tree planter,
+ * the sapling rule, ground-cover picking and the plant-in-hand refusal message.
+ *
+ * ★ IT IS AN ALLOWLIST, and which grounds are absent is character rather than oversight: marsh mud
+ * and crag scree grow nothing, which is how a marsh reads as a marsh and a crag reads as bare. The
+ * denylist shape (everything except mud) is what would quietly plant a forest on the next ground
+ * anyone adds.
+ */
+export const TURF: ReadonlySet<number> = new Set<number>([
+  MAT.TOPSOIL, MAT.FOREST_LOAM, MAT.LUSH_TURF, MAT.DRY_GRASS, MAT.HIGHLAND_TURF,
+])
+
+/**
+ * The land-character table, bound to this file's materials once. `character.ts` cannot import `MAT`
+ * (it would close a cycle — see `GroundMaterials`), so the binding happens here, at the one place
+ * that owns both halves.
+ */
+const LAND_DRESS = landCharacter({
+  topsoil: MAT.TOPSOIL, loam: MAT.FOREST_LOAM, lush: MAT.LUSH_TURF, mud: MAT.MARSH_MUD,
+  dry: MAT.DRY_GRASS, highland: MAT.HIGHLAND_TURF, scree: MAT.SCREE,
+  subsoil: MAT.SUBSOIL, stone: MAT.STONE,
+})
 
 export interface DepthConfig {
   /** Basins below this fill with water. Kept BELOW the datum so most of the world is dry land. */
@@ -528,7 +578,12 @@ export function materialAt(
     if (springsPoolAt(x, z, seed, hcfg) >= 1) return MAT.SPRING_CRUST   // pool beds + mineral aprons
     if (slopeAt(x, z, seed, hcfg) >= cfg.cliffSlope) return MAT.STONE   // cliff faces show rock
     if (greySurfaceAt(x, z, seed)) return MAT.GREY_SOIL                 // drained ground wears grey
-    return MAT.TOPSOIL
+    // ── ★ EVERYTHING ABOVE OUTRANKS LAND CHARACTER, AND THE ORDER IS THE ARGUMENT ──────────────
+    // A river bed, a road, a courtyard, a spring's crust, a cliff face and the greying are all
+    // statements about this exact column that a REGION cannot overrule: the road is where people
+    // walked, the grey is where the mana left. Land character is what the ground wears when nothing
+    // more specific has happened to it, which is most of the world. See character.ts.
+    return surfaceBlockAt(x, z, seed, LAND_DRESS, DEFAULT_BIOME, hcfg)
   }
 
   // 4. Soil under the surface, thinning on slopes so a cliff does not wear a soil stripe.

@@ -64,6 +64,11 @@ export const TILE_MATERIALS: number[] = [
   MAT.WAYMARK, MAT.CLOUD_WALL,
   // The cauldron added 2026-08-18 with brewing — the alchemy station.
   MAT.CAULDRON,
+  // ── The grounds, added 2026-08-19 with the character layer ──────────────────────────────────
+  // ⚠ Each one NEEDS a `paintFor` case below, exactly as the rubble note above says: the switch's
+  // default is the ore painter, so a ground appended here and forgotten there does not render as
+  // plain dirt, it renders as a crystal seam in the middle of a meadow.
+  MAT.FOREST_LOAM, MAT.LUSH_TURF, MAT.MARSH_MUD, MAT.DRY_GRASS, MAT.HIGHLAND_TURF, MAT.SCREE,
 ]
 
 /** One spare layer past the end: an unmapped material samples magenta rather than layer 0's stone. */
@@ -908,6 +913,28 @@ export function paintFor(material: number, face: number, size: number): Layer {
       else if (face === SIDE) paintGrassSide(dst, size, seed, MATERIAL_COLOR[MAT.GREY_SOIL])
       else paintGrit(dst, size, rgbOf(MATERIAL_COLOR[MAT.SUBSOIL]), 18, 22, seed)
       break
+    // ── ★ THE GROUNDS (2026-08-19) ───────────────────────────────────────────────────────────
+    // The four TURFS take the grass painter with their own colour, which is exactly how GREY_SOIL
+    // has always worked — one painter, one palette entry, a whole ground. Their CONTRAST differs
+    // on purpose and it is not decoration: contrast is how blade-scatter reads at distance, so the
+    // dry grass is coarse (sparse straw over bare earth) and the highland turf is tight (hardy,
+    // close-cropped at altitude). Same shape language argument as rubble against cut stone.
+    case MAT.FOREST_LOAM:
+    case MAT.LUSH_TURF:
+    case MAT.DRY_GRASS:
+    case MAT.HIGHLAND_TURF: {
+      const c = MATERIAL_COLOR[material]
+      const contrast = material === MAT.DRY_GRASS ? 1.35 : material === MAT.HIGHLAND_TURF ? 0.75 : 1
+      if (face === TOP) paintGrassTop(dst, size, seed, c, contrast)
+      else if (face === SIDE) paintGrassSide(dst, size, seed, c)
+      else paintGrit(dst, size, rgbOf(MATERIAL_COLOR[MAT.SUBSOIL]), 18, 22, seed)
+      break
+    }
+    // ⚠ MUD AND SCREE ARE NOT TURF AND MUST NOT WEAR THE GRASS PAINTER. A grass crown on either
+    // one is the whole reason a marsh would still read as a meadow: the top face is what you see
+    // from standing height, so it is the face that has to say "nothing grows here".
+    case MAT.MARSH_MUD: paintGrit(dst, size, rgbOf(MATERIAL_COLOR[material]), 14, 26, seed); break
+    case MAT.SCREE: paintRock(dst, size, rgbOf(MATERIAL_COLOR[material]), { speckle: 30, blotch: 24, vein: 0, seed }); break
     // ── ★ THE BUILDING GRAMMAR'S TWO STONES (2026-08-13) ────────────────────────────────────
     // They must read apart ACROSS A ROOM, because the whole point of the ruling is that a player
     // can see the difference between what they patched and what they built. So the split is in the
