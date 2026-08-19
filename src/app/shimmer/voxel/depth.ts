@@ -96,13 +96,19 @@ export const isHerb = (m: number): boolean => m >= HERB_MIN && m <= HERB_MAX
 /**
  * Non-solid, non-opaque ground cover. Range test on purpose — this runs in the mesher's hot loop.
  *
- * ⚠ TWO RANGES NOW, AND THE ORDER IS THE CHEAP ONE FIRST. Grass and flowers cover most of the
- * living world; herbs are rare by design, so the common case still costs two comparisons and the
- * rare one costs four. Anything that treats "plant" as a single span (a `<= PLANT_MAX` written by
- * hand somewhere) is wrong from today — ask this function, never the constants.
+ * ⚠ THREE RANGES NOW, AND THE ORDER IS THE CHEAP ONE FIRST. Grass and flowers cover most of the
+ * living world; herbs and scatter are rare by design, so the common case still costs two
+ * comparisons and the rare ones cost four and six. Anything that treats "plant" as a single span
+ * (a `<= PLANT_MAX` written by hand somewhere) is wrong from today — ask this function, never the
+ * constants.
  */
+export const SCATTER_MIN = 68
+export const SCATTER_MAX = 70
+export const isScatter = (m: number): boolean => m >= SCATTER_MIN && m <= SCATTER_MAX
+
 export const isPlant = (m: number): boolean =>
   (m >= PLANT_MIN && m <= PLANT_MAX) || (m >= HERB_MIN && m <= HERB_MAX)
+  || (m >= SCATTER_MIN && m <= SCATTER_MAX)
 
 /**
  * Saplings, as a contiguous range — the same shape `isPlant` uses, and for the same reason: the
@@ -417,6 +423,25 @@ export const MAT = {
   DRY_GRASS: 65,
   HIGHLAND_TURF: 66,
   SCREE: 67,
+
+  // ── ★ SCATTER (2026-08-19, slice ③) — a THIRD plant range, for the same reason as the second ──
+  // What a land SHEDS: a loose stone, a fallen branch, a mushroom. They are ground cover in every
+  // way the mesher, the walker and the light field care about — non-solid, non-opaque, breakable
+  // by hand — so they must answer `isPlant`. They could not join 24-26 or 58-61 because both are
+  // full and **a material id is written into every save**, so renumbering to make room would
+  // silently repaint every stored edit in the world.
+  //
+  // ⚠ KEEP 68-70 CONTIGUOUS, exactly as the notes on 24-26, 42-45 and 58-61 say. A fourth scatter
+  // kind inserted anywhere else stops being a plant — solid, opaque, unbreakable — with nothing in
+  // the code looking wrong.
+  //
+  // ⚠ A ROCK IS NOT `RUBBLE` AND NOT `SCREE`, AND THE THREE ARE DELIBERATELY SEPARATE. Scree is a
+  // GROUND (a surface you stand on), rubble is the CRAFTING stock quarried stone yields, and this
+  // is a loose stone lying on top of a ground. It drops rubble, so it feeds the existing stone
+  // economy rather than opening a second one — the same reasoning the two stone rows already state.
+  LOOSE_ROCK: 68,
+  DEADFALL: 69,
+  MUSHROOM: 70,
 } as const
 
 /**

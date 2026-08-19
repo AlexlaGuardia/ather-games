@@ -314,6 +314,32 @@ export const BLOCKS: BlockDef[] = [
   { noSlab: true, material: MAT.TALL_GRASS, name: 'Tall Grass', hardness: 0.05, skill: null, minTier: 0, drops: [{ itemId: 'tall_grass', count: 1 }, { itemId: 'mana_seed', count: 1, chance: MANA_SEED_CHANCE }], fastSkill: 'farming', placeable: true },
   { noSlab: true, material: MAT.FLOWER, name: 'Wildflower', hardness: 0.05, skill: null, minTier: 0, drops: [{ itemId: 'wild_flower', count: 1 }], fastSkill: 'farming', placeable: true },
 
+  // ── ★ SCATTER (2026-08-19, slice ③) — what a land SHEDS, as gatherable ground cover ──────────
+  // `noSlab`, like every other plant row: these sit at h+1, so they are never the surface voxel a
+  // slump makes a half cell of. (The `ground: true` rule is for materials that can BE the surface —
+  // a lip with no slab row has no block definition at all, which is how 189 of 262 lips ended up
+  // nameless. Scatter is on top of the surface, never the surface itself.)
+  //
+  // ★ A LOOSE ROCK DROPS RUBBLE — it feeds the stone economy that already exists rather than
+  // opening a second one, which is the same call the two quarried-stone rows make one screen up.
+  // Softer than scree because it is already loose: a bare hand lifts it, a spike is just faster.
+  // ⚠ `placeable: false`, AND THE SUITE HAD TO TEACH ME THAT. `BY_ITEM` reverses placeable blocks by
+  // their drop id, so a placeable Loose Rock dropping `rubble` HIJACKS the rubble item: placing
+  // rubble would have put down a loose rock instead, silently breaking the forgiveness valve that
+  // row exists for. Two blocks cannot both claim one item. Rubble is the thing you place; a loose
+  // rock is a thing you pick up. (Caught by `plants.test.ts`'s identity-drop clash and
+  // `recipes.test.ts`'s "rubble places as rubble" — neither is about scatter, and both fired.)
+  { noSlab: true, material: MAT.LOOSE_ROCK, name: 'Loose Rock', hardness: 0.15, skill: null, minTier: 0, drops: [{ itemId: 'rubble', count: 1 }], fastSkill: 'prospecting', placeable: false },
+  // ★ DEADFALL YIELDS `deadwood`, NOT A SPECIES LOG, and that is deliberate. Every log id in this
+  // file is species-bound (goldwood/shimmeroak/starwillow/dawnwood) and carries that species' tier
+  // and hardness. Scatter has no species — it is weathered wood on the ground — so dropping any one
+  // of them would hand out tier-3 Dawnwood from a barrens twig. A generic id is the honest answer.
+  // ⚠ `deadwood` HAS NO RECIPE YET. That is the same rhythm the four element herbs shipped on:
+  // gatherable in one slice, useful in the next. It is a known gap, not an oversight — GBOARD row.
+  { noSlab: true, material: MAT.DEADFALL, name: 'Deadfall', hardness: 0.20, skill: null, minTier: 0, drops: [{ itemId: 'deadwood', count: 1 }], fastSkill: 'forestry', placeable: true },
+  // ⚠ `mushroom_cap` likewise has no recipe yet — same slice rhythm, same GBOARD row.
+  { noSlab: true, material: MAT.MUSHROOM, name: 'Mushroom', hardness: 0.05, skill: null, minTier: 0, drops: [{ itemId: 'mushroom_cap', count: 1 }], fastSkill: 'farming', placeable: true },
+
   // ── ★★ THE FOUR ELEMENT HERBS (2026-08-18) — canon's ground, picked by hand ──────────────────
   // `game/alchemy.md` + `game/shimmer-geography.md`, ruled by /magii on the hub lane's gap. These
   // four are the last link between this world and an evolved spirit: the cauldron brews, the
