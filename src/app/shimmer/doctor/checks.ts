@@ -41,7 +41,25 @@ async function read(rel: string): Promise<string | null> {
 
 // ---------- parsing helpers ----------
 
-/** Extract a brace-matched block starting at the first `open` char at/after startIdx. */
+/** Blocks whose braces could not be matched. A parse failure MUST be reported, never
+ *  returned as an empty set — see `unparsed-block` in runDoctor. Drained per run. */
+const parseFailures: { name: string; file: string }[] = []
+
+/** Which cached file a content string came from, for naming a parse failure. */
+function fileForContent(content: string): string {
+  for (const [rel, c] of cache) if (c === content) return rel
+  return '(unknown file)'
+}
+
+/** Extract a brace-matched block starting at the first `open` char at/after startIdx.
+ *
+ * ⚠ COMMENTS ARE SKIPPED, AND THAT IS NOT A TIDINESS FIX. This scanner treats `'` as opening
+ * a string, so ONE apostrophe in a `//` comment opens a string that never closes at the right
+ * place and the brace count silently goes wrong. `sprites/items.ts` had exactly that — a comment
+ * reading "the doctor's `item-map-sync`" sat inside ITEM_ICONS, the block failed to match, and
+ * every one of the 92 items was reported as "painted but won't show as an icon" when the two maps
+ * were in perfect sync. The comment naming the check is what broke the check.
+ */
 function braceBlock(content: string, startIdx: number, open = '{', close = '}'): string | null {
   const first = content.indexOf(open, startIdx)
   if (first === -1) return null
@@ -52,6 +70,19 @@ function braceBlock(content: string, startIdx: number, open = '{', close = '}'):
     if (inStr) {
       if (ch === '\\') i++
       else if (ch === inStr) inStr = null
+      continue
+    }
+    // Comments first — their contents are text, not code, and an apostrophe in one is prose.
+    if (ch === '/' && content[i + 1] === '/') {
+      const nl = content.indexOf('\n', i)
+      if (nl === -1) return null
+      i = nl
+      continue
+    }
+    if (ch === '/' && content[i + 1] === '*') {
+      const end = content.indexOf('*/', i + 2)
+      if (end === -1) return null
+      i = end + 1
       continue
     }
     if (ch === "'" || ch === '"' || ch === '`') { inStr = ch; continue }
@@ -68,7 +99,13 @@ function braceBlock(content: string, startIdx: number, open = '{', close = '}'):
 function exportBlock(content: string, name: string, open = '{', close = '}'): string | null {
   const m = content.match(new RegExp(`(?:export )?const ${name}\\b[^=]*=`))
   if (!m || m.index === undefined) return null
-  return braceBlock(content, m.index + m[0].length, open, close)
+  const block = braceBlock(content, m.index + m[0].length, open, close)
+  // ★ A block that exists but will not parse is a DIFFERENT fact from one that is absent, and
+  // every caller here does `?? ''` — so without this ledger a failed parse reads as an empty
+  // object and the check scores a confident zero. Record it; runDoctor reports it as its own
+  // finding rather than letting it masquerade as data.
+  if (block === null) parseFailures.push({ name, file: fileForContent(content) })
+  return block
 }
 
 /** Top-level keys of an object literal block — a key counts if its line STARTS at depth 1,
@@ -89,6 +126,12 @@ function objectKeys(block: string): string[] {
       }
       if (ch === "'" || ch === '"' || ch === '`') inStr = ch
       else if (ch === '/' && line[i + 1] === '/') break
+      else if (ch === '/' && line[i + 1] === '*') {
+        // Same reason as braceBlock: a `{` or an apostrophe inside a block comment is prose.
+        const end = line.indexOf('*/', i + 2)
+        if (end === -1) break
+        i = end + 1
+      }
       else if (ch === '{' || ch === '[') depth++
       else if (ch === '}' || ch === ']') depth--
     }
@@ -307,18 +350,30 @@ async function checkBeastPalettes(add: Add) {
 async function checkItemMaps(add: Add) {
   const content = await read('sprites/items.ts')
   if (!content) return
-  const frameMap = objectKeys(exportBlock(content, 'ITEM_FRAME_MAP') ?? '')
-  const icons = objectKeys(exportBlock(content, 'ITEM_ICONS') ?? '')
-  const palettes = objectKeys(exportBlock(content, 'ITEM_PALETTES') ?? '')
+  // ★★ DIFF ONLY THE MAPS WE ACTUALLY READ. A null block means "could not look", which is already
+  // reported as `unparsed-block` — diffing against it turns ONE parser failure into 92 confident
+  // findings about items that are perfectly fine, and the volume is what makes them believable.
+  // This is why the guards are on the BLOCKS and not on the key arrays: `objectKeys(null ?? '')`
+  // and `objectKeys('{}')` are both `[]`, so by the time it is an array the distinction between
+  // "empty" and "unreadable" is gone.
+  const frameMapBlock = exportBlock(content, 'ITEM_FRAME_MAP')
+  const iconsBlock = exportBlock(content, 'ITEM_ICONS')
+  const palettesBlock = exportBlock(content, 'ITEM_PALETTES')
   const itemsBlock = exportBlock(content, 'ITEMS', '[', ']') ?? ''
+  const frameMap = objectKeys(frameMapBlock ?? '')
+  const icons = objectKeys(iconsBlock ?? '')
+  const palettes = objectKeys(palettesBlock ?? '')
   const itemIds = [...itemsBlock.matchAll(/\bid:\s*'([\w-]+)'/g)].map(m => m[1])
-  for (const k of setDiff(frameMap, icons))
-    add({ severity: 'warn', domain: 'items', check: 'item-map-sync', file: 'sprites/items.ts', message: `'${k}' has ITEM_FRAME_MAP frames but no ITEM_ICONS entry — painted but won't show as an icon.` })
-  for (const k of setDiff(icons, frameMap))
-    add({ severity: 'warn', domain: 'items', check: 'item-map-sync', file: 'sprites/items.ts', message: `'${k}' is in ITEM_ICONS but missing from ITEM_FRAME_MAP — the editor can't load its frames.` })
-  for (const k of setDiff(palettes, [...frameMap, ...itemIds]))
-    add({ severity: 'warn', domain: 'items', check: 'orphan-palette', file: 'sprites/items.ts', message: `ITEM_PALETTES has '${k}' which matches no item id or frame-map key.` })
-  if (itemIds.length)
+  if (frameMapBlock && iconsBlock) {
+    for (const k of setDiff(frameMap, icons))
+      add({ severity: 'warn', domain: 'items', check: 'item-map-sync', file: 'sprites/items.ts', message: `'${k}' has ITEM_FRAME_MAP frames but no ITEM_ICONS entry — painted but won't show as an icon.` })
+    for (const k of setDiff(icons, frameMap))
+      add({ severity: 'warn', domain: 'items', check: 'item-map-sync', file: 'sprites/items.ts', message: `'${k}' is in ITEM_ICONS but missing from ITEM_FRAME_MAP — the editor can't load its frames.` })
+  }
+  if (palettesBlock && frameMapBlock)
+    for (const k of setDiff(palettes, [...frameMap, ...itemIds]))
+      add({ severity: 'warn', domain: 'items', check: 'orphan-palette', file: 'sprites/items.ts', message: `ITEM_PALETTES has '${k}' which matches no item id or frame-map key.` })
+  if (iconsBlock && itemIds.length)
     for (const k of setDiff(icons, itemIds))
       add({ severity: 'info', domain: 'items', check: 'icon-without-itemdef', file: 'sprites/items.ts', message: `ITEM_ICONS '${k}' has no ItemDef in ITEMS — fine if it's a node/decoration sprite, otherwise it's unobtainable.` })
 }
@@ -459,6 +514,7 @@ async function checkStaleness(add: Add) {
 
 export async function runDoctor(): Promise<DoctorReport> {
   cache.clear()
+  parseFailures.length = 0
   const findings: Finding[] = []
   const add: Add = f => findings.push(f)
 
@@ -492,6 +548,17 @@ export async function runDoctor(): Promise<DoctorReport> {
     try { await fn() } catch (e) {
       add({ severity: 'info', domain: 'doctor', check: name, message: `Check crashed (doctor needs an update, the game is fine): ${e instanceof Error ? e.message : String(e)}` })
     }
+  }
+
+  // ★ A CHECK THAT COULD NOT SEE MUST SAY SO, NOT SCORE ZERO. Reported after the checks so it
+  // reads as the explanation for whatever nonsense they just produced. Deduped: one line per
+  // block, however many checks asked for it.
+  for (const key of new Set(parseFailures.map(f => `${f.file}\u0000${f.name}`))) {
+    const [file, name] = key.split('\u0000')
+    add({
+      severity: 'error', domain: 'doctor', check: 'unparsed-block', file,
+      message: `Could not brace-match '${name}' in ${file}, so every check reading it saw an EMPTY set — which scores as "nothing is wired" rather than "the doctor could not look". Treat findings naming ${name} as unproven until this parses. Usual cause: a construct braceBlock mis-scans (an unbalanced quote or brace somewhere it reads as code).`,
+    })
   }
 
   const counts = { error: 0, warn: 0, info: 0 }
