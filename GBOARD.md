@@ -415,6 +415,44 @@ the Arcade frame.
 > ### Files
 > `play3d/collar-raid.ts` (Ather) · `play3d/puppet-guards.ts` + `play3d/crucible-bots.ts` + `play3d/crucible-phases.ts` (Crucible) · `src/app/nolmir/` (Expeditions)
 
+## 🌊 Shimmer voxel3d — **WATER: FLOW · WHAT'S IN IT · SWIMMING · RINNING** (surveyed 2026-08-19, jin-cc) · *Last touched 2026-08-19*
+
+> Session scope call by Alex: *"the way it flows, whats in it, how the player swims through it, and lastly rinning."* Surveyed, not built. This block is the pin so the read isn't re-derived.
+
+### Left off — what EXISTS today
+
+- **Terrain water: built, and the most-iterated system in the voxel world.** Rivers are their own noise field with a zero-line (`RIVER_FULL 0.012` / `RIVER_EDGE 0.035` / `RIVER_DEPTH 3`). The load-bearing idea is **the water table**: a body of water has ONE level, sampled on a 96-block lattice and bilinearly blended — a property of the PLACE, not the column. Third model; the first two were "banks−1 per column" (Alex: *"there shouldn't be highs and lows in a pond"*) and clamp-to-terrain (*"a hill of blue jello"*). Land generates **around** the water; `RIVER_APPROACH 0.10` widens the shore blend ~7× so you walk down to a river instead of off a levee. Sea level 20 below datum; `basin`/`shore` are real biome labels. Guarded by `rivers.test.ts` (ponds flat · no dry ditches · no walls of water · no trunks in the channel).
+- **Swimming: built 2026-08-08, oracle-tested, and it feels right.** Submerged = chest AND feet in water → the swim physics own the whole tick and **every ground verb stands down** (no slide, vault or bhop through a pond). `SWIM_SPEED 3.4` (half a run — drag country) · Space climbs · crouch dives · hands-off drifts down at `SWIM_IDLE_SINK 0.5` because *"water is patient, not a floor."* Feet-only = **treading**: normal physics, water caps the fall, and it counts as perpetual coyote ground — which is exactly what makes "swim to the bank and hop out" a plain jump.
+- **Rinning: fully built — on play3d.** `engine/rinning.ts` + nodes (`small_pond` L1 / `stream` L4 / `lake` L7 in `world/resources.ts`) + strike + `rin-fx.ts` + tool crafting + a NodeEditor category.
+
+### The four holes, in the order they hurt
+
+1. **★★ RINNING IS ON THE WRONG SURFACE, AND THE BUILD ALREADY ADMITS IT.** On `/shimmer` — the front door — rinning exists as a **tool family and an icon only**: the rinstick ladder sits in `voxel/registry.ts`, `VoxelWorld` draws a rod-and-line glyph, and there is **nothing in the voxel world to fish**. `voxel/recipes.test.ts` documents it honestly rather than papering over it — `shimmerscale`/`clickclaw`/`glowfin_scale`/`moonkoi_scale` are unobtainable, so **the rinstick tiers cannot be crafted on the surface that ships**, and the sweep excludes rinning *with its reason*. Same shape as the alchemy-bench hole (08-18): a chain whose middle lives only on the other surface.
+2. **★★ THE BUILT MINIGAME CONTRADICTS A CANON RULING — and no gate catches it.** `engine/rinning.ts` is a reaction test: line out, `!` pops at 0.9–3.0s, strike inside a 1s window or it slips. Canon refuses this **twice, with a stated in-world reason** — `game/shimmer-skilling.md` §Skill 4: *"Rinn are caught by simply waiting — there's no minigame"*; §Rinsticks: *"Rinsticks are built from rinn — kin calls to kin. That is the canon reason rinning has no minigame and rewards patience: **you are asking a rinn, not tricking one.**"* A strike window is precisely tricking one. **Same class as the EvolutionOverlay free-pick: a mechanic built on the premise canon refuses.** All 10 drift gates are lore-TABLE gates; none look at skill mechanics, which is why this shipped quiet.
+3. **THE WATER IS EMPTY, AND CANON'S LARDER IS FULL.** Zero fish, zero creatures, zero nodes in voxel3d. Meanwhile `world/rinn.md` is a complete bestiary across five ocean zones, and skilling already ruled a clean 4-tier catch ladder with XP: shimmerscale/clickclaw (15) → glowfin/ribboneel (45) → moonkoi/pearlshell (120) → **crystal rinn (350)**, *"catching one feels like holding a wish."* **Nothing to invent, nothing to file** — the same "no canon gap, just build it" position slice ② of #262 was in.
+4. **GOING UNDER LOOKS IDENTICAL TO STANDING IN AIR.** No breath, no drowning, no underwater view — nothing tints or fogs when submerged. Water is one transparent pass with `depthWrite` off and there is **no camera-in-water case at all**. The swim physics underneath are good; the screen never tells you you're wet, which is the biggest "this isn't water" tell in the game.
+
+### Decisions
+
+- **FLOW IS PROBABLY NOT A FEATURE — CHECK CANON BEFORE BUILDING CURRENT.** There is no fluid sim, no current, no downstream; water is a static fill to the table and the motion is two uv-scrolled samples of one tile (`mesh-bridge.ts`: *"one texture reads as a conveyor belt; two read as water"*). Waterfalls only happen incidentally where the zero-line crosses a bench edge. **But `shimmer-skilling.md` rules the Ather's waters are *"still, luminescent, and peaceful"*** — so "still" may be the correct answer rather than a missing system. Decide that before anyone writes a flow solver.
+- **⚠ FLOW IS ALSO THE ONE PART WE CANNOT TOUCH RIGHT NOW.** River/water terrain lives in `voxel/height.ts` + `voxel/depth.ts`, and the hub window was inside `depth.ts` on worldgen when this was surveyed (08-19 afternoon). Any flow work collides head-on. Hand it to hub or wait for the lane.
+- **Drowning is Rule-3 territory, not a free choice.** `CANON_GAPS.md` (08-13) binds the build: peril stays in-world, **no real cruelty on the page**, a foe that wounds the player breaks the cozy line's tone. A drowning DEATH is the world killing the keeper. A soft breath meter that pushes you to surface is probably fine; killing them is a canon call, not a tuning dial.
+
+### Next
+
+- **Underwater view** — submerged tint/fog + a surface-crossing cue. Pure Jin (look/feel), no canon exposure, and it's what makes the already-good 08-08 swim physics finally read as water.
+- **Rinning on the voxel surface** — water-adjacent nodes off the real water table, the 4-tier ladder, catches that make the rinstick ingredients obtainable so the tool ladder stops being craftable-in-name-only.
+- **Settle the minigame question first** — it decides the whole shape of the catch. Canon has ruled it (patience, no minigame); reversing that is a `/magii` conversation, not a Jin edit.
+
+### Parked
+
+- Flow / current / waterfalls (canon-questionable AND hub-colliding — see Decisions).
+- Ocean proper: canon's Open Blue / Twilight / **The Deep** zones have no voxel-world home yet; the continent has basins and rivers, not a sea to sail.
+
+### Files
+
+`voxel/height.ts` (water table, `waterLevelAt`/`waterSurfaceAt`, river field) · `voxel/depth.ts` (water fill, sea level) · `voxel/rivers.test.ts` (the guarantees) · `voxel3d/locomotion.ts` (swim/tread, `SWIM_*`) · `voxel3d/locomotion.test.ts` · `voxel3d/mesh-bridge.ts` + `voxel3d/attrs.ts` (the one transparent pass) · `engine/rinning.ts` (+ test) · `world/resources.ts` (rinning nodes) · `voxel/registry.ts` (rinstick ladder) · `voxel/recipes.test.ts` (the honest exclusion) · canon: `CANON/world/rinn.md`, `CANON/game/shimmer-skilling.md` §Skill 4
+
 ## 🏛️ Shimmer — **BUILDING IS THE DIFFERENTIATOR: blocks build the shell, pieces dress it** (Alex, 2026-08-06) · *Last touched 2026-08-07*
 
 > **The call, in Alex's words:** *"here's the thing that sets our game apart from minecraft.. the building.. the material cost comes from blocks but the look will be more like Sims so we don't have to have blocky buildings."* Full spec: **`STRUCTURE-LAYER.md`**.
