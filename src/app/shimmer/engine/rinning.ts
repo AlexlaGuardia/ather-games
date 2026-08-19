@@ -1,3 +1,19 @@
+// ⚠⚠ SUPERSEDED BY `engine/rin-cast.ts` (2026-08-19) — DO NOT BUILD ON THIS FILE.
+//
+// This is a reaction test: the `!` pops, you strike inside ~1s, and a miss means the rinn "slips
+// the line". **Canon refuses that, twice, with a stated in-world reason** —
+//   `game/shimmer-skilling.md` › Skill 4:   *"Rinn are caught by simply waiting — there's no minigame."*
+//   `game/shimmer-skilling.md` › Rinsticks: *"kin calls to kin. That is the canon reason rinning has
+//      no minigame and rewards patience: **you are asking a rinn, not tricking one.**"*
+// The contradiction is the LOSS, not the bite — canon's own line is "cast line → wait for bite →
+// catch", so it refuses a SKILL TEST, not an interaction. `rin-cast.ts` keeps the loop and drops the
+// punishment. Same family as the EvolutionOverlay free-pick deleted on 08-18: a mechanic built on a
+// premise canon refuses. No drift gate catches this class — all 10 gates diff lore TABLES.
+//
+// ⚠ STILL WIRED INTO play3d (`play3d/Shimmer3D.tsx`) and left running deliberately: swapping a live
+// surface's feel is its own change with its own playtest, not a footnote to writing the new module.
+// Migrating play3d onto `rin-cast.ts` is tracked as an open row.
+//
 // Rinning cast-and-catch — the fishing-analog skill's own feel, distinct from the
 // hold-to-channel of forestry/prospecting. Cast a line into a pool (which locks the
 // walker to the node), wait, then a `!` pops over the mote's head: strike during it to
