@@ -79,6 +79,16 @@ export interface ScatterDials {
   deadfallK: number
   /** Mushroom multiplier. Multiplies shade-or-damp, and rides the clump field on top of that. */
   mushroomK: number
+  /**
+   * Boulder multiplier — the same question as `rockK` one scale up, which is why it lives in this
+   * table rather than its own.
+   *
+   * ⚠ NOT READ BY `scatterAt`. A boulder is a multi-block LANDFORM placed by a per-chunk feature
+   * pass (`boulders.ts`, beside the tree planter), not a cell of ground cover, so it never reaches
+   * the h+1 ladder. The dial is here because "what does this land shed" is one question; the
+   * placement lives with the thing it places.
+   */
+  boulderK: number
 }
 
 /**
@@ -108,6 +118,7 @@ export const MUSHROOM_DENSITY = 0.018
 export const MAX_ROCK_K = 3.0      // crag
 export const MAX_DEADFALL_K = 2.2  // deepwood
 export const MAX_MUSHROOM_K = 2.4  // deepwood
+export const MAX_BOULDER_K = 3.0   // crag
 
 /**
  * The cheap gate's upper bound — the loosest sum the per-cell ladder can ever reach.
@@ -171,15 +182,15 @@ const hash01 = (x: number, z: number, seed: number): number => {
  * rocks without either.
  */
 export const SCATTER_DRESS: Readonly<Record<LandId, ScatterDials>> = {
-  meadow:    { rockK: 0.15, deadfallK: 0.10, mushroomK: 0.15 },
-  woodland:  { rockK: 0.30, deadfallK: 1.00, mushroomK: 0.90 },
-  deepwood:  { rockK: 0.35, deadfallK: 2.20, mushroomK: 2.40 },
-  dell:      { rockK: 0.20, deadfallK: 0.60, mushroomK: 1.60 },
-  marsh:     { rockK: 0.10, deadfallK: 0.80, mushroomK: 2.00 },
-  tableland: { rockK: 1.10, deadfallK: 0.20, mushroomK: 0.10 },
-  barrens:   { rockK: 1.60, deadfallK: 0.25, mushroomK: 0.05 },
-  highland:  { rockK: 2.00, deadfallK: 0.15, mushroomK: 0.20 },
-  crag:      { rockK: 3.00, deadfallK: 0,    mushroomK: 0 },
+  meadow:    { rockK: 0.15, deadfallK: 0.10, mushroomK: 0.15, boulderK: 0.15 },
+  woodland:  { rockK: 0.30, deadfallK: 1.00, mushroomK: 0.90, boulderK: 0.30 },
+  deepwood:  { rockK: 0.35, deadfallK: 2.20, mushroomK: 2.40, boulderK: 0.35 },
+  dell:      { rockK: 0.20, deadfallK: 0.60, mushroomK: 1.60, boulderK: 0.20 },
+  marsh:     { rockK: 0.10, deadfallK: 0.80, mushroomK: 2.00, boulderK: 0.05 },
+  tableland: { rockK: 1.10, deadfallK: 0.20, mushroomK: 0.10, boulderK: 0.90 },
+  barrens:   { rockK: 1.60, deadfallK: 0.25, mushroomK: 0.05, boulderK: 1.40 },
+  highland:  { rockK: 2.00, deadfallK: 0.15, mushroomK: 0.20, boulderK: 2.20 },
+  crag:      { rockK: 3.00, deadfallK: 0,    mushroomK: 0,    boulderK: 3.00 },
 }
 
 /**
@@ -196,14 +207,15 @@ export function scatterCharacterAt(
   cfg: BiomeConfig = DEFAULT_BIOME, hcfg: HeightConfig = DEFAULT_HEIGHT,
 ): ScatterDials {
   const w = landMix(x, z, seed, cfg, hcfg)
-  let rockK = 0, deadfallK = 0, mushroomK = 0
+  let rockK = 0, deadfallK = 0, mushroomK = 0, boulderK = 0
   for (let i = 0; i < w.length; i++) {
     const d = dress[LAND_IDS[i]]
     rockK += w[i] * d.rockK
     deadfallK += w[i] * d.deadfallK
     mushroomK += w[i] * d.mushroomK
+    boulderK += w[i] * d.boulderK
   }
-  return { rockK, deadfallK, mushroomK }
+  return { rockK, deadfallK, mushroomK, boulderK }
 }
 
 /**

@@ -36,6 +36,7 @@ import { plantWaystones } from './story-path'
 import { carveStack, type CarveConfig, DEFAULT_CARVE } from './carve'
 import { placeOre, type OreBatch, ORE_BATCHES } from './ore'
 import { plantTrees, type TreeConfig, DEFAULT_TREES } from './trees'
+import { plantBoulders, type BoulderConfig, DEFAULT_BOULDERS } from './boulders'
 import { placeSites } from './sites'
 import { slumpMask } from './slump'
 import { plantMaterialAt } from './flora'
@@ -69,6 +70,7 @@ export interface ColumnConfig {
   carve: CarveConfig
   ore: OreBatch[]
   trees: TreeConfig
+  boulders: BoulderConfig
 }
 
 export const DEFAULT_COLUMN: ColumnConfig = {
@@ -79,6 +81,7 @@ export const DEFAULT_COLUMN: ColumnConfig = {
   carve: DEFAULT_CARVE,
   ore: ORE_BATCHES,
   trees: DEFAULT_TREES,
+  boulders: DEFAULT_BOULDERS,
 }
 
 export class Column {
@@ -359,6 +362,23 @@ export function generateColumn(
     // trunk is never planted on a block that later becomes a cave mouth.
     plantTrees(col.sections, wx, 0, wz, SECTION, seed, surfaceAt,
       (x, z, h) => materialAt(x, h, z, seed, h, cfg.depth, cfg.height), cfg.trees)
+    // ── ★★ BOULDERS GO AFTER THE TREES, AND THE ORDER IS LOAD-BEARING IN BOTH DIRECTIONS ──────
+    // AFTER, because before-trees would let a trunk grow straight out of solid rock: `plantTrees`
+    // asks the GENERATED surface material, never what has been written into the column, so it can
+    // never see a boulder that is already there.
+    //
+    // ★ AND THIS ORDER IS ALSO WHAT PROTECTS BOULDERS FROM ORE — for free. The pipeline is
+    // `depth → pre-carve ore → carvers → post-carve ore → vegetation`, so ore cannot land INSIDE a
+    // boulder: those cells do not exist when either ore phase runs, and `placeOre` discards mass
+    // above the surface anyway.
+    //
+    // ⚠ THE REVERSE IS NOT FREE, AND `plantBoulders` OWNS IT. Landing last means a boulder writes
+    // on top of whatever is already there, and several ore batches ship `discardOnAirExposure: 0`
+    // (tier-4 `ather_crystal` deliberately, so carvers slice it open) — so ore DOES reach exposed
+    // positions a boulder can find. Its `put` refuses logs, leaves and ore for that reason. Without
+    // it, a boulder on an outcrop silently turns an element crystal into stone that drops rubble,
+    // moving the rarity of a third of the evolution grid with nothing looking wrong.
+    plantBoulders(col.sections, wx, 0, wz, SECTION, seed, surfaceAt, cfg.depth.seaLevel, cfg.boulders)
     // Sites go LAST: a ruin wall punches through whatever the fringe planted, never the reverse.
     placeSites(col.sections, wx, 0, wz, SECTION, seed)
     // …except the waystones, which go after even the sites: the story road's lit posts are the

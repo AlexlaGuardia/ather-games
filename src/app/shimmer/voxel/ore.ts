@@ -40,6 +40,18 @@ export const ORE = {
   ATHER_CRYSTAL: 22,
 } as const
 
+/**
+ * Is this material an ore? Contiguous range, same idiom as `isPlant`/`isHerb`/`isScatter`.
+ *
+ * ★ NAMED HERE, AND THE REASON IS THE BOULDER PASS (2026-08-19). Anything that WRITES into finished
+ * stone after the ore phases has to be able to ask "am I about to overwrite ore", and the answer
+ * has to have exactly one definition. A hand-written list in the caller is how the eighth ore ships
+ * one day and something quietly starts eating it.
+ *
+ * ⚠ KEEP 16-22 CONTIGUOUS, for the same reason the plant ranges say so.
+ */
+export const isOre = (m: number): boolean => m >= ORE.RAW_MANA && m <= ORE.ATHER_CRYSTAL
+
 /** Which element a crystal is, resolved at PLACEMENT (steal #11) rather than rolled on break. */
 const ELEMENTS = [ORE.ELEMENT_VIOLET, ORE.ELEMENT_STORM, ORE.ELEMENT_EARTH, ORE.ELEMENT_WATER]
 

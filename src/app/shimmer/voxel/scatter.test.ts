@@ -18,7 +18,7 @@
 import {
   SCATTER, SCATTER_DRESS, scatterAt, scatterCharacterAt,
   ROCK_DENSITY, DEADFALL_DENSITY, MUSHROOM_DENSITY,
-  MAX_ROCK_K, MAX_DEADFALL_K, MAX_MUSHROOM_K,
+  MAX_ROCK_K, MAX_DEADFALL_K, MAX_MUSHROOM_K, MAX_BOULDER_K,
   DEADFALL_MIN_LEN, DEADFALL_MAX_LEN, DEADFALL_MEAN_LEN,
   CLUMP_SCALE, CLUMP_EDGE, CLUMP_OUTSIDE, OPEN_SHADE, SCATTER_CEIL_GATE, clumpAt, type ScatterDials,
 } from './scatter'
@@ -36,7 +36,7 @@ const SEED = 1337
 // ★ AND `npx tsx` RAN ALL THREE VERSIONS HAPPILY — esbuild strips types, it does not check them.
 // A green test run is not a typecheck; `npx tsc --noEmit` is the instrument for that question.
 const only = (d: Partial<ScatterDials>) => {
-  const full: ScatterDials = { rockK: 0, deadfallK: 0, mushroomK: 0, ...d }
+  const full: ScatterDials = { rockK: 0, deadfallK: 0, mushroomK: 0, boulderK: 0, ...d }
   return () => full
 }
 
@@ -72,11 +72,12 @@ const only = (d: Partial<ScatterDials>) => {
   ok(maxOf(d => d.rockK) === MAX_ROCK_K, `MAX_ROCK_K tracks the table (${maxOf(d => d.rockK)} vs ${MAX_ROCK_K})`)
   ok(maxOf(d => d.deadfallK) === MAX_DEADFALL_K, `MAX_DEADFALL_K tracks the table (${maxOf(d => d.deadfallK)} vs ${MAX_DEADFALL_K})`)
   ok(maxOf(d => d.mushroomK) === MAX_MUSHROOM_K, `MAX_MUSHROOM_K tracks the table (${maxOf(d => d.mushroomK)} vs ${MAX_MUSHROOM_K})`)
+  ok(maxOf(d => d.boulderK) === MAX_BOULDER_K, `MAX_BOULDER_K tracks the table (${maxOf(d => d.boulderK)} vs ${MAX_BOULDER_K})`)
 
   // Every land is present and finite — a missing key is a land that silently sheds nothing.
   ok(LAND_IDS.every(id => {
     const d = SCATTER_DRESS[id]
-    return d && [d.rockK, d.deadfallK, d.mushroomK].every(v => Number.isFinite(v) && v >= 0)
+    return d && [d.rockK, d.deadfallK, d.mushroomK, d.boulderK].every(v => Number.isFinite(v) && v >= 0)
   }), 'every land has finite non-negative dials')
 }
 
