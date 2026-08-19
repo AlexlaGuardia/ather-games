@@ -3,8 +3,8 @@
 // ★ PURE CORE. No react/three/DOM, no imports from outside this folder (purity.test.ts enforces).
 //
 // ★ SELECTION ONLY, NEVER SURFACE TRUTH — the same split flora.ts draws, for the same reason. This
-// file answers "would a rinning spot be HERE?" from the fields everything else reads (the river
-// field, the water table, sea level). It deliberately does NOT check that the voxel is water: the
+// file answers "is this water, which water is it, and is this stretch alive?" from the fields
+// everything else reads (the river field, the water table, sea level). It deliberately does NOT check that the voxel is water: the
 // renderer verifies the LIVE voxel at instance time, which is what keeps spots out of player-dug
 // holes, off bridge decks and out of a fold's plot without this file re-deriving materials.
 //
@@ -46,12 +46,26 @@ export const RIN_LAKE = 3   // canon: "lake edge"  — level 7, 8 catches, 12 mi
 export type RinKind = typeof RIN_NONE | typeof RIN_POND | typeof RIN_STREAM | typeof RIN_LAKE
 
 /**
- * Spot field scale — a stretch of good water is tens of blocks long, not one cell. Deliberately
- * coarser than a flower drift (90): a pond you can fish should be a pond, not a patch inside one.
+ * ── ★★ ALL WATER IS CASTABLE. THE FIELD MARKS WHICH WATER IS ALIVE (Alex, 2026-08-19) ───────────
+ * The first cut gated castability on this field, so ~30% of water held a spot. That was a SECOND
+ * scarcity axis, and canon had already chosen its first: **depletion** — 3 / 5 / 8 catches by spot
+ * type, then a respawn timer. Canon's own line is *"water features in your domain serve as fishing
+ * spots"*, which reads as *any* water, and Minecraft (the reference Alex named) lets you fish
+ * anywhere at all. Two scarcity mechanisms stacked is how a keeper ends up walking a shoreline
+ * that refuses them for reasons the game never explains.
+ *
+ * So the gate is gone and the field survives with a better job: **liveliness**. Every water column
+ * can be fished; the field says which stretches are visibly ALIVE — where rise-marks dimple the
+ * surface and (the host's call) where the table leans richer. Water still has good places and quiet
+ * places, which is what the field was really for; it just no longer says no.
+ *
+ * ★ The shape rule is unchanged and is the reason this is a field at all: liveliness is a PLACE,
+ * tens of blocks across. A per-column roll would speckle rise-marks over the whole surface and read
+ * as static rather than as a stretch of water worth standing at.
  */
 export const SPOT_SCALE = 120
-/** Spot field above this = this stretch of water holds a spot. Rarity is the point — see below. */
-export const SPOT_EDGE = 0.62
+/** Liveliness field above this = a lively stretch. NOT a gate on fishing — see above. */
+export const LIVELY_EDGE = 0.62
 
 /**
  * ── ★ THE CHEAP GATE, AND IT IS THE SAME ONE THE WATER TABLE USES ───────────────────────────────
@@ -99,6 +113,11 @@ export interface RinSpot {
   kind: RinKind
   /** 0..1 deterministic per-column roll — the host maps it to bob phase so a shore isn't in lockstep. */
   variant: number
+  /**
+   * Is this stretch of water visibly alive? Drives rise-marks, and the host may lean the catch
+   * table with it. NEVER a gate on casting — quiet water is fishable water, it is just quiet.
+   */
+  lively: boolean
   /** The water surface this spot sits on. The host puts the float here; it never guesses a y. */
   surfaceY: number
 }
@@ -115,12 +134,17 @@ export interface RinSpot {
 export function rinSpotAt(x: number, z: number, seed: number): RinSpot | null {
   const kind = rinKindAt(x, z, seed)
   if (kind === RIN_NONE) return null
-  if (value2(x / SPOT_SCALE, z / SPOT_SCALE, seed ^ 0x51ff) < SPOT_EDGE) return null
   return {
     kind,
     variant: hash01(x, z, seed ^ 0x9e37),
+    lively: livelyAt(x, z, seed),
     surfaceY: waterSurfaceAt(x, z, seed),
   }
+}
+
+/** Is this stretch of water visibly alive? Pure, field-driven, and a PLACE rather than a speckle. */
+export function livelyAt(x: number, z: number, seed: number): boolean {
+  return value2(x / SPOT_SCALE, z / SPOT_SCALE, seed ^ 0x51ff) >= LIVELY_EDGE
 }
 
 const hash01 = (x: number, z: number, seed: number): number => {

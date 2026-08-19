@@ -15,7 +15,7 @@
 // measure terrain, and it fails by CRASHING rather than by asserting, which reads as a broken test
 // rather than a broken world (slump.test.ts, same day). Sample far out in open country.
 
-import { rinSpotAt, rinKindAt, isWaterColumn, RIN_NONE, RIN_POND, RIN_STREAM, RIN_LAKE, SPOT_SCALE, SPOT_EDGE } from './rin-water'
+import { rinSpotAt, rinKindAt, isWaterColumn, livelyAt, RIN_NONE, RIN_POND, RIN_STREAM, RIN_LAKE, SPOT_SCALE, LIVELY_EDGE } from './rin-water'
 import { columnHeight, riverCarve, waterSurfaceAt, RIVER_DEPTH } from './height'
 import { DEFAULT_DEPTH } from './depth'
 
@@ -27,9 +27,10 @@ const ok = (c: boolean, m: string) => { if (c) pass++; else fails.push(m) }
 
 // ── 1. THE GATE IS HONEST — every spot is on water, and water is the only thing it admits ───────
 {
-  let spots = 0, drySpots = 0, kindMismatch = 0
+  let spots = 0, drySpots = 0, kindMismatch = 0, waterCols = 0
   for (let i = 0; i < 60000; i++) {
     const x = FAR + (i * 37) % 900, z = FAR + Math.floor(i / 900) * 7
+    if (isWaterColumn(x, z, SEED)) waterCols++
     const s = rinSpotAt(x, z, SEED)
     if (!s) continue
     spots++
@@ -38,6 +39,7 @@ const ok = (c: boolean, m: string) => { if (c) pass++; else fails.push(m) }
   }
   ok(spots > 50, `found rinning spots to check (${spots})`)
   ok(drySpots === 0, `★ no rinning spot on dry land (${drySpots})`)
+  ok(spots === waterCols, `★★ ALL water is castable — depletion paces rinning, not spot rarity (${spots}/${waterCols})`)
   ok(kindMismatch === 0, `spot kind always agrees with rinKindAt (${kindMismatch})`)
 }
 
@@ -63,11 +65,16 @@ const ok = (c: boolean, m: string) => { if (c) pass++; else fails.push(m) }
   ok(streamNotCarved === 0, `every stream spot is genuinely in a channel (${streamNotCarved})`)
 }
 
-// ── 3. ★★ A SPOT IS A PLACE, NOT A SPECKLE — the assert that measures SHAPE, not amount ─────────
+// ── 3. ★★ LIVELINESS IS A PLACE, NOT A SPECKLE — the assert that measures SHAPE, not amount ─────
 // The failure this catches: a per-column roll. Its tell is a mean run length near 1 — the chessboard
 // stated as a number rather than as an adjective. Walk scanlines through water and measure how long
-// a spot stays on once it starts. A field-driven spot should run for many blocks; a per-column roll
+// liveliness stays on once it starts. A field-driven answer runs for many blocks; a per-column roll
 // cannot exceed ~1/(1-p) by construction.
+//
+// ⚠ THIS ASSERT OUTLIVED THE THING IT WAS WRITTEN FOR, ON PURPOSE. It first guarded a castability
+// gate; that gate is gone (all water is castable now, depletion paces instead). The shape rule was
+// never really about the gate — it is about rise-marks reading as a stretch of living water rather
+// than as static on the surface — so it moved to the field that kept the job.
 {
   let runs = 0, runBlocks = 0, longest = 0
   for (let row = 0; row < 400; row++) {
@@ -75,16 +82,16 @@ const ok = (c: boolean, m: string) => { if (c) pass++; else fails.push(m) }
     let run = 0
     for (let x = FAR; x < FAR + 1200; x++) {
       const wet = isWaterColumn(x, z, SEED)
-      const on = wet && rinSpotAt(x, z, SEED) !== null
+      const on = wet && livelyAt(x, z, SEED)
       if (on) { run++ }
       else if (run > 0) { runs++; runBlocks += run; longest = Math.max(longest, run); run = 0 }
     }
     if (run > 0) { runs++; runBlocks += run; longest = Math.max(longest, run) }
   }
   const mean = runs ? runBlocks / runs : 0
-  ok(runs > 20, `found spot runs to measure (${runs})`)
-  ok(mean > 6, `★★ a spot is a PLACE — mean run ${mean.toFixed(2)} blocks (a per-column roll gives ~1)`)
-  ok(longest > 20, `★ some stretch of water is a real fishing bank (longest run ${longest})`)
+  ok(runs > 20, `found lively runs to measure (${runs})`)
+  ok(mean > 6, `★★ liveliness is a PLACE — mean run ${mean.toFixed(2)} blocks (a per-column roll gives ~1)`)
+  ok(longest > 20, `★ some stretch of water is a real living bank (longest run ${longest})`)
 }
 
 // ── 4. ★★ PLACEMENT DOES NOT READ THE GROUND — the anti-drift rule, held as source ──────────────
@@ -111,19 +118,28 @@ const ok = (c: boolean, m: string) => { if (c) pass++; else fails.push(m) }
     checked++
     if (a.surfaceY !== waterSurfaceAt(x, z, SEED)) wrongSurface++
     const b = rinSpotAt(x, z, SEED)
-    if (b?.variant !== a.variant || b?.kind !== a.kind) unstable++
+    if (b?.variant !== a.variant || b?.kind !== a.kind || b?.lively !== a.lively) unstable++
   }
   ok(checked > 30, `spots to check for surface + determinism (${checked})`)
   ok(wrongSurface === 0, `★ surfaceY is the water table's answer, never a guess (${wrongSurface})`)
   ok(unstable === 0, `pure — same column, same answer (${unstable})`)
 }
 
-// ── 6. THE FIELD IS A DIAL THAT WORKS IN BOTH DIRECTIONS ────────────────────────────────────────
-// A rarity constant nobody can move is a constant that will be wrong forever. Assert the field is
-// actually load-bearing: raising SPOT_EDGE must reduce spots. Guards a dead gate.
+// ── 6. QUIET WATER IS STILL FISHABLE, AND BOTH KINDS OF WATER EXIST ─────────────────────────────
+// ★ The rule that keeps the gate from growing back: a spot must be returned for lively AND quiet
+// water alike. If someone ever re-couples castability to the field, this goes red.
 {
-  ok(SPOT_EDGE > 0 && SPOT_EDGE < 1, `SPOT_EDGE is a real threshold (${SPOT_EDGE})`)
-  ok(SPOT_SCALE > 90, `★ spot regions are coarser than a flower drift (${SPOT_SCALE} > 90)`)
+  ok(LIVELY_EDGE > 0 && LIVELY_EDGE < 1, `LIVELY_EDGE is a real threshold (${LIVELY_EDGE})`)
+  ok(SPOT_SCALE > 90, `★ lively regions are coarser than a flower drift (${SPOT_SCALE} > 90)`)
+  let quietFishable = 0, livelyFishable = 0
+  for (let i = 0; i < 120000; i++) {
+    const x = FAR + (i * 29) % 1500, z = FAR + Math.floor(i / 1500) * 7
+    const s = rinSpotAt(x, z, SEED)
+    if (!s) continue
+    if (s.lively) livelyFishable++; else quietFishable++
+  }
+  ok(quietFishable > 100, `★★ QUIET water is fishable water (${quietFishable} quiet spots)`)
+  ok(livelyFishable > 100, `lively water exists too (${livelyFishable})`)
 }
 
 console.log(fails.length ? `❌ ${fails.length} failed:\n  ${fails.join('\n  ')}` : `✅ the water knows where it can be fished — ${pass} passed`)
