@@ -39,13 +39,29 @@ import { salvageItems, salvageMessage } from '../voxel/salvage'
 import { blockDef, materialForItem, emitOf, BLOCKS, type BlockSkill } from '../voxel/registry'
 import { editIndex, recordEdit, applyEdits, packEdits, unpackEdits, isStale, GENERATOR_VERSION, type ColumnEdits } from '../voxel/edits'
 import { generatePlotColumn, plotGeneratedVoxel } from '../voxel/plot-column'
-import { plotThreshold, hasFallenOut, chestCap, plotStandY, plotForTier, plotHeight, PLOT_TIERS, type PlotConfig } from '../voxel/plot'
+import { plotThreshold, hasFallenOut, chestCap, plotStandY, plotCaveStand, plotForTier, plotHeight, PLOT_TIERS, type PlotConfig } from '../voxel/plot'
 /**
  * How far inside their own fold a keeper lands when they step through — blocks, along the door's
  * bearing. Far enough that the seam is fully in frame, near enough that leaving is one step back.
  * ⚠ Must stay OUTSIDE `PLOT_TRIGGER_RADIUS` or arrival re-fires the crossing the latch just caught.
+ *
+ * ── ★★ DERIVED FROM THE CAVE, NOT A CONSTANT ANY MORE (2026-08-19) ─────────────────────────────
+ * The flat 6 was measured against a door standing in open ground. The cloud cave puts a 13-block
+ * tunnel in front of that door, so 6 now lands the keeper **five blocks inside a cloud pipe**,
+ * nose to the shimmer, with their own garden entirely out of frame. That is not a worse camera
+ * angle, it is the *original* 08-19 complaint restored by a different wall — you come home and
+ * cannot see home.
+ *
+ * Standing clear of the mouth instead, the arrival is the establishing shot the mound was built to
+ * be: the whole cave in frame, the shimmer lit in its arch, the garden opening away on both sides.
+ * The keeper learns the landmark at the one moment they are guaranteed to be looking at it.
+ *
+ * ⚠ IT HAS TO TRACK `cave.depth`, WHICH IS WHY IT IS A FUNCTION. Pinned as a literal it silently
+ * goes wrong the day anyone tunes the mound — and the failure is invisible in the diff and obvious
+ * only in play, three deploys later.
  */
-const ARRIVE_STANDOFF = 6
+const arriveStandoff = (cfg: PlotConfig) =>
+  cfg.cave ? cfg.thresholdInset + cfg.cave.depth + 3 : 6
 import { foldLedger, foldOwed, foldProgressLine, tierRadius, TIER_NEED } from './fold-ledger'
 import { createSpiritIndex, markSeen, indexToSave, indexFromSave, type SpiritIndex, type IndexSave } from '../engine/spirit-index'
 // ⚠ `WILDS_BUBBLE` (from column.ts, imported above), NEVER `bubble.ts`'s `DEFAULT_BUBBLE`. The
@@ -3551,7 +3567,23 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
     cmdOut.current = {
       tp: (x: number, z: number) => {
         const lc = loco.current
-        const h = columnHeight(x, z, SEED)
+        // ── ⚠⚠ THE GARDEN'S FLOOR, NOT THE CONTINENT'S (2026-08-19) ──────────────────────────
+        // `columnHeight` is the Wilds' generator and it answers for coordinates in the fold too —
+        // confidently, and ~40 blocks wrong: the country sits near y135 where the garden's ground
+        // is y97. So every `/tp` inside a fold dropped the keeper into open sky, they fell past
+        // their own island, and `hasFallenOut` caught them and set them back on the threshold. The
+        // visible symptom is a teleport that "doesn't work" — you end up at your door every time,
+        // several seconds later, having gone nowhere near where you asked for.
+        //
+        // ★ THIRD TIME THIS FILE HAS MADE THIS EXACT MISTAKE, and the note is worth the space
+        // because the shape is always the same: the restore clamp used the continent's surface,
+        // the settle gate probed the continent's altitude after a crossing, and now the teleport.
+        // **Any code that turns an (x, z) into a standing y must ask which space it is in first.**
+        // `plotHeight` returns null off the island, which is the honest answer for "there is no
+        // ground there" — fall back to the plane rather than inventing one.
+        const inPlot = space.current === 'plot'
+        const ph = inPlot ? plotHeight(x, z, SEED, plotCfg.current) : null
+        const h = inPlot ? (ph ?? plotCfg.current.baseY) : columnHeight(x, z, SEED)
         lc.px = x + 0.5; lc.py = h + 1; lc.pz = z + 0.5
         lc.vy = 0; lc.hvx = 0; lc.hvz = 0; lc.airborne = false; lc.stepSmooth = 0
         camera.position.set(lc.px, eyeY(lc), lc.pz)
@@ -3756,7 +3788,15 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
         onSay('you were adrift inside your own fold — the glade has you back')
       } else {
         space.current = savedSpace
-        lc.px = p.x; lc.pz = p.z
+        // ⚠ THE CAVE MOVED SOLID CLOUD INTO THE ONE SPOT EVERY KEEPER HAS STOOD (2026-08-19). The
+        // mound is 24 blocks wide and sits at the door; a save taken where its flank now is would
+        // reopen walled into cloud, and the autosave would write that position straight back — the
+        // 08-18 burial arriving by a different road. `plotCaveStand` sets them at the mouth.
+        // Wilds positions are untouched: there is no cave out there to be inside of.
+        const clear = savedSpace === 'plot'
+          ? plotCaveStand(p.x, p.y, p.z, SEED, plotCfg.current)
+          : { x: p.x, z: p.z }
+        lc.px = clear.x; lc.pz = clear.z
         // ⚠ The surface clamp is the CONTINENT's and would drag a plot position up to Wilds
         // altitude (~130 against the garden's 96) — so the garden does NOT take this one. What it
         // takes instead is its OWN (`plotStandY`), which is the 2026-08-18 fix: this line used to
@@ -3765,8 +3805,11 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
         // RISES (see `plotHeight`), so ground can close over a stored standing position and leave
         // the keeper walled into their own topsoil, unable to move — and the autosave writes that
         // position back, so a reload cannot escape it. See `plotStandY` for the whole account.
+        // ⚠ CLAMPED AT THE **CLEARED** COLUMN, NOT THE STORED ONE. Ejecting sideways and then
+        // asking the old column for its floor is how a rescue drops somebody through the ground it
+        // just moved them to — the two lines have to agree on where the keeper now is.
         lc.py = savedSpace === 'plot'
-          ? plotStandY(p.x, p.y, p.z, SEED, plotCfg.current)
+          ? plotStandY(clear.x, p.y, clear.z, SEED, plotCfg.current)
           : Math.max(p.y, columnHeight(Math.floor(p.x), Math.floor(p.z), SEED) + 1)
       }
       // The plot's chest census normally rides `enterSpace`, which a direct restore never calls.
@@ -4179,8 +4222,9 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
       // the camera, so "a step in the air" is the shape that hangs physics.
       const t = plotThreshold(SEED, plotCfg.current)
       const b = plotCfg.current.thresholdBearing
-      const bx = Math.round(t.x - Math.cos(b) * ARRIVE_STANDOFF)
-      const bz = Math.round(t.z - Math.sin(b) * ARRIVE_STANDOFF)
+      const standoff = arriveStandoff(plotCfg.current)
+      const bx = Math.round(t.x - Math.cos(b) * standoff)
+      const bz = Math.round(t.z - Math.sin(b) * standoff)
       const bh = plotHeight(bx, bz, SEED, plotCfg.current)
       // A fold small enough that six blocks inland is off the island falls back to the threshold —
       // the door is still the safe cell, and this is a view preference, never a correctness one.

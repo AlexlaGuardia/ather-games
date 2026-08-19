@@ -12,7 +12,8 @@
 import {
   DEFAULT_PLOT, plotHeight, plotMaterialAt, keelDepth, edgeAt,
   insideCore, withinCap, inWall, distFromCentre, plotYRange, columnSpan,
-  plotThreshold, hasFallenOut, chestCap, plotStandY, type PlotConfig, plotForTier, PLOT_TIERS } from './plot'
+  plotThreshold, hasFallenOut, chestCap, plotStandY, type PlotConfig, plotForTier, PLOT_TIERS,
+  caveAt, caveAnchor, plotCaveStand } from './plot'
 import { AIR } from './section'
 
 let pass = 0, fail = 0
@@ -154,7 +155,13 @@ console.log('\nthe stack')
     if (!s) continue
     if (plotMaterialAt(x, s.bottom - 1, z, SEED) !== AIR) spanWrong++
     if (plotMaterialAt(x, s.top, z, SEED) === AIR) spanWrong++
-    if (plotMaterialAt(x, s.top + 1, z, SEED) !== AIR) spanWrong++
+    // ⚠ `columnSpan` DESCRIBES THE **GROUND** COLUMN, and since 2026-08-19 that is no longer the
+    // only solid a column can hold: the cloud cave is a separate body standing above the turf at
+    // the door. So the "nothing above the turf" clause asks the cave whether it claims the cell —
+    // it is NOT excused for being near the door. Anything solid up there that the cave does not
+    // own is still a failure, which is the whole reason this clause exists.
+    const above = plotMaterialAt(x, s.top + 1, z, SEED)
+    if (above !== AIR && caveAt(x, s.top + 1, z, SEED) !== 'shell') spanWrong++
   }
   check('the declared span matches the solid voxels', spanWrong === 0, `${spanWrong} mismatches`)
 }
@@ -179,7 +186,15 @@ console.log('\nthe wall and the void')
   // bearing 0 the wall is at 27-28 while `capRadius + 1` is 31 — out in the void, and all three
   // asserts below went red reporting AIR as though the wall had stopped generating. **Exactly the
   // `onShell` bug from this morning's bubble work, in a second file, the same day.** Ask the shape.
-  const wx = Math.ceil(edgeAt(1, 0, SEED)) + 1
+  //
+  // ⚠⚠ AND IT IS SAMPLED AWAY FROM THE DOOR NOW (2026-08-19), WHICH THE ORACLE ITSELF DEMANDED.
+  // `thresholdBearing` is 0, so +X was the one bearing on the whole ring where the wall is no longer
+  // plain wall — the cloud cave stands there and rises six blocks over it. `the wall has a top` went
+  // red reporting cloud where it wanted air, and it was **right**: it was measuring the mound and
+  // calling it the wall. Three asserts about the ring have to stand somewhere the ring is a ring.
+  // Sampled at -X, derived from `edgeAt` at that bearing for the same reason the +X sample was.
+  const wb = Math.PI
+  const wx = -(Math.ceil(edgeAt(Math.cos(wb), Math.sin(wb), SEED)) + 1)
   check('the wall stands above the ground plane',
     plotMaterialAt(wx, DEFAULT_PLOT.baseY + DEFAULT_PLOT.wallHeight, 0, SEED) === M.wall)
   check('the wall skirts below it',
@@ -317,7 +332,15 @@ console.log('\ngrowth')
     if (!insideCore(x, z, SEED)) continue
     for (let y = min; y <= max; y++) {
       const a = plotMaterialAt(x, y, z, SEED), b = plotMaterialAt(x, y, z, SEED, grown)
-      if (a !== AIR && b === AIR) taken++
+      // ⚠ THE DOOR'S OWN CLOUD IS EXEMPT, AND ONLY IT (2026-08-19). The cave is anchored to the
+      // COAST, so a fold that grows carries its front door outward with it and the old mound's
+      // cloud goes — 1,658 voxels of it, which is what tripped this assert. That is not the loss
+      // this clause guards: nothing can be built on `CLOUD_WALL` (`hardness: Infinity`, not
+      // placeable), nobody can be standing inside it (`plotCaveStand`), and a door that stayed
+      // behind when the coast moved would be a door in the middle of a field — the exact 08-16 bug
+      // this file was rewritten to kill. The exemption asks `caveAt` at the OLD config, so any
+      // other voxel the growth removes still fails.
+      if (a !== AIR && b === AIR && caveAt(x, y, z, SEED) !== 'shell') taken++
       if (a === AIR && b !== AIR) added++
     }
   }
@@ -479,14 +502,170 @@ console.log('\nthe threshold')
 
   // ★ AND THE ANSWER IS ALWAYS SOMEWHERE THE GENERATOR CALLS AIR — the property the keeper actually
   // cares about, asked of `plotMaterialAt` rather than re-derived from `plotHeight`.
+  //
+  // ⚠⚠ IT ASKS THE **PAIR**, BECAUSE THE HOST APPLIES THE PAIR (2026-08-19). `plotStandY` alone went
+  // red on **126 columns** the moment the cloud cave landed, and it was telling the truth: the
+  // vertical clamp lifts a keeper to `h + 1`, and at the door `h + 1` is now inside a mound. The
+  // fix is not to soften this assert — it is that a sideways eject exists (`plotCaveStand`) and the
+  // restore site runs both. Testing `plotStandY` on its own here would have quietly certified half
+  // a rescue, which is the shape of the bug this whole section was written for.
   let solid = 0
   for (const [x, z] of columns()) {
     const hh = plotHeight(x, z, SEED)
     if (hh === null) continue
-    if (plotMaterialAt(x, plotStandY(x, hh, z, SEED), z, SEED) !== AIR) solid++
+    const y = plotStandY(x, hh, z, SEED)
+    const c = plotCaveStand(x, y, z, SEED)
+    const cy = plotStandY(c.x, y, c.z, SEED)
+    if (plotMaterialAt(Math.floor(c.x), cy, Math.floor(c.z), SEED) !== AIR) solid++
   }
   check('and every restored keeper stands in air, not in a block',
     solid === 0, `${solid} columns restore into solid ground`)
+}
+
+// ── the cloud cave ────────────────────────────────────────────────────────────
+// ★★ THE CLAIM UNDER TEST IS "A DOOR YOU CAN SEE AND WALK THROUGH", and it splits into two halves
+// that fail in opposite directions. Too little cloud and there is no landmark — the 08-19 complaint
+// ("it blends too well") unfixed. Too much and the mound seals the doorway it is supposed to
+// announce, which is worse than the bug it replaces, because a keeper who cannot find their door
+// will keep looking and a keeper whose door is bricked up will conclude the game is broken.
+//
+// ⚠ SWEPT ACROSS SEEDS, NOT SPOT-CHECKED. The cave is anchored to `edgeAt`, which wobbles the coast
+// by up to 18% with the seed, and `seam.ts` has the scar from exactly this: a flat quad that passed
+// on the seed it was written against and missed the wall on **2 of 6** others. A shape pinned to a
+// wobbling surface is only ever proven by sweeping the wobble.
+console.log('\nthe cloud cave')
+{
+  const SEEDS = [1, 2, 3, 7, 11, 23]
+  const C = DEFAULT_PLOT.cave!
+
+  // ★ THE MOUTH IS WALKABLE END TO END. Head height as well as foot height: a bore that clears the
+  // feet and not the head is a doorway you crouch-walk into, and nothing in this game crouches.
+  let blocked = 0
+  for (const seed of SEEDS) {
+    const a = caveAnchor(seed)
+    for (let u = 1; u <= C.depth; u++) {
+      const x = Math.round(a.x - Math.cos(a.bearing) * u)
+      const z = Math.round(a.z - Math.sin(a.bearing) * u)
+      const h = plotHeight(x, z, seed)
+      if (h === null) continue
+      if (plotMaterialAt(x, h + 1, z, seed) !== AIR) blocked++
+      if (plotMaterialAt(x, h + 2, z, seed) !== AIR) blocked++
+    }
+  }
+  check('the mouth is open from the field to the back of the cave, on every seed',
+    blocked === 0, `${blocked} blocked cells`)
+
+  // ★★ AND IT IS OPEN WHERE THE CROSSING ACTUALLY FIRES. The trigger is a ball around the threshold,
+  // not a point; cloud anywhere a keeper can stand inside it is a keeper walking into their own
+  // front door and having nothing happen — `seam.ts` calls that a dead door and it is the one
+  // failure here with no error, no log and no way to tell it from a broken save.
+  let deadDoor = 0
+  for (const seed of SEEDS) {
+    const t = plotThreshold(seed)
+    for (let dx = -3; dx <= 3; dx++) for (let dz = -3; dz <= 3; dz++) {
+      if (dx * dx + dz * dz > 9) continue
+      const x = t.x + dx, z = t.z + dz
+      const h = plotHeight(x, z, seed)
+      if (h === null) continue                       // no ground: nowhere to stand, not a dead door
+      if (plotMaterialAt(x, h + 1, z, seed) !== AIR) deadDoor++
+    }
+  }
+  check('nothing stands in the trigger ball where a keeper could stand',
+    deadDoor === 0, `${deadDoor} standable cells are solid`)
+
+  // ★★ THE SHELL IS NEVER PIERCED — the pact `seam.ts` states for the Wilds side, owed here too. A
+  // cave is a hollow in a wall; the moment its bore runs past the coast it is a HOLE, with the void
+  // on the far side and nothing between a keeper and a fall. Asked as "the cave removes nothing
+  // outside the coast" rather than by re-deriving the bore's geometry, so a retune of `depth` or a
+  // dropped clip cannot pass by agreeing with a copy of itself.
+  const noCave: PlotConfig = { ...DEFAULT_PLOT, cave: undefined }
+  const { min, max } = plotYRange()
+  // ⚠ SWEPT AROUND THE DOOR, NOT OVER THE FOLD. `columns()` is 617x617 and at r300 a whole-island
+  // sweep across six seeds and a 50-block slab is ~100M generator calls — the first cut of this
+  // section ran past two minutes and got killed. The cave is a local object with a stated reach, so
+  // the honest window is its own footprint plus slack; anything outside it the cave cannot touch by
+  // construction, and `caveAt` returning null out there is the clip the next two asserts prove.
+  const reach = C.depth + C.halfWidth + 6
+  function* nearDoor(seed: number): Generator<[number, number]> {
+    const a = caveAnchor(seed)
+    const ax = Math.round(a.x), az = Math.round(a.z)
+    for (let x = ax - reach; x <= ax + reach; x++) for (let z = az - reach; z <= az + reach; z++) yield [x, z]
+  }
+  let pierced = 0, scenery = 0
+  for (const seed of SEEDS) {
+    for (const [x, z] of nearDoor(seed)) {
+      const outside = distFromCentre(x, z) > edgeAt(x, z, seed)
+      if (!outside) continue
+      for (let y = min; y <= max; y++) {
+        const withCave = plotMaterialAt(x, y, z, seed)
+        const without = plotMaterialAt(x, y, z, seed, noCave)
+        if (without !== AIR && withCave === AIR) pierced++
+        // ⚠ AND THE OTHER DIRECTION, past the wall's outer face: canon calls the void *"not to be
+        // dressed with scenery so it looks finished."* The first cut of `caveAt` clipped along the
+        // door's bearing only and left **296 cells** of cloud standing in the dark at the flanks,
+        // because the coast wobbles across a 24-block-wide mound.
+        if (withCave !== AIR && distFromCentre(x, z) > edgeAt(x, z, seed) + DEFAULT_PLOT.wallWidth) scenery++
+      }
+    }
+  }
+  check('the cave never opens a hole through the fold\'s shell', pierced === 0, `${pierced} voxels removed outside the coast`)
+  check('and never leaves cloud standing in the void', scenery === 0, `${scenery} voxels past the wall`)
+
+  // ★ IT IS A LANDMARK, WHICH IS THE ENTIRE REASON IT EXISTS. A mound that tops out level with the
+  // wall is a bump you find by walking into it — the bug, not the fix. Stated as a claim about the
+  // SKYLINE (cloud above the wall's own ceiling) rather than about `cave.height`, so tuning the
+  // numbers cannot quietly tune away the point of them.
+  let overWall = 0
+  for (const [x, z] of nearDoor(SEED)) {
+    for (let y = DEFAULT_PLOT.baseY + DEFAULT_PLOT.wallHeight + 1; y <= max; y++) {
+      if (plotMaterialAt(x, y, z, SEED) === M.wall) overWall++
+    }
+  }
+  check('the mound breaks the wall\'s skyline', overWall > 200, `only ${overWall} voxels stand above the wall`)
+
+  // ⚠ AND `plotYRange` COVERS IT. The range is not advice: `generatePlotColumn` writes only inside
+  // it, so a mound taller than the declared ceiling is a landmark with its top silently cropped —
+  // generated correctly and then thrown away by its own caller, with nothing thrown and nothing
+  // logged.
+  let cropped = 0
+  for (const seed of SEEDS) {
+    const a = caveAnchor(seed)
+    for (let y = max + 1; y <= max + C.height + 4; y++) {
+      if (caveAt(Math.round(a.x), y, Math.round(a.z), seed) !== null) cropped++
+    }
+  }
+  check('the declared y range contains the whole mound', cropped === 0, `${cropped} voxels above the ceiling`)
+
+  // ★ THE EJECT LANDS SOMEWHERE REAL. A rescue that sets a keeper down inside more cloud, or off the
+  // coast into the void, is the 08-18 burial with extra steps.
+  let bad = 0, moved = 0
+  for (const seed of SEEDS) {
+    const a = caveAnchor(seed)
+    for (let u = -1; u <= C.depth; u++) for (let v = -C.halfWidth; v <= C.halfWidth; v++) {
+      const cb = Math.cos(a.bearing), sb = Math.sin(a.bearing)
+      const x = Math.round(a.x - cb * u - sb * v), z = Math.round(a.z - sb * u + cb * v)
+      const y = a.y + 1
+      if (caveAt(x, y, z, seed) !== 'shell') continue
+      moved++
+      const c = plotCaveStand(x, y, z, seed)
+      const fx = Math.floor(c.x), fz = Math.floor(c.z)
+      const h = plotHeight(fx, fz, seed)
+      if (h === null) { bad++; continue }                       // set down over the void
+      if (caveAt(fx, h + 1, fz, seed) === 'shell') bad++        // set down in more cloud
+      if (plotMaterialAt(fx, h + 1, fz, seed) !== AIR) bad++    // set down inside a block
+    }
+  }
+  check('every keeper caught inside the mound is set down on open ground',
+    bad === 0 && moved > 0, `${bad} bad landings out of ${moved}`)
+
+  // ★ AND IT MOVES NOBODY ELSE. An eject that fires in the doorway would teleport a keeper every
+  // time they walked to their own door — `bore` is where the arrival deliberately lands.
+  const a1 = caveAnchor(SEED)
+  const inDoor = plotCaveStand(a1.x - Math.cos(a1.bearing) * 4, a1.y + 1, a1.z - Math.sin(a1.bearing) * 4, SEED)
+  check('standing in the doorway moves nobody',
+    inDoor.x === a1.x - Math.cos(a1.bearing) * 4 && inDoor.z === a1.z - Math.sin(a1.bearing) * 4)
+  const far = plotCaveStand(0, DEFAULT_PLOT.baseY + 4, 0, SEED)
+  check('and standing in the middle of the garden moves nobody', far.x === 0 && far.z === 0)
 }
 
 console.log(`\n${pass} passed, ${fail} failed`)

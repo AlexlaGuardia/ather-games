@@ -111,7 +111,52 @@ export interface PlotConfig {
   thresholdBearing: number
   /** How far INSIDE the coast the threshold stands, in blocks. The wall is what you face. */
   thresholdInset: number
+  /** The mound of cloud the front door sits in. `undefined` = a bare gap in a flat wall. */
+  cave?: PlotCave
   materials: PlotMaterials
+}
+
+/**
+ * ── ★★ THE CLOUD CAVE — the shape a keeper's front door makes from across their garden ────────
+ * Alex, 2026-08-19: *"i would like to make the passage look like a cloud cave protruding from the
+ * wall."*
+ *
+ * ★ IT IS ANSWERING A FINDABILITY PROBLEM WITH GEOMETRY, WHICH IS THE HALF THE SHIMMER CANNOT DO.
+ * The 08-19 pass widened the doorway and raised `PLOT_SHUT` 7 → 120 so the seam is drawn from across
+ * the field, and it helped — but a shimmer is a *transparent* cue on a *pale* wall, competing with
+ * a 1,900-block ring of the same colour, and Alex still had to be told where his door was. A mound
+ * is an OPAQUE cue: it breaks the wall's skyline (15 tall against the wall's 9), it catches the
+ * light differently on every flank, and it reads as a landmark at any angle rather than only when
+ * the parting happens to face you. The shimmer stays exactly what it was — the near confirmation
+ * that the crossing is live. The mound is what you see first and walk toward.
+ *
+ * ⚠ "NO CAVES" IN THIS FILE'S HEADER IS ABOUT SOMETHING ELSE, and the word collision is worth
+ * naming before someone reads this as a contradiction. That rule is `spawn-board.ts`'s: the plot
+ * generates **no ore, no resource caves, nothing that refills**, because *"a home plot that refills
+ * itself is a farm you never have to leave."* This is an AUTHORED doorway made of the wall's own
+ * cloud, it drops nothing, and `CLOUD_WALL` is `hardness: Infinity` so it cannot be mined into
+ * anything. It takes nothing away from the wilds loop; it is the wall, shaped.
+ *
+ * ★ CANON PERMITS IT AND ARGUABLY ASKED FOR IT. The bible: plots are *"ringed by walls of
+ * cloud… Plots connect to one another by passages — **gates and gaps breached through the
+ * cloud-walls**."* A gap breached through a wall of soft, thick, pressed cloud is not a clean
+ * rectangle; it is a hollow, and cloud shoved aside piles up around it. What canon forbids is a
+ * **gate** — *"no gates, no locks, no keep-out"* — so this has no frame, no lintel, no door leaf
+ * and nothing drawn on the ground: it is one continuous body of the same material as the wall, with
+ * a hole in it. The mouth is an arch because an arch is what a hole in something soft settles into,
+ * not because it is architecture.
+ */
+export interface PlotCave {
+  /** How far the mound swells INWARD from the coast, in blocks. Also the length of the tunnel. */
+  depth: number
+  /** Half-width across the threshold bearing, in blocks. */
+  halfWidth: number
+  /** How far it rises above the floor at the door. ⚠ Feeds `plotYRange` — see the note there. */
+  height: number
+  /** Half-width of the arched mouth bored through it, in blocks. */
+  boreHalfWidth: number
+  /** Height of the arched mouth, in blocks. */
+  boreHeight: number
 }
 
 /**
@@ -184,6 +229,14 @@ export const DEFAULT_PLOT: PlotConfig = {
   // that the passage is plainly what they are standing at. See `plotThreshold` for why the old
   // fractional inset was actively wrong once the fold can grow.
   thresholdInset: 2,
+  // ⚠ THE MOUTH MUST OUT-MEASURE THE TRIGGER, NOT MATCH IT. `PLOT_TRIGGER_RADIUS` is 3 and the drawn
+  // seam is 2.55 half-wide; a bore cut to those numbers would put cloud exactly where the crossing
+  // fires, so the keeper would walk into the wall of their own doorway a pace before it took them.
+  // 4 half-wide × 7 tall is deliberately roomier than anything it has to clear.
+  //
+  // ⚠ `height` 15 IS ABOVE `wallHeight` 9 ON PURPOSE — that difference IS the landmark. A mound that
+  // tops out level with the wall is a bump you find by walking into it.
+  cave: { depth: 13, halfWidth: 12, height: 15, boreHalfWidth: 4, boreHeight: 7 },
   materials: { topsoil: 5, subsoil: 4, stone: 3, floor: 1, wall: 1 },
 }
 
@@ -319,6 +372,123 @@ export const inWall = (x: number, z: number, seed: number, cfg: PlotConfig = DEF
 }
 
 /**
+ * Where the cave stands: the point on the coast at the threshold bearing, and the floor there.
+ *
+ * ⚠ DERIVED FROM `edgeAt` AND `plotThreshold`, NEVER STORED — the same rule the threshold and the
+ * Wilds seam both state, for the same reason. The coast wobbles per seed and the floor rolls, so a
+ * hardcoded anchor would bury the mound in the ground on one world and float it on the next, and
+ * both read as a rendering bug rather than as the stale constant they are.
+ *
+ * ★ THE FLOOR COMES FROM `plotThreshold`, NOT FROM `plotHeight` AT THE COAST. They are within a
+ * block of each other and it would be easy to call that a wash — but the number this cave must
+ * agree with is **the altitude the keeper is standing at when they use the door**, and that is the
+ * threshold's, by definition. Asking the same question twice in two ways is how the mouth ends up a
+ * block into the turf on some seeds.
+ */
+export function caveAnchor(
+  seed: number, cfg: PlotConfig = DEFAULT_PLOT,
+): { x: number; z: number; y: number; bearing: number } {
+  const b = cfg.thresholdBearing
+  const e = edgeAt(Math.cos(b), Math.sin(b), seed, cfg)
+  return { x: Math.cos(b) * e, z: Math.sin(b) * e, y: plotThreshold(seed, cfg).y, bearing: b }
+}
+
+/** What the cave puts at a point: its cloud body, the air of its mouth, or nothing. */
+export type CavePart = 'shell' | 'bore' | null
+
+/**
+ * The cave, as pure geometry: a half-ellipsoid of cloud swelling inward off the wall, with an
+ * arched tunnel bored along the threshold bearing.
+ *
+ * ── ★★ IT DECIDES NOTHING BELOW THE FLOOR, AND THAT IS THE WHOLE SAFETY ARGUMENT ────────────────
+ * Every branch here is gated on `w >= 0` (at or above the door's floor) and `plotMaterialAt` only
+ * consults it where the column is already air or void. So the mound **cannot eat ground a keeper
+ * built on or is standing on**, which is the failure this generator has already shipped once: the
+ * 08-18 burial, where a rule that only ever RAISED ground closed over a stored standing position.
+ * A shape that adds solid matter at head height near the one place every keeper walks is the same
+ * hazard wearing a nicer coat, and the gate is what keeps it from being one. See `plotCaveStand`
+ * for the other half — the keeper who was already standing where the cloud now is.
+ *
+ * ★ THE BORE IS TESTED BEFORE THE MOUND, which is the only order that can be right: the mouth is
+ * defined as the absence of the body, so a mound-first rule would fill the doorway and the cave
+ * would read as a solid lump with a shimmer painted on it.
+ *
+ * ⚠ THE BORE STOPS AT THE COAST (`u >= 0`) AND MUST KEEP STOPPING THERE. Run it to negative `u` and
+ * it cuts clean through the wall ring — a literal hole in the fold's shell, with the void on the
+ * far side of it and nothing between a keeper and a fall. The crossing is a THRESHOLD you reach,
+ * not a tunnel you emerge from; the Wilds side keeps its own shell unpierced for exactly this
+ * reason (`seam.ts`: *"nothing is carved; the shell is never pierced"*). So the cave is an alcove
+ * with a solid back, and the back is where the shimmer stands.
+ */
+export function caveAt(
+  x: number, y: number, z: number, seed: number, cfg: PlotConfig = DEFAULT_PLOT,
+): CavePart {
+  const c = cfg.cave
+  if (!c || c.depth <= 0) return null
+  const a = caveAnchor(seed, cfg)
+  const cb = Math.cos(a.bearing), sb = Math.sin(a.bearing)
+  const dx = x - a.x, dz = z - a.z
+  // `u` runs INWARD from the coast toward the garden's centre, `v` across the doorway, `w` up from
+  // the floor. Negating the outward bearing is what makes "deeper into the cave" the positive
+  // direction, which is the direction every constant below is written in.
+  const u = -(dx * cb + dz * sb)
+  const v = -dx * sb + dz * cb
+  const w = y - a.y
+  if (w < 0) return null
+  // ── ⚠⚠ THE ONE MEASUREMENT BOTH HALVES ARE CLIPPED AGAINST ───────────────────────────────────
+  // `u` runs along ONE bearing; the coast is a function of EVERY bearing and wobbles up to 18%
+  // across the 24 blocks this shape spans. So "inward of the anchor" (`u >= 0`) is NOT the same
+  // claim as "inside the fold", and the difference is where both of this function's bugs lived —
+  // the oracle found each separately, on opposite sides of the same confusion:
+  //   · unclipped SHELL left **296 cells** of cloud standing in the void at the flanks;
+  //   · unclipped BORE removed **13 cells** of the shell at the flanks — a literal hole through the
+  //     fold's wall with the dark on the other side, which is the one failure here that could drop
+  //     a keeper out of their own garden.
+  // Asked once, of the same `edgeAt` the ground and the wall are built from.
+  const d = distFromCentre(x, z)
+  const e = edgeAt(x, z, seed, cfg)
+  // The mouth may only ever open ground the fold already owns.
+  if (u >= 0 && d <= e && (v / c.boreHalfWidth) ** 2 + (w / c.boreHeight) ** 2 <= 1) return 'bore'
+  // ⚠ THE AXIAL CLIP KEEPS THE BODY OUT OF THE DARK: unclipped, the ellipsoid's outward half hangs
+  // `depth` blocks into the void, and canon names that directly — the void is *"not unbuilt space,
+  // not to be dressed with scenery so it looks finished."*
+  if (u < -cfg.wallWidth) return null
+  // The body may swell no further out than the wall's own outer face.
+  if (d > e + cfg.wallWidth) return null
+  if ((u / c.depth) ** 2 + (v / c.halfWidth) ** 2 + (w / c.height) ** 2 <= 1) return 'shell'
+  return null
+}
+
+/**
+ * Move a keeper who is standing inside the cave's cloud out to its mouth.
+ *
+ * ── ⚠⚠ THE SIBLING OF `plotStandY`, AND IT EXISTS BECAUSE THIS EXACT BUG HAS SHIPPED ────────────
+ * On 2026-08-18 a generator change closed ground over a stored standing position, collision refused
+ * every direction, and **the autosave wrote the buried position back every few seconds so no reload
+ * escaped it**. That is not a hazard of *that* change; it is a hazard of any change that puts solid
+ * matter where a save says a keeper is — and this one puts a 24-block-wide mound at the one spot in
+ * the garden every keeper has stood. A keeper whose save sits inside the new flank would open the
+ * game walled into cloud with no way to report it that did not look like a broken save.
+ *
+ * ★ IT SETS THEM AT THE MOUTH RATHER THAN NUDGING THEM CLEAR. A nudge has to pick a direction out
+ * of a solid, and every direction is a guess that can be wrong twice (into more cloud, or off the
+ * coast into the void). The mouth is a known-open, known-grounded, on-axis point that is also the
+ * place they were evidently trying to be. Deterministic, one hop, no search.
+ *
+ * ⚠ ONLY `shell` MOVES ANYBODY. Standing in the `bore` is standing in the doorway, which is fine
+ * and extremely common — the arrival lands there on purpose.
+ */
+export function plotCaveStand(
+  x: number, y: number, z: number, seed: number, cfg: PlotConfig = DEFAULT_PLOT,
+): { x: number; z: number } {
+  const c = cfg.cave
+  if (!c || caveAt(Math.floor(x), Math.floor(y), Math.floor(z), seed, cfg) !== 'shell') return { x, z }
+  const a = caveAnchor(seed, cfg)
+  const d = c.depth + 2
+  return { x: a.x - Math.cos(a.bearing) * d, z: a.z - Math.sin(a.bearing) * d }
+}
+
+/**
  * Surface altitude of the plot's ground at this column, or `null` where there is no ground.
  *
  * A gentle two-octave roll around `baseY`. Flat enough to build on and to read as tended; not so
@@ -440,6 +610,25 @@ export function plotMaterialAt(
 ): number {
   const m = cfg.materials
   const h = plotHeight(x, z, seed, cfg)
+
+  // 0. THE CLOUD CAVE — the front door, shaped.
+  //
+  // ★★ IT IS ASKED FIRST BUT IT IS ONLY ALLOWED TO ANSWER IN THE AIR, and that pairing is the
+  //    design. First, because it has to beat BOTH the wall ring (rule 1) and the void (rule 2): the
+  //    mound stands over the coast, so a cave tested after them would be sliced off exactly where
+  //    it meets the wall it grows out of. Gated on `h === null || y > h`, because the one thing it
+  //    must never do is take ground away — see `caveAt` for why that gate is the safety argument
+  //    and not a tidiness.
+  //
+  //    ⚠ WHICH MEANS RULE ORDER HERE IS NOT "cave beats ground": it is *cave beats the two rules
+  //    that fill air*, and ground was never in the argument. Moving this below rule 1 would put a
+  //    ring-shaped notch through the mound's base; moving the gate would put a mound through the
+  //    keeper's turf.
+  if (h === null || y > h) {
+    const cave = caveAt(x, y, z, seed, cfg)
+    if (cave === 'bore') return AIR
+    if (cave === 'shell') return m.wall
+  }
 
   // 1. The cloud wall — a ring standing on nothing, outside the buildable cap.
   if (h === null && inWall(x, z, seed, cfg)) {
@@ -573,6 +762,12 @@ export const hasFallenOut = (y: number, cfg: PlotConfig = DEFAULT_PLOT): boolean
 export function plotYRange(cfg: PlotConfig = DEFAULT_PLOT): { min: number; max: number } {
   return {
     min: cfg.baseY - cfg.roll - cfg.keel - 2,
-    max: cfg.baseY + Math.max(cfg.wallHeight, cfg.roll) + 1,
+    // ⚠⚠ THE CAVE IS IN HERE AND HAS TO BE. This range is not advice — `generatePlotColumn` writes
+    // only inside it and `plotSectionRange` meshes only the sections it names, so a mound 15 blocks
+    // tall against a bound computed from a 9-block wall is a mound **with its top six blocks
+    // silently missing**: a landmark with a hole in it, generated correctly by `plotMaterialAt` and
+    // then cropped by its own caller. Nothing would throw. Anything that grows the plot upward has
+    // to arrive here in the same breath.
+    max: cfg.baseY + Math.max(cfg.wallHeight, cfg.roll, cfg.roll + (cfg.cave?.height ?? 0)) + 1,
   }
 }

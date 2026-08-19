@@ -284,21 +284,85 @@ function drawDoor(ctx: CanvasRenderingContext2D, x: number, y: number, scale: nu
   ctx.restore()
 }
 
+/**
+ * ── ★★ THE MINIMAP HAD THE RING AND STILL COULD NOT POINT HOME (2026-08-19) ─────────────────────
+ * Alex, asking for the door to be marked a second time: *"add a marker on the map to help find
+ * it."* It already was — the ring shipped that morning and draws on all four surfaces. **The bug is
+ * that the minimap is a WINDOW, not a map.** `MINI_REACH` is 240 blocks and the fold is 600 across,
+ * so from most of the garden the door is simply outside the crop and the ring is drawn into the
+ * void beyond the canvas edge, where it is not merely small — it does not exist. The one surface a
+ * keeper actually navigates by is the one that goes blank exactly when they are lost.
+ *
+ * ★ SO AN OFF-WINDOW MARK IS PINNED TO THE RIM AND POINTS. **Same ring, never a second symbol** —
+ * this file's own rule, *"one symbol for one thing"* — with a chevron added outside it to say *it
+ * is this way, further*. A different glyph for "off-map door" would make the keeper learn two marks
+ * for one door, and the whole reason the ring reads instantly out in the Wilds is that it is the
+ * mark they already know from home.
+ *
+ * ⚠ THE CHEVRON CARRIES "FURTHER", NOT A DIMMER RING — and the first cut got that backwards. A rim
+ * mark states a DIRECTION and cannot state a distance, so it must read differently from an on-window
+ * one; I did that by drawing it at 70%, which is correct reasoning applied to the wrong channel. On
+ * a **148px** minimap a 5px ring at 70% is not "a softer statement", it is a smudge you do not
+ * notice — so the mark that exists for the keeper who is lost was the one that disappeared. The
+ * ring now draws at full strength and the CHEVRON is the whole difference: a ring alone means
+ * *there it is*, a ring with a barb pointing off-map means *that way, keep going*. Shape carries
+ * meaning at any size; opacity does not.
+ */
+function drawDoorPinned(ctx: CanvasRenderingContext2D, x: number, y: number, scale: number,
+                        w: number, h: number) {
+  // ⚠ ROOM FOR THE BARB, not just the ring — pinned at `r` the chevron hangs off the canvas and the
+  // one element that says "further" is the one that gets clipped away.
+  const pad = Math.max(12, scale * 3.4)
+  const cx = Math.min(Math.max(x, pad), w - pad)
+  const cy = Math.min(Math.max(y, pad), h - pad)
+  if (cx === x && cy === y) { drawDoor(ctx, x, y, scale); return }
+  const dx = x - w / 2, dy = y - h / 2
+  const len = Math.hypot(dx, dy) || 1
+  const ux = dx / len, uy = dy / len
+  const r = Math.max(4, scale * 1.6)
+  ctx.save()
+  // ⚠ A DARK SEAT UNDER THE MARK. The fold's plate is pale green and its wall is near-white cloud;
+  // a thin gold ring laid straight on either is a ring you have to already know is there. Same rule
+  // the game-UI note states for text over canvas — nothing sits raw on a scene.
+  ctx.fillStyle = 'rgba(8,6,20,0.55)'
+  ctx.beginPath(); ctx.arc(cx, cy, r + 3, 0, Math.PI * 2); ctx.fill()
+  drawDoor(ctx, cx, cy, scale)
+  // The chevron sits OUTSIDE the ring, on the line to the real thing.
+  const t = Math.max(4, scale * 1.3)
+  ctx.fillStyle = '#ffe9b0'
+  ctx.beginPath()
+  ctx.moveTo(cx + ux * (r + 2 + t), cy + uy * (r + 2 + t))
+  ctx.lineTo(cx + ux * (r + 2) - uy * t * 0.75, cy + uy * (r + 2) + ux * t * 0.75)
+  ctx.lineTo(cx + ux * (r + 2) + uy * t * 0.75, cy + uy * (r + 2) - ux * t * 0.75)
+  ctx.closePath(); ctx.fill()
+  ctx.restore()
+}
+
 function drawThreshold(ctx: CanvasRenderingContext2D, seed: number, cfg: PlotConfig,
-                       scale: number, ox = 0, oy = 0) {
+                       scale: number, ox = 0, oy = 0, w = 0, h = 0) {
   const t = plotThreshold(seed, cfg)
   const { px, py } = plotToPixel(t.x, t.z, cfg)
   // ⚠ THE OFFSET IS NOT OPTIONAL ON THE MINIMAP. That surface draws the plate translated so the
   // keeper sits at the centre; a marker placed in plate space without the same translation lands
   // somewhere in the corner and confidently points at nothing.
-  drawDoor(ctx, ox + px * scale, oy + py * scale, scale)
+  // ⚠ `w`/`h` DEFAULT TO 0, WHICH MEANS "THIS SURFACE HAS NO RIM TO PIN TO". The expanded map draws
+  // the WHOLE fold, so a mark can never be off it and clamping there would drag a perfectly visible
+  // ring onto the border. Only the windowed minimap passes its canvas.
+  if (w > 0 && h > 0) drawDoorPinned(ctx, ox + px * scale, oy + py * scale, scale, w, h)
+  else drawDoor(ctx, ox + px * scale, oy + py * scale, scale)
 }
 
 /** The fold's passage, in WILDS coordinates — the same ring, on the country's map. */
-function drawWildsDoor(ctx: CanvasRenderingContext2D, seed: number, cellPx: number, ox = 0, oy = 0) {
+function drawWildsDoor(ctx: CanvasRenderingContext2D, seed: number, cellPx: number,
+                      ox = 0, oy = 0, w = 0, h = 0) {
   const a = passageApproach(seed, WILDS_BUBBLE)
   const { lx, lz } = toLocal(a.x, a.z)
-  drawDoor(ctx, ox + (lx / SAMPLE) * cellPx, oy + (lz / SAMPLE) * cellPx, cellPx)
+  const px = ox + (lx / SAMPLE) * cellPx, py = oy + (lz / SAMPLE) * cellPx
+  // ★ THE COUNTRY NEEDS THIS MORE THAN THE GARDEN DOES, not less. Out here the door is one point in
+  // a 6.3km-round wall and the minimap reaches 240 blocks; the odds of it falling inside the window
+  // by chance are about nil, so without a rim mark the Wilds minimap has never once pointed home.
+  if (w > 0 && h > 0) drawDoorPinned(ctx, px, py, cellPx, w, h)
+  else drawDoor(ctx, px, py, cellPx)
 }
 
 // ── the cloud ───────────────────────────────────────────────────────────────────────────────────
@@ -578,7 +642,7 @@ export function VoxelMiniMap({ seed, seenRef, posRef, headingRef, spaceRef, plot
         const n = plotSpan(cfg)
         const ox = cv.width / 2 - mx * cellPx, oy = cv.height / 2 - my * cellPx
         ctx.drawImage(foldPlate(seed, cfg), ox, oy, n * cellPx, n * cellPx)
-        drawThreshold(ctx, seed, cfg, cellPx, ox, oy)
+        drawThreshold(ctx, seed, cfg, cellPx, ox, oy, cv.width, cv.height)
         drawKeeper(ctx, cv.width / 2, cv.height / 2, headingRef.current, 5)
         return
       }
@@ -588,7 +652,7 @@ export function VoxelMiniMap({ seed, seenRef, posRef, headingRef, spaceRef, plot
       const oy = -((lz - MINI_REACH) / SAMPLE) * cellPx
       ctx.drawImage(terrainPlate(seed), ox, oy, MAP_W * cellPx, MAP_H * cellPx)
       if (seen) drawCloud(ctx, seen, cellPx, ox, oy)
-      drawWildsDoor(ctx, seed, cellPx, ox, oy)
+      drawWildsDoor(ctx, seed, cellPx, ox, oy, cv.width, cv.height)
       drawKeeper(ctx, cv.width / 2, cv.height / 2, headingRef.current, 5)
     }
     id = requestAnimationFrame(tick)
