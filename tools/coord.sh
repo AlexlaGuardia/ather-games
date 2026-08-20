@@ -172,6 +172,23 @@ cmd_build() {
     # deploys nothing, so it must not buy suppression.
     date +%s > "$REPO/.coord/last-deploy" 2>/dev/null || true
     signal "$WIN deployed OK: $msg"
+    # ── ★★ DEPLOYED AND PUSHED ARE DIFFERENT FACTS, AND ONLY ONE OF THEM LEAVES EVIDENCE ────────
+    # 2026-08-20: two commits ran live on prod for half an hour while existing on this box only.
+    # Nobody was careless — prod answered 200 with the right pixels, which FEELS like completion,
+    # so nothing prompted anyone to check the half that leaves no trace. And on a shared box with a
+    # single working tree the gap is invisible by construction: every window's tree agrees, so no
+    # window can see it by looking at what it has. Only `origin` knows, and nothing asked it.
+    #
+    # So the deploy asks. Purely advisory — it must never fail a build that succeeded, and it must
+    # never push for you: pushing is a judgment call (a satellite may be mid-rebase, a commit may be
+    # deliberately local) and a script that pushes on your behalf turns a visible omission into an
+    # invisible action. State the fact, name the command, stop.
+    local ahead
+    ahead=$(git -C "$REPO" rev-list --count @{u}..HEAD 2>/dev/null || echo 0)
+    if [ "${ahead:-0}" -gt 0 ] 2>/dev/null; then
+      echo ">> ⚠ DEPLOYED BUT NOT PUSHED — $ahead commit(s) live on prod exist only on this box."
+      echo ">>   git push origin master   (pull --rebase first if a satellite has landed work)"
+    fi
   else
     echo ">> BUILD FAILED — nothing deployed"
     signal "$WIN BUILD FAILED: $msg"
