@@ -15,6 +15,28 @@
 // Bundled as IIFE, not ESM, deliberately — a classic worker has the widest support and there is
 // then no `{ type: 'module' }` to get wrong. The app loads it with `new Worker('/voxel-gen.worker.js')`.
 
+// ── ⚠⚠ A DELETED HASHED ARTIFACT IS A LIVE 404 WITH NO ERROR SURFACE (2026-08-20) ──────────────
+// The existing rule is "the hashed artifact and worker-url.ts travel in ONE commit", and it is
+// usually explained as a staleness problem — ship the pair apart and the world generates from old
+// code. That undersells the failure by a long way, and the sharper statement is this:
+//
+// A commit that rebuilds the worker DELETES the previous hash from /public. If that commit ships
+// while the deployed bundle still asks for the OLD hash, the browser requests a file that no longer
+// exists and gets a 404. The Worker then constructs, accepts postMessage and never replies — so
+// there is no thrown error, no failed import, nothing in the console, and the app itself is
+// perfectly healthy. The symptom is simply that no terrain ever arrives.
+//
+// Verified the shape of it 2026-08-20: after a worker rebuild, `/voxel-gen.worker.4a6ba0b5ca.js`
+// returned 404 on :3200 while the app served 200. It was harmless only because the deploy had
+// already rebuilt the bundle to ask for the new hash. Had it not, the site would have looked fine
+// and generated nothing.
+//
+// ★ SO THE CHECK IS: after any build, confirm the hash the DEPLOYED bundle asks for is a file that
+// still exists — not merely that the two files in your working tree agree. `curl -o /dev/null -w
+// '%{http_code}' <origin>/voxel-gen.worker.<hash>.js` answers it in one line, and it is the same
+// shape as md5-ing the served worker against the local build: ask the thing that is running, not
+// the thing you have.
+
 // ★ THE OUTPUT IS CONTENT-HASHED, AND THAT IS NOT TIDINESS — IT COST HOURS.
 // The first version emitted a fixed `public/voxel-gen.worker.js`. Files in /public are served with
 // aggressive caching and that name never changes, so the browser pinned the FIRST build and kept
