@@ -18,7 +18,18 @@ function lcg(seed: number): () => number {
   let s = seed >>> 0
   return () => { s = (Math.imul(s, 1664525) + 1013904223) >>> 0; return s / 4294967296 }
 }
-const water = (kind: number, depth: number, lively = false): RinWater => ({ kind: kind as RinWater['kind'], depth, lively })
+// ⚠ A `function`, NOT `const water = (...) => ({ ... })`, AND THAT IS NOT STYLE. This file is
+// semicolon-free like the rest of the tree, and an arrow whose body is a PARENTHESISED OBJECT
+// followed by a bare `{` block — which every section below opens with — parses as one expression:
+// tsc reported `'=>' expected` at the block, and pointed the other four errors at the arrow itself.
+// ★ THE DAMAGE WAS NOT LOCAL. A parse error in one test file makes `tsc` abandon the PROJECT, so
+// the run came back with five errors instead of the fifteen known ones — and a diff-against-baseline
+// reads that as "everything changed" while a careless glance reads it as "the errors went away".
+// `tsx` runs the file perfectly, so the suite was green throughout. A declaration has no such
+// ambiguity and needs no semicolon to fix it.
+function water(kind: RinWater['kind'], depth: number, lively = false): RinWater {
+  return { kind, depth, lively }
+}
 
 // ── 1. ★★ THE LADDER STILL MATCHES CANON ────────────────────────────────────────────────────────
 {

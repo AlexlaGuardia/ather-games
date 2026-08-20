@@ -18,7 +18,6 @@
 import { rinSpotAt, rinKindAt, isWaterColumn, livelyAt, RIN_NONE, RIN_POND, RIN_STREAM, RIN_LAKE, SPOT_SCALE, LIVELY_EDGE } from './rin-water'
 import { DEFAULT_DEPTH } from './depth'
 import { columnHeight, riverCarve, waterSurfaceAt, RIVER_DEPTH } from './height'
-import { DEFAULT_DEPTH } from './depth'
 
 const SEED = 1337
 const FAR = 4096          // open country, well clear of the fold at the origin
