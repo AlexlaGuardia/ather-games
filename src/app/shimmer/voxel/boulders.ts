@@ -138,6 +138,21 @@ export function boulderStartsAt(
  * is what makes two column alignments agree on the same voxel, and it is what the seam assert is
  * protecting. Changing it to a world-space hash would still be deterministic and would still look
  * fine in a single column — and would crack every boulder that straddles a chunk boundary.
+ *
+ * ── ★★ AND HERE IS WHEN THIS WARNING APPLIES, BECAUSE IT HAS ALREADY BEEN COPIED WHERE IT DOES NOT
+ * The dens pass took this paragraph verbatim onto its own warp, and a mutation to world-space came
+ * back GREEN — correctly, because a den's cells are derived entirely from a PLAN whose inputs are
+ * alignment-independent, so both columns build the identical plan and therefore identical cells.
+ * The geometry was safe by construction, not by how the hash was salted, and the imported warning
+ * was pure decoration guarding nothing.
+ *
+ * ★ THE TEST, for whoever copies this next: does the feature's shape depend on anything a
+ * NEIGHBOURING COLUMN cannot see? Here it does — `boulderCells` walks offsets from a centre and
+ * asks this function per voxel, so the salt IS the agreement. Where a feature computes a whole
+ * plan from shared fields first and only then emits cells, the salt is free and this paragraph is
+ * a lie. **A warning travels by copy-paste; the reason it was true does not.** State the reason
+ * next to the rule or the next file inherits a guard around nothing — and worse, a green mutation
+ * that reads as coverage.
  */
 export function boulderWarp(dx: number, dy: number, dz: number, s: number, amp: number): number {
   // Two octaves at different salts — one broad lobe, one smaller bite out of the rim.
