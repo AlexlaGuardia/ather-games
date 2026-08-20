@@ -4767,11 +4767,18 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
    * and at 22 units/s a sprinting swimmer outruns the load radius routinely, so the view would
    * blink dry at the frontier and wet again when the chunk lands.
    *
-   * ★ The disagreement is what makes the truth recoverable: a REAL packed-cloud block reads
-   * PACKED_CLOUD through both, while an ungenerated column reads AIR through one and PACKED_CLOUD
-   * through the other. That pair is the only unknown-shaped answer available, and `submersion`
-   * turns it into null = hold. Do not "simplify" this to a single probe; either one alone is the
-   * blink bug.
+   * ★★ ONE PROBE CANNOT DETECT THE SENTINEL AT ALL — which is the reason this reads two, and the
+   * reason a tidy-up must not collapse it. `voxel` answering AIR is indistinguishable from real
+   * air, and `voxelSolid` answering PACKED_CLOUD is indistinguishable from a real cloud block. So
+   * neither probe alone has an unknown state to test for; testing `=== MAT.WATER` positively on
+   * either one is still the blink bug. **The DISAGREEMENT is the only signal there is**: a real
+   * packed-cloud block reads PACKED_CLOUD through both, while an ungenerated column reads AIR
+   * through one and PACKED_CLOUD through the other. `submersion` turns that pair into null = hold.
+   *
+   * ★ Worth stating generally, because it is not specific to water: TWO INSTRUMENTS EACH WRONG IN
+   * A KNOWN DIRECTION COMPOSE INTO ONE THAT IS NOT. It works here only because the two lies were
+   * chosen independently, for different callers, and happen to disagree exactly on the case
+   * neither can name. Where two probes fail the SAME way, combining them buys nothing.
    */
   const cellAt = useCallback((x: number, y: number, z: number): Cell => {
     const m = voxel(x, y, z)
