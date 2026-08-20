@@ -138,8 +138,33 @@ export function rinSpotAt(x: number, z: number, seed: number): RinSpot | null {
     kind,
     variant: hash01(x, z, seed ^ 0x9e37),
     lively: livelyAt(x, z, seed),
-    surfaceY: waterSurfaceAt(x, z, seed),
+    surfaceY: surfaceFor(kind, x, z, seed),
   }
+}
+
+/**
+ * The water surface for a spot — and the two kinds of water have two different answers.
+ *
+ * ── ⚠⚠ `waterSurfaceAt` ONLY ANSWERS FOR RIVERS, AND RETURNS `-Infinity` FOR EVERYTHING ELSE ────
+ * Found 2026-08-20 by sweeping depth per spot kind before building the catch table. `waterSurfaceAt`
+ * (`height.ts:554`) opens with a riverness gate and returns **`-Infinity`** below it — a documented
+ * "no river water here" sentinel, entirely correct for its own callers. But `rinKindAt` classifies
+ * **RIN_LAKE** off `columnHeight <= seaLevel`, which is the SEA, and the sea is not a river. So
+ * `rinSpotAt` was handing the host `{ kind: RIN_LAKE, surfaceY: -Infinity }` for **4,080 of 18,200
+ * water columns — 22% of all the water in the world.**
+ *
+ * ★ AND THE FIELD'S OWN DOC IS WHY THAT MATTERS: *"The host puts the float here; it never guesses a
+ * y."* So the first host to wire a cast would have put the bobber at negative infinity on nearly a
+ * quarter of the world's water, on the one spot kind that carries the best catches. It never fired
+ * because nothing consumes this file yet — **a bug parked in unconsumed code, waiting for its first
+ * caller**, which was going to be today.
+ *
+ * The sea's surface is not a mystery: `depth.ts:584` fills `MAT.WATER` for every `y <= seaLevel`,
+ * so sea level IS the surface, flat by construction. Rivers keep the table lookup they need.
+ */
+function surfaceFor(kind: RinKind, x: number, z: number, seed: number): number {
+  if (kind === RIN_LAKE) return DEFAULT_DEPTH.seaLevel
+  return waterSurfaceAt(x, z, seed)
 }
 
 /** Is this stretch of water visibly alive? Pure, field-driven, and a PLACE rather than a speckle. */

@@ -16,6 +16,7 @@
 // rather than a broken world (slump.test.ts, same day). Sample far out in open country.
 
 import { rinSpotAt, rinKindAt, isWaterColumn, livelyAt, RIN_NONE, RIN_POND, RIN_STREAM, RIN_LAKE, SPOT_SCALE, LIVELY_EDGE } from './rin-water'
+import { DEFAULT_DEPTH } from './depth'
 import { columnHeight, riverCarve, waterSurfaceAt, RIVER_DEPTH } from './height'
 import { DEFAULT_DEPTH } from './depth'
 
@@ -116,7 +117,14 @@ const ok = (c: boolean, m: string) => { if (c) pass++; else fails.push(m) }
     const a = rinSpotAt(x, z, SEED)
     if (!a) continue
     checked++
-    if (a.surfaceY !== waterSurfaceAt(x, z, SEED)) wrongSurface++
+    // ⚠ KIND-AWARE SINCE 2026-08-20, AND THE OLD ONE-LINE VERSION ASSERTED THE BUG. It demanded
+    // `surfaceY === waterSurfaceAt` for every spot — but `waterSurfaceAt` gates on riverness and
+    // answers `-Infinity` for the sea, so the assert was green precisely BECAUSE the lake case was
+    // broken, and would have gone red the moment anyone fixed it. The claim it was reaching for is
+    // *"the surface comes from a field, never from a guess"*, which is still exactly the claim —
+    // the sea's field is `seaLevel` (`depth.ts:584` fills water to it), the river's is the table.
+    const want = a.kind === RIN_LAKE ? DEFAULT_DEPTH.seaLevel : waterSurfaceAt(x, z, SEED)
+    if (a.surfaceY !== want) wrongSurface++
     const b = rinSpotAt(x, z, SEED)
     if (b?.variant !== a.variant || b?.kind !== a.kind || b?.lively !== a.lively) unstable++
   }
@@ -140,6 +148,36 @@ const ok = (c: boolean, m: string) => { if (c) pass++; else fails.push(m) }
   }
   ok(quietFishable > 100, `★★ QUIET water is fishable water (${quietFishable} quiet spots)`)
   ok(livelyFishable > 100, `lively water exists too (${livelyFishable})`)
+}
+
+// ── ⚠⚠ EVERY SPOT HAS A REAL SURFACE TO FLOAT ON (2026-08-20) ─────────────────────────────────
+// `surfaceY`'s own doc says *"The host puts the float here; it never guesses a y"*, so a
+// non-finite answer is not a degraded answer, it is a bobber at negative infinity.
+//
+// ★ THIS SHIPPED AND NEVER FIRED, WHICH IS THE POINT. `waterSurfaceAt` gates on riverness and
+// returns `-Infinity` below it — correct for its own callers — while `rinKindAt` classifies
+// RIN_LAKE off `columnHeight <= seaLevel`, and the sea is not a river. 4,080 of 18,200 water
+// columns (22%, and the kind carrying the best catches) answered `-Infinity`. Nothing consumed
+// this file yet, so nothing complained: a bug parked in unconsumed code, waiting for its first
+// caller. Asserted per KIND, because a sweep that only reaches rivers reports it clean.
+{
+  const seen = new Map<number, number>()
+  let bad = 0, worst = ''
+  for (let x = -1500; x <= 1500; x += 11) {
+    for (let z = -1500; z <= 1500; z += 11) {
+      const s = rinSpotAt(x, z, SEED)
+      if (!s) continue
+      seen.set(s.kind, (seen.get(s.kind) ?? 0) + 1)
+      if (!Number.isFinite(s.surfaceY)) { bad++; if (!worst) worst = `kind ${s.kind} at (${x},${z}) → ${s.surfaceY}` }
+    }
+  }
+  ok(bad === 0, `★★ every spot's surfaceY is finite (${bad} were not; first: ${worst})`)
+  // The count guard: without it a regression that stopped returning lakes at all would pass the
+  // assert above by having nothing to check — the shape of "green because it saw nothing".
+  ok(seen.get(RIN_LAKE) !== undefined && seen.get(RIN_LAKE)! > 100,
+    `and the lake kind is actually represented in the sweep (${seen.get(RIN_LAKE) ?? 0}) — else the check above is vacuous`)
+  ok(seen.get(RIN_POND) !== undefined && seen.get(RIN_STREAM) !== undefined,
+    'ponds and streams too')
 }
 
 console.log(fails.length ? `❌ ${fails.length} failed:\n  ${fails.join('\n  ')}` : `✅ the water knows where it can be fished — ${pass} passed`)
