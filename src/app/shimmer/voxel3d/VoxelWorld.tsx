@@ -6916,6 +6916,13 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
           // generous 1.6s. `riseProgress` exists to drive a ripple closing on the float; until that
           // is drawn, the line is the tell.
           if (ph === 'rising') onSay('something is rising to the line')
+          // ⚠ THE TAKE NEEDS ITS OWN CUE UNTIL THERE IS A FLOAT TO WATCH. `rin-cast` is built
+          // around a DIEGETIC tell — a ripple closing on a bobber, which is the whole craft of the
+          // wait — and neither is drawn yet. Without a line here the keeper is told something is
+          // rising and must then guess 2.2s ahead into a 1.6s window, which is a reflex test
+          // arrived at by an omission: exactly what canon refuses, produced by not saying a thing
+          // rather than by designing one. ★ Delete this the day the float exists, not before.
+          else if (ph === 'taking') onSay('the line dips — take it')
           // A take that came and went. `passed` shortens the NEXT wait and is never a penalty —
           // `rin-cast.ts` is emphatic about that, so nothing here narrates a loss.
           else if (ph === 'waiting' && r.phase === 'taking') r.cast = passed(r.cast, now, Math.random)
