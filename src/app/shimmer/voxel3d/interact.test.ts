@@ -95,6 +95,30 @@ const ok = (c: boolean, m: string) => { if (c) pass++; else fails.push(m) }
   }
 }
 
+// ── ★★ WATER IS THE MOST CLICKED-AT NOTHING IN THE WORLD ───────────────────────────────────────
+// Both negatives matter more than the positive here. An empty hand over water must stay inert, or
+// every stray click while swimming throws a line; a block in hand must still PLACE, or filling in a
+// pond reads as placement being broken over water. The feature is the narrow case, not the default.
+{
+  ok(rightClickIntent(MAT.WATER, null, false, true) === 'rinn',
+    'water + an empty hand casts, the way mining derives its tool from the block')
+  ok(rightClickIntent(MAT.WATER, 'block_stone', false, true) === 'place',
+    '★★ water + a block in hand still PLACES — filling a pond is a real thing to want')
+  ok(rightClickIntent(MAT.WATER, null, false, false) === 'none',
+    '★ and with no rod at all it is nothing, rather than a cast with an empty line')
+  // ⚠ THE ASSERT THAT WOULD HAVE CAUGHT THE FIRST VERSION. It gated on the rinstick being the
+  // SELECTED item — but tools are not hotbar items in this game, so `selItem` can never be a rod
+  // and the intent was unreachable. A feature that cannot be triggered looks identical to one that
+  // was never wired, and nothing else here would have said so.
+  ok(rightClickIntent(MAT.WATER, 'worn_rinstick', false, true) !== 'rinn',
+    '★★ a rod in `selItem` is NOT the trigger — tools are not hotbar items, that path is unreachable')
+  // The flag is scoped to water and must not leak into blocks that already mean something.
+  ok(rightClickIntent(MAT.CHEST, null, false, true) === 'open',
+    'a chest still opens')
+  ok(rightClickIntent(MAT.POT_BLOOM, null, false, true) === 'harvest',
+    'and a bloomed pot still harvests')
+}
+
 console.log(fails.length ? `interact: ${pass} pass, ${fails.length} FAIL` : `interact oracle ${pass} CLEAN`)
 for (const f of fails) console.log('  ✗ ' + f)
 process.exit(fails.length ? 1 : 0)

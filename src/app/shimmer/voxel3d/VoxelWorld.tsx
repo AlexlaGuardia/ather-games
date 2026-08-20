@@ -71,6 +71,9 @@ import { createSpiritIndex, markSeen, indexToSave, indexFromSave, type SpiritInd
 // the shell from the door the generator actually built — a trigger and a doorway in two different
 // places, which is invisible until someone walks 1000 blocks looking for a way in.
 import { inPassageVolume, insideShell, bubbleSwallows, passageApproach } from '../voxel/bubble'
+import { rinSpotAt } from '../voxel/rin-water'
+import { newCast, phaseAt, passed, answer, type RinCast, type RinPhase } from '../engine/rin-cast'
+import { rinCatch, type RinWater } from '../engine/rin-catch'
 import { HOLDS } from '../voxel/holds'
 import {
   spawnFoe, stepFoe, strike, hostile, foeDef, pickPosture, collarFrac, answerCollar,
@@ -4780,6 +4783,22 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
    * chosen independently, for different callers, and happen to disagree exactly on the case
    * neither can name. Where two probes fail the SAME way, combining them buys nothing.
    */
+  /**
+   * ── ★★ THE LINE THAT IS OUT — the whole of rinning's host state (2026-08-20) ─────────────────
+   * `voxel/rin-water.ts` says where a keeper may cast, `engine/rin-cast.ts` runs the loop, and
+   * `engine/rin-catch.ts` says what came up. None of them is allowed to know about the other two,
+   * so this ref is the only place the three meet, and it is deliberately the only mutable thing
+   * rinning adds to the host.
+   *
+   * ⚠ `outMs` IS THE PATIENCE CLOCK AND IT SURVIVES A PASS. `rin-cast` resets `startMs` every time
+   * a take goes unanswered, so anything derived from the CAST's own clock would silently reset the
+   * keeper's patience each time they looked away — punishing exactly the player canon's
+   * "idle-friendly" line is written for. This is when the line first went out and nothing moves it.
+   */
+  const rinning = useRef<
+    { cast: RinCast; water: RinWater; x: number; y: number; z: number; outMs: number; phase: RinPhase } | null
+  >(null)
+
   const cellAt = useCallback((x: number, y: number, z: number): Cell => {
     const m = voxel(x, y, z)
     if (m === MAT.WATER) return 'water'
@@ -6874,6 +6893,37 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
       if (lastTool.current !== null) { lastTool.current = null; onTool(null) }
     }
 
+    // ── the line that is out ──────────────────────────────────────────────────────────────────
+    // ⚠ RUNS BEFORE THE CLICK BLOCK, so a take that arrives this frame is answerable this frame.
+    // Ticked after, the keeper's click would be judged against last frame's phase and a perfectly
+    // timed answer would miss — the exact reflex-unfairness canon's "no minigame" rule exists to
+    // refuse, reintroduced by an ordering rather than by a design.
+    if (rinning.current) {
+      const r = rinning.current
+      const now = performance.now()
+      // ★ WALKING AWAY REELS IN. Without this the line stays out across a teleport, a crossing into
+      // the plot, or a swim to the far shore — and then answers a take at water the keeper is
+      // nowhere near, paying XP for a rod left in another space. Distance, not a space check,
+      // because it catches every one of those with one rule.
+      if (Math.hypot(lc.px - (r.x + 0.5), lc.pz - (r.z + 0.5)) > REACH + 6) {
+        rinning.current = null
+        onSay('the line goes slack — you have walked away from it')
+      } else {
+        const ph = phaseAt(r.cast, now)
+        if (ph !== r.phase) {
+          // ★ THE RISE IS THE WHOLE CRAFT OF THE WAIT: an announcement, not a reflex cue. It is
+          // 2.2s long on purpose so a keeper has time to look up, and the take that follows is a
+          // generous 1.6s. `riseProgress` exists to drive a ripple closing on the float; until that
+          // is drawn, the line is the tell.
+          if (ph === 'rising') onSay('something is rising to the line')
+          // A take that came and went. `passed` shortens the NEXT wait and is never a penalty —
+          // `rin-cast.ts` is emphatic about that, so nothing here narrates a loss.
+          else if (ph === 'waiting' && r.phase === 'taking') r.cast = passed(r.cast, now, Math.random)
+          r.phase = ph
+        }
+      }
+    }
+
     // ── use, or place ────────────────────────────────────────────────────────────────────────
     // ⚠ NOT gated on `selItem` — USING a block is not placing one (2026-08-11). This branch once
     // required something in hand, so the very first thing a player does with a chest failed: you
@@ -6884,13 +6934,70 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
     if (hit && mouse.current.right && !weaponDrawn) {
       const potMat = voxel(hit.x, hit.y, hit.z)
       const intent = rightClickIntent(potMat, selItem,
-        selItem === 'mana_seed' && countItem(inv.current!, selItem) > 0)
+        selItem === 'mana_seed' && countItem(inv.current!, selItem) > 0,
+        // Greg's starter never breaks, so this is true today for every keeper — passed anyway so
+        // the day a rod can be lost, the click answers `'none'` instead of casting with nothing.
+        !!getEquippedTool(tools.current!, 'rinning'))
       // ── ★ THE CHEST OPENS ON RIGHT-CLICK, and is answered FIRST ────────────────────────────
       // A chest is a thing you USE, and the block in your hand must not be dropped onto it by the
       // same click that opens it. Handing the whole panel upward (rather than opening one down
       // here) keeps every cursor surface in one place — the bag, the bench and the chest are the
       // same panel, so they cannot disagree about what a move means.
-      if (intent === 'open') {
+      // ── ★★ RINNING: ONE GESTURE, THREE MEANINGS, AND THE PHASE DECIDES WHICH ─────────────────
+      // Cast, answer, or reel in. `interact.ts` deliberately does not know which — it cannot see the
+      // cast — so it says "this click is about rinning" and the decision lands here, where the state
+      // is. Answered before `place` for the same reason the chest is: a click that means something
+      // must not also mean the fallback.
+      if (intent === 'rinn') {
+        const r = rinning.current
+        if (!r) {
+          // ⚠ THE SPOT IS RESOLVED FROM THE COLUMN, NOT FROM THE BLOCK THAT WAS HIT. `rinSpotAt` is
+          // a field query about a PLACE — which body of water this is and whether it is alive — and
+          // `rin-water.ts` says so out loud: it never checks that the voxel is water, because the
+          // caller has already done that. We have: `potMat` is `MAT.WATER` or we would not be here.
+          const spot = rinSpotAt(hit.x, hit.z, SEED)
+          if (!spot) {
+            // Water the selection field does not own — a player-dug pool, a bucket's worth on a
+            // bridge deck. Canon's spots are places, not puddles. Say so; silence reads as broken.
+            onSay('this water is too small to rinn')
+          } else {
+            // ⚠ DEPTH IS MEASURED FROM THE SPOT'S OWN SURFACE, never from the cell that was clicked.
+            // A keeper aims at whatever face the ray met first, which on a lake edge is routinely a
+            // block or two under the surface — deriving depth from `hit.y` would report shallower
+            // water the deeper you aimed, which is exactly backwards and would have looked like the
+            // ladder being stingy rather than like a bad measurement.
+            const bed = columnHeight(hit.x, hit.z, SEED)
+            rinning.current = {
+              cast: newCast(performance.now(), Math.random, spot.lively),
+              water: { kind: spot.kind, depth: Math.max(0, spot.surfaceY - bed), lively: spot.lively },
+              x: hit.x, y: spot.surfaceY, z: hit.z,
+              outMs: performance.now(), phase: 'waiting',
+            }
+            onSay(spot.lively ? 'the line goes out — this water is alive' : 'the line goes out')
+          }
+        } else if (answer(r.cast, performance.now())) {
+          // ★ LANDED. XP to rinning, the catch onto the water's surface as an entity — the same
+          // grammar mining uses, and for the reason stated there: straight-to-satchel works and
+          // feels like nothing happened.
+          const caught = rinCatch(r.water, skills.current!.rinning.level, performance.now() - r.outMs, Math.random)
+          drops.current.push(spawnDrop(caught.itemId, 1, r.x, r.y + 1, r.z))
+          const sk = skills.current!.rinning
+          const res = addSkillXP(sk, caught.xp)
+          if (res.leveled) {
+            onLevel(`rinning ${res.newLevel}${getMilestone(res.newLevel) ? ' — ' + getMilestone(res.newLevel) : ''}`)
+          }
+          onSkill({ id: 'rinning', level: sk.level, xp: sk.xp, next: xpForSkillLevel(sk.level) })
+          onSay(`you land a ${caught.itemId.replace(/_/g, ' ')}`)
+          rinning.current = null
+        } else {
+          // Any other phase: reel in. ⚠ NOT a failure and it must never be narrated as one — canon
+          // spends two sentences refusing punishment in this skill, and "you lost it" is a
+          // punishment even when nothing was taken away.
+          rinning.current = null
+          onSay('you reel the line in')
+        }
+        mouse.current.right = false
+      } else if (intent === 'open') {
         // `touch` is bound to THIS chest's column rather than handed up as a coordinate the caller
         // has to remember — the one call that must not be forgotten cannot then be made wrong.
         onOpenChest({

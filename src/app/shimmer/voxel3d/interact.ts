@@ -63,6 +63,15 @@ export type Intent =
   | 'peek'
   /** Meet whoever chose you. */
   | 'harvest'
+  /**
+   * Cast a line, or answer one that is already out. Water, with a rinstick in hand.
+   *
+   * ★ ONE INTENT FOR BOTH HALVES ON PURPOSE. Casting and answering are the same gesture at the same
+   * block, and which one it is depends on the cast's phase — which this file cannot see and must
+   * not learn. It answers *"this click is about rinning"*; the host, which owns the cast, decides
+   * whether that means throw the line, take it, or reel in.
+   */
+  | 'rinn'
   /** Put the block in your hand into the world. */
   | 'place'
   /** Empty hand, ordinary block — the click means nothing, and that is correct. */
@@ -75,7 +84,9 @@ export type Intent =
  *                  out of here so this stays pure, but passed in so `plant` cannot be promised by a
  *                  hotbar slot the bag can't back.
  */
-export function rightClickIntent(aimed: number, selItem: string | null, holdsSeed: boolean): Intent {
+export function rightClickIntent(
+  aimed: number, selItem: string | null, holdsSeed: boolean, hasRinstick = false,
+): Intent {
   // USE is answered FIRST, always. A block you use must not have the block in your hand dropped
   // onto it by the same click that uses it.
   if (aimed === MAT.CHEST) return 'open'
@@ -93,6 +104,23 @@ export function rightClickIntent(aimed: number, selItem: string | null, holdsSee
   // Above the seed/pot branches for the same reason the station is: a keeper carrying a stack of
   // waymarks while standing at one must OPEN it, not stack a second onto its face.
   if (aimed === MAT.WAYMARK) return 'travel'
+  // ── ★★ WATER + AN EMPTY HAND, AND THE EMPTY HAND IS THE CORRECTED HALF ─────────────────────
+  // First version required the rinstick to be the SELECTED item, which reads sensible and is wrong
+  // for this game: **mining already derives the tool from the BLOCK, not from the hand** (`toolSkill
+  // = wantSkill`, set from what you swung at), and `ensureBasicTools` guarantees every keeper one of
+  // Greg's never-breaking starters — `worn_rinstick` among them. Tools are not hotbar items here, so
+  // a rinstick can never BE `selItem`, and gating on it would have shipped a feature that could not
+  // be triggered at all. ★ A rule copied from another game's grammar rather than from this one's.
+  //
+  // So the hand only has to be EMPTY, which keeps the one case that genuinely matters: water with a
+  // BLOCK in hand still places, because filling in a pond is a real thing to want and stealing that
+  // click would read as placement being broken over water.
+  //
+  // ⚠ `hasRinstick` IS PASSED, NOT DERIVED, for the same reason `holdsSeed` is: the tool ladder
+  // lives in `engine/tools.ts` and this file has no business importing it. It is effectively always
+  // true today (Greg's starter), and it is a parameter anyway so that the day a rod can be lost,
+  // this answers `'none'` rather than casting with nothing.
+  if (aimed === MAT.WATER && !selItem && hasRinstick) return 'rinn'
   if (aimed === MAT.POT && selItem === 'mana_seed' && holdsSeed) return 'plant'
   if (aimed === MAT.POT_SEEDED) return 'peek'
   if (aimed === MAT.POT_BLOOM) return 'harvest'
