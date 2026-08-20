@@ -11,6 +11,32 @@
 // of those artefacts is a vault the terrain never actually asked for. The plains pass measured mean
 // |dh| 0.44 per step: most of this world's country is gentle, and most of its walls are rounding.
 //
+// ── ★★★ AND THAT SENTENCE IS A CONSTRAINT ON EVERY FUTURE FEATURE, NOT A NOTE ABOUT THIS ONE ────
+// Added 2026-08-20 by the dens slice, which paid the discovery cost a second time. The line above
+// was already true and already written down, and I sized a feature against the terrain I imagined
+// anyway. **This is the paragraph I needed and it did not exist: the numbers, and what they cost.**
+//
+// Measured over a 1400×1400 grid, the chance a column falls N blocks across a 4-block probe:
+//   `>=2` **23.3%** · `>=3` **9.4%** · `>=4` **4.0%** · `>=5` **1.7%** · `>=6` 0.8% · `>=8` 0.2%
+// Across a 3-block probe a fall of 5 qualifies **0.5%** of the world, and `dell` and `tableland`
+// contain **literally none**. A feature gated on "find a bank" at what reads like a modest slope
+// realises at a **hundredth** of its intended rate — dens first shipped at one per ~450 chunks,
+// which is rarer than the story road and unfindable — and it fails SILENTLY, because a placement
+// rule that never fires looks exactly like a placement rule that is merely rare.
+//
+// ★★ THE SECOND HALF IS WORSE AND IS ABOUT LEGIBILITY, NOT COUNT. What steep country this world has
+// is mostly THIS LAYER'S terracing — a staircase of 1-block risers, each worn to a half — rather
+// than a continuous face. So a feature whose readability depends on a face works on a highland bank
+// and dissolves on a dell one: the same den geometry renders as an unmistakable passage into a
+// hillside in the first, and as a gap between steps in the second. **Same code, same asserts, two
+// different features**, and the terraced case is the COMMON one (meadow and dell are ~47% of the
+// world between them). No count assert can see this; only a render can.
+//
+// ⚠ SO: BEFORE GATING ANYTHING ON SLOPE, MEASURE THE DISTRIBUTION, THEN LOOK AT ONE ON A TERRACE.
+// `scripts/den-tour.mts` is the shape of the tool that makes the second half cheap — find the
+// feature's own instances and hand back a coordinate, because a thing at one per 17 chunks cannot
+// be reviewed by wandering.
+//
 // Slump halves the error where it matters. A column that is the LIP of such a step — one voxel
 // above a neighbour, with nothing higher beside it — gives up the top half of its top voxel. The
 // single 1.0 rise becomes 0.5 + 0.5, and locomotion's existing half-step (STEP_CAPTURE, shipped
