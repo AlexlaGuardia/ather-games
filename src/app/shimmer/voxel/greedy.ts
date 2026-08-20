@@ -307,15 +307,19 @@ export function greedyMesh(
    */
   const cornerY = (cx: number, cz: number, fallback: number): number => {
     const t = waterTops!.corners.get(waterTopKey(cx, cz, S))
-    if (t === undefined) return fallback
-    const local = t - oy0
-    // ⚠ CLAMPED INTO THE BLOCK THAT ACTUALLY HOLDS THE WATER, and the clamp is a guard rather than
-    // the mechanism. The quad's own lattice y is the TOP of the topmost water cell, and the true
-    // table always sits inside that cell — `waterLevelAt` is this value's floor, so the surface is
-    // between `fallback - 1` and `fallback` wherever the quad exists at all. The clamp costs
-    // nothing in the normal case and stops the perimeter rule (`waterSurfaceAt` lowers a
-    // shore column to its dry neighbour's ground) from ever dragging a sheet outside its block.
-    return local < fallback - 1 ? fallback - 1 : local > fallback ? fallback : local
+    if (t === undefined || !Number.isFinite(t)) return fallback
+    // ⚠⚠ NO CLAMP TO THE QUAD'S OWN BLOCK, AND THE CLAMP I FIRST WROTE HERE WAS THE BUG.
+    // Clamping the corner into `[fallback - 1, fallback]` looks like a harmless guard and is
+    // anything but: `fallback` is the QUAD's lattice height, so the clamp makes a corner's height
+    // depend on WHICH QUAD IS ASKING. At a step — the exact case this feature exists to smooth —
+    // the two quads meeting at a corner sit on different levels, so the upper one accepted the true
+    // table and the lower one clamped it a whole block down. Every step became a cliff between two
+    // translucent sheets, and a lake read as a grid of blue boxes: worse than the staircase it
+    // replaced. ★ THE PROPERTY THE WHOLE DESIGN RESTS ON IS THAT A CORNER IS A PURE FUNCTION OF
+    // POSITION; a per-quad clamp silently destroys exactly that, and no assert about the clamp can
+    // notice, because the clamp does what it says. The oracle now asserts CONTINUITY ACROSS A STEP
+    // instead, which is the property rather than the mechanism.
+    return t - oy0
   }
 
   mask.fill(0)

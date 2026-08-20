@@ -673,17 +673,46 @@ for (const S of [4, 16, 32]) {
   ok(offLattice === topQuads * 4,
     `every surface corner sits on the true water table, not the block top (${offLattice}/${topQuads * 4})`)
 
-  // ⚠ The clamp is a guard, not the mechanism: a table value outside the top block must not drag
-  // the sheet out of the block that actually holds the water.
-  const wild = new Map<number, number>()
-  for (const [k] of pCorners) wild.set(k, 99)
-  const clamped = greedyMesh(pond(), undefined, undefined, null, [0, 0, 0], surf(pTops, wild))
-  let bad = 0
-  for (let q = 0; q < clamped.quads; q++) {
-    if (clamped.materials[q * 4] !== MAT.WATER || Math.sign(clamped.normals[q * 12 + 1]) !== 1) continue
-    for (let v = 0; v < 4; v++) { const y = clamped.positions[q * 12 + v * 3 + 1]; if (y > 6 || y < 5) bad++ }
+  // ── ★★★ CONTINUITY ACROSS A STEP — THE PROPERTY, NOT THE MECHANISM ──────────────────────────
+  // This is the assert that matters and the one I did not have first time. A pool whose surface
+  // steps between two levels puts two top quads at DIFFERENT lattice heights against each other.
+  // They share a corner, and the whole design rests on that corner being a pure function of its
+  // position — so both must place it at the same height. My first version clamped each corner into
+  // its own quad's block, which made the height depend on WHICH QUAD ASKED: the upper quad took the
+  // true table, the lower one clamped a whole block down, and every step became a cliff between two
+  // translucent sheets. On a real lake that read as a grid of blue boxes, worse than the staircase
+  // it replaced — and a clamp assert cannot see it, because the clamp does exactly what it claims.
+  const stepped = () => {
+    const sec = new Section(SZ)
+    for (let x = 0; x < SZ; x++) for (let z = 0; z < SZ; z++) for (let y = 0; y <= 3; y++) sec.set(x, y, z, MAT.STONE)
+    for (let x = 0; x < SZ; x++) for (let z = 0; z < SZ; z++) {
+      sec.set(x, 4, z, MAT.WATER)                       // everywhere one deep
+      if (x < 8) sec.set(x, 5, z, MAT.WATER)            // and one deeper on half of it: a step
+    }
+    return sec
   }
-  eq(bad, 0, 'a nonsense table value is clamped into the block that holds the water, never rendered')
+  const sTops = new Map<number, number>(), sCorners = new Map<number, number>()
+  for (let z = -1; z <= SZ; z++) for (let x = -1; x <= SZ; x++) {
+    sTops.set(key(x, z), x < 8 ? 6 : 5)
+    // One continuous table across the whole pool, ramping through the step.
+    sCorners.set(key(x, z), 5.9 - (x / SZ) * 0.8)
+  }
+  const stepMesh = greedyMesh(stepped(), undefined, undefined, null, [0, 0, 0], surf(sTops, sCorners))
+  const cornerHeights = new Map<string, Set<number>>()
+  for (let q = 0; q < stepMesh.quads; q++) {
+    if (stepMesh.materials[q * 4] !== MAT.WATER || Math.sign(stepMesh.normals[q * 12 + 1]) !== 1) continue
+    for (let v = 0; v < 4; v++) {
+      const o = q * 12 + v * 3
+      const k = `${stepMesh.positions[o]},${stepMesh.positions[o + 2]}`
+      if (!cornerHeights.has(k)) cornerHeights.set(k, new Set())
+      cornerHeights.get(k)!.add(Math.round(stepMesh.positions[o + 1] * 1e6))
+    }
+  }
+  let split = 0
+  for (const [, hs] of cornerHeights) if (hs.size > 1) split++
+  eq(split, 0,
+    'a corner shared by quads on DIFFERENT levels gets ONE height — the sheet crosses a step continuously instead of tearing into two')
+  ok(cornerHeights.size > 0, 'fixture: the stepped pool has surface corners at all')
 
   // ★ NO WATER SURFACE SUPPLIED => byte-identical to before this feature existed. Fixtures that
   // never call generateColumn pass `null`, and they must keep meshing exactly as they did.
