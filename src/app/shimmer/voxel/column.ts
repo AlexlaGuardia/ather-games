@@ -26,7 +26,7 @@
 // dependency gate, and it must not become one.**
 
 import { Section, AIR } from './section'
-import { columnHeight, type HeightConfig, DEFAULT_HEIGHT } from './height'
+import { columnHeight, waterTableAt, type HeightConfig, DEFAULT_HEIGHT } from './height'
 import { materialAt, MAT, isPlant, isHalfMat, HALF_BIT, type DepthConfig, DEFAULT_DEPTH } from './depth'
 import {
   bubbleMaterialAt, distFromAxis, DEFAULT_BUBBLE, maxShellRadius, maxBubbleReach, shellCapTop, type BubbleConfig,
@@ -42,7 +42,7 @@ import { placeSites } from './sites'
 import { slumpMask } from './slump'
 import { plantMaterialAt } from './flora'
 import { biomeAt, DEFAULT_BIOME } from './biome'
-import { greedyMesh, createMeshScratch, halfKey, type MeshScratch, type MeshResult, type HalfCells } from './greedy'
+import { greedyMesh, createMeshScratch, halfKey, type MeshScratch, type MeshResult, type HalfCells, waterTopKey, type WaterSurface } from './greedy'
 
 export const SECTION = 16
 
@@ -114,6 +114,19 @@ export class Column {
    * few hundred cells per column, so this is a few KB and is thrown away with the column.
    */
   overrides: Map<number, number> | null = null
+
+  /**
+   * What generated this column. Stamped by `generateColumn`, read only by `meshColumn` to build the
+   * water surface — the mesher needs the true water table, which is a function of the seed.
+   *
+   * ★ STAMPED RATHER THAN PASSED because `meshColumn(col, neigh, scratch, out)` is called from the
+   * worker, the host and four tests, and threading a seed through all of them to reach one optional
+   * feature is a worse change than one field. **Undefined is a legal state**: a Column that was
+   * meshed without being generated (fixtures do this) simply gets no sloped water and behaves
+   * exactly as it did before this existed.
+   */
+  genSeed: number | undefined = undefined
+  genHeight: HeightConfig | undefined = undefined
 
   constructor(wx: number, wz: number, cfg: ColumnConfig = DEFAULT_COLUMN) {
     this.wx = wx
@@ -318,6 +331,8 @@ export function generateColumn(
   col: Column, seed: number, cfg: ColumnConfig = DEFAULT_COLUMN, upTo: Stage = Stage.Ready,
 ): Column {
   const { wx, wz } = col
+  col.genSeed = seed
+  col.genHeight = cfg.height
   const surfaceAt = (x: number, z: number) => columnHeight(x, z, seed, cfg.height)
 
   if (col.stage < Stage.Terrain && upTo >= Stage.Terrain) {
@@ -581,6 +596,71 @@ export interface SectionMesh {
  * (6 boundary planes instead of 51, in `greedy.ts`) is the one that genuinely pays, because 45% of
  * sections are uniform even if their neighbours are not.
  */
+/**
+ * ── ★★ WHAT THE SLOPED WATER SURFACE IS DRAWN FROM (2026-08-20) ───────────────────────────────
+ * Built once per column and handed to the mesher, never asked as a predicate. That is the
+ * measurement in `greedy.ts`'s `HalfFn` note, not a preference: a per-cell callback cost
+ * 22.2ms/column against a 10.5 baseline and blew the frame, and *"the indirection WAS the cost."*
+ *
+ * `tops` answers *where does this column's water end* — the block-quantized surface plane, used to
+ * tell a step's riser (suppressed; the sloped sheet spans it) from a real edge (kept; drop it and
+ * you see into the water body). It carries the one-cell ring so a boundary face gets the same
+ * answer from whichever column meshes it.
+ *
+ * `corners` is the true table at each lattice corner, sampled by WORLD POSITION so two columns
+ * sharing a corner cannot disagree — see the `WaterSurface` docs for why an averaging rule cannot
+ * give that guarantee here. Only corners that actually touch water are sampled, so a dry column
+ * pays four map probes and no noise evaluation.
+ *
+ * Returns `null` when the column and its ring hold no water at all, which skips every water path
+ * in the mesher whole.
+ */
+function buildWaterSurface(col: Column, neigh: Neighbours, seed: number, cfg: HeightConfig): WaterSurface | null {
+  const n = col.sections.length
+  const tops = new Map<number, number>()
+  // Ring included: -1 and SECTION are legal, and come from the edge neighbours.
+  const srcFor = (x: number, z: number): { src: Column | null | undefined; sx: number; sz: number } => {
+    if (x < 0) return { src: neigh.negX, sx: SECTION - 1, sz: z }
+    if (x >= SECTION) return { src: neigh.posX, sx: 0, sz: z }
+    if (z < 0) return { src: neigh.negZ, sx: x, sz: SECTION - 1 }
+    if (z >= SECTION) return { src: neigh.posZ, sx: x, sz: 0 }
+    return { src: col, sx: x, sz: z }
+  }
+  for (let z = -1; z <= SECTION; z++) {
+    for (let x = -1; x <= SECTION; x++) {
+      // The four ring CORNERS belong to diagonal columns nobody holds — they resolve to no source
+      // and simply carry no entry, which costs nothing: `corners` never consults a cell.
+      const { src, sx, sz } = srcFor(x, z)
+      if (!src) continue
+      for (let i = n - 1; i >= 0; i--) {
+        const u = src.uniform[i]
+        if (u === AIR) continue
+        if (u !== -1 && u !== MAT.WATER) continue          // uniform solid: no water in it
+        if (u === MAT.WATER) { tops.set(waterTopKey(x, z, SECTION), (i + 1) * SECTION); break }
+        const sec = src.sections[i]
+        let found = -1
+        for (let y = SECTION - 1; y >= 0; y--) if (sec.get(sx, y, sz) === MAT.WATER) { found = y; break }
+        if (found >= 0) { tops.set(waterTopKey(x, z, SECTION), i * SECTION + found + 1); break }
+      }
+    }
+  }
+  if (tops.size === 0) return null
+  const corners = new Map<number, number>()
+  for (const key of tops.keys()) {
+    // Recover the cell this top belongs to, then sample its four corners.
+    const kx = (key % (SECTION + 2)) - 1, kz = ((key / (SECTION + 2)) | 0) - 1
+    for (let dz = 0; dz <= 1; dz++) {
+      for (let dx = 0; dx <= 1; dx++) {
+        const cx = kx + dx, cz = kz + dz
+        const ck = waterTopKey(cx, cz, SECTION)
+        if (corners.has(ck)) continue
+        corners.set(ck, waterTableAt(col.wx + cx, col.wz + cz, seed, cfg))
+      }
+    }
+  }
+  return { tops, corners }
+}
+
 export function meshColumn(
   col: Column, neigh: Neighbours = {}, scratch?: MeshScratch, out: SectionMesh[] = [],
 ): SectionMesh[] {
@@ -590,6 +670,9 @@ export function meshColumn(
   // One reusable scratch section for the lip-stripped copy (see the strip block below). Allocated
   // per column mesh, not per section, and never touched unless a section actually holds a lip.
   const strip = new Section(SECTION)
+  // One water surface per column, not per section — the table is a property of the place.
+  const water = col.genSeed === undefined
+    ? null : buildWaterSurface(col, neigh, col.genSeed, col.genHeight ?? DEFAULT_HEIGHT)
 
   for (let i = 0; i < n; i++) {
     const sec = col.sections[i]
@@ -681,7 +764,7 @@ export function meshColumn(
       : (x: number, y: number, z: number) => half!.has(halfKey(x, y, z, SECTION)) ? AIR : raw(x, y, z)
     // The world corner, for the leaf pass's per-cell hash — see `greedyMesh`. Everything else in
     // the mesher is section-local on purpose and stays that way.
-    const mesh = greedyMesh(meshSec, neighbourFn, sc, half, [col.wx, oy, col.wz])
+    const mesh = greedyMesh(meshSec, neighbourFn, sc, half, [col.wx, oy, col.wz], water)
     if (mesh.quads === 0) continue
     // ⚠ The scratch is reused, so these arrays are views that the NEXT section will overwrite.
     // Copy them here: the caller receives a list, and a list of aliased views is a trap.

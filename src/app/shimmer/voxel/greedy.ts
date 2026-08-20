@@ -94,6 +94,56 @@ const OUTSIDE_IS_AIR: NeighbourFn = () => AIR
  */
 export type HalfCells = Map<number, number>
 
+/**
+ * ── ★★ WHERE THE WATER SURFACE ACTUALLY IS, PER COLUMN (2026-08-20) ───────────────────────────
+ *
+ * The water table is a SMOOTH bilinear field (`height.ts` `waterSurfaceAt`, a 96-block lattice)
+ * but water is placed in WHOLE BLOCKS, so the rendered surface is a staircase: wherever the smooth
+ * field crosses a block boundary the surface drops a step, and the step's riser is a vertical water
+ * face. Measured on real terrain: **118 vertical water quads across 9 columns, every one exactly 1
+ * block tall**, and a single 16x16 column carrying surface levels 113 AND 114. Underwater, with a
+ * riverbed finally behind them, those risers read as walls of blue standing in open water.
+ *
+ * The fix is Minecraft's: give each surface quad's corners a height and let the sheet SLOPE. This
+ * map is what that is computed from — section-local `(x, z)` INCLUDING the one-cell ring, valued
+ * with the WORLD y of the surface plane (topmost water cell + 1). `null` means no water in reach
+ * and every water path below is skipped whole.
+ *
+ * ★ IT IS A MAP AND NOT A PREDICATE, AND THAT IS THE MEASUREMENT ABOVE, NOT A PREFERENCE. A
+ * per-cell `half(x,y,z)` callback cost 22.2ms/column against a 10.5 baseline and blew the frame;
+ * *"the indirection WAS the cost, not the work inside it."* The caller precomputes, the sweep reads.
+ *
+ * ★ DERIVED FROM PLACED CELLS, NEVER FROM `waterSurfaceAt`. Three reasons, in order: the mesher
+ * does not know worldgen exists and must not start (the same rule that keeps slump out of here); a
+ * player-placed or edited pool has no entry in any noise field; and the averaging below is what
+ * Minecraft does, so it degrades correctly at an edge instead of needing a special case.
+ */
+export interface WaterSurface {
+  /**
+   * Cell `(x, z)` INCLUDING the one-cell ring → the WORLD y of the block-quantized surface plane
+   * (topmost water cell + 1). Answers one question only: *does this column's water end here?*,
+   * which is what tells an internal riser apart from a real edge.
+   */
+  tops: Map<number, number>
+  /**
+   * Lattice CORNER `(x, z)` → the WORLD y of the true, un-quantized water table there.
+   *
+   * ★★ A CORNER'S HEIGHT MUST BE A PURE FUNCTION OF ITS WORLD POSITION, AND THAT IS A HARD
+   * CONSTRAINT, NOT A STYLE. Minecraft averages the four fluid cells touching a corner; that
+   * cannot work here, because a column can see its four edge-neighbours but **not its diagonals**
+   * (`Neighbours` in `column.ts` carries negX/posX/negZ/posZ and nothing else). At each of a
+   * column's four corners the diagonal cell is exactly the one neither side can agree about — two
+   * columns would average different sets, land up to a quarter-block apart, and open a crack where
+   * four quads meet. Sampling `waterTableAt` at the corner's world position removes the
+   * neighbourhood from the question entirely, so both sides compute the identical number by
+   * construction and continuity is not something anyone has to maintain.
+   */
+  corners: Map<number, number>
+}
+
+/** Key for either map. Accepts the one-cell ring, so -1 and S are legal on both axes. */
+export const waterTopKey = (x: number, z: number, S: number): number => (x + 1) + (z + 1) * (S + 2)
+
 /** Key for `HalfCells`. Accepts the one-cell ring, so −1 and S are legal on every axis. */
 export const halfKey = (x: number, y: number, z: number, S: number): number =>
   ((y + 1) * (S + 2) + (z + 1)) * (S + 2) + (x + 1)
@@ -223,6 +273,7 @@ function cellHash(x: number, y: number, z: number): number {
 export function greedyMesh(
   sec: Section, neighbour: NeighbourFn = OUTSIDE_IS_AIR, scratch?: MeshScratch,
   half: HalfCells | null = null, origin: readonly [number, number, number] = [0, 0, 0],
+  waterTops: WaterSurface | null = null,
 ): MeshResult {
   const S = sec.size
   const sc = scratch && scratch.size === S ? scratch : createMeshScratch(S)
@@ -233,6 +284,40 @@ export function greedyMesh(
   let sliceOpqA = sc.sliceOpqA, sliceOpqB = sc.sliceOpqB
   /** Row stride of a slice grid: the section plus its one-cell ring on each side. */
   const SW = S + 2
+  /** This section's world y. `WaterTops` is keyed per column and valued in WORLD y — one map
+   *  serves all 16 sections of a column, so the comparison has to happen in world space. */
+  const oy0 = origin[1]
+
+  /**
+   * ── ★★ THE SLOPED SURFACE, MINECRAFT'S TRICK (2026-08-20) ────────────────────────────────────
+   * Height of the water sheet at one lattice CORNER, in section-local y: the mean surface plane of
+   * the water columns touching it. A corner is touched by four cells — `(cx-1,cz-1)` `(cx,cz-1)`
+   * `(cx-1,cz)` `(cx,cz)` — and **dry columns are excluded from the mean rather than counted as
+   * zero**, which is the whole reason a pond's edge stays at full height instead of collapsing to
+   * the floor.
+   *
+   * ★ CONTINUITY IS FREE AND IS THE POINT. Two neighbouring quads compute their shared corner from
+   * the same lattice position and the same four cells, so they agree EXACTLY and no crack can open
+   * — including across merged quads, whose shared edge is a straight line between the same two
+   * endpoints as its neighbour's. That is what lets merging stay untouched.
+   *
+   * ⚠ THE `<= 2` BAND IS NOT COSMETIC. Without it a corner where a hillside river passes above a
+   * lower pond averages two unrelated water bodies and drags the sheet through the rock between
+   * them. Only surfaces within a couple of blocks are the same sheet.
+   */
+  const cornerY = (cx: number, cz: number, fallback: number): number => {
+    const t = waterTops!.corners.get(waterTopKey(cx, cz, S))
+    if (t === undefined) return fallback
+    const local = t - oy0
+    // ⚠ CLAMPED INTO THE BLOCK THAT ACTUALLY HOLDS THE WATER, and the clamp is a guard rather than
+    // the mechanism. The quad's own lattice y is the TOP of the topmost water cell, and the true
+    // table always sits inside that cell — `waterLevelAt` is this value's floor, so the surface is
+    // between `fallback - 1` and `fallback` wherever the quad exists at all. The clamp costs
+    // nothing in the normal case and stops the perimeter rule (`waterSurfaceAt` lowers a
+    // shore column to its dry neighbour's ground) from ever dragging a sheet outside its block.
+    return local < fallback - 1 ? fallback - 1 : local > fallback ? fallback : local
+  }
+
   mask.fill(0)
 
   let quads = 0
@@ -273,6 +358,9 @@ export function greedyMesh(
   for (let d = 0; d < 3; d++) {
     const u = (d + 1) % 3
     const v = (d + 2) % 3
+    /** Riser suppression applies to VERTICAL faces only — a `d === 1` plane is horizontal and has
+     *  no riser to confuse with an edge. Hoisted out of the per-cell loop; it is loop-invariant. */
+    const waterRisers = waterTops !== null && d !== 1
     x[0] = x[1] = x[2] = 0
     q[0] = q[1] = q[2] = 0
     q[d] = 1
@@ -392,6 +480,35 @@ export function greedyMesh(
           const rankA = sliceSolA[si] + sliceOpqA[si]
           const rankB = sliceSolB[si] + sliceOpqB[si]
           const aSolid = rankA > rankB
+          // ── ★★ A WALL OF WATER IS WATER FACING SOMETHING THE SWEEP CANNOT SEE ───────────────
+          // A vertical water|"air" face is several different things wearing one shape, and the two
+          // cells alone cannot tell them apart:
+          //   · a SUBMERGED PLANT — and measured on real river terrain this is the COMMON case, not
+          //     the step. Reeds on a riverbed are `isPlant`, so `fillSlice` reads them as AIR (the
+          //     same exemption that lets terrain draw behind a leaf), and the water around one then
+          //     cuts a face into its cell. The result is a blue panel standing INSIDE the water,
+          //     visible through the plant's own crossed quads. Measured over 9 real river columns:
+          //     118 vertical water faces total → 91 submerged cells, 11 step risers, 16 genuine
+          //     edges. The staircase everyone would blame is the SMALLEST of the three.
+          //   · a STEP between two water levels — the staircase the sloped corners replace. Leave
+          //     the riser in and a slice of wall stands proud of the sheet it belongs to.
+          //   · a true EDGE, where the neighbouring column holds no water at all (a bank, or water
+          //     against a dry hollow). Drop THAT one and you see straight into the water body.
+          // ★ One inequality covers the first two and spares the third: is the empty cell across
+          // this face at or below the neighbouring column's own water surface? If so it is INSIDE
+          // the body of water and no face belongs there. `tops` is the surface plane (topmost water
+          // cell + 1), so submerged is `top >= cellY` — a plant three blocks down and a step riser
+          // one block down both satisfy it, and a dry column has no entry at all.
+          // On the face-positive path only: the same rare branch AO is already paid from, never the
+          // per-cell budget the uniform fast path exists to protect.
+          if (waterRisers && rankA !== rankB && (aSolid ? a : b) === MAT.WATER) {
+            // The empty cell is whichever side lost the rank; only its d-coordinate differs, and d
+            // is never 1 here (a horizontal face has no riser), so y is shared by both sides.
+            const ax = aSolid && d === 0 ? x[0] + 1 : x[0]
+            const az = aSolid && d === 2 ? x[2] + 1 : x[2]
+            const top = waterTops!.tops.get(waterTopKey(ax, az, S))
+            if (top !== undefined && top >= x[1] + oy0) { mask[n] = 0; n++; continue }
+          }
           if (rankA === rankB) mask[n] = 0
           else {
             // ★ AO IS COMPUTED ONLY ON THE FACE-POSITIVE BRANCH. The mask loop runs over every cell
@@ -480,6 +597,19 @@ export function greedyMesh(
             positions[p + 3] = x[0] + du[0];         positions[p + 4] = x[1] + du[1];         positions[p + 5] = x[2] + du[2]
             positions[p + 6] = x[0] + du[0] + dv[0]; positions[p + 7] = x[1] + du[1] + dv[1]; positions[p + 8] = x[2] + du[2] + dv[2]
             positions[p + 9] = x[0] + dv[0];         positions[p + 10] = x[1] + dv[1];        positions[p + 11] = x[2] + dv[2]
+          }
+
+          // ★ Only the water SHEET slopes: a `+Y` water face exists exactly where water meets air
+          // above it, so this is the surface by construction and no extra test is needed to find
+          // it. Read each corner's own (x, z) back out of the positions just written rather than
+          // re-deriving the u/v axis mapping — the winding already differs between front and back
+          // faces and that is precisely the kind of duplicated index arithmetic that goes quietly
+          // wrong. Emission-time, so it is paid per QUAD, never per cell.
+          if (waterTops !== null && d === 1 && !back && mat === MAT.WATER) {
+            for (let k = 0; k < 4; k++) {
+              const o = p + k * 3
+              positions[o + 1] = cornerY(positions[o], positions[o + 2], positions[o + 1])
+            }
           }
 
           const nx = d === 0 ? (back ? -1 : 1) : 0

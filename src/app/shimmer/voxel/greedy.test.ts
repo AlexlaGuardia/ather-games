@@ -6,9 +6,9 @@
 // rather than something to notice by eye later.
 
 import { AIR, Section } from './section'
-import { greedyMesh, TRUNK_WIDTH } from './greedy'
+import { greedyMesh, TRUNK_WIDTH, waterTopKey } from './greedy'
 import { WOOD } from './trees'
-import { MAT } from './depth'
+import { MAT, PLANT_MIN } from './depth'
 
 let pass = 0
 const fails: string[] = []
@@ -600,6 +600,95 @@ for (const S of [4, 16, 32]) {
     for (let i = 0; i < m.quads * 4; i++) if (m.ao[i] > 3) bad++
     eq(bad, 0, 'every AO value stays inside 0..3 — a rank leaking into the AO operand shows up here first')
   }
+}
+
+// ── ★★ THE WATER SHEET: NO WALLS INSIDE A BODY OF WATER, AND STILL A RIM AROUND IT ────────────
+// Alex reported "the walls of the water blocks" underwater. They were water faces cut into cells
+// the sweep reads as AIR — overwhelmingly SUBMERGED PLANTS (reeds on a riverbed are `isPlant`, so
+// `fillSlice` reads them as air exactly as it reads a leaf), plus step risers where the block-
+// quantized surface drops a level. Measured over 9 real river columns: 118 vertical water faces =
+// 91 submerged · 11 steps · 16 genuine edges. The staircase is the SMALLEST of the three, which is
+// why "fix the steps" alone would have moved 118 to 107 and looked like a failed fix.
+{
+  const SZ = 16
+  const surf = (tops: Map<number, number>, corners: Map<number, number>) => ({ tops, corners })
+  const key = (x: number, z: number) => waterTopKey(x, z, SZ)
+
+  // A pool 4 deep with a PLANT standing on its floor, fully submerged.
+  const withPlant = () => {
+    const sec = new Section(SZ)
+    for (let x = 0; x < SZ; x++) for (let z = 0; z < SZ; z++) {
+      for (let y = 0; y <= 3; y++) sec.set(x, y, z, MAT.STONE)
+      for (let y = 4; y <= 7; y++) sec.set(x, y, z, MAT.WATER)
+    }
+    sec.set(8, 4, 8, PLANT_MIN)          // a reed on the bed, water all around and above it
+    return sec
+  }
+  const tops = new Map<number, number>(), corners = new Map<number, number>()
+  for (let z = -1; z <= SZ; z++) for (let x = -1; x <= SZ; x++) {
+    tops.set(key(x, z), 8)                                    // surface plane: topmost water is y7
+    corners.set(key(x, z), 7.6)                               // true table inside the top block
+  }
+
+  const countWaterSides = (m: ReturnType<typeof greedyMesh>) => {
+    let n = 0
+    for (let q = 0; q < m.quads; q++) {
+      if (m.materials[q * 4] !== MAT.WATER) continue
+      if (Math.abs(m.normals[q * 12 + 1]) > 0.5) continue
+      n++
+    }
+    return n
+  }
+  const bare = greedyMesh(withPlant())
+  const fixed = greedyMesh(withPlant(), undefined, undefined, null, [0, 0, 0], surf(tops, corners))
+  ok(countWaterSides(bare) > 0,
+    `fixture: without the water surface the submerged plant DOES cut walls into the water (${countWaterSides(bare)})`)
+  eq(countWaterSides(fixed), 0,
+    'a plant submerged in a pool cuts no wall — the sweep reads it as air, but it is inside the body of water')
+
+  // ★ AND THE RIM MUST SURVIVE. Suppressing every water|air face would be the easy over-fix and
+  // would let you see straight into the water body from the side.
+  const pond = () => {
+    const sec = new Section(SZ)
+    for (let x = 0; x < SZ; x++) for (let z = 0; z < SZ; z++) for (let y = 0; y <= 3; y++) sec.set(x, y, z, MAT.STONE)
+    for (let x = 4; x < 12; x++) for (let z = 4; z < 12; z++) for (let y = 4; y <= 5; y++) sec.set(x, y, z, MAT.WATER)
+    return sec
+  }
+  const pTops = new Map<number, number>(), pCorners = new Map<number, number>()
+  for (let z = 4; z < 12; z++) for (let x = 4; x < 12; x++) { pTops.set(key(x, z), 6); pCorners.set(key(x, z), 5.7) }
+  for (let z = 4; z <= 12; z++) for (let x = 4; x <= 12; x++) pCorners.set(key(x, z), 5.7)
+  const pondMesh = greedyMesh(pond(), undefined, undefined, null, [0, 0, 0], surf(pTops, pCorners))
+  ok(countWaterSides(pondMesh) > 0,
+    'a pond keeps the rim where it meets dry land — a dry column has no `tops` entry, so its face is never suppressed')
+
+  // ★ THE SHEET SLOPES, and its corners land where the TRUE table is, not on the lattice.
+  let topQuads = 0, offLattice = 0
+  for (let q = 0; q < pondMesh.quads; q++) {
+    if (pondMesh.materials[q * 4] !== MAT.WATER) continue
+    if (Math.sign(pondMesh.normals[q * 12 + 1]) !== 1) continue
+    topQuads++
+    for (let v = 0; v < 4; v++) if (Math.abs(pondMesh.positions[q * 12 + v * 3 + 1] - 5.7) < 1e-6) offLattice++
+  }
+  ok(topQuads > 0, 'fixture: the pond has a surface')
+  ok(offLattice === topQuads * 4,
+    `every surface corner sits on the true water table, not the block top (${offLattice}/${topQuads * 4})`)
+
+  // ⚠ The clamp is a guard, not the mechanism: a table value outside the top block must not drag
+  // the sheet out of the block that actually holds the water.
+  const wild = new Map<number, number>()
+  for (const [k] of pCorners) wild.set(k, 99)
+  const clamped = greedyMesh(pond(), undefined, undefined, null, [0, 0, 0], surf(pTops, wild))
+  let bad = 0
+  for (let q = 0; q < clamped.quads; q++) {
+    if (clamped.materials[q * 4] !== MAT.WATER || Math.sign(clamped.normals[q * 12 + 1]) !== 1) continue
+    for (let v = 0; v < 4; v++) { const y = clamped.positions[q * 12 + v * 3 + 1]; if (y > 6 || y < 5) bad++ }
+  }
+  eq(bad, 0, 'a nonsense table value is clamped into the block that holds the water, never rendered')
+
+  // ★ NO WATER SURFACE SUPPLIED => byte-identical to before this feature existed. Fixtures that
+  // never call generateColumn pass `null`, and they must keep meshing exactly as they did.
+  const a1 = greedyMesh(pond()), a2 = greedyMesh(pond(), undefined, undefined, null, [0, 0, 0], null)
+  eq(a1.quads, a2.quads, 'a null water surface changes nothing')
 }
 
 console.log(`\ngreedy mesher: ${pass} passed, ${fails.length} failed`)

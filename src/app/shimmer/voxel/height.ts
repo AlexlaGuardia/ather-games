@@ -432,13 +432,35 @@ function tableCorner(gx: number, gz: number, seed: number, cfg: HeightConfig): n
   return v
 }
 
-export function waterLevelAt(x: number, z: number, seed: number, cfg: HeightConfig = DEFAULT_HEIGHT): number {
+/**
+ * ── ★★ THE WATER TABLE BEFORE IT IS QUANTIZED (2026-08-20) ────────────────────────────────────
+ * The same bilinear blend `waterLevelAt` returns, WITHOUT the floor — i.e. where the water surface
+ * genuinely is, as a real number.
+ *
+ * ★ WHY IT IS EXPORTED SEPARATELY RATHER THAN INLINED AT THE ONE CALL SITE. The floor is exactly
+ * what turns a smooth surface into a staircase, and the staircase's risers are the "walls of water"
+ * you see standing in a river. The sloped-surface renderer needs the pre-floor value to put a quad
+ * corner where the water actually is — and it needs it to be a **pure function of world position**,
+ * because that is the only thing that makes two neighbouring columns agree on a corner they share.
+ * Any rule derived from surrounding CELLS instead cannot: a column can see its four edge-neighbours
+ * but not its diagonals (`Neighbours` in `column.ts` has no diagonal), so at the four corners of
+ * every column the two sides would average different sets and open a crack. Position in, height
+ * out, no neighbourhood — that is the whole reason this function exists.
+ *
+ * ⚠ Continuous, so it is meaningful at a CORNER (an integer world lattice point between cells),
+ * not only at a cell. `waterLevelAt` keeps its exact previous behaviour as the floor of this.
+ */
+export function waterTableAt(x: number, z: number, seed: number, cfg: HeightConfig = DEFAULT_HEIGHT): number {
   const gx = Math.floor(x / WATER_LATTICE), gz = Math.floor(z / WATER_LATTICE)
   const fx = x / WATER_LATTICE - gx, fz = z / WATER_LATTICE - gz
   const a = tableCorner(gx, gz, seed, cfg), b = tableCorner(gx + 1, gz, seed, cfg)
   const c = tableCorner(gx, gz + 1, seed, cfg), d = tableCorner(gx + 1, gz + 1, seed, cfg)
   const level = (a + (b - a) * fx) + ((c + (d - c) * fx) - (a + (b - a) * fx)) * fz
-  return Math.floor(level - 1)
+  return level - 1
+}
+
+export function waterLevelAt(x: number, z: number, seed: number, cfg: HeightConfig = DEFAULT_HEIGHT): number {
+  return Math.floor(waterTableAt(x, z, seed, cfg))
 }
 
 /**
