@@ -231,9 +231,29 @@ function paintGrassTop(dst: Layer, size: number, seed: number,
  * lives in the shader precisely so this file, and any hand-painted tile that replaces it, can be
  * authored the obvious way round.
  */
+/**
+ * ── ★★ THE FLANK CARRIES THE GROUND IT HOLDS UP (#620, 2026-08-19) ─────────────────────────────
+ * Until now `dirt` was `MAT.SUBSOIL` flat, for every turf in the world. So slice ① gave the world
+ * nine grounds and slice ② dressed them — and every one of them still sat on the SAME cold brown
+ * flank, which is why a bright lush-turf top met a dark side at every terrace lip. Alex called it
+ * the most visible remaining seam between grounds, and it is: the top face is what you see from
+ * standing height, but on terraced country the FLANK is most of what you actually look at.
+ *
+ * ★ DERIVED, NOT TABULATED, and that is deliberate. A per-ground soil table would be one more
+ * `Record` to forget the day a tenth ground lands — the exact drift the doctor spent tonight
+ * proving (a check comparing against a model of what exists, while the model rots). Pulling the
+ * flank from bare subsoil TOWARD the ground's own colour means a new ground gets a matching flank
+ * for free, and the relationship is the physical one: the soil under a turf is that turf's soil.
+ *
+ * ⚠ IT IS A PULL, NOT A REPLACEMENT. At t=1 the flank becomes the grass colour and every terrace
+ * face turns green, which is the opposite failure — a cliff of lawn. The crown must still read as
+ * the only living part of the side. `FLANK_TINT` is the dial; the shade is ALEX'S EYE, not mine.
+ */
+export const FLANK_TINT = 0.35
+
 function paintGrassSide(dst: Layer, size: number, seed: number,
-  crownColor: number = MATERIAL_COLOR[MAT.TOPSOIL]) {
-  const dirt = rgbOf(MATERIAL_COLOR[MAT.SUBSOIL])
+  crownColor: number = MATERIAL_COLOR[MAT.TOPSOIL], flankTint: number = FLANK_TINT) {
+  const dirt = mix(rgbOf(MATERIAL_COLOR[MAT.SUBSOIL]), rgbOf(crownColor), flankTint)
   const grass = rgbOf(crownColor)
   const crown = Math.max(2, Math.round(size * 0.28))
   for (let x = 0; x < size; x++) {
