@@ -229,19 +229,42 @@ export const DEFAULT_BUBBLE: BubbleConfig = {
   // detail you find by walking into it. ⚠ These feed `inPassageVolume` (the crossing trigger) AND
   // the seam's drawn size; they cannot be tuned independently and must not be.
   passageWidth: 9,
-  passageHeight: 24,
-  // ── ★ SIZED AGAINST THE SEAM, NOT AGAINST THE PLOT'S MOUND (2026-08-20) ──────────────────────
-  // The bore must swallow the Wilds ribbon (7.65 half-wide × 21.6 tall — `seam.ts`) CORNERS AND ALL,
-  // which is what `boreSpring` 23 buys: straight walls past the ribbon's full height, then a 7-block
-  // cap. The body is then sized to leave real cloud AROUND that hole — 17 half-width against a 9
-  // half-width bore is 8 blocks of flank, 40 against 30 is ten over the crown. Shrink either of the
-  // first two toward the second and the mound stops reading as a body with a hole in it and starts
-  // reading as a tube. ⚠ The pact is asserted in `seam.test.ts` §8, on six seeds; it has been seen
-  // red, so it is evidence rather than decoration.
+  // ── ★★ 24 → 10, AND THIS UN-PICKS THE 08-19 RAISE ON PURPOSE (Alex, 2026-08-20) ──────────────
+  // The 08-19 pass took the door to 18 × 24 because a doorway in a 6.3km wall was "a scratch at any
+  // distance" and the SEAM was the only cue there was — a transparent cue on a pale wall. That
+  // reasoning was correct and it has now EXPIRED, because the cave arrived: the mound is an opaque
+  // landmark and it has taken over the findable-from-the-glade job. `plot.ts` made this exact move
+  // first — its wall is 9 tall, its mound is 15, and its door is a human-scale 8 × 7, because the
+  // heap is what you see and walk toward. ★ A reason can be sound and still stop being true; when
+  // something else starts carrying the load, the number tuned to carry it should go back.
   //
-  // ⚠ `depth` 14 IS ALSO THE ARRIVAL DISTANCE AND THE `/goto garden` LANDING — see `approachStandoff`.
+  // ⚠ THIS IS THE CROSSING TRIGGER TOO, WHICH IS WHY IT IS NOT A COSMETIC EDIT. `inPassageVolume`
+  // takes a keeper up to `passageHeight` above the ground, so a crossing now fires in a 10-block band
+  // rather than a 24-block one. A keeper who jumps at the door still crosses; one drifting past it
+  // fifteen blocks up no longer does, which is the right answer and was not the old one.
+  passageHeight: 10,
+  // ── ★ SIZED AGAINST THE SEAM, NOT AGAINST THE PLOT'S MOUND (2026-08-20) ──────────────────────
+  // ── ★★★ SIZED BY THE PLOT'S OWN RULE, WHICH IS NOT THE RULE I FIRST INVENTED ─────────────────
+  // `plot.ts` states it in its own config: *"THE MOUTH MUST OUT-MEASURE THE TRIGGER, NOT MATCH IT."*
+  // Its bore is cut against the trigger radius and the seam's HALF-WIDTH — and its seam is **14 tall
+  // standing in a 7-tall mouth**, overshooting by double, deliberately and without complaint. A drawn
+  // shimmer is not a thing that has to fit in a hole.
+  //
+  // ⚠ I FIRST ASSERTED THE OPPOSITE — that every ribbon point must sit inside the bore — watched it
+  // go red, and grew the geometry until my own invented rule went green. That is what produced an
+  // 18 × 30 mouth and a 40-block mound: a cathedral doorway, sized by a contract no other part of
+  // this game holds. ★ A NEW ASSERT CAN BE FALSIFIABLE, RED FOR A REAL REASON, AND STILL BE THE
+  // WRONG RULE. Check a new invariant against the code that already solves the same problem before
+  // reshaping anything to satisfy it.
+  //
+  // ★ `height` 78 IS ABOVE THE WALL, AND THAT DIFFERENCE IS THE WHOLE LANDMARK — the plot says so in
+  // one line (*"`height` 15 IS ABOVE `wallHeight` 9 ON PURPOSE"*), and the Wilds wall stands ~67 over
+  // the ground at the door, so anything under that is a bump on a cliff. The mouth out-measures the
+  // trigger (18 × 14 against 18 × 10) and the seam's half-width (9 against 7.65), with room to spare.
+  //
+  // ⚠ `depth` IS ALSO THE ARRIVAL DISTANCE AND THE `/goto garden` LANDING — see `approachStandoff`.
   // It is not a free number; tune it and both of those move with it, which is the intent.
-  cave: { depth: 14, halfWidth: 17, height: 40, boreHalfWidth: 9, boreSpring: 23, boreHeight: 30 },
+  cave: { depth: 22, halfWidth: 28, height: 78, boreHalfWidth: 9, boreSpring: 9, boreHeight: 14 },
   materials: { wall: 1 },
 }
 

@@ -193,35 +193,58 @@ function quadPoints(a: { x: number; z: number; y: number; bearing: number; halfW
     'the anchor takes its bearing from the config it was handed')
 }
 
-// ── 8. ★★ THE MOUND MAY NEVER EAT THE DOOR (2026-08-20) ────────────────────────────────────────
-// The Wilds-side cloud cave puts a body of cloud exactly where the seam is drawn, and the two are
-// sized independently: the ribbon comes off `passageWidth · 0.85` × `passageHeight · 0.9`, the bore
-// off `cave.boreHalfWidth` × `cave.boreHeight`. Nothing in either file makes them agree.
+// ── 8. ★★ THE MOUTH OUT-MEASURES THE TRIGGER — THE PLOT'S RULE, NOT MY INVENTED ONE ───────────
 //
-// ★ AND THE FAILURE IS SILENT IN THE WORST WAY. A bore too small does not throw and does not look
-// broken — the crossing still fires, because the trigger is a volume at the wall and the wall is
-// where it always was. What a keeper sees is a solid mound they walk into, with the shimmer buried
-// inside it. That reads as "the door is gone", which is precisely the state the 08-19 landmark pass
-// existed to end. `seam.test.ts` already asserts the ribbon sits inside `inPassageVolume`; this is
-// the same pact against the new geometry — drawn where the door OPENS, not merely where it triggers.
+// ⚠⚠ WHAT STOOD HERE ASSERTED THAT EVERY SEAM RIBBON POINT SITS INSIDE THE CAVE'S BORE, AND THAT
+// RULE IS NOT THE GAME'S. `plot.ts` writes its own out loud — *"THE MOUTH MUST OUT-MEASURE THE
+// TRIGGER, NOT MATCH IT"* — and sizes its bore against the trigger radius and the seam's HALF-WIDTH.
+// Its seam is **14 tall standing in a 7-tall mouth**: double the overshoot, shipped, uncommented,
+// because a drawn shimmer is a light effect and not a body that has to fit through a hole.
+//
+// ★ THE INVENTED RULE WAS FALSIFIABLE, WENT RED FOR A REAL REASON, AND WAS STILL WRONG. It came back
+// red on all six seeds; the corners genuinely were inside cloud; and I reshaped the geometry until it
+// passed — an 18 × 30 mouth in a 40-block mound, a cathedral doorway built to satisfy a contract
+// nothing else in the build holds. **A red assert proves the code disagrees with the assert. It does
+// not say which of the two is wrong.** Check a new invariant against whatever already solves the same
+// problem — here, one file over, in a config comment — before reshaping anything to satisfy it.
+//
+// So what is asserted now is the claim the plot actually makes, and the one that has a player
+// consequence: the keeper must not walk into cloud at the moment the crossing fires.
 {
+  const c = WILDS_BUBBLE.cave!
+  // The mouth clears the trigger's width and the seam's half-width, with room — the plot's exact
+  // reasoning: a bore cut to the numbers it must clear puts cloud where the crossing fires, so the
+  // keeper hits the wall of their own doorway a pace before it takes them.
+  const seamHalf = WILDS_BUBBLE.passageWidth * 0.85
+  ok(c.boreHalfWidth > seamHalf, `the mouth is wider than the drawn seam (${c.boreHalfWidth} vs ${seamHalf})`)
+  ok(c.boreHeight > WILDS_BUBBLE.passageHeight,
+    `★ the mouth out-measures the crossing trigger's height (${c.boreHeight} vs ${WILDS_BUBBLE.passageHeight}) — ` +
+    'a keeper the trigger accepts must not be standing in cloud')
+
+  // And the part that is genuinely about the seam: its FOOT — the band a walking keeper meets — is
+  // open. Overshoot above the mouth is allowed and expected, exactly as on the plot side.
   for (const seed of SEEDS) {
     const ribs = wildsSeamRibbon(seed, WILDS_BUBBLE)
     let buried = 0, sampled = 0
     for (const r of ribs) {
-      // ⚠ `yb`/`yt`, AND THE FIRST VERSION OF THIS BLOCK READ `r.y` AND `r.height` — FIELDS A RIB
-      // DOES NOT HAVE. Every sample computed `NaN`, `bubbleCaveAt` answered `null` for all of them,
-      // and the assert passed on six seeds while proving nothing. Caught by re-running it against a
-      // deliberately plot-sized bore (4 × 7, which genuinely does bury the door) and watching it stay
-      // green. ★ A NEW ASSERT IS NOT EVIDENCE UNTIL IT HAS BEEN SEEN TO FAIL — and `tsc` would have
-      // said so in one line, which is the cheaper half of the lesson.
-      for (let f = 0; f <= 1.0001; f += 0.25) {
-        const y = Math.round(r.yb + (r.yt - r.yb) * f)
+      for (let dy = 0; dy <= WILDS_BUBBLE.passageHeight; dy += 2) {
         sampled++
-        if (bubbleCaveAt(Math.round(r.x), y, Math.round(r.z), seed, r.yb, WILDS_BUBBLE) === 'shell') buried++
+        if (bubbleCaveAt(Math.round(r.x), r.yb + dy, Math.round(r.z), seed, r.yb, WILDS_BUBBLE) === 'shell') buried++
       }
     }
     ok(sampled > 0 && buried === 0,
-      `seed ${seed}: ${buried} of ${sampled} seam points stand inside the cave's cloud — the mound is burying the door`)
+      `seed ${seed}: ${buried} of ${sampled} points in the crossing band stand inside the cave's cloud`)
+  }
+
+  // ★ AND THE LANDMARK CLAIM, WHICH IS THE ONE ALEX ASKED FOR AND THE ONLY REASON THE MOUND EXISTS.
+  // `plot.ts`: *"`height` 15 IS ABOVE `wallHeight` 9 ON PURPOSE — that difference IS the landmark. A
+  // mound that tops out level with the wall is a bump you find by walking into it."* Out here the
+  // wall's height is not a config field, it is `topY` minus the ground at the door.
+  {
+    const ground = columnHeight(...(() => { const a = wildsSeamAnchor(SEED, WILDS_BUBBLE); return [Math.round(a.x), Math.round(a.z), SEED] as [number, number, number] })())
+    const wallOverGround = WILDS_BUBBLE.topY - ground
+    ok(c.height > wallOverGround,
+      `★ the mound tops out ABOVE the wall (${c.height} vs ${wallOverGround} over the ground) — ` +
+      'level with it is a bump you find by walking into it')
   }
 }

@@ -33,7 +33,7 @@ import { materialAt, MAT } from '../voxel/depth'
 import { zoneAt, ZONE_ANCHORS } from '../voxel/zones'
 import { CELL, isSeen, type Seen } from './discovery'
 import { DEFAULT_PLOT, plotHeight, plotMaterialAt, inWall, plotThreshold, type PlotConfig } from '../voxel/plot'
-import { passageApproach } from '../voxel/bubble'
+import { caveAnchor } from '../voxel/bubble'
 import { WILDS_BUBBLE } from '../voxel/column'
 import type { Space } from './save'
 
@@ -355,7 +355,17 @@ function drawThreshold(ctx: CanvasRenderingContext2D, seed: number, cfg: PlotCon
 /** The fold's passage, in WILDS coordinates — the same ring, on the country's map. */
 function drawWildsDoor(ctx: CanvasRenderingContext2D, seed: number, cellPx: number,
                       ox = 0, oy = 0, w = 0, h = 0) {
-  const a = passageApproach(seed, WILDS_BUBBLE)
+  // ── ★ THE MARK IS ON THE DOOR, NOT ON WHERE YOU STAND TO LOOK AT IT (2026-08-20) ─────────────
+  // This read `passageApproach`, which is the ARRIVAL — and the arrival is derived from the cave's
+  // depth, so the day the mound grew, the mark quietly slid 22 blocks out into open country while
+  // still calling itself the door. The plot's own mark uses `plotThreshold`, the threshold itself.
+  // Same ring, same meaning, both sides: the mark is the mouth.
+  //
+  // ⚠ AND IT MUST STAY DERIVED FROM THE CAVE, NOT PINNED. `caveAnchor` is the point on the shell's
+  // outer face at the passage bearing — the one place the mouth can be. A stored coordinate here
+  // would survive a generator change and point at a wall, which is the failure `/goto garden` already
+  // shipped once.
+  const a = caveAnchor(seed, WILDS_BUBBLE)
   const { lx, lz } = toLocal(a.x, a.z)
   const px = ox + (lx / SAMPLE) * cellPx, py = oy + (lz / SAMPLE) * cellPx
   // ★ THE COUNTRY NEEDS THIS MORE THAN THE GARDEN DOES, not less. Out here the door is one point in
