@@ -112,6 +112,31 @@ const CFG = DEFAULT_BOULDERS
     `★ the scan radius covers the widest boulder (${boulderScanRadius(SIZE) * SIZE} >= ${reach})`)
 }
 
+// ── 3b. ★★ TWO BOULDERS ARE NOT THE SAME BOULDER ───────────────────────────────────────────────
+// ⚠ A MISSING PROPERTY, NOT A MISSING TEST, and every other assert in this file is blind to it.
+// The dens pass shipped a literal `0` where the feature's own seed belonged: every chamber in the
+// world came out identically warped — deterministic, seam-safe, 47 asserts green, and nine lands
+// of holes all exactly the same shape. `boulders.test.ts` had the identical hole and would have
+// survived the identical mutation. **Variation is a CLAIM, and an unstated claim is unprotected.**
+//
+// ★ COMPARE WHOLE CELL SETS, NOT A SUMMARY — handed over by hub, who tried the cheap version
+// first. Identically-warped instances still differ in cell COUNT (they land on different ground
+// and clip differently), so a count assert passes happily and ships a second decoration on top of
+// the first. The set is the shape; a count is a shadow of it.
+{
+  const shapes = [1, 2, 3, 4].map(seed =>
+    boulderCells({ x: 0, z: 0, r: 3.4, squash: 0.8, seed }, 100)
+      .map(c => `${c.x},${c.y},${c.z}`).sort().join('|'))
+  const distinct = new Set(shapes).size
+  ok(distinct === shapes.length,
+    `★★ boulders of identical geometry differ by SEED (${distinct}/${shapes.length} distinct shapes)`)
+
+  // …and the counts alone would NOT have caught it — stated as an assert so the weaker test can
+  // never quietly replace the stronger one.
+  const counts = new Set(shapes.map(x => x.split('|').length)).size
+  ok(counts <= shapes.length, `(cell counts alone distinguish only ${counts}/${shapes.length} — why the set is compared)`)
+}
+
 // ── 4. it is a lump, not a golf ball ────────────────────────────────────────────────────────────
 {
   const st: BoulderStart = { x: 0, z: 0, r: 3.0, squash: 0.75, seed: 777 }
