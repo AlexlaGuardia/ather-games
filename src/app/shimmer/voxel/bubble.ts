@@ -620,10 +620,15 @@ export const APPROACH_STANDOFF = 10
  * once: the walking crossing out of the garden, the `toDoor` travel option, and `/goto garden`. That
  * is the point — one door, one outside address, no drift.
  *
- * ★ `depth + 3` IS THE PLOT'S RULE, TAKEN VERBATIM RATHER THAN INVENTED. `arriveStandoff` is
- * `thresholdInset + cave.depth + 3`; this is the same sentence with this side's inset (zero — the
- * mound grows off the wall itself). Both faces of one door now stand the keeper the same three paces
- * clear of the same mouth, which is what makes them read as one object rather than two features.
+ * ★ THE STRUCTURE IS THE PLOT'S RULE; THE CONSTANT IS NOT, AND THAT IS DELIBERATE. `arriveStandoff`
+ * is `thresholdInset + cave.depth + 3`, so this file first shipped `depth + 3` to match it exactly.
+ * Rendered, that was too close to see anything: the plot's mound is **15 blocks tall** and three
+ * paces frames it, while this one is **40** against a wall that stands ~67 over the ground, and from
+ * three paces a keeper sees cloud filling the whole screen with a shimmer on it — which is precisely
+ * the read the mound was built to replace. **The rule travels; the number it was tuned against does
+ * not.** Ten blocks clear (`APPROACH_STANDOFF`, whose own header already says "a few paces back on
+ * open ground, looking at it") puts the cave in frame. Both sides still derive from their own cave's
+ * depth, which is the part that actually had to match.
  *
  * ⚠ MEASURED, NOT PICKED, AND THE MEASUREMENT SAYS THE NUMBER IS NOT DELICATE. Swept over ten seeds:
  * every standoff from 15 to 24 puts the keeper on ground with room to stand on all ten, with two
@@ -631,9 +636,8 @@ export const APPROACH_STANDOFF = 10
  * inside a wide safe band, not a fit constraint. If the arrival wants more of the 40-block mound in
  * frame, raise it; nothing breaks until it walks into the forest.
  */
-export const MOUTH_CLEAR = 3
 export const approachStandoff = (cfg: BubbleConfig = DEFAULT_BUBBLE): number =>
-  cfg.cave ? cfg.cave.depth + MOUTH_CLEAR : APPROACH_STANDOFF
+  APPROACH_STANDOFF + (cfg.cave?.depth ?? 0)
 
 /**
  * Where a keeper should be put down when they ask for a place that is inside this bubble: on real
