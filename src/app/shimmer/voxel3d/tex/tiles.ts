@@ -247,9 +247,31 @@ function paintGrassTop(dst: Layer, size: number, seed: number,
  *
  * ⚠ IT IS A PULL, NOT A REPLACEMENT. At t=1 the flank becomes the grass colour and every terrace
  * face turns green, which is the opposite failure — a cliff of lawn. The crown must still read as
- * the only living part of the side. `FLANK_TINT` is the dial; the shade is ALEX'S EYE, not mine.
+ * the only living part of the side.
+ *
+ * ── ★★★ 0.35 → 0.70, RULED BY ALEX 2026-08-20, AND THE STAGING IS WHY IT TOOK TWO PASSES ────────
+ * The first pass compared three shades **at the barrens terraces** and shipped 0.35. That is grey
+ * country, where a grey flank against grey ground is very nearly invisible — so the comparison was
+ * run on the one terrain that cannot answer the question. **A dial must be staged where its failure
+ * is loudest, not where the terrain is photogenic.**
+ *
+ * On GREEN country — meadow, dell, woodland, roughly 65% of the world — it is the dominant visual,
+ * because quantization puts a 1-block riser every 3-5 columns across all gentle ground (already
+ * slumped: 93% of dell lips are) and from any raised angle you are looking mostly at FACES. At 0.35
+ * the mix is **65% subsoil**, so every one of those steps drew a grey stripe on green turf and the
+ * landscape read as a ploughed field. Rendered at one spot on a devwin preview: **0.35 striped,
+ * 0.70 a continuous green hillside.** Same geometry, one constant.
+ *
+ * ★ AND 0.70 DOES NOT BUY THAT WITH THE CLIFF-OF-LAWN ABOVE, because the pull is toward **each
+ * ground's own colour** rather than toward a single grass green. Highland turf is itself pale and
+ * cold, so a highland face stays grey at 0.70 — verified on the steep den face at (-1301,-233),
+ * where the mouth still reads as a cut passage. The derived design is what makes the high value
+ * safe; a tabulated one would have needed nine separate judgements.
+ *
+ * ⚠ THE CAUTION ABOVE STILL BINDS — this is 0.70, not 1.0, and the remaining 30% subsoil is what
+ * keeps a face from reading as lawn. Do not "finish the job".
  */
-export const FLANK_TINT = 0.35
+export const FLANK_TINT = 0.70
 
 function paintGrassSide(dst: Layer, size: number, seed: number,
   crownColor: number = MATERIAL_COLOR[MAT.TOPSOIL], flankTint: number = FLANK_TINT) {
