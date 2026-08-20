@@ -70,6 +70,8 @@ export const HALF_BIT = 0x0100
 export const TOP_BIT = 0x0200
 /** The full-block material behind a possibly-half one. Cheap: one mask. */
 export const baseOf = (m: number): number => m & 0xFF
+
+
 /** A slab in the upper half of its cell. */
 export const isTopSlab = (m: number): boolean => (m & TOP_BIT) !== 0
 /** Is this cell a slab? One bit test — safe in a hot loop. */
@@ -647,3 +649,38 @@ export function fillColumn(
     out[i] = materialAt(x, y, z, seed, h, cfg, hcfg)
   }
 }
+
+/**
+ * ★ THE ONE DEFINITION OF "SOLID", AND IT IS HERE SO EVERYTHING CAN ASK IT (moved 2026-08-20).
+ * It used to live in `voxel3d/VoxelWorld.tsx`, which meant the keeper's own collision rule was
+ * unreachable from any pure test — so tests asked `=== AIR` instead, which is a STRICTLY different
+ * question and wrong in a direction that matters: it calls a flower an obstruction. That cost real
+ * time on the wilds cave, where the door's landing was reported blocked on two seeds by a tuft.
+ * Anything that needs to know whether a body fits should call this, never re-derive it.
+ */
+
+// Ground cover is walked THROUGH, blocks no light, and stops no fence arm — it is scenery you can
+// also pick up, not geometry. Everything downstream of `isSolid` (collision, the light field's
+// opacity, piece connection) inherits that from this one line.
+// ⚠ SAPLINGS JOIN GROUND COVER HERE (2026-08-13). A seedling drawn as a small cross must not be a
+// full solid cell you bump into and cannot see — that is the invisible-wall failure one size down.
+// It also stops a sapling blocking light, which matters more than it sounds: `blockedBy` refuses to
+// grow a tree without open sky, and a sapling that shadowed ITSELF would never come up.
+export const SOLID_EXCEPT = new Set<number>([
+  AIR, MAT.WATER, MAT.TUFT, MAT.TALL_GRASS, MAT.FLOWER,
+  MAT.SAPLING_GOLDWOOD, MAT.SAPLING_SHIMMEROAK, MAT.SAPLING_STARWILLOW, MAT.SAPLING_DAWNWOOD,
+  // ⚠ THE HERBS JOIN GROUND COVER HERE (2026-08-18), and forgetting this line is a specific bug
+  // rather than a rough edge: a plant you can see through but walk into is the invisible-wall
+  // failure, and on a SHORE — where Tidepetal grows — it would be a chest-high fence along the
+  // waterline. This Set is a membership test, not a range, so `isPlant` gaining a second span does
+  // not reach it; the four ids have to be written out.
+  MAT.VIOLETBLOOM, MAT.STORMGRASS, MAT.ROOTVINE, MAT.TIDEPETAL,
+  // ⚠ AND SCATTER JOINS THEM (2026-08-19, slice ③) — third span, same specific bug. A loose rock
+  // you can see through and walk INTO is the invisible wall, and unlike the herbs these turn up on
+  // open country a keeper crosses constantly. The comment above is now load-bearing for a third
+  // time: this Set is membership, not a range, so `isPlant` gaining a span does not reach it.
+  MAT.LOOSE_ROCK, MAT.DEADFALL, MAT.MUSHROOM,
+])
+// A slab is SOLID — it just occupies half the cell. Collision asks `solidProbe`, which reports
+// CELL_HALF for it; everything else (light, fence arms, piece placement) wants "yes, solid".
+export const isSolid = (m: number) => !SOLID_EXCEPT.has(baseOf(m))

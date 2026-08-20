@@ -11,7 +11,7 @@
 // which is what makes a future retune of `passageWidth` show up here instead of in a playtest.
 
 import { wildsSeamAnchor, wildsSeamRibbon, plotSeamAnchor, seamNearness, PLOT_TRIGGER_RADIUS } from './seam'
-import { DEFAULT_BUBBLE, inPassage, inPassageVolume, shellRadiusAt, distFromAxis } from '../voxel/bubble'
+import { DEFAULT_BUBBLE, inPassage, inPassageVolume, shellRadiusAt, distFromAxis, bubbleCaveAt } from '../voxel/bubble'
 import { WILDS_BUBBLE } from '../voxel/column'
 import { DEFAULT_PLOT, plotThreshold } from '../voxel/plot'
 import { columnHeight } from '../voxel/height'
@@ -191,4 +191,37 @@ function quadPoints(a: { x: number; z: number; y: number; bearing: number; halfW
     '★ ...and the default\'s doorway is plain unbroken wall in the world that ships')
   ok(Math.abs(live.bearing - WILDS_BUBBLE.passageBearing) < 1e-9,
     'the anchor takes its bearing from the config it was handed')
+}
+
+// ── 8. ★★ THE MOUND MAY NEVER EAT THE DOOR (2026-08-20) ────────────────────────────────────────
+// The Wilds-side cloud cave puts a body of cloud exactly where the seam is drawn, and the two are
+// sized independently: the ribbon comes off `passageWidth · 0.85` × `passageHeight · 0.9`, the bore
+// off `cave.boreHalfWidth` × `cave.boreHeight`. Nothing in either file makes them agree.
+//
+// ★ AND THE FAILURE IS SILENT IN THE WORST WAY. A bore too small does not throw and does not look
+// broken — the crossing still fires, because the trigger is a volume at the wall and the wall is
+// where it always was. What a keeper sees is a solid mound they walk into, with the shimmer buried
+// inside it. That reads as "the door is gone", which is precisely the state the 08-19 landmark pass
+// existed to end. `seam.test.ts` already asserts the ribbon sits inside `inPassageVolume`; this is
+// the same pact against the new geometry — drawn where the door OPENS, not merely where it triggers.
+{
+  for (const seed of SEEDS) {
+    const ribs = wildsSeamRibbon(seed, WILDS_BUBBLE)
+    let buried = 0, sampled = 0
+    for (const r of ribs) {
+      // ⚠ `yb`/`yt`, AND THE FIRST VERSION OF THIS BLOCK READ `r.y` AND `r.height` — FIELDS A RIB
+      // DOES NOT HAVE. Every sample computed `NaN`, `bubbleCaveAt` answered `null` for all of them,
+      // and the assert passed on six seeds while proving nothing. Caught by re-running it against a
+      // deliberately plot-sized bore (4 × 7, which genuinely does bury the door) and watching it stay
+      // green. ★ A NEW ASSERT IS NOT EVIDENCE UNTIL IT HAS BEEN SEEN TO FAIL — and `tsc` would have
+      // said so in one line, which is the cheaper half of the lesson.
+      for (let f = 0; f <= 1.0001; f += 0.25) {
+        const y = Math.round(r.yb + (r.yt - r.yb) * f)
+        sampled++
+        if (bubbleCaveAt(Math.round(r.x), y, Math.round(r.z), seed, r.yb, WILDS_BUBBLE) === 'shell') buried++
+      }
+    }
+    ok(sampled > 0 && buried === 0,
+      `seed ${seed}: ${buried} of ${sampled} seam points stand inside the cave's cloud — the mound is burying the door`)
+  }
 }

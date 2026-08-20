@@ -1,6 +1,14 @@
 // The garden's BUBBLE, seen from outside — what a folded plot looks like standing in the Wilds.
 //
-// ★ PURE CORE. No react/three/DOM, no host imports.
+// ★ PURE CORE. No react/three/DOM.
+//
+// ⚠ ONE HOST IMPORT SINCE 2026-08-20, NAMED HERE BECAUSE THE HEADER USED TO PROMISE NONE. The cave
+// stands on the Wilds' ground, so its floor is a question only the height field can answer, and every
+// consumer of that answer — the mound, the arrival standoff, the seam — has to agree about it or the
+// door comes apart. The alternative was threading a floor parameter through `bubbleMaterialAt` to
+// every call site, which puts the SAME number in four places and makes disagreeing about it possible.
+// `height.ts` knows nothing about bubbles, so there is no cycle; the cost is that this file now sees
+// the world's height field, and `bubble.test.ts` loads it transitively.
 //
 // ── ★ THE SAME OBJECT FROM THE OTHER SIDE ────────────────────────────────────────────────────────
 // `plot.ts` builds the island a keeper stands ON. This builds the wall of cloud a keeper stands
@@ -22,6 +30,11 @@
 
 import { fbm2 } from './noise'
 import { AIR } from './section'
+// ⚠ THE ONE HOST IMPORT, AND IT IS DELIBERATE. The cave stands ON the Wilds' ground, so its floor
+// is a question only the height field can answer. `height.ts` imports noise/zones/holds and knows
+// nothing about bubbles, so there is no cycle — but it is expensive (warped multi-octave), which is
+// why `caveAnchor` is memoised rather than called per voxel. See its header.
+import { columnHeight } from './height'
 
 export interface BubbleMaterials {
   /** The wall — pressed cloud, SOFT. Same material as the plot's rim; the same wall, outside face. */
@@ -101,7 +114,64 @@ export interface BubbleConfig {
    * crosses, which was always the intent.
    */
   passageHeight: number
+  /**
+   * The mound of cloud the door stands in, seen from the Wilds. `undefined` = a bare doorway in a
+   * flat wall, which is what shipped before 2026-08-20. See `BubbleCave`.
+   */
+  cave?: BubbleCave
   materials: BubbleMaterials
+}
+
+/**
+ * ── ★★ THE CLOUD CAVE, WILDS SIDE — THE SAME DOOR FROM OUTSIDE ─────────────────────────────────
+ * Alex, 2026-08-20: *"the passage between home plot and the wilds on the wilds side should have the
+ * same look as in the homeplot."* `plot.ts`'s `PlotCave` built the mound a keeper sees from inside
+ * their garden; this is its outside face. One door, two faces, and they should read as one object.
+ *
+ * ★ IT SWELLS OUTWARD, WHICH IS THE ONE STRUCTURAL DIFFERENCE AND IT CHANGES EVERY BOUND. The plot's
+ * mound grows INWARD off the coast, into ground the fold already owns, and `plot.ts` clips it against
+ * `edgeAt` so it cannot hang in the void. This one grows into the WILDS — open country with its own
+ * terrain, its own ground altitude and its own generator that has already answered for every cell the
+ * mound is about to stand on. So the clips here are the opposite ones: never past `depth` outward,
+ * never below the ground it stands on, and never into the shell band behind it.
+ *
+ * ★ AND THE BORE HAS TO BE BIG, WHICH IS NOT A TASTE CALL — IT IS THE SEAM'S SIZE (`seam.ts`). The
+ * Wilds ribbon is `passageWidth · 0.85` half-wide and `passageHeight · 0.9` tall = 7.65 × 21.6 at the
+ * shipped numbers, ~8× the plot seam's cross-section, because the 08-19 pass made the outside door a
+ * landmark readable from across the country. A bore sized like the plot's (4 × 7) would bury the
+ * shimmer in cloud and the crossing would present as a solid lump you walk into. `seam.test.ts`
+ * asserts the ribbon sits in the BORE for exactly this reason — the mound may never eat the door.
+ */
+export interface BubbleCave {
+  /** How far the mound swells OUTWARD from the shell's outer face, in blocks. Also the tunnel run. */
+  depth: number
+  /** Half-width across the passage bearing, in blocks. */
+  halfWidth: number
+  /** How far it rises above the door's floor, in blocks. */
+  height: number
+  /** Half-width of the arched mouth bored through it, in blocks. ⚠ Must contain the seam ribbon. */
+  boreHalfWidth: number
+  /**
+   * How high the mouth's straight walls run before the arch springs, in blocks.
+   *
+   * ── ⚠⚠ THIS FIELD EXISTS BECAUSE A PLAIN ELLIPSE CANNOT HOLD THE DOOR (found 2026-08-20) ──────
+   * The bore was one ellipse, sized so its centre and its axis cleared the seam comfortably, and the
+   * pact assert in `seam.test.ts` came back RED on all six seeds: 2-7 ribbon points per seed standing
+   * in cloud. The arithmetic is unforgiving and it is the corners that lose. The Wilds ribbon is a
+   * RECTANGLE 7.65 half-wide and 21.6 tall; an ellipse of half-width 9 has already narrowed to 12.1
+   * by the time it reaches that width, so the ribbon's top corners were nine blocks inside the body.
+   * **An ellipse that contains a rectangle's centre and its edges still cuts its corners off.**
+   *
+   * ★ THE FIX IS THE SHAPE CANON ALREADY DESCRIBES. `plot.ts`: *"the mouth is an arch because an arch
+   * is what a hole in something soft settles into, not because it is architecture."* An arch is
+   * straight-sided to the springline and curved above it — which holds a rectangle to full width for
+   * its whole height, and needs no more mound to do it. Widening the ellipse instead would have taken
+   * the bore to half-width 13 and the body to 22, doubling the mound to keep the same cloud around
+   * a door that was already the right size.
+   */
+  boreSpring: number
+  /** Total height of the arched mouth, springline plus cap, in blocks. ⚠ Must contain the ribbon. */
+  boreHeight: number
 }
 
 /**
@@ -160,6 +230,18 @@ export const DEFAULT_BUBBLE: BubbleConfig = {
   // the seam's drawn size; they cannot be tuned independently and must not be.
   passageWidth: 9,
   passageHeight: 24,
+  // ── ★ SIZED AGAINST THE SEAM, NOT AGAINST THE PLOT'S MOUND (2026-08-20) ──────────────────────
+  // The bore must swallow the Wilds ribbon (7.65 half-wide × 21.6 tall — `seam.ts`) CORNERS AND ALL,
+  // which is what `boreSpring` 23 buys: straight walls past the ribbon's full height, then a 7-block
+  // cap. The body is then sized to leave real cloud AROUND that hole — 17 half-width against a 9
+  // half-width bore is 8 blocks of flank, 40 against 30 is ten over the crown. Shrink either of the
+  // first two toward the second and the mound stops reading as a body with a hole in it and starts
+  // reading as a tube. ⚠ The pact is asserted in `seam.test.ts` §8, on six seeds; it has been seen
+  // red, so it is evidence rather than decoration.
+  //
+  // ⚠ `depth` 14 IS ALSO THE ARRIVAL DISTANCE AND THE `/goto garden` LANDING — see `approachStandoff`.
+  // It is not a free number; tune it and both of those move with it, which is the intent.
+  cave: { depth: 14, halfWidth: 17, height: 40, boreHalfWidth: 9, boreSpring: 23, boreHeight: 30 },
   materials: { wall: 1 },
 }
 
@@ -227,6 +309,23 @@ export const distFromAxis = (x: number, z: number, cfg: BubbleConfig = DEFAULT_B
  */
 export const maxShellRadius = (cfg: BubbleConfig): number => cfg.radius * (1 + cfg.wobble)
 export const maxShellReach = (cfg: BubbleConfig): number => maxShellRadius(cfg) + cfg.thickness
+
+/**
+ * The furthest ANY voxel this module owns can stand from the axis — the shell plus the cave's mound.
+ *
+ * ── ⚠⚠ THIS IS THE BOUND THE CHEAP REJECT MUST USE, AND GETTING IT WRONG IS INVISIBLE ──────────
+ * `maxShellReach` answers for the shell and is still exactly right for that. The mound stands
+ * `cave.depth` blocks OUTSIDE the shell's outer face, so a reject written against the shell's bound
+ * does not fail loudly — it slices the mound off flat at `maxShellReach` and leaves a clean vertical
+ * wall of cloud with the nose of the cave missing. Every assert about the cave's shape still passes,
+ * because they all sample inside the bound. **The picture is the only place it shows.**
+ *
+ * Same family as the note on `maxShellReach` itself: two hand-written copies of a bound is how the
+ * shape and the reject drift apart. One name, both callers (`bubbleMaterialAt`'s reject and
+ * `column.ts`'s `columnTouchesBubble`).
+ */
+export const maxBubbleReach = (cfg: BubbleConfig): number =>
+  maxShellReach(cfg) + (cfg.cave?.depth ?? 0)
 
 /**
  * The bubble's lobe field at this bearing: one signed number in [-0.5, +0.5], read once and used
@@ -369,6 +468,133 @@ export function inPassage(x: number, z: number, cfg: BubbleConfig = DEFAULT_BUBB
 }
 
 /**
+ * Where the Wilds-side cave stands: the point on the shell's OUTER FACE at the passage bearing, the
+ * bearing itself, and the ground altitude there — which is the tunnel's floor.
+ *
+ * ── ⚠⚠ MEMOISED, AND THAT IS A CORRECTNESS-SHAPED PERFORMANCE PROBLEM ──────────────────────────
+ * `bubbleCaveAt` is reached once per voxel for every column in a 14-block ring around a 3km wall,
+ * which is ~4M calls for a keeper who walks the perimeter. This function costs an `fbm2` (the shell
+ * radius) plus a `columnHeight` (warped, multi-octave, the single most expensive call in the
+ * generator) — so calling it per voxel reinstates the exact failure `bubbleMaterialAt`'s header
+ * spends thirteen lines on: the world stops STREAMING, the settle gate never sees ground, and the
+ * keeper hangs in the air over a HUD that says "generating…". A slow generator does not look slow.
+ *
+ * ★ IT IS SAFE TO CACHE BECAUSE IT IS PURE IN (seed, cfg) AND THE WORLD HAS ONE BUBBLE. Keyed on
+ * everything the answer actually depends on, so a test that builds a second config gets its own
+ * entry rather than the first one's answer — which would be a silent wrong-door bug of exactly the
+ * kind `seam.ts` already warns about with `DEFAULT_BUBBLE` vs `WILDS_BUBBLE`.
+ */
+const anchorCache = new Map<string, { x: number; z: number; y: number; bearing: number }>()
+
+export function caveAnchor(seed: number, cfg: BubbleConfig = DEFAULT_BUBBLE) {
+  const k = `${seed}|${cfg.cx}|${cfg.cz}|${cfg.radius}|${cfg.wobble}|${cfg.lobeFreq}|${cfg.thickness}|${cfg.passageBearing}`
+  const hit = anchorCache.get(k)
+  if (hit) return hit
+  const b = cfg.passageBearing
+  // ★ ONE EVALUATION, NOT AN ITERATION — `shellRadiusAt` normalises its input, so the radius depends
+  // on the BEARING alone. Same trick as `wildsSeamAnchor` and `passageApproach`.
+  const r = shellRadiusAt(cfg.cx + Math.cos(b) * cfg.radius, cfg.cz + Math.sin(b) * cfg.radius, seed, cfg)
+  const d = r + cfg.thickness
+  const x = Math.floor(cfg.cx + Math.cos(b) * d)
+  const z = Math.floor(cfg.cz + Math.sin(b) * d)
+  const a = { x, z, y: columnHeight(x, z, seed), bearing: b }
+  anchorCache.set(k, a)
+  return a
+}
+
+/** What the Wilds-side cave puts at a point: its cloud body, the air of its mouth, or nothing. */
+export type BubbleCavePart = 'shell' | 'bore' | null
+
+/**
+ * The mound, as pure geometry: a half-ellipsoid of cloud swelling OUTWARD off the shell, with an
+ * arched tunnel bored along the passage bearing.
+ *
+ * ── ★★ IT MAY ADD CLOUD AND OPEN ITS OWN MOUTH, AND THAT IS THE WHOLE SAFETY ARGUMENT ──────────
+ * The Wilds is not empty ground. Every cell this shape touches has already been answered by the
+ * continent's generator, and `bubbleMaterialAt` runs BEFORE that generator — so anything returned
+ * here overrides real terrain rather than decorating it. Three clips keep that honest:
+ *
+ *   1. **`u` IS BOUNDED AT BOTH ENDS.** Below 0 is the shell band, which this must never touch (the
+ *      wall is unpierced — `bubbleMaterialAt`'s own three-reason note). Above `depth` is open Wilds,
+ *      and an unbounded bore is a tunnel that runs to the edge of the world. ⚠ `plot.ts`'s bore has
+ *      NO upper bound on `u` and is correct without one, because `plotMaterialAt` only consults it
+ *      where the column is already air. **That reasoning does not travel to this file** — copy the
+ *      shape across without the bound and you carve a 9-block corridor across the continent.
+ *   2. **THE BODY NEVER REPLACES TERRAIN** (`y <= h` returns null). Cloud goes in the air above
+ *      whatever ground it lands on, never into it — so the mound cannot bury a keeper's standing
+ *      position, cannot delete a hill, and cannot swallow anything built out here.
+ *   3. **THE BODY SKIRTS DOWN TO THE GROUND IT STANDS ON** (`ws = max(0, w)`). Measured at the live
+ *      door on seed 1337: the Wilds rises **5 blocks over the 14-block tunnel run** and spreads 6
+ *      across the footprint. A rigid ellipsoid floored at the anchor would therefore hang in the air
+ *      on the downhill flank — a mound of cloud with daylight under it. Clamping `w` at 0 means every
+ *      cell between the local ground and the door's floor takes the ellipsoid's WIDEST slice, so the
+ *      body fills down to meet whatever is under it. That skirt is also the tunnel's walkway.
+ *
+ * ★ THE BORE IS TESTED BEFORE THE BODY, the same order `plot.ts` argues for: the mouth is defined as
+ * the ABSENCE of the body, so a body-first rule fills the doorway and the cave reads as a solid lump
+ * with a shimmer painted on it.
+ *
+ * ★ THE BORE MAY CUT TERRAIN, ON PURPOSE. The ground rises across the footprint, so an arch that
+ * refused to carve would open into a hillside — a doorway with dirt in it. Bounded to the mound's
+ * own footprint, that carve is the tunnel; unbounded it is the corridor in clip 1.
+ */
+export function bubbleCaveAt(
+  x: number, y: number, z: number, seed: number, h: number, cfg: BubbleConfig = DEFAULT_BUBBLE,
+): BubbleCavePart {
+  const c = cfg.cave
+  if (!c || c.depth <= 0) return null
+  const a = caveAnchor(seed, cfg)
+  const cb = Math.cos(a.bearing), sb = Math.sin(a.bearing)
+  const dx = x - a.x, dz = z - a.z
+  // `u` runs OUTWARD from the shell's face into the Wilds, `v` across the doorway, `w` up from the
+  // floor. The plot's cave negates its bearing because "deeper" there means inward; out here deeper
+  // means away from the fold, so the bearing is used as it stands. ⚠ The sign is the difference
+  // between a mound on the door and a mound on the far side of the world.
+  const u = dx * cb + dz * sb
+  if (u < 0 || u > c.depth) return null
+  const v = -dx * sb + dz * cb
+  // ⚠ A PURE EARLY-OUT, AND IT SAYS SO BECAUSE IT CANNOT FAIL. The body's own ellipsoid already
+  // rejects `|v| > halfWidth`, and the bore's half-width is smaller still — so deleting this line
+  // changes no cell in the world, which a mutation sweep confirmed by surviving. It is here to skip
+  // the arithmetic below for the ~90% of the footprint's bounding box that is off to the sides.
+  // Unlabelled it is indistinguishable from a load-bearing clip, which is exactly how a real hole
+  // gets left in place by someone tidying up what looks like a duplicate check.
+  if (Math.abs(v) > c.halfWidth) return null
+  const w = y - a.y
+  // ── ★ THE MOUTH IS AN ARCH: STRAIGHT WALLS TO THE SPRINGLINE, AN ELLIPTICAL CAP ABOVE ────────
+  // Full width for the whole of the door's own height, which is the only way a rectangular seam fits
+  // in it — see `boreSpring` for what the plain ellipse cost. Above the springline the cap closes in,
+  // so the mouth still settles rather than reading as a cut rectangle.
+  if (w >= 0 && Math.abs(v) <= c.boreHalfWidth) {
+    if (w <= c.boreSpring) return 'bore'
+    const cap = Math.max(1, c.boreHeight - c.boreSpring)
+    const t = (w - c.boreSpring) / cap
+    if (t <= 1 && (v / c.boreHalfWidth) ** 2 + t ** 2 <= 1) return 'bore'
+  }
+  if (y <= h) return null
+  // ── ★ THE SKIRT, WRITTEN AS A COLUMN FILL — AND THAT IS LEGIBILITY, NOT A FIX ────────────────
+  // How tall is the mound over this (u, v), and is this cell under it? Everything from the local
+  // surface up to that top is cloud, which is what lets the body meet ground that sits below the
+  // door's floor instead of hanging in the air over it. Measured at the live door on seed 1337 the
+  // Wilds rises 5 blocks across the footprint, so the skirt has real work to do.
+  //
+  // ⚠ THIS REPLACED `ws = max(0, w)` FED INTO THE ELLIPSOID, AND I FIRST WROTE THAT UP AS A BUGFIX
+  // WITH A STORY ABOUT THE MOUND TAPERING INWARD AS IT CAME DOWN. That story was false. Swept over
+  // the whole footprint the two forms disagree on **123 of 39,375 cells**, all of them the exact rim
+  // where the radicand is zero — `max(0, w)` uses the w=0 slice below the floor, which IS the widest
+  // slice, so there was never a taper. The form that genuinely differs is the UNCLAMPED ellipsoid
+  // (7,700 cells), and that one this file never had.
+  //
+  // ★ KEPT ANYWAY, because it states the intent in the shape of the question being asked, and a
+  // reader can see the skirt in it. But a rewrite that changes 0.3% of a footprint is a rewrite, and
+  // calling it a fix is how a comment starts lying about what the code does. Checked, not argued.
+  const rad = 1 - (u / c.depth) ** 2 - (v / c.halfWidth) ** 2
+  if (rad <= 0) return null
+  if (w <= c.height * Math.sqrt(rad)) return 'shell'
+  return null
+}
+
+/**
  * How far beyond the shell's outer face the door's approach stands, in blocks.
  *
  * ⚠ IT HAS TO CLEAR THE CROSSING TRIGGER, NOT JUST THE WALL. `inPassageVolume` accepts about a block
@@ -376,6 +602,38 @@ export function inPassage(x: number, z: number, cfg: BubbleConfig = DEFAULT_BUBB
  * door they were brought to see. 10 puts them a few paces back on open ground, looking at it.
  */
 export const APPROACH_STANDOFF = 10
+
+/**
+ * The standoff a keeper actually arrives at — the clear 10 plus whatever the mound occupies.
+ *
+ * ── ★★ DERIVED FROM THE CAVE, NOT A CONSTANT, AND THE PLOT SIDE LEARNED THIS FIRST ─────────────
+ * `VoxelWorld.arriveStandoff` is the mirror of this one file over, and its header records what a
+ * pinned literal cost: the flat 6 was measured against a door standing in open ground, and the day
+ * a 13-block tunnel appeared in front of that door the same 6 landed the keeper **five blocks inside
+ * a cloud pipe**, nose to the shimmer, with the world they had just entered entirely out of frame.
+ *
+ * The mound out here is 14 deep, so an un-derived 10 does the identical thing in the identical way,
+ * from the other side. Both sides now take their standoff from their own cave's depth, which is the
+ * only arrangement where tuning a mound cannot silently strand an arrival inside it.
+ *
+ * ⚠ EVERY OUTSIDE ADDRESS OF THE FOLD GOES THROUGH `passageApproach`, so this moves all of them at
+ * once: the walking crossing out of the garden, the `toDoor` travel option, and `/goto garden`. That
+ * is the point — one door, one outside address, no drift.
+ *
+ * ★ `depth + 3` IS THE PLOT'S RULE, TAKEN VERBATIM RATHER THAN INVENTED. `arriveStandoff` is
+ * `thresholdInset + cave.depth + 3`; this is the same sentence with this side's inset (zero — the
+ * mound grows off the wall itself). Both faces of one door now stand the keeper the same three paces
+ * clear of the same mouth, which is what makes them read as one object rather than two features.
+ *
+ * ⚠ MEASURED, NOT PICKED, AND THE MEASUREMENT SAYS THE NUMBER IS NOT DELICATE. Swept over ten seeds:
+ * every standoff from 15 to 24 puts the keeper on ground with room to stand on all ten, with two
+ * lone exceptions further out (19 on seed 6, 26 on seed 777771 — trees). So this is a FRAMING choice
+ * inside a wide safe band, not a fit constraint. If the arrival wants more of the 40-block mound in
+ * frame, raise it; nothing breaks until it walks into the forest.
+ */
+export const MOUTH_CLEAR = 3
+export const approachStandoff = (cfg: BubbleConfig = DEFAULT_BUBBLE): number =>
+  cfg.cave ? cfg.cave.depth + MOUTH_CLEAR : APPROACH_STANDOFF
 
 /**
  * Where a keeper should be put down when they ask for a place that is inside this bubble: on real
@@ -393,7 +651,7 @@ export const APPROACH_STANDOFF = 10
  * which lands one block off the wall because it is drawing the seam; this stands back to look at it.
  */
 export function passageApproach(
-  seed: number, cfg: BubbleConfig = DEFAULT_BUBBLE, standoff: number = APPROACH_STANDOFF,
+  seed: number, cfg: BubbleConfig = DEFAULT_BUBBLE, standoff: number = approachStandoff(cfg),
 ): { x: number; z: number } {
   const b = cfg.passageBearing
   const r = shellRadiusAt(cfg.cx + Math.cos(b) * cfg.radius, cfg.cz + Math.sin(b) * cfg.radius, seed, cfg)
@@ -428,7 +686,9 @@ export function bubbleMaterialAt(
   // A hypot against the widest the shell can possibly reach answers "not mine" for ~every column in
   // the world with no noise at all. Keep this first.
   const d = distFromAxis(x, z, cfg)
-  if (d > maxShellReach(cfg)) return null
+  // ⚠ `maxBubbleReach`, NOT `maxShellReach` — the cave's mound stands outside the shell and this
+  // reject is the only thing standing between it and being sliced off flat. See `maxBubbleReach`.
+  if (d > maxBubbleReach(cfg)) return null
 
   // ★ AND ONE NOISE EVALUATION, NOT THREE. `insideShell` and `inShell` each recompute the radius, and
   // since 2026-08-16 the cap needs the same field again; asking each in turn means the same fbm three
@@ -439,7 +699,22 @@ export function bubbleMaterialAt(
   // The fold's own space. The Wilds does not generate here — not as ground, and not as air with
   // ground under it. Unreachable by construction, so nothing is spent on it.
   if (d < r) return AIR
-  if (d >= r + cfg.thickness) return null
+  // ── ★★ OUTSIDE THE WALL IS THE CAVE'S GROUND, AND IT IS ASKED BEFORE THE CAP (2026-08-20) ────
+  // Everything past the shell's outer face used to be a flat `null`. The mound lives exactly there.
+  //
+  // ⚠ IT HAS TO BE ASKED HERE AND NOT BELOW THE CAP TEST. The cap (`capFromLobe`) is the SHELL's
+  // top in this column and the mound is neither bounded by it nor related to it — a mound tested
+  // after the cap would be cut off at the wall's own skyline, which on the crowned side of a lobe is
+  // a clean horizontal slice through the cloud with nothing to say it was ever meant to be round.
+  if (d >= r + cfg.thickness) {
+    const c = bubbleCaveAt(x, y, z, seed, h, cfg)
+    // ⚠ AIR IS AN ANSWER, and out here it is the one that overrides the continent. That is correct
+    // for the bore and ONLY for the bore — it is what makes the mouth a mouth rather than a dent in
+    // a hillside — and it is safe because `bubbleCaveAt` bounds the arch to the mound's footprint.
+    if (c === 'bore') return AIR
+    if (c === 'shell') return cfg.materials.wall
+    return null
+  }
 
   // The cap is this column's own, crowned off the same lobe — see `shellCapTop`. Derived from `n`
   // rather than called, so the crown costs nothing on top of the radius that was already computed.

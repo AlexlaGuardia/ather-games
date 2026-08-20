@@ -31,7 +31,7 @@ import { biomeAt, forestness } from '../voxel/biome'
 import { ZONE_ANCHORS, zoneAt } from '../voxel/zones'
 import { findLands, LAND_IDS } from '../voxel/character'
 import { AIR } from '../voxel/section'
-import { materialAt, MAT, isPlant, isHerb, isScatter, isHalfMat, isTopSlab, baseOf, TOP_BIT, DEFAULT_DEPTH, TURF } from '../voxel/depth'
+import { materialAt, MAT, isPlant, isHerb, isScatter, isHalfMat, isTopSlab, baseOf, isSolid, SOLID_EXCEPT, TOP_BIT, DEFAULT_DEPTH, TURF } from '../voxel/depth'
 import { FLORA, plantVariant } from '../voxel/flora'
 import { raycast, tickBreak, dropsFor, setBreakRate, getBreakRate, type BreakState } from '../voxel/mine'
 import { spawnDrop, tossDrop, tickDrops, type Drop } from '../voxel/drops'
@@ -3259,31 +3259,13 @@ function ToolGlyph({ family }: { family: 'forestry' | 'prospecting' | 'rinning' 
   }
 }
 
-// Ground cover is walked THROUGH, blocks no light, and stops no fence arm — it is scenery you can
-// also pick up, not geometry. Everything downstream of `isSolid` (collision, the light field's
-// opacity, piece connection) inherits that from this one line.
-// ⚠ SAPLINGS JOIN GROUND COVER HERE (2026-08-13). A seedling drawn as a small cross must not be a
-// full solid cell you bump into and cannot see — that is the invisible-wall failure one size down.
-// It also stops a sapling blocking light, which matters more than it sounds: `blockedBy` refuses to
-// grow a tree without open sky, and a sapling that shadowed ITSELF would never come up.
-const SOLID_EXCEPT = new Set<number>([
-  AIR, MAT.WATER, MAT.TUFT, MAT.TALL_GRASS, MAT.FLOWER,
-  MAT.SAPLING_GOLDWOOD, MAT.SAPLING_SHIMMEROAK, MAT.SAPLING_STARWILLOW, MAT.SAPLING_DAWNWOOD,
-  // ⚠ THE HERBS JOIN GROUND COVER HERE (2026-08-18), and forgetting this line is a specific bug
-  // rather than a rough edge: a plant you can see through but walk into is the invisible-wall
-  // failure, and on a SHORE — where Tidepetal grows — it would be a chest-high fence along the
-  // waterline. This Set is a membership test, not a range, so `isPlant` gaining a second span does
-  // not reach it; the four ids have to be written out.
-  MAT.VIOLETBLOOM, MAT.STORMGRASS, MAT.ROOTVINE, MAT.TIDEPETAL,
-  // ⚠ AND SCATTER JOINS THEM (2026-08-19, slice ③) — third span, same specific bug. A loose rock
-  // you can see through and walk INTO is the invisible wall, and unlike the herbs these turn up on
-  // open country a keeper crosses constantly. The comment above is now load-bearing for a third
-  // time: this Set is membership, not a range, so `isPlant` gaining a span does not reach it.
-  MAT.LOOSE_ROCK, MAT.DEADFALL, MAT.MUSHROOM,
-])
-// A slab is SOLID — it just occupies half the cell. Collision asks `solidProbe`, which reports
-// CELL_HALF for it; everything else (light, fence arms, piece placement) wants "yes, solid".
-const isSolid = (m: number) => !SOLID_EXCEPT.has(baseOf(m))
+// ⚠ `isSolid`/`SOLID_EXCEPT` MOVED TO `voxel/depth.ts` ON 2026-08-20, and the move was the fix.
+// This is the notion the keeper's BODY uses, and it lived in a React component — so the pure tests
+// that ask "can a keeper stand here" could not import it without dragging three.js into node, and
+// `bubble-wiring.test.ts` had hand-rolled `=== AIR` instead. That predicate counts a grass tuft as
+// an obstruction, and it spent this session reporting the fold's own doorway as unstandable on two
+// seeds while the ground there was flawless. A truth that collision, light and the tests all need
+// does not belong in a component. See `depth.ts`.
 
 function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weaponDrawn, weaponIdx, onAmmo, onStats, onPerf, onSay, runeTick, onPos, onLook, onInvChange, worker, incoming, inflight, settings, build, pieceIdx, rot, tools, skills, onSkill, onLevel, onTool, tutorial, onQuestEvent, onNearGreg, onNearTable, cmdOut, mistLedger, onNearMist, onDiscover, sparring, pot, plotCfg, plotTier, spiritIndex, snapOut, space, lookOut, onOpenChest, onOpenStation, onOpenWaymark, onOpenBrew, uiOpen, owner, foesOut, pressOut }: {
   inv: React.RefObject<Inventory>
@@ -4291,8 +4273,26 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
       if (bh === null) { lc.px = t.x + 0.5; lc.py = t.y; lc.pz = t.z + 0.5 }
       else { lc.px = bx + 0.5; lc.py = bh + 1; lc.pz = bz + 0.5 }
     } else {
-      lc.px = SPAWN_X + 0.5; lc.pz = SPAWN_Z + 0.5
-      lc.py = columnHeight(SPAWN_X, SPAWN_Z, SEED) + 1
+      // ── ★★ YOU COME OUT AT YOUR OWN DOOR, NOT AT SPAWN (Alex, 2026-08-20) ────────────────────
+      // *"when you walk through it the player should load right outside the tunnel entrance so it
+      // feels smoother."* Stepping out of the garden put the keeper down at SPAWN — the glade, ~157
+      // blocks from the wall — so a two-way passage was two-way in one direction only. You walked
+      // INTO a door and came out somewhere else entirely, which is not a passage, it is a fast
+      // travel that happens to be triggered by a door.
+      //
+      // ★ THE SAME ADDRESS THE OTHER TWO EXITS ALREADY USED, WHICH IS THE ONLY REASON THIS IS SMALL.
+      // `toDoor` travel and `/goto garden` have both landed at `passageApproach` since 08-16; the
+      // walking crossing was the one exit that had its own idea of where outside was. Now the fold
+      // has ONE outside address and the mound, the arrival and the seam cannot drift apart.
+      //
+      // ⚠ THE STANDOFF IS DERIVED (`approachStandoff` = 10 + the mound's depth). Landing at a flat
+      // 10 now puts the keeper four blocks INSIDE the cloud tunnel — the plot side's exact 08-19
+      // bug, mirrored. And it may not be smaller than the trigger band either, or the arrival drops
+      // straight back through the seam it just came out of; the latch below catches that, but a
+      // latch is a backstop, not a position.
+      const a = passageApproach(SEED, WILDS_BUBBLE)
+      lc.px = a.x + 0.5; lc.pz = a.z + 0.5
+      lc.py = columnHeight(a.x, a.z, SEED) + 1
     }
     lc.hvx = 0; lc.hvz = 0; lc.vy = 0; lc.airborne = true
     // ── ★★ THE CAMERA HAS TO CROSS TOO, AND IT IS THE SAME BUG AS THE FLORA (2026-08-15) ────────
@@ -4333,14 +4333,32 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
     // aims the keeper at exactly 180° from the thing you meant. It shipped for one deploy and the
     // screenshot was of a keeper standing at their door looking away from it across an empty
     // field — which is the ORIGINAL bug, arrived at by a sign.
-    if (to === 'plot') {
-      const t = plotThreshold(SEED, plotCfg.current)
-      const dx = (t.x + 0.5) - lc.px, dz = (t.z + 0.5) - lc.pz
-      // ⚠ The keeper stands ON the threshold, so the vector to it is ~zero and its angle is noise.
-      // Face straight OUT along the fold's own bearing instead — the direction the door opens.
-      const b = plotCfg.current.thresholdBearing
-      const yaw = Math.hypot(dx, dz) > 0.5 ? Math.atan2(-dx, -dz)
-        : Math.atan2(-Math.cos(b), -Math.sin(b))
+    //
+    // ── ★ AND IT IS BOTH SIDES NOW (Alex, 2026-08-20: "do both sides of this") ──────────────────
+    // The 08-19 pass gave the garden arrival its facing and left the Wilds arrival without one,
+    // because at the time the Wilds arrival was SPAWN and there was no door in front of it to look
+    // at. Now that stepping out lands at the mound, the same argument applies unchanged and for the
+    // same reason: the way home is one seam in a 6.3km wall, and the moment a keeper is guaranteed
+    // to be looking at it is the moment they arrive. Facing them at it teaches the landmark every
+    // single time, at the cost of one turn before they walk off into the country.
+    {
+      let yaw: number | null = null
+      if (to === 'plot') {
+        const t = plotThreshold(SEED, plotCfg.current)
+        const dx = (t.x + 0.5) - lc.px, dz = (t.z + 0.5) - lc.pz
+        // ⚠ The keeper stands ON the threshold, so the vector to it is ~zero and its angle is noise.
+        // Face straight OUT along the fold's own bearing instead — the direction the door opens.
+        const b = plotCfg.current.thresholdBearing
+        yaw = Math.hypot(dx, dz) > 0.5 ? Math.atan2(-dx, -dz)
+          : Math.atan2(-Math.cos(b), -Math.sin(b))
+      } else {
+        // Looking back down the passage bearing, which points OUTWARD from the fold's centre — so
+        // the direction to the door is its negation. ⚠ Then the YXZ sign convention negates again
+        // (see the note above); the two cancel, and `atan2(cos, sin)` is the correct-looking answer
+        // that is correct for once. Verified by the arrival shot, not by the algebra.
+        const b = WILDS_BUBBLE.passageBearing
+        yaw = Math.atan2(Math.cos(b), Math.sin(b))
+      }
       const eul = new THREE.Euler().setFromQuaternion(camera.quaternion, 'YXZ')
       camera.quaternion.setFromEuler(new THREE.Euler(eul.x, yaw, 0, 'YXZ'))
     }

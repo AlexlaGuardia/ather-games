@@ -11,6 +11,7 @@
 import {
   DEFAULT_BUBBLE, bubbleMaterialAt, insideShell, inShell, inPassage, inPassageVolume,
   shellRadiusAt, distFromAxis, bubbleSwallows, shellCapTop, lobeAt, maxShellRadius,
+  bubbleCaveAt, caveAnchor, maxBubbleReach, maxShellReach, approachStandoff, passageApproach,
   type BubbleConfig,
 } from './bubble'
 import { AIR } from './section'
@@ -351,6 +352,191 @@ console.log('\nthe siting')
     bubbleSwallows({ ...asAsked, radius: 1200 }, STORY_LANDMARKS, ['moonwell-glade'])
       .some(s => s.id === 'gloview-village'),
     '★ an exemption list is a named door, never an off switch')
+}
+
+// ── the wilds-side cloud cave ─────────────────────────────────────────────────
+//
+// ★ WHAT THIS SECTION IS FOR: the mound overrides the CONTINENT. Everywhere else in this file the
+// bubble writes into space nobody else claims, but the cave stands on real Wilds ground that the
+// terrain generator has already answered for — and `bubbleMaterialAt` runs first, so anything wrong
+// here does not fail, it silently replaces the world. The three questions worth asking are therefore
+// not "is the mound the right shape" but: does it stay inside its own footprint, does it ever take
+// ground away, and is the doorway still open when it is done.
+console.log('the wilds-side cave')
+{
+  // The cave's shape is written in blocks, not in fractions of the radius, so unlike the shell it is
+  // NOT scale-free — a small test bubble gets the full-size mound on a 60-block wall. That is fine
+  // for every claim below (all of them are local to the door) and it is the reason the sweep is
+  // bounded to the door's own neighbourhood rather than run over `columns()`.
+  const cfg = SMALL
+  const c = cfg.cave!
+  const a = caveAnchor(SEED, cfg)
+  const cb = Math.cos(a.bearing), sb = Math.sin(a.bearing)
+  /** A point at (u along the bearing, v across, w above the door's floor). */
+  const at = (u: number, v: number, w: number) => ({
+    x: Math.round(a.x + cb * u - sb * v),
+    z: Math.round(a.z + sb * u + cb * v),
+    y: a.y + w,
+  })
+
+  check('the anchor sits on the shell\'s outer face', (() => {
+    const d = distFromAxis(a.x, a.z, cfg)
+    const r = shellRadiusAt(a.x, a.z, SEED, cfg)
+    return Math.abs(d - (r + cfg.thickness)) <= 1.5
+  })(), 'the mound grows off the wall, so its origin is the wall')
+
+  check('and it is memoised to the same object', caveAnchor(SEED, cfg) === caveAnchor(SEED, cfg),
+    '★ per-voxel this costs an fbm2 plus a columnHeight; unmemoised it is the streaming stall')
+
+  // ⚠ A CACHE KEYED TOO LOOSELY IS A WRONG-DOOR BUG, which is the failure `seam.ts` already records
+  // once (DEFAULT_BUBBLE vs WILDS_BUBBLE: a trigger and a doorway in two different places, invisible
+  // until someone walks 1000 blocks looking for a way in). A second config must get a second answer.
+  check('a different bearing gets its own anchor',
+    caveAnchor(SEED, { ...cfg, passageBearing: cfg.passageBearing + 1 }).x !== a.x,
+    '★ the cache keys on everything the answer depends on, or it hands out the first caller\'s door')
+
+  // ── it stays inside its own footprint ───────────────────────────────────────
+  // The bore is the dangerous half: it returns AIR, and AIR overrides terrain. `plot.ts`'s bore has
+  // no upper bound on `u` and is CORRECT without one, because its host only consults it where the
+  // column is already air. That reasoning does not travel to this file — copied across unbounded it
+  // is a 9-block corridor carved to the edge of the world, which is why this is asserted and not
+  // assumed. (Applicability test per the 08-20 rule: does this warning's REASON hold here?)
+  check('nothing beyond the mound\'s depth is the cave\'s',
+    bubbleCaveAt(at(c.depth + 1, 0, 1).x, at(c.depth + 1, 0, 1).y, at(c.depth + 1, 0, 1).z, SEED, GROUND, cfg) === null &&
+    bubbleCaveAt(at(c.depth + 40, 0, 1).x, at(c.depth + 40, 0, 1).y, at(c.depth + 40, 0, 1).z, SEED, GROUND, cfg) === null,
+    '★ an unbounded bore is a tunnel to the edge of the world')
+
+  check('nor anything behind the wall',
+    bubbleCaveAt(at(-2, 0, 1).x, at(-2, 0, 1).y, at(-2, 0, 1).z, SEED, GROUND, cfg) === null,
+    'the shell band is not the cave\'s to answer for — the wall is never pierced')
+
+  check('nor anything past its flanks',
+    bubbleCaveAt(at(2, c.halfWidth + 2, 1).x, at(2, c.halfWidth + 2, 1).y, at(2, c.halfWidth + 2, 1).z, SEED, GROUND, cfg) === null)
+
+  // ── it never takes ground away ──────────────────────────────────────────────
+  // The BODY may only ever add cloud in the air. A body cell under the local surface would be cloud
+  // where dirt was — the 08-18 burial hazard, one space over: solid matter written where a save says
+  // a keeper is standing, with the autosave writing the buried position back every few seconds.
+  {
+    let buried = 0, sampled = 0
+    for (let u = 0; u <= c.depth; u++) for (let v = -c.halfWidth; v <= c.halfWidth; v += 2) {
+      // A local surface ABOVE the door's floor: every cell at or below it must not be body.
+      const h = a.y + 4
+      for (let w = -6; w <= 4; w++) {
+        const p = at(u, v, w)
+        if (p.y > h) continue
+        sampled++
+        if (bubbleCaveAt(p.x, p.y, p.z, SEED, h, cfg) === 'shell') buried++
+      }
+    }
+    check('the body never replaces terrain', buried === 0,
+      `${buried} of ${sampled} cells at or below the local surface came back as cloud`)
+  }
+
+  // ── and it skirts down to whatever it stands on ─────────────────────────────
+  // Measured at the live door on seed 1337: the Wilds rises 5 blocks over the 14-block run and
+  // spreads 6 across the footprint, so a rigid ellipsoid floored at the anchor hangs in the air on
+  // the downhill flank. This is the assert that the skirt exists at all — without `ws = max(0, w)`
+  // the mound is a cloud with daylight under it, which reads as a render bug rather than a shape one.
+  {
+    const h = a.y - 5                       // ground five blocks BELOW the door's floor
+    let gap = 0, sampled = 0
+    // ⚠ SWEPT ACROSS THE FLANKS, NOT JUST DOWN THE AXIS, and that is the whole value of this assert.
+    // The first version sampled `v = 0` only and a mutation sweep walked straight through it: on the
+    // axis a clamped ellipsoid and an unclamped one agree for any drop smaller than `height`, so the
+    // test was green against a skirt that did not exist. Out at the flank the two disagree, because
+    // the failing shape tapers inward on the way down and stands on a foot smaller than its footprint.
+    for (let v = -c.halfWidth + 2; v <= c.halfWidth - 2; v += 3) {
+      for (let w = -4; w < 0; w++) {
+        const p = at(2, v, w)
+        // Only where the mound has a body directly above this cell — outside that it is correct to
+        // be empty, and demanding cloud there would be asserting a wall, not a skirt.
+        if (bubbleCaveAt(p.x, a.y + 1, p.z, SEED, h, cfg) === null) continue
+        sampled++
+        if (bubbleCaveAt(p.x, p.y, p.z, SEED, h, cfg) === null) gap++
+      }
+    }
+    check('the body skirts down to lower ground', gap === 0 && sampled > 20,
+      `${gap} of ${sampled} cells between the ground and the door's floor were left empty`)
+  }
+
+  // ── the doorway is open, and open all the way through ───────────────────────
+  // The mound's whole job is to be a body with a hole in it. A bore that stops short is a lump you
+  // walk into; and since the crossing TRIGGER lives at the wall behind it, a blocked bore is a door
+  // that cannot be reached rather than a door that looks wrong.
+  {
+    let blocked = 0
+    for (let u = 0; u <= c.depth; u++) {
+      const p = at(u, 0, 1)
+      if (bubbleCaveAt(p.x, p.y, p.z, SEED, GROUND, cfg) !== 'bore') blocked++
+    }
+    check('the bore runs clear from the wall to the mouth', blocked === 0,
+      `${blocked} of ${c.depth + 1} cells along the tunnel's axis were not open`)
+  }
+
+  check('and the crossing still fires at the back of it', (() => {
+    const p = at(0, 0, 1)
+    return inPassageVolume(p.x, a.y + 1, p.z, SEED, a.y, cfg)
+  })(), '★ the alcove has a solid back and the back is where the shimmer stands')
+
+  // The mound must be a BODY, not a tube: real cloud on the flanks and over the crown, or the shape
+  // reads as a pipe stuck to a wall.
+  check('there is cloud on the flank of the mouth',
+    bubbleCaveAt(at(2, c.boreHalfWidth + 2, 1).x, at(2, c.boreHalfWidth + 2, 1).y, at(2, c.boreHalfWidth + 2, 1).z, SEED, GROUND, cfg) === 'shell')
+  check('and cloud over its crown',
+    bubbleCaveAt(at(2, 0, c.boreHeight + 2).x, at(2, 0, c.boreHeight + 2).y, at(2, 0, c.boreHeight + 2).z, SEED, GROUND, cfg) === 'shell')
+
+  // ── the bound that would slice it off ───────────────────────────────────────
+  // ★ THE ONE FAILURE HERE THAT NO SHAPE ASSERT CAN SEE. `bubbleMaterialAt`'s cheap reject and
+  // `column.ts`'s `columnTouchesBubble` both answer "not mine" below a threshold. Written against
+  // the SHELL's bound they do not render the mound wrong — they cut it off flat at `maxShellReach`
+  // and leave a clean vertical face where the nose should be, while every assert above still passes
+  // because they all sample inside the bound. Ask the bound directly.
+  check('the reach bound covers the mound',
+    maxBubbleReach(cfg) >= maxShellReach(cfg) + c.depth,
+    '★ a bound that understates the shape is a hole, and this one is a hole with a straight edge')
+
+  check('a cave-less bubble keeps the shell\'s own bound',
+    maxBubbleReach({ ...cfg, cave: undefined }) === maxShellReach(cfg),
+    'the mound is optional; the bound may not quietly widen without one')
+
+  // The mound is reached through `bubbleMaterialAt`, not only through `bubbleCaveAt` — the wiring is
+  // its own claim. An integration that never calls the shape is the shape being perfect and absent.
+  check('the material path returns the mound\'s cloud', (() => {
+    const p = at(2, c.boreHalfWidth + 2, 1)
+    return bubbleMaterialAt(p.x, p.y, p.z, SEED, GROUND, cfg) === WALL
+  })())
+  check('and the mouth\'s air', (() => {
+    const p = at(2, 0, 1)
+    return bubbleMaterialAt(p.x, p.y, p.z, SEED, GROUND, cfg) === AIR
+  })())
+
+  // ⚠ SAMPLED AT THE FAR END ON PURPOSE, AND THIS IS THE ASSERT THAT CATCHES A WRONG REJECT. Every
+  // sample above sits within a couple of blocks of the wall, which is INSIDE `maxShellReach` — so a
+  // cheap reject written against the shell's bound passes all of them and still deletes the nose of
+  // the cave. Only a sample past the shell's own reach can tell the two bounds apart.
+  check('the mound survives the cheap reject at its nose', (() => {
+    const p = at(c.depth - 1, 0, 1)
+    return distFromAxis(p.x, p.z, cfg) > maxShellReach(cfg) &&
+      bubbleMaterialAt(p.x, p.y, p.z, SEED, GROUND, cfg) === AIR
+  })(), '★ the reject must use `maxBubbleReach`, or the cave is sliced off flat')
+
+  // ── the arrival stands clear of it ──────────────────────────────────────────
+  // The plot side shipped this bug on 08-19 and its header records it: a standoff pinned as a literal
+  // put the keeper five blocks INSIDE the tunnel, nose to the shimmer, with the world they had just
+  // entered out of frame. The mirror of that is asserted rather than remembered.
+  check('the approach stands outside the mound',
+    approachStandoff(cfg) > c.depth,
+    '★ a pinned standoff lands the keeper inside the cloud pipe — the 08-19 bug, mirrored')
+
+  check('and the landing is beyond the mouth', (() => {
+    const p = passageApproach(SEED, cfg)
+    const dx = p.x - a.x, dz = p.z - a.z
+    return dx * cb + dz * sb > c.depth
+  })(), 'measured along the bearing from the wall, past the nose of the cave')
+
+  check('a cave-less bubble keeps the bare standoff',
+    approachStandoff({ ...cfg, cave: undefined }) === 10)
 }
 
 console.log(`\n${pass} passed, ${fail} failed`)

@@ -17,7 +17,7 @@ import {
   bubbleSwallows, passageApproach, shellCapTop,
 } from './bubble'
 import { columnHeight } from './height'
-import { MAT } from './depth'
+import { MAT, isSolid } from './depth'
 import { AIR } from './section'
 import { ZONE_ANCHORS } from './zones'
 
@@ -266,7 +266,19 @@ const onShell = (bearing: number) => {
     // world at another seed's coordinates and assert nothing. Build the column at `s` explicitly.
     const own = generateColumn(new Column(colOrigin(p.x), colOrigin(p.z), DEFAULT_COLUMN), s)
     const solid = at(own, p.x, ph, p.z) !== AIR
-    const headroom = at(own, p.x, ph + 1, p.z) === AIR && at(own, p.x, ph + 2, p.z) === AIR
+    // ── ⚠⚠ `isSolid`, NOT `=== AIR`, AND THE DIFFERENCE IS A WHOLE FALSE ALARM (2026-08-20) ────
+    // This read `=== AIR`, which asks a STRICTLY stronger question than the keeper's body does. When
+    // the wilds cave moved the landing 14 blocks out, it came back BLOCKED on seeds 7 and 555 — and
+    // the obstruction was a **grass tuft** on one and a **flower** on the other, over flawless
+    // topsoil. Ground cover is walked THROUGH (`SOLID_EXCEPT`, `depth.ts`): there was nothing wrong
+    // with either landing and nothing to fix.
+    //
+    // ★ IT FAILED TOWARD "YOU FOUND SOMETHING", WHICH IS THE EXPENSIVE DIRECTION. It sent me
+    // measuring standoffs across ten seeds looking for a magic distance, and the sweep said no
+    // distance works — a conclusion that was an artefact of the predicate, not a fact about the
+    // world. The fix was to ask the question collision asks, which needed `isSolid` moved out of a
+    // React component to be askable at all.
+    const headroom = !isSolid(at(own, p.x, ph + 1, p.z)) && !isSolid(at(own, p.x, ph + 2, p.z))
     ok(solid && headroom,
       `★ seed ${s}: the door's landing has ground under it and room to stand (y${ph}, ` +
       `ground ${solid ? 'solid' : 'AIR'}, headroom ${headroom ? 'clear' : 'BLOCKED'})`)

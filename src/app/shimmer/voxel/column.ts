@@ -29,7 +29,7 @@ import { Section, AIR } from './section'
 import { columnHeight, type HeightConfig, DEFAULT_HEIGHT } from './height'
 import { materialAt, MAT, isPlant, isHalfMat, HALF_BIT, type DepthConfig, DEFAULT_DEPTH } from './depth'
 import {
-  bubbleMaterialAt, distFromAxis, DEFAULT_BUBBLE, maxShellRadius, maxShellReach, shellCapTop, type BubbleConfig,
+  bubbleMaterialAt, distFromAxis, DEFAULT_BUBBLE, maxShellRadius, maxBubbleReach, shellCapTop, type BubbleConfig,
 } from './bubble'
 import { ZONE_ANCHORS } from './zones'
 import { plantWaystones } from './story-path'
@@ -228,10 +228,14 @@ function columnTouchesBubble(wx: number, wz: number, span: number, cfg: BubbleCo
   const nx = Math.max(cfg.cx - (wx + span), Math.min(0, cfg.cx - wx))
   const nz = Math.max(cfg.cz - (wz + span), Math.min(0, cfg.cz - wz))
   const near = Math.hypot(nx, nz)
-  // ⚠ `maxShellReach`, NOT A SECOND HAND-WRITTEN COPY OF THE SAME ARITHMETIC. This line and
+  // ⚠ `maxBubbleReach`, NOT A SECOND HAND-WRITTEN COPY OF THE SAME ARITHMETIC. This line and
   // `bubbleMaterialAt`'s cheap reject were the same expression typed twice in two files; the shape
-  // changed on 2026-08-16 and only one of them would have been found by grepping for `wobble`.
-  return near <= maxShellReach(cfg) + 1
+  // changed on 2026-08-16 and only one of them would have been found by grepping for `wobble`. It
+  // changed again on 2026-08-20 (the cave's mound stands outside the shell) and this time the two
+  // callers share a name, so the second one cannot be missed. ⚠ A column rejected here is never
+  // offered to the bubble AT ALL, so understating the bound does not thin the mound — it deletes
+  // whole columns of it, in a straight line, at the reject's radius.
+  return near <= maxBubbleReach(cfg) + 1
 }
 
 export function generatedAt(
