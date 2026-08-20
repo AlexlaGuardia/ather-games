@@ -24,13 +24,32 @@
 // which is rarer than the story road and unfindable — and it fails SILENTLY, because a placement
 // rule that never fires looks exactly like a placement rule that is merely rare.
 //
-// ★★ THE SECOND HALF IS WORSE AND IS ABOUT LEGIBILITY, NOT COUNT. What steep country this world has
-// is mostly THIS LAYER'S terracing — a staircase of 1-block risers, each worn to a half — rather
-// than a continuous face. So a feature whose readability depends on a face works on a highland bank
-// and dissolves on a dell one: the same den geometry renders as an unmistakable passage into a
-// hillside in the first, and as a gap between steps in the second. **Same code, same asserts, two
-// different features**, and the terraced case is the COMMON one (meadow and dell are ~47% of the
-// world between them). No count assert can see this; only a render can.
+// ★★ THE SECOND HALF IS WORSE AND IS ABOUT LEGIBILITY, NOT COUNT. A feature whose readability
+// depends on a continuous face works on a highland bank and dissolves on a dell one: the same den
+// geometry renders as an unmistakable passage into a hillside in the first, and as a gap between
+// steps in the second. **Same code, same asserts, two different features.** No count assert can
+// see this; only a render can.
+//
+// ⚠⚠ CORRECTED SAME DAY, AND THE CORRECTION IS THE USEFUL PART. This paragraph first blamed the
+// DELL GROUND — "a staircase of 1-block risers", "the terraced case is the common one". Measured,
+// that is wrong twice over, and it would have sent the fix at the wrong dial:
+//   • **Dell is gentle.** Along x at the site I photographed it climbs **0.19 blocks per column**,
+//     treads averaging **4.8 columns**. It is not staircase country.
+//   • **The 1:1 face I photographed is there because the PLACEMENT RULE went looking for it.**
+//     Steepest-descent answers at the steepest thing within reach, so a den always sits on the
+//     harshest face its neighbourhood owns — in dell, a rare 12-column 1:1 climb where slump
+//     correctly declines to fire. Reporting that site as typical of dell is the same error as a
+//     nearest-search against a hard exclusion reporting its boundary as a location (`findLands`,
+//     08-19). **An extremum search's answer is never evidence about the region's median.**
+//   • **What actually makes the whole landscape read as a ploughed field is FLANK CONTRAST, not
+//     step height.** Quantization puts a 1-block riser every 3-5 columns across all gentle green
+//     country — unavoidable and mostly slumped (93% of dell lips are). Each riser's vertical face
+//     is painted `mix(SUBSOIL, ground, FLANK_TINT)`, and at the shipped 0.35 that is **65% subsoil**,
+//     so every one of those steps draws a grey stripe on green turf. From any raised angle you see
+//     mostly faces. Rendered side by side at the same spot, 0.35 is a striped field and **0.70 is a
+//     continuous green hillside** — same geometry, same asserts, one constant.
+// So: the geometry was never the problem, and the paragraph above nearly recommended reshaping
+// terrain to fix a colour. `FLANK_TINT` is Alex's eye and lives in `voxel3d/tex/tiles.ts`.
 //
 // ⚠ SO: BEFORE GATING ANYTHING ON SLOPE, MEASURE THE DISTRIBUTION, THEN LOOK AT ONE ON A TERRACE.
 // `scripts/den-tour.mts` is the shape of the tool that makes the second half cheap — find the
