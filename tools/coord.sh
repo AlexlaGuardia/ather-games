@@ -157,6 +157,25 @@ cmd_build() {
   acquire_lock || exit 1
   trap release_lock EXIT
   echo ">> build lock acquired by '$WIN'"
+  # ── ★★ THE BUILD CARRIES ITS OWN OBSERVATION, TAKEN HERE (2026-08-20, second incident) ────────
+  # The post-deploy warning below tells you what you just shipped. That is one line too late by
+  # design, and the fix for it is NOT "remember to run `git status` first" — the same seat DID run
+  # it, hit a full-disk build failure, spent fifteen minutes clearing space, and re-ran without
+  # re-checking. **The check was real and it expired.** A pre-build check made by a human is a
+  # perishable observation, and every minute between the check and the build is a window another
+  # window can commit into; a check taken HERE cannot go stale, because there is no gap.
+  #
+  # ⚠ It prints and continues — it does not prompt and does not refuse. A build that stops to ask
+  # is a build people stop running, and on a shared box the deploy path must stay boring. Naming
+  # the files is enough: "greedy.ts is dirty and it isn't mine" is a thought you can only have if
+  # something says `greedy.ts`.
+  local pre
+  pre=$(git -C "$REPO" status --porcelain 2>/dev/null | grep '^ *[MADRC]' || true)
+  if [ -n "$pre" ]; then
+    echo ">> ⚠ BUILDING A DIRTY TREE — these uncommitted files are about to go live:"
+    echo "$pre" | sed 's/^/>>    /'
+    echo ">>   if any of them are not yours, STOP and ask that window before this ships."
+  fi
   signal "$WIN building: $msg"
   cd "$REPO"
   # A satellite's dev server sets NEXT_DIST_DIR. If one ever leaks into this shell the
