@@ -128,6 +128,7 @@ import { WEAPONS, weaponAt, ADS_FOV, spreadDeg, bloomAfterShot, bloomAfterRest,
 // unchanged; the rig in day-night.tsx turns it into sky. This was the last shipped system reading
 // as permanent noon: the light field's `dayFactor` finally has a day to factor.
 import { VoxelDayNight } from './day-night'
+import { submersion, type Cell } from './underwater'
 import { dayProgress, getPhase, getDisplayTime, isTimePinned, setTimePin } from '../engine/day-cycle'
 import { hollowEligible, hollowStep, segmentDist, hollowCap, packSize, packWalk, hollowNight,
          type HollowState, HOLLOW_HP, HOLLOW_HOVER, HOLLOW_RADIUS,
@@ -1224,6 +1225,10 @@ export default function VoxelWorld() {
   const playerSnapRef = useRef<(() => PlayerSave) | null>(null)
   /** Filled by the scene: the camera is three's and only the component holding it can turn it. */
   const lookOut = useRef<((deg: number) => string) | null>(null)
+  /** How submerged the CAMERA is, filled by `World` (which owns the cell probes) and read by the
+   *  atmosphere rig (which owns the fog). The rig mounts out here and the probes live in there, so
+   *  the answer has to travel — same outward-ref shape as `lookOut`/`foesOut` above. */
+  const waterOut = useRef<((x: number, y: number, z: number) => number | null) | null>(null)
   const plotTier = useRef(0)
   const plotCfg = useRef<PlotConfig>(plotForTier(0))
   /**
@@ -2061,6 +2066,11 @@ export default function VoxelWorld() {
             return c * c * (3 - 2 * c)
           }}
           mistAt={(x, z) => mistAt(x, z, SEED)}
+          /* Underwater (2026-08-20): the rig samples the CAMERA, so this answers about the EYE and
+             not the body — `locomotion`'s `submerged` is chest+feet and disagrees for the whole of
+             treading. Null means the column has not generated; the rig holds rather than blinking
+             the water off at the frontier. */
+          underwaterAt={(x, y, z) => waterOut.current ? waterOut.current(x, y, z) : 0}
         />
         <World
           inv={inv} toolTier={toolTier} toolSkill={toolSkill} vitals={vitals} mana={mana}
@@ -2091,6 +2101,7 @@ export default function VoxelWorld() {
           onOpenWaymark={(w) => { openCursorUI(); setOpenWaymark(w) }}
           onOpenBrew={() => { openCursorUI(); setBrewOpen(true) }}
           uiOpen={cursorUIOpenRef} owner={isOwnerRef} foesOut={foesRef} pressOut={pressRef}
+          waterOut={waterOut}
         />
         {/* selector: deliberately matches NOTHING. Without it drei binds click-to-lock on the whole
             DOCUMENT (and that binding ignores `enabled`), which re-locked the pointer on every
@@ -3267,7 +3278,7 @@ function ToolGlyph({ family }: { family: 'forestry' | 'prospecting' | 'rinning' 
 // seeds while the ground there was flawless. A truth that collision, light and the tests all need
 // does not belong in a component. See `depth.ts`.
 
-function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weaponDrawn, weaponIdx, onAmmo, onStats, onPerf, onSay, runeTick, onPos, onLook, onInvChange, worker, incoming, inflight, settings, build, pieceIdx, rot, tools, skills, onSkill, onLevel, onTool, tutorial, onQuestEvent, onNearGreg, onNearTable, cmdOut, mistLedger, onNearMist, onDiscover, sparring, pot, plotCfg, plotTier, spiritIndex, snapOut, space, lookOut, onOpenChest, onOpenStation, onOpenWaymark, onOpenBrew, uiOpen, owner, foesOut, pressOut }: {
+function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weaponDrawn, weaponIdx, onAmmo, onStats, onPerf, onSay, runeTick, onPos, onLook, onInvChange, worker, incoming, inflight, settings, build, pieceIdx, rot, tools, skills, onSkill, onLevel, onTool, tutorial, onQuestEvent, onNearGreg, onNearTable, cmdOut, mistLedger, onNearMist, onDiscover, sparring, pot, plotCfg, plotTier, spiritIndex, snapOut, space, lookOut, onOpenChest, onOpenStation, onOpenWaymark, onOpenBrew, uiOpen, owner, foesOut, pressOut, waterOut }: {
   inv: React.RefObject<Inventory>
   toolTier: React.RefObject<number>
   toolSkill: React.RefObject<BlockSkill>
@@ -3373,6 +3384,7 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
   /** Filled by the World so the owner-only `/foes` can read the live patrol. See its ctx entry. */
   foesOut: React.RefObject<null | (() => { posture: string; dist: number; collar: number }[])>
   pressOut: React.RefObject<null | ((key?: string, value?: number) => string)>
+  waterOut: React.RefObject<null | ((x: number, y: number, z: number) => number | null)>
   /** The keeper's two bars. Written here, polled by the HUD. */
   vitals: React.RefObject<Vitals>
   /** The cast pool. `regen` is per second, derived from the Mana skill. */
@@ -4744,6 +4756,38 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
     if (!isSolid(m)) return CELL_EMPTY
     return CELL_SOLID
   }, [voxelSolid])
+
+  /**
+   * ── ★★ IS THE CAMERA IN WATER — AND THE THIRD ANSWER NEITHER PROBE CAN GIVE ──────────────────
+   *
+   * Both cell readers above conflate "not loaded" with a definite answer, in OPPOSITE directions:
+   * `voxel` returns AIR (:4103) so the raycast sees no phantom solids, `voxelSolid` returns
+   * PACKED_CLOUD (:4123) so a body does not fall out of the world. Each is right for its own
+   * caller and each is a lie here — both say "not water" for ground that has simply not arrived,
+   * and at 22 units/s a sprinting swimmer outruns the load radius routinely, so the view would
+   * blink dry at the frontier and wet again when the chunk lands.
+   *
+   * ★ The disagreement is what makes the truth recoverable: a REAL packed-cloud block reads
+   * PACKED_CLOUD through both, while an ungenerated column reads AIR through one and PACKED_CLOUD
+   * through the other. That pair is the only unknown-shaped answer available, and `submersion`
+   * turns it into null = hold. Do not "simplify" this to a single probe; either one alone is the
+   * blink bug.
+   */
+  const cellAt = useCallback((x: number, y: number, z: number): Cell => {
+    const m = voxel(x, y, z)
+    if (m === MAT.WATER) return 'water'
+    if (m === AIR && voxelSolid(x, y, z) === MAT.PACKED_CLOUD) return 'unknown'
+    return 'other'
+  }, [voxel, voxelSolid])
+
+  useEffect(() => {
+    waterOut.current = (x, y, z) => {
+      const xi = Math.floor(x), yi = Math.floor(y), zi = Math.floor(z)
+      // The raw y, not the floored one: the sub-block ramp is the whole point at the surface.
+      return submersion(y, cellAt(xi, yi, zi), cellAt(xi, yi + 1, zi))
+    }
+    return () => { waterOut.current = null }
+  }, [waterOut, cellAt])
 
   // Fence arms ask the world what to grab — walls, hillsides, other pieces' occupancy. Slabs are
   // excluded: a rail into a half-cell's empty upper half reads as floating.

@@ -32,6 +32,7 @@ import { useRef, useLayoutEffect, useMemo, useEffect } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
 import { dayProgress, daylight, sunElevation, sunAzimuth } from '../engine/day-cycle'
+import { UNDER, fogUnder, domeVeil, stepUnder, newUnderState } from './underwater'
 
 // ── The sky dome (2026-08-08, Alex: "add a sky background… sun cycle but no moon in the Ather") ──
 // A camera-following inverted sphere with the whole sky in ONE fragment shader: vertical gradient
@@ -57,6 +58,12 @@ const SKY_FRAG = /* glsl */ `
   uniform vec3 uSunDir;
   uniform float uDay;   // daylight(), 1 noon .. 0 midnight
   uniform float uWarm;  // low-sun warmth, peaks in the twilight band, 0 at noon and at night
+  // ★ THE DOME SETS fog:false, SO SCENE FOG CANNOT HIDE IT — every other atmosphere effect here
+  // gets away with that because gloom and mist both leave you standing under open sky. Underwater
+  // it is the one thing that would read as a renderer fault: the world closed to arm's length with
+  // a bright blue sky still overhead. So the veil is applied in the shader, last, over everything
+  // including the sun disc.
+  uniform vec3 uWater; uniform float uVeil;
   void main() {
     vec3 d = normalize(vDir);
     float up = clamp(d.y, 0.0, 1.0);
@@ -65,6 +72,7 @@ const SKY_FRAG = /* glsl */ `
     float disc = smoothstep(0.99935, 0.99965, s);
     float halo = pow(s, 90.0) * 0.30 * uDay + pow(s, 7.0) * 0.22 * uWarm;
     vec3 col = sky + uSun * (halo + disc * (0.9 * uDay + 0.35 * uWarm));
+    col = mix(col, uWater, uVeil);
     gl_FragColor = vec4(col, 1.0);
   }
 `
@@ -136,6 +144,32 @@ const MIST = {
 
 const mix = (a: number, b: number, t: number) => a + (b - a) * t
 
+/**
+ * ── ★★ THE DOME WRITES LINEAR AND NOTHING RE-ENCODES IT. MEASURED, NOT DEDUCED ────────────────
+ *
+ * Every other material in the world is a built-in one, so three appends `colorspace_fragment` and
+ * its colours reach the screen sRGB-encoded. This dome is a raw `ShaderMaterial` writing
+ * `gl_FragColor` itself, so whatever `THREE.Color` holds — which is LINEAR working space, because
+ * `new THREE.Color('#rrggbb')` converts on the way in — is what lands in the framebuffer, un-encoded
+ * and therefore dark.
+ *
+ * ⚠ THIS IS PRE-EXISTING AND IT IS NOT A BUG TO FIX HERE. It has been true since the dome shipped
+ * (2026-08-08) and it means the sky's EFFECTIVE palette is the linear one — measured at noon, the
+ * upper sky renders (82,126,184) where the `#6f9fd0` zenith would give (111,159,208). Alex judged
+ * and approved the sky as it actually renders, so "correcting" the encode would silently restyle a
+ * ruled look. Left alone deliberately; logged for him instead.
+ *
+ * ★ BUT IT BREAKS ANY COLOUR THAT HAS TO AGREE WITH SOMETHING OUTSIDE THE DOME. The underwater
+ * veil does: scene fog paints the same water colour onto terrain through a built-in material,
+ * which DOES encode. One frame contained both — 39,750 px of dome at (6,41,58) against 2,292 px of
+ * fogged geometry at (43,111,131), one colour rendered two ways, with the wrong one covering most
+ * of the screen. So the veil colour is pushed in PRE-ENCODED: reading the hex as though it were
+ * already linear means no conversion happens and the sRGB numbers reach the framebuffer intact.
+ */
+function domeColor(hex: string): THREE.Color {
+  return new THREE.Color().setStyle(hex, THREE.LinearSRGBColorSpace)
+}
+
 /** Preallocated colour pairs — this mutates live objects inside useFrame, so no per-frame `new`. */
 function makePairs() {
   const pair = (d: string, n: string) => ({ d: new THREE.Color(d), n: new THREE.Color(n), out: new THREE.Color() })
@@ -145,17 +179,26 @@ function makePairs() {
     sun: pair(SKY.sunHigh, SKY.sunLow),
     leaf: pair(GLOOM.leaf, GLOOM.leaf), fogLeaf: pair(GLOOM.fogLeaf, GLOOM.fogLeaf),
     gold: pair(MIST.gold, MIST.gold), fogGold: pair(MIST.fogGold, MIST.fogGold),
+    // Underwater has NO day/night pair, and that is the design rather than an omission: water is a
+    // medium, not weather, so it does not take a palette from the hour. See `underwater.ts` §4.
+    water: new THREE.Color(UNDER.water), underSky: new THREE.Color(UNDER.sky),
   }
 }
 const lerpInto = (p: { d: THREE.Color; n: THREE.Color; out: THREE.Color }, t: number) => p.out.copy(p.d).lerp(p.n, t)
 
 export function VoxelDayNight(
-  { gloomAt, mistAt }: {
+  { gloomAt, mistAt, underwaterAt }: {
     gloomAt?: (x: number, z: number) => number
     /** Mist thickness 0..1 at a position — same prop shape as `gloomAt`, and the world supplies it
      *  so this file stays ignorant of worldgen. Sampled EVERY frame, unlike gloom: a patch is ~52
      *  blocks across where the canopy mask is a region, so gloom's 4Hz clock would step visibly. */
     mistAt?: (x: number, z: number) => number
+    /** How submerged the CAMERA is, 0..1 — or **null** for "the world could not say", which is the
+     *  honest answer at an unloaded frontier and means HOLD. Takes a y as well as x/z because this
+     *  is the one atmosphere lever that is about a height: see `underwater.ts` on why the eye and
+     *  the body are different questions. Same ignorance contract as the two above — the world
+     *  supplies it, this file never learns what a water block is. */
+    underwaterAt?: (x: number, y: number, z: number) => number | null
   } = {},
 ) {
   const { scene, camera } = useThree()
@@ -166,6 +209,10 @@ export function VoxelDayNight(
   /** Smoothed mist thickness. Smoothed for the same reason gloom is: the field is continuous but
    *  the camera is not, and a hard step in fog density reads as a graphics bug. */
   const mist = useRef({ m: 0 })
+  /** Submersion + the crossing wash. Smoothing lives in `stepUnder` because the crossing cue has
+   *  to key off the EASED value — a rippling surface flickers the raw target and would otherwise
+   *  machine-gun the wash while you tread. */
+  const under = useRef(newUnderState())
   const hemiRef = useRef<THREE.HemisphereLight>(null)
   const sunRef = useRef<THREE.DirectionalLight>(null)
   const nightRef = useRef<THREE.DirectionalLight>(null)
@@ -183,6 +230,7 @@ export function VoxelDayNight(
       uSun: { value: new THREE.Color(SKY.sunHigh) },
       uSunDir: { value: new THREE.Vector3(0, 1, 0.4) },
       uDay: { value: 1 }, uWarm: { value: 0 },
+      uWater: { value: domeColor(UNDER.water) }, uVeil: { value: 0 },
     },
     side: THREE.BackSide, depthWrite: false, fog: false,
   }), [])
@@ -220,20 +268,33 @@ export function VoxelDayNight(
     if (mistAt) M.m += (mistAt(camera.position.x, camera.position.z) - M.m) * Math.min(1, dt * MIST.rate)
     const md = M.m
 
+    // ── underwater: sampled at the CAMERA, which is the whole trick ────────────────────────────
+    // `camera.position` IS the eye, so asking the rig is asking the right question by construction.
+    // The nearby wrong question — `locomotion`'s `submerged` — is a BODY predicate (chest+feet) and
+    // disagrees with the eye for the whole of treading. Don't route this through the player.
+    const U = under.current
+    stepUnder(U, underwaterAt ? underwaterAt(camera.position.x, camera.position.y, camera.position.z) : 0, dt)
+    const ut = U.t
+
     const bg = scene.background
-    if (bg instanceof THREE.Color) bg.copy(lerpInto(P.bg, sv))
+    if (bg instanceof THREE.Color) bg.copy(lerpInto(P.bg, sv)).lerp(P.water, ut)
     const fog = fogRef.current
     if (fog) {
       // Fog dissolves into the dome's HORIZON band now, not the flat bg — the terrain edge and
       // the sky meet in the same colour, which is what makes the dome read as distance.
+      // Water lands LAST and lerps to an absolute: gloom and mist thicken the air you are looking
+      // through and compose with each other, water REPLACES the medium. See `underwater.ts` §4 —
+      // otherwise the same pond is a different pond at midnight under a canopy.
       fog.color.copy(lerpInto(P.horizon, sv)).lerp(lerpInto(P.fogLeaf, sv), 0.6 * gd)
-        .lerp(lerpInto(P.fogGold, sv), 0.85 * md)
+        .lerp(lerpInto(P.fogGold, sv), 0.85 * md).lerp(P.water, ut)
       // The two pulls MULTIPLY rather than add: a mist patch in the Thicket should be the thickest
       // air in the game, and adding two fractions of the same distance would let them cancel out
       // into something milder than either — the one place the world must feel closed.
       const pull = (1 - GLOOM.fogPull * gd) * (1 - MIST.fogPull * md)
-      fog.near = mix(DAY.fogNear, NIGHT.fogNear, sv) * pull
-      fog.far = mix(DAY.fogFar, NIGHT.fogFar, sv) * pull
+      const w = fogUnder(mix(DAY.fogNear, NIGHT.fogNear, sv) * pull,
+                         mix(DAY.fogFar, NIGHT.fogFar, sv) * pull, ut, U.surge)
+      fog.near = w.near
+      fog.far = w.far
     }
 
     // ── the dome ─────────────────────────────────────────────────────────────────────────────
@@ -253,6 +314,7 @@ export function VoxelDayNight(
       ;(u.uSunDir.value as THREE.Vector3).set(sunAzimuth(p), e, 0.41)
       u.uDay.value = dl
       u.uWarm.value = warm
+      u.uVeil.value = domeVeil(ut)
     }
     const hemi = hemiRef.current
     if (hemi) {
@@ -262,8 +324,14 @@ export function VoxelDayNight(
         .lerp(lerpInto(P.gold, sv), 0.7 * md)
       hemi.groundColor.copy(lerpInto(P.hemiGround, sv)).lerp(lerpInto(P.gold, sv), 0.45 * md)
       // Gloom CUTS, mist LIFTS — a luminous fog lights its own inside. See the MIST block.
+      hemi.color.lerp(P.underSky, ut)
+      hemi.groundColor.lerp(P.underSky, ut)
+      // Water LIFTS skylight like mist does, for the same reason and a canon one: `shimmer-
+      // skilling.md` rules the Ather's waters "still, luminescent, and peaceful". Real water
+      // attenuates, so realism and canon point opposite ways here and canon wins — going under is
+      // a change of COLOUR, never a change of brightness.
       hemi.intensity = mix(DAY.hemiIntensity, NIGHT.hemiIntensity, sv)
-        * (1 - GLOOM.hemiCut * gd) * (1 + MIST.hemiLift * md)
+        * (1 - GLOOM.hemiCut * gd) * (1 + MIST.hemiLift * md) * (1 + UNDER.hemiLift * ut)
     }
     const sun = sunRef.current
     if (sun) {
@@ -272,7 +340,9 @@ export function VoxelDayNight(
       const e = sunElevation(p)
       sun.position.set(sunAzimuth(p) * 220, 30 + Math.max(0, e) * 240, 90)
       // Mist scatters sun rather than blocking it: shadows go soft, the ground does not go dark.
+      // A surface scatters direct sun rather than blocking it — shadows soften, they do not black out.
       sun.intensity = DAY.sunIntensity * dl * (1 - GLOOM.sunCut * gd) * (1 - MIST.sunCut * md)
+        * (1 - UNDER.sunCut * ut)
     }
     const night = nightRef.current
     if (night) night.intensity = NIGHT.silverIntensity * sv
