@@ -3558,6 +3558,8 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
   const colOf = useCallback((x: number, z: number) => key(Math.floor(x / SECTION), Math.floor(z / SECTION)), [])
   const dropGroup = useRef<THREE.Group>(null)
   const mouse = useRef({ left: false, right: false })
+  /** One-shot latch for a right-BUTTON PRESS. See the mousedown handler. */
+  const rightPress = useRef(false)
   // Weapon state. Refs, not state: these change per-frame and per-shot, and a re-render per round
   // fired would be a re-render of the whole world at 9 rounds/sec.
   const ammo = useRef(weaponAt(0).clip)
@@ -4011,8 +4013,22 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
        * it has to record.
        */
       if (!document.pointerLockElement) return
-      if (e.button === 0) mouse.current.left = true; if (e.button === 2) mouse.current.right = true
+      if (e.button === 0) mouse.current.left = true
+      // ── ★★ A PRESS IS AN EVENT; A HOLD IS A STATE. LATCH THE FIRST, POLL THE SECOND ──────────
+      // The frame loop READS `mouse.right` rather than listening, which is right for mining (hold
+      // LMB) and wrong for every single-click verb: a press that begins and ends between two frames
+      // is seen by nothing at all. At 60fps a human click spans several frames and it never shows;
+      // at 15fps — a heavy chunk load, a software renderer — a quick tap falls clean through the
+      // gap. ★ Found by a headless probe whose `click()` was ~10ms: the cast "did not work" three
+      // runs in a row, and the feature was perfect. **An input that can be missed is
+      // indistinguishable from a feature that does not exist.**
+      // `rightPress` is set here and cleared ONLY by whoever consumes it, so no press can be lost.
+      // ⚠ `mouse.right` stays exactly as it was — ADS (`weaponDrawn && mouse.right`) wants the HELD
+      // state and would break if it were latched.
+      if (e.button === 2) { mouse.current.right = true; rightPress.current = true }
     }
+    // ⚠ MOUSEUP CLEARS THE HELD STATE ONLY. `rightPress` survives it on purpose — that is the whole
+    // point of the latch — and is cleared by the frame that acts on it.
     const mu = (e: MouseEvent) => { if (e.button === 0) mouse.current.left = false; if (e.button === 2) mouse.current.right = false }
     const ctx = (e: Event) => e.preventDefault()
     window.addEventListener('keydown', kd); window.addEventListener('keyup', ku)
@@ -6938,7 +6954,13 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
     // open it fell through the whole block. Empty-handed is the NORMAL way to open a container.
     // `rightClickIntent` (interact.ts) now owns that decision so an oracle can hold it; placing
     // still needs an item and says so on its own branch.
-    if (hit && mouse.current.right && !weaponDrawn) {
+    // ⚠ CAPTURED AND CLEARED IN ONE PLACE, so the latch lives exactly one frame — consumed or
+    // dropped, never stale. Clearing it only in the branches that ACT would leave a press aimed at
+    // nothing latched indefinitely, to fire later at whatever the reticle happened to find next:
+    // a phantom click, which is a worse bug than the missed one this fixes.
+    const rightNow = mouse.current.right || rightPress.current
+    rightPress.current = false
+    if (hit && rightNow && !weaponDrawn) {
       const potMat = voxel(hit.x, hit.y, hit.z)
       const intent = rightClickIntent(potMat, selItem,
         selItem === 'mana_seed' && countItem(inv.current!, selItem) > 0,
