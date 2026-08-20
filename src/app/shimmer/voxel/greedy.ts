@@ -17,7 +17,7 @@
 
 import { AIR, Section } from './section'
 import { STRUCTURE, STRUCTURE_HALF } from './pieces'
-import { isPlant, isHalfMat, isTopSlab, isSapling } from './depth'
+import { isPlant, isHalfMat, isTopSlab, isSapling, MAT } from './depth'
 import { isLeafMat, isLogMat } from './trees'
 
 /**
@@ -138,6 +138,10 @@ export interface MeshScratch {
   sliceMatB: Int32Array
   sliceSolA: Uint8Array
   sliceSolB: Uint8Array
+  /** OPAQUE-only occupancy, the second half of the rank (see `RANK` below). Parallel to `sliceSol*`
+   *  and swapped with it, or the two disagree about which plane they hold. */
+  sliceOpqA: Uint8Array
+  sliceOpqB: Uint8Array
 }
 
 export function createMeshScratch(size: number): MeshScratch {
@@ -155,6 +159,8 @@ export function createMeshScratch(size: number): MeshScratch {
     sliceMatB: new Int32Array((size + 2) * (size + 2)),
     sliceSolA: new Uint8Array((size + 2) * (size + 2)),
     sliceSolB: new Uint8Array((size + 2) * (size + 2)),
+    sliceOpqA: new Uint8Array((size + 2) * (size + 2)),
+    sliceOpqB: new Uint8Array((size + 2) * (size + 2)),
   }
 }
 
@@ -224,6 +230,7 @@ export function greedyMesh(
   // `let` because the two slices SWAP each plane — see MeshScratch.
   let sliceMatA = sc.sliceMatA, sliceMatB = sc.sliceMatB
   let sliceSolA = sc.sliceSolA, sliceSolB = sc.sliceSolB
+  let sliceOpqA = sc.sliceOpqA, sliceOpqB = sc.sliceOpqB
   /** Row stride of a slice grid: the section plus its one-cell ring on each side. */
   const SW = S + 2
   mask.fill(0)
@@ -278,7 +285,7 @@ export function greedyMesh(
      * Materialise one slice of cells at `dc` along this axis, ring included, into `mat`/`sol`.
      * Indexed `(uu + 1) + (vv + 1) * SW` so the ring at −1 and S is addressable without a branch.
      */
-    const fillSlice = (mat: Int32Array, sol: Uint8Array, dc: number): void => {
+    const fillSlice = (mat: Int32Array, sol: Uint8Array, opq: Uint8Array, dc: number): void => {
       const c0 = d === 0 ? dc : 0, c1 = d === 1 ? dc : 0, c2 = d === 2 ? dc : 0
       let i = 0
       for (let vv = -1; vv <= S; vv++) {
@@ -300,8 +307,20 @@ export function greedyMesh(
           // it wants exactly what a leaf wants — crossed quads, not a cube — and the pass that
           // draws those already exists. Building a second crossed-quad renderer for four materials
           // would be the same duplication the crown layout was just rescued from.
+          // ⚠⚠ `sol` IS NOT ONLY THE FACE TEST — IT IS ALSO AO'S ARITHMETIC OPERAND. `vertexAO`
+          // computes `3 - (side1 + side2 + corner)` straight off these values, and the mask test
+          // below reads `=== 1`. So this array must stay strictly 0/1 and must keep meaning exactly
+          // what it means today. Widening it into a 0/1/2 rank was the obvious way to fix water and
+          // it is a trap twice over: an opaque occluder would contribute 2, taking AO to `3-6 = -3`
+          // and moving every shadow in the world, while `=== 1` would simultaneously stop opaque
+          // cells emitting faces at all. Neither would throw, and the lighting half would look like
+          // an unrelated AO regression that appeared the same day. The rank lives in a SECOND array.
           sol[i] = m !== AIR && m !== STRUCTURE && m !== STRUCTURE_HALF && !isPlant(m)
             && !isLeafMat(m) && !isLogMat(m) && !isSapling(m) ? 1 : 0
+          // ── ★★ RANK = sol + opq: air 0 · water 1 · opaque 2 ──────────────────────────────────
+          // Water is `sol` (it occludes, and that is today's approved look — see the block above
+          // the mask test) but it is NOT opaque, so it ranks between air and stone.
+          opq[i] = sol[i] === 1 && m !== MAT.WATER ? 1 : 0
           i++
         }
       }
@@ -320,10 +339,11 @@ export function greedyMesh(
       if (filled === x[d]) {
         const tm = sliceMatA; sliceMatA = sliceMatB; sliceMatB = tm
         const ts = sliceSolA; sliceSolA = sliceSolB; sliceSolB = ts
-        fillSlice(sliceMatB, sliceSolB, x[d] + 1)
+        const to = sliceOpqA; sliceOpqA = sliceOpqB; sliceOpqB = to
+        fillSlice(sliceMatB, sliceSolB, sliceOpqB, x[d] + 1)
       } else {
-        fillSlice(sliceMatA, sliceSolA, x[d])
-        fillSlice(sliceMatB, sliceSolB, x[d] + 1)
+        fillSlice(sliceMatA, sliceSolA, sliceOpqA, x[d])
+        fillSlice(sliceMatB, sliceSolB, sliceOpqB, x[d] + 1)
       }
       filled = x[d] + 1
 
@@ -352,11 +372,27 @@ export function greedyMesh(
           // crossed quads, and crossed quads cannot merge — routing ~17k of them through this
           // mesher would add ~34k unmergeable quads to terrain meshes for geometry that is
           // already four draw calls. Same exclusion, same reason, as piece occupancy.
-          const aSolid = sliceSolA[si] === 1
-          const bSolid = sliceSolB[si] === 1
-          // Exactly one solid => a face. Both solid or both air => nothing. This single line is
-          // what deletes every interior face in the world.
-          if (aSolid === bSolid) mask[n] = 0
+          // ── ★★ THE RANK TEST, AND WHY IT IS NOT "EXACTLY ONE SOLID" ANY MORE (2026-08-20) ────
+          // It used to be. Water passed as an ordinary opaque cube, so a water↔stone boundary was
+          // solid|solid and emitted NOTHING ON EITHER SIDE: every riverbed and channel wall in the
+          // world had no geometry where it met water. A ray entered the ground, found no interior
+          // faces (correctly culled) and left wherever the terrain next touched air — an x-ray hole
+          // exactly the shape of the water. It survived from 08-07 because you were always looking
+          // through a 0.78-opacity surface at a shallow angle and a missing bed reads convincingly
+          // as deep water; going under puts you on the wrong side of the only thing hiding it.
+          //
+          // ★ THE OBVIOUS FIX IS THE WRONG ONE. Exempting water from the sweep the way leaves and
+          // logs are exempted (three notes up) makes water↔air non-solid on BOTH sides and deletes
+          // the water surface itself — a missing bed traded for a missing river. Water wants half
+          // of that exemption: do not hide what is behind me, but do still draw me.
+          //
+          // So: rank differs => a face, and it belongs to the HIGHER side. water|air gives the
+          // surface, water|stone gives the bed, stone|air is unchanged, equal ranks emit nothing.
+          // Generalises to the next translucent material (glass, ice) instead of naming water here.
+          const rankA = sliceSolA[si] + sliceOpqA[si]
+          const rankB = sliceSolB[si] + sliceOpqB[si]
+          const aSolid = rankA > rankB
+          if (rankA === rankB) mask[n] = 0
           else {
             // ★ AO IS COMPUTED ONLY ON THE FACE-POSITIVE BRANCH. The mask loop runs over every cell
             // of every plane and the uniform fast path exists because that is the expensive part —
@@ -370,7 +406,21 @@ export function greedyMesh(
             // light would have to arrive from. That is slice B for a front face, slice A for a
             // back one, and both are already resident, so the eight lookups are array reads at
             // fixed offsets around `si`.
-            const sol = aSolid ? sliceSolB : sliceSolA
+            // ★★ AO IS PROVABLY UNCHANGED FOR EVERY FACE THAT ALREADY EXISTED, BY CONSTRUCTION
+            // RATHER THAN BY CARE. Every pre-existing face had air on its open side, so `openRank`
+            // is 0, so this picks the very same `sliceSol*` array it always did, on the same side,
+            // and the eight samples below are byte-identical. The new branch cannot reach an old
+            // face because an old face never had water as its open side.
+            //
+            // ★ AND FOR THE NEW ONES, WATER MUST NOT OCCLUDE. A bed face's open side is water,
+            // which is `sol=1`, so reusing that array would give every one of the eight samples an
+            // occluder and bake a PITCH-BLACK riverbed under every river — full occlusion arriving
+            // as a shadow rather than as an error. Under water what blocks light is the ground, so
+            // the occluder set there is opaque-only. This changes no existing shading and is a fresh
+            // decision only where there was nothing to change.
+            const openRank = aSolid ? rankB : rankA
+            const sol = openRank === 0 ? (aSolid ? sliceSolB : sliceSolA)
+                                       : (aSolid ? sliceOpqB : sliceOpqA)
             const nU = sol[si - 1], pU = sol[si + 1]
             const nV = sol[si - SW], pV = sol[si + SW]
             const a00 = vertexAO(nU, nV, sol[si - 1 - SW])

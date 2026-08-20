@@ -519,6 +519,89 @@ for (const S of [4, 16, 32]) {
   ok(lMaxX - lMinX > 1, `★ a LEAF still spills past its cell, unlike a sapling (${(lMaxX - lMinX).toFixed(2)} wide)`)
 }
 
+// ── ★★ WATER IS TRANSLUCENT TO THE SWEEP: IT MUST NOT HIDE WHAT IT COVERS (2026-08-20) ────────
+// The bug this replaces: water passed the old "exactly one side solid" test as an opaque cube, so
+// water|stone was solid|solid and emitted NOTHING ON EITHER SIDE. Every riverbed and channel wall
+// in the world had no geometry where it met water, and you looked straight through the ground —
+// an x-ray hole exactly the shape of the water, alive since 08-07 and hidden only because you were
+// always viewing it through a 0.78-opacity surface at a shallow angle.
+{
+  const S = 16
+  const build = (cover: number) => {
+    const sec = new Section(S)
+    for (let x = 0; x < S; x++) for (let z = 0; z < S; z++) {
+      for (let y = 0; y <= 3; y++) sec.set(x, y, z, MAT.STONE)
+      if (cover !== AIR) for (let y = 4; y <= 7; y++) sec.set(x, y, z, cover)
+    }
+    return greedyMesh(sec)
+  }
+  const facesOf = (m: ReturnType<typeof greedyMesh>, mat: number, ny: number) => {
+    let n = 0
+    for (let q = 0; q < m.quads; q++) {
+      if (m.materials[q * 4] === mat && Math.sign(m.normals[q * 12 + 1]) === ny) n++
+    }
+    return n
+  }
+  const air = build(AIR), water = build(MAT.WATER), leaf = build(WOOD.GOLDWOOD_LEAVES)
+  eq(facesOf(air, MAT.STONE, 1), 1, 'baseline: bare stone has a top face')
+  eq(facesOf(water, MAT.STONE, 1), 1,
+    'THE X-RAY: stone under water KEEPS its top face — a bed you can see through is what solid|solid emitted')
+  eq(facesOf(leaf, MAT.STONE, 1), 1, 'and the leaf exemption is unchanged')
+  // The other half, and the reason a blanket exemption is wrong: reading water as air would make
+  // water|air non-solid on both sides and delete the river's own surface.
+  ok(facesOf(water, MAT.WATER, 1) === 1,
+    'water still draws its OWN surface — exempting it from the sweep entirely trades a missing bed for a missing river')
+  ok(facesOf(water, MAT.WATER, -1) === 0,
+    'and NOT an underside where it meets stone — the higher rank owns the face, so the bed is drawn, not a water face inside rock')
+
+  // ★ A BED UNDER WATER MUST NOT BE PITCH BLACK. Its open side is water, which is still an occluder
+  // for `sol`; reusing that array for AO would give all eight samples an occluder and bake full
+  // darkness in as a shadow rather than as an error.
+  let lit = 0, dark = 0
+  for (let q = 0; q < water.quads; q++) {
+    if (water.materials[q * 4] !== MAT.STONE || Math.sign(water.normals[q * 12 + 1]) !== 1) continue
+    for (let v = 0; v < 4; v++) (water.ao[q * 4 + v] > 0 ? lit++ : dark++)
+  }
+  ok(lit > 0 && dark === 0, `the bed under water is lit, not blacked out by the water above it (lit ${lit}, dark ${dark})`)
+
+  // ★★ AND THE PRESERVATION HALF, WHICH THE FIXTURES ABOVE CANNOT SEE. Everything above has water
+  // either absent or directly covering the face, so an AO read of the opaque-only array would look
+  // identical and a mutation swapping them survives. The case that separates them is an AIR-open
+  // face with water merely BESIDE it: water is still an occluder for `sol` — today's approved look,
+  // deliberately unchanged — so that face must be darkened by the water next to it. Read the
+  // opaque-only array here instead and every shadow cast by water in the world quietly lifts.
+  {
+    const sec = new Section(S)
+    for (let x = 0; x < S; x++) for (let z = 0; z < S; z++) {
+      for (let y = 0; y <= 3; y++) sec.set(x, y, z, MAT.STONE)
+      if (x < 8) sec.set(x, 4, z, MAT.WATER)          // water fills half the plane above the stone
+    }
+    const m = greedyMesh(sec)
+    let minAO = 3, found = false
+    for (let q = 0; q < m.quads; q++) {
+      if (m.materials[q * 4] !== MAT.STONE || Math.sign(m.normals[q * 12 + 1]) !== 1) continue
+      // the DRY half: stone top faces with air above, standing alongside the water
+      let cx = 0
+      for (let v = 0; v < 4; v++) cx += m.positions[q * 12 + v * 3]
+      if (cx / 4 < 8) continue
+      found = true
+      for (let v = 0; v < 4; v++) minAO = Math.min(minAO, m.ao[q * 4 + v])
+    }
+    ok(found, 'fixture: the dry half of the stone top is meshed')
+    ok(minAO < 3,
+      `water beside an air-open face still darkens it (min AO ${minAO}) — AO occlusion is unchanged by the rank; only face EMISSION moved`)
+  }
+
+  // ⚠ AO IS ARITHMETIC OVER THE OCCUPANCY ARRAY (`3 - (s1 + s2 + corner)`), so that array must stay
+  // strictly 0/1. Widening it into the rank was the obvious fix and would have driven AO to -3
+  // silently. This asserts the DOMAIN rather than the mechanism, so it survives a rewrite.
+  for (const m of [air, water, leaf]) {
+    let bad = 0
+    for (let i = 0; i < m.quads * 4; i++) if (m.ao[i] > 3) bad++
+    eq(bad, 0, 'every AO value stays inside 0..3 — a rank leaking into the AO operand shows up here first')
+  }
+}
+
 console.log(`\ngreedy mesher: ${pass} passed, ${fails.length} failed`)
 for (const f of fails) console.log('  ✗ ' + f)
 if (fails.length) process.exit(1)
