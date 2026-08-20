@@ -37,6 +37,7 @@ import { carveStack, type CarveConfig, DEFAULT_CARVE } from './carve'
 import { placeOre, type OreBatch, ORE_BATCHES } from './ore'
 import { plantTrees, type TreeConfig, DEFAULT_TREES } from './trees'
 import { plantBoulders, type BoulderConfig, DEFAULT_BOULDERS } from './boulders'
+import { digDens, type DenConfig, DEFAULT_DENS } from './dens'
 import { placeSites } from './sites'
 import { slumpMask } from './slump'
 import { plantMaterialAt } from './flora'
@@ -71,6 +72,7 @@ export interface ColumnConfig {
   ore: OreBatch[]
   trees: TreeConfig
   boulders: BoulderConfig
+  dens: DenConfig
 }
 
 export const DEFAULT_COLUMN: ColumnConfig = {
@@ -82,6 +84,7 @@ export const DEFAULT_COLUMN: ColumnConfig = {
   ore: ORE_BATCHES,
   trees: DEFAULT_TREES,
   boulders: DEFAULT_BOULDERS,
+  dens: DEFAULT_DENS,
 }
 
 export class Column {
@@ -349,6 +352,27 @@ export function generateColumn(
 
   if (col.stage < Stage.Carved && upTo >= Stage.Carved) {
     carveStack(col.sections, wx, 0, wz, cfg.chunk, seed, cfg.carve, surfaceAt, cfg.depth.seaLevel)
+    // ── ★★ DENS BELONG IN THIS STAGE, AND THE PLACEMENT IS THE WHOLE ARGUMENT ─────────────────
+    // A den is the only feature that generates by REMOVING ground, so every ordering rule boulders
+    // state runs backwards for it.
+    //
+    // ★ HERE, NOT IN VEGETATION. Post-carve ore runs after this line, so `discardOnAirExposure`
+    // deals ore around a den's walls exactly as it does around a tunnel's — for free. In the
+    // vegetation stage a den would instead be DELETING ore already placed, and that is strictly
+    // worse than the addition bug boulders found: a boulder on an element crystal at least leaves
+    // stone behind, while a den leaves nothing at all, so there is no artefact for anyone to
+    // notice. Each element gates ten canon second forms. (`dig` still refuses ore as a belt.)
+    //
+    // ★ AFTER `carveStack`, so a den that meets a tunnel joins it instead of being half-filled.
+    // ★ BEFORE the vegetation stage, so `placeSites`, `plantWaystones` and the hold walls all land
+    //   on top: a den can never hole a ruin, a lit post, or Brack's curtain.
+    // ★ AND AFTER the bare-terrain snapshot, exactly like `carveStack` — so the diff records a den
+    //   as a stage write and `generatedVoxel` agrees with the world. That disagreement is the class
+    //   of bug that regrew chopped trees.
+    //
+    // ⚠ SECTION, not `cfg.chunk`: dens key their placement grid to the streaming section like the
+    // planters do, not to the 64-wide carve grid. The measured rates were taken at 16.
+    digDens(col.sections, wx, 0, wz, SECTION, seed, surfaceAt, cfg.depth.seaLevel, cfg.dens)
     col.stage = Stage.Carved
   }
 
