@@ -183,6 +183,18 @@ cmd_build() {
     # never push for you: pushing is a judgment call (a satellite may be mid-rebase, a commit may be
     # deliberately local) and a script that pushes on your behalf turns a visible omission into an
     # invisible action. State the fact, name the command, stop.
+    # ⚠⚠ AND THE DIRTY-TREE CASE IS THE WORSE ONE, ADDED THE SAME DAY THE ABOVE WAS. The first
+    # version counted COMMITS ahead of origin — and I promptly deployed an uncommitted tree past it,
+    # because `ahead` is 0 when nothing has been committed at all. **Unpushed means prod runs code
+    # that exists on one box; UNCOMMITTED means prod runs code that exists in no history anywhere**,
+    # which no `git` command will ever recover if the file is edited again. The narrower guard read
+    # as covering the general problem, and it silently covered the milder half of it.
+    local dirty
+    dirty=$(git -C "$REPO" status --porcelain 2>/dev/null | grep -c '^ *[MADRC]' || true)
+    if [ "${dirty:-0}" -gt 0 ] 2>/dev/null; then
+      echo ">> ⚠⚠ DEPLOYED FROM A DIRTY TREE — $dirty modified file(s) are live on prod and in no commit."
+      echo ">>   git add -p && git commit    (then push; see below)"
+    fi
     local ahead
     ahead=$(git -C "$REPO" rev-list --count @{u}..HEAD 2>/dev/null || echo 0)
     if [ "${ahead:-0}" -gt 0 ] 2>/dev/null; then
