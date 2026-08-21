@@ -8,6 +8,7 @@
 //   WORLD_PITCH=-10                                           — degrees; negative looks UP
 //   WORLD_YAW=180                                             — degrees, + turns right (spawn faces -Z)
 //   WORLD_LOG='\\[canopy\\]'                                     — forward matching console lines to stdout
+//   WORLD_EVAL='(() => document.title)'                       — run an expression in the page, print it
 //   WORLD_RADIUS=10                                           — load ring, in columns (default: the app's 6)
 //   WORLD_FPS=1                                               — turn the frame meter on for the shot
 //
@@ -252,6 +253,31 @@ try {
   console.log(stats ? `stats · ${stats}` : 'stats · NONE (no [data-stats] node — old build?)')
   const perf = await page.evaluate(() => document.querySelector('[data-perf]')?.textContent ?? null)
   if (perf) console.log(`perf  · ${perf.trim()}   ⚠ SwiftShader — the rate is not a real frame rate`)
+  // ── ★ WORLD_EVAL — ASK THE PAGE A QUESTION A PICTURE CANNOT ANSWER (2026-08-21) ───────────────
+  // Same reason `WORLD_LOG` exists, one level up: a screenshot tells you THAT something is wrong and
+  // never WHAT. Added while verifying water depth attenuation, where the picture was genuinely
+  // ambiguous — the shore-to-deep gradient I wanted to read as depth ran far-to-near, and DISTANCE
+  // FOG produces the identical gradient. No amount of staring separates those two; reading the
+  // compiled shader off the live context separates them in one line.
+  //
+  // ⚠ It runs in the REAL page against the REAL renderer, which is the entire point: it can see the
+  // prebuilt worker's output and the actual GL state, neither of which a `.mts` importing source
+  // modules can. Opt-in, and the result is JSON-stringified so a returned object survives the hop.
+  const EVAL = process.env.WORLD_EVAL
+  if (EVAL) {
+    try {
+      // ⚠ A FUNCTION EXPRESSION IS CALLED, NOT AWAITED. The first cut wrote `await (${EVAL})`, which
+      // awaits the FUNCTION OBJECT — a non-thenable, so it resolves to itself and stringifies to
+      // `undefined`. It printed a clean `eval · undefined` and looked like the page had no answer,
+      // rather than like the harness had not asked. Both shapes are accepted so either style works.
+      const r = await page.evaluate(`(async () => { try {
+        const _e = (${EVAL});
+        const _v = await (typeof _e === 'function' ? _e() : _e);
+        return _v === undefined ? 'EVAL RETURNED undefined' : JSON.stringify(_v)
+      } catch (e) { return 'EVAL THREW: ' + e.message } })()`)
+      console.log(`eval  · ${r}`)
+    } catch (e) { console.log(`eval  · FAILED TO RUN: ${(e as Error).message}`) }
+  }
   if (errors.length) console.log(`page errors (${errors.length}):\n  ${errors.slice(0, 6).join('\n  ')}`)
 } finally {
   await browser.close()   // never leave a chrome behind on an 8GB box
