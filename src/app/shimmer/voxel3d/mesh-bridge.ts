@@ -178,6 +178,18 @@ const WATER_ABSORB = 0.505
 export function createWaterMaterial(tiles: { texture: THREE.DataArrayTexture } | null, waterLayer: number): WaterMaterial {
   const mat = new THREE.MeshLambertMaterial({
     vertexColors: !tiles, transparent: true, opacity: WATER_BASE_ALPHA, depthWrite: false,
+    // ── ★★ THE CEILING: WATER WAS UNDRAWN FROM BELOW (2026-08-21) ─────────────────────────────
+    // The material never set `side`, so it inherited `FrontSide` — and a surface quad's front face
+    // points UP. Underwater you were therefore looking at nothing at all: no ceiling, no boundary,
+    // fog in every direction including up. There was no surface to swim toward, which is most of
+    // why being under water read as being inside a tinted room rather than inside water.
+    //
+    // ⚠ DOUBLE-SIDED IS NOT A FREE SWITCH — it also un-culls the RIMS, and a rim's back face is the
+    // inside of the water's own edge. Those would put translucent panels back inside every body of
+    // water: the "walls of water" that took a day to remove the day before. So the sidedness is
+    // widened at the MATERIAL and narrowed again in the FRAGMENT — only the sheet survives from
+    // behind, every other water face keeps exactly the front-only behaviour it has today.
+    side: THREE.DoubleSide,
   }) as unknown as WaterMaterial
   let live: { uTime: { value: number } } | null = null
   let now = 0
@@ -213,12 +225,19 @@ if (normal.y > 0.5) {
     // off the `if (tiles)` branch would have made the feature silently absent in exactly the
     // configuration that is hardest to notice — the fallback one.
     shader.fragmentShader = shader.fragmentShader
+      // ⚠ `vVoxNormal` IS DECLARED UNCONDITIONALLY NOW. It used to ride in on the tiles branch, but
+      // the back-face discard below reads it on every path — leaving it inside the `tiles ?` would
+      // compile fine WITH an atlas and fail to link without one, which is the configuration nobody
+      // looks at.
       .replace('#include <common>',
-        '#include <common>\nvarying float vDepth;\n'
-        + (tiles ? 'uniform sampler2DArray uTiles;\nuniform float uTime;\n'
-                 + 'varying vec3 vVoxPos;\nvarying vec3 vVoxNormal;\n' : ''))
+        '#include <common>\nvarying float vDepth;\nvarying vec3 vVoxNormal;\n'
+        + (tiles ? 'uniform sampler2DArray uTiles;\nuniform float uTime;\nvarying vec3 vVoxPos;\n' : ''))
       .replace('#include <color_fragment>',
         `#include <color_fragment>
+// ⚠ NARROWING THE MATERIAL'S DoubleSide BACK DOWN — see the 'side' flag above. Only the sheet is meant to be
+// seen from behind. Cheaper than a second mesh, and it cannot drift out of step with the material
+// because it lives in the same function as the flag it corrects.
+if (!gl_FrontFacing && vVoxNormal.y < 0.5) discard;
 ${tiles ? `{
   vec3 an = abs(vVoxNormal);
   vec2 tileUv = an.y > 0.5
@@ -235,7 +254,16 @@ ${tiles ? `{
   // the deepest water in the world. A negative depth is the no-data sentinel and keeps the flat
   // opacity the material was built with, so a section meshed without a water surface renders the
   // way it did before this existed rather than turning to glass.
-  if (vDepth >= 0.0) {
+  // ── ★★ FROM BELOW, THE SURFACE IS A WINDOW AND NOT A VOLUME ────────────────────────────
+  // vDepth measures the water column BENEATH the sheet, and that column sits between viewer and
+  // sheet only when the viewer is ABOVE it. Swim under and you are already inside it, so
+  // attenuating by it again counts the same water twice: a 10-deep basin's ceiling would land at
+  // 0.99 and read as a painted lid with no sky behind it — a worse hole than the one being fixed.
+  // From underneath the sheet keeps its base translucency, and the distance to it is carried by
+  // fog, which is already the thing that handles distance.
+  if (!gl_FrontFacing) {
+    diffuseColor.a = ${WATER_BASE_ALPHA.toFixed(2)};
+  } else if (vDepth >= 0.0) {
     float att = 1.0 - exp(-${WATER_ABSORB.toFixed(3)} * vDepth);
     diffuseColor.a = clamp(att, 0.0, 1.0);
     // ★ THE COLOUR HAS TO TRAVEL WITH THE ALPHA OR THE DEEP END READS AS A FLAT BLUE DECAL. Opacity

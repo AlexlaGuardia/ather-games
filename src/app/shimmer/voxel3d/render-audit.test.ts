@@ -164,6 +164,23 @@ for (const file of files) {
      'materials are constructed in exactly two places: the chunk pass and the water pass')
   ok(/const waterMaterial = useMemo\(/.test(vw), 'the water material is a shared instance, not per-mesh')
   ok(/waterMaterial\.dispose\(\)/.test(vw), 'the shared water material is released on unmount')
+
+  // ── ★★ THE CEILING, AND THE HALF OF IT THAT IS EASY TO LOSE (2026-08-21) ────────────────────
+  // Water had no `side` at all, so it inherited FrontSide and a surface quad — whose front face
+  // points UP — was simply not drawn from below. Underwater there was no ceiling to swim toward.
+  // DoubleSide fixes that and, on its own, ALSO un-culls the rims, which puts translucent panels
+  // back inside every body of water: the exact "walls of water" removed the day before. The two
+  // lines are one mechanism, so they are asserted together — deleting the discard while keeping
+  // DoubleSide is a silent regression of the older fix, and it looks like a cleanup.
+  ok(/side: THREE\.DoubleSide/.test(bridge.slice(bridge.indexOf('createWaterMaterial'))),
+     'the water sheet is visible from below (DoubleSide)')
+  ok(/if \(!gl_FrontFacing && vVoxNormal\.y < 0\.5\) discard;/.test(bridge),
+     'and only the SHEET is — rims keep front-only culling, or the walls of water come back')
+  // The underside must not re-apply the depth ramp: vDepth measures the column BENEATH the sheet,
+  // which is not between you and it once you are under. Without this a deep basin's ceiling lands
+  // near-opaque and reads as a painted lid with no sky behind it.
+  ok(/if \(!gl_FrontFacing\) \{\s*\n\s*diffuseColor\.a = /.test(bridge),
+     'the underside keeps base translucency instead of depth-attenuating twice')
 }
 
 // ── ★ EVERY MATERIAL IN THE ATLAS HAS A PAINTER (2026-08-13, the sawmill) ───────────────────────
