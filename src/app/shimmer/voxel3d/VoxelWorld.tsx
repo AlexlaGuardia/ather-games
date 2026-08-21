@@ -6118,6 +6118,12 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
       const derived = slumpMask(gx * SECTION, gz * SECTION, SECTION, SEED, (x, z) => columnHeight(x, z, SEED))
       col.surface.set(derived.surface)
       col.slump.set(derived.mask)
+      // ★ AND THE SEED IS DERIVED TOO — the sloped water surface needs the water TABLE, which is a
+      // function of it. Stamped by `generateColumn`, which runs in the WORKER, so it never reaches
+      // a column adopted here. Leaving it out made the whole water-sheet feature inert in the game
+      // while every oracle stayed green, because the oracles call `generateColumn` directly. That
+      // is the same failure the paragraph above records for the slump mask, one feature later.
+      col.genSeed = SEED
       // Stage overrides come FROM the worker — they are a product of generation (carving, ore,
       // trees, ruins) and cannot be recovered here. Without them the save's diff compares a chopped
       // trunk against AIR, stores nothing, and the tree is standing again next time you load.

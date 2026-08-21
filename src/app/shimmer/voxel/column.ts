@@ -615,7 +615,7 @@ export interface SectionMesh {
  * Returns `null` when the column and its ring hold no water at all, which skips every water path
  * in the mesher whole.
  */
-function buildWaterSurface(col: Column, neigh: Neighbours, seed: number, cfg: HeightConfig): WaterSurface | null {
+function buildWaterSurface(col: Column, neigh: Neighbours, seed: number | undefined, cfg: HeightConfig): WaterSurface | null {
   const n = col.sections.length
   const tops = new Map<number, number>()
   // Ring included: -1 and SECTION are legal, and come from the edge neighbours.
@@ -645,7 +645,18 @@ function buildWaterSurface(col: Column, neigh: Neighbours, seed: number, cfg: He
     }
   }
   if (tops.size === 0) return null
+  // ── ★★ THE TWO HALVES HAVE DIFFERENT DEPENDENCIES, AND SPLITTING THEM IS FAIL-SOFT ────────────
+  // `tops` comes from CELLS and needs no seed, so wall suppression — the big visual win — works on
+  // any column that has voxels in it. `corners` needs the water table, which needs the seed. A
+  // column that arrived without one therefore renders a FLAT sheet with no walls, rather than
+  // nothing at all. That is not hypothetical: the worker sends VOXELS, not Columns, and the host
+  // rebuilds a fresh `Column` from them — so a seed stamped inside `generateColumn` never reaches
+  // the live path, and gating the whole feature on it made the entire thing inert in the actual
+  // game while every oracle stayed green (they call `generateColumn` directly). Same shape as the
+  // slump mask that "passed its whole oracle and did nothing in the actual game" — the warning is
+  // written ten lines above the adoption code, and this is its second costume.
   const corners = new Map<number, number>()
+  if (seed === undefined) return { tops, corners }
   for (const key of tops.keys()) {
     // Recover the cell this top belongs to, then sample its four corners.
     const kx = (key % (SECTION + 2)) - 1, kz = ((key / (SECTION + 2)) | 0) - 1
@@ -671,8 +682,7 @@ export function meshColumn(
   // per column mesh, not per section, and never touched unless a section actually holds a lip.
   const strip = new Section(SECTION)
   // One water surface per column, not per section — the table is a property of the place.
-  const water = col.genSeed === undefined
-    ? null : buildWaterSurface(col, neigh, col.genSeed, col.genHeight ?? DEFAULT_HEIGHT)
+  const water = buildWaterSurface(col, neigh, col.genSeed, col.genHeight ?? DEFAULT_HEIGHT)
 
   for (let i = 0; i < n; i++) {
     const sec = col.sections[i]

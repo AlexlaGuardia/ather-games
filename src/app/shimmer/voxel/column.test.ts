@@ -178,6 +178,54 @@ const scratch = createMeshScratch(SECTION)
   ok(!meshes.some(m => m.index === top), 'a pure-sky section emits no mesh at all')
 }
 
+// ── ★★★ THE WORKER SENDS VOXELS, NOT COLUMNS — SO TEST THE COLUMN THE HOST ACTUALLY BUILDS ─────
+// This oracle, and every other one, reaches a Column through `generateColumn`. The GAME does not:
+// the worker generates, posts raw voxels, and `VoxelWorld` builds a FRESH `Column` and refills it.
+// Anything derived that is not rebuilt there is silently absent in the real game while every test
+// stays green. That already happened once to the slump mask (its warning is in the adoption code),
+// and it happened again to the sloped water surface, which was 100% inert on prod for an hour with
+// 166 asserts passing. So the fixture below is the ADOPTED shape, not the generated one.
+{
+  const SEED = 1337
+  const wx = 672, wz = 160          // a river column: known water, outside the plot bubble
+  const gen = generateColumn(new Column(wx, wz), SEED)
+  // Exactly what the host does: fresh Column, voxels copied in, nothing else carried over.
+  const adopted = new Column(wx, wz)
+  for (let i = 0; i < gen.sections.length; i++) adopted.sections[i].data.set(gen.sections[i].data)
+  refreshUniform(adopted)
+
+  const verticalWater = (col: Column) => {
+    let n = 0
+    for (const sm of meshColumn(col, {})) {
+      const m = sm.mesh
+      for (let q = 0; q < m.positions.length / 12; q++) {
+        if (m.materials[q * 4] !== MAT.WATER) continue
+        if (Math.abs(m.normals[q * 12 + 1]) > 0.5) continue
+        n++
+      }
+    }
+    return n
+  }
+  // A column with NO seed at all is the worst case: it must still suppress walls, because `tops`
+  // is derived from cells and needs no seed. Only the SLOPE needs the table.
+  const bare = verticalWater(adopted)
+  const stamped = (() => { adopted.genSeed = SEED; return verticalWater(adopted) })()
+  ok(bare === stamped,
+    `an adopted column suppresses water walls with or without a seed (${bare} vs ${stamped}) — the fail-soft half must not depend on the stamp`)
+
+  adopted.genSeed = SEED
+  let sunk = 0, flat = 0
+  for (const sm of meshColumn(adopted, {})) {
+    const m = sm.mesh
+    for (let q = 0; q < m.positions.length / 12; q++) {
+      if (m.materials[q * 4] !== MAT.WATER || Math.sign(m.normals[q * 12 + 1]) !== 1) continue
+      const y = m.positions[q * 12 + 1]
+      if (Math.abs(y - Math.round(y)) > 1e-9) sunk++; else flat++
+    }
+  }
+  ok(sunk > 0, `a SEED-STAMPED adopted column gets the sloped sheet (${sunk} sunk, ${flat} flat) — this is the assert that was missing when the feature shipped inert`)
+}
+
 console.log(`\ncolumn layer: ${pass} passed, ${fails.length} failed`)
 for (const f of fails) console.log('  ✗ ' + f)
 if (fails.length) process.exit(1)
