@@ -271,6 +271,56 @@ const packAO = (a00: number, a10: number, a11: number, a01: number): number =>
   (a00 | (a10 << 2) | (a11 << 4) | (a01 << 6)) << AO_SHIFT
 
 /**
+ * ── ★★★ THE WATER SHEET IS NOT MERGED, AND THE MEASUREMENT IS WHY (2026-08-21) ────────────────
+ * Greedy merging and a per-vertex DEPTH attribute are structurally incompatible, and the way they
+ * fail is a quilt: the surface draws as flat rectangles of visibly different opacity, with straight
+ * edges exactly where the merge boundaries are.
+ *
+ * ★ THE MECHANISM IS A T-JUNCTION, NOT A ROUNDING ERROR. Two columns agree at every shared CORNER
+ * — that much was asserted the same morning and is true. But a merged quad's EDGE runs straight
+ * past the corners of the smaller quads beside it, and along that edge the long quad interpolates
+ * linearly between corners up to 16 cells apart while its neighbour reads the true value at its own
+ * corner. They agree at the endpoints and disagree everywhere between. Measured on real terrain:
+ * **399 T-junction points in 25 columns, worst mismatch 0.806 blocks = 0.229 of alpha.** A C0 check
+ * at shared vertices cannot see this, which is exactly why the oracle passed and the water looked
+ * wrong.
+ *
+ * ★★ THREE FIXES WERE MEASURED AND TWO WERE REJECTED ON THE NUMBERS, NOT ON TASTE:
+ *   · merge only across CONSTANT depth — only **12.8%** of river cells and **37%** of basin cells
+ *     have a flat 3x3 depth neighbourhood, so this collapses merging almost as hard as not merging.
+ *   · carry a SMOOTH depth (waterTable − ground) sampled by world position, the trick that lets the
+ *     sheet's HEIGHT survive merging — but depth inherits TERRAIN's roughness, and terrain is not a
+ *     96-block lattice. A 16-block chord across it errs by **0.66 alpha** at worst. The height field
+ *     gets away with this only because `waterTableAt` genuinely is smooth; depth never can be.
+ *   · don't merge the sheet — every quad 1x1, so every edge is length 1 and **no T-junction can
+ *     exist by construction**. Exactness stops being a property anyone has to maintain.
+ *
+ * ★ AND THE COST IS BOUNDED, WHICH IS WHAT MADE IT THE ANSWER. +8.3% of a river column's total
+ * quads, +15.8% of a basin column's — and only ~13% of the world's columns hold water at all, so it
+ * is low single digits globally. ⚠ It costs QUADS, not DRAW CALLS: a column is still one draw per
+ * pass (`concatAttrs`), so the per-chunk-material rule is untouched.
+ *
+ * ⚠ ONLY THE SHEET. Rims keep merging — they carry the same depth top and bottom, so a merged rim
+ * interpolates a constant and is exact already.
+ */
+const NOMERGE_SHIFT = 24
+/**
+ * A per-cell tiebreaker that makes a cell refuse to merge with its neighbours.
+ *
+ * ★ SEVEN BITS OF THE CELL'S OWN PLANE INDEX, AND THE WIDTH IS THE PROOF. Two cells adjacent in u
+ * differ by 1, two adjacent in v differ by `S` (16) — both below 128 — so no two ADJACENT cells can
+ * ever land on the same value, which is the only thing the merge test asks. A shared constant would
+ * NOT do: every non-merging cell would carry it and they would happily merge with each other.
+ *
+ * ⚠ IT LIVES ABOVE AO, NOT BELOW IT, AND THE FIRST VERSION GOT THIS WRONG. The comment on `packAO`
+ * says a material occupies ten bits, which reads as "bits 10..15 are free" — but the UNPACK is
+ * `key & 0xFFFF`, sixteen bits. Anything parked at 10..15 comes back out as part of the material,
+ * so the sheet meshed as a garbage material and the depth oracle went red. Bits 24..30, above AO's
+ * byte at 16 and below the sign the back-face flag uses.
+ */
+const noMerge = (n: number): number => (n & 0x7F) << NOMERGE_SHIFT
+
+/**
  * The standard three-sample corner term. `side1`/`side2` are the two edge-adjacent cells on the
  * OPEN side of the face, `corner` is the diagonal between them.
  *
@@ -619,7 +669,11 @@ export function greedyMesh(
             const a11 = vertexAO(pU, pV, sol[si + 1 + SW])
             const a01 = vertexAO(nU, pV, sol[si - 1 + SW])
             const shade = packAO(a00, a10, a11, a01)
-            if (aSolid) mask[n] = a | shade
+            // The water SHEET refuses to merge — see `noMerge`. `d === 1 && aSolid` is the +Y face
+            // of the higher-ranked cell, which for water is the surface by construction (the same
+            // test the slope and the depth write already key off, kept identical on purpose).
+            const solo = hasDepths && d === 1 && aSolid && a === MAT.WATER ? noMerge(n) : 0
+            if (aSolid) mask[n] = a | shade | solo
             else mask[n] = -(b | shade)
             faces++
           }

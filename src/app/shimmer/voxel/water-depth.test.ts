@@ -168,6 +168,49 @@ const alpha = (d: number) => (d < 0 ? WATER_BASE_ALPHA : 1 - Math.exp(-WATER_ABS
     `withholding the diagonals visibly tears the seam (${noDiag.worst.toFixed(4)} alpha) — so the assert above has teeth`)
 }
 
+// ── 6. ★★★ THE SHEET DOES NOT MERGE, WHICH IS WHAT MAKES §5 MEAN ANYTHING ────────────────────
+// §5 proves two columns agree at a shared CORNER. That is C0 continuity and it is NOT enough: a
+// merged quad's EDGE runs past the corners of the smaller quads beside it, and along that edge the
+// long quad interpolates between corners up to 16 cells apart while its neighbour reads the true
+// value at its own corner. Measured before this assert existed: 399 such T-junctions in 25 columns,
+// worst 0.806 blocks = **0.229 of alpha**, which draws as a quilt of flat rectangles with straight
+// edges exactly on the merge boundaries. Every corner check in this file passed the whole time.
+//
+// The fix is structural rather than careful: every sheet quad is 1x1, so every edge has length 1
+// and there is no interior point for anyone to disagree about. This asserts that property directly,
+// because it is cheaper to check than the artifact and it cannot be satisfied accidentally.
+{
+  const OX = 9, OZ = -30, R = 1
+  const cols = new Map<string, Column>()
+  const key = (cx: number, cz: number) => `${cx},${cz}`
+  for (let cz = -R - 1; cz <= R + 1; cz++) for (let cx = -R - 1; cx <= R + 1; cx++)
+    cols.set(key(cx, cz), generateColumn(new Column((OX + cx) * SECTION, (OZ + cz) * SECTION), SEED))
+
+  let sheetQuads = 0, merged = 0, longest = 0
+  for (let cz = -R; cz <= R; cz++) for (let cx = -R; cx <= R; cx++) {
+    const n = (dx: number, dz: number) => cols.get(key(cx + dx, cz + dz)) ?? null
+    for (const sm of meshColumn(cols.get(key(cx, cz))!, {
+      negX: n(-1, 0), posX: n(1, 0), negZ: n(0, -1), posZ: n(0, 1),
+      negXnegZ: n(-1, -1), posXnegZ: n(1, -1), negXposZ: n(-1, 1), posXposZ: n(1, 1),
+    })) {
+      const m = sm.mesh
+      for (let q = 0; q < m.quads; q++) {
+        if (m.materials[q * 4] !== MAT.WATER || m.normals[q * 12 + 1] < 0.5) continue
+        sheetQuads++
+        const xs = [0, 1, 2, 3].map(k => m.positions[q * 12 + k * 3])
+        const zs = [0, 1, 2, 3].map(k => m.positions[q * 12 + k * 3 + 2])
+        const w = Math.max(...xs) - Math.min(...xs), h = Math.max(...zs) - Math.min(...zs)
+        longest = Math.max(longest, w, h)
+        if (w > 1 || h > 1) merged++
+      }
+    }
+  }
+  // ⚠ The fixture has to CONTAIN sheet, or "nothing merged" is true of nothing at all — the same
+  // empty-sample trap that made a seam probe print a green tick over zero water vertices.
+  ok(sheetQuads > 100, `the fixture actually holds a water sheet (${sheetQuads} surface quads)`)
+  ok(merged === 0, `no sheet quad spans more than one cell (${merged} merged, longest run ${longest})`)
+}
+
 console.log(`\nwater depth: ${pass} passed, ${fails.length} failed`)
 for (const f of fails) console.log(`  ❌ ${f}`)
 console.log(fails.length === 0 ? '✅ depth attenuation is sound' : '')
