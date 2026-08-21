@@ -649,11 +649,15 @@ function buildWaterSurface(col: Column, neigh: Neighbours, seed: number | undefi
   // into the next y and returned a cell from somewhere else entirely. Harmless for `tops`, whose
   // only consumer is the face test at cells 0..S-1, and NOT harmless for a field sampled at lattice
   // corners. Resolving the axes independently makes every ring cell either a real column or `null`.
+  // ⚠ RESOLVES ANY OFFSET WITHIN ONE COLUMN, NOT JUST THE ONE-CELL RING. The depth blur below reads
+  // three cells deep into a neighbour, so the old `-1 or SECTION` special-casing is not enough —
+  // the column offset is a floor-divide and the cell coordinate a positive modulo, which is correct
+  // for every x in [-SECTION, 2*SECTION) and still only ever names the eight immediate neighbours.
   const srcFor = (x: number, z: number): { src: Column | null | undefined; sx: number; sz: number } => {
-    const dx = x < 0 ? -1 : x >= SECTION ? 1 : 0
-    const dz = z < 0 ? -1 : z >= SECTION ? 1 : 0
-    const sx = x < 0 ? SECTION - 1 : x >= SECTION ? 0 : x
-    const sz = z < 0 ? SECTION - 1 : z >= SECTION ? 0 : z
+    const dx = Math.floor(x / SECTION)
+    const dz = Math.floor(z / SECTION)
+    const sx = x - dx * SECTION
+    const sz = z - dz * SECTION
     if (dx === 0 && dz === 0) return { src: col, sx, sz }
     if (dz === 0) return { src: dx < 0 ? neigh.negX : neigh.posX, sx, sz }
     if (dx === 0) return { src: dz < 0 ? neigh.negZ : neigh.posZ, sx, sz }
@@ -683,35 +687,91 @@ function buildWaterSurface(col: Column, neigh: Neighbours, seed: number | undefi
     }
     return d
   }
-  for (let z = -1; z <= SECTION; z++) {
-    for (let x = -1; x <= SECTION; x++) {
-      // The four ring CORNERS belong to diagonal columns nobody holds — they resolve to no source
-      // and simply carry no entry, which costs nothing: `corners` never consults a cell.
+  // ── ★★★ THE DEPTH FIELD IS LOW-PASSED, AND THE MEASUREMENT IS THE WHOLE ARGUMENT ─────────────
+  // Raw per-cell depth rendered as opacity draws the water as a MOSAIC of tiles. Not a plumbing
+  // bug — the feature working exactly as specified, on a bed that is genuinely rough: **30% of
+  // adjacent wet cell pairs in a river differ in depth**, and an exponential pinned so depth 3
+  // keeps the old 0.78 puts its STEEPEST section in the 1..3 band (**0.239 of alpha per block at
+  // d1->d2**, against 0.007 at d8->d9). 91% of the world's water lives in that band, so ordinary
+  // bed roughness is amplified into high-contrast tiling. Measured worst adjacent jump: 0.384.
+  //
+  // ★ THE SIGNAL AND THE NOISE SIT AT DIFFERENT FREQUENCIES, WHICH IS WHY A BLUR IS THE RIGHT TOOL
+  // AND NOT A COMPROMISE. What the feature is for — shore shallow, middle deep — is a low-frequency
+  // gradient over tens of blocks. What ruins it is a one-cell bump in the bed. A box mean over a
+  // 5x5 keeps the first and removes the second; flattening the ramp instead would have destroyed
+  // both, and it is the shoreline read that the whole feature exists to buy.
+  //
+  // ── ★★★ THE SHORE TAPER LIVES HERE, AND MOVING IT HERE IS THE POINT (2026-08-21) ────────────
+  // It used to live in `cornerDepth`, which counts a DRY cell as zero depth. That is a taper
+  // compressed into ONE block: the outermost water corner read near-zero and drew nearly
+  // transparent while the cell behind it was at full depth, so every body of water wore a hard
+  // bright rim. Measured, splitting adjacent-vertex jumps by where they sit: **open water mean
+  // 0.018 of alpha, waterline mean 0.117, max 0.365** — the shore was six times harsher than
+  // anywhere else, and the shore is precisely what looked wrong.
+  //
+  // ★ SO A DRY CELL CONTRIBUTES ZERO TO THIS MEAN INSTEAD, WHICH SPREADS THE SAME TAPER ACROSS THE
+  // KERNEL — five blocks rather than one — and it costs nothing extra, because the blur is already
+  // walking these cells. `cornerDepth` then stops applying its own zero, or the taper is applied
+  // twice and drags a whole pond toward transparent. **One taper, in the low-pass.**
+  //
+  // ⚠ THE DENOMINATOR COUNTS KNOWN CELLS, NOT THE WHOLE KERNEL. Dry-and-known must pull the mean
+  // down (that IS the taper) while a cell belonging to a column nobody handed us must not — the
+  // diagonals are optional, and treating an absent neighbour as dry would fade the water toward
+  // transparent along a chunk seam, which is an artifact that looks exactly like a real shoreline.
+  const BLUR_R = 2
+  const RAW_LO = -1 - BLUR_R, RAW_HI = SECTION + BLUR_R, RAW_W = RAW_HI - RAW_LO + 1
+  const rawKey = (x: number, z: number): number => (x - RAW_LO) + (z - RAW_LO) * RAW_W
+  const raw = new Map<number, number>()
+  /** Cells we could actually resolve a column for — see the denominator warning above. */
+  const known = new Set<number>()
+
+  for (let z = RAW_LO; z <= RAW_HI; z++) {
+    for (let x = RAW_LO; x <= RAW_HI; x++) {
+      // Cells beyond the eight neighbours resolve to no source and simply carry no entry — the
+      // blur skips them, exactly as it skips dry ones.
       const { src, sx, sz } = srcFor(x, z)
       if (!src) continue
+      known.add(rawKey(x, z))
+      // `tops` keeps its original one-cell ring: its consumer is the face test at cells 0..S-1, and
+      // widening it would change nothing except the cost.
+      const inRing = x >= -1 && x <= SECTION && z >= -1 && z <= SECTION
       for (let i = n - 1; i >= 0; i--) {
         const u = src.uniform[i]
         if (u === AIR) continue
         if (u !== -1 && u !== MAT.WATER) continue          // uniform solid: no water in it
-        if (u === MAT.WATER) {
-          const k = waterTopKey(x, z, SECTION)
-          tops.set(k, (i + 1) * SECTION)
-          depths.set(k, depthAt(src, sx, sz, (i + 1) * SECTION - 1))
-          break
+        let topCell = -1
+        if (u === MAT.WATER) topCell = (i + 1) * SECTION - 1
+        else {
+          const sec = src.sections[i]
+          for (let y = SECTION - 1; y >= 0; y--) if (sec.get(sx, y, sz) === MAT.WATER) { topCell = i * SECTION + y; break }
+          if (topCell < 0) continue
         }
-        const sec = src.sections[i]
-        let found = -1
-        for (let y = SECTION - 1; y >= 0; y--) if (sec.get(sx, y, sz) === MAT.WATER) { found = y; break }
-        if (found >= 0) {
-          const k = waterTopKey(x, z, SECTION)
-          tops.set(k, i * SECTION + found + 1)
-          depths.set(k, depthAt(src, sx, sz, i * SECTION + found))
-          break
-        }
+        raw.set(rawKey(x, z), depthAt(src, sx, sz, topCell))
+        if (inRing) tops.set(waterTopKey(x, z, SECTION), topCell + 1)
+        break
       }
     }
   }
   if (tops.size === 0) return null
+
+  // The blurred field, over the one-cell ring that `cornerDepth` samples. A cell's mean is taken
+  // over a fixed WORLD neighbourhood of cell-derived values, so every column touching it computes
+  // the identical number — the same position-purity `corners` has, and what the seam oracle checks.
+  for (let z = -1; z <= SECTION; z++) {
+    for (let x = -1; x <= SECTION; x++) {
+      if (raw.get(rawKey(x, z)) === undefined) continue
+      let sum = 0, count = 0
+      for (let dz = -BLUR_R; dz <= BLUR_R; dz++) {
+        for (let dx = -BLUR_R; dx <= BLUR_R; dx++) {
+          const k = rawKey(x + dx, z + dz)
+          if (!known.has(k)) continue
+          sum += raw.get(k) ?? 0     // known and dry = zero depth: that is the shore taper
+          count++
+        }
+      }
+      depths.set(waterTopKey(x, z, SECTION), sum / count)
+    }
+  }
   // ── ★★ THE TWO HALVES HAVE DIFFERENT DEPENDENCIES, AND SPLITTING THEM IS FAIL-SOFT ────────────
   // `tops` comes from CELLS and needs no seed, so wall suppression — the big visual win — works on
   // any column that has voxels in it. `corners` needs the water table, which needs the seed. A

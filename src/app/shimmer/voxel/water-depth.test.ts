@@ -73,8 +73,51 @@ const alpha = (d: number) => (d < 0 ? WATER_BASE_ALPHA : 1 - Math.exp(-WATER_ABS
   ok(surfaceDepths.length > 0, 'a 4-deep pool emits a water surface at all')
   // Interior corners see four water cells of depth 4; the ring is dry, so edge corners average down.
   ok(Math.max(...surfaceDepths) === 4, `interior corners read the true depth 4 (got ${Math.max(...surfaceDepths)})`)
-  ok(Math.min(...surfaceDepths) < 4, 'a corner touching dry land reads shallower — the shoreline gradient')
   ok(Math.min(...surfaceDepths) >= 0, 'depth never goes negative on real water')
+  // ⚠ NO NEIGHBOURS MEANS NO TAPER, AND THAT IS THE ASSERT, NOT AN OVERSIGHT. This column is meshed
+  // alone, so every cell outside it is UNKNOWN rather than dry. An unknown cell must not pull the
+  // mean down: fading water toward transparent along a chunk seam is an artifact shaped exactly
+  // like a real shoreline, which is the worst kind. Water that runs off the edge of what we hold
+  // stays at full depth.
+  ok(Math.min(...surfaceDepths) === 4,
+     `water running off the edge of the known world keeps its depth (got ${Math.min(...surfaceDepths)})`)
+}
+
+// ── 2b. ★★ THE SHORE TAPERS OVER SEVERAL BLOCKS, NOT ONE ─────────────────────────────────────
+// A real shore — dry cells inside the same column, so they are KNOWN and count as zero depth. The
+// taper used to live in `cornerDepth`, which meant it happened entirely between the last wet corner
+// and its neighbour: one block, and every pond wore a hard bright rim (waterline alpha jumps
+// averaged 0.117 against 0.018 in open water). It now lives in the low-pass, so it is spread across
+// the blur kernel. This asserts the SHAPE — several distinct steps, none of them a cliff — rather
+// than any particular number, because the numbers are a look and the shape is the fix.
+{
+  const col = new Column(0, 0, DEFAULT_COLUMN)
+  const POOL = 6                                    // a pool inset from the column's edges
+  for (let y = 0; y <= 13; y++) {
+    const sec = col.sections[(y / SECTION) | 0]
+    for (let z = 0; z < SECTION; z++) for (let x = 0; x < SECTION; x++) {
+      const wet = x >= POOL && x < SECTION - POOL && z >= POOL && z < SECTION - POOL
+      sec.set(x, y % SECTION, z, y <= 9 ? MAT.STONE : (wet ? MAT.WATER : AIR))
+    }
+  }
+  refreshUniform(col)
+  const byDist = new Map<number, number>()          // rings out from the pool centre
+  for (const sm of meshColumn(col, {})) {
+    const m = sm.mesh
+    for (let v = 0; v < m.materials.length; v++) {
+      if (m.materials[v] !== MAT.WATER || m.normals[v * 3 + 1] < 0.5) continue
+      const x = m.positions[v * 3], z = m.positions[v * 3 + 2]
+      const ring = Math.max(Math.abs(x - SECTION / 2), Math.abs(z - SECTION / 2))
+      byDist.set(ring, Math.max(byDist.get(ring) ?? 0, m.waterDepth[v]))
+    }
+  }
+  const rings = [...byDist.keys()].sort((a, b) => a - b)
+  const depths = rings.map(r => byDist.get(r)!)
+  ok(rings.length >= 3, `the fixture has a real shore to walk in from (${rings.length} rings)`)
+  const steps = depths.slice(1).map((d, i) => Math.abs(d - depths[i]))
+  const distinct = new Set(depths.map(d => d.toFixed(2))).size
+  ok(distinct >= 3, `depth changes gradually across the shore, not in one step (${distinct} distinct values)`)
+  ok(Math.max(...steps) < 2, `and no single block drops more than 2 of depth (worst ${Math.max(...steps).toFixed(2)})`)
 }
 
 // ── 3. THE SENTINEL: no depth field must mean "as before", never "invisible" ──────────────────

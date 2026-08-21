@@ -410,15 +410,18 @@ export function greedyMesh(
 
   /**
    * ── ★★ HOW DEEP THE WATER IS AT ONE LATTICE CORNER, IN BLOCKS (2026-08-21) ───────────────────
-   * The mean of the four cells touching the corner, with a DRY cell counted as zero rather than
-   * excluded.
+   * The mean of the four cells touching the corner, over whichever of them carry a depth.
    *
-   * ★ THAT ZERO IS THE FEATURE, AND IT IS THE ONE PLACE THIS RULE DELIBERATELY DISAGREES WITH
-   * `cornerY` ABOVE. `cornerY` excludes dry cells, because a pond's edge must stay at full HEIGHT
-   * or the sheet collapses to the floor. Depth wants the opposite: a corner that touches land is
-   * the waterline, and letting it fall toward zero is what draws the shoreline as a gradient into
-   * transparency instead of a hard translucent lip. Same four cells, opposite treatment, because
-   * they are answering different questions about the same corner.
+   * ⚠⚠ IT USED TO COUNT A DRY CELL AS ZERO, AND THAT WAS THE WATERLINE ARTIFACT. The intent was a
+   * shoreline gradient; the effect was a taper compressed into ONE block, so the outermost water
+   * corner drew nearly transparent against a neighbour at full depth and every pond wore a hard
+   * bright rim. Split by position, adjacent-vertex alpha jumps came out at **0.018 mean in open
+   * water against 0.117 at the waterline** — the shore was six times harsher than anywhere else.
+   *
+   * ★ THE TAPER STILL EXISTS; IT MOVED. `buildWaterSurface`'s low-pass now counts a known dry cell
+   * as zero, which spreads the identical falloff across the blur kernel — five blocks instead of
+   * one — and this function must NOT apply it a second time or a whole pond drags toward
+   * transparent. **One taper, at the frequency it belongs at.**
    *
    * ★ TWO COLUMNS SHARING THIS CORNER COMPUTE THE IDENTICAL NUMBER, BY CONSTRUCTION RATHER THAN BY
    * CARE. The four cells are fixed in WORLD space, and `Neighbours` now carries the diagonals, so
@@ -437,9 +440,14 @@ export function greedyMesh(
 
   const cornerDepth = (cx: number, cz: number): number => {
     const d = waterTops!.depths
-    return 0.25 * (
-      (d.get(waterTopKey(cx - 1, cz - 1, S)) ?? 0) + (d.get(waterTopKey(cx, cz - 1, S)) ?? 0)
-      + (d.get(waterTopKey(cx - 1, cz, S)) ?? 0) + (d.get(waterTopKey(cx, cz, S)) ?? 0))
+    let sum = 0, count = 0
+    for (let dz = -1; dz <= 0; dz++) {
+      for (let dx = -1; dx <= 0; dx++) {
+        const v = d.get(waterTopKey(cx + dx, cz + dz, S))
+        if (v !== undefined) { sum += v; count++ }
+      }
+    }
+    return count === 0 ? 0 : sum / count
   }
 
   mask.fill(0)
