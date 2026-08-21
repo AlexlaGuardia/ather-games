@@ -609,10 +609,38 @@ export function greedyMesh(
           // re-deriving the u/v axis mapping — the winding already differs between front and back
           // faces and that is precisely the kind of duplicated index arithmetic that goes quietly
           // wrong. Emission-time, so it is paid per QUAD, never per cell.
-          if (waterTops !== null && d === 1 && !back && mat === MAT.WATER) {
-            for (let k = 0; k < 4; k++) {
-              const o = p + k * 3
-              positions[o + 1] = cornerY(positions[o], positions[o + 2], positions[o + 1])
+          if (waterTops !== null && mat === MAT.WATER) {
+            if (d === 1 && !back) {
+              for (let k = 0; k < 4; k++) {
+                const o = p + k * 3
+                positions[o + 1] = cornerY(positions[o], positions[o + 2], positions[o + 1])
+              }
+            } else if (d !== 1) {
+              // ── ★★ THE RIM HAS TO END WHERE THE SHEET DOES ────────────────────────────────
+              // A surviving vertical face is the water's real edge — a bank, or water against dry
+              // ground. Its top sat at the BLOCK top while the sheet beside it sits on the true
+              // table, so every shoreline grew a lip standing proud of its own water: from the
+              // bank a lake read as a row of translucent boxes with a flat sheet behind them.
+              // ★ The two heights disagree for a reason worth naming: the sheet samples the RAW
+              // table, while the blocks were placed from `waterSurfaceAt`, which CLAMPS a perimeter
+              // column down to its dry neighbour's ground. So the mismatch is largest exactly at
+              // the shore, which is the one place a player stands and looks at it.
+              // Pulling only the TOP pair keeps the face a face; the bottom stays on the bed.
+              let top = -Infinity
+              for (let k = 0; k < 4; k++) top = Math.max(top, positions[p + k * 3 + 1])
+              for (let k = 0; k < 4; k++) {
+                const o = p + k * 3
+                // ⚠ DOMINATED, AND LABELLED SO IT DOES NOT READ AS A HOLE. Deleting this line
+                // survives the mutation sweep, because the `h < y` direction guard below already
+                // spares every bottom vertex: a bottom sits BELOW the sheet, so the pull can never
+                // reach it. Kept because it states the intent — only the top pair is surface — and
+                // it stops being redundant the moment the pull becomes two-directional.
+                if (positions[o + 1] !== top) continue
+                const h = cornerY(positions[o], positions[o + 2], positions[o + 1])
+                // Only ever pull a rim DOWN onto its own sheet, and never by more than the block
+                // it belongs to: a deep face that is not part of this surface must stay put.
+                if (h < positions[o + 1] && positions[o + 1] - h <= 1) positions[o + 1] = h
+              }
             }
           }
 

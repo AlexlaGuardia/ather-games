@@ -714,6 +714,50 @@ for (const S of [4, 16, 32]) {
     'a corner shared by quads on DIFFERENT levels gets ONE height — the sheet crosses a step continuously instead of tearing into two')
   ok(cornerHeights.size > 0, 'fixture: the stepped pool has surface corners at all')
 
+  // ★ THE RIM ENDS WHERE THE SHEET DOES. A surviving edge face whose top stayed on the block top
+  // stands proud of its own water — from a bank the lake reads as a row of translucent boxes with
+  // a flat sheet behind them. The mismatch is worst at a shore, because the blocks there were
+  // placed from the CLAMPED surface while the sheet samples the raw table.
+  let rimTops = 0, rimProud = 0
+  const sheet = 5.7
+  for (let q = 0; q < pondMesh.quads; q++) {
+    if (pondMesh.materials[q * 4] !== MAT.WATER) continue
+    if (Math.abs(pondMesh.normals[q * 12 + 1]) > 0.5) continue
+    let top = -Infinity
+    for (let v = 0; v < 4; v++) top = Math.max(top, pondMesh.positions[q * 12 + v * 3 + 1])
+    rimTops++
+    if (top > sheet + 1e-6) rimProud++
+  }
+  ok(rimTops > 0, 'fixture: the pond has rim faces')
+  eq(rimProud, 0, 'no rim face stands above the sheet it belongs to — its top is pulled onto the water surface')
+
+  // ⚠ ONLY THE TOP PAIR MOVES. Pulling all four collapses the rim into a horizontal sliver and you
+  // see into the water body through the gap — the over-fix wearing a smaller hat.
+  let rimBottoms = 0, floating = 0
+  for (let q = 0; q < pondMesh.quads; q++) {
+    if (pondMesh.materials[q * 4] !== MAT.WATER) continue
+    if (Math.abs(pondMesh.normals[q * 12 + 1]) > 0.5) continue
+    let bot = Infinity
+    for (let v = 0; v < 4; v++) bot = Math.min(bot, pondMesh.positions[q * 12 + v * 3 + 1])
+    rimBottoms++
+    if (Math.abs(bot - Math.round(bot)) > 1e-9) floating++
+  }
+  ok(rimBottoms > 0, 'fixture: rim faces have bottoms')
+  eq(floating, 0, 'a rim keeps its BOTTOM on the lattice — only the top pair is pulled onto the sheet')
+
+  // ⚠ AND IT ONLY EVER PULLS DOWN. A table reading above the block top must not lift the rim into
+  // the air above the water; the sheet is clamped by the block it lives in, the rim must be too.
+  const highCorners = new Map<number, number>()
+  for (const [k] of pCorners) highCorners.set(k, 6.4)
+  const raised = greedyMesh(pond(), undefined, undefined, null, [0, 0, 0], surf(pTops, highCorners))
+  let lifted = 0
+  for (let q = 0; q < raised.quads; q++) {
+    if (raised.materials[q * 4] !== MAT.WATER) continue
+    if (Math.abs(raised.normals[q * 12 + 1]) > 0.5) continue
+    for (let v = 0; v < 4; v++) if (raised.positions[q * 12 + v * 3 + 1] > 6 + 1e-6) lifted++
+  }
+  eq(lifted, 0, 'a rim is never pulled UP off its block — the displacement is one-directional')
+
   // ★ NO WATER SURFACE SUPPLIED => byte-identical to before this feature existed. Fixtures that
   // never call generateColumn pass `null`, and they must keep meshing exactly as they did.
   const a1 = greedyMesh(pond()), a2 = greedyMesh(pond(), undefined, undefined, null, [0, 0, 0], null)
