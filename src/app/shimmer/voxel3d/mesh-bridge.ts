@@ -24,6 +24,8 @@ export function toGeometry(a: MeshAttrs): THREE.BufferGeometry {
   g.setAttribute('aLayer', new THREE.BufferAttribute(a.layers, 1))
   // Leaves only — crossed quads have no face for the shader's UV derivation to key off. See attrs.ts.
   if (a.uv) g.setAttribute('uv', new THREE.BufferAttribute(a.uv, 2))
+  // Water only — depth attenuation. Absent on the solid and leaf passes by design (see attrs.ts).
+  if (a.depth) g.setAttribute('aDepth', new THREE.BufferAttribute(a.depth, 1))
   g.setIndex(new THREE.BufferAttribute(a.indices, 1))
   g.computeBoundingSphere()
   return g
@@ -138,9 +140,44 @@ export interface WaterMaterial extends THREE.Material {
   tick: (seconds: number) => void
 }
 
+/**
+ * ── ★★ DEPTH ATTENUATION: WHERE THE NUMBERS COME FROM (2026-08-21) ────────────────────────────
+ * Water shipped at ONE opacity everywhere, so a shin-deep ford and a drowned basin read the same
+ * and the sheet looked like tinted glass laid over the ground rather than like a volume.
+ *
+ * ★ THE CURVE IS BEER-LAMBERT — `1 - exp(-k*d)` — because it is what absorption actually does and,
+ * more usefully here, because it SATURATES: there is no depth at which it overshoots into opaque
+ * and no dial that has to be clamped by hand. One constant sets the whole shape.
+ *
+ * ★★ AND `k` WAS CHOSEN FROM A SWEEP OF THE REAL WORLD, WHICH OVERTURNED THE OBVIOUS RAMP.
+ * 141,331 water-surface cells over ~9600x9600 blocks: **depth 1 = 20.9%, depth 2 = 20.5%,
+ * depth 3 = 49.9% — 91.3% of the world's water is three blocks or less**, median 3, p99 9, max 15.
+ * The instinct is to spread the ramp over the 0..12 range the deep basins occupy. That would have
+ * made **nine tenths of the world's water thinner than the flat 0.78 it replaced**, which is the
+ * exact complaint (*"the water reads too clear"*) this was meant to answer — a fix that ships as a
+ * regression everywhere except the 8.7% of water nobody is standing in.
+ *
+ * So `k` is pinned by the MEDIAN instead: at depth 3 the curve returns the old 0.78 to within a
+ * percent, which means half the world's water looks exactly as it did and nothing regresses. What
+ * changes is the two tails, which is the entire point — depth 1 shallows go to ~0.40 and draw a
+ * real waterline, depth 8+ basins go past 0.98 and finally read as something you cannot see the
+ * bottom of.
+ *
+ *   depth  1     2     3     4     6     8     12
+ *   alpha  0.40  0.64  0.78  0.87  0.95  0.98  1.00
+ *
+ * ⚠ `aDepth < 0` IS "NO DEPTH DATA" AND MUST KEEP THE FLAT OPACITY. Zero is a real depth and maps
+ * to invisible water; a section meshed without a water surface would otherwise have its rivers
+ * deleted by the feature that was supposed to thicken them. The sentinel is set in `greedy.ts` and
+ * preserved through `concatAttrs`; this branch is the third and last place it has to hold.
+ */
+const WATER_BASE_ALPHA = 0.78
+/** Solves `1 - exp(-k*3) = 0.78` — the median depth keeps the opacity that shipped before this. */
+const WATER_ABSORB = 0.505
+
 export function createWaterMaterial(tiles: { texture: THREE.DataArrayTexture } | null, waterLayer: number): WaterMaterial {
   const mat = new THREE.MeshLambertMaterial({
-    vertexColors: !tiles, transparent: true, opacity: 0.78, depthWrite: false,
+    vertexColors: !tiles, transparent: true, opacity: WATER_BASE_ALPHA, depthWrite: false,
   }) as unknown as WaterMaterial
   let live: { uTime: { value: number } } | null = null
   let now = 0
@@ -153,11 +190,16 @@ export function createWaterMaterial(tiles: { texture: THREE.DataArrayTexture } |
 
     shader.vertexShader = shader.vertexShader
       .replace('#include <common>',
-        '#include <common>\nuniform float uTime;\nvarying vec3 vVoxPos;\nvarying vec3 vVoxNormal;')
+        '#include <common>\nuniform float uTime;\nvarying vec3 vVoxPos;\nvarying vec3 vVoxNormal;\n'
+        // ⚠ DECLARED WITH A DEFAULT, because the attribute is absent on any geometry that predates
+        // it and an undeclared attribute is a link error, not a zero. `-1` is the no-data sentinel,
+        // so a geometry without the buffer lands on the flat-opacity branch rather than vanishing.
+        + 'attribute float aDepth;\nvarying float vDepth;')
       .replace('#include <begin_vertex>',
         `#include <begin_vertex>
 vVoxPos = position;
 vVoxNormal = normal;
+vDepth = aDepth;
 if (normal.y > 0.5) {
   vec3 wp = (modelMatrix * vec4(position, 1.0)).xyz;
   // Recess + ripple, top faces only. Two phases at unrelated wavelengths so the surface never
@@ -166,14 +208,18 @@ if (normal.y > 0.5) {
   transformed.y += sin(wp.x * 0.9 + uTime * 1.4) * cos(wp.z * 0.7 + uTime * 1.1) * 0.05;
 }`)
 
-    if (tiles) {
-      shader.fragmentShader = shader.fragmentShader
-        .replace('#include <common>',
-          '#include <common>\nuniform sampler2DArray uTiles;\nuniform float uTime;\n'
-          + 'varying vec3 vVoxPos;\nvarying vec3 vVoxNormal;')
-        .replace('#include <color_fragment>',
-          `#include <color_fragment>
-{
+    // ⚠ THE DEPTH RAMP IS DECLARED AND APPLIED WHETHER OR NOT THE ATLAS IS PRESENT. The tile
+    // sampling below is optional (there is a no-texture path); attenuation is not, and hanging it
+    // off the `if (tiles)` branch would have made the feature silently absent in exactly the
+    // configuration that is hardest to notice — the fallback one.
+    shader.fragmentShader = shader.fragmentShader
+      .replace('#include <common>',
+        '#include <common>\nvarying float vDepth;\n'
+        + (tiles ? 'uniform sampler2DArray uTiles;\nuniform float uTime;\n'
+                 + 'varying vec3 vVoxPos;\nvarying vec3 vVoxNormal;\n' : ''))
+      .replace('#include <color_fragment>',
+        `#include <color_fragment>
+${tiles ? `{
   vec3 an = abs(vVoxNormal);
   vec2 tileUv = an.y > 0.5
     ? vVoxPos.xz
@@ -183,8 +229,22 @@ if (normal.y > 0.5) {
   vec4 a = texture(uTiles, vec3(tileUv + vec2(uTime * 0.021, uTime * 0.013), ${waterLayer.toFixed(1)}));
   vec4 b = texture(uTiles, vec3(tileUv * 1.31 + vec2(-uTime * 0.017, uTime * 0.024), ${waterLayer.toFixed(1)}));
   diffuseColor.rgb *= mix(a.rgb, b.rgb, 0.5) * 1.25;
+}` : ''}
+{
+  // Beer-Lambert. See WATER_ABSORB for why the constant is pinned to the median depth and not to
+  // the deepest water in the world. A negative depth is the no-data sentinel and keeps the flat
+  // opacity the material was built with, so a section meshed without a water surface renders the
+  // way it did before this existed rather than turning to glass.
+  if (vDepth >= 0.0) {
+    float att = 1.0 - exp(-${WATER_ABSORB.toFixed(3)} * vDepth);
+    diffuseColor.a = clamp(att, 0.0, 1.0);
+    // ★ THE COLOUR HAS TO TRAVEL WITH THE ALPHA OR THE DEEP END READS AS A FLAT BLUE DECAL. Opacity
+    // alone makes deep water MORE of the same tint, which at 0.98 is a solid poster-paint slab.
+    // Real depth also eats light, so the same term darkens it — gently, and floored well short of
+    // black so a basin still reads as water rather than as a hole in the terrain.
+    diffuseColor.rgb *= mix(1.0, 0.72, clamp(att, 0.0, 1.0));
+  }
 }`)
-    }
   }
   return mat
 }

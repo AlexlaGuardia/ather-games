@@ -40,6 +40,9 @@ function quadAt(x: number, y: number, z: number, mat: number): MeshResult {
     normals,
     materials: new Uint16Array([mat, mat, mat, mat]),
     ao: new Uint8Array([0, 1, 2, 3]),
+    // No water surface behind this fixture, so the no-data sentinel — which is what a real mesh
+    // carries in the same situation, and what keeps the flat opacity rather than clear water.
+    waterDepth: new Float32Array([-1, -1, -1, -1]),
     indices: new Uint32Array([0, 1, 2, 0, 2, 3]),
     quads: 1,
     faces: 1,

@@ -58,6 +58,16 @@ export interface MeshResult {
    * a prop layer it needs no art, no canon ruling, and improves every block at once.
    */
   ao: Uint8Array
+  /**
+   * Per-vertex water depth in BLOCKS, and zero on every non-water vertex.
+   *
+   * ★ IT IS A SHADING TERM RIDING ON GEOMETRY, which is why it is per-vertex rather than per-quad.
+   * Greedy merging means one water quad can span a whole shelving run, so a per-quad constant would
+   * band the surface into flat plates and put a hard opacity seam at every column boundary. Four
+   * corner values interpolate across the run for free and meet a neighbour's exactly — see
+   * `cornerDepth`, and `Neighbours`' diagonals for what "exactly" costs.
+   */
+  waterDepth: Float32Array
   /** 6 indices per quad (two triangles). */
   indices: Uint32Array
   quads: number
@@ -139,6 +149,29 @@ export interface WaterSurface {
    * construction and continuity is not something anyone has to maintain.
    */
   corners: Map<number, number>
+  /**
+   * Cell `(x, z)` INCLUDING the one-cell ring → how many WATER CELLS deep the body is there
+   * (surface cell down to, but not including, the first non-water cell beneath it).
+   *
+   * ── ★★ WHY DEPTH IS CARRIED AND NOT DERIVED (2026-08-21) ─────────────────────────────────────
+   * Water is drawn at ONE opacity everywhere, so a puddle and a basin read the same and the sheet
+   * reads as a coloured pane rather than as a volume. Attenuating by depth is the fix, and the
+   * depth has to arrive as a per-vertex attribute: a Fresnel term alone only bites past ~60 deg
+   * of incidence, which is the one angle a player looking INTO water never has.
+   *
+   * ★ MEASURED BEFORE THE RAMP WAS WRITTEN, AND THE MEASUREMENT OVERTURNED IT. 141,331 real water
+   * surface cells over ~9600x9600 blocks: **depth 1 20.9% - depth 2 20.5% - depth 3 49.9%**, so
+   * **91.3% of the world's water is three blocks or less**; median 3, p90 3, p99 9, max 15. A ramp
+   * spread over 0..12 — the obvious way to write one — therefore makes nine tenths of the world's
+   * water CLEARER than the flat opacity it replaced, which is the exact complaint the feature
+   * exists to answer. The curve has to spend its range in the 1..4 band and saturate above it.
+   *
+   * ★ FROM CELLS, LIKE `tops`, AND THAT IS WHAT MAKES IT FAIL-SOFT. It needs no seed, so it
+   * survives the live path (the host rebuilds a fresh `Column` from posted voxels and a
+   * generation-time stamp never reaches it) and it is correct for a player-dug pool, which no
+   * noise field knows about.
+   */
+  depths: Map<number, number>
 }
 
 /** Key for either map. Accepts the one-cell ring, so -1 and S are legal on both axes. */
@@ -165,6 +198,8 @@ export interface MeshScratch {
   indices: Uint32Array
   mask: Int32Array
   ao: Uint8Array
+  /** Per-vertex water depth, written only where a water quad is emitted. See `MeshResult`. */
+  waterDepth: Float32Array
   /**
    * ── ★ TWO CACHED SLICES, AND THEY MADE AO CHEAPER THAN NOT HAVING IT ────────────────────────
    * A plane sits between two slices of cells. The sweep used to `sample()` both sides of every cell
@@ -205,6 +240,7 @@ export function createMeshScratch(size: number): MeshScratch {
     indices: new Uint32Array(maxQuads * 6),
     mask: new Int32Array(size * size),
     ao: new Uint8Array(maxQuads * 4),
+    waterDepth: new Float32Array(maxQuads * 4),
     sliceMatA: new Int32Array((size + 2) * (size + 2)),
     sliceMatB: new Int32Array((size + 2) * (size + 2)),
     sliceSolA: new Uint8Array((size + 2) * (size + 2)),
@@ -277,7 +313,7 @@ export function greedyMesh(
 ): MeshResult {
   const S = sec.size
   const sc = scratch && scratch.size === S ? scratch : createMeshScratch(S)
-  const { positions, normals, materials, indices, mask, ao } = sc
+  const { positions, normals, materials, indices, mask, ao, waterDepth } = sc
   // `let` because the two slices SWAP each plane — see MeshScratch.
   let sliceMatA = sc.sliceMatA, sliceMatB = sc.sliceMatB
   let sliceSolA = sc.sliceSolA, sliceSolB = sc.sliceSolB
@@ -320,6 +356,40 @@ export function greedyMesh(
     // notice, because the clamp does what it says. The oracle now asserts CONTINUITY ACROSS A STEP
     // instead, which is the property rather than the mechanism.
     return t - oy0
+  }
+
+  /**
+   * ── ★★ HOW DEEP THE WATER IS AT ONE LATTICE CORNER, IN BLOCKS (2026-08-21) ───────────────────
+   * The mean of the four cells touching the corner, with a DRY cell counted as zero rather than
+   * excluded.
+   *
+   * ★ THAT ZERO IS THE FEATURE, AND IT IS THE ONE PLACE THIS RULE DELIBERATELY DISAGREES WITH
+   * `cornerY` ABOVE. `cornerY` excludes dry cells, because a pond's edge must stay at full HEIGHT
+   * or the sheet collapses to the floor. Depth wants the opposite: a corner that touches land is
+   * the waterline, and letting it fall toward zero is what draws the shoreline as a gradient into
+   * transparency instead of a hard translucent lip. Same four cells, opposite treatment, because
+   * they are answering different questions about the same corner.
+   *
+   * ★ TWO COLUMNS SHARING THIS CORNER COMPUTE THE IDENTICAL NUMBER, BY CONSTRUCTION RATHER THAN BY
+   * CARE. The four cells are fixed in WORLD space, and `Neighbours` now carries the diagonals, so
+   * every column touching the corner can resolve all four — see the `Neighbours` docs for the
+   * alternatives that were measured and rejected. Continuity is structural, exactly as it is for
+   * `corners`, and for the same reason: nothing about the answer depends on who is asking.
+   */
+  /**
+   * ⚠ AN EMPTY MAP IS "NO DATA", NOT "ZERO DEPTH", and the difference is the whole fail-soft story
+   * above. A caller holding a hand-built `WaterSurface` — every fixture in `greedy.test.ts`, and
+   * any call site written before the field existed — has water quads and no depths, and reading
+   * that as depth 0 would render its rivers as glass. Sentinel instead, and the shader keeps the
+   * flat opacity that shipped before this feature.
+   */
+  const hasDepths = waterTops !== null && waterTops.depths !== undefined && waterTops.depths.size > 0
+
+  const cornerDepth = (cx: number, cz: number): number => {
+    const d = waterTops!.depths
+    return 0.25 * (
+      (d.get(waterTopKey(cx - 1, cz - 1, S)) ?? 0) + (d.get(waterTopKey(cx, cz - 1, S)) ?? 0)
+      + (d.get(waterTopKey(cx - 1, cz, S)) ?? 0) + (d.get(waterTopKey(cx, cz, S)) ?? 0))
   }
 
   mask.fill(0)
@@ -642,6 +712,25 @@ export function greedyMesh(
                 if (h < positions[o + 1] && positions[o + 1] - h <= 1) positions[o + 1] = h
               }
             }
+          }
+
+          // ── ★ DEPTH RIDES ALONG, AND ITS ABSENCE IS A LEGAL VALUE (2026-08-21) ──────────────
+          // ⚠ **-1 MEANS "NO DEPTH DATA", AND IT EXISTS SO A MISSED HAND-OFF DEGRADES INSTEAD OF
+          // DISAPPEARING.** A caller that meshes water without a `WaterSurface` — a fixture, an
+          // older call site, a column that arrived without its neighbours — would otherwise read
+          // depth 0 on every vertex, which the ramp renders as nearly INVISIBLE water: the feature
+          // failing would delete the rivers. -1 tells the shader to fall back to the flat opacity
+          // that shipped before this existed, so the worst case is the old look, not a missing one.
+          // Same reasoning that split `tops` from `corners` a day earlier, and the same lesson: a
+          // dependency you can miss must fail toward the previous behaviour.
+          const wd = quads * 4
+          if (mat === MAT.WATER) {
+            if (!hasDepths) { waterDepth[wd] = -1; waterDepth[wd + 1] = -1; waterDepth[wd + 2] = -1; waterDepth[wd + 3] = -1 }
+            else for (let k = 0; k < 4; k++) waterDepth[wd + k] = cornerDepth(positions[p + k * 3], positions[p + k * 3 + 2])
+          } else {
+            // Written every time rather than cleared once: the scratch is reused for every section
+            // of every column forever, so an unwritten slot holds another column's water.
+            waterDepth[wd] = 0; waterDepth[wd + 1] = 0; waterDepth[wd + 2] = 0; waterDepth[wd + 3] = 0
           }
 
           const nx = d === 0 ? (back ? -1 : 1) : 0
@@ -1061,6 +1150,7 @@ export function greedyMesh(
     normals: normals.subarray(0, quads * 12),
     materials: materials.subarray(0, quads * 4),
     ao: ao.subarray(0, quads * 4),
+    waterDepth: waterDepth.subarray(0, quads * 4),
     indices: indices.subarray(0, quads * 6),
     quads,
     faces,

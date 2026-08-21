@@ -552,6 +552,29 @@ export interface Neighbours {
   posX?: Column | null
   negZ?: Column | null
   posZ?: Column | null
+  /**
+   * ── ★★ THE DIAGONALS EXIST FOR ONE FIELD, AND THE REASON IS A CONSISTENCY PROOF (2026-08-21) ──
+   * Every other consumer needs the four EDGE neighbours, because a face's two cells only ever
+   * differ on one axis. The water DEPTH field is the exception: a lattice corner is touched by
+   * FOUR cells `(cx-1,cz-1)` `(cx,cz-1)` `(cx-1,cz)` `(cx,cz)`, and at a column's own corner one
+   * of those four lives in the diagonal column that nobody held.
+   *
+   * ★ That gap is not a rounding error, it is the difference between a value two columns AGREE on
+   * and one they merely approximate. `WaterSurface.corners` dodges it by sampling a pure function
+   * of world position (see its docs); depth comes from CELLS and has no such escape, so the only
+   * honest fix is to hand the mesher the cells. Every alternative measured on paper — mean over
+   * whichever cells you happen to hold, min, treat-the-missing-one-as-dry — either makes the two
+   * columns disagree at the shared corner or puts a visible dimple at every column corner on a
+   * 16-block grid. **With all four cells present the two columns compute the identical mean by
+   * construction**, which is the same property `corners` has and for the same reason.
+   *
+   * Optional like the rest: absent diagonals cost the depth field a little accuracy at the four
+   * corner points and nothing else, so a caller that does not have them still meshes.
+   */
+  negXnegZ?: Column | null
+  posXnegZ?: Column | null
+  negXposZ?: Column | null
+  posXposZ?: Column | null
 }
 
 export interface SectionMesh {
@@ -618,13 +641,47 @@ export interface SectionMesh {
 function buildWaterSurface(col: Column, neigh: Neighbours, seed: number | undefined, cfg: HeightConfig): WaterSurface | null {
   const n = col.sections.length
   const tops = new Map<number, number>()
+  const depths = new Map<number, number>()
   // Ring included: -1 and SECTION are legal, and come from the edge neighbours.
+  // ⚠⚠ THIS ALSO CLOSES AN OUT-OF-BOUNDS READ THAT WAS ALWAYS HERE. The old chain tested `x` first
+  // and returned `{ src: negX, sz: z }` unchanged — so at a ring CORNER (x = -1, z = 16) it handed
+  // back a section coordinate of 16 and `Section.get`, which bounds-checks nothing, indexed one row
+  // into the next y and returned a cell from somewhere else entirely. Harmless for `tops`, whose
+  // only consumer is the face test at cells 0..S-1, and NOT harmless for a field sampled at lattice
+  // corners. Resolving the axes independently makes every ring cell either a real column or `null`.
   const srcFor = (x: number, z: number): { src: Column | null | undefined; sx: number; sz: number } => {
-    if (x < 0) return { src: neigh.negX, sx: SECTION - 1, sz: z }
-    if (x >= SECTION) return { src: neigh.posX, sx: 0, sz: z }
-    if (z < 0) return { src: neigh.negZ, sx: x, sz: SECTION - 1 }
-    if (z >= SECTION) return { src: neigh.posZ, sx: x, sz: 0 }
-    return { src: col, sx: x, sz: z }
+    const dx = x < 0 ? -1 : x >= SECTION ? 1 : 0
+    const dz = z < 0 ? -1 : z >= SECTION ? 1 : 0
+    const sx = x < 0 ? SECTION - 1 : x >= SECTION ? 0 : x
+    const sz = z < 0 ? SECTION - 1 : z >= SECTION ? 0 : z
+    if (dx === 0 && dz === 0) return { src: col, sx, sz }
+    if (dz === 0) return { src: dx < 0 ? neigh.negX : neigh.posX, sx, sz }
+    if (dx === 0) return { src: dz < 0 ? neigh.negZ : neigh.posZ, sx, sz }
+    return {
+      src: dx < 0 ? (dz < 0 ? neigh.negXnegZ : neigh.negXposZ)
+                  : (dz < 0 ? neigh.posXnegZ : neigh.posXposZ),
+      sx, sz,
+    }
+  }
+
+  /**
+   * How many water cells sit at `(sx, sz)` from `topCell` downward — the body's depth there.
+   *
+   * Walks cells, never the height field: a player-dug pool and a generated basin are the same
+   * question, and `buildWaterSurface`'s whole contract is that it needs no seed. A uniform-water
+   * section is consumed in one step rather than sixteen, which is what keeps a deep sea cheap.
+   */
+  const depthAt = (src: Column, sx: number, sz: number, topCell: number): number => {
+    let d = 0
+    for (let y = topCell; y >= 0; y--) {
+      const i = (y / SECTION) | 0
+      const u = src.uniform[i]
+      if (u === MAT.WATER) { const base = i * SECTION; d += y - base + 1; y = base; continue }
+      if (u !== -1) break
+      if (src.sections[i].get(sx, y % SECTION, sz) !== MAT.WATER) break
+      d++
+    }
+    return d
   }
   for (let z = -1; z <= SECTION; z++) {
     for (let x = -1; x <= SECTION; x++) {
@@ -636,11 +693,21 @@ function buildWaterSurface(col: Column, neigh: Neighbours, seed: number | undefi
         const u = src.uniform[i]
         if (u === AIR) continue
         if (u !== -1 && u !== MAT.WATER) continue          // uniform solid: no water in it
-        if (u === MAT.WATER) { tops.set(waterTopKey(x, z, SECTION), (i + 1) * SECTION); break }
+        if (u === MAT.WATER) {
+          const k = waterTopKey(x, z, SECTION)
+          tops.set(k, (i + 1) * SECTION)
+          depths.set(k, depthAt(src, sx, sz, (i + 1) * SECTION - 1))
+          break
+        }
         const sec = src.sections[i]
         let found = -1
         for (let y = SECTION - 1; y >= 0; y--) if (sec.get(sx, y, sz) === MAT.WATER) { found = y; break }
-        if (found >= 0) { tops.set(waterTopKey(x, z, SECTION), i * SECTION + found + 1); break }
+        if (found >= 0) {
+          const k = waterTopKey(x, z, SECTION)
+          tops.set(k, i * SECTION + found + 1)
+          depths.set(k, depthAt(src, sx, sz, i * SECTION + found))
+          break
+        }
       }
     }
   }
@@ -656,7 +723,7 @@ function buildWaterSurface(col: Column, neigh: Neighbours, seed: number | undefi
   // slump mask that "passed its whole oracle and did nothing in the actual game" — the warning is
   // written ten lines above the adoption code, and this is its second costume.
   const corners = new Map<number, number>()
-  if (seed === undefined) return { tops, corners }
+  if (seed === undefined) return { tops, corners, depths }
   for (const key of tops.keys()) {
     // Recover the cell this top belongs to, then sample its four corners.
     const kx = (key % (SECTION + 2)) - 1, kz = ((key / (SECTION + 2)) | 0) - 1
@@ -669,7 +736,7 @@ function buildWaterSurface(col: Column, neigh: Neighbours, seed: number | undefi
       }
     }
   }
-  return { tops, corners }
+  return { tops, corners, depths }
 }
 
 export function meshColumn(
@@ -785,6 +852,11 @@ export function meshColumn(
         normals: mesh.normals.slice(),
         materials: mesh.materials.slice(),
         ao: mesh.ao.slice(),
+        // ⚠ EVERY BUFFER IN `MeshResult` HAS TO BE LISTED HERE OR IT NEVER LEAVES THE MESHER. This
+        // copy-out is what `VoxelWorld` actually receives; the scratch views it copies from are
+        // overwritten by the next section. A field added upstream and forgotten here is invisible
+        // — the mesher's own tests pass because they read the scratch directly.
+        waterDepth: mesh.waterDepth.slice(),
         indices: mesh.indices.slice(),
         quads: mesh.quads,
         faces: mesh.faces,

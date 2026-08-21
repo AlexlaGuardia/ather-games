@@ -22,56 +22,38 @@
 // **Do not move this back under `src/app/`.**
 
 import {
-  Column, SECTION, makeColumn, meshColumn, DEFAULT_COLUMN,
+  Column, SECTION, makeColumn, DEFAULT_COLUMN,
 } from '../app/shimmer/voxel/column'
 import { generatePlotColumn } from '../app/shimmer/voxel/plot-column'
 import { plotForTier } from '../app/shimmer/voxel/plot'
-import { createMeshScratch } from '../app/shimmer/voxel/greedy'
-import { buildAttrs, attrBuffers, type MeshAttrs } from '../app/shimmer/voxel3d/attrs'
 
 const H = DEFAULT_COLUMN.worldHeight
-const scratch = createMeshScratch(SECTION)
 const cols = new Map<string, Column>()
 const meshed = new Set<string>()
 let seed = 1337
 
 const key = (cx: number, cz: number) => `${cx},${cz}`
 
-export interface SectionPayload {
-  index: number
-  wx: number; wy: number; wz: number
-  attrs: MeshAttrs
-}
+// ── ★★ THIS WORKER MESHES NOTHING, AND SAYING SO IN CODE IS THE POINT (2026-08-21) ─────────────
+// `emitMesh` + `SectionPayload` lived here, fully written, importing `meshColumn` and `buildAttrs`,
+// posting a `{ type: 'mesh' }` message — and NOTHING EVER CALLED IT. Nothing listened for the
+// message either. The worker's real job is generation: it posts raw VOXELS, and `VoxelWorld`
+// rebuilds a fresh `Column` from them and meshes on the main thread.
+//
+// ⚠ That dead path is the *reason* a day was lost on 2026-08-20. The rule everyone was working
+// from — "the mesher runs in the worker" — was true of the code you find by grepping and false of
+// the code that runs, so a value stamped on the generation side never reached the live mesher and
+// a whole feature was inert on prod while every test passed. A convincing second door into the
+// mesher is worse than no door: it answers "where does meshing happen" with a lie.
+//
+// Deleted rather than updated. It also took this worker's import of `voxel3d/attrs` with it, which
+// is a layering win on its own — the generation thread has no business reaching into render code.
 
 /** Flatten a column's sections into one array for the main thread's collision lookups. */
 function packVoxels(col: Column): Uint16Array {
   const out = new Uint16Array(SECTION * SECTION * H)
   for (let i = 0; i < col.sections.length; i++) out.set(col.sections[i].data, i * SECTION * SECTION * SECTION)
   return out
-}
-
-/** Mesh a column and post its sections. Silently no-ops if the column is not loaded. */
-function emitMesh(cx: number, cz: number): void {
-  const col = cols.get(key(cx, cz))
-  if (!col) return
-  const sections = meshColumn(col, {
-    negX: cols.get(key(cx - 1, cz)) ?? null,
-    posX: cols.get(key(cx + 1, cz)) ?? null,
-    negZ: cols.get(key(cx, cz - 1)) ?? null,
-    posZ: cols.get(key(cx, cz + 1)) ?? null,
-  }, scratch)
-
-  const payload: SectionPayload[] = []
-  const transfer: ArrayBuffer[] = []
-  for (const sm of sections) {
-    const attrs = buildAttrs(sm.mesh)
-    payload.push({ index: sm.index, wx: sm.wx, wy: sm.wy, wz: sm.wz, attrs })
-    transfer.push(...attrBuffers(attrs))
-  }
-  meshed.add(key(cx, cz))
-  // Transfer, don't clone: these buffers are hundreds of KB and cloning them would put the copy
-  // cost back on the boundary we just moved the work across.
-  ;(self as unknown as Worker).postMessage({ type: 'mesh', cx, cz, sections: payload }, transfer)
 }
 
 self.onmessage = (e: MessageEvent) => {

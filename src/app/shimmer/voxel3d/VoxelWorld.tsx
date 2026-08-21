@@ -4438,6 +4438,14 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
       posX: cols.current.get(key(cx + 1, cz)) ?? null,
       negZ: cols.current.get(key(cx, cz - 1)) ?? null,
       posZ: cols.current.get(key(cx, cz + 1)) ?? null,
+      // ★ THE DIAGONALS SERVE THE WATER DEPTH FIELD AND NOTHING ELSE. A lattice corner is touched
+      // by four cells and one of them lives diagonally; without it the two columns sharing that
+      // corner compute different depths and the shoreline gradient breaks at every column corner.
+      // Four map lookups on a path that already does four — see `Neighbours` for the alternatives.
+      negXnegZ: cols.current.get(key(cx - 1, cz - 1)) ?? null,
+      posXnegZ: cols.current.get(key(cx + 1, cz - 1)) ?? null,
+      negXposZ: cols.current.get(key(cx - 1, cz + 1)) ?? null,
+      posXposZ: cols.current.get(key(cx + 1, cz + 1)) ?? null,
     }, scratch)) {
       // Water splits into its own mesh so it can blend AFTER the opaque pass — see attrs.ts.
       const { solid, water, leaves } = buildAttrsSplit(sm.mesh, m => m === MAT.WATER, isLeafMat)

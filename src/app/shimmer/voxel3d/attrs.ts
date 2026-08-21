@@ -241,6 +241,14 @@ export interface MeshAttrs {
    * UVs, and nothing else pays for them.
    */
   uv?: Float32Array
+  /**
+   * ── ★ WATER ONLY, AND THAT IS WHY IT IS OPTIONAL (2026-08-21) ────────────────────────────────
+   * Per-vertex water depth in blocks, `-1` where the mesher had no depth field to read. Only the
+   * WATER partition carries it: depth attenuation is a property of the transparent pass, and water
+   * is a low single-digit percentage of the world's quads, so paying a float per vertex across
+   * every block face to serve it would be the whole world subsidising the rivers.
+   */
+  depth?: Float32Array
   indices: Uint32Array
   quads: number
 }
@@ -249,7 +257,8 @@ export interface MeshAttrs {
 export const attrBuffers = (a: MeshAttrs): ArrayBuffer[] =>
   [a.positions.buffer, a.normals.buffer, a.colors.buffer, a.emissive.buffer,
    a.layers.buffer, a.indices.buffer,
-   ...(a.uv ? [a.uv.buffer] : [])] as ArrayBuffer[]
+   ...(a.uv ? [a.uv.buffer] : []),
+   ...(a.depth ? [a.depth.buffer] : [])] as ArrayBuffer[]
 
 /**
  * ── ★ WATER IS ITS OWN DRAW, AND THIS IS WHERE IT SPLITS (2026-08-07 late) ─────────────────────
@@ -286,6 +295,8 @@ export function buildAttrsSplit(
     const normals = new Float32Array(quads * 12)
     const materials = new Uint16Array(quads * 4)
     const ao = new Uint8Array(quads * 4)
+    // Only the water half ever reads this, so only the water half allocates it.
+    const waterDepth = want === 'water' ? new Float32Array(quads * 4) : EMPTY_DEPTH
     const indices = new Uint32Array(quads * 6)
     let outQ = 0
     for (let q = 0; q < mesh.quads; q++) {
@@ -299,12 +310,18 @@ export function buildAttrsSplit(
       // half reading `undefined` per vertex and silently fall back to unoccluded — a river bed that
       // is correctly shaded until the moment water covers it.
       ao.set(mesh.ao.subarray(q * 4, q * 4 + 4), outQ * 4)
+      // ⚠ Depth travels WITH the quad, for the same reason AO does one line above: the split is the
+      // only place that knows which output quad an input quad became, so anything keyed by quad
+      // index has to be remapped here or it silently reads another quad's value.
+      if (want === 'water' && mesh.waterDepth) waterDepth.set(mesh.waterDepth.subarray(q * 4, q * 4 + 4), outQ * 4)
       // Remap the quad's OWN indices rather than assuming a triangulation: winding is what makes a
       // face face outward, and the mesher owns that decision, not this split.
       for (let i = 0; i < 6; i++) indices[outQ * 6 + i] = mesh.indices[q * 6 + i] - q * 4 + outQ * 4
       outQ++
     }
-    return buildAttrs({ positions, normals, materials, ao, indices, quads, faces: quads }, want === 'leaf')
+    return buildAttrs(
+      { positions, normals, materials, ao, waterDepth, indices, quads, faces: quads },
+      want === 'leaf', want === 'water')
   }
   const solidQuads = mesh.quads - waterQuads - leafQuads
   return {
@@ -347,12 +364,13 @@ export interface AttrPart {
 export function concatAttrs(parts: AttrPart[]): MeshAttrs | null {
   if (parts.length === 0) return null
 
-  let verts = 0, idxLen = 0, quads = 0, anyUV = false
+  let verts = 0, idxLen = 0, quads = 0, anyUV = false, anyDepth = false
   for (const p of parts) {
     verts += p.attrs.positions.length / 3
     idxLen += p.attrs.indices.length
     quads += p.attrs.quads
     if (p.attrs.uv) anyUV = true
+    if (p.attrs.depth) anyDepth = true
   }
 
   const positions = new Float32Array(verts * 3)
@@ -362,6 +380,7 @@ export function concatAttrs(parts: AttrPart[]): MeshAttrs | null {
   const layers = new Float32Array(verts)
   const indices = new Uint32Array(idxLen)
   const uv = anyUV ? new Float32Array(verts * 2) : undefined
+  const depth = anyDepth ? new Float32Array(verts) : undefined
 
   let v = 0, i = 0
   for (const p of parts) {
@@ -375,6 +394,11 @@ export function concatAttrs(parts: AttrPart[]): MeshAttrs | null {
     colors.set(a.colors, v * 3)
     emissive.set(a.emissive, v)
     layers.set(a.layers, v)
+    // ⚠ A PART WITHOUT DEPTH FILLS WITH THE -1 SENTINEL, NOT WITH ZERO. Zero is a real depth and
+    // renders as almost perfectly clear water; -1 is "no data" and renders as the old flat opacity.
+    // A mixed list means some sections were meshed without a water surface, and the honest result
+    // for those is the previous look rather than a river you can see straight through.
+    if (depth) { if (a.depth) depth.set(a.depth, v); else depth.fill(-1, v, v + n) }
     // ⚠ UV IS ALL-OR-NOTHING PER PASS BY CONSTRUCTION — only the leaf partition asks for it, and it
     // asks for every part. If a mixed list ever arrives anyway, derive the missing corners rather
     // than zero-filling: zeros would pin a whole section to one texel and read as a smear, which is
@@ -393,7 +417,7 @@ export function concatAttrs(parts: AttrPart[]): MeshAttrs | null {
     i += a.indices.length
   }
 
-  return { positions, normals, colors, emissive, layers, uv, indices, quads }
+  return { positions, normals, colors, emissive, layers, uv, depth, indices, quads }
 }
 
 /**
@@ -417,7 +441,12 @@ export function concatAttrs(parts: AttrPart[]): MeshAttrs | null {
  */
 const AO_CURVE = [0.62, 0.78, 0.91, 1] as const
 
-export function buildAttrs(mesh: MeshResult, withUV = false): MeshAttrs {
+/** Shared empty buffer for the partitions that carry no depth — allocating one per call would put
+ *  a throwaway Float32Array on every solid and leaf section, which is the exact garbage pressure
+ *  `MeshScratch` exists to avoid. */
+const EMPTY_DEPTH = new Float32Array(0)
+
+export function buildAttrs(mesh: MeshResult, withUV = false, withDepth = false): MeshAttrs {
   const n = mesh.materials.length
   const colors = new Float32Array(n * 3)
   const emissive = new Float32Array(n)
@@ -454,6 +483,7 @@ export function buildAttrs(mesh: MeshResult, withUV = false): MeshAttrs {
     emissive,
     layers,
     uv,
+    depth: withDepth && mesh.waterDepth ? mesh.waterDepth.slice() : undefined,
     indices: mesh.indices.slice(),
     quads: mesh.quads,
   }

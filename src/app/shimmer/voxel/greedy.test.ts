@@ -611,7 +611,7 @@ for (const S of [4, 16, 32]) {
 // why "fix the steps" alone would have moved 118 to 107 and looked like a failed fix.
 {
   const SZ = 16
-  const surf = (tops: Map<number, number>, corners: Map<number, number>) => ({ tops, corners })
+  const surf = (tops: Map<number, number>, corners: Map<number, number>, depths = new Map<number, number>()) => ({ tops, corners, depths })
   const key = (x: number, z: number) => waterTopKey(x, z, SZ)
 
   // A pool 4 deep with a PLANT standing on its floor, fully submerged.
