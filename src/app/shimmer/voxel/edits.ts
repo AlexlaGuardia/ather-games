@@ -209,7 +209,16 @@ import { Column, SECTION } from './column'
 // ⚠ The piece layer is not saved; only its ABSENCE is (tombstones). Gen ids are keyed on the
 // crossing and the world CELL and must stay that way — key them on anything derived and the next
 // version bump silently orphans every railing a player has broken.
-export const GENERATOR_VERSION = 30
+// 30 → 31 (2026-08-22, night): THE DECK'S FLANK CELLS ARE FULL HEIGHT, so the railing can stand on
+// them. Alex: *"the fences are all distorted, most not even connected to the bridge."* Both halves
+// measured: **8 of 25 posts on one railing line floated half a block**, and the line broke 7 times.
+// Root is a grid mismatch, not a bug in either part — the arch climbs in HALF steps because
+// `STEP_CAPTURE` demands it (a whole-block riser is a vault), while PIECES live on the integer grid,
+// so a post on a half-slab cell begins half a block above the surface. Rounding only the two flank
+// cells up costs the walkway nothing (flanks are parapet, never walked) and reads correctly as a
+// kerb under a parapet. Floating posts: 0 of 1058.
+// ⚠ Moves the flank deck voxels on every crossing.
+export const GENERATOR_VERSION = 31
 
 /**
  * One column's edits: packed local index → material.

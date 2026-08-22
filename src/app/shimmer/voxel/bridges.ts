@@ -532,7 +532,15 @@ export function bridgeVoxelAt(
   const yc = Math.ceil(top) - 1          // the cell the walking surface lives in
 
   // ── the deck ──────────────────────────────────────────────────────────────────────────────
-  if (y === yc) return (top - yc >= 1) ? deck : deckHalf
+  // ★★ THE EDGE CELLS ARE ALWAYS FULL HEIGHT, AND THAT IS WHAT LETS A RAILING STAND ON THEM.
+  // The arch climbs in HALF steps because `STEP_CAPTURE` demands it (a whole-block riser is a
+  // vault). Pieces live on the INTEGER grid. So on every half-slab cell the fence post placed at
+  // `yc + 1` began half a block ABOVE the surface — measured: 8 of 25 posts on one railing line
+  // floating, which is exactly the "distorted" Alex saw. Rounding the two flank cells up to full
+  // height costs the walkway nothing (the flanks are parapet, never walked) and gives the railing
+  // an integer surface to sit on the whole way across. It also reads correctly: a raised kerb under
+  // a parapet is what a real deck has.
+  if (y === yc) return (top - yc >= 1 || cell.edge) ? deck : deckHalf
 
   // ── the railing is NOT voxels ─────────────────────────────────────────────────────────────
   // It was: a solid course on the deck edge (a kerb), then posts + a top rail out of whole blocks.

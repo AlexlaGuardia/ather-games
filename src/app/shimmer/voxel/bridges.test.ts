@@ -12,7 +12,7 @@ import {
 } from './bridges'
 import { STORY_NODES } from './story-path'
 import { columnHeight } from './height'
-import { materialAt, isSolid } from './depth'
+import { materialAt, isSolid, isHalfMat } from './depth'
 
 let pass = 0, fail = 0
 function check(label: string, ok: boolean, detail = '') {
@@ -346,8 +346,12 @@ for (const SEED of SEEDS) {
           const m = bridgeVoxelAt(yc, c, spec, DECK, DECK_HALF, STONE)
           if (m !== DECK && m !== DECK_HALF) bad++
           else deckCells++
-          // nothing is drawn in the deck cell's empty upper half when it is a slab
-          if (top - yc < 1 && bridgeVoxelAt(yc, c, spec, DECK, DECK_HALF, STONE) !== DECK_HALF) bad++
+          // A half-profile cell is a slab — EXCEPT on the flanks, which are rounded up to full so
+          // the railing has an integer surface to stand on (see the deck emitter). Assert both
+          // halves of that rule, or the edge rule is unguarded and the walkway rule is wrong.
+          const got2 = bridgeVoxelAt(yc, c, spec, DECK, DECK_HALF, STONE)
+          if (top - yc < 1 && !c.edge && got2 !== DECK_HALF) bad++
+          if (c.edge && got2 !== DECK) bad++
           for (let y = spec.bed; y < yc; y++) if (bridgeVoxelAt(y, c, spec, DECK, DECK_HALF, STONE) === STONE) stoneCells++
         }
       }
@@ -533,6 +537,21 @@ for (const SEED of SEEDS) {
       if (g.y !== Math.ceil(deckTopAt(specs[c.i], c.t)) - 1 + 1) offDeck++
     }
     check(`s${SEED}: every railing piece is a fence`, wrongPiece === 0, `${wrongPiece} not fence`)
+    // ★★★ NO POST MAY FLOAT. Pieces sit on the INTEGER grid; the arch climbs in HALF steps because
+    // STEP_CAPTURE demands it. So on every half-slab cell a post placed at `yc + 1` began half a
+    // block above the surface — 8 of 25 on one line, and that is precisely what Alex saw as
+    // "distorted". The flank cells are full height now so the railing always has an integer surface.
+    // ⚠ Ask the WORLD what is under the post, not the profile: this must fail if the deck stops
+    // being full-height at the edge for any reason, including one nobody has thought of.
+    let floating = 0, notFull = 0
+    for (const g of got.values()) {
+      const below = materialAt(g.x, g.y - 1, g.z, SEED, columnHeight(g.x, g.z, SEED))
+      if (below === 0) floating++
+      else if (isHalfMat(below)) notFull++
+    }
+    check(`s${SEED}: no railing post floats over air`, floating === 0, `${floating} posts with nothing under them`)
+    check(`s${SEED}: no railing post stands on a half slab`, notFull === 0,
+      `${notFull} posts half a block above their deck`)
     check(`s${SEED}: every railing post stands on the deck edge`, offDeck === 0, `${offDeck} misplaced`)
     // ★ ADJACENCY IS THE WHOLE MECHANISM: fence ARMS are derived per connected side, so a post
     // with no neighbour grows no rail and reads as a lone stake. Posts must run continuously.
