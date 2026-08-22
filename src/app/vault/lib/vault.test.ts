@@ -2,8 +2,8 @@
 import {
   makeWorld, tick, pressJump, releaseJump,
   diffAt, speedAt, // ensure exports resolve
-  TOP_BASE, FOE_W, FOE_H, SPIKE_H, MOTE_R, JUMP_V0, DEATH_Y, RUNNER_H,
-  type World, type Seg,
+  TOP_BASE, FOE_W, FOE_H, SPIKE_H, MOTE_R, JUMP_V0, DEATH_Y, RUNNER_H, RUNWAY,
+  type World, type Seg, type BoundState,
 } from './vault'
 
 let pass = 0, fail = 0
@@ -128,7 +128,10 @@ function flat(w: World) {
   const w = makeWorld(14); pressJump(w); flat(w)
   w.fuel = 0; w.hearts = 1 // one heart left, light already dry
   let died = false
-  for (let i = 0; i < 600 && w.state === 'playing'; i++) { flat(w); tick(w, 0.016); if (w.state === 'dead') died = true }
+  // ⚠ `state(w)`, not `w.state`: `pressJump` narrows the field to 'playing' for the rest of the
+  // block, so tsc calls the `=== 'dead'` test a no-overlap comparison even though `tick` flips it.
+  const state = (x: World): BoundState => x.state
+  for (let i = 0; i < 600 && state(w) === 'playing'; i++) { flat(w); tick(w, 0.016); if (state(w) === 'dead') died = true }
   ok('dry light guts out to grey death', died && w.events.some(e => e.type === 'death' && e.cause === 'grey'))
 }
 
@@ -188,13 +191,29 @@ function flat(w: World) {
   // dist is seed-INDEPENDENT by design (speed depends only on distance) — so compare the COURSE the
   // seed actually generates. Tick a bit first (still safely on the flat runway) so terrain past the
   // runway is generated, then sign the generated segments' heights + hazard counts.
+  // ★ TICK UNTIL THERE IS A COURSE, THEN SIGN IT — AND PROVE THE SIGNATURE IS NOT EMPTY.
+  // This ran a flat 150 ticks and filtered `x0 >= 900`. Nothing is generated past the nursery that
+  // early any more (first generated segment lands near tick 400), so BOTH signatures came back as
+  // the empty `#f0#s0#m0` and the assert compared nothing to nothing. Note which way that breaks:
+  // an empty window can only ever report "same course", so this assert could not pass no matter what
+  // worldgen did — it was not detecting a determinism bug, it had stopped being able to see the
+  // course at all. So: drive until segments exist past the runway (bounded), and assert the
+  // signature has content before comparing two of them. `RUNWAY` is imported, not the literal 900,
+  // so moving the nursery moves the window with it.
   const courseSig = (seed: number) => {
     const w = makeWorld(seed); pressJump(w)
-    for (let i = 0; i < 150; i++) tick(w, 0.016)
-    const gen = w.segs.filter(s => s.x0 >= 900)
+    let gen: typeof w.segs = []
+    for (let i = 0; i < 1200 && gen.length < 2; i++) {
+      tick(w, 0.016)
+      gen = w.segs.filter(s => s.x0 >= RUNWAY)
+    }
     return gen.map(s => Math.round(s.top)).join(',') + `#f${w.foes.length}#s${w.spikes.length}#m${w.motes.length}`
   }
-  ok('different seed → different course', courseSig(424242) !== courseSig(999))
+  const sigA = courseSig(424242)
+  ok('the course window actually holds generated terrain (not an empty signature)',
+    /^-?\d/.test(sigA) && sigA.length > '#f0#s0#m0'.length)
+  ok('same seed → same course', sigA === courseSig(424242))
+  ok('different seed → different course', sigA !== courseSig(999))
 }
 
 // 13. difficulty ramp monotonic + speed rises

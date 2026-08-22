@@ -160,8 +160,20 @@ const sameSet = (a: string[], b: string[]) =>
 // whole basis for the Y lift, and it belongs to `meshColumn`, not to this file — so it gets checked
 // against a real column rather than trusted.
 {
-  const col = makeColumn(0, 0, 4242)
-  const sections = meshColumn(col)
+  // ★ THE COLUMN IS SEARCHED FOR, NOT NAMED, AND THAT IS THE FIX FOR HOW THIS FILE DIED.
+  // It used to read `makeColumn(0, 0, 4242)`. World origin is the fold's hollow interior — there is
+  // no ground there at any altitude (`void-check.mts`, `character.test.ts` § the tour) — so the
+  // fixture meshed to ZERO sections and every assert below it was measuring an empty column. A
+  // hardcoded coordinate is a standing claim about worldgen that nothing re-checks; this one was
+  // true when written and expired when the fold grew over it. So: walk candidates, take the first
+  // that actually has ground, and say out loud that one was found. 37 of 40 sampled columns
+  // qualify, so a run that finds none is worldgen news, not a flaky pick.
+  let col = makeColumn(0, 0, 4242)
+  let sections = meshColumn(col)
+  for (let i = 0; sections.length < 2 && i < 40; i++) {
+    col = makeColumn((i * 197) % 2000, (i * 331) % 2000, 4242)
+    sections = meshColumn(col)
+  }
   ok(sections.length > 1, 'a generated column meshes into several sections (fixture sanity)')
 
   const solids: AttrPart[] = [], waters: AttrPart[] = [], leaves: AttrPart[] = []
@@ -179,17 +191,23 @@ const sameSet = (a: string[], b: string[]) =>
   }
   ok(localOnly, '★ the mesher really does emit section-local positions — the premise of the lift')
 
-  const mergedSolid = concatAttrs(solids)!
-  ok(sameSet(triangles(mergedSolid), expect.s.sort()),
+  // ⚠ NOT `concatAttrs(solids)!`. With an empty fixture this file did not FAIL, it THREW on a null
+  // deref — which reads as broken test code and buried the sanity assert that had already caught the
+  // real problem one line up. A missing merge is an assertion, never an exception.
+  const mergedSolid = concatAttrs(solids)
+  ok(mergedSolid !== null, 'the column\'s solid sections merge at all (nothing to merge = no ground)')
+  ok(!!mergedSolid && sameSet(triangles(mergedSolid), expect.s.sort()),
     '★ a real column\'s merged solid pass is triangle-for-triangle the sections it came from')
   ok(sections.length > solids.length || solids.length > 1,
     'and it collapsed more than one section into that single pass')
 
   if (waters.length) {
-    ok(sameSet(triangles(concatAttrs(waters)!), expect.w.sort()), 'water merges the same way')
+    const w = concatAttrs(waters)
+    ok(!!w && sameSet(triangles(w), expect.w.sort()), 'water merges the same way')
   } else pass++   // a dry column is a legitimate fixture, not a failure
   if (leaves.length) {
-    ok(sameSet(triangles(concatAttrs(leaves)!), expect.l.sort()), 'so do leaves')
+    const l = concatAttrs(leaves)
+    ok(!!l && sameSet(triangles(l), expect.l.sort()), 'so do leaves')
   } else pass++
 
   // ★ THE COUNT THAT IS THE POINT OF THE WHOLE CHANGE.
