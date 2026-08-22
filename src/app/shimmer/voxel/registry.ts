@@ -19,9 +19,8 @@
 // marked TBD-CANON — if the Ather's stone and soil carry real names, those are Magii's.
 
 import { MAT, HALF_BIT, TOP_BIT } from './depth'
+import { meadowSeedDrops } from './meadow-seed'
 
-/** Chance a broken tuft yields a wind-borne Mana Seed. See the grass entries below before dialing. */
-export const MANA_SEED_CHANCE = 1 / 2_500
 import { ORE } from './ore'
 import { WOOD } from './trees'
 import { AIR } from './section'
@@ -310,8 +309,8 @@ export const BLOCKS: BlockDef[] = [
   // enough to exist. It was briefly 1/1,000,000, which measured out at ~11.6 DAYS of continuous
   // breaking for an even chance: a drop no player would ever meet. `mana-seed.test.ts` proves the
   // roll is wired at ANY rate, so this stays a dial rather than a leap of faith.
-  { noSlab: true, material: MAT.TUFT, name: 'Grass Tuft', hardness: 0.05, skill: null, minTier: 0, drops: [{ itemId: 'grass_tuft', count: 1 }, { itemId: 'mana_seed', count: 1, chance: MANA_SEED_CHANCE }], fastSkill: 'farming', placeable: true },
-  { noSlab: true, material: MAT.TALL_GRASS, name: 'Tall Grass', hardness: 0.05, skill: null, minTier: 0, drops: [{ itemId: 'tall_grass', count: 1 }, { itemId: 'mana_seed', count: 1, chance: MANA_SEED_CHANCE }], fastSkill: 'farming', placeable: true },
+  { noSlab: true, material: MAT.TUFT, name: 'Grass Tuft', hardness: 0.05, skill: null, minTier: 0, drops: [{ itemId: 'grass_tuft', count: 1 }, ...meadowSeedDrops()], fastSkill: 'farming', placeable: true },
+  { noSlab: true, material: MAT.TALL_GRASS, name: 'Tall Grass', hardness: 0.05, skill: null, minTier: 0, drops: [{ itemId: 'tall_grass', count: 1 }, ...meadowSeedDrops()], fastSkill: 'farming', placeable: true },
   { noSlab: true, material: MAT.FLOWER, name: 'Wildflower', hardness: 0.05, skill: null, minTier: 0, drops: [{ itemId: 'wild_flower', count: 1 }], fastSkill: 'farming', placeable: true },
 
   // ── ★ SCATTER (2026-08-19, slice ③) — what a land SHEDS, as gatherable ground cover ──────────

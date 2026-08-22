@@ -90,7 +90,13 @@ const ok = (c: boolean, m: string) => { if (c) pass++; else fails.push(m) }
   // Seed to plant in his clay pot, `engine/farming.ts` exports `MANA_SEED_ITEM`/`MANA_BLOOM_CROP` —
   // and the voxel world has no planting, so the seed it drops into your bag can never be used.
   // The day the front door can farm, this list becomes empty and this assert says so.
-  const KNOWN_ORPHANS = ['mana_seed']
+  // ★★ THE PIN CLOSED ITSELF, WHICH IS WHAT IT WAS FOR (2026-08-22, same day it was written).
+  // `mana_seed` was pinned here as a known orphan — no ItemDef, no material, no consumer — with the
+  // note that fixing it would ALSO go red so nobody could close the hole and leave a stale allowance
+  // behind. Canon then retired the generic seed, grass now yields common crop seeds instead, and
+  // this assert duly went red saying "found: none, pinned: mana_seed". **An exemption would have
+  // stayed quiet through all of that and would still be sitting here.**
+  const KNOWN_ORPHANS: string[] = []
   ok(JSON.stringify(orphans) === JSON.stringify(KNOWN_ORPHANS),
     `★★ the orphan set is exactly the pinned one — nothing new is unnameable AND unconsumed (found: ${orphans.join(', ') || 'none'}, pinned: ${KNOWN_ORPHANS.join(', ')})`)
   ok(!nameable('glowfin_scale') && !consumed.has('glowfin_scale'),
