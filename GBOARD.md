@@ -495,6 +495,16 @@ the Arcade frame.
 
 **Files:** `voxel/bridges.ts` (new) · `voxel/bridges.test.ts` (new) · `voxel/depth.ts` (bridge block only, hub-cleared) · `voxel/edits.ts` (GENVER 24)
 
+## 🌾 Shimmer — **FARMING LOOK + SEVEN WILD CROPS** (2026-08-22, hub+play) · *Last touched 2026-08-22 (night)*
+**Left off:** crop pixels (`tex/crop-tex.ts`, procedural, one stalk + one head tile a tint colours), seven wild crop MAT ids 76-82, registry rows with produce **and** a 25% seed drop (the wild find BOOTSTRAPS the plot), body colours, and a crop kind in `flora-mesh`. **One renderer, two feeds** — a wild crop is a crop at phase 3 standing on its ground; a planted one is the same pixels scaled by phase. Play owns the field/grounds/precedence, hub owns everything visual.
+- ★ `SOLID_EXCEPT` is **derived** from `isPlant`/`isSapling` — the seven landed passable with no list edit. Fourth repetition removed rather than paid.
+- ★ Honesty gate picked all seven up with **no edit**: brews 13/17 → **15/17**. The two dark want sunfruit/moonberry (canon-adopted, nothing drops them).
+- ⚠ Herb/tall/crop instance caps raised (herb 4k→12k after a measured **199%** overrun) and every pool now reports `wanted` vs `cap`. `CAP` exported so a probe cannot mirror it.
+
+**Next:** ⏭ **ALEX'S EYE, UNANSWERED** — `/tp -1440 2400`: seven crops + four herbs share ONE silhouette with colour doing all the work. Dreamroot dusk-purple beside Rootvine brown in woodland is the hardest pair. **If he cannot tell them apart, that is the finding.** · The **planted**-crop feed into the same renderer is still unbuilt (#651 phases 0-3 above a bed) · saplings still draw as CUBES — `isSapling` is not in `isPlant`, which is the whole mechanism (#660) · growth stage per morning (#661) · 25% seed drop is **unplaytested**.
+**Decisions:** A tuft yields a SEED, a ground grows a PLANT — canon had already drawn the line, the ruling did not need a new one. · Distinct silhouettes are Alex's (art); colour-only is survivable because grounds never put two side by side, **not good**. · Basin under-delivers 29/60 and **no density fixes it** (7.3% free ground); the tier band holds at 2.2×, assert the ordering not the constant.
+**Files:** `voxel/{crops,flora,depth,registry}.ts` · `voxel3d/{flora-mesh,attrs}.ts` · `voxel3d/tex/crop-tex.ts` · `voxel/plants.test.ts`
+
 ## 🧪 Shimmer — **THE INSTRUMENTS: 5 red files, 0 code bugs; voxel core portable again** (2026-08-22, hub) · *Last touched 2026-08-22 (hub, late)*
 **Left off:** #656 closed. All five red test files were instruments that had stopped being able to SEE their subject, not code that broke. 137/137 suite · purity 9→0 · tsc 14→9 · canon 10 CLEAN · deployed, prod 200, pushed through `0756ece`.
 - **merge** — fixture sat at world origin, which is the fold's hollow (no ground at any altitude); it measured an empty column and the `!` non-null threw instead of failing. Column is searched for now, and the search asserts it found ground.
