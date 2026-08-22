@@ -27,6 +27,7 @@ import { createMeshScratch } from '../voxel/greedy'
 import { columnHeight, holdPadLevel } from '../voxel/height'
 import { slumpMask } from '../voxel/slump'
 import { holdGenPiecesForCol, type GenPiece } from '../voxel/holds'
+import { bridgeGenPiecesForCol } from '../voxel/bridges'
 import { biomeAt, forestness } from '../voxel/biome'
 import { ZONE_ANCHORS, zoneAt } from '../voxel/zones'
 import { findLands, LAND_IDS } from '../voxel/character'
@@ -4667,7 +4668,15 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
    * walk-away-and-back can't double the parapets.
    */
   const applyGenPieces = useCallback((gx: number, gz: number, removed: string[]) => {
-    const gen = holdGenPiecesForCol(gx, gz, SECTION, i => holdPadLevel(i, SEED))
+    // ⚠⚠ THE CONCAT GOES ABOVE THE EARLY-OUT, AND THE ORDER IS THE WHOLE BUG.
+    // `if (!gen.length) return` used to guard a hold-only list. Bridges cross open country and holds
+    // are elsewhere, so nearly every bridge column has ZERO hold pieces — put the bridge rails below
+    // this line and they silently never place, on almost every bridge, while looking exactly like
+    // `bridgeGenPiecesForCol` returning nothing. The debugging would happen in the wrong file.
+    const gen = [
+      ...holdGenPiecesForCol(gx, gz, SECTION, i => holdPadLevel(i, SEED)),
+      ...bridgeGenPiecesForCol(gx, gz, SECTION, SEED),
+    ]
     if (!gen.length) return
     const k = key(gx, gz)
     const skip = new Set(removed)
