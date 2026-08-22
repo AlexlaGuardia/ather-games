@@ -41,6 +41,7 @@ import { blockDef, materialForItem, emitOf, BLOCKS, type BlockSkill } from '../v
 import { editIndex, recordEdit, applyEdits, packEdits, unpackEdits, isStale, GENERATOR_VERSION, type ColumnEdits } from '../voxel/edits'
 import { cropForSeed, CROP_DEFS } from '../engine/farming'
 import { placeBedBlocker, plotRefusalLine, countBeds, isGardenBed } from './garden'
+import { createProfiler, snapshotText, type FrameProfile } from './profile'
 import {
   plantBlocker, plantRefusalLine, plantInBed, harvestBed, cropAt, readyAt, clearBed,
   bedsToSave, bedsFromSave, type PlantedBeds,
@@ -1020,6 +1021,8 @@ export default function VoxelWorld() {
    * closes, so the meter never shows a fabricated 0.
    */
   const [perf, setPerf] = useState<PerfSample | null>(null)
+  /** Latest zone-profile window plus its rendered snapshot. Same ~4/second cadence as `perf`. */
+  const [prof, setProf] = useState<{ profile: FrameProfile; text: string } | null>(null)
   /**
    * ── ★ THE SAY CHANNEL — what the WORLD tells the PLAYER (2026-08-12) ────────────────────────
    * `stats` is the plumbing readout and the frame loop OVERWRITES IT EVERY 10 FRAMES with the
@@ -2104,7 +2107,7 @@ export default function VoxelWorld() {
           weaponDrawn={drawn}
           weaponIdx={weaponIdx}
           onAmmo={setAmmoUi}
-          onStats={setStats} onPerf={setPerf} onSay={say} runeTick={runeTick}
+          onStats={setStats} onPerf={setPerf} onProfile={setProf} onSay={say} runeTick={runeTick}
           onPos={(p, yaw) => {
             mapPos.current = { x: p.x, z: p.z }
             mapHeading.current = yaw
@@ -2143,6 +2146,7 @@ export default function VoxelWorld() {
            tutorialStage={tutorial.current.stage} nearGreg={nearGreg} dialogueOpen={dialogueOpen}
            nearTable={nearTable} craftOpen={craftOpen} nearMist={nearMist} hasParty={hasParty}
            sparLedger={sparLedger} vitals={vitals} />
+      {settings.showFps && prof && <ProfilePanel p={prof.profile} text={prof.text} />}
       {showSettings && <SettingsPanel s={settings} update={update} onClose={() => { setShowSettings(false); closeCursorUI() }} />}
       {craftOpen && (
         <CraftPanel have={have} tools={tools} tick={craftTick} station={station}
@@ -3301,7 +3305,7 @@ function ToolGlyph({ family }: { family: 'forestry' | 'prospecting' | 'rinning' 
 // seeds while the ground there was flawless. A truth that collision, light and the tests all need
 // does not belong in a component. See `depth.ts`.
 
-function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weaponDrawn, weaponIdx, onAmmo, onStats, onPerf, onSay, runeTick, onPos, onLook, onInvChange, worker, incoming, inflight, settings, build, pieceIdx, rot, tools, skills, onSkill, onLevel, onTool, tutorial, onQuestEvent, onNearGreg, onNearTable, cmdOut, mistLedger, onNearMist, onDiscover, sparring, pot, plotCfg, plotTier, spiritIndex, snapOut, space, lookOut, onOpenChest, onOpenStation, onOpenWaymark, onOpenBrew, uiOpen, owner, foesOut, pressOut, waterOut }: {
+function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weaponDrawn, weaponIdx, onAmmo, onStats, onPerf, onProfile, onSay, runeTick, onPos, onLook, onInvChange, worker, incoming, inflight, settings, build, pieceIdx, rot, tools, skills, onSkill, onLevel, onTool, tutorial, onQuestEvent, onNearGreg, onNearTable, cmdOut, mistLedger, onNearMist, onDiscover, sparring, pot, plotCfg, plotTier, spiritIndex, snapOut, space, lookOut, onOpenChest, onOpenStation, onOpenWaymark, onOpenBrew, uiOpen, owner, foesOut, pressOut, waterOut }: {
   inv: React.RefObject<Inventory>
   toolTier: React.RefObject<number>
   toolSkill: React.RefObject<BlockSkill>
@@ -3318,6 +3322,11 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
   onStats: (s: string) => void
   /** One window of the frame meter, ~4x a second and only while `settings.showFps` is on. */
   onPerf: (p: PerfSample) => void
+  /**
+   * One window of the ZONE profiler, same cadence and same gate. Carries the already-rendered
+   * snapshot text because the scene facts it quotes only exist inside the frame.
+   */
+  onProfile: (p: { profile: FrameProfile; text: string }) => void
   /** Addressed to the PLAYER — held long enough to read. `onStats` is plumbing and gets clobbered
    *  every 10 frames by the biome line; see the SAY CHANNEL note on VoxelWorld. */
   onSay: (s: string) => void
@@ -3590,6 +3599,17 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
   /** The frame meter's open window: frames and seconds since the last publish, plus the worst
    *  single frame in it. A ref, not state — accumulating in state would re-render per frame. */
   const perfWin = useRef({ frames: 0, time: 0, worst: 0 })
+  /**
+   * The zone profiler (`profile.ts`, play lane). Answers the question the frame meter cannot: a
+   * steady low rate is not a hitch, so the useful number is not "how slow" but WHERE, and whether
+   * the frame is CPU- or GPU-bound.
+   *
+   * ⚠ Held in a ref and never in state — a profiler that re-rendered the tree would be measuring
+   * itself, which is the same trap the frame meter's own header describes one screen up.
+   */
+  const prof = useRef(createProfiler())
+  /** The actual GPU string, so a reading Alex pastes says which machine produced it. */
+  const rendererName = useRef<string | undefined>(undefined)
   const requested = useRef(new Set<string>())
   // ★ Edits live here, keyed by column, and are the ONLY thing the world stores. Walking a thousand
   // columns costs zero bytes; a save grows with what you BUILD.
@@ -4153,6 +4173,25 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
     cv.addEventListener('webglcontextrestored', restored)
     return () => { cv.removeEventListener('webglcontextlost', lost); cv.removeEventListener('webglcontextrestored', restored) }
   }, [gl, onStats])
+
+  /**
+   * Hand the profiler the live WebGL2 context so it can ask for GPU timings.
+   *
+   * ⚠ THE TIMER EXTENSION MAY SIMPLY NOT BE THERE, and `profile.ts` reports that as `gpuMs: null`
+   * with a reason rather than as `0`. A zero would read as "the GPU is idle, so this is CPU-bound"
+   * — a confident wrong answer to the exact question. Nothing here needs to handle the failure; it
+   * needs to not paper over it. `attach` is idempotent and re-runs if the context is replaced.
+   */
+  useEffect(() => {
+    const ctx = gl.getContext()
+    prof.current.attach(typeof WebGL2RenderingContext !== 'undefined' && ctx instanceof WebGL2RenderingContext ? ctx : null)
+    // Best-effort: the extension is absent or masked in plenty of browsers, and an unnamed GPU is a
+    // missing line in the snapshot rather than a problem. It must never throw into the frame loop.
+    try {
+      const dbg = ctx.getExtension('WEBGL_debug_renderer_info')
+      if (dbg) rendererName.current = String(ctx.getParameter(dbg.UNMASKED_RENDERER_WEBGL))
+    } catch { /* masked — the snapshot simply omits the gpu line */ }
+  }, [gl])
 
   const voxel = useCallback((wx: number, wy: number, wz: number): number => {
     if (wy < 0 || wy >= H) return AIR
@@ -5431,6 +5470,16 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
   }, [camera, tracerGeo, tracerMat, onAmmo])
 
   useFrame((state, dtRaw) => {
+    // ★★ FIRST LINE OF THE FRAME, AND IT IS ONE CALL RATHER THAN A PAIR. r3f renders AFTER every
+    // `useFrame` callback has run, so a begin/end pair inside this callback would bracket our JS
+    // and almost none of our drawing — reporting a nearly idle GPU, which is a confident WRONG
+    // answer to the one question it exists to settle. `gpuFrame` closes the previous frame's query
+    // and opens the next, so the window always spans a real render. See profile.ts for the full note.
+    prof.current.gpuFrame()
+    // Both setters are guarded for idempotence, so this costs a comparison. `enabled` clears the
+    // window when it actually flips, so a toggle cannot attribute a long idle gap to whichever zone
+    // happened to be open.
+    prof.current.enabled = settings.showFps
     const dt = Math.min(dtRaw, 0.05)
 
     // ── ★ THE FRAME METER ────────────────────────────────────────────────────────────────────────
@@ -5771,6 +5820,7 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
       }
     }
 
+    prof.current.mark('world:ticks')
     // ── ★ THE NIGHT TIDE'S PAYOFF — the Hollows' SPAWN CYCLE, MINECRAFT'S SHAPE ──────────────
     // Reworked 2026-08-07 eve after Alex night-walked without meeting one: the first cut scanned
     // ONE random column per 1.6s (a trickle); MC attempts EVERY eligible chunk every tick, and
@@ -6134,6 +6184,7 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
       }
     }
 
+    prof.current.mark('stream:adopt')
     // ── adopt whatever the worker finished ───────────────────────────────────────────────────
     // Wrapping packed voxels into a Column is a view, not a copy: the sections point straight into
     // the transferred buffer, so adopting a generated column costs nothing.
@@ -6235,6 +6286,7 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
       adopted++
     }
 
+    prof.current.mark('stream:request')
     // ── request what is missing, nearest first ───────────────────────────────────────────────
     const R = settings.viewRadius
     const want: [number, number, number][] = []
@@ -6276,9 +6328,11 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
 
     // Mesh what arrived, nearest first, inside a frame budget. 12ms leaves a 60Hz frame most of its
     // time for everything else while still filling a fresh load radius in a few seconds.
+    prof.current.mark('stream:mesh')
     drainRemeshQueue(cx, cz, 12)
 
     const nowMs = Date.now()
+    prof.current.mark('world:ticks')
     // ── pots come due ────────────────────────────────────────────────────────────────────────
     // Swept from the CLOCK, not by scanning the world: the clock already knows every planted pot's
     // position, so a garden of them costs a handful of map reads instead of a search. A pot outside
@@ -6336,6 +6390,7 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
       }
     }
 
+    prof.current.mark('flora')
     // ── flora sync: once the streaming burst is quiet, rebuild the ground cover ──────────────
     // Deferred behind `incoming` so a fresh load radius pays for flora ONCE at the end, not per
     // adopted column. The probe walks from the generated surface to the ACTUAL one (edits move
@@ -6493,6 +6548,7 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
       }
     }
 
+    prof.current.mark('move')
     // ── the gate ──────────────────────────────────────────────────────────────────────────────
     // Built once its footprint's columns are all loaded (see GATE_COLS's header for why "all", not
     // just the centre one) — sealed or already open depending on what the save says at that moment,
@@ -6641,6 +6697,7 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
       }
     }
 
+    prof.current.mark('look')
     // ── what are we looking at ───────────────────────────────────────────────────────────────
     const hit = raycast(p.x, p.y, p.z, aim.x, aim.y, aim.z, REACH, voxel)
     const hl = highlight.current
@@ -6695,6 +6752,7 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
       }
     }
 
+    prof.current.mark('interact')
     // ── build mode: ghost, place, deconstruct ────────────────────────────────────────────────
     if (build) {
       const def = pieceDef(PIECES[pieceIdx].id)!
@@ -7412,6 +7470,7 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
       }
     }
 
+    prof.current.mark('drops')
     // ── dropped items ────────────────────────────────────────────────────────────────────────
     // Physics resolves against the voxel grid (not a heightfield), so a shard mined in a cave rests
     // on the cave floor rather than on the surface hundreds of blocks above it.
@@ -7467,6 +7526,7 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
       }
     }
 
+    prof.current.mark('hud')
     // ── HUD ──────────────────────────────────────────────────────────────────────────────────
     const def = hit ? blockDef(hit.material) : undefined
     onLook(hit && def
@@ -7519,8 +7579,43 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
         + `${(info.render.triangles / 1000).toFixed(0)}k tris · ${drops.current.length} drops · `
         + `geo ${info.memory.geometries} prog ${info.programs?.length ?? 0} · `
         + `${built} edits saved · ${worker.current ? 'worker' : 'main'}`)
+
+      /**
+       * The profile window, if one is due. `publish` rate-limits itself to ~4/second, so this is a
+       * comparison on most of the frames it runs on.
+       *
+       * ★★ THE SNAPSHOT TEXT IS BUILT HERE, IN THE FRAME, BECAUSE THIS IS WHERE THE SCENE FACTS
+       * ARE. Assembling it in the panel would mean plumbing eight counters out to a component that
+       * re-renders on its own schedule, and the reading would then describe a moment that never
+       * existed.
+       *
+       * ⚠⚠ `space` COMES FROM THE REF, NEVER FROM THE LABEL, and that is not a style choice — it is
+       * the whole reason the play lane lost an afternoon. A reading with no place attached, or with
+       * a place inferred from a string that was itself space-blind until an hour ago, is a reading
+       * that can corroborate a wrong measurement. The ref is the only thing here that KNOWS.
+       */
+      const win = prof.current.publish()
+      if (win) {
+        onProfile({
+          profile: win,
+          text: snapshotText(win, {
+            space: space.current,
+            x: p.x, y: p.y, z: p.z,
+            viewRadius: settings.viewRadius,
+            cols: cols.current.size,
+            meshes: drawn.current.size,
+            draws: info.render.calls,
+            tris: info.render.triangles,
+            geometries: info.memory.geometries,
+            programs: info.programs?.length ?? 0,
+            gpuStatus: prof.current.gpuStatus,
+            renderer: rendererName.current,
+          }),
+        })
+      }
     }
 
+    prof.current.mark('save')
     // ── flush edits ──────────────────────────────────────────────────────────────────────────
     // ★ Debounced, not per-block. Mining is a stream of edits and an IndexedDB write per broken
     // block would put a transaction on every swing. Once a second is imperceptible to a player and
@@ -7529,6 +7624,7 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
       flushSaves()
     }
 
+    prof.current.mark('evict')
     // ── evict ────────────────────────────────────────────────────────────────────────────────
     if (frame.current % 120 === 0) {
       const keep = new Set<string>()
@@ -7551,6 +7647,12 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
       // vanishes on a walk.
       flushSaves()
     }
+
+    // ⚠ `dtRaw`, NEVER the clamped `dt` — the same reason the frame meter says so. The clamp floors
+    // at 20fps, so measuring it would erase every frame worse than that, which are the ones worth
+    // finding. Closes the last open zone and accounts the frame; everything above the first mark
+    // (the frame meter, the weapon tick, the cast) lands in UNACCOUNTED, correctly.
+    prof.current.frameEnd(dtRaw)
   })
 
   return (
@@ -8193,6 +8295,87 @@ function StationPanel({ st, inv, onChange, onSay, onClose }: {
             </button>
           )
         })}
+      </div>
+    </div>
+  )
+}
+
+/**
+ * The zone breakdown, and a key that puts it on the clipboard.
+ *
+ * ★★ THE COPY KEY IS THE FEATURE, NOT A CONVENIENCE. The point of this panel is that Alex SENDS a
+ * reading rather than transcribing one — a transcribed profile loses the zone names nobody thinks
+ * are important, which are exactly the ones that turn out to matter. It has to be a KEY and cannot
+ * be a button: the world holds pointer lock, so a click never reaches the DOM.
+ *
+ * ⚠ `gpuMs` NULL IS RENDERED AS A REASON, NEVER AS A NUMBER, and never as a dash that could be read
+ * as zero. A missing timer extension shown as 0ms says "the GPU is idle, so this is CPU-bound",
+ * which is a confident answer to the exact question this panel exists to settle, and the wrong one.
+ *
+ * ⚠ UNACCOUNTED is a row like any other and sorts on its size — it is not a footnote. If nobody
+ * wrapped the expensive thing, the honest reading is UNACCOUNTED sitting at the top, and that is
+ * the one a tidy table of six wrapped zones would hide.
+ */
+function ProfilePanel({ p, text }: { p: FrameProfile; text: string }) {
+  const [copied, setCopied] = useState(0)
+  useEffect(() => {
+    const kd = (e: KeyboardEvent) => {
+      if (e.code !== 'KeyP' || e.repeat) return
+      const t = e.target as HTMLElement | null
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA')) return
+      e.preventDefault()
+      // ⚠ Two paths on purpose. `navigator.clipboard` needs a secure context and is absent over
+      // plain http on a LAN address, which is exactly how this page gets opened for a look. The
+      // textarea fallback is ugly and works everywhere; silently failing to copy would be worse
+      // than either, because the reading looks taken and never arrives.
+      const fallback = () => {
+        const ta = document.createElement('textarea')
+        ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0'
+        document.body.appendChild(ta); ta.select()
+        try { document.execCommand('copy') } catch { /* nothing left to try */ }
+        document.body.removeChild(ta)
+      }
+      if (navigator.clipboard?.writeText) navigator.clipboard.writeText(text).catch(fallback)
+      else fallback()
+      setCopied(Date.now())
+    }
+    window.addEventListener('keydown', kd)
+    return () => window.removeEventListener('keydown', kd)
+  }, [text])
+  const fresh = copied && Date.now() - copied < 1600
+  return (
+    <div style={{
+      position: 'absolute', top: 96, right: 8, zIndex: 30, pointerEvents: 'none',
+      font: '11px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace',
+      color: '#dfe7ee', background: 'rgba(8,12,16,0.78)', border: '1px solid rgba(150,180,210,0.22)',
+      borderRadius: 6, padding: '7px 9px', minWidth: 262, textShadow: '0 1px 2px rgba(0,0,0,0.8)',
+    }}>
+      <div style={{ letterSpacing: '0.09em', textTransform: 'uppercase', opacity: 0.62, fontSize: 10 }}>
+        frame profile · {p.frames} frame{p.frames === 1 ? '' : 's'}
+      </div>
+      <div style={{ margin: '3px 0 5px' }}>
+        {p.fps} fps · {p.ms.toFixed(1)} ms · worst {p.worst.toFixed(1)}
+      </div>
+      <div style={{ marginBottom: 5, opacity: p.gpuMs === null ? 0.72 : 1 }}>
+        {p.gpuMs === null
+          ? 'gpu  unavailable — cannot say cpu- or gpu-bound'
+          : `gpu  ${p.gpuMs.toFixed(1)} ms (${((p.gpuMs / p.ms) * 100).toFixed(0)}%)`}
+      </div>
+      {p.zones.map(z => (
+        <div key={z.name} style={{
+          display: 'flex', justifyContent: 'space-between', gap: 10,
+          color: z.unaccounted ? '#ffcf8a' : undefined,
+        }}>
+          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {z.unaccounted ? 'UNACCOUNTED' : z.name}
+          </span>
+          <span style={{ fontVariantNumeric: 'tabular-nums', flex: '0 0 auto' }}>
+            {z.ms.toFixed(2)} ms · {z.pct.toFixed(0)}%
+          </span>
+        </div>
+      ))}
+      <div style={{ marginTop: 6, opacity: 0.6, fontSize: 10 }}>
+        {fresh ? 'copied to clipboard' : 'press P to copy this reading'}
       </div>
     </div>
   )
