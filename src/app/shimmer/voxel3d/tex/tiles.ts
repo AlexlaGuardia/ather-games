@@ -69,6 +69,12 @@ export const TILE_MATERIALS: number[] = [
   // default is the ore painter, so a ground appended here and forgotten there does not render as
   // plain dirt, it renders as a crystal seam in the middle of a meadow.
   MAT.FOREST_LOAM, MAT.LUSH_TURF, MAT.MARSH_MUD, MAT.DRY_GRASS, MAT.HIGHLAND_TURF, MAT.SCREE,
+  // ── The garden beds, added 2026-08-22 — one per plank wood ──────────────────────────────────
+  // ⚠ THE BED SHIPPED 08-22 WITHOUT THIS LINE AND WITHOUT A PAINTER, so `layerOf` returned
+  // FALLBACK_LAYER on all three faces and the block sampled the magenta checker. Nobody saw it
+  // because the same day's craft-surface bug meant nobody could craft one — two bugs hiding each
+  // other. Adding a MAT id is never the whole job; it needs a line here AND a case below.
+  MAT.GARDEN_BED_GOLDWOOD, MAT.GARDEN_BED_SHIMMEROAK, MAT.GARDEN_BED_DAWNWOOD,
 ]
 
 /** One spare layer past the end: an unmapped material samples magenta rather than layer 0's stone. */
@@ -581,6 +587,30 @@ function paintBanded(dst: Layer, size: number, base: [number, number, number], s
   }
 }
 
+/**
+ * Which timber each bed is framed in — the whole of Alex's "the planks used decides the colour".
+ *
+ * ⚠ READ OFF THE SPECIES' OWN LOG COLOUR, never a second hand-picked palette. A bed framed in
+ * dawnwood must be the dawnwood the keeper cut; a separate colour here would drift the first time
+ * the log's own colour was tuned, and nothing would fail.
+ */
+const BED_FRAME: Record<number, number> = {
+  [MAT.GARDEN_BED_GOLDWOOD]: MATERIAL_COLOR[WOOD.GOLDWOOD_LOG],
+  [MAT.GARDEN_BED_SHIMMEROAK]: MATERIAL_COLOR[WOOD.SHIMMEROAK_LOG],
+  [MAT.GARDEN_BED_DAWNWOOD]: MATERIAL_COLOR[WOOD.DAWNWOOD_LOG],
+}
+
+/** A bed's flank: milled boards with the dark soil line along the top edge. */
+function paintPlankFrame(dst: Layer, size: number, wood: [number, number, number], seed: number): void {
+  const strip = Math.max(2, Math.round(size / 3))
+  const soilLip = Math.max(1, size >> 3)
+  for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {
+    if (y < soilLip) { put(dst, size, x, y, [120, 112, 104], 0); continue }
+    const seam = x % strip === 0
+    put(dst, size, x, y, seam ? shade(wood, -46) : shade(wood, (h2(x, y, seed) - 0.5) * 20), 0)
+  }
+}
+
 const LOG_SET = new Set<number>([WOOD.GOLDWOOD_LOG, WOOD.SHIMMEROAK_LOG, WOOD.STARWILLOW_LOG, WOOD.DAWNWOOD_LOG])
 const LEAF_SET = new Set<number>([WOOD.GOLDWOOD_LEAVES, WOOD.SHIMMEROAK_LEAVES, WOOD.STARWILLOW_LEAVES, WOOD.DAWNWOOD_LEAVES])
 /** Saplings paint as foliage — a seedling is leaves, and `paintLeaves` already reads as foliage. */
@@ -992,6 +1022,45 @@ export function paintFor(material: number, face: number, size: number): Layer {
     case MAT.SANDSTONE: paintBanded(dst, size, rgbOf(MATERIAL_COLOR[material]), seed); break
     case MAT.WAYMARK: paintWaymark(dst, size, seed, face); break
     case MAT.CLOUD_WALL: paintCloudWall(dst, size, seed); break
+    // ── the garden beds, one per plank wood (2026-08-22) ────────────────────────────────────
+    // ★ ALEX: *"it would be cool if the garden beds were mergable and the planks used decides the
+    // color of the border."* The frame IS the border, and it is drawn here rather than tinted by
+    // the vertex colour because that colour multiplies the whole block — one hue for soil and frame
+    // both. Two tones in one block means two tones in the TEXTURE.
+    //
+    // ⚠ THE FRAME IS DRAWN AT FULL STRENGTH AND THE SOIL IS DRAWN DARK, because `atlas.ts` does
+    // `diffuseColor.rgb *= tile.rgb` — the tile is a MULTIPLIER over the material colour, not a
+    // replacement. A frame painted in the wood's own absolute hue would come out wood x soil.
+    //
+    // ⚠ AND THE FRAME MUST SURVIVE THE MERGE. When beds learn to join, the border is edge geometry
+    // emitted only on the outside of a run, and this painted frame becomes the thing it agrees
+    // with. Keep the band a whole number of texels wide or the two will not line up at 16px.
+    case MAT.GARDEN_BED_GOLDWOOD:
+    case MAT.GARDEN_BED_SHIMMEROAK:
+    case MAT.GARDEN_BED_DAWNWOOD: {
+      const wood = rgbOf(BED_FRAME[material] ?? MATERIAL_COLOR[MAT.PLANKS])
+      const band = Math.max(1, size >> 3)          // 2 texels at 16px — the frame's width
+      if (face === BOTTOM) { paintGrit(dst, size, shade(wood, -34), 10, 10, seed); break }
+      if (face === SIDE) {
+        // From the side a bed is its timber, with the soil showing as a dark line along the top.
+        paintPlankFrame(dst, size, wood, seed)
+        break
+      }
+      // TOP: turned earth inside a timber frame. The soil is drawn DARK so the material colour
+      // carries it; the frame is drawn bright so the wood reads through the multiply.
+      paintGrit(dst, size, [214, 206, 198], 16, 12, seed)
+      for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {
+        const edge = x < band || y < band || x >= size - band || y >= size - band
+        if (edge) put(dst, size, x, y, shade(wood, (h2(x, y, seed) - 0.5) * 16), 0)
+      }
+      // Two furrows across the soil — what says "turned" rather than "a brown square", and the cue
+      // a keeper reads from standing height when deciding which squares are still bare.
+      const furrow = Math.max(1, size >> 4)
+      for (const fy of [Math.floor(size * 0.38), Math.floor(size * 0.66)])
+        for (let y = fy; y < fy + furrow; y++)
+          for (let x = band + 1; x < size - band - 1; x++) put(dst, size, x, y, [150, 142, 134], 0)
+      break
+    }
     case MAT.MANA_LANTERN: paintLantern(dst, size, seed); break
     // ── the pot, in three states ────────────────────────────────────────────────────────────
     // ⚠ Appended to TILE_MATERIALS above, so it NEEDS these cases: the switch's default is the ore

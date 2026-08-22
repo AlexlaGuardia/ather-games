@@ -40,7 +40,7 @@ import { salvageItems, salvageMessage } from '../voxel/salvage'
 import { blockDef, materialForItem, emitOf, BLOCKS, type BlockSkill } from '../voxel/registry'
 import { editIndex, recordEdit, applyEdits, packEdits, unpackEdits, isStale, GENERATOR_VERSION, type ColumnEdits } from '../voxel/edits'
 import { cropForSeed, CROP_DEFS } from '../engine/farming'
-import { placeBedBlocker, plotRefusalLine, countBeds } from '../voxel/garden'
+import { placeBedBlocker, plotRefusalLine, countBeds, isGardenBed } from '../voxel/garden'
 import {
   plantBlocker, plantRefusalLine, plantInBed, harvestBed, cropAt, readyAt, clearBed,
   bedsToSave, bedsFromSave, type PlantedBeds,
@@ -7197,8 +7197,11 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
       // comment warning that two copies of "may this happen" is how a UI offers what the engine then
       // refuses. Two calls with the same arguments is that bug in miniature, waiting for one of the
       // two to gain an argument the other does not.
-      const bedWhy = mat === MAT.GARDEN_BED
-        ? placeBedBlocker(countBeds(edits.current.values(), MAT.GARDEN_BED),
+      // ⚠ THE CAP COUNTS ALL THREE WOODS TOGETHER (see `garden.ts` › GARDEN_BEDS). The allowance is
+      // a farming ration, not a per-wood one — three ceilings would let a keeper hold thirty beds by
+      // owning three woods and would make Alex's 10/15/20 mean nothing.
+      const bedWhy = isGardenBed(mat)
+        ? placeBedBlocker(countBeds(edits.current.values()),
                           skills.current!.farming.level, countItem(inv.current!, held), true)
         : 'ok'
       // Refuse to place inside your own body — the classic way to entomb yourself.

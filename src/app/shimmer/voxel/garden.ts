@@ -18,6 +18,7 @@
 // allowance on a large island. That is not a conflict to resolve — it means both progressions matter,
 // and neither can be ignored to reach the same place. Do not "fix" it by deriving one from the other.
 import { SKILL_MILESTONES } from '../engine/skills'
+import { MAT } from './depth'
 
 /**
  * The ladder, as data. Alex's three numbers, hung on the milestone levels that already exist.
@@ -100,8 +101,48 @@ export function plotRefusalLine(why: PlotRefusal, farmingLevel: number): string 
  * one on its own square would record nothing and go uncounted. Beds are craft-only; if that ever
  * changes, this function is the thing that breaks, silently and permissively.
  */
-export function countBeds(edits: Iterable<Map<number, number>>, bedMaterial: number): number {
+export function countBeds(edits: Iterable<Map<number, number>>, beds: ReadonlySet<number> = GARDEN_BEDS): number {
   let n = 0
-  for (const col of edits) for (const mat of col.values()) if (mat === bedMaterial) n++
+  for (const col of edits) for (const mat of col.values()) if (beds.has(mat)) n++
   return n
 }
+
+
+// ── THE THREE BEDS, AND THE ONE PLACE THAT KNOWS THEY ARE THREE ────────────────────────────────
+//
+// ★ ALEX, 2026-08-22: *"can we make that planks a universal input where any of the tree planks
+// could be used..? (it would be cool if the garden beds were mergable and the planks used decides
+// the color of the border)"*
+//
+// ⚠ EVERY READER IMPORTS THIS. There were eight `=== MAT.GARDEN_BED` comparisons in the build when
+// the bed was one material, and each of them is a place where a two-of-three fix reads as a whole
+// fix: sow works on goldwood, reap works on goldwood, and a shimmeroak bed is scenery. That is the
+// two-branch-function trap from the 07-17 round, and the defence is that there is no comparison to
+// forget — there is a set, derived here, and `isGardenBed` is the only question anyone asks.
+//
+// ⚠ AND THE CAP COUNTS ALL THREE TOGETHER, deliberately. The allowance is a farming-skill ration,
+// not a per-wood one; three separate ceilings would let a keeper hold 30 beds by owning three woods
+// and would make the milestone numbers Alex gave (10/15/20) mean nothing.
+export const BED_WOODS: readonly { wood: string; material: number; item: string; plank: string }[] = [
+  { wood: 'goldwood',   material: MAT.GARDEN_BED_GOLDWOOD,   item: 'garden_bed_goldwood',   plank: 'goldwood_plank' },
+  { wood: 'shimmeroak', material: MAT.GARDEN_BED_SHIMMEROAK, item: 'garden_bed_shimmeroak', plank: 'shimmeroak_plank' },
+  { wood: 'dawnwood',   material: MAT.GARDEN_BED_DAWNWOOD,   item: 'garden_bed_dawnwood',   plank: 'dawnwood_plank' },
+]
+
+/** Every material that IS a garden bed. Derived from the table above, never hand-listed. */
+export const GARDEN_BEDS: ReadonlySet<number> = new Set(BED_WOODS.map(b => b.material))
+
+/**
+ * Is this material a garden bed, of any wood? The only question the rest of the build should ask.
+ *
+ * ⚠ TAKES `undefined` ON PURPOSE — the common caller is `materialForItem(heldItem)`, which returns
+ * `number | undefined` for "you are holding something that is not a block". Forcing every call site
+ * to narrow first is how one of them ends up narrowing with `!` and asserting that a fistful of
+ * seeds is a material.
+ */
+export const isGardenBed = (material: number | undefined): boolean =>
+  material !== undefined && GARDEN_BEDS.has(material)
+
+/** Which wood a placed bed is framed in, or undefined if it is not a bed. */
+export const bedWoodOf = (material: number): string | undefined =>
+  BED_WOODS.find(b => b.material === material)?.wood

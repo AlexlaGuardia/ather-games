@@ -18,6 +18,9 @@
 
 import { MAT } from '../voxel/depth'
 import { stationOf } from '../voxel/workshop'
+// ⚠ THE SET, NOT A MATERIAL. There are three bed woods and each of these three lines is a place a
+// two-of-three fix would read as a whole fix — sow works on goldwood and a dawnwood bed is scenery.
+import { isGardenBed } from '../voxel/garden'
 
 /**
  * What the click does. `place` is the fallback precisely because it is the only one that consumes
@@ -145,14 +148,14 @@ export function rightClickIntent(
   // ★ `bedReady` and `bedPlanted` are PASSED, not derived, exactly like `hasRinstick`: growth is
   // wall-clock state living in `voxel/planting.ts`, and this file reads no state and imports no
   // engine. It answers from what it is told.
-  if (aimed === MAT.GARDEN_BED && bedReady) return 'reap'
-  if (aimed === MAT.GARDEN_BED && !bedPlanted && holdsSeed) return 'sow'
+  if (isGardenBed(aimed) && bedReady) return 'reap'
+  if (isGardenBed(aimed) && !bedPlanted && holdsSeed) return 'sow'
   // ⚠⚠ A BED WITH SOMETHING GROWING IN IT IS NOT A FACE TO BUILD ON. Without this the click falls
   // through to `place` and a keeper buries their own crop under whatever they were carrying — the
   // block goes down, the crop record survives underneath it, and that voxel then refuses every
   // future seed with "something is already growing there" while showing a stone block. Caught by
   // the oracle, not by playing: it needs a seed in the ground AND a block in hand at the same time.
-  if (aimed === MAT.GARDEN_BED && bedPlanted) return 'none'
+  if (isGardenBed(aimed) && bedPlanted) return 'none'
   if (aimed === MAT.POT && selItem === 'mana_seed' && holdsSeed) return 'plant'
   if (aimed === MAT.POT_SEEDED) return 'peek'
   if (aimed === MAT.POT_BLOOM) return 'harvest'

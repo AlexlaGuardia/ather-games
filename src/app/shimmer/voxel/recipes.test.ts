@@ -344,9 +344,13 @@ console.log('building grammar')
   check('every fixture is visible with an EMPTY satchel', hidden.length === 0,
     `a goal you cannot see is not a goal — hidden: ${hidden.join(', ')}`)
 
-  // The specific regression, by name, so this file says out loud what went wrong.
-  check('...including the garden bed, which is what went missing', shown('garden_bed'),
-    'garden_bed costs planking; nobody had made planking; the row vanished instead of greying')
+  // The specific regression, by name, so this file says out loud what went wrong. All three woods,
+  // because the bed became three recipes the same afternoon and "the goldwood one is visible" is
+  // exactly the two-of-three green this day keeps producing.
+  const beds = ['garden_bed_goldwood', 'garden_bed_shimmeroak', 'garden_bed_dawnwood']
+  const missingBeds = beds.filter(id => !shown(id))
+  check('...including every garden bed, which is what went missing', missingBeds.length === 0,
+    `a bed cost planks nobody had made, so the row vanished instead of greying — missing: ${missingBeds.join(', ')}`)
 
   // ⚠ AND THE OTHER DIRECTION, or the assert above is satisfied by showing EVERYTHING — which is
   // the wall of 60-odd species rows the filter was written to prevent. A material naming a tree

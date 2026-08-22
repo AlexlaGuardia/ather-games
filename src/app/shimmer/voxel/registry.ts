@@ -241,7 +241,12 @@ export const BLOCKS: BlockDef[] = [
   // bed costs nothing and the cap in `garden.ts` counts the same object wherever it ends up.
   // ⚠ `fastSkill: 'farming'` and NOT `skill: 'farming'` — gating it behind the skill would strand a
   // fresh keeper who crafted one, which is the same trap `recipes.test.ts` guards for soil.
-  { noSlab: true, material: MAT.GARDEN_BED, name: 'Garden Bed', hardness: 0.4, skill: null, minTier: 0, drops: [{ itemId: 'garden_bed', count: 1 }], fastSkill: 'farming', placeable: true },
+  // ★ ONE ROW PER PLANK WOOD (2026-08-22) — see `garden.ts` › BED_WOODS for why the wood is a
+  // material rather than a property. Each drops ITSELF, so a bed you pull up comes back as the wood
+  // you framed it in and the cap is honest about what you are holding.
+  { noSlab: true, material: MAT.GARDEN_BED_GOLDWOOD, name: 'Goldwood Garden Bed', hardness: 0.4, skill: null, minTier: 0, drops: [{ itemId: 'garden_bed_goldwood', count: 1 }], fastSkill: 'farming', placeable: true },
+  { noSlab: true, material: MAT.GARDEN_BED_SHIMMEROAK, name: 'Shimmeroak Garden Bed', hardness: 0.4, skill: null, minTier: 0, drops: [{ itemId: 'garden_bed_shimmeroak', count: 1 }], fastSkill: 'farming', placeable: true },
+  { noSlab: true, material: MAT.GARDEN_BED_DAWNWOOD, name: 'Dawnwood Garden Bed', hardness: 0.4, skill: null, minTier: 0, drops: [{ itemId: 'garden_bed_dawnwood', count: 1 }], fastSkill: 'farming', placeable: true },
   // ── ★ CAST MATTER CANNOT BE QUARRIED (2026-08-14) ────────────────────────────────────────────
   // `hardness: Infinity` ⇒ `breakSeconds` returns Infinity ⇒ `canBreak` is false. That single value
   // is the whole anti-exploit: without it a keeper casts a 16-mana Stonewall, mines five rubble, and

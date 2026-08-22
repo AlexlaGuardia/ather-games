@@ -448,7 +448,26 @@ export const MAT = {
   // Crafted and placed, never generated, and that last part is load-bearing twice over: it is what
   // lets `garden.ts` count beds off the edit log instead of a stored tally, and it is what keeps
   // canon's extent rule intact — a bed decides what existing ground DOES, it never adds ground.
-  GARDEN_BED: 71,
+  // ★ ONE PER PLANK WOOD (2026-08-22, Alex): *"can we make that planks a universal input where any
+  // of the tree planks could be used... it would be cool if the garden beds were mergable and the
+  // planks used decides the color of the border."*
+  //
+  // ⚠ THREE, NOT FOUR — starwillow is tier-3 forestry and yields BRANCHES, not planks ("the branch
+  // is the structural piece here"). A fourth id here would be a bed nobody can ever craft, which is
+  // the shape of bug this whole day has been about.
+  //
+  // ★ WHY THREE MATERIALS RATHER THAN ONE BED THAT REMEMBERS ITS WOOD: the wood is VISIBLE in the
+  // result, so it is a choice the keeper makes, not a material detail. A material per wood means the
+  // colour, the future merge and the drop all fall out of machinery that already exists — the
+  // mesher, the atlas and `materialForItem` — instead of needing a parallel per-block species
+  // record that every one of them would have to learn to read.
+  //
+  // ⚠ GOLDWOOD KEEPS 71, the id the generic bed already had. Nothing has ever been placed (the bed
+  // was uncraftable until the craft surface was fixed the same day) so no save needs migrating, but
+  // reusing the id costs nothing and keeps the edit-log version where it is.
+  GARDEN_BED_GOLDWOOD: 71,
+  GARDEN_BED_SHIMMEROAK: 72,
+  GARDEN_BED_DAWNWOOD: 73,
 } as const
 
 /**

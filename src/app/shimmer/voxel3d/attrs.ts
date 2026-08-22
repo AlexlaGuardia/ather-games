@@ -151,7 +151,22 @@ export const MATERIAL_COLOR: Record<number, number> = {
   // been broken open, so it should look like the underside of the turf, not like turf. Darker than
   // the surrounding ground on every one of the eight grounds, which is what makes a row of them read
   // as a garden from across the plot instead of as patches of slightly-off grass.
-  [MAT.GARDEN_BED]: 0x4a3527,
+// ⚠ THREE MATERIALS, ONE SOIL, THREE FRAMES (2026-08-22, Alex: *"the planks used decides the color
+// of the border"*). The vertex colour MULTIPLIES the tile (`atlas.ts`: `diffuseColor.rgb *= tile.rgb`),
+// so this single value tints the whole block — the frame cannot be a second free hue here, it is the
+// painter's job. What this does is set each bed's overall cast: the turned earth pulled toward the
+// wood it is framed in, so three beds side by side read as three woods and not as three dirt patches.
+//
+// Turned earth read against SUBSOIL's flank brown rather than topsoil's green: a bed is soil broken
+// open, so it looks like the underside of the turf. Darker than the surrounding ground on all eight
+// grounds, which is what makes a row of them read as a garden from across the plot.
+  [MAT.GARDEN_BED_GOLDWOOD]: 0x4a3527,
+  // Shimmeroak's timber is the cooler, greyer wood (log 0x8a7f6a against goldwood's warm 0xa9803f),
+  // so its bed cools the same amount — the difference has to survive being multiplied into soil.
+  [MAT.GARDEN_BED_SHIMMEROAK]: 0x413628,
+  // Dawnwood is the red timber (log 0x9a5f4a). The reddest of the three beds, and the one that has
+  // to be told apart from goldwood's warm brown rather than from shimmeroak's grey.
+  [MAT.GARDEN_BED_DAWNWOOD]: 0x54321f,
   // ── ★ THE FOUR ELEMENT HERBS (2026-08-18) — canon's own descriptions, at 16px ────────────────
   // Each colour is read off the herb's canon text rather than off its element's palette, because
   // the ruling that placed them says the same thing about their ground: read the thing, not the

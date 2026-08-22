@@ -121,15 +121,15 @@ const ok = (c: boolean, m: string) => { if (c) pass++; else fails.push(m) }
 
 // ── ★★ THE GARDEN BED — sow, reap, and the stacking trap ───────────────────────────────────────
 {
-  const BED = MAT.GARDEN_BED
+  const BED = MAT.GARDEN_BED_GOLDWOOD
   // A bed you are standing over while carrying more beds must SOW, never stack a second onto it.
   // This is the trap the bench and the cauldron are both ordered above `place` to avoid, and a bed
   // walks into it harder than either: it is the block a keeper carries most of while standing at one.
   ok(rightClickIntent(BED, 'seed_shimmerwheat', true, false, false, false) === 'sow',
     '★★ an empty bed + a seed sows')
-  ok(rightClickIntent(BED, 'garden_bed', false, false, false, false) === 'place',
+  ok(rightClickIntent(BED, 'garden_bed_goldwood', false, false, false, false) === 'place',
     'a bed + another bed, nothing growing, no seed → places (there is nothing else to mean)')
-  ok(rightClickIntent(BED, 'garden_bed', false, false, true, false) === 'none',
+  ok(rightClickIntent(BED, 'garden_bed_goldwood', false, false, true, false) === 'none',
     '★★★ a PLANTED bed + a bed in hand does NOT place — the crop is not a face to build on')
 
   ok(rightClickIntent(BED, null, false, false, true, true) === 'reap', '★ a ready bed reaps')

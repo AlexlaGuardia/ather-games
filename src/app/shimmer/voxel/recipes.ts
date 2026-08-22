@@ -342,9 +342,26 @@ export const RECIPES: RecipeDef[] = [
   // price. Two gates on one feature means the cheap one is decoration and the expensive one is a
   // second, invisible cap — so this stays a formality and the milestone ladder does the work.
   // ⚠ Cost is Jin's to tune (canon's boundary names it); the CAP is the designed constraint.
-  { id: 'garden_bed', name: 'Garden Bed', station: 'crafting_table', mana: 0,
-    input: [{ itemId: 'block_topsoil', count: 4 }, { itemId: 'planking', count: 2 }],
-    output: { itemId: 'garden_bed', count: 1 } },
+  // ★ THREE ROWS, ONE PER PLANK WOOD (2026-08-22, Alex) — *"can we make that planks a universal
+  // input where any of the tree planks could be used"*. The wood SHOWS in the finished bed, so it
+  // is a choice rather than a substitution: three named rows say "pick your timber" where a single
+  // any-plank row would silently spend whichever wood the code happened to reach for first.
+  //
+  // ⚠ THE COST IS 4 PLANKS, NOT 2 PLANKING. `planking` cost two planks, so this is the same timber
+  // it always was, one step shorter — and it is what lets shimmeroak and dawnwood planks have a use
+  // at all, since `planking` only ever accepted goldwood.
+  //
+  // ⚠ NO STARWILLOW ROW. Starwillow yields branches, not planks; a fourth row here would be a bed
+  // that can never be crafted.
+  { id: 'garden_bed_goldwood', name: 'Goldwood Garden Bed', station: 'crafting_table', mana: 0,
+    input: [{ itemId: 'block_topsoil', count: 4 }, { itemId: 'goldwood_plank', count: 4 }],
+    output: { itemId: 'garden_bed_goldwood', count: 1 } },
+  { id: 'garden_bed_shimmeroak', name: 'Shimmeroak Garden Bed', station: 'crafting_table', mana: 0,
+    input: [{ itemId: 'block_topsoil', count: 4 }, { itemId: 'shimmeroak_plank', count: 4 }],
+    output: { itemId: 'garden_bed_shimmeroak', count: 1 } },
+  { id: 'garden_bed_dawnwood', name: 'Dawnwood Garden Bed', station: 'crafting_table', mana: 0,
+    input: [{ itemId: 'block_topsoil', count: 4 }, { itemId: 'dawnwood_plank', count: 4 }],
+    output: { itemId: 'garden_bed_dawnwood', count: 1 } },
 
   // ── STORING ─────────────────────────────────────────────────────────────────────────────────
   // By HAND and cheap on purpose. A chest is what makes the 24-slot bag survivable, so gating it
