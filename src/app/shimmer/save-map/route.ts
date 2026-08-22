@@ -52,7 +52,11 @@ const ENCOUNTERS_FILE = join(WORLD_DIR, '../engine/encounters.ts')
 const EXCHANGE_FILE = join(WORLD_DIR, '../engine/exchange.ts')
 const ALCHEMY_FILE = join(WORLD_DIR, '../engine/alchemy.ts')
 const QUESTS_FILE = join(WORLD_DIR, '../engine/quests.ts')
-const FARMING_FILE = join(WORLD_DIR, '../engine/farming.ts')
+// ★ CROP_DEFS lives in the voxel core now (`voxel/crops.ts`) — the roster is world model, the
+// planting/harvest transactions stay in engine/farming.ts. The editor follows the table, not the
+// module that re-exports it: a regex aimed at farming.ts would match the re-export line and never
+// the block. `save-map/targets.test.ts` pins this.
+const CROPS_FILE = join(WORLD_DIR, 'crops.ts')
 const EVOLUTION_FILE = join(WORLD_DIR, '../spirits/evolution-config.ts')
 const RESOURCES_FILE = join(WORLD_DIR, 'resources.ts')
 const TOOLS_FILE = join(WORLD_DIR, '../engine/tools.ts')
@@ -1289,14 +1293,14 @@ export async function POST(req: NextRequest) {
 
       const newBlock = `export const CROP_DEFS: Record<string, CropDef> = {\n${blocks.join('\n').trimEnd()}\n}`
 
-      let content = await readFile(FARMING_FILE, 'utf-8')
+      let content = await readFile(CROPS_FILE, 'utf-8')
       const defsPattern = /export const CROP_DEFS: Record<string, CropDef> = \{[\s\S]*?\n\}/
       if (defsPattern.test(content)) {
         content = content.replace(defsPattern, newBlock)
-        await writeFile(FARMING_FILE, content, 'utf-8')
+        await writeFile(CROPS_FILE, content, 'utf-8')
         saved.push('farming')
       } else {
-        return NextResponse.json({ error: 'Could not find CROP_DEFS in farming.ts' }, { status: 500 })
+        return NextResponse.json({ error: 'Could not find CROP_DEFS in voxel/crops.ts' }, { status: 500 })
       }
     }
 

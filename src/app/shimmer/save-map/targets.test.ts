@@ -41,7 +41,7 @@ const TARGETS: { file: string; re: RegExp; label: string; required?: boolean }[]
   { file: 'voxel/clock.ts', re: /const NIGHT_START\s*=.+/, label: 'NIGHT_START', required: false },
   { file: 'voxel/clock.ts', re: /const MIDNIGHT\s*=.+/, label: 'MIDNIGHT', required: false },
   { file: 'engine/day-cycle.ts', re: /export const RESPAWN_TRIGGERS = \{[\s\S]*?\} as const/, label: 'RESPAWN_TRIGGERS' },
-  { file: 'engine/farming.ts', re: /export const CROP_DEFS: Record<string, CropDef> = \{[\s\S]*?\n\}/, label: 'CROP_DEFS' },
+  { file: 'voxel/crops.ts', re: /export const CROP_DEFS: Record<string, CropDef> = \{[\s\S]*?\n\}/, label: 'CROP_DEFS' },
 ]
 
 for (const t of TARGETS) {

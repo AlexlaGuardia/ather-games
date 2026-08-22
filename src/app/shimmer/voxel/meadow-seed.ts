@@ -20,7 +20,7 @@
 // Never a Mana Seed — that is a spirit. Never one of the four element herbs** — those have their own
 // ruled ground (basin · highland · woodland · shore) and handing them to anyone standing on grass
 // would collapse the one thing that makes a herb *a reason to travel*.
-import { CROP_DEFS, ELEMENT_HERBS } from '../engine/farming'
+import { CROP_DEFS, ELEMENT_HERBS } from './crops'
 
 /**
  * The crops a meadow will offer, DERIVED — never hand-listed.
