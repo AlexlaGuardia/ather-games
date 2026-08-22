@@ -336,6 +336,16 @@ export const RECIPES: RecipeDef[] = [
     input: [{ itemId: 'block_subsoil', count: 8 }, { itemId: 'cut_stone', count: 4 }],
     output: { itemId: 'cauldron', count: 1 } },
 
+  // ★ DELIBERATELY THE CHEAPEST STATION ON THE TABLE — soil you are standing on plus two planks.
+  // The cauldron costs 8 subsoil + 4 cut stone because brewing is a verb arriving; a garden bed is
+  // the FIRST thing a keeper builds, and the gate on it is the farming cap in `garden.ts`, not the
+  // price. Two gates on one feature means the cheap one is decoration and the expensive one is a
+  // second, invisible cap — so this stays a formality and the milestone ladder does the work.
+  // ⚠ Cost is Jin's to tune (canon's boundary names it); the CAP is the designed constraint.
+  { id: 'garden_bed', name: 'Garden Bed', station: 'crafting_table', mana: 0,
+    input: [{ itemId: 'block_topsoil', count: 4 }, { itemId: 'planking', count: 2 }],
+    output: { itemId: 'garden_bed', count: 1 } },
+
   // ── STORING ─────────────────────────────────────────────────────────────────────────────────
   // By HAND and cheap on purpose. A chest is what makes the 24-slot bag survivable, so gating it
   // behind the bench would mean the first hours of the game are spent throwing things away — the

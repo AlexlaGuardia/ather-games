@@ -146,6 +146,12 @@ export const MATERIAL_COLOR: Record<number, number> = {
   // the one colour the substance law forbids (`design-briefs/shimmer-alchemy-vessels.md`), so the
   // brown is load-bearing — it is what tells a keeper this is Ather craft and not Mint metal.
   [MAT.CAULDRON]: 0x8a5236,
+  // ── ★ THE GARDEN BED (2026-08-22) — turned earth, darker and wetter than the ground it sits on ──
+  // Read against SUBSOIL's flank brown rather than against topsoil's green: a bed is soil that has
+  // been broken open, so it should look like the underside of the turf, not like turf. Darker than
+  // the surrounding ground on every one of the eight grounds, which is what makes a row of them read
+  // as a garden from across the plot instead of as patches of slightly-off grass.
+  [MAT.GARDEN_BED]: 0x4a3527,
   // ── ★ THE FOUR ELEMENT HERBS (2026-08-18) — canon's own descriptions, at 16px ────────────────
   // Each colour is read off the herb's canon text rather than off its element's palette, because
   // the ruling that placed them says the same thing about their ground: read the thing, not the

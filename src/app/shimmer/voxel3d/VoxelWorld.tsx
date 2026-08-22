@@ -39,6 +39,7 @@ import { orphanedLeaves, dueLeaves, withoutLeaves, enqueueLeaves, type PendingLe
 import { salvageItems, salvageMessage } from '../voxel/salvage'
 import { blockDef, materialForItem, emitOf, BLOCKS, type BlockSkill } from '../voxel/registry'
 import { editIndex, recordEdit, applyEdits, packEdits, unpackEdits, isStale, GENERATOR_VERSION, type ColumnEdits } from '../voxel/edits'
+import { placeBedBlocker, plotRefusalLine, countBeds } from '../voxel/garden'
 import { generatePlotColumn, plotGeneratedVoxel } from '../voxel/plot-column'
 import { plotThreshold, hasFallenOut, chestCap, plotStandY, plotCaveStand, plotForTier, plotHeight, PLOT_TIERS, type PlotConfig } from '../voxel/plot'
 /**
@@ -7134,6 +7135,15 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
       // Placing — and ONLY placing — needs something in your hand, which `place` already asserts.
       const held = selItem!
       const mat = materialForItem(held)
+      // ★ THE BED CAP IS ASKED ONCE, HERE, and the branch below reads the answer. My first cut asked
+      // `placeBedBlocker` twice — once to decide and once to phrase the message — three lines under a
+      // comment warning that two copies of "may this happen" is how a UI offers what the engine then
+      // refuses. Two calls with the same arguments is that bug in miniature, waiting for one of the
+      // two to gain an argument the other does not.
+      const bedWhy = mat === MAT.GARDEN_BED
+        ? placeBedBlocker(countBeds(edits.current.values(), MAT.GARDEN_BED),
+                          skills.current!.farming.level, countItem(inv.current!, held), true)
+        : 'ok'
       // Refuse to place inside your own body — the classic way to entomb yourself.
       const inPlayer = Math.floor(p.x) === hit.px && Math.floor(p.z) === hit.pz
         && (Math.floor(p.y) === hit.py || Math.floor(p.y - 1.62) === hit.py)
@@ -7150,6 +7160,20 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
         removeItems(inv.current!, held, 1)
         setVoxel(hit.x, hit.y, hit.z, baseOf(aimed))
         onInvChange()
+        mouse.current.right = false
+      } else if (bedWhy !== 'ok') {
+        // ── ★★ THE BED CAP (2026-08-22, Alex) — refuse, and say which of four things is wrong ──
+        // Asked THROUGH `placeBedBlocker` rather than re-deriving `placed >= allowed` here, for the
+        // reason the evolution pass paid for: two copies of "may this happen" is exactly how a UI
+        // ends up offering something the engine then refuses. `groundOk` is passed `true` because
+        // the branch below owns that question (AIR target, not inside your body) — answering it in
+        // two places would let the two disagree about what ground is.
+        //
+        // ★ THE COUNT IS TAKEN AT THE MOMENT OF THE ACT, from the edit log, never from a tally —
+        // see `garden.ts`. Walking every edit on a placement click is fine: it is one click, and a
+        // cached count is the thing that goes wrong silently when a bed dies to something that
+        // forgot to decrement.
+        onSay(plotRefusalLine(bedWhy, skills.current!.farming.level))
         mouse.current.right = false
       } else if (mat !== undefined && isSaplingMat(mat)
                  && !canPlant(voxel, openToSky, hit.px, hit.py, hit.pz)) {

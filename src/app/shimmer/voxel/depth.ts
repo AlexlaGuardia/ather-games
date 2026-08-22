@@ -444,6 +444,11 @@ export const MAT = {
   LOOSE_ROCK: 68,
   DEADFALL: 69,
   MUSHROOM: 70,
+  // ── ★ THE GARDEN BED (2026-08-22, Alex) — the only ground a keeper MAKES ────────────────────
+  // Crafted and placed, never generated, and that last part is load-bearing twice over: it is what
+  // lets `garden.ts` count beds off the edit log instead of a stored tally, and it is what keeps
+  // canon's extent rule intact — a bed decides what existing ground DOES, it never adds ground.
+  GARDEN_BED: 71,
 } as const
 
 /**

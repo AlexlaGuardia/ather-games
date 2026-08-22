@@ -236,6 +236,12 @@ export const BLOCKS: BlockDef[] = [
   // full bottle, not of the pot it came out of. If brewing ever grows a clock (the workshop's job
   // model), the glow arrives WITH it and means something.
   { noSlab: true, material: MAT.CAULDRON, name: 'Cauldron', hardness: 1.0, skill: null, minTier: 0, drops: [{ itemId: 'cauldron', count: 1 }], placeable: true },
+  // ★ SOFT AND BARE-HANDED (hardness 0.4, `skill: null`) — a bed is tilled earth, not masonry, and a
+  // keeper must be able to pick one up and move it without a tool. It drops ITSELF, so relocating a
+  // bed costs nothing and the cap in `garden.ts` counts the same object wherever it ends up.
+  // ⚠ `fastSkill: 'farming'` and NOT `skill: 'farming'` — gating it behind the skill would strand a
+  // fresh keeper who crafted one, which is the same trap `recipes.test.ts` guards for soil.
+  { noSlab: true, material: MAT.GARDEN_BED, name: 'Garden Bed', hardness: 0.4, skill: null, minTier: 0, drops: [{ itemId: 'garden_bed', count: 1 }], fastSkill: 'farming', placeable: true },
   // ── ★ CAST MATTER CANNOT BE QUARRIED (2026-08-14) ────────────────────────────────────────────
   // `hardness: Infinity` ⇒ `breakSeconds` returns Infinity ⇒ `canBreak` is false. That single value
   // is the whole anti-exploit: without it a keeper casts a 16-mana Stonewall, mines five rubble, and
