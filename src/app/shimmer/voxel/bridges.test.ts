@@ -11,6 +11,7 @@ import {
 } from './bridges'
 import { STORY_NODES } from './story-path'
 import { columnHeight } from './height'
+import { materialAt, isSolid } from './depth'
 
 let pass = 0, fail = 0
 function check(label: string, ok: boolean, detail = '') {
@@ -385,6 +386,51 @@ for (const SEED of SEEDS) {
     }
     check(`s${SEED}: nothing reaches above the caller's y-gate`, worstUp <= BRIDGE_REACH,
       `wants ${worstUp}, gate allows ${BRIDGE_REACH} (${where})`)
+  }
+}
+
+// ── ★★★ THROUGH THE REAL GENERATOR, NOT AROUND IT ────────────────────────────────────────────
+// EVERY other assert in this file calls `bridgeVoxelAt` directly. The WORLD calls it through
+// `materialAt`, behind a gate — and for one deploy that gate was still `roadAt`, written when the
+// deck WAS the road. The ribbon is deliberately wider than the road, so the gate silently discarded
+// **44% of the deck and 93% of every rail** while all 371 asserts stayed green. Two code paths, one
+// of them tested; both internally consistent; disagreeing about what exists. That is the same trap
+// as a headless probe reading source while the page runs a prebuilt worker.
+//
+// ⚠ So: ask the generator, in world coordinates, the question a walker asks. Never delete this in
+// favour of the cheaper direct call — the cheaper call is exactly what could not see the bug.
+{
+  for (const SEED of SEEDS) {
+    const specs = bridgeSpecs(SEED)
+    let air = 0, railAir = 0, checked = 0
+    const seenG = new Set<string>()
+    for (let n = 0; n < STORY_NODES.length - 1; n++) {
+      const a = STORY_NODES[n], q = STORY_NODES[n + 1]
+      const dx = q.x - a.x, dz = q.z - a.z, L = Math.hypot(dx, dz)
+      for (let st = 0; st <= Math.ceil(L); st++) {
+        const bx = Math.round(a.x + (dx * st) / L), bz = Math.round(a.z + (dz * st) / L)
+        for (let o1 = -10; o1 <= 10; o1++) for (let o2 = -10; o2 <= 10; o2++) {
+          const x = bx + o1, z = bz + o2, kk = `${x},${z}`
+          if (seenG.has(kk)) continue
+          seenG.add(kk)
+          const c = bridgeAt(x, z, SEED)
+          if (!c) continue
+          const b = specs[c.i]
+          const yc = Math.ceil(deckTopAt(b, c.t)) - 1
+          const h = columnHeight(x, z, SEED)
+          checked++
+          // A bridge cell must be STANDABLE in the world: deck, or solid ground already at that
+          // height where the ribbon meets the bank. Never air — air is a step into the river.
+          const m = materialAt(x, yc, z, SEED, h)
+          if (m === 0 || !isSolid(m)) air++
+          if (c.edge && materialAt(x, yc + 1, z, SEED, h) === 0) railAir++
+        }
+      }
+    }
+    check(`s${SEED}: every bridge cell is standable in the real generator`, air === 0,
+      `${air} of ${checked} cells are AIR through materialAt`)
+    check(`s${SEED}: the rails survive the generator's gate`, railAir < checked * 0.05,
+      `${railAir} rail cells missing in the world`)
   }
 }
 

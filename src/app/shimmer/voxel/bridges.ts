@@ -163,6 +163,21 @@ const MAX_GRADE = 0.5
  * corridor and asserts nothing ever wants a cell above it, so the derivation is checked against
  * worldgen instead of trusted.
  */
+/**
+ * ★★★ HOW FAR FROM THE SPINE A BRIDGE CELL CAN SIT — the caller's cheap HORIZONTAL gate.
+ *
+ * depth.ts used to pre-filter with `roadAt`, which was correct while the footprint WAS the road.
+ * The ribbon is wider than the road on purpose (that is the whole point — the parapet must sit
+ * outside the traffic), so `roadAt` began throwing away the very cells that make it wide:
+ * **44% of the ribbon and 93% of every rail**, silently, in the shipped build.
+ *
+ * ⚠ AND THE ORACLE COULD NOT SEE IT, because it calls `bridgeVoxelAt` directly while the world calls
+ * it through `materialAt`'s gate — two paths, one tested. Same shape as the prebuilt-worker trap:
+ * both halves internally consistent, disagreeing about what exists. `bridges.test.ts` now asserts
+ * through `materialAt` for exactly this reason; do not remove that check.
+ */
+export const BRIDGE_BAND = DECK_HALF + 2
+
 export const BRIDGE_REACH = Math.max(...Object.values(KINDS).map(k => k.rise)) / 2 + 2 + RIVER_DEPTH + 1
 
 export interface BridgeSpec {

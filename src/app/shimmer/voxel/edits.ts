@@ -167,7 +167,18 @@ import { Column, SECTION } from './column'
 // row still surrenders two to rails and leaves two to walk on.
 // ⚠ Moves deck voxels on every crossing and ADDS deck where the old road∩water intersection had
 // none. Third bump of the evening; v25 was live ~20 minutes.
-export const GENERATOR_VERSION = 26
+// 26 → 27 (2026-08-22, same evening): THE GATE WAS STILL THE OLD SHAPE. v26 widened the deck into a
+// constant-width ribbon, but depth.ts's cheap pre-filter in front of it was still `roadAt` — correct
+// while the footprint WAS the road, and wrong the moment the ribbon grew wider than the road on
+// purpose. It discarded **44% of the deck and 93% of every rail** in the shipped build: v26's decks
+// went out roughly as narrow as v25's, with almost no parapet.
+// ⚠ THE 371-ASSERT ORACLE WAS GREEN THROUGHOUT, because it calls `bridgeVoxelAt` directly while the
+// world calls it through `materialAt`'s gate. Two paths, one tested, both internally consistent.
+// Gate is now `distToPath <= BRIDGE_BAND`, derived from the ribbon's own width, and the oracle
+// asserts through `materialAt` in world coordinates so the two can never silently disagree again.
+// This is a FIX to v26 rather than a new iteration, but it does move generated voxels — it adds the
+// deck and rails that v26 intended and did not emit.
+export const GENERATOR_VERSION = 27
 
 /**
  * One column's edits: packed local index → material.

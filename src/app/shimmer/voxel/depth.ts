@@ -22,9 +22,9 @@ import {
 } from './height'
 import { greySurfaceAt, DEFAULT_BIOME } from './biome'
 import { landCharacter, surfaceBlockAt } from './character'
-import { roadAt } from './story-path'
+import { roadAt, distToPath } from './story-path'
 import { holdIndexAt, holdVoxelAt, holdCourtyardAt } from './holds'
-import { bridgeAt, bridgeSpecs, bridgeVoxelAt, BRIDGE_REACH } from './bridges'
+import { bridgeAt, bridgeSpecs, bridgeVoxelAt, BRIDGE_REACH, BRIDGE_BAND } from './bridges'
 import { holdPadLevel } from './height'
 import { AIR } from './section'
 
@@ -626,7 +626,12 @@ export function materialAt(
     // never import MAT — same reason `holdVoxelAt` takes its stone and its lantern as arguments.
     // MAT.DECK and never MAT.PLANKS (2026-08-15): those two lines once emitted the crafted building
     // material and made the whole wood economy free to anyone who walked the road.
-    if (y - h <= BRIDGE_REACH && roadAt(x, z, seed)) {
+    // ⚠ THE HORIZONTAL GATE IS `BRIDGE_BAND`, NOT `roadAt`. It was `roadAt` while the deck WAS the
+    // road; the ribbon is deliberately wider than the road so the parapet sits outside the traffic,
+    // and `roadAt` therefore discarded 44% of the deck and 93% of every rail — invisibly, because
+    // the oracle calls `bridgeVoxelAt` directly and never crosses this gate. Keep both gates cheap
+    // and derived: `distToPath` costs no noise sample, and the band comes from the ribbon's width.
+    if (y - h <= BRIDGE_REACH && distToPath(x, z) <= BRIDGE_BAND) {
       const bc = bridgeAt(x, z, seed, hcfg)
       if (bc) {
         const m = bridgeVoxelAt(
