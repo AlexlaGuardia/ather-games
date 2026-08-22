@@ -155,7 +155,19 @@ import { Column, SECTION } from './column'
 // and COUNT changed everywhere (149-span went 20 piers → 5), and trestle piers are now timber where
 // they were stone. ⚠ v24 was live for roughly half an hour, so this takes its own number rather than
 // being folded back into 23 → 24 — same reasoning as 20 → 21.
-export const GENERATOR_VERSION = 25
+// 25 → 26 (2026-08-22, same evening): THE DECK BECAME A RIBBON — Alex: *"still crunched together
+// not leaving much room to walk it."* The footprint was `roadAt ∩ submerged`: the intersection of a
+// WOBBLED road with a RAGGED waterline, so the deck was whatever shape that accident produced.
+// Measured across the map: walkable width had a MEDIAN OF 2 and **152 of 546 rows were a single
+// cell**, because the rail then took the outermost cell of each side. One crossing was a one-block
+// catwalk end to end. The parapet was eating the roadway it exists to protect.
+// The deck is now a rasterised ribbon of constant width on the crossing's own axis — 7 across, rails
+// on the outer pair, **5 walkable everywhere** (median 2 → 5, one-cell rows 152 → 0). Constant width
+// also retires the raggedness that caused the walled mouths. RAIL_MIN_WIDTH 3 → 5, because a 4-cell
+// row still surrenders two to rails and leaves two to walk on.
+// ⚠ Moves deck voxels on every crossing and ADDS deck where the old road∩water intersection had
+// none. Third bump of the evening; v25 was live ~20 minutes.
+export const GENERATOR_VERSION = 26
 
 /**
  * One column's edits: packed local index → material.

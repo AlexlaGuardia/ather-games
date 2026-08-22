@@ -103,17 +103,48 @@ export function kindFor(span: number): BridgeKind {
 
 /** Bays a crossing wants, before the kind's length clamps. Four reads as designed at every scale. */
 const TARGET_BAYS = 4
+/**
+ * ★★★ HALF-WIDTH OF THE DECK RIBBON, AND THE REASON IT IS A RIBBON AT ALL (2026-08-22, Alex:
+ * *"still crunched together not leaving much room to walk it"*).
+ *
+ * The footprint used to be `roadAt ∩ submerged` — the intersection of a WOBBLED road with a RAGGED
+ * waterline. So the deck was whatever shape that accident produced: measured across the map, rows
+ * ran 1 to 5 cells wide with a **median of 2**, and **152 of 546 rows were a single cell**. Then the
+ * rail rule took the outermost cell of each side, which on a 3-cell row leaves ONE walkable block.
+ * `thistle-hold-4` had a median walkable width of 1 for its whole length. That is a tightrope with
+ * handrails, not a bridge, and it is exactly what "not much room to walk it" means.
+ *
+ * ⚠ THE PARAPET WAS EATING THE ROADWAY. A real deck is built WIDER than the path it carries so the
+ * parapet sits OUTSIDE the traffic; ours was subtracting itself from a road that was already narrow.
+ *
+ * So the deck stops being an intersection and becomes a **rasterised ribbon of constant width on the
+ * crossing's own axis**: 7 cells across, rails on the outer pair, **5 walkable everywhere**. Constant
+ * width also kills the raggedness that produced the walled mouths and the 1-cell rows in the first
+ * place — those were symptoms of the same accident.
+ */
+const DECK_HALF = 3
+/** Sub-cell step used to rasterise the ribbon. A diagonal axis stepped at 1.0 aliases and leaves
+ *  holes in the deck; 0.5 covers every cell the ribbon passes through. */
+const RASTER = 0.5
 /** Courses above the bed that widen back to full deck width — the footing. */
 const FOOTING = 2
 /** Perpendicular inset of the pier from the deck edge. A pier flush with the deck is a wall. */
 const PIER_INSET = 1
-/** ★ A row narrower than this carries NO rail, and the reason is a bug the oracle caught rather
- *  than a taste call. A rail is the outermost cell of a row, so on a 2-cell row BOTH cells are rail
- *  and the row becomes a wall a block high — across the bridge MOUTH specifically, because the
- *  waterline cuts the road diagonally and the first and last rows of a crossing are exactly the
- *  narrow ones. Every crossing on both test seeds was walled at one end or both. A rail protects a
- *  roadway; where there is no roadway left to protect there is nothing to rail. */
-const RAIL_MIN_WIDTH = 3
+/**
+ * ★★ A ROW NARROWER THAN THIS CARRIES NO RAIL. **The parapet may never be what makes a row unusable.**
+ *
+ * This started at 3, from the walled-mouth bug: a rail is the outermost cell of a row, so on a
+ * 2-cell row BOTH cells are rail and the row becomes a wall a block high — at the bridge MOUTH
+ * specifically, where the ribbon tapers into the bank. Every crossing on both seeds was walled at
+ * one end or both.
+ *
+ * ⚠ 3 was the right SHAPE and the wrong NUMBER, and the difference only showed up once the deck was
+ * wide enough for anyone to notice: a 4-cell row still surrenders two cells to rails and leaves TWO
+ * to walk on. 5 is the smallest row that can pay for its own parapet and still leave 3 abreast, and
+ * that — not the wall — is the property being defended. The end taper now drops its rails instead of
+ * pinching the walkway, which is also what a real abutment does as the deck meets the ground.
+ */
+const RAIL_MIN_WIDTH = 5
 /** The steepest the deck may climb per column. `STEP_CAPTURE` is 0.55, so 0.5 is walked with no
  *  press and a full 1.0 is a vault. This is a locomotion fact, not a taste dial. */
 const MAX_GRADE = 0.5
@@ -234,34 +265,57 @@ function survey(seed: number, cfg: HeightConfig): BridgeIndex {
       // The crossing's own frame: origin at the near bank, +u along the span.
       const ox = a.x + ux * d0, oz = a.z + uz * d0
 
-      // Scan a generous bbox and keep the road cells whose ground is under the table. `roadAt` is
-      // wobbled, so the band cannot be derived from ROAD_HALF alone — it has to be asked.
-      const pad = 6
-      const x0 = Math.floor(Math.min(ox, ox + ux * span)) - pad
-      const x1 = Math.ceil(Math.max(ox, ox + ux * span)) + pad
-      const z0 = Math.floor(Math.min(oz, oz + uz * span)) - pad
-      const z1 = Math.ceil(Math.max(oz, oz + uz * span)) + pad
+      // ★ The kind, the crown and the table have to be known BEFORE the ribbon is rasterised,
+      // because the ribbon's own "am I above the ground here" test needs the deck profile.
+      const kind = kindFor(span)
+      const k = KINDS[kind]
+      const riseFor = Math.max(0, Math.min(k.rise, Math.floor(span / 2)))
+      const tbl = Math.floor(waterSurfaceAt(Math.floor(ox + ux * (span / 2)), Math.floor(oz + uz * (span / 2)), seed, cfg))
 
+      // ★★ RASTERISE THE RIBBON, DO NOT FILTER A BBOX. Walk the crossing's own (t, s) frame at
+      // sub-cell resolution and stamp whatever world cell each sample lands in. This is what makes
+      // the width CONSTANT: every row gets the same 7 cells regardless of where the road wobbled or
+      // where the waterline happens to cut. `roadAt` no longer decides the shape — a bridge is a
+      // structure, not a terrain feature, and asking the road for its outline is what produced a
+      // deck one block wide.
       let table = -Infinity, bed = Infinity, found = 0
       const mine: { key: string; t: number; s: number }[] = []
-      for (let x = x0; x <= x1; x++) {
-        for (let z = z0; z <= z1; z++) {
-          if (!roadAt(x, z, seed)) continue
-          const tw = submerged(x, z, seed, cfg)
-          if (tw === null) continue
-          // Project onto the crossing's axis. `t` along, `s` perpendicular.
-          const px = x - ox, pz = z - oz
-          const t = px * ux + pz * uz
-          const s = -px * uz + pz * ux
-          if (t < -1 || t > span) continue          // belongs to a different run on this segment
+      const claimed = new Map<string, number>()   // world cell -> |s| that claimed it
+      for (let t = 0; t <= span; t += RASTER) {
+        for (let so = -DECK_HALF; so <= DECK_HALF; so += RASTER) {
+          const x = Math.floor(ox + ux * t - uz * so)
+          const z = Math.floor(oz + uz * t + ux * so)
           const key = `${x},${z}`
-          if (cells.has(key)) continue              // a shared cell belongs to whoever found it first
-          mine.push({ key, t, s })
-          table = Math.max(table, tw)
-          bed = Math.min(bed, columnHeight(x, z, seed, cfg))
+          if (cells.has(key)) continue          // another crossing already owns it
+          const h = columnHeight(x, z, seed, cfg)
+          // The ground test's job is to stop the ribbon burying itself in a hillside where it meets
+          // the bank, so it is scoped to the abutment: a bridge SPANS a shoal rather than opening a
+          // notch over it, and only the ends taper.
+          // ⚠ HONESTLY LABELLED: this scoping makes no measured difference on either seed. Removing
+          // it — applying the ground rule along the whole span — leaves the oracle fully green,
+          // because a cell skipped over a shoal has solid ground at deck height and is walkable
+          // anyway. It is kept because it is the right description of a bridge, NOT because it fixes
+          // anything today, and it must not be cited as load-bearing. (I first wrote it up as the fix
+          // for three deck holes; those holes were the assert's own false positive at the springing,
+          // where the bank sits flush with the deck.)
+          const deckTop = tbl + 1 + Math.min(riseFor, Math.floor(t), Math.floor(span - t)) * MAX_GRADE
+          const nearBank = t < 2 || t > span - 2
+          if (nearBank && h >= deckTop) continue
+          if (claimed.has(key)) continue
+          claimed.set(key, 1)
+          // ⚠ THE CELL'S OFFSET IS ITS OWN, NOT THE SAMPLE'S. A world cell is hit by several (t, s)
+          // samples, and recording the SAMPLE's `s` (keeping whichever landed nearest the axis)
+          // systematically pulls every cell's offset inward — which erases the edge flag and
+          // silently unrails 118 of 545 rows. Project the cell CENTRE back onto the crossing frame
+          // instead: one true answer per cell, independent of which sample happened to find it.
+          const px = x + 0.5 - ox, pz = z + 0.5 - oz
+          mine.push({ key, t: px * ux + pz * uz, s: -px * uz + pz * ux })
           found++
+          table = Math.max(table, tbl)
+          bed = Math.min(bed, h)
         }
       }
+
       if (found === 0) return
 
       // ★ THE BAND'S EDGE IS MEASURED, ONE ROW AT A TIME. Group the crossing's cells by whole `t`
@@ -276,16 +330,12 @@ function survey(seed: number, cfg: HeightConfig): BridgeIndex {
         else { if (c.s < cur.lo) cur.lo = c.s; if (c.s > cur.hi) cur.hi = c.s; cur.n++ }
       }
 
-      // ★ THE SPAN PICKS THE KIND, AND THE KIND PICKS EVERYTHING ELSE.
-      const kind = kindFor(span)
-      const k = KINDS[kind]
-
       // ★★ RISE IS CLAMPED BY THE RAMPS, NOT BY A GLOBAL CEILING. The deck climbs at MAX_GRADE and
       // no faster (locomotion, not taste), so a crown of `rise` half-steps needs `rise` columns of
       // ramp at EACH end. A span too short for two ramps cannot reach its kind's crown, and it gets
       // the crown it can actually fit rather than a steeper climb — the one thing that would turn
-      // the deck back into a row of vaults.
-      const rise = Math.max(0, Math.min(k.rise, Math.floor(span / 2)))
+      // the deck back into a row of vaults. (Computed as `riseFor` above, where the ribbon needs it.)
+      const rise = riseFor
 
       // ★★ BAY LENGTH IS DERIVED; BAY COUNT IS WHAT STAYS ROUGHLY CONSTANT. The rule this replaces
       // put a pier every 7 blocks at every scale, which is why a 26-block crossing wore three of
@@ -316,8 +366,14 @@ function survey(seed: number, cfg: HeightConfig): BridgeIndex {
         const row = rows.get(Math.round(c.t))!
         cells.set(c.key, {
           i, t: c.t, s: c.s,
+          // ★ The rail is the row's OUTER PAIR — and with a constant-width ribbon that is finally
+          // the right test. It was wrong before only because the ragged `road ∩ waterline` footprint
+          // made "outermost" mean "whatever the accident left", which on a 3-cell row is the entire
+          // roadway. A fixed |s| threshold does NOT work here: the raster floors each sample to a
+          // cell, so an outer cell's CENTRE can project back to less than the cutoff and the rail
+          // silently vanishes for that row (83 of 550 when tried that way).
           edge: row.n >= RAIL_MIN_WIDTH && (c.s === row.lo || c.s === row.hi),
-          half: Math.max(Math.abs(row.lo), Math.abs(row.hi)),
+          half: DECK_HALF,
         })
       }
     }

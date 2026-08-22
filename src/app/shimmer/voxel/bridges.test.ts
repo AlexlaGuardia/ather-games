@@ -217,13 +217,107 @@ for (const SEED of SEEDS) {
         `covers ${lo}..${hi} of 0..${b.span}`)
     }
 
+    // ★★★ CAN YOU ACTUALLY WALK IT? THE ASSERT THAT SHOULD HAVE COME FIRST.
+    // Every check in this file described how a deck LOOKS — railed, right height, on the grid, over
+    // a pier, continuous. None asked how much of it you can stand on. Measured before this landed:
+    // walkable width had a MEDIAN OF 2 and **152 of 546 rows were a single cell**, because the
+    // footprint was `road ∩ waterline` and the rail then ate the outermost cell of whatever that
+    // accident produced. One crossing was a one-block catwalk end to end. It passed 329 asserts.
+    // ⚠ A guard that describes appearance will never catch unusability. Assert the AFFORDANCE.
+    const walk = new Map<number, number[]>()
+    for (const [rk, r] of rows) {
+      const [i, t] = rk.split(':').map(Number)
+      if (!walk.has(i)) walk.set(i, [])
+      walk.get(i)![t] = r.n - r.edges
+    }
+    for (const [i, widths] of walk) {
+      const b = specs[i]
+      let tooNarrow = 0
+      for (let t = 2; t <= b.span - 2; t++) {
+        const w = widths[t]
+        if (w !== undefined && w < 3) tooNarrow++
+      }
+      check(`s${SEED}/${b.id}: the deck is walkable along its length`, tooNarrow === 0,
+        `${tooNarrow} interior rows under 3 cells wide`)
+      const present = widths.filter(w => w !== undefined).sort((a, c) => a - c)
+      const median = present[Math.floor(present.length / 2)]
+      check(`s${SEED}/${b.id}: median walkable width is a road, not a catwalk`, median >= 4,
+        `median ${median}`)
+    }
+
+    // ★★ TWO ASSERTS IN OPPOSITE DIRECTIONS, STATED AS THE AFFORDANCE RATHER THAN AS A THRESHOLD.
+    // A row wide enough to pay for a parapet must have one (or you walk off the side); a row that
+    // cannot pay must not (or the parapet is what makes it impassable). Both are the SAME rule —
+    // **the rail may never be the thing that makes a row unusable** — and writing them against
+    // `MIN_WALK` instead of copying `RAIL_MIN_WIDTH` is deliberate: a test that mirrors the source's
+    // constant agrees with it while both go wrong, which is the failure this file keeps meeting.
+    // Linked by arithmetic instead: a row can afford rails exactly when it has MIN_WALK + 2 cells,
+    // so dropping the source threshold to 4 fails HERE rather than quietly pinching the walkway.
+    const MIN_WALK = 3
+    // ★★★ NO HOLE IN THE DECK — THE OTHER AXIS OF CONTINUITY, AND I ONLY HAD ONE.
+    // The along-span assert above checks that every ROW exists. It says nothing about whether a row
+    // is SOLID. Coarsening the ribbon raster from 0.5 to 1.0 drops 478 of 3822 deck cells — 12.5% of
+    // the bridge — as scattered single-cell holes inside otherwise present, otherwise wide rows, and
+    // the whole oracle stayed green: rows existed, the median width held, the rails were in place.
+    // A hole in a deck is a fall, and it was invisible to every check I had.
+    // ⚠ The general shape, third time today: I asserted a property along ONE axis and assumed it
+    // covered the surface. Test the void, not the material — an enclosed empty cell is the defect.
+    {
+      const own = new Map<number, Set<string>>()
+      const seenC = new Set<string>()
+      for (let n = 0; n < STORY_NODES.length - 1; n++) {
+        const a = STORY_NODES[n], q = STORY_NODES[n + 1]
+        const dx = q.x - a.x, dz = q.z - a.z, L = Math.hypot(dx, dz)
+        for (let st = 0; st <= Math.ceil(L); st++) {
+          const bx = Math.round(a.x + (dx * st) / L), bz = Math.round(a.z + (dz * st) / L)
+          for (let o1 = -10; o1 <= 10; o1++) for (let o2 = -10; o2 <= 10; o2++) {
+            const x = bx + o1, z = bz + o2, kk = `${x},${z}`
+            if (seenC.has(kk)) continue
+            seenC.add(kk)
+            const c = bridgeAt(x, z, SEED)
+            if (!c) continue
+            if (!own.has(c.i)) own.set(c.i, new Set())
+            own.get(c.i)!.add(kk)
+          }
+        }
+      }
+      for (const [i, set] of own) {
+        let holes = 0
+        const b = specs[i]
+        const counted = new Set<string>()
+        for (const kk of set) {
+          const [x, z] = kk.split(',').map(Number)
+          // any empty cell hemmed in on three or more sides by this same deck is a candidate
+          for (const [dx2, dz2] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+            const nx = x + dx2, nz = z + dz2, nk = `${nx},${nz}`
+            if (set.has(nk) || counted.has(nk)) continue
+            let touch = 0, top = -Infinity
+            for (const [ex, ez] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+              const c2 = bridgeAt(nx + ex, nz + ez, SEED)
+              if (c2 && c2.i === i) { touch++; top = Math.max(top, deckTopAt(b, c2.t)) }
+            }
+            if (touch < 3) continue
+            // ⚠ SET MEMBERSHIP IS NOT THE AFFORDANCE. A gap in the deck CELLS is only a hole if you
+            // would fall through it. At the springing the bank sits flush with the deck, so a cell
+            // the ribbon skipped there is solid ground at walking height — the first version of this
+            // assert flagged two of those as defects and would have been "fixed" by damaging the
+            // abutment. Ask how far the drop is, not whether the cell is in the set.
+            counted.add(nk)
+            if (columnHeight(nx, nz, SEED) < top - 0.5) holes++
+          }
+        }
+        check(`s${SEED}/${specs[i].id}: the deck surface has no hole in it`, holes === 0,
+          `${holes} enclosed empty cells`)
+      }
+    }
+
     let railless = 0, walled = 0
     for (const [, r] of rows) {
-      if (r.n >= 3 && r.edges < 2) railless++
-      if (r.n < 3 && r.edges > 0) walled++
+      if (r.edges > 0 && r.n - r.edges < MIN_WALK) walled++
+      if (r.n >= MIN_WALK + 2 && r.edges !== 2) railless++
     }
-    check(`s${SEED}: every walkable deck row is railed on both flanks`, railless === 0, `${railless} open rows of ${rows.size}`)
-    check(`s${SEED}: no narrow row is walled shut by its own rail`, walled === 0, `${walled} walled rows`)
+    check(`s${SEED}: every row that can afford a parapet has one`, railless === 0, `${railless} unrailed of ${rows.size}`)
+    check(`s${SEED}: no parapet pinches its row below ${MIN_WALK} abreast`, walled === 0, `${walled} pinched rows`)
     check(`s${SEED}: the corridor walk actually found deck rows`, rows.size > 0, `${rows.size}`)
   }
 
