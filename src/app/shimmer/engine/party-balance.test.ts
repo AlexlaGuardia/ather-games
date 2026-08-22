@@ -282,15 +282,44 @@ function levelLadder() {
 // ═══════════════════════════════════════════════════════════════════════════════
 // 4. ARCHETYPE HEALTH — no species auto-wins or auto-loses the league
 // ═══════════════════════════════════════════════════════════════════════════════
+/**
+ * How many fights per pairing the league is measured over.
+ *
+ * ★★ 400, NOT 60, AND THE NUMBER IS AN ARGUMENT ABOUT RESOLUTION RATHER THAN A PREFERENCE.
+ * The ceiling check below fails a species above 80%. At 60 fights across 9 opponents that verdict
+ * rests on 540 samples, whose standard error at p≈0.8 is ~1.7 POINTS — so the check could not tell
+ * 79% from 82%, and its answer was decided by dice rather than by balance.
+ *
+ * That is not hypothetical: this file went red at `axolotl 80.4%`. Re-measured at 400 fights over
+ * five independent dice streams, axolotl's true rate is 79.5-80.2% — it sits ON the line, and the
+ * 0.4 was noise. The tempting fix was to nudge the ceiling to 0.81, which is the cheapest lie that
+ * makes a red count green; the honest one is to make the measurement able to resolve the claim it
+ * makes. 400 puts the standard error near 0.7 points, and costs one second of runtime — the fights
+ * were never the expensive part.
+ *
+ * ⚠ THIS DOES NOT MEAN AXOLOTL IS FINE. 79.9% against a 63.9% runner-up is a sixteen-point gap at
+ * the very edge of what this gate permits, which is a real balance question for Alex — but it is a
+ * DESIGN call, and a test quietly retuning the species to make itself green would be the same lie
+ * pointed the other way. The gate's job is to say where the line is and measure honestly against it.
+ */
+const LEAGUE_FIGHTS = 400
+
+/** Dice keyed on species IDENTITY. `a.length * 31 + d.length` collided every same-length pairing
+ *  onto one stream — fox/owl and bat/owl fought the same dice, so the "540 samples" were far less
+ *  independent than the count suggested. */
+const pairSeed = (a: string, d: string): number =>
+  0xA11CE + [...a].reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7) * 31
+           + [...d].reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7)
+
 function speciesMatrix() {
-  console.log('\n── SPECIES LEAGUE (1v1 mirror-level, 60 fights per pairing, lv25) ──')
+  console.log(`\n── SPECIES LEAGUE (1v1 mirror-level, ${LEAGUE_FIGHTS} fights per pairing, lv25) ──`)
   const leagueRate: Record<string, number> = {}
   for (const a of ALL_SPECIES) {
     let wins = 0, games = 0
     const row: string[] = []
     for (const d of ALL_SPECIES) {
       if (a === d) { row.push('  — '); continue }
-      const b = batch(() => [mk(a, 25)], () => [mk(d, 25)], 60, 0xA11CE + a.length * 31 + d.length)
+      const b = batch(() => [mk(a, 25)], () => [mk(d, 25)], LEAGUE_FIGHTS, pairSeed(a, d))
       wins += b.winRate * b.n
       games += b.n
       row.push(String(Math.round(b.winRate * 100)).padStart(4))
@@ -302,7 +331,13 @@ function speciesMatrix() {
 
   console.log('\n  league win rate (vs the whole field):')
   const sorted = Object.entries(leagueRate).sort((x, y) => y[1] - x[1])
-  for (const [sp, r] of sorted) console.log(`    ${sp.padEnd(14)} ${pct(r)}`)
+  // ★ The MARGIN is printed, not just the rate. A species sitting a fraction of a point inside the
+  // ceiling is the interesting case and a bare pass says nothing about it — which is exactly how
+  // axolotl arrived at the line without anyone deciding it should be there.
+  for (const [sp, r] of sorted) {
+    const edge = r > 0.80 - 0.02 ? '  ← at the ceiling' : r < 0.20 + 0.02 ? '  ← at the floor' : ''
+    console.log(`    ${sp.padEnd(14)} ${pct(r)}${edge}`)
+  }
 
   for (const [sp, r] of sorted) {
     check(`species-ceiling:${sp}`, r <= 0.80, `${sp} beats the field ${pct(r)} of the time — oppressive`)
