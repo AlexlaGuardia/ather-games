@@ -454,7 +454,7 @@ for (const SEED of SEEDS) {
 {
   for (const SEED of SEEDS) {
     const specs = bridgeSpecs(SEED)
-    let air = 0, railAir = 0, checked = 0
+    let air = 0, railAir = 0, railGap = 0, edges = 0, checked = 0
     const seenG = new Set<string>()
     for (let n = 0; n < STORY_NODES.length - 1; n++) {
       const a = STORY_NODES[n], q = STORY_NODES[n + 1]
@@ -475,14 +475,26 @@ for (const SEED of SEEDS) {
           // height where the ribbon meets the bank. Never air — air is a step into the river.
           const m = materialAt(x, yc, z, SEED, h)
           if (m === 0 || !isSolid(m)) air++
-          if (c.edge && materialAt(x, yc + 1, z, SEED, h) === 0) railAir++
+          // ⚠ THE CONTINUOUS COURSE IS THE TOP RAIL AT yc + 2. `yc + 1` is deliberately gappy —
+          // posts only — and asserting solidity there is how a railing gets "fixed" back into the
+          // kerb it replaced. Count the rail, and count the daylight separately.
+          if (c.edge) {
+            edges++
+            if (materialAt(x, yc + 2, z, SEED, h) === 0) railAir++
+            if (materialAt(x, yc + 1, z, SEED, h) === 0) railGap++
+          }
         }
       }
     }
     check(`s${SEED}: every bridge cell is standable in the real generator`, air === 0,
       `${air} of ${checked} cells are AIR through materialAt`)
-    check(`s${SEED}: the rails survive the generator's gate`, railAir < checked * 0.05,
-      `${railAir} rail cells missing in the world`)
+    check(`s${SEED}: the top rail survives the generator's gate`, railAir < checked * 0.05,
+      `${railAir} top-rail cells missing in the world`)
+    // ★ A RAILING IS DEFINED BY ITS GAPS. Without this the "cleaner" fix silently regresses to a
+    // solid kerb the day someone makes the post course continuous, and every other assert stays
+    // green because a kerb is a perfectly well-formed parapet — just not a railing.
+    check(`s${SEED}: the railing has daylight under its top rail`, railGap > edges * 0.4,
+      `${railGap} open of ${edges} edge cells`)
   }
 }
 

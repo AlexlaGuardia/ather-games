@@ -144,6 +144,20 @@ const RASTER = 0.5
 const FOOTING = 2
 /** Perpendicular inset of the pier from the deck edge. A pier flush with the deck is a wall. */
 const PIER_INSET = 1
+/**
+ * ★★ A RAILING IS POSTS AND A TOP RAIL, NOT A KERB (2026-08-22, Alex: *"the railings at least should
+ * be added to make it cleaner"*).
+ *
+ * The parapet was a single solid course sitting directly on the deck edge. That is a KERB: from any
+ * distance it reads as the deck being one block thicker, which is why Alex asked for railings on a
+ * bridge that already had them. What makes a railing legible is the **daylight under the top rail** —
+ * the eye reads posts + a line + gaps as a handrail, and reads a continuous block as a wall.
+ *
+ * So: a continuous top rail two courses over the deck, standing on posts every `RAIL_POST_EVERY`
+ * blocks, and nothing in between. Same total material, opened up.
+ */
+const RAIL_POST_EVERY = 3
+
 /** Where a trestle's outer posts stand, as |s| from the axis. Inboard of the deck edge so the
  *  parapet overhangs them slightly, which is what stops a bent reading as a wall's top. */
 const POST_OFFSET = 2
@@ -517,10 +531,15 @@ export function bridgeVoxelAt(
   // ── the deck ──────────────────────────────────────────────────────────────────────────────
   if (y === yc) return (top - yc >= 1) ? deck : deckHalf
 
-  // ── the rail: one course up, on the outermost cells of the band, following the arch ───────
+  // ── the railing: posts and a top rail, following the arch ─────────────────────────────────
   // Edge is decided by the PERPENDICULAR offset, never by a neighbour probe. The old rule asked
   // `!roadAt(x+1,z)` and friends, which cannot tell the bridge's edge from the road's own wobble.
-  if (y === yc + 1 && cell.edge) return deck
+  // ⚠ The gap at `yc + 1` between posts is the entire point — see RAIL_POST_EVERY. Filling it back
+  // in "so the rail is solid" turns the railing into the kerb this replaced.
+  if (cell.edge) {
+    if (y === yc + 2) return deck                                              // the top rail, continuous
+    if (y === yc + 1 && Math.round(cell.t) % RAIL_POST_EVERY === 0) return deck  // its posts
+  }
 
   // ── the piers ─────────────────────────────────────────────────────────────────────────────
   const p = pierAt(spec, cell.t)

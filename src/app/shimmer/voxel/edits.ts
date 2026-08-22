@@ -189,7 +189,16 @@ import { Column, SECTION } from './column'
 // caught two cells on one flank and none on the other (`.D.DDD.`), and the post course selected by
 // per-cell along-span distance produced a single lonely post (`.#.....`). Both are now placed by
 // ROW INDEX. Moves pier voxels on every trestle and plank.
-export const GENERATOR_VERSION = 28
+// 28 → 29 (2026-08-22, night): THE PARAPET BECAME A RAILING. It was a single solid course sitting
+// on the deck edge — a KERB, which from any distance reads as the deck being one block thicker.
+// That is why Alex asked for railings on a bridge that already had them: they were there and they
+// did not look like railings. What makes one legible is the DAYLIGHT under the top rail; the eye
+// reads posts + a line + gaps as a handrail and reads a continuous block as a wall.
+// Now a continuous top rail two courses over the deck, standing on posts every 3 blocks, nothing
+// between. Same material, opened up. ⚠ The gap at yc+1 IS the feature — filling it back in "so the
+// rail is solid" restores the kerb, so the oracle asserts the daylight as well as the rail.
+// Moves parapet voxels on every crossing.
+export const GENERATOR_VERSION = 29
 
 /**
  * One column's edits: packed local index → material.
