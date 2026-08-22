@@ -39,7 +39,7 @@ const ok = (c: boolean, m: string) => { if (c) pass++; else fails.push(m) }
  * does this file, so drift is now IMPOSSIBLE rather than DETECTABLE. The stronger of the two is
  * always the one that removes the second copy.
  */
-import { WORLD_ITEMS, inWorld } from '../voxel/obtainable'
+import { WORLD_ITEMS, inWorld } from './obtainable'
 
 const rich = () => 99
 const broke = () => 0

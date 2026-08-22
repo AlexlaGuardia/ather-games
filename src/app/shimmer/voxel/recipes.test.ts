@@ -17,7 +17,7 @@ import { MAT } from './depth'
 import { isLogMat } from './trees'
 import { PIECES } from './pieces'
 import { TOOL_DEFS } from '../engine/tools'
-import { WORLD_ITEMS, isFixture, craftSurface } from './obtainable'
+import { WORLD_ITEMS, isFixture, craftSurface } from '../voxel3d/obtainable'
 
 let pass = 0, fail = 0
 function check(label: string, ok: boolean, detail = '') {

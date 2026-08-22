@@ -1,4 +1,4 @@
-// The bed-planting oracle. Run: npx tsx src/app/shimmer/voxel/planting.test.ts
+// The bed-planting oracle. Run: npx tsx src/app/shimmer/voxel3d/planting.test.ts
 import {
   bedKey, bedZoneId, plantBlocker, plantRefusalLine, plantInBed, cropAt, phaseAt, readyAt,
   harvestBed, clearBed, bedsToSave, bedsFromSave, type PlantedBeds,

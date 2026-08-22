@@ -20,7 +20,7 @@ import { MAT } from '../voxel/depth'
 import { stationOf } from '../voxel/workshop'
 // ⚠ THE SET, NOT A MATERIAL. There are three bed woods and each of these three lines is a place a
 // two-of-three fix would read as a whole fix — sow works on goldwood and a dawnwood bed is scenery.
-import { isGardenBed } from '../voxel/garden'
+import { isGardenBed } from './garden'
 
 /**
  * What the click does. `place` is the fallback precisely because it is the only one that consumes

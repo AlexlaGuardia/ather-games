@@ -1,6 +1,6 @@
-// The garden-allowance oracle. Run: npx tsx src/app/shimmer/voxel/garden.test.ts
+// The garden-allowance oracle. Run: npx tsx src/app/shimmer/voxel3d/garden.test.ts
 import { PLOT_ALLOWANCE, plotsAllowed, nextAllowance, placeBedBlocker, plotRefusalLine, countBeds, BED_WOODS, GARDEN_BEDS, isGardenBed } from './garden'
-import { MAT } from './depth'
+import { MAT } from '../voxel/depth'
 import { SKILL_MILESTONES } from '../engine/skills'
 
 let pass = 0

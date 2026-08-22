@@ -18,7 +18,7 @@
 // allowance on a large island. That is not a conflict to resolve — it means both progressions matter,
 // and neither can be ignored to reach the same place. Do not "fix" it by deriving one from the other.
 import { SKILL_MILESTONES } from '../engine/skills'
-import { MAT } from './depth'
+import { MAT } from '../voxel/depth'
 
 /**
  * The ladder, as data. Alex's three numbers, hung on the milestone levels that already exist.

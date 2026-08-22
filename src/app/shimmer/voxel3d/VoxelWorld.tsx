@@ -40,11 +40,11 @@ import { salvageItems, salvageMessage } from '../voxel/salvage'
 import { blockDef, materialForItem, emitOf, BLOCKS, type BlockSkill } from '../voxel/registry'
 import { editIndex, recordEdit, applyEdits, packEdits, unpackEdits, isStale, GENERATOR_VERSION, type ColumnEdits } from '../voxel/edits'
 import { cropForSeed, CROP_DEFS } from '../engine/farming'
-import { placeBedBlocker, plotRefusalLine, countBeds, isGardenBed } from '../voxel/garden'
+import { placeBedBlocker, plotRefusalLine, countBeds, isGardenBed } from './garden'
 import {
   plantBlocker, plantRefusalLine, plantInBed, harvestBed, cropAt, readyAt, clearBed,
   bedsToSave, bedsFromSave, type PlantedBeds,
-} from '../voxel/planting'
+} from './planting'
 import { generatePlotColumn, plotGeneratedVoxel } from '../voxel/plot-column'
 import { plotThreshold, hasFallenOut, chestCap, plotStandY, plotCaveStand, plotForTier, plotHeight, PLOT_TIERS, type PlotConfig } from '../voxel/plot'
 /**
@@ -80,7 +80,7 @@ import { inPassageVolume, insideShell, bubbleSwallows, passageApproach } from '.
 import { rinSpotAt } from '../voxel/rin-water'
 import { newCast, phaseAt, passed, answer, type RinCast, type RinPhase } from '../engine/rin-cast'
 import { rinCatch, type RinWater } from '../engine/rin-catch'
-import { WORLD_ITEMS, craftSurface } from '../voxel/obtainable'
+import { WORLD_ITEMS, craftSurface } from './obtainable'
 import { HOLDS } from '../voxel/holds'
 import {
   spawnFoe, stepFoe, strike, hostile, foeDef, pickPosture, collarFrac, answerCollar,

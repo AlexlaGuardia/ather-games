@@ -26,10 +26,10 @@
 // makes a REGRESSION impossible and a brand-new unregistered source merely unlikely. **When you add
 // a way to obtain an item, add it here** — that is the whole contract, and it is one file now
 // instead of three.
-import { BLOCKS, ALL_BLOCKS, materialForItem } from './registry'
-import { RECIPE_OUTPUTS, RECIPES, canCraft, type RecipeDef, type Station } from './recipes'
-import { TREE_NODES, saplingItem, logItem } from './tree-node'
-import { SPECIES } from './trees'
+import { BLOCKS, ALL_BLOCKS, materialForItem } from '../voxel/registry'
+import { RECIPE_OUTPUTS, RECIPES, canCraft, type RecipeDef, type Station } from '../voxel/recipes'
+import { TREE_NODES, saplingItem, logItem } from '../voxel/tree-node'
+import { SPECIES } from '../voxel/trees'
 import { RIN_TIERS } from '../engine/rin-catch'
 
 /** Everything a block hands over when it is broken. */

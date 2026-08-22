@@ -1,13 +1,13 @@
-// The honesty gate's oracle. Run: npx tsx src/app/shimmer/voxel/obtainable.test.ts
+// The honesty gate's oracle. Run: npx tsx src/app/shimmer/voxel3d/obtainable.test.ts
 //
 // ★ THE PROPERTY, IN ONE LINE: **nothing this world actually yields may be reported absent.**
 // Every assert here is a way of asking that question, because the bug it exists for shipped five
 // times in four days and was silent every time — a greyed brew row reads as content that has not
 // been built yet, not as a lie.
 import { WORLD_ITEMS, FROM_BLOCKS, FROM_RINNING, FROM_FELLING, inWorld } from './obtainable'
-import { BLOCKS, materialForItem } from './registry'
-import { RECIPE_OUTPUTS, RECIPES } from './recipes'
-import { TREE_NODES } from './tree-node'
+import { BLOCKS, materialForItem } from '../voxel/registry'
+import { RECIPE_OUTPUTS, RECIPES } from '../voxel/recipes'
+import { TREE_NODES } from '../voxel/tree-node'
 import { RIN_TIERS } from '../engine/rin-catch'
 import { POTION_DEFS, POTION_IDS } from '../engine/alchemy'
 import { TOOL_DEFS } from '../engine/tools'
