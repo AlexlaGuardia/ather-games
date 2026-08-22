@@ -54,10 +54,69 @@ const SHROOM_STEM_COLOR = 0xe0d6bd
 /** Placeholder caps. Generic build vocabulary — canon names no fungus, so neither do we. */
 const SHROOM_CAPS = [0xa8503c, 0xc08a45, 0x8f6f9e, 0xb8ab86] as const
 
-/** Instance caps — generous against radius-12 meadow country; sync stops quietly at the cap. */
+/**
+ * Instance caps.
+ *
+ * ⚠⚠⚠ ONE WORST CASE WAS PICKED FOR EIGHT POOLS AND IT IS THE WRONG ONE FOR THE HERBS.
+ * This block used to read *"generous against radius-12 meadow country"* — and **meadow carries no
+ * herbs at all.** Meadow is the correct worst case for `tuft`; it is the one ground guaranteed to
+ * produce ZERO of what the herb pool holds. The herbs' real worst case is basin + woodland + shore,
+ * and `HERB_TUNE` makes it worse ON PURPOSE: it packs rare grounds tight (basin 0.80, shore 0.52) so
+ * all four herbs stay equally findable. That compensation is right, and it is exactly what blows
+ * this pool.
+ *
+ * Measured (play lane, `generatedAt` over a real load ring at chunk -90,150 — woodland 36.6%,
+ * meadow 30.2%, basin 24.7%, shore 8.3%): herbs wanted **2,961** at radius 6, **4,986** at radius 8,
+ * **7,954** at radius 12. Against a cap of 4,000 that is **199% at radius 12** — so in herb country
+ * at any radius past the default, roughly HALF the element herbs in the ring exist, are breakable,
+ * and are never drawn.
+ *
+ * ★ AND IT IS NOT COSMETIC: the four element herbs gate all four Infusions, which canon makes the
+ * only road to an evolved form — every one of the forty ruled second forms. A player meets that as
+ * *"the Water Infusion is the hard one"*, which is the precise misreading `HERB_TUNE` exists to
+ * prevent. The compensation was being undone downstream of itself.
+ *
+ * ⚠ THE SIZES BELOW ARE THE SMALLER HALF OF THE FIX. See `noteOverflow` — a pool that stops quietly
+ * at its cap is indistinguishable from empty ground, which is why nobody found this by playing and
+ * no test asked. Every cap here is a guess about terrain; the reporting is what makes the next wrong
+ * guess visible instead of silent.
+ */
 // Scatter caps are far below grass because scatter IS rare (~1-3% of columns against grass's 13%).
 // Sized against the measured worst case — a crag at rockK 3.0 is 3% of its columns — with headroom.
-const CAP = { tuft: 24000, tall: 6000, flower: 9000, herb: 4000, rock: 5000, log: 4000, shroom: 3000, crop: 4000 } as const
+// herb 4000 -> 12000: 1.5x the measured radius-12 worst case (7,954), so the headroom survives a
+// HERB_TUNE re-tune rather than sitting exactly on today's number. tall 6000 -> 9000 and crop
+// 4000 -> 6000 for the same reason — both were measured at 96% and 54% of cap, and 96% is not
+// headroom, it is a pool that has already arrived.
+/**
+ * ★ EXPORTED SO A PROBE CANNOT MIRROR IT. The cap sweep that found the herb overrun kept its OWN
+ * copy of this table, so the moment these numbers moved its report went stale while still looking
+ * authoritative — it printed `herb cap 4000` against a live cap of 12,000 and called the pool 199%
+ * over when it was 66% under. Agreement between a copy and its original is not evidence about
+ * either; import this instead of restating it.
+ */
+export const CAP = { tuft: 24000, tall: 9000, flower: 9000, herb: 12000, rock: 5000, log: 4000, shroom: 3000, crop: 6000 } as const
+
+/**
+ * ★★★ A POOL THAT OVERFLOWS SAYS SO — ONCE, PER POOL, WITH THE NUMBER.
+ *
+ * The bug this closes is not the cap, it is the SILENCE. `sync` stopping quietly at the cap makes an
+ * overrun indistinguishable from empty ground: nothing throws, nothing looks wrong, and the only
+ * symptom is plants that are there, are breakable, and are not drawn. Nobody finds that by playing,
+ * because the missing thing is missing.
+ *
+ * ⚠ ONCE PER POOL, NOT PER SYNC. Sync runs continuously; a warn per overflow would be a console
+ * flood, and a flood is its own kind of silence. The first one carries the information.
+ */
+const overflowed = new Set<string>()
+function noteOverflow(pool: string, wanted: number, cap: number): void {
+  if (overflowed.has(pool)) return
+  overflowed.add(pool)
+  console.warn(`[flora] ${pool} pool overflowed: ${wanted} wanted, ${cap} drawn — `
+    + `${wanted - cap} plants exist and are breakable but are NOT rendered. Raise CAP.${pool}.`)
+}
+
+/** What each pool wanted at the last sync, whether or not it fit. Readable by a test or a HUD. */
+export const floraDemand: Record<string, { wanted: number; cap: number }> = {}
 
 /**
  * ── ★ THE FOUR ELEMENT HERBS, AS ONE SHAPE IN FOUR COLOURS (2026-08-18) ────────────────────────
@@ -408,6 +467,10 @@ export function createFloraRenderer(): FloraRenderer {
     group,
     sync(cols, seed, probe) {
       let nT = 0, nL = 0, nF = 0, nH = 0, nR = 0, nG = 0, nS = 0, nC = 0
+      // ⚠ WANTED IS COUNTED SEPARATELY FROM DRAWN, and that separation is the whole instrument.
+      // The `n*` counters stop at the cap by construction, so they can never report an overrun —
+      // they are the truncated number. These count what the world ASKED for.
+      let wT = 0, wL = 0, wF = 0, wH = 0, wR = 0, wG = 0, wS = 0, wC = 0
       for (const c of cols) {
         for (const s of spotsFor(c.key, c.x0, c.z0, seed, probe)) {
           // Deterministic per-spot jitter off the variant roll: offset within the cell, a turn,
@@ -435,18 +498,21 @@ export function createFloraRenderer(): FloraRenderer {
               off.set(s.x + 0.5, s.y + 1.12, s.z + 0.5)
               scl.set(1, sz, sz)          // ⚠ NOT the length axis — that stays 1.0 so runs butt up
               mtx.compose(off, quat, scl)
+              wG++
               if (nG < CAP.log) { logs.setMatrixAt(nG, mtx); logs.setColorAt(nG, tint.set(DEADFALL_COLOR)); nG++ }
             } else if (s.kind === FLORA.ROCK) {
               quat.setFromAxisAngle(Y_AXIS, s.variant * Math.PI * 2)
               off.set(s.x + 0.5 + jx * 0.5, s.y + 1.06, s.z + 0.5 + jz * 0.5)
               scl.set(sz, sz * 0.75, sz)  // squat: a stone lies ON the ground, it does not stand
               mtx.compose(off, quat, scl)
+              wR++
               if (nR < CAP.rock) { rocks.setMatrixAt(nR, mtx); rocks.setColorAt(nR, rockTint(s.ground)); nR++ }
             } else {
               quat.setFromAxisAngle(Y_AXIS, s.variant * Math.PI * 2)
               off.set(s.x + 0.5 + jx * 0.55, s.y + 0.99, s.z + 0.5 + jz * 0.55)
               scl.set(sz, sz, sz)
               mtx.compose(off, quat, scl)
+              wS++
               if (nS < CAP.shroom) {
                 shroomStems.setMatrixAt(nS, mtx); shroomCaps.setMatrixAt(nS, mtx)
                 shroomStems.setColorAt(nS, tint.set(SHROOM_STEM_COLOR))
@@ -456,12 +522,15 @@ export function createFloraRenderer(): FloraRenderer {
             }
           }
           else if (s.kind === FLORA.TUFT) {
+            wT++
             if (nT < CAP.tuft) { tufts.setMatrixAt(nT, mtx); tufts.setColorAt(nT, grassTint(s.ground)); nT++ }
           }
           else if (s.kind === FLORA.TALL) {
+            wL++
             if (nL < CAP.tall) { talls.setMatrixAt(nL, mtx); talls.setColorAt(nL, grassTint(s.ground)); nL++ }
           }
           else if (s.kind === FLORA.CROP) {
+            wC++
             if (nC < CAP.crop) {
               crops.setMatrixAt(nC, mtx)
               cropHeads.setMatrixAt(nC, mtx)
@@ -474,6 +543,7 @@ export function createFloraRenderer(): FloraRenderer {
             }
           }
           else if (s.kind === FLORA.HERB) {
+            wH++
             if (nH < CAP.herb) {
               herbs.setMatrixAt(nH, mtx)
               tips.setMatrixAt(nH, mtx)
@@ -484,17 +554,30 @@ export function createFloraRenderer(): FloraRenderer {
               nH++
             }
           }
-          else if (nF < CAP.flower) {
-            stems.setMatrixAt(nF, mtx)
-            heads.setMatrixAt(nF, mtx)
-            heads.setColorAt(nF, tint.set(HEAD_TINTS[Math.floor(s.variant * 977) % HEAD_TINTS.length]))
-            nF++
+          else {
+            wF++
+            if (nF < CAP.flower) {
+              stems.setMatrixAt(nF, mtx)
+              heads.setMatrixAt(nF, mtx)
+              heads.setColorAt(nF, tint.set(HEAD_TINTS[Math.floor(s.variant * 977) % HEAD_TINTS.length]))
+              nF++
+            }
           }
         }
       }
       tufts.count = nT; talls.count = nL; stems.count = nF; heads.count = nF
       herbs.count = nH; tips.count = nH
       crops.count = nC; cropHeads.count = nC
+      // ★ REPORT DEMAND, NOT JUST WHAT FIT. A pool at 100% of cap and a pool at 199% of cap draw
+      // exactly the same picture; only these numbers tell them apart.
+      for (const [pool, wanted, cap] of [
+        ['tuft', wT, CAP.tuft], ['tall', wL, CAP.tall], ['flower', wF, CAP.flower],
+        ['herb', wH, CAP.herb], ['crop', wC, CAP.crop],
+        ['rock', wR, CAP.rock], ['log', wG, CAP.log], ['shroom', wS, CAP.shroom],
+      ] as [string, number, number][]) {
+        floraDemand[pool] = { wanted, cap }
+        if (wanted > cap) noteOverflow(pool, wanted, cap)
+      }
       rocks.count = nR; logs.count = nG; shroomStems.count = nS; shroomCaps.count = nS
       for (const m of [rocks, logs, shroomStems, shroomCaps]) {
         m.instanceMatrix.needsUpdate = true
