@@ -24,6 +24,7 @@ import { greySurfaceAt, DEFAULT_BIOME } from './biome'
 import { landCharacter, surfaceBlockAt } from './character'
 import { roadAt } from './story-path'
 import { holdIndexAt, holdVoxelAt, holdCourtyardAt } from './holds'
+import { bridgeAt, bridgeSpecs, bridgeVoxelAt, BRIDGE_REACH } from './bridges'
 import { holdPadLevel } from './height'
 import { AIR } from './section'
 
@@ -608,20 +609,31 @@ export function materialAt(
     // lattice; plank rails stand on the deck's sides only (an end cell's along-road neighbour
     // is road, so the edge test can never wall the roadway). Gated behind the same cheap band
     // read as the water fill — sky never pays for bridges.
-    if (y - h <= RIVER_DEPTH + 4 && roadAt(x, z, seed)) {
-      const carve = riverCarve(x, z, seed, hcfg)
-      if (carve >= 1) {
-        const table = Math.floor(waterSurfaceAt(x, z, seed, hcfg))
-        if (h <= table) {
-          // ⚠ MAT.DECK, never MAT.PLANKS (2026-08-15). These two lines used to emit the crafted
-          // building material and made the whole wood economy free to anyone who walked the road
-          // — see the DECK note in the MAT table for the measurement and the PATH precedent.
-          if (y === table + 1) return MAT.DECK
-          if (y <= table && ((x % 4) + 4) % 4 === 0 && ((z % 4) + 4) % 4 === 0) return MAT.STONE
-          if (y === table + 2 &&
-              (!roadAt(x + 1, z, seed) || !roadAt(x - 1, z, seed) ||
-               !roadAt(x, z + 1, seed) || !roadAt(x, z - 1, seed))) return MAT.DECK
-        }
+    // ── ★ THE CROSSING KNOWS ITS OWN SPAN NOW (2026-08-22) — see voxel/bridges.ts ─────────────
+    // What stood here was three parity tests: a flat deck at `table + 1`, stone wherever
+    // `x % 4 === 0 && z % 4 === 0`, and a rail keyed off a neighbour `roadAt` probe. Each is a
+    // statement about a COLUMN, and a bridge is not a column, so the rule could not know a bridge
+    // was happening: the deck skimmed the water, the piers sat on a world grid unrelated to the
+    // span (bunched, or absent on the wrong parity), and a 4-block creek generated exactly like a
+    // 149-block river. `bridges.ts` surveys the spine once per seed and hands back a real object.
+    //
+    // ⚠ THE GATE IS `BRIDGE_REACH`, NOT `RIVER_DEPTH + 4`. The old 7 was correct for a flat deck
+    // and clips an arch, which wants 10 — silently, because a decapitated deck still reads as a
+    // deck from the bank. The constant is derived in bridges.ts and asserted against the real
+    // corridor there; do not inline a number here.
+    //
+    // ⚠ Materials are passed IN. depth.ts and attrs.ts are a module cycle, so `bridges.ts` must
+    // never import MAT — same reason `holdVoxelAt` takes its stone and its lantern as arguments.
+    // MAT.DECK and never MAT.PLANKS (2026-08-15): those two lines once emitted the crafted building
+    // material and made the whole wood economy free to anyone who walked the road.
+    if (y - h <= BRIDGE_REACH && roadAt(x, z, seed)) {
+      const bc = bridgeAt(x, z, seed, hcfg)
+      if (bc) {
+        const m = bridgeVoxelAt(
+          y, bc, bridgeSpecs(seed, hcfg)[bc.i],
+          MAT.DECK, MAT.DECK | HALF_BIT, MAT.STONE,
+        )
+        if (m !== 0) return m
       }
     }
     if (y <= cfg.seaLevel) return MAT.WATER

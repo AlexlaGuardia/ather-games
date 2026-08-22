@@ -126,7 +126,21 @@ import { Column, SECTION } from './column'
 // construction (the 08-16 coast-anchored keel + plane-hung span), so nothing a keeper built is
 // standing on nothing; but the wall, the threshold and the coast all moved several hundred blocks,
 // and a save written against the old island is a save written against a different place.
-export const GENERATOR_VERSION = 23
+// 23 → 24 (2026-08-22): THE STORY ROAD'S BRIDGES BECAME STRUCTURES. A crossing was three parity
+// tests inside `materialAt` — a flat deck one block over the water, stone on a world-aligned 4×4
+// lattice, a rail keyed off a neighbour probe — none of which knew the span they were spanning.
+// `voxel/bridges.ts` surveys the spine once per seed, so a crossing now arches (springing flush at
+// both banks, up to +4 at midspan, climbing in HALF_BIT courses so `STEP_CAPTURE` walks it without
+// a vault), its piers stand in measured bays on their OWN bed with a footing, and its rails follow
+// the arch on the band's measured edge.
+//
+// This moves generated voxels on every crossing on the map, in both directions: the old flat deck
+// cells at `table + 1` are AIR under the arch now (that gap IS the feature — water and a swimmer
+// pass beneath), and deck exists at altitudes the old rule never wrote. The bridges themselves did
+// not move: the footprint is deliberately the same set of columns the parity rule fired on, so no
+// crossing is added or removed. ⚠ But a road bridge is exactly where a keeper builds, and an edit
+// stored against the old deck level is a diff against a place the deck no longer is.
+export const GENERATOR_VERSION = 24
 
 /**
  * One column's edits: packed local index → material.
