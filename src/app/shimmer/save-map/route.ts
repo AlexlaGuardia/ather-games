@@ -62,8 +62,39 @@ const MOVES_FILE = join(WORLD_DIR, '../engine/moves.ts')
 const VOICE_FILE = join(WORLD_DIR, '../data/voice-profiles.ts')
 const NPCS_FILE = join(WORLD_DIR, 'npcs.ts')
 const DAY_CYCLE_FILE = join(WORLD_DIR, '../engine/day-cycle.ts')
+// ★ THE CLOCK ARITHMETIC LIVES IN THE VOXEL CORE, NOT IN day-cycle.ts. CYCLE_MS/DAWN_START/
+// DUSK_START moved there so the core can grow a sapling without depending upward (§ 6 rule 4);
+// day-cycle.ts imports them back and re-exports. The editor has to follow them, because a
+// `String.replace` whose pattern is absent returns the string UNCHANGED — it does not throw. See
+// `sub()` below for why that mattered more than the move did.
+const CLOCK_FILE = join(WORLD_DIR, 'clock.ts')
 const MANA_FILE = join(WORLD_DIR, '../engine/mana.ts')
 const WEATHER_FILE = join(WORLD_DIR, '../engine/weather.ts')
+
+/**
+ * ★★ A TEXTUAL REWRITE THAT CANNOT FAIL SILENTLY, WHICH THE PLAIN `.replace` CALLS COULD.
+ *
+ * `str.replace(re, x)` with a pattern that matches nothing returns the string unchanged and reports
+ * NOTHING. Every constant this route rewrites lives in a source file some other window is free to
+ * edit, so "the pattern is still there" is an assumption with a shelf life — and when it expires the
+ * editor saves, answers 200, and the tuning value silently never moves. That is the worst shape a
+ * failure can take here: the user watches a successful save do nothing.
+ *
+ * Measured, not supposed: at the time this was added, FOUR of this file's day-cycle rewrites were
+ * already dead no-ops. `DAY_START`, `NIGHT_START` and `MIDNIGHT` do not exist in day-cycle.ts and
+ * have not for some time (phase NAMES are derived from the light curve — see `getPhase`), and the
+ * CYCLE_MS/DAWN_START/DUSK_START trio had just moved to the core. Nothing noticed either event.
+ *
+ * `required: false` marks a target that is legitimately gone, so it is reported rather than fatal.
+ */
+function sub(
+  src: string, re: RegExp, next: string, label: string,
+  out: { applied: string[]; missed: string[] }, required = true,
+): string {
+  if (!re.test(src)) { out.missed.push(required ? label : `${label} (retired)`); return src }
+  out.applied.push(label)
+  return src.replace(re, next)
+}
 
 /** Derive TypeScript const name from zone ID: 'mycelial-path' → 'MYCELIAL_PATH' */
 function zoneConstName(id: string): string {
@@ -1849,12 +1880,16 @@ export async function POST(req: NextRequest) {
       })
 
       let content = await readFile(DAY_CYCLE_FILE, 'utf-8')
+      // ⚠ TWO FILES NOW. The clock's arithmetic (CYCLE_MS + the phase boundaries) sits in the voxel
+      // core; the sky, the pin and the respawn triggers stay host-side in day-cycle.ts. Both are
+      // written below, and every rewrite reports whether it actually matched.
+      let clock = await readFile(CLOCK_FILE, 'utf-8')
+      const dcw = { applied: [] as string[], missed: [] as string[] }
 
-      // Update CYCLE_MS
-      content = content.replace(
-        /const CYCLE_MS = .+/,
-        `const CYCLE_MS = ${dc.cycleMins} * 60 * 1000`
-      )
+      // Update CYCLE_MS — in the core. The regex starts at `const`, so the `export ` in front of it
+      // survives the replacement untouched.
+      clock = sub(clock, /const CYCLE_MS = .+/,
+        `const CYCLE_MS = ${dc.cycleMins} * 60 * 1000`, 'CYCLE_MS', dcw)
 
       // Update phase boundaries
       const phaseMap: Record<string, string> = {}
@@ -1864,17 +1899,18 @@ export async function POST(req: NextRequest) {
         const mins = frac * dc.cycleMins
         phaseMap[constName] = `const ${constName}${' '.repeat(Math.max(1, 14 - constName.length - 6))}= ${frac === 0 ? '0' : `${mins.toFixed(1).replace(/\.0$/, '')} / ${dc.cycleMins}`}${' '.repeat(10)}// ${mins.toFixed(0)}:00`
       }
-      content = content.replace(/const DAWN_START\s*=.+/, phaseMap['DAWN_START'] || 'const DAWN_START  = 0')
-      content = content.replace(/const DAY_START\s*=.+/, phaseMap['DAY_START'] || 'const DAY_START   = 3 / 30')
-      content = content.replace(/const DUSK_START\s*=.+/, phaseMap['DUSK_START'] || 'const DUSK_START  = 23 / 30')
-      content = content.replace(/const NIGHT_START\s*=.+/, phaseMap['NIGHT_START'] || 'const NIGHT_START = 26 / 30')
-
-      // Update MIDNIGHT
+      clock = sub(clock, /const DAWN_START\s*=.+/, phaseMap['DAWN_START'] || 'const DAWN_START  = 0', 'DAWN_START', dcw)
+      clock = sub(clock, /const DUSK_START\s*=.+/, phaseMap['DUSK_START'] || 'const DUSK_START  = 23 / 30', 'DUSK_START', dcw)
+      // ⚠ DAY_START / NIGHT_START / MIDNIGHT DO NOT EXIST and have not for some time: the phase
+      // NAMES are derived from the light curve itself (`getPhase`), which is the fix for two
+      // constants describing one thing and drifting apart. These three writes have been dead the
+      // whole while. Kept as non-required so the editor still reports them instead of pretending.
+      clock = sub(clock, /const DAY_START\s*=.+/, phaseMap['DAY_START'] || 'const DAY_START   = 3 / 30', 'DAY_START', dcw, false)
+      clock = sub(clock, /const NIGHT_START\s*=.+/, phaseMap['NIGHT_START'] || 'const NIGHT_START = 26 / 30', 'NIGHT_START', dcw, false)
       const midMins = dc.midnight * dc.cycleMins
-      content = content.replace(
-        /const MIDNIGHT\s*=.+/,
-        `const MIDNIGHT    = ${midMins.toFixed(1).replace(/\.0$/, '')} / ${dc.cycleMins}${' '.repeat(10)}// ${midMins.toFixed(0)}:00`
-      )
+      clock = sub(clock, /const MIDNIGHT\s*=.+/,
+        `const MIDNIGHT    = ${midMins.toFixed(1).replace(/\.0$/, '')} / ${dc.cycleMins}${' '.repeat(10)}// ${midMins.toFixed(0)}:00`,
+        'MIDNIGHT', dcw, false)
 
       // Update respawn triggers
       const triggerLines = dc.respawnTriggers.map(t => {
@@ -1884,10 +1920,9 @@ export async function POST(req: NextRequest) {
           `${t.threshold.toFixed(4)}`
         return `  ${t.id}:${' '.repeat(Math.max(1, 13 - t.id.length))}${constRef},`
       })
-      content = content.replace(
-        /export const RESPAWN_TRIGGERS = \{[\s\S]*?\} as const/,
-        `export const RESPAWN_TRIGGERS = {\n${triggerLines.join('\n')}\n} as const`
-      )
+      content = sub(content, /export const RESPAWN_TRIGGERS = \{[\s\S]*?\} as const/,
+        `export const RESPAWN_TRIGGERS = {\n${triggerLines.join('\n')}\n} as const`,
+        'RESPAWN_TRIGGERS', dcw)
 
       // Update ambient overlay colors
       for (const phase of dc.phases) {
@@ -1919,8 +1954,21 @@ export async function POST(req: NextRequest) {
         }
       }
 
+      // ★ REFUSE BEFORE WRITING IF A REQUIRED TARGET WENT MISSING. The CROP_DEFS path a thousand
+      // lines up already 500s when its block cannot be found; this one used to answer 200 and write
+      // a file it had changed nothing in. Same route, same class of edit, opposite failure mode —
+      // and the quiet one is the half that hides a move like the clock split.
+      const required = dcw.missed.filter(m => !m.endsWith('(retired)'))
+      if (required.length) {
+        return NextResponse.json({
+          error: `Could not find ${required.join(', ')} in clock.ts / day-cycle.ts — nothing was written`,
+        }, { status: 500 })
+      }
       await writeFile(DAY_CYCLE_FILE, content, 'utf-8')
+      await writeFile(CLOCK_FILE, clock, 'utf-8')
       saved.push('dayCycle')
+      // Retired targets are reported, never silently dropped.
+      if (dcw.missed.length) saved.push(`dayCycle:skipped(${dcw.missed.join(' ')})`)
     }
 
     // ── Mana System ──
