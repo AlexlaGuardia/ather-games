@@ -26,6 +26,7 @@ import { floraCharacterAt } from './character'
 import { mistAt } from './mist'
 import { MAT, LAND_DRESS } from './depth'
 import { scatterAt, scatterCharacterAt, SCATTER } from './scatter'
+import { CROP_DEFS } from './crops'
 
 export const FLORA = {
   NONE: 0,
@@ -47,6 +48,11 @@ export const FLORA = {
   ROCK: 5,
   DEADFALL: 6,
   MUSHROOM: 7,
+
+  // ★ ONE KIND, SEVEN MATERIALS — the same shape as HERB, for the same reason: the renderer needs
+  // to know "a crop stands here", and WHICH crop is a lookup on the ground. A swaying alpha card,
+  // so it joins the tuft/tall/flower/herb family, not the solid scatter one.
+  CROP: 8,
 } as const
 
 export interface FloraSpot {
@@ -210,6 +216,153 @@ export function herbAt(x: number, z: number, seed: number, ground: BiomeId): num
   return patch > tune.edge ? herb : 0
 }
 
+// ── ★★ THE SEVEN TIER-2+ CROPS AND THEIR GROUND (ruled 2026-08-22, /magii + Alex) ──────────────
+// `game/shimmer-geography.md` › *★ WHERE THE TIER 2+ CROPS GROW WILD*, and the ruling's own subtitle
+// is the mechanism: **the seed is the meadow's, the plant is the ground's.** A grass tuft yields a
+// common crop SEED — level-1 stock, unchanged by any of this — while the other seven are MET as
+// plants where they grow, exactly as the four element herbs already were. You pick a Violetbloom
+// where Violetbloom grows; you do not get its seed out of grass. That distinction had been
+// load-bearing since 08-18 and nobody had written it down, which is why the gap arrived as a false
+// either/or (*"tier 1, or all ten?"* — all ten puts Dawncap in a grass tuft).
+//
+//   Moonvine     → basin     cool to the touch even in sunlight; cold keeps where nothing moves
+//   Starbean     → river     the herb ruling excluded river because a river SCOURS — and a dense
+//                            pod is exactly what survives it. What kills a petal delivers a seed.
+//   Crystalcap   → crag      translucent, refracts light; a prism wants the mineral face
+//   Dreamroot    → woodland  a root, and the deepest ground here is old forest floor
+//   Shimmerbloom → shore     iridescence is what light does on a wet surface
+//   Dawncap      → highland  unbroken sky, and the highland takes first light
+//   Atherwheat   → meadow    it is wheat. ⚠ THE RAREST THING IN THE COMMON GROUND — you meet the
+//                            PLANT there; the tuft still yields only level-1 seed. This is the one
+//                            place the seed/plant split can be confused, so it is where it works.
+//
+// ⚠ A GREYFIELD GROWS NONE OF THEM — canon, not a dial, same as the herbs. Falls out for free from
+// the allowlist below being keyed on the biome id.
+
+/**
+ * ★★ ONE ROW PER CROP, AND EVERY TABLE BELOW IS A PROJECTION OF IT — deliberately NOT the herbs'
+ * shape. `HERB_GROUND` and `HERB_OF_GROUND` are two hand-kept tables that have to agree, which is
+ * the mirror: a copy and its source go stale together and **agree perfectly while both are wrong**,
+ * and the agreement reads as corroboration. Nothing here is written twice, so nothing here can
+ * disagree. If a crop moves ground, one line moves.
+ *
+ * ⚠ The crop id is the key into `CROP_DEFS`, so TIER IS NEVER WRITTEN HERE. Re-tier a crop in
+ * `crops.ts` and its wild rarity follows on its own — see `wildDensity`.
+ */
+const WILD_CROPS = [
+  { crop: 'moonvine',     ground: 'basin',    mat: MAT.MOONVINE },
+  { crop: 'starbean',     ground: 'river',    mat: MAT.STARBEAN },
+  { crop: 'crystalcap',   ground: 'crag',     mat: MAT.CRYSTALCAP },
+  { crop: 'dreamroot',    ground: 'woodland', mat: MAT.DREAMROOT },
+  { crop: 'shimmerbloom', ground: 'shore',    mat: MAT.SHIMMERBLOOM },
+  { crop: 'dawncap',      ground: 'highland', mat: MAT.DAWNCAP },
+  { crop: 'atherwheat',   ground: 'meadow',   mat: MAT.ATHERWHEAT },
+] as const
+
+/** The wild crop a ground grows, or 0. The one lookup — everything asks this. */
+export const CROP_OF_GROUND: Readonly<Record<string, number>> =
+  Object.fromEntries(WILD_CROPS.map(w => [w.ground, w.mat]))
+
+/** The inverse, DERIVED. Both directions exist; only one is authored. */
+export const GROUND_OF_CROP: Readonly<Record<number, string>> =
+  Object.fromEntries(WILD_CROPS.map(w => [w.mat, w.ground]))
+
+/** The crop id a wild plant material belongs to — the way back into `CROP_DEFS`. */
+export const CROP_ID_OF_MAT: Readonly<Record<number, string>> =
+  Object.fromEntries(WILD_CROPS.map(w => [w.mat, w.crop]))
+
+export const isWildCrop = (m: number): boolean => m in GROUND_OF_CROP
+
+/**
+ * ── ★★★ THE TERRAIN IS ORDERED BACKWARDS FROM THE LADDER, AND THAT IS WHY THIS IS DERIVED ──────
+ * Measured through `generatedAt` on the herbs' own sweep (seed 1337, 1600², step 4), counting cells
+ * where a crop can ACTUALLY land — on its ground, not taken by the herb that outranks it, not grey,
+ * and not under water. Verified as the true ceiling by re-running the sweep at density 1.0, which
+ * reproduces these to within one cell:
+ *
+ *   meadow 53,347 · woodland 20,283 · river 4,274 · highland 2,711 · crag 1,392 · shore 625 · basin 105
+ *
+ * **A 508× spread, and the tier-4 crop sits on the biggest ground while the tier-2 sits on the
+ * smallest.** At one flat density Atherwheat would be the commonest plant in the world and Moonvine
+ * the rarest — the ladder inverted, and read by a keeper as design. That is `HERB_TUNE`'s 187× bug
+ * wearing this feature's hat, except the herbs only needed PARITY (canon makes the four peers) and
+ * this needs an ORDERING, which terrain hands us upside down.
+ *
+ * ⚠⚠ THE FIRST DENOMINATOR WAS WRONG AND THE SWEEP CAUGHT IT. I counted "dry" cells, which silently
+ * assumed the roll happens only on cells a plant can occupy. It happens on EVERY cell and the losses
+ * come after: on the basin, 61% of rolls go to the Violetbloom that outranks the crop and another
+ * 35% drown at the waterline, so a density computed for 90 plants delivered **10**. The number was
+ * measured, was comparable to the herbs', and still meant something other than what the formula
+ * needed. **A denominator has to count what SURVIVES, not what was sampled.**
+ *
+ * ⚠⚠⚠ AND THERE WAS A SATURATION CAP HERE, JUSTIFIED BY ARITHMETIC I NEVER MEASURED. It existed to
+ * stop the basin — 0.9% of the land, 71% lake bed, the densest element herb on what remains — from
+ * becoming wall-to-wall Moonvine, and its comment said removing it would put a crop on *"86% of
+ * every free basin cell… not a plant you find, it is a carpet."* **Then the mutation sweep could not
+ * make removing it fail anything, so I measured instead of arguing: without the cap the basin lands
+ * at 27.6% occupancy, with it 18.1%.** Neither is a carpet. The 86% came from `target / free`, which
+ * assumes every roll lands on a free cell — the same mistake as the first denominator, one level up,
+ * committed while writing the warning about it.
+ *
+ * ★ SO THE CAP IS GONE RATHER THAN RE-TUNED. A dial that changes almost nothing, defended by a
+ * number nobody checked, is worse than no dial: it is a knob that quietly promises someone is
+ * watching saturation. The real protection is the measured-occupancy assert in the oracle, which
+ * asks the sweep what a keeper meets instead of asking a constant about itself.
+ *
+ * ⚠ WHAT REMAINS TRUE AND IS WORTH KNOWING: the basin under-delivers against its tier target (29
+ * against 60) because only 7.3% of it is free, and no density ≤ 1 can fix that — the ground's whole
+ * ceiling is 105 cells. Moonvine is simply the thinnest tier-2 crop. The oracle checks that the
+ * tier band still holds (the spread lands at 2.2×, inside the 4× the herbs use), so this is a
+ * reported fact rather than a hidden one.
+ *
+ * ⚠ `GROUND_FREE_CELLS` IS A MEASUREMENT AND IT WILL GO STALE — terrain moves it, and so does any
+ * change to `HERB_TUNE`, since the herb takes its cells first. That is survivable **only** because
+ * the oracle asserts the resulting ORDER and the measured occupancy rather than these numbers, so
+ * drift shows up as the ladder inverting rather than as a silently wrong constant. Re-measure before
+ * editing; never edit one of these to make a test pass.
+ */
+export const WILD_TARGET_BY_TIER: Readonly<Record<number, number>> = { 2: 60, 3: 30, 4: 15 }
+export const GROUND_FREE_CELLS: Readonly<Record<string, number>> = {
+  basin: 105, river: 4274, crag: 1392, woodland: 20283, shore: 625, highland: 2711, meadow: 53347,
+}
+
+/**
+ * Chance per cell on a crop's own ground. Exported with its inputs as parameters so the oracle can
+ * falsify it with synthetic tables rather than asserting the seven numbers it produces today.
+ */
+export const wildDensity = (
+  ground: string, tier: number,
+  free: Readonly<Record<string, number>> = GROUND_FREE_CELLS,
+  target: Readonly<Record<number, number>> = WILD_TARGET_BY_TIER,
+): number => Math.min(1, (target[tier] ?? 0) / Math.max(1, free[ground] ?? Infinity))
+
+export const CROP_DENSITY: Readonly<Record<string, number>> = Object.fromEntries(
+  WILD_CROPS.map(w => [w.ground, wildDensity(w.ground, CROP_DEFS[w.crop].tier)]))
+
+/**
+ * The wild crop standing at (x, z) on `ground`, or 0.
+ *
+ * ★ SOLITARY, NOT PATCHED, AND THAT IS THE DESIGN RATHER THAN A SIMPLIFICATION. A herb grows in
+ * patches because canon made it *"a reason to travel"* and a patch is a destination — something you
+ * walk to and stop at. A wild crop is a **find**: one plant, noticed. Giving it a patch field would
+ * make seven more destinations competing with the four canon actually ruled, and it would make the
+ * ladder's top tiers arrive in handfuls. One dial instead of two, and the thing it produces reads
+ * differently on the ground.
+ *
+ * ⚠ ITS OWN SALT. Sharing the herb's `0x4e2b` would correlate the two fields, so on the four grounds
+ * that carry both, a crop would turn up at exactly the cells a herb wanted — and the herb wins, so
+ * the crop would be invisible in proportion to how well the herb was doing.
+ */
+export function cropAt(x: number, z: number, seed: number, ground: BiomeId): number {
+  const crop = CROP_OF_GROUND[ground]
+  if (!crop) return 0
+  if (hash01(x, z, seed ^ 0x2c19) > (CROP_DENSITY[ground] ?? 0)) return 0
+  // Same grey refusal as the herbs, and for canon's reason: no forage of any kind in a greyfield,
+  // and the fringe greys before the label flips.
+  if (greyness(x, z, seed) >= 0.35) return 0
+  return crop
+}
+
 /**
  * The flora at (x, z), or null. Deterministic; costs one hash for most columns (the early outs are
  * ordered by how much of the world they cover). Grey ground grows nothing — the greying is drained
@@ -305,6 +458,23 @@ export function plantMaterialAt(x: number, z: number, seed: number, ground?: Bio
     const herb = herbAt(x, z, seed, ground)
     if (herb) return herb
 
+    // ── ★★ THE WILD CROP SITS BELOW THE HERB AND ABOVE SCATTER (2026-08-22) ────────────────────
+    // BELOW THE HERB, and the reason is written three paragraphs down for the stone: the four
+    // herbs' densities were compensated per-ground against a MEASURED land share, so anything that
+    // wins their cell moves the rarity of all four infusions — and the alchemy economy under them —
+    // with nothing looking wrong. **Four of the seven crops share a ground with a herb** (basin,
+    // woodland, shore, highland), so this is not a hypothetical here the way it was for scatter: a
+    // crop that outranked the herb would silently re-tune the Infusions the day it shipped. A crop
+    // displaces a tuft, never a Violetbloom.
+    //
+    // ABOVE SCATTER, and that is a real decision rather than the leftover slot. A crop IS a plant
+    // that grew; a stone LIES on the ground. But the argument that settles it is the same one that
+    // put scatter under the herb: a crop is economically load-bearing (it is an alchemy input and
+    // the bootstrap for a whole farmed line) and scatter is not — rock, deadfall and mushroom cost
+    // nothing downstream if one is displaced. **Order by what breaks when the cell is lost.**
+    const crop = cropAt(x, z, seed, ground)
+    if (crop) return crop
+
   // ── ★★ SCATTER SITS BELOW THE HERB AND ABOVE THE GRASS (2026-08-19, slice ③) ─────────────────
   // BELOW the herb, and that ordering is load-bearing far past looks: the four element herbs'
   // densities were compensated per-ground against a MEASURED land share, so anything that wins
@@ -356,7 +526,12 @@ export function plantMaterialAt(x: number, z: number, seed: number, ground?: Bio
  * re-running the selection.
  */
 export function plantVariant(x: number, z: number, seed: number, kind: number): number {
+  // ⚠ CROP GETS ITS OWN SALT RATHER THAN FALLING THROUGH TO TALL'S. The chain's tail is a default,
+  // not a case, so a new kind silently inherits `0x9c5` and every wild crop would take the same
+  // look-roll as the tall grass on its own cell — correlated jitter and turn, which reads as the
+  // two plants having been placed by one hand. Cosmetic, invisible in a test, and free to prevent.
   const salt = kind === FLORA.HERB ? 0x4e2b
+    : kind === FLORA.CROP ? 0x2c19
     : kind === FLORA.FLOWER ? 0x77e : kind === FLORA.TUFT ? 0x3b1 : 0x9c5
   return hash01(x, z, seed ^ salt)
 }
@@ -381,6 +556,7 @@ export function plantVariant(x: number, z: number, seed: number, kind: number): 
 export const FLORA_MATERIALS: ReadonlySet<number> = new Set<number>([
   MAT.TUFT, MAT.TALL_GRASS, MAT.FLOWER,          // FLORA.TUFT / TALL / FLOWER — the swaying cards
   ...Object.values(HERB_OF_GROUND),              // FLORA.HERB — derived, one per ruled ground
+  ...Object.values(CROP_OF_GROUND),              // FLORA.CROP — derived, one per crop's ruled ground
   MAT.LOOSE_ROCK, MAT.DEADFALL, MAT.MUSHROOM,    // SCATTER.ROCK / DEADFALL / MUSHROOM — solid
 ])
 
@@ -394,8 +570,9 @@ export const FLORA_MATERIALS: ReadonlySet<number> = new Set<number>([
  * (a kind was added) rather than on the symptom (something rendered wrong).
  */
 export const FLORA_KIND_COUNT =
-  (Object.keys(FLORA).length - 2)            // every FLORA kind except NONE and HERB...
+  (Object.keys(FLORA).length - 3)            // every FLORA kind except NONE, HERB and CROP...
   + Object.keys(HERB_OF_GROUND).length       // ...HERB expands to one material per ruled ground
+  + Object.keys(CROP_OF_GROUND).length       // ...and CROP to one per crop's ground (2026-08-22)
 
 // ⚠ SCATTER IS NOT ADDED, AND THE FIRST CUT OF THIS ADDED IT AND WAS RED (13 against a set of 10).
 // `FLORA` already absorbs the scatter kinds into its own slot space — that is exactly what the
