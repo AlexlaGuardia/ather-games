@@ -7487,14 +7487,34 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
       for (const e of edits.current.values()) built += e.size
       // The place label leads — it is the line's one piece of GAME, the rest is plumbing. Pure
       // function of position, so reading it costs a couple of noise samples every 10th frame.
-      const bh = columnHeight(Math.floor(p.x), Math.floor(p.z), SEED)
+      //
+      // ★★★ AND IT MUST ASK WHICH SPACE IT IS IN FIRST — THE FOURTH TIME THIS FILE HAS MADE THAT
+      // MISTAKE, three screens below the note that says the shape is always the same (see the
+      // teleport clamp). This read `columnHeight` + `biomeAt`, which are CONTINENT functions, and
+      // applied them to fold coordinates — so standing in the home plot the HUD confidently named
+      // a Wilds biome.
+      //
+      // ⚠⚠ THIS IS WHERE THAT LIE COSTS THE MOST, because this line is what a player (or another
+      // window) READS TO KNOW WHERE THEY ARE. The play lane burned an afternoon on plot-vs-wilds
+      // perf numbers that were two Wilds locations, and what finally caught it was this stat line
+      // printing the same biome twice. It caught that ONLY because both readings were outside the
+      // fold; had either been inside, the label would have answered with a continent biome and
+      // agreed with the mistake. An instrument that lies exactly where you are trying to measure
+      // is worse than no instrument.
+      const inPlot = space.current === 'plot'
+      const bh = inPlot
+        ? (plotHeight(Math.floor(p.x), Math.floor(p.z), SEED, plotCfg.current) ?? plotCfg.current.baseY)
+        : columnHeight(Math.floor(p.x), Math.floor(p.z), SEED)
+      const place = inPlot
+        ? `home plot t${plotTier.current}`
+        : biomeAt(Math.floor(p.x), Math.floor(p.z), SEED, bh, DEFAULT_DEPTH.seaLevel)
       // ★ `draws` IS THE PERF NUMBER; `mesh` IS NOT, AND CONFUSING THE TWO COST A SESSION.
       // `drawn.current.size` counts meshes we BUILT — every one of them, including the ones behind
       // the camera. `info.render.calls` counts what the GPU was actually asked to draw THIS FRAME,
       // after frustum culling. The gap between them is what culling is worth, and a perf claim made
       // from the first number is a claim about work that may never happen. Both are here on purpose:
       // `mesh` tracks the geometry budget (and leaks), `draws` tracks the frame.
-      onStats(`${biomeAt(Math.floor(p.x), Math.floor(p.z), SEED, bh, DEFAULT_DEPTH.seaLevel)} · `
+      onStats(`${place} · `
         + `${cols.current.size} col · ${drawn.current.size} mesh · ${info.render.calls} draws · `
         + `${(info.render.triangles / 1000).toFixed(0)}k tris · ${drops.current.length} drops · `
         + `geo ${info.memory.geometries} prog ${info.programs?.length ?? 0} · `
