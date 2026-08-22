@@ -13,6 +13,7 @@ import {
   CROP_DEFS, CROP_IDS, ELEMENT_HERBS, elementForHerbItem,
   canPlantCrop, plantCrop, harvestCrop, cropForSeed, getVisibleCrops,
 } from './farming'
+import { CYCLE_MS } from './day-cycle'
 import { ITEMS, ITEM_FRAME_MAP, ITEM_ICONS } from '../sprites/items'
 import { GE_BUY_CURATED } from '../play3d/ui'
 import { createInventory, countItem, addItems } from './inventory'
@@ -65,6 +66,49 @@ chk('an ordinary crop carries no element', elementForHerbItem('shimmerwheat_grai
   // Growth time is the one number canon prints AND Jin owns, and Rootvine is the ruled outlier
   // ("anchors deep. Heavy to harvest."). Pinned as the shape it is, not as a magnitude.
   chk('rootvine is the slow one', CROP_DEFS['rootvine'].growthMs > CROP_DEFS['tidepetal'].growthMs)
+}
+
+// ── ★★ THE GROWTH CURVE — properties, never magnitudes (retuned 2026-08-22, Alex) ──────────────
+// Alex asked to see the growth times and the spread was 5m → 25m across the whole ladder: tier 4
+// dawncap (200xp, the most valuable crop in the game) grew in the same time as a tier-2 herb, so
+// TIME encoded almost nothing and level plus mana were doing all the gating. Widened to 5m → 50m.
+//
+// ⚠ EVERY NUMBER HERE IS JIN'S AND IS EXPECTED TO MOVE — canon's boundary names brew times, level
+// gates and costs as build tuning. So this asserts the SHAPE of the curve and lets the magnitudes
+// float. Pinning "dawncap is 50 minutes" would go red on every future tune and teach whoever hits
+// it to edit the number rather than think about the shape.
+{
+  const byTier = (t: number) => Object.values(CROP_DEFS).filter(c => c.tier === t).map(c => c.growthMs)
+  const tiers = [1, 2, 3, 4].map(t => ({ t, times: byTier(t) }))
+  for (const { t, times } of tiers) chk(`tier ${t} has crops to reason about`, times.length > 0)
+
+  // ★ A HIGHER TIER IS ALWAYS A LONGER WAIT — the property that was violated before the retune, and
+  // the one a keeper actually feels. Band against band, so crops inside a tier stay free to differ.
+  for (let i = 0; i < tiers.length - 1; i++) {
+    const hi = Math.max(...tiers[i].times), lo = Math.min(...tiers[i + 1].times)
+    chk(`tier ${tiers[i].t}'s slowest (${hi / 60000}m) is faster than tier ${tiers[i + 1].t}'s quickest (${lo / 60000}m)`, hi < lo)
+  }
+
+  // ★ NOTHING OUTLIVES A DAY. The world runs a 64-minute cycle, so a crop that took longer would be
+  // the first thing in the game a keeper could not watch happen — planted in one day, harvested in
+  // another, with no moment of readiness they were present for. Asserted against `CYCLE_MS` rather
+  // than against "64", so retuning the day moves this with it instead of silently breaking it.
+  const slowest = Math.max(...Object.values(CROP_DEFS).map(c => c.growthMs))
+  chk(`the slowest crop (${slowest / 60000}m) still finishes inside one ${CYCLE_MS / 60000}m day`, slowest < CYCLE_MS)
+
+  // ★ THE BEGINNER LOOP IS THE ONE MAGNITUDE WORTH PINNING, because it is a FEEL commitment rather
+  // than a curve position: `harvest_brew` (alchemy 2, the first brew a keeper can make from what
+  // they grow) wants shimmerwheat ×5 + glowroot ×3 against a yield of 2 — five beds, one cycle. If
+  // that cycle grows past five minutes the first thing farming ever asks of a keeper is a wait.
+  for (const id of ['shimmerwheat', 'glowroot']) {
+    chk(`${id} is a five-minute crop — the beginner loop`, CROP_DEFS[id].growthMs <= 5 * 60 * 1000)
+  }
+
+  // ⚠ AND THE SPREAD ITSELF, loosely. Before the retune this was 5×, which is what made the curve
+  // read as flat. Asserted as "at least 8×" rather than as a number, so the shape survives a tune.
+  const fastest = Math.min(...Object.values(CROP_DEFS).map(c => c.growthMs))
+  chk(`the ladder spans a real range (${(slowest / fastest).toFixed(1)}× from ${fastest / 60000}m to ${slowest / 60000}m)`,
+    slowest / fastest >= 8)
 }
 
 // ── plant → harvest round trip, at the gate and just under it ──────────────────

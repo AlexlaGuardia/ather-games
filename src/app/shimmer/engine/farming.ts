@@ -102,7 +102,7 @@ export const CROP_DEFS: Record<string, CropDef> = {
   },
   sunpetal: {
     id: 'sunpetal', name: 'Sunpetal', tier: 1,
-    minFarmingLevel: 3, manaCost: 4, plantXp: 8, xpGrant: 28, growthMs: 6 * 60 * 1000,
+    minFarmingLevel: 3, manaCost: 4, plantXp: 8, xpGrant: 28, growthMs: 7 * 60 * 1000,
     seedItemId: 'seed_sunpetal', yieldBonusPerLevel: 0.02,
     yields: [{ itemId: 'sunpetal_bloom', count: 1, chance: 1.0 }],
   },
@@ -110,13 +110,13 @@ export const CROP_DEFS: Record<string, CropDef> = {
   // Tier 2 — Intermediate
   moonvine: {
     id: 'moonvine', name: 'Moonvine', tier: 2,
-    minFarmingLevel: 5, manaCost: 5, plantXp: 12, xpGrant: 40, growthMs: 8 * 60 * 1000,
+    minFarmingLevel: 5, manaCost: 5, plantXp: 12, xpGrant: 40, growthMs: 12 * 60 * 1000,
     seedItemId: 'seed_moonvine', yieldBonusPerLevel: 0.03,
     yields: [{ itemId: 'moonvine_leaf', count: 2, chance: 1.0 }],
   },
   crystalcap: {
     id: 'crystalcap', name: 'Crystalcap', tier: 2,
-    minFarmingLevel: 7, manaCost: 6, plantXp: 15, xpGrant: 50, growthMs: 10 * 60 * 1000,
+    minFarmingLevel: 7, manaCost: 6, plantXp: 15, xpGrant: 50, growthMs: 14 * 60 * 1000,
     seedItemId: 'seed_crystalcap', yieldBonusPerLevel: 0.03,
     yields: [
       { itemId: 'crystalcap_spore', count: 1, chance: 1.0 },
@@ -125,7 +125,7 @@ export const CROP_DEFS: Record<string, CropDef> = {
   },
   starbean: {
     id: 'starbean', name: 'Starbean', tier: 2,
-    minFarmingLevel: 8, manaCost: 5, plantXp: 14, xpGrant: 45, growthMs: 10 * 60 * 1000,
+    minFarmingLevel: 8, manaCost: 5, plantXp: 14, xpGrant: 45, growthMs: 15 * 60 * 1000,
     seedItemId: 'seed_starbean', yieldBonusPerLevel: 0.03,
     yields: [{ itemId: 'starbean_pod', count: 2, chance: 1.0 }],
   },
@@ -145,25 +145,25 @@ export const CROP_DEFS: Record<string, CropDef> = {
   // yields 2 because one canon Infusion recipe costs herb ×2 — one harvest, one infusion.
   violetbloom: {
     id: 'violetbloom', name: 'Violetbloom', tier: 2,
-    minFarmingLevel: 6, manaCost: 6, plantXp: 14, xpGrant: 55, growthMs: 20 * 60 * 1000,
+    minFarmingLevel: 6, manaCost: 6, plantXp: 14, xpGrant: 55, growthMs: 13 * 60 * 1000,
     seedItemId: 'seed_violetbloom', yieldBonusPerLevel: 0.03,
     yields: [{ itemId: 'violetbloom_petal', count: 2, chance: 1.0 }],
   },
   stormgrass: {
     id: 'stormgrass', name: 'Stormgrass', tier: 2,
-    minFarmingLevel: 6, manaCost: 6, plantXp: 14, xpGrant: 55, growthMs: 20 * 60 * 1000,
+    minFarmingLevel: 6, manaCost: 6, plantXp: 14, xpGrant: 55, growthMs: 13 * 60 * 1000,
     seedItemId: 'seed_stormgrass', yieldBonusPerLevel: 0.03,
     yields: [{ itemId: 'stormgrass_blade', count: 2, chance: 1.0 }],
   },
   rootvine: {
     id: 'rootvine', name: 'Rootvine', tier: 2,
-    minFarmingLevel: 6, manaCost: 6, plantXp: 14, xpGrant: 60, growthMs: 25 * 60 * 1000,
+    minFarmingLevel: 6, manaCost: 6, plantXp: 14, xpGrant: 60, growthMs: 16 * 60 * 1000,
     seedItemId: 'seed_rootvine', yieldBonusPerLevel: 0.03,
     yields: [{ itemId: 'rootvine_coil', count: 2, chance: 1.0 }],
   },
   tidepetal: {
     id: 'tidepetal', name: 'Tidepetal', tier: 2,
-    minFarmingLevel: 6, manaCost: 6, plantXp: 14, xpGrant: 55, growthMs: 20 * 60 * 1000,
+    minFarmingLevel: 6, manaCost: 6, plantXp: 14, xpGrant: 55, growthMs: 13 * 60 * 1000,
     seedItemId: 'seed_tidepetal', yieldBonusPerLevel: 0.03,
     yields: [{ itemId: 'tidepetal_bloom', count: 2, chance: 1.0 }],
   },
@@ -171,13 +171,13 @@ export const CROP_DEFS: Record<string, CropDef> = {
   // Tier 3 — Advanced
   dreamroot: {
     id: 'dreamroot', name: 'Dreamroot', tier: 3,
-    minFarmingLevel: 12, manaCost: 8, plantXp: 22, xpGrant: 80, growthMs: 14 * 60 * 1000,
+    minFarmingLevel: 12, manaCost: 8, plantXp: 22, xpGrant: 80, growthMs: 24 * 60 * 1000,
     seedItemId: 'seed_dreamroot', yieldBonusPerLevel: 0.04,
     yields: [{ itemId: 'dreamroot_essence', count: 1, chance: 1.0 }],
   },
   shimmerbloom: {
     id: 'shimmerbloom', name: 'Shimmerbloom', tier: 3,
-    minFarmingLevel: 15, manaCost: 10, plantXp: 28, xpGrant: 100, growthMs: 16 * 60 * 1000,
+    minFarmingLevel: 15, manaCost: 10, plantXp: 28, xpGrant: 100, growthMs: 28 * 60 * 1000,
     seedItemId: 'seed_shimmerbloom', yieldBonusPerLevel: 0.04,
     yields: [
       { itemId: 'shimmerbloom_petal', count: 1, chance: 1.0 },
@@ -188,7 +188,7 @@ export const CROP_DEFS: Record<string, CropDef> = {
   // Tier 4 — Master
   atherwheat: {
     id: 'atherwheat', name: 'Atherwheat', tier: 4,
-    minFarmingLevel: 20, manaCost: 12, plantXp: 35, xpGrant: 150, growthMs: 18 * 60 * 1000,
+    minFarmingLevel: 20, manaCost: 12, plantXp: 35, xpGrant: 150, growthMs: 42 * 60 * 1000,
     seedItemId: 'seed_atherwheat', yieldBonusPerLevel: 0.05,
     yields: [
       { itemId: 'atherwheat_grain', count: 1, chance: 1.0 },
@@ -197,7 +197,7 @@ export const CROP_DEFS: Record<string, CropDef> = {
   },
   dawncap: {
     id: 'dawncap', name: 'Dawncap', tier: 4,
-    minFarmingLevel: 25, manaCost: 14, plantXp: 40, xpGrant: 200, growthMs: 20 * 60 * 1000,
+    minFarmingLevel: 25, manaCost: 14, plantXp: 40, xpGrant: 200, growthMs: 50 * 60 * 1000,
     seedItemId: 'seed_dawncap', yieldBonusPerLevel: 0.05,
     yields: [
       { itemId: 'dawncap_spore', count: 2, chance: 1.0 },
