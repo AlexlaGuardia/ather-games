@@ -290,7 +290,8 @@ function run() {
   const canonMoves = canonKeeperMoves()
   const builtMoves = gameKeeperMoves()
   if (!canonMoves.size || !builtMoves.length) {
-    add('NOTE', 'keeper-moves', `could not read one side (canon ${canonMoves.size}, build ${builtMoves.length}) — check skipped`)
+    add('BLIND', 'keeper-moves', `could not read one side (canon ${canonMoves.size}, build ${builtMoves.length}) — THE CHECK DID NOT RUN`,
+      'A gate that cannot read its subject proves nothing. Usually one side MOVED: find the table and point this reader at it. Do not silence this by widening the reader until it matches something.')
   } else {
     let moveDrift = 0
     for (const m of builtMoves) {
@@ -324,7 +325,8 @@ function run() {
   const canonRost = canonMistRosters()
   const builtRost = gameMistRosters()
   if (!canonRost.size || !builtRost.size) {
-    add('NOTE', 'mist-rosters', `could not read one side (canon ${canonRost.size}, build ${builtRost.size}) — check skipped`)
+    add('BLIND', 'mist-rosters', `could not read one side (canon ${canonRost.size}, build ${builtRost.size}) — THE CHECK DID NOT RUN`,
+      'A gate that cannot read its subject proves nothing. Usually one side MOVED: find the table and point this reader at it. Do not silence this by widening the reader until it matches something.')
   } else {
     const base = canonBaseSpecies()                       // canon NAME -> { code, element }
     const codeOf = new Map(Object.entries(base).map(([n, v]) => [n, v.code]))
@@ -367,7 +369,8 @@ function run() {
   const canonLeans = canonBirthLeans()
   const builtLeans = gameBirthLeans()
   if (!canonLeans.size || !builtLeans.size) {
-    add('NOTE', 'birth-affinity', `could not read one side (canon ${canonLeans.size}, build ${builtLeans.size}) — check skipped`)
+    add('BLIND', 'birth-affinity', `could not read one side (canon ${canonLeans.size}, build ${builtLeans.size}) — THE CHECK DID NOT RUN`,
+      'A gate that cannot read its subject proves nothing. Usually one side MOVED: find the table and point this reader at it. Do not silence this by widening the reader until it matches something.')
   } else {
     let leanDrift = 0
     for (const [rune, lean] of canonLeans) {
@@ -422,7 +425,8 @@ function run() {
   const builtHerbs = gameElementHerbs()
   const builtCropNames = gameCropNames()
   if (!canonHerbs.size || !builtHerbs.size) {
-    add('NOTE', 'element-herbs', `could not read one side (canon ${canonHerbs.size}, build ${builtHerbs.size}) — check skipped`)
+    add('BLIND', 'element-herbs', `could not read one side (canon ${canonHerbs.size}, build ${builtHerbs.size}) — THE CHECK DID NOT RUN`,
+      'A gate that cannot read its subject proves nothing. Usually one side MOVED: find the table and point this reader at it. Do not silence this by widening the reader until it matches something.')
   } else {
     let herbDrift = 0
     for (const [element, herbName] of canonHerbs) {
@@ -430,7 +434,7 @@ function run() {
       if (!built) {
         herbDrift++
         add('GAP', 'element-herbs', `canon's ${element} herb '${herbName}' has no crop in the build`,
-          `Nothing grants a ${element} infusion, so dominantInfusion() never returns '${element}' and the ten canon second forms behind it are unreachable. Add it to CROP_DEFS + ELEMENT_HERBS in engine/farming.ts.`)
+          `Nothing grants a ${element} infusion, so dominantInfusion() never returns '${element}' and the ten canon second forms behind it are unreachable. Add it to CROP_DEFS + ELEMENT_HERBS in voxel/crops.ts.`)
         continue
       }
       const shippedName = builtCropNames.get(built)
@@ -476,7 +480,8 @@ function run() {
   const recipes = gamePotionRecipes()
   const herbItems = gameElementHerbItems()
   if (!canonCat.size || !brews.size) {
-    add('NOTE', 'infusions', `could not read one side (canon ${canonCat.size}, build ${brews.size}) — check skipped`)
+    add('BLIND', 'infusions', `could not read one side (canon ${canonCat.size}, build ${brews.size}) — THE CHECK DID NOT RUN`,
+      'A gate that cannot read its subject proves nothing. Usually one side MOVED: find the table and point this reader at it. Do not silence this by widening the reader until it matches something.')
   } else {
     let infDrift = 0
     for (const [element, crystalName] of canonCat) {
@@ -678,9 +683,14 @@ function canonElementHerbs() {
 /** element -> cropId, read off ELEMENT_HERBS in engine/farming.ts. */
 function gameElementHerbs() {
   const out = new Map()
-  const p = join(GAME, 'engine', 'farming.ts')
+  // ⚠ voxel/crops.ts, NOT engine/farming.ts. The crop roster moved into the portable core on
+  // 2026-08-22 (§ 6 rule 4); farming.ts re-exports it, so a reader aimed there finds the re-export
+  // line and never the table — which is how this gate went blind and still printed a passing run.
+  const p = join(GAME, 'voxel', 'crops.ts')
   if (!existsSync(p)) return out
-  const body = (read(p).split('export const ELEMENT_HERBS')[1] ?? '').split('\n}')[0]
+  // ⚠ ANCHORED AT LINE START. A `split('export const ELEMENT_HERBS')` also matches the words inside
+  // a comment, and then this parses prose and reports zero — which used to read as "check skipped".
+  const body = (read(p).split(/^export const ELEMENT_HERBS/m)[1] ?? '').split('\n}')[0]
   for (const m of body.matchAll(/^\s*([a-z]+):\s*\{\s*cropId:\s*'([^']+)'/gm)) out.set(m[1], m[2])
   return out
 }
@@ -737,16 +747,26 @@ function gameElementHerbItems() {
 /** cropId -> display name, read off CROP_DEFS in engine/farming.ts. */
 function gameCropNames() {
   const out = new Map()
-  const p = join(GAME, 'engine', 'farming.ts')
+  // ⚠ See gameElementHerbs — the roster lives in voxel/crops.ts now.
+  const p = join(GAME, 'voxel', 'crops.ts')
   if (!existsSync(p)) return out
-  const body = (read(p).split('export const CROP_DEFS')[1] ?? '').split('\nexport const CROP_IDS')[0]
+  // ⚠ ANCHORED — see gameElementHerbs. This one really did parse a comment instead of the table.
+  const body = (read(p).split(/^export const CROP_DEFS/m)[1] ?? '').split(/^export const CROP_IDS/m)[0]
   for (const m of body.matchAll(/^\s*id:\s*'?([A-Za-z_]+)'?,\s*name:\s*'([^']+)'/gm)) out.set(m[1], m[2])
   return out
 }
 
 // ── REPORT ─────────────────────────────────────────────
-const ICON = { CLEAN: '🟢', GAP: '🔴', CONFLICT: '🟡', COLLISION: '⚠', NOTE: 'ℹ' }
-const ORDER = ['CONFLICT', 'COLLISION', 'GAP', 'NOTE', 'CLEAN']
+// ★★★ `BLIND` EXISTS BECAUSE A GATE THAT CANNOT READ ITS SUBJECT USED TO REPORT `ℹ ... check
+// skipped` AND EXIT 0. Five of the ten gates have that branch, so five could go dark on a run that
+// printed a passing verdict — the exact shape this file's own scope banner rails about, wearing the
+// costume of a note. It was not hypothetical: the crop roster moved to voxel/crops.ts on 2026-08-22,
+// `element-herbs` went blind, and the run said "1 NOTE, 9 CLEAN" and exited 0.
+//
+// ⚠ AN ABSENCE CLAIM NEEDS A STRONGER MEASUREMENT THAN A PRESENCE CLAIM. "I found no drift" and "I
+// could not look" are different sentences and must not share an exit code. BLIND counts as drift.
+const ICON = { CLEAN: '🟢', GAP: '🔴', CONFLICT: '🟡', COLLISION: '⚠', BLIND: '🙈', NOTE: 'ℹ' }
+const ORDER = ['CONFLICT', 'COLLISION', 'GAP', 'BLIND', 'NOTE', 'CLEAN']
 
 function summarize() {
   const counts = {}
@@ -795,7 +815,7 @@ try {
 }
 
 const counts = summarize()
-const driftCount = (counts.CONFLICT ?? 0) + (counts.COLLISION ?? 0) + (counts.GAP ?? 0)
+const driftCount = (counts.CONFLICT ?? 0) + (counts.COLLISION ?? 0) + (counts.GAP ?? 0) + (counts.BLIND ?? 0)
 
 if (!QUIET) {
   for (const sev of ORDER) {

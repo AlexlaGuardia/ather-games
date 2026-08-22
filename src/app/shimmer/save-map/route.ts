@@ -1294,7 +1294,9 @@ export async function POST(req: NextRequest) {
       const newBlock = `export const CROP_DEFS: Record<string, CropDef> = {\n${blocks.join('\n').trimEnd()}\n}`
 
       let content = await readFile(CROPS_FILE, 'utf-8')
-      const defsPattern = /export const CROP_DEFS: Record<string, CropDef> = \{[\s\S]*?\n\}/
+      // ⚠ ANCHORED AT LINE START (`m`). Unanchored, this also matches the declaration quoted inside
+      // a comment, and the rewrite would begin there and swallow the prose between it and the table.
+      const defsPattern = /^export const CROP_DEFS: Record<string, CropDef> = \{[\s\S]*?\n\}/m
       if (defsPattern.test(content)) {
         content = content.replace(defsPattern, newBlock)
         await writeFile(CROPS_FILE, content, 'utf-8')

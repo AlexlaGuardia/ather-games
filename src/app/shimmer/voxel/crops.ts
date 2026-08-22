@@ -16,10 +16,16 @@
 // module load. So the core genuinely needs the roster, and `meadow-seed.ts` reaching UP into the
 // engine for it was the last of nine port-boundary violations rather than a special case.
 //
-// ⚠ THE MAP EDITOR REWRITES `CROP_DEFS` IN THIS FILE BY REGEX (`save-map/route.ts`), so the block's
-// SHAPE is load-bearing: `export const CROP_DEFS: Record<string, CropDef> = {` ... `\n}`. Do not
-// reformat that declaration line or the closing brace. `save-map/targets.test.ts` re-checks that the
-// pattern still matches, because a rewrite that matches nothing used to answer 200 and write nothing.
+// ⚠⚠ THE MAP EDITOR AND THE CANON GATE BOTH READ THE `CROP_DEFS` BLOCK OUT OF THIS FILE BY REGEX
+// (`save-map/route.ts`, `scripts/canon-drift.mjs`), so its declaration line and its closing brace
+// are load-bearing text. Do not reformat either.
+//
+// ⚠ AND DO NOT SPELL THE DECLARATION OUT IN A COMMENT — that is not a style note, it is a bug this
+// header already caused once. The first draft of these lines quoted the declaration verbatim to
+// explain that it mattered, which gave both readers a SECOND match inside the prose: canon-drift
+// split on the comment and parsed zero crops, and the editor's rewrite would have started in the
+// comment and eaten it. Documenting a marker created a marker. Both readers are anchored at line
+// start now and assert they match exactly once, so prose cannot impersonate the table again.
 
 /**
  * The four elements an herb can carry.

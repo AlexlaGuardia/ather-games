@@ -41,8 +41,35 @@ const TARGETS: { file: string; re: RegExp; label: string; required?: boolean }[]
   { file: 'voxel/clock.ts', re: /const NIGHT_START\s*=.+/, label: 'NIGHT_START', required: false },
   { file: 'voxel/clock.ts', re: /const MIDNIGHT\s*=.+/, label: 'MIDNIGHT', required: false },
   { file: 'engine/day-cycle.ts', re: /export const RESPAWN_TRIGGERS = \{[\s\S]*?\} as const/, label: 'RESPAWN_TRIGGERS' },
-  { file: 'voxel/crops.ts', re: /export const CROP_DEFS: Record<string, CropDef> = \{[\s\S]*?\n\}/, label: 'CROP_DEFS' },
+  { file: 'voxel/crops.ts', re: /^export const CROP_DEFS: Record<string, CropDef> = \{[\s\S]*?\n\}/m, label: 'CROP_DEFS' },
 ]
+
+/**
+ * ★★ MATCHING IS NOT ENOUGH — IT HAS TO MATCH THE TABLE AND NOTHING ELSE.
+ * A comment that spells out the declaration gives the reader a SECOND match, and the rewrite then
+ * starts in the prose and eats everything between there and the real block. That is not a worry, it
+ * happened: crops.ts's own header quoted `CROP_DEFS`'s declaration to explain that its shape was
+ * load-bearing, canon-drift split on the comment and parsed zero crops, and the gate reported the
+ * check as skipped rather than as broken. Documenting a marker created a marker.
+ *
+ * So the anchored patterns below are asserted to match EXACTLY ONCE per file. A guard that only asks
+ * "did it match" survives this bug's own shape — which is the trap that ate a whole afternoon on
+ * 08-22 and is written up in PATTERNS.md.
+ */
+const SINGLE: { file: string; re: RegExp; label: string }[] = [
+  { file: 'voxel/crops.ts', re: /^export const CROP_DEFS: Record<string, CropDef> = \{/gm, label: 'CROP_DEFS' },
+  { file: 'voxel/crops.ts', re: /^export const ELEMENT_HERBS/gm, label: 'ELEMENT_HERBS (canon-drift reads this)' },
+  { file: 'voxel/crops.ts', re: /^export const CROP_IDS/gm, label: 'CROP_IDS (canon-drift stops here)' },
+  { file: 'engine/day-cycle.ts', re: /^export const RESPAWN_TRIGGERS/gm, label: 'RESPAWN_TRIGGERS' },
+]
+
+for (const t of SINGLE) {
+  const src = readFileSync(join(SHIMMER, t.file), 'utf-8')
+  const n = [...src.matchAll(t.re)].length
+  ok(n === 1, `★ ${t.label} must appear exactly once at line start in ${t.file} — found ${n}. `
+    + (n > 1 ? 'A comment quoting the declaration is enough to do this, and it fools the reader before it fools you.'
+             : 'The block a rewrite depends on is gone or renamed.'))
+}
 
 for (const t of TARGETS) {
   const src = readFileSync(join(SHIMMER, t.file), 'utf-8')
