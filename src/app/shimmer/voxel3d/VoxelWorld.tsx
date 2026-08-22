@@ -80,7 +80,7 @@ import { inPassageVolume, insideShell, bubbleSwallows, passageApproach } from '.
 import { rinSpotAt } from '../voxel/rin-water'
 import { newCast, phaseAt, passed, answer, type RinCast, type RinPhase } from '../engine/rin-cast'
 import { rinCatch, type RinWater } from '../engine/rin-catch'
-import { WORLD_ITEMS } from '../voxel/obtainable'
+import { WORLD_ITEMS, craftSurface } from '../voxel/obtainable'
 import { HOLDS } from '../voxel/holds'
 import {
   spawnFoe, stepFoe, strike, hostile, foeDef, pickPosture, collarFrac, answerCollar,
@@ -7758,7 +7758,11 @@ function CraftPanel({ have, tools, tick, station, onCraft, onCraftTool, onClose 
     return next ? [next] : []
   })
 
-  const rows = RECIPES.filter(r => r.input.every(i => have(i.itemId) > 0 || canCraftRecipe(r.id, have, station)))
+  // ⚠ THE FILTER LIVES IN `voxel/obtainable.ts`, NOT HERE. It used to be inlined on this line and
+  // it hid the Garden Bed completely (see that file's craft-surface note) — a fixture whose
+  // ingredients you have never held is a goal you cannot see. One derivation, and its test imports
+  // the same function rather than restating it.
+  const rows = craftSurface(have, station)
 
   return (
     <div className="absolute inset-0 grid place-items-center bg-black/50 pointer-events-auto" onClick={onClose}>

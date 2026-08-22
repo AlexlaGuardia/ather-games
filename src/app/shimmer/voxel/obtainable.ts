@@ -26,8 +26,8 @@
 // makes a REGRESSION impossible and a brand-new unregistered source merely unlikely. **When you add
 // a way to obtain an item, add it here** — that is the whole contract, and it is one file now
 // instead of three.
-import { BLOCKS } from './registry'
-import { RECIPE_OUTPUTS } from './recipes'
+import { BLOCKS, ALL_BLOCKS, materialForItem } from './registry'
+import { RECIPE_OUTPUTS, RECIPES, canCraft, type RecipeDef, type Station } from './recipes'
 import { TREE_NODES, saplingItem, logItem } from './tree-node'
 import { SPECIES } from './trees'
 import { RIN_TIERS } from '../engine/rin-catch'
@@ -74,3 +74,54 @@ export const WORLD_ITEMS: ReadonlySet<string> = new Set<string>([
 
 /** The cauldron's honesty gate, as the panel wants it. */
 export const inWorld = (itemId: string): boolean => WORLD_ITEMS.has(itemId)
+
+// ── THE CRAFTING SURFACE: WHAT C SHOWS, WHICH IS NOT WHAT C LETS YOU PRESS ─────────────────────
+//
+// ★ FOUND 2026-08-22 BY ALEX, PLAYING: the Garden Bed shipped 08-22 and could not be found. The
+// panel filtered to recipes where you already hold ≥1 of EVERY input, so a bed costing topsoil and
+// `planking` was not greyed — it was ABSENT, because nobody had ever made planking. The panel's own
+// docstring said it lists what you cannot afford, "and that is the point... which is why nobody
+// noticed the entire forestry ladder was uncraftable". The prose was true when written and the
+// filter one line below it had stopped honouring it. Same family as the 08-22 mirror: a comment
+// cannot check anything.
+//
+// ⚠ THE OLD FILTER WAS NOT NOISE AND MUST NOT SIMPLY BE DELETED. Without it the surface lists all
+// of RECIPES — every species' planks, bark and sap, most of which name a tree the keeper has not
+// met. That wall is what the heuristic exists to prevent, and deleting it trades an invisible goal
+// for an unreadable list.
+//
+// So the rule is split by what the output IS, derived and not listed:
+//   · a FIXTURE (bench, mill, cutter, chest, pot, lantern, waymark, garden bed) is a GOAL and is
+//     ALWAYS shown, costs in red, whether or not you hold a single ingredient. A goal you cannot
+//     see is not a goal.
+//   · a MATERIAL is shown once you have met it (hold ≥1 of every input) or can make it now.
+//
+// `noSlab` is the build's existing word for "not a full cube" = furniture, the same derivation
+// `recipes.test.ts` uses for its hand-makeable rule. Deriving from it means a NEW fixture is a goal
+// the day its registry row lands, with nobody remembering to add it to a list here.
+
+/**
+ * Is this recipe's output a FIXTURE — a thing you place in the world rather than a material you
+ * spend? Derived from `noSlab`, never enumerated.
+ */
+export const isFixture = (itemId: string): boolean => {
+  const m = materialForItem(itemId)
+  return m !== undefined && ALL_BLOCKS.some(b => b.material === m && b.noSlab === true)
+}
+
+/**
+ * The rows the crafting surface should render, in table order. Craftability is still decided by
+ * `canCraft` at press time — this only decides what a keeper can SEE.
+ *
+ * ⚠ ONE derivation, imported by both the panel and its test. Do not re-implement this filter in
+ * `VoxelWorld.tsx`; that is exactly how it drifted from its own docstring.
+ */
+export function craftSurface(
+  have: (itemId: string) => number,
+  station: Station = 'hand',
+): readonly RecipeDef[] {
+  return RECIPES.filter(r =>
+    isFixture(r.output.itemId)
+    || r.input.every(i => have(i.itemId) > 0)
+    || canCraft(r.id, have, station))
+}

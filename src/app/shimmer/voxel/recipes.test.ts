@@ -17,7 +17,7 @@ import { MAT } from './depth'
 import { isLogMat } from './trees'
 import { PIECES } from './pieces'
 import { TOOL_DEFS } from '../engine/tools'
-import { WORLD_ITEMS } from './obtainable'
+import { WORLD_ITEMS, isFixture, craftSurface } from './obtainable'
 
 let pass = 0, fail = 0
 function check(label: string, ok: boolean, detail = '') {
@@ -73,10 +73,10 @@ console.log('bootstrap')
   // ⚠ Still no exemption list, and still do not add one. If this fails because someone gated a
   // plank, that is the bug. If it fails because someone gated a new *fixture*, the fixture is
   // missing `noSlab` — fix the registry row, not this test.
-  const isFurniture = (itemId: string) => {
-    const m = materialForItem(itemId)
-    return m !== undefined && ALL_BLOCKS.some(b => b.material === m && b.noSlab === true)
-  }
+  // ⚠ WAS A LOCAL RE-IMPLEMENTATION OF THIS EXACT DERIVATION (2026-08-22). Two copies of one rule
+  // agree until they do not, and agreement between a copy and its original is not evidence about
+  // either — so the panel, this sweep and the craft surface now all import the one function.
+  const isFurniture = isFixture
   const gatedMaterials = RECIPES.filter(r => !isFurniture(r.output.itemId) && r.station !== 'hand')
   check('every MATERIAL recipe is makeable by hand',
     gatedMaterials.length === 0,
@@ -321,6 +321,47 @@ console.log('building grammar')
   check('no recipe still costs raw stone', !RECIPES.some(r => r.input.some(i => dead.has(i.itemId))))
   check('no piece still costs raw stone', !PIECES.some(p => p.cost.some(c => dead.has(c.itemId))),
     'the stair pointed at block_stone and would have become uncraftable in silence')
+}
+
+// ── 9. THE CRAFTING SURFACE SHOWS ITS GOALS ───────────────────────────────────────────────────
+//
+// ★ THE BUG THIS EXISTS FOR, FOUND BY ALEX PLAYING ON 2026-08-22: the Garden Bed had shipped and
+// could not be found in the C panel. The panel filtered to recipes where you hold ≥1 of every
+// input, so a fixture whose ingredients you have never made is not greyed — it is absent. The
+// reachability sweep above proved the bed was craftable in principle and never asked whether a
+// keeper could SEE it. A cost table is a promise the thing is obtainable; this is the promise that
+// it is FINDABLE.
+{
+  // An empty satchel is the honest fixture: a keeper on their first minute, holding nothing.
+  const empty = () => 0
+  const surface = craftSurface(empty)
+  const shown = (id: string) => surface.some(r => r.id === id)
+
+  // Named individually rather than as a count, because the tempting fix for a red count is to make
+  // the count agree — the 08-22 law about asserting the NAME of what is missing.
+  const goals = RECIPES.filter(r => isFixture(r.output.itemId)).map(r => r.id)
+  const hidden = goals.filter(id => !shown(id))
+  check('every fixture is visible with an EMPTY satchel', hidden.length === 0,
+    `a goal you cannot see is not a goal — hidden: ${hidden.join(', ')}`)
+
+  // The specific regression, by name, so this file says out loud what went wrong.
+  check('...including the garden bed, which is what went missing', shown('garden_bed'),
+    'garden_bed costs planking; nobody had made planking; the row vanished instead of greying')
+
+  // ⚠ AND THE OTHER DIRECTION, or the assert above is satisfied by showing EVERYTHING — which is
+  // the wall of 60-odd species rows the filter was written to prevent. A material naming a tree
+  // this keeper has never met must stay off the surface until they meet it.
+  check('a material you have never met stays off the surface', !shown('dawnwood_planks'),
+    'the empty-satchel surface must not be the whole table')
+
+  // ...and the heuristic still opens up once you hold the input, so the material half is not simply
+  // dead. One dawnwood log is the whole qualification.
+  const withLog = (id: string) => (id === 'dawnwood_log' ? 1 : 0)
+  check('...and appears once you hold one', craftSurface(withLog).some(r => r.id === 'dawnwood_planks'))
+
+  // The fixture set has to actually SEE something, or every assert above passes by being blind —
+  // the same guard the hand-makeable rule carries.
+  check('the fixture set is non-empty', goals.length > 0)
 }
 
 console.log(`\n${pass} passed, ${fail} failed`)
