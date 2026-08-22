@@ -17,7 +17,7 @@ import { MAT } from './depth'
 import { isLogMat } from './trees'
 import { PIECES } from './pieces'
 import { TOOL_DEFS } from '../engine/tools'
-import { RIN_TIERS } from '../engine/rin-catch'
+import { WORLD_ITEMS } from './obtainable'
 
 let pass = 0, fail = 0
 function check(label: string, ok: boolean, detail = '') {
@@ -159,10 +159,12 @@ console.log('reachability')
   // ...plus anything the recipe table can make from those. One pass is enough today (refining is
   // one step deep); if the table ever grows a chain, this becomes a fixpoint loop and the assert
   // below is what will tell you.
-  // ...plus what the water gives up. ⚠ A RIN CATCH IS NOT A BLOCK DROP AND NEVER WILL BE, so a
-  // reachability set derived from `BLOCKS` alone is structurally incapable of seeing rinning —
-  // which is why the sweep below used to exempt the skill rather than fail on it.
-  const obtainable = new Set([...fromBlocks, ...RECIPE_OUTPUTS, ...RIN_TIERS.flatMap(t => t.items)])
+  // ...plus everything else this world hands over. ⚠ THIS USED TO BUILD ITS OWN SET, which made it
+  // the THIRD copy of one derivation — and the copies drifted apart exactly as you would expect: this
+  // one could not see rinning (so the sweep exempted the skill) and none of them could see FELLING.
+  // `voxel/obtainable.ts` is the single home now; a source registered there is visible to every
+  // reader at once, which is the only version of this that stays true.
+  const obtainable = WORLD_ITEMS
 
   const unreachable = (ids: string[]) => ids.filter(id => !obtainable.has(id))
 
