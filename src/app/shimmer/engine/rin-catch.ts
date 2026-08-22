@@ -53,10 +53,32 @@ export interface RinTier {
  * a DIFFERENT number that happens to look similar — it gates the spot, not the catch — and reading
  * one for the other is how two tables that agree today quietly stop agreeing.
  */
+/**
+ * ⚠⚠ THESE IDS ARE JOIN KEYS, NOT NAMES — and treating them as names shipped a ladder that could
+ * not be climbed (found + fixed 2026-08-22, play lane).
+ *
+ * Tier 2 and tier 3 read `glowfin_scale` and `moonkoi_scale` for two days. Both ids have **no
+ * `ItemDef` in `sprites/items.ts` and no consumer anywhere in the build**, while the fish they were
+ * named after — `glowfin`, `moonkoi` — are exactly what `TOOL_DEFS.glowfin_rinstick` and
+ * `TOOL_DEFS.moonkoi_rinstick` require. So a keeper past level 4 landed a nameless, artless object
+ * half of every cast, and **could never craft the rod that reaches the next rung**. The ladder ends
+ * at tier 1 by construction. Canon rules the relationship this breaks: rinsticks are built *from
+ * rinn*, *"kin calls to kin"* (`CANON_GAPS.md` §rinstick ruling).
+ *
+ * ★ The slip is legible: tier 1's `shimmerscale` is a species whose NAME ends in "scale"
+ * (`world/cuisine.md` calls a Shimmerscale steak *"the best fish in the world"*), and the suffix got
+ * carried onto its two neighbours as though it were a convention.
+ *
+ * ⚠ AND THE GUARD THAT EXISTS FOR THIS EXEMPTED IT. `rin-catch.test.ts` matched canon's names after
+ * `id.replace(/_scale$/, '')`, reasoning that *"the ID convention is the build's business and the
+ * NAME is canon's"* — true in general, and wrong here, because an id that another table looks up is
+ * not a convention. That replace had no other target in the ladder: it existed only to let these two
+ * through. The exemption is gone and the orphan join is asserted directly.
+ */
 export const RIN_TIERS: readonly RinTier[] = [
   { tier: 1, minLevel: 1,  xp: 15,  items: ['shimmerscale', 'clickclaw'] },
-  { tier: 2, minLevel: 4,  xp: 45,  items: ['glowfin_scale', 'ribboneel'] },
-  { tier: 3, minLevel: 7,  xp: 120, items: ['moonkoi_scale', 'pearlshell'] },
+  { tier: 2, minLevel: 4,  xp: 45,  items: ['glowfin', 'ribboneel'] },
+  { tier: 3, minLevel: 7,  xp: 120, items: ['moonkoi', 'pearlshell'] },
   { tier: 4, minLevel: 10, xp: 350, items: ['crystal_rinn'] },
 ]
 

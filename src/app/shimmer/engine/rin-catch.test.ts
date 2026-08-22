@@ -8,6 +8,9 @@
 import { readFileSync } from 'node:fs'
 import { RIN_TIERS, rinCatch, ceilingFor, population, PATIENCE_FULL_MS, type RinWater } from './rin-catch'
 import { RIN_POND, RIN_STREAM, RIN_LAKE } from '../voxel/rin-water'
+import { ITEMS } from '../sprites/items'
+import { TOOL_DEFS } from './tools'
+import { POTION_DEFS } from './alchemy'
 
 let pass = 0
 const fails: string[] = []
@@ -51,12 +54,17 @@ function water(kind: RinWater['kind'], depth: number, lively = false): RinWater 
     ok(JSON.stringify(canonXp) === JSON.stringify(buildXp),
       `★★ the XP ladder matches canon — canon ${JSON.stringify(canonXp)} vs build ${JSON.stringify(buildXp)}`)
 
-    // Every rinn this build can hand out must be named in canon's own tables. Matched loosely
-    // (canon writes "Glowfin", the item id is `glowfin_scale`) because the ID convention is the
-    // build's business and the NAME is canon's.
+    // Every rinn this build can hand out must be named in canon's own tables.
+    //
+    // ⚠⚠ THIS ASSERT USED TO STRIP `_scale` BEFORE COMPARING, and that exemption is the whole
+    // reason the tier-2/3 ids drifted unseen for two days. The justification written here was that
+    // *"the ID convention is the build's business and the NAME is canon's"* — sound in general, and
+    // wrong for an id that other tables LOOK UP. The replace had no legitimate target either: no
+    // rung's id ends in `_scale` any more, so it could only ever have excused the drift it was
+    // supposed to catch. Underscores still normalise to spaces (canon writes "Crystal Rinn").
     const lower = skill4.toLowerCase()
     const missing = RIN_TIERS.flatMap(t => t.items)
-      .filter(id => !lower.includes(id.replace(/_scale$/, '').replace(/_/g, ' ')))
+      .filter(id => !lower.includes(id.replace(/_/g, ' ')))
     ok(missing.length === 0, `★★ every catchable rinn is named in canon (unnamed: ${missing.join(', ') || 'none'})`)
 
     // And the level bands, which are the half that is easy to confuse with the per-spot minLevel in
@@ -67,6 +75,64 @@ function water(kind: RinWater['kind'], depth: number, lively = false): RinWater 
     ok(bandMismatch.length === 0,
       `★★ tier level bands match canon (mismatched: ${bandMismatch.map(b => `T${b.tier} canon ${b.min}`).join(', ') || 'none'})`)
   }
+}
+
+// ── 1b. ★★★ A CATCH IS A JOIN, AND A LADDER MUST BE CLIMBABLE ───────────────────────────────────
+// Section 1 asks whether the ladder still agrees with canon. This asks the question canon cannot
+// see: whether the ids it hands out MEAN anything to the rest of the build.
+//
+// It exists because for two days they did not. `glowfin_scale` and `moonkoi_scale` had no `ItemDef`
+// and no consumer, so tier-2 and tier-3 water each dealt a nameless object on half its casts, and
+// `glowfin_rinstick` / `moonkoi_rinstick` — which gate the rungs above — asked for `glowfin` and
+// `moonkoi`, which nothing here could land. **The ladder terminated at tier 1 and every assert in
+// this file was green**, because every assert in this file was about the ladder's own internals.
+{
+  const have = new Set(ITEMS.map(d => d.id))
+  const catchable = new Set(RIN_TIERS.flatMap(t => t.items))
+
+  const nameless = [...catchable].filter(id => !have.has(id))
+  ok(nameless.length === 0,
+    `\u2605\u2605 every catchable rinn has an ItemDef — it can be named, drawn and described (nameless: ${nameless.join(', ') || 'none'})`)
+
+  // Canon: rinsticks are built *from rinn* — "kin calls to kin". A catch nothing consumes is a
+  // reward with no downstream, which is how the two orphans looked from inside the ladder.
+  const consumers = new Set<string>()
+  for (const t of Object.values(TOOL_DEFS)) for (const r of t.recipe ?? []) consumers.add(r.itemId)
+  for (const d of Object.values(POTION_DEFS)) for (const r of d.recipe ?? []) consumers.add(r.itemId)
+  const orphans = [...catchable].filter(id => !consumers.has(id))
+  ok(orphans.length === 0,
+    `\u2605\u2605 every catchable rinn is consumed by a tool or a brew (orphans: ${orphans.join(', ') || 'none'})`)
+
+  // ★★ THE LADDER IS SELF-SUPPORTING: every rinn a rinstick asks for is a rinn this world can land.
+  // Derived, never hand-listed — an ingredient counts as "a rinn" when canon's own §Skill 4 tables
+  // name it, so the day canon adds a rung this assert covers it without being edited.
+  //
+  // ⚠⚠ TWO RULES, BECAUSE ONE OF THEM CANNOT SEE THE BUG THAT PROMPTED IT. The canon-named rule
+  // asks *"canon names this rinn — can we land it?"*, and a mutation sweep put `moonkoi_scale` into
+  // a rinstick recipe and **it survived**: canon writes "Moonkoi", never "moonkoi scale", so the
+  // ingredient did not read as a rinn and was skipped. The original defect, entering from the tool
+  // side, walks straight past a guard written against the original defect. So the second rule asks
+  // the question that has no vocabulary in it at all — *does this id name anything?* — and
+  // `goldwood_plank` (a real `ItemDef`, not a rinn) passes it without being special-cased.
+  const skilling = (() => {
+    try { return readFileSync('/root/athernyx/CANON/game/shimmer-skilling.md', 'utf8') } catch { return '' }
+  })()
+  const rinnText = skilling.slice(skilling.indexOf('## Skill 4: Rinning'), skilling.indexOf('## Skill 5')).toLowerCase()
+  ok(rinnText.length > 500, "canon's Rinning section is readable here too — else the climb assert is vacuous")
+  const unlandable: string[] = []
+  const unnameable: string[] = []
+  for (const t of Object.values(TOOL_DEFS)) {
+    if (t.skillId !== 'rinning') continue
+    for (const r of t.recipe ?? []) {
+      const isRinn = rinnText.includes(r.itemId.replace(/_/g, ' '))
+      if (isRinn && !catchable.has(r.itemId)) unlandable.push(`${t.id} needs ${r.itemId}`)
+      if (!have.has(r.itemId)) unnameable.push(`${t.id} needs ${r.itemId}`)
+    }
+  }
+  ok(rinnText.length > 500 && unlandable.length === 0,
+    `\u2605\u2605\u2605 every rinstick is built from rinn this world can land — the ladder is climbable (unlandable: ${unlandable.join(', ') || 'none'})`)
+  ok(unnameable.length === 0,
+    `\u2605\u2605 every rinning-tool ingredient names a real item (nameless: ${unnameable.join(', ') || 'none'})`)
 }
 
 // ── 2. THE SPOT IS A CEILING AND THE LEVEL IS A KEY — two limits, neither substituting ──────────

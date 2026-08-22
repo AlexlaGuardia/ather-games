@@ -17,6 +17,7 @@ import { MAT } from './depth'
 import { isLogMat } from './trees'
 import { PIECES } from './pieces'
 import { TOOL_DEFS } from '../engine/tools'
+import { RIN_TIERS } from '../engine/rin-catch'
 
 let pass = 0, fail = 0
 function check(label: string, ok: boolean, detail = '') {
@@ -158,7 +159,10 @@ console.log('reachability')
   // ...plus anything the recipe table can make from those. One pass is enough today (refining is
   // one step deep); if the table ever grows a chain, this becomes a fixpoint loop and the assert
   // below is what will tell you.
-  const obtainable = new Set([...fromBlocks, ...RECIPE_OUTPUTS])
+  // ...plus what the water gives up. ⚠ A RIN CATCH IS NOT A BLOCK DROP AND NEVER WILL BE, so a
+  // reachability set derived from `BLOCKS` alone is structurally incapable of seeing rinning —
+  // which is why the sweep below used to exempt the skill rather than fail on it.
+  const obtainable = new Set([...fromBlocks, ...RECIPE_OUTPUTS, ...RIN_TIERS.flatMap(t => t.items)])
 
   const unreachable = (ids: string[]) => ids.filter(id => !obtainable.has(id))
 
@@ -171,20 +175,26 @@ console.log('reachability')
     check(`${w} log refines into something`, RECIPES.some(r => r.input.some(i => i.itemId === `${w}_log`)))
   }
 
-  // ── The tool ladder. Rinning is excluded WITH ITS REASON, not silently skipped ──────────────
-  // `shimmerscale` / `clickclaw` are CREATURE drops. The voxel world has no creatures yet and water
-  // is `placeable:false, drops:[]`, so rinning has no block answer at all. That is an open design
-  // gap (Jin's — how a water skill works in a block world), not a canon gap and not a bug to patch
-  // by inventing a fish block. Excluded explicitly so the sweep stays honest about what it covers.
-  const RINNING_PENDING = new Set(['shimmerscale', 'clickclaw', 'glowfin_scale', 'moonkoi_scale'])
+  // ── The tool ladder. RINNING IS NOW SWEPT LIKE THE REST — the exemption expired (2026-08-22) ──
+  // What stood here excluded rinning "with its reason": *"the voxel world has no creatures yet and
+  // water is `placeable:false, drops:[]`, so rinning has no block answer at all."* Every word of
+  // that was true when written and it stopped being true on 2026-08-20, when rinning shipped: the
+  // answer was never going to be a block, it is `RIN_TIERS`.
+  //
+  // ★★★ AND AN EXEMPTION IS NOT A NEUTRAL OMISSION — IT IS A SILENT PROMISE THAT SOMEONE IS
+  // WATCHING THAT CORNER. While this skipped, `glowfin_rinstick` asked for `glowfin` while tier-2
+  // water dealt `glowfin_scale`, so the ladder ended at tier 1 and this sweep — the file that
+  // exists to prove a tool is craftable — reported every tool craftable. The stale ids sat in
+  // `RINNING_PENDING` in plain sight; nothing read them, because rinning `continue`d one line
+  // above and that list could never fire.
   const toolGaps: string[] = []
   for (const [id, def] of Object.entries(TOOL_DEFS)) {
-    if (def.basic || def.skillId === 'rinning') continue   // farming (spades) IS swept — see below
+    if (def.basic) continue
     for (const i of def.recipe) {
-      if (!obtainable.has(i.itemId) && !RINNING_PENDING.has(i.itemId)) toolGaps.push(`${id} needs ${i.itemId}`)
+      if (!obtainable.has(i.itemId)) toolGaps.push(`${id} needs ${i.itemId}`)
     }
   }
-  check('every forestry + prospecting + farming tool is craftable from mined material', toolGaps.length === 0, toolGaps.join(' · '))
+  check('every non-basic tool in every skill is craftable from what this world gives up', toolGaps.length === 0, toolGaps.join(' · '))
 
   // ── the spade must never become a KEY ────────────────────────────────────────────────────────
   // Farming's tool was added 2026-08-07 with no basic tier on purpose: soil and sand stay
