@@ -3,7 +3,7 @@
 // ★ THE POINT OF THIS FILE IS THE SWEEP AT THE BOTTOM: the world may not hand out anything you
 // are supposed to CRAFT.
 //
-// The bridges generated `MAT.PLANKS` from 2026-08-08. On 2026-08-13 that id stopped being "a
+// The bridges generated `MAT.PLANKS_GOLDWOOD` from 2026-08-08. On 2026-08-13 that id stopped being "a
 // plank block" and became PLANKING — the crafted wooden wall, the third rung of Alex's building
 // grammar ("you build with what you MADE, not what you dug"). Nobody moved the bridges, so for
 // two days the world went on stamping the crafted material into the ground along the one road
@@ -94,7 +94,7 @@ console.log('\nthe deck renders')
     check(`deck ${name} differs from planking`,
       Buffer.compare(
         Buffer.from(paintFor(MAT.DECK, face, 16)),
-        Buffer.from(paintFor(MAT.PLANKS, face, 16))) !== 0,
+        Buffer.from(paintFor(MAT.PLANKS_GOLDWOOD, face, 16))) !== 0,
       'the whole point is that a player can SEE which timber pays')
   }
   // ⚠ The colour and the wear pattern are jin's placeholders and are Alex's call — this only
@@ -113,7 +113,7 @@ console.log('\nthe spine')
     for (let y = Math.max(1, Math.floor(h) - 2); y <= table + 2; y++) {
       const m = materialAt(x, y, z, SEED, h)
       if (m === MAT.DECK) { deckCells++; onBridge = true }
-      if (m === MAT.PLANKS) plankCells++
+      if (m === MAT.PLANKS_GOLDWOOD) plankCells++
     }
     if (onBridge) bridgeCols++
   }

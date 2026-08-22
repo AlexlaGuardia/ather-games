@@ -282,24 +282,56 @@ console.log('building grammar')
       check(`${id} places as itself`, ALL_BLOCKS.some(b => b.material === materialForItem(id) && b.drops[0].itemId === id))
   }
 
-  // 6. THE WOOD HALF, same shape. A log is raw material; the PLANK is currency, not a block in
-  //    hand; planking is the wooden surface you spend planks on.
+  // 6. THE WOOD HALF. A log is raw material; the PLANK is what you both spend and place.
+  //
+  // ── ★★★ THIS SECTION ASSERTED THE OPPOSITE UNTIL 2026-08-22, AND THAT IS THE POINT ───────────
+  // It used to pin Alex's 08-13 ruling — *"actual planks not the block, not placeable, but can be
+  // used to craft materials to build with"* — with `materialForItem('goldwood_plank') === undefined`
+  // and a `planking` tier as the wooden surface. He reversed that on 08-22, asked twice and
+  // confirmed twice, having played it: planking read as *"a bit out of place when each tree gives
+  // logs that can already be turned into planks"*.
+  //
+  // ⚠ THE REVERSAL IS RECORDED RATHER THAN QUIETLY REWRITTEN, because a test that flips its own
+  // assertion with no note reads like a bug someone patched. `pieces.ts` is the evidence that
+  // settled it: doorway, window, roof, beam, fence and half slab already spent RAW planks in two
+  // species, so the build's carpentry grammar had never been the one this section was defending.
   check('a log is not placeable', ALL_BLOCKS.filter(b => isLogMat(b.material)).every(b => b.placeable === false),
     'putting the trunk back up is the loop this ruling replaces')
-  check('★ a plank is currency, not a block', materialForItem('goldwood_plank') === undefined,
-    'Alex: "actual planks not the block, not placeable" — it buys doors and fences, it is not one')
-  check('planking is the wooden surface', def(MAT.PLANKS).placeable === true)
-  check('and it is crafted from planks', recipeDef('planking')?.input[0].itemId === 'goldwood_plank')
-  check('breaking planking salvages the panel, not its planks', def(MAT.PLANKS).drops[0].itemId === 'planking',
-    'dropping planks would make the craft step a no-op you could farm')
+  check('★ a plank PLACES, and is still what pieces cost', materialForItem('goldwood_plank') !== undefined,
+    'the 08-13 ruling made this undefined; Alex reversed it 08-22')
+  check('...and it places as ITSELF, so the round trip closes',
+    def(materialForItem('goldwood_plank')!).drops[0].itemId === 'goldwood_plank',
+    'a wall that gives back something other than what built it is a farm or a loss')
+  // ★ ALL THREE PLANK WOODS, not just the day-one tree. This is what the cut bought: `planking`
+  // hardcoded goldwood, so shimmeroak could roof a house and not wall one.
+  for (const wood of ['goldwood', 'shimmeroak', 'dawnwood']) {
+    const m = materialForItem(`${wood}_plank`)
+    check(`${wood} planks are a wall`, m !== undefined && def(m).placeable === true,
+      'the whole reason the planking tier was cut')
+  }
+  // ...and starwillow is NOT, because it yields branches. Guards the other direction: a fourth
+  // wall nobody can craft is the shape of bug this week has been made of.
+  check('starwillow has no wall, because it has no plank',
+    materialForItem('starwillow_plank') === undefined)
+  // ⚠ AND THE TIER IS ACTUALLY GONE, not merely unused — a recipe left behind would still show in
+  // the craft surface and still be makeable.
+  check('★ the planking tier is gone from the table', recipeDef('planking') === undefined)
+  check('...and nothing still costs it', !RECIPES.some(r => r.input.some(i => i.itemId === 'planking')),
+    'a cost pointing at an item no block drops is the uncraftable-forestry-ladder bug again')
 
   // 7. THE TWO HALVES MUST NOT COST THE SAME. Stone runs at a net loss (2 mined -> 1 placed) and
-  //    wood at a net gain (1 log -> 4 planks -> 2 planking); that asymmetry IS the economy, and it
-  //    is the kind of thing a later balance pass flattens without noticing what it was for.
+  //    wood at a net gain; that asymmetry IS the economy, and it is the kind of thing a later
+  //    balance pass flattens without noticing what it was for.
+  //
+  // ⚠ WOOD IS MEASURED THROUGH ONE FEWER STEP SINCE 2026-08-22 and the assert is unchanged in
+  // MEANING: it was `4 planks / 2 per panel = 2` placed blocks per log, and it is now `4 planks =
+  // 4` placed blocks per log, because a plank places directly. Cutting the planking tier made wood
+  // twice as cheap to build in, which only WIDENS the gap this section defends — so the check still
+  // passes for the right reason rather than by luck. Stated because a reader who finds the number
+  // doubled deserves to know it was a ruling and not a slip.
   {
     const perLog = recipeDef('goldwood_planks')!.output.count
-    const perPanel = recipeDef('planking')!.input[0].count
-    const woodOut = perLog / perPanel                    // placed blocks per block mined
+    const woodOut = perLog                               // placed blocks per block mined
     // ⚠ WAS `1 / input.count`, WHICH HARDCODED AN OUTPUT OF ONE. It read as "placed per mined" and
     // was really "one over the input", so the 2026-08-15 re-granulation of cut_stone from 2→1 to
     // 4→2 — the SAME 2:1 ratio, by construction — would have reported the stone economy as having

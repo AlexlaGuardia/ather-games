@@ -204,8 +204,19 @@ export const MATERIAL_COLOR: Record<number, number> = {
   [MAT.CHEST]: 0x8f6535,
   // Packed earth, drier than subsoil, tanner than sand — the story road.
   [MAT.PATH]: 0xa8916b,
-  // Milled goldwood strips — the builder's floor. ⚠ No longer the bridge deck; see MAT.DECK.
-  [MAT.PLANKS]: 0xa8834d,
+  // ── ★ THE WOODEN WALLS, ONE PER PLANK SPECIES (2026-08-22, the planking cut) ────────────────
+  // Milled strips — the builder's floor. ⚠ No longer the bridge deck; see MAT.DECK.
+  //
+  // ⚠ EACH IS ITS SPECIES' OWN TIMBER, pulled a little warmer and lighter than the standing LOG,
+  // because milled wood IS lighter than bark — that difference is what stops a wall reading as a
+  // stack of trunks. Derived by eye from each log colour rather than by formula: goldwood's log is
+  // 0x8a6a34, shimmeroak's 0x8a7f6a, dawnwood's 0x9a5f4a, and the three walls must be tellable
+  // apart at a distance, which a uniform lightening does not guarantee.
+  [MAT.PLANKS_GOLDWOOD]: 0xa8834d,
+  // Shimmeroak: the cool grey-brown timber. The one that must not drift into goldwood's warmth.
+  [MAT.PLANKS_SHIMMEROAK]: 0xa39a83,
+  // Dawnwood: the red timber, and the most distinct of the three at any distance.
+  [MAT.PLANKS_DAWNWOOD]: 0xb2765c,
   // The road's bridge timber: the same goldwood weathered paler and greyer by whatever years the
   // story road has stood. It must NOT read as fresh planking — the colour is the only warning a
   // player gets that this one pays nothing, so it is a visible step toward PATH's tan, not a tint.

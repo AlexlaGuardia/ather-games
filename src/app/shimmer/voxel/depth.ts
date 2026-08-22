@@ -186,15 +186,34 @@ export const MAT = {
    */
   PATH: 11,
   /**
-   * PLANKING — the crafted wooden wall (2 planks nailed together), the wood half of the building
-   * grammar. ⚠ NEVER GENERATED as of 2026-08-15: the bridges that used to emit this id now emit
-   * `DECK` (54), because handing the crafted material out in the world is the same hole as making
-   * it diggable. Placed only, and it drops `planking` rather than the planks it was made from.
+   * The wooden wall, in goldwood — the wood half of the building grammar.
    *
-   * ⚠ The id keeps the name PLANKS while the block is called "Planking" — it was renamed and
-   * re-dropped in place on 2026-08-13 rather than replaced, so that two ids never meant one thing.
+   * ── ★★★ 2026-08-22: THE `planking` TIER WAS CUT, AND THAT REVERSES THE 08-13 RULING ──────────
+   * This block used to be "Planking", crafted from 2 planks, and it existed because Alex ruled on
+   * 08-13: *"actual planks not the block, not placeable, but can be used to craft materials to
+   * build with."* Planks were currency; this was what you spent them on.
+   *
+   * ⚠ HE OVERTURNED THAT DELIBERATELY ON 08-22, ASKED TWICE AND CONFIRMED TWICE — recorded here
+   * because the reversal is the kind of thing a later reader finds and "fixes" back. Playing it:
+   * *"i also noticed the craftable item planking.. its a bit out of place when each tree gives logs
+   * that can already be turned into planks."* He is right, and `pieces.ts` was already agreeing
+   * with him in silence: every buildable piece — doorway, window, roof, beam, fence, half slab —
+   * spends RAW planks, across two species. The build already had a carpentry grammar and planking
+   * was not in it. It had two consumers left (the sawmill and the stonecutter) and it hardcoded
+   * goldwood, so shimmeroak could roof a house but could not wall one.
+   *
+   * ★ SO A PLANK IS PLACEABLE AGAIN, AND NOW THERE ARE THREE. The 08-13 ruling's cost was one wood
+   * to build with; its benefit was a plank that felt like currency. Alex weighed both with the game
+   * in front of him and took the three woods.
+   *
+   * ⚠ NEVER GENERATED as of 2026-08-15: the bridges that used to emit this id emit `DECK` (54).
+   * ⚠ Keeps id 12 — renamed in place, never replaced, so two ids never mean one thing.
    */
-  PLANKS: 12,
+  PLANKS_GOLDWOOD: 12,
+  /** Shimmeroak's wall — the cooler, greyer timber. New 2026-08-22 with the planking cut. */
+  PLANKS_SHIMMEROAK: 74,
+  /** Dawnwood's wall — the red timber. New 2026-08-22 with the planking cut. */
+  PLANKS_DAWNWOOD: 75,
   /**
    * The hot springs' mineral shell (2026-08-08, the Springs rework) — the pale crust a spring
    * deposits around itself. Beds, aprons and the shallow walls of the terrace pools wear it

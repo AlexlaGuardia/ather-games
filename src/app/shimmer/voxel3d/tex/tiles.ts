@@ -46,7 +46,7 @@ export const TILE_MATERIALS: number[] = [
   // The story road added 2026-08-08 with the quest-spine worldgen.
   MAT.PATH,
   // Plank block added 2026-08-08 with the road's bridges; it stopped generating there 2026-08-15.
-  MAT.PLANKS,
+  MAT.PLANKS_GOLDWOOD, MAT.PLANKS_SHIMMEROAK, MAT.PLANKS_DAWNWOOD,
   // The bridge deck split off PLANKS 2026-08-15 — same strips, weathered, and it pays nothing.
   MAT.DECK,
   // Spring crust added 2026-08-08 with the hot-spring terraces.
@@ -620,7 +620,7 @@ const bedFrame = (material: number): number => ({
   [MAT.GARDEN_BED_GOLDWOOD]: MATERIAL_COLOR[WOOD.GOLDWOOD_LOG],
   [MAT.GARDEN_BED_SHIMMEROAK]: MATERIAL_COLOR[WOOD.SHIMMEROAK_LOG],
   [MAT.GARDEN_BED_DAWNWOOD]: MATERIAL_COLOR[WOOD.DAWNWOOD_LOG],
-}[material] ?? MATERIAL_COLOR[MAT.PLANKS])
+}[material] ?? MATERIAL_COLOR[MAT.PLANKS_GOLDWOOD])
 
 /** A bed's flank: milled boards with the dark soil line along the top edge. */
 function paintPlankFrame(dst: Layer, size: number, wood: [number, number, number], seed: number): void {
@@ -1183,9 +1183,14 @@ export function paintFor(material: number, face: number, size: number): Layer {
         }
       } else paintGrit(dst, size, rgbOf(MATERIAL_COLOR[MAT.SUBSOIL]), 18, 22, seed)
       break
-    case MAT.PLANKS: {
+    // ★ ONE PAINTER, THREE WOODS (2026-08-22, the planking cut). Keyed off `material` rather than
+    // off MAT.PLANKS_GOLDWOOD, which is the whole reason three species cost three colour entries
+    // and no new art — the strips are procedural and the hue is a lookup.
+    case MAT.PLANKS_GOLDWOOD:
+    case MAT.PLANKS_SHIMMEROAK:
+    case MAT.PLANKS_DAWNWOOD: {
       // Plain milled strips — the craft table's surface without the etched work-square.
-      const milled = rgbOf(MATERIAL_COLOR[MAT.PLANKS])
+      const milled = rgbOf(MATERIAL_COLOR[material])
       const strip = Math.max(2, Math.round(size / 4))
       for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {
         const seam = (face === SIDE ? x : y) % strip === 0

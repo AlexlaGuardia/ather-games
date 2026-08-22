@@ -98,8 +98,9 @@ export interface RecipeDef {
    * full), and the craft panel prints both numbers so it is a decision rather than a trap.
    *
    * ⚠ ONLY ON TAKING RAW MATERIAL APART. Extraction is what a purpose-built station does better.
-   * Assembly is not — `planking` is two planks nailed together and a bench does not conjure a
-   * third, so it stays bonus-free and the oracle guards that.
+   * Assembly is not — nailing planks into a fitting is not extraction and a bench does not conjure
+   * a third plank, so assembly rows stay bonus-free and the oracle guards that. (The example this
+   * used to give was `planking`, cut 2026-08-22.)
    *
    * ★ `cut_stone` NOW DECLARES ONE, AND THAT IS A REVISION, NOT AN EROSION — read this before
    * touching it. This comment used to exclude stone outright, on the grounds that its 2:1 loss is
@@ -218,7 +219,7 @@ export const RECIPES: RecipeDef[] = [
   // not; that asymmetry is the building grammar and these rows must not flatten it.
   //
   // Names are generic English (brick, sandstone, pale) describing worked versions of rock already
-  // in the world — same call `plank`, `planking` and `cut stone` made. No Athernyx word is coined,
+  // in the world — same call `plank` and `cut stone` made. No Athernyx word is coined,
   // so no canon gap is owed.
 
   // Fine grey courses against cut stone's big ashlar blocks — the "somebody BUILT this" read that
@@ -239,17 +240,15 @@ export const RECIPES: RecipeDef[] = [
   { id: 'sandstone', name: 'Sandstone', milled: 3, family: 'stone', station: 'hand', mana: 0,
     input: [{ itemId: 'block_sand', count: 3 }], output: { itemId: 'sandstone', count: 2 } },
 
-  // ── ★ WOOD: PLANKS → PLANKING (2026-08-13) ──────────────────────────────────────────────────
-  // The wood half of the grammar, and the mirror of `cut_stone`. The plank is currency now — it
-  // buys doors, windows, fences, beams — and this is what you spend it on when you want a floor or
-  // a wall rather than a fitting.
-  //
-  // ⚠ CHEAPER THAN STONE ON PURPOSE, and the whole economy is in these two numbers. Stone runs
-  // 2 mined -> 1 placed, a net LOSS, so a stone building is a quarry you went and did. Wood runs
-  // 1 log -> 4 planks -> 2 planking, a net GAIN, so timber is what you throw up first. Renewable,
-  // softer, and it should feel it. Turn these if building in wood ever feels harder than digging.
-  { id: 'planking', name: 'Planking', family: 'wood', station: 'hand', mana: 0,
-    input: [{ itemId: 'goldwood_plank', count: 2 }], output: { itemId: 'planking', count: 1 } },
+  // ── ★ THE `planking` TIER WAS CUT HERE (2026-08-22) ─────────────────────────────────────────
+  // A recipe used to sit at this spot turning 2 goldwood planks into 1 `planking`, the wooden wall.
+  // It existed for Alex's 08-13 ruling (*"actual planks not the block, not placeable"*) and he
+  // reversed that on 08-22, asked twice and confirmed twice: a plank places directly again, one
+  // block per species. The wood economy it carried is UNCHANGED in substance — 1 log still buys 4
+  // placed blocks where it used to buy 4 planks that became 2 panels, so wood got CHEAPER to build
+  // in, which only widens the wood-beats-stone asymmetry the ruling below cares about. See
+  // `registry.ts` › the wooden wall, and `depth.ts` › PLANKS_GOLDWOOD, for the full reasoning.
+
 
   // ── THE STATION ITSELF ──────────────────────────────────────────────────────────────────────
   // Craftable by hand, and it must stay that way: a crafting table gated behind a crafting table is
@@ -260,19 +259,19 @@ export const RECIPES: RecipeDef[] = [
 
   // ── ★ THE SAWMILL — the second station (2026-08-13) ─────────────────────────────────────────
   // Bench work, unlike the bench itself: the table is the bootstrap and must stay hand-makeable,
-  // but by the time you want a mill you demonstrably own a table. Costs planking (so the building
+  // but by the time you want a mill you demonstrably own a table. Costs planks (so the building
   // material has a use that is not a wall) plus bark (a saw needs an edge, and bark is the tier-1
   // blade material the forestry ladder already runs on).
   //
   // ~5 goldwood logs all in. Expensive enough to be a decision, cheap enough to reach in the
   // session you first notice you are refining a lot of wood.
   { id: 'sawmill', name: 'Sawmill', station: 'crafting_table', mana: 0,
-    input: [{ itemId: 'planking', count: 6 }, { itemId: 'goldwood_bark', count: 4 }],
+    input: [{ itemId: 'goldwood_plank', count: 12 }, { itemId: 'goldwood_bark', count: 4 }],
     output: { itemId: 'sawmill', count: 1 } },
 
   // ── ★ THE STONECUTTER — the third station, and it pays in MATERIAL (2026-08-15) ─────────────
   // Bench work like the mill, and it costs the material it exists to save you: 24 rubble's worth
-  // of cut stone for the bed, planking for the frame. That ordering is the point — you cannot buy
+  // of cut stone for the bed, planks for the frame. That ordering is the point — you cannot buy
   // your way out of hand-cutting stone until you have hand-cut a real pile of it, so the station
   // is a reward for the trip rather than a way to skip it.
   //
@@ -280,7 +279,7 @@ export const RECIPES: RecipeDef[] = [
   // stone down by abrasion against a heavy bed; the mass IS the tool, which is also why it is the
   // slowest thing on the plot.
   { id: 'stonecutter', name: 'Stonecutter', station: 'crafting_table', mana: 0,
-    input: [{ itemId: 'cut_stone', count: 6 }, { itemId: 'planking', count: 4 }],
+    input: [{ itemId: 'cut_stone', count: 6 }, { itemId: 'goldwood_plank', count: 8 }],
     output: { itemId: 'stonecutter', count: 1 } },
 
   // ── ★ THE WAYMARK — a passage you plant (2026-08-15) ────────────────────────────────────────
@@ -347,9 +346,8 @@ export const RECIPES: RecipeDef[] = [
   // is a choice rather than a substitution: three named rows say "pick your timber" where a single
   // any-plank row would silently spend whichever wood the code happened to reach for first.
   //
-  // ⚠ THE COST IS 4 PLANKS, NOT 2 PLANKING. `planking` cost two planks, so this is the same timber
-  // it always was, one step shorter — and it is what lets shimmeroak and dawnwood planks have a use
-  // at all, since `planking` only ever accepted goldwood.
+  // ⚠ 4 PLANKS. This was the first recipe moved off the `planking` tier (2026-08-22); the tier
+  // itself was cut hours later for the same reason, so this row is now ordinary rather than special.
   //
   // ⚠ NO STARWILLOW ROW. Starwillow yields branches, not planks; a fourth row here would be a bed
   // that can never be crafted.

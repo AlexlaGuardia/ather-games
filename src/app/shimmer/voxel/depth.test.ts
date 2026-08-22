@@ -53,7 +53,7 @@ for (let i = 0; i < 600; i++) COLS.push([(i * 977) % 4000 - 2000, (i * 1583) % 4
       // Bridges + holds (2026-08-08): the generator holds structure above the surface in exactly
       // two places — plank/stone in the road corridor (bridges), stone/lantern in a hold's bbox
       // (walls, keep, gate lights). Anything built above ground OUTSIDE those is still a bug.
-      const bridge = (m === MAT.PLANKS || m === MAT.STONE) && roadAt(x, z, SEED)
+      const bridge = (m === MAT.PLANKS_GOLDWOOD || m === MAT.STONE) && roadAt(x, z, SEED)
       const hold = (m === MAT.STONE || m === MAT.MANA_LANTERN) && holdIndexAt(x, z) >= 0
       if (m !== MAT.AIR && m !== MAT.WATER && !bridge && !hold) bad++
       // Water above sea level is legal in exactly two places: a river channel or pond filled to

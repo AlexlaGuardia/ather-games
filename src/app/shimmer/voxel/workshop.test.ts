@@ -47,8 +47,17 @@ console.log('milled yield')
 
   // Guarding a RULING, not arithmetic — see the `milled` doc comment. Assembly is not extraction:
   // a bench does not conjure a third plank out of two, anywhere, ever.
-  check('planking gets no station bonus at ANY station (assembly is not extraction)',
-    Object.values(STATIONS).every(st => milledYield(recipeDef('planking')!, st) === recipeDef('planking')!.output.count))
+  // ⚠ WAS PINNED TO `planking`, WHICH WAS CUT ON 2026-08-22 AND TOOK THIS ASSERT DOWN WITH IT.
+  // One id standing in for a rule is a guard that dies when the exemplar does — so the rule is now
+  // asserted over EVERY assembly row (a recipe that declares no `milled`), which is what it always
+  // meant. It also gets stronger as the table grows instead of weaker.
+  const assembly = RECIPES.filter(r => r.milled === undefined)
+  check('assembly rows are non-empty, so this is not passing by being blind', assembly.length > 0)
+  const bonused = assembly.filter(r =>
+    Object.values(STATIONS).some(st => milledYield(r, st) !== r.output.count))
+  check('NO assembly row gets a station bonus anywhere (assembly is not extraction)',
+    bonused.length === 0,
+    `a bench does not conjure a third plank out of two, anywhere, ever — ${bonused.map(r => r.id).join(', ')}`)
 
   const logRefines = RECIPES.filter(r => r.input.some(i => i.itemId.endsWith('_log')))
   check('every log-refine DOES pay better milled', logRefines.length > 0 &&
@@ -119,7 +128,9 @@ console.log('who pays the bonus')
   check('every bonus-bearing recipe names at least one station that pays it',
     RECIPES.filter(r => r.milled !== undefined).every(r => payingStations(r).length > 0),
     RECIPES.filter(r => r.milled !== undefined && payingStations(r).length === 0).map(r => r.id).join(', '))
-  check('an assembly row names nowhere', payingStations(recipeDef('planking')!).length === 0)
+  // Same de-pinning as above: every assembly row names nowhere, not just one chosen id.
+  check('an assembly row names nowhere',
+    RECIPES.filter(r => r.milled === undefined).every(r => payingStations(r).length === 0))
 }
 
 // ── ★ STONE STILL RUNS AT A LOSS, AT EVERY STATION ────────────────────────────

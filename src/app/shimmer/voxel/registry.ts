@@ -258,23 +258,26 @@ export const BLOCKS: BlockDef[] = [
   // road is a CONDITION of the ground, not a block you carry home and lay somewhere else.
   { ground: true, material: MAT.PATH, name: 'Worn Path', hardness: 0.5, skill: null, minTier: 0, drops: [{ itemId: 'block_subsoil', count: 1 }], fastSkill: 'farming', placeable: false },
 
-  // ── ★ PLANKING — the WOOD half of the building grammar (2026-08-13, Alex's ruling) ───────────
-  // Alex: *"which get turned into planks .. actual planks not the block, not placeable, but can be
-  // used to craft materials to build with."* So the plank stopped being a block in hand and became
-  // pure CURRENCY — it buys doors, fences, beams, windows — and this block became the thing you
-  // craft OUT of planks when you want a wooden surface. Same third rung cut stone is for stone:
-  // pieces do not make a house without a wall between them.
+  // ── ★ THE WOODEN WALL, ONE PER PLANK SPECIES (2026-08-13 ruling, REVERSED 2026-08-22) ────────
+  // These rows used to be a single "Planking" block that dropped a `planking` item, because Alex
+  // ruled on 08-13: *"actual planks not the block, not placeable, but can be used to craft
+  // materials to build with."*
   //
-  // ★ IT IS THE SAME MATERIAL ID, RENAMED AND RE-DROPPED, not a new block. The id already exists,
-  // already generates in the road's bridges and already has a milled-plank painter — and a bridge
-  // deck IS planking, which is what a crafted wooden surface should look like. Adding a second
-  // wooden block beside it would have left two ids meaning one thing.
+  // ⚠ HE OVERTURNED THAT ON 08-22, ASKED TWICE AND CONFIRMED TWICE. Playing it, he called planking
+  // *"a bit out of place when each tree gives logs that can already be turned into planks"* — and
+  // `pieces.ts` had been agreeing in silence the whole time: doorway, window, roof, beam, fence and
+  // half slab all spend RAW planks, in two species. The grammar was already "spend planks"; the
+  // planking tier was an orphan with two consumers that hardcoded goldwood, so shimmeroak could
+  // roof a house and not wall one.
   //
-  // ⚠ CHANGING THE DROP IS WHAT MAKES THE PLANK UNPLACEABLE, and it needs no other code: `BY_ITEM`
-  // maps a placeable block's identity drop back to its material, so the moment this row stops
-  // dropping `goldwood_plank`, that item stops resolving to a voxel. Breaking planking gives back
-  // `planking` (salvage the panel), never the planks it was made from.
-  { material: MAT.PLANKS, name: 'Planking', hardness: 0.7, skill: null, minTier: 0, drops: [{ itemId: 'planking', count: 1 }], fastSkill: 'forestry', placeable: true },
+  // ★ SO A PLANK PLACES AGAIN. The drop IS the mechanism, exactly as the old note said in reverse:
+  // `BY_ITEM` maps a placeable block's identity drop back to its material, so dropping
+  // `goldwood_plank` here is what makes the plank resolve to a voxel once more.
+  //
+  // ⚠ ONE ROW PER PLANK SPECIES, AND STARWILLOW IS ABSENT because it yields branches, not planks.
+  { material: MAT.PLANKS_GOLDWOOD, name: 'Goldwood Planks', hardness: 0.7, skill: null, minTier: 0, drops: [{ itemId: 'goldwood_plank', count: 1 }], fastSkill: 'forestry', placeable: true },
+  { material: MAT.PLANKS_SHIMMEROAK, name: 'Shimmeroak Planks', hardness: 0.7, skill: null, minTier: 0, drops: [{ itemId: 'shimmeroak_plank', count: 1 }], fastSkill: 'forestry', placeable: true },
+  { material: MAT.PLANKS_DAWNWOOD, name: 'Dawnwood Planks', hardness: 0.7, skill: null, minTier: 0, drops: [{ itemId: 'dawnwood_plank', count: 1 }], fastSkill: 'forestry', placeable: true },
 
   // ── ★ BRIDGE DECK — the road's timber, and it pays NOTHING (2026-08-15) ─────────────────────
   // Split off `MAT.PLANKS` because the bridges were generating the crafted wall: 1902 free

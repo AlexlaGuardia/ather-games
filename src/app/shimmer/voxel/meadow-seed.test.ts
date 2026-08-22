@@ -120,7 +120,7 @@ const GRASSES = [MAT.TUFT, MAT.TALL_GRASS]
 // ── 5. only grass gives seeds ───────────────────────────────────────────────────────────────────
 {
   let strays = 0
-  for (const m of [MAT.STONE, MAT.TOPSOIL, MAT.SAND, MAT.PLANKS, MAT.FLOWER, MAT.SUBSOIL]) {
+  for (const m of [MAT.STONE, MAT.TOPSOIL, MAT.SAND, MAT.PLANKS_GOLDWOOD, MAT.FLOWER, MAT.SUBSOIL]) {
     if (MEADOW_SEEDS.some(s => dropsFor(m, () => 0).some(d => d.itemId === s))) strays++
   }
   ok(strays === 0, `★ only grass fruits — no other block yields a seed (${strays})`)
