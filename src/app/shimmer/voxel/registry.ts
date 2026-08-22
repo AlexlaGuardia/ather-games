@@ -377,6 +377,33 @@ export const BLOCKS: BlockDef[] = [
   { noSlab: true, material: MAT.STORMGRASS, name: 'Stormgrass', hardness: 0.05, skill: null, minTier: 0, drops: [{ itemId: 'stormgrass_blade', count: 1 }], fastSkill: 'farming', placeable: true },
   { noSlab: true, material: MAT.ROOTVINE, name: 'Rootvine', hardness: 0.05, skill: null, minTier: 0, drops: [{ itemId: 'rootvine_coil', count: 1 }], fastSkill: 'farming', placeable: true },
   { noSlab: true, material: MAT.TIDEPETAL, name: 'Tidepetal', hardness: 0.05, skill: null, minTier: 0, drops: [{ itemId: 'tidepetal_bloom', count: 1 }], fastSkill: 'farming', placeable: true },
+
+  // ── ★★ THE SEVEN WILD CROPS (2026-08-22) — a ground grows a PLANT ────────────────────────────
+  // RULED (/magii): the grass-tuft ruling and these were never in tension. Canon had already drawn
+  // the line the herbs have used since 08-18 — *a tuft yields a SEED, a ground grows a PLANT* — so
+  // a meadow handing over `seed_shimmerwheat` and a crag growing a Crystalcap you pick are two
+  // different transactions, not two answers to one question.
+  //
+  // ★★ EVERY ROW DROPS PRODUCE **AND** A SEED, and the seed is the whole loop rather than a bonus.
+  // Canon left *"whether a met plant hands over seed or produce or both"* to the build, and both is
+  // the only answer that makes its own sentence work: *wild is the reason to travel, the plot is
+  // reliable supply* only means something if the wild plant is what BOOTSTRAPS the plot. You cross
+  // a crag once, find a Crystalcap, carry a seed home, and farm it forever after. One lucky find
+  // opening a crop line is not a leak — it is the loop the ruling describes, and the farming level
+  // gates still pace it.
+  // ⚠ 25% IS UNPLAYTESTED (play lane's number, flagged as such on GBOARD). It is a dial, not a
+  // measurement, and nobody has walked a keeper through it end to end.
+  //
+  // ⚠ NO ATLAS SLOT ON PURPOSE — these are flora, drawn by the instanced renderer with their own
+  // textures, and `render-audit.test.ts` exempts them via `FLORA_MATERIALS`. That exemption is
+  // imported and counted against the kind enums, so it cannot quietly widen to cover a mistake.
+  { noSlab: true, material: MAT.MOONVINE, name: 'Moonvine', hardness: 0.05, skill: null, minTier: 0, drops: [{ itemId: 'moonvine_leaf', count: 1 }, { itemId: 'seed_moonvine', count: 1, chance: 0.25 }], fastSkill: 'farming', placeable: true },
+  { noSlab: true, material: MAT.STARBEAN, name: 'Starbean', hardness: 0.05, skill: null, minTier: 0, drops: [{ itemId: 'starbean_pod', count: 1 }, { itemId: 'seed_starbean', count: 1, chance: 0.25 }], fastSkill: 'farming', placeable: true },
+  { noSlab: true, material: MAT.CRYSTALCAP, name: 'Crystalcap', hardness: 0.05, skill: null, minTier: 0, drops: [{ itemId: 'crystalcap_spore', count: 1 }, { itemId: 'seed_crystalcap', count: 1, chance: 0.25 }], fastSkill: 'farming', placeable: true },
+  { noSlab: true, material: MAT.DREAMROOT, name: 'Dreamroot', hardness: 0.05, skill: null, minTier: 0, drops: [{ itemId: 'dreamroot_essence', count: 1 }, { itemId: 'seed_dreamroot', count: 1, chance: 0.25 }], fastSkill: 'farming', placeable: true },
+  { noSlab: true, material: MAT.SHIMMERBLOOM, name: 'Shimmerbloom', hardness: 0.05, skill: null, minTier: 0, drops: [{ itemId: 'shimmerbloom_petal', count: 1 }, { itemId: 'seed_shimmerbloom', count: 1, chance: 0.25 }], fastSkill: 'farming', placeable: true },
+  { noSlab: true, material: MAT.ATHERWHEAT, name: 'Atherwheat', hardness: 0.05, skill: null, minTier: 0, drops: [{ itemId: 'atherwheat_grain', count: 1 }, { itemId: 'seed_atherwheat', count: 1, chance: 0.25 }], fastSkill: 'farming', placeable: true },
+  { noSlab: true, material: MAT.DAWNCAP, name: 'Dawncap', hardness: 0.05, skill: null, minTier: 0, drops: [{ itemId: 'dawncap_spore', count: 1 }, { itemId: 'seed_dawncap', count: 1, chance: 0.25 }], fastSkill: 'farming', placeable: true },
   // ── the pot: one block in three states, and only the empty one is a thing you carry ──────────
   { noSlab: true, material: MAT.POT, name: 'Clay Pot', hardness: 0.5, skill: null, minTier: 0, drops: [{ itemId: 'clay_pot', count: 1 }], placeable: true },
   // A planted or bloomed pot gives the POT back, never the seed: pulling a seed you already

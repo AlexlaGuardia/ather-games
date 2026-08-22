@@ -178,6 +178,24 @@ export const MATERIAL_COLOR: Record<number, number> = {
   [MAT.STORMGRASS]: 0x5f8fbe,
   [MAT.ROOTVINE]: 0x4a5f34,
   [MAT.TIDEPETAL]: 0x9fd8d0,
+  // ── ★★ THE SEVEN WILD CROPS (2026-08-22) — read the plant, not the lookup ────────────────────
+  // Same discipline as the herbs directly above: each colour is derived from what canon and the
+  // item text say the thing IS, not picked to fill a palette slot. These are STALK/BODY colours;
+  // the ripe head the renderer draws takes its own tint from the table in `flora-mesh.ts`.
+  //
+  // ⚠ SEVEN PLANTS ON SEVEN GROUNDS, AND SILHOUETTE IS NOT YET DOING ANY OF THE WORK. The herbs
+  // carry the same warning and it applies harder here, because there are seven: colour is telling
+  // them apart, and they survive it only because their grounds never put two side by side. That is
+  // survivable, not good. **Distinct silhouettes are Alex's call** — the canon text is specific
+  // enough to draw from when he wants it (a vine that opens at night, a pod hard enough to survive
+  // scouring, a cap of crystal, a root that dreams).
+  [MAT.MOONVINE]: 0x6f7fae,      // basin night-vine — cool, blue-shadowed, never a leaf green
+  [MAT.STARBEAN]: 0x7f8f5a,      // river pod on a tough stem; the pod survives what scours it
+  [MAT.CRYSTALCAP]: 0x9fb8c8,    // crag mineral — pale, faceted, closer to stone than to plant
+  [MAT.DREAMROOT]: 0x8f6f9e,     // woodland, dusk-purple, the one that reads narcotic
+  [MAT.SHIMMERBLOOM]: 0xe0c8a0,  // shore bloom, sun-bleached warm, sand in the colour
+  [MAT.ATHERWHEAT]: 0xc8b070,    // meadow grain, the classic gold — rarest thing on the commonest ground
+  [MAT.DAWNCAP]: 0xd8a070,       // highland first-light — warm orange over a cold ground
   // ── ★ THE WAYMARK (2026-08-15) — mana bound to a place ───────────────────────────────────────
   // Pale dressed stone, but pulled toward the raw-mana blue (0x7fd4ff) rather than sitting in
   // stone's grey family — a waymark is *"mana bound to a place"*, and the binding is the point. It

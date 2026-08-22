@@ -18,7 +18,6 @@ import { generatedAt, generatedVoxel, makeColumn, meshColumn, SECTION } from './
 import { columnHeight } from './height'
 import { materialAt, MAT, isPlant, isSapling, isSolid, SOLID_EXCEPT, PLANT_MIN, PLANT_MAX } from './depth'
 import { isLeafMat } from './trees'
-import { AIR } from './section'
 import { plantMaterialAt, plantVariant, FLORA } from './flora'
 import { BLOCKS, blockDef, materialForItem } from './registry'
 import { dropsFor } from './mine'
