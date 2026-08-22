@@ -31,6 +31,7 @@ import { RECIPE_OUTPUTS, RECIPES, canCraft, type RecipeDef, type Station } from 
 import { TREE_NODES, saplingItem, logItem } from '../voxel/tree-node'
 import { SPECIES } from '../voxel/trees'
 import { RIN_TIERS } from '../engine/rin-catch'
+import { CROP_DEFS } from '../engine/farming'
 
 /** Everything a block hands over when it is broken. */
 export const FROM_BLOCKS: readonly string[] = BLOCKS.flatMap(b => b.drops.map(d => d.itemId))
@@ -58,18 +59,82 @@ export const FROM_FELLING: readonly string[] = [
 ]
 
 /**
- * Every item a keeper can obtain HERE by playing. No Exchange Booth, no crops — this world has
- * neither, and when it grows one, it registers above and this comment changes with it.
+ * Every source that costs a keeper nothing but the going and getting — break it, cast for it, fell
+ * it, or make it out of what you broke.
+ *
+ * ★ IT EXISTS AS ITS OWN LIST SO THAT FARMING CAN ASK IT A QUESTION, and that is the only reason.
+ * A crop's yield is obtainable only if its SEED is, so `FROM_FARMING` has to read the rest of the
+ * world before it can answer. Writing that list out a second time inside the farming derivation is
+ * the **mirror** — the fourth costume of the 08-22 sweep, and the one that manufactures a green:
+ * a copy and its source agree perfectly right up until a fifth source lands in one of them.
+ * One list, read twice.
+ */
+const BEFORE_FARMING: readonly string[] = [
+  ...FROM_BLOCKS,
+  ...RECIPE_OUTPUTS,
+  ...FROM_RINNING,
+  ...FROM_FELLING,
+]
+
+/**
+ * Everything the ground gives back for a seed you put in it.
+ *
+ * ── ★★★ THE SIXTH INSTANCE, AND THE HEADER ABOVE NAMED THE HOLE IT CAME THROUGH ────────────────
+ * *"a source that never registers here is still invisible... When you add a way to obtain an item,
+ * add it here."* Farming shipped on the front door on 2026-08-22 — grass yields `seed_shimmerwheat`
+ * / `seed_glowroot` / `seed_sunpetal`, a crafted bed takes one, and `harvestBed` → `harvestCrop`
+ * puts `shimmerwheat_grain` / `glowroot_bulb` / `sunpetal_bloom` in the satchel. The set did not
+ * hear about it. So the cauldron greyed out `harvest_brew` — **lv2, 18 xp, the second-cheapest rung
+ * on a ladder whose open complaint is that alchemy 10 costs 1151 xp with brewing the only source**
+ * — and told a keeper to go and find an ingredient they were holding. Wrong in the direction that
+ * sends people away, exactly like the four before it.
+ *
+ * ★★ GATED ON THE SEED, NOT LISTED. A crop whose seed this world has no source for is NOT
+ * obtainable, and saying otherwise would break the gate in the opposite and worse direction: the
+ * panel would offer a brew that cannot be made, which is a lie a keeper only discovers after
+ * gathering everything else. Today that gate is load-bearing — grass yields tier-1 seeds only, so
+ * Moonvine, Crystalcap and Dreamroot are correctly absent and `moonvine_tonic` / `dreamroot_elixir`
+ * correctly read as out of reach. See `CANON_GAPS.md` › *MEADOW AND THE TEN CROPS*; that is a canon
+ * scoping question, and the day it is ruled this derivation changes by nothing at all.
+ *
+ * ★ `bloomsSpirit` NEEDS NO SPECIAL CASE. The Mana Seed's `yields` is `[]` because it pays out a
+ * spirit, so it contributes nothing here on its own. A branch asking about it would be a rule with
+ * no work to do, and the next reader would have to check whether it still had any.
+ *
+ * ⚠ ONE PASS, NOT A FIXPOINT, AND THE PREMISE IS ASSERTED RATHER THAN TRUSTED — the same deal
+ * `WORLD_ITEMS` makes about potions below. No crop yields a seed today, so a seed can never be
+ * downstream of a harvest and one pass is complete. The day a crop returns its own seed (the
+ * "reliable supply" half of canon's split, and a live design question), this needs to iterate, and
+ * `obtainable.test.ts` goes red saying so instead of quietly under-reporting a crop line.
+ *
+ * ⚠⚠ THE SEED SOURCE IS A PARAMETER SO THE GATE CAN BE FALSIFIED, and that is not tidiness — it is
+ * the `isMeadowCrop(c, herbCrops)` lesson one file over, where a mutation deleted the canon guard
+ * and every assert stayed green because an unrelated filter already covered it. **A guard that
+ * cannot fail is indistinguishable from one that does not work.** Feeding this every seed id in the
+ * roster must admit crops that `FROM_FARMING` excludes; feeding it none must admit nothing. The
+ * oracle asks it both, so the exclusion is proved rather than assumed — and it proves it without
+ * naming a single crop, which is the enumeration that would have gone stale by the next ruling.
+ */
+export const cropYieldsFrom = (seedSource: Iterable<string>): readonly string[] => {
+  const seeded = new Set(seedSource)
+  return Object.values(CROP_DEFS)
+    .filter(c => seeded.has(c.seedItemId))
+    .flatMap(c => c.yields.map(y => y.itemId))
+}
+
+export const FROM_FARMING: readonly string[] = cropYieldsFrom(BEFORE_FARMING)
+
+/**
+ * Every item a keeper can obtain HERE by playing. No Exchange Booth — this world has none, and when
+ * it grows one, it registers above and this comment changes with it.
  *
  * ⚠ POTIONS ARE DELIBERATELY EXCLUDED. They are obtainable (the cauldron makes them), but no recipe
  * in the table takes a potion as an INPUT, so leaving them out costs nothing and keeps this from
  * needing a fixpoint. `obtainable.test.ts` asserts that premise rather than trusting it.
  */
 export const WORLD_ITEMS: ReadonlySet<string> = new Set<string>([
-  ...FROM_BLOCKS,
-  ...RECIPE_OUTPUTS,
-  ...FROM_RINNING,
-  ...FROM_FELLING,
+  ...BEFORE_FARMING,
+  ...FROM_FARMING,
 ])
 
 /** The cauldron's honesty gate, as the panel wants it. */

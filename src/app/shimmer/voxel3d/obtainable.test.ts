@@ -4,13 +4,14 @@
 // Every assert here is a way of asking that question, because the bug it exists for shipped five
 // times in four days and was silent every time — a greyed brew row reads as content that has not
 // been built yet, not as a lie.
-import { WORLD_ITEMS, FROM_BLOCKS, FROM_RINNING, FROM_FELLING, inWorld } from './obtainable'
+import { WORLD_ITEMS, FROM_BLOCKS, FROM_RINNING, FROM_FELLING, FROM_FARMING, cropYieldsFrom, inWorld } from './obtainable'
 import { BLOCKS, materialForItem } from '../voxel/registry'
 import { RECIPE_OUTPUTS, RECIPES } from '../voxel/recipes'
 import { TREE_NODES } from '../voxel/tree-node'
 import { RIN_TIERS } from '../engine/rin-catch'
 import { POTION_DEFS, POTION_IDS } from '../engine/alchemy'
 import { TOOL_DEFS } from '../engine/tools'
+import { CROP_DEFS } from '../engine/farming'
 import { ITEMS } from '../sprites/items'
 
 let pass = 0
@@ -33,13 +34,80 @@ const ok = (c: boolean, m: string) => { if (c) pass++; else fails.push(m) }
   const missFell = Object.values(TREE_NODES).map(d => d.secondary.itemId).filter(id => !WORLD_ITEMS.has(id))
   ok(missFell.length === 0, `★★★ every tree's secondary yield is obtainable — this is the one that gated ather_infusion and dawn_cordial (missing: ${missFell.join(', ') || 'none'})`)
 
-  // ⚠ The four source lists must be non-empty. A source that silently derives to [] would satisfy
+  // ⚠ The five source lists must be non-empty. A source that silently derives to [] would satisfy
   // every assert above by having nothing to miss — the vacuous-pass shape this codebase has been
   // bitten by before (a canon grep that matched nothing and went green).
   ok(FROM_BLOCKS.length > 0, 'FROM_BLOCKS is non-empty — an empty source passes coverage vacuously')
   ok(FROM_RINNING.length > 0, 'FROM_RINNING is non-empty')
   ok(FROM_FELLING.length > 0, 'FROM_FELLING is non-empty')
+  ok(FROM_FARMING.length > 0, 'FROM_FARMING is non-empty')
   ok(RECIPE_OUTPUTS.size > 0, 'RECIPE_OUTPUTS is non-empty')
+}
+
+// ── 5. ★★★ FARMING — THE SIXTH SOURCE, AND A GATE THAT HAS TO HOLD IN BOTH DIRECTIONS ──────────
+// Instance six of the one bug: farming shipped on the front door on 08-22 and the set did not hear
+// about it, so `harvest_brew` (lv2, 18 xp) read "not in these lands" while a keeper could make it.
+//
+// ⚠⚠ AND THIS SOURCE IS THE FIRST ONE THAT CAN BE WRONG IN THE OPPOSITE DIRECTION, which is why it
+// gets two asserts and the other four get one. Every earlier source is a table of things the world
+// hands over unconditionally — a block drops what it drops. A crop hands over nothing unless its
+// SEED can be got, so an ungated derivation would tell the panel that Moonvine and Dreamroot are in
+// these lands and let a keeper gather four ingredients before discovering the fifth cannot exist.
+// That failure is quieter and lands later than the greyed row this file was written for.
+{
+  const crops = Object.values(CROP_DEFS)
+
+  // (a) COVERAGE — the direction the bug actually shipped in.
+  const missFarm = FROM_FARMING.filter(id => !WORLD_ITEMS.has(id))
+  ok(missFarm.length === 0,
+    `★★★ every yield of a crop this world can seed is obtainable — this is the one that kept harvest_brew dark (missing: ${missFarm.join(', ') || 'none'})`)
+
+  // (b) THE GATE IS REACHABLE AND IT FIRES — proved by feeding the derivation its own extremes,
+  // never by naming a crop. `cropYieldsFrom([])` is the floor and the full roster is the ceiling; a
+  // gate that has stopped excluding anything shows up as those two being equal.
+  const everySeed = crops.map(c => c.seedItemId)
+  const ceiling = new Set(cropYieldsFrom(everySeed))
+  ok(cropYieldsFrom([]).length === 0,
+    '★ with no seed obtainable the derivation yields nothing — the gate can exclude')
+  const excluded = [...ceiling].filter(id => !FROM_FARMING.includes(id))
+  ok(excluded.length > 0,
+    `★★ the seed gate is NOT dominated — it is really holding crops back today, so deleting it would go red (holding: ${excluded.join(', ') || 'NOTHING'})`)
+  ok(FROM_FARMING.every(id => ceiling.has(id)),
+    'and it admits nothing the full roster would not')
+
+  // ⚠ (b) IS DELIBERATELY ASKED OF `FROM_FARMING`, NOT OF `WORLD_ITEMS`, and the four element herbs
+  // are the reason. Violetbloom and its three kin are tier-2 CROPS whose harvest items also drop
+  // from wild herb blocks, so `violetbloom_petal` is legitimately in the world while
+  // `seed_violetbloom` is not obtainable at all. A crop being unseedable does not make its produce
+  // absent — it makes FARMING not the way you get it. Asking the wider set would read that correct
+  // arrangement as a leak.
+
+  // (c) BY NAME, so a regression says what broke — the `crystallized_sap` treatment for the brew
+  // that was actually dark. Derived from the recipe, so if harvest_brew is ever re-costed off
+  // shimmerwheat this assert goes red rather than testing a recipe that no longer exists.
+  ok(inWorld('shimmerwheat_grain'),
+    '★★★ shimmerwheat_grain is obtainable — grass yields the seed, a bed grows it, and the cauldron said otherwise on the day farming shipped')
+  const hbAbsent = POTION_DEFS['harvest_brew'].recipe.filter(r => !inWorld(r.itemId)).map(r => r.itemId)
+  ok(hbAbsent.length === 0,
+    `★★★ harvest_brew is brewable — lv2, 18 xp, and it was greyed out on the day the front door learned to farm (absent: ${hbAbsent.join(', ') || 'none'})`)
+  ok(POTION_DEFS['harvest_brew'].recipe.some(r => FROM_FARMING.includes(r.itemId)),
+    'and it really does take a farmed input, else the assert above is about nothing')
+
+  // ⚠⚠ FOUR BREWS ARE STILL STRANDED AND THAT IS CORRECT — do not "fix" this by widening the set.
+  // They are blocked on CANON, not on this file: `sunfruit` and `moonberry` name things canon does
+  // not have, and Moonvine/Crystalcap/Dreamroot are tier 2-3 crops whose seeds a meadow does not
+  // yield under canon's *"common, level-1 stock"*. Both are queued in `CANON_GAPS.md`.
+  //
+  // ★ SO THE ASSERT IS ABOUT THE REASON, NOT THE COUNT. A tally would go red for good reasons and
+  // invite the cheapest edit that makes it green; this goes red only if FARMING is what is holding
+  // a brew back, which is the failure this section owns. It stays true whichever way Magii rules.
+  const seedable = new Set(crops.filter(c => FROM_FARMING.some(y => c.yields.some(v => v.itemId === y))).map(c => c.id))
+  const blamedOnFarming = Object.values(POTION_DEFS)
+    .flatMap(d => d.recipe.map(r => ({ brew: d.id, item: r.itemId })))
+    .filter(x => !inWorld(x.item))
+    .filter(x => crops.some(c => seedable.has(c.id) && c.yields.some(y => y.itemId === x.item)))
+  ok(blamedOnFarming.length === 0,
+    `★ no brew is stranded on the produce of a crop this world can seed — whatever is still dark, farming is not the reason (found: ${blamedOnFarming.map(x => `${x.brew}/${x.item}`).join(', ') || 'none'})`)
 }
 
 // ── 2. ★★★ CRYSTALLIZED SAP, BY NAME — the fifth instance, so a regression names itself ─────────
