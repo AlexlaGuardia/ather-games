@@ -8,6 +8,7 @@
 
 import {
   bridgeSpecs, bridgeAt, deckTopAt, bridgeVoxelAt, __clearBridgeCache, BRIDGE_REACH, kindFor,
+  bridgeGenPiecesForCol,
 } from './bridges'
 import { STORY_NODES } from './story-path'
 import { columnHeight } from './height'
@@ -454,7 +455,7 @@ for (const SEED of SEEDS) {
 {
   for (const SEED of SEEDS) {
     const specs = bridgeSpecs(SEED)
-    let air = 0, railAir = 0, railGap = 0, edges = 0, checked = 0
+    let air = 0, kerb = 0, buried = 0, edges = 0, checked = 0
     const seenG = new Set<string>()
     for (let n = 0; n < STORY_NODES.length - 1; n++) {
       const a = STORY_NODES[n], q = STORY_NODES[n + 1]
@@ -478,23 +479,89 @@ for (const SEED of SEEDS) {
           // ⚠ THE CONTINUOUS COURSE IS THE TOP RAIL AT yc + 2. `yc + 1` is deliberately gappy —
           // posts only — and asserting solidity there is how a railing gets "fixed" back into the
           // kerb it replaced. Count the rail, and count the daylight separately.
+          // ⚠ THE RAILING IS NO LONGER VOXELS. It is `fence` pieces (see bridgeGenPiecesForCol),
+          // so what must be true here is the OPPOSITE of what used to be: the bridge must emit
+          // nothing above the deck. A block back at `yc + 1` is the kerb returning, and it would
+          // bury the fence post the piece layer places in that cell.
+          // ★ Ask the BRIDGE, not the world. `materialAt` also reports the bank's own ground where
+          // the ribbon meets the abutment, and conflating the two turns a correct abutment into a
+          // red — the same false positive the deck-hole assert produced. Terrain there is counted
+          // separately and tolerated; a kerb is not tolerated at all.
           if (c.edge) {
             edges++
-            if (materialAt(x, yc + 2, z, SEED, h) === 0) railAir++
-            if (materialAt(x, yc + 1, z, SEED, h) === 0) railGap++
+            const b2 = specs[c.i]
+            if (bridgeVoxelAt(yc + 1, c, b2, 53, 53 | 0x0100, 1) !== 0) kerb++
+            if (materialAt(x, yc + 1, z, SEED, h) !== 0) buried++
           }
         }
       }
     }
     check(`s${SEED}: every bridge cell is standable in the real generator`, air === 0,
       `${air} of ${checked} cells are AIR through materialAt`)
-    check(`s${SEED}: the top rail survives the generator's gate`, railAir < checked * 0.05,
-      `${railAir} top-rail cells missing in the world`)
-    // ★ A RAILING IS DEFINED BY ITS GAPS. Without this the "cleaner" fix silently regresses to a
-    // solid kerb the day someone makes the post course continuous, and every other assert stays
-    // green because a kerb is a perfectly well-formed parapet — just not a railing.
-    check(`s${SEED}: the railing has daylight under its top rail`, railGap > edges * 0.4,
-      `${railGap} open of ${edges} edge cells`)
+    check(`s${SEED}: the bridge emits no kerb where the railing goes`, kerb === 0,
+      `${kerb} of ${edges} edge cells still carry a block above the deck`)
+    check(`s${SEED}: few railing posts are buried in the abutment`, buried < edges * 0.05,
+      `${buried} of ${edges} posts sit inside bank ground`)
+  }
+}
+
+// ── ★★ THE RAILING IS PIECES, AND THE PIECE LAYER HAS ITS OWN WAYS TO GO WRONG ──────────────
+{
+  for (const SEED of SEEDS) {
+    const specs = bridgeSpecs(SEED)
+    // Sweep the whole world in column-sized tiles exactly as the host does, so this exercises
+    // `bridgeGenPiecesForCol`'s bbox filter rather than the flat list behind it.
+    const SIZE = 16
+    const got = new Map<string, { x: number; y: number; z: number; pieceId: string }>()
+    for (let cx = -180; cx <= -5; cx++) {
+      for (let cz = -220; cz <= -40; cz++) {
+        for (const g of bridgeGenPiecesForCol(cx, cz, SIZE, SEED)) {
+          check(`s${SEED}: a piece is inside the column that claims it`,
+            g.x >= cx * SIZE && g.x < cx * SIZE + SIZE && g.z >= cz * SIZE && g.z < cz * SIZE + SIZE, g.gen)
+          if (got.has(g.gen)) check(`s${SEED}: no piece is emitted by two columns`, false, g.gen)
+          got.set(g.gen, g)
+        }
+      }
+    }
+    check(`s${SEED}: the crossings carry railing pieces`, got.size > 100, `${got.size}`)
+    let wrongPiece = 0, offDeck = 0
+    for (const g of got.values()) {
+      if (g.pieceId !== 'fence') wrongPiece++
+      const c = bridgeAt(g.x, g.z, SEED)
+      if (!c || !c.edge) { offDeck++; continue }
+      // A post must stand ON the deck: the cell directly above the deck cell, never floating.
+      if (g.y !== Math.ceil(deckTopAt(specs[c.i], c.t)) - 1 + 1) offDeck++
+    }
+    check(`s${SEED}: every railing piece is a fence`, wrongPiece === 0, `${wrongPiece} not fence`)
+    check(`s${SEED}: every railing post stands on the deck edge`, offDeck === 0, `${offDeck} misplaced`)
+    // ★ ADJACENCY IS THE WHOLE MECHANISM: fence ARMS are derived per connected side, so a post
+    // with no neighbour grows no rail and reads as a lone stake. Posts must run continuously.
+    const at = new Set([...got.values()].map(g => `${g.x},${g.y},${g.z}`))
+    let lonely = 0
+    for (const g of got.values()) {
+      const near = [[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dz]) =>
+        at.has(`${g.x + dx},${g.y},${g.z + dz}`) || at.has(`${g.x + dx},${g.y + 1},${g.z + dz}`) ||
+        at.has(`${g.x + dx},${g.y - 1},${g.z + dz}`))
+      if (!near) lonely++
+    }
+    check(`s${SEED}: railing posts connect to a neighbour`, lonely < got.size * 0.05,
+      `${lonely} lone stakes of ${got.size}`)
+    // Tombstones only work if the id regenerates identically.
+    __clearBridgeCache()
+    const again = new Set<string>()
+    for (let cx = -180; cx <= -5; cx++) for (let cz = -220; cz <= -40; cz++)
+      for (const g of bridgeGenPiecesForCol(cx, cz, SIZE, SEED)) again.add(g.gen)
+    // Compare the id SETS, not their sizes: a mutation that reshapes every id keeps the count
+    // identical, and a count assert waves it through (it did — caught by a mutation sweep).
+    let drifted = 0
+    for (const id of got.keys()) if (!again.has(id)) drifted++
+    check(`s${SEED}: railing gen ids are stable across a rebuild`, drifted === 0 && again.size === got.size,
+      `${drifted} ids changed, ${again.size} vs ${got.size}`)
+    // ⚠ HONESTLY LABELLED: this proves determinism WITHIN a build, not stability ACROSS versions.
+    // The id is keyed on the crossing and the world cell precisely so a geometry change cannot move
+    // it — key it on anything derived (a deck height, a pier index) and the next GENERATOR_VERSION
+    // silently orphans every tombstone a player has earned. Nothing here can catch that; the id's
+    // SHAPE is the guard, which is why it is written out in the comment on `railPiecesFor`.
   }
 }
 

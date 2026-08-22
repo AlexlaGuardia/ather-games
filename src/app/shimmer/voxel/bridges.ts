@@ -45,6 +45,7 @@
 // exceed it and the arch starts emitting 1-block risers again, silently, as vaults.
 
 import { STORY_NODES, roadAt } from './story-path'
+import type { GenPiece } from './holds'
 import {
   columnHeight, riverCarve, waterSurfaceAt, RIVER_DEPTH,
   type HeightConfig, DEFAULT_HEIGHT,
@@ -274,6 +275,8 @@ export interface BridgeCell {
 interface BridgeIndex {
   specs: BridgeSpec[]
   cells: Map<string, BridgeCell>
+  /** Railing pieces for the whole seed, built once with the survey. */
+  rails: GenPiece[]
 }
 
 const CACHE = new Map<string, BridgeIndex>()
@@ -453,7 +456,7 @@ function survey(seed: number, cfg: HeightConfig): BridgeIndex {
       }
     }
   }
-  return { specs, cells }
+  return { specs, cells, rails: railPiecesFor(specs, cells) }
 }
 
 function indexFor(seed: number, cfg: HeightConfig): BridgeIndex {
@@ -531,15 +534,16 @@ export function bridgeVoxelAt(
   // ── the deck ──────────────────────────────────────────────────────────────────────────────
   if (y === yc) return (top - yc >= 1) ? deck : deckHalf
 
-  // ── the railing: posts and a top rail, following the arch ─────────────────────────────────
-  // Edge is decided by the PERPENDICULAR offset, never by a neighbour probe. The old rule asked
-  // `!roadAt(x+1,z)` and friends, which cannot tell the bridge's edge from the road's own wobble.
-  // ⚠ The gap at `yc + 1` between posts is the entire point — see RAIL_POST_EVERY. Filling it back
-  // in "so the rail is solid" turns the railing into the kerb this replaced.
-  if (cell.edge) {
-    if (y === yc + 2) return deck                                              // the top rail, continuous
-    if (y === yc + 1 && Math.round(cell.t) % RAIL_POST_EVERY === 0) return deck  // its posts
-  }
+  // ── the railing is NOT voxels ─────────────────────────────────────────────────────────────
+  // It was: a solid course on the deck edge (a kerb), then posts + a top rail out of whole blocks.
+  // Both were the same mistake — **a railing built out of the wrong vocabulary**. Alex: *"we are
+  // still trying to use whole blocks on the railings when it should actually be more like the
+  // fences."* He is right, and the thing he wants already exists: `pieces.ts` › `fence` is a 0.18
+  // centre post whose ARMS are derived per connected side at sync, and `holds.ts` already emits it
+  // as a generated wall-top parapet. It also occupies its full cell for COLLISION while drawing
+  // thin, which is exactly a bridge railing: it stops you walking off and does not read as a wall.
+  // So the railing left the voxel grid entirely — see `bridgeGenPieces` below. Nothing is emitted
+  // above the deck here, deliberately; a block put back at `yc + 1` is the kerb returning.
 
   // ── the piers ─────────────────────────────────────────────────────────────────────────────
   const p = pierAt(spec, cell.t)
@@ -586,6 +590,56 @@ export function bridgeVoxelAt(
     if (cell.idx >= in2 && cell.idx <= cell.n - 1 - in2) return mat
   }
   return 0
+}
+
+/**
+ * ★★ THE RAILING, AS THE PLAYER'S OWN BUILDING VOCABULARY.
+ *
+ * A fence post in every edge cell, standing on the deck. Every cell and not every third, because
+ * fence ARMS are derived from ADJACENCY — two posts three blocks apart are not neighbours, so they
+ * grow no rail between them and you get a row of lonely stakes. A continuous run gives post-arm-post,
+ * which is what a railing is.
+ *
+ * ⚠ Deterministic `gen` ids: these are never saved, only their ABSENCE is (the host's tombstone
+ * list). Break a railing post and it must stay broken across a reload, which only works if the id
+ * regenerates identically — so it is keyed on the crossing and the world cell, nothing else.
+ *
+ * The holds' argument applies here with more force than it does to a hold: a bridge *"reads as
+ * something a builder could have made, because it literally is made of the same catalogue."*
+ * Inventing a bespoke railing part would make bridges the one structure in the world assembled from
+ * pieces nobody can hold.
+ */
+function railPiecesFor(specs: BridgeSpec[], cells: Map<string, BridgeCell>): GenPiece[] {
+  const out: GenPiece[] = []
+  for (const [key, c] of cells) {
+    if (!c.edge) continue
+    const [x, z] = key.split(',').map(Number)
+    const spec = specs[c.i]
+    const yc = Math.ceil(deckTopAt(spec, c.t)) - 1
+    out.push({ gen: `${spec.id}:rail:${x},${z}`, pieceId: 'fence', x, y: yc + 1, z, rot: 0 })
+  }
+  return out
+}
+
+/**
+ * The railing pieces whose column is (cx, cz) — what the host applies when that column is adopted.
+ * Mirrors `holdGenPiecesForCol`, which is the proven path for worldgen-emitted pieces.
+ *
+ * ⚠ THE HOST MUST CONCATENATE THIS **ABOVE** ITS `if (!gen.length) return` EARLY-OUT. Nearly every
+ * bridge column has no HOLD pieces in it (bridges cross open country; the holds are elsewhere), so
+ * a concat placed after that guard drops every railing in the world and looks exactly like this
+ * function returning nothing.
+ */
+export function bridgeGenPiecesForCol(
+  cx: number, cz: number, size: number, seed: number, cfg: HeightConfig = DEFAULT_HEIGHT,
+): GenPiece[] {
+  const idx = indexFor(seed, cfg)
+  const x0 = cx * size, z0 = cz * size
+  const out: GenPiece[] = []
+  for (const g of idx.rails) {
+    if (g.x >= x0 && g.x < x0 + size && g.z >= z0 && g.z < z0 + size) out.push(g)
+  }
+  return out
 }
 
 /** Test seam: the survey is cached per seed, and a test that mutates config needs it cleared. */

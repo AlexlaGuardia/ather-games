@@ -198,7 +198,18 @@ import { Column, SECTION } from './column'
 // between. Same material, opened up. ⚠ The gap at yc+1 IS the feature — filling it back in "so the
 // rail is solid" restores the kerb, so the oracle asserts the daylight as well as the rail.
 // Moves parapet voxels on every crossing.
-export const GENERATOR_VERSION = 29
+// 29 → 30 (2026-08-22, night): THE RAILING LEFT THE VOXEL GRID. Alex: *"we are still trying to use
+// whole blocks on the railings when it should actually be more like the fences."* Correct, and the
+// thing he wanted already existed: `pieces.ts` › `fence` is a 0.18 centre post whose ARMS are
+// derived per connected side at sync, `holds.ts` already emits it as a generated wall-top parapet,
+// and it occupies its full cell for COLLISION while drawing thin — exactly a bridge railing.
+// So no new item. The railing is now `fence` GenPieces along both deck edges (one per cell, because
+// fence arms come from ADJACENCY and spaced posts grow no rail between them), and the bridge emits
+// NOTHING above the deck. Removes the whole-block parapet voxels from every crossing.
+// ⚠ The piece layer is not saved; only its ABSENCE is (tombstones). Gen ids are keyed on the
+// crossing and the world CELL and must stay that way — key them on anything derived and the next
+// version bump silently orphans every railing a player has broken.
+export const GENERATOR_VERSION = 30
 
 /**
  * One column's edits: packed local index → material.
