@@ -7156,6 +7156,12 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
         setVoxel(hit.x, hit.y, hit.z, MAT.POT)
         onSay(`✦ a young ${speciesDisplayName(born.species)} chose you!`)
         mouse.current.right = false
+      } else if (intent === 'needs-seed') {
+        // ★ THE BED SAYS WHAT IT WANTS. Naming the SOURCE, not just the lack — "you have no seed"
+        // is the message a keeper can already infer from the fact that nothing happened. The whole
+        // value is the second half of the sentence.
+        onSay('this bed wants a common crop seed — grass tufts carry them')
+        mouse.current.right = false
       } else if (intent === 'sow') {
         // ── ★★ SOW: a crop seed into an empty bed ──────────────────────────────────────────────
         // Asked through `plantBlocker` and then `plantInBed`, never re-deriving the conditions —

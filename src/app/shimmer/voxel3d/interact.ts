@@ -87,6 +87,21 @@ export type Intent =
   /** Put the block in your hand into the world. */
   | 'place'
   /** Empty hand, ordinary block — the click means nothing, and that is correct. */
+  /**
+   * An empty bed, and an empty hand — say what the bed WANTS.
+   *
+   * ★ ALEX, 2026-08-22, having built the whole farming loop: *"i also crafted and placed the beds,
+   * but i dont have any seeds to plant in it yet."* The seed supply was never broken — a grass tuft
+   * rolls three common crop seeds at 1/12 each, so roughly one seed per four tufts. It was
+   * UNFINDABLE, which is the fourth time in one day that a shipped feature was invisible rather
+   * than absent. Nothing in the world says where a seed comes from, and a bed you aimed at with an
+   * empty hand answered with silence, which reads as "this block does nothing".
+   *
+   * ⚠ ONLY WITH AN EMPTY HAND, and that is the whole reason this is not folded into the sow rule.
+   * A keeper holding a BLOCK over a bed still means `place` — stealing that click to show a hint
+   * would make the top of every bed unbuildable, which is a worse bug than the silence it fixes.
+   */
+  | 'needs-seed'
   | 'none'
 
 /**
@@ -159,5 +174,8 @@ export function rightClickIntent(
   if (aimed === MAT.POT && selItem === 'mana_seed' && holdsSeed) return 'plant'
   if (aimed === MAT.POT_SEEDED) return 'peek'
   if (aimed === MAT.POT_BLOOM) return 'harvest'
+  // ⚠ AFTER the place fall-through's condition, not before it: an empty HAND is the only case that
+  // was silent, and it is the only one this may claim.
+  if (isGardenBed(aimed) && !bedPlanted && !selItem) return 'needs-seed'
   return selItem ? 'place' : 'none'
 }

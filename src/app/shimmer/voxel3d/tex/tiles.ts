@@ -75,6 +75,21 @@ export const TILE_MATERIALS: number[] = [
   // because the same day's craft-surface bug meant nobody could craft one — two bugs hiding each
   // other. Adding a MAT id is never the whole job; it needs a line here AND a case below.
   MAT.GARDEN_BED_GOLDWOOD, MAT.GARDEN_BED_SHIMMEROAK, MAT.GARDEN_BED_DAWNWOOD,
+  // ── The saplings, 2026-08-22 — SHIPPED 08-13 AND UNTEXTURED FOR NINE DAYS ────────────────────
+  // ⚠ THE PAINTER WAS NEVER MISSING. `paintFor`'s default branch has dispatched SAPLING_SET to
+  // paintLeaves since the day saplings landed — but `paintFor` is only ever called for materials in
+  // THIS list, so the branch was dead code and `layerOf` returned FALLBACK_LAYER on every face.
+  // `attrs.ts` even carries a comment claiming its four colour lines are what stop a sapling
+  // rendering as the magenta checkerboard. They are not, and were not: the colour is a MULTIPLIER
+  // over the tile, and there was no tile. Alex confirmed it in-world 2026-08-22.
+  //
+  // ★ THE LESSON, AND IT IS THE SAME ONE THE BED JUST TAUGHT: a material needs a line HERE and a
+  // painter THERE, and having one of the two looks exactly like having both from inside the code.
+  MAT.SAPLING_GOLDWOOD, MAT.SAPLING_SHIMMEROAK, MAT.SAPLING_STARWILLOW, MAT.SAPLING_DAWNWOOD,
+  // Conjured matter, 2026-08-22 — shipped 08-14 with the terrain-cast port and never textured.
+  // depth.ts says a temporary wall HAS to look temporary or it reads as a bug every time; it was
+  // reading as the magenta checker instead, which reads as a bug even harder.
+  MAT.CONJURED,
 ]
 
 /** One spare layer past the end: an unmapped material samples magenta rather than layer 0's stone. */
@@ -623,6 +638,10 @@ const LEAF_SET = new Set<number>([WOOD.GOLDWOOD_LEAVES, WOOD.SHIMMEROAK_LEAVES, 
 /** Saplings paint as foliage — a seedling is leaves, and `paintLeaves` already reads as foliage. */
 const SAPLING_SET = new Set<number>([
   MAT.SAPLING_GOLDWOOD, MAT.SAPLING_SHIMMEROAK, MAT.SAPLING_STARWILLOW, MAT.SAPLING_DAWNWOOD,
+  // Conjured matter, 2026-08-22 — shipped 08-14 with the terrain-cast port and never textured.
+  // depth.ts says a temporary wall HAS to look temporary or it reads as a bug every time; it was
+  // reading as the magenta checker instead, which reads as a bug even harder.
+  MAT.CONJURED,
 ])
 
 // ── the lantern ──────────────────────────────────────────────────────────────────────────────────
@@ -1066,6 +1085,26 @@ export function paintFor(material: number, face: number, size: number): Layer {
       for (const fy of [Math.floor(size * 0.38), Math.floor(size * 0.66)])
         for (let y = fy; y < fy + furrow; y++)
           for (let x = band + 1; x < size - band - 1; x++) put(dst, size, x, y, [150, 142, 134], 0)
+      break
+    }
+    // ── conjured matter (2026-08-22) — mana in the shape of a wall ──────────────────────────
+    // ★ depth.ts states the design constraint and this has to honour it: *"a temporary wall has to
+    // LOOK temporary"*, unlike anything quarried. So no grain, no grit, no mineral face — a lattice
+    // that reads as held-together rather than cut. It is the one block that should look like it
+    // could stop existing.
+    case MAT.CONJURED: {
+      const mana = rgbOf(MATERIAL_COLOR[MAT.CONJURED])
+      const cell = Math.max(2, size >> 2)
+      for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {
+        // A soft diamond lattice: bright where the weave crosses, dim in the panes between.
+        const d = (Math.abs((x % cell) - cell / 2) + Math.abs((y % cell) - cell / 2)) / cell
+        const lit = d < 0.34
+        put(dst, size, x, y, shade(mana, lit ? 18 : -40 + (h2(x, y, seed) - 0.5) * 18),
+            // ⚠ THE ALPHA CHANNEL IS EMISSIVE HERE, NOT TRANSPARENCY (`gTileEmissive = tile.a` in
+            // atlas.ts). The lattice glows and the panes do not, which is what makes it read as a
+            // structure of light rather than a tinted cube.
+            lit ? 255 : 0)
+      }
       break
     }
     case MAT.MANA_LANTERN: paintLantern(dst, size, seed); break

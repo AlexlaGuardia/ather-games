@@ -14,6 +14,9 @@
 
 import { readFileSync, readdirSync, statSync } from 'fs'
 import { join, relative } from 'path'
+import { ALL_BLOCKS } from '../voxel/registry'
+import { layerOf, FALLBACK_LAYER, TOP, SIDE, BOTTOM } from './tex/tiles'
+import { FLORA_MATERIALS, FLORA_KIND_COUNT, SCATTER_SLOTS_SHARED } from '../voxel/flora'
 
 const DIR = join(process.cwd(), 'src/app/shimmer/voxel3d')
 
@@ -224,6 +227,69 @@ for (const file of files) {
       fails.push(`in TILE_MATERIALS but NO case in paintFor — ships as a magenta ore block: ${orphans.join(', ')}`)
     } else pass++
   }
+}
+
+// ── ★★★ THE OTHER DOOR: A MATERIAL THAT SHOULD BE IN THE ATLAS AND IS NOT (2026-08-22) ─────────
+//
+// The check above watches "listed in TILE_MATERIALS but no painter". NOTHING watched "should be
+// listed and isn't", and that is where three blocks were quietly shipping as the magenta
+// checkerboard on the day this was written:
+//
+//   · the GARDEN BED, added 08-22 — never seen, because the same day's craft-surface bug meant
+//     nobody could craft one. Two bugs hiding each other.
+//   · the FOUR SAPLINGS, added 08-13 and untextured for nine days. `paintFor`'s default branch has
+//     dispatched SAPLING_SET to paintLeaves the whole time — but paintFor only ever runs for
+//     materials in TILE_MATERIALS, so the branch was dead code. Confirmed in-world by Alex.
+//   · CONJURED MATTER, added 08-14, whose own design note says a temporary wall has to LOOK
+//     temporary or it reads as a bug every time.
+//
+// ⚠ A GUARD WITH ONE DOOR IS AN EXEMPTION NOBODY WROTE DOWN. `attrs.ts` even carried a comment
+// claiming its four sapling colour lines were what stopped a sapling rendering as the checker. They
+// were not, and could not be — the colour is a MULTIPLIER over the tile, and there was no tile.
+// Prose cannot check anything.
+{
+  // ⚠ THE ONE LEGITIMATE EXEMPTION, AND IT IS DERIVED. Ground cover is a different PIPELINE — the
+  // instanced flora renderer with its own textures — so a flora material correctly has no atlas
+  // slot. Imported from `flora.ts` rather than restated here, and counted below, because an
+  // exemption that a reader has to trust is the shape of Friday's bug.
+  const orphans = new Map<number, string>()
+  for (const b of ALL_BLOCKS) {
+    if (FLORA_MATERIALS.has(b.material) || orphans.has(b.material)) continue
+    if ([TOP, SIDE, BOTTOM].every(f => layerOf(b.material, f) !== FALLBACK_LAYER)) continue
+    orphans.set(b.material, b.name)
+  }
+  if (orphans.size) {
+    fails.push('registry block with NO atlas slot — samples the magenta checker in world: '
+      + [...orphans.entries()].map(([m, n]) => `${n} (mat ${m})`).join(', '))
+  } else pass++
+
+  // The blindness guard, same reasoning as the count guard above: if the registry walk ever stops
+  // seeing blocks, the assert passes by looking at nothing.
+  if (ALL_BLOCKS.length < 60) {
+    fails.push(`registry parsed as only ${ALL_BLOCKS.length} blocks — this atlas check has gone blind`)
+  } else pass++
+
+  // ...and the exemption must not be silently widening. FLORA_MATERIALS is a list of literals
+  // because the kind→material mapping lives in `plantMaterialAt`'s branches; FLORA_KIND_COUNT
+  // counts the same thing off the enums. Two derivations compared, so adding a flora kind fails
+  // HERE — on the event — rather than later, as something rendering wrong.
+  if (FLORA_MATERIALS.size !== FLORA_KIND_COUNT) {
+    fails.push(`the flora exemption lists ${FLORA_MATERIALS.size} materials but the kind enums imply `
+      + `${FLORA_KIND_COUNT} — a flora kind was added without a line in FLORA_MATERIALS, so the `
+      + `atlas exemption above is now wider than anyone decided`)
+  } else pass++
+
+  // The two kind enums must keep sharing their scatter slots — if one grows alone the count above
+  // is comparing two things that have stopped describing the same space.
+  if (!SCATTER_SLOTS_SHARED) {
+    fails.push('FLORA and SCATTER no longer share ROCK/DEADFALL/MUSHROOM — FLORA_KIND_COUNT is '
+      + 'counting a slot space that has split in two')
+  } else pass++
+
+  // And it must actually EXEMPT something, or the whole check passes by exempting nothing and the
+  // orphan list would be full of grass.
+  if (FLORA_MATERIALS.size === 0) fails.push('the flora exemption is empty — it is not exempting anything')
+  else pass++
 }
 
 console.log(`\nrender-path audit: ${pass} checks passed, ${fails.length} failed`)

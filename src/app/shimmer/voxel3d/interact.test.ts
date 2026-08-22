@@ -147,6 +147,33 @@ const ok = (c: boolean, m: string) => { if (c) pass++; else fails.push(m) }
 }
 
 
+// ── ★ AN EMPTY BED WITH AN EMPTY HAND SAYS WHAT IT WANTS (2026-08-22) ──────────────────────────
+// Alex built the farming loop, placed the beds and had no seeds — and aiming at his own bed with an
+// empty hand produced NOTHING. The seed supply works (a tuft rolls three crop seeds at 1/12 each);
+// it was unfindable, and silence reads as "this block does nothing".
+{
+  const BED = MAT.GARDEN_BED_GOLDWOOD
+  // empty hand, unplanted bed → the hint
+  ok(rightClickIntent(BED, null, false, false, false, false) === 'needs-seed',
+    '★ an empty bed aimed at with an empty hand asks for a seed')
+
+  // ⚠⚠ THE REGRESSION THIS COULD EASILY HAVE CAUSED, asserted first-class: a keeper holding a BLOCK
+  // over a bed still means place. Stealing that click for a hint makes the top of every bed
+  // unbuildable — a worse bug than the silence being fixed.
+  ok(rightClickIntent(BED, 'block_stone', false, false, false, false) === 'place',
+    '★★ holding a block over a bed is still PLACE, not a hint')
+
+  // ...and the hint must never outrank the two real verbs.
+  ok(rightClickIntent(BED, 'seed_shimmerwheat', true, false, false, false) === 'sow',
+    'a seed in hand still sows')
+  ok(rightClickIntent(BED, null, false, false, false, true) === 'reap',
+    'a ripe bed still reaps, even empty-handed')
+
+  // A bed with something already growing must stay silent rather than ask for a seed it cannot take.
+  ok(rightClickIntent(BED, null, false, false, true, false) !== 'needs-seed',
+    '★ a bed that is already planted does not ask for a seed')
+}
+
 console.log(fails.length ? `interact: ${pass} pass, ${fails.length} FAIL` : `interact oracle ${pass} CLEAN`)
 for (const f of fails) console.log('  ✗ ' + f)
 process.exit(fails.length ? 1 : 0)

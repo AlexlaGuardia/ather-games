@@ -360,3 +360,47 @@ export function plantVariant(x: number, z: number, seed: number, kind: number): 
     : kind === FLORA.FLOWER ? 0x77e : kind === FLORA.TUFT ? 0x3b1 : 0x9c5
   return hash01(x, z, seed ^ salt)
 }
+
+/**
+ * Every material the FLORA RENDERER draws, and therefore every material that legitimately has no
+ * slot in the block atlas.
+ *
+ * ★ WHY THIS EXISTS (2026-08-22): ground cover and terrain are two different pipelines — flora is
+ * instanced geometry with its own textures, terrain is the chunk mesh sampling `tex/tiles.ts`. A
+ * check that walks the registry looking for materials with no tile slot will therefore find all of
+ * these and be RIGHT that they have none, and WRONG that it matters. That check is real
+ * (`render-audit.test.ts`) and it caught three blocks shipping as the magenta checkerboard — the
+ * garden bed, the four saplings and conjured matter. This set is the exemption it needs, and an
+ * exemption is a silent promise that someone is watching that corner, so it is derived and counted
+ * rather than hand-listed.
+ *
+ * ⚠ THE COUNT GUARD BELOW IS THE POINT. A new flora kind added to the enums above without a line
+ * here would silently widen the exemption — the exact failure mode this codebase spent 2026-08-22
+ * learning. Growing the enum breaks the count, and breaking the count is how you find out.
+ */
+export const FLORA_MATERIALS: ReadonlySet<number> = new Set<number>([
+  MAT.TUFT, MAT.TALL_GRASS, MAT.FLOWER,          // FLORA.TUFT / TALL / FLOWER — the swaying cards
+  ...Object.values(HERB_OF_GROUND),              // FLORA.HERB — derived, one per ruled ground
+  MAT.LOOSE_ROCK, MAT.DEADFALL, MAT.MUSHROOM,    // SCATTER.ROCK / DEADFALL / MUSHROOM — solid
+])
+
+/**
+ * What `FLORA_MATERIALS` SHOULD hold, derived from the kind enums rather than from the set.
+ *
+ * ⚠ TWO DERIVATIONS COMPARED, NOT A VALUE COMPARED TO A COPY OF ITSELF. `FLORA_MATERIALS` is a hand
+ * list of literals because the kind→material mapping lives inside `plantMaterialAt` as branches;
+ * this counts the same thing from the enums, so the day the enums grow the two stop agreeing. That
+ * is the check the 08-22 mirror lesson asks for: compare the derivations, and fail on the EVENT
+ * (a kind was added) rather than on the symptom (something rendered wrong).
+ */
+export const FLORA_KIND_COUNT =
+  (Object.keys(FLORA).length - 2)            // every FLORA kind except NONE and HERB...
+  + Object.keys(HERB_OF_GROUND).length       // ...HERB expands to one material per ruled ground
+
+// ⚠ SCATTER IS NOT ADDED, AND THE FIRST CUT OF THIS ADDED IT AND WAS RED (13 against a set of 10).
+// `FLORA` already absorbs the scatter kinds into its own slot space — that is exactly what the
+// comment on `FLORA.ROCK` says it is for, so ROCK/DEADFALL/MUSHROOM are members of BOTH enums and
+// adding both counts each of them twice. Asserted rather than left as a comment: the two enums must
+// keep agreeing about the shared slots, or one of them grew alone.
+export const SCATTER_SLOTS_SHARED: boolean =
+  (['ROCK', 'DEADFALL', 'MUSHROOM'] as const).every(k => k in FLORA && k in SCATTER)
