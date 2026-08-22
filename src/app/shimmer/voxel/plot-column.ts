@@ -18,11 +18,24 @@ import { DEFAULT_PLOT, plotMaterialAt, plotYRange, type PlotConfig } from './plo
 /**
  * Which sections a plot column can possibly touch.
  *
- * ★ THE PLOT IS A THIN SLAB IN A TALL WORLD, and saying so is most of the performance story. With
- * the default config the island occupies roughly y 78-106 out of 256 — about two sections of
- * sixteen. A host that generates and meshes the full height does ~8x the work for guaranteed-empty
- * air. `refreshUniform` already makes the empty sections free to DRAW; this is what makes them free
- * to BUILD.
+ * ★ THE PLOT IS A THIN SLAB IN A TALL WORLD. With the default config the island occupies roughly
+ * y 78-106 out of 256 — about two sections of sixteen. Measured 2026-08-22 over a 49-column sample
+ * through the real generator: **2.00 non-uniform sections per plot column against 7.20 in the
+ * Wilds**, and 188k solid cells against 1.47M.
+ *
+ * ⚠⚠ AND IT HAS NO PRODUCTION CALLERS — ONLY ITS OWN TEST. This docstring used to end with a claim
+ * about what it saves the host, and `plot.ts`'s `plotYRange` warning asserted outright that
+ * *"`plotSectionRange` meshes only the sections it names."* **It meshes nothing.** Nobody calls it.
+ * Same family as the `brew-reach.test.ts` citation to a file that has never existed: a doc that
+ * asserts coverage retires the question instead of answering it, and the next reader budgets for an
+ * optimisation that is not running.
+ *
+ * ★ IT IS KEPT RATHER THAN DELETED BECAUSE ITS TEST ASSERTS REAL PROPERTIES OF THE RANGE, AND
+ * WIRING IT IS NOT WORTH DOING — measured, not assumed. `column.ts` already records that the
+ * uniform-section skip *"buys about nothing"* in the Wilds, and in the plot the 14 uniform-air
+ * sections per column are already handled by the mesher's own uniform fast path. Skipping the visit
+ * to a section that costs nothing to visit saves nothing. **If you are here looking for the plot's
+ * frame cost, this is not it** — take a reading with `voxel3d/profile.ts` instead.
  */
 export function plotSectionRange(cfg: PlotConfig = DEFAULT_PLOT): { first: number; last: number } {
   const { min, max } = plotYRange(cfg)

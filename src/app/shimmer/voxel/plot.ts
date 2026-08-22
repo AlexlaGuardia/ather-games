@@ -763,11 +763,16 @@ export function plotYRange(cfg: PlotConfig = DEFAULT_PLOT): { min: number; max: 
   return {
     min: cfg.baseY - cfg.roll - cfg.keel - 2,
     // ⚠⚠ THE CAVE IS IN HERE AND HAS TO BE. This range is not advice — `generatePlotColumn` writes
-    // only inside it and `plotSectionRange` meshes only the sections it names, so a mound 15 blocks
-    // tall against a bound computed from a 9-block wall is a mound **with its top six blocks
-    // silently missing**: a landmark with a hole in it, generated correctly by `plotMaterialAt` and
-    // then cropped by its own caller. Nothing would throw. Anything that grows the plot upward has
-    // to arrive here in the same breath.
+    // only inside it, so a mound 15 blocks tall against a bound computed from a 9-block wall is a
+    // mound **with its top six blocks silently missing**: a landmark with a hole in it, generated
+    // correctly by `plotMaterialAt` and then cropped by its own caller. Nothing would throw.
+    // Anything that grows the plot upward has to arrive here in the same breath.
+    //
+    // ⚠ THIS WARNING USED TO NAME `plotSectionRange` AS A SECOND ENFORCER OF THE RANGE ("and
+    // `plotSectionRange` meshes only the sections it names"). It does not — that function has no
+    // production callers at all, so `generatePlotColumn` above is the ONLY thing this bound governs.
+    // A warning that credits two enforcers where there is one is worse than a warning that names
+    // none: it reads as belt and braces. See `plot-column.ts` › `plotSectionRange`.
     max: cfg.baseY + Math.max(cfg.wallHeight, cfg.roll, cfg.roll + (cfg.cave?.height ?? 0)) + 1,
   }
 }
