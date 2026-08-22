@@ -822,9 +822,25 @@ console.log('canon-drift: ' + ORDER.filter((s) => counts[s]).map((s) => `${count
 // comment can, because the day someone adds an eleventh gate they will see this list and either
 // move a line out of it or leave a lie on the terminal. Move a line UP into a gate when you build
 // one; never delete a line to make the output shorter.
+// ★★ THE BANNER ASSERTS ITSELF, because a scope note is exactly the kind of claim that rots. The
+// first cut of this said "ten named things" as a hardcoded word, which would have quietly become a
+// lie the moment an eleventh gate landed — me promising that a future reader would notice, which is
+// the silent-promise shape this banner exists to call out. Borrowed from the Magii seat's
+// `canon_holds.py`, which asserts the two holds it was built for so that "found nothing" and "blind"
+// stop being the same output.
+//
+// The live gate set is DERIVED from what actually reported, then compared to a pinned list. Add a
+// gate and this trips: update the pin and, if the new gate widens what canon-drift covers, move the
+// matching line UP out of the "does not check" list. Never delete a line to quiet the output.
+const LIVE_AREAS = [...new Set(findings.map((f) => f.area))].sort()
+const PINNED_AREAS = [
+  'base-species', 'birth-affinity', 'canon-vs-canon', 'element-herbs', 'infusions',
+  'keeper-moves', 'mist-rosters', 'npcs', 'second-forms', 'zones',
+].sort()
+
 if (!QUIET) {
   console.log('')
-  console.log('canon-drift covers NAMES AND ROSTERS ONLY. It does not check:')
+  console.log(`canon-drift covers NAMES AND ROSTERS ONLY — ${LIVE_AREAS.length} gates. It does not check:`)
   for (const line of [
     'item MODELS — whether a shipped item is a thing canon still has (the mana_seed case)',
     'mechanics, rates, costs, curves — Jin\'s by the boundary, so deliberately unchecked',
@@ -832,7 +848,18 @@ if (!QUIET) {
     'whether a ruled fact reached the BUILD at all — a ruling nothing implements reads clean here',
     'prose claims inside canon files — only the tabled/rostered facts are diffed',
   ]) console.log(`  · ${line}`)
-  console.log('  A clean gate means ten named things line up. It is not a statement about the rest.')
+  console.log(`  A clean gate means those ${LIVE_AREAS.length} named things line up. It is not a statement about the rest.`)
+}
+
+if (JSON.stringify(LIVE_AREAS) !== JSON.stringify(PINNED_AREAS)) {
+  const added = LIVE_AREAS.filter((a) => !PINNED_AREAS.includes(a))
+  const gone = PINNED_AREAS.filter((a) => !LIVE_AREAS.includes(a))
+  console.error('')
+  console.error('canon-drift: SCOPE SELF-CHECK FAILED — the gate set moved and the scope banner did not.')
+  if (added.length) console.error(`  new gate(s): ${added.join(', ')} — does the "does not check" list still hold?`)
+  if (gone.length) console.error(`  gate(s) GONE: ${gone.join(', ')} — canon lost coverage silently, which is the worse direction`)
+  console.error('  Update PINNED_AREAS in scripts/canon-drift.mjs, and move any line this now covers.')
+  process.exit(3)
 }
 
 if (WRITE_REPORT) {
