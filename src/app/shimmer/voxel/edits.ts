@@ -140,7 +140,22 @@ import { Column, SECTION } from './column'
 // not move: the footprint is deliberately the same set of columns the parity rule fired on, so no
 // crossing is added or removed. ⚠ But a road bridge is exactly where a keeper builds, and an edit
 // stored against the old deck level is a diff against a place the deck no longer is.
-export const GENERATOR_VERSION = 24
+// 24 → 25 (2026-08-22, same evening): SPAN-TYPED CROSSINGS. v24 shipped an arch keyed to the span
+// and left everything else span-blind — every bridge on the map had a bay of 6-7 blocks, from the
+// 10-block creek to the 149-block river. Short crossings were a thicket of piers standing shoulder
+// to shoulder; the long one was twenty identical sticks in water, which is a fence, not a viaduct.
+// A crossing is now one of three kinds by span: a `plank` (no piers, barely a camber), a `trestle`
+// (timber piers, short bays) or a `viaduct` (stone piers, bays up to 26, the highest running deck).
+// Bay LENGTH is derived and bay COUNT is what stays roughly constant, which is the way round real
+// crossings work. The deck profile went from a parabola to a trapezoid — ramp, run level, ramp —
+// because an arch stretched over 149 blocks is an imperceptible sag, and a viaduct is a level road
+// carried high, not a hump.
+//
+// Moves deck voxels and pier voxels on every crossing: decks run higher and flatter, pier positions
+// and COUNT changed everywhere (149-span went 20 piers → 5), and trestle piers are now timber where
+// they were stone. ⚠ v24 was live for roughly half an hour, so this takes its own number rather than
+// being folded back into 23 → 24 — same reasoning as 20 → 21.
+export const GENERATOR_VERSION = 25
 
 /**
  * One column's edits: packed local index → material.

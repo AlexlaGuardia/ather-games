@@ -50,18 +50,59 @@ import {
   type HeightConfig, DEFAULT_HEIGHT,
 } from './height'
 
-/** Along-span blocks per half-step of rise. 4 keeps the steepest parabola gradient at 0.5/block —
- *  the exact ceiling `STEP_CAPTURE` walks. Raising this flattens arches; LOWERING it makes vaults. */
-const RISE_PER_4 = 4
-/** Ceiling on the arch, in half-steps. 8 = +4 blocks at midspan, i.e. 5 blocks of clearance over
- *  the table. Past that a bridge stops reading as a bridge and starts reading as a hill. */
-const MAX_RISE = 8
-/** A pier every this many blocks of span. Bays, not a world grid. */
-const PIER_EVERY = 7
-/** No pier within this of either bank — a pier in the shallows is a pier holding nothing up. */
-const PIER_MARGIN = 3
-/** Half-length of a pier along the span: 1 gives a 3-block pier with a pointed cell at each end. */
-const PIER_HALF = 1
+/**
+ * ★★ A CROSSING IS ONE OF THREE THINGS, AND THE SPAN DECIDES WHICH (2026-08-22, Alex: *"lets do the
+ * span-typed crossings for that viaduct, this one is still a bit crunched together"*).
+ *
+ * Slice 1 gave every crossing an arch keyed to its span and left the rest span-blind. Two symptoms,
+ * one cause. The board read: **every bridge on the map had a bay of 6-7 blocks**, from the 10-block
+ * creek to the 149-block river — so the short crossings were a thicket of piers standing shoulder to
+ * shoulder ("crunched"), and the long one was twenty identical sticks in a row, which is not a
+ * viaduct, it is a fence in water. A constant bay is the same defect as the constant deck height it
+ * replaced: **a number that does not know the span it is spanning.**
+ *
+ * Real crossings hold a roughly constant NUMBER of bays and grow the bay itself. So bay length is
+ * derived (`TARGET_BAYS`, clamped) and the span picks a KIND, which sets how high the deck runs, what
+ * the piers are made of, and how heavy they are.
+ */
+export type BridgeKind = 'plank' | 'trestle' | 'viaduct'
+
+/** Below this a crossing is a log laid over a creek: no piers, barely a camber. */
+const PLANK_MAX = 14
+/** At or above this it is masonry: stone piers, the longest bays, the highest running deck. */
+const VIADUCT_MIN = 55
+
+interface KindSpec {
+  /** Crown height above `table + 1`, in HALF-steps. The deck runs flat here between its ramps. */
+  rise: number
+  /** Half-length of a pier along the span. A 25-block bay under a 3-block pier reads spindly. */
+  pierHalf: number
+  /** Piers are the road's own timber on a trestle, quarried stone on a viaduct. No new material id
+   *  either way — a new id with no atlas slot renders as the magenta checker. */
+  stonePiers: boolean
+  /** ★★ BAY BOUNDS ARE PER KIND BECAUSE THE MATERIAL DECIDES THEM. Timber cannot carry far, so a
+   *  trestle stands on short bays; a masonry arch is the opposite and wants long ones. A single
+   *  global pair cannot be right for both, and the first cut proved it — a shared MIN_BAY of 12 was
+   *  too long for a 20-block trestle and far too short for the viaduct it was written for. */
+  minBay: number
+  maxBay: number
+}
+
+const KINDS: Record<BridgeKind, KindSpec> = {
+  // A plank does not arch and stands on nothing. Its clearance is that a creek is shallow, not that
+  // the deck is high, and `minBay = PLANK_MAX` is what makes "no piers" fall out of the same
+  // arithmetic as everything else instead of needing a branch: no bay fits, so there is one bay.
+  plank:   { rise: 2,  pierHalf: 1, stonePiers: false, minBay: PLANK_MAX, maxBay: PLANK_MAX },
+  trestle: { rise: 8,  pierHalf: 1, stonePiers: false, minBay: 9,  maxBay: 14 },
+  viaduct: { rise: 10, pierHalf: 2, stonePiers: true,  minBay: 18, maxBay: 26 },
+}
+
+export function kindFor(span: number): BridgeKind {
+  return span < PLANK_MAX ? 'plank' : span < VIADUCT_MIN ? 'trestle' : 'viaduct'
+}
+
+/** Bays a crossing wants, before the kind's length clamps. Four reads as designed at every scale. */
+const TARGET_BAYS = 4
 /** Courses above the bed that widen back to full deck width — the footing. */
 const FOOTING = 2
 /** Perpendicular inset of the pier from the deck edge. A pier flush with the deck is a wall. */
@@ -73,6 +114,9 @@ const PIER_INSET = 1
  *  narrow ones. Every crossing on both test seeds was walled at one end or both. A rail protects a
  *  roadway; where there is no roadway left to protect there is nothing to rail. */
 const RAIL_MIN_WIDTH = 3
+/** The steepest the deck may climb per column. `STEP_CAPTURE` is 0.55, so 0.5 is walked with no
+ *  press and a full 1.0 is a vault. This is a locomotion fact, not a taste dial. */
+const MAX_GRADE = 0.5
 
 /**
  * ★ HOW FAR ABOVE ITS OWN GROUND A BRIDGE CAN REACH — the caller's cheap y-band gate, DERIVED.
@@ -82,16 +126,18 @@ const RAIL_MIN_WIDTH = 3
  * the old gate would have sliced the top off every crossing in the world — silently, because a
  * clipped deck still looks like a deck from the bank.
  *
- * Derived from the geometry constants rather than measured and pasted, so raising MAX_RISE cannot
- * leave the gate behind: rail sits one over the deck, the deck springs one over the table, the arch
- * adds MAX_RISE/2, and the bed can sit RIVER_DEPTH under the table. `bridges.test.ts` walks the real
+ * Derived from the geometry constants rather than measured and pasted, so adding a taller KIND
+ * cannot leave the gate behind: rail sits one over the deck, the deck springs one over the table,
+ * the crown adds the tallest kind's rise, and the bed can sit RIVER_DEPTH under the table. `bridges.test.ts` walks the real
  * corridor and asserts nothing ever wants a cell above it, so the derivation is checked against
  * worldgen instead of trusted.
  */
-export const BRIDGE_REACH = MAX_RISE / 2 + 2 + RIVER_DEPTH + 1
+export const BRIDGE_REACH = Math.max(...Object.values(KINDS).map(k => k.rise)) / 2 + 2 + RIVER_DEPTH + 1
 
 export interface BridgeSpec {
   id: string
+  /** What the span made it. Sets crown height, pier material and pier heft. */
+  kind: BridgeKind
   /** Span in blocks, bank anchor to bank anchor along the centreline. */
   span: number
   /** Whole-voxel water table this crossing stands over. The deck springs from `table + 1`. */
@@ -100,8 +146,10 @@ export interface BridgeSpec {
    *  OWN bed (`pierBed`), because on a 149-block span the deepest point can be four blocks under
    *  the shallows and every pier would otherwise start buried in the bank it does not stand on. */
   bed: number
-  /** Arch height at midspan, in HALF-steps. 0 = a flat plank, which is correct for a creek. */
+  /** Crown height above `table + 1`, in HALF-steps, after the span's own ramp-fitting clamp. */
   rise: number
+  /** Half-length of each pier along the span, from the kind. */
+  pierHalf: number
   /** Along-span offsets carrying a pier. Empty for a span too short to need one. */
   piers: number[]
   /** Bed level under each pier, index-parallel to `piers`. ⚠ NOT `spec.bed` — see the note there. */
@@ -228,23 +276,42 @@ function survey(seed: number, cfg: HeightConfig): BridgeIndex {
         else { if (c.s < cur.lo) cur.lo = c.s; if (c.s > cur.hi) cur.hi = c.s; cur.n++ }
       }
 
-      // ★ RISE IS CAPPED BY THE SPAN, NOT CHOSEN. See RISE_PER_4 — this is the walkability
-      // invariant in one line, and the reason a creek stays flat with no span-type branch anywhere.
-      const rise = Math.max(0, Math.min(MAX_RISE, Math.floor(span / RISE_PER_4)))
+      // ★ THE SPAN PICKS THE KIND, AND THE KIND PICKS EVERYTHING ELSE.
+      const kind = kindFor(span)
+      const k = KINDS[kind]
+
+      // ★★ RISE IS CLAMPED BY THE RAMPS, NOT BY A GLOBAL CEILING. The deck climbs at MAX_GRADE and
+      // no faster (locomotion, not taste), so a crown of `rise` half-steps needs `rise` columns of
+      // ramp at EACH end. A span too short for two ramps cannot reach its kind's crown, and it gets
+      // the crown it can actually fit rather than a steeper climb — the one thing that would turn
+      // the deck back into a row of vaults.
+      const rise = Math.max(0, Math.min(k.rise, Math.floor(span / 2)))
+
+      // ★★ BAY LENGTH IS DERIVED; BAY COUNT IS WHAT STAYS ROUGHLY CONSTANT. The rule this replaces
+      // put a pier every 7 blocks at every scale, which is why a 26-block crossing wore three of
+      // them and the 149-block river wore twenty. Piers now divide the span EVENLY, so no pier can
+      // land against a bank and the bays are all the same length by construction.
+      // ⚠ THE COUNT IS CAPPED BY THE FLOOR, NOT JUST GUIDED BY IT. Rounding the bay COUNT up can
+      // push the resulting bay BELOW the minimum — the first cut did exactly that and produced
+      // 10.0- and 10.3-block bays under a stated floor of 12. A constant that names a floor it does
+      // not enforce is the lying-name defect this file already fixed once, so `floor(span/minBay)`
+      // is the hard ceiling on the count and the bay is guaranteed to clear its kind's minimum.
+      const bayLen = Math.max(k.minBay, Math.min(k.maxBay, span / TARGET_BAYS))
+      const bays = Math.max(1, Math.min(Math.round(span / bayLen), Math.floor(span / k.minBay)))
 
       const piers: number[] = []
       const pierBed: number[] = []
       const pierPos: { x: number; z: number }[] = []
-      for (let p = PIER_EVERY; p <= span - PIER_MARGIN; p += PIER_EVERY) {
-        if (p < PIER_MARGIN) continue
+      for (let b = 1; b < bays; b++) {
+        const pt = (span * b) / bays
         // Each pier drops to the bed IT stands on, sampled on the centreline at its own offset.
-        const bx = Math.floor(ox + ux * p), bz = Math.floor(oz + uz * p)
-        piers.push(p)
+        const bx = Math.floor(ox + ux * pt), bz = Math.floor(oz + uz * pt)
+        piers.push(pt)
         pierPos.push({ x: bx, z: bz })
         pierBed.push(columnHeight(bx, bz, seed, cfg))
       }
 
-      specs.push({ id, span, table, bed, rise, piers, pierBed, pierPos })
+      specs.push({ id, kind, span, table, bed, rise, pierHalf: k.pierHalf, piers, pierBed, pierPos })
       for (const c of mine) {
         const row = rows.get(Math.round(c.t))!
         cells.set(c.key, {
@@ -276,26 +343,38 @@ export function bridgeAt(x: number, z: number, seed: number, cfg: HeightConfig =
 }
 
 /**
- * The deck's walking surface at `t`, in blocks. Always a multiple of 0.5 — see the half-step note
- * at the head of this file; a value between the halves is a vault waiting to happen.
+ * The deck's walking surface at `t`, in blocks. Always a multiple of 0.5 — see the half-step note at
+ * the head of this file; a value between the halves is a vault waiting to happen.
  *
- * A parabola, springing from `table + 1` at both banks and peaking at midspan. Not a circular arc:
- * the parabola's gradient is steepest exactly at the springing, which is where the walkability cap
- * has to hold, so bounding THAT bounds the whole curve.
+ * ★★ A TRAPEZOID, NOT A PARABOLA (2026-08-22). The curve springs from `table + 1` at both banks,
+ * climbs at exactly MAX_GRADE, and then RUNS FLAT at its crown until it has to come back down. One
+ * formula, three silhouettes, and each is the right one for its span:
+ *
+ *   · a plank barely lifts, because its crown is 2 half-steps and it is over in four columns;
+ *   · a trestle's two ramps nearly meet, so it reads as an arch — which is what a 26-block timber
+ *     crossing should look like;
+ *   · a viaduct's ramps are a small fraction of its length, so it reads as a LEVEL ROAD carried high
+ *     over the water. That is what a viaduct is, and it is the thing a parabola cannot draw: stretch
+ *     an arch over 149 blocks and the curvature vanishes into an imperceptible sag.
+ *
+ * The parabola this replaces was smooth but wrong at both ends of the scale — steepest exactly at
+ * the springing (where the walkability cap has to hold) and flattest in the middle (where the
+ * clearance is wanted). The trapezoid is the same shape a real approach embankment makes.
  */
 export function deckTopAt(spec: BridgeSpec, t: number): number {
   const base = spec.table + 1
   if (spec.rise <= 0 || spec.span <= 1) return base
-  const u = Math.max(0, Math.min(1, t / spec.span))
-  const halves = Math.round(spec.rise * 4 * u * (1 - u))
-  return base + halves / 2
+  const u = Math.max(0, Math.min(spec.span, t))
+  // Climb from whichever bank is nearer, and stop at the crown.
+  const halves = Math.min(spec.rise, Math.floor(u), Math.floor(spec.span - u))
+  return base + halves * MAX_GRADE
 }
 
 /** The pier standing at this along-span offset: its index and the distance to its centre. */
 function pierAt(spec: BridgeSpec, t: number): { k: number; d: number } | null {
   for (let k = 0; k < spec.piers.length; k++) {
     const d = Math.abs(t - spec.piers[k])
-    if (d <= PIER_HALF + 0.5) return { k, d }
+    if (d <= spec.pierHalf + 0.5) return { k, d }
   }
   return null
 }
@@ -333,9 +412,13 @@ export function bridgeVoxelAt(
     // A lens in plan: full width through the middle, drawn in by one cell at each pointed end.
     // Cheap, symmetric, and it does not need to know which way the water runs — flow direction is
     // a `rin-water` question and a cutwater that guesses it wrong is worse than one that does not.
-    const inset = PIER_INSET + (d > 0.5 ? 1 : 0)
+    // A lens in plan, drawn in by one cell at each pointed end. On a viaduct the pier is longer
+    // along the span, so the taper starts at its outer third rather than at its single end cell.
+    const inset = PIER_INSET + (d > spec.pierHalf - 0.5 ? 1 : 0)
     const widen = (y - spec.pierBed[p.k]) < FOOTING ? 1 : 0
-    if (Math.abs(cell.s) <= cell.half - inset + widen) return stone
+    if (Math.abs(cell.s) <= cell.half - inset + widen) {
+      return KINDS[spec.kind].stonePiers ? stone : deck
+    }
   }
   return 0
 }

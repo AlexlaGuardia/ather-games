@@ -7,7 +7,7 @@
 // PATTERNS entry calls a copy reading as corroboration.
 
 import {
-  bridgeSpecs, bridgeAt, deckTopAt, bridgeVoxelAt, __clearBridgeCache, BRIDGE_REACH,
+  bridgeSpecs, bridgeAt, deckTopAt, bridgeVoxelAt, __clearBridgeCache, BRIDGE_REACH, kindFor,
 } from './bridges'
 import { STORY_NODES } from './story-path'
 import { columnHeight } from './height'
@@ -72,9 +72,53 @@ for (const SEED of SEEDS) {
     check(`s${SEED}/${b.id}: pierBed is index-parallel to piers`, b.pierBed.length === b.piers.length)
     check(`s${SEED}/${b.id}: pierPos is index-parallel to piers`, b.pierPos.length === b.piers.length)
 
-    // ★ A SHORT CROSSING GETS NO PIER, and that is the span-type behaviour arriving for free rather
-    // than through a branch. A plank over a creek does not stand on masonry.
-    if (b.span < 10) check(`s${SEED}/${b.id}: a creek span carries no pier`, b.piers.length === 0, `${b.piers.length}`)
+    // ── ★★ SPAN-TYPING (2026-08-22) ───────────────────────────────────────────────────────────
+    // The kind must be a pure function of the span, and every crossing must agree with it.
+    check(`s${SEED}/${b.id}: kind matches its span`, b.kind === kindFor(b.span), `${b.kind} at span ${b.span}`)
+
+    // ★★ THE BAY FLOOR IS ENFORCED, NOT ADVERTISED. Rounding the bay COUNT up can push the resulting
+    // bay under the minimum — the first cut of this pass shipped 10.0-block bays beneath a stated
+    // floor of 12. Assert the DELIVERED bay, never the target, or the constant is free to lie.
+    const BOUNDS: Record<string, [number, number]> = { plank: [14, 14], trestle: [9, 14], viaduct: [18, 26] }
+    const [lo, hi] = BOUNDS[b.kind]
+    if (b.piers.length > 0) {
+      const bay = b.span / (b.piers.length + 1)
+      check(`s${SEED}/${b.id}: delivered bay is inside ${b.kind} bounds`, bay >= lo - 1e-9 && bay <= hi + 1e-9,
+        `bay ${bay.toFixed(2)} vs [${lo},${hi}]`)
+      // Evenly divided, so no pier can crowd a bank and every bay is the same length.
+      for (let k = 1; k < b.piers.length; k++) {
+        check(`s${SEED}/${b.id}: bays are even`, Math.abs((b.piers[k] - b.piers[k - 1]) - bay) < 1e-6)
+      }
+    }
+
+    // ★ A PLANK STANDS ON NOTHING. A log over a creek does not need masonry, and this falls out of
+    // the bay arithmetic rather than a branch — no bay fits, so there is one bay.
+    if (b.kind === 'plank') check(`s${SEED}/${b.id}: a plank carries no pier`, b.piers.length === 0, `${b.piers.length}`)
+
+    // ★★ THE TRAPEZOID'S WHOLE POINT: a long crossing RUNS LEVEL. An arch stretched over 149 blocks
+    // is an imperceptible sag, which is why the parabola had to go. Assert the flat, not the curve.
+    if (b.span >= 55) {
+      let flat = 0
+      for (let t = 0; t < b.span; t++) if (deckTopAt(b, t + 1) === deckTopAt(b, t)) flat++
+      check(`s${SEED}/${b.id}: a viaduct runs level over most of its length`, flat > b.span / 2,
+        `${flat} level of ${b.span}`)
+    }
+
+    // ★ `spec.rise` MUST BE THE CROWN ACTUALLY REACHED, not the crown its kind asked for. The
+    // trapezoid is self-limiting (`min(rise, t, span - t)`), so an oversized rise does not produce a
+    // vault — it produces a SPEC THAT LIES, claiming a crown the deck never gets to. That is what
+    // the survey's ramp-fitting clamp is really for, and this is the assert that holds it.
+    //
+    // ⚠ HONESTLY LABELLED: no crossing on either seed is short enough for that clamp to bind, so
+    // this assert has no live subject today and a mutation removing the clamp passes unnoticed. It
+    // is here for the day a seed generates a crossing under ~16 blocks, not as evidence the clamp
+    // is exercised now. An assert with no input that can make it fire is decoration, and calling
+    // this one covered would be the same lie as a guard that cannot see its subject.
+    const crown = Math.round((deckTopAt(b, b.span / 2) - (b.table + 1)) * 2)
+    check(`s${SEED}/${b.id}: rise is the crown the deck actually reaches`, crown === b.rise,
+      `spec says ${b.rise}, profile gives ${crown}`)
+    check(`s${SEED}/${b.id}: both ramps fit inside the span`, 2 * b.rise <= b.span + 1,
+      `rise ${b.rise}, span ${b.span}`)
   }
 
   // ── ★★ THE ACTUAL BUG THIS PASS EXISTS TO KILL ────────────────────────────────────────────
@@ -89,6 +133,27 @@ for (const SEED of SEEDS) {
       `${shortest.id} rise ${shortest.rise} vs ${longest.id} rise ${longest.rise}`)
     check(`s${SEED}: span changes the pier count`, shortest.piers.length !== longest.piers.length,
       `${shortest.piers.length} vs ${longest.piers.length}`)
+    check(`s${SEED}: span changes the KIND`, shortest.kind !== longest.kind,
+      `${shortest.kind} vs ${longest.kind}`)
+    // ★★ AND THE BAY MUST GROW WITH THE SPAN — the defect that produced "crunched". A constant bay
+    // passes every other assert here: same kinds, same rises, same even division. Only this one
+    // fires, and it is the whole reason this pass exists.
+    const bayOf = (x: typeof shortest) => x.piers.length ? x.span / (x.piers.length + 1) : x.span
+    check(`s${SEED}: bay length grows with span`, bayOf(longest) > bayOf(shortest) + 1,
+      `${bayOf(shortest).toFixed(1)} vs ${bayOf(longest).toFixed(1)}`)
+
+    // ★★★ AND THE LONGEST CROSSING MUST REACH FOR THE TOP OF ITS RANGE, NOT SIT ON ITS FLOOR.
+    // This assert exists because a mutation sweep walked straight past the others: replacing the
+    // derived bay with a hardcoded 7 — THE original crunched bug, restored verbatim — passed every
+    // check above. The per-kind floor absorbed it (`floor(span/minBay)` still capped the count) and
+    // the delivered bay stayed inside [18,26], so "inside bounds" and "grows with span" both went
+    // green while the 149-block viaduct quietly went from 5 piers to 7. A span whose target bay is
+    // clamped by its kind's MAXIMUM must actually get bays near that maximum; that is the entire
+    // difference between a viaduct and a fence in water.
+    if (longest.piers.length > 0 && longest.kind === 'viaduct') {
+      check(`s${SEED}: the longest span uses its kind's long bays`, bayOf(longest) >= 0.85 * 26,
+        `bay ${bayOf(longest).toFixed(1)}, viaduct max 26`)
+    }
   }
 
   // ── the rail follows the band, measured not assumed ───────────────────────────────────────
@@ -123,6 +188,35 @@ for (const SEED of SEEDS) {
     // Sides are counted as "two distinct edge cells", never by the sign of `s`: the waterline cuts
     // the road diagonally, so a perfectly good row can sit entirely to one side of the chord — the
     // first version of this assert read that as a defect and would have been "fixed" by deleting it.
+    // ★★★ CONTINUITY — THE ASSERT THAT DID NOT EXIST, AND ITS ABSENCE WAS THE SCARIEST FINDING OF
+    // THE PASS. Every check in this file described what a deck row LOOKS like: railed, at the right
+    // height, on the 0.5 grid, over a pier. Not one of them asked whether the rows JOIN UP. A
+    // crossing with a 26-block hole punched through the middle passed all 301 — the keeper walks
+    // off the end of the world and into the river, and the oracle calls it green.
+    //
+    // Found the way these things are always found: a cross-section LOOKED like it had a hole. That
+    // one was a probe artifact (it sampled the straight chord while the road wobbles), but the
+    // right response to a false alarm is not relief — it is noticing that nothing would have caught
+    // a true one. An interior gap is a fall; a missing row at either END is the run's last
+    // centreline step having no road cells round to it, which costs a 0.5 step onto the bank and is
+    // why the tolerance below is exactly ±1 and no wider.
+    const spans = new Map<number, number[]>()
+    for (const [rk] of rows) {
+      const [i, t] = rk.split(':').map(Number)
+      if (!spans.has(i)) spans.set(i, [])
+      spans.get(i)!.push(t)
+    }
+    for (const [i, ts] of spans) {
+      const b = specs[i]
+      ts.sort((a, c) => a - c)
+      const lo = ts[0], hi = ts[ts.length - 1]
+      let holes = 0
+      for (let t = lo; t <= hi; t++) if (!ts.includes(t)) holes++
+      check(`s${SEED}/${b.id}: the deck has no interior gap`, holes === 0, `${holes} missing rows between ${lo} and ${hi}`)
+      check(`s${SEED}/${b.id}: the deck reaches both banks`, lo <= 1 && hi >= b.span - 1,
+        `covers ${lo}..${hi} of 0..${b.span}`)
+    }
+
     let railless = 0, walled = 0
     for (const [, r] of rows) {
       if (r.n >= 3 && r.edges < 2) railless++
