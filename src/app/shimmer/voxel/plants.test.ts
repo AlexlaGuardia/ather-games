@@ -16,8 +16,9 @@
 
 import { generatedAt, generatedVoxel, makeColumn, meshColumn, SECTION } from './column'
 import { columnHeight } from './height'
-import { materialAt, MAT, isPlant, PLANT_MIN, PLANT_MAX } from './depth'
+import { materialAt, MAT, isPlant, isSapling, isSolid, SOLID_EXCEPT, PLANT_MIN, PLANT_MAX } from './depth'
 import { isLeafMat } from './trees'
+import { AIR } from './section'
 import { plantMaterialAt, plantVariant, FLORA } from './flora'
 import { BLOCKS, blockDef, materialForItem } from './registry'
 import { dropsFor } from './mine'
@@ -232,6 +233,39 @@ const garden = ZONE_ANCHORS.find(a => a.id === 'moonwell-glade')!
     if (o.has(viaEdits) && o.get(viaEdits) !== col.get(x, y, z)) bad++
   }
   ok(bad === 0, '★ column.ts and edits.ts pack a cell index identically')
+}
+
+// ── ★★★ PASSABILITY IS DERIVED, AND THIS IS WHAT KEEPS IT DERIVED ─────────────────────────────
+// `SOLID_EXCEPT` used to write every passable id out by hand under a comment warning that it is a
+// membership test, not a range, so `isPlant` gaining a span does NOT reach it. That comment was
+// correct and it was load-bearing three separate times — herbs (08-18), scatter (08-19), and the
+// seven wild crops were about to make it four. The Set is built by ASKING `isPlant`/`isSapling`
+// now, so a new span reaches passability by construction.
+//
+// ⚠ THE FAILURE THIS PREVENTS IS SPECIFIC AND SILENT: a plant you can SEE THROUGH and WALK INTO.
+// Nothing throws, nothing renders wrong, and the only report is a player saying the world feels
+// sticky — on a RIVER or a SHORE it is a chest-high invisible fence along the waterline.
+//
+// ★ ASSERTED AS A BICONDITIONAL over every base id, not as a list of the ids we happen to have.
+// A one-way check ("every plant is passable") would pass a Set that had quietly gained a solid
+// block, and that is the other direction of the same bug: a wall you can walk through.
+{
+  let wrong = 0, checked = 0
+  for (let m = 0; m <= 0xFF; m++) {
+    const shouldPass = isPlant(m) || isSapling(m)
+    if (!shouldPass) continue
+    checked++
+    if (isSolid(m)) { wrong++; if (wrong <= 3) console.log(`    ✗ ${m} is a plant and SOLID — invisible wall`) }
+  }
+  ok(checked >= 18, `the sweep actually found the plant spans (${checked} ids)`)
+  ok(wrong === 0, `★ every id answering isPlant/isSapling is passable (${wrong} invisible walls in ${checked})`)
+  // And the other direction: nothing that is NOT ground cover may have slipped into the Set.
+  const strays = [...SOLID_EXCEPT].filter(m => m !== AIR && m !== MAT.WATER && !isPlant(m) && !isSapling(m))
+  ok(strays.length === 0, `★ nothing but plants, saplings, air and water is passable (strays: ${strays.join(',')})`)
+  // The seven wild crops specifically — the span that was about to be the fourth hand-edit.
+  const crops = [MAT.MOONVINE, MAT.STARBEAN, MAT.CRYSTALCAP, MAT.DREAMROOT, MAT.SHIMMERBLOOM, MAT.ATHERWHEAT, MAT.DAWNCAP]
+  ok(crops.every(m => !isSolid(m) && isPlant(m)),
+    '★ the seven wild crops are passable and cross-quad WITHOUT being named in any passability list')
 }
 
 console.log(`\nplants: ${pass} passed, ${fails.length} failed`)

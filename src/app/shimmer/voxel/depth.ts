@@ -109,9 +109,19 @@ export const SCATTER_MIN = 68
 export const SCATTER_MAX = 70
 export const isScatter = (m: number): boolean => m >= SCATTER_MIN && m <= SCATTER_MAX
 
+/**
+ * The seven wild crops (ruled 2026-08-22 /magii — a tuft yields a SEED, a ground grows a PLANT).
+ *
+ * ⚠ KEEP 76-82 CONTIGUOUS, for `isPlant`'s reason: the mesher asks on every cell it sweeps and only
+ * a range test is affordable there. An eighth crop goes at 83, never in a gap elsewhere.
+ */
+export const CROP_MIN = 76
+export const CROP_MAX = 82
+export const isCrop = (m: number): boolean => m >= CROP_MIN && m <= CROP_MAX
+
 export const isPlant = (m: number): boolean =>
   (m >= PLANT_MIN && m <= PLANT_MAX) || (m >= HERB_MIN && m <= HERB_MAX)
-  || (m >= SCATTER_MIN && m <= SCATTER_MAX)
+  || (m >= SCATTER_MIN && m <= SCATTER_MAX) || (m >= CROP_MIN && m <= CROP_MAX)
 
 /**
  * Saplings, as a contiguous range — the same shape `isPlant` uses, and for the same reason: the
@@ -488,6 +498,29 @@ export const MAT = {
   GARDEN_BED_GOLDWOOD: 71,
   GARDEN_BED_SHIMMEROAK: 72,
   GARDEN_BED_DAWNWOOD: 73,
+
+  // ── ★ THE SEVEN WILD CROPS (2026-08-22) — a ground grows a PLANT ────────────────────────────
+  // RULED (/magii, on the play lane's gap): the grass-tuft ruling was never in tension with these.
+  // Canon had already drawn the line the herbs have used since 08-18 — *a tuft yields a SEED, a
+  // ground grows a PLANT* — so a meadow handing over `seed_shimmerwheat` and a crag growing a
+  // Crystalcap you pick are two different transactions, not two answers to one question.
+  //
+  // Each crop's ground is read off its character rather than assigned: Starbean takes the RIVER
+  // because that is the ground which scours and a hard pod is what survives scouring; Dawncap takes
+  // the highland for first light; Atherwheat is the rarest thing growing on the commonest ground.
+  // Greyfield grows none — canon's *"no forage of any kind in a greyfield, ever, before the
+  // freeing"* is a rule, not a density.
+  //
+  // ⚠ 76-82 IS THE `isCrop` RANGE and it answers `isPlant`, which is what keeps them out of the
+  // chunk mesh (cross-quads, not cubes) AND — since SOLID_EXCEPT is derived — passable. Both come
+  // free from the span; neither is written out anywhere.
+  MOONVINE: 76,
+  STARBEAN: 77,
+  CRYSTALCAP: 78,
+  DREAMROOT: 79,
+  SHIMMERBLOOM: 80,
+  ATHERWHEAT: 81,
+  DAWNCAP: 82,
 } as const
 
 /**
@@ -726,21 +759,37 @@ export function fillColumn(
 // full solid cell you bump into and cannot see — that is the invisible-wall failure one size down.
 // It also stops a sapling blocking light, which matters more than it sounds: `blockedBy` refuses to
 // grow a tree without open sky, and a sapling that shadowed ITSELF would never come up.
-export const SOLID_EXCEPT = new Set<number>([
-  AIR, MAT.WATER, MAT.TUFT, MAT.TALL_GRASS, MAT.FLOWER,
-  MAT.SAPLING_GOLDWOOD, MAT.SAPLING_SHIMMEROAK, MAT.SAPLING_STARWILLOW, MAT.SAPLING_DAWNWOOD,
-  // ⚠ THE HERBS JOIN GROUND COVER HERE (2026-08-18), and forgetting this line is a specific bug
-  // rather than a rough edge: a plant you can see through but walk into is the invisible-wall
-  // failure, and on a SHORE — where Tidepetal grows — it would be a chest-high fence along the
-  // waterline. This Set is a membership test, not a range, so `isPlant` gaining a second span does
-  // not reach it; the four ids have to be written out.
-  MAT.VIOLETBLOOM, MAT.STORMGRASS, MAT.ROOTVINE, MAT.TIDEPETAL,
-  // ⚠ AND SCATTER JOINS THEM (2026-08-19, slice ③) — third span, same specific bug. A loose rock
-  // you can see through and walk INTO is the invisible wall, and unlike the herbs these turn up on
-  // open country a keeper crosses constantly. The comment above is now load-bearing for a third
-  // time: this Set is membership, not a range, so `isPlant` gaining a span does not reach it.
-  MAT.LOOSE_ROCK, MAT.DEADFALL, MAT.MUSHROOM,
-])
+export const SOLID_EXCEPT: ReadonlySet<number> = (() => {
+  // ★★★ DERIVED FROM `isPlant`/`isSapling`, NOT HAND-LISTED — and removing the hand-list is the
+  // whole point of this block rather than a tidy-up.
+  //
+  // This Set used to write every passable id out by hand, under a comment explaining that it is a
+  // membership test rather than a range, so `isPlant` gaining a span does NOT reach it. That comment
+  // was correct, and it was load-bearing THREE times: the herbs added a span (2026-08-18), scatter
+  // added a third (08-19), and both times someone remembered. A comment that has successfully asked
+  // a human to remember something three times is three-for-three on borrowed luck, and the play lane
+  // was about to make it four with seven wild crops — on a RIVER and a SHORE, where the failure is a
+  // chest-high invisible fence along the waterline.
+  //
+  // ⚠ THE FAILURE IS SPECIFIC AND SILENT: a plant you can SEE THROUGH and WALK INTO. Nothing throws,
+  // nothing renders wrong, and the only report is a player saying the world feels sticky.
+  //
+  // ★ IT ASKS THE FUNCTIONS RATHER THAN COPYING THEIR SPANS, which is the difference between a
+  // derivation and a second mirror. Copying `[PLANT_MIN, PLANT_MAX]` &c. into a table here would be
+  // the same defect one level up — two lists that agree until they don't. Calling `isPlant` cannot
+  // disagree with `isPlant`.
+  //
+  // ⚠ AND IT DOES NOT TOUCH `isPlant` ITSELF, deliberately. That function runs in the mesher's hot
+  // loop and its own header records that the span order is the cheap-case-first optimisation; making
+  // it iterate an array would put an allocation on every cell the mesher sweeps — a real regression
+  // in the exact file whose frame cost is under investigation. The hot path stays a short-circuit
+  // chain of comparisons; only this one-time module-load sweep is derived.
+  const out = new Set<number>([AIR, MAT.WATER])
+  // Base ids only: `isSolid` calls `baseOf` (m & 0xFF) before the lookup, so the half/top bits are
+  // already gone by the time anything asks.
+  for (let m = 0; m <= 0xFF; m++) if (isPlant(m) || isSapling(m)) out.add(m)
+  return out
+})()
 // A slab is SOLID — it just occupies half the cell. Collision asks `solidProbe`, which reports
 // CELL_HALF for it; everything else (light, fence arms, piece placement) wants "yes, solid".
 export const isSolid = (m: number) => !SOLID_EXCEPT.has(baseOf(m))
