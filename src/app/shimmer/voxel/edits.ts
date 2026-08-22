@@ -178,7 +178,18 @@ import { Column, SECTION } from './column'
 // asserts through `materialAt` in world coordinates so the two can never silently disagree again.
 // This is a FIX to v26 rather than a new iteration, but it does move generated voxels — it adds the
 // deck and rails that v26 intended and did not emit.
-export const GENERATOR_VERSION = 27
+// 27 → 28 (2026-08-22, night): THE TRESTLE STANDS ON POSTS. Its pier was a SOLID block up to 5
+// cells wide under a 7-cell deck, in the deck's OWN timber — so support and roadway merged into one
+// mass and the bridge read as a wall with a road on top. The viaduct escaped it only because stone
+// contrasts with the deck. A trestle is now a `bent`: two mirrored posts, a cap beam across their
+// heads, and a sill at the bed, with daylight between the legs and water visible through it. You
+// cannot quarry a 5-wide block of wood; the gaps are the whole reason it reads as carried.
+// Masonry piers stay solid, which is what masonry is.
+// ⚠ Also fixes two asymmetries that were invisible until asserted: pier geometry placed by `|s|`
+// caught two cells on one flank and none on the other (`.D.DDD.`), and the post course selected by
+// per-cell along-span distance produced a single lonely post (`.#.....`). Both are now placed by
+// ROW INDEX. Moves pier voxels on every trestle and plank.
+export const GENERATOR_VERSION = 28
 
 /**
  * One column's edits: packed local index → material.

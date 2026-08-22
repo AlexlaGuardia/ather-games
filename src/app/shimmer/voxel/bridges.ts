@@ -80,6 +80,20 @@ interface KindSpec {
   /** Piers are the road's own timber on a trestle, quarried stone on a viaduct. No new material id
    *  either way — a new id with no atlas slot renders as the magenta checker. */
   stonePiers: boolean
+  /**
+   * ★★ HOW THE PIER CARRIES THE DECK, AND IT IS A MATERIAL ARGUMENT, NOT A TASTE ONE.
+   *
+   * `solid` is a masonry pier: quarried stone is strong in compression and is built as a mass, so a
+   * viaduct's pier is a filled block and reads correctly as one — helped by the stone contrasting
+   * with the timber deck above it.
+   *
+   * `bent` is a timber trestle: you cannot quarry a 5-wide block of wood. A trestle is POSTS with a
+   * cap beam across their heads, and the daylight between the posts is what makes it read as a road
+   * being CARRIED rather than as a wall standing in the river. The first cut gave the trestle a
+   * solid pier in the DECK'S OWN MATERIAL, so support and roadway merged into one timber mass — a
+   * bulkhead 5 cells wide under a 7-cell deck. The viaduct escaped it only because stone ≠ deck.
+   */
+  pierStyle: 'solid' | 'bent'
   /** ★★ BAY BOUNDS ARE PER KIND BECAUSE THE MATERIAL DECIDES THEM. Timber cannot carry far, so a
    *  trestle stands on short bays; a masonry arch is the opposite and wants long ones. A single
    *  global pair cannot be right for both, and the first cut proved it — a shared MIN_BAY of 12 was
@@ -92,9 +106,9 @@ const KINDS: Record<BridgeKind, KindSpec> = {
   // A plank does not arch and stands on nothing. Its clearance is that a creek is shallow, not that
   // the deck is high, and `minBay = PLANK_MAX` is what makes "no piers" fall out of the same
   // arithmetic as everything else instead of needing a branch: no bay fits, so there is one bay.
-  plank:   { rise: 2,  pierHalf: 1, stonePiers: false, minBay: PLANK_MAX, maxBay: PLANK_MAX },
-  trestle: { rise: 8,  pierHalf: 1, stonePiers: false, minBay: 9,  maxBay: 14 },
-  viaduct: { rise: 10, pierHalf: 2, stonePiers: true,  minBay: 18, maxBay: 26 },
+  plank:   { rise: 2,  pierHalf: 1, stonePiers: false, pierStyle: 'bent',  minBay: PLANK_MAX, maxBay: PLANK_MAX },
+  trestle: { rise: 8,  pierHalf: 1, stonePiers: false, pierStyle: 'bent',  minBay: 9,  maxBay: 14 },
+  viaduct: { rise: 10, pierHalf: 2, stonePiers: true,  pierStyle: 'solid', minBay: 18, maxBay: 26 },
 }
 
 export function kindFor(span: number): BridgeKind {
@@ -130,6 +144,12 @@ const RASTER = 0.5
 const FOOTING = 2
 /** Perpendicular inset of the pier from the deck edge. A pier flush with the deck is a wall. */
 const PIER_INSET = 1
+/** Where a trestle's outer posts stand, as |s| from the axis. Inboard of the deck edge so the
+ *  parapet overhangs them slightly, which is what stops a bent reading as a wall's top. */
+const POST_OFFSET = 2
+/** How close a cell's |s| must be to a post's line to BE that post. Half a cell either way: the
+ *  ribbon's cells do not land on exact integers, so an equality test would drop posts at random. */
+const POST_GRAB = 0.6
 /**
  * ★★ A ROW NARROWER THAN THIS CARRIES NO RAIL. **The parapet may never be what makes a row unusable.**
  *
@@ -222,6 +242,19 @@ export interface BridgeCell {
   edge: boolean
   /** Band half-width at this `t`. The pier reads it so a pier is never wider than its own deck. */
   half: number
+  /**
+   * ★★ RANK OF THIS CELL ACROSS ITS ROW, 0 = one flank, `n - 1` = the other, and everything that
+   * places geometry ACROSS the deck now uses this instead of `s`.
+   *
+   * `s` is a continuous projection, and the ribbon is rasterised, so the cells of one row land on
+   * uneven offsets — a row can be s = -3.1, -2.2, -1.4, -0.5, 0.4, 1.2, 2.1. Matching a post to a
+   * band of `|s|` therefore hits two cells on one flank and none on the other: the first cut of the
+   * timber bent came out `.D.DDD.` where it should be `.D.D.D.`, and the masonry pier sat visibly
+   * off-centre. An INDEX is symmetric by construction and does not care how the raster fell.
+   */
+  idx: number
+  /** How many cells this row has. `idx` is meaningless without it. */
+  n: number
 }
 
 interface BridgeIndex {
@@ -377,6 +410,17 @@ function survey(seed: number, cfg: HeightConfig): BridgeIndex {
       }
 
       specs.push({ id, kind, span, table, bed, rise, pierHalf: k.pierHalf, piers, pierBed, pierPos })
+      // Rank each row's cells across the deck once, so geometry can be placed by INDEX.
+      const ranked = new Map<number, { key: string; s: number }[]>()
+      for (const c of mine) {
+        const r = Math.round(c.t)
+        if (!ranked.has(r)) ranked.set(r, [])
+        ranked.get(r)!.push({ key: c.key, s: c.s })
+      }
+      for (const list of ranked.values()) list.sort((a, b) => a.s - b.s)
+      const rankOf = new Map<string, number>()
+      for (const list of ranked.values()) list.forEach((c, i) => rankOf.set(c.key, i))
+
       for (const c of mine) {
         const row = rows.get(Math.round(c.t))!
         cells.set(c.key, {
@@ -389,6 +433,8 @@ function survey(seed: number, cfg: HeightConfig): BridgeIndex {
           // silently vanishes for that row (83 of 550 when tried that way).
           edge: row.n >= RAIL_MIN_WIDTH && (c.s === row.lo || c.s === row.hi),
           half: DECK_HALF,
+          idx: rankOf.get(c.key)!,
+          n: row.n,
         })
       }
     }
@@ -480,16 +526,45 @@ export function bridgeVoxelAt(
   const p = pierAt(spec, cell.t)
   if (p !== null && y >= spec.pierBed[p.k] && y < yc) {
     const d = p.d
-    // A lens in plan: full width through the middle, drawn in by one cell at each pointed end.
-    // Cheap, symmetric, and it does not need to know which way the water runs — flow direction is
-    // a `rin-water` question and a cutwater that guesses it wrong is worse than one that does not.
-    // A lens in plan, drawn in by one cell at each pointed end. On a viaduct the pier is longer
-    // along the span, so the taper starts at its outer third rather than at its single end cell.
-    const inset = PIER_INSET + (d > spec.pierHalf - 0.5 ? 1 : 0)
-    const widen = (y - spec.pierBed[p.k]) < FOOTING ? 1 : 0
-    if (Math.abs(cell.s) <= cell.half - inset + widen) {
-      return KINDS[spec.kind].stonePiers ? stone : deck
+    const style = KINDS[spec.kind].pierStyle
+    const mat = KINDS[spec.kind].stonePiers ? stone : deck
+
+    if (style === 'bent') {
+      // ★ A TIMBER BENT: posts, and a cap beam across their heads. The gaps are the feature — they
+      // are what separates "a road carried on legs" from "a wall with a road on top", and they cost
+      // nothing but the restraint to leave them empty.
+      // The cap sits in the course directly under the deck and spans the pier, tying the posts
+      // together; without it three lone posts read as scaffolding rather than structure.
+      const inboard = cell.idx >= 1 && cell.idx <= cell.n - 2
+      if (y === yc - 1 && inboard) return mat
+      // ⚠ THE POST COURSE IS CHOSEN BY ROW, NOT BY PER-CELL DISTANCE. `d <= 0.5` looks equivalent
+      // and is not: cells sharing a visual row carry slightly different `t`, so the test passes for
+      // some and fails for their mirrors — one bent came out `.#.....`, a single lonely post. Same
+      // defect as matching posts by `|s|`, rotated onto the other axis. Round to the row.
+      if (Math.round(cell.t) !== Math.round(spec.piers[p.k])) return 0
+      // Posts BY INDEX, not by offset — symmetric however the raster fell. Outer pair one cell in
+      // from the flanks (so the parapet overhangs them), plus one on the centre line.
+      // ⚠ A CENTRE POST CANNOT BE CENTRED ON AN EVEN ROW. `(n-1)>>1` put it at 3 of 8, whose mirror
+      // is 4 — asymmetric by construction, and the symmetry assert caught it. Two posts, mirrored,
+      // is both correct at every width and MORE open, which is the read we are after: a road on
+      // legs. A centre pair only earns its place once the row is wide enough to still show daylight.
+      const mid1 = (cell.n - 1) >> 1, mid2 = cell.n >> 1
+      const onPost = cell.idx === 1 || cell.idx === cell.n - 2
+        || (cell.n >= 9 && (cell.idx === mid1 || cell.idx === mid2))
+      if (!onPost) return 0
+      // A sill spreads the posts' load at the bed — the timber equivalent of a footing, and it
+      // stops three thin legs terminating in three lonely dots on the river floor.
+      if ((y - spec.pierBed[p.k]) < 1 && inboard) return mat
+      return mat
     }
+
+    // `solid` — a masonry mass. Drawn in by one cell at each pointed end along the span, so it does
+    // not need to know which way the water runs: a cutwater that guesses the flow wrong is worse
+    // than one that does not exist (that is a `rin-water` question, deferred on purpose).
+    const taper = d > spec.pierHalf - 0.5 ? 1 : 0
+    const widen = (y - spec.pierBed[p.k]) < FOOTING ? 0 : 1
+    const in2 = PIER_INSET + taper + widen - 1
+    if (cell.idx >= in2 && cell.idx <= cell.n - 1 - in2) return mat
   }
   return 0
 }

@@ -389,6 +389,58 @@ for (const SEED of SEEDS) {
   }
 }
 
+// ── ★★ PIER GEOMETRY: SYMMETRIC, AND A BENT HAS DAYLIGHT IN IT ──────────────────────────────
+// Placing geometry across the deck by `|s|` produced a bent of `.D.DDD.` instead of `.D.D.D.` and a
+// masonry pier visibly off-centre, because the ribbon's rasterised cells land on uneven offsets and
+// a band of `|s|` catches two cells on one flank and none on the other. Everything is placed by row
+// INDEX now, and these are the asserts that keep it that way — asymmetry is the tell.
+{
+  for (const SEED of SEEDS) {
+    const specs = bridgeSpecs(SEED)
+    const cells: Record<number, { x: number; z: number; t: number; idx: number; n: number }[]> = {}
+    const seenP = new Set<string>()
+    for (let n = 0; n < STORY_NODES.length - 1; n++) {
+      const a = STORY_NODES[n], q = STORY_NODES[n + 1]
+      const dx = q.x - a.x, dz = q.z - a.z, L = Math.hypot(dx, dz)
+      for (let st = 0; st <= Math.ceil(L); st++) {
+        const bx = Math.round(a.x + (dx * st) / L), bz = Math.round(a.z + (dz * st) / L)
+        for (let o1 = -10; o1 <= 10; o1++) for (let o2 = -10; o2 <= 10; o2++) {
+          const x = bx + o1, z = bz + o2, kk = `${x},${z}`
+          if (seenP.has(kk)) continue
+          seenP.add(kk)
+          const c = bridgeAt(x, z, SEED)
+          if (!c) continue
+          ;(cells[c.i] ??= []).push({ x, z, t: c.t, idx: c.idx, n: c.n })
+        }
+      }
+    }
+    for (let i = 0; i < specs.length; i++) {
+      const b = specs[i]
+      if (!b.piers.length || !cells[i]) continue
+      const pt = b.piers[Math.floor(b.piers.length / 2)]
+      let bt = cells[i][0].t
+      for (const c of cells[i]) if (Math.abs(c.t - pt) < Math.abs(bt - pt)) bt = c.t
+      const row = cells[i].filter(c => Math.round(c.t) === Math.round(bt)).sort((a2, c2) => a2.idx - c2.idx)
+      if (row.length < 5) continue
+      const y = Math.ceil(deckTopAt(b, bt)) - 3     // well inside the pier, below the cap
+      const solid = row.map(c => materialAt(c.x, y, c.z, SEED, columnHeight(c.x, c.z, SEED)) !== 0)
+      let asym = 0
+      for (let k = 0; k < row.length; k++) if (solid[k] !== solid[row.length - 1 - k]) asym++
+      check(`s${SEED}/${b.id}: the pier is symmetric across the deck`, asym === 0,
+        `${asym} mismatched pairs: ${solid.map(v => v ? '#' : '.').join('')}`)
+      // A timber bent must have gaps; a masonry pier must not.
+      const gaps = solid.slice(1, -1).filter(v => !v).length
+      if (b.kind === 'viaduct') {
+        check(`s${SEED}/${b.id}: a masonry pier is a solid mass`, gaps === 0,
+          solid.map(v => v ? '#' : '.').join(''))
+      } else {
+        check(`s${SEED}/${b.id}: a timber bent has daylight between its posts`, gaps >= 2,
+          solid.map(v => v ? '#' : '.').join(''))
+      }
+    }
+  }
+}
+
 // ── ★★★ THROUGH THE REAL GENERATOR, NOT AROUND IT ────────────────────────────────────────────
 // EVERY other assert in this file calls `bridgeVoxelAt` directly. The WORLD calls it through
 // `materialAt`, behind a gate — and for one deploy that gate was still `roadAt`, written when the
