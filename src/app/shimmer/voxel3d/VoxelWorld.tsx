@@ -73,7 +73,8 @@ import { createSpiritIndex, markSeen, indexToSave, indexFromSave, type SpiritInd
 import { inPassageVolume, insideShell, bubbleSwallows, passageApproach } from '../voxel/bubble'
 import { rinSpotAt } from '../voxel/rin-water'
 import { newCast, phaseAt, passed, answer, type RinCast, type RinPhase } from '../engine/rin-cast'
-import { rinCatch, RIN_TIERS, type RinWater } from '../engine/rin-catch'
+import { rinCatch, type RinWater } from '../engine/rin-catch'
+import { WORLD_ITEMS } from '../voxel/obtainable'
 import { HOLDS } from '../voxel/holds'
 import {
   spawnFoe, stepFoe, strike, hostile, foeDef, pickPosture, collarFrac, answerCollar,
@@ -974,13 +975,12 @@ function suggestionsFor(line: string, ctx: ConsoleCtx): { options: string[]; app
  * and a claim nobody can open is worse than silence — it retires the question. The premise is
  * genuinely asserted, one file over.
  */
-const WORLD_ITEMS: ReadonlySet<string> = new Set([
-  ...BLOCKS.flatMap(b => b.drops.map(d => d.itemId)),
-  ...RECIPE_OUTPUTS,
-  // Derived from the ladder, not hand-listed — the rule three lines up. A tier added to
-  // `RIN_TIERS` enters the cauldron's world the moment it exists.
-  ...RIN_TIERS.flatMap(t => t.items),
-])
+// ⚠ IMPORTED, NOT DECLARED — and the import IS the fix. This was a local `const` enumerating its
+// sources by hand, and it was wrong five times in four days: herbs, rinning, felling, plus a test
+// that mirrored it and a sweep that exempted itself from it. Every failure was silent and pointed
+// the same way — a keeper told to go and find an ingredient they were already holding. A source
+// registered in `voxel/obtainable.ts` is now visible to every reader at once. See that file's
+// header for the full list of what got missed and why.
 
 /**
  * What `/give` will conjure. Everything this world produces, plus every brew.

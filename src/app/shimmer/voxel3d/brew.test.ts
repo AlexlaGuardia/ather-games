@@ -15,8 +15,6 @@
 // genuinely unreachable here. Do not read the diff as the rule being relaxed.
 
 import { brewBlocker, absentInputs, cauldronMenu, isInfusionBrew, ALL_BREWS } from './brew'
-import { readFileSync } from 'node:fs'
-import { join } from 'node:path'
 import { POTION_DEFS, INFUSION_BREWS } from '../engine/alchemy'
 import { MAX_INFUSIONS_PER_ELEMENT } from '../spirits/spirit'
 import { BLOCKS } from '../voxel/registry'
@@ -24,50 +22,25 @@ import { RECIPE_OUTPUTS, RECIPES } from '../voxel/recipes'
 import { MAT } from '../voxel/depth'
 import { STATION_MAT } from '../voxel/workshop'
 import { rightClickIntent } from './interact'
-import { RIN_TIERS } from '../engine/rin-catch'
 
 let pass = 0
 const fails: string[] = []
 const ok = (c: boolean, m: string) => { if (c) pass++; else fails.push(m) }
 
 /**
- * The world's real item universe — the same derivation the host hands the panel as `inWorld`.
+ * ── ★★★ THE MIRROR IS GONE — DELETED, NOT REPAIRED (2026-08-22) ────────────────────────────────
+ * This file used to hand-keep a copy of a PRIVATE const in `VoxelWorld.tsx`, and that copy went
+ * stale exactly as a copy does: rinning shipped 08-20, neither side heard, and **the mirror and its
+ * source agreed perfectly while both were wrong.** The first fix compared the two DERIVATIONS at the
+ * source level so they had to move together — correct, and one instance of the real problem short.
  *
- * ⚠⚠ THIS IS A MIRROR OF A PRIVATE CONST IN `VoxelWorld.tsx`, AND A MIRROR DRIFTS. It went stale
- * the moment rinning shipped: the host gained no catches either, so the two agreed and were both
- * wrong — which is the failure mode a copy has. Agreement between a mirror and its source proves
- * nothing about either. The source-level check below is what makes them move together, because it
- * fails when the two derivations stop listing the same things rather than when they disagree about
- * a value.
+ * ⚠ **A PASSING MIRROR-CHECK IS ONE MORE THING THAT READS AS CORROBORATION**, which is the whole
+ * lesson wearing a badge. `voxel/obtainable.ts` exports the derivation, the host imports it and so
+ * does this file, so drift is now IMPOSSIBLE rather than DETECTABLE. The stronger of the two is
+ * always the one that removes the second copy.
  */
-const WORLD_ITEMS = new Set<string>([
-  ...BLOCKS.flatMap(b => b.drops.map(d => d.itemId)),
-  ...RECIPE_OUTPUTS,
-  ...RIN_TIERS.flatMap(t => t.items),
-])
-const inWorld = (id: string) => WORLD_ITEMS.has(id)
+import { WORLD_ITEMS, inWorld } from '../voxel/obtainable'
 
-// ── ★★ THE MIRROR CANNOT SILENTLY DRIFT FROM ITS SOURCE ──────────────────────────────────────
-// The set above is a hand-kept copy of a PRIVATE const in `VoxelWorld.tsx`. Copies of a derivation
-// are only ever as current as the last person who remembered both, and this one had already gone
-// stale once: rinning shipped 2026-08-20 and neither side learned about it, so the mirror and its
-// source agreed perfectly and were both wrong. **Agreement between a copy and its original is not
-// evidence about either of them.**
-//
-// So this compares the two DERIVATIONS at the source level rather than their values: whatever the
-// host spreads into `WORLD_ITEMS`, this file must spread too. It fails when they stop listing the
-// same things, which is the moment the drift starts, instead of when someone notices a wrong brew.
-{
-  const host = readFileSync(join(import.meta.dirname, 'VoxelWorld.tsx'), 'utf-8')
-  const block = host.match(/const WORLD_ITEMS: ReadonlySet<string> = new Set\(\[([\s\S]*?)\]\)/)
-  ok(block !== null, 'VoxelWorld.tsx still declares WORLD_ITEMS as a derived Set literal')
-  if (block) {
-    const spreads = (src: string) => (src.match(/\.\.\.[A-Za-z_][\w.]*/g) ?? []).sort().join(' ')
-    const mine = spreads(`...BLOCKS.flatMap ...RECIPE_OUTPUTS ...RIN_TIERS.flatMap`)
-    ok(spreads(block[1]) === mine,
-      `the host's WORLD_ITEMS derives from the same sources this mirror does (host: ${spreads(block[1])})`)
-  }
-}
 const rich = () => 99
 const broke = () => 0
 const roomy = () => 99
