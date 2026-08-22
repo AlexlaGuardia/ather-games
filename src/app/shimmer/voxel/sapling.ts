@@ -27,7 +27,7 @@ import { MAT, TURF } from './depth'
 import { AIR } from './section'
 import { SPECIES, crownAt, type TreeSpecies, type TreeStart } from './trees'
 import { hash2 } from './noise'
-import { morningsBetween } from '../engine/day-cycle'
+import { morningsBetween } from './clock'
 
 /**
  * How many MORNINGS a sapling needs.

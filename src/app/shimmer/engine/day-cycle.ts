@@ -22,19 +22,14 @@
 
 export type DayPhase = 'dawn' | 'day' | 'dusk' | 'night'
 
-/** One full day, in real milliseconds. */
-export const CYCLE_MS = 64 * 60 * 1000
-
-/** Game hours, as a fraction of the cycle. Progress 0 = 00:00. */
-const H = (hour: number) => hour / 24
-
-// ★ These are for the map editor ONLY — the PHASE NAMES are derived from the light curve itself
-// (see getPhase). The first cut declared them as independent constants and they immediately drifted:
-// the HUD said DUSK at 19:00 while `daylight()` had already reached zero at 18:51, so the label and
-// the sky disagreed by an hour. Two constants describing one thing will always come apart. The one
-// that survives is the one the renderer actually uses.
-const DAWN_START  = H(5)
-const DUSK_START  = H(18)
+// ★ THE CLOCK ARITHMETIC LIVES IN THE CORE — `voxel/clock.ts`. This file reads `window.location`
+// for the `?hour=` pin, so it is host-side by construction and cannot be ported; the day's LENGTH
+// and where dawn falls in it are world model, and the voxel core needs them to grow a sapling
+// without depending upward (§ 6 rule 4). Imported back and re-exported here, so every existing
+// caller is unchanged and there is still exactly one definition of each — which is the point of the
+// warning that used to sit on these two lines and now sits on them over there.
+import { CYCLE_MS, DAWN_START, DUSK_START, morningsBetween, nextMorning } from '../voxel/clock'
+export { CYCLE_MS, morningsBetween, nextMorning }
 
 /** Kept for the map editor, which rewrites this block textually (save-map/route.ts). */
 export const RESPAWN_TRIGGERS = {
@@ -73,43 +68,6 @@ export function dayProgress(nowMs: number = Date.now()): number {
   if (pinnedHour !== null) return pinnedHour / 24
   const m = nowMs % CYCLE_MS
   return (m < 0 ? m + CYCLE_MS : m) / CYCLE_MS
-}
-
-/**
- * How many MORNINGS have broken between two moments.
- *
- * ── ★★ ALEX, 2026-08-22: *"what if every morning in-game we could have it grow.. so it takes three
- * days for it to reach ful grown and mineable"* ────────────────────────────────────────────────
- * Sapling growth was a flat elapsed-milliseconds check, so a goldwood came up two minutes after you
- * planted it and the whole ritual of planting a tree was a countdown you stood next to. Counting
- * DAWNS instead means a tree is something you come back to, and it costs nothing to persist because
- * the clock is already derived from wall time rather than ticked.
- *
- * ⚠ IT COUNTS BOUNDARIES CROSSED, NOT ELAPSED TIME, and those are genuinely different. Plant at
- * 04:00 and one morning breaks an in-game hour later; plant at 06:00 and the first is 23 hours off.
- * That asymmetry is the feature — a keeper planting at dusk is planting *for tomorrow*, which is
- * what makes it read as a morning at all rather than as a differently-shaped timer.
- *
- * ⚠ DELIBERATELY IGNORES THE TIME PIN. `?hour=` and the console's `time` command move what the sky
- * SHOWS, not what the world has lived through — pinning dawn to look at the light must not mature
- * every sapling in the garden, and un-pinning must not un-grow them. Growth reads the wall clock;
- * only the render reads the pin.
- */
-export function morningsBetween(fromMs: number, toMs: number): number {
-  if (!(toMs > fromMs)) return 0
-  // Dawn lands this far into every cycle, so shifting by it puts a morning on each integer boundary.
-  const dawnAt = CYCLE_MS * DAWN_START
-  const morning = (t: number) => Math.floor((t - dawnAt) / CYCLE_MS)
-  return Math.max(0, morning(toMs) - morning(fromMs))
-}
-
-/**
- * When the next morning breaks after `fromMs`, as epoch ms — so a HUD can say how long the wait is
- * rather than only that there is one.
- */
-export function nextMorning(fromMs: number): number {
-  const dawnAt = CYCLE_MS * DAWN_START
-  return (Math.floor((fromMs - dawnAt) / CYCLE_MS) + 1) * CYCLE_MS + dawnAt
 }
 
 /**
