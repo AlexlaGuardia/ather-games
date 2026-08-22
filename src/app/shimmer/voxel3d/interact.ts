@@ -47,6 +47,15 @@ export type Intent =
    */
   | 'travel'
   /**
+   * A garden bed with nothing in it, and a seed in hand: put the seed in (`voxel/planting.ts`).
+   *
+   * ★ NOT `'plant'` — that is the clay pot and a Mana Seed, which pays out a SPIRIT. Two verbs for
+   * two objects, so a host branch never has to ask which one the player meant.
+   */
+  | 'sow'
+  /** A garden bed whose crop is ready. Not `'harvest'`, which is the pot's bloom. */
+  | 'reap'
+  /**
    * A cauldron: open the brew list (`voxel3d/brew.ts`).
    *
    * ★ ITS OWN INTENT, NOT `'work'`, AND THE REASON IS THE STATION MODEL ITSELF. `voxel/workshop.ts`
@@ -86,6 +95,7 @@ export type Intent =
  */
 export function rightClickIntent(
   aimed: number, selItem: string | null, holdsSeed: boolean, hasRinstick = false,
+  bedPlanted = false, bedReady = false,
 ): Intent {
   // USE is answered FIRST, always. A block you use must not have the block in your hand dropped
   // onto it by the same click that uses it.
@@ -121,6 +131,28 @@ export function rightClickIntent(
   // true today (Greg's starter), and it is a parameter anyway so that the day a rod can be lost,
   // this answers `'none'` rather than casting with nothing.
   if (aimed === MAT.WATER && !selItem && hasRinstick) return 'rinn'
+  // ── ★★ A GARDEN BED (2026-08-22) — SOW and REAP, deliberately NOT `plant`/`harvest` ──────────
+  // Those two already mean the POT: Gregory's clay pot taking a Mana Seed and blooming a spirit.
+  // A bed and a pot are different objects with different payouts, and folding them into one intent
+  // would make the host re-derive which it meant from the material it just handed in — the exact
+  // thing `'work'` vs `'open'` is separated to avoid, ten lines up.
+  //
+  // ⚠ ABOVE THE PLACE FALLBACK, like the bench and the cauldron, and for the identical reason: a
+  // keeper holding a stack of beds while standing over one must SOW it, not stack a second bed onto
+  // its face. That is the trap this whole function exists for and beds walk straight into it — they
+  // are the block you are most likely to be carrying more of while standing at one.
+  //
+  // ★ `bedReady` and `bedPlanted` are PASSED, not derived, exactly like `hasRinstick`: growth is
+  // wall-clock state living in `voxel/planting.ts`, and this file reads no state and imports no
+  // engine. It answers from what it is told.
+  if (aimed === MAT.GARDEN_BED && bedReady) return 'reap'
+  if (aimed === MAT.GARDEN_BED && !bedPlanted && holdsSeed) return 'sow'
+  // ⚠⚠ A BED WITH SOMETHING GROWING IN IT IS NOT A FACE TO BUILD ON. Without this the click falls
+  // through to `place` and a keeper buries their own crop under whatever they were carrying — the
+  // block goes down, the crop record survives underneath it, and that voxel then refuses every
+  // future seed with "something is already growing there" while showing a stone block. Caught by
+  // the oracle, not by playing: it needs a seed in the ground AND a block in hand at the same time.
+  if (aimed === MAT.GARDEN_BED && bedPlanted) return 'none'
   if (aimed === MAT.POT && selItem === 'mana_seed' && holdsSeed) return 'plant'
   if (aimed === MAT.POT_SEEDED) return 'peek'
   if (aimed === MAT.POT_BLOOM) return 'harvest'

@@ -119,6 +119,34 @@ const ok = (c: boolean, m: string) => { if (c) pass++; else fails.push(m) }
     'and a bloomed pot still harvests')
 }
 
+// ── ★★ THE GARDEN BED — sow, reap, and the stacking trap ───────────────────────────────────────
+{
+  const BED = MAT.GARDEN_BED
+  // A bed you are standing over while carrying more beds must SOW, never stack a second onto it.
+  // This is the trap the bench and the cauldron are both ordered above `place` to avoid, and a bed
+  // walks into it harder than either: it is the block a keeper carries most of while standing at one.
+  ok(rightClickIntent(BED, 'seed_shimmerwheat', true, false, false, false) === 'sow',
+    '★★ an empty bed + a seed sows')
+  ok(rightClickIntent(BED, 'garden_bed', false, false, false, false) === 'place',
+    'a bed + another bed, nothing growing, no seed → places (there is nothing else to mean)')
+  ok(rightClickIntent(BED, 'garden_bed', false, false, true, false) === 'none',
+    '★★★ a PLANTED bed + a bed in hand does NOT place — the crop is not a face to build on')
+
+  ok(rightClickIntent(BED, null, false, false, true, true) === 'reap', '★ a ready bed reaps')
+  ok(rightClickIntent(BED, 'seed_shimmerwheat', true, false, true, true) === 'reap',
+    '★★ ready outranks sowing — a keeper holding seed over a ripe crop picks it, and cannot overwrite it')
+  ok(rightClickIntent(BED, 'seed_shimmerwheat', true, false, true, false) === 'none',
+    'a growing, unready bed with seed in hand does nothing — it is not sowable and not pickable')
+
+  // ⚠ The pot's verbs must be untouched. Two objects, two verbs; folding them would make the host
+  // re-derive which it meant from the material it just handed in.
+  ok(rightClickIntent(MAT.POT, 'mana_seed', true, false, false, false) === 'plant',
+    'the clay pot still plants, not sows')
+  ok(rightClickIntent(MAT.POT_BLOOM, null, false, false, false, false) === 'harvest',
+    'the pot still harvests, not reaps')
+}
+
+
 console.log(fails.length ? `interact: ${pass} pass, ${fails.length} FAIL` : `interact oracle ${pass} CLEAN`)
 for (const f of fails) console.log('  ✗ ' + f)
 process.exit(fails.length ? 1 : 0)

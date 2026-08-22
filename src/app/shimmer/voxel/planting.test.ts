@@ -6,7 +6,6 @@ import {
 import { CROP_DEFS } from '../engine/farming'
 import { createInventory, addItems, countItem } from '../engine/inventory'
 import { createSkillSet } from '../engine/skills'
-import { createManaPool } from '../engine/mana'
 
 let pass = 0
 const fails: string[] = []
@@ -19,14 +18,19 @@ const WHEAT = CROP_DEFS['shimmerwheat']
 // refused anything. **The `as any` is what let it through** — TypeScript would have named it
 // instantly. A fixture cast to `any` has stopped describing the world and starts agreeing with
 // whatever the code happens to do.
-const rig = (farming = 1, manaCur?: number) => {
+// ⚠⚠ THE POOL IS A PLAIN NUMBER AND A DRAIN CALLBACK, matching what the module now takes — and the
+// history of this rig is the lesson. v1 faked `{ cur, max } as any`, which hid a dead mana gate
+// (`plantBlocker` read a field the engine type does not have). v2 built a real engine `ManaPool`,
+// which caught that — and then the HOST would not compile against it, because voxel3d keeps its own
+// `{ cur, max, regen }`. **Two mana models exist and the module was right to take neither.**
+const rig = (farming = 1, manaCur = 99) => {
   const inv = createInventory()
   addItems(inv, WHEAT.seedItemId, 3)
   const skills = createSkillSet()
   skills.farming.level = farming
-  const mana = createManaPool(skills.mana?.level ?? 1)
-  if (manaCur !== undefined) mana.current = manaCur
-  return { beds: new Map() as PlantedBeds, inv, skills, mana }
+  const pool = { cur: manaCur }
+  const drain = (cost: number) => { pool.cur -= cost }
+  return { beds: new Map() as PlantedBeds, inv, skills, pool, drain }
 }
 
 // ── 1. ★★ THE KEY CARRIES ALL THREE COORDINATES ────────────────────────────────────────────────
@@ -46,33 +50,33 @@ const rig = (farming = 1, manaCur?: number) => {
 // ── 2. THE REFUSALS ARE SIX DIFFERENT SENTENCES ────────────────────────────────────────────────
 {
   const r = rig()
-  ok(plantBlocker(r.beds, 0, 0, 0, WHEAT.seedItemId, r.inv, r.skills, r.mana) === 'ok', 'a fresh bed takes a seed')
-  ok(plantBlocker(r.beds, 0, 0, 0, 'rubble', r.inv, r.skills, r.mana) === 'not-a-seed', 'rubble is not a seed')
+  ok(plantBlocker(r.beds, 0, 0, 0, WHEAT.seedItemId, r.inv, r.skills, r.pool.cur) === 'ok', 'a fresh bed takes a seed')
+  ok(plantBlocker(r.beds, 0, 0, 0, 'rubble', r.inv, r.skills, r.pool.cur) === 'not-a-seed', 'rubble is not a seed')
 
   const empty = rig(); empty.inv = createInventory()
-  ok(plantBlocker(empty.beds, 0, 0, 0, WHEAT.seedItemId, empty.inv, empty.skills, empty.mana) === 'none-in-bag',
+  ok(plantBlocker(empty.beds, 0, 0, 0, WHEAT.seedItemId, empty.inv, empty.skills, empty.pool.cur) === 'none-in-bag',
     'an empty bag is its own answer')
 
   const dawn = CROP_DEFS['dawncap']
   const low = rig(1); addItems(low.inv, dawn.seedItemId, 1)
-  ok(plantBlocker(low.beds, 0, 0, 0, dawn.seedItemId, low.inv, low.skills, low.mana) === 'level',
+  ok(plantBlocker(low.beds, 0, 0, 0, dawn.seedItemId, low.inv, low.skills, low.pool.cur) === 'level',
     'a tier-4 crop refuses a level-1 keeper')
 
   const broke = rig(1, 0)
-  ok(plantBlocker(broke.beds, 0, 0, 0, WHEAT.seedItemId, broke.inv, broke.skills, broke.mana) === 'mana',
+  ok(plantBlocker(broke.beds, 0, 0, 0, WHEAT.seedItemId, broke.inv, broke.skills, broke.pool.cur) === 'mana',
     'no mana is its own answer')
 
   const taken = rig()
-  plantInBed(taken.beds, 0, 0, 0, WHEAT.seedItemId, taken.inv, taken.skills, taken.mana)
-  ok(plantBlocker(taken.beds, 0, 0, 0, WHEAT.seedItemId, taken.inv, taken.skills, taken.mana) === 'occupied',
+  plantInBed(taken.beds, 0, 0, 0, WHEAT.seedItemId, taken.inv, taken.skills, taken.pool.cur, taken.drain)
+  ok(plantBlocker(taken.beds, 0, 0, 0, WHEAT.seedItemId, taken.inv, taken.skills, taken.pool.cur) === 'occupied',
     '★ an occupied bed refuses a second seed')
 
   // ★ OCCUPIED IS CHECKED FIRST, on purpose: a keeper clicking a full bed should be told it is full,
   // not told about their mana. The bed is the thing they pointed at.
   const both = rig(1)
-  plantInBed(both.beds, 0, 0, 0, WHEAT.seedItemId, both.inv, both.skills, both.mana)
-  both.mana.current = 0
-  ok(plantBlocker(both.beds, 0, 0, 0, WHEAT.seedItemId, both.inv, both.skills, both.mana) === 'occupied',
+  plantInBed(both.beds, 0, 0, 0, WHEAT.seedItemId, both.inv, both.skills, both.pool.cur, both.drain)
+  both.pool.cur = 0
+  ok(plantBlocker(both.beds, 0, 0, 0, WHEAT.seedItemId, both.inv, both.skills, both.pool.cur) === 'occupied',
     '★★ occupied outranks mana — the keeper is told about the thing they clicked')
 
   for (const why of ['ok', 'occupied', 'not-a-seed', 'none-in-bag', 'level', 'mana'] as const) {
@@ -88,10 +92,10 @@ const rig = (farming = 1, manaCur?: number) => {
 {
   const r = rig()
   const seedsBefore = countItem(r.inv, WHEAT.seedItemId)
-  const manaBefore = r.mana.current
+  const manaBefore = r.pool.cur
 
-  ok(plantInBed(r.beds, 0, 0, 0, 'rubble', r.inv, r.skills, r.mana) === null, 'a bad plant returns null')
-  ok(r.mana.current === manaBefore, '...and a non-seed costs no mana')
+  ok(plantInBed(r.beds, 0, 0, 0, 'rubble', r.inv, r.skills, r.pool.cur, r.drain) === null, 'a bad plant returns null')
+  ok(r.pool.cur === manaBefore, '...and a non-seed costs no mana')
   ok(countItem(r.inv, WHEAT.seedItemId) === seedsBefore, '...and costs no seed')
   ok(r.beds.size === 0, '...and leaves the bed empty')
 
@@ -105,16 +109,16 @@ const rig = (farming = 1, manaCur?: number) => {
   const none = rig()
   const dawn = CROP_DEFS['dawncap']
   none.skills.farming.level = dawn.minFarmingLevel      // level is fine, so it is not the refusal
-  const noneMana = none.mana.current
+  const noneMana = none.pool.cur
   ok(countItem(none.inv, dawn.seedItemId) === 0, 'the rig holds no dawncap seed')
-  ok(plantInBed(none.beds, 0, 0, 0, dawn.seedItemId, none.inv, none.skills, none.mana) === null,
+  ok(plantInBed(none.beds, 0, 0, 0, dawn.seedItemId, none.inv, none.skills, none.pool.cur, none.drain) === null,
     'planting a real seed you do not hold is refused')
-  ok(none.mana.current === noneMana,
+  ok(none.pool.cur === noneMana,
     '★★★ ...AND COSTS NO MANA — plantCrop drains before it checks the bag, and the blocker is what stops it')
 
-  ok(plantInBed(r.beds, 0, 0, 0, WHEAT.seedItemId, r.inv, r.skills, r.mana) !== null, 'a good plant succeeds')
+  ok(plantInBed(r.beds, 0, 0, 0, WHEAT.seedItemId, r.inv, r.skills, r.pool.cur, r.drain) !== null, 'a good plant succeeds')
   ok(countItem(r.inv, WHEAT.seedItemId) === seedsBefore - 1, '★ a good plant spends exactly one seed')
-  ok(r.mana.current === manaBefore - WHEAT.manaCost, '★ ...and exactly its mana cost')
+  ok(r.pool.cur === manaBefore - WHEAT.manaCost, '★ ...and exactly its mana cost')
 }
 
 // ── 4. GROWTH AND THE UNRIPE PICK ──────────────────────────────────────────────────────────────
@@ -123,7 +127,7 @@ const rig = (farming = 1, manaCur?: number) => {
   ok(phaseAt(r.beds, 0, 0, 0) === null, 'an empty bed has no phase')
   ok(readyAt(r.beds, 0, 0, 0) === false, 'an empty bed is not ready')
 
-  plantInBed(r.beds, 0, 0, 0, WHEAT.seedItemId, r.inv, r.skills, r.mana)
+  plantInBed(r.beds, 0, 0, 0, WHEAT.seedItemId, r.inv, r.skills, r.pool.cur, r.drain)
   ok(phaseAt(r.beds, 0, 0, 0) === 0, 'a fresh crop is phase 0')
   ok(readyAt(r.beds, 0, 0, 0) === false, 'and not ready')
 
@@ -158,19 +162,19 @@ const rig = (farming = 1, manaCur?: number) => {
 // refuses every seed with "something is already growing there", pointing at nothing.
 {
   const r = rig()
-  plantInBed(r.beds, 4, 5, 6, WHEAT.seedItemId, r.inv, r.skills, r.mana)
+  plantInBed(r.beds, 4, 5, 6, WHEAT.seedItemId, r.inv, r.skills, r.pool.cur, r.drain)
   ok(clearBed(r.beds, 4, 5, 6) === true, 'clearing a planted bed reports that it cleared something')
   ok(r.beds.size === 0, '★ ...and the crop is gone')
   ok(clearBed(r.beds, 4, 5, 6) === false, '★ clearing an empty bed reports nothing — so a caller can be tested')
-  ok(plantBlocker(r.beds, 4, 5, 6, WHEAT.seedItemId, r.inv, r.skills, r.mana) === 'ok',
+  ok(plantBlocker(r.beds, 4, 5, 6, WHEAT.seedItemId, r.inv, r.skills, r.pool.cur) === 'ok',
     '★★ ...and the voxel takes a seed again')
 }
 
 // ── 6. THE SAVE ROUND-TRIPS, AND REFUSES A FOREIGN ONE ─────────────────────────────────────────
 {
   const r = rig()
-  plantInBed(r.beds, 4, 5, 6, WHEAT.seedItemId, r.inv, r.skills, r.mana)
-  plantInBed(r.beds, 7, 8, 9, WHEAT.seedItemId, r.inv, r.skills, r.mana)
+  plantInBed(r.beds, 4, 5, 6, WHEAT.seedItemId, r.inv, r.skills, r.pool.cur, r.drain)
+  plantInBed(r.beds, 7, 8, 9, WHEAT.seedItemId, r.inv, r.skills, r.pool.cur, r.drain)
 
   const back = bedsFromSave(bedsToSave(r.beds))
   ok(back.size === 2, 'both beds survive a round trip')

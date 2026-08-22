@@ -19,13 +19,13 @@
 // alternative — widening `PlantedCrop` with a `z` — would edit a type play3d relies on to buy
 // nothing that this file cannot do on its own.
 import {
-  CROP_DEFS, plantCrop, harvestCrop, getCropGrowthPhase, isCropReady, cropForSeed,
+  CROP_DEFS, harvestCrop, getCropGrowthPhase, isCropReady, cropForSeed,
   type PlantedCrop, type CropGrowthPhase, type HarvestCropResult,
 } from '../engine/farming'
 import type { Inventory } from '../engine/inventory'
 import { countItem } from '../engine/inventory'
-import type { SkillSet } from '../engine/skills'
-import type { ManaPool } from '../engine/mana'
+import { addSkillXP, type SkillSet } from '../engine/skills'
+import { removeItems } from '../engine/inventory'
 
 /** One bed's address. The only key anything here uses. */
 export const bedKey = (x: number, y: number, z: number): string => `${x},${y},${z}`
@@ -48,7 +48,7 @@ export type PlantRefusal = 'ok' | 'occupied' | 'not-a-seed' | 'none-in-bag' | 'l
 
 export function plantBlocker(
   beds: PlantedBeds, x: number, y: number, z: number,
-  seedItemId: string, inv: Inventory, skills: SkillSet, mana: ManaPool,
+  seedItemId: string, inv: Inventory, skills: SkillSet, manaCur: number,
 ): PlantRefusal {
   if (beds.has(bedKey(x, y, z))) return 'occupied'
   const cropId = cropForSeed(seedItemId)
@@ -56,12 +56,16 @@ export function plantBlocker(
   if (countItem(inv, seedItemId) < 1) return 'none-in-bag'
   const def = CROP_DEFS[cropId]
   if (skills.farming.level < def.minFarmingLevel) return 'level'
-  // ⚠⚠ `current`, NOT `cur` — and the first cut of this file read `cur`, which is not a field on
-  // `ManaPool`. `undefined < 3` is false, so the gate never refused: the mana check was DEAD and a
-  // keeper with an empty pool could plant forever. TypeScript would have caught it on the spot; my
-  // own test rig hid it by faking the pool as `{ cur, max } as any`. **A fixture cast to `any` is a
-  // fixture that has stopped describing the world**, and it agreed with the bug rather than the type.
-  if (mana.current < def.manaCost) return 'mana'
+  // ⚠⚠ A PLAIN NUMBER, NOT A POOL — and this is the second correction on this one line. It first
+  // read `mana.cur`, which is not a field on the engine's `ManaPool` (`undefined < 3` is false, so
+  // the gate never refused). Fixing it to `mana.current` then failed to compile against the HOST,
+  // which keeps its own `{ cur, max, regen }` and is not the engine's pool at all.
+  //
+  // ★ TWO MANA MODELS EXIST AND NEITHER IS WRONG, so this file refuses to pick one: it takes the
+  // number. `doBrew` reached the same conclusion first and says so — it deliberately does NOT call
+  // `engine/alchemy.brewPotion`, because the host owns the spend and the engine owns the
+  // definitions. Following that precedent rather than inventing a second bridge.
+  if (manaCur < def.manaCost) return 'mana'
   return 'ok'
 }
 
@@ -97,12 +101,32 @@ export function plantRefusalLine(why: PlantRefusal, seedItemId: string, skills: 
  */
 export function plantInBed(
   beds: PlantedBeds, x: number, y: number, z: number,
-  seedItemId: string, inv: Inventory, skills: SkillSet, mana: ManaPool,
+  seedItemId: string, inv: Inventory, skills: SkillSet, manaCur: number,
+  drain: (cost: number) => void, now: () => number = Date.now,
 ): PlantedCrop | null {
-  if (plantBlocker(beds, x, y, z, seedItemId, inv, skills, mana) !== 'ok') return null
-  const cropId = cropForSeed(seedItemId)!
-  const crop = plantCrop(cropId, inv, skills, mana, x, z, bedZoneId(y))
-  if (!crop) return null
+  if (plantBlocker(beds, x, y, z, seedItemId, inv, skills, manaCur) !== 'ok') return null
+  const def = CROP_DEFS[cropForSeed(seedItemId)!]
+
+  // ★★ THE SPEND IS ATOMIC AND IT HAPPENS HERE, AFTER THE ONLY GATE. `engine/farming.plantCrop`
+  // drains mana on its third line and checks the bag on its fourth, so a plant it refuses has
+  // already cost the keeper — which reads as *"the bed sometimes doesn't work"*. `doBrew` declined
+  // to call the engine's equivalent for the same reason and wrote down why.
+  //
+  // ⚠ `drain` IS A CALLBACK RATHER THAN A POOL because the host's mana is `{ cur, max, regen }` and
+  // the engine's is `{ current, channeling, manaSpent }`. A callback lets the spend stay inside this
+  // function — where it cannot be forgotten — without this file having to know which model it is
+  // talking to, or a caller having to remember to deduct afterwards.
+  removeItems(inv, seedItemId, 1)
+  drain(def.manaCost)
+  addSkillXP(skills.farming, def.plantXp)
+
+  const crop: PlantedCrop = {
+    id: `bed-${x},${y},${z}`,
+    cropId: def.id,
+    tileX: x, tileY: z, zoneId: bedZoneId(y),
+    plantedAt: now(),
+    growthDuration: def.growthMs,
+  }
   beds.set(bedKey(x, y, z), crop)
   return crop
 }

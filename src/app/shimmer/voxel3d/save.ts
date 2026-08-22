@@ -127,6 +127,16 @@ export interface PlayerSave {
   tools: unknown
   skills: unknown
   /**
+   * What is growing in the keeper's garden beds (`voxel/planting.ts`).
+   *
+   * ⚠ OPTIONAL, so every save written before beds existed loads unchanged — and `bedsFromSave`
+   * treats absent and empty identically. A crop is wall-clock timed (`plantedAt` + duration), so it
+   * keeps growing while the tab is shut; that is the intended behaviour and it is why the field is
+   * a list of records rather than a snapshot of progress. Storing "how grown" instead would freeze
+   * every crop the moment a keeper closed the game.
+   */
+  beds?: unknown
+  /**
    * ★ THE WAYMARK NETWORK (2026-08-15) — and it belongs HERE rather than in `ColumnSave`, which is
    * the opposite of where chests and station jobs live.
    *

@@ -39,7 +39,12 @@ import { orphanedLeaves, dueLeaves, withoutLeaves, enqueueLeaves, type PendingLe
 import { salvageItems, salvageMessage } from '../voxel/salvage'
 import { blockDef, materialForItem, emitOf, BLOCKS, type BlockSkill } from '../voxel/registry'
 import { editIndex, recordEdit, applyEdits, packEdits, unpackEdits, isStale, GENERATOR_VERSION, type ColumnEdits } from '../voxel/edits'
+import { cropForSeed, CROP_DEFS } from '../engine/farming'
 import { placeBedBlocker, plotRefusalLine, countBeds } from '../voxel/garden'
+import {
+  plantBlocker, plantRefusalLine, plantInBed, harvestBed, cropAt, readyAt, clearBed,
+  bedsToSave, bedsFromSave, type PlantedBeds,
+} from '../voxel/planting'
 import { generatePlotColumn, plotGeneratedVoxel } from '../voxel/plot-column'
 import { plotThreshold, hasFallenOut, chestCap, plotStandY, plotCaveStand, plotForTier, plotHeight, PLOT_TIERS, type PlotConfig } from '../voxel/plot'
 /**
@@ -3589,6 +3594,8 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
   // ★ Edits live here, keyed by column, and are the ONLY thing the world stores. Walking a thousand
   // columns costs zero bytes; a save grows with what you BUILD.
   const edits = useRef(new Map<string, ColumnEdits>())
+  /** What is growing in each garden bed. Keyed by voxel — see `voxel/planting.ts`. */
+  const beds = useRef<PlantedBeds>(new Map())
   const dirtySaves = useRef(new Set<string>())
   /**
    * ── ★ THE STALE-SAVE WARNING FIRES ONCE PER GENERATOR VERSION, NOT ONCE PER PAGE LOAD ────────
@@ -3905,6 +3912,10 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
       // same ref object, and swapping the `.current` from in here is fine, but a save whose index is
       // the wrong shape must leave the empty one standing rather than throw mid-restore.
       if (p.index) { try { spiritIndex.current = indexFromSave(p.index as IndexSave) } catch { /* older shape */ } }
+      // ⚠ ABSENT AND EMPTY ARE THE SAME THING HERE — every save written before beds existed loads
+      // unchanged. `bedsFromSave` also refuses crops carrying a play3d zone id, so a shared save
+      // cannot drop farm-zone crops into voxel beds at coordinates that mean something else.
+      beds.current = bedsFromSave(p.beds as never)
       onInvChange()
     })
     return () => { live = false }
@@ -3932,6 +3943,7 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
                // The fold Greg has actually given, and the book he reads to decide. See both fields
                // in `PlayerSave` — the tier is what EXISTS, never what is owed.
                plotTier: plotTier.current,
+               beds: bedsToSave(beds.current),
                index: indexToSave(spiritIndex.current) }
     }
     snapOut.current = snap
@@ -6872,6 +6884,12 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
             ? `the ${felled.start.species.id} comes down — ${paid[0].count} logs and ${extra} more`
             : `the ${felled.start.species.id} comes down — ${paid[0].count} logs`)
         } else {
+          // ⚠⚠ A BROKEN BED TAKES ITS CROP WITH IT. Without this the record outlives the block:
+          // the voxel stays "occupied" forever, so a new bed placed there refuses every seed with
+          // *"something is already growing there"* while showing bare soil — a permanently dead
+          // square with nothing visible to explain it. `clearBed` is a no-op on every other
+          // material, so this costs one Map lookup per block broken.
+          clearBed(beds.current, hit.x, hit.y, hit.z)
           for (const d of dropsFor(hit.material)) drops.current.push(spawnDrop(d.itemId, d.count, hit.x, hit.y, hit.z))
         }
         // ★ A BROKEN CHEST SPILLS WHAT IT HELD — before `setVoxel`, which is what drops the record.
@@ -6991,11 +7009,18 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
     rightPress.current = false
     if (hit && rightNow && !weaponDrawn) {
       const potMat = voxel(hit.x, hit.y, hit.z)
-      const intent = rightClickIntent(potMat, selItem,
-        selItem === 'mana_seed' && countItem(inv.current!, selItem) > 0,
+      // ★ `holdsSeed` now answers for BOTH seed kinds: the pot wants a Mana Seed, a bed wants a crop
+      // seed, and `rightClickIntent` disambiguates by the material it was handed. Asking
+      // `cropForSeed` here rather than in that file keeps it free of engine imports, which is the
+      // property that lets it stay a pure lookup table.
+      const holdsAnySeed = !!selItem && countItem(inv.current!, selItem) > 0
+        && (selItem === 'mana_seed' || cropForSeed(selItem) !== null)
+      const intent = rightClickIntent(potMat, selItem, holdsAnySeed,
         // Greg's starter never breaks, so this is true today for every keeper — passed anyway so
         // the day a rod can be lost, the click answers `'none'` instead of casting with nothing.
-        !!getEquippedTool(tools.current!, 'rinning'))
+        !!getEquippedTool(tools.current!, 'rinning'),
+        cropAt(beds.current, hit.x, hit.y, hit.z) !== undefined,
+        readyAt(beds.current, hit.x, hit.y, hit.z))
       // ── ★ THE CHEST OPENS ON RIGHT-CLICK, and is answered FIRST ────────────────────────────
       // A chest is a thing you USE, and the block in your hand must not be dropped onto it by the
       // same click that opens it. Handing the whole panel upward (rather than opening one down
@@ -7130,6 +7155,38 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
         pot.save()
         setVoxel(hit.x, hit.y, hit.z, MAT.POT)
         onSay(`✦ a young ${speciesDisplayName(born.species)} chose you!`)
+        mouse.current.right = false
+      } else if (intent === 'sow') {
+        // ── ★★ SOW: a crop seed into an empty bed ──────────────────────────────────────────────
+        // Asked through `plantBlocker` and then `plantInBed`, never re-deriving the conditions —
+        // and `plantInBed` asks the blocker again itself, which is deliberate rather than wasteful:
+        // the host needs the REASON to say a sentence, the module needs the verdict to stay safe if
+        // any other caller ever appears. Two callers of one function, not two copies of one rule.
+        const why = plantBlocker(beds.current, hit.x, hit.y, hit.z, selItem!,
+                                 inv.current!, skills.current!, mana.current.cur)
+        if (why !== 'ok') {
+          onSay(plantRefusalLine(why, selItem!, skills.current!))
+        } else {
+          const crop = plantInBed(beds.current, hit.x, hit.y, hit.z, selItem!,
+                                  inv.current!, skills.current!, mana.current.cur,
+                                  (cost) => { mana.current.cur = Math.max(0, mana.current.cur - cost) })
+          if (crop) {
+            const def = CROP_DEFS[crop.cropId]
+            onInvChange()
+            onSay(`${def.name.toLowerCase()} sown — ${Math.round(def.growthMs / 60000)} minutes`)
+          }
+        }
+        mouse.current.right = false
+      } else if (intent === 'reap') {
+        // ── ★ REAP: take a ripe crop. `harvestBed` refuses an unripe one and LEAVES IT PLANTED ──
+        const got = harvestBed(beds.current, hit.x, hit.y, hit.z, inv.current!, skills.current!)
+        if (got) {
+          onInvChange()
+          onSkill({ id: 'farming', level: skills.current!.farming.level,
+                    xp: skills.current!.farming.xp, next: xpForSkillLevel(skills.current!.farming.level) })
+          onSay(got.items.map(i => `${i.count}× ${itemLabel(i.itemId).toLowerCase()}`).join(', ')
+                + ` · ${got.xpGained} farming xp`)
+        }
         mouse.current.right = false
       } else if (intent === 'place') {
       // Placing — and ONLY placing — needs something in your hand, which `place` already asserts.
