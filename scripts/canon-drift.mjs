@@ -807,6 +807,34 @@ if (!QUIET) {
 }
 console.log('canon-drift: ' + ORDER.filter((s) => counts[s]).map((s) => `${counts[s]} ${s}`).join(', '))
 
+// ── ★★★ WHAT THIS GATE DOES **NOT** CHECK — printed on purpose ─────────────────────────────────
+// A generic `mana_seed` survived NINE DAYS past its own retirement with this gate green the whole
+// time. Nothing was broken: the ten gates diff NAMES and ROSTERS — species, second forms, NPCs,
+// zones, moves, mist rosters, birth affinities, herbs, infusions — and a retired item MODEL is none
+// of those. The gate was correct on every line it checks and silent on that one.
+//
+// ⚠⚠ **SILENCE FROM A GATE IS INDISTINGUISHABLE FROM A PASS**, and a gate's SCOPE is the same
+// silent promise as an exemption — worse, because an exemption is at least written at the place it
+// exempts, while scope is written nowhere a reader would trip over it. "canon-drift: 10 CLEAN" reads
+// as *canon and the build agree*. It means *ten named things still line up.*
+//
+// So the boundary is printed beside the verdict, every run. It cannot go stale unnoticed the way a
+// comment can, because the day someone adds an eleventh gate they will see this list and either
+// move a line out of it or leave a lie on the terminal. Move a line UP into a gate when you build
+// one; never delete a line to make the output shorter.
+if (!QUIET) {
+  console.log('')
+  console.log('canon-drift covers NAMES AND ROSTERS ONLY. It does not check:')
+  for (const line of [
+    'item MODELS — whether a shipped item is a thing canon still has (the mana_seed case)',
+    'mechanics, rates, costs, curves — Jin\'s by the boundary, so deliberately unchecked',
+    'design-brief HOLDS — a brief still holding art that a later ruling released',
+    'whether a ruled fact reached the BUILD at all — a ruling nothing implements reads clean here',
+    'prose claims inside canon files — only the tabled/rostered facts are diffed',
+  ]) console.log(`  · ${line}`)
+  console.log('  A clean gate means ten named things line up. It is not a statement about the rest.')
+}
+
 if (WRITE_REPORT) {
   writeFileSync(REPORT_PATH, toMarkdown(counts))
   console.log(`report → ${REPORT_PATH}`)
