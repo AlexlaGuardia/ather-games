@@ -1074,7 +1074,15 @@ export function paintFor(material: number, face: number, size: number): Layer {
       }
       // TOP: turned earth inside a timber frame. The soil is drawn DARK so the material colour
       // carries it; the frame is drawn bright so the wood reads through the multiply.
-      paintGrit(dst, size, [214, 206, 198], 16, 12, seed)
+      // ⚠ THE VALUE HERE IS TUNED AGAINST THE LIT WORLD, NOT AGAINST THE ICON, and the two differ by
+      // a lot. `atlas.ts` multiplies this tile by the material colour and the lighting then lifts the
+      // product by roughly 3.6x. The first cut painted this at 214 on the theory that the tint would
+      // darken it; it did, to 62, and the lighting blew that back out to ~230 — a garden bed with a
+      // top face the colour of concrete. Measured off a real screenshot, not computed.
+      //
+      // ⚠ NEUTRAL GREY ON PURPOSE. All the HUE comes from the material colour, which is what makes
+      // the three woods' beds differ without three copies of this painter.
+      paintGrit(dst, size, [96, 90, 84], 16, 12, seed)
       for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {
         const edge = x < band || y < band || x >= size - band || y >= size - band
         if (edge) put(dst, size, x, y, shade(wood, (h2(x, y, seed) - 0.5) * 16), 0)
@@ -1084,7 +1092,7 @@ export function paintFor(material: number, face: number, size: number): Layer {
       const furrow = Math.max(1, size >> 4)
       for (const fy of [Math.floor(size * 0.38), Math.floor(size * 0.66)])
         for (let y = fy; y < fy + furrow; y++)
-          for (let x = band + 1; x < size - band - 1; x++) put(dst, size, x, y, [150, 142, 134], 0)
+          for (let x = band + 1; x < size - band - 1; x++) put(dst, size, x, y, [62, 58, 54], 0)
       break
     }
     // ── conjured matter (2026-08-22) — mana in the shape of a wall ──────────────────────────
