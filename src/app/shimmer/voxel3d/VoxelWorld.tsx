@@ -108,7 +108,7 @@ import { isLeafMat, isLogMat } from '../voxel/trees'
 import { treeOwning, fellTree, fellXP } from '../voxel/tree-node'
 import { growTreeCells, type TreeStart } from '../voxel/trees'
 import {
-  isSaplingMat, saplingSpecies, saplingKey, canPlant, blockedBy, plantedHeight,
+  isSaplingMat, saplingSpecies, saplingKey, canPlant, blockedBy, plantedHeight, GROW_DAYS,
   type SaplingClock,
 } from '../voxel/sapling'
 import { createInventory, removeItems, countItem, type Inventory } from '../engine/inventory'
@@ -7275,7 +7275,12 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
         if (isSaplingMat(put)) {
           saplingClock.current[saplingKey(hit.px, hit.py, hit.pz)] = Date.now()
           saveSaplings()
-          onSay('planted — it needs room overhead to come up')
+          // ★ SAY THE WAIT IN THE UNIT THE WAIT IS MEASURED IN (2026-08-22). Growth counts MORNINGS
+          // now, so "a few minutes" or any elapsed figure would be a sentence the game cannot keep.
+          // Naming the species' own number also makes the rarity ladder visible at the moment it is
+          // paid for, rather than being a thing a keeper infers from two trees behaving differently.
+          onSay(`planted — ${GROW_DAYS[saplingSpecies(put)?.id ?? 'goldwood'] ?? GROW_DAYS.goldwood}`
+                + ` mornings, and it needs room overhead to come up`)
         }
         // ── ★ A PLANTED WAYMARK JOINS THE NETWORK (2026-08-15) ──────────────────────────────
         // ⚠ THE CAP IS CHECKED HERE, AFTER THE BLOCK IS DOWN, AND THE BLOCK IS THEN TAKEN BACK UP.

@@ -27,21 +27,34 @@ import { MAT, TURF } from './depth'
 import { AIR } from './section'
 import { SPECIES, crownAt, type TreeSpecies, type TreeStart } from './trees'
 import { hash2 } from './noise'
+import { morningsBetween } from '../engine/day-cycle'
 
 /**
- * How long a sapling takes.
+ * How many MORNINGS a sapling needs.
  *
- * ⚠ SCALED BY THE TREE, NOT FLAT, and it is the rarity that pays for the wait. Goldwood is 58% of
- * the wild forest and should be a thing you farm inside a session; dawnwood is weight 4 and finding
- * one is an event, so cultivating one is meant to be a commitment. Same ladder the canon node
- * respawn timers already use (2 / 5 / 9 / 15 min) — reused as the shape so a player who learns one
- * has learned the other.
+ * ── ★★ ALEX, 2026-08-22, watching one come up: *"they did grow (a bit fast tho; what if every
+ * morning in-game we could have it grow.. so it takes three days for it to reach ful grown and
+ * mineable)"* ─────────────────────────────────────────────────────────────────────────────────
+ * This was elapsed milliseconds — goldwood in two real minutes — so planting a tree was a countdown
+ * you stood next to rather than something you came back to. Counting dawns makes a planted tree a
+ * thing the world does while you are away, which is the whole feel of the front door.
+ *
+ * ⚠ THE RARITY LADDER SURVIVES, IN DAYS, AND THE STEP IS MINE NOT ALEX'S. He gave one number —
+ * three days — and it is goldwood's, the day-one tree. The old table scaled 2/5/9/15 minutes on a
+ * stated reason (*"dawnwood is weight 4 and finding one is an event, so cultivating one is meant to
+ * be a commitment"*), and flattening every species to three would have deleted that decision as a
+ * side effect of honouring a different one. Carrying the old RATIOS across would have put dawnwood
+ * at twenty-two days, which is not a cozy game — so the ladder is compressed to a single day per
+ * rung. If the ladder should be flat at three, this table is the one line to change.
+ *
+ * ⚠ 64 REAL MINUTES TO THE IN-GAME DAY (`CYCLE_MS`), so goldwood is ~3.2 real hours and dawnwood
+ * ~6.4. Both are "come back later", which is the point, and neither is "come back next week".
  */
-export const GROW_MS: Record<string, number> = {
-  goldwood: 2 * 60_000,
-  shimmeroak: 5 * 60_000,
-  starwillow: 9 * 60_000,
-  dawnwood: 15 * 60_000,
+export const GROW_DAYS: Record<string, number> = {
+  goldwood: 3,
+  shimmeroak: 4,
+  starwillow: 5,
+  dawnwood: 6,
 }
 
 /** Planting times by world position, `"x,y,z"` → epoch ms. Persisted beside the player save. */
@@ -147,7 +160,8 @@ export function blockedBy(
 
   const planted = clock[saplingKey(x, y, z)]
   // A missing stamp is "planted now" (see the header), which means it is not yet due.
-  if (planted === undefined || now - planted < (GROW_MS[sp.id] ?? GROW_MS.goldwood)) return 'time'
+  if (planted === undefined
+      || morningsBetween(planted, now) < (GROW_DAYS[sp.id] ?? GROW_DAYS.goldwood)) return 'time'
 
   for (const c of envelope(sp)) {
     // The sapling's own cell is the one thing in the envelope that is legitimately occupied — by
@@ -163,7 +177,10 @@ export function blockedBy(
 export function progress(clock: SaplingClock, sp: TreeSpecies, x: number, y: number, z: number, now: number): number {
   const at = clock[saplingKey(x, y, z)]
   if (at === undefined) return 0
-  const t = (now - at) / (GROW_MS[sp.id] ?? GROW_MS.goldwood)
+  // ⚠ WHOLE MORNINGS, so this steps rather than creeps — and that is honest rather than coarse.
+  // A smooth bar would tick upward all afternoon and then not grow the tree, because elapsed time is
+  // no longer what growth is measured in. The bar has to count the same thing the gate counts.
+  const t = morningsBetween(at, now) / (GROW_DAYS[sp.id] ?? GROW_DAYS.goldwood)
   return t < 0 ? 0 : t > 1 ? 1 : t
 }
 

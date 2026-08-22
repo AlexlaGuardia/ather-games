@@ -76,6 +76,43 @@ export function dayProgress(nowMs: number = Date.now()): number {
 }
 
 /**
+ * How many MORNINGS have broken between two moments.
+ *
+ * ── ★★ ALEX, 2026-08-22: *"what if every morning in-game we could have it grow.. so it takes three
+ * days for it to reach ful grown and mineable"* ────────────────────────────────────────────────
+ * Sapling growth was a flat elapsed-milliseconds check, so a goldwood came up two minutes after you
+ * planted it and the whole ritual of planting a tree was a countdown you stood next to. Counting
+ * DAWNS instead means a tree is something you come back to, and it costs nothing to persist because
+ * the clock is already derived from wall time rather than ticked.
+ *
+ * ⚠ IT COUNTS BOUNDARIES CROSSED, NOT ELAPSED TIME, and those are genuinely different. Plant at
+ * 04:00 and one morning breaks an in-game hour later; plant at 06:00 and the first is 23 hours off.
+ * That asymmetry is the feature — a keeper planting at dusk is planting *for tomorrow*, which is
+ * what makes it read as a morning at all rather than as a differently-shaped timer.
+ *
+ * ⚠ DELIBERATELY IGNORES THE TIME PIN. `?hour=` and the console's `time` command move what the sky
+ * SHOWS, not what the world has lived through — pinning dawn to look at the light must not mature
+ * every sapling in the garden, and un-pinning must not un-grow them. Growth reads the wall clock;
+ * only the render reads the pin.
+ */
+export function morningsBetween(fromMs: number, toMs: number): number {
+  if (!(toMs > fromMs)) return 0
+  // Dawn lands this far into every cycle, so shifting by it puts a morning on each integer boundary.
+  const dawnAt = CYCLE_MS * DAWN_START
+  const morning = (t: number) => Math.floor((t - dawnAt) / CYCLE_MS)
+  return Math.max(0, morning(toMs) - morning(fromMs))
+}
+
+/**
+ * When the next morning breaks after `fromMs`, as epoch ms — so a HUD can say how long the wait is
+ * rather than only that there is one.
+ */
+export function nextMorning(fromMs: number): number {
+  const dawnAt = CYCLE_MS * DAWN_START
+  return (Math.floor((fromMs - dawnAt) / CYCLE_MS) + 1) * CYCLE_MS + dawnAt
+}
+
+/**
  * Which world-reset window we are in. The planned spawner layer deals its board from
  * (worldSeed, resetIndex) so the layout is a pure function of the two — which is what makes it
  * survive a closed tab and stay identical for everyone standing in the same field.

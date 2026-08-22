@@ -8,7 +8,8 @@
 import { AIR } from './section'
 import { MAT } from './depth'
 import { SPECIES } from './trees'
-import { GROW_MS, PLANTABLE_GROUND, saplingKey, canPlant, blockedBy, envelope, progress, speciesOf } from './sapling'
+import { GROW_DAYS, PLANTABLE_GROUND, saplingKey, canPlant, blockedBy, envelope, progress, speciesOf } from './sapling'
+import { CYCLE_MS, morningsBetween, nextMorning } from '../engine/day-cycle'
 
 let pass = 0
 const fails: string[] = []
@@ -26,6 +27,10 @@ function world(solid: Set<string> = new Set()) {
 }
 const openSky = () => true
 const NOW = 1_000_000_000
+// ★ GROWTH COUNTS MORNINGS NOW, NOT ELAPSED MS (2026-08-22). Stepping back a whole number of cycles
+// crosses exactly that many dawn boundaries, whatever hour NOW happens to be — so this is exact
+// rather than "long enough", and it does not silently become wrong if CYCLE_MS changes.
+const plantedDaysAgo = (days: number) => NOW - days * CYCLE_MS
 
 // ── 1. the three rules Alex stated ───────────────────────────────────────────────────────────
 {
@@ -38,7 +43,7 @@ const NOW = 1_000_000_000
     'PLANTABLE_GROUND is topsoil and not sand')
   // "no blocks above" and "after a certain time" are the growth rules, checked below.
   ok(blockedBy({}, at, openSky, GOLD, 5, 1, 5, NOW) === 'time', 'a fresh sapling is waiting on time')
-  const clock = { [saplingKey(5, 1, 5)]: NOW - GROW_MS.goldwood - 1 }
+  const clock = { [saplingKey(5, 1, 5)]: plantedDaysAgo(GROW_DAYS.goldwood) }
   ok(blockedBy(clock, at, openSky, GOLD, 5, 1, 5, NOW) === null, '★ a due sapling with room grows')
 }
 
@@ -47,7 +52,7 @@ const NOW = 1_000_000_000
 // sapling while it grows and still get a tree through the roof. This is the whole reason `blockedBy`
 // takes the world as an argument instead of a flag stored at planting.
 {
-  const clock = { [saplingKey(5, 1, 5)]: NOW - GROW_MS.goldwood - 1 }
+  const clock = { [saplingKey(5, 1, 5)]: plantedDaysAgo(GROW_DAYS.goldwood) }
   ok(blockedBy(clock, world(), openSky, GOLD, 5, 1, 5, NOW) === null, 'clear at planting, clear now')
   // …and now the player lays a floor four blocks up, AFTER planting.
   const roofed = world(new Set(['5,5,5']))
@@ -90,7 +95,7 @@ const NOW = 1_000_000_000
 // Guards the OTHER direction: an envelope that over-reserves makes saplings refuse to grow in
 // perfectly good spots, which reads as "saplings are broken" and is just as unshippable.
 {
-  const clock = { [saplingKey(5, 1, 5)]: NOW - GROW_MS.dawnwood - 1 }
+  const clock = { [saplingKey(5, 1, 5)]: plantedDaysAgo(GROW_DAYS.dawnwood) }
   const top = envelope(DAWN).reduce((a, c) => Math.max(a, c.dy), 0)
   const justAbove = world(new Set([`5,${1 + top + 1},5`]))
   ok(blockedBy(clock, justAbove, openSky, DAWN, 5, 1, 5, NOW) === null,
@@ -102,7 +107,7 @@ const NOW = 1_000_000_000
 
 // ── 5. sky, and the missing-stamp rule ───────────────────────────────────────────────────────
 {
-  const clock = { [saplingKey(5, 1, 5)]: NOW - GROW_MS.goldwood - 1 }
+  const clock = { [saplingKey(5, 1, 5)]: plantedDaysAgo(GROW_DAYS.goldwood) }
   ok(blockedBy(clock, world(), () => false, GOLD, 5, 1, 5, NOW) === 'sky',
     '★ no sky, no tree — a sealed dark room is not a farm')
   // pot.ts's rule, kept for pot.ts's reason: a lost stamp costs minutes, never the sapling.
@@ -114,12 +119,64 @@ const NOW = 1_000_000_000
 
 // ── 6. rarity is paid for in time, on the canon ladder ───────────────────────────────────────
 {
-  ok(GROW_MS.goldwood < GROW_MS.shimmeroak && GROW_MS.shimmeroak < GROW_MS.starwillow
-     && GROW_MS.starwillow < GROW_MS.dawnwood, '★ the rarer the tree, the longer the wait')
-  const missing = SPECIES.filter(s => GROW_MS[s.id] === undefined)
+  ok(GROW_DAYS.goldwood < GROW_DAYS.shimmeroak && GROW_DAYS.shimmeroak < GROW_DAYS.starwillow
+     && GROW_DAYS.starwillow < GROW_DAYS.dawnwood, '★ the rarer the tree, the longer the wait')
+  ok(GROW_DAYS.goldwood === 3, "★ Alex's number, for the day-one tree: three mornings")
+  const missing = SPECIES.filter(s => GROW_DAYS[s.id] === undefined)
   ok(missing.length === 0, `every species has a grow time (missing ${missing.map(s => s.id).join(',')})`)
   ok(speciesOf('dawnwood')?.id === 'dawnwood', 'a sapling item resolves to its species')
   ok(speciesOf('nonesuch') === null, 'an unknown sapling id resolves to nothing, not to goldwood')
+}
+
+// ── 7. ★★ GROWTH COUNTS MORNINGS, NOT ELAPSED TIME (2026-08-22, Alex) ────────────────────────
+// *"a bit fast tho; what if every morning in-game we could have it grow.. so it takes three days"*
+// The distinction is the whole feature and it is easy to fake: a flat `3 * CYCLE_MS` elapsed check
+// passes every assert above and is NOT what was asked for, because it makes planting-at-dusk and
+// planting-at-dawn identical. These are the asserts that can tell those two apart.
+{
+  // ★ THE ASYMMETRY IS THE FEATURE. Two saplings planted 2 in-game hours apart across a dawn are a
+  // whole day apart in maturity, and no elapsed-time rule can produce that.
+  const dawn = nextMorning(NOW)
+  const justBefore = dawn - CYCLE_MS / 24        // one in-game hour before the sun comes up
+  const justAfter  = dawn + CYCLE_MS / 24        // one in-game hour after
+  ok(morningsBetween(justBefore, dawn + 1) === 1, '★ a morning breaking counts, however brief the wait')
+  ok(morningsBetween(justAfter, dawn + CYCLE_MS / 2) === 0,
+    '★★ planting just AFTER dawn waits for tomorrow — elapsed time cannot express this')
+
+  // ...and the same two spans in raw milliseconds are nearly equal, which is what makes the pair
+  // above a real discriminator rather than a restatement.
+  ok((dawn + 1 - justBefore) < (dawn + CYCLE_MS / 2 - justAfter),
+    '⚠ the counted-1 span is SHORTER in ms than the counted-0 span — elapsed time would rank them backwards')
+
+  // Boundaries, stated: nothing yet, and never negative however the arguments arrive.
+  ok(morningsBetween(NOW, NOW) === 0, 'no time, no mornings')
+  ok(morningsBetween(NOW + CYCLE_MS, NOW) === 0, '★ a backwards span is 0, never negative')
+
+  // A whole cycle is exactly one morning wherever it starts — the property `plantedDaysAgo` rests on.
+  for (const offset of [0, CYCLE_MS / 7, CYCLE_MS / 3, CYCLE_MS * 0.9]) {
+    ok(morningsBetween(NOW + offset, NOW + offset + CYCLE_MS) === 1,
+      `one cycle is one morning, starting at +${Math.round(offset / 60000)}m`)
+  }
+
+  // The bar counts what the gate counts. A sapling one morning short must NOT read as ready.
+  const nearly = { [saplingKey(5, 1, 5)]: plantedDaysAgo(GROW_DAYS.goldwood - 1) }
+  ok(blockedBy(nearly, world(), openSky, GOLD, 5, 1, 5, NOW) === 'time',
+    '★ one morning short is still waiting')
+  ok(progress(nearly, GOLD, 5, 1, 5, NOW) < 1, '...and the HUD bar agrees it is not ready')
+
+  // ⚠⚠ THE ASSERT ABOVE IS DOMINATED AND CANNOT CATCH A DRIFTING BAR — a mutation putting `progress`
+  // back on elapsed time left every assert green, because at two cycles elapsed both rules land
+  // under 1. A bar and a gate measuring DIFFERENT things is exactly the mirror failure: two
+  // derivations of one truth, agreeing until they do not. This fixture is where they disagree.
+  //
+  // Planted an in-game hour before dawn, read an in-game hour after it: one whole morning has
+  // broken, so the bar owes a full 1/3. Elapsed time has barely moved and would show ~2%.
+  const beforeDawn = nextMorning(NOW) - CYCLE_MS / 24
+  const justPastIt = nextMorning(NOW) + CYCLE_MS / 24
+  const overnight = { [saplingKey(5, 1, 5)]: beforeDawn }
+  const shown = progress(overnight, GOLD, 5, 1, 5, justPastIt)
+  ok(Math.abs(shown - 1 / GROW_DAYS.goldwood) < 1e-9,
+    `★★ the bar counts MORNINGS like the gate does — a dawn crossed is a whole rung (got ${shown})`)
 }
 
 console.log(`\nsapling: ${pass} passed, ${fails.length} failed`)
