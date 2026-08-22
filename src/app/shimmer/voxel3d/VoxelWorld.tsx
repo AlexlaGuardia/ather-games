@@ -73,7 +73,7 @@ import { createSpiritIndex, markSeen, indexToSave, indexFromSave, type SpiritInd
 import { inPassageVolume, insideShell, bubbleSwallows, passageApproach } from '../voxel/bubble'
 import { rinSpotAt } from '../voxel/rin-water'
 import { newCast, phaseAt, passed, answer, type RinCast, type RinPhase } from '../engine/rin-cast'
-import { rinCatch, type RinWater } from '../engine/rin-catch'
+import { rinCatch, RIN_TIERS, type RinWater } from '../engine/rin-catch'
 import { HOLDS } from '../voxel/holds'
 import {
   spawnFoe, stepFoe, strike, hostile, foeDef, pickPosture, collarFrac, answerCollar,
@@ -946,8 +946,15 @@ function suggestionsFor(line: string, ctx: ConsoleCtx): { options: string[]; app
 /** Item ids the console may conjure — everything a block drops or a recipe produces. */
 /**
  * ── ★★ WHAT THIS WORLD CAN ACTUALLY PRODUCE (2026-08-18, brewing) ─────────────────────────────
- * Every item a keeper can obtain HERE by playing: what a block drops, and what the voxel recipe
- * table makes. Nothing else — no fishing, no Exchange Booth, no crops.
+ * Every item a keeper can obtain HERE by playing: what a block drops, what the voxel recipe table
+ * makes, and what a cast pulls out of the water. No Exchange Booth, no crops.
+ *
+ * ⚠ THE "NO FISHING" IN THIS SENTENCE WAS TRUE FOR TWO DAYS AND THEN QUIETLY WASN'T (rinning
+ * shipped 2026-08-20, play lane found it 08-22). A stale honesty gate does not fail loudly — it
+ * greys out brews a keeper CAN already make and tells them to go and find ingredients they are
+ * holding. Wrong in the direction that sends people away. Adding the catches takes the front door
+ * from 7/17 to 10/17 runnable brews and puts `glowfin_brew` (lv5) into the empty lv5-6 band on the
+ * road to alchemy 10, which gates all 40 ruled second forms.
  *
  * ★ IT IS THE CAULDRON'S HONESTY GATE, and that is why it is worth naming rather than inlining.
  * `engine/alchemy.ts` is shared with play3d, whose world grows ten crops and sells seeds, so most of
@@ -961,11 +968,18 @@ function suggestionsFor(line: string, ctx: ConsoleCtx): { options: string[]; app
  *
  * ⚠ POTIONS ARE DELIBERATELY EXCLUDED. They are obtainable now (the cauldron makes them), but no
  * recipe in the table takes a potion as an INPUT, so leaving them out costs nothing and keeps this
- * from needing a fixpoint. `brew-reach.test.ts` asserts that premise rather than trusting it.
+ * from needing a fixpoint. `brew.test.ts` asserts that premise rather than trusting it.
+ * ⚠ THAT CITATION SAID `brew-reach.test.ts` UNTIL 2026-08-22 AND NO SUCH FILE HAS EVER
+ * EXISTED (play lane spotted it). A doc naming a test is a claim that something is covered,
+ * and a claim nobody can open is worse than silence — it retires the question. The premise is
+ * genuinely asserted, one file over.
  */
 const WORLD_ITEMS: ReadonlySet<string> = new Set([
   ...BLOCKS.flatMap(b => b.drops.map(d => d.itemId)),
   ...RECIPE_OUTPUTS,
+  // Derived from the ladder, not hand-listed — the rule three lines up. A tier added to
+  // `RIN_TIERS` enters the cauldron's world the moment it exists.
+  ...RIN_TIERS.flatMap(t => t.items),
 ])
 
 /**
