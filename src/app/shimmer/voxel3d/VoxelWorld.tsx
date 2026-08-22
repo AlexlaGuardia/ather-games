@@ -1023,6 +1023,7 @@ export default function VoxelWorld() {
   const [perf, setPerf] = useState<PerfSample | null>(null)
   /** Latest zone-profile window plus its rendered snapshot. Same ~4/second cadence as `perf`. */
   const [prof, setProf] = useState<{ profile: FrameProfile; text: string } | null>(null)
+  const [profCopied, setProfCopied] = useState(0)
   /**
    * ── ★ THE SAY CHANNEL — what the WORLD tells the PLAYER (2026-08-12) ────────────────────────
    * `stats` is the plumbing readout and the frame loop OVERWRITES IT EVERY 10 FRAMES with the
@@ -1047,6 +1048,7 @@ export default function VoxelWorld() {
     const t = setTimeout(() => setToast(c => (c && c.at === toast.at ? null : c)), 4200)
     return () => clearTimeout(t)
   }, [toast])
+
   const [pos, setPos] = useState('')
   // ── ★ THE MAP (2026-08-13) ────────────────────────────────────────────────────────────────────
   // The keeper's live spot, kept as a ref rather than state: the frame loop writes it 60×/sec and a
@@ -1131,6 +1133,53 @@ export default function VoxelWorld() {
   const update = useCallback((patch: Partial<VoxelSettings>) => {
     setSettings(prev => { const next = { ...prev, ...patch }; saveSettings(next); return next })
   }, [])
+
+  /**
+   * P copies the frame profile — and SAYS SOMETHING when there is nothing to copy.
+   *
+   * ★★★ THE LISTENER LIVES HERE, NOT IN THE PANEL, AND THAT IS THE WHOLE FIX. Mounted inside
+   * `ProfilePanel` it only existed while the panel did, so pressing P with the frame meter off did
+   * NOTHING AT ALL — no panel, no message, no error. Silence reads as "the feature is broken", and
+   * the play lane caught it about to happen for real: Alex was handed "press P" without "turn the
+   * frame meter on first", which is an instruction that is true, incomplete, and fails toward *it
+   * does not work*. Today's whole theme, arriving in my own UI.
+   *
+   * ⚠ THE FIX IS THE KEY ANSWERING, NOT A BETTER INSTRUCTION. A missing profile now names the
+   * reason and points at the toggle, so the wrong press teaches instead of misleading.
+   */
+  useEffect(() => {
+    const kd = (e: KeyboardEvent) => {
+      if (e.code !== 'KeyP' || e.repeat || e.metaKey || e.ctrlKey || e.altKey) return
+      const t = e.target as HTMLElement | null
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA')) return
+      e.preventDefault()
+      if (!settings.showFps) { say('frame meter is off — turn it on in settings, then press P'); return }
+      if (!prof) { say('no profile window yet — give it a second'); return }
+      // ⚠ Two paths on purpose. `navigator.clipboard` needs a secure context and is absent over
+      // plain http on a LAN address, which is exactly how this page gets opened for a look. The
+      // textarea fallback is ugly and works everywhere; a copy that silently fails is worse than
+      // either, because the reading looks taken and never arrives.
+      const text = prof.text
+      const fallback = () => {
+        const ta = document.createElement('textarea')
+        ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0'
+        document.body.appendChild(ta); ta.select()
+        let done = false
+        try { done = document.execCommand('copy') } catch { done = false }
+        document.body.removeChild(ta)
+        // ⚠ Says which way it went. "Copied" when nothing was copied is the one outcome worse than
+        // silence — the reading never arrives and nobody is looking for it.
+        say(done ? 'frame profile copied' : 'could not copy — select it from the panel instead')
+      }
+      if (navigator.clipboard?.writeText) {
+        navigator.clipboard.writeText(text).then(() => say('frame profile copied')).catch(fallback)
+      } else fallback()
+      setProfCopied(Date.now())
+    }
+    window.addEventListener('keydown', kd)
+    return () => window.removeEventListener('keydown', kd)
+  }, [settings.showFps, prof, say])
+
   const worker = useRef<Worker | null>(null)
   const incoming = useRef<{ cx: number; cz: number; voxels: Uint16Array; oIdx?: Uint32Array; oMat?: Uint16Array }[]>([])
   const inflight = useRef(0)
@@ -2146,7 +2195,7 @@ export default function VoxelWorld() {
            tutorialStage={tutorial.current.stage} nearGreg={nearGreg} dialogueOpen={dialogueOpen}
            nearTable={nearTable} craftOpen={craftOpen} nearMist={nearMist} hasParty={hasParty}
            sparLedger={sparLedger} vitals={vitals} />
-      {settings.showFps && prof && <ProfilePanel p={prof.profile} text={prof.text} />}
+      {settings.showFps && prof && <ProfilePanel p={prof.profile} copiedAt={profCopied} />}
       {showSettings && <SettingsPanel s={settings} update={update} onClose={() => { setShowSettings(false); closeCursorUI() }} />}
       {craftOpen && (
         <CraftPanel have={have} tools={tools} tick={craftTick} station={station}
@@ -8316,33 +8365,8 @@ function StationPanel({ st, inv, onChange, onSay, onClose }: {
  * wrapped the expensive thing, the honest reading is UNACCOUNTED sitting at the top, and that is
  * the one a tidy table of six wrapped zones would hide.
  */
-function ProfilePanel({ p, text }: { p: FrameProfile; text: string }) {
-  const [copied, setCopied] = useState(0)
-  useEffect(() => {
-    const kd = (e: KeyboardEvent) => {
-      if (e.code !== 'KeyP' || e.repeat) return
-      const t = e.target as HTMLElement | null
-      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA')) return
-      e.preventDefault()
-      // ⚠ Two paths on purpose. `navigator.clipboard` needs a secure context and is absent over
-      // plain http on a LAN address, which is exactly how this page gets opened for a look. The
-      // textarea fallback is ugly and works everywhere; silently failing to copy would be worse
-      // than either, because the reading looks taken and never arrives.
-      const fallback = () => {
-        const ta = document.createElement('textarea')
-        ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0'
-        document.body.appendChild(ta); ta.select()
-        try { document.execCommand('copy') } catch { /* nothing left to try */ }
-        document.body.removeChild(ta)
-      }
-      if (navigator.clipboard?.writeText) navigator.clipboard.writeText(text).catch(fallback)
-      else fallback()
-      setCopied(Date.now())
-    }
-    window.addEventListener('keydown', kd)
-    return () => window.removeEventListener('keydown', kd)
-  }, [text])
-  const fresh = copied && Date.now() - copied < 1600
+function ProfilePanel({ p, copiedAt }: { p: FrameProfile; copiedAt: number }) {
+  const fresh = copiedAt && Date.now() - copiedAt < 1600
   return (
     <div style={{
       position: 'absolute', top: 96, right: 8, zIndex: 30, pointerEvents: 'none',
