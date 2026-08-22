@@ -594,11 +594,18 @@ function paintBanded(dst: Layer, size: number, base: [number, number, number], s
  * dawnwood must be the dawnwood the keeper cut; a separate colour here would drift the first time
  * the log's own colour was tuned, and nothing would fail.
  */
-const BED_FRAME: Record<number, number> = {
+// ⚠⚠ A FUNCTION, NOT A TABLE, AND THAT IS NOT STYLE — IT IS THE ONLY SHAPE THAT WORKS HERE.
+// `tiles.ts` imports MATERIAL_COLOR from `../attrs`, and `attrs.ts` imports layerOf from this file:
+// a genuine import cycle, and a harmless one for as long as every painter reads MATERIAL_COLOR
+// INSIDE a function body. The first cut of this was a top-level object literal, so it evaluated at
+// module-init while MATERIAL_COLOR was still in its temporal dead zone and took the whole page down
+// with "Cannot access 'J' before initialization" — a white-screen client exception, not a bad
+// colour. Every other painter in this file gets away with the cycle by being lazy. Stay lazy.
+const bedFrame = (material: number): number => ({
   [MAT.GARDEN_BED_GOLDWOOD]: MATERIAL_COLOR[WOOD.GOLDWOOD_LOG],
   [MAT.GARDEN_BED_SHIMMEROAK]: MATERIAL_COLOR[WOOD.SHIMMEROAK_LOG],
   [MAT.GARDEN_BED_DAWNWOOD]: MATERIAL_COLOR[WOOD.DAWNWOOD_LOG],
-}
+}[material] ?? MATERIAL_COLOR[MAT.PLANKS])
 
 /** A bed's flank: milled boards with the dark soil line along the top edge. */
 function paintPlankFrame(dst: Layer, size: number, wood: [number, number, number], seed: number): void {
@@ -1038,7 +1045,7 @@ export function paintFor(material: number, face: number, size: number): Layer {
     case MAT.GARDEN_BED_GOLDWOOD:
     case MAT.GARDEN_BED_SHIMMEROAK:
     case MAT.GARDEN_BED_DAWNWOOD: {
-      const wood = rgbOf(BED_FRAME[material] ?? MATERIAL_COLOR[MAT.PLANKS])
+      const wood = rgbOf(bedFrame(material))
       const band = Math.max(1, size >> 3)          // 2 texels at 16px — the frame's width
       if (face === BOTTOM) { paintGrit(dst, size, shade(wood, -34), 10, 10, seed); break }
       if (face === SIDE) {
