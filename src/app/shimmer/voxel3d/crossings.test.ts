@@ -15,10 +15,6 @@ import {
 import { plotThreshold, plotHeight, insideCore, plotForTier, PLOT_TIERS, DEFAULT_PLOT } from '../voxel/plot'
 import { PLOT_TRIGGER_RADIUS } from './seam'
 import { MAX_MARKS } from '../voxel/waymark'
-import { GATE_X, GATE_Z, gateCells } from './gate'
-import { bubbleMaterialAt } from '../voxel/bubble'
-import { WILDS_BUBBLE } from '../voxel/column'
-import { columnHeight } from '../voxel/height'
 
 const SEEDS = [1, 7, 42, 555, 2026, 99, 314, 8675]
 
@@ -82,50 +78,16 @@ for (const seed of SEEDS) {
   ok(walk < 60, `s${seed}: the court shares the garden's door end (centre ${walk.toFixed(0)} blocks from the seam)`)
 }
 
-// ── 4. the Moonwell Glade arch, RECORDED NOT SWALLOWED ────────────────────────────────────────
-// ★★ RULED BY ALEX 2026-08-23, AND THE RULING MAKES THIS WORSE RATHER THAN MOOT: *"the glades will
-// be a one time visit, itll be the tutorial area, after they complete the tutorial they take a gate
-// to the home plot (that disappears after they exit it)."* So the arch is not scenery anyone might
-// relocate at leisure — it is **the only way out of the tutorial**, and it is sitting in the fold's
-// hollow. `gate.ts` was right about the arch's JOB all along (its header already said "sealed until
-// the tutorial quest closes") and only ever wrong about its PLACE.
+// ── 4. the Moonwell Glade arch — FIXED, and the exhibit that lived here is gone ───────────────
+// ★ THIS SECTION WAS A PRINTED EXHIBIT reporting the arch as 20/20 fold-interior air across eight
+// seeds, held open while Alex ruled. He ruled (the arch is the tutorial's one-way exit), the
+// placement was repaired in `gate.ts`, and the exhibit's own else-branch said "§4 is stale, delete
+// it" the moment it stopped being true. Deleted rather than left printing a resolved finding — a
+// note that keeps announcing a fixed problem is how a board row outlives its fact.
 //
-// This still prints rather than fails, because the fix belongs in `gate.ts` and the canon half is
-// `[OPEN]` with Magii: "the gate disappears" can mean a one-use working that spends itself (a fact
-// about Athernyx) or a door the game closes (a fact about the game). Until that is ruled, the build
-// may wire the flow but may not state an in-world reason the way back is shut.
-//
-// ⚠ IT MEASURES AGAINST `WILDS_BUBBLE`, NOT `DEFAULT_BUBBLE`. The live bubble's passageBearing is
-// derived from the glade (`column.ts`); the default's is 0. Probing the default puts the door at
-// (504,0) instead of (-116,-492) and reports the arch as 682 blocks away on the far side of the
-// world — a clean, confident, entirely wrong finding. That is the wrong-door trap `bubble.test.ts`
-// already records once, and it caught this file's author before it caught anyone else.
-{
-  const buried: string[] = []
-  for (const seed of SEEDS) {
-    const baseY = columnHeight(GATE_X, GATE_Z, seed)
-    const cells = gateCells(baseY)
-    // ⚠ `h` IS THE FIFTH PARAMETER AND SKIPPING IT IS SILENT UNDER tsx. The signature is
-    // (x, y, z, seed, h, cfg). Passing the config in `h`'s slot type-checks nowhere and RUNS
-    // anyway, with `cfg` quietly defaulting to DEFAULT_BUBBLE — so the measurement answers about
-    // the wrong bubble while looking exactly like the right one. It produced the same 20/20 here,
-    // which is worse than a wrong number: agreement by luck reads as corroboration. tsc caught it;
-    // the three runs before tsc did not.
-    const inFold = cells.filter(c =>
-      bubbleMaterialAt(c.x, c.y, c.z, seed, columnHeight(c.x, c.z, seed), WILDS_BUBBLE) !== null)
-    if (inFold.length > 0) buried.push(`s${seed}: ${inFold.length}/${cells.length}`)
-  }
-  if (buried.length > 0) {
-    console.log(`\nℹ️  KNOWN, AWAITING ALEX — the Moonwell Glade arch (gate.ts) stands in the fold's hollow.`)
-    console.log(`   arch (${GATE_X},${GATE_Z}) is r=${Math.hypot(GATE_X, GATE_Z).toFixed(0)} from the fold's centre; the shell is at ~501.`)
-    console.log(`   cells claimed as fold interior: ${buried.join(' · ')}`)
-    console.log(`   → ⚠ RULED: this arch is the tutorial's ONE-WAY EXIT, so a buried one soft-locks the opening.`)
-    console.log(`   → fix belongs in gate.ts; the "disappears" half is [OPEN] with Magii.\n`)
-  } else {
-    // If this ever stops being true, the exhibit above is stale prose and must go.
-    console.log('\nℹ️  the Moonwell Glade arch is clear of the fold — §4 is stale, delete it.\n')
-  }
-}
+// The guard now lives where the thing it guards lives: `gate.test.ts`, which asserts the arch clears
+// both the fold's shell AND its mound, and — the part clearance alone cannot do — that it stands
+// BETWEEN the fold and the glade. Nothing here needs to restate it.
 
 // ── 5. sockets do not overlap each other ──────────────────────────────────────────────────────
 // A 5-wide frame at pitch 8 leaves 3 clear blocks. Asserted by walking the actual cells rather than
