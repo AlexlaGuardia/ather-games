@@ -447,6 +447,83 @@ the Arcade frame.
 > - **⏭ NOT VERIFIED BY HAND, AND I CANNOT DO IT HEADLESSLY:** the actual right-click. The pure layers are asserted (24 + 21 + 23 + 29 asserts across four suites, mutation-swept), and the composition has its own oracle, but the click→cast→answer→drop path in `VoxelWorld.tsx` is React + three and needs Alex at a keyboard. **Stand in water anywhere, empty hand, right-click.**
 > - **Files:** `engine/rin-catch.ts` + `.test.ts` (new, canon-parsing gate) · `engine/rin-loop.test.ts` (new, composition) · `voxel/rin-water.ts` + `.test.ts` (the surface fix) · `voxel3d/interact.ts` + `.test.ts` (`'rinn'` intent) · `voxel3d/VoxelWorld.tsx` (the ref, the branch, the tick). Canon gap filed: `athernyx` `341d481`.
 
+## 🔑 Shimmer — **SAVE ISOLATION (#682): per-account slots, owner stamp, server refusal** (2026-08-23, hub) · *Last touched 2026-08-23 (hub, late — shipped + verified live)*
+
+### Left off — SHIPPED `f8435b5`, deployed, pushed, verified serving
+Two accounts in one browser shared ONE save slot (`ather:save:shimmer`, no account in it). The damage
+was never the confusion — it was the UPLOAD: the push reads that slot and POSTs under whatever session
+holds the cookie, and `putSave` wrote unconditionally. **Reproduced end to end, and found ALREADY DONE
+ONCE IN PROD** (one account's row held another's garden, 99.85% identical, only mana regen apart).
+- ⚠ **It needed NO INPUT.** `ge.lastTick` advances on its own, so the blob differs within a minute of
+  LOADING the page. "Don't play as a second account" was never the mitigation; "don't load it" was.
+- `lib/save-slot.ts` owns the key + owner stamp. The key had been a **scattered literal** in 5 places
+  across 4 files. Anonymous slot KEEPS the bare key (renaming orphans every anonymous garden — the same
+  argument `voxel3d/save.ts` makes for not namespacing the Wilds).
+- Boot resolves the session BEFORE any save is read; a failed fetch resolves to anonymous, never a
+  guessed identity. First-sign-in adoption CONSUMES the slot.
+- ★ **Residual hole found while verifying the fix — #682 rebuilt through its own front door:** a cloud
+  hydrate left the anonymous slot unclaimed, so a second account with no cloud row adopted the first
+  keeper's garden. Closed by STAMPING it, not deleting — deleting would discard a garden possibly newer
+  than the cloud copy, trading a rare leak for guaranteed loss.
+- Push requires session AND slot-owner to agree. Server 409s a foreign-stamped blob; unstamped accepted
+  on purpose (refusing legacy saves = self-inflicted outage).
+- Rig committed: `scripts/repro-682{,b,-seed}.mts`. Guarded twice — refuses to run against
+  :3200/ather.games, and refuses to REPORT if the owner gate redirected it off play3d.
+- **Cleanup:** neo's row (held Alex's Serberus world, re-pushed 00:47) deleted; account intact; Serberus
+  save byte-identical to backup `061ab4f2`.
+
+### Decisions
+- **Alpha/ownership fails OPEN for unstamped blobs, on purpose.** Every save written before 08-23 has no
+  stamp. "Does it name someone ELSE" is the test, never "does it name me".
+- **`wallet`/`magii` deliberately left unscoped** — nothing pushes them, so their failure is shared coins
+  in one browser, not a garden overwritten in the cloud. Scoping needs the same adoption path first.
+
+### Next
+- **IndexedDB half** — B still sees A's BUILT BLOCKS locally. Scope `voxel3d/save.ts` record keys per
+  account + one-time adoption; ⚠ renaming the DB orphans every built world by its own module's warning.
+- **Birth rune is not account-scoped** (`ather:shimmer:birthRune`/`runes`) — a second account skips the
+  ritual and spawns with the first keeper's affinity.
+- ⚠ **Alex: sign into Serberus FIRST next time** — the browser's anon slot goes to whichever account
+  signs in first; neo first would re-adopt his garden.
+
+### Files
+`src/lib/save-slot.ts` · `save-slot.test.ts` · `cloud-sync.ts` · `ather-epoch.ts` · `use-cloud-save.ts` ·
+`play3d/page.tsx` · `play3d/Shimmer3D.tsx` · `voxel3d/VoxelWorld.tsx` · `api/saves/route.ts` · `scripts/repro-682*`
+
+## 🌱 Shimmer — **SAPLING ICON: the bag read a glow mask as a cutout** (2026-08-23, hub) · *Last touched 2026-08-23 (hub, late)*
+
+### Left off — SHIPPED `5c15074`, deployed + pushed
+Alex, holding the sapling play fixed that morning: *"the sapling is just a green 2d rectangle."* It was.
+**A THIRD texture disagreeing** — `crossIcon` sampled `paintFor`, and every painter in `tiles.ts` writes
+through `put()`, whose alpha argument **defaults to 0**. Alpha is a **GLOW mask** there, not transparency
+(`rasterIcon` says so in its own header), so the tile is a full sheet of leaf noise with no silhouette,
+and forcing every texel opaque was the CORRECT reading of a glow-masked sheet. **Not an oversight — right
+about the wrong texture.** The world draws saplings with `leafPixels` + `alphaTest: 0.5`, tinted per
+species by `vertexColors`. Bag and ground derived one plant from two sources; the shape lived in the one
+the icon never read. `leafCutout` now multiplies `leafPixels` by the species tint and `crossIcon` honours
+source alpha. Measured 296→140 opaque of 2304; colours 13 → 25/20/35/37. Rendered before/after and looked.
+
+### Decisions
+- ⚠⚠ **The first regression guard was DECORATION and passed with the bug restored.** It asked for holes
+  inside the bounding box — but the two quads are OFFSET, so the corners are empty however solid the quads
+  are. It could not fail for any input. Replaced with: force the same source opaque, require the picture to
+  get bigger. **Two derivations of one source, no threshold to nudge.** Verified red (296 vs 296).
+- Guard ⑤ was green throughout the bug: a solid cross really does cover less than a cube. *"Smaller than a
+  cube"* and *"shaped like a plant"* are different claims.
+
+### Next
+- **ART CALL, ALEX'S:** it reads as a leafy sprig, not a seedling with a stem — the silhouette is inherited
+  from the canopy leaf mask. A hand-painted icon in the existing `painted` tier is the cheapest fix.
+- **3D-rendered icons** (offscreen render target from real geometry, cached like today's data URLs) — its own
+  piece, would upgrade the whole hotbar. ⚠ picaso/Blender pre-render is the OTHER route but collides with the
+  art-medium law: living things stay live glow.
+- ⚠ **`scripts/icon-sheet.mts` calls `iconPixels` (the cube), not `iconPixelsFor`** — so the contact sheet
+  renders a cube for every sapling and structurally CANNOT show this class of bug. Route it through the game's
+  entry point.
+
+### Files
+`voxel3d/tex/item-icon.ts` · `voxel3d/tex/icon-source.test.ts`
+
 ## 🌉 Shimmer voxel3d — **BRIDGES: plank · trestle · viaduct; ribbon deck, timber bents, fence railings** (2026-08-22, world) · *Last touched 2026-08-22 (world, night — railings as pieces)*
 > **★★★ SLICE 5 — THE RAILING IS `fence` PIECES, NOT VOXELS (`a0ecfe6` + hub host wiring `3a34b4a`, GENVER 30, live).** Alex: *"we are still trying to use whole blocks on the railings when it should actually be more like the fences.. idk if we should make a whole new item called railings ..what do u think?"* **Answer: NO NEW ITEM — what he described already exists and is already load-bearing elsewhere.** `pieces.ts` › `fence` is a 0.18 centre post whose ARMS are derived per connected side at sync (*"connection is a question you ask neighbours, never a thing you store"*), and **`holds.ts` has emitted it as a GENERATED wall-top parapet since 08-08**, gen ids and tombstones included. ⚠ The clincher is not the draw count: **a fence occupies its full cell for COLLISION on purpose while drawing thin** — exactly a bridge railing, stops you walking off, does not read as a wall.
 > - **★★ THE PATTERN OF THE WHOLE EVENING, NAMED: a thing that is geometrically CORRECT and semantically the WRONG OBJECT.** Solid pier that was a wall · solid parapet that was a kerb · deck that was the accidental shape of an intersection · railing built from the wrong vocabulary. Every one passed its tests, because the tests asked *"is this well-formed"* and never *"is this the thing it is supposed to be"*. **Alex's eye caught all four before any assert did.** The holds' own line is the fix: a structure *"reads as something a builder could have made, because it literally is made of the same catalogue"* — inventing a bespoke railing would make bridges the one structure assembled from parts nobody can hold.
