@@ -11,6 +11,8 @@
 
 import { keeperKey } from '@/lib/keeper-local'
 
+import type { ActionId } from '@/lib/input/actions'
+
 export type TutorialStage =
   | 'greet'   // objective: find and talk to Greg → he gifts 1 raw_mana_shard
   | 'cut'     // objective: break any log block
@@ -85,4 +87,28 @@ export const OBJECTIVE_LABEL: Record<TutorialStage, string> = {
   light: 'Place the lantern',
   report: 'Return to Gregory',
   done: 'Gate open',
+}
+
+/**
+ * The actions each tutorial step actually needs, so its hint can be RESOLVED from the player's own
+ * bindings instead of typed out.
+ *
+ * ⚠ THIS REPLACES A PERMANENT TWO-LINE CONTROL DUMP IN THE HUD CORNER (Alex, 2026-08-23: "the
+ * button hints should be part of the tutorial"). Those lines were the widest thing on screen, said
+ * the same thing forever, and were WRONG the moment anyone rebound a key or picked up a pad — a
+ * string literal claiming to describe a binding. Naming ACTIONS means a rebind and a controller
+ * both come out right with nothing here to go stale.
+ *
+ * Movement is on `greet` alone: it is how you reach Gregory, and repeating WASD on every step is
+ * the noise that made the old block ignorable. `done` is deliberately empty — a finished tutorial
+ * has nothing to teach, and the permanent reference is Settings › Controls.
+ */
+export const STAGE_ACTIONS: Record<TutorialStage, readonly ActionId[]> = {
+  greet:   ['move.forward', 'move.jump', 'world.interact'],
+  cut:     ['world.mine'],
+  planks:  ['ui.craft'],
+  lantern: ['ui.craft', 'ui.inventory'],
+  light:   ['world.place'],
+  report:  ['world.interact'],
+  done:    [],
 }

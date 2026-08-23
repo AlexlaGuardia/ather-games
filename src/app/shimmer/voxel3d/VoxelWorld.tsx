@@ -44,6 +44,16 @@ import { editIndex, recordEdit, applyEdits, packEdits, unpackEdits, isStale, GEN
 import { cropForSeed, CROP_DEFS } from '../engine/farming'
 import { placeBedBlocker, plotRefusalLine, countBeds, isGardenBed } from './garden'
 import { createProfiler, snapshotText, shortRowLabel, type FrameProfile, gpuTrusted } from './profile'
+// ── the input layer (lib/input) ───────────────────────────────────────────────────────────────
+// Keys used to be decided inline, 25 times, across three listeners in this file — so the meaning of
+// a key could not be tested and could not be rebound. The meaning lives in lib/input now and this
+// file holds the wiring. `matches()` reads the PLAYER'S map, so every one of these follows a rebind
+// for free, and the on-screen hints resolve from the same map instead of being typed out.
+import { load as loadBindings, type BindingMap } from '@/lib/input/bindings'
+import { matches, heldActions, stickMove } from '@/lib/input/resolve'
+import { poll as pollPad, resetEdges, type PadSample, type PadKind } from '@/lib/input/gamepad'
+import BindingsPanel from './BindingsPanel'
+import { hintsFor } from '@/lib/input/hints'
 import {
   plantBlocker, plantRefusalLine, plantInBed, harvestBed, cropAt, readyAt, clearBed,
   bedsToSave, bedsFromSave, type PlantedBeds,
@@ -171,7 +181,7 @@ import { createLoco, tickLocomotion, eyeY, launchKeeper, blinkKeeper,
 // `tutorial.ts` owns the quest state and its (placeholder) dialogue; `gate.ts` is pure math for
 // where the ceremonial arch sits and which of its cells are the sealable doorway; `greg.ts` builds
 // Greg's placeholder figure. This file only wires all three into the render loop.
-import { loadTutorial, saveTutorial, GREG_LINE, OBJECTIVE_LABEL, type TutorialStage, type TutorialState } from './tutorial'
+import { loadTutorial, saveTutorial, GREG_LINE, OBJECTIVE_LABEL, STAGE_ACTIONS, type TutorialStage, type TutorialState } from './tutorial'
 import { GREG_LINES } from './greg-lines'
 import { GATE_X, GATE_Z, GATE_SPANS_X, gateCells } from './gate'
 import { courtAnchor, sockets as courtSockets, socketCells, courtFits, staleCourts } from './crossings'
@@ -1035,6 +1045,24 @@ export default function VoxelWorld() {
    * closes, so the meter never shows a fabricated 0.
    */
   const [perf, setPerf] = useState<PerfSample | null>(null)
+  /**
+   * The player's bindings, as a ref because three keydown listeners and the frame loop all read it
+   * and none of them should re-bind on a settings change. `bindingsRev` is what re-renders the HUD
+   * hints when the panel saves — the ref keeps the handlers stable, the counter refreshes the text.
+   */
+  const bindings = useRef<BindingMap>(loadBindings())
+  const [bindingsRev, setBindingsRev] = useState(0)
+  const [showBindings, setShowBindings] = useState(false)
+  /**
+   * Latest controller sample. null until a pad has spoken — see gamepad.ts gotcha 1.
+   *
+   * ⚠ A REF AND NOT STATE, deliberately. The pad is sampled every frame; putting it in state would
+   * fire a React update 60 times a second and cost orders of magnitude more than the poll it is
+   * reporting. Nothing renders from it — the only consumer that needs the controller FAMILY is the
+   * bindings panel, which reads it once when it opens (below), because which pad you are holding
+   * does not change while a menu is up.
+   */
+  const padRef = useRef<PadSample | null>(null)
   /** Latest zone-profile window plus its rendered snapshot. Same ~4/second cadence as `perf`. */
   const [prof, setProf] = useState<{ profile: FrameProfile; text: string } | null>(null)
   const [profCopied, setProfCopied] = useState(0)
@@ -2002,7 +2030,7 @@ export default function VoxelWorld() {
       // Above the draw lock on purpose: a console you cannot open while your weapon is out is a
       // console you cannot use to debug the weapon.
       if (!consoleOpen && !dialogueOpen && !craftOpen && !bagOpen && !showSettings) {
-        if (e.code === 'KeyT' || e.code === 'Enter') { e.preventDefault(); openCursorUI(); setConsoleSeed(''); setConsoleOpen(true); return }
+        if (matches(bindings.current, e.code, 'ui.chat')) { e.preventDefault(); openCursorUI(); setConsoleSeed(''); setConsoleOpen(true); return }
         if (e.key === '/') { e.preventDefault(); openCursorUI(); setConsoleSeed('/'); setConsoleOpen(true); return }
       }
       const n = Number(e.key)
@@ -2016,7 +2044,7 @@ export default function VoxelWorld() {
        *
        * The draw lock still wraps them: with a weapon out neither hand is free, menus included.
        */
-      if (e.code === 'Escape') {
+      if (matches(bindings.current, e.code, 'ui.close')) {
         // Escape only reaches us when the pointer is already free (the browser eats it to exit the
         // lock first) — so close the surfaces AND settle the handoff ledger. closeCursorUI's relock
         // will be refused by the browser's post-Esc cooldown and swallowed; that is the one seam
@@ -2029,7 +2057,7 @@ export default function VoxelWorld() {
       }
       if (!drawn) {
         // Esc exits pointer lock anyway, so O is the settings key — it must not fight the browser.
-        if (e.code === 'KeyO') {
+        if (matches(bindings.current, e.code, 'ui.settings')) {
           if (showSettings) { setShowSettings(false); closeCursorUI() }
           else { openCursorUI(); setShowSettings(true) }
           return
@@ -2038,7 +2066,7 @@ export default function VoxelWorld() {
         // all, which hid the fact that the whole forestry ladder was uncraftable — you pressed C,
         // nothing happened, and nothing told you why. A list that shows what you CANNOT afford yet
         // is the difference between a broken key and a goal.
-        if (e.code === 'KeyC') {
+        if (matches(bindings.current, e.code, 'ui.craft')) {
           if (craftOpen) { setCraftOpen(false); closeCursorUI() }
           else { openCursorUI(); setCraftOpen(true) }
           return
@@ -2047,19 +2075,19 @@ export default function VoxelWorld() {
         // cursor surfaces behave identically. Escape dismisses them all as well.
         // M opens the map and closes it — the same one-key shape as I and C, and it is a CURSOR
         // surface (you read a map standing still), so it takes the pointer like the others do.
-        if (e.code === 'KeyM') {
+        if (matches(bindings.current, e.code, 'ui.map')) {
           if (showMap) { setShowMap(false); closeCursorUI() }
           else if (!cursorUIOpen) { openCursorUI(); setShowMap(true) }
           return
         }
-        if (e.code === 'KeyI') {
+        if (matches(bindings.current, e.code, 'ui.inventory')) {
           if (bagOpen || openChest) closeBag()
           else { openCursorUI(); setBagOpen(true) }
           return
         }
         // E talks to Greg when the crosshair is ON him, and closes the box that opens from it — the same key
         // both opens and dismisses, matching how C works for the crafting surface just above.
-        if (e.code === 'KeyE') {
+        if (matches(bindings.current, e.code, 'world.interact')) {
           if (dialogueOpen) closeDialogue()   // hands the cursor back itself
           else if (cursorUIOpen) { /* a surface is up and E is not its door — do nothing */ }
           else if (nearGreg) { openCursorUI(); setDialogueOpen(true) }
@@ -2090,15 +2118,15 @@ export default function VoxelWorld() {
       // lock, which is the half that decides how the hotbar behaves. Alex ruled guns DO cross into
       // the Ather (2026-08-07), overturning the 07-22 aegis; that ruling still needs authoring into
       // world/lucernyx.md — see CANON_GAPS.md.
-      if (e.code === 'KeyF') { setDrawn(d => !d); return }
+      if (matches(bindings.current, e.code, 'item.draw')) { setDrawn(d => !d); return }
       // Q swaps the model, and ONLY while drawn — with the weapon stowed Q would be a key that
       // silently changes something you cannot see, which is how a player learns not to trust a HUD.
-      if (e.code === 'KeyQ' && drawn) { setWeaponIdx(i => { const n = (i + 1) % WEAPONS.length; setAmmoUi(WEAPONS[n].clip); return n }); return }
+      if (matches(bindings.current, e.code, 'item.cycle') && drawn) { setWeaponIdx(i => { const n = (i + 1) % WEAPONS.length; setAmmoUi(WEAPONS[n].clip); return n }); return }
       if (drawn) return   // every verb below is locked while the weapon is out
       if (n >= 1 && n <= 8) { if (build) setPieceIdx(Math.min(PIECES.length - 1, n - 1)); else setSel(n - 1) }
-      if (e.code === 'Tab') { e.preventDefault(); setBuild(v => !v) }
-      if (e.code === 'KeyR') setRot(r => ((r + 1) % 4) as Rotation)
-      if (e.code === 'BracketLeft' || e.code === 'BracketRight') { /* spike tier, handled below */ }
+      if (matches(bindings.current, e.code, 'ui.build')) { e.preventDefault(); setBuild(v => !v) }
+      if (matches(bindings.current, e.code, 'build.rotate')) setRot(r => ((r + 1) % 4) as Rotation)
+      if (matches(bindings.current, e.code, 'build.tierDown') || matches(bindings.current, e.code, 'build.tierUp')) { /* spike tier, handled below */ }
       // Tool tier is a debug lever so the tier GATE can be felt in ten seconds: a tier-1 spike
       // REFUSES pure core, and that should be provable without crafting your way up first.
       // ★ THE TIER LEVER IS GONE. Tier comes from the equipped tool now, and a better tool is
@@ -2118,9 +2146,14 @@ export default function VoxelWorld() {
       if (build) setPieceIdx(v => (v + dir + PIECES.length) % PIECES.length)
       else setSel(v => (v + dir + 8) % 8)
     }
+    // ⚠ A pad button held while the window loses focus never reports its release, so the edge
+    // detector would treat it as still-down and the NEXT press would produce no edge at all — a
+    // controller that silently stops responding after you alt-tab. Clearing on blur costs nothing.
+    const onBlur = () => resetEdges()
+    window.addEventListener('blur', onBlur)
     window.addEventListener('keydown', onKey)
     window.addEventListener('wheel', onWheel, { passive: true })
-    return () => { window.removeEventListener('keydown', onKey); window.removeEventListener('wheel', onWheel) }
+    return () => { window.removeEventListener('keydown', onKey); window.removeEventListener('wheel', onWheel); window.removeEventListener('blur', onBlur) }
   }, [build, drawn, dialogueOpen, nearGreg, nearTable, craftOpen, showSettings, consoleOpen, closeDialogue, openCursorUI, closeCursorUI, nearMist, hasParty, startSpar, bagOpen, openChest, closeBag, cursorUIOpen, showMap])
 
   return (
@@ -2162,6 +2195,7 @@ export default function VoxelWorld() {
           underwaterAt={(x, y, z) => waterOut.current ? waterOut.current(x, y, z) : 0}
         />
         <World
+          bindings={bindings} pad={padRef}
           inv={inv} toolTier={toolTier} toolSkill={toolSkill} vitals={vitals} mana={mana}
           /* A tool in hand is not a block in hand — RMB must not place while you hold a spade.
              `drawn` blanks it too: a weapon out means neither hand is free. */
@@ -2206,11 +2240,25 @@ export default function VoxelWorld() {
            skill={skillHud} levelUp={levelUp} crafted={crafted} tools={tools} skills={skills}
            activeTool={activeTool}
            isOwner={isOwner} drawn={drawn} weaponIdx={weaponIdx} ammoUi={ammoUi}
+           bindings={bindings.current} padKind={padRef.current?.kind ?? 'generic'}
            tutorialStage={tutorial.current.stage} nearGreg={nearGreg} dialogueOpen={dialogueOpen}
            nearTable={nearTable} craftOpen={craftOpen} nearMist={nearMist} hasParty={hasParty}
            sparLedger={sparLedger} vitals={vitals} />
       {settings.showFps && prof && <ProfilePanel p={prof.profile} copiedAt={profCopied} />}
-      {showSettings && <SettingsPanel s={settings} update={update} onClose={() => { setShowSettings(false); closeCursorUI() }} />}
+      {showSettings && <SettingsPanel s={settings} update={update}
+        onControls={() => { setShowSettings(false); setShowBindings(true) }}
+        onClose={() => { setShowSettings(false); closeCursorUI() }} />}
+      {/* ⚠ Closing the bindings panel hands the cursor back, exactly as the settings panel does.
+          Opening it from settings CLOSES settings first rather than stacking — two cursor surfaces
+          at once is how Escape stops meaning one thing. */}
+      {showBindings && <BindingsPanel isOwner={isOwner} padKind={padRef.current?.kind ?? 'generic'}
+        onClose={() => {
+          // Re-read from storage rather than trusting a callback: the panel is the writer, this is
+          // the reader, and one source beats two copies agreeing.
+          bindings.current = loadBindings()
+          setBindingsRev(r => r + 1)
+          setShowBindings(false); closeCursorUI()
+        }} />}
       {craftOpen && (
         <CraftPanel have={have} tools={tools} tick={craftTick} station={station}
                     onCraft={doCraft} onCraftTool={doCraftTool} onClose={() => { setCraftOpen(false); closeCursorUI() }} />
@@ -2369,7 +2417,7 @@ function ResourceBars({ vitals }: { vitals: React.RefObject<Vitals> }) {
   )
 }
 
-function Hud({ stats, perf, toast, pos, look, hotbar, sel, tier, held, build, pieceIdx, rot, inv, skill, levelUp, crafted, tools, skills, activeTool, isOwner, drawn, weaponIdx, ammoUi, tutorialStage, nearGreg, dialogueOpen, nearTable, craftOpen, nearMist, hasParty, sparLedger, vitals }: {
+function Hud({ bindings, padKind, stats, perf, toast, pos, look, hotbar, sel, tier, held, build, pieceIdx, rot, inv, skill, levelUp, crafted, tools, skills, activeTool, isOwner, drawn, weaponIdx, ammoUi, tutorialStage, nearGreg, dialogueOpen, nearTable, craftOpen, nearMist, hasParty, sparLedger, vitals }: {
   stats: string; pos: string
   /** The say line — player-addressed, held ~4s. See the SAY CHANNEL note on VoxelWorld. */
   toast: { text: string; at: number } | null
@@ -2395,6 +2443,10 @@ function Hud({ stats, perf, toast, pos, look, hotbar, sel, tier, held, build, pi
   weaponIdx: number
   ammoUi: number
   /** The tutorial's current objective — drives the HUD chip below. */
+  /** The player's live bindings — hints resolve from these, so a rebind is reflected at once. */
+  bindings: BindingMap
+  /** Which controller family is in hand, so a hint says ✕ to a DualSense player and A to an Xbox one. */
+  padKind: PadKind
   tutorialStage: TutorialStage
   /** The crosshair is on Greg, in reach, unoccluded — World's per-frame aim test. Drives "E — talk".
    *  The prompt appearing IS the highlight: there is no outline on him, so this is how a player
@@ -2453,10 +2505,32 @@ function Hud({ stats, perf, toast, pos, look, hotbar, sel, tier, held, build, pi
         {/* ⚠ `V fly` is listed only for the keeper of the realm — the binding is owner-gated, and a
             key hint that does nothing when you press it reads as a broken game, not as a locked
             door. The rest of the line is everyone's. */}
-        <div className="mt-1 text-white/45">click to look · WASD · space jump · shift slide · hold space climb{isOwner ? ' · V fly' : ''}</div>
+        {/* ── ★ THE CONTROL HINTS ARE THE TUTORIAL'S NOW, AND THEY ARE RESOLVED ────────────
+            Alex, 2026-08-23: "the button hints should be part of the tutorial". Two permanent lines
+            used to sit here — the widest thing on screen, saying the same thing forever, and the
+            single biggest reason the block read as a debug dump rather than a HUD.
+            ⚠ They were also a CLAIM ABOUT A BINDING written as a string literal: "space jump"
+            stopped being true the moment anyone rebound jump, and was never true for a controller.
+            These name ACTIONS and let `hintsFor` answer from the player's own map, so a rebind and
+            a pad both come out right with nothing here left to go stale.
+            Build mode keeps its own line: it is a MODE with different verbs, not onboarding, and it
+            is entered deliberately by someone who already knows the game. */}
         {build
           ? <div className="text-amber-200/80">BUILD · RMB place · LMB deconstruct · R rotate · 1-8 piece · Tab exit</div>
-          : <div className="text-white/45">hold LMB mine · RMB place · scroll/1-8 slot · Q drop (shift = stack) · F draw · C craft · Tab build · T chat, / commands</div>}
+          : tutorialStage !== 'done' && (
+            <div className="mt-1 flex flex-wrap gap-x-3 text-white/45">
+              {hintsFor(bindings, STAGE_ACTIONS[tutorialStage], padKind === 'generic' ? 'key' : 'pad', padKind)
+                .map(h => (
+                  <span key={h.id}>
+                    <span className="gx-label text-[9px] text-white/35">{h.input}</span>{' '}
+                    {/* ⚠ AN EXPLICIT BRIGHT TONE, caught by hud-type.test.ts. The first version let
+                        this inherit the parent's white/45 against a white/35 label — a 10% gap,
+                        which is not the dim-label/bright-value signature, it is two dim things. */}
+                    <span className="gx-value text-white/80">{h.label}</span>
+                  </span>
+                ))}
+            </div>
+          )}
         {/* ★ The tools are Greg's, from engine/tools.ts, unchanged. Tier is what you HOLD now. */}
         <div className="mt-1">
           {(['forestry', 'prospecting'] as const).map(sk => {
@@ -3379,7 +3453,7 @@ function ToolGlyph({ family }: { family: 'forestry' | 'prospecting' | 'rinning' 
 // seeds while the ground there was flawless. A truth that collision, light and the tests all need
 // does not belong in a component. See `depth.ts`.
 
-function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weaponDrawn, weaponIdx, onAmmo, onStats, onPerf, onProfile, onSay, runeTick, onPos, onLook, onInvChange, worker, incoming, inflight, settings, build, pieceIdx, rot, tools, skills, onSkill, onLevel, onTool, tutorial, onQuestEvent, onNearGreg, onNearTable, cmdOut, mistLedger, onNearMist, onDiscover, sparring, pot, plotCfg, plotTier, spiritIndex, snapOut, space, lookOut, onOpenChest, onOpenStation, onOpenWaymark, onOpenBrew, uiOpen, owner, foesOut, pressOut, waterOut }: {
+function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weaponDrawn, weaponIdx, onAmmo, onStats, onPerf, onProfile, onSay, runeTick, onPos, onLook, onInvChange, worker, incoming, inflight, settings, build, pieceIdx, rot, tools, skills, onSkill, onLevel, onTool, tutorial, onQuestEvent, onNearGreg, onNearTable, cmdOut, mistLedger, onNearMist, onDiscover, sparring, pot, plotCfg, plotTier, spiritIndex, snapOut, space, lookOut, onOpenChest, onOpenStation, onOpenWaymark, onOpenBrew, uiOpen, owner, foesOut, pressOut, waterOut }: {
   inv: React.RefObject<Inventory>
   toolTier: React.RefObject<number>
   toolSkill: React.RefObject<BlockSkill>
@@ -3486,6 +3560,15 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
    */
   uiOpen: React.RefObject<boolean>
   /** Keeper of the realm. Gates FLY — see the V binding. Live ref, never the state (async fetch). */
+  /**
+   * ⚠ A REF, FOR THE SAME REASON `owner` IS ONE. This component's key listener is registered once
+   * at mount, so a captured BindingMap would be whatever it was that frame — forever. A player who
+   * rebinds mid-session would find the new key dead here while it worked in the parent's handler,
+   * which is the worst shape of all: half the game obeying the old map.
+   */
+  bindings: React.RefObject<BindingMap>
+  /** Latest controller sample, refreshed once per frame by the loop below. */
+  pad: React.RefObject<PadSample | null>
   owner: React.RefObject<boolean>
   /** Filled by the World so the owner-only `/foes` can read the live patrol. See its ctx entry. */
   foesOut: React.RefObject<null | (() => { posture: string; dist: number; collar: number }[])>
@@ -4103,7 +4186,7 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
       //
       // ⚠ THE REF, NOT THE PROP'S VALUE. This listener is bound once at mount and `isOwner` arrives
       // from an async fetch, so a captured boolean would be `false` forever — for the owner too.
-      if (e.code === 'KeyV' && owner.current) fly.current = !fly.current
+      if (matches(bindings.current, e.code, 'owner.fly') && owner.current) fly.current = !fly.current
       // ★ The cast binds. `pendingCast` rather than calling straight through, because a cast that
       // spawns a projectile needs the scene GROUP, which only the frame loop holds — the same
       // reason play3d hands placed archetypes to its sim instead of resolving them in the handler.
@@ -4114,7 +4197,7 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
       // live value and does the gate — `selItem` is already null while drawn, so it comes free.
       // ⚠ Q also cycles weapons in the parent's handler, but only WHILE DRAWN, and the two cases
       // cannot overlap for exactly that reason.
-      if (e.code === 'KeyQ') pendingDrop.current = { all: e.shiftKey }
+      if (matches(bindings.current, e.code, 'item.drop')) pendingDrop.current = { all: e.shiftKey }
     }
     const ku = (e: KeyboardEvent) => { keys.current[e.code] = false }
     const md = (e: MouseEvent) => {
@@ -5926,6 +6009,25 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
     // The enclosing block at the next line is unconditional, so every mark below always fires;
     // a zone whose own work is skipped reports ~0 rather than silently lending its time to the
     // zone before it.
+// ── ★ THE CONTROLLER POLL, AND IT IS MARKED ON PURPOSE ──────────────────────────────────
+    // Inserted immediately before the first existing mark so it is a clean PARTITION INSERT: the
+    // prologue keeps everything up to here, `input:poll` holds exactly this call, and no existing
+    // zone boundary moved. Those boundaries encode where hub measured.
+    //
+    // ⚠ IT IS MARKED RATHER THAN DEFERRED, WHICH WAS THE BETTER ARGUMENT (hub, 2026-08-23). The
+    // alternative was to ship keyboard-only and add the poll later, to avoid appearing in a
+    // measurement under way — but that trades a MEASURED 30µs for an UNMEASURED one, which is the
+    // same trade that produced a worst frame reading 100% UNACCOUNTED. Unmarked per-frame work does
+    // not vanish; it lands in the prologue or the remainder and inflates a row belonging to someone
+    // else. A poll that costs 30µs and says so beats one that costs 30µs and hides, and if the pad
+    // ever does cost something real the row is already there to say it.
+    //
+    // Polled from the frame loop and NOT a timer: the Gamepad API has no button events, so edges
+    // are derived by diffing samples — and a timer sampling out of step with rendering drops
+    // presses. `poll()` returns null until a pad has spoken (browsers withhold gamepads until a
+    // button is pressed), which is why a missing pad is never an error here.
+    pad.current = pollPad()
+    prof.current.mark('input:poll')
     prof.current.mark('world:spawn')
     // ── ★ THE NIGHT TIDE'S PAYOFF — the Hollows' SPAWN CYCLE, MINECRAFT'S SHAPE ──────────────
     // Reworked 2026-08-07 eve after Alex night-walked without meeting one: the first cut scanned
@@ -6746,11 +6848,27 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
     const fwd = vFwd.current.copy(aim); fwd.y = 0; fwd.normalize()
     const right = vRight.current.crossVectors(fwd, UP)
     const wish = vWish.current.set(0, 0, 0)
-    if (k.KeyW) wish.add(fwd)
-    if (k.KeyS) wish.sub(fwd)
-    if (k.KeyD) wish.add(right)
-    if (k.KeyA) wish.sub(right)
-    if (wish.lengthSq() > 0) wish.normalize()
+    // ── ★ KEYBOARD AND STICK UNION, AND THE STICK STAYS ANALOG ───────────────────────────
+    // `heldActions` reads the player's own bindings, so rebound movement keys work here for free.
+    // The two devices UNION rather than switch: any rule for picking an "active device" is wrong at
+    // some moment (a resting stick beating a held key, an idle pad killing the keyboard), and
+    // unioning has no such moment.
+    const heldNow = heldActions(bindings.current, Object.keys(k).filter(c => k[c]), pad.current)
+    const stick = stickMove(pad.current)
+    let wf = 0, wr = 0
+    if (heldNow.has('move.forward')) wf += 1
+    if (heldNow.has('move.back')) wf -= 1
+    if (heldNow.has('move.right')) wr += 1
+    if (heldNow.has('move.left')) wr -= 1
+    wf += stick.forward; wr += stick.right
+    if (wf) wish.addScaledVector(fwd, wf)
+    if (wr) wish.addScaledVector(right, wr)
+    // ⚠ CLAMPED AT 1, NOT NORMALISED TO 1. The old line normalised whenever the wish was non-zero,
+    // which is correct for booleans and would DESTROY the stick — a half-pushed stick would snap to
+    // full speed and a controller would be strictly worse than four keys. Clamping preserves the
+    // keyboard exactly (one key = 1, a diagonal = 1.41 -> 1) while letting a partial push stay
+    // partial.
+    if (wish.lengthSq() > 1) wish.normalize()
 
     const lc = loco.current
     // ⚠ GATED HERE TOO, AND NOT AS BELT-AND-BRACES. The keybind decides whether fly can be turned
@@ -8561,10 +8679,12 @@ function ProfilePanel({ p, copiedAt }: { p: FrameProfile; copiedAt: number }) {
   )
 }
 
-function SettingsPanel({ s, update, onClose }: {
+function SettingsPanel({ s, update, onClose, onControls }: {
   s: VoxelSettings
   update: (p: Partial<VoxelSettings>) => void
   onClose: () => void
+  /** Opens the rebinding panel. Alex, 2026-08-23: "in the menu there should be an option to bind keys." */
+  onControls: () => void
 }) {
   const Slider = ({ label, k }: { label: string; k: 'toon' | 'outline' | 'faceShading' | 'shadowLift' }) => (
     <label className="flex items-center gap-2 text-[11px] font-mono text-white/70">
@@ -8620,6 +8740,17 @@ function SettingsPanel({ s, update, onClose }: {
           Everything above is a look or a budget; this is an instrument. Keeping it out of Render
           also keeps it out of PRESETS, so flipping natural↔cartoon mid-measurement cannot switch
           off the meter you are measuring with. */}
+      {/* ── CONTROLS ────────────────────────────────────────────────────────────────────────
+          Above Debug on purpose: rebinding is a PLAYER setting and the frame meter is an
+          instrument. A controls row buried under a debug heading reads as developer tooling and
+          the players who most need it are the ones least likely to open that section. */}
+      <div className="gx-label pt-1 text-[9px] text-white/40">Controls</div>
+      <button onClick={onControls}
+              className="gx-btn flex w-full items-center justify-between px-2.5 py-1.5 text-[10px]">
+        <span>Key &amp; controller bindings</span>
+        <span className="gx-value text-white/50">edit</span>
+      </button>
+
       <div className="text-[11px] font-mono font-semibold tracking-wider text-white/90 uppercase pt-1">Debug</div>
       <label className="flex items-center gap-2 text-[11px] font-mono text-white/70 cursor-pointer">
         <input

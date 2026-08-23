@@ -27,7 +27,7 @@ export type ActionId =
   // pressed — edge-triggered
   | 'world.mine' | 'world.place' | 'world.interact'
   | 'item.draw' | 'item.drop' | 'item.cycle'
-  | 'ui.craft' | 'ui.build' | 'ui.map' | 'ui.inventory' | 'ui.chat' | 'ui.close'
+  | 'ui.craft' | 'ui.build' | 'ui.map' | 'ui.inventory' | 'ui.chat' | 'ui.close' | 'ui.settings'
   | 'build.rotate' | 'build.tierUp' | 'build.tierDown'
   | 'owner.fly'
 
@@ -93,6 +93,7 @@ export const DEFAULTS: Record<ActionId, Binding> = {
   'ui.inventory':   { keys: ['KeyI'],                      pad: ['DUP'] },
   'ui.chat':        { keys: ['KeyT', 'Enter'],             pad: [] },
   'ui.close':       { keys: ['Escape'],                    pad: ['B'] },
+  'ui.settings':    { keys: ['KeyO'],                      pad: ['START'] },
   'build.rotate':   { keys: ['KeyR'],                      pad: ['LB'] },
   'build.tierUp':   { keys: ['BracketRight'],              pad: [] },
   'build.tierDown': { keys: ['BracketLeft'],               pad: [] },
@@ -109,7 +110,7 @@ export const LABEL: Record<ActionId, string> = {
   'world.mine': 'Mine', 'world.place': 'Place', 'world.interact': 'Interact',
   'item.draw': 'Draw / stow', 'item.drop': 'Drop', 'item.cycle': 'Cycle weapon',
   'ui.craft': 'Craft', 'ui.build': 'Build mode', 'ui.map': 'Map', 'ui.inventory': 'Inventory',
-  'ui.chat': 'Chat', 'ui.close': 'Close',
+  'ui.chat': 'Chat', 'ui.close': 'Close', 'ui.settings': 'Settings',
   'build.rotate': 'Rotate piece', 'build.tierUp': 'Next tier', 'build.tierDown': 'Previous tier',
   'owner.fly': 'Fly (keeper only)',
 }
@@ -148,7 +149,7 @@ export const GROUPS: readonly { title: string; actions: readonly ActionId[] }[] 
   { title: 'World',    actions: ['world.mine', 'world.place', 'world.interact'] },
   { title: 'Items',    actions: ['item.draw', 'item.drop', 'item.cycle'] },
   { title: 'Building', actions: ['ui.build', 'build.rotate', 'build.tierUp', 'build.tierDown'] },
-  { title: 'Menus',    actions: ['ui.craft', 'ui.map', 'ui.inventory', 'ui.chat', 'ui.close'] },
+  { title: 'Menus',    actions: ['ui.craft', 'ui.map', 'ui.inventory', 'ui.chat', 'ui.close', 'ui.settings'] },
   { title: 'Keeper',   actions: ['owner.fly'] },
 ] as const
 

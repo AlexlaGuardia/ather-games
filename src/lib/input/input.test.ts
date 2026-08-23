@@ -44,6 +44,7 @@ const SHIPPED: [ActionId, string][] = [
   ['world.interact', 'KeyE'], ['item.draw', 'KeyF'], ['item.drop', 'KeyQ'],
   ['ui.craft', 'KeyC'], ['ui.build', 'Tab'], ['ui.map', 'KeyM'], ['ui.inventory', 'KeyI'],
   ['ui.chat', 'KeyT'], ['ui.close', 'Escape'], ['build.rotate', 'KeyR'], ['owner.fly', 'KeyV'],
+  ['ui.settings', 'KeyO'],
 ]
 for (const [id, code] of SHIPPED) {
   ok(DEFAULTS[id].keys.includes(code), `${id} no longer defaults to ${code} — that is a remap of the shipped controls`)

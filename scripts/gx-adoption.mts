@@ -37,7 +37,7 @@ const CSS = readFileSync(join(ROOT, 'src/app/gameui.css'), 'utf8')
 const FLOORS: Record<string, number> = {
   vault: 37, rekindle: 22, driftling: 18, squall: 18, dewdrop: 17, ward: 17,
   seedfall: 16, voranyx: 14, atherdash: 12, updraft: 11, manana: 8,
-  shimmer: 8,          // joined 2026-08-23 (c378800) — the fold HUD, first Shimmer adoption ever
+  shimmer: 23,         // c378800 the fold HUD (8), then the input pass: bindings panel + resolved tutorial hints
   lucernyx: 7, nolmir: 3,
 }
 
