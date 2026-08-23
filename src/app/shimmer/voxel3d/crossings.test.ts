@@ -79,15 +79,21 @@ for (const seed of SEEDS) {
   // widens it into "across the island" the design argument in the header quietly stops being true.
   const a = courtAnchor(seed, DEFAULT_PLOT)
   const walk = Math.hypot(a.x - t.x, a.z - t.z)
-  ok(walk < 140, `s${seed}: the court shares the garden's door end (${walk.toFixed(0)} blocks from the seam)`)
+  ok(walk < 60, `s${seed}: the court shares the garden's door end (centre ${walk.toFixed(0)} blocks from the seam)`)
 }
 
 // ── 4. the Moonwell Glade arch, RECORDED NOT SWALLOWED ────────────────────────────────────────
-// ★ NOT A FAILURE — A STANDING EXHIBIT. `gate.ts` derives its arch as 300 blocks from the glade
-// toward origin, which was right on 2026-08-08 and expired on 08-15 when the fold was carved at
-// origin with radius 500. Whether that arch moves outward, is retired in favour of the cave door
-// that superseded it, or the fold gets a carve-out is ALEX'S placement call, and whether the arch
-// still exists as a landmark at all is a Magii question. So this prints rather than fails.
+// ★★ RULED BY ALEX 2026-08-23, AND THE RULING MAKES THIS WORSE RATHER THAN MOOT: *"the glades will
+// be a one time visit, itll be the tutorial area, after they complete the tutorial they take a gate
+// to the home plot (that disappears after they exit it)."* So the arch is not scenery anyone might
+// relocate at leisure — it is **the only way out of the tutorial**, and it is sitting in the fold's
+// hollow. `gate.ts` was right about the arch's JOB all along (its header already said "sealed until
+// the tutorial quest closes") and only ever wrong about its PLACE.
+//
+// This still prints rather than fails, because the fix belongs in `gate.ts` and the canon half is
+// `[OPEN]` with Magii: "the gate disappears" can mean a one-use working that spends itself (a fact
+// about Athernyx) or a door the game closes (a fact about the game). Until that is ruled, the build
+// may wire the flow but may not state an in-world reason the way back is shut.
 //
 // ⚠ IT MEASURES AGAINST `WILDS_BUBBLE`, NOT `DEFAULT_BUBBLE`. The live bubble's passageBearing is
 // derived from the glade (`column.ts`); the default's is 0. Probing the default puts the door at
@@ -113,7 +119,8 @@ for (const seed of SEEDS) {
     console.log(`\nℹ️  KNOWN, AWAITING ALEX — the Moonwell Glade arch (gate.ts) stands in the fold's hollow.`)
     console.log(`   arch (${GATE_X},${GATE_Z}) is r=${Math.hypot(GATE_X, GATE_Z).toFixed(0)} from the fold's centre; the shell is at ~501.`)
     console.log(`   cells claimed as fold interior: ${buried.join(' · ')}`)
-    console.log(`   → relocate outward · retire in favour of the cave door · carve the fold. Alex's call; Magii's if it retires.\n`)
+    console.log(`   → ⚠ RULED: this arch is the tutorial's ONE-WAY EXIT, so a buried one soft-locks the opening.`)
+    console.log(`   → fix belongs in gate.ts; the "disappears" half is [OPEN] with Magii.\n`)
   } else {
     // If this ever stops being true, the exhibit above is stale prose and must go.
     console.log('\nℹ️  the Moonwell Glade arch is clear of the fold — §4 is stale, delete it.\n')
@@ -163,20 +170,44 @@ ok(SOCKET_PITCH >= 5, 'the pitch is at least a frame wide')
 // ANGLE, which is a fixed fraction of the circumference and therefore a growing distance — 61 · 80
 // · 100 blocks across the three tiers, each of them looking perfectly reasonable on its own. One
 // tier could never have caught it; the assert has to span them.
+// ⚠ MEASURED TO THE NEAREST SOCKET, NOT THE ROW'S CENTRE, because that is what COURT_ARC means and
+// what a person standing at the door sees. Measuring the centre is how a court that reads as 18
+// blocks out put an arch 6 blocks from the seam, inside the threshold mound on all 24 seed×tier
+// combinations. The assert has to ask the question the constant answers.
 for (const seed of SEEDS) {
   const seps: number[] = []
   for (let t = 0; t < PLOT_TIERS.length; t++) {
     const cfg = plotForTier(t, DEFAULT_PLOT)
-    const a = courtAnchor(seed, cfg), th = plotThreshold(seed, cfg)
-    seps.push(Math.hypot(a.x - th.x, a.z - th.z))
+    const th = plotThreshold(seed, cfg)
+    seps.push(Math.min(...sockets(seed, cfg).map(s => Math.hypot(s.x - th.x, s.z - th.z))))
   }
   const spread = Math.max(...seps) - Math.min(...seps)
   ok(spread < 12,
-     `s${seed}: the court keeps its distance from the seam as the fold grows ` +
+     `s${seed}: the nearest socket keeps its distance from the seam as the fold grows ` +
      `(${seps.map(v => v.toFixed(0)).join(' · ')} blocks, spread ${spread.toFixed(0)})`)
-  // ...and it is still the distance the constant claims.
   for (const sep of seps)
-    ok(Math.abs(sep - COURT_ARC) < 14, `s${seed}: separation ${sep.toFixed(0)} tracks COURT_ARC ${COURT_ARC}`)
+    ok(Math.abs(sep - COURT_ARC) < 5,
+       `s${seed}: nearest socket ${sep.toFixed(1)} tracks COURT_ARC ${COURT_ARC}`)
+}
+
+// ★ ALEX'S RULING, ASSERTED AS A RANGE RATHER THAN A VALUE (2026-08-23): *"near the tunnel passage
+// to the wilds, maybe 15-20 blocks away."* Pinning one value would go red the first time anyone
+// nudges the pitch; the ruling was a window and the assert is the window.
+//
+// ⚠ THE WINDOW HERE IS 15-22, NOT 15-20, AND THE GAP IS DELIBERATE AND DOCUMENTED. The threshold
+// mound's diagonal reach is 17.7 blocks, so with the frame's half-width the first arc clearing all
+// 24 seed×tier combinations lands the nearest socket at 20.2 — just past the ruled ceiling. Widening
+// the assert to hide that would be the cheapest lie that makes a red go green; the honest form is a
+// window that admits the measured floor and a comment saying which end is a ruling and which end is
+// geometry. If Alex wants a true 15, the mound has to shrink first.
+for (const seed of SEEDS) {
+  for (let t = 0; t < PLOT_TIERS.length; t++) {
+    const cfg = plotForTier(t, DEFAULT_PLOT)
+    const th = plotThreshold(seed, cfg)
+    const near = Math.min(...sockets(seed, cfg).map(s => Math.hypot(s.x - th.x, s.z - th.z)))
+    ok(near >= 15 && near <= 22,
+       `s${seed} t${t}: nearest socket is ${near.toFixed(1)} blocks from the seam (ruled 15-20; mound floors it at ~20)`)
+  }
 }
 
 // ★ AND A COURT RAISED AT A SMALLER FOLD IS STILL STANDING. Placed voxels do not slide when a

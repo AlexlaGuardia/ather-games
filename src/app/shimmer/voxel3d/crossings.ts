@@ -89,7 +89,7 @@ export type SocketKind = 'gate' | 'waymark'
  * ⚠ ALEX'S DIAL. Placement in the fold is his call; this is derived so it follows the threshold if
  * the threshold ever moves, and it is one constant so he can slide it without touching geometry.
  */
-export const COURT_ARC: number = 60
+export const COURT_ARC: number = 21
 
 /** How far inside the coast the court's centre stands, in blocks. Clear of the wall, not inland. */
 export const COURT_INSET: number = 16
@@ -100,6 +100,30 @@ export const SOCKET_PITCH: number = 8
 /** Sockets: one gate (Rune Hold, always up) plus one per waymark the keeper may hold. */
 export const SOCKET_KINDS: SocketKind[] =
   ['gate', ...Array.from({ length: MAX_MARKS }, () => 'waymark' as const)]
+
+/**
+ * Half the row's span, in blocks — the gap between the court's CENTRE and its nearest socket.
+ *
+ * ★★ THIS EXISTS BECAUSE THE CONSTANT USED TO MEASURE THE WRONG THING. `COURT_ARC` was the arc to
+ * the row's MIDDLE, and the row is 24 blocks wide, so "the court is 18 blocks from the seam" put a
+ * socket 6 blocks from it — inside the threshold mound, on every seed and every tier (`fouls-cave`
+ * 24/24, swept). Alex asked for 15-20 blocks and the honest reading of that is *the nearest thing
+ * you walk up to*, not the midpoint of a row he never sees marked.
+ *
+ * ⚠⚠ AND THE THRESHOLD MOUND SETS A FLOOR NEAR 20 THAT NO TUNING GETS UNDER. The plot's cave is 12
+ * half-wide and swells 13 inward, so its diagonal reach is 17.7 blocks; add the frame's own
+ * half-width and integer rounding and the first value clearing every seed AND every tier is 21,
+ * landing the nearest socket at 20.2. Alex ruled 15-20, so the ruled window is satisfiable **only at
+ * its very top edge** — 18 fouls the mound on 3 of 24 seed×tier combinations, 20 on 2. Recorded
+ * rather than quietly rounded, because "he said 15-20 and I shipped 20.2" is a thing he should be
+ * able to find later, and because the floor is a fact about the mound rather than a preference.
+ *
+ * ★ SO THE FIX IS TO MAKE THE NUMBER MEAN WHAT A PERSON MEANS BY IT, not to pick a bigger number
+ * that happens to fit. Same move as blocks-not-fractions above: a constant whose name and value
+ * disagree with the thing being asked about is a trap for whoever tunes it next — and the person
+ * tuning it next is Alex, who is measuring by eye from the door.
+ */
+const ROW_HALF_SPAN = ((SOCKET_KINDS.length - 1) / 2) * SOCKET_PITCH
 
 export interface CourtAnchor {
   /** Centre column of the court's row of sockets. */
@@ -119,21 +143,53 @@ export interface CourtAnchor {
  * `plotThreshold` settled on for the same reason — the court stays its own distance from the wall
  * instead of drifting inland every time the keeper earns more ground.
  */
-export function courtAnchor(seed: number, cfg: PlotConfig = DEFAULT_PLOT): CourtAnchor {
-  // The coast at the SEAM's bearing is what the arc is measured on: using the court's own bearing
-  // would need the answer to compute the question.
-  // ⚠ A CLARITY CHOICE, NOT A MECHANISM, AND IT SAYS SO BECAUSE A MUTATION PROVED IT. Swinging this
-  // sample a full radian away left every assert green — `edgeAt` varies only by `wobble` with
-  // bearing, so the two radii agree to within a couple of blocks and nothing downstream can feel the
-  // difference. Claiming it as the reason the arc holds would be a comment asserting a mechanism no
-  // test can reach, which this repo has had to delete before.
-  const seamR = Math.max(1, edgeAt(Math.cos(cfg.thresholdBearing), Math.sin(cfg.thresholdBearing), seed, cfg))
-  const bearing = cfg.thresholdBearing + COURT_ARC / seamR
+function layoutAt(offset: number, seed: number, cfg: PlotConfig): CourtAnchor {
+  const bearing = cfg.thresholdBearing + offset
   const cb = Math.cos(bearing), sb = Math.sin(bearing)
   const r = Math.max(1, edgeAt(cb, sb, seed, cfg) - COURT_INSET)
   const x = Math.round(cb * r)
   const z = Math.round(sb * r)
   return { x, z, y: plotHeight(x, z, seed, cfg), bearing }
+}
+
+/** Distance from the threshold to the closest socket of the row `offset` would produce. */
+function nearestSocketAt(offset: number, seed: number, cfg: PlotConfig): number {
+  const a = layoutAt(offset, seed, cfg)
+  const t = plotThreshold(seed, cfg)
+  const tx = -Math.sin(a.bearing), tz = Math.cos(a.bearing)
+  const mid = (SOCKET_KINDS.length - 1) / 2
+  let best = Infinity
+  for (let i = 0; i < SOCKET_KINDS.length; i++) {
+    const off = (i - mid) * SOCKET_PITCH
+    const sx = Math.round(a.x + tx * off), sz = Math.round(a.z + tz * off)
+    best = Math.min(best, Math.hypot(sx - t.x, sz - t.z))
+  }
+  return best
+}
+
+export function courtAnchor(seed: number, cfg: PlotConfig = DEFAULT_PLOT): CourtAnchor {
+  // ── ★★ SOLVED, NOT APPROXIMATED, AND THE REASON IS A MEASUREMENT ─────────────────────────────
+  // The first version converted `COURT_ARC` to an angle by dividing by the coast radius. That is
+  // exact only on a perfect circle, and this coast is not one: `edgeAt` wobbles with bearing, so the
+  // court's radius differs from the seam's and the error is radial. Swept across eight seeds and
+  // three tiers it put the nearest socket anywhere from **17.7 to 23.3 blocks** out — one seed fully
+  // outside the 15-20 Alex ruled, while the constant still read 18.
+  //
+  // ★ SO THE ANGLE IS BISECTED UNTIL THE DISTANCE IS THE ONE ASKED FOR. `nearestSocketAt` is
+  // monotonic in the offset over this range (the row only walks away from the seam), 30 halvings
+  // resolve far below a block, and the whole thing is integer-rounded at the end anyway. The cost is
+  // paid once per column-load, not per voxel.
+  //
+  // ⚠ AND IT MEASURES THE SOCKET, NOT THE ROW'S CENTRE. Measuring the centre is what put an arch six
+  // blocks from the seam inside the threshold mound on all 24 seed×tier combinations while reading
+  // as a comfortable 18.
+  let lo = 0, hi = Math.PI / 2
+  for (let i = 0; i < 30; i++) {
+    const mid = (lo + hi) / 2
+    if (nearestSocketAt(mid, seed, cfg) < COURT_ARC) lo = mid
+    else hi = mid
+  }
+  return layoutAt((lo + hi) / 2, seed, cfg)
 }
 
 export interface SocketCell {
