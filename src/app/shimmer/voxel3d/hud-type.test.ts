@@ -98,6 +98,18 @@ ok(handRolled.length === HAND_ROLLED_BASELINE,
 ok(/data-stats/.test(HUD) && /data-perf/.test(HUD),
    'a data-perf/data-stats handle vanished — world-shot.mts scrapes those by textContent')
 
+// ⚠ THE STATS ROW MUST BE HIDDEN, NEVER UNMOUNTED. It is gated off for players now, and the
+// tempting way to do that is a conditional render — but `textContent` sees through `display:none`
+// and returns NULL for a node that is not in the tree. Unmounting it would break every headless
+// world shot with the instrument's own "no [data-stats] node — old build?" message, which reads as
+// a bad deploy rather than as a UI decision. This asserts the node is always emitted and that its
+// visibility rides a className.
+const statsLine = HUD.match(/<div data-stats[^>]*>/)?.[0] ?? ''
+ok(/className=\{/.test(statsLine),
+   `the stats row must toggle via className, not by unmounting — world-shot.mts would report a dead build. Found: ${statsLine}`)
+ok(!/\{\s*diagnostics\s*&&\s*<div data-stats/.test(HUD) && !/\{\s*\w+\s*&&\s*\(?\s*<div data-stats/.test(HUD),
+   'the stats row is behind a && guard — that unmounts it and blinds world-shot.mts')
+
 // ── report ───────────────────────────────────────────────────────────────────────────────────
 console.log(`\nhud-type — ${pairs.length} label/value pairs · ${REQUIRED.length} layer classes verified present`)
 if (fails.length) {

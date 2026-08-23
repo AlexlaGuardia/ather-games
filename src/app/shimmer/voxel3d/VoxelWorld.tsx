@@ -2235,7 +2235,7 @@ export default function VoxelWorld() {
             a menu is up are already refused by the onCreated click handler. */}
         <PointerLockControls selector="#voxel3d-no-autolock" />
       </Canvas>
-      <Hud stats={stats} perf={settings.showFps ? perf : null} toast={toast} pos={pos} look={look} hotbar={hotbar} sel={sel} tier={tier} held={held}
+      <Hud stats={stats} diagnostics={settings.showFps} perf={settings.showFps ? perf : null} toast={toast} pos={pos} look={look} hotbar={hotbar} sel={sel} tier={tier} held={held}
            build={build} pieceIdx={pieceIdx} rot={rot} inv={inv}
            skill={skillHud} levelUp={levelUp} crafted={crafted} tools={tools} skills={skills}
            activeTool={activeTool}
@@ -2417,7 +2417,7 @@ function ResourceBars({ vitals }: { vitals: React.RefObject<Vitals> }) {
   )
 }
 
-function Hud({ bindings, padKind, stats, perf, toast, pos, look, hotbar, sel, tier, held, build, pieceIdx, rot, inv, skill, levelUp, crafted, tools, skills, activeTool, isOwner, drawn, weaponIdx, ammoUi, tutorialStage, nearGreg, dialogueOpen, nearTable, craftOpen, nearMist, hasParty, sparLedger, vitals }: {
+function Hud({ bindings, padKind, stats, diagnostics, perf, toast, pos, look, hotbar, sel, tier, held, build, pieceIdx, rot, inv, skill, levelUp, crafted, tools, skills, activeTool, isOwner, drawn, weaponIdx, ammoUi, tutorialStage, nearGreg, dialogueOpen, nearTable, craftOpen, nearMist, hasParty, sparLedger, vitals }: {
   stats: string; pos: string
   /** The say line — player-addressed, held ~4s. See the SAY CHANNEL note on VoxelWorld. */
   toast: { text: string; at: number } | null
@@ -2443,6 +2443,11 @@ function Hud({ bindings, padKind, stats, perf, toast, pos, look, hotbar, sel, ti
   weaponIdx: number
   ammoUi: number
   /** The tutorial's current objective — drives the HUD chip below. */
+  /**
+   * Whether the renderer instruments are on screen — the frame meter AND the stats row, which are
+   * the same kind of thing and now share one switch.
+   */
+  diagnostics: boolean
   /** The player's live bindings — hints resolve from these, so a rebind is reflected at once. */
   bindings: BindingMap
   /** Which controller family is in hand, so a hint says ✕ to a DualSense player and A to an Xbox one. */
@@ -2500,7 +2505,19 @@ function Hud({ bindings, padKind, stats, perf, toast, pos, look, hotbar, sel, ti
         {/* `data-stats` is the handle `scripts/world-shot.mts` scrapes — the HUD line is the only
             place the renderer's live counters surface, and a headless perf run needs to read them
             without the class name (a styling detail) being load-bearing. */}
-        <div data-stats className="text-white/55">{stats}</div>
+        {/* ── ★ HIDDEN FROM PLAYERS, NOT UNMOUNTED ────────────────────────────────────────
+            This row shipped to EVERY player with no gate at all: `103 col · 77 mesh · 48 draws ·
+            117k tris · 0 drops · geo 62 prog 7`. None of it is actionable by someone playing, and
+            it is the widest line in the block, so it set the whole panel's width. The frame meter
+            directly below it — strictly MORE technical — was correctly opt-in the whole time. The
+            gate existed; this row just never got it.
+
+            ⚠ `hidden`, NOT a conditional render, and that is load-bearing. `world-shot.mts` reads
+            this node with `textContent`, which sees through `display:none` but returns null for a
+            node that is not in the tree — so unmounting it would break every headless world shot
+            with the instrument's own "old build?" message, which reads as a bad deploy rather than
+            as a UI decision. `hud-type.test.ts` asserts the handle still exists. */}
+        <div data-stats className={diagnostics ? 'text-white/55' : 'hidden'}>{stats}</div>
         {/* Shift is slide now, not sprint — run is automatic (play3d locomotion, port step 5). */}
         {/* ⚠ `V fly` is listed only for the keeper of the realm — the binding is owner-gated, and a
             key hint that does nothing when you press it reads as a broken game, not as a locked
@@ -8758,8 +8775,8 @@ function SettingsPanel({ s, update, onClose, onControls }: {
           onChange={e => update({ showFps: e.target.checked })}
           className="accent-amber-300"
         />
-        <span>frame meter</span>
-        <span className="ml-auto text-white/35">fps · ms · worst</span>
+        <span>diagnostics</span>
+        <span className="ml-auto text-white/35">fps · ms · worst · draw counts</span>
       </label>
 
       <p className="text-[10px] leading-relaxed text-white/35 font-mono pt-1">
