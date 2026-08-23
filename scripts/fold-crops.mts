@@ -35,6 +35,20 @@
 //      pool overflowed: N wanted, M drawn`. Captured here. If it fires, the reading above the cap is
 //      invalid BY CONSTRUCTION rather than by judgement — no interpretation required.
 //
+// ── ⚠⚠⚠ FIRST CLEAN RUN CAME BACK **BLIND**, AND THAT IS THE FILE WORKING (08-23) ──────────────
+// 200 crops seeded, save written, space carried across the reload — and the instance count did not
+// move by one. The gate refused to call that "crops are free", which is the entire reason it exists.
+//
+// ★ THE LEADING HYPOTHESIS, UNVERIFIED: seeding the `beds` MAP is not enough because the planted
+// feed almost certainly walks placed GARDEN_BED **voxels** in loaded columns and looks the crop up,
+// rather than iterating the map blind. A crop with no bed block under it is then a record nothing
+// renders. If so the fix is to seed `edits` (PackedEdits) with MAT.GARDEN_BED at each bed position
+// as well — a column-record write, not a player-record one.
+//
+// ⚠ DO NOT "FIX" THIS BY LOOSENING THE GATE. A shortfall or a zero is the finding; the number that
+// would come back from a gate relaxed to `> 0` is the confident wrong answer this file was written
+// to refuse. Verify the hypothesis first.
+//
 // ⚠ SwiftShader: frame rate and gpu time are void, as ever. Draws / triangles / instances are
 // CPU-side facts and are what this reads. And a seeded fold is MY approximation of Alex's, not his.
 import puppeteer from 'puppeteer-core'
@@ -206,7 +220,14 @@ async function pass(label: string, seed: number): Promise<{ s: Sample; overflow:
     s = await sample()
     peak = Math.max(peak, s.triangles)
     // The collapse is a FALL from the peak, not quiet. Until it happens, a steady reading is residue.
-    if (s.triangles < peak * 0.75) collapsed = true
+    // ⚠ ANY STRICT DROP FROM THE PEAK, NOT A 25% ONE. My first cut used `peak * 0.75` and it
+    // FAILED ON ITS OWN FIRST RUN: the sown pass peaked at 7k and settled at 5362, which is above
+    // the 5250 threshold, so `collapsed` never fired, `stable` never incremented, and a pass that
+    // had visibly collapsed at t+24 reported NEVER SATURATED for another 60s. A proportional
+    // threshold cannot work here — the residue is whatever the previous space happened to leave, so
+    // the size of the drop is not a property of the collapse. Counts only ever CLIMB while loading,
+    // so a strict decrease from the maximum seen is the collapse and nothing else is.
+    if (s.triangles < peak) collapsed = true
     const same = prev && s.calls === prev.calls && s.triangles === prev.triangles && s.instances === prev.instances
     stable = same && collapsed ? stable + 1 : 0
     console.log(`   ${label} t+${String((i + 1) * STEP).padStart(3)}s  ${String(s.calls).padStart(4)} draws · ${String(Math.round(s.triangles / 1000)).padStart(4)}k tris · ${String(s.instances).padStart(5)} inst${collapsed ? '' : '  ‹wilds residue›'}${stable ? `  (steady ×${stable})` : ''}`)

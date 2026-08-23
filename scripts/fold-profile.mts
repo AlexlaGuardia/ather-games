@@ -199,7 +199,10 @@ try {
       peak = Math.max(peak, s.triangles)
       // ⚠ ONLY THE PLOT PASS CROSSES; the wilds pass only ever climbs, so requiring a collapse there
       // would hang it forever. `crossed` is false for the wilds reading and true after `/space plot`.
-      if (!crossed || s.triangles < peak * 0.75) collapsed = true
+      // ⚠ ANY STRICT DROP, NOT A PROPORTIONAL ONE — a 0.75 threshold failed on its own first run
+      // (peak 7k, settled 5362, above 5250, so the collapse never registered). Counts only climb
+      // while loading, so a strict decrease from the max seen IS the collapse.
+      if (!crossed || s.triangles < peak) collapsed = true
       const same = prev && s.calls === prev.calls && s.triangles === prev.triangles && s.instances === prev.instances
       stable = same && collapsed ? stable + 1 : 0
       console.log(`   ${label} t+${String((i + 1) * STEP).padStart(3)}s  ${String(s.calls).padStart(5)} draws · ${String(Math.round(s.triangles / 1000)).padStart(5)}k tris · ${String(s.instances).padStart(6)} inst · geo ${s.geometries}${stable ? `  (steady ×${stable})` : ''}`)
