@@ -585,6 +585,23 @@ mist ledger, tutorial progress, the pot/sapling/leaf-decay clocks, and the multi
 `play3d/multiplayer.ts` · `play3d/page.tsx` · `voxel3d/{page,VoxelWorld,discovery,tutorial,mist-encounter}` ·
 `scripts/save-owner-probe.mts`
 
+## ⏱ Shimmer — **THE FOLD IS NOT SLOW, IT STALLS: the frame profile read on Alex's own GPU** (2026-08-23, play) · *Last touched 2026-08-23 (play) — instrument shipped + live, the stall capture is still OPEN*
+
+> **Left off:** `worstZones` + `worstAt` are LIVE on prod (`f308407`, rode hub's build; verified present in the served bundle at `/shimmer/voxel3d`) and **have never yet observed a stall.** Four collectors armed, all four expired against a stationary character.
+> - **★★★ THE MEASUREMENT.** IDLE settled: 20,400 frames, p50 **16.7ms**, max 29.8, **ZERO frames >33ms**. STALLING: p50 still ~16.6ms but **p99 235ms, max 292ms, 39.4% of wall clock lost**, stalls ~600ms apart. **A 60fps game that freezes for a quarter second, repeatedly.** The mean (39.9fps) is a clean frame averaged with a freeze — *that artifact is why it read as "steady low frame rate" and sent two sessions after rendering.*
+> - **⚠ THE DISCRIMINATOR IS A BUILD BACKLOG, NOT MOVEMENT.** "Only while moving" was stated confidently and is FALSE: 71 stalls over 200ms in 43s with the character stationary, in a world that had not finished building (`geo` stuck at 88 vs 362-434 settled). Movement is just the usual way to make a backlog. It SETTLES — 206 consecutive clean windows six minutes later.
+> - **⚠ ALEX'S GPU IS `ANGLE (Intel UHD Graphics 630, D3D11)` — INTEGRATED.** Every perf row assumed a desktop GPU. A trusted reading (coverage 20/20) shows **gpu 13.8ms of a 16.7ms frame = 83%**, the UNACCOUNTED 16.14ms being mostly the main thread waiting on it. It swings hard: 4.7ms and 13.8ms in the same minute, both full coverage.
+> - **★ gpuSamples SHIPPED AND PAID FOR ITSELF SAME-SESSION** (`f692d31` play + `4221aed` hub). The ratio had two denominators — `ms` over `frames`, `gpuMs` over surviving samples — and `frames` was published while `gpuSamples` was a closure local, so the 110% bias was **unreachable by any reader**. `gpuTrusted()` is ONE exported predicate both consumers ASK. The 83% above is quotable *only because it passed that guard*.
+> - **⚠⚠ TWO HYPOTHESES BENCHED AND DEAD — DO NOT SPEND ON THEM.** (1) **Hollows sweep EXONERATED**: `columnHeight` x520 = 5.37ms p50 / 22.59ms worst = **2.2% of one stall**; the tidy `SPAWN_CYCLE_S=0.4` period fit was arithmetic coincidence. (2) The 500ms `setBeat` (`VoxelWorld.tsx:8211`) — fires ~300x in a clean idle run AND is inside a station panel not mounted in normal play.
+> - **★ AND THE WINDOW-MEAN NULL WAS NEVER EVIDENCE.** I held `corr(world:ticks, ms)=0.11` as proof against the sweep. A mean over one 240ms stall and forty clean frames is dominated by the clean frames, so a real periodic stall *produces* that null. **Both sides of that argument were wrong; only a direct bench settled it.**
+>
+> **Next:** capture ONE stalling window's `worstZones`. Reach the profile without a keypress — DFS the React fiber (`__reactContainer$` → `.current`, find `memoizedProps.p` with an Array `worstZones`), poll for `worst > ms*2`. **A page RELOAD is a reliable stall generator (guaranteed backlog); walking is not.** ⚠ Record `gpuMs` ON the stalling window: a GPU-side hitch and a main-thread backlog BOTH land in UNACCOUNTED and the zone table alone cannot separate them.
+>
+> **Parked:** a worst-frame row in `ProfilePanel` (hub offered; `snapshotText` already prints the table above 2x mean, so it is a nicety).
+>
+> **Files:** `voxel3d/profile.ts` · `voxel3d/profile.test.ts` (52 asserts, mutation-swept 10 ways) · consumer `voxel3d/VoxelWorld.tsx` (hub's).
+
+
 ## 💰 Shimmer / site — **ONE PURSE PER ACCOUNT: the marks split** (2026-08-23, hub) · *Last touched 2026-08-23 (hub) — shipped, deployed, prod-verified*
 
 ### Left off — SHIPPED `6a53989`, deployed, pushed, 26-check browser probe green on prod
