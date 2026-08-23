@@ -22,13 +22,19 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import * as LOCO from '../voxel3d/locomotion'
 import {
-  KIT, BODY, BODIES, coverTiersFor,
+  KIT, BODY, BODIES, coverTiersFor, widthTiersFor, metricsFor, bodyDiameter,
   AIRTIME, JUMP_APEX, gapAt, GAP_RUN, GAP_SLIDEHOP, GAP_CAP, SLIDE_RUN,
   STEP_FLOW, LEDGE_VAULT, LEDGE_MANTLE, LEDGE_CLIMB,
-  COVER_SLIDE, COVER_STAND, COVER_FULL,
-  BODY_D, PASS_MIN, LANE_SINGLE, LANE_PAIR, LANE_STREET,
   readsAs, snapHeight,
 } from './metrics'
+
+// ★ EVERY BODY-DERIVED NUMBER IS ASKED FOR BY BODY. There are no pre-collapsed constants to import
+// any more; that is the point of the de-pinning, and this file has to demonstrate the shape rather
+// than restore it with local aliases that would rebuild the same trap one scope down.
+const M = metricsFor(BODY)
+const { slide: COVER_SLIDE, stand: COVER_STAND, full: COVER_FULL } = M.cover
+const { bodyD: BODY_D, passMin: PASS_MIN, laneSingle: LANE_SINGLE,
+        lanePair: LANE_PAIR, laneStreet: LANE_STREET } = M.widths
 
 let pass = 0
 const fails: string[] = []
@@ -78,7 +84,7 @@ ok('slide-cover for the chosen body starts just above a block',
   coverTiersFor(BODY).slide === BODY.eyeSlide)
 
 // ── (1) WIDTHS ───────────────────────────────────────────────────────────────────────────────
-near('body diameter tracks the chosen mannequin', BODY_D, 2 * BODY.radius)
+near('body diameter tracks the chosen mannequin', BODY_D, bodyDiameter(BODY))
 ok('minimum pass clears the body', PASS_MIN > BODY_D)
 ok('lanes are ordered', PASS_MIN < LANE_SINGLE && LANE_SINGLE < LANE_PAIR && LANE_PAIR < LANE_STREET)
 // Single-file means exactly that: two bodies abreast do not fit with any clearance to spare.
@@ -100,9 +106,31 @@ ok('the tier boundaries are inclusive-below', readsAs(STEP_FLOW) === 'flow')
 // becoming 'flow' — so assert the band has width, not just that a sample lands in it.
 ok('the dead band is non-empty', LEDGE_VAULT - STEP_FLOW > 0.5)
 
-ok('snap sends a doorstep to a real tier', readsAs(snapHeight(0.8)) !== 'ambiguous')
-ok('snap sends a kerb to a real tier', readsAs(snapHeight(0.45)) !== 'ambiguous')
-ok('snap is identity on a tier', snapHeight(LEDGE_VAULT) === LEDGE_VAULT)
+ok('snap sends a doorstep to a real tier', readsAs(snapHeight(0.8, BODY)) !== 'ambiguous')
+ok('snap sends a kerb to a real tier', readsAs(snapHeight(0.45, BODY)) !== 'ambiguous')
+ok('snap is identity on a tier', snapHeight(LEDGE_VAULT, BODY) === LEDGE_VAULT)
+
+// ── ★★ THE DE-PINNING, ASSERTED LIVE ─────────────────────────────────────────────────────────
+// A parameter nothing ever passes a second value to is a parameter in name only. These prove both
+// mannequins are genuinely reachable and genuinely disagree — so if anyone ever re-collapses the
+// derivation onto one body, this section is what goes red rather than a town going quietly wrong.
+{
+  const v = metricsFor(BODIES.voxel), p3 = metricsFor(BODIES.play3d)
+  ok('the two mannequins produce DIFFERENT cover heights',
+     v.cover.stand !== p3.cover.stand && v.cover.slide !== p3.cover.slide)
+  ok('the two mannequins produce DIFFERENT lane widths',
+     v.widths.laneStreet !== p3.widths.laneStreet && v.widths.passMin !== p3.widths.passMin)
+  // ⚠ AND THE HIGH-TRAFFIC ONE: snapHeight is what an authoring pass calls on every placed face,
+  // so a body that could not reach it would let a whole town be snapped to the wrong ladder.
+  const h = (BODIES.voxel.eyeStand + BODIES.play3d.eyeStand) / 2
+  ok('snapHeight answers differently for the two bodies',
+     snapHeight(h, BODIES.voxel) !== snapHeight(h, BODIES.play3d))
+  // ★ AND THE SEAM-SAFE HALF MUST **NOT** MOVE. Gaps and ledge tiers come from ballistics, so a
+  // body-sensitive answer there would mean the split this file is built on had broken.
+  ok('the classifier is body-blind, because its tiers are kit-derived',
+     readsAs(0.4) === 'ambiguous' && readsAs(LEDGE_VAULT) === 'vault')
+  ok('full cover is kit-derived and shared', v.cover.full === p3.cover.full)
+}
 
 // ── (2) DRIFT GUARD — vs voxel3d/locomotion.ts ───────────────────────────────────────────────
 const DIVERGENT: Record<string, string> = {

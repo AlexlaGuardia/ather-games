@@ -154,39 +154,72 @@ export function coverTiersFor(body: Body) {
   }
 }
 
-const COVER = coverTiersFor(BODY)
+// ── ★★★ THERE ARE NO PRE-COLLAPSED BODY-DERIVED CONSTANTS, AND THAT IS THE WHOLE FIX ─────────
+// This file used to export `COVER_SLIDE` / `COVER_STAND` / `COVER_FULL` / `BODY_D` / `PASS_MIN` /
+// `LANE_*` as module constants, each one `coverTiersFor(BODY)` or `2 * BODY.radius` resolved once at
+// import. The header two screens up already explains that these tiers are **walker-dependent** and
+// that the two mannequins differ by up to 104% — so those exports answered, context-free and
+// silently, a question that has two answers.
+//
+// ★ THE PARAMETERISATION WAS ALWAYS CORRECT; THE COLLAPSE IS WHAT WAS WRONG. `coverTiersFor()` has
+// taken a body since the file was written, and line 54 says so. A caller who wrote `COVER_STAND`
+// still got one body, with nothing at the call site to suggest a choice had been made on their
+// behalf. **A value that differs by context must not be reachable as a context-free import** — that
+// is the module-constant trap this codebase has now paid for four times in two days (a save slot
+// cached at import pinning a tab to the anonymous purse; a profiler row that was one name over two
+// regions; a secret read as a module constant posting an empty key).
+//
+// ⚠ SO THEY ARE DELETED RATHER THAN KEPT ALONGSIDE THE FUNCTIONS. Keeping them "for convenience"
+// leaves the footgun loaded and pointed at exactly the person who does not yet know there are two
+// bodies. Every caller now names a body, and naming it is one word.
+//
+// ⚠⚠ WHAT THIS DELIBERATELY DOES **NOT** DECIDE: which body a given space is authored against.
+// `BODY` above is unchanged and still the default pick, still Alex's to overturn in one line. It was
+// tempting to key the body off the SPACE — mortal side asks for play3d's, Ather side for voxel's —
+// and canon's two-materials ruling makes that sound derivable. It is not: this file's own note says
+// play3d's 1.15 *"predates it and reads as a shorter mannequin at the same world scale"*, and GBOARD
+// records the divergence as **"an open question, not a fact to enshrine."** Keying cover off the
+// space would enshrine a possibly-stale mannequin as a design principle, invisibly, inside a
+// refactor. De-pinning is a bug fix; choosing per space is a decision, and it is not this commit's.
 
-export const COVER_SLIDE = COVER.slide
+/** Body diameter. Nothing passable may be narrower. */
+export const bodyDiameter = (body: Body): number => 2 * body.radius
 
 /**
+ * Width tiers for an arbitrary mannequin — the counterpart to `coverTiersFor`.
+ *
  * ★ A ONE-BLOCK WALL IS THE ARENA'S PIVOT PIECE AND ITS READ DEPENDS ON THE BODY. Against the
  * voxel mannequin (eyeSlide 1.02) a 1.0 wall sits just UNDER the sliding eye and well under the
  * standing one — so it reads as a shooting rest either way, and true slide-cover starts at ~1.1.
- * Against play3d's shorter body it was the classic waist-high piece (hide sliding, shoot
- * standing). The oracle asserts whichever relationship the chosen body produces, so the grammar
- * can never drift from the mannequin silently — but know that this specific piece changes
- * character if the body is flipped, and it is the piece a street is built out of.
+ * Against play3d's shorter body it is the classic waist-high piece (hide sliding, shoot standing).
+ * That piece is what a street is built out of, and it changes character with the mannequin.
  */
-export const COVER_STAND = COVER.stand
+export function widthTiersFor(body: Body) {
+  const d = bodyDiameter(body)
+  return {
+    /** Body diameter. Nothing passable may be narrower. */
+    bodyD: d,
+    /** Minimum passable gap — body plus clearance, so a slide does not catch a shoulder. */
+    passMin: d + 0.1,
+    /** Single-file. One player flows, two collide — the pinch that makes a flank cost something. */
+    laneSingle: d * 2,
+    /** Two abreast. A street a squad moves down without breaking formation. */
+    lanePair: d * 4,
+    /** A main street / arena floor: room for lurch and slide-hop to be used. */
+    laneStreet: d * 8,
+  }
+}
 
-export const COVER_FULL = COVER.full
-
-// ── WIDTHS ───────────────────────────────────────────────────────────────────────────────────
-
-/** Body diameter. Nothing passable may be narrower. */
-export const BODY_D = 2 * BODY.radius
-
-/** Minimum passable gap — body plus clearance, so a slide does not catch a shoulder. */
-export const PASS_MIN = BODY_D + 0.1
-
-/** Single-file. One player flows, two collide — the pinch that makes a flank cost something. */
-export const LANE_SINGLE = BODY_D * 2
-
-/** Two abreast. A street a squad moves down without breaking formation. */
-export const LANE_PAIR = BODY_D * 4
-
-/** A main street / arena floor: wide enough that lurch and slide-hop have room to be used. */
-export const LANE_STREET = BODY_D * 8
+/**
+ * Everything an authoring pass needs for one mannequin, asked once.
+ *
+ * ★ ONE CALL SO A MAP CANNOT MIX BODIES HALFWAY THROUGH. Asking `coverTiersFor(a)` in one place and
+ * `widthTiersFor(b)` in another is the collapse bug rebuilt by hand, one function lower — a town
+ * whose walls suit one walker and whose doorways suit the other, with every assert green.
+ */
+export function metricsFor(body: Body) {
+  return { body, cover: coverTiersFor(body), widths: widthTiersFor(body) }
+}
 
 // ── THE CLASSIFIER ───────────────────────────────────────────────────────────────────────────
 
@@ -222,8 +255,13 @@ export function readsAs(height: number): FaceRead {
  * Snap an authored height to the nearest tier the walker actually has a verb for. Use when
  * placing geometry: author the intent, run it through here, and the map cannot grow a dead face.
  */
-export function snapHeight(height: number): number {
-  const tiers = [0, STEP_FLOW, LEDGE_VAULT, COVER_STAND, LEDGE_MANTLE, LEDGE_CLIMB]
+export function snapHeight(height: number, body: Body): number {
+  // ⚠ THE BODY IS REQUIRED, AND IT USED TO BE INVISIBLE. This ladder contains the STANDING EYE, so
+  // it is body-dependent — and it read `COVER_STAND`, the pinned constant. `snapHeight` is the
+  // function a map-authoring pass actually calls on every piece of geometry it places, which made
+  // it the single highest-traffic place the wrong mannequin could enter a town, silently, one
+  // snapped face at a time. Everything else in the ladder is kit-derived and seam-safe.
+  const tiers = [0, STEP_FLOW, LEDGE_VAULT, coverTiersFor(body).stand, LEDGE_MANTLE, LEDGE_CLIMB]
   return tiers.reduce((best, t) => (Math.abs(t - height) < Math.abs(best - height) ? t : best), 0)
 }
 
