@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
+import { setSaveOwner } from '@/lib/save-slot'
 
 // Client-side view of "who am I". One fetch of /api/auth/session on mount; null means
 // signed out, which is a normal state, not an error — every caller must render fine without
@@ -49,6 +50,11 @@ export function useAccount(): UseAccount {
   const signOut = useCallback(async () => {
     try { await fetch('/api/auth/logout', { method: 'POST' }) } catch { /* cookie may outlive this */ }
     setSession(null)
+    // ★ AND THE SAVE OWNER WITH IT (2026-08-23). Sign-out does NOT reload the page — it only clears
+    // React state — so without this the purse and every other scoped slot would keep reading and
+    // WRITING into the account that just left, for as long as the tab stays open. Sign-IN needs no
+    // equivalent: it is a full-page OAuth redirect, so `SaveOwnerBoot` runs again from scratch.
+    setSaveOwner(null)
   }, [])
 
   const claimName = useCallback(async (username: string, characterId?: string) => {

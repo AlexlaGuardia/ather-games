@@ -17,6 +17,7 @@ import { getFavs, toggleFav } from "@/lib/favorites";
 import { getRecents, pushRecent } from "@/lib/recents";
 import { hasSave, saveHint } from "@/lib/saves";
 import { getMarks, MARKS_EVENT } from "@/lib/wallet";
+import { SAVE_OWNER_EVENT } from "@/lib/save-slot";
 
 const GOLD = "#d4a843"; // arcade "furniture" colour — the nav is furniture, fixed across games
 const CLOSE_MS = 170; // must match the sitenav-slide-out duration below
@@ -73,9 +74,15 @@ export default function SiteNav({
     const sync = () => setMarksBal(getMarks());
     sync();
     window.addEventListener(MARKS_EVENT, sync);
+    // ★ THE PURSE IS PER-ACCOUNT NOW, and who is playing is answered a few frames into the page by
+    // `SaveOwnerBoot`. Without this the nav would show whatever the ANONYMOUS purse holds for the
+    // life of the page — a signed-in player's own balance would only appear after they earned a
+    // coin, which is the moment a wrong number becomes a bug report.
+    window.addEventListener(SAVE_OWNER_EVENT, sync);
     window.addEventListener("storage", sync);
     return () => {
       window.removeEventListener(MARKS_EVENT, sync);
+      window.removeEventListener(SAVE_OWNER_EVENT, sync);
       window.removeEventListener("storage", sync);
     };
   }, []);

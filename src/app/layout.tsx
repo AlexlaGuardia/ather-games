@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Cormorant_Garamond, Inter, Chakra_Petch } from "next/font/google";
 import "./globals.css";
 import "./gameui.css";
+import SaveOwnerBoot from "./_components/SaveOwnerBoot";
 
 const cormorant = Cormorant_Garamond({
   subsets: ["latin"],
@@ -65,6 +66,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en" className={`${cormorant.variable} ${inter.variable} ${chakra.variable}`}>
       <body className="min-h-screen bg-void text-text antialiased">
+        {/* Answers "who is playing" once for the whole site, so the Marks purse is the right
+            player's on every page rather than only inside Shimmer's two boot gates. Renders
+            nothing; deliberately not a cookie read, which would make every static page dynamic. */}
+        <SaveOwnerBoot />
         <main>{children}</main>
       </body>
     </html>

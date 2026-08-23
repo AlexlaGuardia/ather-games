@@ -13,7 +13,17 @@
 // wallets stay valid. (This file replaces an earlier `ather.marks` store that split the
 // currency in two; the shared key is the reconciliation.)
 
-const KEY = "ather:save:wallet";
+// ★ THE SLOT, NOT A KEY (2026-08-23, Alex: "split it per account"). Two people on one machine
+// shared one balance and there was no record of who earned a coin. `gameSlot` is the one definition
+// — the anonymous player keeps the bare key, and `adoptAnonSlots` moves it in on first sign-in so
+// nobody watches their marks go to zero on upgrade day.
+//
+// ⚠ CALLED PER ACCESS, NEVER CACHED IN A MODULE CONST. The owner is answered a few frames after the
+// page loads (`SaveOwnerBoot`), so a constant evaluated at import time would pin every read and
+// write for the life of the tab to the ANONYMOUS purse — which is this bug with extra steps.
+import { gameSlot } from "./save-slot";
+
+const slot = () => gameSlot("wallet");
 export const MARKS_EVENT = "ather:marks"; // CustomEvent<number> on window; detail = new balance
 
 export interface WalletData {
@@ -28,7 +38,7 @@ const clamp = (n: number): number => (Number.isFinite(n) && n > 0 ? n : 0);
 function read(): WalletData {
   if (typeof window === "undefined") return { ...EMPTY };
   try {
-    const raw = localStorage.getItem(KEY);
+    const raw = localStorage.getItem(slot());
     if (!raw) return { ...EMPTY };
     const d = JSON.parse(raw);
     return {
@@ -44,7 +54,7 @@ function read(): WalletData {
 function write(d: WalletData): WalletData {
   if (typeof window === "undefined") return d;
   try {
-    localStorage.setItem(KEY, JSON.stringify(d));
+    localStorage.setItem(slot(), JSON.stringify(d));
     window.dispatchEvent(new CustomEvent(MARKS_EVENT, { detail: d.marks }));
   } catch {
     /* quota / private mode — the wallet is a convenience layer, never block play */
@@ -56,7 +66,7 @@ function write(d: WalletData): WalletData {
 export function walletExists(): boolean {
   if (typeof window === "undefined") return false;
   try {
-    return localStorage.getItem(KEY) != null;
+    return localStorage.getItem(slot()) != null;
   } catch {
     return false;
   }

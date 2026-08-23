@@ -1,9 +1,9 @@
 "use client";
 
 import { useCallback } from "react";
-import { saveKey as shimmerSlot } from "@/lib/save-slot";
+import { saveKey as shimmerSlot, gameSlot, type SaveGame } from "@/lib/save-slot";
 
-type Game = "magii" | "shimmer" | "wallet";
+type Game = SaveGame;
 
 // ── ★ SHIMMER'S SLOT IS KEYED TO THE ACCOUNT (#682, 2026-08-23) ────────────────────────────────
 // `shimmer` is the one game here that PUSHES to the cloud (`Shimmer3D` → `pushCloudSave`), and the
@@ -11,12 +11,20 @@ type Game = "magii" | "shimmer" | "wallet";
 // that meant a second account uploaded the first account's world into its own row and destroyed
 // whatever was there. Reproduced end to end, and found already done once in production.
 //
-// ⚠ `wallet` and `magii` are DELIBERATELY still unscoped, and the reason is the one that matters:
-// nothing pushes them, so the failure they have is two accounts sharing a browser's coins — visible
-// and reversible — not a garden overwritten in the cloud. Scoping them needs the same first-sign-in
-// adoption shimmer gets in `play3d/page.tsx`, or every existing wallet reads as emptied on upgrade.
-// That is a follow-up, not an oversight; do not "tidy" this into scoping all three without it.
-const saveKey = (g: Game) => (g === "shimmer" ? shimmerSlot() : `ather:save:${g}`);
+// ── ★ ALL THREE ARE SCOPED NOW (2026-08-23, Alex: "split it per account") ──────────────────────
+// The note here used to say `wallet` and `magii` were deliberately left shared, on the grounds that
+// nothing pushes them so the damage is contained to one browser. That reasoning was correct and it
+// was never the whole question: two people on one machine sharing a coin balance is wrong however
+// contained it is, and there was no record of who earned a coin.
+//
+// ⚠ THE FOLLOW-UP THAT NOTE DEMANDED CAME WITH IT, which is the only reason this is safe: without
+// `adoptAnonSlots`, scoping the wallet shows every existing player a balance of ZERO on the day it
+// ships, with their coins sitting one key over. Do not scope a fourth slot without its adoption.
+//
+// ⚠ Shimmer still goes through `saveKey()` rather than `gameSlot('shimmer')` — same answer, but
+// that path carries the unresolved-owner warning, and shimmer is the one slot where reading the
+// wrong one gets UPLOADED.
+const saveKey = (g: Game) => (g === "shimmer" ? shimmerSlot() : gameSlot(g));
 const bestKey = (g: Game, cat: string) => `ather:best:${g}:${cat}`;
 
 // ather.games (public): localStorage-backed saves — no login required. Same hook

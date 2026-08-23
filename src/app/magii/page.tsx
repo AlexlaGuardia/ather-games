@@ -17,6 +17,7 @@ import { getHubAudio } from '@/lib/hub-audio'
 import { GameBoard, GameOverOverlay, Card } from './game-board'
 import type { Card as CardType } from './lib/data'
 import { COLLECTIONS, getCollectionEntry } from './lib/data'
+import { saveOwnerResolved, SAVE_OWNER_EVENT } from '@/lib/save-slot'
 
 // The card game is the Marks FAUCET (canon: Marks = the Mug's coin). No ante, no
 // double-down — one flat prize: win → 10 + 30% of your score; everyone else leaves
@@ -139,8 +140,31 @@ export default function MagiiPage() {
   // Don't mark loaded until auth resolves — useSession is undefined on first
   // render, so claiming "loaded" here would permanently skip the fetch once
   // the session hydrates and isSignedIn flips true.
+  // ★ AND NOT UNTIL WE KNOW WHOSE SAVE IT IS (2026-08-23). The card save is per-account now, and
+  // `SaveOwnerBoot` answers that a few frames in — loading before it lands reads the ANONYMOUS
+  // stats and then never re-reads, so a signed-in player would sit in somebody else's collection
+  // for the whole session. `loadedRef` makes the fetch once; this decides WHEN once is.
+  //
+  // ⚠ HONESTLY LABELLED: THIS GUARD HAS NO DEMONSTRATED FAILING CASE. Removing it and re-running
+  // `scripts/save-owner-probe.mts` stays green, because nothing on this page writes the stats back
+  // on load — so the wrong read leaves no trace in storage for a probe to find, and what is wrong
+  // is only what the player SEES. The reasoning stands (a slot read before the owner is known IS
+  // the anonymous slot) and the case that bites is an account whose adoption LOCKED: it already
+  // has a save, so nothing moves, and a different anonymous save sits beside it. Kept because it is
+  // free and the premise protecting it today — that this page never re-saves on load — is a fact
+  // about this page, not a guarantee. If you make it re-save, this becomes load-bearing.
+  const [ownerKnown, setOwnerKnown] = useState(saveOwnerResolved())
+  useEffect(() => {
+    if (ownerKnown) return
+    const on = () => setOwnerKnown(true)
+    window.addEventListener(SAVE_OWNER_EVENT, on)
+    if (saveOwnerResolved()) setOwnerKnown(true)      // it landed between render and this effect
+    return () => window.removeEventListener(SAVE_OWNER_EVENT, on)
+  }, [ownerKnown])
+
   useEffect(() => {
     if (loadedRef.current) return
+    if (!ownerKnown) return
     if (!isSignedIn) { setStatsReady(true); return }  // wait for auth (or genuinely signed out)
     loadedRef.current = true
     load().then(data => {
@@ -150,7 +174,7 @@ export default function MagiiPage() {
       setOwned(statsRef.current.ownedCollections)
       setStatsReady(true)
     })
-  }, [isSignedIn, load])
+  }, [isSignedIn, load, ownerKnown])
 
   // One-time welcome stake so a player has a bankroll to bet with.
   // Gated on a persisted `seeded` flag (loaded with stats) so it fires once per account.

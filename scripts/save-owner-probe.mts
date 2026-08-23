@@ -163,6 +163,70 @@ try {
   // The page's own answer, not an inference from storage: B is owed the ritual and gets it.
   const sawRitual = await page.evaluate(() => document.body.innerText.toLowerCase())
   ok(/rune|born|choose/.test(sawRitual), `★ B is shown the birth ritual rather than dropped into a world (page said: ${sawRitual.slice(0, 60).replace(/\s+/g, ' ')})`)
+  // ── 6. ★★ THE PURSE, ON /magii — AND THE RACE NO UNIT TEST HERE CAN REACH ─────────────────────
+  // Marks split per account (Alex, 2026-08-23). The store's own test covers the slots; this covers
+  // the thing that only exists in a real page: the account is answered a few FRAMES after load, so
+  // between mount and that answer every surface is reading the anonymous purse. The card game's
+  // welcome stake fires on `marks === 0` — and an unresolved read of an empty anonymous purse looks
+  // exactly like a new player, so an ungated stake would re-grant itself on every sign-in and write
+  // the coins somewhere the account cannot spend them. `useWallet().loading` is what holds it.
+  const MAGII = new globalThis.URL(URL_).origin + '/magii'
+  const loadMagii = async () => {
+    await page.goto(MAGII, { waitUntil: 'domcontentloaded' })
+    await page.waitForFunction(() => document.body.innerText.trim().length > 0, { timeout: 45_000 }).catch(() => {})
+    // The stake lands in an effect chained behind the session fetch, so settle before reading.
+    await page.waitForFunction(() => (window as unknown as { __t?: number }).__t !== undefined || true, { timeout: 1000 }).catch(() => {})
+    await new Promise(r => setTimeout(r, 1200))
+  }
+  const purse = (o: string | null) => page.evaluate((k: string) => {
+    const raw = localStorage.getItem(k)
+    return raw ? (JSON.parse(raw) as { marks: number }).marks : null
+  }, o ? `ather:save:wallet:${o}` : 'ather:save:wallet')
+
+  who = null
+  await page.evaluate(() => localStorage.clear())
+  await loadMagii()
+  await page.evaluate(() => localStorage.setItem('ather:save:wallet', '{"marks":240,"totalEarned":240,"totalSpent":0}'))
+
+  who = A
+  await loadMagii()
+  ok(await purse(A) === 240, `★★ A's 240 anonymous marks were adopted, to the coin (got ${await purse(A)})`)
+  ok(await purse(null) === null, 'and the anonymous purse is emptied, so nobody adopts it twice')
+
+  who = B
+  await loadMagii()
+  const bPurse = await purse(B)
+  ok(bPurse !== 240, `★★ B does NOT inherit A's coins (B has ${bPurse})`)
+  ok(await purse(A) === 240, "and A's balance survived B's visit")
+  // ⚠ B is a genuinely new player, so the welcome stake is CORRECT for them — what must not happen
+  // is A's 240 being read as "empty" and topped up, or B being seeded twice.
+  ok(bPurse === null || bPurse > 0, `B either has no purse yet or a fresh stake, never a partial of A's (${bPurse})`)
+
+  who = A
+  await loadMagii()
+  ok(await purse(A) === 240, `★★ returning as A does not re-grant a welcome stake — the balance is still exactly 240 (got ${await purse(A)})`)
+
+  // ── 7. ★★ THE CARD SAVE READ BEFORE THE OWNER IS KNOWN ────────────────────────────────────────
+  // ⚠ THIS CASE EXISTS BECAUSE THE OBVIOUS ONE DID NOT FAIL. A mutation sweep removed BOTH gates
+  // meant to hold the welcome stake and this probe stayed green — the stake is really protected by
+  // the persisted `seeded` flag inside the (now per-account) card save, so the guards I wrote for it
+  // were never the thing standing in the way. What IS reachable is one layer down: the card save is
+  // read once, on mount, through a slot that answers ANONYMOUS until the session lands. So the setup
+  // has to be one adoption cannot paper over — an account that ALREADY has a save (adoption locks,
+  // and moves nothing) while a different anonymous save sits beside it. Read early, the signed-in
+  // player gets the anonymous collection for the whole session and never re-reads.
+  who = A
+  await page.evaluate((a: string) => {
+    localStorage.setItem(`ather:save:magii:${a}`, JSON.stringify({ seeded: true, ownedCollections: ['tavern', 'vault'] }))
+    localStorage.setItem('ather:save:magii', JSON.stringify({ seeded: true, ownedCollections: ['tavern'] }))
+  }, A)
+  await loadMagii()
+  const collections = await page.evaluate((a: string) => {
+    const raw = localStorage.getItem(`ather:save:magii:${a}`)
+    return raw ? (JSON.parse(raw) as { ownedCollections?: string[] }).ownedCollections ?? [] : []
+  }, A)
+  ok(collections.includes('vault'),
+     `★★ A's own card save is what was read and re-saved, not the anonymous one beside it (${collections.join(',') || 'nothing'})`)
 } finally {
   await browser.close()
 }
