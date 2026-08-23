@@ -1,7 +1,7 @@
 // ── The input layer's oracle ──────────────────────────────────────────────────────────────────
 // Run: npx tsx src/lib/input/input.test.ts
 
-import { DEFAULTS, ALL_ACTIONS, LABEL, PAD, HELD, OWNER_ONLY, STICK_DRIVEN, type ActionId } from './actions'
+import { DEFAULTS, ALL_ACTIONS, LABEL, PAD, HELD, OWNER_ONLY, STICK_DRIVEN, GROUPS, type ActionId } from './actions'
 import { merge, rebind, conflicts, orphans, padGaps, resetAll, BINDINGS_KEY, type BindingMap } from './bindings'
 import { deadzone, kindOf } from './gamepad'
 import { hintFor, hintsFor, keyName, padName } from './hints'
@@ -23,6 +23,16 @@ for (const id of Object.keys(LABEL) as ActionId[]) {
 for (const id of [...HELD, ...OWNER_ONLY]) {
   ok(ALL_ACTIONS.includes(id), `HELD/OWNER_ONLY names "${id}", which is not a registered action`)
 }
+
+// ── 1b. the menu's grouping cannot silently drop a row ─────────────────────────────────────────
+// A hand-kept grouping omits quietly: the player never sees the row, and nobody reports a menu
+// entry they do not know exists.
+const grouped = GROUPS.flatMap(g => g.actions)
+for (const id of ALL_ACTIONS) {
+  ok(grouped.filter(x => x === id).length === 1,
+     `${id} appears ${grouped.filter(x => x === id).length} times across GROUPS — must be exactly once, or the menu drops or duplicates it`)
+}
+for (const id of grouped) ok(ALL_ACTIONS.includes(id), `GROUPS names "${id}", which is not a registered action`)
 
 // ── 2. THE SHIPPED KEYBOARD CONTROLS ARE PINNED ────────────────────────────────────────────────
 // ⚠ These are in players' hands TODAY, read off VoxelWorld.tsx. A change here is a silent remap of

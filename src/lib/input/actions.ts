@@ -135,4 +135,21 @@ export const STICK_DRIVEN: readonly ActionId[] = [
   'move.forward', 'move.back', 'move.left', 'move.right',
 ] as const
 
+/**
+ * How the rebinding menu groups the list.
+ *
+ * ⚠ EVERY ACTION MUST BE IN EXACTLY ONE GROUP, and `input.test.ts` asserts it. A menu built from a
+ * hand-kept grouping silently DROPS whatever it forgets — the player would simply never see that
+ * row, and "the menu does not list Craft" is a bug nobody reports because nobody knows to look for
+ * it. Same failure as an unclassified file in a guard's PENDING list: absence reads as nothing.
+ */
+export const GROUPS: readonly { title: string; actions: readonly ActionId[] }[] = [
+  { title: 'Movement', actions: ['move.forward', 'move.back', 'move.left', 'move.right', 'move.jump', 'move.slide'] },
+  { title: 'World',    actions: ['world.mine', 'world.place', 'world.interact'] },
+  { title: 'Items',    actions: ['item.draw', 'item.drop', 'item.cycle'] },
+  { title: 'Building', actions: ['ui.build', 'build.rotate', 'build.tierUp', 'build.tierDown'] },
+  { title: 'Menus',    actions: ['ui.craft', 'ui.map', 'ui.inventory', 'ui.chat', 'ui.close'] },
+  { title: 'Keeper',   actions: ['owner.fly'] },
+] as const
+
 export const ALL_ACTIONS = Object.keys(DEFAULTS) as ActionId[]
