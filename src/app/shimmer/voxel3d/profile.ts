@@ -103,10 +103,22 @@ export interface FrameProfile {
    * The window means could not see it (a quarter-second freeze averaged into nineteen clean
    * frames), and `worst` could see that it happened while being unable to say what it was.
    *
-   * ⚠ AN UNACCOUNTED ROW LEADING **HERE** IS A REAL FINDING, NOT THE EXPECTED READING. For the
-   * window means, a leading remainder is normal — render submit sits outside the marked span by
-   * construction. For ONE catastrophic frame it says the stall happened somewhere no mark covers,
-   * which rules out every wrapped zone at once. That is the answer, not a gap in the answer.
+   * ⚠⚠⚠ CORRECTED 2026-08-23, AND THE LINE THAT STOOD HERE IS WHY THIS WENT UNQUESTIONED FOR TWO
+   * SESSIONS. It read: *"an UNACCOUNTED row leading here is a real finding, not the expected
+   * reading … it rules out every wrapped zone at once. That is the answer, not a gap in the
+   * answer."* **That is a stronger claim than the data ever supported, and it fails toward a
+   * finding, so it got acted on.** Until `frameStart` shipped, this table's parts and its duration
+   * came from DIFFERENT FRAMES (see `prevAcc`), so a stall inside `gl.render()` billed a frame
+   * whose callback was innocent and printed `100% UNACCOUNTED, every zone 0.00` **by
+   * construction** — the reading was guaranteed, not earned, and it could not have come out any
+   * other way. It ruled out nothing.
+   *
+   * ★ WHAT IT MEANS NOW THAT THE FRAME DIVIDES EXACTLY: a leading remainder here is a WIRING
+   * ERROR, because `PROLOGUE_ROW` and `TAIL_ROW` between them cover everything outside the marks.
+   * The reading that used to be reported as "outside every mark" is now the `TAIL_ROW` row, which
+   * names a place instead of an absence — and even that is a LOCATION, not a cause. ⚠ And when
+   * `partitioned` is false the old undivided row is back and this whole paragraph does not apply:
+   * check the flag before reading meaning into a remainder.
    */
   worstZones: FrameProfile['zones']
   /**
