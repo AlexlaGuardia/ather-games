@@ -11,6 +11,83 @@ real **gimmick** (not watch-and-wait) · **canon-parallel** (serves Athernyx, no
 black, CRT bloom). Mana'nana went glossy-modern; each game gets its own skin under
 the Arcade frame.
 
+## 🚪 Shimmer voxel3d — THE CROSSING COURT + THE TUTORIAL ARCH (2026-08-23, jin-cc world lane)
+> **The keeper's ways OUT get a place, and the tutorial's only way out stopped being buried.**
+> Shipped `8de7a26` · `8cfefb8` · `6a2ca61` · `47d0ae9`. Pure math + oracles — **nothing renders yet.**
+> 897 + 70 asserts, tsc at the 8-error baseline (all pre-existing test files), canon **10 CLEAN**,
+> 75 voxel/voxel3d suites green, 0 failed, 0 killed (`plot.test.ts` 93s — size ceilings against 600s).
+>
+> - **Left off:** geometry and guards are in git and on prod; **no wiring** — `socketCells` is not yet
+>   called from `VoxelWorld.tsx`. The court cannot be walked to.
+> - **Next:** wire the render · greybox Rune Hold so the gate socket has a destination · then the
+>   consumed-gate flow (**arrive → persist → remove**, never remove first).
+>
+> **THE COURT.** `voxel3d/crossings.ts`. Alex ruled the shape: *"more like the portals from Diablo —
+> the runehold one is up from the start, then as the player unlocks gates for the ather they appear
+> here, like a home plot gate station"*, placed *"near the tunnel passage to the wilds, maybe 15-20
+> blocks away."*
+> - **★★ IT IS NOT AT THE FOLD-SEAM, AND THAT IS THE CANON POINT.** `waymark.ts` already does
+>   hub-and-spoke with the plot as hub and asks the keeper to choose **at the seam** — the one spot
+>   canon insists stays unbuilt (`seam.ts`: *no frame, no arch, no lintel*; `VoxelWorld.tsx`: *a build
+>   that puts a locked gate on a plot has misread the world*). Giving the choosing its own building is
+>   that rule finally getting what it asked for. **The seam is deliberately NOT a socket** — it is
+>   two-way by Alex's 08-16 ruling and you leave by WALKING through it.
+> - **★★ VOCABULARY IS AN ASSERT, NOT A CONVENTION.** Rune Hold is a **GATE** (crosses out of the
+>   Ather, Greg-given, socket 0, always up); every Ather destination is a **WAYMARK** and canon
+>   forbids the word gate for it. `npm run canon` checks names and rosters and **says outright it
+>   cannot see vocabulary**, so a mislabelled socket would ship silent and become accidental canon.
+>   The split lives in `SocketKind` — a mislabel is a type error.
+> - **⚠⚠ THREE OF MY OWN CONSTANTS WERE WRONG AND EACH ONE ONLY SHOWS ACROSS A DIMENSION A SINGLE
+>   SAMPLE CANNOT SEE.** (1) A fixed **angle** is a fraction of the circumference, so a constant angle
+>   is a growing distance — 61 · 80 · 100 blocks from the seam across the three tiers. `plotThreshold`
+>   had fixed this exact bug one directory over (*"INSET IS IN BLOCKS NOW, NOT A FRACTION OF THE
+>   RADIUS"*), in the file this module derives from, and I had read that comment the same day.
+>   (2) The court **moves** when Greg widens the fold and **placed stone does not** — a tier-2 keeper
+>   would own two abandoned courts ~88 blocks apart. `staleCourts()` names every older site from the
+>   tier alone: no new save field, self-healing for older saves. (3) `COURT_ARC` measured the row's
+>   **centre**, and the row is 24 blocks wide — so "18 blocks away" put an arch **6** blocks from the
+>   seam, inside the threshold mound, on **all 24 seed×tier combinations**.
+> - **⚠ THE THRESHOLD MOUND FLOORS THE RULING AT ~20 AND NO TUNING GETS UNDER IT.** 12 half-wide,
+>   13 deep, diagonal reach 17.7, plus the frame's half-width: 18 fouls 3 of 24, 20 fouls 2, **21 is
+>   the first clean value** (nearest socket 20.2). So Alex's 15-20 is satisfiable **only at its top
+>   edge**. Documented in both files; the assert window says which end is a ruling and which end is
+>   geometry. A true 15 needs the mound to shrink first.
+> - **★ Arc→angle by dividing by the radius is exact only on a circle.** `edgeAt` wobbles, so the
+>   error is radial: the nearest socket landed **17.7-23.3** blocks out while the constant read 18,
+>   one seed fully outside the window. The bearing is **bisected against the real distance** now.
+>
+> **THE ARCH (`voxel3d/gate.ts`).** Alex: *"the glades will be a one time visit, itll be the tutorial
+> area, after they complete the tutorial they take a gate to the home plot (that disappears after they
+> exit it)."*
+> - **★★★ ITS POSITION WAS DERIVED FROM THE THING THAT DIDN'T MOVE.** `GATE_DIST = 300` from the glade
+>   toward the garden was right on 08-08 and silently wrong from 08-15, when the fold was carved at
+>   the origin with radius 500: **r=358 inside a shell at ~501, 20 of 20 cells fold-interior air on
+>   eight seeds.** The derivation was anchored to the glade and had **no opinion about the fold**, so
+>   nothing about it could notice the fold arriving. Now measured from `maxBubbleReach` (shell **plus
+>   its mound**, 540) + a standoff, so a fold that grows or deepens pushes the arch out instead.
+> - **⚠⚠ AND THE FIX'S OWN BUG READ AS SUCCESS.** A reversed unit vector put the arch at the right
+>   RADIUS on the **opposite side of the world** — and the clearance check returned a perfect **0/20**,
+>   because the far side of the planet is indeed outside the fold. **A guard satisfied by being
+>   ANYWHERE is not a placement guard.** Only the distance to a known thing caught it (1076 blocks to
+>   the fold's door). The test now pins the arch BETWEEN the fold and the glade, on its bearing,
+>   inside the glade, and a short walk from the door.
+> - `gate.ts` had **no test at all**. Now 70 asserts, 5 mutations, 4 red (the original derivation AND
+>   the sign slip). The survivor is labelled: the 30-block standoff is **headroom, not a guard** —
+>   `maxBubbleReach` does the work.
+> - **⚠ SEQUENCING, NOT DESIGN: the consumed gate must not ship before Rune Hold is reachable.**
+>   Fold widening runs through `GregDialogue`, and Greg exists in exactly one place in this walker —
+>   the Glade. One-time area + consumed exit = **the keeper permanently loses boundary widening**
+>   (tiers 1 and 2 unreachable) and waymark purchase. Alex's mitigation (*"greg can be found at his
+>   shop in runehold during the day"*) is canon-correct and there IS a `gregory` NPC in the 2D
+>   rune-hold zone — but that zone is on the **owner-gated play3d route** with no walker-to-walker
+>   crossing. **This puts Rune Hold on the critical path, ahead of the Crucible.**
+> - **⏭ ALEX:** shop hours are Jin's (ruled). **Still open:** wiring order for the consumed gate
+>   (arrive → persist → remove) is mine; **whether "disappears" is an in-world fact or a game fact is
+>   `[OPEN]` with Magii** — until ruled: no ruin, no terrain wall, no line explaining why the way back
+>   is shut.
+> - **Files:** `voxel3d/crossings.ts` + `crossings.test.ts` (new) · `voxel3d/gate.ts` (rederived) ·
+>   `voxel3d/gate.test.ts` (new).
+
 ## 🗓️ STATE OF THE ARCADE — POLISH LAP (reconciled 2026-07-01) [jin]
 > **The new-cabinet pipeline is CLOSED — all 14 cabinets are live.** The 06-25 nine-day push delivered its
 > two sanctioned builds (**Dewdrop** + **Vault**), plus **Driftling** + **Squall** in the same arc, fulfilling
