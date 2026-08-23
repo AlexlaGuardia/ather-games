@@ -44,6 +44,7 @@ import { editIndex, recordEdit, applyEdits, packEdits, unpackEdits, isStale, GEN
 import { cropForSeed, CROP_DEFS } from '../engine/farming'
 import { placeBedBlocker, plotRefusalLine, countBeds, isGardenBed } from './garden'
 import { createProfiler, snapshotText, shortRowLabel, type FrameProfile, gpuTrusted } from './profile'
+import { stopScan, SPAWN_SCAN_MAX } from './spawn-budget'
 // ── the input layer (lib/input) ───────────────────────────────────────────────────────────────
 // Keys used to be decided inline, 25 times, across three listeners in this file — so the meaning of
 // a key could not be tested and could not be rebound. The meaning lives in lib/input now and this
@@ -6060,6 +6061,10 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
       hollowClock.current -= dt
       const cap = hollowCap(cols.current.size)
       const spawnHollow = (sx: number, sh: number, sz: number) => {
+        // ★ A SUB-ZONE, OPENED HERE SO BOTH CALL SITES ARE COVERED BY ONE MARK PAIR. Marks are flat
+        // by construction, so re-opening `world:spawn` at the end resumes the parent zone — this
+        // measures exactly the mesh construction and its scene-graph insert, nothing around it.
+        prof.current.mark('world:spawn/mesh')
         const form = pickForm(Math.random())
         const mesh = new THREE.Mesh(hollowGeo[form], hollowMat[form])
         mesh.scale.set(0.01, 0.01, 0.01)          // rises from nothing — the forming IS the tell
@@ -6070,6 +6075,7 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
                 hp: HOLLOW_FORMS[form].hp, gutter: 0, phase: Math.random() * 6.28 },
           mesh,
         })
+        prof.current.mark('world:spawn')   // resume the parent zone — see the mark above
       }
       // The despawn line IS the load edge — it derives from viewRadius now, so a wider view means
       // a wider night. hollows.ts's DESPAWN_DIST constant documented the r=6 baseline (96).
@@ -6085,14 +6091,27 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
         let lightBudget = 2
         // Random start offset so the same early-loaded columns do not win every night.
         const start = Math.floor(Math.random() * Math.max(1, keys.length))
+        // ── ★★★ THE SWEEP IS BUDGETED — it owned 137.5ms of a 163ms frame before this ───────────
+        // See `spawn-budget.ts` for the measurement and for why the bound is on the SWEEP rather
+        // than on whichever line turns out to be slowest. `examined` counts columns we actually
+        // looked at, not columns we skipped for distance — skipping is nearly free and must not
+        // burn the budget, or a player standing far from the loaded edge would starve the spawner.
+        const scanAt = performance.now()
+        let examined = 0
         for (let i = 0; i < keys.length && hollows.current.length < cap; i++) {
+          if (stopScan(examined, performance.now() - scanAt)) break
           const [scx, scz] = keys[(start + i) % keys.length].split(',').map(Number)
           const ccx = scx * SECTION + SECTION / 2, ccz = scz * SECTION + SECTION / 2
           // A column entirely beyond despawn range would breed instant despawns — skip it.
           if (Math.hypot(ccx - p.x, ccz - p.z) > despawn + SECTION / 2) continue
           const kk = key(scx, scz)
           if (!lightCache.current.has(kk)) { if (lightBudget <= 0) continue; lightBudget-- }
+          examined++
+          // ★ The one call anybody had already suspected, given its own row so the next capture can
+          // confirm or clear it rather than leaving it the default answer.
+          prof.current.mark('world:spawn/light')
           const lf = lightFor(scx, scz)
+          prof.current.mark('world:spawn')
           // MC's structure: ONE random anchor per column per sweep. Coverage comes from sweeping
           // every column, not from hammering one.
           const wx = scx * SECTION + Math.floor(Math.random() * SECTION)

@@ -577,10 +577,33 @@ const clock = () => { const c = { t: 0 }; return { c, now: () => c.t } }
 
   const seen = new Map<string, number>()
   for (const m of marks) seen.set(m, (seen.get(m) ?? 0) + 1)
-  const dupes = [...seen.entries()].filter(([, n]) => n > 1)
+
+  // ★★★ A REPEATED MARK IS LEGITIMATE **ONLY** AS A SUB-ZONE BRACKET, AND THE RULE IS DERIVED FROM
+  // THE NAME RATHER THAN FROM A LIST (2026-08-23, and this guard caught its own author to get here).
+  // Marks are FLAT: to measure a slice inside a zone you open `world:spawn/light`, do the work, then
+  // RE-OPEN `world:spawn`. So the parent legitimately appears more than once — while `world:ticks`
+  // marked in two unrelated regions 500 lines apart was the original silent-sum bug.
+  //
+  // ⚠ THE CHEAP FIX WAS TO EXEMPT THE PARENT, AND IT WOULD HAVE DISARMED THE GUARD. A hand-kept
+  // "these may repeat" list is the exemption shape this codebase has paid for four times. Instead the
+  // relationship is spelled INTO the zone name — `X/sub` declares its parent — so a new sub-zone is
+  // covered the day it is written and a genuine duplicate is still caught.
+  const subsOf = (parent: string) => [...seen.keys()].filter(k => k.startsWith(`${parent}/`))
+  const dupes = [...seen.entries()].filter(([n, c]) => c > 1 && subsOf(n).length === 0)
   ok(dupes.length === 0,
-    `★★★ every zone name is marked in exactly ONE place — two places sharing a name silently sum ` +
-    `two unrelated regions into one row (offenders: ${dupes.map(([n, c]) => `${n} x${c}`).join(', ') || 'none'})`)
+    `★★★ a zone name repeats only to close a sub-zone — two unrelated regions sharing a name ` +
+    `silently sum into one row (offenders: ${dupes.map(([n, c]) => `${n} x${c}`).join(', ') || 'none'})`)
+
+  // ★★ AND THE ARITHMETIC IS EXACT: a parent is opened ONCE and re-opened ONCE PER SUB-ZONE. A
+  // missing re-open bills the rest of the frame to the sub-zone; a spare one is a stray mark.
+  for (const [name, count] of seen) {
+    const subs = subsOf(name)
+    if (!subs.length) continue
+    const wantParent = 1 + subs.reduce((n, s) => n + (seen.get(s) ?? 0), 0)
+    ok(count === wantParent,
+      `★★★ ${name} is opened once and re-opened once per sub-zone (${count}, want ${wantParent} ` +
+      `for ${subs.join(', ')}) — a missing re-open bills the rest of the frame to the sub-zone`)
+  }
 
   // ★ AND THE SPLIT ITSELF, NAMED. If someone folds these back into one row the row goes big and
   // mute again, which is precisely the state that survived two sessions of investigation.
