@@ -43,7 +43,7 @@ import { blockDef, materialForItem, emitOf, BLOCKS, type BlockSkill } from '../v
 import { editIndex, recordEdit, applyEdits, packEdits, unpackEdits, isStale, GENERATOR_VERSION, type ColumnEdits } from '../voxel/edits'
 import { cropForSeed, CROP_DEFS } from '../engine/farming'
 import { placeBedBlocker, plotRefusalLine, countBeds, isGardenBed } from './garden'
-import { createProfiler, snapshotText, type FrameProfile } from './profile'
+import { createProfiler, snapshotText, type FrameProfile, gpuTrusted } from './profile'
 import {
   plantBlocker, plantRefusalLine, plantInBed, harvestBed, cropAt, readyAt, clearBed,
   bedsToSave, bedsFromSave, type PlantedBeds,
@@ -8401,10 +8401,18 @@ function ProfilePanel({ p, copiedAt }: { p: FrameProfile; copiedAt: number }) {
       <div style={{ margin: '3px 0 5px' }}>
         {p.fps} fps · {p.ms.toFixed(1)} ms · worst {p.worst.toFixed(1)}
       </div>
-      <div style={{ marginBottom: 5, opacity: p.gpuMs === null ? 0.72 : 1 }}>
+      <div style={{ marginBottom: 5, opacity: p.gpuMs === null || !gpuTrusted(p) ? 0.72 : 1 }}>
         {p.gpuMs === null
           ? 'gpu  unavailable — cannot say cpu- or gpu-bound'
-          : `gpu  ${p.gpuMs.toFixed(1)} ms (${((p.gpuMs / p.ms) * 100).toFixed(0)}%)`}
+          // ★★ THE MS SURVIVES, THE PERCENTAGE DOES NOT (the world lane's find, `f692d31`). `gpuMs`
+          // averages over the samples that LANDED and `ms` over every frame, so their ratio divides
+          // two means taken over different populations — it measured 110% on a real machine. The raw
+          // millisecond figure is still honest; only the share of the frame becomes meaningless.
+          // ⚠ WITHHELD ≠ UNAVAILABLE. A flaky timer and an absent one are different claims about
+          // this machine, and collapsing them is how a reader stops trusting the panel entirely.
+          : !gpuTrusted(p)
+            ? `gpu  ${p.gpuMs.toFixed(1)} ms · share withheld (${p.gpuSamples}/${p.frames} timed)`
+            : `gpu  ${p.gpuMs.toFixed(1)} ms (${((p.gpuMs / p.ms) * 100).toFixed(0)}%)`}
       </div>
       {p.zones.map(z => (
         <div key={z.name} style={{
