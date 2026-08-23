@@ -3744,6 +3744,8 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
    *  ⚠ NOT A BOOLEAN, because the court MOVES when Greg widens the fold. A `courtBuilt`
    *  flag would build once and leave the old cut stone stranded inland forever. */
   const courtTier = useRef(-1)
+  /** Which socket the keeper is currently standing in, so the arch speaks once rather than per frame. */
+  const inSocket = useRef<number | null>(null)
   // Placements are grouped by the column that OWNS them (the one containing the piece origin) —
   // the same ownership rule trees and carvers use, so a piece straddling a border saves once.
   const placements = useRef<(Placement & { gen?: string })[]>([])
@@ -6872,6 +6874,34 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
           }
         }
         courtTier.current = plotTier.current
+      }
+    }
+
+    // ── standing in a crossing ────────────────────────────────────────────────────────────────
+    // ★ AN ARCH THAT ANSWERS NOTHING READS AS BROKEN, NOT AS UNFINISHED. Alex walked 21 blocks to
+    // the gate and reported *"i see the empty archway but i dont see how to use it"* — and he was
+    // right: the court had no affordance at all, so a crossing that is not built yet and a crossing
+    // that is broken looked identical from inside the doorway. **A thing that cannot work yet still
+    // has to say so.** Silence is the one response that carries no information.
+    //
+    // ⚠ AND IT SAYS ONLY WHAT IS TRUE OF THE BUILD, NOT OF THE WORLD. It is tempting to write
+    // Gregory explaining that the gate wants its rune — canon does put the first gate-rune in his
+    // gift — but NPC voice is raven's and a line invented here becomes accidental canon. The message
+    // names the crossing and reports the build's own state; the fiction stays unwritten.
+    if (space.current === 'plot' && courtTier.current === plotTier.current) {
+      const cfg = plotCfg.current
+      const a = courtAnchor(SEED, cfg)
+      let standing: number | null = null
+      if (a.y !== null) {
+        for (const sk of courtSockets(SEED, cfg)) {
+          // The doorway is the middle 3 of a 5-wide frame; 1.6 covers it with the keeper's own body.
+          if (Math.hypot(p.x - (sk.x + 0.5), p.z - (sk.z + 0.5)) < 1.6) { standing = sk.index; break }
+        }
+      }
+      if (standing !== inSocket.current) {
+        inSocket.current = standing
+        if (standing === 0) onSay('the Rune Hold gate — the crossing to the town is not built yet')
+        else if (standing !== null) onSay('an empty waymark socket — nothing bound to it')
       }
     }
 
