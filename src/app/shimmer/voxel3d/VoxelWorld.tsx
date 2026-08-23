@@ -43,7 +43,7 @@ import { blockDef, materialForItem, emitOf, BLOCKS, type BlockSkill } from '../v
 import { editIndex, recordEdit, applyEdits, packEdits, unpackEdits, isStale, GENERATOR_VERSION, type ColumnEdits } from '../voxel/edits'
 import { cropForSeed, CROP_DEFS } from '../engine/farming'
 import { placeBedBlocker, plotRefusalLine, countBeds, isGardenBed } from './garden'
-import { createProfiler, snapshotText, type FrameProfile, gpuTrusted } from './profile'
+import { createProfiler, snapshotText, shortRowLabel, type FrameProfile, gpuTrusted } from './profile'
 import {
   plantBlocker, plantRefusalLine, plantInBed, harvestBed, cropAt, readyAt, clearBed,
   bedsToSave, bedsFromSave, type PlantedBeds,
@@ -5546,6 +5546,12 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
     // answer to the one question it exists to settle. `gpuFrame` closes the previous frame's query
     // and opens the next, so the window always spans a real render. See profile.ts for the full note.
     prof.current.gpuFrame()
+    // ★★ AND THE CALLBACK-START STAMP, WITHOUT WHICH THE REMAINDER CANNOT BE DIVIDED. r3f takes its
+    // `delta` at the top of the frame and calls `gl.render` AFTER every subscriber, so the render
+    // submit lives between our `frameEnd` and this line. Stamping here is what lets the profiler
+    // separate "the stall was in the submit" from "the stall was in our unwrapped prologue" — see
+    // `TAIL_ROW`. Skipping it degrades to one undivided UNACCOUNTED row, never to invented ones.
+    prof.current.frameStart()
     // Both setters are guarded for idempotence, so this costs a comparison. `enabled` clears the
     // window when it actually flips, so a toggle cannot attribute a long idle gap to whichever zone
     // happened to be open.
@@ -8420,13 +8426,34 @@ function ProfilePanel({ p, copiedAt }: { p: FrameProfile; copiedAt: number }) {
           color: z.unaccounted ? '#ffcf8a' : undefined,
         }}>
           <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            {z.unaccounted ? 'UNACCOUNTED' : z.name}
+            {shortRowLabel(z.name)}
           </span>
           <span style={{ fontVariantNumeric: 'tabular-nums', flex: '0 0 auto' }}>
             {z.ms.toFixed(2)} ms · {z.pct.toFixed(0)}%
           </span>
         </div>
       ))}
+      {/* ★★ THE STALL LINE, LIVE. A mean cannot describe a freeze — the whole reason `worstZones`
+          exists — and until now the only way to see one was to copy the reading out and read it
+          elsewhere. Only shown when the worst frame is meaningfully off the mean, same threshold
+          `snapshotText` uses, because a row that is noise on a healthy run trains people to skip it. */}
+      {p.worst > p.ms * 2 && p.worstZones.length > 0 && (
+        <div style={{ marginTop: 6, paddingTop: 5, borderTop: '1px solid rgba(150,180,210,0.18)' }}>
+          <div style={{ color: '#ffcf8a' }}>
+            stall {p.worst.toFixed(0)} ms · {shortRowLabel(p.worstZones[0].name)} {p.worstZones[0].pct.toFixed(0)}%
+          </div>
+          {/* ⚠ THAT FRAME'S OWN GPU TIME, NEVER THE WINDOW MEAN — a blocked main thread and a busy
+              GPU land in the same row and want opposite fixes. `dropped` is kept distinct from
+              `pending`: one is never coming, the other may arrive next window. */}
+          <div style={{ opacity: 0.75 }}>
+            {p.worstGpuMs !== null
+              ? `gpu on that frame  ${p.worstGpuMs.toFixed(1)} ms (${((p.worstGpuMs / p.worst) * 100).toFixed(0)}%)`
+              : p.worstGpuStatus === 'dropped' ? 'gpu on that frame  dropped (disjoint)'
+              : p.worstGpuStatus === 'pending' ? 'gpu on that frame  pending'
+              : 'gpu on that frame  unavailable'}
+          </div>
+        </div>
+      )}
       <div style={{ marginTop: 6, opacity: 0.6, fontSize: 10 }}>
         {fresh ? 'copied to clipboard' : 'press P to copy this reading'}
       </div>

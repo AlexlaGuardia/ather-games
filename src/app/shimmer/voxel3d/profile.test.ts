@@ -4,7 +4,7 @@
 // Every assert below is a way of asking that, because the failure mode of a profiler is not that it
 // crashes — it is that it hands back a tidy breakdown of the 13% of the frame somebody remembered to
 // wrap and says nothing about the other 87%.
-import { createProfiler, snapshotText, gpuTrusted, GPU_COVERAGE_MIN, WINDOW_MS, MAX_ZONES, OVERFLOW, UNACCOUNTED_ROW } from './profile'
+import { createProfiler, snapshotText, gpuTrusted, GPU_COVERAGE_MIN, WINDOW_MS, MAX_ZONES, OVERFLOW, UNACCOUNTED_ROW, PROLOGUE_ROW, TAIL_ROW } from './profile'
 
 let pass = 0
 const fails: string[] = []
@@ -341,6 +341,181 @@ const clock = () => { const c = { t: 0 }; return { c, now: () => c.t } }
     cols: 1, meshes: 1, draws: 1, tris: 1, geometries: 1, programs: 1, gpuStatus: 'ok' }
   ok(!/worst frame —/.test(snapshotText(hw, ctx)), '★ a healthy window prints no worst-frame table')
   ok(/worst frame —/.test(snapshotText(w, ctx)), '★★ and a stalling one does')
+}
+
+// ── 9. ★★★ THE WORST FRAME'S PARTS AND THE WORST FRAME'S DURATION MUST BE THE SAME FRAME ───────
+// The defect this section exists to catch, read off the HOST'S OWN SOURCE rather than assumed
+// (`@react-three/fiber` `update()`, dist/events-*.esm.js):
+//
+//     delta = state.clock.getDelta()        // ← taken at the TOP of the frame
+//     for (subscribers) subscription(state, delta)   // ← our useFrame, marks, frameEnd(delta)
+//     state.gl.render(scene, camera)        // ← THE RENDER SUBMIT HAPPENS AFTER frameEnd
+//
+// So the `dtRaw` handed to frame N+1 spans `callbackStart(N) → callbackStart(N+1)`: it contains
+// frame **N**'s callback and frame **N**'s render submit, and contains none of frame N+1's work.
+// Pairing it with frame N+1's zone map splices two frames into one reading — which is the exact
+// defect `frameEnd` already documents one level up ("the LAST frame's parts wearing the worst
+// frame's duration") surviving inside its own fix.
+//
+// ⚠⚠ AND IT FAILS IN THE DIRECTION THAT READS AS A FINDING. A stall inside `gl.render()` bills the
+// NEXT frame, whose callback is innocent, so the panel prints `100% UNACCOUNTED, every zone 0.00` —
+// which reads as "this rules out every wrapped zone at once" and actually means "these are a
+// different frame's parts". Alex's 2026-08-23 capture is exactly that shape.
+{
+  /** Drives the profiler the way r3f drives it. Every duration in ms; `render` is post-frameEnd. */
+  const r3f = (p: ReturnType<typeof createProfiler>, c: { t: number },
+               frames: { prologue: number; zones: [string, number][]; render: number }[]) => {
+    let prevStart: number | null = null
+    for (const f of frames) {
+      const callbackAt = c.t
+      const dt = prevStart === null ? 0.016 : (callbackAt - prevStart) / 1000
+      p.frameStart()
+      c.t += f.prologue
+      for (const [name, ms] of f.zones) { p.mark(name); c.t += ms }
+      p.frameEnd(dt)
+      c.t += f.render
+      prevStart = callbackAt
+    }
+  }
+
+  const { c, now } = clock()
+  const p = createProfiler(now)
+  p.enabled = true
+  r3f(p, c, [
+    // frame 1: a normal callback, then a 200ms RENDER SUBMIT — the buffer-upload shape.
+    { prologue: 1, zones: [['ticks', 10]], render: 200 },
+    // frame 2: an ordinary cheap callback. Its dtRaw is 211ms and none of that is its own.
+    { prologue: 0.1, zones: [['ticks', 0.1]], render: 5 },
+    { prologue: 0.1, zones: [['ticks', 10]], render: 6 },
+  ])
+  c.t += WINDOW_MS + 1
+  const w = p.publish()!
+
+  ok(near(w.worst, 211, 0.5), `the 200ms submit surfaces as the worst frame (${w.worst.toFixed(1)}ms)`)
+  const top = w.worstZones[0]
+  ok(!(top.unaccounted && top.ms > 200),
+    `★★★ the worst frame does not report 100% UNACCOUNTED for a stall it can account for (got ${top.name} ${top.ms.toFixed(1)}ms)`)
+  const ticks = w.worstZones.find(z => z.name === 'ticks')
+  ok(!!ticks && near(ticks.ms, 10, 0.5),
+    `★★★ the worst frame's zones are the frame whose callback its dt CONTAINS (ticks ${ticks?.ms.toFixed(2)}, want 10)`)
+
+  // ★★ AND THE STALL LANDS ON A ROW THAT SAYS WHERE IT WAS. `after frameEnd` is where a geometry
+  // upload at first draw lives — the difference between "nobody wrapped this" and "this is outside
+  // our callback entirely", which are different investigations.
+  const tail = w.worstZones.find(z => z.name === TAIL_ROW)
+  ok(!!tail && near(tail.ms, 200, 0.5),
+    `★★★ the 200ms render submit is named, not left as a remainder (${tail?.ms.toFixed(1)}ms)`)
+  const pro = w.worstZones.find(z => z.name === PROLOGUE_ROW)
+  ok(!!pro && near(pro.ms, 1, 0.5), `★ and the unwrapped prologue is its own row (${pro?.ms.toFixed(2)}ms)`)
+
+  // ★★★ THE PARTITION IS EXACT, WHICH IS THE CLAIM THE TWO NEW ROWS BUY. A leftover remainder here
+  // is not rounding — it is a wiring error, and the assert is what keeps the row honest.
+  const un = w.worstZones.find(z => z.unaccounted)!
+  ok(near(un.ms, 0, 0.01), `★★★ nothing is left unaccounted once the frame divides exactly (${un.ms.toFixed(3)}ms)`)
+  ok(near(w.worstZones.reduce((s, z) => s + z.ms, 0), w.worst, 0.01),
+    'the worst frame’s rows still sum to the worst frame')
+  ok(near(w.unaccounted, 0, 0.01),
+    `★★ and the WINDOW divides exactly too, so its remainder is a wiring check (${w.unaccounted.toFixed(3)})`)
+  ok(w.partitioned === true, 'a host that stamps frameStart reports partitioned')
+
+  // ⚠ THE FIRST FRAME IS NOT COUNTED — its dt reaches back before we were watching.
+  ok(w.frames === 2, `★ only attributable frames are counted (${w.frames} of 3 driven)`)
+
+  // ── ★★★ FAIL-CLOSED: NO `frameStart`, NO INVENTED ROWS ──────────────────────────────────────
+  // The wrong way for this to degrade is two plausible rows derived from a timestamp nobody took.
+  const c2 = clock()
+  const q = createProfiler(c2.now); q.enabled = true
+  for (let i = 0; i < 3; i++) { q.mark('ticks'); c2.c.t += 4; q.frameEnd(0.016); c2.c.t += 12 }
+  c2.c.t += WINDOW_MS + 1
+  const w2 = q.publish()!
+  ok(w2.partitioned === false, '★★★ a host that never stamps frameStart says so')
+  ok(!w2.zones.some(z => z.name === TAIL_ROW || z.name === PROLOGUE_ROW),
+    '★★★ and invents neither row rather than deriving them from a stamp it never took')
+  ok(near(w2.zones.find(z => z.name === 'ticks')!.ms, 4, 0.01),
+    `★ the fallback still reports what it did measure (${w2.zones.find(z => z.name === 'ticks')!.ms.toFixed(2)}ms)`)
+  ok(w2.unaccounted > 10, '★ with the undivided remainder intact, as before')
+}
+
+// ── 10. ★★ THE WORST FRAME'S OWN GPU TIME — the row that splits `after frameEnd` in two ────────
+// A 215ms stall that is real GPU work and a 215ms stall waiting on an idle GPU land in the SAME
+// row. Only a per-frame timing separates them, and a window mean cannot supply one.
+{
+  // A fake WebGL2 whose queries land one frame late, exactly as a driver's do.
+  const mkGl = (opts: { disjoint?: boolean; ns?: (seq: number) => number } = {}) => {
+    let made = 0
+    const landed: any[] = []
+    return {
+      QUERY_RESULT_AVAILABLE: 'avail', QUERY_RESULT: 'res',
+      getExtension: (n: string) =>
+        n === 'EXT_disjoint_timer_query_webgl2' ? { TIME_ELAPSED_EXT: 'te', GPU_DISJOINT_EXT: 'dj' } : null,
+      createQuery: () => ({ id: ++made }),
+      beginQuery: (_t: string, q: any) => { q.begun = true },
+      endQuery: () => { landed.push(true) },
+      // ⚠ A query is available only once a LATER frame has ended — results are a frame or two
+      // behind, and a fake that answers instantly would never exercise `pending`.
+      getQueryParameter: (q: any, what: string) =>
+        what === 'avail' ? landed.length > q.id : (opts.ns ?? ((s: number) => s * 1e6))(q.id),
+      getParameter: (_p: string) => !!opts.disjoint,
+      deleteQuery: () => {},
+    } as unknown as WebGL2RenderingContext
+  }
+
+  const { c, now } = clock()
+  const p = createProfiler(now)
+  p.attach(mkGl({ ns: (seq) => (seq === 1 ? 12 : 3) * 1e6 }))   // frame 1's span cost 12ms of GPU
+  p.enabled = true
+  let prevStart: number | null = null
+  for (const f of [{ zones: 2, render: 200 }, { zones: 1, render: 5 }, { zones: 1, render: 5 },
+                   { zones: 1, render: 5 }, { zones: 1, render: 5 }]) {
+    const at = c.t
+    const dt = prevStart === null ? 0.016 : (at - prevStart) / 1000
+    p.gpuFrame(); p.frameStart()
+    p.mark('ticks'); c.t += f.zones
+    p.frameEnd(dt)
+    c.t += f.render
+    prevStart = at
+  }
+  c.t += WINDOW_MS + 1
+  const w = p.publish()!
+  ok(near(w.worst, 202, 1), `the render submit is the worst frame (${w.worst.toFixed(1)}ms)`)
+  ok(w.worstGpuStatus === 'ok', `★★★ the worst frame's own GPU timing lands (${w.worstGpuStatus})`)
+  ok(near(w.worstGpuMs!, 12, 0.01),
+    `★★★ and it is THAT frame's 12ms, not the window's mean (${w.worstGpuMs?.toFixed(2)})`)
+  ok(w.gpuMs !== null && w.gpuMs < 12,
+    `★★ while the window mean stays lower — the two must not be the same number (${w.gpuMs?.toFixed(2)})`)
+  ok(w.worstGpuMs! < w.worst / 2,
+    '★★★ so a stall can be read as "the GPU was not busy" — the claim the whole capture turns on')
+
+  // ⚠ DROPPED IS NOT PENDING. A disjoint driver throws the timing away, most likely on exactly the
+  // frame worth measuring; a reader told "pending" would re-capture forever.
+  const c2 = clock()
+  const d = createProfiler(c2.now)
+  d.attach(mkGl({ disjoint: true }))
+  d.enabled = true
+  let ps: number | null = null
+  for (let i = 0; i < 4; i++) {
+    const at = c2.c.t
+    const dt = ps === null ? 0.016 : (at - ps) / 1000
+    d.gpuFrame(); d.frameStart(); d.mark('ticks'); c2.c.t += 2; d.frameEnd(dt)
+    c2.c.t += i === 0 ? 200 : 5
+    ps = at
+  }
+  c2.c.t += WINDOW_MS + 1
+  const wd = d.publish()!
+  ok(wd.worstGpuStatus === 'dropped', `★★★ a disjoint timing says DROPPED (${wd.worstGpuStatus})`)
+  ok(wd.worstGpuMs === null, '★★ and carries no number, rather than a zero that reads as an idle GPU')
+
+  // ★ No extension at all outranks both — nothing was pending and nothing was dropped.
+  const c3 = clock()
+  const n3 = createProfiler(c3.now)
+  n3.attach({ getExtension: () => null } as unknown as WebGL2RenderingContext)
+  n3.enabled = true
+  n3.frameStart(); n3.mark('t'); c3.c.t += 2; n3.frameEnd(0.016)
+  c3.c.t += 16
+  n3.frameStart(); n3.mark('t'); c3.c.t += 2; n3.frameEnd(0.018)
+  c3.c.t += WINDOW_MS + 1
+  ok(n3.publish()!.worstGpuStatus === 'unavailable',
+    '★★ a missing extension reports unavailable, never pending')
 }
 
 if (fails.length) {
