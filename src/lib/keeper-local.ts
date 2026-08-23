@@ -39,20 +39,51 @@ const OWNER_MARK = 'u:'
  *   · `ather:save:shimmer` — `save-slot.ts` owns that one and scopes it its own way. Two mechanisms
  *     reaching for one key is worse than either.
  */
-export const KEEPER_KEYS: readonly string[] = [
-  'ather:shimmer:birthRune',   // ★ the ritual, and the affinity a keeper is born with
-  'ather:shimmer:runes',       // what they have collected since
-  'ather:shimmer:book',        // the moves they have learned
-  'ather:shimmer:loadout',     // the cast slots they have set
-  'ather:mp:id',               // ★ the peer other players see — two accounts were ONE peer
-  'ather:mp:name',             // and this MIRRORS the signed-in username, so B announced A's name
-  'ather:shimmer:seen:',       // one key per zone — the map they have uncovered (dynamic tail)
-  'voxel3d:tutorial:',         // which prompts they have been shown (dynamic tail: seed)
-  'voxel3d:mist:',             // which patches they have already drawn a resident from
-  'voxel3d:pots:',             // clocks on things standing in a world that is now per-account
-  'voxel3d:saplings:',
-  'voxel3d:leafdecay:',
+/**
+ * Every keeper key, with the one property that could not be read off the string: **does it die when
+ * the world does?**
+ *
+ * ★★★ THIS EXISTS BECAUSE THE ALTERNATIVE WAS A SECOND HAND-KEPT LIST, AND THE GUARD IN THIS
+ * FILE'S OWN TEST REFUSED IT (2026-08-23, and it caught its author for the third time). The epoch
+ * sweep needs to know which families are world-tied. Spelling them again in `lib/ather-epoch.ts`
+ * put a second copy of `voxel3d:tutorial:` outside its owning module — the exact hand-kept mirror
+ * that agrees with itself while drifting from its source. **One list, with the answer ON each
+ * entry**, so the epoch derives rather than restates and there is nothing to keep in sync.
+ *
+ * ⚠ `worldTied: false` IS A CLAIM, NOT A DEFAULT TO SKIM PAST. It says: this survives a world bump
+ * on purpose. Several below are marked false and flagged OPEN — they are genuinely arguable and the
+ * decision has not been made. Making it visible per key is the point; a silent omission is how the
+ * tutorial survived every bump in the first place.
+ */
+export const KEEPER_KEY_SPECS: readonly { base: string; worldTied: boolean }[] = [
+  // ── the character itself: cleared by the epoch today, by literal, and that is settled ──────────
+  { base: 'ather:shimmer:birthRune', worldTied: true },   // ★ the ritual, and the affinity a keeper is born with
+  { base: 'ather:shimmer:runes',     worldTied: true },   // what they have collected since
+  { base: 'ather:shimmer:book',      worldTied: false },  // the moves they have learned — deliberately survives
+  { base: 'ather:shimmer:loadout',   worldTied: false },  // the cast slots they have set
+  { base: 'ather:mp:id',             worldTied: false },  // ★ the peer other players see — two accounts were ONE peer
+  { base: 'ather:mp:name',           worldTied: false },  // and this MIRRORS the signed-in username, so B announced A's name
+  // ── dynamic tails: no suffix can match these, so the epoch matches them by PREFIX ─────────────
+  { base: 'ather:shimmer:seen:',     worldTied: false },  // ⚠ OPEN: the map of a world that no longer exists
+  { base: 'voxel3d:tutorial:',       worldTied: true },   // ★ dynamic tail: seed. Reborn keeper must retake it —
+                                                          //   `done` + a one-way gate already spent = no way out
+  { base: 'voxel3d:mist:',           worldTied: false },  // ⚠ OPEN: patches drawn from, in a regenerated world
+  { base: 'voxel3d:pots:',           worldTied: false },  // ⚠ OPEN: clocks on blocks that no longer stand
+  { base: 'voxel3d:saplings:',       worldTied: false },  // ⚠ OPEN
+  { base: 'voxel3d:leafdecay:',      worldTied: false },  // ⚠ OPEN
 ]
+
+/** The bases alone. Derived — never restate this list. */
+export const KEEPER_KEYS: readonly string[] = KEEPER_KEY_SPECS.map(s => s.base)
+
+/**
+ * World-tied families with a DYNAMIC TAIL — what the epoch sweep must match by prefix.
+ *
+ * ★ Derived twice over (world-tied AND tail-shaped), so a new family is covered the day it is
+ * registered with the right flag, and no second list can drift.
+ */
+export const WORLD_TIED_FAMILIES: readonly string[] =
+  KEEPER_KEY_SPECS.filter(s => s.worldTied && s.base.endsWith(':')).map(s => s.base)
 
 /** Where a given keeper's copy of `base` lives. Anonymous keeps the bare key, as everywhere else. */
 export function keeperKeyFor(base: string, owner: string | null): string {

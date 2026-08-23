@@ -12,7 +12,7 @@
 // makes every shimmer key in it CLASSIFY itself: keeper or device, no third option, no default.
 
 import {
-  KEEPER_KEYS, KEEPER_CLAIM, keeperKeyFor, planKeeperAdoption, adoptAnonKeeperState,
+  KEEPER_KEYS, KEEPER_KEY_SPECS, WORLD_TIED_FAMILIES, KEEPER_CLAIM, keeperKeyFor, planKeeperAdoption, adoptAnonKeeperState,
 } from './keeper-local'
 // ⚠ ANON_SAVE_KEY is IMPORTED, never spelled: `save-slot.test.ts` forbids a second spelling of
 // that literal anywhere in src/, and it caught this file on the first run.
@@ -295,6 +295,65 @@ function fakeStore(initial: Record<string, string>) {
   ok(!resetIfStale(), 'a browser at the current epoch resets nothing on the next load')
   delete (globalThis as { localStorage?: unknown }).localStorage
   delete (globalThis as { window?: unknown }).window
+}
+
+// ── ★★★ A DYNAMIC TAIL CANNOT BE MATCHED BY A SUFFIX, AND THE SWEEP WAS ASKING FOR ONE ──────────
+// The sweep finds an account's copy of a character key by asking whether it ENDS in a known base.
+// That is sound for `u:<id>:ather:shimmer:birthRune` and STRUCTURALLY IMPOSSIBLE for
+// `u:<id>:voxel3d:tutorial:<seed>`, which ends in a seed. So the tutorial survived every world bump:
+// the character was cleared and reborn while its progress still said `done`.
+//
+// ⚠ Already wrong (a reborn keeper skipped the tutorial); a SOFT-LOCK once the Glade gate is
+// one-way (ruled 2026-08-23) — done + a consumed gate + a new character is a keeper with no way out.
+{
+  const store = fakeStore({
+    'ather:epoch': '1',
+    [`u:${A}:${BIRTH_KEY}`]: 'rune_ember',
+    [`u:${A}:voxel3d:tutorial:1337`]: '{"stage":"done"}',   // ★ a signed-in keeper's progress
+    'voxel3d:tutorial:1337': '{"stage":"done"}',            // and the anonymous one
+    [`u:${A}:voxel3d:pots:1337`]: '{"t":1}',                // a SIBLING family — see below
+    'ather:best:seedfall': '9001',
+  })
+  ;(globalThis as { localStorage?: unknown }).localStorage = store
+  ;(globalThis as { window?: unknown }).window = globalThis
+  resetIfStale()
+  ok(store.getItem(`u:${A}:voxel3d:tutorial:1337`) === null,
+    "★★★ a signed-in keeper's tutorial dies with the world — a suffix rule can never reach this key")
+  ok(store.getItem('voxel3d:tutorial:1337') === null, "and the anonymous keeper's with it")
+
+  // ⚠⚠ RECORDED, NOT ENDORSED. `pots:` is one of five dynamic-tail families that are arguably just
+  // as world-tied as the tutorial. This assert pins what the sweep does TODAY so that widening it
+  // is a deliberate act with a red test in front of it, exactly as the arcade-score assert above
+  // demands. It is NOT a claim that leaving pots behind is correct — that question is open.
+  ok(store.getItem(`u:${A}:voxel3d:pots:1337`) === '{"t":1}',
+    '⚠ sibling families are NOT swept today — widening that is a decision, and this assert is the gate on it')
+  ok(store.getItem('ather:best:seedfall') === '9001', 'an arcade score is still not a Shimmer character')
+  delete (globalThis as { localStorage?: unknown }).localStorage
+  delete (globalThis as { window?: unknown }).window
+}
+
+// ── ★★ AND THE TWO SPELLINGS MUST AGREE, COMPARED AS DERIVATIONS RATHER THAN AS VALUES ──────────
+// `ather-epoch.ts` cannot import from the shimmer tree without inverting the layering, so it names
+// the family itself — which makes it a COPY, and a copy agrees with itself while drifting from its
+// source. That is the hand-kept-mirror shape this codebase paid for on 08-22. The test can cross
+// the layer even though the module cannot, so the agreement is checked HERE, at the seam.
+{
+  ok(WORLD_TIED_FAMILIES.includes(TUTORIAL_BASE),
+    `★★★ the epoch's family list DERIVES the tutorial base rather than respelling it ` +
+    `(families: ${WORLD_TIED_FAMILIES.join(', ')} · source: ${TUTORIAL_BASE})`)
+  ok(KEEPER_KEYS.includes(TUTORIAL_BASE),
+    '★ and the keeper registry still lists it, so it stays per-account as well as world-tied')
+  const spec = KEEPER_KEY_SPECS.find(s => s.base === TUTORIAL_BASE)
+  ok(spec?.worldTied === true,
+    '★★ the answer lives ON the registry entry — flip this flag and the epoch stops clearing it, visibly')
+
+  // ★★ AND THE DERIVATION IS NOT VACUOUS. If every family were world-tied, or none were, the filter
+  // would be decoration: it must actually SELECT. This is the "is there an input that makes this
+  // fire?" question asked of a derivation instead of an assert.
+  const tailFamilies = KEEPER_KEY_SPECS.filter(s => s.base.endsWith(':'))
+  ok(tailFamilies.length > WORLD_TIED_FAMILIES.length && WORLD_TIED_FAMILIES.length > 0,
+    `★★★ the world-tied filter genuinely partitions (${WORLD_TIED_FAMILIES.length} of ` +
+    `${tailFamilies.length} tail families) — all-or-nothing would make it decoration`)
 }
 
 // ── ★★ AND NO SECOND SPELLING OF A KEEPER KEY, ANYWHERE ─────────────────────────────────────────

@@ -41,6 +41,7 @@ const EPOCH_KEY = 'ather:epoch'
  * mechanism exists to avoid.
  */
 import { SAVE_KEY_PREFIX, ANON_SAVE_KEY } from './save-slot'
+import { WORLD_TIED_FAMILIES } from './keeper-local'
 import { BIRTH_KEY, RUNES_KEY } from '../app/shimmer/play3d/rune-inventory'
 
 /**
@@ -71,6 +72,26 @@ const CHARACTER_KEYS = [
  * stale value and makes its decision on it.
  */
 /** The latch play3d already uses to mean "this keeper still owes me a birth ritual". */
+/**
+ * Character families whose spelling ends in a DYNAMIC TAIL, so no suffix can ever match them.
+ *
+ * ★★★ THE SUFFIX RULE BELOW IS STRUCTURALLY BLIND TO THIS SHAPE, AND IT FAILED QUIETLY. The sweep
+ * finds an account's copy of a key by asking whether it ENDS in a known base — sound for a key with
+ * one fixed spelling (`u:<id>:ather:shimmer:birthRune`), and impossible for one that ends in a seed
+ * (`u:<id>:voxel3d:tutorial:1337`). So the tutorial survived every world bump: the character was
+ * cleared and reborn while its progress still said `done`.
+ *
+ * ⚠ THAT WAS ALREADY WRONG (a reborn keeper skipped the tutorial) AND IT BECOMES A SOFT-LOCK the
+ * moment the Glade's gate is one-way, which is the ruling of 2026-08-23: tutorial `done` plus a
+ * gate already spent plus a brand-new character is a keeper with nothing to do and no way out.
+ *
+ * ★★ IMPORTED, NEVER RESPELLED. The first cut of this fix copied `'voxel3d:tutorial:'` into this
+ * file and `keeper-local.test.ts` went red on the spot — it forbids a second spelling of a keeper
+ * key outside its owning module, and it was right: a copy agrees with itself while drifting from
+ * its source. The answer lives ON the registry entry now (`worldTied`), so this derives.
+ */
+const CHARACTER_FAMILIES = WORLD_TIED_FAMILIES
+
 const BIRTH_PENDING_KEY = 'ather:shimmer:birthPending'
 
 export function resetIfStale(): boolean {
@@ -97,6 +118,9 @@ export function resetIfStale(): boolean {
       if (!k) continue
       if (k.startsWith(SAVE_KEY_PREFIX)) keys.add(k)
       if (CHARACTER_KEYS.some(base => k.endsWith(`:${base}`))) keys.add(k)
+      // ★ FAMILIES MATCH BY PREFIX, NOT SUFFIX — the tail is a seed, so there is nothing to end on.
+      // Anonymous keeps the bare key; a signed-in keeper carries the owner in FRONT of it.
+      if (CHARACTER_FAMILIES.some(fam => k.startsWith(fam) || k.includes(`:${fam}`))) keys.add(k)
     }
     const hadCharacter = [...keys].some(k => localStorage.getItem(k) !== null)
     for (const k of keys) localStorage.removeItem(k)
