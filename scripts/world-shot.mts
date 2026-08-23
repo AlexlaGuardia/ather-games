@@ -5,6 +5,7 @@
 //   WORLD_GOTO=twilight-thicket                               — drive the console before shooting
 //   WORLD_CMD='tp -139 -588'                                  — any console line (owner-gated, same as GOTO)
 //   WORLD_FLY=8                                               — rise for N seconds first (owner-only)
+//   WORLD_OWNER=1                                             — fetch the owner cookie for a GATED PAGE (dev/*)
 //   WORLD_PITCH=-10                                           — degrees; negative looks UP
 //   WORLD_YAW=180                                             — degrees, + turns right (spawn faces -Z)
 //   WORLD_LOG='\\[canopy\\]'                                     — forward matching console lines to stdout
@@ -144,6 +145,8 @@ try {
 
   const errors: string[] = []
   const LOG = process.env.WORLD_LOG ? new RegExp(process.env.WORLD_LOG) : null
+/** Fetch the owner cookie even without a console command — for pages that are themselves gated. */
+const OWNER = process.env.WORLD_OWNER === '1'
   page.on('pageerror', e => errors.push(String(e)))
   page.on('console', m => {
     if (m.type() === 'error') errors.push(m.text())
@@ -152,7 +155,11 @@ try {
 
   // The owner cookie, before the page — without it `/goto <zone>` answers with a bearing and moves
   // nobody. Only needed when we intend to drive the console; a plain shot stays anonymous.
-  if (GOTO || CMD || FLY) {
+  // ⚠ `WORLD_OWNER=1` EXISTS BECAUSE THIS CONDITION ENCODED AN ASSUMPTION THAT STOPPED BEING TRUE:
+  // *the PAGE is public, only the console is gated*. That holds for `/shimmer/voxel3d`. It does not
+  // hold for anything under `/shimmer/dev/*`, which `proxy.ts` 403s outright — so shooting a dev
+  // page without a cookie photographs "Forbidden — owner only." Set it for any owner-gated URL.
+  if (GOTO || CMD || FLY || OWNER) {
     const KEY = process.env.OWNER_KEY
     if (!KEY) {
       // ⚠ LOUD, AND IT STOPS. Carrying on would hand back a glade shot under the requested zone's
@@ -164,7 +171,20 @@ try {
     await page.goto(`${new globalThis.URL(URL).origin}/owner?key=${encodeURIComponent(KEY)}`, { waitUntil: 'networkidle2', timeout: 30_000 })
   }
 
-  await page.goto(URL, { waitUntil: 'networkidle2', timeout: 60_000 })
+  const resp = await page.goto(URL, { waitUntil: 'networkidle2', timeout: 60_000 })
+  // ★★ REFUSE RATHER THAN REPORT, AND THIS TOOL ALREADY KNEW THE RULE — its own header says a shot
+  // "only shows you that something is wrong, never why". A 403 is worse than that: the page renders
+  // the words "Forbidden — owner only", the canvas never mounts, and the run reports **canvas NONE
+  // (no renderer mounted)** while writing a perfectly real PNG. That reads as a BROKEN RENDERER,
+  // which is a finding, when the truth is you were never allowed to see the page. Same family as the
+  // play3d owner gate photographing `/room` and being read as a failed deploy (2026-08-23) — an
+  // instrument that cannot see its subject must say so instead of describing what it can see.
+  const status = resp?.status() ?? 0
+  if (status >= 400) {
+    console.error(`REFUSED: ${URL} answered HTTP ${status} — nothing was photographed.`)
+    if (status === 403) console.error('  owner-gated? re-run with WORLD_OWNER=1 (needs OWNER_KEY in /root/ather-games/.env)')
+    process.exit(3)
+  }
   // The world streams; there is no "ready" event to wait on, so give it wall-clock and say so.
   await new Promise(r => setTimeout(r, SETTLE * 1000))
 
