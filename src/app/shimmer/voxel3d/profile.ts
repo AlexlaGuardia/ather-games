@@ -617,6 +617,22 @@ export function snapshotText(p: FrameProfile, ctx: {
   cols: number; meshes: number; draws: number; tris: number; geometries: number; programs: number
   gpuStatus: string
   renderer?: string
+  /**
+   * The drawing buffer's real size in device pixels, and the ratio it was derived at.
+   *
+   * ★★★ A GPU-BOUND READING THAT DOES NOT SAY HOW MANY PIXELS IT DREW CANNOT BE COMPARED TO THE
+   * NEXT ONE, and comparing two is the whole method. The first trusted fold reading came back
+   * `gpu 14.6 ms of a 16.7 ms frame · 88%` against 125 draws and 19k triangles — a triangle count
+   * an integrated GPU should not notice, which puts the cost per-PIXEL rather than per-vertex. The
+   * experiment that settles it is to render fewer pixels and look again; **that experiment is
+   * meaningless unless both readings state their pixel count**, and nothing here did.
+   *
+   * ⚠ NOT `window.innerWidth` AND NOT `devicePixelRatio` ALONE. The canvas sets no `dpr`, so the
+   * real buffer is whatever r3f resolved against the browser's ratio, OS display scaling included —
+   * a 125% Windows desktop draws 1.56x the pixels of a 100% one at the same window size, silently.
+   * Ask the drawing buffer what it actually is; anything else is a second derivation that can drift.
+   */
+  pixels?: { w: number; h: number; dpr: number }
 }): string {
   const n = (v: number, d = 1) => v.toFixed(d)
   const L: string[] = []
@@ -633,6 +649,12 @@ export function snapshotText(p: FrameProfile, ctx: {
       ? `gpu time  ${n(p.gpuMs)} ms  ·  share of frame WITHHELD (only ${p.gpuSamples} of ${p.frames} frames timed)`
       : `gpu time  ${n(p.gpuMs)} ms of the ${n(p.ms)} ms frame  ·  ${n((p.gpuMs / p.ms) * 100, 0)}%`)
   L.push(`scene     ${ctx.cols} col · ${ctx.meshes} mesh · ${ctx.draws} draws · ${Math.round(ctx.tris / 1000)}k tris · geo ${ctx.geometries} · prog ${ctx.programs}`)
+  // ★ Megapixels is the number that actually matters for a fill-bound frame, so print it derived
+  // rather than making a reader multiply two numbers in their head and get it wrong.
+  if (ctx.pixels) {
+    const mp = (ctx.pixels.w * ctx.pixels.h) / 1e6
+    L.push(`raster    ${ctx.pixels.w}x${ctx.pixels.h} device px · dpr ${n(ctx.pixels.dpr, 2)} · ${n(mp, 2)} Mpx`)
+  }
   L.push('')
   // ★ The remainder is already IN `zones` and sorted among them, so it can lead the table when it
   // deserves to. No special-casing here, which is the point — it is not a footnote to be forgotten.

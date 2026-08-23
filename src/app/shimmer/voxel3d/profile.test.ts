@@ -520,6 +520,37 @@ const clock = () => { const c = { t: 0 }; return { c, now: () => c.t } }
     '★★ a missing extension reports unavailable, never pending')
 }
 
+// ── 12. ★★ A GPU-BOUND READING MUST STATE ITS PIXEL COUNT ──────────────────────────────────────
+// The fold's first trusted reading was `gpu 14.6ms of a 16.7ms frame · 88%` at 125 draws and 19k
+// triangles — a triangle count an integrated GPU should not notice, which puts the cost per-PIXEL.
+// The experiment that settles that is to draw fewer pixels and look again, and **it is meaningless
+// unless both readings say how many pixels they drew.** Same law as `space` being required: a
+// reading that does not say where it was taken is not evidence.
+{
+  const { c, now } = clock()
+  const p = createProfiler(now)
+  p.enabled = true
+  p.frameStart(); p.mark('a'); c.t += 3; p.frameEnd(0.016)
+  c.t += 13
+  p.frameStart(); p.mark('a'); c.t += 3; p.frameEnd(0.016)
+  c.t += WINDOW_MS + 1
+  const w = p.publish()!
+  const base = { space: 'plot' as const, x: 0, y: 0, z: 0, viewRadius: 12, cols: 503, meshes: 500,
+    draws: 125, tris: 19000, geometries: 230, programs: 10, gpuStatus: 'ok' }
+
+  const withPx = snapshotText(w, { ...base, pixels: { w: 2560, h: 1440, dpr: 1.25 } })
+  ok(/2560x1440 device px/.test(withPx), '★★ the raster line names the real drawing buffer')
+  ok(/3\.69 Mpx/.test(withPx),
+    `★★★ and prints megapixels DERIVED, so nobody multiplies two numbers by hand (${withPx.split('\n').find(l => l.includes('raster'))})`)
+  ok(/dpr 1\.25/.test(withPx), '★ with the ratio it was resolved at — OS display scaling is invisible otherwise')
+
+  // ⚠ ABSENT MUST STAY ABSENT. A caller that cannot ask the drawing buffer must not get a made-up
+  // line: a raster figure derived from nothing is worse than no raster figure, because it will be
+  // compared against a real one.
+  ok(!/raster/.test(snapshotText(w, base)),
+    '★★★ a caller with no pixel count prints NO raster line rather than a guessed one')
+}
+
 // ── 11. ★★★ ONE ZONE NAME, ONE PLACE — the defect that hid 70% of a frame ──────────────────────
 // `mark` names a ZONE, not a place, and `acc` keys on the name. So the same name marked in two
 // unrelated regions sums them into ONE row, and **the table cannot say that it did.** `world:ticks`

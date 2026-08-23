@@ -7720,6 +7720,14 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
             programs: info.programs?.length ?? 0,
             gpuStatus: prof.current.gpuStatus,
             renderer: rendererName.current,
+            // ★ ASKED OF THE DRAWING BUFFER ITSELF, not recomputed from innerWidth x devicePixelRatio.
+            // The canvas sets no `dpr`, so the buffer is whatever r3f resolved — a second derivation
+            // here could disagree with the thing actually being rasterised and nothing would say so.
+            pixels: {
+              w: gl.domElement.width,
+              h: gl.domElement.height,
+              dpr: typeof window === 'undefined' ? 1 : window.devicePixelRatio,
+            },
           }),
         })
       }
