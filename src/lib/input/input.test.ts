@@ -5,6 +5,7 @@ import { DEFAULTS, ALL_ACTIONS, LABEL, PAD, HELD, OWNER_ONLY, STICK_DRIVEN, GROU
 import { merge, rebind, conflicts, orphans, padGaps, resetAll, BINDINGS_KEY, type BindingMap } from './bindings'
 import { deadzone, kindOf } from './gamepad'
 import { hintFor, hintsFor, keyName, padName } from './hints'
+import { matches, actionsFor, heldActions, padPressed, stickMove } from './resolve'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
@@ -137,6 +138,33 @@ ok(hs.every(h => h.label && h.input), 'a hint came back without a label or an in
 const keeperTest = readFileSync(join(process.cwd(), 'src/lib/keeper-local.test.ts'), 'utf8')
 ok(keeperTest.includes(BINDINGS_KEY),
    `${BINDINGS_KEY} is not listed in keeper-local.test.ts DEVICE_KEYS — register it or the key guard will call it unclassified`)
+
+// ── 13. the bridge the game will call ─────────────────────────────────────────────────────────
+ok(matches(base, 'KeyF', 'item.draw'), 'matches() missed a shipped binding')
+ok(!matches(base, 'KeyG', 'item.draw'), 'matches() accepted a key that is not bound')
+ok(matches(rebind(base, 'item.draw', 'key', ['KeyG']), 'KeyG', 'item.draw'), 'matches() ignored a rebind')
+
+// KeyQ drives BOTH drop and cycle — the caller disambiguates by whether the weapon is drawn, so
+// this must hand back both rather than invent a winner.
+const q = actionsFor(base, 'KeyQ')
+ok(q.includes('item.drop') && q.includes('item.cycle'), 'actionsFor collapsed the real KeyQ ambiguity')
+ok(actionsFor(base, 'KeyZ').length === 0, 'actionsFor invented an action for an unbound key')
+
+// ★ THE DEVICES UNION — a pad in hand must not switch the keyboard off.
+const padSample = { down: new Set(['A'] as never[]), pressed: new Set(['A'] as never[]), lx: 0, ly: 0, rx: 0, ry: 0, kind: 'xbox' as const }
+const held = heldActions(base, ['KeyW'], padSample as never)
+ok(held.has('move.forward'), 'keyboard input was lost while a pad was connected')
+ok(held.has('move.jump'), 'pad input was not read')
+ok(heldActions(base, [], null).size === 0, 'actions were held with no input at all')
+ok(padPressed(base, padSample as never).has('move.jump'), 'pad edge not surfaced')
+ok(padPressed(base, null).size === 0, 'padPressed invented edges with no pad')
+
+// ★ THE STICK IS ANALOG AND ITS Y IS NEGATED AT THE BOUNDARY.
+ok(stickMove(null).forward === 0, 'no pad should mean no stick wish')
+const fwd = stickMove({ ...padSample, ly: -1 } as never)
+ok(fwd.forward === 1, '⚠ stick Y not negated — the API reports UP as negative, so the player would walk backwards')
+const half = stickMove({ ...padSample, ly: -0.5 } as never)
+ok(half.forward === 0.5, '⚠ stick collapsed to a boolean — that throws away walk-vs-run and makes a pad worse than four keys')
 
 // ── report ─────────────────────────────────────────────────────────────────────────────────────
 console.log(`\ninput layer — ${ALL_ACTIONS.length} actions · ${Object.keys(PAD).length} pad buttons · ${padGaps(base).length} without a controller binding`)
