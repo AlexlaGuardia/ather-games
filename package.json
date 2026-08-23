@@ -6,6 +6,7 @@
     "dev": "next dev -p 3200",
     "build": "next build",
     "start": "next start -p 3200",
+    "holds": "tsx scripts/board-holds.mts",
     "canon": "node scripts/canon-drift.mjs",
   "gx": "npx tsx scripts/gx-adoption.mts",
     "item:art": "npx tsx scripts/item-art.mts",
