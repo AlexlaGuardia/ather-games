@@ -5907,7 +5907,21 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
       }
     }
 
-    prof.current.mark('world:ticks')
+    // ── ★★★ `world:ticks` WAS ONE ROW OVER TWO REGIONS AND FIVE CONCERNS ────────────────────
+    // It measured ~10.7ms of a clean 16ms frame — about 70% of a 60fps budget in a bounded
+    // ~520-column space — and could not say which of the Hollow spawn sweep, the collared
+    // patrols, the foe loop, the guard tick or the Hollow loop was spending it. A row that
+    // large with no parts is exactly what this profiler exists to refuse, and it had one.
+    //
+    // ⚠ IT WAS ALSO NEVER EXONERATED. `world:ticks` was retired to an "exonerated" list on the
+    // strength of a worst-frame row reading 0.00 — a reading that was guaranteed by the dt
+    // misattribution fixed in fad9e08, not earned. The exoneration is void; this split is how
+    // the question gets asked properly.
+    //
+    // The enclosing block at the next line is unconditional, so every mark below always fires;
+    // a zone whose own work is skipped reports ~0 rather than silently lending its time to the
+    // zone before it.
+    prof.current.mark('world:spawn')
     // ── ★ THE NIGHT TIDE'S PAYOFF — the Hollows' SPAWN CYCLE, MINECRAFT'S SHAPE ──────────────
     // Reworked 2026-08-07 eve after Alex night-walked without meeting one: the first cut scanned
     // ONE random column per 1.6s (a trickle); MC attempts EVERY eligible chunk every tick, and
@@ -5978,6 +5992,7 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
           }
         }
       }
+      prof.current.mark('world:patrols')
       // ── ★ THE COLLARED PATROLS: SPAWN, APPROACH, PRESS (#294, 2026-08-16) ──────────────────────
       // ★ KEYED TO THE HOLDS, NOT TO A TIMER OR TO DARKNESS. Canon: *"a burrow is a mouth, a hold is
       // the hand behind it"* — Hollows well up out of the ground anywhere the light fails, but a
@@ -6067,6 +6082,7 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
         // `foeFreed`, which is counted at the moment a collar breaks and not here.
         if (!foes.current.some(o => o.hold === e.hold)) foeOut.current.delete(e.hold)
       }
+      prof.current.mark('world:foes')
       for (let i = foes.current.length - 1; i >= 0; i--) {
         const e = foes.current[i]
         // Despawn on the load edge, exactly as the Hollows do — a body outside the streamed world is
@@ -6193,6 +6209,7 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
         if (collarMesh) collarMesh.scale.setScalar(Math.max(0.05, collarFrac(e.f)))
       }
 
+      prof.current.mark('world:guard')
       // ── ★ THE GUARD COMES BACK, AND IT HAS TO (2026-08-16) ────────────────────────────────────
       // Nothing in this world wrote `vitals` before the patrols did, so pressure was a one-way
       // ratchet: guard to zero once and it stayed there for the session, which would have made the
@@ -6217,6 +6234,7 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
       // Same-object-when-unchanged (see `pruneStatuses`), so a quiet night writes nothing and this
       // never churns garbage at 60fps.
       statusBag.current = pruneStatuses(statusBag.current, nowMs)
+      prof.current.mark('world:hollows')
       for (let i = hollows.current.length - 1; i >= 0; i--) {
         const hw = hollows.current[i]
         const st = hw.st
@@ -6419,7 +6437,12 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
     drainRemeshQueue(cx, cz, 12)
 
     const nowMs = Date.now()
-    prof.current.mark('world:ticks')
+    // ★★ THE GROWTH CLOCKS ARE NOT THE CREATURE SIM, AND THEY USED TO SHARE ITS ROW.
+    // This mark said `world:ticks` and so did the one ~500 lines up, so the panel summed two
+    // unrelated regions — a night full of Hollows and a pot coming due — into ONE number, and
+    // nothing in the table could say which half moved. `mark` names a zone, not a place; two
+    // places sharing a name is the file's own "one total has no parts" thesis wearing a label.
+    prof.current.mark('world:growth')
     // ── pots come due ────────────────────────────────────────────────────────────────────────
     // Swept from the CLOCK, not by scanning the world: the clock already knows every planted pot's
     // position, so a garden of them costs a handful of map reads instead of a search. A pot outside

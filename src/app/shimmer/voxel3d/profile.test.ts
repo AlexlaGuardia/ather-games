@@ -4,6 +4,8 @@
 // Every assert below is a way of asking that, because the failure mode of a profiler is not that it
 // crashes — it is that it hands back a tidy breakdown of the 13% of the frame somebody remembered to
 // wrap and says nothing about the other 87%.
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { createProfiler, snapshotText, gpuTrusted, GPU_COVERAGE_MIN, WINDOW_MS, MAX_ZONES, OVERFLOW, UNACCOUNTED_ROW, PROLOGUE_ROW, TAIL_ROW } from './profile'
 
 let pass = 0
@@ -516,6 +518,46 @@ const clock = () => { const c = { t: 0 }; return { c, now: () => c.t } }
   c3.c.t += WINDOW_MS + 1
   ok(n3.publish()!.worstGpuStatus === 'unavailable',
     '★★ a missing extension reports unavailable, never pending')
+}
+
+// ── 11. ★★★ ONE ZONE NAME, ONE PLACE — the defect that hid 70% of a frame ──────────────────────
+// `mark` names a ZONE, not a place, and `acc` keys on the name. So the same name marked in two
+// unrelated regions sums them into ONE row, and **the table cannot say that it did.** `world:ticks`
+// was marked twice — the creature simulation ~500 lines above the growth clocks — and published
+// ~10.7ms of a clean 16ms frame as a single number covering a Hollow spawn sweep, collared patrols,
+// a foe loop, a guard tick, pots and saplings. That is this file's own "one total has no parts"
+// thesis reappearing one level down, inside a row rather than inside a frame.
+//
+// ⚠ THE READER IS A TEXTUAL SCAN OF A FILE IT DOES NOT OWN, WHICH FAILS SILENTLY BY DEFAULT. So it
+// asserts it found a plausible NUMBER of marks before judging them — a regex that matches nothing
+// reports "no duplicates" and is indistinguishable from a clean sweep. And it strips line comments
+// first: this codebase has already been bitten by a header quoting its own marker, handing every
+// reader a second match inside the prose (canon gate, 08-22).
+{
+  const host = join(__dirname, 'VoxelWorld.tsx')
+  const raw = readFileSync(host, 'utf8')
+  // ⚠ Comments stripped BEFORE matching — see above. A doc that names a mark must not become one.
+  const code = raw.split('\n').filter(l => !l.trim().startsWith('//')).join('\n')
+  const marks = [...code.matchAll(/prof\.current\.mark\('([^']+)'\)/g)].map(m => m[1])
+
+  ok(marks.length >= 12,
+    `★★★ BLIND CHECK: the scan found ${marks.length} marks in VoxelWorld.tsx — under 12 means the ` +
+    'reader has lost its subject and its verdict is worthless, not clean')
+
+  const seen = new Map<string, number>()
+  for (const m of marks) seen.set(m, (seen.get(m) ?? 0) + 1)
+  const dupes = [...seen.entries()].filter(([, n]) => n > 1)
+  ok(dupes.length === 0,
+    `★★★ every zone name is marked in exactly ONE place — two places sharing a name silently sum ` +
+    `two unrelated regions into one row (offenders: ${dupes.map(([n, c]) => `${n} x${c}`).join(', ') || 'none'})`)
+
+  // ★ AND THE SPLIT ITSELF, NAMED. If someone folds these back into one row the row goes big and
+  // mute again, which is precisely the state that survived two sessions of investigation.
+  for (const z of ['world:spawn', 'world:patrols', 'world:foes', 'world:hollows', 'world:growth']) {
+    ok(seen.has(z), `★★ the creature/growth split survives: ${z} is still its own zone`)
+  }
+  ok(!seen.has('world:ticks'),
+    '★★★ and `world:ticks` is gone rather than kept beside its own replacements')
 }
 
 if (fails.length) {

@@ -14,8 +14,12 @@
 //   · **CPU-side zone ms — as a RANKING between the two places, never as absolutes.** ⚠ MY FIRST
 //     CUT OF THIS HEADER CLAIMED THEY WERE TRUE IN ABSOLUTE ms AND THAT WAS WRONG. SwiftShader is
 //     not a GPU sitting beside the CPU, it IS the CPU: it reports 96-100% of the frame here, and it
-//     is competing with the game's own JS for the same cores. So `world:ticks` reading 124 ms says
-//     nothing about what it costs on a machine with a real driver. Percentages are void for the same
+//     is competing with the game's own JS for the same cores. So `world:spawn` reading 124 ms says
+//     nothing about what it costs on a machine with a real driver. (⚠ THAT EXAMPLE USED TO SAY
+//     `world:ticks`, a zone RETIRED 2026-08-23: it was one row over two regions and five
+//     concerns, now split into world:spawn/patrols/foes/guard/hollows + world:growth. A comment
+//     naming a zone is a claim about a file it does not own, and it goes stale silently.)
+//     Percentages are void for the same
 //     reason plus an inflated denominator. Read them to see WHICH zone leads, not by how much;
 //   · **scene counts** — draws, triangles, geometries, instances are CPU-side facts, exactly true.
 //
