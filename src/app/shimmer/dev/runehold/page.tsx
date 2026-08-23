@@ -1,40 +1,149 @@
 'use client'
-// RUNE HOLD — greybox preview, at eye height, for one mannequin at a time.
+// RUNE HOLD — greybox, walkable, with the mannequin on a live toggle.
 //
-// ★ THIS EXISTS TO ANSWER ONE OPEN QUESTION AND THEN GET OUT OF THE WAY. `metrics.ts` records the
-// authoring body as *"Alex's to overturn in one line"*, and `rune-hold.ts` is authored so that
-// flipping it re-derives the whole town. But a body is a thing you judge by STANDING IN a street,
-// not by comparing 1.62 against 1.15 in a doc — so this renders the same town from the same spot at
-// each mannequin's own standing eye, and the difference is the answer.
+// ★ THIS EXISTS TO SETTLE ONE QUESTION: how tall is the keeper? `metrics.ts` calls the pick *"Alex's
+// to overturn in one line"*, `rune-hold.ts` is authored so flipping it re-derives the whole town, and
+// neither of those helps him decide. Proportion is felt, not read.
 //
-//   /shimmer/dev/runehold?body=voxel      (default — the current pick)
-//   /shimmer/dev/runehold?body=play3d
-//   &yaw=<deg>&x=<n>&z=<n>                move the camera; defaults stand on the square
+// ── ★★ THE TOGGLE MOVES BOTH HALVES AT ONCE, AND THAT IS THE REQUIREMENT ─────────────────────
+// There are TWO bodies in play: the one the TOWN was authored against, and the one the WALKER has.
+// A matched pair is the only thing worth judging. Flipping one alone hands you the MISMATCH, which
+// reads as *"this layout is wrong"* when what is actually wrong is that the halves disagree — both
+// internally consistent about different things, which is the prebuilt-worker trap wearing a third
+// costume.
 //
-// ⚠ NOT WALKABLE, AND DELIBERATELY SO. `metrics.ts` states it plainly: *"there is no continuous
-// collider yet"* — play3d's floor resolver reads TILE TIERS, and this geometry is continuous. A
-// preview that let you walk would be quietly asserting a collider that does not exist, and the
-// first thing it would teach is a movement feel the real game cannot reproduce. Looking is honest;
-// walking would not be. The collider is its own piece of work.
+//   1 · VOXEL PAIR    town + walker at 1.62 / 1.02 / r0.30   (the current pick)
+//   2 · PLAY3D PAIR   town + walker at 1.15 / 0.50 / r0.40   (what Shimmer3D ships today)
+//   3 · MISMATCH      voxel-authored town, play3d walker — ⚠ NOT A CANDIDATE. It is here on purpose:
+//                     one second in it shows why pinning the body was a bug at all, because a wall
+//                     that hides you in one world does not in the other. Labelled so it can never be
+//                     mistaken for an option.
 //
-// ⚠ AND IT RENDERS THE REAL MODULE. Nothing about the town is restated here — masses, streets and
-// the station all come from `runeHold(body)`. A preview that re-declared the layout would be the
-// hand-kept mirror this repo has paid for repeatedly: it would agree with the town right up until
-// one of them changed, and it would agree hardest at the moment someone came looking.
-import { Suspense, useMemo } from 'react'
-import { useSearchParams } from 'next/navigation'
-import { Canvas } from '@react-three/fiber'
-import { runeHold, townFaults } from '../../play3d/rune-hold'
-import { BODIES, metricsFor, type Body } from '../../play3d/metrics'
+// ★ LIVE, NOT TWO BUILDS. Two deploys would make this a memory against a measurement — walk a street,
+// wait, compare it to one you walked five minutes ago. This repo has logged that failure three times
+// in two days. Everything here is client state; the toggle is instant.
+//
+// ⚠⚠ THE PHYSICS IS A PREVIEW COLLIDER AND IS NOT THE GAME'S, AND I WILL NOT PRETEND OTHERWISE.
+// `metrics.ts` says plainly there is no continuous collider yet — play3d's floor resolver reads TILE
+// TIERS and this geometry is continuous. What is honest here is that the greybox is nothing but
+// axis-aligned boxes, so "stand on the top, stop at the side" is unambiguous for THIS geometry and
+// nothing is being guessed. The VERBS are the shipped kit (`KIT`, same numbers both walkers) and the
+// BODY is the real mannequin; what is simplified is slide, mantle and climb, which are not what is
+// being judged. **Judge proportion here. Do not judge movement feel here.**
+//
+// ⚠ Canon, so "make it walkable" cannot quietly open a second door: v1 opens exactly ONE — the
+// Spirit Corner (`world/rune-hold.md:127`), Gregory's (`:77`). The rest stay visible and shut, and
+// `rune-hold.test.ts` counts them.
+import { Suspense, useEffect, useMemo, useRef, useState } from 'react'
+import { Canvas, useFrame, useThree } from '@react-three/fiber'
+import { runeHold, townFaults, type Town } from '../../play3d/rune-hold'
+import { BODIES, KIT, metricsFor, STEP_FLOW, type Body } from '../../play3d/metrics'
 
-function Scene({ body }: { body: Body }) {
-  const town = useMemo(() => runeHold(body), [body])
-  const M = metricsFor(body)
+type Pair = 'voxel' | 'play3d' | 'mismatch'
+const TOWN_BODY: Record<Pair, Body> = { voxel: BODIES.voxel, play3d: BODIES.play3d, mismatch: BODIES.voxel }
+const WALK_BODY: Record<Pair, Body> = { voxel: BODIES.voxel, play3d: BODIES.play3d, mismatch: BODIES.play3d }
+
+interface Box { x0: number; x1: number; z0: number; z1: number; top: number; solid: boolean }
+
+/** Every box the walker can stand on or bump into, derived from the town — never restated. */
+function boxesOf(t: Town): Box[] {
+  const out: Box[] = [
+    { x0: t.square.x - t.square.size / 2, x1: t.square.x + t.square.size / 2,
+      z0: t.square.z - t.square.size / 2, z1: t.square.z + t.square.size / 2, top: 0, solid: false },
+  ]
+  for (const m of t.masses)
+    out.push({ x0: m.x - m.w / 2, x1: m.x + m.w / 2, z0: m.z - m.d / 2, z1: m.z + m.d / 2, top: m.y + m.h, solid: true })
+  for (const s of t.streets) {
+    const [ax, az] = s.from, [bx, bz] = s.to
+    const pad = s.width / 2
+    out.push({ x0: Math.min(ax, bx) - pad, x1: Math.max(ax, bx) + pad,
+               z0: Math.min(az, bz) - pad, z1: Math.max(az, bz) + pad,
+               top: Math.max(s.fromTerrace, s.toTerrace) * t.terraceRise, solid: false })
+  }
+  out.push({ x0: t.station.x - t.station.w / 2, x1: t.station.x + t.station.w / 2,
+             z0: t.station.z - t.station.d / 2, z1: t.station.z + t.station.d / 2, top: t.station.h, solid: true })
+  return out
+}
+
+function Player({ town, body, pairKey }: { town: Town; body: Body; pairKey: Pair }) {
+  const { camera, gl } = useThree()
+  const pos = useRef({ x: 0, y: 0, z: town.square.size / 2 - 1 })
+  const vy = useRef(0)
+  const yaw = useRef(0), pitch = useRef(0)
+  const keys = useRef<Record<string, boolean>>({})
+  const boxes = useMemo(() => boxesOf(town), [town])
+
+  // ⚠ RESET ON A PAIR CHANGE. The two towns are different SIZES, so a position that was on the
+  // square in one can be inside a wall in the other — and a keeper who toggles and finds himself
+  // stuck reads it as the layout being broken.
+  useEffect(() => { pos.current = { x: 0, y: 0, z: town.square.size / 2 - 1 }; vy.current = 0 }, [pairKey, town])
+
+  useEffect(() => {
+    const el = gl.domElement
+    const down = (e: KeyboardEvent) => { keys.current[e.code] = true }
+    const up = (e: KeyboardEvent) => { keys.current[e.code] = false }
+    const move = (e: MouseEvent) => {
+      if (document.pointerLockElement !== el) return
+      yaw.current -= e.movementX * 0.0022
+      pitch.current = Math.max(-1.4, Math.min(1.4, pitch.current - e.movementY * 0.0022))
+    }
+    const click = () => { void el.requestPointerLock?.() }
+    window.addEventListener('keydown', down); window.addEventListener('keyup', up)
+    window.addEventListener('mousemove', move); el.addEventListener('click', click)
+    return () => {
+      window.removeEventListener('keydown', down); window.removeEventListener('keyup', up)
+      window.removeEventListener('mousemove', move); el.removeEventListener('click', click)
+    }
+  }, [gl])
+
+  useFrame((_, dtRaw) => {
+    const dt = Math.min(dtRaw, 0.05)
+    const p = pos.current
+    const r = body.radius
+    const overlaps = (b: Box, x: number, z: number) => x + r > b.x0 && x - r < b.x1 && z + r > b.z0 && z - r < b.z1
+
+    // ── floor: the highest surface under the footprint that is not above a free step ──────────
+    let floor = 0
+    for (const b of boxes) if (overlaps(b, p.x, p.z) && b.top <= p.y + STEP_FLOW + 0.001) floor = Math.max(floor, b.top)
+
+    // ── intent ───────────────────────────────────────────────────────────────────────────────
+    const k = keys.current
+    const f = (k.KeyW ? 1 : 0) - (k.KeyS ? 1 : 0)
+    const s = (k.KeyD ? 1 : 0) - (k.KeyA ? 1 : 0)
+    const len = Math.hypot(f, s) || 1
+    const sp = KIT.RUN_SPEED
+    const dx = ((Math.sin(yaw.current) * -f + Math.cos(yaw.current) * s) / len) * sp * dt
+    const dz = ((Math.cos(yaw.current) * -f - Math.sin(yaw.current) * s) / len) * sp * dt
+
+    // Axis-separated so sliding along a wall works instead of sticking. A solid box blocks whenever
+    // its top is more than a free step above the feet — which is exactly `readsAs`'s flow tier, so
+    // what stops you here is the same rule the oracle asserts the town against.
+    const blocked = (x: number, z: number) =>
+      boxes.some(b => b.solid && overlaps(b, x, z) && b.top > p.y + STEP_FLOW + 0.001)
+    if (!blocked(p.x + dx, p.z)) p.x += dx
+    if (!blocked(p.x, p.z + dz)) p.z += dz
+
+    // ── gravity + jump ───────────────────────────────────────────────────────────────────────
+    const grounded = p.y <= floor + 0.02 && vy.current <= 0
+    if (grounded) { p.y = floor; vy.current = 0; if (k.Space) vy.current = KIT.JUMP_V0 }
+    else vy.current -= KIT.GRAVITY * dt
+    p.y += vy.current * dt
+    if (p.y < floor) { p.y = floor; vy.current = 0 }
+
+    camera.position.set(p.x, p.y + body.eyeStand, p.z)
+    camera.rotation.order = 'YXZ'
+    camera.rotation.y = yaw.current
+    camera.rotation.x = pitch.current
+  })
+  return null
+}
+
+function Scene({ town, walker }: { town: Town; walker: Body }) {
+  const M = metricsFor(walker)
   return (
     <>
       <ambientLight intensity={0.55} />
       <directionalLight position={[30, 60, 20]} intensity={1.1} castShadow />
-      {/* The square's floor — the datum every height in the town is measured from. */}
       <mesh position={[town.square.x, -0.05, town.square.z]} receiveShadow>
         <boxGeometry args={[town.square.size, 0.1, town.square.size]} />
         <meshStandardMaterial color="#6b6257" />
@@ -42,19 +151,16 @@ function Scene({ body }: { body: Body }) {
       {town.masses.map(m => (
         <mesh key={m.id} position={[m.x, m.y + m.h / 2, m.z]} castShadow receiveShadow>
           <boxGeometry args={[m.w, m.h, m.d]} />
-          {/* The one open door is lit differently, because "four shut doors and one open" is the
-              whole read of the opening and it should be legible in a greybox too. */}
           <meshStandardMaterial color={m.id === 'spirit-corner' ? '#c9a227' : '#8a8079'} />
         </mesh>
       ))}
       {town.streets.map(s => {
         const dx = s.to[0] - s.from[0], dz = s.to[1] - s.from[1]
-        const len = Math.hypot(dx, dz)
         return (
           <mesh key={s.id}
-                position={[(s.from[0] + s.to[0]) / 2, s.fromTerrace * town.terraceRise + 0.02, (s.from[1] + s.to[1]) / 2]}
+                position={[(s.from[0] + s.to[0]) / 2, Math.max(s.fromTerrace, s.toTerrace) * town.terraceRise - 0.02, (s.from[1] + s.to[1]) / 2]}
                 rotation={[0, Math.atan2(dx, dz), 0]} receiveShadow>
-            <boxGeometry args={[s.width, 0.04, len]} />
+            <boxGeometry args={[s.width, 0.04, Math.hypot(dx, dz)]} />
             <meshStandardMaterial color="#7d746a" />
           </mesh>
         )
@@ -63,57 +169,64 @@ function Scene({ body }: { body: Body }) {
         <boxGeometry args={[town.station.w, town.station.h, town.station.d]} />
         <meshStandardMaterial color="#5f6b7a" />
       </mesh>
-      {/* A reference post at the body's own standing cover, so the eye has something to read the
-          street against. It is derived, never a stick of a chosen height. */}
-      <mesh position={[M.widths.lanePair, M.cover.stand / 2, M.widths.lanePair]}>
-        <boxGeometry args={[0.3, M.cover.stand, 0.3]} />
-        <meshStandardMaterial color="#b4472e" />
+      {/* Reference posts at the WALKER's own cover tiers — the whole comparison in two sticks. Red
+          is standing cover (breaks your line of sight), blue is sliding cover. Derived, never a
+          chosen height, so they move with the toggle exactly as the town does. */}
+      <mesh position={[M.widths.lanePair, M.cover.stand / 2, -M.widths.lanePair]}>
+        <boxGeometry args={[0.3, M.cover.stand, 0.3]} /><meshStandardMaterial color="#b4472e" />
+      </mesh>
+      <mesh position={[M.widths.lanePair * 2, M.cover.slide / 2, -M.widths.lanePair]}>
+        <boxGeometry args={[0.3, M.cover.slide, 0.3]} /><meshStandardMaterial color="#2e6fb4" />
       </mesh>
     </>
   )
 }
 
 function Preview() {
-  const q = useSearchParams()
-  const which = q.get('body') === 'play3d' ? 'play3d' : 'voxel'
-  const body = BODIES[which]
-  const town = useMemo(() => runeHold(body), [body])
+  const [pair, setPair] = useState<Pair>('voxel')
+  const townBody = TOWN_BODY[pair], walkBody = WALK_BODY[pair]
+  const town = useMemo(() => runeHold(townBody), [townBody])
   const faults = useMemo(() => townFaults(town), [town])
-  const M = metricsFor(body)
-  const yaw = Number(q.get('yaw') ?? 0)
-  const cx = Number(q.get('x') ?? 0)
-  const cz = Number(q.get('z') ?? town.square.size / 2 - 1)
+  const M = metricsFor(walkBody)
+
+  useEffect(() => {
+    const h = (e: KeyboardEvent) => {
+      if (e.code === 'Digit1') setPair('voxel')
+      if (e.code === 'Digit2') setPair('play3d')
+      if (e.code === 'Digit3') setPair('mismatch')
+    }
+    window.addEventListener('keydown', h)
+    return () => window.removeEventListener('keydown', h)
+  }, [])
 
   return (
     <div className="fixed inset-0 bg-[#a8b8c8]">
-      <Canvas shadows camera={{ position: [cx, body.eyeStand, cz], fov: 70, near: 0.05, far: 500 }}
-              onCreated={({ camera }) => { camera.rotation.order = 'YXZ'; camera.rotation.y = (yaw * Math.PI) / 180 }}>
-        <Scene body={body} />
+      <Canvas shadows camera={{ fov: 70, near: 0.05, far: 500 }}>
+        <Scene town={town} walker={walkBody} />
+        <Player town={town} body={walkBody} pairKey={pair} />
       </Canvas>
-      {/* ★ THE READOUT IS PART OF THE INSTRUMENT. A screenshot shows that two towns differ and can
-          never say by how much; these are the numbers the picture is of. `data-runehold` is the
-          handle a headless shot scrapes — same contract as the voxel HUD's `data-perf`. */}
-      <div data-runehold className="absolute top-3 left-3 text-[11px] font-mono text-white/90 bg-black/55 rounded px-3 py-2 leading-relaxed pointer-events-none">
-        <div className="font-semibold tracking-wide">RUNE HOLD · GREYBOX</div>
-        <div>body <span className="text-white/60">{which}</span> · eye {body.eyeStand.toFixed(2)} · slide {body.eyeSlide.toFixed(2)} · r {body.radius.toFixed(2)}</div>
-        <div>square {town.square.size.toFixed(1)} · terrace {town.terraceRise.toFixed(2)} · street {M.widths.lanePair.toFixed(2)}</div>
-        <div>cover slide {M.cover.slide.toFixed(2)} · stand {M.cover.stand.toFixed(2)} · full {M.cover.full.toFixed(2)}</div>
+      <div data-runehold className="absolute top-3 left-3 text-[11px] font-mono text-white/90 bg-black/60 rounded px-3 py-2 leading-relaxed pointer-events-none">
+        <div className="font-semibold tracking-wide">RUNE HOLD · GREYBOX · click to look, WASD, space</div>
+        <div className={pair === 'mismatch' ? 'text-amber-300' : 'text-white/90'}>
+          {pair === 'mismatch'
+            ? '3 · MISMATCH — voxel town, play3d walker. ⚠ NOT A CANDIDATE, shown to make the bug visible'
+            : pair === 'voxel' ? '1 · VOXEL PAIR (current pick)' : '2 · PLAY3D PAIR (what Shimmer3D ships)'}
+        </div>
+        <div>walker eye {walkBody.eyeStand.toFixed(2)} · slide {walkBody.eyeSlide.toFixed(2)} · r {walkBody.radius.toFixed(2)}</div>
+        <div>town built for eye {townBody.eyeStand.toFixed(2)} · square {town.square.size.toFixed(1)} · street {metricsFor(townBody).widths.lanePair.toFixed(2)} · terrace {town.terraceRise.toFixed(2)}</div>
+        <div>walker cover · slide {M.cover.slide.toFixed(2)} <span className="text-[#2e6fb4]">■</span> · stand {M.cover.stand.toFixed(2)} <span className="text-[#b4472e]">■</span></div>
         <div className={faults.length ? 'text-red-300' : 'text-emerald-300'}>
           {faults.length ? `${faults.length} FAULT: ${faults.map(f => f.why).join(', ')}` : 'town reads clean'}
         </div>
+        <div className="text-white/50">1 / 2 / 3 to switch · ⚠ preview collider, not the game&apos;s — judge proportion, not movement</div>
       </div>
     </div>
   )
 }
 
-// ⚠ SUSPENSE IS NOT OPTIONAL HERE. `useSearchParams` opts a client component out of static
-// rendering, and the App Router FAILS THE PRODUCTION BUILD ("missing suspense boundary") rather
-// than warning — so this would have passed tsc, passed every test, and broken the deploy for
-// whoever happened to take the lock next. Caught by knowing the framework, not by the typechecker.
+// ⚠ Suspense is not optional: the App Router FAILS the production build on `useSearchParams` without
+// one. Kept even though the params read has gone, because the boundary costs nothing and the next
+// person to add a query param would otherwise break a deploy they did not touch.
 export default function RuneHoldPreview() {
-  return (
-    <Suspense fallback={<div className="fixed inset-0 bg-[#a8b8c8]" />}>
-      <Preview />
-    </Suspense>
-  )
+  return <Suspense fallback={<div className="fixed inset-0 bg-[#a8b8c8]" />}><Preview /></Suspense>
 }
