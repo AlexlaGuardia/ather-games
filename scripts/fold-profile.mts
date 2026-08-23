@@ -227,6 +227,22 @@ try {
   console.log('\n⚠⚠ SWIFTSHADER. Every `fps`, `ms`, `worst` and gpu line below is VOID as an absolute —')
   console.log('   a software rasteriser, not Alex\'s desktop driver. Read the ZONE ms and the scene')
   console.log('   counts, and read them as wilds-vs-plot differences on one broken clock.\n')
+  // ── ⚠⚠⚠ AND THE DENOMINATOR THAT WOULD LET YOU CHECK THIS IS NOT PUBLISHED ────────────────────
+  // `gpuSamples` is a closure local in `profile.ts` (declared :140, incremented :220, consumed :244)
+  // and is NOT a field of `FrameProfile`. `frames` IS — and the interface even says of it *"a window
+  // of 1 makes every mean above a single sample, so say so."* **The instrument applies its own
+  // honesty rule to `ms`'s denominator and not to `gpuMs`'s.** So no consumer — this probe, the
+  // panel, `snapshotText`, or a keeper pasting a reading — can detect the bias below. It cannot be
+  // printed from out here; publishing it is a one-field change to `voxel3d/profile.ts`, which is
+  // deliberately NOT being made ahead of the real-GPU reading it would perturb.
+  //
+  // ⚠⚠ THE DANGEROUS OUTPUT IS THE PLAUSIBLE PERCENTAGE, NOT THE ABSURD ONE. A visible 110% gets
+  // questioned; "gpu time 62% of frame" does not, and is biased by exactly the same mechanism
+  // whenever queries drop — which is the population of machines where the timer extension is flaky
+  // in the first place. The 110% was a gift, the same way two runs disagreeing was a gift: the
+  // visibly broken reading is the one that saves you.
+  console.log('  ⚠ gpu %: gpuSamples is unpublished, so this ratio cannot be validated from a reading.')
+  console.log('    Under 100% is affected identically and does not announce itself.\n')
   // ⚠ `gpuMs` AND `ms` ARE MEANS OVER DIFFERENT POPULATIONS, SO THEIR RATIO CAN EXCEED 100% — that
   // is arithmetic, not a defect. `ms` averages over `frames`; `gpuMs` averages over `gpuSamples`, and
   // a query lands a frame or two late while a DISJOINT one is dropped entirely. Measured here at
