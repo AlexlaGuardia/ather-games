@@ -5,7 +5,7 @@
 // IndexedDB adoption rules outside their transaction on 2026-08-23. `merge`, `rebind`, `conflicts`
 // and `orphans` are all data-in/data-out, so `input.test.ts` runs the REAL ones headless.
 
-import { DEFAULTS, ALL_ACTIONS, type ActionId, type Binding, type PadButton } from './actions'
+import { DEFAULTS, ALL_ACTIONS, STICK_DRIVEN, type ActionId, type Binding, type PadButton } from './actions'
 
 /**
  * ⚠ DEVICE-SCOPED, NOT KEEPER-SCOPED, AND THAT IS A DELIBERATE CALL AGAINST THE HOUSE HABIT.
@@ -62,9 +62,15 @@ export function orphans(map: BindingMap): ActionId[] {
   return ALL_ACTIONS.filter(id => map[id].keys.length === 0 && map[id].pad.length === 0)
 }
 
-/** Actions with a keyboard binding but no controller one — the controller-coverage worklist. */
+/**
+ * Actions a controller genuinely cannot perform yet — the coverage worklist.
+ *
+ * ⚠ STICK-DRIVEN ACTIONS ARE EXCLUDED, and that is a correction to this function rather than an
+ * exemption for it. It used to count the four movement verbs, which the left stick covers, so it
+ * reported 8 gaps when 4 were real — burying the true ones in noise. See `STICK_DRIVEN`.
+ */
 export function padGaps(map: BindingMap): ActionId[] {
-  return ALL_ACTIONS.filter(id => map[id].pad.length === 0)
+  return ALL_ACTIONS.filter(id => map[id].pad.length === 0 && !STICK_DRIVEN.includes(id))
 }
 
 export interface Conflict { input: string; device: 'key' | 'pad'; actions: ActionId[] }

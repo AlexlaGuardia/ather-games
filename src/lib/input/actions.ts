@@ -117,4 +117,22 @@ export const LABEL: Record<ActionId, string> = {
 /** Actions a non-owner can never perform — hidden from the rebinding menu rather than shown greyed. */
 export const OWNER_ONLY: readonly ActionId[] = ['owner.fly'] as const
 
+/**
+ * Actions a controller drives with an ANALOG STICK rather than a button.
+ *
+ * ⚠ THIS EXISTS BECAUSE `padGaps()` WAS LYING. It reports actions with no pad binding as the
+ * controller-coverage worklist, and it counted the four movement verbs — which the left stick
+ * covers perfectly — as unbound. A worklist that names four items nobody needs to do is a worklist
+ * people stop reading, and it would have hidden the four REAL gaps among them.
+ *
+ * ★ AND THE UNDERLYING LIMITATION IS NAMED RATHER THAN PAPERED OVER: `Binding` models keys and
+ * buttons, not axes, so a stick cannot currently be REBOUND the way a button can. That is a
+ * deliberate first-pass scope call — players expect to remap buttons and do not expect to remap
+ * which stick walks — but it is a real edge of this layer, and the day someone asks for
+ * southpaw/inverted sticks this is the file that has to grow an axis concept.
+ */
+export const STICK_DRIVEN: readonly ActionId[] = [
+  'move.forward', 'move.back', 'move.left', 'move.right',
+] as const
+
 export const ALL_ACTIONS = Object.keys(DEFAULTS) as ActionId[]

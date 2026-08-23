@@ -1,7 +1,7 @@
 // ── The input layer's oracle ──────────────────────────────────────────────────────────────────
 // Run: npx tsx src/lib/input/input.test.ts
 
-import { DEFAULTS, ALL_ACTIONS, LABEL, PAD, HELD, OWNER_ONLY, type ActionId } from './actions'
+import { DEFAULTS, ALL_ACTIONS, LABEL, PAD, HELD, OWNER_ONLY, STICK_DRIVEN, type ActionId } from './actions'
 import { merge, rebind, conflicts, orphans, padGaps, resetAll, BINDINGS_KEY, type BindingMap } from './bindings'
 import { deadzone, kindOf } from './gamepad'
 import { hintFor, hintsFor, keyName, padName } from './hints'
@@ -83,6 +83,11 @@ ok(conflicts(clash).some(x => x.input === 'KeyC' && x.actions.length === 2), 'a 
 const gaps = padGaps(base)
 ok(gaps.length > 0 && gaps.every(id => ALL_ACTIONS.includes(id)), 'padGaps returned nonsense')
 ok(!gaps.includes('world.mine') && !gaps.includes('move.jump'), 'a core verb has no controller binding')
+// ⚠ the movement verbs are covered by the LEFT STICK. Counting them as gaps reported 8 when 4 were
+// real and buried the true ones — a worklist with false entries is one people stop reading.
+for (const id of STICK_DRIVEN) {
+  ok(!gaps.includes(id), `${id} is stick-driven and must not appear in the controller worklist`)
+}
 
 // ── 9. deadzone is RADIAL ──────────────────────────────────────────────────────────────────────
 // Per-axis deadzoning leaves a cross-shaped live area, so a light diagonal reads as pure horizontal.
