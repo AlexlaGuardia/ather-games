@@ -168,6 +168,7 @@ try {
    * trails the column by tens of seconds — `ather-games` has read that as a render regression before.
    * An ABSENCE ("the fold is cheap") needs the saturation check; a presence would not.
    */
+  let crossed = false
   const saturate = async (label: string): Promise<Sample> => {
     // ⚠⚠ THREE STEADY ROUNDS, NOT TWO, AND I LEARNED THAT FROM THIS SCRIPT LYING TO ME. The first
     // run used two and declared the WILDS saturated at 69 draws / 206k tris. The real saturated
@@ -175,12 +176,32 @@ try {
     // is indistinguishable from a finish if you only require two. The plot held at 11 across both
     // runs, so the conclusion survived; that is luck, not method. A longer STEP is doing more of the
     // work here than the counter is, which is why the default moved 3s -> 6s.
+    // ── ★★★ A CROSSING COLLAPSES, IT DOES NOT SATURATE (measured 08-23, `fold-crops.mts`) ────────
+    // Bare fold, 6s steps: t+6 481 inst · t+12 481 (a PLATEAU) · t+18 3476 · t+24 **0** · steady.
+    // `enterSpace` disposes the previous space's meshes ASYNCHRONOUSLY, so counts climb, plateau,
+    // then FALL. Every saturation rule here assumed a climb to a plateau — so a plateau caught
+    // before the collapse is a false saturation that **OVERSTATES the fold**.
+    //
+    // ⚠⚠ THAT CONTAMINATED THIS FILE'S OWN r12 PLOT READING (20 draws / 11k tris / 777 inst): it
+    // reported `777` identical to the wilds value, which is the signature of residue, and the fold's
+    // true figure is lower. The direction is the safe one — it makes the fold look MORE expensive,
+    // so the wilds-vs-plot gap is wider than that run printed — but it is still a wrong number.
+    //
+    // ★ AND IT SETTLES THE `instances` DISAGREEMENT BELOW rather than leaving the field demoted:
+    // **0 is the fold; 777 and 481 are wilds residue mid-eviction.** Neither run misread what it
+    // saw; r12 sampled before the collapse. The field is honest once eviction finishes — it just
+    // cannot tell you that it has, which is why the collapse must be REQUIRED, not waited out.
     let prev: Sample | null = null, stable = 0, s = await sample()
+    let peak = 0, collapsed = false
     for (let i = 0; i < MAX_POLLS; i++) {
       await sleep(STEP * 1000)
       s = await sample()
+      peak = Math.max(peak, s.triangles)
+      // ⚠ ONLY THE PLOT PASS CROSSES; the wilds pass only ever climbs, so requiring a collapse there
+      // would hang it forever. `crossed` is false for the wilds reading and true after `/space plot`.
+      if (!crossed || s.triangles < peak * 0.75) collapsed = true
       const same = prev && s.calls === prev.calls && s.triangles === prev.triangles && s.instances === prev.instances
-      stable = same ? stable + 1 : 0
+      stable = same && collapsed ? stable + 1 : 0
       console.log(`   ${label} t+${String((i + 1) * STEP).padStart(3)}s  ${String(s.calls).padStart(5)} draws · ${String(Math.round(s.triangles / 1000)).padStart(5)}k tris · ${String(s.instances).padStart(6)} inst · geo ${s.geometries}${stable ? `  (steady ×${stable})` : ''}`)
       prev = s
       if (stable >= 3) { console.log(`   ${label} saturated`); return s }
@@ -213,6 +234,7 @@ try {
   const already = await cmd('/space plot')
   ok(/already in the plot/.test(already), '★ `space.current === "plot"` — the ref says we are inside, not at the door')
 
+  crossed = true
   console.log('\n── HOME PLOT (fold) ─────────────────────────────────────────')
   const plotCounts = await saturate('plot')
   const plotSnap = await snapshot()

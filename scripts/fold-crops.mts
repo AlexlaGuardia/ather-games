@@ -73,6 +73,13 @@ async function pass(label: string, seed: number): Promise<{ s: Sample; overflow:
   page.on('console', m => { const t = m.text(); if (/\[flora\]/.test(t)) overflow.push(t) })
 
   await page.evaluateOnNewDocument(() => {
+    // ⚠ `__name` SHIM, FIRST LINE. tsx/esbuild annotates named function expressions with a `__name`
+    // helper that exists in the BUNDLE and not in the page. Any `page.evaluate` containing a named
+    // arrow (`const open = () => …`) therefore dies with `__name is not defined` — which killed the
+    // seeding step on the first run while every simpler evaluate in this repo's probes survived,
+    // because they contain no named function expressions. Shim it once here rather than contorting
+    // every evaluate to avoid consts.
+    ;(globalThis as unknown as Record<string, unknown>).__name = (f: unknown) => f
     localStorage.setItem('ather:epoch', '2')
     localStorage.setItem('ather:shimmer:birthRune', 'freeze')
     localStorage.setItem('ather:shimmer:runes', JSON.stringify(['freeze']))
@@ -173,13 +180,36 @@ async function pass(label: string, seed: number): Promise<{ s: Sample; overflow:
     }
   })
 
+  // ── ★★★ A CROSSING DOES NOT SATURATE, IT COLLAPSES — AND A PLATEAU BEFORE THE COLLAPSE READS
+  //         HIGH (measured 08-23) ────────────────────────────────────────────────────────────────
+  // Watched live on the bare fold, one run, 6s steps:
+  //     t+6   18 draws ·  8k tris ·  481 inst
+  //     t+12  18 draws ·  8k tris ·  481 inst   (steady ×1)   <- a plateau, and it is WILDS residue
+  //     t+18  19 draws · 21k tris · 3476 inst                  <- still tearing down
+  //     t+24  11 draws ·  5k tris ·     0 inst                 <- the collapse
+  //     t+30..42  11 · 5k · 0                  (steady ×3)     <- the fold, actually
+  //
+  // ⚠⚠ EVERY SATURATION RULE IN THESE PROBES ASSUMED COUNTS CLIMB TO A PLATEAU. Across a crossing
+  // they climb, then FALL, because `enterSpace` disposes the old space's meshes asynchronously. So a
+  // plateau caught before the collapse is a false saturation that OVERSTATES the fold — the opposite
+  // direction from the wilds floor, and the one that would have made a bare fold look expensive.
+  //
+  // ★ THIS ALSO SETTLES THE `instances` DISAGREEMENT RATHER THAN LEAVING IT DEMOTED. r6 read plot 0,
+  // r12 read plot 777 identical to its wilds value. Neither was wrong about what it saw: **0 is the
+  // fold, 777 and 481 are wilds residue mid-eviction**, and r12 simply sampled before the collapse.
+  // The field is honest once eviction has finished; what it cannot do is tell you that it has.
+  // Hence: require the collapse, do not merely wait for quiet.
   let prev: Sample | null = null, stable = 0, s = await sample(), saturated = false
+  let peak = 0, collapsed = false
   for (let i = 0; i < MAX_POLLS; i++) {
     await sleep(STEP * 1000)
     s = await sample()
+    peak = Math.max(peak, s.triangles)
+    // The collapse is a FALL from the peak, not quiet. Until it happens, a steady reading is residue.
+    if (s.triangles < peak * 0.75) collapsed = true
     const same = prev && s.calls === prev.calls && s.triangles === prev.triangles && s.instances === prev.instances
-    stable = same ? stable + 1 : 0
-    console.log(`   ${label} t+${String((i + 1) * STEP).padStart(3)}s  ${String(s.calls).padStart(4)} draws · ${String(Math.round(s.triangles / 1000)).padStart(4)}k tris · ${String(s.instances).padStart(5)} inst${stable ? `  (steady ×${stable})` : ''}`)
+    stable = same && collapsed ? stable + 1 : 0
+    console.log(`   ${label} t+${String((i + 1) * STEP).padStart(3)}s  ${String(s.calls).padStart(4)} draws · ${String(Math.round(s.triangles / 1000)).padStart(4)}k tris · ${String(s.instances).padStart(5)} inst${collapsed ? '' : '  ‹wilds residue›'}${stable ? `  (steady ×${stable})` : ''}`)
     prev = s
     if (stable >= 3) { saturated = true; break }
   }
