@@ -174,6 +174,7 @@ import { createLoco, tickLocomotion, eyeY, launchKeeper, blinkKeeper,
 import { loadTutorial, saveTutorial, GREG_LINE, OBJECTIVE_LABEL, type TutorialStage, type TutorialState } from './tutorial'
 import { GREG_LINES } from './greg-lines'
 import { GATE_X, GATE_Z, GATE_SPANS_X, gateCells } from './gate'
+import { courtAnchor, sockets as courtSockets, socketCells, courtFits, staleCourts } from './crossings'
 import { createGregMesh, GREG_BOUNDS } from './greg'
 import { aimedAt, bodyBox } from './aim'
 import { createSteamPoints } from './steam'
@@ -3638,6 +3639,10 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
   // its columns arrive) exactly once, then opened exactly once more if the quest completes later.
   const gateBuilt = useRef(false)
   const gateOpened = useRef(false)
+  /** Which plot tier's crossing court is currently standing in the world; -1 = none built.
+   *  ⚠ NOT A BOOLEAN, because the court MOVES when Greg widens the fold. A `courtBuilt`
+   *  flag would build once and leave the old cut stone stranded inland forever. */
+  const courtTier = useRef(-1)
   // Placements are grouped by the column that OWNS them (the one containing the piece origin) —
   // the same ownership rule trees and carvers use, so a piece straddling a border saves once.
   const placements = useRef<(Placement & { gen?: string })[]>([])
@@ -6677,6 +6682,59 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
       const baseY = columnHeight(GATE_X, GATE_Z, SEED)
       for (const c of gateCells(baseY)) if (c.doorway) setVoxel(c.x, c.y, c.z, AIR)
       gateOpened.current = true
+    }
+
+    // ── the crossing court ────────────────────────────────────────────────────────────────────
+    // The keeper's ways OUT, standing together on their own ground. `crossings.ts` owns WHERE and
+    // WHICH CELLS; this only lays the stone. See that file for why it is not at the fold-seam (canon
+    // forbids framing a threshold) and why socket 0 is a GATE while the rest are WAYMARKS.
+    //
+    // ★ PLOT SPACE ONLY. The plot and the Wilds share every coordinate and are different worlds, so
+    // an unguarded build would raise a court out in the Wilds at the same numbers. That is the same
+    // class as the DEFAULT_BUBBLE/WILDS_BUBBLE wrong-door bug: right about the key, wrong about the
+    // universe.
+    //
+    // ⚠ KEYED ON THE TIER, NOT A BUILT FLAG. The court is derived from the coast, so it moves when
+    // the fold grows — and cut stone already laid does not move with it. Rebuilding on a tier change
+    // and clearing every older site is what stops a tier-2 keeper owning two abandoned courts ~88
+    // blocks apart. `staleCourts` derives those sites from the tier alone, so a save written before
+    // any of this existed self-heals on the next widen.
+    if (space.current === 'plot' && courtTier.current !== plotTier.current) {
+      const cfg = plotCfg.current
+      const fit = courtFits(SEED, cfg)
+      const socks = courtSockets(SEED, cfg)
+      const a = courtAnchor(SEED, cfg)
+      // Every footprint column loaded first — a 5-wide frame straddling a SECTION seam would
+      // otherwise drop whichever half landed in a neighbour that has not arrived. Same reason
+      // GATE_COLS checks all of them rather than the centre.
+      const ready = a.y !== null && socks.every(sk => cols.current.has(colOf(sk.x, sk.z)))
+      if (fit.ok && ready) {
+        // Clear first: an older court's stone may stand where the new one goes, and laying the new
+        // court before clearing would then delete cells it had just placed.
+        for (const { tier: oldTier, anchor: oldA } of staleCourts(SEED, plotTier.current)) {
+          const oldCfg = plotForTier(oldTier)
+          if (oldA.y === null) continue
+          for (const sk of courtSockets(SEED, oldCfg)) {
+            const h = plotHeight(sk.x, sk.z, SEED, oldCfg)
+            if (h === null) continue
+            for (const c of socketCells(sk, h, oldA.bearing))
+              if (voxel(c.x, c.y, c.z) === MAT.CUT_STONE) setVoxel(c.x, c.y, c.z, AIR)
+          }
+        }
+        for (const sk of socks) {
+          const h = plotHeight(sk.x, sk.z, SEED, cfg)
+          if (h === null) continue
+          // ★ A WAYMARK SOCKET ONLY EXISTS ONCE THE KEEPER HOLDS THAT WAYMARK — Alex's "as the player
+          // unlocks gates for the ather they appear here". Socket 0 is the Rune Hold GATE and is up
+          // from the first minute, because canon has Greg give it rather than sell it.
+          const held = sk.index === 0 || waymarks.current.marks.length >= sk.index
+          for (const c of socketCells(sk, h, a.bearing)) {
+            const want = held ? (c.doorway ? AIR : MAT.CUT_STONE) : AIR
+            if (voxel(c.x, c.y, c.z) !== want) setVoxel(c.x, c.y, c.z, want)
+          }
+        }
+        courtTier.current = plotTier.current
+      }
     }
 
     // ── movement — play3d's locomotion on voxel collision (see locomotion.ts) ────────────────

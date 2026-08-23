@@ -181,9 +181,9 @@ for (const seed of SEEDS) {
     const stale = staleCourts(seed, t)
     const here = courtAnchor(seed, plotForTier(t, DEFAULT_PLOT))
     ok(stale.length === t, `s${seed}: tier ${t} names all ${t} older court sites (${stale.length})`)
-    ok(stale.every(a => a.x !== here.x || a.z !== here.z),
+    ok(stale.every(({ anchor: a }) => a.x !== here.x || a.z !== here.z),
        `s${seed}: tier ${t} never lists the court that is supposed to be standing`)
-    ok(stale.every(a => Math.hypot(a.x - here.x, a.z - here.z) > 8),
+    ok(stale.every(({ anchor: a }) => Math.hypot(a.x - here.x, a.z - here.z) > 8),
        `s${seed}: tier ${t} older courts are genuinely elsewhere, not a rounding wobble`)
   }
   // ⚠ THIS DOES NOT TEST THE CLAMP, AND PRETENDING IT DOES WOULD BE THE WORSE OPTION. Removing the
@@ -192,6 +192,10 @@ for (const seed of SEEDS) {
   // other stands. Both are labelled as such in the module. What this DOES assert is the observable
   // contract a caller depends on: a garbage tier out of a save file yields the top tier's answer.
   ok(staleCourts(seed, 99).length === PLOT_TIERS.length - 1, `s${seed}: an over-range tier reads as the top tier`)
+  // the tier rides along, so the host never re-derives which fold each stale court belonged to
+  for (let t = 1; t < PLOT_TIERS.length; t++)
+    ok(staleCourts(seed, t).every((e, i) => e.tier === i),
+       `s${seed}: tier ${t} stale entries carry their own tier index`)
 }
 
 console.log(`crossings: ${pass} passed, ${fails.length} failed`)

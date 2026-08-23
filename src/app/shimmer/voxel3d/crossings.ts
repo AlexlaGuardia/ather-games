@@ -306,10 +306,14 @@ export function courtFits(
  */
 export function staleCourts(
   seed: number, tier: number, base: PlotConfig = DEFAULT_PLOT,
-): CourtAnchor[] {
+): { tier: number; anchor: CourtAnchor }[] {
   const t = Math.max(0, Math.min(PLOT_TIERS.length - 1, Math.round(tier || 0)))
   const here = courtAnchor(seed, plotForTier(t, base))
-  const out: CourtAnchor[] = []
+  // ★ THE TIER TRAVELS WITH THE ANCHOR SO THE HOST NEED NOT RE-DERIVE IT. Returning bare anchors
+  // forced the caller to loop the tiers itself to find the sockets to clear — which is this
+  // function's own staleness rule, restated in a second place, agreeing with it right up until one
+  // of them changed. That is the hand-kept-mirror shape, and it nearly shipped here.
+  const out: { tier: number; anchor: CourtAnchor }[] = []
   for (let i = 0; i < t; i++) {
     const a = courtAnchor(seed, plotForTier(i, base))
     // A lower tier whose court lands on the same column as the current one needs no clearing, and
@@ -322,7 +326,7 @@ export function staleCourts(
     // (It also makes the `t` clamp above redundant, and the clamp makes it redundant: neither is
     // provable while the other stands. Both are kept deliberately; neither is load-bearing today.)
     if (a.x === here.x && a.z === here.z) continue
-    out.push(a)
+    out.push({ tier: i, anchor: a })
   }
   return out
 }
