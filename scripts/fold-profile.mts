@@ -62,6 +62,11 @@ const RADIUS = Number(process.env.WORLD_RADIUS ?? 0)
 const STEP = Number(process.env.PERF_STEP ?? 6)
 const MAX_POLLS = Number(process.env.PERF_POLLS ?? 18)
 
+/** Provenance, printed with every reading — see the note at the readings block. */
+const SHA = process.env.PROBE_SHA ?? 'unstamped'
+const FLORA_SHA = process.env.PROBE_FLORA_SHA ?? 'unstamped'
+const PLANTING_SHA = process.env.PROBE_PLANTING_SHA ?? 'unstamped'
+
 const KEY = process.env.OWNER_KEY
 if (!KEY) {
   console.error('OWNER_KEY not set — `set -a; . /root/ather-games/.env; set +a` first.')
@@ -215,9 +220,18 @@ try {
   ok(!!plotSnap && /HOME PLOT \(fold\)/.test(plotSnap), '★ the reading labels ITSELF as the fold (header from the space ref)')
 
   console.log('\n════════ THE READINGS ════════════════════════════════════════')
+  // ★ PROVENANCE IN THE OUTPUT, NOT ONLY THE HEADER (hub, 08-23). A reading pasted into a chat
+  // outlives the checkout it was taken at, and `flora-mesh.ts` is under active edit in another lane —
+  // a slope measured across that edit is silently against two different renderers.
+  console.log(`\nmeasured at ${SHA}  ·  flora-mesh ${FLORA_SHA}  ·  planting ${PLANTING_SHA}`)
   console.log('\n⚠⚠ SWIFTSHADER. Every `fps`, `ms`, `worst` and gpu line below is VOID as an absolute —')
   console.log('   a software rasteriser, not Alex\'s desktop driver. Read the ZONE ms and the scene')
   console.log('   counts, and read them as wilds-vs-plot differences on one broken clock.\n')
+  // ⚠ `gpuMs` AND `ms` ARE MEANS OVER DIFFERENT POPULATIONS, SO THEIR RATIO CAN EXCEED 100% — that
+  // is arithmetic, not a defect. `ms` averages over `frames`; `gpuMs` averages over `gpuSamples`, and
+  // a query lands a frame or two late while a DISJOINT one is dropped entirely. Measured here at
+  // **110%** (470.0 ms gpu against a 428.4 ms frame) on a 10-frame window. Small windows make it
+  // worse. If a real-GPU reading shows >100%, widen the window before concluding anything from it.
   console.log('--- wilds ---')
   console.log(wildsSnap ?? '  (no reading — clipboard copy did not land)')
   console.log('\n--- home plot (fold) ---')
@@ -231,6 +245,27 @@ try {
   row('draws', wildsCounts.calls, plotCounts.calls)
   row('triangles', wildsCounts.triangles, plotCounts.triangles)
   row('instances', wildsCounts.instances, plotCounts.instances)
+  // ── ⚠⚠ THE INSTANCE COUNT IS NOT TRUSTWORTHY ACROSS A CROSSING, AND TWO RUNS PROVED IT ────────
+  // radius 6:  wilds 10523 -> plot 0.      radius 12: wilds 777 -> plot 777, to the unit.
+  // Same probe, same build, same two places. The field cannot be both. `enterSpace` calls
+  // `flora.invalidateAll()` and marks it dirty, but the rebuild is ASYNC — a window closing before it
+  // finishes reads the PREVIOUS space's instanced mesh and reports it as this one's.
+  //
+  // ★ THE DISAGREEMENT IS THE FINDING, NOT AN ANNOYANCE. Either number quoted alone is a confident
+  // wrong answer: 0 says "the garden grows nothing", 777 says "the garden is as planted as the
+  // wilds". The SOURCE settles what the measurement cannot — `src/app/shimmer/voxel/plot.ts` makes
+  // ZERO calls to `plantMaterialAt`/`floraAt` where `src/app/shimmer/voxel/column.ts` makes two, so a
+  // fold grows no WILD cover by construction. Believe the generator, not this row.
+  //
+  // ⚠ AND FOR ANY FUTURE SLOPE: `CAP.crop` is 6000 (`flora-mesh.ts:97`) and the pool STOPS QUIETLY
+  // at its cap — the overrun Alex surfaced on 08-22, where herbs wanted 199% of cap, existed, were
+  // breakable and did not draw. So `instances > 0` is far too weak a gate: seed 8000 and you read
+  // 6000, the gate passes, and the slope FLATTENS into "crops get cheaper at scale". Gate on
+  // instances ~= N seeded, and read `floraDemand` (`flora-mesh.ts:119`, `{wanted, cap}` per pool at
+  // every sync) so a capped run announces itself instead of flattening.
+  if (wildsCounts.instances === plotCounts.instances && plotCounts.instances > 0)
+    console.log('    ⚠ instances IDENTICAL across the crossing — the flora rebuild had not finished')
+  console.log('    ⚠ read `instances` as "did anything plant here", never as a count')
   row('meshes', wildsCounts.meshes, plotCounts.meshes)
   row('geometries', wildsCounts.geometries, plotCounts.geometries)
   row('programs', wildsCounts.programs, plotCounts.programs)
