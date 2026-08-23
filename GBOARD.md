@@ -526,15 +526,65 @@ built it** — account B signed in and stood in account A's garden, holding A's 
   returned a finding.
 
 ### Next
-- **The localStorage sidecars are still shared** and each is a smaller version of the same bug: pot clock
-  (`voxel3d:pots:<seed>`), sapling clock, decay queue, mist ledger, discovery, tutorial, `book`, `loadout`.
-  None upload, so the blast radius is one browser — but B still sees A's timers.
-- **Birth rune still unscoped** (carried from #682): a second account skips the ritual and spawns with the
-  first keeper's affinity.
+- ✅ **The sidecars AND the birth rune — SHIPPED the same day (`6becd8b`).** Own block below.
 
 ### Files
 `voxel3d/save.ts` · `voxel3d/save.test.ts` · `voxel3d/page.tsx` · `voxel3d/VoxelWorld.tsx` ·
 `voxel3d/world-seed.ts` · `scripts/save-owner-probe.mts`
+
+## 🔑 Shimmer — **KEEPER STATE (#692 follow-on): the rune, the book, the map, the clocks** (2026-08-23, hub) · *Last touched 2026-08-23 (hub) — shipped, deployed, prod-verified*
+
+### Left off — SHIPPED `6becd8b` + `4221aed`, deployed, pushed, 19-check browser probe green on prod
+The save went per-account (#682), then the world did (#692), and this is everything else that describes
+a keeper and still had nobody's name on it. **The rune is the sharp one:** a second account on the
+machine found the first keeper's birth rune in a shared key, **skipped the ritual**, and spawned holding
+somebody else's affinity and cast book. Also moved: move book, cast loadout, uncovered map (per zone),
+mist ledger, tutorial progress, the pot/sapling/leaf-decay clocks, and the multiplayer identity —
+`ather:mp:name` is a MIRROR of the signed-in username, so **B's first frames announced A's name** in the zone.
+- `lib/keeper-local.ts` is the one definition: registry, `keeperKey()`, and an adoption whose rules are
+  the world store's rules. A keeper who adopts one and not the other is worse off than one who adopts
+  neither — their own garden, a stranger's rune.
+- ★ **The owner goes in FRONT here and BEHIND in `save-slot.ts`, and that is not inconsistency.** A suffix
+  is unambiguous only for a key with one fixed spelling. Several of these carry a dynamic tail
+  (`…:seen:<zoneId>`, `voxel3d:pots:<seed>`) and adoption finds them by prefix, because nothing holds a
+  list of every zone a keeper has walked. Suffix-scope a family and a scan for it matches every account's
+  copy — one keeper's adoption sweeping up another's.
+
+### Decisions
+- ★★ **The guard is the real deliverable, because `KEEPER_KEYS` is a hand-kept list** and a hand-kept list
+  of "things that must be scoped" is the shape that rots. `keeper-local.test.ts` reads every `localStorage`
+  call in `src/`, follows each key expression through same-file helpers **and across imports**, and demands
+  a verdict: scoped, or an explicitly listed device key. Anything else fails with the file and expression named.
+- ⚠⚠ **Its first version scored the bug GREEN.** It counted "this is a registered keeper base" as
+  classified, so `getItem(BIRTH_KEY)` — the base registered as per-keeper, read RAW — passed. That is not an
+  unclassified key, it is the bug wearing the registry as cover. Split into a fourth verdict, the sharpened
+  scan **immediately found two more raw readers I had missed** (`BirthScreen.tsx`, `RuneBadge.tsx`), each
+  carrying its own third and fourth copy of the rune literal — so it now also forbids a second spelling of
+  any keeper key outside its owning module, across all of `src`.
+- ⚠⚠ **And the epoch reset broke silently.** `ather-epoch.ts` clears character keys BY LITERAL, so scoping
+  the rune meant a world bump would clear the anonymous keeper's and leave every signed-in one behind — a
+  pre-epoch character surviving the wipe, the exact failure that file exists to prevent. **The browser probe
+  found it, not reasoning**, and a reset is rare enough nobody would have noticed until the next bump.
+  Guarded in both directions now: too narrow leaves a dead world's rune, too greedy wipes an arcade score.
+- **Deliberately still shared, each a decision:** graphics quality and voxel settings (tuned to the MACHINE),
+  the generator warning (one per browser is the point), battle-bg art overrides and the sprite-editor
+  clipboard (owner-gated dev tools authoring content, not progress somebody earned).
+- **Verified:** 72 asserts · 15 mutations, 15 red — including the ordering invariant that had lived only in
+  prose (localStorage has no transaction, so every destination is written before any source is deleted;
+  reversed, an interrupted adoption loses the rune). Then end to end on the real page: A's rune moves, B
+  inherits nothing, and **B is shown the ritual** — the page's own answer, not an inference from storage.
+
+### Next
+- **`wallet`/`magii` slots** still unscoped (carried from #682) — nothing pushes them, so it is shared coins
+  in one browser rather than a cloud overwrite.
+- `scripts/icon-sheet.mts` still calls `iconPixels`, not `iconPixelsFor`, so the contact sheet cannot show a
+  non-cube icon bug.
+
+### Files
+`lib/keeper-local.ts` · `lib/keeper-local.test.ts` · `lib/ather-epoch.ts` · `play3d/rune-inventory.ts` ·
+`play3d/birth/BirthScreen.tsx` · `play3d/birth/RuneBadge.tsx` · `play3d/book.ts` · `play3d/loadout.ts` ·
+`play3d/multiplayer.ts` · `play3d/page.tsx` · `voxel3d/{page,VoxelWorld,discovery,tutorial,mist-encounter}` ·
+`scripts/save-owner-probe.mts`
 
 ## 🌱 Shimmer — **SAPLING ICON: the bag read a glow mask as a cutout** (2026-08-23, hub) · *Last touched 2026-08-23 (hub, late)*
 
