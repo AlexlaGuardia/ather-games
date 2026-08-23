@@ -26,6 +26,7 @@ import { applyLiveRegionData } from '../world/region-maps'
 import { invalidateWorldCaches } from './world-adapter'
 import { resetIfStale } from '@/lib/ather-epoch'
 import { pullCloudSave } from '@/lib/cloud-sync'
+import { setSaveOwner, saveKey, slotFor, stampOwner, ownedBy } from '@/lib/save-slot'
 import BirthScreen from './birth/BirthScreen'
 import { loadRuneInventory, saveRuneInventory, setBirthRune, EMPTY_INVENTORY } from './rune-inventory'
 
@@ -33,7 +34,6 @@ import { loadRuneInventory, saveRuneInventory, setBirthRune, EMPTY_INVENTORY } f
 // so Shimmer3D's module init (world registration, NPC remaps) sees the live data.
 const Shimmer3D = dynamic(() => import('./Shimmer3D'), { ssr: false })
 
-const SAVE_KEY = 'ather:save:shimmer'
 /**
  * Vestigial: `birthOwed()` reads the rune directly now, so nothing consults this any more. Still
  * cleared on choose so an old latch left in a browser by a previous build doesn't sit there
@@ -52,15 +52,82 @@ const JUST_BORN_KEY = 'ather:shimmer:justBorn'
  * nothing it does later can revise who the player is.
  */
 async function hydrateFromCloud(): Promise<void> {
+  // ── WHO IS PLAYING, BEFORE ANYTHING READS A SAVE (#682) ──────────────────────────────────────
+  // This is the first thing that happens, because `saveKey()` answers with the anonymous slot until
+  // it is told otherwise and every later reader trusts that answer.
+  //
+  // ⚠ A FAILED SESSION FETCH RESOLVES TO ANONYMOUS, DELIBERATELY. Offline, or the endpoint down,
+  // means we cannot prove who this is — and the safe direction is a signed-in keeper seeing the
+  // anonymous slot (confusing, reversible, and `useAccount` will have failed too so nothing pushes)
+  // rather than guessing an identity and writing into somebody's garden. Never fail toward a name.
+  let userId: string | null = null
   try {
-    if (localStorage.getItem(SAVE_KEY)) return   // local wins, never overwrite live play
+    const res = await fetch('/api/auth/session', { cache: 'no-store' })
+    const body = (await res.json()) as { session: { user_id: string } | null }
+    userId = body.session?.user_id ?? null
+  } catch { /* offline — anonymous, local-only */ }
+  setSaveOwner(userId)
+
+  const slot = saveKey()
+  try {
+    // Local wins when present — and now that the slot is keyed to the account, the premise that
+    // guard was written under is TRUE again. It used to mean "this browser has a save, so it is
+    // this player's"; with one shared slot that was false the moment a second account signed in,
+    // which is #682. Keyed, it says "this ACCOUNT has a save here", which is the intended claim.
+    if (localStorage.getItem(slot)) return
   } catch { return }                             // private mode — nothing to hydrate into
+
+  // ── ⚠ CLAIM THE ANONYMOUS SLOT BEFORE DOING ANYTHING ELSE ────────────────────────────────────
+  // Found while verifying the fix, and it is #682 rebuilt through this function's own front door.
+  // Hydrating from the cloud leaves the browser's ANONYMOUS slot sitting there unclaimed. A second
+  // account that signs in later with no cloud row of its own reaches adoption below, finds that
+  // slot, and inherits the first keeper's garden — then pushes it up as its own.
+  //
+  // ★ STAMPED, NOT DELETED, AND THE DIFFERENCE IS THE WHOLE POINT. Deleting it would throw away a
+  // garden that may be NEWER than the cloud copy we are about to hydrate — trading a rare leak for
+  // guaranteed data loss, which is the trade this entire fix exists to refuse. Stamping costs
+  // nothing, keeps every byte, and makes `ownedBy` answer "no" for everybody else.
+  if (userId) {
+    try {
+      const anon = localStorage.getItem(slotFor(null))
+      if (anon && ownedBy(anon, null)) localStorage.setItem(slotFor(null), stampOwner(anon, userId))
+    } catch { /* private mode — nothing to claim */ }
+  }
+
+  // This account's own cloud copy comes first: it is unambiguously theirs.
   const cloud = await pullCloudSave('shimmer')
-  if (!cloud) return
+  if (cloud) {
+    try {
+      JSON.parse(cloud)                          // don't persist a blob the game can't read
+      if (ownedBy(cloud, userId)) { localStorage.setItem(slot, cloud); return }
+      // Stamped for someone else. The server should never have handed this over; refuse rather
+      // than hydrate, and let the keeper start fresh instead of inheriting a stranger's garden.
+      console.warn('[save] cloud copy is stamped for another account — refusing to hydrate it')
+    } catch { /* unparseable / quota — fall through to adoption */ }
+  }
+
+  // ── FIRST SIGN-IN ADOPTION (BUILD_SYNC_SPEC.md:150) ──────────────────────────────────────────
+  // No cloud copy and nothing in this account's slot: this is a first sign-in. If the browser holds
+  // an anonymous garden, it belongs to the person now signing in — not adopting it is how a player
+  // loses everything they built before making an account.
+  //
+  // ★ ADOPTION CONSUMES THE SLOT, and that is the load-bearing half. The anonymous garden can be
+  // claimed EXACTLY ONCE. Without that, account A plays, account B signs in on the same browser,
+  // finds the same anonymous slot and adopts A's pre-login world — #682 rebuilt out of the fix for
+  // it. Moving it (rather than copying) is what makes "first" mean something.
+  if (!userId) return
   try {
-    JSON.parse(cloud)                            // don't persist a blob the game can't read
-    localStorage.setItem(SAVE_KEY, cloud)
-  } catch { /* unparseable / quota — start fresh rather than half-load */ }
+    const anon = localStorage.getItem(slotFor(null))
+    if (!anon) return
+    // ⚠ Only if it is not already spoken for. The claim above stamps it for the first account to
+    // sign in on this browser, so a second account finds a slot that names someone else and walks
+    // away — which is the difference between "adopt an unclaimed garden" and "take that one".
+    if (!ownedBy(anon, userId)) return
+    JSON.parse(anon)                             // only adopt something the game can read
+    localStorage.setItem(slot, stampOwner(anon, userId))
+    localStorage.removeItem(slotFor(null))
+    console.info('[save] adopted this browser\'s anonymous garden into the account signing in')
+  } catch { /* nothing adoptable */ }
 }
 
 /**

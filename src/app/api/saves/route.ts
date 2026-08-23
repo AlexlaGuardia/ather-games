@@ -41,7 +41,27 @@ export async function POST(req: NextRequest) {
   if (!GAMES.has(game)) return NextResponse.json({ error: 'Unknown game' }, { status: 400 })
   if (typeof data !== 'string' || data.length === 0) return NextResponse.json({ error: 'data must be a non-empty string' }, { status: 400 })
   if (data.length > MAX_BYTES) return NextResponse.json({ error: 'Save too large' }, { status: 413 })
-  try { JSON.parse(data) } catch { return NextResponse.json({ error: 'data must be JSON' }, { status: 400 }) }
+  let parsed: Record<string, unknown>
+  try { parsed = JSON.parse(data) as Record<string, unknown> } catch { return NextResponse.json({ error: 'data must be JSON' }, { status: 400 }) }
+
+  // ── ⚠ THE LAST LINE OF DEFENCE (#682, 2026-08-23) ──────────────────────────────────────────────
+  // Until today this wrote whatever arrived, under whoever's cookie arrived with it. That is what
+  // made the bug DESTRUCTIVE rather than merely confusing: the client had one save slot with no
+  // account in it, so account B's session posted account A's world and `putSave` replaced B's
+  // garden with it. Reproduced end to end, and found already done once in production.
+  //
+  // The client is fixed (per-account slots), but a server that trusts the client is one stale
+  // bundle away from the same loss — and a browser tab open across a sign-in is exactly that. A
+  // blob stamped for a DIFFERENT account is refused here no matter what the cookie says.
+  //
+  // ★ UNSTAMPED IS ACCEPTED, DELIBERATELY. Every save written before today carries no stamp, and
+  // every client still running yesterday's bundle sends none. Refusing those would stop the world
+  // saving for everyone mid-rollout — a self-inflicted outage in place of a rare overwrite. The
+  // check is "does it name someone else", never "does it name me".
+  const owner = parsed?.['_owner']
+  if (typeof owner === 'string' && owner && owner !== userId) {
+    return NextResponse.json({ error: 'That save belongs to another account' }, { status: 409 })
+  }
   putSave(userId, game, data)
   return NextResponse.json({ ok: true })
 }

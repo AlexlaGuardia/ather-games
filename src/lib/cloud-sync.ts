@@ -11,6 +11,7 @@
 // design has to rule out, so the client never "syncs down" on its own.
 
 import { ATHER_EPOCH } from './ather-epoch'
+import { saveOwner, stampOwner, ownedBy } from './save-slot'
 
 const PUSH_DEBOUNCE_MS = 8_000
 
@@ -72,7 +73,11 @@ if (typeof window !== 'undefined') {
 export function pushCloudSave(game: string, data: string): void {
   // Stamped at QUEUE time so both exit paths carry it — the debounced fetch and the pagehide
   // sendBeacon, which reads straight out of `pending` and would otherwise ship an unstamped blob.
-  pending.set(game, stamp(data))
+  // Owner rides beside the epoch, and for the same reason the epoch does: the stamp has to travel
+  // WITH the character, not sit beside it. A blob in flight carries who it belongs to, so the
+  // server can refuse it even if a client bug, a stale bundle, or a tab that was open across a
+  // sign-in hands it the wrong session. (#682)
+  pending.set(game, stampOwner(stamp(data), saveOwner()))
   if (timer) clearTimeout(timer)
   timer = setTimeout(() => {
     timer = null
@@ -101,6 +106,13 @@ export async function pullCloudSave(game: string): Promise<string | null> {
     } catch {
       return null   // unparseable is not a save we can vouch for
     }
+    // ⚠ AND FAIL CLOSED ON THE OWNER TOO (#682). The server only ever hands back the signed-in
+    // account's own row, so a blob stamped for somebody else means something upstream is already
+    // wrong — a shared slot, a mixed-up row, a stale push. Refusing costs a fresh start; accepting
+    // is how one keeper's garden lands in another's browser and then gets uploaded back as theirs.
+    // Unstamped passes: every save written before today has no stamp, and refusing those would
+    // delete every existing garden on upgrade.
+    if (!ownedBy(data, saveOwner())) return null
     return data
   } catch {
     return null

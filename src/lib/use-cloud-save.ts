@@ -1,10 +1,22 @@
 "use client";
 
 import { useCallback } from "react";
+import { saveKey as shimmerSlot } from "@/lib/save-slot";
 
 type Game = "magii" | "shimmer" | "wallet";
 
-const saveKey = (g: Game) => `ather:save:${g}`;
+// ── ★ SHIMMER'S SLOT IS KEYED TO THE ACCOUNT (#682, 2026-08-23) ────────────────────────────────
+// `shimmer` is the one game here that PUSHES to the cloud (`Shimmer3D` → `pushCloudSave`), and the
+// push reads this slot and POSTs it under whatever session holds the cookie. With one shared slot
+// that meant a second account uploaded the first account's world into its own row and destroyed
+// whatever was there. Reproduced end to end, and found already done once in production.
+//
+// ⚠ `wallet` and `magii` are DELIBERATELY still unscoped, and the reason is the one that matters:
+// nothing pushes them, so the failure they have is two accounts sharing a browser's coins — visible
+// and reversible — not a garden overwritten in the cloud. Scoping them needs the same first-sign-in
+// adoption shimmer gets in `play3d/page.tsx`, or every existing wallet reads as emptied on upgrade.
+// That is a follow-up, not an oversight; do not "tidy" this into scoping all three without it.
+const saveKey = (g: Game) => (g === "shimmer" ? shimmerSlot() : `ather:save:${g}`);
 const bestKey = (g: Game, cat: string) => `ather:best:${g}:${cat}`;
 
 // ather.games (public): localStorage-backed saves — no login required. Same hook

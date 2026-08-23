@@ -21,6 +21,7 @@ import { useRef, useMemo, useState, useEffect, useCallback } from 'react'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { PointerLockControls } from '@react-three/drei'
 import * as THREE from 'three'
+import { saveKey } from '@/lib/save-slot'
 import { SECTION, DEFAULT_COLUMN, Column, Stage, makeColumn, meshColumn, refreshUniform, isHalfCell, generatedVoxel, WILDS_BUBBLE, wildsSwallows } from '../voxel/column'
 import { VOXEL_WORKER_URL } from '../../../workers/worker-url'
 import { createMeshScratch } from '../voxel/greedy'
@@ -1337,9 +1338,9 @@ export default function VoxelWorld() {
   const writeParty = useCallback(() => {
     setHasParty(party.current.length > 0)
     try {
-      const raw = localStorage.getItem('ather:save:shimmer')
+      const raw = localStorage.getItem(saveKey())
       const prev = raw ? JSON.parse(raw) as Record<string, unknown> : {}
-      localStorage.setItem('ather:save:shimmer', JSON.stringify({ ...prev, spirits: spiritsToSave(party.current) }))
+      localStorage.setItem(saveKey(), JSON.stringify({ ...prev, spirits: spiritsToSave(party.current) }))
     } catch { /* private mode: the change still holds for this session, it just does not persist */ }
   }, [])
 
@@ -1740,7 +1741,7 @@ export default function VoxelWorld() {
   useEffect(() => {
     mistLedger.current = loadMistLedger(SEED)
     try {
-      const raw = localStorage.getItem('ather:save:shimmer')
+      const raw = localStorage.getItem(saveKey())
       const data = raw ? JSON.parse(raw) as { spirits?: unknown[] } : null
       if (data?.spirits?.length) {
         party.current = spiritsFromSave(data.spirits as never)

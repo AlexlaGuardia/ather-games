@@ -25,6 +25,7 @@ import { useMultiplayer, storedName, storeName, type RemotePlayer } from './mult
 import { useParty, newPartyCode, sanitizePartyCode, inviteUrl } from '@/lib/party'
 import { useAccount, type UseAccount } from '@/lib/accounts/use-account'
 import { pushCloudSave } from '@/lib/cloud-sync'
+import { saveKey, saveOwner } from '@/lib/save-slot'
 import { birthAffinity, NEUTRAL_AFFINITY, type Affinity } from './birth-affinity'
 import { castForMove, isBuilt, CAST_SLOTS, SLOT_KEYS, type CastSpec } from './cast'
 import { loadLoadout } from './loadout'
@@ -3890,7 +3891,14 @@ export default function Shimmer3D() {
       s.kb = json.length / 1024
       // Cloud copy (stage 2 per-keeper plots): debounced, fire-and-forget, gated on a live
       // session so anonymous play never spends a request. Signed out → local-only, as ever.
-      if (accountRef.current?.session) pushCloudSave('shimmer', json)
+      // ⚠ TWO CONDITIONS, NOT ONE (#682). A live session says "somebody is signed in"; it does NOT
+      // say the blob in hand belongs to them. Before the slot was keyed, those came apart exactly
+      // when it mattered — the session was B's and the bytes were A's — and this line uploaded one
+      // keeper's garden into another's row. `saveOwner()` is who the slot we just wrote belongs to,
+      // so requiring the two to agree is the difference between "signed in" and "this is mine".
+      if (accountRef.current?.session && accountRef.current.session.user_id === saveOwner()) {
+        pushCloudSave('shimmer', json)
+      }
     }
     s.ms = performance.now() - t0
     logPerf('autosave', s.ms)   // surfaces in the lag log — a 30s save that lands mid-frame shows here
@@ -3926,7 +3934,7 @@ export default function Shimmer3D() {
   // merge. Without this we would happily clobber whatever that tab saved with our own `...prev`.
   useEffect(() => {
     const onStorage = (e: StorageEvent) => {
-      if (e.key === 'ather:save:shimmer') { saveMirrorRef.current = null; lastWrittenRef.current = '' }
+      if (e.key === saveKey()) { saveMirrorRef.current = null; lastWrittenRef.current = '' }
     }
     window.addEventListener('storage', onStorage)
     return () => window.removeEventListener('storage', onStorage)

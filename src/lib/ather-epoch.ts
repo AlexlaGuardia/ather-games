@@ -40,8 +40,10 @@ const EPOCH_KEY = 'ather:epoch'
  * drops the player straight back into the world with no ritual, which is the exact bug this whole
  * mechanism exists to avoid.
  */
+import { SAVE_KEY_PREFIX, ANON_SAVE_KEY } from './save-slot'
+
 const CHARACTER_KEYS = [
-  'ather:save:shimmer',
+  ANON_SAVE_KEY,
   'ather:shimmer:birthRune',
   'ather:shimmer:birthPending',
   'ather:shimmer:runes',
@@ -67,8 +69,18 @@ export function resetIfStale(): boolean {
     if (seen === ATHER_EPOCH) return false
     // A brand-new browser has no epoch and no character. Stamping it without a "reset" claim keeps
     // the return value honest for callers.
-    const hadCharacter = CHARACTER_KEYS.some(k => localStorage.getItem(k) !== null)
-    for (const k of CHARACTER_KEYS) localStorage.removeItem(k)
+    // ★ EVERY SLOT, NOT JUST THE BARE ONE (#682, 2026-08-23). The shimmer save used to be a single
+    // key; it is now one slot per account (`ather:save:shimmer:<user_id>`, see `lib/save-slot.ts`).
+    // A reset that removed only the literal would clear the anonymous keeper and leave every
+    // signed-in character behind — a pre-epoch save surviving the wipe is the precise failure this
+    // whole mechanism exists to prevent, and it would come back wearing a different account's name.
+    const keys = new Set(CHARACTER_KEYS)
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i)
+      if (k && k.startsWith(SAVE_KEY_PREFIX)) keys.add(k)
+    }
+    const hadCharacter = [...keys].some(k => localStorage.getItem(k) !== null)
+    for (const k of keys) localStorage.removeItem(k)
     localStorage.setItem(EPOCH_KEY, String(ATHER_EPOCH))
     // ★ ARM THE BIRTH LATCH IN STORAGE, NOT IN MEMORY. play3d decides "new keeper" from
     // save-absence, but its starter kit persists a save as the game mounts — so a reset player can
