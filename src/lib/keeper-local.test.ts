@@ -111,6 +111,12 @@ const ROOT = join(process.cwd(), 'src', 'app', 'shimmer')
 const SRC = join(process.cwd(), 'src')
 const DEVICE_KEYS = [
   'shimmer.voxel.settings.v1',    // graphics/voxel settings — tuned to the MACHINE, not the person
+  'shimmer.voxel.bindings.v1',    // key/controller bindings. DEVICE for the same reason as the line
+                                  // above and against the house habit: controls belong to the hands
+                                  // and the hardware, not the character. Two accounts on one desktop
+                                  // want the same keys; one account on a phone and a desktop does
+                                  // not. Scoping these per keeper would hand a returning player
+                                  // default controls for no reason they could name.
   'ather:gfx:shimmer',            //   ″
   'ather:shimmer:genWarned',      // one generator warning per browser is the point of it
   'ather:shimmer:justBorn',       // read and cleared inside one boot
