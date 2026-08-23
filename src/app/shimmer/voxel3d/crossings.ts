@@ -52,7 +52,8 @@
 // below is that assert, and `crossings.test.ts` runs it across seeds.
 
 import {
-  plotThreshold, plotHeight, insideCore, edgeAt, caveAt, DEFAULT_PLOT, type PlotConfig,
+  plotThreshold, plotHeight, insideCore, edgeAt, caveAt, plotForTier, PLOT_TIERS,
+  DEFAULT_PLOT, type PlotConfig,
 } from '../voxel/plot'
 import { PLOT_TRIGGER_RADIUS } from './seam'
 import { MAX_MARKS } from '../voxel/waymark'
@@ -65,18 +66,30 @@ import { MAX_MARKS } from '../voxel/waymark'
 export type SocketKind = 'gate' | 'waymark'
 
 /**
- * How far around the coast the court sits from the fold-seam, in radians.
+ * How far around the coast the court sits from the fold-seam, **in blocks of arc**.
  *
  * ★ NEAR IT, NOT ON IT, AND BOTH HALVES ARE THE POINT. The seam is where the keeper already walks
- * to leave, so putting the court across the island would make the plot have two unrelated exits and
- * a walk between them. Offsetting it along the coast keeps one "door end" of the garden while
- * leaving the seam itself bare. ~0.22rad at r≈270 is ~60 blocks of separation — far enough that the
- * court is plainly its own building, near enough to share the walk.
+ * to leave, so putting the court across the island would give the plot two unrelated exits and a
+ * walk between them. Offsetting it along the coast keeps one "door end" of the garden while leaving
+ * the seam itself bare. 60 blocks is far enough to read as its own building, near enough to share
+ * the walk.
+ *
+ * ⚠⚠ THIS WAS A FIXED ANGLE (0.22rad) AND THAT WAS THE SAME BUG `plotThreshold` ALREADY FIXED,
+ * WEARING POLAR COORDINATES. Its comment, one directory over: *"INSET IS IN BLOCKS NOW, NOT A
+ * FRACTION OF THE RADIUS. As a fraction it silently walked the door further from the wall every
+ * time the fold grew."* An ANGLE is a fraction of the circumference, so a constant angle is a
+ * growing distance: measured across the three tiers, the court sat 61 · 80 · 100 blocks from the
+ * seam while claiming to be one fixed separation. Nothing looked wrong at any single tier, which is
+ * why it wanted measuring across all three rather than reading.
+ *
+ * ★ AN ARC LENGTH DIVIDED BY THE RADIUS IS THE ANGLE THAT KEEPS THE DISTANCE. Same rule, same
+ * reason, one file apart — and the file that already held the answer is the one this module derives
+ * its own position from.
  *
  * ⚠ ALEX'S DIAL. Placement in the fold is his call; this is derived so it follows the threshold if
  * the threshold ever moves, and it is one constant so he can slide it without touching geometry.
  */
-export const COURT_BEARING_OFFSET: number = 0.22
+export const COURT_ARC: number = 60
 
 /** How far inside the coast the court's centre stands, in blocks. Clear of the wall, not inland. */
 export const COURT_INSET: number = 16
@@ -107,7 +120,15 @@ export interface CourtAnchor {
  * instead of drifting inland every time the keeper earns more ground.
  */
 export function courtAnchor(seed: number, cfg: PlotConfig = DEFAULT_PLOT): CourtAnchor {
-  const bearing = cfg.thresholdBearing + COURT_BEARING_OFFSET
+  // The coast at the SEAM's bearing is what the arc is measured on: using the court's own bearing
+  // would need the answer to compute the question.
+  // ⚠ A CLARITY CHOICE, NOT A MECHANISM, AND IT SAYS SO BECAUSE A MUTATION PROVED IT. Swinging this
+  // sample a full radian away left every assert green — `edgeAt` varies only by `wobble` with
+  // bearing, so the two radii agree to within a couple of blocks and nothing downstream can feel the
+  // difference. Claiming it as the reason the arc holds would be a comment asserting a mechanism no
+  // test can reach, which this repo has had to delete before.
+  const seamR = Math.max(1, edgeAt(Math.cos(cfg.thresholdBearing), Math.sin(cfg.thresholdBearing), seed, cfg))
+  const bearing = cfg.thresholdBearing + COURT_ARC / seamR
   const cb = Math.cos(bearing), sb = Math.sin(bearing)
   const r = Math.max(1, edgeAt(cb, sb, seed, cfg) - COURT_INSET)
   const x = Math.round(cb * r)
@@ -209,4 +230,43 @@ export function courtFits(
         return { ok: false, why: 'fouls-cave', socket: s.index }
   }
   return { ok: true }
+}
+
+
+/**
+ * Where courts raised at SMALLER folds are still standing.
+ *
+ * ★★ THE COURT MOVES WHEN GREG WIDENS THE FOLD, AND PLACED VOXELS DO NOT MOVE WITH IT. That is the
+ * whole reason this exists. `plotThreshold` may be re-derived freely because it is a fact about
+ * TERRAIN — nothing is left behind when it slides. The court is *built*: cut stone the host has
+ * already put in the world. Derive it at tier 2 without clearing tier 1 and the keeper owns two
+ * abandoned stone courts, ~88 blocks apart (measured across the shipped tiers).
+ *
+ * ★ NO NEW SAVE FIELD, ON PURPOSE. The tier is already in the save, and every lower tier's anchor
+ * is a pure function of it — so the host clears tiers `0..current-1` and builds at `current`, which
+ * is idempotent and self-healing for a save written by an older session that never cleared at all.
+ * Storing "where I last built it" would be a second copy of a derivable fact, and this repo has
+ * paid for that shape more than once.
+ */
+export function staleCourts(
+  seed: number, tier: number, base: PlotConfig = DEFAULT_PLOT,
+): CourtAnchor[] {
+  const t = Math.max(0, Math.min(PLOT_TIERS.length - 1, Math.round(tier || 0)))
+  const here = courtAnchor(seed, plotForTier(t, base))
+  const out: CourtAnchor[] = []
+  for (let i = 0; i < t; i++) {
+    const a = courtAnchor(seed, plotForTier(i, base))
+    // A lower tier whose court lands on the same column as the current one needs no clearing, and
+    // clearing it would delete the court that is supposed to be standing there.
+    //
+    // ⚠ UNREACHABLE AT THE SHIPPED NUMBERS, AND IT SAYS SO. The tiers step 100 blocks apart, so two
+    // courts never share a column and a mutation removing this line leaves the suite green. It is
+    // kept because it is the correct rule and the tier ladder is a table someone may edit — but a
+    // guard that cannot currently fail must admit it rather than pose as tested coverage.
+    // (It also makes the `t` clamp above redundant, and the clamp makes it redundant: neither is
+    // provable while the other stands. Both are kept deliberately; neither is load-bearing today.)
+    if (a.x === here.x && a.z === here.z) continue
+    out.push(a)
+  }
+  return out
 }

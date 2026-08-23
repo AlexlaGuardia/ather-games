@@ -10,9 +10,9 @@
  */
 import {
   courtAnchor, sockets, socketCells, courtFits, SOCKET_KINDS, SOCKET_PITCH,
-  COURT_BEARING_OFFSET, COURT_INSET,
+  COURT_ARC, COURT_INSET, staleCourts,
 } from './crossings'
-import { plotThreshold, plotHeight, insideCore, DEFAULT_PLOT } from '../voxel/plot'
+import { plotThreshold, plotHeight, insideCore, plotForTier, PLOT_TIERS, DEFAULT_PLOT } from '../voxel/plot'
 import { PLOT_TRIGGER_RADIUS } from './seam'
 import { MAX_MARKS } from '../voxel/waymark'
 import { GATE_X, GATE_Z, gateCells } from './gate'
@@ -153,8 +153,52 @@ ok(SOCKET_PITCH >= 5, 'the pitch is at least a frame wide')
   const off = { ...DEFAULT_PLOT, thresholdBearing: DEFAULT_PLOT.thresholdBearing + 1 }
   const c = courtAnchor(1, off)
   ok(c.x !== a.x || c.z !== a.z, 'moving the threshold takes the court with it')
-  ok(COURT_BEARING_OFFSET !== 0, 'the court is offset from the seam, never on it')
+  ok(COURT_ARC > 0, 'the court is offset from the seam, never on it')
   ok(COURT_INSET > 0, 'the court stands inside the coast, not on the wall')
+}
+
+
+// ── 7. the fold GROWS, and both consequences of that are asserted ─────────────────────────────
+// ★ THE COURT'S SEPARATION FROM THE SEAM MUST NOT DRIFT WITH THE TIER. This started as a fixed
+// ANGLE, which is a fixed fraction of the circumference and therefore a growing distance — 61 · 80
+// · 100 blocks across the three tiers, each of them looking perfectly reasonable on its own. One
+// tier could never have caught it; the assert has to span them.
+for (const seed of SEEDS) {
+  const seps: number[] = []
+  for (let t = 0; t < PLOT_TIERS.length; t++) {
+    const cfg = plotForTier(t, DEFAULT_PLOT)
+    const a = courtAnchor(seed, cfg), th = plotThreshold(seed, cfg)
+    seps.push(Math.hypot(a.x - th.x, a.z - th.z))
+  }
+  const spread = Math.max(...seps) - Math.min(...seps)
+  ok(spread < 12,
+     `s${seed}: the court keeps its distance from the seam as the fold grows ` +
+     `(${seps.map(v => v.toFixed(0)).join(' · ')} blocks, spread ${spread.toFixed(0)})`)
+  // ...and it is still the distance the constant claims.
+  for (const sep of seps)
+    ok(Math.abs(sep - COURT_ARC) < 14, `s${seed}: separation ${sep.toFixed(0)} tracks COURT_ARC ${COURT_ARC}`)
+}
+
+// ★ AND A COURT RAISED AT A SMALLER FOLD IS STILL STANDING. Placed voxels do not slide when a
+// derived anchor does, so the host must be told where the old ones are or the keeper collects
+// abandoned stone courts across their island.
+for (const seed of SEEDS) {
+  ok(staleCourts(seed, 0).length === 0, `s${seed}: a tier-0 keeper has no older court to clear`)
+  for (let t = 1; t < PLOT_TIERS.length; t++) {
+    const stale = staleCourts(seed, t)
+    const here = courtAnchor(seed, plotForTier(t, DEFAULT_PLOT))
+    ok(stale.length === t, `s${seed}: tier ${t} names all ${t} older court sites (${stale.length})`)
+    ok(stale.every(a => a.x !== here.x || a.z !== here.z),
+       `s${seed}: tier ${t} never lists the court that is supposed to be standing`)
+    ok(stale.every(a => Math.hypot(a.x - here.x, a.z - here.z) > 8),
+       `s${seed}: tier ${t} older courts are genuinely elsewhere, not a rounding wobble`)
+  }
+  // ⚠ THIS DOES NOT TEST THE CLAMP, AND PRETENDING IT DOES WOULD BE THE WORSE OPTION. Removing the
+  // clamp leaves it green, because the same-column skip inside `staleCourts` collapses the extra
+  // iterations anyway — two guards each covering for the other, so neither is provable while the
+  // other stands. Both are labelled as such in the module. What this DOES assert is the observable
+  // contract a caller depends on: a garbage tier out of a save file yields the top tier's answer.
+  ok(staleCourts(seed, 99).length === PLOT_TIERS.length - 1, `s${seed}: an over-range tier reads as the top tier`)
 }
 
 console.log(`crossings: ${pass} passed, ${fails.length} failed`)
