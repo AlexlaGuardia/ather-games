@@ -11,6 +11,39 @@ real **gimmick** (not watch-and-wait) · **canon-parallel** (serves Athernyx, no
 black, CRT bloom). Mana'nana went glossy-modern; each game gets its own skin under
 the Arcade frame.
 
+## 🔮 Shimmer — **THE CAST BAR IS TWO SLOTS: TACTICAL + SIGNATURE** (RULED 2026-08-23, Alex + jin-cc hub) · *Not yet built*
+
+**Alex's ruling, in full, and it is canon-aligned rather than a scope cut.** `game/moves.md:85` — *"## Ultimates — **Signature**, high pool cost."* So *signature* IS the Ultimate band. The mage's four bands are Passives / Tactical / Ultimates / Combos; **passives are not cast and combos are pair-casting, so the button-castable set is exactly Tactical + Signature.** The build's four slots were the drift, not the baseline.
+
+**Left off:** decided, nothing built yet. `play3d/cast.ts:389` still reads
+`CAST_SLOTS = ['passive','tactical','tactical','ultimate']` / `SLOT_KEYS = ['g','z','x','c']`;
+`voxel3d/VoxelWorld.tsx:243` still reads `CAST_KEYS = ['g','z','x','b']` with raw `e.code` matching at `:4193`.
+
+**Next — the whole job:**
+1. `CAST_SLOTS` → `['tactical','ultimate']`. Drop the passive slot and one tactical.
+2. Cast keys move onto the action layer (`lib/input`), same conversion as `525ad15`. `hintsFor` then gives the tutorial the right glyph for free.
+3. **Pad: `LB` = tactical, `RB` = signature.** Both fire ON PRESS. ⚠ **No chord.** A button that is both an action and a modifier cannot fire instantly — `LB` alone + `LB+RB` forces either release-latency on every tactical or a wasted tactical before every signature, and it costs exactly in the combat moment. Alex's first instinct was `LB` / `LB+RB`; he took the single-press version.
+4. **Weapon verb consolidates onto `Y` (Triangle):** tap = draw when stowed, tap = cycle when drawn, **hold = stow.** This frees `RB` and leaves `R3` genuinely unused. ⚠ Tap/hold latency is FINE here and NOT here-vs-casting inconsistency: stowing and cycling are not combat-critical, casting is. Cycle fires on release under the hold threshold.
+5. `LB`'s `build.rotate` context-shares with build mode — a mode the player can SEE, which is the only kind that is safe to overload.
+6. **The passive becomes INNATE, always-on, no key.** See the block below.
+7. ⚠ **MIGRATION, and it is the risk item.** Saved loadouts are a positional 4-array matched by index to `CAST_SLOTS` (`loadout.ts:78` slices to length). Collapsing to 2 shifts every index — position 0 stops meaning *passive* and starts meaning *tactical*. It will probably fail `canSlot` and fall back to a default rather than hand someone the wrong move, **and "probably" is not good enough for a keeper's cast bar.** Needs a real migration and a test, not an assumption.
+
+**Decisions (do not relitigate):**
+- ✅ **`g/z/x/c` vs `g/z/x/b` is NOT a bug** — `C` is `ui.craft` in the fold (`actions.ts:90`). `SLOT_KEYS` is read only by play3d, `CAST_KEYS` only by voxel3d: two internally-consistent lists, one per world. jin-cc hub called it a seam divergence and was **wrong**; play checked and found a deliberate, correctly-commented decision.
+- ✅ **No chord support needed** — the `Binding` chord extension play scoped is required by four-casts-one-free-button, and **not** by two.
+- ✅ Pad budget measured off `DEFAULTS`, not by eye: 15 of 16 standard buttons spent, `R3` the only free one. `RT`/`LT` are `world.mine`/`world.place` and are not available.
+
+## 🌱 Shimmer — **THE PASSIVE IS INNATE, AND THE BIRTH RUNE IS WHAT YOU ARE** (RULED 2026-08-23, Alex) · *Not yet built*
+
+**Ruled:** the passive loses its key and becomes always-on. Alex: *"maybe even affecting the way the player moves or more; ie the barrier birth rune gives the player extra shields."*
+
+⚠ **TWO DIFFERENT THINGS WEAR THE WORD "PASSIVE" AND ONLY ONE OF THEM IS THIS.** `game/moves.md` opens its Passives band with *"**Held or innate.** Holding a passive **pauses mana recovery** — the double edge."* Canon has both kinds and is explicit about the held ones: **Iron Skin** — *"Holding it pauses recovery, so it is a stance, **not a permanent state**."* Barrier is *"a held defensive shell"*; Bulwark *"held as a sustained defense"*.
+- **THIS ruling is the INNATE half: a birth-rune LEAN.** Always on, no button, no mana cost. Canon already has a ruled 20-rune essence table behind it — `npm run canon`'s `[birth-affinity]` gate diffs every lean against it. The lean is canon's; **the numbers are Jin's.** No canon gap.
+- **The held-stance band (Barrier / Iron Skin / Bulwark / the cloaks and armors) is a SEPARATE, LATER system** with its own mana cost. It is not a cast slot, so it does not reopen the pad.
+- ⚠ **Making EVERY passive permanent would be a CANON CHANGE, not a build call** — it deletes the double edge canon calls the point and contradicts Iron Skin's own line. That would go to Magii, not get decided in a build.
+
+**Next:** birth-rune lean as its own always-on system, read off the ruled essence table. ⚠ *"Affecting the way the player moves"* reaches into the movement state machine (`BEAST_MOVEMENT_STYLES` / the 6-phase machine) — a real system, and **the better expression of a birth rune than a defence stat**. Do it as its own job; riding it along inside a binding conversion makes both worse.
+
 ## 🎮 Shimmer voxel3d — **CONTROLLER, REBINDING, AND HINTS THAT STOP LYING** (2026-08-23, play) · *Last touched 2026-08-23 (play) — shipped, deployed, prod-verified*
 
 **Left off:** all three of Alex's asks are live. `01a77d5`+`63c55e8` (`src/lib/input/`), `7d286c7` (BindingsPanel), `1d7a313` (the pure bridge), `525ad15` (the wiring pass), `390e1a1` (stats row gated). Plus the UI-vocabulary work that preceded it: `eeb9084` (play3d tokens), `c378800` (fold HUD onto `gx-*`), `b98531d` (`npm run gx`).
