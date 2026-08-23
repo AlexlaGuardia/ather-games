@@ -9,6 +9,7 @@
 // save that grows with what you BUILD (not where you have walked) should not be competing for a 5MB
 // string quota.
 
+import { saveOwner } from '@/lib/save-slot'
 import type { PackedEdits } from '../voxel/edits'
 import type { Placement } from '../voxel/pieces'
 
@@ -89,14 +90,50 @@ function open(): Promise<IDBDatabase> {
 export type Space = 'wilds' | 'plot'
 
 /**
- * ⚠ THE WILDS KEY IS BYTE-IDENTICAL TO WHAT IT ALWAYS WAS, AND THAT IS THE WHOLE POINT OF THE
- * SHAPE. Namespacing BOTH spaces would have been tidier and would have silently orphaned every
- * world anyone has already built — the records would still be sitting in IndexedDB, addressed by a
- * key nothing asks for any more, which reads to a player as "my save is gone" and to a developer as
- * "the loader is broken". A new space pays for its own prefix; the old one pays nothing.
+ * ── ★★ WHO THE RECORD BELONGS TO (2026-08-23, #692 — the IndexedDB half of #682) ────────────────
+ * `lib/save-slot.ts` made the localStorage save per-account and this store was left shared, so two
+ * accounts in one browser walked into ONE world: B signed in and stood in A's garden, holding A's
+ * chests, because a column record is addressed by seed and coordinates and neither of those knows
+ * who built it. Same defect as #682, one storage layer over, and the same fix — the owner goes in
+ * the key.
+ *
+ * ⚠ THE OWNER COMES FROM `saveOwner()`, WHICH IS THE ONE DEFINITION. This module does not fetch a
+ * session or keep a copy; `page.tsx` resolves it once at boot and everything derives. A reader that
+ * runs before that resolves sees the ANONYMOUS space, which is a real answer for an anonymous
+ * keeper and the wrong one for a signed-in keeper whose session has not landed — which is why the
+ * boot gate holds the world behind the fetch. Ordering is the contract, here exactly as there.
+ *
+ * ── THE ANONYMOUS SPACE KEEPS THE BARE KEYS, DELIBERATELY ───────────────────────────────────────
+ * Third time this file makes this argument, and it is the same argument: a new namespace pays for
+ * its own prefix, the existing one pays nothing. Every world anyone has ever built is addressed
+ * `${seed}:...`; prefixing those too would orphan all of them in place — the records still sitting
+ * in IndexedDB under a key nothing asks for, which reads to a player as "my garden is gone".
+ * Signed-in spaces are the new thing, so signed-in spaces carry the prefix.
  */
-const key = (seed: number, cx: number, cz: number, space: Space = 'wilds') =>
-  space === 'wilds' ? `${seed}:${cx},${cz}` : `${seed}:${space}:${cx},${cz}`
+const OWNER_MARK = 'u:'
+export const worldPrefix = (owner: string | null = saveOwner()): string =>
+  owner ? `${OWNER_MARK}${owner}:` : ''
+
+/**
+ * Everything this seed owns, for one keeper. Every scan in this file matches on THIS, never on the
+ * bare seed — a prefix scan is how one account's census, count or wipe reaches another's records.
+ */
+const seedPrefix = (seed: number, owner: string | null = saveOwner()): string =>
+  `${worldPrefix(owner)}${seed}:`
+
+/**
+ * ⚠ THE WILDS KEY IS BYTE-IDENTICAL TO WHAT IT ALWAYS WAS FOR AN ANONYMOUS KEEPER, AND THAT IS THE
+ * WHOLE POINT OF THE SHAPE. Namespacing BOTH spaces would have been tidier and would have silently
+ * orphaned every world anyone has already built — the records would still be sitting in IndexedDB,
+ * addressed by a key nothing asks for any more, which reads to a player as "my save is gone" and to
+ * a developer as "the loader is broken". A new space pays for its own prefix; the old one pays
+ * nothing. The owner prefix above is the same trade one level up.
+ */
+export const columnKey = (seed: number, cx: number, cz: number, space: Space = 'wilds', owner: string | null = saveOwner()) =>
+  space === 'wilds'
+    ? `${seedPrefix(seed, owner)}${cx},${cz}`
+    : `${seedPrefix(seed, owner)}${space}:${cx},${cz}`
+const key = columnKey
 
 /**
  * ── ★ THE PLAYER PERSISTS TOO (2026-08-08, Alex: "spawn where I left off, keep my inventory") ──
@@ -228,7 +265,38 @@ export interface PlayerSave {
   index?: unknown
 }
 
-const playerKey = (seed: number) => `${seed}:player`
+/**
+ * One record beside the columns, in the keeper's own space. A column key can never collide with it:
+ * a column's coordinate half always contains a comma and this never does — which is also how the
+ * scans below tell the two apart.
+ */
+export const playerKey = (seed: number, owner: string | null = saveOwner()) =>
+  `${seedPrefix(seed, owner)}player`
+
+// ── ★★ THE SCANS, AS PREDICATES SOMETHING CAN CALL (#692) ───────────────────────────────────────
+// Three functions in this file answer a question by walking every key in the store — the chest
+// census, the built-column count, and the wipe. A prefix scan is *exactly* how one keeper's census,
+// count or reset reaches another's records, so the matching is the part most worth checking and it
+// was the part sealed inside an async IndexedDB call where no test could reach it. Out here, it is
+// a string predicate, and `save.test.ts` runs the real one.
+
+/** Every record of this keeper's world: columns, the player, and (anonymously) the claim. */
+export const ownsRecord = (seed: number, owner: string | null = saveOwner()) =>
+  (k: string) => k.startsWith(seedPrefix(seed, owner))
+
+/**
+ * Just the columns. ⚠ The comma is the whole test: `player` and `anon-owner` share the prefix and
+ * are not columns, and a coordinate half always has one.
+ */
+export const ownsColumn = (seed: number, owner: string | null = saveOwner()) =>
+  (k: string) => k.startsWith(seedPrefix(seed, owner)) && k.includes(',')
+
+/** Columns of ONE space. The wilds carry no marker of their own, so they are what is left over. */
+export const ownsColumnIn = (seed: number, space: Space, owner: string | null = saveOwner()) => {
+  const plot = `${seedPrefix(seed, owner)}${'plot' satisfies Space}:`
+  const col = ownsColumn(seed, owner)
+  return space === 'plot' ? (k: string) => k.startsWith(plot) : (k: string) => col(k) && !k.startsWith(plot)
+}
 
 export async function loadPlayer(seed: number): Promise<PlayerSave | null> {
   try {
@@ -326,12 +394,10 @@ export async function saveColumn(seed: number, cx: number, cz: number, save: Col
  * packed material arrays.
  */
 export async function countMaterial(seed: number, space: Space, mat: number): Promise<number> {
-  // The wilds key is unprefixed (see `key`), so "starts with the seed" also matches plot records and
-  // the player record — both have to be excluded by shape, not by hope.
-  const plotPrefix = `${seed}:plot:`
-  const mine = (k: string) => space === 'plot'
-    ? k.startsWith(plotPrefix)
-    : k.startsWith(`${seed}:`) && !k.startsWith(plotPrefix) && k.includes(',')
+  // ⚠ SCOPED TO THE KEEPER (#692). The bare seed IS the anonymous space, so a signed-in keeper
+  // scanning it would census whatever the last anonymous player built and cap their own chests
+  // against a stranger's garden.
+  const mine = ownsColumnIn(seed, space)
   try {
     const db = await open()
     return await new Promise((res) => {
@@ -352,27 +418,45 @@ export async function countMaterial(seed: number, space: Space, mat: number): Pr
   } catch { return 0 }
 }
 
-/** How many columns hold edits. Cheap, and worth surfacing: it is the size of what you have built. */
+/**
+ * How many columns hold edits. Cheap, and worth surfacing: it is the size of what you have built.
+ *
+ * ⚠ COLUMNS, so the comma is load-bearing — the keeper's own `player` record and the adoption claim
+ * live under the same prefix and are not columns. Counting by prefix alone read one high for every
+ * keeper who had ever moved.
+ */
 export async function editedColumnCount(seed: number): Promise<number> {
+  const mine = ownsColumn(seed)
   try {
     const db = await open()
     return await new Promise((res) => {
       const tx = db.transaction(STORE, 'readonly')
       const req = tx.objectStore(STORE).getAllKeys()
-      req.onsuccess = () => res((req.result as string[]).filter(k => k.startsWith(`${seed}:`)).length)
+      req.onsuccess = () => res((req.result as string[]).filter(mine).length)
       req.onerror = () => res(0)
     })
   } catch { return 0 }
 }
 
-/** Wipe this seed's saves. Destructive and only ever called from an explicit action. */
+/**
+ * Wipe this seed's saves. Destructive and only ever called from an explicit action.
+ *
+ * ⚠ THE CURRENT KEEPER'S, AND NOBODY ELSE'S (#692). Scoped to `seedPrefix`, a signed-in keeper's
+ * reset takes their own world; unscoped it took every account's world on the browser, and the one
+ * doing the resetting would have seen exactly the outcome they asked for.
+ *
+ * ★ An ANONYMOUS reset also clears the adoption claim, because the claim is a record of that space
+ * and the space is what is being destroyed. A fresh anonymous garden built afterwards is adoptable
+ * again, which is right: there is nothing left of the old one to leak.
+ */
 export async function clearWorld(seed: number): Promise<void> {
+  const mine = ownsRecord(seed)
   try {
     const db = await open()
     const keys: string[] = await new Promise((res) => {
       const tx = db.transaction(STORE, 'readonly')
       const req = tx.objectStore(STORE).getAllKeys()
-      req.onsuccess = () => res((req.result as string[]).filter(k => k.startsWith(`${seed}:`)))
+      req.onsuccess = () => res((req.result as string[]).filter(mine))
       req.onerror = () => res([])
     })
     const db2 = await open()
@@ -383,4 +467,111 @@ export async function clearWorld(seed: number): Promise<void> {
       tx.onerror = () => res()
     })
   } catch { /* nothing to clear */ }
+}
+
+// ── ★★ ADOPTION: THE GARDEN YOU BUILT BEFORE YOU HAD AN ACCOUNT (2026-08-23, #692) ──────────────
+//
+// Keying the records by owner (see `worldPrefix`) stops account B walking into account A's world.
+// On its own it would also mean that signing in for the first time drops you into an EMPTY world
+// while everything you built is still sitting on disk one prefix over — which reads as "the update
+// deleted my garden", and is exactly the harm the anonymous-space-keeps-the-bare-keys rule exists
+// to avoid. So the anonymous world moves into the account the first time somebody signs in here.
+//
+// ★ THIS IS THE SAME SHAPE `play3d/page.tsx` USES FOR THE localStorage SLOT, ON PURPOSE. Two
+// storage layers, one rule: the anonymous space can be claimed EXACTLY ONCE, and a space claimed by
+// somebody else is left alone rather than taken. Where they differ, they differ because localStorage
+// stamps the owner INSIDE the blob and this store cannot — a typed-array record has nowhere to put
+// a stamp — so the claim is its own record instead.
+
+/** Who consumed this browser's anonymous world. Lives in the anonymous space, so a reset takes it. */
+const anonClaimKey = (seed: number) => `${seedPrefix(seed, null)}anon-owner`
+
+/** What adoption decided, and why — returned so a caller can log it and a test can read it. */
+export interface AdoptionPlan {
+  /** Old key → new key, for every record moving into the account. Empty means nothing moved. */
+  moves: Array<[string, string]>
+  /** Write the claim record, marking the anonymous space spoken for. */
+  claim: boolean
+  reason: 'adopted' | 'locked' | 'nothing-anonymous' | 'someone-elses' | 'anonymous'
+}
+
+/**
+ * ★ THE DECISION IS PURE, AND THE TRANSACTION BELOW IS THE ONLY PART THAT TOUCHES A DATABASE.
+ * Same boundary this file's header draws around `voxel/edits.ts`: all the reasoning that can be
+ * wrong lives somewhere a test can call it with a list of strings. IndexedDB is not available in
+ * node, so a rule that lives inside the transaction is a rule nothing checks.
+ *
+ * The three cases, and the reason for each:
+ *   · nothing anonymous on disk        → do nothing. Claiming an empty space would reserve it for
+ *                                        this account forever, and the keeper it would later cost
+ *                                        is somebody who built a garden while signed out. There is
+ *                                        no leak to prevent, so prevent nothing.
+ *   · anonymous garden, account empty  → MOVE it. This is a first sign-in and that garden is theirs.
+ *   · anonymous garden, account has a  → CLAIM ONLY. Moving would overwrite columns of a world this
+ *     world of its own                   account already built, and the anonymous one may be older.
+ *                                        Locking loses nothing: the records stay exactly where they
+ *                                        are, and no second account can take them.
+ */
+export function planAdoption(keys: string[], claimedBy: string | null, seed: number, userId: string | null): AdoptionPlan {
+  if (!userId) return { moves: [], claim: false, reason: 'anonymous' }
+  // Spoken for by somebody else. Not ours to take, and not ours to re-claim either.
+  if (claimedBy && claimedBy !== userId) return { moves: [], claim: false, reason: 'someone-elses' }
+
+  const anon = seedPrefix(seed, null)
+  const mine = seedPrefix(seed, userId)
+  const claimKey = anonClaimKey(seed)
+
+  const theirs = keys.filter(k => k.startsWith(anon) && k !== claimKey)
+  if (!theirs.length) return { moves: [], claim: false, reason: 'nothing-anonymous' }
+  if (keys.some(k => k.startsWith(mine))) return { moves: [], claim: true, reason: 'locked' }
+
+  return { moves: theirs.map(k => [k, mine + k.slice(anon.length)] as [string, string]), claim: true, reason: 'adopted' }
+}
+
+/**
+ * Move this browser's anonymous world into the account signing in — once, ever.
+ *
+ * ⚠ CALL IT FROM THE BOOT GATE, BEFORE THE WORLD MOUNTS, AND AWAIT IT. `VoxelWorld` streams columns
+ * as it renders; a move that lands mid-session would pull records out from under a world that has
+ * already read them, and the next autosave would write the old keys straight back.
+ *
+ * ★ ONE TRANSACTION FOR THE WHOLE MOVE. A half-moved world is a garden with holes in it, and IDB
+ * gives atomicity for free here — a crash rolls the whole thing back and the next boot retries from
+ * an untouched anonymous space. Reading the keys inside the same transaction is what makes the
+ * decision and the move agree about what was on disk.
+ */
+export async function adoptAnonWorld(seed: number, userId: string | null = saveOwner()): Promise<AdoptionPlan> {
+  const nothing: AdoptionPlan = { moves: [], claim: false, reason: 'anonymous' }
+  if (!userId) return nothing
+  try {
+    const db = await open()
+    return await new Promise<AdoptionPlan>((res) => {
+      const tx = db.transaction(STORE, 'readwrite')
+      const store = tx.objectStore(STORE)
+      const claimKey = anonClaimKey(seed)
+      let plan = nothing
+
+      const keysReq = store.getAllKeys()
+      keysReq.onsuccess = () => {
+        const claimReq = store.get(claimKey)
+        claimReq.onsuccess = () => {
+          const claimedBy = typeof claimReq.result === 'string' ? claimReq.result : null
+          plan = planAdoption((keysReq.result as IDBValidKey[]).map(String), claimedBy, seed, userId)
+          // ⚠ Read-then-write inside the cursor is avoided on purpose: the moved records land under
+          // `u:…`, which sorts AFTER the numeric anonymous keys, so a cursor would walk into its own
+          // output. Explicit gets keep the traversal finite and the reasoning above literal.
+          for (const [from, to] of plan.moves) {
+            const g = store.get(from)
+            g.onsuccess = () => { store.put(g.result, to); store.delete(from) }
+          }
+          if (plan.claim) store.put(userId, claimKey)
+        }
+      }
+      tx.oncomplete = () => res(plan)
+      // A failed move is not a lost world — nothing was deleted, and the next boot tries again
+      // against the same untouched anonymous space.
+      tx.onerror = () => res(nothing)
+      tx.onabort = () => res(nothing)
+    })
+  } catch { return nothing }
 }

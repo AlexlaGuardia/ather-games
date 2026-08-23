@@ -98,6 +98,7 @@ import type { Space } from './save'
 /** Which generator version the player has already been warned about. See `staleWarned`. */
 const GEN_WARN_KEY = 'ather:shimmer:genWarned'
 import { loadColumn, saveColumn, editedColumnCount, countMaterial, loadPlayer, savePlayer, type PlayerSave } from './save'
+import { WORLD_SEED } from './world-seed'
 import { PIECES, STRUCTURE, STRUCTURE_HALF, pieceDef, cellsOf, canPlace, canAfford, placementAt, type Placement, type Rotation } from '../voxel/pieces'
 import { createPieceRenderer } from './piece-mesh'
 import { toGeometry, createVoxelMaterial, createWaterMaterial, applySettings } from './mesh-bridge'
@@ -307,7 +308,7 @@ type Lift = SlotRef & { mode: LiftMode }
  */
 type LiftMode = 'whole' | 'half' | 'one'
 
-const SEED = 1337
+const SEED = WORLD_SEED
 const H = DEFAULT_COLUMN.worldHeight
 // Load-ring radius lives in settings now (viewRadius, O panel) — the World loops read it live.
 const REACH = 6            // how far you can mine or place, in voxels
