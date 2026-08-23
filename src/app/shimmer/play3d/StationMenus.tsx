@@ -96,7 +96,7 @@ export function StationMenus(p: StationMenusProps) {
   if (kind === 'brew') {
     const alch = p.skillsRef.current.alchemy.level
     return (
-      <StationShell accent="#c88ae6" border="#5a3f74" bg="#130f1c" title="⚗ ALCHEMY STATION"
+      <StationShell tone="alchemy" title="⚗ ALCHEMY STATION"
         onClose={p.closeStation} subtitle={sub('#9b86b8', `Alchemy Lv ${alch}`)}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
           {getVisiblePotions(alch).map(def => {
@@ -131,7 +131,7 @@ export function StationMenus(p: StationMenusProps) {
     const craftableTools = (['forestry', 'prospecting', 'rinning'] as const).flatMap(skill =>
       Object.values(TOOL_DEFS).filter(t => t.skillId === skill && !t.basic).sort((a, b) => a.tier - b.tier))
     return (
-      <StationShell accent="#e0b64e" border="#6b5220" bg="#171205" title="🔨 CRAFTING TABLE"
+      <StationShell tone="gold" title="🔨 CRAFTING TABLE"
         onClose={p.closeStation} subtitle={sub('#b09660', 'Build stations from gathered materials')}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
           {getRecipes().map(def => {
@@ -232,7 +232,7 @@ export function StationMenus(p: StationMenusProps) {
     const hasDepositable = p.invRef.current.slots.some(s => s && RESOURCE.has(s.itemId))
     const barColor = over ? '#e0685f' : frac > 0.9 ? '#e0a85f' : '#6ad0a0'
     return (
-      <StationShell accent="#c9a86a" border="#6b5220" bg="#171205" title="🏦 GARDEN BANK"
+      <StationShell tone="gold" title="🏦 GARDEN BANK"
         onClose={p.closeStation} subtitle={sub('#b09660', 'Shared across every chest on your land · stations craft straight from here')}>
         {/* capacity meter */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 4 }}>
@@ -287,7 +287,7 @@ export function StationMenus(p: StationMenusProps) {
     const sellIds = Array.from(new Set(p.invRef.current.slots.filter((s): s is ItemStack => !!s).map(s => s.itemId))).filter(id => GE_ITEM_IDS.includes(id))
     const buyIds = GE_BUY_CURATED.filter(id => GE_ITEM_IDS.includes(id))
     return (
-      <StationShell accent="#6ad0a0" border="#2f5c4f" bg="#0b1613" title="💰 EXCHANGE BOOTH" onClose={p.closeStation}
+      <StationShell tone="exchange" title="💰 EXCHANGE BOOTH" onClose={p.closeStation}
         subtitle={<>
           <div style={{ font: '600 10px ui-monospace, monospace', color: '#8fc4ae', marginBottom: 8 }}>✦ {p.wallet.marks} marks · {Math.round(TAX_RATE * 100)}% tax on sales</div>
           {p.tradeToast && <div style={{ font: '700 11px ui-monospace, monospace', color: '#ffe08a', marginBottom: 8 }}>{p.tradeToast}</div>}
@@ -332,7 +332,7 @@ export function StationMenus(p: StationMenusProps) {
   const crop = p.plantedCropsRef.current.find(c => c.tileX === struct.tileX && c.tileY === struct.tileY && c.zoneId === struct.zoneId) ?? null
   const farmLvl = p.skillsRef.current.farming.level
   return (
-    <StationShell accent="#8fd06a" border="#4a6b2f" bg="#0f1608" title="🌱 PLANTER"
+    <StationShell tone="planter" title="🌱 PLANTER"
       onClose={p.closeStation} subtitle={sub('#94b073', `Farming Lv ${farmLvl}`)}>
       {crop ? (() => {
         const def = CROP_DEFS[crop.cropId]

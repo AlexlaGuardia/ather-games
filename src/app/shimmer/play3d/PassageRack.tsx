@@ -21,13 +21,14 @@
 
 import { useState } from 'react'
 import { StationShell } from './ui'
+import { gold, type as t } from './tokens'
 import { RUNES } from './birth/runes.data'
 import {
   rackFor, cycleAt, msUntilRotation, priceOf, canRead, hasLearned, buy, type Book,
 } from './scroll-market'
 import type { KeeperMove } from './keeper-moves'
 
-const GOLD = '#ffe08a'
+
 const runeName = (id: string) => RUNES.find((r) => r.id === id)?.name ?? id
 
 export function PassageRack(p: {
@@ -53,7 +54,7 @@ export function PassageRack(p: {
 
   return (
     <StationShell
-      accent={GOLD} border="#5c4a2a" bg="#171208" title="✦ THE PASSAGE"
+      tone="gold" title="✦ THE PASSAGE"
       onClose={p.onClose}
       subtitle={
         <div style={{ marginBottom: 10 }}>
@@ -95,7 +96,7 @@ export function PassageRack(p: {
               </div>
               <div style={{ display: 'flex', gap: 8, marginTop: 7, alignItems: 'center' }}>
                 <span style={{ flex: 1 }} />
-                <span style={{ font: '700 11px ui-monospace, monospace', color: afford ? GOLD : '#8a7550' }}>✦ {price}</span>
+                <span style={{ ...t.value, color: afford ? gold.base : gold.faded }}>✦ {price}</span>
                 <button
                   onClick={() => attempt(m)}
                   disabled={owned}
