@@ -54,6 +54,23 @@ export interface FrameProfile {
    */
   gpuMs: number | null
   /**
+   * How many frames in this window actually yielded a GPU timing.
+   *
+   * ★★★ THIS IS PUBLISHED BECAUSE `gpuMs` AND `ms` HAVE DIFFERENT DENOMINATORS, AND WITHOUT IT THE
+   * BIAS IS UNOBSERVABLE FROM ANY READING (world lane, 2026-08-23). `ms` averages over `frames`;
+   * `gpuMs` averages over the samples that survived — a query dropped as disjoint or landing late
+   * never reaches it. Printing their ratio as a clean fraction of the frame is therefore a division
+   * of two means taken over different populations, and it measured **110%** on a real machine
+   * (470.0 ms gpu against a 428.4 ms frame).
+   *
+   * ⚠ THE DANGEROUS OUTPUT IS THE PLAUSIBLE PERCENTAGE, NOT THE ABSURD ONE. 110% gets questioned;
+   * `62%` does not, and both are biased the same way — worst on exactly the machines where the
+   * timer extension is flaky, which are the ones you most want a straight answer about. `frames`
+   * was already a field for precisely this reason; the file was applying its own honesty rule to
+   * one denominator and not the other.
+   */
+  gpuSamples: number
+  /**
    * Mean ms per zone, largest first — **and the unaccounted remainder is one of the rows.**
    *
    * ★★★ IT SORTS AGAINST THE REAL ZONES ON PURPOSE (hub, 2026-08-22). Printing the gap as a
@@ -242,6 +259,7 @@ export function createProfiler(now: () => number = () => performance.now()): Pro
       const out: FrameProfile = {
         fps: Math.round(frames / (time || 1e-9)),
         ms, worst: worst * 1000, gpuMs: gpuSamples ? gpuNs / gpuSamples / 1e6 : null,
+        gpuSamples,
         zones, measured,
         // ⚠ AGAINST WALL CLOCK, NEVER AGAINST THE ZONE SUM. Deriving the total from the parts is how
         // a profiler comes to believe it saw the whole frame.
@@ -253,6 +271,28 @@ export function createProfiler(now: () => number = () => performance.now()): Pro
       return out
     },
   }
+}
+
+/**
+ * How much of the window the GPU timer actually covered before its mean may be compared to `ms`.
+ *
+ * ★ ONE PREDICATE, ASKED BY EVERY CONSUMER — never restated. `snapshotText` and the in-game panel
+ * both print this ratio, and a rule copied into two renderers is a hand-kept mirror: the copies
+ * agree with each other while both drift from the thing they describe. Ask this; do not re-derive
+ * the threshold at the call site.
+ */
+export const GPU_COVERAGE_MIN = 0.9
+
+/**
+ * Is `gpuMs` comparable to `ms` — i.e. did nearly every frame in the window yield a timing?
+ *
+ * ⚠ FALSE DOES NOT MEAN THE GPU NUMBER IS WRONG. The raw millisecond figure is still the honest
+ * mean of the samples that landed; it is the SHARE OF THE FRAME that becomes meaningless, because
+ * the two means no longer describe the same set of frames. So consumers withhold the percentage
+ * and keep the ms, rather than hiding both.
+ */
+export function gpuTrusted(p: FrameProfile): boolean {
+  return p.gpuMs !== null && p.gpuSamples >= p.frames * GPU_COVERAGE_MIN
 }
 
 /**
@@ -283,7 +323,11 @@ export function snapshotText(p: FrameProfile, ctx: {
   L.push(p.gpuMs === null
     // ⚠ Says WHY, so a reader cannot mistake a missing timer for an idle GPU.
     ? `gpu time  UNAVAILABLE (${ctx.gpuStatus}) — cannot say whether this is cpu- or gpu-bound`
-    : `gpu time  ${n(p.gpuMs)} ms of the ${n(p.ms)} ms frame  ·  ${n((p.gpuMs / p.ms) * 100, 0)}%`)
+    // ★★ THE MS SURVIVES, THE PERCENTAGE DOES NOT — and it says how thin the coverage was rather
+    // than going quiet, so a reader can tell a flaky timer from a missing one.
+    : !gpuTrusted(p)
+      ? `gpu time  ${n(p.gpuMs)} ms  ·  share of frame WITHHELD (only ${p.gpuSamples} of ${p.frames} frames timed)`
+      : `gpu time  ${n(p.gpuMs)} ms of the ${n(p.ms)} ms frame  ·  ${n((p.gpuMs / p.ms) * 100, 0)}%`)
   L.push(`scene     ${ctx.cols} col · ${ctx.meshes} mesh · ${ctx.draws} draws · ${Math.round(ctx.tris / 1000)}k tris · geo ${ctx.geometries} · prog ${ctx.programs}`)
   L.push('')
   // ★ The remainder is already IN `zones` and sorted among them, so it can lead the table when it

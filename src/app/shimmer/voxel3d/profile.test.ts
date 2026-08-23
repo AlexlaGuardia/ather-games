@@ -4,7 +4,7 @@
 // Every assert below is a way of asking that, because the failure mode of a profiler is not that it
 // crashes — it is that it hands back a tidy breakdown of the 13% of the frame somebody remembered to
 // wrap and says nothing about the other 87%.
-import { createProfiler, snapshotText, WINDOW_MS, MAX_ZONES, OVERFLOW, UNACCOUNTED_ROW } from './profile'
+import { createProfiler, snapshotText, gpuTrusted, GPU_COVERAGE_MIN, WINDOW_MS, MAX_ZONES, OVERFLOW, UNACCOUNTED_ROW } from './profile'
 
 let pass = 0
 const fails: string[] = []
@@ -213,6 +213,71 @@ const clock = () => { const c = { t: 0 }; return { c, now: () => c.t } }
   c.t = WINDOW_MS + 1
   ok(p.publish() !== null, 'and a window lands once it has')
   ok(p.publish() === null, 'and the window resets, so two reads of the same window cannot disagree')
+}
+
+// ── 7. ★★★ THE GPU SHARE IS WITHHELD WHEN THE TIMER DID NOT COVER THE WINDOW ───────────────────
+// The bug this exists for, measured on a real machine 2026-08-23: **470.0 ms gpu against a 428.4 ms
+// frame — 110%**. `ms` averages over `frames`, `gpuMs` over the samples that survived, and the file
+// printed their ratio as a clean fraction. The absurd number got questioned; the plausible one
+// (`62%`) would not have, and both are biased the same way.
+{
+  const EXT = { TIME_ELAPSED_EXT: 1, GPU_DISJOINT_EXT: 2 }
+  const mkGl = () => ({
+    getExtension: () => EXT,
+    createQuery: () => ({} as WebGLQuery),
+    beginQuery: () => {}, endQuery: () => {},
+    getParameter: () => false,
+    getQueryParameter: (_q: unknown, what: unknown) => what === 'AVAIL' ? true : 4_000_000,
+    QUERY_RESULT_AVAILABLE: 'AVAIL', QUERY_RESULT: 'RESULT',
+    deleteQuery: () => {},
+  } as unknown as WebGL2RenderingContext)
+
+  const ctx = {
+    space: 'plot' as const, x: 0, y: 0, z: 0, viewRadius: 12,
+    cols: 1, meshes: 1, draws: 1, tris: 1, geometries: 1, programs: 1, gpuStatus: 'ok',
+  }
+
+  // ── thin coverage: 10 frames, one timed sample ──────────────────────────────────────────────
+  const { c, now } = clock()
+  const thin = createProfiler(now); thin.enabled = true
+  thin.attach(mkGl())
+  thin.gpuFrame(); thin.gpuFrame()                 // exactly one sample lands
+  for (let i = 0; i < 10; i++) thin.frameEnd(0.016)
+  c.t = WINDOW_MS + 1
+  const tw = thin.publish()!
+  ok(tw.frames === 10, 'the window counted every frame')
+  ok(tw.gpuSamples === 1, '★ gpuSamples is PUBLISHED, so the second denominator is visible at all')
+  ok(tw.gpuMs !== null, '★ the raw gpu ms survives — it is the SHARE that is unsafe, not the mean')
+  ok(!gpuTrusted(tw), `★★ coverage 1/10 is below ${GPU_COVERAGE_MIN} so the ratio is not trusted`)
+  const thinText = snapshotText(tw, ctx)
+  ok(/WITHHELD/.test(thinText), '★★★ and the TEXT withholds the share rather than printing it')
+  ok(/1 of 10 frames timed/.test(thinText), '★★ and says how thin the coverage was, not just that it failed')
+  ok(!/frame  ·  \d+%/.test(thinText), '★★★ no percentage of the frame is printed anywhere on that line')
+
+  // ── full coverage: the percentage is allowed back ───────────────────────────────────────────
+  const c2 = clock()
+  const full = createProfiler(c2.now); full.enabled = true
+  full.attach(mkGl())
+  full.gpuFrame()
+  for (let i = 0; i < 10; i++) { full.gpuFrame(); full.frameEnd(0.016) }
+  c2.c.t = WINDOW_MS + 1
+  const fw = full.publish()!
+  ok(fw.gpuSamples >= fw.frames * GPU_COVERAGE_MIN,
+    '★ a window where every frame was timed reaches full coverage')
+  ok(gpuTrusted(fw), '★★ and IS trusted — the guard is not simply always-false')
+  ok(/of the .* ms frame/.test(snapshotText(fw, ctx)),
+    '★★ so the share of the frame is printed when it is actually comparable')
+
+  // ⚠ A missing extension must still read as UNAVAILABLE, never as "withheld" — they are different
+  // claims and collapsing them would hide a dead timer behind a coverage excuse.
+  const c3 = clock()
+  const none = createProfiler(c3.now); none.enabled = true
+  none.frameEnd(0.016)
+  c3.c.t = WINDOW_MS + 1
+  const nw = none.publish()!
+  ok(nw.gpuMs === null && !gpuTrusted(nw), 'no extension: gpuMs null and not trusted')
+  ok(/UNAVAILABLE/.test(snapshotText(nw, ctx)) && !/WITHHELD/.test(snapshotText(nw, ctx)),
+    '★★ a MISSING timer says UNAVAILABLE, not WITHHELD — different claims, different words')
 }
 
 if (fails.length) {
