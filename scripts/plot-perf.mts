@@ -19,9 +19,25 @@
 // This cost a full afternoon of measurements on 2026-08-22 and every one of them was internally
 // consistent, reproducible and plausible. `void-check.mts` says it outright and has said so since
 // 08-16: the reply is *"is a fold — you are at its door"* and its own assert is
-// `hypot(gx, gz) > 480`, **"standing outside the fold, not in it"**. Crossing is a PASSAGE, not a
-// teleport — the keeper has to physically walk the seam volume before `enterSpace('plot')` fires —
-// so no console command reaches the plot and a probe that only teleports never leaves the Wilds.
+// `hypot(gx, gz) > 480`, **"standing outside the fold, not in it"**. That half is true and stands:
+// `/goto garden` is the DOOR, and a probe that only teleports never leaves the Wilds.
+//
+// ── ★★★ CORRECTED 2026-08-23 (world lane). WHAT THIS HEADER SAID NEXT WAS FALSE WHEN WRITTEN ────
+// It said *"no console command reaches the plot"*, and concluded **"treat any fold measurement as
+// UNMEASURED"**. `/space [plot|wilds]` reaches it, is owner-gated, and has shipped since
+// **2026-08-15** — `51e6b7f`, *"plot: the second space — the Home Plot exists and can be stood in"*,
+// command table at `VoxelWorld.tsx:809`. This file was added 08-22, seven days later.
+// `enterSpace('plot')` is a real crossing: it flips `space.current`, clears every voxel and flora
+// cache, and lands the keeper at the derived threshold. Measured headless the same way this script
+// runs — see `scripts/fold-profile.mts`, which crosses and confirms position twice from
+// `space.current` itself.
+//
+// ⚠ THE DAMAGE WAS NOT THE FALSE SENTENCE, IT WAS THE CONCLUSION DRAWN FROM IT. Being wrong is
+// discoverable by looking; a doc that tells you not to look retires the question instead, and the
+// fold went unmeasured for a day on the strength of this paragraph. The reasoning was that the canon
+// door is slice 2 — true, and it does not imply the console cannot cross. **An absence claim needs a
+// stronger measurement than a presence claim, and this one had none.** Same family as the comment
+// citing `brew-reach.test.ts`, a file that has never existed.
 //
 // ★ WHAT GAVE IT AWAY, AND IT WAS NOT THE SCENE: the game's own HUD stat line printed
 // `moonwell-glade` for BOTH readings. My scene traversal could not see that, because a traversal
@@ -30,9 +46,10 @@
 // the sharper half: my hand-rolled probe and the numbers it produced agreed with each other
 // perfectly the whole time. Self-consistency is not evidence about position.
 //
-// So the two places below are labelled HERE and AFTER-GOTO. They are not "wilds" and "plot" and this
-// script must not claim they are until something walks the keeper through the door. Until then treat
-// any fold measurement as UNMEASURED, not as measured-and-equal.
+// So the two places below are labelled HERE and AFTER-GOTO. They are still not "wilds" and "plot" —
+// this script does not cross, so its own two readings remain two Wilds locations and it must not
+// claim otherwise. That is now a statement about THIS SCRIPT, not about the fold: the fold is
+// reachable and has been measured. Use `fold-profile.mts` for it, or teach this one `/space`.
 //
 // ★ NO PAGE CODE IS ADDED. `THREE.WebGLRenderer` and `THREE.Scene` announce themselves on
 // `window.__THREE_DEVTOOLS__` at construction if it exists. Installing an EventTarget there BEFORE
