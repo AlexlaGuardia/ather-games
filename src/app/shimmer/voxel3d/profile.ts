@@ -91,6 +91,38 @@ export interface FrameProfile {
    * twice. Clamping it to zero would hide a broken wiring behind a plausible number.
    */
   unaccounted: number
+  /**
+   * The zone breakdown **of the single worst frame in the window** — same shape as `zones`,
+   * including its own UNACCOUNTED row, and measured against that frame alone.
+   *
+   * ★★★ `worst` WAS A TOTAL WITH NO PARTS, WHICH IS THE EXACT DEFECT THIS FILE EXISTS TO FIX,
+   * REAPPEARING INSIDE ITS OWN FIELD (2026-08-23). The header argues that `PerfSample` can say
+   * *is this slow* and never *what is slow* because one total has no parts — and then published
+   * `worst` as one total with no parts. Measured on Alex's GPU the same evening: walking cost
+   * 39.4% of wall clock to ~240ms stalls at a ~600ms period while the MEAN frame stayed 16.6ms.
+   * The window means could not see it (a quarter-second freeze averaged into nineteen clean
+   * frames), and `worst` could see that it happened while being unable to say what it was.
+   *
+   * ⚠ AN UNACCOUNTED ROW LEADING **HERE** IS A REAL FINDING, NOT THE EXPECTED READING. For the
+   * window means, a leading remainder is normal — render submit sits outside the marked span by
+   * construction. For ONE catastrophic frame it says the stall happened somewhere no mark covers,
+   * which rules out every wrapped zone at once. That is the answer, not a gap in the answer.
+   */
+  worstZones: FrameProfile['zones']
+  /**
+   * When the worst frame ENDED, on the profiler's own clock (ms).
+   *
+   * ★★★ ATTRIBUTION ALONE CAN NAME A ZONE AND STILL BE WRONG ABOUT THE MECHANISM (root-ef's catch,
+   * 2026-08-23). `worstZones` says what was inside ONE stall. It cannot say whether the stalls in
+   * successive windows are the same recurring event or several different events being averaged
+   * into one story — and those want different fixes. Diffing this across consecutive windows tests
+   * the stall against a fixed period: a ~600ms lattice implicates a clock-driven sweep, scattered
+   * gaps implicate whatever the player happened to be doing.
+   *
+   * ⚠ Zero when no frame has landed yet. It is a profiler-relative stamp, not wall clock, and is
+   * only meaningful DIFFED against another window's — never as an absolute.
+   */
+  worstAt: number
   /** Frames in the window — a window of 1 makes every mean above a single sample, so say so. */
   frames: number
 }
@@ -149,9 +181,20 @@ export function createProfiler(now: () => number = () => performance.now()): Pro
   let gpuStatus = 'not attached'
 
   const acc = new Map<string, number>()
+  /**
+   * The CURRENT frame's zones, cleared every `frameEnd`, and the winner copied into `worstAcc`.
+   *
+   * ★ TWO MAPS RATHER THAN A PER-FRAME ARRAY OF SAMPLES. Keeping every frame's breakdown and
+   * picking the max at publish would be simpler to read and allocates per frame inside the thing
+   * being measured — the same objection that killed the `wrap(zone, fn)` API in the header. These
+   * two maps are written in place, hold the same handful of keys for the life of the profiler, and
+   * the copy happens only when a new worst actually appears.
+   */
+  const frameAcc = new Map<string, number>()
+  const worstAcc = new Map<string, number>()
   let open: string | null = null
   let openAt = 0
-  let frames = 0, time = 0, worst = 0, windowAt = now()
+  let frames = 0, time = 0, worst = 0, worstAt = 0, windowAt = now()
   /** GPU query objects still in flight, oldest first. Results are a frame or two behind. */
   const inflight: WebGLQuery[] = []
   let gpuNs = 0, gpuSamples = 0
@@ -159,7 +202,9 @@ export function createProfiler(now: () => number = () => performance.now()): Pro
 
   const closeOpen = (t: number) => {
     if (open === null) return
-    acc.set(open, (acc.get(open) ?? 0) + (t - openAt))
+    const d = t - openAt
+    acc.set(open, (acc.get(open) ?? 0) + d)
+    frameAcc.set(open, (frameAcc.get(open) ?? 0) + d)
     open = null
   }
 
@@ -170,7 +215,8 @@ export function createProfiler(now: () => number = () => performance.now()): Pro
       enabled = v
       // ⚠ A STALE WINDOW MUST NOT SURVIVE THE TOGGLE. Re-enabling with `openAt` left over from
       // minutes ago would attribute the whole idle gap to whichever zone happened to be open.
-      acc.clear(); open = null; frames = 0; time = 0; worst = 0; windowAt = now()
+      acc.clear(); frameAcc.clear(); worstAcc.clear()
+      open = null; frames = 0; time = 0; worst = 0; worstAt = 0; windowAt = now()
       gpuNs = 0; gpuSamples = 0
     },
     get gpuStatus() { return gpuStatus },
@@ -203,7 +249,16 @@ export function createProfiler(now: () => number = () => performance.now()): Pro
       closeOpen(now())
       frames++
       time += dtRaw
-      if (dtRaw > worst) worst = dtRaw
+      // ⚠ THE COPY HAPPENS BEFORE THE CLEAR AND ONLY ON A NEW WORST. Snapshotting at publish
+      // instead would hand back the LAST frame's parts wearing the worst frame's duration — two
+      // frames spliced into one reading, which is the shape that corroborates a wrong answer.
+      if (dtRaw > worst) {
+        worst = dtRaw
+        worstAt = now()
+        worstAcc.clear()
+        for (const [k, v] of frameAcc) worstAcc.set(k, v)
+      }
+      frameAcc.clear()
     },
 
     gpuFrame() {
@@ -256,17 +311,26 @@ export function createProfiler(now: () => number = () => performance.now()): Pro
       zones.push({ name: UNACCOUNTED_ROW, ms: ms - measured, pct: 0, unaccounted: true })
       zones.sort((a, b) => b.ms - a.ms)
       for (const z of zones) z.pct = ms > 0 ? (z.ms / ms) * 100 : 0
+      // ★ The worst frame's own partition, against ITS duration — never against the window mean.
+      const worstMs = worst * 1000
+      const worstZones: FrameProfile['zones'] = [...worstAcc.entries()]
+        .map(([name, z]) => ({ name, ms: z, pct: 0 }))
+      const worstMeasured = worstZones.reduce((sum, z) => sum + z.ms, 0)
+      worstZones.push({ name: UNACCOUNTED_ROW, ms: worstMs - worstMeasured, pct: 0, unaccounted: true })
+      worstZones.sort((a, b) => b.ms - a.ms)
+      for (const z of worstZones) z.pct = worstMs > 0 ? (z.ms / worstMs) * 100 : 0
       const out: FrameProfile = {
         fps: Math.round(frames / (time || 1e-9)),
         ms, worst: worst * 1000, gpuMs: gpuSamples ? gpuNs / gpuSamples / 1e6 : null,
         gpuSamples,
-        zones, measured,
+        zones, measured, worstZones, worstAt,
         // ⚠ AGAINST WALL CLOCK, NEVER AGAINST THE ZONE SUM. Deriving the total from the parts is how
         // a profiler comes to believe it saw the whole frame.
         unaccounted: ms - measured,
         frames,
       }
-      acc.clear(); frames = 0; time = 0; worst = 0; windowAt = t
+      acc.clear(); frameAcc.clear(); worstAcc.clear()
+      frames = 0; time = 0; worst = 0; worstAt = 0; windowAt = t
       gpuNs = 0; gpuSamples = 0
       return out
     },
@@ -335,6 +399,15 @@ export function snapshotText(p: FrameProfile, ctx: {
   for (const z of p.zones) L.push(`  ${n(z.ms, 2).padStart(7)} ms  ${n(z.pct, 0).padStart(3)}%  ${z.name}`)
   L.push(`  ${'-'.repeat(7)}`)
   L.push(`  ${n(p.measured, 2).padStart(7)} ms  ${n(ms100(p.measured, p.ms), 0).padStart(3)}%  = wrapped zones only`)
+  // ★★ THE WORST FRAME GETS ITS OWN TABLE. A mean cannot describe a stall: a 240ms freeze averaged
+  // into nineteen clean frames reads as a mildly slow game, which is the reading that sent two
+  // sessions after the wrong thing. Only printed when the worst frame is meaningfully off the mean,
+  // because on a healthy run it is noise and a table nobody needs trains people to skip the section.
+  if (p.worst > p.ms * 2 && p.worstZones.length) {
+    L.push('')
+    L.push(`worst frame — ${n(p.worst)} ms, against a ${n(p.ms)} ms mean  ·  at t=${n(p.worstAt, 0)} ms:`)
+    for (const z of p.worstZones) L.push(`  ${n(z.ms, 2).padStart(7)} ms  ${n(z.pct, 0).padStart(3)}%  ${z.name}`)
+  }
   return L.join('\n')
 }
 

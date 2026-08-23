@@ -280,6 +280,69 @@ const clock = () => { const c = { t: 0 }; return { c, now: () => c.t } }
     '★★ a MISSING timer says UNAVAILABLE, not WITHHELD — different claims, different words')
 }
 
+// ── 8. ★★★ THE WORST FRAME HAS PARTS ──────────────────────────────────────────────────────────
+// `worst` was a duration with no parts — the exact defect this file exists to fix, one level down.
+// Measured on Alex's GPU 2026-08-23: p50 16.6ms with a 292ms max, 39.4% of wall clock lost. The
+// window means could not see it and `worst` could see THAT it happened but not WHAT it was.
+{
+  const { c, now } = clock()
+  const p = createProfiler(now); p.enabled = true
+
+  // three clean frames, then one catastrophic one whose cost is all in 'ticks'
+  for (let i = 0; i < 3; i++) {
+    p.mark('ticks'); c.t += 1
+    p.mark('render'); c.t += 2
+    p.frameEnd(0.016)
+  }
+  p.mark('ticks'); c.t += 240          // the stall, inside a wrapped zone
+  p.mark('render'); c.t += 2
+  const stallAt = c.t
+  p.frameEnd(0.250)
+  c.t = stallAt + WINDOW_MS + 1
+  const w = p.publish()!
+
+  ok(w.worstZones.length > 0, 'the worst frame publishes a breakdown at all')
+  const top = w.worstZones[0]
+  ok(top.name === 'ticks', `★★★ the worst frame names its own top zone (got ${top.name})`)
+  ok(near(top.ms, 240, 2), `★★ and its cost is the STALL's, not the window mean's (${top.ms.toFixed(1)}ms)`)
+  ok(w.zones.find(z => z.name === 'ticks')!.ms < 100,
+    '★★ while the WINDOW mean for the same zone stays small — the two must not be the same number')
+  ok(w.worstAt === stallAt, `★ worstAt stamps the stall frame (${w.worstAt} vs ${stallAt})`)
+
+  // ★ the worst frame carries its OWN unaccounted remainder, against its OWN duration
+  const un = w.worstZones.find(z => z.unaccounted)!
+  ok(!!un, 'the worst frame has an unaccounted row of its own')
+  ok(near(w.worstZones.reduce((s, z) => s + z.ms, 0), w.worst, 1),
+    '★★★ and the worst frame’s rows PARTITION the worst frame, not the window')
+
+  // ⚠ THE STALL OUTSIDE EVERY MARK — the reading that rules out all wrapped zones at once, and
+  // the one the real capture may well produce. It must be visible, not silently absent.
+  const c2 = clock()
+  const q = createProfiler(c2.now); q.enabled = true
+  q.mark('ticks'); c2.c.t += 1
+  q.frameEnd(0.016)
+  c2.c.t += 300                        // the freeze happens with NO zone open
+  q.mark('ticks'); c2.c.t += 1
+  q.frameEnd(0.300)
+  c2.c.t += WINDOW_MS + 1
+  const w2 = q.publish()!
+  const lead = w2.worstZones[0]
+  ok(lead.unaccounted === true,
+    '★★★ a stall no mark covers leads the worst frame as UNACCOUNTED — that IS the answer')
+  ok(lead.ms > 250, `★★ and carries the stall's real size (${lead.ms.toFixed(0)}ms)`)
+
+  // ★ a healthy window does not print the worst-frame table — noise trains people to skip it
+  const c3 = clock()
+  const h = createProfiler(c3.now); h.enabled = true
+  for (let i = 0; i < 5; i++) { h.mark('ticks'); c3.c.t += 2; h.frameEnd(0.016) }
+  c3.c.t += WINDOW_MS + 1
+  const hw = h.publish()!
+  const ctx = { space: 'plot' as const, x: 0, y: 0, z: 0, viewRadius: 12,
+    cols: 1, meshes: 1, draws: 1, tris: 1, geometries: 1, programs: 1, gpuStatus: 'ok' }
+  ok(!/worst frame —/.test(snapshotText(hw, ctx)), '★ a healthy window prints no worst-frame table')
+  ok(/worst frame —/.test(snapshotText(w, ctx)), '★★ and a stalling one does')
+}
+
 if (fails.length) {
   console.log(`\n${fails.map(f => `  ✗ ${f}`).join('\n')}\n`)
   console.log(`❌ ${fails.length} failed, ${pass} passed`)
