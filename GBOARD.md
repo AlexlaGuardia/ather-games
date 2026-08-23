@@ -2068,6 +2068,29 @@ source alpha. Measured 296→140 opaque of 2304; colours 13 → 25/20/35/37. Ren
 > - **⚠ FOUND, NOT FIXED — `openShop` IS A DEAD LIMB INSIDE A DEAD SYSTEM.** `engine/dialogue-schema.ts` declares `{ type: 'openShop' }`, the dialogue editor offers it in a dropdown, `dialogue-runtime.ts` queues it — and **nothing in the tree calls `consumeActions`**, so every authored dialogue action (`setFlag`, `giveItem`, `openShop`, `giveRandomSeed`) is queued and dropped. play3d's live `talk()` is a hand-written if/else chain; the whole schema/runtime/editor stack is not what the game runs. Hooking the rack to `openShop` would have shipped a trader who says his lines and opens nothing. Same shape as `pipeline_config.broadcast_reload()` in cortex: **it needs a decision (delete or wire), not a repair.**
 > - **NEXT:** Alex walks it and calls the feel (prices 40/65 + 25/rune, rack of 6, rotates with the in-game day = 64 real min). · The trader's look + the Passage interior are Alex's when the **continuous** authoring lane starts. · **7 of 17 birthable runes still open ZERO keeper moves** and those keepers get an empty book + an unreadable rack — the 37 moves Magii registered 08-13 are the fix, and bringing them into the build is its own pass. · `nearNpc` in play3d is still pure proximity, the same bug just fixed in voxel3d (`voxel3d/aim.ts`) — the trader can be talked to with your back turned.
 
+> **🔓 DE-PINNED 2026-08-23 (`19c38e2`, world lane) — the parameterisation was right, the COLLAPSE was wrong.**
+> `coverTiersFor()` always took a body, and line 54 said so — but `COVER_SLIDE/STAND/FULL`, `BODY_D`,
+> `PASS_MIN` and `LANE_*` were that function resolved **once at import**, so a caller writing
+> `COVER_STAND` silently got one mannequin out of two that differ by up to **104%**. ★ **The
+> module-constant trap for the 4th time in two days** (save slot cached at import → anonymous purse ·
+> `world:ticks` one name over two regions · a secret as a module constant posting an empty key · this).
+> **Deleted, not kept alongside** — "for convenience" leaves the footgun pointed at whoever does not
+> yet know there are two bodies. Added `widthTiersFor(body)` + `metricsFor(body)`, the latter so a map
+> cannot ask cover of one body and widths of another (the same bug rebuilt by hand, one function down,
+> passing every assert). ⚠ **`snapHeight` was the sharp one** — an authoring pass calls it on EVERY
+> placed face and its ladder held the standing eye via the pinned constant, so a wrong mannequin could
+> enter a town one snapped face at a time. It takes a body now. **71 asserts, 5 mutations, 5 red.**
+> - **⚠⚠ DELIBERATELY NOT DECIDED: which body a space is authored against.** `BODY` unchanged, still
+>   Alex's to overturn in one line. "Each space names its walker" *sounds* derivable from the
+>   two-materials ruling — but that rules which SIDE a place is on, **not which BODY walks it**, and
+>   canon separately calls movement feel **unified across the seam** (this block, below). `metrics.ts`
+>   records play3d's 1.15 as *predating* the other and reading as a shorter mannequin at the same world
+>   scale — **legacy, not intentional** — so keying cover off the space would enshrine a stale body as
+>   a design principle, invisibly, inside a refactor. ★ **A refactor is the worst venue for a decision,
+>   because it lands without anyone noticing one was made.** De-pinning is a bug fix; the mannequin is
+>   a separate question and it is **Alex's**.
+> - **⏭ BLOCKS THE GREYBOX until Alex rules it** — cover is the readability grammar of an arena.
+
 > **✅ MAP METRICS SHIPPED 2026-08-12 (`5c49734`, play lane) — the authoring grammar for the CONTINUOUS half.** Alex opened the maps conversation for **Rune Hold · the Crucible · Expeditions** ("this is where I'd like to get the apex look in"). All three sit on the continuous side of canon's **ONE STYLE, TWO MATERIALS** ruling (`two-lines-two-games.md`, 2026-08-12: the Ather is quantized because it was *made*, Athernyx is continuous because it simply is) — so their geometry is AUTHORED, and authored geometry can sit at any height, which is the new failure mode. `play3d/metrics.ts` derives the tiers from the movement kit instead of taste: **gaps** run 4.37 / slide-hop 7.53 / cap 9.42 · **slide corridor** 6.00 minimum straight run · **ledges** flow ≤0.32, vault 1.00, mantle ≤2.64, climb ≤5.14, wall above · **cover** 1.02 / 1.62 / 2.64 · **widths** 0.70 / 1.20 / 2.40 / 4.80. 66 asserts, four mutations verified red.
 > - **★ THE GUARD FOUND A REAL DIVERGENCE ON ITS FIRST RUN: the two walkers share every VERB and disagree on the BODY.** Run, jump, gravity, slide, slide-hop, climb rise, mantle reach all match to the digit between `Shimmer3D.tsx` and `voxel3d/locomotion.ts`. Eye height does not — **1.62 vs 1.15**, slide eye **1.02 vs 0.50**, radius **0.30 vs 0.40**. Kit-derived tiers (gaps, ledges) are seam-safe; **cover and widths are BODY-derived**, so greyboxing Rune Hold before this surfaced would have put every wall in town at a height that reads correctly in one half of the game and wrong in the other. The mannequin is now an explicit parameter, both pinned to their source, and the divergence is **asserted** — unify them and the test sends you back to re-derive rather than letting it pass. Canon lists camera/movement feel as unified across the seam, so this is an open question, not a fact to enshrine.
 > - **THE PICK (Alex's to overturn in one line):** authoring body = the **voxel walker's** — human scale (1.62 above the feet is Minecraft's eye on our 1.75 body), and the walker in daily play. ⚠ It changes what a one-block wall IS: at 1.62/1.02 it is a shooting rest; at play3d's 1.15/0.50 it is the classic hide-behind-it-sliding piece. That is the unit a street is built from, so **Alex calls it when he walks the first greybox.**
