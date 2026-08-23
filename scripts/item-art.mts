@@ -35,7 +35,7 @@ import { TOOL_DEFS } from '../src/app/shimmer/engine/tools'
 import { ITEM_ICONS, ITEM_PALETTES, SEED_PALETTES, PALETTE_COLLISIONS } from '../src/app/shimmer/sprites/items'
 import { iconSourceFor, iconPixelsFor, flatIcon } from '../src/app/shimmer/voxel3d/tex/item-icon'
 
-type Status = 'derived' | 'flora' | 'painted' | 'missing' | 'blank'
+type Status = 'derived' | 'cross' | 'flora' | 'painted' | 'missing' | 'blank'
 interface Row { id: string; status: Status; from: string[] }
 
 /**
@@ -98,6 +98,12 @@ const rows: Row[] = [...sources.entries()]
     // called grass unpainted.
     const src = iconSourceFor(id)
     if (src === 'block') return { id, status: 'derived', from: [...from] }
+    // ⚠ 'cross' JOINED THE CHAIN ON 2026-08-23 AND THIS LINE IS WHY THE HEADER ABOVE IS NOT ENOUGH.
+    // Asking the shipped chain stops the ORDER drifting; it does nothing about a new ARM. Without
+    // this the four saplings fall past every branch and land in `missing` — the checklist would have
+    // called for hand art for an icon that already ships, which is the same lie as calling grass
+    // unpainted, arriving by the other door. Widening a union leaves its consumers stale and quiet.
+    if (src === 'cross') return { id, status: 'cross', from: [...from] }
     if (src === 'flora') return { id, status: 'flora', from: [...from] }
     if (src === 'painted') return { id, status: 'painted', from: [...from] }
     // `flatIcon` refuses a blank frame too, so ask ITEM_ICONS separately to tell "nobody drew it"
@@ -124,6 +130,7 @@ const lines: string[] = [
   '| status | count | meaning |',
   '|---|---|---|',
   `| 🟦 derived | ${of('derived').length} | wears its own block's faces. Never needs hand art. |`,
+  `| 🌿 cross | ${of('cross').length} | the world draws it as crossed quads, not a cube — the icon projects the same cross. Never needs hand art. |`,
   `| 🌱 flora | ${of('flora').length} | drawn by the world's own ground-cover generator. Never needs hand art. |`,
   `| 🟩 painted | ${of('painted').length} | hand-painted flat sprite in \`sprites/items.ts\`. |`,
   `| ⬜ missing | ${of('missing').length} | **needs art** — draws the plain chip today. |`,
@@ -211,6 +218,7 @@ writeFileSync(new URL('../ITEM-ART.md', import.meta.url), lines.join('\n'))
 
 console.log(`\nitem art — ${rows.length} reachable items`)
 console.log(`  🟦 derived ${bar(of('derived').length)}   (block faces, nothing to draw)`)
+console.log(`  🌿 cross   ${bar(of('cross').length)}   (crossed quads, nothing to draw)`)
 console.log(`  🟩 painted ${bar(of('painted').length)}   (flat sprite shipping)`)
 console.log(`  ⬜ missing ${bar(of('missing').length)}   (plain chip — needs Alex)`)
 console.log(`  🟥 blank   ${bar(blank.length)}   (wired to an empty frame)`)
@@ -224,7 +232,10 @@ console.log('\nwrote ITEM-ART.md')
 if (process.argv.includes('--sheet')) {
   const sharp = (await import('sharp')).default
   const S = 48, PAD = 6, COLS = 8, BG = [24, 24, 27]
-  const drawn = rows.filter(r => r.status === 'derived' || r.status === 'painted' || r.status === 'flora')
+  // ⚠ EVERY STATUS THAT SHIPS A PICTURE, or the sheet cannot see the thing it exists to show. This
+  // omitted 'cross' for as long as it took to write the line above it — the contact sheet would have
+  // been blind to precisely the four icons that had just changed.
+  const drawn = rows.filter(r => r.status === 'derived' || r.status === 'painted' || r.status === 'flora' || r.status === 'cross')
   const H = Math.ceil(drawn.length / COLS) * (S + PAD) + PAD
   const W = COLS * (S + PAD) + PAD
   const sheet = Buffer.alloc(W * H * 4)

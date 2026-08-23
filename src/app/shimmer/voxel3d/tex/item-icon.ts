@@ -31,6 +31,7 @@ import { materialForItem } from '../../voxel/registry'
 import { ITEM_ICONS, paletteForItem } from '../../sprites/items'
 import { bladePixels, headPixels, HEAD_TINTS, TUFT_SEED, TUFT_BLADES, TALL_SEED, TALL_BLADES } from './flora-tex'
 import { paintFor, TILE_MATERIALS, TOP, SIDE } from './tiles'
+import { isPlant, isSapling } from '../../voxel/depth'
 
 /** Icon edge in CSS pixels. Small enough to stay crisp, large enough for the cube to read. */
 const ICON = 48
@@ -95,6 +96,37 @@ export function rasterIcon(top: Uint8Array, side: Uint8Array, size = ICON, tile 
   return out
 }
 
+/**
+ * ── ★★★ THE CUBE PROJECTION IS A CLAIM ABOUT GEOMETRY, AND FOR SOME MATERIALS IT IS FALSE ───────
+ * Alex, 2026-08-23, holding two goldwood saplings: *"i dont have any saplings in my inventory."*
+ * He did. They were the first slot. The icon was an isometric CUBE of leaf texture, sitting beside
+ * `grass_tuft` and `tall_grass` and `wild_flower`, and nothing about it said seedling.
+ *
+ * ★ THE HEADER ABOVE IS RIGHT AND IT IS NOT ENOUGH. "An item wears the faces the block already has"
+ * assumes the block HAS faces. A sapling does not: `greedy.ts` draws it as a rooted, narrow cross
+ * (`b50f3ac`, *"sapling: renders as a rooted cross, not a cube"*), the same pass that crosses leaves.
+ * So the icon and the world were derived from the same texture and still disagreed about the SHAPE,
+ * which is the one thing the derivation was never checking. Deriving the paint is not deriving the
+ * picture.
+ *
+ * ⚠⚠ AND THE 08-22 TEXTURE FIX IS WHAT ARMED IT. Before that day saplings had no tile art, so
+ * `hasTileArt` was false, the block branch was skipped, and they fell to the honest chip — plain, and
+ * plainly unfinished. Giving them a texture to stop the magenta checkerboard IN THE WORLD silently
+ * promoted their icon from *"nobody drew this"* to a confident cube. **A fix in one renderer turned a
+ * blank into a lie in another**, with nothing in either place looking wrong. Same family as the
+ * craft-panel filter that stopped honouring its own docstring.
+ *
+ * ★ DERIVED FROM THE MESHER'S OWN PREDICATES, never a list of ids. A hand-kept "these are crosses"
+ * table is the exemption that outlives its reason — it would have said `grass_tuft` in 08-12 and
+ * still not said `sapling` in 08-23. `icon-source.test.ts` asserts the stronger version this cannot
+ * express alone: NO tile-arted material the world crosses may reach the block branch, leaves
+ * included, so the day a leaf becomes a holdable item the guard fires instead of shipping a cube.
+ */
+const drawnAsCross = (material: number): boolean => {
+  const base = material & 0xFF
+  return isPlant(base) || isSapling(base)
+}
+
 /** Does a real painter own this material, or would it fall to the ore artist's default? */
 export const hasTileArt = (material: number): boolean => TILE_MATERIALS.includes(material & 0xFF)
 
@@ -135,6 +167,66 @@ export function flatIconPixels(frame: Uint8Array, palette: readonly string[], si
       if (!c) continue
       const di = (y * size + x) * 4
       out[di] = c[0]; out[di + 1] = c[1]; out[di + 2] = c[2]; out[di + 3] = 255
+    }
+  }
+  return out
+}
+
+/**
+ * The same two crossed quads the world stands a sapling on, projected into an icon.
+ *
+ * ★ THE SILHOUETTE IS THE WHOLE POINT, so it comes from GEOMETRY and the texture only fills it —
+ * exactly the split `rasterIcon` already makes. A sapling's tile is `paintLeaves` in its species
+ * colour, which is why the cube read as a leaf block: the paint was never the problem and repainting
+ * it would not have helped. Two rooted planes crossing is what says *seedling* at 48px, and it says
+ * it in a hotbar full of green squares.
+ *
+ * ⚠ ALPHA COMES FROM THE QUAD TEST, NOT THE TILE — `rasterIcon`'s hard-won lesson, and it applies
+ * with more force here. `tiles.put` leaves alpha as a GLOW mask, so masking the cross by the tile's
+ * own alpha would cut the sprite down to whatever happens to emit light: nothing, for a leaf.
+ *
+ * ⚠ ROOTED LOW AND NARROW ON PURPOSE. The base sits at 0.76 of the icon rather than at the cube's
+ * ground diamond (0.33) — a plant drawn from the cube's footprint grows straight off the top of the
+ * frame. Narrow because the world's sapling is deliberately `wide * 0.30`: *"narrow enough to read as
+ * a shoot instead of a shrub"*. An icon that fattened it would describe a plant the world does not
+ * grow, which is the drift this whole file exists to refuse.
+ */
+export function crossIcon(side: Uint8Array, size = ICON, tile = TILE): Uint8Array {
+  const out = new Uint8Array(size * size * 4)
+  // Same cell footprint as the cube so a sapling sits at the scale its block neighbours do, then
+  // taken in to `SPREAD` — the icon's echo of the mesher's 0.30 width multiplier.
+  const w = size * 0.34, h = w / 2
+  const SPREAD = 0.32
+  const ax = w * SPREAD, az = h * SPREAD
+  const cx = size / 2, baseY = size * 0.76, H = size * 0.56
+
+  // Origin, edge U (tile +x, along one ground axis), edge V (tile +y, straight up), light.
+  // Drawn far-plane first: both are opaque, so the near one must land last to sit in front.
+  const quads: [number, number, number, number, number, number, number][] = [
+    [cx - ax, baseY - az, 2 * ax, 2 * az, 0, -H, 0.72],   // the receding plane, shaded back
+    [cx - ax, baseY + az, 2 * ax, -2 * az, 0, -H, 1],     // the facing plane, full light
+  ]
+
+  for (const [px, py, ux, uy, vx, vy, lit] of quads) {
+    const det = ux * vy - vx * uy
+    if (det === 0) continue
+    for (let y = 0; y < size; y++) {
+      for (let x = 0; x < size; x++) {
+        const qx = x + 0.5 - px, qy = y + 0.5 - py
+        const s = (qx * vy - vx * qy) / det
+        const t = (ux * qy - qx * uy) / det
+        if (s < 0 || s >= 1 || t < 0 || t >= 1) continue
+        const tx = Math.min(tile - 1, (s * tile) | 0)
+        // t runs 0 at the ROOT and 1 at the tip, so the tile is sampled bottom-up — the same flip
+        // `floraIcon` documents. Reading it top-down hangs the leaves under the stem.
+        const ty = Math.min(tile - 1, ((1 - t) * tile) | 0)
+        const si = (ty * tile + tx) * 4
+        const di = (y * size + x) * 4
+        out[di + 0] = Math.min(255, side[si + 0] * lit)
+        out[di + 1] = Math.min(255, side[si + 1] * lit)
+        out[di + 2] = Math.min(255, side[si + 2] * lit)
+        out[di + 3] = 255
+      }
     }
   }
   return out
@@ -225,8 +317,12 @@ export function iconPixels(material: number, size = ICON, tile = TILE): Uint8Arr
  * ★ BLOCK FACES ALWAYS WIN. An item with a real block behind it must wear that block's texture even
  * if other art exists, or the two drift and the icon starts describing last month's stone.
  */
-export function iconSourceFor(itemId: string): 'block' | 'flora' | 'painted' | null {
+export function iconSourceFor(itemId: string): 'block' | 'cross' | 'flora' | 'painted' | null {
   const mat = materialForItem(itemId)
+  // ★ THE CROSS ARM SITS ABOVE THE BLOCK ARM, and the order is the fix. Block-faces-always-win is
+  // still true for everything the world builds out of faces; a cross has none to win with. See
+  // `drawnAsCross` for what this cost and why the predicate is derived rather than listed.
+  if (mat !== undefined && hasTileArt(mat) && drawnAsCross(mat)) return 'cross'
   if (mat !== undefined && hasTileArt(mat)) return 'block'
   if (itemId in FLORA) return 'flora'
   return ITEM_ICONS[itemId] && flatIcon(itemId) ? 'painted' : null
@@ -236,6 +332,7 @@ export function iconSourceFor(itemId: string): 'block' | 'flora' | 'painted' | n
 export function iconPixelsFor(itemId: string, size = ICON): Uint8Array | null {
   switch (iconSourceFor(itemId)) {
     case 'block': return iconPixels(materialForItem(itemId)!, size)
+    case 'cross': return crossIcon(paintFor(materialForItem(itemId)! & 0xFF, SIDE, TILE), size)
     case 'flora': return floraIcon(itemId, size)
     case 'painted': return flatIcon(itemId, size)
     default: return null

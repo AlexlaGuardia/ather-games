@@ -4,14 +4,15 @@
 > registry, the recipe table and the tool table, and it classifies each item by calling the same
 > icon path the game calls. A hand-kept version of this file would be wrong within a week.
 
-Items reachable in voxel3d: **58**
+Items reachable in voxel3d: **99**
 
 | status | count | meaning |
 |---|---|---|
-| 🟦 derived | 26 | wears its own block's faces. Never needs hand art. |
+| 🟦 derived | 35 | wears its own block's faces. Never needs hand art. |
+| 🌿 cross | 8 | the world draws it as crossed quads, not a cube — the icon projects the same cross. Never needs hand art. |
 | 🌱 flora | 3 | drawn by the world's own ground-cover generator. Never needs hand art. |
-| 🟩 painted | 21 | hand-painted flat sprite in `sprites/items.ts`. |
-| ⬜ missing | 6 | **needs art** — draws the plain chip today. |
+| 🟩 painted | 39 | hand-painted flat sprite in `sprites/items.ts`. |
+| ⬜ missing | 12 | **needs art** — draws the plain chip today. |
 | 🟥 blank | 2 | wired to an all-zero frame. Reads as done, renders nothing. |
 
 ## 🟥 Wired but blank — needs art, and the wiring says otherwise
@@ -28,8 +29,14 @@ bag is honest and only the editor is not. Draw them like anything on the list be
 Paint at `/shimmer/dev?mode=item` (32×32, palette-indexed). Each is one flat sprite; there is no
 view-angle call to make — these are held objects, not world props.
 
+- [ ] `dawnwood_log` — drop: Dawnwood, ingredient
+- [ ] `deadwood` — drop: Deadfall
+- [ ] `goldwood_log` — drop: Goldwood, ingredient
 - [ ] `goldwood_spade` — tool: farming t1
+- [ ] `mushroom_cap` — drop: Mushroom
+- [ ] `shimmeroak_log` — drop: Shimmeroak, ingredient
 - [ ] `shimmeroak_spade` — tool: farming t2
+- [ ] `starwillow_log` — drop: Starwillow, ingredient
 - [ ] `starwillow_spade` — tool: farming t3
 - [ ] `worn_blade` — tool: forestry t1
 - [ ] `worn_rinstick` — tool: rinning t1
@@ -49,24 +56,42 @@ source of truth for what a tuft looks like.
 
 - [x] `amber_sap`
 - [x] `ather_crystal`
+- [x] `atherwheat_grain`
 - [x] `basic_rinstick`
 - [x] `crystal_spike`
-- [x] `dawnwood_plank`
+- [x] `crystalcap_spore`
+- [x] `dawncap_spore`
+- [x] `dreamroot_essence`
 - [x] `earth_crystal`
 - [x] `glowfin_rinstick`
 - [x] `goldwood_bark`
 - [x] `goldwood_blade`
-- [x] `mana_seed`
 - [x] `mana_spike`
+- [x] `moonvine_leaf`
 - [x] `pure_mana_core`
 - [x] `raw_mana_shard`
+- [x] `rootvine_coil`
+- [x] `seed_atherwheat`
+- [x] `seed_crystalcap`
+- [x] `seed_dawncap`
+- [x] `seed_dreamroot`
+- [x] `seed_glowroot`
+- [x] `seed_moonvine`
+- [x] `seed_shimmerbloom`
+- [x] `seed_shimmerwheat`
+- [x] `seed_starbean`
+- [x] `seed_sunpetal`
+- [x] `shimmerbloom_petal`
 - [x] `shimmeroak_blade`
-- [x] `shimmeroak_plank`
+- [x] `starbean_pod`
 - [x] `starwillow_blade`
 - [x] `starwillow_branch`
 - [x] `starwillow_sap`
 - [x] `storm_crystal`
+- [x] `stormgrass_blade`
+- [x] `tidepetal_bloom`
 - [x] `violet_crystal`
+- [x] `violetbloom_petal`
 - [x] `water_crystal`
 
 ## 🟦 Derived from block art — nothing to draw
@@ -74,32 +99,41 @@ source of truth for what a tuft looks like.
 These wear the faces of the block they place. Drawing a flat icon for one would create a second
 source of truth for what that block looks like, and the two drift the first time a tile is retuned.
 
-- `block_deep_stone`
-- `block_deep_stone_slab`
 - `block_sand`
 - `block_sand_slab`
 - `block_spring_crust`
 - `block_spring_crust_slab`
-- `block_stone`
-- `block_stone_slab`
 - `block_subsoil`
 - `block_subsoil_slab`
 - `block_topsoil`
 - `block_topsoil_slab`
+- `cauldron`
 - `chest`
 - `clay_pot`
 - `crafting_table`
-- `dawnwood_log`
-- `dawnwood_log_slab`
-- `goldwood_log`
-- `goldwood_log_slab`
+- `cut_stone`
+- `cut_stone_slab`
+- `dawnwood_plank`
+- `dawnwood_plank_slab`
+- `garden_bed_dawnwood`
+- `garden_bed_goldwood`
+- `garden_bed_shimmeroak`
 - `goldwood_plank`
 - `goldwood_plank_slab`
 - `mana_lantern`
-- `shimmeroak_log`
-- `shimmeroak_log_slab`
-- `starwillow_log`
-- `starwillow_log_slab`
+- `pale_brick`
+- `pale_brick_slab`
+- `rubble`
+- `rubble_slab`
+- `sandstone`
+- `sandstone_slab`
+- `sawmill`
+- `shimmeroak_plank`
+- `shimmeroak_plank_slab`
+- `stone_brick`
+- `stone_brick_slab`
+- `stonecutter`
+- `waymark`
 
 ## 🎨 Painted, but wearing the generic palette
 
@@ -108,15 +142,31 @@ These render through the shared 8-colour `ITEM_PALETTE` because they have no ent
 entry to give one its own colours.
 
 - [ ] `ather_crystal`
+- [ ] `atherwheat_grain`
 - [ ] `basic_rinstick`
 - [ ] `crystal_spike`
-- [ ] `dawnwood_plank`
+- [ ] `crystalcap_spore`
+- [ ] `dawncap_spore`
+- [ ] `dreamroot_essence`
 - [ ] `earth_crystal`
 - [ ] `glowfin_rinstick`
 - [ ] `goldwood_blade`
 - [ ] `mana_spike`
+- [ ] `moonvine_leaf`
 - [ ] `pure_mana_core`
+- [ ] `seed_atherwheat`
+- [ ] `seed_crystalcap`
+- [ ] `seed_dawncap`
+- [ ] `seed_dreamroot`
+- [ ] `seed_glowroot`
+- [ ] `seed_moonvine`
+- [ ] `seed_shimmerbloom`
+- [ ] `seed_shimmerwheat`
+- [ ] `seed_starbean`
+- [ ] `seed_sunpetal`
+- [ ] `shimmerbloom_petal`
 - [ ] `shimmeroak_blade`
+- [ ] `starbean_pod`
 - [ ] `starwillow_blade`
 - [ ] `starwillow_branch`
 - [ ] `starwillow_sap`
