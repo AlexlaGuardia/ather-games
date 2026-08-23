@@ -23,6 +23,18 @@ public/*/vo/
 # arcade leaderboard data (runtime-written)
 /data/
 
+# ⚠ ANY sqlite file, ANYWHERE, NOT JUST /data/ — this repo is PUBLIC and `data/accounts.db` holds
+# emails and google subject ids. `/data/` covers the real one; it did NOT cover a stray
+# `accounts.db` that appeared at the repo root on 2026-08-23 (a mistyped sqlite3 path creates an
+# empty file wherever you point it, and sqlite3 never says it did). That one was empty and is gone,
+# but the next one might not be, and the failure mode is `git add -A` from any window in a
+# four-window swarm publishing user records. Nothing tracked matches this pattern (verified).
+*.db
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+
 # agent worktrees / local claude state — never track
 .claude/
 
