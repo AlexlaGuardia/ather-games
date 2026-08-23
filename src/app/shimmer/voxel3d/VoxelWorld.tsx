@@ -2412,10 +2412,10 @@ function Hud({ stats, perf, toast, pos, look, hotbar, sel, tier, held, build, pi
 }) {
   return (
     <>
-      <div className="absolute top-3 left-3 text-[11px] font-mono text-white/80 bg-black/45 rounded px-2.5 py-1.5 leading-relaxed pointer-events-none">
+      <div className="gx-chrome absolute top-3 left-3 text-[11px] font-mono text-white/80 bg-black/45 rounded px-2.5 py-1.5 leading-relaxed pointer-events-none">
         {/* Not a test bed since 2026-08-07 — the room wall and /shimmer both land here now, so this
             is Shimmer. The label said TEST BED while it was reachable only by URL. */}
-        <div className="text-white/95 font-semibold tracking-wide">SHIMMER</div>
+        <div className="gx-title text-white/95">SHIMMER</div>
         {/* A way OUT. This world had no exit and no entrance — you could only arrive by typing the
             URL and only leave with the back button. The parent block is pointer-events-none so the
             canvas keeps the mouse; these opt back in.
@@ -2457,11 +2457,16 @@ function Hud({ stats, perf, toast, pos, look, hotbar, sel, tier, held, build, pi
           ? <div className="text-amber-200/80">BUILD · RMB place · LMB deconstruct · R rotate · 1-8 piece · Tab exit</div>
           : <div className="text-white/45">hold LMB mine · RMB place · scroll/1-8 slot · Q drop (shift = stack) · F draw · C craft · Tab build · T chat, / commands</div>}
         {/* ★ The tools are Greg's, from engine/tools.ts, unchanged. Tier is what you HOLD now. */}
-        <div className="text-white/40 mt-1">
+        <div className="mt-1">
           {(['forestry', 'prospecting'] as const).map(sk => {
             const t = getEquippedTool(tools.current!, sk)
             const d = t ? getToolDef(t) : undefined
-            return <span key={sk} className="mr-3">{sk.slice(0, 4)}: {d?.name ?? '—'}</span>
+            return (
+              <span key={sk} className="mr-3">
+                <span className="gx-label text-[9px] text-white/35">{sk.slice(0, 4)}</span>{' '}
+                <span className="gx-value text-white/85">{d?.name ?? '—'}</span>
+              </span>
+            )
           })}
         </div>
       </div>
@@ -2483,13 +2488,19 @@ function Hud({ stats, perf, toast, pos, look, hotbar, sel, tier, held, build, pi
         </div>
       )}
 
-      {/* The tutorial objective chip — caps label dim, value bright, same rule the tool row above
-          and the hotbar counts already follow. Hidden once the gate is open: there is no more
-          objective to chase. */}
+      {/* The tutorial objective chip — dim caps label, bright value, the house game-UI signature.
+          ⚠ THIS COMMENT USED TO CLAIM the tool row above and the hotbar counts "already follow" the
+          same rule. They did not: the tool row was a single `text-white/40` div whose spans carried
+          only `mr-3`, so its label and value were identical and nothing was emphasised. A comment
+          asserting coverage is a claim, and an unread claim retires the question instead of
+          answering it. The tool row now genuinely follows it, and `hud-type.test.ts` is what keeps
+          that true. All three of these ASK `.gx-label`/`.gx-value` rather than restating a tracking
+          value — this chip's hand-rolled `tracking-[.16em]` was a second spelling of the layer's
+          0.22em. Hidden once the gate is open: there is no more objective to chase. */}
       {tutorialStage !== 'done' && (
         <div className="absolute top-3 left-1/2 -translate-x-1/2 text-[10px] font-mono bg-black/45 rounded px-2.5 py-1 pointer-events-none">
-          <span className="text-white/40 uppercase tracking-[.16em]">objective </span>
-          <span className="text-amber-200/90">{OBJECTIVE_LABEL[tutorialStage]}</span>
+          <span className="gx-label text-white/40">objective</span>{' '}
+          <span className="gx-value text-amber-200/90">{OBJECTIVE_LABEL[tutorialStage]}</span>
         </div>
       )}
 
