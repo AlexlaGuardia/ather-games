@@ -11,6 +11,32 @@ real **gimmick** (not watch-and-wait) · **canon-parallel** (serves Athernyx, no
 black, CRT bloom). Mana'nana went glossy-modern; each game gets its own skin under
 the Arcade frame.
 
+## 🎮 Shimmer voxel3d — **CONTROLLER, REBINDING, AND HINTS THAT STOP LYING** (2026-08-23, play) · *Last touched 2026-08-23 (play) — shipped, deployed, prod-verified*
+
+**Left off:** all three of Alex's asks are live. `01a77d5`+`63c55e8` (`src/lib/input/`), `7d286c7` (BindingsPanel), `1d7a313` (the pure bridge), `525ad15` (the wiring pass), `390e1a1` (stats row gated). Plus the UI-vocabulary work that preceded it: `eeb9084` (play3d tokens), `c378800` (fold HUD onto `gx-*`), `b98531d` (`npm run gx`).
+
+**THE THREE ASKS WERE ONE MISSING LAYER**, which is why they shipped together: a pad needs something other than a `KeyboardEvent` to drive the game · a rebinding menu cannot rebind a key hardcoded in 30 places · **a hint is a CLAIM ABOUT A BINDING**, so it cannot say "press F" to someone holding a pad or after they rebound it. The fold had NO input abstraction: raw `e.code` across three listeners in an 8540-line file, movement reading `k.KeyW` out of a held map, and touch as a second hardcoded path.
+
+**★ THE LOOK PROBLEM WAS NEVER COLOUR, AND MY FIRST DIAGNOSIS WAS WRONG IN THE DIRECTION THAT FLATTERED THE WORK.** A "761 distinct colours" census swept all of `src/app/shimmer` and **621 of it is `sprites/` — palette-indexed pixel ART, not chrome.** `voxel3d` was already at 49 (Nolmir 52). The real cause: `gameui.css` has implemented the house game-UI layer **since June**, `GAME_UI_LAYER.md` ruled on this exact defect, **eight surfaces had opted in** (vault 37, ward 17, seedfall 16, atherdash 12…) and **Shimmer was at ZERO**. Nothing was missing except adoption. ⚠ I nearly shipped a third dialect into the problem I had just diagnosed — my grep searched **filenames** for `gx-*` and they are **CSS class names**.
+
+**A rollout doc with a step nobody completed reads exactly like one that finished.** `npm run gx` now counts adoption off disk, **derived from the `GAMES` registry** so a new cabinet enrols itself and stays red until classified. The numbers are deliberately NOT written into the doc — a table there would be one more accurate paragraph going quietly stale.
+
+**Decisions worth not relitigating:**
+- **Bindings are DEVICE-scoped, against the house habit.** Everything else went per-account on 08-22/23 because a saved world belongs to a character. Controls belong to the hands and the hardware — two accounts on one desktop want the same keys. Registered in `keeper-local.test.ts` `DEVICE_KEYS` so the decision can go red.
+- **The two devices UNION, they do not switch.** Every rule for picking an "active device" is wrong at some moment. Device detection decides what to DISPLAY, never what to obey.
+- **The stick stays ANALOG** — the wish vector is clamped at 1, not normalised whenever non-zero. The old line is correct for booleans and would have snapped a half-push to full speed, making a pad strictly worse than four keys.
+- **Face buttons are named for the pad in hand** — index 0 is Xbox A *and* PlayStation Cross. Printing the wrong family names a button that exists, is wrong, and sits where the player will not question it.
+- **The pad poll is MARKED, not deferred** (hub's argument, and the better one): a measured 30µs beats an unmeasured one. `input:poll 0.00 ms · 0%`, inserted as a clean partition before `world:spawn` with **no existing boundary moved**.
+- **`hidden`, never unmounted, for the stats row.** `world-shot.mts` reads it by `textContent`, which sees through `display:none` but returns null for a node not in the tree — a conditional render would have made every headless shot print *"old build?"*: **a styling decision reporting itself as a bad deploy.**
+
+**⚠ NEXT — `CAST_CODES` IS AN INCOMPLETE FEATURE, NOT A NICE-TO-HAVE.** `VoxelWorld.tsx:244`/`:4193` still match raw `e.code` against hardcoded `Key*`. **A keeper can walk, jump and interact from a pad and CANNOT CAST**, in a game whose core system is runes — a controller that looks finished and stops working at the first Hollow. Same conversion, actions already exist. **With Alex; hub hands over the file on his go.**
+
+**Also open:** Alex to hold a pad and rule on the layout (triggers mine/place, face jump/interact, d-pad menus — Jin's design, his veto) · **29 hand-rolled label roles** in `VoxelWorld.tsx` spelling one role with **nine tracking values** (`.14em` and `0.14em` are the same value twice), ratcheted at exactly 29, convert in batches Alex can react to · `Binding` models keys+buttons, not axes, so a **stick cannot be rebound** — grows an axis concept the day southpaw/inverted is asked for.
+
+**Files:** `src/lib/input/{actions,bindings,gamepad,hints,resolve,input.test}.ts` · `src/app/shimmer/voxel3d/{VoxelWorld,BindingsPanel,tutorial,hud-type.test}.ts(x)` · `scripts/gx-adoption.mts` · `src/app/gameui.css` (read-only, the vocabulary) · `GAME_UI_LAYER.md`
+
+**Guards:** `npx tsx src/lib/input/input.test.ts` (173) · `hud-type.test.ts` (17) · `npm run gx` (84) · `play3d/tokens.test.ts` (20). ~30 mutations across them, all verified red. **Both HUD guards caught their own author inside a day.**
+
 ## 🚪 Shimmer voxel3d — THE CROSSING COURT + THE TUTORIAL ARCH (2026-08-23, jin-cc world lane)
 > **The keeper's ways OUT get a place, and the tutorial's only way out stopped being buried.**
 > Shipped `8de7a26` · `8cfefb8` · `6a2ca61` · `47d0ae9`. Pure math + oracles — **nothing renders yet.**
