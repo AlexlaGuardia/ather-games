@@ -35,13 +35,17 @@
 // Spirit Corner (`world/rune-hold.md:127`), Gregory's (`:77`). The rest stay visible and shut, and
 // `rune-hold.test.ts` counts them.
 import { Suspense, useEffect, useMemo, useRef, useState } from 'react'
+import * as THREE from 'three'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
+import { buildTileArray, sliceLayer, layerOf, TOP, SIDE } from '../../voxel3d/tex/tiles'
+import { MAT } from '../../voxel/depth'
+import { MATERIAL_COLOR } from '../../voxel3d/attrs'
 import { runeHold, townFaults, type Town } from '../../play3d/rune-hold'
 import { BODIES, KIT, metricsFor, STEP_FLOW, type Body } from '../../play3d/metrics'
 
-type Pair = 'voxel' | 'play3d' | 'mismatch'
-const TOWN_BODY: Record<Pair, Body> = { voxel: BODIES.voxel, play3d: BODIES.play3d, mismatch: BODIES.voxel }
-const WALK_BODY: Record<Pair, Body> = { voxel: BODIES.voxel, play3d: BODIES.play3d, mismatch: BODIES.play3d }
+type Pair = 'voxel' | 'play3d' | 'mismatch' | 'seam'
+const TOWN_BODY: Record<Pair, Body> = { voxel: BODIES.voxel, play3d: BODIES.play3d, mismatch: BODIES.voxel, seam: BODIES.voxel }
+const WALK_BODY: Record<Pair, Body> = { voxel: BODIES.voxel, play3d: BODIES.play3d, mismatch: BODIES.play3d, seam: BODIES.voxel }
 
 interface Box { x0: number; x1: number; z0: number; z1: number; top: number; solid: boolean }
 
@@ -63,6 +67,93 @@ function boxesOf(t: Town): Box[] {
   out.push({ x0: t.station.x - t.station.w / 2, x1: t.station.x + t.station.w / 2,
              z0: t.station.z - t.station.d / 2, z1: t.station.z + t.station.d / 2, top: t.station.h, solid: true })
   return out
+}
+
+
+// ── ★★★ THE SEAM BENCH ────────────────────────────────────────────────────────────────────────
+// Canon (`two-lines-two-games.md` › ONE STYLE, TWO MATERIALS) rules that the Ather is quantized and
+// Athernyx continuous, and that **a material change must never become an art-direction change**:
+// palette, lighting language and the asset pipeline stay unified across the seam, only the FORM
+// differs. Its acceptance test is *"a screenshot from either side must be instantly recognisable as
+// the same game."* This is that screenshot, taken with both sides in one frame under one light.
+//
+// ★ IT RENDERS THE REAL TILE GENERATOR. `buildTileArray`/`sliceLayer` are the same functions that
+// paint the world's blocks — nothing here restates the art. A bench with its own copy of the
+// textures would agree with the game right up until someone repainted one of them, and it would
+// agree hardest at the moment you came looking.
+//
+// ⚠ AND THE NUMBER IS THE POINT, NOT THE PICTURE. A block is one world unit and its tile is 64px, so
+// the Ather is authored at **64 texels per metre**. The continuous wall beside it is textured at the
+// SAME density (repeat = its size in metres), because texel density is the thing that actually makes
+// two pipelines read as two games — and unlike palette, it is measurable rather than a matter of eye.
+// If the wall shimmers or tiles visibly while the cube does not, that is the finding.
+//
+// ⚠⚠ WHAT THIS CANNOT TELL YOU YET: `tiles.ts` says in its own header that these tiles are
+// PLACEHOLDER — *"THIS IS NOT SHIMMER'S ART AND MUST NEVER BECOME IT… the look call is Alex's, on
+// painted tiles, later."* So the bench answers *does the pipeline match* and not *does the art look
+// right*. Matching a 3D kit to a stand-in would mean authoring the kit twice.
+const TILE_PX = 64
+
+function useTileTex(material: number, face: number, repeat: number) {
+  return useMemo(() => {
+    const all = buildTileArray(TILE_PX)
+    const layer = sliceLayer(all, TILE_PX, layerOf(material, face))
+    const t = new THREE.DataTexture(new Uint8Array(layer.buffer.slice(0)), TILE_PX, TILE_PX, THREE.RGBAFormat)
+    t.wrapS = t.wrapT = THREE.RepeatWrapping
+    t.repeat.set(repeat, repeat)
+    // Nearest keeps a 64px tile crisp instead of smearing it, which is how the voxel world draws it.
+    t.magFilter = THREE.NearestFilter
+    t.minFilter = THREE.LinearMipMapLinearFilter
+    t.generateMipmaps = true
+    t.needsUpdate = true
+    return t
+  }, [material, face, repeat])
+}
+
+/** One pair: a 1m Ather block and a continuous wall of the same material, same texel density. */
+function SeamPair({ material, face, x, label }: { material: number; face: number; x: number; label: string }) {
+  const WALL_W = 4, WALL_H = 3
+  const cube = useTileTex(material, face, 1)          // 1 unit  → 64 texels/m
+  const wall = useTileTex(material, face, WALL_W)     // 4 units → 64 texels/m, tiled 4x
+  const hex = MATERIAL_COLOR[material] ?? 0x888888
+  return (
+    <group position={[x, 0, -6]}>
+      {/* Ather side: quantized. One block, one tile, no repeat. */}
+      <mesh position={[-1.2, 0.5, 0]} castShadow receiveShadow>
+        <boxGeometry args={[1, 1, 1]} />
+        <meshStandardMaterial map={cube} />
+      </mesh>
+      {/* Athernyx side: continuous. A wall face at the same texel density. */}
+      <mesh position={[1.6, WALL_H / 2, 0]} castShadow receiveShadow>
+        <boxGeometry args={[WALL_W, WALL_H, 0.4]} />
+        <meshStandardMaterial map={wall} />
+      </mesh>
+      {/* ★ AND A FLAT CHIP OF THE SAME PALETTE ENTRY, UNTEXTURED. If the kit is ever built from
+          colour alone, this is what it would read as — the control for the whole comparison, and it
+          comes from `MATERIAL_COLOR`, the one source the tile generator itself derives from. */}
+      <mesh position={[1.6, WALL_H + 0.35, 0]}>
+        <boxGeometry args={[WALL_W, 0.5, 0.4]} />
+        <meshStandardMaterial color={hex} />
+      </mesh>
+      <mesh position={[0, -0.02, 0]} receiveShadow>
+        <boxGeometry args={[6, 0.04, 4]} />
+        <meshStandardMaterial color="#6b6257" />
+      </mesh>
+      <primitive object={new THREE.Object3D()} name={label} />
+    </group>
+  )
+}
+
+function SeamBench() {
+  return (
+    <>
+      <ambientLight intensity={0.55} />
+      <directionalLight position={[30, 60, 20]} intensity={1.1} castShadow />
+      <SeamPair material={MAT.STONE} face={SIDE} x={-9} label="stone" />
+      <SeamPair material={MAT.TOPSOIL} face={TOP} x={0} label="topsoil" />
+      <SeamPair material={MAT.PACKED_CLOUD} face={SIDE} x={9} label="cloud" />
+    </>
+  )
 }
 
 function Player({ town, body, pairKey }: { town: Town; body: Body; pairKey: Pair }) {
@@ -194,6 +285,7 @@ function Preview() {
       if (e.code === 'Digit1') setPair('voxel')
       if (e.code === 'Digit2') setPair('play3d')
       if (e.code === 'Digit3') setPair('mismatch')
+      if (e.code === 'Digit4') setPair('seam')
     }
     window.addEventListener('keydown', h)
     return () => window.removeEventListener('keydown', h)
@@ -202,13 +294,15 @@ function Preview() {
   return (
     <div className="fixed inset-0 bg-[#a8b8c8]">
       <Canvas shadows camera={{ fov: 70, near: 0.05, far: 500 }}>
-        <Scene town={town} walker={walkBody} />
+        {pair === 'seam' ? <SeamBench /> : <Scene town={town} walker={walkBody} />}
         <Player town={town} body={walkBody} pairKey={pair} />
       </Canvas>
       <div data-runehold className="absolute top-3 left-3 text-[11px] font-mono text-white/90 bg-black/60 rounded px-3 py-2 leading-relaxed pointer-events-none">
         <div className="font-semibold tracking-wide">RUNE HOLD · GREYBOX · click to look, WASD, space</div>
         <div className={pair === 'mismatch' ? 'text-amber-300' : 'text-white/90'}>
-          {pair === 'mismatch'
+          {pair === 'seam'
+            ? '4 · SEAM BENCH — 1m Ather block vs a continuous wall, same paint, same 64 texels/m'
+            : pair === 'mismatch'
             ? '3 · MISMATCH — voxel town, play3d walker. ⚠ NOT A CANDIDATE, shown to make the bug visible'
             : pair === 'voxel' ? '1 · VOXEL PAIR (current pick)' : '2 · PLAY3D PAIR (what Shimmer3D ships)'}
         </div>
@@ -218,7 +312,11 @@ function Preview() {
         <div className={faults.length ? 'text-red-300' : 'text-emerald-300'}>
           {faults.length ? `${faults.length} FAULT: ${faults.map(f => f.why).join(', ')}` : 'town reads clean'}
         </div>
-        <div className="text-white/50">1 / 2 / 3 to switch · ⚠ preview collider, not the game&apos;s — judge proportion, not movement</div>
+        {pair === 'seam' && (
+          <div className="text-white/70">left cube = Ather (1m, 1 tile) · right wall = Athernyx (4m, tiled 4x) · chip above = raw palette entry
+            <br />⚠ tiles are PLACEHOLDER art by their own header — this tests the PIPELINE, not the look</div>
+        )}
+        <div className="text-white/50">1 / 2 / 3 / 4 to switch · ⚠ preview collider, not the game&apos;s — judge proportion, not movement</div>
       </div>
     </div>
   )
