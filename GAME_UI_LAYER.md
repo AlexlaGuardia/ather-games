@@ -75,6 +75,37 @@ border, caps+tracking labels, CRT texture option, sfx-on-interaction, game easin
   physics, focus-visible glow, and an optional `sfx` hook (hover/press) so sound is automatic.
 - Reuses what exists: `useCountUp`, `useGainFx`, `useNoScroll`, the sfx engine, Chakra Petch.
 
+## Adoption status — ask the tool, not this paragraph
+
+> **`npm run gx`** — per-surface `gx-*` adoption, derived from the `GAMES` registry.
+
+⚠ **THE ROLLOUT BELOW WAS WRITTEN 2026-06-18 AND ITS STEP 4 SAT UNDONE FOR TWO MONTHS WITHOUT
+ANYTHING NOTICING.** Ten live games adopted the layer. Shimmer — the flagship — stayed at **zero**,
+and its HUD was still carrying hierarchy on the opacity of white alone when it was measured on
+2026-08-23. A whole session went into diagnosing a problem this document had already solved and
+written down.
+
+The document was not wrong. It aged perfectly, and that is the failure: **a rollout doc with a step
+nobody completed reads exactly like a rollout doc that finished.** Prose cannot report its own
+completion. So the adoption numbers are deliberately NOT written here — a table in this file would
+be one more accurate paragraph quietly going stale. `npm run gx` counts them off disk every time it
+runs, and it fails when:
+
+- a **registered game is unclassified** — a new cabinet is enrolled the moment it enters `GAMES`,
+  and stays red until someone decides whether it adopts (the surface list is DERIVED from the
+  registry, never hand-kept here, or it would rot the same way this doc did);
+- a surface **regresses** below its recorded floor, or **climbs** above it without banking the gain;
+- a **PENDING** surface adopts the layer — every entry there states the reason it may sit at zero,
+  and asserts it is still at zero, so the reason expires by itself;
+- `gameui.css` **stops defining** the classes, so the check can never pass vacuously against a class
+  that styles nothing.
+
+★ One trap worth knowing, because it bit the counter on its first run: `hud-type.test.ts` asserts
+ABOUT `.gx-label`/`.gx-value`, naming them 16 times, and the count read Shimmer at 24 instead of 8 —
+scoring a guard's *mentions* of the layer as a surface's *adoption* of it. Test files are excluded
+for that reason. A file that quotes the thing being counted hands the counter a second match, and
+writing a more thorough test would have inflated the number further.
+
 ## Rollout (per surface, after Alex blesses the direction)
 
 1. **Arcade catalog** (`/arcade/all`, `/arcade`) — the front door + most web-y (rounded cards). FIRST
