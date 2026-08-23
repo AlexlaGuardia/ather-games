@@ -26,7 +26,7 @@
 import { ALL_BLOCKS, materialForItem } from '../../voxel/registry'
 import { isPlant, isSapling } from '../../voxel/depth'
 import { isLeafMat } from '../../voxel/trees'
-import { iconSourceFor, iconPixelsFor, iconPixels, hasTileArt } from './item-icon'
+import { iconSourceFor, iconPixelsFor, iconPixels, hasTileArt, crossIcon, leafCutout } from './item-icon'
 
 const fails: string[] = []
 let pass = 0
@@ -102,6 +102,36 @@ for (const id of ['goldwood_sapling', 'dawnwood_sapling']) {
   else if (c >= b) {
     fails.push(`${id}'s cross covers ${c}px against the cube's ${b}px — a cross cannot cover as `
       + `much as a cube, so this is the cube wearing a different label`)
+  } else pass++
+}
+
+// ── ⑥ THE CUTOUT MUST ACTUALLY CHANGE THE PICTURE ─────────────────────────────────────────────
+// ★ ⑤ ABOVE PASSED THROUGHOUT THE BUG THIS CATCHES. Alex, 2026-08-23, holding the "fixed" sapling:
+// *"the sapling is just a green 2d rectangle."* It was — two solid parallelograms — and every check
+// above was green, because a solid cross genuinely does cover less than a cube. "Smaller than a
+// cube" and "shaped like a plant" are different claims and only the first was asserted.
+//
+// ⚠⚠ AND THE FIRST VERSION OF THIS CHECK WAS DECORATION. It asked whether the icon leaves holes
+// inside its bounding box — but the two quads are OFFSET, so the box corners are empty however
+// solid the quads are. It could not have failed for any input, and it passed with the bug put back.
+// A mutation sweep is the only reason that was found rather than shipped.
+//
+// So it asks the question that has an answer instead: does the source's alpha CHANGE the render?
+// Force the same source opaque and the picture must get bigger. If it does not, the cutout is being
+// discarded — which is precisely what forcing every texel opaque did. No threshold to nudge, and it
+// compares two derivations of one source rather than a number someone chose.
+for (const id of ['goldwood_sapling', 'shimmeroak_sapling', 'starwillow_sapling', 'dawnwood_sapling']) {
+  const mat = materialForItem(id)
+  const cut = mat === undefined ? null : leafCutout(mat)
+  if (!cut) { fails.push(`${id} has no cutout source — leafCutout returned null`); continue }
+  const solid = new Uint8Array(cut)
+  for (let i = 3; i < solid.length; i += 4) solid[i] = 255
+  const cover = (px: Uint8Array) => { let n = 0; for (let i = 3; i < px.length; i += 4) if (px[i] !== 0) n++; return n }
+  const real = cover(crossIcon(cut)), filled = cover(crossIcon(solid))
+  if (filled <= real) {
+    fails.push(`${id}: forcing the source opaque covers ${filled}px against the shipped ${real}px — `
+      + `the cutout is not reaching the picture, so the icon is a solid block of colour. This is the `
+      + `green-rectangle bug of 2026-08-23.`)
   } else pass++
 }
 

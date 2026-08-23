@@ -29,9 +29,10 @@
 
 import { materialForItem } from '../../voxel/registry'
 import { ITEM_ICONS, paletteForItem } from '../../sprites/items'
-import { bladePixels, headPixels, HEAD_TINTS, TUFT_SEED, TUFT_BLADES, TALL_SEED, TALL_BLADES } from './flora-tex'
+import { leafPixels, bladePixels, headPixels, HEAD_TINTS, TUFT_SEED, TUFT_BLADES, TALL_SEED, TALL_BLADES } from './flora-tex'
 import { paintFor, TILE_MATERIALS, TOP, SIDE } from './tiles'
 import { isPlant, isSapling } from '../../voxel/depth'
+import { MATERIAL_COLOR } from '../attrs'
 
 /** Icon edge in CSS pixels. Small enough to stay crisp, large enough for the cube to read. */
 const ICON = 48
@@ -191,6 +192,43 @@ export function flatIconPixels(frame: Uint8Array, palette: readonly string[], si
  * a shoot instead of a shrub"*. An icon that fattened it would describe a plant the world does not
  * grow, which is the drift this whole file exists to refuse.
  */
+/**
+ * The pixels the WORLD draws a cross with, tinted for this species.
+ *
+ * ── ★ THE BAG WAS READING A DIFFERENT TEXTURE THAN THE WORLD (2026-08-23) ───────────────────────
+ * Alex, holding a goldwood sapling: *"the sapling is just a green 2d rectangle."* It was, and the
+ * cube fix earlier the same day is not what caused it — this is a THIRD source disagreeing.
+ *
+ * `paintFor` is the tile atlas, and every painter in `tiles.ts` writes through `put()`, whose alpha
+ * argument DEFAULTS TO 0. Alpha is not opacity in that module; the chunk material never reads it.
+ * So `paintFor(SAPLING)` is a full 16x16 sheet of leaf-noise — nine good greens and no silhouette
+ * anywhere — and `crossIcon` then forced every texel opaque. A solid sheet on two quads is a solid
+ * parallelogram. The texture was never missing and the colours were never wrong; the SHAPE simply
+ * was not in that texture, because in the world the shape comes from `leafPixels` + `alphaTest`.
+ *
+ * ⚠ MEASURED, BECAUSE THE FIRST READING LOOKED LIKE THE OPPOSITE BUG: `paintFor(42, SIDE, 16)` is
+ * 256/256 alpha-0, which reads as "this material has no art". It has art. `leafPixels(16)` is
+ * 100 opaque of 256 — a real cutout — and near-white (233,255,233), because it is a LUMINANCE MASK
+ * the world multiplies by the species tint through `vertexColors`. This does the same multiply, so
+ * a sapling in the bag is the same pixels as the sapling in the ground, by construction.
+ */
+export function leafCutout(material: number, tile = TILE): Uint8Array | null {
+  const tint = MATERIAL_COLOR[material & 0xFF]
+  // No guessed colour, ever — the rule this whole file is built on. A material the world tints and
+  // this table does not know is a real gap, and a blank icon says so where a green smear would not.
+  if (tint === undefined) return null
+  const src = leafPixels(tile)
+  const out = new Uint8Array(src.length)
+  const tr = (tint >> 16) & 255, tg = (tint >> 8) & 255, tb = tint & 255
+  for (let i = 0; i < src.length; i += 4) {
+    out[i] = (src[i] * tr) / 255 | 0
+    out[i + 1] = (src[i + 1] * tg) / 255 | 0
+    out[i + 2] = (src[i + 2] * tb) / 255 | 0
+    out[i + 3] = src[i + 3]          // the cutout — the only thing that makes this a plant shape
+  }
+  return out
+}
+
 export function crossIcon(side: Uint8Array, size = ICON, tile = TILE): Uint8Array {
   const out = new Uint8Array(size * size * 4)
   // Same cell footprint as the cube so a sapling sits at the scale its block neighbours do, then
@@ -201,7 +239,9 @@ export function crossIcon(side: Uint8Array, size = ICON, tile = TILE): Uint8Arra
   const cx = size / 2, baseY = size * 0.76, H = size * 0.56
 
   // Origin, edge U (tile +x, along one ground axis), edge V (tile +y, straight up), light.
-  // Drawn far-plane first: both are opaque, so the near one must land last to sit in front.
+  // Drawn far-plane first so the near plane lands in front — and now that the source is a CUTOUT,
+  // the far plane shows through the near one's gaps, which is exactly what the world does with
+  // `alphaTest` on a DoubleSide cross.
   const quads: [number, number, number, number, number, number, number][] = [
     [cx - ax, baseY - az, 2 * ax, 2 * az, 0, -H, 0.72],   // the receding plane, shaded back
     [cx - ax, baseY + az, 2 * ax, -2 * az, 0, -H, 1],     // the facing plane, full light
@@ -221,6 +261,15 @@ export function crossIcon(side: Uint8Array, size = ICON, tile = TILE): Uint8Arra
         // `floraIcon` documents. Reading it top-down hangs the leaves under the stem.
         const ty = Math.min(tile - 1, ((1 - t) * tile) | 0)
         const si = (ty * tile + tx) * 4
+        // ⚠ THE CUTOUT IS THE SHAPE, and this line is only correct because the SOURCE CHANGED.
+        // `rasterIcon` above is right that atlas alpha is a GLOW mask and must never be read as
+        // transparency — and while this function sampled `paintFor`, forcing every texel opaque was
+        // the correct reading of a glow-masked sheet. It was not an oversight; it was right about
+        // the wrong texture. `leafPixels` is a different channel convention (alpha IS the cutout,
+        // as `floraIcon` and the world's `alphaTest: 0.5` both read it), so the holes now mean the
+        // stem and the gaps between leaves. ★ Swapping the source without swapping this line would
+        // reproduce the green rectangle exactly.
+        if (side[si + 3] === 0) continue
         const di = (y * size + x) * 4
         out[di + 0] = Math.min(255, side[si + 0] * lit)
         out[di + 1] = Math.min(255, side[si + 1] * lit)
@@ -332,7 +381,10 @@ export function iconSourceFor(itemId: string): 'block' | 'cross' | 'flora' | 'pa
 export function iconPixelsFor(itemId: string, size = ICON): Uint8Array | null {
   switch (iconSourceFor(itemId)) {
     case 'block': return iconPixels(materialForItem(itemId)!, size)
-    case 'cross': return crossIcon(paintFor(materialForItem(itemId)! & 0xFF, SIDE, TILE), size)
+    case 'cross': {
+      const cut = leafCutout(materialForItem(itemId)!)
+      return cut && crossIcon(cut, size)
+    }
     case 'flora': return floraIcon(itemId, size)
     case 'painted': return flatIcon(itemId, size)
     default: return null
