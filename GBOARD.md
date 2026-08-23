@@ -575,8 +575,7 @@ mist ledger, tutorial progress, the pot/sapling/leaf-decay clocks, and the multi
   inherits nothing, and **B is shown the ritual** — the page's own answer, not an inference from storage.
 
 ### Next
-- **`wallet`/`magii` slots** still unscoped (carried from #682) — nothing pushes them, so it is shared coins
-  in one browser rather than a cloud overwrite.
+- ✅ **`wallet`/`magii` — SHIPPED the same day (`6a53989`), Alex ruled the purse splits.** Own block below.
 - `scripts/icon-sheet.mts` still calls `iconPixels`, not `iconPixelsFor`, so the contact sheet cannot show a
   non-cube icon bug.
 
@@ -585,6 +584,59 @@ mist ledger, tutorial progress, the pot/sapling/leaf-decay clocks, and the multi
 `play3d/birth/BirthScreen.tsx` · `play3d/birth/RuneBadge.tsx` · `play3d/book.ts` · `play3d/loadout.ts` ·
 `play3d/multiplayer.ts` · `play3d/page.tsx` · `voxel3d/{page,VoxelWorld,discovery,tutorial,mist-encounter}` ·
 `scripts/save-owner-probe.mts`
+
+## 💰 Shimmer / site — **ONE PURSE PER ACCOUNT: the marks split** (2026-08-23, hub) · *Last touched 2026-08-23 (hub) — shipped, deployed, prod-verified*
+
+### Left off — SHIPPED `6a53989`, deployed, pushed, 26-check browser probe green on prod
+**Alex ruled it:** two people on one machine sharing a coin balance is wrong, and nothing recorded who
+earned a coin. `ather:save:wallet` and `ather:save:magii` were the last one-per-browser slots — #682
+scoped `shimmer` because it UPLOADS and left these two on the grounds their damage is contained.
+Contained is not the same as right.
+- `gameSlot(game, owner)` covers the family; `adoptAnonSlots` moves the anonymous purse in on first
+  sign-in. **Without adoption, scoping shows every existing player a balance of ZERO** on ship day with
+  their coins one key over. For a world save that reads as "my garden is gone"; for a currency it reads
+  as theft, because the player can name the number.
+- `SaveOwnerBoot` answers "who is playing" once for the whole site, because the purse has no boot gate
+  and never could — SiteNav renders the balance on every page. ⚠ **Deliberately not a cookie read in the
+  server layout**: that opts the ENTIRE site out of static rendering to learn a name only the purse
+  needs. The answer lands a few frames late and the live readouts re-read on `SAVE_OWNER_EVENT`.
+- Signing out clears the owner — **sign-out does not reload the page**, so without it the tab keeps
+  writing into the account that just left.
+
+### Decisions
+- ★★★ **The one-word change that would confiscate every wallet is now an assert.** `ather-epoch.ts`
+  deletes every key starting with `SAVE_KEY_PREFIX` on a world bump, and that constant is
+  `ather:save:shimmer`. Generalising it to `ather:save:` to "cover the family" reads as tidying and
+  would empty every purse on the next reset, against the epoch's own promise that Marks survive one.
+  Four asserts: shimmer slots IN the sweep, wallet slots OUT, both scopings.
+- ★ **A claim key here, an in-blob stamp for shimmer, and they are not interchangeable.** Shimmer's
+  stamp must survive a round trip through the SERVER so the server can refuse a foreign blob. But a
+  stamp only survives if every writer preserves it, and both of these blobs are rewritten WHOLESALE on
+  every change — a stamp would be erased by the first coin earned, silently re-opening the slot to a
+  second account. Neither uploads, so neither needs the server half.
+- **Adoption is per-game and never overwrites a balance the account already has** — their own purse is
+  the newer claim, and adopting over it destroys coins rather than misfiling them.
+- ★★ **WHAT WAS NOT PROVED, RECORDED AS NOT PROVED.** Two gates hold "nothing may act on a balance
+  before the owner is known" (`useWallet().loading`, the card page's load gate). **Removing BOTH left
+  the browser probe green** — the welcome stake is really held by the persisted `seeded` flag inside the
+  per-account card save, so neither gate was the thing standing in the way. Kept as defence in depth and
+  **labelled untested in both files** rather than dressed up as verified. Hunting the reachable case
+  found a real one (the card save read before the owner is known, which only bites an account whose
+  adoption LOCKED) and even that leaves no trace in storage, so the probe cannot see it either.
+- **Verified:** save-slot 50 asserts · wallet 35 · 8 mutations, 6 red (the two survivors are the labelled
+  gates). The wallet's includes the module-constant trap — **a slot cached at import pins the tab to the
+  anonymous purse, which is this bug wearing the fix as a disguise.** Then end to end on the real page:
+  240 anonymous marks adopted to the coin, B inherits none, A survives B, returning as A re-grants nothing.
+- **Housekeeping, flagged by the play window:** a stray 0-byte `accounts.db` at the repo root (mine — a
+  mistyped sqlite3 path creates a file wherever you point it and never says so) removed, and `.gitignore`
+  widened from `/data/` to `*.db`/`*-wal`/`*-shm`/`*.sqlite*` **anywhere**. This repo is PUBLIC and
+  `data/accounts.db` holds emails and google subject ids; one `git add -A` from any of four windows was
+  the failure mode.
+
+### Files
+`lib/save-slot.ts` · `lib/save-slot.test.ts` · `lib/wallet.ts` · `lib/wallet.test.ts` · `lib/use-wallet.ts` ·
+`lib/use-cloud-save.ts` · `lib/accounts/use-account.ts` · `_components/SaveOwnerBoot.tsx` ·
+`_components/SiteNav.tsx` · `layout.tsx` · `magii/page.tsx` · `scripts/save-owner-probe.mts` · `.gitignore`
 
 ## 🌱 Shimmer — **SAPLING ICON: the bag read a glow mask as a cutout** (2026-08-23, hub) · *Last touched 2026-08-23 (hub, late)*
 
