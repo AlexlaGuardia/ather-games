@@ -124,6 +124,45 @@ try {
     }
   }), A)
   ok(cellA === 4, `A's block is still A's block (material ${cellA}, B put 9 in the same coordinates)`)
+  // ── 5. ★ THE RUNE, WHICH IS THE ONE A PLAYER FEELS ────────────────────────────────────────────
+  // Everything above is blocks. This is identity: a second account on this browser used to find the
+  // first keeper's birth rune sitting in a shared key, skip the ritual entirely, and spawn holding
+  // somebody else's affinity and cast book. The page itself is the instrument — if B is owed a
+  // birth, the boot gate puts the ritual on screen instead of the world.
+  // ⚠ THE ANONYMOUS LOAD IS NOT SETUP NOISE — IT STAMPS THE EPOCH. `resetIfStale` clears a
+  // character whose browser is behind, so seeding a rune into a browser with no epoch stamp gets it
+  // legitimately wiped and the probe reads a broken fix. It found the real epoch bug that way (the
+  // reset could not see a scoped rune) and then kept firing on its own setup, which is the tell:
+  // let the page write its own epoch first, then seed.
+  who = null
+  await page.evaluate(() => localStorage.clear())
+  await load()
+  await page.evaluate(() => {
+    localStorage.setItem('ather:shimmer:birthRune', 'rune_ember')
+    localStorage.setItem('ather:shimmer:book', '["bolt"]')
+    localStorage.setItem('ather:gfx:shimmer', '{"quality":"high"}')
+  })
+  const local = () => page.evaluate(() => Object.fromEntries(
+    Object.keys(localStorage).map(k => [k, localStorage.getItem(k) ?? ''])))
+
+  who = A
+  await load()
+  const forA = await local()
+  ok(forA[`u:${A}:ather:shimmer:birthRune`] === 'rune_ember', '★ the birth rune moved into A')
+  ok(forA['ather:shimmer:birthRune'] === undefined, 'and no longer answers to the shared key')
+  ok(forA[`u:${A}:ather:shimmer:book`] === '["bolt"]', "A's move book came with it")
+  ok(forA['ather:gfx:shimmer'] === '{"quality":"high"}', 'graphics quality stayed on the DEVICE, where it belongs')
+  ok(forA['ather:shimmer:anon-keeper'] === A, 'the browser is stamped for A')
+
+  who = B
+  await load()
+  const forB = await local()
+  ok(forB[`u:${B}:ather:shimmer:birthRune`] === undefined,
+     `★★ B is NOT born holding A's rune (${forB[`u:${B}:ather:shimmer:birthRune`] ?? 'nothing'})`)
+  ok(forB[`u:${A}:ather:shimmer:birthRune`] === 'rune_ember', "A's rune survived B's visit")
+  // The page's own answer, not an inference from storage: B is owed the ritual and gets it.
+  const sawRitual = await page.evaluate(() => document.body.innerText.toLowerCase())
+  ok(/rune|born|choose/.test(sawRitual), `★ B is shown the birth ritual rather than dropped into a world (page said: ${sawRitual.slice(0, 60).replace(/\s+/g, ' ')})`)
 } finally {
   await browser.close()
 }

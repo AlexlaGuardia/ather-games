@@ -99,6 +99,16 @@ import type { Space } from './save'
 const GEN_WARN_KEY = 'ather:shimmer:genWarned'
 import { loadColumn, saveColumn, editedColumnCount, countMaterial, loadPlayer, savePlayer, type PlayerSave } from './save'
 import { WORLD_SEED } from './world-seed'
+import { keeperKey } from '@/lib/keeper-local'
+
+// ── ★ CLOCKS TICKING ON BLOCKS IN A WORLD THAT IS NOW PER-ACCOUNT (#692 follow-on) ──────────────
+// A pot's timer, a sapling's growth and a fallen leaf's decay are all about specific cells of a
+// specific keeper's world. The world went per-account; if these had not followed, account B's
+// refresh would resolve timers against blocks that only exist in account A's garden. Bases live
+// here beside their use and are listed in `KEEPER_KEYS`, which `keeper-local.test.ts` enforces.
+const POT_BASE = 'voxel3d:pots:'
+const SAPLING_BASE = 'voxel3d:saplings:'
+const DECAY_BASE = 'voxel3d:leafdecay:'
 import { PIECES, STRUCTURE, STRUCTURE_HALF, pieceDef, cellsOf, canPlace, canAfford, placementAt, type Placement, type Rotation } from '../voxel/pieces'
 import { createPieceRenderer } from './piece-mesh'
 import { toGeometry, createVoxelMaterial, createWaterMaterial, applySettings } from './mesh-bridge'
@@ -1352,7 +1362,7 @@ export default function VoxelWorld() {
    * Lent spirits are `base` element and unbonded, i.e. exactly what a fresh keeper would hold, so
    * what you feel while dialling the spar is what a new player will feel.
    */
-  const POT_KEY = `voxel3d:pots:${SEED}`
+  const POT_KEY = keeperKey(`${POT_BASE}${SEED}`)
   const savePotClock = useCallback(() => {
     try { localStorage.setItem(POT_KEY, JSON.stringify(potClock.current)) } catch { /* full disk */ }
   }, [POT_KEY])
@@ -3604,7 +3614,7 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
    * of which are in this scope — passing it through a prop would be plumbing that buys nothing.
    */
   const saplingClock = useRef<SaplingClock>({})
-  const SAPLING_KEY = `voxel3d:saplings:${SEED}`
+  const SAPLING_KEY = keeperKey(`${SAPLING_BASE}${SEED}`)
   const saveSaplings = useCallback(() => {
     try { localStorage.setItem(SAPLING_KEY, JSON.stringify(saplingClock.current)) } catch { /* full disk */ }
   }, [SAPLING_KEY])
@@ -4331,7 +4341,7 @@ function World({ inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weapo
   const decayQueue = useRef<PendingLeaf[]>([])
   /** Last wall-clock second the queue was written to storage. See the throttle in the decay tick. */
   const decaySavedAt = useRef(0)
-  const DECAY_KEY = `voxel3d:leafdecay:${SEED}`
+  const DECAY_KEY = keeperKey(`${DECAY_BASE}${SEED}`)
   const saveDecay = useCallback(() => {
     try { localStorage.setItem(DECAY_KEY, JSON.stringify(decayQueue.current)) } catch { /* full disk */ }
   }, [DECAY_KEY])

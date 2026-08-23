@@ -21,6 +21,7 @@
 
 import { seedBook, starterFor, type Book } from './scroll-market'
 import { rawLoadout } from './loadout'
+import { keeperKey } from '@/lib/keeper-local'
 
 export const BOOK_KEY = 'ather:shimmer:book'
 
@@ -35,7 +36,7 @@ export const BOOK_KEY = 'ather:shimmer:book'
 export function loadBook(bound: readonly (string | null)[], starter?: string): Book {
   let raw: string | null = null
   try {
-    raw = localStorage.getItem(BOOK_KEY)
+    raw = localStorage.getItem(keeperKey(BOOK_KEY))
   } catch {
     return seedBook(bound, starter)   // private mode: no persistence, but never an empty book
   }
@@ -52,7 +53,7 @@ export function loadBook(bound: readonly (string | null)[], starter?: string): B
 
 export function saveBook(book: Book): void {
   try {
-    localStorage.setItem(BOOK_KEY, JSON.stringify(book.learned))
+    localStorage.setItem(keeperKey(BOOK_KEY), JSON.stringify(book.learned))
   } catch { /* private mode */ }
 }
 

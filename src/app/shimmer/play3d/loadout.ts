@@ -11,6 +11,7 @@
 
 import { CAST_SLOTS, canSlot, defaultLoadout } from './cast'
 import type { Book } from './scroll-market'
+import { keeperKey } from '@/lib/keeper-local'
 
 export const LOADOUT_KEY = 'ather:shimmer:loadout'
 
@@ -38,7 +39,7 @@ export type Loadout = (string | null)[]
 export function loadLoadout(owned: string[], book: Book): Loadout {
   let raw: string | null = null
   try {
-    raw = localStorage.getItem(LOADOUT_KEY)
+    raw = localStorage.getItem(keeperKey(LOADOUT_KEY))
   } catch {
     return defaultLoadout(owned, book)  // private mode — a keeper who cannot save still gets a kit
   }
@@ -66,7 +67,7 @@ export function loadLoadout(owned: string[], book: Book): Loadout {
  */
 export function rawLoadout(): (string | null)[] {
   try {
-    const saved: unknown = JSON.parse(localStorage.getItem(LOADOUT_KEY) ?? 'null')
+    const saved: unknown = JSON.parse(localStorage.getItem(keeperKey(LOADOUT_KEY)) ?? 'null')
     if (!Array.isArray(saved)) return []
     return saved.map((id) => (typeof id === 'string' ? id : null))
   } catch { return [] }
@@ -74,7 +75,7 @@ export function rawLoadout(): (string | null)[] {
 
 export function saveLoadout(slots: Loadout): void {
   try {
-    localStorage.setItem(LOADOUT_KEY, JSON.stringify(slots.slice(0, CAST_SLOTS.length)))
+    localStorage.setItem(keeperKey(LOADOUT_KEY), JSON.stringify(slots.slice(0, CAST_SLOTS.length)))
   } catch { /* private mode */ }
 }
 

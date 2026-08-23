@@ -14,6 +14,7 @@
 // x/y/z + a continuous yaw, and prefixes its zone with `play3d:` so the two never share an
 // instance — they don't share a coordinate space and would render as garbage in each other.
 import { useEffect, useRef } from 'react'
+import { keeperKey } from '@/lib/keeper-local'
 
 export interface RemotePlayer {
   id: string
@@ -35,20 +36,34 @@ const KEEPALIVE_MS = 4000   // ...but never fall SILENT: peers hide who they sto
                             // that, not above this number (see STALE_MS in RemotePlayers).
 const ZONE_PREFIX = 'play3d:'
 
-/** Stable per-browser identity. Incognito gets its own — which is exactly how you test this. */
+/**
+ * ★ PER-KEEPER, NOT PER-BROWSER (#692 follow-on). It said "stable per-browser identity" and was —
+ * which meant two accounts on one machine were ONE peer, and worse, `MP_NAME` is a MIRROR of the
+ * signed-in username (Shimmer3D writes it so the next boot can show a name before the session
+ * resolves). Shared, account B's first frames announced account A's name to everyone in the zone.
+ *
+ * ⚠ SAFE TO SCOPE ONLY BECAUSE `Shimmer3D` IS THE SOLE CONSUMER and does not mount until play3d's
+ * boot gate has resolved the session. A page that read this without that gate would mint an id
+ * under the anonymous key and give one account two identities depending on where they walked in.
+ * Check that before adding a second consumer.
+ */
+export const MP_ID = 'ather:mp:id'
+export const MP_NAME = 'ather:mp:name'
+
+/** This keeper's identity. Incognito gets its own — which is exactly how you test this. */
 function identity(): { id: string; name: string } {
   let id = ''
   let name = ''
   try {
-    id = localStorage.getItem('ather:mp:id') || ''
-    name = localStorage.getItem('ather:mp:name') || ''
+    id = localStorage.getItem(keeperKey(MP_ID)) || ''
+    name = localStorage.getItem(keeperKey(MP_NAME)) || ''
     if (!id) {
       id = 'p_' + Math.random().toString(36).slice(2, 10)
-      localStorage.setItem('ather:mp:id', id)
+      localStorage.setItem(keeperKey(MP_ID), id)
     }
     if (!name) {
       name = 'Traveler-' + id.slice(2, 6)
-      localStorage.setItem('ather:mp:name', name)
+      localStorage.setItem(keeperKey(MP_NAME), name)
     }
   } catch {
     // private-mode storage refusal — still playable, just a new identity each load
@@ -75,7 +90,7 @@ export function storedName(): string {
 export function storeName(name: string): string {
   const clean = name.trim().slice(0, 24)
   if (!clean) return identity().name
-  try { localStorage.setItem('ather:mp:name', clean) } catch { /* session-only then */ }
+  try { localStorage.setItem(keeperKey(MP_NAME), clean) } catch { /* session-only then */ }
   return clean
 }
 

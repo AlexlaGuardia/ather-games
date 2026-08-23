@@ -27,6 +27,7 @@ import { invalidateWorldCaches } from './world-adapter'
 import { resetIfStale } from '@/lib/ather-epoch'
 import { pullCloudSave } from '@/lib/cloud-sync'
 import { setSaveOwner, saveKey, slotFor, stampOwner, ownedBy } from '@/lib/save-slot'
+import { adoptAnonKeeperState } from '@/lib/keeper-local'
 import BirthScreen from './birth/BirthScreen'
 import { loadRuneInventory, saveRuneInventory, setBirthRune, EMPTY_INVENTORY } from './rune-inventory'
 
@@ -67,6 +68,15 @@ async function hydrateFromCloud(): Promise<void> {
     userId = body.session?.user_id ?? null
   } catch { /* offline — anonymous, local-only */ }
   setSaveOwner(userId)
+
+  // ── THE REST OF WHAT A KEEPER IS, MOVED IN THE SAME BREATH (#692 follow-on) ──────────────────
+  // ⚠ BEFORE EVERY EARLY RETURN BELOW, and before `birthOwed()` reads a rune. The rune, the move
+  // book, the loadout and the uncovered map were still shared by every account on this browser, so
+  // a second keeper skipped the ritual and spawned holding the first one's affinity. Adopting the
+  // save without them would be worse than adopting neither: their own garden, a stranger's rune.
+  // Idempotent and one-shot — whichever route the keeper opens first does it, the other finds it
+  // done. See `keeper-local.ts` for the four cases and why an empty browser is claimed by nobody.
+  adoptAnonKeeperState(userId)
 
   const slot = saveKey()
   try {

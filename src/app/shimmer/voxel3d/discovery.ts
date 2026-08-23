@@ -22,6 +22,8 @@
 // readings: in the Ather the cloud is the world, on the mortal side it is the edge of the keeper's
 // own record. Do not write anything that asserts the cloud-ocean covers Athernyx; it does not.
 
+import { keeperKey } from '@/lib/keeper-local'
+
 /**
  * BLOCKS per fog cell. Coarser than the world on purpose: per-block discovery stores 256× more bits
  * for a resolution nobody can see once it is blurred into cloud, and a hard per-block edge is the
@@ -122,7 +124,9 @@ export function seenFraction(s: Seen): number {
 // it silently draws a keeper's history skewed across the map, and looks like a rendering bug
 // forever. A mismatch throws the record away and starts clean, which is honest and recoverable.
 
-const key = (zoneId: string) => `ather:shimmer:seen:${zoneId}`
+/** Per keeper: the map YOU have uncovered. `SEEN_BASE` is in `KEEPER_KEYS` as a family prefix. */
+export const SEEN_BASE = 'ather:shimmer:seen:'
+const key = (zoneId: string) => keeperKey(`${SEEN_BASE}${zoneId}`)
 
 export function encodeSeen(s: Seen): string {
   let bin = ''

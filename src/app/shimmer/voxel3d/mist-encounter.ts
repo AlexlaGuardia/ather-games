@@ -20,6 +20,7 @@ import type { Species } from '../spirits/spirit'
 import type { MistPatch } from '../voxel/mist'
 import { residentFor, residentName, rosterFor, SPECIES_AFFINITY, type ZoneId } from './mist-roster'
 import { answersInPair, residentLevel, secondLevel } from './mist-difficulty'
+import { keeperKey } from '@/lib/keeper-local'
 
 /** How long a sparred patch stays quiet before its mist gathers a new presence. */
 export const WITHDRAW_MS = 10 * 60 * 1000
@@ -27,7 +28,9 @@ export const WITHDRAW_MS = 10 * 60 * 1000
 interface Entry { n: number; until: number }
 export type MistLedger = Record<string, Entry>
 
-const key = (seed: number) => `voxel3d:mist:${seed}`
+/** Per keeper: which patches THIS keeper has drawn from. Family prefix, listed in `KEEPER_KEYS`. */
+export const MIST_BASE = 'voxel3d:mist:'
+const key = (seed: number) => keeperKey(`${MIST_BASE}${seed}`)
 export const patchKey = (p: MistPatch): string => `${p.x},${p.z}`
 
 /**

@@ -11,10 +11,12 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { Chakra_Petch } from 'next/font/google'
 import { ELEMENTS, RUNES, runesOf, type ElementId, type Rune } from './runes.data'
 import { RuneMark } from './RuneMark'
+import { BIRTH_KEY } from '../rune-inventory'
+import { keeperKey } from '@/lib/keeper-local'
 
 const display = Chakra_Petch({ weight: ['500', '600', '700'], subsets: ['latin'] })
 
-const STORAGE_KEY = 'ather:shimmer:birthRune'
+
 
 export default function BirthScreen({
   onChoose,
@@ -69,7 +71,7 @@ export default function BirthScreen({
 
   const confirm = () => {
     if (!rune) return
-    try { localStorage.setItem(STORAGE_KEY, rune.id) } catch {}
+    try { localStorage.setItem(keeperKey(BIRTH_KEY), rune.id) } catch {}
     setBorn(rune)
     onChoose?.(rune.id)
   }

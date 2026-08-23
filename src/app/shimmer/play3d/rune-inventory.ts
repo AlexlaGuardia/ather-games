@@ -32,9 +32,18 @@
 // `grantRune` is a dev tool (play3d's ☰, and voxel3d's owner-gated `/rune`). When the trigger is
 // built, it belongs here — and it must respect the lane, or it is not the ruled system.
 
-/** legacy single-rune key — still the source of truth for the BIRTH rune (BirthScreen writes it) */
+import { keeperKey } from '@/lib/keeper-local'
+
+/**
+ * legacy single-rune key — still the source of truth for the BIRTH rune (BirthScreen writes it).
+ *
+ * ⚠ THE BASE, NOT THE KEY. Both of these are per-KEEPER, so they are read and written through
+ * `keeperKey()` — a second account on this browser used to find the first keeper's rune sitting
+ * here, skip the ritual, and spawn holding somebody else's affinity and cast book. `KEEPER_KEYS`
+ * lists both and `keeper-local.test.ts` fails if either is renamed out from under it.
+ */
 export const BIRTH_KEY = 'ather:shimmer:birthRune'
-/** the inventory: every rune held, birth rune first */
+/** the inventory: every rune held, birth rune first. Per keeper — see `BIRTH_KEY`. */
 export const RUNES_KEY = 'ather:shimmer:runes'
 
 export interface RuneInventory {
@@ -61,8 +70,8 @@ function normalize(birth: string | null, extra: string[]): RuneInventory {
  */
 export function loadRuneInventory(): RuneInventory {
   try {
-    const birth = localStorage.getItem(BIRTH_KEY)
-    const raw = localStorage.getItem(RUNES_KEY)
+    const birth = localStorage.getItem(keeperKey(BIRTH_KEY))
+    const raw = localStorage.getItem(keeperKey(RUNES_KEY))
     const extra: string[] = raw ? JSON.parse(raw) : []
     return normalize(birth, Array.isArray(extra) ? extra.filter((r) => typeof r === 'string') : [])
   } catch {
@@ -72,8 +81,8 @@ export function loadRuneInventory(): RuneInventory {
 
 export function saveRuneInventory(inv: RuneInventory): void {
   try {
-    if (inv.birth) localStorage.setItem(BIRTH_KEY, inv.birth)
-    localStorage.setItem(RUNES_KEY, JSON.stringify(inv.owned))
+    if (inv.birth) localStorage.setItem(keeperKey(BIRTH_KEY), inv.birth)
+    localStorage.setItem(keeperKey(RUNES_KEY), JSON.stringify(inv.owned))
   } catch { /* private mode */ }
 }
 

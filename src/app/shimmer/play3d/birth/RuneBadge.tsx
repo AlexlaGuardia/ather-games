@@ -7,8 +7,10 @@
 import { useEffect, useState } from 'react'
 import { RUNES } from './runes.data'
 import { RuneMark } from './RuneMark'
+import { BIRTH_KEY } from '../rune-inventory'
+import { keeperKey } from '@/lib/keeper-local'
 
-const STORAGE_KEY = 'ather:shimmer:birthRune'
+
 
 export default function RuneBadge({
   runeId,
@@ -26,7 +28,7 @@ export default function RuneBadge({
   const [selfId, setSelfId] = useState<string | null>(null)
   useEffect(() => {
     if (runeId) return
-    try { setSelfId(localStorage.getItem(STORAGE_KEY)) } catch {}
+    try { setSelfId(localStorage.getItem(keeperKey(BIRTH_KEY))) } catch {}
   }, [runeId])
 
   const id = runeId ?? selfId

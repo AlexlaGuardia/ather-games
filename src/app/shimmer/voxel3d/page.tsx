@@ -22,6 +22,7 @@ import BirthScreen from '../play3d/birth/BirthScreen'
 import { loadRuneInventory, saveRuneInventory } from '../play3d/rune-inventory'
 import { resetIfStale } from '@/lib/ather-epoch'
 import { setSaveOwner } from '@/lib/save-slot'
+import { adoptAnonKeeperState } from '@/lib/keeper-local'
 import { adoptAnonWorld } from './save'
 import { WORLD_SEED } from './world-seed'
 
@@ -66,6 +67,12 @@ async function resolveKeeper(): Promise<void> {
     userId = body.session?.user_id ?? null
   } catch { /* offline — anonymous, local-only */ }
   setSaveOwner(userId)
+
+  // The rune, the book, the loadout, the uncovered map, the mist ledger and the world's clocks —
+  // browser-local, still shared by every account until now, and read HERE before the phase machine
+  // asks `loadRuneInventory().birth`. A second keeper used to find the first one's rune sitting
+  // there and skip the ritual entirely. Idempotent: play3d does the same call, whichever runs first.
+  adoptAnonKeeperState(userId)
 
   // First sign-in moves this browser's anonymous world into the account. Once, ever — see
   // `planAdoption` for the three cases and why an already-claimed space is left alone.

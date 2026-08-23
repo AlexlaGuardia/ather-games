@@ -41,12 +41,23 @@ const EPOCH_KEY = 'ather:epoch'
  * mechanism exists to avoid.
  */
 import { SAVE_KEY_PREFIX, ANON_SAVE_KEY } from './save-slot'
+import { BIRTH_KEY, RUNES_KEY } from '../app/shimmer/play3d/rune-inventory'
 
+/**
+ * ⚠⚠ THE RUNE BASES ARE IMPORTED, NOT SPELLED (#692 follow-on, and this file nearly shipped broken).
+ * They became per-keeper the same day — `u:<user_id>:ather:shimmer:birthRune` — so the literals that
+ * used to sit here would have cleared the ANONYMOUS keeper's rune and left every signed-in
+ * character's behind. A pre-epoch character surviving the wipe is the precise failure this whole
+ * mechanism exists to prevent, and it is what this file's own header says out loud. Caught by the
+ * browser probe, not by reasoning: the rune vanished from the shared key and never arrived.
+ *
+ * ★ Third invoice in two days for one lesson: **ask what ELSE keys off the condition you changed.**
+ */
 const CHARACTER_KEYS = [
   ANON_SAVE_KEY,
-  'ather:shimmer:birthRune',
+  BIRTH_KEY,
   'ather:shimmer:birthPending',
-  'ather:shimmer:runes',
+  RUNES_KEY,
 ]
 
 /**
@@ -74,10 +85,18 @@ export function resetIfStale(): boolean {
     // A reset that removed only the literal would clear the anonymous keeper and leave every
     // signed-in character behind — a pre-epoch save surviving the wipe is the precise failure this
     // whole mechanism exists to prevent, and it would come back wearing a different account's name.
+    // ★★ AND EVERY KEEPER'S COPY, NOT JUST THE ANONYMOUS ONE (#692). The save slot carries its
+    // owner as a SUFFIX (`ather:save:shimmer:<id>`) and the character keys carry theirs as a
+    // PREFIX (`u:<id>:ather:shimmer:birthRune`), so the sweep has to look both ways. Matching the
+    // scoped form by suffix is deliberate and slightly greedy: an unknown key that ENDS in a
+    // character key is a character key belonging to somebody, and a reset that misses one leaves a
+    // keeper holding a rune from a world that no longer exists.
     const keys = new Set(CHARACTER_KEYS)
     for (let i = 0; i < localStorage.length; i++) {
       const k = localStorage.key(i)
-      if (k && k.startsWith(SAVE_KEY_PREFIX)) keys.add(k)
+      if (!k) continue
+      if (k.startsWith(SAVE_KEY_PREFIX)) keys.add(k)
+      if (CHARACTER_KEYS.some(base => k.endsWith(`:${base}`))) keys.add(k)
     }
     const hadCharacter = [...keys].some(k => localStorage.getItem(k) !== null)
     for (const k of keys) localStorage.removeItem(k)

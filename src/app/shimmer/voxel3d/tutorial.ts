@@ -9,6 +9,8 @@
 // ★ PHASE 1 = MECHANICS, PLACEHOLDER DIALOGUE. Every line in GREG_LINE is a short, neutral
 // stand-in — no attempt at Greg's eventual cozy voice. That is Alex/raven's pass, not this one's.
 
+import { keeperKey } from '@/lib/keeper-local'
+
 export type TutorialStage =
   | 'greet'   // objective: find and talk to Greg → he gifts 1 raw_mana_shard
   | 'cut'     // objective: break any log block
@@ -37,7 +39,9 @@ export interface TutorialState {
 
 const DEFAULT_TUTORIAL: TutorialState = { stage: 'greet' }
 
-const storageKey = (seed: number) => `voxel3d:tutorial:${seed}`
+/** Per keeper: which prompts THIS keeper has been shown. Family prefix, listed in `KEEPER_KEYS`. */
+export const TUTORIAL_BASE = 'voxel3d:tutorial:'
+const storageKey = (seed: number) => keeperKey(`${TUTORIAL_BASE}${seed}`)
 
 /**
  * ⚠ Same failure discipline as settings.ts: private mode, a corrupt value, SSR — every path returns
