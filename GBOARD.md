@@ -479,16 +479,62 @@ ONCE IN PROD** (one account's row held another's garden, 99.85% identical, only 
   in one browser, not a garden overwritten in the cloud. Scoping needs the same adoption path first.
 
 ### Next
-- **IndexedDB half** — B still sees A's BUILT BLOCKS locally. Scope `voxel3d/save.ts` record keys per
-  account + one-time adoption; ⚠ renaming the DB orphans every built world by its own module's warning.
+- ✅ **IndexedDB half — SHIPPED 2026-08-23 (hub) as #692, `9ea6dc6`.** Own block below.
 - **Birth rune is not account-scoped** (`ather:shimmer:birthRune`/`runes`) — a second account skips the
   ritual and spawns with the first keeper's affinity.
 - ⚠ **Alex: sign into Serberus FIRST next time** — the browser's anon slot goes to whichever account
-  signs in first; neo first would re-adopt his garden.
+  signs in first; neo first would re-adopt his garden. **Now true on BOTH storage layers** (#692).
 
 ### Files
 `src/lib/save-slot.ts` · `save-slot.test.ts` · `cloud-sync.ts` · `ather-epoch.ts` · `use-cloud-save.ts` ·
 `play3d/page.tsx` · `play3d/Shimmer3D.tsx` · `voxel3d/VoxelWorld.tsx` · `api/saves/route.ts` · `scripts/repro-682*`
+
+## 🧱 Shimmer — **WORLD ISOLATION (#692): the IndexedDB half — B stood in A's garden** (2026-08-23, hub) · *Last touched 2026-08-23 (hub) — shipped, deployed, verified on prod*
+
+### Left off — SHIPPED `9ea6dc6`, deployed, pushed, probe green against ather.games
+#682 keyed the localStorage slot per account and left this store shared, so two accounts in one browser
+still walked into ONE world. A column record is addressed by seed and coordinates and **neither knows who
+built it** — account B signed in and stood in account A's garden, holding A's chests.
+- `voxel3d/save.ts` puts the owner in the key, read from `saveOwner()` — the same one definition the slot
+  uses, never a second copy of the question. **The anonymous space keeps the bare keys** (third time this
+  file makes that argument: prefixing them orphans every world anyone has built, in place).
+- ★ **The scans are where a leak actually happens, and all three were sealed inside async IndexedDB calls
+  where nothing could reach them.** The chest census, the built-column count and the WIPE each walked every
+  key in the store matching the bare seed. Now exported string predicates, run for real by `save.test.ts`
+  against a store holding three keepers at once. One was also counting the player record as a built column.
+- ★ **Adoption**, so first sign-in does not read as *"the update deleted my garden"*. The decision is pure
+  (`planAdoption`); the transaction is a thin wrapper, because IndexedDB does not exist in node and a rule
+  living inside a transaction is a rule nothing checks.
+- ⚠ **And the route resolved no session AT ALL, which was a second live bug nothing was watching.**
+  `VoxelWorld` reads the shared party through `saveKey()`, which went per-account in `f8435b5` — so from
+  that commit until this one, **a signed-in keeper catching a spirit on /voxel3d wrote it into the
+  ANONYMOUS slot** while play3d read their account's. It did not vanish; it went somewhere the rest of the
+  game does not look. `saveKey()`'s own warning was firing into a console nobody had reason to open.
+
+### Decisions
+- **Three adoption cases, and the empty one is the interesting one.** Nothing anonymous on disk → claim
+  NOTHING: reserving an empty space forever costs a keeper who builds while signed out and comes back as a
+  different account, and there is no leak to prevent. Anonymous garden + empty account → move it. Anonymous
+  garden + an account that already has a world → **LOCK, never move**: the anonymous one may be older, and
+  overwriting is the exact trade this whole fix refuses.
+- **`world-seed.ts` exists because two modules need `1337` and it belongs to neither.** The boot gate cannot
+  import it out of the deferred world module without pulling the whole R3F scene into the page bundle.
+  Writing the literal twice is the shape that cost us #682.
+- **Verified in the direction that can fail.** 34 asserts, all 7 mutations red (including the comma), then
+  end to end in a real browser on the real page — and `scripts/save-owner-probe.mts` **refuses to report
+  unless the page asked who is playing**, because twice on 08-23 a probe measured a redirect target and
+  returned a finding.
+
+### Next
+- **The localStorage sidecars are still shared** and each is a smaller version of the same bug: pot clock
+  (`voxel3d:pots:<seed>`), sapling clock, decay queue, mist ledger, discovery, tutorial, `book`, `loadout`.
+  None upload, so the blast radius is one browser — but B still sees A's timers.
+- **Birth rune still unscoped** (carried from #682): a second account skips the ritual and spawns with the
+  first keeper's affinity.
+
+### Files
+`voxel3d/save.ts` · `voxel3d/save.test.ts` · `voxel3d/page.tsx` · `voxel3d/VoxelWorld.tsx` ·
+`voxel3d/world-seed.ts` · `scripts/save-owner-probe.mts`
 
 ## 🌱 Shimmer — **SAPLING ICON: the bag read a glow mask as a cutout** (2026-08-23, hub) · *Last touched 2026-08-23 (hub, late)*
 
