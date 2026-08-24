@@ -963,7 +963,15 @@ if (!QUIET) {
     'design-brief HOLDS — a brief still holding art that a later ruling released',
     'whether a ruled fact reached the BUILD at all — a ruling nothing implements reads clean here',
     'prose claims inside canon files — only the tabled/rostered facts are diffed',
-  ]) console.log(`  · ${line}`)
+    'VOCABULARY, beyond the exact nouns canon has listed as retired — and read that narrowly.',
+    '  A green retired-vocab does NOT mean the build says what canon says. It means no noun on',
+    '  canon\'s list ships in a form this gate judges. ⚠ BOTH of 2026-08-24\'s vocabulary drifts',
+    '  would have passed it: one used a word that was never retired, the other a word retired in',
+    '  ONE sense only, which this gate reports and refuses to judge. What caught both was a human',
+    '  re-reading the ruling. This gate narrows the search; it does not replace that.',
+  // A line beginning with spaces is a CONTINUATION of the item above it, not a new one — five
+  // bullets would read as five separate gaps when it is one gap explained.
+  ]) console.log(line.startsWith(' ') ? `    ${line.trim()}` : `  · ${line}`)
   console.log(`  A clean gate means those ${LIVE_AREAS.length} named things line up. It is not a statement about the rest.`)
 }
 
