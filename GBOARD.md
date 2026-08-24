@@ -11,6 +11,32 @@ real **gimmick** (not watch-and-wait) · **canon-parallel** (serves Athernyx, no
 black, CRT bloom). Mana'nana went glossy-modern; each game gets its own skin under
 the Arcade frame.
 
+## 🏔 Shimmer — **RUNE HOLD: THE TOWN GOT ITS HILLSIDE, THEN ITS ROSTER** (2026-08-24, hub) · *Last touched 2026-08-24 (hub) — shipped, deployed, pushed*
+
+### Left off — SHIPPED `853f615` + `d140299` + `7fc6b9a`, all deployed and pushed, tree clean
+The greybox read as *"a blank space with a bunch of abstract shapes"* and neither cause was box count.
+- **`853f615` — the ground became a value.** `Terrace` bands are the hillside: disjoint shelves stepping north one `terraceRise` apart, climbs alternating sides so the streets wind upward as a derivation. Fixed three bugs every existing check was blind to — `station` had **no `y` field** (stood on the dirt while its road climbed two terraces), `eyuun-bookstore` floated a terrace over open ground, and `square-north` drove a raised street **through the Spirit Corner**. ★ *A guard that asks "is this face a tier" cannot ask "is there ground under it."*
+- **`7fc6b9a` — the full canon roster, sized by program.** Was five masses of **identical** 4.8×2.4×5.14. Now `heads`/`floors`/`rise`/`aspect` give a footprint in body-derived units, so the Mug is biggest and the Spirit Corner is the shortest thing on the square — which is canon's *"small café, unassuming storefront"* as geometry. Added the Forgelight Inn, Enchant Temple, Travelers Center, Travelers Station, scattered inventor shops + smithies. **The sparseness was never box size — two-thirds of the named town had never been built.**
+- **`d140299` — `scripts/town-plan.mts`.** Reads the plan straight off `runeHold()`.
+
+### Decisions
+- **Hogsmeade needed no research — canon already ruled it** (`world/rune-hold.md:17`, *"Hogsmeade energy… shops you remember by name. Corners that reward curiosity."*). Both clauses are **layout specs**, and both are checks now: `two-shops-one-size` and `nothing-to-discover` (occlusion measured from the square's centre, where canon puts the keeper on arrival).
+- **Size comes from the program, never the facade.** A hand-picked size is a literal in a file whose whole law is that nothing is a literal. Same for layout: a band is as deep as its street plus the deepest thing on it — **measured off the roster**, because the first cut asserted that rule *in a comment* and the muster hall hung out the back of its own shelf. ⚠ *A comment that states a derivation is not the derivation.*
+- **`FRONTS` is derived from `PLACES`, never restated** — a second hand-kept list of the same five would agree until someone edited one, and would agree hardest at the moment somebody came looking.
+- **⚠ I broke a canon adjacency fixing a geometry bug.** *"Sits near The Spirit Corner"* — moving the floating bookstore sent it a whole terrace away. Heights were checked; the canon file was not. Now asserted (`canon-adjacency-broken`).
+- **The dev preview cannot be driven from an automated browser.** A hidden tab suspends `requestAnimationFrame` entirely: keys accepted, timers run, script reports success, **no frame elapses** — and two identical stills look exactly like catastrophically broken geometry. Check `document.visibilityState` before reading anything into an r3f screenshot.
+
+### Parked — ⛔ BLOCKED ON CANON, do not build the door set
+Alex specified a four-door town (Mug basement · Travelers Station · the merchant Passage · an Ather gate as a portal in the square) with **the Spirit Corner demoted out of the door set**. That supersedes the 08-13 first-day ruling, the Hub table, and `shimmer-geography.md`. Filed as `[OPEN] Rune Hold's door set` in `CANON_GAPS.md` (**not here** — Magii never opens this repo). Magii added evidence rather than ruling: Alex's own Chord ruling the same day has the player *"speak to greg at his shop in runehold"*, so his two statements ask for different towns. **Magii's read, pending Alex: the Spirit Corner stops being the CROSSING and stays the SHOP** — if so nothing shipped above is wrong and only *One door opens* has to move. Second gap open: does the Mug have a basement (blocks nothing).
+
+### Next
+- Alex rules the door set → build the square's framed gate + the doors behind it.
+- **The practice range at the Travelers Station is fully ruled and unbuilt** (*"at the Station, not in the town… practice is free and open to anyone"*) — buildable today, waits on nothing.
+- Open the enterable layer once the ruling lands. Greybox art untouched.
+
+### Files
+`src/app/shimmer/play3d/rune-hold.ts` (+ `.test.ts`, 70 asserts both mannequins) · `src/app/shimmer/dev/runehold/page.tsx` · `scripts/town-plan.mts` · reads `play3d/metrics.ts`
+
 ## 🔮 Shimmer — **THE CAST BAR IS TWO SLOTS: TACTICAL + SIGNATURE** (RULED 2026-08-23, Alex + jin-cc hub) · *Not yet built*
 
 **Alex's ruling, in full, and it is canon-aligned rather than a scope cut.** `game/moves.md:85` — *"## Ultimates — **Signature**, high pool cost."* So *signature* IS the Ultimate band. The mage's four bands are Passives / Tactical / Ultimates / Combos; **passives are not cast and combos are pair-casting, so the button-castable set is exactly Tactical + Signature.** The build's four slots were the drift, not the baseline.
