@@ -7,7 +7,7 @@
  *
  * Run: `npx tsx src/app/shimmer/play3d/rune-hold.test.ts`
  */
-import { runeHold, townFaults, FRONTS, ladderFor } from './rune-hold'
+import { runeHold, townFaults, gateParts, FRONTS, ladderFor } from './rune-hold'
 import { BODIES, BODY, metricsFor, readsAs } from './metrics'
 
 let pass = 0
@@ -91,6 +91,31 @@ for (const [name, body] of [['voxel', BODIES.voxel], ['play3d', BODIES.play3d]] 
   const top = Math.round(t.station.y / t.terraceRise)
   ok(level === top, `${name}: the chain ends on the Station's own band (${level} vs ${top})`)
   ok(t.station.y > 0, `${name}: the Station stands where its road delivers (y ${t.station.y.toFixed(2)})`)
+}
+
+// ── 3c. a gate's FORM costs geometry, and the frame surrounds the opening ─────────────────────
+// ★★ THE GUARD THIS REPLACES COULD NOT FAIL FOR THE REASON IT EXISTED. It compared `kept` to the
+// string `'framed'` — two fields agreeing about a label — while the RENDERER held the only
+// statement of what a form looks like. A form with no branch drew a bare veil and every assert
+// stayed green. `gateParts()` resolves the form to boxes in the pure module, so this compares
+// volume and footprint, the way the sapling-icon guard compares coverage instead of source strings.
+{
+  const t = runeHold(BODY)
+  for (const g of t.gates) {
+    const parts = gateParts(g)
+    const frame = parts.filter(p => p.kind !== 'veil')
+    ok(parts.some(p => p.kind === 'veil'), `${g.id}: the crossing itself is drawn in either form`)
+    ok(frame.length > 0 && frame.reduce((a, p) => a + p.w * p.h * p.d, 0) > 0,
+       `${g.id}: kept, so the frame costs real geometry (${frame.length} parts)`)
+    const veil = parts.find(p => p.kind === 'veil')!
+    ok(frame.every(p => Math.abs(p.x) - p.w / 2 >= veil.w / 2 - 1e-9 || p.y - p.h / 2 >= veil.h - 1e-9),
+       `${g.id}: every frame part is outside the opening, not across it`)
+  }
+  // ⚠ AND THE OTHER FORM MUST ACTUALLY DIFFER, or the branch is decoration. Canon's grammar only
+  // teaches anything if bare and framed are distinguishable at a glance.
+  const bare = gateParts({ ...t.gates[0], form: 'bare-spiral', kept: false })
+  ok(bare.length < gateParts(t.gates[0]).length, 'a bare spiral is visibly less than a framed doorway')
+  ok(bare.every(p => p.kind === 'veil'), 'and it is the note standing in the air, with nothing built around it')
 }
 
 // ── 4. every face lands on a tier the walker has a verb for ───────────────────────────────────

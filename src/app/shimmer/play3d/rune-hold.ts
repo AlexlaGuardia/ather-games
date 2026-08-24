@@ -245,6 +245,48 @@ export interface Gate {
   form: GateForm
 }
 
+/** One box of a gate's built form. The renderer draws these and invents nothing. */
+export interface GatePart {
+  kind: 'veil' | 'post' | 'lintel'
+  /** Centre, relative to the gate's own origin at ground level. */
+  x: number; y: number; z: number
+  w: number; h: number; d: number
+}
+
+/**
+ * The parts a gate is actually made of.
+ *
+ * ── ★★★ WHY THIS IS NOT IN THE RENDERER ─────────────────────────────────────────────────────
+ * The first guard checked `kept === (form === 'framed')` and called that the grammar enforced. It
+ * was not. **The renderer held the only statement of what a form LOOKS like** — `form === 'framed'
+ * && <posts/lintel>` — so a gate whose form had no branch would draw a bare veil, silently, while
+ * every assert stayed green. ⚠ The guard could only ever check that a LABEL agreed with a flag;
+ * canon's claim is about what the player SEES.
+ *
+ * ★ SO THE FORM IS RESOLVED HERE, ONCE, AS GEOMETRY, and the renderer maps over the result. A gate
+ * with no renderer branch is now unrepresentable rather than merely unlikely, and the test can
+ * compare **volume and footprint** instead of source strings — the sapling-icon lesson, where a
+ * cube and a cross agreed about every pixel's colour and disagreed about the shape nothing checked.
+ * A guard that only asks "does it say framed" survives the exact bug it was written for.
+ */
+export function gateParts(g: Gate): GatePart[] {
+  // The crossing itself: the note standing in the air. Present in BOTH forms — a spiral with no
+  // frame is still a gate, which is the whole point of the bare form.
+  const parts: GatePart[] = [
+    { kind: 'veil', x: 0, y: g.h / 2, z: 0, w: g.w, h: g.h, d: 0.08 },
+  ]
+  if (g.form === 'bare-spiral') return parts
+
+  // ★ THE FRAME IS THE TUNING MADE PHYSICAL, so it must actually SURROUND the opening — a post
+  // inside the veil's own width would read as a mullion, not as something built to keep it.
+  const jamb = Math.max(0.24, g.w * 0.12)
+  const depth = 0.42
+  for (const sx of [-1, 1])
+    parts.push({ kind: 'post', x: sx * (g.w / 2 + jamb / 2), y: g.h / 2, z: 0, w: jamb, h: g.h, d: depth })
+  parts.push({ kind: 'lintel', x: 0, y: g.h + jamb / 2, z: 0, w: g.w + jamb * 3, h: jamb, d: depth })
+  return parts
+}
+
 /** The Passage: a way DOWN, tucked where you would only find it if you were shown. */
 export interface Descent {
   id: string
@@ -534,6 +576,8 @@ export type TownFault =
   | { why: 'gate-lies-about-permanence'; id: string; kept: boolean; form: GateForm }
   | { why: 'gate-you-cannot-walk-through'; id: string; height: number }
   | { why: 'gate-stands-inside-a-mass'; id: string; mass: string }
+  | { why: 'gate-form-has-no-geometry'; id: string; form: GateForm; parts: number }
+  | { why: 'frame-does-not-surround-the-opening'; id: string }
 
 /** Does the segment from `a` to `b` cross this footprint? Slab test, plan only. */
 function crosses(a: [number, number], b: [number, number], m: Terrace): boolean {
@@ -645,6 +689,22 @@ export function townFaults(town: Town): TownFault[] {
     // A gate is a thing you step through, so its opening answers to the body, not to taste.
     if (g.h < doorwayHeight(town.body) - 1e-9 || g.w < M.widths.passMin)
       out.push({ why: 'gate-you-cannot-walk-through', id: g.id, height: g.h })
+    // ★★ AND THE FORM MUST COST GEOMETRY, NOT JUST A WORD. `kept === framed` compares two fields
+    // and would pass for a form nothing draws; this asks the shipped part list what the player
+    // actually meets. A framed gate that resolves to a bare veil is the failure the label cannot see.
+    const parts = gateParts(g)
+    const frame = parts.filter(p => p.kind !== 'veil')
+    const volume = frame.reduce((a, p) => a + p.w * p.h * p.d, 0)
+    if ((g.form === 'framed') !== (volume > 1e-6))
+      out.push({ why: 'gate-form-has-no-geometry', id: g.id, form: g.form, parts: frame.length })
+    // ⚠ A FRAME INSIDE THE OPENING IS A MULLION, NOT A FRAME. Surrounding is the affordance; part
+    // count is only membership, and a frame drawn across the doorway would satisfy a count.
+    if (g.form === 'framed') {
+      const veil = parts.find(p => p.kind === 'veil')!
+      const spanning = frame.filter(p => Math.abs(p.x) - p.w / 2 >= veil.w / 2 - 1e-9 || p.y - p.h / 2 >= veil.h - 1e-9)
+      if (spanning.length !== frame.length) out.push({ why: 'frame-does-not-surround-the-opening', id: g.id })
+    }
+
     // ⚠ AND IT MUST NOT BE SWALLOWED — but a door FLUSH IN A WALL is the correct shape, not a bug.
     // Canon calls the Spirit Corner's gate *"a door in a wall"* and lists *"a shop's back door"* as a
     // framed form, so a footprint test would fail the one example canon gives. ★ The question is

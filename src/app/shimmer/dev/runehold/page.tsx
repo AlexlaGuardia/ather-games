@@ -40,7 +40,7 @@ import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { buildTileArray, sliceLayer, layerOf, TOP, SIDE } from '../../voxel3d/tex/tiles'
 import { MAT } from '../../voxel/depth'
 import { MATERIAL_COLOR } from '../../voxel3d/attrs'
-import { runeHold, townFaults, type Town } from '../../play3d/rune-hold'
+import { runeHold, townFaults, gateParts, type Town } from '../../play3d/rune-hold'
 import { BODIES, KIT, metricsFor, STEP_FLOW, LEDGE_VAULT, LEDGE_MANTLE, readsAs, type Body } from '../../play3d/metrics'
 
 type Pair = 'voxel' | 'play3d' | 'mismatch' | 'seam'
@@ -361,42 +361,17 @@ function Scene({ town, walker }: { town: Town; walker: Body }) {
           `townFaults` fails a gate whose form disagrees with its `kept`. */}
       {town.gates.map(g => (
         <group key={g.id} position={[g.x, 0, g.z]}>
-          <mesh position={[0, g.h / 2, 0]}>
-            <boxGeometry args={[g.w, g.h, 0.08]} />
-            <meshStandardMaterial color="#c9a227" emissive="#6d5410" emissiveIntensity={0.6} transparent opacity={0.55} />
-          </mesh>
-          {g.form === 'framed' && <>
-            {[-1, 1].map(sx => (
-              <mesh key={sx} position={[sx * (g.w / 2 + 0.12), g.h / 2, 0]} castShadow>
-                <boxGeometry args={[0.24, g.h, 0.42]} />
-                <meshStandardMaterial color="#6f665d" />
-              </mesh>
-            ))}
-            <mesh position={[0, g.h + 0.15, 0]} castShadow>
-              <boxGeometry args={[g.w + 0.72, 0.3, 0.42]} />
-              <meshStandardMaterial color="#6f665d" />
+          {gateParts(g).map((p, i) => (
+            <mesh key={i} position={[p.x, p.y, p.z]} castShadow={p.kind !== 'veil'}>
+              <boxGeometry args={[p.w, p.h, p.d]} />
+              {p.kind === 'veil'
+                ? <meshStandardMaterial color="#c9a227" emissive="#6d5410" emissiveIntensity={0.6} transparent opacity={0.55} />
+                : <meshStandardMaterial color="#6f665d" />}
             </mesh>
-          </>}
+          ))}
         </group>
       ))}
-      {/* ★★ THE PASSAGE. Canon has it UNDER the town, entry *"word of mouth only. No signs."* — so it
-          is a mouth in the ground behind the smithy, not a shopfront, and the oracle asserts the
-          square cannot see it. Shut in v1 like every door but one, so it is drawn and not entered. */}
-      <mesh position={[town.descent.x, -town.descent.depth / 2, town.descent.z]}>
-        <boxGeometry args={[town.descent.w, town.descent.depth, town.descent.d]} />
-        <meshStandardMaterial color="#241f1b" />
-      </mesh>
-      {town.streets.map(s => {
-        const dx = s.to[0] - s.from[0], dz = s.to[1] - s.from[1]
-        return (
-          <mesh key={s.id}
-                position={[(s.from[0] + s.to[0]) / 2, Math.max(s.fromTerrace, s.toTerrace) * town.terraceRise + 0.02, (s.from[1] + s.to[1]) / 2]}
-                rotation={[0, Math.atan2(dx, dz), 0]} receiveShadow>
-            <boxGeometry args={[s.width, 0.04, Math.hypot(dx, dz)]} />
-            <meshStandardMaterial color="#7d746a" />
-          </mesh>
-        )
-      })}
+
       {/* Reference posts at the WALKER's own cover tiers — the whole comparison in two sticks. Red
           is standing cover (breaks your line of sight), blue is sliding cover. Derived, never a
           chosen height, so they move with the toggle exactly as the town does. */}
