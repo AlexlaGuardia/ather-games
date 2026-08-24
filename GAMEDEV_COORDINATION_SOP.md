@@ -108,6 +108,29 @@ Alex assigns. From then on, prefix every `coord` call with `COORD_WIN=<lane> COO
   assuming it landed.** A window that has died and been replaced looks identical, from the board, to
   one that is simply busy.
 
+#### ★★★ THE FACT SURVIVED. THE ASSIGNMENT DID NOT. (the other half, raised by the world lane)
+> The rule above is only half a rule, and the Gate Station proves the missing half rather than the
+> present one. The **ruling** was safe the whole time — Magii had authored it into
+> `shimmer-geography.md` before relaying. What died with the window was *that the world lane owed a
+> build against it.* That existed nowhere but the message. **A fact in a canon file with nothing
+> pointing at it is a fact nobody is assigned to build**, and it took an hour and one person's memory
+> to resurface.
+- **Durable CONTENT goes in a file. Durable ASSIGNMENT goes in a closable row.** They are different
+  problems and a file solves only the first. Prose — a signal, a lane note, a handoff paragraph —
+  cannot be closed, so it keeps asserting the work is open long after it ships.
+- **⚠⚠ RAISE THE ROW WHEN THE WORK IS ASSIGNED, NOT WHEN THE SESSION WRAPS.** A `NEXT{}` marker only
+  becomes a row at **session end**, so **a window killed mid-turn loses every open item it raised.**
+  That is exactly how the lane turned over with nothing recorded: the dying window never reached its
+  own session end, so it opened a row for nothing — including the work it was mid-write on. For
+  anything that must survive a kill, open it immediately with `cortex_task action=add`, and let
+  `NEXT{}` handle the rest (restating it later dedups to the same row, so there is no cost to both).
+- **★ And a row is a CLAIM, not a state — audit before you build on one.** Six rows on this board were
+  closed the day this was written: one already built, one ruled by Magii eleven days earlier, one a
+  duplicate, one superseded by a later ruling, one whose destination had since been ruled, and one
+  that was simply **false** (*"Rune Hold exists only as a dev preview, not a place in any walker"* —
+  the shipped tile town is walkable and its doors oracle passes 12/0). A stale row does not sit
+  quietly; it keeps directing work.
+
 ## Deploy — always through the lock
 ```bash
 coord build "what changed"     # acquire lock -> npm run build -> pm2 restart -> release
