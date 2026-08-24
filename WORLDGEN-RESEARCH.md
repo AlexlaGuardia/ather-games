@@ -448,3 +448,133 @@ Do not fill these in from memory. Several are Mojang-internal and genuinely do n
 - **Whether `ather_soil` should be worldgen-placed at all**, or exist only where a player tills. Placing it procedurally makes Farming discoverable; placing none makes tilling meaningful. Unruled.
 - **`blob.size` ceilings against the 16³ section budget.** The tier-4 pocket wants to be big and the mesh budget wants it under ~16 across. Needs the bench, not an argument.
 - **Whether the pre-carve/post-carve phase split survives contact with carvers we have not written yet.** The whole tier-readability table in steal #10 rests on carvers existing and truncating things. They are un-skipped but unbuilt.
+
+---
+
+## Rivers as the world's SPINE — captured 2026-08-24 (jin-cc, world lane)
+
+> ⚠ **PROVENANCE — READ BEFORE CITING. This section is a DESIGN CAPTURE, not a gated research
+> round.** Every section above it came out of a 6-agent workflow with an accuracy gate that
+> counted confirmed / corrected / refuted / unknown claims. This one came out of a live session
+> conversation with Alex, with two web checks and a read of our own source. **It is held to a
+> lower standard of proof than the rest of this file and must not be quoted as if it were not.**
+> Claims below are tagged: **[OURS]** = verified against our own code this session · **[EXT]** =
+> external technique, lightly sourced, NOT gated · **[DESIGN]** = our proposal, unbuilt, unproven.
+>
+> **Prompted by:** Alex, after a Minecraft village-generation video — *"what if we gen'd the world
+> in this way? using rivers, but on a much bigger scale?"*
+
+### What our rivers are today **[OURS]**
+
+`voxel/height.ts:189` — **we already use Minecraft 1.18's trick**: a river is the zero-line of a
+signed noise field, on its own large scale (`riverScale: 650`) and its own salt, because the first
+version reused the ridge-scale weirdness field and the rendered map showed a dense capillary tangle.
+`RIVER_FULL 0.012` · `RIVER_EDGE 0.035` · `RIVER_DEPTH 3`.
+
+The file already records what that bought and what it cost, and the cost is the whole subject here:
+
+> *"What was lost: automatic valley alignment. **A river can now cross a ridge** — it notches a
+> 3-deep water gap through the saddle, which reads as a gorge stream, fine."*
+
+**So our rivers do not flow.** No source, no mouth, no confluence, no direction, no watershed. They
+are a *pattern of water-shaped ground* laid over terrain that was decided without them. That is a
+defensible trade and it shipped for good reasons — it is also the ceiling on how much the landscape
+can ever explain itself.
+
+### The proposal: build the skeleton first, derive the land from it **[DESIGN]**
+
+Invert the order. Instead of *height → rivers painted on*, generate a **connected river network
+first**, then derive elevation as a function of distance-and-drop to the nearest channel — so water
+runs downhill **by construction** rather than by luck. Valleys, confluences and watersheds stop
+being decoration and become the reason the land has the shape it has.
+
+**★ This is steal #3's neighbour, not a new family of idea — it is the village generator's
+streets-first ordering, one scale up.** Minecraft places the street pool first and hangs buildings
+off street jigsaws; the streets are what make a village read as a settlement rather than as scattered
+huts. A river network is the same move at continental scale: the connective spine goes down first and
+everything else attaches to it.
+
+**★ AND WE ALREADY DO EXACTLY THIS ONCE, WHICH IS THE STRONGEST ARGUMENT FOR IT [OURS].**
+`voxel/story-path.ts` is Alex's 2026-08-08 ruling *"the map generates from the story"* — a polyline
+spine from which the road, the waystones and the hold gates are all derived (`holds.ts:gateFor`
+literally computes a gate from where the road crosses the wall). The architecture is proven in our
+tree. A river spine is the same machine with a natural spine instead of a narrative one, and the two
+would compose: a road that crosses a river wants a bridge, and `voxel/bridges.ts` already exists.
+
+### Where it lands in canon — and it lands well **[OURS]**
+
+- **The garden cannot host it.** Gardens are **pockets** (RULED 2026-08-13): bounded, cloud-walled
+  sky islands, *"you do not cross the void."* Continental hydrology inside a bounded pocket is
+  machinery with nowhere to run. Arguably `riverScale: 650` is already oversized for one.
+- **Layer 2, the Sea of Folds, is ruled *"PROCEDURAL and endless"*** — and the same ruling says
+  *"continuous open-terrain generation has a canon home one layer out… **No terrain work is wasted
+  by this ruling — it is re-addressed to the layer it was always shaped for.**"*
+- **Layer 3, the Wilds, is the far shore it serves** — and is PARKED (2026-08-12, Alex: *"grgs
+  garden comes first"*). This design is for the layer, not for a hold.
+
+**So the honest siting is: this is layer-2 work.** It is not a garden change and should not be
+smuggled in as one.
+
+### ★★ THE REAL COST: IT BREAKS THE PROPERTY THE WHOLE GENERATOR STANDS ON **[OURS]**
+
+`sites.ts` states it as the reason its placement is shaped the way it is — placement is O(1) pure
+math, *"any column can ask 'does a site touch me?' with no cross-chunk state, **the same property
+that keeps trees safe**."* Height, biome, flora, ore and site placement are all pure functions of
+`(x, z, seed)`.
+
+**A river network is global connected state.** You cannot know where water goes without knowing the
+graph, and that is precisely why Mojang reached for the zero-line noise trick in the first place —
+the noise field is a river-*looking* thing that costs one sample. **Anything spine-first pays this
+bill; the only question is how.**
+
+### How you would pay it without losing locality **[DESIGN]**
+
+**Per-cell flow direction on a coarse lattice.** Each lattice cell deterministically picks which of
+its neighbours it drains to, seeded from `(seed, cellX, cellZ, salt)`. A river is then traced through
+a handful of *local* cell reads — connectivity emerges without any global pass. **`sites.ts` already
+proves half of this**: the lattice, the per-cell deterministic roll, the salt. This adds a *direction*
+to each cell, and it is the same shape of machine.
+
+- **D8 (eight-neighbour steepest descent) is the standard convention** for flow direction on a grid
+  **[EXT]** — but note it is normally the **analysis** direction (measure flow *from* an existing
+  heightfield). We would be using the **synthesis** direction (generate the network, derive the
+  height). ⚠ **Do not conflate the two** — they are different problems that share a vocabulary, and
+  this file has been bitten before by claims that were three systems mashed together.
+- **The published lineage for synthesis is Génevaux et al., *Terrain Generation Using Procedural
+  Models Based on Hydrology* (SIGGRAPH 2013) [EXT, not gated]** — river network computed first, then
+  continuous terrain generated to conform to it, with **Horton-Strahler stream order** controlling
+  how large each branch reads.
+- **★ Generate the tree from the MOUTH UPSTREAM, not by accumulating downstream.** This is what
+  keeps river *size* bounded: expanding outward from mouths lets each branch be assigned its order
+  **as it is created**, instead of requiring a survey of everything upstream to find out how big a
+  channel should be.
+
+### ⚠ Open questions — do NOT fill these in from memory
+
+- **★ THE CRUX, AND IT IS GENUINELY UNRESOLVED: the published hydrology-first work generates a
+  BOUNDED domain with a defined coastline. Ours must be endless and chunk-local.** Whether a river
+  tree can be generated deterministically per-region without a global pass — and what happens where
+  two independently-generated regions' networks meet at a seam — is **not established by anything
+  read this session.** This is the question that decides whether the whole approach is affordable,
+  and it deserves a gated research round of its own before any code.
+- **True flow accumulation is unbounded upstream.** The mouth-first trick above is a *proposal* for
+  dodging that, not a verified result. If river size ends up approximated from a large-scale basin
+  field instead, **that must be labelled an approximation in the source** and never described as
+  hydrology.
+- **Whether the story spine and a river spine can coexist without fighting.** Both want to decide
+  where the land goes. `story-path.ts` currently assumes it is the only spine.
+- **Cost is unestimated on purpose.** Every other steal in this file carries a day figure; this one
+  does not, because the crux above is open and an estimate would be theatre.
+
+### ⚠ Two flags for whoever picks this up
+
+1. **`GENERATOR_VERSION` is 31** (`voxel/edits.ts:221`) and terrain changes bump it, which reaches
+   saved player edits. The 2026-08-22 session note records eight bumps in one evening as **unruled**
+   with *"ask before the ninth."* **This needs Alex's explicit yes, not a builder's judgment.**
+2. **This is not a decoration fix.** It reaches `height.ts`, `biome.ts`, `column.ts` and everything
+   downstream of them. Treat any "just try it in the garden" framing as the smuggling described
+   above.
+
+**Status: CAPTURED, NOT SCHEDULED.** Nothing is blocked on it. It is written down while it was hot
+so that when layer 2 is built this is a designed thing waiting, rather than a good idea half
+remembered.
