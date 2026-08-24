@@ -354,18 +354,31 @@ function Scene({ town, walker }: { town: Town; walker: Body }) {
           <meshStandardMaterial color={KIND_COLOR[m.kind]} />
         </mesh>
       ))}
-      {/* The one open door, marked at the scale of the walker rather than by a colour. */}
-      {(() => {
-        const c = town.masses.find(x => x.id === 'spirit-corner')
-        if (!c) return null
-        const dw = M.widths.lanePair, dh = Math.min(M.cover.full, c.h * 0.8)
-        return (
-          <mesh position={[c.x, dh / 2, c.z + c.d / 2 + 0.03]}>
-            <boxGeometry args={[dw, dh, 0.06]} />
-            <meshStandardMaterial color="#c9a227" />
+      {/* ★★ THE GATES, AND THE FRAME IS THE POINT. `world/gates.md` (08-24): bare spiral = untuned or
+          temporary, framed doorway = tuned and KEPT by someone, and *"nobody frames a gate they do not
+          intend to keep."* Both forms are drawn here even though the town's two gates are both kept,
+          because the grammar only teaches anything if the other form exists to compare against — and
+          `townFaults` fails a gate whose form disagrees with its `kept`. */}
+      {town.gates.map(g => (
+        <group key={g.id} position={[g.x, 0, g.z]}>
+          <mesh position={[0, g.h / 2, 0]}>
+            <boxGeometry args={[g.w, g.h, 0.08]} />
+            <meshStandardMaterial color="#c9a227" emissive="#6d5410" emissiveIntensity={0.6} transparent opacity={0.55} />
           </mesh>
-        )
-      })()}
+          {g.form === 'framed' && <>
+            {[-1, 1].map(sx => (
+              <mesh key={sx} position={[sx * (g.w / 2 + 0.12), g.h / 2, 0]} castShadow>
+                <boxGeometry args={[0.24, g.h, 0.42]} />
+                <meshStandardMaterial color="#6f665d" />
+              </mesh>
+            ))}
+            <mesh position={[0, g.h + 0.15, 0]} castShadow>
+              <boxGeometry args={[g.w + 0.72, 0.3, 0.42]} />
+              <meshStandardMaterial color="#6f665d" />
+            </mesh>
+          </>}
+        </group>
+      ))}
       {/* ★★ THE PASSAGE. Canon has it UNDER the town, entry *"word of mouth only. No signs."* — so it
           is a mouth in the ground behind the smithy, not a shopfront, and the oracle asserts the
           square cannot see it. Shut in v1 like every door but one, so it is drawn and not entered. */}

@@ -40,8 +40,14 @@ for (const [name, body] of [['voxel', BODIES.voxel], ['play3d', BODIES.play3d]] 
 
 // ── 3. canon, asserted rather than reviewed ───────────────────────────────────────────────────
 // ⚠ THE ONE-DOOR RULING IS ONE CHARACTER WIDE AND A SECOND `open: true` READS AS A CONVENIENCE.
-ok(FRONTS.filter(f => f.open).length === 1, 'exactly one door is open in v1')
-ok(FRONTS.find(f => f.open)?.id === 'spirit-corner', 'and it is the Spirit Corner')
+// ⚠ THIS ASSERT USED TO SAY THE OPPOSITE, AND THE FLIP IS THE RULING. Until 2026-08-24 canon staged
+// *"exactly one storefront is enterable: The Spirit Corner."* `rune-hold.md` › ★ NO INTERIOR OPENS
+// struck it: the Corner is *"a face on the town, not a space that loads"* and stepping through
+// Gregory's doorway IS the crossing. ★ A test left asserting a retired contract is worse than no
+// test — a red that is merely out of date trains everyone to discount red.
+ok(FRONTS.every(f => !f.open), 'no storefront interior is enterable in the opening')
+ok(runeHold(BODY).gates.some(g => g.id === 'spirit-corner-gate'),
+   "the Corner keeps Gregory's door — it lost the interior, not the crossing")
 ok(FRONTS.length === 5, 'the five ruled storefronts front the square')
 for (const id of ['kindled-mug', 'spirit-corner', 'eyuun-bookstore', 'the-passage', 'notice-board'])
   ok(FRONTS.some(f => f.id === id), `canon front present: ${id}`)

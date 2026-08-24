@@ -96,7 +96,17 @@ export interface Place {
   kind: PlaceKind
   /** ⚠ CANON: exactly five storefronts stand on the crossroads square. Not a layout preference. */
   square: boolean
-  /** Enterable in v1. Canon opens exactly one. */
+  /**
+   * Is this place's INTERIOR enterable in the opening?
+   *
+   * ⚠ CANON SAYS NO, FOR EVERY STOREFRONT — `world/rune-hold.md` › *★ NO INTERIOR OPENS* (ruled
+   * 2026-08-24). The old *"One door opens"* staging is struck: the Spirit Corner is *"a face on the
+   * town, not a space that loads"*, and **stepping through Gregory's framed doorway IS the
+   * crossing** — no room in between. The 07-12 Hub ruling had already said *"an outdoor town, not
+   * an interior"*; the opening staging carved out one exception and Alex removed the exception.
+   * ★ The field stays because the four doors will each flip one, and **when each opens is scope,
+   * not truth** — mine, on canon's own *"they open when the systems behind them exist"*.
+   */
   open: boolean
   /** People in the room at once. The program — this is what makes one building bigger than another. */
   heads: number
@@ -113,8 +123,15 @@ export interface Place {
 /**
  * ⚠ THE ROSTER IS CANON AND THE NUMBERS ARE MINE, AND THE SPLIT IS EXACT.
  *
+ * ⚠⚠ ALEX'S FOUR DOORS ARE NOT IN THIS LIST, AND THAT IS THE RULING RATHER THAN AN OMISSION.
+ * The town's enterable interiors and travel node are the **Kindled Mug's basement**, the **Travelers
+ * Station**, **The Passage** and the **square's Ather gate**. *"The Spirit Corner was never in that
+ * list because it is not that kind of thing. It is a storefront with a person and a gate in it."*
+ * (`world/rune-hold.md` › ★ NO INTERIOR OPENS.) The Mug's basement is still **unruled** and is not
+ * built here; the other three are the `descent`, the station mass, and a `Gate`.
+ *
  * Canon (`world/rune-hold.md`, `world/locations.md`) fixes: that these places exist, what each one
- * IS, that five storefronts stand on the square, that exactly one door opens in v1, that the
+ * IS, that five storefronts stand on the square, that no storefront interior opens, that the
  * Bookstore *"sits near The Spirit Corner"*, that the Passage is *"under Rune Hold — hidden tunnel
  * market"* with entry *"word of mouth only, no signs"*, that the Enchant Temple is *"adjacent to the
  * town proper"*, that the inventor shops are *"scattered throughout the winding streets"*, and that
@@ -130,7 +147,7 @@ export interface Place {
 export const PLACES: Place[] = [
   // ── the five storefronts canon puts on the square ──────────────────────────────────────────
   { id: 'kindled-mug',      name: 'The Kindled Mug',      kind: 'front',    square: true,  open: false, heads: 28, floors: 2, rise: 2, aspect: 'broad',   terrace: 0 },
-  { id: 'spirit-corner',    name: 'The Spirit Corner',    kind: 'front',    square: true,  open: true,  heads:  6, floors: 1, rise: 1, aspect: 'compact', terrace: 0 },
+  { id: 'spirit-corner',    name: 'The Spirit Corner',    kind: 'front',    square: true,  open: false, heads:  6, floors: 1, rise: 1, aspect: 'compact', terrace: 0 },
   { id: 'eyuun-bookstore',  name: "Eyuun's Bookstore",    kind: 'front',    square: true,  open: false, heads:  8, floors: 2, rise: 2, aspect: 'deep',    terrace: 0 },
   { id: 'notice-board',     name: 'The Notice Board',     kind: 'fixture',  square: true,  open: false, heads:  0, floors: 1, rise: 0, aspect: 'compact', terrace: 0 },
   { id: 'the-passage',      name: 'The Passage',          kind: 'descent',  square: true,  open: false, heads:  0, floors: 1, rise: 0, aspect: 'compact', terrace: 0 },
@@ -199,6 +216,35 @@ export interface Terrace {
   x0: number; x1: number; z0: number; z1: number
 }
 
+/**
+ * A gate, and the one thing its SHAPE is required to tell the truth about.
+ *
+ * ── ★★★ THE FRAME IS THE TUNING, SO THE FORM IS A CLAIM ABOUT PERMANENCE ─────────────────────
+ * `world/gates.md` › *What a gate LOOKS like* (ruled 2026-08-24): **bare spiral = untuned or
+ * temporary** — a dropped gate-rune, a wild fold-mouth, *"a note struck and holding itself"*.
+ * **Framed doorway = tuned and KEPT by someone** — *"the Spirit Corner · the Rune Hold square's
+ * public landing · every socket of a keeper's Gate Station"*. Nobody frames a gate they do not
+ * intend to keep.
+ *
+ * ★ THAT MAKES `form` A DERIVED FACT, NOT A STYLING CHOICE, and it is why `kept` and `form` are
+ * both stored and then checked against each other. Canon's claim is that a player learns the whole
+ * travel layer's cost model *by looking* — so a kept gate drawn as a bare spiral does not merely
+ * look wrong, it tells the player this crossing is going away. `townFaults` fails on the mismatch.
+ */
+export type GateForm = 'bare-spiral' | 'framed'
+
+export interface Gate {
+  id: string
+  /** What it is for, in the town's own words. */
+  name: string
+  x: number; z: number
+  /** The opening a walker steps through. Body-derived, like every other clearance in this file. */
+  w: number; h: number
+  /** Is somebody spending craft to hold this open past today? */
+  kept: boolean
+  form: GateForm
+}
+
 /** The Passage: a way DOWN, tucked where you would only find it if you were shown. */
 export interface Descent {
   id: string
@@ -218,6 +264,8 @@ export interface Town {
   streets: Street[]
   /** The Passage. Not a mass — canon has it under the town, entered by word of mouth. */
   descent: Descent
+  /** Every gate that stands in the town. Canon names two, and both are kept. */
+  gates: Gate[]
   /** The sky-port at the town's edge. ★ THE SAME OBJECT as its entry in `masses`, not a copy. */
   station: Mass
 }
@@ -239,6 +287,15 @@ const box = (m: { x: number; z: number; w: number; d: number }): Terrace =>
  * ★ ONE PERSON'S SHARE IS A LANE TIMES A BODY, both body-derived, so a room that holds twenty is
  * twenty times that and the whole roster re-scales with the mannequin exactly like the streets do.
  */
+/**
+ * Head clearance for a door a walker uses.
+ *
+ * ★ SHARED WITH THE CALIBRATION ROOM ON PURPOSE. That room's whole argument is that a doorway at
+ * the walker's own scale is the most legible proportion test there is; if the town's gates and the
+ * ruler disagreed about what a door is, the ruler would be measuring against a lie.
+ */
+export const doorwayHeight = (body: Body): number => body.eyeStand + 0.5
+
 export function footprintOf(p: Place, body: Body): { w: number; d: number; h: number } {
   const M = metricsFor(body)
   const W = M.widths
@@ -422,8 +479,39 @@ export function runeHold(body: Body = BODY): Town {
   streets.push({ id: 'temple-path', from: [halfX - walk / 2, 0], to: [halfX + walk / 2, 0],
                  width: W.lanePair, fromTerrace: 0, toTerrace: 1, spur: true })
 
+  // ── ★★ THE TWO GATES, AND THE SOURCE IS ONE ENTRY, NOT TWO ──────────────────────────────────
+  // ⚠ CITE 2026-08-12, NOT TODAY: `world/gates.md` › *★ WHERE IT LETS OUT: THE RUNE HOLD TOWN
+  // SQUARE* is where the public landing was ruled, on Alex's override — *"i would like it to be the
+  // town square and the player decides where they go from there."* What legalizes it lives there
+  // too, and that is the load-bearing half: Rune Hold is the rune town in the era Gregory's
+  // commercialization made gatecraft common, so **a public landing is what a commonized craft LOOKS
+  // like**. Two known crossings out of the garden, differing in kind — the Corner is Gregory's
+  // private door, the square is the town's civic plaza. Passage-class, so no home-cost.
+  //
+  // ⚠⚠ AND I ALMOST CITED A SECOND WITNESS THAT WAS THE SAME WITNESS. The 08-24 gate-look table
+  // names the Spirit Corner and the landing in one sentence, which reads like independent
+  // confirmation — it was written FROM the 08-12 crossing table, so it is downstream of the only
+  // source there is. ★ A copy reads as corroboration, and that is the one kind of agreement that
+  // proves nothing. Today's Gate Station table restates the landing as the centre socket's far end;
+  // it did not originate it.
+  //
+  // ★ THE CORNER'S GATE IS THE SHOPFRONT DOOR ITSELF, which is why it sits ON the face and not
+  // behind it: you approach, Gregory admits you, and stepping through is the crossing. No interior.
+  //
+  // ★ A DOORWAY IS THE ONE PROPORTION EVERY PLAYER READS WITHOUT BEING TOLD — you either duck or
+  // you do not. Its clearance is the same derivation the calibration room uses, taken from the
+  // body rather than restated, so the two cannot drift into disagreeing about what a door is.
+  const doorH = doorwayHeight(body)
+  const corner = masses.find(m => m.id === 'spirit-corner')!
+  const gates: Gate[] = [
+    { id: 'square-landing', name: "The Landing", x: square.x, z: square.z,
+      w: W.lanePair, h: doorH, kept: true, form: 'framed' },
+    { id: 'spirit-corner-gate', name: "Gregory's door", x: corner.x, z: corner.z + corner.d / 2,
+      w: W.laneSingle, h: doorH, kept: true, form: 'framed' },
+  ]
+
   const station = masses.find(m => m.id === 'travelers-station')!
-  return { body, terraceRise, square, terraces, masses, streets, descent, station }
+  return { body, terraceRise, square, terraces, masses, streets, descent, gates, station }
 }
 
 /** Why a greybox would not read to the walker. Each names the piece, never a bare count. */
@@ -431,7 +519,7 @@ export type TownFault =
   | { why: 'face-is-ambiguous'; id: string; height: number }
   | { why: 'street-too-narrow'; id: string; width: number }
   | { why: 'terrace-not-a-tier'; height: number }
-  | { why: 'wrong-open-door-count'; open: number }
+  | { why: 'storefront-interior-opens'; id: string }
   | { why: 'wrong-square-front-count'; fronts: number }
   | { why: 'station-bypasses-town'; id: string }
   | { why: 'stands-on-nothing'; id: string; level: number }
@@ -443,6 +531,9 @@ export type TownFault =
   | { why: 'nothing-to-discover'; hidden: number }
   | { why: 'the-passage-is-in-plain-sight'; id: string }
   | { why: 'canon-adjacency-broken'; id: string; near: string; gap: number }
+  | { why: 'gate-lies-about-permanence'; id: string; kept: boolean; form: GateForm }
+  | { why: 'gate-you-cannot-walk-through'; id: string; height: number }
+  | { why: 'gate-stands-inside-a-mass'; id: string; mass: string }
 
 /** Does the segment from `a` to `b` cross this footprint? Slab test, plan only. */
 function crosses(a: [number, number], b: [number, number], m: Terrace): boolean {
@@ -481,8 +572,11 @@ export function townFaults(town: Town): TownFault[] {
   }
 
   // ── canon, asserted rather than reviewed ────────────────────────────────────────────────────
-  const open = PLACES.filter(p => p.open).length
-  if (open !== 1) out.push({ why: 'wrong-open-door-count', open })
+  // ⚠ THE RULING INVERTED THIS ASSERT. It used to demand EXACTLY ONE open door and name the Spirit
+  // Corner; `rune-hold.md` › ★ NO INTERIOR OPENS struck that staging on 2026-08-24. A storefront
+  // that quietly grows an interior is the failure now, and it is still one character wide.
+  for (const p of PLACES)
+    if (p.open && p.kind === 'front') out.push({ why: 'storefront-interior-opens', id: p.id })
   if (FRONTS.length !== 5) out.push({ why: 'wrong-square-front-count', fronts: FRONTS.length })
 
   const road = town.streets.find(s => s.id === 'station-road')
@@ -538,6 +632,30 @@ export function townFaults(town: Town): TownFault[] {
     for (let j = i + 1; j < town.terraces.length; j++)
       if (town.terraces[i].level !== town.terraces[j].level && overlaps(town.terraces[i], town.terraces[j]))
         out.push({ why: 'bands-overlap', id: town.terraces[i].id, other: town.terraces[j].id })
+
+  // ── ★★ THE GATE GRAMMAR, WHICH IS A CLAIM THE SHAPE MAKES TO THE PLAYER ─────────────────────
+  // ⚠ THIS IS NOT A STYLE ASSERT. Canon rules that a player reads *"will this still be here
+  // tomorrow"* off the form alone, so a kept gate drawn bare tells them a permanent crossing is
+  // going away — and a temporary one drawn framed promises a crossing that will not be there. The
+  // cheapest wrong answer is to treat `form` as art and let it drift off `kept`; storing both and
+  // comparing them is what stops that being invisible.
+  for (const g of town.gates) {
+    if (g.kept !== (g.form === 'framed'))
+      out.push({ why: 'gate-lies-about-permanence', id: g.id, kept: g.kept, form: g.form })
+    // A gate is a thing you step through, so its opening answers to the body, not to taste.
+    if (g.h < doorwayHeight(town.body) - 1e-9 || g.w < M.widths.passMin)
+      out.push({ why: 'gate-you-cannot-walk-through', id: g.id, height: g.h })
+    // ⚠ AND IT MUST NOT BE SWALLOWED — but a door FLUSH IN A WALL is the correct shape, not a bug.
+    // Canon calls the Spirit Corner's gate *"a door in a wall"* and lists *"a shop's back door"* as a
+    // framed form, so a footprint test would fail the one example canon gives. ★ The question is
+    // whether the gate's own centre is INSIDE a building — a landing behind a shopfront is
+    // unreachable; a doorway on its face is how you get in.
+    for (const m of town.masses) {
+      const b = box(m)
+      if (g.x > b.x0 + 1e-9 && g.x < b.x1 - 1e-9 && g.z > b.z0 + 1e-9 && g.z < b.z1 - 1e-9)
+        out.push({ why: 'gate-stands-inside-a-mass', id: g.id, mass: m.id })
+    }
+  }
 
   // ── ★★★ CANON'S FEEL LINE, AS A CHECK ───────────────────────────────────────────────────────
   // *"Shops you remember by name. Corners that reward curiosity."* Both halves are layout specs and
