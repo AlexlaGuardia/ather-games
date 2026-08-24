@@ -26,6 +26,7 @@
 
 import { ALL_ZONES } from '../world/all-zones'
 import { getZone, gateFootprint, type Gate, type Zone } from '../world/zones'
+import { stageArrival, type Store, type TilePos } from '../engine/crossing'
 
 /** The town the one home-gate opens onto. Canon's *"established crossing"*, not a keeper's choice. */
 export const LANDING_ZONE = 'rune-hold'
@@ -115,4 +116,33 @@ export function packArrival(
 ): Arrival | null {
   if (arrivalBlockedBy(x, y, zones)) return null
   return { zone: LANDING_ZONE, x, y, via: g.label }
+}
+
+/**
+ * ── ★ THE DEPARTURE, AS ONE CALL ─────────────────────────────────────────────────────────────
+ * Everything a keeper stepping into the home-gate needs, so the host does exactly two things:
+ * call this, and — if it returns a payload — navigate. Putting the refusals HERE rather than in
+ * `VoxelWorld.tsx` is the same inversion `socketMaterial` needed: a rule that lives in a render
+ * file is a rule no oracle can reach, and this one has three ways to say no.
+ *
+ * ⚠⚠ IT WRITES THE ONE-SHOT AND NOTHING ELSE, and that is the contract's *no committed middle*
+ * (`engine/crossing.ts`). The tempting symmetry — also parking the keeper at the gate on the Ather
+ * side so they "come back where they left" — is precisely the committed middle: a tab that dies
+ * between the two writes leaves a keeper whose Ather record has moved for a crossing that never
+ * happened. Either the departure has not happened, or the arrival is complete. Nothing between.
+ *
+ * ★ THE PAYLOAD THAT CROSSES IS `TilePos` AND NOTHING MORE. `via` is returned to the caller for
+ * what it says on screen, and deliberately does NOT persist: a field that crosses a page boundary
+ * is a field the far side can come to depend on, and the contract's shape is the hub's to widen.
+ */
+export function depart(
+  store: Store, anchor: { x: number; y: number }, zones: Zone[] = ALL_ZONES,
+): { staged: TilePos; via: string } | { refused: 'unpainted' | 'blocked' } {
+  const g = landingGate(zones)
+  if (!g) return { refused: 'unpainted' }
+  const packed = packArrival(g, anchor.x, anchor.y, zones)
+  if (!packed) return { refused: 'blocked' }
+  const staged: TilePos = { zone: packed.zone, x: packed.x, y: packed.y }
+  stageArrival(store, staged)
+  return { staged, via: packed.via }
 }
