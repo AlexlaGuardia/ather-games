@@ -26,6 +26,8 @@ import { execFileSync } from 'node:child_process'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
 const GAME = join(HERE, '..', 'src', 'app', 'shimmer')          // /root/ather-games/src/app/shimmer
+import { execSync } from 'child_process'
+
 const CANON = '/root/athernyx/CANON'
 const REPORT_PATH = '/root/ather-games/SHIMMER-CANON-DRIFT.md'
 
@@ -519,6 +521,92 @@ function run() {
         `A fifth element, or a renamed one — either way it is accidental canon on the road to an evolved form. Rule it, or drop it.`)
     }
     if (!infDrift) add('CLEAN', 'infusions', `all ${canonCat.size} elemental infusions match canon's catalysts and herbs`)
+
+// ── GATE 11: RETIRED VOCABULARY ─────────────────────────────────────────────
+// ★★★ A RENAMED NOUN IS INVISIBLE TO A TYPE CHECKER, AND THAT IS THE HOLE THIS FILLS.
+// The world lane's `SocketKind` was `gate | waymark` — a compile-error-strength guard, green the
+// whole time, and one word off the noun a later ruling settled. A guard cannot notice that its own
+// vocabulary retired; only re-reading the ruling does. Canon now publishes retirements as a TABLE
+// (`game/shimmer-geography.md` › RETIRED VOCABULARY) whose header says in as many words that it
+// exists *"for the drift gate to read"* — canon cannot see the build, and that table is the only
+// place a rename becomes machine-readable.
+//
+// ⚠⚠ AND A NAIVE TERM GREP WOULD BE WORSE THAN NOTHING. "gate" is retired only for travel that stays
+// INSIDE the Ather; it is the correct and canon-ruled word for a crossing out of it, so a bare grep
+// lights up every legitimate use in the codebase. A guard that cries wolf gets switched off, and a
+// switched-off guard is the failure mode this whole file exists to prevent.
+//
+// ★ SO SEVERITY IS DECIDED PER TERM, HERE, AND CANON OWNS ONLY THE LIST. A retirement canon adds
+// that this gate has no rule for is reported BLIND — never passed over — so Magii adding a row
+// surfaces as "the gate cannot check this yet" instead of silently reading clean. That is the
+// holds-gate lesson: "I found no drift" and "I could not look" must not share an exit code.
+function canonRetiredVocabulary() {
+  const txt = read(join(CANON, 'game', 'shimmer-geography.md'))
+  const sec = txt.split('RETIRED VOCABULARY')[1]?.split('### Boundary')[0] ?? ''
+  const out = []
+  for (const line of sec.split('\n')) {
+    const m = line.match(/^\|\s*(.+?)\s*\|\s*(.+?)\s*\|\s*(.+?)\s*\|\s*$/)
+    if (!m || /^-+$/.test(m[1]) || /^Retired$/i.test(norm(m[1]))) continue
+    // The cell carries a qualifier ("**clan** (as a canon noun)") — the TERM is the emphasised part.
+    const term = (m[1].match(/\*\*([^*]+)\*\*/) ?? m[1].match(/\*([^*]+)\*/))?.[1]?.trim()
+    if (term) out.push({ term, useInstead: norm(m[2]), retiredOn: norm(m[3]) })
+  }
+  return out
+}
+
+{
+  const retired = canonRetiredVocabulary()
+  // ⚠ Per-term rules. `fail` means an occurrence is drift; `review` means the gate can find it but
+  // cannot judge it, so it reports without failing. A term absent here is BLIND, never clean.
+  const RULES = {
+    clan:     { mode: 'fail',   why: 'a canon noun the world does not use — the world says chord' },
+    shipyard: { mode: 'fail',   why: 'there is one keeper home and it is the home plot / fold' },
+    gate:     { mode: 'review', why: 'retired ONLY for travel that stays inside the Ather; correct for a crossing OUT' },
+    rune:     { mode: 'review', why: 'retired only as a thing BOUGHT — a crafted/gifted rune is canon' },
+  }
+  if (!retired.length) {
+    add('BLIND', 'retired-vocab', 'could not read the RETIRED VOCABULARY table — THE CHECK DID NOT RUN',
+      'game/shimmer-geography.md > RETIRED VOCABULARY is the source. If the heading or table shape moved, point this reader at it. Do not delete this gate to make the run green.')
+  } else {
+    const SRC = '/root/ather-games/src/app/shimmer'
+    let vocabDrift = 0
+    for (const r of retired) {
+      const key = r.term.toLowerCase().replace(/[^a-z]/g, '')
+      const rule = RULES[key]
+      if (!rule) {
+        vocabDrift++
+        add('BLIND', 'retired-vocab', `canon retired '${r.term}' (${r.retiredOn}) and this gate has no rule for it — THE TERM WAS NOT CHECKED`,
+          `Add a rule in canon-drift.mjs RULES: 'fail' if any occurrence is drift, 'review' if the word is still legitimate in another sense. Leaving it unlisted reads as clean and is not.`)
+        continue
+      }
+      // ⚠⚠ SUBSTRING, NOT `\bword\b`, AND THE FIRST VERSION OF THIS GATE WAS DECORATION BECAUSE OF IT.
+      // A word-boundary pattern cannot match a retired noun INSIDE AN IDENTIFIER — `ClanId`,
+      // `clanName`, `CLAN_SIZE` — and an identifier is precisely where the motivating bug lived
+      // (`SocketKind = 'gate' | 'waymark'`). Mutation-tested it by shipping `ClanId` in the build:
+      // the gate read CLEAN. ★ A guard aimed at names in TYPES must search the way names are WRITTEN,
+      // and code writes them camelCased, PascalCased and SCREAMING_SNAKE, never spaced.
+      // ⚠ The cost is that a `fail`-mode term must be one whose substring is unambiguous. That is a
+      // real constraint on the RULES table above, not a property of the canon table — a term that
+      // appears inside unrelated words belongs in `review`, where a human reads the hits.
+      let hits = []
+      try {
+        hits = execSync(`grep -rni "${key}" --include=*.ts --include=*.tsx ${SRC} || true`,
+          { encoding: 'utf8' }).trim().split('\n').filter(Boolean)
+      } catch { hits = [] }
+      if (!hits.length) continue
+      const where = hits.slice(0, 4).map((h) => h.split('/shimmer/')[1]?.split(':').slice(0, 2).join(':')).join(' · ')
+      if (rule.mode === 'fail') {
+        vocabDrift++
+        add('COLLISION', 'retired-vocab', `'${r.term}' is retired (${r.retiredOn}) and still ships in ${hits.length} place(s) — use '${r.useInstead}'`,
+          `${rule.why}. First hits: ${where}. A retired noun in a TYPE is the shape that stays green forever.`)
+      } else {
+        add('NOTE', 'retired-vocab', `'${r.term}' appears ${hits.length}x and is retired in one sense only — not judged here`,
+          `${rule.why}. This gate can find the word and cannot read the intent, so it reports rather than fails. First hits: ${where}.`)
+      }
+    }
+    if (!vocabDrift) add('CLEAN', 'retired-vocab', `no fully-retired noun ships; ${retired.length} retirement(s) read from canon`)
+  }
+}
   }
 }
 
@@ -855,7 +943,7 @@ console.log('canon-drift: ' + ORDER.filter((s) => counts[s]).map((s) => `${count
 const LIVE_AREAS = [...new Set(findings.map((f) => f.area))].sort()
 const PINNED_AREAS = [
   'base-species', 'birth-affinity', 'canon-vs-canon', 'element-herbs', 'infusions',
-  'keeper-moves', 'mist-rosters', 'npcs', 'second-forms', 'zones',
+  'keeper-moves', 'mist-rosters', 'npcs', 'retired-vocab', 'second-forms', 'zones',
 ].sort()
 
 if (!QUIET) {
