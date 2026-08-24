@@ -11,6 +11,43 @@ real **gimmick** (not watch-and-wait) · **canon-parallel** (serves Athernyx, no
 black, CRT bloom). Mana'nana went glossy-modern; each game gets its own skin under
 the Arcade frame.
 
+## 🧱 Shimmer voxel — **RUINS ARE ASSEMBLED NOW, NOT STAMPED** (2026-08-24, world lane) · *Last touched 2026-08-24 (world) — committed + pushed, NOT yet deployed*
+
+### Left off — `6087a93`, suite green, waiting on two things that are not mine
+Every ruin in the world was **the same 11×11 rectangle**, varied only by a crumble hash. `sites.ts`
+had shipped Minecraft's PLACEMENT layer (cells, one jittered candidate, a failed candidate kills the
+cell) and stopped there — placement was solved, the BUILDING was not. `voxel/ruins.ts` is the other
+half: a start piece rolled from a six-shape pool, breadth-first connectors, **AABB-reject on
+interiors** so a shared wall stays legal, a **terminator pool** at max depth, and a **per-site piece
+budget biased small** — a third of ruins are one lonely room, 4% are a nine-room complex you find.
+**357 distinct shapes across 681 ruins, most common 9.7%; it was 100%.**
+- **The assembly is a pure function of the site**, so every column re-derives the whole ruin and
+  writes only its own slice. That redundancy is what lets a ruin cross a chunk seam at all, and it
+  is the one thing here not to optimise into something stateful.
+- **The envelope is a correctness bound, not a taste knob.** `siteScanCells === 1` is sound only
+  while a ruin cannot leave its cell. ⚠ The oracle asserts it under a **stress config**, because
+  under the shipped one deleting the check outright leaves every assert green — the size budget
+  stops growth before the envelope ever does.
+
+### Next
+1. **Alex rules the `GENERATOR_VERSION` bump.** It is owed (this moves generated voxels) and was
+   deliberately **left unbumped**: unbumped, stored edits stay and could sit over moved geometry;
+   bumped, **every column's edits in the world read as stale**. Not a call to make quietly.
+2. **Hub ships it** — the world lane commits, it does not deploy.
+3. **Alex walks one and rules the feel.** `sizeBias` 2.2 and a six-shape pool are a sweep result,
+   not a taste decision; `scripts/ruin-sweep.mts` re-runs the distribution.
+
+### Decisions
+- **Ruins, not holds.** The jigsaw belongs on `sites.ts`'s scatter — holds are an authored cast of
+  8 whose siting canon already ruled, and the Wilds are parked.
+- **Neutral broken stone + rubble, no new material and no new name.** WHAT stands in drained
+  garden-country is still a canon question in CANON_GAPS; this claims nothing about who built it.
+
+### Files
+`src/app/shimmer/voxel/ruins.ts` · `ruins.test.ts` (mutation-tested, 8/8) · `sites.ts` · `sites.test.ts`
+(§4 re-aimed — it asserted the old 11×11 perimeter, a location that expired) · `scripts/ruin-sweep.mts`
+· `scripts/ruin-shot.mts` (reads a ruin out of the generator in world coords)
+
 ## 🏔 Shimmer — **RUNE HOLD: THE TOWN GOT ITS HILLSIDE, THEN ITS ROSTER** (2026-08-24, hub) · *Last touched 2026-08-24 (hub) — shipped, deployed, pushed*
 
 ### Left off — SHIPPED `853f615` + `d140299` + `7fc6b9a`, all deployed and pushed, tree clean
