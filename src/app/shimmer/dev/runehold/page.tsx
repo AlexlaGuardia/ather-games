@@ -49,6 +49,11 @@ const WALK_BODY: Record<Pair, Body> = { voxel: BODIES.voxel, play3d: BODIES.play
 
 interface Box { x0: number; x1: number; z0: number; z1: number; top: number; solid: boolean }
 
+/** One colour per kind, so the roster reads at a glance without a single label. */
+const KIND_COLOR: Record<string, string> = {
+  front: '#9a8f84', fixture: '#6f665d', infra: '#5f6b7a', outlying: '#7a6b82', scatter: '#8d7f6e', descent: '#241f1b',
+}
+
 /** Every box the walker can stand on or bump into, derived from the town — never restated. */
 function boxesOf(t: Town): Box[] {
   // ★ THE BANDS ARE THE GROUND, AND THEY ARE THE ONLY GROUND. Streets used to be their own floating
@@ -58,11 +63,11 @@ function boxesOf(t: Town): Box[] {
   const out: Box[] = t.terraces.map(b => ({
     x0: b.x0, x1: b.x1, z0: b.z0, z1: b.z1, top: b.level * t.terraceRise, solid: false,
   }))
+  // ⚠ THE STATION IS ALREADY IN `masses` AND USED TO BE PUSHED AGAIN HERE. `town.station` is the
+  // SAME OBJECT, not a copy, so adding it separately gave the walker two identical colliders — 
+  // harmless today and exactly the shape that stops being harmless the day one of them is edited.
   for (const m of t.masses)
     out.push({ x0: m.x - m.w / 2, x1: m.x + m.w / 2, z0: m.z - m.d / 2, z1: m.z + m.d / 2, top: m.y + m.h, solid: true })
-  out.push({ x0: t.station.x - t.station.w / 2, x1: t.station.x + t.station.w / 2,
-             z0: t.station.z - t.station.d / 2, z1: t.station.z + t.station.d / 2,
-             top: t.station.y + t.station.h, solid: true })
   return out
 }
 
@@ -338,12 +343,36 @@ function Scene({ town, walker }: { town: Town; walker: Body }) {
         <boxGeometry args={[town.square.size, 0.02, town.square.size]} />
         <meshStandardMaterial color="#7f7568" />
       </mesh>
+      {/* ⚠ COLOUR BY KIND, AND THE SPIRIT CORNER IS NO LONGER THE HERO. It used to be painted gold
+          against a town of identical grey boxes, which is the opposite of what canon says it is —
+          *"small cafe, unassuming storefront… portal gate business, by referral only."* It now reads
+          as the one open door by being the SHORTEST thing on the square, which is its program, and
+          the greybox marks it with a lintel rather than a coat of paint. */}
       {town.masses.map(m => (
         <mesh key={m.id} position={[m.x, m.y + m.h / 2, m.z]} castShadow receiveShadow>
           <boxGeometry args={[m.w, m.h, m.d]} />
-          <meshStandardMaterial color={m.id === 'spirit-corner' ? '#c9a227' : '#8a8079'} />
+          <meshStandardMaterial color={KIND_COLOR[m.kind]} />
         </mesh>
       ))}
+      {/* The one open door, marked at the scale of the walker rather than by a colour. */}
+      {(() => {
+        const c = town.masses.find(x => x.id === 'spirit-corner')
+        if (!c) return null
+        const dw = M.widths.lanePair, dh = Math.min(M.cover.full, c.h * 0.8)
+        return (
+          <mesh position={[c.x, dh / 2, c.z + c.d / 2 + 0.03]}>
+            <boxGeometry args={[dw, dh, 0.06]} />
+            <meshStandardMaterial color="#c9a227" />
+          </mesh>
+        )
+      })()}
+      {/* ★★ THE PASSAGE. Canon has it UNDER the town, entry *"word of mouth only. No signs."* — so it
+          is a mouth in the ground behind the smithy, not a shopfront, and the oracle asserts the
+          square cannot see it. Shut in v1 like every door but one, so it is drawn and not entered. */}
+      <mesh position={[town.descent.x, -town.descent.depth / 2, town.descent.z]}>
+        <boxGeometry args={[town.descent.w, town.descent.depth, town.descent.d]} />
+        <meshStandardMaterial color="#241f1b" />
+      </mesh>
       {town.streets.map(s => {
         const dx = s.to[0] - s.from[0], dz = s.to[1] - s.from[1]
         return (
@@ -355,10 +384,6 @@ function Scene({ town, walker }: { town: Town; walker: Body }) {
           </mesh>
         )
       })}
-      <mesh position={[town.station.x, town.station.y + town.station.h / 2, town.station.z]} castShadow>
-        <boxGeometry args={[town.station.w, town.station.h, town.station.d]} />
-        <meshStandardMaterial color="#5f6b7a" />
-      </mesh>
       {/* Reference posts at the WALKER's own cover tiers — the whole comparison in two sticks. Red
           is standing cover (breaks your line of sight), blue is sliding cover. Derived, never a
           chosen height, so they move with the toggle exactly as the town does. */}

@@ -65,14 +65,23 @@ for (const [name, body] of [['voxel', BODIES.voxel], ['play3d', BODIES.play3d]] 
   const t = runeHold(body)
   const meets = (a: readonly [number, number], b: readonly [number, number]) =>
     Math.hypot(a[0] - b[0], a[1] - b[1]) < 1e-6
+  // ⚠ THE MAIN ROUTE ONLY. A spur is a branch by definition, so folding it into the chain would
+  // make the assert fail for the one reason that is not a defect — and the tempting fix for that is
+  // to delete the assert.
+  const main = t.streets.filter(s => !s.spur)
   let level = 0, broken = ''
-  for (let i = 1; i < t.streets.length; i++) {
-    const prev = t.streets[i - 1], leg = t.streets[i]
+  for (let i = 1; i < main.length; i++) {
+    const prev = main[i - 1], leg = main[i]
     if (!meets(prev.to, leg.from)) { broken = `${prev.id} ends where ${leg.id} does not begin`; break }
     if (leg.fromTerrace !== prev.toTerrace) { broken = `${leg.id} starts on a band ${prev.id} never reached`; break }
     level = leg.toTerrace
   }
   ok(!broken, `${name}: the streets chain from the square upward` + (broken ? ` — ${broken}` : ''))
+  // ★ AND A SPUR MUST HANG OFF GROUND THE MAIN ROUTE ACTUALLY REACHES, or it is a path to a place
+  // you can only arrive at by falling into it.
+  const reached = new Set([0, ...main.map(s => s.toTerrace)])
+  for (const sp of t.streets.filter(s => s.spur))
+    ok(reached.has(sp.fromTerrace), `${name}: ${sp.id} leaves from a band the town reaches`)
   const top = Math.round(t.station.y / t.terraceRise)
   ok(level === top, `${name}: the chain ends on the Station's own band (${level} vs ${top})`)
   ok(t.station.y > 0, `${name}: the Station stands where its road delivers (y ${t.station.y.toFixed(2)})`)
