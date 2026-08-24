@@ -66,6 +66,48 @@ Alex assigns. From then on, prefix every `coord` call with `COORD_WIN=<lane> COO
 - **No feature branches.** The live site builds from the working tree, not a branch — branches buy nothing here and cost merge overhead.
 - Shared surface (`engine/`, `components/`, `lib/`, `data/`) is committed **only by the hub**.
 
+### ★★★ COMMITTED MEANS SHIPPABLE THIS MINUTE — "the hub will ship it" is a queue, not a gate (2026-08-24)
+> A satellite finished work, committed it, and set its lane note to *"awaiting Alex on a version bump,
+> hub to ship."* The hub built for an **unrelated reason in another lane** eleven minutes later and the
+> work went live — because **`coord build` deploys the TREE, not the lane that ran it.** Nobody was
+> wrong and nothing was broken; the model in both heads was simply not the model the tool implements.
+- **The lock serialises deploys. It does not scope what a deploy CARRIES.** Any build, by any window,
+  for any reason, ships every commit in the tree. There is no per-lane filter and there never was.
+- **So the moment you commit, treat it as live.** *"I'll flag it before the hub ships"* is not a
+  mechanism — it is a race against a build you cannot see coming and will not be told about.
+- **If you do not want it live yet, do not commit it.** Hold it in the working tree, or land it behind
+  a flag that is off. ⚠ Holding it in the tree has its own cost — the next `coord build` from ANY
+  window bundles your uncommitted edits and reports success — so a flag is the safer of the two, and
+  the tree is only for work measured in minutes.
+- **Satellites: say what is SHIPPED, not what is ready.** A lane note reading *"landed, hub to ship"*
+  describes a gate that does not exist. It has already shipped, or it will, unannounced.
+
+### ⚠ A COMMIT THAT CHANGES VOXEL SOURCE WITHOUT A BUILD MAKES THE NEXT WINDOW DEPLOY DIRTY
+> Same day, same pair of windows: a voxel commit landed with no rebuild, so the tracked
+> `public/voxel-gen.worker.<hash>.js` predated its own source. The next build — the hub's, in another
+> lane — regenerated it, deleted the old hash, re-pointed `worker-url.ts`, and deployed carrying a
+> diff it did not author. Only `coord build`'s dirty-tree backstop caught it, **after** the deploy.
+- **`npm run worker:fresh`** answers it in seconds and touches nothing: it rebuilds the worker to a
+  temp file and compares the hash to the tracked one. Run it before committing anything in the voxel
+  import graph. It also catches `worker-url.ts` pointing at an artifact that no longer exists — which
+  is a **404 with no error surface**: the Worker constructs, accepts postMessage, never replies, and
+  the console stays clean while no terrain ever arrives.
+- ★ The guard builds to a temp path on purpose. One that regenerated the real artifact would CREATE
+  the dirty tree it exists to detect, and would report "fresh" every time by construction.
+
+### ⚠⚠ A RELAY TO A WINDOW THAT DIES IS LOST SILENTLY, AND THE BOARD KEEPS SHOWING IT ALIVE
+> A travel-layer ruling was relayed to the window holding `world`. That window was killed mid-turn
+> seconds later; the message died with it, and **`coord.sh status` still listed the lane as claimed by
+> it for an hour afterwards.** The replacement window picked up the lane and never learned the ruling
+> existed. Nothing anywhere reported a delivery failure.
+- **A lane claim is evidence a window CLAIMED it, never evidence that window is alive.** Same family as
+  a stale lane note whose timestamp keeps refreshing while its human-readable half rots.
+- **Anything that must survive a window goes in a FILE, not a message** — `CANON_GAPS.md`, GBOARD, a
+  cortex signal. Use a relay to draw attention to the file, never as the carrier.
+- **If a relay matters and you get no acknowledgement, re-check the board and `ListAgents` before
+  assuming it landed.** A window that has died and been replaced looks identical, from the board, to
+  one that is simply busy.
+
 ## Deploy — always through the lock
 ```bash
 coord build "what changed"     # acquire lock -> npm run build -> pm2 restart -> release
