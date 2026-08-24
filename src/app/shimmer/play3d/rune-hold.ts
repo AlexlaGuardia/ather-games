@@ -245,9 +245,19 @@ export interface Gate {
   form: GateForm
 }
 
-/** One box of a gate's built form. The renderer draws these and invents nothing. */
+/**
+ * One piece of a gate's built form. The renderer draws these and invents nothing.
+ *
+ * ★ `oval` IS NOT A STYLING FLAG — IT IS THE CROSSING'S SHAPE AND IT IS ALEX'S CALL (2026-08-24):
+ * *"a 1x2 oval shape."* It also agrees with canon without being derived from it: `world/gates.md`
+ * calls the raw form *"a shimmering spiral"*, which is round, and a framed gate is *"the same note
+ * with something built around it"* — so the note stays an oval and only the frame changes between
+ * the two forms. A rectangular veil would have made the bare form a rectangle of nothing.
+ */
 export interface GatePart {
   kind: 'veil' | 'post' | 'lintel'
+  /** Veils are oval; built pieces are boxes. The renderer must honour this, and a test checks it. */
+  oval?: boolean
   /** Centre, relative to the gate's own origin at ground level. */
   x: number; y: number; z: number
   w: number; h: number; d: number
@@ -273,7 +283,7 @@ export function gateParts(g: Gate): GatePart[] {
   // The crossing itself: the note standing in the air. Present in BOTH forms — a spiral with no
   // frame is still a gate, which is the whole point of the bare form.
   const parts: GatePart[] = [
-    { kind: 'veil', x: 0, y: g.h / 2, z: 0, w: g.w, h: g.h, d: 0.08 },
+    { kind: 'veil', oval: true, x: 0, y: g.h / 2, z: 0, w: g.w, h: g.h, d: 0.08 },
   ]
   if (g.form === 'bare-spiral') return parts
 
@@ -544,12 +554,26 @@ export function runeHold(body: Body = BODY): Town {
   // you do not. Its clearance is the same derivation the calibration room uses, taken from the
   // body rather than restated, so the two cannot drift into disagreeing about what a door is.
   const doorH = doorwayHeight(body)
+  // ── ★★ 1:2, ALEX'S RULING ON THE SHAPE — SIZED FROM THE WIDTH UP, AND THAT ORDER IS THE FIX ──
+  // The obvious version is `width = headroom / 2`, and it is impassable on one of the two walkers.
+  // ⚠ THE TWO MANNEQUINS DIFFER IN SHAPE, NOT JUST SIZE: voxel is tall and narrow (eye 1.62, r 0.30),
+  // play3d is SHORT AND WIDE (1.15, r 0.40). So half of play3d's head clearance is 0.83 while its own
+  // shoulders need 0.90 — a 1:2 oval derived from height alone is narrower than the body meant to
+  // walk through it, and only on that body. The oracle caught it on the play3d sweep; on the voxel
+  // sweep it was perfectly fine, which is exactly why the town is checked against both.
+  //
+  // ★ SO THE OPENING IS SIZED FROM WHAT MUST FIT, AND THE HEIGHT FOLLOWS THE RATIO. Alex's 1:2 then
+  // holds EXACTLY on both bodies instead of being quietly abandoned on one, and the portal is never
+  // narrower than the walker. Proportion is the intent; passability is the floor; neither is traded.
+  const OVAL_RATIO = 2
+  const doorW = Math.max(doorH / OVAL_RATIO, M.widths.passMin)
+  const ovalH = doorW * OVAL_RATIO
   const corner = masses.find(m => m.id === 'spirit-corner')!
   const gates: Gate[] = [
     { id: 'square-landing', name: "The Landing", x: square.x, z: square.z,
-      w: W.lanePair, h: doorH, kept: true, form: 'framed' },
+      w: doorW, h: ovalH, kept: true, form: 'framed' },
     { id: 'spirit-corner-gate', name: "Gregory's door", x: corner.x, z: corner.z + corner.d / 2,
-      w: W.laneSingle, h: doorH, kept: true, form: 'framed' },
+      w: doorW, h: ovalH, kept: true, form: 'framed' },
   ]
 
   const station = masses.find(m => m.id === 'travelers-station')!
@@ -687,6 +711,8 @@ export function townFaults(town: Town): TownFault[] {
     if (g.kept !== (g.form === 'framed'))
       out.push({ why: 'gate-lies-about-permanence', id: g.id, kept: g.kept, form: g.form })
     // A gate is a thing you step through, so its opening answers to the body, not to taste.
+    // ⚠ BOTH HALVES, AND THEY BIND ON DIFFERENT BODIES. The height check catches a portal you would
+    // duck through; the width check caught a 1:2 oval that was narrower than play3d's shoulders.
     if (g.h < doorwayHeight(town.body) - 1e-9 || g.w < M.widths.passMin)
       out.push({ why: 'gate-you-cannot-walk-through', id: g.id, height: g.h })
     // ★★ AND THE FORM MUST COST GEOMETRY, NOT JUST A WORD. `kept === framed` compares two fields

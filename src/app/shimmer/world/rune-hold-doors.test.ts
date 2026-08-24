@@ -27,7 +27,7 @@
  * Run: `npx tsx src/app/shimmer/world/rune-hold-doors.test.ts`
  */
 import { ALL_ZONES } from './all-zones'
-import { getZone, resolveZoneId, type Gate, type Zone } from './zones'
+import { getZone, resolveZoneId, gateFootprint, type Gate, type Zone } from './zones'
 
 let pass = 0
 const fails: string[] = []
@@ -72,8 +72,8 @@ for (const door of CANON_DOORS) {
   if (dest) {
     const there: Gate[] = (dest as Zone & { gates?: Gate[] }).gates ?? []
     const landedOn = there.find(o => {
-      const s = o.size ?? 2
-      return g.toX >= o.x && g.toX < o.x + s && g.toY >= o.y && g.toY < o.y + s
+      const fp = gateFootprint(o)
+      return g.toX >= o.x && g.toX < o.x + fp.w && g.toY >= o.y && g.toY < o.y + fp.h
     })
     ok(!landedOn, `${door.label} does not land you inside ${landedOn?.label ?? 'another door'}`)
   }

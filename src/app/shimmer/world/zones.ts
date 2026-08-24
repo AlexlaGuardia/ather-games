@@ -34,7 +34,16 @@ export interface Warp {
 export interface Gate {
   x: number           // top-left tile of the footprint
   y: number
-  size?: number       // footprint is size x size. Default 2 — the standard 2x2 door.
+  size?: number       // square footprint, size x size. Default 2 — the standard door.
+  // ── ★ A DOOR IS NOT ALWAYS SQUARE (2026-08-24) ─────────────────────────────────────────────
+  // Alex asked for a 1x2 landing in the Rune Hold square and it could not be expressed: `size` is
+  // one number and every reader looped it twice. `w`/`h` override it per axis; omit them and
+  // nothing changes for the fourteen gates already painted.
+  // ⚠ ASK `gateFootprint(g)`, NEVER `g.size ?? 2`. That default was restated in FOUR places —
+  // expandGate, two test files, the map editor's stamp — and a widened field that four readers
+  // each re-derive is four chances to widen three of them. One function, one answer.
+  w?: number
+  h?: number
   toZone: string
   toX: number         // where you land. MUST NOT be inside another gate's footprint, or you
   toY: number         // bounce straight back — see the oracle's instant-re-warp check.
@@ -44,12 +53,22 @@ export interface Gate {
   ownerOnly?: boolean
 }
 
-/** Expand a gate into the warps its footprint covers. One gate in, size² warps out. */
+/**
+ * The tiles a gate's footprint covers, per axis.
+ *
+ * ★ THE ONE PLACE THE DEFAULT LIVES. Every consumer asks here — the warp expansion, the map
+ * editor's stamp, and the oracles that walk a footprint — so a door can stop being square without
+ * three of the four readers quietly still believing it is.
+ */
+export const gateFootprint = (g: Gate): { w: number; h: number } =>
+  ({ w: g.w ?? g.size ?? 2, h: g.h ?? g.size ?? 2 })
+
+/** Expand a gate into the warps its footprint covers. One gate in, w×h warps out. */
 export function expandGate(g: Gate): Warp[] {
-  const size = g.size ?? 2
+  const { w, h } = gateFootprint(g)
   const out: Warp[] = []
-  for (let dy = 0; dy < size; dy++) {
-    for (let dx = 0; dx < size; dx++) {
+  for (let dy = 0; dy < h; dy++) {
+    for (let dx = 0; dx < w; dx++) {
       out.push({
         fromX: g.x + dx, fromY: g.y + dy,
         // Every tile of the door lands you on the SAME square. Offsetting the landing per tile

@@ -362,8 +362,13 @@ function Scene({ town, walker }: { town: Town; walker: Body }) {
       {town.gates.map(g => (
         <group key={g.id} position={[g.x, 0, g.z]}>
           {gateParts(g).map((p, i) => (
-            <mesh key={i} position={[p.x, p.y, p.z]} castShadow={p.kind !== 'veil'}>
-              <boxGeometry args={[p.w, p.h, p.d]} />
+            <mesh key={i} position={[p.x, p.y, p.z]} castShadow={p.kind !== 'veil'}
+                  scale={p.oval ? [p.w / 2, p.h / 2, 1] : undefined}>
+              {/* ⚠ THE OVAL IS A SCALED CIRCLE, NOT A BOX WITH ROUNDED CORNERS. `gateParts` says
+                  which pieces are oval and this branch honours it — a renderer that drew every part
+                  as a box would leave the data telling the truth and the player seeing a rectangle,
+                  which is the exact split the geometry guard exists to close. */}
+              {p.oval ? <circleGeometry args={[1, 48]} /> : <boxGeometry args={[p.w, p.h, p.d]} />}
               {p.kind === 'veil'
                 ? <meshStandardMaterial color="#c9a227" emissive="#6d5410" emissiveIntensity={0.6} transparent opacity={0.55} />
                 : <meshStandardMaterial color="#6f665d" />}

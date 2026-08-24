@@ -106,6 +106,12 @@ for (const [name, body] of [['voxel', BODIES.voxel], ['play3d', BODIES.play3d]] 
     const parts = gateParts(g)
     const frame = parts.filter(p => p.kind !== 'veil')
     ok(parts.some(p => p.kind === 'veil'), `${g.id}: the crossing itself is drawn in either form`)
+    // ★ ALEX RULED THE SHAPE: a 1:2 oval. Asserted as a RATIO, not as two numbers — the height is
+    // body-derived, so a literal width would silently stop being 1:2 the day the mannequin is ruled.
+    const v = parts.find(p => p.kind === 'veil')!
+    ok(v.oval === true, `${g.id}: the crossing is an oval, not a rectangle of nothing`)
+    ok(Math.abs(v.h / v.w - 2) < 1e-9, `${g.id}: the oval holds 1:2 (${v.w.toFixed(2)} x ${v.h.toFixed(2)})`)
+    ok(v.w >= metricsFor(BODY).widths.passMin, `${g.id}: and it is still wide enough to walk through`)
     ok(frame.length > 0 && frame.reduce((a, p) => a + p.w * p.h * p.d, 0) > 0,
        `${g.id}: kept, so the frame costs real geometry (${frame.length} parts)`)
     const veil = parts.find(p => p.kind === 'veil')!

@@ -10,7 +10,7 @@
  * So the wiring gets an oracle rather than a walkthrough. Run: `npx tsx <this file>`
  * (the repo convention — there is no vitest here).
  */
-import { ZONES, getZone, resolveZoneId, checkWarp, expandGate, LEGACY_ZONE_ALIASES, START_ZONE, type Zone } from './zones'
+import { ZONES, getZone, resolveZoneId, checkWarp, expandGate, gateFootprint, LEGACY_ZONE_ALIASES, START_ZONE, type Zone } from './zones'
 import { ALL_ZONES } from './all-zones'
 import { SOLID } from './tiles'
 
@@ -105,8 +105,8 @@ ok(gates.length === 3, 'Rune Hold has three gates (Spirit Corner, Passage, Trave
 // moves a door and the anchor isn't updated, the gate keeps firing on bare grass at the old spot
 // while the new tiles do nothing — a door in two places, neither of them right.
 for (const g of gates) {
-  const size = g.size ?? 2
-  for (let dy = 0; dy < size; dy++) for (let dx = 0; dx < size; dx++) {
+  const { w: gw, h: gh } = gateFootprint(g)
+  for (let dy = 0; dy < gh; dy++) for (let dx = 0; dx < gw; dx++) {
     ok((runeHold!.grid[g.y + dy]?.[g.x + dx] & 0xFF) === WARP_TILE,
       `gate ${g.label} sits on a painted warp tile at (${g.x + dx},${g.y + dy})`)
   }
@@ -115,9 +115,9 @@ for (const g of gates) {
 const painted: string[] = []
 runeHold!.grid.forEach((row, y) => row.forEach((v, x) => { if ((v & 0xFF) === WARP_TILE) painted.push(`${x},${y}`) }))
 const covered = new Set(gates.flatMap(g => {
-  const size = g.size ?? 2
+  const { w: gw, h: gh } = gateFootprint(g)
   const out: string[] = []
-  for (let dy = 0; dy < size; dy++) for (let dx = 0; dx < size; dx++) out.push(`${g.x + dx},${g.y + dy}`)
+  for (let dy = 0; dy < gh; dy++) for (let dx = 0; dx < gw; dx++) out.push(`${g.x + dx},${g.y + dy}`)
   return out
 }).concat(runeHold!.warps.filter(w => !w.gate).map(w => `${w.fromX},${w.fromY}`)))
 for (const p of painted) ok(covered.has(p), `painted warp tile (${p}) is wired to a gate or warp`)
@@ -125,14 +125,14 @@ for (const p of painted) ok(covered.has(p), `painted warp tile (${p}) is wired t
 // invariants that must hold for whatever he places
 for (const g of gates) {
   ok(!!g.label.trim(), `gate at (${g.x},${g.y}) carries a nametag`)
-  const size = g.size ?? 2
-  for (let dy = 0; dy < size; dy++) for (let dx = 0; dx < size; dx++) {
+  const { w: gw, h: gh } = gateFootprint(g)
+  for (let dy = 0; dy < gh; dy++) for (let dx = 0; dx < gw; dx++) {
     ok(walkable(runeHold!, g.x + dx, g.y + dy), `gate ${g.label} footprint (${g.x + dx},${g.y + dy}) is walkable`)
   }
   const target = getZone(ZONES, g.toZone)
   if (target) ok(!checkWarp(ZONES, target.id, g.toX, g.toY), `gate ${g.label} lands clear of any warp tile`)
 }
-ok(runeHold!.warps.filter(w => w.gate).length === gates.reduce((n, g) => n + (g.size ?? 2) ** 2, 0),
+ok(runeHold!.warps.filter(w => w.gate).length === gates.reduce((n, g) => n + gateFootprint(g).w * gateFootprint(g).h, 0),
   'every declared gate expanded into the zone warps')
 
 // ── the town -> station -> range chain (the 2026-08-05 split) ──────────────────────────────
