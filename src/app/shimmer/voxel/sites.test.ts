@@ -4,7 +4,8 @@
 // cut at a chunk seam, a wall floating over the low side of its pad, a subdivision where a scatter
 // was meant. Each assert pins one of those.
 
-import { DEFAULT_SITES, siteAt, siteScanCells, buildRuin } from './sites'
+import { DEFAULT_SITES, siteAt, siteScanCells } from './sites'
+import { ruinPlan } from './ruins'
 import { greyness } from './biome'
 import { columnHeight } from './height'
 import { DEFAULT_DEPTH, MAT } from './depth'
@@ -70,46 +71,43 @@ const CFG = DEFAULT_SITES
   console.log(`  (density: ${sites} sites ≈ ${per1k.toFixed(2)} per 1000²)`)
 }
 
-// ── 4. the ruin generates INTO columns, identically from every side of a seam ───────────────────
+// ── 4. placement is WIRED to building — and that is where this file's job now ends ────────────
+// ⚠ THIS SECTION USED TO ASSERT THE RUIN'S GEOMETRY: it walked the 11×11 footprint perimeter and
+// counted standing wall against gaps. That assert did not become wrong, it became UNAIMED — the
+// jigsaw assembler (2026-08-24) rolls a start piece that may be a 5×5 cell or a 3×5 corridor, so
+// the old perimeter is mostly open ground now and "29 open vs 11 standing" is the correct reading
+// of a world that changed. A location that expired, not an assertion that was false.
+//
+// The ruin's own geometry — variety, the envelope, doorways, nothing floating, and the seam test
+// taken THROUGH `placeSites` rather than around it — is `ruins.test.ts`, where it is mutation
+// tested. What belongs here is the join: a site that exists must put something in the world, or
+// placement and building have silently come apart and each half's suite stays green.
 {
-  // Find a site, then regenerate every column its footprint touches and check each wall block
-  // exists in whichever column owns it. This is the anti-seam assert: every column derives the
-  // same ruin from pure math, so a wall crossing a boundary must simply BE there on both sides.
   let site = null as ReturnType<typeof siteAt>
   for (let cz = -80; cz <= 80 && !site; cz++) for (let cx = -80; cx <= 80 && !site; cx++) {
     site = siteAt(SEED, cx, cz)
   }
   ok(!!site, 'found a site to generate')
   if (site) {
-    const r = CFG.footprint >> 1
-    const cols = new Map<string, ReturnType<typeof makeColumn>>()
-    const colFor = (x: number, z: number) => {
-      const ox = Math.floor(x / SECTION) * SECTION, oz = Math.floor(z / SECTION) * SECTION
-      const k = `${ox},${oz}`
-      if (!cols.has(k)) cols.set(k, makeColumn(ox, oz, SEED))
-      return cols.get(k)!
-    }
-    let wallBlocks = 0, missing = 0, floating = 0
-    for (let dz = -r; dz <= r; dz++) for (let dx = -r; dx <= r; dx++) {
-      if (Math.abs(dx) !== r && Math.abs(dz) !== r) continue
-      const x = site.x + dx, z = site.z + dz
-      const col = colFor(x, z)
-      const lx = x - col.wx, lz = z - col.wz
-      const top = col.get(lx, site.floor + 1, lz)
-      const ground = columnHeight(x, z, SEED)
-      if (top === MAT.STONE) {
-        wallBlocks++
-        // Nothing under the wall's base course may be air: seated, never floating.
-        if (site.floor > 0 && col.get(lx, site.floor - 1, lz) === 0 && site.floor - 1 > ground) floating++
-      } else {
-        // Either a deliberate gap (wallHeightAt rolled 0) or a bug; count and bound below.
-        missing++
+    const ox = Math.floor(site.x / SECTION) * SECTION, oz = Math.floor(site.z / SECTION) * SECTION
+    const col = makeColumn(ox, oz, SEED)
+    // ⚠ THE FIRST VERSION OF THIS ASSERT COUNTED STONE ANYWHERE IN THE COLUMN, and it passed with
+    // `buildRuin` mutated OUT of `placeSites` entirely — the world is made of stone, so "there is
+    // stone here" is satisfied by the mountain. It has to name cells the RUIN claims: the plan's
+    // own wall perimeter, in the column that owns them.
+    let built = 0, claimed = 0
+    for (const p of ruinPlan(site, SEED)) {
+      for (let z = p.z0; z <= p.z1; z++) for (let x = p.x0; x <= p.x1; x++) {
+        if (x !== p.x0 && x !== p.x1 && z !== p.z0 && z !== p.z1) continue
+        if (x < ox || x >= ox + SECTION || z < oz || z >= oz + SECTION) continue
+        claimed++
+        const m = col.get(x - ox, p.floor + 1, z - oz)
+        if (m === MAT.STONE || m === MAT.RUBBLE) built++
       }
     }
-    ok(wallBlocks > 10, `the ruin has standing wall (${wallBlocks} blocks at floor+1)`)
-    ok(missing < wallBlocks * 2, `gaps are gaps, not absence (${missing} open vs ${wallBlocks} standing)`)
-    ok(floating === 0, `no wall block floats (${floating})`)
-    ok(cols.size >= 1, `checked across ${cols.size} column(s)`)
+    ok(claimed > 10, `the plan claims wall cells in this column (${claimed})`)
+    ok(built > claimed / 3, `placement is wired to building (${built} of ${claimed} claimed cells stand)`)
+    ok(columnHeight(site.x, site.z, SEED) >= site.floor, 'the site still sits on the pad it was chosen for')
   }
 }
 

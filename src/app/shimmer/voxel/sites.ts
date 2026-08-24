@@ -23,8 +23,9 @@
 import { hash2, mixSeed } from './noise'
 import { columnHeight, type HeightConfig, DEFAULT_HEIGHT } from './height'
 import { greyness, type BiomeConfig, DEFAULT_BIOME } from './biome'
-import { MAT, DEFAULT_DEPTH, type DepthConfig } from './depth'
+import { DEFAULT_DEPTH, type DepthConfig } from './depth'
 import { Section } from './section'
+import { buildRuin, RUIN_REACH } from './ruins'
 
 export interface SiteConfig {
   /** Cell size in COLUMNS (16-block units). One candidate per cell. */
@@ -100,62 +101,30 @@ export function siteAt(
 }
 
 /**
- * How many cells out a column must scan so no site's footprint can cross in unseen. `separation`
- * keeps every candidate ≥ separation columns (48 blocks at default) off its cell edge, and a
- * footprint reaches footprint/2+1 ≈ 7 blocks — so a site can never leave its own cell, and one
- * ring of neighbours covers a column that sits against a cell boundary. The oracle asserts the
- * separation-vs-reach inequality so a retune that breaks it fails loudly instead of dropping
- * half a ruin at cell seams.
+ * How many cells out a column must scan so no site can cross in unseen. `separation` keeps every
+ * candidate ≥ separation columns (48 blocks at default) off its cell edge, and a ruin reaches at
+ * most `RUIN_REACH` (22) blocks — so a site can never leave its own cell, and one ring of
+ * neighbours covers a column that sits against a cell boundary. Both oracles assert the
+ * separation-vs-reach inequality so a retune that breaks it fails loudly instead of dropping half
+ * a ruin at cell seams. ⚠ THE TERM THAT MOVES IS NOW THE ENVELOPE, NOT THE FOOTPRINT: growing the
+ * piece pool grows the reach, and at 48 vs 23 there is room — but it is a budget, not a licence.
  */
 export const siteScanCells = (_cfg: SiteConfig = DEFAULT_SITES): number => 1
 
 /**
- * ── The ruin blockout ────────────────────────────────────────────────────────────────────────
- * A broken rectangular wall, crumbled by deterministic hash — read: "something STOOD here", and
- * nothing more specific than that, which is exactly as much as canon currently permits. Walls are
- * STONE (already mineable, already textured); the interior ground is left as generated (grey
- * soil), so the ruin reads as part of the drained country rather than furniture dropped on it.
+ * ── The ruin itself lives in `ruins.ts` ──────────────────────────────────────────────────────
+ * ★ THIS FILE IS PLACEMENT, THAT ONE IS BUILDING, and keeping the seam sharp is the point. Until
+ * 2026-08-24 the building half was eleven lines here — one 11×11 rectangle crumbled by a hash, so
+ * every ruin in the world was the same ruin. It is now a jigsaw assembler (Minecraft's own: a
+ * start piece, breadth-first connectors, AABB-reject, a terminator pool at max depth). Nothing
+ * about placement changed, which is exactly why the split is worth having: the density sweep, the
+ * pad filter and the greyfield gate above are untouched and still tuned.
+ *
+ * ⚠ `footprint` NO LONGER BOUNDS WHAT STANDS HERE. It is still the PAD the site demands — the
+ * flat ground a candidate has to find before it can exist — but the assembly reaches out to
+ * `RUIN_REACH` blocks, so anything asking "how far can this ruin reach" must ask ruins.ts.
  */
-const WALL_MAX = 3
-
-/** The wall height this position wants, 0 = a gap. Deterministic — same ruin, forever. */
-function wallHeightAt(site: Site, dx: number, dz: number): number {
-  const g = hash2(dx + 64, dz + 64, site.seed ^ 0x8a11)
-  if (g < 0.30) return 0                                   // crumbled through — an entrance somewhere
-  const c = hash2(dz + 128, dx + 128, site.seed ^ 0x77a1)
-  return 1 + Math.floor(c * WALL_MAX)                      // 1..3, mostly low
-}
-
-/**
- * Write every block of `site` that lands inside this column. Same contract as growTree: bounded
- * writes, clipped to the column, any column touching the footprint reproduces its own slice.
- */
-export function buildRuin(
-  sections: (Section | null)[], ox: number, oy0: number, oz: number, size: number, site: Site,
-): void {
-  const r = DEFAULT_SITES.footprint >> 1
-  const yTop = oy0 + sections.length * size
-  const put = (wx: number, wy: number, wz: number, mat: number) => {
-    if (wx < ox || wx >= ox + size || wz < oz || wz >= oz + size) return
-    if (wy < oy0 || wy >= yTop) return
-    const si = ((wy - oy0) / size) | 0
-    const sec = sections[si]
-    if (!sec) return
-    sec.set(wx - ox, wy - oy0 - si * size, wz - oz, mat)
-  }
-  for (let dz = -r; dz <= r; dz++) {
-    for (let dx = -r; dx <= r; dx++) {
-      const onWall = Math.abs(dx) === r || Math.abs(dz) === r
-      if (!onWall) continue
-      const hWall = wallHeightAt(site, dx, dz)
-      if (hWall === 0) continue
-      // Base AT the pad's lowest surface: on the low side the wall replaces the surface block, on
-      // the high side its first course sits buried — either way it seats into the ground across
-      // the pad's ≤2 span and can never float where the ground dips under it.
-      for (let y = site.floor; y <= site.floor + hWall; y++) put(site.x + dx, y, site.z + dz, MAT.STONE)
-    }
-  }
-}
+export { buildRuin } from './ruins'
 
 /**
  * Place every site whose footprint reaches this column. The tree-planting shape exactly: scan the
@@ -175,10 +144,14 @@ export function placeSites(
     for (let cx = c0x - rad; cx <= c0x + rad; cx++) {
       const site = siteAt(seed, cx, cz, cfg)
       if (!site) continue
-      // Cheap clip: skip sites whose footprint cannot touch this column at all.
-      const r = (cfg.footprint >> 1) + 1
+      // Cheap clip: skip sites whose RUIN cannot touch this column at all.
+      // ⚠ THE PAD IS NOT THE REACH. This read `(footprint >> 1) + 1` while the ruin was one
+      // 11×11 rectangle, and the day the assembler landed that clip would have thrown away every
+      // slice more than 6 blocks from the centre — a ruin cut down to its middle room, on the
+      // columns furthest from it, identically on every load. It is the assembler's envelope.
+      const r = RUIN_REACH + 1
       if (site.x + r < ox || site.x - r >= ox + size || site.z + r < oz || site.z - r >= oz + size) continue
-      buildRuin(sections, ox, oy0, oz, size, site)
+      buildRuin(sections, ox, oy0, oz, size, site, seed)
       placed++
     }
   }
