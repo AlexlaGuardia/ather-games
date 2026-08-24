@@ -9,11 +9,12 @@
  * Run: `npx tsx src/app/shimmer/voxel3d/crossings.test.ts` (repo convention — there is no vitest).
  */
 import {
-  courtAnchor, sockets, socketCells, courtFits, SOCKET_KINDS, SOCKET_PITCH,
+  courtAnchor, sockets, socketCells, socketLit, socketMaterial, courtFits, SOCKET_KINDS, SOCKET_PITCH,
   COURT_ARC, COURT_INSET, staleCourts,
 } from './crossings'
 import { plotThreshold, plotHeight, insideCore, plotForTier, PLOT_TIERS, DEFAULT_PLOT } from '../voxel/plot'
 import { PLOT_TRIGGER_RADIUS } from './seam'
+import { MAT } from '../voxel/depth'
 import { MAX_MARKS } from '../voxel/waymark'
 
 const SEEDS = [1, 7, 42, 555, 2026, 99, 314, 8675]
@@ -27,12 +28,17 @@ function ok(cond: boolean, label: string) {
 
 // ── 1. the two kinds, and the count ───────────────────────────────────────────────────────────
 // ★ THE VOCABULARY IS THE ASSERT. Canon lets "gate" mean exactly one thing — a crossing OUT of the
-// Ather — and every Ather destination is a waymark. If a future edit adds an Ather socket typed
+// Ather — and every Ather destination is a PASSAGE. If a future edit adds an Ather socket typed
 // 'gate' this goes red, which is the only mechanism watching: `npm run canon` checks names and
 // rosters and explicitly does not check vocabulary.
+//
+// ⚠ THIS ASSERTED `waymark` UNTIL 2026-08-24 AND WAS GREEN THE WHOLE TIME — a working guard aimed
+// one word off the ruled noun. The 08-24 travel ruling says *"it is one gate and N passages"* and
+// separates the waymark (the mark you PLANT) from the passage (the crossing that runs to it). A
+// guard cannot notice that its own vocabulary retired; only re-reading the ruling does.
 ok(SOCKET_KINDS[0] === 'gate', 'socket 0 is the gate — Rune Hold, out of the Ather, Greg-given')
-ok(SOCKET_KINDS.slice(1).every(k => k === 'waymark'),
-   'every socket after the first is a waymark, never a gate')
+ok(SOCKET_KINDS.slice(1).every(k => k === 'passage'),
+   'every socket after the first is a passage, never a gate')
 ok(SOCKET_KINDS.filter(k => k === 'gate').length === 1,
    'exactly ONE gate — canon rules one home-gate per garden')
 ok(SOCKET_KINDS.length === MAX_MARKS + 1,
@@ -196,6 +202,55 @@ for (const seed of SEEDS) {
   for (let t = 1; t < PLOT_TIERS.length; t++)
     ok(staleCourts(seed, t).every((e, i) => e.tier === i),
        `s${seed}: tier ${t} stale entries carry their own tier index`)
+}
+
+// ── 5. the station DISPLAYS reach — every socket stands, and the lamp is what changes ─────────
+// Canon 08-24: Greg pre-places the sockets, one lit on day one and the rest dark, and the station
+// grants nothing. Two claims, and they fail in opposite directions: a socket that does not stand
+// until it is earned cannot display anything, and a socket that lights before it is earned is the
+// station GRANTING reach — the one thing canon says it must not do.
+{
+  const socks = sockets(SEEDS[0], DEFAULT_PLOT)
+  const a = courtAnchor(SEEDS[0], DEFAULT_PLOT)
+  ok(socks.length === MAX_MARKS + 1, `every socket is placed regardless of reach (${socks.length})`)
+
+  // ★ THE ASSERT THAT ACTUALLY CATCHES THE OLD BEHAVIOUR. A dark socket's FRAME must be stone —
+  // "unearned" used to mean air, i.e. no socket at all, and `sockets()` returning it in a list was
+  // no evidence otherwise. Asked of the material, this goes red the moment dark means absent again.
+  {
+    const dark = socketCells(socks[MAX_MARKS], 100, a.bearing)
+    const frame = dark.filter(c => !c.doorway)
+    ok(frame.length > 0 && frame.every(c => socketMaterial(c, false) === MAT.CUT_STONE),
+       `a DARK socket still stands in cut stone (${frame.length} frame cells)`)
+    ok(dark.filter(c => c.doorway).every(c => socketMaterial(c, false) === MAT.AIR),
+       'a dark socket is still walk-through — dark is not sealed')
+    ok(socketMaterial(dark.find(c => c.lamp)!, false) === MAT.CUT_STONE,
+       'a dark socket has plain stone where its lamp would be')
+    ok(socketMaterial(dark.find(c => c.lamp)!, true) === MAT.MANA_LANTERN,
+       'a lit socket carries the lantern — the one cell that differs')
+  }
+
+  // Exactly one lamp cell per socket, and it is in the frame rather than the doorway — a lamp in
+  // the opening would be a block standing in the crossing you walk through.
+  for (const sk of socks) {
+    const cells = socketCells(sk, 100, a.bearing)
+    const lamps = cells.filter(c => c.lamp)
+    ok(lamps.length === 1, `socket ${sk.index} has exactly one lamp cell (${lamps.length})`)
+    ok(lamps.every(c => !c.doorway), `socket ${sk.index}'s lamp is in the frame, not the doorway`)
+    ok(lamps.every(c => c.y === 100 + 3), `socket ${sk.index}'s lamp is on the lintel course`)
+  }
+
+  // Day one: the gate is lit and nothing else is.
+  ok(socketLit(socks[0], 0), 'day one — the Rune Hold gate is lit, because Greg gives it')
+  ok(socks.slice(1).every(sk => !socketLit(sk, 0)), 'day one — every passage is dark')
+
+  // And reach lights them one at a time, in order, never ahead of itself.
+  for (let held = 0; held <= MAX_MARKS; held++) {
+    const lit = socks.filter(sk => socketLit(sk, held)).length
+    ok(lit === held + 1, `holding ${held} waymark(s) lights ${held + 1} socket(s), got ${lit}`)
+  }
+  ok(!socketLit(socks[MAX_MARKS], MAX_MARKS - 1),
+     'the last passage stays dark until its own waymark is planted — the station never grants reach')
 }
 
 console.log(`crossings: ${pass} passed, ${fails.length} failed`)

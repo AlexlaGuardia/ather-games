@@ -185,7 +185,7 @@ import { createLoco, tickLocomotion, eyeY, launchKeeper, blinkKeeper,
 import { loadTutorial, saveTutorial, GREG_LINE, OBJECTIVE_LABEL, STAGE_ACTIONS, type TutorialStage, type TutorialState } from './tutorial'
 import { GREG_LINES } from './greg-lines'
 import { GATE_X, GATE_Z, GATE_SPANS_X, gateCells } from './gate'
-import { courtAnchor, sockets as courtSockets, socketCells, courtFits, staleCourts } from './crossings'
+import { courtAnchor, sockets as courtSockets, socketCells, socketLit, socketMaterial, courtFits, staleCourts } from './crossings'
 import { createGregMesh, GREG_BOUNDS } from './greg'
 import { aimedAt, bodyBox } from './aim'
 import { createSteamPoints } from './steam'
@@ -3744,6 +3744,8 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
    *  ⚠ NOT A BOOLEAN, because the court MOVES when Greg widens the fold. A `courtBuilt`
    *  flag would build once and leave the old cut stone stranded inland forever. */
   const courtTier = useRef(-1)
+  /** Waymarks held when the court's lamps were last set — the lit/dark pass keys on this. */
+  const courtMarks = useRef(-1)
   /** Which socket the keeper is currently standing in, so the arch speaks once rather than per frame. */
   const inSocket = useRef<number | null>(null)
   // Placements are grouped by the column that OWNS them (the one containing the piece origin) —
@@ -6861,19 +6863,47 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
               if (voxel(c.x, c.y, c.z) === MAT.CUT_STONE) setVoxel(c.x, c.y, c.z, AIR)
           }
         }
+        // ★★ EVERY SOCKET STANDS, EARNED OR NOT — canon 08-24: Greg PRE-PLACES them, one lit and
+        // the rest dark, and *"the station grants nothing — it displays reach the keeper has
+        // already earned."* This used to lay a socket's stone only once its waymark was held, so
+        // an unearned way was nothing at all rather than a dark one, and the keeper never learned
+        // it existed. Dark is information. `socketLit` decides the LAMP; the frame is unconditional
+        // and therefore pure geometry again.
+        const held = waymarks.current.marks.length
         for (const sk of socks) {
           const h = plotHeight(sk.x, sk.z, SEED, cfg)
           if (h === null) continue
-          // ★ A WAYMARK SOCKET ONLY EXISTS ONCE THE KEEPER HOLDS THAT WAYMARK — Alex's "as the player
-          // unlocks gates for the ather they appear here". Socket 0 is the Rune Hold GATE and is up
-          // from the first minute, because canon has Greg give it rather than sell it.
-          const held = sk.index === 0 || waymarks.current.marks.length >= sk.index
+          const lit = socketLit(sk, held)
           for (const c of socketCells(sk, h, a.bearing)) {
-            const want = held ? (c.doorway ? AIR : MAT.CUT_STONE) : AIR
+            const want = socketMaterial(c, lit)
             if (voxel(c.x, c.y, c.z) !== want) setVoxel(c.x, c.y, c.z, want)
           }
         }
         courtTier.current = plotTier.current
+        courtMarks.current = held
+      }
+    }
+
+    // ── the lamps follow the keeper's reach ───────────────────────────────────────────────────
+    // ★ SEPARATE FROM THE BUILD PASS ON PURPOSE. The court is rebuilt only when the plot TIER
+    // changes, because cut stone does not move with a widening fold — but planting a waymark
+    // changes which sockets are LIT without moving anything. Folding this into the tier pass is
+    // what left the old behaviour unable to light a socket until the fold next grew.
+    if (space.current === 'plot' && courtTier.current === plotTier.current
+        && courtMarks.current !== waymarks.current.marks.length) {
+      const cfg = plotCfg.current
+      const a = courtAnchor(SEED, cfg)
+      if (a.y !== null) {
+        const held = waymarks.current.marks.length
+        for (const sk of courtSockets(SEED, cfg)) {
+          const h = plotHeight(sk.x, sk.z, SEED, cfg)
+          if (h === null) continue
+          const lit = socketLit(sk, held)
+          for (const c of socketCells(sk, h, a.bearing))
+            if (c.lamp && voxel(c.x, c.y, c.z) !== socketMaterial(c, lit))
+              setVoxel(c.x, c.y, c.z, socketMaterial(c, lit))
+        }
+        courtMarks.current = held
       }
     }
 
@@ -6901,7 +6931,15 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
       if (standing !== inSocket.current) {
         inSocket.current = standing
         if (standing === 0) onSay('the Rune Hold gate — the crossing to the town is not built yet')
-        else if (standing !== null) onSay('an empty waymark socket — nothing bound to it')
+        else if (standing !== null) {
+          // ⚠ DARK AND UNBUILT ARE DIFFERENT STATES AND MUST NOT SHARE A SENTENCE — the whole point
+          // of a dark socket is that it says a way exists here that you have not earned. Reporting
+          // both as "nothing bound to it" would put the station back to granting no information.
+          const sk = courtSockets(SEED, cfg)[standing]
+          onSay(socketLit(sk, waymarks.current.marks.length)
+            ? 'a passage socket — its waymark is planted, the crossing is not built yet'
+            : 'a dark passage socket — no waymark planted for it yet')
+        }
       }
     }
 

@@ -57,13 +57,24 @@ import {
 } from '../voxel/plot'
 import { PLOT_TRIGGER_RADIUS } from './seam'
 import { MAX_MARKS } from '../voxel/waymark'
+import { MAT } from '../voxel/depth'
 
 /**
  * What a socket crosses. The two are different in KIND, not in degree — see the header.
  *
  * `gate` is deliberately singular in practice: canon rules exactly one home-gate per garden.
+ *
+ * ── ★★ THIS SAID `waymark` UNTIL 2026-08-24, AND THE GUARD WAS AIMED AT THE RETIRED WORD ─────
+ * The header above brags that the gate/Ather split lives in the TYPES so a mislabel is a compile
+ * error rather than something someone remembers — and it was, against the vocabulary ruled on
+ * 08-13. The travel-layer ruling of **08-24** (`game/shimmer-geography.md` › THE GATE STATION)
+ * restates the line one level finer: *"It is one gate and N **passages**."* A **waymark** is the
+ * thing the keeper PLANTS; a **passage** is the crossing that runs to it. This socket is the
+ * crossing, so it was named after the wrong object — a working type guard pointed one word off.
+ * ⚠ `MAX_MARKS` still sizes the row, because the keeper's own planted marks are what the left arc
+ * runs to. That is a fact about the count, not about the noun.
  */
-export type SocketKind = 'gate' | 'waymark'
+export type SocketKind = 'gate' | 'passage'
 
 /**
  * How far around the coast the court sits from the fold-seam, **in blocks of arc**.
@@ -99,7 +110,27 @@ export const SOCKET_PITCH: number = 8
 
 /** Sockets: one gate (Rune Hold, always up) plus one per waymark the keeper may hold. */
 export const SOCKET_KINDS: SocketKind[] =
-  ['gate', ...Array.from({ length: MAX_MARKS }, () => 'waymark' as const)]
+  ['gate', ...Array.from({ length: MAX_MARKS }, () => 'passage' as const)]
+
+/**
+ * ── ★★ IS THIS SOCKET LIT? — the station DISPLAYS reach, it does not GRANT it ─────────────────
+ * Canon, 08-24: *"Gregory pre-places a low half-circle of sockets... One is lit on day one; the
+ * rest are dark. The station grants nothing — it displays reach the keeper has already earned."*
+ *
+ * ★ WHAT THIS REPLACED, AND WHY IT WAS A CANON DEFECT RATHER THAN A MISSING FEATURE. The build
+ * laid a socket's stone only once the keeper held its waymark, from Alex's 08-23 words (*"as the
+ * player unlocks gates for the ather they appear here"*) — so an unearned way was **nothing at
+ * all**, not a dark one. A station whose sockets appear one at a time cannot display reach; it can
+ * only report it after the fact, and the keeper never learns the ways exist. Dark is INFORMATION.
+ * The 08-24 ruling supersedes the sentence that produced the old behaviour.
+ *
+ * ★ AND IT FIXES A LATENT BUG FOR FREE. The court is rebuilt only when the plot TIER changes, so a
+ * socket that was supposed to appear on planting a waymark would not have stood up until the fold
+ * next widened. Pulling player state out of the STONE leaves the geometry pure and puts the only
+ * state-dependent cell in the lamp.
+ */
+export const socketLit = (s: Socket, marksHeld: number): boolean =>
+  s.kind === 'gate' || marksHeld >= s.index
 
 /**
  * Half the row's span, in blocks — the gap between the court's CENTRE and its nearest socket.
@@ -196,6 +227,8 @@ export interface SocketCell {
   x: number; y: number; z: number
   /** True for the 3×3 interior — the crossing itself. False for the jambs and lintel. */
   doorway: boolean
+  /** The one cell that carries the socket's light: the middle of the lintel course. */
+  lamp: boolean
 }
 
 export interface Socket {
@@ -243,10 +276,33 @@ export function socketCells(s: Socket, baseY: number, bearing: number): SocketCe
         y: baseY + y,
         z: Math.round(s.z + tz * h),
         doorway: h >= -1 && h <= 1 && y <= 2,
+        // ★ ONE CELL CARRIES THE LIGHT: the middle of the lintel course. Lit and dark sockets are
+        // the SAME frame — canon rules every socket on the station framed, because *"a frame is
+        // the tuning made physical"* and Greg means to keep all of them. So the difference a
+        // keeper reads across the plot is the lamp, not the architecture.
+        lamp: h === 0 && y === SOCKET_HEIGHT - 1,
       })
     }
   }
   return cells
+}
+
+/**
+ * ── ★★ WHAT MATERIAL ONE CELL WANTS — and this belongs HERE, not in the host ─────────────────
+ * The file's header says it decides WHERE the court sits and WHICH cells belong to a frame vs a
+ * doorway, and that `VoxelWorld.tsx` only lays the stone. The MATERIAL was the half that never
+ * made the trip: the host held `held ? (doorway ? AIR : CUT_STONE) : AIR`, so the rule that an
+ * unearned socket does not exist lived in a render file where no oracle could reach it.
+ *
+ * ⚠ THAT IS WHY MY FIRST VERSION OF THE PRE-PLACED ASSERT WAS DECORATION. `sockets()` has always
+ * returned every socket, so *"every socket is placed regardless of reach"* was green before the
+ * fix and after it — it asserted the list, while the defect was in the laying. Asking this function
+ * instead means the assert fails if an unlit socket ever goes back to being air.
+ */
+export function socketMaterial(c: SocketCell, lit: boolean): number {
+  if (c.doorway) return MAT.AIR          // the crossing itself is always walk-through
+  if (c.lamp) return lit ? MAT.MANA_LANTERN : MAT.CUT_STONE
+  return MAT.CUT_STONE                   // the frame stands whether the way is earned or not
 }
 
 /** Why the court could not stand where it was derived. Every one is a placement bug, not a refusal. */
