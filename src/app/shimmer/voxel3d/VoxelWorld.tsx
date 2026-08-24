@@ -630,6 +630,24 @@ interface ConsoleCtx {
   /** Cross between the Wilds and the Home Plot. Owner-gated — see the `/space` row. */
   space: (to?: string) => string
   /**
+   * The passages the keeper holds. Bare is VIEW-GRADE — reading your own reach is not a cheat, and
+   * it is the one thing that explains why a socket on the station is dark. `reach` is cheat-grade
+   * and checked in the command row, the same split `/rune` and `/goto` already draw.
+   *
+   * ── ★★ IT SEEDS THE NET, NEVER THE LAMPS, AND THAT IS THE WHOLE DESIGN ───────────────────────
+   * Canon 08-24: *"the station grants nothing — it displays reach the keeper has already earned."*
+   * A test grant that lit sockets directly, or special-cased `socketLit` for an owner, would put
+   * the station back to ASSERTING reach instead of reflecting it — the exact defect fixed hours
+   * ago, re-entered from the other side. So this plants real waymarks through `plant()` and lets
+   * the lamps follow, which also means the thing being tested is the shipped path.
+   *
+   * ⚠ THIS IS A TEST HARNESS, NOT THE ACQUISITION SYSTEM — same standing warning as `/rune`.
+   * Canon (`world/gates.md`, 08-12) rules that reach is BOUGHT FROM GREG: *"the destination is
+   * free because it is yours; what is bought is the REACH."* None of that is built. This exists so
+   * the station is testable before it is, and must not become how a keeper gets a passage.
+   */
+  waymark: (arg?: string) => string
+  /**
    * The garden, as the console can see and touch it. `list` is VIEW-GRADE — a keeper reading their
    * own roster is not a cheat, and it is the one thing that explains a refused spar prompt. The
    * other three write to the SHARED save (`ather:save:shimmer`, the same spirits the 2D game and
@@ -919,6 +937,21 @@ const CONSOLE_CMDS: ConsoleCmd[] = [
     run: (_a, c) => c.greg() },
   { name: 'look', usage: 'look <deg>  (0 = north, 90 = east)', help: 'point the camera (owner)', owner: true,
     run: (a, c) => c.look(Number(a[0]) || 0) },
+  // ⚠ NAMED `waymark`, NOT `gate`, AND CANON RULED THAT BEFORE ANYONE ASKED. Alex's words for this
+  // were "extensions"/"extension gate rune", and `world/gates.md` (08-12) answers his phrasing
+  // directly: *"What Alex's 'extension gate rune' actually is: a HOMEWARD WAYMARK… A rune is never
+  // bought, so the purchase is the same object — a waymark… Vocabulary stays waymark / passage /
+  // fold / threshold — never GATE for in-Ather travel, never a bought RUNE."* A console verb is
+  // shipped vocabulary the moment it tab-completes, so calling this `/gate` would make the retired
+  // phrasing canon by accident — the same one-word drift the SocketKind rename just undid.
+  { name: 'waymark', usage: 'waymark [reach [n]]', help: 'bare: the passages you hold · reach: bind test passages (owner)',
+    run: (a, c) => {
+      if ((a[0] ?? '') === '' ) return c.waymark()
+      if (a[0] !== 'reach') return `not a waymark verb: ${a[0]} — try 'waymark' or 'waymark reach'`
+      if (!c.isOwner) return 'binding passages is the owner\'s — bare /waymark reads the ones you hold'
+      return c.waymark(`reach ${a[1] ?? ''}`.trim())
+    },
+    suggest: (i, c) => i === 0 && c.isOwner ? ['reach'] : [] },
   { name: 'weather', usage: 'weather', help: 'someday', run: () =>
       'no weather in the Ather yet — the day it exists, its command lands here' },
 ]
@@ -1618,7 +1651,7 @@ export default function VoxelWorld() {
   }, [])
   /** World fills this with the verbs only it can perform (teleport needs the walker + the clock
    *  of loaded columns). Null until the world mounts; commands degrade to a message, never throw. */
-  const worldCmd = useRef<{ tp: (x: number, z: number) => string; pos: () => { x: number; z: number }; space: (to?: string) => string } | null>(null)
+  const worldCmd = useRef<{ tp: (x: number, z: number) => string; pos: () => { x: number; z: number }; space: (to?: string) => string; waymark: (arg?: string) => string } | null>(null)
   const consoleCtx = useMemo<ConsoleCtx>(() => ({
     isOwner,
     foes: () => {
@@ -1659,6 +1692,7 @@ export default function VoxelWorld() {
     tp: (x, z) => worldCmd.current ? worldCmd.current.tp(x, z) : 'the world is still waking',
     pos: () => worldCmd.current ? worldCmd.current.pos() : { x: 0, z: 0 },
     space: (to) => worldCmd.current ? worldCmd.current.space(to) : 'the world is still waking',
+    waymark: (arg) => worldCmd.current ? worldCmd.current.waymark(arg) : 'the world is still waking',
     party: partyOps,
     mistLedger: () => mistLedger.current,
     rune: (arg) => {
@@ -3596,7 +3630,7 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
   vitals: React.RefObject<Vitals>
   /** The cast pool. `regen` is per second, derived from the Mana skill. */
   mana: React.RefObject<{ cur: number; max: number; regen: number }>
-  cmdOut: React.RefObject<{ tp: (x: number, z: number) => string; pos: () => { x: number; z: number }; space: (to?: string) => string } | null>
+  cmdOut: React.RefObject<{ tp: (x: number, z: number) => string; pos: () => { x: number; z: number }; space: (to?: string) => string; waymark: (arg?: string) => string } | null>
 }) {
   const { camera } = useThree()
   const group = useRef<THREE.Group>(null)
@@ -3867,6 +3901,61 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
         if (want === space.current) return `already in the ${want}`
         enterSpaceRef.current?.(want)
         return want === 'plot' ? 'stepping into your garden' : 'stepping out into the Wilds'
+      },
+      /**
+       * ── ★ THE GRANT GOES THROUGH THE SHIPPED PATH, BLOCK AND ALL ─────────────────────────────
+       * `plant()`'s own contract is *"the host has already decided a waymark BLOCK belongs at
+       * (x,y,z)"*, and the place-handler one screen down calls an unbound waymark standing in the
+       * world the failure mode, *"it looks identical to a working one"*. The mirror is just as bad
+       * and is what a lazy test grant produces: a BOUND mark with no block, a passage the panel
+       * lists and the world cannot show. So this writes `MAT.WAYMARK` and binds it, in that order,
+       * exactly as a click does — minus the item spend and the reach check, which are the two
+       * things a test grant is for skipping.
+       */
+      waymark: (arg?: string) => {
+        const net = waymarks.current
+        const held = () => `${waymarks.current.marks.length} of ${MAX_MARKS} passages held`
+        const a = (arg ?? '').trim().split(/\s+/).filter(Boolean)
+        if (!a.length) {
+          if (!net.marks.length) return `no passages bound — ${held()}`
+          return net.marks.map((m, i) => `${i + 1}. ${m.name || 'unnamed'}  (${m.x}, ${m.y}, ${m.z})`)
+            .join('\n') + `\n${held()}`
+        }
+        const want = Math.max(1, Math.min(MAX_MARKS, Number(a[1] ?? MAX_MARKS) || MAX_MARKS))
+        const lc = loco.current
+        const inPlot = space.current === 'plot'
+        // ⚠ ASK WHICH SPACE FIRST — the same rule the `tp` autopsy above records three times over.
+        // A test grant that used the continent's height inside a fold would bind passages ~40
+        // blocks in the air, and the panel would list them as though they were fine.
+        const groundAt = (x: number, z: number): number | null => {
+          if (!inPlot) return columnHeight(x, z, SEED)
+          return plotHeight(x, z, SEED, plotCfg.current)
+        }
+        const bx = Math.floor(lc.px), bz = Math.floor(lc.pz)
+        const ring = [[6, 0], [0, 6], [-6, 0], [0, -6], [6, 6], [-6, -6]]
+        const bound: string[] = []
+        const refused: string[] = []
+        for (const [dx, dz] of ring) {
+          if (bound.length >= want) break
+          if (waymarks.current.marks.length >= MAX_MARKS) { refused.push('full'); break }
+          const x = bx + dx, z = bz + dz
+          const g = groundAt(x, z)
+          if (g === null) continue                      // no ground there — try the next spoke
+          const y = g + 1
+          if (voxel(x, y, z) !== AIR) continue          // something already stands there
+          setVoxel(x, y, z, MAT.WAYMARK)
+          const r = plantMark(waymarks.current, x, y, z, `test ${bound.length + 1}`)
+          if ('refused' in r) { setVoxel(x, y, z, AIR); refused.push(r.refused); continue }
+          waymarks.current = r.net
+          bound.push(`(${x}, ${y}, ${z})`)
+        }
+        if (!bound.length) {
+          return refused.includes('full')
+            ? `already at the cap — ${held()}`
+            : 'nowhere to bind one near you — stand on open ground and try again'
+        }
+        return `bound ${bound.length} test passage(s): ${bound.join(' ')}\n${held()}` +
+          `\n(the station's lamps follow the net, so walk to the court to read them)`
       },
     }
     return () => { cmdOut.current = null }

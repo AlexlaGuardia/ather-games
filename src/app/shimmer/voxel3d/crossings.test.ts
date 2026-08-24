@@ -15,6 +15,7 @@ import {
 import { plotThreshold, plotHeight, insideCore, plotForTier, PLOT_TIERS, DEFAULT_PLOT } from '../voxel/plot'
 import { PLOT_TRIGGER_RADIUS } from './seam'
 import { MAT } from '../voxel/depth'
+import { plant, emptyNet } from '../voxel/waymark'
 import { MAX_MARKS } from '../voxel/waymark'
 
 const SEEDS = [1, 7, 42, 555, 2026, 99, 314, 8675]
@@ -251,6 +252,36 @@ for (const seed of SEEDS) {
   }
   ok(!socketLit(socks[MAX_MARKS], MAX_MARKS - 1),
      'the last passage stays dark until its own waymark is planted — the station never grants reach')
+}
+
+// ── 6. the NET is what lights the station — the two modules through their composition ─────────
+// ★ EVERY ASSERT ABOVE FEEDS `socketLit` A HAND-WRITTEN NUMBER, which tests the predicate and says
+// nothing about the thing the game actually does: plant a waymark, and a lamp comes on. A number I
+// typed cannot disagree with `plant()`; a net built by `plant()` can. Same reason the ruins oracle
+// asserts through `placeSites` rather than around it — a module and its consumer separated by a
+// gate, with the test on the wrong side of the gate, is a world that does not exist.
+//
+// ⚠ It is also the guard on the owner test-grant (`/waymark reach`): canon says the station GRANTS
+// nothing and only displays reach, so the grant seeds the NET and lets the lamps follow. If anyone
+// ever lights a socket without a mark behind it, this is what goes red.
+{
+  const socks = sockets(SEEDS[0], DEFAULT_PLOT)
+  let net = emptyNet()
+  ok(socks.filter(sk => socketLit(sk, net.marks.length)).length === 1,
+     'an empty net lights exactly the gate — reach not yet earned')
+  for (let i = 1; i <= MAX_MARKS; i++) {
+    const r = plant(net, i * 10, 100, 0, `t${i}`)
+    ok(!('refused' in r), `planting waymark ${i} is allowed under the cap`)
+    if ('refused' in r) break
+    net = r.net
+    const lit = socks.filter(sk => socketLit(sk, net.marks.length)).length
+    ok(lit === i + 1, `${i} planted waymark(s) light ${i + 1} sockets, got ${lit}`)
+  }
+  // And the cap holds from both ends: a fourth plant is refused, and no fifth lamp exists to light.
+  const over = plant(net, 999, 100, 999, 'over')
+  ok('refused' in over && over.refused === 'full', 'the cap refuses a fourth passage')
+  ok(socks.filter(sk => socketLit(sk, 99)).length === socks.length,
+     'no lamp exists beyond the sockets that are built — reach cannot outrun the row')
 }
 
 console.log(`crossings: ${pass} passed, ${fails.length} failed`)
