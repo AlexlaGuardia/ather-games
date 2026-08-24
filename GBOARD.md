@@ -11,6 +11,46 @@ real **gimmick** (not watch-and-wait) · **canon-parallel** (serves Athernyx, no
 black, CRT bloom). Mana'nana went glossy-modern; each game gets its own skin under
 the Arcade frame.
 
+## 🚪 Shimmer voxel3d — **THE GATE STATION DISPLAYS REACH INSTEAD OF GRANTING IT** (2026-08-24, world lane) · *Last touched 2026-08-24 (world) — committed + pushed, not yet deployed*
+
+### Left off — `2bf33a7`, a CONFORMANCE pass, not a build
+⚠ **The station was already built.** `voxel3d/crossings.ts` shipped 08-23; Magii ruled the contract
+(`game/shimmer-geography.md` › THE GATE STATION) on **08-24, a day after the code**. Verifying the
+row against the code before building it is the only reason this was two edits instead of a feature.
+- **Dark is information.** A socket's stone was laid only once its waymark was held, so an unearned
+  way was **nothing at all** rather than a dark one. Canon: Greg PRE-PLACES the sockets, one lit day
+  one, *"the station grants nothing — it displays reach the keeper has already earned."* Every frame
+  now stands; one lintel cell carries a lantern when the way is earned. ★ Fixes a latent bug free —
+  the court rebuilds only on a plot TIER change, so a socket meant to appear on planting a waymark
+  would not have stood up until the fold next widened.
+- **`SocketKind` was `gate | waymark`.** The file's header brags the split lives in the types so a
+  mislabel is a compile error — and it was, against the vocabulary ruled 08-13. The 08-24 ruling
+  restates it finer: *"one gate and N **passages**"*, a waymark being the mark you PLANT. **A working
+  guard aimed one word off the ruled noun, green the whole time.**
+- **`socketMaterial` moved into the core.** The header always said this file decides frame-vs-doorway
+  and the host only lays stone; the MATERIAL never made the trip. ⚠ That is why the first "every
+  socket is pre-placed" assert was decoration — `sockets()` has always returned every socket, so it
+  was green before the fix and after it.
+
+### Next
+1. **Alex walks the court and rules the look** — lit vs dark is a lantern on the lintel; is that
+   legible across the plot, and is a dark frame the right read for *"a way you have not earned"*?
+2. **The named arcs are NOT built.** Canon rules four routes (Rune Hold gate · a Wilds passage off a
+   keeper waymark · the **Chord** plot · **Lingston**); the build has one gate plus three GENERIC
+   passage slots keyed on `MAX_MARKS`. ⚠ **Lingston exists nowhere in `src`** — it can only ship dark
+   or it needs a place first. The Chord is a shared-fold system, not a socket.
+3. Canon prose says *low half-circle*, the build is a straight row — **not a violation**: canon's own
+   Boundary assigns arc geometry, socket count and unlock order to Jin.
+
+### Decisions
+- **Frames are unconditional, lamps carry state.** Canon rules every socket on the station FRAMED
+  (*"a frame is the tuning made physical"*), so lit and dark are the same architecture — the keeper
+  reads the lamp, not the shape. It also keeps the geometry pure and puts the one state-dependent
+  cell somewhere an oracle can ask about.
+
+### Files
+`src/app/shimmer/voxel3d/crossings.ts` · `crossings.test.ts` (5 mutations, 5 caught) · `VoxelWorld.tsx`
+
 ## 🧱 Shimmer voxel — **RUINS ARE ASSEMBLED NOW, NOT STAMPED** (2026-08-24, world lane) · *Last touched 2026-08-24 (world) — committed + pushed, NOT yet deployed*
 
 ### Left off — `6087a93`, suite green, waiting on two things that are not mine
