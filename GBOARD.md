@@ -11,6 +11,44 @@ real **gimmick** (not watch-and-wait) · **canon-parallel** (serves Athernyx, no
 black, CRT bloom). Mana'nana went glossy-modern; each game gets its own skin under
 the Arcade frame.
 
+## 🌉 Shimmer — **THE CROSSING OUT: BOTH HALVES BUILT, NOTHING WIRED** (2026-08-24, world + hub) · *Last touched 2026-08-24 (world) — committed + pushed, deliberately unwired*
+
+### Left off — `a2d5948` + `8050e43` (world) with `c93beae` + `5675c51` (hub)
+Alex: *"lets stage the crossing next then."* The crossing from the Ather to Rune Hold square is a
+**Next ROUTE change**, not a teleport — `/shimmer/voxel3d` walks the voxel world, the town is the
+**tile** world (`zone rune-hold`, 100×100, `playerStart` 7,9, three wired doors). ⚠ `play3d/rune-hold.ts`
+is an INSTRUMENT with a test capping its importers at two; `dev/runehold` is its owner-gated viewer.
+Wiring a crossing to either goes red.
+- **`voxel3d/crossing-out.ts`** — readiness is read off the MAP (a gate labelled `THE LANDING`), never
+  a `LANDING_BUILT` flag. Paint it and the door works with nothing rewired; unpaint it and the refusal
+  returns by itself. `depart()` is the whole departure as one call. ⚠ Its first draft DERIVED the
+  arrival tile and that was cut: a derived landing is a wall **with a green test beside it**.
+- **`engine/crossing.ts`** (hub) — the state contract as an oracle. **No committed middle**, asserted
+  by COUNTING WRITES rather than reading the end state: the tempting symmetry (also parking the keeper
+  at the gate on the Ather side) leaves an end state that looks entirely correct, and only the count
+  sees it. Clear-before-act asserted on write ORDER, since acting-then-clearing leaves identical store
+  contents and only the order separates *one lost arrival* from *re-placed on every load forever*.
+- **`engine/crossing-join.test.ts`** (hub) — the join neither suite covered.
+
+### Next
+1. **★ ALEX PAINTS `THE LANDING`** in the Rune Hold square (press **B**, map editor, 1×2 warp tiles).
+   It is the ONE thing in the way — #731, one brush stroke. The doors oracle already prints it as the
+   single pending door and flips to asserts when painted.
+2. Hub reads the anchor tile off the map and hands it over; world wires `depart()` to the centre socket.
+3. Alex rules the LOOK of the hard cut — canon calls it *"the gate closes on blocks and opens on real
+   ground… worth staging deliberately"*, so the presentation is his, the mechanism is built.
+
+### Decisions
+- **Nothing persists across the seam until the contract had an oracle.** Both sides held to it.
+- **The arrival tile is a PARAMETER, never derived.** Which tiles are "the square" is Alex's map
+  knowledge; a guessed anchor is a wall or a rooftop that every test agrees with.
+- **A known hole carries a test rather than a message:** the chain does not check that the anchor is
+  walkable, and `crossing-join` §4 *asserts that gap* so the day someone closes it, the note moves too.
+
+### Files
+`src/app/shimmer/voxel3d/crossing-out.ts` · `crossing-out.test.ts` (34 asserts, 4 mutations) ·
+`src/app/shimmer/engine/crossing.ts` · `crossing.test.ts` · `crossing-join.test.ts` (hub's)
+
 ## 🚪 Shimmer voxel3d — **THE GATE STATION DISPLAYS REACH INSTEAD OF GRANTING IT** (2026-08-24, world lane) · *Last touched 2026-08-24 (world) — committed + pushed, not yet deployed*
 
 ### Left off — `2bf33a7`, a CONFORMANCE pass, not a build
