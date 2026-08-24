@@ -41,7 +41,7 @@ import { buildTileArray, sliceLayer, layerOf, TOP, SIDE } from '../../voxel3d/te
 import { MAT } from '../../voxel/depth'
 import { MATERIAL_COLOR } from '../../voxel3d/attrs'
 import { runeHold, townFaults, type Town } from '../../play3d/rune-hold'
-import { BODIES, KIT, metricsFor, STEP_FLOW, type Body } from '../../play3d/metrics'
+import { BODIES, KIT, metricsFor, STEP_FLOW, LEDGE_VAULT, LEDGE_MANTLE, readsAs, type Body } from '../../play3d/metrics'
 
 type Pair = 'voxel' | 'play3d' | 'mismatch' | 'seam'
 const TOWN_BODY: Record<Pair, Body> = { voxel: BODIES.voxel, play3d: BODIES.play3d, mismatch: BODIES.voxel, seam: BODIES.voxel }
@@ -153,6 +153,95 @@ function SeamBench() {
       <SeamPair material={MAT.TOPSOIL} face={TOP} x={0} label="topsoil" />
       <SeamPair material={MAT.PACKED_CLOUD} face={SIDE} x={9} label="cloud" />
     </>
+  )
+}
+
+
+// ── ★★★ THE CALIBRATION ROOM ──────────────────────────────────────────────────────────────────
+// Alex on the first greybox: *"its basically just a blank space with a bunch of abstract shapes."*
+// He was right, and the fault is in the instrument, not the report. **A town cannot answer "how tall
+// is the keeper."** Proportion is judged against things whose size you already know — a doorway you
+// walk through, a step you climb, a corridor with a wall on each side. Isolated masses on a
+// featureless plane give the eye nothing to measure against, so a keeper at 1.62 and one at 1.15
+// look equally plausible and the toggle proves nothing. **I built a town when the question wanted a
+// ruler.**
+//
+// ★ THE GRID IS THE SINGLE BIGGEST FIX AND IT IS ONE LINE. A flat unlit plane has no depth cue at
+// all — no texture gradient, so no distance, so no scale. A 1m grid gives every other object a unit
+// to be read in, and makes "square 14.4 versus 19.2" something you can SEE rather than something the
+// readout claims.
+//
+// Everything here is derived from the walker's own body or the shared kit. Nothing is a chosen
+// number, so the whole room re-proportions on the toggle exactly as the town does.
+function Calibration({ body }: { body: Body }) {
+  const M = metricsFor(body)
+  const W = M.widths
+  // Heights the walker has a verb for — the ladder `readsAs` classifies, stood up as objects.
+  const rungs: [number, string, string][] = [
+    [STEP_FLOW, '#3f7d3f', 'step: crossed at speed'],
+    [LEDGE_VAULT, '#7d7d3f', 'vault: one press'],
+    [M.cover.slide, '#2e6fb4', 'slide cover'],
+    [M.cover.stand, '#b4472e', 'standing cover'],
+    [LEDGE_MANTLE, '#7d3f7d', 'mantle: jump + grab'],
+  ]
+  // Lane widths, as corridors with a wall on EACH side — a width is only felt from inside one.
+  const lanes: [number, string][] = [
+    [W.passMin, 'pass'], [W.laneSingle, 'single'], [W.lanePair, 'pair'], [W.laneStreet, 'street'],
+  ]
+  const wallH = M.cover.stand * 1.6
+  return (
+    <group>
+      {/* ★ 1m grid — the depth cue the first version had none of. */}
+      <gridHelper args={[80, 80, '#94897a', '#7d746a']} position={[0, 0.01, 0]} />
+
+      {/* A DOORWAY at the walker's own scale: head clearance is eye + the gap a real door leaves.
+          This is the single most legible proportion test in the room — you either duck or you don't. */}
+      <group position={[-3, 0, -4]}>
+        {[-1, 1].map(sx => (
+          <mesh key={sx} position={[sx * (W.lanePair / 2), (body.eyeStand + 0.5) / 2, 0]} castShadow>
+            <boxGeometry args={[0.25, body.eyeStand + 0.5, 0.4]} />
+            <meshStandardMaterial color="#8a8079" />
+          </mesh>
+        ))}
+        <mesh position={[0, body.eyeStand + 0.5 + 0.15, 0]} castShadow>
+          <boxGeometry args={[W.lanePair + 0.5, 0.3, 0.4]} /><meshStandardMaterial color="#8a8079" />
+        </mesh>
+      </group>
+
+      {/* THE RUNGS — one post per tier the movement kit produces, in front of you, to walk up to. */}
+      {rungs.map(([h, colour], i) => (
+        <mesh key={colour} position={[i * 1.4 - 2.8, h / 2, -8]} castShadow receiveShadow>
+          <boxGeometry args={[1.1, h, 1.1]} /><meshStandardMaterial color={colour} />
+        </mesh>
+      ))}
+
+      {/* A STAIR of the vault tier — canon's terraces repeat this face dozens of times up the town,
+          so it is the one you will meet most and the one worth feeling under you. */}
+      {[0, 1, 2, 3].map(i => (
+        <mesh key={i} position={[6 + i * 1.6, (LEDGE_VAULT * (i + 1)) / 2, -6]} castShadow receiveShadow>
+          <boxGeometry args={[1.5, LEDGE_VAULT * (i + 1), 3]} /><meshStandardMaterial color="#6f6a62" />
+        </mesh>
+      ))}
+
+      {/* CORRIDORS — a width is only felt from inside, so each lane class gets two walls and a floor
+          you can walk down. This is where a 0.10m difference in shoulder actually shows up. */}
+      {/* ⚠ z starts BEYOND the spawn point. The first cut put the nearest corridor at z=6 while the
+          keeper spawns at z = square/2 - 1 ≈ 6.2 — so you opened the page standing INSIDE a wall pair,
+          looking down a dark tunnel, which is a worse first frame than the empty plane it replaced.
+          A calibration room you spawn inside of is not a calibration room. */
+      {lanes.map(([w, name], i) => {
+        const z = 15 + i * 7
+        return (
+          <group key={name} position={[0, 0, z]}>
+            {[-1, 1].map(sx => (
+              <mesh key={sx} position={[sx * (w / 2 + 0.15), wallH / 2, 0]} castShadow receiveShadow>
+                <boxGeometry args={[0.3, wallH, 9]} /><meshStandardMaterial color="#8f8579" />
+              </mesh>
+            ))}
+          </group>
+        )
+      })}
+    </group>
   )
 }
 
@@ -275,6 +364,7 @@ function Scene({ town, walker }: { town: Town; walker: Body }) {
 
 function Preview() {
   const [pair, setPair] = useState<Pair>('voxel')
+  const [measure, setMeasure] = useState(true)
   const townBody = TOWN_BODY[pair], walkBody = WALK_BODY[pair]
   const town = useMemo(() => runeHold(townBody), [townBody])
   const faults = useMemo(() => townFaults(town), [town])
@@ -286,6 +376,11 @@ function Preview() {
       if (e.code === 'Digit2') setPair('play3d')
       if (e.code === 'Digit3') setPair('mismatch')
       if (e.code === 'Digit4') setPair('seam')
+      // ⚠ P DOES SOMETHING NOW. Alex pressed it expecting the voxel profiler and got nothing — a key
+      // that answers nothing is exactly the silence failure this session put on the board, committed
+      // by me an hour after writing it down. Here it toggles the measurements, which is this page's
+      // equivalent of what P means everywhere else: show me the numbers behind what I am looking at.
+      if (e.code === 'KeyP') setMeasure(m => !m)
     }
     window.addEventListener('keydown', h)
     return () => window.removeEventListener('keydown', h)
@@ -294,7 +389,7 @@ function Preview() {
   return (
     <div className="fixed inset-0 bg-[#a8b8c8]">
       <Canvas shadows camera={{ fov: 70, near: 0.05, far: 500 }}>
-        {pair === 'seam' ? <SeamBench /> : <Scene town={town} walker={walkBody} />}
+        {pair === 'seam' ? <SeamBench /> : <><Scene town={town} walker={walkBody} /><Calibration body={walkBody} /></>}
         <Player town={town} body={walkBody} pairKey={pair} />
       </Canvas>
       <div data-runehold className="absolute top-3 left-3 text-[11px] font-mono text-white/90 bg-black/60 rounded px-3 py-2 leading-relaxed pointer-events-none">
@@ -316,7 +411,13 @@ function Preview() {
           <div className="text-white/70">left cube = Ather (1m, 1 tile) · right wall = Athernyx (4m, tiled 4x) · chip above = raw palette entry
             <br />⚠ tiles are PLACEHOLDER art by their own header — this tests the PIPELINE, not the look</div>
         )}
-        <div className="text-white/50">1 / 2 / 3 / 4 to switch · ⚠ preview collider, not the game&apos;s — judge proportion, not movement</div>
+        {measure && pair !== 'seam' && (
+          <div className="text-white/70">
+            doorway {(walkBody.eyeStand + 0.5).toFixed(2)} tall · rungs: step {STEP_FLOW.toFixed(2)} · vault {LEDGE_VAULT.toFixed(2)} · slide {M.cover.slide.toFixed(2)} · stand {M.cover.stand.toFixed(2)} · mantle {LEDGE_MANTLE.toFixed(2)}
+            <br />corridors: pass {M.widths.passMin.toFixed(2)} · single {M.widths.laneSingle.toFixed(2)} · pair {M.widths.lanePair.toFixed(2)} · street {M.widths.laneStreet.toFixed(2)} · grid = 1m
+          </div>
+        )}
+        <div className="text-white/50">1 / 2 / 3 / 4 to switch · P measurements · ⚠ preview collider, not the game&apos;s — judge proportion, not movement</div>
       </div>
     </div>
   )
