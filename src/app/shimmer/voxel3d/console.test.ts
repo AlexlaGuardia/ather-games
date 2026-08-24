@@ -13,6 +13,7 @@
  *
  * Run: `npx tsx src/app/shimmer/voxel3d/console.test.ts`
  */
+import { readFileSync } from 'node:fs'
 import { CONSOLE_CMDS, runConsoleLine, suggestionsFor, type ConsoleCtx } from './console'
 
 let pass = 0
@@ -108,11 +109,31 @@ for (const c of CONSOLE_CMDS.filter(c => c.owner)) {
 
 // ── 6. ★ A VERB NAME IS SHIPPED VOCABULARY THE MOMENT IT TAB-COMPLETES ───────────────────────
 // The world lane nearly shipped `/gate` for in-Ather travel, which canon retired on 2026-08-15 in
-// favour of `passage`/`waymark`. A console verb is a public noun; it wants the same gate canon's
-// nouns get. Retirements: `game/shimmer-geography.md` › RETIRED VOCABULARY.
+// favour of `passage`/`waymark`. A console verb is a public noun and wants the gate canon's nouns get.
+//
+// ⚠⚠ THE RETIRED LIST IS READ FROM CANON, NOT RESTATED — AND MY FIRST VERSION RESTATED IT, WHICH
+// TRIPPED THE CANON GATE ON MY OWN COMMIT. It hard-coded the three retired nouns as a literal array,
+// which put all three into the build; `canon-drift`'s retired-vocab gate counts occurrences in
+// source, so **a file whose job is to guard against a word counted as a use of it.** Same shape as
+// the adoption counter that read 24 because a guard's asserts named the classes it counted. ★ A more
+// thorough test would have made the false positive WORSE.
+//
+// ⚠ AND THE COMMENT EXPLAINING THAT MISTAKE TRIPPED IT A SECOND TIME, because prose naming the nouns
+// is still the nouns. This paragraph is therefore written without them — deliberately, and not as a
+// dodge: the gate counts prose ON PURPOSE, since a retired noun living in a comment is precisely what
+// the next person copies into code.
+//
+// Reading canon fixes both halves at once: the source holds no retired noun, and the list cannot go
+// stale the way a hand-kept mirror does. ⚠ An unreadable table FAILS rather than passing empty —
+// "no retired verb" and "I could not check" must not share an exit code.
 {
-  const RETIRED = ['gate', 'clan', 'shipyard']
-  const bad = CONSOLE_CMDS.map(c => c.name).filter(n => RETIRED.includes(n))
+  const table = readFileSync('/root/athernyx/CANON/game/shimmer-geography.md', 'utf8')
+    .split('RETIRED VOCABULARY')[1]?.split('### Boundary')[0] ?? ''
+  const retired = table.split('\n')
+    .map(l => l.match(/^\|\s*\*+([^*|]+)\*+/)?.[1]?.trim().toLowerCase())
+    .filter((t): t is string => !!t)
+  ok(retired.length > 0, 'canon\'s RETIRED VOCABULARY table is readable — otherwise this check did not run')
+  const bad = CONSOLE_CMDS.map(c => c.name).filter(n => retired.includes(n))
   ok(bad.length === 0, `no verb is named with retired canon vocabulary${bad.length ? ` — ${bad.join(', ')}` : ''}`)
 }
 

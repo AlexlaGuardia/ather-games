@@ -588,6 +588,14 @@ function canonRetiredVocabulary() {
       // ⚠ The cost is that a `fail`-mode term must be one whose substring is unambiguous. That is a
       // real constraint on the RULES table above, not a property of the canon table — a term that
       // appears inside unrelated words belongs in `review`, where a human reads the hits.
+      //
+      // ★★ PROSE COUNTS, AND THAT IS DELIBERATE. This gate fired on the console oracle for holding a
+      // retired noun in a literal array, and then fired AGAIN on the comment explaining the first
+      // hit — the documenting-a-marker-creates-a-marker shape, twice in one commit. The tempting fix
+      // is to strip comments before matching. It is the wrong one: **a retired noun sitting in a
+      // comment is exactly what the next person copies into code**, which is how vocabulary drifts
+      // back in. So the guard counts prose, and the price is that you write about a retirement
+      // without naming it. Cheap, and it keeps the guard honest about what it can see.
       let hits = []
       try {
         hits = execSync(`grep -rni "${key}" --include=*.ts --include=*.tsx ${SRC} || true`,
