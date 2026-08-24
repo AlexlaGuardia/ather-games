@@ -7,6 +7,7 @@
  *
  * Run: `npx tsx src/app/shimmer/play3d/rune-hold.test.ts`
  */
+import { execSync } from 'node:child_process'
 import { runeHold, townFaults, gateParts, FRONTS, ladderFor } from './rune-hold'
 import { BODIES, BODY, metricsFor, readsAs } from './metrics'
 
@@ -147,6 +148,34 @@ for (const body of [BODIES.voxel, BODIES.play3d]) {
   const a = ladderFor(BODIES.voxel), b = ladderFor(BODIES.play3d)
   ok(a.flow === b.flow && a.vault === b.vault, 'kit-derived rungs are shared across bodies')
   ok(a.laneStreet !== b.laneStreet, 'body-derived rungs are not')
+}
+
+// ── 7. ★★ THIS IS AN INSTRUMENT, NOT THE TOWN — and the decision is guarded, not just written ──
+// Alex ruled 2026-08-24: the greybox is the authoring ruler (how big is the Mug, where does the
+// Passage hide, how tall is the keeper) and the TOWN THAT SHIPS is the 100x100 tile map in
+// `world/zones.ts`. Canon agrees for now — the continuous-mortal-side ruling says in its own scope
+// note that it is *"not a call to rebuild."*
+//
+// ⚠ A DECISION WRITTEN ONLY IN PROSE IS A DECISION THAT EXPIRES SILENTLY. If someone later imports
+// this module into the shipped game, Rune Hold quietly becomes two towns that drift apart — and
+// nobody would be doing anything wrong, because the header would still read like a plan. So the
+// exemption is asserted: exactly two files may import it, and a third is not a bug to fix here but
+// a call to make deliberately.
+{
+  const root = new URL('../../../../', import.meta.url).pathname
+  // ⚠⚠ AND THE FIRST DRAFT OF THIS GREP CAUGHT ITS OWN AUTHOR. It matched `play3d/rune-hold`
+  // anywhere in a file, so `world/rune-hold-doors.test.ts` tripped it — by QUOTING the module in a
+  // header comment explaining that it is an instrument. ★ A file whose job is to talk about a thing
+  // counts as a use of it, under any search that reads prose. Match the IMPORT SPECIFIER, closing
+  // quote and all: that cannot match `play3d/rune-hold.ts` in a sentence, and it cannot match a
+  // backticked mention. (Same shape as the adoption counter that read 24 because a guard's asserts
+  // named the classes it was counting — a more thorough comment would have inflated this further.)
+  const hits = execSync(
+    `grep -rlE "from '[^']*rune-hold'" --include=*.ts --include=*.tsx ${root}src/app/shimmer || true`,
+    { encoding: 'utf8' }).trim().split('\n').filter(Boolean).map(f => f.split('/shimmer/')[1]).sort()
+  const allowed = ['dev/runehold/page.tsx', 'play3d/rune-hold.test.ts']
+  ok(JSON.stringify(hits) === JSON.stringify(allowed),
+     `the greybox stays an instrument — imported only by its ruler and its test (found: ${hits.join(', ')})`)
 }
 
 console.log(`rune-hold: ${pass} passed, ${fails.length} failed`)

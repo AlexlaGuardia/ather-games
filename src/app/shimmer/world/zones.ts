@@ -508,11 +508,18 @@ export const ZONES: Zone[] = [
         // directly onto the Crucible, and the Crucible is not ready. That reason died with the
         // split: a concourse and a practice range are both things a player should walk into.
         //
-        // ⚠ TODO(station-canon): the building is UNRULED and this label is a BUILD working name —
-        // it is in no `CANON/` file, and § The Hub rules five doors, none of them a way OUT of
-        // town. Alex named it and asked for it on the door, so it ships there; the gap is filed
-        // and asks the question that decides it — canon's route to Pyramid Zero is a SHIP and
-        // this map has coastline, so "dock" may beat "station". The name is data: a one-field fix.
+        // ★ RULED 2026-08-05 — `world/rune-hold.md` › *The Travelers Station — the way OUT*. The
+        // name on this door is canon, not a build working name.
+        //
+        // ⚠ THE COMMENT THAT STOOD HERE SAID THE OPPOSITE AND WAS WRONG FOR NINETEEN DAYS. It read
+        // *"the building is UNRULED… it is in no CANON/ file"*, wondered whether *"dock may beat
+        // station"*, and invited the next reader to re-open a question that had already been
+        // answered — the ruling landed the same day the comment was written. Canon's answer to both
+        // halves: it is a **sky-port** (landlocked in the foothills, so never a dock), and *"Rune
+        // Hold calls it the Travelers Station"* because a town names a place for what it does. The
+        // practice range lives with it, which is why the east door opens on the firing range.
+        // ★ A code comment goes stale silently, and the better written it is the longer it is
+        // believed. Verify a claim about canon against `CANON/`, not against the comment.
         x: 49, y: 81, toZone: 'travelers-station', toX: 4, toY: 7, direction: 'up',
         label: 'TRAVELERS STATION',
       },
