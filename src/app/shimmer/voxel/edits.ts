@@ -218,7 +218,26 @@ import { Column, SECTION } from './column'
 // cells up costs the walkway nothing (flanks are parapet, never walked) and reads correctly as a
 // kerb under a parapet. Floating posts: 0 of 1058.
 // ⚠ Moves the flank deck voxels on every crossing.
-export const GENERATOR_VERSION = 31
+// 31 → 32 (2026-08-24): RUINS ARE ASSEMBLED, NOT STAMPED. Every ruin on a greyfield pad was the
+// same 11×11 rectangle, varied only by a crumble hash. `voxel/ruins.ts` assembles one instead — a
+// start piece rolled from a six-shape pool, breadth-first connectors, AABB-reject, a terminator
+// pool, and a per-site size budget — so a ruin is now anything from one lonely room to a nine-room
+// warren, and 357 distinct shapes stand where one did. Placement did not change: the same cells
+// roll the same candidates on the same pads, so no ruin appears or disappears. What changed is the
+// building on top of each one, which is every wall and rubble voxel any of them ever wrote.
+//
+// ★ WHAT THIS BUMP ACTUALLY COSTS, MEASURED RATHER THAN FEARED — because I got it backwards and
+// left the bump parked on the strength of it. `isStale` has exactly ONE behavioural reader in the
+// tree (`voxel3d/VoxelWorld.tsx:6485`) and all it gates is a one-time chat line, deduped in
+// localStorage; `unpackEdits` runs unconditionally three lines later. **A bump discards nothing.**
+// I had told Alex it would stale every column's edits in the world, which turned a one-line change
+// into a decision he had to weigh — a wrong premise producing a wrong process, not just a wrong
+// sentence. Read the consumer before pricing a constant.
+//
+// ⚠ The ruins shipped to prod UNBUMPED for about two hours (hub's build carried the tree), so this
+// is the warning arriving late rather than not at all — which is the whole reason the constant
+// exists, and exactly the v16 mistake this header already records once.
+export const GENERATOR_VERSION = 32
 
 /**
  * One column's edits: packed local index → material.
