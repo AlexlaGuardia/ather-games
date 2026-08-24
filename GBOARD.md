@@ -152,6 +152,35 @@ the Arcade frame.
 > - **Files:** `voxel3d/crossings.ts` + `crossings.test.ts` (new) · `voxel3d/gate.ts` (rederived) ·
 >   `voxel3d/gate.test.ts` (new).
 
+## 🔇 SILENCE IS THE ONLY RESPONSE THAT CARRIES NO INFORMATION (2026-08-24, world lane)
+> Alex walked 21 blocks to the crossing court and reported *"i see the empty archway but i dont see
+> how to use it."* The gate genuinely has no destination yet — **and I had told him so in chat an hour
+> earlier.** That was worth nothing to a person standing inside an arch that answered nothing.
+> - **★ FROM INSIDE THE DOORWAY, "NOT BUILT YET" AND "BROKEN" ARE THE SAME PICTURE.** Every other
+>   state a surface can be in produces some signal; silence is the single response that lets a player
+>   distinguish neither. **So it is the worst state to ship, and "it's obviously unfinished" is the
+>   author's knowledge, never the player's.** A half-built surface must name itself.
+> - **Applies to every stub either lane leaves standing** — shut storefronts, empty waymark sockets,
+>   the Passage door, the Travelers Station. A closed door that says it is closed is a town you come
+>   back to (canon says exactly that); a closed door that says nothing is a bug report.
+> - ⚠ **AND THE MESSAGE MUST BE BUILD-VOICE, NOT WORLD-VOICE.** Canon puts the first gate-rune in
+>   Greg's gift, so having him explain the gate is *right* — and inventing that line in a frame loop,
+>   in a hurry, with Alex standing there, is how **accidental canon** ships. NPC voice is raven's.
+>   Name the crossing, report the build's state, leave the fiction to whoever may write it.
+> - Shipped `c40f716`.
+
+## ⚠ A DOC THAT CLAIMS A CAPABILITY IS WORSE THAN ONE THAT CLAIMS A FACT (2026-08-24, world lane)
+> `Shimmer3D.tsx` said the legacy continent *"stays reachable via `?zone=` until cutover"*, and two
+> more files repeated it. **Measured: nothing in `src/app/shimmer/` or `src/lib/` reads a `zone`
+> query param** — `play3d/page.tsx` does not contain the word — while `mode` IS read in two other
+> pages, so the mechanism exists and this route specifically does not.
+> - **★ IT COST TIME THE SAME NIGHT.** Scoping the voxel3d → Rune Hold crossing, that line read as
+>   *"the mortal world is already reachable by URL"*, and the walker-to-walker crossing was nearly
+>   built on a route that resolves nothing. **You verify a fact; you BUILD ON a capability** — which
+>   is why this class is more expensive than an ordinary stale note.
+> - Retired in all three places rather than reworded. Restoring the param is a decision and was not
+>   taken; the claim is gone so the next person scopes from what exists.
+
 ## ⚠ BOARD HOLDS ARE CLAIMS, NOT STATE — `npm run holds` (added 2026-08-23, world lane)
 > ⚠ **AND A CORRECTION MUST NOT RESTATE THE MARKER IT RETIRES.** The first fix wrote "now ruled (was
 > open)" with the literal status marker in it — and the guard flagged the correction itself, because a

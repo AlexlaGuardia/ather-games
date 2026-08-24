@@ -181,8 +181,12 @@ transplantTable(STRUCTURE_PLACEMENTS)
  * Migrate a legacy save position into the new world: a save standing in an absorbed zone
  * lands at the same spot of its region canvas (the `sources` table is the map). Routes
  * died unmapped — those saves (and anything else unplaced) return null and the caller
- * falls back to the Home Plot's start. One-way by design; the legacy world stays
- * reachable via ?zone= until final cutover.
+ * falls back to the Home Plot's start. One-way by design.
+ *
+ * ⚠ THIS USED TO ADD "the legacy world stays reachable via ?zone= until final cutover". Measured
+ * 2026-08-24: nothing reads a `zone` query param anywhere in the tree, so that route does not exist
+ * and the one-way migration is the ONLY way back. Retired rather than reworded — the sentence was
+ * load-bearing for anyone deciding whether a legacy save could be recovered by hand.
  */
 export function migrateLegacyPosition(zoneId: string, x: number, y: number): { zoneId: string; x: number; y: number } | null {
   for (const f of FILES) {

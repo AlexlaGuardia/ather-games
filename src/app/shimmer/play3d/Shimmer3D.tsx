@@ -140,7 +140,17 @@ import { cloneSparseGrid, materializeRows, newMount, syncWilds, type WildsMount 
 registerGardenWorld()
 const ALL_NPCS = allNpcs()
 
-const START_ZONE = 'r-home-plot' // the world pivot: players live in the region maps; the legacy continent stays reachable via ?zone= until cutover
+// ⚠ THE `?zone=` ESCAPE HATCH THIS LINE PROMISED DOES NOT EXIST (measured 2026-08-24). Nothing in
+// `src/app/shimmer/` or `src/lib/` reads a `zone` query param — `play3d/page.tsx` does not contain the
+// word — while `mode` IS read in two other pages, so the mechanism exists and this one specifically
+// does not. Either it was never wired or cutover took it; the comment kept promising it regardless.
+//
+// ★ IT COST REAL TIME: scoping the voxel3d → Rune Hold crossing, this line was read as "the mortal
+// world is already reachable by URL", and the walker-to-walker crossing was nearly built on top of
+// a route that resolves nothing. A doc that claims a CAPABILITY is worse than one that claims a
+// fact — you do not verify a capability, you build on it. Restoring the param is a decision and is
+// not taken here; the claim is retired so the next person scopes from what exists.
+const START_ZONE = 'r-home-plot' // the world pivot: players live in the region maps
 const WATER_ID = 8, FLOOR_ID = 97, WALL_ID = 34, WARP_ID = 14, MIST_ID = 31
 // The mortal side's wall. Clouds and mist are ATHER-only — a town built out of cloud reads as
 // sky, which is the tonal wall canon splits on. Solid like a cloud, drawn brown.

@@ -121,7 +121,7 @@ export function checkWarp(zones: Zone[], currentZoneId: string, tileX: number, t
  * did and only the id changes. That is why this table carries no offset: add one the day a fold
  * moves tiles, and until then a bare rename is the honest migration.
  *
- * Kept because a saved position, a bookmarked `?zone=`, or a party member's broadcast can still
+ * Kept because a saved position or a party member's broadcast can still
  * name the dead id. Resolving it costs one lookup; NOT resolving it hands `getZone` a null and
  * strands the player on a black screen.
  */
