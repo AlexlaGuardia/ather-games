@@ -7,7 +7,7 @@
 // lying) — not to certify that the world reads well.
 
 import {
-  columnHeight, heightFields, peaksValleys, DEFAULT_HEIGHT, DATUM_CALIBRATION,
+  columnHeight, heightFields, peaksValleys, DEFAULT_HEIGHT,
   CONTINENT_SPLINE, EROSION_SPLINE,
 } from './height'
 import { spline, fbm2, warped2, hash2 } from './noise'
@@ -69,7 +69,37 @@ const C = DEFAULT_HEIGHT
   hs.sort((a, b) => a - b)
   const median = hs[Math.floor(hs.length / 2)]
   near(median, C.datum, 4, '★ median ground level sits on the datum')
-  ok(DATUM_CALIBRATION !== 0, 'the calibration constant is actually applied')
+
+  // ── ⚠⚠ THE ASSERT THAT STOOD HERE COULD NOT FAIL, AND REMOVING IT IS THE HONEST FIX ─────────
+  // It read `ok(DATUM_CALIBRATION !== 0, 'the calibration constant is applied')` — and note the
+  // import went with it, because a constant a file only mentions in prose is not a dependency.
+  // was inside the tolerated tsc baseline for weeks: TS2367, *"types '0.5' and '0' have no
+  // overlap"* — the constant is literal-typed, so the comparison is decided at compile time and
+  // the assert is a `true` wearing a sentence.
+  //
+  // ★ AND WIDENING THE TYPE TO SILENCE TS WOULD HAVE BEEN THE CHEAPEST LIE. The comparison would
+  // then be legal and STILL never fail, because the thing it guards cannot be varied from a test:
+  // `DATUM_CALIBRATION` is a module constant, not a `HeightConfig` field, deliberately (it is a
+  // property of the splines, not of the seed).
+  //
+  // ★★ WORSE, AND THIS IS THE ACTUAL FINDING: NO ASSERT OVER HEIGHTS CAN SEE IT AT ITS CURRENT
+  // VALUE. Calibration is 0.5 and `columnHeight` returns ROUNDED integers, so zeroing it moves the
+  // median by less than one voxel — measured across four seeds, the median does not move at all.
+  // The constant has been re-measured down (10 → 3.5 → 0.5) as the splines improved, and it has
+  // shrunk below the resolution of the world it corrects. The guard did not rot; the thing it
+  // guards became too small to guard. Say that in the file rather than keep a green tick that
+  // means nothing.
+  //
+  // What IS load-bearing is the claim above — the median sits on the datum — and the doc's own
+  // words say it is *"a property of the splines, not of the seed"*, so it is asserted across seeds
+  // now instead of on one. THAT is what a bad re-measure breaks, and it fires at the scale that
+  // actually matters (mutation-tested: calibration at 10 trips it on every seed).
+  for (const s2 of [7, 42, 555]) {
+    const h2: number[] = []
+    for (let i = 0; i < 20000; i++) h2.push(columnHeight((i * 977) % 4000 - 2000, (i * 1583) % 4000 - 2000, s2))
+    h2.sort((a, b) => a - b)
+    near(h2[h2.length >> 1], C.datum, 4, `★ median ground sits on the datum for seed ${s2} too`)
+  }
 
   // Character checks — loose bounds, because this is taste, not correctness. They exist to catch a
   // retune that accidentally flattens the world or turns it into spikes, not to pin the look.
