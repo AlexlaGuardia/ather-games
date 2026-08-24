@@ -126,7 +126,7 @@ budget biased small** — a third of ruins are one lonely room, 4% are a nine-ro
 (§4 re-aimed — it asserted the old 11×11 perimeter, a location that expired) · `scripts/ruin-sweep.mts`
 · `scripts/ruin-shot.mts` (reads a ruin out of the generator in world coords)
 
-## 🏔 Shimmer — **RUNE HOLD: THE TOWN GOT ITS HILLSIDE, THEN ITS ROSTER** (2026-08-24, hub) · *Last touched 2026-08-24 (hub) — shipped, deployed, pushed*
+## 🏔 Shimmer — **RUNE HOLD: THE TOWN GOT ITS HILLSIDE, THEN ITS ROSTER, THEN ITS DOORS** (2026-08-24, hub) · *Last touched 2026-08-24 (hub, late) — shipped, deployed, pushed*
 
 ### Left off — SHIPPED `853f615` + `d140299` + `7fc6b9a`, all deployed and pushed, tree clean
 The greybox read as *"a blank space with a bunch of abstract shapes"* and neither cause was box count.
@@ -150,9 +150,23 @@ The greybox read as *"a blank space with a bunch of abstract shapes"* and neithe
 - **Still open, and neither blocks:** the Travelers Station ⟷ Travelers Center overlap (its own `CANON_GAPS.md` entry; likely shape is Station = departure, Center = muster, sequential not rival — blocks only the Station's interior), and whether the Mug has a basement.
 
 ### Next
-- Build the four doors themselves — the enterable layer is scope now, not canon.
+- Build the four doors themselves — the enterable layer is scope now, not canon. The Mug's basement is the one still unruled by Magii.
+- The **gate-rune** is settled canon and wholly UNBUILT — a field item, the door you make where there is none. A feature to schedule, not a gap to file.
 - **The practice range at the Travelers Station is fully ruled and unbuilt** (*"at the Station, not in the town… practice is free and open to anyone"*) — buildable today, waits on nothing.
 - Open the enterable layer once the ruling lands. Greybox art untouched.
+
+### Later the same day — the doors, and the instruments that check them
+- **The door set is RULED and cost the build nothing** (`rune-hold.md` › *★ NO INTERIOR OPENS*). The Spirit Corner is a face on the town, not a space that loads; **stepping through Gregory's framed doorway IS the crossing.** No storefront interior opens in the opening, and *when* each of Alex's four doors opens is **scope, not truth** — Jin's call.
+- **The landing gate + the gate grammar as DATA** (`8d91fed`, `e410a0a`). Bare spiral = untuned/temporary, framed = tuned and kept; `kept` and `form` are both stored and checked against each other, because canon says a player reads *"will this still be here tomorrow"* off the shape. ⚠ Then `gateParts()` moved the form's resolution into the pure module — the first guard compared a LABEL while the RENDERER held the only statement of what a form looks like, so a form with no branch drew a bare veil and every assert stayed green.
+- **The crossing is a 1:2 oval** (Alex's shape). ⚠ Sized the obvious way (`width = headroom/2`) it is **impassable on one of the two walkers** — the mannequins differ in SHAPE not size, and half of play3d's head clearance is 0.83 against shoulders needing 0.90. Sized from what must FIT with the height following the ratio, 1:2 holds exactly on both. **Proportion is the intent, passability is the floor.**
+- **Three oracles that did not exist**, and each covers a seam the others cannot see:
+  - `world/rune-hold-doors.test.ts` — the SHIPPED tile town's doors against canon, through `resolveZoneId`. ⚠ Its first draft reported two dangling doors on the home plot that were legacy ids the alias table resolves correctly; **a check that skips the resolver tests a world that does not exist.** Reads **12 pass · 0 fail · 1 pending** — and *pending* is not *failing*: a hard red for work correctly not-done-yet trains everyone to discount red.
+  - `engine/crossing.ts` + test — the state contract, agreed with the world lane and written as an oracle rather than a paragraph. **No committed middle**, clear-before-act, and **(0,0) banned as a FALLBACK** (not as a value — a keeper whose real saved position is the origin still returns there).
+  - `engine/crossing-join.test.ts` — **the join nothing owned.** Three suites green and none testing the seam between them. ⚠ It asserts a real gap rather than hiding it: a solid tile is not refused today, and the day someone adds a terrain check the assert flips.
+- **⚠⚠ THREE OF MY OWN GUARDS WERE DECORATION AND ONLY THE MUTATION SHOWED IT.** A greybox-importer grep that matched a comment quoting the module · a retired-vocab gate matching `\bclan\b`, blind to `ClanId` — **the identifier form is where its motivating bug lived** · a join fixture using `WALL = 1` when `SOLID[1]` is false, so the wall was walkable and the walkability assert could not fail. ★ Every one failed toward green, and none was caught by review.
+
+### The crossing — BLOCKED ON ONE BRUSH STROKE
+Both halves are built and **neither is wired; nothing persists across the seam.** Alex paints the **1×2 landing footprint** in Rune Hold (press **B**), hub reads the anchor off the map and hands world the tile, world wires `depart` to the centre socket. Focus row **#731**. Until then the crossing refuses cleanly — *unpainted*, never an error. See the crossing block for the full split.
 
 ### Files
 `src/app/shimmer/play3d/rune-hold.ts` (+ `.test.ts`, 70 asserts both mannequins) · `src/app/shimmer/dev/runehold/page.tsx` · `scripts/town-plan.mts` · reads `play3d/metrics.ts`
