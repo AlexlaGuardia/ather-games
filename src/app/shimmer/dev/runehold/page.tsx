@@ -51,21 +51,18 @@ interface Box { x0: number; x1: number; z0: number; z1: number; top: number; sol
 
 /** Every box the walker can stand on or bump into, derived from the town — never restated. */
 function boxesOf(t: Town): Box[] {
-  const out: Box[] = [
-    { x0: t.square.x - t.square.size / 2, x1: t.square.x + t.square.size / 2,
-      z0: t.square.z - t.square.size / 2, z1: t.square.z + t.square.size / 2, top: 0, solid: false },
-  ]
+  // ★ THE BANDS ARE THE GROUND, AND THEY ARE THE ONLY GROUND. Streets used to be their own floating
+  // slabs at their own terrace height, which is why a shop could stand a terrace up over nothing and
+  // a road could climb to a station sitting on the dirt: the walker had a surface under it in each
+  // case and the town had no opinion about whether that surface belonged to anything.
+  const out: Box[] = t.terraces.map(b => ({
+    x0: b.x0, x1: b.x1, z0: b.z0, z1: b.z1, top: b.level * t.terraceRise, solid: false,
+  }))
   for (const m of t.masses)
     out.push({ x0: m.x - m.w / 2, x1: m.x + m.w / 2, z0: m.z - m.d / 2, z1: m.z + m.d / 2, top: m.y + m.h, solid: true })
-  for (const s of t.streets) {
-    const [ax, az] = s.from, [bx, bz] = s.to
-    const pad = s.width / 2
-    out.push({ x0: Math.min(ax, bx) - pad, x1: Math.max(ax, bx) + pad,
-               z0: Math.min(az, bz) - pad, z1: Math.max(az, bz) + pad,
-               top: Math.max(s.fromTerrace, s.toTerrace) * t.terraceRise, solid: false })
-  }
   out.push({ x0: t.station.x - t.station.w / 2, x1: t.station.x + t.station.w / 2,
-             z0: t.station.z - t.station.d / 2, z1: t.station.z + t.station.d / 2, top: t.station.h, solid: true })
+             z0: t.station.z - t.station.d / 2, z1: t.station.z + t.station.d / 2,
+             top: t.station.y + t.station.h, solid: true })
   return out
 }
 
@@ -324,9 +321,22 @@ function Scene({ town, walker }: { town: Town; walker: Body }) {
     <>
       <ambientLight intensity={0.55} />
       <directionalLight position={[30, 60, 20]} intensity={1.1} castShadow />
-      <mesh position={[town.square.x, -0.05, town.square.z]} receiveShadow>
-        <boxGeometry args={[town.square.size, 0.1, town.square.size]} />
-        <meshStandardMaterial color="#6b6257" />
+      {/* ★ THE HILL, DRAWN AS SOLID EARTH RATHER THAN FLOATING SHELVES. A band is a box from the
+          world floor up to its own height, so the face between two bands is a real cut face the eye
+          reads as ground — which is the difference between "a town on a hillside" and "slabs at
+          different altitudes", and it costs one box per band. */}
+      {town.terraces.map(b => {
+        const h = Math.max(b.level * town.terraceRise, 0.1)
+        return (
+          <mesh key={b.id} position={[(b.x0 + b.x1) / 2, h / 2 - 0.05, (b.z0 + b.z1) / 2]} receiveShadow>
+            <boxGeometry args={[b.x1 - b.x0, h, b.z1 - b.z0]} />
+            <meshStandardMaterial color={b.level % 2 === 0 ? '#6b6257' : '#736a5e'} />
+          </mesh>
+        )
+      })}
+      <mesh position={[town.square.x, 0.01, town.square.z]} receiveShadow>
+        <boxGeometry args={[town.square.size, 0.02, town.square.size]} />
+        <meshStandardMaterial color="#7f7568" />
       </mesh>
       {town.masses.map(m => (
         <mesh key={m.id} position={[m.x, m.y + m.h / 2, m.z]} castShadow receiveShadow>
@@ -338,14 +348,14 @@ function Scene({ town, walker }: { town: Town; walker: Body }) {
         const dx = s.to[0] - s.from[0], dz = s.to[1] - s.from[1]
         return (
           <mesh key={s.id}
-                position={[(s.from[0] + s.to[0]) / 2, Math.max(s.fromTerrace, s.toTerrace) * town.terraceRise - 0.02, (s.from[1] + s.to[1]) / 2]}
+                position={[(s.from[0] + s.to[0]) / 2, Math.max(s.fromTerrace, s.toTerrace) * town.terraceRise + 0.02, (s.from[1] + s.to[1]) / 2]}
                 rotation={[0, Math.atan2(dx, dz), 0]} receiveShadow>
             <boxGeometry args={[s.width, 0.04, Math.hypot(dx, dz)]} />
             <meshStandardMaterial color="#7d746a" />
           </mesh>
         )
       })}
-      <mesh position={[town.station.x, town.station.h / 2, town.station.z]} castShadow>
+      <mesh position={[town.station.x, town.station.y + town.station.h / 2, town.station.z]} castShadow>
         <boxGeometry args={[town.station.w, town.station.h, town.station.d]} />
         <meshStandardMaterial color="#5f6b7a" />
       </mesh>

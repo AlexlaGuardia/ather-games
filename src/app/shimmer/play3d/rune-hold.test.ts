@@ -56,6 +56,28 @@ for (const id of ['kindled-mug', 'spirit-corner', 'eyuun-bookstore', 'the-passag
   ok(road.fromTerrace > 0, 'the Station road starts above the square — reached THROUGH the town')
 }
 
+// ── 3b. the route actually chains, square to Station ──────────────────────────────────────────
+// ★★ THE GAP THIS CATCHES IS INVISIBLE IN PLAY AND FATAL ON PAPER. Two legs that stop short of each
+// other still sit on walkable band, so you can walk between them and nothing looks wrong — while the
+// route GRAPH is in two pieces, which is the exact shape that let a shop stand a terrace up with
+// nothing reaching it. Asserted as a chain, not as a count of legs.
+for (const [name, body] of [['voxel', BODIES.voxel], ['play3d', BODIES.play3d]] as const) {
+  const t = runeHold(body)
+  const meets = (a: readonly [number, number], b: readonly [number, number]) =>
+    Math.hypot(a[0] - b[0], a[1] - b[1]) < 1e-6
+  let level = 0, broken = ''
+  for (let i = 1; i < t.streets.length; i++) {
+    const prev = t.streets[i - 1], leg = t.streets[i]
+    if (!meets(prev.to, leg.from)) { broken = `${prev.id} ends where ${leg.id} does not begin`; break }
+    if (leg.fromTerrace !== prev.toTerrace) { broken = `${leg.id} starts on a band ${prev.id} never reached`; break }
+    level = leg.toTerrace
+  }
+  ok(!broken, `${name}: the streets chain from the square upward` + (broken ? ` — ${broken}` : ''))
+  const top = Math.round(t.station.y / t.terraceRise)
+  ok(level === top, `${name}: the chain ends on the Station's own band (${level} vs ${top})`)
+  ok(t.station.y > 0, `${name}: the Station stands where its road delivers (y ${t.station.y.toFixed(2)})`)
+}
+
 // ── 4. every face lands on a tier the walker has a verb for ───────────────────────────────────
 // The ambiguous band is the whole reason `metrics.ts` exists: too tall to cross at speed, too short
 // to read as an obstacle, and the player blames the controls.
