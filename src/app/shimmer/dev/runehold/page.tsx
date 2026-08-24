@@ -228,7 +228,7 @@ function Calibration({ body }: { body: Body }) {
       {/* ⚠ z starts BEYOND the spawn point. The first cut put the nearest corridor at z=6 while the
           keeper spawns at z = square/2 - 1 ≈ 6.2 — so you opened the page standing INSIDE a wall pair,
           looking down a dark tunnel, which is a worse first frame than the empty plane it replaced.
-          A calibration room you spawn inside of is not a calibration room. */
+          A calibration room you spawn inside of is not a calibration room. */}
       {lanes.map(([w, name], i) => {
         const z = 15 + i * 7
         return (
