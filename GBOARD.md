@@ -237,9 +237,36 @@ Both halves are built and **neither is wired; nothing persists across the seam.*
 
 **Alex's ruling, in full, and it is canon-aligned rather than a scope cut.** `game/moves.md:85` — *"## Ultimates — **Signature**, high pool cost."* So *signature* IS the Ultimate band. The mage's four bands are Passives / Tactical / Ultimates / Combos; **passives are not cast and combos are pair-casting, so the button-castable set is exactly Tactical + Signature.** The build's four slots were the drift, not the baseline.
 
-**Left off:** decided, nothing built yet. `play3d/cast.ts:389` still reads
-`CAST_SLOTS = ['passive','tactical','tactical','ultimate']` / `SLOT_KEYS = ['g','z','x','c']`;
-`voxel3d/VoxelWorld.tsx:243` still reads `CAST_KEYS = ['g','z','x','b']` with raw `e.code` matching at `:4193`.
+**Left off (updated 2026-08-25, jin play lane):** steps 2 and 7 are DONE; the collapse itself is not.
+- ✅ **7 — the migration, landed FIRST on purpose** (`0e31db7`). `loadout.ts` gained `migrateLegacyLoadout`
+  + `LEGACY_CAST_SLOTS` + a 21-assert oracle, mutation-swept 4 ways. It is **INERT today** (identity while
+  `CAST_SLOTS` is still four) and activates the moment the collapse ships — a net first exercised on the
+  day of the fall is a net nobody tested.
+  ⚠ **AND THE RISK WAS WORSE THAN THIS BOARD SAID.** The note below predicted "probably fail `canSlot` and
+  fall back to a default". It would **not**: `loadLoadout` returns the default only when NO save exists, so
+  a 4-entry save read through a 2-entry list nulls both slots and every keeper who ever picked a loadout
+  loads in with an **EMPTY BAR** — no default, no error, nothing that looks wrong.
+- ✅ **2 — cast keys are on the action layer** (`d6462ca`). `cast.tactical` (Z / `LB`) + `cast.signature`
+  (B / no pad yet) joined `lib/input`, grouped under **Casting**, so the rebinding menu reaches them and
+  `hintsFor` resolves the glyph. Keys **derived** off voxel3d's own `CAST_KEYS`, so both surviving slots
+  keep the key already in someone's hands. ⚠ `cast.signature` has no pad binding because RB is still
+  `item.cycle` until step 4 lands — the test asserts that PREMISE, so the day RB frees it goes red and
+  names the follow-up rather than shrugging.
+- ⏭ **STILL OPEN — and it is ONE ATOMIC CHANGE ACROSS FOUR FILES, one of them the hub lane's.**
+  `play3d/cast.ts:389` still reads `CAST_SLOTS = ['passive','tactical','tactical','ultimate']` /
+  `SLOT_KEYS = ['g','z','x','c']`; `voxel3d/VoxelWorld.tsx:245` still reads
+  `CAST_KEYS = ['g','z','x','b']` with raw `e.code` matching at **`:3914`** (both line numbers corrected
+  — the old `:243`/`:4193` had drifted, and a citation nobody opens retires the question instead of
+  answering it). **`play3d/` is NOT legacy**: `VoxelWorld.tsx:249-250` imports `CAST_SLOTS`,
+  `eligibleMoves`, `loadLoadout`, `saveLoadout` and `setSlot` straight out of it, so collapsing
+  `CAST_SLOTS` changes the LIVE fold from a file the play lane owns.
+  ⚠ **Landing three of the four is a shipped bug:** `CAST_KEYS` is four long and indexed by slot, so
+  pressing **X** or **B** would index past the end of a two-slot bar. Sequence in TIME with the hub lane —
+  pathspec cannot split one file on a shared tree.
+- ⚠ **`loadout.test.ts:137` will correctly go red on the collapse.** It contests the no-duplicate rule on
+  the *tactical pair*, and with one tactical + one ultimate there are no two slots of the same kind — a
+  move has exactly one tier, so `setSlot`'s dedup branch becomes **unreachable by legal binds**. Rewrite it
+  as an honest statement that the case is unreachable; do not let it quietly pass.
 
 **Next — the whole job:**
 1. `CAST_SLOTS` → `['tactical','ultimate']`. Drop the passive slot and one tactical.
@@ -255,7 +282,35 @@ Both halves are built and **neither is wired; nothing persists across the seam.*
 - ✅ **No chord support needed** — the `Binding` chord extension play scoped is required by four-casts-one-free-button, and **not** by two.
 - ✅ Pad budget measured off `DEFAULTS`, not by eye: 15 of 16 standard buttons spent, `R3` the only free one. `RT`/`LT` are `world.mine`/`world.place` and are not available.
 
-## 🌱 Shimmer — **THE PASSIVE IS INNATE, AND THE BIRTH RUNE IS WHAT YOU ARE** (RULED 2026-08-23, Alex) · *Not yet built*
+## 🌱 Shimmer — **THE PASSIVE IS INNATE, AND THE BIRTH RUNE IS WHAT YOU ARE** (RULED 2026-08-23, Alex) · *Not yet built* · ⚠ **CONTESTED BY CANON 2026-08-25 — DO NOT BUILD**
+
+> ⚠⚠ **STOP: THIS BLOCK'S HEADLINE IS A BUILD RULING THAT CANON CONTRADICTS IN TWO PLACES, AND THE GAP IS FILED.**
+> Raised in the play lane 2026-08-25 after Alex re-stated it live ("a passive should be innate/always-on
+> decided by the birth rune... only a single tactical and signature **allowed by the birth rune**"). A
+> Magii-role canon read, every quote verified in place, found:
+> - `game/runes.md:253-257` — a passive is *"Advanced technique — most mages only know Active invocation"*,
+>   *"Maintaining a passive layer while fighting is **elite**"*, *"Eyuun teaches this technique"*. **Learned,
+>   not born.**
+> - `characters/magik-profiles.md:60` — *"The trio have the **passive shell only** (none born Barrier)."*
+>   **Three of three cast members run a passive that is not their birth rune.**
+> - The only thing the birth rune grants passively in canon is the **v1 affinity lean**
+>   (`game/shimmer-birth-rune.md:27`) — a permanent **stat** lean, not a passive **move**. That is very
+>   likely what "the innate passive" was always pointing at, in which case Alex's intent is **already
+>   satisfied with no canon change at all**.
+> - ⚠ And the separate half — *"only a tactical and signature **allowed by the birth rune**"* — breaks the
+>   signature slot outright: `game/moves.md:271` *"**Nobody's signature is their birth rune.**"* Kael is
+>   Static-born and casts Chain Lightning off **developed** Lightning. Gate on the birth rune and no keeper
+>   can ever hold a canon-shaped signature.
+> - ✅ **The half that IS already canon:** the runes a keeper **carries** gate their moves
+>   (`moves.md:221`, *"the rune is the filter on the scroll"*) — which is exactly what `keeper-moves.ts`
+>   already does. So *"it restricts the possibilities"* is **true in the shipped game today**.
+> **Parked pending a Magii ruling** — `/root/athernyx/CANON/CANON_GAPS.md`, entry *"Does the BIRTH rune gate
+> the equip slots for life, or only the runes a keeper CARRIES?"* (filed athernyx `a5d42e9`). **Nothing in
+> the build was narrowed.** The two-slot collapse above is unaffected by this gap and proceeds.
+> ⚠ The sharpest question for Alex, because the mana economy hangs on it: if a passive becomes innate and
+> always-on, **does it still pause mana recovery?** Yes ⇒ every keeper runs at reduced regen from birth.
+> No ⇒ the double edge canon calls the point of the system is deleted.
+
 
 **Ruled:** the passive loses its key and becomes always-on. Alex: *"maybe even affecting the way the player moves or more; ie the barrier birth rune gives the player extra shields."*
 
