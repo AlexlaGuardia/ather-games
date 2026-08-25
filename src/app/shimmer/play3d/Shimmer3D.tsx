@@ -5252,7 +5252,9 @@ export default function Shimmer3D() {
   const [birthOpen, setBirthOpen] = useState(false)
   const [birthCancelable, setBirthCancelable] = useState(true) // New Game birth is escapable; first-entry birth is not
   const birthRuneRef = useRef<string | null>(null)  // chosen rune id (also in localStorage ather:shimmer:birthRune)
-  // v1 passive affinity granted by the birth rune (CANON/game/shimmer-birth-rune.md). Resolved on
+  // v1 affinity LEAN granted by the birth rune (CANON/game/shimmer-birth-rune.md) — a permanent
+  // stat lean, NOT a passive move: it costs no socket and does not pause mana recovery
+  // (ruled 2026-08-25). Resolved on
   // load/birth by applyAffinity(); read by the stat hooks (shield/hp caps, speed, mana, gather).
   const affinityRef = useRef<Affinity>(NEUTRAL_AFFINITY)
   // ── THE CAST LAYER: rune inventory → known moves → a typed loadout slot → an archetype ────────
@@ -6760,7 +6762,7 @@ export default function Shimmer3D() {
             saveRuneInventory(inv)
             try { localStorage.removeItem('ather:shimmer:birthPending') } catch { /* private mode */ }  // birth is done; stop re-prompting
             newGame()                  // fresh run — sets its own banner; we override below
-            applyAffinity()            // grant this rune's v1 passive affinity (caps + affinityRef)
+            applyAffinity()            // grant this rune's v1 affinity lean (caps + affinityRef)
             applyLoadout()             // derive the cast slots from the book this rune opens
             hpRef.current = hpMaxRef.current; shieldRef.current = shieldMaxRef.current  // start the new run at full, bonuses included
             const rn = RUNES.find(r => r.id === id)?.name ?? 'your rune'

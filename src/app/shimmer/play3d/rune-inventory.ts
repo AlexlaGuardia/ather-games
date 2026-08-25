@@ -7,6 +7,23 @@
 // you develop or acquire more, and your MOVES come from the runes you hold (keeper-moves.ts inverts
 // each move's rune requirement to build the book).
 //
+// ── ★★ WHAT "THE INNATE PASSIVE" IN THAT QUOTE MEANT (RULED 2026-08-25, Alex + /magii) ─────────
+// The quote above is Alex's, verbatim, and stays that way — a record of what was said is not
+// something a later ruling gets to rewrite. But the words "the innate passive" read as a passive
+// MOVE, and they never meant one. They meant the always-on **affinity LEAN**: canon at
+// `shimmer-birth-rune.md:27`, shipped in `birth-affinity.ts`, read every frame through
+// `engine/vitals.ts`.
+//
+// ⚠ THE DISTINCTION IS LOAD-BEARING, NOT PEDANTRY. A passive MOVE in canon is learned, advanced
+// and elite (`runes.md:253-257`, "Eyuun teaches this technique"), it occupies one of three innate
+// sockets, and **holding it pauses mana recovery** — the double edge the mana economy rests on.
+// The lean is none of those things: it is permanent, free, costless to recovery, and covers all 20
+// runes. Reading the quote the other way would have meant authoring up to 13 new passive moves
+// (only 4 of 17 birthable runes have a passive in that rune alone; 8 have none at all) and either
+// taxing every keeper's regen from birth or deleting the double edge. Alex ruled it stays a
+// background mechanic. See `CANON/CANON_GAPS.md` — the birth-rune equip-gate entry.
+//
+//
 // So the chain is: owned runes → known moves → a loadout slot → a cast archetype. This module owns
 // the first link only.
 //

@@ -1,9 +1,19 @@
-// birth-affinity.ts — v1 passive affinity granted by a keeper's BIRTH RUNE.
+// birth-affinity.ts — the always-on affinity LEAN granted by a keeper's BIRTH RUNE.
+//
+// ⚠ CALLED A "LEAN", NEVER A "PASSIVE" — RULED 2026-08-25 (Alex + /magii), and the word is the
+// whole point. In canon a **passive** is a specific thing: a learned, advanced, elite MOVE
+// (`runes.md:253-257`), held in one of three innate sockets, and **holding it pauses mana
+// recovery**. This file is not that. It is a permanent stat lean that costs nothing, cannot be
+// switched off, and needs no socket — which is precisely why it can be always-on without touching
+// the double edge the mana economy rests on. Alex ruled it stays a **background mechanic**; the
+// idea of surfacing it in the inventory's rune tab is on GBOARD, not built.
+// ★ This file is why the ruling was free: the always-on birth-rune thing already existed and
+// already shipped, covering all 20 runes with no authoring debt and no retcon.
 //
 // CANON: CANON/game/shimmer-birth-rune.md ("your birth rune is you"). Each rune's lean follows
 // its canon ESSENCE (runes.md); this file is the build-side numbers for that lean. The category
 // per rune is canon (Magii); the magnitudes here are Jin's to tune (see the boundary in the
-// canon file). v1 = passive affinity; v2 = the same rune becomes a castable "word" (offense
+// canon file). v1 = the affinity lean; v2 = the same rune becomes a castable "word" (offense
 // runes get their damage identity there — in v1 they carry raw magical charge instead).
 
 export type AffinityLean = 'vitality' | 'defense' | 'mobility' | 'utility' | 'offense'
