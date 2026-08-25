@@ -345,13 +345,25 @@ Both halves are built and **neither is wired; nothing persists across the seam.*
 >   entry, flipped to `[RULED]`.
 
 ### ⏭ Next (Jin's, handed over by the ruling — neither is canon)
-1. **Surface the lean in the inventory's RUNE TAB.** Alex's *"maybe we can work it into the rune tab
-   later"*. The lean is a **number a player currently cannot read** — that is the honest cost of keeping
-   it a background mechanic, and this is the fix when it is worth doing. Data is all there:
-   `birth-affinity.ts` exports the category + magnitudes (`hpBonus`/`shieldBonus`/`speedMult`/
-   `gatherMult`/`manaBonus`), and the ruled 20-row essence→lean table is `shimmer-birth-rune.md:46-69`.
-   ⚠ The **category** per rune is canon; the **magnitudes** are Jin's — do not render a tuned number as
-   though canon fixed it.
+1. ✅ **SHIPPED 2026-08-25 (play lane) — the lean is readable in the inventory's RUNE TAB.**
+   `BirthLean` in `voxel3d/VoxelWorld.tsx` (landed with hub's written green light, scoped to `RunesTab`).
+   The two halves are stated in **different voices on purpose**: the essence line is canon, the
+   magnitudes are a "current tuning" row — rendering `+25 max health` in canon's voice would hand a
+   tuned constant canon's authority. It also says the lean is **always-on and needs no slot**, which is
+   the distinction that nearly cost 13 authored passive moves.
+   · **`essenceOf()` + `leanEffects()` live in `birth-affinity.ts`**, not the panel — a UI that strips
+   its own label with its own regex is a hand-written reader over a file it does not own, and a rewrite
+   whose pattern stops matching returns the input UNCHANGED and throws nothing. Effects are **derived by
+   diffing against `NEUTRAL_AFFINITY`**, never a switch on `lean`, so a rune retuned to grant two things
+   renders both untouched.
+   · **No birth rune renders NOTHING**, not an empty row — neutral would read as *"your rune does
+   nothing"* rather than *"no rune stored"*.
+   · **New oracle `birth-affinity.test.ts`, 16 asserts, mutation-swept 3 ways.** Every failure mode here
+   is a **BLANK** — the hard kind — so each assert NAMES the rune: magnitude retuned to neutral
+   (SILENT: life) · essence strip over-matching (EATEN: all 20) · a rune losing its `AFFINITY` entry
+   (SILENT+BLANK: stone). Roster read from the birth screen's own data, never copied.
+   ⏭ **NOT YET SEEN RENDERED** — tsc clean and the data is oracle-covered, but nobody has looked at the
+   panel in a browser. Deploy is hub's; reaching it needs a keeper with a birth rune, bag open, Runes tab.
 2. **The 1 tactical + 1 signature slot count is JIN'S, not canon** — it left the canon queue on the
    ruling. Canon fixes only **passives ≤ 3** (`runes.md:256`) and states no cap on the other two bands,
    and its own cast contradicts a 1-tactical ceiling: Veyra runs *"Firewall · Flame Infusion"*
