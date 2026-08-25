@@ -319,7 +319,7 @@ function effGrd(f: Fighter): number {
   return g
 }
 function effAgi(f: Fighter): number { return f.agi * stageMult(f.stage.agi) }
-function effSpeed(f: Fighter): number {
+export function effSpeed(f: Fighter): number {
   if (f.st.anchorT > 0) return 0                  // rooted
   return f.speed * (f.st.fortifyT > 0 ? 0.7 : 1)  // locked in place is slow
 }
@@ -615,7 +615,11 @@ function sidestep(state: ArenaState, from: Fighter, tgt: Fighter) {
   clampToRing(state, tgt)
 }
 
-function moveToward(f: Fighter, t: Fighter, dt: number) { moveTowardSpd(f, t, dt, f.speed) }
+// ★ effSpeed, not raw f.speed. This is the DEFEND-stance advance (its only caller, arena.ts:507),
+// and every other movement branch gates through effSpeed — so an anchored fighter (effSpeed 0,
+// "rooted") kept sliding forward here at full speed, and a fortified one moved 43% too fast. The
+// anchor root contract was silently broken for exactly this branch. (Fixed 2026-08-25.)
+export function moveToward(f: Fighter, t: Fighter, dt: number) { moveTowardSpd(f, t, dt, effSpeed(f)) }
 function moveTowardSpd(f: Fighter, t: Fighter, dt: number, spd: number) {
   const a = Math.atan2(t.y - f.y, t.x - f.x)
   f.x += Math.cos(a) * spd * dt; f.y += Math.sin(a) * spd * dt

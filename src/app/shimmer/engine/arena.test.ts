@@ -17,7 +17,7 @@
 // hard invariants: no negative hp/mana, every fight RESOLVES (no real-time stalemate).
 
 import { createSpirit, TEMPERAMENTS, type Spirit, type Species } from '../spirits/spirit'
-import { createArena, tick, mulberry32, type ArenaState, type KeeperCommand } from './arena'
+import { createArena, tick, mulberry32, effSpeed, moveToward, type ArenaState, type KeeperCommand, type Fighter } from './arena'
 import { TIRE_AT, TIRE_RAMP } from './arena-moves'
 
 // createSpirit() rolls IVs (seeds) and temperament off Math.random(), so until 2026-07-23
@@ -208,6 +208,24 @@ if (B.pct - A.pct < 25) fails.push(`Keeper skill barely matters (+${(B.pct - A.p
 // clearly won by an engaged Keeper — NOT one-sided against the player.
 if (Ap.pct < 30 || Ap.pct > 68) fails.push(`party baseline off (passive ${Ap.pct}%) — want competitive ~40-60%`)
 if (Bp.pct < 85) fails.push(`party Keeper too weak (skilled ${Bp.pct}%) — should reliably win`)
+
+// ── movement obeys the status contract (2026-08-25) ───────────────────────────
+// moveToward (the defend-stance advance, arena.ts:507) hard-coded raw f.speed while every other
+// branch gates through effSpeed, so an ANCHORED fighter kept sliding forward at full speed. Restore
+// the bug (moveToward → f.speed) and the "anchored fighter does not move" assert goes red.
+{
+  const fighter = (x: number, over: Partial<Fighter['st']> = {}): Fighter =>
+    ({ x, y: 0, speed: 5, st: { anchorT: 0, fortifyT: 0, ...over } } as unknown as Fighter)
+  const target = fighter(10)
+  if (effSpeed(fighter(0, { anchorT: 1 })) !== 0) fails.push('effSpeed: anchored is not rooted (0)')
+  if (effSpeed(fighter(0, { fortifyT: 1 })) !== 3.5) fails.push('effSpeed: fortified is not 0.7×')
+  const rooted = fighter(0, { anchorT: 1 }); moveToward(rooted, target, 1)
+  if (rooted.x !== 0) fails.push(`moveToward moved an ANCHORED fighter to ${rooted.x} (must stay rooted)`)
+  const fort = fighter(0, { fortifyT: 1 }); moveToward(fort, target, 1)
+  if (Math.abs(fort.x - 3.5) > 1e-9) fails.push(`moveToward advanced a fortified fighter to ${fort.x}, want 3.5`)
+  const free = fighter(0); moveToward(free, target, 1)
+  if (Math.abs(free.x - 5) > 1e-9) fails.push(`moveToward advanced a free fighter to ${free.x}, want 5`)
+}
 
 if (fails.length) { console.error('❌ ARENA ORACLE FAILED:\n  - ' + fails.join('\n  - ')); process.exit(1) }
 console.log('✅ arena oracle: fights resolve, no negative hp/mana, and a skilled Keeper flips a losing fight.')
