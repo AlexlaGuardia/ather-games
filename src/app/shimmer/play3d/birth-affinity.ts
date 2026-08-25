@@ -88,3 +88,40 @@ export function birthAffinity(runeId: string | null | undefined): Affinity {
   if (!runeId) return NEUTRAL_AFFINITY
   return AFFINITY[runeId] ?? NEUTRAL_AFFINITY
 }
+
+// ── The READOUT: what a player is shown about their own lean ───────────────────────────────────
+//
+// These two live HERE, beside the table they read, rather than in the panel that renders them.
+// A UI that strips its own essence line with its own regex, or keeps its own list of which stat each
+// lean touches, is a hand-written reader over a file it does not own — this repo's most-repeated bug
+// (a rewrite whose pattern stops matching returns the input UNCHANGED and throws nothing, so the
+// screen just quietly says the wrong thing). One definition, asked by both the panel and the oracle.
+
+/**
+ * The essence half of a lean's label — the CANON statement of what the rune is, with the build-side
+ * "(+harvest yield)" tail removed because the panel renders the magnitudes itself.
+ *
+ * ⚠ Returns the label UNCHANGED when there is no tail, which is the honest outcome: the caller gets
+ * a real sentence either way. The oracle asserts the strip actually leaves something, so a label
+ * shape that this pattern would eat whole fails a test instead of blanking a panel.
+ */
+export function essenceOf(aff: Affinity): string {
+  return aff.label.replace(/\s*\([^)]*\)\s*$/, '').trim()
+}
+
+/**
+ * Every stat this affinity actually moves, phrased for a player, DERIVED by diffing against neutral
+ * rather than switching on `lean`. Retune a rune to grant two things and both appear here with
+ * nothing else edited; zero a magnitude and the list goes empty, which the oracle catches.
+ */
+export function leanEffects(aff: Affinity): string[] {
+  const n = NEUTRAL_AFFINITY
+  const sign = (d: number) => (d > 0 ? '+' : '')
+  const out: string[] = []
+  if (aff.hpBonus !== n.hpBonus) out.push(`${sign(aff.hpBonus - n.hpBonus)}${aff.hpBonus - n.hpBonus} max health`)
+  if (aff.shieldBonus !== n.shieldBonus) out.push(`${sign(aff.shieldBonus - n.shieldBonus)}${aff.shieldBonus - n.shieldBonus} max shield`)
+  if (aff.manaBonus !== n.manaBonus) out.push(`${sign(aff.manaBonus - n.manaBonus)}${aff.manaBonus - n.manaBonus} max mana`)
+  if (aff.speedMult !== n.speedMult) out.push(`${sign(aff.speedMult - n.speedMult)}${Math.round((aff.speedMult / n.speedMult - 1) * 100)}% move speed`)
+  if (aff.gatherMult !== n.gatherMult) out.push(`${sign(aff.gatherMult - n.gatherMult)}${Math.round((aff.gatherMult / n.gatherMult - 1) * 100)}% harvest yield`)
+  return out
+}

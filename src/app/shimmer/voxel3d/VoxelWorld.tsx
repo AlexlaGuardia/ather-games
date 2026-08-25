@@ -221,7 +221,7 @@ import { MAX_INFUSIONS_PER_ELEMENT } from '../spirits/spirit'
 import { BrewPanel } from './brew-panel'
 import { brewBlocker } from './brew'
 import { loadRuneInventory, saveRuneInventory, grantRune, revokeRune } from '../play3d/rune-inventory'
-import { birthAffinity } from '../play3d/birth-affinity'
+import { birthAffinity, essenceOf, leanEffects } from '../play3d/birth-affinity'
 // Health + shields are SHARED rules, not a second copy — see engine/vitals.ts on why.
 import { freshVitals, pressure, heal, type Vitals } from '../engine/vitals'
 import { getMaxPool, getRegenRate } from '../engine/mana'
@@ -2465,6 +2465,66 @@ const LIFT_BADGE: Record<LiftMode, string> = {
  * all. So an empty book here must read as a *fact about the world*, never as "content coming soon" —
  * Benji carries this rune, and the emptiness is the point of him.
  */
+/**
+ * ── THE BIRTH RUNE'S LEAN, MADE READABLE (2026-08-25, play lane) ───────────────────────────────
+ *
+ * Closes the honest cost of Alex's 2026-08-25 ruling. He kept the birth-rune lean a *background
+ * mechanic* ("maybe we can work it into the rune tab in the inventory menu later"), and the cost of
+ * a background mechanic is that it is a number the player cannot read: `birth-affinity.ts` has been
+ * shipping a permanent stat lean through `engine/vitals.ts` on every frame for every keeper, and
+ * nothing in the game ever said so. This is the "later".
+ *
+ * ★ IT IS CALLED A LEAN AND NEVER A PASSIVE, and that is canon rather than word-choice. A passive in
+ * canon is a learned, advanced, ELITE move held in one of three innate sockets, and holding it PAUSES
+ * MANA RECOVERY (`runes.md:253-257`). The lean is none of those — permanent, free, socketless, no
+ * cost to recovery. Reading the two as one thing is what nearly authored 13 new passive moves.
+ *
+ * ⚠ THE CATEGORY IS CANON, THE MAGNITUDE IS JIN'S, AND THE UI SAYS WHICH IS WHICH. Each rune's lean
+ * family is transcribed from `shimmer-birth-rune.md`'s essence→lean table and is Magii's; the numbers
+ * are build-side and tuned freely. Rendering "+25 max health" in the same voice as the essence line
+ * would quietly hand a tuned constant canon's authority — the lying-provenance shape this repo keeps
+ * filing. So the essence reads as the statement and the number reads as the current tuning.
+ *
+ * ★ THE EFFECT LIST IS DERIVED, NOT TABULATED. It diffs the resolved `Affinity` against
+ * `NEUTRAL_AFFINITY` rather than switching on `lean`, so a rune whose lean is ever retuned to grant
+ * two things renders both with nothing changed here. A hand-kept "which stat does each lean touch"
+ * map is exactly the mirror that agrees with itself while going stale.
+ */
+function BirthLean({ birth }: { birth: string | null }) {
+  const aff = birthAffinity(birth)
+  // Both derivations live in birth-affinity.ts beside the table they read — this panel asks, it does
+  // not restate. See the READOUT block there for why.
+  const effects = leanEffects(aff)
+
+  // ⚠ A keeper with no birth rune resolves to NEUTRAL_AFFINITY, whose label is '' and whose effects
+  // diff to nothing. Rendering the frame anyway would assert a lean that is not there — an empty
+  // confident row, which reads as "your rune does nothing" rather than "no rune is stored". The
+  // tab's own no-rune branch already says the true thing, so this renders nothing at all.
+  if (!birth || effects.length === 0) return null
+
+  // The essence line is the CANON half saying what the lean IS; the numbers below are the build half
+  // saying how much it is worth today.
+  const essence = essenceOf(aff)
+
+  return (
+    <div className="mb-4 rounded border border-amber-200/15 bg-amber-100/[0.03] px-2.5 py-2">
+      <div className="mb-1 flex items-baseline justify-between gap-2">
+        <span className="text-[10px] uppercase tracking-[0.16em] text-amber-200/50">Birth lean</span>
+        <span className="text-[9px] uppercase tracking-[0.14em] text-white/25">{aff.lean}</span>
+      </div>
+      <div className="text-[11px] leading-snug text-white/70">{essence}</div>
+      <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-0.5">
+        {effects.map(e => (
+          <span key={e} className="text-[10px] tabular-nums text-amber-200/70">{e}</span>
+        ))}
+      </div>
+      <div className="mt-1 text-[9px] leading-snug text-white/25">
+        Always on, and it costs nothing to hold — it is not a passive, and it needs no slot.
+      </div>
+    </div>
+  )
+}
+
 function RunesTab() {
   // localStorage read, so it happens once per mount rather than per render.
   const [inv] = useState(() => loadRuneInventory())
@@ -2509,6 +2569,7 @@ function RunesTab() {
           )
         })}
       </div>
+      <BirthLean birth={inv.birth} />
       {known.length === 0 && learnable.length === 0 ? (
         <div className="rounded border border-white/10 bg-white/[0.03] px-3 py-2.5 text-[11px] leading-relaxed text-white/40">
           No move answers to this rune. The Schools do not teach it and scholars do not name it —
