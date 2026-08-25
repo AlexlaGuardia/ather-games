@@ -250,35 +250,69 @@ const chk = (n: string, c: boolean, x = '') => { c ? ok++ : (bad++, console.erro
   // justify. This constrains the shape WITHOUT restating it, so the ruled collapse passes untouched.
   chk('every slot kind is a real canon tier', CAST_SLOTS.every((k) => KEEPER_MOVES.some((m) => m.tier === k)))
 
+  // ── ★ SLOT INDICES ARE DERIVED, NEVER LITERAL (2026-08-25, play lane) ─────────────────────────
+  // Every assert below used to name its slot by number — `life[0]`, `life[3]`, `canSlot(…, 1, …)`,
+  // and a `[null,null,null,null]` shape literal. Those are mirrors of a list that is ABOUT TO MOVE:
+  // the ruled 4→2 collapse makes all of them red at once, every one for a CORRECT reason, and the
+  // cheapest way to make a wall of red green again is to paste the new numbers in. That is the moment
+  // a suite stops testing behaviour and starts testing its own transcription — and it would happen on
+  // exactly the commit that most needs a suite testing behaviour.
+  // Derived indices survive any ruled shape and go red only if the RULE changed.
+  const slotOf = (k: string) => CAST_SLOTS.indexOf(k as never)
+  const TACTICAL = slotOf('tactical')
+  const ULTIMATE = slotOf('ultimate')
+  // ⚠ Assert the fixture FOUND what it needs. A derived index that silently comes back -1 turns every
+  // assert under it into a comparison against `undefined` — the empty-measurement-window trap, where a
+  // check that cannot fire reads identically to one that passed.
+  chk('the bar keeps a tactical slot and a signature slot (the two the ruling keeps)',
+    TACTICAL >= 0 && ULTIMATE >= 0)
+
   const life = defaultLoadout(['life'], ALL)
   chk('a Life-born keeper slots Mend', life.includes('mend'))
-  chk('...and has no passive to hold (Life registers none)', life[0] === null)
-  chk('...and no ultimate (Healing Grove also needs Barrier)', life[3] === null)
+  chk('...and no ultimate (Healing Grove also needs Barrier)', life[ULTIMATE] === null)
+  // Stated as a property over the bar rather than a fixed index, so it holds whatever the shape
+  // becomes: Life registers no passive, so no passive slot the bar has can be filled from it.
+  chk('...and has nothing to hold in a passive slot (Life registers none)',
+    CAST_SLOTS.every((k, i) => k !== 'passive' || life[i] === null))
 
   const lo = defaultLoadout(['barrier'], ALL).filter(Boolean)
   chk('never slots the same move twice', new Set(lo).size === lo.length)
-  chk('an empty book yields an empty loadout, not a crash',
-    JSON.stringify(defaultLoadout([], ALL)) === JSON.stringify([null, null, null, null]))
+  {
+    const none = defaultLoadout([], ALL)
+    chk('an empty book yields an empty loadout, not a crash',
+      none.length === CAST_SLOTS.length && none.every((x) => x === null))
+  }
 
   // Star owns Firewall + Flame Infusion (both unbuilt); adding Freeze must surface Ice Dart first
   chk('prefers a move the sim can actually run', isBuilt(eligibleMoves(['star', 'freeze'], 'tactical', ALL)[0].id))
 
-  chk('rejects a move whose runes you do not own', !canSlot(['life'], 1, 'ice-dart', ALL))
-  chk('rejects a tier/slot mismatch (Mend is tactical, slot 0 is the passive)', !canSlot(['life'], 0, 'mend', ALL))
-  chk('accepts a legal bind', canSlot(['life'], 1, 'mend', ALL))
+  chk('rejects a move whose runes you do not own', !canSlot(['life'], TACTICAL, 'ice-dart', ALL))
+  {
+    // Any slot that is not a tactical must refuse Mend, which is tactical. Derived so the assert
+    // keeps meaning the same thing after the collapse — and it names the case it could not find
+    // rather than passing vacuously if the bar ever becomes tacticals only.
+    const offTier = CAST_SLOTS.findIndex((k) => k !== 'tactical')
+    chk('the bar still has a non-tactical slot to test the tier gate with', offTier >= 0)
+    chk(`rejects a tier/slot mismatch (Mend is tactical, slot ${offTier} is the ${CAST_SLOTS[offTier]})`,
+      !canSlot(['life'], offTier, 'mend', ALL))
+  }
+  chk('accepts a legal bind', canSlot(['life'], TACTICAL, 'mend', ALL))
 
   // ── ★ THE BOOK GATES THE SLOT (2026-08-13) ───────────────────────────────────────────────────
   // Carrying the rune is no longer enough — canon rules a move is OBTAINED, and the rune is the
   // filter on the scroll rather than the source of the move. If this pair ever disagrees, the
   // Passage has nothing to sell and the whole scroll economy is decoration.
   chk('★ a move you have not learned cannot be bound, even holding its rune',
-    !canSlot(['life'], 1, 'mend', EMPTY_BOOK))
+    !canSlot(['life'], TACTICAL, 'mend', EMPTY_BOOK))
   chk('★ an unlearned move is not eligible for its slot either',
     eligibleMoves(['life'], 'tactical', EMPTY_BOOK).length === 0)
-  chk('★ and a keeper with an empty book gets an empty starting kit',
-    JSON.stringify(defaultLoadout(['life', 'barrier'], EMPTY_BOOK)) === JSON.stringify([null, null, null, null]))
+  {
+    const kit = defaultLoadout(['life', 'barrier'], EMPTY_BOOK)
+    chk('★ and a keeper with an empty book gets an empty starting kit',
+      kit.length === CAST_SLOTS.length && kit.every((x) => x === null))
+  }
   chk('★ learning just that one move opens exactly it',
-    canSlot(['life'], 1, 'mend', { learned: ['mend'] }) &&
+    canSlot(['life'], TACTICAL, 'mend', { learned: ['mend'] }) &&
     eligibleMoves(['life'], 'tactical', { learned: ['mend'] }).length === 1)
 }
 
